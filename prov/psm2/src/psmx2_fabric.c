@@ -48,7 +48,7 @@ static int psmx2_fabric_close(fid_t fid)
 
 	psmx2_fabric_release(fabric);
 
-	if (util_fabric_close(&fabric->util_fabric))
+	if (ofi_fabric_close(&fabric->util_fabric))
 		return 0;
 
 	if (psmx2_env.name_server &&
@@ -120,16 +120,16 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 	if (!fabric_priv)
 		return -FI_ENOMEM;
 
-	ret = fi_fabric_init(&psmx2_prov, &psmx2_fabric_attr, attr,
+	ret = ofi_fabric_init(&psmx2_prov, &psmx2_fabric_attr, attr,
 			     &fabric_priv->util_fabric, context,
 			     FI_MATCH_EXACT);
 	if (ret) {
-		FI_INFO(&psmx2_prov, FI_LOG_CORE, "fi_fabric_init returns %d\n", ret);
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "ofi_fabric_init returns %d\n", ret);
 		free(fabric_priv);
 		return ret;
 	}
 
-	/* fclass & context initialized in fi_fabric_init */
+	/* fclass & context initialized in ofi_fabric_init */
 	fabric_priv->util_fabric.fabric_fid.fid.ops = &psmx2_fabric_fi_ops;
 	fabric_priv->util_fabric.fabric_fid.ops = &psmx2_fabric_ops;
 
