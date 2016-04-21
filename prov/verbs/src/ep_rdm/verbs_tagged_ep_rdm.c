@@ -130,18 +130,23 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 						struct fi_ibv_rdm_ep, ep_fid);
 
 	{
-		struct fi_ibv_rdm_tagged_recv_start_data req_data = {
-			.tag = tag,
-			.tagmask = ~ignore,
-			.context = context,
+		struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
+			.peek_data = {
+				.minfo = {
+					.conn = conn,
+					.tag = tag,
+					.tagmask = ~ignore
+				},
+				.context = context,
+				.flags = 0
+			},
 			.dest_addr = buf,
-			.conn = conn,
-			.ep = ep,
-			.data_len = len
+			.data_len = len,
+			.ep = ep
 		};
 
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
-				FI_IBV_EVENT_RECV_START, &req_data);
+				FI_IBV_EVENT_RECV_START, &recv_data);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
 		    "fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, "
@@ -211,12 +216,91 @@ static ssize_t fi_ibv_rdm_tagged_recvv(struct fid_ep *ep, const struct iovec *io
 					  context);
 }
 
-static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep,
+static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
 					 const struct fi_msg_tagged *msg,
 					 uint64_t flags)
 {
-	return fi_ibv_rdm_tagged_recvv(ep, msg->msg_iov, msg->desc,
-		msg->iov_count, msg->addr, msg->tag, msg->ignore, msg->context);
+	ssize_t ret = FI_SUCCESS;
+
+	struct fi_ibv_rdm_tagged_conn *conn = 
+		(msg->addr == FI_ADDR_UNSPEC) ? NULL :
+		(struct fi_ibv_rdm_tagged_conn *) msg->addr;
+
+	struct fi_ibv_rdm_ep *ep_rdm =
+		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
+
+	if (flags & FI_PEEK) {
+		struct fi_ibv_rdm_tagged_request *request = 
+			util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+		fi_ibv_rdm_tagged_zero_request(request);
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request,
+			FI_LOG_DEBUG);
+
+		struct fi_ibv_rdm_tagged_peek_data peek_data = {
+			.minfo = {
+				.conn = conn,
+				.tag = msg->tag,
+				.tagmask = ~(msg->ignore)
+			},
+			.context = msg->context,
+			.flags = flags
+		};
+
+		ret = fi_ibv_rdm_tagged_req_hndl(request,
+			FI_IBV_EVENT_RECV_PEEK, &peek_data);
+		if (ret == -FI_ENOMSG) {
+			fi_ibv_rdm_tagged_poll(ep_rdm);
+		}
+	} else if (flags & FI_CLAIM) {
+		struct fi_ibv_rdm_tagged_request *request = 
+			util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+		fi_ibv_rdm_tagged_zero_request(request);
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request,
+			FI_LOG_DEBUG);
+
+		assert(msg->iov_count == 1);
+
+		struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
+			.peek_data = {
+				.minfo = {
+					.conn = conn,
+					.tag = msg->tag,
+					.tagmask = ~(msg->ignore)
+
+				},
+				.context = msg->context,
+				.flags = flags
+			},
+			.dest_addr = msg->msg_iov[0].iov_base,
+			.data_len = msg->msg_iov[0].iov_len,
+			.ep = ep_rdm
+		};
+
+		ret = fi_ibv_rdm_tagged_req_hndl(request,
+			FI_IBV_EVENT_RECV_START, &recv_data);
+
+		struct fi_ibv_recv_got_pkt_process_data data = {
+			.ep = ep_rdm
+		};
+
+		if (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
+			if (fi_ibv_rdm_tagged_prepare_send_request(request, ep_rdm)) {
+				ret =
+				    fi_ibv_rdm_tagged_req_hndl(request,
+							       FI_IBV_EVENT_SEND_READY,
+							       &data);
+			}
+		} else {
+			ret =
+			    fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RECV_START,
+						       &data);
+		}
+	} else {
+		ret = fi_ibv_rdm_tagged_recvv(ep_fid, msg->msg_iov, msg->desc,
+			msg->iov_count, msg->addr, msg->tag, msg->ignore,
+			msg->context);
+	}
+	return ret;
 }
 
 static ssize_t fi_ibv_rdm_tagged_sendto(struct fid_ep *fid, const void *buf,

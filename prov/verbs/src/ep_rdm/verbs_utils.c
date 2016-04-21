@@ -72,6 +72,22 @@ int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
 		 (minfo->tag   & minfo->tagmask)));
 }
 
+/*
+ * The same as fi_ibv_rdm_tagged_req_match_by_info2 but context field is added  
+ * to compare
+ */
+int fi_ibv_rdm_tagged_req_match_by_info3(struct dlist_entry *item,
+					 const void *info)
+{
+	struct fi_ibv_rdm_tagged_request *request =
+	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
+
+	const struct fi_ibv_rdm_tagged_peek_data *peek_data = info;
+
+	return ((request->context == peek_data->context) && 
+		fi_ibv_rdm_tagged_req_match_by_info2(item, &peek_data->minfo));
+}
+
 int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 					     const void *arg)
 {

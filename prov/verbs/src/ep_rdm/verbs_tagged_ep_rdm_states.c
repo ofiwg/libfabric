@@ -402,12 +402,12 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 
 	struct fi_ibv_rdm_tagged_recv_start_data *p = data;
 
-	request->tag = p->tag;
-	request->tagmask = p->tagmask;
-	request->context = p->context;
+	request->conn = p->peek_data.minfo.conn;
+	request->tag = p->peek_data.minfo.tag;
+	request->tagmask = p->peek_data.minfo.tagmask;
+	request->context = p->peek_data.context;
 	request->context->internal[0] = (void *)request;
 	request->dest_buf = p->dest_addr;
-	request->conn = p->conn;
 	request->len = p->data_len;
 	request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4PKT;
 	request->state.rndv = FI_IBV_STATE_RNDV_NOT_USED;
@@ -415,16 +415,19 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n", request->conn,
 		     request->tag, request->len);
 
-	struct fi_verbs_rdm_tagged_request_minfo minfo = {
-		.conn = p->conn,
-		.tag = p->tag,
-		.tagmask = p->tagmask
-	};
+	/*
+	 * Only claimed requests should be  matched by context
+	 */
+	if (!(p->peek_data.flags & FI_CLAIM)) {
+		p->peek_data.context = NULL;
+	}
 
 	struct dlist_entry *found_entry =
 	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
-				   fi_ibv_rdm_tagged_req_match_by_info2,
-				   &minfo);
+				   fi_ibv_rdm_tagged_req_match_by_info3,
+				   &p->peek_data);
+
+	p->peek_data.context = request->context;
 
 	if (found_entry) {
 
@@ -451,16 +454,26 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 		request->state.eager = found_request->state.eager;
 		request->state.rndv = found_request->state.rndv;
 
-		assert(request->state.eager ==
-		       FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
+		assert((request->state.eager == 
+				FI_IBV_STATE_EAGER_RECV_WAIT4RECV) || 
+		       (request->state.eager == 
+				FI_IBV_STATE_EAGER_RECV_CLAIMED));
+
+		assert(((p->peek_data.flags & FI_CLAIM) &&
+				(request->state.eager == 
+					FI_IBV_STATE_EAGER_RECV_CLAIMED) &&
+				(request->context == found_request->context)) ||
+		       (!(p->peek_data.flags & FI_CLAIM) && 
+				(request->state.eager == 
+					FI_IBV_STATE_EAGER_RECV_WAIT4RECV)));
+
 		if (request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED) {
 			assert(request->state.rndv ==
 			       FI_IBV_STATE_RNDV_RECV_WAIT4RES);
 
-			request->rndv.rkey =
-			    found_request->rndv.rkey;
+			request->rndv.rkey = found_request->rndv.rkey;
 			request->rndv.id = found_request->rndv.id;
-			request->rndv.remote_addr =
+			request->rndv.remote_addr = 
 				found_request->rndv.remote_addr;
 		}
 		VERBS_DBG(FI_LOG_EP_DATA, "found req: len = %d, eager_state = %s, "
@@ -498,6 +511,70 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return FI_EP_RDM_HNDL_SUCCESS;
+}
+
+static ssize_t
+fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
+			       void *data)
+{
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
+	assert(request->state.eager == FI_IBV_STATE_EAGER_BEGIN);
+	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
+
+	ssize_t ret = FI_SUCCESS;
+
+	struct fi_ibv_rdm_tagged_peek_data *peek_data = data;
+	struct dlist_entry *found_entry =
+		dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
+					fi_ibv_rdm_tagged_req_match_by_info2,
+					&peek_data->minfo);
+	if (found_entry) {
+		struct fi_ibv_rdm_tagged_request *found_request =
+			container_of(found_entry,
+				struct fi_ibv_rdm_tagged_request,
+				queue_entry);
+		assert(found_request);
+
+		request->conn = found_request->conn;
+		request->tag = found_request->tag;
+		request->tagmask = found_request->tagmask;
+		request->len = found_request->len;
+		request->unexp_rbuf = found_request->unexp_rbuf;
+		request->state.eager = found_request->state.eager;
+		request->state.rndv = found_request->state.rndv;
+		request->context = peek_data->context;
+
+		if (peek_data->flags & FI_CLAIM) {
+
+			ret = fi_ibv_rdm_tagged_req_hndl(found_request,
+				FI_IBV_EVENT_RECV_CLAIM, peek_data);
+
+			if (ret) {
+				return ret;
+			}
+		}
+
+		if (peek_data->flags & FI_DISCARD) {
+			ret = fi_ibv_rdm_tagged_req_hndl(found_request,
+				FI_IBV_EVENT_RECV_DISCARD, NULL);
+
+			if (ret) {
+				return ret;
+			}
+		}
+
+		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
+		fi_ibv_rdm_tagged_move_to_ready_queue(request);
+		
+		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	} else {
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+		ret = -FI_ENOMSG;
+	}
+
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	return ret;
 }
 
 static enum fi_rdm_tagged_req_hndl_ret
@@ -633,7 +710,8 @@ fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(
 		struct fi_ibv_rdm_tagged_request *request, void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
-	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
+	assert((request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV) ||
+	       (request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED));
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
 
 	if (request->dest_buf && request->len != 0) {
@@ -650,6 +728,108 @@ fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return FI_EP_RDM_HNDL_SUCCESS;
+}
+
+static ssize_t
+fi_ibv_rdm_tagged_recv_claim(struct fi_ibv_rdm_tagged_request *request,
+			     void *data)
+{
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
+	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV ||
+	       request->state.eager == FI_IBV_STATE_EAGER_BEGIN);
+	assert((request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED) ||
+	       (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES));
+
+	ssize_t ret = FI_SUCCESS;
+	struct fi_ibv_rdm_tagged_peek_data *peek_data = data;
+
+	switch (request->state.eager)
+	{
+	case FI_IBV_STATE_EAGER_BEGIN:
+	{
+		assert(peek_data->context);
+		struct dlist_entry *found_entry =
+		    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
+					   fi_ibv_rdm_tagged_req_match_by_info3,
+					   peek_data);
+		if (found_entry) {
+			struct fi_ibv_rdm_tagged_request *found_request =
+				container_of(found_entry,
+					struct fi_ibv_rdm_tagged_request,
+					queue_entry);
+
+			assert(found_request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED);
+
+			FI_IBV_RDM_TAGGED_HANDLER_LOG();
+
+			if (peek_data->flags & FI_DISCARD)
+			{
+				ret = fi_ibv_rdm_tagged_req_hndl(found_request,
+					FI_IBV_EVENT_RECV_DISCARD, NULL);
+				if (ret) {
+					return ret;
+				}
+			}
+			else
+			{
+				fi_ibv_rdm_tagged_remove_from_unexp_queue(found_request);
+
+				ret = fi_ibv_rdm_tagged_req_hndl(found_request,
+					FI_IBV_EVENT_RECV_START, NULL);
+				if (ret) {
+					return ret;
+				}
+
+			}
+			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
+			FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+			util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+
+			FI_IBV_RDM_TAGGED_HANDLER_LOG();
+		} else {
+			ret = -FI_ENOMSG;
+			FI_IBV_RDM_TAGGED_HANDLER_LOG();
+		}
+		break;
+	}
+	case FI_IBV_STATE_EAGER_RECV_WAIT4RECV:
+	{
+		assert(peek_data->context);
+		request->state.eager = FI_IBV_STATE_EAGER_RECV_CLAIMED;
+		request->context = peek_data->context;
+		FI_IBV_RDM_TAGGED_HANDLER_LOG();
+		break;
+	}
+	default:
+		assert(0);
+	}
+
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	return ret;
+}
+
+static ssize_t
+fi_ibv_rdm_tagged_eager_recv_discard(struct fi_ibv_rdm_tagged_request *request,
+				      void *data)
+{
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
+	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
+	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
+	assert(data == NULL);
+
+	fi_ibv_rdm_tagged_remove_from_unexp_queue(request);
+
+	if (request->unexp_rbuf) {
+		util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+			request->unexp_rbuf);
+		request->unexp_rbuf = NULL;
+	}
+
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+	util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	return FI_SUCCESS;
 }
 
 static enum fi_rdm_tagged_req_hndl_ret
@@ -1087,6 +1267,12 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_START] =
 	    fi_ibv_rdm_tagged_init_recv_request;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_PEEK] =
+	    fi_ibv_rdm_tagged_peek_request;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_CLAIM] =
+	    fi_ibv_rdm_tagged_recv_claim;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
 	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_GOT_PKT_PROCESS] =
 	    fi_ibv_rdm_tagged_init_unexp_recv_request;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4PKT]
@@ -1095,6 +1281,15 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
 	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_START] =
 	    fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_CLAIM] =
+	    fi_ibv_rdm_tagged_recv_claim;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_CLAIMED]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_START] =
+	    fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_DISCARD] =
+	    fi_ibv_rdm_tagged_eager_recv_discard;
 
 	// RNDV_SEND stuff
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
@@ -1115,11 +1310,14 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_SEND_END]
 	    [FI_IBV_STATE_RNDV_SEND_WAIT4ACK][FI_IBV_EVENT_RECV_GOT_PKT_PROCESS]
 	    = fi_ibv_rdm_tagged_rndv_end;
-
+	
 	// RNDV_RECV stuff
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
 	    [FI_IBV_STATE_RNDV_RECV_BEGIN][FI_IBV_EVENT_RECV_START] =
 	    fi_ibv_rdm_tagged_init_recv_request;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
+	    [FI_IBV_STATE_RNDV_RECV_WAIT4RES][FI_IBV_EVENT_RECV_CLAIM] =
+	    fi_ibv_rdm_tagged_recv_claim;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_END]
 	    [FI_IBV_STATE_RNDV_RECV_WAIT4RES][FI_IBV_EVENT_SEND_READY] =
 	    fi_ibv_rdm_tagged_rndv_recv_post_read;
@@ -1215,6 +1413,8 @@ char *fi_ibv_rdm_tagged_req_eager_state_to_str(
 		return "STATE_EAGER_RECV_WAIT4PKT";
 	case FI_IBV_STATE_EAGER_RECV_WAIT4RECV:
 		return "STATE_EAGER_RECV_WAIT4RECV";
+	case FI_IBV_STATE_EAGER_RECV_CLAIMED:
+		return "FI_IBV_STATE_EAGER_RECV_CLAIMED";
 	case FI_IBV_STATE_EAGER_RECV_END:
 		return "STATE_EAGER_RECV_END";
 
@@ -1300,6 +1500,12 @@ char *fi_ibv_rdm_tagged_req_event_to_str(
 		return "EVENT_RECV_GOT_PKT_PROCESS";
 	case FI_IBV_EVENT_RECV_GOT_ACK:
 		return "EVENT_RECV_GOT_ACK";
+	case FI_IBV_EVENT_RECV_PEEK:
+		return "FI_IBV_EVENT_RECV_PEEK";
+	case FI_IBV_EVENT_RECV_CLAIM:
+		return "FI_IBV_EVENT_RECV_CLAIM";
+	case FI_IBV_EVENT_RECV_DISCARD:
+		return "FI_IBV_EVENT_RECV_DISCARD";
 
 	case FI_IBV_EVENT_RMA_START:
 		return "FI_IBV_EVENT_RMA_START";

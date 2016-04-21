@@ -144,6 +144,12 @@ struct fi_verbs_rdm_tagged_request_minfo {
 	uint64_t			tagmask;
 };
 
+struct fi_ibv_rdm_tagged_peek_data {
+	struct fi_verbs_rdm_tagged_request_minfo minfo;
+	void *context;
+	uint64_t flags;
+};
+
 struct fi_ibv_rdm_cm;
 
 int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other);
@@ -151,6 +157,8 @@ int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
                                         const void *info);
 int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
                                          const void *info);
+int fi_ibv_rdm_tagged_req_match_by_info3(struct dlist_entry *item,
+					 const void *info);
 int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
                                               const void *arg);
 void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,

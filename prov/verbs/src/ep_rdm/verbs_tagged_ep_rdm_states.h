@@ -37,6 +37,7 @@
 #include <stdint.h>
 
 struct fi_ibv_rdm_tagged_request;
+struct fi_verbs_rdm_tagged_request_minfo;
 
 enum fi_ibv_rdm_tagged_request_eager_state {
 	FI_IBV_STATE_EAGER_BEGIN = 0,      // must be 0
@@ -48,6 +49,7 @@ enum fi_ibv_rdm_tagged_request_eager_state {
 	FI_IBV_STATE_EAGER_RECV_BEGIN,
 	FI_IBV_STATE_EAGER_RECV_WAIT4PKT,
 	FI_IBV_STATE_EAGER_RECV_WAIT4RECV,
+	FI_IBV_STATE_EAGER_RECV_CLAIMED,
 	FI_IBV_STATE_EAGER_RECV_END,
 
 	FI_IBV_STATE_EAGER_RMA_INJECT,
@@ -98,6 +100,9 @@ enum fi_ibv_rdm_tagged_request_event {
 	FI_IBV_EVENT_RECV_GOT_PKT_PREPROCESS,
 	FI_IBV_EVENT_RECV_GOT_PKT_PROCESS,
 	FI_IBV_EVENT_RECV_GOT_ACK,
+	FI_IBV_EVENT_RECV_PEEK,
+	FI_IBV_EVENT_RECV_CLAIM,
+	FI_IBV_EVENT_RECV_DISCARD,
 
 	FI_IBV_EVENT_RMA_START,
 
@@ -143,12 +148,10 @@ struct fi_ibv_rdm_tagged_send_completed_data {
 // Recv service data types
 
 struct fi_ibv_rdm_tagged_recv_start_data {
-	size_t tag;
-	size_t tagmask;
+	struct fi_ibv_rdm_tagged_peek_data peek_data;
 	struct fi_context *context;
-	void *dest_addr;
-	struct fi_ibv_rdm_tagged_conn *conn;
 	struct fi_ibv_rdm_ep *ep;
+	void *dest_addr;
 	size_t data_len;
 };
 

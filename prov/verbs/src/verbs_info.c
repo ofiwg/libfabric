@@ -96,6 +96,12 @@ const struct fi_rx_attr verbs_rx_attr = {
 	.total_buffered_recv	= 0,
 };
 
+const struct fi_rx_attr verbs_rdm_rx_attr = {
+	.mode			= VERBS_RX_MODE,
+	.msg_order		= VERBS_MSG_ORDER,
+	.total_buffered_recv	= FI_IBV_RDM_DFLT_BUFFERED_SSIZE /* TODO: */
+};
+
 const struct fi_tx_attr verbs_tx_attr = {
 	.mode			= VERBS_TX_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
@@ -722,6 +728,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
+		*(fi->rx_attr) = verbs_rdm_rx_attr;
 	}
 
 	switch (ctx->device->transport_type) {
