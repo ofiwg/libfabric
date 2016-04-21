@@ -200,16 +200,10 @@ int main(int argc, char **argv)
 
 	hints->rx_attr->total_buffered_recv = 1024;
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_TAGGED;
+	hints->caps = FI_TAGGED;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 
 	ret = run();
-
-	if (ret == -ENODATA) {
-		hints->caps = FI_TAGGED;
-
-		ret = run();
-	}
 
 	ft_free_res();
 	return -ret;
