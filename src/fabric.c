@@ -399,6 +399,7 @@ libdl_done:
            it being the least preferred provider. */
 	fi_register_provider(UDP_INIT, NULL);
 	fi_register_provider(SOCKETS_INIT, NULL);
+	fi_register_provider(RXM_INIT, NULL);
 
 	init = 1;
 

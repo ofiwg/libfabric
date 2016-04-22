@@ -135,4 +135,15 @@ UDP_INI ;
 #  define UDP_INIT NULL
 #endif
 
+#if (HAVE_RXM) && (HAVE_RXM_DL)
+#  define RXM_INI FI_EXT_INI
+#  define RXM_INIT NULL
+#elif (HAVE_RXM)
+#  define RXM_INI INI_SIG(fi_rxm_ini)
+#  define RXM_INIT fi_rxm_ini()
+RXM_INI ;
+#else
+#  define RXM_INIT NULL
+#endif
+
 #endif /* _PROV_H_ */
