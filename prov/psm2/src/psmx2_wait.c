@@ -137,7 +137,7 @@ int psmx2_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	struct fid_wait *wait;
 	int err;
 
-	err = fi_wait_fd_open(fabric, attr, &wait);
+	err = ofi_wait_fd_open(fabric, attr, &wait);
 	if (err)
 		return err;
 

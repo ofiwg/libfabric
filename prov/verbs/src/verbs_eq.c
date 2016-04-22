@@ -282,7 +282,7 @@ fi_ibv_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		if (ret == 0)
 			return -FI_EAGAIN;
 		else if (ret < 0)
-			return ret;
+			return -errno;
 	};
 }
 

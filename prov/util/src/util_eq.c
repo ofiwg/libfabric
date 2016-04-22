@@ -270,7 +270,7 @@ static int util_verify_eq_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
+int ofi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context)
 {
 	struct util_fabric *fabric;

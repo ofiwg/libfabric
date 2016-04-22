@@ -70,7 +70,7 @@ static struct fi_ops_fabric X = {
 	.trywait = fi_no_trywait,
 };
 */
-int fi_no_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+int fi_no_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
 int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_pep **pep, void *context);

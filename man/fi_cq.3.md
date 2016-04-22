@@ -184,7 +184,7 @@ struct fi_cq_msg_entry {
 
 - *FI_CQ_FORMAT_DATA*
 : Provides data associated with a completion.  Includes support for
-  received message length, remote EQ data, and multi-receive buffers.
+  received message length, remote CQ data, and multi-receive buffers.
 
 ```c
 struct fi_cq_data_entry {

@@ -97,38 +97,50 @@ err:
 int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_provider *prov,
 			const struct fi_info *prov_info, struct fi_info *hints,
-			ofi_alter_layer_info_t alter_layer_info,
-			ofi_alter_base_info_t alter_base_info,
+			ofi_alter_info_t alter_layer_info,
+			ofi_alter_info_t alter_base_info,
 			int get_base_info, struct fi_info **info)
 {
-	struct fi_info *base_hints = NULL, *base_info;
+	struct fi_info *base_hints = NULL, *base_info, *layer_info = NULL;
+	struct fi_info *temp = NULL, *fi, *tail;
 	int ret;
 
 	ret = fi_check_info(prov, prov_info, hints, FI_MATCH_PREFIX);
 	if (ret)
-		return ret;
+		goto err1;
 
-	if (hints) {
-		if (!(base_hints = alter_layer_info(hints)))
-			return -FI_ENOMEM;
-	}
+	ret = alter_layer_info(hints, &base_hints);
+	if (ret)
+		goto err1;
 
 	ret = fi_getinfo(version, node, service, flags, base_hints, &base_info);
 	if (ret)
-		goto out;
+		goto err2;
 
 	if (get_base_info) {
 		*info = base_info;
 	} else {
-		if (!(*info = alter_base_info(base_info))) {
-			ret = -FI_ENOMEM;
-			goto out;
+		for (fi = base_info; fi; fi = fi->next) {
+			ret = alter_base_info(fi, &temp);
+			if (ret)
+				goto err3;
+			if (!layer_info)
+				layer_info = temp;
+			else
+				tail->next = temp;
+			tail = temp;
 		}
 		fi_freeinfo(base_info);
 	}
-out:
 	fi_freeinfo(base_hints);
-	return ret;
+	*info = layer_info;
+	return 0;
+err3:
+	fi_freeinfo(layer_info);
+err2:
+	fi_freeinfo(base_hints);
+err1:
+	return -FI_ENODATA;
 }
 
 static int fi_check_name(char *user_name, char *prov_name, enum fi_match_type type)
