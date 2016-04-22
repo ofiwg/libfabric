@@ -52,7 +52,7 @@ struct fid_wait *waitset;
 struct fid_domain *domain;
 struct fid_poll *pollset;
 struct fid_pep *pep;
-struct fid_ep *ep;
+struct fid_ep *ep, *alias_ep;
 struct fid_cq *txcq, *rxcq;
 struct fid_cntr *txcntr, *rxcntr;
 struct fid_mr *mr;
@@ -568,6 +568,17 @@ int ft_get_cq_fd(struct fid_cq *cq, int *fd)
 	return ret;
 }
 
+int ft_init_alias_ep(uint64_t flags)
+{
+	int ret;
+	ret = fi_ep_alias(ep, &alias_ep, flags);
+	if (ret) {
+		FT_PRINTERR("fi_ep_alias", ret);
+		return ret;
+	}
+	return 0;
+}
+
 int ft_init_ep(void)
 {
 	int flags, ret;
@@ -720,6 +731,7 @@ static void ft_close_fids(void)
 {
 	if (mr != &no_mr)
 		FT_CLOSE_FID(mr);
+	FT_CLOSE_FID(alias_ep);
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(pep);
 	FT_CLOSE_FID(pollset);
