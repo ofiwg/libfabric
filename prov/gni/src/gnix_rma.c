@@ -767,7 +767,7 @@ int _gnix_rma_post_req(void *data)
 
 	if (status != GNI_RC_SUCCESS) {
 		_gnix_nic_tx_free(nic, txd);
-		GNIX_INFO(FI_LOG_EP_DATA, "GNI_Post*() failed: %s\n",
+		GNIX_WARN(FI_LOG_EP_DATA, "GNI_Post*() failed: %s\n",
 			  gni_err_str[status]);
 	}
 
