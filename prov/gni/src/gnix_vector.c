@@ -226,7 +226,7 @@ inline int _gnix_vec_at(gnix_vector_t *vec, void **element, gnix_vec_index_t ind
 		if (likely((uint64_t) vec->vector[index])) {
 			*element = vec->vector[index];
 		} else {
-			GNIX_WARN(FI_LOG_EP_CTRL, "There is no element at index "
+			GNIX_INFO(FI_LOG_EP_CTRL, "There is no element at index "
 				  "%lu in _gnix_vec_at\n", index);
 			return -FI_ECANCELED;
 		}
