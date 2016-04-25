@@ -113,10 +113,10 @@ do {                                                                        \
             request,                                                        \
             fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
             fi_ibv_rdm_tagged_req_rndv_state_to_str(request->state.rndv),   \
-            request->tag,                                                   \
+            request->minfo.tag,                                                   \
             request->len,                                                   \
             request->context,                                               \
-            request->conn);                                                 \
+            request->minfo.conn);                                                 \
                                                                             \
     switch (level)                                                          \
     {                                                                       \
@@ -138,10 +138,16 @@ do {                                                                        \
 
 #endif                          // ENABLE_DEBUG
 
-struct fi_verbs_rdm_tagged_request_minfo {
+struct fi_verbs_rdm_tagged_minfo {
 	struct fi_ibv_rdm_tagged_conn	*conn;
 	uint64_t			tag;
 	uint64_t			tagmask;
+};
+
+struct fi_ibv_rdm_tagged_peek_data {
+	struct fi_verbs_rdm_tagged_minfo minfo;
+	void *context;
+	uint64_t flags;
 };
 
 struct fi_ibv_rdm_cm;
@@ -151,6 +157,8 @@ int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
                                         const void *info);
 int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
                                          const void *info);
+int fi_ibv_rdm_tagged_req_match_by_info3(struct dlist_entry *item,
+					 const void *info);
 int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
                                               const void *arg);
 void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,

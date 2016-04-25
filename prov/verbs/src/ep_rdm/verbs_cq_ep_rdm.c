@@ -60,14 +60,14 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 		FI_DBG(&fi_ibv_prov, FI_LOG_CQ,
 		       "\t\t-> found match in ready: op_ctx %p, len %d, tag 0x%llx\n",
 		       completed_req->context, completed_req->len,
-		       (long long unsigned int) completed_req->tag);
+		       completed_req->minfo.tag);
 
-		src_addr[i] = (fi_addr_t) (uintptr_t) completed_req->conn;
+		src_addr[i] = (fi_addr_t) (uintptr_t) completed_req->minfo.conn;
 		entry[i].op_context = completed_req->context;
 		entry[i].flags = 0;
 		entry[i].len = completed_req->len;
 		entry[i].data = completed_req->imm;
-		entry[i].tag = completed_req->tag;
+		entry[i].tag = completed_req->minfo.tag;
 
 		if (completed_req->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 			FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", completed_req,

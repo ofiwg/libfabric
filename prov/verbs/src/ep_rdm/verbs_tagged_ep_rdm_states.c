@@ -43,7 +43,7 @@ extern struct dlist_entry fi_ibv_rdm_tagged_send_postponed_queue;
 extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
 extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
-typedef enum fi_rdm_tagged_req_hndl_ret (*fi_ep_rdm_request_handler_t)
+typedef ssize_t (*fi_ep_rdm_request_handler_t)
 	(struct fi_ibv_rdm_tagged_request * request, void *data);
 
 static fi_ep_rdm_request_handler_t
@@ -82,14 +82,15 @@ do {                                                                        \
 #define FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT()
 #endif // ENABLE_DEBUG
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 				    void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
 
 	struct fi_ibv_rdm_tagged_send_start_data *p = data;
-	request->tag = p->tag;
+	request->minfo.conn = p->conn;
+	request->minfo.tag = p->tag;
 	request->iov_count = p->iov_count;
 
 	/* Indeed, both branches are the same, just for readability */
@@ -102,7 +103,6 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 	request->len = p->data_len;
 	request->imm = p->imm;
 	request->context = p->context;
-	request->conn = p->conn;
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv =
 	    (p->data_len + sizeof(struct fi_ibv_rdm_header)
@@ -118,10 +118,10 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 	}
 		
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 				   void *data)
 {
@@ -133,10 +133,10 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
 	struct fi_ibv_rdm_tagged_send_ready_data *p = data;
 
-	int ret = 0;
+	ssize_t ret = FI_SUCCESS;
 	struct ibv_sge sge;
 
-	struct fi_ibv_rdm_tagged_conn *conn = request->conn;
+	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
 	int size = request->len + sizeof(struct fi_ibv_rdm_header);
 
 	assert(request->sbuf);
@@ -167,7 +167,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	struct fi_ibv_rdm_buf *sbuf = (struct fi_ibv_rdm_buf *)request->sbuf;
 	char *payload = &(sbuf->payload[0]);
 
-	sbuf->header.tag = request->tag;
+	sbuf->header.tag = request->minfo.tag;
 	sbuf->header.service_tag = 0;
 	FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag, FI_IBV_RDM_EAGER_PKT);
 
@@ -184,14 +184,15 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 		}
 	}
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn,
+					 p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
-		  sge.length, request->conn, request->tag);
+		  sge.length, request->minfo.conn, request->minfo.tag);
 
 	ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
-
+		ret = -errno;
 		assert(0);
 	};
 
@@ -203,7 +204,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	return ret;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_eager_send_lc(struct fi_ibv_rdm_tagged_request *request,
 				void *data)
 {
@@ -213,11 +214,11 @@ fi_ibv_rdm_tagged_eager_send_lc(struct fi_ibv_rdm_tagged_request *request,
 	       request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE);
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
 
-	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n", request->conn,
-		     request->tag, request->len);
+	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
+		request->minfo.conn, request->minfo.tag, request->len);
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
-	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
+	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->minfo.conn, p->ep);
 
 	if (request->iov_count) {
 		util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
@@ -233,10 +234,10 @@ fi_ibv_rdm_tagged_eager_send_lc(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 				      void *data)
 {
@@ -246,15 +247,15 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_SEND_WAIT4SEND);
 	assert(request->sbuf);
 
-	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n", request->conn,
-		     request->tag, request->len);
+	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
+		  request->minfo.conn, request->minfo.tag, request->len);
 
 	fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
 	struct fi_ibv_rdm_tagged_send_ready_data *p = data;
 
 	struct ibv_sge sge;
 
-	struct fi_ibv_rdm_tagged_conn *conn = request->conn;
+	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
 	struct fi_ibv_rdm_tagged_rndv_header *header =
 	    (struct fi_ibv_rdm_tagged_rndv_header *)request->sbuf;
 	struct ibv_mr *mr = NULL;
@@ -278,7 +279,7 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	sge.length = sizeof(struct fi_ibv_rdm_tagged_rndv_header);
 	sge.lkey = conn->s_mr->lkey;
 
-	header->base.tag = request->tag;
+	header->base.tag = request->minfo.tag;
 	header->base.service_tag = 0;
 	header->len = request->len;
 	header->src_addr = (uint64_t) (uintptr_t) request->src_addr;
@@ -288,10 +289,10 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	mr = ibv_reg_mr(p->ep->domain->pd, (void *)request->src_addr,
 			request->len, IBV_ACCESS_REMOTE_READ);
-	if (NULL == mr) {
+	if (!mr) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_reg_mr", errno);
 		assert(0);
-		return FI_EOTHER;
+		return -errno;
 	}
 
 	header->mem_key = mr->rkey;
@@ -305,45 +306,46 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	VERBS_DBG(FI_LOG_EP_DATA,
 	     "fi_senddatato: RNDV conn %p, tag 0x%llx, len %d, src_addr %p,"
 	     "rkey 0x%lx, fi_ctx %p, imm %d, post_send %d\n", conn,
-	     (long long unsigned int)request->tag, (int)request->len,
-	     request->src_addr, (long unsigned int)mr->rkey, request->context,
+	     request->minfo.tag, (int)request->len,
+	     request->src_addr, mr->rkey, request->context,
 	     (int)wr.imm_data, p->ep->posted_sends);
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep,
+		wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
-		sge.length, request->conn, request->tag);
+		sge.length, request->minfo.conn, request->minfo.tag);
 	int ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
+		return -errno;
 	};
 
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 	request->state.rndv = FI_IBV_STATE_RNDV_SEND_WAIT4ACK;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_rndv_rts_lc(struct fi_ibv_rdm_tagged_request *request,
 			      void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
-	enum fi_rdm_tagged_req_hndl_ret ret = FI_EP_RDM_HNDL_SUCCESS;
 
 	assert(((request->state.eager == FI_IBV_STATE_EAGER_SEND_WAIT4LC) &&
 		(request->state.rndv == FI_IBV_STATE_RNDV_SEND_WAIT4ACK)) ||
 	       ((request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) &&
 		(request->state.rndv == FI_IBV_STATE_RNDV_SEND_END)));
-	assert(request->conn);
+	assert(request->minfo.conn);
 
-	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n", request->conn,
-		     request->tag, request->len);
+	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
+		request->minfo.conn, request->minfo.tag, request->len);
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
 
-	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
+	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->minfo.conn, p->ep);
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_SEND_WAIT4LC) {
 		request->state.eager = FI_IBV_STATE_EAGER_SEND_END;
@@ -355,10 +357,10 @@ fi_ibv_rdm_tagged_rndv_rts_lc(struct fi_ibv_rdm_tagged_request *request,
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
-	return ret;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_tagged_request *request,
 			   void *data)
 {
@@ -391,40 +393,76 @@ fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_tagged_request *request,
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+
+static inline ssize_t
+fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_tagged_request *request,
+			      struct fi_ibv_rdm_tagged_request *unexp)
+{
+	if (request->len && (request->len < unexp->len)) {
+		VERBS_INFO(FI_LOG_EP_DATA,
+			"RECV TRUNCATE, unexp len %d, "
+			"req->len=%d, conn %p, tag 0x%llx, "
+			"tagmask %llx\n",
+			unexp->len, request->len,
+			request->minfo.conn, request->minfo.tag,
+			request->minfo.tagmask);
+		assert(0);
+		return -FI_ETRUNC;
+	}
+
+	request->minfo.conn = unexp->minfo.conn;
+	request->minfo.tag = unexp->minfo.tag;
+	request->len = unexp->len;
+	request->unexp_rbuf = unexp->unexp_rbuf;
+	request->state.eager = unexp->state.eager;
+	request->state.rndv = unexp->state.rndv;
+
+	assert((request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV) || 
+	       (request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED));
+
+	VERBS_DBG(FI_LOG_EP_DATA, "found req: len = %d, eager_state = %s, rndv_state = %s \n",
+		unexp->len,
+		fi_ibv_rdm_tagged_req_eager_state_to_str(unexp->state.eager),
+		fi_ibv_rdm_tagged_req_rndv_state_to_str(unexp->state.rndv));
+
+	if (request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED) {
+		assert(request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES);
+
+		request->rndv.rkey = unexp->rndv.rkey;
+		request->rndv.id = unexp->rndv.id;
+		request->rndv.remote_addr = unexp->rndv.remote_addr;
+	}
+
+	return FI_SUCCESS;
+}
+
+static ssize_t
 fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 				    void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
 
+	ssize_t ret = FI_SUCCESS;
 	struct fi_ibv_rdm_tagged_recv_start_data *p = data;
 
-	request->tag = p->tag;
-	request->tagmask = p->tagmask;
-	request->context = p->context;
+	request->minfo = p->peek_data.minfo;
+	request->context = p->peek_data.context;
 	request->context->internal[0] = (void *)request;
 	request->dest_buf = p->dest_addr;
-	request->conn = p->conn;
 	request->len = p->data_len;
 	request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4PKT;
 	request->state.rndv = FI_IBV_STATE_RNDV_NOT_USED;
 
-	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n", request->conn,
-		     request->tag, request->len);
-
-	struct fi_verbs_rdm_tagged_request_minfo minfo = {
-		.conn = p->conn,
-		.tag = p->tag,
-		.tagmask = p->tagmask
-	};
+	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
+		request->minfo.conn, request->minfo.tag, request->len);
 
 	struct dlist_entry *found_entry =
 	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
-				   fi_ibv_rdm_tagged_req_match_by_info2,
-				   &minfo);
+				   fi_ibv_rdm_tagged_req_match_by_info3,
+				   &p->peek_data);
 
 	if (found_entry) {
 
@@ -434,42 +472,15 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 
 		fi_ibv_rdm_tagged_remove_from_unexp_queue(found_request);
 
-		if (request->len < found_request->len) {
-			VERBS_INFO(FI_LOG_EP_DATA,
-				"RECV TRUNCATE, unexp len %d, "
-				"req->len=%d, conn %p, tag 0x%llx, "
-				"tagmask %llx\n",
-				found_request->len, request->len, request->conn,
-				request->tag, request->tagmask);
-			abort();
-		}
-
-		request->tag = found_request->tag;
-		request->len = found_request->len;
-		request->conn = found_request->conn;
-		request->unexp_rbuf = found_request->unexp_rbuf;
-		request->state.eager = found_request->state.eager;
-		request->state.rndv = found_request->state.rndv;
-
-		assert(request->state.eager ==
-		       FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
-		if (request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED) {
-			assert(request->state.rndv ==
-			       FI_IBV_STATE_RNDV_RECV_WAIT4RES);
-
-			request->rndv.rkey =
-			    found_request->rndv.rkey;
-			request->rndv.id = found_request->rndv.id;
-			request->rndv.remote_addr =
-				found_request->rndv.remote_addr;
-		}
-		VERBS_DBG(FI_LOG_EP_DATA, "found req: len = %d, eager_state = %s, "
-			     "rndv_state = %s \n",
-			     found_request->len,
-			     fi_ibv_rdm_tagged_req_eager_state_to_str
-			     (found_request->state.eager),
-			     fi_ibv_rdm_tagged_req_rndv_state_to_str
-			     (found_request->state.rndv));
+		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
+		
+		assert(((p->peek_data.flags & FI_CLAIM) &&
+				(request->state.eager == 
+					FI_IBV_STATE_EAGER_RECV_CLAIMED) &&
+				(request->context == found_request->context)) ||
+		       (!(p->peek_data.flags & FI_CLAIM) && 
+				(request->state.eager == 
+					FI_IBV_STATE_EAGER_RECV_WAIT4RECV)));
 
 		FI_IBV_RDM_TAGGED_HANDLER_LOG();
 
@@ -482,14 +493,14 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 			fi_ibv_rdm_tagged_move_to_postponed_queue(request);
 		}
 #if ENABLE_DEBUG
-		request->conn->unexp_counter++;
+		request->minfo.conn->unexp_counter++;
 #endif // ENABLE_DEBUG
 
 	} else {
 
 #if ENABLE_DEBUG
-		if (request->conn) {
-			request->conn->exp_counter++;
+		if (request->minfo.conn) {
+			request->minfo.conn->exp_counter++;
 		}
 #endif // ENABLE_DEBUG
 
@@ -497,10 +508,73 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return ret;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
+fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
+			       void *data)
+{
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
+	assert(request->state.eager == FI_IBV_STATE_EAGER_BEGIN);
+	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
+
+	ssize_t ret = FI_SUCCESS;
+
+	struct fi_ibv_rdm_tagged_peek_data *peek_data = data;
+	struct dlist_entry *found_entry =
+		dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
+					fi_ibv_rdm_tagged_req_match_by_info2,
+					&peek_data->minfo);
+	if (found_entry) {
+		struct fi_ibv_rdm_tagged_request *found_request =
+			container_of(found_entry,
+				struct fi_ibv_rdm_tagged_request,
+				queue_entry);
+		assert(found_request);
+
+		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
+
+		if (ret) {
+			goto out;
+		}
+
+		request->context = peek_data->context;
+
+		if (peek_data->flags & FI_CLAIM) {
+			ret = fi_ibv_rdm_tagged_req_hndl(found_request,
+				FI_IBV_EVENT_RECV_CLAIM, peek_data);
+
+			if (ret) {
+				goto out;
+			}
+		}
+
+		if (peek_data->flags & FI_DISCARD) {
+			ret = fi_ibv_rdm_tagged_req_hndl(found_request,
+				FI_IBV_EVENT_RECV_DISCARD, NULL);
+
+			if (ret) {
+				goto out;
+			}
+		}
+
+		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
+		fi_ibv_rdm_tagged_move_to_ready_queue(request);
+		
+		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	} else {
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+		ret = -FI_ENOMSG;
+	}
+
+out:
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	return ret;
+}
+
+static ssize_t
 fi_ibv_rdm_tagged_init_unexp_recv_request(
 		struct fi_ibv_rdm_tagged_request *request, void *data)
 {
@@ -511,6 +585,7 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 
 	struct fi_ibv_recv_got_pkt_preprocess_data *p = data;
 	struct fi_ibv_rdm_buf *rbuf = p->rbuf;
+	ssize_t ret = FI_SUCCESS;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG();
 
@@ -518,8 +593,8 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 	case FI_IBV_RDM_EAGER_PKT:
 		FI_IBV_RDM_TAGGED_HANDLER_LOG();
 
-		request->tag = rbuf->header.tag;
-		request->conn = p->conn;
+		request->minfo.tag = rbuf->header.tag;
+		request->minfo.conn = p->conn;
 		request->len = 
 			p->arrived_len - sizeof(struct fi_ibv_rdm_header);
 		
@@ -542,35 +617,34 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 		struct fi_ibv_rdm_tagged_rndv_header *h =
 		    (struct fi_ibv_rdm_tagged_rndv_header *)rbuf;
 
-		request->tag = h->base.tag;
+		request->minfo.conn = p->conn;
+		request->minfo.tag = h->base.tag;
 		request->rndv.id = h->id;
 		request->rndv.remote_addr = (void *)h->src_addr;
 		request->rndv.rkey = h->mem_key;
 		request->len = h->len;
 		request->imm = p->imm_data;
-		request->conn = p->conn;
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4RECV;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
 		break;
 	case FI_IBV_RDM_RNDV_ACK_PKT:
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("Unexpected RNDV ack!!!",
 					      request, FI_LOG_INFO);
-		assert(0);
-		break;
 	default:
 		VERBS_INFO(FI_LOG_EP_DATA,
 			"Got unknown unexpected pkt: %" PRIu64 "\n",
 			p->pkt_type);
 		assert(0);
+		ret = -FI_EOTHER;
 	}
 
 	fi_ibv_rdm_tagged_move_to_unexpected_queue(request);
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return ret;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 				     void *data)
 {
@@ -583,8 +657,8 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 	switch (p->pkt_type) {
 	case FI_IBV_RDM_EAGER_PKT:
 		assert(p->arrived_len - sizeof(rbuf->header) <= request->len);
-		request->tag = rbuf->header.tag;
-		request->conn = p->conn;
+		request->minfo.conn = p->conn;
+		request->minfo.tag = rbuf->header.tag;
 		request->len = p->arrived_len - sizeof(rbuf->header);
 		request->exp_rbuf = rbuf->payload;
 		request->imm = p->imm_data;
@@ -608,12 +682,12 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 		struct fi_ibv_rdm_tagged_rndv_header *rndv_header =
 		    (struct fi_ibv_rdm_tagged_rndv_header *)rbuf;
 
-		request->tag = rndv_header->base.tag;
+		request->minfo.conn = p->conn;
+		request->minfo.tag = rndv_header->base.tag;
 		request->rndv.remote_addr = (void *)rndv_header->src_addr;
 		request->rndv.rkey = rndv_header->mem_key;
 		request->len = rndv_header->len;
 		request->imm = p->imm_data;
-		request->conn = p->conn;
 		request->rndv.id = rndv_header->id;
 
 		fi_ibv_rdm_tagged_move_to_postponed_queue(request);
@@ -625,15 +699,16 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(
 		struct fi_ibv_rdm_tagged_request *request, void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
-	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
+	assert((request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV) ||
+	       (request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED));
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
 
 	if (request->dest_buf && request->len != 0) {
@@ -649,10 +724,54 @@ fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(
 	request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
+fi_ibv_rdm_tagged_recv_claim(struct fi_ibv_rdm_tagged_request *request,
+			     void *data)
+{
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
+	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
+	assert((request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED) ||
+	       (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES));
+
+	ssize_t ret = FI_SUCCESS;
+	struct fi_ibv_rdm_tagged_peek_data *peek_data = data;
+	assert(peek_data->context);
+
+	request->state.eager = FI_IBV_STATE_EAGER_RECV_CLAIMED;
+	request->context = peek_data->context;
+
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	return ret;
+}
+
+static ssize_t
+fi_ibv_rdm_tagged_eager_recv_discard(struct fi_ibv_rdm_tagged_request *request,
+				      void *data)
+{
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
+	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
+	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
+	assert(data == NULL);
+
+	fi_ibv_rdm_tagged_remove_from_unexp_queue(request);
+
+	if (request->unexp_rbuf) {
+		util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+			request->unexp_rbuf);
+		request->unexp_rbuf = NULL;
+	}
+
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+	util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+	return FI_SUCCESS;
+}
+
+static ssize_t
 fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 				      void *data)
 {
@@ -665,7 +784,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
 	VERBS_DBG(FI_LOG_EP_DATA, "\t REQUEST: conn %p, tag 0x%llx, len %d, dest_buf %p, "
 		     "src_addr %p, rkey 0x%lx\n",
-		     request->conn, (long long unsigned int)request->tag,
+		     request->minfo.conn, request->minfo.tag,
 		     request->len, request->dest_buf,
 		     request->rndv.remote_addr,
 		     (long unsigned int)request->rndv.rkey);
@@ -673,9 +792,8 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_sge sge;
-	int ret;
 
-	assert((request->conn->cm_role != FI_VERBS_CM_SELF) || 
+	assert((request->minfo.conn->cm_role != FI_VERBS_CM_SELF) || 
 	       (request->rndv.remote_addr != request->dest_buf));
 
 	wr.wr_id = (uintptr_t) request;
@@ -696,47 +814,45 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	sge.length = request->len;
 	sge.lkey = request->rndv.mr->lkey;
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
-		  sge.length, request->conn, request->tag);
-	ret = ibv_post_send(request->conn->qp[0], &wr, &bad_wr);
+		  sge.length, request->minfo.conn, request->minfo.tag);
+	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
-		return FI_EP_RDM_HNDL_ERROR;
+		return -errno;
 	};
 
 	request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
 	request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4LC;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 				    void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
+	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
+	struct ibv_send_wr wr = { 0 };
+	struct ibv_sge sge = { 0 };
+	struct ibv_send_wr *bad_wr = NULL;
+	struct fi_ibv_rdm_buf *sbuf = request->sbuf;
+	ssize_t ret = FI_SUCCESS;
 
 	assert(request->len > (p->ep->rndv_threshold
 			       - sizeof(struct fi_ibv_rdm_header)));
 	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_END);
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4LC);
-
-	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
-
-	struct fi_ibv_rdm_tagged_conn *conn = request->conn;
 	assert(request->sbuf);
 
-	int ret = 0;
-	struct ibv_send_wr wr = { 0 };
-	struct ibv_sge sge = { 0 };
-	struct ibv_send_wr *bad_wr = NULL;
+	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(conn, p->ep);
 
-	struct fi_ibv_rdm_buf *sbuf = request->sbuf;
 	sbuf->header.tag = 0;
 	sbuf->header.service_tag = 0;
 	FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
@@ -761,10 +877,10 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 	sge.length = sizeof(struct fi_ibv_rdm_header) + sizeof(request->rndv.id);
 	sge.lkey = conn->s_mr->lkey;
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA,
 		"posted %d bytes, conn %p, tag 0x%llx, request %p\n",
-		sge.length, request->conn, request->tag, request);
+		sge.length, request->minfo.conn, request->minfo.tag, request);
 	ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret == 0) {
 		assert(request->rndv.mr);
@@ -776,16 +892,17 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 	} else {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
+		ret = -errno;
 	}
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 	request->state.rndv = FI_IBV_STATE_RNDV_RECV_END;
 	fi_ibv_rdm_tagged_move_to_ready_queue(request);
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return ret;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_rndv_recv_ack_lc(struct fi_ibv_rdm_tagged_request *request,
 				   void *data)
 {
@@ -795,7 +912,7 @@ fi_ibv_rdm_tagged_rndv_recv_ack_lc(struct fi_ibv_rdm_tagged_request *request,
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_RECV_END);
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
-	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
+	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->minfo.conn, p->ep);
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
@@ -807,10 +924,10 @@ fi_ibv_rdm_tagged_rndv_recv_ack_lc(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_tagged_request *request,
 		void *data)
 {
@@ -822,7 +939,7 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_tagged_request *request,
 		(struct fi_ibv_rdm_rma_start_data *)data;
 
 	request->context = p->context;
-	request->conn = p->conn;
+	request->minfo.conn = p->conn;
 	
 	if (p->op_code == IBV_WR_RDMA_READ) {
 		request->dest_buf = (void*)p->lbuf;
@@ -842,10 +959,10 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_tagged_request *request,
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 		void *data)
 {
@@ -857,11 +974,9 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 	struct ibv_sge sge = { 0 };
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
-	int ret = 0;
-
 	struct fi_ibv_rdm_rma_start_data *p = data;
 
-	request->conn = p->conn;
+	request->minfo.conn = p->conn;
 	request->len = p->data_len;
 	request->sbuf = NULL;
 
@@ -876,28 +991,29 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 	sge.addr = p->lbuf;
 
 	if ((request->len < p->ep_rdm->max_inline_rc) && 
-	    (!RMA_RESOURCES_IS_BUSY(request->conn, p->ep_rdm)))
+	    (!RMA_RESOURCES_IS_BUSY(request->minfo.conn, p->ep_rdm)))
 	{
 		wr.send_flags |= IBV_SEND_INLINE;
 	} else if (fi_ibv_rdm_prepare_rma_request(request, p->ep_rdm)) {
 		memcpy(request->rmabuf, (void*)p->lbuf, p->data_len);
 		sge.addr = (uint64_t)request->rmabuf;
-		sge.lkey = request->conn->rma_mr->lkey;
+		sge.lkey = request->minfo.conn->rma_mr->lkey;
 	} else {
 		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-		return FI_EP_RDM_HNDL_AGAIN;
+		return FI_SUCCESS;
 	}
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep_rdm, wr.send_flags);
-	ret = ibv_post_send(request->conn->qp[0], &wr, &bad_wr);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm,
+		wr.send_flags);
+
+	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INJECT_WAIT4LC;
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
-	return (ret == FI_EP_RDM_HNDL_SUCCESS) ?
-		FI_SUCCESS : -errno;
+	return (ret == 0) ? FI_SUCCESS : -errno;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 		void *data)
 {
@@ -926,7 +1042,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 	/* buffered operation */
 	if (request->rmabuf) {
 		sge.addr = (uint64_t) (request->rmabuf);
-		sge.lkey = request->conn->rma_mr->lkey;
+		sge.lkey = request->minfo.conn->rma_mr->lkey;
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_WAIT4LC;
 	} else {
 		/* src_addr or dest_buf from an union
@@ -942,15 +1058,15 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	sge.length = request->len;
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep_rdm, wr.send_flags);
-	int ret = ibv_post_send(request->conn->qp[0], &wr, &bad_wr);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm, wr.send_flags);
+	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
-	return (ret == 0) ? FI_EP_RDM_HNDL_SUCCESS : FI_EP_RDM_HNDL_ERROR;
+	return (ret == 0) ? FI_SUCCESS : -errno;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_rma_inject_lc(struct fi_ibv_rdm_tagged_request *request, void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
@@ -959,7 +1075,7 @@ fi_ibv_rdm_rma_inject_lc(struct fi_ibv_rdm_tagged_request *request, void *data)
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
 
-	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
+	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->minfo.conn, p->ep);
 	if (request->rmabuf) {
 		fi_ibv_rdm_tagged_set_buffer_status(request->rmabuf,
 						    BUF_STATUS_FREE);
@@ -973,10 +1089,10 @@ fi_ibv_rdm_rma_inject_lc(struct fi_ibv_rdm_tagged_request *request, void *data)
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_tagged_request *request,
 			   void *data)
 {
@@ -987,7 +1103,7 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_tagged_request *request,
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
-	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
+	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->minfo.conn, p->ep);
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_RMA_WAIT4LC) {
 		if (request->rmabuf) {
@@ -1007,11 +1123,11 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_rma_zerocopy_lc(struct fi_ibv_rdm_tagged_request *request,
 			   void *data)
 {
@@ -1020,11 +1136,11 @@ fi_ibv_rdm_rma_zerocopy_lc(struct fi_ibv_rdm_tagged_request *request,
 	assert(request->state.eager == FI_IBV_STATE_EAGER_RMA_INITIALIZED);
 	assert(request->state.rndv == FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC);
 
-	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n", request->conn,
-		     request->tag, request->len);
+	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
+		request->minfo.conn, request->minfo.tag, request->len);
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
-	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
+	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->minfo.conn, p->ep);
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 		assert (request->state.rndv == FI_IBV_STATE_ZEROCOPY_RMA_END);
@@ -1038,10 +1154,10 @@ fi_ibv_rdm_rma_zerocopy_lc(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-static enum fi_rdm_tagged_req_hndl_ret
+static ssize_t
 fi_ibv_rdm_tagged_err_hndl(struct fi_ibv_rdm_tagged_request *request,
 			   void *data)
 {
@@ -1052,10 +1168,10 @@ fi_ibv_rdm_tagged_err_hndl(struct fi_ibv_rdm_tagged_request *request,
 		request->len);
 
 	assert(0);
-	return FI_EP_RDM_HNDL_NOT_INIT;
+	return -FI_EOTHER;
 }
 
-enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
+ssize_t fi_ibv_rdm_tagged_req_hndls_init(void)
 {
 	size_t i, j, k;
 
@@ -1087,6 +1203,12 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_START] =
 	    fi_ibv_rdm_tagged_init_recv_request;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_PEEK] =
+	    fi_ibv_rdm_tagged_peek_request;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_CLAIM] =
+	    fi_ibv_rdm_tagged_recv_claim;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
 	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_GOT_PKT_PROCESS] =
 	    fi_ibv_rdm_tagged_init_unexp_recv_request;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4PKT]
@@ -1095,6 +1217,15 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
 	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_START] =
 	    fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_CLAIM] =
+	    fi_ibv_rdm_tagged_recv_claim;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_CLAIMED]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_START] =
+	    fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_DISCARD] =
+	    fi_ibv_rdm_tagged_eager_recv_discard;
 
 	// RNDV_SEND stuff
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
@@ -1115,11 +1246,14 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_SEND_END]
 	    [FI_IBV_STATE_RNDV_SEND_WAIT4ACK][FI_IBV_EVENT_RECV_GOT_PKT_PROCESS]
 	    = fi_ibv_rdm_tagged_rndv_end;
-
+	
 	// RNDV_RECV stuff
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
 	    [FI_IBV_STATE_RNDV_RECV_BEGIN][FI_IBV_EVENT_RECV_START] =
 	    fi_ibv_rdm_tagged_init_recv_request;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4RECV]
+	    [FI_IBV_STATE_RNDV_RECV_WAIT4RES][FI_IBV_EVENT_RECV_CLAIM] =
+	    fi_ibv_rdm_tagged_recv_claim;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_END]
 	    [FI_IBV_STATE_RNDV_RECV_WAIT4RES][FI_IBV_EVENT_SEND_READY] =
 	    fi_ibv_rdm_tagged_rndv_recv_post_read;
@@ -1159,10 +1293,10 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	    [FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC][FI_IBV_EVENT_SEND_GOT_LC] =
 	    fi_ibv_rdm_rma_zerocopy_lc;
 
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_clean(void)
+ssize_t fi_ibv_rdm_tagged_req_hndls_clean(void)
 {
 	size_t i, j, k;
 	for (i = 0; i < FI_IBV_STATE_EAGER_COUNT; ++i) {
@@ -1172,10 +1306,10 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_clean(void)
 			}
 		}
 	}
-	return FI_EP_RDM_HNDL_SUCCESS;
+	return FI_SUCCESS;
 }
 
-enum fi_rdm_tagged_req_hndl_ret
+ssize_t
 fi_ibv_rdm_tagged_req_hndl(struct fi_ibv_rdm_tagged_request * request,
 			   enum fi_ibv_rdm_tagged_request_event event, void *data)
 {
@@ -1215,6 +1349,8 @@ char *fi_ibv_rdm_tagged_req_eager_state_to_str(
 		return "STATE_EAGER_RECV_WAIT4PKT";
 	case FI_IBV_STATE_EAGER_RECV_WAIT4RECV:
 		return "STATE_EAGER_RECV_WAIT4RECV";
+	case FI_IBV_STATE_EAGER_RECV_CLAIMED:
+		return "FI_IBV_STATE_EAGER_RECV_CLAIMED";
 	case FI_IBV_STATE_EAGER_RECV_END:
 		return "STATE_EAGER_RECV_END";
 
@@ -1300,6 +1436,12 @@ char *fi_ibv_rdm_tagged_req_event_to_str(
 		return "EVENT_RECV_GOT_PKT_PROCESS";
 	case FI_IBV_EVENT_RECV_GOT_ACK:
 		return "EVENT_RECV_GOT_ACK";
+	case FI_IBV_EVENT_RECV_PEEK:
+		return "FI_IBV_EVENT_RECV_PEEK";
+	case FI_IBV_EVENT_RECV_CLAIM:
+		return "FI_IBV_EVENT_RECV_CLAIM";
+	case FI_IBV_EVENT_RECV_DISCARD:
+		return "FI_IBV_EVENT_RECV_DISCARD";
 
 	case FI_IBV_EVENT_RMA_START:
 		return "FI_IBV_EVENT_RMA_START";

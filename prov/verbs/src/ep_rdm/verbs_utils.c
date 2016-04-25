@@ -48,11 +48,12 @@ int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
 	struct fi_ibv_rdm_tagged_request *request =
 	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
 
-	const struct fi_verbs_rdm_tagged_request_minfo *minfo = info;
+	const struct fi_verbs_rdm_tagged_minfo *minfo = info;
 
-	return (((request->conn == NULL) || (request->conn == minfo->conn)) &&
-		((request->tag & request->tagmask) ==
-		 (minfo->tag   & request->tagmask)));
+	return (((request->minfo.conn == NULL) ||
+		 (request->minfo.conn == minfo->conn)) &&
+		((request->minfo.tag & request->minfo.tagmask) ==
+		 (minfo->tag         & request->minfo.tagmask)));
 }
 
 /*
@@ -65,11 +66,29 @@ int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
 	struct fi_ibv_rdm_tagged_request *request =
 	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
 
-	const struct fi_verbs_rdm_tagged_request_minfo *minfo = info;
+	const struct fi_verbs_rdm_tagged_minfo *minfo = info;
 
-	return (((minfo->conn == NULL) || (request->conn == minfo->conn)) &&
-		((request->tag & minfo->tagmask) ==
-		 (minfo->tag   & minfo->tagmask)));
+	return (((minfo->conn == NULL) || (request->minfo.conn == minfo->conn)) &&
+		((request->minfo.tag & minfo->tagmask) ==
+		 (minfo->tag         & minfo->tagmask)));
+}
+
+/*
+ * The same as fi_ibv_rdm_tagged_req_match_by_info2 but context field is added  
+ * to compare
+ */
+int fi_ibv_rdm_tagged_req_match_by_info3(struct dlist_entry *item,
+					 const void *info)
+{
+	struct fi_ibv_rdm_tagged_request *request =
+	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
+
+	const struct fi_ibv_rdm_tagged_peek_data *peek_data = info;
+	const void *context = (peek_data->flags & FI_CLAIM) ?
+		peek_data->context : NULL;
+
+	return ((request->context == context) && 
+		fi_ibv_rdm_tagged_req_match_by_info2(item, &peek_data->minfo));
 }
 
 int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
