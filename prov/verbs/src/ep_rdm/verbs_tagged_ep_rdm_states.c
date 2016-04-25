@@ -735,74 +735,16 @@ fi_ibv_rdm_tagged_recv_claim(struct fi_ibv_rdm_tagged_request *request,
 			     void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
-	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV ||
-	       request->state.eager == FI_IBV_STATE_EAGER_BEGIN);
+	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
 	assert((request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED) ||
 	       (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES));
 
 	ssize_t ret = FI_SUCCESS;
 	struct fi_ibv_rdm_tagged_peek_data *peek_data = data;
+	assert(peek_data->context);
 
-	switch (request->state.eager)
-	{
-	case FI_IBV_STATE_EAGER_BEGIN: /* TODO: move to separated handler */
-	{
-		assert(peek_data->context);
-		struct dlist_entry *found_entry =
-		    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
-					   fi_ibv_rdm_tagged_req_match_by_info3,
-					   peek_data);
-		if (found_entry) {
-			struct fi_ibv_rdm_tagged_request *found_request =
-				container_of(found_entry,
-					struct fi_ibv_rdm_tagged_request,
-					queue_entry);
-
-			assert(found_request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED);
-
-			FI_IBV_RDM_TAGGED_HANDLER_LOG();
-
-			if (peek_data->flags & FI_DISCARD)
-			{
-				ret = fi_ibv_rdm_tagged_req_hndl(found_request,
-					FI_IBV_EVENT_RECV_DISCARD, NULL);
-				if (ret) {
-					return ret;
-				}
-			}
-			else
-			{
-				fi_ibv_rdm_tagged_remove_from_unexp_queue(found_request);
-
-				ret = fi_ibv_rdm_tagged_req_hndl(found_request,
-					FI_IBV_EVENT_RECV_START, NULL);
-				if (ret) {
-					return ret;
-				}
-
-			}
-			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-			FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
-
-			FI_IBV_RDM_TAGGED_HANDLER_LOG();
-		} else {
-			ret = -FI_ENOMSG;
-			FI_IBV_RDM_TAGGED_HANDLER_LOG();
-		}
-		break;
-	}
-	case FI_IBV_STATE_EAGER_RECV_WAIT4RECV: /* TODO: move to separated handler */
-	{
-		assert(peek_data->context);
-		request->state.eager = FI_IBV_STATE_EAGER_RECV_CLAIMED;
-		request->context = peek_data->context;
-		FI_IBV_RDM_TAGGED_HANDLER_LOG();
-		break;
-	}
-	default: /* TODO: remove */
-		assert(0);
-	}
+	request->state.eager = FI_IBV_STATE_EAGER_RECV_CLAIMED;
+	request->context = peek_data->context;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return ret;
