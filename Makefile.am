@@ -298,6 +298,7 @@ include prov/psm/Makefile.include
 include prov/psm2/Makefile.include
 include prov/mxm/Makefile.include
 include prov/gni/Makefile.include
+include prov/rxm/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 
