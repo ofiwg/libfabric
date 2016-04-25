@@ -396,12 +396,56 @@ fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_tagged_request *request,
 	return FI_SUCCESS;
 }
 
+
+static inline ssize_t
+fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_tagged_request *request,
+			      struct fi_ibv_rdm_tagged_request *unexp)
+{
+	if (request->len && (request->len < unexp->len)) {
+		VERBS_INFO(FI_LOG_EP_DATA,
+			"RECV TRUNCATE, unexp len %d, "
+			"req->len=%d, conn %p, tag 0x%llx, "
+			"tagmask %llx\n",
+			unexp->len, request->len,
+			request->minfo.conn, request->minfo.tag,
+			request->minfo.tagmask);
+		assert(0);
+		return -FI_ETRUNC;
+	}
+
+	request->minfo.conn = unexp->minfo.conn;
+	request->minfo.tag = unexp->minfo.tag;
+	request->len = unexp->len;
+	request->unexp_rbuf = unexp->unexp_rbuf;
+	request->state.eager = unexp->state.eager;
+	request->state.rndv = unexp->state.rndv;
+
+	assert((request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV) || 
+	       (request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED));
+
+	VERBS_DBG(FI_LOG_EP_DATA, "found req: len = %d, eager_state = %s, rndv_state = %s \n",
+		unexp->len,
+		fi_ibv_rdm_tagged_req_eager_state_to_str(unexp->state.eager),
+		fi_ibv_rdm_tagged_req_rndv_state_to_str(unexp->state.rndv));
+
+	if (request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED) {
+		assert(request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES);
+
+		request->rndv.rkey = unexp->rndv.rkey;
+		request->rndv.id = unexp->rndv.id;
+		request->rndv.remote_addr = unexp->rndv.remote_addr;
+	}
+
+	return FI_SUCCESS;
+}
+
 static ssize_t
 fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 				    void *data)
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
 
+	ssize_t ret = FI_SUCCESS;
 	struct fi_ibv_rdm_tagged_recv_start_data *p = data;
 
 	request->minfo = p->peek_data.minfo;
@@ -415,19 +459,10 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
 		request->minfo.conn, request->minfo.tag, request->len);
 
-	/*
-	 * Only claimed requests should be  matched by context
-	 */
-	if (!(p->peek_data.flags & FI_CLAIM)) {
-		p->peek_data.context = NULL;
-	}
-
 	struct dlist_entry *found_entry =
 	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
 				   fi_ibv_rdm_tagged_req_match_by_info3,
 				   &p->peek_data);
-
-	p->peek_data.context = request->context;
 
 	if (found_entry) {
 
@@ -437,30 +472,8 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 
 		fi_ibv_rdm_tagged_remove_from_unexp_queue(found_request);
 
-		if (request->len < found_request->len) {
-			VERBS_INFO(FI_LOG_EP_DATA,
-				"RECV TRUNCATE, unexp len %d, "
-				"req->len=%d, conn %p, tag 0x%llx, "
-				"tagmask %llx\n",
-				found_request->len, request->len,
-				request->minfo.conn, request->minfo.tag,
-				request->minfo.tagmask);
-			abort();
-			return -FI_ETRUNC;
-		}
-
-		request->minfo.conn = found_request->minfo.conn;
-		request->minfo.tag = found_request->minfo.tag;
-		request->len = found_request->len;
-		request->unexp_rbuf = found_request->unexp_rbuf;
-		request->state.eager = found_request->state.eager;
-		request->state.rndv = found_request->state.rndv;
-
-		assert((request->state.eager == 
-				FI_IBV_STATE_EAGER_RECV_WAIT4RECV) || 
-		       (request->state.eager == 
-				FI_IBV_STATE_EAGER_RECV_CLAIMED));
-
+		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
+		
 		assert(((p->peek_data.flags & FI_CLAIM) &&
 				(request->state.eager == 
 					FI_IBV_STATE_EAGER_RECV_CLAIMED) &&
@@ -468,23 +481,6 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 		       (!(p->peek_data.flags & FI_CLAIM) && 
 				(request->state.eager == 
 					FI_IBV_STATE_EAGER_RECV_WAIT4RECV)));
-
-		if (request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED) {
-			assert(request->state.rndv ==
-			       FI_IBV_STATE_RNDV_RECV_WAIT4RES);
-
-			request->rndv.rkey = found_request->rndv.rkey;
-			request->rndv.id = found_request->rndv.id;
-			request->rndv.remote_addr = 
-				found_request->rndv.remote_addr;
-		}
-		VERBS_DBG(FI_LOG_EP_DATA, "found req: len = %d, eager_state = %s, "
-			     "rndv_state = %s \n",
-			     found_request->len,
-			     fi_ibv_rdm_tagged_req_eager_state_to_str
-			     (found_request->state.eager),
-			     fi_ibv_rdm_tagged_req_rndv_state_to_str
-			     (found_request->state.rndv));
 
 		FI_IBV_RDM_TAGGED_HANDLER_LOG();
 
@@ -512,7 +508,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-	return FI_SUCCESS;
+	return ret;
 }
 
 static ssize_t
@@ -537,11 +533,12 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
 				queue_entry);
 		assert(found_request);
 
-		request->minfo = found_request->minfo;
-		request->len = found_request->len;
-		request->unexp_rbuf = found_request->unexp_rbuf;
-		request->state.eager = found_request->state.eager;
-		request->state.rndv = found_request->state.rndv;
+		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
+
+		if (ret) {
+			goto out;
+		}
+
 		request->context = peek_data->context;
 
 		if (peek_data->flags & FI_CLAIM) {

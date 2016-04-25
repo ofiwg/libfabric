@@ -84,8 +84,10 @@ int fi_ibv_rdm_tagged_req_match_by_info3(struct dlist_entry *item,
 	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
 
 	const struct fi_ibv_rdm_tagged_peek_data *peek_data = info;
+	const void *context = (peek_data->flags & FI_CLAIM) ?
+		peek_data->context : NULL;
 
-	return ((request->context == peek_data->context) && 
+	return ((request->context == context) && 
 		fi_ibv_rdm_tagged_req_match_by_info2(item, &peek_data->minfo));
 }
 
