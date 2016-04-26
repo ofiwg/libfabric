@@ -40,7 +40,7 @@
 /* managing of queues
  */
 
-extern struct dlist_entry fi_ibv_rdm_tagged_request_ready_queue;
+extern struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_unexp_queue;
 /* TODO: implement posted recv queue per connection */
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
@@ -55,7 +55,7 @@ fi_ibv_rdm_tagged_move_to_ready_queue(struct fi_ibv_rdm_tagged_request *request)
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_ready_queue: ",
 				      request, FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry,
-			  &fi_ibv_rdm_tagged_request_ready_queue);
+			  &fi_ibv_rdm_comp_queue.cq);
 }
 
 static inline void

@@ -499,6 +499,10 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 
 	_cq->domain = container_of(domain, struct fi_ibv_domain, domain_fid);
+	/* 
+	 * RDM functionality is moved to correspond separated functions
+	 */
+	assert(!_cq->domain->rdm);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
@@ -530,22 +534,20 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err3;
 	}
 
-	if (!_cq->domain->rdm) {
-		_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
-		_cq->channel, attr->signaling_vector);
+	_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
+	_cq->channel, attr->signaling_vector);
 
-		if (!_cq->cq) {
-			ret = -errno;
-			goto err3;
-		}
+	if (!_cq->cq) {
+		ret = -errno;
+		goto err3;
+	}
 
-		if (_cq->channel) {
-			ret = ibv_req_notify_cq(_cq->cq, 0);
-			if (ret) {
-				FI_WARN(&fi_ibv_prov, FI_LOG_CQ,
-					"ibv_req_notify_cq failed\n");
-				goto err4;
-			}
+	if (_cq->channel) {
+		ret = ibv_req_notify_cq(_cq->cq, 0);
+		if (ret) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_CQ,
+				"ibv_req_notify_cq failed\n");
+			goto err4;
 		}
 	}
 
@@ -558,25 +560,18 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		assert(!_cq->domain->rdm);
 		_cq->read_entry = fi_ibv_cq_read_context_entry;
 		_cq->entry_size = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
-		assert(!_cq->domain->rdm);
 		_cq->read_entry = fi_ibv_cq_read_msg_entry;
 		_cq->entry_size = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
-		assert(!_cq->domain->rdm);
 		_cq->read_entry = fi_ibv_cq_read_data_entry;
 		_cq->entry_size = sizeof(struct fi_cq_data_entry);
 		break;
 	case FI_CQ_FORMAT_TAGGED:
-		assert(_cq->domain->rdm);
-		_cq->cq_fid.ops = fi_ibv_cq_ops_tagged(_cq);
-		_cq->entry_size = sizeof(struct fi_cq_tagged_entry);
-		break;
 	default:
 		ret = -FI_ENOSYS;
 		goto err4;

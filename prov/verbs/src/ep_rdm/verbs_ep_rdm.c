@@ -120,14 +120,14 @@ static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
 				     uint64_t flags)
 {
 	struct fi_ibv_rdm_ep *ep;
-	struct fi_ibv_cq *cq;
+	struct fi_ibv_rdm_cq *cq;
 	struct fi_ibv_av *av;
 
 	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct fi_ibv_cq, cq_fid);
+		cq = container_of(bfid, struct fi_ibv_rdm_cq, cq_fid);
 
 		if (flags & FI_RECV) {
 			if (ep->fi_rcq)
@@ -281,9 +281,9 @@ static void *fi_ibv_rdm_tagged_cm_progress_thread(void *ctx)
 static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 {
 	int ret = 0;
-	struct fi_ibv_rdm_ep *ep;
-	void *status;
-	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
+	void *status = NULL;
+	struct fi_ibv_rdm_ep *ep =
+		container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
 	ep->is_closing = 1;
 	_fi_ibv_rdm_tagged_cm_progress_running = 0;

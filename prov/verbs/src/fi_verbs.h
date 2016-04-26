@@ -196,15 +196,20 @@ struct fi_ibv_cq {
 	uint64_t		wr_id_mask;
 	fi_ibv_trywait_func	trywait;
 	atomic_t		nevents;
-	/* RDM EP fields - TODO: check usage */
+};
+
+struct fi_ibv_rdm_cq {
+	struct fid_cq		cq_fid;
+	struct fi_ibv_domain	*domain;
 	struct fi_ibv_rdm_ep	*ep;
-	int			format;
+	struct dlist_entry	cq;
+	uint64_t		flags;
+	size_t			entry_size;
+	enum fi_cq_wait_cond	wait_cond;
 };
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context);
-struct fi_ops_cq *fi_ibv_cq_ops_tagged(struct fi_ibv_cq *cq);
-
 
 struct fi_ibv_mem_desc {
 	struct fid_mr		mr_fid;
