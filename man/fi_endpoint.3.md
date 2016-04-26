@@ -406,11 +406,13 @@ This call creates an alias to the specified endpoint.  Conceptually,
 an endpoint alias provides an alternate software path from the
 application to the underlying provider hardware.  Applications
 configure an alias endpoint with data transfer flags, specified
-through the fi_ep_alias call.  Typically, the data transfer flags will be
-different than those assigned to the actual endpoint.  The alias
-mechanism allows a single endpoint to have multiple optimized software
-interfaces.  All allocated aliases must be closed for the underlying
-endpoint to be released.
+through the fi_ep_alias call. The flags must include FI_TRANSMIT or FI_RECV
+(not both) with other flags OR'ed to indicate the type of data transfer the
+flags should apply to. This will override the transmit and recieve attributes
+of the alias endpoint. Typically the attributes of the alias endpoint are
+different than those assigned to the actual endpoint. The alias mechanism
+allows a single endpoint to have multiple optimized software interfaces.
+All allocated aliases must be closed for the underlying endpoint to be released.
 
 ## fi_control
 
@@ -425,15 +427,19 @@ struct fi_info.  The following control commands and arguments may be
 assigned to an endpoint.
 
 **FI_GETOPSFLAG -- uint64_t *flags**
-: Used to retrieve the current value of flags associated with data
-  transfer operations initiated on the endpoint.  See below for a list
-  of control flags.
+: Used to retrieve the current value of flags associated with the data
+  transfer operations initiated on the endpoint. The control argument must
+  include FI_TRANSMIT or FI_RECV (not both) flags to indicate the type of
+  data transfer flags to be returned.
+  See below for a list of control flags.
 
 **FI_SETOPSFLAG -- uint64_t *flags**
 : Used to change the data transfer operation flags associated with an
-  endpoint.  The FI_READ, FI_WRITE, FI_SEND, FI_RECV flags indicate
-  the type of data transfer that the flags should apply to, with other
-  flags OR'ed in.  Valid control flags are defined below.
+  endpoint. The control argument must include FI_TRANSMIT or FI_RECV (not both)
+  to indicate the type of data transfer that the flags should apply to, with other
+  flags OR'ed in. The given flags will override the previous transmit and receive
+  attributes that were set when the endpoint was created.
+  Valid control flags are defined below.
 
 **FI_BACKLOG - int *value**
 : This option only applies to passive endpoints.  It is used to set the
@@ -1104,7 +1110,7 @@ Operation flags are obtained by OR-ing the following flags together.
 Operation flags define the default flags applied to an endpoint's data
 transfer operations, where a flags parameter is not available.  Data
 transfer operations that take flags as input override the op_flags
-value of an endpoint.
+value of transmit or receive context attributes of an endpoint.
 
 *FI_INJECT*
 : Indicates that all outbound data buffers should be returned to the
