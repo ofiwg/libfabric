@@ -498,7 +498,6 @@ struct sock_conn_listener {
 struct sock_ep {
 	struct fid_ep ep;
 	size_t fclass;
-	uint64_t op_flags;
 
 	int tx_shared;
 	int rx_shared;

@@ -80,6 +80,7 @@ const struct fi_rx_attr sock_srx_attr = {
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
+
 static int sock_ctx_close(struct fid *fid)
 {
 	struct sock_tx_ctx *tx_ctx;
@@ -308,22 +309,65 @@ static int sock_ctx_enable(struct fid_ep *ep)
 	return -FI_EINVAL;
 }
 
+int sock_getopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
+			uint64_t *flags)
+{
+	if ((*flags & FI_TRANSMIT) && (*flags & FI_RECV)) {
+		SOCK_LOG_ERROR("Both Tx/Rx flags cannot be specified\n");
+		return -FI_EINVAL;
+	} else if (tx_attr && (*flags & FI_TRANSMIT)) {
+		*flags = tx_attr->op_flags;
+	} else if (rx_attr && (*flags & FI_RECV)) {
+		*flags = rx_attr->op_flags;
+	} else {
+		SOCK_LOG_ERROR("Tx/Rx flags not specified\n");
+		return -FI_EINVAL;
+	}
+	return 0;
+}
+
+int sock_setopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
+			uint64_t flags)
+{
+	if ((flags & FI_TRANSMIT) && (flags & FI_RECV)) {
+		SOCK_LOG_ERROR("Both Tx/Rx flags cannot be specified\n");
+		return -FI_EINVAL;
+	} else if (tx_attr && (flags & FI_TRANSMIT)) {
+		tx_attr->op_flags = flags;
+		tx_attr->op_flags &= ~FI_TRANSMIT;
+		if (!(flags & (FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE |
+		     FI_DELIVERY_COMPLETE)))
+			tx_attr->op_flags |= FI_TRANSMIT_COMPLETE;
+	} else if (rx_attr && (flags & FI_RECV)) {
+		rx_attr->op_flags = flags;
+		rx_attr->op_flags &= ~FI_RECV;
+	} else {
+		SOCK_LOG_ERROR("Tx/Rx flags not specified\n");
+		return -FI_EINVAL;
+	}
+	return 0;
+}
+
 static int sock_ctx_control(struct fid *fid, int command, void *arg)
 {
 	struct fid_ep *ep;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
+	int ret;
 
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
-			*(uint64_t *) arg = tx_ctx->attr.op_flags;
+			ret = sock_getopflags(&tx_ctx->attr, NULL, (uint64_t *) arg);
+			if (ret)
+				return -EINVAL;
 			break;
 		case FI_SETOPSFLAG:
-			tx_ctx->attr.op_flags = *(uint64_t *) arg;
-			tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
+			ret = sock_setopflags(&tx_ctx->attr, NULL, *(uint64_t *) arg);
+			if (ret)
+				return -EINVAL;
 			break;
 		case FI_ENABLE:
 			ep = container_of(fid, struct fid_ep, fid);
@@ -338,10 +382,14 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
-			*(uint64_t *) arg = rx_ctx->attr.op_flags;
+			ret = sock_getopflags(NULL, &rx_ctx->attr, (uint64_t *) arg);
+			if (ret)
+				return -EINVAL;
 			break;
 		case FI_SETOPSFLAG:
-			rx_ctx->attr.op_flags = *(uint64_t *) arg;
+			ret = sock_setopflags(NULL, &rx_ctx->attr, *(uint64_t *) arg);
+			if (ret)
+				return -EINVAL;
 			break;
 		case FI_ENABLE:
 			ep = container_of(fid, struct fid_ep, fid);
@@ -356,11 +404,14 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
-			*(uint64_t *) arg = tx_ctx->attr.op_flags;
+			ret = sock_getopflags(&tx_ctx->attr, NULL, (uint64_t *) arg);
+			if (ret)
+				return -EINVAL;
 			break;
 		case FI_SETOPSFLAG:
-			tx_ctx->attr.op_flags = *(uint64_t *) arg;
-			tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
+			ret = sock_setopflags(&tx_ctx->attr, NULL, *(uint64_t *) arg);
+			if (ret)
+				return -EINVAL;
 			break;
 		default:
 			return -FI_ENOSYS;
@@ -881,6 +932,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static int sock_ep_control(struct fid *fid, int command, void *arg)
 {
+	int ret;
 	struct fid_ep *ep_fid;
 	struct fi_alias *alias;
 	struct sock_ep *ep, *new_ep;
@@ -905,16 +957,23 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 		if (!new_ep)
 			return -FI_ENOMEM;
 		*new_ep = *ep;
-		new_ep->op_flags = alias->flags;
+		ret = sock_setopflags(&new_ep->tx_attr, &new_ep->rx_attr,
+				       alias->flags);
+		if (ret) {
+			free(new_ep);
+			return -FI_EINVAL;
+		}
 		*alias->fid = &new_ep->ep.fid;
 		break;
-
 	case FI_GETOPSFLAG:
-		*(uint64_t *) arg = ep->op_flags;
+		ret = sock_getopflags(&ep->tx_attr, &ep->rx_attr, (uint64_t *) arg);
+		if (ret)
+			return -EINVAL;
 		break;
 	case FI_SETOPSFLAG:
-		ep->op_flags = *(uint64_t *) arg;
-		ep->op_flags |= FI_TRANSMIT_COMPLETE;
+		ret = sock_setopflags(&ep->tx_attr, &ep->rx_attr, *(uint64_t *) arg);
+		if (ret)
+			return -FI_EINVAL;
 		break;
 	case FI_ENABLE:
 		ep_fid = container_of(fid, struct fid_ep, fid);
@@ -1492,17 +1551,16 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 		if (info->tx_attr) {
 			sock_ep->tx_attr = *info->tx_attr;
-			sock_ep->op_flags = info->tx_attr->op_flags;
+			if (!(sock_ep->tx_attr.op_flags & (FI_INJECT_COMPLETE |
+			     FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
+                        	sock_ep->tx_attr.op_flags |= FI_TRANSMIT_COMPLETE;
 			sock_ep->tx_attr.size = sock_ep->tx_attr.size ?
 				sock_ep->tx_attr.size :
 				(SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ);
-			sock_ep->op_flags |= FI_TRANSMIT_COMPLETE;
 		}
 
-		if (info->rx_attr) {
+		if (info->rx_attr)
 			sock_ep->rx_attr = *info->rx_attr;
-			sock_ep->op_flags |= info->rx_attr->op_flags;
-		}
 		sock_ep->info.handle = info->handle;
 	}
 
