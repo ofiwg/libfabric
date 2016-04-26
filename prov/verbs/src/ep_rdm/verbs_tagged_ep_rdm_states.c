@@ -196,7 +196,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 		assert(0);
 	};
 
-	fi_ibv_rdm_tagged_move_to_ready_queue(request);
+	fi_ibv_rdm_move_to_cq(request);
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -389,7 +389,7 @@ fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_tagged_request *request,
 
 	request->state.rndv = FI_IBV_STATE_RNDV_SEND_END;
 
-	fi_ibv_rdm_tagged_move_to_ready_queue(request);
+	fi_ibv_rdm_move_to_cq(request);
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
@@ -560,7 +560,7 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
 		}
 
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-		fi_ibv_rdm_tagged_move_to_ready_queue(request);
+		fi_ibv_rdm_move_to_cq(request);
 		
 		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	} else {
@@ -672,7 +672,7 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 		}
 
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-		fi_ibv_rdm_tagged_move_to_ready_queue(request);
+		fi_ibv_rdm_move_to_cq(request);
 		FI_IBV_RDM_TAGGED_HANDLER_LOG();
 		break;
 	case FI_IBV_RDM_RNDV_RTS_PKT:
@@ -720,7 +720,7 @@ fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(
 		request->unexp_rbuf = NULL;
 	}
 
-	fi_ibv_rdm_tagged_move_to_ready_queue(request);
+	fi_ibv_rdm_move_to_cq(request);
 	request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -896,7 +896,7 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 	}
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 	request->state.rndv = FI_IBV_STATE_RNDV_RECV_END;
-	fi_ibv_rdm_tagged_move_to_ready_queue(request);
+	fi_ibv_rdm_move_to_cq(request);
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return ret;
@@ -1114,7 +1114,7 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_tagged_request *request,
 			fi_ibv_rdm_tagged_set_buffer_status(request->rmabuf,
 				BUF_STATUS_FREE);
 		}
-		fi_ibv_rdm_tagged_move_to_ready_queue(request);
+		fi_ibv_rdm_move_to_cq(request);
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	} else { /* FI_IBV_STATE_EAGER_READY_TO_FREE */
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
@@ -1148,7 +1148,7 @@ fi_ibv_rdm_rma_zerocopy_lc(struct fi_ibv_rdm_tagged_request *request,
 					      FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 	} else {
-		fi_ibv_rdm_tagged_move_to_ready_queue(request);
+		fi_ibv_rdm_move_to_cq(request);
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		request->state.rndv = FI_IBV_STATE_ZEROCOPY_RMA_END;
 	}

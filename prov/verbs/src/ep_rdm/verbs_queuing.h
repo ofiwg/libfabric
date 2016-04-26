@@ -50,21 +50,33 @@ extern struct util_buf_pool* fi_ibv_rdm_tagged_postponed_pool;
 
 
 static inline void
-fi_ibv_rdm_tagged_move_to_ready_queue(struct fi_ibv_rdm_tagged_request *request)
+fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_ready_queue: ",
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_cq: ",
 				      request, FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_comp_queue.cq);
 }
 
 static inline void
-fi_ibv_rdm_tagged_remove_from_ready_queue(
-		struct fi_ibv_rdm_tagged_request *request)
+fi_ibv_rdm_remove_from_cq(struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_ready_queue: ",
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_cq: ",
 				      request, FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
+}
+
+static inline struct fi_ibv_rdm_tagged_request *
+fi_ibv_rdm_take_first_from_cq()
+{
+	if (!dlist_empty(&fi_ibv_rdm_comp_queue.cq)) {
+		struct fi_ibv_rdm_tagged_request *entry =
+			container_of(fi_ibv_rdm_comp_queue.cq.next,
+				     struct fi_ibv_rdm_tagged_request, queue_entry);
+		fi_ibv_rdm_remove_from_cq(entry);
+		return entry;
+	}
+	return NULL;
 }
 
 static inline void

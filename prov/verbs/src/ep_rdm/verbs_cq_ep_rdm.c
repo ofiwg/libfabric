@@ -46,47 +46,42 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 	struct fi_ibv_rdm_cq *_cq = 
 		container_of(cq, struct fi_ibv_rdm_cq, cq_fid);
 	struct fi_cq_tagged_entry *entry = buf;
-	size_t i;
+	struct fi_ibv_rdm_tagged_request *cq_entry;
+	size_t ret = 0;
 
-	for (i = 0;
-	     i < count && !dlist_empty(&fi_ibv_rdm_comp_queue.cq);
-	     ++i)
+	for (cq_entry = count ? fi_ibv_rdm_take_first_from_cq() : NULL;
+	     cq_entry;
+	     cq_entry = (ret < count) ? fi_ibv_rdm_take_first_from_cq() : NULL)
 	{
-		struct fi_ibv_rdm_tagged_request *completed_req =
-			container_of(fi_ibv_rdm_comp_queue.cq.next,
-				     struct fi_ibv_rdm_tagged_request, queue_entry);
-
-		fi_ibv_rdm_tagged_remove_from_ready_queue(completed_req);
-
 		FI_DBG(&fi_ibv_prov, FI_LOG_CQ,
 		       "\t\t-> found match in ready: op_ctx %p, len %d, tag 0x%llx\n",
-		       completed_req->context, completed_req->len,
-		       completed_req->minfo.tag);
+		       cq_entry->context, cq_entry->len,
+		       cq_entry->minfo.tag);
 
-		src_addr[i] = (fi_addr_t) (uintptr_t) completed_req->minfo.conn;
-		entry[i].op_context = completed_req->context;
-		entry[i].flags = 0;
-		entry[i].len = completed_req->len;
-		entry[i].data = completed_req->imm;
-		entry[i].tag = completed_req->minfo.tag;
+		src_addr[ret] = (fi_addr_t) (uintptr_t) cq_entry->minfo.conn;
+		entry[ret].op_context = cq_entry->context;
+		entry[ret].flags = fi_ibv_rdm_comp_queue.flags;
+		entry[ret].len = cq_entry->len;
+		entry[ret].data = cq_entry->imm;
+		entry[ret].tag = cq_entry->minfo.tag;
 
-		if (completed_req->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
-			FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", completed_req,
+		if (cq_entry->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
+			FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", cq_entry,
 						      FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_tagged_request_pool, completed_req);
+			util_buf_release(fi_ibv_rdm_tagged_request_pool, cq_entry);
 		} else {
-			completed_req->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
+			cq_entry->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		}
-	}
+		ret++;
+	};
 
-	if (i == 0) {
-		int err = fi_ibv_rdm_tagged_poll(_cq->ep);
-		if (err < 0) {
+	if (ret == 0) {
+		if (fi_ibv_rdm_tagged_poll(_cq->ep) < 0) {
 			VERBS_INFO(FI_LOG_CQ, "fi_ibv_rdm_tagged_poll failed\n");
 		}
 	}
 
-	return i;
+	return ret;
 }
 
 static ssize_t fi_ibv_rdm_tagged_cq_read(struct fid_cq *cq, void *buf,
