@@ -1091,8 +1091,8 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 		}
 		break;
 
-	case FI_GETFIDFLAG:
-	case FI_SETFIDFLAG:
+	case FI_GETOPSFLAG:
+	case FI_SETOPSFLAG:
 	case FI_ALIAS:
 	default:
 		return -FI_ENOSYS;

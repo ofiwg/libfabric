@@ -284,12 +284,12 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 		*alias->fid = &new_ep->ep.fid;
 		break;
 
-	case FI_SETFIDFLAG:
+	case FI_SETOPSFLAG:
 		ep->flags = *(uint64_t *)arg;
 		psmx_ep_optimize_ops(ep);
 		break;
 
-	case FI_GETFIDFLAG:
+	case FI_GETOPSFLAG:
 		if (!arg)
 			return -FI_EINVAL;
 		*(uint64_t *)arg = ep->flags;
