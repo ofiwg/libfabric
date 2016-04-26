@@ -237,6 +237,8 @@ int size_to_count(int size);
 int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_start_server();
+int ft_server_connect();
+int ft_client_connect();
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep(void);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
