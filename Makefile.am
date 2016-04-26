@@ -21,6 +21,7 @@ bin_PROGRAMS = \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
 	streaming/fi_rdm_rma \
+	streaming/fi_msg_stream \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_rdm_cntr_pingpong \
 	benchmarks/fi_dgram_pingpong \
@@ -125,6 +126,10 @@ simple_fi_poll_LDADD = libfabtests.la
 streaming_fi_msg_rma_SOURCES = \
 	streaming/msg_rma.c
 streaming_fi_msg_rma_LDADD = libfabtests.la
+
+streaming_fi_msg_stream_SOURCES = \
+	streaming/msg.c
+streaming_fi_msg_stream_LDADD = libfabtests.la
 
 streaming_fi_rdm_atomic_SOURCES = \
 	streaming/rdm_atomic.c
