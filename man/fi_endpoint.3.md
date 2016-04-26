@@ -28,7 +28,7 @@ fi_enable
 fi_cancel
 :   Cancel a pending asynchronous data transfer
 
-fi_alias
+fi_ep_alias
 :   Create an alias to the endpoint
 
 fi_control
@@ -88,7 +88,7 @@ int fi_enable(struct fid_ep *ep);
 
 int fi_cancel(struct fid_ep *ep, void *context);
 
-int fi_alias(struct fid_ep *ep, fid_t *alias_ep, uint64_t flags);
+int fi_ep_alias(struct fid_ep *ep, struct fid_ep **alias_ep, uint64_t flags);
 
 int fi_control(struct fid *ep, int command, void *arg);
 
@@ -400,13 +400,13 @@ parameter, only one will be canceled.  In this case, the operation
 which is canceled is provider specific.  The cancel operation is
 asynchronous, but will complete within a bounded period of time.
 
-## fi_alias
+## fi_ep_alias
 
 This call creates an alias to the specified endpoint.  Conceptually,
 an endpoint alias provides an alternate software path from the
 application to the underlying provider hardware.  Applications
 configure an alias endpoint with data transfer flags, specified
-through the fi_alias call.  Typically, the data transfer flags will be
+through the fi_ep_alias call.  Typically, the data transfer flags will be
 different than those assigned to the actual endpoint.  The alias
 mechanism allows a single endpoint to have multiple optimized software
 interfaces.  All allocated aliases must be closed for the underlying
