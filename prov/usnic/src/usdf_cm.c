@@ -157,9 +157,8 @@ usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen)
 	ep->e.msg.ep_lcl_peer_id = ntohs(reqp->creq_peer_id);
 
 	/* start creating the dest early */
-	ret = usd_create_dest_with_mac(udp->dom_dev, reqp->creq_ipaddr,
-			reqp->creq_port, reqp->creq_mac,
-			&ep->e.msg.ep_dest);
+	ret = usd_create_dest(udp->dom_dev, reqp->creq_ipaddr,
+			reqp->creq_port, &ep->e.msg.ep_dest);
 	if (ret != 0) {
 		goto fail;
 	}
@@ -185,7 +184,6 @@ usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen)
 	reqp->creq_ipaddr = fp->fab_dev_attrs->uda_ipaddr_be;
 	reqp->creq_port =
 		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
-	memcpy(reqp->creq_mac, fp->fab_dev_attrs->uda_mac_addr, ETH_ALEN);
 	reqp->creq_result = htonl(0);
 	reqp->creq_datalen = htonl(paramlen);
 	memcpy(reqp->creq_data, param, paramlen);
@@ -293,12 +291,11 @@ usdf_cm_msg_connect_cb_rd(void *v)
 			usdf_cm_msg_connreq_failed(crp, -errno);
 			return 0;
 		}
-		
+
 		udp = ep->ep_domain;
 		ep->e.msg.ep_lcl_peer_id = ntohs(reqp->creq_peer_id);
-		ret = usd_create_dest_with_mac(udp->dom_dev, reqp->creq_ipaddr,
-				reqp->creq_port, reqp->creq_mac,
-				&ep->e.msg.ep_dest);
+		ret = usd_create_dest(udp->dom_dev, reqp->creq_ipaddr,
+				reqp->creq_port, &ep->e.msg.ep_dest);
 		if (ret != 0) {
 			free(entry);
 			usdf_cm_msg_connreq_failed(crp, ret);
@@ -471,7 +468,6 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	reqp->creq_ipaddr = fp->fab_dev_attrs->uda_ipaddr_be;
 	reqp->creq_port =
 		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
-	memcpy(reqp->creq_mac, fp->fab_dev_attrs->uda_mac_addr, ETH_ALEN);
 	reqp->creq_datalen = htonl(paramlen);
 	memcpy(reqp->creq_data, param, paramlen);
 
