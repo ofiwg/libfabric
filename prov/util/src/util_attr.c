@@ -79,16 +79,27 @@ char *ofi_strdup_less_prefix(char *name, char *prefix)
 char *ofi_strdup_add_prefix(char *name, char *prefix)
 {
 	char *prefix_name;
-	size_t len;
+	char *base = "";
+	ssize_t size;
 	int ret;
 
-	len = strlen(prefix) + strlen(name) + 2;
-	if (!(prefix_name = malloc(len)))
+	if (name)
+		base = name;
+
+	size = snprintf(NULL, 0, "%s_%s", prefix, base) + 1;
+	if (size < 0)
 		return NULL;
-	ret = snprintf(prefix_name, len, "%s_%s", prefix, name);
-	if (ret != len - 1)
+
+	prefix_name = calloc(size, sizeof(*prefix_name));
+	if (!prefix_name)
+		return NULL;
+
+	ret = snprintf(prefix_name, size, "%s_%s", prefix, base);
+	if (ret < 0 || ret > size)
 		goto err;
+
 	return prefix_name;
+
 err:
 	free(prefix_name);
 	return NULL;
