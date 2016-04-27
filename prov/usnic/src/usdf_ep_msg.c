@@ -169,6 +169,7 @@ int usdf_msg_fill_dom_attr(struct fi_info *hints, struct fi_info *fi)
 	struct fi_domain_attr defaults;
 
 	defaults = msg_dflt_domain_attr;
+	defaults.name = strdup("usnic");
 
 	if (!hints || !hints->domain_attr)
 		goto out;
