@@ -134,6 +134,7 @@ struct fi_ibv_rdm_tagged_request {
 	struct {
 		enum fi_ibv_rdm_tagged_request_eager_state eager;
 		enum fi_ibv_rdm_tagged_request_rndv_state rndv;
+		ssize_t err; /* filled in case of moving to errcq */
 	} state;
 
 	struct fi_verbs_rdm_tagged_minfo minfo;

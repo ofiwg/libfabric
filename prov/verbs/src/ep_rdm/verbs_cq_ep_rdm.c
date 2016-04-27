@@ -38,7 +38,14 @@
 #include "verbs_queuing.h"
 
 
-extern struct util_buf_pool* fi_ibv_rdm_tagged_request_pool;
+struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
+struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
+
+/*
+ * extra buffer size equal eager buffer size, it is used for any intermediate
+ * needs like unexpected recv, pack/unpack noncontig messages, etc
+ */
+struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
 static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
                                              size_t count, fi_addr_t * src_addr)
@@ -79,6 +86,10 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 		if (fi_ibv_rdm_tagged_poll(_cq->ep) < 0) {
 			VERBS_INFO(FI_LOG_CQ, "fi_ibv_rdm_tagged_poll failed\n");
 		}
+
+		if (!dlist_empty(&fi_ibv_rdm_comp_queue.request_errcq)) {
+			ret = -FI_EAVAIL;
+		}
 	}
 
 	return ret;
@@ -102,8 +113,9 @@ ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	size_t threshold = count;
 	uint64_t time_limit = fi_gettime_ms() + timeout;
 	size_t counter = 0;
+	ssize_t ret = 0;
 
-	struct fi_ibv_cq *_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
+	struct fi_ibv_rdm_cq *_cq = container_of(cq, struct fi_ibv_rdm_cq, cq_fid);
 	switch (_cq->wait_cond) {
 	case FI_CQ_COND_THRESHOLD:
 		threshold = MIN((uintptr_t) cond, threshold);
@@ -115,12 +127,19 @@ ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	}
 
 	do {
-		counter += fi_ibv_rdm_tagged_cq_readfrom(cq, buf, threshold,
-							 src_addr);
-	} while (counter < threshold ||
-		(timeout >= 0 && fi_gettime_ms() < time_limit));
+		ret = fi_ibv_rdm_tagged_cq_readfrom(cq, buf, threshold,
+						    src_addr);
+		counter += (ret > 0) ? ret : 0;
+	} while ((ret >= 0) && (counter < threshold ||
+		(timeout >= 0 && fi_gettime_ms() < time_limit)));
 
-	return (counter != 0) ? counter : -FI_EAGAIN;
+	if (counter != 0 && ret >= 0) {
+		ret = counter;
+	} else if (ret == 0) {
+		ret = -FI_EAGAIN;
+	}
+
+	return ret;
 }
 
 ssize_t fi_ibv_rdm_cq_sread(struct fid_cq *cq, void *buf, size_t count,
@@ -147,44 +166,67 @@ ssize_t fi_ibv_rdm_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 	return (count != rest) ? (count - rest) : ret;
 }
 
-#if 0
-static const char *fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno,
-                                      const void *err_data, char *buf,
-                                      size_t len)
+static const char *
+fi_ibv_rdm_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
+		       char *buf, size_t len)
 {
+	/* TODO: */
 	if (buf && len)
 		strncpy(buf, ibv_wc_status_str(prov_errno), len);
 	return ibv_wc_status_str(prov_errno);
 }
-#endif                          /* 0 */
 
 static ssize_t
-fi_ibv_rdm_tagged_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
+fi_ibv_rdm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
                              uint64_t flags)
 {
-#if 0
-	struct fi_ibv_cq *_cq;
-	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-#endif                          /* 0 */
-	/* TODO */
-	return sizeof(*entry);
+	ssize_t ret = 0;
+	struct fi_ibv_rdm_tagged_request *err_request = 
+		fi_ibv_rdm_take_first_from_errcq();
+
+	if (err_request) {
+		entry->op_context = err_request->context;
+		entry->flags = 0; /* TODO: */
+		entry->len = err_request->len;
+		entry->buf = err_request->unexp_rbuf;
+		entry->data = err_request->imm;
+		entry->tag = err_request->minfo.tag;
+		entry->olen = -1; /* TODO: */
+		entry->err = err_request->state.err;
+		entry->prov_errno = -err_request->state.err;
+		entry->err_data = NULL;
+
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", err_request,
+			FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, err_request);
+		ret++;
+	}
+
+	return ret;
 }
 
 static struct fi_ops_cq fi_ibv_rdm_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_rdm_tagged_cq_read,
 	.readfrom = fi_ibv_rdm_tagged_cq_readfrom,
-	.readerr = fi_ibv_rdm_tagged_cq_readerr,
+	.readerr = fi_ibv_rdm_cq_readerr,
 	.sread = fi_ibv_rdm_cq_sread,
 	.sreadfrom = fi_ibv_rdm_cq_sreadfrom,
-	.strerror = fi_cq_strerror
+	.strerror = fi_ibv_rdm_cq_strerror
 };
 
 static int fi_ibv_rdm_cq_close(fid_t fid)
 {
 	struct fi_ibv_rdm_cq *cq =
 		container_of(fid, struct fi_ibv_rdm_cq, cq_fid.fid);
-	cq->ep->fi_scq = cq->ep->fi_rcq = NULL;
+
+	if(cq->ep) {
+		return -FI_EBUSY;
+	}
+
+	/* TODO: move queues & related pools cleanup from close EP */
+	/* fi_ibv_rdm_clean_queues(); */
+
 	free(cq);
 
 	return FI_SUCCESS;
@@ -246,7 +288,8 @@ int fi_ibv_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err;
 	}
 
-	dlist_init(&fi_ibv_rdm_comp_queue.cq);
+	dlist_init(&fi_ibv_rdm_comp_queue.request_cq);
+	dlist_init(&fi_ibv_rdm_comp_queue.request_errcq);
 
 	*cq = &_cq->cq_fid;
 	return 0;

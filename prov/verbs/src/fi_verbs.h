@@ -202,7 +202,8 @@ struct fi_ibv_rdm_cq {
 	struct fid_cq		cq_fid;
 	struct fi_ibv_domain	*domain;
 	struct fi_ibv_rdm_ep	*ep;
-	struct dlist_entry	cq;
+	struct dlist_entry	request_cq;
+	struct dlist_entry	request_errcq;
 	uint64_t		flags;
 	size_t			entry_size;
 	enum fi_cq_wait_cond	wait_cond;

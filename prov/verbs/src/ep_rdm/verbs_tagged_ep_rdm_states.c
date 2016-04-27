@@ -401,6 +401,7 @@ static inline ssize_t
 fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_tagged_request *request,
 			      struct fi_ibv_rdm_tagged_request *unexp)
 {
+	ssize_t ret = FI_SUCCESS;
 	if (request->len && (request->len < unexp->len)) {
 		VERBS_INFO(FI_LOG_EP_DATA,
 			"RECV TRUNCATE, unexp len %d, "
@@ -410,15 +411,15 @@ fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_tagged_request *request,
 			request->minfo.conn, request->minfo.tag,
 			request->minfo.tagmask);
 		assert(0);
-		return -FI_ETRUNC;
+		ret = -FI_ETRUNC;
+		return ret;
 	}
 
 	request->minfo.conn = unexp->minfo.conn;
 	request->minfo.tag = unexp->minfo.tag;
 	request->len = unexp->len;
 	request->unexp_rbuf = unexp->unexp_rbuf;
-	request->state.eager = unexp->state.eager;
-	request->state.rndv = unexp->state.rndv;
+	request->state = unexp->state;
 
 	assert((request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV) || 
 	       (request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED));
@@ -436,7 +437,7 @@ fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_tagged_request *request,
 		request->rndv.remote_addr = unexp->rndv.remote_addr;
 	}
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 static ssize_t
@@ -455,6 +456,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	request->len = p->data_len;
 	request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4PKT;
 	request->state.rndv = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err = FI_SUCCESS;
 
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
 		request->minfo.conn, request->minfo.tag, request->len);
@@ -473,7 +475,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 		fi_ibv_rdm_tagged_remove_from_unexp_queue(found_request);
 
 		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
-		
+
 		assert(((p->peek_data.flags & FI_CLAIM) &&
 				(request->state.eager == 
 					FI_IBV_STATE_EAGER_RECV_CLAIMED) &&
@@ -488,8 +490,11 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 					      FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_tagged_request_pool, found_request);
 
-		if (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
+		if (ret == FI_SUCCESS &&
+		    request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES)
+		{
 			request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
+			FI_IBV_RDM_TAGGED_HANDLER_LOG();
 			fi_ibv_rdm_tagged_move_to_postponed_queue(request);
 		}
 #if ENABLE_DEBUG
@@ -504,7 +509,13 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 		}
 #endif // ENABLE_DEBUG
 
-		fi_ibv_rdm_tagged_move_to_posted_queue(request, p->ep);
+		if (ret == FI_SUCCESS) {
+			fi_ibv_rdm_tagged_move_to_posted_queue(request, p->ep);
+		}
+	}
+	
+	if (ret != FI_SUCCESS) {
+		fi_ibv_rdm_move_to_errcq(request, ret);
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -526,6 +537,9 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
 		dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
 					fi_ibv_rdm_tagged_req_match_by_info2,
 					&peek_data->minfo);
+
+	request->context = peek_data->context;
+
 	if (found_entry) {
 		struct fi_ibv_rdm_tagged_request *found_request =
 			container_of(found_entry,
@@ -536,17 +550,15 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
 		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
 
 		if (ret) {
-			goto out;
+			goto err;
 		}
-
-		request->context = peek_data->context;
 
 		if (peek_data->flags & FI_CLAIM) {
 			ret = fi_ibv_rdm_tagged_req_hndl(found_request,
 				FI_IBV_EVENT_RECV_CLAIM, peek_data);
 
 			if (ret) {
-				goto out;
+				goto err;
 			}
 		}
 
@@ -555,7 +567,7 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
 				FI_IBV_EVENT_RECV_DISCARD, NULL);
 
 			if (ret) {
-				goto out;
+				goto err;
 			}
 		}
 
@@ -564,14 +576,17 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_tagged_request *request,
 		
 		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	} else {
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 		ret = -FI_ENOMSG;
+		goto err;
 	}
 
 out:
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return ret;
+err:
+	fi_ibv_rdm_move_to_errcq(request, ret);
+	ret = FI_SUCCESS;
+	goto out;
 }
 
 static ssize_t

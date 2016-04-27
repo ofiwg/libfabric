@@ -43,18 +43,12 @@
 
 struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
 
+extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
+extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
+
 DEFINE_LIST(fi_ibv_rdm_tagged_recv_posted_queue);
 DEFINE_LIST(fi_ibv_rdm_tagged_recv_unexp_queue);
 DEFINE_LIST(fi_ibv_rdm_tagged_send_postponed_queue);
-
-struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
-
-/*
- * extra buffer size equal eager buffer size, it is used for any intermediate
- * needs like unexpected recv, pack/unpack noncontig messages, etc
- */
-struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
@@ -392,6 +386,7 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err   = FI_SUCCESS;
 
 	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
 	int ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_START,
@@ -602,6 +597,9 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 					 struct fi_ibv_rdm_tagged_request,
 					 queue_entry);
 
+			fi_ibv_rdm_tagged_remove_from_posted_queue
+				(found_request, ep);
+
 			const int data_len = arrived_len -
 				sizeof(struct fi_ibv_rdm_header);
 
@@ -614,12 +612,9 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 					found_request->minfo.conn,
 					found_request->minfo.tag,
 					found_request->minfo.tagmask);
-				assert(0);
-				/* TODO: return -FI_ETRUNC; */
+				fi_ibv_rdm_move_to_errcq(found_request, FI_ETRUNC);
 			}
 
-			fi_ibv_rdm_tagged_remove_from_posted_queue
-			    (found_request, ep);
 			request = found_request;
 		} else {
 			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
@@ -631,7 +626,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 	}
 
 	/* RMA packets are not handled yet (without IMM) */
-	if (pkt_type != FI_IBV_RDM_RMA_PKT) {
+	if (!request->state.err && pkt_type != FI_IBV_RDM_RMA_PKT) {
 
 		struct fi_ibv_recv_got_pkt_preprocess_data p = {
 			.conn = conn,
