@@ -80,8 +80,10 @@ static struct fi_cq_attr cq_attr;
 const char *cdm_id[NUMEPS] = { "5000", "5001" };
 struct fi_info *hints;
 static int using_bnd_ep = 0;
+static int dgram_should_fail;
 
 #define BUF_SZ (1<<20)
+#define BUF_RNDZV (1<<14)
 char *target;
 char *source;
 char *uc_target;
@@ -225,10 +227,44 @@ void rdm_sr_setup(bool is_noreg, enum fi_progress pm)
 		rdm_sr_setup_common_eps();
 	else
 		rdm_sr_setup_common();
+
+	dgram_should_fail = 0;
+}
+
+void dgram_sr_setup(bool is_noreg, enum fi_progress pm)
+{
+	int ret = 0, i = 0;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->cq_data_size = NUMEPS * 2;
+	hints->domain_attr->control_progress = pm;
+	hints->domain_attr->data_progress = pm;
+	hints->mode = ~0;
+	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
+	hints->fabric_attr->name = strdup("gni");
+	hints->ep_attr->type = FI_EP_DGRAM;
+
+	/* Get info about fabric services with the provided hints */
+	for (; i < NUMEPS; i++) {
+		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[i]);
+		cr_assert(!ret, "fi_getinfo");
+	}
+
+	if (is_noreg)
+		rdm_sr_setup_common_eps();
+	else
+		rdm_sr_setup_common();
 }
 
 static void rdm_sr_setup_reg(void) {
 	rdm_sr_setup(false, FI_PROGRESS_AUTO);
+}
+
+static void dgram_sr_setup_reg(void)
+{
+	dgram_sr_setup(false, FI_PROGRESS_AUTO);
 }
 
 static void rdm_sr_setup_noreg(void) {
@@ -415,11 +451,22 @@ void rdm_sr_lazy_dereg_disable(void)
 	}
 }
 
+int rdm_sr_check_canceled(struct fid_cq *cq)
+{
+	struct fi_cq_err_entry ee;
+
+	fi_cq_readerr(cq, &ee, 0);
+	return (ee.err == FI_ECANCELED);
+}
+
 /*******************************************************************************
  * Test MSG functions
  ******************************************************************************/
 
 TestSuite(rdm_sr, .init = rdm_sr_setup_reg, .fini = rdm_sr_teardown,
+	  .disabled = false);
+
+TestSuite(dgram_sr, .init = dgram_sr_setup_reg, .fini = rdm_sr_teardown,
 	  .disabled = false);
 
 TestSuite(rdm_sr_noreg, .init = rdm_sr_setup_noreg,
@@ -439,6 +486,7 @@ void do_send(int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
+	int scanceled = 0, dcanceled = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
@@ -459,11 +507,23 @@ void do_send(int len)
 		if (ret == 1) {
 			source_done = 1;
 		}
+		if (ret == -FI_EAVAIL) {
+			if (rdm_sr_check_canceled(msg_cq[0]))
+				scanceled = 1;
+		}
 		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
 		if (ret == 1) {
 			dest_done = 1;
 		}
-	} while (!(source_done && dest_done));
+		if (ret == -FI_EAVAIL) {
+			if (rdm_sr_check_canceled(msg_cq[1]))
+				dcanceled = 1;
+		}
+	} while (!((source_done || scanceled) && (dest_done || dcanceled)));
+
+	/* no further checking needed */
+	if (dgram_should_fail && (scanceled || dcanceled))
+		return;
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
@@ -485,6 +545,18 @@ Test(rdm_sr, send_retrans)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_send, 1, BUF_SZ);
+}
+
+Test(dgram_sr, send)
+{
+	rdm_sr_xfer_for_each_size(do_send, 1, BUF_SZ);
+}
+
+Test(dgram_sr, send_retrans)
+{
+	dgram_should_fail = 1;
+	rdm_sr_err_inject_enable();
+	rdm_sr_xfer_for_each_size(do_send, BUF_RNDZV, BUF_SZ);
 }
 
 /*

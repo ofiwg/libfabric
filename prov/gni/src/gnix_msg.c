@@ -277,6 +277,7 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	}
 
 	txd->rndzv_fin_hdr.req_addr = req->msg.rma_id;
+	txd->rndzv_fin_hdr.status = req->msg.status;
 
 	txd->req = req;
 	txd->completer_fn = gnix_ep_smsg_completers[GNIX_SMSG_T_RNDZV_FIN];
@@ -373,17 +374,21 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 
 	if (tx_status != GNI_RC_SUCCESS) {
 		req->tx_failures++;
-		if (req->tx_failures <
-		    req->gnix_ep->domain->params.max_retransmits) {
+		if (GNIX_EP_RDM(req->gnix_ep->type) &&
+			req->tx_failures <
+				req->gnix_ep->domain->params.max_retransmits) {
 
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Requeueing failed request: %p\n", req);
 			return _gnix_vc_queue_work_req(req);
 		}
 
-		/* TODO should this be fatal? A request will sit waiting at the
-		 * peer. */
-		return __gnix_msg_recv_err(req->gnix_ep, req);
+		if (!GNIX_EP_DGM(req->gnix_ep->type))
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Dropping failed request: %p\n", req);
+		req->msg.status = tx_status;
+		req->work_fn = __gnix_rndzv_req_send_fin;
+		return _gnix_vc_queue_work_req(req);
 	}
 
 	__gnix_msg_copy_unaligned_get_data(req);
@@ -660,7 +665,7 @@ static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 	struct gnix_tx_descriptor *tdesc = (struct gnix_tx_descriptor *)data;
 	struct gnix_fab_req *req = tdesc->req;
 
-	if (tx_status != GNI_RC_SUCCESS) {
+	if (tx_status != GNI_RC_SUCCESS || req->msg.status != GNI_RC_SUCCESS) {
 		/* TODO should this be fatal? A request will sit waiting at the
 		 * peer. */
 		GNIX_WARN(FI_LOG_EP_DATA, "Failed transaction: %p\n", req);
@@ -1023,7 +1028,11 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	ep = req->gnix_ep;
 	assert(ep != NULL);
 
-	__gnix_msg_send_completion(ep, req);
+	if (hdr->status == GNI_RC_SUCCESS) {
+		__gnix_msg_send_completion(ep, req);
+	} else {
+		__gnix_msg_send_err(ep, req);
+	}
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);
 
