@@ -77,8 +77,7 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 		return !res;
 	}
 #endif // ENABLE_DEBUG
-	request->sbuf = 
-		fi_ibv_rdm_tagged_prepare_send_resources(request->minfo.conn, ep);
+	request->sbuf = fi_ibv_rdm_prepare_send_resources(request->minfo.conn, ep);
 	return !!request->sbuf;
 }
 
@@ -322,8 +321,7 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 	const int in_order = (conn->postponed_entry) ? 0 : 1;
 
 	if (in_order) {
-		void *raw_sbuf =
-			fi_ibv_rdm_tagged_prepare_send_resources(conn, ep);
+		void *raw_sbuf = fi_ibv_rdm_prepare_send_resources(conn, ep);
 		if (raw_sbuf) {
 			struct ibv_sge sge = { 0 };
 			struct ibv_send_wr wr = { 0 };
@@ -331,14 +329,14 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
 			wr.sg_list = &sge;
 			wr.num_sge = 1;
-			wr.wr.rdma.remote_addr =
-			    fi_ibv_rdm_tagged_get_remote_addr(conn, raw_sbuf);
+			wr.wr.rdma.remote_addr = 
+				fi_ibv_rdm_get_remote_addr(conn, raw_sbuf);
 			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
 			wr.send_flags = (size < ep->max_inline_rc)
 				? IBV_SEND_INLINE : 0;
-			wr.imm_data =
-			    fi_ibv_rdm_tagged_get_buff_service_data(raw_sbuf)->
-			    seq_number;
+			wr.imm_data = 
+				fi_ibv_rdm_get_buff_service_data(raw_sbuf)->
+					seq_number;
 			wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 
 			sge.addr = (uintptr_t) (raw_sbuf);
@@ -517,17 +515,12 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 				       struct fi_ibv_rdm_ep *ep)
 {
 	char *buff = conn->sbuf_ack_head;
-	// not needed till nobody use service data of recv buffers
-	fi_ibv_rdm_tagged_set_buffer_status(buff, BUF_STATUS_FREE);
-#if ENABLE_DEBUG
-	char *rbuf = (char *)fi_ibv_rdm_tagged_get_rbuf(conn, ep, 0);
-	memset(rbuf, 0,
-	      ep->buff_len - FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
-#endif // ENABLE_DEBUG
+	/* not needed till nobody use service data of recv buffers */
+	fi_ibv_rdm_set_buffer_status(buff, BUF_STATUS_FREE);
+
 	struct ibv_sge sge;
-	sge.addr =
-	    (uintptr_t) &fi_ibv_rdm_tagged_get_buff_service_data(buff)->status;
-	sge.length = sizeof(enum fi_ibv_rdm_tagged_buffer_status);
+	sge.addr = (uint64_t) &fi_ibv_rdm_get_buff_service_data(buff)->status;
+	sge.length = sizeof(enum fi_ibv_rdm_buffer_status);
 	sge.lkey = conn->r_mr->lkey;
 
 	struct ibv_send_wr *bad_wr = NULL;
@@ -536,9 +529,8 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.wr.rdma.remote_addr =
-	    (uintptr_t) &fi_ibv_rdm_tagged_get_buff_service_data(
-			    conn->remote_sbuf_head)->status;
+	wr.wr.rdma.remote_addr = (uint64_t)
+		&fi_ibv_rdm_get_buff_service_data(conn->remote_sbuf_head)->status;
 	wr.wr.rdma.rkey = conn->remote_sbuf_rkey;
 	wr.send_flags = IBV_SEND_INLINE;
 	wr.opcode = IBV_WR_RDMA_WRITE;	// w/o imm - do not put it into recv
@@ -658,8 +650,7 @@ fi_ibv_rdm_tagged_got_recv_completion(struct fi_ibv_rdm_ep *ep,
 	assert(arrived_len > 0);
 	conn->recv_preposted--;
 	check_and_repost_receives(ep, conn);
-	struct fi_ibv_rdm_buf *rbuf = 
-		fi_ibv_rdm_tagged_get_rbuf(conn, ep, imm_data);
+	struct fi_ibv_rdm_buf *rbuf = fi_ibv_rdm_get_rbuf(conn, ep, imm_data);
 	fi_ibv_rdm_tagged_process_recv(ep, conn, arrived_len, imm_data, rbuf);
 }
 
@@ -681,11 +672,8 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 				    (struct fi_ibv_rdm_tagged_conn *)(uintptr_t)
 				    wc[i].wr_id;
 
-				FI_IBV_PREFETCH_ADDR(
-				    fi_ibv_rdm_tagged_get_rbuf(conn,
-							       ep,
-							       wc[i].imm_data));
-
+				FI_IBV_PREFETCH_ADDR(fi_ibv_rdm_get_rbuf(conn,
+					ep, wc[i].imm_data));
 
 				fi_ibv_rdm_tagged_got_recv_completion(ep, conn,
 								      wc[i].
@@ -843,6 +831,6 @@ fi_ibv_rdm_tagged_init_request_sbuf(struct fi_ibv_rdm_tagged_request *request,
 				    struct fi_ibv_rdm_ep *ep)
 {
 	assert(request->sbuf == NULL);
-	request->sbuf = fi_ibv_rdm_tagged_get_sbuf_head(request->minfo.conn, ep);
+	request->sbuf = fi_ibv_rdm_get_sbuf_head(request->minfo.conn, ep);
 	return !!request->sbuf;
 }

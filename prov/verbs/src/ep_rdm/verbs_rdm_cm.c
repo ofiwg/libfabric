@@ -149,7 +149,7 @@ fi_ibv_rdm_tagged_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 				(void **) &conn->rmabuf_mem_reg, size);
 	assert(conn->rma_mr);
 
-	fi_ibv_rdm_tagged_buffer_lists_init(conn, ep);
+	fi_ibv_rdm_buffer_lists_init(conn, ep);
 	return 0;
 }
 
