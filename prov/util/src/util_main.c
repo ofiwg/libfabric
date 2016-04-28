@@ -165,7 +165,7 @@ int util_getinfo(const struct fi_provider *prov, uint32_t version,
 		return -FI_ENOMEM;
 	}
 
-	fi_alter_info(*info, hints);
+	ofi_alter_info(*info, hints);
 
 	fabric = fi_fabric_find((*info)->fabric_attr->name);
 	if (fabric) {

@@ -30,6 +30,8 @@
  * SOFTWARE.
  */
 
+#include <fi_util.h>
+
 #include "fi_verbs.h"
 #include "ep_rdm/verbs_rdm.h"
 
@@ -164,7 +166,7 @@ int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
 	case FI_THREAD_FID:
 	case FI_THREAD_DOMAIN:
 	case FI_THREAD_COMPLETION:
-    case FI_THREAD_ENDPOINT:
+	case FI_THREAD_ENDPOINT:
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -967,6 +969,8 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	} else {
 		ret = fi_ibv_get_matching_info(NULL, hints, rai, info);
 	}
+
+	ofi_alter_info(*info, hints);
 
 	if (hints && hints->ep_attr)
 		fi_ibv_destroy_ep(hints->ep_attr->type, rai,
