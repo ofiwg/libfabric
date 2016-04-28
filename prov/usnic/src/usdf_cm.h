@@ -45,8 +45,6 @@ struct usdf_connreq_msg {
 	uint32_t creq_peer_id;
 	uint32_t creq_ipaddr;
 	uint32_t creq_port;
-	uint8_t creq_mac[ETH_ALEN];
-	uint8_t pad[8 - ETH_ALEN];
 	uint32_t creq_result;
 	uint32_t creq_reason;
 	uint32_t creq_datalen;
