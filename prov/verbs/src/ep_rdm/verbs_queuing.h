@@ -259,6 +259,30 @@ fi_ibv_rdm_take_first_from_postponed_queue()
 	return NULL;
 }
 
+static inline struct fi_ibv_rdm_tagged_request *
+fi_ibv_rdm_take_first_match_from_postponed_queue(dlist_func_t *match, const void *arg)
+{
+	struct dlist_entry *i, *j;
+	dlist_foreach((&fi_ibv_rdm_tagged_send_postponed_queue), i) {
+		 struct fi_ibv_rdm_tagged_postponed_entry *entry = 
+			container_of(i, struct fi_ibv_rdm_tagged_postponed_entry,
+				     queue_entry);
+
+		j = dlist_find_first_match((&entry->conn->postponed_requests_head),
+					   match, arg);
+		if (j) {
+			struct fi_ibv_rdm_tagged_request *request =
+				container_of(j, struct fi_ibv_rdm_tagged_request,
+					     queue_entry);
+		
+			fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+			return request;
+		}
+	}
+
+	return NULL;
+}
+
 void fi_ibv_rdm_clean_queues();
 
 #endif   // _VERBS_QUEING_H

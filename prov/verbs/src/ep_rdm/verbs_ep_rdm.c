@@ -180,21 +180,26 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 		  request, request->minfo.tag, request->len, request->context);
 
 	struct dlist_entry *found =
-	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
-				   fi_ibv_rdm_tagged_req_match, request);
-
+		dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
+			fi_ibv_rdm_tagged_req_match, request);
 	if (found) {
 		assert(container_of(found, struct fi_ibv_rdm_tagged_request,
 				    queue_entry) == request);
-
 		fi_ibv_rdm_tagged_remove_from_posted_queue(request, ep_rdm);
-
-		fi_ibv_rdm_move_to_errcq(request, FI_ECANCELED);
-
 		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %d\n",
 			ep_rdm->posted_recvs);
-
 		err = 0;
+	} else {
+		request = fi_ibv_rdm_take_first_match_from_postponed_queue
+				(fi_ibv_rdm_tagged_req_match, request);
+		if (request) {
+			fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+			err = 0;
+		}
+	}
+
+	if (!err) {
+		fi_ibv_rdm_move_to_errcq(request, FI_ECANCELED);
 	}
 
 	return err;
