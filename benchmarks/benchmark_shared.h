@@ -45,8 +45,8 @@ extern "C" {
 
 void ft_parse_benchmark_opts(int op, char *optarg);
 void ft_benchmark_usage(void);
-int pingpong();
-int bandwidth();
+int pingpong(void);
+int bandwidth(void);
 
 #ifdef __cplusplus
 }

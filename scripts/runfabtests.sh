@@ -94,6 +94,7 @@ simple_tests=(
 
 short_tests=(
 	"msg_pingpong -I 5"
+	"msg_bw -I 5"
 	"msg_rma -o write -I 5"
 	"msg_rma -o read -I 5"
 	"msg_rma -o writedata -I 5"
@@ -117,6 +118,7 @@ standard_tests=(
 	"msg_pingpong -v"
 	"msg_pingpong -P"
 	"msg_pingpong -P -v"
+	"msg_bw"
 	"msg_rma -o write"
 	"msg_rma -o read"
 	"msg_rma -o writedata"
