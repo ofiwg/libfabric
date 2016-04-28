@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -236,13 +237,17 @@ int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic)
 	 */
 
 	if (cm_nic->ctrl_progress == FI_PROGRESS_MANUAL) {
-		ret = _gnix_dgram_poll(cm_nic->dgram_hndl,
-					  GNIX_DGRAM_NOBLOCK);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_dgram_poll returned %s\n",
-				  fi_strerror(-ret));
-				goto err;
+		++cm_nic->poll_cnt;
+		if (((cm_nic->poll_cnt % 512) == 0)  ||
+			!dlist_empty(&cm_nic->cm_nic_wq)) {
+			ret = _gnix_dgram_poll(cm_nic->dgram_hndl,
+						  GNIX_DGRAM_NOBLOCK);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					"_gnix_dgram_poll returned %s\n",
+					  fi_strerror(-ret));
+					goto err;
+			}
 		}
 	}
 
@@ -552,6 +557,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	cm_nic->fabric = domain->fabric;
 	cm_nic->ctrl_progress = domain->control_progress;
 	cm_nic->my_name.name_type = name_type;
+	cm_nic->poll_cnt = 0;
 	fastlock_init(&cm_nic->wq_lock);
 	dlist_init(&cm_nic->cm_nic_wq);
 

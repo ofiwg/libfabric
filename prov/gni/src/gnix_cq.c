@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +42,7 @@
 #include "gnix.h"
 #include "gnix_cq.h"
 #include "gnix_nic.h"
+#include "gnix_cm_nic.h"
 
 /*******************************************************************************
  * Function pointer for filling specific entry format type.
@@ -248,8 +250,6 @@ cleanup:
 err:
 	return NULL;
 }
-
-extern int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic);
 
 static int __gnix_cq_progress(struct gnix_fid_cq *cq)
 {

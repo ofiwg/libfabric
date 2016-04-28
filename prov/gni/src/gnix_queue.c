@@ -129,5 +129,5 @@ void _gnix_queue_enqueue(struct gnix_queue *queue, struct slist_entry *item)
 void _gnix_queue_enqueue_free(struct gnix_queue *queue,
 			      struct slist_entry *item)
 {
-	gnix_slist_insert_tail(item, &queue->free_list);
+	slist_insert_head(item, &queue->free_list);
 }
