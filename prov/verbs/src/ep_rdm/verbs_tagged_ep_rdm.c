@@ -600,21 +600,6 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 			fi_ibv_rdm_tagged_remove_from_posted_queue
 				(found_request, ep);
 
-			const int data_len = arrived_len -
-				sizeof(struct fi_ibv_rdm_header);
-
-			if (found_request->len < data_len) {
-				VERBS_INFO(FI_LOG_EP_DATA,
-					"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
-					"conn %p, tag 0x%llx, tagmask %llx\n",
-					__FUNCTION__, __LINE__, data_len,
-					found_request->len,
-					found_request->minfo.conn,
-					found_request->minfo.tag,
-					found_request->minfo.tagmask);
-				fi_ibv_rdm_move_to_errcq(found_request, FI_ETRUNC);
-			}
-
 			request = found_request;
 		} else {
 			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
@@ -626,7 +611,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 	}
 
 	/* RMA packets are not handled yet (without IMM) */
-	if (!request->state.err && pkt_type != FI_IBV_RDM_RMA_PKT) {
+	if (pkt_type != FI_IBV_RDM_RMA_PKT) {
 
 		struct fi_ibv_recv_got_pkt_preprocess_data p = {
 			.conn = conn,

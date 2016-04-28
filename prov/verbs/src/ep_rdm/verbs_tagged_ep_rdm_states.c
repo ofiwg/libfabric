@@ -671,25 +671,42 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 
 	switch (p->pkt_type) {
 	case FI_IBV_RDM_EAGER_PKT:
-		assert(p->arrived_len - sizeof(rbuf->header) <= request->len);
-		request->minfo.conn = p->conn;
-		request->minfo.tag = rbuf->header.tag;
-		request->len = p->arrived_len - sizeof(rbuf->header);
-		request->exp_rbuf = rbuf->payload;
-		request->imm = p->imm_data;
+	{
+		const size_t data_len = p->arrived_len - sizeof(rbuf->header);
+		assert(data_len <= p->ep->rndv_threshold);
 
-		assert(request->len <= p->ep->rndv_threshold);
+		if (request->len >= data_len) {
+			request->minfo.conn = p->conn;
+			request->minfo.tag = rbuf->header.tag;
+			request->len = p->arrived_len - sizeof(rbuf->header);
+			request->exp_rbuf = rbuf->payload;
+			request->imm = p->imm_data;
 
-		if (request->dest_buf) {
-			assert(request->exp_rbuf);
-			memcpy(request->dest_buf,
-				request->exp_rbuf, request->len);
+
+			if (request->dest_buf) {
+				assert(request->exp_rbuf);
+				memcpy(request->dest_buf,
+					request->exp_rbuf, request->len);
+			}
+
+			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
+			fi_ibv_rdm_move_to_cq(request);
+		} else {
+			VERBS_INFO(FI_LOG_EP_DATA,
+				"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
+				"conn %p, tag 0x%llx, tagmask %llx\n",
+				__FUNCTION__, __LINE__, data_len,
+				request->len,
+				request->minfo.conn,
+				request->minfo.tag,
+				request->minfo.tagmask);
+
+			fi_ibv_rdm_move_to_errcq(request, FI_ETRUNC);
 		}
 
-		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-		fi_ibv_rdm_move_to_cq(request);
 		FI_IBV_RDM_TAGGED_HANDLER_LOG();
 		break;
+	}
 	case FI_IBV_RDM_RNDV_RTS_PKT:
 		assert(p->arrived_len ==
 		       sizeof(struct fi_ibv_rdm_tagged_rndv_header));
