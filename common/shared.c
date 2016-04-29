@@ -906,23 +906,44 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 	}
 }
 
+#define FT_POST(post_fn, comp_fn, seq, op_str, ...)				\
+	do {									\
+		int timeout_save;						\
+		int ret, rc;							\
+										\
+		while (1) {							\
+			ret = post_fn(__VA_ARGS__);				\
+			if (!ret)						\
+				break;						\
+										\
+			if (ret != -FI_EAGAIN) {				\
+				FT_PRINTERR(op_str, ret);			\
+				return ret;					\
+			}							\
+										\
+			timeout_save = timeout;					\
+			timeout = 0;						\
+			rc = comp_fn(seq);					\
+			if (rc && rc != -FI_EAGAIN) {				\
+				FT_ERR("Failed to get " op_str " completion");	\
+				return rc;					\
+			}							\
+			timeout = timeout_save;					\
+		}								\
+		seq++;								\
+	} while (0)
+
 ssize_t ft_post_tx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 {
-	ssize_t ret;
-
 	if (hints->caps & FI_TAGGED) {
-		ret = fi_tsend(ep, tx_buf, size + ft_tx_prefix_size(),
-				fi_mr_desc(mr), remote_fi_addr, tx_seq, ctx);
+		FT_POST(fi_tsend, ft_get_tx_comp, tx_seq, "transmit", ep,
+				tx_buf, size + ft_tx_prefix_size(), fi_mr_desc(mr),
+				remote_fi_addr, tx_seq, ctx);
 	} else {
-		ret = fi_send(ep, tx_buf, size + ft_tx_prefix_size(),
-				fi_mr_desc(mr), remote_fi_addr, ctx);
+		FT_POST(fi_send, ft_get_tx_comp, tx_seq, "transmit", ep,
+				tx_buf,	size + ft_tx_prefix_size(), fi_mr_desc(mr),
+				remote_fi_addr, ctx);
 	}
-	if (ret) {
-		FT_PRINTERR("transmit", ret);
-		return ret;
-	}
-
-	tx_seq++;
 	return 0;
 }
 
@@ -943,21 +964,16 @@ ssize_t ft_tx(struct fid_ep *ep, size_t size)
 
 ssize_t ft_post_inject(struct fid_ep *ep, size_t size)
 {
-	ssize_t ret;
-
 	if (hints->caps & FI_TAGGED) {
-		ret = fi_tinject(ep, tx_buf, size + ft_tx_prefix_size(),
+		FT_POST(fi_tinject, ft_get_tx_comp, tx_seq, "inject",
+				ep, tx_buf, size + ft_tx_prefix_size(),
 				remote_fi_addr, tx_seq);
 	} else {
-		ret = fi_inject(ep, tx_buf, size + ft_tx_prefix_size(),
+		FT_POST(fi_inject, ft_get_tx_comp, tx_seq, "inject",
+				ep, tx_buf, size + ft_tx_prefix_size(),
 				remote_fi_addr);
 	}
-	if (ret) {
-		FT_PRINTERR("transmit", ret);
-		return ret;
-	}
 
-	tx_seq++;
 	tx_cq_cntr++;
 	return 0;
 }
@@ -978,21 +994,15 @@ ssize_t ft_inject(struct fid_ep *ep, size_t size)
 
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 {
-	ssize_t ret;
-
 	if (hints->caps & FI_TAGGED) {
-		ret = fi_trecv(ep, rx_buf, size + ft_rx_prefix_size(), fi_mr_desc(mr),
-				0, rx_seq, 0, ctx);
+		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive",
+				ep, rx_buf, size + ft_rx_prefix_size(),
+				fi_mr_desc(mr), 0, rx_seq, 0, ctx);
 	} else {
-		ret = fi_recv(ep, rx_buf, size + ft_rx_prefix_size(), fi_mr_desc(mr),
-				0, ctx);
+		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive",
+				ep, rx_buf, size + ft_rx_prefix_size(),
+				fi_mr_desc(mr),	0, ctx);
 	}
-	if (ret) {
-		FT_PRINTERR("receive", ret);
-		return ret;
-	}
-
-	rx_seq++;
 	return 0;
 }
 
