@@ -315,7 +315,7 @@ static ssize_t psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len, void *
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_recv(ep, buf, len, desc, src_addr, tag, ignore,
-				 context, ep_priv->flags);
+				 context, ep_priv->rx_flags);
 }
 
 static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -761,7 +761,7 @@ static ssize_t psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_send(ep, buf, len, desc, dest_addr, tag, context,
-				 ep_priv->flags);
+				 ep_priv->tx_flags);
 }
 
 static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -923,7 +923,7 @@ static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_send(ep, buf, len, NULL, dest_addr, tag, NULL,
-				 ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION);
+				 ep_priv->tx_flags | FI_INJECT | PSMX_NO_COMPLETION);
 }
 
 /* general case */

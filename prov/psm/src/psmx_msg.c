@@ -140,7 +140,7 @@ static ssize_t psmx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_recv(ep, buf, len, desc, src_addr, context, ep_priv->flags);
+	return _psmx_recv(ep, buf, len, desc, src_addr, context, ep_priv->rx_flags);
 }
 
 static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -308,7 +308,7 @@ static ssize_t psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_send(ep, buf, len, desc, dest_addr, context, ep_priv->flags);
+	return _psmx_send(ep, buf, len, desc, dest_addr, context, ep_priv->tx_flags);
 }
 
 static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -364,7 +364,7 @@ static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_send(ep, buf, len, NULL, dest_addr, NULL,
-			  ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION);
+			  ep_priv->tx_flags | FI_INJECT | PSMX_NO_COMPLETION);
 }
 
 struct fi_ops_msg psmx_msg_ops = {
