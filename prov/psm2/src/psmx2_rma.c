@@ -671,7 +671,7 @@ static ssize_t psmx2_read(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_read_generic(ep, buf, len, desc, src_addr, addr,
-				  key, context, ep_priv->flags);
+				  key, context, ep_priv->tx_flags);
 }
 
 static ssize_t psmx2_readmsg(struct fid_ep *ep,
@@ -1137,7 +1137,7 @@ static ssize_t psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_write_generic(ep, buf, len, desc, dest_addr, addr,
-				   key, context, ep_priv->flags, 0);
+				   key, context, ep_priv->tx_flags, 0);
 }
 
 static ssize_t psmx2_writemsg(struct fid_ep *ep,
@@ -1175,11 +1175,11 @@ static ssize_t psmx2_writev(struct fid_ep *ep, const struct iovec *iov,
 
 	if (count > 1)
 		return psmx2_writev_generic(ep, iov, desc, count, dest_addr,
-					    addr, key, context, ep_priv->flags, 0);
+					    addr, key, context, ep_priv->tx_flags, 0);
 
 	return psmx2_write_generic(ep, iov->iov_base, iov->iov_len,
 				   desc ? desc[0] : NULL, dest_addr, addr, key,
-				   context, ep_priv->flags, 0);
+				   context, ep_priv->tx_flags, 0);
 }
 
 static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
@@ -1190,7 +1190,7 @@ static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_write_generic(ep, buf, len, NULL, dest_addr, addr, key, NULL,
-				   ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+				   ep_priv->tx_flags | FI_INJECT | PSMX2_NO_COMPLETION,
 				   0);
 }
 
@@ -1203,7 +1203,7 @@ static ssize_t psmx2_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_write_generic(ep, buf, len, desc, dest_addr, addr, key,
-				   context, ep_priv->flags | FI_REMOTE_CQ_DATA,
+				   context, ep_priv->tx_flags | FI_REMOTE_CQ_DATA,
 				   data);
 }
 
@@ -1216,7 +1216,7 @@ static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_write_generic(ep, buf, len, NULL, dest_addr, addr, key, NULL,
-				   ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+				   ep_priv->tx_flags | FI_INJECT | PSMX2_NO_COMPLETION,
 				   data);
 }
 

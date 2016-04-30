@@ -98,7 +98,7 @@ static int psmx2_alloc_vlane(struct psmx2_fid_domain *domain, uint8_t *vl)
 static void psmx2_ep_optimize_ops(struct psmx2_fid_ep *ep)
 {
 	if (ep->ep.tagged) {
-		if (ep->flags) {
+		if (ep->tx_flags | ep->rx_flags) {
 			ep->ep.tagged = &psmx2_tagged_ops;
 			FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
 				"generic tagged ops.\n");
@@ -339,10 +339,44 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static inline int psmx2_ep_set_flags(struct psmx2_fid_ep *ep, uint64_t flags)
+{
+	uint64_t real_flags = flags & ~(FI_TRANSMIT | FI_RECV);
+
+	if ((flags & FI_TRANSMIT) && (flags & FI_RECV))
+		return -EINVAL;
+	else if (flags & FI_TRANSMIT)
+		ep->tx_flags = real_flags;
+	else if (flags & FI_RECV)
+		ep->rx_flags = real_flags;
+	else
+		; /* ok to leave the flags intact */
+
+	return 0;
+}
+
+static inline int psmx2_ep_get_flags(struct psmx2_fid_ep *ep, uint64_t *flags)
+{
+	uint64_t flags_in = *flags;
+
+	if ((flags_in & FI_TRANSMIT) && (flags_in & FI_RECV))
+		return -EINVAL;
+	else if (flags_in & FI_TRANSMIT)
+		*flags = ep->tx_flags;
+	else if (flags_in & FI_RECV)
+		*flags = ep->rx_flags;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
 static int psmx2_ep_control(fid_t fid, int command, void *arg)
 {
 	struct fi_alias *alias;
 	struct psmx2_fid_ep *ep, *new_ep;
+	int err;
+
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
 	switch (command) {
@@ -352,20 +386,28 @@ static int psmx2_ep_control(fid_t fid, int command, void *arg)
 			return -FI_ENOMEM;
 		alias = arg;
 		*new_ep = *ep;
-		new_ep->flags = alias->flags;
+		err = psmx2_ep_set_flags(new_ep, alias->flags);
+		if (err) {
+			free(new_ep);
+			return err;
+		}
 		psmx2_ep_optimize_ops(new_ep);
 		*alias->fid = &new_ep->ep.fid;
 		break;
 
 	case FI_SETOPSFLAG:
-		ep->flags = *(uint64_t *)arg;
+		err = psmx2_ep_set_flags(ep, *(uint64_t *)arg);
+		if (err)
+			return err;
 		psmx2_ep_optimize_ops(ep);
 		break;
 
 	case FI_GETOPSFLAG:
 		if (!arg)
 			return -FI_EINVAL;
-		*(uint64_t *)arg = ep->flags;
+		err = psmx2_ep_get_flags(ep, arg);
+		if (err)
+			return err;
 		break;
 
 	case FI_ENABLE:
@@ -475,9 +517,9 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	if (info) {
 		if (info->tx_attr)
-			ep_priv->flags = info->tx_attr->op_flags;
+			ep_priv->tx_flags = info->tx_attr->op_flags;
 		if (info->rx_attr)
-			ep_priv->flags |= info->rx_attr->op_flags;
+			ep_priv->rx_flags = info->rx_attr->op_flags;
 	}
 
 	psmx2_ep_optimize_ops(ep_priv);

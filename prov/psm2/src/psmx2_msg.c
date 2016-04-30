@@ -155,7 +155,7 @@ static ssize_t psmx2_recv(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_recv_generic(ep, buf, len, desc, src_addr, context,
-				  ep_priv->flags);
+				  ep_priv->rx_flags);
 }
 
 static ssize_t psmx2_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -622,7 +622,7 @@ static ssize_t psmx2_send(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_send_generic(ep, buf, len, desc, dest_addr, context,
-				  ep_priv->flags, 0);
+				  ep_priv->tx_flags, 0);
 }
 
 static ssize_t psmx2_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -670,7 +670,7 @@ static ssize_t psmx2_sendv(struct fid_ep *ep, const struct iovec *iov,
 		ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 		return psmx2_sendv_generic(ep, iov, desc, count, dest_addr,
-					   context, ep_priv->flags, 0);
+					   context, ep_priv->tx_flags, 0);
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -691,7 +691,7 @@ static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_send_generic(ep, buf, len, NULL, dest_addr, NULL,
-				  ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION, 
+				  ep_priv->tx_flags | FI_INJECT | PSMX2_NO_COMPLETION, 
 				  0);
 }
 
@@ -704,7 +704,7 @@ static ssize_t psmx2_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_send_generic(ep, buf, len, desc, dest_addr, context,
-				  ep_priv->flags, data);
+				  ep_priv->tx_flags, data);
 }
 
 static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -715,7 +715,7 @@ static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_send_generic(ep, buf, len, NULL, dest_addr, NULL,
-				  ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+				  ep_priv->tx_flags | FI_INJECT | PSMX2_NO_COMPLETION,
 				  data);
 }
 

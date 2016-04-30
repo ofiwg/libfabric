@@ -473,7 +473,7 @@ static ssize_t psmx2_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_tagged_recv_generic(ep, buf, len, desc, src_addr, tag,
-					 ignore, context, ep_priv->flags);
+					 ignore, context, ep_priv->rx_flags);
 }
 
 static ssize_t psmx2_tagged_recvmsg(struct fid_ep *ep,
@@ -1101,7 +1101,7 @@ static ssize_t psmx2_tagged_send(struct fid_ep *ep,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_tagged_send_generic(ep, buf, len, desc, dest_addr,
-					 tag, context, ep_priv->flags, 0);
+					 tag, context, ep_priv->tx_flags, 0);
 }
 
 static ssize_t psmx2_tagged_sendmsg(struct fid_ep *ep,
@@ -1153,7 +1153,7 @@ psmx2_tagged_sendv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
 		return psmx2_tagged_sendv_generic(ep, iov, desc, count, \
 						  dest_addr, tag,	\
 						  context,		\
-						  ep_priv->flags, 0);	\
+						  ep_priv->tx_flags, 0);\
 	} else if (count) {						\
 		buf = iov[0].iov_base;					\
 		len = iov[0].iov_len;					\
@@ -1182,7 +1182,7 @@ static ssize_t psmx2_tagged_inject(struct fid_ep *ep,
 
 	return psmx2_tagged_send_generic(ep, buf, len, NULL, dest_addr,
 					 tag, NULL,
-				  	 ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+				  	 ep_priv->tx_flags | FI_INJECT | PSMX2_NO_COMPLETION,
 					 0);
 }
 
