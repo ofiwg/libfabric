@@ -604,7 +604,7 @@ static ssize_t psmx_read(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_read(ep, buf, len, desc, src_addr, addr,
-			  key, context, ep_priv->flags);
+			  key, context, ep_priv->tx_flags);
 }
 
 static ssize_t psmx_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -821,7 +821,7 @@ static ssize_t psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_write(ep, buf, len, desc, dest_addr, addr, key, context,
-			   ep_priv->flags, 0);
+			   ep_priv->tx_flags, 0);
 }
 
 static ssize_t psmx_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -856,7 +856,7 @@ static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_write(ep, buf, len, NULL, dest_addr, addr, key,
-			   NULL, ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION, 0);
+			   NULL, ep_priv->tx_flags | FI_INJECT | PSMX_NO_COMPLETION, 0);
 }
 
 static ssize_t psmx_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
@@ -868,7 +868,7 @@ static ssize_t psmx_writedata(struct fid_ep *ep, const void *buf, size_t len, vo
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_write(ep, buf, len, desc, dest_addr, addr, key, context,
-			   ep_priv->flags | FI_REMOTE_CQ_DATA, data);
+			   ep_priv->tx_flags | FI_REMOTE_CQ_DATA, data);
 }
 
 static ssize_t psmx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -880,7 +880,7 @@ static ssize_t psmx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_write(ep, buf, len, NULL, dest_addr, addr, key,
-			   NULL, ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION,
+			   NULL, ep_priv->tx_flags | FI_INJECT | PSMX_NO_COMPLETION,
 			   data);
 }
 
