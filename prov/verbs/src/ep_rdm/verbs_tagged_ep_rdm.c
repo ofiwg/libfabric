@@ -41,19 +41,14 @@
 #include "verbs_queuing.h"
 #include "verbs_tagged_ep_rdm_states.h"
 
-DEFINE_LIST(fi_ibv_rdm_tagged_request_ready_queue);
+struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
+
+extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
+extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
+
 DEFINE_LIST(fi_ibv_rdm_tagged_recv_posted_queue);
 DEFINE_LIST(fi_ibv_rdm_tagged_recv_unexp_queue);
 DEFINE_LIST(fi_ibv_rdm_tagged_send_postponed_queue);
-
-struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
-
-/*
- * extra buffer size equal eager buffer size, it is used for any intermediate
- * needs like unexpected recv, pack/unpack noncontig messages, etc
- */
-struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
@@ -149,10 +144,9 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 				FI_IBV_EVENT_RECV_START, &recv_data);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
-		    "fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, "
-		     "pend_recv %d\n",
-		     conn, (long long unsigned int)tag, (int)len, buf, context,
-		     ep->posted_recvs);
+			"fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, posted_recv %d\n",
+			conn, tag, (int)len, buf, context,
+			ep->posted_recvs);
 
 		if (ret || request->state.eager ==
 		    FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
@@ -392,6 +386,7 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err   = FI_SUCCESS;
 
 	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
 	int ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_START,
@@ -602,24 +597,9 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 					 struct fi_ibv_rdm_tagged_request,
 					 queue_entry);
 
-			const int data_len = arrived_len -
-				sizeof(struct fi_ibv_rdm_header);
-
-			if (found_request->len < data_len) {
-				VERBS_INFO(FI_LOG_EP_DATA,
-					"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
-					"conn %p, tag 0x%llx, tagmask %llx\n",
-					__FUNCTION__, __LINE__, data_len,
-					found_request->len,
-					found_request->minfo.conn,
-					found_request->minfo.tag,
-					found_request->minfo.tagmask);
-				assert(0);
-				/* TODO: return -FI_ETRUNC; */
-			}
-
 			fi_ibv_rdm_tagged_remove_from_posted_queue
-			    (found_request, ep);
+				(found_request, ep);
+
 			request = found_request;
 		} else {
 			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);

@@ -35,6 +35,11 @@
 #include "../fi_verbs.h"
 #include "verbs_utils.h"
 #include "verbs_rdm.h"
+#include "verbs_queuing.h"
+
+extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
+extern struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
+extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
 int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other)
 {
@@ -187,4 +192,50 @@ int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
 		assert(cm->my_addr.sin_family == AF_INET);
 	}
 	return !found;
+}
+
+void fi_ibv_rdm_clean_queues()
+{
+	struct fi_ibv_rdm_tagged_request *request;
+
+	while ((request = fi_ibv_rdm_take_first_from_unexp_queue())) {
+		if (request->unexp_rbuf) {
+			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+				request->unexp_rbuf);
+		}
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+	}
+
+	while ((request = fi_ibv_rdm_take_first_from_posted_queue())) {
+		if (request->iov_count > 0) {
+			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+				request->unexp_rbuf);
+		}
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+	}
+
+	while ((request = fi_ibv_rdm_take_first_from_postponed_queue())) {
+		if (request->iov_count > 0) {
+			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+				request->unexp_rbuf);
+		}
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+	}
+
+	while ((request = fi_ibv_rdm_take_first_from_cq())) {
+		if (request->iov_count > 0) {
+			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+				request->unexp_rbuf);
+		}
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+	}
+
+	while ((request = fi_ibv_rdm_take_first_from_errcq())) {
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+	}
 }

@@ -134,6 +134,7 @@ struct fi_ibv_rdm_tagged_request {
 	struct {
 		enum fi_ibv_rdm_tagged_request_eager_state eager;
 		enum fi_ibv_rdm_tagged_request_rndv_state rndv;
+		ssize_t err; /* filled in case of moving to errcq */
 	} state;
 
 	struct fi_verbs_rdm_tagged_minfo minfo;
@@ -210,8 +211,8 @@ struct fi_ibv_rdm_cm {
 struct fi_ibv_rdm_ep {
 	struct fid_ep ep_fid;
 	struct fi_ibv_domain *domain;
-	struct fi_ibv_cq *fi_scq;
-	struct fi_ibv_cq *fi_rcq;
+	struct fi_ibv_rdm_cq *fi_scq;
+	struct fi_ibv_rdm_cq *fi_rcq;
 
 	struct fi_ibv_rdm_cm cm;
 	size_t addrlen;
@@ -457,6 +458,9 @@ int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
                                       int num_to_post);
 int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
                               struct fid_ep **ep, void *context);
+int fi_ibv_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		   struct fid_cq **cq, void *context);
+
 int fi_ibv_rdm_tagged_prepare_send_request(
 	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep);
 int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_tagged_request *request,

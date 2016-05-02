@@ -298,6 +298,8 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err   = FI_SUCCESS;
+
 	request->rmabuf = raw_buf;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {
@@ -392,6 +394,8 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err   = FI_SUCCESS;
+
 	request->rmabuf = raw_buf;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {
@@ -486,6 +490,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INJECT;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err   = FI_SUCCESS;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.conn = conn,

@@ -120,14 +120,14 @@ static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
 				     uint64_t flags)
 {
 	struct fi_ibv_rdm_ep *ep;
-	struct fi_ibv_cq *cq;
+	struct fi_ibv_rdm_cq *cq;
 	struct fi_ibv_av *av;
 
 	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct fi_ibv_cq, cq_fid);
+		cq = container_of(bfid, struct fi_ibv_rdm_cq, cq_fid);
 
 		if (flags & FI_RECV) {
 			if (ep->fi_rcq)
@@ -159,12 +159,12 @@ static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
 
 static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 {
-	struct fi_ibv_rdm_ep *fid_ep;
 	struct fi_context *context = (struct fi_context *)ctx;
+	struct fi_ibv_rdm_ep *ep_rdm = 
+		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
 	int err = 1;
 
-	fid_ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
-	if (!fid_ep->domain)
+	if (!ep_rdm->domain)
 		return -EBADF;
 
 	if (!context)
@@ -180,24 +180,26 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 		  request, request->minfo.tag, request->len, request->context);
 
 	struct dlist_entry *found =
-	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
-				   fi_ibv_rdm_tagged_req_match, request);
-
+		dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
+			fi_ibv_rdm_tagged_req_match, request);
 	if (found) {
 		assert(container_of(found, struct fi_ibv_rdm_tagged_request,
 				    queue_entry) == request);
-
-		fi_ibv_rdm_tagged_remove_from_posted_queue(request, fid_ep);
-
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
-					      FI_LOG_DEBUG);
-
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
-
-		VERBS_DBG(FI_LOG_EP_DATA,
-			  "\t\t-> SUCCESS, post recv %d\n", fid_ep->posted_recvs);
-
+		fi_ibv_rdm_tagged_remove_from_posted_queue(request, ep_rdm);
+		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %d\n",
+			ep_rdm->posted_recvs);
 		err = 0;
+	} else {
+		request = fi_ibv_rdm_take_first_match_from_postponed_queue
+				(fi_ibv_rdm_tagged_req_match, request);
+		if (request) {
+			fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+			err = 0;
+		}
+	}
+
+	if (!err) {
+		fi_ibv_rdm_move_to_errcq(request, FI_ECANCELED);
 	}
 
 	return err;
@@ -278,12 +280,14 @@ static void *fi_ibv_rdm_tagged_cm_progress_thread(void *ctx)
 	return NULL;
 }
 
-static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
+static int fi_ibv_rdm_ep_close(fid_t fid)
 {
 	int ret = 0;
-	struct fi_ibv_rdm_ep *ep;
-	void *status;
-	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
+	void *status = NULL;
+	struct fi_ibv_rdm_ep *ep =
+		container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
+
+	ep->fi_scq->ep = ep->fi_rcq->ep = NULL;
 
 	ep->is_closing = 1;
 	_fi_ibv_rdm_tagged_cm_progress_running = 0;
@@ -294,8 +298,6 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	while (ep->posted_sends > 0 && ep->num_active_conns > 0) {
 		fi_ibv_rdm_tagged_poll(ep);
 	}
-
-	assert(ep->posted_recvs == 0);
 
 	struct fi_ibv_rdm_tagged_conn *conn = NULL, *tmp = NULL;
 
@@ -334,10 +336,14 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	       NULL == fi_ibv_rdm_tagged_conn_hash);
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
+	assert(ep->scq && ep->rcq);
 	ibv_destroy_cq(ep->scq);
 	ibv_destroy_cq(ep->rcq);
 
 	fi_ibv_destroy_ep(FI_EP_RDM, ep->cm.rai, &(ep->cm.listener));
+
+	/* TODO: move queues & related pools cleanup to close CQ*/
+	fi_ibv_rdm_clean_queues();
 
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_request_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_postponed_pool);
@@ -382,7 +388,7 @@ static int fi_ibv_ep_sync(fid_t fid, uint64_t flags, void *context)
 
 struct fi_ops fi_ibv_rdm_tagged_ep_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = fi_ibv_rdm_tagged_ep_close,
+	.close = fi_ibv_rdm_ep_close,
 	.bind = fi_ibv_rdm_tagged_ep_bind,
 	.control = fi_ibv_rdm_tagged_control,
 	.ops_open = fi_no_ops_open,
