@@ -84,129 +84,6 @@ static int alloc_epoll_res(void)
 	return 0;
 }
 
-static int server_connect(void)
-{
-	struct fi_eq_cm_entry entry;
-	uint32_t event;
-	ssize_t rd;
-	int ret;
-
-	/* Wait for connection request from client */
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
-		return (int) rd;
-	}
-
-	fi = entry.info;
-	if (event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", event);
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		goto err;
-	}
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		goto err;
-
-	ret = ft_init_ep();
-	if (ret)
-		goto err;
-
-	ret = alloc_epoll_res();
-	if (ret)
-		goto err;
-
-	/* Accept the incoming connection. Also transitions endpoint to active state */
-	ret = fi_accept(ep, NULL, 0);
-	if (ret) {
-		FT_PRINTERR("fi_accept", ret);
-		goto err;
-	}
-
-	/* Wait for the connection to be established */
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
-		ret = (int) rd;
-		goto err;
-	}
-
-	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
-	return 0;
-
-err:
-	fi_reject(pep, fi->handle, NULL, 0);
-	return ret;
-}
-
-static int client_connect(void)
-{
-	struct fi_eq_cm_entry entry;
-	uint32_t event;
-	ssize_t rd;
-	int ret;
-
-	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_init_ep();
-	if (ret)
-		return ret;
-
-	ret = alloc_epoll_res();
-	if (ret)
-		return ret;
-
-	/* Connect to server */
-	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
-	if (ret) {
-		FT_PRINTERR("fi_connect", ret);
-		return ret;
-	}
-
-	/* Wait for the connection to be established */
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "connect");
-		ret = (int) rd;
-		return ret;
-	}
-
-	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
-		ret = -FI_EOTHER;
-		return ret;
-	}
-
-	return 0;
-}
-
 static int send_recv()
 {
 	struct fi_cq_entry comp;
@@ -305,10 +182,14 @@ static int run(void)
 			return ret;
 	}
 
-	ret = opts.dst_addr ? client_connect() : server_connect();
+	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
 	if (ret) {
 		return ret;
 	}
+
+	ret = alloc_epoll_res();
+	if (ret)
+		return ret;
 
 	ret = send_recv();
 
