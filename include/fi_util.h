@@ -370,7 +370,7 @@ int fi_check_info(const struct fi_provider *prov,
 		  const struct fi_info *prov_info,
 		  const struct fi_info *user_info,
 		  enum fi_match_type type);
-void fi_alter_info(struct fi_info *info,
+void ofi_alter_info(struct fi_info *info,
 		   const struct fi_info *hints);
 
 int util_getinfo(const struct fi_provider *prov, uint32_t version,

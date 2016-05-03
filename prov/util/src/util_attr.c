@@ -557,16 +557,18 @@ static void fi_alter_tx_attr(struct fi_tx_attr *attr,
  * the hints have been validated and the starting fi_info is properly
  * configured by the provider.
  */
-void fi_alter_info(struct fi_info *info,
+void ofi_alter_info(struct fi_info *info,
 		   const struct fi_info *hints)
 {
 	if (!hints)
 		return;
 
-	info->caps = (hints->caps & FI_PRIMARY_CAPS) |
-		     (info->caps & FI_SECONDARY_CAPS);
+	for (; info; info = info->next) {
+		info->caps = (hints->caps & FI_PRIMARY_CAPS) |
+			     (info->caps & FI_SECONDARY_CAPS);
 
-	fi_alter_ep_attr(info->ep_attr, hints->ep_attr);
-	fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
-	fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);
+		fi_alter_ep_attr(info->ep_attr, hints->ep_attr);
+		fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
+		fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);
+	}
 }
