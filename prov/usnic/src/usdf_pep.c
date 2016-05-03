@@ -637,6 +637,8 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 	TAILQ_INIT(&pep->pep_cr_free);
 	TAILQ_INIT(&pep->pep_cr_pending);
 	pep->pep_backlog = 10;
+	pep->pep_cr_max_data = USDF_MAX_CONN_DATA;
+
 	ret = usdf_pep_grow_backlog(pep);
 	if (ret != 0) {
 		goto fail;
