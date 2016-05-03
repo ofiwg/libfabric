@@ -327,6 +327,12 @@ int ft_alloc_active_res(struct fi_info *fi)
 {
 	int ret;
 
+	if (hints->caps & FI_RMA) {
+		ret = ft_set_rma_caps(fi, opts.rma_op);
+		if (ret)
+			return ret;
+	}
+
 	ret = ft_alloc_msgs();
 	if (ret)
 		return ret;
@@ -396,6 +402,27 @@ int ft_alloc_active_res(struct fi_info *fi)
 		return ret;
 	}
 
+	return 0;
+}
+
+int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op)
+{
+	switch (rma_op) {
+	case FT_RMA_READ:
+		fi->caps |= FI_REMOTE_READ;
+		if (fi->mode & FI_LOCAL_MR)
+			fi->caps |= FI_READ;
+		break;
+	case FT_RMA_WRITE:
+	case FT_RMA_WRITEDATA:
+		fi->caps |= FI_REMOTE_WRITE;
+		if (fi->mode & FI_LOCAL_MR)
+			fi->caps |= FI_WRITE;
+		break;
+	default:
+		FT_ERR("Invalid rma op type\n");
+		return -FI_EINVAL;
+	}
 	return 0;
 }
 
@@ -1003,6 +1030,80 @@ ssize_t ft_inject(struct fid_ep *ep, size_t size)
 	return ret;
 }
 
+ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+		struct fi_rma_iov *remote, void *context)
+{
+	switch (op) {
+	case FT_RMA_WRITE:
+		FT_POST(fi_write, ft_get_tx_comp, tx_seq, "fi_write", ep, tx_buf,
+				opts.transfer_size, fi_mr_desc(mr), remote_fi_addr,
+				remote->addr, remote->key, context);
+		break;
+	case FT_RMA_WRITEDATA:
+		FT_POST(fi_writedata, ft_get_tx_comp, tx_seq, "fi_writedata", ep,
+				tx_buf, opts.transfer_size, fi_mr_desc(mr),
+				remote_cq_data,	remote_fi_addr,	remote->addr,
+				remote->key, context);
+		break;
+	case FT_RMA_READ:
+		FT_POST(fi_read, ft_get_tx_comp, tx_seq, "fi_read", ep, rx_buf,
+				opts.transfer_size, fi_mr_desc(mr), remote_fi_addr,
+				remote->addr, remote->key, context);
+		break;
+	default:
+		FT_ERR("Unknown RMA op type\n");
+		return EXIT_FAILURE;
+	}
+
+	return 0;
+}
+
+ssize_t ft_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+		struct fi_rma_iov *remote, void *context)
+{
+	int ret;
+
+	ret = ft_post_rma(op, ep, size, remote, context);
+	if (ret)
+		return ret;
+
+	if (op == FT_RMA_WRITEDATA) {
+		ret = ft_rx(ep, 0);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_get_tx_comp(tx_seq);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+		struct fi_rma_iov *remote)
+{
+	switch (op) {
+	case FT_RMA_WRITE:
+		FT_POST(fi_inject_write, ft_get_tx_comp, tx_seq, "fi_inject_write",
+				ep, tx_buf, opts.transfer_size, remote_fi_addr,
+				remote->addr, remote->key);
+		break;
+	case FT_RMA_WRITEDATA:
+		FT_POST(fi_inject_writedata, ft_get_tx_comp, tx_seq,
+				"fi_inject_writedata", ep, tx_buf, opts.transfer_size,
+				remote_cq_data, remote_fi_addr, remote->addr,
+				remote->key);
+		break;
+	default:
+		FT_ERR("Unknown RMA inject op type\n");
+		return EXIT_FAILURE;
+	}
+
+	tx_cq_cntr++;
+	return 0;
+}
+
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 {
 	if (hints->caps & FI_TAGGED) {
@@ -1597,6 +1698,31 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		/* let getopt handle unknown opts*/
 		break;
 	}
+}
+
+int ft_parse_rma_opts(int op, char *optarg, struct ft_opts *opts)
+{
+	switch (op) {
+	case 'o':
+		if (!strcmp(optarg, "read")) {
+			opts->rma_op = FT_RMA_READ;
+		} else if (!strcmp(optarg, "writedata")) {
+			opts->rma_op = FT_RMA_WRITEDATA;
+			cq_attr.format = FI_CQ_FORMAT_DATA;
+		} else if (!strcmp(optarg, "write")) {
+			opts->rma_op = FT_RMA_WRITE;
+		} else {
+			fprintf(stderr, "Invalid operation type: \"%s\". Usage:\n"
+					"-o <op>\trma op type: read|write|writedata "
+				       "(default:write)\n", optarg);
+			return EXIT_FAILURE;
+		}
+		break;
+	default:
+		/* let getopt handle unknown opts*/
+		break;
+	}
+	return 0;
 }
 
 void ft_fill_buf(void *buf, int size)
