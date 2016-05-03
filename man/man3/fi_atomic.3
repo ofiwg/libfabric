@@ -1,4 +1,4 @@
-.TH "fi_atomic" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_atomic" "3" "2016\-05\-03" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic \- Remote atomic functions
@@ -513,6 +513,9 @@ Returns 0 on success.
 On error, a negative value corresponding to fabric errno is returned.
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS
+.PP
+\f[I]\-FI_EAGAIN\f[] : See \f[C]fi_msg\f[](3) for a detailed description
+of handling FI_EAGAIN.
 .PP
 \f[I]\-FI_EOPNOTSUPP\f[] : The requested atomic operation is not
 supported on this endpoint.
