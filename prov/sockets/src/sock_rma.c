@@ -65,18 +65,22 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	union sock_iov tx_iov;
 	struct sock_conn *conn;
 	struct sock_tx_ctx *tx_ctx;
-	uint64_t total_len, src_len, dst_len;
+	uint64_t total_len, src_len, dst_len, op_flags;
 	struct sock_ep *sock_ep;
+	struct sock_ep_attr *ep_attr;
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		tx_ctx = sock_ep->tx_ctx;
+		tx_ctx = sock_ep->attr->tx_ctx;
+		ep_attr = sock_ep->attr;
+		op_flags = sock_ep->tx_attr.op_flags;
 		break;
 
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx);
-		sock_ep = tx_ctx->ep;
+		ep_attr = tx_ctx->ep_attr;
+		op_flags = tx_ctx->attr.op_flags;
 		break;
 
 	default:
@@ -93,13 +97,13 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
+	ret = sock_ep_get_conn(ep_attr, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
-		flags |= tx_ctx->attr.op_flags;
+		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
 		ret = sock_queue_rma_op(ep, msg, flags, SOCK_OP_READ);
@@ -125,7 +129,7 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	sock_tx_ctx_write_op_send(tx_ctx, &tx_op, flags,
 			(uintptr_t) msg->context, msg->addr,
 			(uintptr_t) msg->msg_iov[0].iov_base,
-			sock_ep, conn);
+			ep_attr, conn);
 
 	src_len = 0;
 	for (i = 0; i < msg->rma_iov_count; i++) {
@@ -224,18 +228,22 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	union sock_iov tx_iov;
 	struct sock_conn *conn;
 	struct sock_tx_ctx *tx_ctx;
-	uint64_t total_len, src_len, dst_len;
+	uint64_t total_len, src_len, dst_len, op_flags;
 	struct sock_ep *sock_ep;
+	struct sock_ep_attr *ep_attr;
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		tx_ctx = sock_ep->tx_ctx;
+		tx_ctx = sock_ep->attr->tx_ctx;
+		ep_attr = sock_ep->attr;
+		op_flags = sock_ep->tx_attr.op_flags;
 		break;
 
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx);
-		sock_ep = tx_ctx->ep;
+		ep_attr = tx_ctx->ep_attr;
+		op_flags = tx_ctx->attr.op_flags;
 		break;
 
 	default:
@@ -252,13 +260,13 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
+	ret = sock_ep_get_conn(ep_attr, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
-		flags |= tx_ctx->attr.op_flags;
+		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
 		ret = sock_queue_rma_op(ep, msg, flags, SOCK_OP_WRITE);
@@ -295,7 +303,7 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 
 	sock_tx_ctx_write_op_send(tx_ctx, &tx_op, flags,
 			(uintptr_t) msg->context, msg->addr,
-			(uintptr_t) msg->msg_iov[0].iov_base, sock_ep, conn);
+			(uintptr_t) msg->msg_iov[0].iov_base, ep_attr, conn);
 
 	if (flags & FI_REMOTE_CQ_DATA)
 		sock_tx_ctx_write(tx_ctx, &msg->data, sizeof(msg->data));

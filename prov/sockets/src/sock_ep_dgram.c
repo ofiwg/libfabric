@@ -271,7 +271,7 @@ static int sock_dgram_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return ret;
 
 	if (!info || !info->ep_attr)
-		(*ep)->ep_attr = sock_dgram_ep_attr;
+		(*ep)->attr->ep_attr = sock_dgram_ep_attr;
 
 	if (!info || !info->tx_attr)
 		(*ep)->tx_attr = sock_dgram_tx_attr;

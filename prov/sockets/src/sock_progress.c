@@ -1615,7 +1615,7 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 					struct sock_pe_entry *pe_entry)
 {
 	uint64_t len, data_len;
-	struct sock_ep *ep;
+	struct sock_ep_attr *ep_attr;
 	struct sock_conn_map *map;
 	struct sockaddr_in *addr;
 	struct sock_conn *conn;
@@ -1640,20 +1640,20 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 		inet_ntoa(((struct sockaddr_in *)pe_entry->comm_addr)->sin_addr),
 		ntohs(((struct sockaddr_in *)pe_entry->comm_addr)->sin_port));
 
-	ep = pe_entry->conn->ep;
-	map = &ep->cmap;
+	ep_attr = pe_entry->conn->ep_attr;
+	map = &ep_attr->cmap;
 	addr = (struct sockaddr_in *) pe_entry->comm_addr;
 	pe_entry->conn->addr = *addr;
 
-	index = (ep->ep_type == FI_EP_MSG) ? 0 : sock_av_get_addr_index(ep->av, addr);
+	index = (ep_attr->ep_type == FI_EP_MSG) ? 0 : sock_av_get_addr_index(ep_attr->av, addr);
 	if (index != -1) {
 		fastlock_acquire(&map->lock);
-		conn = sock_ep_lookup_conn(ep, index, addr);
+		conn = sock_ep_lookup_conn(ep_attr, index, addr);
 		if (conn == NULL || conn == SOCK_CM_CONN_IN_PROGRESS)
-			idm_set(&ep->av_idm, index, pe_entry->conn);
+			idm_set(&ep_attr->av_idm, index, pe_entry->conn);
 		fastlock_release(&map->lock);
 	}
-	pe_entry->conn->av_index = (ep->ep_type == FI_EP_MSG || index == -1) ?
+	pe_entry->conn->av_index = (ep_attr->ep_type == FI_EP_MSG || index == -1) ?
 		FI_ADDR_NOTAVAIL : index;
 
 	pe_entry->is_complete = 1;
@@ -2176,7 +2176,7 @@ out:
 }
 
 static void sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
-				struct sock_ep *ep, struct sock_conn *conn)
+				struct sock_ep_attr *ep_attr, struct sock_conn *conn)
 {
 	struct sock_pe_entry *pe_entry;
 
@@ -2185,17 +2185,17 @@ static void sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 
 	pe_entry->conn = conn;
 	pe_entry->type = SOCK_PE_RX;
-	pe_entry->ep = ep;
+	pe_entry->ep_attr = ep_attr;
 	pe_entry->is_complete = 0;
 	pe_entry->done_len = 0;
 
-	if (ep->ep_type == FI_EP_MSG || !ep->av)
+	if (ep_attr->ep_type == FI_EP_MSG || !ep_attr->av)
 		pe_entry->addr = FI_ADDR_NOTAVAIL;
 	else
 		pe_entry->addr = conn->av_index;
 
 	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX)
-		pe_entry->comp = &ep->comp;
+		pe_entry->comp = &ep_attr->comp;
 	else
 		pe_entry->comp = &rx_ctx->comp;
 
@@ -2213,7 +2213,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	int i, datatype_sz;
 	struct sock_msg_hdr *msg_hdr;
 	struct sock_pe_entry *pe_entry;
-	struct sock_ep *ep;
+	struct sock_ep_attr *ep_attr;
 
 	pe_entry = sock_pe_acquire_entry(pe);
 	memset(&pe_entry->pe.tx, 0, sizeof(pe_entry->pe.tx));
@@ -2223,7 +2223,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	pe_entry->is_complete = 0;
 	pe_entry->done_len = 0;
 	pe_entry->conn = NULL;
-	pe_entry->ep = tx_ctx->ep;
+	pe_entry->ep_attr = tx_ctx->ep_attr;
 	pe_entry->pe.tx.tx_ctx = tx_ctx;
 
 	dlist_insert_tail(&pe_entry->ctx_entry, &tx_ctx->pe_entry_list);
@@ -2238,15 +2238,15 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 
 	sock_tx_ctx_read_op_send(tx_ctx, &pe_entry->pe.tx.tx_op,
 			&pe_entry->flags, &pe_entry->context, &pe_entry->addr,
-			&pe_entry->buf, &ep, &pe_entry->conn);
+			&pe_entry->buf, &ep_attr, &pe_entry->conn);
 
 	if (pe_entry->pe.tx.tx_op.op == SOCK_OP_TSEND) {
 		rbread(&tx_ctx->rb, &pe_entry->tag, sizeof(pe_entry->tag));
 		msg_hdr->msg_len += sizeof(pe_entry->tag);
 	}
 
-	if (ep && tx_ctx->fclass == FI_CLASS_STX_CTX)
-		pe_entry->comp = &ep->comp;
+	if (ep_attr && tx_ctx->fclass == FI_CLASS_STX_CTX)
+		pe_entry->comp = &ep_attr->comp;
 	else
 		pe_entry->comp = &tx_ctx->comp;
 
@@ -2432,14 +2432,14 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 	pthread_mutex_unlock(&rx_ctx->domain->pe->list_lock);
 }
 
-static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
+static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep_attr *ep_attr,
 					struct sock_rx_ctx *rx_ctx)
 {
 	int ret = 0, i, fd, num_fds;
 	struct sock_conn *conn;
 	struct sock_conn_map *map;
 
-	map = &ep->cmap;
+	map = &ep_attr->cmap;
 
         if (!map->used)
                 return 0;
@@ -2454,14 +2454,14 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 	fastlock_acquire(&map->lock);
 	for (i = 0; i < num_fds; i++) {
 		fd = sock_epoll_get_fd_at_index(&map->epoll_set, i);
-		conn = idm_lookup(&ep->conn_idm, fd);
+		conn = idm_lookup(&ep_attr->conn_idm, fd);
 		if (!conn)
 			SOCK_LOG_ERROR("idm_lookup failed\n");
 
 		if (!conn || conn->rx_pe_entry)
 			continue;
 
-		sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
+		sock_pe_new_rx_entry(pe, rx_ctx, ep_attr, conn);
 	}
 
 	fastlock_release(&map->lock);
@@ -2471,7 +2471,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 {
 	int ret = 0;
-	struct sock_ep *ep;
+	struct sock_ep_attr *ep_attr;
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
@@ -2485,15 +2485,15 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) {
 		for (entry = rx_ctx->ep_list.next;
 		     entry != &rx_ctx->ep_list;) {
-			ep = container_of(entry, struct sock_ep, rx_ctx_entry);
+			ep_attr = container_of(entry, struct sock_ep_attr, rx_ctx_entry);
 			entry = entry->next;
-			ret = sock_pe_progress_rx_ep(pe, ep, rx_ctx);
+			ret = sock_pe_progress_rx_ep(pe, ep_attr, rx_ctx);
 			if (ret < 0)
 				goto out;
 		}
 	} else {
-		ep = rx_ctx->ep;
-		ret = sock_pe_progress_rx_ep(pe, ep, rx_ctx);
+		ep_attr = rx_ctx->ep_attr;
+		ret = sock_pe_progress_rx_ep(pe, ep_attr, rx_ctx);
 		if (ret < 0)
 			goto out;
 	}
@@ -2516,19 +2516,19 @@ out:
 void sock_pe_progress_rx_ctrl_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 				  struct sock_tx_ctx *tx_ctx)
 {
-	struct sock_ep *ep;
+	struct sock_ep_attr *ep_attr;
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
 	/* check for incoming data */
 	if (tx_ctx->fclass == FI_CLASS_STX_CTX) {
 		for (entry = tx_ctx->ep_list.next; entry != &tx_ctx->ep_list;) {
-			ep = container_of(entry, struct sock_ep, tx_ctx_entry);
+			ep_attr = container_of(entry, struct sock_ep_attr, tx_ctx_entry);
 			entry = entry->next;
-			sock_pe_progress_rx_ep(pe, ep, tx_ctx->rx_ctrl_ctx);
+			sock_pe_progress_rx_ep(pe, ep_attr, tx_ctx->rx_ctrl_ctx);
 		}
 	} else {
-		sock_pe_progress_rx_ep(pe, tx_ctx->ep, tx_ctx->rx_ctrl_ctx);
+		sock_pe_progress_rx_ep(pe, tx_ctx->ep_attr, tx_ctx->rx_ctrl_ctx);
 	}
 
 	for (entry = rx_ctx->pe_entry_list.next;

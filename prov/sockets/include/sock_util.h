@@ -55,12 +55,12 @@ extern int sock_dgram_drop_rate;
 #define _SOCK_LOG_DBG(subsys, ...) FI_DBG(&sock_prov, subsys, __VA_ARGS__)
 #define _SOCK_LOG_ERROR(subsys, ...) FI_WARN(&sock_prov, subsys, __VA_ARGS__)
 
-static inline int sock_drop_packet(struct sock_ep *sock_ep)
+static inline int sock_drop_packet(struct sock_ep_attr *ep_attr)
 {
 #if ENABLE_DEBUG
-	if (sock_ep->ep_type == FI_EP_DGRAM && sock_dgram_drop_rate > 0) {
-		sock_ep->domain->fab->num_send_msg++;
-		if (!(sock_ep->domain->fab->num_send_msg % sock_dgram_drop_rate))
+	if (ep_attr->ep_type == FI_EP_DGRAM && sock_dgram_drop_rate > 0) {
+		ep_attr->domain->fab->num_send_msg++;
+		if (!(ep_attr->domain->fab->num_send_msg % sock_dgram_drop_rate))
 			return 1;
 	}
 #endif
