@@ -556,46 +556,37 @@ static int
 usdf_ep_msg_getopt(fid_t fid, int level, int optname,
 		  void *optval, size_t *optlen)
 {
-	struct usdf_ep *ep;
-
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
-	ep = ep_fidtou(fid);
-	(void)ep;
+	if (level != FI_OPT_ENDPOINT)
+		return -FI_ENOPROTOOPT;
 
-	switch (level) {
+	switch (optname) {
 	case FI_OPT_CM_DATA_SIZE:
 		if (*optlen < sizeof(size_t))
 			return -FI_ETOOSMALL;
 		*((size_t *) optval) = USDF_MAX_CONN_DATA;
 		*optlen = sizeof(size_t);
-		return 0;
+		break;
 	case FI_OPT_ENDPOINT:
 		return -FI_ENOPROTOOPT;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
-	return 0;
+
+	return FI_SUCCESS;
 }
 
 static int
 usdf_ep_msg_setopt(fid_t fid, int level, int optname,
 		  const void *optval, size_t optlen)
 {
-	struct usdf_ep *ep;
-
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
-	ep = ep_fidtou(fid);
-	(void)ep;
-
-	switch (level) {
-	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
+	switch (optname) {
 	default:
 		return -FI_ENOPROTOOPT;
 	}
-	return 0;
 }
 
 static ssize_t
