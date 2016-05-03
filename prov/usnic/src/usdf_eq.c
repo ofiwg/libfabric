@@ -93,6 +93,13 @@ static inline ssize_t usdf_eq_read_event(struct usdf_eq *eq, uint32_t *event,
 
 	copylen = MIN(ev->ue_len, len);
 
+	if (copylen < ev->ue_len) {
+		USDF_DBG_SYS(EP_CTRL,
+				"buffer too small, got: %zu needed %zu\n",
+				copylen, ev->ue_len);
+		return -FI_ETOOSMALL;
+	}
+
 	/* copy out the event */
 	if (event)
 		*event = ev->ue_event;
