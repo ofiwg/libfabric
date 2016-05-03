@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -271,7 +271,9 @@ usdf_cm_msg_connect_cb_rd(void *v)
 		return 0;
 	}
 
+	crp->cr_ptr += ret;
 	crp->cr_resid -= ret;
+
 	reqp = (struct usdf_connreq_msg *)crp->cr_data;
 	if (crp->cr_resid == 0 && crp->cr_ptr == crp->cr_data + sizeof(*reqp)) {
 		reqp->creq_datalen = ntohl(reqp->creq_datalen);
