@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -40,118 +41,6 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 #include <shared.h>
-
-
-static int server_connect(void)
-{
-	struct fi_eq_cm_entry entry;
-	uint32_t event;
-	ssize_t rd;
-	int ret;
-
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
-		return (int) rd;
-	}
-
-	fi = entry.info;
-	if (event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", event);
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		goto err;
-	}
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		 goto err;
-
-	ret = ft_init_ep();
-	if (ret)
-		goto err;
-
-	ret = fi_accept(ep, NULL, 0);
-	if (ret) {
-		FT_PRINTERR("fi_accept", ret);
-		goto err;
-	}
-
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
-		ret = (int) rd;
-		goto err;
-	}
-
-	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
-	return 0;
-
-err:
-	fi_reject(pep, fi->handle, NULL, 0);
-	return ret;
-}
-
-static int client_connect(void)
-{
-	struct fi_eq_cm_entry entry;
-	uint32_t event;
-	ssize_t rd;
-	int ret;
-
-	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
-	if (ret)
-		return ret;
-
-	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_init_ep();
-	if (ret)
-		return ret;
-
-	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
-	if (ret) {
-		FT_PRINTERR("fi_connect", ret);
-		return ret;
-	}
-
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "connect");
-		return (int) rd;
-	}
-
-	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
-		return -FI_EOTHER;
-	}
-
-	return 0;
-}
 
 static int run_test()
 {
@@ -222,7 +111,7 @@ static int run(void)
 			return ret;
 	}
 
-	ret = opts.dst_addr ? client_connect() : server_connect();
+	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
 	if (ret) {
 		return ret;
 	}
