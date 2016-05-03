@@ -500,6 +500,10 @@ errno is returned. Fabric errno values are defined in
 
 # ERRORS
 
+*-FI_EAGAIN*
+: See [`fi_msg`(3)](fi_msg.3.html) for a detailed description of handling
+  FI_EAGAIN.
+
 *-FI_EOPNOTSUPP*
 : The requested atomic operation is not supported on this endpoint.
 

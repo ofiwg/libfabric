@@ -276,15 +276,32 @@ Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in
 `rdma/fi_errno.h`.
 
+See the discussion below for details handling FI_EAGAIN.
+
 # ERRORS
 
 *-FI_EAGAIN*
 : Indicates that the underlying provider currently lacks the resources
-  needed to initiate the requested operation.  This may be the result
-  of insufficient internal buffering, in the case of FI_INJECT,
-  or processing queues are full.  The operation may be retried after
-  additional provider resources become available, usually through the
-  completion of currently outstanding operations.
+  needed to initiate the requested operation.  The reasons for a provider
+  returning FI_EAGAIN are varied.  However, common reasons include
+  insufficient internal buffering or full processing queues.
+
+  Insufficient internal buffering is often associated with operations that
+  use FI_INJECT.  In such cases, additional buffering may become available as
+  posted operations complete.
+
+  Full processing queues may be a temporary state related to local
+  processing (for example, a large message is being transferred), or may be
+  the result of flow control.  In the latter case, the queues may remain
+  blocked until additional resources are made available at the remote side
+  of the transfer.
+
+  In all cases, the operation may be retried after additional resources become
+  available.  It is strongly recommended that applications check for transmit
+  and receive completions after receiving FI_EAGAIN as a return value,
+  independent of the operation which failed.  This is particularly important
+  in cases where manual progress is employed, as acknowledgements or flow
+  control messages may need to be processed in order to resume execution.
 
 # SEE ALSO
 
