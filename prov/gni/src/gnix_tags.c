@@ -836,7 +836,7 @@ int _gnix_insert_tag(
 {
 	int ret;
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "inserting a message by tag, "
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "inserting a message by tag, "
 				"ts=%p tag=%llx req=%p\n", ts, tag, req);
 	req->msg.tag = tag;
 	if (ts->match_func == _gnix_match_posted_tag) {
@@ -845,7 +845,7 @@ int _gnix_insert_tag(
 
 	ret = ts->ops->insert_tag(ts, tag, req);
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "ret=%i\n", ret);
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "ret=%i\n", ret);
 
 	return ret;
 }
@@ -864,12 +864,12 @@ static struct gnix_fab_req *__remove_by_tag_and_addr(
 	struct gnix_fab_req *ret;
 
 	/* assuming that flags and context are correct */
-	GNIX_INFO(FI_LOG_EP_CTRL, "removing a message by tag, "
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "removing a message by tag, "
 			"ts=%p tag=%llx ignore=%llx flags=%llx context=%p "
 			"addr=%p\n",
 			ts, tag, ignore, flags, context, addr);
 	ret = ts->ops->remove_tag(ts, tag, ignore, flags, context, addr);
-	GNIX_INFO(FI_LOG_EP_CTRL, "ret=%p\n", ret);
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "ret=%p\n", ret);
 
 	return ret;
 }
@@ -885,7 +885,7 @@ static struct gnix_fab_req *__peek_by_tag_and_addr(
 	struct gnix_fab_req *ret;
 
 	/* assuming that flags and context are correct */
-	GNIX_INFO(FI_LOG_EP_CTRL, "peeking a message by tag, "
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "peeking a message by tag, "
 			"ts=%p tag=%llx ignore=%llx flags=%llx context=%p "
 			"addr=%p\n",
 			ts, tag, ignore, flags, context, addr);
@@ -896,7 +896,7 @@ static struct gnix_fab_req *__peek_by_tag_and_addr(
 		ret->msg.tle.context = context;
 	}
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "ret=%p\n", ret);
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "ret=%p\n", ret);
 
 	return ret;
 }
