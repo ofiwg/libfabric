@@ -583,6 +583,7 @@ struct psmx2_fid_av {
 
 struct psmx2_fid_ep {
 	struct fid_ep		ep;
+	struct psmx2_fid_ep	*base_ep;
 	struct psmx2_fid_domain	*domain;
 	struct psmx2_fid_av	*av;
 	struct psmx2_fid_cq	*send_cq;
@@ -599,6 +600,7 @@ struct psmx2_fid_ep {
 	uint64_t		tx_flags;
 	uint64_t		rx_flags;
 	uint64_t		caps;
+	atomic_t		ref;
 	struct fi_context	nocomp_send_context;
 	struct fi_context	nocomp_recv_context;
 	struct slist		free_context_list;
