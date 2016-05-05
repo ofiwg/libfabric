@@ -408,6 +408,15 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 
+			switch (hints->domain_attr->threading) {
+			case FI_THREAD_COMPLETION:
+				gnix_info->domain_attr->threading =
+					hints->domain_attr->threading;
+				break;
+			default:
+				break;
+			}
+
 			ret = fi_check_domain_attr(&gnix_prov,
 						   gnix_info->domain_attr,
 						   hints->domain_attr,
