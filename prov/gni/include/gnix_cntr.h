@@ -61,6 +61,8 @@ struct gnix_fid_cntr {
 	atomic_t cnt;
 	atomic_t cnt_err;
 	struct gnix_reference ref_cnt;
+	struct dlist_entry trigger_list;
+	fastlock_t trigger_lock;
 };
 
 /**

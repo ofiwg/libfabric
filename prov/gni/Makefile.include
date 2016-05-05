@@ -36,6 +36,7 @@ _gni_files = \
 	prov/gni/src/gnix_queue.c \
 	prov/gni/src/gnix_rma.c \
 	prov/gni/src/gnix_tags.c \
+	prov/gni/src/gnix_trigger.c \
 	prov/gni/src/gnix_util.c \
 	prov/gni/src/gnix_vc.c \
 	prov/gni/src/gnix_vector.c \
@@ -67,6 +68,7 @@ _gni_headers = \
 	prov/gni/include/gnix_queue.h \
 	prov/gni/include/gnix_rma.h \
 	prov/gni/include/gnix_tags.h \
+	prov/gni/include/gnix_trigger.h \
 	prov/gni/include/gnix_util.h \
 	prov/gni/include/gnix_vc.h \
 	prov/gni/include/gnix_vector.h \

@@ -119,11 +119,11 @@ enum gnix_vc_conn_req_type {
 struct gnix_vc {
 	struct dlist_entry rx_list;	/* RX VC list entry */
 
-	struct slist work_queue;	/* Work reqs */
+	struct dlist_entry work_queue;	/* Work reqs */
 	fastlock_t work_queue_lock;	/* Work req lock */
 	struct dlist_entry work_list;	/* Work VC list entry */
 
-	struct slist tx_queue;		/* TX reqs */
+	struct dlist_entry tx_queue;	/* TX reqs */
 	fastlock_t tx_queue_lock;	/* TX reqs lock */
 	struct dlist_entry tx_list;	/* TX VC list entry */
 
