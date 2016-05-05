@@ -7,7 +7,6 @@ _psm_files = \
 	prov/psm/src/psmx_fabric.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_cq.c \
-	prov/psm/src/psmx_eq.c \
 	prov/psm/src/psmx_cntr.c \
 	prov/psm/src/psmx_av.c \
 	prov/psm/src/psmx_ep.c \
@@ -20,7 +19,6 @@ _psm_files = \
 	prov/psm/src/psmx_am.c \
 	prov/psm/src/psmx_mr.c \
 	prov/psm/src/psmx_wait.c \
-	prov/psm/src/psmx_poll.c \
 	prov/psm/src/psmx_util.c
 
 if HAVE_PSM_DL

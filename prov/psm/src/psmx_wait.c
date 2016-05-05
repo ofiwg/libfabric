@@ -109,220 +109,44 @@ static void psmx_wait_stop_progress(void)
 		;
 }
 
-int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
+static struct fi_ops_wait *psmx_wait_ops_save;
+static struct fi_ops_wait psmx_wait_ops;
+
+static int psmx_wait_wait(struct fid_wait *wait, int timeout)
 {
-	void *obj_ptr;
-	int obj_size = 0;
-	struct fi_mutex_cond mutex_cond;
-
-	if (!arg)
-		return -FI_EINVAL;
-
-	if (wait) {
-		switch (wait->type) {
-			case FI_WAIT_FD:
-				obj_size = sizeof(wait->fd[0]);
-				obj_ptr = &wait->fd[0];
-				break;
-
-			case FI_WAIT_MUTEX_COND:
-				mutex_cond.mutex = &wait->mutex;
-				mutex_cond.cond = &wait->cond;
-				obj_size = sizeof(mutex_cond);
-				obj_ptr = &mutex_cond;
-				break;
-
-			default:
-				break;
-		}
-	}
-
-	if (obj_size) {
-		memcpy(arg, obj_ptr, obj_size);
-	}
-
-	return 0;
-}
-
-int psmx_wait_wait(struct fid_wait *wait, int timeout)
-{
-	struct psmx_fid_wait *wait_priv;
-	int err = 0;
+	struct util_wait *wait_priv;
+	struct psmx_fid_fabric *fabric;
+	int err;
 	
-	wait_priv = container_of(wait, struct psmx_fid_wait, wait.fid);
+	wait_priv = container_of(wait, struct util_wait, wait_fid);
+	fabric = container_of(wait_priv->fabric, struct psmx_fid_fabric,
+			      util_fabric);
 
-	psmx_wait_start_progress(wait_priv->fabric->active_domain);
+	psmx_wait_start_progress(fabric->active_domain);
 
-	switch (wait_priv->type) {
-	case FI_WAIT_UNSPEC:
-		/* TODO: optimized custom wait */
-		break;
-
-	case FI_WAIT_FD:
-		err = fi_poll_fd(wait_priv->fd[0], timeout);
-		if (err > 0)
-			err = 0;
-		else if (err == 0)
-			err = -FI_ETIMEDOUT;
-		break;
-
-	case FI_WAIT_MUTEX_COND:
-		err = fi_wait_cond(&wait_priv->cond,
-				   &wait_priv->mutex, timeout);
-		break;
-
-	default:
-		break;
-	}
+	err = psmx_wait_ops_save->wait(wait, timeout);
 
 	psmx_wait_stop_progress();
 
 	return err;
 }
 
-void psmx_wait_signal(struct fid_wait *wait)
-{
-	struct psmx_fid_wait *wait_priv;
-	static char c = 'x';
-
-	wait_priv = container_of(wait, struct psmx_fid_wait, wait.fid);
-
-	switch (wait_priv->type) {
-	case FI_WAIT_UNSPEC:
-		/* TODO: optimized custom wait */
-		break;
-
-	case FI_WAIT_FD:
-		if (write(wait_priv->fd[1], &c, 1) != 1)
-			FI_WARN(&psmx_prov, FI_LOG_EQ,
-				"error signaling wait object\n");
-		break;
-
-	case FI_WAIT_MUTEX_COND:
-		pthread_cond_signal(&wait_priv->cond);
-		break;
-	}
-}
-
-static int psmx_wait_close(fid_t fid)
-{
-	struct psmx_fid_wait *wait;
-
-	wait = container_of(fid, struct psmx_fid_wait, wait.fid);
-	psmx_fabric_release(wait->fabric);
-
-	if (wait->type == FI_WAIT_FD) {
-		close(wait->fd[0]);
-		close(wait->fd[1]);
-	} else if (wait->type == FI_WAIT_MUTEX_COND) {
-		pthread_mutex_destroy(&wait->mutex);
-		pthread_cond_destroy(&wait->cond);
-	}
-
-	free(wait);
-	return 0;
-}
-
-static struct fi_ops psmx_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = psmx_wait_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
-
-static struct fi_ops_wait psmx_wait_ops = {
-	.size = sizeof(struct fi_ops_wait),
-	.wait = psmx_wait_wait,
-};
-
-static int psmx_wait_init(struct psmx_fid_wait *wait, int type)
-{
-	long flags = 0;
-
-	wait->type = type;
-	
-	switch (type) {
-	case FI_WAIT_UNSPEC:
-		/* TODO: optimized custom wait */
-		break;
-
-	case FI_WAIT_FD:
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->fd))
-			return -errno;
-
-		if (fcntl(wait->fd[0], F_GETFL, &flags) == -1) {
-			close(wait->fd[0]);
-			close(wait->fd[1]);
-			return -errno;
-		}
-
-		if (fcntl(wait->fd[0], F_SETFL, flags | O_NONBLOCK)) {
-			close(wait->fd[0]);
-			close(wait->fd[1]);
-			return -errno;
-		}
-		break;
-
-	case FI_WAIT_MUTEX_COND:
-		pthread_mutex_init(&wait->mutex, NULL);
-		pthread_cond_init(&wait->cond, NULL);
-		break;
- 
-	default:
-		break;
-	}
-
-	return 0;
-}
-
 int psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset)
 {
-	struct psmx_fid_fabric *fabric_priv;
-	struct psmx_fid_wait *wait_priv;
-	int type = FI_WAIT_FD;
+	struct fid_wait *wait;
 	int err;
 
-	if (attr) {
-		switch (attr->wait_obj) {
-		case FI_WAIT_UNSPEC:
-			break;
-
-		case FI_WAIT_FD:
-		case FI_WAIT_MUTEX_COND:
-			type = attr->wait_obj;
-			break;
-	 
-		default:
-			FI_INFO(&psmx_prov, FI_LOG_EQ,
-				"attr->wait_obj=%d, supported=%d,%d,%d\n",
-				attr->wait_obj, FI_WAIT_UNSPEC,
-				FI_WAIT_FD, FI_WAIT_MUTEX_COND);
-			return -FI_EINVAL;
-		}
-	}
-
-	wait_priv = calloc(1, sizeof(*wait_priv));
-	if (!wait_priv)
-		return -FI_ENOMEM;
-	
-	err = psmx_wait_init(wait_priv, type);
-	if (err) {
-		free(wait_priv);
+	err = ofi_wait_fd_open(fabric, attr, &wait);
+	if (err)
 		return err;
-	}
 
-	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
-	psmx_fabric_acquire(fabric_priv);
+	psmx_wait_ops_save = wait->ops;
+	psmx_wait_ops = *psmx_wait_ops_save;
+	psmx_wait_ops.wait = psmx_wait_wait;
+	wait->ops = &psmx_wait_ops;
 
-	wait_priv->fabric = fabric_priv;
-	wait_priv->wait.fid.fclass = FI_CLASS_WAIT;
-	wait_priv->wait.fid.context = 0;
-	wait_priv->wait.fid.ops = &psmx_fi_ops;
-	wait_priv->wait.ops = &psmx_wait_ops;
-
-	*waitset = &wait_priv->wait;
+	*waitset = wait;
 	return 0;
 }
 

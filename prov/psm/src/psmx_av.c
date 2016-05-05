@@ -115,6 +115,29 @@ static int psmx_av_check_table_size(struct psmx_fid_av *av, size_t count)
 	return 0;
 }
 
+static void psmx_av_post_completion(struct psmx_fid_av *av, void *context,
+				    uint64_t data, int prov_errno)
+{
+	if (prov_errno) {
+		struct fi_eq_err_entry entry;
+		entry.fid = &av->av.fid;
+		entry.context = context;
+		entry.data = data;
+		entry.err = -psmx_errno(prov_errno);
+		entry.prov_errno = prov_errno;
+		entry.err_data = NULL;
+		entry.err_data_size = 0;
+		fi_eq_write(av->eq, FI_AV_COMPLETE, &entry, sizeof(entry),
+			    UTIL_FLAG_ERROR);
+	} else {
+		struct fi_eq_entry entry;
+		entry.fid = &av->av.fid;
+		entry.context = context;
+		entry.data = data;
+		fi_eq_write(av->eq, FI_AV_COMPLETE, &entry, sizeof(entry), 0);
+	}
+}
+
 static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
@@ -125,7 +148,6 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	int i, j;
 	fi_addr_t *result = NULL;
 	struct psmx_epaddr_context *epaddr_context;
-	struct psmx_eq_event *event;
 
 	av_priv = container_of(av, struct psmx_fid_av, av);
 
@@ -211,23 +233,8 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
 			error_count++;
 
-			if (av_priv->flags & FI_EVENT) {
-				event = psmx_eq_create_event(av_priv->eq,
-							     FI_AV_COMPLETE,		/* event */
-							     context,			/* context */
-							     i,				/* data: failed index */
-							     psmx_errno(errors[i]),	/* err */
-							     errors[i],			/* prov_errno */
-							     NULL,			/* err_data */
-							     0);			/* err_data_size */
-				if (!event) {
-					free(mask);
-					free(errors);
-					return -FI_ENOMEM;
-				}
-
-				psmx_eq_enqueue_event(av_priv->eq, event);
-			}
+			if (av_priv->flags & FI_EVENT)
+				psmx_av_post_completion(av_priv, context, i, errors[i]);
 		}
 	}
 
@@ -251,18 +258,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	if (!(av_priv->flags & FI_EVENT))
 		return count - error_count;
 
-	event = psmx_eq_create_event(av_priv->eq,
-				     FI_AV_COMPLETE,		/* event */
-				     context,			/* context */
-				     count - error_count,	/* data: succ count */
-				     0,				/* err */
-				     0,				/* prov_errno */
-				     NULL,			/* err_data */
-				     0);			/* err_data_size */
-	if (!event)
-		return -FI_ENOMEM;
-
-	psmx_eq_enqueue_event(av_priv->eq, event);
+	psmx_av_post_completion(av_priv, context, count - error_count, 0);
 	return 0;
 }
 
@@ -340,7 +336,6 @@ static int psmx_av_close(fid_t fid)
 static int psmx_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx_fid_av *av;
-	struct psmx_fid_eq *eq;
 
 	av = container_of(fid, struct psmx_fid_av, av.fid);
 
@@ -349,8 +344,7 @@ static int psmx_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
-		eq = container_of(bfid, struct psmx_fid_eq, eq.fid);
-		av->eq = eq;
+		av->eq = (struct fid_eq *)bfid;
 		break;
 
 	default:
@@ -387,7 +381,8 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	size_t count = 64;
 	uint64_t flags = 0;
 
-	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx_fid_domain,
+				   util_domain.domain_fid);
 
 	if (attr) {
 		switch (attr->type) {

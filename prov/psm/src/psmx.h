@@ -66,12 +66,15 @@ extern "C" {
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
+#include "fi_util.h"
 #include "rbtree.h"
 #include "version.h"
 
 extern struct fi_provider psmx_prov;
 
 extern int psmx_am_compat_mode;
+
+#define PSMX_VERSION	(FI_VERSION(1,3))
 
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
@@ -236,17 +239,15 @@ struct psmx_multi_recv {
 };
 
 struct psmx_fid_fabric {
-	struct fid_fabric	fabric;
-	int			refcnt;
+	struct util_fabric	util_fabric;
 	struct psmx_fid_domain	*active_domain;
 	psm_uuid_t		uuid;
 	pthread_t		name_server_thread;
 };
 
 struct psmx_fid_domain {
-	struct fid_domain	domain;
+	struct util_domain	util_domain;
 	struct psmx_fid_fabric	*fabric;
-	int			refcnt;
 	psm_ep_t		psm_ep;
 	psm_epid_t		psm_epid;
 	psm_mq_t		psm_mq;
@@ -305,42 +306,6 @@ struct psmx_cq_event {
 	struct slist_entry list_entry;
 };
 
-struct psmx_eq_event {
-	int event;
-	union {
-		struct fi_eq_entry		data;
-		struct fi_eq_cm_entry		cm;
-		struct fi_eq_err_entry		err;
-	} eqe;
-	int error;
-	size_t entry_size;
-	struct slist_entry list_entry;
-};
-
-struct psmx_fid_wait {
-	struct fid_wait			wait;
-	struct psmx_fid_fabric		*fabric;
-	int				type;
-	union {
-		int			fd[2];
-		struct {
-			pthread_mutex_t	mutex;
-			pthread_cond_t	cond;
-		};
-	};
-};
-
-struct psmx_poll_list {
-	struct dlist_entry		entry;
-	struct fid			*fid;
-};
-
-struct psmx_fid_poll {
-	struct fid_poll			poll;
-	struct psmx_fid_domain		*domain;
-	struct dlist_entry		poll_list_head;
-};
-
 struct psmx_fid_cq {
 	struct fid_cq			cq;
 	struct psmx_fid_domain		*domain;
@@ -351,19 +316,8 @@ struct psmx_fid_cq {
 	struct slist			free_list;
 	fastlock_t			lock;
 	struct psmx_cq_event		*pending_error;
-	struct psmx_fid_wait		*wait;
+	struct util_wait		*wait;
 	int				wait_cond;
-	int				wait_is_local;
-};
-
-struct psmx_fid_eq {
-	struct fid_eq			eq;
-	struct psmx_fid_fabric		*fabric;
-	struct slist			event_queue;
-	struct slist			error_queue;
-	struct slist			free_list;
-	fastlock_t			lock;
-	struct psmx_fid_wait		*wait;
 	int				wait_is_local;
 };
 
@@ -505,7 +459,7 @@ struct psmx_fid_cntr {
 	volatile uint64_t	error_counter;
 	uint64_t		counter_last_read;
 	uint64_t		error_counter_last_read;
-	struct psmx_fid_wait	*wait;
+	struct util_wait	*wait;
 	int			wait_is_local;
 	struct psmx_trigger	*trigger;
 	pthread_mutex_t		trigger_lock;
@@ -514,7 +468,7 @@ struct psmx_fid_cntr {
 struct psmx_fid_av {
 	struct fid_av		av;
 	struct psmx_fid_domain	*domain;
-	struct psmx_fid_eq	*eq;
+	struct fid_eq		*eq;
 	int			type;
 	uint64_t		flags;
 	size_t			addrlen;
@@ -612,28 +566,31 @@ int	psmx_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		     struct fid_stx **stx, void *context);
 int	psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		     struct fid_cq **cq, void *context);
-int	psmx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		     struct fid_eq **eq, void *context);
 int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
-int	psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
-		       struct fid_poll **pollset);
 
 static inline void psmx_fabric_acquire(struct psmx_fid_fabric *fabric)
 {
-	++fabric->refcnt;
+	atomic_inc(&fabric->util_fabric.ref);
 }
 
-void	psmx_fabric_release(struct psmx_fid_fabric *fabric);
+static inline void psmx_fabric_release(struct psmx_fid_fabric *fabric)
+{
+	atomic_dec(&fabric->util_fabric.ref);
+}
 
 static inline void psmx_domain_acquire(struct psmx_fid_domain *domain)
 {
-	++domain->refcnt;
+	atomic_inc(&domain->util_domain.ref);
 }
 
-void	psmx_domain_release(struct psmx_fid_domain *domain);
+static inline void psmx_domain_release(struct psmx_fid_domain *domain)
+{
+	atomic_dec(&domain->util_domain.ref);
+}
+
 int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
 int	psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 void	psmx_domain_disable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
@@ -647,12 +604,6 @@ int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 			    psm_epid_t epid, psm_epaddr_t *epaddr);
 void	psmx_query_mpi(void);
 
-void	psmx_eq_enqueue_event(struct psmx_fid_eq *eq, struct psmx_eq_event *event);
-struct	psmx_eq_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
-					uint32_t event_num,
-					void *context, uint64_t data,
-					int err, int prov_errno,
-					void *err_data, size_t err_data_size);
 void	psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event);
 struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					void *op_context, void *buf,
@@ -661,9 +612,6 @@ struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					size_t olen, int err);
 int	psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			struct psmx_cq_event *event, int count, fi_addr_t *src_addr);
-int	psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg);
-int	psmx_wait_wait(struct fid_wait *wait, int timeout);
-void	psmx_wait_signal(struct fid_wait *wait);
 
 int	psmx_am_init(struct psmx_fid_domain *domain);
 int	psmx_am_fini(struct psmx_fid_domain *domain);
@@ -695,7 +643,7 @@ static inline void psmx_cntr_inc(struct psmx_fid_cntr *cntr)
 	cntr->counter++;
 	psmx_cntr_check_trigger(cntr);
 	if (cntr->wait)
-		psmx_wait_signal((struct fid_wait *)cntr->wait);
+		cntr->wait->signal(cntr->wait);
 }
 
 static inline void psmx_progress(struct psmx_fid_domain *domain)
