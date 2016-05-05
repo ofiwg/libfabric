@@ -43,51 +43,25 @@
 #include <rdma/fi_trigger.h>
 #include <shared.h>
 
-
 struct fi_triggered_context triggered_ctx;
 
 static char *welcome_text1 = "Hello1 from Client!";
 static char *welcome_text2 = "Hello2 from Client!";
 
-static int rma_write(void *src, size_t size,
-		     void *context, uint64_t flags)
+static int rma_write_trigger(void *src, size_t size,
+			     struct fid_cntr *cntr, size_t threshold)
 {
 	int ret;
-	struct fi_msg_rma msg;
-	struct iovec msg_iov;
-	struct fi_rma_iov rma_iov;
-	void *desc = fi_mr_desc(mr);
-
-	msg_iov.iov_base = src;
-	msg_iov.iov_len = size;
-
-	rma_iov.addr = 0;
-	rma_iov.len = size;
-	rma_iov.key = FT_MR_KEY;
-
-	msg.msg_iov = &msg_iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.rma_iov_count = 1;
-	msg.addr = remote_fi_addr;
-	msg.rma_iov = &rma_iov;
-	msg.context = context;
-
-	ret = fi_writemsg(ep, &msg, flags);
+	triggered_ctx.event_type = FI_TRIGGER_THRESHOLD;
+	triggered_ctx.trigger.threshold.cntr = cntr;
+	triggered_ctx.trigger.threshold.threshold = threshold;
+	ret = fi_write(alias_ep, src, size, fi_mr_desc(mr), remote_fi_addr, 0,
+			FT_MR_KEY, &triggered_ctx);
  	if (ret){
  		FT_PRINTERR("fi_write", ret);
  		return ret;
 	}
 	return 0;
- }
-
-static int rma_write_trigger(void *src, size_t size,
-			     struct fid_cntr *cntr, size_t threshold)
-{
-	triggered_ctx.event_type = FI_TRIGGER_THRESHOLD;
-	triggered_ctx.trigger.threshold.cntr = cntr;
-	triggered_ctx.trigger.threshold.threshold = threshold;
-	return rma_write(src, size, &triggered_ctx, FI_TRIGGER);
 }
 
 static int init_fabric(void)
@@ -118,6 +92,10 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
+	ret = ft_init_alias_ep(FI_TRANSMIT | FI_TRIGGER);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 
@@ -143,10 +121,13 @@ static int run_test(void)
 			goto out;
 
 		fprintf(stdout, "RMA write to server\n");
-		ret = rma_write(tx_buf, strlen(welcome_text1), &tx_ctx, 0);
-		if (ret)
-			goto out;
-
+		ret = fi_write(ep, tx_buf, strlen(welcome_text1), fi_mr_desc(mr),
+				remote_fi_addr, 0, FT_MR_KEY, &tx_ctx);
+ 		if (ret){
+ 			FT_PRINTERR("fi_write", ret);
+ 			goto out;
+		}
+		/* The value of the counter is 3 including a transfer during init_av */
 		ret = fi_cntr_wait(txcntr, 3, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
@@ -155,6 +136,7 @@ static int run_test(void)
 
 		fprintf(stdout, "Received completion events for RMA write operations\n");
 	} else {
+		/* The value of the counter is 3 including a transfer during init_av */
 		ret = fi_cntr_wait(rxcntr, 3, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
@@ -191,7 +173,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A simple RDM client-sever Triggered RMA example.");
+			ft_usage(argv[0], "A simple RDM client-sever triggered RMA example with alias ep.");
 			return EXIT_FAILURE;
 		}
 	}

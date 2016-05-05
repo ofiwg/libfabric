@@ -127,7 +127,7 @@ extern struct fid_wait *waitset;
 extern struct fid_domain *domain;
 extern struct fid_poll *pollset;
 extern struct fid_pep *pep;
-extern struct fid_ep *ep;
+extern struct fid_ep *ep, *alias_ep;
 extern struct fid_cq *txcq, *rxcq;
 extern struct fid_cntr *txcntr, *rxcntr;
 extern struct fid_mr *mr, no_mr;
@@ -241,6 +241,7 @@ int ft_server_connect();
 int ft_client_connect();
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep(void);
+int ft_init_alias_ep(uint64_t flags);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
 		uint64_t flags, void *context);
 int ft_init_av(void);
