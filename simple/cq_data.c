@@ -46,10 +46,7 @@ static int run_test()
 {
 	int ret;
 	size_t size = 1000;
-	uint64_t remote_cq_data;
 	struct fi_cq_data_entry comp;
-
-	remote_cq_data = ft_init_cq_data(fi);
 
 	if (opts.dst_addr) {
 		fprintf(stdout,

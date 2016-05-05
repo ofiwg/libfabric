@@ -62,6 +62,7 @@ struct fid_eq *eq;
 struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
 struct fi_context *ctx_arr = NULL;
+uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 int ft_skip_mr = 0;
@@ -273,6 +274,14 @@ int ft_alloc_msgs(void)
 	tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
 	tx_buf = (void *) (((uintptr_t) tx_buf + alignment - 1) &
 			   ~(alignment - 1));
+
+	remote_cq_data = ft_init_cq_data(fi);
+
+	if (opts.window_size > 0) {
+		ctx_arr = calloc(opts.window_size, sizeof(struct fi_context));
+		if (!ctx_arr)
+			return -FI_ENOMEM;
+	}
 
 	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
@@ -737,6 +746,11 @@ static void ft_close_fids(void)
 void ft_free_res(void)
 {
 	ft_close_fids();
+	if (ctx_arr) {
+		free(ctx_arr);
+		ctx_arr = NULL;
+	}
+
 	if (buf) {
 		free(buf);
 		buf = rx_buf = tx_buf = NULL;
@@ -901,9 +915,6 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		snprintf(test_name, test_name_len, "%s_lat", sstr);
 	if (!(opts->options & FT_OPT_ITER))
 		opts->iterations = size_to_count(opts->transfer_size);
-	if (opts->window_size > 0) {
-		ctx_arr = calloc(opts->window_size, sizeof(struct fi_context));
-	}
 }
 
 #define FT_POST(post_fn, comp_fn, seq, op_str, ...)				\
@@ -995,12 +1006,12 @@ ssize_t ft_inject(struct fid_ep *ep, size_t size)
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 {
 	if (hints->caps & FI_TAGGED) {
-		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive",
-				ep, rx_buf, size + ft_rx_prefix_size(),
+		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
+				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
 				fi_mr_desc(mr), 0, rx_seq, 0, ctx);
 	} else {
-		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive",
-				ep, rx_buf, size + ft_rx_prefix_size(),
+		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
+				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
 				fi_mr_desc(mr),	0, ctx);
 	}
 	return 0;
@@ -1021,6 +1032,10 @@ ssize_t ft_rx(struct fid_ep *ep, size_t size)
 	}
 	/* TODO: verify CQ data, if available */
 
+	/* Ignore the size arg. Post a buffer large enough to handle all message
+	 * sizes. ft_sync() makes use of ft_rx() and gets called in tests just before
+	 * message size is updated. The recvs posted are always for the next incoming
+	 * message */
 	ret = ft_post_rx(ep, rx_size, &rx_ctx);
 	return ret;
 }
@@ -1355,10 +1370,6 @@ int ft_finalize(void)
 	if (ret)
 		return ret;
 
-	if (ctx_arr) {
-		free(ctx_arr);
-		ctx_arr = NULL;
-	}
 	return 0;
 }
 

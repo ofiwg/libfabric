@@ -127,10 +127,6 @@ int bandwidth(void)
 {
 	int ret, i, j;
 
-	if (!ctx_arr) {
-		return -FI_ENOMEM;
-	}
-
 	ret = ft_sync();
 	if (ret)
 		return ret;
