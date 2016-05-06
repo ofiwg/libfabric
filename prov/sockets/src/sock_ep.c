@@ -1524,12 +1524,14 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	default:
 		ret = -FI_EINVAL;
-		goto err;
+		goto err1;
 	}
 
 	sock_ep->attr = (struct sock_ep_attr *) calloc(1, sizeof(struct sock_ep_attr));
-	if (!sock_ep->attr)
-		return -FI_ENOMEM;
+	if (!sock_ep->attr) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
 	sock_ep->attr->fclass = fclass;
 	*ep = sock_ep;
 
@@ -1547,7 +1549,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			sock_ep->attr->src_addr = calloc(1, sizeof(struct sockaddr_in));
 			if (!sock_ep->attr->src_addr) {
 				ret = -FI_ENOMEM;
-				goto err;
+				goto err2;
 			}
 			memcpy(sock_ep->attr->src_addr, info->src_addr,
 			       sizeof(struct sockaddr_in));
@@ -1557,7 +1559,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			sock_ep->attr->dest_addr = calloc(1, sizeof(struct sockaddr_in));
 			if (!sock_ep->attr->dest_addr) {
 				ret = -FI_ENOMEM;
-				goto err;
+				goto err2;
 			}
 			memcpy(sock_ep->attr->dest_addr, info->dest_addr,
 			       sizeof(struct sockaddr_in));
@@ -1581,7 +1583,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!sock_ep->attr->src_addr && sock_ep_assign_src_addr(sock_ep, info)) {
 		SOCK_LOG_ERROR("failed to get src_address\n");
 		ret = -FI_EINVAL;
-		goto err;
+		goto err2;
 	}
 
 	atomic_initialize(&sock_ep->attr->ref, 0);
@@ -1604,14 +1606,14 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 				   sizeof(struct sock_tx_ctx *));
 	if (!sock_ep->attr->tx_array) {
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err2;
 	}
 
 	sock_ep->attr->rx_array = calloc(sock_ep->attr->ep_attr.rx_ctx_cnt,
 				   sizeof(struct sock_rx_ctx *));
 	if (!sock_ep->attr->rx_array) {
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err2;
 	}
 
 	if (sock_ep->attr->fclass != FI_CLASS_SEP &&
@@ -1620,7 +1622,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		tx_ctx = sock_tx_ctx_alloc(&sock_ep->tx_attr, context);
 		if (!tx_ctx) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto err2;
 		}
 		tx_ctx->ep_attr = sock_ep->attr;
 		tx_ctx->domain = sock_dom;
@@ -1636,7 +1638,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rx_ctx = sock_rx_ctx_alloc(&sock_ep->rx_attr, context);
 		if (!rx_ctx) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto err2;
 		}
 		rx_ctx->ep_attr = sock_ep->attr;
 		rx_ctx->domain = sock_dom;
@@ -1659,7 +1661,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0,
 			       sock_ep->attr->cm.signal_fds) < 0) {
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 
 		flags = fcntl(sock_ep->attr->cm.signal_fds[1], F_GETFL, 0);
@@ -1670,18 +1672,19 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (sock_conn_map_init(sock_ep, sock_cm_def_map_sz)) {
 		SOCK_LOG_ERROR("failed to init connection map: %s\n", strerror(errno));
 		ret = -FI_EINVAL;
-		goto err;
+		goto err2;
 	}
 
 	atomic_inc(&sock_dom->ref);
 	return 0;
 
-err:
-	if (sock_ep->attr->src_addr)
+err2:
+	if (sock_ep->attr) {
 		free(sock_ep->attr->src_addr);
-	if (sock_ep->attr->dest_addr)
 		free(sock_ep->attr->dest_addr);
-	free(sock_ep->attr);
+		free(sock_ep->attr);
+	}
+err1:
 	free(sock_ep);
 	return ret;
 }
