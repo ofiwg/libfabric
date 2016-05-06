@@ -54,6 +54,7 @@ extern "C" {
 #define GNIX_VC_MODE_DG_POSTED		(1U << 2)
 #define GNIX_VC_MODE_PENDING_MSGS	(1U << 3)
 #define GNIX_VC_MODE_PEER_CONNECTED	(1U << 4)
+#define GNIX_VC_MODE_IN_TABLE		(1U << 5)
 
 /* VC flags */
 #define GNIX_VC_FLAG_RX_SCHEDULED	0
