@@ -108,7 +108,6 @@ Test(endpoint_info, info)
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 	cr_assert_eq(fi->ep_attr->type, FI_EP_RDM);
-	cr_assert_eq(fi->next, NULL);
 
 	fi_freeinfo(fi);
 
@@ -116,7 +115,6 @@ Test(endpoint_info, info)
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 	cr_assert_eq(fi->ep_attr->type, FI_EP_DGRAM);
-	cr_assert_eq(fi->next, NULL);
 
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
