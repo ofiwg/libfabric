@@ -268,7 +268,7 @@ static char *target;
 static char *source;
 static struct fid_mr *rem_mr, *loc_mr;
 static uint64_t mr_key;
-static const int max_test_time = 5;
+static const int max_test_time = 10;
 
 /* test variables */
 static int elapsed;
