@@ -62,6 +62,7 @@ struct fid_eq *eq;
 struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
 struct fi_context *ctx_arr = NULL;
+uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 int ft_skip_mr = 0;
@@ -274,6 +275,14 @@ int ft_alloc_msgs(void)
 	tx_buf = (void *) (((uintptr_t) tx_buf + alignment - 1) &
 			   ~(alignment - 1));
 
+	remote_cq_data = ft_init_cq_data(fi);
+
+	if (opts.window_size > 0) {
+		ctx_arr = calloc(opts.window_size, sizeof(struct fi_context));
+		if (!ctx_arr)
+			return -FI_ENOMEM;
+	}
+
 	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
 		ret = fi_mr_reg(domain, buf, buf_size, ft_caps_to_mr_access(fi->caps),
@@ -317,6 +326,12 @@ int ft_open_fabric_res(void)
 int ft_alloc_active_res(struct fi_info *fi)
 {
 	int ret;
+
+	if (hints->caps & FI_RMA) {
+		ret = ft_set_rma_caps(fi, opts.rma_op);
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_alloc_msgs();
 	if (ret)
@@ -387,6 +402,27 @@ int ft_alloc_active_res(struct fi_info *fi)
 		return ret;
 	}
 
+	return 0;
+}
+
+int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op)
+{
+	switch (rma_op) {
+	case FT_RMA_READ:
+		fi->caps |= FI_REMOTE_READ;
+		if (fi->mode & FI_LOCAL_MR)
+			fi->caps |= FI_READ;
+		break;
+	case FT_RMA_WRITE:
+	case FT_RMA_WRITEDATA:
+		fi->caps |= FI_REMOTE_WRITE;
+		if (fi->mode & FI_LOCAL_MR)
+			fi->caps |= FI_WRITE;
+		break;
+	default:
+		FT_ERR("Invalid rma op type\n");
+		return -FI_EINVAL;
+	}
 	return 0;
 }
 
@@ -749,6 +785,11 @@ static void ft_close_fids(void)
 void ft_free_res(void)
 {
 	ft_close_fids();
+	if (ctx_arr) {
+		free(ctx_arr);
+		ctx_arr = NULL;
+	}
+
 	if (buf) {
 		free(buf);
 		buf = rx_buf = tx_buf = NULL;
@@ -913,9 +954,6 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		snprintf(test_name, test_name_len, "%s_lat", sstr);
 	if (!(opts->options & FT_OPT_ITER))
 		opts->iterations = size_to_count(opts->transfer_size);
-	if (opts->window_size > 0) {
-		ctx_arr = calloc(opts->window_size, sizeof(struct fi_context));
-	}
 }
 
 #define FT_POST(post_fn, comp_fn, seq, op_str, ...)				\
@@ -1004,15 +1042,89 @@ ssize_t ft_inject(struct fid_ep *ep, size_t size)
 	return ret;
 }
 
+ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+		struct fi_rma_iov *remote, void *context)
+{
+	switch (op) {
+	case FT_RMA_WRITE:
+		FT_POST(fi_write, ft_get_tx_comp, tx_seq, "fi_write", ep, tx_buf,
+				opts.transfer_size, fi_mr_desc(mr), remote_fi_addr,
+				remote->addr, remote->key, context);
+		break;
+	case FT_RMA_WRITEDATA:
+		FT_POST(fi_writedata, ft_get_tx_comp, tx_seq, "fi_writedata", ep,
+				tx_buf, opts.transfer_size, fi_mr_desc(mr),
+				remote_cq_data,	remote_fi_addr,	remote->addr,
+				remote->key, context);
+		break;
+	case FT_RMA_READ:
+		FT_POST(fi_read, ft_get_tx_comp, tx_seq, "fi_read", ep, rx_buf,
+				opts.transfer_size, fi_mr_desc(mr), remote_fi_addr,
+				remote->addr, remote->key, context);
+		break;
+	default:
+		FT_ERR("Unknown RMA op type\n");
+		return EXIT_FAILURE;
+	}
+
+	return 0;
+}
+
+ssize_t ft_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+		struct fi_rma_iov *remote, void *context)
+{
+	int ret;
+
+	ret = ft_post_rma(op, ep, size, remote, context);
+	if (ret)
+		return ret;
+
+	if (op == FT_RMA_WRITEDATA) {
+		ret = ft_rx(ep, 0);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_get_tx_comp(tx_seq);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+		struct fi_rma_iov *remote)
+{
+	switch (op) {
+	case FT_RMA_WRITE:
+		FT_POST(fi_inject_write, ft_get_tx_comp, tx_seq, "fi_inject_write",
+				ep, tx_buf, opts.transfer_size, remote_fi_addr,
+				remote->addr, remote->key);
+		break;
+	case FT_RMA_WRITEDATA:
+		FT_POST(fi_inject_writedata, ft_get_tx_comp, tx_seq,
+				"fi_inject_writedata", ep, tx_buf, opts.transfer_size,
+				remote_cq_data, remote_fi_addr, remote->addr,
+				remote->key);
+		break;
+	default:
+		FT_ERR("Unknown RMA inject op type\n");
+		return EXIT_FAILURE;
+	}
+
+	tx_cq_cntr++;
+	return 0;
+}
+
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 {
 	if (hints->caps & FI_TAGGED) {
-		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive",
-				ep, rx_buf, size + ft_rx_prefix_size(),
+		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
+				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
 				fi_mr_desc(mr), 0, rx_seq, 0, ctx);
 	} else {
-		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive",
-				ep, rx_buf, size + ft_rx_prefix_size(),
+		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
+				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
 				fi_mr_desc(mr),	0, ctx);
 	}
 	return 0;
@@ -1033,6 +1145,10 @@ ssize_t ft_rx(struct fid_ep *ep, size_t size)
 	}
 	/* TODO: verify CQ data, if available */
 
+	/* Ignore the size arg. Post a buffer large enough to handle all message
+	 * sizes. ft_sync() makes use of ft_rx() and gets called in tests just before
+	 * message size is updated. The recvs posted are always for the next incoming
+	 * message */
 	ret = ft_post_rx(ep, rx_size, &rx_ctx);
 	return ret;
 }
@@ -1367,10 +1483,6 @@ int ft_finalize(void)
 	if (ret)
 		return ret;
 
-	if (ctx_arr) {
-		free(ctx_arr);
-		ctx_arr = NULL;
-	}
 	return 0;
 }
 
@@ -1598,6 +1710,31 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		/* let getopt handle unknown opts*/
 		break;
 	}
+}
+
+int ft_parse_rma_opts(int op, char *optarg, struct ft_opts *opts)
+{
+	switch (op) {
+	case 'o':
+		if (!strcmp(optarg, "read")) {
+			opts->rma_op = FT_RMA_READ;
+		} else if (!strcmp(optarg, "writedata")) {
+			opts->rma_op = FT_RMA_WRITEDATA;
+			cq_attr.format = FI_CQ_FORMAT_DATA;
+		} else if (!strcmp(optarg, "write")) {
+			opts->rma_op = FT_RMA_WRITE;
+		} else {
+			fprintf(stderr, "Invalid operation type: \"%s\". Usage:\n"
+					"-o <op>\trma op type: read|write|writedata "
+				       "(default:write)\n", optarg);
+			return EXIT_FAILURE;
+		}
+		break;
+	default:
+		/* let getopt handle unknown opts*/
+		break;
+	}
+	return 0;
 }
 
 void ft_fill_buf(void *buf, int size)

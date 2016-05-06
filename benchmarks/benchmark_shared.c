@@ -127,10 +127,6 @@ int bandwidth(void)
 {
 	int ret, i, j;
 
-	if (!ctx_arr) {
-		return -FI_ENOMEM;
-	}
-
 	ret = ft_sync();
 	if (ret)
 		return ret;
@@ -190,5 +186,84 @@ int bandwidth(void)
 		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end,
 				opts.window_size);
 
+	return 0;
+}
+
+int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
+{
+	int ret, i, j;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		if (i == opts.warmup_iterations)
+			ft_start();
+
+		for(j = 0; j < opts.window_size; j++) {
+			switch (rma_op) {
+			case FT_RMA_WRITE:
+				if (opts.transfer_size < fi->tx_attr->inject_size) {
+					ret = ft_post_rma_inject(FT_RMA_WRITE, ep,
+							opts.transfer_size, remote);
+				} else {
+					ret = ft_post_rma(rma_op, ep, opts.transfer_size,
+							remote,	&ctx_arr[j]);
+				}
+				break;
+			case FT_RMA_WRITEDATA:
+				if (!opts.dst_addr) {
+					ret = ft_post_rx(ep, 0, &ctx_arr[j]);
+				} else {
+					if (opts.transfer_size < fi->tx_attr->inject_size) {
+						ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
+								ep,
+								opts.transfer_size,
+								remote);
+					} else {
+						ret = ft_post_rma(FT_RMA_WRITEDATA,
+								ep,
+								opts.transfer_size,
+								remote,	&ctx_arr[j]);
+					}
+				}
+				break;
+			case FT_RMA_READ:
+				ret = ft_post_rma(FT_RMA_READ, ep, opts.transfer_size,
+						remote,	&ctx_arr[j]);
+				break;
+			default:
+				FT_ERR("Unknown RMA op type\n");
+				return EXIT_FAILURE;
+			}
+			if (ret)
+				return ret;
+		}
+
+		if (rma_op == FT_RMA_WRITEDATA) {
+			if (!opts.dst_addr) {
+				/* rx_seq is always one ahead */
+				ret = ft_get_rx_comp(rx_seq - 1);
+				if (ret)
+					return ret;
+				ret = ft_tx(ep, 4);
+			} else {
+				ret = ft_rx(ep, 4);
+			}
+		} else {
+			ret = ft_get_tx_comp(tx_seq);
+		}
+		if (ret)
+			return ret;
+	}
+	ft_stop();
+
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
+				opts.window_size, opts.argc, opts.argv);
+	else
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end,
+				opts.window_size);
 	return 0;
 }

@@ -1,7 +1,8 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2016 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under the BSD license below:
+ * This software is available to you under the BSD license
+ * below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
@@ -26,8 +27,6 @@
  * SOFTWARE.
  */
 
-#include <assert.h>
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,93 +36,39 @@
 #include <unistd.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_rma.h>
-#include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
-#include <shared.h>
+#include <rdma/fi_endpoint.h>
+#include <rdma/fi_cm.h>
 
+#include <shared.h>
+#include "benchmark_shared.h"
 
 static struct fi_rma_iov remote;
 
-static int run_test(void)
+static int run(void)
 {
-	int ret, i;
-
-	ret = ft_sync();
-	if (ret)
-		return ret;
-
-	ft_start();
-	for (i = 0; i < opts.iterations; i++) {
-		ret = ft_rma(opts.rma_op, ep, opts.transfer_size, &remote, ep);
-		if (ret)
-			return ret;
-	}
-	ft_stop();
-
-	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
-				1, opts.argc, opts.argv);
-	else
-		show_perf(NULL, opts.transfer_size, opts.iterations,
-				&start, &end, 1);
-
-	return 0;
-}
-
-static int init_fabric(void)
-{
-	uint64_t flags = 0;
 	char *node, *service;
-	int ret;
+	uint64_t flags;
+	int i, ret;
 
 	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (ret)
 		return ret;
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	if (hints->caps & FI_RMA) {
-		ret = ft_set_rma_caps(fi, opts.rma_op);
+	if (!opts.dst_addr) {
+		ret = ft_start_server();
 		if (ret)
 			return ret;
 	}
 
-	ret = ft_alloc_active_res(fi);
-	if (ret)
+	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
+	if (ret) {
 		return ret;
-
-	ret = ft_init_ep();
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
-static int run(void)
-{
-	int i, ret = 0;
-
-	ret = init_fabric();
-	if (ret)
-		return ret;
-
-	ret = ft_init_av();
-	if (ret)
-		goto out;
+	}
 
 	ret = ft_exchange_keys(&remote);
 	if (ret)
-		goto out;
+		return ret;
 
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
@@ -131,18 +76,17 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = run_test();
+			ret = bandwidth_rma(opts.rma_op, &remote);
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = run_test();
+		ret = bandwidth_rma(opts.rma_op, &remote);
 		if (ret)
 			goto out;
 	}
 
-	ft_sync();
 	ft_finalize();
 out:
 	return ret;
@@ -158,9 +102,10 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) != -1) {
 		switch (op) {
 		default:
+			ft_parse_benchmark_opts(op, optarg);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			ret = ft_parse_rma_opts(op, optarg, &opts);
@@ -169,8 +114,13 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using rma.");
-			fprintf(stderr, "  -o <op>\trma op type: read|write|writedata (default: write)]\n");
+			ft_csusage(argv[0], "RMA bandwidth test for MSG endpoints.");
+			ft_benchmark_usage();
+			FT_PRINT_OPTS_USAGE("-o <op>", "rma op type: read|write|"
+					"writedata (default: write)\n");
+			fprintf(stderr, "Note: read/write bw tests are bidirectional.\n"
+					"      writedata bw test is unidirectional"
+					" from the client side.\n");
 			return EXIT_FAILURE;
 		}
 	}
@@ -178,9 +128,10 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->ep_attr->type = FI_EP_RDM;
+	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA;
+	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
+	hints->mode = FI_LOCAL_MR | FI_RX_CQ_DATA;
 
 	ret = run();
 
