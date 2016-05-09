@@ -112,8 +112,8 @@ int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *ser
 			ofi_alter_info_t alter_base_info,
 			int get_base_info, struct fi_info **info)
 {
-	struct fi_info *base_hints = NULL, *base_info, *layer_info = NULL;
-	struct fi_info *temp = NULL, *fi, *tail;
+	struct fi_info *base_hints = NULL, *base_info;
+	struct fi_info *temp = NULL, *fi, *tail = NULL;
 	int ret;
 
 	ret = fi_check_info(prov, prov_info, hints, FI_MATCH_PREFIX);
@@ -135,8 +135,8 @@ int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *ser
 			ret = alter_base_info(fi, &temp);
 			if (ret)
 				goto err3;
-			if (!layer_info)
-				layer_info = temp;
+			if (!tail)
+				*info = temp;
 			else
 				tail->next = temp;
 			tail = temp;
@@ -144,10 +144,9 @@ int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *ser
 		fi_freeinfo(base_info);
 	}
 	fi_freeinfo(base_hints);
-	*info = layer_info;
 	return 0;
 err3:
-	fi_freeinfo(layer_info);
+	fi_freeinfo(*info);
 err2:
 	fi_freeinfo(base_hints);
 err1:
