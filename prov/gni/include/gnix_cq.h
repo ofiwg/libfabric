@@ -44,6 +44,7 @@ extern "C" {
 #include "gnix_wait.h"
 #include "gnix_util.h"
 #include <fi_list.h>
+#include <stdbool.h>
 
 #define GNIX_CQ_DEFAULT_FORMAT struct fi_cq_entry
 #define GNIX_CQ_DEFAULT_SIZE   256
@@ -78,6 +79,7 @@ struct gnix_fid_cq {
 
 	struct dlist_entry poll_nics;
 	rwlock_t nic_lock;
+	bool requires_lock;
 };
 
 

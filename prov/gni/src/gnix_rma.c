@@ -280,7 +280,7 @@ static int __gnix_rma_send_data_req(void *arg)
 	}
 	txd->rma_data_hdr.data = req->rma.imm;
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	if (inject_err) {
 		_gnix_nic_txd_err_inject(nic, txd);
 		status = GNI_RC_SUCCESS;
@@ -291,7 +291,7 @@ static int __gnix_rma_send_data_req(void *arg)
 					  NULL, 0, txd->id,
 					  GNIX_SMSG_T_RMA_DATA);
 	}
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (status == GNI_RC_NOT_DONE) {
 		_gnix_nic_tx_free(nic, txd);
@@ -620,7 +620,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 
 	GNIX_LOG_DUMP_TXD(ct_txd);
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
 	/*
 	 * TODO: need work here too!
@@ -635,7 +635,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	}
 
 	if (status != GNI_RC_SUCCESS) {
-		fastlock_release(&nic->lock);
+		COND_RELEASE(nic->requires_lock, &nic->lock);
 		_gnix_nic_tx_free(nic, ct_txd);
 		_gnix_nic_tx_free(nic, bte_txd);
 
@@ -656,7 +656,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	}
 
 	if (status != GNI_RC_SUCCESS) {
-		fastlock_release(&nic->lock);
+		COND_RELEASE(nic->requires_lock, &nic->lock);
 		_gnix_nic_tx_free(nic, ct_txd);
 
 		/* Wait for the first TX to complete, then retransmit the
@@ -669,7 +669,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 		return FI_SUCCESS;
 	}
 
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	/* Wait for both TXs to complete, then process the request. */
 	atomic_set(&req->rma.outstanding_txds, 2);
@@ -750,7 +750,7 @@ int _gnix_rma_post_req(void *data)
 
 	GNIX_LOG_DUMP_TXD(txd);
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
 	if (unlikely(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, txd);
@@ -763,7 +763,7 @@ int _gnix_rma_post_req(void *data)
 		status = GNI_PostFma(fab_req->vc->gni_ep, &txd->gni_desc);
 	}
 
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (status != GNI_RC_SUCCESS) {
 		_gnix_nic_tx_free(nic, txd);

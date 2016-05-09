@@ -282,14 +282,14 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	txd->req = req;
 	txd->completer_fn = gnix_ep_smsg_completers[GNIX_SMSG_T_RNDZV_FIN];
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	status = GNI_SmsgSendWTag(req->vc->gni_ep,
 			&txd->rndzv_fin_hdr, sizeof(txd->rndzv_fin_hdr),
 			NULL, 0, txd->id, GNIX_SMSG_T_RNDZV_FIN);
 	if ((status == GNI_RC_SUCCESS) &&
 		(ep->domain->data_progress == FI_PROGRESS_AUTO))
 		_gnix_rma_post_irq(req->vc);
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (status == GNI_RC_NOT_DONE) {
 		_gnix_nic_tx_free(nic, txd);
@@ -502,7 +502,7 @@ static int __gnix_rndzv_req(void *arg)
 		GNIX_INFO(FI_LOG_EP_DATA, "Using two GETs\n");
 	}
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
 	if (inject_err) {
 		_gnix_nic_txd_err_inject(nic, txd);
@@ -512,7 +512,7 @@ static int __gnix_rndzv_req(void *arg)
 	}
 
 	if (status != GNI_RC_SUCCESS) {
-		fastlock_release(&nic->lock);
+		COND_RELEASE(nic->requires_lock, &nic->lock);
 		if (tail_txd)
 			_gnix_nic_tx_free(nic, tail_txd);
 		_gnix_nic_tx_free(nic, txd);
@@ -531,7 +531,7 @@ static int __gnix_rndzv_req(void *arg)
 		}
 
 		if (status != GNI_RC_SUCCESS) {
-			fastlock_release(&nic->lock);
+			COND_RELEASE(nic->requires_lock, &nic->lock);
 			_gnix_nic_tx_free(nic, tail_txd);
 
 			/* Wait for the first TX to complete, then retransmit
@@ -550,7 +550,7 @@ static int __gnix_rndzv_req(void *arg)
 
 	}
 
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Initiated RNDZV GET, req: %p\n", req);
 
@@ -737,7 +737,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	tagged = !!(hdr->flags & FI_TAGGED);
 	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
 
-	fastlock_acquire(queue_lock);
+	COND_ACQUIRE(ep->requires_lock, queue_lock);
 
 	/* Lookup a matching posted request. */
 	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
@@ -779,13 +779,13 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
 		if (req == NULL) {
-			fastlock_release(queue_lock);
+			COND_RELEASE(ep->requires_lock, queue_lock);
 			return -FI_ENOMEM;
 		}
 
 		req->msg.send_addr = (uint64_t)malloc(hdr->len);
 		if (unlikely(req->msg.send_addr == 0ULL)) {
-			fastlock_release(queue_lock);
+			COND_RELEASE(ep->requires_lock, queue_lock);
 			_gnix_fr_free(ep, req);
 			return -FI_ENOMEM;
 		}
@@ -809,7 +809,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 			  req, req->msg.send_len);
 	}
 
-	fastlock_release(queue_lock);
+	COND_RELEASE(ep->requires_lock, queue_lock);
 
 	status = GNI_SmsgRelease(vc->gni_ep);
 	if (unlikely(status != GNI_RC_SUCCESS)) {
@@ -896,7 +896,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	tagged = !!(hdr->flags & FI_TAGGED);
 	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
 
-	fastlock_acquire(queue_lock);
+	COND_ACQUIRE(ep->requires_lock, queue_lock);
 
 	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
 			      &vc->peer_addr);
@@ -933,7 +933,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			/* Allocate new request for this transfer. */
 			dup_req = __gnix_msg_dup_req(req);
 			if (!dup_req) {
-				fastlock_release(queue_lock);
+				COND_RELEASE(ep->requires_lock, queue_lock);
 				return -FI_ENOMEM;
 			}
 
@@ -956,7 +956,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
 		if (req == NULL) {
-			fastlock_release(queue_lock);
+			COND_RELEASE(ep->requires_lock, queue_lock);
 			return -FI_ENOMEM;
 		}
 
@@ -982,7 +982,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			  req, req->msg.send_len);
 	}
 
-	fastlock_release(queue_lock);
+	COND_RELEASE(ep->requires_lock, queue_lock);
 
 	status = GNI_SmsgRelease(vc->gni_ep);
 	if (unlikely(status != GNI_RC_SUCCESS)) {
@@ -1248,7 +1248,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		ignore = ~0;
 	}
 
-	fastlock_acquire(queue_lock);
+	COND_ACQUIRE(ep->requires_lock, queue_lock);
 
 retry_match:
 	/* Look for a matching unexpected receive request. */
@@ -1420,7 +1420,7 @@ retry_match:
 
 pdc_exit:
 err:
-	fastlock_release(queue_lock);
+	COND_RELEASE(ep->requires_lock, queue_lock);
 
 	return ret;
 }
@@ -1512,7 +1512,7 @@ static int _gnix_send_req(void *arg)
 	tdesc->req = req;
 	tdesc->completer_fn = gnix_ep_smsg_completers[tag];
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
 	if (inject_err) {
 		_gnix_nic_txd_err_inject(nic, tdesc);
@@ -1531,7 +1531,7 @@ static int _gnix_send_req(void *arg)
 		(tag == GNIX_SMSG_T_RNDZV_START))
 		_gnix_rma_post_irq(req->vc);
 
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (status == GNI_RC_NOT_DONE) {
 		_gnix_nic_tx_free(nic, tdesc);

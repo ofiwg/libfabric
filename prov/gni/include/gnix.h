@@ -337,6 +337,7 @@ struct gnix_fid_domain {
 	/* additional gni cq modes to use for this domain */
 	enum fi_progress control_progress;
 	enum fi_progress data_progress;
+	enum fi_threading thread_model;
 	struct gnix_reference ref_cnt;
 	gnix_mr_cache_attr_t mr_cache_attr;
 	gnix_mr_cache_t *mr_cache;
@@ -396,16 +397,13 @@ struct gnix_fid_ep {
 	struct gnix_tag_storage tagged_unexp_recv_queue;
 	struct gnix_tag_storage tagged_posted_recv_queue;
 
-
-	fastlock_t recv_comp_lock;
-	struct slist pending_recv_comp_queue;
 	/* pointer to tag matching engine */
-	void *tag_matcher;
 	int (*progress_fn)(struct gnix_fid_ep *, enum gnix_progress_type);
 	/* RX specific progress fn */
 	int (*rx_progress_fn)(struct gnix_fid_ep *, gni_return_t *rc);
 	bool tx_enabled;
 	bool rx_enabled;
+	bool requires_lock;
 	int send_selective_completion;
 	int recv_selective_completion;
 	int min_multi_recv;

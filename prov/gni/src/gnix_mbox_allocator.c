@@ -363,13 +363,13 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 		goto err_alloc_bitmap;
 	}
 
-	fastlock_acquire(&handle->nic_handle->lock);
+	COND_ACQUIRE(handle->nic_handle->requires_lock, &handle->nic_handle->lock);
 	status = GNI_MemRegister(handle->nic_handle->gni_nic_hndl,
 				 (uint64_t) slab->base, total_size,
 				 handle->cq_handle,
 				 GNI_MEM_READWRITE, -1,
 				 &slab->memory_handle);
-	fastlock_release(&handle->nic_handle->lock);
+	COND_RELEASE(handle->nic_handle->requires_lock, &handle->nic_handle->lock);
 	if (status != GNI_RC_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "GNI_MemRegister failed: %s\n",
 			  gni_err_str[status]);
@@ -425,10 +425,10 @@ static int __destroy_slab(struct gnix_mbox_alloc_handle *handle,
 	_gnix_free_bitmap(slab->used);
 	free(slab->used);
 
-	fastlock_acquire(&handle->nic_handle->lock);
+	COND_ACQUIRE(handle->nic_handle->requires_lock, &handle->nic_handle->lock);
 	GNI_MemDeregister(handle->nic_handle->gni_nic_hndl,
 			  &slab->memory_handle);
-	fastlock_release(&handle->nic_handle->lock);
+	COND_RELEASE(handle->nic_handle->requires_lock, &handle->nic_handle->lock);
 
 	munmap(slab->base, total_size);
 

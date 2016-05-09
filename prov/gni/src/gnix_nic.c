@@ -297,9 +297,9 @@ static int __nic_rx_overrun(struct gnix_nic *nic)
 	while ((status = GNI_CqGetEvent(nic->rx_cq, &cqe)) == GNI_RC_SUCCESS);
 	assert(status == GNI_RC_NOT_DONE);
 
-	fastlock_acquire(&nic->vc_id_lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->vc_id_lock);
 	max_id = nic->vc_id_table_count;
-	fastlock_release(&nic->vc_id_lock);
+	COND_RELEASE(nic->requires_lock, &nic->vc_id_lock);
 	/*
 	 * TODO: optimization would
 	 * be to keep track of last time
@@ -366,7 +366,7 @@ static int __nic_rx_progress(struct gnix_nic *nic)
 	if (status == GNI_RC_NOT_DONE)
 		return FI_SUCCESS;
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
 	do {
 		status = GNI_CqGetEvent(nic->rx_cq, &cqe);
@@ -398,7 +398,7 @@ static int __nic_rx_progress(struct gnix_nic *nic)
 		}
 	} while (1);
 
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	return ret;
 }
@@ -497,10 +497,10 @@ static int __nic_tx_progress(struct gnix_nic *nic, gni_cq_handle_t cq)
 	do {
 		txd = NULL;
 
-		fastlock_acquire(&nic->lock);
+		COND_ACQUIRE(nic->requires_lock, &nic->lock);
 		__nic_get_completed_txd(nic, cq, &txd,
 					&tx_status);
-		fastlock_release(&nic->lock);
+		COND_RELEASE(nic->requires_lock, &nic->lock);
 
 		if (txd && txd->completer_fn) {
 			ret = txd->completer_fn(txd, tx_status);
@@ -576,7 +576,7 @@ int _gnix_nic_get_rem_id(struct gnix_nic *nic, int *remote_id, void *entry)
 	 * bit before resizing the table
 	 */
 
-	fastlock_acquire(&nic->vc_id_lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->vc_id_lock);
 	if (nic->vc_id_table_capacity == nic->vc_id_table_count) {
 		table_base = realloc(nic->vc_id_table,
 				     2 * nic->vc_id_table_capacity *
@@ -600,7 +600,7 @@ int _gnix_nic_get_rem_id(struct gnix_nic *nic, int *remote_id, void *entry)
 
 	++(nic->vc_id_table_count);
 err:
-	fastlock_release(&nic->vc_id_lock);
+	COND_RELEASE(nic->requires_lock, &nic->vc_id_lock);
 	return ret;
 }
 
@@ -613,9 +613,9 @@ int _gnix_nic_tx_alloc(struct gnix_nic *nic,
 {
 	struct dlist_entry *entry;
 
-	fastlock_acquire(&nic->tx_desc_lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->tx_desc_lock);
 	if (dlist_empty(&nic->tx_desc_free_list)) {
-		fastlock_release(&nic->tx_desc_lock);
+		COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
 		return -FI_ENOSPC;
 	}
 
@@ -623,7 +623,7 @@ int _gnix_nic_tx_alloc(struct gnix_nic *nic,
 	dlist_remove_init(entry);
 	dlist_insert_head(entry, &nic->tx_desc_active_list);
 	*desc = dlist_entry(entry, struct gnix_tx_descriptor, list);
-	fastlock_release(&nic->tx_desc_lock);
+	COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
 
 	return FI_SUCCESS;
 }
@@ -636,10 +636,10 @@ int _gnix_nic_tx_alloc(struct gnix_nic *nic,
 int _gnix_nic_tx_free(struct gnix_nic *nic,
 		      struct gnix_tx_descriptor *desc)
 {
-	fastlock_acquire(&nic->tx_desc_lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->tx_desc_lock);
 	dlist_remove_init(&desc->list);
 	dlist_insert_head(&desc->list, &nic->tx_desc_free_list);
-	fastlock_release(&nic->tx_desc_lock);
+	COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
 
 	return FI_SUCCESS;
 }
@@ -1250,6 +1250,10 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		++gnix_nics_per_ptag[domain->ptag];
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Allocated NIC:%p\n", nic);
+	}
+
+	if (nic) {
+		nic->requires_lock = domain->thread_model != FI_THREAD_COMPLETION;
 	}
 
 	*nic_ptr = nic;

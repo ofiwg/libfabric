@@ -1639,6 +1639,9 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!ep_priv)
 		return -FI_ENOMEM;
 
+
+	ep_priv->requires_lock = (domain_priv->thread_model !=
+				FI_THREAD_COMPLETION);
 	ret = __init_tag_storages(ep_priv, GNIX_TAG_LIST);
 	if (ret) {
 		goto err;
@@ -1654,10 +1657,8 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
 
-	fastlock_init(&ep_priv->recv_comp_lock);
 	fastlock_init(&ep_priv->recv_queue_lock);
 	fastlock_init(&ep_priv->tagged_queue_lock);
-	slist_init(&ep_priv->pending_recv_comp_queue);
 
 	ep_priv->caps = info->caps & GNIX_EP_RDM_CAPS;
 
@@ -1840,19 +1841,20 @@ static inline struct gnix_fab_req *__find_tx_req(
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
 		   " cancel, context=%p", context);
 
-	fastlock_acquire(&ep->vc_lock);
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 	while ((vc = _gnix_ht_iterator_next(&iter))) {
-		fastlock_acquire(&vc->tx_queue_lock);
+		COND_ACQUIRE(vc->ep->requires_lock, &vc->tx_queue_lock);
 		entry = dlist_remove_first_match(&vc->tx_queue,
 						 __match_context,
 						 context);
-		fastlock_release(&vc->tx_queue_lock);
+		COND_RELEASE(vc->ep->requires_lock, &vc->tx_queue_lock);
+
 		if (entry) {
 			req = container_of(entry, struct gnix_fab_req, dlist);
 			break;
 		}
 	}
-	fastlock_release(&ep->vc_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	return req;
 }
@@ -1863,17 +1865,17 @@ static inline struct gnix_fab_req *__find_rx_req(
 {
 	struct gnix_fab_req *req = NULL;
 
-	fastlock_acquire(&ep->recv_queue_lock);
+	COND_ACQUIRE(ep->requires_lock, &ep->recv_queue_lock);
 	req = _gnix_remove_req_by_context(&ep->posted_recv_queue, context);
-	fastlock_release(&ep->recv_queue_lock);
+	COND_RELEASE(ep->requires_lock, &ep->recv_queue_lock);
 
 	if (req)
 		return req;
 
-	fastlock_acquire(&ep->tagged_queue_lock);
+	COND_ACQUIRE(ep->requires_lock, &ep->tagged_queue_lock);
 	req = _gnix_remove_req_by_context(&ep->tagged_posted_recv_queue,
 			context);
-	fastlock_release(&ep->tagged_queue_lock);
+	COND_RELEASE(ep->requires_lock, &ep->tagged_queue_lock);
 
 	return req;
 }

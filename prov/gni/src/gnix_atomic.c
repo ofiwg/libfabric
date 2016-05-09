@@ -329,7 +329,7 @@ int _gnix_amo_post_req(void *data)
 
 	GNIX_LOG_DUMP_TXD(txd);
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
 	if (unlikely(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, txd);
@@ -338,7 +338,7 @@ int _gnix_amo_post_req(void *data)
 		status = GNI_PostFma(fab_req->vc->gni_ep, &txd->gni_desc);
 	}
 
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (status != GNI_RC_SUCCESS) {
 		_gnix_nic_tx_free(nic, txd);
