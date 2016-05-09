@@ -64,6 +64,10 @@ dnl looks like we need to get rid of some white space
                      [criterion_tests_present=false])
 
                if test "$with_criterion" != "" && test "$with_criterion" != "no"; then
+	       	     if test "$enable_direct" != "" && test "$enable_direct" != "no"; then
+		     	gnitest_CPPFLAGS="-I$srcdir/prov/gni/include"
+		     fi
+
                      AS_IF([test "$criterion_tests_present" = "true"],
                            [AC_MSG_CHECKING([criterion path])
                             if test -d "$with_criterion"; then
