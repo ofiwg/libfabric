@@ -1062,6 +1062,166 @@ Test(rdm_atomic, bxor)
 	rdm_atomic_xfer_for_each_size(do_bxor, 1, 1);
 }
 
+#define AX_S_MASK   0x00000000FFFFFFFFUL
+#define AX_OP1      0x000000000FF0FFFFUL
+#define AX_OP2      0xFFFF0000FFFF0000UL
+#define AX_TGT_DATA 0x00FFFF0000FFFF00UL
+void do_axor(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t exp;
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+	struct fi_gni_ops_ep *ep_ops;
+	uint64_t operand[2];
+
+	ret = fi_open_ops(&ep[0]->fid, FI_GNI_EP_OPS_1, 0,
+			  (void **) &ep_ops, NULL);
+	cr_assert(!ret, "fi_open_ops endpoint");
+
+	/* u64 */
+	operand[0] = AX_OP1; /* AND operand */
+	operand[1] = AX_OP2; /* XOR operand */
+	*((uint64_t *)target) = AX_TGT_DATA;
+	dbg_printf("initial %016lx\n", *((uint64_t *)target));
+
+	sz = ep_ops->native_amo(ep[0], operand, 1, NULL, NULL,
+				loc_mr[0], gni_addr[1],
+				(uint64_t)target, mr_key[1], FI_LONG_DOUBLE,
+				GNIX_FAB_RQ_NAMO_AX, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+
+	w[0] = 0;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	dbg_printf("result  %016lx\n", *((uint64_t *)target));
+	exp = (AX_OP1 & AX_TGT_DATA) ^ AX_OP2;
+	ret = *((uint64_t *)target) == exp;
+	cr_assert(ret, "Data mismatch");
+
+	/* U32 */
+	operand[0] = AX_OP1;
+	operand[1] = AX_OP2;
+	*((uint64_t *)target) = AX_TGT_DATA;
+
+	dbg_printf("initial %016lx\n", *((uint64_t *)target));
+	dbg_printf("AX_OP1  %016lx\n", AX_OP1);
+	dbg_printf("AX_OP2  %016lx\n", AX_OP2);
+
+	sz = ep_ops->native_amo(ep[0], operand, 1, NULL, NULL,
+				loc_mr[0], gni_addr[1],
+				(uint64_t)target, mr_key[1], FI_UINT64,
+				GNIX_FAB_RQ_NAMO_AX_S, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+
+	w[0] = 0;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	dbg_printf("AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK) %016lx\n",
+			AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK));
+	dbg_printf("AX_OP2  %016lx\n", AX_OP2);
+	exp = (AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK)) ^ (AX_OP2 & AX_S_MASK);
+	ret = *((uint64_t *)target) == exp;
+	cr_assert(ret, "Data mismatch expected %016lx: result %016lx",
+		  exp, *((uint64_t *)target));
+	dbg_printf("result  %016lx\n", *((uint64_t *)target));
+
+	/* fetching u64 */
+	operand[0] = AX_OP1; /* AND operand */
+	operand[1] = AX_OP2; /* XOR operand */
+	*((uint64_t *)target) = AX_TGT_DATA;
+	*((uint64_t *)source) = 0;
+	dbg_printf("initial %016lx\n", *((uint64_t *)target));
+
+	sz = ep_ops->native_amo(ep[0], operand, 1, NULL, source,
+				loc_mr[0], gni_addr[1],
+				(uint64_t)target, mr_key[1], FI_UINT64,
+				GNIX_FAB_RQ_NAMO_FAX, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+
+	w[0] = 0;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	dbg_printf("result  %016lx\n", *((uint64_t *)target));
+	exp = (AX_OP1 & AX_TGT_DATA) ^ AX_OP2;
+	ret = *((uint64_t *)target) == exp;
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) == AX_TGT_DATA;
+	dbg_printf("fetchv  %016lx\n", *((uint64_t *)source));
+	cr_assert(ret, "Data mismatch expected %016lx: fetchv %016lx",
+		  AX_TGT_DATA, *((uint64_t *)source));
+	cr_assert(ret, "Data mismatch");
+
+	/* fetching U32 */
+	operand[0] = AX_OP1;
+	operand[1] = AX_OP2;
+	*((uint64_t *)target) = AX_TGT_DATA;
+	*((uint64_t *)source) = 0;
+
+	dbg_printf("initial %016lx\n", *((uint64_t *)target));
+	dbg_printf("source  %016lx\n", *((uint64_t *)source));
+	dbg_printf("AX_OP1  %016lx\n", AX_OP1);
+	dbg_printf("AX_OP2  %016lx\n", AX_OP2);
+
+	sz = ep_ops->native_amo(ep[0], operand, 1, NULL, source,
+				loc_mr[0], gni_addr[1],
+				(uint64_t)target, mr_key[1], FI_UINT32,
+				GNIX_FAB_RQ_NAMO_FAX_S, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+
+	w[0] = 0;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	dbg_printf("AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK) %016lx\n",
+			AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK));
+	dbg_printf("AX_OP2  %016lx\n", AX_OP2);
+	exp = (AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK)) ^ (AX_OP2 & AX_S_MASK);
+	ret = *((uint64_t *)target) == exp;
+	cr_assert(ret, "Data mismatch expected %016lx: result %016lx",
+		  exp, *((uint64_t *)target));
+	dbg_printf("result  %016lx\n", *((uint64_t *)target));
+	/* 32 bit fetch */
+	ret = *((uint64_t *)source) == (AX_TGT_DATA & AX_S_MASK);
+	dbg_printf("fetchv  %016lx\n", *((uint64_t *)source));
+	cr_assert(ret, "Data mismatch expected %016lx: fetchv %016lx",
+		  AX_TGT_DATA & AX_S_MASK, *((uint64_t *)source));
+}
+
+Test(rdm_atomic, axor)
+{
+	rdm_atomic_xfer_for_each_size(do_axor, 1, 1);
+}
+
 void do_atomic_write(int len)
 {
 	int ret;

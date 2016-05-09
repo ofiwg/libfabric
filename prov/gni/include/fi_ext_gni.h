@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -72,9 +72,16 @@ struct fi_gni_ops_domain {
 	int (*get_val)(struct fid *fid, dom_ops_val_t t, void *val);
 };
 
+enum gnix_fab_req_type;
 struct fi_gni_ops_ep {
 	int (*set_val)(struct fid *fid, ep_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, ep_ops_val_t t, void *val);
+	size_t (*native_amo)(struct fid_ep *ep, const void *buf, size_t count,
+			 void *desc, void *result, void *result_desc,
+			     /*void *desc,*/ fi_addr_t dest_addr, uint64_t addr,
+			     uint64_t key, enum fi_datatype datatype,
+			     enum gnix_fab_req_type req_type,
+			     void *context);
 };
 
 /* per domain parameters */
