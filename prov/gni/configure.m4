@@ -16,6 +16,9 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
         gni_CPPFLAGS=
         gni_LDFLAGS=
         gni_LIBS=
+	gnitest_CPPFLAGS=
+	gnitest_LDFLAGS=
+        gnitest_LIBS=
 
         AS_IF([test x"$enable_gni" != x"no"],
                [FI_PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
@@ -65,12 +68,14 @@ dnl looks like we need to get rid of some white space
                            [AC_MSG_CHECKING([criterion path])
                             if test -d "$with_criterion"; then
                                 AC_MSG_RESULT([yes])
-                                gni_CPPFLAGS="-I$with_criterion/include $gni_CPPFLAGS"
+                                gnitest_CPPFLAGS="-I$with_criterion/include $gnitest_CPPFLAGS"
+				gnitest_LIBS="-lcriterion $gnitest_LIBS"
+
                                 if test -d "$with_criterion/lib"; then
-                                        gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib -Wl,-rpath=$with_criterion/lib $gni_LDFLAGS"
+                                        gnitest_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib -Wl,-rpath=$with_criterion/lib $gnitest_LDFLAGS"
                                         have_criterion=true
                                 elif test -d "$with_criterion/lib64"; then
-                                        gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 -Wl,-rpath=$with_criterion/lib64 $gni_LDFLAGS"
+                                        gnitest_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 -Wl,-rpath=$with_criterion/lib64 $gnitest_LDFLAGS"
                                         have_criterion=true
                                 else
                                         have_criterion=false
@@ -98,6 +103,9 @@ dnl looks like we need to get rid of some white space
         AC_SUBST(gni_CPPFLAGS)
         AC_SUBST(gni_LDFLAGS)
         AC_SUBST(gni_LIBS)
+	AC_SUBST(gnitest_CPPFLAGS)
+        AC_SUBST(gnitest_LDFLAGS)
+        AC_SUBST(gnitest_LIBS)
 
         AS_IF([test $gni_header_happy -eq 1 -a $ugni_lib_happy -eq 1 \
                -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1], [$1], [$2])
