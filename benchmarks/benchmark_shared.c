@@ -69,7 +69,10 @@ void ft_benchmark_usage(void)
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
 	FT_PRINT_OPTS_USAGE("-j", "maximum inject message size");
-	FT_PRINT_OPTS_USAGE("-W", "window size (for bandwidth tests)");
+	FT_PRINT_OPTS_USAGE("-W", "window size* (for bandwidth tests)\n\n"
+			"* The following condition is required to have at least "
+			"one window\nsize # of messsages to be sent: "
+			"# of iterations > window size");
 }
 
 int pingpong(void)
@@ -116,11 +119,33 @@ int pingpong(void)
 	ft_stop();
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2,
+				opts.argc, opts.argv);
 	else
 		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
 
 	return 0;
+}
+
+static int bw_tx_comp()
+{
+	int ret;
+
+	ret = ft_get_tx_comp(tx_seq);
+	if (ret)
+		return ret;
+	return ft_rx(ep, 4);
+}
+
+static int bw_rx_comp()
+{
+	int ret;
+
+	/* rx_seq is always one ahead */
+	ret = ft_get_rx_comp(rx_seq - 1);
+	if (ret)
+		return ret;
+	return ft_tx(ep, 4);
 }
 
 int bandwidth(void)
@@ -139,52 +164,74 @@ int bandwidth(void)
 	 * bandwidth.  */
 
 	if (opts.dst_addr) {
-		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++, j++) {
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			for(j = 0; j < opts.window_size; j++) {
-				if (opts.transfer_size < fi->tx_attr->inject_size)
-					ret = ft_inject(ep, opts.transfer_size);
-				else
-					ret = ft_post_tx(ep, opts.transfer_size,
-							 &ctx_arr[j]);
+			if (opts.transfer_size < fi->tx_attr->inject_size)
+				ret = ft_inject(ep, opts.transfer_size);
+			else
+				ret = ft_post_tx(ep, opts.transfer_size,
+						 &ctx_arr[j]);
+			if (ret)
+				return ret;
+
+			if (j == opts.window_size) {
+				ret = bw_tx_comp();
 				if (ret)
 					return ret;
+				j = 0;
 			}
-			ret = ft_get_tx_comp(tx_seq);
-			if (ret)
-				return ret;
-			ret = ft_rx(ep, 4);
-			if (ret)
-				return ret;
 		}
+		ret = bw_tx_comp();
+		if (ret)
+			return ret;
 	} else {
-		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++, j++) {
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			for(j = 0; j < opts.window_size; j++) {
-				ret = ft_post_rx(ep, opts.transfer_size, &ctx_arr[j]);
+			ret = ft_post_rx(ep, opts.transfer_size, &ctx_arr[j]);
+			if (ret)
+				return ret;
+
+			if (j == opts.window_size) {
+				ret = bw_rx_comp();
 				if (ret)
 					return ret;
+				j = 0;
 			}
-			ret = ft_get_rx_comp(rx_seq-1); /* rx_seq is always one ahead */
-			if (ret)
-				return ret;
-			ret = ft_tx(ep, 4);
-			if (ret)
-				return ret;
 		}
+		ret = bw_rx_comp();
+		if (ret)
+			return ret;
 	}
 	ft_stop();
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
-				opts.window_size, opts.argc, opts.argv);
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1,
+				opts.argc, opts.argv);
 	else
-		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end,
-				opts.window_size);
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+
+	return 0;
+}
+
+static int bw_rma_comp(enum ft_rma_opcodes rma_op)
+{
+	int ret;
+
+	if (rma_op == FT_RMA_WRITEDATA) {
+		if (opts.dst_addr) {
+			ret = bw_tx_comp();
+		} else {
+			ret = bw_rx_comp();
+		}
+	} else {
+		ret = ft_get_tx_comp(tx_seq);
+	}
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -197,73 +244,64 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	if (ret)
 		return ret;
 
-	for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++, j++) {
 		if (i == opts.warmup_iterations)
 			ft_start();
 
-		for(j = 0; j < opts.window_size; j++) {
-			switch (rma_op) {
-			case FT_RMA_WRITE:
+		switch (rma_op) {
+		case FT_RMA_WRITE:
+			if (opts.transfer_size < fi->tx_attr->inject_size) {
+				ret = ft_post_rma_inject(FT_RMA_WRITE, ep,
+						opts.transfer_size, remote);
+			} else {
+				ret = ft_post_rma(rma_op, ep, opts.transfer_size,
+						remote,	&ctx_arr[j]);
+			}
+			break;
+		case FT_RMA_WRITEDATA:
+			if (!opts.dst_addr) {
+				ret = ft_post_rx(ep, 0, &ctx_arr[j]);
+			} else {
 				if (opts.transfer_size < fi->tx_attr->inject_size) {
-					ret = ft_post_rma_inject(FT_RMA_WRITE, ep,
-							opts.transfer_size, remote);
+					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
+							ep,
+							opts.transfer_size,
+							remote);
 				} else {
-					ret = ft_post_rma(rma_op, ep, opts.transfer_size,
+					ret = ft_post_rma(FT_RMA_WRITEDATA,
+							ep,
+							opts.transfer_size,
 							remote,	&ctx_arr[j]);
 				}
-				break;
-			case FT_RMA_WRITEDATA:
-				if (!opts.dst_addr) {
-					ret = ft_post_rx(ep, 0, &ctx_arr[j]);
-				} else {
-					if (opts.transfer_size < fi->tx_attr->inject_size) {
-						ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
-								ep,
-								opts.transfer_size,
-								remote);
-					} else {
-						ret = ft_post_rma(FT_RMA_WRITEDATA,
-								ep,
-								opts.transfer_size,
-								remote,	&ctx_arr[j]);
-					}
-				}
-				break;
-			case FT_RMA_READ:
-				ret = ft_post_rma(FT_RMA_READ, ep, opts.transfer_size,
-						remote,	&ctx_arr[j]);
-				break;
-			default:
-				FT_ERR("Unknown RMA op type\n");
-				return EXIT_FAILURE;
 			}
-			if (ret)
-				return ret;
-		}
-
-		if (rma_op == FT_RMA_WRITEDATA) {
-			if (!opts.dst_addr) {
-				/* rx_seq is always one ahead */
-				ret = ft_get_rx_comp(rx_seq - 1);
-				if (ret)
-					return ret;
-				ret = ft_tx(ep, 4);
-			} else {
-				ret = ft_rx(ep, 4);
-			}
-		} else {
-			ret = ft_get_tx_comp(tx_seq);
+			break;
+		case FT_RMA_READ:
+			ret = ft_post_rma(FT_RMA_READ, ep, opts.transfer_size,
+					remote,	&ctx_arr[j]);
+			break;
+		default:
+			FT_ERR("Unknown RMA op type\n");
+			return EXIT_FAILURE;
 		}
 		if (ret)
 			return ret;
+
+		if (j == opts.window_size) {
+			ret = bw_rma_comp(rma_op);
+			if (ret)
+				return ret;
+			j = 0;
+		}
 	}
+	ret = bw_rma_comp(rma_op);
+	if (ret)
+		return ret;
 	ft_stop();
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
-				opts.window_size, opts.argc, opts.argv);
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,	1,
+				opts.argc, opts.argv);
 	else
-		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end,
-				opts.window_size);
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
 	return 0;
 }
