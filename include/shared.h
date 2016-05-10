@@ -101,6 +101,7 @@ enum {
 	FT_OPT_TX_CNTR		= 1 << 6,
 	FT_OPT_VERIFY_DATA	= 1 << 7,
 	FT_OPT_ALIGN		= 1 << 8,
+	FT_OPT_BW		= 1 << 9,
 };
 
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no

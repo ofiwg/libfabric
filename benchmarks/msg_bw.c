@@ -91,6 +91,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+	opts.options |= FT_OPT_BW;
 
 	hints = fi_allocinfo();
 	if (!hints)
