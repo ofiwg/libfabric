@@ -40,7 +40,6 @@
 #include "rdma/fi_prov.h"
 
 #include "gnix.h"
-#include "gnix_av.h"
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
@@ -58,11 +57,11 @@ static struct gnix_fid_av *gnix_av;
 {	\
 	.gnix_addr = { \
 			.device_addr = id, \
-			.cdm_id = id, \
+			.cdm_id = id+1, \
 	}, \
-	.name_type = id, \
-	.cm_nic_cdm_id = id, \
-	.cookie = id, \
+	.name_type = id+2, \
+	.cm_nic_cdm_id = id+3, \
+	.cookie = id+4, \
 }
 
 #define SIMPLE_ADDR_COUNT 16
@@ -85,24 +84,9 @@ static struct gnix_ep_name simple_ep_names[SIMPLE_ADDR_COUNT] = {
 		SIMPLE_EP_ENTRY(16),
 };
 
-typedef char ep_name_string[GNIX_AV_MAX_STR_ADDR_LEN];
-static ep_name_string simple_ep_names_strs[SIMPLE_ADDR_COUNT];
-
 static void av_setup(void)
 {
 	int ret = 0;
-	int i;
-	size_t len;
-
-	memset(&simple_ep_names_strs, 0,
-	       (GNIX_AV_MAX_STR_ADDR_LEN * SIMPLE_ADDR_COUNT));
-
-	for (i = 0; i < SIMPLE_ADDR_COUNT; i++) {
-		len = GNIX_AV_MAX_STR_ADDR_LEN;
-		gnix_av_straddr(NULL,
-			 (void *) &simple_ep_names[i],
-			 simple_ep_names_strs[i], &len);
-	}
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
@@ -228,7 +212,7 @@ static void remove_addr_test(void)
 	fi_addr_t *compare;
 
 	/* insert addresses */
-	ret = fi_av_insert(av, (void *) simple_ep_names_strs, SIMPLE_ADDR_COUNT,
+	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT,
 			   addresses, 0, NULL);
 	cr_assert_eq(ret, SIMPLE_ADDR_COUNT);
 
@@ -260,8 +244,8 @@ Test(av_full_table, remove_addr)
 static void lookup_invalid_test(void)
 {
 	int ret;
-	ep_name_string addresses[SIMPLE_ADDR_COUNT];
-	size_t addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
+	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
+	size_t addrlen = sizeof(struct gnix_ep_name);
 
 	/* test null addrlen */
 	ret = fi_av_lookup(av, 0xdeadbeef, (void *) 0xdeadbeef, NULL);
@@ -301,11 +285,11 @@ static void lookup_test(void)
 	int i;
 	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
 	fi_addr_t *compare;
-	ep_name_string found;
-	size_t addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
+	fi_addr_t found;
+	size_t addrlen = sizeof(struct gnix_ep_name);
 
 	/* insert addresses */
-	ret = fi_av_insert(av, (void *) simple_ep_names_strs, SIMPLE_ADDR_COUNT,
+	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT,
 			addresses, 0, NULL);
 	cr_assert_eq(ret, SIMPLE_ADDR_COUNT);
 
@@ -335,38 +319,27 @@ Test(av_full_table, lookup)
 
 static void straddr_test(void)
 {
-	int ret;
-	int i;
 	const char *buf;
-	char address[GNIX_AV_MAX_STR_ADDR_LEN];
-	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
-	fi_addr_t *compare;
-	size_t addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
+#define ADDRSTR_LEN 128
+	char addrstr[ADDRSTR_LEN];
+	size_t addrstr_len;
 	char *pend;
 	long int value;
 
-	/* insert addresses */
-	ret = fi_av_insert(av, (void *) simple_ep_names_strs, SIMPLE_ADDR_COUNT,
-			addresses, 0, NULL);
-	cr_assert_eq(ret, SIMPLE_ADDR_COUNT);
+	addrstr_len = 10; /* too short */
+	buf = fi_av_straddr(av, &simple_ep_names[0], addrstr, &addrstr_len);
+	cr_assert_eq(buf, addrstr);
+	cr_assert_eq(addrstr_len, 10);
 
-	/* check address contents */
-	for (i = 0; i < SIMPLE_ADDR_COUNT; i++) {
-		if (gnix_av->type == FI_AV_MAP) {
-			compare = (fi_addr_t *) &simple_ep_names[i].gnix_addr;
-			cr_assert_eq(*compare, addresses[i]);
-		} else {
-			cr_assert_eq(i, addresses[i]);
-		}
-	}
+	addrstr_len = ADDRSTR_LEN;
+	buf = fi_av_straddr(av, &simple_ep_names[0], addrstr, &addrstr_len);
+	cr_assert_eq(buf, addrstr);
+	cr_assert_eq(addrstr_len, GNIX_AV_MAX_STR_ADDR_LEN);
 
-	buf = fi_av_straddr(av, &simple_ep_names[0], address, &addrlen);
-
-	/* verify that a full address has been returned. */
-	cr_assert_eq(addrlen, GNIX_AV_MAX_STR_ADDR_LEN);
+	fprintf(stderr, "string is: %s\n", buf);
 
 	/* extract the first component */
-	buf = strtok(address, ":");
+	buf = strtok(addrstr, ":");
 	cr_assert_not_null(buf, "version not found");
 
 	value = strtol(buf, &pend, 16);
@@ -380,7 +353,7 @@ static void straddr_test(void)
 
 	value = strtol(buf, &pend, 16);
 
-	/* verify the device address has been returned. */
+	/* verify the device addrstr has been returned. */
 	cr_assert_eq(simple_ep_names[0].gnix_addr.device_addr, value,
 		    "Invalid device_addr");
 

@@ -34,8 +34,7 @@
 #include "gnix.h"
 #include "gnix_util.h"
 #include "gnix_nic.h"
-#include "gnix_nic.h"
-#include "gnix_av.h"
+#include "gnix_cm_nic.h"
 
 /*******************************************************************************
  * API function implementations.
@@ -57,32 +56,33 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	struct gnix_ep_name name = {{0}};
 	struct gnix_fid_ep *ep = NULL;
 	int ret = FI_SUCCESS;
-	size_t copy_size = GNIX_AV_MAX_STR_ADDR_LEN;
+	size_t copy_size;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (!addrlen) {
-		ret = -FI_EINVAL;
-		goto err;
+	copy_size = sizeof(struct gnix_ep_name);
+
+	/*
+	 * If addrlen is less than the size necessary then continue copying with
+	 * truncation and return error value -FI_ETOOSMALL.
+	 */
+	if (*addrlen < copy_size) {
+		copy_size = *addrlen;
+		ret = -FI_ETOOSMALL;
 	}
 
-	if (*addrlen < GNIX_AV_MIN_STR_ADDR_LEN) {
-		/* return the maximum length of the string. */
-		*addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
-		ret = -FI_ETOOSMALL;
-		goto err;
-	}
+	/* copy the address length */
+	*addrlen = sizeof(struct gnix_ep_name);
 
 	if (!addr) {
-		/* return the maximum length of the string. */
-		*addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
-		ret = -FI_EINVAL;
+		if (copy_size >= *addrlen) {
+			ret = -FI_EINVAL;
+		}
+
 		goto err;
 	}
 
 	if (!fid) {
-		/* return the maximum length of the string. */
-		*addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -103,31 +103,7 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 		return -FI_ENOSYS;  /*TODO: need to implement FI_EP_MSG */
 	}
 
-	/*
-	 * If addrlen is less than the size necessary then continue copying
-	 * with the size of the receiving buffer.
-	 */
-	if (*addrlen < copy_size) {
-		copy_size = *addrlen;
-	}
-
-	/*
-	 * Retrieve the cdm_id, device_addr and other information
-	 * from the gnix_ep_name structure.
-	 */
-
-	gnix_av_straddr(NULL, (void *) &name, addr, &copy_size);
-
-	/*
-	 * If the copy size is less then the string addr length,
-	 * truncation has occurred so return the error value -FI_ETOOSMALL.
-	 */
-	if (copy_size < GNIX_AV_MAX_STR_ADDR_LEN) {
-		ret = -FI_ETOOSMALL;
-	}
-
-	/* return the copied length of the string. */
-	*addrlen = copy_size;
+	memcpy(addr, &name, copy_size);
 
 err:
 	return ret;

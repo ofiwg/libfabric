@@ -159,16 +159,6 @@ int _gnix_map_reverse_lookup(struct gnix_fid_av *int_av,
 /**
  * @brief Return the string representation of the FI address.
  *
- * @param[in]   buf         The buffer that contains the address string.
- * @param(out)  gnix_ep     The gnix_ep_name structure that contains the
- * @return      FI_SUCCESS on success or -FI_EINVAL on error.
- */
-int gnix_av_straddr_to_ep_name(char *buf,
-			       struct gnix_ep_name *gnix_ep);
-
-/**
- * @brief Return the string representation of the FI address.
- *
  * @param[in]      av      The AV to use.
  * @param[in]      addr    The GNIX address to translate.
  * @param[in/out]  buf     The buffer that contains the address string.

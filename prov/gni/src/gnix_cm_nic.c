@@ -44,7 +44,6 @@
 #include "gnix_cm_nic.h"
 #include "gnix_nic.h"
 #include "gnix_hashtable.h"
-#include "gnix_av.h"
 
 
 #define GNIX_CM_NIC_BND_TAG (100)
@@ -484,7 +483,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	struct gnix_cm_nic *cm_nic = NULL;
 	uint32_t cdm_id, seed;
 	gnix_hashtable_attr_t gnix_ht_attr = {0};
-	struct gnix_ep_name name;
+	struct gnix_ep_name *name;
 	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
 	struct gnix_nic_attr nic_attr = {0};
 
@@ -501,12 +500,12 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	 */
 
 	if (info->src_addr &&
-	    info->src_addrlen == GNIX_AV_MAX_STR_ADDR_LEN) {
-		gnix_av_straddr_to_ep_name(info->src_addr, &name);
-		if (name.name_type == GNIX_EPN_TYPE_BOUND) {
+	    info->src_addrlen == sizeof(struct gnix_ep_name)) {
+		name = (struct gnix_ep_name *)info->src_addr;
+		if (name->name_type == GNIX_EPN_TYPE_BOUND) {
 			/* EP name includes user specified service/port */
-			cdm_id = name.gnix_addr.cdm_id;
-			name_type = name.name_type;
+			cdm_id = name->gnix_addr.cdm_id;
+			name_type = name->name_type;
 		}
 	}
 
