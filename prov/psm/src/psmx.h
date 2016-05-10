@@ -455,10 +455,8 @@ struct psmx_fid_cntr {
 	struct psmx_fid_domain	*domain;
 	int			events;
 	uint64_t		flags;
-	volatile uint64_t	counter;
-	volatile uint64_t	error_counter;
-	uint64_t		counter_last_read;
-	uint64_t		error_counter_last_read;
+	atomic_t		counter;
+	atomic_t		error_counter;
 	struct util_wait	*wait;
 	int			wait_is_local;
 	struct psmx_trigger	*trigger;
@@ -640,7 +638,7 @@ void	psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trig
 
 static inline void psmx_cntr_inc(struct psmx_fid_cntr *cntr)
 {
-	cntr->counter++;
+	atomic_inc(&cntr->counter);
 	psmx_cntr_check_trigger(cntr);
 	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
