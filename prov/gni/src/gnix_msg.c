@@ -1457,7 +1457,7 @@ static int _gnix_send_req(void *arg)
 	}
 	assert(rc == FI_SUCCESS);
 
-	if (rendezvous) {
+	if (unlikely(rendezvous)) {
 		assert(req->msg.send_md);
 
 		tag = GNIX_SMSG_T_RNDZV_START;
@@ -1514,7 +1514,7 @@ static int _gnix_send_req(void *arg)
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
-	if (inject_err) {
+	if (unlikely(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, tdesc);
 		status = GNI_RC_SUCCESS;
 	} else {

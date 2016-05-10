@@ -209,7 +209,7 @@ void _gnix_fl_free(struct dlist_entry *e, struct gnix_freelist *fl)
 	if (fl->ts)
 		fastlock_acquire(&fl->lock);
 	dlist_init(e);
-	dlist_insert_tail(e, &fl->freelist);
+	dlist_insert_head(e, &fl->freelist);
 	if (fl->ts)
 		fastlock_release(&fl->lock);
 }

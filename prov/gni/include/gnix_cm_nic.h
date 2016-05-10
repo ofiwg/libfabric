@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -58,6 +59,8 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
  * @var rcv_cb_fn      pointer to callback function used to process
  *                     incoming messages received by this cm nic
  * @var ptag           ptag of this nic.
+ * @var poll_cnt       non-atomic counter to reduce datagram polling cnt
+ *                     when using FI_PROGRESS_MANUAL for control progress.
  * @var device_id      local Aries device id associated with this nic.
  */
 struct gnix_cm_nic {
@@ -72,6 +75,7 @@ struct gnix_cm_nic {
 	struct gnix_ep_name my_name;
 	gnix_cm_nic_rcv_cb_func *rcv_cb_fn;
 	uint8_t ptag;
+	uint32_t poll_cnt;
 	uint32_t device_id;
 };
 
