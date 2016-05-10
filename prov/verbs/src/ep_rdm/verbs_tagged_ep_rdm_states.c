@@ -137,7 +137,8 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	struct ibv_sge sge;
 
 	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
-	int size = request->len + sizeof(struct fi_ibv_rdm_header);
+	int size = request->len + sizeof(struct fi_ibv_rdm_header) +
+		FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 
 	assert(request->sbuf);
 
@@ -147,12 +148,17 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.wr.rdma.remote_addr = fi_ibv_rdm_get_remote_addr(conn, request->sbuf);
+	wr.wr.rdma.remote_addr = (uintptr_t)
+		(((char*)fi_ibv_rdm_get_remote_addr(conn, request->sbuf)) -
+		 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
 	wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
 	wr.send_flags = 0;
 
-	sge.addr = (uintptr_t) request->sbuf;
+	sge.addr = (uintptr_t)
+		(((char*)request->sbuf) - FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
 	sge.length = size;
+	fi_ibv_rdm_get_buff_service_data(request->sbuf)->pkt_len = 
+		size - FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 
 	if (sge.length <= p->ep->max_inline_rc) {
 		wr.send_flags |= IBV_SEND_INLINE;
@@ -160,7 +166,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	sge.lkey = conn->s_mr->lkey;
 
-	wr.imm_data = fi_ibv_rdm_get_buff_service_data(request->sbuf)->seq_number;
+	wr.imm_data = 0;
 	wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 	struct fi_ibv_rdm_buf *sbuf = (struct fi_ibv_rdm_buf *)request->sbuf;
 	char *payload = &(sbuf->payload[0]);
@@ -265,15 +271,21 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.wr.rdma.remote_addr = fi_ibv_rdm_get_remote_addr(conn, request->sbuf);
+	wr.wr.rdma.remote_addr = (uintptr_t)
+		(((char*)fi_ibv_rdm_get_remote_addr(conn, request->sbuf)) - 
+		 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
 	wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
 	wr.send_flags = 0;
 	wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
-	wr.imm_data = fi_ibv_rdm_get_buff_service_data(request->sbuf)->seq_number;
+	wr.imm_data = 0;
 
-	sge.addr = (uintptr_t) request->sbuf;
-	sge.length = sizeof(struct fi_ibv_rdm_tagged_rndv_header);
+	sge.addr = (uintptr_t) ((char*)request->sbuf - 
+		FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
+	sge.length = sizeof(struct fi_ibv_rdm_tagged_rndv_header) + 
+		FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 	sge.lkey = conn->s_mr->lkey;
+	fi_ibv_rdm_get_buff_service_data(request->sbuf)->pkt_len = sge.length - 
+		FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 
 	header->base.tag = request->minfo.tag;
 	header->base.service_tag = 0;
@@ -895,13 +907,18 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 	wr.send_flags = IBV_SEND_INLINE;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.wr.rdma.remote_addr = fi_ibv_rdm_get_remote_addr(conn, request->sbuf);
+	wr.wr.rdma.remote_addr = (uintptr_t)
+		(((char*)fi_ibv_rdm_get_remote_addr(conn, request->sbuf)) - 
+		 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
 	wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-	wr.imm_data = fi_ibv_rdm_get_buff_service_data(request->sbuf)->seq_number;
+	wr.imm_data = 0;
 
-	sge.addr = (uintptr_t) sbuf;
-	sge.length = sizeof(struct fi_ibv_rdm_header) + sizeof(request->rndv.id);
+	sge.addr = (uintptr_t) ((char*)sbuf - FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
+	sge.length = sizeof(struct fi_ibv_rdm_header) + 
+		sizeof(request->rndv.id) + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 	sge.lkey = conn->s_mr->lkey;
+	fi_ibv_rdm_get_buff_service_data(request->sbuf)->pkt_len = 
+		sge.length - FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA,
