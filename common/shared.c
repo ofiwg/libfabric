@@ -938,11 +938,11 @@ char *cnt_str(char str[FT_STR_LEN], long long cnt)
 int size_to_count(int size)
 {
 	if (size >= (1 << 20))
-		return 100;
+		return (opts.options & FT_OPT_BW) ? 200 : 100;
 	else if (size >= (1 << 16))
-		return 1000;
+		return (opts.options & FT_OPT_BW) ? 2000 : 1000;
 	else
-		return 10000;
+		return (opts.options & FT_OPT_BW) ? 20000: 10000;
 }
 
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
