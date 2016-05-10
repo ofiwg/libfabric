@@ -1751,7 +1751,7 @@ int _gnix_vc_dequeue_smsg(struct gnix_vc *vc)
 					     &tag);
 
 		if (status == GNI_RC_SUCCESS) {
-			GNIX_INFO(FI_LOG_EP_DATA, "Found RX (%p)\n", vc);
+			GNIX_DEBUG(FI_LOG_EP_DATA, "Found RX (%p)\n", vc);
 			ret = nic->smsg_callbacks[tag](vc, msg_ptr);
 			if (ret != FI_SUCCESS) {
 				/* Stalled, reschedule */
@@ -2018,7 +2018,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 		 * requests are completed.  Subsequent requests will be queued
 		 * due to non-empty tx_queue. */
 		queue_tx = 1;
-		GNIX_INFO(FI_LOG_EP_DATA,
+		GNIX_DEBUG(FI_LOG_EP_DATA,
 			  "Queued FI_FENCE request (%p) on VC\n",
 			  req);
 	} else if (connected && dlist_empty(&vc->tx_queue)) {
@@ -2027,19 +2027,19 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 		/* try to initiate request */
 		rc = req->work_fn(req);
 		if (rc == FI_SUCCESS) {
-			GNIX_INFO(FI_LOG_EP_DATA,
+			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "TX request processed: %p (OTX: %d)\n",
 				  req, atomic_get(&vc->outstanding_tx_reqs));
 		} else if (rc != -FI_ECANCELED) {
 			atomic_dec(&vc->outstanding_tx_reqs);
 			queue_tx = 1;
-			GNIX_INFO(FI_LOG_EP_DATA,
+			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "Queued request (%p) on full VC\n",
 				  req);
 		}
 	} else {
 		queue_tx = 1;
-		GNIX_INFO(FI_LOG_EP_DATA,
+		GNIX_DEBUG(FI_LOG_EP_DATA,
 			  "Queued request (%p) on busy VC\n",
 			  req);
 	}
@@ -2112,7 +2112,7 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 	while (req) {
 		if ((req->flags & FI_FENCE) &&
 		    atomic_get(&vc->outstanding_tx_reqs)) {
-			GNIX_INFO(FI_LOG_EP_DATA,
+			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "TX request queue stalled on FI_FENCE request: %p (%d)\n",
 				  req, atomic_get(&vc->outstanding_tx_reqs));
 			/* Success is returned to allow processing of more VCs.
@@ -2126,7 +2126,7 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 
 		ret = req->work_fn(req);
 		if (ret == FI_SUCCESS) {
-			GNIX_INFO(FI_LOG_EP_DATA,
+			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "TX request processed: %p (OTX: %d)\n",
 				  req, atomic_get(&vc->outstanding_tx_reqs));
 		} else if (ret != -FI_ECANCELED) {
@@ -2134,7 +2134,7 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 			 * back on the end of the list and return
 			 * -FI_EAGAIN. */
 
-			GNIX_INFO(FI_LOG_EP_DATA,
+			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "Failed to push TX request %p: %s\n",
 				  req, fi_strerror(-ret));
 			fi_rc = -FI_EAGAIN;

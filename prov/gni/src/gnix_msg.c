@@ -752,7 +752,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
 
-		GNIX_INFO(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
+		GNIX_DEBUG(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
 			  req, req->msg.recv_addr, req->msg.send_len);
 
 		memcpy((void *)req->msg.recv_addr, data_ptr, req->msg.send_len);
@@ -763,13 +763,13 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		if ((req->msg.recv_flags & FI_MULTI_RECV) &&
 		    ((req->msg.recv_len - req->msg.send_len) >=
 		     ep->min_multi_recv)) {
-			GNIX_INFO(FI_LOG_EP_DATA, "Re-using req: %p\n", req);
+			GNIX_DEBUG(FI_LOG_EP_DATA, "Re-using req: %p\n", req);
 
 			/* Adjust receive buffer for the next match. */
 			req->msg.recv_addr += req->msg.send_len;
 			req->msg.recv_len -= req->msg.send_len;
 		} else {
-			GNIX_INFO(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
+			GNIX_DEBUG(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
 
 			/* Dequeue and free the request. */
 			_gnix_remove_tag(posted_queue, req);
@@ -805,7 +805,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 
-		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p (%u)\n",
+		GNIX_DEBUG(FI_LOG_EP_DATA, "New req: %p (%u)\n",
 			  req, req->msg.send_len);
 	}
 
@@ -1289,7 +1289,7 @@ retry_match:
 
 		if (req->msg.send_flags & GNIX_MSG_RENDEZVOUS) {
 			/* Matched rendezvous request.  Start data movement. */
-			GNIX_INFO(FI_LOG_EP_DATA, "matched RNDZV, req: %p\n",
+			GNIX_DEBUG(FI_LOG_EP_DATA, "matched RNDZV, req: %p\n",
 				  req);
 
 			/*
@@ -1323,7 +1323,7 @@ retry_match:
 				buf += req->msg.send_len;
 				len -= req->msg.send_len;
 
-				GNIX_INFO(FI_LOG_EP_DATA,
+				GNIX_DEBUG(FI_LOG_EP_DATA,
 					  "Attempting additional matches, "
 					  "req: %p (%p %u)\n",
 					  req, buf, len);
@@ -1332,7 +1332,7 @@ retry_match:
 		} else {
 			/* Matched eager request.  Copy data and generate
 			 * completions. */
-			GNIX_INFO(FI_LOG_EP_DATA, "Matched recv, req: %p\n",
+			GNIX_DEBUG(FI_LOG_EP_DATA, "Matched recv, req: %p\n",
 				  req);
 
 			/* Send length is truncated to receive buffer size. */
@@ -1354,7 +1354,7 @@ retry_match:
 				buf += req->msg.send_len;
 				len -= req->msg.send_len;
 
-				GNIX_INFO(FI_LOG_EP_DATA,
+				GNIX_DEBUG(FI_LOG_EP_DATA,
 					  "Attempting additional matches, "
 					  "req: %p (%p %u)\n",
 					  req, buf, len);
@@ -1386,7 +1386,7 @@ retry_match:
 			goto err;
 		}
 
-		GNIX_INFO(FI_LOG_EP_DATA, "New recv, req: %p\n", req);
+		GNIX_DEBUG(FI_LOG_EP_DATA, "New recv, req: %p\n", req);
 
 		req->type = GNIX_FAB_RQ_RECV;
 
@@ -1599,14 +1599,14 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 				 len, FI_READ | FI_WRITE, 0, 0, 0,
 				 &auto_mr, NULL);
 		if (ret != FI_SUCCESS) {
-			GNIX_INFO(FI_LOG_EP_DATA,
+			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "Failed to auto-register local buffer: %d\n",
 				  ret);
 			return ret;
 		}
 		flags |= FI_LOCAL_MR;
 		mdesc = (void *)auto_mr;
-		GNIX_INFO(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
+		GNIX_DEBUG(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
 	}
 
 	ret = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
@@ -1668,7 +1668,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		req->msg.send_flags |= GNIX_MSG_RENDEZVOUS;
 	}
 
-	GNIX_INFO(FI_LOG_EP_DATA, "Queuing (%p %d)\n",
+	GNIX_DEBUG(FI_LOG_EP_DATA, "Queuing (%p %d)\n",
 		  (void *)loc_addr, len);
 
 	return _gnix_vc_queue_tx_req(req);
@@ -1680,4 +1680,3 @@ err_get_vc:
 	}
 	return ret;
 }
-

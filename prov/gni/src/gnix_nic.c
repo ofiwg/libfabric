@@ -332,13 +332,13 @@ static int __process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 
 #if 1 /* Process RX inline with arrival of an RX CQE. */
 	if (unlikely(vc->conn_state != GNIX_VC_CONNECTED)) {
-		GNIX_INFO(FI_LOG_EP_DATA,
+		GNIX_DEBUG(FI_LOG_EP_DATA,
 			  "Scheduling VC for RX processing (%p)\n",
 			  vc);
 		ret = _gnix_vc_rx_schedule(vc);
 		assert(ret == FI_SUCCESS);
 	} else {
-		GNIX_INFO(FI_LOG_EP_DATA,
+		GNIX_DEBUG(FI_LOG_EP_DATA,
 			  "Processing VC RX (%p)\n",
 			  vc);
 		ret = _gnix_vc_dequeue_smsg(vc);
