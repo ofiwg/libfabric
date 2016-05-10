@@ -978,10 +978,6 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
-void sock_fabric_add_service(struct sock_fabric *fab, int service);
-void sock_fabric_remove_service(struct sock_fabric *fab, int service);
-int sock_fabric_check_service(struct sock_fabric *fab, int service);
-
 void sock_dom_add_to_list(struct sock_domain *domain);
 int sock_dom_check_list(struct sock_domain *domain);
 void sock_dom_remove_from_list(struct sock_domain *domain);

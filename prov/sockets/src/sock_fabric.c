@@ -381,58 +381,6 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	return 0;
 }
 
-static struct sock_service_entry *sock_fabric_find_service(struct sock_fabric *fab,
-							   int service)
-{
-	struct dlist_entry *entry;
-	struct sock_service_entry *service_entry;
-
-	for (entry = fab->service_list.next; entry != &fab->service_list;
-	     entry = entry->next) {
-		service_entry = container_of(entry,
-					     struct sock_service_entry, entry);
-		if (service_entry->service == service)
-			return service_entry;
-	}
-	return NULL;
-}
-
-int sock_fabric_check_service(struct sock_fabric *fab, int service)
-{
-	struct sock_service_entry *entry;
-
-	fastlock_acquire(&fab->lock);
-	entry = sock_fabric_find_service(fab, service);
-	fastlock_release(&fab->lock);
-	return (entry == NULL) ? 1 : 0;
-}
-
-void sock_fabric_add_service(struct sock_fabric *fab, int service)
-{
-	struct sock_service_entry *entry;
-
-	entry = calloc(1, sizeof(*entry));
-	if (!entry)
-		return;
-
-	entry->service = service;
-	fastlock_acquire(&fab->lock);
-	dlist_insert_tail(&entry->entry, &fab->service_list);
-	fastlock_release(&fab->lock);
-}
-
-void sock_fabric_remove_service(struct sock_fabric *fab, int service)
-{
-	struct sock_service_entry *service_entry;
-	fastlock_acquire(&fab->lock);
-	service_entry = sock_fabric_find_service(fab, service);
-	if (service_entry) {
-		dlist_remove(&service_entry->entry);
-		free(service_entry);
-	}
-	fastlock_release(&fab->lock);
-}
-
 int sock_get_src_addr(struct sockaddr_in *dest_addr,
 		      struct sockaddr_in *src_addr)
 {

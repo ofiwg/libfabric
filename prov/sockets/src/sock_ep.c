@@ -706,9 +706,6 @@ static int sock_ep_close(struct fid *fid)
 	if (sock_ep->attr->dest_addr)
 		free(sock_ep->attr->dest_addr);
 
-	sock_fabric_remove_service(sock_ep->attr->domain->fab,
-				   atoi(sock_ep->attr->listener.service));
-
 	sock_conn_map_destroy(&sock_ep->attr->cmap);
 	atomic_dec(&sock_ep->attr->domain->ref);
 	fastlock_destroy(&sock_ep->attr->lock);
