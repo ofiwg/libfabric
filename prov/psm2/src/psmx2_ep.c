@@ -357,8 +357,8 @@ static inline int psmx2_ep_set_flags(struct psmx2_fid_ep *ep, uint64_t flags)
 		ep->tx_flags = real_flags;
 	else if (flags & FI_RECV)
 		ep->rx_flags = real_flags;
-	else
-		; /* ok to leave the flags intact */
+
+	/* otherwise ok to leave the flags intact */
 
 	return 0;
 }
