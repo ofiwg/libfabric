@@ -278,7 +278,7 @@ usdf_msg_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	rqe->ms_cur_ptr = iov[0].iov_base;
 	rqe->ms_iov_resid = iov[0].iov_len;
 	rqe->ms_resid = tot_len;
-	rqe->ms_length = tot_len;
+	rqe->ms_length = 0;
 
 	op_flags = ep->ep_rx->rx_attr.op_flags;
 	rqe->ms_signal_comp = ep->ep_rx_dflt_signal_comp ||
@@ -576,7 +576,7 @@ usdf_msg_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 
 	rqe->ms_cur_iov = 0;
 	rqe->ms_resid = tot_len;
-	rqe->ms_length = tot_len;
+	rqe->ms_length = 0;
 	rqe->ms_cur_ptr = iov[0].iov_base;
 	rqe->ms_iov_resid = iov[0].iov_len;
 

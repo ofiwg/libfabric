@@ -534,7 +534,7 @@ static inline ssize_t _usdf_rdm_recv_vector(struct fid_ep *fep,
 	rqe->rd_last_iov = count - 1;
 	rqe->rd_cur_ptr = iov[0].iov_base;
 	rqe->rd_resid = tot_len;
-	rqe->rd_length = tot_len;
+	rqe->rd_length = 0;
 
 	rqe->rd_signal_comp = ep->ep_rx_dflt_signal_comp ||
 		(flags & FI_COMPLETION) ? 1 : 0;
