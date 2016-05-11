@@ -557,10 +557,8 @@ struct psmx2_fid_cntr {
 	struct psmx2_fid_domain	*domain;
 	int			events;
 	uint64_t		flags;
-	volatile uint64_t	counter;
-	volatile uint64_t	error_counter;
-	uint64_t		counter_last_read;
-	uint64_t		error_counter_last_read;
+	atomic_t		counter;
+	atomic_t		error_counter;
 	struct util_wait	*wait;
 	int			wait_is_local;
 	struct psmx2_trigger	*trigger;
@@ -747,7 +745,7 @@ int	psmx2_handle_sendv_req(struct psmx2_fid_ep *ep, psm2_mq_status2_t *psm2_stat
 
 static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr)
 {
-	cntr->counter++;
+	atomic_inc(&cntr->counter);
 	psmx2_cntr_check_trigger(cntr);
 	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
