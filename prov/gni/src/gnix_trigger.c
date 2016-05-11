@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2016 Los Alamos National Security, LLC. All rights reserved.
+ *
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -96,11 +98,13 @@ void _gnix_trigger_check_cntr(struct gnix_fid_cntr *cntr)
 	struct fi_triggered_context *trigger_context;
 	struct fi_trigger_threshold *threshold;
 	struct gnix_fab_req *req, *req2;
-	size_t count = atomic_get(&cntr->cnt);
+	size_t count;
 
-	if (dlist_empty(&cntr->trigger_list)) {
+	if (likely(dlist_empty(&cntr->trigger_list))) {
 		return;
 	}
+
+	 count = atomic_get(&cntr->cnt);
 
 	fastlock_acquire(&cntr->trigger_lock);
 	dlist_for_each_safe(&cntr->trigger_list, req, req2, dlist) {
@@ -122,4 +126,3 @@ void _gnix_trigger_check_cntr(struct gnix_fid_cntr *cntr)
 	}
 	fastlock_release(&cntr->trigger_lock);
 }
-
