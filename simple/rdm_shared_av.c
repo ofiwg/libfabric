@@ -43,20 +43,11 @@
 
 static int init_fabric(void)
 {
-	char *node, *service;
-	uint64_t flags = 0;
 	int ret;
 
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	ret = ft_getinfo(hints, &fi);
 	if (ret)
 		return ret;
-
-	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
 
 	ret = ft_open_fabric_res();
 	if (ret)

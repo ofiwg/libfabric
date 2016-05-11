@@ -47,13 +47,7 @@ static struct fi_rma_iov remote;
 
 static int run(void)
 {
-	char *node, *service;
-	uint64_t flags;
 	int i, ret;
-
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
-	if (ret)
-		return ret;
 
 	if (!opts.dst_addr) {
 		ret = ft_start_server();

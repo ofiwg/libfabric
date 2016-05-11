@@ -250,6 +250,8 @@ int size_to_count(int size);
 int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op);
+int ft_getinfo(struct fi_info *hints, struct fi_info **info);
+int ft_init_fabric();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();

@@ -64,50 +64,15 @@ static int rma_write_trigger(void *src, size_t size,
 	return 0;
 }
 
-static int init_fabric(void)
-{
-	char *node, *service;
-	uint64_t flags = 0;
-	int ret;
-
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
-	if (ret)
-		return ret;
-
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_init_ep();
-	if (ret)
-		return ret;
-
-	ret = ft_init_alias_ep(FI_TRANSMIT | FI_TRIGGER);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int run_test(void)
 {
 	int ret = 0;
 
-	ret = init_fabric();
+	ret = ft_init_fabric();
 	if (ret)
 		return ret;
 
-	ret = ft_init_av();
+	ret = ft_init_alias_ep(FI_TRANSMIT | FI_TRIGGER);
 	if (ret)
 		return ret;
 

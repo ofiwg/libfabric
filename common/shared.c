@@ -426,16 +426,31 @@ int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op)
 	return 0;
 }
 
-int ft_start_server(void)
+int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 {
+	char *node, *service;
+	uint64_t flags = 0;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
-			 hints, &fi_pep);
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
+	return 0;
+}
+
+int ft_start_server(void)
+{
+	int ret;
+
+	ret = ft_getinfo(hints, &fi_pep);
+	if (ret)
+		return ret;
 
 	ret = fi_fabric(fi_pep->fabric_attr, &fabric, NULL);
 	if (ret) {
@@ -538,11 +553,9 @@ int ft_client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
+	ret = ft_getinfo(hints, &fi);
+	if (ret)
 		return ret;
-	}
 
 	ret = ft_open_fabric_res();
 	if (ret)
@@ -575,6 +588,39 @@ int ft_client_connect(void)
 		ret = -FI_EOTHER;
 		return ret;
 	}
+
+	return 0;
+}
+
+int ft_init_fabric(void)
+{
+	int ret;
+
+	ret = ft_getinfo(hints, &fi);
+	if (ret)
+		return ret;
+
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
+
+	if (hints->caps & FI_RMA) {
+		ret = ft_set_rma_caps(fi, opts.rma_op);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
+
+	ret = ft_init_ep();
+	if (ret)
+		return ret;
+
+	ret = ft_init_av();
+	if (ret)
+		return ret;
 
 	return 0;
 }
