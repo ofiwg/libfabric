@@ -294,7 +294,7 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		event->cqe.tagged.buf = buf;
 		event->cqe.tagged.flags = flags;
 		event->cqe.tagged.len = psm2_status->nbytes;
-		event->cqe.data.data = 
+		event->cqe.tagged.data = 
 			(psm2_status->msg_tag.tag2 & PSMX2_MSG_BIT) ?
 				PSMX2_GET_TAG64(psm2_status->msg_tag) : 0;
 		event->cqe.tagged.tag = PSMX2_GET_TAG64(psm2_status->msg_tag);
