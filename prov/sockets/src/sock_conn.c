@@ -279,7 +279,6 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	socklen_t addr_size;
 	struct sockaddr_in addr;
 	struct sock_conn_listener *listener = &ep_attr->listener;
-	struct sock_domain *domain = ep_attr->domain;
 	char service[NI_MAXSERV] = {0};
 	char *port;
 
@@ -288,6 +287,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
+	memcpy(&addr, ep_attr->src_addr, sizeof(addr));
 	if (getnameinfo((void *)ep_attr->src_addr, sizeof(*ep_attr->src_addr),
 			NULL, 0, listener->service,
 			sizeof(listener->service), NI_NUMERICSERV)) {
@@ -295,15 +295,14 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 		return -FI_EINVAL;
 	}
 
-	if (!sock_fabric_check_service(domain->fab, atoi(listener->service))) {
+	if (ep_attr->ep_type == FI_EP_MSG) {
 		memset(listener->service, 0, NI_MAXSERV);
-		((struct sockaddr_in *)ep_attr->src_addr)->sin_port = 0;
 		port = NULL;
+		addr.sin_port = 0;
 	} else
 		port = listener->service;
 
-	ret = getaddrinfo(inet_ntoa(((struct sockaddr_in *)ep_attr->src_addr)->sin_addr),
-			  port, &hints, &s_res);
+	ret = getaddrinfo(inet_ntoa(addr.sin_addr), port, &hints, &s_res);
 	if (ret) {
 		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
 			       listener->service, gai_strerror(ret));
@@ -351,11 +350,12 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 		goto err;
 	}
 
-	((struct sockaddr_in *) (ep_attr->src_addr))->sin_port =
-		htons(atoi(listener->service));
-	listener->sock = listen_fd;
+	if (((struct sockaddr_in *) (ep_attr->src_addr))->sin_port == 0) {
+		((struct sockaddr_in *) (ep_attr->src_addr))->sin_port =
+			htons(atoi(listener->service));
+	}
 
-	sock_fabric_add_service(domain->fab, atoi(listener->service));
+	listener->sock = listen_fd;
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, listener->signal_fds) < 0)
 		goto err;
 

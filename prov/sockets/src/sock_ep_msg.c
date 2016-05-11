@@ -720,7 +720,6 @@ out:
 	free(conn_response);
 	free(cm_entry);
 	close(ep->attr->cm.sock);
-	ep->attr->cm.listener_thread = 0L;
 	return NULL;
 }
 
