@@ -176,7 +176,7 @@ extern int ft_skip_mr;
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 #define ADDR_OPTS "b:p:s:a:"
-#define INFO_OPTS "n:f:"
+#define INFO_OPTS "n:f:e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 
 extern char default_port[8];
