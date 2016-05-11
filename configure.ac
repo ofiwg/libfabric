@@ -80,6 +80,13 @@ AC_HEADER_STDC
 AC_CHECK_HEADER([rdma/fabric.h], [],
     [AC_MSG_ERROR([<rdma/fabric.h> not found.  fabtests requires libfabric.])])
 
+AC_MSG_CHECKING([for fi_trywait support])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <rdma/fi_eq.h>]],
+	       [[fi_trywait(NULL, NULL, 0);]])],
+	       [AC_MSG_RESULT([yes])],
+	       [AC_MSG_RESULT([no])
+	        AC_MSG_ERROR([fabtests requires fi_trywait support. Cannot continue])])
+
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))
