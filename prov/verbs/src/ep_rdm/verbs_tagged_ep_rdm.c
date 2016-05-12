@@ -684,7 +684,7 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 	} while (ret == wc_count);
 
 	if (!err && ret >= 0) {
-		return 0;
+		return FI_SUCCESS;
 	}
 
 	/* error handling */
@@ -718,46 +718,54 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 	return -FI_EOTHER;
 }
 
+static inline int
+fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
+{
+	if (wc->status != IBV_WC_SUCCESS) {
+		return 1;
+	}
+
+	if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
+		VERBS_DBG(FI_LOG_EP_DATA, "CQ COMPL: SEND -> 0x1\n");
+		struct fi_ibv_rdm_tagged_conn *conn =
+			(struct fi_ibv_rdm_tagged_conn *)
+			FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
+		FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(conn, ep);
+
+		return 0;
+	} else {
+		FI_IBV_DBG_OPCODE(wc->opcode, "SEND");
+		struct fi_ibv_rdm_tagged_request *request =
+			(struct fi_ibv_rdm_tagged_request *)
+			FI_IBV_RDM_UNPACK_WR(wc->wr_id);
+
+		struct fi_ibv_rdm_tagged_send_completed_data data = 
+			{ .ep = ep };
+
+		return fi_ibv_rdm_tagged_req_hndl(request, 
+			FI_IBV_EVENT_SEND_GOT_LC, &data);
+	}
+}
+
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 {
 	const int wc_count = ep->n_buffs;
 	struct ibv_wc wc[wc_count];
-	int i = 0;
 	int ret = 0;
+	int err = 0;
+	int i = 0;
 
 	if (ep->posted_sends > 0) {
 		do {
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
 			for (i = 0; i < ret; ++i) {
-				if (wc[i].status == IBV_WC_SUCCESS) {
-					if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG
-						(wc[i].wr_id)) {
-						VERBS_DBG(FI_LOG_EP_DATA,
-							"CQ COMPL: SEND -> 0x1\n");
-						struct fi_ibv_rdm_tagged_conn *conn =
-							(struct fi_ibv_rdm_tagged_conn *)
-							FI_IBV_RDM_UNPACK_SERVICE_WR(wc[i].wr_id);
-						FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(conn, ep);
-					} else {
-						FI_IBV_DBG_OPCODE(wc[i].opcode,
-							"SEND");
-						struct fi_ibv_rdm_tagged_request *request =
-							(struct fi_ibv_rdm_tagged_request *)
-							FI_IBV_RDM_UNPACK_WR(wc[i].wr_id);
-
-						struct fi_ibv_rdm_tagged_send_completed_data
-						data = {
-							.ep = ep
-						};
-
-						fi_ibv_rdm_tagged_req_hndl
-							(request, FI_IBV_EVENT_SEND_GOT_LC, &data);
-					}
-				} else {
-					goto wc_error;
-				}
+				err &= fi_ibv_rdm_process_send_wc(ep, &wc[i]);
 			}
-		} while (ret == wc_count);
+		} while (!err && ret == wc_count);
+	}
+
+	if (err) {
+		goto wc_error;
 	}
 
 	struct fi_ibv_rdm_tagged_send_ready_data data = { .ep = ep };
@@ -771,9 +779,8 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 		}
 	}
 
-	if (ret >= 0)		// Success
-	{
-		return 0;
+	if (ret >= 0) {
+		return FI_SUCCESS;
 	}
 
 wc_error:
