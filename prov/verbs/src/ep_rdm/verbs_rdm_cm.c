@@ -145,6 +145,12 @@ fi_ibv_rdm_tagged_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 				(void **) &conn->rbuf_mem_reg, size);
 	assert(conn->r_mr);
 
+	conn->ack_mr = ibv_reg_mr(ep->domain->pd, &conn->sbuf_ack_status,
+		sizeof(conn->sbuf_ack_status),
+		IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+
+	assert(conn->ack_mr);
+
 	conn->rma_mr = fi_ibv_rdm_alloc_and_reg(ep,
 				(void **) &conn->rmabuf_mem_reg, size);
 	assert(conn->rma_mr);
@@ -480,6 +486,9 @@ int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn)
 		fi_ibv_rdm_dereg_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
 	if (conn->r_mr)
 		fi_ibv_rdm_dereg_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
+	if (conn->ack_mr)
+		ibv_dereg_mr(conn->ack_mr);
+
 	if (conn->rma_mr)
 		fi_ibv_rdm_dereg_and_free(&conn->rma_mr, &conn->rmabuf_mem_reg);
 

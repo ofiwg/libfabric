@@ -514,7 +514,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	struct ibv_sge sge;
 	sge.addr = (uint64_t) & conn->sbuf_ack_status;
 	sge.length = sizeof(conn->sbuf_ack_status);
-	/* sge.lkey = TODO: works only with INLINE support */
+	sge.lkey = conn->ack_mr->lkey;
 
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_send_wr wr = { 0 };
@@ -525,7 +525,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	wr.wr.rdma.remote_addr = (uint64_t)
 		&fi_ibv_rdm_get_buff_service_data(conn->remote_sbuf_head)->status;
 	wr.wr.rdma.rkey = conn->remote_sbuf_rkey;
-	wr.send_flags = IBV_SEND_INLINE;
+	wr.send_flags = (sge.length < ep->max_inline_rc) ? IBV_SEND_INLINE : 0;
 	/* w/o imm - do not put it into recv completion queue */
 	wr.opcode = IBV_WR_RDMA_WRITE;
 

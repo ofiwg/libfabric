@@ -288,6 +288,7 @@ struct fi_ibv_rdm_tagged_conn {
 
 	struct ibv_mr *s_mr;
 	struct ibv_mr *r_mr;
+	struct ibv_mr *ack_mr;
 	struct ibv_mr *rma_mr;
 
 	uint32_t remote_sbuf_rkey;
