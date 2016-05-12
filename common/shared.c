@@ -426,16 +426,34 @@ int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op)
 	return 0;
 }
 
-int ft_start_server(void)
+int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 {
+	char *node, *service;
+	uint64_t flags = 0;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
-			 hints, &fi_pep);
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+
+	if (!hints->ep_attr->type)
+		hints->ep_attr->type = FI_EP_RDM;
+
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
+	return 0;
+}
+
+int ft_start_server(void)
+{
+	int ret;
+
+	ret = ft_getinfo(hints, &fi_pep);
+	if (ret)
+		return ret;
 
 	ret = fi_fabric(fi_pep->fabric_attr, &fabric, NULL);
 	if (ret) {
@@ -538,11 +556,9 @@ int ft_client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
+	ret = ft_getinfo(hints, &fi);
+	if (ret)
 		return ret;
-	}
 
 	ret = ft_open_fabric_res();
 	if (ret)
@@ -575,6 +591,39 @@ int ft_client_connect(void)
 		ret = -FI_EOTHER;
 		return ret;
 	}
+
+	return 0;
+}
+
+int ft_init_fabric(void)
+{
+	int ret;
+
+	ret = ft_getinfo(hints, &fi);
+	if (ret)
+		return ret;
+
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
+
+	if (hints->caps & FI_RMA) {
+		ret = ft_set_rma_caps(fi, opts.rma_op);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
+
+	ret = ft_init_ep();
+	if (ret)
+		return ret;
+
+	ret = ft_init_av();
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1603,8 +1652,10 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-n <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-b <src_port>", "non default source port number");
 	FT_PRINT_OPTS_USAGE("-p <dst_port>", "non default destination port number");
-	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
+	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)\n"
+			"Only fi_rma_bw test supports this option for now");
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-w <number>", "number of warmup iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
@@ -1639,6 +1690,14 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 			}
 		}
 		hints->fabric_attr->prov_name = strdup(optarg);
+		break;
+	case 'e':
+		if (!strncasecmp("msg", optarg, 3))
+			hints->ep_attr->type = FI_EP_MSG;
+		if (!strncasecmp("rdm", optarg, 3))
+			hints->ep_attr->type = FI_EP_RDM;
+		if (!strncasecmp("dgram", optarg, 5))
+			hints->ep_attr->type = FI_EP_DGRAM;
 		break;
 	default:
 		/* let getopt handle unknown opts*/

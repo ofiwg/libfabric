@@ -47,24 +47,21 @@ static struct fi_rma_iov remote;
 
 static int run(void)
 {
-	char *node, *service;
-	uint64_t flags;
 	int i, ret;
 
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (hints->ep_attr->type == FI_EP_MSG) {
+		if (!opts.dst_addr) {
+			ret = ft_start_server();
+			if (ret)
+				return ret;
+		}
+
+		ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
+	} else {
+		ret = ft_init_fabric();
+	}
 	if (ret)
 		return ret;
-
-	if (!opts.dst_addr) {
-		ret = ft_start_server();
-		if (ret)
-			return ret;
-	}
-
-	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
-	if (ret) {
-		return ret;
-	}
 
 	ret = ft_exchange_keys(&remote);
 	if (ret)
@@ -129,7 +126,6 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG | FI_RMA;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->mode = FI_LOCAL_MR | FI_RX_CQ_DATA;

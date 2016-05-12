@@ -72,54 +72,13 @@ static int run_test(void)
 	return 0;
 }
 
-static int init_fabric(void)
-{
-	uint64_t flags = 0;
-	char *node, *service;
-	int ret;
-
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
-	if (ret)
-		return ret;
-
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	if (hints->caps & FI_RMA) {
-		ret = ft_set_rma_caps(fi, opts.rma_op);
-		if (ret)
-			return ret;
-	}
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_init_ep();
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int run(void)
 {
 	int i, ret = 0;
 
-	ret = init_fabric();
+	ret = ft_init_fabric();
 	if (ret)
 		return ret;
-
-	ret = ft_init_av();
-	if (ret)
-		goto out;
 
 	ret = ft_exchange_keys(&remote);
 	if (ret)

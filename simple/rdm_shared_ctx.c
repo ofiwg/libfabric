@@ -235,19 +235,11 @@ static int run_test()
 
 static int init_fabric(void)
 {
-	uint64_t flags = 0;
-	char *node, *service;
 	int ret;
 
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	ret = ft_getinfo(hints, &fi);
 	if (ret)
 		return ret;
-
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
 
 	/* Check the number of EPs supported by the provider */
 	if (ep_cnt > fi->domain_attr->ep_cnt) {

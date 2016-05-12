@@ -48,50 +48,16 @@ struct fi_rma_iov local, remote;
 struct fi_context fi_ctx_write;
 struct fi_context fi_ctx_read;
 
-static int init_fabric(void)
-{
-	char *node, *service;
-	uint64_t flags = 0;
-	int ret;
-
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
-	if (ret)
-		return ret;
-
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_init_ep();
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int run_test(void)
 {
 	int ret = 0;
 	const char *message = "Hello from Client!";
 	size_t message_len = strlen(message) + 1;
 
-	ret = init_fabric();
+	ret = ft_init_fabric();
 	if (ret)
 		return ret;
 
-	ret = ft_init_av();
-	if (ret)
-		return ret;
 	if (opts.dst_addr) {
 		fprintf(stdout, "RMA write to server\n");
 		if (snprintf(tx_buf, tx_size, "%s", message) >= tx_size) {

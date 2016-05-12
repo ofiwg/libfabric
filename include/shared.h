@@ -176,7 +176,7 @@ extern int ft_skip_mr;
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 #define ADDR_OPTS "b:p:s:a:"
-#define INFO_OPTS "n:f:"
+#define INFO_OPTS "n:f:e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 
 extern char default_port[8];
@@ -250,6 +250,8 @@ int size_to_count(int size);
 int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op);
+int ft_getinfo(struct fi_info *hints, struct fi_info **info);
+int ft_init_fabric();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();
