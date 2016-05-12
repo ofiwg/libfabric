@@ -331,31 +331,32 @@ An endpoint may also, or instead, be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
 
 *FI_SEND*
-: Increments the specified counter whenever a successful message is
-  transferred over the endpoint.  Sent messages include both tagged
-  and normal message operations.
+: Increments the specified counter whenever a message transfer initiated
+  over the endpoint has completed successfully or in error.  Sent messages
+  include both tagged and normal message operations.
 
 *FI_RECV*
-: Increments the specified counter whenever a successful message is
+: Increments the specified counter whenever a message is
   received over the endpoint.  Received messages include both tagged
   and normal message operations.
 
 *FI_READ*
-: Increments the specified counter whenever a successful RMA read or
-  atomic fetch operation is initiated from the endpoint.
+: Increments the specified counter whenever an RMA read or atomic fetch
+  operation initiated from the endpoint has completed successfully or
+  in error.
 
 *FI_WRITE*
-: Increments the specified counter whenever a successful RMA write or
-  atomic operation is initiated from the endpoint.
+: Increments the specified counter whenever an RMA write or atomic operation
+  initiated from the endpoint has completed successfully or in error.
 
 *FI_REMOTE_READ*
-: Increments the specified counter whenever a successful RMA read or
+: Increments the specified counter whenever an RMA read or
   atomic fetch operation is initiated from a remote endpoint that
   targets the given endpoint.  Use of this flag requires that the
   endpoint be created using FI_RMA_EVENT.
 
 *FI_REMOTE_WRITE*
-: Increments the specified counter whenever a successful RMA write or
+: Increments the specified counter whenever an RMA write or
   atomic operation is initiated from a remote endpoint that targets
   the given endpoint.  Use of this flag requires that the
   endpoint be created using FI_RMA_EVENT.
