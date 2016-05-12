@@ -231,8 +231,8 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 			conn->remote_sbuf_rkey = conn->s_mr->rkey;
 			conn->remote_sbuf_mem_reg = conn->s_mr->addr;
 
-			conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-				FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
+			conn->remote_sbuf_head = (struct fi_ibv_rdm_buf *)
+				conn->remote_sbuf_mem_reg;
 		}
 	} else {
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
@@ -250,8 +250,8 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 		conn->remote_sbuf_mem_reg = *(char **)(p);
 		p += sizeof(conn->remote_sbuf_mem_reg);
 
-		conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-			FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
+		conn->remote_sbuf_head = (struct fi_ibv_rdm_buf *)
+			conn->remote_sbuf_mem_reg;
 	}
 }
 

@@ -158,7 +158,7 @@ struct fi_ibv_rdm_tagged_recv_start_data {
 struct fi_ibv_recv_got_pkt_preprocess_data {
 	struct fi_ibv_rdm_tagged_conn *conn;
 	struct fi_ibv_rdm_ep *ep;
-	void *rbuf;
+	struct fi_ibv_rdm_buf *rbuf;
 	size_t arrived_len;
 	uint64_t pkt_type;
 	int imm_data;
