@@ -1285,6 +1285,7 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 	if (rx_buffered) {
 		pe_entry.data_len = rx_buffered->total_len;
 		pe_entry.tag = rx_buffered->tag;
+		pe_entry.data = rx_buffered->data;
 		rx_buffered->context = (uintptr_t)context;
 		if (flags & FI_CLAIM)
 			rx_buffered->is_claimed = 1;
@@ -1331,6 +1332,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 		pe_entry.comp = &rx_ctx->comp;
 		pe_entry.data_len = rx_buffered->total_len;
 		pe_entry.tag = rx_buffered->tag;
+		pe_entry.data = rx_buffered->data;
 		pe_entry.context = rx_buffered->context;
 		pe_entry.flags = (flags | FI_MSG | FI_RECV);
 		if (is_tagged)
