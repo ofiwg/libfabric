@@ -541,8 +541,7 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
 	int pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
 
 	if (pkt_type == FI_IBV_RDM_RNDV_ACK_PKT) {
-		request = *(struct fi_ibv_rdm_tagged_request **)
-			(void*)rbuf->payload;
+		memcpy(&request, rbuf->payload, sizeof(request));
 		assert(request);
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %p\n", conn, request);
@@ -639,17 +638,22 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p recv_completions %d\n",
 		conn, conn->recv_completions);
 
-
 	check_and_repost_receives(ep, conn);
 
 	if (rbuf->service_data.status == BUF_STATUS_RECVED &&
-	    fi_ibv_rdm_buffer_check_pkt_len(rbuf, wc->byte_len))
+	    fi_ibv_rdm_buffer_check_seq_num(rbuf, conn->recv_processed))
 	{
 		do {
+			assert(rbuf->service_data.pkt_len > 0);
+
 			fi_ibv_rdm_process_recv(ep, conn, 
 				rbuf->service_data.pkt_len, rbuf);
 
+			VERBS_DBG(FI_LOG_EP_DATA, "processed: conn %p, pkt # %d\n",
+				conn, rbuf->service_data.seq_num);
+
 			fi_ibv_rdm_set_buffer_status(rbuf, BUF_STATUS_FREE);
+			rbuf->service_data.seq_num = -1;
 
 			conn->recv_processed++;
 			if (conn->recv_processed & ep->n_buffs) {
@@ -665,6 +669,9 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 		/* Do not process w/o completion! */
 		} while (conn->recv_processed != conn->recv_completions &&
 			 rbuf->service_data.status == BUF_STATUS_RECVED);
+	} else {
+		VERBS_DBG(FI_LOG_EP_DATA, "not processed: conn %p, status: %d\n",
+			conn, rbuf->service_data.status);
 	}
 
 	return 0;
