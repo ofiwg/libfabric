@@ -294,7 +294,8 @@ static void mr_notifier_stressor_teardown(void)
 
 TestSuite(mr_notifier_stressor,
 	  .init = mr_notifier_stressor_setup,
-	  .fini = mr_notifier_stressor_teardown);
+	  .fini = mr_notifier_stressor_teardown,
+	  .disabled = true);
 
 /* good 'nuff */
 static int get_len(int min_len, int max_len)
@@ -407,7 +408,8 @@ static void mr_reuse_stressor_teardown(void)
 
 TestSuite(mr_reuse_stressor,
 	  .init = mr_reuse_stressor_setup,
-	  .fini = mr_reuse_stressor_teardown);
+	  .fini = mr_reuse_stressor_teardown,
+	  .disabled = true);
 
 static void do_reuse(int num_allocs, int num_reuse,
 		     int min_len, int max_len)
