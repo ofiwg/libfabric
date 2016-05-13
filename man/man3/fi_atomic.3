@@ -1,4 +1,4 @@
-.TH "fi_atomic" "3" "2016\-05\-03" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_atomic" "3" "2016\-05\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic \- Remote atomic functions
@@ -278,7 +278,7 @@ addr[i]\ =\ addr[i]\ ^\ buf[i]
 .IP
 .nf
 \f[C]
-buf[i]\ =\ addr[i]
+result[i]\ =\ addr[i]
 \f[]
 .fi
 .PP
@@ -410,9 +410,9 @@ struct\ fi_msg_atomic\ {
 };
 
 struct\ fi_rma_ioc\ {
-\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ addr;\ \ \ \ \ \ \ \ \ /*\ target\ address\ */
-\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ count;\ \ \ \ \ \ \ \ /*\ #\ target\ operands\ */
-\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ key;\ \ \ \ \ \ \ \ \ \ /*\ access\ key\ */
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ addr;\ \ \ \ \ \ /*\ target\ address\ */
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ count;\ \ \ \ \ /*\ #\ target\ operands\ */
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ key;\ \ \ \ \ \ \ /*\ access\ key\ */
 };
 \f[]
 .fi
@@ -435,6 +435,10 @@ read access.
 The following list of atomic operations are usable with fetch atomic
 operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD, FI_LOR, FI_LAND, FI_BOR,
 FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ, and FI_ATOMIC_WRITE.
+.PP
+For FI_ATOMIC_READ operations, the source buffer operand (e.g.
+fi_fetch_atomic buf parameter) is ignored and may be NULL.
+The results are written into the result buffer.
 .SS Compare\-Atomic Functions
 .PP
 The compare atomic functions \-\- fi_compare_atomic, fi_compare_atomicv,
@@ -535,11 +539,11 @@ bytes to an aligned memory location.
 .nf
 \f[C]
 fi_atomic(ep,\ buf,\ count,\ NULL,\ dest_addr,\ addr,\ key,
-\ \ \ \ FI_UINT64,\ FI_ATOMIC_WRITE,\ context);
+\ \ \ \ \ \ FI_UINT64,\ FI_ATOMIC_WRITE,\ context)
 {
 \ \ \ \ for\ (i\ =\ 1;\ i\ <\ count;\ i\ ++)
 \ \ \ \ \ \ \ \ ATOMIC_WRITE_U64(((uint64_t\ *)\ addr)[i],
-\ \ \ \ \ \ \ \ \ \ \ \ ((uint64_t\ *)\ buf)[i]);
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ ((uint64_t\ *)\ buf)[i]);
 }
 \f[]
 .fi
