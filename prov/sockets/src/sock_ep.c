@@ -379,6 +379,7 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		break;
 
 	case FI_CLASS_RX_CTX:
+	case FI_CLASS_SRX_CTX:
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
@@ -394,24 +395,6 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		case FI_ENABLE:
 			ep = container_of(fid, struct fid_ep, fid);
 			return sock_ctx_enable(ep);
-			break;
-		default:
-			return -FI_ENOSYS;
-		}
-		break;
-
-	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
-		switch (command) {
-		case FI_GETOPSFLAG:
-			ret = sock_getopflags(&tx_ctx->attr, NULL, (uint64_t *) arg);
-			if (ret)
-				return -EINVAL;
-			break;
-		case FI_SETOPSFLAG:
-			ret = sock_setopflags(&tx_ctx->attr, NULL, *(uint64_t *) arg);
-			if (ret)
-				return -EINVAL;
 			break;
 		default:
 			return -FI_ENOSYS;
