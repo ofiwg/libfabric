@@ -218,6 +218,7 @@ operations.  A conceptual description of each operation is provided.
 
 *FI_MIN*
 : Minimum
+
 ```c
 if (buf[i] < addr[i])
     addr[i] = buf[i]
@@ -225,6 +226,7 @@ if (buf[i] < addr[i])
 
 *FI_MAX*
 : Maximum
+
 ```c
 if (buf[i] > addr[i])
     addr[i] = buf[i]
@@ -232,66 +234,77 @@ if (buf[i] > addr[i])
 
 *FI_SUM*
 : Sum
+
 ```c
 addr[i] = addr[i] + buf[i]
 ```
 
 *FI_PROD*
 : Product
+
 ```c
 addr[i] = addr[i] * buf[i]
 ```
 
 *FI_LOR*
 : Logical OR
+
 ```c
 addr[i] = (addr[i] || buf[i])
 ```
 
 *FI_LAND*
 : Logical AND
+
 ```c
 addr[i] = (addr[i] && buf[i])
 ```
 
 *FI_BOR*
 : Bitwise OR
+
 ```c
 addr[i] = addr[i] | buf[i]
 ```
 
 *FI_BAND*
 : Bitwise AND
+
 ```c
 addr[i] = addr[i] & buf[i]
 ```
 
 *FI_LXOR*
 : Logical exclusive-OR (XOR)
+
 ```c
 addr[i] = ((addr[i] && !buf[i]) || (!addr[i] && buf[i]))
 ```
 
 *FI_BXOR*
 : Bitwise exclusive-OR (XOR)
+
 ```c
 addr[i] = addr[i] ^ buf[i]
 ```
 
 *FI_ATOMIC_READ*
 : Read data atomically
+
 ```c
-buf[i] = addr[i]
+result[i] = addr[i]
 ```
 
 *FI_ATOMIC_WRITE*
 : Write data atomically
+
 ```c
 addr[i] = buf[i]
 ```
 
 *FI_CSWAP*
 : Compare values and if equal swap with data
+
 ```c
 if (compare[i] == addr[i])
     addr[i] = buf[i]
@@ -299,6 +312,7 @@ if (compare[i] == addr[i])
 
 *FI_CSWAP_NE*
 : Compare values and if not equal swap with data
+
 ```c
 if (compare[i] != addr[i])
     addr[i] = buf[i]
@@ -306,6 +320,7 @@ if (compare[i] != addr[i])
 
 *FI_CSWAP_LE*
 : Compare values and if less than or equal swap with data
+
 ```c
 if (compare[i] <= addr[i])
     addr[i] = buf[i]
@@ -313,6 +328,7 @@ if (compare[i] <= addr[i])
 
 *FI_CSWAP_LT*
 : Compare values and if less than swap with data
+
 ```c
 if (compare[i] < addr[i])
     addr[i] = buf[i]
@@ -320,6 +336,7 @@ if (compare[i] < addr[i])
 
 *FI_CSWAP_GE*
 : Compare values and if greater than or equal swap with data
+
 ```c
 if (compare[i] >= addr[i])
     addr[i] = buf[i]
@@ -327,6 +344,7 @@ if (compare[i] >= addr[i])
 
 *FI_CSWAP_GT*
 : Compare values and if greater than swap with data
+
 ```c
 if (compare[i] > addr[i])
     addr[i] = buf[i]
@@ -334,6 +352,7 @@ if (compare[i] > addr[i])
 
 *FI_MSWAP*
 : Swap masked bits with data
+
 ```c
 addr[i] = (buf[i] & compare[i]) | (addr[i] & ~compare[i])
 ```
@@ -390,9 +409,9 @@ struct fi_msg_atomic {
 };
 
 struct fi_rma_ioc {
-    uint64_t           addr;         /* target address */
-    size_t             count;        /* # target operands */
-    uint64_t           key;          /* access key */
+	uint64_t           addr;      /* target address */
+	size_t             count;     /* # target operands */
+	uint64_t           key;       /* access key */
 };
 ```
 
@@ -415,6 +434,10 @@ The following list of atomic operations are usable with
 fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
 FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ,
 and FI_ATOMIC_WRITE.
+
+For FI_ATOMIC_READ operations, the source buffer operand (e.g.
+fi_fetch_atomic buf parameter) is ignored and may be NULL.  The results
+are written into the result buffer.
 
 ## Compare-Atomic Functions
 
@@ -521,11 +544,11 @@ dependent macro that atomically writes 8 bytes to an aligned memory location.
 
 ```c
 fi_atomic(ep, buf, count, NULL, dest_addr, addr, key,
-	FI_UINT64, FI_ATOMIC_WRITE, context);
+	  FI_UINT64, FI_ATOMIC_WRITE, context)
 {
 	for (i = 1; i < count; i ++)
 		ATOMIC_WRITE_U64(((uint64_t *) addr)[i],
-			((uint64_t *) buf)[i]);
+				 ((uint64_t *) buf)[i]);
 }
 ```
 
