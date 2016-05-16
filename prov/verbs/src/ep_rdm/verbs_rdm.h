@@ -196,14 +196,13 @@ fi_ibv_rdm_tagged_zero_request(struct fi_ibv_rdm_tagged_request *request)
 void fi_ibv_rdm_tagged_print_request(char *buf,
 				     struct fi_ibv_rdm_tagged_request *request);
 
-typedef short fi_ibv_rdm_buf_status_t;
-#define BUF_STATUS_FREE		((fi_ibv_rdm_buf_status_t) 0)
-#define BUF_STATUS_BUSY		((fi_ibv_rdm_buf_status_t) 1)
-#define BUF_STATUS_RECVED	((fi_ibv_rdm_buf_status_t) 2)
+#define BUF_STATUS_FREE 	((uint16_t) 0)
+#define BUF_STATUS_BUSY 	((uint16_t) 1)
+#define BUF_STATUS_RECVED 	((uint16_t) 2)
 
 struct fi_ibv_rdm_buf_service_data {
-	volatile fi_ibv_rdm_buf_status_t status;
-	short seq_num;
+	volatile uint16_t status;
+	uint16_t seq_num;
 	int pkt_len;
 };
 
@@ -284,7 +283,7 @@ struct fi_ibv_rdm_tagged_conn {
 
 	char *sbuf_mem_reg;
 	struct fi_ibv_rdm_buf *sbuf_head;
-	fi_ibv_rdm_buf_status_t sbuf_ack_status;
+	uint16_t sbuf_ack_status;
 
 	char *rbuf_mem_reg;
 	struct fi_ibv_rdm_buf *rbuf_head;
@@ -310,9 +309,9 @@ struct fi_ibv_rdm_tagged_conn {
 	int sends_outgoing;
 	int recv_preposted;
 	/* counter for eager buffer releasing */
-	short recv_completions;
+	uint16_t recv_completions;
 	/* counter to control OOO behaviour, works in pair with recv_completions */
-	short recv_processed;
+	uint16_t recv_processed;
 	UT_hash_handle hh;
 #if ENABLE_DEBUG
 	size_t unexp_counter;
@@ -327,8 +326,7 @@ struct fi_ibv_rdm_tagged_postponed_entry {
 };
 
 static inline void
-fi_ibv_rdm_set_buffer_status(struct fi_ibv_rdm_buf *buff,
-	fi_ibv_rdm_buf_status_t status)
+fi_ibv_rdm_set_buffer_status(struct fi_ibv_rdm_buf *buff, uint16_t status)
 {
 	buff->service_data.status = status;
 	if (status == BUF_STATUS_FREE) {
@@ -337,7 +335,7 @@ fi_ibv_rdm_set_buffer_status(struct fi_ibv_rdm_buf *buff,
 }
 
 static inline int
-fi_ibv_rdm_buffer_check_seq_num(struct fi_ibv_rdm_buf *buff, short seq_num)
+fi_ibv_rdm_buffer_check_seq_num(struct fi_ibv_rdm_buf *buff, uint16_t seq_num)
 {
 	const int res = (seq_num == buff->service_data.seq_num);
 	VERBS_DBG(FI_LOG_EP_DATA, "seq num: %d <-> %d\n",
@@ -355,7 +353,7 @@ fi_ibv_rdm_get_remote_addr(struct fi_ibv_rdm_tagged_conn *conn,
 
 static inline void
 fi_ibv_rdm_push_buff_pointer(char *area_start, size_t area_size,
-	struct fi_ibv_rdm_buf **rdm_buff, size_t offset)
+			     struct fi_ibv_rdm_buf **rdm_buff, size_t offset)
 {
 	char *buff = (char*)(*rdm_buff);
 	char *buff_tmp = buff + offset;
@@ -371,7 +369,7 @@ fi_ibv_rdm_push_buff_pointer(char *area_start, size_t area_size,
 
 static inline void
 fi_ibv_rdm_push_sbuff_head(struct fi_ibv_rdm_tagged_conn *conn,
-                           struct fi_ibv_rdm_ep *ep)
+			   struct fi_ibv_rdm_ep *ep)
 {
 	fi_ibv_rdm_push_buff_pointer(conn->sbuf_mem_reg,
 				     ep->buff_len * ep->n_buffs,
@@ -389,8 +387,7 @@ fi_ibv_rdm_push_rmabuff_head(struct fi_ibv_rdm_tagged_conn *conn,
 
 static inline struct fi_ibv_rdm_buf *
 fi_ibv_rdm_get_rmabuf(struct fi_ibv_rdm_tagged_conn *conn,
-	struct fi_ibv_rdm_ep *ep,
-	int seq_num)
+		      struct fi_ibv_rdm_ep *ep, uint16_t seq_num)
 {
 	char *rmabuf = conn->rmabuf_mem_reg + (seq_num * ep->buff_len);
 	VERBS_DBG(FI_LOG_EP_DATA, "rma buf %d\n", seq_num);
@@ -399,28 +396,29 @@ fi_ibv_rdm_get_rmabuf(struct fi_ibv_rdm_tagged_conn *conn,
 
 static inline struct fi_ibv_rdm_buf *
 fi_ibv_rdm_get_rbuf(struct fi_ibv_rdm_tagged_conn *conn,
-	struct fi_ibv_rdm_ep *ep,
-	int seq_num)
+		    struct fi_ibv_rdm_ep *ep, uint16_t seq_num)
 {
 	struct fi_ibv_rdm_buf *rbuf = (struct fi_ibv_rdm_buf *)
 		(conn->rbuf_mem_reg + (seq_num * ep->buff_len));
-	VERBS_DBG(FI_LOG_EP_DATA, "recv buf %d <-> %d\n", seq_num, rbuf->service_data.seq_num);
+
+	VERBS_DBG(FI_LOG_EP_DATA, "recv buf %d <-> %d\n",
+		seq_num, rbuf->service_data.seq_num);
+
 	return  rbuf;
 }
 
 static inline struct fi_ibv_rdm_buf *
 fi_ibv_rdm_get_sbuf(struct fi_ibv_rdm_tagged_conn *conn,
-	struct fi_ibv_rdm_ep *ep,
-	int seq_num)
+		    struct fi_ibv_rdm_ep *ep, uint16_t seq_num)
 {
-	char * sbuf = conn->sbuf_mem_reg + (seq_num * ep->buff_len);
+	char *sbuf = conn->sbuf_mem_reg + (seq_num * ep->buff_len);
 	VERBS_DBG(FI_LOG_EP_DATA, "send buf %d\n", seq_num);
-	return (struct fi_ibv_rdm_buf *) sbuf;
+	return (struct fi_ibv_rdm_buf *)sbuf;
 }
 
 static inline void
 fi_ibv_rdm_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
-                                    struct fi_ibv_rdm_ep *ep)
+			     struct fi_ibv_rdm_ep *ep)
 {
 	int i;
 
@@ -438,7 +436,8 @@ fi_ibv_rdm_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
 		fi_ibv_rdm_set_buffer_status(fi_ibv_rdm_get_rbuf(conn, ep, i),
 			BUF_STATUS_FREE);
 		/* should be initialized by sender */
-		fi_ibv_rdm_get_rbuf(conn, ep, i)->service_data.seq_num = -1;
+		fi_ibv_rdm_get_rbuf(conn, ep, i)->service_data.seq_num = 
+			(uint16_t)(-1);
 
 		fi_ibv_rdm_set_buffer_status(fi_ibv_rdm_get_rmabuf(conn, ep, i),
 			BUF_STATUS_FREE);
@@ -532,10 +531,8 @@ fi_ibv_rdm_get_sbuf_head(struct fi_ibv_rdm_tagged_conn *conn,
 #endif // ENABLE_DEBUG
 
 	VERBS_DBG(FI_LOG_EP_DATA,
-		     "conn %p sbuf allocated: %p, head: %p, begin: %p\n",
-		     conn,
-		     sbuf, conn->sbuf_head,
-		     conn->sbuf_mem_reg);
+		"conn %p sbuf allocated: %p, head: %p, begin: %p\n",
+		conn, sbuf, conn->sbuf_head, conn->sbuf_mem_reg);
 
 	return sbuf;
 }

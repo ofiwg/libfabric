@@ -102,9 +102,9 @@ static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 }
 
 static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
-	size_t len, void *desc,
-	fi_addr_t src_addr, uint64_t tag,
-	uint64_t ignore, void *context)
+					  size_t len, void *desc,
+					  fi_addr_t src_addr, uint64_t tag,
+					  uint64_t ignore, void *context)
 {
 	int ret = 0;
 
@@ -116,7 +116,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 	struct fi_ibv_rdm_tagged_conn *conn = (src_addr == FI_ADDR_UNSPEC)
 		? NULL : (struct fi_ibv_rdm_tagged_conn *) src_addr;
 	struct fi_ibv_rdm_ep *ep = container_of(ep_fid,
-		struct fi_ibv_rdm_ep, ep_fid);
+						struct fi_ibv_rdm_ep, ep_fid);
 
 	{
 		struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
@@ -135,7 +135,8 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 		};
 
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
-			FI_IBV_EVENT_RECV_START, &recv_data);
+						 FI_IBV_EVENT_RECV_START,
+						 &recv_data);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, posted_recv %d\n",
@@ -143,7 +144,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 			ep->posted_recvs);
 
 		if (ret || request->state.eager ==
-			FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
+		    FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
 			goto out;
 		}
 	}
@@ -166,9 +167,10 @@ out:
 	return ret;
 }
 
-static ssize_t fi_ibv_rdm_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-	size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-	void *context)
+static ssize_t
+fi_ibv_rdm_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+			size_t count, fi_addr_t src_addr, uint64_t tag,
+			uint64_t ignore, void *context)
 {
 	void *buf = NULL;
 	size_t total_len = 0;
@@ -196,9 +198,8 @@ static ssize_t fi_ibv_rdm_tagged_recvv(struct fid_ep *ep, const struct iovec *io
 	}
 
 	return fi_ibv_rdm_tagged_recvfrom(ep, buf, total_len,
-		desc ? desc[0] : NULL,
-		src_addr, tag, ignore,
-		context);
+					  desc ? desc[0] : NULL,
+					  src_addr, tag, ignore, context);
 }
 
 static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
@@ -281,8 +282,9 @@ static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
 		}
 	} else {
 		ret = fi_ibv_rdm_tagged_recvv(ep_fid, msg->msg_iov, msg->desc,
-			msg->iov_count, msg->addr, msg->tag, msg->ignore,
-			msg->context);
+					      msg->iov_count, msg->addr,
+					      msg->tag, msg->ignore,
+					      msg->context);
 	}
 	return ret;
 }
@@ -334,7 +336,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 			rdm_sbuf->header.tag = tag;
 			rdm_sbuf->header.service_tag = 0;
 			FI_IBV_RDM_SET_PKTTYPE(rdm_sbuf->header.service_tag,
-				FI_IBV_RDM_EAGER_PKT);
+					       FI_IBV_RDM_EAGER_PKT);
 			if ((len > 0) && (buf)) {
 				memcpy(payload, buf, len);
 			}
@@ -388,10 +390,9 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 }
 
 static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
-	size_t len, void *desc,
-	uint64_t data,
-	fi_addr_t dest_addr, uint64_t tag,
-	void *context)
+					    size_t len, void *desc,
+					    uint64_t data, fi_addr_t dest_addr,
+					    uint64_t tag, void *context)
 {
 	struct fi_ibv_rdm_tagged_send_start_data sdata = {
 		.ep_rdm = container_of(fid, struct fi_ibv_rdm_ep, ep_fid),
@@ -409,17 +410,18 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 }
 
 static ssize_t fi_ibv_rdm_tagged_sendto(struct fid_ep *fid, const void *buf,
-	size_t len, void *desc,
-	fi_addr_t dest_addr,
-	uint64_t tag, void *context)
+					size_t len, void *desc,
+					fi_addr_t dest_addr, uint64_t tag,
+					void *context)
 {
 	return fi_ibv_rdm_tagged_senddatato(fid, buf, len, desc, 0, dest_addr,
-		tag, context);
+					    tag, context);
 }
 
 static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
-	const struct iovec *iov, void **desc, size_t count, fi_addr_t dest_addr,
-	uint64_t tag, void *context)
+				       const struct iovec *iov, void **desc,
+				       size_t count, fi_addr_t dest_addr,
+				       uint64_t tag, void *context)
 {
 	struct fi_ibv_rdm_tagged_send_start_data sdata = {
 		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
@@ -691,7 +693,7 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 		for (i = 0; i < ret; ++i) {
 			err &= fi_ibv_rdm_process_recv_wc(ep, &wc[i]);
 		}
-	} while (ret == wc_count);
+	} while (!err && ret == wc_count);
 
 	if (!err && ret >= 0) {
 		return FI_SUCCESS;
