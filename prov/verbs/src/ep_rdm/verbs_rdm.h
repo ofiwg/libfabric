@@ -337,10 +337,9 @@ fi_ibv_rdm_set_buffer_status(struct fi_ibv_rdm_buf *buff, uint16_t status)
 static inline int
 fi_ibv_rdm_buffer_check_seq_num(struct fi_ibv_rdm_buf *buff, uint16_t seq_num)
 {
-	const int res = (seq_num == buff->service_data.seq_num);
 	VERBS_DBG(FI_LOG_EP_DATA, "seq num: %d <-> %d\n",
 		buff->service_data.seq_num, seq_num);
-	return res;
+	return (seq_num == buff->service_data.seq_num);
 }
 
 static inline uintptr_t

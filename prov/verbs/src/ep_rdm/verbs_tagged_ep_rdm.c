@@ -655,7 +655,7 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 				conn, rbuf->service_data.seq_num);
 
 			fi_ibv_rdm_set_buffer_status(rbuf, BUF_STATUS_FREE);
-			rbuf->service_data.seq_num = -1;
+			rbuf->service_data.seq_num = (uint16_t)(-1);
 
 			conn->recv_processed++;
 			if (conn->recv_processed & ep->n_buffs) {
