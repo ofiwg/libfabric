@@ -86,27 +86,37 @@ void fi_fabric_remove(struct util_fabric *fabric)
 	fastlock_release(&lock);
 }
 
-int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
- 		    struct fid *fid)
-{
-	struct fid_list_entry *entry;
-
-	entry = calloc(1, sizeof(*entry));
-	if (!entry)
-		return -FI_ENOMEM;
-
-	fastlock_acquire(lock);
-	entry->fid = fid;
-	dlist_insert_tail(&entry->entry, fid_list);
-	fastlock_release(lock);
-	return 0;
-}
 
 static int fi_fid_match(struct dlist_entry *entry, const void *fid)
 {
 	struct fid_list_entry *item;
 	item = container_of(entry, struct fid_list_entry, entry);
 	return (item->fid == fid);
+}
+
+int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
+		    struct fid *fid)
+{
+	int ret = 0;
+	struct dlist_entry *entry;
+	struct fid_list_entry *item;
+
+	fastlock_acquire(lock);
+	entry = dlist_find_first_match(fid_list, fi_fid_match, fid);
+	if (entry)
+		goto out;
+
+	item = calloc(1, sizeof(*item));
+	if (!item) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	item->fid = fid;
+	dlist_insert_tail(&item->entry, fid_list);
+out:
+	fastlock_release(lock);
+	return ret;
 }
 
 void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
