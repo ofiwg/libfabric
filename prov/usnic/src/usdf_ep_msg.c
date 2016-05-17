@@ -552,43 +552,6 @@ usdf_ep_msg_enable(struct fid_ep *fep)
 	return usdf_ep_msg_get_queues(ep_ftou(fep));
 }
 
-static int
-usdf_ep_msg_getopt(fid_t fid, int level, int optname,
-		  void *optval, size_t *optlen)
-{
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-
-	if (level != FI_OPT_ENDPOINT)
-		return -FI_ENOPROTOOPT;
-
-	switch (optname) {
-	case FI_OPT_CM_DATA_SIZE:
-		if (*optlen < sizeof(size_t))
-			return -FI_ETOOSMALL;
-		*((size_t *) optval) = USDF_MAX_CONN_DATA;
-		*optlen = sizeof(size_t);
-		break;
-	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-
-	return FI_SUCCESS;
-}
-
-static int
-usdf_ep_msg_setopt(fid_t fid, int level, int optname,
-		  const void *optval, size_t optlen)
-{
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-
-	switch (optname) {
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-}
-
 static ssize_t
 usdf_ep_msg_cancel(fid_t fid, void *context)
 {
@@ -829,7 +792,7 @@ usdf_ep_msg_close(fid_t fid)
 		atomic_dec(&ep->ep_eq->eq_refcnt);
 	}
 	usdf_timer_free(ep->ep_domain->dom_fabric, ep->e.msg.ep_ack_timer);
-	
+
 	free(ep);
 	return 0;
 }
@@ -837,8 +800,8 @@ usdf_ep_msg_close(fid_t fid)
 static struct fi_ops_ep usdf_base_msg_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = usdf_ep_msg_cancel,
-	.getopt = usdf_ep_msg_getopt,
-	.setopt = usdf_ep_msg_setopt,
+	.getopt = usdf_ep_getopt_connected,
+	.setopt = usdf_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = usdf_msg_rx_size_left,
