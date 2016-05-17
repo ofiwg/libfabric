@@ -64,7 +64,7 @@
 #include "usdf_av.h"
 #include "usdf_cm.h"
 
-static void
+void
 usdf_cm_msg_connreq_cleanup(struct usdf_connreq *crp)
 {
 	struct usdf_ep *ep;
@@ -282,10 +282,17 @@ usdf_cm_msg_connect_cb_rd(void *v)
 
 	/* if resid is 0 now, completely done */
 	if (crp->cr_resid == 0) {
+		reqp->creq_result = ntohl(reqp->creq_result);
+
 		ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_DEL,
 				crp->cr_sockfd, NULL);
 		close(crp->cr_sockfd);
 		crp->cr_sockfd = -1;
+
+		if (reqp->creq_result != FI_SUCCESS) {
+			usdf_cm_msg_connreq_failed(crp, reqp->creq_result);
+			return 0;
+		}
 
 		entry_len = sizeof(*entry) + reqp->creq_datalen;
 		entry = malloc(entry_len);

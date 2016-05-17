@@ -336,6 +336,101 @@ usdf_pep_listen(struct fid_pep *fpep)
 	return 0;
 }
 
+/* Register as a callback triggered by the socket becoming writeable. Write as
+ * much data as can be written in a single write, and keep track of how much
+ * data is left. If the data is not fully written, it will finish getting
+ * written in another iteration of the progression.
+ */
+static int usdf_pep_reject_async(void *vreq)
+{
+	struct usdf_connreq *crp;
+	struct usdf_eq *eq;
+	int ret;
+
+	crp = vreq;
+	eq = crp->cr_pep->pep_eq;
+
+	do {
+		ret = write(crp->cr_sockfd, crp->cr_ptr, crp->cr_resid);
+	} while ((ret < 0) && (errno == EINTR));
+
+	if ((ret <= 0) && (errno != EAGAIN)) {
+		USDF_DBG_SYS(EP_CTRL, "write failed: %s\n",
+				strerror(errno));
+		usdf_cm_msg_connreq_failed(crp, -errno);
+		return -errno;
+	}
+
+	crp->cr_resid -= ret;
+	crp->cr_ptr += ret;
+
+	if (crp->cr_resid == 0)
+		usdf_cm_msg_connreq_cleanup(crp);
+
+	return FI_SUCCESS;
+}
+
+static int usdf_pep_reject(struct fid_pep *fpep, fid_t handle, const void *param,
+		size_t paramlen)
+{
+	struct usdf_pep *pep;
+	struct usdf_connreq *crp;
+	struct epoll_event event;
+	struct usdf_connreq_msg *reqp;
+	int ret;
+
+	if (paramlen > USDF_MAX_CONN_DATA) {
+		USDF_WARN_SYS(EP_CTRL,
+				"reject payload size %zu exceeds max %zu\n",
+				paramlen, USDF_MAX_CONN_DATA);
+		return -FI_EINVAL;
+	}
+
+	if (!fpep || !handle) {
+		USDF_WARN_SYS(EP_CTRL,
+				"handle and passive ep needed for reject\n");
+		return -FI_EINVAL;
+	}
+
+	if (!param && paramlen > 0) {
+		USDF_WARN_SYS(EP_CTRL,
+				"NULL data pointer with non-zero data length\n");
+		return -FI_EINVAL;
+	}
+
+	/* usdf_pep_conn_info stashed the pep pointer into the handle field of
+	 * the info struct previously returned
+	 */
+	crp = (struct usdf_connreq *) handle;
+	pep = pep_ftou(fpep);
+
+	crp->cr_ptr = crp->cr_data;
+	crp->cr_resid = sizeof(*reqp) + paramlen;
+
+	reqp = (struct usdf_connreq_msg *) crp->cr_data;
+
+	/* The result field is used on the remote end to detect whether the
+	 * connection succeeded or failed.
+	 */
+	reqp->creq_result = htonl(-FI_ECONNREFUSED);
+	reqp->creq_datalen = htonl(paramlen);
+	memcpy(reqp->creq_data, param, paramlen);
+
+	crp->cr_pollitem.pi_rtn = usdf_pep_reject_async;
+	crp->cr_pollitem.pi_context = crp;
+
+	event.events = EPOLLOUT;
+	event.data.ptr = &crp->cr_pollitem;
+
+	ret = epoll_ctl(pep->pep_fabric->fab_epollfd, EPOLL_CTL_ADD,
+			crp->cr_sockfd, &event);
+
+	if (ret)
+		return -errno;
+
+	return FI_SUCCESS;
+}
+
 static void
 usdf_pep_free_cr_lists(struct usdf_pep *pep)
 {
@@ -513,7 +608,7 @@ static struct fi_ops_cm usdf_pep_cm_ops = {
 	.connect = fi_no_connect,
 	.listen = usdf_pep_listen,
 	.accept = fi_no_accept,
-	.reject = fi_no_reject,
+	.reject = usdf_pep_reject,
 	.shutdown = fi_no_shutdown,
 };
 
