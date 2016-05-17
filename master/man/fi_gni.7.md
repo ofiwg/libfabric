@@ -105,8 +105,9 @@ All *FI_TAGGED* operations are supported except `fi_tinjectdata`.
 The GNI provider exposes low-level tuning parameters via a domain and
 endpoint `fi_open_ops` interface named *FI_GNI_DOMAIN_OPS_1* and
 *FI_GNI_EP_OPS_1*.  The flags parameter is currently ignored.  The
-fi_open_ops function takes either a `struct fi_gni_ops_domain` or a
-`struct fi_gni_ops_ep` parameter and populates it with the following:
+fi_open_ops function takes a `struct fi_gni_ops_domain` or a
+`struct fi_gni_ops_ep` parameter respectively and populates it with
+the following:
 
 ```c
 struct fi_gni_ops_domain {
@@ -117,6 +118,12 @@ struct fi_gni_ops_domain {
 struct fi_gni_ops_ep {
 	int (*set_val)(struct fid *fid, dom_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, dom_ops_val_t t, void *val);
+        size_t (*native_amo)(struct fid_ep *ep, const void *buf,
+                             size_t count,void *desc,
+                             fi_addr_t dest_addr, uint64_t addr,
+                             uint64_t key, enum fi_datatype datatype,
+                             enum gnix_fab_req_type req_type,
+                             void *context);
 };
 ```
 
@@ -182,6 +189,16 @@ For *FI_GNI_EP_OPS_1*, the currently supported values are:
 *GNI_HASH_TAG_IMPL*
 : Use a hashlist for the tag list implementation.  The value is of type uint32_t.
 
+The `native_amo` function allows the user to call GNI native atomics
+that are not implemented in the libfabric API.
+The parameters for native_amo are the same as the fi_atomic function
+but adds the following parameter:
+
+*enum gnix_fab_req_type req_type*
+: The req_type's supported with this call are GNIX_FAB_RQ_NAMO_AX
+ (AND and XOR), and GNIX_FAB_RQ_NAMO_AX_S (AND and XOR 32 bit),
+GNIX_FAB_RQ_NAMO_FAX (Fetch AND and XOR) and GNIX_FAB_RQ_NAMO_FAX_S
+ (Fetch AND and XOR 32 bit).
 
 # SEE ALSO
 
@@ -189,6 +206,7 @@ For *FI_GNI_EP_OPS_1*, the currently supported values are:
 [`fi_open_ops`(3)](fi_open_ops.3.html),
 [`fi_provider`(7)](fi_provider.7.html),
 [`fi_getinfo`(3)](fi_getinfo.3.html)
+[`fi_atomic`(3)](fi_atomic.3.html)
 
 For more information on uGNI, see *Using the GNI and DMAPP APIs*
 (S-2446-3103, Cray Inc.).  For more information on the GNI provider,
