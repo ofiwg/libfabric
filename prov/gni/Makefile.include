@@ -110,6 +110,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/api_cq.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
+	prov/gni/test/vc_lookup.c \
 	prov/gni/test/vector.c \
 	prov/gni/test/wait.c \
 	prov/gni/test/common.c
