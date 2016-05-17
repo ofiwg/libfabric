@@ -245,7 +245,11 @@ static int __gnix_cmp_amo_cmds[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST] = {
 int _gnix_atomic_cmd(enum fi_datatype dt, enum fi_op op,
 		     enum gnix_fab_req_type fr_type)
 {
-	if (dt >= FI_DATATYPE_LAST || op >= FI_ATOMIC_OP_LAST) {
+	if (!((fr_type == GNIX_FAB_RQ_NAMO_AX)   ||
+	      (fr_type == GNIX_FAB_RQ_NAMO_FAX)  ||
+	      (fr_type == GNIX_FAB_RQ_NAMO_AX_S) ||
+	      (fr_type == GNIX_FAB_RQ_NAMO_FAX_S)) &&
+	    (dt >= FI_DATATYPE_LAST || op >= FI_ATOMIC_OP_LAST)) {
 		return -FI_ENOENT;
 	}
 
@@ -256,6 +260,14 @@ int _gnix_atomic_cmd(enum fi_datatype dt, enum fi_op op,
 		return __gnix_fetch_amo_cmds[op][dt] ?: -FI_ENOENT;
 	case GNIX_FAB_RQ_CAMO:
 		return __gnix_cmp_amo_cmds[op][dt] ?: -FI_ENOENT;
+	case GNIX_FAB_RQ_NAMO_AX:
+		return GNI_FMA_ATOMIC2_AX;
+	case GNIX_FAB_RQ_NAMO_AX_S:
+		return GNI_FMA_ATOMIC2_AX_S;
+	case GNIX_FAB_RQ_NAMO_FAX:
+		return GNI_FMA_ATOMIC2_FAX;
+	case GNIX_FAB_RQ_NAMO_FAX_S:
+		return GNI_FMA_ATOMIC2_FAX_S;
 	default:
 		break;
 	}
@@ -327,6 +339,10 @@ int _gnix_amo_post_req(void *data)
 	txd->gni_desc.first_operand = fab_req->amo.first_operand;
 	txd->gni_desc.second_operand = fab_req->amo.second_operand;
 
+	GNIX_DEBUG(FI_LOG_EP_DATA, "fo:%016lx so:%016lx\n",
+		   txd->gni_desc.first_operand, txd->gni_desc.second_operand);
+	GNIX_DEBUG(FI_LOG_EP_DATA, "amo_cmd:%x\n",
+		   txd->gni_desc.amo_cmd);
 	GNIX_LOG_DUMP_TXD(txd);
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
@@ -409,7 +425,10 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	}
 
 	/* need a memory descriptor for all fetching and comparison AMOs */
-	if (fr_type == GNIX_FAB_RQ_FAMO || fr_type == GNIX_FAB_RQ_CAMO) {
+	if (fr_type == GNIX_FAB_RQ_FAMO ||
+	    fr_type == GNIX_FAB_RQ_CAMO ||
+	    fr_type == GNIX_FAB_RQ_NAMO_FAX ||
+	    fr_type == GNIX_FAB_RQ_NAMO_FAX_S) {
 		if (!resultv || !resultv[0].addr || result_count != 1)
 			return -FI_EINVAL;
 
@@ -470,7 +489,15 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	req->amo.loc_md = (void *)md;
 	req->amo.loc_addr = (uint64_t)loc_addr;
 
-	if (msg->op == FI_ATOMIC_READ) {
+	if ((fr_type == GNIX_FAB_RQ_NAMO_AX)   ||
+	    (fr_type == GNIX_FAB_RQ_NAMO_FAX)  ||
+	    (fr_type == GNIX_FAB_RQ_NAMO_AX_S) ||
+	    (fr_type == GNIX_FAB_RQ_NAMO_FAX_S)) {
+		req->amo.first_operand =
+			*(uint64_t *)msg->msg_iov[0].addr;
+		req->amo.second_operand =
+			*((uint64_t *)(msg->msg_iov[0].addr) + 1);
+	} else if (msg->op == FI_ATOMIC_READ) {
 		/* Atomic reads are the only AMO which write to the operand
 		 * buffer.  It's assumed that this is in addition to writing
 		 * fetched data to the result buffer.  Make the NIC write to

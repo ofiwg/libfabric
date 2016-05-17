@@ -824,6 +824,49 @@ DIRECT_FN STATIC int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
 		0 : -FI_ENOENT;
 }
 
+size_t
+__gnix_fabric_ops_native_amo(struct fid_ep *ep, const void *buf, size_t count,
+			 void *desc, void *result, void *result_desc,
+				    fi_addr_t dest_addr,
+				    uint64_t addr, uint64_t key,
+				    enum fi_datatype datatype,
+				    enum gnix_fab_req_type req_type,
+				    void *context)
+{
+	struct gnix_fid_ep *gnix_ep;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	struct fi_ioc result_iov;
+	uint64_t flags;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.context = context;
+	result_iov.addr = result;
+	result_iov.count = 1;
+
+	flags = gnix_ep->op_flags | GNIX_ATOMIC_WRITE_FLAGS_DEF;
+
+	return _gnix_atomic(gnix_ep, req_type, &msg, NULL,
+			    NULL, 0, &result_iov, &result_desc, 1, flags);
+}
+
 DIRECT_FN STATIC ssize_t
 gnix_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 		     void *desc, fi_addr_t dest_addr, uint64_t addr,
@@ -1983,7 +2026,7 @@ ssize_t gnix_cancel(fid_t fid, void *context)
 }
 
 static int
-__gnix_ep_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
+__gnix_ep_ops_get_val(struct fid *fid, ep_ops_val_t t, void *val)
 {
 	struct gnix_fid_ep *ep;
 
@@ -2012,7 +2055,7 @@ __gnix_ep_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 }
 
 static int
-__gnix_ep_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
+__gnix_ep_ops_set_val(struct fid *fid, ep_ops_val_t t, void *val)
 {
 	struct gnix_fid_ep *ep;
 	int v;
@@ -2063,9 +2106,10 @@ __gnix_ep_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 	return FI_SUCCESS;
 }
 
-static struct fi_gni_ops_domain gnix_ops_ep = {
+static struct fi_gni_ops_ep gnix_ops_ep = {
 	.set_val = __gnix_ep_ops_set_val,
-	.get_val = __gnix_ep_ops_get_val
+	.get_val = __gnix_ep_ops_get_val,
+	.native_amo = __gnix_fabric_ops_native_amo
 };
 
 static int
