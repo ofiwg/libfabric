@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2016\-03\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2016\-05\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -96,9 +96,9 @@ The GNI provider exposes low\-level tuning parameters via a domain and
 endpoint \f[C]fi_open_ops\f[] interface named
 \f[I]FI_GNI_DOMAIN_OPS_1\f[] and \f[I]FI_GNI_EP_OPS_1\f[].
 The flags parameter is currently ignored.
-The fi_open_ops function takes either a
-\f[C]struct\ fi_gni_ops_domain\f[] or a \f[C]struct\ fi_gni_ops_ep\f[]
-parameter and populates it with the following:
+The fi_open_ops function takes a \f[C]struct\ fi_gni_ops_domain\f[] or a
+\f[C]struct\ fi_gni_ops_ep\f[] parameter respectively and populates it
+with the following:
 .IP
 .nf
 \f[C]
@@ -110,6 +110,12 @@ struct\ fi_gni_ops_domain\ {
 struct\ fi_gni_ops_ep\ {
 \ \ \ \ int\ (*set_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
 \ \ \ \ int\ (*get_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
+\ \ \ \ \ \ \ \ size_t\ (*native_amo)(struct\ fid_ep\ *ep,\ const\ void\ *buf,
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ size_t\ count,void\ *desc,
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ fi_addr_t\ dest_addr,\ uint64_t\ addr,
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ uint64_t\ key,\ enum\ fi_datatype\ datatype,
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ enum\ gnix_fab_req_type\ req_type,
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void\ *context);
 };
 \f[]
 .fi
@@ -176,10 +182,20 @@ For \f[I]FI_GNI_EP_OPS_1\f[], the currently supported values are:
 \f[I]GNI_HASH_TAG_IMPL\f[] : Use a hashlist for the tag list
 implementation.
 The value is of type uint32_t.
+.PP
+The \f[C]native_amo\f[] function allows the user to call GNI native
+atomics that are not implemented in the libfabric API.
+The parameters for native_amo are the same as the fi_atomic function but
+adds the following parameter:
+.PP
+\f[I]enum gnix_fab_req_type req_type\f[] : The req_type\[aq]s supported
+with this call are GNIX_FAB_RQ_NAMO_AX (AND and XOR), and
+GNIX_FAB_RQ_NAMO_AX_S (AND and XOR 32 bit), GNIX_FAB_RQ_NAMO_FAX (Fetch
+AND and XOR) and GNIX_FAB_RQ_NAMO_FAX_S (Fetch AND and XOR 32 bit).
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
-\f[C]fi_getinfo\f[](3)
+\f[C]fi_getinfo\f[](3) \f[C]fi_atomic\f[](3)
 .PP
 For more information on uGNI, see \f[I]Using the GNI and DMAPP APIs\f[]
 (S\-2446\-3103, Cray Inc.).
