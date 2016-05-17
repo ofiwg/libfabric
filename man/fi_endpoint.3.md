@@ -23,7 +23,7 @@ fi_pep_bind
 :   Associate a passive endpoint with an event queue
 
 fi_enable
-:   Transitions an endpoint into an active state.
+:   Transitions an active endpoint into an enabled state.
 
 fi_cancel
 :   Cancel a pending asynchronous data transfer
@@ -176,7 +176,7 @@ data are submitted to the receive queue.
 Active endpoints are created in the disabled state.  They must
 transition into an enabled state before accepting data transfer
 operations, including posting of receive buffers.  The fi_enable call
-is used to transition an endpoint into an active enabled state.  The
+is used to transition an active endpoint into an enabled state.  The
 fi_connect and fi_accept calls will also transition an endpoint into
 the enabled state, if it is not already active.
 
