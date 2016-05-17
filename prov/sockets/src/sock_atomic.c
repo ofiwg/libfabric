@@ -76,7 +76,8 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		tx_ctx = sock_ep->attr->tx_ctx;
+		tx_ctx = sock_ep->attr->tx_ctx->use_shared ?
+			sock_ep->attr->tx_ctx->stx_ctx : sock_ep->attr->tx_ctx;
 		ep_attr = sock_ep->attr;
 		op_flags = sock_ep->tx_attr.op_flags;
 		break;

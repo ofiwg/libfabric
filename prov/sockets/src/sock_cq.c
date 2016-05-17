@@ -49,6 +49,53 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_CQ, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
 
+void sock_cq_add_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx)
+{
+	struct dlist_entry *entry;
+	struct sock_tx_ctx *curr_ctx;
+	fastlock_acquire(&cq->list_lock);
+	for (entry = cq->tx_list.next; entry != &cq->tx_list;
+	     entry = entry->next) {
+		curr_ctx = container_of(entry, struct sock_tx_ctx, cq_entry);
+		if (tx_ctx == curr_ctx)
+			goto out;
+	}
+	dlist_insert_tail(&tx_ctx->cq_entry, &cq->tx_list);
+out:
+	fastlock_release(&cq->list_lock);
+}
+
+void sock_cq_remove_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx)
+{
+		fastlock_acquire(&cq->list_lock);
+		dlist_remove(&tx_ctx->cq_entry);
+		fastlock_release(&cq->list_lock);
+}
+
+void sock_cq_add_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx)
+{
+	struct dlist_entry *entry;
+	struct sock_rx_ctx *curr_ctx;
+	fastlock_acquire(&cq->list_lock);
+
+	for (entry = cq->rx_list.next; entry != &cq->rx_list;
+	     entry = entry->next) {
+		curr_ctx = container_of(entry, struct sock_rx_ctx, cq_entry);
+		if (rx_ctx == curr_ctx)
+			goto out;
+	}
+	dlist_insert_tail(&rx_ctx->cq_entry, &cq->rx_list);
+out:
+	fastlock_release(&cq->list_lock);
+}
+
+void sock_cq_remove_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx)
+{
+		fastlock_acquire(&cq->list_lock);
+		dlist_remove(&rx_ctx->cq_entry);
+		fastlock_release(&cq->list_lock);
+}
+
 int sock_cq_progress(struct sock_cq *cq)
 {
 	struct sock_tx_ctx *tx_ctx;
@@ -62,13 +109,19 @@ int sock_cq_progress(struct sock_cq *cq)
 	for (entry = cq->tx_list.next; entry != &cq->tx_list;
 	     entry = entry->next) {
 		tx_ctx = container_of(entry, struct sock_tx_ctx, cq_entry);
-		sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx);
+		if (tx_ctx->use_shared)
+			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx->stx_ctx);
+		else
+			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx);		      
 	}
 
 	for (entry = cq->rx_list.next; entry != &cq->rx_list;
 	     entry = entry->next) {
 		rx_ctx = container_of(entry, struct sock_rx_ctx, cq_entry);
-		sock_pe_progress_rx_ctx(cq->domain->pe, rx_ctx);
+		if (rx_ctx->use_shared)
+			sock_pe_progress_rx_ctx(cq->domain->pe, rx_ctx->srx_ctx);
+		else
+			sock_pe_progress_rx_ctx(cq->domain->pe, rx_ctx);
 	}
 	fastlock_release(&cq->list_lock);
 

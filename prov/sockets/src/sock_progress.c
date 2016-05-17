@@ -2197,7 +2197,7 @@ static void sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 		pe_entry->addr = conn->av_index;
 
 	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX)
-		pe_entry->comp = &ep_attr->comp;
+		pe_entry->comp = &ep_attr->rx_ctx->comp;
 	else
 		pe_entry->comp = &rx_ctx->comp;
 
@@ -2248,7 +2248,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	}
 
 	if (ep_attr && tx_ctx->fclass == FI_CLASS_STX_CTX)
-		pe_entry->comp = &ep_attr->comp;
+		pe_entry->comp = &ep_attr->tx_ctx->comp;
 	else
 		pe_entry->comp = &tx_ctx->comp;
 
@@ -2404,18 +2404,37 @@ void sock_pe_poll_add(struct sock_pe *pe, int fd)
 
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
 {
+	struct dlist_entry *entry;
+	struct sock_tx_ctx *curr_ctx;
 	pthread_mutex_lock(&pe->list_lock);
+	for (entry = pe->tx_list.next; entry != &pe->tx_list;
+	     entry = entry->next) {
+		curr_ctx = container_of(entry, struct sock_tx_ctx, pe_entry);
+		if (curr_ctx == ctx)
+			goto out;
+	}
+
 	dlist_insert_tail(&ctx->pe_entry, &pe->tx_list);
 	sock_pe_signal(pe);
+out:
 	pthread_mutex_unlock(&pe->list_lock);
 	SOCK_LOG_DBG("TX ctx added to PE\n");
 }
 
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx)
 {
+	struct dlist_entry *entry;
+	struct sock_rx_ctx *curr_ctx;
 	pthread_mutex_lock(&pe->list_lock);
+	for (entry = pe->rx_list.next; entry != &pe->rx_list;
+	     entry = entry->next) {
+		curr_ctx = container_of(entry, struct sock_rx_ctx, pe_entry);
+		if (curr_ctx == ctx)
+			goto out;
+	}
 	dlist_insert_tail(&ctx->pe_entry, &pe->rx_list);
 	sock_pe_signal(pe);
+out:
 	pthread_mutex_unlock(&pe->list_lock);
 	SOCK_LOG_DBG("RX ctx added to PE\n");
 }

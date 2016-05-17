@@ -41,6 +41,8 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#include <fi_util.h>
+
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
@@ -51,11 +53,43 @@ const struct fi_cntr_attr sock_cntr_attr = {
 	.flags = 0,
 };
 
+void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
+{
+	int ret;
+	struct fid *fid = &tx_ctx->fid.ctx.fid;
+	ret = fid_list_insert(&cntr->tx_list, &cntr->list_lock, fid);
+	if (ret)
+		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
+}
+
+void sock_cntr_remove_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
+{
+	struct fid *fid = &tx_ctx->fid.ctx.fid;
+	fid_list_remove(&cntr->tx_list, &cntr->list_lock, fid);
+}
+
+void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
+{
+	int ret;
+	struct fid *fid = &rx_ctx->ctx.fid;
+	ret = fid_list_insert(&cntr->rx_list, &cntr->list_lock, fid);
+	if (ret)
+		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
+}
+
+void sock_cntr_remove_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
+{
+	struct fid *fid = &rx_ctx->ctx.fid;
+	fid_list_remove(&cntr->rx_list, &cntr->list_lock, fid);
+}
+
 int sock_cntr_progress(struct sock_cntr *cntr)
 {
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 	struct dlist_entry *entry;
+
+	struct fid_list_entry *fid_entry;
 
 	if (cntr->domain->progress_mode == FI_PROGRESS_AUTO)
 		return 0;
@@ -63,17 +97,25 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 	fastlock_acquire(&cntr->list_lock);
 	for (entry = cntr->tx_list.next; entry != &cntr->tx_list;
 	     entry = entry->next) {
-		tx_ctx = container_of(entry, struct sock_tx_ctx, cntr_entry);
-		sock_pe_progress_tx_ctx(cntr->domain->pe, tx_ctx);
+		fid_entry = container_of(entry, struct fid_list_entry, entry);
+		tx_ctx = container_of(fid_entry->fid, struct sock_tx_ctx, fid.ctx.fid);
+		if (tx_ctx->use_shared)
+			sock_pe_progress_tx_ctx(cntr->domain->pe, tx_ctx->stx_ctx);
+		else
+			sock_pe_progress_tx_ctx(cntr->domain->pe, tx_ctx);
 	}
 
 	for (entry = cntr->rx_list.next; entry != &cntr->rx_list;
 	     entry = entry->next) {
-		rx_ctx = container_of(entry, struct sock_rx_ctx, cntr_entry);
-		sock_pe_progress_rx_ctx(cntr->domain->pe, rx_ctx);
+		fid_entry = container_of(entry, struct fid_list_entry, entry);
+		rx_ctx = container_of(fid_entry->fid, struct sock_rx_ctx, ctx.fid);
+		if (rx_ctx->use_shared)
+			sock_pe_progress_rx_ctx(cntr->domain->pe, rx_ctx->srx_ctx);
+		else
+			sock_pe_progress_rx_ctx(cntr->domain->pe, rx_ctx);
 	}
-	fastlock_release(&cntr->list_lock);
 
+	fastlock_release(&cntr->list_lock);
 	return 0;
 }
 

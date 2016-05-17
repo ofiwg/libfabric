@@ -42,7 +42,7 @@
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
-					void *context)
+				      void *context, int use_shared)
 {
 	struct sock_rx_ctx *rx_ctx;
 	rx_ctx = calloc(1, sizeof(*rx_ctx));
@@ -50,7 +50,6 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
 		return NULL;
 
 	dlist_init(&rx_ctx->cq_entry);
-	dlist_init(&rx_ctx->cntr_entry);
 	dlist_init(&rx_ctx->pe_entry);
 
 	dlist_init(&rx_ctx->pe_entry_list);
@@ -64,6 +63,7 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
 	rx_ctx->ctx.fid.context = context;
 	rx_ctx->num_left = attr->size;
 	rx_ctx->attr = *attr;
+	rx_ctx->use_shared = use_shared;
 	return rx_ctx;
 }
 
@@ -75,7 +75,8 @@ void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx)
 }
 
 static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
-					     void *context, size_t fclass)
+						 void *context, int use_shared,
+						 size_t fclass)
 {
 	struct sock_tx_ctx *tx_ctx;
 	struct fi_rx_attr rx_attr = {0};
@@ -84,13 +85,12 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	if (!tx_ctx)
 		return NULL;
 
-	if (rbinit(&tx_ctx->rb,
-		(attr->size) ? attr->size * SOCK_EP_TX_ENTRY_SZ :
-		SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ))
+	if (!use_shared && rbinit(&tx_ctx->rb,
+				 (attr->size) ? attr->size * SOCK_EP_TX_ENTRY_SZ :
+				 SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ))
 		goto err;
 
 	dlist_init(&tx_ctx->cq_entry);
-	dlist_init(&tx_ctx->cntr_entry);
 	dlist_init(&tx_ctx->pe_entry);
 
 	dlist_init(&tx_ctx->pe_entry_list);
@@ -105,6 +105,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 		tx_ctx->fid.ctx.fid.fclass = FI_CLASS_TX_CTX;
 		tx_ctx->fid.ctx.fid.context = context;
 		tx_ctx->fclass = FI_CLASS_TX_CTX;
+		tx_ctx->use_shared = use_shared;
 		break;
 	case FI_CLASS_STX_CTX:
 		tx_ctx->fid.stx.fid.fclass = FI_CLASS_STX_CTX;
@@ -117,10 +118,12 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	tx_ctx->attr = *attr;
 	tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 
-	tx_ctx->rx_ctrl_ctx = sock_rx_ctx_alloc(&rx_attr, NULL);
-	if (!tx_ctx->rx_ctrl_ctx)
-		goto err;
-	tx_ctx->rx_ctrl_ctx->is_ctrl_ctx = 1;
+	if (!use_shared) {
+		tx_ctx->rx_ctrl_ctx = sock_rx_ctx_alloc(&rx_attr, NULL, 0);
+		if (!tx_ctx->rx_ctrl_ctx)
+			goto err;
+		tx_ctx->rx_ctrl_ctx->is_ctrl_ctx = 1;
+	}
 	return tx_ctx;
 
 err:
@@ -130,15 +133,15 @@ err:
 
 
 struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr,
-					void *context)
+				      void *context, int use_shared)
 {
-	return sock_tx_context_alloc(attr, context, FI_CLASS_TX_CTX);
+	return sock_tx_context_alloc(attr, context, use_shared, FI_CLASS_TX_CTX);
 }
 
 struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr,
 					void *context)
 {
-	return sock_tx_context_alloc(attr, context, FI_CLASS_STX_CTX);
+	return sock_tx_context_alloc(attr, context, 0, FI_CLASS_STX_CTX);
 }
 
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
@@ -146,8 +149,11 @@ void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 	fastlock_destroy(&tx_ctx->rlock);
 	fastlock_destroy(&tx_ctx->wlock);
 	fastlock_destroy(&tx_ctx->lock);
-	rbfree(&tx_ctx->rb);
-	sock_rx_ctx_free(tx_ctx->rx_ctrl_ctx);
+
+	if (!tx_ctx->use_shared) {
+		rbfree(&tx_ctx->rb);
+		sock_rx_ctx_free(tx_ctx->rx_ctrl_ctx);
+	}
 	free(tx_ctx);
 }
 
