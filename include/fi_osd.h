@@ -37,6 +37,8 @@
 #include <osx/osd.h>
 #elif defined __FreeBSD__
 #include <freebsd/osd.h>
+#elif defined _WIN32
+#include <windows/osd.h>
 #else
 #include <linux/osd.h>
 #endif

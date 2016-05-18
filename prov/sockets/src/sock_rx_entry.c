@@ -131,7 +131,7 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 	return rx_entry;
 }
 
-inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
+size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
 {
 	return rx_entry->total_len - rx_entry->used;
 }

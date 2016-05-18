@@ -88,8 +88,8 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 
 		ret = fd_set_nonblock(wait->wobj.fd[WAIT_READ_FD]);
 		if (ret) {
-			close(wait->wobj.fd[WAIT_READ_FD]);
-			close(wait->wobj.fd[WAIT_WRITE_FD]);
+			fi_close_fd(wait->wobj.fd[WAIT_READ_FD]);
+			fi_close_fd(wait->wobj.fd[WAIT_WRITE_FD]);
 			return ret;
 		}
 		break;
@@ -159,7 +159,7 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 			err = -FI_ETIMEDOUT;
 		} else {
 			while (err > 0) {
-				ret = read(wait->wobj.fd[WAIT_READ_FD], &c, 1);
+				ret = fi_read_fd(wait->wobj.fd[WAIT_READ_FD], &c, 1);
 				if (ret != 1) {
 					SOCK_LOG_ERROR("failed to read wait_fd\n");
 					err = 0;
@@ -192,7 +192,7 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 
 	switch (wait->type) {
 	case FI_WAIT_FD:
-		ret = write(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
+		ret = fi_write_fd(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
 		if (ret != 1)
 			SOCK_LOG_ERROR("failed to signal\n");
 		break;
@@ -244,8 +244,8 @@ int sock_wait_close(fid_t fid)
 	}
 
 	if (wait->type == FI_WAIT_FD) {
-		close(wait->wobj.fd[WAIT_READ_FD]);
-		close(wait->wobj.fd[WAIT_WRITE_FD]);
+		fi_close_fd(wait->wobj.fd[WAIT_READ_FD]);
+		fi_close_fd(wait->wobj.fd[WAIT_WRITE_FD]);
 	}
 
 	atomic_dec(&wait->fab->ref);

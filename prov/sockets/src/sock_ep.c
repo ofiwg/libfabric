@@ -627,15 +627,15 @@ static int sock_ep_close(struct fid *fid)
 
 	if (sock_ep->attr->ep_type == FI_EP_MSG) {
 		sock_ep->attr->cm.do_listen = 0;
-		if (write(sock_ep->attr->cm.signal_fds[0], &c, 1) != 1)
+		if (fi_write_fd(sock_ep->attr->cm.signal_fds[0], &c, 1) != 1)
 			SOCK_LOG_DBG("Failed to signal\n");
 
 		if (sock_ep->attr->cm.listener_thread &&
 		    pthread_join(sock_ep->attr->cm.listener_thread, NULL)) {
 			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 		}
-		close(sock_ep->attr->cm.signal_fds[0]);
-		close(sock_ep->attr->cm.signal_fds[1]);
+		fi_close_fd(sock_ep->attr->cm.signal_fds[0]);
+		fi_close_fd(sock_ep->attr->cm.signal_fds[1]);
 	} else {
 		if (sock_ep->attr->av)
 			atomic_dec(&sock_ep->attr->av->ref);
@@ -657,7 +657,7 @@ static int sock_ep_close(struct fid *fid)
 
 	if (sock_ep->attr->listener.do_listen) {
 		sock_ep->attr->listener.do_listen = 0;
-		if (write(sock_ep->attr->listener.signal_fds[0], &c, 1) != 1)
+		if (fi_write_fd(sock_ep->attr->listener.signal_fds[0], &c, 1) != 1)
 			SOCK_LOG_DBG("Failed to signal\n");
 
 		if (sock_ep->attr->listener.listener_thread &&
@@ -665,8 +665,8 @@ static int sock_ep_close(struct fid *fid)
 			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 		}
 
-		close(sock_ep->attr->listener.signal_fds[0]);
-		close(sock_ep->attr->listener.signal_fds[1]);
+		fi_close_fd(sock_ep->attr->listener.signal_fds[0]);
+		fi_close_fd(sock_ep->attr->listener.signal_fds[1]);
 	}
 
 	fastlock_destroy(&sock_ep->attr->cm.lock);
@@ -1644,8 +1644,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err2;
 		}
 
-		flags = fcntl(sock_ep->attr->cm.signal_fds[1], F_GETFL, 0);
-		if (fcntl(sock_ep->attr->cm.signal_fds[1], F_SETFL, flags | O_NONBLOCK))
+		if(fd_set_nonblock(sock_ep->attr->cm.signal_fds[1]))
 			SOCK_LOG_ERROR("fcntl failed");
 	}
 

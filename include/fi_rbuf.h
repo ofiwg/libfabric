@@ -214,7 +214,7 @@ struct ringbuffd {
 
 static inline int rbfdinit(struct ringbuffd *rbfd, size_t size)
 {
-	int ret, flags;
+	int ret;
 
 	rbfd->fdrcnt = 0;
 	rbfd->fdwcnt = 0;
@@ -226,16 +226,15 @@ static inline int rbfdinit(struct ringbuffd *rbfd, size_t size)
 	if (ret < 0)
 		goto err1;
 
-	flags = fcntl(rbfd->fd[RB_READ_FD], F_GETFL, 0);
-	ret = fcntl(rbfd->fd[RB_READ_FD], F_SETFL, flags | O_NONBLOCK);
+	ret = fd_set_nonblock(rbfd->fd[RB_READ_FD]);
 	if (ret < 0)
 		goto err2;
 
 	return 0;
 
 err2:
-	close(rbfd->fd[0]);
-	close(rbfd->fd[1]);
+	fi_close_fd(rbfd->fd[0]);
+	fi_close_fd(rbfd->fd[1]);
 err1:
 	rbfree(&rbfd->rb);
 	return -errno;
@@ -244,8 +243,8 @@ err1:
 static inline void rbfdfree(struct ringbuffd *rbfd)
 {
 	rbfree(&rbfd->rb);
-	close(rbfd->fd[0]);
-	close(rbfd->fd[1]);
+	fi_close_fd(rbfd->fd[0]);
+	fi_close_fd(rbfd->fd[1]);
 }
 
 static inline int rbfdfull(struct ringbuffd *rbfd)
@@ -272,7 +271,7 @@ static inline void rbfdsignal(struct ringbuffd *rbfd)
 {
 	char c = 0;
 	if (rbfd->fdwcnt == rbfd->fdrcnt) {
-		if (write(rbfd->fd[RB_WRITE_FD], &c, sizeof c) == sizeof c)
+		if (fi_write_fd(rbfd->fd[RB_WRITE_FD], &c, sizeof c) == sizeof c)
 			rbfd->fdwcnt++;
 	}
 }
@@ -282,7 +281,7 @@ static inline void rbfdreset(struct ringbuffd *rbfd)
 	char c;
 
 	if (rbfdempty(rbfd) && (rbfd->fdrcnt != rbfd->fdwcnt)) {
-		if (read(rbfd->fd[RB_READ_FD], &c, sizeof c) == sizeof c)
+		if (fi_read_fd(rbfd->fd[RB_READ_FD], &c, sizeof c) == sizeof c)
 			rbfd->fdrcnt++;
 	}
 }

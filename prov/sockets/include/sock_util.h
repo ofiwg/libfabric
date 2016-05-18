@@ -74,6 +74,8 @@ static inline void *sock_mremap(void *old_address, size_t old_size,
 	return (void *) -1;
 #elif defined __FreeBSD__
 	return (void *) -1;
+#elif defined _WIN32
+	return (void *) -1;
 #else
 	return mremap(old_address, old_size, new_size, 0);
 #endif

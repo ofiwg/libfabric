@@ -48,6 +48,10 @@
 #define FI_INFO_MODE(provider, prov, user) \
 	FI_INFO_FIELD(provider, prov, user, "Expected", "Given", mode, FI_TYPE_MODE)
 
+#ifdef _WIN32 /* there is no strncasecmp function on windows, use _strnicmp instead */
+#define strncasecmp _strnicmp
+#endif /* _WIN32 */
+
 static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC)
