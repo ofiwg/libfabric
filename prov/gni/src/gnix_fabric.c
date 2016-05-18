@@ -59,7 +59,6 @@
 #include "gnix_util.h"
 #include "gnix_nameserver.h"
 #include "gnix_wait.h"
-#include "gnix_av.h"
 
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
@@ -179,8 +178,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
 	struct gnix_ep_name *addr = NULL;
-	char *str_src_addr = NULL;
-	char *str_dest_addr = NULL;
 
 	/*
 	 * the code below for resolving a node/service to what
@@ -255,30 +252,10 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->next = NULL;
 	gnix_info->addr_format = FI_ADDR_GNI;
-	gnix_info->src_addrlen = 0;
-	gnix_info->dest_addrlen = 0;
-	gnix_info->src_addr = NULL;
-	gnix_info->dest_addr = NULL;
-	if (src_addr) {
-		str_src_addr = malloc(GNIX_AV_MAX_STR_ADDR_LEN);
-		if (!str_src_addr) {
-			goto err;
-		}
-		gnix_info->src_addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
-		gnix_av_straddr(NULL, (void *) src_addr, (char *) str_src_addr,
-			 &gnix_info->src_addrlen);
-		gnix_info->src_addr = str_src_addr;
-	}
-	if (dest_addr) {
-		str_dest_addr = malloc(GNIX_AV_MAX_STR_ADDR_LEN);
-		if (!str_dest_addr) {
-			goto err;
-		}
-		gnix_info->dest_addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
-		gnix_av_straddr(NULL, (void *) addr, (char *) str_dest_addr,
-			 &gnix_info->dest_addrlen);
-		gnix_info->dest_addr = str_dest_addr;
-	}
+	gnix_info->src_addrlen = sizeof(struct gnix_ep_name);
+	gnix_info->dest_addrlen = sizeof(struct gnix_ep_name);
+	gnix_info->src_addr = src_addr;
+	gnix_info->dest_addr = dest_addr;
 	/* prov_name gets filled in by fi_getinfo from the gnix_prov struct */
 	/* let's consider gni copyrighted :) */
 
@@ -474,18 +451,6 @@ err:
 		if (gnix_info->domain_attr) free(gnix_info->domain_attr);
 		if (gnix_info->fabric_attr) free(gnix_info->fabric_attr);
 		free(gnix_info);
-	}
-
-	if (addr) {
-		free(addr);
-	}
-
-	if (str_src_addr) {
-		free(str_src_addr);
-	}
-
-	if (str_dest_addr) {
-		free(str_dest_addr);
 	}
 
 	/*
