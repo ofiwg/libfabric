@@ -398,8 +398,10 @@ struct gnix_fid_ep {
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
 	fastlock_t vc_lock;
-	struct gnix_hashtable *vc_ht;
-	struct gnix_vector *vc_table;   /* used for FI_AV_TABLE */
+	union {
+		struct gnix_hashtable *vc_ht;	/* FI_AV_MAP */
+		struct gnix_vector *vc_table;	/* FI_AV_TABLE */
+	};
 	struct gnix_vc *vc;		/* used for FI_EP_MSG */
 	/* lock for unexp and posted recv queue */
 	fastlock_t recv_queue_lock;
