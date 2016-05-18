@@ -105,7 +105,90 @@ err:
 	return NULL;
 }
 
-int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *service,
+static int ofix_dup_addr(struct fi_info *info, struct fi_info *dup)
+{
+	dup->addr_format = info->addr_format;
+	if (info->src_addr) {
+		dup->src_addrlen = info->src_addrlen;
+		dup->src_addr = mem_dup(info->src_addr, info->src_addrlen);
+		if (dup->src_addr == NULL)
+			return -FI_ENOMEM;
+	}
+	if (info->dest_addr) {
+		dup->dest_addrlen = info->dest_addrlen;
+		dup->dest_addr = mem_dup(info->dest_addr, info->dest_addrlen);
+		if (dup->dest_addr == NULL) {
+			free(dup->src_addr);
+			dup->src_addr = NULL;
+			return -FI_ENOMEM;
+		}
+	}
+	return 0;
+}
+
+static int ofix_alter_layer_info(const struct fi_provider *prov,
+		const struct fi_info *prov_info,
+		struct fi_info *layer_info, ofi_alter_info_t alter_layer_info,
+		struct fi_info **base_info)
+{
+	if (!(*base_info = fi_allocinfo()))
+		return -FI_ENOMEM;
+
+	if (alter_layer_info(layer_info, *base_info))
+		goto err;
+
+	if (!layer_info)
+		return 0;
+
+	if (ofix_dup_addr(layer_info, *base_info))
+		goto err;
+
+	if (layer_info->domain_attr && layer_info->domain_attr->name &&
+			!((*base_info)->domain_attr->name =
+			ofi_strdup_less_prefix(layer_info->domain_attr->name,
+			prov_info->domain_attr->name))) {
+		FI_WARN(prov, FI_LOG_FABRIC,
+				"Unable to alter layer_info domain name\n");
+		goto err;
+	}
+	return 0;
+err:
+	fi_freeinfo(*base_info);
+	return -FI_ENOMEM;
+}
+
+static int ofix_alter_base_info(const struct fi_provider *prov,
+		const struct fi_info *prov_info,
+		struct fi_info *base_info, ofi_alter_info_t alter_base_info,
+		struct fi_info **layer_info)
+{
+	if (!(*layer_info = fi_allocinfo()))
+		return -FI_ENOMEM;
+
+	if (alter_base_info(base_info, *layer_info))
+		goto err;
+
+	if (ofix_dup_addr(base_info, *layer_info))
+		goto err;
+
+	if (!((*layer_info)->domain_attr->name =
+				ofi_strdup_add_prefix(base_info->domain_attr->name,
+					prov_info->domain_attr->name))) {
+		FI_WARN(prov, FI_LOG_FABRIC,
+				"Unable to alter base prov domain name\n");
+		goto err;
+	}
+	(*layer_info)->fabric_attr->prov_version = prov->version;
+	if (!((*layer_info)->fabric_attr->name = strdup(base_info->fabric_attr->name)))
+		goto err;
+
+	return 0;
+err:
+	fi_freeinfo(*layer_info);
+	return -FI_ENOMEM;
+}
+
+int ofix_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_provider *prov,
 			const struct fi_info *prov_info, struct fi_info *hints,
 			ofi_alter_info_t alter_layer_info,
@@ -120,7 +203,8 @@ int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *ser
 	if (ret)
 		goto err1;
 
-	ret = alter_layer_info(hints, &base_hints);
+	ret = ofix_alter_layer_info(prov, prov_info, hints, alter_layer_info,
+			&base_hints);
 	if (ret)
 		goto err1;
 
@@ -132,7 +216,8 @@ int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *ser
 		*info = base_info;
 	} else {
 		for (fi = base_info; fi; fi = fi->next) {
-			ret = alter_base_info(fi, &temp);
+			ret = ofix_alter_base_info(prov, prov_info, fi,
+					alter_base_info, &temp);
 			if (ret)
 				goto err3;
 			if (!tail)

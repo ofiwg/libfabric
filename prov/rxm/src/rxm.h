@@ -65,5 +65,5 @@ extern struct fi_domain_attr rxm_domain_attr;
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
-int rxm_alter_layer_info(struct fi_info *layer_info, struct fi_info **base_info);
-int rxm_alter_base_info(struct fi_info *base_info, struct fi_info **layer_info);
+int rxm_alter_layer_info(struct fi_info *layer_info, struct fi_info *base_info);
+int rxm_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info);
