@@ -52,8 +52,8 @@ ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	struct fi_trigger_threshold *threshold;
 
 	trigger_context = (struct fi_triggered_context *) msg->context;
-	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
-	    (flags & FI_INJECT))
+	if ((flags & FI_INJECT) || !trigger_context ||
+	     (trigger_context->event_type != FI_TRIGGER_THRESHOLD))
 		return -FI_EINVAL;
 
 	threshold = &trigger_context->trigger.threshold;
@@ -95,8 +95,8 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 	struct fi_trigger_threshold *threshold;
 
 	trigger_context = (struct fi_triggered_context *) msg->context;
-	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
-	    (flags & FI_INJECT))
+	if ((flags & FI_INJECT) || !trigger_context ||
+	     (trigger_context->event_type != FI_TRIGGER_THRESHOLD))
 		return -FI_EINVAL;
 
 	threshold = &trigger_context->trigger.threshold;
@@ -135,8 +135,8 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	struct fi_trigger_threshold *threshold;
 
 	trigger_context = (struct fi_triggered_context *) msg->context;
-	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
-	    (flags & FI_INJECT))
+	if ((flags & FI_INJECT) || !trigger_context ||
+	     (trigger_context->event_type != FI_TRIGGER_THRESHOLD))
 		return -FI_EINVAL;
 
 	threshold = &trigger_context->trigger.threshold;
@@ -177,8 +177,8 @@ ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	struct fi_trigger_threshold *threshold;
 
 	trigger_context = (struct fi_triggered_context *) msg->context;
-	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
-	    (flags & FI_INJECT))
+	if ((flags & FI_INJECT) || !trigger_context ||
+	     (trigger_context->event_type != FI_TRIGGER_THRESHOLD))
 		return -FI_EINVAL;
 
 	threshold = &trigger_context->trigger.threshold;
