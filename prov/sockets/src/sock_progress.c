@@ -158,6 +158,7 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 
 	if (pe_entry->is_pool_entry) {
 		rbfree(&pe_entry->comm_buf);
+		dlist_remove(&pe_entry->entry);
 		util_buf_release(pe->pe_rx_pool, pe_entry);
 		return;
 	}
@@ -200,6 +201,7 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 			if (rbinit(&pe_entry->comm_buf, SOCK_PE_OVERFLOW_COMM_BUFF_SZ))
 				SOCK_LOG_ERROR("failed to init comm-cache\n");
 			pe_entry->cache_sz = SOCK_PE_OVERFLOW_COMM_BUFF_SZ;
+			dlist_insert_tail(&pe_entry->entry, &pe->pool_list);
 		}
 	} else {
 		pe->num_free_entries--;
@@ -2142,8 +2144,10 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 {
 	int ret;
 
-	if (pe_entry->conn->disconnected)
+	if (sock_comm_is_disconnected(pe_entry)) {
+		sock_pe_release_entry(pe, pe_entry);
 		return 0;
+	}
 
 	if (pe_entry->pe.rx.pending_send) {
 		sock_pe_progress_pending_ack(pe, pe_entry);
@@ -2774,6 +2778,7 @@ static void sock_pe_init_table(struct sock_pe *pe)
 
 	dlist_init(&pe->free_list);
 	dlist_init(&pe->busy_list);
+	dlist_init(&pe->pool_list);
 
 	for (i = 0; i < SOCK_PE_MAX_ENTRIES; i++) {
 		dlist_insert_head(&pe->pe_table[i].entry, &pe->free_list);
@@ -2852,6 +2857,23 @@ err1:
 	return NULL;
 }
 
+static void sock_pe_free_util_pool(struct sock_pe *pe)
+{
+	struct dlist_entry *entry;
+	struct sock_pe_entry *pe_entry;
+
+	while (!dlist_empty(&pe->pool_list)) {
+		entry = pe->pool_list.next;
+		pe_entry = container_of(entry, struct sock_pe_entry, entry);
+		rbfree(&pe_entry->comm_buf);
+		dlist_remove(&pe_entry->entry);
+		util_buf_release(pe->pe_rx_pool, pe_entry);
+	}
+
+	util_buf_pool_destroy(pe->pe_rx_pool);
+	util_buf_pool_destroy(pe->atomic_rx_pool);
+}
+
 void sock_pe_finalize(struct sock_pe *pe)
 {
 	int i;
@@ -2867,8 +2889,7 @@ void sock_pe_finalize(struct sock_pe *pe)
 		rbfree(&pe->pe_table[i].comm_buf);
 	}
 
-	util_buf_pool_destroy(pe->pe_rx_pool);
-	util_buf_pool_destroy(pe->atomic_rx_pool);
+	sock_pe_free_util_pool(pe);
 	fastlock_destroy(&pe->lock);
 	fastlock_destroy(&pe->signal_lock);
 	pthread_mutex_destroy(&pe->list_lock);

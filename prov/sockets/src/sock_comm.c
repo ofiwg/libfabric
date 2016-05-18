@@ -215,3 +215,8 @@ ssize_t sock_comm_discard(struct sock_pe_entry *pe_entry, size_t len)
 	free(buf);
 	return ret;
 }
+
+int sock_comm_is_disconnected(struct sock_pe_entry *pe_entry)
+{
+	return (rbempty(&pe_entry->comm_buf) && pe_entry->conn->disconnected);
+}

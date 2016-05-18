@@ -816,6 +816,7 @@ struct sock_pe {
 	struct util_buf_pool *atomic_rx_pool;
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
+	struct dlist_entry pool_list;
 
 	struct dlist_entry tx_list;
 	struct dlist_entry rx_list;
@@ -1144,6 +1145,7 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_discard(struct sock_pe_entry *pe_entry, size_t len);
 int sock_comm_tx_done(struct sock_pe_entry *pe_entry);
 ssize_t sock_comm_flush(struct sock_pe_entry *pe_entry);
+int sock_comm_is_disconnected(struct sock_pe_entry *pe_entry);
 
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);
