@@ -588,6 +588,13 @@ int _gnix_nic_get_rem_id(struct gnix_nic *nic, int *remote_id, void *entry)
 		}
 		nic->vc_id_table_capacity *= 2;
 		nic->vc_id_table = table_base;
+
+		ret = _gnix_realloc_bitmap(&nic->vc_id_bitmap,
+					   nic->vc_id_table_capacity);
+		if (ret != FI_SUCCESS) {
+			assert(ret == -FI_ENOMEM);
+			goto err;
+		}
 	}
 
 	nic->vc_id_table[nic->vc_id_table_count] = entry;
@@ -1114,6 +1121,15 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err1;
 		}
 
+		ret = _gnix_alloc_bitmap(&nic->vc_id_bitmap,
+					 nic->vc_id_table_capacity);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "alloc_bitmap returned %d\n", ret);
+			goto err1;
+		}
+		fastlock_init(&nic->vc_id_lock);
+
 		fastlock_init(&nic->lock);
 
 		ret = __gnix_nic_tx_freelist_init(nic, domain->gni_tx_cq_size);
@@ -1128,13 +1144,6 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		dlist_init(&nic->tx_vcs);
 
 		_gnix_ref_init(&nic->ref_cnt, 1, __nic_destruct);
-		ret = _gnix_alloc_bitmap(&nic->vc_id_bitmap, 1000);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "alloc_bitmap returned %d\n", ret);
-			goto err1;
-		}
-		fastlock_init(&nic->vc_id_lock);
 
 		smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 		smsg_mbox_attr.mbox_maxcredit = domain->params.mbox_maxcredit;
