@@ -139,6 +139,7 @@ int _do_vc_lookup_perf(int av_type, int niters, int npeers, int naddrs)
 
 	for (i = 0; i < npeers; i++) {
 		/* insert fake addresses into AV */
+		tmp_name.gnix_addr.cdm_id++;
 		tmp_name.cm_nic_cdm_id++;
 		addrs[i] = tmp_name;
 	}
@@ -147,9 +148,9 @@ int _do_vc_lookup_perf(int av_type, int niters, int npeers, int naddrs)
 			   (void *)fi_addrs, 0, NULL);
 	cr_assert(ret == npeers);
 
-	for (i = 0; i < niters; i++) {
+	for (i = 0; i < npeers; i++) {
 		/* do warump */
-		ret = _gnix_vc_ep_get_vc(gnix_ep, fi_addrs[(i * inc)%npeers],
+		ret = _gnix_vc_ep_get_vc(gnix_ep, fi_addrs[i],
 					 &vc);
 		cr_assert(ret == FI_SUCCESS);
 	}
@@ -188,22 +189,24 @@ int do_vc_lookup_perf(int av_type, int niters, int naddrs, int npeers)
 	return 0;
 }
 
-#define NITERS	100000
+#define NITERS	10000
+#define EXP_INC	4
+#define TESTS	5
 Test(vc_lookup, perf, .disabled = true)
 {
 	int i, j;
 
-	for (i = 0; i < 5; i++) {
+	for (i = 0; i < TESTS; i++) {
 		for (j = 0; j <= i; j++) {
 			do_vc_lookup_perf(FI_AV_MAP, NITERS,
-					  2<<(i*5), 2<<(j*5));
+					  2<<(i*EXP_INC), 2<<(j*EXP_INC));
 		}
 	}
 
-	for (i = 0; i < 5; i++) {
+	for (i = 0; i < TESTS; i++) {
 		for (j = 0; j <= i; j++) {
 			do_vc_lookup_perf(FI_AV_TABLE, NITERS,
-					  2<<(i*5), 2<<(j*5));
+					  2<<(i*EXP_INC), 2<<(j*EXP_INC));
 		}
 	}
 }
