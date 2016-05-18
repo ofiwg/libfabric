@@ -85,15 +85,21 @@ src_libfabric_la_SOURCES = \
 
 if MACOS
 src_libfabric_la_SOURCES += src/osx/osd.c
+src_libfabric_la_SOURCES += src/unix/osd.c
 src_libfabric_la_SOURCES += include/osx/osd.h
+src_libfabric_la_SOURCES += include/unix/osd.h
 endif
 
 if FREEBSD
+src_libfabric_la_SOURCES += src/unix/osd.c
 src_libfabric_la_SOURCES += include/freebsd/osd.h
+src_libfabric_la_SOURCES += include/unix/osd.h
 endif
 
 if LINUX
+src_libfabric_la_SOURCES += src/unix/osd.c
 src_libfabric_la_SOURCES += include/linux/osd.h
+src_libfabric_la_SOURCES += include/unix/osd.h
 endif
 
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)

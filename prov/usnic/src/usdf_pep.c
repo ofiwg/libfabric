@@ -58,6 +58,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_file.h"
 
 #include "fi_ext_usnic.h"
 #include "usnic_direct.h"
@@ -581,16 +582,11 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		ret = -errno;
 		goto fail;
 	}
-        ret = fcntl(pep->pep_sock, F_GETFL, 0);
-        if (ret == -1) {
-                ret = -errno;
-                goto fail;
-        }
-        ret = fcntl(pep->pep_sock, F_SETFL, ret | O_NONBLOCK);
-        if (ret == -1) {
-                ret = -errno;
-                goto fail;
-        }
+	ret = fi_fd_nonblock(pep->pep_sock);
+	if (ret) {
+		ret = -errno;
+		goto fail;
+	}
 
 	/* set SO_REUSEADDR to prevent annoying "Address already in use" errors
 	 * on successive runs of programs listening on a well known port */

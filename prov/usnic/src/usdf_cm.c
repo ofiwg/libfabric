@@ -55,6 +55,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 #include "fi.h"
+#include "fi_file.h"
 
 #include "usnic_direct.h"
 #include "usdf.h"
@@ -414,13 +415,8 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 		ep->e.msg.ep_cm_sock = -1;
 	}
 
-	ret = fcntl(crp->cr_sockfd, F_GETFL, 0);
-	if (ret == -1) {
-		ret = -errno;
-		goto fail;
-	}
-	ret = fcntl(crp->cr_sockfd, F_SETFL, ret | O_NONBLOCK);
-	if (ret == -1) {
+	ret = fi_fd_nonblock(crp->cr_sockfd);
+	if (ret) {
 		ret = -errno;
 		goto fail;
 	}

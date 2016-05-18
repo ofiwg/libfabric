@@ -407,7 +407,7 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 		ret = -errno;
 	}
 out:
-	close(sock);
+	ofi_close_socket(sock);
 	return ret;
 }
 

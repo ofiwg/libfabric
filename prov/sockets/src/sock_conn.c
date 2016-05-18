@@ -52,6 +52,7 @@
 
 #include "sock.h"
 #include "sock_util.h"
+#include "fi_file.h"
 
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
@@ -129,7 +130,7 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap)
 	int i;
 
 	for (i = 0; i < cmap->used; i++) {
-		close(cmap->table[i].sock_fd);
+		ofi_close_socket(cmap->table[i].sock_fd);
 	}
 	free(cmap->table);
 	cmap->table = NULL;
@@ -175,13 +176,11 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 
 int fd_set_nonblock(int fd)
 {
-	int flags, ret;
+	int ret;
 
-	flags = fcntl(fd, F_GETFL, 0);
-	ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	ret = fi_fd_nonblock(fd);
 	if (ret) {
-		SOCK_LOG_ERROR("fcntl failed\n");
-		ret = -errno;
+		SOCK_LOG_ERROR("fi_fd_nonblock failed\n");
 	}
 
 	return ret;
@@ -236,7 +235,7 @@ static void *_sock_conn_listen(void *arg)
 	while (listener->do_listen) {
 		if (poll(poll_fds, 2, -1) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
-				ret = read(listener->signal_fds[1], &tmp, 1);
+				ret = ofi_read_socket(listener->signal_fds[1], &tmp, 1);
 				if (ret != 1) {
 					SOCK_LOG_ERROR("Invalid signal\n");
 					goto err;
@@ -266,7 +265,7 @@ static void *_sock_conn_listen(void *arg)
 	}
 
 err:
-	close(listener->sock);
+	ofi_close_socket(listener->sock);
 	SOCK_LOG_DBG("Listener thread exited\n");
 	return NULL;
 }
@@ -317,7 +316,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
 				break;
-			close(listen_fd);
+			ofi_close_socket(listen_fd);
 			listen_fd = -1;
 		}
 	}
@@ -370,7 +369,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	return 0;
 err:
 	if (listen_fd >= 0)
-		close(listen_fd);
+		ofi_close_socket(listen_fd);
 	return -FI_EINVAL;
 }
 
@@ -412,7 +411,7 @@ do_connect:
 	if (ret) {
 		SOCK_LOG_ERROR("failed to set conn_fd nonblocking, errno: %d\n", errno);
 		errno = FI_EOTHER;
-		close(conn_fd);
+		ofi_close_socket(conn_fd);
                 return NULL;
 	}
 
@@ -467,8 +466,10 @@ retry:
 	if (!do_retry)
 		goto err;
 
-	close(conn_fd);
-	conn_fd = -1;
+	if (conn_fd != -1) {
+		ofi_close_socket(conn_fd);
+		conn_fd = -1;
+	}
 
 	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n", strerror(errno), conn_fd);
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
@@ -494,7 +495,7 @@ out:
 	return conn;
 
 err:
-	close(conn_fd);
+	ofi_close_socket(conn_fd);
 	return NULL;
 }
 

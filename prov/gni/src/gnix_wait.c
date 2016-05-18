@@ -190,8 +190,6 @@ static int gnix_verify_wait_attr(struct fi_wait_attr *attr)
 
 static int gnix_init_wait_obj(struct gnix_fid_wait *wait, enum fi_wait_obj type)
 {
-	long flags = 0;
-
 	GNIX_TRACE(WAIT_SUB, "\n");
 
 	wait->type = type;
@@ -201,8 +199,7 @@ static int gnix_init_wait_obj(struct gnix_fid_wait *wait, enum fi_wait_obj type)
 		if (socketpair(AF_LOCAL, SOCK_STREAM, 0, wait->fd))
 			goto err;
 
-		fcntl(wait->fd[WAIT_READ], F_GETFL, &flags);
-		if (fcntl(wait->fd[WAIT_READ], F_SETFL, flags | O_NONBLOCK))
+		if (fi_fd_nonblock(wait->fd[WAIT_READ]))
 			goto cleanup;
 		break;
 	case FI_WAIT_MUTEX_COND:

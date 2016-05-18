@@ -30,6 +30,9 @@
  * SOFTWARE.
  */
 
+#include <pthread.h>
+#include <stdio.h>
+
 #include <fi_enosys.h>
 #include "fi_verbs.h"
 

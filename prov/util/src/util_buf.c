@@ -36,6 +36,7 @@
 #include <fi_enosys.h>
 #include <fi_mem.h>
 #include <fi.h>
+#include <fi_osd.h>
 
 #if ENABLE_DEBUG
 static inline int util_buf_use_ftr(struct util_buf_pool *pool)
@@ -75,7 +76,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 	if (!buf_region)
 		return -1;
 
-	ret = posix_memalign((void **)&buf_region->mem_region, pool->alignment,
+	ret = ofi_memalign((void **)&buf_region->mem_region, pool->alignment,
 			     pool->chunk_cnt * pool->entry_sz);
 	if (ret)
 		goto err;
@@ -174,7 +175,7 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 #endif
 		if (pool->free_hndlr)
 			pool->free_hndlr(pool->ctx, buf_region->context);
-		free(buf_region->mem_region);
+		ofi_freealign(buf_region->mem_region);
 		free(buf_region);
 	}
 	free(pool);

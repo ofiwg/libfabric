@@ -33,8 +33,6 @@
 #ifndef FI_TRIGGER_H
 #define FI_TRIGGER_H
 
-#include <stdint.h>
-#include <stddef.h>
 #include <rdma/fabric.h>
 
 #ifdef __cplusplus

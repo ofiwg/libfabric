@@ -43,6 +43,7 @@
 #include <sys/socket.h>
 
 #include <fi_file.h>
+#include <fi_osd.h>
 #include <rdma/fi_errno.h>
 
 
@@ -65,29 +66,29 @@ static inline int fd_signal_init(struct fd_signal *signal)
 	if (ret < 0)
 		return -errno;
 
-	ret = fcntl(signal->fd[FI_READ_FD], F_SETFL, O_NONBLOCK);
-	if (ret < 0)
+	ret = fi_fd_nonblock(signal->fd[FI_READ_FD]);
+	if (ret)
 		goto err;
 
 	return 0;
 
 err:
-	close(signal->fd[0]);
-	close(signal->fd[1]);
+	ofi_close_socket(signal->fd[0]);
+	ofi_close_socket(signal->fd[1]);
 	return -errno;
 }
 
 static inline void fd_signal_free(struct fd_signal *signal)
 {
-	close(signal->fd[0]);
-	close(signal->fd[1]);
+	ofi_close_socket(signal->fd[0]);
+	ofi_close_socket(signal->fd[1]);
 }
 
 static inline void fd_signal_set(struct fd_signal *signal)
 {
 	char c = 0;
 	if (signal->wcnt == signal->rcnt) {
-		if (write(signal->fd[FI_WRITE_FD], &c, sizeof c) == sizeof c)
+		if (ofi_write_socket(signal->fd[FI_WRITE_FD], &c, sizeof c) == sizeof c)
 			signal->wcnt++;
 	}
 }
@@ -96,7 +97,7 @@ static inline void fd_signal_reset(struct fd_signal *signal)
 {
 	char c;
 	if (signal->rcnt != signal->wcnt) {
-		if (read(signal->fd[FI_READ_FD], &c, sizeof c) == sizeof c)
+		if (ofi_read_socket(signal->fd[FI_READ_FD], &c, sizeof c) == sizeof c)
 			signal->rcnt++;
 	}
 }
