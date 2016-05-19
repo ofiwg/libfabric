@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -38,7 +39,6 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_prov.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <shared.h>
