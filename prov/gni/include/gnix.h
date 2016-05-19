@@ -71,6 +71,7 @@ extern "C" {
 #include "fi_ext_gni.h"
 #include "gnix_tags.h"
 #include "gnix_mr_cache.h"
+#include "gnix_mr_notifier.h"
 
 #define GNI_MAJOR_VERSION 1
 #define GNI_MINOR_VERSION 0
@@ -304,6 +305,7 @@ struct gnix_fid_fabric {
 	 * GNI_PostdataProbeWaitById in gni_pub.h */
 	uint64_t datagram_timeout;
 	struct gnix_reference ref_cnt;
+	struct gnix_mr_notifier mr_notifier;
 };
 
 extern struct fi_ops_cm gnix_cm_ops;

@@ -31,16 +31,20 @@
  */
 
 #include <gnix_mr_cache.h>
+#include <gnix_mr_notifier.h>
 #include <gnix.h>
 
 typedef enum cache_entry_flags {
-	GNIX_CE_RETIRED = 1 << 0,
+	GNIX_CE_RETIRED = 1 << 0, /* retired entries are not in any tree */
 } cache_entry_flags_e;
 
+/* consider using a bitmask (and possibly combining with flags above) */
 typedef enum cache_entry_state {
 	GNIX_CES_DEAD = 0,
 	GNIX_CES_INUSE,
+	GNIX_CES_INUSE_UNMAPPED,
 	GNIX_CES_STALE,
+	GNIX_CES_STALE_UNMAPPED,
 } cache_entry_state_e;
 
 /**
@@ -81,10 +85,6 @@ typedef struct gnix_mr_cache_entry {
 } gnix_mr_cache_entry_t;
 
 /* forward declarations */
-int _gnix_mr_cache_init(
-		gnix_mr_cache_t      **cache,
-		gnix_mr_cache_attr_t *attr);
-
 int _gnix_mr_cache_register(
 		gnix_mr_cache_t             *cache,
 		uint64_t                    address,
@@ -103,6 +103,9 @@ static inline int __mr_cache_entry_put(
 static inline int __mr_cache_entry_get(
 		gnix_mr_cache_t       *cache,
 		gnix_mr_cache_entry_t *entry);
+
+static inline int __mr_cache_entry_destroy(gnix_mr_cache_t *cache,
+					   gnix_mr_cache_entry_t *entry);
 
 static int __mr_cache_create_registration(
 		gnix_mr_cache_t             *cache,
@@ -130,7 +133,7 @@ gnix_mr_cache_attr_t __default_mr_cache_attr = {
  * @param[in] x key to be inserted or found
  * @param[in] y key to be compared against
  *
- * @return    -1 if it should be positioned at the left, 0 if the same,
+ * @return    -1 if it should be positioned at the left, 0 if it overlaps,
  *             1 otherwise
  */
 static int __find_overlapping_addr(
@@ -259,7 +262,11 @@ static inline void __attach_retired_entries_to_registration(
 			__mr_cache_entry_put(cache, entry);
 		}
 	}
-	assert(dlist_empty(retired_entries));
+
+	if (!dlist_empty(retired_entries)) {
+		GNIX_FATAL(FI_LOG_MR, "retired_entries not empty\n");
+	}
+
 	__mr_cache_entry_get(cache, parent);
 }
 
@@ -279,13 +286,15 @@ static inline void __remove_sibling_entries_from_tree(
 				entry->key.address,
 				entry->key.length);
 		iter = rbtFind(tree, &entry->key);
-		assert(iter);
+		if (unlikely(!iter)) {
+			GNIX_FATAL(FI_LOG_MR, "key not found\n");
+		}
 
 		rc = rbtErase(tree, iter);
-		if (unlikely(rc != RBT_STATUS_OK))
-			GNIX_INFO(FI_LOG_MR,
-					"could not remove entry from tree\n");
-		assert(rc == RBT_STATUS_OK);
+		if (unlikely(rc != RBT_STATUS_OK)) {
+			GNIX_FATAL(FI_LOG_MR,
+				   "could not remove entry from tree\n");
+		}
 	}
 }
 
@@ -337,6 +346,236 @@ static inline int __mr_cache_lru_dequeue(
 }
 
 /**
+ * Removes a particular registration cache entry from the lru cache.
+ *
+ * @param[in] cache  a memory registration cache
+ * @param[in] entry  a memory registration cache entry
+ *
+ * @return           FI_SUCCESS, on success
+ * @return           -FI_ENOENT, on empty LRU
+ */
+static inline int __mr_cache_lru_remove(
+		gnix_mr_cache_t       *cache,
+		gnix_mr_cache_entry_t *entry)
+{
+	/* Could do some error checking to see if in cache */
+
+	dlist_remove(&entry->lru_entry);
+
+	return FI_SUCCESS;
+}
+
+/**
+ * Remove entries that have been unmapped as indicated by the notifer
+ *
+ * @param[in] cache  a memory registration cache
+ *
+ * @return           nothing
+ */
+static bool __notifier_warned = false;
+static void
+__clear_notifier_events(gnix_mr_cache_t *cache)
+{
+	int ret;
+	gnix_mr_cache_entry_t *entry;
+	RbtIterator iter;
+	uint64_t cookie;
+
+	if (!cache->attr.lazy_deregistration) {
+		return;
+	}
+
+	ret = _gnix_notifier_get_event(cache->attr.notifier,
+				       &cookie, sizeof(cookie));
+	while (ret > 0) {
+		if (ret == sizeof(cookie)) {
+			entry = (gnix_mr_cache_entry_t *) cookie;
+			switch (entry->state) {
+			case GNIX_CES_INUSE:
+				/* First, warn that this might be a
+				 * problem.*/
+				if (__notifier_warned == false) {
+					GNIX_WARN(FI_LOG_MR,
+						  "Registered memory region"
+						  " includes unmapped pages."
+						  "  Have you freed memory"
+						  " without closing the memory"
+						  " region?\n");
+					__notifier_warned = true;
+				}
+
+				GNIX_INFO(FI_LOG_MR,
+					  "Marking unmapped entry (%p)"
+					  " as retired %llx:%llx\n", entry,
+					  entry->key.address,
+					  entry->key.length);
+
+				entry->state = GNIX_CES_INUSE_UNMAPPED;
+				if (entry->flags & GNIX_CE_RETIRED) {
+					/* Nothing to do */
+					break;
+				}
+
+				/* Retire this entry (remove from
+				 * inuse tree) */
+
+				entry->flags |= GNIX_CE_RETIRED;
+				iter = rbtFind(cache->inuse.rb_tree,
+					       &entry->key);
+				if (likely(iter != NULL)) {
+					ret = rbtErase(cache->inuse.rb_tree,
+						       iter);
+					if (ret != RBT_STATUS_OK) {
+						GNIX_FATAL(FI_LOG_MR,
+							   "Unmapped entry"
+							   " could not be"
+							   " removed from"
+							   " in usetree.\n");
+					}
+				} else {
+					/*  The only way we should get
+					 *  here is if if this entry
+					 *  was already retired.  Not
+					 *  sure if this is worth a
+					 *  separate warning from the
+					 *  one above. */
+				}
+
+				break;
+			case GNIX_CES_STALE:
+				entry->state = GNIX_CES_STALE_UNMAPPED;
+				iter = rbtFind(cache->stale.rb_tree,
+					       &entry->key);
+				if (!iter) {
+					break;
+				}
+
+				ret = rbtErase(cache->stale.rb_tree, iter);
+				if (ret != RBT_STATUS_OK) {
+					GNIX_FATAL(FI_LOG_MR,
+						   "Unmapped entry could"
+						   " not be removed "
+						   " from stale tree.\n");
+				}
+
+				GNIX_INFO(FI_LOG_MR, "Removed unmapped entry"
+					  " (%p) from stale tree %llx:%llx\n",
+					  entry, entry->key.address,
+					  entry->key.length);
+
+				if (__mr_cache_lru_remove(cache, entry)
+				    == FI_SUCCESS) {
+					GNIX_INFO(FI_LOG_MR, "Removed"
+						  " unmapped entry (%p)"
+						  " from lru list %llx:%llx\n",
+						  entry, entry->key.address,
+						  entry->key.length);
+
+					atomic_dec(&cache->stale.elements);
+
+				} else {
+					GNIX_WARN(FI_LOG_MR, "Failed to remove"
+						  " unmapped entry"
+						  " from lru list (%p) %p\n",
+						  entry, iter);
+				}
+				
+				__mr_cache_entry_destroy(cache, entry);
+
+				break;
+			default:
+				GNIX_FATAL(FI_LOG_MR,
+					   "Unmapped entry (%p) in incorrect"
+					   " state: %d\n",
+					   entry, entry->state);
+			}
+
+		} else {
+			/* Should we do something else here? */
+			GNIX_FATAL(FI_LOG_MR,
+				   "_gnix_notifier_get_event returned incomplete event");
+		}
+		ret = _gnix_notifier_get_event(cache->attr.notifier,
+					       &cookie, sizeof(cookie));
+	}
+	if (ret != -FI_EAGAIN) {
+		/* Should we do something else here? */
+		GNIX_WARN(FI_LOG_MR,
+			  "_gnix_notifier_get_event returned error: %s",
+			  fi_strerror(-ret));
+	}
+
+	return;
+}
+
+/**
+ * Start monitoring a memory region
+ *
+ * @param[in] cache  a memory registration cache
+ * @param[in] entry  a memory registration entry
+ *
+ * @return           return code from _gnix_notifier_monitor
+ */
+static int
+__notifier_monitor(gnix_mr_cache_t *cache,
+		   gnix_mr_cache_entry_t *entry)
+{
+	if (!cache->attr.lazy_deregistration) {
+		return FI_SUCCESS;
+	}
+
+	GNIX_INFO(FI_LOG_MR, "monitoring entry=%p %llx:%llx\n", entry,
+		  entry->key.address, entry->key.length);
+
+	return _gnix_notifier_monitor(cache->attr.notifier,
+				      (void *) entry->key.address,
+				      entry->key.length,
+				      (uint64_t) entry);
+
+}
+
+/**
+ * Stop monitoring a memory region
+ *
+ * @param[in] cache  a memory registration cache
+ * @param[in] entry  a memory registration entry
+ *
+ * @return           nothing
+ */
+static void
+__notifier_unmonitor(gnix_mr_cache_t *cache,
+		     gnix_mr_cache_entry_t *entry)
+{
+	int rc;
+
+	if (!cache->attr.lazy_deregistration) {
+		return;
+	}
+
+	__clear_notifier_events(cache);
+
+	if ((entry->state != GNIX_CES_INUSE_UNMAPPED) &&
+	    (entry->state != GNIX_CES_STALE_UNMAPPED)) {
+		GNIX_INFO(FI_LOG_MR, "unmonitoring entry=%p (state=%d)\n",
+			  entry, entry->state);
+		rc = _gnix_notifier_unmonitor(cache->attr.notifier,
+					      (uint64_t) entry);
+		if (rc != FI_SUCCESS) {
+			/* This probably is okay (ESRCH), because the
+			 * memory could have been unmapped in the
+			 * interim, so clear the notifier events
+			 * again */
+			GNIX_INFO(FI_LOG_MR,
+				  "failed to unmonitor memory (entry=%p),"
+				  " so clear notifier events again\n",
+				  entry, fi_strerror(-rc));
+
+			__clear_notifier_events(cache);
+		}
+	}
+}
+
+/**
  * Destroys the memory registration cache entry and deregisters the memory
  *   region with uGNI
  *
@@ -352,6 +591,13 @@ static inline int __mr_cache_entry_destroy(gnix_mr_cache_t *cache,
 	rc = cache->attr.dereg_callback(entry->mr,
 			cache->attr.destruct_context);
 	if (!rc) {
+		/* Should we bother with this check?  If we don't, the
+		 * only difference it that __clear_notifier_events
+		 * will be called one additional time. */
+		if ((entry->state != GNIX_CES_INUSE_UNMAPPED) &&
+		    (entry->state != GNIX_CES_STALE_UNMAPPED)) {
+			__notifier_unmonitor(cache, entry);
+		}
 		entry->state = GNIX_CES_DEAD;
 
 		rc = cache->attr.destruct_callback(cache->attr.dereg_context);
@@ -372,6 +618,15 @@ static inline int __insert_entry_into_stale(
 {
 	RbtStatus rc;
 	int ret = 0;
+
+	if ((entry->state == GNIX_CES_INUSE_UNMAPPED) ||
+	    (entry->state == GNIX_CES_STALE_UNMAPPED)) {
+		GNIX_INFO(FI_LOG_MR, "entry (%p) unmapped, not inserting"
+			  " into stale %llx:%llx", entry,
+			  entry->key.address, entry->key.length);
+		/* Should we return some other value? */
+		return ret;
+	}
 
 	rc = rbtInsert(cache->stale.rb_tree,
 			&entry->key,
@@ -394,7 +649,17 @@ static inline int __insert_entry_into_stale(
 
 		__mr_cache_lru_enqueue(cache, entry);
 		atomic_inc(&cache->stale.elements);
-		entry->state = GNIX_CES_STALE;
+		switch (entry->state) {
+		case  GNIX_CES_INUSE:
+			entry->state = GNIX_CES_STALE;
+			break;
+		default:
+			GNIX_FATAL(FI_LOG_MR,
+				   "stale entry (%p) %llx:%llx in bad"
+				   " state (%d)\n", entry,
+				   entry->key.address, entry->key.length,
+				   entry->state);
+		}
 	}
 
 	return ret;
@@ -413,7 +678,10 @@ static inline void __resolve_stale_entry_collision(
 	RbtIterator iter = found;
 	int add_new_entry = 1, cmp;
 
-	GNIX_INFO(FI_LOG_MR, "resolving collisions\n");
+	GNIX_TRACE(FI_LOG_MR, "\n");
+
+	GNIX_INFO(FI_LOG_MR, "resolving collisions with entry (%p) %llx:%llx\n",
+		  entry, entry->key.address, entry->key.length);
 
 	while (iter) {
 		rbtKeyValue(cache->stale.rb_tree, iter, (void **) &c_key,
@@ -426,8 +694,9 @@ static inline void __resolve_stale_entry_collision(
 		if (__can_subsume(&entry->key, c_key) ||
 				(entry->key.length > c_key->length)) {
 			GNIX_INFO(FI_LOG_MR,
-					"adding stale entry to destroy list, key=%llx:%llx",
-					c_key->address, c_key->length);
+				  "adding stale entry (%p) to destroy list,"
+				  "  key=%llx:%llx\n", c_entry,
+				  c_key->address, c_key->length);
 			dlist_insert_tail(&c_entry->siblings, &to_destroy);
 		} else {
 			add_new_entry = 0;
@@ -441,25 +710,42 @@ static inline void __resolve_stale_entry_collision(
 	 */
 	dlist_for_each_safe(&to_destroy, c_entry, tmp, siblings)
 	{
-		GNIX_INFO(FI_LOG_MR, "removing key from tree, key=%llx:%ll\n",
-				c_entry->key.address, c_entry->key.length);
+		GNIX_INFO(FI_LOG_MR, "removing key from tree, entry %p"
+			  " key=%llx:%llx\n", c_entry,
+			  c_entry->key.address, c_entry->key.length);
 		iter = rbtFind(cache->stale.rb_tree, &c_entry->key);
-		assert(iter);
+		if (unlikely(!iter)) {
+			GNIX_FATAL(FI_LOG_MR, "key not found\n");
+		}
 
 		rc = rbtErase(cache->stale.rb_tree,
 						iter);
-		assert(rc == RBT_STATUS_OK);
+		if (unlikely(rc != RBT_STATUS_OK)) {
+			GNIX_FATAL(FI_LOG_MR,
+				   "could not remove entry from tree\n");
+		}
 
-		dlist_remove(&c_entry->lru_entry);
-		dlist_remove(&c_entry->siblings);
+		if (__mr_cache_lru_remove(cache, c_entry) != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_MR, "Failed to remove entry"
+				  " from lru list (%p)\n",
+				  c_entry);
+		}
 		atomic_dec(&cache->stale.elements);
+		dlist_remove(&c_entry->siblings);
 		__mr_cache_entry_destroy(cache, c_entry);
 	}
-	assert(dlist_empty(&to_destroy));
+	if (unlikely(!dlist_empty(&to_destroy))) {
+		GNIX_FATAL(FI_LOG_MR, "to_destroy not empty\n");
+	}
 
 	if (add_new_entry) {
 		ret = __insert_entry_into_stale(cache, entry);
-		assert(!ret);
+		if (ret) {
+			GNIX_FATAL(FI_LOG_MR,
+				   "Failed to insert subsumed MR "
+				   " entry (%p) into stale list\n",
+				   entry);
+		}
 	} else {
 		/* stale entry is larger than this one
 		 * so lets just toss this entry out
@@ -492,6 +778,8 @@ static inline int __mr_cache_entry_get(
 		gnix_mr_cache_t       *cache,
 		gnix_mr_cache_entry_t *entry)
 {
+	GNIX_TRACE(FI_LOG_MR, "\n");
+
 	return atomic_inc(&entry->ref_cnt);
 }
 
@@ -508,10 +796,17 @@ static inline int __mr_cache_entry_put(
 		gnix_mr_cache_entry_t *entry)
 {
 	RbtIterator iter;
+	int rc;
 	gni_return_t grc = GNI_RC_SUCCESS;
 	RbtIterator found;
 	gnix_mr_cache_entry_t *parent = NULL;
 	struct dlist_entry *next;
+
+	GNIX_TRACE(FI_LOG_MR, "\n");
+
+	if (cache->attr.lazy_deregistration) {
+		__clear_notifier_events(cache);
+	}
 
 	if (atomic_dec(&entry->ref_cnt) == 0) {
 		next = entry->siblings.next;
@@ -524,7 +819,6 @@ static inline int __mr_cache_entry_put(
 		if (next != &entry->siblings && dlist_empty(next)) {
 			parent = container_of(next, gnix_mr_cache_entry_t,
 					children);
-
 			grc = __mr_cache_entry_put(cache, parent);
 			if (unlikely(grc != GNI_RC_SUCCESS)) {
 				GNIX_ERR(FI_LOG_MR,
@@ -543,7 +837,12 @@ static inline int __mr_cache_entry_put(
 				GNIX_ERR(FI_LOG_MR,
 						"failed to find entry in the inuse cache\n");
 			} else {
-				rbtErase(cache->inuse.rb_tree, iter);
+				rc = rbtErase(cache->inuse.rb_tree, iter);
+				if (unlikely(rc != RBT_STATUS_OK)) {
+					GNIX_ERR(FI_LOG_MR,
+						 "failed to erase lru entry"
+						 " from stale tree\n");
+				}
 			}
 		}
 
@@ -612,17 +911,14 @@ static inline int __check_mr_cache_attr_sanity(gnix_mr_cache_attr_t *attr)
 }
 
 int _gnix_mr_cache_init(
-		gnix_mr_cache_t      **cache,
-		gnix_mr_cache_attr_t *attr)
+		gnix_mr_cache_t         **cache,
+		gnix_mr_cache_attr_t    *attr)
 {
 	gnix_mr_cache_attr_t *cache_attr = &__default_mr_cache_attr;
 	gnix_mr_cache_t *cache_p;
 	int rc;
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
-
-	if (!cache)
-		return -FI_EINVAL;
 
 	/* if the provider asks us to use their attributes, are they sane? */
 	if (attr) {
@@ -672,6 +968,7 @@ int _gnix_mr_cache_init(
 	cache_p->misses = 0;
 
 	cache_p->state = GNIX_MRC_STATE_READY;
+
 	*cache = cache_p;
 
 	return FI_SUCCESS;
@@ -725,8 +1022,7 @@ int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache)
 int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 	int rc;
 	RbtIterator iter;
-	gnix_mr_cache_key_t *e_key;
-	gnix_mr_cache_entry_t *entry, *e_entry;
+	gnix_mr_cache_entry_t *entry;
 	int destroyed = 0;
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
@@ -754,23 +1050,11 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 		iter = rbtFind(cache->stale.rb_tree, &entry->key);
 		if (unlikely(!iter)) {
 			GNIX_ERR(FI_LOG_MR,
-					"lru entries MUST be present in the cache,"
-					" could not find key in stale tree\n");
+				 "lru entries MUST be present in the cache,"
+				 " could not find entry (%p) in stale tree"
+				 " %llx:%llx\n",
+				 entry, entry->key.address, entry->key.length);
 			break;
-		}
-
-		rbtKeyValue(cache->stale.rb_tree, iter, (void **) &e_key,
-			    (void **) &e_entry);
-		if (e_entry != entry) {
-			/* If not an exact match, remove the found entry,
-			 and then put the original entry back on the LRU list */
-			GNIX_INFO(FI_LOG_MR,
-				  "Flushing non-lru entry %llx:%llx\n",
-				  e_entry->key.address, e_entry->key.length);
-			dlist_remove(&e_entry->lru_entry);
-			dlist_insert_tail(&entry->lru_entry, &cache->lru_head);
-			/* Destroy the actual entry below */
-			entry = e_entry;
 		}
 
 		rc = rbtErase(cache->stale.rb_tree, iter);
@@ -821,6 +1105,10 @@ static int __mr_cache_search_inuse(
 	gnix_mr_cache_entry_t *found_entry;
 	uint64_t new_end, found_end;
 	DLIST_HEAD(retired_entries);
+
+	if (cache->attr.lazy_deregistration) {
+		__clear_notifier_events(cache);
+	}
 
 	/* first we need to find an entry that overlaps with this one.
 	 * care should be taken to find the left most entry that overlaps
@@ -912,9 +1200,19 @@ static int __mr_cache_search_inuse(
 			new_key.address, new_key.length,
 			entry, &new_key, fi_reg_context);
 	if (ret) {
-		GNIX_ERR(FI_LOG_MR, "failure in registration, can't really "
-				"recover at this point since we've already retired "
-				"the existing entries\n");
+		/* If we get here, one of two things have happened.
+		 * Either some part of the new merged registration was
+		 * unmapped (i.e., freed by user) or the merged
+		 * registration failed for some other reason (probably
+		 * GNI_RC_ERROR_RESOURCE).  The first case is a user
+		 * error (which they should have been warned about by
+		 * the notifier), and the second case is always
+		 * possible.  Neither case is a problem.  The entries
+		 * above have been retired, and here we return the
+		 * error */
+		GNIX_INFO(FI_LOG_MR,
+			  "failed to create merged registration, key=",
+			  new_key.address, new_key.length);
 		return ret;
 	}
 
@@ -942,6 +1240,10 @@ static int __mr_cache_search_stale(
 	RbtIterator iter;
 	gnix_mr_cache_key_t *mr_key;
 	gnix_mr_cache_entry_t *mr_entry, *tmp;
+
+	if (cache->attr.lazy_deregistration) {
+		__clear_notifier_events(cache);
+	}
 
 	GNIX_INFO(FI_LOG_MR, "searching for stale entry, key=%llx:%llx\n",
 			key->address, key->length);
@@ -985,26 +1287,36 @@ static int __mr_cache_search_stale(
 				GNIX_ERR(FI_LOG_MR,
 						"failed to erase entry from stale tree\n");
 			} else {
-				dlist_remove(&mr_entry->lru_entry);
-
-				atomic_dec(&cache->stale.elements);
-
+				if (__mr_cache_lru_remove(cache, mr_entry)
+				    == FI_SUCCESS) {
+					atomic_dec(&cache->stale.elements);
+				} else {
+					GNIX_WARN(FI_LOG_MR, "Failed to remove"
+						  " entry (%p) from lru list\n",
+						  mr_entry);
+				}
 				__mr_cache_entry_destroy(cache, mr_entry);
 			}
 
 			*entry = tmp;
 		} else {
 			GNIX_INFO(FI_LOG_MR,
-					"removing entry from stale and migrating to inuse, "
-					"key=%llx:%llx\n",
-					mr_key->address, mr_key->length);
+				  "removing entry (%p) from stale and"
+				  " migrating to inuse, key=%llx:%llx\n",
+				  mr_entry, mr_key->address, mr_key->length);
 			rc = rbtErase(cache->stale.rb_tree, iter);
-			if (unlikely(rc != RBT_STATUS_OK))
-				GNIX_WARN(FI_LOG_MR,
-						"failed to erase entry from stale tree\n");
-			assert(rc == RBT_STATUS_OK);
+			if (unlikely(rc != RBT_STATUS_OK)) {
+				GNIX_FATAL(FI_LOG_MR,
+					   "failed to erase entry (%p) from "
+					   " stale tree\n", mr_entry);
+			}
 
-			dlist_remove(&mr_entry->lru_entry);
+			if (__mr_cache_lru_remove(cache, mr_entry)
+			    != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_MR, "Failed to remove"
+					  " entry (%p) from lru list\n",
+					  mr_entry);
+			}
 
 			atomic_dec(&cache->stale.elements);
 
@@ -1014,10 +1326,11 @@ static int __mr_cache_search_stale(
 			 */
 			rc = rbtInsert(cache->inuse.rb_tree,
 					&mr_entry->key, mr_entry);
-			if (unlikely(rc != RBT_STATUS_OK))
-				GNIX_WARN(FI_LOG_MR,
-						"failed to insert entry into inuse tree\n");
-			assert(rc == RBT_STATUS_OK);
+			if (unlikely(rc != RBT_STATUS_OK)) {
+				GNIX_FATAL(FI_LOG_MR,
+					   "failed to insert entry into"
+					   "inuse tree\n");
+			}
 
 			atomic_set(&mr_entry->ref_cnt, 1);
 			atomic_inc(&cache->inuse.elements);
@@ -1062,9 +1375,9 @@ static int __mr_cache_create_registration(
 	handle = cache->attr.reg_callback(handle, (void *) address, length,
 			fi_reg_context, cache->attr.reg_context);
 	if (unlikely(!handle)) {
-		free(current_entry);
-		GNIX_WARN(FI_LOG_MR, "failed to register memory with callback");
-		return -FI_ENOMEM;
+		GNIX_WARN(FI_LOG_MR,
+			  "failed to register memory with callback\n");
+		goto err;
 	}
 
 	/* set up the entry's key */
@@ -1072,24 +1385,20 @@ static int __mr_cache_create_registration(
 	current_entry->key.length = length;
 	current_entry->flags = 0;
 
+	rc = __notifier_monitor(cache, current_entry);
+	if (unlikely(rc != FI_SUCCESS)) {
+		GNIX_WARN(FI_LOG_MR,
+			  "failed to monitor memory with notifier\n");
+		goto err_dereg;
+	}
+
 	rc = rbtInsert(cache->inuse.rb_tree, &current_entry->key,
 			current_entry);
 	if (unlikely(rc != RBT_STATUS_OK)) {
 		GNIX_ERR(FI_LOG_MR, "failed to insert registration "
 				"into cache, ret=%i\n", rc);
 
-		rc = cache->attr.dereg_callback(current_entry->mr,
-				cache->attr.dereg_context);
-		if (unlikely(rc)) {
-			GNIX_WARN(FI_LOG_MR,
-					"failed to deregister memory with "
-					"callback, ret=%d\n",
-					rc);
-		}
-
-		free(current_entry);
-
-		return -FI_ENOMEM;
+		goto err_dereg;
 	}
 
 	GNIX_INFO(FI_LOG_MR, "inserted key %llx:%llx into inuse\n",
@@ -1102,6 +1411,18 @@ static int __mr_cache_create_registration(
 	*entry = current_entry;
 
 	return FI_SUCCESS;
+
+err_dereg:
+	rc = cache->attr.dereg_callback(current_entry->mr,
+					cache->attr.dereg_context);
+	if (unlikely(rc)) {
+		GNIX_WARN(FI_LOG_MR,
+			  "failed to deregister memory with "
+			  "callback, ret=%d\n", rc);
+	}
+err:
+	free(current_entry);
+	return -FI_ENOMEM;
 }
 
 /**
@@ -1141,10 +1462,14 @@ int _gnix_mr_cache_register(
 	/* if we shouldn't introduce any new elements, return -FI_ENOSPC */
 	if (unlikely(cache->attr.hard_reg_limit > 0 &&
 			(atomic_get(&cache->inuse.elements) >=
-					cache->attr.hard_reg_limit)))
-		return -FI_ENOSPC;
+			 cache->attr.hard_reg_limit))) {
+		ret = -FI_ENOSPC;
+		goto err;
+	}
 
 	if (cache->attr.lazy_deregistration) {
+		__clear_notifier_events(cache);
+
 		/* if lazy deregistration is in use, we can check the
 		 *   stale tree
 		 */
@@ -1166,8 +1491,9 @@ int _gnix_mr_cache_register(
 
 	ret = __mr_cache_create_registration(cache, address, length,
 			&entry, &key, fi_reg_context);
-	if (ret)
-		return ret;
+	if (ret) {
+		goto err;
+	}
 
 	cache->misses++;
 
@@ -1176,12 +1502,14 @@ success:
 	*handle = (void *) entry->mr;
 
 	return FI_SUCCESS;
+
+err:
+	return ret;
 }
 
 /**
  * Function to deregister memory in the cache
  *
- * @param[in]  cache  gnix memory registration cache pointer
  * @param[in]  mr     gnix memory registration descriptor pointer
  *
  * @return     FI_SUCCESS on success
@@ -1203,8 +1531,12 @@ int _gnix_mr_cache_deregister(
 	 */
 
 	entry = container_of(handle, gnix_mr_cache_entry_t, mr);
-	if (entry->state != GNIX_CES_INUSE)
+	if ((entry->state != GNIX_CES_INUSE) &&
+	    (entry->state != GNIX_CES_INUSE_UNMAPPED)) {
+		GNIX_WARN(FI_LOG_MR, "entry (%p) in incorrect state (%d)\n",
+			  entry, entry->state);
 		return -FI_EINVAL;
+	}
 
 	GNIX_INFO(FI_LOG_MR, "entry found, entry=%p refs=%d\n",
 			entry, atomic_get(&entry->ref_cnt));

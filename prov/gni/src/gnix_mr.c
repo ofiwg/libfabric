@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  *
@@ -281,7 +281,7 @@ static int fi_gnix_mr_close(fid_t fid)
 
 	/* call cache deregister op */
 	fastlock_acquire(&domain->mr_cache_lock);
-	ret = _gnix_mr_cache_deregister(mr->domain->mr_cache, mr);
+	ret = _gnix_mr_cache_deregister(domain->mr_cache, mr);
 	fastlock_release(&domain->mr_cache_lock);
 
 	/* check retcode */

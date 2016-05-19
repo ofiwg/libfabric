@@ -297,11 +297,6 @@ static void rdm_sr_teardown_common(bool unreg)
 {
 	int ret = 0, i = 0;
 
-	free(uc_source);
-	free(uc_target);
-	free(target);
-	free(source);
-
 	for (; i < NUMEPS; i++) {
 		fi_close(&recv_cntr[i]->fid);
 		fi_close(&send_cntr[i]->fid);
@@ -327,6 +322,11 @@ static void rdm_sr_teardown_common(bool unreg)
 
 		free(ep_name[i]);
 	}
+
+	free(uc_source);
+	free(uc_target);
+	free(target);
+	free(source);
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");

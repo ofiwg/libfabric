@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -148,6 +148,7 @@ typedef struct gnix_mr_cache_attr {
 	void *reg_context;
 	void *dereg_context;
 	void *destruct_context;
+	struct gnix_mr_notifier *notifier;
 	void *(*reg_callback)(void *handle, void *address, size_t length,
 			struct _gnix_fi_reg_context *fi_reg_context,
 			void *context);
@@ -220,7 +221,13 @@ int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache);
 int _gnix_mr_cache_flush(gnix_mr_cache_t *cache);
 
 /**
- * TODO
+ * @brief Initializes the MR cache state
+ *
+ * @param[in,out] cache   a gnix memory registration cache
+ * @param[in] attr        cache attributes, @see gnix_mr_cache_attr_t
+ *
+ * @return           FI_SUCCESS on success
+ *                   -FI_ENOMEM otherwise
  */
 int _gnix_mr_cache_init(
 		gnix_mr_cache_t      **cache,

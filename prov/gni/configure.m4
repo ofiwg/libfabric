@@ -102,6 +102,14 @@ dnl looks like we need to get rid of some white space
 
         ])
 
+	AC_ARG_WITH([kdreg], [AS_HELP_STRING([--with-kdreg],
+                                             [Install directory for kdreg headers])])
+
+        if test "$with_kdreg" != "" && test "$with_kdreg" != "no"; then
+		    gni_CPPFLAGS="-I$with_kdreg/include -DHAVE_KDREG $gni_CPPFLAGS"
+        fi
+
+
         AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
 
         AC_SUBST(gni_CPPFLAGS)

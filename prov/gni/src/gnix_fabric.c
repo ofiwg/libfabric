@@ -100,6 +100,11 @@ static void __fabric_destruct(void *obj)
 {
 	struct gnix_fid_fabric *fab = (struct gnix_fid_fabric *) obj;
 
+	/*
+	 * close the MR notifier
+	 */
+	(void) _gnix_notifier_close(&fab->mr_notifier);
+
 	_gnix_alps_cleanup();
 
 	free(fab);
@@ -136,6 +141,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 			    struct fid_fabric **fabric,
 			    void *context)
 {
+	int ret;
 	struct gnix_fid_fabric *fab;
 
 	if (strcmp(attr->name, gnix_fab_name)) {
@@ -160,6 +166,17 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	fab->fab_fid.ops = &gnix_fab_ops;
 	_gnix_ref_init(&fab->ref_cnt, 1, __fabric_destruct);
 	dlist_init(&fab->domain_list);
+
+	ret = _gnix_notifier_init(&fab->mr_notifier);
+	if (ret != FI_SUCCESS) {
+		return ret;
+	}
+
+	// TODO: open dynamically as needed
+	ret = _gnix_notifier_open(&fab->mr_notifier);
+	if (ret != FI_SUCCESS && ret != -FI_EBUSY) {
+		return ret;
+	}
 
 	*fabric = &fab->fab_fid;
 
