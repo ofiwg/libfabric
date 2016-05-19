@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -455,7 +456,7 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 	assert(status == GNI_RC_SUCCESS ||
 	       status == GNI_RC_TRANSACTION_ERROR);
 
-	if (status == GNI_RC_TRANSACTION_ERROR) {
+	if (unlikely(status == GNI_RC_TRANSACTION_ERROR)) {
 		status = GNI_CqErrorRecoverable(cqe, &recov);
 		if (status != GNI_RC_SUCCESS || !recov) {
 			char ebuf[512];
@@ -535,11 +536,11 @@ int _gnix_nic_progress(struct gnix_nic *nic)
 	}
 
 	ret = __nic_rx_progress(nic);
-	if (unlikely(ret != FI_SUCCESS))
+	if (ret != FI_SUCCESS)
 		return ret;
 
 	ret = _gnix_vc_nic_progress(nic);
-	if (unlikely(ret != FI_SUCCESS))
+	if (ret != FI_SUCCESS)
 		return ret;
 
 	return ret;

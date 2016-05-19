@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -127,7 +128,8 @@ int _gnix_cntr_inc(struct gnix_fid_cntr *cntr)
 	if (cntr->wait)
 		_gnix_signal_wait_obj(cntr->wait);
 
-	_gnix_trigger_check_cntr(cntr);
+	if (_gnix_trigger_pending(cntr))
+		_gnix_trigger_check_cntr(cntr);
 
 	return FI_SUCCESS;
 }
@@ -210,31 +212,38 @@ int _gnix_cntr_poll_nic_rem(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
  * API functions.
  ******************************************************************************/
 
+static int gnix_cntr_wait_sleep(struct gnix_fid_cntr *cntr_priv,
+				uint64_t threshold, int timeout)
+{
+	int ret = FI_SUCCESS;
+
+	while (atomic_get(&cntr_priv->cnt) < threshold) {
+		ret = gnix_wait_wait((struct fid_wait *)cntr_priv->wait,
+					timeout);
+		if (ret == -FI_ETIMEDOUT)
+			break;
+		if (ret) {
+			GNIX_WARN(FI_LOG_CQ,
+				" gnix_wait_wait returned %d.\n",
+				  ret);
+			break;
+		}
+	}
+
+	return ret;
+}
+
+
 DIRECT_FN STATIC int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 				    int timeout)
 {
 	struct gnix_fid_cntr *cntr_priv;
-	struct timespec ts0, ts;
-	int msec_passed = 0;
 	int ret = 0;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
 
-	clock_gettime(CLOCK_REALTIME, &ts0);
-
-	while (atomic_get(&cntr_priv->cnt) < threshold) {
-		if (cntr_priv->wait) {
-			ret = gnix_wait_wait((struct fid_wait *)cntr_priv->wait,
-					     timeout - msec_passed);
-			if (ret == -FI_ETIMEDOUT)
-				break;
-			if (ret) {
-				GNIX_WARN(FI_LOG_CQ,
-					" gnix_wait_wait returned %d.\n",
-					  ret);
-				break;
-			}
-		} else {
+	if (!cntr_priv->wait) {
+		while (atomic_get(&cntr_priv->cnt) < threshold) {
 			ret = __gnix_cntr_progress(cntr_priv);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_CQ,
@@ -242,22 +251,13 @@ DIRECT_FN STATIC int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 					  ret);
 				break;
 			}
+
+			if (atomic_get(&cntr_priv->cnt) >= threshold)
+				break;
+
 		}
-
-		if (atomic_get(&cntr_priv->cnt) >= threshold)
-			break;
-
-		if (timeout < 0)
-			continue;
-
-		clock_gettime(CLOCK_REALTIME, &ts);
-		msec_passed = (ts.tv_sec - ts0.tv_sec) * 1000 +
-			      (ts.tv_nsec - ts0.tv_nsec) / 1000000;
-
-		if (msec_passed >= timeout) {
-			ret = -FI_ETIMEDOUT;
-			break;
-		}
+	} else  {
+		ret = gnix_cntr_wait_sleep(cntr_priv, threshold, timeout);
 	}
 
 	return ret;

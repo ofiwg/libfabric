@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2016 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -34,13 +35,19 @@
  * Triggered operations handling.
  */
 
-#ifndef _GNIX_TRIGGER_H_
-#define _GNIX_TRIGGER_H_
+#ifndef GNIX_TRIGGER_H_
+#define GNIX_TRIGGER_H_
 
 #include "gnix.h"
 #include "gnix_cntr.h"
+#include "gnix_vc.h"
 
 int _gnix_trigger_queue_req(struct gnix_fab_req *req);
 void _gnix_trigger_check_cntr(struct gnix_fid_cntr *cntr);
 
-#endif
+static inline int _gnix_trigger_pending(struct gnix_fid_cntr *cntr)
+{
+	return dlist_empty(&cntr->trigger_list) ? 0 : 1;
+}
+
+#endif /* GNIX_TRIGGER_H */
