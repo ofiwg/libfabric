@@ -230,7 +230,9 @@ static int print_providers(struct fi_info *info)
 static int print_short_info(struct fi_info *info)
 {
 	for (struct fi_info *cur = info; cur; cur = cur->next) {
-		printf("%s: %s\n", cur->fabric_attr->prov_name, cur->fabric_attr->name);
+		printf("provider: %s\n", cur->fabric_attr->prov_name);
+		printf("    fabric: %s\n", cur->fabric_attr->name),
+		printf("    domain: %s\n", cur->domain_attr->name),
 		printf("    version: %d.%d\n", FI_MAJOR(cur->fabric_attr->prov_version),
 			FI_MINOR(cur->fabric_attr->prov_version));
 		if (!list_providers) {
