@@ -168,6 +168,30 @@ int fi_rma_target_allowed(uint64_t caps);
 uint64_t fi_gettime_ms(void);
 
 
+#define FI_LOG(prov, level, subsystem, ...)				\
+	do {								\
+		if (fi_log_enabled(prov, level, subsystem))		\
+			fi_log(prov, level, subsystem,			\
+				__func__, __LINE__, __VA_ARGS__);	\
+	} while (0)
+
+#define FI_WARN(prov, subsystem, ...)					\
+	FI_LOG(prov, FI_LOG_WARN, subsystem, __VA_ARGS__)
+
+#define FI_TRACE(prov, subsystem, ...)					\
+	FI_LOG(prov, FI_LOG_TRACE, subsystem, __VA_ARGS__)
+
+#define FI_INFO(prov, subsystem, ...)					\
+	FI_LOG(prov, FI_LOG_INFO, subsystem, __VA_ARGS__)
+
+#if defined(ENABLE_DEBUG) && ENABLE_DEBUG > 0
+#define FI_DBG(prov, subsystem, ...)					\
+	FI_LOG(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
+#else
+#define FI_DBG(prov_name, subsystem, ...)				\
+	do {} while (0)
+#endif
+
 #ifdef __cplusplus
 }
 #endif
