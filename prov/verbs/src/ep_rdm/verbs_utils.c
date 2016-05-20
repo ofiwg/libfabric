@@ -161,7 +161,11 @@ int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
 		if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
 			struct sockaddr_in *paddr =
 			    (struct sockaddr_in *) tmp->ifa_addr;
-			if (!strncmp(tmp->ifa_name, "ib", 2)) {
+			/* TODO: initialize from outside */
+			if (!strncmp(tmp->ifa_name, "ib",   2) ||
+			    !strncmp(tmp->ifa_name, "enp",  3) ||
+			    !strncmp(tmp->ifa_name, "eth2", 4))
+			{
 				int ret = 0;
 
 				if (addr && addr->sin_addr.s_addr) {

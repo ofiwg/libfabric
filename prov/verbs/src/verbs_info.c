@@ -763,7 +763,9 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 
 		fi->ep_attr->protocol = (ep_dom == &verbs_msg_domain) ?
 					FI_PROTO_IWARP : FI_PROTO_IWARP_RDM;
-		fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
+		if (ep_dom == &verbs_msg_domain) {
+			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
+		}
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown transport type\n");

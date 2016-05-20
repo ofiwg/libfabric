@@ -78,15 +78,25 @@ fi_ibv_rdm_tagged_batch_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
 	const size_t idx = (conn->cm_role == FI_VERBS_CM_SELF) ? 1 : 0;
 	struct ibv_recv_wr *bad_wr = NULL;
 	struct ibv_recv_wr wr[num_to_post];
+	struct ibv_sge sge[num_to_post];
 	int ret = 0;
 	int last = num_to_post - 1;
 	int i;
 
 	for (i = 0; i < num_to_post; i++) {
+		sge[i].addr = (uint64_t)(void *)fi_ibv_rdm_get_rbuf(conn, ep, (conn->last_recv_preposted) % ep->n_buffs);
+		sge[i].length = FI_IBV_RDM_DFLT_BUFFER_SIZE;
+		sge[i].lkey = conn->r_mr->lkey;
 		wr[i].wr_id = (uintptr_t) conn;
 		wr[i].next = &wr[i + 1];
-		wr[i].sg_list = NULL;
-		wr[i].num_sge = 0;
+		wr[i].sg_list = &sge[i];
+		wr[i].num_sge = 1;
+
+		conn->last_recv_preposted++;
+		if (conn->last_recv_preposted & ep->n_buffs) {
+			conn->last_recv_preposted = 0;
+		}
+
 	}
 	wr[last].next = NULL;
 

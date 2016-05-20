@@ -460,9 +460,9 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(
 		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	_ep->max_inline_rc =
-	    fi_ibv_rdm_tagged_find_max_inline_size(_ep->domain->pd,
-						   _ep->domain->verbs);
+	_ep->max_inline_rc = 0;
+//	    fi_ibv_rdm_tagged_find_max_inline_size(_ep->domain->pd,
+//						   _ep->domain->verbs);
 	_ep->scq_depth = FI_IBV_RDM_TAGGED_DFLT_SCQ_SIZE;
 	_ep->rcq_depth = FI_IBV_RDM_TAGGED_DFLT_RCQ_SIZE;
 

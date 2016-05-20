@@ -308,6 +308,7 @@ struct fi_ibv_rdm_tagged_conn {
 
 	int sends_outgoing;
 	int recv_preposted;
+	int last_recv_preposted;
 	/* counter for eager buffer releasing */
 	uint16_t recv_completions;
 	/* counter to control OOO behaviour, works in pair with recv_completions */
