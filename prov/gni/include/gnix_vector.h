@@ -84,6 +84,18 @@ typedef struct gnix_vec_attr {
 
 struct gnix_vector;
 
+struct gnix_vector_iter {
+	struct gnix_vector *vec;
+	int cur_idx;
+};
+
+#define GNIX_VECTOR_ITERATOR(_vec, _iter)	\
+	struct gnix_vector_iter _iter = {	\
+		.vec = (_vec),			\
+		.cur_idx = 0,			\
+	}
+#define GNIX_VECTOR_ITERATOR_IDX(_iter)	((_iter).cur_idx)
+
 /**
  * Vector operations
  *
@@ -112,7 +124,7 @@ typedef struct gnix_vector_ops {
 	int (*first)(struct gnix_vector *, void **);
 	int (*last)(struct gnix_vector *, void **);
 	int (*at)(struct gnix_vector *, void **, gnix_vec_index_t);
-	/* TODO: void *(*iter_next)(struct gnix_vector_iter *); */
+	gnix_vec_entry_t *(*iter_next)(struct gnix_vector_iter *);
 } gnix_vector_ops_t;
 
 /**
@@ -303,5 +315,13 @@ int _gnix_vec_insert_last(gnix_vector_t *vec, gnix_vec_entry_t *entry);
  * @return -FI_ECANCELED Upon an existing non-empty entry being found at index 0
  */
 int _gnix_vec_insert_first(gnix_vector_t *vec, gnix_vec_entry_t *entry);
+
+/**
+ * Return next element in the vector iterator
+ *
+ * @param iter    pointer to the vector iterator
+ * @return        pointer to next element in the vector
+ */
+gnix_vec_entry_t *_gnix_vec_iterator_next(struct gnix_vector_iter *iter);
 
 #endif /* GNIX_VECTOR_H_ */
