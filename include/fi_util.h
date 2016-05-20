@@ -399,9 +399,9 @@ void fi_fabric_remove(struct util_fabric *fabric);
  * Layered Providers
  */
 
-typedef int (*ofi_alter_info_t)(struct fi_info *src_info, struct fi_info **dest_info);
+typedef int (*ofi_alter_info_t)(struct fi_info *src_info, struct fi_info *dest_info);
 
-int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *service,
+int ofix_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_provider *prov,
 			const struct fi_info *prov_info, struct fi_info *hints,
 			ofi_alter_info_t alter_layer_info,
