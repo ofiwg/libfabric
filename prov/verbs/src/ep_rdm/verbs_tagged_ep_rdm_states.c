@@ -334,6 +334,8 @@ fi_ibv_rdm_tagged_rndv_rts_lc(struct fi_ibv_rdm_tagged_request *request,
 	assert(((request->state.eager == FI_IBV_STATE_EAGER_SEND_WAIT4LC) &&
 		(request->state.rndv == FI_IBV_STATE_RNDV_SEND_WAIT4ACK)) ||
 	       ((request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) &&
+		(request->state.rndv == FI_IBV_STATE_RNDV_SEND_END)) ||
+	       ((request->state.eager == FI_IBV_STATE_EAGER_SEND_WAIT4LC) &&
 		(request->state.rndv == FI_IBV_STATE_RNDV_SEND_END)));
 	assert(request->minfo.conn);
 
@@ -1276,6 +1278,9 @@ ssize_t fi_ibv_rdm_tagged_req_hndls_init(void)
 	    [FI_IBV_STATE_RNDV_SEND_WAIT4ACK][FI_IBV_EVENT_SEND_GOT_LC] =
 	    fi_ibv_rdm_tagged_rndv_rts_lc;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_READY_TO_FREE]
+	    [FI_IBV_STATE_RNDV_SEND_END][FI_IBV_EVENT_SEND_GOT_LC] =
+	    fi_ibv_rdm_tagged_rndv_rts_lc;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_SEND_WAIT4LC]
 	    [FI_IBV_STATE_RNDV_SEND_END][FI_IBV_EVENT_SEND_GOT_LC] =
 	    fi_ibv_rdm_tagged_rndv_rts_lc;
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_SEND_WAIT4LC]

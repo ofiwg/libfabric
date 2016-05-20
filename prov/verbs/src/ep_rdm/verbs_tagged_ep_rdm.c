@@ -683,15 +683,14 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 {
 	const int wc_count = ep->n_buffs; /* TODO: to set from upper level */
 	struct ibv_wc wc[wc_count];
+	int ret = 0;
 	int err = 0;
-
-	int i;
-	int ret;
+	int i = 0;
 
 	do {
 		ret = ibv_poll_cq(ep->rcq, wc_count, wc);
-		for (i = 0; i < ret; ++i) {
-			err &= fi_ibv_rdm_process_recv_wc(ep, &wc[i]);
+		for (i = 0; i < ret && !err; ++i) {
+			err = fi_ibv_rdm_process_recv_wc(ep, &wc[i]);
 		}
 	} while (!err && ret == wc_count);
 
@@ -770,8 +769,8 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	if (ep->posted_sends > 0) {
 		do {
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
-			for (i = 0; i < ret; ++i) {
-				err &= fi_ibv_rdm_process_send_wc(ep, &wc[i]);
+			for (i = 0; i < ret && !err; ++i) {
+				err = fi_ibv_rdm_process_send_wc(ep, &wc[i]);
 			}
 		} while (!err && ret == wc_count);
 	}
