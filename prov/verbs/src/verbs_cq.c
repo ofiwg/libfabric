@@ -466,10 +466,10 @@ static int fi_ibv_cq_close(fid_t fid)
 	}
 
 	if (cq->signal_fd[0]) {
-		close(cq->signal_fd[0]);
+		ofi_close_socket(cq->signal_fd[0]);
 	}
 	if (cq->signal_fd[1]) {
-		close(cq->signal_fd[1]);
+		ofi_close_socket(cq->signal_fd[1]);
 	}
 
 	if (cq->channel)
@@ -596,8 +596,8 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 err4:
 	ibv_destroy_cq(_cq->cq);
 err3:
-	close(_cq->signal_fd[0]);
-	close(_cq->signal_fd[1]);
+	ofi_close_socket(_cq->signal_fd[0]);
+	ofi_close_socket(_cq->signal_fd[1]);
 err2:
 	if (_cq->channel)
 		ibv_destroy_comp_channel(_cq->channel);

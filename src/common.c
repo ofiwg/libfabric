@@ -203,21 +203,6 @@ uint64_t fi_gettime_ms(void)
 	return now.tv_sec * 1000 + now.tv_usec / 1000;
 }
 
-int fi_fd_nonblock(int fd)
-{
-	long flags = 0;
-
-	flags = fcntl(fd, F_GETFL);
-	if (flags < 0) {
-		return -errno;
-	}
-
-	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-		return -errno;
-
-	return 0;
-}
-
 #ifndef HAVE_EPOLL
 
 int fi_epoll_create(struct fi_epoll **ep)

@@ -63,6 +63,7 @@ extern "C" {
 #include <fi_indexer.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>
+#include <fi_file.h>
 #include "gni_pub.h"
 #include "gnix_util.h"
 #include "gnix_freelist.h"

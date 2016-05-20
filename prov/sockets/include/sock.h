@@ -53,6 +53,7 @@
 #include <fi_indexer.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>
+#include <fi_file.h>
 #include <rbtree.h>
 
 #ifndef _SOCK_H_

@@ -2400,7 +2400,7 @@ void sock_pe_signal(struct sock_pe *pe)
 
 	fastlock_acquire(&pe->signal_lock);
 	if (pe->wcnt == pe->rcnt) {
-		if (write(pe->signal_fds[SOCK_SIGNAL_WR_FD], &c, 1) != 1)
+		if (ofi_write_socket(pe->signal_fds[SOCK_SIGNAL_WR_FD], &c, 1) != 1)
 			SOCK_LOG_ERROR("Failed to signal\n");
 		else
 			pe->wcnt++;
@@ -2489,6 +2489,8 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep_attr *ep_at
 	fastlock_acquire(&map->lock);
 	for (i = 0; i < num_fds; i++) {
 		fd = sock_epoll_get_fd_at_index(&map->epoll_set, i);
+		if(fd == -1) /* failed to lookup fd due to connection failures */
+			continue;
 		conn = idm_lookup(&ep_attr->conn_idm, fd);
 		if (!conn)
 			SOCK_LOG_ERROR("idm_lookup failed\n");
@@ -2664,7 +2666,7 @@ static void sock_pe_poll(struct sock_pe *pe)
 
 	fastlock_acquire(&pe->signal_lock);
 	if (pe->rcnt != pe->wcnt) {
-		if (read(pe->signal_fds[SOCK_SIGNAL_RD_FD], &tmp, 1) == 1)
+		if (ofi_read_socket(pe->signal_fds[SOCK_SIGNAL_RD_FD], &tmp, 1) == 1)
 			pe->rcnt++;
 		else
 			SOCK_LOG_ERROR("Invalid signal\n");
@@ -2853,8 +2855,8 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	return pe;
 
 err5:
-	close(pe->signal_fds[0]);
-	close(pe->signal_fds[1]);
+	ofi_close_socket(pe->signal_fds[0]);
+	ofi_close_socket(pe->signal_fds[1]);
 err4:
 	sock_epoll_close(&pe->epoll_set);
 err3:
@@ -2891,8 +2893,8 @@ void sock_pe_finalize(struct sock_pe *pe)
 		pe->do_progress = 0;
 		sock_pe_signal(pe);
 		pthread_join(pe->progress_thread, NULL);
-		close(pe->signal_fds[0]);
-		close(pe->signal_fds[1]);
+		ofi_close_socket(pe->signal_fds[0]);
+		ofi_close_socket(pe->signal_fds[1]);
 	}
 
 	for (i = 0; i < SOCK_PE_MAX_ENTRIES; i++) {

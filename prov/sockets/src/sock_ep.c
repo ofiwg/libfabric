@@ -615,15 +615,15 @@ static int sock_ep_close(struct fid *fid)
 
 	if (sock_ep->attr->ep_type == FI_EP_MSG) {
 		sock_ep->attr->cm.do_listen = 0;
-		if (write(sock_ep->attr->cm.signal_fds[0], &c, 1) != 1)
+		if (ofi_write_socket(sock_ep->attr->cm.signal_fds[0], &c, 1) != 1)
 			SOCK_LOG_DBG("Failed to signal\n");
 
 		if (sock_ep->attr->cm.listener_thread &&
 		    pthread_join(sock_ep->attr->cm.listener_thread, NULL)) {
 			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 		}
-		close(sock_ep->attr->cm.signal_fds[0]);
-		close(sock_ep->attr->cm.signal_fds[1]);
+		ofi_close_socket(sock_ep->attr->cm.signal_fds[0]);
+		ofi_close_socket(sock_ep->attr->cm.signal_fds[1]);
 	} else {
 		if (sock_ep->attr->av)
 			atomic_dec(&sock_ep->attr->av->ref);
@@ -645,7 +645,7 @@ static int sock_ep_close(struct fid *fid)
 
 	if (sock_ep->attr->listener.do_listen) {
 		sock_ep->attr->listener.do_listen = 0;
-		if (write(sock_ep->attr->listener.signal_fds[0], &c, 1) != 1)
+		if (ofi_write_socket(sock_ep->attr->listener.signal_fds[0], &c, 1) != 1)
 			SOCK_LOG_DBG("Failed to signal\n");
 
 		if (sock_ep->attr->listener.listener_thread &&
@@ -653,8 +653,8 @@ static int sock_ep_close(struct fid *fid)
 			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 		}
 
-		close(sock_ep->attr->listener.signal_fds[0]);
-		close(sock_ep->attr->listener.signal_fds[1]);
+		ofi_close_socket(sock_ep->attr->listener.signal_fds[0]);
+		ofi_close_socket(sock_ep->attr->listener.signal_fds[1]);
 	}
 
 	fastlock_destroy(&sock_ep->attr->cm.lock);
@@ -1382,7 +1382,7 @@ static int sock_ep_assign_src_addr(struct sock_ep *sock_ep, struct fi_info *info
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct sock_ep **ep, void *context, size_t fclass)
 {
-	int ret, flags;
+	int ret;
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
@@ -1564,9 +1564,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err2;
 		}
 
-		flags = fcntl(sock_ep->attr->cm.signal_fds[1], F_GETFL, 0);
-		if (fcntl(sock_ep->attr->cm.signal_fds[1], F_SETFL, flags | O_NONBLOCK))
-			SOCK_LOG_ERROR("fcntl failed");
+		if (fi_fd_nonblock(sock_ep->attr->cm.signal_fds[1]))
+			SOCK_LOG_ERROR("fi_fd_nonblock failed");
 	}
 
 	if (sock_conn_map_init(sock_ep, sock_cm_def_map_sz)) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,18 +30,26 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_OSD_H_
-#define _FI_OSD_H_
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
-#ifdef __APPLE__
-#include <osx/osd.h>
-#include <unix/osd.h>
-#elif defined __FreeBSD__
-#include <freebsd/osd.h>
-#include <unix/osd.h>
-#else
-#include <linux/osd.h>
-#include <unix/osd.h>
-#endif
+#include "fi_osd.h"
+#include "fi_file.h"
 
-#endif /* _FI_OSD_H_ */
+int fi_fd_nonblock(int fd)
+{
+	long flags = 0;
+
+	flags = fcntl(fd, F_GETFL);
+	if (flags < 0) {
+		return -errno;
+	}
+
+	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK))
+		return -errno;
+
+	return 0;
+}
+
+

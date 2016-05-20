@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -63,7 +64,7 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 
 	case FI_WAIT_MUTEX_COND:
 		mut_cond.mutex = &wait->wobj.mutex_cond.mutex;
-		mut_cond.cond = &wait->wobj.mutex_cond.cond;
+		mut_cond.cond  = &wait->wobj.mutex_cond.cond;
 		memcpy(arg, &mut_cond, sizeof(mut_cond));
 		break;
 
@@ -88,8 +89,8 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 
 		ret = fd_set_nonblock(wait->wobj.fd[WAIT_READ_FD]);
 		if (ret) {
-			close(wait->wobj.fd[WAIT_READ_FD]);
-			close(wait->wobj.fd[WAIT_WRITE_FD]);
+			ofi_close_socket(wait->wobj.fd[WAIT_READ_FD]);
+			ofi_close_socket(wait->wobj.fd[WAIT_WRITE_FD]);
 			return ret;
 		}
 		break;
@@ -159,7 +160,7 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 			err = -FI_ETIMEDOUT;
 		} else {
 			while (err > 0) {
-				ret = read(wait->wobj.fd[WAIT_READ_FD], &c, 1);
+				ret = ofi_read_socket(wait->wobj.fd[WAIT_READ_FD], &c, 1);
 				if (ret != 1) {
 					SOCK_LOG_ERROR("failed to read wait_fd\n");
 					err = 0;
@@ -192,7 +193,7 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 
 	switch (wait->type) {
 	case FI_WAIT_FD:
-		ret = write(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
+		ret = ofi_write_socket(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
 		if (ret != 1)
 			SOCK_LOG_ERROR("failed to signal\n");
 		break;
@@ -244,8 +245,8 @@ int sock_wait_close(fid_t fid)
 	}
 
 	if (wait->type == FI_WAIT_FD) {
-		close(wait->wobj.fd[WAIT_READ_FD]);
-		close(wait->wobj.fd[WAIT_WRITE_FD]);
+		ofi_close_socket(wait->wobj.fd[WAIT_READ_FD]);
+		ofi_close_socket(wait->wobj.fd[WAIT_WRITE_FD]);
 	}
 
 	atomic_dec(&wait->fab->ref);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,18 +30,36 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_OSD_H_
-#define _FI_OSD_H_
+#ifndef _FI_UNIX_OSD_H_
+#define _FI_UNIX_OSD_H_
 
-#ifdef __APPLE__
-#include <osx/osd.h>
-#include <unix/osd.h>
-#elif defined __FreeBSD__
-#include <freebsd/osd.h>
-#include <unix/osd.h>
-#else
-#include <linux/osd.h>
-#include <unix/osd.h>
-#endif
+#include <stdlib.h>
+#include <unistd.h>
 
-#endif /* _FI_OSD_H_ */
+static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
+{
+	return posix_memalign(memptr, alignment, size);
+}
+
+static inline void ofi_freealign(void *memptr)
+{
+	free(memptr);
+}
+
+static inline ssize_t ofi_read_socket(int fd, void *buf, size_t count)
+{
+	return read(fd, buf, count);
+}
+
+static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
+{
+	return write(fd, buf, count);
+}
+
+static inline int ofi_close_socket(int socket)
+{
+	return close(socket);
+}
+
+#endif /* _FI_UNIX_OSD_H_ */
+

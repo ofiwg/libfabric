@@ -33,10 +33,8 @@
 #ifndef FI_ENDPOINT_H
 #define FI_ENDPOINT_H
 
-#include <sys/socket.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
-#include <stddef.h>
 
 
 #ifdef __cplusplus
