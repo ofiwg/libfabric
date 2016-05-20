@@ -145,11 +145,17 @@ fi_ibv_rdm_tagged_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 				(void **) &conn->rbuf_mem_reg, size);
 	assert(conn->r_mr);
 
+	conn->ack_mr = ibv_reg_mr(ep->domain->pd, &conn->sbuf_ack_status,
+		sizeof(conn->sbuf_ack_status),
+		IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+
+	assert(conn->ack_mr);
+
 	conn->rma_mr = fi_ibv_rdm_alloc_and_reg(ep,
 				(void **) &conn->rmabuf_mem_reg, size);
 	assert(conn->rma_mr);
 
-	fi_ibv_rdm_tagged_buffer_lists_init(conn, ep);
+	fi_ibv_rdm_buffer_lists_init(conn, ep);
 	return 0;
 }
 
@@ -225,8 +231,8 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 			conn->remote_sbuf_rkey = conn->s_mr->rkey;
 			conn->remote_sbuf_mem_reg = conn->s_mr->addr;
 
-			conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-				FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
+			conn->remote_sbuf_head = (struct fi_ibv_rdm_buf *)
+				conn->remote_sbuf_mem_reg;
 		}
 	} else {
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
@@ -244,8 +250,8 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 		conn->remote_sbuf_mem_reg = *(char **)(p);
 		p += sizeof(conn->remote_sbuf_mem_reg);
 
-		conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-			FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
+		conn->remote_sbuf_head = (struct fi_ibv_rdm_buf *)
+			conn->remote_sbuf_mem_reg;
 	}
 }
 
@@ -480,6 +486,9 @@ int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn)
 		fi_ibv_rdm_dereg_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
 	if (conn->r_mr)
 		fi_ibv_rdm_dereg_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
+	if (conn->ack_mr)
+		ibv_dereg_mr(conn->ack_mr);
+
 	if (conn->rma_mr)
 		fi_ibv_rdm_dereg_and_free(&conn->rma_mr, &conn->rmabuf_mem_reg);
 
