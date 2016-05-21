@@ -111,8 +111,8 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 	trigger->threshold = threshold->threshold;
 
 	memcpy(&trigger->op.msg.msg, msg, sizeof(*msg));
-	trigger->op.msg.msg.msg_iov = &trigger->op.msg.msg.msg_iov[0];
-	memcpy((void *) &trigger->op.msg.msg.msg_iov[0], &msg->msg_iov[0],
+	trigger->op.msg.msg.msg_iov = &trigger->op.msg.msg_iov[0];
+	memcpy((void *) &trigger->op.msg.msg_iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
 	trigger->op_type = op_type;
@@ -151,8 +151,8 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	trigger->threshold = threshold->threshold;
 
 	memcpy(&trigger->op.tmsg.msg, msg, sizeof(*msg));
-	trigger->op.tmsg.msg.msg_iov = &trigger->op.tmsg.msg.msg_iov[0];
-	memcpy((void *) &trigger->op.tmsg.msg.msg_iov[0], &msg->msg_iov[0],
+	trigger->op.tmsg.msg.msg_iov = &trigger->op.tmsg.msg_iov[0];
+	memcpy((void *) &trigger->op.tmsg.msg_iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
 	trigger->op_type = op_type;
