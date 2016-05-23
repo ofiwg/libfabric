@@ -844,10 +844,14 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	wr.wr.rdma.remote_addr = (uintptr_t) request->rndv.remote_addr;
 	wr.wr.rdma.rkey = request->rndv.rkey;
 
-	request->rndv.mr = ibv_reg_mr(p->ep->domain->pd,
-				      request->dest_buf,
-				      request->len, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
-	assert(request->rndv.mr);
+	request->rndv.mr =
+		ibv_reg_mr(p->ep->domain->pd, request->dest_buf, request->len,
+			   IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+	if (!request->rndv.mr) {
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "failed ibv_reg_mr", errno);
+		assert(0);
+		return -FI_ENOMEM;
+	}
 
 	sge.addr = (uintptr_t) request->dest_buf;
 	sge.length = request->len;
