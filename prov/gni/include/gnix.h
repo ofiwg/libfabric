@@ -403,6 +403,7 @@ struct gnix_fid_ep {
 		struct gnix_vector *vc_table;	/* FI_AV_TABLE */
 	};
 	struct gnix_vc *vc;		/* used for FI_EP_MSG */
+	struct dlist_entry unmapped_vcs;
 	/* lock for unexp and posted recv queue */
 	fastlock_t recv_queue_lock;
 	/* used for unexpected receives */

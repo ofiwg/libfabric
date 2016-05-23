@@ -128,7 +128,7 @@ struct gnix_vc {
 	fastlock_t tx_queue_lock;	/* TX reqs lock */
 	struct dlist_entry tx_list;	/* TX VC list entry */
 
-	struct dlist_entry entry;
+	struct dlist_entry list;	/* General purpose list */
 	fi_addr_t peer_fi_addr;
 	struct gnix_address peer_addr;
 	struct gnix_address peer_cm_nic_addr;

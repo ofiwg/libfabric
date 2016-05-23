@@ -323,6 +323,8 @@ static inline int __gnix_ep_init_vc(struct gnix_fid_ep *ep_priv)
 		}
 	}
 
+	dlist_init(&ep_priv->unmapped_vcs);
+
 	return FI_SUCCESS;
 
 err:
@@ -340,13 +342,29 @@ err:
 static inline int __gnix_ep_fini_vc(struct gnix_fid_ep *ep)
 {
 	int ret;
+	GNIX_VECTOR_ITERATOR(ep->vc_table, iter);
+	struct gnix_vc *vc;
+
+	/* Free unmapped VCs. */
+	dlist_for_each(&ep->unmapped_vcs, vc, list) {
+		_gnix_vc_destroy(vc);
+	}
 
 	if (!ep->av) {
-		/* No AV bound, no VC storage to clean up. */
+		/* No AV bound, no mapped VCs clean up. */
 		return FI_SUCCESS;
 	}
 
 	if (ep->av->type == FI_AV_TABLE) {
+		/* Destroy all VCs */
+		while ((vc = (struct gnix_vc *)
+				_gnix_vec_iterator_next(&iter))) {
+			_gnix_vec_remove_at(ep->vc_table,
+					    GNIX_VECTOR_ITERATOR_IDX(iter));
+			_gnix_vc_destroy(vc);
+		}
+
+		/* Destroy vector storage */
 		ret = _gnix_vec_close(ep->vc_table);
 		if (ret == FI_SUCCESS) {
 			free(ep->vc_table);
@@ -357,6 +375,7 @@ static inline int __gnix_ep_fini_vc(struct gnix_fid_ep *ep)
 				  fi_strerror(-ret));
 		}
 	} else {
+		/* Destroy VC storage, it automatically tears down VCs */
 		ret = _gnix_ht_destroy(ep->vc_ht);
 		if (ret == FI_SUCCESS) {
 			free(ep->vc_ht);
@@ -1879,24 +1898,53 @@ static inline struct gnix_fab_req *__find_tx_req(
 	struct gnix_fab_req *req = NULL;
 	struct dlist_entry *entry;
 	struct gnix_vc *vc;
-	GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
 		   " cancel, context=%p", context);
 
 	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
-	while ((vc = _gnix_ht_iterator_next(&iter))) {
-		COND_ACQUIRE(vc->ep->requires_lock, &vc->tx_queue_lock);
-		entry = dlist_remove_first_match(&vc->tx_queue,
-						 __match_context,
-						 context);
-		COND_RELEASE(vc->ep->requires_lock, &vc->tx_queue_lock);
 
-		if (entry) {
-			req = container_of(entry, struct gnix_fab_req, dlist);
-			break;
+	if (ep->av->type == FI_AV_TABLE) {
+		GNIX_VECTOR_ITERATOR(ep->vc_table, iter);
+
+		while ((vc = (struct gnix_vc *)
+				_gnix_vec_iterator_next(&iter))) {
+			COND_ACQUIRE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+			entry = dlist_remove_first_match(&vc->tx_queue,
+							 __match_context,
+							 context);
+			COND_RELEASE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+
+			if (entry) {
+				req = container_of(entry,
+						   struct gnix_fab_req,
+						   dlist);
+				break;
+			}
+		}
+	} else {
+		GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
+
+		while ((vc = _gnix_ht_iterator_next(&iter))) {
+			COND_ACQUIRE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+			entry = dlist_remove_first_match(&vc->tx_queue,
+							 __match_context,
+							 context);
+			COND_RELEASE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+
+			if (entry) {
+				req = container_of(entry,
+						   struct gnix_fab_req,
+						   dlist);
+				break;
+			}
 		}
 	}
+
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	return req;
