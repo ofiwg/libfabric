@@ -603,9 +603,10 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p remain prepost recvs %d\n", conn, conn->recv_preposted);
 	if (conn->recv_preposted < ep->recv_preposted_threshold) {
 		int to_post = ep->rq_wr_depth - conn->recv_preposted;
-		int res = fi_ibv_rdm_tagged_repost_receives(conn, ep, to_post);
-		if (res == 0) {
+		ssize_t res = fi_ibv_rdm_repost_receives(conn, ep, to_post);
+		if (res < 0) {
 			VERBS_INFO(FI_LOG_EP_DATA, "repost recv failed %d\n", res);
+			/* TODO: err code propagation */
 			abort();
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,

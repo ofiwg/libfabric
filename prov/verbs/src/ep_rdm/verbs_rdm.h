@@ -313,7 +313,6 @@ struct fi_ibv_rdm_tagged_conn {
 
 	int sends_outgoing;
 	int recv_preposted;
-	int last_recv_preposted;
 	/* counter for eager buffer releasing */
 	uint16_t recv_completions;
 	/* counter to control OOO behaviour, works in pair with recv_completions */
@@ -456,9 +455,9 @@ int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn);
 int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn);
 int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
                                 struct fi_ibv_rdm_tagged_conn *conn);
-int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
-                                      struct fi_ibv_rdm_ep *ep,
-                                      int num_to_post);
+ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
+				   struct fi_ibv_rdm_ep *ep,
+				   int num_to_post);
 int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
                               struct fid_ep **ep, void *context);
 int fi_ibv_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

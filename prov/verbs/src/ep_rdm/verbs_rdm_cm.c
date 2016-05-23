@@ -70,73 +70,73 @@ fi_ibv_rdm_dereg_and_free(struct ibv_mr **mr, char **buff)
 	return ret;
 }
 
-static inline int
-fi_ibv_rdm_tagged_batch_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
-					struct fi_ibv_rdm_ep *ep,
-					int num_to_post)
+static inline ssize_t
+fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
+				 struct fi_ibv_rdm_ep *ep, int num_to_post)
 {
 	const size_t idx = (conn->cm_role == FI_VERBS_CM_SELF) ? 1 : 0;
 	struct ibv_recv_wr *bad_wr = NULL;
 	struct ibv_recv_wr wr[num_to_post];
 	struct ibv_sge sge[num_to_post];
-	int ret = 0;
 	int last = num_to_post - 1;
 	int i;
 
+	/* IBV_WR_SEND opcode specific */
+	assert((num_to_post % ep->n_buffs) == 0);
+
+	assert(ep->topcode == IBV_WR_SEND ||
+	       ep->topcode == IBV_WR_RDMA_WRITE_WITH_IMM);
+
+	if (ep->topcode == IBV_WR_SEND) {
+		for (i = 0; i < num_to_post; i++) {
+			sge[i].addr = (uint64_t)(void *)
+			fi_ibv_rdm_get_rbuf(conn, ep, i % ep->n_buffs);
+			sge[i].length = FI_IBV_RDM_DFLT_BUFFER_SIZE;
+			sge[i].lkey = conn->r_mr->lkey;
+		}
+	}
+
 	for (i = 0; i < num_to_post; i++) {
-		sge[i].addr = (uint64_t)(void *)fi_ibv_rdm_get_rbuf(conn, ep, (conn->last_recv_preposted) % ep->n_buffs);
-		sge[i].length = FI_IBV_RDM_DFLT_BUFFER_SIZE;
-		sge[i].lkey = conn->r_mr->lkey;
 		wr[i].wr_id = (uintptr_t) conn;
 		wr[i].next = &wr[i + 1];
 		wr[i].sg_list = &sge[i];
 		wr[i].num_sge = 1;
-
-		conn->last_recv_preposted++;
-		if (conn->last_recv_preposted & ep->n_buffs) {
-			conn->last_recv_preposted = 0;
-		}
-
 	}
 	wr[last].next = NULL;
 
 	if (ibv_post_recv(conn->qp[idx], wr, &bad_wr) == 0) {
-		ret = num_to_post;
-	} else {
-		int found = 0;
-		for (i = 0; !found && (i < num_to_post); i++) {
-			found = (&wr[i] == bad_wr);
-		}
-
-		if (!found) {
-			VERBS_INFO(FI_LOG_EP_DATA, "Failed to post recv\n");
-		}
-
-		ret = i;
+		conn->recv_preposted += num_to_post;
+		return num_to_post;
 	}
-	conn->recv_preposted += ret;
-	return ret;
+
+	VERBS_INFO(FI_LOG_EP_DATA, "Failed to post recv\n");
+	return -FI_ENOMEM;
 }
 
-int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
-				      struct fi_ibv_rdm_ep *ep, int num_to_post)
+ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
+				   struct fi_ibv_rdm_ep *ep, int num_to_post)
 {
 	assert(num_to_post > 0);
-	const int batch_size = 100;
+	const ssize_t batch_size = ep->n_buffs * 10;
 
-	int rest = num_to_post;
+	ssize_t rest = num_to_post - (num_to_post % ep->n_buffs);
+	ssize_t count = 0;
 	while (rest) {
-		const int batch = MIN(rest, batch_size);
-		const int ret =
-		    fi_ibv_rdm_tagged_batch_repost_receives(conn, ep, batch);
+		const ssize_t batch = MIN(rest, batch_size);
+		const ssize_t ret = 
+			fi_ibv_rdm_batch_repost_receives(conn, ep, batch);
 
-		rest -= ret;
-		if (ret != batch) {
-			break;
+		if (ret < 0) {
+			return ret;
 		}
+
+		count += ret;
+		rest -= ret;
+		
+		assert(ret != batch);
 	}
 
-	return num_to_post - rest;
+	return count;
 }
 
 static inline int
@@ -295,10 +295,11 @@ fi_ibv_rdm_tagged_process_addr_resolved(struct rdma_cm_id *id,
 		}
 
 		fi_ibv_rdm_tagged_prepare_conn_memory(ep, conn);
-		if (ep->rq_wr_depth != fi_ibv_rdm_tagged_repost_receives(conn,
-			ep, ep->rq_wr_depth)) {
+		/* TODO: CM err code type should be ssize_t */
+		int ret = fi_ibv_rdm_repost_receives(conn, ep, ep->rq_wr_depth);
+		if (ret < 0) {
 			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
-			return -FI_ENOMEM;
+			return ret;
 		}
 	} while (0);
 
@@ -392,12 +393,11 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 		fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
 		rdma_create_qp(id, ep->domain->pd, &qp_attr);
 		conn->qp[idx] = id->qp;
-		if (ep->rq_wr_depth !=
-		    fi_ibv_rdm_tagged_repost_receives(conn, ep,
-						      ep->rq_wr_depth))
-		{
+		/* TODO: CM err code type should be ssize_t */
+		ret = fi_ibv_rdm_repost_receives(conn, ep, ep->rq_wr_depth);
+		if (ret < 0) {
 			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
-			return -FI_ENOMEM;
+			return ret;
 		}
 
 		id->context = conn;
