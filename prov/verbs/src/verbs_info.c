@@ -51,6 +51,7 @@
 
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
+#define VERBS_TX_OP_FLAGS_IWARP_RDM (VERBS_TX_OP_FLAGS)
 
 #define VERBS_TX_MODE VERBS_MODE
 #define VERBS_TX_RDM_MODE VERBS_RDM_MODE
@@ -761,10 +762,12 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			goto err;
 		}
 
-		fi->ep_attr->protocol = (ep_dom == &verbs_msg_domain) ?
-					FI_PROTO_IWARP : FI_PROTO_IWARP_RDM;
 		if (ep_dom == &verbs_msg_domain) {
+			fi->ep_attr->protocol = FI_PROTO_IWARP;
 			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
+		} else {
+			fi->ep_attr->protocol = FI_PROTO_IWARP_RDM;
+			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP_RDM;
 		}
 		break;
 	default:

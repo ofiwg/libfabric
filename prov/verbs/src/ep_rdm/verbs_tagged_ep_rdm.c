@@ -322,7 +322,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 			wr.send_flags = (size < ep->max_inline_rc)
 				? IBV_SEND_INLINE : 0;
 			wr.imm_data = 0;
-			wr.opcode = IBV_WR_SEND; IBV_WR_RDMA_WRITE_WITH_IMM;
+			wr.opcode = ep->topcode;
 
 			sge.addr = (uintptr_t)(void*)sbuf;
 			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;

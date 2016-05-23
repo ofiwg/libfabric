@@ -233,6 +233,11 @@ struct fi_ibv_rdm_ep {
 
 	struct fi_ibv_av *av;
 
+	/*
+	 * ibv_post_send opcode for tagged messaging.
+	 * It must generate work completion in receive CQ
+	 */
+	enum ibv_wr_opcode topcode;
 	int buff_len;
 	int n_buffs;
 	int rq_wr_depth;    // RQ depth
