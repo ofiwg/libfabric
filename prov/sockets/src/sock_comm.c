@@ -72,14 +72,14 @@ ssize_t sock_comm_flush(struct sock_pe_entry *pe_entry)
 		(pe_entry->comm_buf.rcnt & pe_entry->comm_buf.size_mask);
 
 	xfer_len = MIN(len, endlen);
-	ret1 = sock_comm_send_socket(pe_entry->conn, pe_entry->comm_buf.buf +
+	ret1 = sock_comm_send_socket(pe_entry->conn, (char*)pe_entry->comm_buf.buf +
 				     (pe_entry->comm_buf.rcnt & pe_entry->comm_buf.size_mask),
 				     xfer_len);
 	if (ret1 > 0)
 		pe_entry->comm_buf.rcnt += ret1;
 
 	if (ret1 == xfer_len && xfer_len < len) {
-		ret2 = sock_comm_send_socket(pe_entry->conn, pe_entry->comm_buf.buf +
+		ret2 = sock_comm_send_socket(pe_entry->conn, (char*)pe_entry->comm_buf.buf +
 					     (pe_entry->comm_buf.rcnt & pe_entry->comm_buf.size_mask),
 					     len - xfer_len);
 		if (ret2 > 0)

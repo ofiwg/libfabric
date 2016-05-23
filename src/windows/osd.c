@@ -33,37 +33,68 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <pthread.h>
 
 #include "fi_osd.h"
 #include "fi_file.h"
 
-int fi_fd_nonblock(int fd)
+int socketpair(int af, int type, int protocol, int socks[2])
 {
-	long flags = 0;
+	protocol; /* suppress warning */
+	struct sockaddr_in in_addr;
+	int lsock;
+	int len = sizeof(in_addr);
 
-	flags = fcntl(fd, F_GETFL);
-	if (flags < 0) {
-		return -errno;
+	if(!socks)
+	{
+		WSASetLastError(WSAEINVAL);
+		return SOCKET_ERROR;
 	}
 
-	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-		return -errno;
+	socks[0] = socks[1] = (int)INVALID_SOCKET;
+	if ((lsock = socket(af == AF_UNIX ? AF_INET : af, type, 0)) == INVALID_SOCKET)
+	{
+		return SOCKET_ERROR;
+	}
 
+	memset(&in_addr, 0, sizeof(in_addr));
+	in_addr.sin_family = AF_INET;
+	in_addr.sin_addr.s_addr = htonl(0x7f000001);
+
+	if(bind(lsock, (struct sockaddr*)&in_addr, sizeof(in_addr)))
+	{
+		int err = WSAGetLastError();
+		closesocket(lsock);
+		WSASetLastError(err);
+		return SOCKET_ERROR;
+	}
+	if(getsockname(lsock, (struct sockaddr*) &in_addr, &len))
+	{
+		int err = WSAGetLastError();
+		closesocket(lsock);
+		WSASetLastError(err);
+		return SOCKET_ERROR;
+	}
+
+	if (listen(lsock, 1))
+		goto err;
+	if ((socks[0] = WSASocket(af == AF_UNIX ? AF_INET : af, type, 0, NULL, 0, 0)) == INVALID_SOCKET)
+		goto err;
+	if(connect(socks[0], (const struct sockaddr*) &in_addr, sizeof(in_addr)))
+		goto err;
+	if ((socks[1] = accept(lsock, NULL, NULL)) == INVALID_SOCKET)
+		goto err;
+
+	closesocket(lsock);
 	return 0;
-}
 
-int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
-{
-	struct timespec ts;
-
-	if (timeout < 0)
-		return pthread_cond_wait(cond, mut);
-
-	clock_gettime(CLOCK_REALTIME, &ts);
-	ts.tv_sec += timeout / 1000;
-	ts.tv_nsec += (timeout % 1000) * 1000000;
-	return pthread_cond_timedwait(cond, mut, &ts);
+	int err;
+err:
+	err = WSAGetLastError();
+	closesocket(lsock);
+	closesocket(socks[0]);
+	closesocket(socks[1]);
+	WSASetLastError(err);
+	return SOCKET_ERROR;
 }
 
 

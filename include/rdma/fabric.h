@@ -37,10 +37,14 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#if defined(_WIN32)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 #ifndef container_of
 #define container_of(ptr, type, field) \

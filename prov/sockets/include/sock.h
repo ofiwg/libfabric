@@ -1137,7 +1137,6 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 			   uint64_t flags, uint64_t tag, uint64_t ignore,
 			   uint8_t is_tagged, const struct iovec *msg_iov,
 			   size_t iov_count);
-size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 
 ssize_t sock_comm_send(struct sock_pe_entry *pe_entry, const void *buf, size_t len);
@@ -1185,5 +1184,10 @@ int sock_epoll_del(struct sock_epoll_set *set, int fd);
 int sock_epoll_wait(struct sock_epoll_set *set, int timeout);
 int sock_epoll_get_fd_at_index(struct sock_epoll_set *set, int index);
 void sock_epoll_close(struct sock_epoll_set *set);
+
+static inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
+{
+	return rx_entry->total_len - rx_entry->used;
+}
 
 #endif

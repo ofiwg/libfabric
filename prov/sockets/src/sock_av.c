@@ -49,6 +49,8 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#include "fi_osd.h"
+
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_AV, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_AV, __VA_ARGS__)
 

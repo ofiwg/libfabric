@@ -51,19 +51,6 @@
 #include <fi.h>
 
 
-int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
-{
-	struct timespec ts;
-
-	if (timeout < 0)
-		return pthread_cond_wait(cond, mut);
-
-	clock_gettime(CLOCK_REALTIME, &ts);
-	ts.tv_sec += timeout / 1000;
-	ts.tv_nsec += (timeout % 1000) * 1000000;
-	return pthread_cond_timedwait(cond, mut, &ts);
-}
-
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 {
 	char *path;
