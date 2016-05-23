@@ -31,6 +31,8 @@
  */
 
 #include <ifaddrs.h>
+#include <net/if.h>
+
 #include <rdma/fi_errno.h>
 #include "../fi_verbs.h"
 #include "verbs_utils.h"
@@ -153,36 +155,45 @@ int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
 	struct sockaddr_in lh;
 	int found = 0;
 
+	char iface[IFNAMSIZ];
+	char *iface_tmp = "ib";
+	size_t iface_len = 2;
+
+	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
+		iface_len = strlen(iface_tmp);
+		if (iface_len > IFNAMSIZ) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				   "Too long iface name: %s, max: %d\n",
+				   iface_tmp, IFNAMSIZ);
+			return 0;
+		}
+	}
+
+	strncpy(iface, iface_tmp, iface_len);
+
 	inet_pton(AF_INET, "127.0.0.1", &lh.sin_addr);
 
 	getifaddrs(&addrs);
 	tmp = addrs;
-	while (tmp) {
+	while (tmp && !found) {
 		if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
 			struct sockaddr_in *paddr =
 			    (struct sockaddr_in *) tmp->ifa_addr;
-			/* TODO: initialize from outside */
-			if (!strncmp(tmp->ifa_name, "ib",   2) ||
-			    !strncmp(tmp->ifa_name, "enp",  3) ||
-			    !strncmp(tmp->ifa_name, "eth2", 4))
-			{
-				int ret = 0;
+			if (!strncmp(tmp->ifa_name, iface, iface_len)) {
 
 				if (addr && addr->sin_addr.s_addr) {
-					ret = !memcmp(&addr->sin_addr,
+					found = !memcmp(&addr->sin_addr,
 						      &paddr->sin_addr,
 						      sizeof(addr->sin_addr)) ||
-					      !memcmp(&addr->sin_addr,
+						!memcmp(&addr->sin_addr,
 						      &lh.sin_addr,
 						      sizeof(addr->sin_addr))
 					      ? 1 : 0;
 				}
 
-				if (ret == 1) {
+				if (found) {
 					memcpy(&(cm->my_addr), paddr,
 					       sizeof(cm->my_addr));
-					found = 1;
-					break;
 				}
 			}
 		}

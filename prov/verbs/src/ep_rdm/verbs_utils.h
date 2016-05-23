@@ -69,14 +69,12 @@ struct fi_ibv_msg_ep;
 #define FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM (8)
 
 #define FI_IBV_RDM_DFLT_BUFFER_SIZE					\
-	(1 * FI_IBV_RDM_BUF_ALIGNMENT)
+	(3 * FI_IBV_RDM_BUF_ALIGNMENT)
 
 #define FI_IBV_RDM_DFLT_BUFFERED_SSIZE					\
 	(FI_IBV_RDM_DFLT_BUFFER_SIZE -					\
 	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
 	 sizeof(struct fi_ibv_rdm_header))
-
-#define FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE  (500)
 
 /* TODO: CQs depths increased from 100 to 1000 to prevent
  *      "Work Request Flushed Error" in stress tests like alltoall.

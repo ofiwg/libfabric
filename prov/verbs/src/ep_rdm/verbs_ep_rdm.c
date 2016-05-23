@@ -435,7 +435,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->buff_len = FI_IBV_RDM_DFLT_BUFFER_SIZE;
 	_ep->rndv_threshold = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
 
-	_ep->rq_wr_depth = FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE;
+	_ep->rq_wr_depth = info->domain_attr->rx_ctx_cnt;
 
 	/*
 	 * max number of WRs in SQ is n_buffer for send and
