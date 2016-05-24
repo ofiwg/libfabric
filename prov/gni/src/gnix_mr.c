@@ -214,16 +214,18 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	/* call cache register op to retrieve the right entry */
 	fastlock_acquire(&domain->mr_cache_lock);
-	if (unlikely(!domain->mr_cache)) {
-		rc = _gnix_mr_cache_init(&domain->mr_cache,
-				&domain->mr_cache_attr);
+	if (unlikely(!domain->mr_ops))
+		_gnix_open_cache(domain, GNIX_DEFAULT_CACHE_TYPE);
+
+	if (unlikely(!domain->mr_ops->is_init(domain))) {
+		rc = domain->mr_ops->init(domain);
 		if (rc != FI_SUCCESS) {
 			fastlock_release(&domain->mr_cache_lock);
 			goto err;
 		}
 	}
 
-	rc = _gnix_mr_cache_register(domain->mr_cache,
+	rc = domain->mr_ops->reg_mr(domain,
 			(uint64_t) reg_addr, reg_len, &fi_reg_context,
 			(void **) &mr);
 	fastlock_release(&domain->mr_cache_lock);
@@ -253,7 +255,7 @@ err:
 }
 
 /**
- * Closes and deallocates a libfabric memory registration
+ * Closes and deallocates a libfabric memory registration in the internal cache
  *
  * @param[in]  fid  libfabric memory registration fid
  *
@@ -282,7 +284,7 @@ static int fi_gnix_mr_close(fid_t fid)
 
 	/* call cache deregister op */
 	fastlock_acquire(&domain->mr_cache_lock);
-	ret = _gnix_mr_cache_deregister(domain->mr_cache, mr);
+	ret = domain->mr_ops->dereg_mr(domain, mr);
 	fastlock_release(&domain->mr_cache_lock);
 
 	/* check retcode */
@@ -298,34 +300,25 @@ static int fi_gnix_mr_close(fid_t fid)
 	return ret;
 }
 
-static void *__gnix_register_region(
-		void *handle,
+static inline void *__gnix_generic_register(
+		struct gnix_fid_domain *domain,
+		struct gnix_fid_mem_desc *md,
 		void *address,
 		size_t length,
-		struct _gnix_fi_reg_context *fi_reg_context,
-		void *context)
+		gni_cq_handle_t dst_cq_hndl,
+		int flags,
+		int vmdh_index)
 {
-	struct gnix_fid_mem_desc *md = (struct gnix_fid_mem_desc *) handle;
-	struct gnix_fid_domain *domain = context;
 	struct gnix_nic *nic;
-	gni_cq_handle_t dst_cq_hndl = NULL;
-	int flags = 0;
-	int vmdh_index = -1;
 	gni_return_t grc = GNI_RC_SUCCESS;
-
-	/* If network would be able to write to this buffer, use read-write */
-	if (fi_reg_context->access & (FI_RECV | FI_READ | FI_REMOTE_WRITE))
-		flags |= GNI_MEM_READWRITE;
-	else
-		flags |= GNI_MEM_READ_ONLY;
 
 	dlist_for_each(&domain->nic_list, nic, dom_nic_list)
 	{
 		COND_ACQUIRE(nic->requires_lock, &nic->lock);
 		grc = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t) address,
-				      length,	dst_cq_hndl, flags,
-				      vmdh_index, &md->mem_hndl);
-		fastlock_release(&nic->lock);
+					  length,	dst_cq_hndl, flags,
+					  vmdh_index, &md->mem_hndl);
+		COND_RELEASE(nic->requires_lock, &nic->lock);
 		if (grc == GNI_RC_SUCCESS)
 			break;
 	}
@@ -345,6 +338,29 @@ static void *__gnix_register_region(
 	_gnix_ref_get(md->nic);
 
 	return md;
+}
+
+static void *__gnix_register_region(
+		void *handle,
+		void *address,
+		size_t length,
+		struct _gnix_fi_reg_context *fi_reg_context,
+		void *context)
+{
+	struct gnix_fid_mem_desc *md = (struct gnix_fid_mem_desc *) handle;
+	struct gnix_fid_domain *domain = context;
+	gni_cq_handle_t dst_cq_hndl = NULL;
+	int flags = 0;
+	int vmdh_index = -1;
+
+	/* If network would be able to write to this buffer, use read-write */
+	if (fi_reg_context->access & (FI_RECV | FI_READ | FI_REMOTE_WRITE))
+		flags |= GNI_MEM_READWRITE;
+	else
+		flags |= GNI_MEM_READ_ONLY;
+
+	return __gnix_generic_register(domain, md, address, length, dst_cq_hndl,
+			flags, vmdh_index);
 }
 
 static int __gnix_deregister_region(
@@ -399,13 +415,252 @@ static int __gnix_destruct_registration(void *context)
 	return GNI_RC_SUCCESS;
 }
 
+
+#ifdef HAVE_UDREG
+void *__udreg_register(void *addr, uint64_t length, void *context)
+{
+	struct gnix_fid_mem_desc *md;
+	struct gnix_fid_domain *domain;
+
+	domain = (struct gnix_fid_domain *) context;
+
+    /* Allocate an udreg info block for this registration. */
+    md = malloc(sizeof(struct gnix_fid_mem_desc));
+    if (!md) {
+	GNIX_WARN(FI_LOG_MR, "failed to allocate memory for registration\n");
+	return NULL;
+    }
+
+    return __gnix_generic_register(domain, md, addr, length, NULL,
+		GNI_MEM_READWRITE, -1);
+}
+
+
+uint32_t __udreg_deregister(void *registration, void *context)
+{
+	gni_return_t grc;
+
+	grc = __gnix_deregister_region(registration, NULL);
+
+	return (grc == GNI_RC_SUCCESS) ? 0 : 1;
+}
+
+
+/* Called via dreg when a cache is destroyed. */
+void __udreg_cache_destructor(void *context)
+{
+    /*  Nothing needed here. */
+}
+
+static int __udreg_init(struct gnix_fid_domain *domain)
+{
+	udreg_return_t urc;
+
+	udreg_cache_attr_t udreg_cache_attr = {
+		.cache_name =           {"gnix_app_cache"},
+		.max_entries =          domain->udreg_reg_limit,
+		.modes =                UDREG_CC_MODE_USE_LARGE_PAGES,
+		.debug_mode =           0,
+		.debug_rank =           0,
+		.reg_context =          (void *) domain,
+		.dreg_context =         (void *) domain,
+		.destructor_context =   (void *) domain,
+		.device_reg_func =      __udreg_register,
+		.device_dereg_func =    __udreg_deregister,
+		.destructor_callback =  __udreg_cache_destructor,
+	};
+
+	/*
+	 * Create a udreg cache for application memory registrations.
+	 */
+	urc = UDREG_CacheCreate(&udreg_cache_attr);
+	if (urc != UDREG_RC_SUCCESS) {
+		GNIX_FATAL(FI_LOG_MR,
+				"Could not initialize udreg application cache, urc=%d\n",
+				urc);
+	}
+
+	urc = UDREG_CacheAccess(udreg_cache_attr.cache_name, &domain->udreg_cache);
+	if (urc != UDREG_RC_SUCCESS) {
+		GNIX_FATAL(FI_LOG_MR,
+				"Could not access udreg application cache, urc=%d",
+				urc);
+	}
+	return 0;
+}
+
+static int __udreg_is_init(struct gnix_fid_domain *domain)
+{
+	return domain->udreg_cache != NULL;
+}
+
+static int __udreg_reg_mr(
+		struct gnix_fid_domain     *domain,
+		uint64_t                    address,
+		uint64_t                    length,
+		struct _gnix_fi_reg_context *fi_reg_context,
+		void                        **handle) {
+
+	udreg_return_t urc;
+	udreg_entry_t *udreg_entry;
+	struct gnix_fid_mem_desc *md;
+
+	urc = UDREG_Register(domain->udreg_cache, (void *) address, length, &udreg_entry);
+	if (unlikely(urc != UDREG_RC_SUCCESS))
+		return -FI_EIO;
+
+	md = udreg_entry->device_data;
+	md->entry = udreg_entry;
+
+	*handle = md;
+
+	return 0;
+}
+
+static int __udreg_dereg_mr(struct gnix_fid_domain *domain,
+		struct gnix_fid_mem_desc *md)
+{
+	udreg_return_t urc;
+
+	urc = UDREG_Unregister(domain->udreg_cache,
+			(udreg_entry_t *) md->entry);
+	if (urc != UDREG_RC_SUCCESS) {
+		GNIX_WARN(FI_LOG_MR, "UDREG_Unregister() returned %d\n", urc);
+		return -FI_ENOENT;
+	}
+
+	return urc;
+}
+
+#else
+static int __udreg_init(struct gnix_fid_domain *domain)
+{
+	return -FI_ENOSYS;
+}
+
+static int __udreg_is_init(struct gnix_fid_domain *domain)
+{
+	return 0;
+}
+
+static int __udreg_reg_mr(struct gnix_fid_domain *domain,
+		uint64_t                    address,
+		uint64_t                    length,
+		struct _gnix_fi_reg_context *fi_reg_context,
+		void                        **handle) {
+
+	return -FI_ENOSYS;
+}
+
+static int __udreg_dereg_mr(struct gnix_fid_domain *domain,
+		struct gnix_fid_mem_desc *md)
+{
+	return -FI_ENOSYS;
+}
+#endif
+
+struct gnix_mr_ops udreg_mr_ops = {
+	.init = __udreg_init,
+	.is_init = __udreg_is_init,
+	.reg_mr = __udreg_reg_mr,
+	.dereg_mr = __udreg_dereg_mr,
+};
+
+static int __cache_init(struct gnix_fid_domain *domain) {
+	return _gnix_mr_cache_init(&domain->mr_cache,
+			&domain->mr_cache_attr);
+}
+
+static int __cache_is_init(struct gnix_fid_domain *domain) {
+	return domain->mr_cache != NULL;
+}
+
+static int __cache_reg_mr(
+		struct gnix_fid_domain      *domain,
+		uint64_t                    address,
+		uint64_t                    length,
+		struct _gnix_fi_reg_context *fi_reg_context,
+		void                        **handle) {
+
+	return _gnix_mr_cache_register(domain->mr_cache, address, length,
+			fi_reg_context, handle);
+}
+
+static int __cache_dereg_mr(struct gnix_fid_domain *domain,
+		struct gnix_fid_mem_desc *md)
+{
+	return _gnix_mr_cache_deregister(domain->mr_cache, md);
+}
+
+struct gnix_mr_ops cache_mr_ops = {
+	.init = __cache_init,
+	.is_init = __cache_is_init,
+	.reg_mr = __cache_reg_mr,
+	.dereg_mr = __cache_dereg_mr,
+};
+
+int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
+{
+	if (type < 0 || type >= GNIX_MR_MAX_TYPE)
+		return -FI_EINVAL;
+
+	if (domain->mr_ops)
+		return -FI_EBUSY;
+
+	switch(type) {
+	case GNIX_MR_TYPE_UDREG:
+		domain->mr_ops = &udreg_mr_ops;
+		break;
+	default:
+		domain->mr_ops = &cache_mr_ops;
+		break;
+	}
+
+	domain->mr_cache_type = type;
+	return 0;
+}
+
+int _gnix_close_cache(struct gnix_fid_domain *domain)
+{
+	int ret;
+
+	/* if the domain isn't being destructed by close, we need to check the
+	 * cache again. This isn't a likely case. Destroy must succeed since we
+	 * are in the destruct path */
+	if (domain->mr_cache) {
+		ret = _gnix_mr_cache_destroy(domain->mr_cache);
+		if (ret != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr cache "
+					"during domain destruct, dom=%p ret=%d\n",
+					domain, ret);
+	}
+
+#ifdef HAVE_UDREG
+	if (domain->udreg_cache) {
+		ret = UDREG_CacheRelease(domain->udreg_cache);
+		if (unlikely(ret != UDREG_RC_SUCCESS))
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to release from "
+					"mr cache during domain destruct, dom=%p rc=%d\n",
+					domain, ret);
+
+		ret = UDREG_CacheDestroy(domain->udreg_cache);
+		if (unlikely(ret != UDREG_RC_SUCCESS))
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr "
+					"cache during domain destruct, dom=%p rc=%d\n",
+					domain, ret);
+	}
+#endif
+
+	return 0;
+}
+
 gnix_mr_cache_attr_t _gnix_default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
 		.lazy_deregistration = 1,
-		.reg_callback = __gnix_register_region,
-		.dereg_callback = __gnix_deregister_region,
-		.destruct_callback = __gnix_destruct_registration,
-		.elem_size = sizeof(struct gnix_fid_mem_desc),
+		.reg_callback        = __gnix_register_region,
+		.dereg_callback      = __gnix_deregister_region,
+		.destruct_callback   = __gnix_destruct_registration,
+		.elem_size           = sizeof(struct gnix_fid_mem_desc),
 };

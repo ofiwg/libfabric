@@ -65,6 +65,11 @@ extern "C" {
 #include <fi_rbuf.h>
 #include <fi_list.h>
 #include <fi_file.h>
+
+#ifdef HAVE_UDREG
+#include <udreg_pub.h>
+#endif
+
 #include "gni_pub.h"
 #include "gnix_util.h"
 #include "gnix_freelist.h"
@@ -346,6 +351,12 @@ struct gnix_fid_domain {
 	gnix_mr_cache_attr_t mr_cache_attr;
 	gnix_mr_cache_t *mr_cache;
 	fastlock_t mr_cache_lock;
+	struct gnix_mr_ops *mr_ops;
+	int mr_cache_type;
+	int udreg_reg_limit;
+#ifdef HAVE_UDREG
+	udreg_cache_handle_t udreg_cache;
+#endif
 };
 
 #define GNIX_CQS_PER_EP		8

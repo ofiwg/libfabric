@@ -48,6 +48,13 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                   gni_LDFLAGS="$CRAY_ALPS_UTIL_LIBS $gni_LDFLAGS"
                                  ],
                                  [alps_util_happy=0])
+               FI_PKG_CHECK_MODULES([CRAY_UDREG], [cray-udreg],
+                                 [udreg_lib_happy=1
+                                  gni_CPPFLAGS="-DHAVE_UDREG $CRAY_UDREG_INCLUDE_OPTS $gni_CPPFLAGS"
+                                  gni_LDFLAGS="$CRAY_UDREG_POST_LINK_OPTS $gni_LDFLAGS"
+                                  gni_LIBS="-ludreg $gni_LIBS"
+                                 ],
+                                 [udreg_lib_happy=0])
                gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
 dnl looks like we need to get rid of some white space
                gni_path_to_gni_pub=${gni_path_to_gni_pub%?}/gni_pub.h
@@ -72,8 +79,8 @@ dnl looks like we need to get rid of some white space
                            [AC_MSG_CHECKING([criterion path])
                             if test -d "$with_criterion"; then
                                 AC_MSG_RESULT([yes])
-                                gnitest_CPPFLAGS="-I$with_criterion/include $gnitest_CPPFLAGS"
-				gnitest_LIBS="-lcriterion $gnitest_LIBS"
+                                gnitest_CPPFLAGS="-I$with_criterion/include -DHAVE_UDREG $CRAY_UDREG_INCLUDE_OPTS $gnitest_CPPFLAGS"
+                                gnitest_LIBS="-lcriterion -ludreg  $gnitest_LIBS"
 
                                 if test -d "$with_criterion/lib"; then
                                         gnitest_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib -Wl,-rpath=$with_criterion/lib $gnitest_LDFLAGS"
@@ -84,6 +91,8 @@ dnl looks like we need to get rid of some white space
                                 else
                                         have_criterion=false
                                 fi
+
+                                gnitest_LDFLAGS="$CRAY_UDREG_POST_LINK_OPTS $gnitest_LDFLAGS"
                                 FI_PKG_CHECK_MODULES([CRAY_PMI], [cray-pmi],
                                                      [],
                                                      [have_criterion=false])
@@ -120,5 +129,6 @@ dnl looks like we need to get rid of some white space
         AC_SUBST(gnitest_LIBS)
 
         AS_IF([test $gni_header_happy -eq 1 -a $ugni_lib_happy -eq 1 \
-               -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1], [$1], [$2])
+               -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1 \
+               -a $udreg_lib_happy -eq 1], [$1], [$2])
 ])

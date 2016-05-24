@@ -62,18 +62,9 @@ static void __domain_destruct(void *obj)
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
-	/* if the domain isn't being destructed by close, we need to check the
-	 * cache again. This isn't a likely case. Destroy must succeed since we
-	 * are in the destruct path */
-	if (domain->mr_cache) {
-		ret = _gnix_mr_cache_destroy(domain->mr_cache);
-		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_DOMAIN, "failed to destroy mr cache "
-					"during domain destruct, dom=%p",
-					domain);
-		assert(ret == FI_SUCCESS);
-	}
-
+	ret = _gnix_close_cache(domain);
+	if (ret != FI_SUCCESS)
+		GNIX_FATAL(FI_LOG_MR, "failed to close memory registration cache\n");
 	/*
 	 * Drop a reference to each NIC used by this domain.
 	 */
@@ -314,6 +305,13 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_MR_CACHE_LAZY_DEREG:
 		*(int32_t *)val = domain->mr_cache_attr.lazy_deregistration;
 		break;
+	case GNI_MR_CACHE_UDREG:
+		*(int32_t *)val = (domain->mr_cache_type == GNIX_MR_TYPE_UDREG ?
+				1 : 0);
+		break;
+	case GNI_MR_UDREG_REG_LIMIT:
+		*(int32_t *)val = domain->udreg_reg_limit;
+		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
 		return -FI_EINVAL;
@@ -328,6 +326,7 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 	gni_return_t grc = GNI_RC_SUCCESS;
 	struct gnix_nic *nic;
 	struct gnix_fid_domain *domain;
+	int ret;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
@@ -399,6 +398,18 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_MR_CACHE_LAZY_DEREG:
 		domain->mr_cache_attr.lazy_deregistration = *(int32_t *)val;
+		break;
+	case GNI_MR_CACHE_UDREG:
+		if ((*(int32_t *) val) != 0) {
+			ret = _gnix_open_cache(domain, GNIX_MR_TYPE_UDREG);
+			if (ret != FI_SUCCESS)
+				return -FI_EINVAL;
+		}
+		break;
+	case GNI_MR_UDREG_REG_LIMIT:
+		if (*(int32_t *) val < 0)
+			return -FI_EINVAL;
+		domain->udreg_reg_limit = *(int32_t *) val;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -490,6 +501,8 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->mr_cache = NULL;
 	fastlock_init(&domain->mr_cache_lock);
 
+	domain->udreg_reg_limit = 4096;
+
 	dlist_init(&domain->nic_list);
 	dlist_init(&domain->list);
 
@@ -531,6 +544,8 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->data_progress = info->domain_attr->data_progress;
 	domain->thread_model = info->domain_attr->threading;
 	fastlock_init(&domain->cm_nic_lock);
+
+	domain->mr_cache_type = GNIX_DEFAULT_CACHE_TYPE;
 
 	*dom = &domain->domain_fid;
 	return FI_SUCCESS;
