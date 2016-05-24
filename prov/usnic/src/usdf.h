@@ -410,6 +410,12 @@ enum {
 #define cq_fidtou(FID) container_of(FID, struct usdf_cq, cq_fid.fid)
 #define cq_utof(CQ) (&(CQ)->cq_fid)
 
+struct usdf_err_data_entry {
+	struct slist_entry entry;
+	uint8_t seen;
+	uint8_t err_data[0];
+};
+
 struct usdf_event {
 	uint32_t ue_event;
 	void *ue_buf;
@@ -438,6 +444,7 @@ struct usdf_eq {
 		int eq_fd;
 	};
 
+	struct slist eq_err_data;
 	struct fi_ops_eq eq_ops_data;
 };
 #define eq_ftou(FEQ) container_of(FEQ, struct usdf_eq, eq_fid)
