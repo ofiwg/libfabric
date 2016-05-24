@@ -413,7 +413,10 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	if (!info || !info->ep_attr || !info->domain_attr ||
 	    strncmp(_domain->verbs->device->name, info->domain_attr->name,
-		    strlen(_domain->verbs->device->name))) {
+		    strlen(_domain->verbs->device->name)) ||
+	    (!info->rx_attr ||
+	     info->rx_attr->size <= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM))
+	{
 		return -FI_EINVAL;
 	}
 
@@ -457,8 +460,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
 	_ep->buff_len = FI_IBV_RDM_DFLT_BUFFER_SIZE;
 	_ep->rndv_threshold = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
-
-	_ep->rq_wr_depth = info->domain_attr->rx_ctx_cnt;
+	
+	_ep->rq_wr_depth = info->rx_attr->size;
 
 	/*
 	 * max number of WRs in SQ is n_buffer for send and
@@ -468,7 +471,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->posted_sends = 0;
 	_ep->posted_recvs = 0;
-	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, 5);
+	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, _ep->n_buffs);
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 

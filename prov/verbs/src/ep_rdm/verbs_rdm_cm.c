@@ -132,8 +132,8 @@ ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
 
 		count += ret;
 		rest -= ret;
-		
-		assert(ret != batch);
+
+		assert(ret == batch);
 	}
 
 	return count;
