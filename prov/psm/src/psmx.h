@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -53,7 +54,6 @@ extern "C" {
 #include <netdb.h>
 #include <complex.h>
 #include <rdma/fabric.h>
-#include <rdma/fi_prov.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
@@ -62,7 +62,6 @@ extern "C" {
 #include <rdma/fi_trigger.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_log.h>
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"

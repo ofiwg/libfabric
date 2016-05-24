@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,7 +36,7 @@
 
 #include "config.h"
 
-#include <rdma/fi_prov.h>
+#include <rdma/providers/fi_prov.h>
 
 /* Provider initialization function signature that built-in providers
  * must specify. */

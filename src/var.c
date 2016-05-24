@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2015-2016, Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2015, Intel Corp., Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -38,8 +38,6 @@
 #include <ctype.h>
 
 #include <rdma/fi_errno.h>
-#include <rdma/fi_prov.h>
-#include <rdma/fi_log.h>
 
 #include "fi.h"
 #include "fi_list.h"

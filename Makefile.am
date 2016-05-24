@@ -77,8 +77,8 @@ src_libfabric_la_SOURCES = \
 	include/fasthash.h \
 	include/rbtree.h \
 	include/prov.h \
-	include/rdma/fi_log.h \
-	include/rdma/fi_prov.h \
+	include/rdma/providers/fi_log.h \
+	include/rdma/providers/fi_prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
 	src/log.c \

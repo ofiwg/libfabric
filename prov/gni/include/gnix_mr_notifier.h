@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,7 +48,7 @@
 #include <string.h>
 #include <kdreg_pub.h>
 
-#include "rdma/fi_log.h"
+#include "rdma/providers/fi_log.h"
 #include "gnix_util.h"
 
 #define KDREG_DEV "/dev/kdreg"

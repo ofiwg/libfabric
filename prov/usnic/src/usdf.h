@@ -39,7 +39,7 @@
 #include <sys/queue.h>
 #include <pthread.h>
 
-#include <rdma/fi_log.h>
+#include <rdma/providers/fi_log.h>
 
 #include "usdf_progress.h"
 #include "usd.h"
