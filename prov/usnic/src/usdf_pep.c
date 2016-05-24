@@ -64,6 +64,7 @@
 #include "usnic_direct.h"
 #include "usd.h"
 #include "usdf.h"
+#include "usdf_endpoint.h"
 #include "usdf_cm.h"
 #include "usdf_msg.h"
 
@@ -497,8 +498,8 @@ struct fi_ops usdf_pep_ops = {
 static struct fi_ops_ep usdf_pep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = fi_no_cancel,
-	.getopt = fi_no_getopt,
-	.setopt = fi_no_setopt,
+	.getopt = usdf_ep_getopt_connected,
+	.setopt = usdf_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,

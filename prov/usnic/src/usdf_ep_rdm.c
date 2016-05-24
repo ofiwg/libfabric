@@ -543,46 +543,6 @@ usdf_ep_rdm_enable(struct fid_ep *fep)
 	return usdf_ep_rdm_get_queues(ep_ftou(fep));
 }
 
-static int
-usdf_ep_rdm_getopt(fid_t fid, int level, int optname,
-		  void *optval, size_t *optlen)
-{
-	struct usdf_ep *ep;
-
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-
-	ep = ep_fidtou(fid);
-	(void)ep;
-
-	switch (level) {
-	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-	return 0;
-}
-
-static int
-usdf_ep_rdm_setopt(fid_t fid, int level, int optname,
-		  const void *optval, size_t optlen)
-{
-	struct usdf_ep *ep;
-
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-
-	ep = ep_fidtou(fid);
-	(void)ep;
-
-	switch (level) {
-	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-	return 0;
-}
-
 static ssize_t
 usdf_ep_rdm_cancel(fid_t fid, void *context)
 {
@@ -835,7 +795,7 @@ usdf_rx_rdm_port_bind(struct usdf_rx *rx, struct fi_info *info)
 		sin->sin_addr.s_addr =
 			rx->rx_domain->dom_fabric->fab_dev_attrs->uda_ipaddr_be;
 	}
-		
+
 	rx->r.rdm.rx_sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (rx->r.rdm.rx_sock == -1) {
 		return -errno;
@@ -885,7 +845,7 @@ usdf_ep_rdm_close(fid_t fid)
 	if (ep->ep_eq != NULL) {
 		atomic_dec(&ep->ep_eq->eq_refcnt);
 	}
-	
+
 	free(ep);
 	return 0;
 }
@@ -893,8 +853,8 @@ usdf_ep_rdm_close(fid_t fid)
 static struct fi_ops_ep usdf_base_rdm_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = usdf_ep_rdm_cancel,
-	.getopt = usdf_ep_rdm_getopt,
-	.setopt = usdf_ep_rdm_setopt,
+	.getopt = usdf_ep_getopt_unconnected,
+	.setopt = usdf_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = usdf_rdm_rx_size_left,
