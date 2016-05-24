@@ -56,6 +56,7 @@ extern "C" {
 #include <mxm/api/mxm_api.h>
 #include "mpool.h"
 #include "uthash.h"
+#include <sys/uio.h>
 
 extern int mlxm_errno_table[MXM_ERR_LAST];
 static inline
