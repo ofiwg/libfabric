@@ -387,6 +387,7 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	struct usdf_fabric *fp;
 	struct usdf_connreq_msg *reqp;
 	struct usd_qp_impl *qp;
+	size_t request_size;
 	int ret;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
@@ -398,10 +399,16 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	udp = ep->ep_domain;
 	fp = udp->dom_fabric;
 	sin = addr;
-	crp = NULL;
 
-	crp = calloc(1, sizeof(*crp) + sizeof(struct usdf_connreq_msg) +
-			paramlen);
+	/* Although paramlen may be less than USDF_MAX_CONN_DATA, the same crp
+	 * struct is used for receiving the accept and reject payload. The
+	 * structure has to be prepared to receive the maximum allowable amount
+	 * of data per transfer. The maximum size includes the connection
+	 * request structure, the connection request message, and the maximum
+	 * amount of data per connection request message.
+	 */
+	request_size = sizeof(*crp) + sizeof(*reqp) + USDF_MAX_CONN_DATA;
+	crp = calloc(1, request_size);
 	if (crp == NULL) {
 		ret = -errno;
 		goto fail;
