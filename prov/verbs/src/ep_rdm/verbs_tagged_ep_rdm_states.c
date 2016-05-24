@@ -101,6 +101,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	request->len = p->data_len;
+	request->comp_flags = FI_TAGGED | FI_SEND;
 	request->imm = p->imm;
 	request->context = p->context;
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
@@ -417,6 +418,7 @@ fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_tagged_request *request,
 	request->minfo.conn = unexp->minfo.conn;
 	request->minfo.tag = unexp->minfo.tag;
 	request->len = unexp->len;
+	request->comp_flags = unexp->comp_flags;
 	request->unexp_rbuf = unexp->unexp_rbuf;
 	request->state = unexp->state;
 
@@ -453,6 +455,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	request->context->internal[0] = (void *)request;
 	request->dest_buf = p->dest_addr;
 	request->len = p->data_len;
+	request->comp_flags = FI_TAGGED | FI_RECV;
 	request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4PKT;
 	request->state.rndv = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err = FI_SUCCESS;
@@ -611,6 +614,7 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 		request->minfo.conn = p->conn;
 		request->len = 
 			p->arrived_len - sizeof(struct fi_ibv_rdm_header);
+		request->comp_flags = FI_TAGGED | FI_RECV;
 		
 		assert(request->len <= p->ep->rndv_threshold);
 
@@ -637,6 +641,7 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 		request->rndv.remote_addr = (void *)h->src_addr;
 		request->rndv.rkey = h->mem_key;
 		request->len = h->len;
+		request->comp_flags = FI_TAGGED | FI_RECV;
 		request->imm = p->imm_data;
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4RECV;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
@@ -984,9 +989,11 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_tagged_request *request,
 	
 	if (p->op_code == IBV_WR_RDMA_READ) {
 		request->dest_buf = (void*)p->lbuf;
+		request->comp_flags = FI_RMA | FI_READ;
 	} else {
 		assert(p->op_code == IBV_WR_RDMA_WRITE);
 		request->src_addr = (void*)p->lbuf;
+		request->comp_flags = FI_RMA | FI_WRITE;
 	}
 
 	request->len = p->data_len;
@@ -1019,6 +1026,7 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 
 	request->minfo.conn = p->conn;
 	request->len = p->data_len;
+	request->comp_flags = 0; /* inject does not generate completion */
 	request->sbuf = NULL;
 
 	wr.sg_list = &sge;

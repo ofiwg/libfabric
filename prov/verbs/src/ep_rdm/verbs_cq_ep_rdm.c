@@ -67,7 +67,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 
 		src_addr[ret] = (fi_addr_t) (uintptr_t) cq_entry->minfo.conn;
 		entry[ret].op_context = cq_entry->context;
-		entry[ret].flags = fi_ibv_rdm_comp_queue.flags;
+		entry[ret].flags = cq_entry->comp_flags;
 		entry[ret].len = cq_entry->len;
 		entry[ret].data = cq_entry->imm;
 		entry[ret].tag = cq_entry->minfo.tag;
@@ -186,7 +186,7 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
 
 	if (err_request) {
 		entry->op_context = err_request->context;
-		entry->flags = 0; /* TODO: */
+		entry->flags = err_request->comp_flags;
 		entry->len = err_request->len;
 		entry->buf = err_request->unexp_rbuf;
 		entry->data = err_request->imm;
