@@ -292,7 +292,8 @@ static void *fi_ibv_rdm_tagged_cm_progress_thread(void *ctx)
 
 static int fi_ibv_rdm_ep_close(fid_t fid)
 {
-	int ret = 0;
+	int ret = FI_SUCCESS;
+	int err = FI_SUCCESS;
 	void *status = NULL;
 	struct fi_ibv_rdm_ep *ep =
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
@@ -317,16 +318,16 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		case FI_VERBS_CONN_ALLOCATED:
 		case FI_VERBS_CONN_REMOTE_DISCONNECT:
 		case FI_VERBS_CONN_ESTABLISHED:
-			fi_ibv_rdm_start_disconnection(conn);
+			ret = fi_ibv_rdm_start_disconnection(conn);
 			break;
 		case FI_VERBS_CONN_STARTED:
 			while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
 			       conn->state != FI_VERBS_CONN_REJECTED) {
 				ret = fi_ibv_rdm_tagged_cm_progress(ep);
 				if (ret) {
-					VERBS_INFO(FI_LOG_AV,
-						"cm progress failed\n");
-					return ret;
+					VERBS_INFO(FI_LOG_AV, 
+						   "cm progress failed\n");
+					break;
 				}
 			}
 			break;
@@ -335,10 +336,10 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		}
 	}
 	while (ep->num_active_conns) {
-		ret = fi_ibv_rdm_tagged_cm_progress(ep);
-		if (ret) {
+		err = fi_ibv_rdm_tagged_cm_progress(ep);
+		if (err) {
 			VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
-			return ret;
+			ret = (ret == FI_SUCCESS) ? err : ret;
 		}
 	}
 
@@ -347,10 +348,17 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);
-	ibv_destroy_cq(ep->scq);
-	ibv_destroy_cq(ep->rcq);
+	if (ibv_destroy_cq(ep->scq) || ibv_destroy_cq(ep->rcq)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_cq failed\n", errno);
+		ret = (ret == FI_SUCCESS) ? -errno : ret;
+	}
 
+	errno = 0;
 	fi_ibv_destroy_ep(FI_EP_RDM, ep->cm.rai, &(ep->cm.listener));
+	if (errno) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_ep failed\n", errno);
+		ret = (ret == FI_SUCCESS) ? -errno : ret;
+	}
 
 	/* TODO: move queues & related pools cleanup to close CQ*/
 	fi_ibv_rdm_clean_queues();
@@ -361,7 +369,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
 	free(ep);
 
-	return 0;
+	return ret;
 }
 
 #if 0

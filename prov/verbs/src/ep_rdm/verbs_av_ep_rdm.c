@@ -39,26 +39,30 @@ extern struct fi_provider fi_ibv_prov;
 extern struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash;
 
 
-int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
-                                struct fi_ibv_rdm_tagged_conn *conn)
+ssize_t
+fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep, 
+			    struct fi_ibv_rdm_tagged_conn *conn)
 {
 	struct rdma_cm_id *id = NULL;
 	assert(ep->cm.listener);
 
-	if (conn->state != FI_VERBS_CONN_ALLOCATED)
-		return 0;
+	if (conn->state != FI_VERBS_CONN_ALLOCATED) {
+		return FI_SUCCESS;
+	}
 
 	if (ep->is_closing) {
 		VERBS_INFO(FI_LOG_AV, "Attempt to start connection with addr %s:%u when ep is closing\n",
 			inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
-		return -1;
+		return -FI_EOTHER;
 	}
 
 	conn->state = FI_VERBS_CONN_STARTED;
 
-	if (rdma_create_id(ep->cm.ec, &id, conn, RDMA_PS_TCP))
-		return -1;
+	if (rdma_create_id(ep->cm.ec, &id, conn, RDMA_PS_TCP)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_create_id\n", errno);
+		return -errno;
+	}
 
 	if (conn->cm_role == FI_VERBS_CM_ACTIVE || 
 	    conn->cm_role == FI_VERBS_CM_SELF)
@@ -66,25 +70,34 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 		conn->id[0] = id;
 	}
 
-	return rdma_resolve_addr(id, NULL, (struct sockaddr *)&conn->addr, 30000);
+	if (rdma_resolve_addr(id, NULL, (struct sockaddr *)&conn->addr, 30000)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_resolve_addr\n", errno);
+		return -errno;
+	}
+	return FI_SUCCESS;
 }
 
-int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
+ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
 {
-	int ret = 0;
+	ssize_t ret = FI_SUCCESS;
+	ssize_t err = FI_SUCCESS;
 
 	FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 		"Closing connection %p, state %d\n", conn, conn->state);
 
 	if (conn->id[0]) {
-		ret = rdma_disconnect(conn->id[0]);
-		assert(ret == 0);
+		if (rdma_disconnect(conn->id[0])) {
+			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
+			ret = -errno;
+			assert(ret == 0);
+		}
 	}
 
 	switch (conn->state) {
 	case FI_VERBS_CONN_ALLOCATED:
 	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		fi_ibv_rdm_tagged_conn_cleanup(conn);
+		err = fi_ibv_rdm_tagged_conn_cleanup(conn);
+		ret = (ret == FI_SUCCESS) ? err : ret;
 		break;
 	case FI_VERBS_CONN_ESTABLISHED:
 		conn->state = FI_VERBS_CONN_LOCAL_DISCONNECT;
@@ -93,10 +106,10 @@ int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
 		conn->state = FI_VERBS_CONN_CLOSED;
 		break;
 	default:
-		ret = -1;
+		ret = -FI_EOTHER;
 	}
 
-	assert(ret == 0);
+	assert(ret == FI_SUCCESS);
 	return ret;
 }
 
@@ -182,6 +195,8 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av, fi_addr_t * fi_addr,
                                 size_t count, uint64_t flags)
 {
 	struct fi_ibv_rdm_tagged_conn *conn;
+	int ret = FI_SUCCESS;
+	int err = FI_SUCCESS;
 	int i;
 
 	for (i = 0; i < count; i++) {
@@ -190,10 +205,11 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av, fi_addr_t * fi_addr,
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
 		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
-		fi_ibv_rdm_start_disconnection(conn);
+		err = fi_ibv_rdm_start_disconnection(conn);
+		ret = (ret == FI_SUCCESS) ? err : ret;
 	}
 
-	return 0;
+	return ret;
 }
 
 static struct fi_ops_av fi_ibv_rdm_av_ops = {
