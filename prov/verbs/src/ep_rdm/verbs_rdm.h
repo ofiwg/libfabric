@@ -161,6 +161,7 @@ struct fi_ibv_rdm_tagged_request {
 	 */
 	size_t iov_count;
 	size_t len;
+	uint64_t comp_flags;
 	struct fi_context *context;
 	uint32_t imm;
 
