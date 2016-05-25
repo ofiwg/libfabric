@@ -627,16 +627,8 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 	FI_IBV_DBG_OPCODE(wc->opcode, "RECV");
 
-	assert(wc->opcode != IBV_WC_RDMA_READ);
-
-	if (wc->status != IBV_WC_SUCCESS
-#if ENABLE_DEBUG
-	    ||
-	    (wc->opcode != IBV_WC_RECV_RDMA_WITH_IMM &&
-	     (wc->opcode != IBV_WC_RECV))
-#endif /* ENABLE_DEBUG */
-	   )
-	{
+	if (!FI_IBV_RDM_CHECK_RECV_WC(wc)) {
+		assert(0 && "Error recv wc\n");
 		return 1;
 	}
 

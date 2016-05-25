@@ -84,6 +84,14 @@ struct fi_ibv_msg_ep;
 
 #define FI_IBV_RDM_CM_RESOLVEADDR_TIMEOUT (30000)
 
+#if ENABLE_DEBUG
+#define FI_IBV_RDM_CHECK_RECV_WC(wc)						\
+	((wc->status == IBV_WC_SUCCESS) &&					\
+	(wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM || wc->opcode == IBV_WC_RECV))
+#else
+#define FI_IBV_RDM_CHECK_RECV_WC(wc) (wc->status == IBV_WC_SUCCESS)
+#endif /* ENABLE_DEBUG */
+
 /* TODO: Holy macro batman, use verbs calls */
 #define FI_IBV_DBG_OPCODE(wc_opcode, str)                                      \
         VERBS_DBG(FI_LOG_CQ, "CQ COMPL: "str" -> %s\n",                        \
