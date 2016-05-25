@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2015-2016, Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2015, Intel Corp., Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -38,7 +38,7 @@
 #include "config.h"
 
 #include <rdma/fabric.h>
-#include <rdma/fi_prov.h>
+#include <rdma/providers/fi_prov.h>
 
 #ifdef __cplusplus
 extern "C" {

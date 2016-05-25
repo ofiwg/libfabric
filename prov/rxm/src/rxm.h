@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,7 +40,6 @@
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_prov.h>
 
 #include <fi.h>
 #include <fi_enosys.h>

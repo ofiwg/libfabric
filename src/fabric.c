@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
- * Copyright (c) 2006-2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2006-2016 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013 Intel Corp., Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -43,7 +43,6 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "prov.h"
-#include <rdma/fi_log.h>
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>

@@ -77,6 +77,8 @@ src_libfabric_la_SOURCES = \
 	include/fasthash.h \
 	include/rbtree.h \
 	include/prov.h \
+	include/rdma/providers/fi_log.h \
+	include/rdma/providers/fi_prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
 	src/log.c \
@@ -115,8 +117,6 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_cm.h \
 	$(top_srcdir)/include/rdma/fi_domain.h \
 	$(top_srcdir)/include/rdma/fi_eq.h \
-	$(top_srcdir)/include/rdma/fi_log.h \
-	$(top_srcdir)/include/rdma/fi_prov.h \
 	$(top_srcdir)/include/rdma/fi_rma.h \
 	$(top_srcdir)/include/rdma/fi_endpoint.h \
 	$(top_srcdir)/include/rdma/fi_errno.h \

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,11 +47,11 @@
 #include <fi_lock.h>
 #include <fi_atom.h>
 #include <fi_mem.h>
+#include <rdma/providers/fi_prov.h>
+#include <rdma/providers/fi_log.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_prov.h>
 #include <rdma/fi_atomic.h>
-#include <rdma/fi_log.h>
 
 #include <fi_osd.h>
 

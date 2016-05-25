@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -34,7 +35,7 @@
 #define _SOCK_UTIL_H_
 
 #include <sys/mman.h>
-#include <rdma/fi_log.h>
+#include <rdma/providers/fi_log.h>
 #include "sock.h"
 
 extern const char sock_fab_name[];
