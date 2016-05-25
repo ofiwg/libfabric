@@ -33,7 +33,9 @@
 #ifndef FI_EQ_H
 #define FI_EQ_H
 
+#ifndef _WIN32
 #include <pthread.h>
+#endif /* _WIN32 */
 
 #include <rdma/fabric.h>
 

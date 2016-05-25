@@ -2675,7 +2675,7 @@ static void sock_pe_poll(struct sock_pe *pe)
 	pe->waittime = fi_gettime_ms();
 }
 
-#ifndef __APPLE__
+#if !defined __APPLE__ && !defined _WIN32
 static void sock_thread_set_affinity(char *s)
 {
 	char *saveptra = NULL, *saveptrb = NULL, *saveptrc = NULL;
@@ -2725,7 +2725,7 @@ static void sock_pe_set_affinity(void)
 	if (sock_pe_affinity_str == NULL)
 		return;
 
-#ifndef __APPLE__
+#if !defined __APPLE__ && !defined _WIN32
 	sock_thread_set_affinity(sock_pe_affinity_str);
 #else
 	SOCK_LOG_ERROR("*** FI_SOCKETS_PE_AFFINITY is not supported on OS X\n");

@@ -33,6 +33,8 @@
 #ifndef _FI_ENOSYS_H_
 #define _FI_ENOSYS_H_
 
+#include <fi_osd.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>

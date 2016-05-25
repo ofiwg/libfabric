@@ -93,26 +93,26 @@ int fi_check_cq_attr(const struct fi_provider *prov,
 static void util_cq_read_ctx(void **dst, void *src)
 {
 	*(struct fi_cq_entry *) *dst = *(struct fi_cq_entry *) src;
-	*dst += sizeof(struct fi_cq_entry);
+	*(char**)dst += sizeof(struct fi_cq_entry);
 }
 
 static void util_cq_read_msg(void **dst, void *src)
 {
 	*(struct fi_cq_msg_entry *) *dst = *(struct fi_cq_msg_entry *) src;
-	*dst += sizeof(struct fi_cq_msg_entry);
+	*(char**)dst += sizeof(struct fi_cq_msg_entry);
 }
 
 static void util_cq_read_data(void **dst, void *src)
 {
 	*(struct fi_cq_data_entry *) *dst = *(struct fi_cq_data_entry *) src;
-	*dst += sizeof(struct fi_cq_data_entry);
+	*(char**)dst += sizeof(struct fi_cq_data_entry);
 }
 
 static void util_cq_read_tagged(void **dst, void *src)
 {
 	util_cq_read_data(dst, src);
 	((struct fi_cq_tagged_entry *) *dst)->tag = 0;
-	*dst += sizeof(struct fi_cq_tagged_entry);
+	*(char**)dst += sizeof(struct fi_cq_tagged_entry);
 }
 
 static ssize_t util_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)

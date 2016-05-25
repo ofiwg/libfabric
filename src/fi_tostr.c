@@ -41,10 +41,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "fi.h"
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
-#include "fi.h"
 
 /* Print fi_info and related structs, enums, OR_able flags, addresses.
  *
