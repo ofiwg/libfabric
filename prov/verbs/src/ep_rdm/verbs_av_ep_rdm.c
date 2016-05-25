@@ -96,7 +96,7 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
 	switch (conn->state) {
 	case FI_VERBS_CONN_ALLOCATED:
 	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		err = fi_ibv_rdm_tagged_conn_cleanup(conn);
+		err = fi_ibv_rdm_conn_cleanup(conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
 		break;
 	case FI_VERBS_CONN_ESTABLISHED:

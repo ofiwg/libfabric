@@ -280,7 +280,7 @@ static void *fi_ibv_rdm_tagged_cm_progress_thread(void *ctx)
 {
 	struct fi_ibv_rdm_ep *ep = (struct fi_ibv_rdm_ep *)ctx;
 	while (_fi_ibv_rdm_tagged_cm_progress_running) {
-		if (fi_ibv_rdm_tagged_cm_progress(ep)) {
+		if (fi_ibv_rdm_cm_progress(ep)) {
 			VERBS_INFO (FI_LOG_EP_DATA,
 			"fi_ibv_rdm_cm_progress error\n");
 			abort();
@@ -323,7 +323,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		case FI_VERBS_CONN_STARTED:
 			while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
 			       conn->state != FI_VERBS_CONN_REJECTED) {
-				ret = fi_ibv_rdm_tagged_cm_progress(ep);
+				ret = fi_ibv_rdm_cm_progress(ep);
 				if (ret) {
 					VERBS_INFO(FI_LOG_AV, 
 						   "cm progress failed\n");
@@ -336,7 +336,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		}
 	}
 	while (ep->num_active_conns) {
-		err = fi_ibv_rdm_tagged_cm_progress(ep);
+		err = fi_ibv_rdm_cm_progress(ep);
 		if (err) {
 			VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
 			ret = (ret == FI_SUCCESS) ? err : ret;

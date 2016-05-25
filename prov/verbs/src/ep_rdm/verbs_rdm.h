@@ -451,9 +451,9 @@ fi_ibv_rdm_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep);
-ssize_t fi_ibv_rdm_tagged_cm_progress(struct fi_ibv_rdm_ep *ep);
+ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep);
 ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn);
-ssize_t fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn);
+ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn);
 ssize_t fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
                                 struct fi_ibv_rdm_tagged_conn *conn);
 ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
