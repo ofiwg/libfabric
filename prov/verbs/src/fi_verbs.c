@@ -91,7 +91,7 @@ static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 		return -FI_EOTHER;
 	}
 
-	if (fi_ibv_rdm_tagged_find_ipoib_addr(src_addr, cm)) {
+	if (fi_ibv_rdm_find_ipoib_addr(src_addr, cm)) {
 		VERBS_INFO(FI_LOG_EP_CTRL, 
 			   "Failed to find correct IPoIB address\n");
 		return -FI_ENODEV;

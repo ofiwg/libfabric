@@ -142,22 +142,26 @@ void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
 	}
 }
 
-/* find the IPoIB address of the device opened in the fi_domain call. The name
- * of this device is _domain->verbs->device->name. The logic of the function is:
- * iterate through all the available network interfaces, find those having "ib"
- * in the name, then try to test the IB device that correspond to each address.
- * If the name is the desired one then we're done.
+/* Find the IPoIB address of the device opened in the fi_ibv_domain call.
+ * The logic of the function is: iterate through all the available network 
+ * interfaces, find those having "ib" (or iface param value if it's defined) in
+ * the name. If the name is the desired one then we're done. If user defines
+ * wrong interface, following rdma_bind_addr call will fail with corresponding
+ * propagation of error code.
  */
-int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
-				      struct fi_ibv_rdm_cm* cm)
+int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
+			       struct fi_ibv_rdm_cm* cm)
 {
 	struct ifaddrs *addrs, *tmp;
-	struct sockaddr_in lh;
 	int found = 0;
 
 	char iface[IFNAMSIZ];
 	char *iface_tmp = "ib";
 	size_t iface_len = 2;
+
+	if (!addr || !addr->sin_addr.s_addr) {
+		return 0;
+	}
 
 	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
 		iface_len = strlen(iface_tmp);
@@ -171,30 +175,15 @@ int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
 
 	strncpy(iface, iface_tmp, iface_len);
 
-	inet_pton(AF_INET, "127.0.0.1", &lh.sin_addr);
-
 	getifaddrs(&addrs);
 	tmp = addrs;
-	while (tmp && !found) {
+	while (tmp) {
 		if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
-			struct sockaddr_in *paddr =
-			    (struct sockaddr_in *) tmp->ifa_addr;
-			if (!strncmp(tmp->ifa_name, iface, iface_len)) {
-
-				if (addr && addr->sin_addr.s_addr) {
-					found = !memcmp(&addr->sin_addr,
-						      &paddr->sin_addr,
-						      sizeof(addr->sin_addr)) ||
-						!memcmp(&addr->sin_addr,
-						      &lh.sin_addr,
-						      sizeof(addr->sin_addr))
-					      ? 1 : 0;
-				}
-
-				if (found) {
-					memcpy(&(cm->my_addr), paddr,
-					       sizeof(cm->my_addr));
-				}
+			found = !strncmp(tmp->ifa_name, iface, iface_len);
+			if (found) {
+				memcpy(&cm->my_addr, tmp->ifa_addr,
+					sizeof(cm->my_addr));
+				break;
 			}
 		}
 
@@ -203,9 +192,6 @@ int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
 
 	freeifaddrs(addrs);
 
-	if (found) {
-		assert(cm->my_addr.sin_family == AF_INET);
-	}
 	return !found;
 }
 
