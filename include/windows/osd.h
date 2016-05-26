@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <malloc.h>
+#include <errno.h>
 #include "pthread.h"
 
 #include <rdma/fabric.h>
@@ -33,7 +34,21 @@ extern "C" {
 #define BIG_ENDIAN 8765
 #define BYTE_ORDER LITTLE_ENDIAN
 
-int socketpair(int af, int type, int protocol, int socks[2]);
+static inline void ofi_osd_init()
+{
+	WORD wsa_version;
+	WSADATA data;
+	int err;
+
+	wsa_version = MAKEWORD(2, 2);
+
+	err = WSAStartup(wsa_version, &data);
+}
+
+static inline void ofi_osd_fini(void)
+{
+	WSACleanup();
+}
 
 #define FI_FFSL(val)	 			\
 do						\
@@ -71,6 +86,7 @@ do						\
 
 #define MIN min
 #define MAX max
+#define OFI_UNUSED(p) (void)(p)
 
 #define htonll _byteswap_uint64
 #define ntohll _byteswap_uint64
@@ -80,6 +96,8 @@ do						\
 //#define INET6_ADDRSTRLEN (48)
 
 int fd_set_nonblock(int fd);
+
+int socketpair(int af, int type, int protocol, int socks[2]);
 
 static inline int ffsl(long val)
 {
@@ -137,8 +155,8 @@ struct iovec
 
 static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
 {
-	*memptr = _aligned_malloc(alignment, size);
-	return *memptr != 0;
+	*memptr = _aligned_malloc(size, alignment);
+	return *memptr == 0;
 }
 
 static inline void ofi_freealign(void *memptr)
@@ -159,6 +177,18 @@ static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
 static inline int ofi_close_socket(int socket)
 {
 	return closesocket(socket);
+}
+
+static inline int ofi_sockerr(void)
+{
+	int wsaerror = WSAGetLastError();
+	switch (wsaerror) {
+	case WSAEINPROGRESS:
+	case WSAEWOULDBLOCK:
+	      return EINPROGRESS;
+	default:
+	      return wsaerror;
+	}
 }
 
 static inline int fi_fd_nonblock(int fd)

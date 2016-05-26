@@ -35,6 +35,7 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
 
 static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
 {
@@ -59,6 +60,19 @@ static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
 static inline int ofi_close_socket(int socket)
 {
 	return close(socket);
+}
+
+static inline int ofi_sockerr(void)
+{
+	return errno;
+}
+
+static inline void ofi_osd_init(void)
+{
+}
+
+static inline void ofi_osd_fini(void)
+{
 }
 
 #endif /* _FI_UNIX_OSD_H_ */
