@@ -617,6 +617,10 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	info->tx_attr->size	 	= init_attr.cap.max_send_wr;
 
 	info->rx_attr->iov_limit 	= init_attr.cap.max_recv_sge;
+	/*
+	 * On some HW ibv_create_qp can increase max_recv_wr value more than
+	 * it really supports. So, alignment with device capability is needed.
+	 */
 	info->rx_attr->size	 	= MIN(init_attr.cap.max_recv_wr,
 						device_attr->max_qp_wr);
 
