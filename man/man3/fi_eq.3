@@ -1,4 +1,4 @@
-.TH "fi_eq" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_eq" "3" "2016\-05\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_eq \- Event queue operations
@@ -394,6 +394,8 @@ information into a printable string for debugging purposes.
 .PP
 If err_data_size is > 0, then the buffer referenced by err_data is
 directly user\-accessible.
+The contents of the buffer will remain valid until a subsequent read
+call against the EQ.
 Applications which read the err_data buffer must ensure that they do not
 read past the end of the referenced buffer.
 .SH RETURN VALUES
