@@ -201,8 +201,9 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (unlikely(dlist_empty(&domain->nic_list))) {
 		rc = gnix_nic_alloc(domain, NULL, &nic);
 		if (rc) {
-			GNIX_WARN(FI_LOG_MR, "could not allocate nic to do mr_reg,"
-					" ret=%i\n", rc);
+			GNIX_INFO(FI_LOG_MR,
+				  "could not allocate nic to do mr_reg,"
+				  " ret=%i\n", rc);
 			goto err;
 		}
 	}
@@ -290,8 +291,8 @@ static int fi_gnix_mr_close(fid_t fid)
 		_gnix_ref_put(domain);
 		_gnix_ref_put(nic);
 	} else {
-		GNIX_WARN(FI_LOG_MR, "failed to deregister memory, "
-				"ret=%i\n", ret);
+		GNIX_INFO(FI_LOG_MR, "failed to deregister memory, "
+			  "ret=%i\n", ret);
 	}
 
 	return ret;
@@ -330,7 +331,7 @@ static void *__gnix_register_region(
 	}
 
 	if (unlikely(grc != GNI_RC_SUCCESS)) {
-		GNIX_WARN(FI_LOG_MR, "failed to register memory with uGNI, "
+		GNIX_INFO(FI_LOG_MR, "failed to register memory with uGNI, "
 			  "ret=%s\n", gni_err_str[grc]);
 		return NULL;
 	}
@@ -368,8 +369,8 @@ static int __gnix_deregister_region(
 		/* release reference to nic */
 		_gnix_ref_put(nic);
 	} else {
-		GNIX_WARN(FI_LOG_MR, "failed to deregister memory"
-				" region, entry=%p ret=%i\n", handle, ret);
+		GNIX_INFO(FI_LOG_MR, "failed to deregister memory"
+			  " region, entry=%p ret=%i\n", handle, ret);
 	}
 
 	return ret;

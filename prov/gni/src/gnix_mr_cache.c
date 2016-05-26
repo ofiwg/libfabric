@@ -281,10 +281,9 @@ static inline void __remove_sibling_entries_from_tree(
 
 	dlist_for_each(list, entry, siblings)
 	{
-		GNIX_INFO(FI_LOG_MR,
-				"removing key from tree, key=%llx:%llx\n",
-				entry->key.address,
-				entry->key.length);
+		GNIX_DEBUG(FI_LOG_MR,
+			   "removing key from tree, key=%llx:%llx\n",
+			   entry->key.address, entry->key.length);
 		iter = rbtFind(tree, &entry->key);
 		if (unlikely(!iter)) {
 			GNIX_FATAL(FI_LOG_MR, "key not found\n");
@@ -395,6 +394,8 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 				/* First, warn that this might be a
 				 * problem.*/
 				if (__notifier_warned == false) {
+					/* TODO: Only warn if this is
+					 * not a merged entry */
 					GNIX_WARN(FI_LOG_MR,
 						  "Registered memory region"
 						  " includes unmapped pages."
@@ -404,11 +405,11 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 					__notifier_warned = true;
 				}
 
-				GNIX_INFO(FI_LOG_MR,
-					  "Marking unmapped entry (%p)"
-					  " as retired %llx:%llx\n", entry,
-					  entry->key.address,
-					  entry->key.length);
+				GNIX_DEBUG(FI_LOG_MR,
+					   "Marking unmapped entry (%p)"
+					   " as retired %llx:%llx\n", entry,
+					   entry->key.address,
+					   entry->key.length);
 
 				entry->state = GNIX_CES_INUSE_UNMAPPED;
 				if (entry->flags & GNIX_CE_RETIRED) {
@@ -458,18 +459,18 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 						   " from stale tree.\n");
 				}
 
-				GNIX_INFO(FI_LOG_MR, "Removed unmapped entry"
-					  " (%p) from stale tree %llx:%llx\n",
-					  entry, entry->key.address,
-					  entry->key.length);
+				GNIX_DEBUG(FI_LOG_MR, "Removed unmapped entry"
+					   " (%p) from stale tree %llx:%llx\n",
+					   entry, entry->key.address,
+					   entry->key.length);
 
 				if (__mr_cache_lru_remove(cache, entry)
 				    == FI_SUCCESS) {
-					GNIX_INFO(FI_LOG_MR, "Removed"
-						  " unmapped entry (%p)"
-						  " from lru list %llx:%llx\n",
-						  entry, entry->key.address,
-						  entry->key.length);
+					GNIX_DEBUG(FI_LOG_MR, "Removed"
+						   " unmapped entry (%p)"
+						   " from lru list %llx:%llx\n",
+						   entry, entry->key.address,
+						   entry->key.length);
 
 					atomic_dec(&cache->stale.elements);
 
@@ -524,8 +525,8 @@ __notifier_monitor(gnix_mr_cache_t *cache,
 		return FI_SUCCESS;
 	}
 
-	GNIX_INFO(FI_LOG_MR, "monitoring entry=%p %llx:%llx\n", entry,
-		  entry->key.address, entry->key.length);
+	GNIX_DEBUG(FI_LOG_MR, "monitoring entry=%p %llx:%llx\n", entry,
+		   entry->key.address, entry->key.length);
 
 	return _gnix_notifier_monitor(cache->attr.notifier,
 				      (void *) entry->key.address,
@@ -556,8 +557,8 @@ __notifier_unmonitor(gnix_mr_cache_t *cache,
 
 	if ((entry->state != GNIX_CES_INUSE_UNMAPPED) &&
 	    (entry->state != GNIX_CES_STALE_UNMAPPED)) {
-		GNIX_INFO(FI_LOG_MR, "unmonitoring entry=%p (state=%d)\n",
-			  entry, entry->state);
+		GNIX_DEBUG(FI_LOG_MR, "unmonitoring entry=%p (state=%d)\n",
+			   entry, entry->state);
 		rc = _gnix_notifier_unmonitor(cache->attr.notifier,
 					      (uint64_t) entry);
 		if (rc != FI_SUCCESS) {
@@ -565,10 +566,10 @@ __notifier_unmonitor(gnix_mr_cache_t *cache,
 			 * memory could have been unmapped in the
 			 * interim, so clear the notifier events
 			 * again */
-			GNIX_INFO(FI_LOG_MR,
-				  "failed to unmonitor memory (entry=%p),"
-				  " so clear notifier events again\n",
-				  entry, fi_strerror(-rc));
+			GNIX_DEBUG(FI_LOG_MR,
+				   "failed to unmonitor memory (entry=%p),"
+				   " so clear notifier events again\n",
+				   entry, fi_strerror(-rc));
 
 			__clear_notifier_events(cache);
 		}
@@ -604,9 +605,9 @@ static inline int __mr_cache_entry_destroy(gnix_mr_cache_t *cache,
 		if (!rc)
 			free(entry);
 	} else {
-		GNIX_WARN(FI_LOG_MR, "failed to deregister memory"
-				" region with callback, "
-				"cache_entry=%p ret=%i\n", entry, rc);
+		GNIX_INFO(FI_LOG_MR, "failed to deregister memory"
+			  " region with callback, "
+			  "cache_entry=%p ret=%i\n", entry, rc);
 	}
 
 	return rc;
@@ -621,9 +622,9 @@ static inline int __insert_entry_into_stale(
 
 	if ((entry->state == GNIX_CES_INUSE_UNMAPPED) ||
 	    (entry->state == GNIX_CES_STALE_UNMAPPED)) {
-		GNIX_INFO(FI_LOG_MR, "entry (%p) unmapped, not inserting"
-			  " into stale %llx:%llx", entry,
-			  entry->key.address, entry->key.length);
+		GNIX_DEBUG(FI_LOG_MR, "entry (%p) unmapped, not inserting"
+			   " into stale %llx:%llx", entry,
+			   entry->key.address, entry->key.length);
 		/* Should we return some other value? */
 		return ret;
 	}
@@ -642,10 +643,9 @@ static inline int __insert_entry_into_stale(
 
 		ret = __mr_cache_entry_destroy(cache, entry);
 	} else {
-		GNIX_INFO(FI_LOG_MR,
-				"inserted key=%llx:%llx into stale\n",
-				entry->key.address,
-				entry->key.length);
+		GNIX_DEBUG(FI_LOG_MR,
+			   "inserted key=%llx:%llx into stale\n",
+			   entry->key.address, entry->key.length);
 
 		__mr_cache_lru_enqueue(cache, entry);
 		atomic_inc(&cache->stale.elements);
@@ -680,8 +680,9 @@ static inline void __resolve_stale_entry_collision(
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
-	GNIX_INFO(FI_LOG_MR, "resolving collisions with entry (%p) %llx:%llx\n",
-		  entry, entry->key.address, entry->key.length);
+	GNIX_DEBUG(FI_LOG_MR,
+		   "resolving collisions with entry (%p) %llx:%llx\n",
+		   entry, entry->key.address, entry->key.length);
 
 	while (iter) {
 		rbtKeyValue(cache->stale.rb_tree, iter, (void **) &c_key,
@@ -693,10 +694,10 @@ static inline void __resolve_stale_entry_collision(
 
 		if (__can_subsume(&entry->key, c_key) ||
 				(entry->key.length > c_key->length)) {
-			GNIX_INFO(FI_LOG_MR,
-				  "adding stale entry (%p) to destroy list,"
-				  "  key=%llx:%llx\n", c_entry,
-				  c_key->address, c_key->length);
+			GNIX_DEBUG(FI_LOG_MR,
+				   "adding stale entry (%p) to destroy list,"
+				   "  key=%llx:%llx\n", c_entry,
+				   c_key->address, c_key->length);
 			dlist_insert_tail(&c_entry->siblings, &to_destroy);
 		} else {
 			add_new_entry = 0;
@@ -710,9 +711,9 @@ static inline void __resolve_stale_entry_collision(
 	 */
 	dlist_for_each_safe(&to_destroy, c_entry, tmp, siblings)
 	{
-		GNIX_INFO(FI_LOG_MR, "removing key from tree, entry %p"
-			  " key=%llx:%llx\n", c_entry,
-			  c_entry->key.address, c_entry->key.length);
+		GNIX_DEBUG(FI_LOG_MR, "removing key from tree, entry %p"
+			   " key=%llx:%llx\n", c_entry,
+			   c_entry->key.address, c_entry->key.length);
 		iter = rbtFind(cache->stale.rb_tree, &c_entry->key);
 		if (unlikely(!iter)) {
 			GNIX_FATAL(FI_LOG_MR, "key not found\n");
@@ -750,11 +751,10 @@ static inline void __resolve_stale_entry_collision(
 		/* stale entry is larger than this one
 		 * so lets just toss this entry out
 		 */
-		GNIX_INFO(FI_LOG_MR,
-				"larger entry already exists, "
-				"to_destroy=%llx:%llx\n",
-				entry->key.address,
-				entry->key.length);
+		GNIX_DEBUG(FI_LOG_MR,
+			   "larger entry already exists, "
+			   "to_destroy=%llx:%llx\n",
+			   entry->key.address, entry->key.length);
 
 		ret = __mr_cache_entry_destroy(cache, entry);
 		if (ret) {
@@ -851,8 +851,9 @@ static inline int __mr_cache_entry_put(
 		 */
 		if (cache->attr.lazy_deregistration &&
 				!(entry->flags & GNIX_CE_RETIRED)) {
-			GNIX_INFO(FI_LOG_MR, "moving key %llx:%llx to stale\n",
-					entry->key.address, entry->key.length);
+			GNIX_DEBUG(FI_LOG_MR,
+				   "moving key %llx:%llx to stale\n",
+				   entry->key.address, entry->key.length);
 
 			found = rbtFindLeftmost(cache->stale.rb_tree,
 					&entry->key, __find_overlapping_addr);
@@ -868,18 +869,16 @@ static inline int __mr_cache_entry_put(
 			}
 		} else {
 			/* if retired or not using lazy registration */
-			GNIX_INFO(FI_LOG_MR,
-					"destroying entry, key=%llx:%llx\n",
-					entry->key.address,
-					entry->key.length);
+			GNIX_DEBUG(FI_LOG_MR,
+				   "destroying entry, key=%llx:%llx\n",
+				   entry->key.address, entry->key.length);
 
 			grc = __mr_cache_entry_destroy(cache, entry);
 		}
 
 		if (unlikely(grc != GNI_RC_SUCCESS)) {
-			GNIX_WARN(FI_LOG_MR,
-					"dereg callback returned '%s'\n",
-					gni_err_str[grc]);
+			GNIX_INFO(FI_LOG_MR, "dereg callback returned '%s'\n",
+				  gni_err_str[grc]);
 		}
 	}
 
@@ -1027,7 +1026,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
-	GNIX_INFO(FI_LOG_MR, "starting flush on memory registration cache\n");
+	GNIX_DEBUG(FI_LOG_MR, "starting flush on memory registration cache\n");
 
 	/* flushes are unnecessary for caches without lazy deregistration */
 	if (!cache->attr.lazy_deregistration)
@@ -1045,8 +1044,8 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 			break;
 		}
 
-		GNIX_INFO(FI_LOG_MR, "attempting to flush key %llx:%llx\n",
-				entry->key.address, entry->key.length);
+		GNIX_DEBUG(FI_LOG_MR, "attempting to flush key %llx:%llx\n",
+			   entry->key.address, entry->key.length);
 		iter = rbtFind(cache->stale.rb_tree, &entry->key);
 		if (unlikely(!iter)) {
 			GNIX_ERR(FI_LOG_MR,
@@ -1069,9 +1068,9 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 		++destroyed;
 	}
 
-	GNIX_INFO(FI_LOG_MR, "flushed %i of %i entries from memory "
-				"registration cache\n", destroyed,
-				atomic_get(&cache->stale.elements));
+	GNIX_DEBUG(FI_LOG_MR, "flushed %i of %i entries from memory "
+		   "registration cache\n", destroyed,
+		   atomic_get(&cache->stale.elements));
 
 	if (destroyed > 0) {
 		atomic_sub(&cache->stale.elements, destroyed);
@@ -1119,31 +1118,31 @@ static int __mr_cache_search_inuse(
 	iter = rbtFindLeftmost(cache->inuse.rb_tree, (void *) key,
 			__find_overlapping_addr);
 	if (!iter) {
-		GNIX_INFO(FI_LOG_MR,
-				"could not find key in inuse, key=%llx:%llx\n",
-				key->address, key->length);
+		GNIX_DEBUG(FI_LOG_MR,
+			   "could not find key in inuse, key=%llx:%llx\n",
+			   key->address, key->length);
 		return -FI_ENOENT;
 	}
 
 	rbtKeyValue(cache->inuse.rb_tree, iter, (void **) &found_key,
 			(void **) &found_entry);
 
-	GNIX_INFO(FI_LOG_MR,
-			"found a key that matches the search criteria, "
-			"found=%llx:%llx key=%llx:%llx\n",
-			found_key->address, found_key->length,
-			key->address, key->length);
+	GNIX_DEBUG(FI_LOG_MR,
+		   "found a key that matches the search criteria, "
+		   "found=%llx:%llx key=%llx:%llx\n",
+		   found_key->address, found_key->length,
+		   key->address, key->length);
 
 	/* if the entry that we've found completely subsumes
 	 * the requested entry, just return a reference to
 	 * that existing registration
 	 */
 	if (__can_subsume(found_key, key)) {
-		GNIX_INFO(FI_LOG_MR,
-				"found an entry that subsumes the request, "
-				"existing=%llx:%llx key=%llx:%llx\n",
-				found_key->address, found_key->length,
-				key->address, key->length);
+		GNIX_DEBUG(FI_LOG_MR,
+			   "found an entry that subsumes the request, "
+			   "existing=%llx:%llx key=%llx:%llx\n",
+			   found_key->address, found_key->length,
+			   key->address, key->length);
 		*entry = found_entry;
 		__mr_cache_entry_get(cache, found_entry);
 
@@ -1163,10 +1162,10 @@ static int __mr_cache_search_inuse(
 
 
 		cmp = __find_overlapping_addr(found_key, key);
-		GNIX_INFO(FI_LOG_MR,
-				"candidate: key=%llx:%llx result=%d\n",
-				found_key->address,
-				found_key->length, cmp);
+		GNIX_DEBUG(FI_LOG_MR,
+			   "candidate: key=%llx:%llx result=%d\n",
+			   found_key->address,
+			   found_key->length, cmp);
 		if (cmp != 0)
 			break;
 
@@ -1174,8 +1173,8 @@ static int __mr_cache_search_inuse(
 		found_end = found_key->address + found_key->length;
 
 		/* mark the entry as retired */
-		GNIX_INFO(FI_LOG_MR, "retiring entry, key=%llx:%llx\n",
-				found_key->address, found_key->length);
+		GNIX_DEBUG(FI_LOG_MR, "retiring entry, key=%llx:%llx\n",
+			   found_key->address, found_key->length);
 		found_entry->flags |= GNIX_CE_RETIRED;
 		dlist_insert_tail(&found_entry->siblings, &retired_entries);
 
@@ -1188,14 +1187,14 @@ static int __mr_cache_search_inuse(
 
 
 	/* remove retired entries from tree */
-	GNIX_INFO(FI_LOG_MR, "removing retired entries from inuse tree\n");
+	GNIX_DEBUG(FI_LOG_MR, "removing retired entries from inuse tree\n");
 	__remove_sibling_entries_from_tree(cache,
 			&retired_entries, cache->inuse.rb_tree);
 
 	/* create new registration */
-	GNIX_INFO(FI_LOG_MR,
-			"creating a new merged registration, key=%llx:%llx\n",
-			new_key.address, new_key.length);
+	GNIX_DEBUG(FI_LOG_MR,
+		   "creating a new merged registration, key=%llx:%llx\n",
+		   new_key.address, new_key.length);
 	ret = __mr_cache_create_registration(cache,
 			new_key.address, new_key.length,
 			entry, &new_key, fi_reg_context);
@@ -1210,9 +1209,9 @@ static int __mr_cache_search_inuse(
 		 * possible.  Neither case is a problem.  The entries
 		 * above have been retired, and here we return the
 		 * error */
-		GNIX_INFO(FI_LOG_MR,
-			  "failed to create merged registration, key=",
-			  new_key.address, new_key.length);
+		GNIX_DEBUG(FI_LOG_MR,
+			   "failed to create merged registration, key=",
+			   new_key.address, new_key.length);
 		return ret;
 	}
 
@@ -1245,8 +1244,8 @@ static int __mr_cache_search_stale(
 		__clear_notifier_events(cache);
 	}
 
-	GNIX_INFO(FI_LOG_MR, "searching for stale entry, key=%llx:%llx\n",
-			key->address, key->length);
+	GNIX_DEBUG(FI_LOG_MR, "searching for stale entry, key=%llx:%llx\n",
+		   key->address, key->length);
 
 	iter = rbtFindLeftmost(cache->stale.rb_tree, (void *) key,
 			__find_overlapping_addr);
@@ -1256,10 +1255,10 @@ static int __mr_cache_search_stale(
 	rbtKeyValue(cache->stale.rb_tree, iter, (void **) &mr_key,
 			(void **) &mr_entry);
 
-	GNIX_INFO(FI_LOG_MR,
-			"found a matching entry, found=%llx:%llx key=%llx:%llx\n",
-			mr_key->address, mr_key->length,
-			key->address, key->length);
+	GNIX_DEBUG(FI_LOG_MR,
+		   "found a matching entry, found=%llx:%llx key=%llx:%llx\n",
+		   mr_key->address, mr_key->length,
+		   key->address, key->length);
 
 
 	/* if the entry that we've found completely subsumes
@@ -1278,9 +1277,9 @@ static int __mr_cache_search_stale(
 			 * The old entry (mr_entry) should be destroyed
 			 * now as it is no longer needed.
 			 */
-			GNIX_INFO(FI_LOG_MR,
-					"removing entry from stale key=%llx:%llx\n",
-					mr_key->address, mr_key->length);
+			GNIX_DEBUG(FI_LOG_MR,
+				   "removing entry from stale key=%llx:%llx\n",
+				   mr_key->address, mr_key->length);
 
 			rc = rbtErase(cache->stale.rb_tree, iter);
 			if (unlikely(rc != RBT_STATUS_OK)) {
@@ -1300,10 +1299,10 @@ static int __mr_cache_search_stale(
 
 			*entry = tmp;
 		} else {
-			GNIX_INFO(FI_LOG_MR,
-				  "removing entry (%p) from stale and"
-				  " migrating to inuse, key=%llx:%llx\n",
-				  mr_entry, mr_key->address, mr_key->length);
+			GNIX_DEBUG(FI_LOG_MR,
+				   "removing entry (%p) from stale and"
+				   " migrating to inuse, key=%llx:%llx\n",
+				   mr_entry, mr_key->address, mr_key->length);
 			rc = rbtErase(cache->stale.rb_tree, iter);
 			if (unlikely(rc != RBT_STATUS_OK)) {
 				GNIX_FATAL(FI_LOG_MR,
@@ -1341,10 +1340,10 @@ static int __mr_cache_search_stale(
 		return FI_SUCCESS;
 	}
 
-	GNIX_INFO(FI_LOG_MR,
-			"could not use matching entry, "
-			"found=%llx:%llx\n",
-			mr_key->address, mr_key->length);
+	GNIX_DEBUG(FI_LOG_MR,
+		   "could not use matching entry, "
+		   "found=%llx:%llx\n",
+		   mr_key->address, mr_key->length);
 
 	return -FI_ENOENT;
 }
@@ -1375,7 +1374,7 @@ static int __mr_cache_create_registration(
 	handle = cache->attr.reg_callback(handle, (void *) address, length,
 			fi_reg_context, cache->attr.reg_context);
 	if (unlikely(!handle)) {
-		GNIX_WARN(FI_LOG_MR,
+		GNIX_INFO(FI_LOG_MR,
 			  "failed to register memory with callback\n");
 		goto err;
 	}
@@ -1387,7 +1386,7 @@ static int __mr_cache_create_registration(
 
 	rc = __notifier_monitor(cache, current_entry);
 	if (unlikely(rc != FI_SUCCESS)) {
-		GNIX_WARN(FI_LOG_MR,
+		GNIX_INFO(FI_LOG_MR,
 			  "failed to monitor memory with notifier\n");
 		goto err_dereg;
 	}
@@ -1401,8 +1400,8 @@ static int __mr_cache_create_registration(
 		goto err_dereg;
 	}
 
-	GNIX_INFO(FI_LOG_MR, "inserted key %llx:%llx into inuse\n",
-			current_entry->key.address, current_entry->key.length);
+	GNIX_DEBUG(FI_LOG_MR, "inserted key %llx:%llx into inuse\n",
+		   current_entry->key.address, current_entry->key.length);
 
 
 	atomic_inc(&cache->inuse.elements);
@@ -1416,7 +1415,7 @@ err_dereg:
 	rc = cache->attr.dereg_callback(current_entry->mr,
 					cache->attr.dereg_context);
 	if (unlikely(rc)) {
-		GNIX_WARN(FI_LOG_MR,
+		GNIX_INFO(FI_LOG_MR,
 			  "failed to deregister memory with "
 			  "callback, ret=%d\n", rc);
 	}
@@ -1533,13 +1532,13 @@ int _gnix_mr_cache_deregister(
 	entry = container_of(handle, gnix_mr_cache_entry_t, mr);
 	if ((entry->state != GNIX_CES_INUSE) &&
 	    (entry->state != GNIX_CES_INUSE_UNMAPPED)) {
-		GNIX_WARN(FI_LOG_MR, "entry (%p) in incorrect state (%d)\n",
+		GNIX_INFO(FI_LOG_MR, "entry (%p) in incorrect state (%d)\n",
 			  entry, entry->state);
 		return -FI_EINVAL;
 	}
 
-	GNIX_INFO(FI_LOG_MR, "entry found, entry=%p refs=%d\n",
-			entry, atomic_get(&entry->ref_cnt));
+	GNIX_DEBUG(FI_LOG_MR, "entry found, entry=%p refs=%d\n",
+		   entry, atomic_get(&entry->ref_cnt));
 
 	grc = __mr_cache_entry_put(cache, entry);
 
