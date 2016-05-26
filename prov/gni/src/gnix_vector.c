@@ -215,7 +215,7 @@ inline int _gnix_vec_at(gnix_vector_t *vec, void **element, gnix_vec_index_t ind
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!vec || index > vec->attr.cur_size || !element)) {
+	if (unlikely(!vec || index >= vec->attr.cur_size || !element)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_at\n");
 		return -FI_EINVAL;
