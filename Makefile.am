@@ -47,6 +47,25 @@ common_srcs = \
 	prov/util/src/util_wait.c   \
 	prov/util/src/util_buf.c
 
+if MACOS
+common_srcs += src/osx/osd.c
+common_srcs += src/unix/osd.c
+common_srcs += include/osx/osd.h
+common_srcs += include/unix/osd.h
+endif
+
+if FREEBSD
+common_srcs += src/unix/osd.c
+common_srcs += include/freebsd/osd.h
+common_srcs += include/unix/osd.h
+endif
+
+if LINUX
+common_srcs += src/unix/osd.c
+common_srcs += include/linux/osd.h
+common_srcs += include/unix/osd.h
+endif
+
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
 
@@ -84,25 +103,6 @@ src_libfabric_la_SOURCES = \
 	src/log.c \
 	src/var.c \
 	$(common_srcs)
-
-if MACOS
-src_libfabric_la_SOURCES += src/osx/osd.c
-src_libfabric_la_SOURCES += src/unix/osd.c
-src_libfabric_la_SOURCES += include/osx/osd.h
-src_libfabric_la_SOURCES += include/unix/osd.h
-endif
-
-if FREEBSD
-src_libfabric_la_SOURCES += src/unix/osd.c
-src_libfabric_la_SOURCES += include/freebsd/osd.h
-src_libfabric_la_SOURCES += include/unix/osd.h
-endif
-
-if LINUX
-src_libfabric_la_SOURCES += src/unix/osd.c
-src_libfabric_la_SOURCES += include/linux/osd.h
-src_libfabric_la_SOURCES += include/unix/osd.h
-endif
 
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)
 src_libfabric_la_LDFLAGS =
