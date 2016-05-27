@@ -344,11 +344,9 @@ usdf_pep_listen(struct fid_pep *fpep)
 static int usdf_pep_reject_async(void *vreq)
 {
 	struct usdf_connreq *crp;
-	struct usdf_eq *eq;
 	int ret;
 
 	crp = vreq;
-	eq = crp->cr_pep->pep_eq;
 
 	do {
 		ret = write(crp->cr_sockfd, crp->cr_ptr, crp->cr_resid);
