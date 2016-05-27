@@ -64,7 +64,7 @@
 #include "usdf_av.h"
 #include "usdf_cm.h"
 
-static void
+void
 usdf_cm_msg_connreq_cleanup(struct usdf_connreq *crp)
 {
 	struct usdf_ep *ep;
@@ -215,13 +215,16 @@ fail:
 void
 usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error)
 {
+	struct usdf_err_data_entry *err_data_entry;
+	struct usdf_connreq_msg *reqp;
+	struct fi_eq_err_entry err = {0};
         struct usdf_pep *pep;
         struct usdf_ep *ep;
         struct usdf_eq *eq;
+	size_t entry_size;
 	fid_t fid;
-        struct fi_eq_err_entry err;
 
-	USDF_DBG_SYS(EP_CTRL, "error=%d (%s)\n", error, fi_strerror(-error));
+	USDF_DBG_SYS(EP_CTRL, "error=%d (%s)\n", error, fi_strerror(error));
 
         pep = crp->cr_pep;
         ep = crp->cr_ep;
@@ -234,13 +237,32 @@ usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error)
 		eq = pep->pep_eq;
 	}
 
+	reqp = (struct usdf_connreq_msg *) crp->cr_data;
+	if (reqp && reqp->creq_datalen) {
+		entry_size = sizeof(*err_data_entry) + reqp->creq_datalen;
+		err_data_entry = calloc(1, entry_size);
+		if (!err_data_entry) {
+			USDF_WARN_SYS(EP_CTRL,
+					"failed to allocate EQ event\n");
+			return;
+		}
+
+		/* This data should be copied and owned by the provider. Keep
+		 * track of it in the EQ, this will be freed in the next EQ read
+		 * call after it has been read.
+		 */
+		memcpy(err_data_entry->err_data, reqp->creq_data,
+				reqp->creq_datalen);
+
+		err.err_data = err_data_entry->err_data;
+		err.err_data_size = reqp->creq_datalen;
+
+		slist_insert_tail(&err_data_entry->entry, &eq->eq_err_data);
+	}
+
         err.fid = fid;
-        err.context = NULL;
-        err.data = 0;
         err.err = -error;
-        err.prov_errno = 0;
-        err.err_data = NULL;
-        err.err_data_size = 0;
+
         usdf_eq_write_internal(eq, 0, &err, sizeof(err), USDF_EVENT_FLAG_ERROR);
 
         usdf_cm_msg_connreq_cleanup(crp);
@@ -282,10 +304,17 @@ usdf_cm_msg_connect_cb_rd(void *v)
 
 	/* if resid is 0 now, completely done */
 	if (crp->cr_resid == 0) {
+		reqp->creq_result = ntohl(reqp->creq_result);
+
 		ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_DEL,
 				crp->cr_sockfd, NULL);
 		close(crp->cr_sockfd);
 		crp->cr_sockfd = -1;
+
+		if (reqp->creq_result != FI_SUCCESS) {
+			usdf_cm_msg_connreq_failed(crp, reqp->creq_result);
+			return 0;
+		}
 
 		entry_len = sizeof(*entry) + reqp->creq_datalen;
 		entry = malloc(entry_len);
@@ -380,6 +409,7 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	struct usdf_fabric *fp;
 	struct usdf_connreq_msg *reqp;
 	struct usd_qp_impl *qp;
+	size_t request_size;
 	int ret;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
@@ -391,10 +421,16 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	udp = ep->ep_domain;
 	fp = udp->dom_fabric;
 	sin = addr;
-	crp = NULL;
 
-	crp = calloc(1, sizeof(*crp) + sizeof(struct usdf_connreq_msg) +
-			paramlen);
+	/* Although paramlen may be less than USDF_MAX_CONN_DATA, the same crp
+	 * struct is used for receiving the accept and reject payload. The
+	 * structure has to be prepared to receive the maximum allowable amount
+	 * of data per transfer. The maximum size includes the connection
+	 * request structure, the connection request message, and the maximum
+	 * amount of data per connection request message.
+	 */
+	request_size = sizeof(*crp) + sizeof(*reqp) + USDF_MAX_CONN_DATA;
+	crp = calloc(1, request_size);
 	if (crp == NULL) {
 		ret = -errno;
 		goto fail;

@@ -173,6 +173,7 @@ usdf_eq_write_event(struct usdf_eq *eq, uint32_t event,
 static ssize_t usdf_eq_readerr(struct fid_eq *feq,
 		struct fi_eq_err_entry *entry, uint64_t flags)
 {
+	struct usdf_err_data_entry *err_data_entry;
 	struct usdf_eq *eq;
 	ssize_t ret;
 
@@ -195,11 +196,38 @@ static ssize_t usdf_eq_readerr(struct fid_eq *feq,
 
 	ret = usdf_eq_read_event(eq, NULL, entry, sizeof(*entry), flags);
 
+	/* Mark as seen so it can be cleaned on the next iteration of read. */
+	if (entry->err_data_size) {
+		err_data_entry = container_of(entry->err_data,
+				struct usdf_err_data_entry, err_data);
+		err_data_entry->seen = 1;
+	}
+
 done:
 	pthread_spin_unlock(&eq->eq_lock);
 	return ret;
 }
 
+static void usdf_eq_clean_err(struct usdf_eq *eq, uint8_t destroy)
+{
+	struct usdf_err_data_entry *err_data_entry;
+	struct slist_entry *entry;
+
+	while (!slist_empty(&eq->eq_err_data)) {
+		entry = slist_remove_head(&eq->eq_err_data);
+		err_data_entry = container_of(entry, struct usdf_err_data_entry,
+				entry);
+		if (err_data_entry->seen || destroy) {
+			free(err_data_entry);
+		} else {
+			/* Oops, the rest hasn't been seen yet. Put this back
+			 * and exit.
+			 */
+			slist_insert_head(entry, &eq->eq_err_data);
+			break;
+		}
+	}
+}
 
 static ssize_t _usdf_eq_read(struct usdf_eq *eq, uint32_t *event, void *buf,
 		size_t len, uint64_t flags)
@@ -217,6 +245,9 @@ static ssize_t _usdf_eq_read(struct usdf_eq *eq, uint32_t *event, void *buf,
 		ret = -FI_EAVAIL;
 		goto done;
 	}
+
+	if (!slist_empty(&eq->eq_err_data))
+		usdf_eq_clean_err(eq, 0);
 
 	ret = usdf_eq_read_event(eq, event, buf, len, flags);
 
@@ -467,6 +498,9 @@ usdf_eq_close(fid_t fid)
 		break;
 	}
 
+	/* Set destroy flag to clear everything out */
+	usdf_eq_clean_err(eq, 1);
+
 	free(eq->eq_ev_ring);
 	free(eq->eq_ev_buf);
 	free(eq);
@@ -522,6 +556,8 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		ret = -ret;
 		goto fail;
 	}
+
+	slist_init(&eq->eq_err_data);
 
 	/* get baseline routines */
 	eq->eq_ops_data = usdf_eq_ops;

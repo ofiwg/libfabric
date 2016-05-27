@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -68,6 +68,7 @@ struct usdf_connreq {
 };
 
 void usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error);
+void usdf_cm_msg_connreq_cleanup(struct usdf_connreq *crp);
 
 int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen);
 int usdf_cm_dgram_getname(fid_t fid, void *addr, size_t *addrlen);
