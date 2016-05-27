@@ -51,6 +51,7 @@
 
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
+#define VERBS_TX_OP_FLAGS_IWARP_RDM (VERBS_TX_OP_FLAGS)
 
 #define VERBS_TX_MODE VERBS_MODE
 #define VERBS_TX_RDM_MODE VERBS_RDM_MODE
@@ -560,8 +561,8 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 }
 
 static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
-		struct ibv_device_attr *device_attr,
-		struct fi_info *info)
+				    struct ibv_device_attr *device_attr,
+				    struct fi_info *info)
 {
 	struct ibv_pd *pd;
 	struct ibv_cq *cq;
@@ -597,8 +598,8 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
 	init_attr.recv_cq = cq;
-	init_attr.cap.max_send_wr = atoi(def_tx_ctx_size);
-	init_attr.cap.max_recv_wr = atoi(def_rx_ctx_size);
+	init_attr.cap.max_send_wr = MIN(atoi(def_tx_ctx_size), device_attr->max_qp_wr);
+	init_attr.cap.max_recv_wr = MIN(atoi(def_rx_ctx_size), device_attr->max_qp_wr);
 	init_attr.cap.max_send_sge = MIN(atoi(def_tx_iov_limit), device_attr->max_sge);
 	init_attr.cap.max_recv_sge = MIN(atoi(def_rx_iov_limit), device_attr->max_sge);
 	init_attr.cap.max_inline_data = atoi(def_inject_size);
@@ -616,7 +617,12 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	info->tx_attr->size	 	= init_attr.cap.max_send_wr;
 
 	info->rx_attr->iov_limit 	= init_attr.cap.max_recv_sge;
-	info->rx_attr->size	 	= init_attr.cap.max_recv_wr;
+	/*
+	 * On some HW ibv_create_qp can increase max_recv_wr value more than
+	 * it really supports. So, alignment with device capability is needed.
+	 */
+	info->rx_attr->size	 	= MIN(init_attr.cap.max_recv_wr,
+						device_attr->max_qp_wr);
 
 	ibv_destroy_qp(qp);
 err2:
@@ -713,7 +719,8 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		*(fi->tx_attr)	= verbs_tx_attr;
 	}
 
-	*(fi->rx_attr)		= verbs_rx_attr;
+	*(fi->rx_attr)		= (ep_dom->type == FI_EP_RDM)
+				? verbs_rdm_rx_attr : verbs_rx_attr;
 	*(fi->ep_attr)		= verbs_ep_attr;
 	*(fi->domain_attr)	= verbs_domain_attr;
 	*(fi->fabric_attr)	= verbs_fabric_attr;
@@ -730,7 +737,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
-		*(fi->rx_attr) = verbs_rdm_rx_attr;
 	}
 
 	switch (ctx->device->transport_type) {
@@ -761,9 +767,13 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			goto err;
 		}
 
-		fi->ep_attr->protocol = (ep_dom == &verbs_msg_domain) ?
-					FI_PROTO_IWARP : FI_PROTO_IWARP_RDM;
-		fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
+		if (ep_dom == &verbs_msg_domain) {
+			fi->ep_attr->protocol = FI_PROTO_IWARP;
+			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
+		} else {
+			fi->ep_attr->protocol = FI_PROTO_IWARP_RDM;
+			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP_RDM;
+		}
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown transport type\n");

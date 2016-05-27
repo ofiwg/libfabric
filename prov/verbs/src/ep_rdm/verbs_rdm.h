@@ -234,6 +234,11 @@ struct fi_ibv_rdm_ep {
 
 	struct fi_ibv_av *av;
 
+	/*
+	 * ibv_post_send opcode for tagged messaging.
+	 * It must generate work completion in receive CQ
+	 */
+	enum ibv_wr_opcode topcode;
 	int buff_len;
 	int n_buffs;
 	int rq_wr_depth;    // RQ depth
@@ -451,9 +456,9 @@ int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn);
 int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn);
 int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
                                 struct fi_ibv_rdm_tagged_conn *conn);
-int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
-                                      struct fi_ibv_rdm_ep *ep,
-                                      int num_to_post);
+ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
+				   struct fi_ibv_rdm_ep *ep,
+				   int num_to_post);
 int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
                               struct fid_ep **ep, void *context);
 int fi_ibv_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

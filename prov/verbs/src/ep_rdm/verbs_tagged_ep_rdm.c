@@ -322,7 +322,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 			wr.send_flags = (size < ep->max_inline_rc)
 				? IBV_SEND_INLINE : 0;
 			wr.imm_data = 0;
-			wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+			wr.opcode = ep->topcode;
 
 			sge.addr = (uintptr_t)(void*)sbuf;
 			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
@@ -603,9 +603,10 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p remain prepost recvs %d\n", conn, conn->recv_preposted);
 	if (conn->recv_preposted < ep->recv_preposted_threshold) {
 		int to_post = ep->rq_wr_depth - conn->recv_preposted;
-		int res = fi_ibv_rdm_tagged_repost_receives(conn, ep, to_post);
-		if (res == 0) {
+		ssize_t res = fi_ibv_rdm_repost_receives(conn, ep, to_post);
+		if (res < 0) {
 			VERBS_INFO(FI_LOG_EP_DATA, "repost recv failed %d\n", res);
+			/* TODO: err code propagation */
 			abort();
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,
@@ -626,9 +627,8 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 	FI_IBV_DBG_OPCODE(wc->opcode, "RECV");
 
-	if (wc->status != IBV_WC_SUCCESS ||
-	    (wc->opcode != IBV_WC_RECV_RDMA_WITH_IMM))
-	{
+	if (!FI_IBV_RDM_CHECK_RECV_WC(wc)) {
+		assert(0 && "Error recv wc\n");
 		return 1;
 	}
 
@@ -720,7 +720,9 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 			return -FI_EOTHER;
 		}
 
-		if (wc[i].opcode != IBV_WC_RECV_RDMA_WITH_IMM) {
+		if (wc[i].opcode != IBV_WC_RECV_RDMA_WITH_IMM &&
+		    wc[i].opcode != IBV_WC_RECV)
+		{
 			VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc[%d].opcode = %d\n",
 				i, wc[i].opcode);
 		}

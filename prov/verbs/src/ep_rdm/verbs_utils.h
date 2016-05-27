@@ -76,8 +76,6 @@ struct fi_ibv_msg_ep;
 	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
 	 sizeof(struct fi_ibv_rdm_header))
 
-#define FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE  (1000)
-
 /* TODO: CQs depths increased from 100 to 1000 to prevent
  *      "Work Request Flushed Error" in stress tests like alltoall.
  */
@@ -85,6 +83,14 @@ struct fi_ibv_msg_ep;
 #define FI_IBV_RDM_TAGGED_DFLT_RCQ_SIZE (1000)
 
 #define FI_IBV_RDM_CM_RESOLVEADDR_TIMEOUT (30000)
+
+#if ENABLE_DEBUG
+#define FI_IBV_RDM_CHECK_RECV_WC(wc)						\
+	((wc->status == IBV_WC_SUCCESS) &&					\
+	(wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM || wc->opcode == IBV_WC_RECV))
+#else
+#define FI_IBV_RDM_CHECK_RECV_WC(wc) (wc->status == IBV_WC_SUCCESS)
+#endif /* ENABLE_DEBUG */
 
 /* TODO: Holy macro batman, use verbs calls */
 #define FI_IBV_DBG_OPCODE(wc_opcode, str)                                      \
@@ -161,7 +167,7 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
                                               const void *arg);
 void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
 				  struct fi_ibv_rdm_ep *ep);
-int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
-				      struct fi_ibv_rdm_cm* cm);
+int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
+			       struct fi_ibv_rdm_cm* cm);
 
 #endif /* _VERBS_UTILS_H */

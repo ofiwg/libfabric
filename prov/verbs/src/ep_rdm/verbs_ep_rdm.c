@@ -54,8 +54,7 @@ struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash = NULL;
 
 
 static int
-fi_ibv_rdm_tagged_find_max_inline_size(struct ibv_pd *pd,
-				       struct ibv_context *context)
+fi_ibv_rdm_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
 {
 	struct ibv_qp_init_attr qp_attr;
 	struct ibv_qp *qp = NULL;
@@ -82,10 +81,20 @@ fi_ibv_rdm_tagged_find_max_inline_size(struct ibv_pd *pd,
 			/* 
 			 * truescale returns max_inline_data 0
 			 */
-			if (0 == qp_attr.cap.max_inline_data) break;
+			if (qp_attr.cap.max_inline_data == 0)
+				break;
+
+			/*
+			 * iWarp is able to create qp with unsupported
+			 * max_inline, lets take first returned value.
+			 */
+			if (context->device->transport_type == IBV_TRANSPORT_IWARP) {
+				max_inline = rst = qp_attr.cap.max_inline_data;
+				break;
+			}
 			rst = max_inline;
 		}
-	} while (qp && (max_inline *= 2));
+	} while (qp && (max_inline < INT_MAX / 2) && (max_inline *= 2));
 
 	if (rst != 0) {
 		int pos = rst, neg = max_inline;
@@ -402,8 +411,12 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		container_of(domain, struct fi_ibv_domain, domain_fid);
 	int ret = 0;
 
-	if (strncmp(_domain->verbs->device->name, info->domain_attr->name,
-                strlen(_domain->verbs->device->name))) {
+	if (!info || !info->ep_attr || !info->domain_attr ||
+	    strncmp(_domain->verbs->device->name, info->domain_attr->name,
+		    strlen(_domain->verbs->device->name)) ||
+	    (!info->rx_attr ||
+	     info->rx_attr->size <= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM))
+	{
 		return -FI_EINVAL;
 	}
 
@@ -422,6 +435,19 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma(_ep);
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
 
+	switch (info->ep_attr->protocol) {
+	case FI_PROTO_IB_RDM:
+		_ep->topcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+		break;
+	case FI_PROTO_IWARP_RDM:
+		_ep->topcode = IBV_WR_SEND;
+		break;
+	default:
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported protocol\n");
+		return -FI_ENODATA;
+	}
+
 	ret = fi_ibv_create_ep(NULL, NULL, 0, info, &_ep->cm.rai, &_ep->cm.listener);
 
 	if (rdma_listen(_ep->cm.listener, 1024)) {
@@ -434,8 +460,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
 	_ep->buff_len = FI_IBV_RDM_DFLT_BUFFER_SIZE;
 	_ep->rndv_threshold = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
-
-	_ep->rq_wr_depth = FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE;
+	
+	_ep->rq_wr_depth = info->rx_attr->size;
 
 	/*
 	 * max number of WRs in SQ is n_buffer for send and
@@ -445,7 +471,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->posted_sends = 0;
 	_ep->posted_recvs = 0;
-	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, 5);
+	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, _ep->n_buffs);
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
@@ -460,9 +486,9 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(
 		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	_ep->max_inline_rc =
-	    fi_ibv_rdm_tagged_find_max_inline_size(_ep->domain->pd,
-						   _ep->domain->verbs);
+	_ep->max_inline_rc = 
+		fi_ibv_rdm_find_max_inline(_ep->domain->pd, _ep->domain->verbs);
+
 	_ep->scq_depth = FI_IBV_RDM_TAGGED_DFLT_SCQ_SIZE;
 	_ep->rcq_depth = FI_IBV_RDM_TAGGED_DFLT_RCQ_SIZE;
 

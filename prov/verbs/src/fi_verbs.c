@@ -91,7 +91,7 @@ static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 		return -FI_EOTHER;
 	}
 
-	if (fi_ibv_rdm_tagged_find_ipoib_addr(src_addr, cm)) {
+	if (fi_ibv_rdm_find_ipoib_addr(src_addr, cm)) {
 		VERBS_INFO(FI_LOG_EP_CTRL, 
 			   "Failed to find correct IPoIB address\n");
 		return -FI_ENODEV;
@@ -174,7 +174,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 	if (FI_IBV_EP_TYPE_IS_RDM(hints)) {
 		struct fi_ibv_rdm_cm* cm = 
 			container_of(id, struct fi_ibv_rdm_cm, listener);
-		fi_ibv_rdm_cm_init(cm, _rai);
+		ret = fi_ibv_rdm_cm_init(cm, _rai);
 	} else {
 		ret = rdma_create_ep(id, _rai, NULL, NULL);
 		if (ret) {
@@ -366,5 +366,9 @@ static void fi_ibv_fini(void)
 
 VERBS_INI
 {
+	fi_param_define(&fi_ibv_prov, "iface", FI_PARAM_STRING,
+			"prefix or full name of network interface associated "
+			"with IB device (default: ib)");
+
 	return &fi_ibv_prov;
 }
