@@ -453,7 +453,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Unsupported protocol\n");
-		return -FI_ENODATA;
+		ret = -FI_ENODATA;
+		goto err;
 	}
 
 	ret = fi_ibv_create_ep(NULL, NULL, 0, info, &_ep->cm.rai, &_ep->cm.listener);
@@ -531,9 +532,9 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		ret = -FI_EOTHER;
 		goto err;
 	}
-out:
+
 	return ret;
 err:
 	free(_ep);
-	goto out;
+	return ret;
 }
