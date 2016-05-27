@@ -335,6 +335,8 @@ fi_ibv_rdm_process_addr_resolved(struct rdma_cm_id *id,
 		if (ret < 0) {
 			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
 			goto err;
+		} else {
+			ret = FI_SUCCESS;
 		}
 	} while (0);
 
@@ -458,6 +460,8 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		if (ret < 0) {
 			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
 			goto err;
+		} else {
+			ret = FI_SUCCESS;
 		}
 
 		id->context = conn;
