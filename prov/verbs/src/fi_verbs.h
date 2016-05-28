@@ -217,6 +217,11 @@ struct fi_ibv_mem_desc {
 	struct fi_ibv_domain	*domain;
 };
 
+struct fi_ibv_srq_ep {
+	struct fid_ep		ep_fid;
+	struct ibv_srq		*srq;
+};
+
 struct fi_ibv_msg_ep {
 	struct fid_ep		ep_fid;
 	struct rdma_cm_id	*id;
