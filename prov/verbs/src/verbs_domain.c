@@ -189,7 +189,7 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 	.cntr_open = fi_no_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context,
+	.srx_ctx = fi_ibv_srq_context,
 };
 
 static struct fi_ops_domain fi_ibv_rdm_domain_ops = {

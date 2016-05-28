@@ -141,6 +141,9 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 	conn_param.retry_count = 15;
 	conn_param.rnr_retry_count = 7;
 
+	if (_ep->srq_ep)
+		conn_param.srq = 1;
+
 	src_addr = rdma_get_local_addr(_ep->id);
 	if (src_addr) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "src_addr: %s:%d\n",
@@ -180,6 +183,9 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
 	conn_param.flow_control = 1;
 	conn_param.rnr_retry_count = 7;
+
+	if (_ep->srq_ep)
+		conn_param.srq = 1;
 
 	ret = rdma_accept(_ep->id, &conn_param);
 	if (ret)
