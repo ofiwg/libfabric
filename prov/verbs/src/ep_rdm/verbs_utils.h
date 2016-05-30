@@ -112,15 +112,16 @@ do {                                                                        \
     const size_t max_str_len = 1024;                                        \
     char str[max_str_len];                                                  \
     snprintf(str, max_str_len,                                              \
-            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%lx, len: %lu, context: %p, connection: %p\n", \
+            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%lx, len: %lu, rest: %lu, context: %p, connection: %p\n", \
             prefix,                                                         \
             request,                                                        \
             fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
             fi_ibv_rdm_tagged_req_rndv_state_to_str(request->state.rndv),   \
-            request->minfo.tag,                                                   \
+            request->minfo.tag,						    \
             request->len,                                                   \
+	    request->rest_len,					    \
             request->context,                                               \
-            request->minfo.conn);                                                 \
+            request->minfo.conn);					    \
                                                                             \
     switch (level)                                                          \
     {                                                                       \

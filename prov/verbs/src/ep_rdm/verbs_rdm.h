@@ -120,8 +120,9 @@ struct fi_ibv_rdm_tagged_rndv_header {
 	struct fi_ibv_rdm_header base;
 	uint64_t src_addr;
 	void *id;
-	int len;
+	size_t total_len;
 	uint32_t mem_key;
+	uint32_t padding;
 };
 
 struct fi_ibv_rdm_tagged_request {
@@ -161,6 +162,8 @@ struct fi_ibv_rdm_tagged_request {
 	 */
 	size_t iov_count;
 	size_t len;
+	size_t rest_len;
+	uint32_t post_counter;
 	uint64_t comp_flags;
 	struct fi_context *context;
 	uint32_t imm;
