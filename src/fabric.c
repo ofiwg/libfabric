@@ -58,7 +58,7 @@ static struct fi_prov *fi_getprov(const char *prov_name);
 
 static struct fi_prov *prov_head, *prov_tail;
 int init = 0;
-static pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static struct fi_filter prov_filter;
 
@@ -352,6 +352,7 @@ void fi_ini(void)
 	fi_param_init();
 	fi_log_init();
 	fi_util_init();
+	ofi_osd_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
@@ -424,6 +425,7 @@ static void __attribute__((destructor)) fi_fini(void)
 	fi_log_fini();
 	fi_param_fini();
 	fi_util_fini();
+	ofi_osd_fini();
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)

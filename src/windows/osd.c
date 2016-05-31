@@ -37,6 +37,9 @@
 #include "fi_osd.h"
 #include "fi_file.h"
 
+extern pthread_mutex_t ini_lock;
+static INIT_ONCE ofi_init_once = INIT_ONCE_STATIC_INIT;
+
 int socketpair(int af, int type, int protocol, int socks[2])
 {
 	protocol; /* suppress warning */
@@ -97,5 +100,31 @@ err:
 	return SOCKET_ERROR;
 }
 
+static BOOL CALLBACK ofi_init_once_cb(PINIT_ONCE once, void* data, void** ctx)
+{
+	OFI_UNUSED(once);
+	OFI_UNUSED(ctx);
+	InitializeCriticalSection((CRITICAL_SECTION*)data);
+	return TRUE;
+}
 
+BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
+{
+	OFI_UNUSED(instance);
+	OFI_UNUSED(reserved);
+
+	switch(reason)
+	{
+	case DLL_PROCESS_ATTACH:
+		InitOnceExecuteOnce(&ofi_init_once, ofi_init_once_cb, &ini_lock, 0);
+		break;
+	case DLL_THREAD_ATTACH:
+	case DLL_PROCESS_DETACH:
+	case DLL_THREAD_DETACH:
+	default:
+		break;
+	}
+
+	return TRUE;
+}
 
