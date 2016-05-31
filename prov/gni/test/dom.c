@@ -136,7 +136,11 @@ Test(domain, open_ops)
 		for (op = 0; op < GNI_NUM_DOM_OPS; op++) {
 			ret = gni_domain_ops->get_val(&doms[i]->fid, op, &val);
 			cr_assert(ret == FI_SUCCESS, "get_val");
-			cr_assert(val == i*op+op, "Incorrect op value");
+
+			if (op == GNI_MR_CACHE_UDREG)
+				cr_assert(val != 0, "Incorrect op value");
+			else 
+				cr_assert(val == i*op+op, "Incorrect op value");
 		}
 		ret = fi_close(&doms[i]->fid);
 		cr_assert(ret == FI_SUCCESS, "fi_close domain");
