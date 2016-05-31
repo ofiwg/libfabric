@@ -1394,6 +1394,8 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 	if (src_addr) {
 		memcpy(info->src_addr, src_addr, sizeof(struct sockaddr_in));
 		info->src_addrlen = sizeof(struct sockaddr_in);
+	} else {
+		sock_get_src_addr_from_hostname(info->src_addr, NULL);
 	}
 
 	if (dest_addr) {
@@ -1420,11 +1422,11 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 		if (hints->handle)
 			info->handle = hints->handle;
 
-		sock_set_domain_attr(src_addr, hints->domain_attr, info->domain_attr);
-		sock_set_fabric_attr(src_addr, hints->fabric_attr, info->fabric_attr);
+		sock_set_domain_attr(info->src_addr, hints->domain_attr, info->domain_attr);
+		sock_set_fabric_attr(info->src_addr, hints->fabric_attr, info->fabric_attr);
 	} else {
-		sock_set_domain_attr(src_addr, NULL, info->domain_attr);
-		sock_set_fabric_attr(src_addr, NULL, info->fabric_attr);
+		sock_set_domain_attr(info->src_addr, NULL, info->domain_attr);
+		sock_set_fabric_attr(info->src_addr, NULL, info->fabric_attr);
 	}
 
 	info->ep_attr->type = ep_type;
