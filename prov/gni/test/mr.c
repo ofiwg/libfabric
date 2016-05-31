@@ -40,10 +40,6 @@
 #include <string.h>
 #include <stdint.h>
 #include <sys/time.h>
-
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -76,7 +72,7 @@ static uint64_t default_offset;
 
 struct timeval s1, s2;
 
-static void mr_setup(void)
+static void _mr_setup(void)
 {
 	int ret = 0;
 
@@ -118,15 +114,36 @@ static void mr_teardown(void)
 	free(buf);
 }
 
-TestSuite(memory_registration_bare, .init = mr_setup, .fini = mr_teardown);
+static void udreg_setup(void)
+{
+	_mr_setup();
 
-TestSuite(memory_registration_cache, .init = mr_setup, .fini = mr_teardown);
+	_gnix_open_cache(domain, GNIX_MR_TYPE_UDREG);
+}
 
-TestSuite(perf_memory_registration, .init = mr_setup, .fini = mr_teardown,
+static void internal_mr_setup(void)
+{
+	_mr_setup();
+
+	_gnix_open_cache(domain, GNIX_MR_TYPE_INTERNAL);
+}
+
+TestSuite(mr_internal_bare, .init = internal_mr_setup, .fini = mr_teardown);
+
+TestSuite(mr_internal_cache, .init = internal_mr_setup, .fini = mr_teardown);
+
+#ifdef HAVE_UDREG
+TestSuite(mr_udreg_cache, .init = udreg_setup, .fini = mr_teardown);
+
+TestSuite(perf_mr_udreg, .init = udreg_setup, .fini = mr_teardown,
+		.disabled = true);
+#endif
+
+TestSuite(perf_mr_internal, .init = internal_mr_setup, .fini = mr_teardown,
 		.disabled = true);
 
 /* Test simple init, register and deregister */
-Test(memory_registration_bare, basic_init)
+Test(mr_internal_bare, basic_init)
 {
 	int ret;
 
@@ -140,7 +157,7 @@ Test(memory_registration_bare, basic_init)
 }
 
 /* Test invalid flags to fi_mr_reg */
-Test(memory_registration_bare, invalid_flags)
+Test(mr_internal_bare, invalid_flags)
 {
 	int ret;
 
@@ -151,7 +168,7 @@ Test(memory_registration_bare, invalid_flags)
 }
 
 /* Test invalid access param to fi_mr_reg */
-Test(memory_registration_bare, invalid_access)
+Test(mr_internal_bare, invalid_access)
 {
 	int ret;
 
@@ -162,7 +179,7 @@ Test(memory_registration_bare, invalid_access)
 }
 
 /* Test invalid offset param to fi_mr_reg */
-Test(memory_registration_bare, invalid_offset)
+Test(mr_internal_bare, invalid_offset)
 {
 	int ret;
 
@@ -173,7 +190,7 @@ Test(memory_registration_bare, invalid_offset)
 }
 
 /* Test invalid buf param to fi_mr_reg */
-Test(memory_registration_bare, invalid_buf)
+Test(mr_internal_bare, invalid_buf)
 {
 	int ret;
 
@@ -184,7 +201,7 @@ Test(memory_registration_bare, invalid_buf)
 }
 
 /* Test invalid mr_o param to fi_mr_reg */
-Test(memory_registration_bare, invalid_mr_ptr)
+Test(mr_internal_bare, invalid_mr_ptr)
 {
 	int ret;
 
@@ -195,7 +212,7 @@ Test(memory_registration_bare, invalid_mr_ptr)
 }
 
 /* Test invalid fid param to fi_mr_reg */
-Test(memory_registration_bare, invalid_fid_class)
+Test(mr_internal_bare, invalid_fid_class)
 {
 	int ret;
 	size_t old_class = dom->fid.fclass;
@@ -212,7 +229,7 @@ Test(memory_registration_bare, invalid_fid_class)
 }
 
 /* Test simple cache initialization */
-Test(memory_registration_cache, basic_init)
+Test(mr_internal_cache, basic_init)
 {
 	int ret;
 
@@ -238,7 +255,7 @@ Test(memory_registration_cache, basic_init)
  *   provide a unique fid_mr but internally, a second reference to the same
  *   entry is provided to prevent expensive calls to GNI_MemRegister
  */
-Test(memory_registration_cache, duplicate_registration)
+Test(mr_internal_cache, duplicate_registration)
 {
 	int ret;
 	struct fid_mr *f_mr;
@@ -275,7 +292,7 @@ Test(memory_registration_cache, duplicate_registration)
 /* Test registration of 1024 elements, all distinct. Cache element counts
  *   should meet expected values
  */
-Test(memory_registration_cache, register_1024_distinct_regions)
+Test(mr_internal_cache, register_1024_distinct_regions)
 {
 	int ret;
 	uint64_t **buffers;
@@ -328,7 +345,7 @@ Test(memory_registration_cache, register_1024_distinct_regions)
 /* Test registration of 1024 registrations backed by the same initial
  *   registration. There should only be a single registration in the cache
  */
-Test(memory_registration_cache, register_1024_non_unique_regions)
+Test(mr_internal_cache, register_1024_non_unique_regions)
 {
 	int ret;
 	char *hugepage;
@@ -392,7 +409,7 @@ Test(memory_registration_cache, register_1024_non_unique_regions)
 /* Test registration of 128 regions that will be cycled in and out of the
  *   inuse and stale trees. inuse + stale should never exceed 128
  */
-Test(memory_registration_cache, cyclic_register_128_distinct_regions)
+Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 {
 	int ret;
 	char **buffers;
@@ -473,7 +490,7 @@ Test(memory_registration_cache, cyclic_register_128_distinct_regions)
 	hugepage = NULL;
 }
 
-Test(memory_registration_cache, lru_evict_first_entry)
+Test(mr_internal_cache, lru_evict_first_entry)
 {
 	int ret;
 	char **buffers;
@@ -549,7 +566,7 @@ Test(memory_registration_cache, lru_evict_first_entry)
 	hugepage = NULL;
 }
 
-Test(memory_registration_cache, lru_evict_middle_entry)
+Test(mr_internal_cache, lru_evict_middle_entry)
 {
 	int ret;
 	char **buffers;
@@ -641,7 +658,7 @@ Test(memory_registration_cache, lru_evict_middle_entry)
  * version of what the test rdm_sr::send_autoreg_uncached does under
  * the covers (currently).
  */
-Test(memory_registration_cache, same_addr_incr_size)
+Test(mr_internal_cache, same_addr_incr_size)
 {
 	int ret;
 	int i;
@@ -667,7 +684,7 @@ Test(memory_registration_cache, same_addr_incr_size)
 }
 
 /* Same as above, except with decreasing sizes */
-Test(memory_registration_cache, same_addr_decr_size)
+Test(mr_internal_cache, same_addr_decr_size)
 {
 	int ret;
 	int i;
@@ -692,7 +709,7 @@ Test(memory_registration_cache, same_addr_decr_size)
 	}
 }
 
-Test(perf_memory_registration, repeated_registration)
+static inline void _repeated_registration(const char *label)
 {
 	int ret, i;
 	int region_len = 1 << 24;
@@ -723,9 +740,6 @@ Test(perf_memory_registration, repeated_registration)
 	}
 	gettimeofday(&s2, 0);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-
-
 	calculate_time_difference(&s1, &s2, &seconds, &reg_time);
 	reg_time += seconds * 1000000;
 
@@ -742,14 +756,17 @@ Test(perf_memory_registration, repeated_registration)
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-	fprintf(stderr, "best(repeated) case: reg_time=%.3f usec dereg_time=%.3f usec\n",
+	fprintf(stderr, "[%s] best(repeated) case: reg_time=%.3f "
+			"usec dereg_time=%.3f usec\n", label,
 			reg_time / (registrations * 1.0),
 			dereg_time / (registrations * 1.0));
 
 	free(region);
 }
 
-Test(perf_memory_registration, single_large_registration)
+
+
+static inline void _single_large_registration(const char *label)
 {
 	int ret, i;
 	int region_len = 1 << 24;
@@ -797,14 +814,15 @@ Test(perf_memory_registration, single_large_registration)
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-	fprintf(stderr, "best(overlap) case: reg_time=%.3f usec dereg_time=%.3f usec\n",
+	fprintf(stderr, "[%s] best(overlap) case: reg_time=%.3f "
+			"usec dereg_time=%.3f usec\n", label,
 			reg_time / (registrations * 1.0),
 			dereg_time / (registrations * 1.0));
 
 	free(region);
 }
 
-Test(perf_memory_registration, random_analysis)
+static inline void _random_analysis(const char *label)
 {
 	int ret, i;
 	int region_len = 1 << 24;
@@ -860,19 +878,34 @@ Test(perf_memory_registration, random_analysis)
 	calculate_time_difference(&s1, &s2, &seconds, &dereg_time);
 	dereg_time += seconds * 1000000;
 
-	fprintf(stderr, "random case: reg_time=%.3f usec "
-			"dereg_time=%.3f usec\n",
+	fprintf(stderr, "[%s] random case: reg_time=%.3f usec "
+			"dereg_time=%.3f usec\n", label,
 			reg_time / (registrations * 1.0),
 			dereg_time / (registrations * 1.0));
 
 	free(region);
 }
 
+Test(perf_mr_internal, repeated_registration)
+{
+	_repeated_registration("internal");
+}
+
+Test(perf_mr_internal, single_large_registration)
+{
+	_single_large_registration("internal");
+}
+
+Test(perf_mr_internal, random_analysis)
+{
+	_random_analysis("internal");
+}
+
 /*
  * This test exercises the ability of the cache to drop registrations that
  * have been subsumed by other registrations
  */
-Test(memory_registration_cache, regression_615)
+Test(mr_internal_cache, regression_615)
 {
 	int ret;
 	struct fid_mr *f_mr;
@@ -912,5 +945,123 @@ Test(memory_registration_cache, regression_615)
 	free(buffer);
 }
 
+#ifdef HAVE_UDREG
+/* Test registration of 1024 elements, all distinct. Cache element counts
+ *   should meet expected values
+ */
+Test(mr_udreg_cache, register_1024_distinct_regions)
+{
+	int ret;
+	uint64_t **buffers;
+	void *buffer;
+	struct fid_mr **mr_arr;
+	int i;
 
+	mr_arr = calloc(regions, sizeof(struct fid_mr *));
+	cr_assert(mr_arr);
 
+	buffers = calloc(regions, sizeof(uint64_t *));
+	cr_assert(buffers, "failed to allocate array of buffers");
+
+	buffer = calloc(regions * 4 * __BUF_LEN, sizeof(char));
+	cr_assert(buffer);
+
+	for (i = 0; i < regions; ++i) {
+		buffers[i] = (uint64_t *) (buffer + ((i * 4) * __BUF_LEN));
+	}
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], __BUF_LEN,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	free(buffers);
+	buffers = NULL;
+
+	free(mr_arr);
+	mr_arr = NULL;
+
+	free(buffer);
+	buffer = NULL;
+}
+
+/* Test registration of 1024 registrations backed by the same initial
+ *   registration. There should only be a single registration in the cache
+ */
+Test(mr_udreg_cache, register_1024_non_unique_regions)
+{
+	int ret;
+	char *hugepage;
+	struct fid_mr *hugepage_mr;
+	char **buffers;
+	struct fid_mr **mr_arr;
+	int i;
+
+	mr_arr = calloc(regions, sizeof(struct fid_mr *));
+	cr_assert(mr_arr);
+
+	buffers = calloc(regions, sizeof(uint64_t *));
+	cr_assert(buffers, "failed to allocate array of buffers");
+
+	hugepage = calloc(regions * regions, sizeof(char));
+	cr_assert(hugepage);
+
+	for (i = 0; i < regions; ++i) {
+		buffers[i] = &hugepage[i * regions];
+		cr_assert(buffers[i]);
+	}
+
+	ret = fi_mr_reg(dom, (void *) hugepage,
+			regions * regions * sizeof(char),
+			default_access, default_offset, default_req_key,
+			default_flags, &hugepage_mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], regions,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	ret = fi_close(&hugepage_mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	free(hugepage);
+	hugepage = NULL;
+
+	free(buffers);
+	buffers = NULL;
+
+	free(mr_arr);
+	mr_arr = NULL;
+}
+
+Test(perf_mr_udreg, repeated_registration)
+{
+	_repeated_registration("udreg");
+}
+
+Test(perf_mr_udreg, single_large_registration)
+{
+	_single_large_registration("udred");
+}
+
+Test(perf_mr_udreg, random_analysis)
+{
+	_random_analysis("udreg");
+}
+
+#endif

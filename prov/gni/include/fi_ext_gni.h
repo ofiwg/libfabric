@@ -57,6 +57,8 @@ typedef enum dom_ops_val { GNI_MSG_RENDEZVOUS_THRESHOLD,
 			   GNI_MAX_RETRANSMITS,
 			   GNI_ERR_INJECT_COUNT,
 			   GNI_MR_CACHE_LAZY_DEREG,
+			   GNI_MR_CACHE_UDREG,
+			   GNI_MR_UDREG_REG_LIMIT,
 			   GNI_NUM_DOM_OPS
 } dom_ops_val_t;
 

@@ -34,12 +34,17 @@
 #ifndef GNIX_MR_H_
 #define GNIX_MR_H_
 
+#ifdef HAVE_UDREG
+#include <udreg_pub.h>
+#endif
+
 /* global includes */
 #include "rdma/fi_domain.h"
 
 /* provider includes */
 #include "gnix_priv.h"
 #include "gnix_mr_cache.h"
+
 
 #define GNIX_MR_PAGE_SHIFT 12
 #define GNIX_MR_PFN_BITS 37
@@ -55,6 +60,14 @@
 enum {
 	GNIX_MR_FLAG_READONLY = 1 << 0
 };
+
+enum {
+	GNIX_MR_TYPE_INTERNAL = 0,
+	GNIX_MR_TYPE_UDREG,
+	GNIX_MR_MAX_TYPE,
+};
+
+#define GNIX_DEFAULT_CACHE_TYPE GNIX_MR_TYPE_INTERNAL
 
 /* forward declarations */
 struct gnix_fid_domain;
@@ -74,6 +87,9 @@ struct gnix_fid_mem_desc {
 	struct gnix_fid_domain *domain;
 	gni_mem_handle_t mem_hndl;
 	struct gnix_nic *nic;
+#ifdef HAVE_UDREG
+	udreg_entry_t *entry;
+#endif
 };
 
 /**
@@ -99,6 +115,20 @@ typedef struct gnix_mr_key {
 		uint64_t value;
 	};
 } gnix_mr_key_t;
+
+/**
+ *
+ */
+struct gnix_mr_ops {
+	int (*init)(struct gnix_fid_domain *domain);
+	int (*is_init)(struct gnix_fid_domain *domain);
+	int (*reg_mr)(struct gnix_fid_domain *domain, uint64_t address,
+			uint64_t length, struct _gnix_fi_reg_context *fi_reg_context,
+			void **handle);
+	int (*dereg_mr)(struct gnix_fid_domain *domain,
+			struct gnix_fid_mem_desc *md);
+};
+
 
 /**
  * @brief Converts a libfabric key to a gni memory handle, skipping memory
@@ -128,6 +158,12 @@ void _gnix_convert_key_to_mhdl(
  * @return              fi_mr_key to be used by remote EPs.
  */
 uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl);
+
+/* initializes mr cache for a given domain */
+int _gnix_open_cache(struct gnix_fid_domain *domain, int type);
+
+/* destroys mr cache for a given domain */
+int _gnix_close_cache(struct gnix_fid_domain *domain);
 
 extern gnix_mr_cache_attr_t _gnix_default_mr_cache_attr;
 
