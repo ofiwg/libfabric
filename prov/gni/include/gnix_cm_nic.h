@@ -162,24 +162,20 @@ int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic);
  * value previously returned from _gnix_cm_nic_get_cdm_seed_set
  *
  * @param[in]  domain  pointer to previously allocated gnix_fid_domain struct
- * @param[in]  seed    seed value to be used for creating cdm_id
  * @param[out] id      pointer to address where the 32 bit ids will be returned
  * @return FI_SUCCESS upon generation of 32 bit id.
  */
-int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t seed,
-			       uint32_t *id);
+int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t *id);
 
 /**
- * @brief generate a set of contiguous, unique 32 bit seed values to supply
- * to _gnix_cm_nic_create_cdm_id to generate cdm_id for calls to GNI_CdmCreate
+ * @brief generate a set of contiguous, unique 32 bit cdm_ids for use with GNI_CdmCreate
  *
- * @param[in]  domain  pointer to previously allocated gnix_fid_domain struct
- * @param[in]  nseeds  number of seeds to be allocated
- * @param[out] seeds   pointer to address where the 32 bit seeds will be
- *                     returned
+ * @param domain  pointer to previously allocated gnix_fid_domain struct
+ * @param nids    number of ids to be allocated
+ * @param id      pointer to address where the 32 bit id will be returned
  * @return FI_SUCCESS upon generate ion of 32 bit id.
  */
-int _gnix_cm_nic_get_cdm_seed_set(struct gnix_fid_domain *domain, int nseeds,
-				  uint32_t *seeds);
+int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
+				uint32_t *id);
 
 #endif /* _GNIX_CM_NIC_H_ */

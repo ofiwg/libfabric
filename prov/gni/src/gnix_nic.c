@@ -915,7 +915,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	struct gnix_nic *nic = NULL;
 	uint32_t device_addr;
 	gni_return_t status;
-	uint32_t fake_cdm_id, seed;
+	uint32_t fake_cdm_id;
 	gni_smsg_attr_t smsg_mbox_attr;
 	struct gnix_nic_attr *nic_attr = &default_attr;
 	bool must_alloc_nic = false;
@@ -982,15 +982,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		}
 
 		if (nic_attr->use_cdm_id == false) {
-			ret = _gnix_cm_nic_get_cdm_seed_set(domain, 1, &seed);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "_gnix_cm_nic_get_cdm_seed_set returned %s\n",
-					  fi_strerror(-ret));
-				goto err;
-			}
-			ret = _gnix_cm_nic_create_cdm_id(domain, seed,
-							 &fake_cdm_id);
+			ret = _gnix_cm_nic_create_cdm_id(domain, &fake_cdm_id);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
 					  "_gnix_cm_nic_create_cdm_id returned %s\n",
