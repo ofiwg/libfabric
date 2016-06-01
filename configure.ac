@@ -41,7 +41,7 @@ AC_ARG_ENABLE([debug],
 	      [AS_HELP_STRING([--enable-debug],
 			      [Enable debugging @<:@default=no@:>@])
 	      ],
-	      [CFLAGS="$CFLAGS -g -O0 -Wall -Wextra -Wundef -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers"
+	      [CFLAGS="-g -O0 -Wall -Wextra -Wundef -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers $CFLAGS"
 	       dbg=1],
 	      [enable_debug=no
                dbg=0])
@@ -49,9 +49,9 @@ AC_ARG_ENABLE([debug],
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
 
-dnl Fix autoconf's habit of adding -g -O2 by default
-AS_IF([test -z "$CFLAGS"],
-      [CFLAGS='-fvisibility=hidden -O2 -DNDEBUG -Wall -Wundef'])
+# Fix autoconf's habit of setting CFLAGS="-g -O2" by default while still
+# allowing the user to explicitly set CFLAGS=""
+: ${CFLAGS="-fvisibility=hidden -O2 -DNDEBUG -Wall -Wundef"}
 
 # AM PROG_AR did not exist pre AM 1.11.x (where x is somewhere >0 and
 # <3), but it is necessary in AM 1.12.x.
@@ -65,7 +65,7 @@ if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 	AC_DEFINE([INCLUDE_VALGRIND], 1,
 		  [Define to 1 to enable valgrind annotations])
 	if test -d $with_valgrind; then
-		CPPFLAGS="$CPPLFAGS -I$with_valgrind/include"
+		CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
 	fi
 fi
 
