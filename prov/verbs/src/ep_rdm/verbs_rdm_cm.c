@@ -756,6 +756,7 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 		if (event->param.conn.private_data_len) {
 			data = malloc(event->param.conn.private_data_len);
 			if (!data) {
+				pthread_mutex_unlock(&ep->cm_lock);
 				ret = -FI_ENOMEM;
 				break;
 			}
@@ -780,11 +781,12 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 
 		event = NULL;
 
+		pthread_mutex_unlock(&ep->cm_lock);
+
 		if (ret != FI_SUCCESS) {
 			break;
 		}
 
-		pthread_mutex_unlock(&ep->cm_lock);
 		if(rdma_get_cm_event(ep->cm.ec, &event)) {
 			if(errno == EAGAIN) {
 				errno = 0;
