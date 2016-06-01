@@ -65,7 +65,7 @@ if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 	AC_DEFINE([INCLUDE_VALGRIND], 1,
 		  [Define to 1 to enable valgrind annotations])
 	if test -d $with_valgrind; then
-		CPPFLAGS="$CPPLFAGS -I$with_valgrind/include"
+		CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
 	fi
 fi
 
