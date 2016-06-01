@@ -50,6 +50,7 @@
 #include "sock_util.h"
 
 #include "fi_osd.h"
+#include "fi_util.h"
 
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_AV, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_AV, __VA_ARGS__)
@@ -195,7 +196,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				if (_av->attr.name) {
 					new_addr = sock_mremap(_av->table_hdr,
 							       old_sz, table_sz);
-					if (new_addr == ((void *) -1)) {
+					if (new_addr == MAP_FAILED) {
 						if (fi_addr)
 							fi_addr[i] = FI_ADDR_NOTAVAIL;
 						sock_av_report_error(_av,
@@ -419,15 +420,12 @@ static int sock_av_close(struct fid *fid)
 	if (atomic_get(&av->ref))
 		return -FI_EBUSY;
 
-	if (!av->name)
+	if (!av->shared)
 		free(av->table_hdr);
 	else {
-		shm_unlink(av->name);
-		free(av->name);
-		ret = munmap(av->table_hdr, SOCK_AV_TABLE_SZ(av->attr.count, av->name));
+		ret = ofi_shm_unmap(&av->shm);
 		if (ret)
-			SOCK_LOG_ERROR("munmap failed: %s\n", strerror(errno));
-		close(av->shared_fd);
+			SOCK_LOG_ERROR("unmap failed: %s\n", strerror(errno));
 	}
 
 	atomic_dec(&av->domain->ref);
@@ -490,9 +488,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	int ret = 0;
 	struct sock_domain *dom;
 	struct sock_av *_av;
-	size_t table_sz, i;
-	int flags = O_RDWR;
-	struct stat mapstat;
+	size_t table_sz;
 
 	if (!attr || sock_verify_av_attr(attr))
 		return -FI_EINVAL;
@@ -514,46 +510,15 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	table_sz = SOCK_AV_TABLE_SZ(_av->attr.count, attr->name);
 
 	if (attr->name) {
-		_av->name = calloc(1, strlen(attr->name) + 1);
-		if (!_av->name) {
-			ret = -FI_ENOMEM;
-			goto err1;
-		}
-		sprintf(_av->name, "/%s", attr->name);
-		if (!(attr->flags & FI_READ))
-			flags |= O_CREAT;
+		ret = ofi_shm_map(&_av->shm, attr->name, table_sz,
+				attr->flags & FI_READ, (void**)&_av->table_hdr);
 
-		for (i = 0; i < strlen(_av->name); i++)
-			if (_av->name[i] == ' ')
-				_av->name[i] = '_';
-
-		SOCK_LOG_DBG("Creating shm segment :%s (size: %lu)\n",
-			      _av->name, table_sz);
-
-		_av->shared_fd = shm_open(_av->name, flags, S_IRUSR | S_IWUSR);
-		if (_av->shared_fd < 0) {
-			SOCK_LOG_ERROR("shm_open failed\n");
+		if (ret || _av->table_hdr == MAP_FAILED) {
+			SOCK_LOG_ERROR("map failed\n");
 			ret = -FI_EINVAL;
-			goto err2;
+			goto err;
 		}
 
-		if (fstat(_av->shared_fd, &mapstat)) {
-			SOCK_LOG_ERROR("failed to do fstat: %s\n", strerror(errno));
-			goto err_shm;
-		}
-
-		if (mapstat.st_size == 0) {
-			if (ftruncate(_av->shared_fd, table_sz)) {
-				SOCK_LOG_ERROR("ftruncate failed: %s\n", strerror(errno));
-				goto err_shm;
-			}
-		} else if (mapstat.st_size < table_sz) {
-			SOCK_LOG_ERROR("shm file too small\n");
-			goto err_shm;
-		}
-
-		_av->table_hdr = mmap(NULL, table_sz, PROT_READ | PROT_WRITE,
-					MAP_SHARED, _av->shared_fd, 0);
 		_av->idx_arr = (uint64_t *)(_av->table_hdr + 1);
 		_av->attr.map_addr = _av->idx_arr;
 		attr->map_addr = _av->attr.map_addr;
@@ -568,18 +533,12 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			_av->table_hdr->size = _av->attr.count;
 			_av->table_hdr->stored = 0;
 		}
-
-		if (_av->table_hdr == MAP_FAILED) {
-			SOCK_LOG_ERROR("mmap failed\n");
-			shm_unlink(_av->name);
-			ret = -FI_EINVAL;
-			goto err2;
-		}
+		_av->shared = 1;
 	} else {
 		_av->table_hdr = calloc(1, table_sz);
 		if (!_av->table_hdr) {
 			ret = -FI_ENOMEM;
-			goto err3;
+			goto err;
 		}
 		_av->table_hdr->size = _av->attr.count;
 		_av->table_hdr->req_sz = attr->count;
@@ -599,7 +558,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		break;
 	default:
 		ret = -FI_EINVAL;
-		goto err3;
+		goto err2;
 	}
 
 	atomic_initialize(&_av->ref, 0);
@@ -612,7 +571,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	default:
 		SOCK_LOG_ERROR("Invalid address format: only IPv4 supported\n");
 		ret = -FI_EINVAL;
-		goto err3;
+		goto err2;
 	}
 	_av->rx_ctx_bits = attr->rx_ctx_bits;
 	_av->mask = attr->rx_ctx_bits ?
@@ -620,16 +579,14 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	*av = &_av->av_fid;
 	return 0;
 
-err_shm:
-	shm_unlink(_av->name);
-	ret = -FI_EINVAL;
-	goto err2;
-err3:
-	free(_av->table_hdr);
 err2:
-	free(_av->name);
-err1:
+	if(attr->name) {
+		ofi_shm_unmap(&_av->shm);
+	} else {
+		if(_av->table_hdr && _av->table_hdr != MAP_FAILED)
+			free(_av->table_hdr);
+	}
+err:
 	free(_av);
-
 	return ret;
 }

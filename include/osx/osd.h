@@ -64,6 +64,11 @@ extern "C" {
 
 int clock_gettime(clockid_t clk_id, struct timespec *tp);
 
+static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
+{
+	return -1;
+}
+
 #ifdef __cplusplus
 }
 #endif
