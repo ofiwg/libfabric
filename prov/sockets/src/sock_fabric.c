@@ -545,8 +545,11 @@ struct slist sock_get_list_of_addr(void)
 			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
 					  addr_entry->hostname, sizeof(addr_entry->hostname),
 					  NULL, 0, NI_NUMERICHOST);
-			if (ret)
+			if (ret) {
+				SOCK_LOG_DBG("getnameinfo failed: %d\n", ret);
+				free(addr_entry);
 				continue;
+			}
 			slist_insert_tail(&addr_entry->entry, &addr_list);
 		}
 		freeifaddrs(ifaddrs);
@@ -667,7 +670,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		while (!slist_empty(&addr_list)) {
 			entry = slist_remove_head(&addr_list);
 			host_entry = container_of(entry, struct sock_host_list_entry, entry);
-			node = strdup(host_entry->hostname);
+			node = host_entry->hostname;
 			ret = sock_node_getinfo(node, service, flags, hints, info, &tail);
 			free(host_entry);
 			if (ret) {
