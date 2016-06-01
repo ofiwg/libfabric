@@ -184,6 +184,7 @@ struct gnix_nic {
 	gnix_bitmap_t vc_id_bitmap;
 	uint32_t mem_per_mbox;
 	struct gnix_mbox_alloc_handle *mbox_hndl;
+	/* TODO: gnix_buddy_alloc_handle_t *alloc_handle */
 	struct gnix_mbox_alloc_handle *s_rdma_buf_hndl;
 	struct gnix_mbox_alloc_handle *r_rdma_buf_hndl;
 	struct gnix_reference ref_cnt;

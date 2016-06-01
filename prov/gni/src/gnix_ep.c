@@ -114,21 +114,19 @@ static inline ssize_t __ep_recv(struct fid_ep *ep, void *buf, size_t len,
 
 static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 				 void **desc, size_t count, fi_addr_t src_addr,
-				 void *context, uint64_t flags, uint64_t tag,
-				 uint64_t ignore)
+				 void *context, uint64_t flags, uint64_t tag)
 {
 	struct gnix_fid_ep *ep_priv;
 
-	if (!ep || !iov || count != 1) {
+	if (!ep || !iov || !count) {
 		return -FI_EINVAL;
 	}
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
-	return _gnix_recv(ep_priv, (uint64_t)iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL, src_addr, context,
-			  ep_priv->op_flags | flags, tag, ignore);
+	return _gnix_recvv(ep_priv, iov, desc ? desc[0] : NULL, count, src_addr,
+			   context, ep_priv->op_flags | flags, tag);
 }
 
 static inline ssize_t __ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -182,16 +180,15 @@ static inline ssize_t __ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct gnix_fid_ep *gnix_ep;
 
-	if (!ep || !iov || count != 1) {
+	if (!ep || !iov || !count) {
 		return -FI_EINVAL;
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
-	return _gnix_send(gnix_ep, (uint64_t)iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL, dest_addr, context,
-			  gnix_ep->op_flags | flags, 0, tag);
+	return _gnix_sendv(gnix_ep, iov, desc ? desc[0] : NULL, count,
+			   dest_addr, context, gnix_ep->op_flags | flags, tag);
 }
 
 static inline ssize_t __ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -206,6 +203,7 @@ static inline ssize_t __ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
+	/* TODO: return _gnix_sendnv */
 	return _gnix_send(gnix_ep, (uint64_t)msg->msg_iov[0].iov_base,
 			  msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr,
@@ -408,7 +406,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_recvv(struct fid_ep *ep,
 				       fi_addr_t src_addr,
 				       void *context)
 {
-	return __ep_recvv(ep, iov, desc, count, src_addr, context, 0, 0, 0);
+	return __ep_recvv(ep, iov, desc, count, src_addr, context, 0, 0);
 }
 
 DIRECT_FN STATIC ssize_t gnix_ep_recvmsg(struct fid_ep *ep,
@@ -431,6 +429,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_sendv(struct fid_ep *ep,
 				       fi_addr_t dest_addr,
 				       void *context)
 {
+
 	return __ep_sendv(ep, iov, desc, count, dest_addr, context, 0, 0);
 }
 
@@ -710,7 +709,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_trecvv(struct fid_ep *ep,
 					void *context)
 {
 	return __ep_recvv(ep, iov, desc, count, src_addr, context,
-			FI_TAGGED, tag, ignore);
+			  FI_TAGGED, tag);
 }
 
 DIRECT_FN STATIC ssize_t gnix_ep_trecvmsg(struct fid_ep *ep,

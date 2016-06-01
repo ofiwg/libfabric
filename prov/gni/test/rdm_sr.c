@@ -79,9 +79,12 @@ static int using_bnd_ep = 0;
 static int dgram_should_fail;
 
 #define BUF_SZ (1<<20)
-#define BUF_RNDZV (1<<14)
+#define BUF_RNDZV (1<<20)
+#define IOV_CNT (1<<4)
+
 char *target;
 char *source;
+struct iovec *src_iov, *dest_iov;
 char *uc_target;
 char *uc_source;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
@@ -111,8 +114,22 @@ void rdm_sr_setup_common_eps(void)
 	target = malloc(BUF_SZ * 3); /* 3x BUF_SZ for multi recv testing */
 	assert(target);
 
+	dest_iov = malloc(sizeof(struct iovec) * IOV_CNT);
+	assert(dest_iov);
+
 	source = malloc(BUF_SZ);
 	assert(source);
+
+	src_iov = malloc(sizeof(struct iovec) * IOV_CNT);
+	assert(src_iov);
+
+	for (i = 0; i < IOV_CNT; i++) {
+		src_iov[i].iov_base = malloc(BUF_SZ);
+		assert(src_iov[i].iov_base != NULL);
+
+		dest_iov[i].iov_base = malloc(BUF_SZ * 3);
+		assert(dest_iov[i].iov_base != NULL);
+	}
 
 	uc_target = malloc(BUF_SZ);
 	assert(uc_target);
@@ -123,7 +140,7 @@ void rdm_sr_setup_common_eps(void)
 	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
-	for (; i < NUMEPS; i++) {
+	for (i = 0; i < NUMEPS; i++) {
 		ret = fi_domain(fab, fi[i], dom + i, NULL);
 		cr_assert(!ret, "fi_domain");
 
@@ -328,6 +345,14 @@ static void rdm_sr_teardown_common(bool unreg)
 	free(target);
 	free(source);
 
+	for (i = 0; i < IOV_CNT; i++) {
+		free(src_iov[i].iov_base);
+		free(dest_iov[i].iov_base);
+	}
+
+	free(src_iov);
+	free(dest_iov);
+
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
 
@@ -369,6 +394,28 @@ int rdm_sr_check_data(char *buf1, char *buf2, int len)
 	return 1;
 }
 
+int rdm_sr_check_iov_data(struct iovec *iov_buf, char *buf, size_t cnt)
+{
+	int i, j, cum_len = 0;
+
+	/*
+	 * For these tests we assume cumulative length of the vector entries is
+	 * equal to the buf size
+	 */
+	for (i = 0; i < cnt; i++) {
+		for (j = 0; j < iov_buf[i].iov_len; j++, cum_len++) {
+			if (((char *)iov_buf[i].iov_base)[j] != buf[cum_len]) {
+				printf("data mismatch, iov_index: %d, elem: %d,"
+				       " exp: %hhx, act: %hhx\n", i, j,
+				       ((char *)iov_buf[i].iov_base)[j],
+				       buf[cum_len]);
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
 void rdm_sr_xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 {
 	int i;
@@ -390,6 +437,7 @@ void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 
 		if (!(flags & FI_MULTI_RECV))
 			cr_assert(cqe->buf == addr, "CQE address mismatch");
+
 
 		if (flags & FI_REMOTE_CQ_DATA)
 			cr_assert(cqe->data == data, "CQE data mismatch");
@@ -561,24 +609,32 @@ ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 */
 void do_sendv(int len)
 {
-	int ret;
+	int i, ret;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
-	struct iovec iov;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
+	char *dest_buf = malloc(len * IOV_CNT);
 
-	iov.iov_base = source;
-	iov.iov_len = len;
+	assert(dest_buf != NULL);
 
-	rdm_sr_init_data(source, len, 0x25);
-	rdm_sr_init_data(target, len, 0);
+	for (i = 0; i < IOV_CNT; i++) {
+		rdm_sr_init_data(src_iov[i].iov_base, len, 0x25);
+		src_iov[i].iov_len = len;
+	}
+	rdm_sr_init_data(dest_buf, len * IOV_CNT, 0);
 
-	sz = fi_sendv(ep[0], &iov, (void **)loc_mr, 1, gni_addr[1], target);
+	/*
+	 * TODO: Register src_iov and dest_iov.
+	 * Using NULL descriptor for now so that _gnix_send auto registers
+	 * the buffers for rndzv messages.
+	 */
+	sz = fi_sendv(ep[0], src_iov, NULL, IOV_CNT, gni_addr[1], dest_buf);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
+	sz = fi_recv(ep[1], dest_buf, len * IOV_CNT, NULL, gni_addr[0],
+		     src_iov);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -593,15 +649,19 @@ void do_sendv(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, dest_buf, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV), dest_buf,
+			 len * IOV_CNT, 0);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
-	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+	cr_assert(rdm_sr_check_iov_data(src_iov, dest_buf, IOV_CNT),
+		  "Data mismatch");
+
+	free(dest_buf);
 }
 
 Test(rdm_sr, sendv)
@@ -980,24 +1040,28 @@ ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 */
 void do_recvv(int len)
 {
-	int ret;
+	int i, ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
-	struct iovec iov;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
+	char *src_buf = malloc(len * IOV_CNT);
 
-	rdm_sr_init_data(source, len, 0xab);
-	rdm_sr_init_data(target, len, 0);
+	assert(src_buf != NULL);
 
-	sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1], target);
+	rdm_sr_init_data(src_buf, len * IOV_CNT, 0xab);
+
+	for (i = 0; i < IOV_CNT; i++) {
+		rdm_sr_init_data(dest_iov[i].iov_base, len, 0);
+		dest_iov[i].iov_len = len;
+	}
+
+	sz = fi_send(ep[0], src_buf, len * IOV_CNT, NULL, gni_addr[1],
+		     dest_iov);
 	cr_assert_eq(sz, 0);
 
-	iov.iov_base = target;
-	iov.iov_len = len;
-
-	sz = fi_recvv(ep[1], &iov, (void **)rem_mr, 1, gni_addr[0], source);
+	sz = fi_recvv(ep[1], dest_iov, NULL, IOV_CNT, gni_addr[0], src_buf);
 	cr_assert_eq(sz, 0);
 
 	/*  need to progress both CQs simultaneously for rendezvous */
@@ -1012,15 +1076,19 @@ void do_recvv(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, dest_iov, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, src_buf, (FI_MSG|FI_RECV), dest_iov,
+			 len * IOV_CNT, 0);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
-	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+	cr_assert(rdm_sr_check_iov_data(dest_iov, src_buf, IOV_CNT),
+		  "Data mismatch");
+
+	free(src_buf);
 }
 
 Test(rdm_sr, recvv)
@@ -1652,4 +1720,3 @@ Test(rdm_sr, multirecv2_retrans)
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
 }
-

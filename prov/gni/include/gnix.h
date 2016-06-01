@@ -140,6 +140,7 @@ extern "C" {
 
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
 #define GNIX_MSG_GET_TAIL		(1ULL << 62)	/* MSG only flag */
+#define GNIX_MSG_IOV			(1ULL << 63)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -537,6 +538,8 @@ struct gnix_fab_req_msg {
 	size_t                       recv_len;
 	struct gnix_fid_mem_desc     *recv_md;
 	uint64_t                     recv_flags; /* protocol, API info */
+	uint64_t		     recv_iov_addr;
+	size_t			     recv_iov_cnt;
 	uint64_t                     tag;
 	uint64_t                     ignore;
 	uint64_t                     imm;
