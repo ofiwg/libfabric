@@ -91,7 +91,7 @@ int pingpong(void)
 			if (opts.transfer_size < fi->tx_attr->inject_size)
 				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_tx(ep, opts.transfer_size);
+				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
 			if (ret)
 				return ret;
 
@@ -111,7 +111,7 @@ int pingpong(void)
 			if (opts.transfer_size < fi->tx_attr->inject_size)
 				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_tx(ep, opts.transfer_size);
+				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
 			if (ret)
 				return ret;
 		}
@@ -145,7 +145,7 @@ static int bw_rx_comp()
 	ret = ft_get_rx_comp(rx_seq - 1);
 	if (ret)
 		return ret;
-	return ft_tx(ep, 4);
+	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
 }
 
 int bandwidth(void)
@@ -171,7 +171,7 @@ int bandwidth(void)
 			if (opts.transfer_size < fi->tx_attr->inject_size)
 				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_post_tx(ep, opts.transfer_size,
+				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
 						 &ctx_arr[j]);
 			if (ret)
 				return ret;

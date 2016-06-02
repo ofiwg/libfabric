@@ -759,7 +759,7 @@ int ft_init_av(void)
 			return ret;
 		}
 
-		ret = (int) ft_tx(ep, addrlen);
+		ret = (int) ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -774,7 +774,7 @@ int ft_init_av(void)
 		if (ret)
 			return ret;
 
-		ret = (int) ft_tx(ep, 1);
+		ret = (int) ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 	}
 
 	return ret;
@@ -790,7 +790,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(ep, sizeof *rma_iov);
+		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -816,7 +816,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(ep, sizeof *rma_iov);
+		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
 	}
 
 	return ret;
@@ -1042,28 +1042,28 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		seq++;								\
 	} while (0)
 
-ssize_t ft_post_tx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
+ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context* ctx)
 {
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_tsend, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf, size + ft_tx_prefix_size(), fi_mr_desc(mr),
-				remote_fi_addr, tx_seq, ctx);
+				fi_addr, tx_seq, ctx);
 	} else {
 		FT_POST(fi_send, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf,	size + ft_tx_prefix_size(), fi_mr_desc(mr),
-				remote_fi_addr, ctx);
+				fi_addr, ctx);
 	}
 	return 0;
 }
 
-ssize_t ft_tx(struct fid_ep *ep, size_t size)
+ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx)
 {
 	ssize_t ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
 		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
-	ret = ft_post_tx(ep, size, &tx_ctx);
+	ret = ft_post_tx(ep, fi_addr, size, ctx);
 	if (ret)
 		return ret;
 
@@ -1397,7 +1397,7 @@ int ft_sync()
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_tx(ep, 1);
+		ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -1407,7 +1407,7 @@ int ft_sync()
 		if (ret)
 			return ret;
 
-		ret = ft_tx(ep, 1);
+		ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 	}
 
 	return ret;
@@ -1895,7 +1895,7 @@ int send_recv_greeting(struct fid_ep *ep)
 			return -FI_ETOOSMALL;
 		}
 
-		ret = ft_tx(ep, message_len);
+		ret = ft_tx(ep, remote_fi_addr, message_len, &tx_ctx);
 		if (ret)
 			return ret;
 

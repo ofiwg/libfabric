@@ -285,9 +285,10 @@ int ft_finalize(void);
 size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
-ssize_t ft_post_tx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
+ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
+		struct fi_context* ctx);
 ssize_t ft_rx(struct fid_ep *ep, size_t size);
-ssize_t ft_tx(struct fid_ep *ep, size_t size);
+ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx);
 ssize_t ft_inject(struct fid_ep *ep, size_t size);
 ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 		struct fi_rma_iov *remote, void *context);
