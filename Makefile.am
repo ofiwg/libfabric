@@ -17,6 +17,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm_shared_ctx \
 	simple/fi_msg_epoll \
 	simple/fi_rdm_shared_av \
+	simple/fi_cm_data \
 	streaming/fi_msg_rma \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
@@ -112,6 +113,10 @@ simple_fi_rdm_tagged_peek_LDADD = libfabtests.la
 simple_fi_cq_data_SOURCES = \
 	simple/cq_data.c
 simple_fi_cq_data_LDADD = libfabtests.la
+
+simple_fi_cm_data_SOURCES = \
+	simple/cm_data.c
+simple_fi_cm_data_LDADD = libfabtests.la
 
 simple_fi_scalable_ep_SOURCES = \
 	simple/scalable_ep.c
