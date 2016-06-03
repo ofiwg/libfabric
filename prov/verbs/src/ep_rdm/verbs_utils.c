@@ -40,8 +40,8 @@
 #include "verbs_queuing.h"
 
 extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
 extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
+extern struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
 int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other)
 {
@@ -103,9 +103,9 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 {
 	const struct fi_ibv_rdm_tagged_send_ready_data *send_data = arg;
 
-	struct fi_ibv_rdm_tagged_postponed_entry *postponed_entry =
+	struct fi_ibv_rdm_postponed_entry *postponed_entry =
 	    container_of(postponed_item,
-			 struct fi_ibv_rdm_tagged_postponed_entry, queue_entry);
+			 struct fi_ibv_rdm_postponed_entry, queue_entry);
 	int ret = 0;
 	if (!dlist_empty(&postponed_entry->conn->postponed_requests_head)) {
 		struct dlist_entry *req_entry = 

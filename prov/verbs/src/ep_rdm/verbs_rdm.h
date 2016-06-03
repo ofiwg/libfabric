@@ -301,7 +301,7 @@ struct fi_ibv_rdm_tagged_conn {
 	struct fi_ibv_rdm_buf *rmabuf_head;
 
 	struct dlist_entry postponed_requests_head;
-	struct fi_ibv_rdm_tagged_postponed_entry *postponed_entry;
+	struct fi_ibv_rdm_postponed_entry *postponed_entry;
 
 	struct ibv_mr *s_mr;
 	struct ibv_mr *r_mr;
@@ -328,7 +328,7 @@ struct fi_ibv_rdm_tagged_conn {
 #endif
 };
 
-struct fi_ibv_rdm_tagged_postponed_entry {
+struct fi_ibv_rdm_postponed_entry {
 	struct dlist_entry queue_entry;
 
 	struct fi_ibv_rdm_tagged_conn *conn;

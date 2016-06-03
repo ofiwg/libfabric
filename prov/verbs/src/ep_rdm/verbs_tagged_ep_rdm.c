@@ -48,7 +48,7 @@ extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
 DEFINE_LIST(fi_ibv_rdm_tagged_recv_posted_queue);
 DEFINE_LIST(fi_ibv_rdm_tagged_recv_unexp_queue);
-DEFINE_LIST(fi_ibv_rdm_tagged_send_postponed_queue);
+DEFINE_LIST(fi_ibv_rdm_postponed_queue);
 
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
@@ -783,7 +783,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 
 	struct fi_ibv_rdm_tagged_send_ready_data data = { .ep = ep };
 	struct dlist_entry *item;
-	dlist_foreach((&fi_ibv_rdm_tagged_send_postponed_queue), item) {
+	dlist_foreach((&fi_ibv_rdm_postponed_queue), item) {
 		if (fi_ibv_rdm_tagged_send_postponed_process(item, &data)) {
 			/* we can't process all postponed items till foreach */
 			/* implementation is not safety for removing during  */

@@ -39,7 +39,7 @@
 #include "verbs_queuing.h"
 #include "verbs_tagged_ep_rdm_states.h"
 
-extern struct dlist_entry fi_ibv_rdm_tagged_send_postponed_queue;
+extern struct dlist_entry fi_ibv_rdm_postponed_queue;
 extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
 extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
@@ -113,7 +113,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG();
 
-	fi_ibv_rdm_tagged_move_to_postponed_queue(request);
+	fi_ibv_rdm_move_to_postponed_queue(request);
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_POSTPONED;
 	if (request->state.rndv == FI_IBV_STATE_RNDV_SEND_BEGIN) {
 		request->state.rndv = FI_IBV_STATE_RNDV_SEND_WAIT4SEND;
@@ -132,7 +132,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	assert(request->state.eager == FI_IBV_STATE_EAGER_SEND_POSTPONED);
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
 
-	fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+	fi_ibv_rdm_remove_from_postponed_queue(request);
 	struct fi_ibv_rdm_tagged_send_ready_data *p = data;
 
 	ssize_t ret = FI_SUCCESS;
@@ -251,7 +251,7 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
 		  request->minfo.conn, request->minfo.tag, request->len);
 
-	fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+	fi_ibv_rdm_remove_from_postponed_queue(request);
 	struct fi_ibv_rdm_tagged_send_ready_data *p = data;
 
 	struct ibv_sge sge;
@@ -499,7 +499,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 		{
 			request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
 			FI_IBV_RDM_TAGGED_HANDLER_LOG();
-			fi_ibv_rdm_tagged_move_to_postponed_queue(request);
+			fi_ibv_rdm_move_to_postponed_queue(request);
 		}
 #if ENABLE_DEBUG
 		request->minfo.conn->unexp_counter++;
@@ -730,7 +730,7 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 		request->imm = p->imm_data;
 		request->rndv.id = rndv_header->id;
 
-		fi_ibv_rdm_tagged_move_to_postponed_queue(request);
+		fi_ibv_rdm_move_to_postponed_queue(request);
 
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
@@ -836,7 +836,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_sge sge;
 
-	fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+	fi_ibv_rdm_remove_from_postponed_queue(request);
 	VERBS_DBG(FI_LOG_EP_DATA,
 		  "\t REQUEST: conn %p, tag 0x%llx, len %zu, rest %zu, dest_buf %p, src_addr %p, rkey 0x%lx\n",
 		  request->minfo.conn, request->minfo.tag,
@@ -891,7 +891,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 
 	if (request->rest_len) {
 		/* Move to postponed queue for the next iteration */
-		fi_ibv_rdm_tagged_move_to_postponed_queue(request);
+		fi_ibv_rdm_move_to_postponed_queue(request);
 	} else {
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4LC;
@@ -1126,7 +1126,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 	wr.opcode = request->rma.opcode;
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_RMA_POSTPONED) {
-		fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+		fi_ibv_rdm_remove_from_postponed_queue(request);
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_INITIALIZED;
 	}
 
@@ -1160,7 +1160,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 
 	if (request->rest_len) {
-		fi_ibv_rdm_tagged_move_to_postponed_queue(request);
+		fi_ibv_rdm_move_to_postponed_queue(request);
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_POSTPONED;
 	}
 

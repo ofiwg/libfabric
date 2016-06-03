@@ -39,7 +39,7 @@
 
 
 struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
+struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
 /*
  * extra buffer size equal eager buffer size, it is used for any intermediate

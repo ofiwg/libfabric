@@ -45,9 +45,9 @@ extern struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_unexp_queue;
 /* TODO: implement posted recv queue per connection */
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
-extern struct dlist_entry fi_ibv_rdm_tagged_send_postponed_queue;
+extern struct dlist_entry fi_ibv_rdm_postponed_queue;
 
-extern struct util_buf_pool* fi_ibv_rdm_tagged_postponed_pool;
+extern struct util_buf_pool* fi_ibv_rdm_postponed_pool;
 
 static inline void
 fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_tagged_request *request)
@@ -180,8 +180,7 @@ fi_ibv_rdm_take_first_from_posted_queue()
 }
 
 static inline void
-fi_ibv_rdm_tagged_move_to_postponed_queue(
-		struct fi_ibv_rdm_tagged_request *request)
+fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_tagged_request *request)
 {
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_postponed_queue: ", request,
 				      FI_LOG_DEBUG);
@@ -190,22 +189,21 @@ fi_ibv_rdm_tagged_move_to_postponed_queue(
 	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
 
 	if (dlist_empty(&conn->postponed_requests_head)) {
-		struct fi_ibv_rdm_tagged_postponed_entry *entry =
-			util_buf_alloc(fi_ibv_rdm_tagged_postponed_pool);
+		struct fi_ibv_rdm_postponed_entry *entry =
+			util_buf_alloc(fi_ibv_rdm_postponed_pool);
 
 		entry->conn = conn;	
 		conn->postponed_entry = entry;
 
 		dlist_insert_tail(&entry->queue_entry,
-				  &fi_ibv_rdm_tagged_send_postponed_queue);
+				  &fi_ibv_rdm_postponed_queue);
 	}
 	dlist_insert_tail(&request->queue_entry,
 			  &conn->postponed_requests_head);
 }
 
 static inline void
-fi_ibv_rdm_tagged_remove_from_postponed_queue(
-		struct fi_ibv_rdm_tagged_request *request)
+fi_ibv_rdm_remove_from_postponed_queue(struct fi_ibv_rdm_tagged_request *request)
 {
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_postponed_queue: ", request,
 				      FI_LOG_DEBUG);
@@ -217,7 +215,7 @@ fi_ibv_rdm_tagged_remove_from_postponed_queue(
 	/* 
 	 * remove from conn->postponed_requests_head at first
 	 * then if conn->postponed_requests_head is empty
-	 * clean fi_ibv_rdm_tagged_send_postponed_queue
+	 * clean fi_ibv_rdm_postponed_queue
 	 */
 
 	dlist_remove(&request->queue_entry);
@@ -230,7 +228,7 @@ fi_ibv_rdm_tagged_remove_from_postponed_queue(
 		conn->postponed_entry->queue_entry.prev = NULL;
 		conn->postponed_entry->conn = NULL;
 
-		util_buf_release(fi_ibv_rdm_tagged_postponed_pool,
+		util_buf_release(fi_ibv_rdm_postponed_pool,
 				 conn->postponed_entry);
 		conn->postponed_entry = NULL;
 	}
@@ -239,10 +237,10 @@ fi_ibv_rdm_tagged_remove_from_postponed_queue(
 static inline struct fi_ibv_rdm_tagged_request *
 fi_ibv_rdm_take_first_from_postponed_queue()
 {
-	if (!dlist_empty(&fi_ibv_rdm_tagged_send_postponed_queue)) {
-		struct fi_ibv_rdm_tagged_postponed_entry *entry = 
-			container_of(fi_ibv_rdm_tagged_send_postponed_queue.next,
-				struct fi_ibv_rdm_tagged_postponed_entry, queue_entry);
+	if (!dlist_empty(&fi_ibv_rdm_postponed_queue)) {
+		struct fi_ibv_rdm_postponed_entry *entry = 
+			container_of(fi_ibv_rdm_postponed_queue.next,
+				struct fi_ibv_rdm_postponed_entry, queue_entry);
 
 		if (!dlist_empty(&entry->conn->postponed_requests_head)) {
 			struct dlist_entry *req_entry = 
@@ -251,7 +249,7 @@ fi_ibv_rdm_take_first_from_postponed_queue()
 			struct fi_ibv_rdm_tagged_request *request =
 			    container_of(req_entry, struct fi_ibv_rdm_tagged_request,
 					 queue_entry);
-			fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+			fi_ibv_rdm_remove_from_postponed_queue(request);
 			return request;
 		}
 	}
@@ -263,9 +261,9 @@ static inline struct fi_ibv_rdm_tagged_request *
 fi_ibv_rdm_take_first_match_from_postponed_queue(dlist_func_t *match, const void *arg)
 {
 	struct dlist_entry *i, *j;
-	dlist_foreach((&fi_ibv_rdm_tagged_send_postponed_queue), i) {
-		 struct fi_ibv_rdm_tagged_postponed_entry *entry = 
-			container_of(i, struct fi_ibv_rdm_tagged_postponed_entry,
+	dlist_foreach((&fi_ibv_rdm_postponed_queue), i) {
+		 struct fi_ibv_rdm_postponed_entry *entry = 
+			container_of(i, struct fi_ibv_rdm_postponed_entry,
 				     queue_entry);
 
 		j = dlist_find_first_match((&entry->conn->postponed_requests_head),
@@ -275,7 +273,7 @@ fi_ibv_rdm_take_first_match_from_postponed_queue(dlist_func_t *match, const void
 				container_of(j, struct fi_ibv_rdm_tagged_request,
 					     queue_entry);
 		
-			fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+			fi_ibv_rdm_remove_from_postponed_queue(request);
 			return request;
 		}
 	}
