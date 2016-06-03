@@ -88,6 +88,7 @@ dnl Check for compiler features
 AC_C_TYPEOF
 
 LT_INIT
+LT_OUTPUT
 
 dnl dlopen support is optional
 AC_ARG_WITH([dlopen],
