@@ -457,6 +457,11 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	}
 
 	if (req->msg.recv_flags & GNIX_MSG_IOV) {
+
+		GNIX_DEBUG(FI_LOG_EP_DATA, "recv_iov_addr = %p, recv_addr = %p,"
+			   " req = %p\n", req->msg.recv_iov_addr,
+			   req->msg.recv_addr, req);
+
 		__gnix_msg_unpack_data_into_iov(req->msg.recv_iov_addr,
 						req->msg.recv_iov_cnt,
 						req->msg.recv_addr,
@@ -1086,12 +1091,14 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			 * iov buffer while the actual buffer written
 			 * to by PostRdma (msg.recv_addr) is temporary, for now.
 			 */
+			/* Is there something wrong with the pipeline here? */
 			req->msg.recv_iov_addr = req->msg.recv_addr;
 			req->msg.recv_addr = (uint64_t) tmp;
 
-			GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.recv_addr = 0x%x,"
-				   "req->msg.recv_iov_addr = 0x%x\n",
-				   req->msg.recv_addr, req->msg.recv_iov_addr);
+			GNIX_DEBUG(FI_LOG_EP_DATA, "recv_iov_addr = %p,"
+				   "recv_addr = %p,"
+				   " req = %p\n", req->msg.recv_iov_addr,
+				   req->msg.recv_addr, req);
 		}
 
 		GNIX_INFO(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
@@ -1444,7 +1451,23 @@ retry_match:
 		req->gnix_ep = ep;
 		req->user_context = context;
 
-		req->msg.recv_addr = (uint64_t)buf;
+		if (req->msg.recv_flags & GNIX_MSG_IOV) {
+			void *tmp = malloc(req->msg.send_len);
+
+			assert(tmp != NULL);
+
+			/*
+			 * msg.recv_iov_addr points to the user's
+			 * iov buffer while the actual buffer written
+			 * to by PostRdma (msg.recv_addr) is temporary, for now.
+			 */
+			/* Is there something wrong with the pipeline here? */
+			req->msg.recv_iov_addr = req->msg.recv_addr;
+			req->msg.recv_addr = (uint64_t) tmp;
+		} else {
+			req->msg.recv_addr = (uint64_t)buf;
+		}
+
 		req->msg.recv_len = len;
 		if (mdesc) {
 			md = container_of(mdesc,
@@ -1884,7 +1907,6 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov, void *desc,
 	int i;
 	size_t cum_len = 0;
 
-
 	if (!iov || !count) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to _gnix_recvv");
 		return -FI_EINVAL;
@@ -1921,11 +1943,10 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 		cum_len += iov[i].iov_len;
 	}
 
-
 	/*
 	 * TODO: If the cum_len is >= ep->domain->params.msg_rendezvous_thresh
-	 * transfer the iovec entries individually and possibly in order of
-	 * lowest index to largest index.
+	 * transfer the iovec entries individually.
+	 *
 	 * For this case, use CtPostFma for iovec lengths that are smaller than
 	 * the rendezvous thresh. For CtPostFma:
 	 * the sum of the iov lens must be either <= 1GB or <= 1MB if the comm
