@@ -263,6 +263,7 @@ static void __gnix_vc_destroy_ht_entry(void *val)
 /*******************************************************************************
  * EP vc initialization helper
  ******************************************************************************/
+
 static inline int __gnix_ep_init_vc(struct gnix_fid_ep *ep_priv)
 {
 	int ret;
@@ -272,75 +273,121 @@ static inline int __gnix_ep_init_vc(struct gnix_fid_ep *ep_priv)
 
 	type = ep_priv->av->type;
 
-	/*
-	 *Initialize VC hashtable - this is always used
-	 * regardless of AV type associated with the EP
-	 */
-
-	ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
-	if (ep_priv->vc_ht == NULL)
-		goto err;
-
-	gnix_ht_attr.ht_initial_size = ep_priv->domain->params.ct_init_size;
-	gnix_ht_attr.ht_maximum_size = ep_priv->domain->params.ct_max_size;
-	gnix_ht_attr.ht_increase_step = ep_priv->domain->params.ct_step;
-	gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
-	gnix_ht_attr.ht_collision_thresh = 500;
-	gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
-	gnix_ht_attr.ht_internal_locking = 0;
-	gnix_ht_attr.destructor = __gnix_vc_destroy_ht_entry;
-
-	ret = _gnix_ht_init(ep_priv->vc_ht, &gnix_ht_attr);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_ht_init returned %s\n",
-			  fi_strerror(-ret));
-
-		goto err;
-	}
-
 	if (type == FI_AV_TABLE) {
-		/* Initialize VC vector for FI_AV_TABLE */
+		/* Use array to store EP VCs when using FI_AV_TABLE. */
 		ep_priv->vc_table = calloc(1, sizeof(struct gnix_vector));
 		if(ep_priv->vc_table == NULL)
-			goto err;
+			return -FI_ENOMEM;
 
-		gnix_vec_attr.vec_initial_size = ep_priv->domain->params.ct_init_size;
-		gnix_vec_attr.vec_maximum_size = ep_priv->domain->params.ct_max_size;
+		gnix_vec_attr.vec_initial_size =
+				ep_priv->domain->params.ct_init_size;
+		/* TODO: ep_priv->domain->params.ct_max_size; */
+		gnix_vec_attr.vec_maximum_size = 1024*1024;
 		gnix_vec_attr.vec_increase_step = ep_priv->domain->params.ct_step;
 		gnix_vec_attr.vec_increase_type = GNIX_VEC_INCREASE_MULT;
 		gnix_vec_attr.vec_internal_locking = GNIX_VEC_UNLOCKED;
 
 		ret = _gnix_vec_init(ep_priv->vc_table, &gnix_vec_attr);
-                GNIX_DEBUG(
-			FI_LOG_EP_CTRL,
-			"ep_priv->vc_table = %p, ep_priv->vc_table->vector = %p\n",
-			ep_priv->vc_table, ep_priv->vc_table->vector);
+		GNIX_DEBUG(FI_LOG_EP_CTRL,
+			   "ep_priv->vc_table = %p, ep_priv->vc_table->vector = %p\n",
+			   ep_priv->vc_table, ep_priv->vc_table->vector);
                 if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL, "_gnix_vec_init returned %s\n",
 				  fi_strerror(ret));
 			goto err;
 		}
+	} else {
+		/* Use hash table to store EP VCs when using FI_AV_MAP. */
+		ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
+		if (ep_priv->vc_ht == NULL)
+			return -FI_ENOMEM;
+
+		gnix_ht_attr.ht_initial_size =
+				ep_priv->domain->params.ct_init_size;
+		gnix_ht_attr.ht_maximum_size =
+				ep_priv->domain->params.ct_max_size;
+		gnix_ht_attr.ht_increase_step = ep_priv->domain->params.ct_step;
+		gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
+		gnix_ht_attr.ht_collision_thresh = 500;
+		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
+		gnix_ht_attr.ht_internal_locking = 0;
+		gnix_ht_attr.destructor = __gnix_vc_destroy_ht_entry;
+
+		ret = _gnix_ht_init(ep_priv->vc_ht, &gnix_ht_attr);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_ht_init returned %s\n",
+				  fi_strerror(-ret));
+
+			goto err;
+		}
 	}
+
+	dlist_init(&ep_priv->unmapped_vcs);
 
 	return FI_SUCCESS;
 
 err:
-	if (ep_priv->vc_table != NULL) {
-		_gnix_vec_close(ep_priv->vc_table);
-
+	if (type == FI_AV_TABLE) {
 		free(ep_priv->vc_table);
 		ep_priv->vc_table = NULL;
-	}
-
-	if (ep_priv->vc_ht != NULL) {
-		_gnix_ht_destroy(ep_priv->vc_ht); /* may not be initialized but
-						     okay */
+	} else {
 		free(ep_priv->vc_ht);
 		ep_priv->vc_ht = NULL;
 	}
 
 	return ret;
+}
+
+static inline int __gnix_ep_fini_vc(struct gnix_fid_ep *ep)
+{
+	int ret;
+	GNIX_VECTOR_ITERATOR(ep->vc_table, iter);
+	struct gnix_vc *vc;
+
+	/* Free unmapped VCs. */
+	dlist_for_each(&ep->unmapped_vcs, vc, list) {
+		_gnix_vc_destroy(vc);
+	}
+
+	if (!ep->av) {
+		/* No AV bound, no mapped VCs clean up. */
+		return FI_SUCCESS;
+	}
+
+	if (ep->av->type == FI_AV_TABLE) {
+		/* Destroy all VCs */
+		while ((vc = (struct gnix_vc *)
+				_gnix_vec_iterator_next(&iter))) {
+			_gnix_vec_remove_at(ep->vc_table,
+					    GNIX_VECTOR_ITERATOR_IDX(iter));
+			_gnix_vc_destroy(vc);
+		}
+
+		/* Destroy vector storage */
+		ret = _gnix_vec_close(ep->vc_table);
+		if (ret == FI_SUCCESS) {
+			free(ep->vc_table);
+			ep->vc_table = NULL;
+		} else {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_vec_close returned %s\n",
+				  fi_strerror(-ret));
+		}
+	} else {
+		/* Destroy VC storage, it automatically tears down VCs */
+		ret = _gnix_ht_destroy(ep->vc_ht);
+		if (ret == FI_SUCCESS) {
+			free(ep->vc_ht);
+			ep->vc_ht = NULL;
+		} else {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"_gnix_ht_destroy returned %s\n",
+				  fi_strerror(-ret));
+		}
+	}
+
+	return FI_SUCCESS;
 }
 
 /*******************************************************************************
@@ -1272,41 +1319,23 @@ static void __ep_destruct(void *obj)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	/*
-	 * clean up any vc hash table or vector,
-	 * remove entry from addr_to_ep ht.
-	 * any outstanding GNI internal requests on
-	 * the VC's will be completed prior to
-	 * destroying the VC entries in the ht.
-	 */
-
-	if (GNIX_EP_RDM_DGM(ep->type)) {
-
+	if (ep->av) {
+		/* Remove EP from CM NIC lookup list. */
 		key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
 		ret =  _gnix_ht_remove(ep->cm_nic->addr_to_ep_ht,
 				       *key_ptr);
-		if (ep->vc_ht != NULL) {
-			ret = _gnix_ht_destroy(ep->vc_ht);
-			if (ret == FI_SUCCESS) {
-				free(ep->vc_ht);
-				ep->vc_ht = NULL;
-			} else {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					"_gnix_ht_destroy returned %s\n",
-					  fi_strerror(-ret));
-			}
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_ht_remove returned %s\n",
+				  fi_strerror(-ret));
 		}
 
-		if (ep->vc_table != NULL) {
-			ret = _gnix_vec_close(ep->vc_table);
-			if (ret == FI_SUCCESS) {
-				free(ep->vc_table);
-				ep->vc_table = NULL;
-			} else {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "_gnix_vec_close returned %s\n",
-					  fi_strerror(-ret));
-			}
+		/* Destroy EP VC storage. */
+		ret = __gnix_ep_fini_vc(ep);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_ht_remove returned %s\n",
+				  fi_strerror(-ret));
 		}
 	}
 
@@ -1869,24 +1898,53 @@ static inline struct gnix_fab_req *__find_tx_req(
 	struct gnix_fab_req *req = NULL;
 	struct dlist_entry *entry;
 	struct gnix_vc *vc;
-	GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
 		   " cancel, context=%p", context);
 
 	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
-	while ((vc = _gnix_ht_iterator_next(&iter))) {
-		COND_ACQUIRE(vc->ep->requires_lock, &vc->tx_queue_lock);
-		entry = dlist_remove_first_match(&vc->tx_queue,
-						 __match_context,
-						 context);
-		COND_RELEASE(vc->ep->requires_lock, &vc->tx_queue_lock);
 
-		if (entry) {
-			req = container_of(entry, struct gnix_fab_req, dlist);
-			break;
+	if (ep->av->type == FI_AV_TABLE) {
+		GNIX_VECTOR_ITERATOR(ep->vc_table, iter);
+
+		while ((vc = (struct gnix_vc *)
+				_gnix_vec_iterator_next(&iter))) {
+			COND_ACQUIRE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+			entry = dlist_remove_first_match(&vc->tx_queue,
+							 __match_context,
+							 context);
+			COND_RELEASE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+
+			if (entry) {
+				req = container_of(entry,
+						   struct gnix_fab_req,
+						   dlist);
+				break;
+			}
+		}
+	} else {
+		GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
+
+		while ((vc = _gnix_ht_iterator_next(&iter))) {
+			COND_ACQUIRE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+			entry = dlist_remove_first_match(&vc->tx_queue,
+							 __match_context,
+							 context);
+			COND_RELEASE(vc->ep->requires_lock,
+				     &vc->tx_queue_lock);
+
+			if (entry) {
+				req = container_of(entry,
+						   struct gnix_fab_req,
+						   dlist);
+				break;
+			}
 		}
 	}
+
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	return req;

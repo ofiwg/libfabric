@@ -235,6 +235,17 @@ inline int _gnix_vec_at(gnix_vector_t *vec, void **element, gnix_vec_index_t ind
 	return FI_SUCCESS;
 }
 
+/**
+ * Return next element in the vector iterator
+ *
+ * @param iter    pointer to the vector iterator
+ * @return        pointer to next element in the vector
+ */
+gnix_vec_entry_t *_gnix_vec_iterator_next(struct gnix_vector_iter *iter)
+{
+	return iter->vec->ops->iter_next(iter);
+}
+
 /*******************************************************************************
  * LOCKLESS FNS
  ******************************************************************************/
@@ -310,6 +321,21 @@ static int __gnix_vec_lf_last(gnix_vector_t *vec, void **element)
 static int __gnix_vec_lf_at(gnix_vector_t *vec, void **element, gnix_vec_index_t index)
 {
 	return _gnix_vec_at(vec, element, index);
+}
+
+gnix_vec_entry_t *__gnix_vec_lf_iter_first(struct gnix_vector_iter *iter)
+{
+	int i;
+
+	for (i = iter->cur_idx; i < iter->vec->attr.cur_size; i++) {
+		if (iter->vec->vector[i]) {
+			iter->cur_idx = i;
+			return iter->vec->vector[i];
+		}
+	}
+
+	iter->cur_idx = iter->vec->attr.cur_size;
+	return NULL;
 }
 
 /*******************************************************************************
@@ -476,6 +502,28 @@ static int __gnix_vec_lk_at(gnix_vector_t *vec, void **element, gnix_vec_index_t
 	return ret;
 }
 
+gnix_vec_entry_t *__gnix_vec_lk_iter_first(struct gnix_vector_iter *iter)
+{
+	int i;
+
+	rwlock_rdlock(&iter->vec->lock);
+
+	for (i = iter->cur_idx; i < iter->vec->attr.cur_size; i++) {
+		if (iter->vec->vector[i]) {
+			rwlock_unlock(&iter->vec->lock);
+
+			iter->cur_idx = i;
+			return iter->vec->vector[i];
+		}
+	}
+
+	iter->cur_idx = iter->vec->attr.cur_size;
+
+	rwlock_unlock(&iter->vec->lock);
+
+	return NULL;
+}
+
 /**
  * Create the initial vector.  The user is responsible for initializing the
  * "attr" parameter prior to calling this function.
@@ -565,6 +613,8 @@ static gnix_vector_ops_t __gnix_vec_lockless_ops = {
 	.first = __gnix_vec_lf_first,
 	.last = __gnix_vec_lf_last,
 	.at = __gnix_vec_lf_at,
+
+	.iter_next = __gnix_vec_lf_iter_first,
 };
 
 static gnix_vector_ops_t __gnix_vec_locked_ops = {
@@ -579,4 +629,6 @@ static gnix_vector_ops_t __gnix_vec_locked_ops = {
 	.first = __gnix_vec_lk_first,
 	.last = __gnix_vec_lk_last,
 	.at = __gnix_vec_lk_at,
+
+	.iter_next = __gnix_vec_lk_iter_first,
 };

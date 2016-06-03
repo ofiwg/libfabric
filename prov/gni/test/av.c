@@ -336,8 +336,6 @@ static void straddr_test(void)
 	cr_assert_eq(buf, addrstr);
 	cr_assert_eq(addrstr_len, GNIX_AV_MAX_STR_ADDR_LEN);
 
-	fprintf(stderr, "string is: %s\n", buf);
-
 	/* extract the first component */
 	buf = strtok(addrstr, ":");
 	cr_assert_not_null(buf, "version not found");
