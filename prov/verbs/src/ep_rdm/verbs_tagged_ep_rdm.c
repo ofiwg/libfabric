@@ -156,7 +156,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 	if (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
 		if (fi_ibv_rdm_tagged_prepare_send_request(request, ep)) {
 			ret = fi_ibv_rdm_tagged_req_hndl(request,
-				FI_IBV_EVENT_SEND_READY, &data);
+				FI_IBV_EVENT_POST_READY, &data);
 		}
 	} else {
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
@@ -274,7 +274,7 @@ static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
 								   ep_rdm))
 			{
 				ret = fi_ibv_rdm_tagged_req_hndl(request,
-					FI_IBV_EVENT_SEND_READY, &data);
+					FI_IBV_EVENT_POST_READY, &data);
 			}
 		} else {
 			ret = fi_ibv_rdm_tagged_req_hndl(request,
@@ -383,7 +383,7 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
 			{ .ep = sdata->ep_rdm };
 		ret = fi_ibv_rdm_tagged_req_hndl(request, 
-			FI_IBV_EVENT_SEND_READY, &req_data);
+			FI_IBV_EVENT_POST_READY, &req_data);
 	}
 
 	return ret;
@@ -756,7 +756,7 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 			{ .ep = ep };
 
 		return fi_ibv_rdm_tagged_req_hndl(request, 
-			FI_IBV_EVENT_SEND_GOT_LC, &data);
+			FI_IBV_EVENT_POST_LC, &data);
 	}
 }
 

@@ -116,24 +116,32 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 				 queue_entry);
 
 		int res = 0;
-		if (!request->sbuf) {
+		if ((request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) &&
+		    (request->sbuf == NULL))
+		{
 			res = fi_ibv_rdm_tagged_prepare_send_request(request,
 								 send_data->ep);
 		} else  {
 			/*
-			 * This case is possible only for segmented RNDV msg 
-			 * (> 1GB), connection must be already established
+			 * This case is possible only for segmented RNDV msg or 
+			 * RMA operation (> 1GB), connection must be already 
+			 * established
 			 */
 			assert(request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED);
 			assert(fi_ibv_rdm_check_connection(request->minfo.conn,
 							   send_data->ep));
-			res = !SEND_RESOURCES_IS_BUSY(request->minfo.conn,
-						      send_data->ep);
+			if (request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) {
+				res = !SEND_RESOURCES_IS_BUSY(request->minfo.conn,
+							      send_data->ep);
+			} else {
+				res = !RMA_RESOURCES_IS_BUSY(request->minfo.conn,
+							      send_data->ep);
+			}
 		}
 
 		if (res) {
 			fi_ibv_rdm_tagged_req_hndl(request,
-						   FI_IBV_EVENT_SEND_READY,
+						   FI_IBV_EVENT_POST_READY,
 						   (void *) send_data);
 			ret++;
 		}

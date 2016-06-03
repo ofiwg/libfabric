@@ -76,6 +76,9 @@ struct fi_ibv_msg_ep;
 	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
 	 sizeof(struct fi_ibv_rdm_header))
 
+/* 1GB is RC_QP limitation */
+#define FI_IBV_RDM_SEG_MAXSIZE (1024*1024*1024)
+
 /* TODO: CQs depths increased from 100 to 1000 to prevent
  *      "Work Request Flushed Error" in stress tests like alltoall.
  */
