@@ -34,18 +34,21 @@
 #include <gnix_mr_notifier.h>
 #include <gnix.h>
 
-typedef enum cache_entry_flags {
-	GNIX_CE_RETIRED = 1 << 0, /* retired entries are not in any tree */
-} cache_entry_flags_e;
+typedef unsigned long long int cache_entry_state_t;
+/* These are used for entry state and should be unique */
+#define GNIX_CES_INUSE       (1ULL << 8)    /* in use */
+#define GNIX_CES_STALE       (2ULL << 8)    /* cached for possible reuse */
+#define GNIX_CES_STATE_MASK  (0xFULL << 8)
 
-/* consider using a bitmask (and possibly combining with flags above) */
-typedef enum cache_entry_state {
-	GNIX_CES_DEAD = 0,
-	GNIX_CES_INUSE,
-	GNIX_CES_INUSE_UNMAPPED,
-	GNIX_CES_STALE,
-	GNIX_CES_STALE_UNMAPPED,
-} cache_entry_state_e;
+typedef unsigned long long int cache_entry_flag_t;
+/* One or more of these can be combined with the above */
+#define GNIX_CE_RETIRED     (1ULL << 61)   /* in use, but not to be reused */
+#define GNIX_CE_MERGED      (1ULL << 62)   /* merged entry, i.e., not
+					    * an original request from
+					    * fi_mr_reg */
+#define GNIX_CE_UNMAPPED    (1ULL << 63)   /* at least 1 page of the
+					    * entry has been unmapped
+					    * by the OS */
 
 /**
  * @brief structure for containing the fields relevant to the memory cache key
@@ -71,16 +74,14 @@ typedef struct gnix_mr_cache_key {
  * @var   lru_entry  lru list entry
  * @var   siblings   list of sibling entries
  * @var   children   list of subsumed child entries
- * @var   flags      cache entry flags @see cache_entry_flags_e
  */
 typedef struct gnix_mr_cache_entry {
-	cache_entry_state_e state;
+	cache_entry_state_t state;
 	gnix_mr_cache_key_t key;
 	atomic_t ref_cnt;
 	struct dlist_entry lru_entry;
 	struct dlist_entry siblings;
 	struct dlist_entry children;
-	cache_entry_flags_e flags;
 	uint64_t mr[0];
 } gnix_mr_cache_entry_t;
 
@@ -125,6 +126,66 @@ gnix_mr_cache_attr_t __default_mr_cache_attr = {
 		.hard_stale_limit    = 128,
 		.lazy_deregistration = 1,
 };
+
+/* Functions for using and manipulating cache entry state */
+static inline cache_entry_state_t __entry_get_state(gnix_mr_cache_entry_t *e)
+{
+	return e->state & GNIX_CES_STATE_MASK;
+}
+
+static inline void __entry_set_state(gnix_mr_cache_entry_t *e,
+				     cache_entry_state_t s)
+{
+	e->state = (e->state & ~GNIX_CES_STATE_MASK) |
+		(s & GNIX_CES_STATE_MASK);
+}
+
+static inline void __entry_reset_state(gnix_mr_cache_entry_t *e)
+{
+	e->state = 0ULL;
+}
+
+static inline bool __entry_is_flag(gnix_mr_cache_entry_t *e,
+				   cache_entry_flag_t f)
+{
+	return (e->state & f) != 0;
+}
+
+static inline void __entry_set_flag(gnix_mr_cache_entry_t *e,
+				    cache_entry_flag_t f)
+{
+	e->state = e->state | f;
+}
+
+static inline bool __entry_is_retired(gnix_mr_cache_entry_t *e)
+{
+	return __entry_is_flag(e, GNIX_CE_RETIRED);
+}
+
+static inline bool __entry_is_merged(gnix_mr_cache_entry_t *e)
+{
+	return __entry_is_flag(e, GNIX_CE_MERGED);
+}
+
+static inline bool __entry_is_unmapped(gnix_mr_cache_entry_t *e)
+{
+	return __entry_is_flag(e, GNIX_CE_UNMAPPED);
+}
+
+static inline void __entry_set_retired(gnix_mr_cache_entry_t *e)
+{
+	__entry_set_flag(e, GNIX_CE_RETIRED);
+}
+
+static inline void __entry_set_merged(gnix_mr_cache_entry_t *e)
+{
+	__entry_set_flag(e, GNIX_CE_MERGED);
+}
+
+static inline void __entry_set_unmapped(gnix_mr_cache_entry_t *e)
+{
+	__entry_set_flag(e, GNIX_CE_UNMAPPED);
+}
 
 /**
  * Key comparison function for finding overlapping gnix memory
@@ -389,13 +450,12 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 	while (ret > 0) {
 		if (ret == sizeof(cookie)) {
 			entry = (gnix_mr_cache_entry_t *) cookie;
-			switch (entry->state) {
+			switch (__entry_get_state(entry)) {
 			case GNIX_CES_INUSE:
 				/* First, warn that this might be a
 				 * problem.*/
-				if (__notifier_warned == false) {
-					/* TODO: Only warn if this is
-					 * not a merged entry */
+				if ((__notifier_warned == false) &&
+				    !__entry_is_merged(entry)) {
 					GNIX_WARN(FI_LOG_MR,
 						  "Registered memory region"
 						  " includes unmapped pages."
@@ -411,8 +471,9 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 					   entry->key.address,
 					   entry->key.length);
 
-				entry->state = GNIX_CES_INUSE_UNMAPPED;
-				if (entry->flags & GNIX_CE_RETIRED) {
+				__entry_set_unmapped(entry);
+
+				if (__entry_is_retired(entry)) {
 					/* Nothing to do */
 					break;
 				}
@@ -420,7 +481,7 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 				/* Retire this entry (remove from
 				 * inuse tree) */
 
-				entry->flags |= GNIX_CE_RETIRED;
+				__entry_set_retired(entry);
 				iter = rbtFind(cache->inuse.rb_tree,
 					       &entry->key);
 				if (likely(iter != NULL)) {
@@ -435,16 +496,17 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 					}
 				} else {
 					/*  The only way we should get
-					 *  here is if if this entry
-					 *  was already retired.  Not
-					 *  sure if this is worth a
-					 *  separate warning from the
-					 *  one above. */
+					 *  here is if we're in the
+					 *  middle of retiring this
+					 *  entry.  Not sure if this
+					 *  is worth a separate
+					 *  warning from the one
+					 *  above. */
 				}
 
 				break;
 			case GNIX_CES_STALE:
-				entry->state = GNIX_CES_STALE_UNMAPPED;
+				__entry_set_unmapped(entry);
 				iter = rbtFind(cache->stale.rb_tree,
 					       &entry->key);
 				if (!iter) {
@@ -555,8 +617,7 @@ __notifier_unmonitor(gnix_mr_cache_t *cache,
 
 	__clear_notifier_events(cache);
 
-	if ((entry->state != GNIX_CES_INUSE_UNMAPPED) &&
-	    (entry->state != GNIX_CES_STALE_UNMAPPED)) {
+	if (!__entry_is_unmapped(entry)) {
 		GNIX_DEBUG(FI_LOG_MR, "unmonitoring entry=%p (state=%d)\n",
 			   entry, entry->state);
 		rc = _gnix_notifier_unmonitor(cache->attr.notifier,
@@ -595,11 +656,10 @@ static inline int __mr_cache_entry_destroy(gnix_mr_cache_t *cache,
 		/* Should we bother with this check?  If we don't, the
 		 * only difference it that __clear_notifier_events
 		 * will be called one additional time. */
-		if ((entry->state != GNIX_CES_INUSE_UNMAPPED) &&
-		    (entry->state != GNIX_CES_STALE_UNMAPPED)) {
+		if (!__entry_is_unmapped(entry)) {
 			__notifier_unmonitor(cache, entry);
 		}
-		entry->state = GNIX_CES_DEAD;
+		__entry_reset_state(entry);
 
 		rc = cache->attr.destruct_callback(cache->attr.dereg_context);
 		if (!rc)
@@ -620,8 +680,7 @@ static inline int __insert_entry_into_stale(
 	RbtStatus rc;
 	int ret = 0;
 
-	if ((entry->state == GNIX_CES_INUSE_UNMAPPED) ||
-	    (entry->state == GNIX_CES_STALE_UNMAPPED)) {
+	if (__entry_is_unmapped(entry)) {
 		GNIX_DEBUG(FI_LOG_MR, "entry (%p) unmapped, not inserting"
 			   " into stale %llx:%llx", entry,
 			   entry->key.address, entry->key.length);
@@ -649,9 +708,9 @@ static inline int __insert_entry_into_stale(
 
 		__mr_cache_lru_enqueue(cache, entry);
 		atomic_inc(&cache->stale.elements);
-		switch (entry->state) {
+		switch (__entry_get_state(entry)) {
 		case  GNIX_CES_INUSE:
-			entry->state = GNIX_CES_STALE;
+			__entry_set_state(entry, GNIX_CES_STALE);
 			break;
 		default:
 			GNIX_FATAL(FI_LOG_MR,
@@ -831,7 +890,7 @@ static inline int __mr_cache_entry_put(
 
 		atomic_dec(&cache->inuse.elements);
 
-		if (!(entry->flags & GNIX_CE_RETIRED)) {
+		if (!__entry_is_retired(entry)) {
 			iter = rbtFind(cache->inuse.rb_tree, &entry->key);
 			if (unlikely(!iter)) {
 				GNIX_ERR(FI_LOG_MR,
@@ -850,7 +909,7 @@ static inline int __mr_cache_entry_put(
 		 * isn't retired, put it in the stale cache
 		 */
 		if (cache->attr.lazy_deregistration &&
-				!(entry->flags & GNIX_CE_RETIRED)) {
+		    !(__entry_is_retired(entry))) {
 			GNIX_DEBUG(FI_LOG_MR,
 				   "moving key %llx:%llx to stale\n",
 				   entry->key.address, entry->key.length);
@@ -1175,7 +1234,7 @@ static int __mr_cache_search_inuse(
 		/* mark the entry as retired */
 		GNIX_DEBUG(FI_LOG_MR, "retiring entry, key=%llx:%llx\n",
 			   found_key->address, found_key->length);
-		found_entry->flags |= GNIX_CE_RETIRED;
+		__entry_set_retired(found_entry);
 		dlist_insert_tail(&found_entry->siblings, &retired_entries);
 
 		iter = rbtNext(cache->inuse.rb_tree, iter);
@@ -1214,6 +1273,8 @@ static int __mr_cache_search_inuse(
 			   new_key.address, new_key.length);
 		return ret;
 	}
+
+	__entry_set_merged(*entry);
 
 	/* move retired entries to the head of the new entry's child list */
 	if (!dlist_empty(&retired_entries)) {
@@ -1379,10 +1440,11 @@ static int __mr_cache_create_registration(
 		goto err;
 	}
 
+	__entry_reset_state(current_entry);
+
 	/* set up the entry's key */
 	current_entry->key.address = address;
 	current_entry->key.length = length;
-	current_entry->flags = 0;
 
 	rc = __notifier_monitor(cache, current_entry);
 	if (unlikely(rc != FI_SUCCESS)) {
@@ -1497,7 +1559,7 @@ int _gnix_mr_cache_register(
 	cache->misses++;
 
 success:
-	entry->state = GNIX_CES_INUSE;
+	__entry_set_state(entry, GNIX_CES_INUSE);
 	*handle = (void *) entry->mr;
 
 	return FI_SUCCESS;
@@ -1530,8 +1592,7 @@ int _gnix_mr_cache_deregister(
 	 */
 
 	entry = container_of(handle, gnix_mr_cache_entry_t, mr);
-	if ((entry->state != GNIX_CES_INUSE) &&
-	    (entry->state != GNIX_CES_INUSE_UNMAPPED)) {
+	if (__entry_get_state(entry) != GNIX_CES_INUSE) {
 		GNIX_INFO(FI_LOG_MR, "entry (%p) in incorrect state (%d)\n",
 			  entry, entry->state);
 		return -FI_EINVAL;
