@@ -1214,6 +1214,31 @@ static struct fi_ops_cm sock_pep_cm_ops = {
 	.shutdown = fi_no_shutdown,
 };
 
+int sock_pep_getopt(fid_t fid, int level, int optname,
+		      void *optval, size_t *optlen)
+{
+	if (level != FI_OPT_ENDPOINT || optname != FI_OPT_CM_DATA_SIZE)
+		return -FI_ENOPROTOOPT;
+
+	if (*optlen < sizeof(size_t)) {
+		*optlen = sizeof(size_t);
+		return -FI_ETOOSMALL;
+	}
+	*((size_t *) optval) = SOCK_EP_MAX_CM_DATA_SZ;
+	*optlen = sizeof(size_t);
+	return 0;
+}
+
+static struct fi_ops_ep sock_pep_ops = {
+	.size = sizeof(struct fi_ops_ep),
+	.getopt = sock_pep_getopt,
+	.setopt = fi_no_setopt,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
+};
+
 int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **sep, void *context)
 {
@@ -1285,7 +1310,7 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->pep.fid.context = context;
 	_pep->pep.fid.ops = &sock_pep_fi_ops;
 	_pep->pep.cm = &sock_pep_cm_ops;
-	_pep->pep.ops = NULL;
+	_pep->pep.ops = &sock_pep_ops;
 	fastlock_init(&_pep->cm.lock);
 
 	_pep->sock_fab = container_of(fabric, struct sock_fabric, fab_fid);

@@ -1013,8 +1013,10 @@ static int sock_ep_getopt(fid_t fid, int level, int optname,
 		break;
 
 	case FI_OPT_CM_DATA_SIZE:
-		if (*optlen < sizeof(size_t))
+		if (*optlen < sizeof(size_t)) {
+			*optlen = sizeof(size_t);
 			return -FI_ETOOSMALL;
+		}
 		*((size_t *) optval) = SOCK_EP_MAX_CM_DATA_SZ;
 		*optlen = sizeof(size_t);
 		break;
