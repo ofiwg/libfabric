@@ -164,7 +164,7 @@ int bandwidth(void)
 	 * bandwidth.  */
 
 	if (opts.dst_addr) {
-		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++, j++) {
+		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
 				ft_start();
 
@@ -176,7 +176,7 @@ int bandwidth(void)
 			if (ret)
 				return ret;
 
-			if (j == opts.window_size) {
+			if (++j == opts.window_size) {
 				ret = bw_tx_comp();
 				if (ret)
 					return ret;
@@ -187,7 +187,7 @@ int bandwidth(void)
 		if (ret)
 			return ret;
 	} else {
-		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++, j++) {
+		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
 				ft_start();
 
@@ -195,7 +195,7 @@ int bandwidth(void)
 			if (ret)
 				return ret;
 
-			if (j == opts.window_size) {
+			if (++j == opts.window_size) {
 				ret = bw_rx_comp();
 				if (ret)
 					return ret;
@@ -244,7 +244,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	if (ret)
 		return ret;
 
-	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++, j++) {
+	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 		if (i == opts.warmup_iterations)
 			ft_start();
 
@@ -286,7 +286,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		if (ret)
 			return ret;
 
-		if (j == opts.window_size) {
+		if (++j == opts.window_size) {
 			ret = bw_rma_comp(rma_op);
 			if (ret)
 				return ret;
