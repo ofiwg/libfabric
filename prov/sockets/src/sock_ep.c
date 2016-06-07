@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1008,6 +1009,13 @@ static int sock_ep_getopt(fid_t fid, int level, int optname,
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
 		*(size_t *)optval = sock_ep->attr->min_multi_recv;
+		*optlen = sizeof(size_t);
+		break;
+
+	case FI_OPT_CM_DATA_SIZE:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
+		*((size_t *) optval) = SOCK_EP_MAX_CM_DATA_SZ;
 		*optlen = sizeof(size_t);
 		break;
 
