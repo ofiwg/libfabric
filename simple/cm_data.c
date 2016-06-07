@@ -56,7 +56,7 @@ static int server_setup(void)
 		return ret;
 
 	/* Get the maximum cm_size supported in all domains */
-	opt_size = sizeof(opt_size);
+	opt_size = sizeof(cm_data_size);
 	return fi_getopt(&pep->fid, FI_OPT_ENDPOINT, FI_OPT_CM_DATA_SIZE,
 		&cm_data_size, &opt_size);
 }
