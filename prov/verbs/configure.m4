@@ -19,7 +19,25 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[],
 				[$verbs_PREFIX],
 				[$verbs_LIBDIR],
-				[verbs_ibverbs_happy=1],
+				[
+				AC_MSG_CHECKING(if libibverbs is linkable by libtool)
+				file=conftemp.$$.c
+				rm -f $file conftemp
+				cat > $file <<-EOF
+					char ibv_open_device ();
+					int main ()
+					{ return ibv_open_device (); }
+				EOF
+				./libtool --mode=link --tag=CC $CC $CPPFLAGS \
+				$CFLAGS $file -o conftemp $LDFLAGS -libverbs \
+				2>&1 > /dev/null
+				status=$?
+				AS_IF([test $status -eq 0 && test -x conftemp],
+					[AC_MSG_RESULT(yes)
+					verbs_ibverbs_happy=1],
+					[AC_MSG_RESULT(no)
+					verbs_ibverbs_happy=0])
+				rm -f $file conftemp],
 				[verbs_ibverbs_happy=0])
 
 	       FI_CHECK_PACKAGE([verbs_rdmacm],
