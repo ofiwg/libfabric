@@ -72,6 +72,7 @@ typedef enum ep_ops_val {
 struct fi_gni_ops_domain {
 	int (*set_val)(struct fid *fid, dom_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, dom_ops_val_t t, void *val);
+	int (*flush_cache)(struct fid *fid);
 };
 
 enum gnix_fab_req_type;

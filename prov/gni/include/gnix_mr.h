@@ -128,6 +128,8 @@ struct gnix_mr_ops {
 			void **handle);
 	int (*dereg_mr)(struct gnix_fid_domain *domain,
 			struct gnix_fid_mem_desc *md);
+	int (*destroy_cache)(struct gnix_fid_domain *domain);
+	int (*flush_cache)(struct gnix_fid_domain *domain);
 };
 
 
@@ -165,6 +167,10 @@ int _gnix_open_cache(struct gnix_fid_domain *domain, int type);
 
 /* destroys mr cache for a given domain */
 int _gnix_close_cache(struct gnix_fid_domain *domain);
+
+/* flushes the memory registration cache for a given domain */
+int _gnix_flush_registration_cache(struct gnix_fid_domain *domain);
+
 
 extern gnix_mr_cache_attr_t _gnix_default_mr_cache_attr;
 
