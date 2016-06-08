@@ -314,9 +314,6 @@ static void  __cm_nic_destruct(void *obj)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (cm_nic->nic != NULL)
-		_gnix_ref_put(cm_nic->nic);
-
 	if (cm_nic->dgram_hndl != NULL) {
 		ret = _gnix_dgram_hndl_free(cm_nic->dgram_hndl);
 		if (ret != FI_SUCCESS)
@@ -334,6 +331,9 @@ static void  __cm_nic_destruct(void *obj)
 		free(cm_nic->addr_to_ep_ht);
 		cm_nic->addr_to_ep_ht = NULL;
 	}
+
+	if (cm_nic->nic != NULL)
+		_gnix_ref_put(cm_nic->nic);
 
 	free(cm_nic);
 }
