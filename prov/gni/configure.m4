@@ -8,6 +8,7 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
         # Determine if we can support the gni provider
         # have to pull in pkg.m4 manually
         ugni_lib_happy=0
+        udreg_lib_happy=0
         gni_header_happy=0
         alps_lli_happy=0
         alps_util_happy=0
@@ -15,7 +16,6 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
         criterion_tests_present=true
         gni_CPPFLAGS=
         gni_LDFLAGS=
-        gni_LIBS=
 	gnitest_CPPFLAGS=
 	gnitest_LDFLAGS=
         gnitest_LIBS=
@@ -50,9 +50,8 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                  [alps_util_happy=0])
                FI_PKG_CHECK_MODULES([CRAY_UDREG], [cray-udreg],
                                  [udreg_lib_happy=1
-                                  gni_CPPFLAGS="-DHAVE_UDREG $CRAY_UDREG_INCLUDE_OPTS $gni_CPPFLAGS"
-                                  gni_LDFLAGS="$CRAY_UDREG_POST_LINK_OPTS $gni_LDFLAGS"
-                                  gni_LIBS="-ludreg $gni_LIBS"
+                                  gni_CPPFLAGS="-DHAVE_UDREG $CRAY_UDREG_CFLAGS $gni_CPPFLAGS"
+                                  gni_LDFLAGS="$CRAY_UDREG_LIBS $gni_LDFLAGS"
                                  ],
                                  [udreg_lib_happy=0])
                gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
@@ -71,7 +70,7 @@ dnl looks like we need to get rid of some white space
                      [criterion_tests_present=false])
 
                if test "$with_criterion" != "" && test "$with_criterion" != "no"; then
-	       	     if test "$enable_direct" != "" && test "$enable_direct" != "no"; then
+	             if test "$enable_direct" != "" && test "$enable_direct" != "no"; then
 		     	gnitest_CPPFLAGS="-I$srcdir/prov/gni/include"
 		     fi
 
@@ -123,7 +122,6 @@ dnl looks like we need to get rid of some white space
 
         AC_SUBST(gni_CPPFLAGS)
         AC_SUBST(gni_LDFLAGS)
-        AC_SUBST(gni_LIBS)
 	AC_SUBST(gnitest_CPPFLAGS)
         AC_SUBST(gnitest_LDFLAGS)
         AC_SUBST(gnitest_LIBS)
