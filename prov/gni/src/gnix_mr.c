@@ -486,7 +486,10 @@ static int __udreg_init(struct gnix_fid_domain *domain)
 				"Could not access udreg application cache, urc=%d",
 				urc);
 	}
-	return 0;
+
+	domain->mr_is_init = 1;
+
+	return FI_SUCCESS;
 }
 
 static int __udreg_is_init(struct gnix_fid_domain *domain)
@@ -514,7 +517,7 @@ static int __udreg_reg_mr(
 
 	*handle = md;
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 static int __udreg_dereg_mr(struct gnix_fid_domain *domain,
@@ -540,7 +543,7 @@ static int __udreg_init(struct gnix_fid_domain *domain)
 
 static int __udreg_is_init(struct gnix_fid_domain *domain)
 {
-	return 0;
+	return FI_SUCCESS;
 }
 
 static int __udreg_reg_mr(struct gnix_fid_domain *domain,
@@ -567,8 +570,14 @@ struct gnix_mr_ops udreg_mr_ops = {
 };
 
 static int __cache_init(struct gnix_fid_domain *domain) {
-	return _gnix_mr_cache_init(&domain->mr_cache,
+	int ret;
+
+	ret = _gnix_mr_cache_init(&domain->mr_cache,
 			&domain->mr_cache_attr);
+	if (ret == FI_SUCCESS)
+		domain->mr_is_init = 1;
+
+	return ret;
 }
 
 static int __cache_is_init(struct gnix_fid_domain *domain) {
@@ -599,17 +608,71 @@ struct gnix_mr_ops cache_mr_ops = {
 	.dereg_mr = __cache_dereg_mr,
 };
 
+
+static int __basic_mr_init(struct gnix_fid_domain *domain) {
+	domain->mr_is_init = 1;
+	return FI_SUCCESS;
+}
+
+static int __basic_mr_is_init(struct gnix_fid_domain *domain) {
+	return domain->mr_is_init;
+}
+
+static int __basic_mr_reg_mr(
+		struct gnix_fid_domain      *domain,
+		uint64_t                    address,
+		uint64_t                    length,
+		struct _gnix_fi_reg_context *fi_reg_context,
+		void                        **handle) {
+
+	struct gnix_fid_mem_desc *md, *ret;
+
+	md = calloc(1, sizeof(*md));
+	if (!md) {
+		GNIX_WARN(FI_LOG_MR, "failed to allocate memory");
+		return -FI_ENOMEM;
+	}
+	ret = __gnix_register_region((void *) md, (void *) address, length,
+			fi_reg_context, (void *) domain);
+	if (!ret) {
+		GNIX_WARN(FI_LOG_MR, "failed to register memory");
+		free(md);
+		return -FI_ENOSPC;
+	}
+
+	*handle = (void *) md;
+
+	return FI_SUCCESS;
+}
+
+static int __basic_mr_dereg_mr(struct gnix_fid_domain *domain,
+		struct gnix_fid_mem_desc *md)
+{
+	return __gnix_deregister_region((void *) md, NULL);
+}
+
+struct gnix_mr_ops basic_mr_ops = {
+	.init = __basic_mr_init,
+	.is_init = __basic_mr_is_init,
+	.reg_mr = __basic_mr_reg_mr,
+	.dereg_mr = __basic_mr_dereg_mr,
+};
+
+
 int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
 {
 	if (type < 0 || type >= GNIX_MR_MAX_TYPE)
 		return -FI_EINVAL;
 
-	if (domain->mr_ops)
+	if (domain->mr_ops && domain->mr_ops->is_init(domain))
 		return -FI_EBUSY;
 
 	switch(type) {
 	case GNIX_MR_TYPE_UDREG:
 		domain->mr_ops = &udreg_mr_ops;
+		break;
+	case GNIX_MR_TYPE_NONE:
+		domain->mr_ops = &basic_mr_ops;
 		break;
 	default:
 		domain->mr_ops = &cache_mr_ops;
@@ -617,7 +680,7 @@ int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
 	}
 
 	domain->mr_cache_type = type;
-	return 0;
+	return FI_SUCCESS;
 }
 
 int _gnix_close_cache(struct gnix_fid_domain *domain)
@@ -651,7 +714,7 @@ int _gnix_close_cache(struct gnix_fid_domain *domain)
 	}
 #endif
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 gnix_mr_cache_attr_t _gnix_default_mr_cache_attr = {

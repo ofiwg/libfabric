@@ -116,6 +116,8 @@ Test(domain, open_ops)
 	struct fi_gni_ops_domain *gni_domain_ops;
 	enum dom_ops_val op;
 	uint32_t val;
+	char *other_reg_type = "none";
+	char *string_val;
 
 	memset(doms, 0, num_doms*sizeof(struct fid_domain *));
 
@@ -127,25 +129,40 @@ Test(domain, open_ops)
 		cr_assert(ret == FI_SUCCESS, "fi_open_ops");
 		for (op = 0; op < GNI_NUM_DOM_OPS; op++) {
 			val = i*op+op;
-			ret = gni_domain_ops->set_val(&doms[i]->fid, op, &val);
+			switch (op) {
+			case GNI_MR_CACHE:
+				ret = gni_domain_ops->set_val(&doms[i]->fid, op,
+						&other_reg_type);
+				break;
+			default:
+				ret = gni_domain_ops->set_val(&doms[i]->fid, op, &val);
+				break;
+			}
 			cr_assert(ret == FI_SUCCESS, "set_val");
-		}
-	}
 
-	for (i = num_doms-1; i >= 0; i--) {
-		for (op = 0; op < GNI_NUM_DOM_OPS; op++) {
-			ret = gni_domain_ops->get_val(&doms[i]->fid, op, &val);
+			switch (op) {
+			case GNI_MR_CACHE:
+				ret = gni_domain_ops->get_val(&doms[i]->fid, op, &string_val);
+				break;
+			default:
+				ret = gni_domain_ops->get_val(&doms[i]->fid, op, &val);
+				break;
+			}
 			cr_assert(ret == FI_SUCCESS, "get_val");
 
-			if (op == GNI_MR_CACHE_UDREG)
-				cr_assert(val != 0, "Incorrect op value");
-			else 
+			switch (op) {
+			case GNI_MR_CACHE:
+				cr_assert_eq(strncmp(other_reg_type, string_val,
+						strlen(other_reg_type)),  0, "Incorrect op value");
+				break;
+			default:
 				cr_assert(val == i*op+op, "Incorrect op value");
+				break;
+			}
 		}
 		ret = fi_close(&doms[i]->fid);
 		cr_assert(ret == FI_SUCCESS, "fi_close domain");
 	}
-
 }
 
 Test(domain, invalid_open_ops)
