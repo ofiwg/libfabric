@@ -324,7 +324,7 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d)
 		/*
 		 * datagram is active now, listening
 		 */
-		d->state = GNIX_DGRAM_STATE_LISTENING;
+		d->state = GNIX_DGRAM_STATE_ACTIVE;
 	}
 	COND_RELEASE(nic->requires_lock, &nic->lock);
 
@@ -403,7 +403,7 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 			/*
 			 * datagram is active now, connecting
 			 */
-			d->state = GNIX_DGRAM_STATE_CONNECTING;
+			d->state = GNIX_DGRAM_STATE_ACTIVE;
 		} else {
 			ret = -FI_EBUSY;
 		}
@@ -463,9 +463,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 
 		dg_ptr = (struct gnix_datagram *)datagram_id;
 		assert(dg_ptr != NULL);
-
-		assert((dg_ptr->state == GNIX_DGRAM_STATE_CONNECTING) ||
-			(dg_ptr->state = GNIX_DGRAM_STATE_LISTENING));
+		assert(dg_ptr->state == GNIX_DGRAM_STATE_ACTIVE);
 
 		/*
 		 * do need to take lock here
