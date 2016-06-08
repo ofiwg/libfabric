@@ -19,25 +19,7 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[],
 				[$verbs_PREFIX],
 				[$verbs_LIBDIR],
-				[
-				AC_MSG_CHECKING(if libibverbs is linkable by libtool)
-				file=conftemp.$$.c
-				rm -f $file conftemp
-				cat > $file <<-EOF
-					char ibv_open_device ();
-					int main ()
-					{ return ibv_open_device (); }
-				EOF
-				cmd="./libtool --mode=link --tag=CC $CC $CPPFLAGS $CFLAGS $file -o conftemp $LDFLAGS -libverbs"
-				echo "configure:$LINENO: $cmd" >> config.log 2>&1
-				eval $cmd >> config.log 2>&1
-				status=$?
-				AS_IF([test $status -eq 0 && test -x conftemp],
-					[AC_MSG_RESULT(yes)
-					verbs_ibverbs_happy=1],
-					[AC_MSG_RESULT(no)
-					verbs_ibverbs_happy=0])
-				rm -f $file conftemp],
+				[FI_VERBS_DOUBLE_CHECK_LIBIBVERBS],
 				[verbs_ibverbs_happy=0])
 
 	       FI_CHECK_PACKAGE([verbs_rdmacm],
@@ -65,4 +47,38 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	AC_SUBST(verbs_CPPFLAGS)
 	AC_SUBST(verbs_LDFLAGS)
 	AC_SUBST(verbs_LIBS)
+])
+
+dnl
+dnl Per https://github.com/ofiwg/libfabric/issues/2070, it is possible
+dnl that the AC_CHECK_LIB test for libibverbs is not sufficient --
+dnl i.e., AC_CHECK_LIB may succeed, but then linking with libtool may
+dnl fail.  This test therefore double checks that we can successfully
+dnl use libtool to link against libibverbs.  NOTE: this test is
+dnl contingent upon LT_OUTPUT having already been invoked (i.e., so that
+dnl the libtool script exists).
+dnl
+AC_DEFUN([FI_VERBS_DOUBLE_CHECK_LIBIBVERBS],[
+	AC_MSG_CHECKING(if libibverbs is linkable by libtool)
+	file=conftemp.$$.c
+	rm -f $file conftemp
+	cat > $file <<-EOF
+char ibv_open_device ();
+int main ()
+{ return ibv_open_device (); }
+EOF
+
+	cmd="./libtool --mode=link --tag=CC $CC $CPPFLAGS $CFLAGS $file -o conftemp $LDFLAGS -libverbs"
+	echo "configure:$LINENO: $cmd" >> config.log 2>&1
+	eval $cmd >> config.log 2>&1
+	status=$?
+	AS_IF([test $status -eq 0 && test -x conftemp],
+		[AC_MSG_RESULT(yes)
+		verbs_ibverbs_happy=1],
+		[AC_MSG_RESULT(no)
+		echo "configure: failed program was" >> config.log
+		cat $file >> config.log
+		verbs_ibverbs_happy=0])
+
+	rm -f $file conftemp
 ])
