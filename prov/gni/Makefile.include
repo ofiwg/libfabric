@@ -127,7 +127,7 @@ libgnix_fi_la_SOURCES = $(_gni_files) $(_gni_headers) $(common_srcs)
 libgnix_fi_la_LDFLAGS = \
 	$(gni_LDFLAGS) \
 	-module -avoid-version -shared -export-dynamic
-libgnix_fi_la_LIBADD = $(linkback) $(gni_LIBS)
+libgnix_fi_la_LIBADD = $(linkback)
 libgnix_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_GNI_DL
 src_libfabric_la_SOURCES += $(_gni_files) $(_gni_headers)
