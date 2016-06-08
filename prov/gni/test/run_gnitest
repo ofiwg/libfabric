@@ -32,6 +32,11 @@
 #
 
 #
+# disable use of xpmem bypass for criterion tests
+#
+
+export GNIX_DISABLE_XPMEM=1
+#
 # Check for srun or aprun
 #
 srun=`command -v srun`

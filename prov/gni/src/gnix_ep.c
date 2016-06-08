@@ -51,6 +51,7 @@
 #include "gnix_rma.h"
 #include "gnix_atomic.h"
 #include "gnix_cntr.h"
+#include "gnix_xpmem.h"
 
 
 /*******************************************************************************
@@ -1382,6 +1383,14 @@ static void __ep_destruct(void *obj)
 	if (ep->stx_ctx)
 		_gnix_ref_put(ep->stx_ctx);
 
+	if (ep->xpmem_hndl) {
+		ret = _gnix_xpmem_handle_destroy(ep->xpmem_hndl);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_xpmem_handle_destroy returned %s\n",
+				  fi_strerror(-ret));
+	}
+
 	domain = ep->domain;
 	assert(domain != NULL);
 	_gnix_ref_put(domain);
@@ -1784,6 +1793,17 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	gnix_ep_caps(ep_priv, ep_priv->caps);
 
 	ep_priv->ep_fid.cm = &gnix_cm_ops;
+
+	/*
+	 * try out XPMEM
+	 */
+
+	ret = _gnix_xpmem_handle_create(domain_priv,
+					&ep_priv->xpmem_hndl);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "_gnix_xpmem_handl_create returned %s\n",
+			  fi_strerror(-ret));
+	}
 
 	if (GNIX_EP_RDM_DGM(ep_priv->type)) {
 		if (info->src_addr != NULL) {

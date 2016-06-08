@@ -59,6 +59,7 @@
 #include "gnix_util.h"
 #include "gnix_nameserver.h"
 #include "gnix_wait.h"
+#include "gnix_xpmem.h"
 
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
@@ -520,6 +521,9 @@ GNI_INI
 
 	if (getenv("GNIX_MAX_NICS") != NULL)
 		gnix_max_nics_per_ptag = atoi(getenv("GNIX_MAX_NICS"));
+
+	if (getenv("GNIX_DISABLE_XPMEM") != NULL)
+		gnix_xpmem_disabled = true;
 
 	/*
 	 * if for some reason we can't even allocate a single nic, bail.

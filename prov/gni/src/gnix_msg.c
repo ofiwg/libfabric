@@ -407,6 +407,56 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	return ret;
 }
 
+static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_xpmem_access_handle *access_hndl;
+
+	/*
+	 * look up mapping from other EP
+	 */
+
+	ret = _gnix_xpmem_access_hndl_get(req->gnix_ep->xpmem_hndl,
+					req->vc->peer_apid,
+					req->msg.send_addr,
+					req->msg.recv_len,
+					&access_hndl);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_access_hndl_get failed %s\n",
+			  fi_strerror(-ret));
+		req->msg.status = GNI_RC_TRANSACTION_ERROR;
+		return ret;
+	}
+
+	/*
+	 * pull the data from the other process' address space
+	 */
+	ret = _gnix_xpmem_copy(access_hndl,
+				(void *)req->msg.recv_addr,
+				(void *)req->msg.send_addr,
+				req->msg.send_len);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_vaddr_copy failed %s\n",
+			  fi_strerror(-ret));
+		req->msg.status = GNI_RC_TRANSACTION_ERROR;
+		_gnix_xpmem_access_hndl_put(access_hndl);
+		return ret;
+	}
+
+	ret = _gnix_xpmem_access_hndl_put(access_hndl);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_access_hndl_put failed %s\n",
+			  fi_strerror(-ret));
+
+	/*
+	 * set the req send fin and reschedule req
+	 */
+
+	req->msg.status = GNI_RC_SUCCESS;  /* hmph */
+	req->work_fn = __gnix_rndzv_req_send_fin;
+	return _gnix_vc_queue_work_req(req);
+}
+
 static int __gnix_rndzv_req(void *arg)
 {
 	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
@@ -420,6 +470,13 @@ static int __gnix_rndzv_req(void *arg)
 	int inject_err = _gnix_req_inject_err(req);
 	int head_off, head_len, tail_len;
 	void *tail_data = NULL;
+
+	/*
+	 * TODO: xpmem intercept here
+	 */
+
+	if (req->vc->modes & GNIX_VC_MODE_XPMEM)
+		return  __gnix_rndzv_req_xpmem(req);
 
 	if (!req->msg.recv_md) {
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
@@ -547,7 +604,7 @@ static int __gnix_rndzv_req(void *arg)
 
 		/* Wait for both TXs to complete, then process the request. */
 		atomic_set(&req->msg.outstanding_txds, 2);
-		req->msg.status = 0;
+		req->msg.status = GNI_RC_SUCCESS;
 
 	}
 
