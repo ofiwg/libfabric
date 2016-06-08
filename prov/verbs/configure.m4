@@ -28,9 +28,9 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 					int main ()
 					{ return ibv_open_device (); }
 				EOF
-				./libtool --mode=link --tag=CC $CC $CPPFLAGS \
-				$CFLAGS $file -o conftemp $LDFLAGS -libverbs \
-				2>&1 > /dev/null
+				cmd="./libtool --mode=link --tag=CC $CC $CPPFLAGS $CFLAGS $file -o conftemp $LDFLAGS -libverbs"
+				echo "configure:$LINENO: $cmd" >> config.log 2>&1
+				eval $cmd >> config.log 2>&1
 				status=$?
 				AS_IF([test $status -eq 0 && test -x conftemp],
 					[AC_MSG_RESULT(yes)
