@@ -432,14 +432,13 @@ static int sock_ep_cm_send_msg(struct sock_cm_entry *cm,
 			       void *msg, size_t len)
 {
 	int ret;
+#if ENABLE_DEBUG
 	char sa_ip[INET_ADDRSTRLEN] = {0};
-
 	memcpy(sa_ip, inet_ntoa(addr->sin_addr), INET_ADDRSTRLEN);
-	SOCK_LOG_DBG("Sending message to %s:%d\n", sa_ip, ntohs(addr->sin_port));
-
+#endif
 	ret = sendto(cm->sock, (char *) msg, len, 0,
 		     (struct sockaddr *) addr, sizeof(*addr));
-	SOCK_LOG_DBG("Total Sent: %d\n", ret);
+	SOCK_LOG_DBG("Sending %d to %s:%d\n", ret, sa_ip, ntohs(addr->sin_port));
 	return (ret == len) ? 0 : -1;
 }
 
@@ -454,11 +453,13 @@ static void sock_ep_cm_release_entry(struct sock_cm_msg_list_entry *msg_entry)
 		memset(&cm_entry, 0, sizeof(cm_entry));
 		cm_entry.fid = msg_entry->fid;
 		sock_ep = container_of(cm_entry.fid, struct sock_ep, ep.fid);
-		if (sock_eq_report_event(msg_entry->eq, FI_SHUTDOWN, &cm_entry,
-					 sizeof(cm_entry), 0))
-			SOCK_LOG_ERROR("Error in writing to EQ\n");
-		sock_ep->attr->cm.shutdown_received = 1;
-		sock_ep_disable(&sock_ep->ep);
+		if (!sock_ep->attr->cm.shutdown_received) {
+			sock_ep->attr->cm.shutdown_received = 1;
+			sock_ep_disable(&sock_ep->ep);
+			if (sock_eq_report_event(msg_entry->eq, FI_SHUTDOWN, &cm_entry,
+			     sizeof(cm_entry), 0))
+				SOCK_LOG_ERROR("Error in writing to EQ\n");
+		}
 	} else {
 		if (sock_eq_report_error(msg_entry->eq, msg_entry->fid, NULL,
 					 0, FI_ETIMEDOUT, -FI_ETIMEDOUT, NULL, 0))
@@ -506,16 +507,17 @@ static int sock_ep_cm_send_ack(struct sock_cm_entry *cm,
 				struct sockaddr_in *addr, uint64_t msg_id)
 {
 	int ret;
-	char sa_ip[INET_ADDRSTRLEN] = {0};
 	struct sock_conn_response conn_response;
-
+#if ENABLE_DEBUG
+	char sa_ip[INET_ADDRSTRLEN] = {0};
+	memcpy(sa_ip, inet_ntoa(addr->sin_addr), INET_ADDRSTRLEN);
+#endif
 	memset(&conn_response, 0, sizeof(conn_response));
 	conn_response.hdr.type = SOCK_CONN_ACK;
 	conn_response.hdr.msg_id = msg_id;
 
 	ret = sendto(cm->sock, &conn_response, sizeof(conn_response), 0,
 		     (struct sockaddr *) addr, sizeof(*addr));
-	memcpy(sa_ip, inet_ntoa(addr->sin_addr), INET_ADDRSTRLEN);
 	SOCK_LOG_DBG("Total Sent %d to %s:%d\n", ret, sa_ip, ntohs(addr->sin_port));
 	sock_ep_cm_flush_msg(cm);
 	return (ret == sizeof(conn_response)) ? 0 : -1;
@@ -531,7 +533,6 @@ static void sock_ep_cm_handle_ack(struct sock_ep *sock_ep,
 
 	fastlock_acquire(&sock_ep->attr->cm.lock);
 	for (entry = sock_ep->attr->cm.msg_list.next; entry != &sock_ep->attr->cm.msg_list;) {
-
 		msg_entry = container_of(entry, struct sock_cm_msg_list_entry,
 					 entry);
 		msg_hdr = (struct sock_conn_hdr *) msg_entry->msg;
@@ -545,6 +546,7 @@ static void sock_ep_cm_handle_ack(struct sock_ep *sock_ep,
 				if (sock_ep->attr->cm.shutdown_received)
 					break;
 
+				sock_ep->attr->cm.shutdown_received = 1;
 				if (sock_eq_report_event(sock_ep->attr->eq, FI_SHUTDOWN,
 							 &cm_entry,
 							 sizeof(cm_entry), 0))
@@ -605,6 +607,54 @@ static void sock_pep_cm_handle_ack(struct sock_cm_entry *cm,
 		entry = entry->next;
 	}
 	fastlock_release(&cm->lock);
+}
+
+static void sock_release_shutdowns(struct sock_cm_entry *cm,
+				    struct sock_conn_hdr *hdr)
+{
+	struct sock_conn_hdr *msg_hdr;
+	struct dlist_entry *entry, *next_entry;
+	struct sock_cm_msg_list_entry *msg_entry;
+
+	fastlock_acquire(&cm->lock);
+	for (entry = cm->msg_list.next; entry != &cm->msg_list;) {
+		msg_entry = container_of(entry, struct sock_cm_msg_list_entry,
+					  entry);
+		msg_hdr = (struct sock_conn_hdr *) msg_entry->msg;
+		next_entry = entry->next;
+
+		if (msg_hdr->type == SOCK_CONN_SHUTDOWN) {
+			SOCK_LOG_DBG("Discarding previous SOCK_CONN_SHUTDOWN in disconnecting state\n");
+			dlist_remove(entry);
+			free(msg_entry);
+		}
+		entry = next_entry;
+	}
+	fastlock_release(&cm->lock);
+}
+
+static int sock_is_connecting(struct sock_cm_entry *cm,
+				struct sock_conn_hdr *hdr)
+{
+	struct sock_conn_hdr *msg_hdr;
+	struct dlist_entry *entry;
+	struct sock_cm_msg_list_entry *msg_entry;
+
+	fastlock_acquire(&cm->lock);
+	for (entry = cm->msg_list.next; entry != &cm->msg_list; entry = entry->next) {
+		msg_entry = container_of(entry, struct sock_cm_msg_list_entry,
+					  entry);
+		msg_hdr = (struct sock_conn_hdr *) msg_entry->msg;
+
+		if (((msg_hdr->type == SOCK_CONN_REQ) || (msg_hdr->type == SOCK_CONN_ACK))
+		     && (hdr->msg_id < msg_hdr->msg_id)) {
+			SOCK_LOG_DBG("Discarding SOCK_CONN_SHUTDOWN in connecting state\n");
+			fastlock_release(&cm->lock);
+			return 1;
+		}
+	}
+	fastlock_release(&cm->lock);
+	return 0;
 }
 
 static void *sock_msg_ep_listener_thread(void *data)
@@ -733,7 +783,9 @@ static void *sock_msg_ep_listener_thread(void *data)
 			memset(cm_entry, 0, sizeof(*cm_entry));
 			cm_entry->fid = &ep->ep.fid;
 
-			if (ep->attr->cm.shutdown_received)
+			sock_release_shutdowns(&ep->attr->cm, &conn_response->hdr);
+			if (ep->attr->cm.shutdown_received ||
+			     sock_is_connecting(&ep->attr->cm, &conn_response->hdr))
 				break;
 
 			sock_ep_disable(&ep->ep);
@@ -741,7 +793,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 			if (sock_eq_report_event(ep->attr->eq, FI_SHUTDOWN, cm_entry,
 						 entry_sz, 0))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
-			goto out;
+			break;
 
 		default:
 			SOCK_LOG_ERROR("Invalid event: %d\n", conn_response->hdr.type);
@@ -749,7 +801,6 @@ static void *sock_msg_ep_listener_thread(void *data)
 		}
 	}
 
-out:
 	free(conn_response);
 	free(cm_entry);
 	ofi_close_socket(ep->attr->cm.sock);
@@ -803,6 +854,8 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	}
 
 	free (req);
+	_ep->attr->cm.shutdown_received = 0;
+	_ep->attr->is_disabled = 0;
 	return 0;
 
 err:
@@ -851,7 +904,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param,
 	memcpy(&_ep->attr->cm_addr, addr, sizeof(*addr));
 
 	response->hdr.type = SOCK_CONN_ACCEPT;
-	req->hdr.msg_id = _ep->attr->cm.next_msg_id++;
+	response->hdr.msg_id = _ep->attr->cm.next_msg_id++;
 	response->hdr.s_port = htons(atoi(_ep->attr->listener.service));
 
 	if (sock_ep_cm_enqueue_msg(&_ep->attr->cm, addr, response,
@@ -1071,7 +1124,8 @@ static void *sock_pep_listener_thread(void *data)
 	while (*((volatile int *) &pep->cm.do_listen)) {
 		timeout = dlist_empty(&pep->cm.msg_list) ? -1 :
 					SOCK_CM_COMM_TIMEOUT;
-		if (poll(poll_fds, 2, timeout) > 0) {
+		ret = poll(poll_fds, 2, timeout);
+		if (ret > 0) {
 			if (poll_fds[1].revents & POLLIN) {
 				ret = ofi_read_socket(pep->cm.signal_fds[1], &tmp, 1);
 				if (ret != 1)

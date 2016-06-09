@@ -155,6 +155,7 @@ static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 		}
 
 		dlistfd_remove(list, &sock_eq->err_list);
+		dlistfd_reset(&sock_eq->list);
 		free(entry);
 	}
 
