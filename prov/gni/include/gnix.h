@@ -353,6 +353,10 @@ struct gnix_fid_domain {
 	fastlock_t mr_cache_lock;
 	struct gnix_mr_ops *mr_ops;
 	int mr_cache_type;
+	/* flag to indicate that memory registration is initialized and should not
+	 * be changed at this point.
+	 */
+	int mr_is_init;
 	int udreg_reg_limit;
 #ifdef HAVE_UDREG
 	udreg_cache_handle_t udreg_cache;

@@ -45,6 +45,12 @@
 
 gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
 
+static char *__gnix_mr_type_to_str[GNIX_MR_MAX_TYPE] = {
+		[GNIX_MR_TYPE_INTERNAL] = "internal",
+		[GNIX_MR_TYPE_UDREG] = "udreg",
+		[GNIX_MR_TYPE_NONE] = "none",
+};
+
 /*******************************************************************************
  * Forward declaration for ops structures.
  ******************************************************************************/
@@ -244,6 +250,17 @@ static const uint32_t default_tx_cq_size = 2048;
 static const uint32_t default_max_retransmits = 5;
 static const int32_t default_err_inject_count; /* static var is zeroed */
 
+static int __gnix_string_to_mr_type(const char *name)
+{
+	int i;
+	for (i = 0; i < GNIX_MR_MAX_TYPE; i++)
+		if (strncmp(name, __gnix_mr_type_to_str[i],
+				strlen(__gnix_mr_type_to_str[i])) == 0)
+			return i;
+
+	return -1;
+}
+
 static int
 __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 {
@@ -305,9 +322,8 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_MR_CACHE_LAZY_DEREG:
 		*(int32_t *)val = domain->mr_cache_attr.lazy_deregistration;
 		break;
-	case GNI_MR_CACHE_UDREG:
-		*(int32_t *)val = (domain->mr_cache_type == GNIX_MR_TYPE_UDREG ?
-				1 : 0);
+	case GNI_MR_CACHE:
+		*(char **) val = __gnix_mr_type_to_str[domain->mr_cache_type];
 		break;
 	case GNI_MR_UDREG_REG_LIMIT:
 		*(int32_t *)val = domain->udreg_reg_limit;
@@ -326,7 +342,7 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 	gni_return_t grc = GNI_RC_SUCCESS;
 	struct gnix_nic *nic;
 	struct gnix_fid_domain *domain;
-	int ret;
+	int ret, type;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
@@ -399,9 +415,19 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_MR_CACHE_LAZY_DEREG:
 		domain->mr_cache_attr.lazy_deregistration = *(int32_t *)val;
 		break;
-	case GNI_MR_CACHE_UDREG:
-		if ((*(int32_t *) val) != 0) {
-			ret = _gnix_open_cache(domain, GNIX_MR_TYPE_UDREG);
+	case GNI_MR_CACHE:
+		if (val != NULL) {
+			GNIX_DEBUG(FI_LOG_DOMAIN, "user provided value=%s\n",
+					*(char **) val);
+
+			type = __gnix_string_to_mr_type(*(const char **) val);
+			if (type < 0 || type >= GNIX_MR_MAX_TYPE)
+				return -FI_EINVAL;
+
+			GNIX_DEBUG(FI_LOG_DOMAIN, "setting domain mr type to %s\n",
+					__gnix_mr_type_to_str[type]);
+
+			ret = _gnix_open_cache(domain, type);
 			if (ret != FI_SUCCESS)
 				return -FI_EINVAL;
 		}
@@ -543,6 +569,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->control_progress = info->domain_attr->control_progress;
 	domain->data_progress = info->domain_attr->data_progress;
 	domain->thread_model = info->domain_attr->threading;
+	domain->mr_is_init = 0;
 	fastlock_init(&domain->cm_nic_lock);
 
 	domain->mr_cache_type = GNIX_DEFAULT_CACHE_TYPE;

@@ -128,6 +128,13 @@ static void internal_mr_setup(void)
 	_gnix_open_cache(domain, GNIX_MR_TYPE_INTERNAL);
 }
 
+static void no_cache_setup(void)
+{
+	_mr_setup();
+
+	_gnix_open_cache(domain, GNIX_MR_TYPE_NONE);
+}
+
 TestSuite(mr_internal_bare, .init = internal_mr_setup, .fini = mr_teardown);
 
 TestSuite(mr_internal_cache, .init = internal_mr_setup, .fini = mr_teardown);
@@ -138,6 +145,11 @@ TestSuite(mr_udreg_cache, .init = udreg_setup, .fini = mr_teardown);
 TestSuite(perf_mr_udreg, .init = udreg_setup, .fini = mr_teardown,
 		.disabled = true);
 #endif
+
+TestSuite(mr_no_cache, .init = no_cache_setup, .fini = mr_teardown);
+
+TestSuite(perf_mr_no_cache, .init = no_cache_setup, .fini = mr_teardown,
+		.disabled = true);
 
 TestSuite(perf_mr_internal, .init = internal_mr_setup, .fini = mr_teardown,
 		.disabled = true);
@@ -945,11 +957,7 @@ Test(mr_internal_cache, regression_615)
 	free(buffer);
 }
 
-#ifdef HAVE_UDREG
-/* Test registration of 1024 elements, all distinct. Cache element counts
- *   should meet expected values
- */
-Test(mr_udreg_cache, register_1024_distinct_regions)
+void simple_register_1024_distinct_regions(void)
 {
 	int ret;
 	uint64_t **buffers;
@@ -992,61 +1000,75 @@ Test(mr_udreg_cache, register_1024_distinct_regions)
 	buffer = NULL;
 }
 
+void simple_register_1024_non_unique_regions(void)
+{
+	int ret;
+		char *hugepage;
+		struct fid_mr *hugepage_mr;
+		char **buffers;
+		struct fid_mr **mr_arr;
+		int i;
+
+		mr_arr = calloc(regions, sizeof(struct fid_mr *));
+		cr_assert(mr_arr);
+
+		buffers = calloc(regions, sizeof(uint64_t *));
+		cr_assert(buffers, "failed to allocate array of buffers");
+
+		hugepage = calloc(regions * regions, sizeof(char));
+		cr_assert(hugepage);
+
+		for (i = 0; i < regions; ++i) {
+			buffers[i] = &hugepage[i * regions];
+			cr_assert(buffers[i]);
+		}
+
+		ret = fi_mr_reg(dom, (void *) hugepage,
+				regions * regions * sizeof(char),
+				default_access, default_offset, default_req_key,
+				default_flags, &hugepage_mr, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		for (i = 0; i < regions; ++i) {
+			ret = fi_mr_reg(dom, (void *) buffers[i], regions,
+					default_access,	default_offset, default_req_key,
+					default_flags, &mr_arr[i], NULL);
+			cr_assert(ret == FI_SUCCESS);
+		}
+
+		for (i = 0; i < regions; ++i) {
+			ret = fi_close(&mr_arr[i]->fid);
+			cr_assert(ret == FI_SUCCESS);
+		}
+
+		ret = fi_close(&hugepage_mr->fid);
+		cr_assert(ret == FI_SUCCESS);
+
+		free(hugepage);
+		hugepage = NULL;
+
+		free(buffers);
+		buffers = NULL;
+
+		free(mr_arr);
+		mr_arr = NULL;
+}
+
+#ifdef HAVE_UDREG
+/* Test registration of 1024 elements, all distinct. Cache element counts
+ *   should meet expected values
+ */
+Test(mr_udreg_cache, register_1024_distinct_regions)
+{
+	simple_register_1024_distinct_regions();
+}
+
 /* Test registration of 1024 registrations backed by the same initial
  *   registration. There should only be a single registration in the cache
  */
 Test(mr_udreg_cache, register_1024_non_unique_regions)
 {
-	int ret;
-	char *hugepage;
-	struct fid_mr *hugepage_mr;
-	char **buffers;
-	struct fid_mr **mr_arr;
-	int i;
-
-	mr_arr = calloc(regions, sizeof(struct fid_mr *));
-	cr_assert(mr_arr);
-
-	buffers = calloc(regions, sizeof(uint64_t *));
-	cr_assert(buffers, "failed to allocate array of buffers");
-
-	hugepage = calloc(regions * regions, sizeof(char));
-	cr_assert(hugepage);
-
-	for (i = 0; i < regions; ++i) {
-		buffers[i] = &hugepage[i * regions];
-		cr_assert(buffers[i]);
-	}
-
-	ret = fi_mr_reg(dom, (void *) hugepage,
-			regions * regions * sizeof(char),
-			default_access, default_offset, default_req_key,
-			default_flags, &hugepage_mr, NULL);
-	cr_assert(ret == FI_SUCCESS);
-
-	for (i = 0; i < regions; ++i) {
-		ret = fi_mr_reg(dom, (void *) buffers[i], regions,
-				default_access,	default_offset, default_req_key,
-				default_flags, &mr_arr[i], NULL);
-		cr_assert(ret == FI_SUCCESS);
-	}
-
-	for (i = 0; i < regions; ++i) {
-		ret = fi_close(&mr_arr[i]->fid);
-		cr_assert(ret == FI_SUCCESS);
-	}
-
-	ret = fi_close(&hugepage_mr->fid);
-	cr_assert(ret == FI_SUCCESS);
-
-	free(hugepage);
-	hugepage = NULL;
-
-	free(buffers);
-	buffers = NULL;
-
-	free(mr_arr);
-	mr_arr = NULL;
+	simple_register_1024_non_unique_regions();
 }
 
 Test(perf_mr_udreg, repeated_registration)
@@ -1056,12 +1078,40 @@ Test(perf_mr_udreg, repeated_registration)
 
 Test(perf_mr_udreg, single_large_registration)
 {
-	_single_large_registration("udred");
+	_single_large_registration("udreg");
 }
 
 Test(perf_mr_udreg, random_analysis)
 {
 	_random_analysis("udreg");
 }
-
 #endif
+
+
+Test(mr_no_cache, register_1024_distinct_regions)
+{
+	simple_register_1024_distinct_regions();
+}
+
+/* Test registration of 1024 registrations backed by the same initial
+ *   registration. There should only be a single registration in the cache
+ */
+Test(mr_no_cache, register_1024_non_unique_regions)
+{
+	simple_register_1024_non_unique_regions();
+}
+
+Test(perf_mr_no_cache, repeated_registration)
+{
+	_repeated_registration("no caching");
+}
+
+Test(perf_mr_no_cache, single_large_registration)
+{
+	_single_large_registration("no caching");
+}
+
+Test(perf_mr_no_cache, random_analysis)
+{
+	_random_analysis("no caching");
+}
