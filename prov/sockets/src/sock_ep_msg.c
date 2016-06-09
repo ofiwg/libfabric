@@ -506,6 +506,7 @@ static int sock_ep_cm_send_ack(struct sock_cm_entry *cm,
 				struct sockaddr_in *addr, uint64_t msg_id)
 {
 	int ret;
+	char sa_ip[INET_ADDRSTRLEN] = {0};
 	struct sock_conn_response conn_response;
 
 	memset(&conn_response, 0, sizeof(conn_response));
@@ -514,7 +515,8 @@ static int sock_ep_cm_send_ack(struct sock_cm_entry *cm,
 
 	ret = sendto(cm->sock, &conn_response, sizeof(conn_response), 0,
 		     (struct sockaddr *) addr, sizeof(*addr));
-	SOCK_LOG_DBG("Total Sent: %d\n", ret);
+	memcpy(sa_ip, inet_ntoa(addr->sin_addr), INET_ADDRSTRLEN);
+	SOCK_LOG_DBG("Total Sent %d to %s:%d\n", ret, sa_ip, ntohs(addr->sin_port));
 	sock_ep_cm_flush_msg(cm);
 	return (ret == sizeof(conn_response)) ? 0 : -1;
 }
@@ -573,6 +575,37 @@ static void sock_ep_cm_handle_ack(struct sock_ep *sock_ep,
 	fastlock_release(&sock_ep->attr->cm.lock);
 }
 
+static void sock_pep_cm_handle_ack(struct sock_cm_entry *cm,
+				    struct sock_conn_hdr *hdr)
+{
+	struct sock_conn_hdr *msg_hdr;
+	struct dlist_entry *entry;
+	struct sock_cm_msg_list_entry *msg_entry;
+
+	fastlock_acquire(&cm->lock);
+	for (entry = cm->msg_list.next; entry != &cm->msg_list;) {
+		msg_entry = container_of(entry, struct sock_cm_msg_list_entry,
+					  entry);
+		msg_hdr = (struct sock_conn_hdr *) msg_entry->msg;
+
+		if (msg_hdr->msg_id == hdr->msg_id) {
+			switch (msg_hdr->type) {
+			case SOCK_CONN_REJECT:
+				SOCK_LOG_DBG("Got ack for SOCK_CONN_REJECT\n");
+				break;
+
+			default:
+				SOCK_LOG_DBG("Invalid event: %d\n", msg_hdr->type);
+				break;
+			}
+			dlist_remove(entry);
+			free(msg_entry);
+			break;
+		}
+		entry = entry->next;
+	}
+	fastlock_release(&cm->lock);
+}
 
 static void *sock_msg_ep_listener_thread(void *data)
 {
@@ -691,7 +724,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 						&conn_response->user_data,
 						user_data_sz))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
-			goto out;
+			break;
 
 		case SOCK_CONN_SHUTDOWN:
 			SOCK_LOG_DBG("Received SOCK_CONN_SHUTDOWN\n");
@@ -1116,6 +1149,10 @@ static void *sock_pep_listener_thread(void *data)
 						 entry_sz, 0))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			break;
+		case SOCK_CONN_ACK:
+			SOCK_LOG_DBG("Received SOCK_CONN_ACK\n");
+			sock_pep_cm_handle_ack(&pep->cm, &conn_req->hdr);
+			break;
 
 		default:
 			SOCK_LOG_ERROR("Invalid event: %d\n", conn_req->hdr.type);
@@ -1185,9 +1222,9 @@ static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 
 	addr = &req->from_addr;
 	response->hdr.type = SOCK_CONN_REJECT;
-	req->hdr.msg_id = _pep->cm.next_msg_id++;
+	response->hdr.msg_id = _pep->cm.next_msg_id++;
 
-	if (sock_ep_cm_enqueue_msg(&_pep->cm, addr, req,
+	if (sock_ep_cm_enqueue_msg(&_pep->cm, addr, response,
 				   sizeof(struct sock_conn_response),
 				   &_pep->pep.fid, _pep->eq)) {
 		ret = -FI_EIO;
