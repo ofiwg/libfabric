@@ -30,6 +30,9 @@
  * SOFTWARE.
  */
 
+#ifndef _FREEBSD_OSD_H_
+#define _FREEBSD_OSD_H_
+
 #include <sys/endian.h>
 #include <pthread_np.h>
 
@@ -40,3 +43,12 @@
 #define HOST_NAME_MAX  128
 
 typedef cpuset_t cpu_set_t;
+
+static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
+{
+	return -1;
+}
+
+#endif /* _FREEBSD_OSD_H_ */
+
+

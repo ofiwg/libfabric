@@ -54,6 +54,7 @@
 #include <fi_rbuf.h>
 #include <fi_list.h>
 #include <fi_file.h>
+#include <fi_osd.h>
 #include <rbtree.h>
 
 #ifndef _SOCK_H_
@@ -327,8 +328,8 @@ struct sock_av {
 	struct sock_av_table_hdr *table_hdr;
 	struct sock_av_addr *table;
 	uint64_t *idx_arr;
-	char *name;
-	int shared_fd;
+	struct util_shm shm;
+	int    shared;
 };
 
 struct sock_fid_list {

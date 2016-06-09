@@ -24,6 +24,7 @@
 #include <errno.h>
 #include "pthread.h"
 
+#include <rdma/fi_errno.h>
 #include <rdma/fabric.h>
 
 #ifdef __cplusplus
@@ -33,6 +34,15 @@ extern "C" {
 #define LITTLE_ENDIAN 5678
 #define BIG_ENDIAN 8765
 #define BYTE_ORDER LITTLE_ENDIAN
+
+struct util_shm
+{ /* this is dummy structure to provide compilation on Windows platform. */
+  /* will be updated on real Windows implementation */
+	int		shared_fd;
+	void		*ptr;
+	const char	*name;
+	size_t		size;
+};
 
 static inline void ofi_osd_init()
 {
@@ -113,7 +123,7 @@ static inline int ffsll(long long val)
 	return 0;
 }
 
-static inline int asprintf(char** ptr, const char* format, ...)
+static inline int asprintf(char **ptr, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
@@ -127,7 +137,7 @@ static inline int asprintf(char** ptr, const char* format, ...)
 	return len;
 }
 
-static inline char* strsep(char** stringp, const char* delim)
+static inline char* strsep(char **stringp, const char *delim)
 {
 	char* ptr = *stringp;
 	char* p;
@@ -200,6 +210,34 @@ static inline int fi_fd_nonblock(int fd)
 static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
 {
 	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
+}
+
+static inline int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
+				int readonly, void **mapped)
+{
+	OFI_UNUSED(shm);
+	OFI_UNUSED(name);
+	OFI_UNUSED(size);
+	OFI_UNUSED(readonly);
+	OFI_UNUSED(mapped);
+
+	return -FI_ENOENT;
+}
+
+static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
+{
+	OFI_UNUSED(shm);
+	OFI_UNUSED(newsize);
+	OFI_UNUSED(mapped);
+
+	return -FI_ENOENT;
+}
+
+static inline int ofi_shm_unmap(struct util_shm *shm)
+{
+	OFI_UNUSED(shm);
+
+	return -FI_ENOENT;
 }
 
 #ifdef __cplusplus

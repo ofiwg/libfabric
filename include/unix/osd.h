@@ -37,6 +37,14 @@
 #include <unistd.h>
 #include <errno.h>
 
+struct util_shm
+{
+	int		shared_fd;
+	void		*ptr;
+	const char	*name;
+	size_t		size;
+};
+
 static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
 {
 	return posix_memalign(memptr, alignment, size);

@@ -34,9 +34,17 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "fi_osd.h"
 #include "fi_file.h"
+
+#include "rdma/fi_errno.h"
+#include "rdma/providers/fi_log.h"
+
+extern struct fi_provider core_prov;
 
 int fi_fd_nonblock(int fd)
 {
@@ -66,5 +74,104 @@ int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
 	return pthread_cond_timedwait(cond, mut, &ts);
 }
 
+int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
+		int readonly, void **mapped)
+{
+	char *fname = 0;
+	int ret = FI_SUCCESS;
+	int flags = O_RDWR | (readonly ? 0 : O_CREAT);
+	struct stat mapstat;
+
+	int i;
+
+	*mapped = MAP_FAILED;
+	memset(shm, 0, sizeof(*shm));
+
+	fname = calloc(1, strlen(name) + 2); /* '/' + %s + trailing 0 */
+	if (!fname) {
+		ret = -FI_ENOMEM;
+		goto failed;
+	}
+	strcpy(fname, "/");
+	strcat(fname, name);
+	shm->name = fname;
+
+	for (i = 0; i < strlen(fname); i++) {
+		if (fname[i] == ' ')
+			fname[i] = '_';
+	}
+
+	FI_DBG(&core_prov, FI_LOG_CORE,
+		"Creating shm segment :%s (size: %lu)\n", fname, size);
+
+	shm->shared_fd = shm_open(fname, flags, S_IRUSR | S_IWUSR);
+	if (shm->shared_fd < 0) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "shm_open failed\n");
+		ret = -FI_EINVAL;
+		goto failed;
+	}
+
+	if (fstat(shm->shared_fd, &mapstat)) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "failed to do fstat: %s\n",
+			strerror(errno));
+		ret = -FI_EINVAL;
+		goto failed;
+	}
+
+	if (mapstat.st_size == 0) {
+		if (ftruncate(shm->shared_fd, size)) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"ftruncate failed: %s\n", strerror(errno));
+			ret = -FI_EINVAL;
+			goto failed;
+		}
+	} else if (mapstat.st_size < size) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "shm file too small\n");
+		ret = -FI_EINVAL;
+		goto failed;
+	}
+
+	shm->ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
+				MAP_SHARED, shm->shared_fd, 0);
+	if (shm->ptr == MAP_FAILED) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"mmap failed: %s\n", strerror(errno));
+		ret = -FI_EINVAL;
+		goto failed;
+	}
+
+	*mapped = shm->ptr;
+
+	return ret;
+
+failed:
+	if (shm->shared_fd >= 0) {
+		close(shm->shared_fd);
+		shm_unlink(fname);
+	}
+	if (fname)
+		free(fname);
+	memset(shm, 0, sizeof(*shm));
+	return ret;
+}
+
+int ofi_shm_unmap(struct util_shm* shm)
+{
+	if (shm->ptr && shm->ptr != MAP_FAILED) {
+		if (munmap(shm->ptr, shm->size)) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"munmap failed: %s\n", strerror(errno));
+		}
+	}
+
+	if (shm->shared_fd)
+		close(shm->shared_fd);
+	if (shm->name) {
+		shm_unlink(shm->name);
+		free((void*)shm->name);
+	}
+	memset(shm, 0, sizeof(*shm));
+	return FI_SUCCESS;
+}
 
 

@@ -55,6 +55,7 @@
 #include <fi_rbuf.h>
 #include <fi_signal.h>
 #include <fi_enosys.h>
+#include <fi_osd.h>
 
 #ifndef _FI_UTIL_H_
 #define _FI_UTIL_H_
@@ -410,4 +411,9 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 			int get_base_info, struct fi_info **info);
 char *ofi_strdup_less_prefix(char *name, char *prefix);
 char *ofi_strdup_add_prefix(char *name, char *prefix);
+
+int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
+		int readonly, void **mapped);
+int ofi_shm_unmap(struct util_shm *shm);
+
 #endif

@@ -30,5 +30,26 @@
  * SOFTWARE.
  */
 
+#ifndef _LINUX_OSD_H_
+#define _LINUX_OSD_H_
+
+/*#define _GNU_SOURCE*/
+
 #include <byteswap.h>
 #include <endian.h>
+#include <sys/mman.h>
+
+#include "unix/osd.h"
+#include "rdma/fi_errno.h"
+
+static inline int ofi_shm_remap(struct util_shm *shm,
+				size_t newsize, void **mapped)
+{
+	shm->ptr = mremap(shm->ptr, shm->size, newsize, 0);
+	shm->size = newsize;
+	*mapped = shm->ptr;
+	return shm->ptr == MAP_FAILED ? -FI_EINVAL : FI_SUCCESS;
+}
+
+#endif /* _LINUX_OSD_H_ */
+
