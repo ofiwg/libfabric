@@ -106,9 +106,7 @@ enum gnix_dgram_type {
 
 enum gnix_dgram_state {
 	GNIX_DGRAM_STATE_FREE,
-	GNIX_DGRAM_STATE_CONNECTING,
-	GNIX_DGRAM_STATE_LISTENING,
-	GNIX_DGRAM_STATE_CONNECTED
+	GNIX_DGRAM_STATE_ACTIVE
 };
 
 enum gnix_dgram_buf {
