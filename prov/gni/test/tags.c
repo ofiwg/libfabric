@@ -615,6 +615,10 @@ static void multiple_insert_peek_remove_by_order(
 	for (i = 0; i < requests; i++)
 		reqs[i].claimed = 0;
 
+	/* reset the dlist state as appropriate for a new request */
+	for (i = 0; i < requests; i++)
+		dlist_init(&reqs[i].req.msg.tle.free);
+
 	/* establish correct removal order based on passed in removal order */
 	for (i = 0; i < requests; i++) {
 		to_remove = &reqs[removal_order[i]];
@@ -984,6 +988,10 @@ static inline void __test_not_found_non_empty(void)
 
 	memcpy(reqs, default_reqs, sizeof(struct gnix_fr_element) * 8);
 
+	/* reset the dlist state as appropriate for a new request */
+	for (i = 0; i < requests; i++)
+		dlist_init(&reqs[i].req.msg.tle.free);
+
 	for (i = 0; i < requests; i++) {
 		ret = _gnix_insert_tag(test_tag_storage,
 				reqs[i].req.msg.tag, &reqs[i].req,
@@ -1065,6 +1073,8 @@ static inline void __test_claim_pass(
 	};
 	struct gnix_fab_req *found;
 
+	dlist_init(&request.req.msg.tle.free);
+
 	ret = _gnix_insert_tag(
 			test_tag_storage, request.req.msg.tag,
 			&request.req, request.ignore);
@@ -1098,6 +1108,8 @@ static inline void __test_fail_no_claimed_tags(
 		.remove_flags = FI_CLAIM,
 		.context = (void *) 0xDEADBEEF,
 	};
+
+	dlist_init(&request.req.msg.tle.free);
 
 	ret = _gnix_insert_tag(
 			test_tag_storage, request.req.msg.tag,
@@ -1139,6 +1151,10 @@ static inline void __test_fail_all_claimed_tags(
 	};
 	struct gnix_fab_req *found;
 
+	/* reset the dlist state as appropriate for a new request */
+	dlist_init(&request.req.msg.tle.free);
+
+
 	ret = _gnix_insert_tag(
 			test_tag_storage, request.req.msg.tag,
 			&request.req, request.ignore);
@@ -1178,6 +1194,8 @@ static inline void __test_fail_peek_all_claimed(
 	};
 	struct gnix_fab_req *found;
 
+	dlist_init(&request.req.msg.tle.free);
+
 	ret = _gnix_insert_tag(
 			test_tag_storage, request.req.msg.tag,
 			&request.req, request.ignore);
@@ -1216,6 +1234,8 @@ static inline void __test_src_addr_match(
 		.peek_flags = FI_PEEK,
 	};
 	struct gnix_fab_req *found;
+
+	dlist_init(&request.req.msg.tle.free);
 
 	ret = _gnix_insert_tag(
 			test_tag_storage, request.req.msg.tag,
@@ -1259,6 +1279,8 @@ static inline void __test_src_addr_fail_wrong_src_addr(
 			.cdm_id = 1,
 			.device_addr = 2,
 	};
+
+	dlist_init(&request.req.msg.tle.free);
 
 	/* hack, don't actually do this */
 	test_tag_storage->attr.use_src_addr_matching = 1;
@@ -1312,6 +1334,7 @@ static inline void __test_src_addr_match_unspec(
 			.device_addr = -1,
 	};
 
+	dlist_init(&request.req.msg.tle.free);
 
 	if (test_tag_storage->match_func == _gnix_match_posted_tag) {
 		/* swap addresses because posted tag receives check
@@ -1415,6 +1438,30 @@ Test(gnix_tags_bare, initialize_list)
 	ret = _gnix_tag_storage_destroy(test_tag_storage);
 	cr_assert(ret == FI_SUCCESS);
 }
+
+Test(gnix_tags_bare, simple)
+{
+	int ret;
+	struct gnix_fab_req req, *tmp;
+	dlist_init(&req.msg.tle.free);
+
+	ret = _gnix_tag_storage_init(test_tag_storage, &default_list_attr,
+			match_func);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = _gnix_insert_tag(test_tag_storage, 0xdeadbeef, &req, 0);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = _gnix_insert_tag(test_tag_storage, 0xdeadbeef, &req, 0);
+	cr_assert(ret == -FI_EALREADY);
+
+	tmp = _gnix_match_tag(test_tag_storage, 0xdeadbeef, 0, 0, 0, 0);
+	cr_assert(&req == tmp);
+
+	ret = _gnix_tag_storage_destroy(test_tag_storage);
+	cr_assert(ret == FI_SUCCESS);
+}
+
 
 
 Test(gnix_tags_bare, initialize_hlist)
