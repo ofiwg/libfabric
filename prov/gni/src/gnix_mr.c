@@ -470,6 +470,9 @@ static int __udreg_init(struct gnix_fid_domain *domain)
 		.destructor_callback =  __udreg_cache_destructor,
 	};
 
+	if (domain->mr_cache_attr.lazy_deregistration)
+		udreg_cache_attr.modes |= UDREG_CC_MODE_USE_LAZY_DEREG;
+
 	/*
 	 * Create a udreg cache for application memory registrations.
 	 */
