@@ -964,6 +964,7 @@ int sock_ep_enable(struct fid_ep *ep)
 	if (sock_ep->attr->ep_type != FI_EP_MSG &&
 	    !sock_ep->attr->listener.listener_thread && sock_conn_listen(sock_ep->attr))
 		SOCK_LOG_ERROR("cannot start connection thread\n");
+	sock_ep->attr->is_disabled = 0;
 	return 0;
 }
 
@@ -1013,8 +1014,10 @@ static int sock_ep_getopt(fid_t fid, int level, int optname,
 		break;
 
 	case FI_OPT_CM_DATA_SIZE:
-		if (*optlen < sizeof(size_t))
+		if (*optlen < sizeof(size_t)) {
+			*optlen = sizeof(size_t);
 			return -FI_ETOOSMALL;
+		}
 		*((size_t *) optval) = SOCK_EP_MAX_CM_DATA_SZ;
 		*optlen = sizeof(size_t);
 		break;
