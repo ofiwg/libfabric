@@ -61,10 +61,6 @@
 
 #if 0
 #define MR_DBG(fmt, args...) fprintf(stderr, fmt, ##args)
-#else
-#define MR_DBG(fmt, args...)
-#endif
-
 #define HOOK_DEBUG(message, args...) \
 	MR_DBG("%s:%d - " message, func, line, ##args)
 #define HOOK_ASSERT(cond, message, args...) \
@@ -72,6 +68,13 @@
 		if (!(cond)) \
 			HOOK_DEBUG(message, args); \
 	} while (0)
+#else
+#define MR_DBG(fmt, args...)
+#define HOOK_DEBUG(message, args...) do { } while (0)
+#define HOOK_ASSERT(cond, message, args...) do { } while (0)
+#endif
+
+
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
