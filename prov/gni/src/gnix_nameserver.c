@@ -229,11 +229,13 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	ret =  __gnix_ipaddr_from_iface("ipogif0", &sin);
 	if (ret != FI_SUCCESS)
 		ret =  __gnix_ipaddr_from_iface("br0", &sin);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_FABRIC,
-				  "Unable to obtain local iface addr\n");
-			goto err;
-		}
+
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "Unable to obtain local iface addr\n");
+		goto err;
+	}
+
 
 	ret = getaddrinfo(node, service, &hints, &result);
 	if (ret != 0) {
