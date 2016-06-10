@@ -816,7 +816,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 
 	_ep = container_of(ep, struct sock_ep, ep);
 	_eq = _ep->attr->eq;
-	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ)
+	if (!_eq || !addr || (paramlen > SOCK_EP_MAX_CM_DATA_SZ))
 		return -FI_EINVAL;
 
 	if (!_ep->attr->listener.listener_thread && sock_conn_listen(_ep->attr))
@@ -832,7 +832,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	req->hdr.msg_id = _ep->attr->cm.next_msg_id++;
 	req->info = _ep->attr->info;
 	memcpy(&req->src_addr, _ep->attr->src_addr, sizeof(req->src_addr));
-	memcpy(&req->dest_addr, _ep->attr->info.dest_addr, sizeof(req->dest_addr));
+	memcpy(&req->dest_addr, addr, sizeof(req->dest_addr));
 	req->tx_attr = *_ep->attr->info.tx_attr;
 	req->rx_attr = *_ep->attr->info.rx_attr;
 	req->ep_attr = *_ep->attr->info.ep_attr;
