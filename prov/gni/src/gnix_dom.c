@@ -236,6 +236,8 @@ err:
  */
 
 static const uint32_t default_msg_rendezvous_thresh = 16*1024;
+/* default_iov_limit = default_msg_rendezvous_thresh / sizeof(struct iovec) */
+static const uint16_t default_iov_limit = 1024;
 static const uint32_t default_rma_rdma_thresh = 8*1024;
 static const uint32_t default_ct_init_size = 64;
 static const uint32_t default_ct_max_size = 16384;
@@ -335,6 +337,9 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_ERR_INJECT_COUNT:
 		*(int32_t *)val = domain->params.err_inject_count;
+		break;
+	case GNI_IOV_LIMIT:
+		*(uint16_t *)val = domain->params.iov_limit;
 		break;
 	case GNI_MR_CACHE_LAZY_DEREG:
 		*(int32_t *)val = domain->mr_cache_attr.lazy_deregistration;
@@ -437,6 +442,9 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_ERR_INJECT_COUNT:
 		domain->params.err_inject_count = *(int32_t *)val;
+		break;
+	case GNI_IOV_LIMIT:
+		domain->params.iov_limit = *(uint16_t *)val;
 		break;
 	case GNI_MR_CACHE_LAZY_DEREG:
 		domain->mr_cache_attr.lazy_deregistration = *(int32_t *)val;
@@ -579,6 +587,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	/* user tunables */
 	domain->params.msg_rendezvous_thresh = default_msg_rendezvous_thresh;
+	domain->params.iov_limit = default_iov_limit;
 	domain->params.rma_rdma_thresh = default_rma_rdma_thresh;
 	domain->params.ct_init_size = default_ct_init_size;
 	domain->params.ct_max_size = default_ct_max_size;

@@ -84,9 +84,12 @@ typedef int (*smsg_completer_fn_t)(void  *desc, gni_return_t);
  * @var gni_nic_hndl         optional previously allocated gni_nic_hndl to
  *                           use for allocating GNI resources (GNI CQs) for
  *                           this nic
+ *
+ * @var gni_cdm_modes	     The mode bits gni_cdm_hndl was created with.
  */
 struct gnix_nic_attr {
 	gni_cdm_handle_t gni_cdm_hndl;
+	uint32_t	 gni_cdm_modes;
 	gni_nic_handle_t gni_nic_hndl;
 	bool use_cdm_id;
 	uint32_t cdm_id;
@@ -102,6 +105,7 @@ struct gnix_nic_attr {
  *                           gni_nic_hndl, rx_cq, and tx_cq
  * @var gni_cdm_hndl         handle for the GNI communication domain (CDM)
  *                           this nic is bound to.
+ * @var gni_cdm_modes	     The mode bits gni_cdm_hndl was created with.
  * @var gni_nic_hndl         handle for the GNI nic to which this GNIX nic is bound
  * @var rx_cq                GNI rx cq (non-blocking) bound to this nic
  * @var rx_cq_blk            GNI rx cq (blocking) bound to this nic
@@ -156,6 +160,7 @@ struct gnix_nic {
 	fastlock_t lock;
 	uint32_t allocd_gni_res;
 	gni_cdm_handle_t gni_cdm_hndl;
+	uint32_t	 gni_cdm_modes;
 	gni_nic_handle_t gni_nic_hndl;
 	gni_cq_handle_t rx_cq;
 	gni_cq_handle_t rx_cq_blk;
@@ -243,6 +248,32 @@ struct gnix_smsg_rndzv_start_hdr {
 };
 
 /**
+ * gnix_smsg_rndzv_iov_start_hdr
+ *
+ * @var flags	      the sender's flags needed on the receive side.
+ * @var imm	      the immediate data associated with this message.
+ * @var msg_tag       the tag associated with this message.
+ * @var mdh	      the memory handle associated with the iov buffer.
+ * @var iov_cnt       the length of the scatter/gather vector.
+ * @var req_addr      the sender's fabric request address.
+ * @var send_addr     the client's iov addr for the remote CQE.
+ * @var send_len      the cumulative size (in bytes) of the client's
+ * iov base buffers.
+ *
+ * @note the actual iov base addresses and lengths are placed in the
+ * data section of the start message.
+ */
+struct gnix_smsg_rndzv_iov_start_hdr {
+	uint64_t flags;
+	uint64_t imm;
+	uint64_t msg_tag;
+	uint64_t req_addr;
+	size_t iov_cnt;
+	uint64_t send_addr;
+	uint64_t send_len;
+};
+
+/**
  * gnix_smsg_rndzv_fin_hdr  - first part of a rendezvous send fin SMSG message
  *
  * @var req_addr   returned local request address
@@ -297,16 +328,17 @@ struct gnix_smsg_amo_cntr_hdr {
  */
 struct gnix_tx_descriptor {
 	struct dlist_entry          list;
+	struct slist_entry	    slist;
 	union {
 		struct {
 			gni_post_descriptor_t        gni_desc;
 			gni_ct_get_post_descriptor_t gni_ct_descs[2];
 		};
-		struct gnix_smsg_eager_hdr       eager_hdr;
-		struct gnix_smsg_rndzv_start_hdr rndzv_start_hdr;
-		struct gnix_smsg_rndzv_fin_hdr   rndzv_fin_hdr;
-		struct gnix_smsg_rma_data_hdr    rma_data_hdr;
-		struct gnix_smsg_amo_cntr_hdr    amo_cntr_hdr;
+		struct gnix_smsg_eager_hdr           eager_hdr;
+		struct gnix_smsg_rndzv_start_hdr     rndzv_start_hdr;
+		struct gnix_smsg_rndzv_iov_start_hdr rndzv_iov_start_hdr;
+		struct gnix_smsg_rndzv_fin_hdr       rndzv_fin_hdr;
+		struct gnix_smsg_rma_data_hdr        rma_data_hdr;
 	};
 	struct gnix_fab_req *req;
 	int  (*completer_fn)(void *, gni_return_t);

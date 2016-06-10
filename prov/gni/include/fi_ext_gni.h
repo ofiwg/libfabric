@@ -62,6 +62,7 @@ typedef enum dom_ops_val { GNI_MSG_RENDEZVOUS_THRESHOLD,
 			   GNI_MR_SOFT_REG_LIMIT,
 			   GNI_MR_HARD_REG_LIMIT,
 			   GNI_MR_HARD_STALE_REG_LIMIT,
+			   GNI_IOV_LIMIT,
 			   GNI_NUM_DOM_OPS
 } dom_ops_val_t;
 
@@ -106,6 +107,7 @@ struct gnix_ops_domain {
 	uint32_t tx_cq_size;
 	uint32_t max_retransmits;
 	int32_t err_inject_count;
+	uint16_t iov_limit;
 };
 
 #endif /* _FI_EXT_GNI_H_ */

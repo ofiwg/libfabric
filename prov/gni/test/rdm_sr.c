@@ -89,6 +89,8 @@ char *iov_src_buf, *iov_dest_buf;
 char *uc_target;
 char *uc_source;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
+struct fid_mr *iov_dest_buf_mr[NUMEPS], *iov_src_buf_mr[NUMEPS];
+uint64_t iov_dest_buf_mr_key[NUMEPS];
 uint64_t mr_key[NUMEPS];
 
 static struct fid_cntr *send_cntr[NUMEPS], *recv_cntr[NUMEPS];
@@ -219,7 +221,18 @@ void rdm_sr_setup_common(void)
 				FI_REMOTE_WRITE, 0, 0, 0, loc_mr + i, &source);
 		cr_assert_eq(ret, 0);
 
+		ret = fi_mr_reg(dom[i], iov_dest_buf, IOV_CNT * BUF_SZ,
+				FI_REMOTE_WRITE, 0, 0, 0, iov_dest_buf_mr + i,
+				&iov_dest_buf);
+		cr_assert_eq(ret, 0);
+
+		ret = fi_mr_reg(dom[i], iov_src_buf, IOV_CNT * BUF_SZ,
+				FI_REMOTE_WRITE, 0, 0, 0, iov_src_buf_mr + i,
+				&iov_src_buf);
+		cr_assert_eq(ret, 0);
+
 		mr_key[i] = fi_mr_key(rem_mr[i]);
+		iov_dest_buf_mr_key[i] = fi_mr_key(iov_dest_buf_mr[i]);
 	}
 }
 
@@ -640,8 +653,8 @@ void do_sendv(int len)
 	sz = fi_sendv(ep[0], src_iov, NULL, IOV_CNT, gni_addr[1], iov_dest_buf);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], iov_dest_buf, len * IOV_CNT, NULL, gni_addr[0],
-		     src_iov);
+	sz = fi_recv(ep[1], iov_dest_buf, len * IOV_CNT, iov_dest_buf_mr[1],
+		     gni_addr[0], src_iov);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */

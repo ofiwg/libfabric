@@ -503,11 +503,15 @@ struct gnix_fid_av {
 
 enum gnix_fab_req_type {
 	GNIX_FAB_RQ_SEND,
+	GNIX_FAB_RQ_SENDV,
 	GNIX_FAB_RQ_TSEND,
+	GNIX_FAB_RQ_TSENDV,
 	GNIX_FAB_RQ_RDMA_WRITE,
 	GNIX_FAB_RQ_RDMA_READ,
 	GNIX_FAB_RQ_RECV,
+	GNIX_FAB_RQ_RECVV,
 	GNIX_FAB_RQ_TRECV,
+	GNIX_FAB_RQ_TRECVV,
 	GNIX_FAB_RQ_AMO,
 	GNIX_FAB_RQ_FAMO,
 	GNIX_FAB_RQ_CAMO,
@@ -528,22 +532,51 @@ struct gnix_fab_req_rma {
 	gni_return_t             status;
 };
 
+/**
+ * sendv/recvv variable notes.
+ *
+ * @var send_addr	   For sendv rndzv this is the iov addr.
+ * @var send_len	   For sendv this is the cumulative length of the iov
+ * entries.
+ * @var smsg_iov_hdr_addr  A ptr to the smsg iov hdr address so it can be freed
+ * @var send_iov	   For sendv, rndzv, on the remote side, this is a ptr to
+ * the addrs and lengths of the sender's iovec entries.
+ * @var recv_addr	   For recvv this is the iov addr on the remote side.
+ * @var recv_len	   For recvv this is the cumulative length of the iov
+ * entries.
+ * @var send_iov_md	   The sender's memory descriptors.
+ * @var recv_iov_md	   The receiver's memory descriptors.
+ * @var rma_iov_mdh	   The sender's gni mem handles on the receivers request.
+ * @var multi_recv_iov_idx The previous index into the receive buffer for a
+ * subsequent send on a multi_recv req.
+ * @var multi_recv_iov_ptr The previous ptr into the recv buffer for a
+ * subsequent send on a multi_recv req.
+ * @var multi_recv_iov_len The remaining cumulative length of the recv buffer.
+ */
 struct gnix_fab_req_msg {
 	struct gnix_tag_list_element tle;
 	uint64_t                     send_addr;
 	size_t                       send_len;
+	uint64_t		     smsg_iov_hdr_addr;
+	uint64_t		     send_iov;
+	size_t                       send_iov_cnt;
+	struct gnix_fid_mem_desc     **send_iov_md;
 	struct gnix_fid_mem_desc     *send_md;
 	uint64_t                     send_flags;
 	uint64_t                     recv_addr;
 	size_t                       recv_len;
+	size_t			     recv_iov_cnt;
+	struct gnix_fid_mem_desc     **recv_iov_md;
 	struct gnix_fid_mem_desc     *recv_md;
 	uint64_t                     recv_flags; /* protocol, API info */
-	uint64_t		     recv_iov_addr;
-	size_t			     recv_iov_cnt;
 	uint64_t                     tag;
 	uint64_t                     ignore;
 	uint64_t                     imm;
 	gni_mem_handle_t             rma_mdh;
+	gni_mem_handle_t	     *rma_iov_mdh;
+	int32_t			     multi_recv_iov_idx;
+	void			     *multi_recv_iov_ptr;
+	size_t			     multi_recv_iov_len;
 	uint64_t                     rma_id;
 	uint32_t                     rndzv_head;
 	uint32_t                     rndzv_tail;
@@ -755,12 +788,30 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
 	return 0;
 }
 
-/*
+/**
  * Fabric request layout, there is a one to one
  * correspondence between an application's invocation of fi_send, fi_recv
  * and a gnix fab_req.
+ *
+ * @var dlist	     a doubly linked list entry.
+ * @var addr	     the peer's gnix_address associated with this request.
+ * @var type	     the fabric request type
+ * @var gnix_ep      the gni endpoint associated with this request
+ * @var user_context the user context, typically the receive buffer address for
+ * a send or the send buffer address for a receive.
+ * @var vc	      the virtual channel or connection edge between the sender
+ * and receiver.
+ * @var work_fn	     the function called by the nic progress loop to initiate
+ * the fabric request.
+ * @var flags	      a set of bit patterns that apply to all message types
+ * @var txd	      the transmission descriptor used to track GNI SMSG and
+ * Post operations.
+ * @var iov_txd_slist A slist of pending Rdma/CtFma GET txds.
+ * @var tx_failures   tx failure bits.
+ * @var rma	      GNI PostRdma request
+ * @var msg	      GNI SMSG request
+ * @var amo	      GNI Fma request
  */
-
 struct gnix_fab_req {
 	struct dlist_entry        dlist;
 	struct gnix_address       addr;
@@ -771,6 +822,7 @@ struct gnix_fab_req {
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
 	void                      *txd;
+	struct slist		  iov_txd_slist;
 	uint32_t                  tx_failures;
 
 	/* common to rma/amo/msg */

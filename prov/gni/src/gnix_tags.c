@@ -930,6 +930,7 @@ void _gnix_remove_tag(
 		struct gnix_tag_storage *ts,
 		struct gnix_fab_req *req)
 {
+	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 	ts->ops->remove_tag_by_req(ts, req);
 }
 
