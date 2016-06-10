@@ -206,6 +206,7 @@ enum {
 	PSMX2_AM_REQ_ATOMIC_COMPWRITE,
 	PSMX2_AM_REP_ATOMIC_COMPWRITE,
 	PSMX2_AM_REQ_WRITEV,
+	PSMX2_AM_REQ_READV,
 };
 
 struct psmx2_am_request {
@@ -223,7 +224,10 @@ struct psmx2_am_request {
 			uint64_t data;
 		} write;
 		struct {
-			void	*buf;
+			union {
+				void	*buf;	   /* for read */
+				size_t	iov_count; /* for readv */
+			};
 			size_t	len;
 			uint64_t addr;
 			uint64_t key;
@@ -248,6 +252,7 @@ struct psmx2_am_request {
 	int no_event;
 	int error;
 	struct slist_entry list_entry;
+	struct iovec iov[0];	/* for readv, must be the last field */
 };
 
 #define PSMX2_IOV_PROTO_PACK	0
@@ -394,6 +399,7 @@ enum psmx2_triggered_op {
 	PSMX2_TRIGGERED_WRITE,
 	PSMX2_TRIGGERED_WRITEV,
 	PSMX2_TRIGGERED_READ,
+	PSMX2_TRIGGERED_READV,
 	PSMX2_TRIGGERED_ATOMIC_WRITE,
 	PSMX2_TRIGGERED_ATOMIC_READWRITE,
 	PSMX2_TRIGGERED_ATOMIC_COMPWRITE,
@@ -501,6 +507,17 @@ struct psmx2_trigger {
 			void		*context;
 			uint64_t	flags;
 		} read;
+		struct {
+			struct fid_ep	*ep;
+			const struct iovec *iov;
+			size_t		count;
+			void		*desc;
+			fi_addr_t	src_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			void		*context;
+			uint64_t	flags;
+		} readv;
 		struct {
 			struct fid_ep	*ep;
 			const void	*buf;
@@ -822,6 +839,13 @@ ssize_t psmx2_read_generic(
 			struct fid_ep *ep,
 			void *buf, size_t len,
 			void *desc, fi_addr_t src_addr,
+			uint64_t addr, uint64_t key,
+			void *context, uint64_t flags);
+
+ssize_t psmx2_readv_generic(
+			struct fid_ep *ep,
+			const struct iovec *iov, void *desc,
+			size_t count, fi_addr_t src_addr,
 			uint64_t addr, uint64_t key,
 			void *context, uint64_t flags);
 

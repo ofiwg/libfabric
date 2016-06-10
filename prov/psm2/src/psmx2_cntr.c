@@ -136,6 +136,18 @@ int psmx2_process_trigger(struct psmx2_fid_domain *domain,
 				   trigger->read.flags);
 		break;
 
+	case PSMX2_TRIGGERED_READV:
+		psmx2_readv_generic(trigger->readv.ep,
+				    trigger->readv.iov,
+				    trigger->readv.desc,
+				    trigger->readv.count,
+				    trigger->readv.src_addr,
+				    trigger->readv.addr,
+				    trigger->readv.key,
+				    trigger->readv.context,
+				    trigger->readv.flags);
+		break;
+
 	case PSMX2_TRIGGERED_ATOMIC_WRITE:
 		psmx2_atomic_write_generic(
 				trigger->atomic_write.ep,

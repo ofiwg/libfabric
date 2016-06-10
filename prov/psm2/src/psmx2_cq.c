@@ -337,6 +337,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	struct psmx2_fid_cq *tmp_cq;
 	struct psmx2_fid_cntr *tmp_cntr;
 	struct psmx2_cq_event *event;
+	struct psmx2_am_request *read_req;
 	int multi_recv;
 	int err;
 	int read_more = 1;
@@ -411,7 +412,18 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				tmp_cq = tmp_ep->send_cq;
 				/* Fall throigh */
 			case PSMX2_NOCOMP_READ_CONTEXT:
+				read_req = container_of(fi_context, struct psmx2_am_request,
+							fi_context);
 				tmp_cntr = tmp_ep->read_cntr;
+				if (read_req->op == PSMX2_AM_REQ_READV) {
+					read_req->read.len_read += psm2_status.nbytes;
+					if (read_req->read.len_read < read_req->read.len) {
+						FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
+							"readv: long protocol finishes early\n");
+						tmp_cq = NULL;
+						tmp_cntr = NULL;
+					}
+				}
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
