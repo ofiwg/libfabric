@@ -609,8 +609,7 @@ static void sock_pep_cm_handle_ack(struct sock_cm_entry *cm,
 	fastlock_release(&cm->lock);
 }
 
-static void sock_release_shutdowns(struct sock_cm_entry *cm,
-				    struct sock_conn_hdr *hdr)
+static void sock_release_shutdowns(struct sock_cm_entry *cm)
 {
 	struct sock_conn_hdr *msg_hdr;
 	struct dlist_entry *entry, *next_entry;
@@ -783,7 +782,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 			memset(cm_entry, 0, sizeof(*cm_entry));
 			cm_entry->fid = &ep->ep.fid;
 
-			sock_release_shutdowns(&ep->attr->cm, &conn_response->hdr);
+			sock_release_shutdowns(&ep->attr->cm);
 			if (ep->attr->cm.shutdown_received ||
 			     sock_is_connecting(&ep->attr->cm, &conn_response->hdr))
 				break;
@@ -928,6 +927,9 @@ static int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 	struct sock_ep *_ep;
 
 	_ep = container_of(ep, struct sock_ep, ep);
+	if (_ep->attr->cm.shutdown_received)
+		return 0;
+
 	memset(&response, 0, sizeof(response));
 
 	response.hdr.type = SOCK_CONN_SHUTDOWN;
