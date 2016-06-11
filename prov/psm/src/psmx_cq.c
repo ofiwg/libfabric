@@ -374,48 +374,37 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			multi_recv = 0;
 
 			switch ((int)PSMX_CTXT_TYPE(fi_context)) {
+			case PSMX_SEND_CONTEXT:
+			case PSMX_TSEND_CONTEXT:
+				tmp_cq = tmp_ep->send_cq;
+				/* Fall through */
 			case PSMX_NOCOMP_SEND_CONTEXT:
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
+			case PSMX_MULTI_RECV_CONTEXT:
+				multi_recv = 1;
+				/* Fall through */
+			case PSMX_RECV_CONTEXT:
+			case PSMX_TRECV_CONTEXT:
+				tmp_cq = tmp_ep->recv_cq;
+				/* Fall through */
 			case PSMX_NOCOMP_RECV_CONTEXT:
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
+			case PSMX_WRITE_CONTEXT:
+				tmp_cq = tmp_ep->send_cq;
+				/* Fall through */
 			case PSMX_NOCOMP_WRITE_CONTEXT:
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
-			case PSMX_NOCOMP_READ_CONTEXT:
-				tmp_cntr = tmp_ep->read_cntr;
-				break;
-
-			case PSMX_SEND_CONTEXT:
-			case PSMX_TSEND_CONTEXT:
-				tmp_cq = tmp_ep->send_cq;
-				tmp_cntr = tmp_ep->send_cntr;
-				break;
-
-			case PSMX_RECV_CONTEXT:
-			case PSMX_TRECV_CONTEXT:
-				tmp_cq = tmp_ep->recv_cq;
-				tmp_cntr = tmp_ep->recv_cntr;
-				break;
-
-			case PSMX_MULTI_RECV_CONTEXT:
-				multi_recv = 1;
-				tmp_cq = tmp_ep->recv_cq;
-				tmp_cntr = tmp_ep->recv_cntr;
-				break;
-
 			case PSMX_READ_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
+				/* Fall through */
+			case PSMX_NOCOMP_READ_CONTEXT:
 				tmp_cntr = tmp_ep->read_cntr;
-				break;
-
-			case PSMX_WRITE_CONTEXT:
-				tmp_cq = tmp_ep->send_cq;
-				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_REMOTE_WRITE_CONTEXT:

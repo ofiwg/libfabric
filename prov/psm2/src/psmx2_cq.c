@@ -371,10 +371,21 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			multi_recv = 0;
 
 			switch ((int)PSMX2_CTXT_TYPE(fi_context)) {
+			case PSMX2_SEND_CONTEXT:
+			case PSMX2_TSEND_CONTEXT:
+				tmp_cq = tmp_ep->send_cq;
+				/* Fall through */
 			case PSMX2_NOCOMP_SEND_CONTEXT:
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
+			case PSMX2_RECV_CONTEXT:
+			case PSMX2_TRECV_CONTEXT:
+				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
+					continue;
+				tmp_cq = tmp_ep->recv_cq;
+				/* Fall through */
 			case PSMX2_NOCOMP_RECV_CONTEXT:
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
@@ -389,27 +400,18 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				psmx2_ep_put_op_context(tmp_ep, fi_context);
 				break;
 
+			case PSMX2_WRITE_CONTEXT:
+				tmp_cq = tmp_ep->send_cq;
+				/* Fall through */
 			case PSMX2_NOCOMP_WRITE_CONTEXT:
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
+			case PSMX2_READ_CONTEXT:
+				tmp_cq = tmp_ep->send_cq;
+				/* Fall throigh */
 			case PSMX2_NOCOMP_READ_CONTEXT:
 				tmp_cntr = tmp_ep->read_cntr;
-				break;
-
-			case PSMX2_SEND_CONTEXT:
-			case PSMX2_TSEND_CONTEXT:
-				tmp_cq = tmp_ep->send_cq;
-				tmp_cntr = tmp_ep->send_cntr;
-				break;
-
-			case PSMX2_RECV_CONTEXT:
-			case PSMX2_TRECV_CONTEXT:
-				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
-				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
-					continue;
-				tmp_cq = tmp_ep->recv_cq;
-				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
@@ -419,16 +421,6 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				multi_recv = 1;
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
-				break;
-
-			case PSMX2_READ_CONTEXT:
-				tmp_cq = tmp_ep->send_cq;
-				tmp_cntr = tmp_ep->read_cntr;
-				break;
-
-			case PSMX2_WRITE_CONTEXT:
-				tmp_cq = tmp_ep->send_cq;
-				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX2_REMOTE_WRITE_CONTEXT:
