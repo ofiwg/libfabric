@@ -40,6 +40,34 @@ static inline void psmx2_am_enqueue_rma(struct psmx2_fid_domain *domain,
 	fastlock_release(&domain->rma_queue.lock);
 }
 
+static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
+				  size_t offset, const void *src,
+				  size_t len)
+{
+	int i;
+	size_t copy_len;
+
+	for (i=0; i<count && len; i++) {
+		if (offset >= iov[i].iov_len) {
+			offset -= iov[i].iov_len;
+			continue;
+		}
+
+		copy_len = iov[i].iov_len - offset;
+		
+		if (copy_len > len)
+			copy_len = len;
+
+		memcpy(iov[i].iov_base + offset, src, copy_len);
+
+		src += copy_len;
+		len -= copy_len;
+
+		if (offset)
+			offset = 0;
+	}
+}
+
 /* RMA protocol:
  *
  * Write REQ:
@@ -296,16 +324,23 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 
 	case PSMX2_AM_REP_READ:
 		req = (struct psmx2_am_request *)(uintptr_t)args[1].u64;
-		assert(req->op == PSMX2_AM_REQ_READ);
+		assert(req->op == PSMX2_AM_REQ_READ || req->op == PSMX2_AM_REQ_READV);
 		op_error = (int)args[0].u32w1;
 		offset = args[2].u64;
 		if (!req->error)
 			req->error = op_error;
 		if (!op_error) {
-			memcpy(req->read.buf + offset, src, len);
+			if (req->op == PSMX2_AM_REQ_READ)
+				memcpy(req->read.buf + offset, src, len);
+			else 
+				psmx2_iov_copy(req->iov, req->read.iov_count, offset, src, len);
+
 			req->read.len_read += len;
 		}
-		if (eom) {
+		if (eom || req->read.len == req->read.len_read) {
+			if (!eom)
+				FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
+					"readv: short protocol finishes after long protocol.\n");
 			if (req->ep->send_cq && !req->no_event) {
 				event = psmx2_cq_create_event(
 						req->ep->send_cq,
@@ -352,7 +387,7 @@ static ssize_t psmx2_rma_self(int am_cmd,
 	int err = 0;
 	int op_error = 0;
 	int access;
-	void *dst;
+	void *dst, *src;
 	uint64_t cq_flags;
 	struct iovec *iov = buf;
 	size_t iov_count = len;
@@ -374,6 +409,12 @@ static ssize_t psmx2_rma_self(int am_cmd,
 		access = FI_REMOTE_READ;
 		cq_flags = FI_READ | FI_RMA;
 		break;
+	case PSMX2_AM_REQ_READV:
+		access = FI_REMOTE_READ;
+		cq_flags = FI_READ | FI_RMA;
+		len = 0;
+		for (i=0; i<iov_count; i++)
+			len += iov[i].iov_len;
 	default:
 		return -FI_EINVAL;
 	}
@@ -410,6 +451,16 @@ static ssize_t psmx2_rma_self(int am_cmd,
 		case PSMX2_AM_REQ_READ:
 			cntr = dst_ep->remote_read_cntr;
 			memcpy(buf, (void *)addr, len);
+			break;
+
+		case PSMX2_AM_REQ_READV:
+			cntr = dst_ep->remote_read_cntr;
+			src = (void *)addr;
+			for (i=0; i<iov_count; i++)
+				if (iov[i].iov_len) {
+					memcpy(iov[i].iov_base, src, iov[i].iov_len);
+					src += iov[i].iov_len;
+				}
 			break;
 		}
 
@@ -460,11 +511,13 @@ static ssize_t psmx2_rma_self(int am_cmd,
 
 	switch (am_cmd) {
 	case PSMX2_AM_REQ_WRITE:
+	case PSMX2_AM_REQ_WRITEV:
 		if (ep->write_cntr)
 			psmx2_cntr_inc(ep->write_cntr);
 		break;
 
 	case PSMX2_AM_REQ_READ:
+	case PSMX2_AM_REQ_READV:
 		if (ep->read_cntr)
 			psmx2_cntr_inc(ep->read_cntr);
 		break;
@@ -662,6 +715,171 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	return 0;
 }
 
+ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
+			    void *desc, size_t count, fi_addr_t src_addr,
+			    uint64_t addr, uint64_t key, void *context,
+			    uint64_t flags)
+{
+	struct psmx2_fid_ep *ep_priv;
+	struct psmx2_fid_av *av;
+	struct psmx2_epaddr_context *epaddr_context;
+	struct psmx2_am_request *req;
+	psm2_amarg_t args[8];
+	int chunk_size;
+	size_t offset = 0;
+	psm2_epaddr_t psm2_epaddr;
+	uint8_t vlane;
+	psm2_mq_req_t psm2_req;
+	psm2_mq_tag_t psm2_tag, psm2_tagsel;
+	uint32_t tag32;
+	size_t idx;
+	size_t total_len, long_len, short_len;
+	void *long_buf;
+	int i;
+
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+
+	if (flags & FI_TRIGGER) {
+		struct psmx2_trigger *trigger;
+		struct fi_triggered_context *ctxt = context;
+
+		trigger = calloc(1, sizeof(*trigger));
+		if (!trigger)
+			return -FI_ENOMEM;
+
+		trigger->op = PSMX2_TRIGGERED_READV;
+		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
+					     struct psmx2_fid_cntr, cntr);
+		trigger->threshold = ctxt->trigger.threshold.threshold;
+		trigger->readv.ep = ep;
+		trigger->readv.iov = iov;
+		trigger->readv.count = count;
+		trigger->readv.desc = desc;
+		trigger->readv.src_addr = src_addr;
+		trigger->readv.addr = addr;
+		trigger->readv.key = key;
+		trigger->readv.context = context;
+		trigger->readv.flags = flags & ~FI_TRIGGER;
+
+		psmx2_cntr_add_trigger(trigger->cntr, trigger);
+		return 0;
+	}
+
+	av = ep_priv->av;
+	if (av && av->type == FI_AV_TABLE) {
+		idx = src_addr;
+		if (idx >= av->last)
+			return -FI_EINVAL;
+
+		psm2_epaddr = av->epaddrs[idx];
+		vlane = av->vlanes[idx];
+	} else {
+		if (!src_addr)
+			return -FI_EINVAL;
+
+		psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
+		vlane = PSMX2_ADDR_TO_VL(src_addr);
+	}
+
+	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
+	if (epaddr_context->epid == ep_priv->domain->psm2_epid)
+		return psmx2_rma_self(PSMX2_AM_REQ_READV, ep_priv,
+				      ep_priv->domain->eps[vlane],
+				      (void *)iov, count, desc, addr,
+				      key, context, flags, 0);
+
+	total_len = 0;
+	for (i=0; i<count; i++)
+		total_len += iov[i].iov_len;
+
+	req = calloc(1, sizeof(*req) + count * sizeof(struct iovec));
+	if (!req)
+		return -FI_ENOMEM;
+
+	memcpy(req->iov, iov, count * sizeof(struct iovec));
+
+	req->op = PSMX2_AM_REQ_READV;
+	req->read.iov_count = count;
+	req->read.len = total_len;
+	req->read.addr = addr;	/* needed? */
+	req->read.key = key; 	/* needed? */
+	req->read.context = context;
+	req->ep = ep_priv;
+	req->cq_flags = FI_READ | FI_RMA;
+	PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_READ_CONTEXT;
+	PSMX2_CTXT_USER(&req->fi_context) = context;
+	PSMX2_CTXT_EP(&req->fi_context) = ep_priv;
+
+	if (ep_priv->send_selective_completion && !(flags & FI_COMPLETION)) {
+		PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_NOCOMP_READ_CONTEXT;
+		req->no_event = 1;
+	}
+
+	chunk_size = psmx2_am_param.max_reply_short;
+
+	long_len = 0;
+	if (psmx2_env.tagged_rma) {
+		for (i=count-1; i>=0; i--) {
+			if (iov[i].iov_len > chunk_size) {
+				long_buf = iov[i].iov_base;
+				long_len = iov[i].iov_len;
+				break;
+			} else if (iov[i].iov_len) {
+				break;
+			}
+		}
+	}
+
+	short_len = total_len - long_len;
+
+	/* Use short protocol for all but the last segment (long_len) */
+	args[0].u32w0 = 0;
+	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
+	PSMX2_AM_SET_DST(args[0].u32w0, vlane);
+	PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_READ);
+	args[1].u64 = (uint64_t)(uintptr_t)req;
+	args[3].u64 = key;
+	while (short_len > chunk_size) {
+		args[0].u32w1 = chunk_size;
+		args[2].u64 = addr;
+		args[4].u64 = offset;
+		psm2_am_request_short(psm2_epaddr, PSMX2_AM_RMA_HANDLER,
+				      args, 5, NULL, 0, 0, NULL, NULL);
+		addr += chunk_size;
+		short_len -= chunk_size;
+		offset += chunk_size;
+	}
+
+	if (!long_len)
+		PSMX2_AM_SET_FLAG(args[0].u32w0, PSMX2_AM_EOM);
+	args[0].u32w1 = short_len;
+	args[2].u64 = addr;
+	args[4].u64 = offset;
+	psm2_am_request_short(psm2_epaddr, PSMX2_AM_RMA_HANDLER,
+			      args, 5, NULL, 0, 0, NULL, NULL);
+
+	/* Use the long protocol for the last segment */
+	if (long_len) {
+		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, vlane, ep_priv->vlane);
+		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
+		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
+		psm2_mq_irecv2(ep_priv->domain->psm2_mq, psm2_epaddr,
+			       &psm2_tag, &psm2_tagsel, 0,
+			       long_buf, long_len,
+			       (void *)&req->fi_context, &psm2_req);
+
+		PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_READ_LONG);
+		args[0].u32w1 = long_len;
+		args[1].u64 = (uint64_t)req;
+		args[2].u64 = addr + short_len;
+		args[3].u64 = key;
+		psm2_am_request_short(psm2_epaddr, PSMX2_AM_RMA_HANDLER,
+				      args, 4, NULL, 0, 0, NULL, NULL);
+	}
+
+	return 0;
+}
+
 static ssize_t psmx2_read(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr,
 			  uint64_t addr, uint64_t key, void *context)
@@ -678,8 +896,17 @@ static ssize_t psmx2_readmsg(struct fid_ep *ep,
 			     const struct fi_msg_rma *msg,
 			     uint64_t flags)
 {
-	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov)
+	if (!msg || !msg->iov_count || !msg->msg_iov ||
+	    !msg->rma_iov || msg->rma_iov_count != 1)
 		return -FI_EINVAL;
+
+	if (msg->iov_count > 1)
+		return psmx2_readv_generic(ep, msg->msg_iov,
+					   msg->desc ? msg->desc[0] : NULL,
+					   msg->iov_count, msg->addr,
+					   msg->rma_iov[0].addr,
+					   msg->rma_iov[0].key,
+					   msg->context, flags);
 
 	return psmx2_read_generic(ep, msg->msg_iov[0].iov_base,
 				  msg->msg_iov[0].iov_len,
@@ -693,8 +920,17 @@ static ssize_t psmx2_readv(struct fid_ep *ep, const struct iovec *iov,
 		           void **desc, size_t count, fi_addr_t src_addr,
 		           uint64_t addr, uint64_t key, void *context)
 {
-	if (!iov || count != 1)
+	struct psmx2_fid_ep *ep_priv;
+
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+
+	if (!iov || !count)
 		return -FI_EINVAL;
+
+	if (count > 1)
+		return psmx2_readv_generic(ep, iov, desc ? desc[0] : NULL,
+					   count, src_addr, addr, key,
+					   context, ep_priv->tx_flags);
 
 	return psmx2_read(ep, iov->iov_base, iov->iov_len,
 			  desc ? desc[0] : NULL, src_addr, addr, key, context);
