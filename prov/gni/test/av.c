@@ -244,7 +244,7 @@ Test(av_full_table, remove_addr)
 static void lookup_invalid_test(void)
 {
 	int ret;
-	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
+	struct gnix_ep_name addr;
 	size_t addrlen = sizeof(struct gnix_ep_name);
 
 	/* test null addrlen */
@@ -257,14 +257,14 @@ static void lookup_invalid_test(void)
 
 	/* test invalid lookup */
 	if (gnix_av->type == FI_AV_TABLE) {
-		ret = fi_av_lookup(av, 2000, &addresses[0], &addrlen);
+		ret = fi_av_lookup(av, 2000, &addr, &addrlen);
 		cr_assert_eq(ret, -FI_EINVAL);
 
 		/* test within range, but not inserted case */
-		ret = fi_av_lookup(av, 1, &addresses[1], &addrlen);
+		ret = fi_av_lookup(av, 1, &addr, &addrlen);
 		cr_assert_eq(ret, -FI_EINVAL);
 	} else {
-		ret = fi_av_lookup(av, 0xdeadbeef, &addresses[0], &addrlen);
+		ret = fi_av_lookup(av, 0xdeadbeef, &addr, &addrlen);
 		cr_assert_eq(ret, -FI_ENOENT);
 	}
 }
@@ -285,7 +285,7 @@ static void lookup_test(void)
 	int i;
 	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
 	fi_addr_t *compare;
-	fi_addr_t found;
+	struct gnix_ep_name found;
 	size_t addrlen = sizeof(struct gnix_ep_name);
 
 	/* insert addresses */
@@ -303,8 +303,10 @@ static void lookup_test(void)
 		}
 	}
 
-	ret = fi_av_lookup(av, addresses[1], &found, &addrlen);
-	cr_assert_eq(ret, FI_SUCCESS);
+	for (i = 0; i < SIMPLE_ADDR_COUNT; i++) {
+		ret = fi_av_lookup(av, addresses[i], &found, &addrlen);
+		cr_assert_eq(ret, FI_SUCCESS);
+	}
 }
 
 Test(av_full_map, lookup)
