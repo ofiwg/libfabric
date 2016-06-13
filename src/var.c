@@ -43,9 +43,6 @@
 #include "fi_list.h"
 
 
-/* When given a NULL provider pointer, use core for logging and settings. */
-extern struct fi_provider core_prov;
-
 extern int init;
 extern void fi_ini();
 
