@@ -283,10 +283,10 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	header->base.tag = request->minfo.tag;
 	header->base.service_tag = 0;
 	header->total_len = request->len;
-	header->src_addr = (uint64_t) (uintptr_t) request->src_addr;
+	header->src_addr = (uintptr_t)request->src_addr;
 
-	header->id = request;
-	request->rndv.id = request;
+	header->id = (uintptr_t)request;
+	request->rndv.id = (uintptr_t)request;
 
 	mr = ibv_reg_mr(p->ep->domain->pd, (void *)request->src_addr,
 			request->len, IBV_ACCESS_REMOTE_READ);
@@ -639,7 +639,7 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 
 		request->minfo.conn = p->conn;
 		request->minfo.tag = h->base.tag;
-		request->rndv.id = h->id;
+		request->rndv.id = (uintptr_t)h->id;
 		request->rndv.remote_addr = (void *)h->src_addr;
 		request->rndv.rkey = h->mem_key;
 		request->len = h->total_len;

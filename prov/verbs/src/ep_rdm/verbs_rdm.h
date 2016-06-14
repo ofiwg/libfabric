@@ -119,8 +119,8 @@ struct fi_ibv_rdm_header {
 struct fi_ibv_rdm_tagged_rndv_header {
 	struct fi_ibv_rdm_header base;
 	uint64_t src_addr;
-	void *id;
-	size_t total_len;
+	uint64_t id; /* pointer to request on sender side */
+	uint64_t total_len;
 	uint32_t mem_key;
 	uint32_t padding;
 };
@@ -172,7 +172,7 @@ struct fi_ibv_rdm_tagged_request {
 		/* RNDV info */
 		struct {
 			/* pointer to request on sender side */
-			void *id;
+			uint64_t id;
 			/* registered buffer on sender side */
 			void* remote_addr;
 			/* registered mr of local src_addr */
