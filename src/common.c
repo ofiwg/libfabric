@@ -47,9 +47,15 @@
 #include <sys/time.h>
 
 #include <fi_signal.h>
+#include <rdma/providers/fi_prov.h>
 #include <rdma/fi_errno.h>
 #include <fi.h>
 
+struct fi_provider core_prov = {
+	.name = "core",
+	.version = 1,
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
+};
 
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 {

@@ -62,13 +62,6 @@ pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static struct fi_filter prov_filter;
 
-struct fi_provider core_prov = {
-	.name = "core",
-	.version = 1,
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
-};
-
-
 static int fi_find_name(char **names, const char *name)
 {
 	int i;

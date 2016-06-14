@@ -61,8 +61,6 @@ static const char * const log_levels[] = {
 	[FI_LOG_MAX] = NULL
 };
 
-extern struct fi_provider core_prov;
-
 enum {
 	FI_LOG_SUBSYS_OFFSET	= FI_LOG_MAX,
 	FI_LOG_PROV_OFFSET	= FI_LOG_SUBSYS_OFFSET + FI_LOG_SUBSYS_MAX,

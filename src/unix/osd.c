@@ -38,13 +38,12 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include "fi.h"
 #include "fi_osd.h"
 #include "fi_file.h"
 
 #include "rdma/fi_errno.h"
 #include "rdma/providers/fi_log.h"
-
-extern struct fi_provider core_prov;
 
 int fi_fd_nonblock(int fd)
 {
