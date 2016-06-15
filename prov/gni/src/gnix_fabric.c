@@ -190,7 +190,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	int ret = 0;
 	int ep_type_unspec = 1;
 	uint64_t mode = GNIX_FAB_MODES;
-	uint64_t caps = GNIX_EP_RDM_CAPS;
 	struct fi_info *gnix_info = NULL;
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
@@ -338,12 +337,20 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			mode = hints->mode & ~GNIX_FAB_MODES_CLEAR;
 		}
 
-		if ((hints->caps & GNIX_EP_RDM_CAPS) != hints->caps) {
-			goto err;
-		}
+		if (!hints->caps) {
+			/* Return all supported capabilities. */
+			gnix_info->caps = GNIX_EP_RDM_CAPS_FULL;
+		} else {
+			/* The provider must support all requested
+			 * capabilities. */
+			if ((hints->caps & GNIX_EP_RDM_CAPS_FULL) !=
+			    hints->caps) {
+				goto err;
+			}
 
-		if (hints->caps) {
-			caps = hints->caps & GNIX_EP_RDM_CAPS;
+			/* The provider may silently enable secondary
+			 * capabilities that do not introduce any overhead. */
+			gnix_info->caps = hints->caps | GNIX_EP_RDM_SEC_CAPS;
 		}
 
 		if (hints->tx_attr) {
@@ -418,24 +425,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			if (ret)
 				goto err;
 		}
-	}
-
-	/*
-	 * Set the values based on hints
-	 */
-
-	switch (gnix_info->ep_attr->type) {
-	case FI_EP_RDM:
-	case FI_EP_DGRAM:
-		gnix_info->caps = caps | GNIX_EP_RDM_SEC_CAPS;
-		break;
-	case FI_EP_MSG:
-		gnix_info->caps = caps | GNIX_EP_MSG_SEC_CAPS;
-		break;
-	default:
-		GNIX_ERR(FI_LOG_FABRIC, "unknown ep type %d",
-			 gnix_info->ep_attr->type);
-		break;
 	}
 
 	gnix_info->mode = mode;
