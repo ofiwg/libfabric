@@ -119,9 +119,10 @@ struct fi_ibv_rdm_header {
 struct fi_ibv_rdm_tagged_rndv_header {
 	struct fi_ibv_rdm_header base;
 	uint64_t src_addr;
-	void *id;
-	int len;
+	uint64_t id; /* pointer to request on sender side */
+	uint64_t total_len;
 	uint32_t mem_key;
+	uint32_t padding;
 };
 
 struct fi_ibv_rdm_tagged_request {
@@ -161,6 +162,8 @@ struct fi_ibv_rdm_tagged_request {
 	 */
 	size_t iov_count;
 	size_t len;
+	size_t rest_len;
+	uint32_t post_counter;
 	uint64_t comp_flags;
 	struct fi_context *context;
 	uint32_t imm;
@@ -169,7 +172,7 @@ struct fi_ibv_rdm_tagged_request {
 		/* RNDV info */
 		struct {
 			/* pointer to request on sender side */
-			void *id;
+			uint64_t id;
 			/* registered buffer on sender side */
 			void* remote_addr;
 			/* registered mr of local src_addr */
@@ -298,7 +301,7 @@ struct fi_ibv_rdm_tagged_conn {
 	struct fi_ibv_rdm_buf *rmabuf_head;
 
 	struct dlist_entry postponed_requests_head;
-	struct fi_ibv_rdm_tagged_postponed_entry *postponed_entry;
+	struct fi_ibv_rdm_postponed_entry *postponed_entry;
 
 	struct ibv_mr *s_mr;
 	struct ibv_mr *r_mr;
@@ -325,7 +328,7 @@ struct fi_ibv_rdm_tagged_conn {
 #endif
 };
 
-struct fi_ibv_rdm_tagged_postponed_entry {
+struct fi_ibv_rdm_postponed_entry {
 	struct dlist_entry queue_entry;
 
 	struct fi_ibv_rdm_tagged_conn *conn;

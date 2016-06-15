@@ -40,8 +40,8 @@
 #include "verbs_queuing.h"
 
 extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
 extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
+extern struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
 int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other)
 {
@@ -103,9 +103,9 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 {
 	const struct fi_ibv_rdm_tagged_send_ready_data *send_data = arg;
 
-	struct fi_ibv_rdm_tagged_postponed_entry *postponed_entry =
+	struct fi_ibv_rdm_postponed_entry *postponed_entry =
 	    container_of(postponed_item,
-			 struct fi_ibv_rdm_tagged_postponed_entry, queue_entry);
+			 struct fi_ibv_rdm_postponed_entry, queue_entry);
 	int ret = 0;
 	if (!dlist_empty(&postponed_entry->conn->postponed_requests_head)) {
 		struct dlist_entry *req_entry = 
@@ -115,11 +115,33 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 		    container_of(req_entry, struct fi_ibv_rdm_tagged_request,
 				 queue_entry);
 
-		int res = fi_ibv_rdm_tagged_prepare_send_request(request,
+		int res = 0;
+		if ((request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) &&
+		    (request->sbuf == NULL))
+		{
+			res = fi_ibv_rdm_tagged_prepare_send_request(request,
 								 send_data->ep);
+		} else  {
+			/*
+			 * This case is possible only for segmented RNDV msg or 
+			 * RMA operation (> 1GB), connection must be already 
+			 * established
+			 */
+			assert(request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED);
+			assert(fi_ibv_rdm_check_connection(request->minfo.conn,
+							   send_data->ep));
+			if (request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) {
+				res = !SEND_RESOURCES_IS_BUSY(request->minfo.conn,
+							      send_data->ep);
+			} else {
+				res = !RMA_RESOURCES_IS_BUSY(request->minfo.conn,
+							      send_data->ep);
+			}
+		}
+
 		if (res) {
 			fi_ibv_rdm_tagged_req_hndl(request,
-						   FI_IBV_EVENT_SEND_READY,
+						   FI_IBV_EVENT_POST_READY,
 						   (void *) send_data);
 			ret++;
 		}

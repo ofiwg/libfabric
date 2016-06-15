@@ -203,7 +203,7 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 		request = fi_ibv_rdm_take_first_match_from_postponed_queue
 				(fi_ibv_rdm_tagged_req_match, request);
 		if (request) {
-			fi_ibv_rdm_tagged_remove_from_postponed_queue(request);
+			fi_ibv_rdm_remove_from_postponed_queue(request);
 			err = 0;
 		}
 	}
@@ -364,8 +364,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	fi_ibv_rdm_clean_queues();
 
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_request_pool);
-	util_buf_pool_destroy(fi_ibv_rdm_tagged_postponed_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_extra_buffers_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
 
 	free(ep);
 
@@ -488,8 +488,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		sizeof(struct fi_ibv_rdm_tagged_request),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_rdm_tagged_postponed_pool = util_buf_pool_create(
-		sizeof(struct fi_ibv_rdm_tagged_postponed_entry),
+	fi_ibv_rdm_postponed_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_postponed_entry),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
 	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(

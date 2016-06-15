@@ -76,6 +76,9 @@ struct fi_ibv_msg_ep;
 	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
 	 sizeof(struct fi_ibv_rdm_header))
 
+/* 1GB is RC_QP limitation */
+#define FI_IBV_RDM_SEG_MAXSIZE (1024*1024*1024)
+
 /* TODO: CQs depths increased from 100 to 1000 to prevent
  *      "Work Request Flushed Error" in stress tests like alltoall.
  */
@@ -112,15 +115,16 @@ do {                                                                        \
     const size_t max_str_len = 1024;                                        \
     char str[max_str_len];                                                  \
     snprintf(str, max_str_len,                                              \
-            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%lx, len: %lu, context: %p, connection: %p\n", \
+            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%lx, len: %lu, rest: %lu, context: %p, connection: %p\n", \
             prefix,                                                         \
             request,                                                        \
             fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
             fi_ibv_rdm_tagged_req_rndv_state_to_str(request->state.rndv),   \
-            request->minfo.tag,                                                   \
+            request->minfo.tag,						    \
             request->len,                                                   \
+	    request->rest_len,					    \
             request->context,                                               \
-            request->minfo.conn);                                                 \
+            request->minfo.conn);					    \
                                                                             \
     switch (level)                                                          \
     {                                                                       \

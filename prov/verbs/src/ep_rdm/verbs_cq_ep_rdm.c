@@ -39,7 +39,7 @@
 
 
 struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
+struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
 /*
  * extra buffer size equal eager buffer size, it is used for any intermediate
@@ -61,9 +61,9 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 	     cq_entry = (ret < count) ? fi_ibv_rdm_take_first_from_cq() : NULL)
 	{
 		FI_DBG(&fi_ibv_prov, FI_LOG_CQ,
-		       "\t\t-> found match in ready: op_ctx %p, len %d, tag 0x%llx\n",
-		       cq_entry->context, cq_entry->len,
-		       cq_entry->minfo.tag);
+			"\t\t-> found in ready: %p op_ctx %p, len %lu, tag 0x%llx\n",
+			cq_entry, cq_entry->context, cq_entry->len,
+			cq_entry->minfo.tag);
 
 		src_addr[ret] = (fi_addr_t) (uintptr_t) cq_entry->minfo.conn;
 		entry[ret].op_context = cq_entry->context;
