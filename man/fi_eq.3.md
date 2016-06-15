@@ -174,8 +174,11 @@ struct fi_eq_attr {
   as a wait object.
 
 *signaling_vector*
-: Indicates which processor core interrupts associated with the EQ
-  should target.
+: Indicates which processor core (1..max cpu) that interrupts associated
+  with the EQ should target.  A value of 0 indicates that the provider
+  should select the vector.  This field should be treated as a hint
+  to the provider and may be ignored if the provider does not support
+  interrupt affinity.
 
 *wait_set*
 : If wait_obj is FI_WAIT_SET, this field references a wait object to

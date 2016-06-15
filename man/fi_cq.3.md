@@ -250,8 +250,11 @@ struct fi_cq_tagged_entry {
   as a wait object.
 
 *signaling_vector*
-: Indicates which processor core interrupts associated with the EQ should
-  target.
+: Indicates which processor core (1..max cpu) that interrupts associated
+  with the CQ should target.  A value of 0 indicates that the provider
+  should select the vector.  This field should be treated as a hint
+  to the provider and may be ignored if the provider does not support
+  interrupt affinity.
 
 *wait_cond*
 : By default, when a completion is inserted into an CQ that supports
