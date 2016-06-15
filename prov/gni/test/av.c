@@ -64,8 +64,9 @@ static struct gnix_fid_av *gnix_av;
 	.cookie = id+4, \
 }
 
+#define MT_ADDR_COUNT 59
 #define SIMPLE_ADDR_COUNT 16
-static struct gnix_ep_name simple_ep_names[SIMPLE_ADDR_COUNT] = {
+static struct gnix_ep_name simple_ep_names[MT_ADDR_COUNT] = {
 		SIMPLE_EP_ENTRY(1),
 		SIMPLE_EP_ENTRY(2),
 		SIMPLE_EP_ENTRY(3),
@@ -82,6 +83,49 @@ static struct gnix_ep_name simple_ep_names[SIMPLE_ADDR_COUNT] = {
 		SIMPLE_EP_ENTRY(14),
 		SIMPLE_EP_ENTRY(15),
 		SIMPLE_EP_ENTRY(16),
+		SIMPLE_EP_ENTRY(17),
+		SIMPLE_EP_ENTRY(18),
+		SIMPLE_EP_ENTRY(19),
+		SIMPLE_EP_ENTRY(20),
+		SIMPLE_EP_ENTRY(21),
+		SIMPLE_EP_ENTRY(22),
+		SIMPLE_EP_ENTRY(23),
+		SIMPLE_EP_ENTRY(24),
+		SIMPLE_EP_ENTRY(25),
+		SIMPLE_EP_ENTRY(26),
+		SIMPLE_EP_ENTRY(27),
+		SIMPLE_EP_ENTRY(28),
+		SIMPLE_EP_ENTRY(29),
+		SIMPLE_EP_ENTRY(30),
+		SIMPLE_EP_ENTRY(31),
+		SIMPLE_EP_ENTRY(32),
+		SIMPLE_EP_ENTRY(33),
+		SIMPLE_EP_ENTRY(34),
+		SIMPLE_EP_ENTRY(35),
+		SIMPLE_EP_ENTRY(36),
+		SIMPLE_EP_ENTRY(37),
+		SIMPLE_EP_ENTRY(38),
+		SIMPLE_EP_ENTRY(39),
+		SIMPLE_EP_ENTRY(40),
+		SIMPLE_EP_ENTRY(41),
+		SIMPLE_EP_ENTRY(42),
+		SIMPLE_EP_ENTRY(43),
+		SIMPLE_EP_ENTRY(44),
+		SIMPLE_EP_ENTRY(45),
+		SIMPLE_EP_ENTRY(46),
+		SIMPLE_EP_ENTRY(47),
+		SIMPLE_EP_ENTRY(48),
+		SIMPLE_EP_ENTRY(49),
+		SIMPLE_EP_ENTRY(50),
+		SIMPLE_EP_ENTRY(51),
+		SIMPLE_EP_ENTRY(52),
+		SIMPLE_EP_ENTRY(53),
+		SIMPLE_EP_ENTRY(54),
+		SIMPLE_EP_ENTRY(55),
+		SIMPLE_EP_ENTRY(56),
+		SIMPLE_EP_ENTRY(57),
+		SIMPLE_EP_ENTRY(58),
+		SIMPLE_EP_ENTRY(59),
 };
 
 static void av_setup(void)
@@ -317,6 +361,422 @@ Test(av_full_map, lookup)
 Test(av_full_table, lookup)
 {
 	lookup_test();
+}
+
+/* Stuff for mulithreaded tests */
+static pthread_barrier_t mtbar;
+
+/* Currently the AV operations are not thread safe, so use this big
+ * fat lock when calling them */
+#define USE_LOCK
+#ifdef USE_LOCK
+static fastlock_t my_big_lock;
+#define init_av_lock() fastlock_init(&my_big_lock)
+#define av_lock() fastlock_acquire(&my_big_lock)
+#define av_unlock() fastlock_release(&my_big_lock)
+#else
+#define init_av_lock()
+#define av_lock()
+#define av_unlock()
+#endif
+
+static void *insert_single(void *data)
+{
+	int ret;
+	int n = (int) ((int *) data)[0];
+	fi_addr_t *addr = ((fi_addr_t **) data)[1];
+
+	ret = pthread_barrier_wait(&mtbar);
+	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
+		pthread_exit((void *) 1UL);
+	}
+
+	av_lock();
+	ret = fi_av_insert(av, (void *) &simple_ep_names[n], 1, addr, 0, NULL);
+	av_unlock();
+
+	if (ret != 1) {
+		pthread_exit((void *) 2UL);
+	}
+
+	pthread_exit((void *) 0UL);
+}
+
+static void *remove_single(void *data)
+{
+	int ret;
+	fi_addr_t *addr = (fi_addr_t *) data;
+
+	ret = pthread_barrier_wait(&mtbar);
+	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
+		pthread_exit((void *) 1UL);
+	}
+
+	av_lock();
+	ret = fi_av_remove(av, addr, 1, 0);
+	av_unlock();
+
+	if (ret != FI_SUCCESS) {
+		pthread_exit((void *) 2UL);
+	}
+
+	pthread_exit((void *) 0UL);
+}
+
+static void *lookup_single(void *data)
+{
+	int ret;
+	struct gnix_ep_name found;
+	size_t addrlen = sizeof(struct gnix_ep_name);
+	fi_addr_t *addr = (fi_addr_t *) data;
+
+	ret = pthread_barrier_wait(&mtbar);
+	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
+		pthread_exit((void *) 1UL);
+	}
+
+	av_lock();
+	ret = fi_av_lookup(av, *addr, &found, &addrlen);
+	av_unlock();
+
+	if (ret != FI_SUCCESS) {
+		pthread_exit((void *) 2UL);
+	}
+
+	pthread_exit((void *) 0UL);
+}
+
+static void simple_mt_test(void)
+{
+	int ret;
+	unsigned long pret;
+	int i, j;
+	fi_addr_t *compare;
+	pthread_t threads[MT_ADDR_COUNT];
+	fi_addr_t addresses[MT_ADDR_COUNT];
+	bool found_addresses[MT_ADDR_COUNT];
+	void *info[MT_ADDR_COUNT][2];
+
+	ret = pthread_barrier_init(&mtbar, NULL, MT_ADDR_COUNT);
+	cr_assert_eq(ret, 0);
+
+	init_av_lock();
+
+	/* insert addresses */
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		info[i][0] = (void *) (uint64_t) i;
+		info[i][1] = (void *) &addresses[i];
+		ret = pthread_create(&threads[i], NULL,
+				     insert_single, &info[i]);
+		cr_assert_eq(ret, 0);
+	}
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		ret = pthread_join(threads[i], (void **) &pret);
+		cr_assert_eq(ret, 0);
+		cr_assert_eq(pret, 0UL);
+	}
+
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		found_addresses[i] = false;
+	}
+
+	/* check address contents */
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		if (gnix_av->type == FI_AV_MAP) {
+			for (j = 0; j < MT_ADDR_COUNT; j++) {
+				compare = (fi_addr_t *)
+					&simple_ep_names[j].gnix_addr;
+				if (addresses[i] == *compare) {
+					found_addresses[j] = true;
+				}
+			}
+		} else {
+			found_addresses[addresses[i]] = true;
+		}
+	}
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		cr_assert_eq(found_addresses[i], true);
+	}
+
+	/* look up addresses */
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		ret = pthread_create(&threads[i], NULL, lookup_single,
+				     (void *) &addresses[i]);
+		cr_assert_eq(ret, 0);
+	}
+
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		ret = pthread_join(threads[i], (void **) &pret);
+		cr_assert_eq(ret, 0);
+		cr_assert_eq(pret, 0UL);
+	}
+
+	/* remove addresses */
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		ret = pthread_create(&threads[i], NULL, remove_single,
+				     (void *) &addresses[i]);
+		cr_assert_eq(ret, 0);
+	}
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		ret = pthread_join(threads[i], (void **) &pret);
+		cr_assert_eq(ret, 0);
+		cr_assert_eq(pret, 0UL);
+	}
+
+	ret = pthread_barrier_destroy(&mtbar);
+	cr_assert_eq(ret, 0);
+}
+
+Test(av_full_map, mt_simple)
+{
+	simple_mt_test();
+}
+
+Test(av_full_table, mt_simple)
+{
+	simple_mt_test();
+}
+
+#include "fi_atom.h"
+/* add a compare-and-swap */
+static inline int atomic_cas_weak(atomic_t *atomic, int *expected, int desired)
+{
+	ATOMIC_IS_INITIALIZED(atomic);
+	return atomic_compare_exchange_weak_explicit(&atomic->val,
+						     expected, desired,
+						     memory_order_seq_cst,
+						     memory_order_seq_cst);
+}
+
+static void *lookup_random(void *data)
+{
+	int n, ret;
+	fi_addr_t *addresses = ((fi_addr_t **) data)[0];
+	atomic_t *done = ((atomic_t **) data)[1];
+	struct gnix_ep_name found;
+	size_t addrlen = sizeof(struct gnix_ep_name);
+
+	srand(0);
+
+	ret = pthread_barrier_wait(&mtbar);
+	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
+		pthread_exit((void *) 1UL);
+	}
+
+	while (!atomic_get(done)) {
+		n = rand()%MT_ADDR_COUNT;
+		(void) fi_av_lookup(av, addresses[n], &found, &addrlen);
+	}
+
+	pthread_exit(NULL);
+}
+
+static void continuous_lookup(void)
+{
+	int i, ret;
+	pthread_t thread;
+	fi_addr_t addresses[MT_ADDR_COUNT];
+	atomic_t done;
+	void *info[2];
+	const int iters = 17;
+
+	ret = pthread_barrier_init(&mtbar, NULL, 2);
+	cr_assert_eq(ret, 0);
+
+	init_av_lock();
+
+	atomic_initialize(&done, 0);
+
+	memset(addresses, 0, MT_ADDR_COUNT*sizeof(fi_addr_t));
+
+	info[0] = (void *) addresses;
+	info[1] = (void *) &done;
+
+	ret = pthread_create(&thread, NULL, lookup_random, info);
+	cr_assert_eq(ret, 0);
+
+	ret = pthread_barrier_wait(&mtbar);
+	cr_assert((ret == PTHREAD_BARRIER_SERIAL_THREAD) || (ret == 0));
+
+	for (i = 0; i < iters; i++) {
+		for (i = 0; i < MT_ADDR_COUNT; i++) {
+			ret = fi_av_insert(av, (void *) &simple_ep_names[i], 1,
+					   &addresses[i], 0, NULL);
+			cr_assert_eq(ret, 1);
+		}
+		for (i = 0; i < MT_ADDR_COUNT; i++) {
+			ret = fi_av_remove(av, &addresses[i], 1, 0);
+			cr_assert_eq(ret, FI_SUCCESS);
+		}
+	}
+
+	atomic_set(&done, 1);
+
+	ret = pthread_join(thread, NULL);
+	cr_assert_eq(ret, 0);
+
+	ret = pthread_barrier_destroy(&mtbar);
+	cr_assert_eq(ret, 0);
+}
+
+Test(av_full_map, mt_lookup)
+{
+	continuous_lookup();
+}
+
+Test(av_full_table, mt_lookup)
+{
+	continuous_lookup();
+}
+
+static const int state_empty = 1;
+static const int state_full = 2;
+static const int state_locked = 3;
+
+static void *continuous_insert(void *data)
+{
+	int i, pos, n, ret;
+	int expected_state;
+	struct gnix_ep_name *ep_names = ((struct gnix_ep_name **) data)[0];
+	fi_addr_t *addresses = ((fi_addr_t **) data)[1];
+	atomic_t *fe = ((atomic_t **) data)[2];
+	int num_insertions = (int) ((uint64_t *) data)[3];
+	int num_addrs = (int) ((uint64_t *) data)[4];
+	atomic_t *done = ((atomic_t **) data)[5];
+
+	ret = pthread_barrier_wait(&mtbar);
+	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
+		pthread_exit((void *) 1UL);
+	}
+
+	i = 0;
+	pos = 0;
+	while ((i < num_insertions) && !atomic_get(done)) {
+		n = (pos++)%num_addrs;
+		expected_state = state_empty;
+		if (atomic_cas_weak(&fe[n], &expected_state, state_locked)) {
+			av_lock();
+			ret = fi_av_insert(av, (void *) &ep_names[n], 1,
+					   &addresses[n], 0, NULL);
+			av_unlock();
+			if (ret != 1) {
+				/* flag shutdown to avoid deadlock */
+				atomic_set(done, 1);
+				pthread_exit((void *) 1UL);
+			}
+			atomic_set(&fe[n], state_full);
+			i++;
+		}
+	}
+
+	pthread_exit((void *) NULL);
+}
+
+static void *continuous_remove(void *data)
+{
+	int pos, n, ret;
+	int expected_state;
+	fi_addr_t *addresses = ((fi_addr_t **) data)[0];
+	atomic_t *fe = ((atomic_t **) data)[1];
+	int num_addrs = (int) ((uint64_t *) data)[2];
+	atomic_t *done = ((atomic_t **) data)[3];
+
+	ret = pthread_barrier_wait(&mtbar);
+	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
+		pthread_exit((void *) 1UL);
+	}
+
+	pos = 0;
+	while (!atomic_get(done)) {
+		n = (pos++)%num_addrs;
+		expected_state = state_full;
+		if (atomic_cas_weak(&fe[n], &expected_state, state_locked)) {
+			av_lock();
+			ret = fi_av_remove(av, &addresses[n], 1, 0);
+			av_unlock();
+			if (ret != FI_SUCCESS) {
+				/* flag shutdown to avoid deadlock */
+				atomic_set(done, 1);
+				pthread_exit((void *) 1UL);
+			}
+			atomic_set(&fe[n], state_empty);
+		}
+	}
+
+	pthread_exit((void *) NULL);
+}
+
+static void continuous_insert_remove(int num_inserters, int num_removers,
+				     int num_insertions)
+{
+	int i, ret;
+	unsigned long pret;
+	atomic_t done;
+	fi_addr_t addresses[MT_ADDR_COUNT];
+	atomic_t fe[MT_ADDR_COUNT];
+	const int addrs_per_thread = MT_ADDR_COUNT/num_inserters;
+	const int num_threads = num_inserters + num_removers;
+	pthread_t threads[num_threads];
+	void *info[num_threads][6];
+
+	ret = pthread_barrier_init(&mtbar, NULL, num_threads);
+	cr_assert_eq(ret, 0);
+
+	init_av_lock();
+
+	atomic_initialize(&done, 0);
+	for (i = 0; i < MT_ADDR_COUNT; i++) {
+		atomic_initialize(&fe[i], state_empty);
+	}
+
+	for (i = 0; i < num_inserters; i++) {
+		info[i][0] = (void *) &simple_ep_names[i*addrs_per_thread];
+		info[i][1] = (void *) &addresses[i*addrs_per_thread];
+		info[i][2] = (void *) &fe[i*addrs_per_thread];
+		info[i][3] = (void *) (uint64_t) num_insertions;
+		info[i][4] = (void *) (uint64_t) addrs_per_thread;
+		info[i][5] = (void *) &done;
+		ret = pthread_create(&threads[i], NULL,
+				     continuous_insert, &info[i]);
+		cr_assert_eq(ret, 0);
+	}
+
+	for (i = num_inserters; i < num_threads; i++) {
+		info[i][0] = (void *) addresses;
+		info[i][1] = (void *) fe;
+		info[i][2] = (void *) (uint64_t)
+			(num_inserters*addrs_per_thread);
+		info[i][3] = (void *) &done;
+		ret = pthread_create(&threads[i], NULL,
+				     continuous_remove, &info[i]);
+		cr_assert_eq(ret, 0);
+	}
+
+	for (i = 0; i < num_threads; i++) {
+		if (i == num_inserters) {
+			atomic_set(&done, 1);
+		}
+		ret = pthread_join(threads[i], (void **) &pret);
+		cr_assert_eq(ret, 0);
+		cr_assert_eq(pret, 0UL, "thread %d failed\n", i);
+	}
+
+	ret = pthread_barrier_destroy(&mtbar);
+	cr_assert_eq(ret, 0);
+}
+
+Test(av_full_map, mt_insert_remove)
+{
+	continuous_insert_remove(8, 1, 113);
+	continuous_insert_remove(4, 3, 113);
+	continuous_insert_remove(29, 13, 113);
+}
+
+Test(av_full_table, mt_insert_remove)
+{
+	continuous_insert_remove(8, 1, 113);
+	continuous_insert_remove(4, 3, 113);
+	continuous_insert_remove(29, 13, 113);
 }
 
 static void straddr_test(void)
