@@ -535,7 +535,7 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
-	_cq->channel, attr->signaling_vector);
+				_cq->channel, attr->signaling_vector);
 
 	if (!_cq->cq) {
 		ret = -errno;

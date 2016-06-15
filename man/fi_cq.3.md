@@ -145,7 +145,10 @@ struct fi_cq_attr {
   the provider may choose a default value.
 
 *flags*
-: Flags that control the configuration of the CQ.  This field must be 0.
+: Flags that control the configuration of the CQ.
+
+- *FI_AFFINITY*
+: Indicates that the signaling_vector field (see below) is valid.
 
 *format*
 : Completion queues allow the application to select the amount of
@@ -250,8 +253,10 @@ struct fi_cq_tagged_entry {
   as a wait object.
 
 *signaling_vector*
-: Indicates which processor core interrupts associated with the EQ should
-  target.
+: If the FI_AFFINITY flag is set, this indicates the logical cpu number
+  (0..max cpu - 1) that interrupts associated with the EQ should target.
+  This field should be treated as a hint to the provider and may be
+  ignored if the provider does not support interrupt affinity.
 
 *wait_cond*
 : By default, when a completion is inserted into an CQ that supports
