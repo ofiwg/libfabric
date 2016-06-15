@@ -78,7 +78,7 @@ dnl looks like we need to get rid of some white space
                            [AC_MSG_CHECKING([criterion path])
                             if test -d "$with_criterion"; then
                                 AC_MSG_RESULT([yes])
-                                gnitest_CPPFLAGS="-I$with_criterion/include -DHAVE_UDREG $CRAY_UDREG_INCLUDE_OPTS $gnitest_CPPFLAGS"
+                                gnitest_CPPFLAGS="-I$with_criterion/include -DHAVE_UDREG $CRAY_UDREG_CFLAGS $gnitest_CPPFLAGS"
                                 gnitest_LIBS="-lcriterion -ludreg  $gnitest_LIBS"
 
                                 if test -d "$with_criterion/lib"; then
@@ -91,7 +91,7 @@ dnl looks like we need to get rid of some white space
                                         have_criterion=false
                                 fi
 
-                                gnitest_LDFLAGS="$CRAY_UDREG_POST_LINK_OPTS $gnitest_LDFLAGS"
+                                gnitest_LDFLAGS="$CRAY_UDREG_LIBS $gnitest_LDFLAGS"
                                 FI_PKG_CHECK_MODULES([CRAY_PMI], [cray-pmi],
                                                      [],
                                                      [have_criterion=false])
