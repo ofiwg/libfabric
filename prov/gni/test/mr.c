@@ -263,6 +263,68 @@ Test(mr_internal_cache, basic_init)
 	cr_assert(atomic_get(&cache->stale.elements) == 1);
 }
 
+Test(mr_internal_cache, change_hard_soft_limits)
+{
+	int ret;
+	struct fi_gni_ops_domain *gni_domain_ops;
+	uint32_t val, get_val;
+
+	ret = fi_open_ops(&domain->domain_fid.fid, FI_GNI_DOMAIN_OPS_1,
+			  0, (void **) &gni_domain_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
+
+
+	val = 8192;
+	ret = gni_domain_ops->set_val(&domain->domain_fid.fid,
+			GNI_MR_HARD_REG_LIMIT, &val);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = gni_domain_ops->get_val(&domain->domain_fid.fid,
+			GNI_MR_HARD_REG_LIMIT, &get_val);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert(val == get_val);
+
+	val = 4096;
+	ret = gni_domain_ops->set_val(&domain->domain_fid.fid,
+			GNI_MR_SOFT_REG_LIMIT, &val);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = gni_domain_ops->get_val(&domain->domain_fid.fid,
+			GNI_MR_SOFT_REG_LIMIT, &get_val);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert(val == get_val);
+
+	val = 256;
+	ret = gni_domain_ops->set_val(&domain->domain_fid.fid,
+			GNI_MR_HARD_STALE_REG_LIMIT, &val);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = gni_domain_ops->get_val(&domain->domain_fid.fid,
+			GNI_MR_HARD_STALE_REG_LIMIT, &get_val);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert(val == get_val);
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, default_req_key,
+			default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cache = domain->mr_cache;
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+	cr_assert(cache->attr.hard_reg_limit == 8192);
+	cr_assert(cache->attr.soft_reg_limit == 4096);
+	cr_assert(cache->attr.hard_stale_limit == 256);
+
+	cr_assert(atomic_get(&cache->inuse.elements) == 1);
+	cr_assert(atomic_get(&cache->stale.elements) == 0);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(atomic_get(&cache->inuse.elements) == 0);
+	cr_assert(atomic_get(&cache->stale.elements) == 1);
+}
+
 /* Test duplicate registration. Since this is a valid operation, we
  *   provide a unique fid_mr but internally, a second reference to the same
  *   entry is provided to prevent expensive calls to GNI_MemRegister

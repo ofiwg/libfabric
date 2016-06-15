@@ -344,6 +344,15 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_MR_UDREG_REG_LIMIT:
 		*(int32_t *)val = domain->udreg_reg_limit;
 		break;
+	case GNI_MR_HARD_REG_LIMIT:
+		*(int32_t *)val = domain->mr_cache_attr.hard_reg_limit;
+		break;
+	case GNI_MR_SOFT_REG_LIMIT:
+		*(int32_t *)val = domain->mr_cache_attr.soft_reg_limit;
+		break;
+	case GNI_MR_HARD_STALE_REG_LIMIT:
+		*(int32_t *)val = domain->mr_cache_attr.hard_stale_limit;
+		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
 		return -FI_EINVAL;
@@ -447,6 +456,15 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 			if (ret != FI_SUCCESS)
 				return -FI_EINVAL;
 		}
+		break;
+	case GNI_MR_HARD_REG_LIMIT:
+		domain->mr_cache_attr.hard_reg_limit = *(int32_t *) val;
+		break;
+	case GNI_MR_SOFT_REG_LIMIT:
+		domain->mr_cache_attr.soft_reg_limit = *(int32_t *) val;
+		break;
+	case GNI_MR_HARD_STALE_REG_LIMIT:
+		domain->mr_cache_attr.hard_stale_limit = *(int32_t *) val;
 		break;
 	case GNI_MR_UDREG_REG_LIMIT:
 		if (*(int32_t *) val < 0)
