@@ -289,6 +289,67 @@ static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
 	return ret;
 }
 
+static ssize_t
+fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
+{
+	struct fi_ibv_rdm_tagged_request *request =
+		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+
+	/* Initial state */
+	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
+	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err   = FI_SUCCESS;
+
+	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
+	ssize_t ret = fi_ibv_rdm_tagged_req_hndl(request,
+						 FI_IBV_EVENT_SEND_START,
+						 sdata);
+
+	if (!ret && in_order &&
+		fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
+	{
+
+		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
+			{ .ep = sdata->ep_rdm };
+		ret = fi_ibv_rdm_tagged_req_hndl(request, 
+			FI_IBV_EVENT_POST_READY, &req_data);
+	}
+
+	return ret;
+}
+
+/*
+ * Postponed inject implementation. It's called when network resources are busy.
+ * There is another copying to an extra buffer to make user's one free to reusing.
+ */
+static inline ssize_t
+fi_ibv_rdm_tagged_pinject(struct fi_ibv_rdm_ep *ep,
+			  struct fi_ibv_rdm_tagged_conn *conn, const void *buf,
+			  size_t len, uint64_t tag)
+{
+	void* buf_src = util_buf_alloc(fi_ibv_rdm_tagged_extra_buffers_pool);
+	if (buf_src) {
+		memcpy(buf_src, buf, len);
+	} else {
+		return -FI_ENOMEM;
+	}
+
+	struct fi_ibv_rdm_tagged_send_start_data sdata = {
+		.ep_rdm = ep,
+		.conn = conn,
+		.data_len = len,
+		.context = NULL,
+		.tag = tag,
+		.buf.src_addr = buf_src,
+		.iov_count = 0,
+		.imm = 0,
+		.stype = IBV_RDM_SEND_TYPE_INJ
+	};
+
+	return fi_ibv_rdm_tagged_send_common(&sdata);
+}
+
 static inline ssize_t 
 fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len, 
 			 fi_addr_t dest_addr, uint64_t tag)
@@ -357,36 +418,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 
 	fi_ibv_rdm_tagged_poll(ep);
 
-	return -FI_EAGAIN;
-}
-
-static ssize_t
-fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
-{
-	struct fi_ibv_rdm_tagged_request *request =
-		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
-
-	/* Initial state */
-	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
-	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
-	request->state.err   = FI_SUCCESS;
-
-	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
-	int ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_START,
-		sdata);
-
-	if (!ret && in_order &&
-		fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
-	{
-
-		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
-			{ .ep = sdata->ep_rdm };
-		ret = fi_ibv_rdm_tagged_req_hndl(request, 
-			FI_IBV_EVENT_POST_READY, &req_data);
-	}
-
-	return ret;
+	return fi_ibv_rdm_tagged_pinject(ep, conn, buf, len, tag);
 }
 
 static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,

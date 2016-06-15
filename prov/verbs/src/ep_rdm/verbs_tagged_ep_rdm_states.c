@@ -102,7 +102,8 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 
 	request->sbuf = NULL;
 	request->len = p->data_len;
-	request->comp_flags = FI_TAGGED | FI_SEND;
+	request->comp_flags =
+		(p->stype == IBV_RDM_SEND_TYPE_INJ) ? 0 : (FI_TAGGED | FI_SEND);
 	request->imm = p->imm;
 	request->context = p->context;
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
@@ -197,7 +198,9 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 		assert(0);
 	};
 
-	fi_ibv_rdm_move_to_cq(request);
+	if (request->comp_flags) {
+		fi_ibv_rdm_move_to_cq(request);
+	}
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -224,6 +227,16 @@ fi_ibv_rdm_tagged_eager_send_lc(struct fi_ibv_rdm_tagged_request *request,
 	if (request->iov_count) {
 		util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
 				 request->iovec_arr);
+	}
+
+	if (!request->comp_flags) {
+		/*
+		 * This is a postponed inject w/o completion,
+		 * src_addr is an extra buffer which should be released
+		 */
+		util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+				 request->src_addr);
+		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	}
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
