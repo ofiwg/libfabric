@@ -262,6 +262,22 @@ static int __gnix_string_to_mr_type(const char *name)
 }
 
 static int
+__gnix_dom_ops_flush_cache(struct fid *fid)
+{
+	struct gnix_fid_domain *domain;
+
+	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
+
+	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
+	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
+		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid domain\n"));
+		return -FI_EINVAL;
+	}
+
+	return _gnix_flush_registration_cache(domain);
+}
+
+static int
 __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 {
 	struct gnix_fid_domain *domain;
@@ -448,7 +464,8 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 
 static struct fi_gni_ops_domain gnix_ops_domain = {
 	.set_val = __gnix_dom_ops_set_val,
-	.get_val = __gnix_dom_ops_get_val
+	.get_val = __gnix_dom_ops_get_val,
+	.flush_cache = __gnix_dom_ops_flush_cache,
 };
 
 DIRECT_FN int gnix_domain_bind(struct fid_domain *domain, struct fid *fid,
@@ -570,9 +587,10 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->data_progress = info->domain_attr->data_progress;
 	domain->thread_model = info->domain_attr->threading;
 	domain->mr_is_init = 0;
+
 	fastlock_init(&domain->cm_nic_lock);
 
-	domain->mr_cache_type = GNIX_DEFAULT_CACHE_TYPE;
+	_gnix_open_cache(domain, GNIX_DEFAULT_CACHE_TYPE);
 
 	*dom = &domain->domain_fid;
 	return FI_SUCCESS;

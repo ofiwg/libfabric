@@ -538,6 +538,26 @@ static int __udreg_dereg_mr(struct gnix_fid_domain *domain,
 	return urc;
 }
 
+static int __udreg_close(struct gnix_fid_domain *domain)
+{
+	udreg_return_t ret;
+
+	if (domain->udreg_cache) {
+		ret = UDREG_CacheRelease(domain->udreg_cache);
+		if (unlikely(ret != UDREG_RC_SUCCESS))
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to release from "
+					"mr cache during domain destruct, dom=%p rc=%d\n",
+					domain, ret);
+
+		ret = UDREG_CacheDestroy(domain->udreg_cache);
+		if (unlikely(ret != UDREG_RC_SUCCESS))
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr "
+					"cache during domain destruct, dom=%p rc=%d\n",
+					domain, ret);
+	}
+
+	return FI_SUCCESS;
+}
 #else
 static int __udreg_init(struct gnix_fid_domain *domain)
 {
@@ -563,6 +583,11 @@ static int __udreg_dereg_mr(struct gnix_fid_domain *domain,
 {
 	return -FI_ENOSYS;
 }
+
+static int __udreg_close(struct gnix_fid_domain *domain)
+{
+	return FI_SUCCESS;
+}
 #endif
 
 struct gnix_mr_ops udreg_mr_ops = {
@@ -570,6 +595,8 @@ struct gnix_mr_ops udreg_mr_ops = {
 	.is_init = __udreg_is_init,
 	.reg_mr = __udreg_reg_mr,
 	.dereg_mr = __udreg_dereg_mr,
+	.destroy_cache = __udreg_close,
+	.flush_cache = NULL, // UDREG doesn't support cache flush
 };
 
 static int __cache_init(struct gnix_fid_domain *domain) {
@@ -604,11 +631,39 @@ static int __cache_dereg_mr(struct gnix_fid_domain *domain,
 	return _gnix_mr_cache_deregister(domain->mr_cache, md);
 }
 
+static int __cache_close(struct gnix_fid_domain *domain)
+{
+	int ret;
+
+	if (domain->mr_cache) {
+		ret = _gnix_mr_cache_destroy(domain->mr_cache);
+		if (ret != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr cache "
+					"during domain destruct, dom=%p ret=%d\n",
+					domain, ret);
+	}
+
+	return FI_SUCCESS;
+}
+
+static int __cache_flush(struct gnix_fid_domain *domain)
+{
+	int ret;
+
+	fastlock_acquire(&domain->mr_cache_lock);
+	ret = _gnix_mr_cache_flush(domain->mr_cache);
+	fastlock_release(&domain->mr_cache_lock);
+
+	return ret;
+}
+
 struct gnix_mr_ops cache_mr_ops = {
 	.init = __cache_init,
 	.is_init = __cache_is_init,
 	.reg_mr = __cache_reg_mr,
 	.dereg_mr = __cache_dereg_mr,
+	.destroy_cache = __cache_close,
+	.flush_cache = __cache_flush,
 };
 
 
@@ -659,6 +714,7 @@ struct gnix_mr_ops basic_mr_ops = {
 	.is_init = __basic_mr_is_init,
 	.reg_mr = __basic_mr_reg_mr,
 	.dereg_mr = __basic_mr_dereg_mr,
+	.flush_cache = NULL, // unsupported since there is no caching here
 };
 
 
@@ -686,36 +742,22 @@ int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
 	return FI_SUCCESS;
 }
 
+
+int _gnix_flush_registration_cache(struct gnix_fid_domain *domain)
+{
+	if (domain->mr_ops && domain->mr_ops->flush_cache)
+		return domain->mr_ops->flush_cache(domain);
+
+	return FI_SUCCESS;  // if no flush was present, silently pass
+}
+
 int _gnix_close_cache(struct gnix_fid_domain *domain)
 {
-	int ret;
-
 	/* if the domain isn't being destructed by close, we need to check the
 	 * cache again. This isn't a likely case. Destroy must succeed since we
 	 * are in the destruct path */
-	if (domain->mr_cache) {
-		ret = _gnix_mr_cache_destroy(domain->mr_cache);
-		if (ret != FI_SUCCESS)
-			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr cache "
-					"during domain destruct, dom=%p ret=%d\n",
-					domain, ret);
-	}
-
-#ifdef HAVE_UDREG
-	if (domain->udreg_cache) {
-		ret = UDREG_CacheRelease(domain->udreg_cache);
-		if (unlikely(ret != UDREG_RC_SUCCESS))
-			GNIX_FATAL(FI_LOG_DOMAIN, "failed to release from "
-					"mr cache during domain destruct, dom=%p rc=%d\n",
-					domain, ret);
-
-		ret = UDREG_CacheDestroy(domain->udreg_cache);
-		if (unlikely(ret != UDREG_RC_SUCCESS))
-			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr "
-					"cache during domain destruct, dom=%p rc=%d\n",
-					domain, ret);
-	}
-#endif
+	if (domain->mr_ops && domain->mr_ops->destroy_cache)
+		return domain->mr_ops->destroy_cache(domain);
 
 	return FI_SUCCESS;
 }

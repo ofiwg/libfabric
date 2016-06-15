@@ -165,6 +165,42 @@ Test(domain, open_ops)
 	}
 }
 
+Test(domain, cache_flush_op)
+{
+	int i, ret;
+	const int num_doms = 11;
+	struct fid_domain *doms[num_doms];
+	struct fi_gni_ops_domain *gni_domain_ops;
+	struct fid_mr *mr;
+	char *buf = calloc(1024, sizeof(char));
+
+	cr_assert(buf);
+
+	memset(doms, 0, num_doms*sizeof(struct fid_domain *));
+
+	for (i = 0; i < num_doms; i++) {
+		ret = fi_domain(fabric, fi, &doms[i], NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_domain");
+		ret = fi_open_ops(&doms[i]->fid, FI_GNI_DOMAIN_OPS_1,
+				  0, (void **) &gni_domain_ops, NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_open_ops");
+
+		ret = fi_mr_reg(doms[i], buf, 1024, FI_READ, 0, 0, 0, &mr, NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_reg_mr");
+
+		ret = fi_close(&mr->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close mr");
+
+		ret = gni_domain_ops->flush_cache(&doms[i]->fid);
+		cr_assert(ret == FI_SUCCESS, "flush cache");
+
+		ret = fi_close(&doms[i]->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close domain");
+	}
+
+	free(buf);
+}
+
 Test(domain, invalid_open_ops)
 {
 	int ret;
