@@ -1500,6 +1500,7 @@ int ft_finalize(void)
 	struct iovec iov;
 	int ret;
 	struct fi_context ctx;
+	void *desc = fi_mr_desc(mr);
 
 	strcpy(tx_buf + ft_tx_prefix_size(), "fin");
 	iov.iov_base = tx_buf;
@@ -1510,6 +1511,7 @@ int ft_finalize(void)
 
 		memset(&tmsg, 0, sizeof tmsg);
 		tmsg.msg_iov = &iov;
+		tmsg.desc = &desc;
 		tmsg.iov_count = 1;
 		tmsg.addr = remote_fi_addr;
 		tmsg.tag = tx_seq;
@@ -1522,6 +1524,7 @@ int ft_finalize(void)
 
 		memset(&msg, 0, sizeof msg);
 		msg.msg_iov = &iov;
+		msg.desc = &desc;
 		msg.iov_count = 1;
 		msg.addr = remote_fi_addr;
 		msg.context = &ctx;
