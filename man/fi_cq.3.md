@@ -525,6 +525,12 @@ operation.  The following completion flags are defined.
   If other flag bits are zero, the provider is reporting that the multi-recv
   buffer has been freed, and the completion entry is not associated
   with a received message.
+
+Completion flags may be suppressed if the FI_NOTIFY_FLAGS_ONLY mode bit
+has been set.  When enabled, only the following flags are guaranteed to
+be set in completion data when they are valid: FI_REMOTE_READ and
+FI_REMOTE_WRITE (when FI_RMA_EVENT capability bit has been set),
+FI_REMOTE_CQ_DATA, and FI_MULTI_RECV.
  
 # RETURN VALUES
 
