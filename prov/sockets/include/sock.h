@@ -157,7 +157,7 @@ enum {
 	SOCK_SIGNAL_WR_FD
 };
 
-#define SOCK_MAJOR_VERSION 1
+#define SOCK_MAJOR_VERSION 2
 #define SOCK_MINOR_VERSION 0
 
 #define SOCK_WIRE_PROTO_VERSION (1)
@@ -484,7 +484,7 @@ struct sock_cm_entry {
 	int signal_fds[2];
 	uint64_t next_msg_id;
 	fastlock_t lock;
-	int shutdown_received;
+	int is_connected;
 	pthread_t listener_thread;
 	struct dlist_entry msg_list;
 };
@@ -528,8 +528,9 @@ struct sock_ep_attr {
 	enum fi_ep_type ep_type;
 	struct sockaddr_in *src_addr;
 	struct sockaddr_in *dest_addr;
+	uint16_t msg_src_port;
+	uint16_t msg_dest_port;
 
-	struct sockaddr_in cm_addr;
 	uint64_t peer_fid;
 	uint16_t key;
 	int is_disabled;
@@ -864,42 +865,19 @@ struct sock_cq {
 	sock_cq_report_fn report_completion;
 };
 
-struct sock_cm_msg_list_entry {
-	uint64_t msg_len;
-	uint8_t retry;
-	uint8_t reserved[7];
-	uint64_t timestamp_ms;
-	struct sockaddr_in addr;
-	struct dlist_entry entry;
-	fid_t fid;
-	struct sock_eq *eq;
-	char msg[0];
-};
-
 struct sock_conn_hdr {
 	uint8_t type;
 	uint8_t reserved[3];
-	int32_t s_port;
-	uint64_t msg_id;
+	uint16_t port;
+	uint16_t cm_data_sz;
+	char cm_data[0];
 };
 
 struct sock_conn_req {
 	struct sock_conn_hdr hdr;
-	struct fi_info info;
 	struct sockaddr_in src_addr;
-	struct sockaddr_in dest_addr;
-	struct fi_tx_attr	tx_attr;
-	struct fi_rx_attr	rx_attr;
-	struct fi_ep_attr	ep_attr;
-	struct fi_domain_attr	domain_attr;
-	struct fi_fabric_attr	fabric_attr;
-	struct sockaddr_in from_addr;
-	char user_data[0];
-};
-
-struct sock_conn_response {
-	struct sock_conn_hdr hdr;
-	char user_data[0];
+	uint64_t caps;
+	char cm_data[0];
 };
 
 enum {
@@ -907,12 +885,19 @@ enum {
 	SOCK_CONN_ACCEPT,
 	SOCK_CONN_REJECT,
 	SOCK_CONN_SHUTDOWN,
-	SOCK_CONN_ACK
 };
 
 struct sock_conn_req_handle {
 	struct fid handle;
 	struct sock_conn_req *req;
+	int sock_fd;
+	struct sock_pep *pep;
+	struct sock_ep *ep;
+	size_t paramlen;
+	pthread_t req_handler;
+	struct sockaddr_in dest_addr;
+	struct dlist_entry entry;
+	char cm_data[SOCK_EP_MAX_CM_DATA_SZ];
 };
 
 struct sock_host_list_entry {
@@ -1113,7 +1098,9 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr);
 void sock_conn_map_destroy(struct sock_conn_map *cmap);
 void sock_set_sockopts(int sock);
 int fd_set_nonblock(int fd);
+void sock_set_sockopt_reuseaddr(int sock);
 int sock_conn_map_init(struct sock_ep *ep, int init_size);
+void sock_set_sockopts_conn(int sock);
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
