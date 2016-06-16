@@ -608,7 +608,9 @@ static int __gnix_tag_list_insert_tag(
 	struct gnix_tag_list_element *element;
 
 	element = &req->msg.tle;
-	element->free.next = NULL;
+	if (!dlist_empty(&element->free))
+		return -FI_EALREADY;
+
 	element->context = NULL;
 	dlist_insert_tail(&element->free, &ts->list.list);
 
@@ -651,7 +653,6 @@ static struct gnix_fab_req *__gnix_tag_list_remove_tag(
 		return NULL;
 
 	req = __to_gnix_fab_req(element);
-	element->free.next = NULL;
 
 	return req;
 }
@@ -666,7 +667,6 @@ static void __gnix_tag_list_remove_tag_by_req(
 	element = &req->msg.tle;
 	item = (struct dlist_entry *) &element->free;
 	dlist_remove(item);
-	element->free.next = NULL;
 }
 
 static struct gnix_fab_req *__gnix_tag_list_remove_req_by_context(
@@ -684,7 +684,6 @@ static struct gnix_fab_req *__gnix_tag_list_remove_req_by_context(
 			return NULL;
 
 	req = __to_gnix_fab_req(element);
-	element->free.next = NULL;
 
 	return req;
 }
@@ -746,6 +745,9 @@ static int __gnix_tag_hlist_insert_tag(
 	int bucket = get_bucket(ts, tag);
 
 	element = &req->msg.tle;
+	if (!dlist_empty(&element->free))
+		return -FI_EALREADY;
+
 	dlist_init(&element->free);
 	element->context = NULL;
 	element->seq = ++ts->hlist.last_inserted_id;

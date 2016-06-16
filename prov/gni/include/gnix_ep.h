@@ -154,6 +154,7 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 		fr = container_of(de, struct gnix_fab_req, dlist);
 		fr->gnix_ep = ep;
 		dlist_init(&fr->dlist);
+		dlist_init(&fr->msg.tle.free);
 	}
 
 	/* reset common fields */
