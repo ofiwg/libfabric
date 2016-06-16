@@ -50,6 +50,29 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 
+#define CHECK_HOOK(name, args...) \
+	({ \
+		int __hook_return_val = 0; \
+		if (hooks->name) \
+			__hook_return_val = hooks->name(__func__, \
+					__LINE__, ##args); \
+		__hook_return_val; })
+#define HOOK_PRESENT(name) (hooks->name != NULL)
+
+#if 0
+#define MR_DBG(fmt, args...) fprintf(stderr, fmt, ##args)
+#else
+#define MR_DBG(fmt, args...)
+#endif
+
+#define HOOK_DEBUG(message, args...) \
+	MR_DBG("%s:%d - " message, func, line, ##args)
+#define HOOK_ASSERT(cond, message, args...) \
+	do { \
+		if (!(cond)) \
+			HOOK_DEBUG(message, args); \
+	} while (0)
+
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_mr *mr;
@@ -71,6 +94,44 @@ static uint64_t default_req_key;
 static uint64_t default_offset;
 
 struct timeval s1, s2;
+
+struct _mr_test_hooks {
+	int (*init_hook)(const char *func, int line);
+	int (*post_reg_hook)(const char *func, int line,
+			int inuse, int stale);
+	int (*post_dereg_hook)(const char *func, int line,
+			int inuse, int stale);
+	int (*get_lazy_dereg_limit)(const char *func, int line);
+};
+
+#define HOOK_DECL struct _mr_test_hooks *hooks
+struct _mr_test_hooks empty_hooks = {NULL};
+
+/* this helper function doesn't work for string ops */
+static void _set_check_domain_op_value(int op, int value)
+{
+	int ret;
+	struct fi_gni_ops_domain *gni_domain_ops;
+	int32_t get_val, val;
+
+	ret = fi_open_ops(&domain->domain_fid.fid, FI_GNI_DOMAIN_OPS_1,
+			  0, (void **) &gni_domain_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
+
+	val = value;
+	ret = gni_domain_ops->set_val(&domain->domain_fid.fid,
+			op, &val);
+	cr_assert(ret == FI_SUCCESS, "set val");
+
+	ret = gni_domain_ops->get_val(&domain->domain_fid.fid,
+			op, &get_val);
+	cr_assert(val == get_val, "get val");
+}
+
+static void _set_lazy_deregistration(int val)
+{
+	_set_check_domain_op_value(GNI_MR_CACHE_LAZY_DEREG, val);
+}
 
 static void _mr_setup(void)
 {
@@ -119,6 +180,17 @@ static void udreg_setup(void)
 	_mr_setup();
 
 	_gnix_open_cache(domain, GNIX_MR_TYPE_UDREG);
+
+	_set_lazy_deregistration(1);
+}
+
+static void udreg_setup_nld(void)
+{
+	_mr_setup();
+
+	_gnix_open_cache(domain, GNIX_MR_TYPE_UDREG);
+
+	_set_lazy_deregistration(0);
 }
 
 static void internal_mr_setup(void)
@@ -126,6 +198,17 @@ static void internal_mr_setup(void)
 	_mr_setup();
 
 	_gnix_open_cache(domain, GNIX_MR_TYPE_INTERNAL);
+
+	_set_lazy_deregistration(1);
+}
+
+static void internal_mr_setup_nld(void)
+{
+	_mr_setup();
+
+	_gnix_open_cache(domain, GNIX_MR_TYPE_INTERNAL);
+
+	_set_lazy_deregistration(0);
 }
 
 static void no_cache_setup(void)
@@ -135,24 +218,87 @@ static void no_cache_setup(void)
 	_gnix_open_cache(domain, GNIX_MR_TYPE_NONE);
 }
 
+/* bare tests */
 TestSuite(mr_internal_bare, .init = internal_mr_setup, .fini = mr_teardown);
 
+
+/* simple tests with lazy deregistration */
 TestSuite(mr_internal_cache, .init = internal_mr_setup, .fini = mr_teardown);
 
 #ifdef HAVE_UDREG
 TestSuite(mr_udreg_cache, .init = udreg_setup, .fini = mr_teardown);
-
-TestSuite(perf_mr_udreg, .init = udreg_setup, .fini = mr_teardown,
-		.disabled = true);
 #endif
 
 TestSuite(mr_no_cache, .init = no_cache_setup, .fini = mr_teardown);
 
+
+/* simple tests without lazy deregistration */
+TestSuite(mr_internal_cache_nld, .init = internal_mr_setup_nld,
+		.fini = mr_teardown);
+
+#ifdef HAVE_UDREG
+TestSuite(mr_udreg_cache_nld, .init = udreg_setup_nld, .fini = mr_teardown);
+#endif
+
+
+/* performance tests */
+TestSuite(perf_mr_internal, .init = internal_mr_setup, .fini = mr_teardown,
+		.disabled = true);
+
+#ifdef HAVE_UDREG
+TestSuite(perf_mr_udreg, .init = udreg_setup, .fini = mr_teardown,
+		.disabled = true);
+#endif
+
 TestSuite(perf_mr_no_cache, .init = no_cache_setup, .fini = mr_teardown,
 		.disabled = true);
 
-TestSuite(perf_mr_internal, .init = internal_mr_setup, .fini = mr_teardown,
-		.disabled = true);
+
+/* test hooks */
+
+static int __simple_init_hook(const char *func, int line)
+{
+	cache = domain->mr_cache;
+
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+
+	return 0;
+}
+
+static int __simple_post_reg_hook(const char *func, int line,
+		int expected_inuse,
+		int expected_stale)
+{
+	cache = domain->mr_cache;
+
+	HOOK_ASSERT(atomic_get(&cache->inuse.elements) == expected_inuse,
+			"failed expected inuse condition, actual=%d expected=%d\n",
+			atomic_get(&cache->inuse.elements),
+			expected_inuse);
+	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
+	HOOK_ASSERT(atomic_get(&cache->stale.elements) == expected_stale,
+				"failed expected inuse condition, actual=%d expected=%d\n",
+				atomic_get(&cache->stale.elements),
+				expected_stale);
+	cr_assert(atomic_get(&cache->stale.elements) == expected_stale);
+
+	return 0;
+}
+
+static int __simple_post_dereg_hook(const char *func, int line,
+		int expected_inuse,
+		int expected_stale)
+{
+	cache = domain->mr_cache;
+	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
+	cr_assert(atomic_get(&cache->stale.elements) == expected_stale);
+
+	return 0;
+}
+
+
+/* We won't do a very of the 'no cache' tests with nld "no lazy-dereg' as it
+   just doesn't make sense */
 
 /* Test simple init, register and deregister */
 Test(mr_internal_bare, basic_init)
@@ -240,8 +386,14 @@ Test(mr_internal_bare, invalid_fid_class)
 	dom->fid.fclass = old_class;
 }
 
-/* Test simple cache initialization */
-Test(mr_internal_cache, basic_init)
+/* more advanced test setups */
+static struct _mr_test_hooks __simple_test_hooks = {
+	.init_hook = __simple_init_hook,
+	.post_reg_hook = __simple_post_reg_hook,
+	.post_dereg_hook = __simple_post_dereg_hook,
+};
+
+static void __simple_init_test(HOOK_DECL)
 {
 	int ret;
 
@@ -250,17 +402,14 @@ Test(mr_internal_cache, basic_init)
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cache = domain->mr_cache;
-	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+	CHECK_HOOK(init_hook);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	CHECK_HOOK(post_reg_hook, 1, 0);
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) == 1);
+	CHECK_HOOK(post_dereg_hook, 0, 1);
 }
 
 Test(mr_internal_cache, change_hard_soft_limits)
@@ -329,7 +478,7 @@ Test(mr_internal_cache, change_hard_soft_limits)
  *   provide a unique fid_mr but internally, a second reference to the same
  *   entry is provided to prevent expensive calls to GNI_MemRegister
  */
-Test(mr_internal_cache, duplicate_registration)
+static void __simple_duplicate_registration_test(HOOK_DECL)
 {
 	int ret;
 	struct fid_mr *f_mr;
@@ -339,19 +488,16 @@ Test(mr_internal_cache, duplicate_registration)
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cache = domain->mr_cache;
-	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+	CHECK_HOOK(init_hook);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	CHECK_HOOK(post_reg_hook, 1, 0);
 
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	CHECK_HOOK(post_reg_hook, 1, 0);
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
@@ -359,14 +505,38 @@ Test(mr_internal_cache, duplicate_registration)
 	ret = fi_close(&f_mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) == 1);
+	CHECK_HOOK(post_reg_hook, 0, 1);
 }
+
+static int __post_dereg_greater_or_equal(const char *func, int line,
+		int expected_inuse,
+		int expected_stale)
+{
+	cache = domain->mr_cache;
+
+	HOOK_ASSERT(atomic_get(&cache->inuse.elements) == expected_inuse,
+			"failed expected inuse test, actual=%d expected=%d\n",
+			atomic_get(&cache->inuse.elements),
+			expected_inuse);
+	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
+	HOOK_ASSERT(atomic_get(&cache->stale.elements) >= expected_stale,
+			"failed expected stale test, actual=%d expected=%d\n",
+			atomic_get(&cache->stale.elements),
+			expected_stale);
+	cr_assert(atomic_get(&cache->stale.elements) >= expected_stale);
+
+	return 0;
+}
+
+static struct _mr_test_hooks __simple_rdr_hooks = {
+		.post_reg_hook = __simple_post_reg_hook,
+		.post_dereg_hook = __post_dereg_greater_or_equal,
+};
 
 /* Test registration of 1024 elements, all distinct. Cache element counts
  *   should meet expected values
  */
-Test(mr_internal_cache, register_1024_distinct_regions)
+static void __simple_register_1024_distinct_regions(HOOK_DECL)
 {
 	int ret;
 	uint64_t **buffers;
@@ -394,9 +564,7 @@ Test(mr_internal_cache, register_1024_distinct_regions)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	cache = domain->mr_cache;
-	cr_assert(atomic_get(&cache->inuse.elements) == regions);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	CHECK_HOOK(post_reg_hook, regions, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -412,14 +580,29 @@ Test(mr_internal_cache, register_1024_distinct_regions)
 	free(buffer);
 	buffer = NULL;
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) >= 0);
+	CHECK_HOOK(post_dereg_hook, 0, 0);
 }
+
+static int __post_dereg_greater_than(const char *func, int line,
+		int expected_inuse,
+		int expected_stale)
+{
+	cache = domain->mr_cache;
+	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
+	cr_assert(atomic_get(&cache->stale.elements) > expected_stale);
+
+	return 0;
+}
+
+static struct _mr_test_hooks __simple_rnur_hooks = {
+		.post_reg_hook = __simple_post_reg_hook,
+		.post_dereg_hook = __post_dereg_greater_than,
+};
 
 /* Test registration of 1024 registrations backed by the same initial
  *   registration. There should only be a single registration in the cache
  */
-Test(mr_internal_cache, register_1024_non_unique_regions)
+static void __simple_register_1024_non_unique_regions_test(HOOK_DECL)
 {
 	int ret;
 	char *hugepage;
@@ -455,9 +638,7 @@ Test(mr_internal_cache, register_1024_non_unique_regions)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	cache = domain->mr_cache;
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	CHECK_HOOK(post_reg_hook, 1, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -476,14 +657,27 @@ Test(mr_internal_cache, register_1024_non_unique_regions)
 	free(mr_arr);
 	mr_arr = NULL;
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) > 0);
+	CHECK_HOOK(post_dereg_hook, 0, 0);
 }
+
+static int __get_lazy_dereg_limit(const char *func, int line)
+{
+	cache = domain->mr_cache;
+
+	return cache->attr.hard_stale_limit;
+}
+
+static struct _mr_test_hooks __simple_lazy_hooks = {
+		.post_reg_hook = __simple_post_reg_hook,
+		.post_dereg_hook = __simple_post_dereg_hook,
+		.get_lazy_dereg_limit = __get_lazy_dereg_limit,
+};
+
 
 /* Test registration of 128 regions that will be cycled in and out of the
  *   inuse and stale trees. inuse + stale should never exceed 128
  */
-Test(mr_internal_cache, cyclic_register_128_distinct_regions)
+static void __simple_cyclic_register_128_distinct_regions(HOOK_DECL)
 {
 	int ret;
 	char **buffers;
@@ -491,7 +685,7 @@ Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 	struct fid_mr **mr_arr;
 	int i;
 	int buf_size = __BUF_LEN * sizeof(char);
-	int lazy_limit;
+	int lazy_limit = 0;
 
 	regions = 128;
 	mr_arr = calloc(regions, sizeof(struct fid_mr *));
@@ -515,12 +709,12 @@ Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	/* all registrations should now be 'in-use' */
-	cache = domain->mr_cache;
-	lazy_limit = MIN(cache->attr.hard_stale_limit, regions);
+	if (HOOK_PRESENT(get_lazy_dereg_limit)) {
+		lazy_limit = CHECK_HOOK(get_lazy_dereg_limit);
+	}
 
-	cr_assert(atomic_get(&cache->inuse.elements) == regions);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	/* all registrations should now be 'in-use' */
+	CHECK_HOOK(post_reg_hook, regions, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -528,8 +722,7 @@ Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 	}
 
 	/* all registrations should now be 'stale' */
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) == lazy_limit);
+	CHECK_HOOK(post_dereg_hook, 0, lazy_limit);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_mr_reg(dom, (void *) buffers[i], buf_size,
@@ -537,13 +730,11 @@ Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 				default_flags, &mr_arr[i], NULL);
 		cr_assert(ret == FI_SUCCESS);
 
-		cr_assert(atomic_get(&cache->inuse.elements) == i + 1);
-		cr_assert(atomic_get(&cache->stale.elements) == regions - (i + 1));
+		CHECK_HOOK(post_reg_hook, i + 1, regions - (i + 1));
 	}
 
 	/* all registrations should have been moved from 'stale' to 'in-use' */
-	cr_assert(atomic_get(&cache->inuse.elements) == regions);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	CHECK_HOOK(post_reg_hook, regions, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -551,8 +742,7 @@ Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 	}
 
 	/* all registrations should now be 'stale' */
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) == regions);
+	CHECK_HOOK(post_dereg_hook, 0, regions);
 
 	free(buffers);
 	buffers = NULL;
@@ -562,6 +752,130 @@ Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 
 	free(hugepage);
 	hugepage = NULL;
+}
+
+static int __test_stale_lt_or_equal(const char *func, int line,
+		int expected_inuse,
+		int expected_stale)
+{
+	cache = domain->mr_cache;
+
+	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
+	cr_assert(atomic_get(&cache->stale.elements) <= expected_stale);
+
+	return 0;
+}
+
+static struct _mr_test_hooks __simple_sais_hooks = {
+		.post_reg_hook = __test_stale_lt_or_equal,
+		.post_dereg_hook = __simple_post_reg_hook,
+		.get_lazy_dereg_limit = __get_lazy_dereg_limit,
+};
+
+
+/* Test repeated registration of a memory region with the same base
+ * address, increasing the size each time..  This is an explicit
+ * version of what the test rdm_sr::send_autoreg_uncached does under
+ * the covers (currently).
+ */
+static void __simple_same_addr_incr_size_test(HOOK_DECL)
+{
+	int ret;
+	int i;
+
+	for (i = 2; i <= buf_len; i *= 2) {
+		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
+				default_offset, default_req_key,
+				default_flags, &mr, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		CHECK_HOOK(init_hook);
+
+		CHECK_HOOK(post_reg_hook, 1, 1);
+
+		ret = fi_close(&mr->fid);
+		cr_assert(ret == FI_SUCCESS);
+
+		CHECK_HOOK(post_dereg_hook, 0, 1);
+	}
+}
+
+/* Same as above, except with decreasing sizes */
+static void  __simple_same_addr_decr_size_test(HOOK_DECL)
+{
+	int ret;
+	int i;
+
+	for (i = buf_len; i >= 2; i /= 2) {
+		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
+				default_offset, default_req_key,
+				default_flags, &mr, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		CHECK_HOOK(init_hook);
+
+		CHECK_HOOK(post_reg_hook, 1, 0);
+
+		ret = fi_close(&mr->fid);
+		cr_assert(ret == FI_SUCCESS);
+
+		CHECK_HOOK(post_dereg_hook, 0, 1);
+	}
+}
+
+/* Test simple cache initialization */
+Test(mr_internal_cache, basic_init)
+{
+	__simple_init_test(&__simple_test_hooks);
+}
+
+/* Test duplicate registration. Since this is a valid operation, we
+ *   provide a unique fid_mr but internally, a second reference to the same
+ *   entry is provided to prevent expensive calls to GNI_MemRegister
+ */
+Test(mr_internal_cache, duplicate_registration)
+{
+	__simple_duplicate_registration_test(&__simple_test_hooks);
+}
+
+/* Test registration of 1024 elements, all distinct. Cache element counts
+ *   should meet expected values
+ */
+Test(mr_internal_cache, register_1024_distinct_regions)
+{
+	__simple_register_1024_distinct_regions(&__simple_rdr_hooks);
+}
+
+/* Test registration of 1024 registrations backed by the same initial
+ *   registration. There should only be a single registration in the cache
+ */
+Test(mr_internal_cache, register_1024_non_unique_regions)
+{
+	__simple_register_1024_non_unique_regions_test(&__simple_rnur_hooks);
+}
+
+/* Test registration of 128 regions that will be cycled in and out of the
+ *   inuse and stale trees. inuse + stale should never exceed 128
+ */
+Test(mr_internal_cache, cyclic_register_128_distinct_regions)
+{
+	__simple_cyclic_register_128_distinct_regions(&__simple_lazy_hooks);
+}
+
+/* Test repeated registration of a memory region with the same base
+ * address, increasing the size each time..  This is an explicit
+ * version of what the test rdm_sr::send_autoreg_uncached does under
+ * the covers (currently).
+ */
+Test(mr_internal_cache, same_addr_incr_size)
+{
+	__simple_same_addr_incr_size_test(&__simple_sais_hooks);
+}
+
+/* Same as above, except with decreasing sizes */
+Test(mr_internal_cache, same_addr_decr_size)
+{
+	__simple_same_addr_decr_size_test(&__simple_test_hooks);
 }
 
 Test(mr_internal_cache, lru_evict_first_entry)
@@ -725,62 +1039,6 @@ Test(mr_internal_cache, lru_evict_middle_entry)
 
 	free(hugepage);
 	hugepage = NULL;
-}
-
-/* Test repeated registration of a memory region with the same base
- * address, increasing the size each time..  This is an explicit
- * version of what the test rdm_sr::send_autoreg_uncached does under
- * the covers (currently).
- */
-Test(mr_internal_cache, same_addr_incr_size)
-{
-	int ret;
-	int i;
-
-	for (i = 2; i <= buf_len; i *= 2) {
-		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
-				default_offset, default_req_key,
-				default_flags, &mr, NULL);
-		cr_assert(ret == FI_SUCCESS);
-
-		cache = domain->mr_cache;
-		cr_assert(cache->state == GNIX_MRC_STATE_READY);
-
-		cr_assert(atomic_get(&cache->inuse.elements) == 1);
-		cr_assert(atomic_get(&cache->stale.elements) <= 1);
-
-		ret = fi_close(&mr->fid);
-		cr_assert(ret == FI_SUCCESS);
-
-		cr_assert(atomic_get(&cache->inuse.elements) == 0);
-		cr_assert(atomic_get(&cache->stale.elements) == 1);
-	}
-}
-
-/* Same as above, except with decreasing sizes */
-Test(mr_internal_cache, same_addr_decr_size)
-{
-	int ret;
-	int i;
-
-	for (i = buf_len; i >= 2; i /= 2) {
-		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
-				default_offset, default_req_key,
-				default_flags, &mr, NULL);
-		cr_assert(ret == FI_SUCCESS);
-
-		cache = domain->mr_cache;
-		cr_assert(cache->state == GNIX_MRC_STATE_READY);
-
-		cr_assert(atomic_get(&cache->inuse.elements) == 1);
-		cr_assert(atomic_get(&cache->stale.elements) == 0);
-
-		ret = fi_close(&mr->fid);
-		cr_assert(ret == FI_SUCCESS);
-
-		cr_assert(atomic_get(&cache->inuse.elements) == 0);
-		cr_assert(atomic_get(&cache->stale.elements) == 1);
-	}
 }
 
 static inline void _repeated_registration(const char *label)
@@ -1133,6 +1391,7 @@ Test(mr_udreg_cache, register_1024_non_unique_regions)
 	simple_register_1024_non_unique_regions();
 }
 
+/* performance tests */
 Test(perf_mr_udreg, repeated_registration)
 {
 	_repeated_registration("udreg");
@@ -1147,6 +1406,18 @@ Test(perf_mr_udreg, random_analysis)
 {
 	_random_analysis("udreg");
 }
+
+/* no lazy dereg tests */
+Test(mr_udreg_cache_nld, register_1024_distinct_regions)
+{
+	simple_register_1024_distinct_regions();
+}
+
+Test(mr_udreg_cache_nld, register_1024_non_unique_regions)
+{
+	simple_register_1024_non_unique_regions();
+}
+
 #endif
 
 
@@ -1176,4 +1447,63 @@ Test(perf_mr_no_cache, single_large_registration)
 Test(perf_mr_no_cache, random_analysis)
 {
 	_random_analysis("no caching");
+}
+
+
+/* simple tests without lazy deregistration. Empty hooks can be used with all
+ * of the tests */
+
+/* Test simple cache initialization */
+Test(mr_internal_cache_nld, basic_init)
+{
+	__simple_init_test(&empty_hooks);
+}
+
+/* Test duplicate registration. Since this is a valid operation, we
+ *   provide a unique fid_mr but internally, a second reference to the same
+ *   entry is provided to prevent expensive calls to GNI_MemRegister
+ */
+Test(mr_internal_cache_nld, duplicate_registration)
+{
+	__simple_duplicate_registration_test(&empty_hooks);
+}
+
+/* Test registration of 1024 elements, all distinct. Cache element counts
+ *   should meet expected values
+ */
+Test(mr_internal_cache_nld, register_1024_distinct_regions)
+{
+	__simple_register_1024_distinct_regions(&empty_hooks);
+}
+
+/* Test registration of 1024 registrations backed by the same initial
+ *   registration. There should only be a single registration in the cache
+ */
+Test(mr_internal_cache_nld, register_1024_non_unique_regions)
+{
+	__simple_register_1024_non_unique_regions_test(&empty_hooks);
+}
+
+/* Test registration of 128 regions that will be cycled in and out of the
+ *   inuse and stale trees. inuse + stale should never exceed 128
+ */
+Test(mr_internal_cache_nld, cyclic_register_128_distinct_regions)
+{
+	__simple_cyclic_register_128_distinct_regions(&empty_hooks);
+}
+
+/* Test repeated registration of a memory region with the same base
+ * address, increasing the size each time..  This is an explicit
+ * version of what the test rdm_sr::send_autoreg_uncached does under
+ * the covers (currently).
+ */
+Test(mr_internal_cache_nld, same_addr_incr_size)
+{
+	__simple_same_addr_incr_size_test(&empty_hooks);
+}
+
+/* Same as above, except with decreasing sizes */
+Test(mr_internal_cache_nld, same_addr_decr_size)
+{
+	__simple_same_addr_decr_size_test(&empty_hooks);
 }
