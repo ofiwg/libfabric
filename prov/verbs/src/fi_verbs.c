@@ -149,7 +149,9 @@ int fi_ibv_create_ep(const char *node, const char *service,
 				&rai_hints, &_rai);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_getaddrinfo", errno);
-		ret = -errno;
+		if (errno) {
+			ret = -errno;
+		}
 		goto out;
 	}
 
