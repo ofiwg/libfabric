@@ -61,7 +61,7 @@ struct fid_eq *eq;
 
 struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
-struct fi_context *ctx_arr = NULL;
+struct fi_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
 uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -276,12 +276,6 @@ int ft_alloc_msgs(void)
 			   ~(alignment - 1));
 
 	remote_cq_data = ft_init_cq_data(fi);
-
-	if (opts.window_size > 0) {
-		ctx_arr = calloc(opts.window_size, sizeof(struct fi_context));
-		if (!ctx_arr)
-			return -FI_ENOMEM;
-	}
 
 	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
@@ -844,10 +838,11 @@ static void ft_close_fids(void)
 void ft_free_res(void)
 {
 	ft_close_fids();
-	if (ctx_arr) {
-		free(ctx_arr);
-		ctx_arr = NULL;
-	}
+
+	free(tx_ctx_arr);
+	free(rx_ctx_arr);
+	tx_ctx_arr = NULL;
+	rx_ctx_arr = NULL;
 
 	if (buf) {
 		free(buf);

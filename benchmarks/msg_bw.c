@@ -58,6 +58,10 @@ static int run(void)
 		return ret;
 	}
 
+	ret = ft_bw_init();
+	if (ret)
+		return ret;
+
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (!ft_use_size(i, opts.sizes_enabled))

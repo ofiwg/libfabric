@@ -63,6 +63,10 @@ static int run(void)
 	if (ret)
 		return ret;
 
+	ret = ft_bw_init();
+	if (ret)
+		return ret;
+
 	ret = ft_exchange_keys(&remote);
 	if (ret)
 		return ret;

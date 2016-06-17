@@ -151,6 +151,7 @@ extern int tx_fd, rx_fd;
 extern int timeout;
 
 extern struct fi_context tx_ctx, rx_ctx;
+extern struct fi_context *tx_ctx_arr, *rx_ctx_arr;
 extern uint64_t remote_cq_data;
 
 extern uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
