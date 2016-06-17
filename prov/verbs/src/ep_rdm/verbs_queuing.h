@@ -105,7 +105,7 @@ fi_ibv_rdm_take_first_from_errcq()
 		struct fi_ibv_rdm_tagged_request *entry =
 			container_of(fi_ibv_rdm_comp_queue.request_errcq.next,
 				struct fi_ibv_rdm_tagged_request, queue_entry);
-		fi_ibv_rdm_remove_from_cq(entry);
+		fi_ibv_rdm_remove_from_errcq(entry);
 		return entry;
 	}
 	return NULL;
