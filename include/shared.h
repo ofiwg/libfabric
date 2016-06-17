@@ -337,7 +337,7 @@ int check_recv_msg(const char *message);
 #define FT_PROCESS_EQ_ERR(rd, eq, fn, str) \
 	FT_PROCESS_QUEUE_ERR(eq_readerr, rd, eq, fn, str)
 
-#define FT_PRINT_OPTS_USAGE(opt, desc) fprintf(stderr, " %-20s %s\n", opt, desc)
+#define FT_PRINT_OPTS_USAGE(opt, desc) fprintf(stderr, " %-30s %s\n", opt, desc)
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
