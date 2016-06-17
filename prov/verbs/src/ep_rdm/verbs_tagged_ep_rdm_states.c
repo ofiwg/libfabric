@@ -1089,7 +1089,7 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 		sge.lkey = request->minfo.conn->rma_mr->lkey;
 	} else {
 		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-		return FI_SUCCESS;
+		return -FI_EAGAIN;
 	}
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm,
