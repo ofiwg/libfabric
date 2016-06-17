@@ -37,11 +37,13 @@ AM_CONDITIONAL([MACOS], [test "x$macos" = "x1"])
 AM_CONDITIONAL([LINUX], [test "x$linux" = "x1"])
 AM_CONDITIONAL([FREEBSD], [test "x$freebsd" = "x1"])
 
+base_c_warn_flags="-Wall -Wundef -Wpointer-arith"
+
 AC_ARG_ENABLE([debug],
 	      [AS_HELP_STRING([--enable-debug],
 			      [Enable debugging @<:@default=no@:>@])
 	      ],
-	      [CFLAGS="-g -O0 -Wall -Wextra -Wundef -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers $CFLAGS"
+	      [CFLAGS="-g -O0 ${base_c_warn_flags} -Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers $CFLAGS"
 	       dbg=1],
 	      [enable_debug=no
                dbg=0])
@@ -51,7 +53,7 @@ AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
 
 # Fix autoconf's habit of setting CFLAGS="-g -O2" by default while still
 # allowing the user to explicitly set CFLAGS=""
-: ${CFLAGS="-fvisibility=hidden -O2 -DNDEBUG -Wall -Wundef"}
+: ${CFLAGS="-fvisibility=hidden -O2 -DNDEBUG ${base_c_warn_flags}"}
 
 # AM PROG_AR did not exist pre AM 1.11.x (where x is somewhere >0 and
 # <3), but it is necessary in AM 1.12.x.

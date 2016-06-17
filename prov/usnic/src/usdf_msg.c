@@ -154,7 +154,7 @@ usdf_msg_rewind_qe(struct usdf_msg_qe *qe, size_t rewind, size_t mtu)
 	}
 
 	qe->ms_cur_iov = cur_iov;
-	qe->ms_cur_ptr = qe->ms_iov[cur_iov].iov_base +
+	qe->ms_cur_ptr = ((uint8_t *)qe->ms_iov[cur_iov].iov_base) +
 		qe->ms_iov[cur_iov].iov_len - cur_resid;
 	qe->ms_iov_resid = cur_resid;
 }

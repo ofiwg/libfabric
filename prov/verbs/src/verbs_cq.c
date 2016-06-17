@@ -123,7 +123,9 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	ssize_t ret = 0, cur;
 	ssize_t  threshold;
 	struct fi_ibv_cq *_cq;
+	uint8_t *p;
 
+	p = buf;
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 
 	if (!_cq->channel)
@@ -139,9 +141,9 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 				break;
 		}
 
-		ret = _cq->cq_fid.ops->read(&_cq->cq_fid, buf, count - cur);
+		ret = _cq->cq_fid.ops->read(&_cq->cq_fid, p, count - cur);
 		if (ret > 0) {
-			buf += ret * _cq->entry_size;
+			p += ret * _cq->entry_size;
 			cur += ret;
 			if (cur >= threshold)
 				break;

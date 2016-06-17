@@ -251,7 +251,11 @@ void vnic_dev_upd_res_vaddr(struct vnic_dev *vdev,
 			continue;
 		if (vdev->res[i].bus_addr >= map->bus_addr &&
 			vdev->res[i].bus_addr < map->bus_addr + map->len)
-			vdev->res[i].vaddr = map->vaddr +
+			/*
+			 * ptr cast is a libfabric-local modification, port to
+			 * Cisco-internal repository is in progress
+			 */
+			vdev->res[i].vaddr = ((uint8_t *)map->vaddr) +
 					(vdev->res[i].bus_addr - map->bus_addr);
 	}
 }
