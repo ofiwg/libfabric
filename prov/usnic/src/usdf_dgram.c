@@ -158,7 +158,7 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	qp = to_qpi(ep->e.dg.ep_qp);
 
 	rxd.urd_context = context;
-	rxd.urd_iov[0].iov_base = ep->e.dg.ep_hdr_buf +
+	rxd.urd_iov[0].iov_base = ((uint8_t *)ep->e.dg.ep_hdr_buf) +
 		qp->uq_rq.urq_post_index * USDF_HDR_BUF_ENTRY;
 	rxd.urd_iov[0].iov_len = sizeof(struct usd_udp_hdr);
 	memcpy(&rxd.urd_iov[1], iov, sizeof(*iov) * count);
@@ -196,7 +196,8 @@ usdf_dgram_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 
 	iovp = msg->msg_iov;
 	rq->urq_context[index] = msg->context;
-	hdr_ptr = ep->e.dg.ep_hdr_buf + (index * USDF_HDR_BUF_ENTRY);
+	hdr_ptr = ((uint8_t *)ep->e.dg.ep_hdr_buf) +
+			(index * USDF_HDR_BUF_ENTRY);
 	rq_enet_desc_enc(desc, (dma_addr_t) hdr_ptr,
 			RQ_ENET_TYPE_ONLY_SOP, sizeof(struct usd_udp_hdr));
 	ep->e.dg.ep_hdr_ptr[index] = (struct usd_udp_hdr *) hdr_ptr;
@@ -426,7 +427,7 @@ usdf_dgram_inject(struct fid_ep *fep, const void *buf, size_t len,
 ssize_t usdf_dgram_prefix_inject(struct fid_ep *fep, const void *buf,
 		size_t len, fi_addr_t dest_addr)
 {
-	return usdf_dgram_inject(fep, buf + USDF_HDR_BUF_ENTRY,
+	return usdf_dgram_inject(fep, ((uint8_t *)buf) + USDF_HDR_BUF_ENTRY,
 			len - USDF_HDR_BUF_ENTRY, dest_addr);
 }
 
@@ -549,7 +550,7 @@ usdf_dgram_prefix_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t
 
 	iovp = msg->msg_iov;
 	rq->urq_context[index] = msg->context;
-	hdr_ptr = iovp[0].iov_base +
+	hdr_ptr = ((uint8_t *)iovp[0].iov_base) +
 		(USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr));
 	rq_enet_desc_enc(desc, (dma_addr_t) hdr_ptr,
 			 RQ_ENET_TYPE_ONLY_SOP,
@@ -613,7 +614,7 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 		}
 
 		return usd_post_send_one_copy(ep->e.dg.ep_qp, &dest->ds_dest,
-				buf + USDF_HDR_BUF_ENTRY, len -
+				((uint8_t *)buf) + USDF_HDR_BUF_ENTRY, len -
 				USDF_HDR_BUF_ENTRY, flags,
 				context);
 	}
