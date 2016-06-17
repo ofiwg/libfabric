@@ -201,6 +201,13 @@ provider implementation constraints.
 
 *FI_LONG_DOUBLE*
 : A double-extended precision floating point value (IEEE 754).
+  Note that the size of a long double and number of bits used for
+  precision is compiler, platform, and/or provider specific.
+  Developers that use long double should ensure that libfabric is
+  built using a long double format that is compatible with their
+  application, and that format is supported by the provider.  The
+  mechanism used for this validation is currently beyond the scope of
+  the libfabric API.
 
 *FI_LONG_DOUBLE_COMPLEX*
 : An ordered pair of double-extended precision floating point values
