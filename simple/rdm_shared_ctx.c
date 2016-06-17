@@ -40,48 +40,23 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
+enum {
+	FT_UNSPEC,
+	FT_EP_CNT,
+};
 
-static int ep_cnt = 2;
+static int tx_shared_ctx = 1;
+static int rx_shared_ctx = 1;
+static int ep_cnt = 4;
 static struct fid_ep **ep_array, *srx_ctx;
 static struct fid_stx *stx_ctx;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t *addr_array;
 
-
-static int send_msg(int size)
-{
-	int ret;
-
-	ret = fi_send(ep_array[0], buf, (size_t) size, fi_mr_desc(mr),
-			addr_array[0], &tx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
-		return ret;
-	}
-
-	ret = ft_get_tx_comp(++tx_seq);
-	return ret;
-}
-
-static int recv_msg(void)
-{
-	int ret;
-
-	ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	ret = ft_get_rx_comp(++rx_seq);
-	return ret;
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_rx_attr rx_attr;
-	struct fi_tx_attr tx_attr;
+	struct fi_info *hints_dup, *fi_dup;
 	int i, ret = 0;
 
 	addr_array = calloc(ep_cnt, sizeof(*addr_array));
@@ -99,71 +74,87 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* TODO: avoid allocating EP when EP array is used. */
 	FT_CLOSE_FID(ep);
 
-	memset(&tx_attr, 0, sizeof tx_attr);
-	memset(&rx_attr, 0, sizeof rx_attr);
-
-	ret = fi_stx_context(domain, &tx_attr, &stx_ctx, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_stx_context", ret);
-		return ret;
+	if (tx_shared_ctx) {
+		ret = fi_stx_context(domain, fi->tx_attr, &stx_ctx, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_stx_context", ret);
+			return ret;
+		}
 	}
 
-	ret = fi_srx_context(domain, &rx_attr, &srx_ctx, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_srx_context", ret);
-		return ret;
+	if (rx_shared_ctx) {
+		ret = fi_srx_context(domain, fi->rx_attr, &srx_ctx, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_srx_context", ret);
+			return ret;
+		}
 	}
+
+       /* Get a fi_info corresponding to a wild card port. The first endpoint
+	* should use default/given port since that is what is known to both
+	* client and server. For other endpoints we should use addresses with
+	* random ports to avoid collision. fi_getinfo should return a random
+	* port if we don't specify it in the service arg or the hints. */
+
+	hints_dup = fi_dupinfo(hints);
+	if (!hints_dup)
+		return -FI_ENOMEM;
+
+	free(hints_dup->src_addr);
+	free(hints_dup->dest_addr);
+	hints_dup->src_addr = NULL;
+	hints_dup->dest_addr = NULL;
+	hints_dup->src_addrlen = 0;
+	hints_dup->dest_addrlen = 0;
+
+	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints_dup, &fi_dup);
+	if (ret)
+		goto err1;
 
 	ep_array = calloc(ep_cnt, sizeof(*ep_array));
 	if (!ep_array) {
 		perror("malloc");
-		return ret;
+		goto err2;
 	}
-	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_endpoint(domain, fi, &ep_array[i], NULL);
+
+	ret = fi_endpoint(domain, fi, &ep_array[0], NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err2;
+	}
+
+	for (i = 1; i < ep_cnt; i++) {
+		ret = fi_endpoint(domain, fi_dup, &ep_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_endpoint", ret);
-			return ret;
+			goto err2;
 		}
 	}
 
+	fi_freeinfo(fi_dup);
+	fi_freeinfo(hints_dup);
 	return 0;
+err2:
+	fi_freeinfo(fi_dup);
+err1:
+	fi_freeinfo(hints_dup);
+	return ret;
 }
 
 static int bind_ep_res(void)
 {
-	int i, ret = 0;
+	int i, ret;
 
 	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_ep_bind(ep_array[i], &stx_ctx->fid, 0);
-		if (ret) {
-			FT_PRINTERR("fi_ep_bind", ret);
-			return ret;
-		}
+		if (tx_shared_ctx)
+			FT_EP_BIND(ep_array[i], stx_ctx, 0);
 
-		ret = fi_ep_bind(ep_array[i], &srx_ctx->fid, 0);
-		if (ret) {
-			FT_PRINTERR("fi_ep_bind", ret);
-			return ret;
-		}
+		if (rx_shared_ctx)
+			FT_EP_BIND(ep_array[i], srx_ctx, 0);
 
-		ret = fi_ep_bind(ep_array[i], &txcq->fid, FI_SEND);
-		if (ret) {
-			FT_PRINTERR("fi_ep_bind", ret);
-			return ret;
-		}
-
-		ret = fi_ep_bind(ep_array[i], &rxcq->fid, FI_RECV);
-		if (ret) {
-			FT_PRINTERR("fi_ep_bind", ret);
-			return ret;
-		}
-
-		ret = fi_ep_bind(ep_array[i], &av->fid, 0);
-		if (ret) {
-			FT_PRINTERR("fi_ep_bind", ret);
-			return ret;
-		}
+		FT_EP_BIND(ep_array[i], txcq, FI_SEND);
+		FT_EP_BIND(ep_array[i], rxcq, FI_RECV);
+		FT_EP_BIND(ep_array[i], av, 0);
 
 		ret = fi_enable(ep_array[i]);
 		if (ret) {
@@ -171,45 +162,42 @@ static int bind_ep_res(void)
 			return ret;
 		}
 	}
-
-	return ret;
+	return 0;
 }
 
 static int run_test()
 {
 	int ret, i;
 
+	if (!(tx_ctx_arr = calloc(ep_cnt, sizeof *tx_ctx_arr)))
+		return -FI_ENOMEM;
+
+	if (!(rx_ctx_arr = calloc(ep_cnt, sizeof *rx_ctx_arr)))
+		return -FI_ENOMEM;
+
 	/* Post recvs */
 	for (i = 0; i < ep_cnt; i++) {
 		fprintf(stdout, "Posting recv for ctx: %d\n", i);
-		ret = fi_recv(srx_ctx, rx_buf, rx_size, fi_mr_desc(mr),
-				FI_ADDR_UNSPEC, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
+		if (rx_shared_ctx)
+			ret = ft_post_rx(srx_ctx, rx_size, &rx_ctx_arr[i]);
+		else
+			ret = ft_post_rx(ep_array[i], rx_size, &rx_ctx_arr[i]);
+		if (ret)
 			return ret;
-		}
-		rx_seq++;
 	}
 
 	if (opts.dst_addr) {
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
-			ret = fi_send(ep_array[i], tx_buf, tx_size, fi_mr_desc(mr),
-					addr_array[i], NULL);
-			if (ret) {
-				FT_PRINTERR("fi_send", ret);
-				return ret;
-			}
-
-			ret = ft_get_tx_comp(++tx_seq);
+			ret = ft_tx(ep_array[i], addr_array[i], tx_size, &tx_ctx_arr[i]);
 			if (ret)
 				return ret;
 		}
 	}
 
 	/* Wait for recv completions */
-	ret = ft_get_rx_comp(rx_seq);
+	ret = ft_get_rx_comp(rx_seq - 1);
 	if (ret)
 		return ret;
 
@@ -217,14 +205,7 @@ static int run_test()
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
-			ret = fi_send(ep_array[i], tx_buf, tx_size, fi_mr_desc(mr),
-					addr_array[i], NULL);
-			if (ret) {
-				FT_PRINTERR("fi_send", ret);
-				return ret;
-			}
-
-			ret = ft_get_tx_comp(++tx_seq);
+			ret = ft_tx(ep_array[i], addr_array[i], tx_size, &tx_ctx_arr[i]);
 			if (ret)
 				return ret;
 		}
@@ -241,25 +222,9 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	/* Check the number of EPs supported by the provider */
-	if (ep_cnt > fi->domain_attr->ep_cnt) {
-		ep_cnt = fi->domain_attr->ep_cnt;
-		fprintf(stderr, "Provider can support only %d of EPs\n", ep_cnt);
-	}
-
-	/* Get remote address */
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen * ep_cnt);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
-
-	fi->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
-	fi->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 
 	ret = alloc_ep_res(fi);
 	if (ret)
@@ -270,11 +235,12 @@ static int init_fabric(void)
 		return ret;
 
 	/* Post recv */
-	ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
+	if (rx_shared_ctx)
+		ret = ft_post_rx(srx_ctx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+	else
+		ret = ft_post_rx(ep_array[0], MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+	if (ret)
 		return ret;
-	}
 
 	return 0;
 }
@@ -293,11 +259,8 @@ static int init_av(void)
 		return ret;
 	}
 
-	if (ep_cnt <= 0) {
-		fprintf(stderr, "ep_cnt needs to be greater than 0\n");
-		return -EXIT_FAILURE;
-	}
 	local_addr = malloc(addrlen * ep_cnt);
+	remote_addr = malloc(addrlen * ep_cnt);
 
 	/* Get local addresses for all EPs */
 	for (i = 0; i < ep_cnt; i++) {
@@ -309,24 +272,32 @@ static int init_av(void)
 	}
 
 	if (opts.dst_addr) {
+		memcpy(remote_addr, fi->dest_addr, addrlen);
+
 		ret = ft_av_insert(av, remote_addr, 1, &addr_array[0], 0, NULL);
 		if (ret)
 			return ret;
 
 		/* Send local EP addresses to one of the remote endpoints */
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen * ep_cnt);
-		ret = send_msg(sizeof(size_t) + addrlen * ep_cnt);
+		memcpy(tx_buf + ft_tx_prefix_size(), &addrlen, sizeof(size_t));
+		memcpy(tx_buf + ft_tx_prefix_size() + sizeof(size_t),
+				local_addr, addrlen * ep_cnt);
+		ret = ft_tx(ep_array[0], addr_array[0],
+				sizeof(size_t) + addrlen * ep_cnt, &tx_ctx);
 		if (ret)
 			return ret;
 
 		/* Get remote EP addresses */
-		ret = recv_msg();
+		if (rx_shared_ctx)
+			ret = ft_rx(srx_ctx, rx_size);
+		else
+			ret = ft_rx(ep_array[0], rx_size);
 		if (ret)
 			return ret;
 
-		memcpy(&addrlen, buf, sizeof(size_t));
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen * ep_cnt);
+		memcpy(&addrlen, rx_buf + ft_rx_prefix_size(), sizeof(size_t));
+		memcpy(remote_addr, rx_buf + ft_rx_prefix_size() + sizeof(size_t),
+				addrlen * ep_cnt);
 
 		/* Insert remote addresses into AV
 		 * Skip the first address since we already have it in AV */
@@ -336,19 +307,23 @@ static int init_av(void)
 			return ret;
 
 		/* Send ACK */
-		ret = send_msg(16);
+		ret = ft_tx(ep_array[0], addr_array[0], 1, &tx_ctx);
 		if (ret)
 			return ret;
 
 	} else {
 		/* Get remote EP addresses */
-		ret = recv_msg();
+		if (rx_shared_ctx)
+			ret = ft_rx(srx_ctx, rx_size);
+		else
+			ret = ft_rx(ep_array[0], rx_size);
 		if (ret)
 			return ret;
 
-		memcpy(&addrlen, buf, sizeof(size_t));
+		memcpy(&addrlen, rx_buf + ft_rx_prefix_size(), sizeof(size_t));
 		remote_addr = malloc(addrlen * ep_cnt);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen * ep_cnt);
+		memcpy(remote_addr, rx_buf + ft_rx_prefix_size() + sizeof(size_t),
+				addrlen * ep_cnt);
 
 		/* Insert remote addresses into AV */
 		ret = ft_av_insert(av, remote_addr, ep_cnt, addr_array, 0, NULL);
@@ -356,14 +331,19 @@ static int init_av(void)
 			return ret;
 
 		/* Send local EP addresses to one of the remote endpoints */
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen * ep_cnt);
-		ret = send_msg(sizeof(size_t) + addrlen * ep_cnt);
+		memcpy(tx_buf + ft_tx_prefix_size(), &addrlen, sizeof(size_t));
+		memcpy(tx_buf + ft_tx_prefix_size() + sizeof(size_t),
+				local_addr, addrlen * ep_cnt);
+		ret = ft_tx(ep_array[0], addr_array[0],
+				sizeof(size_t) + addrlen * ep_cnt, &tx_ctx);
 		if (ret)
 			return ret;
 
 		/* Receive ACK from client */
-		ret = recv_msg();
+		if (rx_shared_ctx)
+			ret = ft_rx(srx_ctx, rx_size);
+		else
+			ret = ft_rx(ep_array[0], rx_size);
 		if (ret)
 			return ret;
 	}
@@ -396,6 +376,14 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+	int option_index = 0;
+
+	struct option long_options[] = {
+		{"no-tx-shared-ctx", no_argument, &tx_shared_ctx, 0},
+		{"no-rx-shared-ctx", no_argument, &rx_shared_ctx, 0},
+		{"ep-count", required_argument, 0, FT_EP_CNT},
+		{0, 0, 0, 0},
+	};
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
@@ -404,15 +392,31 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "h" ADDR_OPTS INFO_OPTS,
+					long_options, &option_index)) != -1) {
 		switch (op) {
+		case FT_EP_CNT:
+			ep_cnt = atoi(optarg);
+			if (ep_cnt <= 0) {
+				FT_ERR("ep_count needs to be greater than 0\n");
+				return EXIT_FAILURE;
+			}
+			hints->domain_attr->ep_cnt = ep_cnt;
+			break;
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "An RDM client-server example that uses shared context.\n");
+			ft_usage(argv[0], "An RDM client-server example that uses"
+				       " shared context.\n");
+			FT_PRINT_OPTS_USAGE("--no-tx-shared-ctx",
+					"Disable shared context for TX");
+			FT_PRINT_OPTS_USAGE("--no-rx-shared-ctx",
+					"Disable shared context for RX");
+			FT_PRINT_OPTS_USAGE("--ep-count <count> (default: 4)",
+					"# of endpoints to be opened");
 			return EXIT_FAILURE;
 		}
 	}
@@ -421,14 +425,20 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_NAMED_RX_CTX;
+	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	if (tx_shared_ctx)
+		hints->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
+	if (rx_shared_ctx)
+		hints->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 
 	ret = run();
 
 	FT_CLOSEV_FID(ep_array, ep_cnt);
-	FT_CLOSE_FID(srx_ctx);
-	FT_CLOSE_FID(stx_ctx);
+	if (rx_shared_ctx)
+		FT_CLOSE_FID(srx_ctx);
+	if (tx_shared_ctx)
+		FT_CLOSE_FID(stx_ctx);
 	ft_free_res();
 	free(addr_array);
 	free(ep_array);

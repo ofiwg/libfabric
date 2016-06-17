@@ -632,18 +632,6 @@ int ft_init_fabric(void)
 	return 0;
 }
 
-#define FT_EP_BIND(ep, fd, flags)					\
-	do {								\
-		int ret;						\
-		if ((fd)) {						\
-			ret = fi_ep_bind((ep), &(fd)->fid, (flags));	\
-			if (ret) {					\
-				FT_PRINTERR("fi_ep_bind", ret);		\
-				return ret;				\
-			}						\
-		}							\
-	} while (0)
-
 int ft_get_cq_fd(struct fid_cq *cq, int *fd)
 {
 	int ret = FI_SUCCESS;

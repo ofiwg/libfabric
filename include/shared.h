@@ -248,6 +248,18 @@ int size_to_count(int size);
 		}				\
 	} while (0)
 
+#define FT_EP_BIND(ep, fd, flags)					\
+	do {								\
+		int ret;						\
+		if ((fd)) {						\
+			ret = fi_ep_bind((ep), &(fd)->fid, (flags));	\
+			if (ret) {					\
+				FT_PRINTERR("fi_ep_bind", ret);		\
+				return ret;				\
+			}						\
+		}							\
+	} while (0)
+
 int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op);
