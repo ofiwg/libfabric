@@ -319,7 +319,7 @@ static void __gnix_msg_copy_unaligned_get_data(struct gnix_fab_req *req)
 			GNI_READ_ALIGN_MASK;
 
 	if (head_off) {
-		addr = (void *)&req->msg.rndzv_head + head_off;
+		addr = (uint8_t *)&req->msg.rndzv_head + head_off;
 
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "writing %d bytes to head (%p, 0x%x)\n",

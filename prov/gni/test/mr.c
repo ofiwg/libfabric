@@ -543,7 +543,7 @@ static void __simple_register_1024_distinct_regions(HOOK_DECL)
 {
 	int ret;
 	uint64_t **buffers;
-	void *buffer;
+	char *buffer;
 	struct fid_mr **mr_arr;
 	int i;
 
@@ -1125,7 +1125,8 @@ static inline void _single_large_registration(const char *label)
 
 	gettimeofday(&s1, 0);
 	for (i = 0; i < registrations; i++) {
-		ret = fi_mr_reg(dom, (void *) region + (registration_width * i),
+		ret = fi_mr_reg(dom, (void *) (region +
+					       (registration_width * i)),
 				registration_width, default_access,
 				default_offset, default_req_key,
 				default_flags, &f_mr[i], NULL);
@@ -1189,8 +1190,10 @@ static inline void _random_analysis(const char *label)
 	for (i = 0; i < registrations; i++) {
 		ptr = region + rand() % region_len;
 		ptr_len = registration_width;
-		if ((uint64_t) (ptr + ptr_len) > (uint64_t) (region + region_len))
+		if ((uint64_t) ((char *) ptr + ptr_len) >
+		    (uint64_t) (region + region_len)) {
 			ptr_len = ((uint64_t) region + region_len) - (uint64_t) ptr;
+		}
 
 		ret = fi_mr_reg(dom, (void *) ptr,
 				ptr_len, default_access,
@@ -1244,19 +1247,19 @@ Test(mr_internal_cache, regression_615)
 {
 	int ret;
 	struct fid_mr *f_mr;
-	void *buffer = calloc(1 << 19, sizeof(char));
+	char *buffer = calloc(1 << 19, sizeof(char));
 
 	cr_assert(buffer != NULL);
 
 	/* set up stale cache */
-	ret = fi_mr_reg(dom, (void *) buffer + 0x18000, 0x8000,
+	ret = fi_mr_reg(dom, (void *) (buffer + 0x18000), 0x8000,
 			default_access, default_offset, default_req_key,
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 	ret = fi_close(&f_mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-	ret = fi_mr_reg(dom, (void *) buffer + 0x0, 0x80000,
+	ret = fi_mr_reg(dom, (void *) (buffer + 0x0), 0x80000,
 			default_access, default_offset, default_req_key,
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
@@ -1264,7 +1267,7 @@ Test(mr_internal_cache, regression_615)
 	cr_assert(ret == FI_SUCCESS);
 
 	/* set up inuse */
-	ret = fi_mr_reg(dom, (void *) buffer + 0x28000, 0x4000,
+	ret = fi_mr_reg(dom, (void *) (buffer + 0x28000), 0x4000,
 			default_access, default_offset, default_req_key,
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
@@ -1284,7 +1287,7 @@ void simple_register_1024_distinct_regions(void)
 {
 	int ret;
 	uint64_t **buffers;
-	void *buffer;
+	char *buffer;
 	struct fid_mr **mr_arr;
 	int i;
 

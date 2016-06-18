@@ -129,7 +129,7 @@ static void __gnix_rma_copy_indirect_get_data(struct gnix_tx_descriptor *txd)
 	int head_off = req->rma.rem_addr & GNI_READ_ALIGN_MASK;
 
 	memcpy((void *)req->rma.loc_addr,
-	       txd->int_buf + head_off,
+	       (void *) ((uint8_t *) txd->int_buf + head_off),
 	       req->rma.len);
 }
 
@@ -147,19 +147,19 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_tx_descriptor *txd)
 		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  head_len, req->rma.loc_addr);
 		memcpy((void *)req->rma.loc_addr,
-		       txd->int_buf + head_off,
+		       (void *) ((uint8_t *) txd->int_buf + head_off),
 		       head_len);
 	}
 
 	if (tail_len) {
-		addr = (void *)req->rma.loc_addr +
-			       req->rma.len -
-			       tail_len;
+		addr = (void *) ((uint8_t *) req->rma.loc_addr +
+				 req->rma.len -
+				 tail_len);
 
 		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  tail_len, addr);
 		memcpy((void *)addr,
-		       txd->int_buf + GNI_READ_ALIGN,
+		       (void *) ((uint8_t *) txd->int_buf + GNI_READ_ALIGN),
 		       tail_len);
 	}
 }

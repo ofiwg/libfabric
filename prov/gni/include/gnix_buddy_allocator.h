@@ -68,11 +68,16 @@ static inline uint32_t __gnix_buddy_log2(uint32_t v)
 }
 
 /* Find the bitmap index for block X of size X_LEN */
-static inline size_t __gnix_buddy_bitmap_index(void *x, size_t x_len, void *base,
-					       size_t base_len, size_t min_len)
+static inline size_t __gnix_buddy_bitmap_index(void *_x, size_t x_len,
+					       void *_base, size_t base_len,
+					       size_t min_len)
 {
-	return (size_t) ((x - base) / (size_t) x_len) + base_len / (min_len / 2)
-		- base_len / (x_len / 2);
+	/* arithmetic on void * is not part of the C standard (yet?) */
+	uint8_t *x = _x;
+	uint8_t *base = _base;
+
+	return (size_t) ((x - base) / (size_t) x_len) +
+		base_len / (min_len / 2) - base_len / (x_len / 2);
 }
 
 /* Find the address of X's buddy block:
