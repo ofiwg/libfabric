@@ -420,19 +420,19 @@ int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 	}
 
 	if ((ep_cap & FI_TAGGED) && domain->tagged_ep &&
-	    fi_recv_allowed(ep_cap))
+	    ofi_recv_allowed(ep_cap))
 		return -FI_EBUSY;
 
 	if ((ep_cap & FI_MSG) && domain->msg_ep &&
-	    fi_recv_allowed(ep_cap))
+	    ofi_recv_allowed(ep_cap))
 		return -FI_EBUSY;
 
 	if ((ep_cap & FI_RMA) && domain->rma_ep &&
-	    fi_rma_target_allowed(ep_cap))
+	    ofi_rma_target_allowed(ep_cap))
 		return -FI_EBUSY;
 
 	if ((ep_cap & FI_ATOMICS) && domain->atomics_ep &&
-	    fi_rma_target_allowed(ep_cap))
+	    ofi_rma_target_allowed(ep_cap))
 		return -FI_EBUSY;
 
 	return 0;
@@ -470,16 +470,16 @@ int psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep
 		domain->am_initialized = 1;
 	}
 
-	if ((ep_cap & FI_RMA) && fi_rma_target_allowed(ep_cap))
+	if ((ep_cap & FI_RMA) && ofi_rma_target_allowed(ep_cap))
 		domain->rma_ep = ep;
 
-	if ((ep_cap & FI_ATOMICS) && fi_rma_target_allowed(ep_cap))
+	if ((ep_cap & FI_ATOMICS) && ofi_rma_target_allowed(ep_cap))
 		domain->atomics_ep = ep;
 
-	if ((ep_cap & FI_TAGGED) && fi_recv_allowed(ep_cap))
+	if ((ep_cap & FI_TAGGED) && ofi_recv_allowed(ep_cap))
 		domain->tagged_ep = ep;
 
-	if ((ep_cap & FI_MSG) && fi_recv_allowed(ep_cap))
+	if ((ep_cap & FI_MSG) && ofi_recv_allowed(ep_cap))
 		domain->msg_ep = ep;
 
 	return 0;

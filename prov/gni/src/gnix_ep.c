@@ -1631,16 +1631,16 @@ static int __gnix_ep_bound_prep(struct gnix_fid_domain *domain,
 
 static void gnix_ep_caps(struct gnix_fid_ep *ep_priv, uint64_t caps)
 {
-	if (fi_recv_allowed(caps & ~FI_TAGGED))
+	if (ofi_recv_allowed(caps & ~FI_TAGGED))
 		ep_priv->ep_ops.msg_recv_allowed = 1;
 
-	if (fi_send_allowed(caps & ~FI_TAGGED))
+	if (ofi_send_allowed(caps & ~FI_TAGGED))
 		ep_priv->ep_ops.msg_send_allowed = 1;
 
-	if (fi_recv_allowed(caps & ~FI_MSG))
+	if (ofi_recv_allowed(caps & ~FI_MSG))
 		ep_priv->ep_ops.tagged_recv_allowed = 1;
 
-	if (fi_send_allowed(caps & ~FI_MSG))
+	if (ofi_send_allowed(caps & ~FI_MSG))
 		ep_priv->ep_ops.tagged_send_allowed = 1;
 
 }

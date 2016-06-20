@@ -128,7 +128,7 @@ size_t fi_datatype_size(enum fi_datatype datatype)
 	return fi_datatype_size_table[datatype];
 }
 
-int fi_send_allowed(uint64_t caps)
+int ofi_send_allowed(uint64_t caps)
 {
 	if (caps & FI_MSG ||
 		caps & FI_TAGGED) {
@@ -142,7 +142,7 @@ int fi_send_allowed(uint64_t caps)
 	return 0;
 }
 
-int fi_recv_allowed(uint64_t caps)
+int ofi_recv_allowed(uint64_t caps)
 {
 	if (caps & FI_MSG ||
 		caps & FI_TAGGED) {
@@ -156,7 +156,7 @@ int fi_recv_allowed(uint64_t caps)
 	return 0;
 }
 
-int fi_rma_initiate_allowed(uint64_t caps)
+int ofi_rma_initiate_allowed(uint64_t caps)
 {
 	if (caps & FI_RMA ||
 		caps & FI_ATOMICS) {
@@ -172,7 +172,7 @@ int fi_rma_initiate_allowed(uint64_t caps)
 	return 0;
 }
 
-int fi_rma_target_allowed(uint64_t caps)
+int ofi_rma_target_allowed(uint64_t caps)
 {
 	if (caps & FI_RMA ||
 		caps & FI_ATOMICS) {
