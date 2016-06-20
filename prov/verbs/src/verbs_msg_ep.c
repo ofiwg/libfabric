@@ -127,6 +127,9 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	int ret;
 
 	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
+	ret = ofi_ep_bind_valid(&fi_ibv_prov, bfid, flags);
+	if (ret)
+		return ret;
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
