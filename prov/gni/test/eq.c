@@ -127,6 +127,110 @@ void eq_wait_mutex_cond_setup(void)
 	eq_create(FI_WAIT_MUTEX_COND, 8);
 }
 
+/******************************************************************************
+ * Basic in/out tests
+ *****************************************************************************/
+
+TestSuite(eq_basic, .init = eq_wait_unspec_setup, .fini = eq_teardown);
+
+void eq_rw(int blocking)
+{
+	int ret = 0, i;
+	uint32_t in_event = 'a';
+	uint32_t out_event = 'a';
+
+	fid_t in_err_fid = (fid_t)0xf1d;
+	int64_t in_err_ctx = 0xc0413;
+	uint64_t in_err_idx = 10;
+	int in_err_err = 255;
+	int in_err_perrno = -13;
+	uint64_t in_err_data = 12445079;
+	size_t in_err_data_size = sizeof(in_err_data);
+
+	char *in_buf = "12345";
+	char out_buf[1024];
+	const size_t eq_size = 1025;
+	struct fi_eq_err_entry err_buf;
+	int err_cnt = 0;
+
+	for (i = 0; i < eq_size; i++) {
+		ret = fi_eq_write(eq, in_event + i + eq_size, in_buf,
+				  sizeof(in_buf), 0);
+		cr_assert_eq(ret, sizeof(in_buf));
+
+#if 0
+		fid_t            fid;        /* fid associated with error */
+		void            *context;    /* operation context */
+		uint64_t         data;       /* completion-specific data */
+		int              err;        /* positive error code */
+		int              prov_errno; /* provider error code */
+		void            *err_data;   /* additional error data */
+		size_t           err_data_size; /* size of err_data */
+#endif
+
+		ret = _gnix_eq_write_error(eq,
+					   (fid_t)(in_err_fid + i),
+					   (void *)(in_err_ctx + i),
+					   in_err_idx + i,
+					   in_err_err + i,
+					   in_err_perrno + i,
+					   (void *)(in_err_data + i),
+					   in_err_data_size + i);
+		cr_assert_eq(ret, FI_SUCCESS);
+		err_cnt++;
+	}
+
+	for (i = 0; i < eq_size*2; i++) {
+		if (blocking) {
+			ret = fi_eq_sread(eq, &out_event, &out_buf, 1024, 1, 0);
+		} else {
+			ret = fi_eq_read(eq, &out_event, &out_buf, 1024, 0);
+		}
+
+		if (ret == -FI_EAVAIL) {
+			struct fi_eq_err_entry tmp_err = {
+				.fid = (fid_t)(in_err_fid + i),
+				.context = (void *)(in_err_ctx + i),
+				.data = in_err_idx + i,
+				.err = in_err_err + i,
+				.prov_errno = in_err_perrno + i,
+				.err_data = (void *)(in_err_data + i),
+				.err_data_size = in_err_data_size + i
+			};
+
+			ret = fi_eq_readerr(eq, &err_buf, 0);
+			cr_assert(!memcmp(&tmp_err, &err_buf, sizeof(err_buf)),
+				  "bad error data");
+			err_cnt--;
+		} else {
+			cr_assert(err_cnt == 0);
+			cr_assert_eq(ret, sizeof(in_buf));
+			cr_assert_eq(out_event, in_event + i);
+		}
+	}
+
+	if (blocking) {
+		ret = fi_eq_sread(eq, &out_event, &out_buf, 1024, 1, 0);
+	} else {
+		ret = fi_eq_read(eq, &out_event, &out_buf, 1024, 0);
+	}
+	cr_assert_eq(ret, -FI_EAGAIN);
+}
+
+Test(eq_basic, rw)
+{
+	eq_rw(0);
+}
+
+Test(eq_basic, rw_blocking)
+{
+	eq_rw(1);
+}
+
+/******************************************************************************
+ * Wait object tests
+ *****************************************************************************/
+
 TestSuite(eq_wait_obj, .fini = eq_teardown);
 
 Test(eq_wait_obj, none, .init = eq_wait_none_setup)
