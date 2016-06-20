@@ -411,7 +411,9 @@ fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_tagged_request *request,
 			unexp->len, request->len,
 			request->minfo.conn, request->minfo.tag,
 			request->minfo.tagmask);
-		assert(0);
+
+		util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
+				 unexp->unexp_rbuf);
 		ret = -FI_ETRUNC;
 		return ret;
 	}
@@ -480,7 +482,8 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 
 		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
 
-		assert(((p->peek_data.flags & FI_CLAIM) &&
+		assert((ret != FI_SUCCESS) ||
+			((p->peek_data.flags & FI_CLAIM) &&
 				(request->state.eager == 
 					FI_IBV_STATE_EAGER_RECV_CLAIMED) &&
 				(request->context == found_request->context)) ||
@@ -520,6 +523,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	
 	if (ret != FI_SUCCESS) {
 		fi_ibv_rdm_move_to_errcq(request, ret);
+		ret = FI_SUCCESS;
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -1085,7 +1089,7 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 		sge.lkey = request->minfo.conn->rma_mr->lkey;
 	} else {
 		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
-		return FI_SUCCESS;
+		return -FI_EAGAIN;
 	}
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm,
