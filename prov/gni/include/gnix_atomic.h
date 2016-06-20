@@ -47,5 +47,8 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		     size_t result_count,
 		     uint64_t flags);
 
+/* SMSG callback for AMO remote counter control message. */
+int __smsg_amo_cntr(void *data, void *msg);
+
 #endif /* _GNIX_ATOMIC_H_ */
 

@@ -1359,14 +1359,24 @@ static void __ep_destruct(void *obj)
 		_gnix_ref_put(ep->recv_cntr);
 	}
 
+	if (ep->write_cntr) {
+		_gnix_cntr_poll_nic_rem(ep->write_cntr, ep->nic);
+		_gnix_ref_put(ep->write_cntr);
+	}
+
 	if (ep->read_cntr) {
 		_gnix_cntr_poll_nic_rem(ep->read_cntr, ep->nic);
 		_gnix_ref_put(ep->read_cntr);
 	}
 
-	if (ep->write_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->write_cntr, ep->nic);
-		_gnix_ref_put(ep->write_cntr);
+	if (ep->rwrite_cntr) {
+		_gnix_cntr_poll_nic_rem(ep->rwrite_cntr, ep->nic);
+		_gnix_ref_put(ep->rwrite_cntr);
+	}
+
+	if (ep->rread_cntr) {
+		_gnix_cntr_poll_nic_rem(ep->rread_cntr, ep->nic);
+		_gnix_ref_put(ep->rread_cntr);
 	}
 
 	if (ep->stx_ctx)
@@ -1529,20 +1539,6 @@ DIRECT_FN STATIC int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			_gnix_ref_get(cntr);
 		}
 
-		if (flags & FI_READ) {
-			/* don't allow rebinding */
-			if (ep->read_cntr) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "cannot rebind read counter (%p)\n",
-					  cntr);
-				ret = -FI_EINVAL;
-				break;
-			}
-			ep->read_cntr = cntr;
-			_gnix_cntr_poll_nic_add(cntr, ep->nic);
-			_gnix_ref_get(cntr);
-		}
-
 		if (flags & FI_WRITE) {
 			/* don't allow rebinding */
 			if (ep->write_cntr) {
@@ -1557,18 +1553,48 @@ DIRECT_FN STATIC int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			_gnix_ref_get(cntr);
 		}
 
-		/* TODO: don't support this option right now,
-		   never should have gotten here since gni provider
-		   doesn't claim cap FI_RMA_EVENT.  This
-		   option could be supported via Aries atomics
-		   or using SMSG cntrl messages */
-
-		if ((flags & FI_REMOTE_WRITE) || (flags & FI_REMOTE_READ)) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "unsupported counter flags (%p)\n",
-				  cntr);
-			ret = -FI_ENOSYS;
+		if (flags & FI_READ) {
+			/* don't allow rebinding */
+			if (ep->read_cntr) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "cannot rebind read counter (%p)\n",
+					  cntr);
+				ret = -FI_EINVAL;
+				break;
+			}
+			ep->read_cntr = cntr;
+			_gnix_cntr_poll_nic_add(cntr, ep->nic);
+			_gnix_ref_get(cntr);
 		}
+
+		if (flags & FI_REMOTE_WRITE) {
+			/* don't allow rebinding */
+			if (ep->rwrite_cntr) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "cannot rebind rwrite counter (%p)\n",
+					  cntr);
+				ret = -FI_EINVAL;
+				break;
+			}
+			ep->rwrite_cntr = cntr;
+			_gnix_cntr_poll_nic_add(cntr, ep->nic);
+			_gnix_ref_get(cntr);
+		}
+
+		if (flags & FI_REMOTE_READ) {
+			/* don't allow rebinding */
+			if (ep->rread_cntr) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "cannot rebind rread counter (%p)\n",
+					  cntr);
+				ret = -FI_EINVAL;
+				break;
+			}
+			ep->rread_cntr = cntr;
+			_gnix_cntr_poll_nic_add(cntr, ep->nic);
+			_gnix_ref_get(cntr);
+		}
+
 		break;
 
 	case FI_CLASS_STX_CTX:
@@ -1732,7 +1758,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fastlock_init(&ep_priv->recv_queue_lock);
 	fastlock_init(&ep_priv->tagged_queue_lock);
 
-	ep_priv->caps = info->caps & GNIX_EP_RDM_CAPS;
+	ep_priv->caps = info->caps & GNIX_EP_RDM_CAPS_FULL;
 
 	if (info->tx_attr)
 		ep_priv->op_flags = info->tx_attr->op_flags;

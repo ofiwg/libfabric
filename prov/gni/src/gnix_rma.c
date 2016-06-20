@@ -227,6 +227,54 @@ static int __gnix_rma_post_irq_complete(void *arg, gni_return_t tx_status)
 	return FI_SUCCESS;
 }
 
+/* SMSG callback for RMA data control message. */
+int __smsg_rma_data(void *data, void *msg)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+	struct gnix_smsg_rma_data_hdr *hdr =
+			(struct gnix_smsg_rma_data_hdr *)msg;
+	struct gnix_fid_ep *ep = vc->ep;
+	gni_return_t status;
+
+	if (hdr->flags & FI_REMOTE_CQ_DATA && ep->recv_cq) {
+		ret = _gnix_cq_add_event(ep->recv_cq, NULL, hdr->user_flags, 0,
+					 0, hdr->user_data, 0,
+					 FI_ADDR_NOTAVAIL);
+		if (ret != FI_SUCCESS)  {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cq_add_event returned %d\n",
+				  ret);
+		}
+	}
+
+	if (hdr->flags & FI_REMOTE_WRITE && ep->rwrite_cntr) {
+		ret = _gnix_cntr_inc(ep->rwrite_cntr);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cntr_inc() failed: %d\n",
+				  ret);
+	}
+
+	if (hdr->flags & FI_REMOTE_READ && ep->rread_cntr) {
+		ret = _gnix_cntr_inc(ep->rread_cntr);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cntr_inc() failed: %d\n",
+				  ret);
+	}
+
+	status = GNI_SmsgRelease(vc->gni_ep);
+	if (unlikely(status != GNI_RC_SUCCESS)) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "GNI_SmsgRelease returned %s\n",
+			  gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+	}
+
+	return ret;
+}
+
 /* __gnix_rma_txd_data_complete() should match __gnix_rma_txd_complete() except
  * for checking whether to send immediate data. */
 static int __gnix_rma_txd_data_complete(void *arg, gni_return_t tx_status)
@@ -272,14 +320,26 @@ static int __gnix_rma_send_data_req(void *arg)
 
 	txd->req = req;
 	txd->completer_fn = __gnix_rma_txd_data_complete;
+	txd->rma_data_hdr.flags = 0;
 
-	txd->rma_data_hdr.flags = FI_RMA | FI_REMOTE_CQ_DATA;
-	if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
-		txd->rma_data_hdr.flags |= FI_REMOTE_WRITE;
-	} else {
-		txd->rma_data_hdr.flags |= FI_REMOTE_READ;
+	if (req->flags & FI_REMOTE_CQ_DATA) {
+		txd->rma_data_hdr.flags |= FI_REMOTE_CQ_DATA;
+		txd->rma_data_hdr.user_flags = FI_RMA | FI_REMOTE_CQ_DATA;
+		if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+			txd->rma_data_hdr.user_flags |= FI_REMOTE_WRITE;
+		} else {
+			txd->rma_data_hdr.user_flags |= FI_REMOTE_READ;
+		}
+		txd->rma_data_hdr.user_data = req->rma.imm;
 	}
-	txd->rma_data_hdr.data = req->rma.imm;
+
+	if (req->vc->peer_caps & FI_RMA_EVENT) {
+		if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+			txd->rma_data_hdr.flags |= FI_REMOTE_WRITE;
+		} else {
+			txd->rma_data_hdr.flags |= FI_REMOTE_READ;
+		}
+	}
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	if (inject_err) {
@@ -357,8 +417,9 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
-	if (req->flags & FI_REMOTE_CQ_DATA) {
-		/* initiate immediate data transfer */
+	if (req->flags & FI_REMOTE_CQ_DATA ||
+	    req->vc->peer_caps & FI_RMA_EVENT) {
+		/* control message needed for imm. data or a counter event. */
 		req->tx_failures = 0;
 		req->work_fn = __gnix_rma_send_data_req;
 		_gnix_vc_queue_work_req(req);

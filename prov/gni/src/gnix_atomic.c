@@ -144,6 +144,123 @@ static int __gnix_amo_post_err(struct gnix_fab_req *req, int error)
 	return FI_SUCCESS;
 }
 
+/* SMSG callback for AMO remote counter control message. */
+int __smsg_amo_cntr(void *data, void *msg)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+	struct gnix_smsg_amo_cntr_hdr *hdr =
+			(struct gnix_smsg_amo_cntr_hdr *)msg;
+	struct gnix_fid_ep *ep = vc->ep;
+	gni_return_t status;
+
+	if (hdr->flags & FI_REMOTE_WRITE && ep->rwrite_cntr) {
+		ret = _gnix_cntr_inc(ep->rwrite_cntr);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cntr_inc() failed: %d\n",
+				  ret);
+	}
+
+	if (hdr->flags & FI_REMOTE_READ && ep->rread_cntr) {
+		ret = _gnix_cntr_inc(ep->rread_cntr);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cntr_inc() failed: %d\n",
+				  ret);
+	}
+
+	status = GNI_SmsgRelease(vc->gni_ep);
+	if (unlikely(status != GNI_RC_SUCCESS)) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "GNI_SmsgRelease returned %s\n",
+			  gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+	}
+
+	return ret;
+}
+
+static int __gnix_amo_txd_cntr_complete(void *arg, gni_return_t tx_status)
+{
+	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
+	struct gnix_fab_req *req = txd->req;
+	int rc;
+
+	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+
+	if (tx_status != GNI_RC_SUCCESS)
+		return __gnix_amo_post_err(req, FI_ECANCELED);
+
+	/* Successful data delivery.  Generate local completion. */
+	rc = __gnix_amo_send_completion(req->vc->ep, req);
+	if (rc != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_amo_send_completion() failed: %d\n",
+			  rc);
+
+	__gnix_amo_fr_complete(req);
+
+	return FI_SUCCESS;
+}
+
+static int __gnix_amo_send_cntr_req(void *arg)
+{
+	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
+	struct gnix_fid_ep *ep = req->gnix_ep;
+	struct gnix_nic *nic = ep->nic;
+	struct gnix_tx_descriptor *txd;
+	gni_return_t status;
+	int rc;
+	int inject_err = _gnix_req_inject_err(req);
+
+	rc = _gnix_nic_tx_alloc(nic, &txd);
+	if (rc) {
+		GNIX_INFO(FI_LOG_EP_DATA,
+				"_gnix_nic_tx_alloc() failed: %d\n",
+				rc);
+		return -FI_ENOSPC;
+	}
+
+	txd->req = req;
+	txd->completer_fn = __gnix_amo_txd_cntr_complete;
+
+	if (req->type == GNIX_FAB_RQ_AMO) {
+		txd->amo_cntr_hdr.flags = FI_REMOTE_WRITE;
+	} else {
+		txd->amo_cntr_hdr.flags = FI_REMOTE_READ;
+	}
+
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
+	if (inject_err) {
+		_gnix_nic_txd_err_inject(nic, txd);
+		status = GNI_RC_SUCCESS;
+	} else {
+		status = GNI_SmsgSendWTag(req->vc->gni_ep,
+					  &txd->amo_cntr_hdr,
+					  sizeof(txd->amo_cntr_hdr),
+					  NULL, 0, txd->id,
+					  GNIX_SMSG_T_AMO_CNTR);
+	}
+	COND_RELEASE(nic->requires_lock, &nic->lock);
+
+	if (status == GNI_RC_NOT_DONE) {
+		_gnix_nic_tx_free(nic, txd);
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "GNI_SmsgSendWTag returned %s\n",
+			  gni_err_str[status]);
+	} else if (status != GNI_RC_SUCCESS) {
+		_gnix_nic_tx_free(nic, txd);
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "GNI_SmsgSendWTag returned %s\n",
+			  gni_err_str[status]);
+	} else {
+		GNIX_INFO(FI_LOG_EP_DATA, "Sent RMA CQ data, req: %p\n", req);
+	}
+
+	return gnixu_to_fi_errno(status);
+}
+
 static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
@@ -177,14 +294,20 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 		}
 	}
 
-	/* complete request */
-	rc = __gnix_amo_send_completion(req->vc->ep, req);
-	if (rc != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "__gnix_amo_send_completion() failed: %d\n",
-			  rc);
+	if (req->vc->peer_caps & FI_RMA_EVENT) {
+		/* control message needed for a counter event. */
+		req->work_fn = __gnix_amo_send_cntr_req;
+		_gnix_vc_queue_work_req(req);
+	} else {
+		/* complete request */
+		rc = __gnix_amo_send_completion(req->vc->ep, req);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_amo_send_completion() failed: %d\n",
+				  rc);
 
-	__gnix_amo_fr_complete(req);
+		__gnix_amo_fr_complete(req);
+	}
 
 	return FI_SUCCESS;
 }

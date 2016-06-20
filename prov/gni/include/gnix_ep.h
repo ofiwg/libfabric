@@ -58,7 +58,8 @@ enum {
 	GNIX_SMSG_T_RNDZV_RDONE,
 	GNIX_SMSG_T_RNDZV_START,
 	GNIX_SMSG_T_RNDZV_FIN,
-	GNIX_SMSG_T_RMA_DATA
+	GNIX_SMSG_T_RMA_DATA,
+	GNIX_SMSG_T_AMO_CNTR
 };
 
 extern smsg_completer_fn_t gnix_ep_smsg_completers[];

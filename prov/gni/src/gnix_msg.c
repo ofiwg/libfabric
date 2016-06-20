@@ -45,6 +45,7 @@
 #include "gnix_cntr.h"
 #include "gnix_av.h"
 #include "gnix_rma.h"
+#include "gnix_atomic.h"
 
 #define INVALID_PEEK_FORMAT(fmt) \
 	((fmt) == FI_CQ_FORMAT_CONTEXT || (fmt) == FI_CQ_FORMAT_MSG)
@@ -1057,37 +1058,6 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	return ret;
 }
 
-/* TODO: This is kind of out of place. */
-static int __smsg_rma_data(void *data, void *msg)
-{
-	int ret = FI_SUCCESS;
-	struct gnix_vc *vc = (struct gnix_vc *)data;
-	struct gnix_smsg_rma_data_hdr *hdr =
-			(struct gnix_smsg_rma_data_hdr *)msg;
-	struct gnix_fid_ep *ep = vc->ep;
-	gni_return_t status;
-
-	if (ep->recv_cq) {
-		ret = _gnix_cq_add_event(ep->recv_cq, NULL, hdr->flags, 0,
-					 0, hdr->data, 0, FI_ADDR_NOTAVAIL);
-		if (ret != FI_SUCCESS)  {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_cq_add_event returned %d\n",
-				  ret);
-		}
-	}
-
-	status = GNI_SmsgRelease(vc->gni_ep);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "GNI_SmsgRelease returned %s\n",
-			  gni_err_str[status]);
-		ret = gnixu_to_fi_errno(status);
-	}
-
-	return ret;
-}
-
 smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_EGR_W_DATA] = __smsg_eager_msg_w_data,
 	[GNIX_SMSG_T_EGR_W_DATA_ACK] = __smsg_eager_msg_w_data_ack,
@@ -1100,7 +1070,8 @@ smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_RNDZV_RDONE] = __smsg_rndzv_msg_recv_done,
 	[GNIX_SMSG_T_RNDZV_START] = __smsg_rndzv_start,
 	[GNIX_SMSG_T_RNDZV_FIN] = __smsg_rndzv_fin,
-	[GNIX_SMSG_T_RMA_DATA] = __smsg_rma_data
+	[GNIX_SMSG_T_RMA_DATA] = __smsg_rma_data, /* defined in gnix_rma.c */
+	[GNIX_SMSG_T_AMO_CNTR] = __smsg_amo_cntr /* defined in gnix_amo.c */
 };
 
 static int __gnix_peek_request(struct gnix_fab_req *req)

@@ -53,6 +53,8 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
  */
 int _gnix_rma_post_irq(struct gnix_vc *vc);
 
+/* SMSG callback for RMA data control message. */
+int __smsg_rma_data(void *data, void *msg);
 
 #endif /* _GNIX_RMA_H_ */
 

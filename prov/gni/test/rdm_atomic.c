@@ -86,6 +86,8 @@ struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
 uint64_t mr_key[NUMEPS];
 
 static struct fid_cntr *write_cntr[NUMEPS], *read_cntr[NUMEPS];
+static struct fid_cntr *rwrite_cntr;
+static struct fid_cntr *rread_cntr;
 static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
@@ -93,7 +95,7 @@ static struct fi_cntr_attr cntr_attr = {
 static uint64_t writes[NUMEPS] = {0}, reads[NUMEPS] = {0},
 	write_errs[NUMEPS] = {0}, read_errs[NUMEPS] = {0};
 
-void rdm_atomic_setup(void)
+void common_atomic_setup(void)
 {
 	int ret = 0, i = 0, j = 0;
 	struct fi_av_attr attr;
@@ -106,11 +108,11 @@ void rdm_atomic_setup(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
-	hints = fi_allocinfo();
-	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
 	hints->fabric_attr->name = strdup("gni");
+	hints->caps |= GNIX_EP_RDM_PRIMARY_CAPS;
 
 	target = malloc(BUF_SZ);
 	assert(target);
@@ -198,11 +200,48 @@ void rdm_atomic_setup(void)
 		ret = fi_ep_bind(ep[i], &read_cntr[i]->fid, FI_READ);
 		cr_assert(!ret, "fi_ep_bind");
 	}
+
+	if (hints->caps & FI_RMA_EVENT) {
+		ret = fi_cntr_open(dom[1], &cntr_attr, &rwrite_cntr, 0);
+		cr_assert(!ret, "fi_cntr_open");
+
+		ret = fi_ep_bind(ep[1], &rwrite_cntr->fid, FI_REMOTE_WRITE);
+		cr_assert(!ret, "fi_ep_bind");
+
+		ret = fi_cntr_open(dom[1], &cntr_attr, &rread_cntr, 0);
+		cr_assert(!ret, "fi_cntr_open");
+
+		ret = fi_ep_bind(ep[1], &rread_cntr->fid, FI_REMOTE_READ);
+		cr_assert(!ret, "fi_ep_bind");
+	}
+}
+
+void rdm_atomic_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	common_atomic_setup();
+}
+
+void rdm_atomic_rcntr_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->caps = FI_RMA_EVENT;
+	common_atomic_setup();
 }
 
 void rdm_atomic_teardown(void)
 {
 	int ret = 0, i = 0;
+
+	if (hints->caps & FI_RMA_EVENT) {
+		ret = fi_close(&rwrite_cntr->fid);
+		cr_assert(!ret, "failure in closing dom[1] rwrite counter.");
+
+		ret = fi_close(&rread_cntr->fid);
+		cr_assert(!ret, "failure in closing dom[1] rread counter.");
+	}
 
 	for (; i < NUMEPS; i++) {
 		ret = fi_close(&read_cntr[i]->fid);
@@ -282,6 +321,17 @@ void rdm_atomic_check_cntrs(uint64_t w[], uint64_t r[], uint64_t w_e[],
 			  "Bad write err count");
 		cr_assert(fi_cntr_readerr(read_cntr[i]) == read_errs[i],
 			  "Bad read err count");
+	}
+
+	if (hints->caps & FI_RMA_EVENT) {
+		cr_assert(fi_cntr_read(rwrite_cntr) == writes[0],
+			  "Bad rwrite count");
+		cr_assert(fi_cntr_read(rread_cntr) == reads[0],
+			  "Bad rread count");
+		cr_assert(fi_cntr_readerr(rwrite_cntr) == 0,
+			  "Bad rwrite err count");
+		cr_assert(fi_cntr_readerr(rread_cntr) == 0,
+			  "Bad rread err count");
 	}
 }
 
@@ -4574,3 +4624,22 @@ Test(rdm_atomic, compare_atomic_err)
 	r_e[0] = 1;
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 }
+
+TestSuite(rdm_atomic_rcntr, .init = rdm_atomic_rcntr_setup,
+	  .fini = rdm_atomic_teardown, .disabled = false);
+
+Test(rdm_atomic_rcntr, amo_rcntr)
+{
+	rdm_atomic_xfer_for_each_size(do_min, 1, 1);
+}
+
+Test(rdm_atomic_rcntr, famo_rcntr)
+{
+	rdm_atomic_xfer_for_each_size(do_fetch_min, 1, 1);
+}
+
+Test(rdm_atomic_rcntr, camo_rcntr)
+{
+	rdm_atomic_xfer_for_each_size(do_cswap, 1, 1);
+}
+

@@ -254,12 +254,23 @@ struct gnix_smsg_rndzv_fin_hdr {
 /**
  * gnix_smsg_rma_data_hdr  - RMA remote data message
  *
- * @var flags  remote CQ RMA flags
- * @var data   remote CQ immediate data
+ * @var flags       control flags
+ * @var user_flags  remote CQ user flags
+ * @var user_data   remote CQ user immediate data
  */
 struct gnix_smsg_rma_data_hdr {
 	uint64_t flags;
-	uint64_t data;
+	uint64_t user_flags;
+	uint64_t user_data;
+};
+
+/**
+ * gnix_smsg_amo_cntr_hdr  - RMA remote counter message
+ *
+ * @var user_flags  control flags
+ */
+struct gnix_smsg_amo_cntr_hdr {
+	uint64_t flags;
 };
 
 /**
@@ -294,6 +305,7 @@ struct gnix_tx_descriptor {
 		struct gnix_smsg_rndzv_start_hdr rndzv_start_hdr;
 		struct gnix_smsg_rndzv_fin_hdr   rndzv_fin_hdr;
 		struct gnix_smsg_rma_data_hdr    rma_data_hdr;
+		struct gnix_smsg_amo_cntr_hdr    amo_cntr_hdr;
 	};
 	struct gnix_fab_req *req;
 	int  (*completer_fn)(void *, gni_return_t);

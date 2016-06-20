@@ -86,6 +86,8 @@ struct fid_mr *rem_mr[2], *loc_mr[2];
 uint64_t mr_key[2];
 
 static struct fid_cntr *write_cntr[2], *read_cntr[2];
+static struct fid_cntr *rwrite_cntr;
+static struct fid_cntr *rread_cntr;
 static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
@@ -105,6 +107,7 @@ void common_setup(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
+	hints->caps |= GNIX_EP_RDM_PRIMARY_CAPS;
 
 	hints->fabric_attr->name = strdup("gni");
 
@@ -288,6 +291,20 @@ void common_setup(void)
 
 	ret = fi_ep_bind(ep[1], &read_cntr[1]->fid, FI_READ);
 	cr_assert(!ret, "fi_ep_bind");
+
+	if (hints->caps & FI_RMA_EVENT) {
+		ret = fi_cntr_open(dom[1], &cntr_attr, &rwrite_cntr, 0);
+		cr_assert(!ret, "fi_cntr_open");
+
+		ret = fi_ep_bind(ep[1], &rwrite_cntr->fid, FI_REMOTE_WRITE);
+		cr_assert(!ret, "fi_ep_bind");
+
+		ret = fi_cntr_open(dom[1], &cntr_attr, &rread_cntr, 0);
+		cr_assert(!ret, "fi_cntr_open");
+
+		ret = fi_ep_bind(ep[1], &rread_cntr->fid, FI_REMOTE_READ);
+		cr_assert(!ret, "fi_ep_bind");
+	}
 }
 
 void rdm_rma_setup(void)
@@ -306,9 +323,26 @@ void dgram_setup(void)
 	common_setup();
 }
 
+void rdm_rma_rcntr_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_RMA_EVENT;
+	common_setup();
+}
+
 void rdm_rma_teardown(void)
 {
 	int ret = 0;
+
+	if (hints->caps & FI_RMA_EVENT) {
+		ret = fi_close(&rwrite_cntr->fid);
+		cr_assert(!ret, "failure in closing dom[1] rwrite counter.");
+
+		ret = fi_close(&rread_cntr->fid);
+		cr_assert(!ret, "failure in closing dom[1] rread counter.");
+	}
 
 	ret = fi_close(&read_cntr[0]->fid);
 	cr_assert(!ret, "failure in closing dom[0] read counter.");
@@ -454,6 +488,17 @@ void rdm_rma_check_cntrs(uint64_t w[2], uint64_t r[2], uint64_t w_e[2],
 		  "Bad write err count");
 	cr_assert(fi_cntr_readerr(read_cntr[1]) == read_errs[1],
 		  "Bad read err count");
+
+	if (hints->caps & FI_RMA_EVENT) {
+		cr_assert(fi_cntr_read(rwrite_cntr) == writes[0],
+			  "Bad rwrite count");
+		cr_assert(fi_cntr_read(rread_cntr) == reads[0],
+			  "Bad rread count");
+		cr_assert(fi_cntr_readerr(rwrite_cntr) == 0,
+			  "Bad rwrite err count");
+		cr_assert(fi_cntr_readerr(rread_cntr) == 0,
+			  "Bad rread err count");
+	}
 }
 
 void xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
@@ -1683,4 +1728,17 @@ void do_trigger(int len)
 Test(rdm_rma, trigger)
 {
 	xfer_for_each_size(do_trigger, 8, BUF_SZ);
+}
+
+TestSuite(rdm_rma_rcntr, .init = rdm_rma_rcntr_setup, .fini = rdm_rma_teardown,
+	  .disabled = false);
+
+Test(rdm_rma_rcntr, write_rcntr)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(rdm_rma_rcntr, read_rcntr)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
 }

@@ -158,15 +158,25 @@ extern "C" {
 /*
  * See capabilities section in fi_getinfo.3.
  */
+
+/* Primary capabilities.  Each must be explicitly requested (unless the full
+ * set is requested by setting input hints->caps to NULL). */
 #define GNIX_EP_RDM_PRIMARY_CAPS                                               \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
 	 FI_DIRECTED_RECV | FI_READ |                                          \
 	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
-#define GNIX_EP_RDM_SEC_CAPS                                             \
-	(FI_MULTI_RECV | FI_SOURCE | FI_TRIGGER | FI_FENCE)
+/* No overhead secondary capabilities.  These can be silently enabled by the
+ * provider. */
+#define GNIX_EP_RDM_SEC_CAPS (FI_MULTI_RECV | FI_TRIGGER | FI_FENCE)
 
-#define GNIX_EP_RDM_CAPS (GNIX_EP_RDM_PRIMARY_CAPS | GNIX_EP_RDM_SEC_CAPS)
+/* Secondary capabilities that introduce overhead.  Must be requested. */
+#define GNIX_EP_RDM_SEC_CAPS_OH (FI_SOURCE | FI_RMA_EVENT)
+
+/* FULL set of capabilities for the provider.  */
+#define GNIX_EP_RDM_CAPS_FULL (GNIX_EP_RDM_PRIMARY_CAPS | \
+			       GNIX_EP_RDM_SEC_CAPS | \
+			       GNIX_EP_RDM_SEC_CAPS_OH)
 
 /*
  * see Operations flags in fi_endpoint.3
@@ -394,8 +404,10 @@ struct gnix_fid_ep {
 	struct gnix_fid_cq *recv_cq;
 	struct gnix_fid_cntr *send_cntr;
 	struct gnix_fid_cntr *recv_cntr;
-	struct gnix_fid_cntr *read_cntr;
 	struct gnix_fid_cntr *write_cntr;
+	struct gnix_fid_cntr *read_cntr;
+	struct gnix_fid_cntr *rwrite_cntr;
+	struct gnix_fid_cntr *rread_cntr;
 	struct gnix_fid_av *av;
 	struct gnix_fid_stx *stx_ctx;
 	struct gnix_ep_name my_name;
