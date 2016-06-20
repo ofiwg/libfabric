@@ -1428,7 +1428,7 @@ static int gnix_ep_close(fid_t fid)
 
 DIRECT_FN STATIC int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
-	int ret = FI_SUCCESS;
+	int ret;
 	struct gnix_fid_ep  *ep;
 	struct gnix_fid_av  *av;
 	struct gnix_fid_cq  *cq;
@@ -1438,9 +1438,9 @@ DIRECT_FN STATIC int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-
-	if (!bfid)
-		return -FI_EINVAL;
+	ret = ofi_ep_bind_valid(&gnix_prov, bfid, flags);
+	if (ret)
+		return ret;
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:

@@ -274,9 +274,10 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	int err;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
+	err = ofi_ep_bind_valid(&psmx2_prov, bfid, flags);
+	if (err)
+		return err;
 
-	if (!bfid)
-		return -FI_EINVAL;
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
 		return -FI_ENOSYS;
