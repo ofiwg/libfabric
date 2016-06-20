@@ -162,10 +162,10 @@ size_t fi_datatype_size(enum fi_datatype datatype);
 uint64_t fi_tag_bits(uint64_t mem_tag_format);
 uint64_t fi_tag_format(uint64_t tag_bits);
 
-int fi_send_allowed(uint64_t caps);
-int fi_recv_allowed(uint64_t caps);
-int fi_rma_initiate_allowed(uint64_t caps);
-int fi_rma_target_allowed(uint64_t caps);
+int ofi_send_allowed(uint64_t caps);
+int ofi_recv_allowed(uint64_t caps);
+int ofi_rma_initiate_allowed(uint64_t caps);
+int ofi_rma_target_allowed(uint64_t caps);
 
 uint64_t fi_gettime_ms(void);
 
