@@ -62,6 +62,7 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	wr.num_sge = msg->iov_count;
 
 	ret = ibv_post_recv(_ep->id->qp, &wr, &bad);
+
 	switch (ret) {
 	case ENOMEM:
 		return -FI_EAGAIN;
@@ -220,5 +221,23 @@ static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 struct fi_ops_msg *fi_ibv_msg_ep_ops_msg(struct fi_ibv_msg_ep *ep)
 {
 	return &fi_ibv_msg_ep_msg_ops;
+}
+
+static struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = fi_no_msg_recv,
+	.recvv = fi_no_msg_recvv,
+	.recvmsg = fi_no_msg_recvmsg,
+	.send = fi_ibv_msg_ep_send,
+	.sendv = fi_ibv_msg_ep_sendv,
+	.sendmsg = fi_ibv_msg_ep_sendmsg,
+	.inject = fi_ibv_msg_ep_inject,
+	.senddata = fi_ibv_msg_ep_senddata,
+	.injectdata = fi_ibv_msg_ep_injectdata,
+};
+
+struct fi_ops_msg *fi_ibv_msg_srq_ep_ops_msg(struct fi_ibv_msg_ep *ep)
+{
+	return &fi_ibv_msg_srq_ep_msg_ops;
 }
 

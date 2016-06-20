@@ -160,6 +160,9 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return -errno;
 		break;
+	case FI_CLASS_SRX_CTX:
+		ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -221,7 +224,16 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 
 	attr.cap.max_inline_data = _ep->info->tx_attr->inject_size;
 
-	attr.srq = NULL;
+	if (_ep->srq_ep) {
+		attr.srq =_ep->srq_ep->srq;
+		/* Use of SRQ, no need to allocate recv_wr entries in the QP */
+		attr.cap.max_recv_wr = 0;
+
+		/* Override the default ops to prevent the user from posting WRs to a
+		 * QP where a SRQ is attached to */
+		_ep->ep_fid.msg = fi_ibv_msg_srq_ep_ops_msg(_ep);
+	}
+
 	attr.qp_type = IBV_QPT_RC;
 	attr.sq_sig_all = 0;
 	attr.qp_context = _ep;

@@ -217,12 +217,21 @@ struct fi_ibv_mem_desc {
 	struct fi_ibv_domain	*domain;
 };
 
+struct fi_ibv_srq_ep {
+	struct fid_ep		ep_fid;
+	struct ibv_srq		*srq;
+};
+
+int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
+		struct fid_ep **rx_ep, void *context);
+
 struct fi_ibv_msg_ep {
 	struct fid_ep		ep_fid;
 	struct rdma_cm_id	*id;
 	struct fi_ibv_eq	*eq;
 	struct fi_ibv_cq	*rcq;
 	struct fi_ibv_cq	*scq;
+	struct fi_ibv_srq_ep	*srq_ep;
 	uint64_t		ep_flags;
 	struct fi_info		*info;
 	atomic_t		unsignaled_send_cnt;
@@ -254,6 +263,8 @@ struct fi_ops_msg *fi_ibv_msg_ep_ops_msg(struct fi_ibv_msg_ep *ep);
 struct fi_ops_rma *fi_ibv_msg_ep_ops_rma(struct fi_ibv_msg_ep *ep);
 
 struct fi_ops_rma *fi_ibv_rdm_ep_ops_rma(struct fi_ibv_rdm_ep *ep);
+
+struct fi_ops_msg *fi_ibv_msg_srq_ep_ops_msg(struct fi_ibv_msg_ep *ep);
 
 struct fi_ibv_connreq {
 	struct fid		handle;
