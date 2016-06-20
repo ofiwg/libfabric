@@ -104,7 +104,7 @@ size_t fi_datatype_size(enum fi_datatype datatype)
 	return fi_datatype_size_table[datatype];
 }
 
-int fi_send_allowed(uint64_t caps)
+int ofi_send_allowed(uint64_t caps)
 {
 	if (caps & FI_MSG ||
 		caps & FI_TAGGED) {
@@ -118,7 +118,7 @@ int fi_send_allowed(uint64_t caps)
 	return 0;
 }
 
-int fi_recv_allowed(uint64_t caps)
+int ofi_recv_allowed(uint64_t caps)
 {
 	if (caps & FI_MSG ||
 		caps & FI_TAGGED) {
@@ -132,7 +132,7 @@ int fi_recv_allowed(uint64_t caps)
 	return 0;
 }
 
-int fi_rma_initiate_allowed(uint64_t caps)
+int ofi_rma_initiate_allowed(uint64_t caps)
 {
 	if (caps & FI_RMA ||
 		caps & FI_ATOMICS) {
@@ -148,7 +148,7 @@ int fi_rma_initiate_allowed(uint64_t caps)
 	return 0;
 }
 
-int fi_rma_target_allowed(uint64_t caps)
+int ofi_rma_target_allowed(uint64_t caps)
 {
 	if (caps & FI_RMA ||
 		caps & FI_ATOMICS) {
@@ -162,6 +162,37 @@ int fi_rma_target_allowed(uint64_t caps)
 	}
 
 	return 0;
+}
+
+int ofi_ep_bind_valid(struct fi_provider *prov, struct fid *bfid, uint64_t flags)
+{
+	if (!bfid) {
+		FI_WARN(prov, FI_LOG_EP_CTRL, "NULL bind fid\n");
+		return -FI_EINVAL;
+	}
+
+	switch (bfid->fclass) {
+	case FI_CLASS_CQ:
+		if (flags & ~(FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)) {
+			FI_WARN(prov, FI_LOG_EP_CTRL, "invalid CQ flags\n");
+			return -FI_EBADFLAGS;
+		}
+		break;
+	case FI_CLASS_CNTR:
+		if (flags & ~(FI_SEND | FI_RECV | FI_READ | FI_WRITE |
+			      FI_REMOTE_READ | FI_REMOTE_WRITE)) {
+			FI_WARN(prov, FI_LOG_EP_CTRL, "invalid cntr flags\n");
+			return -FI_EBADFLAGS;
+		}
+		break;
+	default:
+		if (flags) {
+			FI_WARN(prov, FI_LOG_EP_CTRL, "invalid bind flags\n");
+			return -FI_EBADFLAGS;
+		}
+		break;
+	}
+	return FI_SUCCESS;
 }
 
 uint64_t fi_gettime_ms(void)

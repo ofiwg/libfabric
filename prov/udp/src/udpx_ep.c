@@ -439,7 +439,11 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct udpx_ep *ep;
 	struct util_av *av;
-	int ret = 0;
+	int ret;
+
+	ret = ofi_ep_bind_valid(&udpx_prov, bfid, flags);
+	if (ret)
+		return ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
 	switch (bfid->fclass) {

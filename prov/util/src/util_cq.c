@@ -83,8 +83,7 @@ int fi_check_cq_attr(const struct fi_provider *prov,
 	}
 
 	if (attr->signaling_vector) {
-		FI_WARN(prov, FI_LOG_CQ, "signaling vectors not supported\n");
-		return -FI_ENOSYS;
+		FI_WARN(prov, FI_LOG_CQ, "signaling vector ignored\n");
 	}
 
 	return 0;

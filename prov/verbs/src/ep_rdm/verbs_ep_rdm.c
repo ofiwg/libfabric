@@ -132,8 +132,12 @@ static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
 	struct fi_ibv_rdm_ep *ep;
 	struct fi_ibv_rdm_cq *cq;
 	struct fi_ibv_av *av;
+	int ret;
 
 	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
+	ret = ofi_ep_bind_valid(&fi_ibv_prov, bfid, flags);
+	if (ret)
+		return ret;
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:

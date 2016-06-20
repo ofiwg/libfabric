@@ -709,6 +709,10 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 
+	ret = ofi_ep_bind_valid(&sock_prov, bfid, flags);
+	if (ret)
+		return ret;
+
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
 		ep = container_of(fid, struct sock_ep, ep.fid);

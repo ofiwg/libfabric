@@ -81,8 +81,12 @@ static int mlxm_ep_close(fid_t fid)
 static int mlxm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
         struct mlxm_fid_ep *fid_ep;
-        int           err = 0;
+        int ret;
         fid_ep = container_of(fid, struct mlxm_fid_ep, ep.fid);
+
+	ret = ofi_ep_bind_valid(&mlxm_prov, bfid, flags);
+	if (ret)
+		return ret;
 
         switch (bfid->fclass) {
         case FI_CLASS_CQ:
@@ -97,7 +101,7 @@ static int mlxm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
         default:
                 return -ENOSYS;
         }
-        return err;
+        return 0;
 }
 
 
