@@ -143,7 +143,8 @@ static inline int __gnix_buddy_create_lists(gnix_buddy_alloc_handle_t
 
 	/* Insert free blocks of size max in sorted order into last list */
 	for (i = 0; i < alloc_handle->len / alloc_handle->max; i++) {
-		dlist_insert_tail(alloc_handle->base + offset,
+		dlist_insert_tail((void *) ((uint8_t *) alloc_handle->base +
+					    offset),
 				  alloc_handle->lists +
 				  alloc_handle->nlists - 1);
 		offset += alloc_handle->max;
@@ -171,7 +172,8 @@ static inline void __gnix_buddy_split(gnix_buddy_alloc_handle_t *alloc_handle,
 							alloc_handle->len,
 							MIN_BLOCK_SIZE));
 
-		dlist_insert_tail(tmp + OFFSET(MIN_BLOCK_SIZE, j - 1),
+		dlist_insert_tail((void *) ((uint8_t *) tmp +
+					    OFFSET(MIN_BLOCK_SIZE, j - 1)),
 				  alloc_handle->lists + j - 1);
 	}
 
@@ -366,7 +368,8 @@ int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (unlikely(!alloc_handle || !len || len > alloc_handle->max ||
-		     ptr >= alloc_handle->base + alloc_handle->len  ||
+		     ptr >= (void *) ((uint8_t *) alloc_handle->base +
+				      alloc_handle->len) ||
 		     ptr < alloc_handle->base)) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,

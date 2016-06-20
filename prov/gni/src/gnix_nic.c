@@ -696,7 +696,8 @@ static int __gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 
 	for (i = 0, desc_ptr = desc_base; i < n_descs; i++, desc_ptr++) {
 		desc_ptr->id = i;
-		desc_ptr->int_buf = int_bufs + (i * GNIX_CACHELINE_SIZE);
+		desc_ptr->int_buf = (void *) ((uint8_t *) int_bufs +
+					      (i * GNIX_CACHELINE_SIZE));
 		dlist_insert_tail(&desc_ptr->list,
 				  &nic->tx_desc_free_list);
 	}

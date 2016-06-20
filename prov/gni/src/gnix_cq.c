@@ -513,7 +513,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf,
 
 		_gnix_queue_enqueue_free(cq_priv->events, &event->item);
 
-		buf += cq_priv->entry_size;
+		buf = (void *) ((uint8_t *) buf + cq_priv->entry_size);
 
 		read_count++;
 	}
