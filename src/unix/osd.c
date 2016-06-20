@@ -30,6 +30,11 @@
  * SOFTWARE.
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif /* _GNU_SOURCE */
+
+#include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -171,6 +176,30 @@ int ofi_shm_unmap(struct util_shm* shm)
 	}
 	memset(shm, 0, sizeof(*shm));
 	return FI_SUCCESS;
+}
+
+int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
+{
+	char *path;
+	int fd, len;
+
+	if (asprintf(&path, "%s/%s", dir, file) < 0)
+		return -1;
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		free(path);
+		return -1;
+	}
+
+	len = read(fd, buf, size);
+	close(fd);
+	free(path);
+
+	if (len > 0 && buf[len - 1] == '\n')
+		buf[--len] = '\0';
+
+	return len;
 }
 
 

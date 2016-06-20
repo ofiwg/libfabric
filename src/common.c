@@ -57,30 +57,6 @@ struct fi_provider core_prov = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
 };
 
-int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
-{
-	char *path;
-	int fd, len;
-
-	if (asprintf(&path, "%s/%s", dir, file) < 0)
-		return -1;
-
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		free(path);
-		return -1;
-	}
-
-	len = read(fd, buf, size);
-	close(fd);
-	free(path);
-
-	if (len > 0 && buf[len - 1] == '\n')
-		buf[--len] = '\0';
-
-	return len;
-}
-
 int fi_poll_fd(int fd, int timeout)
 {
 	struct pollfd fds;
