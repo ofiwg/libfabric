@@ -100,6 +100,55 @@ err:
 	return SOCKET_ERROR;
 }
 
+int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
+{
+	char *path = 0;
+	int len, lendir, lenfile, pathlen;
+
+	HANDLE fd = INVALID_HANDLE_VALUE;
+	DWORD read;
+
+	len = -1;
+
+	lendir = lstrlenA(dir);
+	lenfile = lstrlenA(file);
+
+	pathlen = lendir + lenfile + 2; /* dir + '\' + file + '0' */
+
+	path = malloc(pathlen);
+	if (!path)
+		goto fn_fail;
+
+	lstrcpyA(path, dir);
+	if (lenfile) {
+		lstrcatA(path, "\\");
+		lstrcatA(path, file);
+	}
+
+	fd = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
+	if (fd == INVALID_HANDLE_VALUE)
+		goto fn_fail;
+
+	if (!ReadFile(fd, buf, (DWORD)size, &read, 0))
+		goto fn_fail;
+
+	len = (int)read;
+
+	if (len > 0 && buf[len - 1] == '\n')
+		buf[--len] = '\0';
+
+fn_exit:
+	if (fd != INVALID_HANDLE_VALUE)
+		CloseHandle(fd);
+	if (path)
+		free(path);
+	return len;
+
+fn_fail:
+	len = -1;
+	goto fn_exit;
+}
+
 static BOOL CALLBACK ofi_init_once_cb(PINIT_ONCE once, void* data, void** ctx)
 {
 	OFI_UNUSED(once);
