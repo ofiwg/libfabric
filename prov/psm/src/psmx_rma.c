@@ -75,7 +75,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psm_amarg_t *args, int nargs, void *src, uint32_t len)
 {
 	psm_amarg_t rep_args[8];
-	void *rma_addr;
+	uint8_t *rma_addr;
 	ssize_t rma_len;
 	uint64_t key;
 	int err = 0;
@@ -93,7 +93,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	switch (cmd) {
 	case PSMX_AM_REQ_WRITE:
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
@@ -141,7 +141,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	case PSMX_AM_REQ_WRITE_LONG:
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
@@ -180,7 +180,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	case PSMX_AM_REQ_READ:
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		offset = args[4].u64;
 		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
@@ -210,7 +210,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	case PSMX_AM_REQ_READ_LONG:
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
@@ -710,9 +710,9 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		if (!req)
 			return -FI_ENOMEM;
 
-		memset((void *)req, 0, sizeof(*req));
-		memcpy((void *)req + sizeof(*req), (void *)buf, len);
-		buf = (void *)req + sizeof(*req);
+		memset(req, 0, sizeof(*req));
+		memcpy((uint8_t *)req + sizeof(*req), (void *)buf, len);
+		buf = (uint8_t *)req + sizeof(*req);
 	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
@@ -790,7 +790,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 					PSMX_AM_RMA_HANDLER, args, nargs,
 					(void *)buf, chunk_size,
 					am_flags, NULL, NULL);
-		buf += chunk_size;
+		buf = (const uint8_t *)buf + chunk_size;
 		addr += chunk_size;
 		len -= chunk_size;
 	}

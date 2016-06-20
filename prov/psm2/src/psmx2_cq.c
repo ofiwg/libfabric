@@ -461,7 +461,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					if (event == event_buffer) {
 						read_count++;
 						read_more = --count;
-						event_buffer = count ? event_buffer + cq->entry_size : NULL;
+						event_buffer = count ?
+							(uint8_t *)event_buffer + cq->entry_size :
+							NULL;
 						if (src_addr)
 							src_addr = count ? src_addr + 1 : NULL;
 					} else {
@@ -562,7 +564,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (event == event_buffer) {
 					read_count++;
 					read_more = --count;
-					event_buffer = count ? event_buffer + cq->entry_size : NULL;
+					event_buffer = count ?
+						(uint8_t *)event_buffer + cq->entry_size :
+						NULL;
 					if (src_addr)
 						src_addr = count ? src_addr + 1 : NULL;
 				} else {
@@ -649,7 +653,7 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				psmx2_cq_free_event(cq_priv, event);
 
 				read_count++;
-				buf += cq_priv->entry_size;
+				buf = (uint8_t *)buf + cq_priv->entry_size;
 				if (src_addr)
 					src_addr++;
 				continue;

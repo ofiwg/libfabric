@@ -330,7 +330,7 @@ int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request 
 	req->send.len_sent = offset + len;
 	err = psm_am_request_short((psm_epaddr_t) req->send.dest_addr,
 				PSMX_AM_MSG_HANDLER, args, 4,
-				(void *)req->send.buf+offset, len,
+				req->send.buf+offset, len,
 				am_flags, NULL, NULL);
 
 	return psmx_errno(err);

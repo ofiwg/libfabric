@@ -532,7 +532,7 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	struct fi_context *fi_context;
 	struct fi_context *recv_context;
 	int i, err;
-	void *recv_buf;
+	uint8_t *recv_buf;
 	size_t recv_len, len;
 
 	if (psm2_status->error_code != PSM2_OK)
