@@ -35,6 +35,8 @@
 
 #ifndef _WIN32
 #include <pthread.h>
+#else /* _WIN32 */
+#include <windows.h>
 #endif /* _WIN32 */
 
 #include <rdma/fabric.h>
@@ -58,6 +60,7 @@ enum fi_wait_obj {
 	FI_WAIT_SET,
 	FI_WAIT_FD,
 	FI_WAIT_MUTEX_COND,	/* pthread mutex & cond */
+	FI_WAIT_CRITSEC_COND	/* critical section & cond */
 };
 
 struct fi_wait_attr {
@@ -75,10 +78,18 @@ struct fid_wait {
 	struct fi_ops_wait	*ops;
 };
 
+#ifndef _WIN32
 struct fi_mutex_cond {
 	pthread_mutex_t		*mutex;
 	pthread_cond_t		*cond;
 };
+#else /* _WIN32 */
+struct fi_critsec_cond {
+	CRITICAL_SECTION	*critsec;
+	CONDITION_VARIABLE	*cond;
+};
+#endif /* _WIN32 */
+
 
 /*
  * Poll Set
