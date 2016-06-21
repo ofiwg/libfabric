@@ -39,6 +39,7 @@
 
 #if defined(_WIN32)
 #include <BaseTsd.h>
+#include <windows.h>
 typedef SSIZE_T ssize_t;
 #endif
 

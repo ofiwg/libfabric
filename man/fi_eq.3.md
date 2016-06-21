@@ -173,6 +173,10 @@ struct fi_eq_attr {
 : Specifies that the EQ should use a pthread mutex and cond variable
   as a wait object.
 
+- *FI_WAIT_CRITSEC_COND*
+: Windows specific.  Specifies that the EQ should use a critical
+  section and condition variable as a wait object.
+
 *signaling_vector*
 : Indicates which processor core interrupts associated with the EQ
   should target.

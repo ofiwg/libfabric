@@ -190,6 +190,10 @@ struct fi_wait_attr {
 : Specifies that the wait set should use a pthread mutex and cond
   variable as a wait object.
 
+- *FI_WAIT_CRITSEC_COND*
+: Windows specific.  Specifies that the EQ should use a critical
+  section and condition variable as a wait object.
+
 *flags*
 : Flags that set the default operation of the wait set.  The use of
   this field is reserved and must be set to 0 by the caller.
