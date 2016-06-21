@@ -127,6 +127,9 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	int ret;
 
 	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
+	ret = ofi_ep_bind_valid(&fi_ibv_prov, bfid, flags);
+	if (ret)
+		return ret;
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
@@ -188,15 +191,15 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 		return -FI_ENOCQ;
 	}
 
-	if (!_ep->scq && (fi_send_allowed(_ep->info->caps) ||
-				fi_rma_initiate_allowed(_ep->info->caps))) {
+	if (!_ep->scq && (ofi_send_allowed(_ep->info->caps) ||
+				ofi_rma_initiate_allowed(_ep->info->caps))) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "Endpoint is not bound to "
 				"a send completion queue when it has transmit "
 				"capabilities enabled (FI_SEND | FI_RMA).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!_ep->rcq && fi_recv_allowed(_ep->info->caps)) {
+	if (!_ep->rcq && ofi_recv_allowed(_ep->info->caps)) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "Endpoint is not bound to "
 				"a receive completion queue when it has receive "
 				"capabilities enabled. (FI_RECV)\n");
