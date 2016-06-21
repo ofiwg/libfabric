@@ -1,4 +1,4 @@
-.TH "fi_atomic" "3" "2016\-05\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_atomic" "3" "2016\-06\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic \- Remote atomic functions
@@ -178,6 +178,13 @@ imaginary portion.
 .PP
 \f[I]FI_LONG_DOUBLE\f[] : A double\-extended precision floating point
 value (IEEE 754).
+Note that the size of a long double and number of bits used for
+precision is compiler, platform, and/or provider specific.
+Developers that use long double should ensure that libfabric is built
+using a long double format that is compatible with their application,
+and that format is supported by the provider.
+The mechanism used for this validation is currently beyond the scope of
+the libfabric API.
 .PP
 \f[I]FI_LONG_DOUBLE_COMPLEX\f[] : An ordered pair of double\-extended
 precision floating point values (IEEE 754), with the first value
