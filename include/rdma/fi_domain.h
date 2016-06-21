@@ -210,6 +210,23 @@ fi_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 			       requested_key, flags, mr, context);
 }
 
+static inline int
+fi_mr_regv(struct fid_domain *domain, const struct iovec *iov,
+			size_t count, uint64_t access,
+			uint64_t offset, uint64_t requested_key,
+			uint64_t flags, struct fid_mr **mr, void *context)
+{
+	return domain->mr->regv(&domain->fid, iov, count, access,
+			offset, requested_key, flags, mr, context);
+}
+
+static inline int
+fi_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
+			uint64_t flags, struct fid_mr **mr)
+{
+	return domain->mr->regattr(&domain->fid, attr, flags, mr);
+}
+
 static inline void *fi_mr_desc(struct fid_mr *mr)
 {
 	return mr->mem_desc;
