@@ -987,7 +987,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 			FI_IBV_EP_TYPE_IS_RDM(hints) ? &(rdm_cm.listener) : &id);
 
 out:
-	if (!ret || ret == -FI_ENOMEM)
+	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
 		return ret;
 	else
 		return -FI_ENODATA;

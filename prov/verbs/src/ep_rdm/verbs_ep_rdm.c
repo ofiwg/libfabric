@@ -462,6 +462,9 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	ret = fi_ibv_create_ep(NULL, NULL, 0, info, &_ep->cm.rai, &_ep->cm.listener);
+	if (ret) {
+		goto err;
+	}
 
 	if (rdma_listen(_ep->cm.listener, 1024)) {
 		VERBS_INFO(FI_LOG_EP_CTRL, "rdma_listen failed: %s\n",

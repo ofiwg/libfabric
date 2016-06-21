@@ -182,7 +182,7 @@ int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 	size_t iface_len = 2;
 
 	if (!addr || !addr->sin_addr.s_addr) {
-		return 0;
+		return 1;
 	}
 
 	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
@@ -191,7 +191,7 @@ int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 			VERBS_INFO(FI_LOG_EP_CTRL,
 				   "Too long iface name: %s, max: %d\n",
 				   iface_tmp, IFNAMSIZ);
-			return 0;
+			return 1;
 		}
 	}
 
