@@ -117,7 +117,7 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 
 	path = malloc(pathlen);
 	if (!path)
-		goto fn_fail;
+		goto fn_nomem;
 
 	lstrcpyA(path, dir);
 	if (lenfile) {
@@ -127,26 +127,22 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 
 	fd = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
 	if (fd == INVALID_HANDLE_VALUE)
-		goto fn_fail;
+		goto fn_nofile;
 
 	if (!ReadFile(fd, buf, (DWORD)size, &read, 0))
-		goto fn_fail;
+		goto fn_faread;
 
 	len = (int)read;
 
 	if (len > 0 && buf[len - 1] == '\n')
 		buf[--len] = '\0';
 
-fn_exit:
-	if (fd != INVALID_HANDLE_VALUE)
-		CloseHandle(fd);
-	if (path)
-		free(path);
+fn_faread:
+	CloseHandle(fd);
+fn_nofile:
+	free(path);
+fn_nomem:
 	return len;
-
-fn_fail:
-	len = -1;
-	goto fn_exit;
 }
 
 static BOOL CALLBACK ofi_init_once_cb(PINIT_ONCE once, void* data, void** ctx)
