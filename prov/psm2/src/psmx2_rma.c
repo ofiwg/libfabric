@@ -58,9 +58,9 @@ static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
 		if (copy_len > len)
 			copy_len = len;
 
-		memcpy(iov[i].iov_base + offset, src, copy_len);
+		memcpy((uint8_t *)iov[i].iov_base + offset, src, copy_len);
 
-		src += copy_len;
+		src = (const uint8_t *)src + copy_len;
 		len -= copy_len;
 
 		if (offset)
@@ -102,7 +102,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			 int nargs, void *src, uint32_t len)
 {
 	psm2_amarg_t rep_args[8];
-	void *rma_addr;
+	uint8_t *rma_addr;
 	ssize_t rma_len;
 	uint64_t key;
 	int err = 0;
@@ -131,7 +131,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	switch (cmd) {
 	case PSMX2_AM_REQ_WRITE:
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		mr = psmx2_mr_get(domain, key);
 		op_error = mr ?
@@ -180,7 +180,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	case PSMX2_AM_REQ_WRITE_LONG:
 		src_vl = PSMX2_AM_GET_SRC(args[0].u32w0);
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		mr = psmx2_mr_get(domain, key);
 		op_error = mr ?
@@ -222,7 +222,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 
 	case PSMX2_AM_REQ_READ:
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		offset = args[4].u64;
 		mr = psmx2_mr_get(domain, key);
@@ -253,7 +253,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	case PSMX2_AM_REQ_READ_LONG:
 		src_vl = PSMX2_AM_GET_SRC(args[0].u32w0);
 		rma_len = args[0].u32w1;
-		rma_addr = (void *)(uintptr_t)args[2].u64;
+		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		mr = psmx2_mr_get(domain, key);
 		op_error = mr ?
@@ -387,7 +387,7 @@ static ssize_t psmx2_rma_self(int am_cmd,
 	int err = 0;
 	int op_error = 0;
 	int access;
-	void *dst, *src;
+	uint8_t *dst, *src;
 	uint64_t cq_flags;
 	struct iovec *iov = buf;
 	size_t iov_count = len;
@@ -1024,9 +1024,9 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 		if (!req)
 			return -FI_ENOMEM;
 
-		memset((void *)req, 0, sizeof(*req));
-		memcpy((void *)req + sizeof(*req), (void *)buf, len);
-		buf = (void *)req + sizeof(*req);
+		memset(req, 0, sizeof(*req));
+		memcpy((uint8_t *)req + sizeof(*req), (void *)buf, len);
+		buf = (uint8_t *)req + sizeof(*req);
 	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
@@ -1096,7 +1096,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 		psm2_am_request_short(psm2_epaddr, PSMX2_AM_RMA_HANDLER, args,
 				      nargs, (void *)buf, chunk_size, am_flags,
 				      NULL, NULL);
-		buf += chunk_size;
+		buf = (const uint8_t *)buf + chunk_size;
 		addr += chunk_size;
 		len -= chunk_size;
 	}
@@ -1140,7 +1140,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	void *psm2_context;
 	int no_event;
 	size_t total_len, len, len_sent;
-	void *buf, *p;
+	uint8_t *buf, *p;
 	int i;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
@@ -1210,15 +1210,15 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		if (!req)
 			return -FI_ENOMEM;
 
-		memset((void *)req, 0, sizeof(*req));
-		p = (void *)req + sizeof(*req);
+		memset(req, 0, sizeof(*req));
+		p = (uint8_t *)req + sizeof(*req);
 		for (i=0; i<count; i++) {
 			if (iov[i].iov_len) {
 				memcpy(p, iov[i].iov_base, iov[i].iov_len);
 				p += iov[i].iov_len;
 			}
 		}
-		buf = (void *)req + sizeof(*req);
+		buf = (uint8_t *)req + sizeof(*req);
 		len = total_len;
 
 		req->no_event = no_event;

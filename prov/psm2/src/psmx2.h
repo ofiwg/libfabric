@@ -213,7 +213,7 @@ struct psmx2_am_request {
 	int op;
 	union {
 		struct {
-			void	*buf;
+			uint8_t	*buf;
 			size_t	len;
 			uint64_t addr;
 			uint64_t key;
@@ -225,7 +225,7 @@ struct psmx2_am_request {
 		} write;
 		struct {
 			union {
-				void	*buf;	   /* for read */
+				uint8_t	*buf;	   /* for read */
 				size_t	iov_count; /* for readv */
 			};
 			size_t	len;
@@ -238,12 +238,12 @@ struct psmx2_am_request {
 			size_t	len_read;
 		} read;
 		struct {
-			void	*buf;
+			uint8_t	*buf;
 			size_t	len;
 			uint64_t addr;
 			uint64_t key;
 			void	*context;
-			void 	*result;
+			uint8_t *result;
 		} atomic;
 	};
 	uint64_t cq_flags;
@@ -286,7 +286,7 @@ struct psmx2_sendv_reply {
 	struct fi_context fi_context;
 	int no_completion;
 	int multi_recv;
-	void *buf;
+	uint8_t *buf;
 	void *user_context;
 	size_t iov_done;
 	size_t bytes_received;
@@ -305,7 +305,7 @@ struct psmx2_multi_recv {
 	psm2_epaddr_t	src_addr;
 	psm2_mq_tag_t	tag;
 	psm2_mq_tag_t	tagsel;
-	void		*buf;
+	uint8_t		*buf;
 	size_t		len;
 	size_t		offset;
 	int		min_buf_size;

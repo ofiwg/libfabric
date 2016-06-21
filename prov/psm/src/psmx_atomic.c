@@ -377,7 +377,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 {
 	psm_amarg_t rep_args[8];
 	int count;
-	void *addr;
+	uint8_t *addr;
 	uint64_t key;
 	int datatype, op;
 	int err = 0;
@@ -393,7 +393,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	switch (args[0].u32w0 & PSMX_AM_OP_MASK) {
 	case PSMX_AM_REQ_ATOMIC_WRITE:
 		count = args[0].u32w1;
-		addr = (void *)(uintptr_t)args[2].u64;
+		addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		datatype = args[4].u32w0;
 		op = args[4].u32w1;
@@ -429,7 +429,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	case PSMX_AM_REQ_ATOMIC_READWRITE:
 		count = args[0].u32w1;
-		addr = (void *)(uintptr_t)args[2].u64;
+		addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		datatype = args[4].u32w0;
 		op = args[4].u32w1;
@@ -480,7 +480,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	case PSMX_AM_REQ_ATOMIC_COMPWRITE:
 		count = args[0].u32w1;
-		addr = (void *)(uintptr_t)args[2].u64;
+		addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		datatype = args[4].u32w0;
 		op = args[4].u32w1;
@@ -496,7 +496,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			addr += mr->offset;
 			tmp_buf = malloc(len);
 			if (tmp_buf)
-				psmx_atomic_do_compwrite(addr, src, src + len,
+				psmx_atomic_do_compwrite(addr, src, (uint8_t *)src + len,
 							 tmp_buf, datatype, op, count);
 			else
 				op_error = -FI_ENOMEM;
@@ -812,9 +812,9 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 		req = malloc(sizeof(*req) + len);
 		if (!req)
 			return -FI_ENOMEM;
-		memset((void *)req, 0, sizeof(*req));
-		memcpy((void *)req+sizeof(*req), (void *)buf, len);
-		buf = (void *)req + sizeof(*req);
+		memset(req, 0, sizeof(*req));
+		memcpy((uint8_t *)req+sizeof(*req), (void *)buf, len);
+		buf = (uint8_t *)req + sizeof(*req);
 	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
@@ -999,9 +999,9 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 		req = malloc(sizeof(*req) + len);
 		if (!req)
 			return -FI_ENOMEM;
-		memset((void *)req, 0, sizeof(*req));
-		memcpy((void *)req+sizeof(*req), (void *)buf, len);
-		buf = (void *)req + sizeof(*req);
+		memset(req, 0, sizeof(*req));
+		memcpy((uint8_t *)req+sizeof(*req), (void *)buf, len);
+		buf = (uint8_t *)req + sizeof(*req);
 	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
@@ -1205,17 +1205,17 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 		req = malloc(sizeof(*req) + len + len);
 		if (!req)
 			return -FI_ENOMEM;
-		memset((void *)req, 0, sizeof(*req));
-		memcpy((void *)req + sizeof(*req), (void *)buf, len);
-		memcpy((void *)req + sizeof(*req) + len, (void *)compare, len);
-		buf = (void *)req + sizeof(*req);
-		compare = buf + len;
+		memset(req, 0, sizeof(*req));
+		memcpy((uint8_t *)req + sizeof(*req), (void *)buf, len);
+		memcpy((uint8_t *)req + sizeof(*req) + len, (void *)compare, len);
+		buf = (uint8_t *)req + sizeof(*req);
+		compare = (uint8_t *)buf + len;
 	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
 
-		if (compare != buf + len) {
+		if ((uintptr_t)compare != (uintptr_t)buf + len) {
 			tmp_buf = malloc(len * 2);
 			if (!tmp_buf) {
 				free(req);
@@ -1223,7 +1223,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 			}
 
 			memcpy(tmp_buf, buf, len);
-			memcpy(tmp_buf + len, compare, len);
+			memcpy((uint8_t *)tmp_buf + len, compare, len);
 		}
 	}
 

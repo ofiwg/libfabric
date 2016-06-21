@@ -162,7 +162,7 @@ struct psmx_am_request {
 	int op;
 	union {
 		struct {
-			void	*buf;
+			uint8_t	*buf;
 			size_t	len;
 			uint64_t addr;
 			uint64_t key;
@@ -172,7 +172,7 @@ struct psmx_am_request {
 			uint64_t data;
 		} write;
 		struct {
-			void	*buf;
+			uint8_t	*buf;
 			size_t	len;
 			uint64_t addr;
 			uint64_t key;
@@ -181,7 +181,7 @@ struct psmx_am_request {
 			size_t	len_read;
 		} read;
 		struct {
-			void	*buf;
+			uint8_t	*buf;
 			size_t	len;
 			void	*context;
 			void	*peer_context;
@@ -190,19 +190,19 @@ struct psmx_am_request {
 			size_t	len_sent;
 		} send;
 		struct {
-			void	*buf;
+			uint8_t	*buf;
 			size_t	len;
 			void	*context;
 			void	*src_addr;
 			size_t  len_received;
 		} recv;
 		struct {
-			void	*buf;
+			uint8_t	*buf;
 			size_t	len;
 			uint64_t addr;
 			uint64_t key;
 			void	*context;
-			void 	*result;
+			uint8_t	*result;
 		} atomic;
 	};
 	uint64_t cq_flags;
@@ -230,7 +230,7 @@ struct psmx_req_queue {
 struct psmx_multi_recv {
 	uint64_t	tag;
 	uint64_t	tagsel;
-	void		*buf;
+	uint8_t		*buf;
 	size_t		len;
 	size_t		offset;
 	int		min_buf_size;

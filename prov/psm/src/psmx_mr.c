@@ -171,6 +171,7 @@ static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)
 {
 	struct iovec tmp_iov;
 	int i, j, n, new_len;
+	uintptr_t iov_end_i, iov_end_j;
 
 	n = *count;
 
@@ -197,8 +198,10 @@ static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)
 			if (iov[j].iov_len == 0)
 				continue;
 
-			if (iov[i].iov_base + iov[i].iov_len >= iov[j].iov_base) {
-				new_len = iov[j].iov_base + iov[j].iov_len - iov[i].iov_base;
+			iov_end_i = (uintptr_t)iov[i].iov_base + iov[i].iov_len;
+			iov_end_j = (uintptr_t)iov[j].iov_base + iov[j].iov_len;
+			if (iov_end_i >= (uintptr_t)iov[j].iov_base) {
+				new_len = iov_end_j - (uintptr_t)iov[i].iov_base;
 				if (new_len > iov[i].iov_len)
 					iov[i].iov_len = new_len;
 				iov[j].iov_len = 0;
