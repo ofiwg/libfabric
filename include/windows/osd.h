@@ -38,7 +38,7 @@ extern "C" {
 struct util_shm
 { /* this is dummy structure to provide compilation on Windows platform. */
   /* will be updated on real Windows implementation */
-	int		shared_fd;
+	HANDLE		shared_fd;
 	void		*ptr;
 	const char	*name;
 	size_t		size;
@@ -212,17 +212,8 @@ static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int t
 	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
 }
 
-static inline int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
-				int readonly, void **mapped)
-{
-	OFI_UNUSED(shm);
-	OFI_UNUSED(name);
-	OFI_UNUSED(size);
-	OFI_UNUSED(readonly);
-	OFI_UNUSED(mapped);
-
-	return -FI_ENOENT;
-}
+int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
+				int readonly, void **mapped);
 
 static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
 {
@@ -233,12 +224,7 @@ static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **map
 	return -FI_ENOENT;
 }
 
-static inline int ofi_shm_unmap(struct util_shm *shm)
-{
-	OFI_UNUSED(shm);
-
-	return -FI_ENOENT;
-}
+int ofi_shm_unmap(struct util_shm *shm);
 
 #ifdef __cplusplus
 }
