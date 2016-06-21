@@ -1253,29 +1253,32 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 	struct sockaddr_in *host_addr, *net_addr;
 	char netbuf[SOCK_MAX_NETWORK_ADDR_SZ];
 	int prefix_len;
+
 	ret = getifaddrs(&ifaddrs);
-	if (!ret) {
-		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-			     (ifa->ifa_addr->sa_family != AF_INET))
-				continue;
-			if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
-				host_addr = (struct sockaddr_in *)ifa->ifa_addr;
-				net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
-				// set fabric name to the network_adress in the format of a.b.c.d/e
-				net_in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr
-							& (uint32_t) net_addr->sin_addr.s_addr);
-				inet_ntop(host_addr->sin_family, (void *)&(net_in_addr), netbuf,
-					   sizeof(netbuf));
-				prefix_len = sock_get_prefix_len(net_addr->sin_addr.s_addr);
-				snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
-					  "%s%d", "/", prefix_len);
-				fabric_name = strdup(netbuf);
-				return fabric_name;
-			}
-                }
-                freeifaddrs(ifaddrs);
-        }
+	if (ret)
+		return NULL;
+
+	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+		     (ifa->ifa_addr->sa_family != AF_INET))
+			continue;
+		if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+			host_addr = (struct sockaddr_in *)ifa->ifa_addr;
+			net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
+			// set fabric name to the network_adress in the format of a.b.c.d/e
+			net_in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr &
+						(uint32_t) net_addr->sin_addr.s_addr);
+			inet_ntop(host_addr->sin_family, (void *)&(net_in_addr), netbuf,
+				   sizeof(netbuf));
+			prefix_len = sock_get_prefix_len(net_addr->sin_addr.s_addr);
+			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
+				  "%s%d", "/", prefix_len);
+			fabric_name = strdup(netbuf);
+			return fabric_name;
+		}
+	}
+	freeifaddrs(ifaddrs);
+
 	return fabric_name;
 }
 
@@ -1284,19 +1287,22 @@ char *sock_get_domain_name(struct sockaddr_in *src_addr)
 	int ret;
         struct ifaddrs *ifaddrs, *ifa;
 	char *domain_name = NULL;
+
 	ret = getifaddrs(&ifaddrs);
-	if (!ret) {
-		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-			     (ifa->ifa_addr->sa_family != AF_INET))
-				continue;
-			if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
-				domain_name = strdup(ifa->ifa_name);
-				return domain_name;
-			}
-                }
-                freeifaddrs(ifaddrs);
-        }
+	if (ret)
+		return NULL;
+
+	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+		     (ifa->ifa_addr->sa_family != AF_INET))
+			continue;
+		if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+			domain_name = strdup(ifa->ifa_name);
+			return domain_name;
+		}
+	}
+	freeifaddrs(ifaddrs);
+
 	return domain_name;
 }
 #else
