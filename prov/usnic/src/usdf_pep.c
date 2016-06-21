@@ -283,6 +283,7 @@ usdf_pep_listen(struct fid_pep *fpep)
 	struct usdf_pep *pep;
 	struct epoll_event ev;
 	struct usdf_fabric *fp;
+	socklen_t socklen;
 	int ret;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
@@ -315,6 +316,15 @@ usdf_pep_listen(struct fid_pep *fpep)
 		if (ret == -1) {
 			return -errno;
 		}
+
+		/* Get the actual port (since we may have requested
+		 * port 0)
+		 */
+		socklen = sizeof(pep->pep_src_addr);
+		ret = getsockname(pep->pep_sock, &pep->pep_src_addr,
+				&socklen);
+		if (ret == -1)
+			return -errno;
 		pep->pep_state = USDF_PEP_BOUND;
 	}
 
