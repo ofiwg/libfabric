@@ -1262,7 +1262,7 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
 		     (ifa->ifa_addr->sa_family != AF_INET))
 			continue;
-		if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
 			host_addr = (struct sockaddr_in *)ifa->ifa_addr;
 			net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
 			// set fabric name to the network_adress in the format of a.b.c.d/e
@@ -1296,7 +1296,7 @@ char *sock_get_domain_name(struct sockaddr_in *src_addr)
 		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
 		     (ifa->ifa_addr->sa_family != AF_INET))
 			continue;
-		if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
 			domain_name = strdup(ifa->ifa_name);
 			return domain_name;
 		}
@@ -1408,12 +1408,11 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 	info->mode = SOCK_MODE;
 	info->addr_format = FI_SOCKADDR_IN;
 
-	if (src_addr) {
+	if (src_addr)
 		memcpy(info->src_addr, src_addr, sizeof(struct sockaddr_in));
-		info->src_addrlen = sizeof(struct sockaddr_in);
-	} else {
+	else
 		sock_get_src_addr_from_hostname(info->src_addr, NULL);
-	}
+	info->src_addrlen = sizeof(struct sockaddr_in);
 
 	if (dest_addr) {
 		info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
@@ -1709,12 +1708,12 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 	conn = idm_lookup(&attr->av_idm, idx);
 	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
-		assert(sock_compare_addr(&conn->addr, addr));
+		assert(ofi_equals_sockaddr(&conn->addr, addr));
 		return conn;
 	}
 
 	for (i = 0; i < attr->cmap.used; i++) {
-		if (sock_compare_addr(&attr->cmap.table[i].addr, addr))
+		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr, addr))
 			return &attr->cmap.table[i];
 	}
 	return conn;

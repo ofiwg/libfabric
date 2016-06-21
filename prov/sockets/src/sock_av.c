@@ -60,13 +60,6 @@
 				count * sizeof(struct sock_av_addr))
 #define SOCK_IS_SHARED_AV(av_name) ((av_name) ? 1 : 0)
 
-int sock_compare_addr(struct sockaddr_in *addr1,
-			     struct sockaddr_in *addr2)
-{
-	return ((addr1->sin_addr.s_addr == addr2->sin_addr.s_addr) &&
-		(addr1->sin_port == addr2->sin_port));
-}
-
 int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
 {
 	int i;
@@ -74,7 +67,7 @@ int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
 
 	for (i = 0; i < av->table_hdr->stored; i++) {
 		av_addr = &av->table[i];
-		if (sock_compare_addr(addr, (struct sockaddr_in *)&av_addr->addr))
+		if (ofi_equals_sockaddr(addr, (struct sockaddr_in *)&av_addr->addr))
 			return i;
 	}
 	SOCK_LOG_DBG("failed to get index in AV\n");
