@@ -1100,7 +1100,6 @@ int sock_wait_close(fid_t fid);
 int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
 int sock_av_compare_addr(struct sock_av *av, fi_addr_t addr1, fi_addr_t addr2);
-int sock_compare_addr(struct sockaddr_in *addr1, struct sockaddr_in *addr2);
 int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr);
 
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index,

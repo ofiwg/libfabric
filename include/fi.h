@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <netinet/in.h>
 
 #include <fi_abi.h>
 #include <fi_file.h>
@@ -133,7 +134,6 @@ void fi_param_init(void);
 void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
 
-
 static inline uint64_t roundup_power_of_two(uint64_t n)
 {
 	if (!n || !(n & (n - 1)))
@@ -170,6 +170,18 @@ int ofi_ep_bind_valid(struct fi_provider *prov, struct fid *bfid, uint64_t flags
 
 uint64_t fi_gettime_ms(void);
 
+static inline int ofi_equals_ipaddr(struct sockaddr_in *addr1,
+                             struct sockaddr_in *addr2)
+{
+        return (addr1->sin_addr.s_addr == addr2->sin_addr.s_addr);
+}
+
+static inline int ofi_equals_sockaddr(struct sockaddr_in *addr1,
+                             struct sockaddr_in *addr2)
+{
+        return (ofi_equals_ipaddr(addr1, addr2) &&
+                (addr1->sin_port == addr2->sin_port));
+}
 
 #ifdef __cplusplus
 }
