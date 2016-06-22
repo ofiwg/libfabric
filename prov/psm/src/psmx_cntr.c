@@ -343,7 +343,10 @@ static int psmx_cntr_control(fid_t fid, int command, void *arg)
 		break;
 
 	case FI_GETWAIT:
-		ret = fi_control(&cntr->wait->wait_fid.fid, FI_GETWAIT, arg);
+		if (cntr->wait)
+			ret = fi_control(&cntr->wait->wait_fid.fid, FI_GETWAIT, arg);
+		else
+			return -FI_EINVAL;
 		break;
 
 	default:

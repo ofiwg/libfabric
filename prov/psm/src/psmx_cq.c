@@ -717,7 +717,10 @@ static int psmx_cq_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
-		ret = fi_control(&cq->wait->wait_fid.fid, FI_GETWAIT, arg);
+		if (cq->wait)
+			ret = fi_control(&cq->wait->wait_fid.fid, FI_GETWAIT, arg);
+		else
+			return -FI_EINVAL;
 		break;
 
 	default:
