@@ -590,7 +590,7 @@ int sock_node_getinfo(const char *node, const char *service, uint64_t flags,
 						hints->ep_attr->type, &cur);
 			if (ret) {
 				if (ret == -FI_ENODATA)
-					return 0;
+					return ret;
 				goto err;
 			}
 
