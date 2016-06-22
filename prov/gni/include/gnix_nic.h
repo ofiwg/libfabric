@@ -256,7 +256,6 @@ struct gnix_smsg_rndzv_start_hdr {
  * @var mdh	      the memory handle associated with the iov buffer.
  * @var iov_cnt       the length of the scatter/gather vector.
  * @var req_addr      the sender's fabric request address.
- * @var send_addr     the client's iov addr for the remote CQE.
  * @var send_len      the cumulative size (in bytes) of the client's
  * iov base buffers.
  *
@@ -269,7 +268,6 @@ struct gnix_smsg_rndzv_iov_start_hdr {
 	uint64_t msg_tag;
 	uint64_t req_addr;
 	size_t iov_cnt;
-	uint64_t send_addr;
 	uint64_t send_len;
 };
 
@@ -339,6 +337,7 @@ struct gnix_tx_descriptor {
 		struct gnix_smsg_rndzv_iov_start_hdr rndzv_iov_start_hdr;
 		struct gnix_smsg_rndzv_fin_hdr       rndzv_fin_hdr;
 		struct gnix_smsg_rma_data_hdr        rma_data_hdr;
+		struct gnix_smsg_amo_cntr_hdr	     amo_cntr_hdr;
 	};
 	struct gnix_fab_req *req;
 	int  (*completer_fn)(void *, gni_return_t);

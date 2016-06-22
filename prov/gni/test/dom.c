@@ -155,6 +155,9 @@ Test(domain, open_ops)
 				cr_assert_eq(strncmp(other_reg_type, string_val,
 						strlen(other_reg_type)),  0, "Incorrect op value");
 				break;
+			case GNI_IOV_LIMIT:
+				cr_assert(val <= GNIX_MAX_IOV_LIMIT, "Incorrect op value");
+				break;
 			default:
 				cr_assert(val == i*op+op, "Incorrect op value");
 				break;

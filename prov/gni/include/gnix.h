@@ -117,6 +117,9 @@ extern "C" {
 #define compiler_barrier() asm volatile ("" ::: "memory")
 #endif
 
+
+#define GNIX_MAX_IOV_LIMIT 8
+
 /*
  * GNI GET alignment
  */
@@ -140,7 +143,7 @@ extern "C" {
 
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
 #define GNIX_MSG_GET_TAIL		(1ULL << 62)	/* MSG only flag */
-#define GNIX_MSG_IOV			(1ULL << 63)	/* MSG only flag */
+#define LAST_FLAG			(1ULL << 63)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -555,29 +558,30 @@ struct gnix_fab_req_rma {
  */
 struct gnix_fab_req_msg {
 	struct gnix_tag_list_element tle;
-	uint64_t                     send_addr;
-	size_t                       send_len;
-	uint64_t		     smsg_iov_hdr_addr;
-	uint64_t		     send_iov;
+	struct send_info_t {
+		uint64_t	 send_addr;
+		size_t		 send_len;
+		gni_mem_handle_t mem_hndl;
+	}			     send_info[GNIX_MAX_IOV_LIMIT];
+	struct gnix_fid_mem_desc     *send_md[GNIX_MAX_IOV_LIMIT];
 	size_t                       send_iov_cnt;
-	struct gnix_fid_mem_desc     **send_iov_md;
-	struct gnix_fid_mem_desc     *send_md;
 	uint64_t                     send_flags;
-	uint64_t                     recv_addr;
-	size_t                       recv_len;
+	size_t			     cum_send_len;
+	struct recv_info_t {
+		uint64_t	 recv_addr;
+		size_t		 recv_len;
+		gni_mem_handle_t mem_hndl;
+	}			     recv_info[GNIX_MAX_IOV_LIMIT];
+	struct gnix_fid_mem_desc     *recv_md[GNIX_MAX_IOV_LIMIT];
 	size_t			     recv_iov_cnt;
-	struct gnix_fid_mem_desc     **recv_iov_md;
-	struct gnix_fid_mem_desc     *recv_md;
 	uint64_t                     recv_flags; /* protocol, API info */
+	size_t			     cum_recv_len;
 	uint64_t                     tag;
 	uint64_t                     ignore;
 	uint64_t                     imm;
 	gni_mem_handle_t             rma_mdh;
-	gni_mem_handle_t	     *rma_iov_mdh;
-	int32_t			     multi_recv_iov_idx;
-	void			     *multi_recv_iov_ptr;
-	size_t			     multi_recv_iov_len;
 	uint64_t                     rma_id;
+	/* TODO: Move head&tail info send_info */
 	uint32_t                     rndzv_head;
 	uint32_t                     rndzv_tail;
 	atomic_t                     outstanding_txds;

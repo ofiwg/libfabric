@@ -256,8 +256,8 @@ Test(gnix_cancel, cancel_ep_send)
 	gnix_ep = container_of(ep[0], struct gnix_fid_ep, ep_fid);
 	req = _gnix_fr_alloc(gnix_ep);
 
-	req->msg.send_addr = 0xdeadbeef;
-	req->msg.send_len = 128;
+	req->msg.send_info[0].send_addr = 0xdeadbeef;
+	req->msg.cum_send_len = req->msg.send_info[0].send_len = 128;
 	req->user_context = foobar_ptr;
 	req->type = GNIX_FAB_RQ_SEND;
 

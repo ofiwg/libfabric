@@ -949,7 +949,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	/* If we already have an AV bound, see if sender's address is already
 	 * mapped. */
 	if (ep->av) {
-		GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+		GNIX_DEBUG(FI_LOG_EP_DATA, "\n");
 		ret = _gnix_av_reverse_lookup(ep->av, src_addr, &fi_addr);
 		if (ret == FI_SUCCESS) {
 			src_mapped = 1;
@@ -2029,16 +2029,9 @@ static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 			if ((ret != -FI_ENOSPC) &&
 			    (ret != -FI_EAGAIN)) {
 				/* TODO report error? */
-				GNIX_WARN(FI_LOG_EP_DATA,
-					  "Failed to push request %p: %s\n",
-					  req, fi_strerror(-ret));
-
-				/*
-				 * If a UGNI fn returned invalid param, quit.
-				 */
-				if (ret == -FI_EINVAL) {
-					GNIX_FATAL(FI_LOG_EP_DATA, "\n");
-				}
+				GNIX_FATAL(FI_LOG_EP_DATA,
+					   "Failed to push request %p: %s\n",
+					   req, fi_strerror(-ret));
 			}
 		} else {
 			break; /* nothing left in the queue */
@@ -2383,7 +2376,7 @@ fi_addr_t _gnix_vc_peer_fi_addr(struct gnix_vc *vc)
 	if (vc->ep->caps & FI_SOURCE &&
 	    vc->ep->av &&
 	    vc->peer_fi_addr == FI_ADDR_NOTAVAIL) {
-		GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+		GNIX_DEBUG(FI_LOG_EP_DATA, "\n");
 		rc = _gnix_av_reverse_lookup(vc->ep->av,
 					     vc->peer_addr,
 					     &vc->peer_fi_addr);

@@ -55,34 +55,15 @@
 /*******************************************************************************
  * helper functions
  ******************************************************************************/
-static void __gnix_msg_unpack_data_into_iov(const struct iovec *dest,
+static void __gnix_msg_unpack_data_into_iov(const struct recv_info_t *dest,
 					    size_t dest_cnt,
-					    void *src, size_t src_len,
-					    char is_multi_recv)
+					    uint64_t src, size_t src_len)
 {
-	/*
-	 * TODO: Does this fn need be thread safe? Since fi_recv is
-	 * non-blocking and we have static variables below for multi_recv.
-	 * We can only release the lock once the destination buffer is
-	 * exhausted.
-	 * TODO: Is starvation a problem here?
-	 */
 	static int i;
 	static size_t cum_len;
 	static size_t offset;
-	static fastlock_t multi_recv_lock = {0};
 	size_t bwrite;
 
-	if (is_multi_recv) {
-		fastlock_init(&multi_recv_lock);
-		fastlock_acquire(&multi_recv_lock);
-	}
-
-	/*
-	 * For FI_MULTI_RECV it could be the case that the src_len is less than
-	 * the cum_len.  In this case, we are expecting more output in this
-	 * iov destination buffer.
-	 */
 	GNIX_DEBUG(FI_LOG_EP_DATA, "Unpacking data for recvv count (%lu)"
 		   " src = %p, dest = %p,"
 		   " i = %d, cum_len = %lu, offset = %lu\n",
@@ -90,17 +71,17 @@ static void __gnix_msg_unpack_data_into_iov(const struct iovec *dest,
 
 	/* Pull out each iov len and base field into the iov */
 	while (i < dest_cnt) {
-		bwrite = dest[i].iov_len - offset < src_len - cum_len ?
-			dest[i].iov_len - offset : src_len - cum_len;
+		bwrite = dest[i].recv_len - offset < src_len - cum_len ?
+			dest[i].recv_len - offset : src_len - cum_len;
 
-		memcpy(dest[i].iov_base + offset, src + cum_len,
-		       bwrite);
+		memcpy((uint8_t *) dest[i].recv_addr + offset,
+		       (void *) (src + cum_len), bwrite);
 
 		cum_len += bwrite;
 
 		/* Src exhausted */
 		if (cum_len == src_len) {
-			offset = dest[i].iov_len - bwrite;
+			offset = dest[i].recv_len - bwrite;
 			cum_len = 0;
 
 			/* dest exhausted too, reset the counters */
@@ -117,16 +98,12 @@ static void __gnix_msg_unpack_data_into_iov(const struct iovec *dest,
 fini:
 	/* dest exhausted, reset the counters */
 	i = cum_len = 0;
-
-	if (is_multi_recv)
-		fastlock_release(&multi_recv_lock);
 }
 
 static void __gnix_msg_pack_data_from_iov(uint64_t dest, size_t dest_len,
 					  uint64_t src, size_t src_cnt)
 {
 	int i;
-	void *dest_ptr = (void *) dest;
 	struct iovec *iov_src = (struct iovec *) src;
 	size_t cum_len = 0;
 
@@ -135,7 +112,7 @@ static void __gnix_msg_pack_data_from_iov(uint64_t dest, size_t dest_len,
 
 	/* Pull out each iov len and base field into the dest buffer */
 	for (i = 0; i < src_cnt && cum_len < dest_len; i++) {
-		memcpy(dest_ptr + cum_len, iov_src[i].iov_base,
+		memcpy((void *) (dest + cum_len), iov_src[i].iov_base,
 		       iov_src[i].iov_len < dest_len - cum_len ?
 		       iov_src[i].iov_len : dest_len - cum_len);
 		cum_len += iov_src[i].iov_len;
@@ -147,16 +124,23 @@ static void __gnix_msg_copy_data_to_recv_addr(struct gnix_fab_req *req,
 {
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
-	if (req->msg.recv_flags & GNIX_MSG_IOV) {
-		__gnix_msg_unpack_data_into_iov((struct iovec *)
-						req->msg.recv_addr,
+	switch(req->type) {
+	case GNIX_FAB_RQ_RECV:
+		memcpy((void *)req->msg.recv_info[0].recv_addr, data,
+		       req->msg.cum_send_len);
+		break;
+
+	case GNIX_FAB_RQ_RECVV:
+	case GNIX_FAB_RQ_TRECVV:
+		__gnix_msg_unpack_data_into_iov(req->msg.recv_info,
 						req->msg.recv_iov_cnt,
-						data,
-						req->msg.send_len,
-						!!(req->msg.recv_flags &
-						FI_MULTI_RECV));
-	} else {
-		memcpy((void *)req->msg.recv_addr, data, req->msg.send_len);
+						(uint64_t) data,
+						req->msg.cum_send_len);
+		break;
+
+	default:
+		GNIX_FATAL(FI_LOG_EP_DATA, "Invalid request type: %d", req->type);
+		return;
 	}
 }
 
@@ -242,8 +226,9 @@ static int __gnix_msg_recv_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 
 	flags |= req->msg.send_flags & FI_TAGGED;
 
-	return __recv_err(ep, req->user_context, flags, req->msg.recv_len,
-			  (void *)req->msg.recv_addr, req->msg.imm,
+	/* TODO: Check for FI_MULTI_RECV? */
+	return __recv_err(ep, req->user_context, flags, req->msg.cum_recv_len,
+			  (void *)req->msg.recv_info[0].recv_addr, req->msg.imm,
 			  req->msg.tag, 0, FI_ECANCELED,
 			  GNI_RC_TRANSACTION_ERROR, NULL);
 }
@@ -291,10 +276,11 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 	flags |= req->msg.recv_flags & (FI_PEEK | FI_CLAIM | FI_DISCARD |
 					FI_MULTI_RECV);
 
-	GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.send_len = %lu\n",
-		   req->msg.send_len);
 	return __recv_completion(ep, req, req->user_context, flags,
-				 req->msg.send_len, (void *)req->msg.recv_addr,
+				 req->msg.cum_send_len,
+				 req->msg.recv_flags & FI_MULTI_RECV ?
+				 (void *)req->msg.recv_info[0].recv_addr :
+				 NULL,
 				 req->msg.imm, req->msg.tag,
 				 _gnix_vc_peer_fi_addr(req->vc));
 }
@@ -425,27 +411,28 @@ static void __gnix_msg_copy_unaligned_get_data(struct gnix_fab_req *req)
 	int head_off, head_len, tail_len;
 	void *addr;
 
-	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
+	head_off = req->msg.send_info[0].send_addr & GNI_READ_ALIGN_MASK;
 	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
-	tail_len = (req->msg.send_addr + req->msg.send_len) &
+	tail_len = (req->msg.send_info[0].send_addr + req->msg.send_info[0].send_len) &
 			GNI_READ_ALIGN_MASK;
 
 	if (head_off) {
 		addr = (uint8_t *)&req->msg.rndzv_head + head_off;
 
 		GNIX_INFO(FI_LOG_EP_DATA,
-			  "writing %d bytes to head (%p, 0x%x)\n",
-			  head_len, req->msg.recv_addr, *(uint32_t *)addr);
-		memcpy((void *)req->msg.recv_addr, addr, head_len);
+			  "writing %d bytes to head (%p, %hxx)\n",
+			  head_len, req->msg.recv_info[0].recv_addr,
+			  *(uint32_t *)addr);
+		memcpy((void *)req->msg.recv_info[0].recv_addr, addr, head_len);
 	}
 
 	if (tail_len) {
-		addr = (void *)(req->msg.recv_addr +
-				req->msg.send_len -
+		addr = (void *)(req->msg.recv_info[0].recv_addr +
+				req->msg.send_info[0].send_len -
 				tail_len);
 
 		GNIX_INFO(FI_LOG_EP_DATA,
-			  "writing %d bytes to tail (%p, 0x%x)\n",
+			  "writing %d bytes to tail (%p, %hxx)\n",
 			  tail_len, addr, req->msg.rndzv_tail);
 		memcpy((void *)addr, &req->msg.rndzv_tail, tail_len);
 	}
@@ -508,8 +495,8 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 
 	if (req->msg.recv_flags & FI_LOCAL_MR) {
 		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
-			  req->msg.recv_md);
-		fi_close(&req->msg.recv_md->mr_fid.fid);
+			  req->msg.recv_md[0]);
+		fi_close(&req->msg.recv_md[0]->mr_fid.fid);
 	}
 
 	req->work_fn = __gnix_rndzv_req_send_fin;
@@ -533,6 +520,9 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
+	GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.outstanding_txds = %d\n",
+		   atomic_get(&req->msg.outstanding_txds));
+
 	if (tx_status != GNI_RC_SUCCESS) {
 		req->tx_failures++;
 		if (GNIX_EP_RDM(req->gnix_ep->type) &&
@@ -550,25 +540,19 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 		req->msg.status = tx_status;
 		return _gnix_vc_queue_work_req(req);
 	} else if (atomic_dec(&req->msg.outstanding_txds) == 0) {
-		/* Free the txd now, we arn't rebuilding it. */
 		_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+
+		GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.recv_flags == FI_LOCAL_MR is %s"
+			   ", req->msg.recv_iov_cnt = %lu\n",
+			   req->msg.recv_flags & FI_LOCAL_MR ? "true" : "false",
+			   req->msg.recv_iov_cnt);
 
 		/* Generate remote CQE and send fin msg back to sender */
 		if (req->msg.recv_flags & FI_LOCAL_MR) {
-			if (req->msg.recv_flags & GNIX_MSG_IOV) {
-				for (i = 0; i < req->msg.recv_iov_cnt; i++) {
-					GNIX_INFO(FI_LOG_EP_DATA, "freeing auto"
-						  "-reg MR: %p\n",
-						  req->msg.recv_iov_md[i]);
-					fi_close(&req->msg.recv_iov_md[i]->
-						 mr_fid.fid);
-				}
-				free(req->msg.recv_iov_md);
-			} else {
-				GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR:"
-					  " %p\n",
-					  req->msg.recv_md);
-				fi_close(&req->msg.recv_md->mr_fid.fid);
+			for (i = 0; i < req->msg.recv_iov_cnt; i++) {
+				GNIX_INFO(FI_LOG_EP_DATA, "freeing auto"
+					  "-reg MR: %p\n", req->msg.recv_md[i]);
+				fi_close(&req->msg.recv_md[i]->mr_fid.fid);
 			}
 		}
 
@@ -658,9 +642,10 @@ static int __gnix_rndzv_req(void *arg)
 	if (req->vc->modes & GNIX_VC_MODE_XPMEM)
 		return  __gnix_rndzv_req_xpmem(req);
 
-	if (!req->msg.recv_md) {
+	if (!req->msg.recv_md[0]) {
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
-				 (void *)req->msg.recv_addr, req->msg.recv_len,
+				 (void *)req->msg.recv_info[0].recv_addr,
+				 req->msg.recv_info[0].recv_len,
 				 FI_READ | FI_WRITE, 0, 0, 0, &auto_mr, NULL);
 		if (rc != FI_SUCCESS) {
 			GNIX_INFO(FI_LOG_EP_DATA,
@@ -669,9 +654,10 @@ static int __gnix_rndzv_req(void *arg)
 			return -FI_EAGAIN;
 		}
 		req->msg.recv_flags |= FI_LOCAL_MR;
-		req->msg.recv_md = container_of(auto_mr,
-						struct gnix_fid_mem_desc,
-						mr_fid);
+		req->msg.recv_md[0] = container_of(auto_mr,
+						   struct gnix_fid_mem_desc,
+						   mr_fid);
+		req->msg.recv_info[0].mem_hndl = req->msg.recv_md[0]->mem_hndl;
 		GNIX_INFO(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
 	}
 
@@ -690,20 +676,20 @@ static int __gnix_rndzv_req(void *arg)
 	txd->gni_desc.type = GNI_POST_RDMA_GET;
 	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
 	txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
-	txd->gni_desc.local_mem_hndl = req->msg.recv_md->mem_hndl;
+	txd->gni_desc.local_mem_hndl = req->msg.recv_info[0].mem_hndl;
 	txd->gni_desc.remote_mem_hndl = req->msg.rma_mdh;
 	txd->gni_desc.rdma_mode = 0;
 	txd->gni_desc.src_cq_hndl = (use_tx_cq_blk) ?
 					nic->tx_cq_blk : nic->tx_cq;
 
-	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
+	head_off = req->msg.send_info[0].send_addr & GNI_READ_ALIGN_MASK;
 	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
-	tail_len = (req->msg.send_addr + req->msg.send_len) &
+	tail_len = (req->msg.send_info[0].send_addr + req->msg.send_info[0].send_len) &
 			GNI_READ_ALIGN_MASK;
 
-	txd->gni_desc.local_addr = (uint64_t)req->msg.recv_addr + head_len;
-	txd->gni_desc.remote_addr = (uint64_t)req->msg.send_addr + head_len;
-	txd->gni_desc.length = req->msg.send_len - head_len - tail_len;
+	txd->gni_desc.local_addr = (uint64_t)req->msg.recv_info[0].recv_addr + head_len;
+	txd->gni_desc.remote_addr = (uint64_t)req->msg.send_info[0].send_addr + head_len;
+	txd->gni_desc.length = req->msg.send_info[0].send_len - head_len - tail_len;
 
 	if (req->msg.recv_flags & GNIX_MSG_GET_TAIL) {
 		/* The user ended up with a send matching a receive with a
@@ -723,7 +709,8 @@ static int __gnix_rndzv_req(void *arg)
 		tail_txd->completer_fn = __gnix_rndzv_req_complete;
 		tail_txd->req = req;
 
-		tail_data = (void *)((req->msg.send_addr + req->msg.send_len) &
+		tail_data = (void *)((req->msg.send_info[0].send_addr +
+				      req->msg.send_info[0].send_len) &
 				      ~GNI_READ_ALIGN_MASK);
 
 		tail_txd->gni_desc.type = GNI_POST_FMA_GET;
@@ -757,7 +744,7 @@ static int __gnix_rndzv_req(void *arg)
 		GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostRdma failed: %s\n",
 			  gni_err_str[status]);
 
-		GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+		GNIX_DEBUG(FI_LOG_EP_DATA, "\n");
 		return gnixu_to_fi_errno(status);
 	}
 
@@ -809,7 +796,7 @@ static int __gnix_rndzv_iov_req_post(void *arg)
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
-	GNIX_DEBUG(FI_LOG_EP_DATA, "%s for req = %p",
+	GNIX_DEBUG(FI_LOG_EP_DATA, "%s for req = %p\n",
 		   slist_empty(&req->iov_txd_slist) ?
 		   "req->iov_txd_slist is empty" :
 		   "req->iov_txd_slist is NON-empty");
@@ -857,25 +844,19 @@ static int __gnix_rndzv_iov_req_post(void *arg)
 
 /*
  * Dequeued a iov work req on the remote endpoint, initiate the pull of data.
- * Note that the recv_flags will be GNIX_MSG_IOV for fi_recvv.
  */
 static int __gnix_rndzv_iov_req_build(void *arg)
 {
-	int ret = FI_SUCCESS, i = 0, j = 0;
+	int ret = FI_SUCCESS, i = 0, j = 0, use_tx_cq_blk;
 	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
 	struct gnix_fid_ep *ep = req->gnix_ep;
 	struct gnix_nic *nic = ep->nic;
 	gni_ep_handle_t gni_ep = req->vc->gni_ep;
 	struct gnix_tx_descriptor *txd = NULL;
-	size_t recv_len, get_len, ct_size;
-	struct iovec *recv_iov, *send_iov;
-	void *recv_ptr = NULL;
-	size_t send_cnt = req->msg.send_iov_cnt, recv_cnt;
-	struct iovec tmp;	/* Simplifies algorithm for calculating GETs */
-	/* Note: Should this be the sender's rndzv thresh instead? */
+	size_t recv_len, get_len, ct_size, send_cnt, recv_cnt, txd_cnt;
+	uint64_t recv_ptr = 0UL;
+	/* TODO: Should this be the sender's rndzv thresh instead? */
 	size_t rndzv_thresh = ep->domain->params.msg_rendezvous_thresh;
-	int use_tx_cq_blk;
-	size_t txd_cnt = 0;
 	gni_ct_get_post_descriptor_t *cur_ct = NULL;
 	void **next_ct = NULL;
 	uint32_t max_ct_size = nic->gni_cdm_modes & GNI_CDM_MODE_FMA_SHARED ?
@@ -884,96 +865,70 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
 	slist_init(&req->iov_txd_slist);
-
-	/* recvv/recv Setup for creating get txd's */
-	if (req->msg.recv_flags & GNIX_MSG_IOV) {
-		recv_iov = (void *) req->msg.recv_addr;
-		recv_cnt = req->msg.recv_iov_cnt;
-	} else {
-		tmp.iov_base = (void *) req->msg.recv_addr;
-		tmp.iov_len = req->msg.recv_len;
-		recv_iov = &tmp;
-		recv_cnt = req->msg.recv_iov_cnt = 1;
-		req->msg.recv_iov_md = &req->msg.recv_md;
-	}
-
-	/* sendv/send setup for creating get txd's */
-	if (req->msg.send_flags & GNIX_MSG_IOV) {
-		send_iov = (struct iovec *) req->msg.send_iov;
-	} else {
-		tmp.iov_base = (void *) req->msg.send_addr;
-		tmp.iov_len = req->msg.send_len;
-		send_iov = &tmp;
-		send_cnt = req->msg.send_iov_cnt = 1;
-		req->msg.rma_iov_mdh = &req->msg.rma_mdh;
-	}
-
-	/* Ensure the user's recv buffer is registered for recv/recvv */
-	if (!req->msg.recv_iov_md || !req->msg.recv_md) {
-		struct fid_mr *auto_mr[recv_cnt];
-
-		req->msg.recv_iov_md = malloc(
-			sizeof(struct gnix_fid_mem_desc *) * recv_cnt);
-
-		for (i = 0; i < recv_cnt; i++) {
-			auto_mr[i] = NULL;
-			ret = gnix_mr_reg(&ep->domain->domain_fid.fid,
-					  recv_iov[i].iov_base,
-					  recv_iov[i].iov_len,
-					  FI_READ | FI_WRITE, 0, 0, 0,
-					  auto_mr + i, NULL);
-
-			if (ret != FI_SUCCESS) {
-				GNIX_DEBUG(FI_LOG_EP_DATA,
-					   "Failed to auto-register"
-					   " local buffer: %d\n",
-					   ret);
-				return ret;
-			}
-
-			req->msg.recv_iov_md[i] = container_of(
-				(void *) auto_mr[i],
-				struct gnix_fid_mem_desc,
-				mr_fid);
-
-			GNIX_DEBUG(FI_LOG_EP_DATA, "auto-reg MR: %p\n",
-				   req->msg.recv_iov_md[i]);
-
-		}
-		req->msg.recv_flags |= FI_LOCAL_MR;
-	}
-
-	i = 0;
-	ct_size = 0;
-	req->msg.recv_md = req->msg.recv_iov_md[0];
-
-	/* For multi recv, pick up where we left off */
-	if (req->msg.recv_flags & FI_MULTI_RECV) {
-		j = req->msg.multi_recv_iov_idx;
-		recv_ptr = req->msg.multi_recv_iov_ptr;
-		recv_len = req->msg.multi_recv_iov_len;
-	} else {
-		recv_ptr = recv_iov[i].iov_base;
-		recv_len = recv_iov[i].iov_len;
-	}
-
+	txd_cnt = ct_size = 0;
+	send_cnt = req->msg.send_iov_cnt;
+	recv_ptr = req->msg.recv_info[0].recv_addr;
+	recv_len = req->msg.recv_info[0].recv_len;
+	recv_cnt = req->msg.recv_iov_cnt;
 	use_tx_cq_blk = (ep->domain->data_progress == FI_PROGRESS_AUTO);
 
 	GNIX_DEBUG(FI_LOG_EP_DATA, "send_cnt = %lu, recv_cnt = %lu\n",
 		   send_cnt, recv_cnt);
 
+	/* Ensure the user's recv buffer is registered for recv/recvv */
+	if (!req->msg.recv_md[0]) {
+		struct fid_mr *auto_mr;
+
+		for (i = 0; i < recv_cnt; i++) {
+			auto_mr = NULL;
+			ret = gnix_mr_reg(&ep->domain->domain_fid.fid,
+					  (void *)
+					  req->msg.recv_info[i].recv_addr,
+					  req->msg.recv_info[i].recv_len,
+					  FI_READ | FI_WRITE, 0, 0, 0,
+					  &auto_mr, NULL);
+
+			if (ret != FI_SUCCESS) {
+				GNIX_DEBUG(FI_LOG_EP_DATA,
+					   "Failed to auto-register"
+					   " local buffer: %s\n",
+					   fi_strerror(-ret));
+
+				for (i--; i >= 0; i--) {
+					fi_close(&req->msg.recv_md[i]->mr_fid.fid);
+				}
+
+				return ret;
+			}
+
+			req->msg.recv_md[i] = container_of(
+				(void *) auto_mr,
+				struct gnix_fid_mem_desc,
+				mr_fid);
+
+			req->msg.recv_info[i].mem_hndl =
+				req->msg.recv_md[i]->mem_hndl;
+
+			GNIX_DEBUG(FI_LOG_EP_DATA, "auto-reg MR: %p\n",
+				   req->msg.recv_md[i]);
+
+		}
+		req->msg.recv_flags |= FI_LOCAL_MR;
+	}
+
 	/*
 	 * TODO: "coalesce" the user's sendv buffer before sending the control
 	 * message; do "the same" in _gnix_recvv.
 	 */
+	i = 0;
 
 	/* Iterate through the buffers and build the Fma and Rdma requests! */
 	while (i < send_cnt) {
-		get_len = MIN(recv_len, send_iov[i].iov_len);
+		get_len = MIN(recv_len, req->msg.send_info[i].send_len);
 
-		GNIX_DEBUG(FI_LOG_EP_DATA, "send_iov[%d].iov_len = %lu,"
+		GNIX_DEBUG(FI_LOG_EP_DATA, "send_info[%d].send_len = %lu,"
 			   " recv_len = %lu, get_len = %lu\n", i,
-			   send_iov[i].iov_len, recv_len, get_len);
+			   req->msg.send_info[i].send_len, recv_len, get_len);
 
 		if (get_len >= rndzv_thresh) { /* Build the rdma txd */
 			ret = _gnix_nic_tx_alloc(nic, &txd);
@@ -992,10 +947,10 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 			txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
 			txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
 			txd->gni_desc.local_mem_hndl =
-				req->msg.recv_iov_md[j]->mem_hndl;
+				req->msg.recv_info[j].mem_hndl;
 			/* TODO: If the user passes in a incorrect mdh can we
 			 * report a useful error? */
-			txd->gni_desc.remote_mem_hndl = req->msg.rma_iov_mdh[i];
+			txd->gni_desc.remote_mem_hndl = req->msg.send_info[i].mem_hndl;
 			txd->gni_desc.rdma_mode = 0;
 			txd->gni_desc.src_cq_hndl = (use_tx_cq_blk) ?
 				nic->tx_cq_blk : nic->tx_cq;
@@ -1004,7 +959,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 			txd->gni_desc.local_addr =
 				(uint64_t) recv_ptr;
 			txd->gni_desc.remote_addr =
-				(uint64_t) send_iov[i].iov_base;
+				req->msg.send_info[i].send_addr;
 			txd->gni_desc.length = get_len;
 
 			slist_insert_tail(&txd->slist, &req->iov_txd_slist);
@@ -1044,14 +999,14 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 					txd->gni_desc.dlvr_mode =
 						GNI_DLVMODE_PERFORMANCE;
 					txd->gni_desc.local_mem_hndl =
-						req->msg.recv_iov_md[j]->
+						req->msg.recv_info[j].
 						mem_hndl;
 
 					/* TODO: If the user passes in a
 					 * incorrect mdh can we report a
 					 * useful error? */
 					txd->gni_desc.remote_mem_hndl =
-						req->msg.rma_iov_mdh[i];
+						req->msg.send_info[i].mem_hndl;
 					txd->gni_desc.rdma_mode = 0;
 					txd->gni_desc.src_cq_hndl =
 						(use_tx_cq_blk) ?
@@ -1061,7 +1016,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 					txd->gni_desc.local_addr =
 						(uint64_t) recv_ptr;
 					txd->gni_desc.remote_addr =
-						(uint64_t) send_iov[i].iov_base;
+						req->msg.send_info[i].send_addr;
 					txd->gni_desc.length = get_len;
 					ct_size += get_len;
 
@@ -1072,14 +1027,13 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 					cur_ct->ep_hndl = gni_ep;
 					cur_ct->length = get_len;
 					ct_size += get_len;
-					cur_ct->remote_addr =
-						(uint64_t) send_iov[i].iov_base;
+					cur_ct->remote_addr = req->msg.send_info[i].send_addr;
 					cur_ct->remote_mem_hndl =
-						req->msg.rma_iov_mdh[i];
+						req->msg.send_info[i].mem_hndl;
 					cur_ct->local_addr =
 						(uint64_t) recv_ptr;
 					cur_ct->local_mem_hndl =
-						req->msg.recv_iov_md[j]->
+						req->msg.recv_info[j].
 						mem_hndl;
 
 					next_ct = &cur_ct->next_descr;
@@ -1099,14 +1053,14 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 			if (j == recv_cnt)
 				break;
 
-			recv_len = recv_iov[j].iov_len;
-			recv_ptr = recv_iov[j].iov_base;
+			recv_ptr = req->msg.recv_info[j].recv_addr;
+			recv_len = req->msg.recv_info[j].recv_len;
 
 			/* Also exhausted send buffer */
-			if (get_len == send_iov[i].iov_len) {
+			if (get_len == req->msg.send_info[i].send_len) {
 				i++;
 			} else {
-				send_iov[i].iov_base += get_len;
+				req->msg.send_info[i].send_addr += get_len;
 			}
 		} else {	/* Just exhausted current send buffer. */
 			i++;
@@ -1122,36 +1076,10 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 	 * will have been queued and txd will have a NULL value.
 	 */
 	if (txd) {
-		GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+		GNIX_DEBUG(FI_LOG_EP_DATA, "\n");
 		*next_ct = NULL;
 		txd_cnt++;
 		slist_insert_tail(&txd->slist, &req->iov_txd_slist);
-	}
-
-	/* We are using multi recv and have exhausted the current send buffer
-	 * but not the recv buffer */
-	if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-	    (j != recv_cnt || recv_len != 0) &&
-	    (recv_len >= ep->min_multi_recv)) {
-		/* Save the state of the recv buffer */
-		req->msg.multi_recv_iov_idx = j;
-		req->msg.multi_recv_iov_len = recv_len;
-		req->msg.multi_recv_iov_ptr = recv_ptr;
-
-		struct gnix_fab_req *dup_req = __gnix_msg_dup_req(req);
-
-		if (dup_req) {
-			/* The next time a rx cqe is caught we'll check the work
-			 * queue and process this req. */
-			ret = _gnix_vc_queue_work_req(dup_req);
-
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_DATA, "Failed to queue"
-					  " req %p _gnix_vc_queue_work_req "
-					  "returned %s\n",
-					  dup_req, fi_strerror(-ret));
-			}
-		}
 	}
 
 	atomic_set(&req->msg.outstanding_txds, txd_cnt);
@@ -1190,8 +1118,10 @@ static int __comp_eager_msg_w_data(void *data, gni_return_t tx_status)
 		 * For fi_sendv we must free the temporary buf used to flatten
 		 * the user's iovec.
 		 */
-		if (req->msg.send_flags & GNIX_MSG_IOV)
-			free((void *) req->msg.send_addr);
+		if (req->type == GNIX_FAB_RQ_SENDV ||
+		    req->type == GNIX_FAB_RQ_TSENDV) {
+			free((void *) req->msg.send_info[0].send_addr);
+		}
 
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
@@ -1301,13 +1231,6 @@ static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 	}
 
 	_gnix_nic_tx_free(req->gnix_ep->nic, tdesc);
-
-	/* Free the sender's mem handle buffer */
-	if (req->msg.send_flags & GNIX_MSG_IOV &&
-	    req->msg.send_flags & GNIX_MSG_RENDEZVOUS) {
-		free(req->msg.rma_iov_mdh);
-	}
-
 	_gnix_fr_free(req->gnix_ep, req);
 
 	return FI_SUCCESS;
@@ -1331,7 +1254,6 @@ static int __comp_rndzv_iov_start(void *data, gni_return_t tx_status)
 		/* Just free the TX descriptor for now.  The request remains
 		 * active until the remote peer notifies us that they're done
 		 * with the send buffer. */
-		free((void *) req->msg.smsg_iov_hdr_addr);
 		_gnix_nic_tx_free(txd->req->gnix_ep->nic, txd);
 
 		GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_START, req: %p\n",
@@ -1400,13 +1322,14 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		req->gnix_ep = ep;
 		req->vc = vc;
 
-		req->msg.send_len = MIN(hdr->len, req->msg.recv_len);
+		req->msg.cum_send_len = MIN(hdr->len, req->msg.cum_recv_len);
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
 
 		GNIX_DEBUG(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
-			  req, req->msg.recv_addr, req->msg.send_len);
+			   req, req->msg.recv_info[0].recv_addr,
+			   req->msg.cum_send_len);
 
 		__gnix_msg_copy_data_to_recv_addr(req, data_ptr);
 		__gnix_msg_recv_completion(ep, req);
@@ -1414,13 +1337,14 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		/* Check if we're using FI_MULTI_RECV and there is space left
 		 * in the receive buffer. */
 		if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-		    ((req->msg.recv_len - req->msg.send_len) >=
+		    ((req->msg.cum_recv_len - req->msg.cum_send_len) >=
 		     ep->min_multi_recv)) {
 			GNIX_DEBUG(FI_LOG_EP_DATA, "Re-using req: %p\n", req);
 
 			/* Adjust receive buffer for the next match. */
-			req->msg.recv_addr += req->msg.send_len;
-			req->msg.recv_len -= req->msg.send_len;
+			req->msg.recv_info[0].recv_addr += req->msg.send_info[0].send_len;
+			req->msg.recv_info[0].recv_len -= req->msg.cum_send_len;
+			req->msg.cum_recv_len = req->msg.recv_info[0].recv_len;
 		} else {
 			GNIX_DEBUG(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
 
@@ -1437,8 +1361,8 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		}
 
 		/* TODO: Buddy alloc */
-		req->msg.send_addr = (uint64_t)malloc(hdr->len);
-		if (unlikely(req->msg.send_addr == 0ULL)) {
+		req->msg.send_info[0].send_addr = (uint64_t)malloc(hdr->len);
+		if (unlikely(req->msg.send_info[0].send_addr == 0ULL)) {
 			COND_RELEASE(ep->requires_lock, queue_lock);
 			_gnix_fr_free(ep, req);
 			return -FI_ENOMEM;
@@ -1449,18 +1373,19 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		req->gnix_ep = ep;
 		req->vc = vc;
 
-		req->msg.send_len = hdr->len;
+		req->msg.cum_send_len = hdr->len;
+		req->msg.send_info[0].send_len = hdr->len;
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
 
-		memcpy((void *)req->msg.send_addr, data_ptr, hdr->len);
+		memcpy((void *)req->msg.send_info[0].send_addr, data_ptr, hdr->len);
 		req->addr = vc->peer_addr;
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 
 		GNIX_DEBUG(FI_LOG_EP_DATA, "New req: %p (%u)\n",
-			  req, req->msg.send_len);
+			  req, req->msg.cum_send_len);
 	}
 
 	COND_RELEASE(ep->requires_lock, queue_lock);
@@ -1572,13 +1497,17 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->tx_failures = 0;
 
 		/* Check if a second GET for unaligned data is needed. */
-		if (hdr->len > req->msg.recv_len &&
-		    ((hdr->addr + req->msg.recv_len) & GNI_READ_ALIGN_MASK)) {
+		if (hdr->len > req->msg.recv_info[0].recv_len &&
+		    ((hdr->addr + req->msg.recv_info[0].recv_len) & GNI_READ_ALIGN_MASK)) {
 			req->msg.recv_flags |= GNIX_MSG_GET_TAIL;
 		}
 
-		req->msg.send_addr = hdr->addr;
-		req->msg.send_len = MIN(hdr->len, req->msg.recv_len);
+		req->msg.send_info[0].send_addr = hdr->addr;
+		req->msg.send_info[0].send_len =
+			MIN(hdr->len, req->msg.cum_recv_len);
+		req->msg.send_info[0].mem_hndl = hdr->mdh;
+		req->msg.cum_send_len = req->msg.send_info[0].send_len;
+		req->msg.send_iov_cnt = 1;
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
@@ -1601,25 +1530,23 @@ static int __smsg_rndzv_start(void *data, void *msg)
 				   " req = %p\n", req);
 
 			req->work_fn = __gnix_rndzv_iov_req_build;
-			req->msg.rma_iov_mdh = &req->msg.rma_mdh;
-			req->msg.send_iov_cnt = 1;
-
 			_gnix_remove_tag(posted_queue, req);
 			ret = _gnix_vc_queue_work_req(req);
 
-			GNIX_TRACE(FI_LOG_EP_DATA,
+			GNIX_DEBUG(FI_LOG_EP_DATA,
 				   "_gnix_vc_queue_work_req returned %s\n",
 				   fi_strerror(-ret));
 			goto fini;
 		}
 
 		GNIX_INFO(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
-			  req, req->msg.recv_addr, req->msg.send_len);
+			  req, req->msg.recv_info[0].recv_addr,
+			  req->msg.send_info[0].send_len);
 
 		/* Check if we're using FI_MULTI_RECV and there is space left
 		 * in the receive buffer. */
 		if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-		    ((req->msg.recv_len - req->msg.send_len) >=
+		    ((req->msg.cum_recv_len - req->msg.cum_send_len) >=
 		     ep->min_multi_recv)) {
 			/* Allocate new request for this transfer. */
 			dup_req = __gnix_msg_dup_req(req);
@@ -1629,8 +1556,9 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			}
 
 			/* Adjust receive buffer for the next match. */
-			req->msg.recv_addr += req->msg.send_len;
-			req->msg.recv_len -= req->msg.send_len;
+			req->msg.recv_info[0].recv_addr += req->msg.send_info[0].send_len;
+			req->msg.recv_info[0].recv_len -= req->msg.send_info[0].send_len;
+			req->msg.cum_recv_len = req->msg.recv_info[0].recv_len;
 
 			/* 'req' remains queued for more matches while the
 			 * duplicated request is processed. */
@@ -1659,8 +1587,10 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->gnix_ep = ep;
 		req->vc = vc;
 
-		req->msg.send_addr = hdr->addr;
-		req->msg.send_len = hdr->len;
+		req->msg.send_info[0].send_addr = hdr->addr;
+		req->msg.send_info[0].send_len = hdr->len;
+		req->msg.send_info[0].mem_hndl = hdr->mdh;
+		req->msg.cum_send_len = req->msg.send_info[0].send_len;
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
@@ -1673,7 +1603,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 
 		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p (%u)\n",
-			  req, req->msg.send_len);
+			  req, req->msg.send_info[0].send_len);
 	}
 
 fini:
@@ -1695,13 +1625,8 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	int ret = FI_SUCCESS;
 	gni_return_t status;
 	struct gnix_vc *vc = (struct gnix_vc *) data;
-	struct gnix_smsg_rndzv_iov_start_hdr *hdr =
-		(struct gnix_smsg_rndzv_iov_start_hdr *) msg;
-	gni_mem_handle_t *md = (gni_mem_handle_t *) ((void *) hdr +
-						     sizeof(*hdr));
-	void *data_ptr = (struct iovec *) (msg + sizeof(*hdr) +
-					   (sizeof(gni_mem_handle_t) *
-					    hdr->iov_cnt));
+	struct gnix_smsg_rndzv_iov_start_hdr *hdr = msg;
+	void *data_ptr = (void *) ((uint8_t *) msg + sizeof(*hdr));
 	struct gnix_fid_ep *ep;
 	struct gnix_fab_req *req = NULL;
 	struct gnix_tag_storage *unexp_queue;
@@ -1736,7 +1661,7 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 		req->tx_failures = 0;
 
 		GNIX_INFO(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
-			  req, req->msg.recv_addr, hdr->send_len);
+			  req, req->msg.recv_info[0].recv_addr, hdr->send_len);
 		_gnix_remove_tag(posted_queue, req);
 	} else {		/* Unexpected receive, enqueue it */
 		req = _gnix_fr_alloc(ep);
@@ -1761,32 +1686,9 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	req->msg.tag = hdr->msg_tag;
 	req->msg.send_iov_cnt = hdr->iov_cnt;
 	req->msg.rma_id = hdr->req_addr;
-	req->msg.send_addr = hdr->send_addr;
-	req->msg.send_len = hdr->send_len;
-	req->msg.rma_iov_mdh = malloc(sizeof(gni_mem_handle_t) * hdr->iov_cnt);
-	assert(req->msg.rma_iov_mdh != 0);
-
-	req->msg.send_iov = (uint64_t) malloc(sizeof(struct iovec) *
-					      hdr->iov_cnt);
-	assert(req->msg.send_iov != 0);
-
-	GNIX_DEBUG(FI_LOG_EP_DATA, "Unpacking header...req_addr = %p\n",
-		   (void *) hdr->req_addr);
-
-
-	memcpy(req->msg.rma_iov_mdh, md, sizeof(gni_mem_handle_t) *
-	       hdr->iov_cnt);
-
-	/*
-	 * Remote fr send_iov now points to a buffer with the lengths and addrs
-	 * of the client's iov
-	 */
-	GNIX_DEBUG(FI_LOG_EP_DATA, "req = %p, req->msg.send_len = %lu\n",
-		   req, req->msg.send_len);
-
-
-	memcpy((void *) req->msg.send_iov, data_ptr,
-	       sizeof(struct iovec) * hdr->iov_cnt);
+	req->msg.cum_send_len = hdr->send_len;
+	memcpy(req->msg.send_info, data_ptr,
+	       sizeof(struct send_info_t) * hdr->iov_cnt);
 
 	if (is_req_posted)
 		ret = _gnix_vc_queue_work_req(req);
@@ -1819,20 +1721,13 @@ static int __gnix_rndzv_fin_cleanup(void *arg)
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
-	if (req->msg.send_flags & GNIX_MSG_IOV) {
-		for (i = 0; i < req->msg.send_iov_cnt; i++) {
-			GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
-				  req->msg.send_iov_md[i]);
-
-			GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.send_iov_md[%d] ="
-				   " %p\n", i, req->msg.send_iov_md[i]);
-			fi_close(&req->msg.send_iov_md[i]->mr_fid.fid);
-		}
-		free(req->msg.send_iov_md);
-	} else {
+	for (i = 0; i < req->msg.send_iov_cnt; i++) {
 		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
-			  req->msg.send_md);
-		fi_close(&req->msg.send_md->mr_fid.fid);
+			  req->msg.send_md[i]);
+
+		GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.send_md[%d] ="
+			   " %p\n", i, req->msg.send_md[i]);
+		fi_close(&req->msg.send_md[i]->mr_fid.fid);
 	}
 
 	_gnix_fr_free(req->gnix_ep, req);
@@ -1892,39 +1787,6 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	return ret;
 }
 
-/* TODO: This is kind of out of place. */
-static int __smsg_rma_data(void *data, void *msg)
-{
-	int ret = FI_SUCCESS;
-	struct gnix_vc *vc = (struct gnix_vc *)data;
-	struct gnix_smsg_rma_data_hdr *hdr =
-			(struct gnix_smsg_rma_data_hdr *)msg;
-	struct gnix_fid_ep *ep = vc->ep;
-	gni_return_t status;
-
-	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
-
-	if (ep->recv_cq) {
-		ret = _gnix_cq_add_event(ep->recv_cq, NULL, hdr->flags, 0,
-					 0, hdr->data, 0, FI_ADDR_NOTAVAIL);
-		if (ret != FI_SUCCESS)  {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_cq_add_event returned %d\n",
-				  ret);
-		}
-	}
-
-	status = GNI_SmsgRelease(vc->gni_ep);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "GNI_SmsgRelease returned %s\n",
-			  gni_err_str[status]);
-		ret = gnixu_to_fi_errno(status);
-	}
-
-	return ret;
-}
-
 static int __smsg_rma_iov_data(void *data, void *msg)
 {
 	/* TODO for writev and readv. */
@@ -1944,8 +1806,7 @@ smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_RNDZV_START] = __smsg_rndzv_start,
 	[GNIX_SMSG_T_RNDZV_FIN] = __smsg_rndzv_fin,
 	[GNIX_SMSG_T_RMA_DATA] = __smsg_rma_data, /* defined in gnix_rma.c */
-	[GNIX_SMSG_T_AMO_CNTR] = __smsg_amo_cntr /* defined in gnix_amo.c */
-	[GNIX_SMSG_T_RMA_DATA] = __smsg_rma_data,
+	[GNIX_SMSG_T_AMO_CNTR] = __smsg_amo_cntr, /* defined in gnix_amo.c */
 	[GNIX_SMSG_T_RNDZV_IOV_START] = __smsg_rndzv_iov_start,
 	[GNIX_SMSG_T_RMA_IOV_DATA] = __smsg_rma_iov_data
 };
@@ -1966,15 +1827,17 @@ static int __gnix_peek_request(struct gnix_fab_req *req)
 	/* Rendezvous messages on the unexpected queue won't have data.
 	 * Additionally, if the CQ format doesn't support passing a buffer
 	 * location and length, then data will not be copied. */
-	if (!rendezvous && req->msg.recv_addr &&
+	if (!rendezvous && req->msg.recv_info[0].recv_addr &&
 	    !INVALID_PEEK_FORMAT(recv_cq->attr.format)) {
-		int copy_len = MIN(req->msg.send_len, req->msg.recv_len);
+		int copy_len = MIN(req->msg.send_info[0].send_len,
+				   req->msg.recv_info[0].recv_len);
 
-		memcpy((void *)req->msg.recv_addr, (void *)req->msg.send_addr,
+		memcpy((void *)req->msg.recv_info[0].recv_addr,
+		       (void *)req->msg.send_info[0].send_addr,
 		       copy_len);
 	} else {
 		/* The CQE should not contain a valid buffer. */
-		req->msg.recv_addr = 0;
+		req->msg.recv_info[0].recv_addr = 0;
 	}
 
 	ret = __gnix_msg_recv_completion(req->gnix_ep, req);
@@ -1992,8 +1855,8 @@ static int __gnix_discard_request(struct gnix_fab_req *req)
 	int rendezvous = !!(req->msg.send_flags & GNIX_MSG_RENDEZVOUS);
 
 	/* The CQE should not contain a valid buffer. */
-	req->msg.recv_addr = 0;
-	req->msg.send_len = 0;
+	req->msg.recv_info[0].recv_addr = 0;
+	req->msg.cum_send_len = req->msg.send_info[0].send_len = 0;
 
 	GNIX_INFO(FI_LOG_EP_DATA, "discarding req=%p\n", req);
 	if (rendezvous) {
@@ -2013,7 +1876,7 @@ static int __gnix_discard_request(struct gnix_fab_req *req)
 				  ret);
 
 		/* Free unexpected eager receive buffer. */
-		free((void *)req->msg.send_addr);
+		free((void *)req->msg.send_info[0].send_addr);
 		_gnix_fr_free(req->gnix_ep, req);
 	}
 
@@ -2107,15 +1970,18 @@ retry_match:
 		/* Found matching request, populate local fields. */
 		req->gnix_ep = ep;
 		req->user_context = context;
-		req->msg.recv_addr = (uint64_t)buf;
-		req->msg.recv_len = len;
+		req->msg.recv_info[0].recv_addr = (uint64_t)buf;
+		req->msg.recv_info[0].recv_len = len;
+		req->msg.cum_recv_len = len;
 
 		if (mdesc) {
 			md = container_of(mdesc,
 					  struct gnix_fid_mem_desc,
 					  mr_fid);
+			req->msg.recv_info[0].mem_hndl = md->mem_hndl;
 		}
-		req->msg.recv_md = md;
+		req->msg.recv_md[0] = md;
+		req->msg.recv_iov_cnt = 1;
 		req->msg.recv_flags = flags;
 		req->msg.ignore = ignore;
 
@@ -2150,15 +2016,18 @@ retry_match:
 			}
 
 			/* Check if second GET for unaligned data is needed. */
-			if (req->msg.send_len > req->msg.recv_len &&
-			    ((req->msg.send_addr + req->msg.recv_len) &
+			if (req->msg.send_info[0].send_len > req->msg.recv_info[0].recv_len &&
+			    ((req->msg.send_info[0].send_addr + req->msg.recv_info[0].recv_len) &
 			     GNI_READ_ALIGN_MASK)) {
 				req->msg.recv_flags |= GNIX_MSG_GET_TAIL;
 			}
 
 			/* Send length is truncated to receive buffer size. */
-			req->msg.send_len = MIN(req->msg.send_len,
-						req->msg.recv_len);
+			req->msg.send_info[0].send_len =
+				MIN(req->msg.send_info[0].send_len,
+				    req->msg.recv_info[0].recv_len);
+
+			req->msg.cum_send_len = req->msg.send_info[0].send_len;
 
 			/* Initiate pull of source data. */
 			req->work_fn = __gnix_rndzv_req;
@@ -2168,9 +2037,9 @@ retry_match:
 			 * the receive buffer, try to match another unexpected
 			 * request. */
 			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-			    ((len - req->msg.send_len) >= ep->min_multi_recv)) {
-				buf += req->msg.send_len;
-				len -= req->msg.send_len;
+			    ((len - req->msg.cum_send_len) >= ep->min_multi_recv)) {
+				buf += req->msg.cum_send_len;
+				len -= req->msg.cum_send_len;
 
 				GNIX_DEBUG(FI_LOG_EP_DATA,
 					  "Attempting additional matches, "
@@ -2185,13 +2054,16 @@ retry_match:
 				  req);
 
 			/* Send length is truncated to receive buffer size. */
-			req->msg.send_len = MIN(req->msg.send_len,
-						req->msg.recv_len);
+			req->msg.send_info[0].send_len =
+				MIN(req->msg.send_info[0].send_len,
+				    req->msg.recv_info[0].recv_len);
+
+			req->msg.cum_send_len = req->msg.send_info[0].send_len;
 
 			/* Copy data from unexpected eager receive buffer. */
-			memcpy((void *)buf, (void *)req->msg.send_addr,
-			       req->msg.send_len);
-			free((void *)req->msg.send_addr);
+			memcpy((void *)buf, (void *)req->msg.send_info[0].send_addr,
+			       req->msg.send_info[0].send_len);
+			free((void *)req->msg.send_info[0].send_addr);
 
 			__gnix_msg_recv_completion(ep, req);
 
@@ -2199,9 +2071,9 @@ retry_match:
 			 * the receive buffer, try to match another unexpected
 			 * request. */
 			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-			    ((len - req->msg.send_len) >= ep->min_multi_recv)) {
-				buf += req->msg.send_len;
-				len -= req->msg.send_len;
+			    ((len - req->msg.cum_send_len) >= ep->min_multi_recv)) {
+				buf += req->msg.cum_send_len;
+				len -= req->msg.cum_send_len;
 
 				GNIX_DEBUG(FI_LOG_EP_DATA,
 					  "Attempting additional matches, "
@@ -2243,15 +2115,20 @@ retry_match:
 		req->gnix_ep = ep;
 		req->user_context = context;
 
-		req->msg.recv_addr = (uint64_t)buf;
-		req->msg.recv_len = len;
+		req->msg.recv_info[0].recv_addr = (uint64_t)buf;
+		req->msg.recv_info[0].recv_len = len;
+		req->msg.cum_recv_len = len;
 
 		if (mdesc) {
 			md = container_of(mdesc,
 					struct gnix_fid_mem_desc,
 					mr_fid);
+
+			req->msg.recv_info[0].mem_hndl = md->mem_hndl;
 		}
-		req->msg.recv_md = md;
+
+		req->msg.recv_md[0] = md;
+		req->msg.recv_iov_cnt = 1;
 		req->msg.recv_flags = flags;
 		req->msg.tag = tag;
 		req->msg.ignore = ignore;
@@ -2285,7 +2162,7 @@ static int _gnix_send_req(void *arg)
 	struct gnix_fid_ep *ep;
 	struct gnix_tx_descriptor *tdesc;
 	gni_return_t status;
-	int rc, i;
+	int rc;
 	int rendezvous = !!(req->msg.send_flags & GNIX_MSG_RENDEZVOUS);
 	int hdr_len, data_len;
 	void *hdr, *data;
@@ -2307,8 +2184,59 @@ static int _gnix_send_req(void *arg)
 	assert(rc == FI_SUCCESS);
 
 	if (unlikely(rendezvous)) {
-		if (req->msg.send_flags & GNIX_MSG_IOV) {
-			assert(req->msg.send_iov_md);
+		switch(req->type) {
+
+		case GNIX_FAB_RQ_SEND:
+		case GNIX_FAB_RQ_TSEND:
+			assert(req->msg.send_md);
+			tag = GNIX_SMSG_T_RNDZV_START;
+			tdesc->rndzv_start_hdr.flags = req->msg.send_flags;
+			tdesc->rndzv_start_hdr.imm = req->msg.imm;
+			tdesc->rndzv_start_hdr.msg_tag = req->msg.tag;
+			tdesc->rndzv_start_hdr.mdh = req->msg.send_info[0].mem_hndl;
+			tdesc->rndzv_start_hdr.addr = req->msg.send_info[0].send_addr;
+			tdesc->rndzv_start_hdr.len = req->msg.send_info[0].send_len;
+			tdesc->rndzv_start_hdr.req_addr = (uint64_t)req;
+
+			if (req->msg.send_info[0].send_addr & GNI_READ_ALIGN_MASK) {
+				tdesc->rndzv_start_hdr.head =
+					*(uint32_t *)(req->msg.send_info[0].send_addr &
+						      ~GNI_READ_ALIGN_MASK);
+				GNIX_INFO(FI_LOG_EP_DATA,
+					  "Sending %d unaligned head bytes (%x)\n",
+					  GNI_READ_ALIGN -
+					  (req->msg.send_info[0].send_addr &
+					   GNI_READ_ALIGN_MASK),
+					  tdesc->rndzv_start_hdr.head);
+			}
+
+			if ((req->msg.send_info[0].send_addr +
+			     req->msg.send_info[0].send_len) &
+			    GNI_READ_ALIGN_MASK) {
+				tdesc->rndzv_start_hdr.tail =
+					*(uint32_t *)((req->msg.send_info[0].send_addr +
+						       req->msg.send_info[0].send_len) &
+						      ~GNI_READ_ALIGN_MASK);
+				GNIX_INFO(FI_LOG_EP_DATA,
+					  "Sending %d unaligned tail bytes (%x)\n",
+					  (req->msg.send_info[0].send_addr +
+					   req->msg.send_info[0].send_len) &
+					  GNI_READ_ALIGN_MASK,
+					  tdesc->rndzv_start_hdr.tail);
+			}
+
+			hdr = &tdesc->rndzv_start_hdr;
+			hdr_len = sizeof(tdesc->rndzv_start_hdr);
+			/* TODO: Unify send&sendv/recv&recvv, so data will be
+			 * req->msg.send_info */
+			data = NULL;
+			data_len = 0;
+
+			break;
+
+		case GNIX_FAB_RQ_SENDV:
+		case GNIX_FAB_RQ_TSENDV:
+			assert(req->msg.send_md[0]);
 			tag = GNIX_SMSG_T_RNDZV_IOV_START;
 			tdesc->rndzv_iov_start_hdr.flags = req->msg.send_flags;
 			tdesc->rndzv_iov_start_hdr.imm = req->msg.imm;
@@ -2316,93 +2244,31 @@ static int _gnix_send_req(void *arg)
 			tdesc->rndzv_iov_start_hdr.iov_cnt =
 				req->msg.send_iov_cnt;
 			tdesc->rndzv_iov_start_hdr.req_addr = (uint64_t) req;
-			tdesc->rndzv_iov_start_hdr.send_addr =
-				req->msg.send_addr;
-			tdesc->rndzv_iov_start_hdr.send_len = req->msg.send_len;
-			data_len = sizeof(struct iovec) * req->msg.send_iov_cnt;
-			data = (void *) req->msg.send_addr;
+			tdesc->rndzv_iov_start_hdr.send_len = req->msg.cum_send_len;
+
+			data_len = sizeof(struct send_info_t) * req->msg.send_iov_cnt;
+			data = (void *) req->msg.send_info;
+			hdr_len = sizeof(tdesc->rndzv_iov_start_hdr);
+			hdr = &tdesc->rndzv_iov_start_hdr;
 
 #if ENABLE_DEBUG
 			for (i = 0; i < req->msg.send_iov_cnt; i++) {
-				GNIX_DEBUG(FI_LOG_EP_DATA, "iov_base[%d] = %p, "
-					   "iov_len[%d] = %lu\n", i,
-					   ((struct iovec *)data)[i].iov_base,
+				GNIX_DEBUG(FI_LOG_EP_DATA,
+					   "data[%d].send_addr = 0x%ux, "
+					   "data[%d].send_len = %lu, "
+					   "data[%d].mem_hndl = %hxx\n", i,
+					   ((struct send_info_t *)data)[i].send_addr,
 					   i,
-					   ((struct iovec *)data)[i].iov_len);
+					   ((struct send_info_t *)data)[i].send_len,
+					   i,
+					   ((struct send_info_t *)data)[i].mem_hndl);
+
 			}
 #endif
-
-			/*
-			 * Allocate the header and place the memory descriptors
-			 * in the header.
-			 * TODO: Is there a better way to pack the mds?
-			 * hdr_format: [iov_start_hdr|mdh_0mdh_1mdh_2...]
-			 */
-			hdr_len = sizeof(tdesc->rndzv_iov_start_hdr) +
-				(sizeof(gni_mem_handle_t) *
-				 tdesc->rndzv_iov_start_hdr.iov_cnt);
-
-			hdr = malloc(hdr_len);
-			assert(hdr != NULL);
-
-			/* Record this as it must be free'd upon completion */
-			req->msg.smsg_iov_hdr_addr = (uint64_t) hdr;
-
-			memcpy(hdr, &tdesc->rndzv_iov_start_hdr,
-			       sizeof(tdesc->rndzv_iov_start_hdr));
-
-			GNIX_DEBUG(FI_LOG_EP_DATA, "Packing header..."
-				   "req_addr = %p, req->msg.send_len = %lu\n",
-				   ((struct gnix_smsg_rndzv_iov_start_hdr *)
-				    hdr)->req_addr, req->msg.send_len);
-			/* Pack up the memory descriptors */
-
-			/* There must be a better way.. */
-			for (i = 0; i < tdesc->rndzv_iov_start_hdr.iov_cnt; i++) {
-				memcpy(hdr + sizeof(tdesc->rndzv_iov_start_hdr)
-				       + sizeof(gni_mem_handle_t) * i,
-				       &req->msg.send_iov_md[i]->mem_hndl,
-				       sizeof(gni_mem_handle_t));
-			}
-		} else {
-			assert(req->msg.send_md);
-			tag = GNIX_SMSG_T_RNDZV_START;
-			tdesc->rndzv_start_hdr.flags = req->msg.send_flags;
-			tdesc->rndzv_start_hdr.imm = req->msg.imm;
-			tdesc->rndzv_start_hdr.msg_tag = req->msg.tag;
-			tdesc->rndzv_start_hdr.mdh = req->msg.send_md->mem_hndl;
-			tdesc->rndzv_start_hdr.addr = req->msg.send_addr;
-			tdesc->rndzv_start_hdr.len = req->msg.send_len;
-			tdesc->rndzv_start_hdr.req_addr = (uint64_t)req;
-
-			if (req->msg.send_addr & GNI_READ_ALIGN_MASK) {
-				tdesc->rndzv_start_hdr.head =
-					*(uint32_t *)(req->msg.send_addr &
-						      ~GNI_READ_ALIGN_MASK);
-				GNIX_INFO(FI_LOG_EP_DATA,
-					  "Sending %d unaligned head bytes (%x)\n",
-					  GNI_READ_ALIGN -
-					  (req->msg.send_addr & GNI_READ_ALIGN_MASK),
-					  tdesc->rndzv_start_hdr.head);
-			}
-
-			if ((req->msg.send_addr + req->msg.send_len) &
-			    GNI_READ_ALIGN_MASK) {
-				tdesc->rndzv_start_hdr.tail =
-					*(uint32_t *)((req->msg.send_addr +
-						       req->msg.send_len) &
-						      ~GNI_READ_ALIGN_MASK);
-				GNIX_INFO(FI_LOG_EP_DATA,
-					  "Sending %d unaligned tail bytes (%x)\n",
-					  (req->msg.send_addr + req->msg.send_len) &
-					  GNI_READ_ALIGN_MASK,
-					  tdesc->rndzv_start_hdr.tail);
-			}
-
-			hdr = &tdesc->rndzv_start_hdr;
-			hdr_len = sizeof(tdesc->rndzv_start_hdr);
-			data = NULL;
-			data_len = 0;
+			break;
+		default:
+			GNIX_FATAL(FI_LOG_EP_DATA, "Invalid request type: %d\n", req->type);
+			return -FI_EINVAL;
 		}
 	} else {
 		tag = GNIX_SMSG_T_EGR_W_DATA;
@@ -2410,12 +2276,14 @@ static int _gnix_send_req(void *arg)
 		tdesc->eager_hdr.flags = req->msg.send_flags;
 		tdesc->eager_hdr.imm = req->msg.imm;
 		tdesc->eager_hdr.msg_tag = req->msg.tag;
-		tdesc->eager_hdr.len = req->msg.send_len;
+		tdesc->eager_hdr.len = req->msg.cum_send_len;
 
 		hdr = &tdesc->eager_hdr;
 		hdr_len = sizeof(tdesc->eager_hdr);
-		data = (void *)req->msg.send_addr;
-		data_len = req->msg.send_len;
+		data = (void *)req->msg.send_info[0].send_addr;
+		/* If this is not rndzv the send length should always be the
+		 * cumulative length of all the send_info lengths */
+		data_len = req->msg.cum_send_len;
 	}
 	tdesc->req = req;
 	tdesc->completer_fn = gnix_ep_smsg_completers[tag];
@@ -2508,8 +2376,8 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 				 &auto_mr, NULL);
 		if (ret != FI_SUCCESS) {
 			GNIX_DEBUG(FI_LOG_EP_DATA,
-				  "Failed to auto-register local buffer: %d\n",
-				  ret);
+				  "Failed to auto-register local buffer: %s\n",
+				   fi_strerror(-ret));
 			return ret;
 		}
 		flags |= FI_LOCAL_MR;
@@ -2543,19 +2411,22 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 
 	if (mdesc) {
 		md = container_of(mdesc, struct gnix_fid_mem_desc, mr_fid);
+		req->msg.send_info[0].mem_hndl = md->mem_hndl;
 	}
-	req->msg.send_md = md;
-	req->msg.send_len = len;
+	req->msg.send_md[0] = md;
+	req->msg.send_iov_cnt = 1;
 	req->msg.send_flags = flags;
+	req->msg.send_info[0].send_len = len;
+	req->msg.cum_send_len = len;
 	req->msg.imm = data;
 	req->flags = 0;
 
 	if (flags & FI_INJECT) {
 		memcpy(req->inject_buf, (void *)loc_addr, len);
-		req->msg.send_addr = (uint64_t)req->inject_buf;
+		req->msg.send_info[0].send_addr = (uint64_t)req->inject_buf;
 		req->flags |= FI_INJECT;
 	} else {
-		req->msg.send_addr = loc_addr;
+		req->msg.send_info[0].send_addr = loc_addr;
 	}
 
 	if ((flags & GNIX_SUPPRESS_COMPLETION) ||
@@ -2602,7 +2473,7 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	struct gnix_tag_storage *unexp_queue = NULL;
 	uint64_t match_flags;
 	int tagged = flags & FI_TAGGED;
-	struct fid_mr *auto_mr[count];
+	struct fid_mr *auto_mr;
 
 	if (!ep->recv_cq) {
 		return -FI_ENOCQ;
@@ -2663,7 +2534,6 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	 * Posting a recv, look for an existing request in the
 	 * unexpected queue.
 	 */
-retry_match:
 	req = _gnix_match_tag(unexp_queue, tag, ignore,
 			      match_flags, context, &gnix_addr);
 
@@ -2678,9 +2548,7 @@ retry_match:
 		req->gnix_ep = ep;
 		req->user_context = context;
 		req->flags = 0;
-		req->msg.recv_flags = flags | GNIX_MSG_IOV;
-		req->msg.recv_addr = (uint64_t) iov;
-		req->msg.recv_len = cum_len;
+		req->msg.recv_flags = flags;
 		req->msg.recv_iov_cnt = count;
 
 		if (tagged) {
@@ -2708,81 +2576,85 @@ retry_match:
 
 		if (req->msg.send_flags & GNIX_MSG_RENDEZVOUS) {
 			req->work_fn = __gnix_rndzv_iov_req_build;
-			req->msg.recv_iov_md = malloc(
-				sizeof(struct gnix_fid_mem_desc *) * count);
 			if (!desc) {	/* Register the memory for the user */
 				for (i = 0; i < count; i++) {
-					auto_mr[i] = NULL;
+					auto_mr = NULL;
 					ret = gnix_mr_reg(&ep->domain->
 							  domain_fid.fid,
 							  iov[i].iov_base,
 							  iov[i].iov_len,
 							  FI_READ | FI_WRITE, 0,
-							  0, 0, auto_mr + i,
+							  0, 0, &auto_mr,
 							  NULL);
 
 					if (ret != FI_SUCCESS) {
 						GNIX_DEBUG(FI_LOG_EP_DATA,
 							   "Failed to "
 							   "auto-register"
-							   " local buffer: %d\n"
-							   , ret);
+							   " local buffer: %s\n"
+							   , fi_strerror(-ret));
+
+						for (i--; i >= 0; i--) {
+							fi_close(&req->msg.recv_md[i]->mr_fid.fid);
+						}
+
 						return ret;
 					}
 
-					req->msg.recv_iov_md[i] = container_of(
-						(void *) auto_mr[i],
+					req->msg.recv_md[i] = container_of(
+						(void *) auto_mr,
 						struct gnix_fid_mem_desc,
 						mr_fid);
 
+					req->msg.recv_info[i].recv_addr = (uint64_t) iov[i].iov_base;
+					req->msg.recv_info[i].recv_len = iov[i].iov_len;
+					req->msg.recv_info[i].mem_hndl =
+						req->msg.recv_md[i]->mem_hndl;
+
 					GNIX_DEBUG(FI_LOG_EP_DATA, "auto-reg MR"
 						   ": %p\n",
-						   req->msg.recv_iov_md[i]);
+						   req->msg.recv_md[i]);
 
 				}
 
 				req->msg.send_flags |= FI_LOCAL_MR;
 			} else {	/* User registered their memory */
 				for (i = 0; i < count; i++) {
-					req->msg.recv_iov_md[i] =
+					if (!desc[i]) {
+						GNIX_FATAL(FI_LOG_EP_DATA,
+							   "invalid memory reg"
+							   "istration (%p).\n",
+							   desc[i]);
+					}
+
+					req->msg.recv_md[i] =
 						container_of(desc[i],
 						struct gnix_fid_mem_desc,
 						mr_fid);
+
+					req->msg.recv_info[i].mem_hndl =
+						req->msg.recv_md[i]->mem_hndl;
 				}
 			}
 
 			ret = _gnix_vc_queue_work_req(req);
 		} else {
+			for (i = 0; i < count; i++) {
+				req->msg.recv_info[i].recv_addr = (uint64_t) iov[i].iov_base;
+				req->msg.recv_info[i].recv_len = iov[i].iov_len;
+			}
+
 			/*
 			 * This request is associate with a regular eager smsg,
 			 * the rndzv threshold on the sender was not reached or
 			 * exceeded.
 			 */
-			__gnix_msg_unpack_data_into_iov(iov, count,
-							(void *)
-							req->msg.send_addr,
-							req->msg.send_len,
-							!!(req->msg.recv_flags &
-							FI_MULTI_RECV));
+			__gnix_msg_unpack_data_into_iov(req->msg.recv_info,
+							count,
+							req->msg.send_info[0].send_addr,
+							req->msg.send_info[0].send_len);
 
 			__gnix_msg_recv_completion(ep, req);
-
-			/*
-			 * Handle FI_MULTI_RECV, where single fabric request
-			 * satisfies multiple sends by filling up the recv
-			 * buffer, when the recv buffer is full, quit.
-			 */
-			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-			    (cum_len - req->msg.send_len) >=
-			    ep->min_multi_recv) {
-				cum_len -= req->msg.send_len;
-
-				GNIX_DEBUG(FI_LOG_EP_DATA,
-					   "Attempting additional matches, "
-					   "req: %p (%p %lu)\n",
-					   req, iov, cum_len);
-				goto retry_match;
-			}
 			_gnix_fr_free(ep, req);
 		}
 	} else {
@@ -2833,28 +2705,20 @@ retry_match:
 		req->user_context = context;
 		req->flags = 0;
 
-		req->msg.recv_addr = (uint64_t) iov;
+		for (i = 0; i < count; i++) {
+			req->msg.recv_info[i].recv_addr = (uint64_t) iov[i].iov_base;
+			req->msg.recv_info[i].recv_len = iov[i].iov_len;
+			/* req->msg.recv_info[i].mem_hndl ^= req->msg.recv_info[i].mem_hndl; */
+			req->msg.recv_md[i] = NULL;
+		}
+
 		req->msg.recv_iov_cnt = count;
-		req->msg.recv_len = cum_len;
-		req->msg.recv_flags = flags | GNIX_MSG_IOV;
+		req->msg.recv_flags = flags;
+		req->msg.cum_recv_len = cum_len;
 		req->msg.tag = tag;
 		req->msg.ignore = ignore;
 		atomic_initialize(&req->msg.outstanding_txds, 0);
 
-		if (desc) {	/* User registered their memory */
-			req->msg.recv_iov_md = malloc(
-				sizeof(struct gnix_fid_mem_desc *) * count);
-
-			for (i = 0; i < count; i++) {
-				req->msg.recv_iov_md[i] =
-					container_of(desc[i],
-						     struct gnix_fid_mem_desc,
-						     mr_fid);
-			}
-		} else {	/* Register the memory for the user when
-				 * processing rndzv req */
-			req->msg.recv_iov_md = NULL;
-		}
 
 		if ((flags & GNIX_SUPPRESS_COMPLETION) ||
 		    (ep->recv_selective_completion &&
@@ -2876,15 +2740,14 @@ err:
 
 ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 		    void **mdesc, size_t count, uint64_t dest_addr,
-		    void *context, uint64_t flags, uint64_t ignore,
-		    uint64_t tag)
+		    void *context, uint64_t flags, uint64_t tag)
 {
 	int i, ret = FI_SUCCESS;
 	unsigned long long cum_len = 0;
 	void *tmp = NULL;
 	struct gnix_vc *vc = NULL;
 	struct gnix_fab_req *req = NULL;
-	struct fid_mr *auto_mr[count];
+	struct fid_mr *auto_mr;
 
 	if (!(flags & FI_TAGGED)) {
 		if (!ep->ep_ops.msg_send_allowed)
@@ -2916,7 +2779,7 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	if (flags & FI_TAGGED) {
 		req->type = GNIX_FAB_RQ_TSENDV;
 		req->msg.tag = tag;
-		req->msg.ignore = ignore;
+		req->msg.ignore = 0;
 	} else {
 		req->type = GNIX_FAB_RQ_SENDV;
 		req->msg.tag = 0;
@@ -2928,7 +2791,7 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	req->vc = vc;
 	req->work_fn = _gnix_send_req;
 	req->flags = 0; /* Flags that apply to all message types? */
-	req->msg.send_flags = flags | GNIX_MSG_IOV;
+	req->msg.send_flags = flags;
 	req->msg.imm = 0;
 
 	/*
@@ -2942,55 +2805,69 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	 * otherwise use PostRdma.
 	 */
 	if (cum_len >= ep->domain->params.msg_rendezvous_thresh) {
-		req->msg.send_iov_md = malloc(
-			sizeof(struct gnix_fid_mem_desc *) * count);
 		if (!mdesc) {	/* Register the memory for the user */
 			for (i = 0; i < count; i++) {
-				auto_mr[i] = NULL;
+				auto_mr = NULL;
 				ret = gnix_mr_reg(&ep->domain->domain_fid.fid,
 						  iov[i].iov_base,
 						  iov[i].iov_len,
 						  FI_READ | FI_WRITE, 0, 0, 0,
-						  auto_mr + i, NULL);
+						  &auto_mr, NULL);
 
 				if (ret != FI_SUCCESS) {
 					GNIX_DEBUG(FI_LOG_EP_DATA,
 						   "Failed to auto-register"
-						   " local buffer: %d\n",
-						   ret);
+						   " local buffer: %s\n",
+						   fi_strerror(-ret));
+
+					for (i--; i >= 0; i--) {
+						fi_close(&req->msg.send_md[i]->mr_fid.fid);
+					}
+
 					return ret;
 				}
 
-				req->msg.send_iov_md[i] = container_of(
-					(void *) auto_mr[i],
+				req->msg.send_md[i] = container_of(
+					(void *) auto_mr,
 					struct gnix_fid_mem_desc,
 					mr_fid);
 
-				GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.send_iov_req->msg.send_iov_md[%d] "
+				req->msg.send_info[i].send_addr = (uint64_t) iov[i].iov_base;
+				req->msg.send_info[i].send_len = iov[i].iov_len;
+				req->msg.send_info[i].mem_hndl =
+					req->msg.send_md[i]->mem_hndl;
+
+				GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.send_md[%d] "
 					   "= %p\n", i,
-					   req->msg.send_iov_md[i]);
+					   req->msg.send_md[i]);
 
 				GNIX_DEBUG(FI_LOG_EP_DATA, "auto-reg MR: %p\n",
-					   req->msg.send_iov_md[i]);
+					   req->msg.send_md[i]);
 
 			}
 
 			req->msg.send_flags |= FI_LOCAL_MR;
 		} else {	/* User registered their memory */
 			for (i = 0; i < count; i++) {
-				req->msg.send_iov_md[i] =
+				if (!mdesc[i]) {
+					GNIX_FATAL(FI_LOG_EP_DATA,
+						   "invalid memory reg"
+						   "istration (%p).\n",
+						   mdesc[i]);
+				}
+
+				req->msg.send_md[i] =
 					container_of(mdesc[i],
 						     struct gnix_fid_mem_desc,
 						     mr_fid);
+
+				req->msg.send_info[i].send_addr = (uint64_t) iov[i].iov_base;
+				req->msg.send_info[i].send_len = iov[i].iov_len;
+				req->msg.send_info[i].mem_hndl =
+					req->msg.send_md[i]->mem_hndl;
 			}
 		}
 
-		/* The default iov_limit for the gni provider keeps the
-		 * data portion of the control packet near the rndzv threshold
-		 * however, the hdr is not accounted for.
-		 * TODO: Account for the header size in the iov_limit.
-		 */
-		req->msg.send_addr = (uint64_t) iov;
 		req->msg.send_iov_cnt = count;
 		req->msg.send_flags |= GNIX_MSG_RENDEZVOUS;
 	} else {
@@ -3004,7 +2881,8 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 
 		__gnix_msg_pack_data_from_iov((uint64_t) tmp, cum_len,
 					      (uint64_t) iov, count);
-		req->msg.send_addr = (uint64_t) tmp;
+		req->msg.send_info[0].send_addr = (uint64_t) tmp;
+		req->msg.send_info[0].send_len = cum_len;
 	}
 
 	if ((flags & GNIX_SUPPRESS_COMPLETION) ||
@@ -3014,8 +2892,8 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	} else {
 		req->msg.send_flags |= FI_COMPLETION;
 	}
-	req->msg.send_iov = (uint64_t) iov;
-	req->msg.send_len = (size_t) cum_len;
+
+	req->msg.cum_send_len = (size_t) cum_len;
 
 	return _gnix_vc_queue_tx_req(req);
 }

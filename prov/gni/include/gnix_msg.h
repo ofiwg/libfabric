@@ -48,7 +48,6 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 
 ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 		    void **mdesc, size_t count, uint64_t dest_addr,
-		    void *context, uint64_t flags, uint64_t ignore,
-		    uint64_t tag);
+		    void *context, uint64_t flags, uint64_t tag);
 
 #endif /* _GNIX_MSG_H_ */
