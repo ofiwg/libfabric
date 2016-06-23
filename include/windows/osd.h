@@ -201,12 +201,6 @@ static inline int ofi_sockerr(void)
 	}
 }
 
-static inline int fi_fd_nonblock(int fd)
-{
-	u_long argp = 1;
-	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
-}
-
 static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
 {
 	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
