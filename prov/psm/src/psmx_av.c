@@ -149,6 +149,12 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	fi_addr_t *result = NULL;
 	struct psmx_epaddr_context *epaddr_context;
 
+	if (count && (!addr || !fi_addr)) {
+		FI_INFO(&psmx_prov, FI_LOG_AV,
+			"NULL address array: addr=%p fi_addr=%p.\n", addr, fi_addr);
+		return -FI_EINVAL;
+	}
+
 	av_priv = container_of(av, struct psmx_fid_av, av);
 
 	if ((av_priv->flags & FI_EVENT) && !av_priv->eq)

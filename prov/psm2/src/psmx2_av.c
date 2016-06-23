@@ -241,6 +241,12 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	int error_count;
 	int i;
 
+	if (count && (!addr || !fi_addr)) {
+		FI_INFO(&psmx2_prov, FI_LOG_AV,
+			"NULL address array: addr=%p fi_addr=%p.\n", addr, fi_addr);
+		return -FI_EINVAL;
+	}
+
 	av_priv = container_of(av, struct psmx2_fid_av, av);
 
 	if ((av_priv->flags & FI_EVENT) && !av_priv->eq)
