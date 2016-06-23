@@ -77,14 +77,13 @@ int fi_check_cq_attr(const struct fi_provider *prov,
 		return -FI_EINVAL;
 	}
 
-	if (attr->flags) {
+	if (attr->flags & ~(FI_AFFINITY)) {
 		FI_WARN(prov, FI_LOG_CQ, "invalid flags\n");
 		return -FI_EINVAL;
 	}
 
-	if (attr->signaling_vector) {
-		FI_WARN(prov, FI_LOG_CQ, "signaling vectors not supported\n");
-		return -FI_ENOSYS;
+	if (attr->flags & FI_AFFINITY) {
+		FI_WARN(prov, FI_LOG_CQ, "signaling vector ignored\n");
 	}
 
 	return 0;

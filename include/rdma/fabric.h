@@ -128,6 +128,7 @@ typedef struct fid *fid_t;
 #define FI_INJECT_COMPLETE	(1ULL << 26)
 #define FI_TRANSMIT_COMPLETE	(1ULL << 27)
 #define FI_DELIVERY_COMPLETE	(1ULL << 28)
+#define FI_AFFINITY		(1ULL << 29)
 
 /* fi_getinfo()-specific flags/caps */
 #define FI_PROV_ATTR_ONLY	(1ULL << 54)

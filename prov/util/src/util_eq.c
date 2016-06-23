@@ -262,9 +262,13 @@ static int util_verify_eq_attr(const struct fi_provider *prov,
 		return -FI_EINVAL;
 	}
 
-	if (attr->signaling_vector) {
-		FI_WARN(prov, FI_LOG_EQ, "signaling vectors not supported\n");
-		return -FI_ENOSYS;
+	if (attr->flags & ~(FI_AFFINITY | FI_WRITE)) {
+		FI_WARN(prov, FI_LOG_EQ, "invalid flags\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr->flags & FI_AFFINITY) {
+		FI_WARN(prov, FI_LOG_EQ, "signaling vector ignored\n");
 	}
 
 	return 0;

@@ -136,6 +136,9 @@ struct fi_eq_attr {
   operation must be supported by the provider.  If the FI_WRITE flag
   is not set, then the application may not invoke fi_eq_write.
 
+- *FI_AFFINITY*
+: Indicates that the signaling_vector field (see below) is valid.
+
 *wait_obj*
 : EQ's may be associated with a specific wait object.  Wait objects
   allow applications to block until the wait object is signaled,
@@ -178,8 +181,10 @@ struct fi_eq_attr {
   section and condition variable as a wait object.
 
 *signaling_vector*
-: Indicates which processor core interrupts associated with the EQ
-  should target.
+: If the FI_AFFINITY flag is set, this indicates the logical cpu number
+  (0..max cpu - 1) that interrupts associated with the EQ should target.
+  This field should be treated as a hint to the provider and may be
+  ignored if the provider does not support interrupt affinity.
 
 *wait_set*
 : If wait_obj is FI_WAIT_SET, this field references a wait object to
