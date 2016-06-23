@@ -169,8 +169,8 @@ usdf_pep_read_connreq(void *v)
 
 	n = read(crp->cr_sockfd, crp->cr_ptr, crp->cr_resid);
 	if (n == -1) {
-		usdf_cm_msg_connreq_failed(crp, -errno);
-		return 0;
+		ret = -errno;
+		goto report_failure_skip_data;
 	}
 
 	crp->cr_ptr += n;
@@ -186,36 +186,40 @@ usdf_pep_read_connreq(void *v)
 	/* if resid is 0 now, completely done */
 	if (crp->cr_resid == 0) {
 		ret = usdf_pep_creq_epoll_del(crp);
-		if (ret != 0) {
-			usdf_cm_msg_connreq_failed(crp, ret);
-			return 0;
-		}
+		if (ret != 0)
+			goto report_failure_skip_data;
 
 		/* create CONNREQ EQ entry */
 		entry_len = sizeof(*entry) + reqp->creq_datalen;
 		entry = malloc(entry_len);
 		if (entry == NULL) {
-			usdf_cm_msg_connreq_failed(crp, -errno);
-			return 0;
+			ret = -errno;
+			goto report_failure_skip_data;
 		}
 
 		entry->fid = &pep->pep_fid.fid;
 		entry->info = usdf_pep_conn_info(crp);
 		if (entry->info == NULL) {
-			free(entry);
-			usdf_cm_msg_connreq_failed(crp, -FI_ENOMEM);
-			return 0;
+			ret = -FI_ENOMEM;
+			goto free_entry_and_report_failure;
 		}
+
 		memcpy(entry->data, reqp->creq_data, reqp->creq_datalen);
 		ret = usdf_eq_write_internal(pep->pep_eq, FI_CONNREQ, entry,
 				entry_len, 0);
+
+		if (ret != (int)entry_len)
+			goto free_entry_and_report_failure;
+
 		free(entry);
-		if (ret != (int)entry_len) {
-			usdf_cm_msg_connreq_failed(crp, ret);
-			return 0;
-		}
 	}
 
+	return 0;
+
+free_entry_and_report_failure:
+	free(entry);
+report_failure_skip_data:
+	usdf_cm_report_failure(crp, ret, false);
 	return 0;
 }
 
@@ -267,8 +271,7 @@ usdf_pep_listen_cb(void *v)
 	ret = epoll_ctl(pep->pep_fabric->fab_epollfd, EPOLL_CTL_ADD,
 			crp->cr_sockfd, &ev);
 	if (ret == -1) {
-		crp->cr_pollitem.pi_rtn = NULL;
-		usdf_cm_msg_connreq_failed(crp, -errno);
+		usdf_cm_report_failure(crp, -errno, false);
 		return 0;
 	}
 
@@ -365,7 +368,7 @@ static int usdf_pep_reject_async(void *vreq)
 	if ((ret <= 0) && (errno != EAGAIN)) {
 		USDF_DBG_SYS(EP_CTRL, "write failed: %s\n",
 				strerror(errno));
-		usdf_cm_msg_connreq_failed(crp, -errno);
+		usdf_cm_report_failure(crp, -errno, false);
 		return -errno;
 	}
 
