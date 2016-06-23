@@ -74,6 +74,12 @@ function no_data_num {
 }
 declare -ri FI_ENODATA=$(no_data_num)
 
+neg_unit_tests=(
+	"dgram foo"
+	"rdm foo"
+	"msg foo"
+)
+
 simple_tests=(
 	"cq_data"
 	"dgram"
@@ -246,6 +252,7 @@ function is_excluded {
 
 function unit_test {
 	local test=$1
+	local is_neg=$2
 	local ret1=0
 	local test_exe=$(echo "fi_${test} -f $PROV" | \
 	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${S_INTERFACE}/g")
@@ -266,17 +273,24 @@ function unit_test {
 	p1=$!
 
 	wait $p1
-	ret1=$?
+	ret=$?
 
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ $ret1 -eq $FI_ENODATA ]; then
+	if [ $is_neg -eq 1 -a $ret -eq $FI_ENODATA ]; then
+		# negative test passed
+		ret=0
+	elif [ $is_neg -eq 1 ]; then
+		# negative test failed
+		ret=1
+	fi
+	if [ $ret -eq $FI_ENODATA ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
 		skip_count+=1
-	elif [ $ret1 -ne 0 ]; then
+	elif [ $ret -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp"
-		if [ $ret1 -eq 124 ]; then
+		if [ $ret -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
@@ -422,7 +436,11 @@ function main {
 	case ${ts} in
 		unit)
 			for test in "${unit_tests[@]}"; do
-				unit_test "$test"
+				unit_test "$test" "0"
+			done
+
+			for test in "${neg_unit_tests[@]}"; do
+				unit_test "$test" "1"
 			done
 		;;
 		simple)
