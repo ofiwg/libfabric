@@ -2252,6 +2252,7 @@ static int _gnix_send_req(void *arg)
 			hdr = &tdesc->rndzv_iov_start_hdr;
 
 #if ENABLE_DEBUG
+			int i;
 			for (i = 0; i < req->msg.send_iov_cnt; i++) {
 				GNIX_DEBUG(FI_LOG_EP_DATA,
 					   "data[%d].send_addr = 0x%ux, "

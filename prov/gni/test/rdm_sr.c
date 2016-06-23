@@ -635,54 +635,60 @@ ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 */
 void do_sendv(int len)
 {
-	int i, ret;
+	int i, ret, iov_cnt;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
-	for (i = 0; i < IOV_CNT; i++) {
-		rdm_sr_init_data(src_iov[i].iov_base, len, 0x25);
-		src_iov[i].iov_len = len;
+	sz = fi_sendv(ep[0], src_iov, NULL, 0, gni_addr[1], iov_dest_buf);
+	cr_assert_eq(sz, -FI_EINVAL);
+
+	for (iov_cnt = 1; iov_cnt <= IOV_CNT; iov_cnt++) {
+		for (i = 0; i < iov_cnt; i++) {
+			rdm_sr_init_data(src_iov[i].iov_base, len, 0x25);
+			src_iov[i].iov_len = len;
+		}
+		rdm_sr_init_data(iov_dest_buf, len * iov_cnt, 0);
+
+		/*
+		 * TODO: Register src_iov and dest_iov.
+		 * Using NULL descriptor for now so that _gnix_send auto registers
+		 * the buffers for rndzv messages.
+		 */
+		sz = fi_sendv(ep[0], src_iov, NULL, iov_cnt, gni_addr[1], iov_dest_buf);
+		cr_assert_eq(sz, 0);
+
+		sz = fi_recv(ep[1], iov_dest_buf, len * iov_cnt, iov_dest_buf_mr[1],
+			     gni_addr[0], src_iov);
+		cr_assert_eq(sz, 0);
+
+		/* need to progress both CQs simultaneously for rendezvous */
+		do {
+			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+			if (ret == 1) {
+				source_done = 1;
+			}
+			ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+			if (ret == 1) {
+				dest_done = 1;
+			}
+		} while (!(source_done && dest_done));
+
+		rdm_sr_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV), iov_dest_buf,
+				 len * iov_cnt, 0);
+
+		s[0] = 1; r[1] = 1;
+		rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+		dbg_printf("got context events!\n");
+
+		cr_assert(rdm_sr_check_iov_data(src_iov, iov_dest_buf, iov_cnt),
+			  "Data mismatch");
+		source_done = dest_done = 0;
 	}
-	rdm_sr_init_data(iov_dest_buf, len * IOV_CNT, 0);
-
-	/*
-	 * TODO: Register src_iov and dest_iov.
-	 * Using NULL descriptor for now so that _gnix_send auto registers
-	 * the buffers for rndzv messages.
-	 */
-	sz = fi_sendv(ep[0], src_iov, NULL, IOV_CNT, gni_addr[1], iov_dest_buf);
-	cr_assert_eq(sz, 0);
-
-	sz = fi_recv(ep[1], iov_dest_buf, len * IOV_CNT, iov_dest_buf_mr[1],
-		     gni_addr[0], src_iov);
-	cr_assert_eq(sz, 0);
-
-	/* need to progress both CQs simultaneously for rendezvous */
-	do {
-		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
-		if (ret == 1) {
-			source_done = 1;
-		}
-		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
-		if (ret == 1) {
-			dest_done = 1;
-		}
-	} while (!(source_done && dest_done));
-
-	rdm_sr_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV), iov_dest_buf,
-			 len * IOV_CNT, 0);
-
-	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
-
-	dbg_printf("got context events!\n");
-
-	cr_assert(rdm_sr_check_iov_data(src_iov, iov_dest_buf, IOV_CNT),
-		  "Data mismatch");
 }
 
 Test(rdm_sr, sendv)
@@ -1061,50 +1067,56 @@ ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 */
 void do_recvv(int len)
 {
-	int i, ret;
+	int i, ret, iov_cnt;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
-	rdm_sr_init_data(iov_src_buf, len * IOV_CNT, 0xab);
+	sz = fi_recvv(ep[1], dest_iov, NULL, 0, gni_addr[0], iov_src_buf);
+	cr_assert_eq(sz, -FI_EINVAL);
 
-	for (i = 0; i < IOV_CNT; i++) {
-		rdm_sr_init_data(dest_iov[i].iov_base, len, 0);
-		dest_iov[i].iov_len = len;
+	for (iov_cnt = 1; iov_cnt <= IOV_CNT; iov_cnt++) {
+		rdm_sr_init_data(iov_src_buf, len * iov_cnt, 0xab);
+
+		for (i = 0; i < iov_cnt; i++) {
+			rdm_sr_init_data(dest_iov[i].iov_base, len, 0);
+			dest_iov[i].iov_len = len;
+		}
+
+		sz = fi_send(ep[0], iov_src_buf, len * iov_cnt, NULL, gni_addr[1],
+			     dest_iov);
+		cr_assert_eq(sz, 0);
+
+		sz = fi_recvv(ep[1], dest_iov, NULL, iov_cnt, gni_addr[0], iov_src_buf);
+		cr_assert_eq(sz, 0);
+
+		/*  need to progress both CQs simultaneously for rendezvous */
+		do {
+			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+			if (ret == 1) {
+				source_done = 1;
+			}
+			ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+			if (ret == 1) {
+				dest_done = 1;
+			}
+		} while (!(source_done && dest_done));
+
+		rdm_sr_check_cqe(&s_cqe, dest_iov, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&d_cqe, iov_src_buf, (FI_MSG|FI_RECV), dest_iov,
+				 len * iov_cnt, 0);
+
+		s[0] = 1; r[1] = 1;
+		rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+		dbg_printf("got context events!\n");
+
+		cr_assert(rdm_sr_check_iov_data(dest_iov, iov_src_buf, iov_cnt),
+			  "Data mismatch");
+		source_done = dest_done = 0;
 	}
-
-	sz = fi_send(ep[0], iov_src_buf, len * IOV_CNT, NULL, gni_addr[1],
-		     dest_iov);
-	cr_assert_eq(sz, 0);
-
-	sz = fi_recvv(ep[1], dest_iov, NULL, IOV_CNT, gni_addr[0], iov_src_buf);
-	cr_assert_eq(sz, 0);
-
-	/*  need to progress both CQs simultaneously for rendezvous */
-	do {
-		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
-		if (ret == 1) {
-			source_done = 1;
-		}
-		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
-		if (ret == 1) {
-			dest_done = 1;
-		}
-	} while (!(source_done && dest_done));
-
-	rdm_sr_check_cqe(&s_cqe, dest_iov, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, iov_src_buf, (FI_MSG|FI_RECV), dest_iov,
-			 len * IOV_CNT, 0);
-
-	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
-
-	dbg_printf("got context events!\n");
-
-	cr_assert(rdm_sr_check_iov_data(dest_iov, iov_src_buf, IOV_CNT),
-		  "Data mismatch");
 }
 
 Test(rdm_sr, recvv)
