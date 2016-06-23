@@ -381,6 +381,9 @@ usdf_cm_msg_connect_cb_wr(void *v)
 	crp->cr_resid -= ret;
 	if (crp->cr_resid == 0) {
 		crp->cr_pollitem.pi_rtn = usdf_cm_msg_connect_cb_rd;
+		crp->cr_ptr = crp->cr_data;
+		crp->cr_resid = sizeof(struct usdf_connreq_msg);
+
 		ev.events = EPOLLIN;
 		ev.data.ptr = &crp->cr_pollitem;
 		ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_MOD,
@@ -389,9 +392,6 @@ usdf_cm_msg_connect_cb_wr(void *v)
 			usdf_cm_msg_connreq_failed(crp, -errno);
 			return 0;
 		}
-
-		crp->cr_ptr = crp->cr_data;
-		crp->cr_resid = sizeof(struct usdf_connreq_msg);
 	}
 	return 0;
 }
@@ -475,18 +475,6 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	if (ret)
 		goto fail;
 
-	/* register for notification when connect completes */
-	crp->cr_pollitem.pi_rtn = usdf_cm_msg_connect_cb_wr;
-	crp->cr_pollitem.pi_context = crp;
-	ev.events = EPOLLOUT;
-	ev.data.ptr = &crp->cr_pollitem;
-	ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_ADD, crp->cr_sockfd, &ev);
-	if (ret != 0) {
-		crp->cr_pollitem.pi_rtn = NULL;
-		ret = -errno;
-		goto fail;
-	}
-
 	/* allocate remote peer ID */
 	ep->e.msg.ep_rem_peer_id = udp->dom_next_peer;
 	udp->dom_peer_tab[udp->dom_next_peer] = ep;
@@ -503,6 +491,18 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 	reqp->creq_datalen = htonl(paramlen);
 	memcpy(reqp->creq_data, param, paramlen);
+
+	/* register for notification when connect completes */
+	crp->cr_pollitem.pi_rtn = usdf_cm_msg_connect_cb_wr;
+	crp->cr_pollitem.pi_context = crp;
+	ev.events = EPOLLOUT;
+	ev.data.ptr = &crp->cr_pollitem;
+	ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_ADD, crp->cr_sockfd, &ev);
+	if (ret != 0) {
+		crp->cr_pollitem.pi_rtn = NULL;
+		ret = -errno;
+		goto fail;
+	}
 
 	return 0;
 
