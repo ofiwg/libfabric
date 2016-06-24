@@ -508,7 +508,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 {
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
-	int ret = -FI_ENODATA;
+	int ret;
 
 	if (!init)
 		fi_ini();
@@ -561,7 +561,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 		tail->fabric_attr->prov_version = prov->provider->version;
 	}
 
-	return *info ? 0 : ret;
+	return *info ? 0 : -FI_ENODATA;
 }
 DEFAULT_SYMVER(fi_getinfo_, fi_getinfo);
 
