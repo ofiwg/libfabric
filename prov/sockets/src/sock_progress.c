@@ -2618,21 +2618,18 @@ out:
 	return ret;
 }
 
-static void sock_pe_poll(struct sock_pe *pe)
+static int sock_pe_wait_ok(struct sock_pe *pe)
 {
-	char tmp;
-	int ret;
 	struct dlist_entry *entry;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 
 	if (pe->waittime && ((fi_gettime_ms() - pe->waittime) < sock_pe_waittime))
-		return;
+		return 0;
 
 	if (dlist_empty(&pe->tx_list) && dlist_empty(&pe->rx_list))
-		return;
+		return 0;
 
-	pthread_mutex_lock(&pe->list_lock);
 	if (!dlist_empty(&pe->tx_list)) {
 		for (entry = pe->tx_list.next;
 		     entry != &pe->tx_list; entry = entry->next) {
@@ -2640,8 +2637,7 @@ static void sock_pe_poll(struct sock_pe *pe)
 						pe_entry);
 			if (!rbempty(&tx_ctx->rb) ||
 			    !dlist_empty(&tx_ctx->pe_entry_list)) {
-				pthread_mutex_unlock(&pe->list_lock);
-				return;
+				return 0;
 			}
 		}
 	}
@@ -2653,12 +2649,18 @@ static void sock_pe_poll(struct sock_pe *pe)
 						pe_entry);
 			if (!dlist_empty(&rx_ctx->rx_buffered_list) ||
 			    !dlist_empty(&rx_ctx->pe_entry_list)) {
-				pthread_mutex_unlock(&pe->list_lock);
-				return;
+				return 0;
 			}
 		}
 	}
-	pthread_mutex_unlock(&pe->list_lock);
+
+	return 1;
+}
+
+static void sock_pe_wait(struct sock_pe *pe)
+{
+	char tmp;
+	int ret;
 
 	ret = sock_epoll_wait(&pe->epoll_set, -1);
         if (ret < 0)
@@ -2743,10 +2745,14 @@ static void *sock_pe_progress_thread(void *data)
 	SOCK_LOG_DBG("Progress thread started\n");
 	sock_pe_set_affinity();
 	while (*((volatile int *)&pe->do_progress)) {
-		if (pe->domain->progress_mode == FI_PROGRESS_AUTO)
-			sock_pe_poll(pe);
-
 		pthread_mutex_lock(&pe->list_lock);
+		if (pe->domain->progress_mode == FI_PROGRESS_AUTO &&
+		    sock_pe_wait_ok(pe)) {
+			pthread_mutex_unlock(&pe->list_lock);
+			sock_pe_wait(pe);
+			pthread_mutex_lock(&pe->list_lock);
+		}
+
 		if (!dlist_empty(&pe->tx_list)) {
 			for (entry = pe->tx_list.next;
 			     entry != &pe->tx_list; entry = entry->next) {
