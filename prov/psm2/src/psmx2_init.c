@@ -91,14 +91,16 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 
 	if (node && !(flags & FI_SOURCE)) {
 		dest_addr = psmx2_resolve_name(node, 0);
-		if (dest_addr)
+		if (dest_addr) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"node '%s' resolved to <epid=0x%llx, vl=%d>\n", node,
 				((struct psmx2_ep_name *)dest_addr)->epid,
 				((struct psmx2_ep_name *)dest_addr)->vlane);
-		else
+		} else {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"failed to resolve node '%s'.\n", node);
+			return -FI_ENODATA;
+		}
 	}
 
 	if (hints) {
