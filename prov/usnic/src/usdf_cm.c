@@ -114,7 +114,7 @@ usdf_cm_msg_accept_complete(struct usdf_connreq *crp)
 	ret = usdf_eq_write_internal(ep->ep_eq, FI_CONNECTED, &entry,
 			sizeof(entry), 0);
 	if (ret != sizeof(entry)) {
-		usdf_cm_msg_connreq_failed(crp, ret);
+		usdf_cm_report_failure(crp, ret, false);
 		return 0;
 	}
 
@@ -209,25 +209,82 @@ fail:
 	return ret;
 }
 
-/*
- * Connection request attempt failed
+/* Given a connection request structure containing data, make a copy of the data
+ * that can be accessed in error entries on the EQ. The return value is the size
+ * of the data stored in the error entry. If the return value is a non-negative
+ * value, then the function has suceeded and the size and output data can be
+ * assumed to be valid. If the function fails, then the data will be NULL and
+ * the size will be a negative error value.
  */
-void
-usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error)
+static int usdf_cm_generate_err_data(struct usdf_eq *eq,
+		struct usdf_connreq *crp, void **data)
 {
 	struct usdf_err_data_entry *err_data_entry;
 	struct usdf_connreq_msg *reqp;
+	size_t entry_size;
+	size_t data_size;
+
+	if (!eq || !crp || !data) {
+		USDF_DBG_SYS(EP_CTRL,
+				"eq, crp, or data is NULL.\n");
+		return -FI_EINVAL;
+	}
+
+	/* Initialize to NULL so data can't be used in the error case. */
+	*data = NULL;
+
+	reqp = (struct usdf_connreq_msg *) crp->cr_data;
+
+	/* This is a normal case, maybe there was no data. */
+	if (!reqp || !reqp->creq_datalen)
+		return 0;
+
+	data_size = reqp->creq_datalen;
+
+	entry_size = sizeof(*err_data_entry) + data_size;
+
+	err_data_entry = calloc(1, entry_size);
+	if (!err_data_entry) {
+		USDF_WARN_SYS(EP_CTRL,
+				"failed to allocate err data entry\n");
+		return -FI_ENOMEM;
+	}
+
+	/* This data should be copied and owned by the provider. Keep
+	 * track of it in the EQ, this will be freed in the next EQ read
+	 * call after it has been read.
+	 */
+	memcpy(err_data_entry->err_data, reqp->creq_data, data_size);
+	slist_insert_tail(&err_data_entry->entry, &eq->eq_err_data);
+
+	*data = err_data_entry->err_data;
+
+	return data_size;
+}
+
+/* Report a connection management related failure. Sometimes there is connection
+ * event data that should be copied into the generated event. If the copy_data
+ * parameter evaluates to true, then the data will be copied.
+ *
+ * If data is to be generated for the error entry, then the connection request
+ * is assumed to have the data size in host order. If something fails during
+ * processing of the error data, then the EQ entry will still be generated
+ * without the error data.
+ */
+void usdf_cm_report_failure(struct usdf_connreq *crp, int error, bool copy_data)
+{
 	struct fi_eq_err_entry err = {0};
         struct usdf_pep *pep;
         struct usdf_ep *ep;
         struct usdf_eq *eq;
-	size_t entry_size;
 	fid_t fid;
+	int ret;
 
 	USDF_DBG_SYS(EP_CTRL, "error=%d (%s)\n", error, fi_strerror(error));
 
         pep = crp->cr_pep;
         ep = crp->cr_ep;
+
 	if (ep != NULL) {
 		fid = ep_utofid(ep);
 		eq = ep->ep_eq;
@@ -237,27 +294,14 @@ usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error)
 		eq = pep->pep_eq;
 	}
 
-	reqp = (struct usdf_connreq_msg *) crp->cr_data;
-	if (reqp && reqp->creq_datalen) {
-		entry_size = sizeof(*err_data_entry) + reqp->creq_datalen;
-		err_data_entry = calloc(1, entry_size);
-		if (!err_data_entry) {
-			USDF_WARN_SYS(EP_CTRL,
-					"failed to allocate EQ event\n");
-			return;
-		}
-
-		/* This data should be copied and owned by the provider. Keep
-		 * track of it in the EQ, this will be freed in the next EQ read
-		 * call after it has been read.
-		 */
-		memcpy(err_data_entry->err_data, reqp->creq_data,
-				reqp->creq_datalen);
-
-		err.err_data = err_data_entry->err_data;
-		err.err_data_size = reqp->creq_datalen;
-
-		slist_insert_tail(&err_data_entry->entry, &eq->eq_err_data);
+	/* Try to generate the space necessary for the error data. If the
+	 * function returns a number greater than or equal to 0, then it was a
+	 * success. The return value is the size of the data.
+	 */
+	if (copy_data) {
+		ret = usdf_cm_generate_err_data(eq, crp, &err.err_data);
+		if (ret >= 0)
+			err.err_data_size = ret;
 	}
 
         err.fid = fid;
@@ -288,10 +332,8 @@ usdf_cm_msg_connect_cb_rd(void *v)
 	fp = ep->ep_domain->dom_fabric;
 
 	ret = read(crp->cr_sockfd, crp->cr_ptr, crp->cr_resid);
-	if (ret == -1) {
-		usdf_cm_msg_connreq_failed(crp, -errno);
-		return 0;
-	}
+	if (ret == -1)
+		goto report_failure_skip_data;
 
 	crp->cr_ptr += ret;
 	crp->cr_resid -= ret;
@@ -312,26 +354,23 @@ usdf_cm_msg_connect_cb_rd(void *v)
 		crp->cr_sockfd = -1;
 
 		if (reqp->creq_result != FI_SUCCESS) {
-			usdf_cm_msg_connreq_failed(crp, reqp->creq_result);
+			/* Copy the data since this was an explicit rejection.
+			 */
+			usdf_cm_report_failure(crp, reqp->creq_result, true);
 			return 0;
 		}
 
 		entry_len = sizeof(*entry) + reqp->creq_datalen;
 		entry = malloc(entry_len);
-		if (entry == NULL) {
-			usdf_cm_msg_connreq_failed(crp, -errno);
-			return 0;
-		}
+		if (entry == NULL)
+			goto report_failure_skip_data;
 
 		udp = ep->ep_domain;
 		ep->e.msg.ep_lcl_peer_id = ntohs(reqp->creq_peer_id);
 		ret = usd_create_dest(udp->dom_dev, reqp->creq_ipaddr,
 				reqp->creq_port, &ep->e.msg.ep_dest);
-		if (ret != 0) {
-			free(entry);
-			usdf_cm_msg_connreq_failed(crp, ret);
-			return 0;
-		}
+		if (ret != 0)
+			goto free_entry_and_report_failure;
 
 		ep->e.msg.ep_dest->ds_dest.ds_udp.u_hdr.uh_ip.frag_off |=
 			htons(IP_DF);
@@ -341,16 +380,22 @@ usdf_cm_msg_connect_cb_rd(void *v)
 		memcpy(entry->data, reqp->creq_data, reqp->creq_datalen);
 		ret = usdf_eq_write_internal(ep->ep_eq, FI_CONNECTED, entry,
 				entry_len, 0);
-		free(entry);
 		if (ret != (int)entry_len) {
 			free(ep->e.msg.ep_dest);
 			ep->e.msg.ep_dest = NULL;
-			usdf_cm_msg_connreq_failed(crp, ret);
-			return 0;
+
+			goto free_entry_and_report_failure;
 		}
 
+		free(entry);
 		usdf_cm_msg_connreq_cleanup(crp);
 	}
+	return 0;
+
+free_entry_and_report_failure:
+	free(entry);
+report_failure_skip_data:
+	usdf_cm_report_failure(crp, ret, false);
 	return 0;
 }
 
@@ -374,24 +419,24 @@ usdf_cm_msg_connect_cb_wr(void *v)
 
 	ret = write(crp->cr_sockfd, crp->cr_ptr, crp->cr_resid);
 	if (ret == -1) {
-		usdf_cm_msg_connreq_failed(crp, -errno);
+		usdf_cm_report_failure(crp, -errno, false);
 		return 0;
 	}
 
 	crp->cr_resid -= ret;
 	if (crp->cr_resid == 0) {
 		crp->cr_pollitem.pi_rtn = usdf_cm_msg_connect_cb_rd;
+		crp->cr_ptr = crp->cr_data;
+		crp->cr_resid = sizeof(struct usdf_connreq_msg);
+
 		ev.events = EPOLLIN;
 		ev.data.ptr = &crp->cr_pollitem;
 		ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_MOD,
 				crp->cr_sockfd, &ev);
 		if (ret != 0) {
-			usdf_cm_msg_connreq_failed(crp, -errno);
+			usdf_cm_report_failure(crp, -errno, false);
 			return 0;
 		}
-
-		crp->cr_ptr = crp->cr_data;
-		crp->cr_resid = sizeof(struct usdf_connreq_msg);
 	}
 	return 0;
 }
@@ -475,18 +520,6 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	if (ret)
 		goto fail;
 
-	/* register for notification when connect completes */
-	crp->cr_pollitem.pi_rtn = usdf_cm_msg_connect_cb_wr;
-	crp->cr_pollitem.pi_context = crp;
-	ev.events = EPOLLOUT;
-	ev.data.ptr = &crp->cr_pollitem;
-	ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_ADD, crp->cr_sockfd, &ev);
-	if (ret != 0) {
-		crp->cr_pollitem.pi_rtn = NULL;
-		ret = -errno;
-		goto fail;
-	}
-
 	/* allocate remote peer ID */
 	ep->e.msg.ep_rem_peer_id = udp->dom_next_peer;
 	udp->dom_peer_tab[udp->dom_next_peer] = ep;
@@ -503,6 +536,18 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 	reqp->creq_datalen = htonl(paramlen);
 	memcpy(reqp->creq_data, param, paramlen);
+
+	/* register for notification when connect completes */
+	crp->cr_pollitem.pi_rtn = usdf_cm_msg_connect_cb_wr;
+	crp->cr_pollitem.pi_context = crp;
+	ev.events = EPOLLOUT;
+	ev.data.ptr = &crp->cr_pollitem;
+	ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_ADD, crp->cr_sockfd, &ev);
+	if (ret != 0) {
+		crp->cr_pollitem.pi_rtn = NULL;
+		ret = -errno;
+		goto fail;
+	}
 
 	return 0;
 

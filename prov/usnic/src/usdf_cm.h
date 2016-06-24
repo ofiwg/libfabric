@@ -67,7 +67,8 @@ struct usdf_connreq {
 	uint8_t cr_data[0];
 };
 
-void usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error);
+void usdf_cm_report_failure(struct usdf_connreq *crp, int error,
+		bool skip_data);
 void usdf_cm_msg_connreq_cleanup(struct usdf_connreq *crp);
 
 int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen);
