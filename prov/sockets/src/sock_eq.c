@@ -276,7 +276,13 @@ static int sock_eq_fi_close(struct fid *fid)
 	fastlock_destroy(&sock_eq->lock);
 	atomic_dec(&sock_eq->sock_fab->ref);
 
-	if (sock_eq->signal && sock_eq->attr.wait_obj == FI_WAIT_MUTEX_COND)
+	if (sock_eq->signal &&
+#ifndef _WIN32
+	    sock_eq->attr.wait_obj == FI_WAIT_MUTEX_COND
+#else /* _WIN32 */
+	    sock_eq->attr.wait_obj == FI_WAIT_CRITSEC_COND
+#endif /* _WIN32 */
+	   )
 		sock_wait_close(&sock_eq->waitset->fid);
 
 	free(sock_eq);
@@ -299,6 +305,7 @@ static int sock_eq_control(struct fid *fid, int command, void *arg)
 			break;
 		case FI_WAIT_SET:
 		case FI_WAIT_MUTEX_COND:
+		case FI_WAIT_CRITSEC_COND:
 			sock_wait_get_obj(eq->waitset, arg);
 			break;
 		default:
@@ -330,7 +337,11 @@ static int _sock_eq_verify_attr(struct fi_eq_attr *attr)
 	case FI_WAIT_NONE:
 	case FI_WAIT_FD:
 	case FI_WAIT_SET:
+#ifndef _WIN32
 	case FI_WAIT_MUTEX_COND:
+#else /* _WIN32 */
+	case FI_WAIT_CRITSEC_COND:
+#endif /* _WIN32 */
 		break;
 	case FI_WAIT_UNSPEC:
 		attr->wait_obj = FI_WAIT_FD;
@@ -398,8 +409,9 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		sock_eq->signal = 0;
 		break;
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		wait_attr.flags = 0;
-		wait_attr.wait_obj = FI_WAIT_MUTEX_COND;
+		wait_attr.wait_obj = sock_eq->attr.wait_obj;
 		ret = sock_wait_open(fabric, &wait_attr, &sock_eq->waitset);
 		if (ret)
 			goto err2;

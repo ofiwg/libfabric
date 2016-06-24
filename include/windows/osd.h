@@ -201,11 +201,6 @@ static inline int ofi_sockerr(void)
 	}
 }
 
-static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
-{
-	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
-}
-
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 				int readonly, void **mapped);
 

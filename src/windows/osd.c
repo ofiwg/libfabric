@@ -258,5 +258,10 @@ int fi_fd_nonblock(int fd)
 	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
 }
 
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
+{
+	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
+}
+
 
 

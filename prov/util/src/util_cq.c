@@ -348,6 +348,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
 		cq->internal_wait = 1;

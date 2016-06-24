@@ -77,7 +77,11 @@ int fi_check_wait_attr(const struct fi_provider *prov,
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+#ifndef _WIN32
 	case FI_WAIT_MUTEX_COND:
+#else /* _WIN32 */
+	case FI_WAIT_CRITSEC_COND:
+#endif /* _WIN32 */
 		break;
 	default:
 		FI_WARN(prov, FI_LOG_FABRIC, "invalid wait object type\n");
@@ -124,7 +128,8 @@ int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 		wait->wait_obj = FI_WAIT_FD;
 		break;
 	case FI_WAIT_MUTEX_COND:
-		wait->wait_obj = FI_WAIT_MUTEX_COND;
+	case FI_WAIT_CRITSEC_COND:
+		wait->wait_obj = attr->wait_obj;
 		break;
 	default:
 		assert(0);

@@ -50,7 +50,11 @@ enum {
 
 int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 {
+#ifndef _WIN32
 	struct fi_mutex_cond mut_cond;
+#else /* _WIN32 */
+	struct fi_critsec_cond mut_cond;
+#endif /* _WIN32 */
 	struct sock_wait *wait;
 
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
@@ -63,8 +67,13 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 		break;
 
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
+#ifndef _WIN32
 		mut_cond.mutex = &wait->wobj.mutex_cond.mutex;
-		mut_cond.cond  = &wait->wobj.mutex_cond.cond;
+#else /* _WIN32 */
+		mut_cond.critsec = &wait->wobj.mutex_cond.mutex;
+#endif /* _WIN32 */
+		mut_cond.cond = &wait->wobj.mutex_cond.cond;
 		memcpy(arg, &mut_cond, sizeof(mut_cond));
 		break;
 
@@ -96,6 +105,7 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 		break;
 
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		pthread_mutex_init(&wait->wobj.mutex_cond.mutex, NULL);
 		pthread_cond_init(&wait->wobj.mutex_cond.cond, NULL);
 		break;
@@ -172,6 +182,7 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 		break;
 
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		err = fi_wait_cond(&wait->wobj.mutex_cond.cond,
 				   &wait->wobj.mutex_cond.mutex, timeout);
 		break;
@@ -199,6 +210,7 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 		break;
 
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		pthread_cond_signal(&wait->wobj.mutex_cond.cond);
 		break;
 	default:
@@ -267,7 +279,11 @@ static int sock_verify_wait_attr(struct fi_wait_attr *attr)
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+#ifndef _WIN32
 	case FI_WAIT_MUTEX_COND:
+#else /* _WIN32 */
+	case FI_WAIT_CRITSEC_COND:
+#endif /* _WIN32 */
 		break;
 
 	default:
