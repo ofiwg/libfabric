@@ -232,6 +232,7 @@ int _gnix_job_fma_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_job_cq_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_pes_on_node(uint32_t *num_pes);
 int _gnix_nics_per_rank(uint32_t *nics_per_rank);
+void _gnix_dump_gni_res(uint8_t ptag);
 
 struct gnix_reference {
 	atomic_t references;

@@ -522,3 +522,48 @@ int _gnix_nics_per_rank(uint32_t *nics_per_rank)
 	return FI_SUCCESS;
 }
 
+void _gnix_dump_gni_res(uint8_t ptag)
+{
+	int i;
+	gni_return_t status;
+	gni_dev_res_desc_t dev_res_desc;
+	gni_job_res_desc_t job_res_desc;
+#define BUF_SZ 4096
+	char buf[BUF_SZ];
+	int size = BUF_SZ, written = 0;
+
+	if (!fi_log_enabled(&gnix_prov, FI_LOG_WARN, FI_LOG_FABRIC))
+		return;
+
+	written += snprintf(buf + written, size - written,
+			    "Device Resources:\n");
+	for (i = GNI_DEV_RES_FIRST+1; i < GNI_DEV_RES_LAST; i++) {
+		status = GNI_GetDevResInfo(0, i, &dev_res_desc);
+		if (status == GNI_RC_SUCCESS) {
+			written += snprintf(buf + written, size - written,
+					    "dev res: %9s, avail: %lu res: %lu held: %lu total: %lu\n",
+					    gni_dev_res_to_str(i),
+					    dev_res_desc.available,
+					    dev_res_desc.reserved,
+					    dev_res_desc.held,
+					    dev_res_desc.total);
+			GNIX_WARN(FI_LOG_FABRIC, "%s", buf);
+		}
+	}
+
+	written = 0;
+	written += snprintf(buf + written, size - written,
+			    "Job Resources:\n");
+	for (i = GNI_JOB_RES_FIRST+1; i < GNI_JOB_RES_LAST; i++) {
+		status = GNI_GetJobResInfo(0, ptag, i, &job_res_desc);
+		if (status == GNI_RC_SUCCESS) {
+			written += snprintf(buf + written, size - written,
+					    "ptag[%d] job res: %9s used: %lu limit: %lu\n",
+					    ptag, gni_job_res_to_str(i),
+					    job_res_desc.used,
+					    job_res_desc.limit);
+			GNIX_WARN(FI_LOG_FABRIC, "%s", buf);
+		}
+	}
+}
+
