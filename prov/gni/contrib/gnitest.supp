@@ -155,14 +155,23 @@
 }
 
 #
+# This is from the av multithreaded tests that pass void * args via pthread-create
+#
+{
+   atomic_cas_weak_continuous_remove
+   Memcheck:Cond
+   fun:atomic_cas_weak
+   fun:continuous_remove
+   fun:start_thread
+}
+
+#
 # This is from reading kernel initialized memory
 #
 {
    gnix_notifier_get_event
    Memcheck:Addr8
    fun:_gnix_notifier_get_event
-   fun:__clear_notifier_events.part.5
-   fun:__clear_notifier_events
    ...
 }
 
