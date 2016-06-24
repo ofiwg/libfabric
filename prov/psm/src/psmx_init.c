@@ -149,8 +149,18 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	psmx_init_env();
 
-	if (node && !(flags & FI_SOURCE))
+	if (node && !(flags & FI_SOURCE)) {
 		dest_addr = psmx_resolve_name(node, 0);
+		if (dest_addr) {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"node '%s' resolved to <epid=0x%llx>\n", node,
+				*(psm_epid_t *)dest_addr);
+		} else {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"failed to resolve node '%s'.\n", node);
+			return -FI_ENODATA;
+		}
+	}
 
 	if (hints) {
 		switch (hints->addr_format) {
