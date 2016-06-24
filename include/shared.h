@@ -255,6 +255,7 @@ int ft_init_fabric();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();
+int ft_alloc_ep_res(struct fi_info *fi);
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep(void);
 int ft_init_alias_ep(uint64_t flags);

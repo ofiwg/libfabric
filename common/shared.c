@@ -323,7 +323,7 @@ int ft_open_fabric_res(void)
 	return 0;
 }
 
-int ft_alloc_active_res(struct fi_info *fi)
+int ft_alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
@@ -395,6 +395,16 @@ int ft_alloc_active_res(struct fi_info *fi)
 			return ret;
 		}
 	}
+	return 0;
+}
+
+int ft_alloc_active_res(struct fi_info *fi)
+{
+	int ret;
+
+	ret = ft_alloc_ep_res(fi);
+	if (ret)
+		return ret;
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
