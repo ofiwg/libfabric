@@ -53,6 +53,9 @@
 #define RXM_MAJOR_VERSION 1
 #define RXM_MINOR_VERSION 0
 
+extern struct fi_provider rxm_prov;
+extern struct util_prov rxm_util_prov;
+
 struct rxm_fabric {
 	struct util_fabric util_fabric;
 	struct fid_fabric *msg_fabric;

@@ -69,3 +69,9 @@ struct fi_info rxm_info = {
 	.domain_attr = &rxm_domain_attr,
 	.fabric_attr = &rxm_fabric_attr
 };
+
+struct util_prov rxm_util_prov = {
+	.prov = &rxm_prov,
+	.info = &rxm_info,
+	.flags = 0,
+};

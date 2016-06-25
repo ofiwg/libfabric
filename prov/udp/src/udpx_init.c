@@ -38,14 +38,14 @@
 
 int udpx_check_info(struct fi_info *info)
 {
-	return fi_check_info(&udpx_prov, &udpx_info, info, FI_MATCH_EXACT);
+	return fi_check_info(&udpx_util_prov, info, FI_MATCH_EXACT);
 }
 
 static int udpx_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
-	return util_getinfo(&udpx_prov, version, node, service, flags,
-			    &udpx_info, hints, info);
+	return util_getinfo(&udpx_util_prov, version, node, service, flags,
+			    hints, info);
 }
 
 static void udpx_fini(void)

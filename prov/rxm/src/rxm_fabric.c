@@ -96,8 +96,8 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	}
 	hints.fabric_attr->name = attr->name;
 
-	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_prov,
-			&rxm_info, &hints, rxm_alter_layer_info,
+	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
+			&hints, rxm_alter_layer_info,
 			rxm_alter_base_info, 1, &msg_info);
 	if (ret) {
 		ret = -FI_EINVAL;

@@ -189,8 +189,8 @@ err:
 }
 
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct fi_provider *prov,
-			const struct fi_info *prov_info, struct fi_info *hints,
+			uint64_t flags, const struct util_prov *util_prov,
+			struct fi_info *hints,
 			ofi_alter_info_t alter_layer_info,
 			ofi_alter_info_t alter_base_info,
 			int get_base_info, struct fi_info **info)
@@ -199,12 +199,12 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *temp = NULL, *fi, *tail = NULL;
 	int ret;
 
-	ret = fi_check_info(prov, prov_info, hints, FI_MATCH_PREFIX);
+	ret = fi_check_info(util_prov, hints, FI_MATCH_PREFIX);
 	if (ret)
 		goto err1;
 
-	ret = ofix_alter_layer_info(prov, prov_info, hints, alter_layer_info,
-			&base_hints);
+	ret = ofix_alter_layer_info(util_prov->prov, util_prov->info, hints,
+			alter_layer_info, &base_hints);
 	if (ret)
 		goto err1;
 
@@ -216,8 +216,8 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		*info = base_info;
 	} else {
 		for (fi = base_info; fi; fi = fi->next) {
-			ret = ofix_alter_base_info(prov, prov_info, fi,
-					alter_base_info, &temp);
+			ret = ofix_alter_base_info(util_prov->prov, util_prov->info,
+					fi, alter_base_info, &temp);
 			if (ret)
 				goto err3;
 			if (!tail)
@@ -374,10 +374,12 @@ int fi_check_domain_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_check_ep_attr(const struct fi_provider *prov,
-		     const struct fi_ep_attr *prov_attr,
+int fi_check_ep_attr(const struct util_prov *util_prov,
 		     const struct fi_ep_attr *user_attr)
 {
+	const struct fi_provider *prov = util_prov->prov;
+	const struct fi_ep_attr *prov_attr = util_prov->info->ep_attr;
+
 	if (user_attr->type && (user_attr->type != prov_attr->type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported endpoint type\n");
 		FI_INFO_CAPS(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);
@@ -399,6 +401,34 @@ int fi_check_ep_attr(const struct fi_provider *prov,
 	if (user_attr->max_msg_size > prov_attr->max_msg_size) {
 		FI_INFO(prov, FI_LOG_CORE, "Max message size too large\n");
 		return -FI_ENODATA;
+	}
+
+	if (user_attr->tx_ctx_cnt > util_prov->info->domain_attr->max_ep_tx_ctx) {
+		if (user_attr->tx_ctx_cnt == FI_SHARED_CONTEXT) {
+			if (!(util_prov->flags & UTIL_TX_SHARED_CTX)) {
+				FI_INFO(prov, FI_LOG_CORE,
+						"Shared tx context not supported\n");
+				return -FI_ENODATA;
+			}
+		} else {
+			FI_INFO(prov, FI_LOG_CORE,
+					"Requested tx_ctx_cnt exceeds supported\n");
+			return -FI_ENODATA;
+		}
+	}
+
+	if (user_attr->rx_ctx_cnt > util_prov->info->domain_attr->max_ep_rx_ctx) {
+		if (user_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
+			if (!(util_prov->flags & UTIL_RX_SHARED_CTX)) {
+				FI_INFO(prov, FI_LOG_CORE,
+						"Shared rx context not supported\n");
+				return -FI_ENODATA;
+			}
+		} else {
+			FI_INFO(prov, FI_LOG_CORE,
+					"Requested rx_ctx_cnt exceeds supported\n");
+			return -FI_ENODATA;
+		}
 	}
 
 	return 0;
@@ -513,11 +543,12 @@ int fi_check_tx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_check_info(const struct fi_provider *prov,
-		  const struct fi_info *prov_info,
+int fi_check_info(const struct util_prov *util_prov,
 		  const struct fi_info *user_info,
 		  enum fi_match_type type)
 {
+	const struct fi_info *prov_info = util_prov->info;
+	const struct fi_provider *prov = util_prov->prov;
 	int ret;
 
 	if (!user_info)
@@ -551,29 +582,28 @@ int fi_check_info(const struct fi_provider *prov,
 
 	if (user_info->domain_attr) {
 		ret = fi_check_domain_attr(prov, prov_info->domain_attr,
-					   user_info->domain_attr,
-					   type);
+				user_info->domain_attr,
+				type);
 		if (ret)
 			return ret;
 	}
 
 	if (user_info->ep_attr) {
-		ret = fi_check_ep_attr(prov, prov_info->ep_attr,
-				       user_info->ep_attr);
+		ret = fi_check_ep_attr(util_prov, user_info->ep_attr);
 		if (ret)
 			return ret;
 	}
 
 	if (user_info->rx_attr) {
 		ret = fi_check_rx_attr(prov, prov_info->rx_attr,
-				       user_info->rx_attr);
+				user_info->rx_attr);
 		if (ret)
 			return ret;
 	}
 
 	if (user_info->tx_attr) {
 		ret = fi_check_tx_attr(prov, prov_info->tx_attr,
-				       user_info->tx_attr);
+				user_info->tx_attr);
 		if (ret)
 			return ret;
 	}

@@ -68,17 +68,19 @@ enum fi_match_type {
 	FI_MATCH_PREFIX,
 };
 
+enum {
+	UTIL_TX_SHARED_CTX = 1 << 0,
+	UTIL_RX_SHARED_CTX = 1 << 1,
+};
+
 /*
  * Provider details
- * TODO: Determine if having this structure (with expanded fields)
- * would help support fi_getinfo.  If so, fill out and update
- * implementation
-struct util_prov {
-	const struct fi_provider *prov;
-	const struct fi_info	*info;  -- list of provider info's
-	provider specific handlers, e.g. resolve addressing
-};
  */
+struct util_prov {
+	const struct fi_provider	*prov;
+	const struct fi_info		*info;
+	const int			flags;
+};
 
 
 /*
@@ -357,8 +359,7 @@ int fi_check_domain_attr(const struct fi_provider *prov,
 			 const struct fi_domain_attr *prov_attr,
 			 const struct fi_domain_attr *user_attr,
 			 enum fi_match_type type);
-int fi_check_ep_attr(const struct fi_provider *prov,
-		     const struct fi_ep_attr *prov_attr,
+int fi_check_ep_attr(const struct util_prov *util_prov,
 		     const struct fi_ep_attr *user_attr);
 int fi_check_cq_attr(const struct fi_provider *prov,
 		     const struct fi_cq_attr *attr);
@@ -368,17 +369,15 @@ int fi_check_rx_attr(const struct fi_provider *prov,
 int fi_check_tx_attr(const struct fi_provider *prov,
 		     const struct fi_tx_attr *prov_attr,
 		     const struct fi_tx_attr *user_attr);
-int fi_check_info(const struct fi_provider *prov,
-		  const struct fi_info *prov_info,
+int fi_check_info(const struct util_prov *util_prov,
 		  const struct fi_info *user_info,
 		  enum fi_match_type type);
 void ofi_alter_info(struct fi_info *info,
 		   const struct fi_info *hints);
 
-int util_getinfo(const struct fi_provider *prov, uint32_t version,
+int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
-		 const struct fi_info *prov_info, struct fi_info *hints,
-		 struct fi_info **info);
+		 struct fi_info *hints, struct fi_info **info);
 
 
 struct fid_list_entry {
@@ -404,8 +403,8 @@ void fi_fabric_remove(struct util_fabric *fabric);
 typedef int (*ofi_alter_info_t)(struct fi_info *src_info, struct fi_info *dest_info);
 
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct fi_provider *prov,
-			const struct fi_info *prov_info, struct fi_info *hints,
+			uint64_t flags, const struct util_prov *util_prov,
+			struct fi_info *hints,
 			ofi_alter_info_t alter_layer_info,
 			ofi_alter_info_t alter_base_info,
 			int get_base_info, struct fi_info **info);
