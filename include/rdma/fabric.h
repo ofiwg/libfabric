@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -157,8 +158,8 @@ enum {
 	FI_ADDR_GNI
 };
 
-#define FI_ADDR_UNSPEC		UINT64_MAX
-#define FI_ADDR_NOTAVAIL	UINT64_MAX
+#define FI_ADDR_UNSPEC		((uint64_t) -1)
+#define FI_ADDR_NOTAVAIL	((uint64_t) -1)
 #define FI_SHARED_CONTEXT	(-(size_t)1)
 typedef uint64_t		fi_addr_t;
 
