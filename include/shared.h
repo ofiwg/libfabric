@@ -65,7 +65,7 @@ struct test_size_param {
 };
 
 extern struct test_size_param test_size[];
-const unsigned int test_cnt;
+extern const unsigned int test_cnt;
 #define TEST_CNT test_cnt
 
 #define FT_ENABLE_ALL		(~0)
