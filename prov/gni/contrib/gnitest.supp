@@ -32,6 +32,19 @@
 }
 
 #
+# These are leaks from getifaddrs in the sockets provider.
+#
+{
+    getifaddrs_criterion_run_all_tests
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:calloc
+    fun:getifaddrs_internal
+    fun:getifaddrs
+}
+
+
+#
 # This is an actual memory leak in uGNI.  A bug has been submitted
 #
 {
