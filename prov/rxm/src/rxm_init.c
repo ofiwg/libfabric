@@ -62,7 +62,7 @@ int rxm_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info)
 static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
-	return ofix_getinfo(version, node, service, flags, &rxm_prov, &rxm_info,
+	return ofix_getinfo(version, node, service, flags, &rxm_util_prov,
 			hints, rxm_alter_layer_info, rxm_alter_base_info, 0, info);
 }
 

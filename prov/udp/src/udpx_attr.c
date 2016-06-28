@@ -88,3 +88,9 @@ struct fi_info udpx_info = {
 	.domain_attr = &udpx_domain_attr,
 	.fabric_attr = &udpx_fabric_attr
 };
+
+struct util_prov udpx_util_prov = {
+	.prov = &udpx_prov,
+	.info = &udpx_info,
+	.flags = 0,
+};

@@ -306,7 +306,8 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 		return -FI_ENODATA;
 	}
 
-	if (attr->rx_ctx_cnt > info->domain_attr->max_ep_rx_ctx) {
+	if ((attr->rx_ctx_cnt > info->domain_attr->max_ep_rx_ctx) &&
+			(attr->rx_ctx_cnt != FI_SHARED_CONTEXT)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"rx_ctx_cnt exceeds supported size\n");
 		return -FI_ENODATA;

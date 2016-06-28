@@ -147,14 +147,14 @@ int util_find_domain(struct dlist_entry *item, const void *arg)
 		 ((info->mode & domain->mode) == domain->mode);
 }
 
-int util_getinfo(const struct fi_provider *prov, uint32_t version,
+int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
-		 const struct fi_info *prov_info, struct fi_info *hints,
-		 struct fi_info **info)
+		 struct fi_info *hints, struct fi_info **info)
 {
 	struct util_fabric *fabric;
 	struct util_domain *domain;
 	struct dlist_entry *item;
+	const struct fi_provider *prov = util_prov->prov;
 	int ret, copy_dest;
 
 	FI_DBG(prov, FI_LOG_CORE, "checking info\n");
@@ -165,11 +165,11 @@ int util_getinfo(const struct fi_provider *prov, uint32_t version,
 		return -FI_EINVAL;
 	}
 
-	ret = fi_check_info(prov, prov_info, hints, FI_MATCH_EXACT);
+	ret = fi_check_info(util_prov, hints, FI_MATCH_EXACT);
 	if (ret)
 		return ret;
 
-	*info = fi_dupinfo(prov_info);
+	*info = fi_dupinfo(util_prov->info);
 	if (!*info) {
 		FI_INFO(prov, FI_LOG_CORE, "cannot copy info\n");
 		return -FI_ENOMEM;

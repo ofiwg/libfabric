@@ -69,6 +69,7 @@
 
 
 extern struct fi_provider udpx_prov;
+extern struct util_prov udpx_util_prov;
 extern struct fi_info udpx_info;
 
 
