@@ -238,6 +238,24 @@ FI_LOG_SUBSYS environment variables.
 - *mr*
 : Provides output specific to memory registration.
 
+# NOTES
+
+Because libfabric is designed to provide applications direct access to
+fabric hardware, there are limits on how libfabric resources may be used
+in conjunction with system calls.  These limitations are notable for
+developers who may be familiar programming to the sockets interface.
+Although limits are provider specific, the following restrictions
+apply to many providers and should be adhered to by applications desiring
+portability across providers.
+
+*fork*
+: Fabric resources are not guaranteed to be available by child processes.
+  This includes objects, such as endpoints and completion queues, as well
+  as application controlled data buffers which have been assigned to the
+  network.  For example, data buffers that have been registered with a
+  fabric domain may not be available in a child process because of copy
+  on write restrictions.
+
 # SEE ALSO
 
 [`fi_provider`(7)](fi_provider.7.html),
