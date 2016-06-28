@@ -45,6 +45,7 @@ extern "C" {
 
 void ft_parse_benchmark_opts(int op, char *optarg);
 void ft_benchmark_usage(void);
+int ft_bw_init(void);
 int pingpong(void);
 int bandwidth(void);
 int bandwidth_rma(enum ft_rma_opcodes op, struct fi_rma_iov *remote);

@@ -61,7 +61,7 @@ struct fid_eq *eq;
 
 struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
-struct fi_context *ctx_arr = NULL;
+struct fi_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
 uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -277,12 +277,6 @@ int ft_alloc_msgs(void)
 
 	remote_cq_data = ft_init_cq_data(fi);
 
-	if (opts.window_size > 0) {
-		ctx_arr = calloc(opts.window_size, sizeof(struct fi_context));
-		if (!ctx_arr)
-			return -FI_ENOMEM;
-	}
-
 	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
 		ret = fi_mr_reg(domain, buf, buf_size, ft_caps_to_mr_access(fi->caps),
@@ -323,7 +317,7 @@ int ft_open_fabric_res(void)
 	return 0;
 }
 
-int ft_alloc_active_res(struct fi_info *fi)
+int ft_alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
@@ -395,6 +389,16 @@ int ft_alloc_active_res(struct fi_info *fi)
 			return ret;
 		}
 	}
+	return 0;
+}
+
+int ft_alloc_active_res(struct fi_info *fi)
+{
+	int ret;
+
+	ret = ft_alloc_ep_res(fi);
+	if (ret)
+		return ret;
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
@@ -628,18 +632,6 @@ int ft_init_fabric(void)
 	return 0;
 }
 
-#define FT_EP_BIND(ep, fd, flags)					\
-	do {								\
-		int ret;						\
-		if ((fd)) {						\
-			ret = fi_ep_bind((ep), &(fd)->fid, (flags));	\
-			if (ret) {					\
-				FT_PRINTERR("fi_ep_bind", ret);		\
-				return ret;				\
-			}						\
-		}							\
-	} while (0)
-
 int ft_get_cq_fd(struct fid_cq *cq, int *fd)
 {
 	int ret = FI_SUCCESS;
@@ -749,7 +741,7 @@ int ft_init_av(void)
 			return ret;
 		}
 
-		ret = (int) ft_tx(ep, addrlen);
+		ret = (int) ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -764,7 +756,7 @@ int ft_init_av(void)
 		if (ret)
 			return ret;
 
-		ret = (int) ft_tx(ep, 1);
+		ret = (int) ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 	}
 
 	return ret;
@@ -780,7 +772,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(ep, sizeof *rma_iov);
+		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -806,7 +798,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(ep, sizeof *rma_iov);
+		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
 	}
 
 	return ret;
@@ -834,10 +826,11 @@ static void ft_close_fids(void)
 void ft_free_res(void)
 {
 	ft_close_fids();
-	if (ctx_arr) {
-		free(ctx_arr);
-		ctx_arr = NULL;
-	}
+
+	free(tx_ctx_arr);
+	free(rx_ctx_arr);
+	tx_ctx_arr = NULL;
+	rx_ctx_arr = NULL;
 
 	if (buf) {
 		free(buf);
@@ -1032,28 +1025,28 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		seq++;								\
 	} while (0)
 
-ssize_t ft_post_tx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
+ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context* ctx)
 {
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_tsend, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf, size + ft_tx_prefix_size(), fi_mr_desc(mr),
-				remote_fi_addr, tx_seq, ctx);
+				fi_addr, tx_seq, ctx);
 	} else {
 		FT_POST(fi_send, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf,	size + ft_tx_prefix_size(), fi_mr_desc(mr),
-				remote_fi_addr, ctx);
+				fi_addr, ctx);
 	}
 	return 0;
 }
 
-ssize_t ft_tx(struct fid_ep *ep, size_t size)
+ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx)
 {
 	ssize_t ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
 		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
-	ret = ft_post_tx(ep, size, &tx_ctx);
+	ret = ft_post_tx(ep, fi_addr, size, ctx);
 	if (ret)
 		return ret;
 
@@ -1387,7 +1380,7 @@ int ft_sync()
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_tx(ep, 1);
+		ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -1397,7 +1390,7 @@ int ft_sync()
 		if (ret)
 			return ret;
 
-		ret = ft_tx(ep, 1);
+		ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 	}
 
 	return ret;
@@ -1490,6 +1483,7 @@ int ft_finalize(void)
 	struct iovec iov;
 	int ret;
 	struct fi_context ctx;
+	void *desc = fi_mr_desc(mr);
 
 	strcpy(tx_buf + ft_tx_prefix_size(), "fin");
 	iov.iov_base = tx_buf;
@@ -1500,6 +1494,7 @@ int ft_finalize(void)
 
 		memset(&tmsg, 0, sizeof tmsg);
 		tmsg.msg_iov = &iov;
+		tmsg.desc = &desc;
 		tmsg.iov_count = 1;
 		tmsg.addr = remote_fi_addr;
 		tmsg.tag = tx_seq;
@@ -1512,6 +1507,7 @@ int ft_finalize(void)
 
 		memset(&msg, 0, sizeof msg);
 		msg.msg_iov = &iov;
+		msg.desc = &desc;
 		msg.iov_count = 1;
 		msg.addr = remote_fi_addr;
 		msg.context = &ctx;
@@ -1633,6 +1629,10 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-p <dst_port>", "non default destination port number");
 	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
+	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)");
+	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
+	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
+	FT_PRINT_OPTS_USAGE("", "fi_shared_ctx");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
@@ -1641,21 +1641,7 @@ void ft_usage(char *name, char *desc)
 
 void ft_csusage(char *name, char *desc)
 {
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
-
-	if (desc)
-		fprintf(stderr, "\n%s\n", desc);
-
-	fprintf(stderr, "\nOptions:\n");
-	FT_PRINT_OPTS_USAGE("-n <domain>", "domain name");
-	FT_PRINT_OPTS_USAGE("-b <src_port>", "non default source port number");
-	FT_PRINT_OPTS_USAGE("-p <dst_port>", "non default destination port number");
-	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
-	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)\n"
-			"Only fi_rma_bw test supports this option for now");
+	ft_usage(name, desc);
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-w <number>", "number of warmup iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
@@ -1882,7 +1868,7 @@ int send_recv_greeting(struct fid_ep *ep)
 			return -FI_ETOOSMALL;
 		}
 
-		ret = ft_tx(ep, message_len);
+		ret = ft_tx(ep, remote_fi_addr, message_len, &tx_ctx);
 		if (ret)
 			return ret;
 

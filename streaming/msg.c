@@ -53,7 +53,7 @@ static int stream(void)
 	ft_start();
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ?
-			ft_tx(ep, opts.transfer_size) : ft_rx(ep, opts.transfer_size);
+			ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx) : ft_rx(ep, opts.transfer_size);
 		if (ret)
 			return ret;
 	}

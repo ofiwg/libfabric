@@ -14,7 +14,7 @@ bin_PROGRAMS = \
 	simple/fi_cq_data \
 	simple/fi_poll \
 	simple/fi_scalable_ep \
-	simple/fi_rdm_shared_ctx \
+	simple/fi_shared_ctx \
 	simple/fi_msg_epoll \
 	simple/fi_rdm_shared_av \
 	simple/fi_cm_data \
@@ -122,9 +122,9 @@ simple_fi_scalable_ep_SOURCES = \
 	simple/scalable_ep.c
 simple_fi_scalable_ep_LDADD = libfabtests.la
 
-simple_fi_rdm_shared_ctx_SOURCES = \
-	simple/rdm_shared_ctx.c
-simple_fi_rdm_shared_ctx_LDADD = libfabtests.la
+simple_fi_shared_ctx_SOURCES = \
+	simple/shared_ctx.c
+simple_fi_shared_ctx_LDADD = libfabtests.la
 
 simple_fi_poll_SOURCES = \
 	simple/poll.c

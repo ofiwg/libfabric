@@ -90,7 +90,7 @@ static int send_recv()
 			return -FI_ETOOSMALL;
 		}
 
-		ret = ft_tx(ep, message_len);
+		ret = ft_tx(ep, remote_fi_addr, message_len, &tx_ctx);
 		if (ret)
 			return ret;
 

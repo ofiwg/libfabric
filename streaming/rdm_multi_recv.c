@@ -90,11 +90,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = opts.dst_addr ? ft_tx(ep, 1) : wait_for_recv_completion(1);
+	ret = opts.dst_addr ? ft_tx(ep, remote_fi_addr, 1, &tx_ctx) : wait_for_recv_completion(1);
 	if (ret)
 		return ret;
 
-	ret = opts.dst_addr ? wait_for_recv_completion(1) : ft_tx(ep, 1);
+	ret = opts.dst_addr ? wait_for_recv_completion(1) : ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 	return ret;
 }
 
@@ -132,7 +132,7 @@ static int run_test(void)
 	ft_start();
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations; i++) {
-			ret = ft_tx(ep, opts.transfer_size);
+			ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
 			if (ret)
 				goto out;
 		}
@@ -265,7 +265,7 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = ft_tx(ep, addrlen);
+		ret = ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
 		if (ret)
 			return ret;
 	} else {

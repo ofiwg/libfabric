@@ -151,6 +151,7 @@ extern int tx_fd, rx_fd;
 extern int timeout;
 
 extern struct fi_context tx_ctx, rx_ctx;
+extern struct fi_context *tx_ctx_arr, *rx_ctx_arr;
 extern uint64_t remote_cq_data;
 
 extern uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -247,6 +248,18 @@ int size_to_count(int size);
 		}				\
 	} while (0)
 
+#define FT_EP_BIND(ep, fd, flags)					\
+	do {								\
+		int ret;						\
+		if ((fd)) {						\
+			ret = fi_ep_bind((ep), &(fd)->fid, (flags));	\
+			if (ret) {					\
+				FT_PRINTERR("fi_ep_bind", ret);		\
+				return ret;				\
+			}						\
+		}							\
+	} while (0)
+
 int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op);
@@ -255,6 +268,7 @@ int ft_init_fabric();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();
+int ft_alloc_ep_res(struct fi_info *fi);
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep(void);
 int ft_init_alias_ep(uint64_t flags);
@@ -284,9 +298,10 @@ int ft_finalize(void);
 size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
-ssize_t ft_post_tx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
+ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
+		struct fi_context* ctx);
 ssize_t ft_rx(struct fid_ep *ep, size_t size);
-ssize_t ft_tx(struct fid_ep *ep, size_t size);
+ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx);
 ssize_t ft_inject(struct fid_ep *ep, size_t size);
 ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 		struct fi_rma_iov *remote, void *context);
@@ -322,7 +337,7 @@ int check_recv_msg(const char *message);
 #define FT_PROCESS_EQ_ERR(rd, eq, fn, str) \
 	FT_PROCESS_QUEUE_ERR(eq_readerr, rd, eq, fn, str)
 
-#define FT_PRINT_OPTS_USAGE(opt, desc) fprintf(stderr, " %-20s %s\n", opt, desc)
+#define FT_PRINT_OPTS_USAGE(opt, desc) fprintf(stderr, " %-30s %s\n", opt, desc)
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))

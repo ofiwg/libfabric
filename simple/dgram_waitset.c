@@ -91,7 +91,7 @@ static int send_recv()
 	int ret;
 
 	fprintf(stdout, "Posting a send...\n");
-	ret = ft_post_tx(ep, tx_size, &tx_ctx);
+	ret = ft_post_tx(ep, remote_fi_addr, tx_size, &tx_ctx);
 	if (ret)
 		return ret;
 

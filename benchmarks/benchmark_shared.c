@@ -42,8 +42,6 @@
 #include "shared.h"
 #include "benchmark_shared.h"
 
-extern struct fi_context *ctx_arr;
-
 void ft_parse_benchmark_opts(int op, char *optarg)
 {
 	switch (op) {
@@ -75,6 +73,16 @@ void ft_benchmark_usage(void)
 			"# of iterations > window size");
 }
 
+int ft_bw_init(void)
+{
+	if (opts.window_size > 0) {
+		tx_ctx_arr = calloc(opts.window_size, sizeof(struct fi_context));
+		if (!tx_ctx_arr)
+			return -FI_ENOMEM;
+	}
+	return 0;
+}
+
 int pingpong(void)
 {
 	int ret, i;
@@ -91,7 +99,7 @@ int pingpong(void)
 			if (opts.transfer_size < fi->tx_attr->inject_size)
 				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_tx(ep, opts.transfer_size);
+				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
 			if (ret)
 				return ret;
 
@@ -111,7 +119,7 @@ int pingpong(void)
 			if (opts.transfer_size < fi->tx_attr->inject_size)
 				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_tx(ep, opts.transfer_size);
+				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
 			if (ret)
 				return ret;
 		}
@@ -145,7 +153,7 @@ static int bw_rx_comp()
 	ret = ft_get_rx_comp(rx_seq - 1);
 	if (ret)
 		return ret;
-	return ft_tx(ep, 4);
+	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
 }
 
 int bandwidth(void)
@@ -171,8 +179,8 @@ int bandwidth(void)
 			if (opts.transfer_size < fi->tx_attr->inject_size)
 				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_post_tx(ep, opts.transfer_size,
-						 &ctx_arr[j]);
+				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
+						 &tx_ctx_arr[j]);
 			if (ret)
 				return ret;
 
@@ -191,7 +199,7 @@ int bandwidth(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			ret = ft_post_rx(ep, opts.transfer_size, &ctx_arr[j]);
+			ret = ft_post_rx(ep, opts.transfer_size, &tx_ctx_arr[j]);
 			if (ret)
 				return ret;
 
@@ -255,12 +263,12 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 						opts.transfer_size, remote);
 			} else {
 				ret = ft_post_rma(rma_op, ep, opts.transfer_size,
-						remote,	&ctx_arr[j]);
+						remote,	&tx_ctx_arr[j]);
 			}
 			break;
 		case FT_RMA_WRITEDATA:
 			if (!opts.dst_addr) {
-				ret = ft_post_rx(ep, 0, &ctx_arr[j]);
+				ret = ft_post_rx(ep, 0, &tx_ctx_arr[j]);
 			} else {
 				if (opts.transfer_size < fi->tx_attr->inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
@@ -271,13 +279,13 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					ret = ft_post_rma(FT_RMA_WRITEDATA,
 							ep,
 							opts.transfer_size,
-							remote,	&ctx_arr[j]);
+							remote,	&tx_ctx_arr[j]);
 				}
 			}
 			break;
 		case FT_RMA_READ:
 			ret = ft_post_rma(FT_RMA_READ, ep, opts.transfer_size,
-					remote,	&ctx_arr[j]);
+					remote,	&tx_ctx_arr[j]);
 			break;
 		default:
 			FT_ERR("Unknown RMA op type\n");
