@@ -349,6 +349,11 @@ void fi_ini(void)
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
+	fi_param_define(NULL, "fork_unsafe", FI_PARAM_BOOL,
+			"Whether use of fork() may be unsafe for some providers"
+			" (default: no). Setting this to yes could improve"
+			" performance at the expense of making fork() potentially"
+			" unsafe");
 	fi_param_get_str(NULL, "provider", &param_val);
 	fi_create_filter(&prov_filter, param_val);
 
