@@ -1,4 +1,4 @@
-.TH "fabric" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fabric" "7" "2016\-06\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Fabric Interface Library
@@ -231,6 +231,25 @@ operations.
 \f[I]eq\f[] : Provides output specific to event queue operations.
 .IP \[bu] 2
 \f[I]mr\f[] : Provides output specific to memory registration.
+.SH NOTES
+.PP
+Because libfabric is designed to provide applications direct access to
+fabric hardware, there are limits on how libfabric resources may be used
+in conjunction with system calls.
+These limitations are notable for developers who may be familiar
+programming to the sockets interface.
+Although limits are provider specific, the following restrictions apply
+to many providers and should be adhered to by applications desiring
+portability across providers.
+.PP
+\f[I]fork\f[] : Fabric resources are not guaranteed to be available by
+child processes.
+This includes objects, such as endpoints and completion queues, as well
+as application controlled data buffers which have been assigned to the
+network.
+For example, data buffers that have been registered with a fabric domain
+may not be available in a child process because of copy on write
+restrictions.
 .SH SEE ALSO
 .PP
 \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3),
