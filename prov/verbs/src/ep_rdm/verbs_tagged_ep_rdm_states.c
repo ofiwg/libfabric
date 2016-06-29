@@ -1084,8 +1084,8 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 	{
 		wr.send_flags |= IBV_SEND_INLINE;
 	} else if (fi_ibv_rdm_prepare_rma_request(request, p->ep_rdm)) {
-		memcpy(request->rmabuf, (void*)p->lbuf, p->data_len);
-		sge.addr = (uint64_t)request->rmabuf;
+		memcpy(request->rmabuf->payload, (void*)p->lbuf, p->data_len);
+		sge.addr = (uint64_t)request->rmabuf->payload;
 		sge.lkey = request->minfo.conn->rma_mr->lkey;
 	} else {
 		FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -1141,7 +1141,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	/* buffered operation */
 	if (request->rmabuf) {
-		sge.addr = (uint64_t) (request->rmabuf);
+		sge.addr = (uint64_t) (request->rmabuf->payload);
 		sge.lkey = request->minfo.conn->rma_mr->lkey;
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_WAIT4LC;
 	} else {
@@ -1213,8 +1213,8 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_tagged_request *request,
 	if (request->state.eager == FI_IBV_STATE_EAGER_RMA_WAIT4LC) {
 		if (request->rmabuf) {
 			if (request->rma.opcode == IBV_WR_RDMA_READ) {
-				memcpy(request->dest_buf, request->rmabuf,
-				       request->len);
+				memcpy(request->dest_buf,
+				       request->rmabuf->payload, request->len);
 			}
 			fi_ibv_rdm_set_buffer_status(request->rmabuf,
 						     BUF_STATUS_FREE);
