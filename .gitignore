@@ -34,3 +34,4 @@ config/missing
 config/test-driver
 
 util/fi_info
+util/fi_strerror
