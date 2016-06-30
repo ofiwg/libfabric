@@ -682,6 +682,9 @@ static int sock_ep_close(struct fid *fid)
 		sock_rx_ctx_free(sock_ep->attr->rx_array[0]);
 	}
 
+	idm_reset(&sock_ep->attr->conn_idm);
+	idm_reset(&sock_ep->attr->av_idm);
+
 	free(sock_ep->attr->tx_array);
 	free(sock_ep->attr->rx_array);
 
