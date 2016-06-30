@@ -1269,7 +1269,7 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
 			host_addr = (struct sockaddr_in *)ifa->ifa_addr;
 			net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
-			// set fabric name to the network_adress in the format of a.b.c.d/e
+			/* set fabric name to the network_adress in the format of a.b.c.d/e */
 			net_in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr &
 						(uint32_t) net_addr->sin_addr.s_addr);
 			inet_ntop(host_addr->sin_family, (void *)&(net_in_addr), netbuf,
@@ -1278,11 +1278,11 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
 				  "%s%d", "/", prefix_len);
 			fabric_name = strdup(netbuf);
-			return fabric_name;
+			goto out;
 		}
 	}
+out:
 	freeifaddrs(ifaddrs);
-
 	return fabric_name;
 }
 
@@ -1302,11 +1302,11 @@ char *sock_get_domain_name(struct sockaddr_in *src_addr)
 			continue;
 		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
 			domain_name = strdup(ifa->ifa_name);
-			return domain_name;
+			goto out;
 		}
 	}
+out:
 	freeifaddrs(ifaddrs);
-
 	return domain_name;
 }
 #else
