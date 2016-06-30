@@ -150,3 +150,36 @@ int psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	return 0;
 }
 
+int psmx_wait_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	struct psmx_fid_cq *cq_priv;
+	struct util_eq *eq;
+	struct util_wait *wait;
+	int i, ret;
+
+	for (i = 0; i < count; i++) {
+		switch (fids[i]->fclass) {
+			case FI_CLASS_CQ:
+				cq_priv = container_of(fids[i], struct psmx_fid_cq, cq);
+				wait = cq_priv->wait;
+				break;
+			case FI_CLASS_EQ:
+				eq = container_of(fids[i], struct util_eq, eq_fid.fid);
+				wait = eq->wait;
+				break;
+			case FI_CLASS_CNTR:
+				return -FI_ENOSYS;
+			case FI_CLASS_WAIT:
+				wait = container_of(fids[i], struct util_wait, wait_fid.fid);
+				break;
+			default:
+				return -FI_EINVAL;
+		}
+
+		ret = wait->try(wait);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+

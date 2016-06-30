@@ -164,7 +164,7 @@ int psmx2_wait_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 				wait = cq_priv->wait;
 				break;
 			case FI_CLASS_EQ:
-				eq = container_of(fids[i], struct util_eq, eq_fid.fid)
+				eq = container_of(fids[i], struct util_eq, eq_fid.fid);
 				wait = eq->wait;
 				break;
 			case FI_CLASS_CNTR:
