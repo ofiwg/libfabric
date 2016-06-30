@@ -123,7 +123,7 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_SIGN_MASK  		(0x0080000000000000UL)
 #define PSMX2_SIGN_EXT			(0xFF00000000000000UL)
 #define PSMX2_VL_MASK			(0xFF00000000000000UL)
- 
+
 #define PSMX2_EP_TO_ADDR(ep,vl)		((((uint64_t)vl) << 56) | \
 						((uint64_t)ep & PSMX2_EP_MASK))
 #define PSMX2_ADDR_TO_VL(addr)		((uint8_t)((addr & PSMX2_VL_MASK) >> 56))
@@ -338,7 +338,7 @@ struct psmx2_fid_domain {
 	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
 	int			vl_alloc;
 	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
-	
+
 	int			am_initialized;
 
 	/* incoming req queue for AM based RMA request. */
@@ -689,6 +689,7 @@ int	psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
 int	psmx2_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
+int psmx2_wait_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 static inline void psmx2_fabric_acquire(struct psmx2_fid_fabric *fabric)
 {
