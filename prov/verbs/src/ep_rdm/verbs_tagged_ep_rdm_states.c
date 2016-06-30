@@ -522,6 +522,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 	}
 	
 	if (ret != FI_SUCCESS) {
+		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		fi_ibv_rdm_move_to_errcq(request, ret);
 		ret = FI_SUCCESS;
 	}
@@ -592,6 +593,7 @@ out:
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return ret;
 err:
+	request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	fi_ibv_rdm_move_to_errcq(request, ret);
 	ret = FI_SUCCESS;
 	goto out;
@@ -712,7 +714,9 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 				request->minfo.tag,
 				request->minfo.tagmask);
 
-			fi_ibv_rdm_move_to_errcq(request, FI_ETRUNC);
+				request->state.eager =
+					FI_IBV_STATE_EAGER_READY_TO_FREE;
+				fi_ibv_rdm_move_to_errcq(request, FI_ETRUNC);
 		}
 
 		FI_IBV_RDM_TAGGED_HANDLER_LOG();
@@ -724,6 +728,13 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 		    (struct fi_ibv_rdm_tagged_rndv_header *)&rbuf->header;
 
 		assert(p->arrived_len == sizeof(*rndv_header));
+
+		if (request->len < rndv_header->total_len) {
+			/* rndv protocol finalization requires memory
+			 * deregistration, entry in errcq will be generated
+			 * after acknowledgement in normal flow */
+			request->state.err = FI_ETRUNC;
+		}
 
 		request->minfo.conn = p->conn;
 		request->minfo.tag = rndv_header->base.tag;
@@ -878,7 +889,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	wr.wr.rdma.rkey = request->rndv.rkey;
 
 	sge.addr = (uintptr_t)((char *)request->dest_buf + offset);
-	sge.length = seg_cursize;
+	sge.length = (request->state.err == FI_SUCCESS ? seg_cursize : 0);
 	sge.lkey = request->rndv.mr->lkey;
 
 	request->rest_len -= seg_cursize;
@@ -893,7 +904,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 		return -errno;
 	};
 
-	if (request->rest_len) {
+	if (request->rest_len && request->state.err == FI_SUCCESS) {
 		/* Move to postponed queue for the next iteration */
 		fi_ibv_rdm_move_to_postponed_queue(request);
 	} else {
@@ -977,10 +988,15 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
 		ret = -errno;
+		request->state.err = ret;
 	}
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 	request->state.rndv = FI_IBV_STATE_RNDV_RECV_END;
-	fi_ibv_rdm_move_to_cq(request);
+	if (request->state.err == FI_SUCCESS) {
+		fi_ibv_rdm_move_to_cq(request);
+	} else {
+		fi_ibv_rdm_move_to_errcq(request, request->state.err);
+	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return ret;

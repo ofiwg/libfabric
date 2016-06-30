@@ -196,9 +196,15 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
 		entry->prov_errno = -err_request->state.err;
 		entry->err_data = NULL;
 
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", err_request,
-			FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, err_request);
+		if (err_request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
+			FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", err_request,
+				FI_LOG_DEBUG);
+			util_buf_release(fi_ibv_rdm_tagged_request_pool,
+				err_request);
+		} else {
+			err_request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
+		}
+
 		ret++;
 	}
 

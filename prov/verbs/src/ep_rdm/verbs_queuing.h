@@ -82,9 +82,9 @@ fi_ibv_rdm_take_first_from_cq()
 static inline void
 fi_ibv_rdm_move_to_errcq(struct fi_ibv_rdm_tagged_request *request, ssize_t err)
 {
+	request->state.err = llabs(err);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_errcq: ",
 				      request, FI_LOG_DEBUG);
-	request->state.err = llabs(err);
 	assert(request->context);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_comp_queue.request_errcq);

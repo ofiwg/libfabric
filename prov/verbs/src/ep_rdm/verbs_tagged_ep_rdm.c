@@ -143,8 +143,8 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 			conn, tag, (int)len, buf, context,
 			ep->posted_recvs);
 
-		if (ret || request->state.eager ==
-		    FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
+		if (ret || request->state.err ||
+		    request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
 			goto out;
 		}
 	}
