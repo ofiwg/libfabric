@@ -346,13 +346,13 @@ static void sock_pe_report_read_completion(struct sock_pe_entry *pe_entry)
 		sock_cntr_inc(pe_entry->comp->read_cntr);
 }
 
-static void sock_pe_report_rx_error(struct sock_pe_entry *pe_entry, int rem)
+static void sock_pe_report_rx_error(struct sock_pe_entry *pe_entry, int rem, int err)
 {
 	if (pe_entry->comp->recv_cntr)
 		sock_cntr_err_inc(pe_entry->comp->recv_cntr);
 	if (pe_entry->comp->recv_cq)
 		sock_cq_report_error(pe_entry->comp->recv_cq, pe_entry, rem,
-				     FI_ETRUNC, -FI_ETRUNC, NULL);
+				     err, -err, NULL);
 }
 
 static void sock_pe_report_tx_rma_read_err(struct sock_pe_entry *pe_entry,
@@ -750,7 +750,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe,
 
 	/* report error, if any */
 	if (rem) {
-		sock_pe_report_rx_error(pe_entry, rem);
+		sock_pe_report_rx_error(pe_entry, rem, FI_ETRUNC);
 		goto out;
 	}
 
@@ -1356,7 +1356,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 
 		if (rem) {
 			SOCK_LOG_DBG("Not enough space in posted recv buffer\n");
-			sock_pe_report_rx_error(&pe_entry, rem);
+			sock_pe_report_rx_error(&pe_entry, rem, FI_ETRUNC);
 		} else {
 			sock_pe_report_recv_completion(&pe_entry);
 		}
@@ -1450,7 +1450,7 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 
 		if (rem) {
 			SOCK_LOG_DBG("Not enough space in posted recv buffer\n");
-			sock_pe_report_rx_error(&pe_entry, rem);
+			sock_pe_report_rx_error(&pe_entry, rem, FI_ETRUNC);
 		} else {
 			sock_pe_report_recv_completion(&pe_entry);
 		}
@@ -1588,7 +1588,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 	/* report error, if any */
 	if (rem) {
 		SOCK_LOG_ERROR("Not enough space in posted recv buffer\n");
-		sock_pe_report_rx_error(pe_entry, rem);
+		sock_pe_report_rx_error(pe_entry, rem, FI_ETRUNC);
 		pe_entry->is_error = 1;
 		pe_entry->rem = pe_entry->total_len - pe_entry->done_len;
 		goto out;
@@ -2151,6 +2151,15 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 	int ret;
 
 	if (sock_comm_is_disconnected(pe_entry)) {
+		SOCK_LOG_DBG("conn disconnected: removing fd from pollset\n");
+		sock_epoll_del(&pe_entry->ep_attr->cmap.epoll_set,
+			       pe_entry->conn->sock_fd);
+		sock_pe_poll_del(pe, pe_entry->conn->sock_fd);
+		ofi_close_socket(pe_entry->conn->sock_fd);
+
+		if (pe_entry->pe.rx.header_read)
+			sock_pe_report_rx_error(pe_entry, 0, FI_EIO);
+
 		sock_pe_release_entry(pe, pe_entry);
 		return 0;
 	}
@@ -2413,6 +2422,15 @@ void sock_pe_poll_add(struct sock_pe *pe, int fd)
         fastlock_acquire(&pe->signal_lock);
         if (sock_epoll_add(&pe->epoll_set, fd))
                 SOCK_LOG_ERROR("failed to add to epoll set: %d, size: %d, used: %d\n", fd, pe->epoll_set.size, pe->epoll_set.used);
+        fastlock_release(&pe->signal_lock);
+}
+
+void sock_pe_poll_del(struct sock_pe *pe, int fd)
+{
+        fastlock_acquire(&pe->signal_lock);
+        if (sock_epoll_del(&pe->epoll_set, fd))
+                SOCK_LOG_ERROR("failed to del from epoll set: %d, size: %d, used: %d\n",
+			       fd, pe->epoll_set.size, pe->epoll_set.used);
         fastlock_release(&pe->signal_lock);
 }
 

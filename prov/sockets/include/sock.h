@@ -1107,6 +1107,7 @@ void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx);
 void sock_pe_signal(struct sock_pe *pe);
 void sock_pe_poll_add(struct sock_pe *pe, int fd);
+void sock_pe_poll_del(struct sock_pe *pe, int fd);
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx);
 int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx);
 void sock_pe_remove_tx_ctx(struct sock_tx_ctx *tx_ctx);
