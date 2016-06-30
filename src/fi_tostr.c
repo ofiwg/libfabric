@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014-2015 Intel Corp., Inc.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -445,7 +446,7 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s%sdata_progress: ", prefix, TAB);
 	fi_tostr_progress(buf, attr->data_progress);
 	strcatf(buf, "\n");
-	strcatf(buf, "%s%sresouce_mgmt: ", prefix, TAB);
+	strcatf(buf, "%s%sresource_mgmt: ", prefix, TAB);
 	fi_tostr_resource_mgmt(buf, attr->resource_mgmt);
 	strcatf(buf, "\n");
 	strcatf(buf, "%s%sav_type: ", prefix, TAB);
