@@ -1711,10 +1711,8 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 	conn = idm_lookup(&attr->av_idm, idx);
-	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
-		assert(ofi_equals_sockaddr(&conn->addr, addr));
+	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS)
 		return conn;
-	}
 
 	for (i = 0; i < attr->cmap.used; i++) {
 		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr, addr))

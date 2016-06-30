@@ -186,7 +186,7 @@ int fd_set_nonblock(int fd)
 	return ret;
 }
 
-static void sock_set_sockopt_reuseaddr(int sock)
+void sock_set_sockopt_reuseaddr(int sock)
 {
 	int optval;
 	optval = 1;
@@ -335,6 +335,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 		snprintf(listener->service, sizeof listener->service, "%d",
 			 ntohs(addr.sin_port));
 		SOCK_LOG_DBG("Bound to port: %s - %d\n", listener->service, getpid());
+		ep_attr->msg_src_port = ntohs(addr.sin_port);
 	}
 
 	if (ep_attr->src_addr->sin_addr.s_addr == 0) {
@@ -379,22 +380,23 @@ struct sock_conn *sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index)
 	int do_retry = sock_conn_retry;
 	struct sock_conn *conn, *new_conn;
 	uint16_t idx;
-	struct sockaddr_in *addr;
+	struct sockaddr_in addr;
 	socklen_t lon;
 	int valopt = 0;
 	struct pollfd poll_fd;
 
 	if (ep_attr->ep_type == FI_EP_MSG) {
 		idx = 0;
-		addr = ep_attr->dest_addr;
+		addr = *ep_attr->dest_addr;
+		addr.sin_port = htons(ep_attr->msg_dest_port);
 	} else {
 		idx = index & ep_attr->av->mask;
-		addr = (struct sockaddr_in *)&ep_attr->av->table[idx].addr;
+		addr = *((struct sockaddr_in *)&ep_attr->av->table[idx].addr);
 	}
 
 do_connect:
 	fastlock_acquire(&ep_attr->cmap.lock);
-	conn = sock_ep_lookup_conn(ep_attr, index, addr);
+	conn = sock_ep_lookup_conn(ep_attr, index, &addr);
 	fastlock_release(&ep_attr->cmap.lock);
 
 	if (conn != SOCK_CM_CONN_IN_PROGRESS)
@@ -415,12 +417,12 @@ do_connect:
                 return NULL;
 	}
 
-	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
-			ntohs(addr->sin_port));
+	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
+			ntohs(addr.sin_port));
 	SOCK_LOG_DBG("Connecting using address:%s\n",
 			inet_ntoa(ep_attr->src_addr->sin_addr));
 
-	ret = connect(conn_fd, (struct sockaddr *) addr, sizeof *addr);
+	ret = connect(conn_fd, (struct sockaddr *) &addr, sizeof addr);
 	if (ret < 0) {
 		if (ofi_sockerr() == EINPROGRESS) {
 			poll_fd.fd = conn_fd;
@@ -441,8 +443,8 @@ do_connect:
 
 			if (valopt) {
 				SOCK_LOG_DBG("Error in connection() %d - %s - %d\n", valopt, strerror(valopt), conn_fd);
-				SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
-						ntohs(addr->sin_port));
+				SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
+						ntohs(addr.sin_port));
 				SOCK_LOG_DBG("Connecting using address:%s\n",
 				inet_ntoa(ep_attr->src_addr->sin_addr));
 				goto retry;
@@ -450,8 +452,8 @@ do_connect:
 			goto out;
 		} else {
 			SOCK_LOG_DBG("Timeout or error() - %s: %d\n", strerror(errno), conn_fd);
-			SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
-					ntohs(addr->sin_port));
+			SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
+					ntohs(addr.sin_port));
 			SOCK_LOG_DBG("Connecting using address:%s\n",
 					inet_ntoa(ep_attr->src_addr->sin_addr));
 			goto retry;
@@ -472,15 +474,15 @@ retry:
 	}
 
 	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n", strerror(errno), conn_fd);
-	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
-			ntohs(addr->sin_port));
+	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
+			ntohs(addr.sin_port));
 	SOCK_LOG_DBG("Connecting using address:%s\n",
 			inet_ntoa(ep_attr->src_addr->sin_addr));
         goto do_connect;
 
 out:
 	fastlock_acquire(&ep_attr->cmap.lock);
-	new_conn = sock_conn_map_insert(ep_attr, addr, conn_fd, 0);
+	new_conn = sock_conn_map_insert(ep_attr, &addr, conn_fd, 0);
 	if (!new_conn) {
 		fastlock_release(&ep_attr->cmap.lock);
 		goto err;
