@@ -689,7 +689,8 @@ int	psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
 int	psmx2_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
-int psmx2_wait_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
+int	psmx2_wait_trywait(struct fid_fabric *fabric, struct fid **fids,
+			   int count);
 
 static inline void psmx2_fabric_acquire(struct psmx2_fid_fabric *fabric)
 {

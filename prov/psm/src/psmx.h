@@ -558,6 +558,8 @@ int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
 int	psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		       struct fid_wait **waitset);
+int	psmx_wait_trywait(struct fid_fabric *fabric, struct fid **fids,
+			  int count);
 int	psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **ep, void *context);
 int	psmx_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
