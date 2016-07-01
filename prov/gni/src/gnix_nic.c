@@ -1172,11 +1172,6 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					  domain->params.mbox_num_per_slab,
 					  &nic->mbox_hndl);
 
-		/*
-		 * TODO: Create a buddy allocator on the nic for iov
-		 * operations
-		 */
-
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_mbox_alloc returned %s\n",

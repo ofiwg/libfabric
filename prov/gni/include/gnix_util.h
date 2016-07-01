@@ -127,7 +127,7 @@ extern atomic_t gnix_debug_next_tid;
 	} while (0)
 #endif
 
-/* dlist utilities */
+/* slist and dlist utilities */
 #include "fi_list.h"
 
 static inline void dlist_node_init(struct dlist_entry *e)
@@ -140,6 +140,8 @@ static inline void dlist_remove_init(struct dlist_entry *e)
 	dlist_remove(e);
 	e->prev = e->next = e;
 }
+
+#define DLIST_IN_LIST(e) e.prev != e.next
 
 #define DLIST_HEAD(dlist)  struct dlist_entry dlist = { &(dlist), &(dlist) }
 

@@ -119,7 +119,7 @@ static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct gnix_fid_ep *ep_priv;
 
-	if (!ep || !iov || !count) {
+	if (!ep || !iov || !count || count > GNIX_MAX_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
@@ -133,10 +133,6 @@ static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 				  ep_priv->op_flags | flags, tag, ignore);
 	}
 
-	if (count > ep_priv->domain->params.iov_limit) {
-		return -FI_EINVAL;
-	}
-
 	return _gnix_recvv(ep_priv, iov, desc, count, src_addr,
 			   context, ep_priv->op_flags | flags, ignore, tag);
 }
@@ -145,28 +141,19 @@ static inline ssize_t __ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				   uint64_t flags, uint64_t tag,
 				   uint64_t ignore)
 {
-	struct gnix_fid_ep *ep_priv;
-	uint64_t recv_addr, recv_len;
+	struct iovec iov;
 
-	if (!ep || !msg) {
+	iov.iov_base = NULL;
+	iov.iov_len = 0;
+
+	if (!msg) {
 		return -FI_EINVAL;
 	}
 
 	/* msg_iov can be undefined when using FI_PEEK, etc. */
-	if (msg->msg_iov) {
-		recv_addr = (uint64_t)msg->msg_iov[0].iov_base;
-		recv_len = (uint64_t)msg->msg_iov[0].iov_len;
-	} else {
-		recv_addr = 0;
-		recv_len = 0;
-	}
-
-	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
-
-	return _gnix_recv(ep_priv, recv_addr, recv_len,
-			  msg->desc ? msg->desc[0] : NULL,
-			  msg->addr, msg->context, flags, tag, ignore);
+	return __ep_recvv(ep, msg->msg_iov ? msg->msg_iov : &iov, msg->desc,
+			  msg->iov_count, msg->addr, msg->context, flags, tag,
+			  ignore);
 }
 
 static inline ssize_t __ep_send(struct fid_ep *ep, const void *buf, size_t len,
@@ -192,7 +179,7 @@ static inline ssize_t __ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct gnix_fid_ep *gnix_ep;
 
-	if (!ep || !iov || !count) {
+	if (!ep || !iov || !count || count > GNIX_MAX_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
@@ -206,10 +193,6 @@ static inline ssize_t __ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 				  0, tag);
 	}
 
-	if (count > gnix_ep->domain->params.iov_limit) {
-		return -FI_EINVAL;
-	}
-
 	return _gnix_sendv(gnix_ep, iov, desc, count, dest_addr, context,
 			   gnix_ep->op_flags | flags, tag);
 }
@@ -219,14 +202,19 @@ static inline ssize_t __ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 {
 	struct gnix_fid_ep *gnix_ep;
 
-	if (!ep || !msg || !msg->msg_iov || msg->iov_count != 1) {
+	if (!ep || !msg || !msg->msg_iov || !msg->iov_count) {
 		return -FI_EINVAL;
+	}
+
+	/* Must check the iov count here, can't send msg->data to sendv */
+	if (msg->iov_count > 1) {
+		return __ep_sendv(ep, msg->msg_iov, msg->desc, msg->iov_count,
+				  msg->addr, msg->context, flags, tag);
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
-	/* TODO: return _gnix_sendnv */
 	return _gnix_send(gnix_ep, (uint64_t)msg->msg_iov[0].iov_base,
 			  msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr,
@@ -452,7 +440,6 @@ DIRECT_FN STATIC ssize_t gnix_ep_sendv(struct fid_ep *ep,
 				       fi_addr_t dest_addr,
 				       void *context)
 {
-
 	return __ep_sendv(ep, iov, desc, count, dest_addr, context, 0, 0);
 }
 

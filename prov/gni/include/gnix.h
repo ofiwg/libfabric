@@ -79,6 +79,7 @@ extern "C" {
 #include "gnix_tags.h"
 #include "gnix_mr_cache.h"
 #include "gnix_mr_notifier.h"
+#include "gnix_nic.h"
 
 #define GNI_MAJOR_VERSION 1
 #define GNI_MINOR_VERSION 0
@@ -797,7 +798,8 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
  * correspondence between an application's invocation of fi_send, fi_recv
  * and a gnix fab_req.
  *
- * @var dlist	     a doubly linked list entry.
+ * @var dlist	     a doubly linked list entry used to queue a request in
+ * either the vc's tx_queue or work_queue.
  * @var addr	     the peer's gnix_address associated with this request.
  * @var type	     the fabric request type
  * @var gnix_ep      the gni endpoint associated with this request
@@ -808,8 +810,6 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
  * @var work_fn	     the function called by the nic progress loop to initiate
  * the fabric request.
  * @var flags	      a set of bit patterns that apply to all message types
- * @var txd	      the transmission descriptor used to track GNI SMSG and
- * Post operations.
  * @var iov_txd_slist A slist of pending Rdma/CtFma GET txds.
  * @var tx_failures   tx failure bits.
  * @var rma	      GNI PostRdma request
@@ -825,9 +825,8 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
-	void                      *txd;
 	struct slist		  iov_txd_slist;
-	uint32_t                  tx_failures;
+	uint32_t		  tx_failures;
 
 	/* common to rma/amo/msg */
 	union {

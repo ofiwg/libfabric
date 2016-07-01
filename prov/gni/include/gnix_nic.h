@@ -308,14 +308,17 @@ struct gnix_smsg_amo_cntr_hdr {
  *                     and Post operations
  *
  * @var list             list element
+ * @var slist		 slist element for storing unposted CtFma/Rdma txds
  * @var gni_desc         embedded GNI post descriptor
  * @var gnix_ct_descs    embedded GNI post descriptors for concatenated gets
  *                       used for unaligned gets
  * @var gnix_smsg_eager_hdr embedded header for SMSG eager protocol
  * @var gnix_smsg_rndzv_start_hdr embedded header for rendezvous protocol
+ * @var gnix_smsg_rndzv_iov_start_hdr embedded header for iovec rndzv protocol
  * @var gnix_smsg_rndzv_fin_hdr embedded header for rendezvous protocol
  * @var gnix_smsg_rndzv_rma_data_hdr embedded header for remote notification for
  *                       rma operations
+ * @var gnix_smsg_amo_cntr_hdr embedded header for AMO remote counter events.
  * @var req              pointer to fab request associated with this descriptor
  * @var completer_fn     call back to invoke when associated GNI CQE's are
  *                       returned.
@@ -323,6 +326,7 @@ struct gnix_smsg_amo_cntr_hdr {
  *                       from GNI_CQ_MSG_ID
  * @var err_list         Error TXD list entry
  * @var int_buf          Intermediate buffer for landing unaligned data, etc.
+ * @var tx_failures	 Number of times this transmission descriptor failed.
  */
 struct gnix_tx_descriptor {
 	struct dlist_entry          list;
