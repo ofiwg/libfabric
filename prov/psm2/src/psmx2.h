@@ -238,12 +238,16 @@ struct psmx2_am_request {
 			size_t	len_read;
 		} read;
 		struct {
-			uint8_t	*buf;
+			union {
+				uint8_t	*buf;	   /* for result_count == 1 */
+				size_t	iov_count; /* for result_count > 1 */
+			};
 			size_t	len;
 			uint64_t addr;
 			uint64_t key;
 			void	*context;
 			uint8_t *result;
+			int	datatype;
 		} atomic;
 	};
 	uint64_t cq_flags;
@@ -252,7 +256,10 @@ struct psmx2_am_request {
 	int no_event;
 	int error;
 	struct slist_entry list_entry;
-	struct iovec iov[0];	/* for readv, must be the last field */
+	union {
+		struct iovec iov[0];	/* for readv, must be the last field */
+		struct fi_ioc ioc[0];	/* for atomic read, must be the last field */
+	};
 };
 
 #define PSMX2_IOV_PROTO_PACK	0
@@ -401,8 +408,11 @@ enum psmx2_triggered_op {
 	PSMX2_TRIGGERED_READ,
 	PSMX2_TRIGGERED_READV,
 	PSMX2_TRIGGERED_ATOMIC_WRITE,
+	PSMX2_TRIGGERED_ATOMIC_WRITEV,
 	PSMX2_TRIGGERED_ATOMIC_READWRITE,
+	PSMX2_TRIGGERED_ATOMIC_READWRITEV,
 	PSMX2_TRIGGERED_ATOMIC_COMPWRITE,
+	PSMX2_TRIGGERED_ATOMIC_COMPWRITEV,
 };
 
 struct psmx2_trigger {
@@ -533,6 +543,19 @@ struct psmx2_trigger {
 		} atomic_write;
 		struct {
 			struct fid_ep	*ep;
+			const struct fi_ioc *iov;
+			size_t		count;
+			void		*desc;
+			fi_addr_t	dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			enum fi_datatype datatype;
+			enum fi_op	atomic_op;
+			void		*context;
+			uint64_t	flags;
+		} atomic_writev;
+		struct {
+			struct fid_ep	*ep;
 			const void	*buf;
 			size_t		count;
 			void		*desc;
@@ -546,6 +569,22 @@ struct psmx2_trigger {
 			void		*context;
 			uint64_t	flags;
 		} atomic_readwrite;
+		struct {
+			struct fid_ep	*ep;
+			const struct fi_ioc *iov;
+			size_t		count;
+			void		**desc;
+			struct fi_ioc	*resultv;
+			void		**result_desc;
+			size_t		result_count;
+			fi_addr_t	dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			enum fi_datatype datatype;
+			enum fi_op	atomic_op;
+			void		*context;
+			uint64_t	flags;
+		} atomic_readwritev;
 		struct {
 			struct fid_ep	*ep;
 			const void	*buf;
@@ -563,6 +602,25 @@ struct psmx2_trigger {
 			void		*context;
 			uint64_t	flags;
 		} atomic_compwrite;
+		struct {
+			struct fid_ep	*ep;
+			const struct fi_ioc *iov;
+			size_t		count;
+			void		**desc;
+			const struct fi_ioc *comparev;
+			void		**compare_desc;
+			size_t		compare_count;
+			struct fi_ioc	*resultv;
+			void		**result_desc;
+			size_t		result_count;
+			fi_addr_t	dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			enum fi_datatype datatype;
+			enum fi_op	atomic_op;
+			void		*context;
+			uint64_t	flags;
+		} atomic_compwritev;
 	};
 	struct psmx2_trigger *next;	/* used for randomly accessed trigger list */
 	struct slist_entry list_entry;	/* used for ready-to-fire trigger queue */
