@@ -207,7 +207,7 @@ void fi_ibv_rdm_tagged_print_request(char *buf,
 struct fi_ibv_rdm_buf_service_data {
 	volatile uint16_t status;
 	uint16_t seq_num;
-	int pkt_len;
+	int32_t pkt_len;
 };
 
 #define FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE	\
@@ -216,7 +216,7 @@ struct fi_ibv_rdm_buf_service_data {
 struct fi_ibv_rdm_buf {
 	struct fi_ibv_rdm_buf_service_data service_data;
 	struct fi_ibv_rdm_header header;
-	char payload[sizeof(void *)];
+	uint8_t payload;
 };
 
 struct fi_ibv_rdm_cm {

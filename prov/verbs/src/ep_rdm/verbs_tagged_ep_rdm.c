@@ -334,7 +334,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 					       FI_IBV_RDM_EAGER_PKT);
 			if ((len > 0) && (buf)) {
-				memcpy(sbuf->payload, buf, len);
+				memcpy(&sbuf->payload, buf, len);
 			}
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
@@ -539,7 +539,7 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
 	int pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
 
 	if (pkt_type == FI_IBV_RDM_RNDV_ACK_PKT) {
-		memcpy(&request, rbuf->payload, sizeof(request));
+		memcpy(&request, &rbuf->payload, sizeof(request));
 		assert(request);
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %p\n", conn, request);
