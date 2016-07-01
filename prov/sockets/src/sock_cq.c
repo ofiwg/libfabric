@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -208,12 +209,21 @@ static int sock_cq_report_context(struct sock_cq *cq, fi_addr_t addr,
 	return _sock_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
+static uint64_t sock_cq_sanitize_flags(uint64_t flags)
+{
+	return (flags & (FI_SEND | FI_RECV | FI_RMA | FI_ATOMIC |
+				FI_MSG | FI_TAGGED |
+				FI_READ | FI_WRITE |
+				FI_REMOTE_READ | FI_REMOTE_WRITE |
+				FI_REMOTE_CQ_DATA | FI_MULTI_RECV));
+}
+
 static int sock_cq_report_msg(struct sock_cq *cq, fi_addr_t addr,
 			      struct sock_pe_entry *pe_entry)
 {
 	struct fi_cq_msg_entry cq_entry;
 	cq_entry.op_context = (void *) (uintptr_t) pe_entry->context;
-	cq_entry.flags = pe_entry->flags;
+	cq_entry.flags = sock_cq_sanitize_flags(pe_entry->flags);
 	cq_entry.len = pe_entry->data_len;
 	return _sock_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
@@ -223,7 +233,7 @@ static int sock_cq_report_data(struct sock_cq *cq, fi_addr_t addr,
 {
 	struct fi_cq_data_entry cq_entry;
 	cq_entry.op_context = (void *) (uintptr_t) pe_entry->context;
-	cq_entry.flags = pe_entry->flags;
+	cq_entry.flags = sock_cq_sanitize_flags(pe_entry->flags);
 	cq_entry.len = pe_entry->data_len;
 	cq_entry.buf = (void *) (uintptr_t) pe_entry->buf;
 	cq_entry.data = pe_entry->data;
@@ -235,7 +245,7 @@ static int sock_cq_report_tagged(struct sock_cq *cq, fi_addr_t addr,
 {
 	struct fi_cq_tagged_entry cq_entry;
 	cq_entry.op_context = (void *) (uintptr_t) pe_entry->context;
-	cq_entry.flags = pe_entry->flags;
+	cq_entry.flags = sock_cq_sanitize_flags(pe_entry->flags);
 	cq_entry.len = pe_entry->data_len;
 	cq_entry.buf = (void *) (uintptr_t) pe_entry->buf;
 	cq_entry.data = pe_entry->data;
