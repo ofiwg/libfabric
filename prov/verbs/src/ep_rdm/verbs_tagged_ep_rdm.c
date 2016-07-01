@@ -60,14 +60,14 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 	int res =
 		FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(request->minfo.conn, ep);
 	if (res) {
-		FI_IBV_RDM_TAGGED_DBG_REQUEST
+		FI_IBV_RDM_DBG_REQUEST
 			("failed because SENDS_OUTGOING_ARE_LIMITED", request,
 			FI_LOG_DEBUG);
 		return !res;
 	}
 	res = PEND_SEND_IS_LIMITED(ep);
 	if (res) {
-		FI_IBV_RDM_TAGGED_DBG_REQUEST
+		FI_IBV_RDM_DBG_REQUEST
 			("failed because PEND_SEND_IS_LIMITED", request,
 			FI_LOG_DEBUG);
 		return !res;
@@ -111,7 +111,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 	struct fi_ibv_rdm_tagged_request *request =
 		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 	fi_ibv_rdm_tagged_zero_request(request);
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	struct fi_ibv_rdm_tagged_conn *conn = (src_addr == FI_ADDR_UNSPEC)
 		? NULL : (struct fi_ibv_rdm_tagged_conn *) src_addr;
@@ -219,8 +219,7 @@ static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
 		struct fi_ibv_rdm_tagged_request *request =
 			util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 		fi_ibv_rdm_tagged_zero_request(request);
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request,
-			FI_LOG_DEBUG);
+		FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 		struct fi_ibv_rdm_tagged_peek_data peek_data = {
 			.minfo = {
@@ -241,8 +240,7 @@ static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
 		struct fi_ibv_rdm_tagged_request *request =
 			util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 		fi_ibv_rdm_tagged_zero_request(request);
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request,
-			FI_LOG_DEBUG);
+		FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 		assert(msg->iov_count == 1);
 
@@ -365,7 +363,7 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 {
 	struct fi_ibv_rdm_tagged_request *request =
 		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
@@ -573,8 +571,8 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
 			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 			fi_ibv_rdm_tagged_zero_request(request);
 
-			FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",
-				request, FI_LOG_DEBUG);
+			FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request,
+						FI_LOG_DEBUG);
 		}
 	}
 
