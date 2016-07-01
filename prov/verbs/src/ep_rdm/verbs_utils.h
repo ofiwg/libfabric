@@ -110,39 +110,42 @@ struct fi_ibv_msg_ep;
 
 #if ENABLE_DEBUG
 
-#define FI_IBV_RDM_TAGGED_DBG_REQUEST(prefix, request, level)               \
-do {                                                                        \
-    const size_t max_str_len = 1024;                                        \
-    char str[max_str_len];                                                  \
-    snprintf(str, max_str_len,                                              \
-            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%lx, len: %lu, rest: %lu, context: %p, connection: %p\n", \
-            prefix,                                                         \
-            request,                                                        \
-            fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
-            fi_ibv_rdm_tagged_req_rndv_state_to_str(request->state.rndv),   \
-            request->minfo.tag,						    \
-            request->len,                                                   \
-	    request->rest_len,					    \
-            request->context,                                               \
-            request->minfo.conn);					    \
-                                                                            \
-    switch (level)                                                          \
-    {                                                                       \
-        case FI_LOG_WARN:                                                   \
-        case FI_LOG_TRACE:                                                  \
-        case FI_LOG_INFO:                                                   \
-            VERBS_INFO(FI_LOG_EP_DATA, "%s", str);                          \
-            break;                                                          \
-        case FI_LOG_DEBUG:                                                  \
-        default:                                                            \
-            VERBS_DBG(FI_LOG_EP_DATA, "%s", str);                           \
-            break;                                                          \
-    }                                                                       \
+#define FI_IBV_RDM_DBG_REQUEST(prefix, request, level)				\
+do {										\
+	const size_t max_str_len = 1024;					\
+	char str[max_str_len];							\
+	snprintf(str, max_str_len,						\
+		"%s request: %p, eager_state: %s, rndv_state: %s,"		\
+		" err_state: %ld, tag: 0x%lx, len: %lu, rest: %lu,"		\
+		"context: %p, connection: %p\n",				\
+		prefix,								\
+		request,							\
+		fi_ibv_rdm_req_eager_state_to_str(request->state.eager),	\
+		fi_ibv_rdm_req_rndv_state_to_str(request->state.rndv),		\
+		request->state.err,						\
+		request->minfo.tag,						\
+		request->len,							\
+		request->rest_len,						\
+		request->context,						\
+		request->minfo.conn);						\
+										\
+	switch (level)								\
+	{									\
+	case FI_LOG_WARN:							\
+	case FI_LOG_TRACE:							\
+	case FI_LOG_INFO:							\
+		VERBS_INFO(FI_LOG_EP_DATA, "%s", str);				\
+		break;								\
+	case FI_LOG_DEBUG:							\
+	default:								\
+		VERBS_DBG(FI_LOG_EP_DATA, "%s", str);				\
+		break;								\
+	}									\
 } while (0);
 
 #else                           // ENABLE_DEBUG
 
-#define FI_IBV_RDM_TAGGED_DBG_REQUEST(prefix, request, level)
+#define FI_IBV_RDM_DBG_REQUEST(prefix, request, level)
 
 #endif                          // ENABLE_DEBUG
 

@@ -293,7 +293,7 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 
 	struct fi_ibv_rdm_tagged_request *request = 
 		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
@@ -389,7 +389,7 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	struct fi_ibv_rdm_tagged_request *request = 
 		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
@@ -485,7 +485,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 
 	request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INJECT;
@@ -517,8 +517,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 		break;
 	}
 
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
-				      FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 	util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 
 	fi_ibv_rdm_tagged_poll(ep_rdm);

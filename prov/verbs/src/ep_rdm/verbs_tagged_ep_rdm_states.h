@@ -64,7 +64,7 @@ enum fi_ibv_rdm_tagged_request_eager_state {
 	FI_IBV_STATE_EAGER_COUNT           // must be last
 };
 
-char *fi_ibv_rdm_tagged_req_eager_state_to_str(
+char *fi_ibv_rdm_req_eager_state_to_str(
 		enum fi_ibv_rdm_tagged_request_eager_state state);
 
 enum fi_ibv_rdm_tagged_request_rndv_state {
@@ -87,7 +87,7 @@ enum fi_ibv_rdm_tagged_request_rndv_state {
 	FI_IBV_STATE_RNDV_COUNT            // must be last
 };
 
-char *fi_ibv_rdm_tagged_req_rndv_state_to_str(
+char *fi_ibv_rdm_req_rndv_state_to_str(
 		enum fi_ibv_rdm_tagged_request_rndv_state state);
 
 enum fi_ibv_rdm_tagged_request_event {
@@ -108,8 +108,7 @@ enum fi_ibv_rdm_tagged_request_event {
 	FI_IBV_EVENT_COUNT                 // must be last
 };
 
-char *fi_ibv_rdm_tagged_req_event_to_str(
-		enum fi_ibv_rdm_tagged_request_event event);
+char *fi_ibv_rdm_event_to_str(enum fi_ibv_rdm_tagged_request_event event);
 
 // Send service data types
 

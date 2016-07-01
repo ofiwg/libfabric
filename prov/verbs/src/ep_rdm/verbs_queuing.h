@@ -52,8 +52,7 @@ extern struct util_buf_pool* fi_ibv_rdm_postponed_pool;
 static inline void
 fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_cq: ",
-				      request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("move_to_cq: ", request, FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_comp_queue.request_cq);
 }
@@ -61,8 +60,7 @@ fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_tagged_request *request)
 static inline void
 fi_ibv_rdm_remove_from_cq(struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_cq: ",
-				      request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("remove_from_cq: ", request, FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
 }
 
@@ -82,9 +80,8 @@ fi_ibv_rdm_take_first_from_cq()
 static inline void
 fi_ibv_rdm_move_to_errcq(struct fi_ibv_rdm_tagged_request *request, ssize_t err)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_errcq: ",
-				      request, FI_LOG_DEBUG);
 	request->state.err = llabs(err);
+	FI_IBV_RDM_DBG_REQUEST("move_to_errcq: ", request, FI_LOG_DEBUG);
 	assert(request->context);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_comp_queue.request_errcq);
@@ -93,8 +90,7 @@ fi_ibv_rdm_move_to_errcq(struct fi_ibv_rdm_tagged_request *request, ssize_t err)
 static inline void
 fi_ibv_rdm_remove_from_errcq(struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_errcq: ",
-				      request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("remove_from_errcq: ", request, FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
 }
 
@@ -115,8 +111,8 @@ static inline void
 fi_ibv_rdm_tagged_move_to_unexpected_queue(
 		struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_unexpected_queue: ",
-				      request, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("move_to_unexpected_queue: ", request,
+				FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_tagged_recv_unexp_queue);
 }
@@ -125,8 +121,8 @@ static inline void
 fi_ibv_rdm_tagged_remove_from_unexp_queue(
 		struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_unexpected_queue: ", request,
-				      FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("remove_from_unexpected_queue: ", request,
+				FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
 }
 
@@ -148,8 +144,7 @@ fi_ibv_rdm_tagged_move_to_posted_queue(
 		struct fi_ibv_rdm_tagged_request *request,
 		struct fi_ibv_rdm_ep *ep)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_posted_queue: ", request,
-				      FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("move_to_posted_queue: ", request, FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_tagged_recv_posted_queue);
 	ep->posted_recvs++;
@@ -160,8 +155,8 @@ fi_ibv_rdm_tagged_remove_from_posted_queue(
 		struct fi_ibv_rdm_tagged_request *request,
 		struct fi_ibv_rdm_ep *ep)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_posted_queue: ", request,
-				      FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("remove_from_posted_queue: ", request, 
+				FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
 	ep->posted_recvs--;
 }
@@ -182,8 +177,8 @@ fi_ibv_rdm_take_first_from_posted_queue()
 static inline void
 fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_postponed_queue: ", request,
-				      FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("move_to_postponed_queue: ", request, 
+				FI_LOG_DEBUG);
 	assert(request && request->minfo.conn);
 
 	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
@@ -205,8 +200,8 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_tagged_request *request)
 static inline void
 fi_ibv_rdm_remove_from_postponed_queue(struct fi_ibv_rdm_tagged_request *request)
 {
-	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_postponed_queue: ", request,
-				      FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("remove_from_postponed_queue: ", request,
+				FI_LOG_DEBUG);
 
 	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
 	assert(conn);

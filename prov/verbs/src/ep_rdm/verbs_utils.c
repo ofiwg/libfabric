@@ -226,7 +226,7 @@ void fi_ibv_rdm_clean_queues()
 			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
 				request->unexp_rbuf);
 		}
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 	}
 
@@ -235,7 +235,7 @@ void fi_ibv_rdm_clean_queues()
 			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
 				request->unexp_rbuf);
 		}
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 	}
 
@@ -244,7 +244,7 @@ void fi_ibv_rdm_clean_queues()
 			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
 				request->unexp_rbuf);
 		}
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 	}
 
@@ -253,12 +253,12 @@ void fi_ibv_rdm_clean_queues()
 			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
 				request->unexp_rbuf);
 		}
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_errcq())) {
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 	}
 }
