@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -125,7 +126,7 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 {
 	size_t ret;
 	if (!pe_entry->rem)
-		return;
+		goto out;
 
 	SOCK_LOG_DBG("Remaining for %p: %ld\n", pe_entry, pe_entry->rem);
 	ret = sock_comm_discard(pe_entry, pe_entry->rem);
@@ -135,6 +136,7 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 	if (pe_entry->rem == 0)
 		pe_entry->conn->rx_pe_entry = NULL;
 
+ out:
 	if (pe_entry->done_len == pe_entry->total_len && !pe_entry->rem) {
 		SOCK_LOG_DBG("Discard complete for %p\n", pe_entry);
 		pe_entry->is_complete = 1;
