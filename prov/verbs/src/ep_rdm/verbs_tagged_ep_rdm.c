@@ -311,32 +311,30 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 			struct ibv_sge sge = {0};
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
+
+			sge.addr = (uintptr_t)(void*)sbuf;
+			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
+			sge.lkey = conn->s_mr->lkey;
+
 			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
 			wr.sg_list = &sge;
 			wr.num_sge = 1;
 			wr.wr.rdma.remote_addr = (uintptr_t)
 				fi_ibv_rdm_get_remote_addr(conn, sbuf);
 			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-			wr.send_flags = (size < ep->max_inline_rc)
+			wr.send_flags = (sge.length < ep->max_inline_rc)
 				? IBV_SEND_INLINE : 0;
 			wr.imm_data = 0;
 			wr.opcode = ep->topcode;
 
-			sge.addr = (uintptr_t)(void*)sbuf;
-			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
-			sge.lkey = conn->s_mr->lkey;
 			sbuf->service_data.pkt_len = size;
+			sbuf->header.tag = tag;
+			sbuf->header.service_tag = 0;
 
-			struct fi_ibv_rdm_buf *rdm_sbuf =
-				(struct fi_ibv_rdm_buf *)sbuf;
-			void *payload = (void *)&(rdm_sbuf->payload[0]);
-
-			rdm_sbuf->header.tag = tag;
-			rdm_sbuf->header.service_tag = 0;
-			FI_IBV_RDM_SET_PKTTYPE(rdm_sbuf->header.service_tag,
+			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 					       FI_IBV_RDM_EAGER_PKT);
 			if ((len > 0) && (buf)) {
-				memcpy(payload, buf, len);
+				memcpy(sbuf->payload, buf, len);
 			}
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
