@@ -187,6 +187,19 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 typedef int slist_func_t(struct slist_entry *item, const void *arg);
 
 static inline struct slist_entry *
+slist_find_first_match(const struct slist *list, slist_func_t *match,
+			const void *arg)
+{
+	struct slist_entry *item;
+	for (item = list->head; item; item = item->next) {
+		if (match(item, arg))
+			return item;
+	}
+
+	return NULL;
+}
+
+static inline struct slist_entry *
 slist_remove_first_match(struct slist *list, slist_func_t *match, const void *arg)
 {
 	struct slist_entry *item, *prev;
@@ -270,7 +283,7 @@ static inline int dlistfd_wait_avail(struct dlistfd_head *head, int timeout)
 
 	if (!dlistfd_empty(head))
 		return 1;
-	
+
 	ret = fd_signal_poll(&head->signal, timeout);
 	return ret ? ret : !dlistfd_empty(head);
 }

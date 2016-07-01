@@ -426,7 +426,6 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 			return -FI_ENODATA;
 		}
 		src_addr = (struct sockaddr_in *) rai->ai_addr;
-
 		if (hints && hints->dest_addr)
 			dest_addr = hints->dest_addr;
 	} else {
@@ -525,14 +524,12 @@ void sock_insert_loopback_addr(struct slist *addr_list)
 }
 
 #if HAVE_GETIFADDRS
-struct slist sock_get_list_of_addr(void)
+void sock_get_list_of_addr(struct slist *addr_list)
 {
 	int ret;
-	struct slist addr_list;
 	struct sock_host_list_entry *addr_entry;
 	struct ifaddrs *ifaddrs, *ifa;
 
-	slist_init(&addr_list);
 	ret = getifaddrs(&ifaddrs);
 	if (!ret) {
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
@@ -550,26 +547,17 @@ struct slist sock_get_list_of_addr(void)
 				free(addr_entry);
 				continue;
 			}
-			slist_insert_tail(&addr_entry->entry, &addr_list);
+			slist_insert_tail(&addr_entry->entry, addr_list);
 		}
 		freeifaddrs(ifaddrs);
 	}
-	if (slist_empty(&addr_list)) {
-		// no reasonable address found, try loopback
-		sock_insert_loopback_addr(&addr_list);
-	}
-
-	return addr_list;
+	// Always add loopback address at the end
+	sock_insert_loopback_addr(addr_list);
 }
 #else
-struct slist sock_get_list_of_addr(void)
+void sock_get_list_of_addr(struct slist *addr_list)
 {
-	struct slist addr_list;
-
-	slist_init(&addr_list);
-	sock_insert_loopback_addr(&addr_list);
-
-	return addr_list;
+	sock_insert_loopback_addr(addr_list);
 }
 #endif
 
@@ -634,6 +622,62 @@ err_no_free:
 	return ret;
 }
 
+static int sock_match_src_addr(struct slist_entry *entry, const void *src_addr)
+{
+	struct sock_host_list_entry *host_entry;
+	host_entry = container_of(entry, struct sock_host_list_entry, entry);
+
+        return (strcmp(host_entry->hostname, (char *) src_addr) == 0);
+}
+
+static int sock_addr_matches_interface(struct slist *addr_list, struct sockaddr_in *src_addr)
+{
+	struct slist_entry *entry;
+
+	/* Always match if it's localhost */
+	if (src_addr->sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+		return 1;
+
+	entry = slist_find_first_match(addr_list, sock_match_src_addr,
+					inet_ntoa(src_addr->sin_addr));
+
+	return entry ? 1 : 0;
+}
+
+static int sock_node_matches_interface(struct slist *addr_list, const char *node)
+{
+	struct addrinfo ai, *rai = NULL;
+	struct sockaddr_in addr;
+	int ret;
+
+	memset(&ai, 0, sizeof(ai));
+	ai.ai_family = AF_INET;
+	ai.ai_socktype = SOCK_STREAM;
+
+	ret = getaddrinfo(node, 0, &ai, &rai);
+	if (ret) {
+		SOCK_LOG_DBG("getaddrinfo failed!\n");
+		return -FI_EINVAL;
+	}
+	addr = *(struct sockaddr_in *)rai->ai_addr;
+	freeaddrinfo(rai);
+
+	return sock_addr_matches_interface(addr_list, &addr);
+}
+
+static void sock_free_addr_list(struct slist *addr_list)
+{
+	struct slist_entry *entry;
+	struct sock_host_list_entry *host_entry;
+
+	while (!slist_empty(addr_list)) {
+		entry = slist_remove_head(addr_list);
+		host_entry = container_of(entry, struct sock_host_list_entry,
+					   entry);
+		free(host_entry);
+	}
+}
+
 static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints,
 			struct fi_info **info)
@@ -658,36 +702,44 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		return ret;
 
 	slist_init(&addr_list);
-	if (!node  && (!hints || !hints->src_addr || (!(flags & FI_SOURCE) &&
-	     !hints->dest_addr))) {
-		addr_list = sock_get_list_of_addr();
+	/* Returns loopback address if no other interfaces are available */
+	sock_get_list_of_addr(&addr_list);
+
+	ret = 1;
+	if (flags & FI_SOURCE) {
+		if (node)
+			ret = sock_node_matches_interface(&addr_list, node);
+	} else if (hints && hints->src_addr) {
+		ret = sock_addr_matches_interface(&addr_list, (struct sockaddr_in *)hints->src_addr);
+	}
+	if (!ret) {
+		SOCK_LOG_ERROR("Couldn't find a match with local interfaces\n");
+		return -FI_ENODATA;
 	}
 
 	*info = tail = NULL;
-	if (slist_empty(&addr_list)) {
+	if (node ||
+	     (!(flags & FI_SOURCE) && hints && hints->src_addr) ||
+	     (!(flags & FI_SOURCE) && hints && hints->dest_addr)) {
+		sock_free_addr_list(&addr_list);
 		return sock_node_getinfo(node, service, flags, hints, info, &tail);
-	} else {
-		while (!slist_empty(&addr_list)) {
-			entry = slist_remove_head(&addr_list);
-			host_entry = container_of(entry, struct sock_host_list_entry, entry);
-			node = host_entry->hostname;
-			ret = sock_node_getinfo(node, service, flags, hints, info, &tail);
-			free(host_entry);
-			if (ret) {
-				if (ret == -FI_ENODATA)
-					continue;
-				goto out;
-			}
-		}
 	}
-	return 0;
-out:
+
 	while (!slist_empty(&addr_list)) {
 		entry = slist_remove_head(&addr_list);
 		host_entry = container_of(entry, struct sock_host_list_entry, entry);
+		node = host_entry->hostname;
+		flags |= FI_SOURCE;
+		ret = sock_node_getinfo(node, service, flags, hints, info, &tail);
 		free(host_entry);
+		if (ret) {
+			if (ret == -FI_ENODATA)
+				continue;
+			sock_free_addr_list(&addr_list);
+			return ret;
+		}
 	}
-	return ret;
+	return 0;
 }
 
 static void fi_sockets_fini(void)
