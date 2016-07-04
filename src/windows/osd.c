@@ -193,7 +193,7 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 	if (!fname)
 	{
 		ret = -FI_ENOMEM;
-		goto fn_fail;
+		goto fn_nomem;
 	}
 	shm->name = fname;
 
@@ -207,14 +207,14 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		if (!shm->shared_fd) {
 			FI_WARN(&core_prov, FI_LOG_CORE, "CreateFileMapping failed\n");
 			ret = -FI_EINVAL;
-			goto fn_fail;
+			goto fn_nofilemap;
 		}
 	} else { /* readonly */
 		shm->shared_fd = OpenFileMappingA(access, FALSE, shm->name);
 		if (!shm->shared_fd) {
 			FI_WARN(&core_prov, FI_LOG_CORE, "OpenFileMapping failed\n");
 			ret = -FI_EINVAL;
-			goto fn_fail;
+			goto fn_nofilemap;
 		}
 	}
 
@@ -222,18 +222,21 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 	if (!shm->ptr) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "MapViewOfFile failed\n");
 		ret = -FI_EINVAL;
-		goto fn_fail;
+		goto fn_nomap;
 	}
 
+	/* size value not really used due to missing remap functionality,
+	   but may be useful for debugging */
+	shm->size = size;
 	*mapped = shm->ptr;
 
 	return FI_SUCCESS;
 
-fn_fail:
-	if (shm->shared_fd)
-		CloseHandle(shm->shared_fd);
-	if (fname)
-		free((void*)fname);
+fn_nomap:
+	CloseHandle(shm->shared_fd);
+fn_nofilemap:
+	free(fname);
+fn_nomem:
 	ZeroMemory(shm, sizeof(*shm));
 	return ret;
 }
