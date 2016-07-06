@@ -576,7 +576,7 @@ err2:
 	if(attr->name) {
 		ofi_shm_unmap(&_av->shm);
 	} else {
-		if(_av->table_hdr && _av->table_hdr != MAP_FAILED)
+		if(_av->table_hdr != MAP_FAILED)
 			free(_av->table_hdr);
 	}
 err:

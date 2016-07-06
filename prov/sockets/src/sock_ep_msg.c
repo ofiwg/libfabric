@@ -296,7 +296,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 	for (p = s_res; p; p = p->ai_next) {
 		pep->cm.sock = socket(p->ai_family, p->ai_socktype,
 				     p->ai_protocol);
-		if (pep->cm.sock) {
+		if (pep->cm.sock >= 0) {
 			sock_set_sockopts(pep->cm.sock);
 			if (!bind(pep->cm.sock, s_res->ai_addr, s_res->ai_addrlen))
 				break;
@@ -386,6 +386,7 @@ static int sock_cm_send(int fd, const void *buf, int len)
 		if (ret < 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				continue;
+			SOCK_LOG_ERROR("failed to write to fd: %s\n", strerror(errno));
 			return -FI_EIO;
 		}
 		done += ret;
@@ -401,6 +402,7 @@ static int sock_cm_recv(int fd, void *buf, int len)
 		if (ret <= 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				continue;
+			SOCK_LOG_ERROR("failed to read from fd: %s\n", strerror(errno));
 			return -FI_EIO;
 		}
 		done += ret;
@@ -691,7 +693,8 @@ static int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 	fastlock_acquire(&_ep->attr->cm.lock);
 	if (_ep->attr->cm.is_connected) {
 		msg.type = SOCK_CONN_SHUTDOWN;
-		sock_cm_send(_ep->attr->cm.sock, &msg, sizeof(msg));
+		if (sock_cm_send(_ep->attr->cm.sock, &msg, sizeof(msg)))
+			SOCK_LOG_DBG("failed to send shutdown msg\n");
 		_ep->attr->cm.is_connected = 0;
 		_ep->attr->cm.do_listen = 0;
 		if (ofi_write_socket(_ep->attr->cm.signal_fds[0], &c, 1) != 1)
@@ -895,6 +898,7 @@ static void *sock_pep_req_handler(void *data)
 
 		if (ofi_write_socket(handle->pep->cm.signal_fds[0], &c, 1) != 1)
 			SOCK_LOG_DBG("Failed to signal\n");
+		free(conn_req);
 		return NULL;
 	}
 
@@ -997,6 +1001,7 @@ static void *sock_pep_listener_thread(void *data)
 		handle = calloc(1, sizeof(*handle));
 		if (!handle) {
 			SOCK_LOG_ERROR("cannot allocate memory\n");
+			ofi_close_socket(conn_fd);
 			break;
 		}
 
@@ -1006,6 +1011,7 @@ static void *sock_pep_listener_thread(void *data)
 		if (pthread_create(&handle->req_handler, NULL,
 				   sock_pep_req_handler, handle)) {
 			SOCK_LOG_ERROR("failed to create req handler\n");
+			ofi_close_socket(conn_fd);
 			free(handle);
 		}
 	}
