@@ -2431,7 +2431,7 @@ void sock_pe_poll_del(struct sock_pe *pe, int fd)
 {
         fastlock_acquire(&pe->signal_lock);
         if (sock_epoll_del(&pe->epoll_set, fd))
-                SOCK_LOG_ERROR("failed to del from epoll set: %d, size: %d, used: %d\n",
+                SOCK_LOG_DBG("failed to del from epoll set: %d, size: %d, used: %d\n",
 			       fd, pe->epoll_set.size, pe->epoll_set.used);
         fastlock_release(&pe->signal_lock);
 }
