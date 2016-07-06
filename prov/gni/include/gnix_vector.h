@@ -59,7 +59,7 @@ typedef enum gnix_vec_lock {
 	GNIX_VEC_LOCKED,
 } gnix_vec_lock_e;
 
-typedef uint64_t gnix_vec_index_t;
+typedef uint32_t gnix_vec_index_t;
 typedef void * gnix_vec_entry_t;
 
 /**
@@ -72,11 +72,11 @@ typedef void * gnix_vec_entry_t;
  * @var creator			fn required to properly alloc the vector element
  */
 typedef struct gnix_vec_attr {
-	uint64_t vec_initial_size;
-	uint64_t cur_size;
-	uint64_t vec_maximum_size;
+	uint32_t vec_initial_size;
+	uint32_t cur_size;
+	uint32_t vec_maximum_size;
 
-	uint64_t vec_increase_step;
+	uint32_t vec_increase_step;
 
 	gnix_vec_increase_e vec_increase_type;
 
@@ -87,7 +87,7 @@ struct gnix_vector;
 
 struct gnix_vector_iter {
 	struct gnix_vector *vec;
-	uint64_t cur_idx;
+	uint32_t cur_idx;
 };
 
 #define GNIX_VECTOR_ITERATOR(_vec, _iter)	\
@@ -110,7 +110,7 @@ struct gnix_vector_iter {
  * @var at		Return the element at the specified index.
  */
 typedef struct gnix_vector_ops {
-	int (*resize)(struct gnix_vector *, uint64_t);
+	int (*resize)(struct gnix_vector *, uint32_t);
 
 	int (*insert_last)(struct gnix_vector *, gnix_vec_entry_t *);
 	int (*insert_at)(struct gnix_vector *, gnix_vec_entry_t *,
@@ -185,7 +185,7 @@ int _gnix_vec_close(gnix_vector_t *vec);
  *			than the maximum vector size
  * @return -FI_ENOMEM	Upon running out of memory
  */
-static inline int _gnix_vec_resize(gnix_vector_t *vec, uint64_t size)
+static inline int _gnix_vec_resize(gnix_vector_t *vec, uint32_t size)
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 

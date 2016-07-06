@@ -40,9 +40,9 @@ static gnix_vector_ops_t __gnix_vec_locked_ops;
 /*******************************************************************************
  * INTERNAL HELPER FNS
  ******************************************************************************/
-static inline uint64_t __gnix_vec_get_new_size(gnix_vector_t *vec, uint64_t index)
+static inline uint32_t __gnix_vec_get_new_size(gnix_vector_t *vec, uint32_t index)
 {
-	uint64_t new_size = vec->attr.cur_size;
+	uint32_t new_size = vec->attr.cur_size;
 
 	if (vec->attr.vec_increase_type == GNIX_VEC_INCREASE_ADD) {
 		do {
@@ -76,7 +76,7 @@ static inline void __gnix_vec_close_entries(gnix_vector_t *vec)
 /*******************************************************************************
  * INTERNAL WORKER FNS
  ******************************************************************************/
-static inline int __gnix_vec_resize(gnix_vector_t *vec, uint64_t new_size)
+static inline int __gnix_vec_resize(gnix_vector_t *vec, uint32_t new_size)
 {
 	void *tmp;
 
@@ -107,6 +107,12 @@ static inline int __gnix_vec_resize(gnix_vector_t *vec, uint64_t new_size)
 
 static inline int __gnix_vec_create(gnix_vector_t *vec, gnix_vec_attr_t *attr)
 {
+	if (unlikely(vec->state == GNIX_VEC_STATE_READY)) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "The vector (%p) is already ready.\n",
+			   vec);
+		return -FI_EINVAL;
+	}
+
 	vec->vector = calloc(attr->vec_initial_size, sizeof(gnix_vec_entry_t));
 
 	if (unlikely(!vec->vector)) {
@@ -124,6 +130,12 @@ static inline int __gnix_vec_create(gnix_vector_t *vec, gnix_vec_attr_t *attr)
 
 static inline int __gnix_vec_close(gnix_vector_t *vec)
 {
+	if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "The vector (%p) is already dead.\n",
+			   vec);
+		return -FI_EINVAL;
+	}
+
 	free(vec->vector);
 	vec->ops = NULL;
 	vec->attr.cur_size = 0;
@@ -150,7 +162,7 @@ static inline int __gnix_vec_insert_at(gnix_vector_t *vec,
 	}
 
 	if (index >= vec->attr.cur_size) {
-		uint64_t new_size = __gnix_vec_get_new_size(vec, index);
+		uint32_t new_size = __gnix_vec_get_new_size(vec, index);
 		int ret = __gnix_vec_resize(vec, new_size);
 
 		if (unlikely(ret))
@@ -235,7 +247,7 @@ static int __gnix_vec_lf_close(gnix_vector_t *vec)
 	return ret;
 }
 
-static int __gnix_vec_lf_resize(gnix_vector_t *vec, uint64_t size)
+static int __gnix_vec_lf_resize(gnix_vector_t *vec, uint32_t size)
 {
 	return __gnix_vec_resize(vec, size);
 }
@@ -276,7 +288,7 @@ static int __gnix_vec_lf_at(gnix_vector_t *vec, void **element, gnix_vec_index_t
 
 gnix_vec_entry_t *__gnix_vec_lf_iter_next(struct gnix_vector_iter *iter)
 {
-	uint64_t i;
+	uint32_t i;
 
 	for (i = iter->cur_idx; i < iter->vec->attr.cur_size; i++) {
 		if (iter->vec->vector[i]) {
@@ -320,7 +332,7 @@ static int __gnix_vec_lk_close(gnix_vector_t *vec)
 	return ret;
 }
 
-static int __gnix_vec_lk_resize(gnix_vector_t *vec, uint64_t size)
+static int __gnix_vec_lk_resize(gnix_vector_t *vec, uint32_t size)
 {
 	int ret;
 
@@ -417,7 +429,7 @@ static int __gnix_vec_lk_at(gnix_vector_t *vec, void **element, gnix_vec_index_t
 
 gnix_vec_entry_t *__gnix_vec_lk_iter_next(struct gnix_vector_iter *iter)
 {
-	uint64_t i;
+	uint32_t i;
 	gnix_vec_entry_t *entry;
 
 	rwlock_rdlock(&iter->vec->lock);
@@ -462,9 +474,6 @@ int _gnix_vec_init(struct gnix_vector *vec, gnix_vec_attr_t *attr)
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to _gnix_vec_init."
 			  "\n");
 		return -FI_EINVAL;
-	} else if (unlikely(vec->state == GNIX_VEC_STATE_READY)) {
-		GNIX_FATAL(FI_LOG_EP_CTRL, "gnix_vector_t is in state "
-			   "GNIX_VEC_STATE_READY in _gnix_vec_init.\n");
 	}
 
 	if (attr->vec_internal_locking == GNIX_VEC_LOCKED) {
@@ -490,9 +499,6 @@ int _gnix_vec_close(gnix_vector_t *vec)
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to _gnix_vec_close."
 			  "\n");
 		return -FI_EINVAL;
-	} else if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
-		GNIX_FATAL(FI_LOG_EP_CTRL, "gnix_vector_t is in state "
-			   "GNIX_VEC_STATE_DEAD in _gnix_vec_close.\n");
 	} else {
 		if (vec->attr.vec_internal_locking == GNIX_VEC_LOCKED) {
 			return __gnix_vec_lk_close(vec);

@@ -227,9 +227,10 @@ void do_remove_last()
 void do_unfill_remove_at()
 {
 	int i, ret;
+	void *tmp;
 
 	for (i = 0; i < vec.attr.cur_size; i++) {
-		ret = vec.ops->remove_at(&vec, i);
+		ret = _gnix_vec_at(&vec, &tmp, i);
 		cr_assert(!ret, "_gnix_vec_at");
 		free(tmp);
 
