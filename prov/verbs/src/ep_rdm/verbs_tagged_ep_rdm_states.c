@@ -1036,16 +1036,6 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_tagged_request *request,
 
 	request->context = p->context;
 	request->minfo.conn = p->conn;
-	
-	if (p->op_code == IBV_WR_RDMA_READ) {
-		request->dest_buf = (void*)p->lbuf;
-		request->comp_flags = FI_RMA | FI_READ;
-	} else {
-		assert(p->op_code == IBV_WR_RDMA_WRITE);
-		request->src_addr = (void*)p->lbuf;
-		request->comp_flags = FI_RMA | FI_WRITE;
-	}
-
 	request->len = p->data_len;
 	request->rest_len = p->data_len;
 	request->post_counter = 0;
@@ -1055,6 +1045,20 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_tagged_request *request,
 	request->rma.lkey = p->lkey;
 	request->rma.opcode = p->op_code;
 	
+	if (p->op_code == IBV_WR_RDMA_READ) {
+		request->dest_buf = (void*)p->lbuf;
+		request->comp_flags = FI_RMA | FI_READ;
+	} else {
+		assert(p->op_code == IBV_WR_RDMA_WRITE);
+		request->src_addr = (void*)p->lbuf;
+		request->comp_flags = FI_RMA | FI_WRITE;
+
+		if (request->rmabuf && request->len >= p->ep_rdm->max_inline_rc) {
+			memcpy(&request->rmabuf->payload, request->src_addr,
+				request->len);
+		}
+	}
+
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INITIALIZED;
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -1146,26 +1150,23 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_INITIALIZED;
 	}
 
-	if (request->rma.opcode == IBV_WR_RDMA_WRITE &&
-	    request->len < p->ep_rdm->max_inline_rc) {
-		wr.send_flags |= IBV_SEND_INLINE;
-	}
-
 	/* buffered operation */
 	if (request->rmabuf) {
-		sge.addr = (uintptr_t)&request->rmabuf->payload;
-		sge.lkey = request->minfo.conn->rma_mr->lkey;
+		if (request->rma.opcode == IBV_WR_RDMA_WRITE && 
+		    request->len < p->ep_rdm->max_inline_rc) {
+			wr.send_flags |= IBV_SEND_INLINE;
+			sge.addr = (uintptr_t) request->src_addr;
+		} else {
+			sge.addr = (uintptr_t) &request->rmabuf->payload;
+			sge.lkey = request->minfo.conn->rma_mr->lkey;
+		}
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_WAIT4LC;
 	} else {
 		/* src_addr or dest_buf from an union
 		 *  for write or read properly */
 		sge.addr = ((uintptr_t)request->src_addr) + offset;
 		sge.lkey = request->rma.lkey;
-		if (request->len < p->ep_rdm->max_inline_rc) {
-			request->state.eager = FI_IBV_STATE_EAGER_RMA_WAIT4LC;
-		} else {
-			request->state.rndv = FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC;
-		}
+		request->state.rndv = FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC;
 	}
 
 	sge.length = seg_cursize;
