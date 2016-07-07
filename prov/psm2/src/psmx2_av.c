@@ -241,9 +241,9 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	int error_count;
 	int i;
 
-	if (count && (!addr || !fi_addr)) {
+	if (count && !addr) {
 		FI_INFO(&psmx2_prov, FI_LOG_AV,
-			"NULL address array: addr=%p fi_addr=%p.\n", addr, fi_addr);
+			"the input address array is NULL.\n");
 		return -FI_EINVAL;
 	}
 
