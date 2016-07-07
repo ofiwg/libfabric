@@ -71,20 +71,13 @@ static inline void __gnix_msg_free_rma_txd(struct gnix_fab_req *req,
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 }
 
-static inline void __gnix_msg_free_iov_txds(struct gnix_fab_req *req)
+static inline void __gnix_msg_free_iov_txds(struct gnix_fab_req *req,
+					    size_t txd_cnt)
 {
-	struct slist_entry *cur;
-	__attribute__((unused)) struct slist_entry *prev;
-	struct gnix_tx_descriptor *txd;
+	int i;
 
-	slist_foreach(&req->iov_txd_slist, cur, prev) {
-		txd = container_of(cur,
-				   struct gnix_tx_descriptor,
-				   slist);
-
-		if (txd) {
-			__gnix_msg_free_rma_txd(req, txd);
-		}
+	for (i = 0; i < txd_cnt; i++) {
+		__gnix_msg_free_rma_txd(req, req->iov_txds[i]);
 	}
 }
 
@@ -539,88 +532,54 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
  * As the completer fn is called in the nic's progress loop, the remote
  * side's fabric request will keep track of the state of this rndzv iov
  * transaction, once the outstanding_txds reaches zero for this fabric
- * request, we are ready to generate CQEs and send the fin msg back to the
- * sender
+ * request, we are either ready to generate CQEs and send the fin msg
+ * back to the sender or rebuild and retransmit the iov txds.
  */
+static int __gnix_rndzv_iov_req_build(void *arg);
 static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
-	int i, ret = FI_SUCCESS;
+	int i;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
 	GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.outstanding_txds = %d\n",
 		   atomic_get(&req->msg.outstanding_txds));
 
-	/* Try to enqueue the iov req again upon failure */
-	if (tx_status != GNI_RC_SUCCESS) {
-		req->tx_failures++;
+	req->msg.status |= tx_status;
+	__gnix_msg_free_rma_txd(req, txd);
 
-		/* Continue if the gnix fabric request is already in a Q */
-		if (DLIST_IN_LIST(req->dlist) &&
-		    req->tx_failures <
-		    req->gnix_ep->domain->params.max_retransmits) {
-
-			/* We assume that __gnix_rndzv_req_build did it's job,
-			 * don't free this txd just put it at the end of the
-			 * slist. We'll try again next time the request is
-			 * dequeued by the progress loop.
-			 * slist uses tail ptr, so, O(1) to insert tail.
-			 */
-			slist_insert_tail(&txd->slist, &req->iov_txd_slist);
-			return FI_SUCCESS;
-		}
-
-		if (GNIX_EP_RDM(req->gnix_ep->type) &&
-		    req->tx_failures <
-		    req->gnix_ep->domain->params.max_retransmits) {
-
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Requeueing failed request: %p\n", req);
-
-			/* Put the failed txd and the end of the txd list */
-			slist_insert_tail(&txd->slist, &req->iov_txd_slist);
-			return _gnix_vc_queue_work_req(req);
-		}
-
-		if (!GNIX_EP_DGM(req->gnix_ep->type))
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Dropping failed request: %p\n", req);
-
-		__gnix_msg_free_iov_txds(req);
-
-		req->msg.status = tx_status;
-		req->work_fn = __gnix_rndzv_req_send_fin;
-		return _gnix_vc_queue_work_req(req);
-	} else if (atomic_dec(&req->msg.outstanding_txds) == 0) {
-		__gnix_msg_free_rma_txd(req, txd);
-
+	if (atomic_dec(&req->msg.outstanding_txds) == 0) {
 		GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.recv_flags == FI_LOCAL_MR is %s"
 			   ", req->msg.recv_iov_cnt = %lu\n",
 			   req->msg.recv_flags & FI_LOCAL_MR ? "true" : "false",
 			   req->msg.recv_iov_cnt);
 
-		/* Generate remote CQE and send fin msg back to sender */
-		if (req->msg.recv_flags & FI_LOCAL_MR) {
-			for (i = 0; i < req->msg.recv_iov_cnt; i++) {
-				GNIX_INFO(FI_LOG_EP_DATA, "freeing auto"
-					  "-reg MR: %p\n", req->msg.recv_md[i]);
-				fi_close(&req->msg.recv_md[i]->mr_fid.fid);
+		/* Build and re-tx the entire iov request */
+		if (req->msg.status != FI_SUCCESS &&
+		    req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
+			req->tx_failures++;
+			req->work_fn = __gnix_rndzv_iov_req_build;
+		} else {
+			/* Generate remote CQE and send fin msg back to sender */
+			if (req->msg.recv_flags & FI_LOCAL_MR) {
+				for (i = 0; i < req->msg.recv_iov_cnt; i++) {
+					GNIX_INFO(FI_LOG_EP_DATA, "freeing auto"
+						  "-reg MR: %p\n", req->msg.recv_md[i]);
+					fi_close(&req->msg.recv_md[i]->mr_fid.fid);
+				}
 			}
+			req->work_fn = __gnix_rndzv_req_send_fin;
 		}
-
-		req->msg.status = tx_status;
-		req->work_fn = __gnix_rndzv_req_send_fin;
 		return _gnix_vc_queue_work_req(req);
 	}
 
 	/*
-	 * Successful tx, continue until the txd counter reaches zero or we
-	 * can't recover from the error.
+	 * Successful tx, continue until the txd counter reaches zero
+	 * or we can't recover from the error.
 	 */
-	__gnix_msg_free_rma_txd(req, txd);
-	return ret;
+	return FI_SUCCESS;
 }
 
 static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
@@ -845,27 +804,23 @@ static int __gnix_rndzv_iov_req_post(void *arg)
 	struct gnix_tx_descriptor *txd;
 	gni_return_t status;
 	struct gnix_nic *nic = req->gnix_ep->nic;
+	int i, iov_txd_cnt = atomic_get(&req->msg.outstanding_txds);
 
 	assert(nic != NULL);
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
-	GNIX_DEBUG(FI_LOG_EP_DATA, "%s for req = %p\n",
-		   slist_empty(&req->iov_txd_slist) ?
-		   "req->iov_txd_slist is empty" :
-		   "req->iov_txd_slist is NON-empty");
-
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
-	while (!slist_empty(&req->iov_txd_slist)) {
-		txd = container_of(slist_remove_head(&req->iov_txd_slist),
-				   struct gnix_tx_descriptor,
-				   slist);
-
+	for (i = 0, txd = req->iov_txds[0];
+	     i < iov_txd_cnt;
+	     txd = req->iov_txds[++i]) {
 		if (txd->gni_desc.type & GNI_POST_RDMA_GET) {
-			status = GNI_PostRdma(req->vc->gni_ep, &txd->gni_desc);
+			status = GNI_PostRdma(req->vc->gni_ep,
+					      &txd->gni_desc);
 		} else {
-			status = GNI_CtPostFma(req->vc->gni_ep, &txd->gni_desc);
+			status = GNI_CtPostFma(req->vc->gni_ep,
+					       &txd->gni_desc);
 		}
 
 		if (status != GNI_RC_SUCCESS) {
@@ -908,7 +863,6 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
-	slist_init(&req->iov_txd_slist);
 	txd_cnt = ct_size = 0;
 	send_cnt = req->msg.send_iov_cnt;
 	recv_ptr = req->msg.recv_info[0].recv_addr;
@@ -979,7 +933,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 					  " returned %s\n",
 					  fi_strerror(-ret));
 
-				__gnix_msg_free_iov_txds(req);
+				__gnix_msg_free_iov_txds(req, txd_cnt);
 				return -FI_ENOSPC;
 			}
 
@@ -1003,8 +957,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 				req->msg.send_info[i].send_addr;
 			txd->gni_desc.length = get_len;
 
-			slist_insert_tail(&txd->slist, &req->iov_txd_slist);
-			txd_cnt++;
+			req->iov_txds[txd_cnt++] = txd;
 			txd = NULL;
 		} else {		       /* Build the Ct txd */
 			/*
@@ -1013,9 +966,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 			 */
 			if (ct_size + get_len >= max_ct_size) {
 				*next_ct = txd = NULL;
-				slist_insert_tail(&txd->slist,
-						  &req->iov_txd_slist);
-				txd_cnt++;
+				req->iov_txds[txd_cnt++] = txd;
 				ct_size = 0;
 			} else {
 				if (!txd) {
@@ -1029,7 +980,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 							  " returned %s\n",
 							  fi_strerror(-ret));
 
-						__gnix_msg_free_iov_txds(req);
+						__gnix_msg_free_iov_txds(req, txd_cnt);
 						return -FI_ENOSPC;
 					}
 
@@ -1071,7 +1022,9 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 							  "gni FMA get chained "
 							  "descriptor.");
 
-						__gnix_msg_free_iov_txds(req);
+						/* +1 to ensure we free the
+						 * current chained txd */
+						__gnix_msg_free_iov_txds(req, txd_cnt + 1);
 						return -FI_ENOSPC;
 					}
 
@@ -1128,8 +1081,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 	 */
 	if (txd) {
 		*next_ct = NULL;
-		txd_cnt++;
-		slist_insert_tail(&txd->slist, &req->iov_txd_slist);
+		req->iov_txds[txd_cnt++] = txd;
 	}
 
 	atomic_set(&req->msg.outstanding_txds, txd_cnt);

@@ -810,7 +810,8 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
  * @var work_fn	     the function called by the nic progress loop to initiate
  * the fabric request.
  * @var flags	      a set of bit patterns that apply to all message types
- * @var iov_txd_slist A slist of pending Rdma/CtFma GET txds.
+ * @var iov_txds      A list of pending Rdma/CtFma GET txds.
+ * @var iov_txd_cnt   The count of outstanding iov txds.
  * @var tx_failures   tx failure bits.
  * @var rma	      GNI PostRdma request
  * @var msg	      GNI SMSG request
@@ -825,7 +826,7 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
-	struct slist		  iov_txd_slist;
+	struct gnix_tx_descriptor *iov_txds[GNIX_MAX_IOV_LIMIT];
 	uint32_t		  tx_failures;
 
 	/* common to rma/amo/msg */

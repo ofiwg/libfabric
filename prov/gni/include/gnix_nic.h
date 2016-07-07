@@ -308,7 +308,6 @@ struct gnix_smsg_amo_cntr_hdr {
  *                     and Post operations
  *
  * @var list             list element
- * @var slist		 slist element for storing unposted CtFma/Rdma txds
  * @var gni_desc         embedded GNI post descriptor
  * @var gnix_ct_descs    embedded GNI post descriptors for concatenated gets
  *                       used for unaligned gets
@@ -330,7 +329,6 @@ struct gnix_smsg_amo_cntr_hdr {
  */
 struct gnix_tx_descriptor {
 	struct dlist_entry          list;
-	struct slist_entry	    slist;
 	union {
 		struct {
 			gni_post_descriptor_t        gni_desc;
