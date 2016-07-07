@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -63,13 +63,28 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
-static int alps_init;
-static uint64_t gnix_apid;
-static alpsAppLayout_t gnix_appLayout;
+static bool app_init;
+/* Filled in by __gnix_app_init */
 static uint8_t gnix_app_ptag;
 static uint32_t gnix_app_cookie;
+static uint32_t gnix_pes_on_node;
+/* CCM/ccmlogin specific stuff */
+static bool ccm_init;
+/* This file provides ccm_alps_info */
+#define CCM_ALPS_INFO_FILE "/tmp/ccm_alps_info"
+typedef struct ccm_alps_info {
+	uint32_t version;
+	uint8_t ptag;
+	uint32_t cookie;
+} ccm_alps_info_t;
+/* Format for the nodelist filename: $HOME/.crayccm/ccmnodlist.<WLM jobid> */
+#define CCM_NODELIST_FN ".crayccm/ccm_nodelist."
+/* alps specific stuff */
+static uint64_t gnix_apid;
+static alpsAppLayout_t gnix_appLayout;
 static uint32_t gnix_device_id;
-
+/* These are not used currently and could be static to gnix_alps_init */
+static int alps_init;
 static int *gnix_app_placementList;
 static int *gnix_app_targetNids;
 static int *gnix_app_targetPes;
@@ -80,15 +95,14 @@ static int *gnix_app_totalPes;
 static int *gnix_app_nodePes;
 static int *gnix_app_peCpus;
 
-void _gnix_alps_cleanup(void)
+static inline void __gnix_ccm_cleanup(void)
+{
+	ccm_init = false;
+}
+
+static inline void __gnix_alps_cleanup(void)
 {
 	alps_app_lli_lock();
-
-	if (alps_init) {
-		/* alps lli lock protects alps_init for now */
-		alps_app_lli_unlock();
-		return;
-	}
 
 	if (gnix_app_placementList)
 		free(gnix_app_placementList);
@@ -109,12 +123,113 @@ void _gnix_alps_cleanup(void)
 	if (gnix_app_peCpus)
 		free(gnix_app_peCpus);
 
-	alps_init = 0;
+	alps_init = false;
 
 	alps_app_lli_unlock();
 }
 
-static int gnix_alps_init(void)
+void _gnix_app_cleanup(void)
+{
+	if (alps_init) {
+		__gnix_alps_cleanup();
+	} else if (ccm_init) {
+		__gnix_ccm_cleanup();
+	}
+}
+
+/* There are two types of errors that can happen in this function:
+ * - CCM ALPS info file not found
+ * - Failure while trying to get ptag, cookie and PEs/node
+ *  Currently we don't distinguish between the two.
+ */
+static int __gnix_ccm_init(void)
+{
+	int rc, fd;
+	FILE *f;
+	char ccm_nodelist[PATH_MAX];
+	const char *home, *jobid;
+	ccm_alps_info_t info;
+	uint32_t num_nids = 0;
+
+	GNIX_DEBUG(FI_LOG_FABRIC, "Reading job info file %s\n",
+		   CCM_ALPS_INFO_FILE);
+
+	fd = open(CCM_ALPS_INFO_FILE, O_RDONLY);
+	if (fd < 0) {
+		return -FI_EIO;
+	}
+
+	rc = read(fd, &info, sizeof(ccm_alps_info_t));
+	if (rc != sizeof(ccm_alps_info_t))
+		return -FI_EIO;
+
+	gnix_app_ptag = info.ptag;
+	gnix_app_cookie = info.cookie;
+
+	close(fd);
+	GNIX_DEBUG(FI_LOG_FABRIC, "Ptag=0x%x, cookie=0x%x\n",
+		   gnix_app_ptag, gnix_app_cookie);
+
+	home = getenv("HOME");
+	jobid = getenv("PBS_JOBID");
+	if (!jobid) {
+		/* This path hasn't been tested yet (no access to resources) */
+		jobid = getenv("SLURM_JOB_ID");
+		if (!jobid) {
+			jobid = getenv("SLURM_JOBID");
+		}
+		/* Should we do something else if this fails? */
+	}
+	snprintf(ccm_nodelist, PATH_MAX, "%s/%s%s", home ? home : ".",
+		 CCM_NODELIST_FN, jobid ? jobid : "sdb");
+	f = fopen(ccm_nodelist, "r");
+	if (f) {
+		char mynid[PATH_MAX];
+		char next_nid[PATH_MAX];
+
+		rc = gethostname(mynid, PATH_MAX);
+		if (rc) {
+			/* use the first address */
+			rc = fscanf(f, "%s\n", mynid);
+			/* assume this one worked, error case is same */
+			num_nids++;
+		}
+		while (true) {
+			rc = fscanf(f, "%s\n", next_nid);
+			if (rc == 1) {
+				if (strcmp(mynid, next_nid) == 0) {
+					num_nids++;
+				}
+			} else {
+				break;
+			}
+		}
+		gnix_pes_on_node = num_nids;
+		fclose(f);
+	} else {
+		/* what would be a better default? */
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "CCM nodelist not found.  Assuming 1 PE per node");
+		gnix_pes_on_node = 1;
+	}
+	GNIX_DEBUG(FI_LOG_FABRIC, "pes per node=%u\n", gnix_pes_on_node);
+
+	/* Don't really need to do this here, but wanted to be clear */
+	gnix_app_placementList = NULL;
+	gnix_app_targetNids = NULL;
+	gnix_app_targetPes = NULL;
+	gnix_app_targetLen = NULL;
+	gnix_app_targetIps = NULL;
+	gnix_app_startPe = NULL;
+	gnix_app_totalPes = NULL;
+	gnix_app_nodePes = NULL;
+	gnix_app_peCpus = NULL;
+
+	ccm_init = true;
+	return FI_SUCCESS;
+}
+
+static int __gnix_alps_init(void)
 {
 	int ret = FI_SUCCESS;
 	int alps_status = 0;
@@ -230,8 +345,9 @@ static int gnix_alps_init(void)
 		goto err;
 	}
 
-	gnix_device_id = 0;
-	alps_init++;
+	gnix_pes_on_node = gnix_appLayout.numPesHere;
+
+	alps_init = true;
 
 	ret = 0;
 err:
@@ -243,34 +359,27 @@ err:
 	return ret;
 }
 
-typedef struct ccm_alps_info {
-	uint32_t version;
-	uint8_t ptag;
-	uint32_t cookie;
-} ccm_alps_info_t;
-
-int get_ccm_ptag_cookie(char *filename)
+static int __gnix_app_init(void)
 {
-	int rc, fd;
-	ccm_alps_info_t info;
-	GNIX_INFO(FI_LOG_FABRIC, "Reading job info file %s", filename);
+	int ret;
 
-	fd = open(filename, O_RDONLY);
-	if (fd < 0)
-		return -FI_EIO;
+	if (app_init) {
+		return FI_SUCCESS;
+	}
 
-	rc = read(fd, &info, sizeof(ccm_alps_info_t));
-	if (rc != sizeof(ccm_alps_info_t))
-		return -FI_EIO;
+	/* Try CCM first */
+	ret = __gnix_ccm_init();
+	if (ret) {
+		ret = __gnix_alps_init();
+	}
 
-	gnix_app_ptag = info.ptag;
-	gnix_app_cookie = info.cookie;
+	if (ret == FI_SUCCESS) {
+		app_init = true;
+	}
 
-	close(fd);
-	GNIX_INFO(FI_LOG_FABRIC, "Ptag=0x%x, cookie=0x%x",
-		  gnix_app_ptag, gnix_app_cookie);
+	gnix_device_id = 0;
+	return ret;
 
-	return FI_SUCCESS;
 }
 
 int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
@@ -280,15 +389,13 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 	if ((ptag == NULL) || (cookie == NULL)) {
 		return -FI_EINVAL;
 	}
-	ret = get_ccm_ptag_cookie("/tmp/ccm_alps_info");
+
+	ret = __gnix_app_init();
 	if (ret) {
-		ret = gnix_alps_init();
-		if (ret) {
-			GNIX_WARN(FI_LOG_FABRIC,
-				  "gnix_alps_init() failed, ret=%d(%s)\n",
-				  ret, strerror(errno));
-			return ret;
-		}
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "__gnix_app_init() failed, ret=%d(%s)\n",
+			  ret, strerror(errno));
+		return ret;
 	}
 
 	/*
@@ -468,15 +575,15 @@ int _gnix_pes_on_node(uint32_t *num_pes)
 		return -FI_EINVAL;
 	}
 
-	rc = gnix_alps_init();
+	rc = __gnix_app_init();
 	if (rc) {
 		GNIX_WARN(FI_LOG_FABRIC,
-			  "gnix_alps_init() failed, ret=%d(%s)\n",
+			  "__gnix_app_init() failed, ret=%d(%s)\n",
 			  rc, strerror(errno));
 		return rc;
 	}
 
-	*num_pes = gnix_appLayout.numPesHere;
+	*num_pes = gnix_pes_on_node;
 	GNIX_INFO(FI_LOG_FABRIC, "num_pes: %u\n", gnix_appLayout.numPesHere);
 
 	return FI_SUCCESS;
@@ -491,10 +598,10 @@ int _gnix_nics_per_rank(uint32_t *nics_per_rank)
 		return -FI_EINVAL;
 	}
 
-	rc = gnix_alps_init();
+	rc = __gnix_app_init();
 	if (rc) {
 		GNIX_WARN(FI_LOG_FABRIC,
-			  "gnix_alps_init() failed, ret=%d(%s)\n",
+			  "__gnix_app_init() failed, ret=%d(%s)\n",
 			  rc, strerror(errno));
 		return rc;
 	}

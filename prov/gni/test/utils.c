@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -86,7 +86,7 @@ Test(utils, alps)
 	uint32_t cookie, fmas, cqs, npes, npr;
 	void *addr = NULL;
 
-	_gnix_alps_cleanup();
+	_gnix_app_cleanup();
 
 	rc = gnixu_get_rdma_credentials(addr, &ptag, &cookie);
 	cr_expect(!rc);
@@ -106,7 +106,7 @@ Test(utils, alps)
 	cqs /= GNIX_CQS_PER_EP;
 	cr_expect(((fmas > cqs ? cqs : fmas) / npes) == npr);
 
-	_gnix_alps_cleanup();
+	_gnix_app_cleanup();
 }
 
 static void test_destruct(void *obj)

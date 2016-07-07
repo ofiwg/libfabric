@@ -106,7 +106,7 @@ static void __fabric_destruct(void *obj)
 	 */
 	(void) _gnix_notifier_close(&fab->mr_notifier);
 
-	_gnix_alps_cleanup();
+	_gnix_app_cleanup();
 
 	free(fab);
 }
