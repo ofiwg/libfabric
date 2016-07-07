@@ -57,6 +57,9 @@
 #define VERBS_TX_RDM_MODE VERBS_RDM_MODE
 
 #define VERBS_RX_MODE (FI_LOCAL_MR | FI_RX_CQ_DATA)
+
+#define VERBS_RX_RDM_OP_FLAGS (FI_COMPLETION)
+
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
@@ -101,6 +104,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 
 const struct fi_rx_attr verbs_rdm_rx_attr = {
 	.mode			= VERBS_RX_MODE,
+	.op_flags		= VERBS_RX_RDM_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.total_buffered_recv	= FI_IBV_RDM_DFLT_BUFFERED_SSIZE /* TODO: */
 };
