@@ -88,7 +88,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 {
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
 
-	struct fi_ibv_rdm_tagged_send_start_data *p = data;
+	struct fi_ibv_rdm_tsend_start_data *p = data;
 	request->minfo.conn = p->conn;
 	request->minfo.tag = p->tag;
 	request->iov_count = p->iov_count;
@@ -102,7 +102,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 
 	request->sbuf = NULL;
 	request->len = p->data_len;
-	request->comp_flags = FI_TAGGED | FI_SEND;
+	request->comp_flags = /* TODO: p->flags */ FI_TAGGED | FI_SEND;
 	request->imm = p->imm;
 	request->context = p->context;
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;

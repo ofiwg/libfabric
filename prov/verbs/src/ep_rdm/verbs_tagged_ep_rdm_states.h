@@ -120,10 +120,11 @@ enum ibv_rdm_send_type
 	IBV_RDM_SEND_TYPE_VEC
 };
 
-struct fi_ibv_rdm_tagged_send_start_data {
+struct fi_ibv_rdm_tsend_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
 	struct fi_ibv_rdm_tagged_conn *conn;
 	void *context;
+	uint64_t flags;
 	size_t tag;
 	size_t data_len;
 	union {

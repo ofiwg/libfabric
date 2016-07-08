@@ -357,7 +357,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 }
 
 static ssize_t
-fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
+fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tsend_start_data* sdata)
 {
 	struct fi_ibv_rdm_tagged_request *request =
 		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
@@ -389,11 +389,12 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 					    uint64_t data, fi_addr_t dest_addr,
 					    uint64_t tag, void *context)
 {
-	struct fi_ibv_rdm_tagged_send_start_data sdata = {
+	struct fi_ibv_rdm_tsend_start_data sdata = {
 		.ep_rdm = container_of(fid, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = (struct fi_ibv_rdm_tagged_conn *) dest_addr,
 		.data_len = len,
 		.context = context,
+		.flags = 0,
 		.tag = tag,
 		.buf.src_addr = (void*)buf,
 		.iov_count = 0,
@@ -416,11 +417,12 @@ static ssize_t fi_ibv_rdm_tagged_sendto(struct fid_ep *fid, const void *buf,
 static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 	const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	struct fi_ibv_rdm_tagged_send_start_data sdata = {
+	struct fi_ibv_rdm_tsend_start_data sdata = {
 		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = (struct fi_ibv_rdm_tagged_conn *) msg->addr,
 		.data_len = 0,
 		.context = msg->context,
+		.flags = flags,
 		.tag = msg->tag,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
