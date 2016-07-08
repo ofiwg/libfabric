@@ -160,12 +160,12 @@ struct fi_ibv_rdm_tagged_request {
 	 * iovec_arr is a mem pool entry if iov_count > 0
 	 * and must be freed properly
 	 */
-	size_t iov_count;
-	size_t len;
-	size_t rest_len;
-	uint32_t post_counter;
+	uint64_t iov_count;
+	uint64_t len;
+	uint64_t rest_len;
 	uint64_t comp_flags;
 	struct fi_context *context;
+	uint32_t post_counter;
 	uint32_t imm;
 
 	union {

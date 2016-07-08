@@ -172,7 +172,7 @@ struct fi_ibv_rdm_rma_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
 	struct fi_ibv_rdm_tagged_conn *conn;
 	void *context;
-	size_t data_len;
+	uint64_t data_len;
 	uint64_t rbuf;
 	uintptr_t lbuf;
 	uint32_t rkey;
