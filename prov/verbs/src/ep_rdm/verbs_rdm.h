@@ -236,6 +236,7 @@ struct fi_ibv_rdm_ep {
 	size_t addrlen;
 
 	struct fi_ibv_av *av;
+	uint64_t ep_flags;
 
 	/*
 	 * ibv_post_send opcode for tagged messaging.
