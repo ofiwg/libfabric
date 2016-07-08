@@ -596,6 +596,10 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 		memcpy(handle->cm_data, param, paramlen);
 	}
 
+	if (_ep->attr->cm.listener_thread &&
+	    pthread_join(_ep->attr->cm.listener_thread, NULL))
+		SOCK_LOG_DBG("failed to join cm listener\n");
+
 	if (pthread_create(&_ep->attr->cm.listener_thread, NULL,
 			   sock_ep_cm_connect_handler, handle)) {
 		SOCK_LOG_ERROR("failed to create cm thread\n");
@@ -643,6 +647,8 @@ static void *sock_cm_accept_handler(void *data)
 	ep_attr->cm.sock = hreq->sock_fd;
 	sock_ep_wait_shutdown(hreq->ep);
 
+	if (pthread_join(hreq->req_handler, NULL))
+		SOCK_LOG_DBG("failed to join req-handler\n");
 	free(hreq->req);
 	free(hreq);
 	return NULL;
@@ -674,9 +680,13 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 		memcpy(handle->cm_data, param, paramlen);
 	}
 
+	if (_ep->attr->cm.listener_thread &&
+	    pthread_join(_ep->attr->cm.listener_thread, NULL))
+		SOCK_LOG_DBG("failed to join cm listener\n");
+
 	if (pthread_create(&_ep->attr->cm.listener_thread, NULL,
 			   sock_cm_accept_handler, handle)) {
-		SOCK_LOG_ERROR("Couldnt create pep-resp-handler\n");
+		SOCK_LOG_ERROR("Couldnt create accept handler\n");
 		return -FI_ENOMEM;
 	}
 	return 0;
@@ -957,6 +967,9 @@ static void sock_pep_check_msg_list(struct sock_pep *pep)
 			SOCK_LOG_ERROR("failed to send userdata\n");
 			break;
 		}
+
+		if (pthread_join(hreq->req_handler, NULL))
+			SOCK_LOG_DBG("failed to join req-handler\n");
 		ofi_close_socket(hreq->sock_fd);
 		free(hreq->req);
 		free(hreq);
