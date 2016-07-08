@@ -1976,14 +1976,16 @@ retry_match:
 			}
 
 			/* Send length is truncated to receive buffer size. */
-			req->msg.send_info[0].send_len =
-				MIN(req->msg.send_info[0].send_len,
+			req->msg.cum_send_len =
+				MIN(req->msg.cum_send_len,
 				    req->msg.recv_info[0].recv_len);
 
-			req->msg.cum_send_len = req->msg.send_info[0].send_len;
-
 			/* Initiate pull of source data. */
-			req->work_fn = __gnix_rndzv_req;
+			if (req->msg.send_iov_cnt == 1)
+				req->work_fn = __gnix_rndzv_req;
+			else
+				req->work_fn = __gnix_rndzv_iov_req_build;
+
 			ret = _gnix_vc_queue_work_req(req);
 
 			/* If using FI_MULTI_RECV and there is space left in
@@ -2259,8 +2261,8 @@ static int _gnix_send_req(void *arg)
 	 * TODO: Do we need to do this for sendv?
 	 */
 	if ((status == GNI_RC_SUCCESS) &&
-		(tag == GNIX_SMSG_T_RNDZV_START /* || */
-		 /* tag == GNIX_SMSG_T_RNDZV_IOV_START*/))
+		(tag == GNIX_SMSG_T_RNDZV_START ||
+		 tag == GNIX_SMSG_T_RNDZV_IOV_START))
 		_gnix_rma_post_irq(req->vc);
 
 	COND_RELEASE(nic->requires_lock, &nic->lock);
