@@ -375,7 +375,6 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 	if (!ret && in_order &&
 		fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
 	{
-
 		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
 			{ .ep = sdata->ep_rdm };
 		ret = fi_ibv_rdm_tagged_req_hndl(request, 
@@ -414,17 +413,15 @@ static ssize_t fi_ibv_rdm_tagged_sendto(struct fid_ep *fid, const void *buf,
 					    tag, context);
 }
 
-static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
-				       const struct iovec *iov, void **desc,
-				       size_t count, fi_addr_t dest_addr,
-				       uint64_t tag, void *context)
+static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
+	const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	struct fi_ibv_rdm_tagged_send_start_data sdata = {
 		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
-		.conn = (struct fi_ibv_rdm_tagged_conn *) dest_addr,
+		.conn = (struct fi_ibv_rdm_tagged_conn *) msg->addr,
 		.data_len = 0,
-		.context = context,
-		.tag = tag,
+		.context = msg->context,
+		.tag = msg->tag,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
 		.imm = (uint32_t) 0,
@@ -432,20 +429,20 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 	};
 
 	size_t i;
-	for (i = 0; i < count; i++) {
-		sdata.data_len += iov[i].iov_len;
+	for (i = 0; i < msg->iov_count; i++) {
+		sdata.data_len += msg->msg_iov[i].iov_len;
 	}
 
-	if ((count > (sdata.ep_rdm->rndv_threshold / sizeof(struct iovec))) ||
-	    (count > 1 && (sdata.data_len > sdata.ep_rdm->rndv_threshold)))
+	if ((msg->iov_count > (sdata.ep_rdm->rndv_threshold / sizeof(struct iovec))) ||
+	    (msg->iov_count > 1 && (sdata.data_len > sdata.ep_rdm->rndv_threshold)))
 	{
 		return -FI_EMSGSIZE;
 	}
 
-	switch (count)
+	switch (msg->iov_count)
 	{
 	case 1:
-		sdata.buf.src_addr = iov[0].iov_base;
+		sdata.buf.src_addr = msg->msg_iov[0].iov_base;
 	case 0:
 		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
 		break;
@@ -456,11 +453,11 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 		 */
 		sdata.buf.iovec_arr =
 			util_buf_alloc(fi_ibv_rdm_tagged_extra_buffers_pool);
-		for (i = 0; i < count; i++) {
-			sdata.buf.iovec_arr[i].iov_base = iov[i].iov_base;
-			sdata.buf.iovec_arr[i].iov_len = iov[i].iov_len;
+		for (i = 0; i < msg->iov_count; i++) {
+			sdata.buf.iovec_arr[i].iov_base = msg->msg_iov[i].iov_base;
+			sdata.buf.iovec_arr[i].iov_len = msg->msg_iov[i].iov_len;
 		}
-		sdata.iov_count = count;
+		sdata.iov_count = msg->iov_count;
 		sdata.stype = IBV_RDM_SEND_TYPE_VEC;
 		break;
 	}
@@ -468,11 +465,23 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 	return fi_ibv_rdm_tagged_send_common(&sdata);
 }
 
-static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
-	const struct fi_msg_tagged *msg, uint64_t flags)
+static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
+				       const struct iovec *iov, void **desc,
+				       size_t count, fi_addr_t dest_addr,
+				       uint64_t tag, void *context)
 {
-	return fi_ibv_rdm_tagged_sendv(ep, msg->msg_iov,
-		msg->desc, msg->iov_count, msg->addr, msg->tag, msg->context);
+	const struct fi_msg_tagged msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = dest_addr,
+		.tag = tag,
+		.ignore = 0,
+		.context = context,
+		.data = 0
+	};
+
+	return fi_ibv_rdm_tagged_sendmsg(ep, &msg, 0);
 }
 
 struct fi_ops_tagged fi_ibv_rdm_tagged_ops = {
