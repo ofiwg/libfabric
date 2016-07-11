@@ -971,7 +971,7 @@ int sock_ep_enable(struct fid_ep *ep)
 	if (sock_ep->attr->ep_type != FI_EP_MSG &&
 	    !sock_ep->attr->listener.listener_thread && sock_conn_listen(sock_ep->attr))
 		SOCK_LOG_ERROR("cannot start connection thread\n");
-	sock_ep->attr->is_disabled = 0;
+	sock_ep->attr->is_enabled = 1;
 	return 0;
 }
 
@@ -1001,7 +1001,7 @@ int sock_ep_disable(struct fid_ep *ep)
 		if (sock_ep->attr->rx_array[i])
 			sock_ep->attr->rx_array[i]->enabled = 0;
 	}
-	sock_ep->attr->is_disabled = 1;
+	sock_ep->attr->is_enabled = 0;
 	return 0;
 }
 

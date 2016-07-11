@@ -533,7 +533,7 @@ struct sock_ep_attr {
 
 	uint64_t peer_fid;
 	uint16_t key;
-	int is_disabled;
+	int is_enabled;
 	struct sock_cm_entry cm;
 	struct sock_conn_listener listener;
 	struct dlist_entry conn_list;
@@ -560,6 +560,7 @@ struct sock_pep {
 	struct sockaddr_in src_addr;
 	struct fi_info info;
 	struct sock_eq *eq;
+	int name_set;
 };
 
 struct sock_rx_entry {
