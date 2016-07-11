@@ -46,6 +46,11 @@ extern "C" {
 
 #define GNIX_EQ_DEFAULT_SIZE 256
 
+ssize_t _gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
+			     void *context, uint64_t index, int err,
+			     int prov_errno, void *err_data,
+			     size_t err_size);
+
 /*
  * Stores events inside of the event queue.
  *

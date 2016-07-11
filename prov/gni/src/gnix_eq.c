@@ -155,14 +155,10 @@ err:
 	return NULL;
 }
 
-/* Temporarily mark as unused to avoid build warnings. */
-static ssize_t gnix_eq_write_error(struct fid_eq*, fid_t, void*, uint64_t, int,
-				   int, void*, size_t) __attribute__((unused));
-
-static ssize_t gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
-				   void *context, uint64_t index, int err,
-				   int prov_errno, void *err_data,
-				   size_t err_size)
+ssize_t _gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
+			     void *context, uint64_t index, int err,
+			     int prov_errno, void *err_data,
+			     size_t err_size)
 {
 	struct fi_eq_err_entry *error;
 	struct gnix_eq_entry *event;
@@ -329,23 +325,21 @@ DIRECT_FN STATIC int gnix_eq_close(struct fid *fid)
 	return FI_SUCCESS;
 }
 
-DIRECT_FN STATIC ssize_t gnix_eq_sread(struct fid_eq *eq, uint32_t *event,
-				       void *buf, size_t len, int timeout,
-				       uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
 DIRECT_FN STATIC ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event,
 				      void *buf, size_t len, uint64_t flags)
 {
 	struct gnix_fid_eq *eq_priv;
 	struct gnix_eq_entry *entry;
 	struct slist_entry *item;
+	ssize_t read_size;
 
-	ssize_t read_size = len;
+	if (!eq || !event || (len && !buf))
+		return -FI_EINVAL;
 
 	eq_priv = container_of(eq, struct gnix_fid_eq, eq_fid);
+
+	if (_gnix_queue_peek(eq_priv->errors))
+		return -FI_EAVAIL;
 
 	fastlock_acquire(&eq_priv->lock);
 
@@ -358,13 +352,14 @@ DIRECT_FN STATIC ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event,
 
 	entry = container_of(item, struct gnix_eq_entry, item);
 
-	if (read_size < entry->len) {
+	if (len < entry->len) {
 		read_size = -FI_ETOOSMALL;
 		goto err;
 	}
 
 	*event = entry->type;
 
+	read_size = entry->len;
 	memcpy(buf, entry->the_entry, read_size);
 
 	if (!(flags & FI_PEEK)) {
@@ -380,6 +375,38 @@ err:
 	fastlock_release(&eq_priv->lock);
 
 	return read_size;
+}
+
+DIRECT_FN STATIC ssize_t gnix_eq_sread(struct fid_eq *eq, uint32_t *event,
+				       void *buf, size_t len, int timeout,
+				       uint64_t flags)
+{
+	double start_ms = 0.0, end_ms = 0.0;
+	int ret;
+
+	ret = gnix_eq_read(eq, event, buf, len, flags);
+	if (ret != -FI_EAGAIN)
+		return ret;
+
+	if (timeout > 0)
+		start_ms = fi_gettime_ms();
+
+	do {
+		usleep(1000);
+
+		ret = gnix_eq_read(eq, event, buf, len, flags);
+		if (ret != -FI_EAGAIN)
+			return ret;
+
+		if (timeout > 0) {
+			end_ms = fi_gettime_ms();
+			timeout -=  (end_ms - start_ms);
+			timeout = timeout < 0 ? 0 : timeout;
+			start_ms = end_ms;
+		}
+	} while (timeout);
+
+	return -FI_EAGAIN;
 }
 
 DIRECT_FN STATIC int gnix_eq_control(struct fid *eq, int command, void *arg)
