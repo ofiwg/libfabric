@@ -251,10 +251,14 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	case FI_CLASS_EP:
 	case FI_CLASS_SEP:
 		sock_ep = container_of(fid, struct sock_ep, ep.fid);
+		if (sock_ep->attr->is_enabled == 0)
+			return -FI_EOPBADSTATE;
 		memcpy(addr, sock_ep->attr->src_addr, len);
 		break;
 	case FI_CLASS_PEP:
 		sock_pep = container_of(fid, struct sock_pep, pep.fid);
+		if (!sock_pep->name_set)
+			return -FI_EOPBADSTATE;
 		memcpy(addr, &sock_pep->src_addr, len);
 		break;
 	default:
@@ -332,6 +336,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 		return -errno;
 	}
 
+	pep->name_set = 1;
 	SOCK_LOG_DBG("Listener thread bound to %s:%d\n",
 		     sa_ip, ntohs(pep->src_addr.sin_port));
 	return 0;
