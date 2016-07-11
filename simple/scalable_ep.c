@@ -81,8 +81,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 	int i, ret;
 
 	/* Get number of bits needed to represent ctx_cnt */
-	while (ctx_cnt >> ++rx_ctx_bits)
-		;
+	while (ctx_cnt >> ++rx_ctx_bits);
 
 	av_attr.rx_ctx_bits = rx_ctx_bits;
 
@@ -175,6 +174,12 @@ static int bind_ep_res(void)
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
 		}
+	}
+
+	ret = fi_enable(sep);
+	if (ret) {
+		FT_PRINTERR("fi_enable", ret);
+		return ret;
 	}
 
 	return 0;

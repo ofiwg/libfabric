@@ -265,11 +265,11 @@ static int client_connect(void)
 	 * from */
 	FT_CLOSE_FID(pep);
 
-	ret = check_address(&ep->fid, "fi_endpoint (ep)");
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep();
+	ret = check_address(&ep->fid, "fi_endpoint (ep)");
 	if (ret)
 		return ret;
 
@@ -283,7 +283,7 @@ static int client_connect(void)
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
 		return (int) rd;
 	}
 
