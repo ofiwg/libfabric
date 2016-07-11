@@ -102,7 +102,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 
 	request->sbuf = NULL;
 	request->len = p->data_len;
-	request->comp_flags = /* TODO: p->flags */ FI_TAGGED | FI_SEND;
+	request->comp_flags = p->flags;
 	request->imm = p->imm;
 	request->context = p->context;
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;

@@ -389,12 +389,16 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 					    uint64_t data, fi_addr_t dest_addr,
 					    uint64_t tag, void *context)
 {
+	struct fi_ibv_rdm_ep *ep_rdm = 
+		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
+
 	struct fi_ibv_rdm_tsend_start_data sdata = {
 		.ep_rdm = container_of(fid, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = (struct fi_ibv_rdm_tagged_conn *) dest_addr,
 		.data_len = len,
 		.context = context,
-		.flags = 0,
+		.flags = FI_TAGGED | (ep_rdm->ep_flags & FI_SEND) |
+			(ep_rdm->ep_info->tx_attr->op_flags & FI_COMPLETION),
 		.tag = tag,
 		.buf.src_addr = (void*)buf,
 		.iov_count = 0,
@@ -417,12 +421,17 @@ static ssize_t fi_ibv_rdm_tagged_sendto(struct fid_ep *fid, const void *buf,
 static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 	const struct fi_msg_tagged *msg, uint64_t flags)
 {
+	struct fi_ibv_rdm_ep *ep_rdm = 
+		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
+
 	struct fi_ibv_rdm_tsend_start_data sdata = {
 		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = (struct fi_ibv_rdm_tagged_conn *) msg->addr,
 		.data_len = 0,
 		.context = msg->context,
-		.flags = flags,
+		.flags = FI_TAGGED | (ep_rdm->ep_flags & FI_SEND) |
+			((ep_rdm->ep_flags & FI_SELECTIVE_COMPLETION) ?
+				(flags & FI_COMPLETION) : FI_COMPLETION),
 		.tag = msg->tag,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
@@ -472,6 +481,9 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 				       size_t count, fi_addr_t dest_addr,
 				       uint64_t tag, void *context)
 {
+	struct fi_ibv_rdm_ep *ep_rdm = 
+		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
+
 	const struct fi_msg_tagged msg = {
 		.msg_iov = iov,
 		.desc = desc,
@@ -483,7 +495,9 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 		.data = 0
 	};
 
-	return fi_ibv_rdm_tagged_sendmsg(ep, &msg, 0);
+	return fi_ibv_rdm_tagged_sendmsg(ep, &msg,
+		FI_TAGGED | (ep_rdm->ep_flags & (FI_SEND)) |
+		(ep_rdm->ep_info->tx_attr->op_flags & FI_COMPLETION));
 }
 
 struct fi_ops_tagged fi_ibv_rdm_tagged_ops = {

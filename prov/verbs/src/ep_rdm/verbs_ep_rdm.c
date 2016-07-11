@@ -146,14 +146,20 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->fi_rcq)
 				return -EINVAL;
 			ep->fi_rcq = cq;
+			ep->ep_info->rx_attr->op_flags |= FI_COMPLETION; /* default */
 		}
+
 		if (flags & FI_SEND) {
 			if (ep->fi_scq)
 				return -EINVAL;
 			ep->fi_scq = cq;
-		}
 
-		ep->ep_flags |= flags;
+			if (flags & FI_SELECTIVE_COMPLETION) {
+				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
+			} else {
+				ep->ep_info->tx_attr->op_flags |= FI_COMPLETION; /* default */
+			}
+		}
 
 		/* TODO: this is wrong. CQ to EP is 1:n */
 		cq->ep = ep;
@@ -371,7 +377,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_request_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_extra_buffers_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
-	
+
+	fi_freeinfo(ep->ep_info);
 	free(ep);
 
 	return ret;
@@ -448,6 +455,10 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma(_ep);
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
 	_ep->ep_flags = 0;
+	_ep->ep_info = fi_dupinfo(info);
+	if (!_ep->ep_info) {
+		return -FI_ENOMEM;
+	}
 
 	switch (info->ep_attr->protocol) {
 	case FI_PROTO_IB_RDM:
