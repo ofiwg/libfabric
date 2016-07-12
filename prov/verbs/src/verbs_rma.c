@@ -313,7 +313,10 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.ep_rdm = container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = conn,
 		.context = msg->context,
-		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
+		.flags = FI_RMA | FI_READ | (ep->ep_flags & FI_TRANSMIT) |
+			((ep->ep_flags & FI_SELECTIVE_COMPLETION) ?
+				(flags & FI_COMPLETION) : FI_COMPLETION),
+ 		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
 		.rbuf = msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
 		.rkey = (uint32_t)msg->rma_iov[0].key,
@@ -415,6 +418,9 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.conn = conn,
 		.ep_rdm = ep,
 		.context = msg->context,
+		.flags = FI_RMA | FI_WRITE | (ep->ep_flags & FI_TRANSMIT) |
+			((ep->ep_flags & FI_SELECTIVE_COMPLETION) ?
+				(flags & FI_COMPLETION) : FI_COMPLETION),
 		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
 		.rbuf = msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
@@ -508,12 +514,12 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.conn = conn,
 		.ep_rdm = ep_rdm,
+		.flags = 0, /* inject does not generate completion */
 		.data_len = (uint64_t)len,
 		.rbuf = addr,
 		.lbuf = (uintptr_t)buf,
 		.rkey = (uint32_t)key,
 		.lkey = 0
-
 	};
 
 	ret =  fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RMA_START,
