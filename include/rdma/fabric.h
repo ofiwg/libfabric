@@ -209,6 +209,12 @@ enum fi_resource_mgmt {
 #define FI_ORDER_STRICT		0x1FF
 #define FI_ORDER_DATA		(1 << 16)
 
+/*
+ * Allow for growing communication scope as needed.
+ */
+#define FI_COMM_LOCAL		(1 << 0)
+#define FI_COMM_REMOTE		(1 << 1)
+
 enum fi_ep_type {
 	FI_EP_UNSPEC,
 	FI_EP_MSG,
@@ -300,6 +306,7 @@ struct fi_domain_attr {
 	size_t			max_ep_rx_ctx;
 	size_t			max_ep_stx_ctx;
 	size_t			max_ep_srx_ctx;
+	uint64_t		comm_scope;
 };
 
 struct fi_fabric_attr {
