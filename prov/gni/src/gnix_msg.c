@@ -1299,6 +1299,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 		req->msg.cum_send_len = MIN(hdr->len, req->msg.cum_recv_len);
 		req->msg.send_flags = hdr->flags;
+		req->msg.send_iov_cnt = 1;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
 
@@ -1350,6 +1351,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 		req->msg.cum_send_len = hdr->len;
 		req->msg.send_info[0].send_len = hdr->len;
+		req->msg.send_iov_cnt = 1;
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
@@ -1551,6 +1553,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.send_info[0].send_addr = hdr->addr;
 		req->msg.send_info[0].send_len = hdr->len;
 		req->msg.send_info[0].mem_hndl = hdr->mdh;
+		req->msg.send_iov_cnt = 1;
 		req->msg.cum_send_len = req->msg.send_info[0].send_len;
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
@@ -1981,10 +1984,8 @@ retry_match:
 				    req->msg.recv_info[0].recv_len);
 
 			/* Initiate pull of source data. */
-			if (req->msg.send_iov_cnt == 1)
-				req->work_fn = __gnix_rndzv_req;
-			else
-				req->work_fn = __gnix_rndzv_iov_req_build;
+			req->work_fn = req->msg.send_iov_cnt == 1 ?
+				__gnix_rndzv_req : __gnix_rndzv_iov_req_build;
 
 			ret = _gnix_vc_queue_work_req(req);
 
@@ -2083,7 +2084,7 @@ retry_match:
 		}
 
 		req->msg.recv_md[0] = md;
-		req->msg.recv_iov_cnt = 1;
+		req->msg.send_iov_cnt = req->msg.recv_iov_cnt = 1;
 		req->msg.recv_flags = flags;
 		req->msg.tag = tag;
 		req->msg.ignore = ignore;
