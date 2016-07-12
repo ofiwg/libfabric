@@ -462,7 +462,7 @@ fi_ibv_rdm_ep_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **
 		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
 
 	return fi_ibv_rdm_ep_rma_writemsg(ep_fid, &msg,
-		FI_RMA | (ep_rdm->ep_flags & (FI_WRITE)) |
+		FI_RMA | (ep_rdm->ep_flags & (FI_TRANSMIT)) |
 		(ep_rdm->ep_info->tx_attr->op_flags & FI_COMPLETION));
 }
 
