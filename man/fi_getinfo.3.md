@@ -346,6 +346,20 @@ additional optimizations.
   used to enforce ordering between operations that are not otherwise
   guaranteed by the underlying provider or protocol.
 
+*FI_COMM_LOCAL*
+: Indicates that the endpoint should support host local communications. This
+  flag can be used in conjunction with FI_COMM_REMOTE to indicate that both
+  local and remote communication are required. If neither the FI_COMM_LOCAL
+  nor the FI_COMM_REMOTE flag are specified, then the provider will indicate
+  support for the configuration that minimally affects performance.
+
+*FI_COMM_REMOTE*
+: Indicates that the endpoint should support remote communications. This flag
+  can be used in conjunction with FI_COMM_LOCAL to indicate that both local and
+  remote communication are required. If neither the FI_COMM_REMOTE nor the
+  FI_COMM_LOCAL flag are specified, then the provider will indicate support for
+  the configuration that minimally affects performance.
+
 Capabilities may be grouped into two general categories: primary and
 secondary.  Primary capabilities must explicitly be requested by an
 application, and a provider must enable support for only those primary
@@ -359,7 +373,8 @@ Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
 FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
-Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_TRIGGER, FI_FENCE.
+Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_TRIGGER,
+FI_FENCE, FI_COMM_LOCAL, FI_COMM_REMOTE.
 
 # MODE
 
