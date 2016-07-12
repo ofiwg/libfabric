@@ -508,7 +508,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.conn = conn,
 		.ep_rdm = ep_rdm,
-		.data_len = (uint32_t)len,
+		.data_len = (uint64_t)len,
 		.rbuf = addr,
 		.lbuf = (uintptr_t)buf,
 		.rkey = (uint32_t)key,
