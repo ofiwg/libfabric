@@ -584,44 +584,81 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 
 static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
 {
-	int ret = FI_SUCCESS;
+	int ret = FI_SUCCESS, i = 0, j = 0;
+	size_t cpy_len, recv_len;
+	uint64_t recv_ptr = 0UL;
 	struct gnix_xpmem_access_handle *access_hndl;
 
-	/*
-	 * look up mapping from other EP
-	 */
+	recv_len = req->msg.recv_info[0].recv_len;
+	recv_ptr = req->msg.recv_info[0].recv_addr;
 
-	ret = _gnix_xpmem_access_hndl_get(req->gnix_ep->xpmem_hndl,
-					req->vc->peer_apid,
-					req->msg.send_addr,
-					req->msg.recv_len,
-					&access_hndl);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_access_hndl_get failed %s\n",
-			  fi_strerror(-ret));
-		req->msg.status = GNI_RC_TRANSACTION_ERROR;
-		return ret;
+	/* Copy data from/to (>=1) iovec entries */
+	while (i < req->msg.send_iov_cnt) {
+		cpy_len = MIN(recv_len, req->msg.send_info[i].send_len);
+
+		/*
+		 * look up mapping from other EP
+		 */
+		ret = _gnix_xpmem_access_hndl_get(req->gnix_ep->xpmem_hndl,
+						  req->vc->peer_apid,
+						  req->msg.send_info[i].send_addr,
+						  req->msg.recv_info[j].recv_len,
+						  &access_hndl);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_access_hndl_get failed %s\n",
+				  fi_strerror(-ret));
+			req->msg.status = GNI_RC_TRANSACTION_ERROR;
+			return ret;
+		}
+
+		/*
+		 * pull the data from the other process' address space
+		 */
+		ret = _gnix_xpmem_copy(access_hndl,
+				       (void *)recv_ptr,
+				       (void *)req->msg.send_info[i].send_addr,
+				       cpy_len);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_vaddr_copy failed %s\n",
+				  fi_strerror(-ret));
+			req->msg.status = GNI_RC_TRANSACTION_ERROR;
+			_gnix_xpmem_access_hndl_put(access_hndl);
+			return ret;
+		}
+
+		ret = _gnix_xpmem_access_hndl_put(access_hndl);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_access_hndl_put failed %s\n",
+				  fi_strerror(-ret));
+		}
+
+		/* Update the local and remote addresses */
+		recv_len -= cpy_len;
+
+		/* We have exhausted the current recv (and possibly send)
+		 * buffer */
+		if (recv_len == 0) {
+			j++;
+
+			/* We cannot receive any more. */
+			if (j == req->msg.recv_iov_cnt)
+				break;
+
+			recv_ptr = req->msg.recv_info[j].recv_addr;
+			recv_len = req->msg.recv_info[j].recv_len;
+
+			/* Also exhausted send buffer */
+			if (cpy_len == req->msg.send_info[i].send_len) {
+				i++;
+			} else {
+				req->msg.send_info[i].send_addr += cpy_len;
+			}
+		} else {	/* Just exhausted current send buffer. */
+			i++;
+			recv_ptr += cpy_len;
+		}
+		GNIX_DEBUG(FI_LOG_EP_DATA, "i = %d, j = %d\n", i, j);
 	}
-
-	/*
-	 * pull the data from the other process' address space
-	 */
-	ret = _gnix_xpmem_copy(access_hndl,
-				(void *)req->msg.recv_addr,
-				(void *)req->msg.send_addr,
-				req->msg.send_len);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_vaddr_copy failed %s\n",
-			  fi_strerror(-ret));
-		req->msg.status = GNI_RC_TRANSACTION_ERROR;
-		_gnix_xpmem_access_hndl_put(access_hndl);
-		return ret;
-	}
-
-	ret = _gnix_xpmem_access_hndl_put(access_hndl);
-	if (ret != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_access_hndl_put failed %s\n",
-			  fi_strerror(-ret));
 
 	/*
 	 * set the req send fin and reschedule req
@@ -862,6 +899,12 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 		1024*1024 : 1<<30;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+	/*
+	 * TODO: xpmem intercept here
+	 */
+
+	if (req->vc->modes & GNIX_VC_MODE_XPMEM)
+		return  __gnix_rndzv_req_xpmem(req);
 
 	txd_cnt = ct_size = 0;
 	send_cnt = req->msg.send_iov_cnt;
