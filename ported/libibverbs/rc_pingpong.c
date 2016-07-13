@@ -217,6 +217,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		FT_PRINTERR("fi_endpoint", rc);
 		return 1;
 	}
+	fi_freeinfo(entry.info);
 
 	/* Create event queue */
 	if (pp_cq_create(ctx)) {
@@ -266,7 +267,6 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 	}
 	printf("Connection accepted\n");
 
-	fi_freeinfo(entry.info);
 	return 0;
 }
 
