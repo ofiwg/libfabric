@@ -397,8 +397,8 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 		.conn = (struct fi_ibv_rdm_tagged_conn *) dest_addr,
 		.data_len = len,
 		.context = context,
-		.flags = FI_TAGGED | (ep_rdm->ep_flags & FI_SEND) |
-			(ep_rdm->ep_info->tx_attr->op_flags & FI_COMPLETION),
+		.flags = FI_TAGGED | FI_SEND |
+			(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION),
 		.tag = tag,
 		.buf.src_addr = (void*)buf,
 		.iov_count = 0,
@@ -429,9 +429,8 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		.conn = (struct fi_ibv_rdm_tagged_conn *) msg->addr,
 		.data_len = 0,
 		.context = msg->context,
-		.flags = FI_TAGGED | (ep_rdm->ep_flags & FI_SEND) |
-			((ep_rdm->ep_flags & FI_SELECTIVE_COMPLETION) ?
-				(flags & FI_COMPLETION) : FI_COMPLETION),
+		.flags = FI_TAGGED | FI_SEND | (ep_rdm->tx_selective_completion ?
+			(flags & FI_COMPLETION) : FI_COMPLETION),
 		.tag = msg->tag,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
@@ -496,8 +495,7 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 	};
 
 	return fi_ibv_rdm_tagged_sendmsg(ep, &msg,
-		FI_TAGGED | (ep_rdm->ep_flags & (FI_SEND)) |
-		(ep_rdm->ep_info->tx_attr->op_flags & FI_COMPLETION));
+		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
 }
 
 struct fi_ops_tagged fi_ibv_rdm_tagged_ops = {

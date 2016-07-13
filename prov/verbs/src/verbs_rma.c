@@ -313,9 +313,8 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.ep_rdm = container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = conn,
 		.context = msg->context,
-		.flags = FI_RMA | FI_READ | (ep->ep_flags & FI_TRANSMIT) |
-			((ep->ep_flags & FI_SELECTIVE_COMPLETION) ?
-				(flags & FI_COMPLETION) : FI_COMPLETION),
+		.flags = FI_RMA | FI_READ | (ep->tx_selective_completion ?
+			(flags & FI_COMPLETION) : FI_COMPLETION),
  		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
 		.rbuf = msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
@@ -363,8 +362,7 @@ fi_ibv_rdm_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	};
 
 	return fi_ibv_rdm_ep_rma_readmsg(ep, &msg,
-		FI_RMA | (ep_rdm->ep_flags & (FI_TRANSMIT)) |
-		(ep_rdm->ep_info->tx_attr->op_flags & FI_COMPLETION));
+		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
 }
 
 static ssize_t
@@ -418,9 +416,8 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.conn = conn,
 		.ep_rdm = ep,
 		.context = msg->context,
-		.flags = FI_RMA | FI_WRITE | (ep->ep_flags & FI_TRANSMIT) |
-			((ep->ep_flags & FI_SELECTIVE_COMPLETION) ?
-				(flags & FI_COMPLETION) : FI_COMPLETION),
+		.flags = FI_RMA | FI_WRITE | (ep->tx_selective_completion ?
+			(flags & FI_COMPLETION) : FI_COMPLETION),
 		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
 		.rbuf = msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
@@ -468,8 +465,7 @@ fi_ibv_rdm_ep_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **
 		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
 
 	return fi_ibv_rdm_ep_rma_writemsg(ep_fid, &msg,
-		FI_RMA | (ep_rdm->ep_flags & (FI_TRANSMIT)) |
-		(ep_rdm->ep_info->tx_attr->op_flags & FI_COMPLETION));
+		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
 }
 
 static ssize_t
