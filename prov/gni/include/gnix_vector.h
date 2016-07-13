@@ -95,6 +95,8 @@ struct gnix_vector_iter {
 		.vec = (_vec),			\
 		.cur_idx = 0,			\
 	}
+
+/* Returns the current index of the iterator */
 #define GNIX_VECTOR_ITERATOR_IDX(_iter)	((_iter).cur_idx)
 
 /**
@@ -108,6 +110,9 @@ struct gnix_vector_iter {
  *
  * @var last		Return the last element of the vector.
  * @var at		Return the element at the specified index.
+ *
+ * @var iter_next	Return the element at the current index and move them
+ *			index to the next element.
  */
 typedef struct gnix_vector_ops {
 	int (*resize)(struct gnix_vector *, uint32_t);
@@ -401,10 +406,11 @@ static inline int _gnix_vec_insert_first(gnix_vector_t *vec,
 }
 
 /**
- * Return next element in the vector iterator
+ * Return the current element in the vector iterator and move
+ * the iterator to the next element.
  *
  * @param iter    pointer to the vector iterator
- * @return        pointer to next element in the vector
+ * @return        pointer to current element in the vector
  */
 static inline
 gnix_vec_entry_t *_gnix_vec_iterator_next(struct gnix_vector_iter *iter)

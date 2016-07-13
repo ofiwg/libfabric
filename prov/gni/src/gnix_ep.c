@@ -370,7 +370,7 @@ static inline int __gnix_ep_fini_vc(struct gnix_fid_ep *ep)
 		while ((vc = (struct gnix_vc *)
 				_gnix_vec_iterator_next(&iter))) {
 			_gnix_vec_remove_at(ep->vc_table,
-					    GNIX_VECTOR_ITERATOR_IDX(iter));
+					    GNIX_VECTOR_ITERATOR_IDX(iter) - 1);
 			_gnix_vc_destroy(vc);
 		}
 
