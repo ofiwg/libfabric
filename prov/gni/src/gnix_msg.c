@@ -551,27 +551,39 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 	__gnix_msg_free_rma_txd(req, txd);
 
 	if (atomic_dec(&req->msg.outstanding_txds) == 0) {
-		GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.recv_flags == FI_LOCAL_MR is %s"
-			   ", req->msg.recv_iov_cnt = %lu\n",
+		GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.recv_flags == FI_LOCAL_MR "
+			   "is %s, req->msg.recv_iov_cnt = %lu\n",
 			   req->msg.recv_flags & FI_LOCAL_MR ? "true" : "false",
 			   req->msg.recv_iov_cnt);
 
-		/* Build and re-tx the entire iov request */
-		if (req->msg.status != FI_SUCCESS &&
-		    req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
+		if (req->msg.status != FI_SUCCESS) {
 			req->tx_failures++;
-			req->work_fn = __gnix_rndzv_iov_req_build;
+
+			if (GNIX_EP_RDM(req->gnix_ep->type) &&
+			    req->tx_failures <
+			    req->gnix_ep->domain->params.max_retransmits) {
+				/* Build and re-tx the entire iov request if the
+				 * ep type is "reliable datagram" */
+				req->work_fn = __gnix_rndzv_iov_req_build;
+				return _gnix_vc_queue_work_req(req);
+			}
+
+			if (!GNIX_EP_DGM(req->gnix_ep->type)) {
+				GNIX_INFO(FI_LOG_EP_DATA,
+					  "Dropping failed request: %p\n", req);
+			}
 		} else {
-			/* Generate remote CQE and send fin msg back to sender */
 			if (req->msg.recv_flags & FI_LOCAL_MR) {
 				for (i = 0; i < req->msg.recv_iov_cnt; i++) {
 					GNIX_INFO(FI_LOG_EP_DATA, "freeing auto"
-						  "-reg MR: %p\n", req->msg.recv_md[i]);
+						  "-reg MR: %p\n",
+						  req->msg.recv_md[i]);
 					fi_close(&req->msg.recv_md[i]->mr_fid.fid);
 				}
 			}
-			req->work_fn = __gnix_rndzv_req_send_fin;
 		}
+		/* Generate remote CQE and send fin msg back to sender */
+		req->work_fn = __gnix_rndzv_req_send_fin;
 		return _gnix_vc_queue_work_req(req);
 	}
 
