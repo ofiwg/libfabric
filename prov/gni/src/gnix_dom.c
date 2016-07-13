@@ -354,6 +354,13 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_MR_HARD_STALE_REG_LIMIT:
 		*(int32_t *)val = domain->mr_cache_attr.hard_stale_limit;
 		break;
+	case GNI_XPMEM_ENABLE:
+		*(bool *)val = domain->params.xpmem_enabled;
+#if !HAVE_XPMEM
+		GNIX_WARN(FI_LOG_DOMAIN,
+			  "GNI provider XPMEM support not configured\n");
+#endif
+		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
 		return -FI_EINVAL;
@@ -471,6 +478,14 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		if (*(int32_t *) val < 0)
 			return -FI_EINVAL;
 		domain->udreg_reg_limit = *(int32_t *) val;
+		break;
+	case GNI_XPMEM_ENABLE:
+#if HAVE_XPMEM
+		domain->params.xpmem_enabled = *(bool *)val;
+#else
+		GNIX_WARN(FI_LOG_DOMAIN,
+			  "GNI provider XPMEM support not configured\n");
+#endif
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -590,6 +605,11 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->params.mbox_msg_maxsize = default_mbox_msg_maxsize;
 	domain->params.max_retransmits = default_max_retransmits;
 	domain->params.err_inject_count = default_err_inject_count;
+#if HAVE_XPMEM
+	domain->params.xpmem_enabled = true;
+#else
+	domain->params.xpmem_enabled = false;
+#endif
 
 	domain->gni_tx_cq_size = default_tx_cq_size;
 	domain->gni_rx_cq_size = default_rx_cq_size;
