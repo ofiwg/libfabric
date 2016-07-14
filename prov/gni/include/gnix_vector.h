@@ -97,7 +97,7 @@ struct gnix_vector_iter {
 	}
 
 /* Returns the current index of the iterator */
-#define GNIX_VECTOR_ITERATOR_IDX(_iter)	((_iter).cur_idx)
+#define GNIX_VECTOR_ITERATOR_IDX(_iter)	((_iter).cur_idx - 1)
 
 /**
  * Vector operations
