@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2016\-05\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2016\-07\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -9,8 +9,8 @@ Allocate or close an endpoint.
 .RE
 .TP
 .B fi_ep_bind
-Associate an endpoint with an event queue, completion queue, counter,
-address vector, or memory region
+Associate an endpoint with an event queue, completion queue, counter, or
+address vector
 .RS
 .RE
 .TP
@@ -195,9 +195,9 @@ data transfer operations or communication establishment events, must be
 bound to the appropriate completion queues or event queues before being
 enabled.
 .PP
-Once an endpoint has been activated, it may be associated with memory
-regions and address vectors.
-Receive buffers may be posted to it, and calls may be made to connection
+Once an endpoint has been activated, it may be associated with an
+address vector.
+Receive buffers may be posted to it and calls may be made to connection
 establishment routines.
 Connectionless endpoints may also perform data transfers.
 .PP
