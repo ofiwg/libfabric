@@ -45,6 +45,7 @@ extern "C" {
 #include "gnix.h"
 #include "gnix_bitmap.h"
 #include "gnix_av.h"
+#include "gnix_xpmem.h"
 
 /*
  * mode bits
@@ -55,6 +56,7 @@ extern "C" {
 #define GNIX_VC_MODE_PENDING_MSGS	(1U << 3)
 #define GNIX_VC_MODE_PEER_CONNECTED	(1U << 4)
 #define GNIX_VC_MODE_IN_TABLE		(1U << 5)
+#define GNIX_VC_MODE_XPMEM		(1U << 6)
 
 /* VC flags */
 #define GNIX_VC_FLAG_RX_SCHEDULED	0
@@ -144,6 +146,7 @@ struct gnix_vc {
 	int modes;
 	gnix_bitmap_t flags; /* We're missing regular bit ops */
 	gni_mem_handle_t peer_irq_mem_hndl;
+	xpmem_apid_t peer_apid;
 	uint64_t peer_caps;
 };
 

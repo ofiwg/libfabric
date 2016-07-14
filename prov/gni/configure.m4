@@ -20,6 +20,12 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	gnitest_LDFLAGS=
         gnitest_LIBS=
 
+
+        AC_ARG_ENABLE([xpmem],
+                      [AS_HELP_STRING([--enable-xpmem],
+                                      [Enable xpmem (gni provider) @<:@default=yes@:>@])],
+                      )
+
         AS_IF([test x"$enable_gni" != x"no"],
                [FI_PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
                                  [gni_header_happy=1
@@ -54,6 +60,20 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                   gni_LDFLAGS="$CRAY_UDREG_LIBS $gni_LDFLAGS"
                                  ],
                                  [udreg_lib_happy=0])
+               AS_IF([test x"$enable_xpmem" != x"no"],
+                     [FI_PKG_CHECK_MODULES([CRAY_XPMEM], [cray-xpmem],
+                                 [AC_DEFINE_UNQUOTED([HAVE_XPMEM], [1], [Define to 1 if xpmem available])
+                                  gni_CPPFLAGS="$CRAY_XPMEM_CFLAGS $gni_CPPFLAGS"
+                                  gni_LDFLAGS="$CRAY_XPMEM_LIBS $gni_LDFLAGS"
+                                 ],
+                                 [])
+                      ],
+                      [AC_DEFINE_UNQUOTED([HAVE_XPMEM], [0], [Define to 1 if xpmem available])
+                      ])
+
+               gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
+dnl looks like we need to get rid of some white space
+               gni_path_to_gni_pub=${gni_path_to_gni_pub%?}/gni_pub.h
                gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
 dnl looks like we need to get rid of some white space
                gni_path_to_gni_pub=${gni_path_to_gni_pub%?}/gni_pub.h

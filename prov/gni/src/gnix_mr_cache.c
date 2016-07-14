@@ -583,18 +583,22 @@ static int
 __notifier_monitor(gnix_mr_cache_t *cache,
 		   gnix_mr_cache_entry_t *entry)
 {
+
 	if (!cache->attr.lazy_deregistration) {
+		return FI_SUCCESS;
+	}
+
+	if (cache->attr.notifier == NULL) {
 		return FI_SUCCESS;
 	}
 
 	GNIX_DEBUG(FI_LOG_MR, "monitoring entry=%p %llx:%llx\n", entry,
 		   entry->key.address, entry->key.length);
 
-	return _gnix_notifier_monitor(cache->attr.notifier,
-				      (void *) entry->key.address,
-				      entry->key.length,
-				      (uint64_t) entry);
-
+	return  _gnix_notifier_monitor(cache->attr.notifier,
+					      (void *) entry->key.address,
+					      entry->key.length,
+					      (uint64_t) entry);
 }
 
 /**
@@ -612,6 +616,10 @@ __notifier_unmonitor(gnix_mr_cache_t *cache,
 	int rc;
 
 	if (!cache->attr.lazy_deregistration) {
+		return;
+	}
+
+	if (cache->attr.notifier == NULL) {
 		return;
 	}
 

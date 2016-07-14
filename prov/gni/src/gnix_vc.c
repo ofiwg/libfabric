@@ -52,6 +52,7 @@
 #include "gnix_av.h"
 #include "gnix_trigger.h"
 #include "gnix_vector.h"
+#include "gnix_xpmem.h"
 
 /*
  * forward declarations and local struct defs.
@@ -63,6 +64,7 @@ struct wq_hndl_conn_req {
 	struct gnix_vc *vc;
 	uint64_t src_vc_ptr;
 	gni_mem_handle_t irq_mem_hndl;
+	xpmem_segid_t peer_segid;
 };
 
 static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr);
@@ -292,7 +294,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 				    uint64_t src_vc_vaddr,
 				    gni_smsg_attr_t *src_smsg_attr,
 				    gni_mem_handle_t *src_irq_cq_mhdl,
-				    uint64_t caps)
+				    uint64_t caps,
+				    xpmem_segid_t my_segid)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = sbuf;
@@ -309,7 +312,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	      sizeof(int) +
 	      sizeof(uint64_t) * 2 +
 	      sizeof(gni_smsg_attr_t) +
-	      sizeof(gni_mem_handle_t);
+	      sizeof(gni_mem_handle_t) +
+	      sizeof(xpmem_segid_t);
 	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	memcpy(cptr, &rtype, sizeof(rtype));
@@ -327,6 +331,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	memcpy(cptr, src_irq_cq_mhdl, sizeof(gni_mem_handle_t));
 	cptr += sizeof(gni_mem_handle_t);
 	memcpy(cptr, &caps, sizeof(uint64_t));
+	cptr += sizeof(xpmem_segid_t);
+	memcpy(cptr, &my_segid, sizeof(xpmem_segid_t));
 }
 
 /*
@@ -339,7 +345,8 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 				      uint64_t *src_vc_vaddr,
 				      gni_smsg_attr_t *src_smsg_attr,
 				      gni_mem_handle_t *src_irq_cq_mhndl,
-				      uint64_t *caps)
+				      uint64_t *caps,
+				      xpmem_segid_t *peer_segid)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = rbuf;
@@ -364,6 +371,8 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 	memcpy(src_irq_cq_mhndl, cptr, sizeof(gni_mem_handle_t));
 	cptr += sizeof(gni_mem_handle_t);
 	memcpy(caps, cptr, sizeof(uint64_t));
+	cptr += sizeof(uint64_t);
+	memcpy(peer_segid, cptr, sizeof(xpmem_segid_t));
 }
 
 /*
@@ -383,7 +392,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 				     int resp_vc_id,
 				     gni_smsg_attr_t *resp_smsg_attr,
 				     gni_mem_handle_t *resp_irq_cq_mhndl,
-				     uint64_t caps)
+				     uint64_t caps,
+				     xpmem_segid_t my_segid)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = sbuf;
@@ -399,7 +409,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 	      sizeof(uint64_t) * 3 +
 	      sizeof(int) +
 	      sizeof(gni_smsg_attr_t) +
-	      sizeof(gni_mem_handle_t);
+	      sizeof(gni_mem_handle_t) +
+	      sizeof(xpmem_segid_t);
 	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	memcpy(cptr, &rtype, sizeof(rtype));
@@ -415,6 +426,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 	memcpy(cptr, resp_irq_cq_mhndl, sizeof(gni_mem_handle_t));
 	cptr += sizeof(gni_mem_handle_t);
 	memcpy(cptr, &caps, sizeof(uint64_t));
+	cptr += sizeof(uint64_t);
+	memcpy(cptr, &my_segid, sizeof(xpmem_segid_t));
 }
 
 /*
@@ -426,7 +439,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 				  int *resp_vc_id,
 				  gni_smsg_attr_t *resp_smsg_attr,
 				  gni_mem_handle_t *resp_irq_cq_mhndl,
-				  uint64_t *caps)
+				  uint64_t *caps,
+				  xpmem_segid_t *peer_segid)
 {
 	char *cptr = rbuf;
 
@@ -443,6 +457,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 	memcpy(resp_irq_cq_mhndl, cptr, sizeof(gni_mem_handle_t));
 	cptr += sizeof(gni_mem_handle_t);
 	memcpy(caps, cptr, sizeof(uint64_t));
+	cptr += sizeof(uint64_t);
+	memcpy(peer_segid, cptr, sizeof(xpmem_segid_t));
 }
 
 static void __gnix_vc_get_msg_type(char *rbuf,
@@ -759,6 +775,9 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	gni_smsg_attr_t peer_smsg_attr;
 	gni_mem_handle_t tmp_mem_hndl;
 	uint64_t peer_caps;
+	xpmem_segid_t peer_segid;
+	xpmem_apid_t peer_apid;
+	bool accessible;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -772,7 +791,8 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 			      &peer_id,
 			      &peer_smsg_attr,
 			      &tmp_mem_hndl,
-			      &peer_caps);
+			      &peer_caps,
+			      &peer_segid);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		"resp rx: (From Aries 0x%x Id %d src vc %p peer vc addr 0x%lx)\n",
@@ -808,6 +828,21 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 			"__gnix_vc_smsg_init returned %s\n",
 			fi_strerror(-ret));
 		goto err;
+	}
+
+	/*
+	 * see if we can do xpmem with this EP
+	 */
+
+	ret = _gnix_xpmem_accessible(ep, src_cm_nic_addr, &accessible);
+	if ((ret == FI_SUCCESS) && (accessible == true)) {
+		ret = _gnix_xpmem_get_apid(ep->xpmem_hndl,
+					   peer_segid,
+					   &peer_apid);
+		if (ret == FI_SUCCESS) {
+			vc->modes |= GNIX_VC_MODE_XPMEM;
+			vc->peer_apid = peer_apid;
+		}
 	}
 
 	/*
@@ -858,8 +893,9 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	gni_mem_handle_t tmp_mem_hndl;
 	int src_mapped = 0;
 	fi_addr_t fi_addr;
-
-
+	xpmem_segid_t peer_segid;
+	xpmem_apid_t peer_apid;
+	bool accessible;
 	ssize_t __attribute__((unused)) len;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -875,7 +911,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				  &src_vc_ptr,
 				  &src_smsg_attr,
 				  &tmp_mem_hndl,
-				  &peer_caps);
+				  &peer_caps,
+				  &peer_segid);
 
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
@@ -989,6 +1026,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		data->src_vc_id = src_vc_id;
 		data->src_vc_ptr = src_vc_ptr;
 		data->irq_mem_hndl = tmp_mem_hndl;
+		data->peer_segid = peer_segid;
 
 		work_req->progress_fn = __gnix_vc_conn_ack_prog_fn;
 		work_req->data = data;
@@ -1042,6 +1080,17 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				  "_gnix_vc_smsg_init returned %s\n",
 				  fi_strerror(-ret));
 			goto err;
+		}
+
+		ret = _gnix_xpmem_accessible(ep, src_cm_nic_addr, &accessible);
+		if ((ret == FI_SUCCESS) && (accessible == true)) {
+			ret = _gnix_xpmem_get_apid(ep->xpmem_hndl,
+						   peer_segid,
+						   &peer_apid);
+			if (ret == FI_SUCCESS) {
+				vc->modes |= GNIX_VC_MODE_XPMEM;
+				vc->peer_apid = peer_apid;
+			}
 		}
 
 		vc->conn_state = GNIX_VC_CONNECTED;
@@ -1120,7 +1169,10 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 	struct gnix_fid_ep *ep = NULL;
 	struct gnix_fid_domain *dom = NULL;
 	struct gnix_cm_nic *cm_nic = NULL;
+	xpmem_segid_t my_segid;
 	char sbuf[GNIX_CM_NIC_MAX_MSG_SIZE] = {0};
+	xpmem_apid_t peer_apid;
+	bool accessible;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1175,7 +1227,7 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 
 	/*
 	 * prep the smsg_mbox_attr
-     */
+	 */
 
 	smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 	smsg_mbox_attr.msg_buffer = mbox->base;
@@ -1189,13 +1241,21 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 	 * serialize the resp message in the buffer
 	 */
 
+        ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
+				       &my_segid);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "_gni_xpmem_get_my_segid returned %s\n",
+			  fi_strerror(-ret));
+	}
+
 	__gnix_vc_pack_conn_resp(sbuf,
 				 work_req_data->src_vc_ptr,
 				 (uint64_t)vc,
 				 vc->vc_id,
 				 &smsg_mbox_attr,
 				 &ep->nic->irq_mem_hndl,
-				 ep->caps);
+				 ep->caps,
+				 my_segid);
 
 	/*
 	 * try to send the message, if it succeeds,
@@ -1218,6 +1278,23 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 				  fi_strerror(-ret));
 			goto exit;
 		}
+
+		/*
+		 * TODO: xpmem setup here
+		 */
+
+		ret = _gnix_xpmem_accessible(ep, vc->peer_cm_nic_addr,
+					     &accessible);
+		if ((ret == FI_SUCCESS) && (accessible == true)) {
+			ret = _gnix_xpmem_get_apid(ep->xpmem_hndl,
+						   work_req_data->peer_segid,
+						   &peer_apid);
+			if (ret == FI_SUCCESS) {
+				vc->modes |= GNIX_VC_MODE_XPMEM;
+				vc->peer_apid = peer_apid;
+			}
+		}
+
 		complete = 1;
 		vc->conn_state = GNIX_VC_CONNECTED;
 		vc->peer_id = work_req_data->src_vc_id;
@@ -1259,6 +1336,7 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 	struct gnix_fid_ep *ep = NULL;
 	struct gnix_fid_domain *dom = NULL;
 	struct gnix_cm_nic *cm_nic = NULL;
+	xpmem_segid_t my_segid;
 	char sbuf[GNIX_CM_NIC_MAX_MSG_SIZE] = {0};
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -1300,7 +1378,7 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 
 	/*
 	 * prep the smsg_mbox_attr
-     */
+	 */
 
 	smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 	smsg_mbox_attr.msg_buffer = mbox->base;
@@ -1323,6 +1401,14 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 		 vc->peer_cm_nic_addr.cdm_id,
 		 vc);
 
+        ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
+				       &my_segid);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			"_gnix_xpmem_get_my_segid returned %s\n",
+			fi_strerror(-ret));
+	}
+
 	__gnix_vc_pack_conn_req(sbuf,
 				&vc->peer_addr,
 				&ep->my_name.gnix_addr,
@@ -1330,7 +1416,8 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 				(uint64_t)vc,
 				&smsg_mbox_attr,
 				&ep->nic->irq_mem_hndl,
-				ep->caps);
+				ep->caps,
+				my_segid);
 
 	/*
 	 * try to send the message, if -FI_EAGAIN is returned, okay,

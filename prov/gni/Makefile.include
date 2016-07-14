@@ -41,6 +41,7 @@ _gni_files = \
 	prov/gni/src/gnix_util.c \
 	prov/gni/src/gnix_vc.c \
 	prov/gni/src/gnix_vector.c \
+	prov/gni/src/gnix_xpmem.c \
 	prov/gni/src/gnix_wait.c
 
 _gni_headers = \
@@ -74,6 +75,7 @@ _gni_headers = \
 	prov/gni/include/gnix_util.h \
 	prov/gni/include/gnix_vc.h \
 	prov/gni/include/gnix_vector.h \
+	prov/gni/include/gnix_xpmem.h \
 	prov/gni/include/gnix_wait.h
 
 if HAVE_CRITERION
@@ -116,7 +118,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/common.c
 
 prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) $(gnitest_LDFLAGS) -static
-prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS) $(gnitest_CPPFLAGS)
+prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS) $(CRAY_XPMEM_CFLAGS) $(gnitest_CPPFLAGS)
 prov_gni_test_gnitest_LDADD =  $(gnitest_LIBS) $(linkback)
 endif HAVE_CRITERION
 

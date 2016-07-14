@@ -435,6 +435,7 @@ struct gnix_fid_ep {
 	int (*progress_fn)(struct gnix_fid_ep *, enum gnix_progress_type);
 	/* RX specific progress fn */
 	int (*rx_progress_fn)(struct gnix_fid_ep *, gni_return_t *rc);
+	struct gnix_xpmem_handle *xpmem_hndl;
 	bool tx_enabled;
 	bool rx_enabled;
 	bool requires_lock;
