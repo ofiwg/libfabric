@@ -177,6 +177,7 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	if (flags & FI_PEEK) {
+		recv_data.peek_data.flags |= FI_COMPLETION;
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
 						FI_IBV_EVENT_RECV_PEEK,
 						&recv_data.peek_data);
@@ -184,6 +185,7 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 			fi_ibv_rdm_tagged_poll(ep_rdm);
 		}
 	} else if (flags & FI_CLAIM) {
+		recv_data.peek_data.flags |= FI_COMPLETION;
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
 						 FI_IBV_EVENT_RECV_START,
 						 &recv_data);
@@ -196,7 +198,7 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 						 &recv_data);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
-			"fi_recvfrom: conn %p, tag 0x%llx, len %ull, rbuf %p, fi_ctx %p, posted_recv %d\n",
+			"fi_recvfrom: conn %p, tag 0x%llx, len %llu, rbuf %p, fi_ctx %p, posted_recv %d\n",
 			conn, msg->tag, recv_data.data_len, recv_data.dest_addr,
 			msg->context, ep_rdm->posted_recvs);
 
