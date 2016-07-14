@@ -781,7 +781,8 @@ transfer operation in order to guarantee that ordering is met.
 
 *FI_ORDER_NONE*
 : No ordering is specified.  This value may be used as input in order
-  to obtain the default message order supported by the provider.
+  to obtain the default message order supported by the provider. FI_ORDER_NONE
+  is an alias for the value 0.
 
 *FI_ORDER_RAR*
 : Read after read.  If set, RMA and atomic read operations are
@@ -1206,6 +1207,18 @@ track successful completions, with a CQ used to report errors.
 Operations that complete with an error increment the error counter
 and generate a completion event.  The generation of entries going to
 the CQ can then be controlled using FI_SELECTIVE_COMPLETION.
+
+As mentioned in fi_getinfo(3), the ep_attr structure can be used to
+query providers that support various endpoint attributes. fi_getinfo
+can return provider info structures that can support the minimal set
+of requirements (such that the application maintains correctness).
+However, it can also return provider info structures that exceed
+application requirements. As an example, consider an application
+requesting msg_order as FI_ORDER_NONE. The resulting output from
+getinfo may have all the ordering bits set. The application can reset
+the ordering bits it does not require before creating the endpoint.
+The provider is free to implement a stricter ordering than is
+required by the application.
 
 # RETURN VALUES
 
