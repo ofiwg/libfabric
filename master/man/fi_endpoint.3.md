@@ -14,7 +14,7 @@ fi_endpoint / fi_scalable_ep / fi_passive_ep / fi_close
 
 fi_ep_bind
 :   Associate an endpoint with an event queue, completion queue,
-    counter, address vector, or memory region
+    counter, or address vector
 
 fi_scalable_ep_bind
 :   Associate a scalable endpoint with an address vector
@@ -186,8 +186,8 @@ asynchronous completions, either through data transfer operations or
 communication establishment events, must be bound to the appropriate
 completion queues or event queues before being enabled.
 
-Once an endpoint has been activated, it may be associated with memory
-regions and address vectors.  Receive buffers may be posted to it, and
+Once an endpoint has been activated, it may be associated with an address
+vector.  Receive buffers may be posted to it and
 calls may be made to connection establishment routines.
 Connectionless endpoints may also perform data transfers.
 
