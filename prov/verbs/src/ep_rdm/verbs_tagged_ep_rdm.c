@@ -101,190 +101,149 @@ static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 	return 0;
 }
 
-static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
-					  size_t len, void *desc,
-					  fi_addr_t src_addr, uint64_t tag,
-					  uint64_t ignore, void *context)
+static inline ssize_t
+rdm_trecv_second_event(struct fi_ibv_rdm_tagged_request *request,
+			struct fi_ibv_rdm_ep *ep)
 {
-	int ret = 0;
+	ssize_t ret = FI_SUCCESS;
 
-	struct fi_ibv_rdm_tagged_request *request =
-		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-	fi_ibv_rdm_tagged_zero_request(request);
-	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
-
-	struct fi_ibv_rdm_tagged_conn *conn = (src_addr == FI_ADDR_UNSPEC)
-		? NULL : (struct fi_ibv_rdm_tagged_conn *) src_addr;
-	struct fi_ibv_rdm_ep *ep = container_of(ep_fid,
-						struct fi_ibv_rdm_ep, ep_fid);
-
+	switch (request->state.rndv)
 	{
-		struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
-			.peek_data = {
-				.minfo = {
-					.conn = conn,
-					.tag = tag,
-					.tagmask = ~ignore
-				},
-				.context = context,
-				.flags = 0
-			},
-			.dest_addr = buf,
-			.data_len = len,
-			.ep = ep
-		};
-
-		ret = fi_ibv_rdm_tagged_req_hndl(request,
-						 FI_IBV_EVENT_RECV_START,
-						 &recv_data);
-
-		VERBS_DBG(FI_LOG_EP_DATA,
-			"fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, posted_recv %d\n",
-			conn, tag, (int)len, buf, context,
-			ep->posted_recvs);
-
-		if (ret || request->state.err ||
-		    request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
-			goto out;
-		}
-	}
-
-	struct fi_ibv_recv_got_pkt_process_data data = {
-		.ep = ep
-	};
-
-	if (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
-		if (fi_ibv_rdm_tagged_prepare_send_request(request, ep)) {
+	case FI_IBV_STATE_RNDV_NOT_USED:
+		if (request->state.eager != FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
+			struct fi_ibv_recv_got_pkt_process_data data = {
+				.ep = ep
+			};
 			ret = fi_ibv_rdm_tagged_req_hndl(request,
-				FI_IBV_EVENT_POST_READY, &data);
+							 FI_IBV_EVENT_RECV_START,
+							 &data);
 		}
-	} else {
-		ret = fi_ibv_rdm_tagged_req_hndl(request,
-			FI_IBV_EVENT_RECV_START, &data);
+		break;
+	case FI_IBV_STATE_RNDV_RECV_WAIT4RES:
+		if (fi_ibv_rdm_tagged_prepare_send_request(request, ep)) {
+			struct fi_ibv_rdm_tagged_send_ready_data data = {
+				.ep = ep
+			};
+			ret = fi_ibv_rdm_tagged_req_hndl(request,
+							FI_IBV_EVENT_POST_READY,
+							&data);
+		}
+		break;
+	default:
+		break;
 	}
 
-out:
 	return ret;
 }
 
 static ssize_t
-fi_ibv_rdm_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-			size_t count, fi_addr_t src_addr, uint64_t tag,
-			uint64_t ignore, void *context)
-{
-	void *buf = NULL;
-	size_t total_len = 0;
-	size_t i;
-
-	for (i = 0; i < count; i++) {
-		total_len += iov[i].iov_len;
-	}
-
-	struct fi_ibv_rdm_ep *ep_rdm =
-		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
-	if ((count > 1) && (total_len > ep_rdm->rndv_threshold)) {
-		return -FI_EMSGSIZE;
-	}
-
-	switch (count)
-	{
-	case 0: break;
-	case 1:
-		buf = iov[0].iov_base;
-		break;
-	default:
-		return -FI_EINVAL;
-		break;
-	}
-
-	return fi_ibv_rdm_tagged_recvfrom(ep, buf, total_len,
-					  desc ? desc[0] : NULL,
-					  src_addr, tag, ignore, context);
-}
-
-static ssize_t fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid,
-	const struct fi_msg_tagged *msg,
-	uint64_t flags)
+fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+			  uint64_t flags)
 {
 	ssize_t ret = FI_SUCCESS;
+	struct fi_ibv_rdm_ep *ep_rdm =
+		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
+
+	if (msg->iov_count > 1) {
+		assert(0);
+		return -FI_EMSGSIZE;
+	}
 
 	struct fi_ibv_rdm_tagged_conn *conn =
 		(msg->addr == FI_ADDR_UNSPEC) ? NULL :
 		(struct fi_ibv_rdm_tagged_conn *) msg->addr;
 
-	struct fi_ibv_rdm_ep *ep_rdm =
-		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
-
-	if (flags & FI_PEEK) {
-		struct fi_ibv_rdm_tagged_request *request =
-			util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-		fi_ibv_rdm_tagged_zero_request(request);
-		FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
-
-		struct fi_ibv_rdm_tagged_peek_data peek_data = {
+	struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
+		.peek_data = {
 			.minfo = {
 				.conn = conn,
 				.tag = msg->tag,
 				.tagmask = ~(msg->ignore)
 			},
 			.context = msg->context,
-			.flags = flags
-		};
+			.flags = (ep_rdm->rx_selective_completion ?
+				flags : (flags | FI_COMPLETION))
+		},
+		.dest_addr =
+			(msg->iov_count) ? msg->msg_iov[0].iov_base : NULL,
+		.data_len = (msg->iov_count) ? msg->msg_iov[0].iov_len : 0,
+		.ep = ep_rdm
+	};
 
+	struct fi_ibv_rdm_tagged_request *request =
+		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+
+	fi_ibv_rdm_tagged_zero_request(request);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+
+	if (flags & FI_PEEK) {
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
-			FI_IBV_EVENT_RECV_PEEK, &peek_data);
+						FI_IBV_EVENT_RECV_PEEK,
+						&recv_data.peek_data);
 		if (ret == -FI_ENOMSG) {
 			fi_ibv_rdm_tagged_poll(ep_rdm);
 		}
 	} else if (flags & FI_CLAIM) {
-		struct fi_ibv_rdm_tagged_request *request =
-			util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-		fi_ibv_rdm_tagged_zero_request(request);
-		FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
-
-		assert(msg->iov_count == 1);
-
-		struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
-			.peek_data = {
-				.minfo = {
-					.conn = conn,
-					.tag = msg->tag,
-					.tagmask = ~(msg->ignore)
-
-				},
-				.context = msg->context,
-				.flags = flags
-			},
-			.dest_addr = msg->msg_iov[0].iov_base,
-			.data_len = msg->msg_iov[0].iov_len,
-			.ep = ep_rdm
-		};
-
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
-			FI_IBV_EVENT_RECV_START, &recv_data);
-
-		struct fi_ibv_recv_got_pkt_process_data data = {
-			.ep = ep_rdm
-		};
-
-		if (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
-			if (fi_ibv_rdm_tagged_prepare_send_request(request,
-								   ep_rdm))
-			{
-				ret = fi_ibv_rdm_tagged_req_hndl(request,
-					FI_IBV_EVENT_POST_READY, &data);
-			}
-		} else {
-			ret = fi_ibv_rdm_tagged_req_hndl(request,
-				FI_IBV_EVENT_RECV_START, &data);
+						 FI_IBV_EVENT_RECV_START,
+						 &recv_data);
+		if (!ret) {
+			ret = rdm_trecv_second_event(request, ep_rdm);
 		}
 	} else {
-		ret = fi_ibv_rdm_tagged_recvv(ep_fid, msg->msg_iov, msg->desc,
-					      msg->iov_count, msg->addr,
-					      msg->tag, msg->ignore,
-					      msg->context);
+		ret = fi_ibv_rdm_tagged_req_hndl(request,
+						 FI_IBV_EVENT_RECV_START,
+						 &recv_data);
+
+		VERBS_DBG(FI_LOG_EP_DATA,
+			"fi_recvfrom: conn %p, tag 0x%llx, len %ull, rbuf %p, fi_ctx %p, posted_recv %d\n",
+			conn, msg->tag, recv_data.data_len, recv_data.dest_addr,
+			msg->context, ep_rdm->posted_recvs);
+
+		if (!ret && !request->state.err) {
+			ret = rdm_trecv_second_event(request, ep_rdm);
+		}
 	}
+
 	return ret;
+}
+
+static ssize_t
+fi_ibv_rdm_tagged_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+			size_t count, fi_addr_t src_addr, uint64_t tag,
+			uint64_t ignore, void *context)
+{
+	struct fi_ibv_rdm_ep *ep_rdm =
+		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
+
+	const struct fi_msg_tagged msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = src_addr,
+		.tag = tag,
+		.ignore = ignore,
+		.context = context,
+		.data = 0
+	};
+
+	return fi_ibv_rdm_tagged_recvmsg(ep_fid, &msg,
+		(ep_rdm->rx_selective_completion ? 0ULL : FI_COMPLETION));
+
+}
+
+static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
+					  size_t len, void *desc,
+					  fi_addr_t src_addr, uint64_t tag,
+					  uint64_t ignore, void *context)
+{
+	const struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = len
+	};
+
+	return fi_ibv_rdm_tagged_recvv(ep_fid, &iov, &desc, 1, src_addr, tag,
+					ignore, context);
 }
 
 static inline ssize_t 
