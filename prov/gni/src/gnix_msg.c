@@ -664,6 +664,7 @@ static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
 				i++;
 			} else {
 				req->msg.send_info[i].send_addr += cpy_len;
+				req->msg.send_info[i].send_len -= cpy_len;
 			}
 		} else {	/* Just exhausted current send buffer. */
 			i++;
@@ -1020,8 +1021,8 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 			 * been reached.
 			 */
 			if (ct_size + get_len >= max_ct_size) {
-				*next_ct = txd = NULL;
 				req->iov_txds[txd_cnt++] = txd;
+				*next_ct = txd = NULL;
 				ct_size = 0;
 			} else {
 				if (!txd) {
@@ -1120,6 +1121,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 				i++;
 			} else {
 				req->msg.send_info[i].send_addr += get_len;
+				req->msg.send_info[i].send_len -= get_len;
 			}
 		} else {	/* Just exhausted current send buffer. */
 			i++;
