@@ -203,6 +203,14 @@ uint64_t fi_gettime_ms(void)
 	return now.tv_sec * 1000 + now.tv_usec / 1000;
 }
 
+uint64_t fi_gettime_us(void)
+{
+	struct timeval now;
+
+	gettimeofday(&now, NULL);
+	return now.tv_sec * 1000000 + now.tv_usec;
+}
+
 #ifndef HAVE_EPOLL
 
 int fi_epoll_create(struct fi_epoll **ep)
