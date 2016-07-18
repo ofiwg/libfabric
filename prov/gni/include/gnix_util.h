@@ -227,7 +227,7 @@ int _gnix_job_disable_unassigned_cpus(void);
 int _gnix_job_enable_affinity_apply(void);
 int _gnix_job_disable_affinity_apply(void);
 
-void _gnix_alps_cleanup(void);
+void _gnix_app_cleanup(void);
 int _gnix_job_fma_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_job_cq_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_pes_on_node(uint32_t *num_pes);
