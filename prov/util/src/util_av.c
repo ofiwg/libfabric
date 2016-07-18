@@ -540,8 +540,8 @@ int ip_av_get_index(struct util_av *av, const void *addr)
 	return ofi_av_lookup_index(av, addr, ip_av_slot(av, addr));
 }
 
-static void ip_av_write_event(struct util_av *av, uint64_t data,
-			      int err, void *context)
+void ofi_av_write_event(struct util_av *av, uint64_t data,
+			int err, void *context)
 {
 	struct fi_eq_err_entry entry;
 	size_t size;
@@ -623,12 +623,12 @@ static int ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (!ret)
 			success_cnt++;
 		else if (av->eq)
-			ip_av_write_event(av, i, -ret, context);
+			ofi_av_write_event(av, i, -ret, context);
 	}
 
 	FI_DBG(av->prov, FI_LOG_AV, "%d addresses successful\n", success_cnt);
 	if (av->eq) {
-		ip_av_write_event(av, success_cnt, 0, context);
+		ofi_av_write_event(av, success_cnt, 0, context);
 		ret = 0;
 	} else {
 		ret = success_cnt;
@@ -696,7 +696,7 @@ static int ip_av_insert_ip4sym(struct util_av *av,
 			if (!ret)
 				success_cnt++;
 			else if (av->eq)
-				ip_av_write_event(av, fi, -ret, context);
+				ofi_av_write_event(av, fi, -ret, context);
 		}
 	}
 
@@ -723,7 +723,7 @@ static int ip_av_insert_ip6sym(struct util_av *av,
 			if (!ret)
 				success_cnt++;
 			else if (av->eq)
-				ip_av_write_event(av, fi, -ret, context);
+				ofi_av_write_event(av, fi, -ret, context);
 		}
 
 		/* TODO: should we skip addresses x::0 and x::255? */
@@ -776,7 +776,7 @@ static int ip_av_insert_nodesym(struct util_av *av,
 			if (!ret)
 				success_cnt++;
 			else if (av->eq)
-				ip_av_write_event(av, fi, -ret, context);
+				ofi_av_write_event(av, fi, -ret, context);
 		}
 	}
 
@@ -827,7 +827,7 @@ static int ip_av_insertsym(struct fid_av *av_fid, const char *node, size_t nodec
 
 out:
 	if (av->eq) {
-		ip_av_write_event(av, ret, 0, context);
+		ofi_av_write_event(av, ret, 0, context);
 		ret = 0;
 	}
 	return ret;
