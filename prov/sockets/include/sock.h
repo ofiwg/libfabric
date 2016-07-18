@@ -55,7 +55,7 @@
 #include <fi_list.h>
 #include <fi_file.h>
 #include <fi_osd.h>
-#include <rbtree.h>
+#include "fi_util.h"
 
 #ifndef _SOCK_H_
 #define _SOCK_H_
@@ -224,7 +224,7 @@ struct sock_domain {
 	struct sock_eq *mr_eq;
 
 	enum fi_progress progress_mode;
-	RbtHandle mr_heap;
+	struct ofi_util_mr *mr_heap;
 	struct sock_pe *pe;
 	struct dlist_entry dom_list_entry;
 	struct fi_domain_attr attr;
@@ -295,14 +295,10 @@ struct sock_cntr {
 struct sock_mr {
 	struct fid_mr mr_fid;
 	struct sock_domain *domain;
-	uint64_t access;
-	uint64_t offset;
 	uint64_t key;
 	uint64_t flags;
-	size_t iov_count;
 	struct sock_cntr *cntr;
 	struct sock_cq *cq;
-	struct iovec mr_iov[1];
 };
 
 struct sock_av_addr {
@@ -1042,11 +1038,9 @@ void sock_cntr_remove_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 
 
 struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
-				   void *buf, size_t len, uint64_t access);
+				   uintptr_t *buf, size_t len, uint64_t access);
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 				    void *buf, size_t len, uint64_t access);
-struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint64_t key);
-
 
 struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);

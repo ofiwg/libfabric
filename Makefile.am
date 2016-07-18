@@ -51,7 +51,8 @@ common_srcs = \
 	prov/util/src/util_main.c   \
 	prov/util/src/util_poll.c   \
 	prov/util/src/util_wait.c   \
-	prov/util/src/util_buf.c
+	prov/util/src/util_buf.c    \
+	prov/util/src/util_mr.c
 
 if MACOS
 common_srcs += src/osx/osd.c
