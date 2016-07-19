@@ -260,7 +260,7 @@ int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 int ofi_get_src_addr(uint32_t addr_format,
 		     const void *dest_addr, size_t dest_addrlen,
 		     void **src_addr, size_t *src_addrlen);
-
+void ofi_getnodename(char *buf, int buflen);
 
 /*
  * Poll set

@@ -475,45 +475,6 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 	return ret;
 }
 
-void sock_getnodename(char *buf, int buflen)
-{
-	int ret;
-	struct addrinfo ai, *rai = NULL;
-	struct ifaddrs *ifaddrs, *ifa;
-
-	ret = gethostname(buf, buflen);
-	if (ret == 0) {
-		memset(&ai, 0, sizeof(ai));
-		ai.ai_family = AF_INET;
-		ret = getaddrinfo(buf, NULL, &ai, &rai);
-		if (!ret) {
-			freeaddrinfo(rai);
-			return;
-		}
-	}
-
-#if HAVE_GETIFADDRS
-	ret = getifaddrs(&ifaddrs);
-	if (!ret) {
-		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-			     (ifa->ifa_addr->sa_family != AF_INET))
-				continue;
-
-			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
-				  	  buf, buflen, NULL, 0, NI_NUMERICHOST);
-			if (ret == 0) {
-				freeifaddrs(ifaddrs);
-				return;
-			}
-		}
-		freeifaddrs(ifaddrs);
-	}
-#endif
-	/* no reasonable address found, try loopback */
-	strncpy(buf, "127.0.0.1", buflen);
-}
-
 void sock_insert_loopback_addr(struct slist *addr_list)
 {
 	struct sock_host_list_entry *addr_entry;
