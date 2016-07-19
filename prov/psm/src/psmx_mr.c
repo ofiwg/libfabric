@@ -35,13 +35,16 @@
 struct psmx_fid_mr *psmx_mr_get(struct psmx_fid_domain *domain, uint64_t key)
 {
 	RbtIterator it;
-	struct psmx_fid_mr *mr;
+	struct psmx_fid_mr *mr = NULL;
 
+	fastlock_acquire(&domain->mr_lock);
 	it = rbtFind(domain->mr_map, (void *)key);
 	if (!it)
-		return NULL;
+		goto exit;
 
 	rbtKeyValue(domain->mr_map, it, (void **)&key, (void **)&mr);
+exit:
+	fastlock_release(&domain->mr_lock);
 	return mr;
 }
 
