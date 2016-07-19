@@ -147,4 +147,15 @@ RXM_INI ;
 #  define RXM_INIT NULL
 #endif
 
+#if (HAVE_RXD) && (HAVE_RXD_DL)
+#  define RXD_INI FI_EXT_INI
+#  define RXD_INIT NULL
+#elif (HAVE_RXD)
+#  define RXD_INI INI_SIG(fi_rxd_ini)
+#  define RXD_INIT fi_rxd_ini()
+RXD_INI ;
+#else
+#  define RXD_INIT NULL
+#endif
+
 #endif /* _PROV_H_ */

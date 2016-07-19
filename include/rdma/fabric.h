@@ -234,7 +234,8 @@ enum {
 	FI_PROTO_IWARP_RDM,
 	FI_PROTO_IB_RDM,
 	FI_PROTO_GNI,
-	FI_PROTO_RXM
+	FI_PROTO_RXM,
+	FI_PROTO_RXD
 };
 
 /* Mode bits */
