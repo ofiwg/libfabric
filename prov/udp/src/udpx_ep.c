@@ -43,7 +43,10 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 
 	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
 	ret = bind(ep->sock, addr, addrlen);
-	return ret ? -errno : 0;
+	if (ret)
+		return -errno;
+	ep->is_bound = 1;
+	return 0;
 }
 
 int udpx_getname(fid_t fid, void *addr, size_t *addrlen)
@@ -472,6 +475,31 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	return ret;
 }
 
+static void udpx_bind_src_addr(struct udpx_ep *ep)
+{
+	int ret;
+	struct addrinfo ai, *rai = NULL;
+	char hostname[HOST_NAME_MAX];
+
+	memset(&ai, 0, sizeof(ai));
+	ai.ai_family = AF_INET;
+	ai.ai_socktype = SOCK_DGRAM;
+
+	ofi_getnodename(hostname, sizeof(hostname));
+	ret = getaddrinfo(hostname, NULL, &ai, &rai);
+	if (ret) {
+		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
+			"getaddrinfo failed\n");
+		return;
+	}
+
+	ret = udpx_setname(&ep->util_ep.ep_fid.fid, rai->ai_addr, rai->ai_addrlen);
+	if (ret) {
+		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "failed to set addr\n");
+	}
+	freeaddrinfo(rai);
+}
+
 static int udpx_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct udpx_ep *ep;
@@ -483,6 +511,8 @@ static int udpx_ep_ctrl(struct fid *fid, int command, void *arg)
 			return -FI_ENOCQ;
 		if (!ep->util_ep.av)
 			return -FI_EOPBADSTATE; /* TODO: Add FI_ENOAV */
+		if (!ep->is_bound)
+			udpx_bind_src_addr(ep);
 		break;
 	default:
 		return -FI_ENOSYS;

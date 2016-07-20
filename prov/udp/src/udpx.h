@@ -106,6 +106,7 @@ struct udpx_ep {
 	udpx_tx_comp_func	tx_comp;
 	struct udpx_rx_cirq	*rxq;    /* protected by rx_cq lock */
 	int			sock;
+	int			is_bound;
 };
 
 int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
