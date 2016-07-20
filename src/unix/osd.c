@@ -145,7 +145,7 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 	}
 
 	*mapped = shm->ptr;
-
+	shm->size = size;
 	return ret;
 
 failed:
