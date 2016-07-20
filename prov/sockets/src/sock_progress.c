@@ -1437,6 +1437,7 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		pe_entry.comp = rx_buffered->comp;
 		pe_entry.flags = rx_posted->flags;
 		pe_entry.flags |= (FI_MSG | FI_RECV);
+		pe_entry.addr = rx_buffered->addr;
 		if (rx_buffered->is_tagged)
 			pe_entry.flags |= FI_TAGGED;
 		pe_entry.flags &= ~FI_MULTI_RECV;
