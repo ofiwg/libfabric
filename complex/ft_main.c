@@ -137,7 +137,7 @@ static void ft_show_test_info(void)
 	printf(" %s,", fi_tostr(&test_info.ep_type, FI_TYPE_EP_TYPE));
 	printf(" %s,", fi_tostr(&test_info.av_type, FI_TYPE_AV_TYPE));
 	printf(" eq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));
-	printf(" cq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));
+	printf(" cq_%s,", ft_wait_obj_str(test_info.cq_wait_obj));
 	printf(" [%s],", fi_tostr(&test_info.mode, FI_TYPE_MODE));
 	printf(" [%s]]\n", fi_tostr(&test_info.caps, FI_TYPE_CAPS));
 }
