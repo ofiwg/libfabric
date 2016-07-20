@@ -1074,7 +1074,10 @@ void do_recvv(int len)
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
-	sz = fi_recvv(ep[1], dest_iov, NULL, 0, gni_addr[0], iov_src_buf);
+	sz = fi_recvv(ep[1], NULL, NULL, IOV_CNT, gni_addr[0], iov_src_buf);
+	cr_assert_eq(sz, -FI_EINVAL);
+
+	sz = fi_recvv(ep[1], dest_iov, NULL, IOV_CNT + 1, gni_addr[0], iov_src_buf);
 	cr_assert_eq(sz, -FI_EINVAL);
 
 	for (iov_cnt = 1; iov_cnt <= IOV_CNT; iov_cnt++) {

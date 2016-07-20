@@ -119,14 +119,14 @@ static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct gnix_fid_ep *ep_priv;
 
-	if (!ep || !iov || !count || count > GNIX_MAX_IOV_LIMIT) {
+	if (!ep || !iov || count > GNIX_MAX_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
-	if (count == 1) {
+	if (count <= 1) {
 		return _gnix_recv(ep_priv, (uint64_t)iov[0].iov_base,
 				  iov[0].iov_len, desc ? desc[0] : NULL,
 				  src_addr, context,
