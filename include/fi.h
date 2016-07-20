@@ -169,6 +169,7 @@ int ofi_rma_target_allowed(uint64_t caps);
 int ofi_ep_bind_valid(struct fi_provider *prov, struct fid *bfid, uint64_t flags);
 
 uint64_t fi_gettime_ms(void);
+uint64_t fi_gettime_us(void);
 
 static inline int ofi_equals_ipaddr(struct sockaddr_in *addr1,
                              struct sockaddr_in *addr2)

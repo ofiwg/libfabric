@@ -220,6 +220,7 @@ AC_TRY_LINK(
 
 AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
 	  	   [Define to 1 if the linker supports alias attribute.])
+AC_CHECK_FUNCS([getifaddrs])
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT

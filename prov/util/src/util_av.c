@@ -30,6 +30,8 @@
  * SOFTWARE.
  */
 
+#include "config.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -38,6 +40,11 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <netinet/in.h>
+
+#if HAVE_GETIFADDRS
+#include <net/if.h>
+#include <ifaddrs.h>
+#endif
 
 #include <fi_util.h>
 
@@ -92,6 +99,45 @@ out:
 	close(sock);
 	return ret;
 
+}
+
+void ofi_getnodename(char *buf, int buflen)
+{
+	int ret;
+	struct addrinfo ai, *rai = NULL;
+	struct ifaddrs *ifaddrs, *ifa;
+
+	ret = gethostname(buf, buflen);
+	if (ret == 0) {
+		memset(&ai, 0, sizeof(ai));
+		ai.ai_family = AF_INET;
+		ret = getaddrinfo(buf, NULL, &ai, &rai);
+		if (!ret) {
+			freeaddrinfo(rai);
+			return;
+		}
+	}
+
+#if HAVE_GETIFADDRS
+	ret = getifaddrs(&ifaddrs);
+	if (!ret) {
+		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+			     (ifa->ifa_addr->sa_family != AF_INET))
+				continue;
+
+			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
+				  	  buf, buflen, NULL, 0, NI_NUMERICHOST);
+			if (ret == 0) {
+				freeifaddrs(ifaddrs);
+				return;
+			}
+		}
+		freeifaddrs(ifaddrs);
+	}
+#endif
+	/* no reasonable address found, try loopback */
+	strncpy(buf, "127.0.0.1", buflen);
 }
 
 int ofi_get_src_addr(uint32_t addr_format,
@@ -540,8 +586,8 @@ int ip_av_get_index(struct util_av *av, const void *addr)
 	return ofi_av_lookup_index(av, addr, ip_av_slot(av, addr));
 }
 
-static void ip_av_write_event(struct util_av *av, uint64_t data,
-			      int err, void *context)
+void ofi_av_write_event(struct util_av *av, uint64_t data,
+			int err, void *context)
 {
 	struct fi_eq_err_entry entry;
 	size_t size;
@@ -623,12 +669,12 @@ static int ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (!ret)
 			success_cnt++;
 		else if (av->eq)
-			ip_av_write_event(av, i, -ret, context);
+			ofi_av_write_event(av, i, -ret, context);
 	}
 
 	FI_DBG(av->prov, FI_LOG_AV, "%d addresses successful\n", success_cnt);
 	if (av->eq) {
-		ip_av_write_event(av, success_cnt, 0, context);
+		ofi_av_write_event(av, success_cnt, 0, context);
 		ret = 0;
 	} else {
 		ret = success_cnt;
@@ -696,7 +742,7 @@ static int ip_av_insert_ip4sym(struct util_av *av,
 			if (!ret)
 				success_cnt++;
 			else if (av->eq)
-				ip_av_write_event(av, fi, -ret, context);
+				ofi_av_write_event(av, fi, -ret, context);
 		}
 	}
 
@@ -723,7 +769,7 @@ static int ip_av_insert_ip6sym(struct util_av *av,
 			if (!ret)
 				success_cnt++;
 			else if (av->eq)
-				ip_av_write_event(av, fi, -ret, context);
+				ofi_av_write_event(av, fi, -ret, context);
 		}
 
 		/* TODO: should we skip addresses x::0 and x::255? */
@@ -776,7 +822,7 @@ static int ip_av_insert_nodesym(struct util_av *av,
 			if (!ret)
 				success_cnt++;
 			else if (av->eq)
-				ip_av_write_event(av, fi, -ret, context);
+				ofi_av_write_event(av, fi, -ret, context);
 		}
 	}
 
@@ -827,7 +873,7 @@ static int ip_av_insertsym(struct fid_av *av_fid, const char *node, size_t nodec
 
 out:
 	if (av->eq) {
-		ip_av_write_event(av, ret, 0, context);
+		ofi_av_write_event(av, ret, 0, context);
 		ret = 0;
 	}
 	return ret;

@@ -244,6 +244,8 @@ int ofi_av_close(struct util_av *av);
 int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index);
 int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot);
 int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
+void ofi_av_write_event(struct util_av *av, uint64_t data,
+			int err, void *context);
 
 int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
@@ -258,7 +260,7 @@ int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 int ofi_get_src_addr(uint32_t addr_format,
 		     const void *dest_addr, size_t dest_addrlen,
 		     void **src_addr, size_t *src_addrlen);
-
+void ofi_getnodename(char *buf, int buflen);
 
 /*
  * Poll set

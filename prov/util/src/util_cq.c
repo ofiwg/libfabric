@@ -36,6 +36,7 @@
 #include <fi_enosys.h>
 #include <fi_util.h>
 
+#define UTIL_DEF_CQ_SIZE (1024)
 
 int fi_check_cq_attr(const struct fi_provider *prov,
 		     const struct fi_cq_attr *attr)
@@ -109,9 +110,8 @@ static void util_cq_read_data(void **dst, void *src)
 
 static void util_cq_read_tagged(void **dst, void *src)
 {
-	util_cq_read_data(dst, src);
-	((struct fi_cq_tagged_entry *) *dst)->tag = 0;
-	*(char**)dst += sizeof(struct fi_cq_tagged_entry);
+	*(struct fi_cq_tagged_entry *) *dst = *(struct fi_cq_tagged_entry *) src;
+	*(char **)dst += sizeof(struct fi_cq_tagged_entry);
 }
 
 static ssize_t util_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
@@ -436,7 +436,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		}
 	}
 
-	cq->cirq = util_comp_cirq_create(attr->size);
+	cq->cirq = util_comp_cirq_create(attr->size == 0 ? UTIL_DEF_CQ_SIZE : attr->size);
 	if (!cq->cirq) {
 		ret = -FI_ENOMEM;
 		goto err1;

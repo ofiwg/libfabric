@@ -46,6 +46,7 @@
 #include <ifaddrs.h>
 #endif
 
+#include "fi_util.h"
 #include "sock.h"
 #include "sock_util.h"
 
@@ -1472,7 +1473,7 @@ int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr,
 	ai.ai_family = AF_INET;
 	ai.ai_socktype = SOCK_STREAM;
 
-	sock_getnodename(hostname, sizeof(hostname));
+	ofi_getnodename(hostname, sizeof(hostname));
 	ret = getaddrinfo(hostname, service, &ai, &rai);
 	if (ret) {
 		SOCK_LOG_DBG("getaddrinfo failed!\n");
