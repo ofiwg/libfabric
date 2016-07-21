@@ -141,8 +141,13 @@ rx_size_left_err(void)
 		goto fail;
 	}
 
-	/* ep starts in a non-enabled state, may fail, should not SEGV */
-	fi_rx_size_left(ep);
+	/* ep starts in a non-enabled state, so if supported this
+	 * should return -FI_EOPBADSTATE */
+	ret = fi_rx_size_left(ep);
+	if ((ret != -FI_EOPBADSTATE) && (ret != -FI_ENOSYS)) {
+		printf("fi_rx_size_left %s (%d)\n", fi_strerror(-ret), ret);
+		goto fail;
+	}
 
 	testret = PASS;
 fail:
