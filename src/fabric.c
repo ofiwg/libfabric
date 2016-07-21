@@ -398,6 +398,7 @@ libdl_done:
 	fi_register_provider(UDP_INIT, NULL);
 	fi_register_provider(SOCKETS_INIT, NULL);
 	fi_register_provider(RXM_INIT, NULL);
+	fi_register_provider(RXD_INIT, NULL);
 
 	init = 1;
 

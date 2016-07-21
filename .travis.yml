@@ -35,8 +35,8 @@ before_install:
 install:
     - ./autogen.sh
     - if [[ "$TRAVIS_OS_NAME" == "linux" && "$CC" == "gcc" ]]; then ./configure $LIBFABRIC_CONFIGURE_ARGS --enable-debug --enable-verbs && make -j2; fi
-    - ./configure --prefix=$HOME --enable-direct=sockets --enable-udp=no --enable-psm=no --enable-mxm=no --enable-gni=no --enable-psm2=no --enable-verbs=no --enable-usnic=no --enable-rxm=no && make -j2
-    - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-verbs --disable-usnic --prefix=$HOME && make -j2  && make install && make test
+    - ./configure --prefix=$HOME --enable-direct=sockets --enable-udp=no --enable-psm=no --enable-mxm=no --enable-gni=no --enable-psm2=no --enable-verbs=no --enable-usnic=no --enable-rxm=no --enable-rxd=no && make -j2
+    - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-rxd --disable-verbs --disable-usnic --prefix=$HOME && make -j2  && make install && make test
     - ./configure $LIBFABRIC_CONFIGURE_ARGS
     - make -j2
     - make install
