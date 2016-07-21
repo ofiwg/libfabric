@@ -255,7 +255,7 @@ static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "Unable to destroy previous rdma_cm_id\n");
 			return -errno;
 		}
-		ret = rdma_create_id(NULL, &pep->id, NULL, RDMA_PS_TCP);
+		ret = rdma_create_id(NULL, &pep->id, &pep->pep_fid.fid, RDMA_PS_TCP);
 		if (ret) {
 			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "Unable to create rdma_cm_id\n");
 			return -errno;
