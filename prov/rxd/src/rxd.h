@@ -98,6 +98,16 @@ struct rxd_domain {
 	struct dlist_entry cq_list;
 };
 
+struct rxd_av {
+	struct fid_av *dg_av;
+	fastlock_t lock;
+
+	struct util_av util_av;
+	int dg_av_used;
+	size_t addrlen;
+	size_t size;
+};
+
 struct rxd_cq {
 	struct util_cq util_cq;
 	struct dlist_entry dom_entry;
@@ -114,5 +124,6 @@ int rxd_fabric(struct fi_fabric_attr *attr,
 	       struct fid_fabric **fabric, void *context);
 int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_domain **dom, void *context);
-
+int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		  struct fid_av **av, void *context);
 #endif

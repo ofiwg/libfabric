@@ -39,7 +39,7 @@
 
 static struct fi_ops_domain rxd_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = fi_no_av_open,
+	.av_open = rxd_av_create,
 	.cq_open = fi_no_cq_open,
 	.endpoint = fi_no_endpoint,
 	.scalable_ep = fi_no_scalable_ep,

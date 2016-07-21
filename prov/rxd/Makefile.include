@@ -1,9 +1,10 @@
 if HAVE_RXD
 _rxd_files = \
-	prov/rxd/src/rxd_attr.c	\
-	prov/rxd/src/rxd_init.c	\
+	prov/rxd/src/rxd_attr.c		\
+	prov/rxd/src/rxd_init.c		\
 	prov/rxd/src/rxd_fabric.c	\
 	prov/rxd/src/rxd_domain.c	\
+	prov/rxd/src/rxd_av.c		\
 	prov/rxd/src/rxd.h
 
 if HAVE_RXD_DL
