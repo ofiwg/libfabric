@@ -51,11 +51,10 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 
 	ret = ofi_write_socket(conn->sock_fd, buf, len);
 	if (ret < 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			ret = 0;
-		} else {
-			SOCK_LOG_DBG("write %s\n", strerror(errno));
-		}
+		else
+			SOCK_LOG_DBG("write error: %s\n", strerror(errno));
 	}
 	if (ret > 0)
 		SOCK_LOG_DBG("wrote to network: %lu\n", ret);
@@ -129,10 +128,9 @@ static ssize_t sock_comm_recv_socket(struct sock_conn *conn,
 	ssize_t ret;
 	ret = recv(conn->sock_fd, buf, len, 0);
 	if (ret == 0) {
-		conn->disconnected = 1;
+		conn->connected = 0;
 		SOCK_LOG_DBG("Disconnected: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
                                ntohs(conn->addr.sin_port));
-
 		return ret;
 	}
 
@@ -187,7 +185,7 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
 	ssize_t ret;
 	ret = recv(conn->sock_fd, buf, len, MSG_PEEK);
 	if (ret == 0) {
-		conn->disconnected = 1;
+		conn->connected = 0;
 		SOCK_LOG_DBG("Disconnected\n");
 		return ret;
 	}
@@ -218,5 +216,5 @@ ssize_t sock_comm_discard(struct sock_pe_entry *pe_entry, size_t len)
 
 int sock_comm_is_disconnected(struct sock_pe_entry *pe_entry)
 {
-	return (rbempty(&pe_entry->comm_buf) && pe_entry->conn->disconnected);
+	return (rbempty(&pe_entry->comm_buf) && !pe_entry->conn->connected);
 }

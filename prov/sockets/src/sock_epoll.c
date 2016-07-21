@@ -110,6 +110,7 @@ void sock_epoll_close(struct sock_epoll_set *set)
 {
 	free(set->events);
 	close(set->fd);
+	set->used = 0;
 }
 
 #else
@@ -179,6 +180,7 @@ int sock_epoll_get_fd_at_index(struct sock_epoll_set *set, int index)
 void sock_epoll_close(struct sock_epoll_set *set)
 {
 	free(set->pollfds);
+	set->used = 0;
 }
 
 #endif
