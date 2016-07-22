@@ -58,7 +58,7 @@ out:
 	return ret;
 }
 
-int rxd_dg_av_reverse_lookup(struct rxd_av *av, uint64_t start_idx,
+int rxd_av_dg_reverse_lookup(struct rxd_av *av, uint64_t start_idx,
 			      const void *addr, size_t addrlen, uint64_t *idx)
 {
 	int ret;
@@ -96,7 +96,7 @@ size_t rxd_av_insert_check(struct rxd_av *av, const void *addr, size_t count,
 
 	for (i = 0; i < count; i++) {
 		curr_addr = (char *) addr + av->addrlen * i;
-		ret = rxd_dg_av_reverse_lookup(av, i, curr_addr, av->addrlen, &dg_av_idx);
+		ret = rxd_av_dg_reverse_lookup(av, i, curr_addr, av->addrlen, &dg_av_idx);
 		if (ret == -FI_ENODATA) {
 			ret = fi_av_insert(av->dg_av, curr_addr, 1, &dg_av_idx,
 					   flags, context);

@@ -40,8 +40,8 @@
 static struct fi_ops_domain rxd_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = rxd_av_create,
-	.cq_open = fi_no_cq_open,
-	.endpoint = fi_no_endpoint,
+	.cq_open = rxd_cq_open,
+	.endpoint = rxd_endpoint,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = fi_no_cntr_open,
 	.poll_open = fi_poll_create,
@@ -78,18 +78,6 @@ static struct fi_ops rxd_domain_fi_ops = {
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
-
-void rxd_cq_progress(struct util_cq *util_cq)
-{
-	/* place-holder */
-	return;
-}
-
-void rxd_ep_progress(struct rxd_ep *ep)
-{
-	/* place-holder */
-	return;
-}
 
 void *rxd_progress(void *arg)
 {
