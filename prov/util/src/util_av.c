@@ -553,7 +553,7 @@ int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
 
 static int ip_av_slot(struct util_av *av, const struct sockaddr *sa)
 {
-	uint16_t host;
+	uint32_t host;
 	uint16_t port;
 
 	if (!sa)
@@ -990,7 +990,7 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	else
 		util_attr.addrlen = sizeof(struct sockaddr_in6);
 
-	util_attr.overhead = attr->count >> 2;
+	util_attr.overhead = attr->count >> 1;
 	util_attr.flags = domain->caps & FI_SOURCE ? FI_SOURCE : 0;
 
 	if (attr->type == FI_AV_UNSPEC)
