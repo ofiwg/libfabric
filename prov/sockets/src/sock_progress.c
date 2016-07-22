@@ -1656,8 +1656,10 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 	if (index != -1) {
 		fastlock_acquire(&map->lock);
 		conn = sock_ep_lookup_conn(ep_attr, index, addr);
-		if (conn == NULL || conn == SOCK_CM_CONN_IN_PROGRESS)
-			idm_set(&ep_attr->av_idm, index, pe_entry->conn);
+		if (conn == NULL || conn == SOCK_CM_CONN_IN_PROGRESS) {
+			if (idm_set(&ep_attr->av_idm, index, pe_entry->conn) < 0)
+				SOCK_LOG_ERROR("idm_set failed\n");
+		}
 		fastlock_release(&map->lock);
 	}
 	pe_entry->conn->av_index = (ep_attr->ep_type == FI_EP_MSG || index == -1) ?
@@ -2152,13 +2154,23 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 					struct sock_rx_ctx *rx_ctx)
 {
 	int ret;
+	struct sock_conn *conn;
 
 	if (sock_comm_is_disconnected(pe_entry)) {
 		SOCK_LOG_DBG("conn disconnected: removing fd from pollset\n");
-		sock_epoll_del(&pe_entry->ep_attr->cmap.epoll_set,
-			       pe_entry->conn->sock_fd);
 		sock_pe_poll_del(pe, pe_entry->conn->sock_fd);
 		ofi_close_socket(pe_entry->conn->sock_fd);
+
+		fastlock_acquire(&pe_entry->ep_attr->lock);
+		sock_epoll_del(&pe_entry->ep_attr->cmap.epoll_set,
+			       pe_entry->conn->sock_fd);
+		conn = idm_lookup(&pe_entry->ep_attr->conn_idm, pe_entry->conn->sock_fd);
+		if (conn) {
+			sock_conn_reset_entry(conn);
+			idm_clear(&pe_entry->ep_attr->conn_idm, pe_entry->conn->sock_fd);
+		}
+		pe_entry->ep_attr->cmap.used--;
+		fastlock_release(&pe_entry->ep_attr->lock);
 
 		if (pe_entry->pe.rx.header_read)
 			sock_pe_report_rx_error(pe_entry, 0, FI_EIO);
@@ -2381,7 +2393,6 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		SOCK_LOG_ERROR("Invalid operation type\n");
 		return -FI_EINVAL;
 	}
-
 	SOCK_LOG_DBG("Inserting TX-entry to PE entry %p, conn: %p\n",
 		      pe_entry, pe_entry->conn);
 
@@ -2510,8 +2521,9 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep_attr *ep_at
 	fastlock_acquire(&map->lock);
 	for (i = 0; i < num_fds; i++) {
 		fd = sock_epoll_get_fd_at_index(&map->epoll_set, i);
-		if(fd == -1) /* failed to lookup fd due to connection failures */
+		if (fd == -1) /* failed to lookup fd due to connection failures */
 			continue;
+
 		conn = idm_lookup(&ep_attr->conn_idm, fd);
 		if (!conn)
 			SOCK_LOG_ERROR("idm_lookup failed\n");

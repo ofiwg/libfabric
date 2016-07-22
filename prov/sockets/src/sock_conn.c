@@ -125,11 +125,13 @@ static int sock_conn_map_increase(struct sock_conn_map *map, int new_size)
 	return 0;
 }
 
-void sock_conn_map_destroy(struct sock_conn_map *cmap)
+void sock_conn_map_destroy(struct sock_ep_attr *ep_attr)
 {
 	int i;
-
+	struct sock_conn_map *cmap = &ep_attr->cmap;
 	for (i = 0; i < cmap->used; i++) {
+		sock_epoll_del(&cmap->epoll_set, cmap->table[i].sock_fd);
+		sock_pe_poll_del(ep_attr->domain->pe, cmap->table[i].sock_fd);
 		ofi_close_socket(cmap->table[i].sock_fd);
 	}
 	free(cmap->table);
@@ -137,6 +139,24 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap)
 	cmap->used = cmap->size = 0;
 	sock_epoll_close(&cmap->epoll_set);
 	fastlock_destroy(&cmap->lock);
+}
+
+void sock_conn_reset_entry(struct sock_conn *conn)
+{
+        conn->ep_attr = NULL;
+        conn->sock_fd = 0;
+        conn->address_published = 0;
+        conn->connected = 0;
+}
+
+static int sock_conn_get_next_index(struct sock_conn_map *map)
+{
+	int i;
+	for (i = 0; i < map->size; i++) {
+		if (!map->table[i].connected)
+			return i;
+	}
+	return -1;
 }
 
 static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
@@ -147,27 +167,29 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 	struct sock_conn_map *map = &ep_attr->cmap;
 
 	if (map->size == map->used) {
-		if (sock_conn_map_increase(map, map->size * 2))
-			return NULL;
+		index = sock_conn_get_next_index(map);
+		if (index < 0) {
+			if (sock_conn_map_increase(map, map->size * 2))
+				return NULL;
+			index = map->used;
+		}
+	} else {
+		index = map->used;
 	}
-
-	index = map->used;
 	map->used++;
 
+	map->table[index].connected = 1;
 	map->table[index].addr = *addr;
 	map->table[index].sock_fd = conn_fd;
 	map->table[index].ep_attr = ep_attr;
 	sock_set_sockopts(conn_fd);
 
-	fastlock_acquire(&ep_attr->lock);
-	dlist_insert_tail(&map->table[index].ep_entry, &ep_attr->conn_list);
-	fastlock_release(&ep_attr->lock);
 
 	if (idm_set(&ep_attr->conn_idm, conn_fd, &map->table[index]) < 0)
-                SOCK_LOG_ERROR("idm_set failed\n");
+		SOCK_LOG_ERROR("idm_set failed\n");
 
 	if (sock_epoll_add(&map->epoll_set, conn_fd))
-                SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
+		SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
 
 	map->table[index].address_published = addr_published;
 	sock_pe_poll_add(ep_attr->domain->pe, conn_fd);
@@ -379,19 +401,16 @@ struct sock_conn *sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index)
 	int conn_fd = -1, ret;
 	int do_retry = sock_conn_retry;
 	struct sock_conn *conn, *new_conn;
-	uint16_t idx;
 	struct sockaddr_in addr;
 	socklen_t lon;
 	int valopt = 0;
 	struct pollfd poll_fd;
 
 	if (ep_attr->ep_type == FI_EP_MSG) {
-		idx = 0;
 		addr = *ep_attr->dest_addr;
 		addr.sin_port = htons(ep_attr->msg_dest_port);
 	} else {
-		idx = index & ep_attr->av->mask;
-		addr = *((struct sockaddr_in *)&ep_attr->av->table[idx].addr);
+		addr = *((struct sockaddr_in *)&ep_attr->av->table[index].addr);
 	}
 
 do_connect:
@@ -487,10 +506,11 @@ out:
 		fastlock_release(&ep_attr->cmap.lock);
 		goto err;
 	}
-	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ? FI_ADDR_NOTAVAIL : (fi_addr_t) idx;
+	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ? FI_ADDR_NOTAVAIL : index;
 	conn = idm_lookup(&ep_attr->av_idm, index);
 	if (conn == SOCK_CM_CONN_IN_PROGRESS) {
-		idm_set(&ep_attr->av_idm, index, new_conn);
+		if (idm_set(&ep_attr->av_idm, index, new_conn) < 0)
+			SOCK_LOG_ERROR("idm_set failed\n");
 		conn = new_conn;
 	}
 	fastlock_release(&ep_attr->cmap.lock);
