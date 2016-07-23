@@ -46,6 +46,8 @@ static size_t cm_data_size;
 static struct fi_eq_cm_entry *entry;
 static struct fi_eq_err_entry err_entry;
 
+char *sock_service = "2710";
+
 static int read_shutdown_event()
 {
 	int ret;
@@ -356,6 +358,19 @@ static int run(void)
 	if (!entry)
 		return -FI_ENOMEM;
 
+	if (opts.dst_addr) {
+		ret = ft_sock_connect(opts.dst_addr, sock_service);
+		if (ret)
+			goto err2;
+	} else {
+		ret = ft_sock_listen(sock_service);
+		if (ret)
+			goto err2;
+		ret = ft_sock_accept();
+		if (ret)
+			goto err1;
+	}
+
 	for (i = 1; i <= cm_data_size; i <<= 1) {
 		printf("trying with data size: %zu\n", i);
 
@@ -365,12 +380,16 @@ static int run(void)
 			ret = server(i);
 
 		if (ret)
-			goto err;
+			goto err1;
+
+		ret = ft_sock_sync(0);
+		if (ret)
+			goto err1;
 	}
 
 	/* Despite server not being setup to handle this, the client should fail
-	 * with -FI_EINVAL since this exceeds its max data size.
-	 */
+	* with -FI_EINVAL since this exceeds its max data size.
+	*/
 	if (opts.dst_addr) {
 		printf("trying with data size exceeding maximum: %zu\n",
 				cm_data_size + 1);
@@ -383,7 +402,10 @@ static int run(void)
 			ret = FI_SUCCESS;
 		}
 	}
-err:
+
+err1:
+	ft_sock_shutdown(sock);
+err2:
 	free(entry);
 	return ret;
 }
@@ -399,8 +421,11 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "q:h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
+		case 'q':
+			sock_service = optarg;
+			break;
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
@@ -409,6 +434,7 @@ int main(int argc, char **argv)
 		case 'h':
 			ft_usage(argv[0],
 					"A MSG client-sever example that uses CM data.");
+			FT_PRINT_OPTS_USAGE("-q <service_port>", "management port");
 			return EXIT_FAILURE;
 		}
 	}
