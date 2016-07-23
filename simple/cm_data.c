@@ -46,6 +46,26 @@ static size_t cm_data_size;
 static struct fi_eq_cm_entry *entry;
 static struct fi_eq_err_entry err_entry;
 
+static int read_shutdown_event()
+{
+	int ret;
+	uint32_t event;
+
+	memset(entry, 0, sizeof(*entry));
+	ret = fi_eq_sread(eq, &event, entry, sizeof(*entry), -1, 0);
+	if (ret < 0) {
+		FT_PROCESS_EQ_ERR(ret, eq, "fi_eq_sread", "shutdown");
+		return ret;
+	}
+	if (event != FI_SHUTDOWN || entry->fid != &ep->fid) {
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)", event,
+			entry->fid, ep);
+		ret = -FI_EOTHER;
+		return ret;
+	}
+	return 0;
+}
+
 static int server_setup(void)
 {
 	size_t opt_size;
@@ -99,6 +119,7 @@ static int server_listen(size_t paramlen)
 	int ret;
 
 	expected = paramlen + sizeof(*entry);
+	memset(entry, 0, expected);
 
 	ret = fi_eq_sread(eq, &event, entry, expected, -1, 0);
 	if (ret != expected) {
@@ -176,7 +197,7 @@ static int server_accept(size_t paramlen)
 	}
 
 	/* Local FI_CONNECTED event does not have data associated. */
-	memset(entry, 0, sizeof(*entry) + paramlen);
+	memset(entry, 0, sizeof(*entry));
 	ret = fi_eq_sread(eq, &event, entry, sizeof(*entry), -1, 0);
 	if (ret != sizeof(*entry)) {
 		FT_PROCESS_EQ_ERR(ret, eq, "fi_eq_sread", "accept");
@@ -191,6 +212,9 @@ static int server_accept(size_t paramlen)
 	}
 
 	fi_shutdown(ep, 0);
+	ret = read_shutdown_event();
+	if (ret)
+		goto err;
 
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(rxcq);
@@ -245,8 +269,8 @@ static int client_expect_reject(size_t paramlen)
 
 	ret = fi_eq_readerr(eq, &err_entry, 0);
 	if (ret != sizeof(err_entry)) {
-		FT_PROCESS_EQ_ERR(ret, eq, "fi_eq_readerr", "listen");
-		return ret;
+		FT_EQ_ERR(eq, err_entry, NULL, 0);
+		return err_entry.err;
 	}
 
 	if (err_entry.err != FI_ECONNREFUSED)
@@ -288,6 +312,9 @@ static int client_expect_accept(size_t paramlen)
 		return ret;
 
 	fi_shutdown(ep, 0);
+	ret = read_shutdown_event();
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -338,7 +365,7 @@ static int run(void)
 			ret = server(i);
 
 		if (ret)
-			return ret;
+			goto err;
 	}
 
 	/* Despite server not being setup to handle this, the client should fail
@@ -356,7 +383,8 @@ static int run(void)
 			ret = FI_SUCCESS;
 		}
 	}
-
+err:
+	free(entry);
 	return ret;
 }
 
