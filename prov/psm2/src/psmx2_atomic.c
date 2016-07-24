@@ -1012,9 +1012,9 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 
 		err = psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_WRITE, ep_priv,
 					ep_priv->domain->eps[vlane],
-					buf, count, NULL, NULL, NULL, NULL,
-					NULL, addr, key, datatype, op,
-					context, flags);
+					buf, len / fi_datatype_size(datatype),
+					NULL, NULL, NULL, NULL, NULL, addr,
+					key, datatype, op, context, flags);
 
 		free(buf);
 		return err;
@@ -1417,9 +1417,9 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 
 		err = psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_READWRITE,
 					ep_priv, ep_priv->domain->eps[vlane],
-					buf, count, desc0, NULL, NULL, result,
-					result_desc0, addr, key, datatype, op,
-					context, flags);
+					buf, len / fi_datatype_size(datatype),
+					desc0, NULL, NULL, result, result_desc0,
+					addr, key, datatype, op, context, flags);
 
 		if (result_count > 1) {
 			psmx2_ioc_write(resultv, result_count, datatype, result, len);
@@ -1904,9 +1904,9 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 
 		err = psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_COMPWRITE,
 					ep_priv, ep_priv->domain->eps[vlane],
-					buf, count, desc0, compare, compare_desc0,
-					result, result_desc0, addr, key, datatype, op,
-					context, flags);
+					buf, len / fi_datatype_size(datatype), desc0,
+					compare, compare_desc0, result, result_desc0,
+					addr, key, datatype, op, context, flags);
 
 		if (result_count > 1) {
 			psmx2_ioc_write(resultv, result_count, datatype, result, len);
