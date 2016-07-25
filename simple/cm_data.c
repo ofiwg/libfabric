@@ -388,8 +388,8 @@ static int run(void)
 	}
 
 	/* Despite server not being setup to handle this, the client should fail
-	* with -FI_EINVAL since this exceeds its max data size.
-	*/
+	 * with -FI_EINVAL since this exceeds its max data size.
+	 */
 	if (opts.dst_addr) {
 		printf("trying with data size exceeding maximum: %zu\n",
 				cm_data_size + 1);
