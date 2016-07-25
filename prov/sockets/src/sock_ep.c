@@ -554,7 +554,7 @@ static ssize_t sock_rx_size_left(struct fid_ep *ep)
 		return -FI_EINVAL;
 	}
 
-	return rx_ctx->num_left;
+	return rx_ctx->enabled ? rx_ctx->num_left : -FI_EOPBADSTATE;
 }
 
 static ssize_t sock_tx_size_left(struct fid_ep *ep)
@@ -577,6 +577,9 @@ static ssize_t sock_tx_size_left(struct fid_ep *ep)
 		SOCK_LOG_ERROR("Invalid EP type\n");
 		return -FI_EINVAL;
 	}
+
+	if (!tx_ctx->enabled)
+		return -FI_EOPBADSTATE;
 
 	fastlock_acquire(&tx_ctx->wlock);
 	num_left = rbavail(&tx_ctx->rb)/SOCK_EP_TX_ENTRY_SZ;
