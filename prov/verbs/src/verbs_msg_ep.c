@@ -452,7 +452,7 @@ int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	ret = rdma_create_id(NULL, &_pep->id, NULL, RDMA_PS_TCP);
+	ret = rdma_create_id(NULL, &_pep->id, &_pep->pep_fid.fid, RDMA_PS_TCP);
 	if (ret) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to create rdma_cm_id\n");
 		goto err1;
@@ -466,8 +466,6 @@ int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		}
 		_pep->bound = 1;
 	}
-
-	_pep->id->context = &_pep->pep_fid.fid;
 
 	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
 	_pep->pep_fid.fid.context = context;
