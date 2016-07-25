@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
+ * Copyright (c) 2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,13 +37,12 @@
 static gnix_vector_ops_t __gnix_vec_lockless_ops;
 static gnix_vector_ops_t __gnix_vec_locked_ops;
 
-
 /*******************************************************************************
  * INTERNAL HELPER FNS
  ******************************************************************************/
-static inline uint64_t __gnix_vec_get_new_size(gnix_vector_t *vec, uint64_t index)
+static inline uint32_t __gnix_vec_get_new_size(gnix_vector_t *vec, uint32_t index)
 {
-	uint64_t new_size = vec->attr.cur_size;
+	uint32_t new_size = vec->attr.cur_size;
 
 	if (vec->attr.vec_increase_type == GNIX_VEC_INCREASE_ADD) {
 		do {
@@ -68,9 +68,24 @@ static inline uint64_t __gnix_vec_get_new_size(gnix_vector_t *vec, uint64_t inde
 	return new_size;
 }
 
-static inline int __gnix_vec_resize(gnix_vector_t *vec, uint64_t new_size)
+static inline void __gnix_vec_close_entries(gnix_vector_t *vec)
 {
-	void *tmp = realloc(vec->vector, new_size * sizeof(gnix_vec_entry_t));
+	memset(vec->vector, 0, (sizeof(gnix_vec_entry_t) * vec->attr.cur_size));
+}
+
+/*******************************************************************************
+ * INTERNAL WORKER FNS
+ ******************************************************************************/
+static inline int __gnix_vec_resize(gnix_vector_t *vec, uint32_t new_size)
+{
+	void *tmp;
+
+	if (new_size <= vec->attr.cur_size) {
+		GNIX_WARN(FI_LOG_EP_DATA, "In __gnix_vec_resize, the new vector"
+			  "size is less than or equal to the current size.\n");
+	}
+
+	tmp = realloc(vec->vector, new_size * sizeof(gnix_vec_entry_t));
 
 	if (!tmp) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Insufficient memory in "
@@ -92,6 +107,12 @@ static inline int __gnix_vec_resize(gnix_vector_t *vec, uint64_t new_size)
 
 static inline int __gnix_vec_create(gnix_vector_t *vec, gnix_vec_attr_t *attr)
 {
+	if (unlikely(vec->state == GNIX_VEC_STATE_READY)) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "The vector (%p) is already ready.\n",
+			   vec);
+		return -FI_EINVAL;
+	}
+
 	vec->vector = calloc(attr->vec_initial_size, sizeof(gnix_vec_entry_t));
 
 	if (unlikely(!vec->vector)) {
@@ -107,39 +128,29 @@ static inline int __gnix_vec_create(gnix_vector_t *vec, gnix_vec_attr_t *attr)
 	return FI_SUCCESS;
 }
 
-static inline void __gnix_vec_close_entries(gnix_vector_t *vec)
+static inline int __gnix_vec_close(gnix_vector_t *vec)
 {
-	memset(vec->vector, 0, (sizeof(gnix_vec_entry_t) * vec->attr.cur_size));
-}
+	if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "The vector (%p) is already dead.\n",
+			   vec);
+		return -FI_EINVAL;
+	}
 
-static inline void __gnix_vec_close(gnix_vector_t *vec)
-{
 	free(vec->vector);
 	vec->ops = NULL;
 	vec->attr.cur_size = 0;
 	vec->state = GNIX_VEC_STATE_DEAD;
+
+	return FI_SUCCESS;
 }
 
-/*******************************************************************************
- * INLINE OPS FNS
- ******************************************************************************/
-inline int _gnix_vec_insert_first(gnix_vector_t *vec, gnix_vec_entry_t *entry)
-{
-	return _gnix_vec_insert_at(vec, entry, 0);
-}
-
-inline int _gnix_vec_insert_last(gnix_vector_t *vec, gnix_vec_entry_t *entry)
-{
-	return _gnix_vec_insert_at(vec, entry, vec->attr.cur_size-1);
-}
-
-inline int _gnix_vec_insert_at(gnix_vector_t *vec, gnix_vec_entry_t *entry,
-				      gnix_vec_index_t index)
+static inline int __gnix_vec_insert_at(gnix_vector_t *vec,
+				       gnix_vec_entry_t *entry,
+				       gnix_vec_index_t index)
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!vec || !entry ||
-		    index >= vec->attr.vec_maximum_size)) {
+	if (unlikely(index >= vec->attr.vec_maximum_size)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "__gnix_vec_insert_at\n");
 		return -FI_EINVAL;
@@ -147,11 +158,11 @@ inline int _gnix_vec_insert_at(gnix_vector_t *vec, gnix_vec_entry_t *entry,
 
 	if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
 		GNIX_FATAL(FI_LOG_EP_CTRL, "gnix_vector_t is in state "
-			   "GNIX_VEC_STATE_DEAD in _gnix_vec_insert_at.\n");
+			   "GNIX_VEC_STATE_DEAD in __gnix_vec_insert_at.\n");
 	}
 
 	if (index >= vec->attr.cur_size) {
-		uint64_t new_size = __gnix_vec_get_new_size(vec, index);
+		uint32_t new_size = __gnix_vec_get_new_size(vec, index);
 		int ret = __gnix_vec_resize(vec, new_size);
 
 		if (unlikely(ret))
@@ -160,7 +171,7 @@ inline int _gnix_vec_insert_at(gnix_vector_t *vec, gnix_vec_entry_t *entry,
 
 	if (vec->vector[index]) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Existing element found in "
-			  "__gnix_vec_insert_last\n");
+			  "__gnix_vec_insert_at\n");
 		return -FI_ECANCELED;
 	} else {
 		vec->vector[index] = entry;
@@ -168,27 +179,16 @@ inline int _gnix_vec_insert_at(gnix_vector_t *vec, gnix_vec_entry_t *entry,
 	}
 }
 
-inline int _gnix_vec_remove_first(gnix_vector_t *vec)
+static inline int __gnix_vec_remove_at(gnix_vector_t *vec,
+				       gnix_vec_index_t index)
 {
-	return _gnix_vec_remove_at(vec, 0);
-}
-
-inline int _gnix_vec_remove_last(gnix_vector_t *vec)
-{
-	return _gnix_vec_remove_at(vec, vec->attr.cur_size-1);
-}
-
-inline int _gnix_vec_remove_at(gnix_vector_t *vec, gnix_vec_index_t index)
-{
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	if (unlikely(!vec || index >= vec->attr.cur_size)) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
-			  "__gnix_vec_remove_at\n");
-		return -FI_EINVAL;
-	} else if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
+	if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
 		GNIX_FATAL(FI_LOG_EP_CTRL, "gnix_vector_t is in state "
-			   "GNIX_VEC_STATE_DEAD in _gnix_vec_remove_at.\n");
+			   "GNIX_VEC_STATE_DEAD in __gnix_vec_remove_at.\n");
+	} else if (index >= vec->attr.cur_size) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "Index (%lu) too large in "
+			  "__gnix_vec_remove_at\n", index);
+		return -FI_EINVAL;
 	} else {
 		if (!vec->vector[index]) {
 			GNIX_WARN(FI_LOG_EP_CTRL, "No entry exists in "
@@ -201,49 +201,26 @@ inline int _gnix_vec_remove_at(gnix_vector_t *vec, gnix_vec_index_t index)
 	return FI_SUCCESS;
 }
 
-inline int _gnix_vec_first(gnix_vector_t *vec, void **element)
+static inline int __gnix_vec_at(gnix_vector_t *vec, void **element,
+				gnix_vec_index_t index)
 {
-	return _gnix_vec_at(vec, element, 0);
-}
-
-inline int _gnix_vec_last(gnix_vector_t *vec, void **element)
-{
-	return _gnix_vec_at(vec, element, vec->attr.cur_size-1);
-}
-
-inline int _gnix_vec_at(gnix_vector_t *vec, void **element, gnix_vec_index_t index)
-{
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	if (unlikely(!vec || index >= vec->attr.cur_size || !element)) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
-			  "_gnix_vec_at\n");
-		return -FI_EINVAL;
-	} else if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
+	if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
 		GNIX_FATAL(FI_LOG_EP_CTRL, "gnix_vector_t is in state "
-			   "GNIX_VEC_STATE_DEAD in _gnix_vec_at.\n");
+			   "GNIX_VEC_STATE_DEAD in __gnix_vec_at.\n");
+	} else if (index >= vec->attr.cur_size) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "Index (%lu) too large in "
+			  "__gnix_vec_at\n", index);
+		return -FI_EINVAL;
 	} else {
 		if (likely((uint64_t) vec->vector[index])) {
 			*element = vec->vector[index];
 		} else {
-			GNIX_INFO(FI_LOG_EP_CTRL, "There is no element at index "
-				  "%lu in _gnix_vec_at\n", index);
+			GNIX_DEBUG(FI_LOG_EP_CTRL, "There is no element at index "
+				   "(%lu) in __gnix_vec_at\n", index);
 			return -FI_ECANCELED;
 		}
-
 	}
 	return FI_SUCCESS;
-}
-
-/**
- * Return next element in the vector iterator
- *
- * @param iter    pointer to the vector iterator
- * @return        pointer to next element in the vector
- */
-gnix_vec_entry_t *_gnix_vec_iterator_next(struct gnix_vector_iter *iter)
-{
-	return iter->vec->ops->iter_next(iter);
 }
 
 /*******************************************************************************
@@ -262,74 +239,60 @@ static int __gnix_vec_lf_init(gnix_vector_t *vec, gnix_vec_attr_t *attr)
 
 static int __gnix_vec_lf_close(gnix_vector_t *vec)
 {
-	__gnix_vec_close_entries(vec);
-	__gnix_vec_close(vec);
+	int ret;
 
-	return FI_SUCCESS;
+	__gnix_vec_close_entries(vec);
+	ret = __gnix_vec_close(vec);
+
+	return ret;
 }
 
-static int __gnix_vec_lf_resize(gnix_vector_t *vec, uint64_t size)
+static int __gnix_vec_lf_resize(gnix_vector_t *vec, uint32_t size)
 {
 	return __gnix_vec_resize(vec, size);
-}
-
-static int __gnix_vec_lf_insert_first(gnix_vector_t *vec,
-				      gnix_vec_entry_t *entry)
-{
-	return _gnix_vec_insert_first(vec, entry);
 }
 
 static int __gnix_vec_lf_insert_last(gnix_vector_t *vec,
 			      gnix_vec_entry_t *entry)
 {
-	return _gnix_vec_insert_last(vec, entry);
+	return __gnix_vec_insert_at(vec, entry, vec->attr.cur_size - 1);
 }
 
 static int __gnix_vec_lf_insert_at(gnix_vector_t *vec,
 				   gnix_vec_entry_t *entry,
 				   gnix_vec_index_t index)
 {
-	return _gnix_vec_insert_at(vec, entry, index);
-}
-
-static int __gnix_vec_lf_remove_first(gnix_vector_t *vec)
-{
-	return _gnix_vec_remove_first(vec);
+	return __gnix_vec_insert_at(vec, entry, index);
 }
 
 static int __gnix_vec_lf_remove_last(gnix_vector_t *vec)
 {
-	return _gnix_vec_remove_last(vec);
+	return __gnix_vec_remove_at(vec, vec->attr.cur_size - 1);
 }
 
 static int __gnix_vec_lf_remove_at(gnix_vector_t *vec,
 				   gnix_vec_index_t index)
 {
-	return _gnix_vec_remove_at(vec, index);
-}
-
-static int __gnix_vec_lf_first(gnix_vector_t *vec, void **element)
-{
-	return _gnix_vec_first(vec, element);
+	return __gnix_vec_remove_at(vec, index);
 }
 
 static int __gnix_vec_lf_last(gnix_vector_t *vec, void **element)
 {
-	return _gnix_vec_last(vec, element);
+	return __gnix_vec_at(vec, element, vec->attr.cur_size - 1);
 }
 
 static int __gnix_vec_lf_at(gnix_vector_t *vec, void **element, gnix_vec_index_t index)
 {
-	return _gnix_vec_at(vec, element, index);
+	return __gnix_vec_at(vec, element, index);
 }
 
-gnix_vec_entry_t *__gnix_vec_lf_iter_first(struct gnix_vector_iter *iter)
+gnix_vec_entry_t *__gnix_vec_lf_iter_next(struct gnix_vector_iter *iter)
 {
-	int i;
+	uint32_t i;
 
 	for (i = iter->cur_idx; i < iter->vec->attr.cur_size; i++) {
 		if (iter->vec->vector[i]) {
-			iter->cur_idx = i;
+			iter->cur_idx = i + 1;
 			return iter->vec->vector[i];
 		}
 	}
@@ -355,39 +318,27 @@ static int __gnix_vec_lk_init(gnix_vector_t *vec, gnix_vec_attr_t *attr)
 
 static int __gnix_vec_lk_close(gnix_vector_t *vec)
 {
+	int ret;
+
 	rwlock_wrlock(&vec->lock);
 
 	__gnix_vec_close_entries(vec);
-	__gnix_vec_close(vec);
+	ret = __gnix_vec_close(vec);
 
 	rwlock_unlock(&vec->lock);
 
 	rwlock_destroy(&vec->lock);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
-static int __gnix_vec_lk_resize(gnix_vector_t *vec, uint64_t size)
+static int __gnix_vec_lk_resize(gnix_vector_t *vec, uint32_t size)
 {
 	int ret;
 
 	rwlock_wrlock(&vec->lock);
 
 	ret = __gnix_vec_resize(vec, size);
-
-	rwlock_unlock(&vec->lock);
-
-	return ret;
-}
-
-static int __gnix_vec_lk_insert_first(gnix_vector_t *vec,
-				      gnix_vec_entry_t *entry)
-{
-	int ret;
-
-	rwlock_wrlock(&vec->lock);
-
-	ret = _gnix_vec_insert_first(vec, entry);
 
 	rwlock_unlock(&vec->lock);
 
@@ -401,7 +352,7 @@ static int __gnix_vec_lk_insert_last(gnix_vector_t *vec,
 
 	rwlock_wrlock(&vec->lock);
 
-	ret = _gnix_vec_insert_last(vec, entry);
+	ret = __gnix_vec_insert_at(vec, entry, vec->attr.cur_size - 1);
 
 	rwlock_unlock(&vec->lock);
 
@@ -416,20 +367,7 @@ static int __gnix_vec_lk_insert_at(gnix_vector_t *vec,
 
 	rwlock_wrlock(&vec->lock);
 
-	ret = _gnix_vec_insert_at(vec, entry, index);
-
-	rwlock_unlock(&vec->lock);
-
-	return ret;
-}
-
-static int __gnix_vec_lk_remove_first(gnix_vector_t *vec)
-{
-	int ret;
-
-	rwlock_wrlock(&vec->lock);
-
-	ret = _gnix_vec_remove_first(vec);
+	ret = __gnix_vec_insert_at(vec, entry, index);
 
 	rwlock_unlock(&vec->lock);
 
@@ -442,7 +380,7 @@ static int __gnix_vec_lk_remove_last(gnix_vector_t *vec)
 
 	rwlock_wrlock(&vec->lock);
 
-	ret = _gnix_vec_remove_last(vec);
+	ret = __gnix_vec_remove_at(vec, vec->attr.cur_size - 1);
 
 	rwlock_unlock(&vec->lock);
 
@@ -456,20 +394,7 @@ static int __gnix_vec_lk_remove_at(gnix_vector_t *vec,
 
 	rwlock_wrlock(&vec->lock);
 
-	ret = _gnix_vec_remove_at(vec, index);
-
-	rwlock_unlock(&vec->lock);
-
-	return ret;
-}
-
-static int __gnix_vec_lk_first(gnix_vector_t *vec, void **element)
-{
-	int ret;
-
-	rwlock_rdlock(&vec->lock);
-
-	ret = _gnix_vec_first(vec, element);
+	ret = __gnix_vec_remove_at(vec, index);
 
 	rwlock_unlock(&vec->lock);
 
@@ -482,7 +407,7 @@ static int __gnix_vec_lk_last(gnix_vector_t *vec, void **element)
 
 	rwlock_rdlock(&vec->lock);
 
-	ret = _gnix_vec_last(vec, element);
+	ret = __gnix_vec_at(vec, element, vec->attr.cur_size - 1);
 
 	rwlock_unlock(&vec->lock);
 
@@ -495,25 +420,27 @@ static int __gnix_vec_lk_at(gnix_vector_t *vec, void **element, gnix_vec_index_t
 
 	rwlock_rdlock(&vec->lock);
 
-	ret = _gnix_vec_at(vec, element, index);
+	ret = __gnix_vec_at(vec, element, index);
 
 	rwlock_unlock(&vec->lock);
 
 	return ret;
 }
 
-gnix_vec_entry_t *__gnix_vec_lk_iter_first(struct gnix_vector_iter *iter)
+gnix_vec_entry_t *__gnix_vec_lk_iter_next(struct gnix_vector_iter *iter)
 {
-	int i;
+	uint32_t i;
+	gnix_vec_entry_t *entry;
 
 	rwlock_rdlock(&iter->vec->lock);
 
 	for (i = iter->cur_idx; i < iter->vec->attr.cur_size; i++) {
 		if (iter->vec->vector[i]) {
+			iter->cur_idx = i + 1;
+			entry = iter->vec->vector[i];
 			rwlock_unlock(&iter->vec->lock);
 
-			iter->cur_idx = i;
-			return iter->vec->vector[i];
+			return entry;
 		}
 	}
 
@@ -524,6 +451,9 @@ gnix_vec_entry_t *__gnix_vec_lk_iter_first(struct gnix_vector_iter *iter)
 	return NULL;
 }
 
+/*******************************************************************************
+ * API FNS
+ ******************************************************************************/
 /**
  * Create the initial vector.  The user is responsible for initializing the
  * "attr" parameter prior to calling this function.
@@ -544,9 +474,6 @@ int _gnix_vec_init(struct gnix_vector *vec, gnix_vec_attr_t *attr)
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to _gnix_vec_init."
 			  "\n");
 		return -FI_EINVAL;
-	} else if (unlikely(vec->state == GNIX_VEC_STATE_READY)) {
-		GNIX_FATAL(FI_LOG_EP_CTRL, "gnix_vector_t is in state "
-			   "GNIX_VEC_STATE_READY in _gnix_vec_init.\n");
 	}
 
 	if (attr->vec_internal_locking == GNIX_VEC_LOCKED) {
@@ -572,9 +499,6 @@ int _gnix_vec_close(gnix_vector_t *vec)
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to _gnix_vec_close."
 			  "\n");
 		return -FI_EINVAL;
-	} else if (unlikely(vec->state == GNIX_VEC_STATE_DEAD)) {
-		GNIX_FATAL(FI_LOG_EP_CTRL, "gnix_vector_t is in state "
-			   "GNIX_VEC_STATE_DEAD in _gnix_vec_close.\n");
 	} else {
 		if (vec->attr.vec_internal_locking == GNIX_VEC_LOCKED) {
 			return __gnix_vec_lk_close(vec);
@@ -584,51 +508,32 @@ int _gnix_vec_close(gnix_vector_t *vec)
 	}
 }
 
-int _gnix_vec_resize(gnix_vector_t *vec, uint64_t size)
-{
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	if (unlikely(!vec || !size)) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to _gnix_vec_resize."
-			  "\n");
-		return -FI_EINVAL;
-	} else {
-		if (vec->attr.vec_internal_locking == GNIX_VEC_LOCKED) {
-			return __gnix_vec_lk_resize(vec, size);
-		} else {
-			return __gnix_vec_lf_resize(vec, size);
-		}
-	}
-}
-
 static gnix_vector_ops_t __gnix_vec_lockless_ops = {
-	.insert_first = __gnix_vec_lf_insert_first,
+	.resize = __gnix_vec_lf_resize,
+
 	.insert_last = __gnix_vec_lf_insert_last,
 	.insert_at = __gnix_vec_lf_insert_at,
 
-	.remove_first = __gnix_vec_lf_remove_first,
 	.remove_last = __gnix_vec_lf_remove_last,
 	.remove_at = __gnix_vec_lf_remove_at,
 
-	.first = __gnix_vec_lf_first,
 	.last = __gnix_vec_lf_last,
 	.at = __gnix_vec_lf_at,
 
-	.iter_next = __gnix_vec_lf_iter_first,
+	.iter_next = __gnix_vec_lf_iter_next,
 };
 
 static gnix_vector_ops_t __gnix_vec_locked_ops = {
-	.insert_first = __gnix_vec_lk_insert_first,
+	.resize = __gnix_vec_lk_resize,
+
 	.insert_last = __gnix_vec_lk_insert_last,
 	.insert_at = __gnix_vec_lk_insert_at,
 
-	.remove_first = __gnix_vec_lk_remove_first,
 	.remove_last = __gnix_vec_lk_remove_last,
 	.remove_at = __gnix_vec_lk_remove_at,
 
-	.first = __gnix_vec_lk_first,
 	.last = __gnix_vec_lk_last,
 	.at = __gnix_vec_lk_at,
 
-	.iter_next = __gnix_vec_lk_iter_first,
+	.iter_next = __gnix_vec_lk_iter_next,
 };
