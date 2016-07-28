@@ -3,6 +3,8 @@ _rxm_files = \
        prov/rxm/src/rxm_attr.c		\
        prov/rxm/src/rxm_init.c		\
        prov/rxm/src/rxm_fabric.c	\
+       prov/rxm/src/rxm_domain.c	\
+       prov/rxm/src/rxm_cq.c		\
        prov/rxm/src/rxm.h
 
 if HAVE_RXM_DL
