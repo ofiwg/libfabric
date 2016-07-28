@@ -37,6 +37,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <inttypes.h>
+#include <netinet/tcp.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
@@ -173,9 +174,18 @@ void ft_csusage(char *name, char *desc);
 void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
+int ft_sock_listen(char *service);
+int ft_sock_connect(char *node, char *service);
+int ft_sock_accept();
+int ft_sock_send(int fd, void *msg, size_t len);
+int ft_sock_recv(int fd, void *msg, size_t len);
+int ft_sock_sync(int value);
+void ft_sock_shutdown(int fd);
 extern int ft_skip_mr;
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
+extern int sock;
+extern int listen_sock;
 #define ADDR_OPTS "b:p:s:a:"
 #define INFO_OPTS "n:f:e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"

@@ -33,17 +33,12 @@
 #include <time.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 
 #include <limits.h>
 #include <shared.h>
 
 #include "fabtest.h"
 
-int listen_sock = -1;
-int sock = -1;
 static int persistent = 1;
 
 //static struct timespec start, end;
@@ -156,126 +151,6 @@ static int ft_check_info(struct fi_info *hints, struct fi_info *info)
 	return 0;
 }
 
-static int ft_fw_listen(char *service)
-{
-	struct addrinfo *ai, hints;
-	int val, ret;
-
-	memset(&hints, 0, sizeof hints);
-	hints.ai_flags = AI_PASSIVE;
-
-	ret = getaddrinfo(NULL, service, &hints, &ai);
-	if (ret) {
-		fprintf(stderr, "getaddrinfo() %s\n", gai_strerror(ret));
-		return ret;
-	}
-
-	listen_sock = socket(ai->ai_family, SOCK_STREAM, 0);
-	if (listen_sock < 0) {
-		perror("socket");
-		ret = listen_sock;
-		goto out;
-	}
-
-	val = 1;
-	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
-	if (ret) {
-		perror("setsockopt SO_REUSEADDR");
-		goto out;
-	}
-
-	ret = bind(listen_sock, ai->ai_addr, ai->ai_addrlen);
-	if (ret) {
-		perror("bind");
-		goto out;
-	}
-
-	ret = listen(listen_sock, 0);
-	if (ret)
-		perror("listen");
-
-out:
-	if (ret && listen_sock >= 0)
-		close(listen_sock);
-	freeaddrinfo(ai);
-	return ret;
-}
-
-static int ft_fw_connect(char *node, char *service)
-{
-	struct addrinfo *ai;
-	int ret;
-
-	ret = getaddrinfo(node, service, NULL, &ai);
-	if (ret) {
-		perror("getaddrinfo");
-		return ret;
-	}
-
-	sock = socket(ai->ai_family, SOCK_STREAM, 0);
-	if (sock < 0) {
-		perror("socket");
-		ret = sock;
-		goto free;
-	}
-
-	ret = 1;
-	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void *) &ret, sizeof(ret));
-	if (ret)
-		perror("setsockopt");
-
-	ret = connect(sock, ai->ai_addr, ai->ai_addrlen);
-	if (ret) {
-		perror("connect");
-		close(sock);
-	}
-
-free:
-	freeaddrinfo(ai);
-	return ret;
-}
-
-static void ft_fw_shutdown(int fd)
-{
-	shutdown(fd, SHUT_RDWR);
-	close(fd);
-}
-
-int ft_fw_send(int fd, void *msg, size_t len)
-{
-	int ret;
-
-	ret = send(fd, msg, len, 0);
-	if (ret == len) {
-		return 0;
-	} else if (ret < 0) {
-		perror("send");
-		return -errno;
-	} else {
-		perror("send aborted");
-		return -FI_ECONNABORTED;
-	}
-}
-
-int ft_fw_recv(int fd, void *msg, size_t len)
-{
-	int ret;
-
-	ret = recv(fd, msg, len, MSG_WAITALL);
-	if (ret == len) {
-		return 0;
-	} else if (ret == 0) {
-		return -FI_ENOTCONN;
-	} else if (ret < 0) {
-		FT_PRINTERR("ft_fw_recv", ret);
-		perror("recv");
-		return -errno;
-	} else {
-		perror("recv aborted");
-		return -FI_ECONNABORTED;
-	}
-}
-
 static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 {
 	info->caps = test_info->caps;
@@ -340,7 +215,7 @@ static int ft_fw_server(void)
 
 
 	do {
-		ret = ft_fw_recv(sock, &test_info, sizeof test_info);
+		ret = ft_sock_recv(sock, &test_info, sizeof test_info);
 		if (ret) {
 			if (ret == -FI_ENOTCONN)
 				ret = 0;
@@ -393,9 +268,9 @@ static int ft_fw_server(void)
 		printf("Ending test %d-%d, result: %s\n", test_info.test_index,
 			test_info.test_subindex, fi_strerror(-ret));
 		results[ft_fw_result_index(-ret)]++;
-		ret = ft_fw_send(sock, &ret, sizeof ret);
+		ret = ft_sock_send(sock, &ret, sizeof ret);
 		if (ret)
-			FT_PRINTERR("ft_fw_send", ret);
+			FT_PRINTERR("ft_sock_send", ret);
 	} while (!ret);
 
 	return ret;
@@ -415,21 +290,21 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 			return ret;
 
 		ft_fw_update_info(&test_info, fabric_info, subindex);
-		ret = ft_fw_send(sock, &test_info, sizeof test_info);
+		ret = ft_sock_send(sock, &test_info, sizeof test_info);
 		if (ret) {
-			FT_PRINTERR("ft_fw_send", ret);
+			FT_PRINTERR("ft_sock_send", ret);
 			return ret;
 		}
 
 		result = ft_run_test();
 
-		ret = ft_fw_recv(sock, &sresult, sizeof sresult);
+		ret = ft_sock_recv(sock, &sresult, sizeof sresult);
 		if (result) {
 			FT_PRINTERR("ft_run_test", result);
 			return result;
 		}
 		else if (ret) {
-			FT_PRINTERR("ft_fw_recv", ret);
+			FT_PRINTERR("ft_sock_recv", ret);
 			return ret;
 		}
 		else if (sresult)
@@ -600,37 +475,28 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 
-		ret = ft_fw_connect(opts.dst_addr, service);
+		ret = ft_sock_connect(opts.dst_addr, service);
 		if (ret)
 			goto out;
 
 		ret = ft_fw_client();
 		if (ret)
 			FT_PRINTERR("ft_fw_client", ret);
-		ft_fw_shutdown(sock);
+		ft_sock_shutdown(sock);
 	} else {
-		ret = ft_fw_listen(service);
+		ret = ft_sock_listen(service);
 		if (ret)
 			goto out;
 
 		do {
-			sock = accept(listen_sock, NULL, 0);
-			if (sock < 0) {
-				ret = sock;
-				perror("accept");
-				goto out;
-			}
-
-			op = 1;
-			ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
-					 (void *) &op, sizeof(op));
+			ret = ft_sock_accept();
 			if (ret)
-				perror("setsockopt");
+				goto out;
 
 			ret = ft_fw_server();
 			if (ret)
 				FT_PRINTERR("ft_fw_server", ret);
-			ft_fw_shutdown(sock);
+			ft_sock_shutdown(sock);
 		} while (persistent);
 	}
 

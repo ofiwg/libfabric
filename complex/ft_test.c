@@ -247,21 +247,6 @@ void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt)
 		ctrl->iov_iter = 0;
 }
 
-static int ft_fw_sync(int value)
-{
-	int result = -FI_EOTHER;
-
-	if (listen_sock < 0) {
-		ft_fw_send(sock, &value,  sizeof value);
-		ft_fw_recv(sock, &result, sizeof result);
-	} else {
-		ft_fw_recv(sock, &result, sizeof result);
-		ft_fw_send(sock, &value,  sizeof value);
-	}
-
-	return result;
-}
-
 static int ft_sync_test(int value)
 {
 	int ret;
@@ -270,7 +255,7 @@ static int ft_sync_test(int value)
 	if (ret)
 		return ret;
 
-	return ft_fw_sync(value);
+	return ft_sock_sync(value);
 }
 
 static int ft_pingpong(void)
@@ -542,7 +527,7 @@ int ft_run_test()
 		}
 	}
 
-	ft_fw_sync(0);
+	ft_sock_sync(0);
 
 	ret = ft_enable_comm();
 	if (ret) {

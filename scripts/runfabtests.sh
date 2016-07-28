@@ -81,6 +81,7 @@ neg_unit_tests=(
 )
 
 simple_tests=(
+	"cm_data"
 	"cq_data"
 	"dgram"
 	"dgram_waitset"

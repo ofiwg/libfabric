@@ -46,6 +46,28 @@ static size_t cm_data_size;
 static struct fi_eq_cm_entry *entry;
 static struct fi_eq_err_entry err_entry;
 
+char *sock_service = "2710";
+
+static int read_shutdown_event()
+{
+	int ret;
+	uint32_t event;
+
+	memset(entry, 0, sizeof(*entry));
+	ret = fi_eq_sread(eq, &event, entry, sizeof(*entry), -1, 0);
+	if (ret < 0) {
+		FT_PROCESS_EQ_ERR(ret, eq, "fi_eq_sread", "shutdown");
+		return ret;
+	}
+	if (event != FI_SHUTDOWN || entry->fid != &ep->fid) {
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)", event,
+			entry->fid, ep);
+		ret = -FI_EOTHER;
+		return ret;
+	}
+	return 0;
+}
+
 static int server_setup(void)
 {
 	size_t opt_size;
@@ -99,6 +121,7 @@ static int server_listen(size_t paramlen)
 	int ret;
 
 	expected = paramlen + sizeof(*entry);
+	memset(entry, 0, expected);
 
 	ret = fi_eq_sread(eq, &event, entry, expected, -1, 0);
 	if (ret != expected) {
@@ -176,7 +199,7 @@ static int server_accept(size_t paramlen)
 	}
 
 	/* Local FI_CONNECTED event does not have data associated. */
-	memset(entry, 0, sizeof(*entry) + paramlen);
+	memset(entry, 0, sizeof(*entry));
 	ret = fi_eq_sread(eq, &event, entry, sizeof(*entry), -1, 0);
 	if (ret != sizeof(*entry)) {
 		FT_PROCESS_EQ_ERR(ret, eq, "fi_eq_sread", "accept");
@@ -191,6 +214,9 @@ static int server_accept(size_t paramlen)
 	}
 
 	fi_shutdown(ep, 0);
+	ret = read_shutdown_event();
+	if (ret)
+		goto err;
 
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(rxcq);
@@ -245,8 +271,8 @@ static int client_expect_reject(size_t paramlen)
 
 	ret = fi_eq_readerr(eq, &err_entry, 0);
 	if (ret != sizeof(err_entry)) {
-		FT_PROCESS_EQ_ERR(ret, eq, "fi_eq_readerr", "listen");
-		return ret;
+		FT_EQ_ERR(eq, err_entry, NULL, 0);
+		return err_entry.err;
 	}
 
 	if (err_entry.err != FI_ECONNREFUSED)
@@ -288,6 +314,9 @@ static int client_expect_accept(size_t paramlen)
 		return ret;
 
 	fi_shutdown(ep, 0);
+	ret = read_shutdown_event();
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -329,6 +358,19 @@ static int run(void)
 	if (!entry)
 		return -FI_ENOMEM;
 
+	if (opts.dst_addr) {
+		ret = ft_sock_connect(opts.dst_addr, sock_service);
+		if (ret)
+			goto err2;
+	} else {
+		ret = ft_sock_listen(sock_service);
+		if (ret)
+			goto err2;
+		ret = ft_sock_accept();
+		if (ret)
+			goto err1;
+	}
+
 	for (i = 1; i <= cm_data_size; i <<= 1) {
 		printf("trying with data size: %zu\n", i);
 
@@ -338,7 +380,11 @@ static int run(void)
 			ret = server(i);
 
 		if (ret)
-			return ret;
+			goto err1;
+
+		ret = ft_sock_sync(0);
+		if (ret)
+			goto err1;
 	}
 
 	/* Despite server not being setup to handle this, the client should fail
@@ -357,6 +403,10 @@ static int run(void)
 		}
 	}
 
+err1:
+	ft_sock_shutdown(sock);
+err2:
+	free(entry);
 	return ret;
 }
 
@@ -371,8 +421,11 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "q:h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
+		case 'q':
+			sock_service = optarg;
+			break;
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
@@ -381,6 +434,7 @@ int main(int argc, char **argv)
 		case 'h':
 			ft_usage(argv[0],
 					"A MSG client-sever example that uses CM data.");
+			FT_PRINT_OPTS_USAGE("-q <service_port>", "management port");
 			return EXIT_FAILURE;
 		}
 	}

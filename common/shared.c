@@ -80,6 +80,9 @@ char test_name[50] = "custom";
 int timeout = -1;
 struct timespec start, end;
 
+int listen_sock = -1;
+int sock = -1;
+
 struct fi_av_attr av_attr = {
 	.type = FI_AV_MAP,
 	.count = 1
@@ -1889,3 +1892,159 @@ int send_recv_greeting(struct fid_ep *ep)
 
 	return 0;
 }
+
+int ft_sock_listen(char *service)
+{
+	struct addrinfo *ai, hints;
+	int val, ret;
+
+	memset(&hints, 0, sizeof hints);
+	hints.ai_flags = AI_PASSIVE;
+
+	ret = getaddrinfo(NULL, service, &hints, &ai);
+	if (ret) {
+		fprintf(stderr, "getaddrinfo() %s\n", gai_strerror(ret));
+		return ret;
+	}
+
+	listen_sock = socket(ai->ai_family, SOCK_STREAM, 0);
+	if (listen_sock < 0) {
+		perror("socket");
+		ret = listen_sock;
+		goto out;
+	}
+
+	val = 1;
+	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
+	if (ret) {
+		perror("setsockopt SO_REUSEADDR");
+		goto out;
+	}
+
+	ret = bind(listen_sock, ai->ai_addr, ai->ai_addrlen);
+	if (ret) {
+		perror("bind");
+		goto out;
+	}
+
+	ret = listen(listen_sock, 0);
+	if (ret)
+		perror("listen");
+
+out:
+	if (ret && listen_sock >= 0)
+		close(listen_sock);
+	freeaddrinfo(ai);
+	return ret;
+}
+
+int ft_sock_connect(char *node, char *service)
+{
+	struct addrinfo *ai;
+	int ret;
+
+	ret = getaddrinfo(node, service, NULL, &ai);
+	if (ret) {
+		perror("getaddrinfo");
+		return ret;
+	}
+
+	sock = socket(ai->ai_family, SOCK_STREAM, 0);
+	if (sock < 0) {
+		perror("socket");
+		ret = sock;
+		goto free;
+	}
+
+	ret = 1;
+	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void *) &ret, sizeof(ret));
+	if (ret)
+		perror("setsockopt");
+
+	ret = connect(sock, ai->ai_addr, ai->ai_addrlen);
+	if (ret) {
+		perror("connect");
+		close(sock);
+	}
+
+free:
+	freeaddrinfo(ai);
+	return ret;
+}
+
+int ft_sock_accept()
+{
+	int ret, op;
+
+	sock = accept(listen_sock, NULL, 0);
+        if (sock < 0) {
+		ret = sock;
+		perror("accept");
+		return ret;
+	}
+
+	op = 1;
+	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+			  (void *) &op, sizeof(op));
+	if (ret)
+		perror("setsockopt");
+
+	return 0;
+}
+
+int ft_sock_send(int fd, void *msg, size_t len)
+{
+	int ret;
+
+	ret = send(fd, msg, len, 0);
+	if (ret == len) {
+		return 0;
+	} else if (ret < 0) {
+		perror("send");
+		return -errno;
+	} else {
+		perror("send aborted");
+		return -FI_ECONNABORTED;
+	}
+}
+
+int ft_sock_recv(int fd, void *msg, size_t len)
+{
+	int ret;
+
+	ret = recv(fd, msg, len, MSG_WAITALL);
+	if (ret == len) {
+		return 0;
+	} else if (ret == 0) {
+		return -FI_ENOTCONN;
+	} else if (ret < 0) {
+		FT_PRINTERR("ft_fw_recv", ret);
+		perror("recv");
+		return -errno;
+	} else {
+		perror("recv aborted");
+		return -FI_ECONNABORTED;
+	}
+}
+
+int ft_sock_sync(int value)
+{
+	int result = -FI_EOTHER;
+
+	if (listen_sock < 0) {
+		ft_sock_send(sock, &value,  sizeof value);
+		ft_sock_recv(sock, &result, sizeof result);
+	} else {
+		ft_sock_recv(sock, &result, sizeof result);
+		ft_sock_send(sock, &value,  sizeof value);
+	}
+
+	return result;
+}
+
+void ft_sock_shutdown(int fd)
+{
+	shutdown(fd, SHUT_RDWR);
+	close(fd);
+}
+

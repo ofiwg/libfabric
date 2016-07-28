@@ -37,6 +37,7 @@ These tests are a mix of very basic functionality tests that show major features
 	fi_rdm_shared_ctx: An RDM client-server example that uses shared context
 	fi_rdm_tagged_peek: An RDM client-server example that uses tagged FI_PEEK
 	fi_scalable_ep: An RDM client-server example with scalable endpoints
+	fi_cm_data: A MSG client-server example that uses CM data
 
 ## Benchmarks
 

@@ -98,11 +98,11 @@ static int ft_load_av(void)
 	}
 
 	msg.len = (uint32_t) len;
-	ret = ft_fw_send(sock, &msg, sizeof msg);
+	ret = ft_sock_send(sock, &msg, sizeof msg);
 	if (ret)
 		return ret;
 
-	ret = ft_fw_recv(sock, &msg, sizeof msg);
+	ret = ft_sock_recv(sock, &msg, sizeof msg);
 	if (ret)
 		return ret;
 
