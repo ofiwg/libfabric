@@ -34,16 +34,23 @@
 
 struct fi_tx_attr rxm_tx_attr = {
 	.caps = FI_MSG | FI_SEND,
+	.comp_order = FI_ORDER_STRICT,
+	.inject_size = 0,
+	.size = 1024,
 };
 
 struct fi_rx_attr rxm_rx_attr = {
 	.caps = FI_MSG | FI_RECV,
+	.comp_order = FI_ORDER_STRICT,
+	.size = 1024,
 };
 
 struct fi_ep_attr rxm_ep_attr = {
 	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_RXM,
-	.protocol_version = 0,
+	.protocol_version = 1,
+	.tx_ctx_cnt = 1,
+	.rx_ctx_cnt = 1
 };
 
 struct fi_domain_attr rxm_domain_attr = {
@@ -51,7 +58,15 @@ struct fi_domain_attr rxm_domain_attr = {
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
+	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_BASIC,
+	.cq_cnt = (1 << 16),
+	.ep_cnt = (1 << 15),
+	.tx_ctx_cnt = 1,
+	.rx_ctx_cnt = 1,
+	.max_ep_tx_ctx = 1,
+	.max_ep_rx_ctx = 1
 };
 
 struct fi_fabric_attr rxm_fabric_attr = {
@@ -62,6 +77,7 @@ struct fi_fabric_attr rxm_fabric_attr = {
 
 struct fi_info rxm_info = {
 	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE,
+	.mode = FI_LOCAL_MR,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,

@@ -39,7 +39,7 @@
 
 static struct fi_ops_fabric rxm_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
-	.domain = fi_no_domain,
+	.domain = rxm_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
 	.wait_open = ofi_wait_fd_open,

@@ -61,6 +61,21 @@ struct rxm_fabric {
 	struct fid_fabric *msg_fabric;
 };
 
+struct rxm_domain {
+	struct util_domain util_domain;
+	struct fid_domain *msg_domain;
+};
+
+struct rxm_mr {
+	struct fid_mr mr_fid;
+	struct fid_mr *msg_mr;
+};
+
+struct rxm_cq {
+	struct util_cq util_cq;
+	struct fid_cq *msg_cq;
+};
+
 extern struct fi_provider rxm_prov;
 extern struct fi_info rxm_info;
 extern struct fi_fabric_attr rxm_fabric_attr;
@@ -70,3 +85,7 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 int rxm_alter_layer_info(struct fi_info *layer_info, struct fi_info *base_info);
 int rxm_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info);
+int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+			     struct fid_domain **dom, void *context);
+int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+			 struct fid_cq **cq_fid, void *context);
