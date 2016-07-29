@@ -1914,6 +1914,15 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	return ret;
 
 err:
+	if (ep_priv->xpmem_hndl) {
+		if (_gnix_xpmem_handle_destroy(ep_priv->xpmem_hndl) !=
+		    FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_xpmem_handle_destroy returned %s\n",
+				  fi_strerror(-ret));
+		}
+	}
+
 	__destruct_tag_storages(ep_priv);
 
 	if (free_list_inited == true)
