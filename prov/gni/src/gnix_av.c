@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -374,6 +374,7 @@ static int map_reverse_lookup(struct gnix_fid_av *int_av,
 		}
 	}
 
+	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 	return -FI_ENOENT;
 }
 
@@ -462,6 +463,7 @@ int _gnix_av_reverse_lookup(struct gnix_fid_av *gnix_av,
 	}
 
 err:
+	GNIX_TRACE(FI_LOG_AV, "\n");
 	return ret;
 }
 

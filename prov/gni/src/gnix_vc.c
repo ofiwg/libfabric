@@ -2028,9 +2028,9 @@ static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 			if ((ret != -FI_ENOSPC) &&
 			    (ret != -FI_EAGAIN)) {
 				/* TODO report error? */
-				GNIX_WARN(FI_LOG_EP_DATA,
-					  "Failed to push request %p: %s\n",
-					  req, fi_strerror(-ret));
+				GNIX_FATAL(FI_LOG_EP_DATA,
+					   "Failed to push request %p: %s\n",
+					   req, fi_strerror(-ret));
 			}
 		} else {
 			break; /* nothing left in the queue */

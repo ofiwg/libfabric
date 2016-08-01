@@ -79,6 +79,7 @@ extern "C" {
 #include "gnix_tags.h"
 #include "gnix_mr_cache.h"
 #include "gnix_mr_notifier.h"
+#include "gnix_nic.h"
 
 #define GNI_MAJOR_VERSION 1
 #define GNI_MINOR_VERSION 0
@@ -117,6 +118,9 @@ extern "C" {
 #define compiler_barrier() asm volatile ("" ::: "memory")
 #endif
 
+
+#define GNIX_MAX_IOV_LIMIT 8
+
 /*
  * GNI GET alignment
  */
@@ -140,6 +144,7 @@ extern "C" {
 
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
 #define GNIX_MSG_GET_TAIL		(1ULL << 62)	/* MSG only flag */
+#define LAST_FLAG			(1ULL << 63)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -502,11 +507,15 @@ struct gnix_fid_av {
 
 enum gnix_fab_req_type {
 	GNIX_FAB_RQ_SEND,
+	GNIX_FAB_RQ_SENDV,
 	GNIX_FAB_RQ_TSEND,
+	GNIX_FAB_RQ_TSENDV,
 	GNIX_FAB_RQ_RDMA_WRITE,
 	GNIX_FAB_RQ_RDMA_READ,
 	GNIX_FAB_RQ_RECV,
+	GNIX_FAB_RQ_RECVV,
 	GNIX_FAB_RQ_TRECV,
+	GNIX_FAB_RQ_TRECVV,
 	GNIX_FAB_RQ_AMO,
 	GNIX_FAB_RQ_FAMO,
 	GNIX_FAB_RQ_CAMO,
@@ -527,21 +536,53 @@ struct gnix_fab_req_rma {
 	gni_return_t             status;
 };
 
+/**
+ * sendv/recvv variable notes.
+ *
+ * @var send_addr	   For sendv rndzv this is the iov addr.
+ * @var send_len	   For sendv this is the cumulative length of the iov
+ * entries.
+ * @var smsg_iov_hdr_addr  A ptr to the smsg iov hdr address so it can be freed
+ * @var send_iov	   For sendv, rndzv, on the remote side, this is a ptr to
+ * the addrs and lengths of the sender's iovec entries.
+ * @var recv_addr	   For recvv this is the iov addr on the remote side.
+ * @var recv_len	   For recvv this is the cumulative length of the iov
+ * entries.
+ * @var send_iov_md	   The sender's memory descriptors.
+ * @var recv_iov_md	   The receiver's memory descriptors.
+ * @var rma_iov_mdh	   The sender's gni mem handles on the receivers request.
+ * @var multi_recv_iov_idx The previous index into the receive buffer for a
+ * subsequent send on a multi_recv req.
+ * @var multi_recv_iov_ptr The previous ptr into the recv buffer for a
+ * subsequent send on a multi_recv req.
+ * @var multi_recv_iov_len The remaining cumulative length of the recv buffer.
+ */
 struct gnix_fab_req_msg {
 	struct gnix_tag_list_element tle;
-	uint64_t                     send_addr;
-	size_t                       send_len;
-	struct gnix_fid_mem_desc     *send_md;
+	struct send_info_t {
+		uint64_t	 send_addr;
+		size_t		 send_len;
+		gni_mem_handle_t mem_hndl;
+	}			     send_info[GNIX_MAX_IOV_LIMIT];
+	struct gnix_fid_mem_desc     *send_md[GNIX_MAX_IOV_LIMIT];
+	size_t                       send_iov_cnt;
 	uint64_t                     send_flags;
-	uint64_t                     recv_addr;
-	size_t                       recv_len;
-	struct gnix_fid_mem_desc     *recv_md;
+	size_t			     cum_send_len;
+	struct recv_info_t {
+		uint64_t	 recv_addr;
+		size_t		 recv_len;
+		gni_mem_handle_t mem_hndl;
+	}			     recv_info[GNIX_MAX_IOV_LIMIT];
+	struct gnix_fid_mem_desc     *recv_md[GNIX_MAX_IOV_LIMIT];
+	size_t			     recv_iov_cnt;
 	uint64_t                     recv_flags; /* protocol, API info */
+	size_t			     cum_recv_len;
 	uint64_t                     tag;
 	uint64_t                     ignore;
 	uint64_t                     imm;
 	gni_mem_handle_t             rma_mdh;
 	uint64_t                     rma_id;
+	/* TODO: Move head&tail info send_info */
 	uint32_t                     rndzv_head;
 	uint32_t                     rndzv_tail;
 	atomic_t                     outstanding_txds;
@@ -752,12 +793,30 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
 	return 0;
 }
 
-/*
+/**
  * Fabric request layout, there is a one to one
  * correspondence between an application's invocation of fi_send, fi_recv
  * and a gnix fab_req.
+ *
+ * @var dlist	     a doubly linked list entry used to queue a request in
+ * either the vc's tx_queue or work_queue.
+ * @var addr	     the peer's gnix_address associated with this request.
+ * @var type	     the fabric request type
+ * @var gnix_ep      the gni endpoint associated with this request
+ * @var user_context the user context, typically the receive buffer address for
+ * a send or the send buffer address for a receive.
+ * @var vc	      the virtual channel or connection edge between the sender
+ * and receiver.
+ * @var work_fn	     the function called by the nic progress loop to initiate
+ * the fabric request.
+ * @var flags	      a set of bit patterns that apply to all message types
+ * @var iov_txds      A list of pending Rdma/CtFma GET txds.
+ * @var iov_txd_cnt   The count of outstanding iov txds.
+ * @var tx_failures   tx failure bits.
+ * @var rma	      GNI PostRdma request
+ * @var msg	      GNI SMSG request
+ * @var amo	      GNI Fma request
  */
-
 struct gnix_fab_req {
 	struct dlist_entry        dlist;
 	struct gnix_address       addr;
@@ -767,8 +826,8 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
-	void                      *txd;
-	uint32_t                  tx_failures;
+	struct gnix_tx_descriptor *iov_txds[GNIX_MAX_IOV_LIMIT];
+	uint32_t		  tx_failures;
 
 	/* common to rma/amo/msg */
 	union {

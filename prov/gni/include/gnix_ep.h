@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -59,7 +59,8 @@ enum {
 	GNIX_SMSG_T_RNDZV_START,
 	GNIX_SMSG_T_RNDZV_FIN,
 	GNIX_SMSG_T_RMA_DATA,
-	GNIX_SMSG_T_AMO_CNTR
+	GNIX_SMSG_T_AMO_CNTR,
+	GNIX_SMSG_T_RNDZV_IOV_START
 };
 
 extern smsg_completer_fn_t gnix_ep_smsg_completers[];

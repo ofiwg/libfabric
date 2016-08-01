@@ -84,9 +84,12 @@ typedef int (*smsg_completer_fn_t)(void  *desc, gni_return_t);
  * @var gni_nic_hndl         optional previously allocated gni_nic_hndl to
  *                           use for allocating GNI resources (GNI CQs) for
  *                           this nic
+ *
+ * @var gni_cdm_modes	     The mode bits gni_cdm_hndl was created with.
  */
 struct gnix_nic_attr {
 	gni_cdm_handle_t gni_cdm_hndl;
+	uint32_t	 gni_cdm_modes;
 	gni_nic_handle_t gni_nic_hndl;
 	bool use_cdm_id;
 	uint32_t cdm_id;
@@ -102,6 +105,7 @@ struct gnix_nic_attr {
  *                           gni_nic_hndl, rx_cq, and tx_cq
  * @var gni_cdm_hndl         handle for the GNI communication domain (CDM)
  *                           this nic is bound to.
+ * @var gni_cdm_modes	     The mode bits gni_cdm_hndl was created with.
  * @var gni_nic_hndl         handle for the GNI nic to which this GNIX nic is bound
  * @var rx_cq                GNI rx cq (non-blocking) bound to this nic
  * @var rx_cq_blk            GNI rx cq (blocking) bound to this nic
@@ -156,6 +160,7 @@ struct gnix_nic {
 	fastlock_t lock;
 	uint32_t allocd_gni_res;
 	gni_cdm_handle_t gni_cdm_hndl;
+	uint32_t	 gni_cdm_modes;
 	gni_nic_handle_t gni_nic_hndl;
 	gni_cq_handle_t rx_cq;
 	gni_cq_handle_t rx_cq_blk;
@@ -184,6 +189,7 @@ struct gnix_nic {
 	gnix_bitmap_t vc_id_bitmap;
 	uint32_t mem_per_mbox;
 	struct gnix_mbox_alloc_handle *mbox_hndl;
+	/* TODO: gnix_buddy_alloc_handle_t *alloc_handle */
 	struct gnix_mbox_alloc_handle *s_rdma_buf_hndl;
 	struct gnix_mbox_alloc_handle *r_rdma_buf_hndl;
 	struct gnix_reference ref_cnt;
@@ -242,6 +248,30 @@ struct gnix_smsg_rndzv_start_hdr {
 };
 
 /**
+ * gnix_smsg_rndzv_iov_start_hdr
+ *
+ * @var flags	      the sender's flags needed on the receive side.
+ * @var imm	      the immediate data associated with this message.
+ * @var msg_tag       the tag associated with this message.
+ * @var mdh	      the memory handle associated with the iov buffer.
+ * @var iov_cnt       the length of the scatter/gather vector.
+ * @var req_addr      the sender's fabric request address.
+ * @var send_len      the cumulative size (in bytes) of the client's
+ * iov base buffers.
+ *
+ * @note the actual iov base addresses and lengths are placed in the
+ * data section of the start message.
+ */
+struct gnix_smsg_rndzv_iov_start_hdr {
+	uint64_t flags;
+	uint64_t imm;
+	uint64_t msg_tag;
+	uint64_t req_addr;
+	size_t iov_cnt;
+	uint64_t send_len;
+};
+
+/**
  * gnix_smsg_rndzv_fin_hdr  - first part of a rendezvous send fin SMSG message
  *
  * @var req_addr   returned local request address
@@ -283,9 +313,11 @@ struct gnix_smsg_amo_cntr_hdr {
  *                       used for unaligned gets
  * @var gnix_smsg_eager_hdr embedded header for SMSG eager protocol
  * @var gnix_smsg_rndzv_start_hdr embedded header for rendezvous protocol
+ * @var gnix_smsg_rndzv_iov_start_hdr embedded header for iovec rndzv protocol
  * @var gnix_smsg_rndzv_fin_hdr embedded header for rendezvous protocol
  * @var gnix_smsg_rndzv_rma_data_hdr embedded header for remote notification for
  *                       rma operations
+ * @var gnix_smsg_amo_cntr_hdr embedded header for AMO remote counter events.
  * @var req              pointer to fab request associated with this descriptor
  * @var completer_fn     call back to invoke when associated GNI CQE's are
  *                       returned.
@@ -293,6 +325,7 @@ struct gnix_smsg_amo_cntr_hdr {
  *                       from GNI_CQ_MSG_ID
  * @var err_list         Error TXD list entry
  * @var int_buf          Intermediate buffer for landing unaligned data, etc.
+ * @var tx_failures	 Number of times this transmission descriptor failed.
  */
 struct gnix_tx_descriptor {
 	struct dlist_entry          list;
@@ -301,11 +334,12 @@ struct gnix_tx_descriptor {
 			gni_post_descriptor_t        gni_desc;
 			gni_ct_get_post_descriptor_t gni_ct_descs[2];
 		};
-		struct gnix_smsg_eager_hdr       eager_hdr;
-		struct gnix_smsg_rndzv_start_hdr rndzv_start_hdr;
-		struct gnix_smsg_rndzv_fin_hdr   rndzv_fin_hdr;
-		struct gnix_smsg_rma_data_hdr    rma_data_hdr;
-		struct gnix_smsg_amo_cntr_hdr    amo_cntr_hdr;
+		struct gnix_smsg_eager_hdr           eager_hdr;
+		struct gnix_smsg_rndzv_start_hdr     rndzv_start_hdr;
+		struct gnix_smsg_rndzv_iov_start_hdr rndzv_iov_start_hdr;
+		struct gnix_smsg_rndzv_fin_hdr       rndzv_fin_hdr;
+		struct gnix_smsg_rma_data_hdr        rma_data_hdr;
+		struct gnix_smsg_amo_cntr_hdr	     amo_cntr_hdr;
 	};
 	struct gnix_fab_req *req;
 	int  (*completer_fn)(void *, gni_return_t);

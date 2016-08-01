@@ -924,6 +924,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	*nic_ptr = NULL;
+	nic_attr->gni_cdm_modes = gnix_cdm_modes;
 
 	if (attr) {
 		ret = __gnix_nic_check_attr_sanity(attr);
@@ -1006,8 +1007,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 				goto err1;
 			}
 			nic->allocd_gni_res |= GNIX_NIC_CDM_ALLOCD;
-		} else
+			nic->gni_cdm_modes = gnix_cdm_modes;
+		} else {
 			nic->gni_cdm_hndl = nic_attr->gni_cdm_hndl;
+			nic->gni_cdm_modes = nic_attr->gni_cdm_modes;
+		}
 
 		/*
 		 * Okay, now go for the attach
@@ -1167,6 +1171,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					  (size_t)nic->mem_per_mbox,
 					  domain->params.mbox_num_per_slab,
 					  &nic->mbox_hndl);
+
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_mbox_alloc returned %s\n",
