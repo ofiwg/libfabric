@@ -1082,7 +1082,6 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_tagged_request *request,
 	} else {
 		assert(p->op_code == IBV_WR_RDMA_WRITE);
 		request->src_addr = (void*)p->lbuf;
-		request->comp_flags = FI_RMA | FI_WRITE;
 	}
 
 	if (request->rmabuf && request->len >= p->ep_rdm->max_inline_rc) {
