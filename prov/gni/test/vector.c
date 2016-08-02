@@ -304,10 +304,10 @@ void do_iterator_next()
 
 	do_fill_insert_at();
 
-	while (GNIX_VECTOR_ITERATOR_IDX(iter) < vec.attr.cur_size) {
+	while (GNIX_VECTOR_ITERATOR_IDX(iter) + 1 < vec.attr.cur_size) {
 		tmp1 = _gnix_vec_iterator_next(&iter);
 
-		ret = _gnix_vec_at(&vec, &tmp2, GNIX_VECTOR_ITERATOR_IDX(iter) - 1);
+		ret = _gnix_vec_at(&vec, &tmp2, GNIX_VECTOR_ITERATOR_IDX(iter));
 		cr_assert(!ret, "_gnix_vec_at");
 
 		cr_assert_eq(tmp1, tmp2);
@@ -315,7 +315,7 @@ void do_iterator_next()
 
 	tmp1 = _gnix_vec_iterator_next(&iter);
 	cr_assert(tmp1 == NULL, "_gnix_vec_iterator_next");
-	cr_assert_eq(GNIX_VECTOR_ITERATOR_IDX(iter), vec.attr.cur_size);
+	cr_assert_eq(GNIX_VECTOR_ITERATOR_IDX(iter) + 1, vec.attr.cur_size);
 
 	do_unfill_remove_at();
 }
