@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -34,6 +35,7 @@
 #include <stdio.h>
 #include <sys/statfs.h>
 #include <sys/mman.h>
+#include <mntent.h>
 
 #include "gnix_mbox_allocator.h"
 #include "gnix_nic.h"
@@ -51,74 +53,46 @@
  * @return -FI_EINVAL	if an invalid parameter was given
  * @return -FI_EIO	if an error occurred while opening the /proc/mounts
  * file.
- * @return -FI_ENOMEM	if an error occurred while allocating space for the text
- * from the file.
  */
 static int __find_huge_page(size_t page_size, char **directory)
 {
-	int bytes_read = -FI_EINVAL;
+	int rc = -FI_EINVAL;
 	struct statfs pg_size;
-	size_t size = 1024;
-	char error_buf[256];
-	char *line, *field;
-	char *saveptr;
-	char *error;
+	struct mntent *mntent;
 	FILE *fd;
 
 	if (!directory || !page_size) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Invalid page_size or directory provided.\n");
-		bytes_read = -FI_EINVAL;
-		goto err_fopen;
+		return -FI_EINVAL;
 	}
 
-	*directory = NULL;
-
-	fd = fopen("/proc/mounts", "r");
-	if (!fd) {
-		error = strerror_r(errno, error_buf, sizeof(error_buf));
-		GNIX_WARN(FI_LOG_EP_CTRL, "Error opening /proc/mounts: %s\n",
-			  error);
-		bytes_read = -FI_EIO;
-		goto err_fopen;
+	fd = setmntent ("/proc/mounts", "r");
+	if (fd == NULL) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Unable to open /proc/mounts - %s.\n",
+			  strerror(errno));
+		return -FI_EIO;
 	}
 
-	line = malloc(size);
-	if (!line) {
+	while ((mntent = getmntent(fd)) != NULL) {
 
-		error = strerror_r(errno, error_buf, sizeof(error_buf));
-		GNIX_WARN(FI_LOG_EP_CTRL, "Error allocating line: %s\n",
-			  error);
-		bytes_read = -FI_ENOMEM;
-		goto err_malloc;
-	}
+		if (strcmp (mntent->mnt_type, "hugetlbfs") != 0) {
+			continue;
+		}
 
-	/*
-	 * Look for entries with substring hugetlbfs in /proc/mounts.
-	 */
-	while (getline(&line, &size, fd) != -1) {
-		if (strstr(line, "hugetlbfs")) {
-			field = strtok_r(line, " ", &saveptr);
-			field = strtok_r(NULL, " ", &saveptr);
-
-			/*
-			 * Check if page is the correct size.
-			 */
-			if (statfs(field, &pg_size) == 0) {
-				if (pg_size.f_bsize == page_size) {
-					*directory = strdup(field);
-					bytes_read = FI_SUCCESS;
-					break;
-				}
+		if (statfs(mntent->mnt_dir, &pg_size) == 0) {
+			if (pg_size.f_bsize == page_size) {
+				*directory = strdup(mntent->mnt_dir);
+				rc = FI_SUCCESS;
+				break;
 			}
 		}
 	}
 
-	free(line);
-err_malloc:
-	fclose(fd);
-err_fopen:
-	return bytes_read;
+	endmntent(fd);
+
+	return rc;
 }
 
 /**
@@ -155,9 +129,10 @@ static int __generate_file_name(size_t page_size, char **filename)
 	}
 
 	ret = __find_huge_page(page_size, &huge_page);
-	if (ret < 0) {
+	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Find huge page returned negative condition.\n");
+			  "Find huge page returned error %s\n",
+			  fi_strerror(-ret));
 		goto err_invalid;
 	}
 
