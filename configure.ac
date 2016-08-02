@@ -115,7 +115,7 @@ AC_CHECK_FUNC([pthread_spin_init],
 
 dnl shm_open not used in the common code on os-x
 
-if test "$macos" -eq "0"; then
+if test "$macos" -eq 0; then
 AC_CHECK_FUNC([shm_open],
 	[],
 	[AC_SEARCH_LIBS([shm_open],[rt],[],
