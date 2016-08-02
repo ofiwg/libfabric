@@ -118,7 +118,6 @@ extern "C" {
 #define compiler_barrier() asm volatile ("" ::: "memory")
 #endif
 
-
 #define GNIX_MAX_IOV_LIMIT 8
 
 /*
@@ -127,6 +126,17 @@ extern "C" {
 
 #define GNI_READ_ALIGN		4
 #define GNI_READ_ALIGN_MASK	(GNI_READ_ALIGN - 1)
+
+/*
+ * GNI IOV GET alignment
+ *
+ * We always pull 4byte chucks for unaligned GETs. To prevent stomping on
+ * someone else's head or tail data, each segment must be four bytes
+ * (i.e. GNI_READ_ALIGN bytes).
+ *
+ * Note: "* 2" for head and tail
+ */
+#define GNIX_HTD_BUF_SZ GNIX_MAX_IOV_LIMIT * GNI_READ_ALIGN * 2
 
 /*
  * Flags
@@ -391,6 +401,22 @@ struct gnix_fid_ep_ops_en {
 	uint32_t atomic_write_allowed: 1;
 };
 
+#define GNIX_HTD_POOL_SIZE 128
+
+struct gnix_htd_buf {
+	struct slist_entry e;
+	uint8_t *buf;
+};
+
+struct gnix_htd_pool {
+	bool enabled;
+	fastlock_t lock;
+	struct gnix_fid_mem_desc *md;
+	struct slist sl;
+	void *buf_ptr;
+	void *sl_ptr;
+};
+
 /*
  *   gnix endpoint structure
  *
@@ -449,6 +475,7 @@ struct gnix_fid_ep {
 	int min_multi_recv;
 	/* note this free list will be initialized for thread safe */
 	struct gnix_freelist fr_freelist;
+	struct gnix_htd_pool htd_pool;
 	struct gnix_reference ref_cnt;
 	struct gnix_fid_ep_ops_en ep_ops;
 };
@@ -536,55 +563,46 @@ struct gnix_fab_req_rma {
 	gni_return_t             status;
 };
 
-/**
- * sendv/recvv variable notes.
- *
- * @var send_addr	   For sendv rndzv this is the iov addr.
- * @var send_len	   For sendv this is the cumulative length of the iov
- * entries.
- * @var smsg_iov_hdr_addr  A ptr to the smsg iov hdr address so it can be freed
- * @var send_iov	   For sendv, rndzv, on the remote side, this is a ptr to
- * the addrs and lengths of the sender's iovec entries.
- * @var recv_addr	   For recvv this is the iov addr on the remote side.
- * @var recv_len	   For recvv this is the cumulative length of the iov
- * entries.
- * @var send_iov_md	   The sender's memory descriptors.
- * @var recv_iov_md	   The receiver's memory descriptors.
- * @var rma_iov_mdh	   The sender's gni mem handles on the receivers request.
- * @var multi_recv_iov_idx The previous index into the receive buffer for a
- * subsequent send on a multi_recv req.
- * @var multi_recv_iov_ptr The previous ptr into the recv buffer for a
- * subsequent send on a multi_recv req.
- * @var multi_recv_iov_len The remaining cumulative length of the recv buffer.
- */
 struct gnix_fab_req_msg {
 	struct gnix_tag_list_element tle;
+
 	struct send_info_t {
 		uint64_t	 send_addr;
 		size_t		 send_len;
 		gni_mem_handle_t mem_hndl;
+		uint32_t	 head;
+		uint32_t	 tail;
 	}			     send_info[GNIX_MAX_IOV_LIMIT];
 	struct gnix_fid_mem_desc     *send_md[GNIX_MAX_IOV_LIMIT];
 	size_t                       send_iov_cnt;
 	uint64_t                     send_flags;
 	size_t			     cum_send_len;
+
 	struct recv_info_t {
 		uint64_t	 recv_addr;
 		size_t		 recv_len;
 		gni_mem_handle_t mem_hndl;
+		uint32_t	 tail_len : 2; /* If the send len is > the recv_len, we
+						* need to fetch the unaligned tail into
+						* the txd's int buf
+						*/
+		uint32_t	 head_len : 2;
 	}			     recv_info[GNIX_MAX_IOV_LIMIT];
 	struct gnix_fid_mem_desc     *recv_md[GNIX_MAX_IOV_LIMIT];
 	size_t			     recv_iov_cnt;
 	uint64_t                     recv_flags; /* protocol, API info */
 	size_t			     cum_recv_len;
+
+	/* @var htd_buf->buf "head(H) tail(T) data buf" layout: '[T|T|...|H|H]' */
+	struct slist_entry	     *htd_buf_e;
+	uint8_t			     *htd_buf;
+	gni_mem_handle_t	     htd_mdh;
+
 	uint64_t                     tag;
 	uint64_t                     ignore;
 	uint64_t                     imm;
 	gni_mem_handle_t             rma_mdh;
 	uint64_t                     rma_id;
-	/* TODO: Move head&tail info send_info */
-	uint32_t                     rndzv_head;
-	uint32_t                     rndzv_tail;
 	atomic_t                     outstanding_txds;
 	gni_return_t                 status;
 };
@@ -826,6 +844,8 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
+
+	/* TODO: change the size of this for unaligned data? */
 	struct gnix_tx_descriptor *iov_txds[GNIX_MAX_IOV_LIMIT];
 	uint32_t		  tx_failures;
 
