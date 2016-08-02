@@ -32,6 +32,7 @@
 
 #include <sys/endian.h>
 #include <pthread_np.h>
+#include <netinet/in.h>
 
 
 #define bswap_64 bswap64
