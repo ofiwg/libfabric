@@ -38,7 +38,7 @@ enum { PASS, FAIL, NOTSUPP, SKIPPED };
 #define TEST_ENTRY(NAME) { NAME, #NAME }
 
 #define TEST_RET_VAL(_ret, _testret) \
-	(_ret == -FI_ENOSYS || -ret == -FI_ENODATA) ? SKIPPED : (_testret)
+	(_ret == -FI_ENOSYS || _ret == -FI_ENODATA) ? SKIPPED : (_testret)
 
 struct test_entry {
 	int (*test)();
