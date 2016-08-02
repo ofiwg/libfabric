@@ -46,6 +46,7 @@ static int verbose = 0, env = 0;
 /* options and matching help strings need to be kept in sync */
 
 static const struct option longopts[] = {
+	{"help", no_argument, NULL, 'h'},
 	{"node", required_argument, NULL, 'n'},
 	{"port", required_argument, NULL, 'p'},
 	{"caps", required_argument, NULL, 'c'},
@@ -61,6 +62,7 @@ static const struct option longopts[] = {
 };
 
 static const char *help_strings[][2] = {
+	{"", "\t\tdisplay this help and exit"},
 	{"NAME", "\t\tnode name or address"},
 	{"PNUM", "\t\tport number"},
 	{"CAP1|CAP2..", "\tone or more capabilities: FI_MSG|FI_RMA..."},
