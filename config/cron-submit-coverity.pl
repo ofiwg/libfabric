@@ -7,6 +7,9 @@ use Getopt::Long;
 use File::Temp qw/ tempfile tempdir /;
 use File::Basename;
 
+# Coverity changes this URL periodically
+my $coverity_tool_url = "https://scan.coverity.com/download/cxx/linux64";
+
 my $filename_arg;
 my $coverity_token_arg;
 my $project_arg = "ofiwg%2Flibfabric";
@@ -92,7 +95,7 @@ verbose "*** Working in $dir\n";
 # Get the coverity tool, put it in our path
 
 verbose "*** Downloading coverity tool\n";
-doit(0, "wget https://scan.coverity.com/download/linux-64 --post-data \"token=$coverity_token_arg\&project=$project_arg\" -O coverity_tool.tgz");
+doit(0, "wget $coverity_tool_url --post-data \"token=$coverity_token_arg\&project=$project_arg\" -O coverity_tool.tgz");
 doit(0, "tar xf coverity_tool.tgz");
 opendir(my $dh, ".") ||
     die "Can't opendir .";
