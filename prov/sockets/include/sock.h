@@ -1096,7 +1096,7 @@ ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx
 				struct sock_conn *conn);
 int sock_conn_listen(struct sock_ep_attr *ep_attr);
 void sock_conn_map_destroy(struct sock_ep_attr *ep_attr);
-void sock_conn_reset_entry(struct sock_conn *conn);
+void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn);
 void sock_set_sockopts(int sock);
 int fd_set_nonblock(int fd);
 void sock_set_sockopt_reuseaddr(int sock);
