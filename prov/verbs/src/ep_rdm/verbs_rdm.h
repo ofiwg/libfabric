@@ -236,6 +236,8 @@ struct fi_ibv_rdm_ep {
 	size_t addrlen;
 
 	struct fi_ibv_av *av;
+	int tx_selective_completion;
+	int rx_selective_completion;
 
 	/*
 	 * ibv_post_send opcode for tagged messaging.

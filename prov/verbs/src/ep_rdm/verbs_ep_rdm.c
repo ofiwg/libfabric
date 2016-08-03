@@ -126,8 +126,7 @@ fi_ibv_rdm_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
 	return rst;
 }
 
-static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
-				     uint64_t flags)
+static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_rdm_ep *ep;
 	struct fi_ibv_rdm_cq *cq;
@@ -147,11 +146,16 @@ static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
 			if (ep->fi_rcq)
 				return -EINVAL;
 			ep->fi_rcq = cq;
+			ep->rx_selective_completion = 
+				(flags & FI_SELECTIVE_COMPLETION) ? 1 : 0;
 		}
+
 		if (flags & FI_SEND) {
 			if (ep->fi_scq)
 				return -EINVAL;
 			ep->fi_scq = cq;
+			ep->tx_selective_completion = 
+				(flags & FI_SELECTIVE_COMPLETION) ? 1 : 0;
 		}
 
 		/* TODO: this is wrong. CQ to EP is 1:n */
@@ -411,7 +415,7 @@ static int fi_ibv_ep_sync(fid_t fid, uint64_t flags, void *context)
 struct fi_ops fi_ibv_rdm_tagged_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_rdm_ep_close,
-	.bind = fi_ibv_rdm_tagged_ep_bind,
+	.bind = fi_ibv_rdm_ep_bind,
 	.control = fi_ibv_rdm_tagged_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -446,6 +450,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
 	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma(_ep);
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
+	_ep->tx_selective_completion = 0;
+	_ep->rx_selective_completion = 0;
 
 	switch (info->ep_attr->protocol) {
 	case FI_PROTO_IB_RDM:

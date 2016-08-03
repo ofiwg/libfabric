@@ -276,22 +276,47 @@ fi_ibv_rdm_ep_rma_preinit(void **desc, void **raw_buf, size_t len,
 }
 
 static ssize_t
-fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
-		    void *desc, fi_addr_t src_addr,
-		    uint64_t addr, uint64_t key, void *context)
+fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+		uint64_t flags)
 {
-	struct fi_ibv_rdm_ep *ep = container_of(ep_fid, struct fi_ibv_rdm_ep,
-						ep_fid);
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *)src_addr;
-	void *raw_buf = NULL;
+	struct fi_ibv_rdm_ep *ep =
+		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
 
-	ssize_t ret = fi_ibv_rdm_ep_rma_preinit(&desc, &raw_buf, len, conn, ep);
+	struct fi_ibv_rdm_tagged_conn *conn =
+		(struct fi_ibv_rdm_tagged_conn *)msg->addr;
+
+	struct fi_ibv_rdm_rma_start_data start_data = {
+		.ep_rdm = ep,
+		.conn = conn,
+		.context = msg->context,
+		.flags = FI_RMA | FI_READ | (ep->tx_selective_completion ?
+			(flags & FI_COMPLETION) : FI_COMPLETION),
+		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
+		.rbuf = msg->rma_iov[0].addr,
+		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
+		.rkey = (uint32_t)msg->rma_iov[0].key,
+		.lkey = (uint32_t)(uintptr_t)msg->desc[0],
+		.op_code = IBV_WR_RDMA_READ
+	};
+
+	struct fi_ibv_rma_post_ready_data post_ready_data = { .ep_rdm = ep };
+
+	void *raw_buf = NULL;
+	ssize_t ret = FI_SUCCESS;
+
+	if(msg->iov_count != 1 || msg->rma_iov_count != 1) {
+		assert(0);
+		return -FI_EMSGSIZE;
+	}
+
+	ret = fi_ibv_rdm_ep_rma_preinit(&msg->desc[0], &raw_buf,
+					msg->msg_iov[0].iov_len,
+					conn, ep);
 	if (ret) {
 		return ret;
 	}
 
-	struct fi_ibv_rdm_tagged_request *request = 
+	struct fi_ibv_rdm_tagged_request *request =
 		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
@@ -302,43 +327,10 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 
 	request->rmabuf = raw_buf;
 
-	struct fi_ibv_rdm_rma_start_data start_data = {
-		.ep_rdm = container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid),
-		.conn = (struct fi_ibv_rdm_tagged_conn *) src_addr,
-		.context = context,
-		.data_len = (uint32_t)len,
-		.rbuf = addr,
-		.lbuf = (uintptr_t)buf,
-		.rkey = (uint32_t)key,
-		.lkey = (uint32_t)(uintptr_t)desc,
-		.op_code = IBV_WR_RDMA_READ
-	};
-
 	fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
-
-	struct fi_ibv_rma_post_ready_data post_ready_data = { .ep_rdm = ep };
 
 	return fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_POST_READY,
 					 &post_ready_data);
-}
-
-static ssize_t
-fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags)
-{
-	if(msg->iov_count == 1 && msg->rma_iov_count == 1) {
-		return fi_ibv_rdm_ep_rma_read(ep,
-					      msg->msg_iov[0].iov_base,
-					      msg->msg_iov[0].iov_len,
-					      msg->desc[0],
-					      msg->addr,
-					      msg->rma_iov[0].addr,
-					      msg->rma_iov[0].key,
-					      msg->context);
-	}
-
-	assert(0);
-	return -FI_EMSGSIZE;
 }
 
 static ssize_t
@@ -346,10 +338,24 @@ fi_ibv_rdm_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
 		void *context)
 {
+	struct fi_ibv_rdm_ep *ep_rdm = 
+		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
+
 	struct fi_rma_iov rma_iov = {
-		.addr = src_addr,
+		.addr = addr,
 		.len = 0,
 		.key = key
+	};
+
+	struct fi_msg_rma msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = src_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0
 	};
 
 	size_t i;
@@ -357,38 +363,63 @@ fi_ibv_rdm_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		rma_iov.len += iov[i].iov_len;
 	}
 
-	struct fi_msg_rma msg = {
-		.msg_iov = iov,
-		.desc = desc,
-		.iov_count = count,
-		.addr = addr,
-		.rma_iov = &rma_iov,
-		.rma_iov_count = 1,
-		.context = context,
-		.data = 0
-	};
-
-	return fi_ibv_rdm_ep_rma_readmsg(ep, &msg, 0);
+	return fi_ibv_rdm_ep_rma_readmsg(ep, &msg,
+		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
 }
 
 static ssize_t
-fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
-		     void *desc, fi_addr_t dest_addr,
-		     uint64_t addr, uint64_t key, void *context)
+fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
+		    void *desc, fi_addr_t src_addr,
+		    uint64_t addr, uint64_t key, void *context)
+{
+	const struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = len
+	};
+
+	return fi_ibv_rdm_ep_rma_readv(ep_fid, &iov, &desc, 1, src_addr, addr,
+					key, context);
+}
+
+static ssize_t
+fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+		uint64_t flags)
 {
 	struct fi_ibv_rdm_ep *ep = container_of(ep_fid, struct fi_ibv_rdm_ep,
 						ep_fid);
 	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
+		(struct fi_ibv_rdm_tagged_conn *) msg->addr;
+	struct fi_ibv_rdm_tagged_request *request = NULL;
 	void *raw_buf = NULL;
+	ssize_t ret = FI_SUCCESS;
 
-	ssize_t ret = fi_ibv_rdm_ep_rma_preinit(&desc, &raw_buf, len, conn, ep);
+	struct fi_ibv_rdm_rma_start_data start_data = {
+		.conn = conn,
+		.ep_rdm = ep,
+		.context = msg->context,
+		.flags = FI_RMA | FI_WRITE | (ep->tx_selective_completion ?
+			(flags & FI_COMPLETION) : FI_COMPLETION),
+		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
+		.rbuf = msg->rma_iov[0].addr,
+		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
+		.rkey = (uint32_t)msg->rma_iov[0].key,
+		.lkey = (uint32_t)(uintptr_t)msg->desc[0],
+		.op_code = IBV_WR_RDMA_WRITE
+	};
+
+	if(msg->iov_count != 1 && msg->rma_iov_count != 1) {
+		assert(0);
+		return -FI_EMSGSIZE;
+	}
+
+	ret = fi_ibv_rdm_ep_rma_preinit(&msg->desc[0], &raw_buf,
+					msg->msg_iov[0].iov_len,
+					conn, ep);
 	if (ret) {
 		return ret;
 	}
 
-	struct fi_ibv_rdm_tagged_request *request = 
-		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+	request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -397,18 +428,6 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 	request->state.err   = FI_SUCCESS;
 
 	request->rmabuf = raw_buf;
-
-	struct fi_ibv_rdm_rma_start_data start_data = {
-		.conn = conn,
-		.ep_rdm = ep,
-		.context = context,
-		.data_len = (uint64_t)len,
-		.rbuf = addr,
-		.lbuf = (uintptr_t)buf,
-		.rkey = (uint32_t)key,
-		.lkey = (uint32_t)(uintptr_t)desc,
-		.op_code = IBV_WR_RDMA_WRITE
-	};
 
 	fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
 
@@ -419,33 +438,25 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 }
 
 static ssize_t
-fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags)
-{
-	if(msg->iov_count == 1 && msg->rma_iov_count == 1) {
-		return fi_ibv_rdm_ep_rma_write(ep,
-					       msg->msg_iov[0].iov_base,
-					       msg->msg_iov[0].iov_len,
-					       msg->desc[0],
-					       msg->addr,
-					       msg->rma_iov[0].addr,
-					       msg->rma_iov[0].key,
-					       msg->context);
-	}
-
-	assert(0);
-	return -FI_EMSGSIZE;
-}
-
-static ssize_t
-fi_ibv_rdm_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fi_ibv_rdm_ep_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 		void *context)
 {
 	struct fi_rma_iov rma_iov = {
-		.addr = dest_addr,
+		.addr = addr,
 		.len = 0,
 		.key = key
+	};
+
+	struct fi_msg_rma msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = dest_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0
 	};
 
 	size_t i;
@@ -453,18 +464,25 @@ fi_ibv_rdm_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc
 		rma_iov.len += iov[i].iov_len;
 	}
 
-	struct fi_msg_rma msg = {
-		.msg_iov = iov,
-		.desc = desc,
-		.iov_count = count,
-		.addr = addr,
-		.rma_iov = &rma_iov,
-		.rma_iov_count = 1,
-		.context = context,
-		.data = 0
+	struct fi_ibv_rdm_ep *ep_rdm =
+		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
+
+	return fi_ibv_rdm_ep_rma_writemsg(ep_fid, &msg,
+		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
+}
+
+static ssize_t
+fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr, uint64_t addr,
+			uint64_t key, void *context)
+{
+	const struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len
 	};
 
-	return fi_ibv_rdm_ep_rma_writemsg(ep, &msg, 0);
+	return fi_ibv_rdm_ep_rma_writev(ep_fid, &iov, &desc, 1, dest_addr, addr,
+					key, context);
 }
 
 static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
@@ -477,6 +495,17 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	struct fi_ibv_rdm_tagged_conn *conn =
 		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
 	struct fi_ibv_rdm_tagged_request *request = NULL;
+
+	struct fi_ibv_rdm_rma_start_data start_data = {
+		.conn = conn,
+		.ep_rdm = ep_rdm,
+		.flags = 0, /* inject does not generate completion */
+		.data_len = (uint64_t)len,
+		.rbuf = addr,
+		.lbuf = (uintptr_t)buf,
+		.rkey = (uint32_t)key,
+		.lkey = 0
+	};
 
 	ssize_t ret = fi_ibv_rdm_ep_rma_preinit(NULL, NULL, len, conn, ep_rdm);
 	if (ret) {
@@ -491,17 +520,6 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INJECT;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err   = FI_SUCCESS;
-
-	struct fi_ibv_rdm_rma_start_data start_data = {
-		.conn = conn,
-		.ep_rdm = ep_rdm,
-		.data_len = (uint32_t)len,
-		.rbuf = addr,
-		.lbuf = (uintptr_t)buf,
-		.rkey = (uint32_t)key,
-		.lkey = 0
-
-	};
 
 	ret =  fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RMA_START,
 					  &start_data);
