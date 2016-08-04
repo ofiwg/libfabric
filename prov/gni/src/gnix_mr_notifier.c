@@ -231,7 +231,7 @@ _gnix_notifier_get_event(struct gnix_mr_notifier *mrn, void* buf, size_t len)
 		} else {
 			ret_errno = errno;
 			if (ret_errno != EAGAIN) {
-				GNIX_INFO(FI_LOG_MR,
+				GNIX_WARN(FI_LOG_MR,
 					  "kdreg event read failed: %s\n",
 					  strerror(ret_errno));
 			}
