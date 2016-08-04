@@ -40,6 +40,7 @@ common_srcs = \
 	prov/util/src/util_av.c     \
 	prov/util/src/util_cq.c     \
 	prov/util/src/util_domain.c \
+	prov/util/src/util_ep.c \
 	prov/util/src/util_eq.c     \
 	prov/util/src/util_fabric.c \
 	prov/util/src/util_main.c   \
