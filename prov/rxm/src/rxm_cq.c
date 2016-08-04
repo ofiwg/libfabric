@@ -49,15 +49,10 @@ static int rxm_msg_cq_read(struct util_cq *util_cq, struct fid_cq *cq,
 					"Unable to allocate util_cq_err_entry\n");
 			return -FI_ENOMEM;
 		}
-		ret = fi_cq_readerr(cq, &entry->err_entry, 0);
+		OFI_CQ_READERR(&rxm_prov, FI_LOG_CQ, cq, ret, entry->err_entry);
 		if (ret < 0) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to fi_cq_readerr\n");
 			free(entry);
 			return ret;
-		} else {
-			FI_WARN(&rxm_prov, FI_LOG_CQ, "fi_cq_readerr: %s\n",
-					fi_cq_strerror(cq, entry->err_entry.prov_errno,
-						entry->err_entry.err_data, NULL, 0));
 		}
 		slist_insert_tail(&entry->list_entry, &util_cq->err_list);
 		comp->flags = UTIL_FLAG_ERROR;

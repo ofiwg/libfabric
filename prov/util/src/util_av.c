@@ -1044,13 +1044,13 @@ static int ofi_cmap_match_peer(struct dlist_entry *entry, const void *addr)
 	return !memcmp(peer->addr, addr, peer->addrlen);
 }
 
-/* Caller must hold cmap->lock */
 static int ofi_cmap_add_peer(struct util_cmap *cmap, struct util_cmap_handle *handle,
 		enum util_cmap_state state, void *addr, size_t addrlen)
 {
 	struct util_cmap_peer *peer;
 	int ret = 0;
 
+	fastlock_acquire(&cmap->lock);
 	if (dlist_find_first_match(&cmap->peer_list, ofi_cmap_match_peer, addr)) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Peer already present\n");
@@ -1070,6 +1070,7 @@ static int ofi_cmap_add_peer(struct util_cmap *cmap, struct util_cmap_handle *ha
 	memcpy(peer->addr, addr, addrlen);
 	dlist_insert_tail(&peer->entry, &cmap->peer_list);
 out:
+	fastlock_release(&cmap->lock);
 	return ret;
 }
 
@@ -1096,7 +1097,6 @@ int ofi_cmap_add_handle(struct util_cmap *cmap, struct util_cmap_handle *handle,
 		ofi_cmap_init_handle(handle, cmap, state, fi_addr, NULL);
 		cmap->handles[fi_addr] = handle;
 	}
-out:
 	return 0;
 }
 
