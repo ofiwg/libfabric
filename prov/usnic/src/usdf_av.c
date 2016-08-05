@@ -504,7 +504,7 @@ usdf_av_straddr(struct fid_av *av, const void *addr,
 
 	sin = addr;
 	size = snprintf(straddr, sizeof straddr, "%s:%d",
-			inet_ntoa(sin->sin_addr), sin->sin_port);
+			inet_ntoa(sin->sin_addr), ntohs(sin->sin_port));
 	snprintf(buf, *len, "%s", straddr);
 	*len = size + 1;
 	return buf;
