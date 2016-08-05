@@ -76,7 +76,9 @@ int sock_epoll_create(struct sock_epoll_set *set, int size)
 
 int sock_epoll_add(struct sock_epoll_set *set, int fd)
 {
+	int ret;
 	struct epoll_event event;
+
 	memset(&event, 0, sizeof(event));
 	event.data.fd = fd;
 	event.events = EPOLLIN;
@@ -84,14 +86,25 @@ int sock_epoll_add(struct sock_epoll_set *set, int fd)
 	if (set->used == set->size)
 		return -1;
 
-	set->used++;
-	return epoll_ctl(set->fd, EPOLL_CTL_ADD, fd, &event);
+	ret = epoll_ctl(set->fd, EPOLL_CTL_ADD, fd, &event);
+	if (!ret)
+		set->used++;
+
+	return ret;
 }
 
 int sock_epoll_del(struct sock_epoll_set *set, int fd)
 {
-	set->used--;
-	return epoll_ctl(set->fd, EPOLL_CTL_DEL, fd, NULL);
+	int ret;
+
+	if (!set->used)
+		return -1;
+
+	ret = epoll_ctl(set->fd, EPOLL_CTL_DEL, fd, NULL);
+	if (!ret)
+		set->used--;
+
+	return ret;
 }
 
 int sock_epoll_wait(struct sock_epoll_set *set, int timeout)
