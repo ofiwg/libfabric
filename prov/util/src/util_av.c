@@ -204,20 +204,20 @@ int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 	}
 }
 
-static void *util_av_get_data(struct util_av *av, int index)
+static void *util_av_get_addr(struct util_av *av, int index)
 {
-	return (char *) av->data + (index * av->addrlen);
+	return (char *) av->addr + (index * av->addrlen);
 }
 
 void *ofi_av_get_addr(struct util_av *av, int index)
 {
-	return util_av_get_data(av, index);
+	return util_av_get_addr(av, index);
 }
 
-static void util_av_set_data(struct util_av *av, int index,
-			     const void *data, size_t len)
+static void util_av_set_addr(struct util_av *av, int index,
+			     const void *addr, size_t len)
 {
-	memcpy(util_av_get_data(av, index), data, len);
+	memcpy(util_av_get_addr(av, index), addr, len);
 }
 
 static int fi_verify_av_insert(struct util_av *av, uint64_t flags)
@@ -233,6 +233,16 @@ static int fi_verify_av_insert(struct util_av *av, uint64_t flags)
 	}
 
 	return 0;
+}
+
+uint64_t ofi_av_get_data(struct util_av *av, int index)
+{
+	return av->data[index];
+}
+
+void ofi_av_set_data(struct util_av *av, int index, uint64_t data)
+{
+	av->data[index] = data;
 }
 
 /*
@@ -286,8 +296,8 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 	}
 
 	*index = av->free_list;
-	av->free_list = *(int *) util_av_get_data(av, av->free_list);
-	util_av_set_data(av, *index, addr, av->addrlen);
+	av->free_list = *(int *) util_av_get_addr(av, av->free_list);
+	util_av_set_addr(av, *index, addr, av->addrlen);
 out:
 	fastlock_release(&av->lock);
 	return ret;
@@ -334,17 +344,17 @@ static int fi_av_remove_addr(struct util_av *av, int slot, int index)
 	if (av->flags & FI_SOURCE)
 		util_av_hash_remove(&av->hash, slot, index);
 
-	entry = util_av_get_data(av, index);
+	entry = util_av_get_addr(av, index);
 	if (av->free_list == UTIL_NO_ENTRY || index < av->free_list) {
 		*entry = av->free_list;
 		av->free_list = index;
 	} else {
 		i = av->free_list;
-		for (next = util_av_get_data(av, i); index > *next;) {
+		for (next = util_av_get_addr(av, i); index > *next;) {
 			i = *next;
-			next = util_av_get_data(av, i);
+			next = util_av_get_addr(av, i);
 		}
-		util_av_set_data(av, index, next, sizeof index);
+		util_av_set_addr(av, index, next, sizeof index);
 		*next = index;
 	}
 
@@ -415,8 +425,9 @@ int ofi_av_close(struct util_av *av)
 
 	atomic_dec(&av->domain->ref);
 	fastlock_destroy(&av->lock);
-	/* TODO: unmap data? */
 	free(av->data);
+	/* TODO: unmap addr? */
+	free(av->addr);
 	return 0;
 }
 
@@ -461,23 +472,32 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 		       "FI_SOURCE requested, hash size %zu\n", av->hash.total_count);
 	}
 
-	av->data = malloc((av->count * util_attr->addrlen) +
+	av->addr = malloc((av->count * util_attr->addrlen) +
 			  (av->hash.total_count * sizeof(*av->hash.table)));
-	if (!av->data)
+	if (!av->addr)
 		return -FI_ENOMEM;
 
+	av->data = calloc(av->count, sizeof *(av->data));
+	if (!av->data) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
 	for (i = 0; i < av->count - 1; i++) {
-		entry = util_av_get_data(av, i);
+		entry = util_av_get_addr(av, i);
 		*entry = i + 1;
 	}
-	entry = util_av_get_data(av, av->count - 1);
+	entry = util_av_get_addr(av, av->count - 1);
 	*entry = UTIL_NO_ENTRY;
 
 	if (util_attr->flags & FI_SOURCE) {
-		av->hash.table = util_av_get_data(av, av->count);
+		av->hash.table = util_av_get_addr(av, av->count);
 		util_av_hash_init(&av->hash);
 	}
 
+	return 0;
+err:
+	free(av->addr);
 	return ret;
 }
 

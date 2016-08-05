@@ -227,7 +227,8 @@ struct util_av {
 	size_t			addrlen;
 	ssize_t			free_list;
 	struct util_av_hash	hash;
-	void			*data;
+	void			*addr;
+	uint64_t		*data;
 };
 
 struct util_av_attr {
@@ -397,6 +398,8 @@ void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
 void fi_fabric_insert(struct util_fabric *fabric);
 struct util_fabric *fi_fabric_find(const char *name);
 void fi_fabric_remove(struct util_fabric *fabric);
+uint64_t ofi_av_get_data(struct util_av *av, int index);
+void ofi_av_set_data(struct util_av *av, int index, uint64_t data);
 
 /*
  * Layered Providers
