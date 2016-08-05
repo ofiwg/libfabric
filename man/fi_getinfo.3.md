@@ -455,6 +455,15 @@ supported set of modes will be returned in the info structure(s).
   receive buffer at the target.  This is true even for operations that would
   normally not consume posted receive buffers, such as RMA write operations.
 
+*FI_NOTIFY_FLAGS_ONLY*
+: This bit indicates that general completion flags may not be set by
+  the provider, and are not needed by the application.  If specified,
+  completion flags which simply report the type of operation that
+  completed (e.g. send or receive) may not be set.  However,
+  completion flags that are used for remote notifications will still
+  be set when applicable.  See `fi_cq`(3) for details on which completion
+  flags are valid when this mode bit is enabled.
+
 # ADDRESSING FORMATS
 
 Multiple fabric interfaces take as input either a source or
