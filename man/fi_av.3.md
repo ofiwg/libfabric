@@ -57,7 +57,7 @@ fi_addr_t fi_rx_addr(fi_addr_t fi_addr, int rx_index,
 	  int rx_ctx_bits);
 
 const char * fi_av_straddr(struct fid_av *av, const void *addr,
-      void *buf, size_t *len);
+      char *buf, size_t *len);
 ```
 
 # ARGUMENTS
