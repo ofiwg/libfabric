@@ -1125,7 +1125,7 @@ static int rxd_cq_close(struct fid *fid)
 	ret = ofi_cq_cleanup(&cq->util_cq);
 	if (ret)
 		return ret;
-
+	util_buf_pool_destroy(cq->unexp_pool);
 	free(cq);
 	return 0;
 }

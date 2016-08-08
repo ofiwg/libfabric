@@ -241,13 +241,13 @@ int rxd_ep_enable(struct rxd_ep *ep)
 			goto out;
 		slist_insert_tail(&rx_buf->entry, &ep->rx_pkt_list);
 	}
-
-	fastlock_acquire(&ep->domain->lock);
-	dlist_insert_tail(&ep->dom_entry, &ep->domain->ep_list);
-	fastlock_release(&ep->domain->lock);
-	ret = 0;
 out:
 	rxd_ep_unlock_if_required(ep);
+	if (ret == 0) {
+		fastlock_acquire(&ep->domain->lock);
+		dlist_insert_tail(&ep->dom_entry, &ep->domain->ep_list);
+		fastlock_release(&ep->domain->lock);
+	}
 	return ret;
 }
 
@@ -509,7 +509,7 @@ void rxd_resend_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 
 			if (curr_stamp < pkt->us_stamp ||
 			    (curr_stamp - pkt->us_stamp) <
-			    (1 << (pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
+			    (1 << ((uint64_t) pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
 				break;
 			}
 
@@ -1403,6 +1403,8 @@ static int rxd_ep_close(struct fid *fid)
 	atomic_dec(&ep->domain->util_domain.ref);
 	fastlock_destroy(&ep->lock);
 	rxd_ep_free_buf_pools(ep);
+	free(ep->peer_info);
+	free(ep->name);
 	free(ep);
 	return 0;
 }
@@ -1762,7 +1764,7 @@ void rxd_ep_progress(struct rxd_ep *ep)
 			pkt = container_of(pkt_item, struct rxd_pkt_meta, entry);
 			if (curr_stamp > pkt->us_stamp &&
 			    curr_stamp - pkt->us_stamp >
-			    (1 << (pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
+			    (1 << ((uint64_t) pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
 				pkt->us_stamp = curr_stamp;
 				rxd_ep_retry_pkt(ep, tx_entry, pkt);
 			}

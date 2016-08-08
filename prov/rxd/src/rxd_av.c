@@ -87,7 +87,7 @@ out:
 }
 
 size_t rxd_av_insert_check(struct rxd_av *av, const void *addr, size_t count,
-			    fi_addr_t *fi_addr, uint64_t flags, void *context)
+			   fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	size_t i, success_cnt = 0;
 	int ret, index;
@@ -284,6 +284,7 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct rxd_av *av;
 	struct rxd_domain *domain;
 	struct util_av_attr util_attr;
+	struct fi_av_attr av_attr;
 
 	if (attr && attr->name)
 		return -FI_ENOSYS;
@@ -294,7 +295,7 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	util_attr.addrlen = sizeof(fi_addr_t);
-	util_attr.overhead = attr->count;
+	util_attr.overhead = attr ? attr->count : 0;
 	util_attr.flags = FI_SOURCE;
 	av->size = attr->count;
 	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,
@@ -303,10 +304,12 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		goto err1;
 
 	av->size = av->util_av.count;
-	attr->type = FI_AV_TABLE;
-	attr->count = 0;
-	attr->flags = 0;
-	ret = fi_av_open(domain->dg_domain, attr, &av->dg_av, context);
+	if (attr)
+		av_attr = *attr;
+	av_attr.type = FI_AV_TABLE;
+	av_attr.count = 0;
+	av_attr.flags = 0;
+	ret = fi_av_open(domain->dg_domain, &av_attr, &av->dg_av, context);
 	if (ret)
 		goto err2;
 

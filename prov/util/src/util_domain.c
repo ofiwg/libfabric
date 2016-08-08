@@ -46,6 +46,7 @@ int ofi_domain_close(struct util_domain *domain)
 	dlist_remove(&domain->list_entry);
 	fastlock_release(&domain->fabric->lock);
 
+	free(domain->name);
 	fastlock_destroy(&domain->lock);
 	atomic_dec(&domain->fabric->ref);
 	return 0;
