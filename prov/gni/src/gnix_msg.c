@@ -614,7 +614,7 @@ static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
 		ret = _gnix_xpmem_access_hndl_get(req->gnix_ep->xpmem_hndl,
 						  req->vc->peer_apid,
 						  req->msg.send_info[i].send_addr,
-						  req->msg.recv_info[j].recv_len,
+						  cpy_len,
 						  &access_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_DATA, "_gnix_xpmem_access_hndl_get failed %s\n",
@@ -664,6 +664,7 @@ static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
 				i++;
 			} else {
 				req->msg.send_info[i].send_addr += cpy_len;
+				req->msg.send_info[i].send_len -= cpy_len;
 			}
 		} else {	/* Just exhausted current send buffer. */
 			i++;
@@ -907,8 +908,6 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 	size_t rndzv_thresh = ep->domain->params.msg_rendezvous_thresh;
 	gni_ct_get_post_descriptor_t *cur_ct = NULL;
 	void **next_ct = NULL;
-	uint32_t max_ct_size = nic->gni_cdm_modes & GNI_CDM_MODE_FMA_SHARED ?
-		1024*1024 : 1<<30;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 	/*
@@ -1015,88 +1014,64 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 			req->iov_txds[txd_cnt++] = txd;
 			txd = NULL;
 		} else {		       /* Build the Ct txd */
-			/*
-			 * The txd is ready to be queued if the max size has
-			 * been reached.
-			 */
-			if (ct_size + get_len >= max_ct_size) {
-				*next_ct = txd = NULL;
-				req->iov_txds[txd_cnt++] = txd;
-				ct_size = 0;
-			} else {
-				if (!txd) {
-					GNIX_DEBUG(FI_LOG_EP_DATA, "New FMA"
-						   " CT\n");
-					ret = _gnix_nic_tx_alloc(nic, &txd);
-					if (ret != FI_SUCCESS) {
-						/* We'll try again. */
-						GNIX_INFO(FI_LOG_EP_DATA,
-							  "_gnix_nic_tx_alloc()"
-							  " returned %s\n",
-							  fi_strerror(-ret));
+			if (!txd) {
+				GNIX_DEBUG(FI_LOG_EP_DATA, "New FMA"
+					   " CT\n");
+				ret = _gnix_nic_tx_alloc(nic, &txd);
+				if (ret != FI_SUCCESS) {
+					/* We'll try again. */
+					GNIX_INFO(FI_LOG_EP_DATA,
+						  "_gnix_nic_tx_alloc()"
+						  " returned %s\n",
+						  fi_strerror(-ret));
 
-						__gnix_msg_free_iov_txds(req, txd_cnt);
-						return -FI_ENOSPC;
-					}
-
-					txd->completer_fn =
-						__gnix_rndzv_iov_req_complete;
-					txd->req = req;
-
-					txd->gni_desc.type = GNI_POST_FMA_GET;
-					txd->gni_desc.cq_mode =
-						GNI_CQMODE_GLOBAL_EVENT;
-					txd->gni_desc.dlvr_mode =
-						GNI_DLVMODE_PERFORMANCE;
-					txd->gni_desc.local_mem_hndl =
-						req->msg.recv_info[j].
-						mem_hndl;
-
-					txd->gni_desc.remote_mem_hndl =
-						req->msg.send_info[i].mem_hndl;
-					txd->gni_desc.rdma_mode = 0;
-					txd->gni_desc.src_cq_hndl =
-						(use_tx_cq_blk) ?
-						nic->tx_cq_blk : nic->tx_cq;
-
-					/* TODO: handle alignment! */
-					txd->gni_desc.local_addr =
-						(uint64_t) recv_ptr;
-					txd->gni_desc.remote_addr =
-						req->msg.send_info[i].send_addr;
-					txd->gni_desc.length = get_len;
-					ct_size += get_len;
-
-					next_ct = &txd->gni_desc.next_descr;
-				} else {
-					cur_ct = *next_ct = malloc(sizeof(gni_ct_get_post_descriptor_t));
-
-					if (cur_ct == NULL) {
-						GNIX_DEBUG(FI_LOG_EP_DATA,
-							  "Failed to allocate "
-							  "gni FMA get chained "
-							  "descriptor.");
-
-						/* +1 to ensure we free the
-						 * current chained txd */
-						__gnix_msg_free_iov_txds(req, txd_cnt + 1);
-						return -FI_ENOSPC;
-					}
-
-					cur_ct->ep_hndl = gni_ep;
-					cur_ct->length = get_len;
-					ct_size += get_len;
-					cur_ct->remote_addr = req->msg.send_info[i].send_addr;
-					cur_ct->remote_mem_hndl =
-						req->msg.send_info[i].mem_hndl;
-					cur_ct->local_addr =
-						(uint64_t) recv_ptr;
-					cur_ct->local_mem_hndl =
-						req->msg.recv_info[j].
-						mem_hndl;
-
-					next_ct = &cur_ct->next_descr;
+					__gnix_msg_free_iov_txds(req, txd_cnt);
+					return -FI_ENOSPC;
 				}
+
+				txd->completer_fn = __gnix_rndzv_iov_req_complete;
+				txd->req = req;
+
+				txd->gni_desc.type = GNI_POST_FMA_GET;
+				txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
+				txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
+				txd->gni_desc.local_mem_hndl = req->msg.recv_info[j].mem_hndl;
+
+				txd->gni_desc.remote_mem_hndl = req->msg.send_info[i].mem_hndl;
+				txd->gni_desc.rdma_mode = 0;
+				txd->gni_desc.src_cq_hndl = (use_tx_cq_blk) ? nic->tx_cq_blk : nic->tx_cq;
+
+				/* TODO: handle alignment! */
+				txd->gni_desc.local_addr = (uint64_t) recv_ptr;
+				txd->gni_desc.remote_addr = req->msg.send_info[i].send_addr;
+				txd->gni_desc.length = get_len;
+				ct_size += get_len;
+
+				next_ct = &txd->gni_desc.next_descr;
+			} else {
+				cur_ct = *next_ct = malloc(sizeof(gni_ct_get_post_descriptor_t));
+
+				if (cur_ct == NULL) {
+					GNIX_DEBUG(FI_LOG_EP_DATA,
+						   "Failed to allocate "
+						   "gni FMA get chained "
+						   "descriptor.");
+
+					/* +1 to ensure we free the
+					 * current chained txd */
+					__gnix_msg_free_iov_txds(req, txd_cnt + 1);
+					return -FI_ENOSPC;
+				}
+
+				cur_ct->ep_hndl = gni_ep;
+				cur_ct->length = get_len;
+				ct_size += get_len;
+				cur_ct->remote_addr = req->msg.send_info[i].send_addr;
+				cur_ct->remote_mem_hndl = req->msg.send_info[i].mem_hndl;
+				cur_ct->local_addr = (uint64_t) recv_ptr;
+				cur_ct->local_mem_hndl = req->msg.recv_info[j].mem_hndl;
+
+				next_ct = &cur_ct->next_descr;
 			}
 		}
 
@@ -1120,6 +1095,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 				i++;
 			} else {
 				req->msg.send_info[i].send_addr += get_len;
+				req->msg.send_info[i].send_len -= get_len;
 			}
 		} else {	/* Just exhausted current send buffer. */
 			i++;

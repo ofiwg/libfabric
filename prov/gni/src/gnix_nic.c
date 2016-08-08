@@ -1007,10 +1007,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 				goto err1;
 			}
 			nic->allocd_gni_res |= GNIX_NIC_CDM_ALLOCD;
-			nic->gni_cdm_modes = gnix_cdm_modes;
 		} else {
 			nic->gni_cdm_hndl = nic_attr->gni_cdm_hndl;
-			nic->gni_cdm_modes = nic_attr->gni_cdm_modes;
 		}
 
 		/*
