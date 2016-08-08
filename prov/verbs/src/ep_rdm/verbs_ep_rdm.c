@@ -420,7 +420,7 @@ struct fi_ops fi_ibv_rdm_tagged_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
+int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context)
 {
 	struct fi_ibv_domain *_domain = 
