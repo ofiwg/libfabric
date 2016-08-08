@@ -80,6 +80,8 @@ static int source[NUM_EPS];
 struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
 static uint64_t mr_key[NUM_EPS];
 
+static int max_eps = NUM_EPS;
+
 static void setup(void)
 {
 	int i, j;
@@ -114,57 +116,63 @@ static void setup(void)
 
 	for (i = 0; i < NUM_EPS; i++) {
 		ret = fi_domain(fab, fi, &dom[i], NULL);
-		cr_assert(!ret, "fi_domain");
+		cr_assert(!ret, "fi_domain (%d)", i);
 
 		ret = fi_open_ops(&dom[i]->fid, FI_GNI_DOMAIN_OPS_1, 0,
 				  (void **) &gni_domain_ops, NULL);
-		cr_assert(ret == FI_SUCCESS, "fi_open_ops");
+		cr_assert(ret == FI_SUCCESS, "fi_open_ops (%d)", i);
 
 		rx_cq_size = min_rx_cq_size;
 
 		ret = gni_domain_ops->set_val(&dom[i]->fid, GNI_RX_CQ_SIZE,
 					      &rx_cq_size);
-		cr_assert(ret == FI_SUCCESS, "set_val");
-
-		ret = fi_av_open(dom[i], &attr, &av[i], NULL);
-		cr_assert(!ret, "fi_av_open");
+		cr_assert(ret == FI_SUCCESS, "set_val (%d)", i);
 
 		ret = fi_endpoint(dom[i], fi, &ep[i], NULL);
-		cr_assert(!ret, "fi_endpoint");
+		if (ret != FI_SUCCESS) {
+			/* ran out of resources */
+			max_eps = i;
+			break;
+		}
 		cr_assert(ep[i]);
+
+		ret = fi_av_open(dom[i], &attr, &av[i], NULL);
+		cr_assert(!ret, "fi_av_open (%d)", i);
+
 		ret = fi_cq_open(dom[i], &cq_attr, &msg_cq[i], 0);
-		cr_assert(!ret, "fi_cq_open");
+		cr_assert(!ret, "fi_cq_open (%d)", i);
+
 		ret = fi_ep_bind(ep[i], &msg_cq[i]->fid, FI_SEND | FI_RECV);
-		cr_assert(!ret, "fi_ep_bind");
+		cr_assert(!ret, "fi_ep_bind (%d)", i);
 	}
 
 	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
 	cr_assert_eq(ret, -FI_ETOOSMALL);
 	cr_assert(addrlen > 0);
 
-	for (i = 0; i < NUM_EPS; i++) {
+	for (i = 0; i < max_eps; i++) {
 		ep_name[i] = malloc(addrlen);
 		cr_assert(ep_name[i] != NULL);
 		ret = fi_getname(&ep[i]->fid, ep_name[i], &addrlen);
 		cr_assert(ret == FI_SUCCESS);
-		for (j = 0; j < NUM_EPS; j++) {
+		for (j = 0; j < max_eps; j++) {
 			ret = fi_av_insert(av[j], ep_name[i],
 					1, &gni_addr[i], 0, NULL);
 			cr_assert(ret == 1);
 		}
 	}
 
-	for (i = 0; i < NUM_EPS; i++) {
+	for (i = 0; i < max_eps; i++) {
 		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
 		cr_assert(!ret, "fi_ep_bind");
 		ret = fi_enable(ep[i]);
 		cr_assert(!ret, "fi_ep_enable");
 
-		ret = fi_mr_reg(dom[i], target, NUM_EPS*sizeof(int),
+		ret = fi_mr_reg(dom[i], target, max_eps*sizeof(int),
 			FI_RECV, 0, 0, 0, &rem_mr[i], &target);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], source, NUM_EPS*sizeof(int),
+		ret = fi_mr_reg(dom[i], source, max_eps*sizeof(int),
 				FI_SEND, 0, 0, 0, &loc_mr[i], &source);
 		cr_assert_eq(ret, 0);
 
@@ -177,21 +185,27 @@ static void teardown(void)
 	int i;
 	int ret = 0;
 
-	for (i = 0; i < NUM_EPS; i++) {
+	for (i = 0; i < max_eps; i++) {
 		fi_close(&loc_mr[i]->fid);
 		fi_close(&rem_mr[i]->fid);
 
 		ret = fi_close(&ep[i]->fid);
-		cr_assert(!ret, "failure in closing ep.");
+		cr_assert(!ret, "failure in closing ep %d.", i);
 		ret = fi_close(&msg_cq[i]->fid);
-		cr_assert(!ret, "failure in msg cq.");
+		cr_assert(!ret, "failure in msg cq %d.", i);
 		free(ep_name[i]);
 
 		ret = fi_close(&av[i]->fid);
-		cr_assert(!ret, "failure in closing av.");
+		cr_assert(!ret, "failure in closing av %d.", i);
 
 		ret = fi_close(&dom[i]->fid);
-		cr_assert(!ret, "failure in closing domain.");
+		cr_assert(!ret, "failure in closing domain %d.", i);
+	}
+
+	if (max_eps != NUM_EPS) {
+		/* clean up the last domain */
+		ret = fi_close(&dom[max_eps]->fid);
+		cr_assert(!ret, "failure in closing domain %d.", max_eps);
 	}
 
 	ret = fi_close(&fab->fid);
@@ -210,15 +224,15 @@ Test(rdm_rx_overrun, all_to_one)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_entry s_cqe, d_cqe;
 	ssize_t sz;
-	int ctx[NUM_EPS];
+	int ctx[max_eps];
 
-	for (i = 0; i < NUM_EPS; i++) {
+	for (i = 0; i < max_eps; i++) {
 		source[i] = i;
 		target[i] = -1;
 		ctx[i] = -1;
 	}
 
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < max_eps; i++) {
 		for (j = 0; j < num_msgs; j++) {
 			sz = fi_send(ep[i], &source[i], sizeof(int), loc_mr,
 				     gni_addr[0], ctx+i);
@@ -227,21 +241,21 @@ Test(rdm_rx_overrun, all_to_one)
 	}
 
 	do {
-		for (i = 1; i < NUM_EPS; i++) {
+		for (i = 1; i < max_eps; i++) {
 			for (j = 0; j < num_msgs; j++) {
 				if (fi_cq_read(msg_cq[i], &s_cqe, 1) == 1) {
 					cr_assert(((uint64_t) s_cqe.op_context
 						   >= (uint64_t) ctx) &&
 						  ((uint64_t) s_cqe.op_context
 						   <=
-						   (uint64_t) (ctx+NUM_EPS-1)));
+						   (uint64_t) (ctx+max_eps-1)));
 					source_done += 1;
 				}
 			}
 		}
-	} while (source_done != num_msgs*(NUM_EPS-1));
+	} while (source_done != num_msgs*(max_eps-1));
 
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < max_eps; i++) {
 		for (j = 0; j < num_msgs; j++) {
 			sz = fi_recv(ep[0], &target[i], sizeof(int), rem_mr,
 				     gni_addr[i], ctx+i);
@@ -250,28 +264,28 @@ Test(rdm_rx_overrun, all_to_one)
 	}
 
 	do {
-		for (i = 1; i < NUM_EPS; i++) {
+		for (i = 1; i < max_eps; i++) {
 			for (j = 0; j < num_msgs; j++) {
 				if (fi_cq_read(msg_cq[0], &d_cqe, 1) == 1) {
 					cr_assert(((uint64_t) d_cqe.op_context
 						   >= (uint64_t) ctx) &&
 						  ((uint64_t) d_cqe.op_context
 						   <=
-						   (uint64_t) (ctx+NUM_EPS-1)));
+						   (uint64_t) (ctx+max_eps-1)));
 					dest_done += 1;
 				}
 			}
 		}
-	} while (dest_done != num_msgs*(NUM_EPS-1));
+	} while (dest_done != num_msgs*(max_eps-1));
 
 
 	/* good enough error checking (only checks the last send) */
-	for (i = 1; i < NUM_EPS; i++) {
-		cr_assert(target[i] < NUM_EPS);
+	for (i = 1; i < max_eps; i++) {
+		cr_assert(target[i] < max_eps);
 		ctx[target[i]] = target[i];
 	}
 
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < max_eps; i++) {
 		cr_assert(ctx[i] == i);
 	}
 
