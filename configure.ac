@@ -174,6 +174,15 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
         ac_cv_version_script=no
     fi])
 
+AC_ARG_ENABLE([embedded],
+	      [AS_HELP_STRING([--enable-embedded],
+			      [Enable embedded support (turns off symbol versioning) @<:@default=no@:>@])
+	      ],
+	      [ac_asm_symver_support=0
+               icc_symver_hack=1],
+	      [enable_embedded=no])
+AM_CONDITIONAL([EMBEDDED], [test x"$enable_embedded" = x"yes"])
+
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
 dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.

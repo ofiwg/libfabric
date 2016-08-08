@@ -10,11 +10,17 @@ AM_CPPFLAGS = \
 	-DRDMADIR=\"@rdmadir@\" \
 	-DPROVDLDIR=\"$(pkglibdir)\"
 
-lib_LTLIBRARIES = src/libfabric.la
+noinst_LTLIBRARIES =
+lib_LTLIBRARIES =
+
+if EMBEDDED
+noinst_LTLIBRARIES += src/libfabric.la
+else
+lib_LTLIBRARIES += src/libfabric.la
+endif
 
 pkglib_LTLIBRARIES = $(DL_PROVIDERS)
 
-noinst_LTLIBRARIES =
 
 ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -g -Wall
