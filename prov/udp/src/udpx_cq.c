@@ -35,6 +35,27 @@
 
 #include "udpx.h"
 
+static int udpx_cq_close(struct fid *fid)
+{
+	int ret;
+	struct util_cq *cq;
+
+	cq = container_of(fid, struct util_cq, cq_fid.fid);
+	ret = ofi_cq_cleanup(cq);
+	if (ret)
+		return ret;
+	free(cq);
+	return 0;
+}
+
+static struct fi_ops udpx_cq_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = udpx_cq_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
 int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
@@ -53,5 +74,6 @@ int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	*cq_fid = &cq->cq_fid;
+	(*cq_fid)->fid.ops = &udpx_cq_fi_ops;
 	return 0;
 }
