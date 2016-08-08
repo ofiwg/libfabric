@@ -914,6 +914,7 @@ __gnix_fabric_ops_native_amo(struct fid_ep *ep, const void *buf, size_t count,
 	msg.addr = dest_addr;
 	msg.rma_iov = &rma_iov;
 	msg.datatype = datatype;
+	msg.op = FI_ATOMIC_OP_LAST; /* not FI_ATOMIC_OP */
 	msg.context = context;
 	result_iov.addr = result;
 	result_iov.count = 1;
