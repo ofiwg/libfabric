@@ -426,13 +426,17 @@ int _gnix_xpmem_accessible(struct gnix_fid_ep *ep,
 			   struct gnix_address addr,
 			   bool *accessible)
 {
-
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (!ep || !accessible)
 		return -FI_EINVAL;
 
 	if (gnix_xpmem_disabled == true) {
+		*accessible = false;
+		return FI_SUCCESS;
+	}
+
+	if (ep->domain->params.xpmem_enabled == false) {
 		*accessible = false;
 		return FI_SUCCESS;
 	}

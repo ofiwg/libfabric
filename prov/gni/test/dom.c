@@ -118,6 +118,7 @@ Test(domain, open_ops)
 	uint32_t val;
 	char *other_reg_type = "none";
 	char *string_val;
+	bool xpmem_toggle = false, xpmem_check;
 
 	memset(doms, 0, num_doms*sizeof(struct fid_domain *));
 
@@ -134,6 +135,10 @@ Test(domain, open_ops)
 				ret = gni_domain_ops->set_val(&doms[i]->fid, op,
 						&other_reg_type);
 				break;
+			case GNI_XPMEM_ENABLE:
+				ret = gni_domain_ops->set_val(&doms[i]->fid, op,
+						&xpmem_toggle);
+				break;
 			default:
 				ret = gni_domain_ops->set_val(&doms[i]->fid, op, &val);
 				break;
@@ -143,6 +148,10 @@ Test(domain, open_ops)
 			switch (op) {
 			case GNI_MR_CACHE:
 				ret = gni_domain_ops->get_val(&doms[i]->fid, op, &string_val);
+				break;
+			case GNI_XPMEM_ENABLE:
+				ret = gni_domain_ops->get_val(&doms[i]->fid, op,
+							      &xpmem_check);
 				break;
 			default:
 				ret = gni_domain_ops->get_val(&doms[i]->fid, op, &val);
@@ -155,6 +164,9 @@ Test(domain, open_ops)
 				cr_assert_eq(strncmp(other_reg_type, string_val,
 						strlen(other_reg_type)),  0, "Incorrect op value");
 				break;
+			case GNI_XPMEM_ENABLE:
+				cr_assert(xpmem_toggle == xpmem_check,
+					  "Incorrect op value");
 			default:
 				cr_assert(val == i*op+op, "Incorrect op value");
 				break;
