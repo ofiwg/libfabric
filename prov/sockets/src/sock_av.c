@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -385,7 +386,7 @@ static const char *sock_av_straddr(struct fid_av *av, const void *addr,
 
 	sin = addr;
 	size = snprintf(straddr, sizeof(straddr), "%s:%d",
-			inet_ntoa(sin->sin_addr), sin->sin_port);
+			inet_ntoa(sin->sin_addr), ntohs(sin->sin_port));
 	snprintf(buf, *len, "%s", straddr);
 	*len = size + 1;
 	return buf;
