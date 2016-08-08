@@ -1,4 +1,4 @@
-.TH "fi_av" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_av" "3" "2016\-08\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_av \- Address vector operations
@@ -47,7 +47,7 @@ fi_addr_t\ fi_rx_addr(fi_addr_t\ fi_addr,\ int\ rx_index,
 \ \ \ \ \ \ int\ rx_ctx_bits);
 
 const\ char\ *\ fi_av_straddr(struct\ fid_av\ *av,\ const\ void\ *addr,
-\ \ \ \ \ \ void\ *buf,\ size_t\ *len);
+\ \ \ \ \ \ char\ *buf,\ size_t\ *len);
 \f[]
 .fi
 .SH ARGUMENTS
