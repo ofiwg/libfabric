@@ -429,7 +429,7 @@ int _gnix_xpmem_accessible(struct gnix_fid_ep *ep,
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (!ep || *accessible)
+	if (!ep || !accessible)
 		return -FI_EINVAL;
 
 	if (gnix_xpmem_disabled == true) {
