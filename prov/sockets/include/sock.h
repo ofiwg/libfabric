@@ -274,6 +274,7 @@ struct sock_cntr {
 	atomic_t threshold;
 	atomic_t ref;
 	atomic_t err_cnt;
+	atomic_t last_read_val;
 	pthread_cond_t 	cond;
 	pthread_mutex_t mut;
 	struct fi_cntr_attr attr;
