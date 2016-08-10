@@ -590,7 +590,11 @@ void do_trecvv(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 
-	sz = fi_trecvv(ep[1], dest_iov, NULL, 0, gni_addr[0],
+	sz = fi_trecvv(ep[1], NULL, NULL, IOV_CNT, gni_addr[0],
+		       len * IOV_CNT, 0, iov_src_buf);
+	cr_assert_eq(sz, -FI_EINVAL);
+
+	sz = fi_trecvv(ep[1], dest_iov, NULL, IOV_CNT + 1, gni_addr[0],
 		       len * IOV_CNT, 0, iov_src_buf);
 	cr_assert_eq(sz, -FI_EINVAL);
 
