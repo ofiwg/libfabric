@@ -29,9 +29,12 @@ The verbs provider supports a subset of OFI features.
 
 *Modes*
 : Verbs provider requires applications to support the following modes:
+
   * FI_LOCAL_MR for all applications.
+
   * FI_RX_CQ_DATA for applications that want to use RMA. Applications must
     take responsibility of posting receives for any incoming CQ data.
+
   * FI_CONTEXT for applications making uses of the experimental FI_EP_RDM capability.
 
 *Addressing Formats*
@@ -47,12 +50,19 @@ The verbs provider supports a subset of OFI features.
 
 *Msg Ordering*
 : Verbs provider support the following messaging ordering on the TX side:
+
   * Read after Read
+
   * Read after Write
+
   * Read after Send
+
   * Write after Write
+
   * Write after Send
+
   * Send after Write
+
   * Send after Send
 
 # LIMITATIONS
@@ -74,10 +84,15 @@ The verbs provider supports a subset of OFI features.
 
 *RDM*
 : The RDM support for verbs have the following limitations:
+
   * iWARP is not supported yet.
+
   * Supports iovs of only size 1.
+
   * Max data transfer size is 1 GB
+
   * Not thread safe.
+
   * Data and flags arguments are ignored
 
 # SEE ALSO
