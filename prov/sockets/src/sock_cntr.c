@@ -200,10 +200,13 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 
 static uint64_t sock_cntr_read(struct fid_cntr *cntr)
 {
+	uint64_t curr_val;
 	struct sock_cntr *_cntr;
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	sock_cntr_progress(_cntr);
-	return atomic_get(&_cntr->value);
+	curr_val = atomic_get(&_cntr->value);
+	atomic_set(&_cntr->last_read_val, curr_val);
+	return curr_val;
 }
 
 void sock_cntr_inc(struct sock_cntr *cntr)
@@ -228,11 +231,13 @@ void sock_cntr_err_inc(struct sock_cntr *cntr)
 
 static int sock_cntr_add(struct fid_cntr *cntr, uint64_t value)
 {
+	uint64_t new_val;
 	struct sock_cntr *_cntr;
 
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	pthread_mutex_lock(&_cntr->mut);
-	atomic_set(&_cntr->value, atomic_get(&_cntr->value) + value);
+	new_val = atomic_add(&_cntr->value, value);
+	atomic_set(&_cntr->last_read_val, new_val);
 	if (atomic_get(&_cntr->value) >= atomic_get(&_cntr->threshold))
 		pthread_cond_signal(&_cntr->cond);
 	pthread_mutex_unlock(&_cntr->mut);
@@ -242,11 +247,13 @@ static int sock_cntr_add(struct fid_cntr *cntr, uint64_t value)
 
 static int sock_cntr_set(struct fid_cntr *cntr, uint64_t value)
 {
+	uint64_t new_val;
 	struct sock_cntr *_cntr;
 
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	pthread_mutex_lock(&_cntr->mut);
-	atomic_set(&_cntr->value, value);
+	new_val = atomic_set(&_cntr->value, value);
+	atomic_set(&_cntr->last_read_val, new_val);
 	if (atomic_get(&_cntr->value) >= atomic_get(&_cntr->threshold))
 		pthread_cond_signal(&_cntr->cond);
 	pthread_mutex_unlock(&_cntr->mut);
@@ -300,6 +307,9 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 	} else {
 		ret = fi_wait_cond(&_cntr->cond, &_cntr->mut, timeout);
 	}
+
+	if (atomic_get(&_cntr->value) >= threshold)
+		atomic_set(&_cntr->last_read_val, threshold);
 
 	_cntr->is_waiting = 0;
 	atomic_set(&_cntr->threshold, ~0);
@@ -509,6 +519,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	atomic_initialize(&_cntr->err_cnt, 0);
 
 	atomic_initialize(&_cntr->value, 0);
+	atomic_initialize(&_cntr->last_read_val, 0);
 	atomic_initialize(&_cntr->threshold, INT_MAX);
 
 	dlist_init(&_cntr->tx_list);

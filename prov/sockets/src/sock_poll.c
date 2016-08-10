@@ -142,8 +142,10 @@ static int sock_poll_poll(struct fid_poll *pollset, void **context, int count)
 						cntr_fid);
 			sock_cntr_progress(cntr);
 			pthread_mutex_lock(&cntr->mut);
-			if (atomic_get(&cntr->value) >=
-				atomic_get(&cntr->threshold)) {
+			if (atomic_get(&cntr->value) !=
+			    atomic_get(&cntr->last_read_val)) {
+				atomic_set(&cntr->last_read_val,
+					   atomic_get(&cntr->value));
 				*context++ = cntr->cntr_fid.fid.context;
 				ret_count++;
 			}
