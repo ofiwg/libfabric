@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         Allrights reserved.
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -70,6 +71,8 @@ static int __gnix_ipaddr_from_iface(const char *iface, struct sockaddr_in *sin)
 	struct ifreq ifr = { { { 0 } } };
 	int sock = -1;
 
+	GNIX_TRACE(FI_LOG_FABRIC, "\n");
+
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock == -1) {
 		GNIX_WARN(FI_LOG_FABRIC, "Socket creation failed: %s\n",
@@ -110,7 +113,8 @@ exit_w_sock:
  * returns 0 if ipogif entry found
  * otherwise  -errno
  */
-static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
+static int gnixu_get_pe_from_ip(const char *iface_name, const char *ip_addr,
+				uint32_t *gni_nic_addr)
 {
 	int scount;
 	/* return this if no ipgogif for this ip-addr found */
@@ -120,6 +124,8 @@ static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
 	char dummy[64], iface[64], fnd_ip_addr[64];
 	char mac_str[64];
 	int w, x, y;
+
+	GNIX_TRACE(FI_LOG_FABRIC, "\n");
 
 	fd = fopen("/proc/net/arp", "r");
 	if (fd == NULL) {
@@ -140,7 +146,7 @@ static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
 		 * check for a match
 		 */
 		if ((strstr(line, ip_addr) != NULL) &&
-		    (strstr(line, "ipogif") != NULL)) {
+		    (strstr(line, iface_name) != NULL)) {
 			ret = 0;
 			scount = sscanf(line, "%s%s%s%s%s%s", fnd_ip_addr,
 					dummy, dummy, mac_str, dummy, iface);
@@ -208,6 +214,8 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 		.ai_flags = AI_CANONNAME
 	};
 
+	GNIX_TRACE(FI_LOG_FABRIC, "\n");
+
 	if (flags & FI_SOURCE)
 		hints.ai_flags |= AI_PASSIVE;
 
@@ -266,10 +274,17 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 			}
 		} else {
 			ret =
-			    gnixu_get_pe_from_ip(inet_ntoa(sa->sin_addr), &pe);
+			    gnixu_get_pe_from_ip("ipogif0",
+						 inet_ntoa(sa->sin_addr), &pe);
 			if (ret == 0) {
 				break;
+			} else  {
+			    ret = gnixu_get_pe_from_ip("br0",
+						       inet_ntoa(sa->sin_addr),
+						       &pe);
 			}
+			if (ret == 0)
+				break;
 		}
 	}
 
