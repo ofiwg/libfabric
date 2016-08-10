@@ -288,7 +288,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libfabric.pc
 
 nroff:
-	@for file in $(real_man_pages); do \
+	@for file in $(real_man_pages) $(prov_install_man_pages); do \
 	    source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
 	    config/md2nroff.pl --source=$$source.md; \
 	done
