@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2016\-04\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2016\-08\-10" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -20,11 +20,15 @@ FI_TAGGED and FI_RMA interfaces).
 \f[I]Endpoint capabilities\f[] : FI_MSG, FI_RMA, FI_ATOMIC.
 .PP
 \f[I]Modes\f[] : Verbs provider requires applications to support the
-following modes: * FI_LOCAL_MR for all applications.
-* FI_RX_CQ_DATA for applications that want to use RMA.
+following modes:
+.IP \[bu] 2
+FI_LOCAL_MR for all applications.
+.IP \[bu] 2
+FI_RX_CQ_DATA for applications that want to use RMA.
 Applications must take responsibility of posting receives for any
 incoming CQ data.
-* FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
+.IP \[bu] 2
+FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
 capability.
 .PP
 \f[I]Addressing Formats\f[] : Supported addresing formats include
@@ -37,8 +41,20 @@ Asynchronous operations make forward progress automatically.
 FI_COMPLETION, FI_REMOTE_CQ_DATA.
 .PP
 \f[I]Msg Ordering\f[] : Verbs provider support the following messaging
-ordering on the TX side: * Read after Read * Read after Write * Read
-after Send * Write after Write * Write after Send * Send after Write *
+ordering on the TX side:
+.IP \[bu] 2
+Read after Read
+.IP \[bu] 2
+Read after Write
+.IP \[bu] 2
+Read after Send
+.IP \[bu] 2
+Write after Write
+.IP \[bu] 2
+Write after Send
+.IP \[bu] 2
+Send after Write
+.IP \[bu] 2
 Send after Send
 .SH LIMITATIONS
 .PP
@@ -56,10 +72,16 @@ Wait sets are not supported.
 overrun as this cannot be detected by the provider.
 .PP
 \f[I]RDM\f[] : The RDM support for verbs have the following limitations:
-* iWARP is not supported yet.
-* Supports iovs of only size 1.
-* Max data transfer size is 1 GB * Not thread safe.
-* Data and flags arguments are ignored
+.IP \[bu] 2
+iWARP is not supported yet.
+.IP \[bu] 2
+Supports iovs of only size 1.
+.IP \[bu] 2
+Max data transfer size is 1 GB
+.IP \[bu] 2
+Not thread safe.
+.IP \[bu] 2
+Data and flags arguments are ignored
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
