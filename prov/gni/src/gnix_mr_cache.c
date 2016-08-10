@@ -556,7 +556,7 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 		} else {
 			/* Should we do something else here? */
 			GNIX_FATAL(FI_LOG_MR,
-				   "_gnix_notifier_get_event returned incomplete event");
+				   "_gnix_notifier_get_event returned incomplete event\n");
 		}
 		ret = _gnix_notifier_get_event(cache->attr.notifier,
 					       &cookie, sizeof(cookie));
@@ -564,7 +564,7 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 	if (ret != -FI_EAGAIN) {
 		/* Should we do something else here? */
 		GNIX_WARN(FI_LOG_MR,
-			  "_gnix_notifier_get_event returned error: %s",
+			  "_gnix_notifier_get_event returned error: %s\n",
 			  fi_strerror(-ret));
 	}
 
