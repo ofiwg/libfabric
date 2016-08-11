@@ -274,8 +274,8 @@ The fi_av_insert call inserts zero or more addresses into an AV.  The
 number of addresses is specified through the count parameter.  The
 addr parameter references an array of addresses to insert into the AV.
 Addresses inserted into an address vector must be in the same format
-as specified in struct fi_info:addr_format for the corresponding
-domain.
+as specified in the addr_format field of the fi_info struct provided when
+opening the corresponding domain.
 
 For AV's of type FI_AV_MAP, once inserted addresses have been mapped,
 the mapped values are written into the buffer referenced by fi_addr.
@@ -418,6 +418,9 @@ were specified.
 Insertion calls for an AV opened for asynchronous operation (with FI_EVENT
 flag specified) will return 0 if the operation was successfully initiated.
 In the case of failure, a negative fabric errno will be returned.
+
+In both the synchronous and asynchronous modes of operation, the fi_addr
+buffer associated with a failed insertion will be set to FI_ADDR_NOTAVAIL.
 
 All other calls return 0 on success, or a negative value corresponding to
 fabric errno on error.
