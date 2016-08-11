@@ -306,7 +306,10 @@ insertion operation completes.  Note that if
 fi_addr is NULL and synchronous operation is requested, individual
 insertion failures cannot be reported and the application must use
 other calls, such as `fi_av_lookup` to learn which specific addresses
-failed to insert.
+failed to insert.  Since fi_av_remove is provider-specific, it is recommended
+that calls to fi_av_insert following a call to fi_av_remove always reference a
+valid buffer in the fi_addr parameter.  Otherwise it may be difficult to
+determine what the next assigned index will be.
 
 *flags*
 : The following flag may be passed to fi_av_insert
