@@ -174,7 +174,8 @@ void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
 int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 			       struct fi_ibv_rdm_cm* cm)
 {
-	struct ifaddrs *addrs, *tmp;
+	struct ifaddrs *addrs = NULL;
+	struct ifaddrs *tmp = NULL;
 	int found = 0;
 
 	char iface[IFNAMSIZ];
@@ -197,7 +198,10 @@ int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 
 	strncpy(iface, iface_tmp, iface_len);
 
-	getifaddrs(&addrs);
+	if (getifaddrs(&addrs)) {
+		return 1;
+	}
+
 	tmp = addrs;
 	while (tmp) {
 		if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {

@@ -453,12 +453,25 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->tx_selective_completion = 0;
 	_ep->rx_selective_completion = 0;
 
+	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
+	_ep->buff_len = FI_IBV_RDM_DFLT_BUFFER_SIZE;
+	_ep->rndv_threshold = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
+
 	switch (info->ep_attr->protocol) {
 	case FI_PROTO_IB_RDM:
 		_ep->topcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+		_ep->rq_wr_depth = info->rx_attr->size;
+		_ep->sq_wr_depth = _ep->n_buffs + 1;
 		break;
 	case FI_PROTO_IWARP_RDM:
 		_ep->topcode = IBV_WR_SEND;
+		_ep->rq_wr_depth = info->rx_attr->size;
+		/*
+		 * TODO: More then 1 outgoing send causes hang of bidirectional
+		 * RNDV tests on iWarp devices +1 for eager buffers releasing.
+		 * Ideally it should be the same as for FI_PROTO_IB_RDM case
+		 */
+		_ep->sq_wr_depth = 2;
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -478,18 +491,6 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		ret = -FI_EOTHER;
 		goto err;
 	}
-
-	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
-	_ep->buff_len = FI_IBV_RDM_DFLT_BUFFER_SIZE;
-	_ep->rndv_threshold = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
-	
-	_ep->rq_wr_depth = info->rx_attr->size;
-
-	/*
-	 * max number of WRs in SQ is n_buffer for send and
-	 * the same amount for buffer releasing from recv
-	 */
-	_ep->sq_wr_depth = 2 * (_ep->n_buffs + 1);
 
 	_ep->posted_sends = 0;
 	_ep->posted_recvs = 0;

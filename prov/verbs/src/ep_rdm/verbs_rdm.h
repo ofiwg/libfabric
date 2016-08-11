@@ -96,7 +96,7 @@ do {                                                                	\
 } while (0)
 
 #define FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep)  \
-	((_connection)->sends_outgoing > 0.5*(_ep)->sq_wr_depth)
+	((_connection)->sends_outgoing >= (_ep)->sq_wr_depth - 1)
 
 #define PEND_SEND_IS_LIMITED(_ep)                                       \
 	((_ep)->posted_sends > 0.5 * (_ep)->scq_depth)
