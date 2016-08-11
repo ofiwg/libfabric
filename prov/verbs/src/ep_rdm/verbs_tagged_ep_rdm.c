@@ -180,7 +180,7 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 	if (flags & FI_PEEK) {
 		recv_data.peek_data.flags |= FI_COMPLETION;
 		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_PEEK,
-					  &recv_data.peek_data);
+					  &recv_data);
 		if (ret == -FI_ENOMSG) {
 			fi_ibv_rdm_tagged_poll(ep_rdm);
 		}

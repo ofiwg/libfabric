@@ -128,6 +128,7 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct fi_ibv_rdm_ep *ep;
 	struct fi_ibv_rdm_cq *cq;
 	struct fi_ibv_av *av;
+	struct fi_ibv_rdm_cntr *cntr;
 	int ret;
 
 	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
@@ -138,6 +139,9 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct fi_ibv_rdm_cq, cq_fid);
+		if (ep->domain != cq->domain) {
+			return -FI_EINVAL;
+		}
 
 		if (flags & FI_RECV) {
 			if (ep->fi_rcq)
@@ -160,10 +164,42 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct fi_ibv_av, av_fid.fid);
+		if (ep->domain != av->domain) {
+			return -FI_EINVAL;
+		}
+
 		ep->av = av;
 
 		/* TODO: this is wrong, AV to EP is 1:n */
 		ep->av->ep = ep;
+		break;
+	case FI_CLASS_CNTR:
+		cntr = container_of(bfid, struct fi_ibv_rdm_cntr, fid.fid);
+		if (ep->domain != cntr->domain) {
+			return -FI_EINVAL;
+		}
+
+		if ((flags & FI_REMOTE_READ) || (flags & FI_REMOTE_WRITE)) {
+			return -FI_ENOSYS;
+		}
+
+		if (flags & FI_SEND) {
+			ep->send_cntr = cntr;
+			atomic_inc(&ep->send_cntr->ep_ref);
+		}
+		if (flags & FI_RECV) {
+			ep->recv_cntr = cntr;
+			atomic_inc(&ep->recv_cntr->ep_ref);
+		}
+		if (flags & FI_READ) {
+			ep->read_cntr = cntr;
+			atomic_inc(&ep->read_cntr->ep_ref);
+		}
+		if (flags & FI_WRITE) {
+			ep->write_cntr = cntr;
+			atomic_inc(&ep->write_cntr->ep_ref);
+		}
+
 		break;
 	default:
 		return -EINVAL;
@@ -214,7 +250,11 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 	}
 
 	if (!err) {
-		fi_ibv_rdm_move_to_errcq(request, FI_ECANCELED);
+		fi_ibv_rdm_cntr_inc_err(ep_rdm->recv_cntr);
+
+		if (request->comp_flags & FI_COMPLETION) {
+			fi_ibv_rdm_move_to_errcq(request, FI_ECANCELED);
+		}
 	}
 
 	return err;
@@ -313,6 +353,26 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	/* All posted sends are waiting local completions */
 	while (ep->posted_sends > 0 && ep->num_active_conns > 0) {
 		fi_ibv_rdm_tagged_poll(ep);
+	}
+
+	if (ep->send_cntr) {
+		atomic_dec(&ep->send_cntr->ep_ref);
+		ep->send_cntr = 0;
+	}
+
+	if (ep->recv_cntr) {
+		atomic_dec(&ep->recv_cntr->ep_ref);
+		ep->recv_cntr = 0;
+	}
+
+	if (ep->read_cntr) {
+		atomic_dec(&ep->read_cntr->ep_ref);
+		ep->read_cntr = 0;
+	}
+
+	if (ep->write_cntr) {
+		atomic_dec(&ep->write_cntr->ep_ref);
+		ep->write_cntr = 0;
 	}
 
 	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
