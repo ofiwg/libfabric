@@ -463,51 +463,45 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 
 		dg_ptr = (struct gnix_datagram *)datagram_id;
 		assert(dg_ptr != NULL);
-		assert(dg_ptr->state == GNIX_DGRAM_STATE_ACTIVE);
 
 		/*
 		 * do need to take lock here
 		 */
 		COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
-		if (dg_ptr->pre_test_clbk_fn != NULL) {
-			ret = dg_ptr->pre_test_clbk_fn(dg_ptr);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					"pre_test_clbk returned %d\n",
-					ret);
-			}
-		}
-
 		status = GNI_EpPostDataTestById(dg_ptr->gni_ep,
 						datagram_id,
 						&post_state,
 						&responding_remote_addr,
 						&responding_remote_id);
-		if (status != GNI_RC_SUCCESS) {
+		if ((status != GNI_RC_SUCCESS) &&
+			(status !=GNI_RC_NO_MATCH)) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				"GNI_EpPostDataTestById:  %s\n",
 					gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			COND_RELEASE(nic->requires_lock, &nic->lock);
 			goto err;
-		}
-
-		if (dg_ptr->post_test_clbk_fn != NULL) {
-			responding_addr.device_addr =
-				responding_remote_addr;
-			responding_addr.cdm_id =
-				responding_remote_id;
-			ret = dg_ptr->post_test_clbk_fn(dg_ptr,
-						responding_addr,
-						post_state);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					"post_test_clbk returned %d\n",
-					ret);
+		} else {
+			if ((status == GNI_RC_SUCCESS) &&
+			     (dg_ptr->state != GNIX_DGRAM_STATE_ACTIVE)) {
+				GNIX_DEBUG(FI_LOG_EP_CTRL,
+					"GNI_EpPostDataTestById ",
+					"returned success but dgram not active\n");
 			}
 		}
+
 		COND_RELEASE(nic->requires_lock, &nic->lock);
+
+		/*
+		 * no match is okay, it means another thread
+		 * won the race to get this datagram
+		 */
+
+		if (status == GNI_RC_NO_MATCH) {
+			ret = FI_SUCCESS;
+			goto err;
+		}
 
 		/*
 		 * pass COMPLETED and error post state cases to
