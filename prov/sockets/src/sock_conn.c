@@ -130,9 +130,10 @@ void sock_conn_map_destroy(struct sock_ep_attr *ep_attr)
 	int i;
 	struct sock_conn_map *cmap = &ep_attr->cmap;
 	for (i = 0; i < cmap->used; i++) {
-		sock_epoll_del(&cmap->epoll_set, cmap->table[i].sock_fd);
-		sock_pe_poll_del(ep_attr->domain->pe, cmap->table[i].sock_fd);
-		ofi_close_socket(cmap->table[i].sock_fd);
+		if (cmap->table[i].sock_fd != -1) {
+			sock_pe_poll_del(ep_attr->domain->pe, cmap->table[i].sock_fd);
+			sock_conn_release_entry(cmap, &cmap->table[i]);
+		}
 	}
 	free(cmap->table);
 	cmap->table = NULL;
@@ -141,19 +142,21 @@ void sock_conn_map_destroy(struct sock_ep_attr *ep_attr)
 	fastlock_destroy(&cmap->lock);
 }
 
-void sock_conn_reset_entry(struct sock_conn *conn)
+void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn)
 {
-        conn->ep_attr = NULL;
-        conn->sock_fd = 0;
-        conn->address_published = 0;
+	sock_epoll_del(&map->epoll_set, conn->sock_fd);
+	ofi_close_socket(conn->sock_fd);
+
+	conn->address_published = 0;
         conn->connected = 0;
+        conn->sock_fd = -1;
 }
 
 static int sock_conn_get_next_index(struct sock_conn_map *map)
 {
 	int i;
 	for (i = 0; i < map->size; i++) {
-		if (!map->table[i].connected)
+		if (map->table[i].sock_fd == -1)
 			return i;
 	}
 	return -1;
@@ -172,11 +175,12 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 			if (sock_conn_map_increase(map, map->size * 2))
 				return NULL;
 			index = map->used;
+			map->used++;
 		}
 	} else {
 		index = map->used;
+		map->used++;
 	}
-	map->used++;
 
 	map->table[index].connected = 1;
 	map->table[index].addr = *addr;
@@ -273,7 +277,7 @@ static void *_sock_conn_listen(void *arg)
 					&addr_size);
 		SOCK_LOG_DBG("CONN: accepted conn-req: %d\n", conn_fd);
 		if (conn_fd < 0) {
-			SOCK_LOG_ERROR("failed to accept: %d\n", errno);
+			SOCK_LOG_ERROR("failed to accept: %s\n", strerror(errno));
 			goto err;
 		}
 

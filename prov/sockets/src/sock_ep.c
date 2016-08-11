@@ -686,9 +686,6 @@ static int sock_ep_close(struct fid *fid)
 		sock_rx_ctx_free(sock_ep->attr->rx_array[0]);
 	}
 
-	idm_reset(&sock_ep->attr->conn_idm);
-	idm_reset(&sock_ep->attr->av_idm);
-
 	free(sock_ep->attr->tx_array);
 	free(sock_ep->attr->rx_array);
 
@@ -697,7 +694,12 @@ static int sock_ep_close(struct fid *fid)
 	if (sock_ep->attr->dest_addr)
 		free(sock_ep->attr->dest_addr);
 
+	fastlock_acquire(&sock_ep->attr->domain->pe->lock);
+	idm_reset(&sock_ep->attr->conn_idm);
+	idm_reset(&sock_ep->attr->av_idm);
 	sock_conn_map_destroy(sock_ep->attr);
+	fastlock_release(&sock_ep->attr->domain->pe->lock);
+
 	atomic_dec(&sock_ep->attr->domain->ref);
 	fastlock_destroy(&sock_ep->attr->lock);
 	free(sock_ep->attr);
