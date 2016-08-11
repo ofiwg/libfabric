@@ -84,15 +84,15 @@ do {                                                                	\
 		(_connection)->sends_outgoing);                         \
 } while (0)
 
-#define FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(_connection, _ep)		\
-do {                                                                	\
-	(_connection)->sends_outgoing--;                                \
-	(_ep)->posted_sends--;                                          \
+#define FI_IBV_RDM_DEC_SIG_POST_COUNTERS(_connection, _ep)		\
+do {									\
+	(_connection)->sends_outgoing--;				\
+	(_ep)->posted_sends--;						\
 									\
-	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",    \
-			_connection, (_connection)->sends_outgoing);    \
-	assert((_ep)->posted_sends >= 0);                               \
-	assert((_connection)->sends_outgoing >= 0);                     \
+	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",	\
+			_connection, (_connection)->sends_outgoing);	\
+	assert((_ep)->posted_sends >= 0);				\
+	assert((_connection)->sends_outgoing >= 0);			\
 } while (0)
 
 #define FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep)  \

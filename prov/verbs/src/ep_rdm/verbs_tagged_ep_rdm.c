@@ -740,7 +740,7 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 		struct fi_ibv_rdm_tagged_conn *conn =
 			(struct fi_ibv_rdm_tagged_conn *)
 			FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
-		FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(conn, ep);
+		FI_IBV_RDM_DEC_SIG_POST_COUNTERS(conn, ep);
 
 		return 0;
 	} else {
