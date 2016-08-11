@@ -95,19 +95,17 @@ do {									\
 	assert((_connection)->sends_outgoing >= 0);			\
 } while (0)
 
-#define FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep)  \
+#define OUTGOING_POST_LIMIT(_connection, _ep)				\
 	((_connection)->sends_outgoing >= (_ep)->sq_wr_depth - 1)
 
-#define PEND_SEND_IS_LIMITED(_ep)                                       \
+#define PEND_POST_LIMIT(_ep)						\
 	((_ep)->posted_sends > 0.5 * (_ep)->scq_depth)
 
-#define SEND_RESOURCES_IS_BUSY(_connection, _ep)                        \
-	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) ||  \
-	 PEND_SEND_IS_LIMITED(_ep))
+#define TSEND_RESOURCES_IS_BUSY(_connection, _ep)			\
+	(OUTGOING_POST_LIMIT(_connection, _ep) || PEND_POST_LIMIT(_ep))
 
 #define RMA_RESOURCES_IS_BUSY(_connection, _ep)				\
-	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) || \
-	 PEND_SEND_IS_LIMITED(_ep))
+	(OUTGOING_POST_LIMIT(_connection, _ep) || PEND_POST_LIMIT(_ep))
 
 struct fi_ibv_rdm_header {
 /*	uint64_t imm_data; TODO: not implemented */
@@ -584,7 +582,7 @@ fi_ibv_rdm_prepare_send_resources(struct fi_ibv_rdm_tagged_conn *conn,
 				  struct fi_ibv_rdm_ep *ep)
 {
 	if (fi_ibv_rdm_check_connection(conn, ep)) {
-		return (!SEND_RESOURCES_IS_BUSY(conn, ep)) ?
+		return (!TSEND_RESOURCES_IS_BUSY(conn, ep)) ?
 			fi_ibv_rdm_get_sbuf_head(conn, ep) : NULL;
 	}
 	return NULL;

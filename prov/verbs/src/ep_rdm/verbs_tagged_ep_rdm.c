@@ -57,18 +57,17 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep)
 {
 #if ENABLE_DEBUG
-	int res =
-		FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(request->minfo.conn, ep);
+	int res = OUTGOING_POST_LIMIT(request->minfo.conn, ep);
 	if (res) {
 		FI_IBV_RDM_DBG_REQUEST
-			("failed because SENDS_OUTGOING_ARE_LIMITED", request,
+			("failed because OUTGOING_POST_LIMIT", request,
 			FI_LOG_DEBUG);
 		return !res;
 	}
-	res = PEND_SEND_IS_LIMITED(ep);
+	res = PEND_POST_LIMIT(ep);
 	if (res) {
 		FI_IBV_RDM_DBG_REQUEST
-			("failed because PEND_SEND_IS_LIMITED", request,
+			("failed because PEND_POST_LIMIT", request,
 			FI_LOG_DEBUG);
 		return !res;
 	}

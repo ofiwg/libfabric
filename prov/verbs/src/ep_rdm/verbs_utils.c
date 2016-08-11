@@ -130,8 +130,8 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 			assert(request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED);
 			assert(fi_ibv_rdm_check_connection(request->minfo.conn,
 							   send_data->ep));
-			if (request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) {
-				res = !SEND_RESOURCES_IS_BUSY(request->minfo.conn,
+			if (request->state.eager <= FI_IBV_STATE_EAGER_RECV_END) {
+				res = !TSEND_RESOURCES_IS_BUSY(request->minfo.conn,
 							      send_data->ep);
 			} else {
 				res = !RMA_RESOURCES_IS_BUSY(request->minfo.conn,
