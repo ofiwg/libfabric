@@ -366,7 +366,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 
 	if (ep->is_closing) {
 		int rej_message = 0xdeadbeef;
-		if (rdma_reject(id, &rej_message, sizeof(int))) {
+		if (rdma_reject(id, &rej_message, sizeof(rej_message))) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_reject\n", errno);
 			ret = -errno;
 			if (rdma_destroy_id(id)) {
@@ -646,10 +646,16 @@ fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 {
 	struct fi_ibv_rdm_tagged_conn *conn = event->id->context;
 	ssize_t ret = FI_SUCCESS;
+	const int *pdata = event->param.conn.private_data;
 
-	if (NULL != event->param.conn.private_data &&
-	    *((int *)event->param.conn.private_data) == 0xdeadbeef ) {
-		assert(conn->cm_role == FI_VERBS_CM_PASSIVE);
+	if ((pdata && *pdata == 0xdeadbeef) ||
+	    /* 
+	     * TODO: this is a workaround of the case when private_data is not
+	     * arriving from rdma_reject call on iWarp devices
+	     */
+	    (conn->cm_role == FI_VERBS_CM_PASSIVE &&
+	     event->status == -ECONNREFUSED))
+	{
 		errno = 0;
 		rdma_destroy_qp(event->id);
 		if (errno) {
@@ -671,14 +677,15 @@ fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 			event->status);
 	} else {
 		VERBS_INFO(FI_LOG_AV,
-			"Unexpected REJECT from conn %p, addr %s:%u, cm_role %d, msg len %d, msg %x, status %d\n",
+			"Unexpected REJECT from conn %p, addr %s:%u, cm_role %d, "
+			"msg len %d, msg %x, status %d, err %d\n",
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port),
 			conn->cm_role,
 			event->param.conn.private_data_len,
 			event->param.conn.private_data ?
 			*(int *)event->param.conn.private_data : 0,
-			event->status);
+			event->status, errno);
 		conn->state = FI_VERBS_CONN_REJECTED;
 
 	}

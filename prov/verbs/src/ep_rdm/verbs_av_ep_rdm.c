@@ -89,7 +89,6 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
 		if (rdma_disconnect(conn->id[0])) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
 			ret = -errno;
-			assert(ret == 0);
 		}
 	}
 
@@ -109,7 +108,6 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
 		ret = -FI_EOTHER;
 	}
 
-	assert(ret == FI_SUCCESS);
 	return ret;
 }
 

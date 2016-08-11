@@ -608,7 +608,25 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	FI_IBV_DBG_OPCODE(wc->opcode, "RECV");
 
 	if (!FI_IBV_RDM_CHECK_RECV_WC(wc)) {
-		assert(0 && "Error recv wc\n");
+
+		VERBS_INFO(FI_LOG_EP_DATA, "conn %p state %d, wc status %d\n",
+			conn, conn->state, wc->status);
+		if (wc->status == IBV_WC_WR_FLUSH_ERR &&
+		    conn->state == FI_VERBS_CONN_ESTABLISHED)
+		{
+			/*
+			 * It means that remote side initiated disconnection
+			 * and QP is flushed earlier then disconnect event was
+			 * handled or arrived. Just initiate disconnect to
+			 * opposite direction.
+			 */
+			fi_ibv_rdm_start_disconnection(conn);
+		} else {
+			assert("Error recv wc\n" &&
+			       (!ep->is_closing ||
+				conn->state != FI_VERBS_CONN_ESTABLISHED));
+		}
+
 		return 1;
 	}
 
@@ -696,7 +714,6 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 
 			VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc[%d].status = %d:%s\n",
 				i, wc[i].status, ibv_wc_status_str(wc[i].status));
-			assert(0);
 			return -FI_EOTHER;
 		}
 
@@ -806,7 +823,8 @@ wc_error:
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep)
 {
 	int ret = fi_ibv_rdm_tagged_poll_send(ep);
-	if (ret) {
+	/* Only already posted sends should be processed during EP closing */
+	if (ret || ep->is_closing) {
 		return ret;
 	}
 
