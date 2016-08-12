@@ -245,7 +245,7 @@ struct fi_ops_rma *fi_ibv_msg_ep_ops_rma(struct fi_ibv_msg_ep *ep)
 
 static inline ssize_t
 fi_ibv_rdm_ep_rma_preinit(void **desc, void **raw_buf, size_t len,
-			  struct fi_ibv_rdm_tagged_conn *conn,
+			  struct fi_ibv_rdm_conn *conn,
 			  struct fi_ibv_rdm_ep *ep)
 {
 	int again = 0;
@@ -282,8 +282,7 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	struct fi_ibv_rdm_ep *ep =
 		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
 
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *)msg->addr;
+	struct fi_ibv_rdm_conn *conn = (struct fi_ibv_rdm_conn *)msg->addr;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.ep_rdm = ep,
@@ -387,8 +386,7 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 {
 	struct fi_ibv_rdm_ep *ep = container_of(ep_fid, struct fi_ibv_rdm_ep,
 						ep_fid);
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *) msg->addr;
+	struct fi_ibv_rdm_conn *conn = (struct fi_ibv_rdm_conn *) msg->addr;
 	struct fi_ibv_rdm_request *request = NULL;
 	void *raw_buf = NULL;
 	ssize_t ret = FI_SUCCESS;
@@ -492,8 +490,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 {
 	struct fi_ibv_rdm_ep *ep_rdm = container_of(ep, struct fi_ibv_rdm_ep,
 						    ep_fid);
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
+	struct fi_ibv_rdm_conn *conn = (struct fi_ibv_rdm_conn *) dest_addr;
 	struct fi_ibv_rdm_request *request = NULL;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {

@@ -150,9 +150,9 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 		return -FI_EMSGSIZE;
 	}
 
-	struct fi_ibv_rdm_tagged_conn *conn =
+	struct fi_ibv_rdm_conn *conn =
 		(msg->addr == FI_ADDR_UNSPEC) ? NULL :
-		(struct fi_ibv_rdm_tagged_conn *) msg->addr;
+		(struct fi_ibv_rdm_conn *) msg->addr;
 
 	struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
 		.peek_data = {
@@ -250,8 +250,7 @@ static inline ssize_t
 fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len, 
 			 fi_addr_t dest_addr, uint64_t tag)
 {
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
+	struct fi_ibv_rdm_conn *conn = (struct fi_ibv_rdm_conn *)dest_addr;
 	struct fi_ibv_rdm_ep *ep =
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
 
@@ -352,7 +351,7 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 
 	struct fi_ibv_rdm_tsend_start_data sdata = {
 		.ep_rdm = container_of(fid, struct fi_ibv_rdm_ep, ep_fid),
-		.conn = (struct fi_ibv_rdm_tagged_conn *) dest_addr,
+		.conn = (struct fi_ibv_rdm_conn *) dest_addr,
 		.data_len = len,
 		.context = context,
 		.flags = FI_TAGGED | FI_SEND |
@@ -384,7 +383,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 
 	struct fi_ibv_rdm_tsend_start_data sdata = {
 		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
-		.conn = (struct fi_ibv_rdm_tagged_conn *) msg->addr,
+		.conn = (struct fi_ibv_rdm_conn *) msg->addr,
 		.data_len = 0,
 		.context = msg->context,
 		.flags = FI_TAGGED | FI_SEND | (ep_rdm->tx_selective_completion ?
@@ -475,8 +474,8 @@ struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops = {
 };
 
 static inline void
-fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
-	struct fi_ibv_rdm_ep *ep)
+fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
+					struct fi_ibv_rdm_ep *ep)
 {
 	struct ibv_sge sge;
 	sge.addr = (uint64_t) & conn->sbuf_ack_status;
@@ -511,9 +510,8 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline void
-fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
-	struct fi_ibv_rdm_tagged_conn *conn, int arrived_len,
-	struct fi_ibv_rdm_buf *rbuf)
+fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
+			int arrived_len, struct fi_ibv_rdm_buf *rbuf)
 {
 	struct fi_ibv_rdm_request *request = NULL;
 
@@ -573,7 +571,7 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
 
 static inline
 void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
-	struct fi_ibv_rdm_tagged_conn *conn)
+				struct fi_ibv_rdm_conn *conn)
 {
 	conn->recv_preposted--;
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p remain prepost recvs %d\n", conn, conn->recv_preposted);
@@ -594,7 +592,7 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 static inline int 
 fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 {
-	struct fi_ibv_rdm_tagged_conn *conn = (void *) wc->wr_id;
+	struct fi_ibv_rdm_conn *conn = (void *) wc->wr_id;
 
 	struct fi_ibv_rdm_buf *rbuf = 
 		fi_ibv_rdm_get_rbuf(conn, ep, conn->recv_processed);
@@ -699,8 +697,7 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 	for(i = 0; i < wc_count; i++) {
 
 		if (wc[i].status != IBV_WC_SUCCESS) {
-			struct fi_ibv_rdm_tagged_conn *conn = 
-				(void *)wc[i].wr_id;
+			struct fi_ibv_rdm_conn *conn = (void *)wc[i].wr_id;
 
 			if (wc[i].status == IBV_WC_WR_FLUSH_ERR && conn &&
 				conn->state != FI_VERBS_CONN_ESTABLISHED)
@@ -733,8 +730,8 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 	if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
 		VERBS_DBG(FI_LOG_EP_DATA, "CQ COMPL: SEND -> 0x1\n");
-		struct fi_ibv_rdm_tagged_conn *conn =
-			(struct fi_ibv_rdm_tagged_conn *)
+		struct fi_ibv_rdm_conn *conn =
+			(struct fi_ibv_rdm_conn *)
 			FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
 		FI_IBV_RDM_DEC_SIG_POST_COUNTERS(conn, ep);
 
@@ -793,7 +790,7 @@ wc_error:
 
 	for (i = 0; i < wc_count; i++) {
 		if (wc[i].status != IBV_WC_SUCCESS) {
-			struct fi_ibv_rdm_tagged_conn *conn;
+			struct fi_ibv_rdm_conn *conn;
 			if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc[i].wr_id)) {
 				conn = FI_IBV_RDM_UNPACK_SERVICE_WR(wc[i].wr_id);
 			} else {

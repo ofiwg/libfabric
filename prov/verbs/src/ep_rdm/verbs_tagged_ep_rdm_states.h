@@ -122,7 +122,7 @@ enum ibv_rdm_send_type
 
 struct fi_ibv_rdm_tsend_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 	void *context;
 	uint64_t flags;
 	size_t tag;
@@ -155,7 +155,7 @@ struct fi_ibv_rdm_tagged_recv_start_data {
 };
 
 struct fi_ibv_recv_got_pkt_preprocess_data {
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 	struct fi_ibv_rdm_ep *ep;
 	struct fi_ibv_rdm_buf *rbuf;
 	size_t arrived_len;
@@ -171,7 +171,7 @@ struct fi_ibv_recv_got_pkt_process_data {
 
 struct fi_ibv_rdm_rma_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 	void *context;
 	uint64_t flags;
 	uint64_t data_len;

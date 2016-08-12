@@ -50,7 +50,7 @@ extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 extern struct util_buf_pool* fi_ibv_rdm_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
 
-struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash = NULL;
+struct fi_ibv_rdm_conn *fi_ibv_rdm_conn_hash = NULL;
 
 
 static int
@@ -318,10 +318,10 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		fi_ibv_rdm_tagged_poll(ep);
 	}
 
-	struct fi_ibv_rdm_tagged_conn *conn = NULL, *tmp = NULL;
+	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
 
-	HASH_ITER(hh, fi_ibv_rdm_tagged_conn_hash, conn, tmp) {
-		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
+	HASH_ITER(hh, fi_ibv_rdm_conn_hash, conn, tmp) {
+		HASH_DEL(fi_ibv_rdm_conn_hash, conn);
 		switch (conn->state) {
 		case FI_VERBS_CONN_ALLOCATED:
 		case FI_VERBS_CONN_REMOTE_DISCONNECT:
@@ -351,8 +351,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		}
 	}
 
-	assert(0 == HASH_COUNT(fi_ibv_rdm_tagged_conn_hash) &&
-	       NULL == fi_ibv_rdm_tagged_conn_hash);
+	assert(0 == HASH_COUNT(fi_ibv_rdm_conn_hash) &&
+		NULL == fi_ibv_rdm_conn_hash);
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);

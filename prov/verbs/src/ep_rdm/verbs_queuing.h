@@ -175,7 +175,7 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 				FI_LOG_DEBUG);
 	assert(request && request->minfo.conn);
 
-	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
+	struct fi_ibv_rdm_conn *conn = request->minfo.conn;
 
 	if (dlist_empty(&conn->postponed_requests_head)) {
 		struct fi_ibv_rdm_postponed_entry *entry =
@@ -197,7 +197,7 @@ fi_ibv_rdm_remove_from_postponed_queue(struct fi_ibv_rdm_request *request)
 	FI_IBV_RDM_DBG_REQUEST("remove_from_postponed_queue: ", request,
 				FI_LOG_DEBUG);
 
-	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
+	struct fi_ibv_rdm_conn *conn = request->minfo.conn;
 	assert(conn);
 	assert(!dlist_empty(&conn->postponed_requests_head));
 

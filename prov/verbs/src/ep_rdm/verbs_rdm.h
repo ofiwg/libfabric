@@ -276,7 +276,7 @@ enum fi_rdm_cm_role {
 	FI_VERBS_CM_SELF,
 };
 
-struct fi_ibv_rdm_tagged_conn {
+struct fi_ibv_rdm_conn {
 
 	/* 
 	 * In normal case only qp[0] and id[0] are used.
@@ -330,7 +330,7 @@ struct fi_ibv_rdm_tagged_conn {
 struct fi_ibv_rdm_postponed_entry {
 	struct dlist_entry queue_entry;
 
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 };
 
 static inline void
@@ -351,7 +351,7 @@ fi_ibv_rdm_buffer_check_seq_num(struct fi_ibv_rdm_buf *buff, uint16_t seq_num)
 }
 
 static inline uintptr_t
-fi_ibv_rdm_get_remote_addr(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_get_remote_addr(struct fi_ibv_rdm_conn *conn,
 			   struct fi_ibv_rdm_buf *local_sbuff)
 {
 	return (uintptr_t) (conn->remote_rbuf_mem_reg +
@@ -375,7 +375,7 @@ fi_ibv_rdm_push_buff_pointer(char *area_start, size_t area_size,
 }
 
 static inline void
-fi_ibv_rdm_push_sbuff_head(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_push_sbuff_head(struct fi_ibv_rdm_conn *conn, 
 			   struct fi_ibv_rdm_ep *ep)
 {
 	fi_ibv_rdm_push_buff_pointer(conn->sbuf_mem_reg,
@@ -384,7 +384,7 @@ fi_ibv_rdm_push_sbuff_head(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline void
-fi_ibv_rdm_push_rmabuff_head(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_push_rmabuff_head(struct fi_ibv_rdm_conn *conn,
 			     struct fi_ibv_rdm_ep *ep)
 {
 	fi_ibv_rdm_push_buff_pointer(conn->rmabuf_mem_reg,
@@ -393,7 +393,7 @@ fi_ibv_rdm_push_rmabuff_head(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline struct fi_ibv_rdm_buf *
-fi_ibv_rdm_get_rmabuf(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_get_rmabuf(struct fi_ibv_rdm_conn *conn,
 		      struct fi_ibv_rdm_ep *ep, uint16_t seq_num)
 {
 	char *rmabuf = conn->rmabuf_mem_reg + (seq_num * ep->buff_len);
@@ -402,7 +402,7 @@ fi_ibv_rdm_get_rmabuf(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline struct fi_ibv_rdm_buf *
-fi_ibv_rdm_get_rbuf(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_get_rbuf(struct fi_ibv_rdm_conn *conn,
 		    struct fi_ibv_rdm_ep *ep, uint16_t seq_num)
 {
 	struct fi_ibv_rdm_buf *rbuf = (struct fi_ibv_rdm_buf *)
@@ -415,7 +415,7 @@ fi_ibv_rdm_get_rbuf(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline struct fi_ibv_rdm_buf *
-fi_ibv_rdm_get_sbuf(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_get_sbuf(struct fi_ibv_rdm_conn *conn,
 		    struct fi_ibv_rdm_ep *ep, uint16_t seq_num)
 {
 	char *sbuf = conn->sbuf_mem_reg + (seq_num * ep->buff_len);
@@ -424,7 +424,7 @@ fi_ibv_rdm_get_sbuf(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline void
-fi_ibv_rdm_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_buffer_lists_init(struct fi_ibv_rdm_conn *conn,
 			     struct fi_ibv_rdm_ep *ep)
 {
 	int i;
@@ -454,11 +454,11 @@ fi_ibv_rdm_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
 
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep);
 ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep);
-ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn);
-ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn);
+ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn);
+ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
-                                struct fi_ibv_rdm_tagged_conn *conn);
-ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
+                                struct fi_ibv_rdm_conn *conn);
+ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_conn *conn,
 				   struct fi_ibv_rdm_ep *ep,
 				   int num_to_post);
 int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
@@ -472,8 +472,7 @@ int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_request *request,
 				   struct fi_ibv_rdm_ep *ep);
 
 static inline struct fi_ibv_rdm_buf *
-fi_ibv_rdm_get_sbuf_head(struct fi_ibv_rdm_tagged_conn *conn,
-			 struct fi_ibv_rdm_ep *ep)
+fi_ibv_rdm_get_sbuf_head(struct fi_ibv_rdm_conn *conn, struct fi_ibv_rdm_ep *ep)
 {
 	assert(conn);
 
@@ -545,7 +544,7 @@ fi_ibv_rdm_get_sbuf_head(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline void *
-fi_ibv_rdm_rma_get_buf_head(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_rma_get_buf_head(struct fi_ibv_rdm_conn *conn,
 			    struct fi_ibv_rdm_ep *ep)
 {
 	assert(conn);
@@ -560,7 +559,7 @@ fi_ibv_rdm_rma_get_buf_head(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline int
-fi_ibv_rdm_check_connection(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_check_connection(struct fi_ibv_rdm_conn *conn,
 			    struct fi_ibv_rdm_ep *ep)
 {
 	const int status = (conn->state == FI_VERBS_CONN_ESTABLISHED);
@@ -577,7 +576,7 @@ fi_ibv_rdm_check_connection(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline struct fi_ibv_rdm_buf *
-fi_ibv_rdm_prepare_send_resources(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_prepare_send_resources(struct fi_ibv_rdm_conn *conn,
 				  struct fi_ibv_rdm_ep *ep)
 {
 	if (fi_ibv_rdm_check_connection(conn, ep)) {
@@ -588,7 +587,7 @@ fi_ibv_rdm_prepare_send_resources(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline void *
-fi_ibv_rdm_rma_prepare_resources(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_rma_prepare_resources(struct fi_ibv_rdm_conn *conn,
 				 struct fi_ibv_rdm_ep *ep)
 {
 	if (fi_ibv_rdm_check_connection(conn, ep)) {

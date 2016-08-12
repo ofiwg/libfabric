@@ -145,7 +145,7 @@ int fi_ibv_rdm_postponed_process(struct dlist_entry *postponed_item,
 	return ret;
 }
 
-void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
+void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_conn *conn,
 				  struct fi_ibv_rdm_ep *ep)
 {
 	const int addr_cmp = memcmp(&conn->addr, &ep->cm.my_addr,

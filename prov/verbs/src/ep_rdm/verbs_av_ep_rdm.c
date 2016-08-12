@@ -36,12 +36,12 @@
 
 
 extern struct fi_provider fi_ibv_prov;
-extern struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash;
+extern struct fi_ibv_rdm_conn *fi_ibv_rdm_conn_hash;
 
 
 ssize_t
 fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep, 
-			    struct fi_ibv_rdm_tagged_conn *conn)
+			    struct fi_ibv_rdm_conn *conn)
 {
 	struct rdma_cm_id *id = NULL;
 	assert(ep->cm.listener);
@@ -77,7 +77,7 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	return FI_SUCCESS;
 }
 
-ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
+ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
 {
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
@@ -130,7 +130,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 	}
 
 	for (i = 0; i < count; i++) {
-		struct fi_ibv_rdm_tagged_conn *conn = NULL;
+		struct fi_ibv_rdm_conn *conn = NULL;
 		void *addr_i = (char *) addr + 
 			i * (ep ? ep->addrlen : FI_IBV_RDM_DFLT_ADDRLEN);
 
@@ -145,7 +145,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			continue;
 		}
 
-		HASH_FIND(hh, fi_ibv_rdm_tagged_conn_hash, addr_i,
+		HASH_FIND(hh, fi_ibv_rdm_conn_hash, addr_i,
 			FI_IBV_RDM_DFLT_ADDRLEN, conn);
 
 		if (!conn) {
@@ -163,8 +163,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			dlist_init(&conn->postponed_requests_head);
 			conn->state = FI_VERBS_CONN_ALLOCATED;
 			memcpy(&conn->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
-			HASH_ADD(hh, fi_ibv_rdm_tagged_conn_hash, addr,
-			FI_IBV_RDM_DFLT_ADDRLEN, conn);
+			HASH_ADD(hh, fi_ibv_rdm_conn_hash, addr,
+				FI_IBV_RDM_DFLT_ADDRLEN, conn);
 		}
 
 		if (ep) {
@@ -192,17 +192,17 @@ out:
 static int fi_ibv_rdm_av_remove(struct fid_av *av, fi_addr_t * fi_addr,
                                 size_t count, uint64_t flags)
 {
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
 	int i;
 
 	for (i = 0; i < count; i++) {
-		conn = (struct fi_ibv_rdm_tagged_conn *) fi_addr[i];
+		conn = (struct fi_ibv_rdm_conn *) fi_addr[i];
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
-		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
+		HASH_DEL(fi_ibv_rdm_conn_hash, conn);
 		err = fi_ibv_rdm_start_disconnection(conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
 	}

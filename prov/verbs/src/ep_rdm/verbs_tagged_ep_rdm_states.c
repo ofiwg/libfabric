@@ -138,7 +138,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_request *request,
 	ssize_t ret = FI_SUCCESS;
 	struct ibv_sge sge;
 
-	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
+	struct fi_ibv_rdm_conn *conn = request->minfo.conn;
 	const int size = request->len + sizeof(struct fi_ibv_rdm_header);
 
 	assert(request->sbuf);
@@ -259,7 +259,7 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_request *request,
 
 	struct ibv_sge sge;
 
-	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
+	struct fi_ibv_rdm_conn *conn = request->minfo.conn;
 	struct fi_ibv_rdm_tagged_rndv_header *header =
 	    (struct fi_ibv_rdm_tagged_rndv_header *)&request->sbuf->header;
 	struct ibv_mr *mr = NULL;
@@ -949,7 +949,7 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_request *request,
 	FI_IBV_RDM_HNDL_REQ_LOG_IN();
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
-	struct fi_ibv_rdm_tagged_conn *conn = request->minfo.conn;
+	struct fi_ibv_rdm_conn *conn = request->minfo.conn;
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_sge sge = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
