@@ -123,7 +123,7 @@ struct fi_ibv_rdm_tagged_rndv_header {
 	uint32_t padding;
 };
 
-struct fi_ibv_rdm_tagged_request {
+struct fi_ibv_rdm_request {
 
 	/* Accessors and match info */
 
@@ -131,12 +131,12 @@ struct fi_ibv_rdm_tagged_request {
 	struct dlist_entry queue_entry;
 
 	struct {
-		enum fi_ibv_rdm_tagged_request_eager_state eager;
-		enum fi_ibv_rdm_tagged_request_rndv_state rndv;
+		enum fi_ibv_rdm_request_eager_state eager;
+		enum fi_ibv_rdm_request_rndv_state rndv;
 		ssize_t err; /* filled in case of moving to errcq */
 	} state;
 
-	struct fi_verbs_rdm_tagged_minfo minfo;
+	struct fi_ibv_rdm_tagged_minfo minfo;
 
 	/* User data: buffers, lens, imm, context */
 
@@ -190,13 +190,12 @@ struct fi_ibv_rdm_tagged_request {
 };
 
 static inline void
-fi_ibv_rdm_tagged_zero_request(struct fi_ibv_rdm_tagged_request *request)
+fi_ibv_rdm_zero_request(struct fi_ibv_rdm_request *request)
 {
 	memset(request, 0, sizeof(*request));
 }
 
-void fi_ibv_rdm_tagged_print_request(char *buf,
-				     struct fi_ibv_rdm_tagged_request *request);
+void fi_ibv_rdm_print_request(char *buf, struct fi_ibv_rdm_request *request);
 
 #define BUF_STATUS_FREE 	((uint16_t) 0)
 #define BUF_STATUS_BUSY 	((uint16_t) 1)
@@ -467,9 +466,9 @@ int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
 int fi_ibv_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context);
 
-int fi_ibv_rdm_tagged_prepare_send_request(
-	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep);
-int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_tagged_request *request,
+int fi_ibv_rdm_tagged_prepare_send_request(struct fi_ibv_rdm_request *request,
+					   struct fi_ibv_rdm_ep *ep);
+int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_request *request,
 				   struct fi_ibv_rdm_ep *ep);
 
 static inline struct fi_ibv_rdm_buf *

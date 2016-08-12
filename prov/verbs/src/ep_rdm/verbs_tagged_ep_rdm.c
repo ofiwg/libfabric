@@ -43,18 +43,19 @@
 
 struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
 
-extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
+extern struct util_buf_pool *fi_ibv_rdm_request_pool;
+extern struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
 
-DEFINE_LIST(fi_ibv_rdm_tagged_recv_posted_queue);
-DEFINE_LIST(fi_ibv_rdm_tagged_recv_unexp_queue);
+DEFINE_LIST(fi_ibv_rdm_posted_queue);
+DEFINE_LIST(fi_ibv_rdm_unexp_queue);
 DEFINE_LIST(fi_ibv_rdm_postponed_queue);
 
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
 
-int fi_ibv_rdm_tagged_prepare_send_request(
-	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep)
+int
+fi_ibv_rdm_tagged_prepare_send_request(struct fi_ibv_rdm_request *request,
+					struct fi_ibv_rdm_ep *ep)
 {
 #if ENABLE_DEBUG
 	int res = OUTGOING_POST_LIMIT(request->minfo.conn, ep);
@@ -76,8 +77,9 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 	return !!request->sbuf;
 }
 
-int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_tagged_request *request,
-	struct fi_ibv_rdm_ep *ep)
+int
+fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_request *request,
+				struct fi_ibv_rdm_ep *ep)
 {
 	request->rmabuf =
 		fi_ibv_rdm_rma_prepare_resources(request->minfo.conn, ep);
@@ -101,7 +103,7 @@ static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 }
 
 static inline ssize_t
-rdm_trecv_second_event(struct fi_ibv_rdm_tagged_request *request,
+rdm_trecv_second_event(struct fi_ibv_rdm_request *request, 
 			struct fi_ibv_rdm_ep *ep)
 {
 	ssize_t ret = FI_SUCCESS;
@@ -113,9 +115,9 @@ rdm_trecv_second_event(struct fi_ibv_rdm_tagged_request *request,
 			struct fi_ibv_recv_got_pkt_process_data data = {
 				.ep = ep
 			};
-			ret = fi_ibv_rdm_tagged_req_hndl(request,
-							 FI_IBV_EVENT_RECV_START,
-							 &data);
+			ret = fi_ibv_rdm_req_hndl(request,
+						  FI_IBV_EVENT_RECV_START,
+						  &data);
 		}
 		break;
 	case FI_IBV_STATE_RNDV_RECV_WAIT4RES:
@@ -123,9 +125,9 @@ rdm_trecv_second_event(struct fi_ibv_rdm_tagged_request *request,
 			struct fi_ibv_rdm_tagged_send_ready_data data = {
 				.ep = ep
 			};
-			ret = fi_ibv_rdm_tagged_req_hndl(request,
-							FI_IBV_EVENT_POST_READY,
-							&data);
+			ret = fi_ibv_rdm_req_hndl(request,
+						  FI_IBV_EVENT_POST_READY,
+						  &data);
 		}
 		break;
 	default:
@@ -169,32 +171,29 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 		.ep = ep_rdm
 	};
 
-	struct fi_ibv_rdm_tagged_request *request =
-		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+	struct fi_ibv_rdm_request *request =
+		util_buf_alloc(fi_ibv_rdm_request_pool);
 
-	fi_ibv_rdm_tagged_zero_request(request);
+	fi_ibv_rdm_zero_request(request);
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	if (flags & FI_PEEK) {
 		recv_data.peek_data.flags |= FI_COMPLETION;
-		ret = fi_ibv_rdm_tagged_req_hndl(request,
-						FI_IBV_EVENT_RECV_PEEK,
-						&recv_data.peek_data);
+		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_PEEK,
+					  &recv_data.peek_data);
 		if (ret == -FI_ENOMSG) {
 			fi_ibv_rdm_tagged_poll(ep_rdm);
 		}
 	} else if (flags & FI_CLAIM) {
 		recv_data.peek_data.flags |= FI_COMPLETION;
-		ret = fi_ibv_rdm_tagged_req_hndl(request,
-						 FI_IBV_EVENT_RECV_START,
-						 &recv_data);
+		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_START,
+					  &recv_data);
 		if (!ret) {
 			ret = rdm_trecv_second_event(request, ep_rdm);
 		}
 	} else {
-		ret = fi_ibv_rdm_tagged_req_hndl(request,
-						 FI_IBV_EVENT_RECV_START,
-						 &recv_data);
+		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_START,
+					  &recv_data);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"fi_recvfrom: conn %p, tag 0x%llx, len %llu, rbuf %p, fi_ctx %p, posted_recv %d\n",
@@ -319,8 +318,8 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 static ssize_t
 fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tsend_start_data* sdata)
 {
-	struct fi_ibv_rdm_tagged_request *request =
-		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+	struct fi_ibv_rdm_request *request =
+		util_buf_alloc(fi_ibv_rdm_request_pool);
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -329,16 +328,15 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tsend_start_data* sdata)
 	request->state.err   = FI_SUCCESS;
 
 	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
-	int ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_START,
-		sdata);
+	int ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_SEND_START, sdata);
 
 	if (!ret && in_order &&
 		fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
 	{
 		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
 			{ .ep = sdata->ep_rdm };
-		ret = fi_ibv_rdm_tagged_req_hndl(request, 
-			FI_IBV_EVENT_POST_READY, &req_data);
+		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_READY,
+					  &req_data);
 	}
 
 	return ret;
@@ -422,7 +420,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		 * to send immediately
 		 */
 		sdata.buf.iovec_arr =
-			util_buf_alloc(fi_ibv_rdm_tagged_extra_buffers_pool);
+			util_buf_alloc(fi_ibv_rdm_extra_buffers_pool);
 		for (i = 0; i < msg->iov_count; i++) {
 			sdata.buf.iovec_arr[i].iov_base = msg->msg_iov[i].iov_base;
 			sdata.buf.iovec_arr[i].iov_len = msg->msg_iov[i].iov_len;
@@ -517,7 +515,7 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
 	struct fi_ibv_rdm_tagged_conn *conn, int arrived_len,
 	struct fi_ibv_rdm_buf *rbuf)
 {
-	struct fi_ibv_rdm_tagged_request *request = NULL;
+	struct fi_ibv_rdm_request *request = NULL;
 
 	int pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
 
@@ -527,30 +525,29 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %p\n", conn, request);
 	} else if (pkt_type != FI_IBV_RDM_RMA_PKT) {
-		struct fi_verbs_rdm_tagged_minfo minfo = {
+		struct fi_ibv_rdm_tagged_minfo minfo = {
 			.conn = conn,
 			.tag = rbuf->header.tag,
 			.tagmask = 0
 		};
 
 		struct dlist_entry *found_entry =
-			dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
-			fi_ibv_rdm_tagged_req_match_by_info,
-			&minfo);
+			dlist_find_first_match(&fi_ibv_rdm_posted_queue,
+						fi_ibv_rdm_req_match_by_info,
+						&minfo);
 
 		if (found_entry) {
-			struct fi_ibv_rdm_tagged_request *found_request =
+			struct fi_ibv_rdm_request *found_request =
 				container_of(found_entry,
-				struct fi_ibv_rdm_tagged_request,
-				queue_entry);
+					     struct fi_ibv_rdm_request,
+					     queue_entry);
 
-			fi_ibv_rdm_tagged_remove_from_posted_queue
-				(found_request, ep);
+			fi_ibv_rdm_remove_from_posted_queue(found_request, ep);
 
 			request = found_request;
 		} else {
-			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-			fi_ibv_rdm_tagged_zero_request(request);
+			request = util_buf_alloc(fi_ibv_rdm_request_pool);
+			fi_ibv_rdm_zero_request(request);
 
 			FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request,
 						FI_LOG_DEBUG);
@@ -569,8 +566,8 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep,
 			.imm_data = 0 // TODO:
 		};
 
-		fi_ibv_rdm_tagged_req_hndl(request,
-			FI_IBV_EVENT_RECV_GOT_PKT_PROCESS, &p);
+		fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_GOT_PKT_PROCESS,
+				    &p);
 	}
 }
 
@@ -744,15 +741,13 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 		return 0;
 	} else {
 		FI_IBV_DBG_OPCODE(wc->opcode, "SEND");
-		struct fi_ibv_rdm_tagged_request *request =
-			(struct fi_ibv_rdm_tagged_request *)
-			FI_IBV_RDM_UNPACK_WR(wc->wr_id);
+		struct fi_ibv_rdm_request *request =
+			(void *)FI_IBV_RDM_UNPACK_WR(wc->wr_id);
 
 		struct fi_ibv_rdm_tagged_send_completed_data data = 
 			{ .ep = ep };
 
-		return fi_ibv_rdm_tagged_req_hndl(request, 
-			FI_IBV_EVENT_POST_LC, &data);
+		return fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_LC, &data);
 	}
 }
 
@@ -780,7 +775,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	struct fi_ibv_rdm_tagged_send_ready_data data = { .ep = ep };
 	struct dlist_entry *item;
 	dlist_foreach((&fi_ibv_rdm_postponed_queue), item) {
-		if (fi_ibv_rdm_tagged_send_postponed_process(item, &data)) {
+		if (fi_ibv_rdm_postponed_process(item, &data)) {
 			/* we can't process all postponed items till foreach */
 			/* implementation is not safety for removing during  */
 			/* iterating                                         */
@@ -802,7 +797,7 @@ wc_error:
 			if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc[i].wr_id)) {
 				conn = FI_IBV_RDM_UNPACK_SERVICE_WR(wc[i].wr_id);
 			} else {
-				struct fi_ibv_rdm_tagged_request *req =
+				struct fi_ibv_rdm_request *req =
 					(void *)wc[i].wr_id;
 				conn = req->minfo.conn;
 			}
