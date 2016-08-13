@@ -1009,3 +1009,192 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	(*av)->ops = &ip_av_ops;
 	return 0;
 }
+
+/*
+ * Connection Map
+ */
+static void ofi_cmap_init_handle(struct util_cmap_handle *handle,
+		struct util_cmap *cmap,
+		enum util_cmap_state state,
+		fi_addr_t fi_addr,
+		struct util_cmap_peer *peer)
+{
+	handle->cmap = cmap;
+	handle->state = state;
+	handle->key = freestack_pop(cmap->keypool);
+	handle->key->handle = handle;
+	handle->key_index = util_cmap_keypool_index(cmap->keypool, handle->key);
+	handle->fi_addr = fi_addr;
+	handle->peer = peer;
+}
+
+void ofi_cmap_update_state(struct util_cmap_handle *handle,
+		enum util_cmap_state state)
+{
+	fastlock_acquire(&handle->cmap->lock);
+	handle->state = state;
+	fastlock_release(&handle->cmap->lock);
+}
+
+static int ofi_cmap_match_peer(struct dlist_entry *entry, const void *addr)
+{
+	struct util_cmap_peer *peer;
+
+	peer = container_of(entry, struct util_cmap_peer, entry);
+	return !memcmp(peer->addr, addr, peer->addrlen);
+}
+
+static int ofi_cmap_add_peer(struct util_cmap *cmap, struct util_cmap_handle *handle,
+		enum util_cmap_state state, void *addr, size_t addrlen)
+{
+	struct util_cmap_peer *peer;
+	int ret = 0;
+
+	fastlock_acquire(&cmap->lock);
+	if (dlist_find_first_match(&cmap->peer_list, ofi_cmap_match_peer, addr)) {
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Peer already present\n");
+		goto out;
+	}
+
+	// TODO Use util_buf_pool
+	peer = calloc(1, sizeof(*peer) + addrlen);
+	if (!peer) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	ofi_cmap_init_handle(handle, cmap, state, FI_ADDR_UNSPEC, peer);
+	peer->handle = handle;
+	peer->addrlen = addrlen;
+	memcpy(peer->addr, addr, addrlen);
+	dlist_insert_tail(&peer->entry, &cmap->peer_list);
+out:
+	fastlock_release(&cmap->lock);
+	return ret;
+}
+
+/*
+ * Caller must hold cmap->lock. Either fi_addr or
+ * addr and addrlen args should be present.
+ */
+int ofi_cmap_add_handle(struct util_cmap *cmap, struct util_cmap_handle *handle,
+		enum util_cmap_state state, fi_addr_t fi_addr, void *addr,
+		size_t addrlen)
+{
+	int index;
+	if (fi_addr == FI_ADDR_UNSPEC) {
+		index = ip_av_get_index(cmap->av, addr);
+		if (index < 0)
+			return ofi_cmap_add_peer(cmap, handle, state, addr, addrlen);
+		fi_addr = index;
+	}
+
+	if (cmap->handles[fi_addr]) {
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Handle already present\n");
+	} else {
+		ofi_cmap_init_handle(handle, cmap, state, fi_addr, NULL);
+		cmap->handles[fi_addr] = handle;
+	}
+	return 0;
+}
+
+/* Caller must hold cmap->lock */
+struct util_cmap_handle *ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr)
+{
+	struct util_cmap_peer *peer;
+	struct dlist_entry *entry;
+
+	if (cmap->handles[fi_addr])
+		return cmap->handles[fi_addr];
+
+	/* Search in peer list */
+	entry = dlist_remove_first_match(&cmap->peer_list, ofi_cmap_match_peer,
+			ip_av_get_addr(cmap->av, fi_addr));
+	if (!entry)
+		return NULL;
+	peer = container_of(entry, struct util_cmap_peer, entry);
+
+	/* Move handle to cmap */
+	peer->handle->peer = NULL;
+	peer->handle->fi_addr = fi_addr;
+
+	cmap->handles[fi_addr] = peer->handle;
+	free(peer);
+	return cmap->handles[fi_addr];
+}
+
+void ofi_cmap_del_handle(struct util_cmap_handle *handle)
+{
+	struct util_cmap *cmap = handle->cmap;
+
+	fastlock_acquire(&cmap->lock);
+	if (handle->peer) {
+		dlist_remove(&handle->peer->entry);
+		free(handle->peer);
+	} else {
+		cmap->handles[handle->fi_addr] = 0;
+	}
+	handle->key->handle = NULL;
+	freestack_push(cmap->keypool, handle->key);
+	cmap->free_handle(handle);
+	fastlock_release(&cmap->lock);
+}
+
+void ofi_cmap_del_handles(struct util_cmap *cmap)
+{
+	struct util_cmap_peer *peer;
+	struct dlist_entry *entry;
+	int i;
+
+	for (i = 0; i < cmap->av->count; i++) {
+		if (cmap->handles[i])
+			ofi_cmap_del_handle(cmap->handles[i]);
+	}
+	dlist_foreach(&cmap->peer_list, entry) {
+		peer = container_of(entry, struct util_cmap_peer, entry);
+		ofi_cmap_del_handle(peer->handle);
+	}
+}
+
+void ofi_cmap_free(struct util_cmap *cmap)
+{
+	ofi_cmap_del_handles(cmap);
+	fastlock_acquire(&cmap->lock);
+	util_cmap_keypool_free(cmap->keypool);
+	free(cmap->handles);
+	fastlock_release(&cmap->lock);
+	free(cmap);
+}
+
+struct util_cmap *ofi_cmap_alloc(struct util_av *av,
+		ofi_cmap_free_handle_func free_handle)
+{
+	struct util_cmap *cmap;
+
+	cmap = calloc(1, sizeof *cmap);
+	if (!cmap)
+		return NULL;
+
+	cmap->av = av;
+
+	cmap->handles = calloc(cmap->av->count, sizeof(*cmap->handles));
+	if (!cmap->handles)
+		goto err1;
+
+	cmap->keypool = util_cmap_keypool_create(cmap->av->count);
+	if (!cmap->keypool)
+		goto err2;
+
+	dlist_init(&cmap->peer_list);
+	cmap->free_handle = free_handle;
+	fastlock_init(&cmap->lock);
+
+	return cmap;
+err2:
+	free(cmap->handles);
+err1:
+	free(cmap);
+	return NULL;
+}

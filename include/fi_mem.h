@@ -111,6 +111,12 @@ static inline struct name * name ## _create(size_t size)	\
 	return fs;						\
 }								\
 								\
+static inline int name ## _index(struct name *fs,		\
+		entrytype *entry)				\
+{								\
+	return entry - fs->buf;					\
+}								\
+								\
 static inline void name ## _free(struct name *fs)		\
 {								\
 	free(fs);						\

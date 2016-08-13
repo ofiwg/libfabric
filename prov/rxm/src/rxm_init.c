@@ -40,6 +40,7 @@ int rxm_alter_layer_info(struct fi_info *layer_info, struct fi_info *base_info)
 	/* TODO choose base_info attr based on layer_info attr */
 	base_info->caps = FI_MSG;
 	base_info->mode = FI_LOCAL_MR;
+	base_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	base_info->ep_attr->type = FI_EP_MSG;
 
 	return 0;
@@ -54,6 +55,7 @@ int rxm_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info)
 	*layer_info->tx_attr = *rxm_info.tx_attr;
 	*layer_info->rx_attr = *rxm_info.rx_attr;
 	*layer_info->ep_attr = *rxm_info.ep_attr;
+	layer_info->ep_attr->max_msg_size = base_info->ep_attr->max_msg_size;
 	*layer_info->domain_attr = *rxm_info.domain_attr;
 
 	return 0;

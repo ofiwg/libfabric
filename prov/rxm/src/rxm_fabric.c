@@ -48,10 +48,24 @@ static struct fi_ops_fabric rxm_fabric_ops = {
 
 static int rxm_fabric_close(fid_t fid)
 {
-	int ret;
 	struct rxm_fabric *rxm_fabric;
+	struct fi_eq_entry entry = {0};
+	ssize_t rd;
+	int ret;
 
 	rxm_fabric = container_of(fid, struct rxm_fabric, util_fabric.fabric_fid.fid);
+
+	rd = fi_eq_write(rxm_fabric->msg_eq, FI_NOTIFY, &entry, sizeof(entry), 0);
+	if (rd != sizeof(entry)) {
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to notify listener thread\n");
+		return rd;
+	}
+
+	pthread_join(rxm_fabric->msg_listener_thread, NULL);
+
+	ret = fi_close(&rxm_fabric->msg_eq->fid);
+	if (ret)
+		return ret;
 
 	ret = fi_close(&rxm_fabric->msg_fabric->fid);
 	if (ret)
@@ -78,6 +92,7 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 {
 	struct rxm_fabric *rxm_fabric;
 	struct fi_info hints, *msg_info;
+	struct fi_eq_attr eq_attr;
 	int ret;
 
 	rxm_fabric = calloc(1, sizeof(*rxm_fabric));
@@ -95,6 +110,7 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto err2;
 	}
 	hints.fabric_attr->name = attr->name;
+	hints.mode = rxm_info.mode;
 
 	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
 			&hints, rxm_alter_layer_info,
@@ -109,6 +125,22 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto err4;
 	}
 
+	eq_attr.wait_obj = FI_WAIT_UNSPEC;
+	eq_attr.flags = FI_WRITE;
+
+	ret = fi_eq_open(rxm_fabric->msg_fabric, &eq_attr, &rxm_fabric->msg_eq, NULL);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open msg EQ\n");
+		goto err5;
+	}
+
+	if (pthread_create(&rxm_fabric->msg_listener_thread, 0,
+				rxm_msg_listener, rxm_fabric)) {
+		ret = -errno;
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to create msg_cm_listener_thread\n");
+		goto err6;
+	}
+
 	*fabric = &rxm_fabric->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &rxm_fabric_fi_ops;
 	(*fabric)->ops = &rxm_fabric_ops;
@@ -116,6 +148,10 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	free(hints.fabric_attr);
 	fi_freeinfo(msg_info);
 	return 0;
+err6:
+	fi_close(&rxm_fabric->msg_eq->fid);
+err5:
+	fi_close(&rxm_fabric->msg_fabric->fid);
 err4:
 	fi_freeinfo(msg_info);
 err3:
