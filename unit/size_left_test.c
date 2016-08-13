@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -47,13 +47,6 @@
 #include "shared.h"
 #include "unit_common.h"
 
-
-#define DEBUG(...) \
-	if (fabtests_debug) { \
-		fprintf(stderr, __VA_ARGS__); \
-	}
-
-int fabtests_debug = 0;
 
 static char err_buf[512];
 
@@ -216,15 +209,9 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 	int failed;
-	char *debug_str;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
-
-	debug_str = getenv("FABTESTS_DEBUG");
-	if (debug_str) {
-		fabtests_debug = atoi(debug_str);
-	}
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -258,7 +245,7 @@ int main(int argc, char **argv)
 		exit(-ret);
 	}
 
-	DEBUG("using provider \"%s\" and fabric \"%s\"\n",
+	FT_DEBUG("using provider \"%s\" and fabric \"%s\"\n",
 		fi->fabric_attr->prov_name,
 		fi->fabric_attr->name);
 
