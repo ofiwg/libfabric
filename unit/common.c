@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
- * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2014-2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,13 +54,11 @@ run_tests(struct test_entry *test_array, char *err_buf)
 			printf("PASS!\n");
 			break;
 		case FAIL:
-			printf("FAIL\n");
-			printf("  %s\n", err_buf);
+			printf("FAIL: %s\n", err_buf);
 			failed++;
 			break;
 		case SKIPPED:
-			printf("skipped because:\n");
-			printf("  %s\n", err_buf);
+			printf("skipped because: %s\n", err_buf);
 			break;
 		case NOTSUPP:
 			printf("requires unsupported feature: %s\n", err_buf);
