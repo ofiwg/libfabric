@@ -228,6 +228,12 @@ int size_to_count(int size);
 #define FT_ERR(fmt, ...) FT_LOG("error", fmt, ##__VA_ARGS__)
 #define FT_WARN(fmt, ...) FT_LOG("warn", fmt, ##__VA_ARGS__)
 
+#if ENABLE_DEBUG
+#define FT_DEBUG(fmt, ...) FT_LOG("debug", fmt, ##__VA_ARGS__)
+#else
+#define FT_DEBUG(fmt, ...)
+#endif
+
 #define FT_EQ_ERR(eq, entry, buf, len) \
 	FT_ERR("eq_readerr: %s", fi_eq_strerror(eq, entry.prov_errno, \
 				entry.err_data, buf, len))
