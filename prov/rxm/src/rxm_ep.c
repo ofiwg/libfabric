@@ -173,7 +173,7 @@ ssize_t rxm_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	if (ret)
 		goto unlock;
 
-	return fi_sendv(msg_ep, iov, desc, count, 0, context);
+	ret = fi_sendv(msg_ep, iov, desc, count, 0, context);
 unlock:
 	fastlock_release(&rxm_ep->cmap->lock);
 	return ret;
