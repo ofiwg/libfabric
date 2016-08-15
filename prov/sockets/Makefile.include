@@ -2,7 +2,7 @@
 
 if HAVE_SOCKETS
 
-AM_CFLAGS += -I$(top_srcdir)/prov/sockets/include -I$(top_srcdir)/prov/sockets
+AM_CPPFLAGS += -I$(top_srcdir)/prov/sockets/include -I$(top_srcdir)/prov/sockets
 
 _sockets_files = \
 	prov/sockets/src/sock_av.c \
