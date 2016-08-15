@@ -154,16 +154,17 @@ int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 
 	ret = fi_accept(rxm_conn->msg_ep, NULL, 0);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to accept incoming connection\n");
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+				"Unable to accept incoming connection\n");
 		goto err2;
 	}
 	return ret;
 err2:
 	ofi_cmap_del_handle(&rxm_conn->handle);
 err1:
-	ret = fi_reject(rxm_ep->msg_pep, msg_info->handle, NULL, 0);
-	if (ret)
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to reject incoming connection\n");
+	if (fi_reject(rxm_ep->msg_pep, msg_info->handle, NULL, 0))
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to reject incoming connection\n");
 	return ret;
 }
 
