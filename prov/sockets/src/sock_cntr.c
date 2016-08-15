@@ -338,6 +338,7 @@ static int sock_cntr_control(struct fid *fid, int command, void *arg)
 		case FI_WAIT_NONE:
 		case FI_WAIT_UNSPEC:
 		case FI_WAIT_MUTEX_COND:
+		case FI_WAIT_CRITSEC_COND:
 			memcpy(arg, &cntr->mut, sizeof(cntr->mut));
 			memcpy((char *)arg + sizeof(cntr->mut), &cntr->cond,
 			       sizeof(cntr->cond));
@@ -430,7 +431,11 @@ static int sock_cntr_verify_attr(struct fi_cntr_attr *attr)
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
+#ifndef _WIN32
 	case FI_WAIT_MUTEX_COND:
+#else /* _WIN32 */
+	case FI_WAIT_CRITSEC_COND:
+#endif /* _WIN32 */
 	case FI_WAIT_SET:
 	case FI_WAIT_FD:
 		break;
@@ -474,6 +479,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		_cntr->signal = 0;
 		break;
 

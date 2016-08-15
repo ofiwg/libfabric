@@ -428,7 +428,13 @@ static int sock_cq_close(struct fid *fid)
 	if (atomic_get(&cq->ref))
 		return -FI_EBUSY;
 
-	if (cq->signal && cq->attr.wait_obj == FI_WAIT_MUTEX_COND)
+	if (cq->signal &&
+#ifndef _WIN32
+	    cq->attr.wait_obj == FI_WAIT_MUTEX_COND
+#else /* _WIN32 */
+	    cq->attr.wait_obj == FI_WAIT_CRITSEC_COND
+#endif /* _WIN32 */
+	   )
 		sock_wait_close(&cq->waitset->fid);
 
 	rbfree(&cq->addr_rb);
@@ -482,6 +488,7 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 
 		case FI_WAIT_SET:
 		case FI_WAIT_MUTEX_COND:
+		case FI_WAIT_CRITSEC_COND:
 			sock_wait_get_obj(cq->waitset, arg);
 			break;
 
@@ -526,7 +533,11 @@ static int sock_cq_verify_attr(struct fi_cq_attr *attr)
 	case FI_WAIT_NONE:
 	case FI_WAIT_FD:
 	case FI_WAIT_SET:
+#ifndef _WIN32
 	case FI_WAIT_MUTEX_COND:
+#else /* _WIN32 */
+	case FI_WAIT_CRITSEC_COND:
+#endif /* _WIN32 */
 		break;
 	case FI_WAIT_UNSPEC:
 		attr->wait_obj = FI_WAIT_FD;
@@ -614,8 +625,9 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		wait_attr.flags = 0;
-		wait_attr.wait_obj = FI_WAIT_MUTEX_COND;
+		wait_attr.wait_obj = sock_cq->attr.wait_obj;
 		ret = sock_wait_open(&sock_dom->fab->fab_fid, &wait_attr,
 				     &sock_cq->waitset);
 		if (ret) {

@@ -217,6 +217,7 @@ static int util_eq_init(struct fid_fabric *fabric, struct util_eq *eq,
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_CRITSEC_COND:
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
 		eq->internal_wait = 1;
@@ -244,7 +245,11 @@ static int util_verify_eq_attr(const struct fi_provider *prov,
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+#ifndef _WIN32
 	case FI_WAIT_MUTEX_COND:
+#else /* _WIN32 */
+	case FI_WAIT_CRITSEC_COND:
+#endif /* _WIN32 */
 		break;
 	case FI_WAIT_SET:
 		if (!attr->wait_set) {
