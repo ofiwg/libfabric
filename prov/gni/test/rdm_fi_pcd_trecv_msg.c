@@ -613,8 +613,9 @@ static void validate_cqe_contents(
 	cr_assert_eq(entry->data, 0);
 
 	if (flags & FI_RECV) {
-		if (!(flags & FI_DISCARD))
+		if (!(flags & FI_DISCARD)) {
 			cr_assert_eq(entry->len, len);
+		}
 		else {
 			cr_assert_eq(entry->len, 0);
 			cr_assert_eq(entry->buf, NULL);
@@ -1764,11 +1765,12 @@ static void pdc_peek_event_present_small_buffer_provided(int len)
 {
 	/* Like pdc_peek_event_present_buffer_provided except uses an
 	 * undersized receive buffer with the FI_PEEK request. */
-	int ret;
+	int ret, i;
 	struct fi_msg_tagged msg;
 	struct iovec iov;
 	struct fi_cq_tagged_entry s_cqe;
 	struct fi_cq_tagged_entry d_cqe;
+	size_t cum_recv_len = 0;
 
 	rdm_fi_pdc_init_data(source, len, 0xab);
 	rdm_fi_pdc_init_data(target, len, 0);
@@ -1784,6 +1786,7 @@ static void pdc_peek_event_present_small_buffer_provided(int len)
 	 */
 	build_peek_message(&peek_msg, &msg);
 	peek_iov.iov_len /= 2;
+
 
 	start_test_timer();
 	do {
@@ -1853,10 +1856,14 @@ static void pdc_peek_event_present_small_buffer_provided(int len)
 
 	ASSERT_SEND_RECV_DONE;
 
+	for (i = 0; i < peek_msg.iov_count; i++) {
+		cum_recv_len += peek_msg.msg_iov[i].iov_len;
+	}
+
 	/* validate the expected results */
-	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
+	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, cum_recv_len, len, target);
 	validate_cqe_contents(&d_peek_cqe, TRECV_FLAGS | FI_PEEK,
-			peek_msg.msg_iov[0].iov_base, len, peek_msg.tag,
+			peek_msg.msg_iov[0].iov_base, cum_recv_len, peek_msg.tag,
 			peek_msg.context);
 
 	/* if CQE provided a buffer back, the data was copied.
@@ -1868,6 +1875,7 @@ static void pdc_peek_event_present_small_buffer_provided(int len)
 	}
 
 	validate_cqe_with_message(&d_cqe, &msg, TRECV_FLAGS);
+
 	cr_assert(rdm_fi_pdc_check_data(source, target, len), "Data mismatch");
 }
 

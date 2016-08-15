@@ -64,19 +64,105 @@
 #define GNIX_FAB_REQ_FL_MIN_SIZE 100
 #define GNIX_FAB_REQ_FL_REFILL_SIZE 10
 
+void _gnix_ep_htd_pool_init(struct gnix_fid_ep *ep)
+{
+	int ret, i;
+	struct fid_mr *auto_mr = NULL;
+	uint8_t *htd_bufs;
+	struct gnix_htd_buf *htd_buf_list;
+
+	assert(ep);
+
+	htd_bufs = malloc(GNIX_HTD_POOL_SIZE * GNIX_HTD_BUF_SZ);
+	if (htd_bufs == NULL) {
+		GNIX_FATAL(FI_LOG_EP_DATA, "\n");
+	}
+
+	htd_buf_list = malloc(GNIX_HTD_POOL_SIZE * sizeof(struct gnix_htd_buf));
+	if (htd_buf_list == NULL) {
+		GNIX_FATAL(FI_LOG_EP_DATA, "\n");
+	}
+
+	ep->htd_pool.buf_ptr = (void *) htd_bufs;
+	ep->htd_pool.sl_ptr = (void *) htd_buf_list;
+
+	ret = gnix_mr_reg(&ep->domain->domain_fid.fid, htd_bufs,
+	      		  GNIX_HTD_BUF_SZ * GNIX_HTD_POOL_SIZE,
+			  FI_READ | FI_WRITE, 0, 0, 0, &auto_mr, NULL);
+
+	if (unlikely(ret != FI_SUCCESS)) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "gnix_mr_req returned: %s\n",
+			   fi_strerror(-ret));
+	} else {
+		ep->htd_pool.md = container_of(auto_mr, struct gnix_fid_mem_desc, mr_fid);
+	}
+
+	slist_init(&ep->htd_pool.sl);
+
+	for (i = 0; i < GNIX_HTD_POOL_SIZE; i++) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "htd_bufs + (%d * GNIX_HTD_BUF_SZ) = %p\n",
+			   i, htd_bufs + (i * GNIX_HTD_BUF_SZ));
+		htd_buf_list[i].buf = htd_bufs + (i * GNIX_HTD_BUF_SZ);
+		slist_insert_tail(&htd_buf_list[i].e, &ep->htd_pool.sl);
+	}
+
+	fastlock_init(&ep->htd_pool.lock);
+
+	ep->htd_pool.enabled = true;
+}
+
+void _gnix_ep_htd_pool_fini(struct gnix_fid_ep *ep)
+{
+	int ret;
+
+	assert(ep);
+
+	if (ep->htd_pool.enabled == false)
+		return;
+
+	ret = fi_close(&ep->htd_pool.md->mr_fid.fid);
+
+	if (ret != FI_SUCCESS) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "fi_close returned: %s\n", fi_strerror(-ret));
+	}
+
+	if (ep->htd_pool.buf_ptr != NULL) {
+		free(ep->htd_pool.buf_ptr);
+		ep->htd_pool.buf_ptr = NULL;
+	}
+
+	if (ep->htd_pool.sl_ptr != NULL) {
+		free(ep->htd_pool.sl_ptr);
+		ep->htd_pool.sl_ptr = NULL;
+	}
+
+	ep->htd_pool.enabled = false;
+}
+
 static int __fr_freelist_init(struct gnix_fid_ep *ep)
 {
+	int ret;
+
 	assert(ep);
-	return _gnix_fl_init_ts(sizeof(struct gnix_fab_req),
-				offsetof(struct gnix_fab_req, dlist),
-				GNIX_FAB_REQ_FL_MIN_SIZE,
-				GNIX_FAB_REQ_FL_REFILL_SIZE,
-				0, 0, &ep->fr_freelist);
+	ret = _gnix_fl_init_ts(sizeof(struct gnix_fab_req),
+			       offsetof(struct gnix_fab_req, dlist),
+			       GNIX_FAB_REQ_FL_MIN_SIZE,
+			       GNIX_FAB_REQ_FL_REFILL_SIZE,
+			       0, 0, &ep->fr_freelist);
+
+	if (ret != FI_SUCCESS) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "_gnix_fl_init_ts returned: %s\n",
+			   fi_strerror(-ret));
+		return ret;
+	}
+
+	return ret;
 }
 
 static void __fr_freelist_destroy(struct gnix_fid_ep *ep)
 {
 	assert(ep);
+
 	_gnix_fl_destroy(&ep->fr_freelist);
 }
 
@@ -1289,6 +1375,8 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 			if (ep->recv_cq)
 				ep->rx_enabled = true;
 		}
+
+		_gnix_ep_htd_pool_init(ep);
 		break;
 
 	case FI_GETOPSFLAG:
@@ -1328,7 +1416,7 @@ static int __destruct_tag_storages(struct gnix_fid_ep *ep)
 
 static void __ep_destruct(void *obj)
 {
-	int __attribute__((unused)) ret;
+	int ret;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 	struct gnix_fid_av *av;
@@ -1440,6 +1528,7 @@ static void __ep_destruct(void *obj)
 	 */
 
 	__fr_freelist_destroy(ep);
+	_gnix_ep_htd_pool_fini(ep);
 
 	free(ep);
 }

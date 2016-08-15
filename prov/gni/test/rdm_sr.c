@@ -84,7 +84,7 @@ static int dgram_should_fail;
 
 char *target;
 char *source;
-struct iovec *src_iov, *dest_iov;
+struct iovec *src_iov, *dest_iov, *s_iov, *d_iov;
 char *iov_src_buf, *iov_dest_buf;
 char *uc_target;
 char *uc_source;
@@ -119,12 +119,16 @@ void rdm_sr_setup_common_eps(void)
 
 	dest_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(dest_iov);
+	d_iov = malloc(sizeof(struct iovec) * IOV_CNT);
+	assert(d_iov);
 
 	source = malloc(BUF_SZ);
 	assert(source);
 
 	src_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(src_iov);
+	s_iov = malloc(sizeof(struct iovec) * IOV_CNT);
+	assert(s_iov);
 
 	for (i = 0; i < IOV_CNT; i++) {
 		src_iov[i].iov_base = malloc(BUF_SZ);
@@ -375,6 +379,8 @@ static void rdm_sr_teardown_common(bool unreg)
 
 	free(src_iov);
 	free(dest_iov);
+	free(s_iov);
+	free(d_iov);
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
@@ -417,25 +423,38 @@ int rdm_sr_check_data(char *buf1, char *buf2, int len)
 	return 1;
 }
 
-int rdm_sr_check_iov_data(struct iovec *iov_buf, char *buf, size_t cnt)
+int rdm_sr_check_iov_data(struct iovec *iov_buf, char *buf, size_t cnt, size_t buf_len)
 {
-	int i, j, cum_len = 0;
+	size_t i, j, cum_len = 0, len, iov_idx;
 
-	/*
-	 * For these tests we assume cumulative length of the vector entries is
-	 * equal to the buf size
-	 */
 	for (i = 0; i < cnt; i++) {
-		for (j = 0; j < iov_buf[i].iov_len; j++, cum_len++) {
-			if (((char *)iov_buf[i].iov_base)[j] != buf[cum_len]) {
-				printf("data mismatch, iov_index: %d, elem: %d,"
-				       " iov_buf: %hhx, buf: %hhx\n", i, j,
-				       ((char *)iov_buf[i].iov_base)[j],
-				       buf[cum_len]);
-				return 0;
-			}
+		cum_len += iov_buf[i].iov_len;
+	}
+
+	len = MIN(cum_len, buf_len);
+
+	cum_len = iov_buf[0].iov_len;
+
+	for (i = j = iov_idx = 0; j < len; j++, iov_idx++) {
+
+		if (j == cum_len) {
+			i++, iov_idx = 0;
+			cum_len += iov_buf[i].iov_len;
+
+			if (i >= cnt)
+				break;
+		}
+
+		if (((char *)iov_buf[i].iov_base)[iov_idx] != buf[j]) {
+			printf("data mismatch, iov_index: %lu, elem: %lu, "
+			       "iov_buf_len: %lu, "
+			       " iov_buf: %hhx, buf: %hhx\n", i, j, iov_buf[i].iov_len,
+			       ((char *)iov_buf[i].iov_base)[iov_idx],
+			       buf[j]);
+			return 0;
 		}
 	}
+
 	return 1;
 }
 
@@ -544,6 +563,12 @@ TestSuite(rdm_sr_noreg, .init = rdm_sr_setup_noreg,
 
 TestSuite(rdm_sr_bnd_ep, .init = rdm_sr_bnd_ep_setup, .fini = rdm_sr_teardown,
 	  .disabled = false);
+
+/* This tests cases where the head and tail length is greater or equal to the
+ * receive buffer length.
+ */
+TestSuite(rdm_sr_alignment_edge, .init = rdm_sr_setup_reg, .fini = rdm_sr_teardown,
+	  .disabled = true);
 
 /*
  * ssize_t fi_send(struct fid_ep *ep, void *buf, size_t len,
@@ -685,7 +710,7 @@ void do_sendv(int len)
 
 		dbg_printf("got context events!\n");
 
-		cr_assert(rdm_sr_check_iov_data(src_iov, iov_dest_buf, iov_cnt),
+		cr_assert(rdm_sr_check_iov_data(src_iov, iov_dest_buf, iov_cnt, len * iov_cnt),
 			  "Data mismatch");
 		source_done = dest_done = 0;
 	}
@@ -1116,7 +1141,7 @@ void do_recvv(int len)
 
 		dbg_printf("got context events!\n");
 
-		cr_assert(rdm_sr_check_iov_data(dest_iov, iov_src_buf, iov_cnt),
+		cr_assert(rdm_sr_check_iov_data(dest_iov, iov_src_buf, iov_cnt, len * iov_cnt),
 			  "Data mismatch");
 		source_done = dest_done = 0;
 	}
@@ -1591,6 +1616,171 @@ void do_sendrecv_alignment(int len)
 	}
 }
 
+void do_sendvrecv_alignment(int slen, int dlen, int offset)
+{
+	int i, ret, iov_cnt;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+	uint64_t iov_d_buf = (uint64_t) iov_dest_buf;
+
+	iov_d_buf += offset;
+
+	for (iov_cnt = 1; iov_cnt <= IOV_CNT; iov_cnt++) {
+		for (i = 0; i < iov_cnt; i++) {
+			s_iov[i].iov_base = src_iov[i].iov_base;
+			s_iov[i].iov_base = (void *) ((uint64_t)s_iov[i].iov_base + offset);
+			rdm_sr_init_data(s_iov[i].iov_base, slen - offset, 0x25);
+			s_iov[i].iov_len = slen - offset;
+		}
+		rdm_sr_init_data((void *) iov_d_buf, (dlen - offset) * iov_cnt, 0);
+		sz = fi_sendv(ep[0], s_iov, NULL, iov_cnt, gni_addr[1], (void *) iov_d_buf);
+		cr_assert_eq(sz, 0);
+
+		sz = fi_recv(ep[1], (void *) iov_d_buf, (dlen - offset) * iov_cnt, (void *) iov_dest_buf_mr[1],
+			     gni_addr[0], s_iov);
+		cr_assert_eq(sz, 0);
+
+		/* need to progress both CQs simultaneously for rendezvous */
+		do {
+			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+			if (ret == 1) {
+				source_done = 1;
+			}
+			ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+			if (ret == 1) {
+				dest_done = 1;
+			}
+		} while (!(source_done && dest_done));
+
+		rdm_sr_check_cqe(&s_cqe, (void *) iov_d_buf, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&d_cqe, s_iov, (FI_MSG|FI_RECV), (void *) iov_d_buf,
+				 (dlen - offset) * iov_cnt, 0);
+
+		s[0] = 1; r[1] = 1;
+		rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+		dbg_printf("got context events!\n");
+
+		cr_assert(rdm_sr_check_iov_data(s_iov, (void *) iov_d_buf,
+						iov_cnt, (dlen - offset) * iov_cnt),
+			  "Data mismatch");
+		source_done = dest_done = 0;
+	}
+
+}
+
+void do_sendrecvv_alignment(int slen, int dlen, int offset)
+{
+	int i, ret, iov_cnt;
+	ssize_t sz;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+	uint64_t iov_s_buf = (uint64_t) iov_src_buf;
+
+	iov_s_buf += offset;
+
+	for (iov_cnt = 1; iov_cnt <= IOV_CNT; iov_cnt++) {
+		for (i = 0; i < iov_cnt; i++) {
+			d_iov[i].iov_base = dest_iov[i].iov_base;
+			d_iov[i].iov_base = (void *) ((uint64_t)d_iov[i].iov_base + offset);
+			rdm_sr_init_data(d_iov[i].iov_base, dlen - offset, 0);
+			d_iov[i].iov_len = dlen - offset;
+		}
+
+		rdm_sr_init_data((void *) iov_s_buf, (slen - offset) * iov_cnt, 0xab);
+
+		sz = fi_send(ep[0], (void *) iov_s_buf, (slen - offset) * iov_cnt, NULL, gni_addr[1],
+			     d_iov);
+		cr_assert_eq(sz, 0);
+
+		sz = fi_recvv(ep[1], d_iov, NULL, iov_cnt, gni_addr[0], (void *) iov_s_buf);
+		cr_assert_eq(sz, 0);
+
+		/*  need to progress both CQs simultaneously for rendezvous */
+		do {
+			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+			if (ret == 1) {
+				source_done = 1;
+			}
+			ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+			if (ret == 1) {
+				dest_done = 1;
+			}
+		} while (!(source_done && dest_done));
+
+		rdm_sr_check_cqe(&s_cqe, d_iov, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&d_cqe, (void *) iov_s_buf, (FI_MSG|FI_RECV), d_iov,
+				 MIN((slen - offset) * iov_cnt, (dlen - offset) * iov_cnt), 0);
+
+		s[0] = 1; r[1] = 1;
+		rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+		dbg_printf("got context events!\n");
+
+		cr_assert(rdm_sr_check_iov_data(d_iov, (void *) iov_s_buf,
+						iov_cnt, (slen - offset) * iov_cnt),
+			  "Data mismatch");
+		source_done = dest_done = 0;
+	}
+}
+
+void do_sendvrecv_alignment_iter(int len)
+{
+	int offset;
+
+	/* Check for alignment issues using offsets 1..3 */
+	for (offset = 1; offset < GNI_READ_ALIGN; offset++) {
+		/* lets assume the user passes in valid addresses */
+		if (offset < len) {
+			do_sendvrecv_alignment(len, len, offset);
+		}
+	}
+}
+
+void do_sendrecvv_alignment_iter(int len)
+{
+	int offset;
+
+	/* Check for alignment issues using offsets 1..3 */
+	for (offset = 1; offset < GNI_READ_ALIGN; offset++) {
+		/* lets assume the user passes in valid addresses */
+		if (offset < len) {
+			do_sendrecvv_alignment(len, len, offset);
+		}
+	}
+}
+
+void do_iov_alignment_edge(int len)
+{
+	int offset;
+
+	/* Check for alignment issues using offsets 1..3 */
+	for (offset = 1; offset < GNI_READ_ALIGN; offset++) {
+		/* lets assume the user passes in valid addresses */
+		if (offset < len) {
+			/* These calls trigger rendezvous cases on the sender's
+			 * side but the recv buffer that's posted will be so
+			 * small it will only fit a portion of the sender's data.
+			 *
+			 * The four byte alignment support in the current
+			 * sendv/recvv implementation doesn't support a head/tail
+			 * which meets or exceeds a given recv buffer.
+			 */
+
+			/* large (IOV) 1..8 x slen of 1..BUF_SZ -> dlen of 2..4 */
+			do_sendvrecv_alignment(len, offset + 1, offset);
+
+			/* large slen of 1..BUF_SZ -> (IOV) 1..8 x dlen of 2..4 */
+			do_sendrecvv_alignment(len, offset + 1, offset);
+		}
+	}
+}
+
 Test(rdm_sr, sendrecv_alignment)
 {
 	rdm_sr_xfer_for_each_size(do_sendrecv_alignment, 8*1024, 16*1024);
@@ -1600,6 +1790,21 @@ Test(rdm_sr, sendrecv_alignment_retrans)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_sendrecv_alignment, 8*1024, 32*1024);
+}
+
+Test(rdm_sr, sendvrecv_alignment)
+{
+	rdm_sr_xfer_for_each_size(do_sendvrecv_alignment_iter, 1, BUF_SZ);
+}
+
+Test(rdm_sr, sendrecvv_alignment)
+{
+	rdm_sr_xfer_for_each_size(do_sendrecvv_alignment_iter, 1, BUF_SZ);
+}
+
+Test(rdm_sr_alignment_edge, iov_alignment_edge)
+{
+	rdm_sr_xfer_for_each_size(do_iov_alignment_edge, 1, BUF_SZ);
 }
 
 void do_multirecv(int len)
