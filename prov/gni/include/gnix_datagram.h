@@ -135,14 +135,6 @@ enum gnix_dgram_poll_type {
  * @var type                 datagram type (bound or wildcard)
  * @var d_hndl               pointer to datagram handle this datagram is
  *                           associated
- * @var pre_test_clbk_fn     Call back function to be called prior to
- *                           a call to GNI_EpPostDataTestById to retrieve
- *                           the datagram from GNI.  This callback is invoked
- *                           while the lock is held on the cm nic.
- * @var post_test_clbk_fn    Call back function to be called following a
- *                           call to GNI_EpPostDataTestById to retrieve
- *                           the datagram from GNI.  This callback is invoked
- *                           while the lock is held on the cm nic.
  * @var pre_post_clbk_fn     Call back function to be called prior to
  *                           to the call to GNI_EpPostDataWId. This callback
  *                           is invoked while the lock is held on the cm nic.
@@ -184,10 +176,6 @@ struct gnix_datagram {
 	enum gnix_dgram_state   state;
 	enum gnix_dgram_type    type;
 	struct gnix_dgram_hndl  *d_hndl;
-	int  (*pre_test_clbk_fn)(struct gnix_datagram *);
-	int  (*post_test_clbk_fn)(struct gnix_datagram *,
-				      struct gnix_address,
-				      gni_post_state_t);
 	int  (*pre_post_clbk_fn)(struct gnix_datagram *,
 				 int *);
 	int  (*post_post_clbk_fn)(struct gnix_datagram *,
