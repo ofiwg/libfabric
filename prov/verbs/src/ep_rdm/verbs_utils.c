@@ -39,23 +39,22 @@
 #include "verbs_rdm.h"
 #include "verbs_queuing.h"
 
-extern struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
+extern struct util_buf_pool *fi_ibv_rdm_request_pool;
+extern struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
 extern struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
-int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other)
+int fi_ibv_rdm_req_match(struct dlist_entry *item, const void *other)
 {
-	const struct fi_ibv_rdm_tagged_request *req = other;
+	const struct fi_ibv_rdm_request *req = other;
 	return (item == &req->queue_entry);
 }
 
-int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
-					  const void *info)
+int fi_ibv_rdm_req_match_by_info(struct dlist_entry *item, const void *info)
 {
-	struct fi_ibv_rdm_tagged_request *request =
-	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
+	struct fi_ibv_rdm_request *request =
+		container_of(item, struct fi_ibv_rdm_request, queue_entry);
 
-	const struct fi_verbs_rdm_tagged_minfo *minfo = info;
+	const struct fi_ibv_rdm_tagged_minfo *minfo = info;
 
 	return (((request->minfo.conn == NULL) ||
 		 (request->minfo.conn == minfo->conn)) &&
@@ -67,13 +66,12 @@ int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
  * The same as fi_ibv_rdm_tagged_req_match_by_info but conn and tagmask fields
  * are used for matching instead of request's ones
  */
-int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
-					 const void *info)
+int fi_ibv_rdm_req_match_by_info2(struct dlist_entry *item, const void *info)
 {
-	struct fi_ibv_rdm_tagged_request *request =
-	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
+	struct fi_ibv_rdm_request *request =
+		container_of(item, struct fi_ibv_rdm_request, queue_entry);
 
-	const struct fi_verbs_rdm_tagged_minfo *minfo = info;
+	const struct fi_ibv_rdm_tagged_minfo *minfo = info;
 
 	return (((minfo->conn == NULL) || (request->minfo.conn == minfo->conn)) &&
 		((request->minfo.tag & minfo->tagmask) ==
@@ -84,22 +82,21 @@ int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
  * The same as fi_ibv_rdm_tagged_req_match_by_info2 but context field is added  
  * to compare
  */
-int fi_ibv_rdm_tagged_req_match_by_info3(struct dlist_entry *item,
-					 const void *info)
+int fi_ibv_rdm_req_match_by_info3(struct dlist_entry *item, const void *info)
 {
-	struct fi_ibv_rdm_tagged_request *request =
-	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
+	struct fi_ibv_rdm_request *request =
+		container_of(item, struct fi_ibv_rdm_request, queue_entry);
 
 	const struct fi_ibv_rdm_tagged_peek_data *peek_data = info;
 	const void *context = (peek_data->flags & FI_CLAIM) ?
 		peek_data->context : NULL;
 
 	return ((request->context == context) && 
-		fi_ibv_rdm_tagged_req_match_by_info2(item, &peek_data->minfo));
+		fi_ibv_rdm_req_match_by_info2(item, &peek_data->minfo));
 }
 
-int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
-					     const void *arg)
+int fi_ibv_rdm_postponed_process(struct dlist_entry *postponed_item,
+				 const void *arg)
 {
 	const struct fi_ibv_rdm_tagged_send_ready_data *send_data = arg;
 
@@ -111,9 +108,9 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 		struct dlist_entry *req_entry = 
 			postponed_entry->conn->postponed_requests_head.next;
 
-		struct fi_ibv_rdm_tagged_request *request =
-		    container_of(req_entry, struct fi_ibv_rdm_tagged_request,
-				 queue_entry);
+		struct fi_ibv_rdm_request *request =
+			container_of(req_entry, struct fi_ibv_rdm_request,
+				     queue_entry);
 
 		int res = 0;
 		if ((request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) &&
@@ -130,8 +127,8 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 			assert(request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED);
 			assert(fi_ibv_rdm_check_connection(request->minfo.conn,
 							   send_data->ep));
-			if (request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) {
-				res = !SEND_RESOURCES_IS_BUSY(request->minfo.conn,
+			if (request->state.eager <= FI_IBV_STATE_EAGER_RECV_END) {
+				res = !TSEND_RESOURCES_IS_BUSY(request->minfo.conn,
 							      send_data->ep);
 			} else {
 				res = !RMA_RESOURCES_IS_BUSY(request->minfo.conn,
@@ -140,16 +137,15 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 		}
 
 		if (res) {
-			fi_ibv_rdm_tagged_req_hndl(request,
-						   FI_IBV_EVENT_POST_READY,
-						   (void *) send_data);
+			fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_READY,
+					    (void *) send_data);
 			ret++;
 		}
 	}
 	return ret;
 }
 
-void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
+void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_conn *conn,
 				  struct fi_ibv_rdm_ep *ep)
 {
 	const int addr_cmp = memcmp(&conn->addr, &ep->cm.my_addr,
@@ -223,46 +219,46 @@ int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 
 void fi_ibv_rdm_clean_queues()
 {
-	struct fi_ibv_rdm_tagged_request *request;
+	struct fi_ibv_rdm_request *request;
 
 	while ((request = fi_ibv_rdm_take_first_from_unexp_queue())) {
 		if (request->unexp_rbuf) {
-			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
-				request->unexp_rbuf);
+			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
+					request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_posted_queue())) {
 		if (request->iov_count > 0) {
-			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
-				request->unexp_rbuf);
+			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
+					request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_postponed_queue())) {
 		if (request->iov_count > 0) {
-			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
-				request->unexp_rbuf);
+			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
+					request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_cq())) {
 		if (request->iov_count > 0) {
-			util_buf_release(fi_ibv_rdm_tagged_extra_buffers_pool,
-				request->unexp_rbuf);
+			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
+					request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_errcq())) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 }

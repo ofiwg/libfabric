@@ -36,10 +36,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct fi_ibv_rdm_tagged_request;
-struct fi_verbs_rdm_tagged_request_minfo;
+struct fi_ibv_rdm_request;
+struct fi_verbs_rdm_request_minfo;
 
-enum fi_ibv_rdm_tagged_request_eager_state {
+enum fi_ibv_rdm_request_eager_state {
 	FI_IBV_STATE_EAGER_BEGIN = 0,      // must be 0
 
 	FI_IBV_STATE_EAGER_SEND_POSTPONED,
@@ -64,10 +64,10 @@ enum fi_ibv_rdm_tagged_request_eager_state {
 	FI_IBV_STATE_EAGER_COUNT           // must be last
 };
 
-char *fi_ibv_rdm_req_eager_state_to_str(
-		enum fi_ibv_rdm_tagged_request_eager_state state);
+char *
+fi_ibv_rdm_req_eager_state_to_str(enum fi_ibv_rdm_request_eager_state state);
 
-enum fi_ibv_rdm_tagged_request_rndv_state {
+enum fi_ibv_rdm_request_rndv_state {
 	FI_IBV_STATE_RNDV_NOT_USED = 0,    // must be 0
 	FI_IBV_STATE_RNDV_SEND_BEGIN,
 	//    FI_IBV_STATE_RNDV_SEND_WAIT4CTS, // not implemented yet
@@ -87,10 +87,10 @@ enum fi_ibv_rdm_tagged_request_rndv_state {
 	FI_IBV_STATE_RNDV_COUNT            // must be last
 };
 
-char *fi_ibv_rdm_req_rndv_state_to_str(
-		enum fi_ibv_rdm_tagged_request_rndv_state state);
+char *
+fi_ibv_rdm_req_rndv_state_to_str(enum fi_ibv_rdm_request_rndv_state state);
 
-enum fi_ibv_rdm_tagged_request_event {
+enum fi_ibv_rdm_request_event {
 	FI_IBV_EVENT_SEND_START = 0,
 	FI_IBV_EVENT_POST_READY,
 	FI_IBV_EVENT_POST_LC,
@@ -108,7 +108,7 @@ enum fi_ibv_rdm_tagged_request_event {
 	FI_IBV_EVENT_COUNT                 // must be last
 };
 
-char *fi_ibv_rdm_event_to_str(enum fi_ibv_rdm_tagged_request_event event);
+char *fi_ibv_rdm_event_to_str(enum fi_ibv_rdm_request_event event);
 
 // Send service data types
 
@@ -122,7 +122,7 @@ enum ibv_rdm_send_type
 
 struct fi_ibv_rdm_tsend_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 	void *context;
 	uint64_t flags;
 	size_t tag;
@@ -155,7 +155,7 @@ struct fi_ibv_rdm_tagged_recv_start_data {
 };
 
 struct fi_ibv_recv_got_pkt_preprocess_data {
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 	struct fi_ibv_rdm_ep *ep;
 	struct fi_ibv_rdm_buf *rbuf;
 	size_t arrived_len;
@@ -171,7 +171,7 @@ struct fi_ibv_recv_got_pkt_process_data {
 
 struct fi_ibv_rdm_rma_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
-	struct fi_ibv_rdm_tagged_conn *conn;
+	struct fi_ibv_rdm_conn *conn;
 	void *context;
 	uint64_t flags;
 	uint64_t data_len;
@@ -188,10 +188,10 @@ struct fi_ibv_rma_post_ready_data {
 
 // Interfaces
 
-ssize_t fi_ibv_rdm_tagged_req_hndls_init();
-ssize_t fi_ibv_rdm_tagged_req_hndls_clean();
-ssize_t fi_ibv_rdm_tagged_req_hndl(struct fi_ibv_rdm_tagged_request *request,
-				   enum fi_ibv_rdm_tagged_request_event event,
-				   void *data);
+ssize_t fi_ibv_rdm_req_hndls_init();
+ssize_t fi_ibv_rdm_req_hndls_clean();
+ssize_t fi_ibv_rdm_req_hndl(struct fi_ibv_rdm_request *request,
+			    enum fi_ibv_rdm_request_event event,
+			    void *data);
 
 #endif /* _VERBS_TAGGED_EP_RDM_STATES_H */

@@ -149,30 +149,26 @@ do {										\
 
 #endif                          // ENABLE_DEBUG
 
-struct fi_verbs_rdm_tagged_minfo {
-	struct fi_ibv_rdm_tagged_conn	*conn;
-	uint64_t			tag;
-	uint64_t			tagmask;
+struct fi_ibv_rdm_tagged_minfo {
+	struct fi_ibv_rdm_conn	*conn;
+	uint64_t		tag;
+	uint64_t		tagmask;
 };
 
 struct fi_ibv_rdm_tagged_peek_data {
-	struct fi_verbs_rdm_tagged_minfo minfo;
+	struct fi_ibv_rdm_tagged_minfo minfo;
 	void *context;
 	uint64_t flags;
 };
 
 struct fi_ibv_rdm_cm;
 
-int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other);
-int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
-                                        const void *info);
-int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
-                                         const void *info);
-int fi_ibv_rdm_tagged_req_match_by_info3(struct dlist_entry *item,
-					 const void *info);
-int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
-                                              const void *arg);
-void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
+int fi_ibv_rdm_req_match(struct dlist_entry *item, const void *other);
+int fi_ibv_rdm_req_match_by_info(struct dlist_entry *item, const void *info);
+int fi_ibv_rdm_req_match_by_info2(struct dlist_entry *item, const void *info);
+int fi_ibv_rdm_req_match_by_info3(struct dlist_entry *item, const void *info);
+int fi_ibv_rdm_postponed_process(struct dlist_entry *item, const void *arg);
+void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_conn *conn,
 				  struct fi_ibv_rdm_ep *ep);
 int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 			       struct fi_ibv_rdm_cm* cm);

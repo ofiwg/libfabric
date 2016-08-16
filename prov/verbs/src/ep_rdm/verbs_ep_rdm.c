@@ -45,12 +45,12 @@
 
 extern struct fi_ops_tagged fi_ibv_rdm_tagged_ops;
 extern struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops;
-extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
-extern struct util_buf_pool* fi_ibv_rdm_tagged_request_pool;
-extern struct util_buf_pool* fi_ibv_rdm_tagged_extra_buffers_pool;
+extern struct dlist_entry fi_ibv_rdm_posted_queue;
+extern struct util_buf_pool* fi_ibv_rdm_request_pool;
+extern struct util_buf_pool* fi_ibv_rdm_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
 
-struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash = NULL;
+struct fi_ibv_rdm_conn *fi_ibv_rdm_conn_hash = NULL;
 
 
 static int
@@ -191,25 +191,25 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 	if (context->internal[0] == NULL)
 		return 0;
 
-	struct fi_ibv_rdm_tagged_request *request = context->internal[0];
+	struct fi_ibv_rdm_request *request = context->internal[0];
 
 	VERBS_DBG(FI_LOG_EP_DATA,
 		  "ep_cancel, match %p, tag 0x%llx, len %d, ctx %p\n",
 		  request, request->minfo.tag, request->len, request->context);
 
 	struct dlist_entry *found =
-		dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
-			fi_ibv_rdm_tagged_req_match, request);
+		dlist_find_first_match(&fi_ibv_rdm_posted_queue,
+					fi_ibv_rdm_req_match, request);
 	if (found) {
-		assert(container_of(found, struct fi_ibv_rdm_tagged_request,
+		assert(container_of(found, struct fi_ibv_rdm_request,
 				    queue_entry) == request);
-		fi_ibv_rdm_tagged_remove_from_posted_queue(request, ep_rdm);
+		fi_ibv_rdm_remove_from_posted_queue(request, ep_rdm);
 		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %d\n",
 			ep_rdm->posted_recvs);
 		err = 0;
 	} else {
 		request = fi_ibv_rdm_take_first_match_from_postponed_queue
-				(fi_ibv_rdm_tagged_req_match, request);
+				(fi_ibv_rdm_req_match, request);
 		if (request) {
 			fi_ibv_rdm_remove_from_postponed_queue(request);
 			err = 0;
@@ -318,10 +318,10 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		fi_ibv_rdm_tagged_poll(ep);
 	}
 
-	struct fi_ibv_rdm_tagged_conn *conn = NULL, *tmp = NULL;
+	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
 
-	HASH_ITER(hh, fi_ibv_rdm_tagged_conn_hash, conn, tmp) {
-		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
+	HASH_ITER(hh, fi_ibv_rdm_conn_hash, conn, tmp) {
+		HASH_DEL(fi_ibv_rdm_conn_hash, conn);
 		switch (conn->state) {
 		case FI_VERBS_CONN_ALLOCATED:
 		case FI_VERBS_CONN_REMOTE_DISCONNECT:
@@ -351,8 +351,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		}
 	}
 
-	assert(0 == HASH_COUNT(fi_ibv_rdm_tagged_conn_hash) &&
-	       NULL == fi_ibv_rdm_tagged_conn_hash);
+	assert(0 == HASH_COUNT(fi_ibv_rdm_conn_hash) &&
+		NULL == fi_ibv_rdm_conn_hash);
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);
@@ -371,8 +371,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	/* TODO: move queues & related pools cleanup to close CQ*/
 	fi_ibv_rdm_clean_queues();
 
-	util_buf_pool_destroy(fi_ibv_rdm_tagged_request_pool);
-	util_buf_pool_destroy(fi_ibv_rdm_tagged_extra_buffers_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_request_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_extra_buffers_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
 
 	free(ep);
@@ -420,7 +420,7 @@ struct fi_ops fi_ibv_rdm_tagged_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
+int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context)
 {
 	struct fi_ibv_domain *_domain = 
@@ -498,15 +498,15 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
-	fi_ibv_rdm_tagged_request_pool = util_buf_pool_create(
-		sizeof(struct fi_ibv_rdm_tagged_request),
+	fi_ibv_rdm_request_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_request),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
 	fi_ibv_rdm_postponed_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_postponed_entry),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(
+	fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
 		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
 	_ep->max_inline_rc = 
@@ -534,7 +534,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	*ep = &_ep->ep_fid;
 
 	_ep->is_closing = 0;
-	fi_ibv_rdm_tagged_req_hndls_init();
+	fi_ibv_rdm_req_hndls_init();
 
 	pthread_mutex_init(&_ep->cm_lock, NULL);
 	ret = pthread_create(&_ep->cm_progress_thread, NULL,

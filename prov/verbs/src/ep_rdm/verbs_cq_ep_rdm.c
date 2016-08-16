@@ -38,14 +38,14 @@
 #include "verbs_queuing.h"
 
 
-struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
+struct util_buf_pool *fi_ibv_rdm_request_pool;
 struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
 /*
  * extra buffer size equal eager buffer size, it is used for any intermediate
  * needs like unexpected recv, pack/unpack noncontig messages, etc
  */
-struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
+struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
 
 static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
                                              size_t count, fi_addr_t * src_addr)
@@ -53,7 +53,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 	struct fi_ibv_rdm_cq *_cq = 
 		container_of(cq, struct fi_ibv_rdm_cq, cq_fid);
 	struct fi_cq_tagged_entry *entry = buf;
-	struct fi_ibv_rdm_tagged_request *cq_entry;
+	struct fi_ibv_rdm_request *cq_entry;
 	size_t ret = 0;
 
 	for (cq_entry = count ? fi_ibv_rdm_take_first_from_cq() : NULL;
@@ -75,7 +75,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 		if (cq_entry->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", cq_entry, 
 						FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_tagged_request_pool, cq_entry);
+			util_buf_release(fi_ibv_rdm_request_pool, cq_entry);
 		} else {
 			cq_entry->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		}
@@ -181,7 +181,7 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
                              uint64_t flags)
 {
 	ssize_t ret = 0;
-	struct fi_ibv_rdm_tagged_request *err_request = 
+	struct fi_ibv_rdm_request *err_request = 
 		fi_ibv_rdm_take_first_from_errcq();
 
 	if (err_request) {
@@ -199,8 +199,7 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
 		if (err_request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", err_request,
 						FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_tagged_request_pool,
-				err_request);
+			util_buf_release(fi_ibv_rdm_request_pool, err_request);
 		} else {
 			err_request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		}

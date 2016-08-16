@@ -248,7 +248,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
-int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
+int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
 int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,

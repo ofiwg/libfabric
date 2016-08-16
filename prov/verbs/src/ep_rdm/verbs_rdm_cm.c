@@ -40,7 +40,7 @@
 
 
 extern struct fi_provider fi_ibv_prov;
-extern struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash;
+extern struct fi_ibv_rdm_conn *fi_ibv_rdm_conn_hash;
 
 
 static struct ibv_mr *
@@ -73,7 +73,7 @@ fi_ibv_rdm_dereg_and_free(struct ibv_mr **mr, char **buff)
 }
 
 static inline ssize_t
-fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
+fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 				 struct fi_ibv_rdm_ep *ep, int num_to_post)
 {
 	const size_t idx = (conn->cm_role == FI_VERBS_CM_SELF) ? 1 : 0;
@@ -115,7 +115,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
 	return -FI_ENOMEM;
 }
 
-ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
+ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_conn *conn,
 				   struct fi_ibv_rdm_ep *ep, int num_to_post)
 {
 	assert(num_to_post > 0);
@@ -143,7 +143,7 @@ ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
 
 static ssize_t
 fi_ibv_rdm_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
-			       struct fi_ibv_rdm_tagged_conn *conn)
+			       struct fi_ibv_rdm_conn *conn)
 {
 	assert(conn->s_mr == NULL);
 	assert(conn->r_mr == NULL);
@@ -217,7 +217,7 @@ fi_ibv_rdm_tagged_init_qp_attributes(struct ibv_qp_init_attr *qp_attr,
 
 static inline void
 fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
-			  struct fi_ibv_rdm_tagged_conn *conn,
+			  struct fi_ibv_rdm_conn *conn,
 			  struct fi_ibv_rdm_ep *ep)
 {
 	memset(cm_params, 0, sizeof(struct rdma_conn_param));
@@ -255,7 +255,7 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 
 static inline void
 fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
-			  struct fi_ibv_rdm_tagged_conn *conn,
+			  struct fi_ibv_rdm_conn *conn,
 			  struct fi_ibv_rdm_ep *ep)
 {
 	char *p = (char *)cm_param->private_data;
@@ -300,7 +300,7 @@ fi_ibv_rdm_process_addr_resolved(struct rdma_cm_id *id,
 {
 	ssize_t ret = FI_SUCCESS;
 	struct ibv_qp_init_attr qp_attr;
-	struct fi_ibv_rdm_tagged_conn *conn = id->context;
+	struct fi_ibv_rdm_conn *conn = id->context;
 
 	VERBS_INFO(FI_LOG_AV, "ADDR_RESOLVED conn %p, addr %s:%u\n",
 		   conn, inet_ntoa(conn->addr.sin_addr),
@@ -354,11 +354,11 @@ err:
 
 static ssize_t
 fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
-					  struct fi_ibv_rdm_ep *ep)
+				   struct fi_ibv_rdm_ep *ep)
 {
 	struct ibv_qp_init_attr qp_attr;
 	struct rdma_conn_param cm_params;
-	struct fi_ibv_rdm_tagged_conn *conn = NULL;
+	struct fi_ibv_rdm_conn *conn = NULL;
 	struct rdma_cm_id *id = event->id;
 	ssize_t ret = FI_SUCCESS;
 
@@ -379,15 +379,14 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		return ret;
 	}
 
-	HASH_FIND(hh, fi_ibv_rdm_tagged_conn_hash, p, FI_IBV_RDM_DFLT_ADDRLEN,
-		  conn);
+	HASH_FIND(hh, fi_ibv_rdm_conn_hash, p, FI_IBV_RDM_DFLT_ADDRLEN, conn);
 
 	if (!conn) {
 		conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof(*conn));
 		if (!conn)
 			return -FI_ENOMEM;
 
-		memset(conn, 0, sizeof(struct fi_ibv_rdm_tagged_conn));
+		memset(conn, 0, sizeof(*conn));
 
 		conn->state = FI_VERBS_CONN_ALLOCATED;
 		dlist_init(&conn->postponed_requests_head);
@@ -399,7 +398,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
 
-		HASH_ADD(hh, fi_ibv_rdm_tagged_conn_hash, addr,
+		HASH_ADD(hh, fi_ibv_rdm_conn_hash, addr,
 			FI_IBV_RDM_DFLT_ADDRLEN, conn);
 	} else {
 		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
@@ -489,7 +488,7 @@ static ssize_t
 fi_ibv_rdm_process_route_resolved(struct rdma_cm_event *event,
 				  struct fi_ibv_rdm_ep *ep)
 {
-	struct fi_ibv_rdm_tagged_conn *conn = event->id->context;
+	struct fi_ibv_rdm_conn *conn = event->id->context;
 	ssize_t ret = FI_SUCCESS;
 
 	struct rdma_conn_param cm_params;
@@ -515,8 +514,8 @@ static ssize_t
 fi_ibv_rdm_process_event_established(struct rdma_cm_event *event,
 				     struct fi_ibv_rdm_ep *ep)
 {
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *)event->id->context;
+	struct fi_ibv_rdm_conn *conn = 
+		(struct fi_ibv_rdm_conn *)event->id->context;
 
 	if (conn->state != FI_VERBS_CONN_STARTED &&
 	    conn->cm_role != FI_VERBS_CM_SELF)
@@ -544,7 +543,7 @@ fi_ibv_rdm_process_event_established(struct rdma_cm_event *event,
 	return FI_SUCCESS;
 }
 
-ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn)
+ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 {
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
@@ -619,7 +618,7 @@ static ssize_t
 fi_ibv_rdm_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 				      struct rdma_cm_event *event)
 {
-	struct fi_ibv_rdm_tagged_conn *conn = event->id->context;
+	struct fi_ibv_rdm_conn *conn = event->id->context;
 
 	ep->num_active_conns--;
 	
@@ -644,7 +643,7 @@ static ssize_t
 fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 				  struct rdma_cm_event *event)
 {
-	struct fi_ibv_rdm_tagged_conn *conn = event->id->context;
+	struct fi_ibv_rdm_conn *conn = event->id->context;
 	ssize_t ret = FI_SUCCESS;
 	const int *pdata = event->param.conn.private_data;
 
