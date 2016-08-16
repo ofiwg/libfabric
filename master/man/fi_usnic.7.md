@@ -67,6 +67,8 @@ low latency and other offload capabilities on Ethernet networks.
         * fi_control with FI_GETWAIT may only be used on CQs that have been
           bound to an endpoint. If fi_control is used on an unbound CQ, it will
           return -FI_EOPBADSTATE.
+    - Resource management is not supported. The application is responsible for
+      resource protection.
     - The usnic libfabric provider supports extensions that provide
       information and functionality beyond the standard libfabric
       interface.  See the "USNIC EXTENSIONS" section, below.
