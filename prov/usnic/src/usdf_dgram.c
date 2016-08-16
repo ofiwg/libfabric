@@ -442,8 +442,8 @@ ssize_t usdf_dgram_rx_size_left(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 
-	if (ep->e.dg.ep_qp == NULL)
-		return -FI_EOPBADSTATE; /* EP not enabled */
+	if (!(ep->flags & USDF_EP_ENABLED))
+		return -FI_EOPBADSTATE;
 
 	return usd_get_recv_credits(ep->e.dg.ep_qp) /
 		(ep->e.dg.rx_iov_limit + 1);
@@ -460,8 +460,8 @@ ssize_t usdf_dgram_tx_size_left(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 
-	if (ep->e.dg.ep_qp == NULL)
-		return -FI_EOPBADSTATE; /* EP not enabled */
+	if (!(ep->flags & USDF_EP_ENABLED))
+		return -FI_EOPBADSTATE;
 
 	return usd_get_send_credits(ep->e.dg.ep_qp) /
 		(ep->e.dg.tx_iov_limit + 1);
@@ -777,8 +777,8 @@ ssize_t usdf_dgram_prefix_rx_size_left(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 
-	if (ep->e.dg.ep_qp == NULL)
-		return -FI_EOPBADSTATE; /* EP not enabled */
+	if (!(ep->flags & USDF_EP_ENABLED))
+		return -FI_EOPBADSTATE;
 
 	/* prefix_recvv can post up to iov_limit descriptors
 	 */
@@ -796,8 +796,8 @@ ssize_t usdf_dgram_prefix_tx_size_left(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 
-	if (ep->e.dg.ep_qp == NULL)
-		return -FI_EOPBADSTATE; /* EP not enabled */
+	if (!(ep->flags & USDF_EP_ENABLED))
+		return -FI_EOPBADSTATE;
 
 	/* prefix_sendvcan post up to iov_limit descriptors
 	 */

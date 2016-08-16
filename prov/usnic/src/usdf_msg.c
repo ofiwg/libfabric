@@ -1229,8 +1229,9 @@ ssize_t usdf_msg_rx_size_left(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 	rx = ep->ep_rx;
-	if (rx == NULL)
-		return -FI_EOPBADSTATE; /* EP not enabled */
+
+	if (!(ep->flags & USDF_EP_ENABLED))
+		return -FI_EOPBADSTATE;
 
 	return rx->r.msg.rx_num_free_rqe;
 }
@@ -1244,8 +1245,9 @@ ssize_t usdf_msg_tx_size_left(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 	tx = ep->ep_tx;
-	if (tx == NULL)
-		return -FI_EOPBADSTATE; /* EP not enabled */
+
+	if (!(ep->flags & USDF_EP_ENABLED))
+		return -FI_EOPBADSTATE;
 
 	return tx->t.msg.tx_num_free_wqe;
 }
