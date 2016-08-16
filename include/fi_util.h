@@ -429,6 +429,39 @@ struct util_event {
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);
 
+/*
+ * MR
+ */
+
+
+/*hide addr related info & store prov_mr ptr */
+struct ofi_util_mr {
+    void *map_handle;
+    uint64_t b_key; /* track available key (BASIC usage) */
+    enum fi_mr_mode mr_type;
+    const struct fi_provider *prov;
+};
+
+/*create instance of data structure and return handle to user */
+int ofi_mr_init(const struct fi_provider *in_prov, enum fi_mr_mode mode,
+                                struct ofi_util_mr ** out_new_mr);
+/*insert user mr struct in data structure*/
+int ofi_mr_insert(struct ofi_util_mr * in_mr_h,
+                                const struct fi_mr_attr *in_attr,
+                                uint64_t * out_key, void * in_prov_mr);
+/*return on user mr struct */
+void * ofi_mr_retrieve(struct ofi_util_mr * in_mr_h,  uint64_t in_key);
+/*need address offsetted, verified, and user mr struct returned*/
+/* io_addr is address of buff (&buf) */
+int ofi_mr_retrieve_and_verify(struct ofi_util_mr * in_mr_h, ssize_t in_len,
+                                uintptr_t *io_addr, uint64_t in_key,
+                                uint64_t in_access, void **out_prov_mr);
+/*erase a specific item in the data structure */
+int ofi_mr_erase(struct ofi_util_mr * in_mr_h, uint64_t in_key);
+/*close data structure instance */
+void ofi_mr_close(struct ofi_util_mr *in_mr_h);
+
+
 
 /*
  * Attributes and capabilities
