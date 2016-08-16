@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -51,7 +52,7 @@ static int rx_shared_ctx = 1;
 static int ep_cnt = 4;
 static struct fid_ep **ep_array, *srx_ctx;
 static struct fid_stx *stx_ctx;
-static void *local_addr, *remote_addr;
+static char *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t *addr_array;
 

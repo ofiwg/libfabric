@@ -146,7 +146,7 @@ extern struct fid_av *av;
 extern struct fid_eq *eq;
 
 extern fi_addr_t remote_fi_addr;
-extern void *buf, *tx_buf, *rx_buf;
+extern char *buf, *tx_buf, *rx_buf;
 extern size_t buf_size, tx_size, rx_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
