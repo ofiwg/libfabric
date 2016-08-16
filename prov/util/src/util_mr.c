@@ -54,8 +54,10 @@ static struct fi_mr_attr * create_mr_attr_copy(
     *item = *in_attr;
     item->context = prov_mr;
     mr_iov = malloc(sizeof(struct iovec) * in_attr->iov_count);
-    if (!mr_iov)
+    if (!mr_iov) {
+        free(item);
         return NULL;
+    }
 
     for(i = 0; i < in_attr->iov_count; i++)
         mr_iov[i] = in_attr->mr_iov[i];
@@ -113,8 +115,11 @@ int ofi_mr_insert(struct ofi_util_mr * in_mr_h, const struct fi_mr_attr *in_attr
     if (in_mr_h->mr_type == FI_MR_SCALABLE) {
         item->offset = (uintptr_t) in_attr->mr_iov[0].iov_base + in_attr->offset;
         /* verify key doesn't already exist */
-        if (rbtFind(in_mr_h->map_handle, &item->requested_key))
+        if (rbtFind(in_mr_h->map_handle, &item->requested_key)) {
+                free((void *)item->mr_iov);
+                free(item);
                 return -FI_EINVAL;
+        }
     } else {
         item->requested_key = get_mr_key(in_mr_h);
         item->offset = (uintptr_t) in_attr->mr_iov[0].iov_base;
@@ -224,8 +229,10 @@ int ofi_mr_init(const struct fi_provider *in_prov, enum fi_mr_mode mode,
     new_mr->mr_type = mode;
 
     new_mr->map_handle = rbtNew(compare_mr_keys);
-    if (!new_mr->map_handle)
+    if (!new_mr->map_handle) {
+        free(new_mr);
         return -FI_ENOMEM;
+    }
 
     new_mr->b_key = 0;
 
@@ -240,7 +247,7 @@ int ofi_mr_init(const struct fi_provider *in_prov, enum fi_mr_mode mode,
 void ofi_mr_close(struct ofi_util_mr *in_mr_h)
 {
     if (!in_mr_h) {
-        FI_WARN(in_mr_h->prov, FI_LOG_MR, "util mr_close: received NULL input\n");
+        FI_WARN(&core_prov, FI_LOG_MR, "util mr_close: received NULL input\n");
         return;
     }
 
