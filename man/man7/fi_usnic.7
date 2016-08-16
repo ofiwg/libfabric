@@ -1,4 +1,4 @@
-.TH "fi_usnic" "7" "2016\-03\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_usnic" "7" "2016\-08\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -85,6 +85,9 @@ fi_control with FI_GETWAIT may only be used on CQs that have been bound
 to an endpoint.
 If fi_control is used on an unbound CQ, it will return \-FI_EOPBADSTATE.
 .RE
+.IP \[bu] 2
+Resource management is not supported.
+The application is responsible for resource protection.
 .IP \[bu] 2
 The usnic libfabric provider supports extensions that provide
 information and functionality beyond the standard libfabric interface.
