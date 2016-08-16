@@ -425,7 +425,7 @@ void *__udreg_register(void *addr, uint64_t length, void *context)
 	domain = (struct gnix_fid_domain *) context;
 
     /* Allocate an udreg info block for this registration. */
-    md = malloc(sizeof(struct gnix_fid_mem_desc));
+    md = calloc(1, sizeof(*md));
     if (!md) {
 	GNIX_WARN(FI_LOG_MR, "failed to allocate memory for registration\n");
 	return NULL;
@@ -706,7 +706,13 @@ static int __basic_mr_reg_mr(
 static int __basic_mr_dereg_mr(struct gnix_fid_domain *domain,
 		struct gnix_fid_mem_desc *md)
 {
-	return __gnix_deregister_region((void *) md, NULL);
+	int ret; 
+	
+	ret = __gnix_deregister_region((void *) md, NULL);
+	if (ret == FI_SUCCESS)
+		free((void *) md);
+
+	return ret;
 }
 
 struct gnix_mr_ops basic_mr_ops = {
