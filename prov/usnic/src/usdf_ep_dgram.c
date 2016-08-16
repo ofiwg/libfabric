@@ -138,6 +138,8 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 		goto fail;
 	}
 
+	ep->flags |= USDF_EP_ENABLED;
+
 	return 0;
 
 fail:

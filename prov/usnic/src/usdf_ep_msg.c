@@ -548,7 +548,16 @@ fail:
 static int
 usdf_ep_msg_enable(struct fid_ep *fep)
 {
-	return usdf_ep_msg_get_queues(ep_ftou(fep));
+	struct usdf_ep *ep;
+	int ret;
+
+	ep = ep_ftou(fep);
+
+	ret = usdf_ep_msg_get_queues(ep);
+	if (ret == FI_SUCCESS)
+		ep->flags |= USDF_EP_ENABLED;
+
+	return ret;
 }
 
 static ssize_t

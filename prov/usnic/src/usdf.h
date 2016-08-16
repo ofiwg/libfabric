@@ -263,6 +263,10 @@ struct usdf_rx {
 #define rx_utof(RX) (&(RX)->rx_fid)
 #define rx_utofid(RX) (&(RX)->rx_fid.fid)
 
+enum {
+	USDF_EP_ENABLED = (1 << 0)
+};
+
 struct usdf_ep {
 	struct fid_ep ep_fid;
 	struct usdf_domain *ep_domain;
@@ -275,6 +279,8 @@ struct usdf_ep {
 
 	uint8_t ep_tx_completion;
 	uint8_t ep_rx_completion;
+
+	uint32_t flags;
 
 	uint32_t ep_wqe;	/* requested queue sizes */
 	uint32_t ep_rqe;
