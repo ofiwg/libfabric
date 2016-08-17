@@ -554,6 +554,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	struct gnix_dgram_hndl *the_hndl = NULL;
 	struct gnix_nic *nic;
 	gni_return_t status;
+	uint32_t num_corespec_cpus = 0;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -650,10 +651,21 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 		 * though...
 		 */
 
-		ret = _gnix_job_disable_affinity_apply();
+		ret = _gnix_get_num_corespec_cpus(&num_corespec_cpus);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "failed to get num corespec cpus\n");
+		}
+
+		if (num_corespec_cpus > 0) {
+			ret = _gnix_job_disable_affinity_apply();
+		} else {
+			ret = _gnix_job_enable_unassigned_cpus();
+		}
 		if (ret != 0)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			"_gnix_job_disable call returned %d\n", ret);
+			"disable_affinity/unassigned_cpus call returned %d\n",
+			ret);
 
 		ret = pthread_create(&the_hndl->progress_thread,
 				     NULL,
