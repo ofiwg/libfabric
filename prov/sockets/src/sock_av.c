@@ -151,7 +151,6 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 	if (_av->attr.flags & FI_READ) {
 		for (i = 0; i < count; i++) {
 			for (j = 0; j < _av->table_hdr->stored; j++) {
-
 				if (!sock_av_is_valid_address(&addr[i])) {
 					if (fi_addr)
 						fi_addr[i] = FI_ADDR_NOTAVAIL;
@@ -176,43 +175,32 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 
 	for (i = 0, ret = 0; i < count; i++) {
 		if (_av->table_hdr->stored == _av->table_hdr->size) {
-			if (_av->table_hdr->req_sz) {
-				if (fi_addr)
-					fi_addr[i] = FI_ADDR_NOTAVAIL;
-				sock_av_report_error(_av, context, i, FI_ENOSPC);
-				SOCK_LOG_ERROR("Cannot insert to AV table\n");
-				continue;
-			} else {
-				new_count = _av->table_hdr->size * 2;
-				table_sz = SOCK_AV_TABLE_SZ(new_count, _av->attr.name);
-				old_sz = SOCK_AV_TABLE_SZ(_av->table_hdr->size, _av->attr.name);
+			new_count = _av->table_hdr->size * 2;
+			table_sz = SOCK_AV_TABLE_SZ(new_count, _av->attr.name);
+			old_sz = SOCK_AV_TABLE_SZ(_av->table_hdr->size, _av->attr.name);
 
-				if (_av->attr.name) {
-					new_addr = sock_mremap(_av->table_hdr,
-							       old_sz, table_sz);
-					if (new_addr == MAP_FAILED) {
-						if (fi_addr)
-							fi_addr[i] = FI_ADDR_NOTAVAIL;
-						sock_av_report_error(_av,
-							context, i, FI_ENOMEM);
-						continue;
-					}
-					_av->idx_arr[_av->table_hdr->stored] = _av->table_hdr->stored;
-				} else {
-					new_addr = realloc(_av->table_hdr,
-								table_sz);
-					if (!new_addr) {
-						if (fi_addr)
-							fi_addr[i] = FI_ADDR_NOTAVAIL;
-						sock_av_report_error(_av,
-							context, i, FI_ENOMEM);
-						continue;
-					}
+			if (_av->attr.name) {
+				new_addr = sock_mremap(_av->table_hdr,
+							old_sz, table_sz);
+				if (new_addr == MAP_FAILED) {
+					if (fi_addr)
+						fi_addr[i] = FI_ADDR_NOTAVAIL;
+					sock_av_report_error(_av, context, i, FI_ENOMEM);
+					continue;
 				}
-				_av->table_hdr = new_addr;
-				_av->table_hdr->size = new_count;
-				sock_update_av_table(_av, new_count);
+				_av->idx_arr[_av->table_hdr->stored] = _av->table_hdr->stored;
+			} else {
+				new_addr = realloc(_av->table_hdr, table_sz);
+				if (!new_addr) {
+					if (fi_addr)
+						fi_addr[i] = FI_ADDR_NOTAVAIL;
+					sock_av_report_error(_av, context, i, FI_ENOMEM);
+					continue;
+				}
 			}
+			_av->table_hdr = new_addr;
+			_av->table_hdr->size = new_count;
+			sock_update_av_table(_av, new_count);
 		}
 
 		if (!sock_av_is_valid_address(&addr[i])) {
@@ -535,7 +523,6 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			goto err;
 		}
 		_av->table_hdr->size = _av->attr.count;
-		_av->table_hdr->req_sz = attr->count;
 	}
 	sock_update_av_table(_av, _av->attr.count);
 
