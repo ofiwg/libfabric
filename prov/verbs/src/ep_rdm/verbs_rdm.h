@@ -220,8 +220,12 @@ struct fi_ibv_rdm_cm {
 	struct rdma_cm_id *listener;
 	struct rdma_event_channel *ec;
 	struct sockaddr_in my_addr;
-	struct fi_ibv_rdm_conn *conn_hash;
 	struct rdma_addrinfo *rai;
+
+	/* conn_hash has a sockaddr_in -> conn associative */
+	struct fi_ibv_rdm_conn *conn_hash;
+	/* Used only for FI_AV_TABLE */
+	struct fi_ibv_rdm_conn **conn_table;
 };
 
 struct fi_ibv_rdm_ep {

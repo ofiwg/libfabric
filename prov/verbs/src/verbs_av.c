@@ -56,7 +56,6 @@ int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 {
 	struct fi_ibv_domain *fid_domain;
 	struct fi_ibv_av *av;
-	int type = FI_AV_MAP;
 	size_t count = 64;
 
 	fid_domain = container_of(domain, struct fi_ibv_domain, domain_fid);
@@ -64,15 +63,12 @@ int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!attr)
 		return -FI_EINVAL;
 
-	if (attr->type == FI_AV_UNSPEC)
-		attr->type = FI_AV_MAP;
-
 	switch (attr->type) {
+	case FI_AV_UNSPEC:
+		attr->type = FI_AV_MAP;
 	case FI_AV_MAP:
-		type = attr->type;
-		break;
 	case FI_AV_TABLE:
-		return -FI_ENOSYS;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -86,7 +82,7 @@ int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	assert(fid_domain->rdm);
 	av->domain = fid_domain;
-	av->type = type;
+	av->type = attr->type;
 
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	av->av_fid.fid.context = context;

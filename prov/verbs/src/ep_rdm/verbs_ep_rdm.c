@@ -350,6 +350,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
 	assert(HASH_COUNT(ep->domain->rdm_cm->conn_hash) == 0 &&
 	       ep->domain->rdm_cm->conn_hash == NULL);
+	free(ep->domain->rdm_cm->conn_table);
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);

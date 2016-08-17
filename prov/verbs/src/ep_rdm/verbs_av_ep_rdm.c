@@ -127,6 +127,17 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 		pthread_mutex_lock(&ep->cm_lock);
 	}
 
+	if (av->type == FI_AV_TABLE) {
+		void *p = realloc(av->domain->rdm_cm->conn_table,
+				(av->count + count * sizeof(*av->domain->rdm_cm->conn_table)));
+		if (p) {
+			av->domain->rdm_cm->conn_table = p;
+		} else {
+			ret = -FI_ENOMEM;
+			goto out;
+		}
+	}
+
 	for (i = 0; i < count; i++) {
 		struct fi_ibv_rdm_conn *conn = NULL;
 		void *addr_i = (char *) addr +
@@ -170,7 +181,18 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 		}
 
 		if (fi_addr) {
-			fi_addr[i] = (uintptr_t) (void *) conn;
+			switch (av->type) {
+			case FI_AV_MAP:
+				fi_addr[i] = (uintptr_t) (void *) conn;
+				break;
+			case FI_AV_TABLE:
+				fi_addr[i] = av->count + i;
+				av->domain->rdm_cm->conn_table[fi_addr[i]] = conn;
+				break;
+			default:
+				assert(0);
+				break;
+			}
 		}
 
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr %s:%u conn %p %d\n",
@@ -180,6 +202,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 		ret++;
 	}
 
+	av->count += count;
 out:
 	if (ep) {
 		pthread_mutex_unlock(&ep->cm_lock);
@@ -191,17 +214,38 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
                                 size_t count, uint64_t flags)
 {
 	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
-	struct fi_ibv_rdm_conn *conn;
+	struct fi_ibv_rdm_conn *conn = NULL;
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
 	int i;
+
+	if (!fi_addr) {
+		return -FI_EINVAL;
+	}
 
 	if (av->ep) {
 		pthread_mutex_lock(&av->ep->cm_lock);
 	}
 
 	for (i = 0; i < count; i++) {
-		conn = (struct fi_ibv_rdm_conn *) fi_addr[i];
+
+		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+			continue;
+		}
+
+		switch (av->type) {
+		case FI_AV_MAP:
+			conn = (struct fi_ibv_rdm_conn *) fi_addr[i];
+			break;
+		case FI_AV_TABLE:
+			conn = av->domain->rdm_cm->conn_table[fi_addr[i]];
+			break;
+		default:
+			assert(0);
+			ret = -FI_EINVAL;
+			break;
+		}
+
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));

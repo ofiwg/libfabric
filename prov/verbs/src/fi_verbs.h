@@ -140,6 +140,7 @@ struct fi_ibv_av {
 	struct fid_av		av_fid;
 	struct fi_ibv_domain	*domain;
 	struct fi_ibv_rdm_ep	*ep;
+	size_t			count;
 	enum fi_av_type		type;
 };
 
