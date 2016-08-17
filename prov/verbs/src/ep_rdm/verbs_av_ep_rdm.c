@@ -36,15 +36,13 @@
 
 
 extern struct fi_provider fi_ibv_prov;
-extern struct fi_ibv_rdm_conn *fi_ibv_rdm_conn_hash;
-
 
 ssize_t
 fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep, 
 			    struct fi_ibv_rdm_conn *conn)
 {
 	struct rdma_cm_id *id = NULL;
-	assert(ep->cm.listener);
+	assert(ep->domain->rdm_cm->listener);
 
 	if (conn->state != FI_VERBS_CONN_ALLOCATED) {
 		return FI_SUCCESS;
@@ -59,7 +57,7 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 
 	conn->state = FI_VERBS_CONN_STARTED;
 
-	if (rdma_create_id(ep->cm.ec, &id, conn, RDMA_PS_TCP)) {
+	if (rdma_create_id(ep->domain->rdm_cm->ec, &id, conn, RDMA_PS_TCP)) {
 		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_create_id\n", errno);
 		return -errno;
 	}
@@ -131,7 +129,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 
 	for (i = 0; i < count; i++) {
 		struct fi_ibv_rdm_conn *conn = NULL;
-		void *addr_i = (char *) addr + 
+		void *addr_i = (char *) addr +
 			i * (ep ? ep->addrlen : FI_IBV_RDM_DFLT_ADDRLEN);
 
 		if (!fi_ibv_rdm_av_is_valid_address(addr_i)) {
@@ -145,8 +143,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			continue;
 		}
 
-		HASH_FIND(hh, fi_ibv_rdm_conn_hash, addr_i,
-			FI_IBV_RDM_DFLT_ADDRLEN, conn);
+		HASH_FIND(hh, av->domain->rdm_cm->conn_hash, addr_i,
+			  FI_IBV_RDM_DFLT_ADDRLEN, conn);
 
 		if (!conn) {
 			/* If addr_i is not found in HASH then we malloc it.
@@ -163,8 +161,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			dlist_init(&conn->postponed_requests_head);
 			conn->state = FI_VERBS_CONN_ALLOCATED;
 			memcpy(&conn->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
-			HASH_ADD(hh, fi_ibv_rdm_conn_hash, addr,
-				FI_IBV_RDM_DFLT_ADDRLEN, conn);
+			HASH_ADD(hh, av->domain->rdm_cm->conn_hash, addr,
+				 FI_IBV_RDM_DFLT_ADDRLEN, conn);
 		}
 
 		if (ep) {
@@ -189,24 +187,32 @@ out:
 	return ret;
 }
 
-static int fi_ibv_rdm_av_remove(struct fid_av *av, fi_addr_t * fi_addr,
+static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
                                 size_t count, uint64_t flags)
 {
+	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
 	struct fi_ibv_rdm_conn *conn;
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
 	int i;
+
+	if (av->ep) {
+		pthread_mutex_lock(&av->ep->cm_lock);
+	}
 
 	for (i = 0; i < count; i++) {
 		conn = (struct fi_ibv_rdm_conn *) fi_addr[i];
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
-		HASH_DEL(fi_ibv_rdm_conn_hash, conn);
+		HASH_DEL(av->domain->rdm_cm->conn_hash, conn);
 		err = fi_ibv_rdm_start_disconnection(conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
 	}
 
+	if (av->ep) {
+		pthread_mutex_unlock(&av->ep->cm_lock);
+	}
 	return ret;
 }
 

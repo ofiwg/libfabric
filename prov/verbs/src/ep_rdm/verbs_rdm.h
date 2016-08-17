@@ -220,6 +220,7 @@ struct fi_ibv_rdm_cm {
 	struct rdma_cm_id *listener;
 	struct rdma_event_channel *ec;
 	struct sockaddr_in my_addr;
+	struct fi_ibv_rdm_conn *conn_hash;
 	struct rdma_addrinfo *rai;
 };
 
@@ -229,7 +230,6 @@ struct fi_ibv_rdm_ep {
 	struct fi_ibv_rdm_cq *fi_scq;
 	struct fi_ibv_rdm_cq *fi_rcq;
 
-	struct fi_ibv_rdm_cm cm;
 	size_t addrlen;
 
 	struct fi_ibv_av *av;
@@ -254,6 +254,7 @@ struct fi_ibv_rdm_ep {
 	struct ibv_cq *rcq;
 	int scq_depth;
 	int rcq_depth;
+	/* TODO: move all CM things to domain */
 	pthread_t cm_progress_thread;
 	pthread_mutex_t cm_lock;
 	int is_closing;

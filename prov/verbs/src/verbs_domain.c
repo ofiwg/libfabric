@@ -125,6 +125,11 @@ static int fi_ibv_domain_close(fid_t fid)
 	int ret;
 
 	domain = container_of(fid, struct fi_ibv_domain, domain_fid.fid);
+
+	if (domain->rdm) {
+		free(domain->rdm_cm);
+	}
+
 	if (domain->pd) {
 		ret = ibv_dealloc_pd(domain->pd);
 		if (ret)
@@ -229,6 +234,13 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err1;
 
 	_domain->rdm = FI_IBV_EP_TYPE_IS_RDM(info);
+	if (_domain->rdm) {
+		_domain->rdm_cm = calloc(1, sizeof(*_domain->rdm_cm));
+		if (!_domain->rdm_cm) {
+			ret = -FI_ENOMEM;
+			goto err2;
+		}
+	}
 	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
 		goto err2;
@@ -250,6 +262,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	*domain = &_domain->domain_fid;
 	return 0;
 err2:
+	free(_domain->rdm_cm);
 	fi_freeinfo(_domain->info);
 err1:
 	free(_domain);

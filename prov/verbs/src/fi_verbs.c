@@ -71,6 +71,10 @@ static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 			      const struct rdma_addrinfo* rai)
 {
 	struct sockaddr_in* src_addr = (struct sockaddr_in*)rai->ai_src_addr;
+	if (cm->ec) {
+		/* cm is already initialized (by other ep) */
+		return FI_SUCCESS;
+	}
 	cm->ec = rdma_create_event_channel();
 
 	if (!cm->ec) {

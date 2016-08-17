@@ -157,12 +157,19 @@ struct fi_ibv_pep {
 };
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
+struct fi_ibv_rdm_cm;
 
 struct fi_ibv_domain {
 	struct fid_domain	domain_fid;
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
+	/*
+	 * TODO: Currently, only 1 rdm EP can be created per rdm domain!
+	 *	 CM logic should be separated from EP,
+	 *	 excluding naming/addressing
+	 */
 	int			rdm;
+	struct fi_ibv_rdm_cm	*rdm_cm;
 	struct fi_info		*info;
 	struct fi_ibv_fabric	*fab;
 };
