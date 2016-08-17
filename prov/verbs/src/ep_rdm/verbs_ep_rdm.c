@@ -162,7 +162,7 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cq->ep = ep;
 		break;
 	case FI_CLASS_AV:
-		av = container_of(bfid, struct fi_ibv_av, av.fid);
+		av = container_of(bfid, struct fi_ibv_av, av_fid.fid);
 		ep->av = av;
 
 		/* TODO: this is wrong, AV to EP is 1:n */

@@ -137,11 +137,10 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context);
 
 struct fi_ibv_av {
-	struct fid_av		av;	/* TODO: rename to av_fid */
+	struct fid_av		av_fid;
 	struct fi_ibv_domain	*domain;
-	struct fi_ibv_rdm_ep	*ep;	/* TODO: check usage */
-	int			type;	/* TODO: AV enum? */
-	size_t			count;
+	struct fi_ibv_rdm_ep	*ep;
+	enum fi_av_type		type;
 };
 
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,

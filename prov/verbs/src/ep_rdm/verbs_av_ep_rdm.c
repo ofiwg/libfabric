@@ -117,12 +117,12 @@ static inline int fi_ibv_rdm_av_is_valid_address(struct sockaddr_in *addr)
 }
 
 
-static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
+static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
                                 size_t count, fi_addr_t * fi_addr,
                                 uint64_t flags, void *context)
 {
-	struct fi_ibv_av *fid_av = container_of(av, struct fi_ibv_av, av);
-	struct fi_ibv_rdm_ep *ep = fid_av->ep;
+	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
+	struct fi_ibv_rdm_ep *ep = av->ep;
 	int i,  ret = 0;
 
 	if (ep) {

@@ -39,8 +39,8 @@
 
 static int fi_ibv_av_close(fid_t fid)
 {
-	struct fi_ibv_av *fid_av = container_of(fid, struct fi_ibv_av, av.fid);
-	free(fid_av);
+	struct fi_ibv_av *av = container_of(fid, struct fi_ibv_av, av_fid.fid);
+	free(av);
 	return 0;
 }
 
@@ -52,10 +52,10 @@ static struct fi_ops fi_ibv_fi_ops = {
 
 /* TODO: match rest of verbs code for variable naming */
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		   struct fid_av **av, void *context)
+		   struct fid_av **av_fid, void *context)
 {
 	struct fi_ibv_domain *fid_domain;
-	struct fi_ibv_av *fid_av;
+	struct fi_ibv_av *av;
 	int type = FI_AV_MAP;
 	size_t count = 64;
 
@@ -64,11 +64,15 @@ int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!attr)
 		return -FI_EINVAL;
 
+	if (attr->type == FI_AV_UNSPEC)
+		attr->type = FI_AV_MAP;
+
 	switch (attr->type) {
 	case FI_AV_MAP:
-	case FI_AV_TABLE:
 		type = attr->type;
 		break;
+	case FI_AV_TABLE:
+		return -FI_ENOSYS;
 	default:
 		return -EINVAL;
 	}
@@ -76,21 +80,20 @@ int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (attr->count)
 		count = attr->count;
 
-	fid_av = calloc(1, sizeof *fid_av);
-	if (!fid_av)
+	av = calloc(1, sizeof *av);
+	if (!av)
 		return -ENOMEM;
 
-	fid_av->domain = fid_domain;
-	fid_av->type = type;
-	fid_av->count = count;
-
-	fid_av->av.fid.fclass = FI_CLASS_AV;
-	fid_av->av.fid.context = context;
-	fid_av->av.fid.ops = &fi_ibv_fi_ops;
-
 	assert(fid_domain->rdm);
-	fid_av->av.ops = fi_ibv_rdm_set_av_ops();
+	av->domain = fid_domain;
+	av->type = type;
 
-	*av = &fid_av->av;
+	av->av_fid.fid.fclass = FI_CLASS_AV;
+	av->av_fid.fid.context = context;
+	av->av_fid.fid.ops = &fi_ibv_fi_ops;
+
+	av->av_fid.ops = fi_ibv_rdm_set_av_ops();
+
+	*av_fid = &av->av_fid;
 	return 0;
 }
