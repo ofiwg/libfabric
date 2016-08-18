@@ -66,9 +66,12 @@ int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
 	int i;
 	struct sock_av_addr *av_addr;
 
-	for (i = 0; i < av->table_hdr->stored; i++) {
+	for (i = 0; i < av->table_hdr->size; i++) {
 		av_addr = &av->table[i];
-		if (ofi_equals_sockaddr(addr, (struct sockaddr_in *)&av_addr->addr))
+		if (!av_addr->valid)
+			continue;
+
+		 if (ofi_equals_sockaddr(addr, (struct sockaddr_in *)&av_addr->addr))
 			return i;
 	}
 	SOCK_LOG_DBG("failed to get index in AV\n");
@@ -84,8 +87,8 @@ int sock_av_compare_addr(struct sock_av *av,
 	index1 = ((uint64_t)addr1 & av->mask);
 	index2 = ((uint64_t)addr2 & av->mask);
 
-	if (index1 >= av->table_hdr->stored || index1 < 0 ||
-	    index2 >= av->table_hdr->stored || index2 < 0) {
+	if (index1 >= av->table_hdr->size || index1 < 0 ||
+	    index2 >= av->table_hdr->size || index2 < 0) {
 		SOCK_LOG_ERROR("requested rank is larger than av table\n");
 		return -1;
 	}
@@ -135,23 +138,63 @@ static void sock_update_av_table(struct sock_av *_av, size_t count)
 		sizeof(struct sock_av_table_hdr));
 }
 
+static int sock_resize_av_table(struct sock_av *av)
+{
+	void *new_addr;
+	size_t new_count, table_sz, old_sz;
+
+	new_count = av->table_hdr->size * 2;
+	table_sz = SOCK_AV_TABLE_SZ(new_count, av->attr.name);
+	old_sz = SOCK_AV_TABLE_SZ(av->table_hdr->size, av->attr.name);
+
+	if (av->attr.name) {
+		new_addr = sock_mremap(av->table_hdr, old_sz, table_sz);
+		if (new_addr == MAP_FAILED)
+			return -1;
+
+		av->idx_arr[av->table_hdr->stored] = av->table_hdr->stored;
+	} else {
+		new_addr = realloc(av->table_hdr, table_sz);
+		if (!new_addr)
+			return -1;
+	}
+
+	av->table_hdr = new_addr;
+	av->table_hdr->size = new_count;
+	sock_update_av_table(av, new_count);
+
+	return 0;
+}
+
+static int sock_av_get_next_index(struct sock_av *av)
+{
+	int i;
+
+	for (i = 0; i < av->table_hdr->size; i++) {
+		if (!av->table[i].valid)
+			return i;
+	}
+
+	return -1;
+}
+
 static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			       fi_addr_t *fi_addr, int count, uint64_t flags,
 			       void *context)
 {
-	void *new_addr;
 	int i, j, ret = 0;
 	char sa_ip[INET_ADDRSTRLEN];
 	struct sock_av_addr *av_addr;
-	size_t new_count, table_sz, old_sz;
+	int index;
 
 	if ((_av->attr.flags & FI_EVENT) && !_av->eq)
 		return -FI_ENOEQ;
 
 	if (_av->attr.flags & FI_READ) {
 		for (i = 0; i < count; i++) {
-			for (j = 0; j < _av->table_hdr->stored; j++) {
-				if (!sock_av_is_valid_address(&addr[i])) {
+			for (j = 0; j < _av->table_hdr->size; j++) {
+				if (_av->table[j].valid &&
+				     !sock_av_is_valid_address(&addr[i])) {
 					if (fi_addr)
 						fi_addr[i] = FI_ADDR_NOTAVAIL;
 					sock_av_report_error(_av, context, i,
@@ -174,43 +217,28 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 	}
 
 	for (i = 0, ret = 0; i < count; i++) {
-		if (_av->table_hdr->stored == _av->table_hdr->size) {
-			new_count = _av->table_hdr->size * 2;
-			table_sz = SOCK_AV_TABLE_SZ(new_count, _av->attr.name);
-			old_sz = SOCK_AV_TABLE_SZ(_av->table_hdr->size, _av->attr.name);
-
-			if (_av->attr.name) {
-				new_addr = sock_mremap(_av->table_hdr,
-							old_sz, table_sz);
-				if (new_addr == MAP_FAILED) {
-					if (fi_addr)
-						fi_addr[i] = FI_ADDR_NOTAVAIL;
-					sock_av_report_error(_av, context, i, FI_ENOMEM);
-					continue;
-				}
-				_av->idx_arr[_av->table_hdr->stored] = _av->table_hdr->stored;
-			} else {
-				new_addr = realloc(_av->table_hdr, table_sz);
-				if (!new_addr) {
-					if (fi_addr)
-						fi_addr[i] = FI_ADDR_NOTAVAIL;
-					sock_av_report_error(_av, context, i, FI_ENOMEM);
-					continue;
-				}
-			}
-			_av->table_hdr = new_addr;
-			_av->table_hdr->size = new_count;
-			sock_update_av_table(_av, new_count);
-		}
-
 		if (!sock_av_is_valid_address(&addr[i])) {
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
 			sock_av_report_error(_av, context, i, FI_EINVAL);
 			continue;
 		}
+		if (_av->table_hdr->stored == _av->table_hdr->size) {
+			index = sock_av_get_next_index(_av);
+			if (index < 0) {
+				if (sock_resize_av_table(_av)) {
+					if (fi_addr)
+						fi_addr[i] = FI_ADDR_NOTAVAIL;
+					sock_av_report_error(_av, context, i, FI_ENOMEM);
+					continue;
+				}
+				index = _av->table_hdr->stored++;
+			}
+		} else {
+			index = _av->table_hdr->stored++;
+		}
 
-		av_addr = &_av->table[_av->table_hdr->stored];
+		av_addr = &_av->table[index];
 		memcpy(sa_ip, inet_ntoa((&addr[i])->sin_addr), INET_ADDRSTRLEN);
 		SOCK_LOG_DBG("AV-INSERT:dst_addr: family: %d, IP is %s, port: %d\n",
 			      ((struct sockaddr_in *)&addr[i])->sin_family,
@@ -218,10 +246,9 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 
 		memcpy(&av_addr->addr, &addr[i], sizeof(struct sockaddr_in));
 		if (fi_addr)
-			fi_addr[i] = (fi_addr_t)_av->table_hdr->stored;
+			fi_addr[i] = (fi_addr_t)index;
 
 		av_addr->valid = 1;
-		_av->table_hdr->stored++;
 		ret++;
 	}
 	sock_av_report_success(_av, context, ret, flags);
@@ -246,7 +273,7 @@ static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	_av = container_of(av, struct sock_av, av_fid);
 	index = ((uint64_t)fi_addr & _av->mask);
-	if (index >= _av->table_hdr->stored || index < 0) {
+	if (index >= _av->table_hdr->size || index < 0) {
 		SOCK_LOG_ERROR("requested address not inserted\n");
 		return -EINVAL;
 	}
