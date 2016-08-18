@@ -137,7 +137,7 @@ static void sock_update_av_table(struct sock_av *_av, size_t count)
 
 static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			       fi_addr_t *fi_addr, int count, uint64_t flags,
-			       void *context, int index)
+			       void *context)
 {
 	void *new_addr;
 	int i, j, ret = 0;
@@ -234,7 +234,7 @@ static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
 	struct sock_av *_av;
 	_av = container_of(av, struct sock_av, av_fid);
 	return sock_check_table_in(_av, (struct sockaddr_in *)addr,
-				   fi_addr, count, flags, context, 0);
+				   fi_addr, count, flags, context);
 }
 
 static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
@@ -259,7 +259,7 @@ static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 			      const char *service, fi_addr_t *fi_addr,
-			      uint64_t flags, void *context, int index)
+			      uint64_t flags, void *context)
 {
 	int ret;
 	struct addrinfo sock_hints;
@@ -281,7 +281,7 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	}
 
 	ret = sock_check_table_in(_av, (struct sockaddr_in *)result->ai_addr,
-				  fi_addr, 1, flags, context, index);
+				  fi_addr, 1, flags, context);
 	freeaddrinfo(result);
 	return ret;
 }
@@ -295,7 +295,7 @@ static int sock_av_insertsvc(struct fid_av *av, const char *node,
 		return -FI_EINVAL;
 	}
 
-	return _sock_av_insertsvc(av, node, service, fi_addr, flags, context, 0);
+	return _sock_av_insertsvc(av, node, service, fi_addr, flags, context);
 }
 
 static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
@@ -335,7 +335,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 			len2 = snprintf(tmp_port, FI_NAME_MAX,  "%d",
 					var_port + j);
 			if (len1 > 0 && len1 < FI_NAME_MAX && len2 > 0 && len2 < FI_NAME_MAX) {
-				ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, context, i * nodecnt + j);
+				ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, context);
 				if (ret == 1)
 					success++;
 				else
