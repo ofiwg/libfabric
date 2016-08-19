@@ -310,7 +310,6 @@ struct sock_av_addr {
 struct sock_av_table_hdr {
 	uint64_t size;
 	uint64_t stored;
-	uint64_t req_sz;
 };
 
 struct sock_av {
