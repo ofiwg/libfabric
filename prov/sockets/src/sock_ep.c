@@ -1086,7 +1086,13 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 		index >= sock_ep->attr->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
-	tx_ctx = sock_tx_ctx_alloc(&sock_ep->tx_attr, context, 0);
+	if (attr) {
+		if (fi_check_tx_attr(&sock_prov, &sock_ep->tx_attr, attr))
+			return -FI_ENODATA;
+		tx_ctx = sock_tx_ctx_alloc(attr, context, 0);
+	} else {
+		tx_ctx = sock_tx_ctx_alloc(&sock_ep->tx_attr, context, 0);
+	}
 	if (!tx_ctx)
 		return -FI_ENOMEM;
 
@@ -1121,7 +1127,13 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 		index >= sock_ep->attr->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
-	rx_ctx = sock_rx_ctx_alloc(attr ? attr : &sock_ep->rx_attr, context, 0);
+	if (attr) {
+		if (fi_check_rx_attr(&sock_prov, &sock_ep->rx_attr, attr))
+			return -FI_ENODATA;
+		rx_ctx = sock_rx_ctx_alloc(attr, context, 0);
+	} else {
+		rx_ctx = sock_rx_ctx_alloc(&sock_ep->rx_attr, context, 0);
+	}
 	if (!rx_ctx)
 		return -FI_ENOMEM;
 
