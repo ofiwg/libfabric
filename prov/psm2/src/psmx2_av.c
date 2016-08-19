@@ -319,6 +319,7 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	av_priv = container_of(av, struct psmx2_fid_av, av);
 
+	memset(&name, 0, sizeof(name));
 	if (av_priv->type == FI_AV_TABLE) {
 		idx = (int)(int64_t)fi_addr;
 		if (idx >= av_priv->last)
