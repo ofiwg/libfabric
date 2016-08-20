@@ -53,8 +53,11 @@ extern "C" {
 	((type *) ((char *)ptr - offsetof(type, field)))
 #endif
 
+/* API version (which is not necessarily the same as the
+ * tarball/libfabric package version number).
+ */
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 3
+#define FI_MINOR_VERSION 4
 
 enum {
 	FI_PATH_MAX		= 256,
