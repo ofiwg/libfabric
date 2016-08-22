@@ -146,7 +146,7 @@ extern struct fid_av *av;
 extern struct fid_eq *eq;
 
 extern fi_addr_t remote_fi_addr;
-extern void *buf, *tx_buf, *rx_buf;
+extern char *buf, *tx_buf, *rx_buf;
 extern size_t buf_size, tx_size, rx_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
@@ -227,6 +227,12 @@ int size_to_count(int size);
 
 #define FT_ERR(fmt, ...) FT_LOG("error", fmt, ##__VA_ARGS__)
 #define FT_WARN(fmt, ...) FT_LOG("warn", fmt, ##__VA_ARGS__)
+
+#if ENABLE_DEBUG
+#define FT_DEBUG(fmt, ...) FT_LOG("debug", fmt, ##__VA_ARGS__)
+#else
+#define FT_DEBUG(fmt, ...)
+#endif
 
 #define FT_EQ_ERR(eq, entry, buf, len) \
 	FT_ERR("eq_readerr: %s", fi_eq_strerror(eq, entry.prov_errno, \

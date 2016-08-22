@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -31,7 +31,6 @@
  * SOFTWARE.
  */
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -47,184 +46,236 @@
 #include "shared.h"
 #include "unit_common.h"
 
-
-#define DEBUG(...) \
-	if (fabtests_debug) { \
-		fprintf(stderr, __VA_ARGS__); \
-	}
-
-int fabtests_debug = 0;
-
 static char err_buf[512];
 
-
-static void teardown_ep_fixture(void)
-{
-	if (mr != &no_mr)
-		FT_CLOSE_FID(mr);
-	FT_CLOSE_FID(ep);
-	FT_CLOSE_FID(txcq);
-	FT_CLOSE_FID(rxcq);
-	FT_CLOSE_FID(av);
-	if (buf) {
-		free(buf);
-		buf = rx_buf = tx_buf = NULL;
-		buf_size = rx_size = tx_size = 0;
-	}
-}
-
-/* returns 0 on success or a negative value that can be stringified with
- * fi_strerror on error */
-static int setup_ep_fixture(void)
+/* Need to define a separate setup function from the ft_* functions defined in
+ * common/shared.c, this is because extra flexibility is needed in this test.
+ * The ft_* functions have a couple of incompatibility issues with this test:
+ *
+ * - ft_free_res always frees the hints
+ * - ft_init_ep posts a recv
+ */
+static void setup_ep_fixture(void)
 {
 	int ret;
 
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_init_ep();
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
-static int
-rx_size_left(void)
-{
-	int ret;
-	int testret;
-
-	testret = FAIL;
-
-	ret = setup_ep_fixture();
-	if (ret != 0) {
-		printf("failed to setup test fixture: %s\n", fi_strerror(-ret));
-		goto fail;
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_fabric", ret);
+		exit(EXIT_FAILURE);
 	}
 
-	ret = fi_rx_size_left(ep);
-	if (ret < 0) {
-		printf("fi_rx_size_left returned %d (-%s)\n", ret,
-			fi_strerror(-ret));
-		goto fail;
+	ret = fi_domain(fabric, fi, &domain, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		exit(EXIT_FAILURE);
 	}
 
-	/* TODO: add basic sanity checking here */
+	/* Queues are opened for providers that need a queue bound before
+	 * calling fi_enable. This avoids getting back -FI_ENOCQ.
+	 */
+	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	cq_attr.wait_obj = FI_WAIT_NONE;
 
-	testret = PASS;
-fail:
-	teardown_ep_fixture();
-	return TEST_RET_VAL(ret, testret);
-}
-
-static int
-rx_size_left_err(void)
-{
-	int ret;
-	int testret;
-
-	testret = FAIL;
-
-	/* datapath operation, not expected to be caught by libfabric */
-#if 0
-	ret = fi_rx_size_left(NULL);
-	if (ret != -FI_EINVAL) {
-		goto fail;
+	ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		exit(EXIT_FAILURE);
 	}
-#endif
+
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		exit(EXIT_FAILURE);
+	}
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret != 0) {
-		printf("fi_endpoint %s\n", fi_strerror(-ret));
-		goto fail;
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		exit(EXIT_FAILURE);
 	}
 
-	/* ep starts in a non-enabled state, so if supported this
-	 * should return -FI_EOPBADSTATE */
-	ret = fi_rx_size_left(ep);
-	if ((ret != -FI_EOPBADSTATE) && (ret != -FI_ENOSYS)) {
-		printf("fi_rx_size_left %s (%d)\n", fi_strerror(-ret), ret);
-		goto fail;
+	/* Some providers require that an endpoint be bound to an AV before
+	 * calling fi_enable on unconnected endpoints.
+	 */
+	if (fi->ep_attr->type == FI_EP_RDM ||
+	    fi->ep_attr->type == FI_EP_DGRAM) {
+		ret = fi_av_open(domain, &av_attr, &av, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_av_open", ret);;
+			exit(EXIT_FAILURE);
+		}
+
+		ret = fi_ep_bind(ep, &av->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			exit(EXIT_FAILURE);
+		}
 	}
 
-	testret = PASS;
-fail:
-	FT_CLOSE_FID(ep);
-	return TEST_RET_VAL(ret, testret);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_TRANSMIT);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		exit(EXIT_FAILURE);
+	}
+
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		exit(EXIT_FAILURE);
+	}
 }
 
-static int
-tx_size_left(void)
+/* Teardown after every test. */
+static void teardown_ep_fixture(void)
 {
-	int ret;
+	FT_CLOSE_FID(ep);
+	FT_CLOSE_FID(av);
+	FT_CLOSE_FID(rxcq);
+	FT_CLOSE_FID(txcq);
+	FT_CLOSE_FID(domain);
+	FT_CLOSE_FID(fabric);
+}
+
+/* Test that a provider returns -FI_EOPBADSTATE before an endpoint has been
+ * enabled.
+ */
+static int test_size_left_bad(void)
+{
+	ssize_t ret;
 	int testret;
 
-	testret = FAIL;
-
-	ret = setup_ep_fixture();
-	if (ret != 0) {
-		printf("failed to setup test fixture: %s\n", fi_strerror(-ret));
+	FT_DEBUG("testing fi_rx_size_left for -FI_EOPBADSTATE");
+	ret = fi_rx_size_left(ep);
+	if (ret != -FI_EOPBADSTATE)
 		goto fail;
-	}
 
+	FT_DEBUG("testing fi_tx_size_left for -FI_EOPBADSTATE");
 	ret = fi_tx_size_left(ep);
-	if (ret < 0) {
-		printf("fi_rx_size_left returned %d (-%s)\n", ret,
-			fi_strerror(-ret));
+	if (ret != -FI_EOPBADSTATE)
 		goto fail;
-	}
 
-	/* TODO: once fi_tx_attr's size field meaning has been fixed to refer to
-	 * queue depth instead of number of bytes, we can do a little basic
-	 * sanity checking here */
+	return PASS;
 
-	testret = PASS;
 fail:
-	teardown_ep_fixture();
-	return TEST_RET_VAL(ret, testret);
+	testret = TEST_RET_VAL(ret, FAIL);
+	if (testret == SKIPPED)
+		snprintf(err_buf, sizeof(err_buf),
+			 "provider returned: [%zd]: <%s>", ret,
+			 fi_strerror(-ret));
+	else
+		snprintf(err_buf, sizeof(err_buf),
+			 "%zd not equal to -FI_EOPBADSTATE", ret);
+
+	return testret;
 }
 
-struct test_entry test_rx_size_left[] = {
-	TEST_ENTRY(rx_size_left_err),
-	TEST_ENTRY(rx_size_left),
-	{ NULL, "" }
-};
-
-struct test_entry test_tx_size_left[] = {
-	TEST_ENTRY(tx_size_left),
-	{ NULL, "" }
-};
-
-/* TODO: Rewrite test to use size_left() during data transfers and check
- * that posted sends complete when indicated and check for proper failures
- * when size_left() returns 0.
+/* Test that the initial sizes are equal to the size attribute for the tx and rx
+ * context.
  */
-int run_test_set(void)
+static int test_size_left_good(void)
 {
-	int failed;
+	ssize_t expected;
+	ssize_t ret;
+	int testret;
 
-	failed = 0;
-	failed += run_tests(test_rx_size_left, err_buf);
-	failed += run_tests(test_tx_size_left, err_buf);
+	FT_DEBUG("testing fi_rx_size_left for size equal to or greater than fi->rx_attr->size");
+	expected = fi->rx_attr->size;
+
+	ret = fi_rx_size_left(ep);
+	if (ret < expected)
+		goto fail;
+
+	FT_DEBUG("testing fi_tx_size_left for size equal to or greater than fi->tx_attr->size");
+	expected = fi->tx_attr->size;
+
+	ret = fi_tx_size_left(ep);
+	if (ret < expected)
+		goto fail;
+
+	return PASS;
+
+fail:
+	testret = TEST_RET_VAL(ret, FAIL);
+	if (testret == SKIPPED)
+		snprintf(err_buf, sizeof(err_buf),
+			 "provider returned: [%zd]: <%s>", ret,
+			 fi_strerror(-ret));
+	else
+		snprintf(err_buf, sizeof(err_buf),
+			 "%zd not greater than or equal to %zd", ret, expected);
+
+	return testret;
+}
+
+/* Separate these into separate entries since one of them needs to get run
+ * before the endpoint is enabled, and one needs to be run after the endpoint is
+ * enabled.
+ */
+struct test_entry bad_tests[] = {
+	TEST_ENTRY(test_size_left_bad),
+	{ NULL, "" }
+};
+
+struct test_entry good_tests[] = {
+	TEST_ENTRY(test_size_left_good),
+	{ NULL, "" }
+};
+
+int run_test_set(struct fi_info *hints)
+{
+	struct fi_info *info;
+	int failed = 0;
+	int ep_type;
+	int ret;
+
+	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &info);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		exit(EXIT_FAILURE);
+	}
+
+	for (ep_type = FI_EP_MSG; ep_type <= FI_EP_RDM; ep_type++) {
+		for (fi = info; fi; fi = fi->next) {
+			if (fi->ep_attr->type == ep_type)
+				break;
+		}
+
+		if (!fi)
+			continue;
+
+		setup_ep_fixture();
+
+		printf("Testing provider %s on fabric %s with EP type %s\n",
+				fi->fabric_attr->prov_name,
+				fi->fabric_attr->name,
+				fi_tostr(&ep_type, FI_TYPE_EP_TYPE));
+
+		failed += run_tests(bad_tests, err_buf);
+
+		ret = fi_enable(ep);
+		if (ret) {
+			FT_PRINTERR("fi_enable", ret);
+			exit(EXIT_FAILURE);
+		}
+
+		failed += run_tests(good_tests, err_buf);
+
+		teardown_ep_fixture();
+	}
+
+	fi_freeinfo(info);
 
 	return failed;
 }
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op;
 	int failed;
-	char *debug_str;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
-
-	debug_str = getenv("FABTESTS_DEBUG");
-	if (debug_str) {
-		fabtests_debug = atoi(debug_str);
-	}
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -249,31 +300,16 @@ int main(int argc, char **argv)
 	}
 
 	hints->mode = ~0;
-	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
 
-	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
-	if (ret != 0) {
-		printf("fi_getinfo %s\n", fi_strerror(-ret));
-		exit(-ret);
-	}
+	failed = run_test_set(hints);
 
-	DEBUG("using provider \"%s\" and fabric \"%s\"\n",
-		fi->fabric_attr->prov_name,
-		fi->fabric_attr->name);
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	failed = run_test_set();
-
-	if (failed > 0) {
+	if (failed)
 		printf("Summary: %d tests failed\n", failed);
-	} else {
-		printf("Summary: all tests passed\n");
-	}
+	else
+		printf("Summary: all tests passed!\n");
 
-	ft_free_res();
+	fi_freeinfo(hints);
+
 	return (failed > 0);
 }

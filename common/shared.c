@@ -71,7 +71,7 @@ pid_t ft_child_pid = 0;
 int ft_socket_pair[2];
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
-void *buf, *tx_buf, *rx_buf;
+char *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
@@ -260,7 +260,8 @@ int ft_alloc_msgs(void)
 			return -errno;
 		buf_size += alignment;
 
-		ret = posix_memalign(&buf, (size_t) alignment, buf_size);
+		ret = posix_memalign((void **) &buf, (size_t) alignment,
+				buf_size);
 		if (ret) {
 			FT_PRINTERR("posix_memalign", ret);
 			return ret;
@@ -771,7 +772,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	int ret;
 
 	if (opts.dst_addr) {
-		rma_iov = tx_buf + ft_tx_prefix_size();
+		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
@@ -783,7 +784,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		if (ret)
 			return ret;
 
-		rma_iov = rx_buf + ft_rx_prefix_size();
+		rma_iov = (struct fi_rma_iov *) (rx_buf + ft_rx_prefix_size());
 		*peer_iov = *rma_iov;
 		ret = ft_post_rx(ep, rx_size, &rx_ctx);
 	} else {
@@ -791,13 +792,13 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		if (ret)
 			return ret;
 
-		rma_iov = rx_buf + ft_rx_prefix_size();
+		rma_iov = (struct fi_rma_iov *) (rx_buf + ft_rx_prefix_size());
 		*peer_iov = *rma_iov;
 		ret = ft_post_rx(ep, rx_size, &rx_ctx);
 		if (ret)
 			return ret;
 
-		rma_iov = tx_buf + ft_tx_prefix_size();
+		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
