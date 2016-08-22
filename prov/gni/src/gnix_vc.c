@@ -585,6 +585,8 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 	gni_smsg_attr_t smsg_mbox_attr_peer;
 	gnix_ht_key_t key;
 	struct gnix_av_addr_entry entry;
+	xpmem_apid_t peer_apid;
+	xpmem_segid_t my_segid;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -655,8 +657,34 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 			goto exit;
 		}
 		vc->conn_state = GNIX_VC_CONNECTED;
+
+		/*
+		 * XPMEM should work: TODO: use special
+		 * send-to-self mechanism to avoid overhead
+		 * of XPMEM when just sending a message to
+		 * oneself.
+		 */
+		ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
+					       &my_segid);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gni_xpmem_get_my_segid returned %s\n",
+				  fi_strerror(-ret));
+		}
+		ret = _gnix_xpmem_get_apid(ep->xpmem_hndl,
+					   my_segid,
+					   &peer_apid);
+		if (ret == FI_SUCCESS) {
+			vc->modes |= GNIX_VC_MODE_XPMEM;
+			vc->peer_apid = peer_apid;
+		} else {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gni_xpmem_get_apiid returned %s\n",
+				  fi_strerror(-ret));
+		}
 		vc->peer_id = vc->vc_id;
 		vc->peer_caps = ep->caps;
+		vc->peer_irq_mem_hndl = ep->nic->irq_mem_hndl;
 		ret = _gnix_vc_schedule(vc);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
@@ -701,8 +729,34 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 
 	vc_peer->conn_state = GNIX_VC_CONNECTING;
 
+	/*
+	 * XPMEM should work: TODO: use special
+	 * send-to-self mechanism to avoid overhead
+	 * of XPMEM when just sending a message to
+	 * oneself.
+	 */
+	ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
+				       &my_segid);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gni_xpmem_get_my_segid returned %s\n",
+			  fi_strerror(-ret));
+	}
+	ret = _gnix_xpmem_get_apid(ep->xpmem_hndl,
+				   my_segid,
+				   &peer_apid);
+	if (ret == FI_SUCCESS) {
+		vc_peer->modes |= GNIX_VC_MODE_XPMEM;
+		vc_peer->peer_apid = peer_apid;
+	} else {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gni_xpmem_get_apiid returned %s\n",
+			  fi_strerror(-ret));
+	}
+
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n",
 		   vc_peer);
+
 
 	if (vc_peer->smsg_mbox == NULL) {
 		ret = _gnix_mbox_alloc(vc_peer->ep->nic->mbox_hndl, &mbox_peer);
@@ -747,6 +801,7 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 
 	vc_peer->conn_state = GNIX_VC_CONNECTED;
 	vc_peer->peer_id = vc->vc_id;
+	vc_peer->peer_irq_mem_hndl = ep->nic->irq_mem_hndl;
 	ret = _gnix_vc_schedule(vc_peer);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_vc_schedule returned %s\n",
@@ -1241,7 +1296,7 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 	 * serialize the resp message in the buffer
 	 */
 
-        ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
+	ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
 				       &my_segid);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "_gni_xpmem_get_my_segid returned %s\n",
