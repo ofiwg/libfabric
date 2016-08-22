@@ -95,6 +95,24 @@ static void setup_ep_fixture(void)
 		exit(EXIT_FAILURE);
 	}
 
+	/* Some providers require that an endpoint be bound to an AV before
+	 * calling fi_enable on unconnected endpoints.
+	 */
+	if (fi->ep_attr->type == FI_EP_RDM ||
+	    fi->ep_attr->type == FI_EP_DGRAM) {
+		ret = fi_av_open(domain, &av_attr, &av, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_av_open", ret);;
+			exit(EXIT_FAILURE);
+		}
+
+		ret = fi_ep_bind(ep, &av->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			exit(EXIT_FAILURE);
+		}
+	}
+
 	ret = fi_ep_bind(ep, &txcq->fid, FI_TRANSMIT);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
@@ -112,6 +130,7 @@ static void setup_ep_fixture(void)
 static void teardown_ep_fixture(void)
 {
 	FT_CLOSE_FID(ep);
+	FT_CLOSE_FID(av);
 	FT_CLOSE_FID(rxcq);
 	FT_CLOSE_FID(txcq);
 	FT_CLOSE_FID(domain);
