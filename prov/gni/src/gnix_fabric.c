@@ -266,6 +266,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
 	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
 	gnix_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
+	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t),
 
 	gnix_info->next = NULL;
 	gnix_info->addr_format = FI_ADDR_GNI;
