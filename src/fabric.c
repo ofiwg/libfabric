@@ -114,8 +114,11 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 	       "registering provider: %s (%d.%d)\n", provider->name,
 	       FI_MAJOR(provider->version), FI_MINOR(provider->version));
 
-	if (FI_MAJOR(provider->fi_version) != FI_MAJOR_VERSION ||
-	    FI_MINOR(provider->fi_version) != FI_MINOR_VERSION) {
+	/* The current core implementation is not backward compatible
+	 * with providers that support a release earlier than v1.3.
+	 * See commit 0f4b6651.
+	 */
+	if (provider->fi_version < FI_VERSION(1, 3)) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 		       "provider has unsupported FI version (provider %d.%d != libfabric %d.%d); ignoring\n",
 		       FI_MAJOR(provider->fi_version),
