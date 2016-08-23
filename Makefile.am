@@ -302,7 +302,7 @@ pkgconfig_DATA = libfabric.pc
 nroff:
 	@for file in $(real_man_pages) $(prov_install_man_pages); do \
 	    source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
-	    config/md2nroff.pl --source=$$source.md; \
+	    $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
 	done
 
 dist-hook: libfabric.spec
