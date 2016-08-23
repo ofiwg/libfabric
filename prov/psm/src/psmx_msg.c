@@ -114,6 +114,8 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 			req->context = fi_context; 
 			PSMX_CTXT_TYPE(fi_context) = PSMX_MULTI_RECV_CONTEXT;
 			PSMX_CTXT_USER(fi_context) = req;
+			if (len > PSMX_MAX_MSG_SIZE)
+				len = PSMX_MAX_MSG_SIZE;
 		} else {
 			PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
 			PSMX_CTXT_USER(fi_context) = buf;

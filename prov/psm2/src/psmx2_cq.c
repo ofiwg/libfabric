@@ -582,15 +582,19 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			if (multi_recv) {
 				struct psmx2_multi_recv *req;
 				psm2_mq_req_t psm2_req;
+				size_t len_remaining;
 
 				req = PSMX2_CTXT_USER(fi_context);
 				req->offset += psm2_status.nbytes;
-				if (req->offset + req->min_buf_size <= req->len) {
+				len_remaining = req->len - req->offset;
+				if (len_remaining >= req->min_buf_size) {
+					if (len_remaining > PSMX2_MAX_MSG_SIZE)
+						len_remaining = PSMX2_MAX_MSG_SIZE;
 					err = psm2_mq_irecv2(tmp_ep->domain->psm2_mq,
 							    req->src_addr, &req->tag,
 							    &req->tagsel, req->flag,
 							    req->buf + req->offset, 
-							    req->len - req->offset,
+							    len_remaining,
 							    (void *)fi_context, &psm2_req);
 					if (err != PSM2_OK)
 						return psmx2_errno(err);
