@@ -359,9 +359,10 @@ The total number of inserted addresses will be nodecnt x svccnt.
 ## fi_av_remove
 
 fi_av_remove removes a set of addresses from an address vector.  All
-resources associated with the indicated addresses are released, and no
-future references to either the mapped address (in the case of
-FI_AV_MAP) or index (FI_AV_TABLE) are allowed.
+resources associated with the indicated addresses are released.
+The removed address - either the mapped address (in the case of FI_AV_MAP)
+or index (FI_AV_TABLE) - is invalid until it is returned again by a
+new fi_av_insert.
 
 The use of fi_av_remove is an optimization that applications may use
 to free memory allocated with addresses that will no longer be
