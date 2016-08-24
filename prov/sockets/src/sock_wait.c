@@ -50,7 +50,9 @@ enum {
 
 int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 {
+#ifndef _WIN32 /* there is no support of wait objects on windows */
 	struct fi_mutex_cond mut_cond;
+#endif /* _WIN32 */
 	struct sock_wait *wait;
 
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
@@ -58,6 +60,7 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 		return -FI_ENOSYS;
 
 	switch (wait->type) {
+#ifndef _WIN32
 	case FI_WAIT_FD:
 		memcpy(arg, &wait->wobj.fd[WAIT_READ_FD], sizeof(int));
 		break;
@@ -67,7 +70,7 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 		mut_cond.cond  = &wait->wobj.mutex_cond.cond;
 		memcpy(arg, &mut_cond, sizeof(mut_cond));
 		break;
-
+#endif /* _WIN32 */
 	default:
 		SOCK_LOG_ERROR("Invalid wait obj type\n");
 		return -FI_EINVAL;
