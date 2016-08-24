@@ -109,7 +109,8 @@ static int sock_dgram_verify_rx_attr(const struct fi_rx_attr *attr)
 	if (attr->total_buffered_recv > sock_dgram_rx_attr.total_buffered_recv)
 		return -FI_ENODATA;
 
-	if (attr->size > sock_dgram_rx_attr.size)
+	if (sock_get_tx_size(attr->size) >
+	     sock_get_tx_size(sock_dgram_rx_attr.size))
 		return -FI_ENODATA;
 
 	if (attr->iov_limit > sock_dgram_rx_attr.iov_limit)
@@ -132,7 +133,8 @@ static int sock_dgram_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (attr->inject_size > sock_dgram_tx_attr.inject_size)
 		return -FI_ENODATA;
 
-	if (attr->size > sock_dgram_tx_attr.size)
+	if (sock_get_tx_size(attr->size) >
+	     sock_get_tx_size(sock_dgram_tx_attr.size))
 		return -FI_ENODATA;
 
 	if (attr->iov_limit > sock_dgram_tx_attr.iov_limit)
@@ -203,7 +205,9 @@ int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 		return -FI_ENOMEM;
 
 	*(*info)->tx_attr = sock_dgram_tx_attr;
+	(*info)->tx_attr->size = sock_get_tx_size(sock_dgram_tx_attr.size);
 	*(*info)->rx_attr = sock_dgram_rx_attr;
+	(*info)->rx_attr->size = sock_get_tx_size(sock_dgram_rx_attr.size);
 	*(*info)->ep_attr = sock_dgram_ep_attr;
 
 	if (hints && hints->ep_attr) {

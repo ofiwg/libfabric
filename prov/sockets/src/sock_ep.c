@@ -533,6 +533,12 @@ static ssize_t sock_ep_cancel(fid_t fid, void *context)
 	return sock_rx_ctx_cancel(rx_ctx, context);
 }
 
+size_t sock_get_tx_size(size_t size)
+{
+	return roundup_power_of_two(size * SOCK_EP_TX_ENTRY_SZ) /
+					SOCK_EP_TX_ENTRY_SZ;
+}
+
 static ssize_t sock_rx_size_left(struct fid_ep *ep)
 {
 	struct sock_rx_ctx *rx_ctx;
@@ -1157,7 +1163,7 @@ static int sock_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (attr->inject_size > SOCK_EP_MAX_INJECT_SZ)
 		return -FI_ENODATA;
 
-	if (attr->size > SOCK_EP_TX_SZ)
+	if (sock_get_tx_size(attr->size) > sock_get_tx_size(SOCK_EP_TX_SZ))
 		return -FI_ENODATA;
 
 	if (attr->iov_limit > SOCK_EP_MAX_IOV_LIMIT)
@@ -1207,7 +1213,7 @@ static int sock_verify_rx_attr(const struct fi_rx_attr *attr)
 	if (attr->total_buffered_recv > SOCK_EP_MAX_BUFF_RECV)
 		return -FI_ENODATA;
 
-	if (attr->size > SOCK_EP_TX_SZ)
+	if (sock_get_tx_size(attr->size) > sock_get_tx_size(SOCK_EP_TX_SZ))
 		return -FI_ENODATA;
 
 	if (attr->iov_limit > SOCK_EP_MAX_IOV_LIMIT)
@@ -1596,8 +1602,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			     FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
                         	sock_ep->tx_attr.op_flags |= FI_TRANSMIT_COMPLETE;
 			sock_ep->tx_attr.size = sock_ep->tx_attr.size ?
-				sock_ep->tx_attr.size :
-				(SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ);
+				sock_ep->tx_attr.size : SOCK_EP_TX_SZ;
 		}
 
 		if (info->rx_attr)

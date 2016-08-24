@@ -61,7 +61,7 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
 
 	rx_ctx->ctx.fid.fclass = FI_CLASS_RX_CTX;
 	rx_ctx->ctx.fid.context = context;
-	rx_ctx->num_left = attr->size;
+	rx_ctx->num_left = sock_get_tx_size(attr->size);
 	rx_ctx->attr = *attr;
 	rx_ctx->use_shared = use_shared;
 	return rx_ctx;

@@ -118,7 +118,8 @@ static int sock_rdm_verify_rx_attr(const struct fi_rx_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	if (attr->size > sock_rdm_rx_attr.size) {
+	if (sock_get_tx_size(attr->size) >
+	     sock_get_tx_size(sock_rdm_rx_attr.size)) {
 		SOCK_LOG_DBG("Rx size too large\n");
 		return -FI_ENODATA;
 	}
@@ -151,7 +152,8 @@ static int sock_rdm_verify_tx_attr(const struct fi_tx_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	if (attr->size > sock_rdm_tx_attr.size) {
+	if (sock_get_tx_size(attr->size) >
+	     sock_get_tx_size(sock_rdm_tx_attr.size)) {
 		SOCK_LOG_DBG("Tx size too large\n");
 		return -FI_ENODATA;
 	}
@@ -247,7 +249,9 @@ int sock_rdm_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 		return -FI_ENOMEM;
 
 	*(*info)->tx_attr = sock_rdm_tx_attr;
+	(*info)->tx_attr->size = sock_get_tx_size(sock_rdm_tx_attr.size);
 	*(*info)->rx_attr = sock_rdm_rx_attr;
+	(*info)->rx_attr->size = sock_get_tx_size(sock_rdm_rx_attr.size);
 	*(*info)->ep_attr = sock_rdm_ep_attr;
 
 	if (hints && hints->ep_attr) {
