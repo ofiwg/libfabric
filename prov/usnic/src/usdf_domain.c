@@ -344,3 +344,21 @@ fail:
 	}
 	return ret;
 }
+
+int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
+			char **name)
+{
+	int ret = FI_SUCCESS;
+	char *buf = NULL;
+
+	if (FI_VERSION_GE(version, FI_VERSION(1, 4))) {
+		buf = strdup(dap->uda_devname);
+		if (!buf) {
+			ret = -errno;
+			USDF_DBG("strdup failed while creating domain name\n");
+		}
+	}
+
+	*name = buf;
+	return ret;
+}

@@ -57,7 +57,8 @@ int usdf_dgram_fill_rx_attr(struct fi_info *hints,
 		struct fi_info *fi, struct usd_device_attrs *dap);
 int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap);
-int usdf_dgram_fill_dom_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
+			     struct fi_info *fi, struct usd_device_attrs *dap);
 int usdf_dgram_fill_ep_attr(uint32_t version, struct fi_info *hints,
 		struct fi_info *fi, struct usd_device_attrs *dap);
 
