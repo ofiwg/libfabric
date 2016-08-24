@@ -112,7 +112,8 @@ struct ofi_ctrl_hdr {
 enum {
 	ofi_op_msg,
 	ofi_op_tagged,
-	ofi_op_read,
+	ofi_op_read_req,
+	ofi_op_read_rsp,
 	ofi_op_write,
 	ofi_op_atomic,
 };
@@ -133,7 +134,7 @@ enum {
  * size: Size of data transfer
  * data: Remote CQ data, if available
  * tag: Message tag, used for tagged operations only
- * iov_len: Length of destination iov, used for RMA operations
+ * iov_count: Count of destination iov, used for RMA operations
  * atomic: Control fields for atomic operations
  * resv: Reserved, used for msg operations
  */
@@ -148,12 +149,13 @@ struct ofi_op_hdr {
 	uint64_t		data;
 	union {
 		uint64_t	tag;
-		uint8_t		iov_len;
+		uint8_t		iov_count;
 		struct {
 			uint8_t	datatype;
 			uint8_t	op;
-			uint8_t ioc_len;
+			uint8_t ioc_count;
 		} atomic;
+		uint64_t	peer_id;
 		uint64_t	resv;
 	};
 };

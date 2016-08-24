@@ -241,13 +241,13 @@ int rxd_ep_enable(struct rxd_ep *ep)
 			goto out;
 		slist_insert_tail(&rx_buf->entry, &ep->rx_pkt_list);
 	}
-
-	fastlock_acquire(&ep->domain->lock);
-	dlist_insert_tail(&ep->dom_entry, &ep->domain->ep_list);
-	fastlock_release(&ep->domain->lock);
-	ret = 0;
 out:
 	rxd_ep_unlock_if_required(ep);
+	if (ret == 0) {
+		fastlock_acquire(&ep->domain->lock);
+		dlist_insert_tail(&ep->dom_entry, &ep->domain->ep_list);
+		fastlock_release(&ep->domain->lock);
+	}
 	return ret;
 }
 
@@ -367,11 +367,51 @@ struct rxd_pkt_meta *rxd_tx_pkt_acquire(struct rxd_ep *ep)
 	return pkt_meta;
 }
 
+static uint64_t rxd_ep_copy_data(struct rxd_tx_entry *tx_entry,
+				 struct rxd_pkt_data *pkt, uint64_t data_sz)
+{
+	uint64_t done;
+	switch(tx_entry->op_hdr.op) {
+	case ofi_op_msg:
+		done = rxd_ep_copy_iov_buf(tx_entry->msg.msg_iov,
+					   tx_entry->msg.msg.iov_count,
+					   pkt->data, data_sz, tx_entry->done,
+					   RXD_COPY_IOV_TO_BUF);
+		break;
+
+	case ofi_op_tagged:
+		done = rxd_ep_copy_iov_buf(tx_entry->tmsg.msg_iov,
+					   tx_entry->tmsg.tmsg.iov_count,
+					   pkt->data, data_sz, tx_entry->done,
+					   RXD_COPY_IOV_TO_BUF);
+		break;
+
+	case ofi_op_write:
+		done = rxd_ep_copy_iov_buf(tx_entry->write.src_iov,
+					   tx_entry->write.msg.iov_count,
+					   pkt->data, data_sz, tx_entry->done,
+					   RXD_COPY_IOV_TO_BUF);
+		break;
+
+	case ofi_op_read_rsp:
+		done = rxd_ep_copy_iov_buf(tx_entry->read_rsp.src_iov,
+					   tx_entry->read_rsp.iov_count,
+					   pkt->data, data_sz, tx_entry->done,
+					   RXD_COPY_IOV_TO_BUF);
+		break;
+
+	default:
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid op-type\n",
+			tx_entry->op_hdr.op);
+		done = 0;
+	}
+	return done;
+}
+
 ssize_t rxd_ep_post_data_msg(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 {
 	int ret;
-	uint64_t data_sz;
-	size_t done;
+	uint64_t data_sz, done;
 	struct rxd_pkt_meta *pkt_meta;
 	struct rxd_pkt_data *pkt;
 	struct rxd_peer *peer;
@@ -386,17 +426,7 @@ ssize_t rxd_ep_post_data_msg(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 
 	rxd_init_ctrl_hdr(&pkt->ctrl, ofi_ctrl_data, data_sz, tx_entry->nxt_seg_no,
 			   tx_entry->msg_id, tx_entry->rx_key, peer->conn_data);
-
-	if (tx_entry->op_hdr.op == ofi_op_msg)
-		done = rxd_ep_copy_iov_buf(tx_entry->msg.msg_iov,
-					   tx_entry->msg.msg.iov_count,
-					   pkt->data, data_sz, tx_entry->done,
-					   RXD_COPY_IOV_TO_BUF);
-	else
-		done = rxd_ep_copy_iov_buf(tx_entry->tmsg.msg_iov,
-					   tx_entry->tmsg.tmsg.iov_count,
-					   pkt->data, data_sz, tx_entry->done,
-					   RXD_COPY_IOV_TO_BUF);
+	done = rxd_ep_copy_data(tx_entry, pkt, data_sz);
 
 	pkt_meta->tx_entry = tx_entry;
 	pkt_meta->type = (tx_entry->op_hdr.size == tx_entry->done + done) ?
@@ -476,9 +506,13 @@ int rxd_progress_tx(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 	switch (tx_entry->op_hdr.op) {
 	case ofi_op_msg:
 	case ofi_op_tagged:
+	case ofi_op_write:
+	case ofi_op_read_rsp:
 		ret = rxd_ep_post_data_msg(ep, tx_entry);
 		break;
+
 	default:
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid pkt type\n");
 		break;
 	}
 	return ret;
@@ -509,7 +543,7 @@ void rxd_resend_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 
 			if (curr_stamp < pkt->us_stamp ||
 			    (curr_stamp - pkt->us_stamp) <
-			    (1 << (pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
+			    (1 << ((uint64_t) pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
 				break;
 			}
 
@@ -660,8 +694,101 @@ err:
 
 #define RXD_TX_ENTRY_ID(ep, tx_entry) (tx_entry - &ep->tx_entry_fs->buf[0])
 
+void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
+			   uint8_t op, struct rxd_tx_entry *tx_entry,
+			   struct rxd_pkt_data_start *pkt, uint32_t flags,
+			   uint64_t *msg_sz, uint64_t *data_sz)
+{
+	size_t curr_offset, i, iov_sz;
+	struct ofi_rma_iov rma_iov;
+
+	switch(op) {
+	case ofi_op_msg:
+		*msg_sz = rxd_get_msg_len(tx_entry->msg.msg_iov, tx_entry->msg.msg.iov_count);
+		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
+		rxd_init_op_hdr(&pkt->op, tx_entry->msg.msg.data, *msg_sz, 0, op, 0, flags);
+		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->msg.msg_iov,
+						     tx_entry->msg.msg.iov_count,
+						     pkt->data, *data_sz, 0, RXD_COPY_IOV_TO_BUF);
+		break;
+
+	case ofi_op_tagged:
+		*msg_sz = rxd_get_msg_len(tx_entry->tmsg.msg_iov, tx_entry->tmsg.tmsg.iov_count);
+		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
+		rxd_init_op_hdr(&pkt->op, tx_entry->tmsg.tmsg.data, *msg_sz, 0, op,
+				 tx_entry->tmsg.tmsg.tag, flags);
+		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->tmsg.msg_iov,
+						     tx_entry->tmsg.tmsg.iov_count,
+						     pkt->data, *data_sz, 0, RXD_COPY_IOV_TO_BUF);
+		break;
+
+	case ofi_op_write:
+		*msg_sz = rxd_get_msg_len(tx_entry->write.msg.msg_iov, tx_entry->write.msg.iov_count);
+		iov_sz = sizeof(struct ofi_rma_iov) * tx_entry->write.msg.rma_iov_count;
+		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
+		*data_sz -= iov_sz;
+
+		rxd_init_op_hdr(&pkt->op, tx_entry->write.msg.data, *msg_sz, 0, op, 0, flags);
+		pkt->op.iov_count = tx_entry->write.msg.rma_iov_count;
+
+		curr_offset = 0;
+		for (i = 0; i < pkt->op.iov_count; i++) {
+			rma_iov.addr = tx_entry->write.dst_iov[i].addr;
+			rma_iov.len = tx_entry->write.dst_iov[i].len;
+			rma_iov.key = tx_entry->write.dst_iov[i].key;
+			memcpy(pkt->data + curr_offset, &rma_iov, sizeof(struct ofi_rma_iov));
+			curr_offset += sizeof(struct ofi_rma_iov);
+		}
+		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->write.msg.msg_iov,
+						     tx_entry->write.msg.iov_count,
+						     pkt->data + curr_offset, *data_sz, 0,
+						     RXD_COPY_IOV_TO_BUF);
+		*data_sz = tx_entry->done + iov_sz;
+		break;
+
+	case ofi_op_read_req:
+		*msg_sz = rxd_get_msg_len(tx_entry->read_req.msg.msg_iov,
+					  tx_entry->read_req.msg.iov_count);
+
+		rxd_init_op_hdr(&pkt->op, tx_entry->read_req.msg.data, *msg_sz,
+				0, op, 0, flags);
+		pkt->op.iov_count = tx_entry->read_req.msg.rma_iov_count;
+
+		tx_entry->done = 0;
+		curr_offset = 0;
+		*data_sz = 0;
+		for (i = 0; i < pkt->op.iov_count; i++) {
+			rma_iov.addr = tx_entry->read_req.src_iov[i].addr;
+			rma_iov.len = tx_entry->read_req.src_iov[i].len;
+			rma_iov.key = tx_entry->read_req.src_iov[i].key;
+			memcpy(pkt->data + curr_offset, &rma_iov, sizeof(struct ofi_rma_iov));
+			curr_offset += sizeof(struct ofi_rma_iov);
+		}
+		*data_sz += curr_offset;
+		assert(*data_sz <= RXD_MAX_STRT_DATA_PKT_SZ(ep));
+		break;
+
+	case ofi_op_read_rsp:
+		*msg_sz = rxd_get_msg_len(tx_entry->read_rsp.src_iov,
+					  tx_entry->read_rsp.iov_count);
+		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
+
+		rxd_init_op_hdr(&pkt->op, 0, *msg_sz, 0, op, 0, flags);
+		pkt->op.peer_id = tx_entry->read_rsp.peer_msg_id;
+
+		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->read_rsp.src_iov,
+						     tx_entry->read_rsp.iov_count,
+						     pkt->data, *data_sz, 0,
+						     RXD_COPY_IOV_TO_BUF);
+		break;
+
+	default:
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid op-type\n", op);
+	}
+}
+
 ssize_t rxd_ep_post_start_msg(struct rxd_ep *ep, struct rxd_peer *peer,
-			       uint8_t op, struct rxd_tx_entry *tx_entry)
+			      uint8_t op, struct rxd_tx_entry *tx_entry)
 {
 	ssize_t ret;
 	uint32_t flags;
@@ -678,25 +805,7 @@ ssize_t rxd_ep_post_start_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 	flags = rxd_prepare_tx_flags(tx_entry->flags);
 	tx_entry->msg_id = RXD_TX_ID(peer->nxt_msg_id, RXD_TX_ENTRY_ID(ep, tx_entry));
 
-	if (op == ofi_op_msg) {
-		msg_sz = rxd_get_msg_len(tx_entry->msg.msg_iov, tx_entry->msg.msg.iov_count);
-		data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), msg_sz);
-		rxd_init_op_hdr(&pkt->op, tx_entry->msg.msg.data, msg_sz, 0, op, 0, flags);
-		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->msg.msg_iov,
-						     tx_entry->msg.msg.iov_count,
-						     pkt->data, data_sz, 0, RXD_COPY_IOV_TO_BUF);
-	} else {
-		msg_sz = rxd_get_msg_len(tx_entry->tmsg.msg_iov, tx_entry->tmsg.tmsg.iov_count);
-		data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), msg_sz);
-		rxd_init_op_hdr(&pkt->op, tx_entry->tmsg.tmsg.data, msg_sz, 0, op,
-				 tx_entry->tmsg.tmsg.tag,flags);
-		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->tmsg.msg_iov,
-						     tx_entry->tmsg.tmsg.iov_count,
-						     pkt->data, data_sz, 0, RXD_COPY_IOV_TO_BUF);
-		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sent start %p, tag: %p, len: %d\n",
-		       pkt->ctrl.msg_id, tx_entry->tmsg.tmsg.tag, msg_sz);
-	}
-
+	rxd_ep_init_start_hdr(ep, peer, op, tx_entry, pkt, flags, &msg_sz, &data_sz);
 	rxd_init_ctrl_hdr(&pkt->ctrl, ofi_ctrl_start_data, data_sz, 0,
 			   tx_entry->msg_id, peer->conn_data, peer->conn_data);
 	tx_entry->nxt_seg_no = 1;
@@ -761,7 +870,7 @@ out:
 }
 
 ssize_t rxd_ep_post_conn_msg(struct rxd_ep *ep, struct rxd_peer *peer,
-			      fi_addr_t addr)
+			     fi_addr_t addr)
 {
 	ssize_t ret;
 	size_t addrlen;
@@ -818,12 +927,13 @@ err:
 	return ret;
 }
 
-struct rxd_tx_entry *rxd_tx_entry_acquire(struct rxd_ep *ep, struct rxd_peer *peer)
+struct rxd_tx_entry *rxd_tx_entry_acquire_fast(struct rxd_ep *ep, struct rxd_peer *peer)
 {
 	struct rxd_tx_entry *tx_entry;
-	if (freestack_isempty(ep->tx_entry_fs) ||
-	    peer->num_msg_out == RXD_MAX_OUT_TX_MSG)
+	if (freestack_isempty(ep->tx_entry_fs)) {
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "no-more tx entries\n");
 		return NULL;
+	}
 
 	peer->num_msg_out++;
 	tx_entry = freestack_pop(ep->tx_entry_fs);
@@ -831,6 +941,12 @@ struct rxd_tx_entry *rxd_tx_entry_acquire(struct rxd_ep *ep, struct rxd_peer *pe
 	tx_entry->is_waiting = 0;
 	dlist_init(&tx_entry->entry);
 	return tx_entry;
+}
+
+struct rxd_tx_entry *rxd_tx_entry_acquire(struct rxd_ep *ep, struct rxd_peer *peer)
+{
+	return (peer->num_msg_out == RXD_MAX_OUT_TX_MSG) ? NULL :
+		rxd_tx_entry_acquire_fast(ep, peer);
 }
 
 void rxd_tx_entry_release(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
@@ -843,8 +959,16 @@ void rxd_tx_entry_release(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 	freestack_push(ep->tx_entry_fs, tx_entry);
 }
 
-static inline void rxd_copy_iov(const struct iovec *src_iov,
-				 struct iovec *dst_iov, size_t iov_count)
+void rxd_ep_copy_msg_iov(const struct iovec *src_iov,
+			 struct iovec *dst_iov, size_t iov_count)
+{
+	size_t i;
+	for (i = 0; i < iov_count; i++)
+		dst_iov[i] = src_iov[i];
+}
+
+void rxd_ep_copy_rma_iov(const struct fi_rma_iov *src_iov,
+			 struct fi_rma_iov *dst_iov, size_t iov_count)
 {
 	size_t i;
 	for (i = 0; i < iov_count; i++)
@@ -882,7 +1006,7 @@ static ssize_t rxd_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_entry->msg.msg = *msg;
 	tx_entry->flags = flags;
 	tx_entry->peer = peer_addr;
-	rxd_copy_iov(msg->msg_iov, &tx_entry->msg.msg_iov[0], msg->iov_count);
+	rxd_ep_copy_msg_iov(msg->msg_iov, &tx_entry->msg.msg_iov[0], msg->iov_count);
 
 	ret = rxd_ep_post_start_msg(rxd_ep, peer, ofi_op_msg, tx_entry);
 	if (ret)
@@ -1231,7 +1355,7 @@ ssize_t rxd_ep_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	tx_entry->tmsg.tmsg = *msg;
 	tx_entry->flags = flags;
 	tx_entry->peer = peer_addr;
-	rxd_copy_iov(msg->msg_iov, &tx_entry->tmsg.msg_iov[0], msg->iov_count);
+	rxd_ep_copy_msg_iov(msg->msg_iov, &tx_entry->tmsg.msg_iov[0], msg->iov_count);
 
 	ret = rxd_ep_post_start_msg(rxd_ep, peer, ofi_op_tagged, tx_entry);
 	if (ret)
@@ -1403,6 +1527,8 @@ static int rxd_ep_close(struct fid *fid)
 	atomic_dec(&ep->domain->util_domain.ref);
 	fastlock_destroy(&ep->lock);
 	rxd_ep_free_buf_pools(ep);
+	free(ep->peer_info);
+	free(ep->name);
 	free(ep);
 	return 0;
 }
@@ -1667,6 +1793,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxd_ep->ep.ops = &rxd_ops_ep;
 	rxd_ep->ep.msg = &rxd_ops_msg;
 	rxd_ep->ep.tagged = &rxd_ops_tagged;
+	rxd_ep->ep.rma = &rxd_ops_rma;
 
 	dlist_init(&rxd_ep->tx_entry_list);
 	dlist_init(&rxd_ep->rx_entry_list);
@@ -1762,7 +1889,7 @@ void rxd_ep_progress(struct rxd_ep *ep)
 			pkt = container_of(pkt_item, struct rxd_pkt_meta, entry);
 			if (curr_stamp > pkt->us_stamp &&
 			    curr_stamp - pkt->us_stamp >
-			    (1 << (pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
+			    (1 << ((uint64_t) pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
 				pkt->us_stamp = curr_stamp;
 				rxd_ep_retry_pkt(ep, tx_entry, pkt);
 			}

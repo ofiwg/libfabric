@@ -108,6 +108,7 @@ extern struct fi_provider rxd_prov;
 extern struct fi_info rxd_info;
 extern struct fi_fabric_attr rxd_fabric_attr;
 extern struct util_prov rxd_util_prov;
+extern struct fi_ops_rma rxd_ops_rma;
 
 enum {
 	RXD_PKT_ORDR_OK = 0,
@@ -119,6 +120,9 @@ enum {
 	RXD_TX_CONN = 0,
 	RXD_TX_MSG,
 	RXD_TX_TAG,
+	RXD_TX_WRITE,
+	RXD_TX_READ_REQ,
+	RXD_TX_READ_RSP,
 };
 
 enum {
@@ -145,6 +149,8 @@ struct rxd_domain {
 
 	struct dlist_entry ep_list;
 	struct dlist_entry cq_list;
+	struct ofi_util_mr *mr_heap;
+	fastlock_t mr_lock;
 };
 
 struct rxd_av {
@@ -263,6 +269,14 @@ struct rxd_rx_entry {
 	union {
 		struct rxd_recv_entry *recv;
 		struct rxd_trecv_entry *trecv;
+
+		struct {
+			struct iovec iov[RXD_IOV_LIMIT];
+		} write;
+
+		struct {
+			struct rxd_tx_entry *tx_entry;
+		} read_rsp;
 	};
 
 	union {
@@ -300,6 +314,24 @@ struct rxd_tx_entry {
 			struct fi_msg_tagged tmsg;
 			struct iovec msg_iov[RXD_IOV_LIMIT];
 		} tmsg;
+
+		struct {
+			struct fi_msg_rma msg;
+			struct iovec src_iov[RXD_IOV_LIMIT];
+			struct fi_rma_iov dst_iov[RXD_IOV_LIMIT];
+		} write;
+
+		struct {
+			struct fi_msg_rma msg;
+			struct fi_rma_iov src_iov[RXD_IOV_LIMIT];
+			struct iovec dst_iov[RXD_IOV_LIMIT];
+		} read_req;
+
+		struct {
+			uint64_t peer_msg_id;
+			uint8_t iov_count;
+			struct iovec src_iov[RXD_IOV_LIMIT];
+		} read_rsp;
 	};
 };
 DECLARE_FREESTACK(struct rxd_tx_entry, rxd_tx_entry_fs);
@@ -404,9 +436,21 @@ uint64_t rxd_ep_copy_iov_buf(const struct iovec *iov, size_t iov_count,
 			     void *buf, uint64_t data_sz, uint64_t skip, int dir);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 		     struct rxd_pkt_meta *pkt);
+void rxd_ep_copy_msg_iov(const struct iovec *src_iov,
+			 struct iovec *dst_iov, size_t iov_count);
+void rxd_ep_copy_rma_iov(const struct fi_rma_iov *src_iov,
+			 struct fi_rma_iov *dst_iov, size_t iov_count);
+ssize_t rxd_ep_post_start_msg(struct rxd_ep *ep, struct rxd_peer *peer,
+			      uint8_t op, struct rxd_tx_entry *tx_entry);
+ssize_t rxd_ep_post_conn_msg(struct rxd_ep *ep, struct rxd_peer *peer,
+			     fi_addr_t addr);
+int rxd_mr_verify(struct rxd_domain *rxd_domain, ssize_t len,
+		  uintptr_t *io_addr, uint64_t key, uint64_t access);
+
 
 /* Tx/Rx entry sub-functions */
 struct rxd_tx_entry *rxd_tx_entry_acquire(struct rxd_ep *ep, struct rxd_peer *peer);
+struct rxd_tx_entry *rxd_tx_entry_acquire_fast(struct rxd_ep *ep, struct rxd_peer *peer);
 int rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 			  struct ofi_ctrl_hdr *ack);
 void rxd_tx_entry_discard(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry);

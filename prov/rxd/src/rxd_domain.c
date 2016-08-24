@@ -64,9 +64,11 @@ static int rxd_domain_close(fid_t fid)
 	if (ret)
 		return ret;
 
+	ofi_mr_close(rxd_domain->mr_heap);
 	rxd_domain->do_progress = 0;
 	pthread_join(rxd_domain->progress_thread, NULL);
 	fastlock_destroy(&rxd_domain->lock);
+	fastlock_destroy(&rxd_domain->mr_lock);
 	free(rxd_domain);
 	return 0;
 }
@@ -100,6 +102,133 @@ void *rxd_progress(void *arg)
 		fastlock_release(&domain->lock);
 	}
 	return NULL;
+}
+struct rxd_mr_entry {
+	struct fid_mr mr_fid;
+	struct rxd_domain *domain;
+	uint64_t key;
+	uint64_t flags;
+};
+
+static int rxd_mr_close(struct fid *fid)
+{
+	struct rxd_domain *dom;
+	struct rxd_mr_entry *mr;
+	uint64_t mr_key;
+	int err = 0;
+
+	mr = container_of(fid, struct rxd_mr_entry, mr_fid.fid);
+	dom = mr->domain;
+	mr_key = mr->key;
+
+	fastlock_acquire(&dom->lock);
+	err = ofi_mr_erase(dom->mr_heap, mr_key);
+	if (err)
+		return err;
+
+	fastlock_release(&dom->lock);
+	atomic_dec(&dom->util_domain.ref);
+	free(mr);
+	return 0;
+}
+
+static struct fi_ops rxd_mr_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = rxd_mr_close,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+
+static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		uint64_t flags, struct fid_mr **mr)
+{
+	struct rxd_domain *dom;
+	struct rxd_mr_entry *_mr;
+	uint64_t key;
+	int ret = 0;
+
+	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0) {
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct rxd_domain, util_domain.domain_fid.fid);
+	_mr = calloc(1, sizeof(*_mr));
+	if (!_mr)
+		return -FI_ENOMEM;
+
+	fastlock_acquire(&dom->mr_lock);
+
+	_mr->mr_fid.fid.fclass = FI_CLASS_MR;
+	_mr->mr_fid.fid.context = attr->context;
+	_mr->mr_fid.fid.ops = &rxd_mr_fi_ops;
+
+	_mr->domain = dom;
+	_mr->flags = flags;
+
+	ret = ofi_mr_insert(dom->mr_heap, attr, &key, _mr);
+	if (ret != 0) {
+		goto err;
+	}
+
+	_mr->mr_fid.key = _mr->key = key;
+	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
+	fastlock_release(&dom->mr_lock);
+
+	*mr = &_mr->mr_fid;
+	atomic_inc(&dom->util_domain.ref);
+
+	return 0;
+err:
+	fastlock_release(&dom->mr_lock);
+	free(_mr);
+	return ret;
+}
+
+static int rxd_mr_regv(struct fid *fid, const struct iovec *iov,
+			size_t count, uint64_t access,
+			uint64_t offset, uint64_t requested_key,
+			uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct fi_mr_attr attr;
+
+	attr.mr_iov = iov;
+	attr.iov_count = count;
+	attr.access = access;
+	attr.offset = offset;
+	attr.requested_key = requested_key;
+	attr.context = context;
+	return rxd_mr_regattr(fid, &attr, flags, mr);
+}
+
+static int rxd_mr_reg(struct fid *fid, const void *buf, size_t len,
+		       uint64_t access, uint64_t offset, uint64_t requested_key,
+		       uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct iovec iov;
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	return rxd_mr_regv(fid, &iov, 1, access,  offset, requested_key,
+			    flags, mr, context);
+}
+
+static struct fi_ops_mr rxd_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = rxd_mr_reg,
+	.regv = rxd_mr_regv,
+	.regattr = rxd_mr_regattr,
+};
+
+int rxd_mr_verify(struct rxd_domain *rxd_domain, ssize_t len,
+		  uintptr_t *io_addr, uint64_t key, uint64_t access)
+{
+	int ret;
+	fastlock_acquire(&rxd_domain->mr_lock);
+	ret = ofi_mr_retrieve_and_verify(rxd_domain->mr_heap, len,
+					 io_addr, key, access, NULL);
+	fastlock_release(&rxd_domain->mr_lock);
+	return ret;
 }
 
 int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
@@ -142,19 +271,26 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	dlist_init(&rxd_domain->ep_list);
 	dlist_init(&rxd_domain->cq_list);
 	fastlock_init(&rxd_domain->lock);
+	fastlock_init(&rxd_domain->mr_lock);
+
+	ret = ofi_mr_init(&rxd_prov, info->domain_attr->mr_mode, &rxd_domain->mr_heap);
+	if (ret)
+		goto err4;
 
 	rxd_domain->do_progress = 1;
 	if (pthread_create(&rxd_domain->progress_thread, NULL,
 			   rxd_progress, rxd_domain)) {
-		goto err4;
+		goto err5;
 	}
 
 	*domain = &rxd_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxd_domain_fi_ops;
 	(*domain)->ops = &rxd_domain_ops;
+	(*domain)->mr = &rxd_mr_ops;
 	fi_freeinfo(dg_info);
 	return 0;
-
+err5:
+	ofi_mr_close(rxd_domain->mr_heap);
 err4:
 	ofi_domain_close(&rxd_domain->util_domain);
 err3:

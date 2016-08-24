@@ -140,7 +140,7 @@ struct util_domain {
 	atomic_t		ref;
 	const struct fi_provider *prov;
 
-	const char		*name;
+	char			*name;
 	uint64_t		caps;
 	uint64_t		mode;
 	uint32_t		addr_format;

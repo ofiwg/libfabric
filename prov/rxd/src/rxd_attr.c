@@ -33,7 +33,8 @@
 #include "rxd.h"
 
 struct fi_tx_attr rxd_tx_attr = {
-	.caps = FI_MSG | FI_TAGGED | FI_SEND,
+	.caps = FI_MSG | FI_TAGGED | FI_SEND | FI_RMA | FI_WRITE |
+	FI_READ | FI_RMA_EVENT | FI_REMOTE_READ | FI_REMOTE_WRITE,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = 0,
 	.size = (1ULL << RXD_MAX_TX_BITS),
@@ -41,7 +42,7 @@ struct fi_tx_attr rxd_tx_attr = {
 };
 
 struct fi_rx_attr rxd_rx_attr = {
-	.caps = FI_MSG | FI_TAGGED | FI_RECV | FI_SOURCE,
+	.caps = FI_MSG | FI_TAGGED | FI_RECV | FI_SOURCE | FI_RMA_EVENT,
 	.comp_order = FI_ORDER_STRICT,
 	.total_buffered_recv = 0,
 	.size = (1ULL << RXD_MAX_RX_BITS),
@@ -80,7 +81,9 @@ struct fi_fabric_attr rxd_fabric_attr = {
 };
 
 struct fi_info rxd_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_TAGGED,
+	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_TAGGED |
+	FI_RMA | FI_WRITE | FI_READ | FI_RMA_EVENT |
+	FI_REMOTE_WRITE | FI_REMOTE_READ,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxd_tx_attr,
 	.rx_attr = &rxd_rx_attr,
