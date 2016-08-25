@@ -974,22 +974,13 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
-	struct fi_ibv_rdm_cm rdm_cm;
 	int ret;
 
 	ret = fi_ibv_init_info();
 	if (ret)
 		goto out;
 
-	if (FI_IBV_EP_TYPE_IS_RDM(hints)) {
-		memset(&rdm_cm, 0, sizeof(struct fi_ibv_rdm_cm));
-		ret = fi_ibv_create_ep(node, service, flags, hints, &rai,
-				       &(rdm_cm.listener));
-		id = rdm_cm.listener;
-	} else {
-		ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
-	}
-
+	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
 	if (ret)
 		goto out;
 
@@ -1002,9 +993,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 
 	ofi_alter_info(*info, hints);
 
-	if (hints && hints->ep_attr)
-		fi_ibv_destroy_ep(hints->ep_attr->type, rai,
-			FI_IBV_EP_TYPE_IS_RDM(hints) ? &(rdm_cm.listener) : &id);
+	fi_ibv_destroy_ep(rai, &id);
 
 out:
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)

@@ -260,9 +260,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
-void fi_ibv_destroy_ep(enum fi_ep_type ep_type,
-		       struct rdma_addrinfo *rai,
-		       struct rdma_cm_id **id);
+void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id);
 
 struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
 struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep);
@@ -289,6 +287,9 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name);
 void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
+int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
+			const struct fi_info *hints, struct rdma_addrinfo **rai);
+int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep);
 
 struct verbs_ep_domain {
 	char			*suffix;

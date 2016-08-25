@@ -360,8 +360,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	}
 
 	errno = 0;
-	fi_ibv_destroy_ep(FI_EP_RDM, ep->domain->rdm_cm->rai,
-			  &(ep->domain->rdm_cm->listener));
+	fi_ibv_destroy_ep(ep->rai, &ep->domain->rdm_cm->listener);
 	if (errno) {
 		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_ep failed\n", errno);
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
@@ -479,16 +478,12 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err;
 	}
 
-	ret = fi_ibv_create_ep(NULL, NULL, 0, info, &_domain->rdm_cm->rai,
-			       &_domain->rdm_cm->listener);
+	ret = fi_ibv_get_rdma_rai(NULL, NULL, 0, info, &_ep->rai);
 	if (ret) {
 		goto err;
 	}
-
-	if (rdma_listen(_domain->rdm_cm->listener, 1024)) {
-		VERBS_INFO(FI_LOG_EP_CTRL, "rdma_listen failed: %s\n",
-			strerror(errno));
-		ret = -FI_EOTHER;
+	ret = fi_ibv_rdm_cm_bind_ep(_ep->domain->rdm_cm, _ep);
+	if (ret) {
 		goto err;
 	}
 

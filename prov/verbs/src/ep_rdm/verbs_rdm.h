@@ -219,8 +219,6 @@ struct fi_ibv_rdm_buf {
 struct fi_ibv_rdm_cm {
 	struct rdma_cm_id *listener;
 	struct rdma_event_channel *ec;
-	struct sockaddr_in my_addr;
-	struct rdma_addrinfo *rai;
 
 	/* conn_hash has a sockaddr_in -> conn associative */
 	struct fi_ibv_rdm_conn *conn_hash;
@@ -235,6 +233,8 @@ struct fi_ibv_rdm_ep {
 	struct fi_ibv_rdm_cq *fi_rcq;
 
 	size_t addrlen;
+	struct rdma_addrinfo *rai;
+	struct sockaddr_in my_addr;
 
 	struct fi_ibv_av *av;
 	int tx_selective_completion;

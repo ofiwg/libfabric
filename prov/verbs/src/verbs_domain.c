@@ -254,9 +254,34 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->domain_fid.fid.context = context;
 	_domain->domain_fid.fid.ops = &fi_ibv_fid_ops;
-	_domain->domain_fid.ops = _domain->rdm ? &fi_ibv_rdm_domain_ops :
-						 &fi_ibv_domain_ops;
 	_domain->domain_fid.mr = &fi_ibv_domain_mr_ops;
+	if (_domain->rdm) {
+		_domain->domain_fid.ops = &fi_ibv_rdm_domain_ops;
+
+		_domain->rdm_cm->ec = rdma_create_event_channel();
+
+		if (!_domain->rdm_cm->ec) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				"Failed to create listener event channel: %s\n",
+				strerror(errno));
+			return -FI_EOTHER;
+		}
+
+		if (fi_fd_nonblock(_domain->rdm_cm->ec->fd) != 0) {
+			VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "fcntl", errno);
+			return -FI_EOTHER;
+		}
+
+		if (rdma_create_id(_domain->rdm_cm->ec,
+				   &_domain->rdm_cm->listener, NULL, RDMA_PS_TCP))
+		{
+			VERBS_INFO(FI_LOG_EP_CTRL, "Failed to create cm listener: %s\n",
+				     strerror(errno));
+			return -FI_EOTHER;
+		}
+	} else {
+		_domain->domain_fid.ops = &fi_ibv_domain_ops;
+	}
 	_domain->fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 
 	*domain = &_domain->domain_fid;

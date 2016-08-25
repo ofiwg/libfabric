@@ -234,7 +234,7 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 	cm_params->private_data = malloc(cm_params->private_data_len);
 
 	char *p = (char *) cm_params->private_data;
-	memcpy(p, &ep->domain->rdm_cm->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+	memcpy(p, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 	p += FI_IBV_RDM_DFLT_ADDRLEN;
 
 	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
@@ -260,7 +260,7 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 
 	if (conn->cm_role == FI_VERBS_CM_SELF) {
 		if (conn->r_mr && conn->s_mr) {
-			memcpy(&conn->addr, &ep->domain->rdm_cm->my_addr,
+			memcpy(&conn->addr, &ep->my_addr,
 				FI_IBV_RDM_DFLT_ADDRLEN);
 			conn->remote_rbuf_rkey = conn->r_mr->rkey;
 			conn->remote_rbuf_mem_reg = conn->r_mr->addr;
