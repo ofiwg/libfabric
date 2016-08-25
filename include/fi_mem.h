@@ -69,24 +69,31 @@ static inline void *mem_dup(const void *src, size_t size)
  */
 #define FREESTACK_EMPTY	NULL
 
+#define FREESTACK_HEADER 					\
+	size_t		size;					\
+	void		*next;					\
+
 #define freestack_isempty(fs)	((fs)->next == FREESTACK_EMPTY)
 #define freestack_push(fs, p)					\
-{								\
+do {								\
 	*(void **) p = (fs)->next;				\
 	(fs)->next = p;						\
+} while (0)
+#define freestack_pop(fs) freestack_pop_impl(fs, (fs)->next)
+
+static inline void* freestack_pop_impl(void *fs, void *fs_next)
+{
+	struct {
+		FREESTACK_HEADER
+	} *freestack = fs;
+	assert(!freestack_isempty(freestack));
+	freestack->next = *((void **)fs_next);
+	return fs_next;
 }
-#define freestack_pop(fs)					\
-	({							\
-		void *p = (fs)->next;				\
-		assert(!freestack_isempty(fs));			\
-		(fs)->next = *((void **) p);			\
-		p;						\
-	})
 
 #define DECLARE_FREESTACK(entrytype, name)			\
 struct name {							\
-	size_t		size;					\
-	void		*next;					\
+	FREESTACK_HEADER					\
 	entrytype	buf[];					\
 };								\
 								\
