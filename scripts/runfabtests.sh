@@ -59,20 +59,8 @@ declare -i skip_count=0
 declare -i pass_count=0
 declare -i fail_count=0
 
-# OS X defines NODATA differently than Linux, this
-# is a hack to work around that.
-function no_data_num {
-	if [[ "$(uname)" == "Linux" ]]; then
-		echo 61
-	elif [[ "$(uname)" == "FreeBSD" ]]; then
-		echo 83
-	elif [[ "$(uname)" == "Darwin" ]]; then
-		echo 96
-	else
-		echo 61
-	fi
-}
-declare -ri FI_ENODATA=$(no_data_num)
+declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENODATA)')
+declare -ri FI_ENOSYS=$(python -c 'import errno; print(errno.ENOSYS)')
 
 neg_unit_tests=(
 	"dgram foo"
@@ -289,7 +277,7 @@ function unit_test {
 		# negative test failed
 		ret=1
 	fi
-	if [ $ret -eq $FI_ENODATA ]; then
+	if [[ $ret -eq $FI_ENODATA || $ret -eq $FI_ENOSYS ]]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
 		skip_count+=1
 	elif [ $ret -ne 0 ]; then
@@ -338,7 +326,8 @@ function cs_test {
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ $ret1 -eq $FI_ENODATA -a $ret2 -eq $FI_ENODATA ]; then
+	if [[ $ret1 -eq $FI_ENODATA && $ret2 -eq $FI_ENODATA ]] ||
+	   [[ $ret1 -eq $FI_ENOSYS && $ret2 -eq $FI_ENOSYS ]]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$c_outp"
 		skip_count+=1
 	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
