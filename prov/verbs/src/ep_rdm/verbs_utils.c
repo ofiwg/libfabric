@@ -44,6 +44,14 @@ extern struct util_buf_pool *fi_ibv_rdm_request_pool;
 extern struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
 extern struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
+size_t rdm_buffer_size(size_t buf_send_size)
+{
+	size_t size = buf_send_size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
+		sizeof(struct fi_ibv_rdm_header) + FI_IBV_RDM_BUF_ALIGNMENT;
+	size -= (size % FI_IBV_RDM_BUF_ALIGNMENT);
+	return size;
+}
+
 int fi_ibv_rdm_req_match(struct dlist_entry *item, const void *other)
 {
 	const struct fi_ibv_rdm_request *req = other;

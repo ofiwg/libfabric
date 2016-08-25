@@ -106,7 +106,8 @@ const struct fi_rx_attr verbs_rdm_rx_attr = {
 	.mode			= VERBS_RX_MODE,
 	.op_flags		= VERBS_RX_RDM_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
-	.total_buffered_recv	= FI_IBV_RDM_DFLT_BUFFERED_SSIZE /* TODO: */
+	.total_buffered_recv	= 0,
+	.iov_limit		= 1
 };
 
 const struct fi_tx_attr verbs_tx_attr = {
@@ -117,11 +118,11 @@ const struct fi_tx_attr verbs_tx_attr = {
 	.rma_iov_limit		= 1,
 };
 
-const struct fi_tx_attr verbs_tx_rdm_attr = {
+const struct fi_tx_attr verbs_rdm_tx_attr = {
 	.mode			= VERBS_TX_RDM_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
-	.inject_size		= 0,
+	.inject_size		= FI_IBV_RDM_DFLT_BUFFERED_SSIZE,
 	.rma_iov_limit		= 1,
 };
 
@@ -710,6 +711,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	union ibv_gid gid;
 	size_t name_len;
 	int ret;
+	int param;
 
 	if (!(fi = fi_allocinfo()))
 		return -FI_ENOMEM;
@@ -718,7 +720,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	fi->handle		= NULL;
 	if (ep_dom->type == FI_EP_RDM) {
 		fi->mode	= VERBS_RDM_MODE;
-		*(fi->tx_attr)	= verbs_tx_rdm_attr;
+		*(fi->tx_attr)	= verbs_rdm_tx_attr;
 	} else {
 		fi->mode	= VERBS_MODE;
 		*(fi->tx_attr)	= verbs_tx_attr;
@@ -742,6 +744,17 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
+		if (!fi_param_get_int(&fi_ibv_prov, "rdm_buffer_size", &param)) {
+			if (param > sizeof (struct fi_ibv_rdm_tagged_rndv_header)) {
+				fi->tx_attr->inject_size = param;
+			} else {
+				FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+					"rdm_buffer_size too small, should be greater then %d\n",
+					sizeof (struct fi_ibv_rdm_tagged_rndv_header));
+				ret = -FI_EINVAL;
+				goto err;
+			}
+		}
 	}
 
 	switch (ctx->device->transport_type) {

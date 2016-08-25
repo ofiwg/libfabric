@@ -871,7 +871,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_request *request,
 	struct fi_ibv_rdm_tagged_send_ready_data *p = data;
 	const size_t offset = request->len - request->rest_len;
 	const size_t seg_cursize =
-		MIN(FI_IBV_RDM_SEG_MAXSIZE, request->rest_len);
+		MIN(p->ep->rndv_seg_size, request->rest_len);
 
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
@@ -1159,7 +1159,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 	
 	const size_t offset = request->len - request->rest_len;
 	const size_t seg_cursize =
-		MIN(FI_IBV_RDM_SEG_MAXSIZE, request->rest_len);
+		MIN(p->ep_rdm->rndv_seg_size, request->rest_len);
 
 	struct ibv_sge sge = { 0 };
 	struct ibv_send_wr wr = { 0 };

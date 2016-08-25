@@ -64,9 +64,10 @@ struct fi_ibv_msg_ep;
 
 #define FI_IBV_RDM_CM_THREAD_TIMEOUT (100)
 #define FI_IBV_RDM_MEM_ALIGNMENT (64)
-#define FI_IBV_RDM_BUF_ALIGNMENT (4096) /* TODO: Page size */
+#define FI_IBV_RDM_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
 
 #define FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM (8)
+#define FI_IBV_RDM_DFLT_CQREAD_BUNCH_SIZE (FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM)
 
 #define FI_IBV_RDM_DFLT_BUFFER_SIZE					\
 	(3 * FI_IBV_RDM_BUF_ALIGNMENT)
@@ -75,6 +76,12 @@ struct fi_ibv_msg_ep;
 	(FI_IBV_RDM_DFLT_BUFFER_SIZE -					\
 	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
 	 sizeof(struct fi_ibv_rdm_header))
+
+/*
+ * calculates internal buffer size from user defined buffered send size in
+ * consideration of wired protocols, alignment, etc
+ */
+size_t rdm_buffer_size(size_t buf_send_size);
 
 /* 1GB is RC_QP limitation */
 #define FI_IBV_RDM_SEG_MAXSIZE (1024*1024*1024)

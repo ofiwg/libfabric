@@ -374,8 +374,24 @@ static void fi_ibv_fini(void)
 VERBS_INI
 {
 	fi_param_define(&fi_ibv_prov, "iface", FI_PARAM_STRING,
-			"prefix or full name of network interface associated "
-			"with IB device (default: ib)");
+			"the prefix or the full name of the network interface "
+			"associated with the IB device (default: ib)");
+	fi_param_define(&fi_ibv_prov, "rdm_buffer_num", FI_PARAM_INT,
+			"the number of pre-registered buffers for buffered "
+			"operations between the endpoints, must be a power of 2 "
+			"(default: 8)");
+	fi_param_define(&fi_ibv_prov, "rdm_buffer_size", FI_PARAM_INT,
+			"the maximum size of a buffered operation (bytes) "
+			"(default: platform specific)");
+	fi_param_define(&fi_ibv_prov, "rdm_rndv_seg_size", FI_PARAM_INT,
+			"the segment size for zero copy protocols (bytes)"
+			"(default: 1073741824)");
+	fi_param_define(&fi_ibv_prov, "rdm_cqread_bunch_size", FI_PARAM_INT,
+			"the number of entries to be read from the verbs "
+			"completion queue at a time (default: 8)");
+	fi_param_define(&fi_ibv_prov, "rdm_thread_timeout", FI_PARAM_INT,
+			"the wake up timeout of the helper thread (usec) "
+			"(default: 100)");
 
 	return &fi_ibv_prov;
 }

@@ -212,6 +212,7 @@ struct fi_ibv_rdm_cq {
 	struct dlist_entry	request_errcq;
 	uint64_t		flags;
 	size_t			entry_size;
+	int			read_bunch_size;
 	enum fi_cq_wait_cond	wait_cond;
 };
 

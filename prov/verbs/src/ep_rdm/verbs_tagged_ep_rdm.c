@@ -673,7 +673,7 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 {
-	const int wc_count = ep->n_buffs; /* TODO: to set from upper level */
+	const int wc_count = ep->fi_rcq->read_bunch_size;
 	struct ibv_wc wc[wc_count];
 	int ret = 0;
 	int err = 0;
@@ -750,7 +750,7 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 {
-	const int wc_count = ep->n_buffs;
+	const int wc_count = ep->fi_scq->read_bunch_size;
 	struct ibv_wc wc[wc_count];
 	int ret = 0;
 	int err = 0;
