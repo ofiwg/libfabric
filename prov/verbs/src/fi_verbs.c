@@ -67,14 +67,17 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr)
 	}
 }
 
-static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
-			      const struct rdma_addrinfo* rai)
+static int fi_ibv_rdm_cm_bind_addr(struct fi_ibv_rdm_cm* cm,
+				   const struct rdma_addrinfo* rai)
 {
 	struct sockaddr_in* src_addr = (struct sockaddr_in*)rai->ai_src_addr;
 	if (cm->ec) {
-		/* cm is already initialized (by other ep) */
-		return FI_SUCCESS;
+		VERBS_INFO(FI_LOG_EP_CTRL,
+			   "Failed to initialize more then 1 endpoint per domain, "
+			   "currently it's not supported\n", strerror(errno));
+		return -FI_ENOSYS;
 	}
+
 	cm->ec = rdma_create_event_channel();
 
 	if (!cm->ec) {
@@ -181,7 +184,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 	if (FI_IBV_EP_TYPE_IS_RDM(hints)) {
 		struct fi_ibv_rdm_cm* cm = 
 			container_of(id, struct fi_ibv_rdm_cm, listener);
-		ret = fi_ibv_rdm_cm_init(cm, _rai);
+		ret = fi_ibv_rdm_cm_bind_addr(cm, _rai);
 	} else {
 		ret = rdma_create_ep(id, _rai, NULL, NULL);
 		if (ret) {
