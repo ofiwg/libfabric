@@ -283,6 +283,22 @@ is the destination host is locally connected, and `1` otherwise.
 
 See fi_ext_usnic.h for more details.
 
+# VERSION DIFFERENCES
+
+## New naming convention for fabric/domain starting with libfabric v1.4
+
+The release of libfabric v1.4 introduced a new naming convention for fabric and domain. However the usNIC provider
+remains backward compatible with applications supporting the old scheme and decides which one to use based on
+the version passed to `fi_getinfo`:
+
+* When `FI_VERSION(1,4)` or higher is used:
+     - fabric name is the network address with the CIDR notation (i.e., `a.b.c.d/e`)
+     - domain name is the usNIC Linux interface name (i.e., `usnic_X`)
+
+* When a lower version number is used, like `FI_VERSION(1, 3)`, it follows the same behavior the usNIC provider exhibited in libfabric <= v1.3:
+     - fabric name is the usNIC Linux interface name (i.e., `usnic_X`)
+     - domain name is `NULL`
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

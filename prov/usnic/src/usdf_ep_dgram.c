@@ -456,12 +456,16 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_dom_attr(struct fi_info *hints, struct fi_info *fi)
+int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
+			     struct fi_info *fi, struct usd_device_attrs *dap)
 {
+	int ret;
 	struct fi_domain_attr defaults;
 
 	defaults = dgram_dflt_domain_attr;
-	defaults.name = strdup("usnic");
+	ret = usdf_domain_getname(version, dap, &defaults.name);
+	if (ret < 0)
+		return -FI_ENODATA;
 
 	if (!hints || !hints->domain_attr)
 		goto out;
