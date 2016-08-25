@@ -1,4 +1,4 @@
-.TH "fi_usnic" "7" "2016\-08\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_usnic" "7" "2016\-08\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -308,6 +308,33 @@ destination host is unreachable, \f[C]0\f[] is the destination host is
 locally connected, and \f[C]1\f[] otherwise.
 .PP
 See fi_ext_usnic.h for more details.
+.SH VERSION DIFFERENCES
+.SS New naming convention for fabric/domain starting with libfabric v1.4
+.PP
+The release of libfabric v1.4 introduced a new naming convention for
+fabric and domain.
+However the usNIC provider remains backward compatible with applications
+supporting the old scheme and decides which one to use based on the
+version passed to \f[C]fi_getinfo\f[]:
+.IP \[bu] 2
+When \f[C]FI_VERSION(1,4)\f[] or higher is used:
+.RS 2
+.IP \[bu] 2
+fabric name is the network address with the CIDR notation (i.e.,
+\f[C]a.b.c.d/e\f[])
+.IP \[bu] 2
+domain name is the usNIC Linux interface name (i.e., \f[C]usnic_X\f[])
+.RE
+.IP \[bu] 2
+When a lower version number is used, like \f[C]FI_VERSION(1,\ 3)\f[], it
+follows the same behavior the usNIC provider exhibited in libfabric <=
+v1.3:
+.RS 2
+.IP \[bu] 2
+fabric name is the usNIC Linux interface name (i.e., \f[C]usnic_X\f[])
+.IP \[bu] 2
+domain name is \f[C]NULL\f[]
+.RE
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
