@@ -48,6 +48,7 @@ rm -rf %{buildroot}
 %{_libdir}/lib*.so.*
 %{_bindir}/fi_info
 %{_bindir}/fi_strerror
+%{_bindir}/fi_pingpong
 %dir %{_libdir}/libfabric/
 %doc AUTHORS COPYING README
 
