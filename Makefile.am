@@ -79,7 +79,8 @@ linkback = $(top_builddir)/src/libfabric.la
 
 bin_PROGRAMS = \
 	util/fi_info \
-	util/fi_strerror
+	util/fi_strerror \
+	util/fi_pingpong
 
 bin_SCRIPTS =
 
@@ -90,6 +91,10 @@ util_fi_info_LDADD = $(linkback)
 util_fi_strerror_SOURCES = \
 	util/strerror.c
 util_fi_strerror_LDADD = $(linkback)
+
+util_fi_pingpong_SOURCES = \
+	util/pingpong.c
+util_fi_pingpong_LDADD = $(linkback)
 
 src_libfabric_la_SOURCES = \
 	include/fi.h \
@@ -151,6 +156,7 @@ nodist_rdmainclude_HEADERS = \
 endif HAVE_DIRECT
 
 real_man_pages = \
+        man/man1/fi_pingpong.1 \
         man/man1/fi_strerror.1 \
         man/man3/fi_av.3 \
         man/man3/fi_cm.3 \
@@ -299,7 +305,8 @@ dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
 	"$(top_srcdir)/config/distscript.pl" "$(distdir)" "$(PACKAGE_VERSION)"
 
-TESTS = util/fi_info
+TESTS = \
+	util/fi_info
 
 test:
 	./util/fi_info

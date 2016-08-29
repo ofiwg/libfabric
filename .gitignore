@@ -36,3 +36,4 @@ config/test-driver
 
 util/fi_info
 util/fi_strerror
+util/fi_pingpong
