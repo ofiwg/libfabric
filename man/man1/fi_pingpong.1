@@ -1,7 +1,7 @@
-.TH fi_pingpong 1 "2016\-08\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_pingpong" "1" "2016\-08\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_pingpong - Quick and simple pingpong test for libfabric
+fi_pingpong \- Quick and simple pingpong test for libfabric
 .SH SYNOPSYS
 .IP
 .nf
@@ -18,14 +18,14 @@ fi_pingpong also displays aggregated statistics after each test run, and
 can additionally verify data integrity upon receipt.
 .PP
 By default, the datagram (FI_EP_DGRAM) endpoint is used for the test,
-unless otherwise specified via -e.
+unless otherwise specified via \-e.
 .SH HOW TO RUN TESTS
 .PP
 Two copies of the program must be launched: first, one copy must be
 launched as the server.
 Second, another copy is launched with the address of the server.
 .PP
-As a client-server test, each have the following usage model:
+As a client\-server test, each have the following usage model:
 .SS Start the server
 .IP
 .nf
@@ -48,74 +48,73 @@ If they do not match, the client and server may not be able to
 communicate properly.
 .SS Nodes addressing
 .PP
-\f[I]-B <src_port>\f[] : The non-default source port number of the
+\f[I]\-B <src_port>\f[] : The non\-default source port number of the
 endpoint.
 .PP
-\f[I]-P <dest_port>\f[] : The non-default destination port number of the
-endpoint.
+\f[I]\-P <dest_port>\f[] : The non\-default destination port number of
+the endpoint.
 .SS Fabric
 .PP
-\f[I]-p <provider_name>\f[] : The name of the underlying fabric provider
-(e.g., sockets, psm, usnic, etc.)
-\&.
-If a provider is not specified via the -f switch, the test will pick one
-from the list of available providers (as returned by fi_getinfo(3)).
+\f[I]\-p <provider_name>\f[] : The name of the underlying fabric
+provider (e.g., sockets, psm, usnic, etc.).
+If a provider is not specified via the \-f switch, the test will pick
+one from the list of available providers (as returned by fi_getinfo(3)).
 .PP
-\f[I]-p <endpoint>\f[] where endpoint = (dgram|rdm|msg) : The type of
+\f[I]\-p <endpoint>\f[] where endpoint = (dgram|rdm|msg) : The type of
 endpoint to be used for data messaging between the two processes.
 .PP
-\f[I]-d <domain>\f[] : The name of the specific domain to be used.
+\f[I]\-d <domain>\f[] : The name of the specific domain to be used.
 .SS Messaging
 .PP
-\f[I]-I <iter>\f[] : The number of iterations of the test will run.
+\f[I]\-I <iter>\f[] : The number of iterations of the test will run.
 .PP
-\f[I]-S <msg_size>\f[] : The specific size of the message in bytes the
+\f[I]\-S <msg_size>\f[] : The specific size of the message in bytes the
 test will use or \[aq]all\[aq] to run all the default sizes.
 .SS Utils
 .PP
-\f[I]-c\f[] : Activate data integrity checks at the receiver (note: this
-may have performance impact).
+\f[I]\-c\f[] : Activate data integrity checks at the receiver (note:
+this may have performance impact).
 .PP
-\f[I]-v\f[] : Activate output debugging (warning: highly verbose)
+\f[I]\-v\f[] : Activate output debugging (warning: highly verbose)
 .PP
-\f[I]-h\f[] : Displays help output for the pingpong test.
+\f[I]\-h\f[] : Displays help output for the pingpong test.
 .SH USAGE EXAMPLES
 .SS A simple example
-.SS Server: \f[C]fi_pingpong\ -p\ <provider_name>\f[]
+.SS Server: \f[C]fi_pingpong\ \-p\ <provider_name>\f[]
 .PP
-\f[C]server$\ fi_pingpong\ -p\ sockets\f[]
-.SS Client: \f[C]fi_pingpong\ -p\ <provider_name>\ <server_addr>\f[]
+\f[C]server$\ fi_pingpong\ \-p\ sockets\f[]
+.SS Client: \f[C]fi_pingpong\ \-p\ <provider_name>\ <server_addr>\f[]
 .PP
-\f[C]client$\ fi_pingpong\ -p\ sockets\ 192.168.0.123\f[]
+\f[C]client$\ fi_pingpong\ \-p\ sockets\ 192.168.0.123\f[]
 .SS An example with various options
 .SS Server:
 .PP
-\f[C]server$\ fi_pingpong\ -p\ usnic\ -I\ 1000\ -S\ 1024\f[]
+\f[C]server$\ fi_pingpong\ \-p\ usnic\ \-I\ 1000\ \-S\ 1024\f[]
 .SS Client:
 .PP
-\f[C]client$\ fi_pingpong\ -p\ usnic\ -I\ 1000\ -S\ 1024\ 192.168.0.123\f[]
+\f[C]client$\ fi_pingpong\ \-p\ usnic\ \-I\ 1000\ \-S\ 1024\ 192.168.0.123\f[]
 .PP
 Specifically, this will run a pingpong test with:
 .IP
 .nf
 \f[C]
--\ usNIC\ provider
--\ 1000\ iterations
--\ 1024\ bytes\ message\ size
--\ server\ node\ as\ 192.168.0.123
+\-\ usNIC\ provider
+\-\ 1000\ iterations
+\-\ 1024\ bytes\ message\ size
+\-\ server\ node\ as\ 192.168.0.123
 \f[]
 .fi
 .SS A longer test
 .SS Server:
 .PP
-\f[C]server$\ fi_pingpong\ -p\ usnic\ -I\ 10000\ -S\ all\f[]
+\f[C]server$\ fi_pingpong\ \-p\ usnic\ \-I\ 10000\ \-S\ all\f[]
 .SS Client:
 .PP
-\f[C]client$\ fi_pingpong\ -p\ usnic\ -I\ 10000\ -S\ all\ 192.168.0.123\f[]
+\f[C]client$\ fi_pingpong\ \-p\ usnic\ \-I\ 10000\ \-S\ all\ 192.168.0.123\f[]
 .SH DEFAULTS
 .PP
 There is no default provider; if a provider is not specified via the
-\f[C]-p\f[] switch, the test will pick one from the list of available
+\f[C]\-p\f[] switch, the test will pick one from the list of available
 providers (as returned by \f[C]fi_getinfo\f[](3)).
 .PP
 If no endpoint type is specified, \[aq]dgram\[aq] is used.
