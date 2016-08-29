@@ -59,7 +59,7 @@
 #include <rdma/fi_errno.h>
 
 #ifndef PP_FIVERSION
-#define PP_FIVERSION FI_VERSION(1, 3)
+#define PP_FIVERSION FI_VERSION(1, 4)
 #endif
 
 #ifdef __APPLE__
