@@ -479,8 +479,12 @@ int usdf_endpoint_open(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av_o, void *context);
+
+/* Domain name functionality */
 int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
 			char **name);
+bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
+			char *hint);
 
 /* fi_ops_mr */
 int usdf_reg_mr(struct fid *fid, const void *buf, size_t len,

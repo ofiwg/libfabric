@@ -146,6 +146,7 @@ static int usdf_validate_hints(uint32_t version, struct fi_info *hints,
 			       struct usd_device_attrs *dap)
 {
 	struct fi_fabric_attr *fattrp;
+	struct fi_domain_attr *dattrp;
 	size_t size;
 
 	switch (hints->addr_format) {
@@ -188,6 +189,12 @@ static int usdf_validate_hints(uint32_t version, struct fi_info *hints,
 		    !usdf_fabric_checkname(version, dap, fattrp->name)) {
 			return -FI_ENODATA;
 		}
+	}
+
+	dattrp = hints->domain_attr;
+	if (dattrp) {
+		if (!usdf_domain_checkname(version, dap, dattrp->name))
+			return -FI_ENODATA;
 	}
 
 	return FI_SUCCESS;

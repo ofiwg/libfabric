@@ -237,7 +237,16 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	USDF_TRACE_SYS(DOMAIN, "\n");
 
+	fp = fab_fidtou(fabric);
+
 	if (info->domain_attr != NULL) {
+		/* No versioning information available here. */
+		if (!usdf_domain_checkname(0, fp->fab_dev_attrs,
+					   info->domain_attr->name)) {
+			USDF_WARN_SYS(DOMAIN, "domain name mismatch\n");
+			return -FI_ENODATA;
+		}
+
 		switch (info->domain_attr->mr_mode) {
 		case FI_MR_UNSPEC:
 		case FI_MR_BASIC:
@@ -256,8 +265,6 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		ret = -FI_ENOMEM;
 		goto fail;
 	}
-
-	fp = fab_fidtou(fabric);
 
 	USDF_DBG("uda_devname=%s\n", fp->fab_dev_attrs->uda_devname);
 
@@ -361,4 +368,67 @@ int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
 
 	*name = buf;
 	return ret;
+}
+
+/* In pre-1.4 the domain name was NULL. This is unfortunate as it makes it
+ * difficult to tell whether providing a name was intended. In this case, it can
+ * be broken into 4 cases:
+ *
+ * 1. Version is greater than or equal to 1.4 and a non-NULL hint is provided.
+ *    Just do a string compare.
+ * 2. Version is greater than or equal to 1.4 and provided hint is NULL.  Treat
+ *    this as _valid_ as it could be an application requesting a 1.4 domain name
+ *    but not providing an explicit hint.
+ * 3. Version is less than 1.4 and a name hint is provided.  This should always
+ *    be _invalid_.
+ * 4. Version is less than 1.4 and name hint is NULL. This will always be
+ *    _valid_.
+ */
+bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
+			   char *hint)
+{
+	char *reference;
+	bool valid;
+	int ret;
+
+	USDF_DBG("checking domain name: version=%d, domain name='%s'\n",
+		 version, hint);
+
+	if (version) {
+		valid = false;
+
+		ret = usdf_domain_getname(version, dap, &reference);
+		if (ret < 0)
+			return false;
+
+		/* If the reference name exists, then this is version 1.4 or
+		 * greater.
+		 */
+		if (reference) {
+			if (hint) {
+				/* Case 1 */
+				valid = (strcmp(reference, hint) == 0);
+			} else {
+				/* Case 2 */
+				valid = true;
+			}
+		} else {
+			/* Case 3 & 4 */
+			valid = (hint == NULL);
+		}
+
+		if (!valid)
+			USDF_DBG("given hint %s does not match %s -- invalid\n",
+				 hint, reference);
+
+		free(reference);
+		return valid;
+	}
+
+	/* If hint is non-NULL then assume the version is 1.4 if not provided.
+	 */
+	if (hint)
+		return usdf_domain_checkname(FI_VERSION(1, 4), dap, hint);
+
+	return usdf_domain_checkname(FI_VERSION(1, 3), dap, hint);
 }
