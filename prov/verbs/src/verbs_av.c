@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -83,6 +84,7 @@ int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	assert(fid_domain->rdm);
 	av->domain = fid_domain;
 	av->type = attr->type;
+	av->count = count;
 
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	av->av_fid.fid.context = context;
