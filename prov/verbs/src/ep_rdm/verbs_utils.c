@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -204,7 +205,7 @@ int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 			found = !strncmp(tmp->ifa_name, iface, iface_len);
 			if (found) {
 				memcpy(ipoib_addr, tmp->ifa_addr,
-					sizeof(ipoib_addr));
+					sizeof(*ipoib_addr));
 				ipoib_addr->sin_port = addr->sin_port;
 				break;
 			}
