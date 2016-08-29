@@ -137,11 +137,11 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context);
 
 struct fi_ibv_av {
-	struct fid_av		av;	/* TODO: rename to av_fid */
+	struct fid_av		av_fid;
 	struct fi_ibv_domain	*domain;
-	struct fi_ibv_rdm_ep	*ep;	/* TODO: check usage */
-	int			type;	/* TODO: AV enum? */
+	struct fi_ibv_rdm_ep	*ep;
 	size_t			count;
+	enum fi_av_type		type;
 };
 
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -158,12 +158,19 @@ struct fi_ibv_pep {
 };
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
+struct fi_ibv_rdm_cm;
 
 struct fi_ibv_domain {
 	struct fid_domain	domain_fid;
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
+	/*
+	 * TODO: Currently, only 1 rdm EP can be created per rdm domain!
+	 *	 CM logic should be separated from EP,
+	 *	 excluding naming/addressing
+	 */
 	int			rdm;
+	struct fi_ibv_rdm_cm	*rdm_cm;
 	struct fi_info		*info;
 	struct fi_ibv_fabric	*fab;
 };
@@ -253,9 +260,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
-void fi_ibv_destroy_ep(enum fi_ep_type ep_type,
-		       struct rdma_addrinfo *rai,
-		       struct rdma_cm_id **id);
+void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id);
 
 struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
 struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep);
@@ -282,6 +287,9 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name);
 void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
+int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
+			const struct fi_info *hints, struct rdma_addrinfo **rai);
+int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep);
 
 struct verbs_ep_domain {
 	char			*suffix;

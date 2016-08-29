@@ -40,8 +40,6 @@
 
 
 extern struct fi_provider fi_ibv_prov;
-extern struct fi_ibv_rdm_conn *fi_ibv_rdm_conn_hash;
-
 
 static struct ibv_mr *
 fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep, void **buf, size_t size)
@@ -236,7 +234,7 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 	cm_params->private_data = malloc(cm_params->private_data_len);
 
 	char *p = (char *) cm_params->private_data;
-	memcpy(p, &ep->cm.my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+	memcpy(p, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 	p += FI_IBV_RDM_DFLT_ADDRLEN;
 
 	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
@@ -262,7 +260,7 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 
 	if (conn->cm_role == FI_VERBS_CM_SELF) {
 		if (conn->r_mr && conn->s_mr) {
-			memcpy(&conn->addr, &ep->cm.my_addr,
+			memcpy(&conn->addr, &ep->my_addr,
 				FI_IBV_RDM_DFLT_ADDRLEN);
 			conn->remote_rbuf_rkey = conn->r_mr->rkey;
 			conn->remote_rbuf_mem_reg = conn->r_mr->addr;
@@ -379,7 +377,8 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		return ret;
 	}
 
-	HASH_FIND(hh, fi_ibv_rdm_conn_hash, p, FI_IBV_RDM_DFLT_ADDRLEN, conn);
+	HASH_FIND(hh, ep->domain->rdm_cm->conn_hash, p, FI_IBV_RDM_DFLT_ADDRLEN,
+		  conn);
 
 	if (!conn) {
 		conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof(*conn));
@@ -398,8 +397,8 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
 
-		HASH_ADD(hh, fi_ibv_rdm_conn_hash, addr,
-			FI_IBV_RDM_DFLT_ADDRLEN, conn);
+		HASH_ADD(hh, ep->domain->rdm_cm->conn_hash, addr,
+			 FI_IBV_RDM_DFLT_ADDRLEN, conn);
 	} else {
 		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
 			/*
@@ -742,7 +741,7 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 	void *data = NULL;
 	ssize_t ret = FI_SUCCESS;
 
-	if (rdma_get_cm_event(ep->cm.ec, &event)) {
+	if (rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 		if(errno == EAGAIN) {
 			errno = 0;
 			usleep(FI_IBV_RDM_CM_THREAD_TIMEOUT);
@@ -793,7 +792,7 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 			break;
 		}
 
-		if(rdma_get_cm_event(ep->cm.ec, &event)) {
+		if(rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 			if(errno == EAGAIN) {
 				errno = 0;
 				usleep(FI_IBV_RDM_CM_THREAD_TIMEOUT);

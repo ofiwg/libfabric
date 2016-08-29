@@ -50,9 +50,6 @@ extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 extern struct util_buf_pool* fi_ibv_rdm_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
 
-struct fi_ibv_rdm_conn *fi_ibv_rdm_conn_hash = NULL;
-
-
 static int
 fi_ibv_rdm_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
 {
@@ -162,7 +159,7 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cq->ep = ep;
 		break;
 	case FI_CLASS_AV:
-		av = container_of(bfid, struct fi_ibv_av, av.fid);
+		av = container_of(bfid, struct fi_ibv_av, av_fid.fid);
 		ep->av = av;
 
 		/* TODO: this is wrong, AV to EP is 1:n */
@@ -320,8 +317,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
 	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
 
-	HASH_ITER(hh, fi_ibv_rdm_conn_hash, conn, tmp) {
-		HASH_DEL(fi_ibv_rdm_conn_hash, conn);
+	HASH_ITER(hh, ep->domain->rdm_cm->conn_hash, conn, tmp) {
+		HASH_DEL(ep->domain->rdm_cm->conn_hash, conn);
 		switch (conn->state) {
 		case FI_VERBS_CONN_ALLOCATED:
 		case FI_VERBS_CONN_REMOTE_DISCONNECT:
@@ -351,8 +348,9 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		}
 	}
 
-	assert(0 == HASH_COUNT(fi_ibv_rdm_conn_hash) &&
-		NULL == fi_ibv_rdm_conn_hash);
+	assert(HASH_COUNT(ep->domain->rdm_cm->conn_hash) == 0 &&
+	       ep->domain->rdm_cm->conn_hash == NULL);
+	free(ep->domain->rdm_cm->conn_table);
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);
@@ -362,7 +360,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	}
 
 	errno = 0;
-	fi_ibv_destroy_ep(FI_EP_RDM, ep->cm.rai, &(ep->cm.listener));
+	fi_ibv_destroy_ep(ep->rai, &ep->domain->rdm_cm->listener);
 	if (errno) {
 		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_ep failed\n", errno);
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
@@ -480,15 +478,12 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err;
 	}
 
-	ret = fi_ibv_create_ep(NULL, NULL, 0, info, &_ep->cm.rai, &_ep->cm.listener);
+	ret = fi_ibv_get_rdma_rai(NULL, NULL, 0, info, &_ep->rai);
 	if (ret) {
 		goto err;
 	}
-
-	if (rdma_listen(_ep->cm.listener, 1024)) {
-		VERBS_INFO(FI_LOG_EP_CTRL, "rdma_listen failed: %s\n",
-			strerror(errno));
-		ret = -FI_EOTHER;
+	ret = fi_ibv_rdm_cm_bind_ep(_ep->domain->rdm_cm, _ep);
+	if (ret) {
 		goto err;
 	}
 
