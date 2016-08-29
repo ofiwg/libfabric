@@ -308,7 +308,7 @@ static inline ssize_t __ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 }
 
 static inline ssize_t __ep_inject(struct fid_ep *ep, const void *buf,
-				  size_t len, fi_addr_t dest_addr,
+				  size_t len, uint64_t data, fi_addr_t dest_addr,
 				  uint64_t flags, uint64_t tag)
 {
 	struct gnix_fid_ep *gnix_ep;
@@ -325,7 +325,7 @@ static inline ssize_t __ep_inject(struct fid_ep *ep, const void *buf,
 			GNIX_SUPPRESS_COMPLETION | flags);
 
 	return _gnix_send(gnix_ep, (uint64_t)buf, len, NULL, dest_addr,
-			  NULL, inject_flags, 0, tag);
+			  NULL, inject_flags, data, tag);
 }
 
 static inline ssize_t __ep_senddata(struct fid_ep *ep, const void *buf,
@@ -539,7 +539,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_sendmsg(struct fid_ep *ep,
 DIRECT_FN STATIC ssize_t gnix_ep_msg_inject(struct fid_ep *ep, const void *buf,
 					    size_t len, fi_addr_t dest_addr)
 {
-	return __ep_inject(ep, buf, len, dest_addr, 0, 0);
+	return __ep_inject(ep, buf, len, 0, dest_addr, 0, 0);
 }
 
 DIRECT_FN STATIC ssize_t gnix_ep_senddata(struct fid_ep *ep, const void *buf,
@@ -893,7 +893,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_tinject(struct fid_ep *ep, const void *buf,
 					 size_t len, fi_addr_t dest_addr,
 					 uint64_t tag)
 {
-	return __ep_inject(ep, buf, len, dest_addr, FI_TAGGED, tag);
+	return __ep_inject(ep, buf, len, 0, dest_addr, FI_TAGGED, tag);
 }
 
 DIRECT_FN STATIC ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf,
@@ -923,7 +923,8 @@ DIRECT_FN STATIC ssize_t gnix_ep_tinjectdata(struct fid_ep *ep, const void *buf,
 					     size_t len, uint64_t data,
 					     fi_addr_t dest_addr, uint64_t tag)
 {
-	return -FI_ENOSYS;
+	return __ep_inject(ep, buf, len, data, dest_addr,
+			  FI_TAGGED | FI_REMOTE_CQ_DATA, tag);
 }
 
 
