@@ -869,7 +869,6 @@ int pp_read_addr_opts(struct ct_pingpong *ct, char **node, char **service,
 	} else {
 		if (!opts->src_port)
 			opts->src_port = ct->data_port;
-		*flags = FI_SOURCE;
 	}
 
 	return 0;
