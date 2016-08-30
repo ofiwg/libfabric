@@ -293,7 +293,7 @@ void pp_banner_options(struct ct_pingpong *ct)
 		opts.src_port = "None";
 	if ((opts.dst_addr == NULL) || (opts.dst_addr[0] == '\0'))
 		opts.dst_addr = "None";
-	if ((opts.dst_port == NULL) || (opts.dst_addr[0] == '\0'))
+	if ((opts.dst_port == NULL) || (opts.dst_port[0] == '\0'))
 		opts.dst_port = "None";
 
 	if (opts.sizes_enabled == PP_ENABLE_ALL)
