@@ -33,7 +33,7 @@ for all providers and endpoint types will be returned.
 : Node name or address used to filter interfaces. Only interfaces which can
 reach the given node or address will respond.
 
-*-p, --port=\<PORT\>*
+*-P, --port=\<PORT\>*
 : Port number used to filter interfaces.
 
 *-c, --caps=\<CAP1|CAP2\>..*
@@ -57,9 +57,15 @@ specifying FI_SOCKADDR_IN would return only interfaces which use sockaddr_in
 structures for addressing. For more information on address formats, see
 fi_getinfo(3).
 
-*-f, --provider=\<PROV\>*
+*-p, --provider=\<PROV\>*
 : Filter fabric interfaces by the provider implementation. For a list of
 providers, see the `--list` option.
+
+*-d, --domain=\<DOMAIN\>*
+: Filter interfaces to only those with the given domain name.
+
+*-f, --fabric=\<FABRIC\>*
+: Filter interfaces to only those with the given fabric name.
 
 ## Discovery
 
@@ -82,7 +88,7 @@ the fi_info structure, see fi_getinfo(3).
 # USAGE EXAMPLES
 
 ```
-$ fi_info -n 30.0.11.1 -f usnic -t FI_EP_DGRAM
+$ fi_info -n 30.0.11.1 -p usnic -t FI_EP_DGRAM
 ```
 
 This will respond with all fabric interfaces that can reach address 30.0.11.1
@@ -93,7 +99,7 @@ using endpoint type FI_EP_DGRAM with the usNIC provider.
 By default fi_info will output a summary of the fabric interfaces discovered:
 
 ```
-$ ./fi_info -n 30.0.11.1 -f usnic -t FI_EP_DGRAM
+$ ./fi_info -n 30.0.11.1 -p usnic -t FI_EP_DGRAM
 provider: usnic
     fabric: 30.0.11.0/24
     domain: usnic_2

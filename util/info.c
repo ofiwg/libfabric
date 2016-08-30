@@ -48,12 +48,14 @@ static int verbose = 0, env = 0;
 static const struct option longopts[] = {
 	{"help", no_argument, NULL, 'h'},
 	{"node", required_argument, NULL, 'n'},
-	{"port", required_argument, NULL, 'p'},
+	{"port", required_argument, NULL, 'P'},
 	{"caps", required_argument, NULL, 'c'},
 	{"mode", required_argument, NULL, 'm'},
 	{"ep_type", required_argument, NULL, 't'},
+	{"domain", required_argument, NULL, 'd'},
+	{"fabric", required_argument, NULL, 'f'},
 	{"addr_format", required_argument, NULL, 'a'},
-	{"provider", required_argument, NULL, 'f'},
+	{"provider", required_argument, NULL, 'p'},
 	{"env", no_argument, NULL, 'e'},
 	{"list", no_argument, NULL, 'l'},
 	{"verbose", no_argument, NULL, 'v'},
@@ -68,6 +70,8 @@ static const char *help_strings[][2] = {
 	{"CAP1|CAP2..", "\tone or more capabilities: FI_MSG|FI_RMA..."},
 	{"MOD1|MOD2..", "\tone or more modes, default all modes"},
 	{"EPTYPE", "\t\tspecify single endpoint type: FI_EP_MSG, FI_EP_DGRAM..."},
+	{"DOMAIN", "\t\tspecify the domain name"},
+	{"FABRIC", "\t\tspecify the fabric name"},
 	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
 	{"PROV", "\t\tspecify provider explicitly"},
 	{"", "\t\tprint libfabric environment variables"},
@@ -290,7 +294,8 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 
-	while ((op = getopt_long(argc, argv, "n:p:c:m:t:a:f:elhv", longopts, &option_index)) != -1) {
+	while ((op = getopt_long(argc, argv, "n:P:c:m:t:a:p:d:f:elhv", longopts,
+				 &option_index)) != -1) {
 		switch (op) {
 		case 0:
 			/* If --verbose set a flag, do nothing. */
@@ -299,7 +304,7 @@ int main(int argc, char **argv)
 		case 'n':
 			node = optarg;
 			break;
-		case 'p':
+		case 'P':
 			port = optarg;
 			break;
 		case 'c':
@@ -318,9 +323,17 @@ int main(int argc, char **argv)
 			hints->addr_format = str2addr_format(optarg);
 			use_hints = 1;
 			break;
-		case 'f':
+		case 'p':
 			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
+			use_hints = 1;
+			break;
+		case 'd':
+			hints->domain_attr->name = strdup(optarg);
+			use_hints = 1;
+			break;
+		case 'f':
+			hints->fabric_attr->name = strdup(optarg);
 			use_hints = 1;
 			break;
 		case 'e':
