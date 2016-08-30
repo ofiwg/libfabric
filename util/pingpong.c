@@ -179,9 +179,7 @@ struct ct_pingpong {
 	long cnt_ack_msg;
 
 	uint16_t ctrl_port;
-	int ctrl_listenfd;
 	int ctrl_connfd;
-	struct sockaddr_in ctrl_addr;
 	char ctrl_buf[PP_CTRL_BUF_LEN + 1];
 	char loc_name[PP_MAX_CTRL_MSG];
 	char rem_name[PP_MAX_CTRL_MSG];
@@ -335,6 +333,7 @@ int pp_getaddrinfo(char *name, uint16_t port, struct addrinfo **results)
 	    .ai_family = AF_INET,       /* IPv4 */
 	    .ai_socktype = SOCK_STREAM, /* TCP socket */
 	    .ai_protocol = IPPROTO_TCP, /* Any protocol */
+	    .ai_flags = AI_NUMERICSERV /* numeric port is used */
 	};
 
 	snprintf(port_s, 6, "%" PRIu16, port);
@@ -352,125 +351,142 @@ out:
 	return ret;
 }
 
+static int pp_ctrl_init_client(struct ct_pingpong *ct)
+{
+	struct addrinfo *results;
+	struct addrinfo *rp;
+	int errno_save;
+	int ret;
+
+	ret = pp_getaddrinfo(ct->opts.dst_addr, ct->ctrl_port, &results);
+	if (ret)
+		return ret;
+
+	if (!results) {
+		PP_ERR("getaddrinfo returned NULL list");
+		return -EXIT_FAILURE;
+	}
+
+	for (rp = results; rp; rp = rp->ai_next) {
+		ct->ctrl_connfd = socket(rp->ai_family, rp->ai_socktype,
+					 rp->ai_protocol);
+		if (ct->ctrl_connfd == -1) {
+			errno_save = errno;
+			continue;
+		}
+
+		ret = connect(ct->ctrl_connfd, rp->ai_addr, rp->ai_addrlen);
+		if (ret != -1)
+			break;
+
+		errno_save = errno;
+		close(ct->ctrl_connfd);
+	}
+
+	if (!rp || ret == -1) {
+		ret = -errno_save;
+		ct->ctrl_connfd = -1;
+		PP_ERR("failed to connect: %s", strerror(errno_save));
+	} else {
+		PP_DEBUG("CLIENT: connected\n");
+	}
+
+	freeaddrinfo(results);
+
+	return ret;
+}
+
+static int pp_ctrl_init_server(struct ct_pingpong *ct)
+{
+	struct sockaddr_in ctrl_addr = {0};
+	int optval = 1;
+	int listenfd;
+	int ret;
+
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (listenfd == -1) {
+		ret = -errno;
+		PP_PRINTERR("socket", ret);
+		return ret;
+	}
+
+	ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
+			&optval, sizeof(optval));
+	if (ret == -1) {
+		ret = -errno;
+		PP_PRINTERR("setsockopt(SO_REUSEADDR)", ret);
+		goto fail_close_socket;
+	}
+
+	ctrl_addr.sin_family = AF_INET;
+	ctrl_addr.sin_port = htons(ct->ctrl_port);
+	ctrl_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	ret = bind(listenfd, (struct sockaddr *)&ctrl_addr,
+		   sizeof(ctrl_addr));
+	if (ret == -1) {
+		ret = -errno;
+		PP_PRINTERR("bind", ret);
+		goto fail_close_socket;
+	}
+
+	ret = listen(listenfd, 10);
+	if (ret == -1) {
+		ret = -errno;
+		PP_PRINTERR("listen", ret);
+		goto fail_close_socket;
+	}
+
+	PP_DEBUG("SERVER: waiting for connection\n");
+
+	ct->ctrl_connfd = accept(listenfd, NULL, NULL);
+	if (ct->ctrl_connfd == -1) {
+		ret = -errno;
+		PP_PRINTERR("accept", ret);
+		goto fail_close_socket;
+	}
+
+	close(listenfd);
+
+	PP_DEBUG("SERVER: connected\n");
+
+	return ret;
+
+fail_close_socket:
+	close(ct->ctrl_connfd);
+	ct->ctrl_connfd = -1;
+
+	return ret;
+}
+
 int pp_ctrl_init(struct ct_pingpong *ct)
 {
-	int ret, err;
-	const char *retp;
-	struct timeval tv;
-	struct addrinfo *results, *rp;
-	char s[INET_ADDRSTRLEN];
-
-	tv.tv_sec = 5;
-	tv.tv_usec = 0;
+	struct timeval tv = {
+		.tv_sec = 5
+	};
+	int ret;
 
 	PP_DEBUG("Initializing control messages\n");
 
-	if (ct->opts.dst_addr) {
-		ret =
-		    pp_getaddrinfo(ct->opts.dst_addr, ct->ctrl_port, &results);
-		if (ret != 0)
-			return ret;
+	if (ct->opts.dst_addr)
+		ret = pp_ctrl_init_client(ct);
+	else
+		ret = pp_ctrl_init_server(ct);
 
-		for (rp = results; rp != NULL; rp = rp->ai_next) {
-			ct->ctrl_connfd = socket(rp->ai_family, rp->ai_socktype,
-						 rp->ai_protocol);
-			if (ct->ctrl_connfd == -1)
-				continue;
+	if (ret)
+		return ret;
 
-			memset(&ct->ctrl_addr, '\0', sizeof(ct->ctrl_addr));
-			ct->ctrl_addr.sin_family = AF_INET;
-			ct->ctrl_addr.sin_addr.s_addr =
-			    ((struct sockaddr_in *)rp->ai_addr)
-				->sin_addr.s_addr;
-			ct->ctrl_addr.sin_port = htons(ct->ctrl_port);
-
-			retp = inet_ntop(
-			    AF_INET,
-			    (const void *)&ct->ctrl_addr.sin_addr.s_addr, s,
-			    INET_ADDRSTRLEN);
-			if (retp == NULL) {
-				err = -errno;
-				PP_PRINTERR("inet_ntop", err);
-				return err;
-			}
-			PP_DEBUG("CLIENT: connecting to <%s> (%s)\n",
-				 ct->opts.dst_addr, s);
-			ret = connect(ct->ctrl_connfd,
-				      (struct sockaddr *)&ct->ctrl_addr,
-				      sizeof(ct->ctrl_addr));
-			if (ret == -1) {
-				err = -errno;
-				close(ct->ctrl_connfd);
-				continue;
-			}
-			break;
-		}
-
-		freeaddrinfo(results);
-
-		if (!rp || ct->ctrl_connfd == -1) {
-			err = -errno;
-			PP_PRINTERR("getaddrinfo/socket/connect", err);
-			return err;
-		}
-
-		PP_DEBUG("CLIENT: connected\n");
-	} else {
-		ct->ctrl_listenfd = socket(AF_INET, SOCK_STREAM, 0);
-		if (ct->ctrl_listenfd == -1) {
-			err = -errno;
-			PP_PRINTERR("socket", err);
-		}
-		ret = setsockopt(ct->ctrl_listenfd, SOL_SOCKET, SO_REUSEADDR,
-				 &(int){1}, sizeof(int));
-		if (ret == -1) {
-			err = -errno;
-			PP_PRINTERR("setsockopt(SO_REUSEADDR)", err);
-			return err;
-		}
-
-		memset(&ct->ctrl_addr, '\0', sizeof(ct->ctrl_addr));
-		ct->ctrl_addr.sin_family = AF_INET;
-		ct->ctrl_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-		ct->ctrl_addr.sin_port = htons(ct->ctrl_port);
-
-		ret = bind(ct->ctrl_listenfd, (struct sockaddr *)&ct->ctrl_addr,
-			   sizeof(ct->ctrl_addr));
-		if (ret == -1) {
-			err = -errno;
-			PP_PRINTERR("bind", err);
-			return err;
-		}
-
-		ret = listen(ct->ctrl_listenfd, 10);
-		if (ret == -1) {
-			err = -errno;
-			PP_PRINTERR("listen", err);
-			return err;
-		}
-
-		PP_DEBUG("SERVER: waiting for connection\n");
-		ct->ctrl_connfd =
-		    accept(ct->ctrl_listenfd, (struct sockaddr *)NULL, NULL);
-		if (ct->ctrl_connfd == -1) {
-			err = -errno;
-			PP_PRINTERR("accept", err);
-			return err;
-		}
-		PP_DEBUG("SERVER: connection acquired\n");
-	}
-
-	ret = setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,
+	ret = setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO, &tv,
 			 sizeof(struct timeval));
 	if (ret == -1) {
-		err = -errno;
-		PP_PRINTERR("setsockopt(SO_RCVTIMEO)", err);
-		return err;
+		ret = -errno;
+		PP_PRINTERR("setsockopt(SO_RCVTIMEO)", ret);
+		return ret;
 	}
 
 	PP_DEBUG("Control messages initialized\n");
 
-	return 0;
+	return ret;
 }
 
 int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
@@ -531,10 +547,6 @@ int pp_ctrl_finish(struct ct_pingpong *ct)
 	if (ct->ctrl_connfd != -1) {
 		close(ct->ctrl_connfd);
 		ct->ctrl_connfd = -1;
-	}
-	if (ct->ctrl_listenfd != -1) {
-		close(ct->ctrl_listenfd);
-		ct->ctrl_listenfd = -1;
 	}
 
 	return 0;
@@ -2287,7 +2299,6 @@ int main(int argc, char **argv)
 
 	struct ct_pingpong ct = {
 		.timeout = -1,
-		.ctrl_listenfd = -1,
 		.ctrl_connfd = -1,
 		.data_default_port = 9228,
 		.ctrl_port = 47592,
