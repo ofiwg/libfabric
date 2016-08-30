@@ -349,6 +349,7 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 		break;
 
 	case FI_ENABLE:
+		ep->enabled = 1;
 		return 0;
 
 	default:
@@ -360,12 +361,24 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 
 static ssize_t psmx_rx_size_left(struct fid_ep *ep)
 {
-	return 0x7fffffff; /* a random choice */
+	struct psmx_fid_ep *ep_priv;
+
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	if (ep_priv->enabled)
+		return 0x7fffffff;
+	else
+		return -FI_EOPBADSTATE;
 }
 
 static ssize_t psmx_tx_size_left(struct fid_ep *ep)
 {
-	return 0x7fffffff; /* a random choice */
+	struct psmx_fid_ep *ep_priv;
+
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	if (ep_priv->enabled)
+		return 0x7fffffff;
+	else
+		return -FI_EOPBADSTATE;
 }
 
 static struct fi_ops psmx_fi_ops = {
