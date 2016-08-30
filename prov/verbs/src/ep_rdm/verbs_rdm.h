@@ -254,13 +254,17 @@ struct fi_ibv_rdm_ep {
 	int num_active_conns;
 	int max_inline_rc;
 	int rndv_threshold;
+	int rndv_seg_size;
 	struct ibv_cq *scq;
 	struct ibv_cq *rcq;
 	int scq_depth;
 	int rcq_depth;
+	int cqread_bunch_size;
+
 	/* TODO: move all CM things to domain */
 	pthread_t cm_progress_thread;
 	pthread_mutex_t cm_lock;
+	int cm_progress_timeout;
 	int is_closing;
 	int recv_preposted_threshold;
 };
@@ -574,7 +578,6 @@ fi_ibv_rdm_check_connection(struct fi_ibv_rdm_conn *conn,
 			fi_ibv_rdm_start_connection(ep, conn);
 		}
 		pthread_mutex_unlock(&ep->cm_lock);
-		usleep(1000);
 	}
 
 	return status;
