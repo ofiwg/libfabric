@@ -405,11 +405,15 @@ int pp_ctrl_init(struct ct_pingpong *ct)
 			}
 			break;
 		}
-		if (ct->ctrl_connfd == -1) {
+
+		freeaddrinfo(results);
+
+		if (!rp || ct->ctrl_connfd == -1) {
 			err = -errno;
 			PP_PRINTERR("getaddrinfo/socket/connect", err);
 			return err;
 		}
+
 		PP_DEBUG("CLIENT: connected\n");
 	} else {
 		ct->ctrl_listenfd = socket(AF_INET, SOCK_STREAM, 0);
