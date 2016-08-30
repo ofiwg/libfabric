@@ -219,7 +219,7 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 	int err = FI_SUCCESS;
 	int i;
 
-	if (!fi_addr) {
+	if (!fi_addr || (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)) {
 		return -FI_EINVAL;
 	}
 
@@ -233,17 +233,10 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 			continue;
 		}
 
-		switch (av->type) {
-		case FI_AV_MAP:
+		if (av->type == FI_AV_MAP) {
 			conn = (struct fi_ibv_rdm_conn *) fi_addr[i];
-			break;
-		case FI_AV_TABLE:
+		} else { /* (av->type == FI_AV_TABLE) */
 			conn = av->domain->rdm_cm->conn_table[fi_addr[i]];
-			break;
-		default:
-			assert(0);
-			ret = -FI_EINVAL;
-			break;
 		}
 
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",

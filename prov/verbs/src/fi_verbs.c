@@ -160,7 +160,8 @@ int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 		}
 	}
 
-	*rai = _rai;
+	if (rai)
+		*rai = _rai;
 
 out:
 	if (rai_hints.ai_src_addr)
