@@ -1,4 +1,4 @@
-.TH "fi_pingpong" "1" "2016\-08\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_pingpong" "1" "2016\-08\-31" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_pingpong \- Quick and simple pingpong test for libfabric
@@ -49,10 +49,15 @@ communicate properly.
 .SS Nodes addressing
 .PP
 \f[I]\-B <src_port>\f[] : The non\-default source port number of the
-endpoint.
+control socket.
+If this is not provided then the server will bind to port 47592 by
+default and the client will allow the port to be selected automatically.
 .PP
 \f[I]\-P <dest_port>\f[] : The non\-default destination port number of
-the endpoint.
+the control socket.
+If this is not provided then the client will connect to 47592 by
+default.
+The server ignores this option.
 .SS Fabric
 .PP
 \f[I]\-p <provider_name>\f[] : The name of the underlying fabric
