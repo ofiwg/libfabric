@@ -19,6 +19,7 @@ _verbs_files = \
 	prov/verbs/src/ep_rdm/verbs_ep_rdm.c \
 	prov/verbs/src/ep_rdm/verbs_queuing.h \
 	prov/verbs/src/ep_rdm/verbs_rdm_cm.c \
+	prov/verbs/src/ep_rdm/verbs_rdm_cntr.c \
 	prov/verbs/src/ep_rdm/verbs_rdm.h \
 	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.h \
 	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.c \

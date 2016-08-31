@@ -262,7 +262,8 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
 void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id);
-
+int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+			struct fid_cntr **cntr, void *context);
 struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
 struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep);
 struct fi_ops_msg *fi_ibv_msg_ep_ops_msg(struct fi_ibv_msg_ep *ep);

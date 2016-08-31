@@ -197,6 +197,8 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_request *request,
 		assert(0);
 	};
 
+	fi_ibv_rdm_cntr_inc(p->ep->send_cntr);
+
 	if (request->comp_flags & FI_COMPLETION) {
 		fi_ibv_rdm_move_to_cq(request);
 		request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
@@ -367,14 +369,13 @@ static ssize_t
 fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_request *request,
 			   void *data)
 {
+	struct fi_ibv_recv_got_pkt_preprocess_data *p = data;
+
 	FI_IBV_RDM_HNDL_REQ_LOG_IN();
+
 	assert(request->state.eager == FI_IBV_STATE_EAGER_SEND_END ||
 	       (request->state.eager == FI_IBV_STATE_EAGER_SEND_WAIT4LC));
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_SEND_WAIT4ACK);
-
-#ifndef NDEBUG
-	struct fi_ibv_recv_got_pkt_preprocess_data *p = data;
-#endif /* NDEBUG */
 
 	assert((sizeof(struct fi_ibv_rdm_request *) +
 		sizeof(struct fi_ibv_rdm_header)) == p->arrived_len);
@@ -392,6 +393,8 @@ fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_request *request,
 
 	request->state.rndv = FI_IBV_STATE_RNDV_SEND_END;
 	FI_IBV_RDM_HNDL_REQ_LOG();
+
+	fi_ibv_rdm_cntr_inc(p->ep->send_cntr);
 
 	if (request->comp_flags & FI_COMPLETION) {
 		fi_ibv_rdm_move_to_cq(request);
@@ -530,7 +533,12 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_request *request,
 	
 	if (ret != FI_SUCCESS) {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-		fi_ibv_rdm_move_to_errcq(request, ret);
+
+		fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
+
+		if (request->comp_flags & FI_COMPLETION) {
+			fi_ibv_rdm_move_to_errcq(request, ret);
+		}
 		ret = FI_SUCCESS;
 	}
 
@@ -547,7 +555,8 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_request *request, void *data)
 
 	ssize_t ret = FI_SUCCESS;
 
-	struct fi_ibv_rdm_tagged_peek_data *peek_data = data;
+	struct fi_ibv_rdm_tagged_recv_start_data *p = data;
+	struct fi_ibv_rdm_tagged_peek_data *peek_data = &p->peek_data;
 	struct dlist_entry *found_entry =
 		dlist_find_first_match(&fi_ibv_rdm_unexp_queue,
 					fi_ibv_rdm_req_match_by_info2,
@@ -588,6 +597,8 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_request *request, void *data)
 			}
 		}
 
+		fi_ibv_rdm_cntr_inc(p->ep->recv_cntr);
+
 		if (request->comp_flags & FI_COMPLETION) {
 			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 			fi_ibv_rdm_move_to_cq(request);
@@ -607,7 +618,13 @@ out:
 	return ret;
 err:
 	request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-	fi_ibv_rdm_move_to_errcq(request, ret);
+
+	fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
+
+	if (request->comp_flags & FI_COMPLETION) {
+		fi_ibv_rdm_move_to_errcq(request, ret);
+	}
+
 	ret = FI_SUCCESS;
 	goto out;
 }
@@ -715,6 +732,8 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 					request->exp_rbuf, request->len);
 			}
 
+			fi_ibv_rdm_cntr_inc(p->ep->recv_cntr);
+
 			if (request->comp_flags & FI_COMPLETION) {
 				request->state.eager = 
 					FI_IBV_STATE_EAGER_READY_TO_FREE;
@@ -735,9 +754,14 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 				request->minfo.tag,
 				request->minfo.tagmask);
 
-				request->state.eager =
-					FI_IBV_STATE_EAGER_READY_TO_FREE;
+			request->state.eager =
+				FI_IBV_STATE_EAGER_READY_TO_FREE;
+
+			fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
+
+			if (request->comp_flags & FI_COMPLETION) {
 				fi_ibv_rdm_move_to_errcq(request, FI_ETRUNC);
+			}
 		}
 
 		FI_IBV_RDM_HNDL_REQ_LOG();
@@ -790,7 +814,10 @@ static ssize_t
 fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(struct fi_ibv_rdm_request *request,
 						void *data)
 {
+	struct fi_ibv_recv_got_pkt_process_data *p = data;
+
 	FI_IBV_RDM_HNDL_REQ_LOG_IN();
+
 	assert((request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV) ||
 	       (request->state.eager == FI_IBV_STATE_EAGER_RECV_CLAIMED));
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
@@ -804,6 +831,8 @@ fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(struct fi_ibv_rdm_request *reques
 				request->unexp_rbuf);
 		request->unexp_rbuf = NULL;
 	}
+
+	fi_ibv_rdm_cntr_inc(p->ep->recv_cntr);
 
 	if (request->comp_flags & FI_COMPLETION) {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
@@ -1018,12 +1047,19 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_request *request,
 	}
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 	request->state.rndv = FI_IBV_STATE_RNDV_RECV_END;
+
 	if (request->state.err == FI_SUCCESS) {
+		fi_ibv_rdm_cntr_inc(p->ep->recv_cntr);
+
 		if (request->comp_flags & FI_COMPLETION) {
 			fi_ibv_rdm_move_to_cq(request);
 		}
 	} else {
-		fi_ibv_rdm_move_to_errcq(request, request->state.err);
+		fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
+
+		if (request->comp_flags & FI_COMPLETION) {
+			fi_ibv_rdm_move_to_errcq(request, request->state.err);
+		}
 	}
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
@@ -1258,6 +1294,12 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_request *request, void *data)
 						     BUF_STATUS_FREE);
 		}
 
+		if (request->rma.opcode == IBV_WR_RDMA_READ) {
+			fi_ibv_rdm_cntr_inc(p->ep->read_cntr);
+		} else if (request->rma.opcode == IBV_WR_RDMA_WRITE) {
+			fi_ibv_rdm_cntr_inc(p->ep->write_cntr);
+		}
+
 		if (request->comp_flags & FI_COMPLETION) {
 			fi_ibv_rdm_move_to_cq(request);
 		} else {
@@ -1295,6 +1337,12 @@ fi_ibv_rdm_rma_zerocopy_lc(struct fi_ibv_rdm_request *request, void *data)
 	request->post_counter--;
 
 	if (request->rest_len == 0 && request->post_counter == 0) {
+		if (request->rma.opcode == IBV_WR_RDMA_READ) {
+			fi_ibv_rdm_cntr_inc(p->ep->read_cntr);
+		} else if (request->rma.opcode == IBV_WR_RDMA_WRITE) {
+			fi_ibv_rdm_cntr_inc(p->ep->write_cntr);
+		}
+
 		if (request->comp_flags & FI_COMPLETION) {
 			fi_ibv_rdm_move_to_cq(request);
 			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
