@@ -41,6 +41,8 @@ extern "C" {
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdbool.h>
+
 #define FI_GNI_DOMAIN_OPS_1 "domain ops 1"
 typedef enum dom_ops_val { GNI_MSG_RENDEZVOUS_THRESHOLD,
 			   GNI_RMA_RDMA_THRESHOLD,
@@ -79,7 +81,13 @@ struct fi_gni_ops_domain {
 	int (*flush_cache)(struct fid *fid);
 };
 
-enum gnix_fab_req_type;
+enum gnix_native_amo_types {
+	GNIX_NAMO_AX = 0x20,
+	GNIX_NAMO_AX_S,
+	GNIX_NAMO_FAX,
+	GNIX_NAMO_FAX_S,
+};
+
 struct fi_gni_ops_ep {
 	int (*set_val)(struct fid *fid, ep_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, ep_ops_val_t t, void *val);
@@ -87,7 +95,7 @@ struct fi_gni_ops_ep {
 			 void *desc, void *result, void *result_desc,
 			     /*void *desc,*/ fi_addr_t dest_addr, uint64_t addr,
 			     uint64_t key, enum fi_datatype datatype,
-			     enum gnix_fab_req_type req_type,
+			     int req_type,
 			     void *context);
 };
 
