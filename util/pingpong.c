@@ -192,7 +192,6 @@ struct ct_pingpong {
 
 	int ctrl_connfd;
 	char ctrl_buf[PP_CTRL_BUF_LEN + 1];
-	char loc_name[PP_MAX_CTRL_MSG];
 	char rem_name[PP_MAX_CTRL_MSG];
 };
 
@@ -557,6 +556,76 @@ int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 	}
 
 	return ret;
+}
+
+int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
+{
+	char local_name[64];
+	size_t addrlen;
+	uint32_t len;
+	int ret;
+
+	PP_DEBUG("Fetching local address\n");
+
+	addrlen = sizeof(local_name);
+	ret = fi_getname(endpoint, local_name, &addrlen);
+	if (ret) {
+		PP_PRINTERR("fi_getname", ret);
+		return ret;
+	}
+
+	if (addrlen > sizeof(local_name)) {
+		PP_DEBUG("Address exceeds control buffer length\n");
+		return -EMSGSIZE;
+	}
+
+	PP_DEBUG("Sending name length\n");
+	len = htonl(addrlen);
+	ret = pp_ctrl_send(ct, (char *) &len, sizeof(len));
+	if (ret < 0)
+		return ret;
+
+	PP_DEBUG("Sending name\n");
+	ret = pp_ctrl_send(ct, local_name, addrlen);
+	PP_DEBUG("Sent name\n");
+
+	return ret;
+}
+
+int pp_recv_name(struct ct_pingpong *ct)
+{
+	uint32_t len;
+	int ret;
+
+	PP_DEBUG("Receiving name length\n");
+	ret = pp_ctrl_recv(ct, (char *) &len, sizeof(len));
+	if (ret < 0)
+		return ret;
+
+	len = ntohl(len);
+
+	if (len > sizeof(ct->rem_name)) {
+		PP_DEBUG("Address length exceeds address storage\n");
+		return -EMSGSIZE;
+	}
+
+	PP_DEBUG("Receiving name\n");
+	ret = pp_ctrl_recv(ct, ct->rem_name, len);
+	if (ret < 0)
+		return ret;
+	PP_DEBUG("Received name\n");
+
+	ct->hints->dest_addr = malloc(len);
+	if (!ct->hints->dest_addr) {
+		PP_DEBUG("Failed to allocate memory for destination address\n");
+		return -ENOMEM;
+	}
+
+	/* fi_freeinfo will free the dest_addr field. */
+	memcpy(ct->hints->dest_addr, ct->rem_name, len);
+	ct->hints->dest_addrlen = len;
+
+	return 0;
 }
 
 int pp_ctrl_finish(struct ct_pingpong *ct)
@@ -1423,128 +1492,6 @@ int pp_av_insert(struct fid_av *av, void *addr, size_t count,
 	return 0;
 }
 
-int pp_init_av(struct ct_pingpong *ct)
-{
-	size_t addrlen;
-	int ret;
-
-	PP_DEBUG("Connection-less endpoint: initializing address vector\n");
-
-	addrlen = PP_MAX_CTRL_MSG;
-
-	ret = fi_getname(&(ct->ep->fid), (char *)ct->loc_name, &addrlen);
-	if (ret) {
-		PP_PRINTERR("fi_getname", ret);
-		return ret;
-	}
-
-	if (ct->opts.dst_addr) {
-		PP_DEBUG("CLIENT: receiving server name\n");
-		ret = pp_ctrl_recv(ct, ct->rem_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: received server name\n");
-
-		PP_DEBUG("CLIENT: sending client name\n");
-		ret = pp_ctrl_send(ct, ct->loc_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: sent client name\n");
-	} else {
-		PP_DEBUG("SERVER: sending server name\n");
-		ret = pp_ctrl_send(ct, ct->loc_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("SERVER: sent server name\n");
-
-		PP_DEBUG("SERVER: receiving client name\n");
-		ret = pp_ctrl_recv(ct, ct->rem_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("SERVER: received client name\n");
-	}
-
-	/* synchronous av insertion */
-	ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
-			   NULL);
-	if (ret)
-		return ret;
-
-	PP_DEBUG("Connection-less endpoint: address vector initialized\n");
-
-	return 0;
-}
-
-int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
-{
-	char local_name[64];
-	size_t addrlen;
-	uint32_t len;
-	int ret;
-
-	PP_DEBUG("Fetching local address\n");
-
-	addrlen = sizeof(local_name);
-	ret = fi_getname(endpoint, local_name, &addrlen);
-	if (ret) {
-		PP_PRINTERR("fi_getname", ret);
-		return ret;
-	}
-
-	if (addrlen > sizeof(local_name)) {
-		PP_DEBUG("Address exceeds control buffer length\n");
-		return -EMSGSIZE;
-	}
-
-	PP_DEBUG("Sending name length\n");
-	len = htonl(addrlen);
-	ret = pp_ctrl_send(ct, (char *) &len, sizeof(len));
-	if (ret < 0)
-		return ret;
-
-	PP_DEBUG("Sending name\n");
-	ret = pp_ctrl_send(ct, local_name, addrlen);
-	PP_DEBUG("Sent name\n");
-
-	return ret;
-}
-
-int pp_recv_name(struct ct_pingpong *ct)
-{
-	uint32_t len;
-	int ret;
-
-	PP_DEBUG("Receiving name length\n");
-	ret = pp_ctrl_recv(ct, (char *) &len, sizeof(len));
-	if (ret < 0)
-		return ret;
-
-	len = ntohl(len);
-
-	if (len > sizeof(ct->rem_name)) {
-		PP_DEBUG("Address length exceeds address storage\n");
-		return -EMSGSIZE;
-	}
-
-	PP_DEBUG("Receiving name\n");
-	ret = pp_ctrl_recv(ct, ct->rem_name, len);
-	if (ret < 0)
-		return ret;
-	PP_DEBUG("Received name\n");
-
-	ct->hints->dest_addr = malloc(len);
-	if (!ct->hints->dest_addr) {
-		PP_DEBUG("Failed to allocate memory for destination address\n");
-		return -ENOMEM;
-	}
-
-	/* fi_freeinfo will free the dest_addr field. */
-	memcpy(ct->hints->dest_addr, ct->rem_name, len);
-	ct->hints->dest_addrlen = len;
-
-	return 0;
-}
-
 int pp_exchange_names_connected(struct ct_pingpong *ct)
 {
 	int ret;
@@ -1556,12 +1503,17 @@ int pp_exchange_names_connected(struct ct_pingpong *ct)
 		return ret;
 
 	if (ct->opts.dst_addr) {
-		pp_recv_name(ct);
+		ret = pp_recv_name(ct);
+		if (ret < 0)
+			return ret;
+
 		ret = pp_getinfo(ct, ct->hints, &(ct->fi));
 		if (ret)
 			return ret;
 	} else {
-		pp_send_name(ct, &ct->pep->fid);
+		ret = pp_send_name(ct, &ct->pep->fid);
+		if (ret < 0)
+			return ret;
 	}
 
 	return 0;
@@ -1751,7 +1703,6 @@ int pp_client_connect(struct ct_pingpong *ct)
 int pp_init_fabric(struct ct_pingpong *ct)
 {
 	int ret;
-	size_t addrlen;
 
 	ret = pp_ctrl_init(ct);
 	if (ret)
@@ -1761,11 +1712,9 @@ int pp_init_fabric(struct ct_pingpong *ct)
 
 	PP_DEBUG("Connection-less endpoint: initializing address vector\n");
 
-	addrlen = PP_MAX_CTRL_MSG;
-
 	if (ct->opts.dst_addr) {
 		ret = pp_recv_name(ct);
-		if (ret)
+		if (ret < 0)
 			return ret;
 
 		ret = pp_getinfo(ct, ct->hints, &(ct->fi));
@@ -1784,18 +1733,7 @@ int pp_init_fabric(struct ct_pingpong *ct)
 		if (ret)
 			return ret;
 
-		ret =
-		    fi_getname(&(ct->ep->fid), (char *)ct->loc_name, &addrlen);
-		if (ret) {
-			PP_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		PP_DEBUG("CLIENT: sending client name\n");
-		ret = pp_ctrl_send(ct, ct->loc_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: sent client name\n");
+		ret = pp_send_name(ct, &ct->ep->fid);
 	} else {
 		PP_DEBUG("SERVER: getinfo\n");
 		ret = pp_getinfo(ct, ct->hints, &(ct->fi));
@@ -1817,14 +1755,15 @@ int pp_init_fabric(struct ct_pingpong *ct)
 		if (ret)
 			return ret;
 
-		pp_send_name(ct, &ct->ep->fid);
-
-		PP_DEBUG("SERVER: receiving client name\n");
-		ret = pp_ctrl_recv(ct, ct->rem_name, addrlen);
+		ret = pp_send_name(ct, &ct->ep->fid);
 		if (ret < 0)
 			return ret;
-		PP_DEBUG("SERVER: received client name\n");
+
+		ret = pp_recv_name(ct);
 	}
+
+	if (ret < 0)
+		return ret;
 
 	ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
 			   NULL);
