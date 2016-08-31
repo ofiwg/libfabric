@@ -48,10 +48,14 @@ The client's command line options must match those used on the server. If they d
 ## Nodes addressing
 
 *-B \<src_port\>*
-: The non-default source port number of the endpoint.
+: The non-default source port number of the control socket. If this is not
+  provided then the server will bind to port 47592 by default and the client
+  will allow the port to be selected automatically.
 
 *-P \<dest_port\>*
-: The non-default destination port number of the endpoint.
+: The non-default destination port number of the control socket. If this is not
+  provided then the client will connect to 47592 by default. The server ignores
+  this option.
 
 ## Fabric
 
