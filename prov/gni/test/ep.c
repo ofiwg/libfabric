@@ -218,7 +218,17 @@ Test(endpoint, sizeleft)
 	struct fid_ep *ep = NULL;
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
-	cr_assert(!ret, "fi_endpoint");
+	cr_assert(ret == FI_SUCCESS, "fi_endpoint");
+
+	/* Test in disabled state. */
+	sz = fi_rx_size_left(ep);
+	cr_assert(sz == -FI_EOPBADSTATE, "fi_rx_size_left");
+
+	sz = fi_tx_size_left(ep);
+	cr_assert(sz == -FI_EOPBADSTATE, "fi_tx_size_left");
+
+	ret = fi_enable(ep);
+	cr_assert(ret == FI_SUCCESS, "fi_enable");
 
 	/* Test default values. */
 	sz = fi_rx_size_left(ep);
