@@ -218,7 +218,7 @@ _gnix_notifier_get_event(struct gnix_mr_notifier *mrn, void* buf, size_t len)
 	int ret, ret_errno;
 
 	if ((mrn == NULL) || (buf == NULL) || (len <= 0)) {
-		GNIX_INFO(FI_LOG_MR,
+		GNIX_WARN(FI_LOG_MR,
 			  "Invalid argument to _gnix_notifier_get_event\n");
 		return -FI_EINVAL;
 	}
