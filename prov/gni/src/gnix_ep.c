@@ -1739,6 +1739,37 @@ DIRECT_FN int gnix_pep_bind(fid_t fid, fid_t *bfid, uint64_t flags)
 	return -FI_ENOSYS;
 }
 
+static int __gnix_ep_cm_nic_prep(struct gnix_fid_domain *domain,
+				 struct fi_info *info,
+				 uint32_t *cdm_id)
+{
+	int ret = FI_SUCCESS;
+	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
+	struct gnix_ep_name *name;
+
+	if (info->src_addr &&
+	    info->src_addrlen == sizeof(struct gnix_ep_name)) {
+		name = (struct gnix_ep_name *)info->src_addr;
+		if (name->name_type == GNIX_EPN_TYPE_BOUND) {
+			/* EP name includes user specified service/port */
+			*cdm_id = name->gnix_addr.cdm_id;
+			name_type = name->name_type;
+		}
+	}
+
+	if (name_type == GNIX_EPN_TYPE_UNBOUND) {
+		ret = _gnix_cm_nic_create_cdm_id(domain, cdm_id);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"gnix_cm_nic_create_cdm_id returned %s\n",
+				  fi_strerror(-ret));
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
 /*
  * helper function for initializing an ep of type
  * GNIX_EPN_TYPE_BOUND
@@ -1748,6 +1779,7 @@ static int __gnix_ep_bound_prep(struct gnix_fid_domain *domain,
 				struct gnix_fid_ep *ep)
 {
 	int ret = FI_SUCCESS;
+	uint32_t cdm_id;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1755,8 +1787,14 @@ static int __gnix_ep_bound_prep(struct gnix_fid_domain *domain,
 	assert(info != NULL);
 	assert(ep != NULL);
 
+	ret = __gnix_ep_cm_nic_prep(domain, info, &cdm_id);
+	if (ret != FI_SUCCESS) {
+		return ret;
+	}
+
 	ret = _gnix_cm_nic_alloc(domain,
 				 info,
+				 cdm_id,
 				 &ep->cm_nic);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -1934,8 +1972,16 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			 * to reduce demand on Aries hw resources.
 			 */
 			if (domain_priv->cm_nic == NULL) {
+				__gnix_ep_cm_nic_prep(domain_priv, info,
+						      &cdm_id);
+				if (ret != FI_SUCCESS) {
+					fastlock_release(
+						 &domain_priv->cm_nic_lock);
+					goto err;
+				}
 				ret = _gnix_cm_nic_alloc(domain_priv,
 							 info,
+							 cdm_id,
 							 &domain_priv->cm_nic);
 				if (ret != FI_SUCCESS) {
 					GNIX_WARN(FI_LOG_EP_CTRL,
