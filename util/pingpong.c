@@ -82,8 +82,8 @@ enum {
 };
 
 struct pp_opts {
-	char *src_port;
-	char *dst_port;
+	uint16_t src_port;
+	uint16_t dst_port;
 	char *dst_addr;
 	int iterations;
 	int transfer_size;
@@ -190,7 +190,6 @@ struct ct_pingpong {
 
 	long cnt_ack_msg;
 
-	uint16_t ctrl_port;
 	int ctrl_connfd;
 	char ctrl_buf[PP_CTRL_BUF_LEN + 1];
 	char loc_name[PP_MAX_CTRL_MSG];
@@ -299,12 +298,8 @@ void pp_banner_options(struct ct_pingpong *ct)
 	char iter_msg[50];
 	struct pp_opts opts = ct->opts;
 
-	if ((opts.src_port == NULL) || (opts.src_port[0] == '\0'))
-		opts.src_port = "None";
 	if ((opts.dst_addr == NULL) || (opts.dst_addr[0] == '\0'))
 		opts.dst_addr = "None";
-	if ((opts.dst_port == NULL) || (opts.dst_port[0] == '\0'))
-		opts.dst_port = "None";
 
 	if (opts.sizes_enabled == PP_ENABLE_ALL)
 		snprintf(size_msg, 50, "%s", "All sizes");
@@ -322,9 +317,9 @@ void pp_banner_options(struct ct_pingpong *ct)
 	}
 
 	PP_DEBUG(" * PingPong options:\n");
-	PP_DEBUG("  - %-20s: [%s]\n", "src_port", opts.src_port);
+	PP_DEBUG("  - %-20s: [%" PRIu16 "]\n", "src_port", opts.src_port);
 	PP_DEBUG("  - %-20s: [%s]\n", "dst_addr", opts.dst_addr);
-	PP_DEBUG("  - %-20s: [%s]\n", "dst_port", opts.dst_port);
+	PP_DEBUG("  - %-20s: [%" PRIu16 "]\n", "dst_port", opts.dst_port);
 	PP_DEBUG("  - %-20s: %s\n", "sizes_enabled", size_msg);
 	PP_DEBUG("  - %-20s: %s\n", "iterations", iter_msg);
 	PP_DEBUG("  - %-20s: %s\n", "provider",
@@ -365,12 +360,13 @@ out:
 
 static int pp_ctrl_init_client(struct ct_pingpong *ct)
 {
+	struct sockaddr_in in_addr = {0};
 	struct addrinfo *results;
 	struct addrinfo *rp;
 	int errno_save;
 	int ret;
 
-	ret = pp_getaddrinfo(ct->opts.dst_addr, ct->ctrl_port, &results);
+	ret = pp_getaddrinfo(ct->opts.dst_addr, ct->opts.dst_port, &results);
 	if (ret)
 		return ret;
 
@@ -385,6 +381,21 @@ static int pp_ctrl_init_client(struct ct_pingpong *ct)
 		if (ct->ctrl_connfd == -1) {
 			errno_save = errno;
 			continue;
+		}
+
+		if (ct->opts.src_port != 0) {
+			in_addr.sin_family = AF_INET;
+			in_addr.sin_port = htons(ct->opts.src_port);
+			in_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+			ret =
+			    bind(ct->ctrl_connfd, (struct sockaddr *)&in_addr,
+				 sizeof(in_addr));
+			if (ret == -1) {
+				errno_save = errno;
+				close(ct->ctrl_connfd);
+				continue;
+			}
 		}
 
 		ret = connect(ct->ctrl_connfd, rp->ai_addr, rp->ai_addrlen);
@@ -431,7 +442,7 @@ static int pp_ctrl_init_server(struct ct_pingpong *ct)
 	}
 
 	ctrl_addr.sin_family = AF_INET;
-	ctrl_addr.sin_port = htons(ct->ctrl_port);
+	ctrl_addr.sin_port = htons(ct->opts.src_port);
 	ctrl_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	ret = bind(listenfd, (struct sockaddr *)&ctrl_addr,
@@ -473,6 +484,7 @@ fail_close_socket:
 
 int pp_ctrl_init(struct ct_pingpong *ct)
 {
+	const uint32_t default_ctrl = 47592;
 	struct timeval tv = {
 		.tv_sec = 5
 	};
@@ -480,10 +492,15 @@ int pp_ctrl_init(struct ct_pingpong *ct)
 
 	PP_DEBUG("Initializing control messages\n");
 
-	if (ct->opts.dst_addr)
+	if (ct->opts.dst_addr) {
+		if (ct->opts.dst_port == 0)
+			ct->opts.dst_port = default_ctrl;
 		ret = pp_ctrl_init_client(ct);
-	else
+	} else {
+		if (ct->opts.src_port == 0)
+			ct->opts.src_port = default_ctrl;
 		ret = pp_ctrl_init_server(ct);
+	}
 
 	if (ret)
 		return ret;
@@ -1930,19 +1947,20 @@ void pp_pingpong_usage(char *name, char *desc)
 	fprintf(stderr, "\nOptions:\n");
 
 	fprintf(stderr, " %-20s %s\n", "-B <src_port>",
-		"non default source port number");
+		"source control port number (server: 47592, client: auto)");
 	fprintf(stderr, " %-20s %s\n", "-P <dst_port>",
-		"non default destination port number");
+		"destination control port number (client: 47592)");
 
 	fprintf(stderr, " %-20s %s\n", "-d <domain>", "domain name");
 	fprintf(stderr, " %-20s %s\n", "-p <provider>",
 		"specific provider name eg sockets, verbs");
 	fprintf(stderr, " %-20s %s\n", "-e <ep_type>",
-		"Endpoint type: msg|rdm|dgram (default:dgram)");
+		"endpoint type: msg|rdm|dgram (dgram)");
 
-	fprintf(stderr, " %-20s %s\n", "-I <number>", "number of iterations");
+	fprintf(stderr, " %-20s %s\n", "-I <number>",
+		"number of iterations (1000)");
 	fprintf(stderr, " %-20s %s\n", "-S <size>",
-		"specific transfer size or 'all'");
+		"specific transfer size or 'all' (all)");
 
 	fprintf(stderr, " %-20s %s\n", "-c", "enables data_integrity checks");
 
@@ -2009,12 +2027,12 @@ void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 
 	/* Source Port */
 	case 'B':
-		ct->opts.src_port = optarg;
+		ct->opts.src_port = parse_ulong(optarg, UINT16_MAX);
 		break;
 
 	/* Destination Port */
 	case 'P':
-		ct->opts.dst_port = optarg;
+		ct->opts.dst_port = parse_ulong(optarg, UINT16_MAX);
 		break;
 
 	/* Debug */
@@ -2208,11 +2226,10 @@ int main(int argc, char **argv)
 	struct ct_pingpong ct = {
 		.timeout = -1,
 		.ctrl_connfd = -1,
-		.ctrl_port = 47592,
 		.opts = {
 			.iterations = 1000,
 			.transfer_size = 1024,
-			.sizes_enabled = PP_DEFAULT_SIZE,
+			.sizes_enabled = PP_DEFAULT_SIZE
 		},
 		.eq_attr.wait_obj = FI_WAIT_UNSPEC,
 	};
