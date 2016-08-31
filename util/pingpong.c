@@ -1180,11 +1180,11 @@ int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 			timeout_save = ct->timeout;                            \
 			ct->timeout = 0;                                       \
 			rc = comp_fn(ct, seq);                                 \
+			ct->timeout = timeout_save;                            \
 			if (rc && rc != -FI_EAGAIN) {                          \
 				PP_ERR("Failed to get " op_str " completion"); \
 				return rc;                                     \
 			}                                                      \
-			ct->timeout = timeout_save;                            \
 		}                                                              \
 		seq++;                                                         \
 	} while (0)
