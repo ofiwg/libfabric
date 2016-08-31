@@ -179,8 +179,6 @@ struct ct_pingpong {
 	fi_addr_t remote_fi_addr;
 	void *buf, *tx_buf, *rx_buf;
 	size_t buf_size, tx_size, rx_size;
-	int data_default_port;
-	char data_port[8];
 
 	int timeout;
 	struct timespec start, end;
@@ -566,68 +564,6 @@ int pp_ctrl_finish(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_ctrl_txrx_data_port(struct ct_pingpong *ct)
-{
-	int ret;
-
-	PP_DEBUG("Exchanging data port\n");
-
-	if (ct->opts.dst_addr) {
-		memset(&ct->ctrl_buf, '\0', PP_MSG_LEN_PORT + 1);
-
-		PP_DEBUG("CLIENT: receiving port\n");
-		ret = pp_ctrl_recv(ct, ct->ctrl_buf, PP_MSG_LEN_PORT);
-		if (ret < 0)
-			return ret;
-
-		ct->data_default_port =
-		    (int)parse_ulong(ct->ctrl_buf, UINT16_MAX);
-		if (ct->data_default_port < 0)
-			return ret;
-		PP_DEBUG("CLIENT: received port = <%d> (len=%lu)\n",
-			 ct->data_default_port, strlen(ct->ctrl_buf));
-
-		snprintf(ct->ctrl_buf, sizeof(PP_MSG_CHECK_PORT_OK), "%s",
-			 PP_MSG_CHECK_PORT_OK);
-		ret = pp_ctrl_send(ct, ct->ctrl_buf,
-				   sizeof(PP_MSG_CHECK_PORT_OK));
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: acked port to server\n");
-	} else {
-		snprintf(ct->ctrl_buf, PP_MSG_LEN_PORT + 1, "%d",
-			 ct->data_default_port);
-
-		PP_DEBUG("SERVER: sending port = <%s> (len=%lu)\n",
-			 ct->ctrl_buf, strlen(ct->ctrl_buf));
-		ret = pp_ctrl_send(ct, ct->ctrl_buf, PP_MSG_LEN_PORT);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("SERVER: sent port\n");
-
-		memset(&ct->ctrl_buf, '\0', sizeof(PP_MSG_CHECK_PORT_OK));
-		ret = pp_ctrl_recv(ct, ct->ctrl_buf,
-				   sizeof(PP_MSG_CHECK_PORT_OK));
-		if (ret < 0)
-			return ret;
-
-		if (strcmp(ct->ctrl_buf, PP_MSG_CHECK_PORT_OK)) {
-			PP_DEBUG(
-				"SERVER: error while client acking the port: <%s> (len=%lu)\n",
-				ct->ctrl_buf, strlen(ct->ctrl_buf));
-			return -EBADMSG;
-		}
-		PP_DEBUG("SERVER: port acked by client\n");
-	}
-
-	snprintf(ct->data_port, sizeof(ct->data_port), "%d",
-		 ct->data_default_port);
-
-	PP_DEBUG("Data port exchanged\n");
-
-	return 0;
-}
-
 int pp_ctrl_sync(struct ct_pingpong *ct)
 {
 	int ret;
@@ -882,26 +818,6 @@ void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
 		eq_readerr(eq);
 	else
 		PP_PRINTERR(fn, rd);
-}
-
-/*******************************************************************************
- *                                         Address handling
- ******************************************************************************/
-
-int pp_read_addr_opts(struct ct_pingpong *ct, char **node, char **service,
-		      struct fi_info *hints, uint64_t *flags,
-		      struct pp_opts *opts)
-{
-
-	if (opts->dst_addr) {
-		if (!opts->dst_port)
-			opts->dst_port = ct->data_port;
-	} else {
-		if (!opts->src_port)
-			opts->src_port = ct->data_port;
-	}
-
-	return 0;
 }
 
 /*******************************************************************************
@@ -1425,14 +1341,8 @@ int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
 	       struct fi_info **info)
 {
-	char *node, *service;
 	uint64_t flags = 0;
 	int ret;
-
-	ret =
-	    pp_read_addr_opts(ct, &node, &service, hints, &flags, &(ct->opts));
-	if (ret)
-		return ret;
 
 	if (!hints->ep_attr->type)
 		hints->ep_attr->type = FI_EP_DGRAM;
@@ -1839,10 +1749,6 @@ int pp_init_fabric(struct ct_pingpong *ct)
 	size_t addrlen;
 
 	ret = pp_ctrl_init(ct);
-	if (ret)
-		return ret;
-
-	ret = pp_ctrl_txrx_data_port(ct);
 	if (ret)
 		return ret;
 
@@ -2266,10 +2172,6 @@ static int run_pingpong_msg(struct ct_pingpong *ct)
 	if (ret)
 		return ret;
 
-	ret = pp_ctrl_txrx_data_port(ct);
-	if (ret)
-		return ret;
-
 	if (!ct->opts.dst_addr) {
 		ret = pp_start_server(ct);
 		if (ret)
@@ -2306,7 +2208,6 @@ int main(int argc, char **argv)
 	struct ct_pingpong ct = {
 		.timeout = -1,
 		.ctrl_connfd = -1,
-		.data_default_port = 9228,
 		.ctrl_port = 47592,
 		.opts = {
 			.iterations = 1000,
