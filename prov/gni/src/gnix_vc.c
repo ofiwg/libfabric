@@ -90,10 +90,18 @@ static inline void __gnix_vc_set_ht_key(void *gnix_addr,
 
 static struct gnix_vc *_gnix_ep_vc_lookup(struct gnix_fid_ep *ep, uint64_t key)
 {
-	struct gnix_vc *vc;
+	struct gnix_vc *vc = NULL;
 	int ret;
+	int i;
 
 	assert(ep->av);
+
+
+	for (i = 0; i < GNIX_ADDR_CACHE_SIZE; i++)
+	{
+		if (ep->addr_cache[i].addr == key && ep->addr_cache[i].vc != NULL)
+			return ep->addr_cache[i].vc;		
+	}
 
 	if (ep->av->type == FI_AV_TABLE) {
 		ret = _gnix_vec_at(ep->vc_table, (void **)&vc, key);
@@ -102,6 +110,12 @@ static struct gnix_vc *_gnix_ep_vc_lookup(struct gnix_fid_ep *ep, uint64_t key)
 		}
 	} else {
 		vc = (struct gnix_vc *)_gnix_ht_lookup(ep->vc_ht, key);
+	}
+
+	if (vc) {
+		ep->addr_cache[ep->last_cached].addr = key;
+		ep->addr_cache[ep->last_cached].vc = vc;
+		ep->last_cached = (ep->last_cached + 1) % 5; 	
 	}
 
 	return vc;

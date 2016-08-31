@@ -126,22 +126,34 @@ static inline gnix_ht_key_t __gnix_hash_func(
 			ht->ht_attr.ht_hash_seed) % ht->ht_size;
 }
 
+static inline gnix_ht_entry_t *__gnix_ht_lookup_entry_collision(
+                struct dlist_entry *head,
+                gnix_ht_key_t key,
+                uint64_t *collision_count)
+{
+        gnix_ht_entry_t *ht_entry;
+
+        dlist_for_each(head, ht_entry, entry) {
+                READ_PREFETCH(ht_entry->entry.next);
+                if (ht_entry->key == key)
+                        return ht_entry;
+
+                *collision_count += 1;
+        }
+
+        return NULL;
+}
+
 static inline gnix_ht_entry_t *__gnix_ht_lookup_entry(
 		struct dlist_entry *head,
-		gnix_ht_key_t key,
-		uint64_t *collision_count)
+		gnix_ht_key_t key)
 {
 	gnix_ht_entry_t *ht_entry;
 
-	if (dlist_empty(head))
-		return NULL;
-
 	dlist_for_each(head, ht_entry, entry) {
+		READ_PREFETCH(ht_entry->entry.next);
 		if (ht_entry->key == key)
 			return ht_entry;
-
-		if (collision_count)
-			*collision_count += 1;
 	}
 
 	return NULL;
@@ -151,12 +163,9 @@ static inline void *__gnix_ht_lookup_key(
 		struct dlist_entry *head,
 		gnix_ht_key_t key)
 {
-	gnix_ht_entry_t *ht_entry = __gnix_ht_lookup_entry(head, key, NULL);
+	gnix_ht_entry_t *ht_entry = __gnix_ht_lookup_entry(head, key);
 
-	if (!ht_entry)
-		return NULL;
-
-	return ht_entry->value;
+	return ((ht_entry != NULL) ? ht_entry->value : NULL);
 }
 
 static inline int __gnix_ht_destroy_list(
@@ -186,7 +195,7 @@ static inline int __gnix_ht_insert_list(
 {
 	gnix_ht_entry_t *found;
 
-	found = __gnix_ht_lookup_entry(head, ht_entry->key, collisions);
+	found = __gnix_ht_lookup_entry_collision(head, ht_entry->key, collisions);
 	if (!found) {
 		dlist_insert_tail(&ht_entry->entry, head);
 	} else {
@@ -202,7 +211,7 @@ static inline int __gnix_ht_remove_list(
 {
 	gnix_ht_entry_t *ht_entry;
 
-	ht_entry = __gnix_ht_lookup_entry(head, key, NULL);
+	ht_entry = __gnix_ht_lookup_entry(head, key);
 	if (!ht_entry) {
 		return -FI_ENOENT;
 	}
@@ -715,9 +724,6 @@ int _gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key)
 
 void *_gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key)
 {
-	if (ht->ht_state != GNIX_HT_STATE_READY)
-		return NULL;
-
 	return ht->ht_ops->lookup(ht, key);
 }
 
