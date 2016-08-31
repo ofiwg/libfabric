@@ -59,7 +59,7 @@
 #include <rdma/fi_errno.h>
 
 #ifndef PP_FIVERSION
-#define PP_FIVERSION FI_VERSION(1, 3)
+#define PP_FIVERSION FI_VERSION(1, 4)
 #endif
 
 #ifdef __APPLE__
@@ -74,15 +74,16 @@ enum precision {
 	MILLI = 1000000,
 };
 
-enum { PP_OPT_ACTIVE = 1 << 0,
-       PP_OPT_ITER = 1 << 1,
-       PP_OPT_SIZE = 1 << 2,
-       PP_OPT_VERIFY_DATA = 1 << 3,
+enum {
+	PP_OPT_ACTIVE = 1 << 0,
+	PP_OPT_ITER = 1 << 1,
+	PP_OPT_SIZE = 1 << 2,
+	PP_OPT_VERIFY_DATA = 1 << 3,
 };
 
 struct pp_opts {
-	char *src_port;
-	char *dst_port;
+	uint16_t src_port;
+	uint16_t dst_port;
 	char *dst_addr;
 	int iterations;
 	int transfer_size;
@@ -92,7 +93,7 @@ struct pp_opts {
 
 #define PP_SIZE_MAX_POWER_TWO 22
 #define PP_MAX_DATA_MSG                                                        \
-	(1 << PP_SIZE_MAX_POWER_TWO) + (1 << (PP_SIZE_MAX_POWER_TWO - 1));
+	((1 << PP_SIZE_MAX_POWER_TWO) + (1 << (PP_SIZE_MAX_POWER_TWO - 1)))
 
 #define PP_STR_LEN 32
 #define PP_MAX_CTRL_MSG 64
@@ -111,25 +112,22 @@ struct pp_opts {
 #define PP_MSG_SYNC_A "a"
 
 #define PP_PRINTERR(call, retv)                                                \
-	do {                                                                   \
-		fprintf(stderr, "%s(): %s:%-4d, ret=%d (%s)\n", call,          \
-			__FILE__, __LINE__, (int)retv,                         \
-			fi_strerror((int) - retv));                            \
-	} while (0)
+	fprintf(stderr, "%s(): %s:%-4d, ret=%d (%s)\n", call, __FILE__,        \
+		__LINE__, (int)retv, fi_strerror((int) -retv))
 
 #define PP_ERR(fmt, ...)                                                       \
-	do {                                                                   \
-		fprintf(stderr, "[%s] %s:%-4d: " fmt "\n", "error", __FILE__,  \
-			__LINE__, ##__VA_ARGS__);                              \
-	} while (0)
+	fprintf(stderr, "[%s] %s:%-4d: " fmt "\n", "error", __FILE__,          \
+		__LINE__, ##__VA_ARGS__)
 
-int pp_debug = 0;
+int pp_debug;
 
 #define PP_DEBUG(fmt, ...)                                                     \
-	if (pp_debug) {                                                        \
-		fprintf(stderr, "[%s] %s:%-4d: " fmt, "debug", __FILE__,       \
-			__LINE__, ##__VA_ARGS__);                              \
-	}
+	do {                                                                   \
+		if (pp_debug) {                                                \
+			fprintf(stderr, "[%s] %s:%-4d: " fmt, "debug",         \
+				__FILE__, __LINE__, ##__VA_ARGS__);            \
+		}                                                              \
+	} while (0)
 
 #define PP_CLOSE_FID(fd)                                                       \
 	do {                                                                   \
@@ -144,7 +142,21 @@ int pp_debug = 0;
 	} while (0)
 
 #ifndef MAX
-#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define MAX(a, b)                                                              \
+	({                                                                     \
+		typeof(a) _a = (a);                                            \
+		typeof(b) _b = (b);                                            \
+		_a > _b ? _a : _b;                                             \
+	})
+#endif
+
+#ifndef MIN
+#define MIN(a, b)                                                              \
+	({                                                                     \
+		typeof(a) _a = (a);                                            \
+		typeof(b) _b = (b);                                            \
+		_a < _b ? _a : _b;                                             \
+	})
 #endif
 
 struct ct_pingpong {
@@ -167,8 +179,6 @@ struct ct_pingpong {
 	fi_addr_t remote_fi_addr;
 	void *buf, *tx_buf, *rx_buf;
 	size_t buf_size, tx_size, rx_size;
-	int data_default_port;
-	char data_port[8];
 
 	int timeout;
 	struct timespec start, end;
@@ -180,19 +190,16 @@ struct ct_pingpong {
 
 	long cnt_ack_msg;
 
-	uint16_t ctrl_port;
-	int ctrl_listenfd;
 	int ctrl_connfd;
-	struct sockaddr_in ctrl_addr;
 	char ctrl_buf[PP_CTRL_BUF_LEN + 1];
-	char loc_name[PP_MAX_CTRL_MSG];
 	char rem_name[PP_MAX_CTRL_MSG];
 };
 
 static const char integ_alphabet[] =
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+/* Size does not include trailing new line */
 static const int integ_alphabet_length =
-    (sizeof(integ_alphabet) / sizeof(*integ_alphabet)) - 1; // without '\0'
+	(sizeof(integ_alphabet) / sizeof(*integ_alphabet)) - 1;
 
 /*******************************************************************************
  *                                  Compatibility methods
@@ -221,8 +228,8 @@ long parse_ulong(char *str, long max)
 {
 	long ret;
 	char *end;
-	errno = 0;
 
+	errno = 0;
 	ret = strtol(str, &end, 10);
 	if (*end != '\0' || errno != 0) {
 		if (errno == 0)
@@ -288,14 +295,10 @@ void pp_banner_options(struct ct_pingpong *ct)
 {
 	char size_msg[50];
 	char iter_msg[50];
-
 	struct pp_opts opts = ct->opts;
-	if ((opts.src_port == NULL) || (opts.src_port[0] == '\0'))
-		opts.src_port = "None";
+
 	if ((opts.dst_addr == NULL) || (opts.dst_addr[0] == '\0'))
 		opts.dst_addr = "None";
-	if ((opts.dst_port == NULL) || (opts.dst_addr[0] == '\0'))
-		opts.dst_port = "None";
 
 	if (opts.sizes_enabled == PP_ENABLE_ALL)
 		snprintf(size_msg, 50, "%s", "All sizes");
@@ -313,9 +316,9 @@ void pp_banner_options(struct ct_pingpong *ct)
 	}
 
 	PP_DEBUG(" * PingPong options:\n");
-	PP_DEBUG("  - %-20s: [%s]\n", "src_port", opts.src_port);
+	PP_DEBUG("  - %-20s: [%" PRIu16 "]\n", "src_port", opts.src_port);
 	PP_DEBUG("  - %-20s: [%s]\n", "dst_addr", opts.dst_addr);
-	PP_DEBUG("  - %-20s: [%s]\n", "dst_port", opts.dst_port);
+	PP_DEBUG("  - %-20s: [%" PRIu16 "]\n", "dst_port", opts.dst_port);
 	PP_DEBUG("  - %-20s: %s\n", "sizes_enabled", size_msg);
 	PP_DEBUG("  - %-20s: %s\n", "iterations", iter_msg);
 	PP_DEBUG("  - %-20s: %s\n", "provider",
@@ -336,6 +339,7 @@ int pp_getaddrinfo(char *name, uint16_t port, struct addrinfo **results)
 	    .ai_family = AF_INET,       /* IPv4 */
 	    .ai_socktype = SOCK_STREAM, /* TCP socket */
 	    .ai_protocol = IPPROTO_TCP, /* Any protocol */
+	    .ai_flags = AI_NUMERICSERV /* numeric port is used */
 	};
 
 	snprintf(port_s, 6, "%" PRIu16, port);
@@ -353,121 +357,164 @@ out:
 	return ret;
 }
 
+static int pp_ctrl_init_client(struct ct_pingpong *ct)
+{
+	struct sockaddr_in in_addr = {0};
+	struct addrinfo *results;
+	struct addrinfo *rp;
+	int errno_save;
+	int ret;
+
+	ret = pp_getaddrinfo(ct->opts.dst_addr, ct->opts.dst_port, &results);
+	if (ret)
+		return ret;
+
+	if (!results) {
+		PP_ERR("getaddrinfo returned NULL list");
+		return -EXIT_FAILURE;
+	}
+
+	for (rp = results; rp; rp = rp->ai_next) {
+		ct->ctrl_connfd = socket(rp->ai_family, rp->ai_socktype,
+					 rp->ai_protocol);
+		if (ct->ctrl_connfd == -1) {
+			errno_save = errno;
+			continue;
+		}
+
+		if (ct->opts.src_port != 0) {
+			in_addr.sin_family = AF_INET;
+			in_addr.sin_port = htons(ct->opts.src_port);
+			in_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+			ret =
+			    bind(ct->ctrl_connfd, (struct sockaddr *)&in_addr,
+				 sizeof(in_addr));
+			if (ret == -1) {
+				errno_save = errno;
+				close(ct->ctrl_connfd);
+				continue;
+			}
+		}
+
+		ret = connect(ct->ctrl_connfd, rp->ai_addr, rp->ai_addrlen);
+		if (ret != -1)
+			break;
+
+		errno_save = errno;
+		close(ct->ctrl_connfd);
+	}
+
+	if (!rp || ret == -1) {
+		ret = -errno_save;
+		ct->ctrl_connfd = -1;
+		PP_ERR("failed to connect: %s", strerror(errno_save));
+	} else {
+		PP_DEBUG("CLIENT: connected\n");
+	}
+
+	freeaddrinfo(results);
+
+	return ret;
+}
+
+static int pp_ctrl_init_server(struct ct_pingpong *ct)
+{
+	struct sockaddr_in ctrl_addr = {0};
+	int optval = 1;
+	int listenfd;
+	int ret;
+
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (listenfd == -1) {
+		ret = -errno;
+		PP_PRINTERR("socket", ret);
+		return ret;
+	}
+
+	ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
+			&optval, sizeof(optval));
+	if (ret == -1) {
+		ret = -errno;
+		PP_PRINTERR("setsockopt(SO_REUSEADDR)", ret);
+		goto fail_close_socket;
+	}
+
+	ctrl_addr.sin_family = AF_INET;
+	ctrl_addr.sin_port = htons(ct->opts.src_port);
+	ctrl_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	ret = bind(listenfd, (struct sockaddr *)&ctrl_addr,
+		   sizeof(ctrl_addr));
+	if (ret == -1) {
+		ret = -errno;
+		PP_PRINTERR("bind", ret);
+		goto fail_close_socket;
+	}
+
+	ret = listen(listenfd, 10);
+	if (ret == -1) {
+		ret = -errno;
+		PP_PRINTERR("listen", ret);
+		goto fail_close_socket;
+	}
+
+	PP_DEBUG("SERVER: waiting for connection\n");
+
+	ct->ctrl_connfd = accept(listenfd, NULL, NULL);
+	if (ct->ctrl_connfd == -1) {
+		ret = -errno;
+		PP_PRINTERR("accept", ret);
+		goto fail_close_socket;
+	}
+
+	close(listenfd);
+
+	PP_DEBUG("SERVER: connected\n");
+
+	return ret;
+
+fail_close_socket:
+	close(ct->ctrl_connfd);
+	ct->ctrl_connfd = -1;
+
+	return ret;
+}
+
 int pp_ctrl_init(struct ct_pingpong *ct)
 {
-	int ret, err;
-	const char *retp;
-	struct timeval tv;
-	struct addrinfo *results, *rp;
-	char s[INET_ADDRSTRLEN];
-
-	tv.tv_sec = 5;
-	tv.tv_usec = 0;
+	const uint32_t default_ctrl = 47592;
+	struct timeval tv = {
+		.tv_sec = 5
+	};
+	int ret;
 
 	PP_DEBUG("Initializing control messages\n");
 
 	if (ct->opts.dst_addr) {
-		ret =
-		    pp_getaddrinfo(ct->opts.dst_addr, ct->ctrl_port, &results);
-		if (ret != 0)
-			return ret;
-
-		for (rp = results; rp != NULL; rp = rp->ai_next) {
-			ct->ctrl_connfd = socket(rp->ai_family, rp->ai_socktype,
-						 rp->ai_protocol);
-			if (ct->ctrl_connfd == -1)
-				continue;
-
-			memset(&ct->ctrl_addr, '\0', sizeof(ct->ctrl_addr));
-			ct->ctrl_addr.sin_family = AF_INET;
-			ct->ctrl_addr.sin_addr.s_addr =
-			    ((struct sockaddr_in *)rp->ai_addr)
-				->sin_addr.s_addr;
-			ct->ctrl_addr.sin_port = htons(ct->ctrl_port);
-
-			retp = inet_ntop(
-			    AF_INET,
-			    (const void *)&ct->ctrl_addr.sin_addr.s_addr, s,
-			    INET_ADDRSTRLEN);
-			if (retp == NULL) {
-				err = -errno;
-				PP_PRINTERR("inet_ntop", err);
-				return err;
-			}
-			PP_DEBUG("CLIENT: connecting to <%s> (%s)\n",
-				 ct->opts.dst_addr, s);
-			ret = connect(ct->ctrl_connfd,
-				      (struct sockaddr *)&ct->ctrl_addr,
-				      sizeof(ct->ctrl_addr));
-			if (ret == -1) {
-				err = -errno;
-				close(ct->ctrl_connfd);
-				continue;
-			}
-			break;
-		}
-		if (ct->ctrl_connfd == -1) {
-			err = -errno;
-			PP_PRINTERR("getaddrinfo/socket/connect", err);
-			return err;
-		}
-		PP_DEBUG("CLIENT: connected\n");
+		if (ct->opts.dst_port == 0)
+			ct->opts.dst_port = default_ctrl;
+		ret = pp_ctrl_init_client(ct);
 	} else {
-		ct->ctrl_listenfd = socket(AF_INET, SOCK_STREAM, 0);
-		if (ct->ctrl_listenfd == -1) {
-			err = -errno;
-			PP_PRINTERR("socket", err);
-		}
-		ret = setsockopt(ct->ctrl_listenfd, SOL_SOCKET, SO_REUSEADDR,
-				 &(int){1}, sizeof(int));
-		if (ret == -1) {
-			err = -errno;
-			PP_PRINTERR("setsockopt(SO_REUSEADDR)", err);
-			return err;
-		}
-
-		memset(&ct->ctrl_addr, '\0', sizeof(ct->ctrl_addr));
-		ct->ctrl_addr.sin_family = AF_INET;
-		ct->ctrl_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-		ct->ctrl_addr.sin_port = htons(ct->ctrl_port);
-
-		ret = bind(ct->ctrl_listenfd, (struct sockaddr *)&ct->ctrl_addr,
-			   sizeof(ct->ctrl_addr));
-		if (ret == -1) {
-			err = -errno;
-			PP_PRINTERR("bind", err);
-			return err;
-		}
-
-		ret = listen(ct->ctrl_listenfd, 10);
-		if (ret == -1) {
-			err = -errno;
-			PP_PRINTERR("listen", err);
-			return err;
-		}
-
-		PP_DEBUG("SERVER: waiting for connection\n");
-		ct->ctrl_connfd =
-		    accept(ct->ctrl_listenfd, (struct sockaddr *)NULL, NULL);
-		if (ct->ctrl_connfd == -1) {
-			err = -errno;
-			PP_PRINTERR("accept", err);
-			return err;
-		}
-		PP_DEBUG("SERVER: connection acquired\n");
+		if (ct->opts.src_port == 0)
+			ct->opts.src_port = default_ctrl;
+		ret = pp_ctrl_init_server(ct);
 	}
 
-	ret = setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,
+	if (ret)
+		return ret;
+
+	ret = setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO, &tv,
 			 sizeof(struct timeval));
 	if (ret == -1) {
-		err = -errno;
-		PP_PRINTERR("setsockopt(SO_RCVTIMEO)", err);
-		return err;
+		ret = -errno;
+		PP_PRINTERR("setsockopt(SO_RCVTIMEO)", ret);
+		return ret;
 	}
 
 	PP_DEBUG("Control messages initialized\n");
 
-	return 0;
+	return ret;
 }
 
 int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
@@ -484,14 +531,6 @@ int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
 		err = -ECONNABORTED;
 		PP_ERR("ctrl/read: no data or remote connection closed");
 		return err;
-	}
-	PP_DEBUG("----> sent (%d/%ld): \"", ret, size);
-	if (pp_debug) {
-		int i;
-		for (i = 0; i < size; i++) {
-			fprintf(stderr, "%c.", buf[i]);
-		}
-		fprintf(stderr, "\"\n");
 	}
 
 	return ret;
@@ -515,16 +554,78 @@ int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 		PP_ERR("ctrl/read: no data or remote connection closed");
 		return err;
 	}
-	PP_DEBUG("----> received (%d/%ld): \"", ret, size);
-	if (pp_debug) {
-		int i;
-		for (i = 0; i < size; i++) {
-			fprintf(stderr, "%c.", buf[i]);
-		}
-		fprintf(stderr, "\"\n");
-	}
 
 	return ret;
+}
+
+int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
+{
+	char local_name[64];
+	size_t addrlen;
+	uint32_t len;
+	int ret;
+
+	PP_DEBUG("Fetching local address\n");
+
+	addrlen = sizeof(local_name);
+	ret = fi_getname(endpoint, local_name, &addrlen);
+	if (ret) {
+		PP_PRINTERR("fi_getname", ret);
+		return ret;
+	}
+
+	if (addrlen > sizeof(local_name)) {
+		PP_DEBUG("Address exceeds control buffer length\n");
+		return -EMSGSIZE;
+	}
+
+	PP_DEBUG("Sending name length\n");
+	len = htonl(addrlen);
+	ret = pp_ctrl_send(ct, (char *) &len, sizeof(len));
+	if (ret < 0)
+		return ret;
+
+	PP_DEBUG("Sending name\n");
+	ret = pp_ctrl_send(ct, local_name, addrlen);
+	PP_DEBUG("Sent name\n");
+
+	return ret;
+}
+
+int pp_recv_name(struct ct_pingpong *ct)
+{
+	uint32_t len;
+	int ret;
+
+	PP_DEBUG("Receiving name length\n");
+	ret = pp_ctrl_recv(ct, (char *) &len, sizeof(len));
+	if (ret < 0)
+		return ret;
+
+	len = ntohl(len);
+
+	if (len > sizeof(ct->rem_name)) {
+		PP_DEBUG("Address length exceeds address storage\n");
+		return -EMSGSIZE;
+	}
+
+	PP_DEBUG("Receiving name\n");
+	ret = pp_ctrl_recv(ct, ct->rem_name, len);
+	if (ret < 0)
+		return ret;
+	PP_DEBUG("Received name\n");
+
+	ct->hints->dest_addr = malloc(len);
+	if (!ct->hints->dest_addr) {
+		PP_DEBUG("Failed to allocate memory for destination address\n");
+		return -ENOMEM;
+	}
+
+	/* fi_freeinfo will free the dest_addr field. */
+	memcpy(ct->hints->dest_addr, ct->rem_name, len);
+	ct->hints->dest_addrlen = len;
+
+	return 0;
 }
 
 int pp_ctrl_finish(struct ct_pingpong *ct)
@@ -533,72 +634,6 @@ int pp_ctrl_finish(struct ct_pingpong *ct)
 		close(ct->ctrl_connfd);
 		ct->ctrl_connfd = -1;
 	}
-	if (ct->ctrl_listenfd != -1) {
-		close(ct->ctrl_listenfd);
-		ct->ctrl_listenfd = -1;
-	}
-
-	return 0;
-}
-
-int pp_ctrl_txrx_data_port(struct ct_pingpong *ct)
-{
-	int ret;
-
-	PP_DEBUG("Exchanging data port\n");
-
-	if (ct->opts.dst_addr) {
-		memset(&ct->ctrl_buf, '\0', PP_MSG_LEN_PORT + 1);
-
-		PP_DEBUG("CLIENT: receiving port\n");
-		ret = pp_ctrl_recv(ct, ct->ctrl_buf, PP_MSG_LEN_PORT);
-		if (ret < 0)
-			return ret;
-
-		ct->data_default_port =
-		    (int)parse_ulong(ct->ctrl_buf, UINT16_MAX);
-		if (ct->data_default_port < 0)
-			return ret;
-		PP_DEBUG("CLIENT: received port = <%d> (len=%lu)\n",
-			 ct->data_default_port, strlen(ct->ctrl_buf));
-
-		snprintf(ct->ctrl_buf, sizeof(PP_MSG_CHECK_PORT_OK), "%s",
-			 PP_MSG_CHECK_PORT_OK);
-		ret = pp_ctrl_send(ct, ct->ctrl_buf,
-				   sizeof(PP_MSG_CHECK_PORT_OK));
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: acked port to server\n");
-	} else {
-		snprintf(ct->ctrl_buf, PP_MSG_LEN_PORT + 1, "%d",
-			 ct->data_default_port);
-
-		PP_DEBUG("SERVER: sending port = <%s> (len=%lu)\n",
-			 ct->ctrl_buf, strlen(ct->ctrl_buf));
-		ret = pp_ctrl_send(ct, ct->ctrl_buf, PP_MSG_LEN_PORT);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("SERVER: sent port\n");
-
-		memset(&ct->ctrl_buf, '\0', sizeof(PP_MSG_CHECK_PORT_OK));
-		ret = pp_ctrl_recv(ct, ct->ctrl_buf,
-				   sizeof(PP_MSG_CHECK_PORT_OK));
-		if (ret < 0)
-			return ret;
-
-		if (strcmp(ct->ctrl_buf, PP_MSG_CHECK_PORT_OK)) {
-			PP_DEBUG("SERVER: error while client acking the port: "
-				 "<%s> (len=%lu)\n",
-				 ct->ctrl_buf, strlen(ct->ctrl_buf));
-			return -EBADMSG;
-		}
-		PP_DEBUG("SERVER: port acked by client\n");
-	}
-
-	snprintf(ct->data_port, sizeof(ct->data_port), "%d",
-		 ct->data_default_port);
-
-	PP_DEBUG("Data port exchanged\n");
 
 	return 0;
 }
@@ -631,9 +666,9 @@ int pp_ctrl_sync(struct ct_pingpong *ct)
 			return ret;
 		if (strcmp(ct->ctrl_buf, PP_MSG_SYNC_A)) {
 			ct->ctrl_buf[PP_CTRL_BUF_LEN] = '\0';
-			PP_DEBUG("CLIENT: sync error while acking A: <%s> "
-				 "(len=%lu)\n",
-				 ct->ctrl_buf, strlen(ct->ctrl_buf));
+			PP_DEBUG(
+				"CLIENT: sync error while acking A: <%s> (len=%lu)\n",
+				ct->ctrl_buf, strlen(ct->ctrl_buf));
 			return -EBADMSG;
 		}
 		PP_DEBUG("CLIENT: synced\n");
@@ -645,9 +680,9 @@ int pp_ctrl_sync(struct ct_pingpong *ct)
 			return ret;
 		if (strcmp(ct->ctrl_buf, PP_MSG_SYNC_Q)) {
 			ct->ctrl_buf[PP_CTRL_BUF_LEN] = '\0';
-			PP_DEBUG("SERVER: sync error while acking Q: <%s> "
-				 "(len=%lu)\n",
-				 ct->ctrl_buf, strlen(ct->ctrl_buf));
+			PP_DEBUG(
+				"SERVER: sync error while acking Q: <%s> (len=%lu)\n",
+				ct->ctrl_buf, strlen(ct->ctrl_buf));
 			return -EBADMSG;
 		}
 
@@ -707,9 +742,9 @@ int pp_ctrl_txrx_msg_count(struct ct_pingpong *ct)
 		}
 
 		if (strcmp(ct->ctrl_buf, PP_MSG_CHECK_CNT_OK)) {
-			PP_DEBUG("CLIENT: error while server acking the count: "
-				 "<%s> (len=%lu)\n",
-				 ct->ctrl_buf, strlen(ct->ctrl_buf));
+			PP_DEBUG(
+				"CLIENT: error while server acking the count: <%s> (len=%lu)\n",
+				ct->ctrl_buf, strlen(ct->ctrl_buf));
 			return ret;
 		}
 		PP_DEBUG("CLIENT: count acked by server\n");
@@ -783,7 +818,7 @@ void pp_fill_buf(void *buf, int size)
 {
 	char *msg_buf;
 	int msg_index;
-	static unsigned int iter = 0;
+	static unsigned int iter;
 	int i;
 
 	msg_index = ((iter++) * INTEG_SEED) % integ_alphabet_length;
@@ -800,7 +835,7 @@ int pp_check_buf(void *buf, int size)
 {
 	char *recv_data;
 	char c;
-	static unsigned int iter = 0;
+	static unsigned int iter;
 	int msg_index;
 	int i;
 
@@ -853,32 +888,10 @@ void eq_readerr(struct fid_eq *eq)
 
 void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
 {
-	if (rd == -FI_EAVAIL) {
+	if (rd == -FI_EAVAIL)
 		eq_readerr(eq);
-	} else {
+	else
 		PP_PRINTERR(fn, rd);
-	}
-}
-
-/*******************************************************************************
- *                                         Address handling
- ******************************************************************************/
-
-int pp_read_addr_opts(struct ct_pingpong *ct, char **node, char **service,
-		      struct fi_info *hints, uint64_t *flags,
-		      struct pp_opts *opts)
-{
-
-	if (opts->dst_addr) {
-		if (!opts->dst_port)
-			opts->dst_port = ct->data_port;
-	} else {
-		if (!opts->src_port)
-			opts->src_port = ct->data_port;
-		*flags = FI_SOURCE;
-	}
-
-	return 0;
 }
 
 /*******************************************************************************
@@ -891,6 +904,7 @@ int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
 	int power_of_two;
 	int half_up;
 	int n = 0;
+	int i;
 	int *sizes = NULL;
 
 	PP_DEBUG("Generating test sizes\n");
@@ -907,8 +921,7 @@ int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
 		sizes[0] = opts->transfer_size;
 		n = 1;
 	} else if (opts->sizes_enabled != PP_ENABLE_ALL) {
-		for (int i = 0; i < (sizeof defaults / sizeof defaults[0]);
-		     i++) {
+		for (i = 0; i < (sizeof(defaults) / sizeof(defaults[0])); i++) {
 			if (defaults[i] > tx_size)
 				break;
 
@@ -916,7 +929,7 @@ int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
 			n++;
 		}
 	} else {
-		for (int i = 0;; i++) {
+		for (i = 0;; i++) {
 			power_of_two = (i == 0) ? 0 : (1 << i);
 			half_up =
 			    (i == 0) ? 1 : power_of_two + (power_of_two / 2);
@@ -1143,25 +1156,25 @@ int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 	do {                                                                   \
 		int timeout_save;                                              \
 		int ret, rc;                                                   \
-                                                                               \
+									       \
 		while (1) {                                                    \
 			ret = post_fn(__VA_ARGS__);                            \
 			if (!ret)                                              \
 				break;                                         \
-                                                                               \
+									       \
 			if (ret != -FI_EAGAIN) {                               \
 				PP_PRINTERR(op_str, ret);                      \
 				return ret;                                    \
 			}                                                      \
-                                                                               \
+									       \
 			timeout_save = ct->timeout;                            \
 			ct->timeout = 0;                                       \
 			rc = comp_fn(ct, seq);                                 \
+			ct->timeout = timeout_save;                            \
 			if (rc && rc != -FI_EAGAIN) {                          \
 				PP_ERR("Failed to get " op_str " completion"); \
 				return rc;                                     \
 			}                                                      \
-			ct->timeout = timeout_save;                            \
 		}                                                              \
 		seq++;                                                         \
 	} while (0)
@@ -1237,10 +1250,9 @@ ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 
 	/* Ignore the size arg. Post a buffer large enough to handle all message
 	 * sizes. pp_sync() makes use of pp_rx() and gets called in tests just
-	 * before
-	 * message size is updated. The recvs posted are always for the next
-	 * incoming
-	 * message */
+	 * before message size is updated. The recvs posted are always for the
+	 * next incoming message.
+	 */
 	ret = pp_post_rx(ct, ct->ep, ct->rx_size, &(ct->rx_ctx));
 	if (!ret)
 		ct->cnt_ack_msg++;
@@ -1403,14 +1415,8 @@ int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
 	       struct fi_info **info)
 {
-	char *node, *service;
 	uint64_t flags = 0;
 	int ret;
-
-	ret =
-	    pp_read_addr_opts(ct, &node, &service, hints, &flags, &(ct->opts));
-	if (ret)
-		return ret;
 
 	if (!hints->ep_attr->type)
 		hints->ep_attr->type = FI_EP_DGRAM;
@@ -1486,138 +1492,9 @@ int pp_av_insert(struct fid_av *av, void *addr, size_t count,
 	return 0;
 }
 
-int pp_init_av(struct ct_pingpong *ct)
-{
-	size_t addrlen;
-	int ret;
-
-	PP_DEBUG("Connection-less endpoint: initializing address vector\n");
-
-	addrlen = PP_MAX_CTRL_MSG;
-
-	ret = fi_getname(&(ct->ep->fid), (char *)ct->loc_name, &addrlen);
-	if (ret) {
-		PP_PRINTERR("fi_getname", ret);
-		return ret;
-	}
-
-	if (ct->opts.dst_addr) {
-		PP_DEBUG("CLIENT: receiving server name\n");
-		ret = pp_ctrl_recv(ct, ct->rem_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: received server name\n");
-
-		PP_DEBUG("CLIENT: sending client name\n");
-		ret = pp_ctrl_send(ct, ct->loc_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: sent client name\n");
-	} else {
-		PP_DEBUG("SERVER: sending server name\n");
-		ret = pp_ctrl_send(ct, ct->loc_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("SERVER: sent server name\n");
-
-		PP_DEBUG("SERVER: receiving client name\n");
-		ret = pp_ctrl_recv(ct, ct->rem_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("SERVER: received client name\n");
-	}
-
-	// synchronous av insertion
-	ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
-			   NULL);
-	if (ret)
-		return ret;
-
-	PP_DEBUG("Connection-less endpoint: address vector initialized\n");
-
-	return 0;
-}
-
-int pp_send_name(struct ct_pingpong *ct, struct fid *f, size_t *addrlen)
-{
-	int ret, err;
-	int addr_text_len = 3;
-	*addrlen = PP_MAX_CTRL_MSG;
-
-	PP_DEBUG("SERVER: fetching local address\n");
-	ret = fi_getname(f, (char *)ct->loc_name, addrlen);
-	if (ret) {
-		PP_PRINTERR("fi_getname", ret);
-		return ret;
-	}
-	if (*addrlen > PP_MAX_CTRL_MSG) {
-		err = -EMSGSIZE;
-		PP_DEBUG("The address for this provider is greater than the "
-			 "control buffer\n");
-		PP_PRINTERR("fi_getname", err);
-		return err;
-	}
-	PP_DEBUG("SERVER: fetched local address: %s\n", ct->loc_name);
-
-	PP_DEBUG("building name\n");
-	/* The textual representation of addrlen should not exceed 3 bytes.
-	 * There is another byte for the null byte. */
-	ret = snprintf(ct->ctrl_buf, addr_text_len + 1, "%03zu", *addrlen);
-	if (ret != addr_text_len) {
-		err = -EMSGSIZE;
-		PP_DEBUG("The address length for this provider is too long\n");
-		PP_PRINTERR("snprintf", err);
-		return err;
-	}
-	memcpy(ct->ctrl_buf + addr_text_len + 1, ct->loc_name, *addrlen);
-	ct->ctrl_buf[*addrlen + addr_text_len + 1] = '\0';
-
-	PP_DEBUG("sending name\n");
-	ret = pp_ctrl_send(ct, ct->ctrl_buf, PP_MAX_CTRL_MSG);
-	if (ret < 0)
-		return ret;
-	PP_DEBUG("sent name\n");
-
-	return 0;
-}
-
-int pp_recv_name(struct ct_pingpong *ct, size_t *addrlen)
-{
-	int ret, err;
-	int addr_text_len = 3;
-
-	*addrlen = PP_MAX_CTRL_MSG;
-	PP_DEBUG("receiving server name\n");
-	ret = pp_ctrl_recv(ct, ct->ctrl_buf, PP_MAX_CTRL_MSG);
-	if (ret < 0)
-		return ret;
-	PP_DEBUG("received server name\n");
-	ret = (int)parse_ulong(ct->ctrl_buf, 999);
-	if (ret < 0)
-		return -EINVAL;
-	*addrlen = (size_t)ret;
-	PP_DEBUG("address len = %zu\n", *addrlen);
-
-	memcpy(ct->rem_name, ct->ctrl_buf + addr_text_len + 1, *addrlen);
-	ct->ctrl_buf[*addrlen + addr_text_len + 1] = '\0';
-
-	ct->hints->dest_addr = malloc(*addrlen);
-	if (ct->hints->dest_addr == NULL) {
-		err = -ENOMEM;
-		PP_PRINTERR("malloc", err);
-		return err;
-	}
-	memcpy(ct->hints->dest_addr, ct->rem_name, *addrlen);
-
-	ct->hints->dest_addrlen = *addrlen;
-
-	return 0;
-}
-
 int pp_exchange_names_connected(struct ct_pingpong *ct)
 {
 	int ret;
-	size_t addrlen;
 
 	PP_DEBUG("Connection-based endpoint: setting up connection\n");
 
@@ -1626,12 +1503,17 @@ int pp_exchange_names_connected(struct ct_pingpong *ct)
 		return ret;
 
 	if (ct->opts.dst_addr) {
-		pp_recv_name(ct, &addrlen);
+		ret = pp_recv_name(ct);
+		if (ret < 0)
+			return ret;
+
 		ret = pp_getinfo(ct, ct->hints, &(ct->fi));
 		if (ret)
 			return ret;
 	} else {
-		pp_send_name(ct, &(ct->pep->fid), &addrlen);
+		ret = pp_send_name(ct, &ct->pep->fid);
+		if (ret < 0)
+			return ret;
 	}
 
 	return 0;
@@ -1700,8 +1582,8 @@ int pp_server_connect(struct ct_pingpong *ct)
 		goto err;
 
 	/* Listen */
-	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
+	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
+	if (rd != sizeof(entry)) {
 		pp_process_eq_err(rd, ct->eq, "fi_eq_sread");
 		return (int)rd;
 	}
@@ -1740,8 +1622,8 @@ int pp_server_connect(struct ct_pingpong *ct)
 		goto err;
 
 	/* Accept */
-	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
+	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
+	if (rd != sizeof(entry)) {
 		pp_process_eq_err(rd, ct->eq, "fi_eq_sread");
 		ret = (int)rd;
 		goto err;
@@ -1801,8 +1683,8 @@ int pp_client_connect(struct ct_pingpong *ct)
 		return ret;
 
 	/* Connect */
-	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
+	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
+	if (rd != sizeof(entry)) {
 		pp_process_eq_err(rd, ct->eq, "fi_eq_sread");
 		ret = (int)rd;
 		return ret;
@@ -1821,13 +1703,8 @@ int pp_client_connect(struct ct_pingpong *ct)
 int pp_init_fabric(struct ct_pingpong *ct)
 {
 	int ret;
-	size_t addrlen;
 
 	ret = pp_ctrl_init(ct);
-	if (ret)
-		return ret;
-
-	ret = pp_ctrl_txrx_data_port(ct);
 	if (ret)
 		return ret;
 
@@ -1835,11 +1712,9 @@ int pp_init_fabric(struct ct_pingpong *ct)
 
 	PP_DEBUG("Connection-less endpoint: initializing address vector\n");
 
-	addrlen = PP_MAX_CTRL_MSG;
-
 	if (ct->opts.dst_addr) {
-		ret = pp_recv_name(ct, &addrlen);
-		if (ret)
+		ret = pp_recv_name(ct);
+		if (ret < 0)
 			return ret;
 
 		ret = pp_getinfo(ct, ct->hints, &(ct->fi));
@@ -1858,18 +1733,7 @@ int pp_init_fabric(struct ct_pingpong *ct)
 		if (ret)
 			return ret;
 
-		ret =
-		    fi_getname(&(ct->ep->fid), (char *)ct->loc_name, &addrlen);
-		if (ret) {
-			PP_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		PP_DEBUG("CLIENT: sending client name\n");
-		ret = pp_ctrl_send(ct, ct->loc_name, addrlen);
-		if (ret < 0)
-			return ret;
-		PP_DEBUG("CLIENT: sent client name\n");
+		ret = pp_send_name(ct, &ct->ep->fid);
 	} else {
 		PP_DEBUG("SERVER: getinfo\n");
 		ret = pp_getinfo(ct, ct->hints, &(ct->fi));
@@ -1891,16 +1755,16 @@ int pp_init_fabric(struct ct_pingpong *ct)
 		if (ret)
 			return ret;
 
-		pp_send_name(ct, &(ct->ep->fid), &addrlen);
-
-		PP_DEBUG("SERVER: receiving client name\n");
-		ret = pp_ctrl_recv(ct, ct->rem_name, addrlen);
+		ret = pp_send_name(ct, &ct->ep->fid);
 		if (ret < 0)
 			return ret;
-		PP_DEBUG("SERVER: received client name\n");
+
+		ret = pp_recv_name(ct);
 	}
 
-	// synchronous av insertion
+	if (ret < 0)
+		return ret;
+
 	ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
 			   NULL);
 	if (ret)
@@ -1965,7 +1829,7 @@ int pp_finalize(struct ct_pingpong *ct)
 	iov.iov_base = ct->tx_buf;
 	iov.iov_len = 4;
 
-	memset(&msg, 0, sizeof msg);
+	memset(&msg, 0, sizeof(msg));
 	msg.msg_iov = &iov;
 	msg.iov_count = 1;
 	msg.addr = ct->remote_fi_addr;
@@ -2010,19 +1874,20 @@ void pp_pingpong_usage(char *name, char *desc)
 	fprintf(stderr, "\nOptions:\n");
 
 	fprintf(stderr, " %-20s %s\n", "-B <src_port>",
-		"non default source port number");
+		"source control port number (server: 47592, client: auto)");
 	fprintf(stderr, " %-20s %s\n", "-P <dst_port>",
-		"non default destination port number");
+		"destination control port number (client: 47592)");
 
 	fprintf(stderr, " %-20s %s\n", "-d <domain>", "domain name");
 	fprintf(stderr, " %-20s %s\n", "-p <provider>",
 		"specific provider name eg sockets, verbs");
 	fprintf(stderr, " %-20s %s\n", "-e <ep_type>",
-		"Endpoint type: msg|rdm|dgram (default:dgram)");
+		"endpoint type: msg|rdm|dgram (dgram)");
 
-	fprintf(stderr, " %-20s %s\n", "-I <number>", "number of iterations");
+	fprintf(stderr, " %-20s %s\n", "-I <number>",
+		"number of iterations (1000)");
 	fprintf(stderr, " %-20s %s\n", "-S <size>",
-		"specific transfer size or 'all'");
+		"specific transfer size or 'all' (all)");
 
 	fprintf(stderr, " %-20s %s\n", "-c", "enables data_integrity checks");
 
@@ -2042,7 +1907,8 @@ void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 	/* Provider */
 	case 'p':
 		/* The provider name will be checked during the fabric
-		 * initialization. */
+		 * initialization.
+		 */
 		ct->hints->fabric_attr->prov_name = strdup(optarg);
 		break;
 
@@ -2088,12 +1954,12 @@ void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 
 	/* Source Port */
 	case 'B':
-		ct->opts.src_port = optarg;
+		ct->opts.src_port = parse_ulong(optarg, UINT16_MAX);
 		break;
 
 	/* Destination Port */
 	case 'P':
-		ct->opts.dst_port = optarg;
+		ct->opts.dst_port = parse_ulong(optarg, UINT16_MAX);
 		break;
 
 	/* Debug */
@@ -2113,8 +1979,6 @@ void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 int pingpong(struct ct_pingpong *ct)
 {
 	int ret, i;
-
-	PP_DEBUG("PingPong test starting\n");
 
 	ret = pp_ctrl_sync(ct);
 	if (ret)
@@ -2136,10 +2000,6 @@ int pingpong(struct ct_pingpong *ct)
 			ret = pp_rx(ct, ct->ep, ct->opts.transfer_size);
 			if (ret)
 				return ret;
-
-			ret = pp_ctrl_sync(ct);
-			if (ret)
-				return ret;
 		}
 	} else {
 		for (i = 0; i < ct->opts.iterations; i++) {
@@ -2156,10 +2016,6 @@ int pingpong(struct ct_pingpong *ct)
 				ret = pp_tx(ct, ct->ep, ct->opts.transfer_size);
 			if (ret)
 				return ret;
-
-			ret = pp_ctrl_sync(ct);
-			if (ret)
-				return ret;
 		}
 	}
 	pp_stop(ct);
@@ -2172,7 +2028,6 @@ int pingpong(struct ct_pingpong *ct)
 	show_perf(NULL, ct->opts.transfer_size, ct->opts.iterations,
 		  ct->cnt_ack_msg, &(ct->start), &(ct->end), 2);
 
-	PP_DEBUG("PingPong test successfuly handled\n");
 	return 0;
 }
 
@@ -2212,7 +2067,8 @@ static int run_pingpong_dgram(struct ct_pingpong *ct)
 		return ret;
 
 	/* Post an extra receive to avoid lacking a posted receive in the
-	 * finalize. */
+	 * finalize.
+	 */
 	ret = fi_recv(ct->ep, ct->rx_buf, ct->rx_size, fi_mr_desc(ct->mr), 0,
 		      &ct->rx_ctx);
 
@@ -2247,14 +2103,8 @@ static int run_pingpong_msg(struct ct_pingpong *ct)
 	PP_DEBUG("Selected endpoint: MSG\n");
 
 	ret = pp_ctrl_init(ct);
-	if (ret) {
+	if (ret)
 		return ret;
-	}
-
-	ret = pp_ctrl_txrx_data_port(ct);
-	if (ret) {
-		return ret;
-	}
 
 	if (!ct->opts.dst_addr) {
 		ret = pp_start_server(ct);
@@ -2270,9 +2120,8 @@ static int run_pingpong_msg(struct ct_pingpong *ct)
 		PP_DEBUG("SERVER: server_connect=%s\n", ret ? "KO" : "OK");
 	}
 
-	if (ret) {
+	if (ret)
 		return ret;
-	}
 
 	ret = run_suite_pingpong(ct);
 	if (ret)
@@ -2291,18 +2140,14 @@ int main(int argc, char **argv)
 	ret = EXIT_SUCCESS;
 
 	struct ct_pingpong ct = {
-	    .timeout = -1,
-	    .ctrl_listenfd = -1,
-	    .ctrl_connfd = -1,
-	    .data_default_port = 9228,
-	    .ctrl_port = 47592,
-	    .opts =
-		{
-		    .iterations = 1000,
-		    .transfer_size = 1024,
-		    .sizes_enabled = PP_DEFAULT_SIZE,
+		.timeout = -1,
+		.ctrl_connfd = -1,
+		.opts = {
+			.iterations = 1000,
+			.transfer_size = 1024,
+			.sizes_enabled = PP_DEFAULT_SIZE
 		},
-	    .eq_attr.wait_obj = FI_WAIT_UNSPEC,
+		.eq_attr.wait_obj = FI_WAIT_UNSPEC,
 	};
 
 	ct.hints = fi_allocinfo();
@@ -2312,8 +2157,7 @@ int main(int argc, char **argv)
 	ct.hints->caps = FI_MSG;
 	ct.hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 
-	while ((op = getopt(argc, argv, "hv"
-					"d:p:e:I:S:B:P:c")) != -1) {
+	while ((op = getopt(argc, argv, "hvd:p:e:I:S:B:P:c")) != -1) {
 		switch (op) {
 		default:
 			pp_parse_opts(&ct, op, optarg);
