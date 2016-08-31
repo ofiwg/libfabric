@@ -520,7 +520,7 @@ int pp_ctrl_init(struct ct_pingpong *ct)
 
 int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
 {
-	int i, ret, err;
+	int ret, err;
 
 	ret = send(ct->ctrl_connfd, buf, size, 0);
 	if (ret < 0) {
@@ -533,19 +533,13 @@ int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
 		PP_ERR("ctrl/read: no data or remote connection closed");
 		return err;
 	}
-	PP_DEBUG("----> sent (%d/%ld): \"", ret, size);
-	if (pp_debug) {
-		for (i = 0; i < size; i++)
-			fprintf(stderr, "%c.", buf[i]);
-		fprintf(stderr, "\"\n");
-	}
 
 	return ret;
 }
 
 int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 {
-	int i, ret, err;
+	int ret, err;
 
 	do {
 		PP_DEBUG("receiving\n");
@@ -560,12 +554,6 @@ int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 		err = -ECONNABORTED;
 		PP_ERR("ctrl/read: no data or remote connection closed");
 		return err;
-	}
-	PP_DEBUG("----> received (%d/%ld): \"", ret, size);
-	if (pp_debug) {
-		for (i = 0; i < size; i++)
-			fprintf(stderr, "%c.", buf[i]);
-		fprintf(stderr, "\"\n");
 	}
 
 	return ret;
@@ -2053,8 +2041,6 @@ int pingpong(struct ct_pingpong *ct)
 {
 	int ret, i;
 
-	PP_DEBUG("PingPong test starting\n");
-
 	ret = pp_ctrl_sync(ct);
 	if (ret)
 		return ret;
@@ -2075,10 +2061,6 @@ int pingpong(struct ct_pingpong *ct)
 			ret = pp_rx(ct, ct->ep, ct->opts.transfer_size);
 			if (ret)
 				return ret;
-
-			ret = pp_ctrl_sync(ct);
-			if (ret)
-				return ret;
 		}
 	} else {
 		for (i = 0; i < ct->opts.iterations; i++) {
@@ -2095,10 +2077,6 @@ int pingpong(struct ct_pingpong *ct)
 				ret = pp_tx(ct, ct->ep, ct->opts.transfer_size);
 			if (ret)
 				return ret;
-
-			ret = pp_ctrl_sync(ct);
-			if (ret)
-				return ret;
 		}
 	}
 	pp_stop(ct);
@@ -2111,7 +2089,6 @@ int pingpong(struct ct_pingpong *ct)
 	show_perf(NULL, ct->opts.transfer_size, ct->opts.iterations,
 		  ct->cnt_ack_msg, &(ct->start), &(ct->end), 2);
 
-	PP_DEBUG("PingPong test successfuly handled\n");
 	return 0;
 }
 
