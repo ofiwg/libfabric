@@ -174,6 +174,8 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 		struct fi_info *info, struct util_ep *ep, void *context,
 		enum fi_match_type type);
 
+int ofi_endpoint_close(struct util_ep *util_ep);
+
 /*
  * Completion queue
  *

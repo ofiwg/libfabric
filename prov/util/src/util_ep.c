@@ -58,3 +58,9 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	atomic_inc(&util_domain->ref);
 	return 0;
 }
+
+int ofi_endpoint_close(struct util_ep *util_ep)
+{
+	atomic_dec(&util_ep->domain->ref);
+	return 0;
+}
