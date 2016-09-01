@@ -424,6 +424,9 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	if (attr) {
 		switch (attr->type) {
+		case FI_AV_UNSPEC:
+			break;
+
 		case FI_AV_MAP:
 		case FI_AV_TABLE:
 			type = attr->type;
@@ -464,6 +467,9 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av_priv->av.ops = &psmx2_av_ops;
 
 	*av = &av_priv->av;
+	if (attr)
+		attr->type = type;
+
 	return 0;
 }
 
