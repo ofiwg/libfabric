@@ -55,12 +55,49 @@ __thread uint32_t gnix_debug_tid = ~(uint32_t) 0;
 atomic_t gnix_debug_next_tid;
 #endif
 
+uint8_t precomputed_crc_results[256];
+
+static inline uint8_t __gni_crc_bits(uint8_t data)
+{
+  uint8_t lcrc = 0;
+
+  if(data & 1)
+    lcrc ^= 0x5e;
+  if(data & 2)
+    lcrc ^= 0xbc;
+  if(data & 4)
+    lcrc ^= 0x61;
+  if(data & 8)
+    lcrc ^= 0xc2;
+  if(data & 0x10)
+    lcrc ^= 0x9d;
+  if(data & 0x20)
+    lcrc ^= 0x23;
+  if(data & 0x40)
+    lcrc ^= 0x46;
+  if(data & 0x80)
+    lcrc ^= 0x8c;
+
+  return lcrc;
+}
+
+void __setup_precomputed_crcs(void)
+{
+	int i;
+
+	for (i = 0; i < 256; i++)
+	{
+		precomputed_crc_results[i] = __gni_crc_bits(i);
+	}
+}
+
 /**
  * Initialization function for performing global setup
  */
 __attribute__((constructor))
 void gnix_init(void)
 {
+	__setup_precomputed_crcs();
 	atomic_initialize(&gnix_id_counter, 0);
 	atomic_initialize(&file_id_counter, 0);
 #ifndef NDEBUG

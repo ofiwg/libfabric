@@ -35,32 +35,12 @@
 
 #include "gnix.h"
 
+extern uint8_t precomputed_crc_results[256];
+
 /*
  * Start of code pulled from gni_priv.h
  */
-inline static uint8_t gni_crc_bits(uint8_t data)
-{
-  uint8_t lcrc = 0;
-
-  if(data & 1)
-    lcrc ^= 0x5e;
-  if(data & 2)
-    lcrc ^= 0xbc;
-  if(data & 4)
-    lcrc ^= 0x61;
-  if(data & 8)
-    lcrc ^= 0xc2;
-  if(data & 0x10)
-    lcrc ^= 0x9d;
-  if(data & 0x20)
-    lcrc ^= 0x23;
-  if(data & 0x40)
-    lcrc ^= 0x46;
-  if(data & 0x80)
-    lcrc ^= 0x8c;
-
-  return lcrc;
-}
+#define gni_crc_bits(data) precomputed_crc_results[(data)]
 
 inline static uint8_t gni_memhndl_calc_crc(gni_mem_handle_t *memhndl)
 {
