@@ -2388,8 +2388,18 @@ DIRECT_FN STATIC int gnix_ep_setopt(fid_t fid, int level, int optname,
 
 DIRECT_FN STATIC ssize_t gnix_ep_rx_size_left(struct fid_ep *ep)
 {
-	if (!ep)
+	if (!ep) {
 		return -FI_EINVAL;
+	}
+
+	struct gnix_fid_ep *ep_priv = container_of(ep,
+						   struct gnix_fid_ep,
+						   ep_fid);
+
+	/* A little arbitrary... */
+	if (ep_priv->htd_pool.enabled == false) {
+		return -FI_EOPBADSTATE;
+	}
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
@@ -2408,8 +2418,18 @@ DIRECT_FN STATIC ssize_t gnix_ep_rx_size_left(struct fid_ep *ep)
 
 DIRECT_FN STATIC ssize_t gnix_ep_tx_size_left(struct fid_ep *ep)
 {
-	if (!ep)
+	if (!ep) {
 		return -FI_EINVAL;
+	}
+
+	struct gnix_fid_ep *ep_priv = container_of(ep,
+						   struct gnix_fid_ep,
+						   ep_fid);
+
+	/* A little arbitrary... */
+	if (ep_priv->htd_pool.enabled == false) {
+		return -FI_EOPBADSTATE;
+	}
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
