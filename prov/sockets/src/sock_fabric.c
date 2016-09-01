@@ -719,7 +719,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
-	return ret;
+	return (!*info) ? ret : 0;
 }
 
 static void fi_sockets_fini(void)
