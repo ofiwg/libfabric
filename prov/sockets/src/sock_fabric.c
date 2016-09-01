@@ -404,6 +404,19 @@ out:
 	return ret;
 }
 
+static int sock_fi_checkinfo(struct fi_info *info, struct fi_info *hints)
+{
+	if (hints && hints->domain_attr && hints->domain_attr->name &&
+             strcmp(info->domain_attr->name, hints->domain_attr->name))
+		return -FI_ENODATA;
+
+	if (hints && hints->fabric_attr && hints->fabric_attr->name &&
+             strcmp(info->fabric_attr->name, hints->fabric_attr->name))
+		return -FI_ENODATA;
+
+	return 0;
+}
+
 static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags,
 			   struct fi_info *hints, enum fi_ep_type ep_type,
 			   struct fi_info **info)
@@ -473,6 +486,10 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 
 	if (rai)
 		freeaddrinfo(rai);
+
+	if (ret == 0)
+		return sock_fi_checkinfo(*info, hints);
+
 	return ret;
 }
 
@@ -701,7 +718,8 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			return ret;
 		}
 	}
-	return 0;
+
+	return ret;
 }
 
 static void fi_sockets_fini(void)
