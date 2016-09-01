@@ -475,8 +475,13 @@ static int pp_ctrl_init_server(struct ct_pingpong *ct)
 	return ret;
 
 fail_close_socket:
-	close(ct->ctrl_connfd);
-	ct->ctrl_connfd = -1;
+	if (ct->ctrl_connfd != -1) {
+		close(ct->ctrl_connfd);
+		ct->ctrl_connfd = -1;
+	}
+
+	if (listenfd != -1)
+		close(listenfd);
 
 	return ret;
 }
