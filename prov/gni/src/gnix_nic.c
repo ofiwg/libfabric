@@ -919,6 +919,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	uint32_t fake_cdm_id;
 	gni_smsg_attr_t smsg_mbox_attr;
 	struct gnix_nic_attr *nic_attr = &default_attr;
+	uint32_t num_corespec_cpus = 0;
 	bool must_alloc_nic = false;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -1241,10 +1242,20 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			 * though...
 			 */
 
-			ret = _gnix_job_disable_affinity_apply();
+			ret = _gnix_get_num_corespec_cpus(&num_corespec_cpus);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				  "failed to get num corespec cpus\n");
+			}
+			if (num_corespec_cpus > 0) {
+				ret = _gnix_job_disable_affinity_apply();
+			} else {
+				ret = _gnix_job_enable_unassigned_cpus();
+			}
 			if (ret != 0)
 				GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_job_disable call returned %d\n", ret);
+				"job_disable/unassigned cpus returned %d\n",
+					 ret);
 
 			ret = pthread_create(&nic->progress_thread,
 					     NULL,

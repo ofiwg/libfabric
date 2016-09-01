@@ -89,11 +89,12 @@ static int *gnix_app_placementList;
 static int *gnix_app_targetNids;
 static int *gnix_app_targetPes;
 static int *gnix_app_targetLen;
-struct in_addr *gnix_app_targetIps;
+static struct in_addr *gnix_app_targetIps;
 static int *gnix_app_startPe;
 static int *gnix_app_totalPes;
 static int *gnix_app_nodePes;
 static int *gnix_app_peCpus;
+
 
 static inline void __gnix_ccm_cleanup(void)
 {
@@ -497,14 +498,14 @@ static int gnix_write_proc_job(char *val_str)
  * assigned to the app and not assigned to corespec. */
 int _gnix_job_enable_unassigned_cpus(void)
 {
-	return gnix_write_proc_job("enable_unassigned_cpus");
+	return gnix_write_proc_job("enable_affinity_unassigned_cpus");
 }
 
 /* Indicate that the next task spawned will be restricted to CPUs that are
  * assigned to the app. */
 int _gnix_job_disable_unassigned_cpus(void)
 {
-	return gnix_write_proc_job("disable_unassigned_cpus");
+	return gnix_write_proc_job("disable_affinity_unassigned_cpus");
 }
 
 /* Indicate that the next task spawned should adhere to the the affinity rules. */
@@ -672,5 +673,57 @@ void _gnix_dump_gni_res(uint8_t ptag)
 			GNIX_WARN(FI_LOG_FABRIC, "%s", buf);
 		}
 	}
+}
+
+int _gnix_get_num_corespec_cpus(uint32_t *num_core_spec_cpus)
+{
+	int ret = -FI_ENODATA;
+	int ncpus = 0;
+	FILE *fd = NULL;
+	char buffer[4096], *line, *field;
+	static bool already_called;
+	static uint32_t cached_num_corespec_cpus;
+
+	if (num_core_spec_cpus == NULL)
+		return -FI_EINVAL;
+
+	if (already_called == true) {
+		*num_core_spec_cpus = cached_num_corespec_cpus;
+		return FI_SUCCESS;
+	}
+
+	fd = fopen("/proc/job", "r");
+	if (!fd) {
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "open of /proc/job returned %s", strerror(errno));
+		return -errno;
+	}
+
+	while (1) {
+		line = fgets(buffer, sizeof(buffer), fd);
+		if (!line)
+			break;
+
+		line = strstr(line, "corespec");
+		if (line != NULL) {
+			field  = strtok(line, " ");
+			field  = strtok(NULL, " ");
+			if (!strcmp(field, "num_sys_cpus")) {
+				field = strtok(NULL, " ");
+				ncpus = atoi(field);
+			}
+			ret = FI_SUCCESS;
+			break;
+		}
+	}
+
+	*num_core_spec_cpus = ncpus;
+	cached_num_corespec_cpus = ncpus;
+
+	already_called = true;
+
+	fclose(fd);
+
+	return ret;
 }
 

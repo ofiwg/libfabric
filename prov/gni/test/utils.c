@@ -64,12 +64,11 @@ Test(utils, proc)
 	rc = _gnix_task_is_not_app();
 	cr_expect(rc == 0);
 
-	/* *_unassigned_cpus flags don't work on tiger */
 	rc = _gnix_job_enable_unassigned_cpus();
-	cr_expect(rc != 0);
+	cr_expect(rc == 0);
 
 	rc = _gnix_job_disable_unassigned_cpus();
-	cr_expect(rc != 0);
+	cr_expect(rc == 0);
 
 	rc = _gnix_job_enable_affinity_apply();
 	cr_expect(rc == 0);
