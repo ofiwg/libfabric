@@ -156,6 +156,7 @@ nodist_rdmainclude_HEADERS = \
 endif HAVE_DIRECT
 
 real_man_pages = \
+        man/man1/fi_info.1 \
         man/man1/fi_pingpong.1 \
         man/man1/fi_strerror.1 \
         man/man3/fi_av.3 \
