@@ -185,9 +185,6 @@ int ofi_ep_bind_valid(struct fi_provider *prov, struct fid *bfid, uint64_t flags
 			return -FI_EBADFLAGS;
 		}
 		break;
-	case FI_CLASS_SRX_CTX:
-		/* For now, flags must be 0 */
-		break;
 	default:
 		if (flags) {
 			FI_WARN(prov, FI_LOG_EP_CTRL, "invalid bind flags\n");
