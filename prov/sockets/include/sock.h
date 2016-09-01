@@ -271,7 +271,6 @@ struct sock_cntr {
 	struct fid_cntr cntr_fid;
 	struct sock_domain *domain;
 	atomic_t value;
-	atomic_t threshold;
 	atomic_t ref;
 	atomic_t err_cnt;
 	atomic_t last_read_val;
@@ -288,7 +287,7 @@ struct sock_cntr {
 
 	struct fid_wait *waitset;
 	int signal;
-	int is_waiting;
+	atomic_t num_waiting;
 	int err_flag;
 };
 
