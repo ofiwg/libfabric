@@ -20,13 +20,18 @@ fi_pingpong  \- Quick and simple pingpong test for libfabric
 
 # DESCRIPTION
 
-fi_pingpong is a generic pingpong test for the core feature of the libfabric library: transmitting data between two processes. fi_pingpong also displays aggregated statistics after each test run, and can additionally verify data integrity upon receipt.
+fi_pingpong is a pingpong test for the core feature of the libfabric library:
+transmitting data between two processes. fi_pingpong also displays aggregated
+statistics after each test run, and can additionally verify data integrity upon
+receipt.
 
-By default, the datagram (FI_EP_DGRAM) endpoint is used for the test, unless otherwise specified via -e.
+By default, the datagram (FI_EP_DGRAM) endpoint is used for the test, unless
+otherwise specified via `-e`.
 
 # HOW TO RUN TESTS
 
-Two copies of the program must be launched: first, one copy must be launched as the server. Second, another copy is launched with the address of the server.
+Two copies of the program must be launched: first, one copy must be launched as
+the server. Second, another copy is launched with the address of the server.
 
 As a client-server test, each have the following usage model:
 
@@ -37,15 +42,22 @@ server$ fi_pingpong
 
 ## Start the client
 ```
-client$ fi_pingpong <server endpoint address>
+client$ fi_pingpong <server address>
 ```
 
 
 # OPTIONS
 
-The client's command line options must match those used on the server. If they do not match, the client and server may not be able to communicate properly.
+The server and client must be able to communicate properly for the fi_pingpong
+utility to function. If any of the `-e`, `-I`, `-S`, or `-p` options are used,
+then they must be specified on the invocation for both the server and the
+client process. If the `-d` option is specified on the server, then the client
+will select the appropriate domain if no hint is provided on the client side.
+If the `-d` option is specified on the client, then it must also be specified
+on the server. If both the server and client specify the `-d` option and the
+given domains cannot communicate, then the application will fail.
 
-## Nodes addressing
+## Control Messaging
 
 *-B \<src_port\>*
 : The non-default source port number of the control socket. If this is not
@@ -57,29 +69,35 @@ The client's command line options must match those used on the server. If they d
   provided then the client will connect to 47592 by default. The server ignores
   this option.
 
-## Fabric
+## Fabric Filtering
 
 *-p \<provider_name\>*
-: The name of the underlying fabric provider (e.g., sockets, psm, usnic, etc.). If a provider is not specified via the -f switch, the test will pick one from the list of available providers (as returned by fi_getinfo(3)).
+: The name of the underlying fabric provider (e.g., sockets, psm, usnic, etc.).
+  If a provider is not specified via the -p switch, the test will pick one from
+  the list of available providers (as returned by fi_getinfo(3)).
 
-*-p \<endpoint\>* where endpoint = (dgram|rdm|msg)
+*-e \<endpoint\>*
 : The type of endpoint to be used for data messaging between the two processes.
+  Supported values are dgram, rdm, and msg. For more information on endpoint
+  types, see fi_endpoint(3).
 
 *-d \<domain\>*
 : The name of the specific domain to be used.
 
-## Messaging
+## Test Options
 
 *-I \<iter\>*
 : The number of iterations of the test will run.
 
 *-S \<msg_size\>*
-: The specific size of the message in bytes the test will use or 'all' to run all the default sizes.
-
-## Utils
+: The specific size of the message in bytes the test will use or 'all' to run
+  all the default sizes.
 
 *-c*
-: Activate data integrity checks at the receiver (note: this may have performance impact).
+: Activate data integrity checks at the receiver (note: this will degrade
+  performance).
+
+## Utility
 
 *-v*
 : Activate output debugging (warning: highly verbose)
@@ -109,10 +127,10 @@ The client's command line options must match those used on the server. If they d
 
 Specifically, this will run a pingpong test with:
 
-	- usNIC provider
-	- 1000 iterations
-	- 1024 bytes message size
-	- server node as 192.168.0.123
+- usNIC provider
+- 1000 iterations
+- 1024 bytes message size
+- server node as 192.168.0.123
 
 ## A longer test
 
@@ -125,31 +143,36 @@ Specifically, this will run a pingpong test with:
 
 # DEFAULTS
 
-There is no default provider; if a provider is not specified via the `-p` switch, the test will pick one from the list of available providers (as returned by `fi_getinfo`(3)).
+There is no default provider; if a provider is not specified via the `-p`
+switch, the test will pick one from the list of available providers (as
+returned by fi_getinfo(3)).
 
 If no endpoint type is specified, 'dgram' is used.
 
-The default tested sizes are:  64, 256, 1024, 4096.
-
-If no server address is specified, the server address is determined by the selected provider. With the current implementation of libfabric, it means that the picked address will be the first address in the list of available addresses matching the selected provider.
-
+The default tested sizes are:  64, 256, 1024, 4096, 65536, and 1048576. The
+test will only test sizes that are within the selected endpoints maximum
+message size boundary.
 
 # OUTPUT
 
-Each test generates data messages which are accounted for. Specifically, the displayed statistics at the end are :
+Each test generates data messages which are accounted for. Specifically, the
+displayed statistics at the end are :
 
  - *bytes*          : number of bytes per message sent
- - *#sent*          : number of messages (ping) sent from the client to the server
- - *#ack*           : number of replies (pong) of the server received by the client
+ - *#sent*          : number of messages (ping) sent from the client to the
+                      server
+ - *#ack*           : number of replies (pong) of the server received by the
+                      client
  - *total*          : amount of memory exchanged between the processes
  - *time*           : duration of this single test
  - *MB/sec*         : throughput computed from *total* and *time*
- - *usec/xfer*      : average time for transfering a message outbound (ping or pong) in microseconds
- - *Mxfers/sec*     : average amount of transfers of message outbound per second
-
+ - *usec/xfer*      : average time for transferring a message outbound (ping or
+                      pong) in microseconds
+ - *Mxfers/sec*     : average amount of transfers of message outbound per
+                      second
 
 # SEE ALSO
 
-[`fi_info`(1)](info.1.html),
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_endpoint`(3)](fi_endpoint.3.html)
 [`fabric`(7)](fabric.7.html),
-[`fi_provider`(7)](fi_provider.7.html)
