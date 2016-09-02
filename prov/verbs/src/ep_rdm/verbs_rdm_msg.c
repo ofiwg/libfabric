@@ -35,9 +35,8 @@
 
 #include "verbs_rdm.h"
 
-static ssize_t
-fi_ibv_rdm_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, void *context)
+static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
+				  uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
@@ -47,17 +46,35 @@ fi_ibv_rdm_recvv(struct fid_ep *ep, const struct iovec *iov,
 		 void **desc, size_t count, fi_addr_t src_addr,
 		 void *context)
 {
-	return -FI_ENOSYS;
+	struct fi_ibv_rdm_ep *ep_rdm =
+		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
+
+	const struct fi_msg msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = src_addr,
+		.context = context,
+		.data = 0
+	};
+
+	return fi_ibv_rdm_recvmsg(ep, &msg,
+		(ep_rdm->rx_selective_completion ? 0ULL : FI_COMPLETION));
 }
 
-static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-				  uint64_t flags)
+static ssize_t
+fi_ibv_rdm_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+		fi_addr_t src_addr, void *context)
 {
-	return -FI_ENOSYS;
+	const struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = len
+	};
+	return fi_ibv_rdm_recvv(ep, &iov, &desc, 1, src_addr, context);
 }
 
-static ssize_t fi_ibv_rdm_send(struct fid_ep *ep, const void *buf, size_t len,
-			       void *desc, fi_addr_t dest_addr, void *context)
+static ssize_t fi_ibv_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+				  uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
@@ -66,13 +83,30 @@ static ssize_t fi_ibv_rdm_sendv(struct fid_ep *ep, const struct iovec *iov,
 				void **desc, size_t count, fi_addr_t dest_addr,
 				void *context)
 {
-	return -FI_ENOSYS;
+	struct fi_ibv_rdm_ep *ep_rdm =
+		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
+
+	const struct fi_msg msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = dest_addr,
+		.context = context,
+		.data = 0
+	};
+
+	return fi_ibv_rdm_sendmsg(ep, &msg,
+		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
 }
 
-static ssize_t fi_ibv_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-				  uint64_t flags)
+static ssize_t fi_ibv_rdm_send(struct fid_ep *ep, const void *buf, size_t len,
+			       void *desc, fi_addr_t dest_addr, void *context)
 {
-	return -FI_ENOSYS;
+	const struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len
+	};
+	return fi_ibv_rdm_sendv(ep, &iov, &desc, 1, dest_addr, context);
 }
 
 static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep, const void *buf, size_t len,
