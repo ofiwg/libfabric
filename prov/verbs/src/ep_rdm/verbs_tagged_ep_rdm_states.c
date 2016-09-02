@@ -200,7 +200,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_request *request,
 	fi_ibv_rdm_cntr_inc(p->ep->send_cntr);
 
 	if (request->comp_flags & FI_COMPLETION) {
-		fi_ibv_rdm_move_to_cq(request);
+		fi_ibv_rdm_move_to_cq(p->ep->fi_scq, request);
 		request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;
 	} else {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
@@ -397,7 +397,7 @@ fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_request *request,
 	fi_ibv_rdm_cntr_inc(p->ep->send_cntr);
 
 	if (request->comp_flags & FI_COMPLETION) {
-		fi_ibv_rdm_move_to_cq(request);
+		fi_ibv_rdm_move_to_cq(p->ep->fi_scq, request);
 	} else if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_request_pool, request);
@@ -537,7 +537,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_request *request,
 		fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
 
 		if (request->comp_flags & FI_COMPLETION) {
-			fi_ibv_rdm_move_to_errcq(request, ret);
+			fi_ibv_rdm_move_to_errcq(p->ep->fi_rcq, request, ret);
 		}
 		ret = FI_SUCCESS;
 	}
@@ -601,7 +601,7 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_request *request, void *data)
 
 		if (request->comp_flags & FI_COMPLETION) {
 			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-			fi_ibv_rdm_move_to_cq(request);
+			fi_ibv_rdm_move_to_cq(p->ep->fi_rcq, request);
 		} else {
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 			util_buf_release(fi_ibv_rdm_request_pool, request);
@@ -622,7 +622,7 @@ err:
 	fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
 
 	if (request->comp_flags & FI_COMPLETION) {
-		fi_ibv_rdm_move_to_errcq(request, ret);
+		fi_ibv_rdm_move_to_errcq(p->ep->fi_rcq, request, ret);
 	}
 
 	ret = FI_SUCCESS;
@@ -737,7 +737,7 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 			if (request->comp_flags & FI_COMPLETION) {
 				request->state.eager = 
 					FI_IBV_STATE_EAGER_READY_TO_FREE;
-				fi_ibv_rdm_move_to_cq(request);
+				fi_ibv_rdm_move_to_cq(p->ep->fi_rcq, request);
 			} else {
 				FI_IBV_RDM_DBG_REQUEST("to_pool: ", request,
 							FI_LOG_DEBUG);
@@ -760,7 +760,8 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 			fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
 
 			if (request->comp_flags & FI_COMPLETION) {
-				fi_ibv_rdm_move_to_errcq(request, FI_ETRUNC);
+				fi_ibv_rdm_move_to_errcq(p->ep->fi_rcq, request,
+							 FI_ETRUNC);
 			}
 		}
 
@@ -836,7 +837,7 @@ fi_ibv_rdm_tagged_eager_recv_process_unexp_pkt(struct fi_ibv_rdm_request *reques
 
 	if (request->comp_flags & FI_COMPLETION) {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
-		fi_ibv_rdm_move_to_cq(request);
+		fi_ibv_rdm_move_to_cq(p->ep->fi_rcq, request);
 	} else {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_request_pool, request);
@@ -1052,13 +1053,14 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_request *request,
 		fi_ibv_rdm_cntr_inc(p->ep->recv_cntr);
 
 		if (request->comp_flags & FI_COMPLETION) {
-			fi_ibv_rdm_move_to_cq(request);
+			fi_ibv_rdm_move_to_cq(p->ep->fi_rcq, request);
 		}
 	} else {
 		fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
 
 		if (request->comp_flags & FI_COMPLETION) {
-			fi_ibv_rdm_move_to_errcq(request, request->state.err);
+			fi_ibv_rdm_move_to_errcq(p->ep->fi_rcq, request,
+						 request->state.err);
 		}
 	}
 
@@ -1301,7 +1303,7 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_request *request, void *data)
 		}
 
 		if (request->comp_flags & FI_COMPLETION) {
-			fi_ibv_rdm_move_to_cq(request);
+			fi_ibv_rdm_move_to_cq(p->ep->fi_scq, request);
 		} else {
 			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 			FI_IBV_RDM_HNDL_REQ_LOG();
@@ -1344,7 +1346,7 @@ fi_ibv_rdm_rma_zerocopy_lc(struct fi_ibv_rdm_request *request, void *data)
 		}
 
 		if (request->comp_flags & FI_COMPLETION) {
-			fi_ibv_rdm_move_to_cq(request);
+			fi_ibv_rdm_move_to_cq(p->ep->fi_scq, request);
 			request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 			request->state.rndv = FI_IBV_STATE_ZEROCOPY_RMA_END;
 		} else {

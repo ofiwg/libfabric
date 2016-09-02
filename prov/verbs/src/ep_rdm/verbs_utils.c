@@ -227,7 +227,7 @@ int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 	return !found;
 }
 
-void fi_ibv_rdm_clean_queues()
+void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 {
 	struct fi_ibv_rdm_request *request;
 
@@ -258,7 +258,7 @@ void fi_ibv_rdm_clean_queues()
 		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 
-	while ((request = fi_ibv_rdm_take_first_from_cq())) {
+	while ((request = fi_ibv_rdm_take_first_from_cq(ep->fi_scq))) {
 		if (request->iov_count > 0) {
 			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
 					request->unexp_rbuf);
@@ -267,7 +267,21 @@ void fi_ibv_rdm_clean_queues()
 		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 
-	while ((request = fi_ibv_rdm_take_first_from_errcq())) {
+	while ((request = fi_ibv_rdm_take_first_from_cq(ep->fi_rcq))) {
+		if (request->iov_count > 0) {
+			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
+					request->unexp_rbuf);
+		}
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
+	}
+
+	while ((request = fi_ibv_rdm_take_first_from_errcq(ep->fi_scq))) {
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
+	}
+
+	while ((request = fi_ibv_rdm_take_first_from_errcq(ep->fi_rcq))) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}

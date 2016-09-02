@@ -552,7 +552,7 @@ static struct fi_ops_rma fi_ibv_rdm_ep_rma_ops = {
 	.injectdata	= fi_no_rma_injectdata,
 };
 
-struct fi_ops_rma *fi_ibv_rdm_ep_ops_rma(struct fi_ibv_rdm_ep *ep)
+struct fi_ops_rma *fi_ibv_rdm_ep_ops_rma()
 {
 	return &fi_ibv_rdm_ep_rma_ops;
 }
