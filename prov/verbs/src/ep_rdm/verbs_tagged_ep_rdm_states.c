@@ -88,10 +88,10 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_request *request,
 {
 	FI_IBV_RDM_HNDL_REQ_LOG_IN();
 
-	struct fi_ibv_rdm_tsend_start_data *p = data;
+	struct fi_ibv_rdm_send_start_data *p = data;
 	request->minfo.conn = p->conn;
 	request->minfo.tag = p->tag;
-	request->minfo.is_tagged = 1;
+	request->minfo.is_tagged = p->is_tagged,
 	request->iov_count = p->iov_count;
 
 	/* Indeed, both branches are the same, just for readability */
@@ -169,9 +169,13 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_request *request,
 	struct fi_ibv_rdm_buf *sbuf = (struct fi_ibv_rdm_buf *)request->sbuf;
 	uint8_t *payload = &sbuf->payload;
 
-	sbuf->header.tag = request->minfo.tag;
 	sbuf->header.service_tag = 0;
-	FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag, FI_IBV_RDM_EAGER_PKT);
+	if (request->minfo.is_tagged) {
+		sbuf->header.tag = request->minfo.tag;
+		FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag, FI_IBV_RDM_EAGER_PKT);
+	} else {
+		FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag, FI_IBV_RDM_MSG_PKT);
+	}
 
 	if (request->len > 0) {
 		if (request->iov_count == 0) {
@@ -648,11 +652,12 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(struct fi_ibv_rdm_request *request,
 
 	switch (p->pkt_type) {
 	case FI_IBV_RDM_EAGER_PKT:
+	case FI_IBV_RDM_MSG_PKT:
 		FI_IBV_RDM_HNDL_REQ_LOG();
 
 		request->minfo.conn = p->conn;
 		request->minfo.tag = rbuf->header.tag;
-		request->minfo.is_tagged = 1;
+		request->minfo.is_tagged = FI_IBV_RDM_EAGER_PKT ? 1 : 0;
 		request->len = 
 			p->arrived_len - sizeof(struct fi_ibv_rdm_header);
 		request->comp_flags = FI_TAGGED | FI_RECV;
@@ -678,13 +683,13 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(struct fi_ibv_rdm_request *request,
 
 		request->minfo.conn = p->conn;
 		request->minfo.tag = h->base.tag;
-		request->minfo.is_tagged = 1;
+		request->minfo.is_tagged = 1; /* TODO: rndv for MSG */
 		request->rndv.id = (uintptr_t)h->id;
 		request->rndv.remote_addr = (void *)h->src_addr;
 		request->rndv.rkey = h->mem_key;
 		request->len = h->total_len;
 		request->rest_len = h->total_len;
-		request->comp_flags = FI_TAGGED | FI_RECV;
+		request->comp_flags = FI_TAGGED | FI_RECV; /* TODO: MSG */
 		request->imm = p->imm_data;
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4RECV;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
@@ -718,6 +723,7 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 
 	switch (p->pkt_type) {
 	case FI_IBV_RDM_EAGER_PKT:
+	case FI_IBV_RDM_MSG_PKT:
 	{
 		const size_t data_len = p->arrived_len - sizeof(rbuf->header);
 		assert(data_len <= p->ep->rndv_threshold);
@@ -725,7 +731,8 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 		if (request->len >= data_len) {
 			request->minfo.conn = p->conn;
 			request->minfo.tag = rbuf->header.tag;
-			request->minfo.is_tagged = 1;
+			request->minfo.is_tagged = FI_IBV_RDM_EAGER_PKT ? 1 : 0;
+
 			request->len = p->arrived_len - sizeof(rbuf->header);
 			request->exp_rbuf = &rbuf->payload;
 			request->imm = p->imm_data;

@@ -102,41 +102,6 @@ static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 	return 0;
 }
 
-static inline ssize_t
-rdm_trecv_second_event(struct fi_ibv_rdm_request *request, 
-			struct fi_ibv_rdm_ep *ep)
-{
-	ssize_t ret = FI_SUCCESS;
-
-	switch (request->state.rndv)
-	{
-	case FI_IBV_STATE_RNDV_NOT_USED:
-		if (request->state.eager != FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
-			struct fi_ibv_recv_got_pkt_process_data data = {
-				.ep = ep
-			};
-			ret = fi_ibv_rdm_req_hndl(request,
-						  FI_IBV_EVENT_RECV_START,
-						  &data);
-		}
-		break;
-	case FI_IBV_STATE_RNDV_RECV_WAIT4RES:
-		if (fi_ibv_rdm_tagged_prepare_send_request(request, ep)) {
-			struct fi_ibv_rdm_tagged_send_ready_data data = {
-				.ep = ep
-			};
-			ret = fi_ibv_rdm_req_hndl(request,
-						  FI_IBV_EVENT_POST_READY,
-						  &data);
-		}
-		break;
-	default:
-		break;
-	}
-
-	return ret;
-}
-
 static ssize_t
 fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 			  uint64_t flags)
@@ -315,33 +280,6 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 	return -FI_EAGAIN;
 }
 
-static ssize_t
-fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tsend_start_data* sdata)
-{
-	struct fi_ibv_rdm_request *request =
-		util_buf_alloc(fi_ibv_rdm_request_pool);
-	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
-
-	/* Initial state */
-	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
-	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
-	request->state.err   = FI_SUCCESS;
-
-	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
-	int ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_SEND_START, sdata);
-
-	if (!ret && in_order &&
-		fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
-	{
-		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
-			{ .ep = sdata->ep_rdm };
-		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_READY,
-					  &req_data);
-	}
-
-	return ret;
-}
-
 static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 					    size_t len, void *desc,
 					    uint64_t data, fi_addr_t dest_addr,
@@ -350,7 +288,7 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 	struct fi_ibv_rdm_ep *ep_rdm = 
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
 
-	struct fi_ibv_rdm_tsend_start_data sdata = {
+	struct fi_ibv_rdm_send_start_data sdata = {
 		.ep_rdm = container_of(fid, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = (struct fi_ibv_rdm_conn *) dest_addr,
 		.data_len = len,
@@ -358,13 +296,14 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 		.flags = FI_TAGGED | FI_SEND |
 			(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION),
 		.tag = tag,
+		.is_tagged = 1,
 		.buf.src_addr = (void*)buf,
 		.iov_count = 0,
 		.imm = (uint32_t) data,
 		.stype = IBV_RDM_SEND_TYPE_GEN
 	};
 
-	return fi_ibv_rdm_tagged_send_common(&sdata);
+	return fi_ibv_rdm_send_common(&sdata);
 }
 
 static ssize_t fi_ibv_rdm_tagged_sendto(struct fid_ep *fid, const void *buf,
@@ -382,7 +321,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 	struct fi_ibv_rdm_ep *ep_rdm = 
 		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
 
-	struct fi_ibv_rdm_tsend_start_data sdata = {
+	struct fi_ibv_rdm_send_start_data sdata = {
 		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = (struct fi_ibv_rdm_conn *) msg->addr,
 		.data_len = 0,
@@ -390,6 +329,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		.flags = FI_TAGGED | FI_SEND | (ep_rdm->tx_selective_completion ?
 			(flags & FI_COMPLETION) : FI_COMPLETION),
 		.tag = msg->tag,
+		.is_tagged = 1,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
 		.imm = (uint32_t) 0,
@@ -430,7 +370,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		break;
 	}
 
-	return fi_ibv_rdm_tagged_send_common(&sdata);
+	return fi_ibv_rdm_send_common(&sdata);
 }
 
 static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
@@ -528,7 +468,7 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 			.conn = conn,
 			.tag = rbuf->header.tag,
 			.tagmask = 0,
-			.is_tagged = 1
+			.is_tagged = (pkt_type == FI_IBV_RDM_MSG_PKT) ? 0 : 1
 		};
 
 		struct dlist_entry *found_entry =

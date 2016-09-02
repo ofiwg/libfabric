@@ -162,7 +162,7 @@ struct fi_ibv_rdm_request {
 	uint64_t iov_count;
 	uint64_t len;
 	uint64_t rest_len;
-	uint64_t comp_flags;
+	uint64_t comp_flags; /* TODO: MSG */
 	struct fi_context *context;
 	uint32_t post_counter;
 	uint32_t imm;

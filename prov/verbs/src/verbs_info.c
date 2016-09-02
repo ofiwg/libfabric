@@ -325,6 +325,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 			 const struct fi_info *hints, const struct fi_info *info)
 {
 	uint64_t compare_mode, check_mode;
+	int rm_enabled;
 
 	if (attr->caps & ~(info->rx_attr->caps)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -361,7 +362,12 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 		return -FI_ENODATA;
 	}
 
-	if (attr->total_buffered_recv > info->rx_attr->total_buffered_recv) {
+	rm_enabled =(info->domain_attr &&
+		     info->domain_attr->resource_mgmt == FI_RM_ENABLED);
+
+	if (!rm_enabled &&
+	    (attr->total_buffered_recv > info->rx_attr->total_buffered_recv))
+	{
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->total_buffered_recv exceeds supported size\n");
 		return -FI_ENODATA;
@@ -755,6 +761,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 				goto err;
 			}
 		}
+		fi->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	}
 
 	switch (ctx->device->transport_type) {

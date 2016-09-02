@@ -295,3 +295,65 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 }
+
+ssize_t
+fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata)
+{
+	struct fi_ibv_rdm_request *request =
+		util_buf_alloc(fi_ibv_rdm_request_pool);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+
+	/* Initial state */
+	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
+	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+	request->state.err   = FI_SUCCESS;
+
+	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
+	int ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_SEND_START, sdata);
+
+	if (!ret && in_order &&
+		fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
+	{
+		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
+			{ .ep = sdata->ep_rdm };
+		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_READY,
+					  &req_data);
+	}
+
+	return ret;
+}
+
+ssize_t
+rdm_trecv_second_event(struct fi_ibv_rdm_request *request, 
+			struct fi_ibv_rdm_ep *ep)
+{
+	ssize_t ret = FI_SUCCESS;
+
+	switch (request->state.rndv)
+	{
+	case FI_IBV_STATE_RNDV_NOT_USED:
+		if (request->state.eager != FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
+			struct fi_ibv_recv_got_pkt_process_data data = {
+				.ep = ep
+			};
+			ret = fi_ibv_rdm_req_hndl(request,
+						  FI_IBV_EVENT_RECV_START,
+						  &data);
+		}
+		break;
+	case FI_IBV_STATE_RNDV_RECV_WAIT4RES:
+		if (fi_ibv_rdm_tagged_prepare_send_request(request, ep)) {
+			struct fi_ibv_rdm_tagged_send_ready_data data = {
+				.ep = ep
+			};
+			ret = fi_ibv_rdm_req_hndl(request,
+						  FI_IBV_EVENT_POST_READY,
+						  &data);
+		}
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
