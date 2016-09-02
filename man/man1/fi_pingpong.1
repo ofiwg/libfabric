@@ -1,4 +1,4 @@
-.TH "fi_pingpong" "1" "2016\-08\-31" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_pingpong" "1" "2016\-09\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_pingpong \- Quick and simple pingpong test for libfabric
@@ -12,13 +12,13 @@ fi_pingpong \- Quick and simple pingpong test for libfabric
 .fi
 .SH DESCRIPTION
 .PP
-fi_pingpong is a generic pingpong test for the core feature of the
-libfabric library: transmitting data between two processes.
+fi_pingpong is a pingpong test for the core feature of the libfabric
+library: transmitting data between two processes.
 fi_pingpong also displays aggregated statistics after each test run, and
 can additionally verify data integrity upon receipt.
 .PP
 By default, the datagram (FI_EP_DGRAM) endpoint is used for the test,
-unless otherwise specified via \-e.
+unless otherwise specified via \f[C]\-e\f[].
 .SH HOW TO RUN TESTS
 .PP
 Two copies of the program must be launched: first, one copy must be
@@ -37,16 +37,24 @@ server$\ fi_pingpong
 .IP
 .nf
 \f[C]
-client$\ fi_pingpong\ <server\ endpoint\ address>
+client$\ fi_pingpong\ <server\ address>
 \f[]
 .fi
 .SH OPTIONS
 .PP
-The client\[aq]s command line options must match those used on the
-server.
-If they do not match, the client and server may not be able to
-communicate properly.
-.SS Nodes addressing
+The server and client must be able to communicate properly for the
+fi_pingpong utility to function.
+If any of the \f[C]\-e\f[], \f[C]\-I\f[], \f[C]\-S\f[], or \f[C]\-p\f[]
+options are used, then they must be specified on the invocation for both
+the server and the client process.
+If the \f[C]\-d\f[] option is specified on the server, then the client
+will select the appropriate domain if no hint is provided on the client
+side.
+If the \f[C]\-d\f[] option is specified on the client, then it must also
+be specified on the server.
+If both the server and client specify the \f[C]\-d\f[] option and the
+given domains cannot communicate, then the application will fail.
+.SS Control Messaging
 .PP
 \f[I]\-B <src_port>\f[] : The non\-default source port number of the
 control socket.
@@ -58,27 +66,29 @@ the control socket.
 If this is not provided then the client will connect to 47592 by
 default.
 The server ignores this option.
-.SS Fabric
+.SS Fabric Filtering
 .PP
 \f[I]\-p <provider_name>\f[] : The name of the underlying fabric
 provider (e.g., sockets, psm, usnic, etc.).
-If a provider is not specified via the \-f switch, the test will pick
+If a provider is not specified via the \-p switch, the test will pick
 one from the list of available providers (as returned by fi_getinfo(3)).
 .PP
-\f[I]\-p <endpoint>\f[] where endpoint = (dgram|rdm|msg) : The type of
-endpoint to be used for data messaging between the two processes.
+\f[I]\-e <endpoint>\f[] : The type of endpoint to be used for data
+messaging between the two processes.
+Supported values are dgram, rdm, and msg.
+For more information on endpoint types, see fi_endpoint(3).
 .PP
 \f[I]\-d <domain>\f[] : The name of the specific domain to be used.
-.SS Messaging
+.SS Test Options
 .PP
 \f[I]\-I <iter>\f[] : The number of iterations of the test will run.
 .PP
 \f[I]\-S <msg_size>\f[] : The specific size of the message in bytes the
 test will use or \[aq]all\[aq] to run all the default sizes.
-.SS Utils
 .PP
 \f[I]\-c\f[] : Activate data integrity checks at the receiver (note:
-this may have performance impact).
+this will degrade performance).
+.SS Utility
 .PP
 \f[I]\-v\f[] : Activate output debugging (warning: highly verbose)
 .PP
@@ -100,15 +110,14 @@ this may have performance impact).
 \f[C]client$\ fi_pingpong\ \-p\ usnic\ \-I\ 1000\ \-S\ 1024\ 192.168.0.123\f[]
 .PP
 Specifically, this will run a pingpong test with:
-.IP
-.nf
-\f[C]
-\-\ usNIC\ provider
-\-\ 1000\ iterations
-\-\ 1024\ bytes\ message\ size
-\-\ server\ node\ as\ 192.168.0.123
-\f[]
-.fi
+.IP \[bu] 2
+usNIC provider
+.IP \[bu] 2
+1000 iterations
+.IP \[bu] 2
+1024 bytes message size
+.IP \[bu] 2
+server node as 192.168.0.123
 .SS A longer test
 .SS Server:
 .PP
@@ -120,17 +129,13 @@ Specifically, this will run a pingpong test with:
 .PP
 There is no default provider; if a provider is not specified via the
 \f[C]\-p\f[] switch, the test will pick one from the list of available
-providers (as returned by \f[C]fi_getinfo\f[](3)).
+providers (as returned by fi_getinfo(3)).
 .PP
 If no endpoint type is specified, \[aq]dgram\[aq] is used.
 .PP
-The default tested sizes are: 64, 256, 1024, 4096.
-.PP
-If no server address is specified, the server address is determined by
-the selected provider.
-With the current implementation of libfabric, it means that the picked
-address will be the first address in the list of available addresses
-matching the selected provider.
+The default tested sizes are: 64, 256, 1024, 4096, 65536, and 1048576.
+The test will only test sizes that are within the selected endpoints
+maximum message size boundary.
 .SH OUTPUT
 .PP
 Each test generates data messages which are accounted for.
@@ -151,13 +156,13 @@ client
 \f[I]MB/sec\f[] : throughput computed from \f[I]total\f[] and
 \f[I]time\f[]
 .IP \[bu] 2
-\f[I]usec/xfer\f[] : average time for transfering a message outbound
+\f[I]usec/xfer\f[] : average time for transferring a message outbound
 (ping or pong) in microseconds
 .IP \[bu] 2
 \f[I]Mxfers/sec\f[] : average amount of transfers of message outbound
 per second
 .SH SEE ALSO
 .PP
-\f[C]fi_info\f[](1), \f[C]fabric\f[](7), \f[C]fi_provider\f[](7)
+\f[C]fi_getinfo\f[](3), \f[C]fi_endpoint\f[](3) \f[C]fabric\f[](7),
 .SH AUTHORS
 OpenFabrics.
