@@ -909,7 +909,7 @@ void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
 
 int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
 {
-	int defaults[6] = {64, 256, 1024, 4096, 655616, 1048576};
+	int defaults[6] = {64, 256, 1024, 4096, 65536, 1048576};
 	int power_of_two;
 	int half_up;
 	int n = 0;
