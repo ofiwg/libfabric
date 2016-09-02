@@ -137,7 +137,7 @@ struct fi_ibv_rdm_request {
 		ssize_t err; /* filled in case of moving to errcq */
 	} state;
 
-	struct fi_ibv_rdm_tagged_minfo minfo;
+	struct fi_ibv_rdm_minfo minfo;
 
 	/* User data: buffers, lens, imm, context */
 

@@ -63,12 +63,16 @@ int fi_ibv_rdm_req_match_by_info(struct dlist_entry *item, const void *info)
 	struct fi_ibv_rdm_request *request =
 		container_of(item, struct fi_ibv_rdm_request, queue_entry);
 
-	const struct fi_ibv_rdm_tagged_minfo *minfo = info;
+	const struct fi_ibv_rdm_minfo *minfo = info;
 
-	return (((request->minfo.conn == NULL) ||
-		 (request->minfo.conn == minfo->conn)) &&
-		((request->minfo.tag & request->minfo.tagmask) ==
-		 (minfo->tag         & request->minfo.tagmask)));
+	return	(
+			((request->minfo.conn == NULL) ||
+			(request->minfo.conn == minfo->conn))
+			&&
+			(request->minfo.is_tagged ?
+			((request->minfo.tag & request->minfo.tagmask) ==
+			(minfo->tag          & request->minfo.tagmask)) : 1)
+		);
 }
 
 /*
@@ -80,11 +84,16 @@ int fi_ibv_rdm_req_match_by_info2(struct dlist_entry *item, const void *info)
 	struct fi_ibv_rdm_request *request =
 		container_of(item, struct fi_ibv_rdm_request, queue_entry);
 
-	const struct fi_ibv_rdm_tagged_minfo *minfo = info;
+	const struct fi_ibv_rdm_minfo *minfo = info;
 
-	return (((minfo->conn == NULL) || (request->minfo.conn == minfo->conn)) &&
-		((request->minfo.tag & minfo->tagmask) ==
-		 (minfo->tag         & minfo->tagmask)));
+	return	(
+			((minfo->conn == NULL) ||
+			(request->minfo.conn == minfo->conn))
+			&&
+			(minfo->is_tagged ?
+			((request->minfo.tag & minfo->tagmask) ==
+			(minfo->tag          & minfo->tagmask)) : 1)
+		);
 }
 
 /*

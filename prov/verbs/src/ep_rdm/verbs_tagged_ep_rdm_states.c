@@ -91,6 +91,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_request *request,
 	struct fi_ibv_rdm_tsend_start_data *p = data;
 	request->minfo.conn = p->conn;
 	request->minfo.tag = p->tag;
+	request->minfo.is_tagged = 1;
 	request->iov_count = p->iov_count;
 
 	/* Indeed, both branches are the same, just for readability */
@@ -431,6 +432,7 @@ fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_request *request,
 
 	request->minfo.conn = unexp->minfo.conn;
 	request->minfo.tag = unexp->minfo.tag;
+	request->minfo.is_tagged = unexp->minfo.is_tagged;
 	request->len = unexp->len;
 	request->rest_len = unexp->rest_len;
 	request->unexp_rbuf = unexp->unexp_rbuf;
@@ -648,8 +650,9 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(struct fi_ibv_rdm_request *request,
 	case FI_IBV_RDM_EAGER_PKT:
 		FI_IBV_RDM_HNDL_REQ_LOG();
 
-		request->minfo.tag = rbuf->header.tag;
 		request->minfo.conn = p->conn;
+		request->minfo.tag = rbuf->header.tag;
+		request->minfo.is_tagged = 1;
 		request->len = 
 			p->arrived_len - sizeof(struct fi_ibv_rdm_header);
 		request->comp_flags = FI_TAGGED | FI_RECV;
@@ -675,6 +678,7 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(struct fi_ibv_rdm_request *request,
 
 		request->minfo.conn = p->conn;
 		request->minfo.tag = h->base.tag;
+		request->minfo.is_tagged = 1;
 		request->rndv.id = (uintptr_t)h->id;
 		request->rndv.remote_addr = (void *)h->src_addr;
 		request->rndv.rkey = h->mem_key;
@@ -721,6 +725,7 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 		if (request->len >= data_len) {
 			request->minfo.conn = p->conn;
 			request->minfo.tag = rbuf->header.tag;
+			request->minfo.is_tagged = 1;
 			request->len = p->arrived_len - sizeof(rbuf->header);
 			request->exp_rbuf = &rbuf->payload;
 			request->imm = p->imm_data;
@@ -784,6 +789,7 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_request *request,
 
 		request->minfo.conn = p->conn;
 		request->minfo.tag = rndv_header->base.tag;
+		request->minfo.is_tagged = 1;
 		request->rndv.remote_addr = (void *)rndv_header->src_addr;
 		request->rndv.rkey = rndv_header->mem_key;
 		request->len = rndv_header->total_len;

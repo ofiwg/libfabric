@@ -159,7 +159,8 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 			.minfo = {
 				.conn = conn,
 				.tag = msg->tag,
-				.tagmask = ~(msg->ignore)
+				.tagmask = ~(msg->ignore),
+				.is_tagged = 1
 			},
 			.context = msg->context,
 			.flags = (ep_rdm->rx_selective_completion ?
@@ -523,10 +524,11 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %p\n", conn, request);
 	} else if (pkt_type != FI_IBV_RDM_RMA_PKT) {
-		struct fi_ibv_rdm_tagged_minfo minfo = {
+		struct fi_ibv_rdm_minfo minfo = {
 			.conn = conn,
 			.tag = rbuf->header.tag,
-			.tagmask = 0
+			.tagmask = 0,
+			.is_tagged = 1
 		};
 
 		struct dlist_entry *found_entry =

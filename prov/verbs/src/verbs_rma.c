@@ -324,6 +324,7 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err   = FI_SUCCESS;
 
+	request->minfo.is_tagged = 0;
 	request->rmabuf = raw_buf;
 
 	fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
@@ -425,6 +426,7 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err   = FI_SUCCESS;
 
+	request->minfo.is_tagged = 0;
 	request->rmabuf = raw_buf;
 
 	fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
@@ -518,6 +520,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err   = FI_SUCCESS;
 
+	request->minfo.is_tagged = 0;
 	ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
 
 	switch (ret)

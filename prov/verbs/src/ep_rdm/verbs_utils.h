@@ -156,14 +156,15 @@ do {										\
 
 #endif                          // ENABLE_DEBUG
 
-struct fi_ibv_rdm_tagged_minfo {
+struct fi_ibv_rdm_minfo {
 	struct fi_ibv_rdm_conn	*conn;
+	uint64_t		is_tagged;
 	uint64_t		tag;
 	uint64_t		tagmask;
 };
 
 struct fi_ibv_rdm_tagged_peek_data {
-	struct fi_ibv_rdm_tagged_minfo minfo;
+	struct fi_ibv_rdm_minfo minfo;
 	void *context;
 	uint64_t flags;
 };
