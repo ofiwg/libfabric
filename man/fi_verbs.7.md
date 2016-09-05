@@ -38,7 +38,7 @@ The verbs provider supports a subset of OFI features.
   * FI_CONTEXT for applications making uses of the experimental FI_EP_RDM capability.
 
 *Addressing Formats*
-: Supported addresing formats include FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6,
+: Supported addressing formats include FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6,
   FI_SOCKADDR_IB
 
 *Progress*

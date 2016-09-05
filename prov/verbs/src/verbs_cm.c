@@ -264,7 +264,7 @@ static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 
 	ret = rdma_bind_addr(pep->id, (struct sockaddr *)addr);
 	if (ret) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "Unable to bind addres to rdma_cm_id\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "Unable to bind address to rdma_cm_id\n");
 		return -errno;
 	}
 

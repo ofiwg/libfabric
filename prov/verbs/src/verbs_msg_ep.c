@@ -461,7 +461,7 @@ int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (info->src_addr) {
 		ret = rdma_bind_addr(_pep->id, (struct sockaddr *)info->src_addr);
 		if (ret) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to bind addres to rdma_cm_id\n");
+			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to bind address to rdma_cm_id\n");
 			goto err2;
 		}
 		_pep->bound = 1;
