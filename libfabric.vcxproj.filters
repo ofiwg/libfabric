@@ -52,6 +52,33 @@
     <Filter Include="Source Files\prov\sockets\include">
       <UniqueIdentifier>{53ba7405-75a4-408e-9ac8-e6802ba33d58}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\prov\udp">
+      <UniqueIdentifier>{e8d08af7-8c3f-4e28-adbf-b6800d101dbf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\udp\src">
+      <UniqueIdentifier>{79bf7ef8-c8f8-48fb-b264-5861ca5aa517}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\udp\include">
+      <UniqueIdentifier>{ca21a98b-b971-46f1-b692-cee827c88d9d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\rxm">
+      <UniqueIdentifier>{45ed8650-0d98-472a-912b-f21f3baeca8e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\rxm\include">
+      <UniqueIdentifier>{a769a36c-7e46-45f4-ab54-f804608d7fbc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\rxm\src">
+      <UniqueIdentifier>{2d3aeb95-125a-45dd-bc88-d83c1c8e9231}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\rxd">
+      <UniqueIdentifier>{937f824e-0920-433f-87a7-eff40b271a14}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\rxd\src">
+      <UniqueIdentifier>{7b02f380-3d31-4ff5-846e-534138818dd2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\rxd\include">
+      <UniqueIdentifier>{e89f94da-f0f0-4e62-aad4-d738963d7dd9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\common.c">
@@ -185,6 +212,69 @@
     </ClCompile>
     <ClCompile Include="prov\util\src\util_mr.c">
       <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\udp\src\udpx_attr.c">
+      <Filter>Source Files\prov\udp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\udp\src\udpx_cq.c">
+      <Filter>Source Files\prov\udp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\udp\src\udpx_domain.c">
+      <Filter>Source Files\prov\udp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\udp\src\udpx_ep.c">
+      <Filter>Source Files\prov\udp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\udp\src\udpx_fabric.c">
+      <Filter>Source Files\prov\udp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\udp\src\udpx_init.c">
+      <Filter>Source Files\prov\udp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_attr.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_av.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_cq.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_domain.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_ep.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_fabric.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_init.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_rma.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_attr.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_conn.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_cq.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_domain.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_ep.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_fabric.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_init.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -328,6 +418,15 @@
     </ClInclude>
     <ClInclude Include="include\rdma\providers\fi_prov.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\udp\src\udpx.h">
+      <Filter>Source Files\prov\udp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\rxd\src\rxd.h">
+      <Filter>Source Files\prov\rxd\include</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\rxm\src\rxm.h">
+      <Filter>Source Files\prov\rxm\include</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

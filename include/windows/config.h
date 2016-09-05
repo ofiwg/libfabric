@@ -74,8 +74,23 @@
 /* sockets provider is built */
 #define HAVE_SOCKETS 1
 
+/* UDP provider is built */
+#define HAVE_UDP 1
+
 /* sockets provider is built as DSO */
 /* #undef HAVE_SOCKETS_DL */
+
+/* rxm provider is built */
+#define HAVE_RXM 1
+
+/* rxm provider is built as DSO */
+/* #undef HAVE_RXM_DL */
+
+/* rxd provider is built */
+#define HAVE_RXD 1
+
+/* rxd provider is built as DSO */
+/* #undef HAVE_RXD_DL */
 
 /* Define to 1 if you have the <stdint.h> header file. */
 /* #undef HAVE_STDINT_H */

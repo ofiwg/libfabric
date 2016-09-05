@@ -1,9 +1,14 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.24720.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libfabric", "libfabric.vcxproj", "{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "info", "info.vcxproj", "{90850937-D15C-491D-B294-66DCA165254D}"
+	ProjectSection(ProjectDependencies) = postProject
+		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E} = {6B3A874F-B14C-4F16-B7C3-31E94859AE3E}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +20,10 @@ Global
 		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Debug|x64.Build.0 = Debug|x64
 		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Release|x64.ActiveCfg = Release|x64
 		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Release|x64.Build.0 = Release|x64
+		{90850937-D15C-491D-B294-66DCA165254D}.Debug|x64.ActiveCfg = Debug|x64
+		{90850937-D15C-491D-B294-66DCA165254D}.Debug|x64.Build.0 = Debug|x64
+		{90850937-D15C-491D-B294-66DCA165254D}.Release|x64.ActiveCfg = Release|x64
+		{90850937-D15C-491D-B294-66DCA165254D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
