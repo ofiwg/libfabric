@@ -36,14 +36,12 @@ static int mlxm_av_insert(struct fid_av *av, const void *addr, size_t count,
                           fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
         struct mlxm_fid_av *fid_av;
-        struct mlxm_fid_ep *fid_ep;
         mxm_error_t    mxm_err;
         void          *mxm_addr;
         size_t         mxm_addrlen;
         int            i, err;
 
         fid_av = container_of(av, struct mlxm_fid_av, av);
-        fid_ep = fid_av->ep;
         mxm_addrlen = fid_av->domain->mxm_addrlen;
 
         for (i = 0; i < count; ++i) {
@@ -58,7 +56,7 @@ static int mlxm_av_insert(struct fid_av *av, const void *addr, size_t count,
                         (char*)mxm_addr+8,
                         *((mxm_conn_h*)&fi_addr[i]));
         }
-        return 0;
+        return count;
 err_out:
         return err;
 }
@@ -68,8 +66,6 @@ static int mlxm_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 {
         mxm_error_t   mxm_err;
         int           i;
-        struct mlxm_fid_av *fid_av;
-        fid_av = container_of(av, struct mlxm_fid_av, av.fid);
 
         if (mlxm_globals.mxm_ep) {
                 for (i = 0; i < count; ++i) {

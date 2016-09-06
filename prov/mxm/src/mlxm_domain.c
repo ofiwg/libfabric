@@ -69,6 +69,7 @@ int mlxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
         fid_domain->domain.fid.ops     = &mlxm_fi_ops;
         fid_domain->domain.ops         = &mlxm_domain_ops;
 
+        fid_domain->domain.mr = &mlxm_mr_ops;
         *domain = &fid_domain->domain;
         return 0;
 }

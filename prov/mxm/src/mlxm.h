@@ -58,6 +58,7 @@ extern "C" {
 #include "mpool.h"
 #include "uthash.h"
 #include <sys/uio.h>
+#include <fi.h>
 
 extern int mlxm_errno_table[MXM_ERR_LAST];
 static inline
