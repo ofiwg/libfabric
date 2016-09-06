@@ -115,13 +115,13 @@ struct fi_ibv_rdm_header {
 	uint32_t padding;
 };
 
-struct fi_ibv_rdm_tagged_rndv_header {
+struct fi_ibv_rdm_rndv_header {
 	struct fi_ibv_rdm_header base;
 	uint64_t src_addr;
 	uint64_t id; /* pointer to request on sender side */
 	uint64_t total_len;
 	uint32_t mem_key;
-	uint32_t padding;
+	uint32_t is_tagged;
 };
 
 struct fi_ibv_rdm_request {
@@ -162,7 +162,7 @@ struct fi_ibv_rdm_request {
 	uint64_t iov_count;
 	uint64_t len;
 	uint64_t rest_len;
-	uint64_t comp_flags; /* TODO: MSG */
+	uint64_t comp_flags;
 	struct fi_context *context;
 	uint32_t post_counter;
 	uint32_t imm;

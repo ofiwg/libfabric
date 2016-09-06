@@ -471,6 +471,11 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 			.is_tagged = (pkt_type == FI_IBV_RDM_MSG_PKT) ? 0 : 1
 		};
 
+		if (pkt_type == FI_IBV_RDM_RNDV_RTS_PKT) {
+			struct fi_ibv_rdm_rndv_header* h = (void *)&rbuf->header;
+			minfo.is_tagged = h->is_tagged;
+		}
+
 		struct dlist_entry *found_entry =
 			dlist_find_first_match(&fi_ibv_rdm_posted_queue,
 						fi_ibv_rdm_req_match_by_info,

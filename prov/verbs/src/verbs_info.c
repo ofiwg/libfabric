@@ -751,12 +751,12 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
 		if (!fi_param_get_int(&fi_ibv_prov, "rdm_buffer_size", &param)) {
-			if (param > sizeof (struct fi_ibv_rdm_tagged_rndv_header)) {
+			if (param > sizeof (struct fi_ibv_rdm_rndv_header)) {
 				fi->tx_attr->inject_size = param;
 			} else {
 				FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 					"rdm_buffer_size too small, should be greater then %d\n",
-					sizeof (struct fi_ibv_rdm_tagged_rndv_header));
+					sizeof (struct fi_ibv_rdm_rndv_header));
 				ret = -FI_EINVAL;
 				goto err;
 			}

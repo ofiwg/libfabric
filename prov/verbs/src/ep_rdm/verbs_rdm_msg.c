@@ -212,11 +212,71 @@ static ssize_t fi_ibv_rdm_send(struct fid_ep *ep, const void *buf, size_t len,
 	return fi_ibv_rdm_sendv(ep, &iov, &desc, 1, dest_addr, context);
 }
 
-static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep, const void *buf, size_t len,
-				 fi_addr_t dest_addr)
+static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
+				 size_t len, fi_addr_t dest_addr)
 {
-	assert(0);
-	return -FI_ENOSYS;
+	struct fi_ibv_rdm_conn *conn = (struct fi_ibv_rdm_conn *)dest_addr;
+	struct fi_ibv_rdm_ep *ep =
+		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
+
+	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
+
+	if (len > ep->rndv_threshold) {
+		return -FI_EMSGSIZE;
+	}
+
+	const int in_order = (conn->postponed_entry) ? 0 : 1;
+
+	if (in_order) {
+		struct fi_ibv_rdm_buf *sbuf = 
+			fi_ibv_rdm_prepare_send_resources(conn, ep);
+		if (sbuf) {
+			struct ibv_sge sge = {0};
+			struct ibv_send_wr wr = {0};
+			struct ibv_send_wr *bad_wr = NULL;
+
+			sge.addr = (uintptr_t)(void*)sbuf;
+			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
+			sge.lkey = conn->s_mr->lkey;
+
+			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
+			wr.sg_list = &sge;
+			wr.num_sge = 1;
+			wr.wr.rdma.remote_addr = (uintptr_t)
+				fi_ibv_rdm_get_remote_addr(conn, sbuf);
+			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
+			wr.send_flags = (sge.length < ep->max_inline_rc)
+				? IBV_SEND_INLINE : 0;
+			wr.imm_data = 0;
+			wr.opcode = ep->topcode;
+
+			sbuf->service_data.pkt_len = size;
+			sbuf->header.tag = 0;
+			sbuf->header.service_tag = 0;
+
+			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
+					       FI_IBV_RDM_MSG_PKT);
+			if ((len > 0) && (buf)) {
+				memcpy(&sbuf->payload, buf, len);
+			}
+
+			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
+							 wr.send_flags);
+			if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+				assert(0);
+				return -errno;
+			} else {
+				VERBS_DBG(FI_LOG_EP_DATA,
+					"posted %d bytes, conn %p, len %d\n",
+					sge.length, conn, len);
+				return FI_SUCCESS;
+			}
+		}
+	}
+
+	fi_ibv_rdm_tagged_poll(ep);
+
+	return -FI_EAGAIN;
 }
 
 static ssize_t fi_ibv_rdm_senddata(struct fid_ep *ep, const void *buf,

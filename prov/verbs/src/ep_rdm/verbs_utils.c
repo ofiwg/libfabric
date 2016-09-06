@@ -76,7 +76,7 @@ int fi_ibv_rdm_req_match_by_info(struct dlist_entry *item, const void *info)
 }
 
 /*
- * The same as fi_ibv_rdm_tagged_req_match_by_info but conn and tagmask fields
+ * The same as fi_ibv_rdm_req_match_by_info but conn and tagmask fields
  * are used for matching instead of request's ones
  */
 int fi_ibv_rdm_req_match_by_info2(struct dlist_entry *item, const void *info)
