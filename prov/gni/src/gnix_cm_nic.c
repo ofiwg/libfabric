@@ -203,8 +203,7 @@ int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
  * a local variable.
  */
 	v = atomic_inc(&gnix_id_counter);
-	cdm_id = (domain->cdm_id_seed & 0x0000FFFF) |
-			((uint32_t)v << 16);
+	cdm_id = ((domain->cdm_id_seed & 0xFFF) << 12) | v;
 	*id = cdm_id;
 	return FI_SUCCESS;
 }
@@ -216,8 +215,7 @@ int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
 	int v;
 
 	v = atomic_add(&gnix_id_counter, nids);
-	cdm_id = (domain->cdm_id_seed & 0x0000FFFF) |
-			((uint32_t)v << 16);
+	cdm_id = ((domain->cdm_id_seed & 0xFFF) << 12) | v;
 	*id = cdm_id;
 	return FI_SUCCESS;
 }
@@ -476,13 +474,12 @@ int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 
 int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		       struct fi_info *info,
+		       uint32_t cdm_id,
 		       struct gnix_cm_nic **cm_nic_ptr)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_cm_nic *cm_nic = NULL;
-	uint32_t cdm_id;
 	gnix_hashtable_attr_t gnix_ht_attr = {0};
-	struct gnix_ep_name *name;
 	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
 	struct gnix_nic_attr nic_attr = {0};
 
@@ -500,22 +497,8 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 
 	if (info->src_addr &&
 	    info->src_addrlen == sizeof(struct gnix_ep_name)) {
-		name = (struct gnix_ep_name *)info->src_addr;
-		if (name->name_type == GNIX_EPN_TYPE_BOUND) {
-			/* EP name includes user specified service/port */
-			cdm_id = name->gnix_addr.cdm_id;
-			name_type = name->name_type;
-		}
-	}
-
-	if (name_type == GNIX_EPN_TYPE_UNBOUND) {
-		ret = _gnix_cm_nic_create_cdm_id(domain, &cdm_id);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				"gnix_cm_nic_create_cdm_id returned %s\n",
-				  fi_strerror(-ret));
-			goto err;
-		}
+		name_type = ((struct gnix_ep_name *)(info->src_addr))->
+								name_type;
 	}
 
 	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",
