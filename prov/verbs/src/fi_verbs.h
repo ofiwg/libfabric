@@ -100,6 +100,8 @@
 #define VERBS_WCE_CNT 1024
 #define VERBS_EPE_CNT 1024
 
+#define VERBS_DEF_CQ_SIZE 1024
+
 extern struct fi_provider fi_ibv_prov;
 
 
