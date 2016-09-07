@@ -156,6 +156,7 @@ unit_tests=(
 	"av_test -d GOOD_ADDR -n 1 -s SERVER_ADDR"
 	"dom_test -n 2"
 	"eq_test"
+	"cq_test"
 	"size_left_test"
 )
 

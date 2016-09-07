@@ -32,6 +32,7 @@ bin_PROGRAMS = \
 	benchmarks/fi_rdm_tagged_pingpong \
 	benchmarks/fi_rdm_tagged_bw \
 	unit/fi_eq_test \
+	unit/fi_cq_test \
 	unit/fi_av_test \
 	unit/fi_size_left_test \
 	unit/fi_dom_test \
@@ -203,6 +204,11 @@ unit_fi_eq_test_SOURCES = \
 	unit/eq_test.c \
 	unit/common.c
 unit_fi_eq_test_LDADD = libfabtests.la
+
+unit_fi_cq_test_SOURCES = \
+	unit/cq_test.c \
+	unit/common.c
+unit_fi_cq_test_LDADD = libfabtests.la
 
 unit_fi_av_test_SOURCES = \
 	unit/av_test.c \
