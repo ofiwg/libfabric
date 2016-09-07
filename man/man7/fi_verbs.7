@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2016\-08\-10" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2016\-09\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -13,14 +13,18 @@ control and data transfer operations.
 .SH SUPPORTED FEATURES
 .PP
 The verbs provider supports a subset of OFI features.
+.SS Endpoint types
 .PP
-\f[I]Endpoint types\f[] : FI_EP_MSG, FI_EP_RDM (Experimental support
-FI_TAGGED and FI_RMA interfaces).
+: FI_EP_MSG, FI_EP_RDM (Experimental support FI_TAGGED and FI_RMA
+interfaces).
+.SS Endpoint capabilities and features
+.SS MSG endpoints
 .PP
-\f[I]Endpoint capabilities\f[] : FI_MSG, FI_RMA, FI_ATOMIC.
+: FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
+##### RDM endpoints : FI_TAGGED, FI_RMA
+.SS Modes
 .PP
-\f[I]Modes\f[] : Verbs provider requires applications to support the
-following modes:
+: Verbs provider requires applications to support the following modes:
 .IP \[bu] 2
 FI_LOCAL_MR for all applications.
 .IP \[bu] 2
@@ -30,18 +34,21 @@ incoming CQ data.
 .IP \[bu] 2
 FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
 capability.
+.SS Addressing Formats
 .PP
-\f[I]Addressing Formats\f[] : Supported addressing formats include
-FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6, FI_SOCKADDR_IB
+: Supported addressing formats include FI_SOCKADDR, FI_SOCKADDR_IN,
+FI_SOCKADDR_IN6, FI_SOCKADDR_IB
+.SS Progress
 .PP
-\f[I]Progress\f[] : Verbs provider supports FI_PROGRESS_AUTO:
-Asynchronous operations make forward progress automatically.
+: Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make
+forward progress automatically.
+.SS Operation flags
 .PP
-\f[I]Operation flags\f[] : Verbs provider supports FI_INJECT,
-FI_COMPLETION, FI_REMOTE_CQ_DATA.
+: Verbs provider supports FI_INJECT, FI_COMPLETION, FI_REMOTE_CQ_DATA.
+.SS Msg Ordering
 .PP
-\f[I]Msg Ordering\f[] : Verbs provider support the following messaging
-ordering on the TX side:
+: Verbs provider support the following messaging ordering on the TX
+side:
 .IP \[bu] 2
 Read after Read
 .IP \[bu] 2
@@ -57,21 +64,43 @@ Send after Write
 .IP \[bu] 2
 Send after Send
 .SH LIMITATIONS
+.SS CQ
 .PP
-\f[I]CQ\f[] : cq_readfrom operations are not supported.
+: cq_readfrom operations are not supported.
+.SS Memory Regions
 .PP
-\f[I]Memory Regions\f[] : Only FI_MR_BASIC mode is supported.
+: Only FI_MR_BASIC mode is supported.
 Adding regions via s/g list is not supported.
 Generic fi_mr_regattr is not supported.
 No support for binding memory regions to a counter.
+.SS Wait objects
 .PP
-\f[I]Wait objects\f[] : Only FI_WAIT_FD wait object is supported.
+: Only FI_WAIT_FD wait object is supported.
 Wait sets are not supported.
+.SS Resource Management
 .PP
-\f[I]Resource Management\f[] : Application has to make sure CQs are not
-overrun as this cannot be detected by the provider.
+: Application has to make sure CQs are not overrun as this cannot be
+detected by the provider.
+.SS Unsupported Features
 .PP
-\f[I]RDM\f[] : The RDM support for verbs have the following limitations:
+: The following features are not supported in verbs provider.
+.SS Unsupported Endpoint types
+.PP
+: FI_EP_DGRAM
+.SS Unsupported Capabilities
+.PP
+: FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_MULTI_RECV,
+FI_RMA_EVENT, FI_FENCE
+.SS Other unsupported features
+.PP
+: Scalable endpoints, FABRIC_DIRECT
+.SS Unsupported features specific to MSG endpoints
+.PP
+: Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel,
+fi_ep_alias, Shared TX context.
+.SS Unsupported features specific to RDM endpoints
+.PP
+: The RDM support for verbs have the following limitations:
 .IP \[bu] 2
 iWARP is not supported yet.
 .IP \[bu] 2
