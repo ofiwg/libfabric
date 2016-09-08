@@ -64,7 +64,7 @@ static struct fid_cq *cq;
 static struct fi_cq_attr cq_attr;
 void *ep_name[2];
 fi_addr_t gni_addr[2];
-struct gnix_av_addr_entry * gnix_addr[2];
+struct gnix_av_addr_entry gnix_addr[2];
 size_t gnix_addrlen[2];
 
 static void vc_setup_common(void);
@@ -227,10 +227,10 @@ Test(vc_management_auto, vc_alloc_simple)
 
 	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
 
-	ret = _gnix_vc_alloc(ep_priv, gnix_addr[0], &vc[0]);
+	ret = _gnix_vc_alloc(ep_priv, &gnix_addr[0], &vc[0]);
 	cr_assert_eq(ret, FI_SUCCESS);
 
-	ret = _gnix_vc_alloc(ep_priv, gnix_addr[1], &vc[1]);
+	ret = _gnix_vc_alloc(ep_priv, &gnix_addr[1], &vc[1]);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	/*
@@ -254,10 +254,10 @@ Test(vc_management_auto, vc_lookup_by_id)
 
 	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
 
-	ret = _gnix_vc_alloc(ep_priv, gnix_addr[0], &vc[0]);
+	ret = _gnix_vc_alloc(ep_priv, &gnix_addr[0], &vc[0]);
 	cr_assert_eq(ret, FI_SUCCESS);
 
-	ret = _gnix_vc_alloc(ep_priv, gnix_addr[1], &vc[1]);
+	ret = _gnix_vc_alloc(ep_priv, &gnix_addr[1], &vc[1]);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	vc_chk = __gnix_nic_elem_by_rem_id(ep_priv->nic, vc[0]->vc_id);
@@ -286,7 +286,7 @@ Test(vc_management_auto, vc_connect)
 
 	ep_priv[1] = container_of(ep[1], struct gnix_fid_ep, ep_fid);
 
-	ret = _gnix_vc_alloc(ep_priv[0], gnix_addr[1], &vc_conn);
+	ret = _gnix_vc_alloc(ep_priv[0], &gnix_addr[1], &vc_conn);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	memcpy(&key, &gni_addr[1],
@@ -328,7 +328,7 @@ Test(vc_management_auto, vc_connect2)
 	ep_priv[0] = container_of(ep[0], struct gnix_fid_ep, ep_fid);
 	ep_priv[1] = container_of(ep[1], struct gnix_fid_ep, ep_fid);
 
-	ret = _gnix_vc_alloc(ep_priv[0], gnix_addr[1], &vc_conn0);
+	ret = _gnix_vc_alloc(ep_priv[0], &gnix_addr[1], &vc_conn0);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	memcpy(&key, &gni_addr[1],
@@ -339,7 +339,7 @@ Test(vc_management_auto, vc_connect2)
 
 	vc_conn0->modes |= GNIX_VC_MODE_IN_HT;
 
-	ret = _gnix_vc_alloc(ep_priv[1], gnix_addr[0], &vc_conn1);
+	ret = _gnix_vc_alloc(ep_priv[1], &gnix_addr[0], &vc_conn1);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	memcpy(&key, &gni_addr[0],
