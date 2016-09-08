@@ -180,6 +180,12 @@
     <ClCompile Include="prov\sockets\src\sock_wait.c">
       <Filter>Source Files\prov\sockets\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\util\src\util_ep.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\util\src\util_mr.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h">
@@ -228,12 +234,6 @@
       <Filter>Header Files\rdma</Filter>
     </ClInclude>
     <ClInclude Include="include\rdma\fi_errno.h">
-      <Filter>Header Files\rdma</Filter>
-    </ClInclude>
-    <ClInclude Include="include\rdma\fi_log.h">
-      <Filter>Header Files\rdma</Filter>
-    </ClInclude>
-    <ClInclude Include="include\rdma\fi_prov.h">
       <Filter>Header Files\rdma</Filter>
     </ClInclude>
     <ClInclude Include="include\rdma\fi_rma.h">
@@ -322,6 +322,12 @@
     </ClInclude>
     <ClInclude Include="prov\sockets\include\sock_util.h">
       <Filter>Source Files\prov\sockets\include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\rdma\providers\fi_log.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\rdma\providers\fi_prov.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

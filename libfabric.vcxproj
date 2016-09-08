@@ -184,9 +184,11 @@
     <ClCompile Include="prov\util\src\util_buf.c" />
     <ClCompile Include="prov\util\src\util_cq.c" />
     <ClCompile Include="prov\util\src\util_domain.c" />
+    <ClCompile Include="prov\util\src\util_ep.c" />
     <ClCompile Include="prov\util\src\util_eq.c" />
     <ClCompile Include="prov\util\src\util_fabric.c" />
     <ClCompile Include="prov\util\src\util_main.c" />
+    <ClCompile Include="prov\util\src\util_mr.c" />
     <ClCompile Include="prov\util\src\util_poll.c" />
     <ClCompile Include="prov\util\src\util_wait.c" />
     <ClCompile Include="src\common.c" />
@@ -228,11 +230,11 @@
     <ClInclude Include="include\rdma\fi_endpoint.h" />
     <ClInclude Include="include\rdma\fi_eq.h" />
     <ClInclude Include="include\rdma\fi_errno.h" />
-    <ClInclude Include="include\rdma\fi_log.h" />
-    <ClInclude Include="include\rdma\fi_prov.h" />
     <ClInclude Include="include\rdma\fi_rma.h" />
     <ClInclude Include="include\rdma\fi_tagged.h" />
     <ClInclude Include="include\rdma\fi_trigger.h" />
+    <ClInclude Include="include\rdma\providers\fi_log.h" />
+    <ClInclude Include="include\rdma\providers\fi_prov.h" />
     <ClInclude Include="include\windows\arpa\inet.h" />
     <ClInclude Include="include\windows\config.h" />
     <ClInclude Include="include\windows\netinet\in.h" />
