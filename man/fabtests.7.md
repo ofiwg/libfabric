@@ -34,8 +34,8 @@ These tests are a mix of very basic functionality tests that show major features
 	fi_rdm_rma_simple: A simple RDM client-server RMA example
 	fi_rdm_rma_trigger: A simple RDM client-server example that uses triggered RMA
 	fi_rdm_shared_av: A simple RDM client-server example where av is shared between two child processes
-	fi_rdm_shared_ctx: An RDM client-server example that uses shared context
 	fi_rdm_tagged_peek: An RDM client-server example that uses tagged FI_PEEK
+	fi_shared_ctx: An client-server example that uses shared context
 	fi_scalable_ep: An RDM client-server example with scalable endpoints
 	fi_cm_data: A MSG client-server example that uses CM data
 
@@ -61,6 +61,7 @@ These are one way streaming data tests.
 
 ## Unit
 	 fi_eq_test: Unit tests for event queue
+	 fi_cq_test: Unit tests for completion queue
 	 fi_dom_test: Unit tests for domain
 	 fi_av_test: Unit tests for address vector
 	 fi_size_left_test: Unit tests to query the lower bound of rx/tx entries
