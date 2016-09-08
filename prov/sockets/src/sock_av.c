@@ -240,7 +240,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 
 		av_addr = &_av->table[index];
 		memcpy(sa_ip, inet_ntoa((&addr[i])->sin_addr), INET_ADDRSTRLEN);
-		SOCK_LOG_DBG("AV-INSERT:dst_addr: family: %d, IP is %s, port: %d\n",
+		SOCK_LOG_DBG("AV-INSERT: dst_addr family: %d, IP %s, port: %d\n",
 			      ((struct sockaddr_in *)&addr[i])->sin_family,
 				sa_ip, ntohs(((struct sockaddr_in *)&addr[i])->sin_port));
 
@@ -383,12 +383,35 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 	int i;
 	struct sock_av *_av;
 	struct sock_av_addr *av_addr;
+	struct dlist_entry *item;
+	struct fid_list_entry *fid_entry;
+	struct sock_ep *sock_ep;
+	struct sock_conn *conn;
+	uint16_t idx;
+
 	_av = container_of(av, struct sock_av, av_fid);
+	fastlock_acquire(&_av->list_lock);
+	dlist_foreach(&_av->ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		sock_ep = container_of(fid_entry->fid, struct sock_ep, ep.fid);
+		fastlock_acquire(&sock_ep->attr->cmap.lock);
+		for (i = 0; i < count; i++) {
+        		idx = fi_addr[i] & sock_ep->attr->av->mask;
+			conn = idm_lookup(&sock_ep->attr->av_idm, idx);
+			if (conn && conn->sock_fd != -1) {
+				sock_ep_remove_conn(sock_ep->attr, conn);
+				idm_clear(&sock_ep->attr->av_idm, idx);
+			}
+		}
+		fastlock_release(&sock_ep->attr->cmap.lock);
+	}
+	fastlock_release(&_av->list_lock);
 
 	for (i = 0; i < count; i++) {
 		av_addr = &_av->table[fi_addr[i]];
 		av_addr->valid = 0;
 	}
+
 	return 0;
 }
 
@@ -438,6 +461,7 @@ static int sock_av_close(struct fid *fid)
 	}
 
 	atomic_dec(&av->domain->ref);
+	fastlock_destroy(&av->list_lock);
 	free(av);
 	return 0;
 }
@@ -581,6 +605,8 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		ret = -FI_EINVAL;
 		goto err2;
 	}
+	dlist_init(&_av->ep_list);
+	fastlock_init(&_av->list_lock);
 	_av->rx_ctx_bits = attr->rx_ctx_bits;
 	_av->mask = attr->rx_ctx_bits ?
 		((uint64_t)1 << (64 - attr->rx_ctx_bits)) - 1 : ~0;

@@ -2152,9 +2152,7 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 		SOCK_LOG_DBG("conn disconnected: removing fd from pollset\n");
 		if (pe_entry->conn->sock_fd != -1) {
 			fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
-			sock_pe_poll_del(pe, pe_entry->conn->sock_fd);
-			idm_clear(&pe_entry->ep_attr->conn_idm, pe_entry->conn->sock_fd);
-			sock_conn_release_entry(&pe_entry->ep_attr->cmap, pe_entry->conn);
+			sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
 			fastlock_release(&pe_entry->ep_attr->cmap.lock);
 		}
 

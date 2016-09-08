@@ -325,6 +325,8 @@ struct sock_av {
 	uint64_t *idx_arr;
 	struct util_shm shm;
 	int    shared;
+	struct dlist_entry ep_list;
+	fastlock_t list_lock;
 };
 
 struct sock_fid_list {
@@ -1084,6 +1086,7 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
                                       struct sockaddr_in *addr);
 int sock_ep_get_conn(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
 		     fi_addr_t index, struct sock_conn **pconn);
+void sock_ep_remove_conn(struct sock_ep_attr *ep_attr, struct sock_conn *conn);
 struct sock_conn *sock_ep_connect(struct sock_ep_attr *attr, fi_addr_t index);
 ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
 				struct sock_conn *conn);
