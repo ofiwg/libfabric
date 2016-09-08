@@ -441,6 +441,10 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 	RbtIterator iter;
 	uint64_t cookie;
 
+	if (!cache->attr.notifier) {
+		return;
+	}
+
 	if (!cache->attr.lazy_deregistration) {
 		return;
 	}

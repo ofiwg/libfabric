@@ -70,6 +70,9 @@ struct gnix_xpmem_ht_entry {
 
 /*
  * TODO: should be adjustable from domain params
+ * Note notifier is set to NULL since xpmem device driver
+ * handles mmu notifiers internally so we don't need to use
+ * KDREG.
  */
 static gnix_mr_cache_attr_t _gnix_xpmem_default_mr_cache_attr = {
 		.soft_reg_limit      = 128,
@@ -80,6 +83,7 @@ static gnix_mr_cache_attr_t _gnix_xpmem_default_mr_cache_attr = {
 		.dereg_callback      = __gnix_xpmem_detach_seg,
 		.destruct_callback   = __gnix_xpmem_destroy_mr_cache,
 		.elem_size           = sizeof(struct gnix_xpmem_access_handle),
+		.notifier            = NULL,
 };
 
 /*******************************************************************************
