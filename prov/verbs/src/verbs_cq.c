@@ -493,6 +493,7 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 {
 	struct fi_ibv_cq *_cq;
 	int ep_cnt_bits = 0;
+	size_t size;
 	int ret;
 
 	_cq = calloc(1, sizeof *_cq);
@@ -511,6 +512,8 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		_cq->channel = ibv_create_comp_channel(_cq->domain->verbs);
 		if (!_cq->channel) {
 			ret = -errno;
+			FI_WARN(&fi_ibv_prov, FI_LOG_CQ,
+					"Unable to create completion channel\n");
 			goto err1;
 		}
 
@@ -535,11 +538,15 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err3;
 	}
 
-	_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
-				_cq->channel, attr->signaling_vector);
+	size = attr->size ? attr->size :
+		MIN(VERBS_DEF_CQ_SIZE, _cq->domain->info->domain_attr->cq_cnt);
+
+	_cq->cq = ibv_create_cq(_cq->domain->verbs, size, _cq, _cq->channel,
+			attr->signaling_vector);
 
 	if (!_cq->cq) {
 		ret = -errno;
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Unable to create verbs CQ\n");
 		goto err3;
 	}
 
@@ -560,6 +567,7 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	_cq->cq_fid.ops = &fi_ibv_cq_ops;
 
 	switch (attr->format) {
+	case FI_CQ_FORMAT_UNSPEC:
 	case FI_CQ_FORMAT_CONTEXT:
 		_cq->read_entry = fi_ibv_cq_read_context_entry;
 		_cq->entry_size = sizeof(struct fi_cq_entry);
