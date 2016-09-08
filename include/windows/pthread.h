@@ -21,6 +21,7 @@
 #define PTHREAD_MUTEX_INITIALIZER {0}
 
 #define pthread_cond_signal WakeConditionVariable
+#define pthread_cond_broadcast WakeAllConditionVariable
 #define pthread_mutex_init(mutex, attr) InitializeCriticalSection(mutex)
 #define pthread_mutex_destroy DeleteCriticalSection
 #define pthread_cond_init(cond, attr) (InitializeConditionVariable(cond), 0)
