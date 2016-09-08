@@ -269,6 +269,11 @@ int run_test_set(struct fi_info *hints)
 	return failed;
 }
 
+static void usage(void)
+{
+	ft_unit_usage("size_left_test", "Unit test for checking TX and RX context sizes");
+}
+
 int main(int argc, char **argv)
 {
 	int op;
@@ -281,7 +286,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		exit(1);
 
-	while ((op = getopt(argc, argv, "f:a:")) != -1) {
+	while ((op = getopt(argc, argv, "f:a:h")) != -1) {
 		switch (op) {
 		case 'a':
 			free(hints->fabric_attr->name);
@@ -291,11 +296,12 @@ int main(int argc, char **argv)
 			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
+		case 'h':
+			usage();
+			return EXIT_SUCCESS;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-a fabric_name]\n");
-			printf("\t[-f provider_name]\n");
-			exit(1);
+			usage();
+			return EXIT_FAILURE;
 		}
 	}
 

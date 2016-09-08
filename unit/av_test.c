@@ -983,6 +983,16 @@ run_test_set()
 	return failed;
 }
 
+static void usage(void)
+{
+	ft_unit_usage("av_test", "Unit test for Address Vector (AV)");
+	FT_PRINT_OPTS_USAGE("-d <good_address>", "");
+	FT_PRINT_OPTS_USAGE("-D <bad_address>]", "");
+	fprintf(stderr, FT_OPTS_USAGE_FORMAT " (max=%d)\n", "-n <num_good_addr>",
+			"Number of good addresses", MAX_ADDR - 1);
+	FT_PRINT_OPTS_USAGE("-s <source_address>", "");
+}
+
 int main(int argc, char **argv)
 {
 	int op, ret;
@@ -992,7 +1002,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:d:D:n:a:s:")) != -1) {
+	while ((op = getopt(argc, argv, "f:d:D:n:a:s:h")) != -1) {
 		switch (op) {
 		case 'd':
 			good_address = optarg;
@@ -1014,14 +1024,11 @@ int main(int argc, char **argv)
 		case 's':
 			src_addr_str = optarg;
 			break;
+		case 'h':
+			usage();
+			return EXIT_SUCCESS;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d good_address]\n");
-			printf("\t[-D bad_address]\n");
-			printf("\t[-a fabric_name]\n");
-			printf("\t[-n num_good_addr (max=%d)]\n", MAX_ADDR - 1);
-			printf("\t[-f provider_name]\n");
-			printf("\t[-s source_address]\n");
+			usage();
 			return EXIT_FAILURE;
 
 		}

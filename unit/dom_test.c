@@ -63,6 +63,12 @@ static struct fid_domain **domain_vec = NULL;
  * - test open and close of a domain
  */
 
+static void usage(void)
+{
+	ft_unit_usage("dom_test", "Unit test for Domain");
+	FT_PRINT_OPTS_USAGE("-n <num_domains>", "num domains to open");
+}
+
 int main(int argc, char **argv)
 {
 	unsigned long i;
@@ -74,7 +80,7 @@ int main(int argc, char **argv)
 	if (hints == NULL)
 		exit(EXIT_FAILURE);
 
-	while ((op = getopt(argc, argv, "f:a:n:")) != -1) {
+	while ((op = getopt(argc, argv, "f:a:n:h")) != -1) {
 		switch (op) {
 		case 'a':
 			free(hints->fabric_attr->name);
@@ -93,12 +99,12 @@ int main(int argc, char **argv)
 			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
+		case 'h':
+			usage();
+			return EXIT_SUCCESS;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-a fabric_name]\n");
-			printf("\t[-f provider_name]\n");
-			printf("\t[-n num domains to open]\n");
-			exit(EXIT_FAILURE);
+			usage();
+			return EXIT_FAILURE;
 		}
 	}
 

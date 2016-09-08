@@ -557,6 +557,11 @@ struct test_entry test_array[] = {
 	{ NULL, "" }
 };
 
+static void usage(void)
+{
+	ft_unit_usage("eq_test", "Unit test for Event Queue (EQ)");
+}
+
 int main(int argc, char **argv)
 {
 	int op, ret;
@@ -566,7 +571,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		exit(1);
 
-	while ((op = getopt(argc, argv, "f:a:")) != -1) {
+	while ((op = getopt(argc, argv, "f:a:h")) != -1) {
 		switch (op) {
 		case 'a':
 			free(hints->fabric_attr->name);
@@ -576,11 +581,12 @@ int main(int argc, char **argv)
 			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
+		case 'h':
+			usage();
+			return EXIT_SUCCESS;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-a fabric_name]\n");
-			printf("\t[-f provider_name]\n");
-			exit(1);
+			usage();
+			return EXIT_FAILURE;
 		}
 	}
 
