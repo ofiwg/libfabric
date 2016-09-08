@@ -518,6 +518,9 @@ static int sock_cq_verify_attr(struct fi_cq_attr *attr)
 	case FI_CQ_FORMAT_DATA:
 	case FI_CQ_FORMAT_TAGGED:
 		break;
+	case FI_CQ_FORMAT_UNSPEC:
+		attr->format = FI_CQ_FORMAT_CONTEXT;
+		break;
 	default:
 		return -FI_ENOSYS;
 	}
