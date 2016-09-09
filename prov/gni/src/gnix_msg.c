@@ -657,19 +657,26 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
 	if (tx_status != GNI_RC_SUCCESS) {
-		req->tx_failures++;
 		if (GNIX_EP_RDM(req->gnix_ep->type) &&
-			req->tx_failures <
-				req->gnix_ep->domain->params.max_retransmits) {
-
+			GNIX_REQ_REPLAYABLE(req)) {
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Requeueing failed request: %p\n", req);
 			return _gnix_vc_queue_work_req(req);
 		}
 
-		if (!GNIX_EP_DGM(req->gnix_ep->type))
-			GNIX_INFO(FI_LOG_EP_DATA,
+		if (!GNIX_EP_DGM(req->gnix_ep->type)) {
+			GNIX_WARN(FI_LOG_EP_DATA,
 				  "Dropping failed request: %p\n", req);
+			ret = __gnix_msg_send_err(req->gnix_ep,
+						  req);
+			if (ret != FI_SUCCESS)
+				GNIX_WARN(FI_LOG_EP_DATA,
+					  "__gnix_msg_send_err() failed: %s\n",
+					  fi_strerror(-ret));
+			__gnix_msg_send_fr_complete(req, txd);
+			return ret;
+		}
+
 		req->msg.status = tx_status;
 		req->work_fn = __gnix_rndzv_req_send_fin;
 		return _gnix_vc_queue_work_req(req);
@@ -703,7 +710,7 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
-	int i;
+	int i, ret = FI_SUCCESS;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
@@ -726,11 +733,9 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 			   req->msg.recv_iov_cnt);
 
 		if (req->msg.status != FI_SUCCESS) {
-			req->tx_failures++;
 
 			if (GNIX_EP_RDM(req->gnix_ep->type) &&
-			    req->tx_failures <
-			    req->gnix_ep->domain->params.max_retransmits) {
+				GNIX_REQ_REPLAYABLE(req)) {
 				/* Build and re-tx the entire iov request if the
 				 * ep type is "reliable datagram" */
 				req->work_fn = __gnix_rndzv_iov_req_build;
@@ -738,8 +743,16 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 			}
 
 			if (!GNIX_EP_DGM(req->gnix_ep->type)) {
-				GNIX_INFO(FI_LOG_EP_DATA,
+				GNIX_WARN(FI_LOG_EP_DATA,
 					  "Dropping failed request: %p\n", req);
+				ret = __gnix_msg_send_err(req->gnix_ep,
+						    req);
+				if (ret != FI_SUCCESS)
+					GNIX_WARN(FI_LOG_EP_DATA,
+						  "__gnix_msg_send_err() failed: %s\n",
+						  fi_strerror(-ret));
+				__gnix_msg_send_fr_complete(req, txd);
+				return ret;
 			}
 		} else {
 			if (req->msg.recv_flags & FI_LOCAL_MR) {
@@ -761,7 +774,7 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 	 * Successful tx, continue until the txd counter reaches zero
 	 * or we can't recover from the error.
 	 */
-	return FI_SUCCESS;
+	return ret;
 }
 
 static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
@@ -1538,8 +1551,8 @@ static int __comp_eager_msg_w_data(void *data, gni_return_t tx_status)
 		ret = __gnix_msg_send_err(req->gnix_ep, req);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_msg_send_err() failed: %d\n",
-				  ret);
+				  "__gnix_msg_send_err() failed: %s\n",
+				  fi_strerror(-ret));
 	} else {
 		/* Successful delivery.  Generate completions. */
 		ret = __gnix_msg_send_completion(req->gnix_ep, req);
@@ -1616,8 +1629,8 @@ static int __comp_rndzv_start(void *data, gni_return_t tx_status)
 		ret = __gnix_msg_send_err(req->gnix_ep, req);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_msg_send_err() failed: %d\n",
-				  ret);
+				  "__gnix_msg_send_err() failed: %s\n",
+				  fi_strerror(-ret));
 		__gnix_msg_send_fr_complete(req, txd);
 	} else {
 		/* Just free the TX descriptor for now.  The request remains
@@ -2153,7 +2166,12 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	if (hdr->status == GNI_RC_SUCCESS) {
 		__gnix_msg_send_completion(ep, req);
 	} else {
-		__gnix_msg_send_err(ep, req);
+		ret = __gnix_msg_send_err(ep, req);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_msg_send_err() failed: %s\n",
+				  fi_strerror(-ret));
+		}
 	}
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);

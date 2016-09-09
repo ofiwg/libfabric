@@ -196,15 +196,14 @@ static int __gnix_rma_post_err_no_retrans(struct gnix_fab_req *req, int error)
 
 static int __gnix_rma_post_err(struct gnix_fab_req *req, int error)
 {
-	req->tx_failures++;
 	if (GNIX_EP_RDM(req->gnix_ep->type) &&
-	    req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
+		GNIX_REQ_REPLAYABLE(req)) {
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Requeueing failed request: %p\n", req);
 		return _gnix_vc_queue_work_req(req);
 	}
 
-	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p error: %d\n",
+	GNIX_WARN(FI_LOG_EP_DATA, "Failed %u transmits: %p error: %d\n",
 		  req->tx_failures, req, error);
 
 	__gnix_rma_post_err_no_retrans(req, error);
