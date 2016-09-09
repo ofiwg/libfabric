@@ -1136,7 +1136,8 @@ value of transmit or receive context attributes of an endpoint.
   restrictions.  The buffer will be returned to the application's
   control, and an *FI_MULTI_RECV* completion will be generated, when a
   message is received that cannot fit into the remaining free buffer
-  space.
+  space. The completions for this single posted receive operation should 
+  be generated in order.
 
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for data
