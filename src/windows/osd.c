@@ -45,6 +45,8 @@ static INIT_ONCE ofi_init_once = INIT_ONCE_STATIC_INIT;
 
 static char ofi_shm_prefix[] = "Local\\";
 
+void fi_fini(void);
+
 int socketpair(int af, int type, int protocol, int socks[2])
 {
 	protocol; /* suppress warning */
@@ -163,14 +165,17 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 	OFI_UNUSED(instance);
 	OFI_UNUSED(reserved);
 
-	switch(reason)
-	{
+	switch (reason) {
 	case DLL_PROCESS_ATTACH:
 		InitOnceExecuteOnce(&ofi_init_once, ofi_init_once_cb, &ini_lock, 0);
 		break;
 	case DLL_THREAD_ATTACH:
+		break;
 	case DLL_PROCESS_DETACH:
+		fi_fini();
+		break;
 	case DLL_THREAD_DETACH:
+		break;
 	default:
 		break;
 	}

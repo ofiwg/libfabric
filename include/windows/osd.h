@@ -31,6 +31,8 @@
 extern "C" {
 #endif
 
+#define FI_DESTRUCTOR(func) void func
+
 #define LITTLE_ENDIAN 5678
 #define BIG_ENDIAN 8765
 #define BYTE_ORDER LITTLE_ENDIAN

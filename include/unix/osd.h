@@ -37,6 +37,8 @@
 #include <unistd.h>
 #include <errno.h>
 
+#define FI_DESTRUCTOR(func) static __attribute__((destructor)) void func
+
 struct util_shm
 {
 	int		shared_fd;
