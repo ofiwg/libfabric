@@ -2458,8 +2458,8 @@ DIRECT_FN STATIC ssize_t gnix_ep_rx_size_left(struct fid_ep *ep)
 		return -FI_EINVAL;
 	}
 
-	/* We can queue RXs indefinitely, return an arbitrary low water mark. */
-	return 64;
+	/* We can queue RXs indefinitely, so just return the default size. */
+	return GNIX_RX_SIZE_DEFAULT;
 }
 
 DIRECT_FN STATIC ssize_t gnix_ep_tx_size_left(struct fid_ep *ep)
@@ -2487,8 +2487,8 @@ DIRECT_FN STATIC ssize_t gnix_ep_tx_size_left(struct fid_ep *ep)
 		return -FI_EINVAL;
 	}
 
-	/* We can queue TXs indefinitely, return an arbitrary low water mark. */
-	return 64;
+	/* We can queue TXs indefinitely, so just return the default size. */
+	return GNIX_TX_SIZE_DEFAULT;
 }
 
 __attribute__((unused))
