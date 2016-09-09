@@ -409,7 +409,7 @@ unlock:
 	pthread_mutex_unlock(&ini_lock);
 }
 
-static void __attribute__((destructor)) fi_fini(void)
+FI_DESTRUCTOR(fi_fini(void))
 {
 	struct fi_prov *prov;
 
