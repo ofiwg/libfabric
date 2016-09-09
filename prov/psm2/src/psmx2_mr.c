@@ -268,10 +268,6 @@ static int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
 	mr_priv->mr.fid.context = context;
 	mr_priv->mr.fid.ops = &psmx2_fi_ops;
 	mr_priv->mr.mem_desc = mr_priv;
-	mr_priv->mr.fid.fclass = FI_CLASS_MR;
-	mr_priv->mr.fid.context = context;
-	mr_priv->mr.fid.ops = &psmx2_fi_ops;
-	mr_priv->mr.mem_desc = mr_priv;
 	mr_priv->mr.key = key;
 	mr_priv->domain = domain_priv;
 	mr_priv->access = access;
