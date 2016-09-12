@@ -1,4 +1,4 @@
-.TH "fi_info" "1" "2016\-09\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_info" "1" "2016\-09\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_info \- Simple utility to query for fabric interfaces
@@ -26,7 +26,7 @@ all providers and endpoint types will be returned.
 interfaces.
 Only interfaces which can reach the given node or address will respond.
 .PP
-\f[I]\-p, \-\-port=<PORT>\f[] : Port number used to filter interfaces.
+\f[I]\-P, \-\-port=<PORT>\f[] : Port number used to filter interfaces.
 .PP
 \f[I]\-c, \-\-caps=<CAP1|CAP2>..\f[] : Pipe separated list of
 capabilities used to filter interfaces.
@@ -50,9 +50,15 @@ For example, specifying FI_SOCKADDR_IN would return only interfaces
 which use sockaddr_in structures for addressing.
 For more information on address formats, see fi_getinfo(3).
 .PP
-\f[I]\-f, \-\-provider=<PROV>\f[] : Filter fabric interfaces by the
+\f[I]\-p, \-\-provider=<PROV>\f[] : Filter fabric interfaces by the
 provider implementation.
 For a list of providers, see the \f[C]\-\-list\f[] option.
+.PP
+\f[I]\-d, \-\-domain=<DOMAIN>\f[] : Filter interfaces to only those with
+the given domain name.
+.PP
+\f[I]\-f, \-\-fabric=<FABRIC>\f[] : Filter interfaces to only those with
+the given fabric name.
 .SS Discovery
 .PP
 \f[I]\-e, \-\-env\f[] : List libfabric related environment levels which
@@ -72,7 +78,7 @@ fi_getinfo(3).
 .IP
 .nf
 \f[C]
-$\ fi_info\ \-n\ 30.0.11.1\ \-f\ usnic\ \-t\ FI_EP_DGRAM
+$\ fi_info\ \-n\ 30.0.11.1\ \-p\ usnic\ \-t\ FI_EP_DGRAM
 \f[]
 .fi
 .PP
@@ -85,7 +91,7 @@ discovered:
 .IP
 .nf
 \f[C]
-$\ ./fi_info\ \-n\ 30.0.11.1\ \-f\ usnic\ \-t\ FI_EP_DGRAM
+$\ ./fi_info\ \-n\ 30.0.11.1\ \-p\ usnic\ \-t\ FI_EP_DGRAM
 provider:\ usnic
 \ \ \ \ fabric:\ 30.0.11.0/24
 \ \ \ \ domain:\ usnic_2
