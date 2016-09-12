@@ -5,9 +5,12 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.3.1, TBD
+v1.4.0, TBD
 ===========
 
+- Add new options, `-f` and `-d`, to fi_info that can be used to specify hints
+  about the fabric and domain name. Change port to `-P` and provider to `-p` to
+  be more in line with fi_pingpong.
 
 v1.3.0, Mon Apr 11, 2016
 ========================
