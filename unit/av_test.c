@@ -1048,25 +1048,26 @@ int main(int argc, char **argv)
 	hints->mode = ~0;
 	hints->addr_format = FI_SOCKADDR;
 
+	// TODO make this test accept endpoint type argument
 	hints->ep_attr->type = FI_EP_RDM;
 	ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
-	if (ret != 0 && ret != -FI_ENODATA) {
-		printf("fi_getinfo %s\n", fi_strerror(-ret));
+	if (ret && ret != -FI_ENODATA) {
+		FT_PRINTERR("fi_getinfo", ret);
 		goto err;
 	}
 
 	if (ret == -FI_ENODATA) {
 		hints->ep_attr->type = FI_EP_DGRAM;
 		ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
-		if (ret != 0) {
-			printf("fi_getinfo %s\n", fi_strerror(-ret));
+		if (ret) {
+			FT_PRINTERR("fi_getinfo", ret);
 			goto err;
 		}
 	}
 
 	ret = ft_open_fabric_res();
 	if (ret)
-		return ret;
+		goto err;
 
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
 	failed = 0;
@@ -1091,9 +1092,7 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
-	ft_free_res();
-	return (failed > 0);
 err:
 	ft_free_res();
-	return -ret;
+	return ret ? -ret : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

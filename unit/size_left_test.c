@@ -284,7 +284,7 @@ int main(int argc, char **argv)
 
 	hints = fi_allocinfo();
 	if (!hints)
-		exit(1);
+		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "f:a:h")) != -1) {
 		switch (op) {
@@ -317,5 +317,5 @@ int main(int argc, char **argv)
 
 	fi_freeinfo(hints);
 
-	return (failed > 0);
+	return (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

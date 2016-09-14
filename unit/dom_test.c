@@ -77,8 +77,8 @@ int main(int argc, char **argv)
 	char *ptr;
 
 	hints = fi_allocinfo();
-	if (hints == NULL)
-		exit(EXIT_FAILURE);
+	if (!hints)
+		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "f:a:n:h")) != -1) {
 		switch (op) {
@@ -111,8 +111,8 @@ int main(int argc, char **argv)
 	hints->mode = ~0;
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
-	if (ret != 0) {
-		printf("fi_getinfo %s\n", fi_strerror(-ret));
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
 		goto out;
 	}
 
@@ -123,6 +123,7 @@ int main(int argc, char **argv)
 	domain_vec = calloc(num_domains, sizeof(*domain_vec));
 	if (domain_vec == NULL) {
 		perror("malloc");
+		ret = EXIT_FAILURE;
 		goto out;
 	}
 
