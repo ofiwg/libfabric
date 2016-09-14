@@ -594,6 +594,11 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		goto err;
 	}
 
+	/*
+	 * we have to force allocation of a new nic since we want
+	 * an a particulard cdm id
+	 */
+	nic_attr.must_alloc = true;
 	nic_attr.use_cdm_id = true;
 	nic_attr.cdm_id = cdm_id;
 

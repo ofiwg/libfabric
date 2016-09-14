@@ -388,8 +388,11 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				goto err;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > GNIX_SEP_MAX_CNT)
+			if ((hints->ep_attr->tx_ctx_cnt > GNIX_SEP_MAX_CNT) &&
+				(hints->ep_attr->tx_ctx_cnt !=
+						FI_SHARED_CONTEXT)) {
 				goto err;
+			}
 
 			if (hints->ep_attr->rx_ctx_cnt > GNIX_SEP_MAX_CNT)
 				goto err;

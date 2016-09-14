@@ -300,6 +300,13 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 
 int _gnix_ep_init_vc(struct gnix_fid_ep *ep_priv);
 
+/**
+ * Internal function for enabling an ep
+ *
+ * @param[in] ep_priv	 pointer to a previously allocated EP
+ */
+int _gnix_ep_enable(struct gnix_fid_ep *ep_priv);
+
 /*******************************************************************************
  * API Functions
  ******************************************************************************/

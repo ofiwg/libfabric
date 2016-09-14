@@ -79,6 +79,7 @@ _gni_headers = \
 	prov/gni/include/gnix_xpmem.h \
 	prov/gni/include/gnix_wait.h
 
+
 if HAVE_CRITERION
 bin_PROGRAMS += prov/gni/test/gnitest
 bin_SCRIPTS += prov/gni/test/run_gnitest
@@ -118,8 +119,9 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/vc_lookup.c \
 	prov/gni/test/vector.c \
 	prov/gni/test/wait.c \
-	prov/gni/test/common.c \
-	prov/gni/test/cm.c
+	prov/gni/test/rdm_dgram_stx.c \
+	prov/gni/test/cm.c \
+	prov/gni/test/common.c
 
 prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) $(gnitest_LDFLAGS) -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS) $(CRAY_XPMEM_CFLAGS) $(gnitest_CPPFLAGS)
