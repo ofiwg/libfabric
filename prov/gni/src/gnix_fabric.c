@@ -517,7 +517,8 @@ GNI_INI
 		GNIX_INFO(FI_LOG_FABRIC, "gnix_max_nics_per_ptag: %u\n",
 			  gnix_max_nics_per_ptag);
 	} else {
-		GNIX_INFO(FI_LOG_FABRIC, "_gnix_nics_per_rank failed: %d\n", rc);
+		GNIX_WARN(FI_LOG_FABRIC, "_gnix_nics_per_rank failed: %d\n",
+			  rc);
 	}
 
 	if (getenv("GNIX_MAX_NICS") != NULL)
@@ -527,12 +528,14 @@ GNI_INI
 		gnix_xpmem_disabled = true;
 
 	/*
-	 * if for some reason we can't even allocate a single nic, bail.
+	 * well if we didn't get 1 nic, that means we must really be doing
+	 * FMA sharing.  Emit a warning message if FI_LOG_LEVEL appropriately
+	 * set.
 	 */
 
 	if (gnix_max_nics_per_ptag == 0) {
-		GNIX_WARN(FI_LOG_FABRIC, "Insufficient network resources\n");
-		provider = NULL;
+		gnix_max_nics_per_ptag = 1;
+		GNIX_WARN(FI_LOG_FABRIC, "Using inter-procss FMA sharing\n");
 	}
 
 	return (provider);
