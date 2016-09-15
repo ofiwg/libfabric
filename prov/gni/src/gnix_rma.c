@@ -882,8 +882,10 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	int rdma;
 	struct fid_mr *auto_mr = NULL;
 
-	if (!ep) {
-		return -FI_EINVAL;
+	if (!(flags & FI_INJECT) && !ep->send_cq &&
+	    (((fr_type == GNIX_FAB_RQ_RDMA_WRITE) && !ep->write_cntr) ||
+	     ((fr_type == GNIX_FAB_RQ_RDMA_READ) && !ep->read_cntr))) {
+		return -FI_ENOCQ;
 	}
 
 	if (flags & FI_TRIGGER) {
@@ -893,10 +895,6 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		    (flags & FI_INJECT)) {
 			return -FI_EINVAL;
 		}
-	}
-
-	if (!ep->send_cq && !(flags & FI_INJECT)) {
-		return -FI_ENOCQ;
 	}
 
 	if ((flags & FI_INJECT) && (len > GNIX_INJECT_SIZE)) {

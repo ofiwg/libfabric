@@ -84,12 +84,6 @@ struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
 uint64_t mr_key[NUMEPS];
 uint64_t cq_bind_flags;
 
-static struct fid_cntr *send_cntr[NUMEPS], *recv_cntr[NUMEPS];
-static struct fi_cntr_attr cntr_attr = {
-	.events = FI_CNTR_EVENTS_COMP,
-	.flags = 0
-};
-
 void api_cq_bind(uint64_t flags)
 {
 	int ret, i;
@@ -185,18 +179,6 @@ void api_cq_setup(void)
 		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
 		cr_assert(!ret, "fi_ep_bind");
 
-
-		ret = fi_cntr_open(dom[i], &cntr_attr, send_cntr + i, 0);
-		cr_assert(!ret, "fi_cntr_open");
-
-		ret = fi_ep_bind(ep[i], &send_cntr[i]->fid, FI_SEND);
-		cr_assert(!ret, "fi_ep_bind");
-
-		ret = fi_cntr_open(dom[i], &cntr_attr, recv_cntr + i, 0);
-		cr_assert(!ret, "fi_cntr_open");
-
-		ret = fi_ep_bind(ep[i], &recv_cntr[i]->fid, FI_RECV);
-		cr_assert(!ret, "fi_ep_bind");
 	}
 
 	for (i = 0; i < NUMEPS; i++) {
@@ -217,9 +199,6 @@ static void api_cq_teardown_common(bool unreg)
 	int ret = 0, i = 0;
 
 	for (; i < NUMEPS; i++) {
-		fi_close(&recv_cntr[i]->fid);
-		fi_close(&send_cntr[i]->fid);
-
 		if (unreg) {
 			fi_close(&loc_mr[i]->fid);
 			fi_close(&rem_mr[i]->fid);
