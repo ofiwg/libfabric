@@ -68,6 +68,8 @@ struct gnix_fid_wait {
 	struct slist set;
 };
 
+extern uint32_t gnix_wait_thread_sleep_time;
+
 /*
  * API Functions
  */

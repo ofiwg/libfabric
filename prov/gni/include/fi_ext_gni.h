@@ -74,6 +74,12 @@ typedef enum ep_ops_val {
 	GNI_NUM_EP_OPS,
 } ep_ops_val_t;
 
+#define FI_GNI_FAB_OPS_1 "fab ops 1"
+typedef enum fab_ops_val {
+	GNI_WAIT_THREAD_SLEEP = 0,
+	GNI_NUM_FAB_OPS,
+} fab_ops_val_t;
+
 /* per domain gni provider specific ops */
 struct fi_gni_ops_domain {
 	int (*set_val)(struct fid *fid, dom_ops_val_t t, void *val);
@@ -117,6 +123,11 @@ struct gnix_ops_domain {
 	uint32_t max_retransmits;
 	int32_t err_inject_count;
 	bool xpmem_enabled;
+};
+
+struct fi_gni_ops_fab {
+	int (*set_val)(struct fid *fid, fab_ops_val_t t, void *val);
+	int (*get_val)(struct fid *fid, fab_ops_val_t t, void *val);
 };
 
 #ifdef __cplusplus

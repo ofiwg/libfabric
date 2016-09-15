@@ -48,7 +48,8 @@
 #define GNIX_DEF_MAX_NICS_PER_PTAG	4
 
 extern uint32_t gnix_max_nics_per_ptag;
-
+extern struct dlist_entry gnix_nic_list;
+extern pthread_mutex_t gnix_nic_list_lock;
 /*
  * allocation flags for cleaning up GNI resources
  * when closing a gnix_nic - needed since these

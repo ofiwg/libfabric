@@ -43,10 +43,15 @@
 
 #define GNIX_EQ_DEFAULT_SIZE 256
 
+extern struct dlist_entry gnix_eq_list;
+extern pthread_mutex_t gnix_eq_list_lock;
+
 ssize_t _gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
 			     void *context, uint64_t index, int err,
 			     int prov_errno, void *err_data,
 			     size_t err_size);
+
+int _gnix_eq_progress(struct gnix_fid_eq *eq);
 
 /*
  * Stores events inside of the event queue.
@@ -92,6 +97,7 @@ struct gnix_fid_eq {
 
 	rwlock_t poll_obj_lock;
 	struct dlist_entry poll_objs;
+	struct dlist_entry gnix_fid_eq_list;
 };
 
 int _gnix_eq_poll_obj_add(struct gnix_fid_eq *eq, struct fid *obj_fid);

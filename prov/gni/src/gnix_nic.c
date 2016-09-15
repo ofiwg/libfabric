@@ -50,8 +50,8 @@
 #define GNIX_VC_FL_MIN_SIZE 128
 
 static int gnix_nics_per_ptag[GNI_PTAG_USER_END];
-static DLIST_HEAD(gnix_nic_list);
-static pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
+DLIST_HEAD(gnix_nic_list);
+pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * globals
@@ -786,6 +786,17 @@ static void __nic_destruct(void *obj)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
+	/* Get us out of the progression tables we are destroying the nic
+	 * and we don't want the wait progression thread to progress us
+	 * after our structures are destroyed.
+	 */
+	pthread_mutex_lock(&gnix_nic_list_lock);
+
+	dlist_remove(&nic->gnix_nic_list);
+	--gnix_nics_per_ptag[nic->ptag];
+	dlist_remove(&nic->dom_nic_list);
+
+	pthread_mutex_unlock(&gnix_nic_list_lock);
 	__gnix_nic_tx_freelist_destroy(nic);
 
 	/*
@@ -923,14 +934,6 @@ static void __nic_destruct(void *obj)
 
 err:
 	_gnix_free_bitmap(&nic->vc_id_bitmap);
-
-	pthread_mutex_lock(&gnix_nic_list_lock);
-
-	dlist_remove(&nic->gnix_nic_list);
-	--gnix_nics_per_ptag[nic->ptag];
-	dlist_remove(&nic->dom_nic_list);
-
-	pthread_mutex_unlock(&gnix_nic_list_lock);
 
 	free(nic);
 }
