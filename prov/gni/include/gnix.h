@@ -119,7 +119,9 @@ extern "C" {
 #endif
 
 #define GNIX_MAX_IOV_LIMIT 8
+#define GNIX_MAX_RMA_IOV_LIMIT 1
 #define GNIX_ADDR_CACHE_SIZE 5
+
 /*
  * GNI GET alignment
  */
