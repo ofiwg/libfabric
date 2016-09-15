@@ -227,6 +227,7 @@ static inline void __gnix_ht_rehash_list(
 	gnix_ht_entry_t *ht_entry, *tmp;
 	gnix_ht_key_t bucket;
 	struct dlist_entry *ht_lh;
+	uint64_t trash; // No collision information is recorded
 
 	if (dlist_empty(head))
 		return;
@@ -237,7 +238,7 @@ static inline void __gnix_ht_rehash_list(
 
 		dlist_remove(&ht_entry->entry);
 
-		__gnix_ht_insert_list(ht_lh, ht_entry, NULL);
+		__gnix_ht_insert_list(ht_lh, ht_entry, &trash);
 	}
 }
 
