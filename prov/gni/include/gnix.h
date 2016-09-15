@@ -119,7 +119,7 @@ extern "C" {
 #endif
 
 #define GNIX_MAX_IOV_LIMIT 8
-
+#define GNIX_ADDR_CACHE_SIZE 5
 /*
  * GNI GET alignment
  */
@@ -417,6 +417,11 @@ struct gnix_htd_pool {
 	void *sl_ptr;
 };
 
+struct gnix_addr_cache_entry {
+	fi_addr_t addr;
+	struct gnix_vc *vc;
+};
+
 /*
  *   gnix endpoint structure
  *
@@ -470,6 +475,8 @@ struct gnix_fid_ep {
 	bool tx_enabled;
 	bool rx_enabled;
 	bool requires_lock;
+	int last_cached;
+	struct gnix_addr_cache_entry addr_cache[GNIX_ADDR_CACHE_SIZE];
 	int send_selective_completion;
 	int recv_selective_completion;
 	int min_multi_recv;
