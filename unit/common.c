@@ -35,6 +35,20 @@
 
 #include "unit_common.h"
 
+void ft_unit_usage(char *name, char *desc)
+{
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\n", name);
+
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	FT_PRINT_OPTS_USAGE("-a <fabric_name>", "specific fabric to use");
+	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-h", "display this help output");
+}
+
 int
 run_tests(struct test_entry *test_array, char *err_buf)
 {

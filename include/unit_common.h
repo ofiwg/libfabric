@@ -34,6 +34,8 @@
 #ifndef _UNIT_COMMON_H_
 #define _UNIT_COMMON_H_
 
+#include <shared.h>
+
 enum { PASS, FAIL, NOTSUPP, SKIPPED };
 #define TEST_ENTRY(NAME) { NAME, #NAME }
 
@@ -45,6 +47,7 @@ struct test_entry {
 	char *name;
 };
 
+void ft_unit_usage(char *name, char *desc);
 int run_tests(struct test_entry *test_array, char *err_buf);
 
 #endif /* _UNIT_COMMON_H_ */

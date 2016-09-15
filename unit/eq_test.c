@@ -557,6 +557,11 @@ struct test_entry test_array[] = {
 	{ NULL, "" }
 };
 
+static void usage(void)
+{
+	ft_unit_usage("eq_test", "Unit test for Event Queue (EQ)");
+}
+
 int main(int argc, char **argv)
 {
 	int op, ret;
@@ -564,9 +569,9 @@ int main(int argc, char **argv)
 
 	hints = fi_allocinfo();
 	if (!hints)
-		exit(1);
+		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:a:")) != -1) {
+	while ((op = getopt(argc, argv, "f:a:h")) != -1) {
 		switch (op) {
 		case 'a':
 			free(hints->fabric_attr->name);
@@ -576,26 +581,27 @@ int main(int argc, char **argv)
 			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
+		case 'h':
+			usage();
+			return EXIT_SUCCESS;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-a fabric_name]\n");
-			printf("\t[-f provider_name]\n");
-			exit(1);
+			usage();
+			return EXIT_FAILURE;
 		}
 	}
 
 	hints->mode = ~0;
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
-	if (ret != 0) {
-		printf("fi_getinfo %s\n", fi_strerror(-ret));
-		exit(-ret);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		goto err;
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret != 0) {
-		printf("fi_fabric %s\n", fi_strerror(-ret));
-		exit(1);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		goto err;
 	}
 
 	printf("Testing EQs on fabric %s\n", fi->fabric_attr->name);
@@ -607,6 +613,7 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
+err:
 	ft_free_res();
-	exit(failed > 0);
+	return ret ? -ret : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

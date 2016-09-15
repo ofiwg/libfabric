@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2013-2016 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2014-2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,12 +38,6 @@
 #include <poll.h>
 #include <time.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <inttypes.h>
-#include <limits.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -51,49 +45,98 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
 #include "unit_common.h"
+#include "shared.h"
 
-#define MAX_ADDR 256
 
-static struct fid_domain **domain_vec = NULL;
+static char err_buf[512];
+
+static int
+create_cq(struct fid_cq **cq, size_t size, uint64_t flags,
+		enum fi_cq_format format, enum fi_wait_obj wait_obj)
+{
+	struct fi_cq_attr cq_attr;
+
+	memset(&cq_attr, 0, sizeof(cq_attr));
+	cq_attr.size = size;
+	cq_attr.flags = flags;
+	cq_attr.format = format;
+	cq_attr.wait_obj = wait_obj;
+
+	return fi_cq_open(domain, &cq_attr, cq, NULL);
+}
 
 /*
  * Tests:
- * - test open and close of a domain
+ * - test open and close of CQ over a range of sizes
  */
+static int
+cq_open_close()
+{
+	int i;
+	int ret;
+	int size;
+	int testret;
+	struct fid_cq *cq;
+
+	testret = FAIL;
+
+	for (i = -1; i < 17; ++i) {
+		size = (i < 0) ? 0 : 1 << i;
+
+		ret = create_cq(&cq, size, 0, FI_CQ_FORMAT_UNSPEC, FI_WAIT_UNSPEC);
+		if (ret == -FI_EINVAL) {
+			FT_WARN("\nSuccessfully completed %d iterations up to size %d "
+					"before the provider returned EINVAL...",
+					i + 1, size >> 1);
+			ret = 0;
+			goto pass;
+		}
+		if (ret != 0) {
+			sprintf(err_buf, "fi_cq_open(%d, 0, FI_CQ_FORMAT_UNSPEC, "
+					"FI_WAIT_UNSPEC) = %d, %s",
+					size, ret, fi_strerror(-ret));
+			goto fail;
+		}
+
+		ret = fi_close(&cq->fid);
+		if (ret != 0) {
+			sprintf(err_buf, "close(cq) = %d, %s", ret, fi_strerror(-ret));
+			goto fail;
+		}
+		cq = NULL;
+	}
+pass:
+	testret = PASS;
+fail:
+	cq = NULL;
+	return TEST_RET_VAL(ret, testret);
+}
+
+struct test_entry test_array[] = {
+	TEST_ENTRY(cq_open_close),
+	{ NULL, "" }
+};
 
 static void usage(void)
 {
-	ft_unit_usage("dom_test", "Unit test for Domain");
-	FT_PRINT_OPTS_USAGE("-n <num_domains>", "num domains to open");
+	ft_unit_usage("cq_test", "Unit test for Completion Queue (CQ)");
 }
 
 int main(int argc, char **argv)
 {
-	unsigned long i;
-	int op, ret = 0;
-	unsigned long num_domains = 1;
-	char *ptr;
+	int op, ret;
+	int failed;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:a:n:h")) != -1) {
+	while ((op = getopt(argc, argv, "f:a:h")) != -1) {
 		switch (op) {
 		case 'a':
 			free(hints->fabric_attr->name);
 			hints->fabric_attr->name = strdup(optarg);
-			break;
-		case 'n':
-			errno = 0;
-			num_domains = strtol(optarg, &ptr, 10);
-			if (ptr == optarg || *ptr != '\0' ||
-				((num_domains == LONG_MIN || num_domains == LONG_MAX) && errno == ERANGE)) {
-				fprintf(stderr, "Cannot convert from string to long\n");
-				goto out;
-			}
 			break;
 		case 'f':
 			free(hints->fabric_attr->prov_name);
@@ -113,40 +156,23 @@ int main(int argc, char **argv)
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
-		goto out;
+		goto err;
 	}
 
 	ret = ft_open_fabric_res();
 	if (ret)
-		goto out;
+		goto err;
 
-	domain_vec = calloc(num_domains, sizeof(*domain_vec));
-	if (domain_vec == NULL) {
-		perror("malloc");
-		ret = EXIT_FAILURE;
-		goto out;
+	printf("Testing CQs on fabric %s\n", fi->fabric_attr->name);
+
+	failed = run_tests(test_array, err_buf);
+	if (failed > 0) {
+		printf("Summary: %d tests failed\n", failed);
+	} else {
+		printf("Summary: all tests passed\n");
 	}
 
-	/* Common code will open one domain */
-	for (i = 1; i < num_domains; i++) {
-		ret = fi_domain(fabric, fi, &domain_vec[i], NULL);
-		if (ret != FI_SUCCESS) {
-			printf("fi_domain num %lu %s\n", i, fi_strerror(-ret));
-			break;
-		}
-	}
-
-	while (--i > 0) {
-		ret = fi_close(&domain_vec[i]->fid);
-		if (ret != FI_SUCCESS) {
-			printf("Error %d closing domain num %lu: %s\n", ret,
-				i, fi_strerror(-ret));
-			break;
-		}
-	}
-
-	free(domain_vec);
-out:
+err:
 	ft_free_res();
-	return -ret;
+	return ret ? -ret : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

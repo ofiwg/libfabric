@@ -983,6 +983,16 @@ run_test_set()
 	return failed;
 }
 
+static void usage(void)
+{
+	ft_unit_usage("av_test", "Unit test for Address Vector (AV)");
+	FT_PRINT_OPTS_USAGE("-d <good_address>", "");
+	FT_PRINT_OPTS_USAGE("-D <bad_address>]", "");
+	fprintf(stderr, FT_OPTS_USAGE_FORMAT " (max=%d)\n", "-n <num_good_addr>",
+			"Number of good addresses", MAX_ADDR - 1);
+	FT_PRINT_OPTS_USAGE("-s <source_address>", "");
+}
+
 int main(int argc, char **argv)
 {
 	int op, ret;
@@ -992,7 +1002,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:d:D:n:a:s:")) != -1) {
+	while ((op = getopt(argc, argv, "f:d:D:n:a:s:h")) != -1) {
 		switch (op) {
 		case 'd':
 			good_address = optarg;
@@ -1014,14 +1024,11 @@ int main(int argc, char **argv)
 		case 's':
 			src_addr_str = optarg;
 			break;
+		case 'h':
+			usage();
+			return EXIT_SUCCESS;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d good_address]\n");
-			printf("\t[-D bad_address]\n");
-			printf("\t[-a fabric_name]\n");
-			printf("\t[-n num_good_addr (max=%d)]\n", MAX_ADDR - 1);
-			printf("\t[-f provider_name]\n");
-			printf("\t[-s source_address]\n");
+			usage();
 			return EXIT_FAILURE;
 
 		}
@@ -1041,25 +1048,26 @@ int main(int argc, char **argv)
 	hints->mode = ~0;
 	hints->addr_format = FI_SOCKADDR;
 
+	// TODO make this test accept endpoint type argument
 	hints->ep_attr->type = FI_EP_RDM;
 	ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
-	if (ret != 0 && ret != -FI_ENODATA) {
-		printf("fi_getinfo %s\n", fi_strerror(-ret));
+	if (ret && ret != -FI_ENODATA) {
+		FT_PRINTERR("fi_getinfo", ret);
 		goto err;
 	}
 
 	if (ret == -FI_ENODATA) {
 		hints->ep_attr->type = FI_EP_DGRAM;
 		ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
-		if (ret != 0) {
-			printf("fi_getinfo %s\n", fi_strerror(-ret));
+		if (ret) {
+			FT_PRINTERR("fi_getinfo", ret);
 			goto err;
 		}
 	}
 
 	ret = ft_open_fabric_res();
 	if (ret)
-		return ret;
+		goto err;
 
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
 	failed = 0;
@@ -1084,9 +1092,7 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
-	ft_free_res();
-	return (failed > 0);
 err:
 	ft_free_res();
-	return -ret;
+	return ret ? -ret : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
