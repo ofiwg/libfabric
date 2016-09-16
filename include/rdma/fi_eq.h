@@ -57,8 +57,7 @@ enum fi_wait_obj {
 	FI_WAIT_UNSPEC,
 	FI_WAIT_SET,
 	FI_WAIT_FD,
-	FI_WAIT_MUTEX_COND,	/* pthread mutex & cond */
-	FI_WAIT_CRITSEC_COND	/* critical section & cond */
+	FI_WAIT_MUTEX_COND	/* pthread mutex & cond */
 };
 
 struct fi_wait_attr {
@@ -80,11 +79,6 @@ struct fid_wait {
 struct fi_mutex_cond {
 	pthread_mutex_t		*mutex;
 	pthread_cond_t		*cond;
-};
-#else /* _WIN32 */
-struct fi_critsec_cond {
-	LPCRITICAL_SECTION	critsec;
-	PCONDITION_VARIABLE	cond;
 };
 #endif /* _WIN32 */
 
