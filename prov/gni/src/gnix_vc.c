@@ -149,7 +149,7 @@ static int __gnix_vc_gnix_addr_equal(struct dlist_entry *item, const void *arg)
 static struct gnix_vc *__gnix_vc_lookup_unmapped(struct gnix_fid_ep *ep,
 						 fi_addr_t dest_addr)
 {
-	struct gnix_av_addr_entry *av_entry;
+	struct gnix_av_addr_entry av_entry;
 	struct dlist_entry *entry;
 	struct gnix_vc *vc;
 	int ret;
@@ -167,7 +167,7 @@ static struct gnix_vc *__gnix_vc_lookup_unmapped(struct gnix_fid_ep *ep,
 	 * mapped by dest_addr. */
 	entry = dlist_remove_first_match(&ep->unmapped_vcs,
 					 __gnix_vc_gnix_addr_equal,
-					 (void *)&av_entry->gnix_addr);
+					 (void *)&av_entry.gnix_addr);
 	if (entry) {
 		/* Found a matching, unmapped VC.  Map dest_addr to the VC in
 		 * the EP's VC look up table. */
@@ -205,7 +205,7 @@ static int __gnix_vc_get_vc_by_fi_addr(struct gnix_fid_ep *ep, fi_addr_t dest_ad
 {
 	struct gnix_fid_av *av;
 	int ret = FI_SUCCESS;
-	struct gnix_av_addr_entry *av_entry;
+	struct gnix_av_addr_entry av_entry;
 	struct gnix_vc *vc;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -247,7 +247,7 @@ static int __gnix_vc_get_vc_by_fi_addr(struct gnix_fid_ep *ep, fi_addr_t dest_ad
 		}
 
 		/* Initiate a connection to the endpoint. */
-		ret = _gnix_vc_alloc(ep, av_entry, &vc);
+		ret = _gnix_vc_alloc(ep, &av_entry, &vc);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_vc_alloc returned %s\n",

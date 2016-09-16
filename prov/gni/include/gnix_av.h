@@ -79,7 +79,7 @@ struct gnix_av_addr_entry {
  * @return  FI_SUCCESS on success, -FI_EINVAL on error
  */
 int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
-		    struct gnix_av_addr_entry **addr);
+		    struct gnix_av_addr_entry *addr);
 
 /**
  * @brief Return the FI address mapped to a given GNIX address.
@@ -104,14 +104,14 @@ int _gnix_av_reverse_lookup(struct gnix_fid_av *gnix_av,
  *
  * @param[in] int_av		The AV to use for the lookup.
  * @param[in] fi_addr		The corresponding fi_addr_t.
- * @param[in/out] entry_ptr	The pointer to an address in the entry table.
+ * @param[in/out] entry_ptr	pointer to an av entry struct
  *
  * @return FI_SUCCESS on successfully looking up the entry in the entry table.
  * @return -FI_EINVAL upon passing an invalid parameter.
  */
 int _gnix_table_lookup(struct gnix_fid_av *int_av,
 		       fi_addr_t fi_addr,
-		       struct gnix_av_addr_entry **entry_ptr);
+		       struct gnix_av_addr_entry *entry_ptr);
 
 /**
  * @brief (FI_AV_MAP) Return the gnix address using its corresponding
@@ -119,14 +119,14 @@ int _gnix_table_lookup(struct gnix_fid_av *int_av,
  *
  * @param[in] int_av		The AV to use for the lookup.
  * @param[in] fi_addr		The corresponding fi_addr_t.
- * @param[in/out] entry_ptr	The pointer to an address in the entry table.
+ * @param[in/out] entry_ptr	pointer to an av entry struct
  *
  * @return FI_SUCCESS on successfully looking up the entry in the entry table.
  * @return -FI_EINVAL upon passing an invalid parameter.
  */
 int _gnix_map_lookup(struct gnix_fid_av *int_av,
 		     fi_addr_t fi_addr,
-		     struct gnix_av_addr_entry **entry_ptr);
+		     struct gnix_av_addr_entry *entry_ptr);
 
 /**
  * @brief (FI_AV_TABLE) Return fi_addr using its corresponding gnix address.

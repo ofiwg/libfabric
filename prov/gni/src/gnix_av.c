@@ -211,7 +211,7 @@ static int table_remove(struct gnix_fid_av *av_priv, fi_addr_t *fi_addr,
  * table_lookup(): Translate fi_addr_t to struct gnix_address.
  */
 static int table_lookup(struct gnix_fid_av *av_priv, fi_addr_t fi_addr,
-			struct gnix_av_addr_entry **entry_ptr)
+			struct gnix_av_addr_entry *entry_ptr)
 {
 	size_t index;
 	struct gnix_av_addr_entry *entry = NULL;
@@ -229,7 +229,7 @@ static int table_lookup(struct gnix_fid_av *av_priv, fi_addr_t fi_addr,
 	if (av_priv->valid_entry_vec[index] == 0)
 		return -FI_EINVAL;
 
-	*entry_ptr = entry;
+	memcpy(entry_ptr, entry, sizeof(*entry));
 
 	return FI_SUCCESS;
 }
@@ -346,7 +346,7 @@ static int map_remove(struct gnix_fid_av *av_priv, fi_addr_t *fi_addr,
 }
 
 static int map_lookup(struct gnix_fid_av *av_priv, fi_addr_t fi_addr,
-		      struct gnix_av_addr_entry **entry_ptr)
+		      struct gnix_av_addr_entry *entry_ptr)
 {
 	gnix_ht_key_t *key = (gnix_ht_key_t *)&fi_addr;
 	struct gnix_av_addr_entry *entry;
@@ -355,7 +355,7 @@ static int map_lookup(struct gnix_fid_av *av_priv, fi_addr_t fi_addr,
 	if (entry == NULL)
 		return -FI_ENOENT;
 
-	*entry_ptr = entry;
+	memcpy(entry_ptr, entry, sizeof(*entry));
 
 	return FI_SUCCESS;
 }
@@ -383,7 +383,7 @@ static int map_reverse_lookup(struct gnix_fid_av *av_priv,
  ******************************************************************************/
 int _gnix_table_lookup(struct gnix_fid_av *av_priv,
 		       fi_addr_t fi_addr,
-		       struct gnix_av_addr_entry **entry_ptr)
+		       struct gnix_av_addr_entry *entry_ptr)
 {
 	return table_lookup(av_priv, fi_addr, entry_ptr);
 }
@@ -397,7 +397,7 @@ int _gnix_table_reverse_lookup(struct gnix_fid_av *av_priv,
 
 int _gnix_map_lookup(struct gnix_fid_av *av_priv,
 		     fi_addr_t fi_addr,
-		     struct gnix_av_addr_entry **entry_ptr)
+		     struct gnix_av_addr_entry *entry_ptr)
 {
 	return map_lookup(av_priv, fi_addr, entry_ptr);
 }
@@ -410,7 +410,7 @@ int _gnix_map_reverse_lookup(struct gnix_fid_av *av_priv,
 }
 
 int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
-		    struct gnix_av_addr_entry **entry_ptr)
+		    struct gnix_av_addr_entry *entry_ptr)
 {
 	int ret = FI_SUCCESS;
 
@@ -477,7 +477,7 @@ DIRECT_FN STATIC int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr,
 {
 	struct gnix_fid_av *gnix_av;
 	struct gnix_ep_name ep_name = { {0} };
-	struct gnix_av_addr_entry *entry = NULL;
+	struct gnix_av_addr_entry entry;
 	int rc;
 
 	GNIX_TRACE(FI_LOG_AV, "\n");
@@ -506,11 +506,10 @@ DIRECT_FN STATIC int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr,
 		return rc;
 	}
 
-	memcpy(&ep_name.gnix_addr, &entry->gnix_addr,
-	       sizeof(struct gnix_address));
-	ep_name.name_type = entry->name_type;
-	ep_name.cm_nic_cdm_id = entry->cm_nic_cdm_id;
-	ep_name.cookie = entry->cookie;
+	ep_name.gnix_addr = entry.gnix_addr;
+	ep_name.name_type = entry.name_type;
+	ep_name.cm_nic_cdm_id = entry.cm_nic_cdm_id;
+	ep_name.cookie = entry.cookie;
 
 	memcpy(addr, (void *)&ep_name, MIN(*addrlen, sizeof(ep_name)));
 	*addrlen = sizeof(ep_name);

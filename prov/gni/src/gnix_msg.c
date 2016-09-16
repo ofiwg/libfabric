@@ -2308,7 +2308,7 @@ static int __gnix_msg_addr_lookup(struct gnix_fid_ep *ep, uint64_t src_addr,
 {
 	int ret;
 	struct gnix_fid_av *av;
-	struct gnix_av_addr_entry *av_entry;
+	struct gnix_av_addr_entry av_entry;
 
 	/* Translate source address. */
 	if (GNIX_EP_RDM_DGM(ep->type)) {
@@ -2323,7 +2323,7 @@ static int __gnix_msg_addr_lookup(struct gnix_fid_ep *ep, uint64_t src_addr,
 					  ret);
 				return ret;
 			}
-			*gnix_addr = av_entry->gnix_addr;
+			*gnix_addr = av_entry.gnix_addr;
 		} else {
 			*(uint64_t *)gnix_addr = FI_ADDR_UNSPEC;
 		}
