@@ -364,6 +364,9 @@ The removed address - either the mapped address (in the case of FI_AV_MAP)
 or index (FI_AV_TABLE) - is invalid until it is returned again by a
 new fi_av_insert.
 
+The behavior of operations in progress that reference the removed addresses
+is undefined.
+
 The use of fi_av_remove is an optimization that applications may use
 to free memory allocated with addresses that will no longer be
 accessed.  Inserted addresses are not required to be removed.
