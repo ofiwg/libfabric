@@ -252,6 +252,29 @@ static int client_connect(size_t paramlen)
 	return fi_connect(ep, fi->dest_addr, cm_data, paramlen);
 }
 
+static int client_open_new_ep()
+{
+	size_t opt_size;
+	int ret;
+
+	FT_CLOSE_FID(ep);
+
+	ret = fi_endpoint(domain, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		return ret;
+	}
+
+	ret = ft_init_ep();
+	if (ret)
+		return ret;
+
+	/* Get the maximum cm_size for this domain + endpoint combination */
+	opt_size = sizeof(opt_size);
+	return fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_CM_DATA_SIZE,
+		&cm_data_size, &opt_size);
+}
+
 static int client_expect_reject(size_t paramlen)
 {
 	uint32_t event;
@@ -314,13 +337,14 @@ static int client_expect_accept(size_t paramlen)
 		return ret;
 
 	fi_shutdown(ep, 0);
-	ret = read_shutdown_event();
-	if (ret)
-		return ret;
-
-	return 0;
+	return read_shutdown_event();
 }
 
+/*
+ * After each reject and accept of a connection request we close the endpoint and
+ * open a new one since fi_connect can be called only once in a connected
+ * endpoint's lifetime.
+ */
 static int client(size_t paramlen)
 {
 	int ret;
@@ -329,7 +353,15 @@ static int client(size_t paramlen)
 	if (ret)
 		return ret;
 
-	return client_expect_accept(paramlen);
+	ret = client_open_new_ep();
+	if (ret)
+		return ret;
+
+	ret = client_expect_accept(paramlen);
+	if (ret)
+		return ret;
+
+	return client_open_new_ep();
 }
 
 static int run(void)
