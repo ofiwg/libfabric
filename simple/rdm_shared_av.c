@@ -181,12 +181,15 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	if (opts.dst_addr) {
+		if (!opts.av_name)
+			opts.av_name = "client_av";
+
 		ret = ft_fork_and_pair();
 		if (ret)
 			return ret;
-
+	} else {
 		if (!opts.av_name)
-			opts.av_name = "foo";
+			opts.av_name = "server_av";
 	}
 
 	hints->ep_attr->type	= FI_EP_RDM;
