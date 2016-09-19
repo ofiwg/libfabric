@@ -263,9 +263,7 @@ together when binding an endpoint to a completion domain CQ.
 *FI_TRANSMIT*
 : Directs the completion of outbound data transfer requests to the
   specified completion queue.  This includes send message, RMA, and
-  atomic operations.  The FI_SEND flag may be used interchangeably.
-  This binding automatically includes FI_READ and FI_WRITE, if
-  applicable to the endpoint.
+  atomic operations.
 
 *FI_RECV*
 : Directs the notification of inbound data transfers to the specified
@@ -280,7 +278,7 @@ together when binding an endpoint to a completion domain CQ.
   completions are generated.  If FI_SELECTIVE_COMPLETION is specified,
   data transfer operations will not generate entries for successful
   completions unless FI_COMPLETION is set as an operational flag for the
-  given operation.  FI_SELECTIVE_COMPLETION must be OR'ed with FI_SEND
+  given operation.  FI_SELECTIVE_COMPLETION must be OR'ed with FI_TRANSMIT
   and/or FI_RECV flags.
 
   When FI_SELECTIVE_COMPLETION is set, the user must determine when a
@@ -294,7 +292,7 @@ together when binding an endpoint to a completion domain CQ.
 
 ```c
   fi_tx_attr::op_flags = 0; // default - no completion
-  fi_ep_bind(ep, cq, FI_SEND | FI_SELECTIVE_COMPLETION);
+  fi_ep_bind(ep, cq, FI_TRANSMIT | FI_SELECTIVE_COMPLETION);
   fi_send(ep, ...);                   // no completion
   fi_sendv(ep, ...);                  // no completion
   fi_sendmsg(ep, ..., FI_COMPLETION); // completion!
@@ -306,7 +304,7 @@ together when binding an endpoint to a completion domain CQ.
 
 ```c
   fi_tx_attr::op_flags = FI_COMPLETION; // default - completion
-  fi_ep_bind(ep, cq, FI_SEND | FI_SELECTIVE_COMPLETION);
+  fi_ep_bind(ep, cq, FI_TRANSMIT | FI_SELECTIVE_COMPLETION);
   fi_send(ep, ...);       // completion
   fi_sendv(ep, ...);      // completion
   fi_sendmsg(ep, ..., 0); // no completion!
@@ -318,7 +316,7 @@ together when binding an endpoint to a completion domain CQ.
 
 ```c
   fi_tx_attr::op_flags = 0;
-  fi_ep_bind(ep, cq, FI_SEND);  // default - completion
+  fi_ep_bind(ep, cq, FI_TRANSMIT);    // default - completion
   fi_send(ep, ...);                   // completion
   fi_sendv(ep, ...);                  // completion
   fi_sendmsg(ep, ..., 0);             // completion!
