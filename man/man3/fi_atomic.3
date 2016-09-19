@@ -1,4 +1,4 @@
-.TH "fi_atomic" "3" "2016\-06\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_atomic" "3" "2016\-09\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic \- Remote atomic functions
@@ -395,6 +395,8 @@ for this atomic.
 The completion event will be suppressed even if the endpoint has not
 been configured with FI_SELECTIVE_COMPLETION.
 See the flags discussion below for more details.
+The requested message size that can be used with fi_inject_atomic is
+limited by inject_size.
 .PP
 The fi_atomicmsg call supports atomic functions over both connected and
 unconnected endpoints, with the ability to control the atomic operation
@@ -514,6 +516,7 @@ after the call returns, even if the operation is handled asynchronously.
 This may require that the underlying provider implementation copy the
 data into a local buffer and transfer out of that buffer.
 The use of output result buffers are not affected by this flag.
+This flag can only be used with messages smaller than inject_size.
 .PP
 \f[I]FI_FENCE\f[] : Indicates that the requested operation, also known
 as the fenced operation, be deferred until all previous operations

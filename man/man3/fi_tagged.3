@@ -1,4 +1,4 @@
-.TH "fi_tagged" "3" "2016\-05\-03" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_tagged" "3" "2016\-09\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_tagged \- Tagged data transfer operations
@@ -175,6 +175,8 @@ send.
 The completion event will be suppressed even if the endpoint has not
 been configured with FI_SELECTIVE_COMPLETION.
 See the flags discussion below for more details.
+The requested message size that can be used with fi_tinject is limited
+by inject_size.
 .SS fi_tsenddata
 .PP
 The tagged send data call is similar to fi_tsend, but allows for the
@@ -237,6 +239,7 @@ immediately after the send call returns, even if the operation is
 handled asynchronously.
 This may require that the underlying provider implementation copy the
 data into a local buffer and transfer out of that buffer.
+This flag can only be used with messages smaller than inject_size.
 .PP
 \f[I]FI_INJECT_COMPLETE\f[] : Applies to fi_tsendmsg.
 Indicates that a completion should be generated when the source
