@@ -93,7 +93,8 @@ through the fi_control call.
 ## fi_connect
 
 The fi_connect call initiates a connection request on a
-connection-oriented endpoint to the destination address.
+connection-oriented endpoint to the destination address.  fi_connect
+may only be called on an endpoint once in its lifetime.
 
 ## fi_accept / fi_reject
 
