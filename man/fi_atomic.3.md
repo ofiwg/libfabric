@@ -394,7 +394,8 @@ available for reuse immediately on returning from from
 fi_inject_atomic, and no completion event will be generated for this
 atomic.  The completion event will be suppressed even if the endpoint
 has not been configured with FI_SELECTIVE_COMPLETION.  See the flags
-discussion below for more details.
+discussion below for more details. The requested message size that
+can be used with fi_inject_atomic is limited by inject_size.
 
 The fi_atomicmsg call supports atomic functions over both connected
 and unconnected endpoints, with the ability to control the atomic
@@ -515,7 +516,8 @@ with atomic message calls.
   returns, even if the operation is handled asynchronously.  This may
   require that the underlying provider implementation copy the data
   into a local buffer and transfer out of that buffer.  The use of
-  output result buffers are not affected by this flag.
+  output result buffers are not affected by this flag. This flag can only
+  be used with messages smaller than inject_size.
 
 *FI_FENCE*
 : Indicates that the requested operation, also

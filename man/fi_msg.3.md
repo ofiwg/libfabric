@@ -159,7 +159,9 @@ available for reuse immediately on returning from from fi_inject, and
 no completion event will be generated for this send.  The completion
 event will be suppressed even if the CQ was bound without
 FI_SELECTIVE_COMPLETION or the endpoint's op_flags contain
-FI_COMPLETION.  See the flags discussion below for more details.
+FI_COMPLETION.  See the flags discussion below for more details. The
+requested message size that can be used with fi_inject is limited
+by inject_size.
 
 ## fi_senddata
 
@@ -229,7 +231,8 @@ fi_sendmsg.
   should be returned to user immediately after the send call returns,
   even if the operation is handled asynchronously.  This may require
   that the underlying provider implementation copy the data into a
-  local buffer and transfer out of that buffer.
+  local buffer and transfer out of that buffer. This flag can only
+  be used with messages smaller than inject_size.
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to
