@@ -191,6 +191,7 @@ enum {
 	FI_ECRC          = 264, /* CRC error */
 	FI_ETRUNC        = 265, /* Truncation error */
 	FI_ENOKEY        = 266, /* Required key not available */
+	FI_ENOAV	 = 267, /* Missing or unavailable address vector */
 	FI_ERRNO_MAX
 };
 
