@@ -183,7 +183,8 @@ available for reuse immediately on returning from from
 fi_inject_write, and no completion event will be generated for this
 write.  The completion event will be suppressed even if the endpoint
 has not been configured with FI_SELECTIVE_COMPLETION.  See the flags
-discussion below for more details.
+discussion below for more details. The requested message size that
+can be used with fi_inject_write is limited by inject_size.
 
 ## fi_writedata
 
@@ -249,7 +250,8 @@ fi_writemsg.
    should be returned to user immediately after the write call
    returns, even if the operation is handled asynchronously.  This may
    require that the underlying provider implementation copy the data
-   into a local buffer and transfer out of that buffer.
+   into a local buffer and transfer out of that buffer. This flag can only
+   be used with messages smaller than inject_size.
 
 *FI_INJECT_COMPLETE*
 : Applies to fi_writemsg.  Indicates that a completion should be
