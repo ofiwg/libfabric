@@ -1122,8 +1122,10 @@ value of transmit or receive context attributes of an endpoint.
   user's control immediately after a data transfer call returns, even
   if the operation is handled asynchronously.  This may require that
   the provider copy the data into a local buffer and transfer out of
-  that buffer.  A provider may limit the total amount of send data
-  that may be buffered and/or the size of a single send.
+  that buffer.  A provider can limit the total amount of send data
+  that may be buffered and/or the size of a single send that can use
+  this flag. This limit is indicated using inject_size (see inject_size
+  above).
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to
@@ -1151,7 +1153,8 @@ value of transmit or receive context attributes of an endpoint.
 
   Note: This flag is used to control when a completion entry is inserted
   into a completion queue.  It does not apply to operations that do not
-  generate a completion queue entry, such as the fi_inject operation.
+  generate a completion queue entry, such as the fi_inject operation, and
+  is not subject to the inject_size message limit restriction.
 
 *FI_TRANSMIT_COMPLETE*
 : Indicates that a completion should be generated when the transmit

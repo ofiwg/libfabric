@@ -182,7 +182,8 @@ available for reuse immediately on returning from from fi_tinject, and
 no completion event will be generated for this send.  The completion
 event will be suppressed even if the endpoint has not been configured
 with FI_SELECTIVE_COMPLETION.  See the flags discussion below for more
-details.
+details. The requested message size that can be used with fi_tinject is
+limited by inject_size.
 
 ## fi_tsenddata
 
@@ -249,7 +250,8 @@ and/or fi_tsendmsg.
   should be returned to user immediately after the send call returns,
   even if the operation is handled asynchronously.  This may require
   that the underlying provider implementation copy the data into a
-  local buffer and transfer out of that buffer.
+  local buffer and transfer out of that buffer. This flag can only
+  be used with messages smaller than inject_size.
 
 *FI_INJECT_COMPLETE*
 : Applies to fi_tsendmsg.  Indicates that a completion should be
