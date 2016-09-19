@@ -1,4 +1,4 @@
-.TH "fi_cm" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cm" "3" "2016\-09\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cm \- Connection management operations
@@ -80,6 +80,7 @@ but may be adjusted through the fi_control call.
 .PP
 The fi_connect call initiates a connection request on a
 connection\-oriented endpoint to the destination address.
+fi_connect may only be called on an endpoint once in its lifetime.
 .SS fi_accept / fi_reject
 .PP
 The fi_accept and fi_reject calls are used on the passive (listening)

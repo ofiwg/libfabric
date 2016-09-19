@@ -1,4 +1,4 @@
-.TH "fi_av" "3" "2016\-08\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_av" "3" "2016\-09\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_av \- Address vector operations
@@ -352,6 +352,9 @@ All resources associated with the indicated addresses are released.
 The removed address \- either the mapped address (in the case of
 FI_AV_MAP) or index (FI_AV_TABLE) \- is invalid until it is returned
 again by a new fi_av_insert.
+.PP
+The behavior of operations in progress that reference the removed
+addresses is undefined.
 .PP
 The use of fi_av_remove is an optimization that applications may use to
 free memory allocated with addresses that will no longer be accessed.
