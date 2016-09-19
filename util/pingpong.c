@@ -675,9 +675,9 @@ int pp_ctrl_sync(struct ct_pingpong *ct)
 			return ret;
 		if (strcmp(ct->ctrl_buf, PP_MSG_SYNC_A)) {
 			ct->ctrl_buf[PP_CTRL_BUF_LEN] = '\0';
-			PP_DEBUG(
-				"CLIENT: sync error while acking A: <%s> (len=%lu)\n",
-				ct->ctrl_buf, strlen(ct->ctrl_buf));
+			PP_DEBUG("CLIENT: sync error while acking A: <%s> "
+				 "(len=%zu)\n",
+				 ct->ctrl_buf, strlen(ct->ctrl_buf));
 			return -EBADMSG;
 		}
 		PP_DEBUG("CLIENT: synced\n");
@@ -689,9 +689,9 @@ int pp_ctrl_sync(struct ct_pingpong *ct)
 			return ret;
 		if (strcmp(ct->ctrl_buf, PP_MSG_SYNC_Q)) {
 			ct->ctrl_buf[PP_CTRL_BUF_LEN] = '\0';
-			PP_DEBUG(
-				"SERVER: sync error while acking Q: <%s> (len=%lu)\n",
-				ct->ctrl_buf, strlen(ct->ctrl_buf));
+			PP_DEBUG("SERVER: sync error while acking Q: <%s> "
+				 "(len=%zu)\n",
+				 ct->ctrl_buf, strlen(ct->ctrl_buf));
 			return -EBADMSG;
 		}
 
@@ -727,7 +727,7 @@ int pp_ctrl_txrx_msg_count(struct ct_pingpong *ct)
 		snprintf(ct->ctrl_buf, PP_MSG_LEN_CNT + 1, "%ld",
 			 ct->cnt_ack_msg);
 
-		PP_DEBUG("CLIENT: sending count = <%s> (len=%lu)\n",
+		PP_DEBUG("CLIENT: sending count = <%s> (len=%zu)\n",
 			 ct->ctrl_buf, strlen(ct->ctrl_buf));
 		ret = pp_ctrl_send(ct, ct->ctrl_buf, PP_MSG_LEN_CNT);
 		if (ret < 0)
@@ -751,9 +751,9 @@ int pp_ctrl_txrx_msg_count(struct ct_pingpong *ct)
 		}
 
 		if (strcmp(ct->ctrl_buf, PP_MSG_CHECK_CNT_OK)) {
-			PP_DEBUG(
-				"CLIENT: error while server acking the count: <%s> (len=%lu)\n",
-				ct->ctrl_buf, strlen(ct->ctrl_buf));
+			PP_DEBUG("CLIENT: error while server acking the count: "
+				 "<%s> (len=%zu)\n",
+				 ct->ctrl_buf, strlen(ct->ctrl_buf));
 			return ret;
 		}
 		PP_DEBUG("CLIENT: count acked by server\n");
@@ -773,7 +773,7 @@ int pp_ctrl_txrx_msg_count(struct ct_pingpong *ct)
 		ct->cnt_ack_msg = parse_ulong(ct->ctrl_buf, -1);
 		if (ct->cnt_ack_msg < 0)
 			return ret;
-		PP_DEBUG("SERVER: received count = <%ld> (len=%lu)\n",
+		PP_DEBUG("SERVER: received count = <%ld> (len=%zu)\n",
 			 ct->cnt_ack_msg, strlen(ct->ctrl_buf));
 
 		snprintf(ct->ctrl_buf, sizeof(PP_MSG_CHECK_CNT_OK), "%s",
