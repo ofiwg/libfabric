@@ -2,6 +2,7 @@
 
 #
 # Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
+# Copyright (c) 2016, Cray, Inc. All rights reserved.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -177,7 +178,9 @@ function print_results {
 	local test_result=$2
 	local test_time=$3
 	local server_out_file=$4
-	local client_out_file=$5
+	local server_cmd=$5
+	local client_out_file=$6
+	local client_cmd=$7
 
 	if [ $VERBOSE -eq 0 ] ; then
 		# print a simple, single-line format that is still valid YAML
@@ -203,10 +206,16 @@ function print_results {
 		printf -- "  result: %s\n" "$test_result"
 		printf -- "  time:   %s\n" "$test_time"
 		if [ $emit_stdout -eq 1 -a "$server_out_file" != "" ] ; then
+			if [ "$server_cmd" != "" ] ; then
+				printf -- "  server_cmd: %s\n" "$server_cmd"
+			fi
 			printf -- "  server_stdout: |\n"
 			sed -e 's/^/    /' < $server_out_file
 		fi
 		if [ $emit_stdout -eq 1 -a "$client_out_file" != "" ] ; then
+			if [ "$client_cmd" != "" ] ; then
+				printf -- "  client_cmd: %s\n" "$client_cmd"
+			fi
 			printf -- "  client_stdout: |\n"
 			sed -e 's/^/    /' < $client_out_file
 		fi
@@ -262,7 +271,8 @@ function unit_test {
 
 	start_time=$(date '+%s')
 
-	${SERVER_CMD} "${BIN_PATH}${test_exe}" &> $s_outp &
+	cmd="${BIN_PATH}${test_exe}"
+	${SERVER_CMD} "$cmd" &> $s_outp &
 	p1=$!
 
 	wait $p1
@@ -279,16 +289,16 @@ function unit_test {
 		ret=1
 	fi
 	if [[ $ret -eq $FI_ENODATA || $ret -eq $FI_ENOSYS ]]; then
-		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
+		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$cmd"
 		skip_count+=1
 	elif [ $ret -ne 0 ]; then
-		print_results "$test_exe" "Fail" "$test_time" "$s_outp"
+		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$cmd"
 		if [ $ret -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
 	else
-		print_results "$test_exe" "Pass" "$test_time" "$s_outp"
+		print_results "$test_exe" "Pass" "$test_time" "$s_outp" "$cmd"
 		pass_count+=1
 	fi
 }
@@ -311,11 +321,13 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE" &> $s_outp &
+	s_cmd="${BIN_PATH}${test_exe} -s $S_INTERFACE"
+	${SERVER_CMD} "$s_cmd" &> $s_outp &
 	p1=$!
 	sleep 1
 
-	${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
+	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE"
+	${CLIENT_CMD} "$c_cmd" &> $c_outp &
 	p2=$!
 
 	wait $p1
@@ -329,16 +341,16 @@ function cs_test {
 
 	if [[ $ret1 -eq $FI_ENODATA && $ret2 -eq $FI_ENODATA ]] ||
 	   [[ $ret1 -eq $FI_ENOSYS && $ret2 -eq $FI_ENOSYS ]]; then
-		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$c_outp"
+		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 		skip_count+=1
 	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
-		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$c_outp"
+		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 		if [ $ret1 -eq 124 -o $ret2 -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
 	else
-		print_results "$test_exe" "Pass" "$test_time" "$s_outp" "$c_outp"
+		print_results "$test_exe" "Pass" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 		pass_count+=1
 	fi
 }
@@ -362,11 +374,13 @@ function complex_test {
 
 	start_time=$(date '+%s')
 
-	FI_LOG_LEVEL=error ${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE -x" &> $s_outp &
+	s_cmd="${BIN_PATH}${test_exe} -s $S_INTERFACE -x"
+	FI_LOG_LEVEL=error ${SERVER_CMD} "$s_cmd" &> $s_outp &
 	p1=$!
 	sleep 1
 
-	FI_LOG_LEVEL=error ${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE -f ${PROV} -t $config $S_INTERFACE" &> $c_outp &
+	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE -f ${PROV} -t $config $S_INTERFACE"
+	FI_LOG_LEVEL=error ${CLIENT_CMD} "$c_cmd" &> $c_outp &
 	p2=$!
 
 	wait $p2
@@ -380,14 +394,14 @@ function complex_test {
 
 	# case: config file doesn't exist or invalid option provided
 	if [ $ret1 -eq 1 -o $ret2 -eq 1 ]; then
-		print_results "$test_exe" "Notrun" "0" "$s_outp" "$c_outp"
+		print_results "$test_exe" "Notrun" "0" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 		cleanup
 		skip_count+=1
 		return
 	# case: test didn't run becasue some error occured
 	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
 		printf "%-50s%s\n" "$test_exe:" "Server returns $ret1, client returns $ret2"
-		print_results "$test_exe" "Fail [$f_cnt/$total]" "$test_time" "$s_outp" "$c_outp"
+		print_results "$test_exe" "Fail [$f_cnt/$total]" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
                 cleanup
                 fail_count+=1
 	else
@@ -395,10 +409,10 @@ function complex_test {
 		local s_cnt=$(cat $c_outp | awk -F': ' '/Success/ {total += $2} END {print total}')
 		local total=$(cat $c_outp | awk -F': ' '/Success|ENODATA|ENOSYS|ERROR/ {total += $2} END {print total}')
 		if [ $f_cnt -eq 0 ]; then
-			print_results "$test_exe" "Pass [$s_cnt/$total]" "$test_time" "$s_outp" "$c_outp"
+			print_results "$test_exe" "Pass [$s_cnt/$total]" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 			pass_count+=1
 		else
-			print_results "$test_exe" "Fail [$f_cnt/$total]" "$test_time" "$s_outp" "$c_outp"
+			print_results "$test_exe" "Fail [$f_cnt/$total]" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 			cleanup
 			fail_count+=1
 		fi
