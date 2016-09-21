@@ -31,6 +31,7 @@ before_install:
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then cd libibverbs && ./autogen.sh && ./configure --prefix=$HOME && make && make install && cd .. ; fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then git clone https://github.com/ofiwg/librdmacm.git ; fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then cd librdmacm && ./autogen.sh && ./configure --prefix=$HOME CC=gcc && make && make install && cd .. ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; brew upgrade automake libtool; fi
 
 install:
     - ./autogen.sh
