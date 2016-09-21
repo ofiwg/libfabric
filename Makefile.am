@@ -75,7 +75,7 @@ common_srcs += include/unix/osd.h
 endif
 
 # ensure dl-built providers link back to libfabric
-linkback = $(top_builddir)/src/libfabric.la
+linkback = src/libfabric.la
 
 bin_PROGRAMS = \
 	util/fi_info \
