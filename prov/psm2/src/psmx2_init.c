@@ -76,12 +76,18 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	uint64_t caps = PSMX2_CAPS;
 	uint64_t max_tag_value = -1ULL;
 	int err = -FI_ENODATA;
+	struct stat st;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
 	*info = NULL;
 
-	if (psm2_ep_num_devunits(&cnt) || !cnt) {
+	/*
+	 * psm2_ep_num_devunits() may wait for 15 seconds before return
+	 * when /dev/hfi1_0 is not present. Check the existence of this
+	 * device first to avoid this delay.
+	 */
+	if (stat("/dev/hfi1_0", &st) || psm2_ep_num_devunits(&cnt) || !cnt) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"no PSM device is found.\n");
 		return -FI_ENODATA;
