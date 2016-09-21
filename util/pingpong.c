@@ -1097,7 +1097,7 @@ static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 			  int timeout)
 {
 	struct fi_cq_err_entry comp;
-	struct timespec a, b;
+	struct timespec a = {0}, b = {0};
 	int ret = 0;
 
 	if (timeout >= 0)
