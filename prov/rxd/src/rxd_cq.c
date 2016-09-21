@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -985,7 +986,8 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 		rma_iov = (struct ofi_rma_iov *) pkt_start->data;
 		for (i = 0; i < rx_entry->op_hdr.iov_count; i++) {
 			ret = rxd_mr_verify(ep->domain,
-					    rma_iov[i].len, &rma_iov[i].addr,
+					    rma_iov[i].len,
+					    (uintptr_t *) &rma_iov[i].addr,
 					    rma_iov[i].key, FI_WRITE);
 			if (ret) {
 				/* todo: handle invalid key case */
@@ -1016,7 +1018,8 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 		tx_entry->read_rsp.iov_count = rx_entry->op_hdr.iov_count;
 		for (i = 0; i < rx_entry->op_hdr.iov_count; i++) {
 			ret = rxd_mr_verify(ep->domain,
-					    rma_iov[i].len, &rma_iov[i].addr,
+					    rma_iov[i].len,
+					    (uintptr_t *) &rma_iov[i].addr,
 					    rma_iov[i].key, FI_READ);
 			if (ret) {
 				/* todo: handle invalid key case */

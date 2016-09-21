@@ -662,7 +662,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe,
 
 		mr = sock_mr_verify_key(rx_ctx->domain,
 					pe_entry->pe.rx.rx_iov[i].iov.key,
-					&pe_entry->pe.rx.rx_iov[i].iov.addr,
+					(uintptr_t *) &pe_entry->pe.rx.rx_iov[i].iov.addr,
 					pe_entry->pe.rx.rx_iov[i].iov.len,
 					FI_REMOTE_READ);
 		if (!mr) {
@@ -713,7 +713,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe,
 	for (i = 0; i < pe_entry->msg_hdr.dest_iov_len && !pe_entry->mr_checked; i++) {
 		mr = sock_mr_verify_key(rx_ctx->domain,
 					pe_entry->pe.rx.rx_iov[i].iov.key,
-					&pe_entry->pe.rx.rx_iov[i].iov.addr,
+					(uintptr_t *) &pe_entry->pe.rx.rx_iov[i].iov.addr,
 					pe_entry->pe.rx.rx_iov[i].iov.len,
 					FI_REMOTE_WRITE);
 		if (!mr) {
@@ -1199,7 +1199,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 	for (i = 0; i < pe_entry->pe.rx.rx_op.dest_iov_len && !pe_entry->mr_checked; i++) {
 		mr = sock_mr_verify_key(rx_ctx->domain,
 					pe_entry->pe.rx.rx_iov[i].ioc.key,
-					&pe_entry->pe.rx.rx_iov[i].ioc.addr,
+					(uintptr_t *) &pe_entry->pe.rx.rx_iov[i].ioc.addr,
 					pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
 					FI_REMOTE_WRITE);
 		if (!mr) {
