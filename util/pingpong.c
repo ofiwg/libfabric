@@ -34,6 +34,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <assert.h>
 #include <getopt.h>
 #include <inttypes.h>
