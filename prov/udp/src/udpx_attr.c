@@ -66,10 +66,10 @@ struct fi_domain_attr udpx_domain_attr = {
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_SCALABLE,
-	.cq_cnt = 1024,
-	.ep_cnt = 1024,
-	.tx_ctx_cnt = 1024,
-	.rx_ctx_cnt = 1024,
+	.cq_cnt = 256,
+	.ep_cnt = 256,
+	.tx_ctx_cnt = 256,
+	.rx_ctx_cnt = 256,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1
 };
