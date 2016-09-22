@@ -66,12 +66,50 @@ create_cq(struct fid_cq **cq, size_t size, uint64_t flags,
 	return fi_cq_open(domain, &cq_attr, cq, NULL);
 }
 
+/* Try opening fi->domain_attr->cq_cnt number of completion queues
+ * simultaneously using a size hint of 0 (indicating the provider should choose
+ * the size)
+ */
+static int cq_open_close_simultaneous(void)
+{
+	int ret;
+	int opened;
+	size_t count;
+	int testret = FAIL;
+	struct fid_cq **cq_array;
+
+	count = fi->domain_attr->cq_cnt;
+	FT_DEBUG("testing creation of up to %zu simultaneous CQs\n", count);
+
+	cq_array = calloc(count, sizeof(*cq_array));
+	if (!cq_array)
+		return -FI_ENOMEM;
+
+	ret = 0;
+	for (opened = 0; opened < count; opened++) {
+		ret = create_cq(&cq_array[opened], 0, 0, FI_CQ_FORMAT_UNSPEC,
+				FI_WAIT_UNSPEC);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			goto cleanup;
+		}
+	}
+
+	testret = PASS;
+
+cleanup:
+	FT_CLOSEV_FID(cq_array, opened);
+	free(cq_array);
+
+	return TEST_RET_VAL(ret, testret);
+}
+
 /*
  * Tests:
  * - test open and close of CQ over a range of sizes
  */
 static int
-cq_open_close()
+cq_open_close_sizes()
 {
 	int i;
 	int ret;
@@ -86,9 +124,10 @@ cq_open_close()
 
 		ret = create_cq(&cq, size, 0, FI_CQ_FORMAT_UNSPEC, FI_WAIT_UNSPEC);
 		if (ret == -FI_EINVAL) {
-			FT_WARN("\nSuccessfully completed %d iterations up to size %d "
-					"before the provider returned EINVAL...",
-					i + 1, size >> 1);
+			FT_WARN("\nSuccessfully completed %d iterations up to "
+				"size %d before the provider returned "
+				"EINVAL...",
+				i + 1, size >> 1);
 			ret = 0;
 			goto pass;
 		}
@@ -106,6 +145,7 @@ cq_open_close()
 		}
 		cq = NULL;
 	}
+
 pass:
 	testret = PASS;
 fail:
@@ -114,7 +154,8 @@ fail:
 }
 
 struct test_entry test_array[] = {
-	TEST_ENTRY(cq_open_close),
+	TEST_ENTRY(cq_open_close_sizes),
+	TEST_ENTRY(cq_open_close_simultaneous),
 	{ NULL, "" }
 };
 
