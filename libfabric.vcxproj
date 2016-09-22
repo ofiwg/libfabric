@@ -42,16 +42,18 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\windows</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
@@ -73,7 +75,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\windows</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127</DisableSpecificWarnings>
@@ -91,6 +93,27 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="prov\rxd\src\rxd_attr.c" />
+    <ClCompile Include="prov\rxd\src\rxd_av.c" />
+    <ClCompile Include="prov\rxd\src\rxd_cq.c" />
+    <ClCompile Include="prov\rxd\src\rxd_domain.c" />
+    <ClCompile Include="prov\rxd\src\rxd_ep.c" />
+    <ClCompile Include="prov\rxd\src\rxd_fabric.c" />
+    <ClCompile Include="prov\rxd\src\rxd_init.c">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">fi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">fi_osd.h</ForcedIncludeFiles>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_rma.c" />
+    <ClCompile Include="prov\rxm\src\rxm_attr.c" />
+    <ClCompile Include="prov\rxm\src\rxm_conn.c" />
+    <ClCompile Include="prov\rxm\src\rxm_cq.c" />
+    <ClCompile Include="prov\rxm\src\rxm_domain.c" />
+    <ClCompile Include="prov\rxm\src\rxm_ep.c" />
+    <ClCompile Include="prov\rxm\src\rxm_fabric.c" />
+    <ClCompile Include="prov\rxm\src\rxm_init.c">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">fi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">fi_osd.h</ForcedIncludeFiles>
+    </ClCompile>
     <ClCompile Include="prov\sockets\src\sock_atomic.c">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -179,6 +202,15 @@
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <ClCompile Include="prov\udp\src\udpx_attr.c" />
+    <ClCompile Include="prov\udp\src\udpx_cq.c" />
+    <ClCompile Include="prov\udp\src\udpx_domain.c" />
+    <ClCompile Include="prov\udp\src\udpx_ep.c" />
+    <ClCompile Include="prov\udp\src\udpx_fabric.c" />
+    <ClCompile Include="prov\udp\src\udpx_init.c">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">fi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">fi_osd.h</ForcedIncludeFiles>
+    </ClCompile>
     <ClCompile Include="prov\util\src\util_attr.c" />
     <ClCompile Include="prov\util\src\util_av.c" />
     <ClCompile Include="prov\util\src\util_buf.c" />
@@ -251,8 +283,11 @@
     <ClInclude Include="include\windows\sys\socket.h" />
     <ClInclude Include="include\windows\sys\time.h" />
     <ClInclude Include="include\windows\unistd.h" />
+    <ClInclude Include="prov\rxd\src\rxd.h" />
+    <ClInclude Include="prov\rxm\src\rxm.h" />
     <ClInclude Include="prov\sockets\include\sock.h" />
     <ClInclude Include="prov\sockets\include\sock_util.h" />
+    <ClInclude Include="prov\udp\src\udpx.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="libfabric.def" />
