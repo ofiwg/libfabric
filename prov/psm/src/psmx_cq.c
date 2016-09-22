@@ -596,7 +596,6 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 
 	return read_count;
 }
-}
 
 static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
