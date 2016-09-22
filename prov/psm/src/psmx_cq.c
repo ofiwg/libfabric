@@ -540,6 +540,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	struct psmx_cq_event *event;
 	int ret;
 	ssize_t read_count;
+	int i;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 
@@ -560,7 +561,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		return -FI_EINVAL;
 
 	read_count = 0;
-	while (count--) {
+	for (i = 0; i < count; i++) {
 		event = psmx_cq_dequeue_event(cq_priv);
 		if (event) {
 			if (!event->error) {
@@ -586,10 +587,15 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		}
 	}
 
-	if (!read_count && slist_empty(&cq_priv->event_queue))
+	/*
+	 * Return 0 if and only if the input count is 0 and the CQ is not empty.
+	 * This is used by the util poll code to check the poll state.
+	 */
+	if (!read_count &&  (count || slist_empty(&cq_priv->event_queue)))
 		read_count = -FI_EAGAIN;
 
 	return read_count;
+}
 }
 
 static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
