@@ -49,7 +49,7 @@ struct fi_ep_attr rxm_ep_attr = {
 	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_RXM,
 	.protocol_version = 1,
-	.max_msg_size = UINT64_MAX,
+	.max_msg_size = SIZE_MAX,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1
 };
