@@ -6,6 +6,9 @@ compiler:
 os:
     - osx
     - linux
+
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; brew upgrade automake libtool; fi
 install:
     - git clone https://github.com/ofiwg/libfabric.git
     - cd libfabric
