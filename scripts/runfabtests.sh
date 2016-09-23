@@ -64,9 +64,9 @@ declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENODATA)')
 declare -ri FI_ENOSYS=$(python -c 'import errno; print(errno.ENOSYS)')
 
 neg_unit_tests=(
-	"dgram foo"
-	"rdm foo"
-	"msg foo"
+	"dgram g00n13s"
+	"rdm g00n13s"
+	"msg g00n13s"
 )
 
 simple_tests=(
