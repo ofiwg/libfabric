@@ -581,6 +581,11 @@ GNI_INI
 		return NULL;
 	}
 
+	/*
+	 * ensure all globals are properly initialized
+	 */
+	_gnix_init();
+
 	/* sanity check that the 1 aries/node holds */
 	assert(num_devices == 1);
 
