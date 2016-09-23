@@ -448,20 +448,21 @@ void rxd_rx_entry_release(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry)
 
 static int rxd_match_recv_entry(struct dlist_entry *item, const void *arg)
 {
-	fi_addr_t addr = (fi_addr_t) arg;
+	struct rxd_rx_entry *rx_entry = (struct rxd_rx_entry *) arg;
 	struct rxd_recv_entry *recv_entry;
 	recv_entry = container_of(item, struct rxd_recv_entry, entry);
 	return (recv_entry->msg.addr == FI_ADDR_UNSPEC ||
-		addr == FI_ADDR_UNSPEC || recv_entry->msg.addr == addr);
+		rx_entry->source == FI_ADDR_UNSPEC ||
+		recv_entry->msg.addr == rx_entry->source);
 }
 
-struct rxd_recv_entry *rxd_get_recv_entry(struct rxd_ep *ep, fi_addr_t addr)
+struct rxd_recv_entry *rxd_get_recv_entry(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry)
 {
 	struct dlist_entry *match;
 	struct rxd_recv_entry *recv_entry;
 
 	match = dlist_find_first_match(&ep->recv_list, &rxd_match_recv_entry,
-				       (void *)addr);
+				       (void *) rx_entry);
 	if (!match) {
 		/*todo: queue the pkt */
 		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "no matching recv entry\n");
@@ -945,7 +946,7 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 
 	switch (rx_entry->op_hdr.op) {
 	case ofi_op_msg:
-		rx_entry->recv = rxd_get_recv_entry(ep, rx_entry->source);
+		rx_entry->recv = rxd_get_recv_entry(ep, rx_entry);
 		if (!rx_entry->recv) {
 			if (ep->num_unexp_msg < RXD_EP_MAX_UNEXP_MSG) {
 				dlist_insert_tail(&rx_entry->unexp_entry, &ep->unexp_msg_list);
@@ -995,7 +996,7 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 				return -FI_EACCES;
 			}
 
-			rx_entry->write.iov[i].iov_base = (void *) rma_iov[i].addr;
+			rx_entry->write.iov[i].iov_base = (void *) (uintptr_t) rma_iov[i].addr;
 			rx_entry->write.iov[i].iov_len = rma_iov[i].len;
 		}
 
@@ -1027,7 +1028,7 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 				return -FI_EACCES;
 			}
 
-			tx_entry->read_rsp.src_iov[i].iov_base = (void *) rma_iov[i].addr;
+			tx_entry->read_rsp.src_iov[i].iov_base = (void *) (uintptr_t) rma_iov[i].addr;
 			tx_entry->read_rsp.src_iov[i].iov_len = rma_iov[i].len;
 		}
 		tx_entry->read_rsp.peer_msg_id = ctrl->msg_id;

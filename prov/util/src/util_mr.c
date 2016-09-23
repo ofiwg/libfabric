@@ -77,7 +77,7 @@ static int verify_addr(struct ofi_util_mr * in_mr, struct fi_mr_attr * item, uin
                                  uint64_t in_addr, ssize_t in_len)
 {
     int i = 0;
-    uint64_t start = (uint64_t)item->mr_iov[i].iov_base;
+    uint64_t start = (uintptr_t) item->mr_iov[i].iov_base;
     uint64_t end = start + item->mr_iov[i].iov_len;
 
     if (!in_addr) {
