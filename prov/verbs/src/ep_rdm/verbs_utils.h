@@ -156,19 +156,22 @@ do {										\
 
 #endif                          // ENABLE_DEBUG
 
-struct fi_ibv_rdm_tagged_minfo {
+struct fi_ibv_rdm_minfo {
 	struct fi_ibv_rdm_conn	*conn;
+	uint64_t		is_tagged; /* TODO: unexpected RTS for MSG */
 	uint64_t		tag;
 	uint64_t		tagmask;
 };
 
 struct fi_ibv_rdm_tagged_peek_data {
-	struct fi_ibv_rdm_tagged_minfo minfo;
+	struct fi_ibv_rdm_minfo minfo;
 	void *context;
 	uint64_t flags;
 };
 
 struct fi_ibv_rdm_cm;
+struct fi_ibv_rdm_request *request;
+struct fi_ibv_rdm_send_start_data;
 
 int fi_ibv_rdm_req_match(struct dlist_entry *item, const void *other);
 int fi_ibv_rdm_req_match_by_info(struct dlist_entry *item, const void *info);
@@ -179,5 +182,9 @@ void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_conn *conn,
 				  struct fi_ibv_rdm_ep *ep);
 int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
 			       struct sockaddr_in *ipoib_addr);
+
+ssize_t fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata);
+ssize_t rdm_trecv_second_event(struct fi_ibv_rdm_request *request,
+			       struct fi_ibv_rdm_ep *ep);
 
 #endif /* _VERBS_UTILS_H */

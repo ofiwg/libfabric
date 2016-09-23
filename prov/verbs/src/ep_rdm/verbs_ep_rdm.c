@@ -253,7 +253,8 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 		fi_ibv_rdm_cntr_inc_err(ep_rdm->recv_cntr);
 
 		if (request->comp_flags & FI_COMPLETION) {
-			fi_ibv_rdm_move_to_errcq(request, FI_ECANCELED);
+			fi_ibv_rdm_move_to_errcq(ep_rdm->fi_rcq, request,
+						 FI_ECANCELED);
 		}
 	}
 
@@ -343,7 +344,12 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	struct fi_ibv_rdm_ep *ep =
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
-	ep->fi_scq->ep = ep->fi_rcq->ep = NULL;
+	if (ep->fi_scq) {
+		ep->fi_scq->ep = NULL;
+	}
+	if (ep->fi_rcq) {
+		ep->fi_rcq->ep = NULL;
+	}
 
 	ep->is_closing = 1;
 	_fi_ibv_rdm_tagged_cm_progress_running = 0;
@@ -419,15 +425,15 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
 	}
 
+	rdma_freeaddrinfo(ep->rai);
 	errno = 0;
-	fi_ibv_destroy_ep(ep->rai, &ep->domain->rdm_cm->listener);
 	if (errno) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_ep failed\n", errno);
-		ret = (ret == FI_SUCCESS) ? -errno : ret;
+		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_freeaddrinfo failed\n", errno);
+		ret = (ret == FI_SUCCESS) ? -ret : ret;
 	}
 
 	/* TODO: move queues & related pools cleanup to close CQ*/
-	fi_ibv_rdm_clean_queues();
+	fi_ibv_rdm_clean_queues(ep);
 
 	util_buf_pool_destroy(fi_ibv_rdm_request_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_extra_buffers_pool);
@@ -504,9 +510,10 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.fid.context = context;
 	_ep->ep_fid.fid.ops = &fi_ibv_rdm_ep_ops;
 	_ep->ep_fid.ops = &fi_ibv_rdm_tagged_ep_base_ops;
-	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
-	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma(_ep);
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
+	_ep->ep_fid.msg = fi_ibv_rdm_ep_ops_msg();
+	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma();
+	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
 	_ep->tx_selective_completion = 0;
 	_ep->rx_selective_completion = 0;
 
@@ -624,6 +631,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	fi_ibv_rdm_req_hndls_init();
 
 	pthread_mutex_init(&_ep->cm_lock, NULL);
+	_fi_ibv_rdm_tagged_cm_progress_running = 1;
 	ret = pthread_create(&_ep->cm_progress_thread, NULL,
 			     &fi_ibv_rdm_tagged_cm_progress_thread,
 			     (void *)_ep);

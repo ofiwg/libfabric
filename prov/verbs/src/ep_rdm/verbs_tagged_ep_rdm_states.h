@@ -120,7 +120,7 @@ enum ibv_rdm_send_type
 	IBV_RDM_SEND_TYPE_VEC
 };
 
-struct fi_ibv_rdm_tsend_start_data {
+struct fi_ibv_rdm_send_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
 	struct fi_ibv_rdm_conn *conn;
 	void *context;
@@ -132,6 +132,7 @@ struct fi_ibv_rdm_tsend_start_data {
 		struct iovec* iovec_arr;
 	} buf;
 	int iov_count;
+	int is_tagged;
 	unsigned int imm;
 	enum ibv_rdm_send_type stype;
 };

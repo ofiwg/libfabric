@@ -122,11 +122,17 @@ err:
 static int fi_ibv_domain_close(fid_t fid)
 {
 	struct fi_ibv_domain *domain;
-	int ret;
+	int ret = FI_SUCCESS;
 
 	domain = container_of(fid, struct fi_ibv_domain, domain_fid.fid);
 
 	if (domain->rdm) {
+		errno = 0;
+		rdma_destroy_ep(domain->rdm_cm->listener);
+		if (errno) {
+			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_ep failed\n", errno);
+			ret = (ret == FI_SUCCESS) ? -ret : ret;
+		}
 		free(domain->rdm_cm);
 	}
 
@@ -282,6 +288,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			ret = -FI_EOTHER;
 			goto err3;
 		}
+		_domain->rdm_cm->is_bound = 0;
 	} else {
 		_domain->domain_fid.ops = &fi_ibv_domain_ops;
 	}

@@ -86,26 +86,26 @@ int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep)
 
 	VERBS_INFO(FI_LOG_EP_CTRL, "My IPoIB: %s\n", my_ipoib_addr_str);
 
-	if (rdma_bind_addr(cm->listener, (struct sockaddr *)&ep->my_addr)) {
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			"Failed to bind cm listener to my IPoIB addr %s: %s\n",
-			my_ipoib_addr_str, strerror(errno));
-		return -FI_EOTHER;
+	if (!cm->is_bound) {
+		errno = 0;
+		if (rdma_bind_addr(cm->listener, (struct sockaddr *)&ep->my_addr)) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				"Failed to bind cm listener to my IPoIB addr %s: %s\n",
+				my_ipoib_addr_str, strerror(errno));
+			return -FI_EOTHER;
+		}
+		if (rdma_listen(cm->listener, 1024)) {
+			VERBS_INFO(FI_LOG_EP_CTRL, "rdma_listen failed: %s\n",
+				strerror(errno));
+			return -FI_EOTHER;
+		}
+		cm->is_bound = 1;
 	}
 
 	if (!ep->my_addr.sin_port) {
 		ep->my_addr.sin_port = rdma_get_src_port(cm->listener);
 	}
 	assert(ep->my_addr.sin_family == AF_INET);
-
-	/* TODO:
-	 * check - should rdma_listen be called after binding every endpoint?
-	 */
-	if (rdma_listen(cm->listener, 1024)) {
-		VERBS_INFO(FI_LOG_EP_CTRL, "rdma_listen failed: %s\n",
-			strerror(errno));
-		return -FI_EOTHER;
-	}
 
 	VERBS_INFO(FI_LOG_EP_CTRL, "My ep_addr: %s:%u\n",
 		inet_ntoa(ep->my_addr.sin_addr), ntohs(ep->my_addr.sin_port));

@@ -48,6 +48,7 @@
 #define FI_IBV_RDM_RNDV_RTS_PKT		1
 #define FI_IBV_RDM_RNDV_ACK_PKT		2
 #define FI_IBV_RDM_RMA_PKT		3
+#define FI_IBV_RDM_MSG_PKT		4
 #define FI_IBV_RDM_SET_PKTTYPE(dest, type) (dest |= type)
 #define FI_IBV_RDM_GET_PKTTYPE(value) (value & FI_IBV_RDM_ST_PKTTYPE_MASK)
 
@@ -114,13 +115,13 @@ struct fi_ibv_rdm_header {
 	uint32_t padding;
 };
 
-struct fi_ibv_rdm_tagged_rndv_header {
+struct fi_ibv_rdm_rndv_header {
 	struct fi_ibv_rdm_header base;
 	uint64_t src_addr;
 	uint64_t id; /* pointer to request on sender side */
 	uint64_t total_len;
 	uint32_t mem_key;
-	uint32_t padding;
+	uint32_t is_tagged;
 };
 
 struct fi_ibv_rdm_request {
@@ -136,7 +137,7 @@ struct fi_ibv_rdm_request {
 		ssize_t err; /* filled in case of moving to errcq */
 	} state;
 
-	struct fi_ibv_rdm_tagged_minfo minfo;
+	struct fi_ibv_rdm_minfo minfo;
 
 	/* User data: buffers, lens, imm, context */
 
@@ -217,8 +218,9 @@ struct fi_ibv_rdm_buf {
 };
 
 struct fi_ibv_rdm_cm {
-	struct rdma_cm_id *listener;
 	struct rdma_event_channel *ec;
+	struct rdma_cm_id *listener;
+	int is_bound;
 
 	/* conn_hash has a sockaddr_in -> conn associative */
 	struct fi_ibv_rdm_conn *conn_hash;

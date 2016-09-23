@@ -43,8 +43,8 @@
 #define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
-#define VERBS_RDM_CAPS (FI_SEND | FI_RECV | FI_TAGGED | FI_RMA | FI_READ |  \
-			FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define VERBS_RDM_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_READ | FI_WRITE |	\
+			FI_RECV | FI_SEND | FI_REMOTE_READ | FI_REMOTE_WRITE )
 
 #define VERBS_MODE (FI_LOCAL_MR)
 #define VERBS_RDM_MODE (FI_CONTEXT)
@@ -325,6 +325,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 			 const struct fi_info *hints, const struct fi_info *info)
 {
 	uint64_t compare_mode, check_mode;
+	int rm_enabled;
 
 	if (attr->caps & ~(info->rx_attr->caps)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -361,7 +362,12 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 		return -FI_ENODATA;
 	}
 
-	if (attr->total_buffered_recv > info->rx_attr->total_buffered_recv) {
+	rm_enabled =(info->domain_attr &&
+		     info->domain_attr->resource_mgmt == FI_RM_ENABLED);
+
+	if (!rm_enabled &&
+	    (attr->total_buffered_recv > info->rx_attr->total_buffered_recv))
+	{
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->total_buffered_recv exceeds supported size\n");
 		return -FI_ENODATA;
@@ -745,16 +751,17 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
 		if (!fi_param_get_int(&fi_ibv_prov, "rdm_buffer_size", &param)) {
-			if (param > sizeof (struct fi_ibv_rdm_tagged_rndv_header)) {
+			if (param > sizeof (struct fi_ibv_rdm_rndv_header)) {
 				fi->tx_attr->inject_size = param;
 			} else {
 				FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 					"rdm_buffer_size too small, should be greater then %d\n",
-					sizeof (struct fi_ibv_rdm_tagged_rndv_header));
+					sizeof (struct fi_ibv_rdm_rndv_header));
 				ret = -FI_EINVAL;
 				goto err;
 			}
 		}
+		fi->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	}
 
 	switch (ctx->device->transport_type) {

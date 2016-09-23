@@ -41,7 +41,6 @@
  * managing of queues
  */
 
-extern struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
 extern struct dlist_entry fi_ibv_rdm_unexp_queue;
 /* TODO: implement posted recv queue per connection */
 extern struct dlist_entry fi_ibv_rdm_posted_queue;
@@ -50,11 +49,11 @@ extern struct dlist_entry fi_ibv_rdm_postponed_queue;
 extern struct util_buf_pool* fi_ibv_rdm_postponed_pool;
 
 static inline void
-fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_request *request)
+fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_cq *cq,
+		      struct fi_ibv_rdm_request *request)
 {
 	FI_IBV_RDM_DBG_REQUEST("move_to_cq: ", request, FI_LOG_DEBUG);
-	dlist_insert_tail(&request->queue_entry,
-			  &fi_ibv_rdm_comp_queue.request_cq);
+	dlist_insert_tail(&request->queue_entry, &cq->request_cq);
 }
 
 static inline void
@@ -65,11 +64,11 @@ fi_ibv_rdm_remove_from_cq(struct fi_ibv_rdm_request *request)
 }
 
 static inline struct fi_ibv_rdm_request *
-fi_ibv_rdm_take_first_from_cq()
+fi_ibv_rdm_take_first_from_cq(struct fi_ibv_rdm_cq *cq)
 {
-	if (!dlist_empty(&fi_ibv_rdm_comp_queue.request_cq)) {
+	if (cq && !dlist_empty(&cq->request_cq)) {
 		struct fi_ibv_rdm_request *entry =
-			container_of(fi_ibv_rdm_comp_queue.request_cq.next,
+			container_of(cq->request_cq.next,
 				     struct fi_ibv_rdm_request, queue_entry);
 		fi_ibv_rdm_remove_from_cq(entry);
 		return entry;
@@ -78,13 +77,14 @@ fi_ibv_rdm_take_first_from_cq()
 }
 
 static inline void
-fi_ibv_rdm_move_to_errcq(struct fi_ibv_rdm_request *request, ssize_t err)
+fi_ibv_rdm_move_to_errcq(struct fi_ibv_rdm_cq *cq,
+			 struct fi_ibv_rdm_request *request, ssize_t err)
 {
 	request->state.err = llabs(err);
 	FI_IBV_RDM_DBG_REQUEST("move_to_errcq: ", request, FI_LOG_DEBUG);
 	assert(request->context);
 	dlist_insert_tail(&request->queue_entry,
-			  &fi_ibv_rdm_comp_queue.request_errcq);
+			  &cq->request_errcq);
 }
 
 static inline void
@@ -95,11 +95,11 @@ fi_ibv_rdm_remove_from_errcq(struct fi_ibv_rdm_request *request)
 }
 
 static inline struct fi_ibv_rdm_request *
-fi_ibv_rdm_take_first_from_errcq()
+fi_ibv_rdm_take_first_from_errcq(struct fi_ibv_rdm_cq *cq)
 {
-	if (!dlist_empty(&fi_ibv_rdm_comp_queue.request_errcq)) {
+	if (cq && !dlist_empty(&cq->request_errcq)) {
 		struct fi_ibv_rdm_request *entry =
-			container_of(fi_ibv_rdm_comp_queue.request_errcq.next,
+			container_of(cq->request_errcq.next,
 				     struct fi_ibv_rdm_request, queue_entry);
 		fi_ibv_rdm_remove_from_errcq(entry);
 		return entry;
