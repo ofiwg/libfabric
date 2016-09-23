@@ -774,7 +774,7 @@ void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 
 		rxd_init_op_hdr(&pkt->op, 0, *msg_sz, 0, op, 0, flags);
-		pkt->op.peer_id = tx_entry->read_rsp.peer_msg_id;
+		pkt->op.remote_idx = tx_entry->read_rsp.peer_msg_id;
 
 		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->read_rsp.src_iov,
 						     tx_entry->read_rsp.iov_count,
