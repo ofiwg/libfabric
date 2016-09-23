@@ -136,6 +136,7 @@ enum {
  * tag: Message tag, used for tagged operations only
  * iov_count: Count of destination iov, used for RMA operations
  * atomic: Control fields for atomic operations
+ * remote_idx: Tx request identifier of remote side
  * resv: Reserved, used for msg operations
  */
 struct ofi_op_hdr {
@@ -155,7 +156,7 @@ struct ofi_op_hdr {
 			uint8_t	op;
 			uint8_t ioc_count;
 		} atomic;
-		uint64_t	peer_id;
+		uint64_t	remote_idx;
 		uint64_t	resv;
 	};
 };

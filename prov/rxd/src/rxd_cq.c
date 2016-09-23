@@ -1037,9 +1037,9 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 		break;
 
 	case ofi_op_read_rsp:
-		idx = rx_entry->op_hdr.peer_id & RXD_TX_IDX_BITS;
+		idx = rx_entry->op_hdr.remote_idx & RXD_TX_IDX_BITS;
 		tx_entry = &ep->tx_entry_fs->buf[idx];
-		if (tx_entry->msg_id != rx_entry->op_hdr.peer_id)
+		if (tx_entry->msg_id != rx_entry->op_hdr.remote_idx)
 			return -FI_ENOMEM;
 
 		rx_entry->read_rsp.tx_entry = tx_entry;
