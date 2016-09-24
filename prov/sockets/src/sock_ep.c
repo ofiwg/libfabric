@@ -645,6 +645,11 @@ static int sock_ep_close(struct fid *fid)
 		if (sock_ep->attr->av)
 			atomic_dec(&sock_ep->attr->av->ref);
 	}
+	if (sock_ep->attr->av) {
+		fastlock_acquire(&sock_ep->attr->av->list_lock);
+		fid_list_remove(&sock_ep->attr->av->ep_list, &sock_ep->attr->lock, &sock_ep->ep.fid);
+		fastlock_release(&sock_ep->attr->av->list_lock);
+	}
 
 	pthread_mutex_lock(&sock_ep->attr->domain->pe->list_lock);
 	if (sock_ep->attr->tx_shared) {
@@ -841,7 +846,14 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->attr->rx_array[i])
 				ep->attr->rx_array[i]->av = av;
 		}
-
+		fastlock_acquire(&av->list_lock);
+		ret = fid_list_insert(&av->ep_list, &ep->attr->lock, &ep->ep.fid);
+		if (ret) {
+			SOCK_LOG_ERROR("Error in adding fid in the EP list\n");
+			fastlock_release(&av->list_lock);
+			return ret;
+		}
+		fastlock_release(&av->list_lock);
 		break;
 
 	case FI_CLASS_STX_CTX:
@@ -1727,6 +1739,13 @@ err1:
 	return ret;
 }
 
+void sock_ep_remove_conn(struct sock_ep_attr *attr, struct sock_conn *conn)
+{
+	sock_pe_poll_del(attr->domain->pe, conn->sock_fd);
+	idm_clear(&attr->conn_idm, conn->sock_fd);
+	sock_conn_release_entry(&attr->cmap, conn);
+}
+
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index,
 					struct sockaddr_in *addr)
 {
@@ -1735,11 +1754,15 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 	struct sock_conn *conn;
 
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
+
 	conn = idm_lookup(&attr->av_idm, idx);
 	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS)
 		return conn;
 
 	for (i = 0; i < attr->cmap.used; i++) {
+		if (!attr->cmap.table[i].connected)
+			continue;
+
 		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr, addr))
 			return &attr->cmap.table[i];
 	}
