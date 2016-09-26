@@ -12,6 +12,18 @@ v1.4.0, TBD
   about the fabric and domain name. Change port to `-P` and provider to `-p` to
   be more in line with fi_pingpong.
 
+## PSM provider notes
+
+- General bug fixes
+- Use utility provider for EQ, wait object, and poll set
+- Allow multi-recv to post buffer larger than message size limit
+
+## PSM2 provider notes
+
+- General bug fixes
+- Add support for multi-iov RMA read and aromic operations
+- Allow multi-recv to post buffer larger than message size limit
+
 v1.3.0, Mon Apr 11, 2016
 ========================
 
