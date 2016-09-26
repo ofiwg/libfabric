@@ -1037,30 +1037,6 @@ unlock:
 	return ret;
 }
 
-void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info)
-{
-	if (hints) {
-		if (hints->ep_attr) {
-			if (hints->ep_attr->tx_ctx_cnt)
-				info->ep_attr->tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
-			if (hints->ep_attr->rx_ctx_cnt)
-				info->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
-		}
-
-		if (hints->tx_attr)
-			info->tx_attr->op_flags = hints->tx_attr->op_flags;
-
-		if (hints->rx_attr)
-			info->rx_attr->op_flags = hints->rx_attr->op_flags;
-
-		if (hints->handle)
-			info->handle = hints->handle;
-	} else {
-		info->tx_attr->op_flags = 0;
-		info->rx_attr->op_flags = 0;
-	}
-}
-
 int fi_ibv_find_fabric(const struct fi_fabric_attr *attr)
 {
 	struct fi_info *fi;
@@ -1111,8 +1087,6 @@ static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 			ret = -FI_ENOMEM;
 			goto err1;
 		}
-
-		fi_ibv_update_info(hints, fi);
 
 		if (!*info)
 			*info = fi;

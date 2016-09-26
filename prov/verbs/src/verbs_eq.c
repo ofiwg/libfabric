@@ -32,6 +32,7 @@
 
 #include "config.h"
 
+#include <fi_util.h>
 #include "fi_verbs.h"
 
 
@@ -70,7 +71,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 	if (!(info->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
 		goto err;
 
-	fi_ibv_update_info(pep_info, info);
+	ofi_alter_info(info, pep_info);
 
 	info->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(info->src_addr = malloc(info->src_addrlen)))
