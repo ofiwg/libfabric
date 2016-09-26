@@ -264,7 +264,7 @@ static int sock_cntr_set(struct fid_cntr *cntr, uint64_t value)
 static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 			  int timeout)
 {
-	int ret = 0;
+	int last_read, ret = 0;
 	uint64_t start_ms = 0, end_ms = 0, remaining_ms = 0;
 	struct sock_cntr *_cntr;
 
@@ -288,7 +288,7 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 		end_ms = start_ms + timeout;
 	}
 
-        int last_read = last_read = atomic_get(&_cntr->value);
+        last_read = atomic_get(&_cntr->value);
 	remaining_ms = timeout;
 
 	while (!ret && last_read < threshold) {
