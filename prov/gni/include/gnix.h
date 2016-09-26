@@ -854,6 +854,11 @@ struct gnix_fab_req {
 
 	/* TODO: change the size of this for unaligned data? */
 	struct gnix_tx_descriptor *iov_txds[GNIX_MAX_IOV_LIMIT];
+	/*
+	 * special value of UINT_MAX is used to indicate
+	 * an unrecoverable (aka non-transient) error has occurred
+	 * in one of the underlying GNI transactions
+	 */
 	uint32_t		  tx_failures;
 
 	/* common to rma/amo/msg */
@@ -864,6 +869,15 @@ struct gnix_fab_req {
 	};
 	char inject_buf[GNIX_INJECT_SIZE];
 };
+
+/*
+ * macro to test whether a request is replayable
+ * or not based on the value of the tx_failures field
+ */
+#define GNIX_REQ_REPLAYABLE(req)                                            \
+	(((req)->tx_failures != UINT_MAX) &&                                 \
+	 (++(req)->tx_failures <                                            \
+		(req)->gnix_ep->domain->params.max_retransmits))
 
 static inline int _gnix_req_inject_err(struct gnix_fab_req *req)
 {

@@ -295,6 +295,10 @@ static int __nic_rx_overrun(struct gnix_nic *nic)
 	GNIX_WARN(FI_LOG_EP_DATA, "\n");
 
 	/* clear out the CQ */
+	/*
+	 * TODO:  really need to process CQEs better for error reporting,
+	 * etc.
+	 */
 	while ((status = GNI_CqGetEvent(nic->rx_cq, &cqe)) == GNI_RC_SUCCESS);
 	assert(status == GNI_RC_NOT_DONE);
 
@@ -435,10 +439,11 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 {
 	gni_post_descriptor_t *gni_desc;
 	struct gnix_tx_descriptor *txd_p = NULL;
+	struct gnix_fab_req *req;
 	gni_return_t status;
 	int msg_id;
 	gni_cq_entry_t cqe;
-	uint32_t recov;
+	uint32_t recov = 1;
 
 	if (__gnix_nic_txd_err_get(nic, &txd_p)) {
 		*txd = txd_p;
@@ -458,11 +463,20 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 
 	if (unlikely(status == GNI_RC_TRANSACTION_ERROR)) {
 		status = GNI_CqErrorRecoverable(cqe, &recov);
-		if (status != GNI_RC_SUCCESS || !recov) {
-			char ebuf[512];
-			GNI_CqErrorStr(cqe, ebuf, sizeof(ebuf));
-			GNIX_FATAL(FI_LOG_EP_DATA, "CQ error status: %s\n",
-				   ebuf);
+		if (status == GNI_RC_SUCCESS) {
+			if (!recov) {
+				char ebuf[512];
+
+				GNI_CqErrorStr(cqe, ebuf, sizeof(ebuf));
+				GNIX_WARN(FI_LOG_EP_DATA,
+					  "CQ error status: %s\n",
+					   ebuf);
+			}
+		} else {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "GNI_CqErrorRecover returned: %s\n",
+				   gni_err_str[status]);
+			recov = 0;  /* assume something bad has happened */
 		}
 	}
 
@@ -480,8 +494,18 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 		txd_p = __desc_lkup_by_id(nic, msg_id);
 	}
 
-	if (!txd_p) {
+	if (unlikely(txd_p == NULL))
 		GNIX_FATAL(FI_LOG_EP_DATA, "Unexpected CQE: 0x%lx", cqe);
+
+	/*
+	 * set retry count on the request to max to force
+	 * delivering error'd CQ event to application
+	 */
+	if (!recov) {
+		status = GNI_RC_TRANSACTION_ERROR;
+		req = txd_p->req;
+		if (req)
+			req->tx_failures = UINT_MAX;
 	}
 
 	*tx_status = status;
