@@ -242,16 +242,18 @@ int size_to_count(int size);
 	FT_ERR("cq_readerr: %s", fi_cq_strerror(cq, entry.prov_errno, \
 				entry.err_data, buf, len))
 
-#define FT_CLOSE_FID(fd)					\
-	do {							\
-		int ret;					\
-		if ((fd)) {					\
-			ret = fi_close(&(fd)->fid);		\
-			if (ret)				\
-				FT_ERR("fi_close (%d) fid %d",	\
-					ret, (int) (fd)->fid.fclass);	\
-			fd = NULL;				\
-		}						\
+#define FT_CLOSE_FID(fd)						\
+	do {								\
+		int ret;						\
+		if ((fd)) {						\
+			ret = fi_close(&(fd)->fid);			\
+			if (ret)					\
+				FT_ERR("fi_close: %s(%d) fid %d",	\
+					fi_strerror(-ret), 		\
+					ret,				\
+					(int) (fd)->fid.fclass);	\
+			fd = NULL;					\
+		}							\
 	} while (0)
 
 #define FT_CLOSEV_FID(fd, cnt)			\
