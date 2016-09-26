@@ -398,7 +398,7 @@ Test(gnix_hashtable_advanced, insert_1024)
 	srand(time(NULL));
 
 	for (i = 0; i < 1024; ++i) {
-		test_elements[i].key = rand();
+		test_elements[i].key = i;
 		test_elements[i].val = rand() % (1024 * 1024);
 		test_elements[i].magic = __GNIX_MAGIC_VALUE;
 	}
