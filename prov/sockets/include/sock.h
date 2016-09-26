@@ -886,6 +886,7 @@ struct sock_conn_req_handle {
 	struct fid handle;
 	struct sock_conn_req *req;
 	int sock_fd;
+	int is_connected;
 	struct sock_pep *pep;
 	struct sock_ep *ep;
 	size_t paramlen;
