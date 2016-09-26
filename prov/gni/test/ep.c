@@ -232,10 +232,10 @@ Test(endpoint, sizeleft)
 
 	/* Test default values. */
 	sz = fi_rx_size_left(ep);
-	cr_assert(sz == 64, "fi_rx_size_left");
+	cr_assert(sz == GNIX_RX_SIZE_DEFAULT, "fi_rx_size_left");
 
 	sz = fi_tx_size_left(ep);
-	cr_assert(sz == 64, "fi_tx_size_left");
+	cr_assert(sz == GNIX_TX_SIZE_DEFAULT, "fi_tx_size_left");
 
 	ret = fi_close(&ep->fid);
 	cr_assert(!ret, "fi_close endpoint");
