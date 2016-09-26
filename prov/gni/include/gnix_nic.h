@@ -50,7 +50,6 @@ extern "C" {
 #include "gnix_util.h"
 
 #define GNIX_DEF_MAX_NICS_PER_PTAG	4
-#define GNIX_MAX_IOV_LIMIT 8	/* this should have been pulled in from gnix.h.. */
 
 extern uint32_t gnix_max_nics_per_ptag;
 

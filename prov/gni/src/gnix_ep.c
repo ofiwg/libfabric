@@ -609,7 +609,7 @@ gnix_ep_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	struct gnix_fid_ep *gnix_ep;
 	uint64_t flags;
 
-	if (!ep || !iov || !desc || count != 1) {
+	if (!ep || !iov || !desc || count > GNIX_MAX_RMA_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
@@ -676,7 +676,7 @@ gnix_ep_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	struct gnix_fid_ep *gnix_ep;
 	uint64_t flags;
 
-	if (!ep || !iov || !desc || count != 1) {
+	if (!ep || !iov || !desc || count > GNIX_MAX_RMA_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
@@ -696,7 +696,8 @@ DIRECT_FN STATIC ssize_t gnix_ep_writemsg(struct fid_ep *ep, const struct fi_msg
 	struct gnix_fid_ep *gnix_ep;
 
 	if (!ep || !msg || !msg->msg_iov || !msg->rma_iov ||
-	    msg->iov_count != 1 || msg->rma_iov_count != 1 ||
+	    msg->iov_count != 1 ||
+		msg->rma_iov_count > GNIX_MAX_RMA_IOV_LIMIT ||
 	    msg->rma_iov[0].len > msg->msg_iov[0].iov_len) {
 		return -FI_EINVAL;
 	}
@@ -1059,7 +1060,7 @@ gnix_ep_atomic_writev(struct fid_ep *ep, const struct fi_ioc *iov, void **desc,
 		      uint64_t key, enum fi_datatype datatype, enum fi_op op,
 		      void *context)
 {
-	if (!iov || count != 1) {
+	if (!iov || count > GNIX_MAX_RMA_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
@@ -1185,7 +1186,7 @@ gnix_ep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
 			  enum fi_datatype datatype, enum fi_op op,
 			  void *context)
 {
-	if (!iov || count != 1 || !resultv)
+	if (!iov || count > GNIX_MAX_RMA_IOV_LIMIT || !resultv)
 		return -FI_EINVAL;
 
 	return gnix_ep_atomic_readwrite(ep, iov[0].addr, iov[0].count,
@@ -1286,7 +1287,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_atomic_compwritev(struct fid_ep *ep,
 						   enum fi_op op,
 						   void *context)
 {
-	if (!iov || count != 1 || !resultv || !comparev)
+	if (!iov || count > GNIX_MAX_RMA_IOV_LIMIT || !resultv || !comparev)
 		return -FI_EINVAL;
 
 	return gnix_ep_atomic_compwrite(ep, iov[0].addr, iov[0].count,
