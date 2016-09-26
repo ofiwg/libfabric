@@ -591,24 +591,68 @@ static struct fi_ops_av usdf_am_ops_sync = {
 	.straddr = usdf_av_straddr
 };
 
+static int usdf_av_process_attr(struct fi_av_attr *attr)
+{
+	USDF_TRACE_SYS(AV, "\n");
+
+	if (attr == NULL) {
+		USDF_WARN_SYS(AV, "NULL AV attribute structure is invalid\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr->name || attr->map_addr || (attr->flags & FI_READ)) {
+		USDF_WARN_SYS(AV, "named AVs are not supported\n");
+		return -FI_ENOSYS;
+	}
+
+	if (attr->flags & ~FI_EVENT) {
+		USDF_WARN_SYS(AV, "invalid flag, only FI_EVENT is supported\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr->rx_ctx_bits) {
+		USDF_WARN_SYS(AV, "scalable endpoints not supported\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr->ep_per_node > 1)
+		USDF_WARN_SYS(AV, "ep_per_node not supported, ignoring\n");
+
+	switch (attr->type) {
+	case FI_AV_UNSPEC:
+		USDF_DBG_SYS(AV, "no AV type specified, using FI_AV_MAP\n");
+	case FI_AV_MAP:
+		break;
+	case FI_AV_TABLE:
+		USDF_DBG_SYS(AV, "FI_AV_TABLE is unsupported\n");
+		return -FI_ENOSYS;
+	default:
+		USDF_WARN_SYS(AV, "unknown AV type %d, not supported",
+			      attr->type);
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
 int
 usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av_o, void *context)
 {
 	struct usdf_domain *udp;
 	struct usdf_av *av;
+	int ret;
 
 	USDF_TRACE_SYS(AV, "\n");
 
-	if (attr == NULL || av_o == NULL)
+	if (!av_o) {
+		USDF_WARN_SYS(AV, "provided AV pointer can not be NULL\n");
 		return -FI_EINVAL;
-
-	if ((attr->flags & ~(FI_EVENT | FI_READ)) != 0) {
-		return -FI_ENOSYS;
 	}
 
-	if (attr->name)
-		return -FI_ENOSYS;
+	ret = usdf_av_process_attr(attr);
+	if (ret)
+		return ret;
 
 	udp = dom_ftou(domain);
 
