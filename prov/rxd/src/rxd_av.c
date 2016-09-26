@@ -286,7 +286,10 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct util_av_attr util_attr;
 	struct fi_av_attr av_attr;
 
-	if (attr && attr->name)
+	if (!attr)
+		return -FI_EINVAL;
+
+	if (attr->name)
 		return -FI_ENOSYS;
 
 	domain = container_of(domain_fid, struct rxd_domain, util_domain.domain_fid);
@@ -295,17 +298,16 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	util_attr.addrlen = sizeof(fi_addr_t);
-	util_attr.overhead = attr ? attr->count : 0;
+	util_attr.overhead = attr->count;
 	util_attr.flags = FI_SOURCE;
-	av->size = attr ? attr->count : RXD_AV_DEF_COUNT;
+	av->size = attr->count ? attr->count : RXD_AV_DEF_COUNT;
 	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,
 			 &av->util_av, context);
 	if (ret)
 		goto err1;
 
 	av->size = av->util_av.count;
-	if (attr)
-		av_attr = *attr;
+	av_attr = *attr;
 	av_attr.type = FI_AV_TABLE;
 	av_attr.count = 0;
 	av_attr.flags = 0;

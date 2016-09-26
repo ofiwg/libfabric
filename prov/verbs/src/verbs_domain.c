@@ -122,17 +122,12 @@ err:
 static int fi_ibv_domain_close(fid_t fid)
 {
 	struct fi_ibv_domain *domain;
-	int ret = FI_SUCCESS;
+	int ret;
 
 	domain = container_of(fid, struct fi_ibv_domain, domain_fid.fid);
 
 	if (domain->rdm) {
-		errno = 0;
 		rdma_destroy_ep(domain->rdm_cm->listener);
-		if (errno) {
-			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_ep failed\n", errno);
-			ret = (ret == FI_SUCCESS) ? -ret : ret;
-		}
 		free(domain->rdm_cm);
 	}
 

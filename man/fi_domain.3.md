@@ -435,7 +435,7 @@ at least 4-bytes.
 The optimal number of completion queues supported by the domain, relative
 to any specified or default CQ attributes.  The cq_cnt value may be a
 fixed value of the maximum number of CQs supported by the
-underlying provider, or may be a dynamic value, based on the default
+underlying hardware, or may be a dynamic value, based on the default
 attributes of an allocated CQ, such as the CQ size and data format.
 
 ## Endpoint Count (ep_cnt)
@@ -443,7 +443,7 @@ attributes of an allocated CQ, such as the CQ size and data format.
 The total number of endpoints supported by the domain, relative to any
 specified or default endpoint attributes.  The ep_cnt value may be a
 fixed value of the maximum number of endpoints supported by the
-underlying provider, or may be a dynamic value, based on the default
+underlying hardware, or may be a dynamic value, based on the default
 attributes of an allocated endpoint, such as the endpoint capabilities
 and size.  The endpoint count is the number of addressable endpoints
 supported by the provider.
@@ -502,9 +502,18 @@ errno is returned. Fabric errno values are defined in
 Users should call fi_close to release all resources allocated to the
 fabric domain.
 
-The following fabric resources are associated with access domains:
+The following fabric resources are associated with domains:
 active endpoints, memory regions, completion event queues, and address
 vectors.
+
+Domain attributes reflect the limitations and capabilities of the
+underlying hardware and/or software provider.  They do not reflect
+system limitations, such as the number of physical pages that an
+application may pin or number of file descriptors that the
+application may open.  As a result, the reported maximums may not be
+achievable, even on a lightly loaded systems, without an
+administrator configuring system resources appropriately for the
+installed provider(s).
 
 # SEE ALSO
 

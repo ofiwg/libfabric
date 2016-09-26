@@ -543,7 +543,8 @@ void rxd_resend_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 
 			if (curr_stamp < pkt->us_stamp ||
 			    (curr_stamp - pkt->us_stamp) <
-			    (1 << ((uint64_t) pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
+			    (((uint64_t) 1) << ((uint64_t) pkt->retries + 1)) *
+			     RXD_RETRY_TIMEOUT) {
 				break;
 			}
 
@@ -1887,9 +1888,14 @@ void rxd_ep_progress(struct rxd_ep *ep)
 
 		dlist_foreach(&tx_entry->pkt_list, pkt_item) {
 			pkt = container_of(pkt_item, struct rxd_pkt_meta, entry);
+			/* TODO: This if check is repeated.  Create a function
+			 * to perform this check, and figure out what the check
+			 * is actually doing with the bit-shift, multiply operation.
+			 */
 			if (curr_stamp > pkt->us_stamp &&
 			    curr_stamp - pkt->us_stamp >
-			    (1 << ((uint64_t) pkt->retries + 1)) * RXD_RETRY_TIMEOUT) {
+			    (((uint64_t) 1) << ((uint64_t) pkt->retries + 1)) *
+			     RXD_RETRY_TIMEOUT) {
 				pkt->us_stamp = curr_stamp;
 				rxd_ep_retry_pkt(ep, tx_entry, pkt);
 			}

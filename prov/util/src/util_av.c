@@ -1001,8 +1001,10 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = ofi_av_init(domain, attr, &util_attr, util_av, context);
-	if (ret)
+	if (ret) {
+		free(util_av);
 		return ret;
+	}
 
 	*av = &util_av->av_fid;
 	(*av)->fid.ops = &ip_av_fi_ops;

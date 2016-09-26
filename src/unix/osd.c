@@ -82,20 +82,17 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		int readonly, void **mapped)
 {
 	char *fname = 0;
-	int ret = FI_SUCCESS;
+	int i, ret = FI_SUCCESS;
 	int flags = O_RDWR | (readonly ? 0 : O_CREAT);
 	struct stat mapstat;
-
-	int i;
 
 	*mapped = MAP_FAILED;
 	memset(shm, 0, sizeof(*shm));
 
 	fname = calloc(1, strlen(name) + 2); /* '/' + %s + trailing 0 */
-	if (!fname) {
-		ret = -FI_ENOMEM;
-		goto failed;
-	}
+	if (!fname)
+		return -FI_ENOMEM;
+
 	strcpy(fname, "/");
 	strcat(fname, name);
 	shm->name = fname;
