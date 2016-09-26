@@ -509,6 +509,20 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	void *loc_addr = NULL;
 	int dt_len, dt_align;
 
+	if (!(flags & FI_INJECT) && !ep->send_cq &&
+	    (((fr_type == GNIX_FAB_RQ_AMO ||
+	      fr_type == GNIX_FAB_RQ_NAMO_AX ||
+	      fr_type == GNIX_FAB_RQ_NAMO_AX_S) &&
+	      !ep->write_cntr) ||
+	     ((fr_type == GNIX_FAB_RQ_FAMO ||
+	      fr_type == GNIX_FAB_RQ_CAMO ||
+	      fr_type == GNIX_FAB_RQ_NAMO_FAX ||
+	      fr_type == GNIX_FAB_RQ_NAMO_FAX_S) &&
+	      !ep->read_cntr))) {
+		return -FI_ENOCQ;
+	}
+
+
 	if (!ep || !msg || !msg->msg_iov ||
 	    !msg->msg_iov[0].addr ||
 	    msg->msg_iov[0].count != 1 ||
@@ -523,10 +537,6 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		    (flags & FI_INJECT)) {
 			return -FI_EINVAL;
 		}
-	}
-
-	if (!ep->send_cq && !(flags & FI_INJECT)) {
-		return -FI_ENOCQ;
 	}
 
 	if (fr_type == GNIX_FAB_RQ_CAMO) {

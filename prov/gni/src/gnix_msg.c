@@ -2371,7 +2371,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	struct gnix_fid_mem_desc *md = NULL;
 	int tagged = !!(flags & FI_TAGGED);
 
-	if (!ep->recv_cq) {
+	if (!ep->recv_cq && !ep->recv_cntr) {
 		return -FI_ENOCQ;
 	}
 
@@ -2782,8 +2782,8 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	int rendezvous;
 	struct fid_mr *auto_mr = NULL;
 
-	if (!ep) {
-		return -FI_EINVAL;
+	if (!ep->send_cq && !ep->send_cntr) {
+		return -FI_ENOCQ;
 	}
 
 	if (flags & FI_TRIGGER) {
@@ -2793,10 +2793,6 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		    (flags & FI_INJECT)) {
 			return -FI_EINVAL;
 		}
-	}
-
-	if (!ep->send_cq) {
-		return -FI_ENOCQ;
 	}
 
 	if ((flags & FI_INJECT) && (len > GNIX_INJECT_SIZE)) {
@@ -2922,7 +2918,7 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	int tagged = flags & FI_TAGGED;
 	struct fid_mr *auto_mr;
 
-	if (!ep->recv_cq) {
+	if (!ep->recv_cq && !ep->recv_cntr) {
 		return -FI_ENOCQ;
 	}
 
@@ -3200,6 +3196,10 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	struct fid_mr *auto_mr;
 
 	GNIX_DEBUG(FI_LOG_EP_DATA, "iov_count = %lu\n", count);
+
+	if (!ep->send_cq && !ep->send_cntr) {
+		return -FI_ENOCQ;
+	}
 
 	if (!(flags & FI_TAGGED)) {
 		if (!ep->ep_ops.msg_send_allowed)
