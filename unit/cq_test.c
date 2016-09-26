@@ -91,7 +91,7 @@ static int cq_open_close_simultaneous(void)
 				FI_WAIT_UNSPEC);
 	}
 	if (ret) {
-		FT_WARN("fi_cq_open failed after %d (cq_cnt: %d): %s",
+		FT_WARN("fi_cq_open failed after %d (cq_cnt: %zu): %s",
 			opened, count, fi_strerror(-ret));
 	}
 
