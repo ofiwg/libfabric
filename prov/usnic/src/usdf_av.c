@@ -246,9 +246,6 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 	fp = av->av_domain->dom_fabric;
 	dap = fp->fab_dev_attrs;
 
-	if (av->av_flags & FI_READ) {
-		return -FI_EACCES;
-	}
 	if (av->av_eq == NULL) {
 		return -FI_ENOEQ;
 	}
@@ -447,16 +444,9 @@ usdf_am_remove(struct fid_av *fav, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
 	struct usdf_dest *dest;
-	struct usdf_av *av;
 	size_t i;
 
 	USDF_TRACE_SYS(AV, "\n");
-
-	av = av_ftou(fav);
-
-	if (av->av_flags & FI_READ) {
-		return -FI_EACCES;
-	}
 
 	for (i = 0; i < count; ++i) {
 		if (fi_addr[i] != FI_ADDR_NOTAVAIL) {
