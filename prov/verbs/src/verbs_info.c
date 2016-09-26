@@ -32,6 +32,9 @@
 
 #include <fi_util.h>
 
+#include <ifaddrs.h>
+#include <net/if.h>
+
 #include "fi_verbs.h"
 #include "ep_rdm/verbs_rdm.h"
 
@@ -824,6 +827,94 @@ err:
 	return ret;
 }
 
+static int fi_ibv_copy_ifaddr(const char *name, const char *service, uint64_t flags,
+		struct fi_info *info)
+{
+	struct rdma_addrinfo *rai;
+	struct fi_info *fi;
+	struct rdma_cm_id *id;
+	int ret;
+
+	ret = fi_ibv_get_rdma_rai(name, service, flags, NULL, &rai);
+	if (ret) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+				"rdma_getaddrinfo failed for name:%s\n", name);
+		return ret;
+	}
+	ret = rdma_create_ep(&id, rai, NULL, NULL);
+	if (!ret) {
+		for (fi = info; fi; fi = fi->next)
+			if (!strncmp(id->verbs->device->name, fi->domain_attr->name,
+						strlen(id->verbs->device->name)))
+				break;
+		if (!fi) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+					"No matching fi_info for device: "
+					"%s with address: %s\n",
+					id->verbs->device->name, name);
+		} else {
+			if (fi->src_addr) {
+				free(fi->src_addr);
+				fi->src_addr = NULL;
+			}
+			fi_ibv_rai_to_fi(rai, fi);
+		}
+		rdma_destroy_ep(id);
+	}
+	rdma_freeaddrinfo(rai);
+	return 0;
+}
+
+static int fi_ibv_getifaddrs(const char *service, uint64_t flags, struct fi_info *info)
+{
+	struct ifaddrs *ifaddr, *ifa;
+	char name[INET6_ADDRSTRLEN];
+	const char *ret_ptr;
+	int ret, num_verbs_ifs = 0;
+
+	flags |= FI_NUMERICHOST | FI_SOURCE;
+
+	ret = getifaddrs(&ifaddr);
+	if (ret) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+				"Unable to get interface addresses\n");
+		return ret;
+	}
+
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
+				!strcmp(ifa->ifa_name, "lo"))
+			continue;
+		switch (ifa->ifa_addr->sa_family) {
+		case AF_INET:
+			ret_ptr = inet_ntop(AF_INET, &ofi_sin_addr(ifa->ifa_addr),
+				name, INET6_ADDRSTRLEN);
+			break;
+		case AF_INET6:
+			ret_ptr = inet_ntop(AF_INET6, &ofi_sin6_addr(ifa->ifa_addr),
+				name, INET6_ADDRSTRLEN);
+			break;
+		default:
+			continue;
+		}
+		if (!ret_ptr) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+					"inet_ntop failed: %s(%d)\n",
+					strerror(errno), errno);
+			goto err;
+		}
+		ret = fi_ibv_copy_ifaddr(name, service, flags, info);
+		if (ret)
+			goto err;
+		num_verbs_ifs++;
+	}
+	freeifaddrs(ifaddr);
+	return num_verbs_ifs ? 0 : -FI_ENODATA;
+err:
+	freeifaddrs(ifaddr);
+	return ret;
+}
+
 int fi_ibv_init_info(void)
 {
 	struct ibv_context **ctx_list;
@@ -1009,6 +1100,15 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 					       hints, rai, info);
 	} else {
 		ret = fi_ibv_get_matching_info(NULL, hints, rai, info);
+		if (!ret && !(flags & FI_SOURCE) && !node && !hints->src_addr &&
+				!hints->dest_addr) {
+			ret = fi_ibv_getifaddrs(service, flags, *info);
+			if (ret) {
+				fi_freeinfo(*info);
+				fi_ibv_destroy_ep(rai, &id);
+				goto out;
+			}
+		}
 	}
 
 	ofi_alter_info(*info, hints);
