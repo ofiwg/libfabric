@@ -60,7 +60,11 @@ declare -i skip_count=0
 declare -i pass_count=0
 declare -i fail_count=0
 
-declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENODATA)')
+if [[ "$(uname)" == "FreeBSD" ]]; then
+    declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENOMSG)')
+else
+    declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENODATA)')
+fi
 declare -ri FI_ENOSYS=$(python -c 'import errno; print(errno.ENOSYS)')
 
 neg_unit_tests=(
