@@ -471,6 +471,11 @@ usdf_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	USDF_TRACE_SYS(AV, "\n");
 
+	if (fi_addr == FI_ADDR_NOTAVAIL) {
+		USDF_WARN_SYS(AV, "invalid address, can't lookup\n");
+		return -FI_EINVAL;
+	}
+
 	dest = (struct usdf_dest *)(uintptr_t)fi_addr;
 
 	if (*addrlen < sizeof(sin)) {
