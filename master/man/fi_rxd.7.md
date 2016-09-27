@@ -16,15 +16,15 @@ emulated over a base DGRAM provider.
 
 # SUPPORTED FEATURES
 
-The RxD provider currently supports *FI_MSG* and *FI_TAGGED*
+The RxD provider currently supports *FI_MSG*, *FI_TAGGED* and *FI_RMA*
 capabilities. It requires the base DGRAM provider to support *FI_MSG*
 capabilities.
 
 *Endpoint types*
 : The provider supports only endpoint type *FI_EP_RDM*.
 
-*Endpoint capabilities*
-: The following data transfer interface is supported: *fi_msg*, *fi_tagged*.
+*Endpoint capabilities* : The following data transfer interface is
+supported: *fi_msg*, *fi_tagged* and *fi_rma*.
 
 *Modes*
 : The provider does not require the use of any mode bits.
@@ -43,6 +43,9 @@ base DGRAM provider.
 No support for multi-recv.
 
 No support for counters.
+
+The RxD provider is still under development and is not extensively
+tested.
 
 # RUNTIME PARAMETERS
 
