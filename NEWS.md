@@ -24,6 +24,25 @@ v1.4.0, TBD
 - Add support for multi-iov RMA read and aromic operations
 - Allow multi-recv to post buffer larger than message size limit
 
+## verbs provider notes
+
+- verbs/RDM
+  - General bug fixes
+  - Add FI_MSG capability
+  - Add FI_PEEK and FI_CLAIM flags support
+  - Add completion flags support
+  - Add selective completion support
+  - Add fi_cq_readerr support
+  - Add possibility to set IPoIB network interface via FI_VERBS_IFACE
+    environment variable
+  - Add large data transfer support (> 1 GB)
+  - Add FI_AV_TABLE support
+  - Add fi_cntr support
+  - Add environment variables for the provider tuning: FI_VERBS_RDM_BUFFER_NUM,
+    FI_VERBS_RDM_BUFFER_SIZE, FI_VERBS_RDM_RNDV_SEG_SIZE,
+    FI_VERBS_RDM_CQREAD_BUNCH_SIZE, FI_VERBS_RDM_THREAD_TIMEOUT
+  - Add iWarp support
+
 v1.3.0, Mon Apr 11, 2016
 ========================
 

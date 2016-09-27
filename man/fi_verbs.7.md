@@ -22,13 +22,13 @@ and data transfer operations.
 The verbs provider supports a subset of OFI features.
 
 #### Endpoint types
-: FI_EP_MSG, FI_EP_RDM (Experimental support FI_TAGGED and FI_RMA interfaces).
+: FI_EP_MSG, FI_EP_RDM (Experimental support FI_MSG, FI_TAGGED, FI_RMA interfaces).
 
 #### Endpoint capabilities and features
 ##### MSG endpoints
 : FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
 ##### RDM endpoints
-: FI_TAGGED, FI_RMA
+: FI_MSG, FI_TAGGED, FI_RMA
 
 #### Modes
 : Verbs provider requires applications to support the following modes:
@@ -70,9 +70,6 @@ The verbs provider supports a subset of OFI features.
 
 # LIMITATIONS
 
-#### CQ
-: cq_readfrom operations are not supported.
-
 #### Memory Regions
 : Only FI_MR_BASIC mode is supported. Adding regions via s/g list is not supported.
   Generic fi_mr_regattr is not supported. No support for binding memory regions to
@@ -99,20 +96,16 @@ The verbs provider supports a subset of OFI features.
 
 ##### Unsupported features specific to MSG endpoints
 : Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel, fi_ep_alias,
-  Shared TX context.
+  Shared TX context, cq_readfrom operations.
 
 ##### Unsupported features specific to RDM endpoints
 : The RDM support for verbs have the following limitations:
 
-  * iWARP is not supported yet.
-
   * Supports iovs of only size 1.
 
-  * Max data transfer size is 1 GB
+  * Wait objects are not supported.
 
   * Not thread safe.
-
-  * Data and flags arguments are ignored
 
 # SEE ALSO
 
