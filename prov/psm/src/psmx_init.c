@@ -477,7 +477,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->ep_cnt = 65535;
 	psmx_info->domain_attr->tx_ctx_cnt = 1;
 	psmx_info->domain_attr->rx_ctx_cnt = 1;
-	psmx_info->domain_attr->max_ep_tx_ctx = 65535;
+	psmx_info->domain_attr->max_ep_tx_ctx = 1;
 	psmx_info->domain_attr->max_ep_rx_ctx = 1;
 	psmx_info->domain_attr->max_ep_stx_ctx = 65535;
 	psmx_info->domain_attr->max_ep_srx_ctx = 0;
