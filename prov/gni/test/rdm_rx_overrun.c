@@ -107,6 +107,7 @@ static void setup(void)
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
+	memset(&attr, 0, sizeof(attr));
 	attr.type = FI_AV_TABLE;
 	attr.count = NUM_EPS;
 

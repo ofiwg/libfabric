@@ -107,6 +107,7 @@ void rdm_sr_setup_common_eps(void)
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
 
+	memset(&attr, 0, sizeof(attr));
 	attr.type = FI_AV_MAP;
 	attr.count = NUMEPS;
 
