@@ -452,6 +452,9 @@ usdf_am_remove(struct fid_av *fav, fi_addr_t *fi_addr, size_t count,
 		if (fi_addr[i] != FI_ADDR_NOTAVAIL) {
 			dest = (struct usdf_dest *)(uintptr_t)fi_addr[i];
 			free(dest);
+
+			/* Mark invalid by setting to FI_ADDR_NOTAVAIL*/
+			fi_addr[i] = FI_ADDR_NOTAVAIL;
 		}
 	}
 
