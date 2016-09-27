@@ -64,14 +64,101 @@
 #include "usdf.h"
 #include "usdf_av.h"
 #include "usdf_timer.h"
+#include "usdf_rdm.h"
 
 #include "fi_ext_usnic.h"
+
+static int usdf_av_alloc_dest(struct usdf_dest **dest_o)
+{
+	struct usdf_dest *dest;
+
+	dest = calloc(1, sizeof(**dest_o));
+	if (dest == NULL)
+		return -errno;
+
+	SLIST_INIT(&dest->ds_rdm_rdc_list);
+
+	*dest_o = dest;
+	return 0;
+}
+
+static void usdf_av_free_dest(struct usdf_dest *dest)
+{
+	struct usdf_rdm_connection *rdc = NULL;
+
+	LIST_REMOVE(dest, ds_addresses_entry);
+
+	while (!SLIST_EMPTY(&dest->ds_rdm_rdc_list)) {
+		rdc = SLIST_FIRST(&dest->ds_rdm_rdc_list);
+		rdc->dc_dest = NULL;
+
+		SLIST_REMOVE(&dest->ds_rdm_rdc_list, rdc, usdf_rdm_connection,
+			     dc_addr_link);
+		if (rdc)
+			rdc->dc_dest = NULL;
+	}
+
+	free(dest);
+}
+
+static int usdf_av_close_(struct usdf_av *av)
+{
+	struct usdf_dest *entry;
+
+	USDF_TRACE_SYS(AV, "\n");
+
+	pthread_spin_lock(&av->av_lock);
+
+	if (av->av_eq)
+		atomic_dec(&av->av_eq->eq_refcnt);
+
+	atomic_dec(&av->av_domain->dom_refcnt);
+
+	while (!LIST_EMPTY(&av->av_addresses)) {
+		entry = LIST_FIRST(&av->av_addresses);
+		usdf_av_free_dest(entry);
+	}
+
+	pthread_spin_destroy(&av->av_lock);
+	free(av);
+
+	USDF_DBG_SYS(AV, "AV successfully destroyed\n");
+
+	return 0;
+}
+
+static int usdf_av_close(struct fid *fid)
+{
+	struct usdf_av *av;
+	int pending;
+
+	USDF_TRACE_SYS(AV, "\n");
+
+	av = container_of(fid, struct usdf_av, av_fid.fid);
+	if (atomic_get(&av->av_refcnt) > 0)
+		return -FI_EBUSY;
+
+	pending = atomic_get(&av->av_active_inserts);
+	assert(pending >= 0);
+
+	if (pending) {
+		USDF_DBG_SYS(AV, "%d pending inserts, defer closing\n",
+			     pending);
+		atomic_set(&av->av_closing, 1);
+	} else {
+		usdf_av_close_(av);
+	}
+
+	return 0;
+}
 
 static void
 usdf_av_insert_async_complete(struct usdf_av_insert *insert)
 {
 	struct fi_eq_entry entry;
 	struct usdf_av *av;
+	int pending;
+	int closing;
 
 	av = insert->avi_av;
 
@@ -81,17 +168,16 @@ usdf_av_insert_async_complete(struct usdf_av_insert *insert)
 	usdf_eq_write_internal(av->av_eq,
 		FI_AV_COMPLETE, &entry, sizeof(entry), 0);
 
-	pthread_spin_lock(&av->av_lock);
-
 	usdf_timer_free(av->av_domain->dom_fabric, insert->avi_timer);
 
-	atomic_dec(&av->av_active_inserts);
-	if (atomic_get(&av->av_active_inserts) == 0 && av->av_closing) {
-		pthread_spin_destroy(&av->av_lock);
-		free(av);
-	} else {
-		pthread_spin_unlock(&av->av_lock);
-	}
+	pending = atomic_dec(&av->av_active_inserts);
+	USDF_DBG_SYS(AV, "new active insert value: %d\n", pending);
+	assert(pending >= 0);
+
+	closing = atomic_get(&av->av_closing);
+
+	if (!pending && closing)
+		usdf_av_close_(av);
 
 	free(insert);
 }
@@ -122,22 +208,6 @@ usdf_post_insert_request_error(struct usdf_av_insert *insert,
 		&err_entry, sizeof(err_entry),
 		USDF_EVENT_FLAG_ERROR);
 }
-
-static int
-usdf_av_alloc_dest(struct usdf_dest **dest_o)
-{
-	struct usdf_dest *dest;
-
-	dest = calloc(1, sizeof(**dest_o));
-	if (dest == NULL) {
-		return -errno;
-	}
-	SLIST_INIT(&dest->ds_rdm_rdc_list);
-
-	*dest_o = dest;
-	return 0;
-}
-
 
 /*
  * Called by progression thread to look for AV completions on this domain
@@ -174,6 +244,9 @@ usdf_av_insert_progress(void *v)
 			if (ret == 0) {
 				++insert->avi_successes;
 				*(struct usdf_dest **)req->avr_fi_addr = dest;
+
+				LIST_INSERT_HEAD(&insert->avi_av->av_addresses,
+						 dest, ds_addresses_entry);
 			} else {
 				usdf_post_insert_request_error(insert, req);
 			}
@@ -371,6 +444,8 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 				htons(IP_DF);
 			dest->ds_dest = *u_dest;
 			fi_addr[i] = (fi_addr_t)dest;
+			LIST_INSERT_HEAD(&av->av_addresses, dest,
+					 ds_addresses_entry);
 			++ret_count;
 		} else {
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
@@ -452,7 +527,7 @@ usdf_am_remove(struct fid_av *fav, fi_addr_t *fi_addr, size_t count,
 	for (i = 0; i < count; ++i) {
 		if (fi_addr[i] != FI_ADDR_NOTAVAIL) {
 			dest = (struct usdf_dest *)(uintptr_t)fi_addr[i];
-			free(dest);
+			usdf_av_free_dest(dest);
 
 			/* Mark invalid by setting to FI_ADDR_NOTAVAIL*/
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
@@ -530,35 +605,6 @@ usdf_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -FI_EINVAL;
 	}
 
-	return 0;
-}
-
-static int
-usdf_av_close(struct fid *fid)
-{
-	struct usdf_av *av;
-
-	USDF_TRACE_SYS(AV, "\n");
-
-	av = container_of(fid, struct usdf_av, av_fid.fid);
-	if (atomic_get(&av->av_refcnt) > 0) {
-		return -FI_EBUSY;
-	}
-
-	pthread_spin_lock(&av->av_lock);
-
-	if (av->av_eq != NULL) {
-		atomic_dec(&av->av_eq->eq_refcnt);
-	}
-	atomic_dec(&av->av_domain->dom_refcnt);
-
-	if (atomic_get(&av->av_active_inserts) > 0) {
-		av->av_closing = 1;
-		pthread_spin_unlock(&av->av_lock);
-	} else {
-		pthread_spin_destroy(&av->av_lock);
-		free(av);
-	}
 	return 0;
 }
 
@@ -665,6 +711,9 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	} else {
 		av->av_fid.ops = &usdf_am_ops_sync;
 	}
+
+	LIST_INIT(&av->av_addresses);
+
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	av->av_fid.fid.context = context;
 	av->av_fid.fid.ops = &usdf_av_fi_ops;
@@ -672,6 +721,7 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	pthread_spin_init(&av->av_lock, PTHREAD_PROCESS_PRIVATE);
 	atomic_initialize(&av->av_active_inserts, 0);
+	atomic_initialize(&av->av_closing, 0);
 
 	atomic_initialize(&av->av_refcnt, 0);
 	atomic_inc(&udp->dom_refcnt);
