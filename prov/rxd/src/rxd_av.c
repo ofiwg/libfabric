@@ -301,6 +301,9 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	util_attr.overhead = attr->count;
 	util_attr.flags = FI_SOURCE;
 	av->size = attr->count ? attr->count : RXD_AV_DEF_COUNT;
+	if (attr->type == FI_AV_UNSPEC)
+		attr->type = FI_AV_TABLE;
+
 	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,
 			 &av->util_av, context);
 	if (ret)
