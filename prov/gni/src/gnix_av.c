@@ -75,6 +75,7 @@ static int gnix_verify_av_attr(struct fi_av_attr *attr)
 	switch (attr->type) {
 	case FI_AV_TABLE:
 	case FI_AV_MAP:
+	case FI_AV_UNSPEC:
 		break;
 	default:
 		ret = -FI_EINVAL;
@@ -763,7 +764,9 @@ DIRECT_FN int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			goto cleanup;
 		}
 
-		type = attr->type;
+		if (attr->type != FI_AV_UNSPEC) {
+			type = attr->type;
+		}
 		count = attr->count;
 	}
 
