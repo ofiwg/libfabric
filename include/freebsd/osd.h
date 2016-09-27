@@ -36,6 +36,7 @@
 #include <sys/endian.h>
 #include <pthread_np.h>
 
+#include "unix/osd.h"
 
 #define bswap_64 bswap64
 
