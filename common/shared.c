@@ -1901,6 +1901,7 @@ int ft_sock_listen(char *service)
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags = AI_PASSIVE;
+	hints.ai_family = AF_INET;
 
 	ret = getaddrinfo(NULL, service, &hints, &ai);
 	if (ret) {
