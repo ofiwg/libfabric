@@ -158,6 +158,7 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct usdf_ep *ep;
 	struct usdf_cq *cq;
+	struct usdf_av *av;
 	int ret;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
@@ -170,7 +171,10 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->e.dg.ep_av != NULL) {
 			return -FI_EINVAL;
 		}
-		ep->e.dg.ep_av = av_fidtou(bfid);
+
+		av = av_fidtou(bfid);
+		ep->e.dg.ep_av = av;
+		atomic_inc(&av->av_refcnt);
 		break;
 
 	case FI_CLASS_CQ:
@@ -282,6 +286,10 @@ usdf_ep_dgram_close(fid_t fid)
 	if (ep->ep_eq != NULL) {
 		atomic_dec(&ep->ep_eq->eq_refcnt);
 	}
+
+	if (ep->e.dg.ep_av)
+		atomic_dec(&ep->e.dg.ep_av->av_refcnt);
+
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_wcq);
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_rcq);
 
