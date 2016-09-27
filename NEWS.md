@@ -43,6 +43,42 @@ v1.4.0, TBD
     FI_VERBS_RDM_CQREAD_BUNCH_SIZE, FI_VERBS_RDM_THREAD_TIMEOUT
   - Add iWarp support
 
+## Sockets provider notes
+
+- General code cleanup and bug fixes
+- Set tx/rx op_flags correctly to be consistent with manpage
+- Restructure struct sock_ep to support alias ep
+- Refactor CQ/Cntr bindings, CQ completion generation, and counter increments
+- Copy compare data to internal buffer when FI_INJECT is set in
+  fi_compare_atomic
+- Correctly handle triggered operation when FI_INJECT is set or
+  triggered op is enqueued or counter is incremented. Initialize counter
+  threshold to INT_MAX
+- Refactor and cleanup connection management code, add locks to avoid
+  race between main thread and progress thread, add logic to correctly handle
+  FI_SHUTDOWN and FI_REJECT
+- Set fabric name as network address in the format of a.b.c.d/e and
+  domain name as network interface name
+- Remove sock_compare_addr and add two utility functions ofi_equals_ipaddr
+  and ofi_equals_sockaddr in fi.h
+- Refactor fi_getinfo to handle corner cases and add logic if a given
+  src_addr matches to any local interface addr
+- Restructure acquiring/releasing the list_lock in progress thread so that
+  it is only acquired once per iteration
+- Refactor connection management of MSG ep so that it uses TCP instead of
+  UDP for connection management msg and new port for every MSG endpoint
+- Add sock_cq_sanitize_flags function to make sure only flags returned in
+  CQ events are the ones that are listed on the manpage
+- Update fi_poll semantics for counters so that it returns success if the
+  counter value is different from the last-read-value
+- Allow multiple threads to wait on one counter
+- Update code to use ofi_util_mr - the new MR structure added to util code
+- Fix fi_av_insert not to report error when the number of inserted addr
+  exceeds the count attribute in fi_av_attr
+- Add garbage collection of AV indices after fi_av_remove, add ep list in AV
+  and cleanup conn map during fi_av_remove
+- Use correct fi_tx_attr/fi_rx_attr for scalable ep
+
 v1.3.0, Mon Apr 11, 2016
 ========================
 
