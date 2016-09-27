@@ -237,6 +237,22 @@ static inline uint64_t fi_mr_key(struct fid_mr *mr)
 	return mr->key;
 }
 
+static inline int
+fi_mr_raw_key(struct fid_mr *mr, uint8_t *raw, size_t *size)
+{
+	struct fi_mr_raw_key lakey = {.size = size, .raw = raw};
+	return mr->fid.ops->control(&mr->fid, FI_RAW_KEY, &lakey);
+}
+
+static inline int
+fi_mr_map_key(struct fid_domain *domain,
+	      uint8_t *raw, size_t size, uint64_t* key)
+{
+	struct fi_mr_map_raw_key lakey =
+		{.raw = raw, .size = size, .key = key};
+	return domain->fid.ops->control(&domain->fid, FI_RAW_KEY, &lakey);
+}
+
 static inline int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags)
 {
 	return mr->fid.ops->bind(&mr->fid, bfid, flags);

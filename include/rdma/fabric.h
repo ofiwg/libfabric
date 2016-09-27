@@ -247,6 +247,7 @@ enum {
 #define FI_ASYNC_IOV		(1ULL << 57)
 #define FI_RX_CQ_DATA		(1ULL << 56)
 #define FI_LOCAL_MR		(1ULL << 55)
+#define FI_RAW_MR		(1ULL << 54)
 
 struct fi_tx_attr {
 	uint64_t		caps;
@@ -418,6 +419,17 @@ struct fi_alias {
 	uint64_t		flags;
 };
 
+struct fi_mr_raw_key {
+	uint8_t		*raw;
+	size_t		*size;
+};
+
+struct fi_mr_map_raw_key {
+	uint8_t		*raw;
+	size_t		size;
+	uint64_t	*key;
+};
+
 /* control commands */
 enum {
 	FI_GETFIDFLAG,		/* uint64_t flags */
@@ -428,6 +440,7 @@ enum {
 	FI_GETWAIT,		/* void * wait object */
 	FI_ENABLE,		/* NULL */
 	FI_BACKLOG,		/* integer * */
+	FI_RAW_KEY		/* fi_mr_raw_key or fi_mr_map_raw_key */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)
