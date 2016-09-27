@@ -21,8 +21,8 @@ src_libfabric_la_SOURCES += $(_rxd_files)
 src_libfabric_la_LIBADD += $(rxd_shm_LIBS)
 endif !HAVE_RXD_DL
 
-prov_install_man_pages += man/man7/fi_rxd.7
+#prov_install_man_pages += man/man7/fi_rxd.7
 
 endif HAVE_RXD
 
-prov_dist_man_pages += man/man7/fi_rxd.7
+#prov_dist_man_pages += man/man7/fi_rxd.7
