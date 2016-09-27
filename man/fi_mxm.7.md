@@ -11,6 +11,9 @@ The MXM Fabric Provider
 
 # OVERVIEW
 
+The mxm provider is deprecated and will be replaced in a future release
+of libfabric.
+
 The *mxm* provider runs over the MXM (Mellanox messaging) interface
 that is currently supported by the Mellanox infiniband fabrics.
 The *mxm* provider makes use of MXM tag matching API in order to

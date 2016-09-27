@@ -79,6 +79,10 @@ v1.4.0, TBD
   and cleanup conn map during fi_av_remove
 - Use correct fi_tx_attr/fi_rx_attr for scalable ep
 
+## MXM provider
+
+- The mxm provider has been deprecated and will be replaced in a future release.
+
 v1.3.0, Mon Apr 11, 2016
 ========================
 
