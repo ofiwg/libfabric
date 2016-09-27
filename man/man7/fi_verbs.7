@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2016\-09\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2016\-09\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -15,13 +15,13 @@ control and data transfer operations.
 The verbs provider supports a subset of OFI features.
 .SS Endpoint types
 .PP
-: FI_EP_MSG, FI_EP_RDM (Experimental support FI_TAGGED and FI_RMA
+: FI_EP_MSG, FI_EP_RDM (Experimental support FI_MSG, FI_TAGGED, FI_RMA
 interfaces).
 .SS Endpoint capabilities and features
 .SS MSG endpoints
 .PP
 : FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
-##### RDM endpoints : FI_TAGGED, FI_RMA
+##### RDM endpoints : FI_MSG, FI_TAGGED, FI_RMA
 .SS Modes
 .PP
 : Verbs provider requires applications to support the following modes:
@@ -64,9 +64,6 @@ Send after Write
 .IP \[bu] 2
 Send after Send
 .SH LIMITATIONS
-.SS CQ
-.PP
-: cq_readfrom operations are not supported.
 .SS Memory Regions
 .PP
 : Only FI_MR_BASIC mode is supported.
@@ -97,20 +94,16 @@ FI_RMA_EVENT, FI_FENCE
 .SS Unsupported features specific to MSG endpoints
 .PP
 : Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel,
-fi_ep_alias, Shared TX context.
+fi_ep_alias, Shared TX context, cq_readfrom operations.
 .SS Unsupported features specific to RDM endpoints
 .PP
 : The RDM support for verbs have the following limitations:
 .IP \[bu] 2
-iWARP is not supported yet.
-.IP \[bu] 2
 Supports iovs of only size 1.
 .IP \[bu] 2
-Max data transfer size is 1 GB
+Wait objects are not supported.
 .IP \[bu] 2
 Not thread safe.
-.IP \[bu] 2
-Data and flags arguments are ignored
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
