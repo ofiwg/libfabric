@@ -113,6 +113,20 @@ static void setup_ep_fixture(void)
 		}
 	}
 
+	/* MSG endpoints require EQ to be bound to an endpoint */
+	if (fi->ep_attr->type == FI_EP_MSG) {
+		ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_eq_open", ret);
+			exit(EXIT_FAILURE);
+		}
+		ret = fi_ep_bind(ep, &eq->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			exit(EXIT_FAILURE);
+		}
+	}
+
 	ret = fi_ep_bind(ep, &txcq->fid, FI_TRANSMIT);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
@@ -134,6 +148,7 @@ static void teardown_ep_fixture(void)
 	FT_CLOSE_FID(rxcq);
 	FT_CLOSE_FID(txcq);
 	FT_CLOSE_FID(domain);
+	FT_CLOSE_FID(eq);
 	FT_CLOSE_FID(fabric);
 }
 
