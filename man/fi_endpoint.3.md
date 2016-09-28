@@ -184,7 +184,8 @@ In order to transition an endpoint into an enabled state, it must be
 bound to one or more fabric resources.  An endpoint that will generate
 asynchronous completions, either through data transfer operations or
 communication establishment events, must be bound to the appropriate
-completion queues or event queues before being enabled.
+completion queues or event queues, respectively, before being enabled.
+Unconnected endpoints must be bound to an address vector.
 
 Once an endpoint has been activated, it may be associated with an address
 vector.  Receive buffers may be posted to it and
@@ -379,7 +380,9 @@ contexts created using the scalable endpoint.
 This call transitions the endpoint into an enabled state.  An endpoint
 must be enabled before it may be used to perform data transfers.
 Enabling an endpoint typically results in hardware resources being
-assigned to it.
+assigned to it.  Endpoints making use of completion queues, counters,
+event queues, and/or address vectors must be bound to them before being
+enabled.
 
 Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
