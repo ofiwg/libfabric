@@ -92,7 +92,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 		}
 	}
 
-	return ret;
+	return !ret ? -FI_EAGAIN : ret;
 }
 
 static ssize_t fi_ibv_rdm_tagged_cq_read(struct fid_cq *cq, void *buf,
