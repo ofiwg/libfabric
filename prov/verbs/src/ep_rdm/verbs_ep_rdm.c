@@ -527,8 +527,15 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err;
 	}
 
-	_ep->buff_len = _ep->rndv_threshold =
-		rdm_buffer_size(info->tx_attr->inject_size);
+	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "inject_size: %d\n",
+		info->tx_attr->inject_size);
+
+	_ep->rndv_threshold = info->tx_attr->inject_size;
+	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "rndv_threshold: %d\n",
+		_ep->rndv_threshold);
+
+	_ep->buff_len = rdm_buffer_size(info->tx_attr->inject_size);
+	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "buff_len: %d\n", _ep->buff_len);
 
 	_ep->rndv_seg_size = FI_IBV_RDM_SEG_MAXSIZE;
 	if (!fi_param_get_int(&fi_ibv_prov, "rdm_rndv_seg_size", &param)) {
