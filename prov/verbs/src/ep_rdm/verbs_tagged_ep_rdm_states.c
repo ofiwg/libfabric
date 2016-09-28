@@ -163,7 +163,7 @@ fi_ibv_rdm_eager_send_ready(struct fi_ibv_rdm_request *request, void *data)
 	sge.lkey = conn->s_mr->lkey;
 
 	wr.imm_data = 0;
-	wr.opcode = p->ep->topcode;
+	wr.opcode = p->ep->eopcode;
 	struct fi_ibv_rdm_buf *sbuf = (struct fi_ibv_rdm_buf *)request->sbuf;
 	uint8_t *payload = &sbuf->payload;
 
@@ -278,7 +278,7 @@ fi_ibv_rdm_rndv_rts_send_ready(struct fi_ibv_rdm_request *request, void *data)
 		fi_ibv_rdm_get_remote_addr(conn, request->sbuf);
 	wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
 	wr.send_flags = 0;
-	wr.opcode = p->ep->topcode;
+	wr.opcode = p->ep->eopcode;
 	wr.imm_data = 0;
 
 	sge.addr = (uintptr_t)request->sbuf;
@@ -1021,7 +1021,7 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 	wr.wr_id = ((uint64_t) (uintptr_t) (void *) request);
 	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 
-	wr.opcode = p->ep->topcode;
+	wr.opcode = p->ep->eopcode;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.wr.rdma.remote_addr = 

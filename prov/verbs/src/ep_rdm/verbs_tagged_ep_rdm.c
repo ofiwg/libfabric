@@ -249,7 +249,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 			wr.send_flags = (sge.length < ep->max_inline_rc)
 				? IBV_SEND_INLINE : 0;
 			wr.imm_data = 0;
-			wr.opcode = ep->topcode;
+			wr.opcode = ep->eopcode;
 
 			sbuf->service_data.pkt_len = size;
 			sbuf->header.tag = tag;

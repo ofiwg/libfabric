@@ -491,6 +491,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		container_of(domain, struct fi_ibv_domain, domain_fid);
 	int ret = 0;
 	int param = 0;
+	char *str_param = NULL;
 
 	if (!info || !info->ep_attr || !info->domain_attr ||
 	    strncmp(_domain->verbs->device->name, info->domain_attr->name,
@@ -561,21 +562,46 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 
+	_ep->rq_wr_depth = info->rx_attr->size;
+	/* one more outstanding slot for releasing eager buffers */
+	_ep->sq_wr_depth = _ep->n_buffs + 1;
+	if (!fi_param_get_str(&fi_ibv_prov, "rdm_eager_send_opcode", &str_param)) {
+		if (!strncmp(str_param, "IBV_WR_RDMA_WRITE_WITH_IMM",
+			     strlen("IBV_WR_RDMA_WRITE_WITH_IMM"))) {
+			_ep->eopcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+		} else if (!strncmp(str_param, "IBV_WR_SEND",
+				    strlen("IBV_WR_SEND"))) {
+			_ep->eopcode = IBV_WR_SEND;
+		} else {
+			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+				"invalid value of rdm_eager_send_opcode\n");
+			ret = -FI_EINVAL;
+			goto err;
+		}
+	} else {
+		_ep->eopcode = IBV_WR_SEND;
+	}
+
 	switch (info->ep_attr->protocol) {
 	case FI_PROTO_IB_RDM:
-		/* _ep->topcode = IBV_WR_RDMA_WRITE_WITH_IMM; */
-		_ep->topcode = IBV_WR_SEND;
-		_ep->rq_wr_depth = info->rx_attr->size;
-		_ep->sq_wr_depth = _ep->n_buffs + 1;
+		if (_ep->eopcode != IBV_WR_RDMA_WRITE_WITH_IMM &&
+		    _ep->eopcode != IBV_WR_SEND) {
+			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported eager operation code\n");
+			ret = -FI_ENODATA;
+			goto err;
+		}
 		break;
 	case FI_PROTO_IWARP_RDM:
-		_ep->topcode = IBV_WR_SEND;
-		_ep->rq_wr_depth = info->rx_attr->size;
-		_ep->sq_wr_depth = _ep->n_buffs + 1;
+		if (_ep->eopcode != IBV_WR_SEND) {
+			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported eager operation code\n");
+			ret = -FI_ENODATA;
+			goto err;
+		}
 		break;
 	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Unsupported protocol\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unsupported protocol\n");
 		ret = -FI_ENODATA;
 		goto err;
 	}
