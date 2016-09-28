@@ -267,13 +267,14 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 	TAILQ_INIT(&insert->avi_req_list);
 	insert->avi_arps_left = USDF_AV_MAX_ARPS;
 
+	ret = atomic_inc(&av->av_active_inserts);
+	USDF_DBG_SYS(AV, "new active insert value: %d\n", ret);
+
 	/* If no addresses, complete now */
 	if (count == 0) {
 		usdf_av_insert_async_complete(insert);
 		return 0;
 	}
-
-	atomic_inc(&av->av_active_inserts);
 
 	req = (struct usdf_av_req *)(insert + 1);
 
