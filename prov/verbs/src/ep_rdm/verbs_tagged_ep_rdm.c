@@ -581,8 +581,18 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 	check_and_repost_receives(ep, conn);
 
-	if (rbuf->service_data.status == BUF_STATUS_RECVED &&
-	    fi_ibv_rdm_buffer_check_seq_num(rbuf, conn->recv_processed))
+	if ((rbuf->service_data.status == BUF_STATUS_RECVED) &&
+	    /* NOTE: the ibverbs bug?
+	     * In case of out of order arriving we may check seq_num only if
+	     * send was posted with IBV_WR_RDMA_WRITE_WITH_IMM opcode because
+	     * the sender controls this.
+	     * Otherwise, the sender with IBV_WR_SEND opcode consumes pre-posted
+	     * buffers in the same order as they were pre-posted by recv.
+	     * So, we should handle it as is. Potentially, this way may cause
+	     * broken ordering of completions in fi_cq.
+	     */
+	    (wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM ?
+	    fi_ibv_rdm_buffer_check_seq_num(rbuf, conn->recv_processed) : 1))
 	{
 		do {
 			assert(rbuf->service_data.pkt_len > 0);
