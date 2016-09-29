@@ -73,6 +73,13 @@ v1.4.0, TBD
 
 ## Verbs provider notes
 
+- Add fork support.
+- Fix a bug where source address info was not being returned in fi_info
+  when destination node is specified.
+
+- verbs/MSG
+  - Add fi_getopt for passive endpoints.
+  - Add support for shared RX contexts.
 - verbs/RDM
   - General bug fixes
   - Add FI_MSG capability
