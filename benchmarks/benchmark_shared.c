@@ -48,7 +48,7 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 	case 'v':
 		opts.options |= FT_OPT_VERIFY_DATA;
 		break;
-	case 'P':
+	case 'k':
 		hints->mode |= FI_MSG_PREFIX;
 		break;
 	case 'j':
@@ -65,7 +65,7 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 void ft_benchmark_usage(void)
 {
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
-	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
+	FT_PRINT_OPTS_USAGE("-k", "enable prefix mode");
 	FT_PRINT_OPTS_USAGE("-j", "maximum inject message size");
 	FT_PRINT_OPTS_USAGE("-W", "window size* (for bandwidth tests)\n\n"
 			"* The following condition is required to have at least "

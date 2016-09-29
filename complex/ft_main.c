@@ -380,13 +380,13 @@ static void ft_fw_usage(char *program)
 	FT_PRINT_OPTS_USAGE("-x", "exit after test run");
 	fprintf(stderr, "\nClient only options:\n");
 	FT_PRINT_OPTS_USAGE("-u <test_config_file>", "config file path (Either config file path or both provider and test config name are required)");
-	FT_PRINT_OPTS_USAGE("-f <provider_name>", " provider name");
+	FT_PRINT_OPTS_USAGE("-p <provider_name>", " provider name");
 	FT_PRINT_OPTS_USAGE("-t <test_config_name>", "test config name");
 	FT_PRINT_OPTS_USAGE("-y <start_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-z <end_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
-	FT_PRINT_OPTS_USAGE("-b <src_port>", "non default source port number");
-	FT_PRINT_OPTS_USAGE("-p <dst_port>", "non default destination port number"
+	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
+	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number"
 		       " (config file service parameter will override this)");
 }
 
@@ -406,12 +406,12 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "f:u:t:q:xy:z:h" ADDR_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "p:u:t:q:xy:z:h" ADDR_OPTS)) != -1) {
 		switch (op) {
 		case 'u':
 			filename = strdup(optarg);
 			break;
-		case 'f':
+		case 'p':
 			provname = strdup(optarg);
 			break;
 		case 't':

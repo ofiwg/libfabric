@@ -1628,10 +1628,10 @@ void ft_usage(char *name, char *desc)
 		fprintf(stderr, "\n%s\n", desc);
 
 	fprintf(stderr, "\nOptions:\n");
-	FT_PRINT_OPTS_USAGE("-n <domain>", "domain name");
-	FT_PRINT_OPTS_USAGE("-b <src_port>", "non default source port number");
-	FT_PRINT_OPTS_USAGE("-p <dst_port>", "non default destination port number");
-	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
+	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
+	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number");
+	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
 	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)");
 	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
@@ -1661,7 +1661,7 @@ void ft_csusage(char *name, char *desc)
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 {
 	switch (op) {
-	case 'n':
+	case 'd':
 		if (!hints->domain_attr) {
 			hints->domain_attr = malloc(sizeof *(hints->domain_attr));
 			if (!hints->domain_attr) {
@@ -1671,7 +1671,7 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 		}
 		hints->domain_attr->name = strdup(optarg);
 		break;
-	case 'f':
+	case 'p':
 		if (!hints->fabric_attr) {
 			hints->fabric_attr = malloc(sizeof *(hints->fabric_attr));
 			if (!hints->fabric_attr) {
@@ -1702,10 +1702,10 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 	case 's':
 		opts->src_addr = optarg;
 		break;
-	case 'b':
+	case 'B':
 		opts->src_port = optarg;
 		break;
-	case 'p':
+	case 'P':
 		opts->dst_port = optarg;
 		break;
 	default:
