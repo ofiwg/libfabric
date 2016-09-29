@@ -257,10 +257,10 @@ struct fi_ibv_rdm_ep {
 	int rx_selective_completion;
 
 	/*
-	 * ibv_post_send opcode for tagged messaging.
+	 * ibv_post_send opcode for eager messaging.
 	 * It must generate work completion in receive CQ
 	 */
-	enum ibv_wr_opcode topcode;
+	enum ibv_wr_opcode eopcode;
 	int buff_len;
 	int n_buffs;
 	int rq_wr_depth;    // RQ depth

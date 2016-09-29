@@ -84,10 +84,10 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 	/* IBV_WR_SEND opcode specific */
 	assert((num_to_post % ep->n_buffs) == 0);
 
-	assert(ep->topcode == IBV_WR_SEND ||
-	       ep->topcode == IBV_WR_RDMA_WRITE_WITH_IMM);
+	assert(ep->eopcode == IBV_WR_SEND ||
+	       ep->eopcode == IBV_WR_RDMA_WRITE_WITH_IMM);
 
-	if (ep->topcode == IBV_WR_SEND) {
+	if (ep->eopcode == IBV_WR_SEND) {
 		for (i = 0; i < num_to_post; i++) {
 			sge[i].addr = (uint64_t)(void *)
 			fi_ibv_rdm_get_rbuf(conn, ep, i % ep->n_buffs);

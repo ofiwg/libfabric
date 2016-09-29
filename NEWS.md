@@ -40,7 +40,8 @@ v1.4.0, TBD
   - Add fi_cntr support
   - Add environment variables for the provider tuning: FI_VERBS_RDM_BUFFER_NUM,
     FI_VERBS_RDM_BUFFER_SIZE, FI_VERBS_RDM_RNDV_SEG_SIZE,
-    FI_VERBS_RDM_CQREAD_BUNCH_SIZE, FI_VERBS_RDM_THREAD_TIMEOUT
+    FI_VERBS_RDM_CQREAD_BUNCH_SIZE, FI_VERBS_RDM_THREAD_TIMEOUT,
+    FI_VERBS_RDM_EAGER_SEND_OPCODE
   - Add iWarp support
 
 ## Sockets provider notes

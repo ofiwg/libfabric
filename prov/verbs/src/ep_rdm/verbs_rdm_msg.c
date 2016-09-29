@@ -248,7 +248,7 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 			wr.send_flags = (sge.length < ep->max_inline_rc)
 				? IBV_SEND_INLINE : 0;
 			wr.imm_data = 0;
-			wr.opcode = ep->topcode;
+			wr.opcode = ep->eopcode;
 
 			sbuf->service_data.pkt_len = size;
 			sbuf->header.tag = 0;

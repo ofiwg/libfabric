@@ -393,6 +393,11 @@ VERBS_INI
 	fi_param_define(&fi_ibv_prov, "rdm_thread_timeout", FI_PARAM_INT,
 			"the wake up timeout of the helper thread (usec) "
 			"(default: 100)");
+	fi_param_define(&fi_ibv_prov, "rdm_eager_send_opcode", FI_PARAM_STRING,
+			"the operation code that will be used for eager messaging. "
+			"Only IBV_WR_SEND and IBV_WR_RDMA_WRITE_WITH_IMM are supported. "
+			"The last one is not applicable for iWarp. "
+			"(default: IBV_WR_SEND)");
 
 	return &fi_ibv_prov;
 }
