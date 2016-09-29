@@ -303,18 +303,11 @@ int main(int argc, char **argv)
 
 	while ((op = getopt(argc, argv, "f:p:h")) != -1) {
 		switch (op) {
-		case 'f':
-			free(hints->fabric_attr->name);
-			hints->fabric_attr->name = strdup(optarg);
-			break;
-		case 'p':
-			free(hints->fabric_attr->prov_name);
-			hints->fabric_attr->prov_name = strdup(optarg);
-			break;
-		case 'h':
-			usage();
-			return EXIT_SUCCESS;
 		default:
+			ft_parseinfo(op, optarg, hints);
+			break;
+		case '?':
+		case 'h':
 			usage();
 			return EXIT_FAILURE;
 		}

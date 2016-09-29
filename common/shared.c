@@ -1661,6 +1661,16 @@ void ft_csusage(char *name, char *desc)
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 {
 	switch (op) {
+	case 'f':
+		if (!hints->fabric_attr) {
+			hints->fabric_attr = malloc(sizeof *(hints->fabric_attr));
+			if (!hints->fabric_attr) {
+				perror("malloc");
+				exit(EXIT_FAILURE);
+			}
+		}
+		hints->fabric_attr->name = strdup(optarg);
+		break;
 	case 'd':
 		if (!hints->domain_attr) {
 			hints->domain_attr = malloc(sizeof *(hints->domain_attr));

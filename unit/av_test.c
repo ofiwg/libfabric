@@ -997,13 +997,13 @@ int main(int argc, char **argv)
 	int failed;
 
 	opts = INIT_OPTS;
-        opts.options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "p:g:G:n:f:s:h")) != -1) {
+	while ((op = getopt(argc, argv, "f:p:g:G:n:s:h")) != -1) {
 		switch (op) {
 		case 'g':
 			good_address = optarg;
@@ -1011,24 +1011,17 @@ int main(int argc, char **argv)
 		case 'G':
 			bad_address = optarg;
 			break;
-		case 'f':
-			free(hints->fabric_attr->name);
-			hints->fabric_attr->name = strdup(optarg);
-			break;
 		case 'n':
 			num_good_addr = atoi(optarg);
-			break;
-		case 'p':
-			free(hints->fabric_attr->prov_name);
-			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		case 's':
 			opts.src_addr = optarg;
 			break;
-		case 'h':
-			usage();
-			return EXIT_SUCCESS;
 		default:
+			ft_parseinfo(op, optarg, hints);
+			break;
+		case '?':
+		case 'h':
 			usage();
 			return EXIT_FAILURE;
 
