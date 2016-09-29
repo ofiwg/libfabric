@@ -320,7 +320,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using message endpoints.");
+			ft_csusage(argv[0], "Streaming RDM client-server using multi recv buffer.");
 			return EXIT_FAILURE;
 		}
 	}

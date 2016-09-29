@@ -35,8 +35,8 @@ These tests are a mix of very basic functionality tests that show major features
 	fi_rdm_rma_trigger: A simple RDM client-server example that uses triggered RMA
 	fi_rdm_shared_av: A simple RDM client-server example where av is shared between two child processes
 	fi_rdm_tagged_peek: An RDM client-server example that uses tagged FI_PEEK
-	fi_shared_ctx: An client-server example that uses shared context
-	fi_scalable_ep: An RDM client-server example with scalable endpoints
+	fi_shared_ctx: A client-server example that uses shared context
+	fi_scalable_ep: A RDM client-server example with scalable endpoints
 	fi_cm_data: A MSG client-server example that uses CM data
 
 ## Benchmarks
@@ -44,20 +44,23 @@ These tests are a mix of very basic functionality tests that show major features
 The client and the server exchange messages in a ping-pong manner for various messages sizes and report latency numbers.
 
 	fi_msg_pingpong: A ping-pong client-server example using MSG endpoints
+	fi_msg_bw: A bandwidth test for MSG endpoints
+	fi_rma_bw: A bandwidth test using RMA operations
 	fi_rdm_pingpong: A ping-pong client-server example using RDM endpoints
-	fi_rdm_cntr_pingpong: An RDM ping pong client-server using counters
-	fi_rdm_pingpong: An RDM ping-pong client-server example using inject
+	fi_rdm_cntr_pingpong: A RDM ping pong client-server using counters
 	fi_rdm_tagged_pingpong: A ping-pong client-server example using tagged messages
+	fi_rdm_tagged_bw: A bandwidth test for RDM endpoints with tagged messages
 	fi_dgram_pingpong: A ping-pong client-server example using DGRAM endpoints
 
 ## Streaming
 
 These are one way streaming data tests.
 
+	fi_msg_stream: A basic streaming client-server example using MSG endpoints
 	fi_msg_rma: A streaming client-server example using RMA operations between MSG endpoints
 	fi_rdm_rma: A streaming client-server example using RMA operations
-	fi_rdm_atomic: An RDM streaming client-server using atomic operations
-	fi_rdm_multi_recv: An RDM streaming client-server example using multi recv buffer
+	fi_rdm_atomic: A RDM streaming client-server using atomic operations
+	fi_rdm_multi_recv: A RDM streaming client-server example using multi recv buffer
 
 ## Unit
 	 fi_eq_test: Unit tests for event queue

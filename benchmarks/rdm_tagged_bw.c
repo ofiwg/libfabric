@@ -97,7 +97,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using tagged messages.");
+			ft_csusage(argv[0], "Bandwidth test for RDM endpoints using tagged messages.");
 			ft_benchmark_usage();
 			return EXIT_FAILURE;
 		}

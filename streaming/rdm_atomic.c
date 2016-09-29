@@ -520,7 +520,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using atomic ops.");
+			ft_csusage(argv[0], "Streaming RDM client-server using atomic operations.");
 			FT_PRINT_OPTS_USAGE("-o <op>", "atomic op type: all|min|max|sum|prod|lor|");
 			FT_PRINT_OPTS_USAGE("", "land|bor|band|lxor|bxor|read|write|cswap|cswap_ne|"
 					"cswap_le|cswap_lt|");
