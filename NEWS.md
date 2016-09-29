@@ -84,6 +84,14 @@ v1.4.0, TBD
 
 - The mxm provider has been deprecated and will be replaced in a future release.
 
+## UDP provider
+
+- Enhance parameter checks for several function calls.
+- Fix memory leak freeing CQ structure.
+- Bind to a source address when enabling endpoint.
+- Reduce reported resource limits (domain attributes).
+
+
 v1.3.0, Mon Apr 11, 2016
 ========================
 
