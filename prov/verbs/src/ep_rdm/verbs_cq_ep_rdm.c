@@ -65,7 +65,8 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 			cq_entry, cq_entry->context, cq_entry->len,
 			cq_entry->minfo.tag);
 
-		src_addr[ret] = (fi_addr_t) (uintptr_t) cq_entry->minfo.conn;
+		src_addr[ret] =
+			_cq->ep->av->conn_to_addr(_cq->ep, cq_entry->minfo.conn);
 		entry[ret].op_context = cq_entry->context;
 		entry[ret].flags = (cq_entry->comp_flags & ~FI_COMPLETION);
 		entry[ret].len = cq_entry->len;

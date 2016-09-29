@@ -36,7 +36,7 @@
 
 #include <fi_enosys.h>
 #include "fi_verbs.h"
-
+#include "ep_rdm/verbs_rdm.h"
 
 static int fi_ibv_av_close(fid_t fid)
 {
@@ -50,6 +50,41 @@ static struct fi_ops fi_ibv_fi_ops = {
 	.close = fi_ibv_av_close,
 	.bind = fi_no_bind,
 };
+
+static inline struct fi_ibv_rdm_conn *
+fi_ibv_rdm_av_tbl_idx_to_conn(struct fi_ibv_rdm_ep *ep, fi_addr_t addr)
+{
+	return (addr == FI_ADDR_UNSPEC) ? NULL : ep->domain->rdm_cm->conn_table[addr];
+}
+
+static inline struct fi_ibv_rdm_conn *
+fi_ibv_rdm_av_map_addr_to_conn(struct fi_ibv_rdm_ep *ep, fi_addr_t addr)
+{
+	return (struct fi_ibv_rdm_conn *)
+		(addr == FI_ADDR_UNSPEC ? NULL : (void *)addr);
+}
+
+static inline fi_addr_t
+fi_ibv_rdm_to_conn_to_av_tbl_idx(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn)
+{
+	size_t i;
+	if (conn == NULL)
+		return FI_ADDR_UNSPEC;
+
+	for (i = 0; i < ep->av->used; i++) {
+		if (ep->domain->rdm_cm->conn_table[i] == conn) {
+			return i;
+		}
+	}
+
+	return FI_ADDR_UNSPEC;
+}
+
+static inline fi_addr_t
+fi_ibv_rdm_conn_to_av_map_addr(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn)
+{
+	return (conn == NULL) ? FI_ADDR_UNSPEC : (fi_addr_t)(uintptr_t)conn;
+}
 
 /* TODO: match rest of verbs code for variable naming */
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -85,6 +120,24 @@ int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av->domain = fid_domain;
 	av->type = attr->type;
 	av->count = count;
+	av->used = 0;
+
+	if (av->type == FI_AV_TABLE && av->count > 0) {
+		av->domain->rdm_cm->conn_table =
+			calloc(av->count, sizeof(*av->domain->rdm_cm->conn_table));
+		if (!av->domain->rdm_cm->conn_table) {
+			free(av);
+			return -ENOMEM;
+		}
+	}
+
+	if (av->type == FI_AV_MAP) {
+		av->addr_to_conn = fi_ibv_rdm_av_map_addr_to_conn;
+		av->conn_to_addr = fi_ibv_rdm_conn_to_av_map_addr;
+	} else /* if (av->type == FI_AV_TABLE) */ {
+		av->addr_to_conn = fi_ibv_rdm_av_tbl_idx_to_conn;
+		av->conn_to_addr = fi_ibv_rdm_to_conn_to_av_tbl_idx;
+	}
 
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	av->av_fid.fid.context = context;

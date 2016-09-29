@@ -50,9 +50,7 @@ static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_EMSGSIZE;
 	}
 
-	struct fi_ibv_rdm_conn *conn =
-		(msg->addr == FI_ADDR_UNSPEC) ? NULL :
-		(struct fi_ibv_rdm_conn *) msg->addr;
+	struct fi_ibv_rdm_conn *conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr);
 
 	struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
 		.peek_data = {
@@ -131,8 +129,8 @@ static ssize_t fi_ibv_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
 
 	struct fi_ibv_rdm_send_start_data sdata = {
-		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
-		.conn = (struct fi_ibv_rdm_conn *) msg->addr,
+		.ep_rdm = ep_rdm,
+		.conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr),
 		.data_len = 0,
 		.context = msg->context,
 		.flags = FI_TAGGED | FI_SEND | (ep_rdm->tx_selective_completion ?
@@ -215,9 +213,9 @@ static ssize_t fi_ibv_rdm_send(struct fid_ep *ep, const void *buf, size_t len,
 static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 				 size_t len, fi_addr_t dest_addr)
 {
-	struct fi_ibv_rdm_conn *conn = (struct fi_ibv_rdm_conn *)dest_addr;
 	struct fi_ibv_rdm_ep *ep =
 		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
+	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
 
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
