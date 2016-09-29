@@ -447,6 +447,13 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 				attr->flags, FI_EVENT);
 			return -FI_EINVAL;
 		}
+
+		if (attr->name) {
+			FI_INFO(&psmx2_prov, FI_LOG_AV,
+				"attr->name=%s, named AV is not supported\n",
+				attr->name);
+			return -FI_EINVAL;
+		}
 	}
 
 	av_priv = (struct psmx2_fid_av *) calloc(1, sizeof *av_priv);
