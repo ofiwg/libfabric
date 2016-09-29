@@ -46,6 +46,19 @@ enum {
 	FT_EP_CNT,
 };
 
+enum ft_ep_state {
+	FT_EP_STATE_INIT,
+	FT_EP_CONNECT_RCVD,
+	FT_EP_CONNECTING,
+	FT_EP_CONNECTED,
+};
+
+struct ep_info {
+	struct fid_ep *ep;
+	struct fi_info *fi;
+	enum ft_ep_state state;
+};
+
 static struct fi_info *fi_dup;
 static int tx_shared_ctx = 1;
 static int rx_shared_ctx = 1;
@@ -452,72 +465,99 @@ static int server_connect(void)
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
 	ssize_t rd;
-	int ret, i, j;
+	int ret, k;
+	int num_conn_reqs = 0, num_connected = 0;
+	struct ep_info *ep_state_array = NULL;
 
 	ep_array = calloc(ep_cnt, sizeof(*ep_array));
 	if (!ep_array)
 		return -FI_ENOMEM;
 
-	for (i = 0; i < ep_cnt; i++) {
+	ep_state_array = calloc(ep_cnt, sizeof(*ep_state_array));
+	if (!ep_state_array)
+		return -FI_ENOMEM;
+
+	while (num_connected != ep_cnt) {
 		rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 		if (rd != sizeof entry) {
-			FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
+			FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "cm-event");
 			ret = (int) rd;
 			goto err;
 		}
 
-		if (event != FI_CONNREQ) {
-			fprintf(stderr, "Unexpected CM event %d\n", event);
-			ret = -FI_EOTHER;
-			goto err;
-		}
-		fi = entry.info;
-
-		if (!domain) {
-			ret = fi_domain(fabric, fi, &domain, NULL);
-			if (ret) {
-				FT_PRINTERR("fi_domain", ret);
+		switch(event) {
+		case FI_CONNREQ:
+			if (num_conn_reqs == ep_cnt) {
+				fprintf(stderr, "Unexpected CM event %d\n", event);
+				ret = -FI_EOTHER;
 				goto err;
 			}
-		}
+			fi = ep_state_array[num_conn_reqs].fi = entry.info;
+			ep_state_array[num_conn_reqs].state = FT_EP_CONNECT_RCVD;
 
-		if (!i) {
-			ret = alloc_ep_res(fi);
+			if (num_conn_reqs == 0) {
+				ret = fi_domain(fabric, fi, &domain, NULL);
+				if (ret) {
+					FT_PRINTERR("fi_domain", ret);
+					goto err;
+				}
+
+				ret = alloc_ep_res(fi);
+				if (ret)
+					goto err;
+			}
+
+			ret = fi_endpoint(domain, fi, &ep_array[num_conn_reqs], NULL);
+			if (ret) {
+				FT_PRINTERR("fi_endpoint", ret);
+				goto err;
+			}
+
+			ep_state_array[num_conn_reqs].ep = ep_array[num_conn_reqs];
+			ret = bind_ep_res(ep_array[num_conn_reqs]);
 			if (ret)
-				return ret;
-		}
+				goto err;
 
-		ret = fi_endpoint(domain, fi, &ep_array[i], NULL);
-		if (ret) {
-			FT_PRINTERR("fi_endpoint", ret);
-			return ret;
-		}
+			ret = fi_accept(ep_array[num_conn_reqs], NULL, 0);
+			if (ret) {
+				FT_PRINTERR("fi_accept", ret);
+				goto err;
+			}
 
-		ret = bind_ep_res(ep_array[i]);
-		if (ret)
-			goto err;
+			ep_state_array[num_conn_reqs].state = FT_EP_CONNECTING;
+			num_conn_reqs++;
+			break;
 
-		ret = fi_accept(ep_array[i], NULL, 0);
-		if (ret) {
-			FT_PRINTERR("fi_accept", ret);
-			goto err;
-		}
+		case FI_CONNECTED:
+			if (num_conn_reqs <= num_connected) {
+				ret = -FI_EOTHER;
+				goto err;
+			}
 
-		rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-		if (rd != sizeof entry) {
-			FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
-			ret = (int) rd;
-			goto err;
-		}
+			for (k = 0; k < num_conn_reqs; k++) {
+				if (ep_state_array[k].state != FT_EP_CONNECTING)
+					continue;
+				if (&ep_state_array[k].ep->fid == entry.fid) {
+					ep_state_array[k].state = FT_EP_CONNECTED;
+					num_connected++;
+					if (num_connected != ep_cnt)
+						fi_freeinfo(ep_state_array[k].fi);
+					break;
+				}
+			}
 
-		if (event != FI_CONNECTED || entry.fid != &ep_array[i]->fid) {
-			fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-				event, entry.fid, ep);
+			if (k == num_conn_reqs) {
+				fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+					event, entry.fid, ep);
+				ret = -FI_EOTHER;
+				goto err;
+			}
+			break;
+
+		default:
 			ret = -FI_EOTHER;
 			goto err;
 		}
-		if (i < ep_cnt - 1)
-			fi_freeinfo(fi);
 	}
 
 	/* Post recv */
@@ -526,14 +566,29 @@ static int server_connect(void)
 	else
 		ret = ft_post_rx(ep_array[0], MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 	if (ret)
-		return ret;
+		goto err;
 
+	free(ep_state_array);
 	return 0;
 err:
-	for (j = 0; j < i; j++)
-		fi_shutdown(ep_array[j], 0);
-	if (i < ep_cnt)
-		fi_reject(pep, fi->handle, NULL, 0);
+	for (k = 0; k < ep_cnt; k++) {
+		switch(ep_state_array[k].state) {
+		case FT_EP_CONNECT_RCVD:
+			fi_reject(pep, ep_state_array[k].fi->handle, NULL, 0);
+			break;
+
+		case FT_EP_CONNECTING:
+		case FT_EP_CONNECTED:
+			fi_shutdown(ep_state_array[k].ep, 0);
+			break;
+
+		case FT_EP_STATE_INIT:
+		default:
+			break;
+		}
+	}
+
+	free(ep_state_array);
 	return ret;
 }
 
