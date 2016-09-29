@@ -120,6 +120,7 @@ void api_cq_setup(void)
 		cr_assert(!ret, "fi_getinfo");
 	}
 
+	memset(&attr, 0, sizeof(attr));
 	attr.type = FI_AV_MAP;
 	attr.count = NUMEPS;
 

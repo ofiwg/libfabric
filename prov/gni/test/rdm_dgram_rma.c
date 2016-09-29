@@ -123,6 +123,7 @@ void common_setup(void)
 	ret = fi_open_ops(&dom[0]->fid, FI_GNI_DOMAIN_OPS_1,
 			  0, (void **) gni_domain_ops, NULL);
 
+	memset(&attr, 0, sizeof(attr));
 	attr.type = FI_AV_MAP;
 	attr.count = 2;
 

@@ -112,6 +112,7 @@ static inline void cntr_setup_eps(void)
 	ret = fi_domain(fab, fi, &dom, NULL);
 	cr_assert(!ret, "fi_domain");
 
+	memset(&attr, 0, sizeof(attr));
 	attr.type = FI_AV_MAP;
 	attr.count = 16;
 
