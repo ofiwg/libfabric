@@ -228,6 +228,8 @@ struct util_cntr {
 	struct fid_cntr		cntr_fid;
 	struct util_domain	*domain;
 	atomic_t		ref;
+	uint64_t		checkpoint_cnt;
+	uint64_t		checkpoint_err;
 };
 
 
@@ -510,8 +512,6 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 struct fid_list_entry {
 	struct dlist_entry	entry;
 	struct fid		*fid;
-
-	uint64_t		last_cntr_val;
 };
 
 int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,

@@ -99,8 +99,13 @@ static int util_poll_run(struct fid_poll *poll_fid, void **context, int count)
 			cntr = container_of(fid_entry->fid, struct util_cntr,
 					    cntr_fid.fid);
 			val = fi_cntr_read(&cntr->cntr_fid);
-			if ((ret = (val != fid_entry->last_cntr_val)))
-				fid_entry->last_cntr_val = val;
+			if ((ret = (val != cntr->checkpoint_cnt))) {
+				cntr->checkpoint_cnt = val;
+			} else {
+				val = fi_cntr_readerr(&cntr->cntr_fid);
+				if ((ret = (val != cntr->checkpoint_err)))
+					cntr->checkpoint_err = val;
+			}
 			break;
 		case FI_CLASS_EQ:
 			eq = container_of(fid_entry->fid, struct util_eq,
