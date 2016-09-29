@@ -12,6 +12,10 @@ v1.4.0, TBD
   about the fabric and domain name. Change port to `-P` and provider to `-p` to
   be more in line with fi_pingpong.
 
+## MXM provider
+
+- The mxm provider has been deprecated and will be replaced in a future release.
+
 ## PSM provider notes
 
 - General bug fixes
@@ -23,26 +27,6 @@ v1.4.0, TBD
 - General bug fixes
 - Add support for multi-iov RMA read and aromic operations
 - Allow multi-recv to post buffer larger than message size limit
-
-## verbs provider notes
-
-- verbs/RDM
-  - General bug fixes
-  - Add FI_MSG capability
-  - Add FI_PEEK and FI_CLAIM flags support
-  - Add completion flags support
-  - Add selective completion support
-  - Add fi_cq_readerr support
-  - Add possibility to set IPoIB network interface via FI_VERBS_IFACE
-    environment variable
-  - Add large data transfer support (> 1 GB)
-  - Add FI_AV_TABLE support
-  - Add fi_cntr support
-  - Add environment variables for the provider tuning: FI_VERBS_RDM_BUFFER_NUM,
-    FI_VERBS_RDM_BUFFER_SIZE, FI_VERBS_RDM_RNDV_SEG_SIZE,
-    FI_VERBS_RDM_CQREAD_BUNCH_SIZE, FI_VERBS_RDM_THREAD_TIMEOUT,
-    FI_VERBS_RDM_EAGER_SEND_OPCODE
-  - Add iWarp support
 
 ## Sockets provider notes
 
@@ -80,17 +64,32 @@ v1.4.0, TBD
   and cleanup conn map during fi_av_remove
 - Use correct fi_tx_attr/fi_rx_attr for scalable ep
 
-## MXM provider
-
-- The mxm provider has been deprecated and will be replaced in a future release.
-
-## UDP provider
+## UDP provider notes
 
 - Enhance parameter checks for several function calls.
 - Fix memory leak freeing CQ structure.
 - Bind to a source address when enabling endpoint.
 - Reduce reported resource limits (domain attributes).
 
+## Verbs provider notes
+
+- verbs/RDM
+  - General bug fixes
+  - Add FI_MSG capability
+  - Add FI_PEEK and FI_CLAIM flags support
+  - Add completion flags support
+  - Add selective completion support
+  - Add fi_cq_readerr support
+  - Add possibility to set IPoIB network interface via FI_VERBS_IFACE
+    environment variable
+  - Add large data transfer support (> 1 GB)
+  - Add FI_AV_TABLE support
+  - Add fi_cntr support
+  - Add environment variables for the provider tuning: FI_VERBS_RDM_BUFFER_NUM,
+    FI_VERBS_RDM_BUFFER_SIZE, FI_VERBS_RDM_RNDV_SEG_SIZE,
+    FI_VERBS_RDM_CQREAD_BUNCH_SIZE, FI_VERBS_RDM_THREAD_TIMEOUT,
+    FI_VERBS_RDM_EAGER_SEND_OPCODE
+  - Add iWarp support
 
 v1.3.0, Mon Apr 11, 2016
 ========================
