@@ -654,7 +654,6 @@ static void *sock_cm_accept_handler(void *data)
 	ep_attr->cm.is_connected = 1;
 	ep_attr->cm.do_listen = 1;
 	ep_attr->cm.sock = hreq->sock_fd;
-	hreq->is_connected = 1;
 	sock_ep_wait_shutdown(hreq->ep);
 
 	if (pthread_join(hreq->req_handler, NULL))
@@ -685,6 +684,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 
 	handle->ep = _ep;
 	handle->paramlen = 0;
+	handle->is_accepted = 1;
 	if (paramlen) {
 		handle->paramlen = paramlen;
 		memcpy(handle->cm_data, param, paramlen);
@@ -1080,7 +1080,7 @@ static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 	_pep = container_of(pep, struct sock_pep, pep);
 	hreq = container_of(handle, struct sock_conn_req_handle, handle);
 	req = hreq->req;
-	if (!req || hreq->handle.fclass != FI_CLASS_CONNREQ || hreq->is_connected)
+	if (!req || hreq->handle.fclass != FI_CLASS_CONNREQ || hreq->is_accepted)
 		return -FI_EINVAL;
 
 	hreq->paramlen = 0;
