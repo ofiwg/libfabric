@@ -136,13 +136,20 @@ Removes an completion queue or counter from a poll set.
 ## fi_poll
 
 Progresses all completion queues and counters associated with a poll set
-and checks for events.  If events have occurred, contexts associated
+and checks for events.  If events might have occurred, contexts associated
 with the completion queues and/or counters are returned.  Completion
 queues will return their context if they are not empty.  The context
 associated with a counter will be returned if the counter's success
-value or error value have changed since the last time fi_poll was
-called.  The number of contexts is limited to the size of the context
-array, indicated by the count parameter.
+value or error value have changed since the last time fi_poll, fi_cntr_set,
+or fi_cntr_add were called.  The number of contexts is limited to the
+size of the context array, indicated by the count parameter.
+
+Note that fi_poll only indicates that events might be available.  In some
+cases, providers may consume such events internally, to drive progress, for
+example.  This can result in fi_poll returning false positives.  Applications
+should drive their progress based on the results of reading events from a
+completion queue or reading counter values.  The fi_poll function will always
+return all completion queues and counters that do have new events.
 
 ## fi_wait_open
 
