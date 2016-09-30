@@ -71,6 +71,32 @@ v1.4.0, TBD
 - Bind to a source address when enabling endpoint.
 - Reduce reported resource limits (domain attributes).
 
+## usNIC provider notes
+- Fix handling of EP_MSG peers on different IP subnets [PR #1988]
+- Fix handling of CM data. Fixes a bug where data received would overwrite
+  parts of the connection management structure [PR #1991]
+- Fix bug in CM connect/accept handling that would cause a seg fault if data
+  was sent as part of a connection request [PR #1991]
+- Fix invalid completion lengths in the MSG and RDM endpoint implementations of
+  fi_recvv and fi_recvmsg [PR #2026]
+- Implement the FI_CM_DATA_SIZE option for fi_getopt on passive endpoints
+  [PR #2033]
+- Add fi_reject implementation that supports data exchange [PR #2038]
+- Fix fi_av_straddr bug that reported port in network order [PR #2244]
+- Report -FI_EOPBADSTATE if the size left functions are used on an endpoint
+  which has not been enabled [PR #2266]
+- Change the domain/fabric naming. The fabric is now represented as the network
+  address in the form of a.b.c.d/e and the domain name is the usNIC device
+  name. For more information see fi_usnic(7) [PR #2287]
+- Fix the domain name matching in fi_getinfo/fi_domain [PR #2298]
+- Fix issue with AV where it is fully closed before pending asynchronous
+  inserts can finish leading to invalid data accesses [PR #2397]
+- Free all data associated with AV when fi_av_close is called [PR #2397]
+- Fail with -FI_EINVAL if a value of FI_ADDR_NOTAVAIL is given to fi_av_lookup.
+  [PR #2397]
+- Verify AV attributes and return an error if anything that is unsupported is
+  requested (FI_AV_TABLE, named AVs, FI_READ, etc.) [PR #2397]
+
 ## Verbs provider notes
 
 - Add fork support.
