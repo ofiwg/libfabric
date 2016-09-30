@@ -44,8 +44,8 @@ void ft_unit_usage(char *name, char *desc)
 		fprintf(stderr, "\n%s\n", desc);
 
 	fprintf(stderr, "\nOptions:\n");
-	FT_PRINT_OPTS_USAGE("-a <fabric_name>", "specific fabric to use");
-	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-f <fabric_name>", "specific fabric to use");
+	FT_PRINT_OPTS_USAGE("-p <provider_name>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 }
 

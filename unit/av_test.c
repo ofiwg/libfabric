@@ -59,12 +59,10 @@
 char *good_address;
 int num_good_addr;
 char *bad_address;
-static char *src_addr_str = NULL;
 
 static enum fi_av_type av_type;
 
 static char err_buf[512];
-
 
 static int
 check_eq_readerr(struct fid_eq *eq, fid_t fid, void *context, int index)
@@ -998,36 +996,32 @@ int main(int argc, char **argv)
 	int op, ret;
 	int failed;
 
+	opts = INIT_OPTS;
+	opts.options |= FT_OPT_SIZE;
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:d:D:n:a:s:h")) != -1) {
+	while ((op = getopt(argc, argv, "f:p:g:G:n:s:h")) != -1) {
 		switch (op) {
-		case 'd':
+		case 'g':
 			good_address = optarg;
 			break;
-		case 'D':
+		case 'G':
 			bad_address = optarg;
-			break;
-		case 'a':
-			free(hints->fabric_attr->name);
-			hints->fabric_attr->name = strdup(optarg);
 			break;
 		case 'n':
 			num_good_addr = atoi(optarg);
 			break;
-		case 'f':
-			free(hints->fabric_attr->prov_name);
-			hints->fabric_attr->prov_name = strdup(optarg);
-			break;
 		case 's':
-			src_addr_str = optarg;
+			opts.src_addr = optarg;
 			break;
-		case 'h':
-			usage();
-			return EXIT_SUCCESS;
 		default:
+			ft_parseinfo(op, optarg, hints);
+			break;
+		case '?':
+		case 'h':
 			usage();
 			return EXIT_FAILURE;
 
@@ -1035,7 +1029,7 @@ int main(int argc, char **argv)
 	}
 
 	if (good_address == NULL ||  num_good_addr == 0) {
-		printf("Test requires -d  and -n\n");
+		printf("Test requires -g  and -n\n");
 		return EXIT_FAILURE;
 	}
 
@@ -1050,7 +1044,8 @@ int main(int argc, char **argv)
 
 	// TODO make this test accept endpoint type argument
 	hints->ep_attr->type = FI_EP_RDM;
-	ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, 0, FI_SOURCE, hints, &fi);
+
 	if (ret && ret != -FI_ENODATA) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err;
@@ -1058,7 +1053,7 @@ int main(int argc, char **argv)
 
 	if (ret == -FI_ENODATA) {
 		hints->ep_attr->type = FI_EP_DGRAM;
-		ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
+		ret = fi_getinfo(FT_FIVERSION, opts.src_addr, 0, FI_SOURCE, hints, &fi);
 		if (ret) {
 			FT_PRINTERR("fi_getinfo", ret);
 			goto err;

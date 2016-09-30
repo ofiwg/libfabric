@@ -131,8 +131,8 @@ short_tests=(
 standard_tests=(
 	"msg_pingpong"
 	"msg_pingpong -v"
-	"msg_pingpong -P"
-	"msg_pingpong -P -v"
+	"msg_pingpong -k"
+	"msg_pingpong -k -v"
 	"msg_bw"
 	"rma_bw -e msg -o write"
 	"rma_bw -e msg -o read"
@@ -149,8 +149,8 @@ standard_tests=(
 	"rdm_multi_recv"
 	"rdm_pingpong"
 	"rdm_pingpong -v"
-	"rdm_pingpong -P"
-	"rdm_pingpong -P -v"
+	"rdm_pingpong -k"
+	"rdm_pingpong -k -v"
 	"rdm_rma -o write"
 	"rdm_rma -o read"
 	"rdm_rma -o writedata"
@@ -158,13 +158,13 @@ standard_tests=(
 	"rdm_tagged_bw"
 	"dgram_pingpong"
 	"dgram_pingpong -v"
-	"dgram_pingpong -P"
-	"dgram_pingpong -P -v"
+	"dgram_pingpong -k"
+	"dgram_pingpong -k -v"
 	"rc_pingpong"
 )
 
 unit_tests=(
-	"av_test -d GOOD_ADDR -n 1 -s SERVER_ADDR"
+	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR"
 	"dom_test -n 2"
 	"eq_test"
 	"cq_test"
@@ -266,7 +266,7 @@ function unit_test {
 	local test=$1
 	local is_neg=$2
 	local ret1=0
-	local test_exe=$(echo "fi_${test} -f $PROV" | \
+	local test_exe=$(echo "fi_${test} -p $PROV" | \
 	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${S_INTERFACE}/g")
 	local start_time
 	local end_time
@@ -317,7 +317,7 @@ function cs_test {
 	local test=$1
 	local ret1=0
 	local ret2=0
-	local test_exe="fi_${test} -f ${PROV}"
+	local test_exe="fi_${test} -p ${PROV}"
 	local start_time
 	local end_time
 	local test_time
@@ -389,7 +389,7 @@ function complex_test {
 	p1=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE -f ${PROV} -t $config $S_INTERFACE"
+	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE -p ${PROV} -t $config $S_INTERFACE"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "$c_cmd" &> $c_outp &
 	p2=$!
 

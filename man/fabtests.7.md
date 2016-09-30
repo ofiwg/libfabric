@@ -91,16 +91,16 @@ These are comprehensive latency and bandwidth tests that can handle a variety of
 
 The common options for most of the tests are listed below. Individual tests may have additional options.
 
-*-f <provider_name>*
+*-p <provider_name>*
 : The name of the underlying fabric provider e.g. sockets, verbs, psm etc. If the provider name is not provided, the test will pick one from the list of the available providers it finds by fi_getinfo call.
 
-*-n <domain>*
+*-d <domain>*
 : The name of the the specific domain to be used.
 
-*-b <src_port>*
+*-B <src_port>*
 : The non-default source port number of the endpoint.
 
-*-p <dest_port>*
+*-P <dest_port>*
 : The non-default destination port number of the endpoint.
 
 *-s <src_addr>*
@@ -128,15 +128,15 @@ The common options for most of the tests are listed below. Individual tests may 
 
 ## A simple example
 
-	run server: <test_name> -f <provider_name> -s <source_addr>
-		e.g.	fi_msg_rma -f sockets -s 192.168.0.123
-	run client: <test_name> <server_addr> -f <provider_name>
-		e.g.	fi_msg_rma 192.168.0.123 -f sockets
+	run server: <test_name> -p <provider_name> -s <source_addr>
+		e.g.	fi_msg_rma -p sockets -s 192.168.0.123
+	run client: <test_name> <server_addr> -p <provider_name>
+		e.g.	fi_msg_rma 192.168.0.123 -p sockets
 
 ## An example with various options
 
-	run server: fi_rdm_atomic -f psm -s 192.168.0.123 -I 1000 -S 1024
-	run client: fi_rdm_atomic 192.168.0.123 -f psm -I 1000 -S 1024
+	run server: fi_rdm_atomic -p psm -s 192.168.0.123 -I 1000 -S 1024
+	run client: fi_rdm_atomic 192.168.0.123 -p psm -I 1000 -S 1024
 
 This will run "fi_rdm_atomic" for all atomic operations with
 

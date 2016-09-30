@@ -186,8 +186,8 @@ extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
-#define ADDR_OPTS "b:p:s:a:"
-#define INFO_OPTS "n:f:e:"
+#define ADDR_OPTS "B:P:s:a:"
+#define INFO_OPTS "d:p:e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 
 extern char default_port[8];
