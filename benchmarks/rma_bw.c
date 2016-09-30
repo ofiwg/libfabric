@@ -116,7 +116,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "RMA bandwidth test for MSG endpoints.");
+			ft_csusage(argv[0], "Bandwidth test using RMA operations.");
 			ft_benchmark_usage();
 			FT_PRINT_OPTS_USAGE("-o <op>", "rma op type: read|write|"
 					"writedata (default: write)\n");

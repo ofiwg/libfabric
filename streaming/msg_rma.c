@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using message RMA.");
+			ft_csusage(argv[0], "Streaming client-server using RMA operations between MSG endpoints.");
 			fprintf(stderr, "  -o <op>\trma op type: read|write|writedata (default: write)]\n");
 			return EXIT_FAILURE;
 		}

@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Streaming client and server using message endpoints.");
+			ft_csusage(argv[0], "Simple streaming client and server using MSG endpoints.");
 			return EXIT_FAILURE;
 		}
 	}
