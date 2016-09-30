@@ -538,8 +538,7 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err3;
 	}
 
-	size = attr->size ? attr->size :
-		MIN(VERBS_DEF_CQ_SIZE, _cq->domain->info->domain_attr->cq_cnt);
+	size = attr->size ? attr->size : VERBS_DEF_CQ_SIZE;
 
 	_cq->cq = ibv_create_cq(_cq->domain->verbs, size, _cq, _cq->channel,
 			attr->signaling_vector);

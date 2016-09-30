@@ -87,6 +87,9 @@
 	OFI_Q_READERR(prov, log, eq, "eq", fi_eq_readerr, 	\
 			fi_eq_strerror, ret, err_entry)
 
+#define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
+#define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
+
 enum fi_match_type {
 	FI_MATCH_EXACT,
 	FI_MATCH_PREFIX,
