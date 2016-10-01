@@ -5,7 +5,7 @@ Summary: Test suite for libfabric API
 Group: System Environment/Libraries
 License: GPLv2 or BSD
 Url: http://www.github.com/ofiwg/fabtests
-Source: http://www.openfabrics.org/downloads/ofi/%{name}-%{version}.tar.bz2
+Source: http://www.github.org/ofiwg/%{name}/releases/download/v{%version}/%{name}-%{version}.tar.bz2
 Requires: libfabric
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
