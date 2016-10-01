@@ -121,26 +121,32 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 {
 	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
 	struct fi_ibv_rdm_ep *ep = av->ep;
-	int i,  ret = 0;
+	size_t i;
+	int ret = 0;
 
 	if (ep) {
 		pthread_mutex_lock(&ep->cm_lock);
 	}
 
-	if (av->type == FI_AV_TABLE) {
-		void *p = realloc(av->domain->rdm_cm->conn_table,
-				(av->count + count * sizeof(*av->domain->rdm_cm->conn_table)));
-		if (p) {
-			av->domain->rdm_cm->conn_table = p;
-		} else {
-			ret = -FI_ENOMEM;
-			goto out;
+	if (av->used + count > av->count) {
+		const size_t new_av_count = av->used + count;
+		if (av->type == FI_AV_TABLE) {
+			void *p = realloc(av->domain->rdm_cm->conn_table,
+					  (new_av_count *
+					  sizeof(*av->domain->rdm_cm->conn_table)));
+			if (p) {
+				av->domain->rdm_cm->conn_table = p;
+			} else {
+				ret = -FI_ENOMEM;
+				goto out;
+			}
 		}
+		av->count = new_av_count;
 	}
 
 	for (i = 0; i < count; i++) {
 		struct fi_ibv_rdm_conn *conn = NULL;
-		void *addr_i = (char *) addr +
+		void *addr_i = (uint8_t *) addr +
 			i * (ep ? ep->addrlen : FI_IBV_RDM_DFLT_ADDRLEN);
 
 		if (!fi_ibv_rdm_av_is_valid_address(addr_i)) {
@@ -162,7 +168,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			 * It could be found if the connection was initiated by the remote
 			 * side.
 			 */
-			conn = memalign(64, sizeof *conn);
+			conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof *conn);
 			if (!conn) {
 				ret = -FI_ENOMEM;
 				goto out;
@@ -180,29 +186,32 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		}
 
-		if (fi_addr) {
-			switch (av->type) {
-			case FI_AV_MAP:
+
+		switch (av->type) {
+		case FI_AV_MAP:
+			if (fi_addr) {
 				fi_addr[i] = (uintptr_t) (void *) conn;
-				break;
-			case FI_AV_TABLE:
-				fi_addr[i] = av->count + i;
-				av->domain->rdm_cm->conn_table[fi_addr[i]] = conn;
-				break;
-			default:
-				assert(0);
-				break;
 			}
+			break;
+		case FI_AV_TABLE:
+			if (fi_addr) {
+				fi_addr[i] = av->used;
+			}
+			av->domain->rdm_cm->conn_table[av->used] = conn;
+			break;
+		default:
+			assert(0);
+			break;
 		}
 
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr %s:%u conn %p %d\n",
 			inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port), conn, conn->cm_role);
 
+		av->used++;
 		ret++;
 	}
 
-	av->count += count;
 out:
 	if (ep) {
 		pthread_mutex_unlock(&ep->cm_lock);
