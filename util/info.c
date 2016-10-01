@@ -98,10 +98,15 @@ static void usage(void)
 				help_strings[i][1]);
 }
 
-#define ORCASE(SYM) \
-	do { if (strcmp(#SYM, inputstr) == 0) return SYM; } while (0);
+#define ORCASE(SYM)                                                            \
+	do {                                                                   \
+		if (strcasecmp(#SYM, inputstr) == 0) {                         \
+			*value = SYM;                                          \
+			return 0;                                              \
+		}                                                              \
+	} while (0)
 
-static uint64_t str2cap(char *inputstr)
+static int str2cap(char *inputstr, uint64_t *value)
 {
 	ORCASE(FI_MSG);
 	ORCASE(FI_RMA);
@@ -133,10 +138,12 @@ static uint64_t str2cap(char *inputstr)
 	ORCASE(FI_SOURCE);
 	ORCASE(FI_DIRECTED_RECV);
 
-	return 0;
+	fprintf(stderr, "error: Unrecognized capability: %s\n", inputstr);
+
+	return -EINVAL;
 }
 
-static uint64_t str2mode(char *inputstr)
+static int str2mode(char *inputstr, uint64_t *value)
 {
 	ORCASE(FI_CONTEXT);
 	ORCASE(FI_LOCAL_MR);
@@ -144,21 +151,24 @@ static uint64_t str2mode(char *inputstr)
 	ORCASE(FI_ASYNC_IOV);
 	ORCASE(FI_RX_CQ_DATA);
 
-	return 0;
+	fprintf(stderr, "error: Unrecognized mode: %s\n", inputstr);
+
+	return -EINVAL;
 }
 
-static enum fi_ep_type str2ep_type(char *inputstr)
+static int str2ep_type(char *inputstr, enum fi_ep_type *value)
 {
 	ORCASE(FI_EP_UNSPEC);
 	ORCASE(FI_EP_MSG);
 	ORCASE(FI_EP_DGRAM);
 	ORCASE(FI_EP_RDM);
 
-	/* probably not the right thing to do? */
-	return FI_EP_UNSPEC;
+	fprintf(stderr, "error: Unrecognized endpoint type: %s\n", inputstr);
+
+	return -EINVAL;
 }
 
-static uint32_t str2addr_format(char *inputstr)
+static int str2addr_format(char *inputstr, uint32_t *value)
 {
 	ORCASE(FI_FORMAT_UNSPEC);
 	ORCASE(FI_SOCKADDR);
@@ -167,18 +177,28 @@ static uint32_t str2addr_format(char *inputstr)
 	ORCASE(FI_SOCKADDR_IB);
 	ORCASE(FI_ADDR_PSMX);
 
-	return FI_FORMAT_UNSPEC;
+	fprintf(stderr, "error: Unrecognized address format: %s\n", inputstr);
+
+	return -EINVAL;
 }
 
-static uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
+static int tokparse(char *caps,
+		    int (*str2flag)(char *, uint64_t *),
+		    uint64_t *flags)
 {
-	uint64_t flags = 0;
+	uint64_t value;
 	char *tok;
+	int ret;
 
-	for (tok = strtok(caps, "|"); tok != NULL; tok = strtok(NULL, "|"))
-		flags |= str2flag(tok);
+	for (tok = strtok(caps, "|"); tok != NULL; tok = strtok(NULL, "|")) {
+		ret = str2flag(tok, &value);
+		if (ret)
+			return ret;
 
-	return flags;
+		*flags |= value;
+	}
+
+	return 0;
 }
 
 static const char *param_type(enum fi_param_type type)
@@ -308,19 +328,32 @@ int main(int argc, char **argv)
 			port = optarg;
 			break;
 		case 'c':
-			hints->caps = tokparse(optarg, str2cap);
+			ret = tokparse(optarg, str2cap, &hints->caps);
+			if (ret)
+				goto out;
+
 			use_hints = 1;
 			break;
 		case 'm':
-			hints->mode = tokparse(optarg, str2mode);
+			hints->mode = 0;
+			ret = tokparse(optarg, str2mode, &hints->mode);
+			if (ret)
+				goto out;
+
 			use_hints = 1;
 			break;
 		case 't':
-			hints->ep_attr->type = str2ep_type(optarg);
+			ret = str2ep_type(optarg, &hints->ep_attr->type);
+			if (ret)
+				goto out;
+
 			use_hints = 1;
 			break;
 		case 'a':
-			hints->addr_format = str2addr_format(optarg);
+			ret = str2addr_format(optarg, &hints->addr_format);
+			if (ret)
+				goto out;
+
 			use_hints = 1;
 			break;
 		case 'p':
