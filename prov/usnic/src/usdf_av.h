@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -50,6 +50,7 @@ struct usdf_dest {
 	struct usd_dest ds_dest;
 
 	SLIST_HEAD(,usdf_rdm_connection) ds_rdm_rdc_list;
+	LIST_ENTRY(usdf_dest) ds_addresses_entry;
 };
 
 /* struct used to track async insert requests */
@@ -81,9 +82,10 @@ struct usdf_av {
 	uint64_t av_flags;
 	struct usdf_eq *av_eq;
 	atomic_t av_refcnt;
-	int av_closing;
+	atomic_t av_closing;
 	atomic_t av_active_inserts;
 	pthread_spinlock_t av_lock;
+	LIST_HEAD(, usdf_dest) av_addresses;
 };
 #define av_ftou(FAV) container_of(FAV, struct usdf_av, av_fid)
 #define av_fidtou(FID) container_of(FID, struct usdf_av, av_fid.fid)

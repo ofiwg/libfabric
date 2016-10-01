@@ -665,6 +665,7 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct usdf_ep *ep;
 	struct usdf_cq *cq;
+	struct usdf_av *av;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
@@ -676,9 +677,11 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->e.rdm.ep_av != NULL) {
 			return -FI_EINVAL;
 		}
-		ep->e.rdm.ep_av = av_fidtou(bfid);
-		break;
 
+		av = av_fidtou(bfid);
+		ep->e.rdm.ep_av = av;
+		atomic_inc(&av->av_refcnt);
+		break;
 
 	case FI_CLASS_CQ:
 		if (flags & FI_SEND) {
@@ -858,6 +861,9 @@ usdf_ep_rdm_close(fid_t fid)
 	if (ep->ep_eq != NULL) {
 		atomic_dec(&ep->ep_eq->eq_refcnt);
 	}
+
+	if (ep->e.rdm.ep_av)
+		atomic_dec(&ep->e.rdm.ep_av->av_refcnt);
 
 	free(ep);
 	return 0;
