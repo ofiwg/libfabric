@@ -81,6 +81,7 @@ struct fi_gni_ops_domain {
 	int (*flush_cache)(struct fid *fid);
 };
 
+#include <rdma/fi_atomic.h>
 enum gnix_native_amo_types {
 	GNIX_NAMO_AX = 0x20,
 	GNIX_NAMO_AX_S,
@@ -117,5 +118,9 @@ struct gnix_ops_domain {
 	int32_t err_inject_count;
 	bool xpmem_enabled;
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _FI_EXT_GNI_H_ */

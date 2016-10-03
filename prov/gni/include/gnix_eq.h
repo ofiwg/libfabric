@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,10 +33,6 @@
 
 #ifndef _GNIX_EQ_H_
 #define _GNIX_EQ_H_
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <rdma/fi_eq.h>
 
@@ -86,9 +82,5 @@ struct gnix_fid_eq {
 	fastlock_t lock;
 	struct gnix_reference ref_cnt;
 };
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _GNIX_EQ_H_ */

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,10 +33,6 @@
 
 #ifndef _GNIX_WAIT_H_
 #define _GNIX_WAIT_H_
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <pthread.h>
 #include <rdma/fi_eq.h>
@@ -86,9 +83,5 @@ int _gnix_wait_set_add(struct fid_wait *wait, struct fid *wait_obj);
 int _gnix_wait_set_remove(struct fid_wait *wait, struct fid *wait_obj);
 int _gnix_get_wait_obj(struct fid_wait *wait, void *arg);
 void _gnix_signal_wait_obj(struct fid_wait *wait);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

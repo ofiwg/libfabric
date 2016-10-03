@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,10 +34,6 @@
 #ifndef _GNIX_QUEUE_H
 #define _GNIX_QUEUE_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <fi_list.h>
 
 typedef struct slist_entry *(*alloc_func)(size_t entry_size);
@@ -66,9 +63,5 @@ struct slist_entry *_gnix_queue_dequeue_free(struct gnix_queue *queue);
 void _gnix_queue_enqueue(struct gnix_queue *queue, struct slist_entry *item);
 void _gnix_queue_enqueue_free(struct gnix_queue *queue,
 			      struct slist_entry *item);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* #define _GNIX_QUEUE_H */

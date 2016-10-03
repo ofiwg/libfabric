@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All
- * rights reserved.
+ * Copyright (c) 2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,10 +33,6 @@
 
 #ifndef _GNIX_POLL_H_
 #define _GNIX_POLL_H_
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /*******************************************************************************
  * API Functions
@@ -86,9 +82,5 @@ int gnix_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 /*******************************************************************************
  * Exposed internal functions.
  ******************************************************************************/
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _GNIX_POLL_H_ */

@@ -34,10 +34,6 @@
 #ifndef _GNIX_NIC_H_
 #define _GNIX_NIC_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #if HAVE_CONFIG_H
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
@@ -465,9 +461,5 @@ static inline void *__gnix_nic_elem_by_rem_id(struct gnix_nic *nic, int rem_id)
 
 void _gnix_nic_txd_err_inject(struct gnix_nic *nic,
 			      struct gnix_tx_descriptor *txd);
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif /* _GNIX_NIC_H_ */
