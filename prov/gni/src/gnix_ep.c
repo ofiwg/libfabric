@@ -1873,6 +1873,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			   struct fid_ep **ep, void *context)
 {
 	int ret = FI_SUCCESS;
+	int err_ret;
 	uint32_t cdm_id;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
@@ -2065,24 +2066,41 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 err:
 	if (ep_priv->xpmem_hndl) {
-		if (_gnix_xpmem_handle_destroy(ep_priv->xpmem_hndl) !=
-		    FI_SUCCESS) {
+		err_ret = _gnix_xpmem_handle_destroy(ep_priv->xpmem_hndl);
+		if (err_ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_xpmem_handle_destroy returned %s\n",
-				  fi_strerror(-ret));
+				  fi_strerror(-err_ret));
 		}
 	}
 
-	__destruct_tag_storages(ep_priv);
+	err_ret = __destruct_tag_storages(ep_priv);
+	if (err_ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "__destruct_tag_stroages returned %s\n",
+			  fi_strerror(-err_ret));
+	}
 
 	if (free_list_inited == true)
 		__fr_freelist_destroy(ep_priv);
 
-	if (ep_priv->cm_nic != NULL)
-		ret = _gnix_cm_nic_free(ep_priv->cm_nic);
+	if (ep_priv->cm_nic != NULL) {
+		err_ret = _gnix_cm_nic_free(ep_priv->cm_nic);
+		if (err_ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_cm_nic_free returned %s\n",
+				  fi_strerror(-err_ret));
+		}
+	}
 
-	if (ep_priv->nic != NULL)
-		ret = _gnix_nic_free(ep_priv->nic);
+	if (ep_priv->nic != NULL) {
+		err_ret = _gnix_nic_free(ep_priv->nic);
+		if (err_ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_nic_free returned %s\n",
+				  fi_strerror(-err_ret));
+		}
+	}
 
 	free(ep_priv);
 	return ret;
