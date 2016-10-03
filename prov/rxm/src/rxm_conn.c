@@ -242,13 +242,34 @@ err:
 	}
 }
 
+static int rxm_prepare_cm_data(struct fid_pep *pep, void *cm_data, size_t *cm_data_size)
+{
+	size_t opt_size = sizeof(*cm_data_size);
+	int ret;
+
+	ret = fi_getopt(&pep->fid, FI_OPT_ENDPOINT, FI_OPT_CM_DATA_SIZE,
+			cm_data_size, &opt_size);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "fi_getopt failed\n");
+		return ret;
+	}
+
+	ret = fi_getname(&pep->fid, cm_data, cm_data_size);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get msg pep name\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 int rxm_msg_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		struct fi_info *msg_hints)
 {
 	struct rxm_conn *rxm_conn;
 	struct fi_info *msg_info;
 	struct sockaddr name;
-	size_t name_len;
+	size_t name_len = 0;
 	int ret;
 
 	assert(!msg_hints->dest_addr);
@@ -275,11 +296,12 @@ int rxm_msg_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	if (ret)
 		goto err2;
 
-	ret = fi_getname(&rxm_ep->msg_pep->fid, &name, &name_len);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get msg pep name\n");
+	/* We have to send passive endpoint's address to the server since the
+	 * address from which connection request would be sent would have a
+	 * different port. */
+	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &name, &name_len);
+	if (ret)
 		goto err2;
-	}
 
 	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr, &name, name_len);
 	if (ret) {
