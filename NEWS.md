@@ -5,7 +5,7 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.4.0, TBD
+v1.4.0rc1, Mon Oct 3, 2016
 ===========
 
 - Add new options, `-f` and `-d`, to fi_info that can be used to specify hints
