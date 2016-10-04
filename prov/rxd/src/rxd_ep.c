@@ -211,7 +211,7 @@ static int rxd_ep_set_conn_id(struct rxd_ep *ep)
 int rxd_ep_enable(struct rxd_ep *ep)
 {
 	ssize_t i, ret;
-	struct fid_mr *mr = NULL;
+	void *mr = NULL;
 	struct rxd_rx_buf *rx_buf;
 
 	ret = fi_enable(ep->dg_ep);
@@ -226,7 +226,7 @@ int rxd_ep_enable(struct rxd_ep *ep)
 	ep->credits = ep->rx_size;
 	for (i = 0; i < ep->rx_size; i++) {
 		rx_buf = ep->do_local_mr ?
-			util_buf_get_ex(ep->rx_pkt_pool, (void **)&mr) :
+			util_buf_get_ex(ep->rx_pkt_pool, &mr) :
 			util_buf_get(ep->rx_pkt_pool);
 
 		if (!rx_buf) {
@@ -234,7 +234,7 @@ int rxd_ep_enable(struct rxd_ep *ep)
 			goto out;
 		}
 
-		rx_buf->mr = mr;
+		rx_buf->mr = (struct fid_mr *) mr;
 		rx_buf->ep = ep;
 		ret = rxd_ep_repost_buff(rx_buf);
 		if (ret)
@@ -348,10 +348,10 @@ uint64_t rxd_ep_copy_iov_buf(const struct iovec *iov, size_t iov_count,
 struct rxd_pkt_meta *rxd_tx_pkt_acquire(struct rxd_ep *ep)
 {
 	struct rxd_pkt_meta *pkt_meta;
-	struct fid_mr *mr = NULL;
+	void *mr = NULL;
 
 	pkt_meta = ep->do_local_mr ?
-		util_buf_alloc_ex(ep->tx_pkt_pool, (void **)&mr) :
+		util_buf_alloc_ex(ep->tx_pkt_pool, &mr) :
 		util_buf_alloc(ep->tx_pkt_pool);
 
 	if (!pkt_meta) {
@@ -362,7 +362,7 @@ struct rxd_pkt_meta *rxd_tx_pkt_acquire(struct rxd_ep *ep)
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "Acquired tx pkt: %p\n", pkt_meta);
 	pkt_meta->ep = ep;
 	pkt_meta->retries = 0;
-	pkt_meta->mr = mr;
+	pkt_meta->mr = (struct fid_mr *) mr;
 	pkt_meta->ref = 0;
 	return pkt_meta;
 }
