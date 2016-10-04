@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -526,7 +526,7 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	if (!ep || !msg || !msg->msg_iov ||
 	    !msg->msg_iov[0].addr ||
 	    msg->msg_iov[0].count != 1 ||
-	    msg->iov_count != 1 ||
+	    msg->iov_count != GNIX_MAX_ATOMIC_IOV_LIMIT ||
 	    !msg->rma_iov || !msg->rma_iov[0].addr)
 		return -FI_EINVAL;
 

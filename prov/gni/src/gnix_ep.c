@@ -205,7 +205,7 @@ static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct gnix_fid_ep *ep_priv;
 
-	if (!ep || !iov || count > GNIX_MAX_IOV_LIMIT) {
+	if (!ep || !iov || count > GNIX_MAX_MSG_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
@@ -265,7 +265,7 @@ static inline ssize_t __ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct gnix_fid_ep *gnix_ep;
 
-	if (!ep || !iov || !count || count > GNIX_MAX_IOV_LIMIT) {
+	if (!ep || !iov || !count || count > GNIX_MAX_MSG_IOV_LIMIT) {
 		return -FI_EINVAL;
 	}
 
@@ -1064,7 +1064,7 @@ gnix_ep_atomic_writev(struct fid_ep *ep, const struct fi_ioc *iov, void **desc,
 		      uint64_t key, enum fi_datatype datatype, enum fi_op op,
 		      void *context)
 {
-	if (!iov || count > GNIX_MAX_RMA_IOV_LIMIT) {
+	if (!iov || count > 1) {
 		return -FI_EINVAL;
 	}
 
@@ -1190,7 +1190,7 @@ gnix_ep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
 			  enum fi_datatype datatype, enum fi_op op,
 			  void *context)
 {
-	if (!iov || count > GNIX_MAX_RMA_IOV_LIMIT || !resultv)
+	if (!iov || count > 1 || !resultv)
 		return -FI_EINVAL;
 
 	return gnix_ep_atomic_readwrite(ep, iov[0].addr, iov[0].count,
@@ -1291,7 +1291,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_atomic_compwritev(struct fid_ep *ep,
 						   enum fi_op op,
 						   void *context)
 {
-	if (!iov || count > GNIX_MAX_RMA_IOV_LIMIT || !resultv || !comparev)
+	if (!iov || count > 1 || !resultv || !comparev)
 		return -FI_EINVAL;
 
 	return gnix_ep_atomic_compwrite(ep, iov[0].addr, iov[0].count,
