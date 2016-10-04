@@ -1100,8 +1100,8 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 					       hints, rai, info);
 	} else {
 		ret = fi_ibv_get_matching_info(NULL, hints, rai, info);
-		if (!ret && !(flags & FI_SOURCE) && !node && !hints->src_addr &&
-				!hints->dest_addr) {
+		if (!ret && !(flags & FI_SOURCE) && !node 
+                && (!hints || (!hints->src_addr && !hints->dest_addr))) {
 			ret = fi_ibv_getifaddrs(service, flags, *info);
 			if (ret) {
 				fi_freeinfo(*info);
