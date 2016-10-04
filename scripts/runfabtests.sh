@@ -164,6 +164,7 @@ standard_tests=(
 )
 
 unit_tests=(
+	"getinfo_test"
 	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR"
 	"dom_test -n 2"
 	"eq_test"
