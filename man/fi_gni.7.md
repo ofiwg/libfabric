@@ -203,7 +203,9 @@ The `set_val` function sets the value of a given parameter; the
 
 *GNI_MR_UDREG_LIMIT*
 : Maximum number of registrations. Applies only to the udreg cache. The value is of type int32_t. The value must be greater than 0.
-+.PP
+
+*GNI_XPMEM_ENABLE*
+: Enable or disable use of XPMEM for on node messages using the GNI provider internal rendezvous protocol.  The value is of type bool.
 
 For *FI_GNI_EP_OPS_1*, the currently supported values are:
 *GNI_HASH_TAG_IMPL*
