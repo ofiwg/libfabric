@@ -37,7 +37,7 @@
 #include <shared.h>
 
 enum { PASS, FAIL, NOTSUPP, SKIPPED };
-#define TEST_ENTRY(NAME) { NAME, #NAME }
+#define TEST_ENTRY(NAME, DESC) { NAME, #NAME, DESC}
 
 #define TEST_RET_VAL(_ret, _testret) \
 	(_ret == -FI_ENOSYS || _ret == -FI_ENODATA) ? SKIPPED : (_testret)
@@ -45,6 +45,7 @@ enum { PASS, FAIL, NOTSUPP, SKIPPED };
 struct test_entry {
 	int (*test)();
 	char *name;
+	char *desc;
 };
 
 void ft_unit_usage(char *name, char *desc);

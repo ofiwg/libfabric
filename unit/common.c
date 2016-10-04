@@ -60,7 +60,7 @@ run_tests(struct test_entry *test_array, char *err_buf)
 
 	tep = test_array;
 	while (tep->test != NULL) {
-		printf("Running %s...", tep->name);
+		printf("Running %s [%s]...", tep->name, tep->desc);
 		fflush(stdout);
 		ret = tep->test();
 		switch (ret) {

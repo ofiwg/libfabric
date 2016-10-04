@@ -153,8 +153,8 @@ fail:
 }
 
 struct test_entry test_array[] = {
-	TEST_ENTRY(cq_open_close_sizes),
-	TEST_ENTRY(cq_open_close_simultaneous),
+	TEST_ENTRY(cq_open_close_sizes, "Test open and close of CQ for various sizes"),
+	TEST_ENTRY(cq_open_close_simultaneous, "Test opening several CQs at a time"),
 	{ NULL, "" }
 };
 
