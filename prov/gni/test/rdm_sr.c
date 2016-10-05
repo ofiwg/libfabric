@@ -254,7 +254,7 @@ void rdm_sr_setup(bool is_noreg, enum fi_progress pm)
 	hints->domain_attr->data_progress = pm;
 	hints->mode = ~0;
 	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 
 	/* Get info about fabric services with the provided hints */
 	for (; i < NUMEPS; i++) {
@@ -282,7 +282,7 @@ void dgram_sr_setup(bool is_noreg, enum fi_progress pm)
 	hints->domain_attr->data_progress = pm;
 	hints->mode = ~0;
 	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 	hints->ep_attr->type = FI_EP_DGRAM;
 
 	/* Get info about fabric services with the provided hints */

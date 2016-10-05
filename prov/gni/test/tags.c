@@ -348,7 +348,7 @@ static void __gnix_tags_bare_test_setup(void)
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
 
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo");

@@ -114,7 +114,7 @@ static void vc_setup_common(void)
 	size_t addrlen = 0;
 	struct gnix_fid_av *gnix_av;
 
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");

@@ -214,7 +214,7 @@ void rdm_api_setup(void)
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
 		hints[i]->mode = ~0;
 		hints[i]->domain_attr->mr_mode = FI_MR_BASIC;
-		hints[i]->fabric_attr->name = strdup("gni");
+		hints[i]->fabric_attr->prov_name = strdup("gni");
 	}
 }
 

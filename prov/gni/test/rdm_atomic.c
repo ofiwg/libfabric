@@ -114,7 +114,7 @@ void common_atomic_setup(void)
 	hints->mode = ~0;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->caps |= FI_ATOMIC | FI_READ | FI_REMOTE_READ |
-		       FI_WRITE | FI_REMOTE_WRITE;
+			FI_WRITE | FI_REMOTE_WRITE;
 
 	target = malloc(BUF_SZ);
 	assert(target);

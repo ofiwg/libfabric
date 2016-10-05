@@ -97,7 +97,7 @@ static inline void cntr_setup_eps(void)
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
 
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 
 	/* This test hangs with the FI_RMA_EVENT capability enabled because the
 	 * receiver does not progress libfabric. */

@@ -143,7 +143,7 @@ static void _mr_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
