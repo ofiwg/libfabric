@@ -63,9 +63,11 @@
 
 #define UTIL_FLAG_ERROR	(1ULL << 60)
 
-#define OFI_Q_STERROR(prov, log, q, q_str, entry, strerror)			\
-	FI_WARN(prov, log, "fi_" q_str "_readerr: prov_err:%s", entry.err,	\
-			strerror(q, entry.prov_errno, entry.err_data, NULL, 0))
+#define OFI_Q_STRERROR(prov, log, q, q_str, entry, strerror)			\
+	FI_WARN(prov, log, "fi_" q_str "_readerr: err: %d, prov_err: %s (%d)\n",\
+			entry.err,						\
+			strerror(q, entry.prov_errno, entry.err_data, NULL, 0), \
+			entry.prov_errno)
 
 #define OFI_Q_READERR(prov, log, q, q_str, readerr, strerror, ret, err_entry)	\
 	do {									\
@@ -74,7 +76,7 @@
 			FI_WARN(prov, log,					\
 					"Unable to fi_" q_str "_readerr\n");	\
 		} else {							\
-			OFI_Q_STERROR(prov, log, q, q_str,			\
+			OFI_Q_STRERROR(prov, log, q, q_str,			\
 					err_entry, strerror);			\
 		}								\
 	} while (0)
