@@ -60,11 +60,15 @@ static int __gnix_amo_send_err(struct gnix_fid_ep *ep,
 		}
 	}
 
-	if ((req->type == GNIX_FAB_RQ_AMO) &&
+	if (((req->type == GNIX_FAB_RQ_AMO) ||
+	     (req->type == GNIX_FAB_RQ_NAMO_AX) ||
+	     (req->type == GNIX_FAB_RQ_NAMO_AX_S)) &&
 	    ep->write_cntr) {
 		cntr = ep->write_cntr;
 	} else if ((req->type == GNIX_FAB_RQ_FAMO ||
-		    req->type == GNIX_FAB_RQ_CAMO) &&
+		    req->type == GNIX_FAB_RQ_CAMO ||
+		    req->type == GNIX_FAB_RQ_NAMO_FAX ||
+		    req->type == GNIX_FAB_RQ_NAMO_FAX_S) &&
 		   ep->read_cntr) {
 		cntr = ep->read_cntr;
 	}
@@ -95,11 +99,15 @@ static int __gnix_amo_send_completion(struct gnix_fid_ep *ep,
 		}
 	}
 
-	if ((req->type == GNIX_FAB_RQ_AMO) &&
+	if ((req->type == GNIX_FAB_RQ_AMO ||
+	     req->type == GNIX_FAB_RQ_NAMO_AX ||
+	     req->type == GNIX_FAB_RQ_NAMO_AX_S) &&
 	    ep->write_cntr) {
 		cntr = ep->write_cntr;
 	} else if ((req->type == GNIX_FAB_RQ_FAMO ||
-		    req->type == GNIX_FAB_RQ_CAMO) &&
+		    req->type == GNIX_FAB_RQ_CAMO ||
+		    req->type == GNIX_FAB_RQ_NAMO_FAX ||
+		    req->type == GNIX_FAB_RQ_NAMO_FAX_S) &&
 		   ep->read_cntr) {
 		cntr = ep->read_cntr;
 	}

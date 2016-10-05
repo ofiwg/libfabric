@@ -1151,7 +1151,7 @@ void do_axor(int len)
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
-	w[0] = 0;
+	w[0] = 1;
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("result  %016lx\n", *((uint64_t *)target));
@@ -1181,7 +1181,6 @@ void do_axor(int len)
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
-	w[0] = 0;
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK) %016lx\n",
@@ -1214,6 +1213,7 @@ void do_axor(int len)
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 0;
+	r[0] = 1;
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("result  %016lx\n", *((uint64_t *)target));
@@ -1250,7 +1250,6 @@ void do_axor(int len)
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
-	w[0] = 0;
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("AX_TGT_DATA & (AX_OP1 | ~AX_S_MASK) %016lx\n",
