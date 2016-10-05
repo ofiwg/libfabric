@@ -487,7 +487,7 @@ static ssize_t psmx2_tagged_recvmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	if (msg->iov_count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
@@ -511,8 +511,10 @@ psmx2_tagged_recvv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
 {									\
 	void *buf;							\
 	size_t len;							\
-	if ((count && !iov) || (count > 1))				\
+	if (count && !iov)						\
 		return -FI_EINVAL;					\
+	if (count > 1)							\
+		return -FI_ENOSYS;					\
 	if (count) {							\
 		buf = iov[0].iov_base;					\
 		len = iov[0].iov_len;					\

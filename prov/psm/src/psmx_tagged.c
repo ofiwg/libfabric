@@ -328,7 +328,7 @@ static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged
 		return -FI_EINVAL;
 
 	if (msg->iov_count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
@@ -374,7 +374,7 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -398,7 +398,7 @@ static ssize_t psmx_tagged_recvv_no_flag(struct fid_ep *ep, const struct iovec *
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -423,7 +423,7 @@ static ssize_t psmx_tagged_recvv_no_event(struct fid_ep *ep, const struct iovec 
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -774,7 +774,7 @@ static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged
 		return -FI_EINVAL;
 
 	if (msg->iov_count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
@@ -798,7 +798,7 @@ static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, voi
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -823,7 +823,7 @@ static ssize_t psmx_tagged_sendv_no_flag_av_map(struct fid_ep *ep, const struct 
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -849,7 +849,7 @@ static ssize_t psmx_tagged_sendv_no_flag_av_table(struct fid_ep *ep, const struc
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -875,7 +875,7 @@ static ssize_t psmx_tagged_sendv_no_event_av_map(struct fid_ep *ep, const struct
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -901,7 +901,7 @@ static ssize_t psmx_tagged_sendv_no_event_av_table(struct fid_ep *ep, const stru
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
