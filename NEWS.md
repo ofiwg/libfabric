@@ -12,6 +12,25 @@ v1.4.0rc1, Mon Oct 3, 2016
   about the fabric and domain name. Change port to `-P` and provider to `-p` to
   be more in line with fi_pingpong.
 
+## GNI provider notes
+
+- General bug fixes, plugged memory leaks, performance improvements,
+  improved error handling and warning messages, etc.
+- Additional API support:
+  - FI_THREAD_COMPLETION
+  - FI_RMA_EVENT
+  - iov length up to 8 for messaging data transfers
+- Provider-specific API support:
+  - Aries native AXOR atomic operation
+  - Memory registation cache flush operation
+- Memory registration cache improvements:
+  - IOMMU notifier support
+  - Alternatives to the internal cache
+  - Additional tuning knobs
+- On-node optimization for rendezvous message communication via XPMEM
+- Internal fixes to support accelerators and KNL processors
+- Better support for running in CCM mode (in support for fabtests)
+
 ## MXM provider
 
 - The mxm provider has been deprecated and will be replaced in a future release.
