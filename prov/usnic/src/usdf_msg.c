@@ -896,7 +896,8 @@ usdf_msg_recv_complete(struct usdf_ep *ep, struct usdf_msg_qe *rqe, int status)
 	rx = ep->ep_rx;
 	hcq = rx->r.msg.rx_hcq;
 
-	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, status);
+	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, status,
+		      FI_MSG | FI_RECV);
 	usdf_msg_put_rx_rqe(rx, rqe);
 }
 
@@ -967,7 +968,8 @@ usdf_msg_process_ack(struct usdf_ep *ep, uint16_t seq)
 			USDF_DBG_SYS(EP_DATA, "send complete, signal_comp=%u\n", wqe->ms_signal_comp);
 			if (wqe->ms_signal_comp)
 				hcq->cqh_post(hcq, wqe->ms_context,
-						wqe->ms_length, FI_SUCCESS);
+					      wqe->ms_length, FI_SUCCESS,
+					      FI_MSG | FI_SEND);
 
 			usdf_msg_put_tx_wqe(tx, wqe);
 		} else {
