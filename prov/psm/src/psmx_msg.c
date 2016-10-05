@@ -154,7 +154,7 @@ static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_
 		return -FI_EINVAL;
 
 	if (msg->iov_count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
@@ -178,7 +178,7 @@ static ssize_t psmx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
@@ -322,7 +322,7 @@ static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_
 		return -FI_EINVAL;
 
 	if (msg->iov_count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
@@ -346,7 +346,7 @@ static ssize_t psmx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 		return -FI_EINVAL;
 
 	if (count > 1) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;

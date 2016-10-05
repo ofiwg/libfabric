@@ -445,14 +445,14 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
 				"attr->flags=%x, supported=%x\n",
 				attr->flags, FI_EVENT);
-			return -FI_EINVAL;
+			return -FI_ENOSYS;
 		}
 
 		if (attr->name) {
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
 				"attr->name=%s, named AV is not supported\n",
 				attr->name);
-			return -FI_EINVAL;
+			return -FI_ENOSYS;
 		}
 	}
 
