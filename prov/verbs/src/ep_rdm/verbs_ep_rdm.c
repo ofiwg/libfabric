@@ -356,11 +356,6 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	pthread_join(ep->cm_progress_thread, &status);
 	pthread_mutex_destroy(&ep->cm_lock);
 
-	/* All posted sends are waiting local completions */
-	while (ep->posted_sends > 0 && ep->num_active_conns > 0) {
-		fi_ibv_rdm_tagged_poll(ep);
-	}
-
 	if (ep->send_cntr) {
 		atomic_dec(&ep->send_cntr->ep_ref);
 		ep->send_cntr = 0;
@@ -387,9 +382,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		HASH_DEL(ep->domain->rdm_cm->conn_hash, conn);
 		switch (conn->state) {
 		case FI_VERBS_CONN_ALLOCATED:
-		case FI_VERBS_CONN_REMOTE_DISCONNECT:
 		case FI_VERBS_CONN_ESTABLISHED:
-			ret = fi_ibv_rdm_start_disconnection(conn);
+			ret = fi_ibv_rdm_start_disconnect(ep, conn);
 			break;
 		case FI_VERBS_CONN_STARTED:
 			while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
@@ -401,7 +395,11 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 					break;
 				}
 			}
+			ret = fi_ibv_rdm_start_disconnect(ep, conn);
 			break;
+		case FI_VERBS_CONN_DISCONNECT_REQUESTED:
+		case FI_VERBS_CONN_DISCONNECT_STARTED:
+		case FI_VERBS_CONN_CLOSED:
 		default:
 			break;
 		}
@@ -411,6 +409,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		if (err) {
 			VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
 			ret = (ret == FI_SUCCESS) ? err : ret;
+		} else {
+			fi_ibv_rdm_tagged_poll(ep);
 		}
 	}
 

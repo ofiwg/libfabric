@@ -75,35 +75,97 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	return FI_SUCCESS;
 }
 
-ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
+static inline ssize_t
+fi_ibv_rdm_disconnect_request(struct fi_ibv_rdm_ep *ep,
+			      struct fi_ibv_rdm_conn *conn)
+{
+	struct fi_ibv_rdm_buf *sbuf = NULL;
+	ssize_t ret = FI_SUCCESS;
+
+	if (!ep->is_closing) {
+		pthread_mutex_lock(&ep->cm_lock);
+	}
+	/* The latest control message MUST be in order */
+	while (conn->postponed_entry) {
+		fi_ibv_rdm_tagged_poll(ep);
+	}
+
+	/*
+	 * Wait untill resources will be available.
+	 * (Remote side should process all recvs then release local buffer)
+	 */
+	while ( !(sbuf = fi_ibv_rdm_prepare_send_resources(conn, ep)) ) {
+		if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
+			goto out;
+		}
+	};
+
+	/* To make sure it's still in order */
+	assert(!conn->postponed_entry);
+
+	struct ibv_sge sge = {0};
+	struct ibv_send_wr wr = {0};
+	struct ibv_send_wr *bad_wr = NULL;
+
+	sge.addr = (uintptr_t)(void*)sbuf;
+	sge.length = sizeof(*sbuf);
+	sge.lkey = conn->s_mr->lkey;
+
+	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
+	wr.sg_list = &sge;
+	wr.num_sge = 1;
+	wr.wr.rdma.remote_addr =
+		(uintptr_t)fi_ibv_rdm_get_remote_addr(conn, sbuf);
+	wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
+	wr.send_flags = (sge.length < ep->max_inline_rc)
+		? IBV_SEND_INLINE : 0;
+	wr.imm_data = 0;
+	wr.opcode = ep->eopcode;
+
+	sbuf->service_data.pkt_len = 0;
+	sbuf->header.tag = 0;
+	sbuf->header.service_tag = 0;
+
+	FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
+			       FI_IBV_RDM_DISCONNECT_PKT);
+
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep, wr.send_flags);
+	if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+		assert(0);
+		ret =  -errno;
+	} else {
+		conn->state = FI_VERBS_CONN_DISCONNECT_REQUESTED;
+
+		VERBS_INFO(FI_LOG_EP_DATA, "posted %d bytes, conn %p\n",
+			  sge.length, conn);
+	}
+out:
+	if (!ep->is_closing) {
+		pthread_mutex_unlock(&ep->cm_lock);
+	}
+	return ret;
+}
+
+ssize_t
+fi_ibv_rdm_start_disconnect(struct fi_ibv_rdm_ep *ep,
+			    struct fi_ibv_rdm_conn *conn)
 {
 	ssize_t ret = FI_SUCCESS;
-	ssize_t err = FI_SUCCESS;
 
 	FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 		"Closing connection %p, state %d\n", conn, conn->state);
 
-	if (conn->id[0]) {
+	if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
+		assert(ep);
+		ret = fi_ibv_rdm_disconnect_request(ep, conn);
+	} else if (conn->id[0]) {
 		if (rdma_disconnect(conn->id[0])) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
 			ret = -errno;
 		}
-	}
-
-	switch (conn->state) {
-	case FI_VERBS_CONN_ALLOCATED:
-	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		err = fi_ibv_rdm_conn_cleanup(conn);
-		ret = (ret == FI_SUCCESS) ? err : ret;
-		break;
-	case FI_VERBS_CONN_ESTABLISHED:
-		conn->state = FI_VERBS_CONN_LOCAL_DISCONNECT;
-		break;
-	case FI_VERBS_CONN_REJECTED:
-		conn->state = FI_VERBS_CONN_CLOSED;
-		break;
-	default:
-		ret = -FI_EOTHER;
+		conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+	} else if (conn->state != FI_VERBS_CONN_DISCONNECT_REQUESTED) {
+		ret = fi_ibv_rdm_conn_cleanup(conn);
 	}
 
 	return ret;
@@ -252,7 +314,7 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
 		HASH_DEL(av->domain->rdm_cm->conn_hash, conn);
-		err = fi_ibv_rdm_start_disconnection(conn);
+		err = fi_ibv_rdm_start_disconnect(av->ep, conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
 	}
 

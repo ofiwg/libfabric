@@ -563,6 +563,7 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 			if (ret == FI_SUCCESS)
 				ret = -errno;
 		}
+		conn->id[0] = NULL;
 	}
 
 	if (conn->id[1]) {
@@ -578,6 +579,7 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 			if (ret == FI_SUCCESS)
 				ret = -errno;
 		}
+		conn->id[1] = NULL;
 	}
 
 	if (conn->s_mr) {
@@ -599,6 +601,7 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 			if (ret == FI_SUCCESS)
 				ret = -errno;
 		}
+		conn->ack_mr = NULL;
 	}
 
 	if (conn->rma_mr) {
@@ -618,24 +621,22 @@ fi_ibv_rdm_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 				      struct rdma_cm_event *event)
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
+	struct fi_ibv_rdm_conn *tmp = NULL;
 
 	ep->num_active_conns--;
 	
-	if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
-		conn->state = FI_VERBS_CONN_REMOTE_DISCONNECT;
-	} else {
-		assert(conn->state == FI_VERBS_CONN_LOCAL_DISCONNECT);
-		conn->state = FI_VERBS_CONN_CLOSED;
-	}
+	conn->state = FI_VERBS_CONN_CLOSED;
 	VERBS_INFO(FI_LOG_AV,
 		   "Disconnected from conn %p, addr %s:%u\n",
 		   conn, inet_ntoa(conn->addr.sin_addr),
 		   ntohs(conn->addr.sin_port));
-	if (conn->state == FI_VERBS_CONN_CLOSED) {
-		return fi_ibv_rdm_conn_cleanup(conn);
-	}
 
-	return FI_SUCCESS;
+	HASH_FIND(hh, ep->domain->rdm_cm->conn_hash, &conn->addr,
+		  FI_IBV_RDM_DFLT_ADDRLEN, tmp);
+	if (tmp == conn) {
+		HASH_DEL(ep->domain->rdm_cm->conn_hash, conn);
+	}
+	return fi_ibv_rdm_conn_cleanup(conn);
 }
 
 static ssize_t
@@ -685,7 +686,6 @@ fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 			*(int *)event->param.conn.private_data : 0,
 			event->status, errno);
 		conn->state = FI_VERBS_CONN_REJECTED;
-
 	}
 	return ret;
 }

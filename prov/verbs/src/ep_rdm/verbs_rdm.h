@@ -47,8 +47,8 @@
 #define FI_IBV_RDM_EAGER_PKT		0
 #define FI_IBV_RDM_RNDV_RTS_PKT		1
 #define FI_IBV_RDM_RNDV_ACK_PKT		2
-#define FI_IBV_RDM_RMA_PKT		3
-#define FI_IBV_RDM_MSG_PKT		4
+#define FI_IBV_RDM_MSG_PKT		3
+#define FI_IBV_RDM_DISCONNECT_PKT	100
 #define FI_IBV_RDM_SET_PKTTYPE(dest, type) (dest |= type)
 #define FI_IBV_RDM_GET_PKTTYPE(value) (value & FI_IBV_RDM_ST_PKTTYPE_MASK)
 
@@ -290,8 +290,8 @@ enum {
 	FI_VERBS_CONN_STARTED,
 	FI_VERBS_CONN_REJECTED,
 	FI_VERBS_CONN_ESTABLISHED,
-	FI_VERBS_CONN_LOCAL_DISCONNECT,
-	FI_VERBS_CONN_REMOTE_DISCONNECT,
+	FI_VERBS_CONN_DISCONNECT_REQUESTED,
+	FI_VERBS_CONN_DISCONNECT_STARTED,
 	FI_VERBS_CONN_CLOSED
 };
 
@@ -493,7 +493,8 @@ static inline void fi_ibv_rdm_cntr_inc_err(struct fi_ibv_rdm_cntr *cntr)
 
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep);
 ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep);
-ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn);
+ssize_t fi_ibv_rdm_start_disconnect(struct fi_ibv_rdm_ep *ep,
+				    struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
                                 struct fi_ibv_rdm_conn *conn);
