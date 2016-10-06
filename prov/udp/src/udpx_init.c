@@ -35,6 +35,62 @@
 #include <prov.h>
 #include "udpx.h"
 
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+
+
+#if HAVE_GETIFADDRS
+static void udpx_getinfo_ifs(struct fi_info **info)
+{
+	struct ifaddrs *ifaddrs, *ifa;
+	struct fi_info *head, *tail, *cur;
+	size_t addrlen;
+	int ret;
+
+	ret = getifaddrs(&ifaddrs);
+	if (ret)
+		return;
+
+	head = tail = NULL;
+	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP))
+			continue;
+
+		switch (ifa->ifa_addr->sa_family) {
+		case AF_INET:
+			addrlen = sizeof(struct sockaddr_in);
+			break;
+		case AF_INET6:
+			addrlen = sizeof(struct sockaddr_in6);
+			break;
+		default:
+			continue;
+		}
+
+		cur = fi_dupinfo(*info);
+		if (!cur)
+			break;
+
+		if (!head)
+			head = cur;
+		else
+			tail->next = cur;
+		tail = cur;
+
+		if ((cur->src_addr = mem_dup(ifa->ifa_addr, addrlen)))
+			cur->src_addrlen = addrlen;
+	}
+	freeifaddrs(ifaddrs);
+
+	if (head) {
+		fi_freeinfo(*info);
+		*info = head;
+	}
+}
+#else
+#define udpx_get_interfaces(info)
+#endif
 
 int udpx_check_info(struct fi_info *info)
 {
@@ -44,8 +100,17 @@ int udpx_check_info(struct fi_info *info)
 static int udpx_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
-	return util_getinfo(&udpx_util_prov, version, node, service, flags,
-			    hints, info);
+	int ret;
+
+	ret = util_getinfo(&udpx_util_prov, version, node, service, flags,
+			   hints, info);
+	if (ret)
+		return ret;
+
+	if (!(*info)->src_addr && !(*info)->dest_addr)
+		udpx_getinfo_ifs(info);
+
+	return 0;
 }
 
 static void udpx_fini(void)
