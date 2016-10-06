@@ -112,6 +112,16 @@ enable all debug code paths, and install Libfabric to the `/opt/libfabric`
 tree. All other providers will be enabled if possible.
 
 
+## Validate installation
+
+The fi_info utility can be used to validate the libfabric and provider
+installation, as well as provide details about provider support and available
+interfaces.  See `fi_info(1)` man page for details on using the fi_info
+utility.  fi_info is installed as part of the libfabric package.
+
+A more comprehensive test package is available via the fabtests package.
+
+
 ## Providers
 
 ### gni
