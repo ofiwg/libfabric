@@ -224,56 +224,78 @@ static int __gnix_vc_get_vc_by_fi_addr(struct gnix_fid_ep *ep, fi_addr_t dest_ad
 
 	/* Use FI address to lookup in EP VC table. */
 	vc = _gnix_ep_vc_lookup(ep, dest_addr);
-
-	if (vc == NULL) {
-		/* We can receive a connection request from a remote peer
-		 * before the target EP has bound to an AV or before the remote
-		 * peer has had it's address inserted into the target EP's AV.
-		 * Those requests will result in a connection as usual, but the
-		 * VC will not be mapped into an EP's AV until the EP attempts
-		 * to send to the remote peer.  Check the 'unmapped VC' list to
-		 * see if such a VC exists and map it into the AV here. */
-		 vc = __gnix_vc_lookup_unmapped(ep, dest_addr);
+	if (vc) {
+		COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+		*vc_ptr = vc;
+		return FI_SUCCESS;
 	}
 
-	if (vc == NULL) {
-		/* Look up full AV entry for the destination address. */
-		ret = _gnix_av_lookup(av, dest_addr, &av_entry);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_av_lookup for addr 0x%llx returned %s \n",
-				  dest_addr, fi_strerror(-ret));
-			goto err_w_lock;
-		}
+	/* VC is not mapped yet.  We can receive a connection request from a
+	 * remote peer before the target EP has bound to an AV or before the
+	 * remote peer has had it's address inserted into the target EP's AV.
+	 * Those requests will result in a connection as usual, but the VC will
+	 * not be mapped into an EP's AV until the EP attempts to send to the
+	 * remote peer.  Check the 'unmapped VC' list to see if such a VC
+	 * exists and map it into the AV here. */
+	vc = __gnix_vc_lookup_unmapped(ep, dest_addr);
+	if (vc) {
+		COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+		*vc_ptr = vc;
+		return FI_SUCCESS;
+	}
 
-		/* Initiate a connection to the endpoint. */
-		ret = _gnix_vc_alloc(ep, &av_entry, &vc);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_vc_alloc returned %s\n",
-				  fi_strerror(-ret));
-			goto err_w_lock;
-		}
+	/* No VC exists for the peer yet.  Look up full AV entry for the
+	 * destination address. */
+	ret = _gnix_av_lookup(av, dest_addr, &av_entry);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_av_lookup for addr 0x%llx returned %s \n",
+			  dest_addr, fi_strerror(-ret));
+		goto err_w_lock;
+	}
 
-		/* Store new VC in EP connection table. */
-		ret = _gnix_ep_vc_store(ep, vc, dest_addr);
-		if (unlikely(ret != FI_SUCCESS)) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_ep_vc_store returned %s\n",
-				  fi_strerror(-ret));
-			goto err_w_lock;
-		}
+	/* Allocate new VC with AV entry. */
+	ret = _gnix_vc_alloc(ep, &av_entry, &vc);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_vc_alloc returned %s\n",
+			  fi_strerror(-ret));
+		goto err_w_lock;
+	}
 
-		ret = _gnix_vc_connect(vc);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_vc_connect returned %s\n",
-				  fi_strerror(-ret));
-			goto err_w_lock;
-		}
+	/* Map new VC through the EP connection table. */
+	ret = _gnix_ep_vc_store(ep, vc, dest_addr);
+	if (unlikely(ret != FI_SUCCESS)) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_ep_vc_store returned %s\n",
+			  fi_strerror(-ret));
+		goto err_w_lock;
+	}
+
+	/* Initiate new VC connection. */
+	ret = _gnix_vc_connect(vc);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_vc_connect returned %s\n",
+			  fi_strerror(-ret));
+		goto err_w_lock;
 	}
 
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	/* If we just initiated an intra-CM NIC connection, run CM progress.
+	 * This will attempt to complete the connection immediately.  This may
+	 * be required if auto-progress is enabled because CM progress would
+	 * not otherwise be run until a datagram is received on the network. */
+	if (GNIX_ADDR_EQUAL(vc->peer_cm_nic_addr,
+			    vc->ep->cm_nic->my_name.gnix_addr)) {
+		ret = _gnix_cm_nic_progress(ep->domain->cm_nic);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cm_nic_progress() returned %s\n",
+				  fi_strerror(-ret));
+		}
+	}
 
 	*vc_ptr = vc;
 	return ret;
@@ -580,25 +602,14 @@ err:
 	return ret;
 }
 
-/*
- * connect to self, since we use a lock here
- * the only case we need to deal with is one
- * vc connect request with the peer vc not yet
- * being set up
- */
-static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
+static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *dom = NULL;
 	struct gnix_fid_ep *ep = NULL;
-	struct gnix_fid_ep *ep_peer = NULL;
 	struct gnix_cm_nic *cm_nic = NULL;
-	struct gnix_mbox *mbox = NULL, *mbox_peer = NULL;
-	struct gnix_vc *vc_peer;
+	struct gnix_mbox *mbox = NULL;
 	gni_smsg_attr_t smsg_mbox_attr;
-	gni_smsg_attr_t smsg_mbox_attr_peer;
-	gnix_ht_key_t key;
-	struct gnix_av_addr_entry entry;
 	xpmem_apid_t peer_apid;
 	xpmem_segid_t my_segid;
 
@@ -609,36 +620,26 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		return -FI_EINVAL;
 
 	cm_nic = ep->cm_nic;
-	if (cm_nic == NULL) {
-		ret = -FI_EINVAL;
-		goto exit;
-	}
+	if (cm_nic == NULL)
+		return -FI_EINVAL;
 
 	dom = ep->domain;
-	if (dom == NULL) {
-		ret = -FI_EINVAL;
-		goto exit;
+	if (dom == NULL)
+		return -FI_EINVAL;
+
+	assert(vc->conn_state == GNIX_VC_CONN_NONE);
+	vc->conn_state = GNIX_VC_CONNECTING;
+
+	assert(vc->smsg_mbox == NULL);
+
+	ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl, &mbox);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_mbox_alloc returned %s\n",
+			  fi_strerror(-ret));
+		return -FI_ENOSPC;
 	}
-
-	if ((vc->conn_state == GNIX_VC_CONNECTING) ||
-	    (vc->conn_state == GNIX_VC_CONNECTED)) {
-		return FI_SUCCESS;
-	} else
-		vc->conn_state = GNIX_VC_CONNECTING;
-
-	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n", vc);
-
-	if (vc->smsg_mbox == NULL) {
-		ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl, &mbox);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_mbox_alloc returned %s\n",
-				  fi_strerror(-ret));
-			goto exit;
-		}
-		vc->smsg_mbox = mbox;
-	} else
-		mbox = vc->smsg_mbox;
+	vc->smsg_mbox = mbox;
 
 	smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 	smsg_mbox_attr.msg_buffer = mbox->base;
@@ -648,183 +649,51 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 	smsg_mbox_attr.mbox_maxcredit = dom->params.mbox_maxcredit;
 	smsg_mbox_attr.msg_maxsize = dom->params.mbox_msg_maxsize;
 
-	__gnix_vc_set_ht_key(&vc->peer_addr, &key);
-	ep_peer = (struct gnix_fid_ep *)_gnix_ht_lookup(cm_nic->addr_to_ep_ht,
-							key);
-	if (ep_peer == NULL) {
+	ret = __gnix_vc_smsg_init(vc, vc->vc_id, &smsg_mbox_attr, NULL);
+	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_ht_lookup addr_to_ep failed\n");
-		ret = -FI_ENOENT;
-		goto exit;
+			  "_gnix_vc_smsg_init returned %s\n",
+			  fi_strerror(-ret));
+		goto err_mbox_init;
 	}
+	vc->conn_state = GNIX_VC_CONNECTED;
 
-	__gnix_vc_set_ht_key(&ep->my_name.gnix_addr, &key);
-	vc_peer = _gnix_ep_vc_lookup(ep_peer, key);
-
-	/* Loopback VC.  EP wants to send to itself. */
-	if (vc_peer == vc) {
-		ret = __gnix_vc_smsg_init(vc, vc->vc_id, &smsg_mbox_attr, NULL);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_vc_smsg_init returned %s\n",
-				  fi_strerror(-ret));
-			goto exit;
-		}
-		vc->conn_state = GNIX_VC_CONNECTED;
-
-		/*
-		 * XPMEM should work: TODO: use special
-		 * send-to-self mechanism to avoid overhead
-		 * of XPMEM when just sending a message to
-		 * oneself.
-		 */
-		ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
-					       &my_segid);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gni_xpmem_get_my_segid returned %s\n",
-				  fi_strerror(-ret));
-		}
-		ret = _gnix_xpmem_get_apid(ep->xpmem_hndl,
-					   my_segid,
-					   &peer_apid);
-		if (ret == FI_SUCCESS) {
-			vc->modes |= GNIX_VC_MODE_XPMEM;
-			vc->peer_apid = peer_apid;
-		} else {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gni_xpmem_get_apiid returned %s\n",
-				  fi_strerror(-ret));
-		}
-		vc->peer_id = vc->vc_id;
-		vc->peer_caps = ep->caps;
-		vc->peer_irq_mem_hndl = ep->nic->irq_mem_hndl;
-		ret = _gnix_vc_schedule(vc);
-		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_vc_schedule returned %s\n",
-				  fi_strerror(-ret));
-
-		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
-			   vc);
-		goto exit;
-	}
-
-	if ((vc_peer != NULL) &&
-	    (vc_peer->conn_state != GNIX_VC_CONN_NONE)) {
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_vc_connect self, vc_peer in inconsistent state\n");
-		ret = -FI_ENOSPC;
-		goto exit;
-	}
-
-	/* Inter-CM VC,  Connect this EP to another EP using the same CM (same
-	 * process, likely different threads). */
-	if (vc_peer == NULL) {
-		entry.gnix_addr = ep->my_name.gnix_addr;
-		entry.cm_nic_cdm_id = ep->my_name.cm_nic_cdm_id;
-
-		ret = _gnix_vc_alloc(ep_peer, &entry, &vc_peer);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_vc_alloc returned %s\n",
-				  fi_strerror(-ret));
-			goto exit;
-		}
-
-		ret = _gnix_ep_vc_store(ep_peer, vc_peer, key);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_ht_insert returned %s\n",
-				  fi_strerror(-ret));
-			goto exit;
-		}
-	}
-
-	vc_peer->conn_state = GNIX_VC_CONNECTING;
-
-	/*
-	 * XPMEM should work: TODO: use special
-	 * send-to-self mechanism to avoid overhead
-	 * of XPMEM when just sending a message to
-	 * oneself.
-	 */
-	ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl,
-				       &my_segid);
+	/* TODO: use special send-to-self mechanism to avoid overhead of XPMEM
+	 * when just sending a message to oneself. */
+	ret = _gnix_xpmem_get_my_segid(ep->xpmem_hndl, &my_segid);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "_gni_xpmem_get_my_segid returned %s\n",
 			  fi_strerror(-ret));
 	}
-	ret = _gnix_xpmem_get_apid(ep->xpmem_hndl,
-				   my_segid,
-				   &peer_apid);
+
+	ret = _gnix_xpmem_get_apid(ep->xpmem_hndl, my_segid, &peer_apid);
 	if (ret == FI_SUCCESS) {
-		vc_peer->modes |= GNIX_VC_MODE_XPMEM;
-		vc_peer->peer_apid = peer_apid;
+		vc->modes |= GNIX_VC_MODE_XPMEM;
+		vc->peer_apid = peer_apid;
 	} else {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "_gni_xpmem_get_apiid returned %s\n",
 			  fi_strerror(-ret));
 	}
 
-	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n",
-		   vc_peer);
-
-
-	if (vc_peer->smsg_mbox == NULL) {
-		ret = _gnix_mbox_alloc(vc_peer->ep->nic->mbox_hndl, &mbox_peer);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_mbox_alloc returned %s\n",
-				  fi_strerror(-ret));
-			goto exit;
-		}
-		vc_peer->smsg_mbox = mbox_peer;
-	} else
-		mbox_peer = vc_peer->smsg_mbox;
-
-	smsg_mbox_attr_peer.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
-	smsg_mbox_attr_peer.msg_buffer = mbox_peer->base;
-	smsg_mbox_attr_peer.buff_size =  vc_peer->ep->nic->mem_per_mbox;
-	smsg_mbox_attr_peer.mem_hndl = *mbox_peer->memory_handle;
-	smsg_mbox_attr_peer.mbox_offset = (uint64_t)mbox_peer->offset;
-	smsg_mbox_attr_peer.mbox_maxcredit = dom->params.mbox_maxcredit;
-	smsg_mbox_attr_peer.msg_maxsize = dom->params.mbox_msg_maxsize;
-
-	ret = __gnix_vc_smsg_init(vc, vc_peer->vc_id, &smsg_mbox_attr_peer,
-				  &ep_peer->nic->irq_mem_hndl);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_vc_smsg_init returned %s\n",
-			  fi_strerror(-ret));
-		goto exit;
-	}
-
-	ret = __gnix_vc_smsg_init(vc_peer, vc->vc_id, &smsg_mbox_attr,
-				  &ep->nic->irq_mem_hndl);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_vc_smsg_init returned %s\n",
-			  fi_strerror(-ret));
-		goto exit;
-	}
-
-	vc->conn_state = GNIX_VC_CONNECTED;
-	vc->peer_id = vc_peer->vc_id;
+	vc->peer_id = vc->vc_id;
 	vc->peer_caps = ep->caps;
-	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n", vc);
+	vc->peer_irq_mem_hndl = ep->nic->irq_mem_hndl;
 
-	vc_peer->conn_state = GNIX_VC_CONNECTED;
-	vc_peer->peer_id = vc->vc_id;
-	vc_peer->peer_irq_mem_hndl = ep->nic->irq_mem_hndl;
-	ret = _gnix_vc_schedule(vc_peer);
+	ret = _gnix_vc_schedule(vc);
 	if (ret != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_vc_schedule returned %s\n",
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_vc_schedule returned %s\n",
 			  fi_strerror(-ret));
 
-	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
-		   vc_peer);
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n", vc);
+	return ret;
 
-exit:
+err_mbox_init:
+	_gnix_mbox_free(vc->smsg_mbox);
+	vc->smsg_mbox = NULL;
+	
 	return ret;
 }
 
@@ -1801,14 +1670,11 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 		return -FI_EINVAL;
 
 	/*
-	 * have to do something special for
-	 * connect to same cm_nic
+	 * check if this EP is connecting to itself
 	 */
 
-	if (!memcmp(&vc->peer_cm_nic_addr,
-		   &cm_nic->my_name.gnix_addr,
-		   sizeof(struct gnix_address))) {
-		return  __gnix_vc_connect_to_same_cm_nic(vc);
+	if (GNIX_ADDR_EQUAL(ep->my_name.gnix_addr, vc->peer_addr)) {
+		return __gnix_vc_connect_to_self(vc);
 	}
 
 	/*
