@@ -628,7 +628,10 @@ struct psmx2_trigger {
 };
 
 struct psmx2_fid_cntr {
-	struct fid_cntr		cntr;
+	union {
+		struct fid_cntr		cntr;
+		struct util_cntr	util_cntr; /* for util_poll_run */
+	};
 	struct psmx2_fid_domain	*domain;
 	int			events;
 	uint64_t		flags;
