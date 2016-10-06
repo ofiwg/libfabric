@@ -185,6 +185,26 @@ The `set_val` function sets the value of a given parameter; the
 : Enable or disable lazy deregistration of memory.  The value is of
   type int32_t.
 
+*GNI_MR_CACHE*
+: Select the type of cache that the domain will use. Valid choices are
+  the following: 'internal', 'udreg', or 'none'. 'internal' refers to the GNI
+  provider internal registration cache. 'udreg' refers to a user level dreg
+  library based cache. Lastly, 'none' refers to device direct registration
+  without a provider cache.
+
+*GNI_MR_HARD_REG_LIMIT*
+: Maximum number of registrations. Applies only to the GNI provider cache. The value is of type int32_t (-1 for no limit).
+
+*GNI_MR_SOFT_REG_LIMIT*
+: Soft cap on the registration limit. Applies only to the GNI provider cache. The value is of type int32_t (-1 for no limit).
+
+*GNI_MR_HARD_STALE_REG_LIMIT*
+: Maximum number of stale registrations to be held in cache. This applies to  the GNI provider cache and the udreg cache. The value is of type int32_t (-1 for no limit for the GNI provider cache and udreg cache values must be greater than 0).
+
+*GNI_MR_UDREG_LIMIT*
+: Maximum number of registrations. Applies only to the udreg cache. The value is of type int32_t. The value must be greater than 0.
++.PP
+
 For *FI_GNI_EP_OPS_1*, the currently supported values are:
 *GNI_HASH_TAG_IMPL*
 : Use a hashlist for the tag list implementation.  The value is of type uint32_t.
