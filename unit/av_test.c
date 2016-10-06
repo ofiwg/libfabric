@@ -945,19 +945,24 @@ fail:
 }
 
 struct test_entry test_array_good[] = {
-	TEST_ENTRY(av_open_close),
-	TEST_ENTRY(av_good_sync),
-	TEST_ENTRY(av_good_vector_async),
-	TEST_ENTRY(av_zero_async),
-	TEST_ENTRY(av_good_2vector_async),
+	TEST_ENTRY(av_open_close, "Test open and close AVs of varying sizes"),
+	TEST_ENTRY(av_good_sync, "Test sync AV insert with good address"),
+	TEST_ENTRY(av_good_vector_async,
+			"Test async AV insert with vector of good addresses"),
+	TEST_ENTRY(av_zero_async, "Test async insert AV insert of zero addresses"),
+	TEST_ENTRY(av_good_2vector_async,
+			"Test async AV inserts with two address vectors"),
 	{ NULL, "" }
 };
 
 struct test_entry test_array_bad[] = {
-	TEST_ENTRY(av_bad_sync),
-	TEST_ENTRY(av_goodbad_vector_sync),
-	TEST_ENTRY(av_goodbad_vector_async),
-	TEST_ENTRY(av_goodbad_2vector_async),
+	TEST_ENTRY(av_bad_sync, "Test sync AV insert of bad address"),
+	TEST_ENTRY(av_goodbad_vector_sync,
+			"Test sync AV inset of 1 good and 1 bad address"),
+	TEST_ENTRY(av_goodbad_vector_async,
+			"Test async AV insert with good and bad address"),
+	TEST_ENTRY(av_goodbad_2vector_async, "Test async AV insert with two vectors:"
+			" one good and one mix (good + bad)"),
 	{ NULL, "" }
 };
 
@@ -970,12 +975,12 @@ run_test_set()
 
 	failed += run_tests(test_array_good, err_buf);
 	if (bad_address != NULL) {
-		printf("Testing with bad_address = \"%s\"\n", bad_address);
+		printf("\nTesting with bad_address = \"%s\"\n", bad_address);
 		failed += run_tests(test_array_bad, err_buf);
 	}
 
 	bad_address = NULL;
-	printf("Testing with invalid address\n");
+	printf("\nTesting with invalid address\n");
 	failed += run_tests(test_array_bad, err_buf);
 
 	return failed;
@@ -1070,21 +1075,21 @@ int main(int argc, char **argv)
 	if (fi->domain_attr->av_type == FI_AV_UNSPEC ||
 	    fi->domain_attr->av_type == FI_AV_MAP) {
 		av_type = FI_AV_MAP;
-		printf("Testing with type = FI_AV_MAP\n");
+		printf("\nTesting with type = FI_AV_MAP\n");
 		failed += run_test_set();
 	}
 
 	if (fi->domain_attr->av_type == FI_AV_UNSPEC ||
 	    fi->domain_attr->av_type == FI_AV_TABLE) {
 		av_type = FI_AV_TABLE;
-		printf("Testing with type = FI_AV_TABLE\n");
+		printf("\nTesting with type = FI_AV_TABLE\n");
 		failed += run_test_set();
 	}
 
 	if (failed > 0) {
-		printf("Summary: %d tests failed\n", failed);
+		printf("\nSummary: %d tests failed\n", failed);
 	} else {
-		printf("Summary: all tests passed\n");
+		printf("\nSummary: all tests passed\n");
 	}
 
 err:

@@ -228,12 +228,14 @@ fail:
  * enabled.
  */
 struct test_entry bad_tests[] = {
-	TEST_ENTRY(test_size_left_bad),
+	TEST_ENTRY(test_size_left_bad,
+			"Test if provider returns error when endpoint is not enabled"),
 	{ NULL, "" }
 };
 
 struct test_entry good_tests[] = {
-	TEST_ENTRY(test_size_left_good),
+	TEST_ENTRY(test_size_left_good,
+			"Test size left after endpoint is enabled"),
 	{ NULL, "" }
 };
 

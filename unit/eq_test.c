@@ -547,13 +547,13 @@ fail:
 }
 
 struct test_entry test_array[] = {
-	TEST_ENTRY(eq_open_close),
-	TEST_ENTRY(eq_write_read_self),
-	TEST_ENTRY(eq_write_overflow),
-	TEST_ENTRY(eq_wait_fd_poll),
-	TEST_ENTRY(eq_wait_fd_sread),
-	TEST_ENTRY(eq_wait_read_peek),
-	TEST_ENTRY(eq_wait_sread_peek),
+	TEST_ENTRY(eq_open_close, "Test open and close of EQ for various sizes"),
+	TEST_ENTRY(eq_write_read_self, "Test writing and reading to EQ"),
+	TEST_ENTRY(eq_write_overflow, "Test writing # of entries that exceed EQ size"),
+	TEST_ENTRY(eq_wait_fd_poll, "Test polling on fd extracted from EQ"),
+	TEST_ENTRY(eq_wait_fd_sread, "Test EQ sread"),
+	TEST_ENTRY(eq_wait_read_peek, "Test EQ read with FI_PEEK"),
+	TEST_ENTRY(eq_wait_sread_peek, "Test EQ sread with FI_PEEK"),
 	{ NULL, "" }
 };
 
