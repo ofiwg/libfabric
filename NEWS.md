@@ -118,9 +118,16 @@ v1.4.0rc1, Mon Oct 3, 2016
 
 ## Verbs provider notes
 
-- Add fork support.
-- Fix a bug where source address info was not being returned in fi_info
-  when destination node is specified.
+- Add fork support. It is enabled by default and can be turned off by setting the 
+  FI_FORK_UNSAFE variable to "yes". This can improve performance of memory registrations
+  but also makes fork unsafe. The following are the limitations of fork support:
+  - Fabric resources like endpoint, CQ, EQ, etc. should not be used in the
+    forked process.
+  - The memory registered using fi_mr_reg has to be page aligned since ibv_reg_mr
+    marks the entire page that a memory region belongs to as not to be re-mapped
+    when the process is forked (MADV_DONTFORK).
+- Fix a bug where source address info was not being returned in fi_info when
+  destination node is specified.
 
 - verbs/MSG
   - Add fi_getopt for passive endpoints.
