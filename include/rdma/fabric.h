@@ -219,8 +219,8 @@ enum fi_ep_type {
 	FI_EP_MSG,
 	FI_EP_DGRAM,
 	FI_EP_RDM,
-	/* FI_EP_RAW, */
-	/* FI_EP_PACKET, */
+	FI_EP_SOCK_STREAM,
+	FI_EP_SOCK_DGRAM,
 };
 
 /* Endpoint protocol

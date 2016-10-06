@@ -208,6 +208,8 @@ static void fi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
 	CASEENUMSTR(FI_EP_MSG);
 	CASEENUMSTR(FI_EP_DGRAM);
 	CASEENUMSTR(FI_EP_RDM);
+	CASEENUMSTR(FI_EP_SOCK_STREAM);
+	CASEENUMSTR(FI_EP_SOCK_DGRAM);
 	default:
 		strcatf(buf, "Unknown");
 		break;

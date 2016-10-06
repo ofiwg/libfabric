@@ -452,6 +452,14 @@ assigned to an endpoint.
 : This option only applies to passive endpoints.  It is used to set the
   connection request backlog for listening endpoints.
 
+*FI_GETWAIT (void \*\*)*
+: This command allows the user to retrieve the file descriptor associated
+  with a socket endpoint.  The fi_control arg parameter should be an address
+  where a pointer to the returned file descriptor will be written.  See fi_eq.3
+  for addition details using fi_control with FI_GETWAIT.  The file descriptor
+  may be used for notification that the endpoint is ready to send or receive
+  data.
+
 ## fi_getopt / fi_setopt
 
 Endpoint protocol operations may be retrieved using fi_getopt or set
@@ -544,6 +552,20 @@ desired.  Supported types are:
 : Reliable datagram message.  Provides a reliable, unconnected data
   transfer service with flow control that maintains message
   boundaries.
+
+*FI_EP_SOCK_STREAM*
+: Data streaming endpoint with TCP socket-like semantics.  Provides
+  a reliable, connection-oriented data transfer service that does
+  not maintain message boundaries.  FI_EP_SOCK_STREAM is most useful for
+  applications designed around using TCP sockets.  See the SOCKET
+  ENDPOINT section for additional details and restrictions that apply
+  to stream endpoints.
+
+*FI_EP_SOCK_DGRAM*
+: A connectionless, unreliable datagram endpoint with UDP socket-like
+  semantics.  FI_EP_SOCK_DGRAM is most useful for applications designed
+  around using UDP sockets.  See the SOCKET ENDPOINT section for additional
+  details and restrictions that apply to datagram socket endpoints.
 
 ## Protocol
 
@@ -1117,6 +1139,40 @@ under SCALABLE ENDPOINTS section for details on the receive context
 attributes.  The exception is that endpoints attached to a shared
 receive context must use a subset of the receive context attributes.
 This is opposite of the requirement for scalable endpoints.
+
+# SOCKET ENDPOINTS
+
+This section applies to endpoints of type FI_EP_SOCK_STREAM and
+FI_EP_SOCK_DGRAM, commonly referred to as socket endpoints.
+
+Socket endpoints are defined with semantics that allow them to more
+easily be adopted by developers familiar with the UNIX socket API, or
+by middleware that exposes the socket API, while still taking advantage
+of high-performance hardware features.
+
+The key difference between socket endpoints and other active endpoints
+are socket endpoints use synchronous data transfers.  Buffers passed
+into send and receive operations revert to the control of the application
+upon returning from the function call.  As a result, no data transfer
+completions are reported to the application, and socket endpoints are not
+associated with completion queues or counters.
+
+Socket endpoints support a subset of message operations: fi_send,
+fi_sendv, fi_sendmsg, fi_recv, fi_recvv, fi_recvmsg, and fi_inject.
+Because data transfers are synchronous, the return value from send and receive
+operations indicate the number of bytes transferred on success, or a negative
+value on error, including -FI_EAGAIN if the endpoint cannot send or
+receive any data because of full or empty queues, respectively.
+
+Socket endpoints are associated with event queues and address vectors, and
+process connection management events asynchronously, similar to other endpoints.
+Unlike UNIX sockets, socket endpoint must still be declared as either active
+or passive.
+
+Socket endpoints behave like non-blocking sockets.  In order to support
+select and poll semantics, active socket endpoints are associated with a
+file descriptor that is signaled whenever the endpoint is ready to send
+and/or receive data.  The file descriptor may be retrieved using fi_control.
 
 # OPERATION FLAGS
 
