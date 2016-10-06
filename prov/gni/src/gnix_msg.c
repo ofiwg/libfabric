@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -610,8 +610,8 @@ static inline void __gnix_msg_iov_cpy_unaligned_head_tail_data(struct gnix_fab_r
 			 * data we are interested in.
 			 */
 			addr = (void *) ((uint8_t *) req->msg.htd_buf +
-					 (GNI_READ_ALIGN * (i + GNIX_MAX_IOV_LIMIT)) +
-					 GNI_READ_ALIGN - req->msg.recv_info[i].head_len);
+			     (GNI_READ_ALIGN * (i + GNIX_MAX_MSG_IOV_LIMIT)) +
+			     GNI_READ_ALIGN - req->msg.recv_info[i].head_len);
 			recv_addr = (void *) req->msg.recv_info[i].recv_addr;
 
 			GNIX_INFO(FI_LOG_EP_DATA,
@@ -1270,7 +1270,8 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 					cur_ct->local_mem_hndl = req->msg.htd_mdh;
 					cur_ct->length = GNI_READ_ALIGN;
 					cur_ct->remote_addr = send_ptr - GNI_READ_ALIGN;
-					cur_ct->local_addr = (uint64_t) (((uint8_t *) req->msg.htd_buf) + (GNI_READ_ALIGN * (recv_idx + GNIX_MAX_IOV_LIMIT)));
+					cur_ct->local_addr = (uint64_t) (((uint8_t *) req->msg.htd_buf) +
+						(GNI_READ_ALIGN * (recv_idx + GNIX_MAX_MSG_IOV_LIMIT)));
 					next_ct = &cur_ct->next_descr;
 				}
 			} else { 	/* Start a new ct */
@@ -1330,7 +1331,8 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 						cur_ct->local_mem_hndl = req->msg.htd_mdh;
 						cur_ct->length = GNI_READ_ALIGN;
 						cur_ct->remote_addr = send_ptr - GNI_READ_ALIGN;
-						cur_ct->local_addr = (uint64_t) (((uint8_t *) req->msg.htd_buf) + (GNI_READ_ALIGN * (recv_idx + GNIX_MAX_IOV_LIMIT)));
+						cur_ct->local_addr = (uint64_t) (((uint8_t *) req->msg.htd_buf) +
+								(GNI_READ_ALIGN * (recv_idx + GNIX_MAX_MSG_IOV_LIMIT)));
 						next_ct = &cur_ct->next_descr;
 					} else { /* New FMA ct */
 						GNIX_DEBUG(FI_LOG_EP_DATA, "New FMA"
@@ -1360,7 +1362,8 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 						ct_txd->gni_desc.remote_addr = send_ptr - GNI_READ_ALIGN;
 						ct_txd->gni_desc.remote_mem_hndl = req->msg.send_info[send_idx].mem_hndl;
 
-						ct_txd->gni_desc.local_addr = (uint64_t) ((uint8_t *) req->msg.htd_buf + (GNI_READ_ALIGN * (recv_idx + GNIX_MAX_IOV_LIMIT)));
+						ct_txd->gni_desc.local_addr = (uint64_t) ((uint8_t *) req->msg.htd_buf +
+								(GNI_READ_ALIGN * (recv_idx + GNIX_MAX_MSG_IOV_LIMIT)));
 						ct_txd->gni_desc.local_mem_hndl = req->msg.htd_mdh;
 
 						ct_txd->gni_desc.length = GNI_READ_ALIGN;
