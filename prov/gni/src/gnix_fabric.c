@@ -529,8 +529,7 @@ GNI_INI
 
 	/*
 	 * well if we didn't get 1 nic, that means we must really be doing
-	 * FMA sharing.  Emit a warning message if FI_LOG_LEVEL appropriately
-	 * set.
+	 * FMA sharing.
 	 */
 
 	if (gnix_max_nics_per_ptag == 0) {
