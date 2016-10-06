@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2016\-08\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2016\-10\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -177,6 +177,36 @@ The value is of type uint32_t.
 \f[I]GNI_MR_CACHE_LAZY_DEREG\f[] : Enable or disable lazy deregistration
 of memory.
 The value is of type int32_t.
+.PP
+\f[I]GNI_MR_CACHE\f[] : Select the type of cache that the domain will
+use.
+Valid choices are the following: \[aq]internal\[aq], \[aq]udreg\[aq], or
+\[aq]none\[aq].
+\[aq]internal\[aq] refers to the GNI provider internal registration
+cache.
+\[aq]udreg\[aq] refers to a user level dreg library based cache.
+Lastly, \[aq]none\[aq] refers to device direct registration without a
+provider cache.
+.PP
+\f[I]GNI_MR_HARD_REG_LIMIT\f[] : Maximum number of registrations.
+Applies only to the GNI provider cache.
+The value is of type int32_t (\-1 for no limit).
+.PP
+\f[I]GNI_MR_SOFT_REG_LIMIT\f[] : Soft cap on the registration limit.
+Applies only to the GNI provider cache.
+The value is of type int32_t (\-1 for no limit).
+.PP
+\f[I]GNI_MR_HARD_STALE_REG_LIMIT\f[] : Maximum number of stale
+registrations to be held in cache.
+This applies to the GNI provider cache and the udreg cache.
+The value is of type int32_t (\-1 for no limit for the GNI provider
+cache and udreg cache values must be greater than 0).
+.PP
+\f[I]GNI_MR_UDREG_LIMIT\f[] : Maximum number of registrations.
+Applies only to the udreg cache.
+The value is of type int32_t.
+The value must be greater than 0.
++.PP
 .PP
 For \f[I]FI_GNI_EP_OPS_1\f[], the currently supported values are:
 \f[I]GNI_HASH_TAG_IMPL\f[] : Use a hashlist for the tag list
