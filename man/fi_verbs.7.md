@@ -68,6 +68,12 @@ The verbs provider supports a subset of OFI features.
 
   * Send after Send
 
+#### Fork
+: Verbs provider supports the fork system call by default. See the limitations section
+  for restrictions. It can be turned off by setting the FI_FORK_UNSAFE environment
+  variable to "yes". This can improve the performance of memory registrations but it
+  also makes the use of fork unsafe.
+
 # LIMITATIONS
 
 #### Memory Regions
@@ -106,6 +112,48 @@ The verbs provider supports a subset of OFI features.
   * Wait objects are not supported.
 
   * Not thread safe.
+
+#### Fork
+: The support for fork in the provider has the following limitations:
+  * Fabric resources like endpoint, CQ, EQ, etc. should not be used in the
+    forked process.
+  * The memory registered using fi_mr_reg has to be page aligned since ibv_reg_mr
+    marks the entire page that a memory region belongs to as not to be re-mapped
+    when the process is forked (MADV_DONTFORK).
+
+# RUNTIME PARAMETERS
+
+The verbs provider checks for the following environment variables.
+
+#### Variables specific to RDM endpoints
+
+##### FI_VERBS_IFACE
+: The prefix or the full name of the network interface associated with the IB device (default: ib)
+
+##### FI_VERBS_RDM_BUFFER_NUM
+: The number of pre-registered buffers for buffered operations between the endpoints,
+  must be a power of 2 (default: 8).
+
+##### FI_VERBS_RDM_BUFFER_SIZE
+: The maximum size of a buffered operation (bytes) (default: platform specific).
+
+##### FI_VERBS_RDM_RNDV_SEG_SIZE
+: The segment size for zero copy protocols (bytes)(default: 1073741824).
+
+##### FI_VERBS_RDM_CQREAD_BUNCH_SIZE
+: The number of entries to be read from the verbs completion queue at a time (default: 8).
+
+##### FI_VERBS_RDM_THREAD_TIMEOUT
+: The wake up timeout of the helper thread (usec) (default: 100).
+
+##### FI_VERBS_RDM_EAGER_SEND_OPCODE
+: The operation code that will be used for eager messaging. Only IBV_WR_SEND and
+  IBV_WR_RDMA_WRITE_WITH_IMM are supported. The last one is not applicable for iWarp.
+  (default: IBV_WR_SEND)
+
+#### Environment variables notes
+: The fi_info utility would give the up-to-date information on environment variables:
+  fi_info -p verbs -e
 
 # SEE ALSO
 
