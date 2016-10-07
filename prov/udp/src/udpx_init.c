@@ -89,7 +89,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 	}
 }
 #else
-#define udpx_get_interfaces(info)
+#define udpx_getinfo_ifs(info) do{}while(0)
 #endif
 
 int udpx_check_info(struct fi_info *info)
