@@ -310,6 +310,7 @@ struct fi_domain_attr {
 	size_t			max_ep_rx_ctx;
 	size_t			max_ep_stx_ctx;
 	size_t			max_ep_srx_ctx;
+	size_t			cntr_cnt;
 };
 
 struct fi_fabric_attr {

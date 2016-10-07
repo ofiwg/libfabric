@@ -52,6 +52,27 @@ struct fi_fabric_attr_1_0 {
 	uint32_t			prov_version;
 };
 
+struct fi_domain_attr_1_0 {
+	struct fid_domain		*domain;
+	char				*name;
+	enum fi_threading		threading;
+	enum fi_progress		control_progress;
+	enum fi_progress		data_progress;
+	enum fi_resource_mgmt		resource_mgmt;
+	enum fi_av_type			av_type;
+	enum fi_mr_mode			mr_mode;
+	size_t				mr_key_size;
+	size_t				cq_data_size;
+	size_t				cq_cnt;
+	size_t				ep_cnt;
+	size_t				tx_ctx_cnt;
+	size_t				rx_ctx_cnt;
+	size_t				max_ep_tx_ctx;
+	size_t				max_ep_rx_ctx;
+	size_t				max_ep_stx_ctx;
+	size_t				max_ep_srx_ctx;
+};
+
 struct fi_info_1_0 {
 	struct fi_info			*next;
 	uint64_t			caps;
@@ -65,7 +86,7 @@ struct fi_info_1_0 {
 	struct fi_tx_attr		*tx_attr;
 	struct fi_rx_attr		*rx_attr;
 	struct fi_ep_attr		*ep_attr;
-	struct fi_domain_attr		*domain_attr;
+	struct fi_domain_attr_1_0	*domain_attr;
 	struct fi_fabric_attr_1_0	*fabric_attr;
 };
 

@@ -469,6 +469,7 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s%smax_ep_rx_ctx: %zd\n", prefix, TAB, attr->max_ep_rx_ctx);
 	strcatf(buf, "%s%smax_ep_stx_ctx: %zd\n", prefix, TAB, attr->max_ep_stx_ctx);
 	strcatf(buf, "%s%smax_ep_srx_ctx: %zd\n", prefix, TAB, attr->max_ep_srx_ctx);
+	strcatf(buf, "%s%scntr_cnt: %zd\n", prefix, TAB, attr->cntr_cnt);
 }
 
 static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,

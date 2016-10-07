@@ -126,6 +126,7 @@ struct fi_domain_attr {
 	size_t                max_ep_rx_ctx;
 	size_t                max_ep_stx_ctx;
 	size_t                max_ep_srx_ctx;
+	size_t                cntr_cnt;
 };
 ```
 
@@ -490,6 +491,13 @@ shared transmit context.
 
 The maximum number of endpoints that may be associated with a
 shared receive context.
+
+## Counter Count (cntr_cnt)
+
+The optimal number of completion counters supported by the domain.
+The cq_cnt value may be a fixed value of the maximum number of counters
+supported by the underlying hardware, or may be a dynamic value, based on
+the default attributes of the domain.
 
 # RETURN VALUE
 
