@@ -21,6 +21,10 @@ extern "C" {
 extern char* optarg;
 extern int   optind, opterr, optopt;
 
+#ifndef strcasecmp
+#  define strcasecmp lstrcmpiA
+#endif /* strcasecmp */
+
 #ifndef no_argument
 #    define no_argument        0
 #endif /* no_argument */
