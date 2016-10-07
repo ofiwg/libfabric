@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2016\-10\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2016\-10\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -206,7 +206,10 @@ cache and udreg cache values must be greater than 0).
 Applies only to the udreg cache.
 The value is of type int32_t.
 The value must be greater than 0.
-+.PP
+.PP
+\f[I]GNI_XPMEM_ENABLE\f[] : Enable or disable use of XPMEM for on node
+messages using the GNI provider internal rendezvous protocol.
+The value is of type bool.
 .PP
 For \f[I]FI_GNI_EP_OPS_1\f[], the currently supported values are:
 \f[I]GNI_HASH_TAG_IMPL\f[] : Use a hashlist for the tag list
