@@ -57,8 +57,8 @@ struct fi_prov {
 static struct fi_prov *fi_getprov(const char *prov_name);
 
 static struct fi_prov *prov_head, *prov_tail;
-int init = 0;
-pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
+int ofi_init = 0;
+pthread_mutex_t ofi_ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static struct fi_filter prov_filter;
 
@@ -340,9 +340,9 @@ void fi_ini(void)
 {
 	char *param_val = NULL;
 
-	pthread_mutex_lock(&ini_lock);
+	pthread_mutex_lock(&ofi_ini_lock);
 
-	if (init)
+	if (ofi_init)
 		goto unlock;
 
 	fi_param_init();
@@ -407,17 +407,17 @@ libdl_done:
 
 	/* Seriously, read it! */
 
-	init = 1;
+	ofi_init = 1;
 
 unlock:
-	pthread_mutex_unlock(&ini_lock);
+	pthread_mutex_unlock(&ofi_ini_lock);
 }
 
 FI_DESTRUCTOR(fi_fini(void))
 {
 	struct fi_prov *prov;
 
-	if (!init)
+	if (!ofi_init)
 		return;
 
 	while (prov_head) {
@@ -523,7 +523,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 	struct fi_info *tail, *cur;
 	int ret;
 
-	if (!init)
+	if (!ofi_init)
 		fi_ini();
 
 	if (FI_VERSION_LT(fi_version(), version)) {
@@ -691,7 +691,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr, struct fid_fabric
 	if (!attr || !attr->prov_name || !attr->name)
 		return -FI_EINVAL;
 
-	if (!init)
+	if (!ofi_init)
 		fi_ini();
 
 	prov = fi_getprov(attr->prov_name);

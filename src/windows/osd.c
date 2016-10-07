@@ -40,7 +40,7 @@
 
 #include "rdma/providers/fi_log.h"
 
-extern pthread_mutex_t ini_lock;
+extern pthread_mutex_t ofi_ini_lock;
 static INIT_ONCE ofi_init_once = INIT_ONCE_STATIC_INIT;
 
 static char ofi_shm_prefix[] = "Local\\";
@@ -167,7 +167,7 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
-		InitOnceExecuteOnce(&ofi_init_once, ofi_init_once_cb, &ini_lock, 0);
+		InitOnceExecuteOnce(&ofi_init_once, ofi_init_once_cb, &ofi_ini_lock, 0);
 		break;
 	case DLL_THREAD_ATTACH:
 		break;
