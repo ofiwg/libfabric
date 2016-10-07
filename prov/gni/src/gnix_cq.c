@@ -158,6 +158,11 @@ static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops,
 		return -FI_EINVAL;
 	}
 
+	/* TODO: Wait objects are not yet implemented. */
+	if (attr->wait_obj != FI_WAIT_NONE) {
+		return -FI_EINVAL;
+	}
+
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 		ops->sread = fi_no_cq_sread;
