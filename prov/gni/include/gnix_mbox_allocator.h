@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,10 +33,6 @@
 
 #ifndef _GNIX_MBOX_ALLOCATOR_
 #define _GNIX_MBOX_ALLOCATOR_
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <stddef.h>
 
@@ -193,9 +189,5 @@ int _gnix_mbox_free(struct gnix_mbox *ptr);
  * hugepages.
  */
 extern atomic_t file_id_counter;
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _GNIX_MBOX_ALLOCATOR_ */

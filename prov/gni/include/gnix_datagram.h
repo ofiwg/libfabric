@@ -34,10 +34,6 @@
 #ifndef _GNIX_DATAGRAM_H_
 #define _GNIX_DATAGRAM_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "gnix.h"
 
 /*
@@ -336,9 +332,5 @@ int _gnix_dgram_rewind_buf(struct gnix_datagram *d, enum gnix_dgram_buf);
 int _gnix_dgram_poll(struct gnix_dgram_hndl *hndl_ptr,
 			enum gnix_dgram_poll_type type);
 
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif /* _GNIX_DATAGRAM_H_ */

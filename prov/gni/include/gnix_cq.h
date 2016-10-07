@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,10 +33,6 @@
 
 #ifndef _GNIX_CQ_H_
 #define _GNIX_CQ_H_
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <fi.h>
 
@@ -94,9 +90,5 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 
 int _gnix_cq_poll_nic_add(struct gnix_fid_cq *cq, struct gnix_nic *nic);
 int _gnix_cq_poll_nic_rem(struct gnix_fid_cq *cq, struct gnix_nic *nic);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

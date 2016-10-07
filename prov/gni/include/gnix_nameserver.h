@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -34,10 +34,6 @@
 #ifndef _GNIX_NAMESERVER_H_
 #define _GNIX_NAMESERVER_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "gnix.h"
 
 /*
@@ -51,9 +47,5 @@ extern "C" {
 int gnix_resolve_name(IN const char *node, IN const char *service,
 		      IN uint64_t flags, INOUT struct gnix_ep_name
 		      *resolved_addr);
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif /* _GNIX_NAMESERVER_H_ */

@@ -34,10 +34,6 @@
 #ifndef _GNIX_VC_H_
 #define _GNIX_VC_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #if HAVE_CONFIG_H
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
@@ -345,5 +341,6 @@ static inline enum gnix_vc_conn_state _gnix_vc_state(struct gnix_vc *vc)
 	assert(vc);
 	return vc->conn_state;
 }
+
 
 #endif /* _GNIX_VC_H_ */

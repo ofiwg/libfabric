@@ -36,10 +36,6 @@
 #ifndef _GNIX_H_
 #define _GNIX_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #if HAVE_CONFIG_H
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
@@ -987,10 +983,6 @@ int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 #else
 #define DIRECT_FN
 #define STATIC static
-#endif
-
-#ifdef __cplusplus
-} /* extern "C" */
 #endif
 
 #endif /* _GNIX_H_ */
