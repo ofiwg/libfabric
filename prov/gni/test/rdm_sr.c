@@ -470,7 +470,7 @@ void rdm_sr_xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 
 void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 		      uint64_t flags, void *addr, size_t len,
-		      uint64_t data)
+		      uint64_t data, bool buf_is_non_null)
 {
 	cr_assert(cqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(cqe->flags == flags, "CQE flags mismatch");
@@ -478,11 +478,10 @@ void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 	if (flags & FI_RECV) {
 		cr_assert(cqe->len == len, "CQE length mismatch");
 
-		/* This needs to be addressed for #876 */
-		/* if (flags & FI_MULTI_RECV) */
-		/* 	cr_assert(cqe->buf == addr, "CQE address mismatch"); */
-		/* else */
-		/* 	cr_assert(cqe->buf == NULL, "CQE address mismatch"); */
+		if (buf_is_non_null)
+			cr_assert(cqe->buf == addr, "CQE address mismatch");
+		else
+			cr_assert(cqe->buf == NULL, "CQE address mismatch");
 
 
 		if (flags & FI_REMOTE_CQ_DATA)
@@ -621,8 +620,8 @@ void do_send(int len)
 	if (dgram_should_fail && (scanceled || dcanceled))
 		return;
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -702,9 +701,10 @@ void do_sendv(int len)
 			}
 		} while (!(source_done && dest_done));
 
-		rdm_sr_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND), 0, 0, 0,
+				false);
 		rdm_sr_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV), iov_dest_buf,
-				 len * iov_cnt, 0);
+				 len * iov_cnt, 0, false);
 
 		s[0] = 1; r[1] = 1;
 		rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -774,8 +774,9 @@ void do_sendmsg(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0,
+			false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -843,9 +844,9 @@ void do_sendmsgdata(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			 target, len, (uint64_t)source);
+			 target, len, (uint64_t)source, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -896,7 +897,7 @@ void do_inject(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_sr_check_cqe(&cqe, source, (FI_MSG|FI_RECV),
-			 target, len, (uint64_t)source);
+			 target, len, (uint64_t)source, false);
 
 	dbg_printf("got recv context event!\n");
 
@@ -953,7 +954,7 @@ Test(rdm_sr, inject_progress)
 
 	cr_assert_eq(ret, 1);
 	rdm_sr_check_cqe(&cqe, source, (FI_MSG|FI_RECV),
-			 target, len, (uint64_t)source);
+			 target, len, (uint64_t)source, false);
 
 	dbg_printf("got recv context event!\n");
 
@@ -1007,9 +1008,9 @@ void do_senddata(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			 target, len, (uint64_t)source);
+			 target, len, (uint64_t)source, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1058,7 +1059,7 @@ void do_injectdata(int len)
 	}
 
 	rdm_sr_check_cqe(&cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			 target, len, (uint64_t)source);
+			 target, len, (uint64_t)source, false);
 
 	dbg_printf("got recv context event!\n");
 
@@ -1133,9 +1134,9 @@ void do_recvv(int len)
 			}
 		} while (!(source_done && dest_done));
 
-		rdm_sr_check_cqe(&s_cqe, dest_iov, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&s_cqe, dest_iov, (FI_MSG|FI_SEND), 0, 0, 0, false);
 		rdm_sr_check_cqe(&d_cqe, iov_src_buf, (FI_MSG|FI_RECV), dest_iov,
-				 len * iov_cnt, 0);
+				 len * iov_cnt, 0, false);
 
 		s[0] = 1; r[1] = 1;
 		rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1205,8 +1206,9 @@ void do_recvmsg(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0,
+			false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1262,8 +1264,9 @@ void do_send_autoreg(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0,
+			false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1314,9 +1317,9 @@ void do_send_autoreg_uncached(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0, false);
 	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV),
-			 uc_target, len, 0);
+			 uc_target, len, 0, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1424,9 +1427,9 @@ void do_send_autoreg_uncached_nolazydereg(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0, false);
 	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV),
-			 uc_target, len, 0);
+			 uc_target, len, 0, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1476,8 +1479,8 @@ Test(rdm_sr, send_readfrom)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1519,8 +1522,8 @@ void do_send_buf(void *p, void *t, int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, len, 0);
+	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, len, 0, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1588,8 +1591,8 @@ void do_sendrecv_buf(void *p, void *t, int send_len, int recv_len)
 	} while (!(source_done && dest_done));
 
 	xfer_len = MIN(send_len, recv_len);
-	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, xfer_len, 0);
+	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, xfer_len, 0, false);
 
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1656,9 +1659,9 @@ void do_sendvrecv_alignment(int slen, int dlen, int offset)
 			}
 		} while (!(source_done && dest_done));
 
-		rdm_sr_check_cqe(&s_cqe, (void *) iov_d_buf, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&s_cqe, (void *) iov_d_buf, (FI_MSG|FI_SEND), 0, 0, 0, false);
 		rdm_sr_check_cqe(&d_cqe, s_iov, (FI_MSG|FI_RECV), (void *) iov_d_buf,
-				 (dlen - offset) * iov_cnt, 0);
+				 (dlen - offset) * iov_cnt, 0, false);
 
 		s[0] = 1; r[1] = 1;
 		rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1714,9 +1717,9 @@ void do_sendrecvv_alignment(int slen, int dlen, int offset)
 			}
 		} while (!(source_done && dest_done));
 
-		rdm_sr_check_cqe(&s_cqe, d_iov, (FI_MSG|FI_SEND), 0, 0, 0);
+		rdm_sr_check_cqe(&s_cqe, d_iov, (FI_MSG|FI_SEND), 0, 0, 0, false);
 		rdm_sr_check_cqe(&d_cqe, (void *) iov_s_buf, (FI_MSG|FI_RECV), d_iov,
-				 MIN((slen - offset) * iov_cnt, (dlen - offset) * iov_cnt), 0);
+				 MIN((slen - offset) * iov_cnt, (dlen - offset) * iov_cnt), 0, false);
 
 		s[0] = 1; r[1] = 1;
 		rdm_sr_check_cntrs(s, r, s_e, r_e);
@@ -1817,6 +1820,7 @@ void do_multirecv(int len)
 	struct fi_msg msg;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
+	uint64_t flags;
 	int nrecvs = 3;
 
 	rdm_sr_init_data(source, len, 0xab);
@@ -1847,14 +1851,16 @@ void do_multirecv(int len)
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
 			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
-					 0, 0, 0);
+					 0, 0, 0, false);
 			s[0]++;
 		}
 		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		flags = (r[1] < (nrecvs -1 )) ? FI_MSG | FI_RECV :
+				FI_MSG | FI_RECV | FI_MULTI_RECV;
 		if (ret == 1) {
 			rdm_sr_check_cqe(&d_cqe, source,
-					 (FI_MSG|FI_RECV|FI_MULTI_RECV),
-					 target + (r[1] * len), len, 0);
+					 flags,
+					 target + (r[1] * len), len, 0, true);
 			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
 				  "Data mismatch");
 			r[1]++;
@@ -1871,11 +1877,20 @@ Test(rdm_sr, multirecv)
 	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
 
+/*
+ * for now disable this test since the current test assumes
+ * recv-side CQ events arrive in order of buffer consumption
+ * for multi recv.  But actually this isn't always the case.
+ * We need a test which keeps track of each CQE on the receive
+ * side.
+ */
+#if 0
 Test(rdm_sr, multirecv_retrans)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
+#endif
 
 void do_multirecv2(int len)
 {
@@ -1886,6 +1901,7 @@ void do_multirecv2(int len)
 	struct fi_msg msg;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
+	uint64_t flags;
 	int nrecvs = 3;
 
 	rdm_sr_init_data(source, len, 0xab);
@@ -1903,7 +1919,7 @@ void do_multirecv2(int len)
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
 			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
-					 0, 0, 0);
+					 0, 0, 0, false);
 			s[0]++;
 		}
 		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
@@ -1928,14 +1944,16 @@ void do_multirecv2(int len)
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
 			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
-					 0, 0, 0);
+					 0, 0, 0, false);
 			s[0]++;
 		}
 		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
 		if (ret == 1) {
+			flags = (r[1] < (nrecvs -1 )) ? FI_MSG | FI_RECV :
+					FI_MSG | FI_RECV | FI_MULTI_RECV;
 			rdm_sr_check_cqe(&d_cqe, source,
-					 (FI_MSG|FI_RECV|FI_MULTI_RECV),
-					 target + (r[1] * len), len, 0);
+					 flags,
+					 target + (r[1] * len), len, 0, true);
 			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
 				  "Data mismatch");
 			r[1]++;
