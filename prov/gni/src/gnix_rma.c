@@ -197,7 +197,8 @@ static int __gnix_rma_post_err_no_retrans(struct gnix_fab_req *req, int error)
 static int __gnix_rma_post_err(struct gnix_fab_req *req, int error)
 {
 	if (GNIX_EP_RDM(req->gnix_ep->type) &&
-		GNIX_REQ_REPLAYABLE(req)) {
+		_gnix_req_replayable(req)) {
+		req->tx_failures++;
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Requeueing failed request: %p\n", req);
 		return _gnix_vc_queue_work_req(req);

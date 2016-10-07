@@ -658,7 +658,8 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 
 	if (tx_status != GNI_RC_SUCCESS) {
 		if (GNIX_EP_RDM(req->gnix_ep->type) &&
-			GNIX_REQ_REPLAYABLE(req)) {
+			_gnix_req_replayable(req)) {
+			req->tx_failures++;
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Requeueing failed request: %p\n", req);
 			return _gnix_vc_queue_work_req(req);
@@ -735,7 +736,8 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 		if (req->msg.status != FI_SUCCESS) {
 
 			if (GNIX_EP_RDM(req->gnix_ep->type) &&
-				GNIX_REQ_REPLAYABLE(req)) {
+				_gnix_req_replayable(req)) {
+				req->tx_failures++;
 				/* Build and re-tx the entire iov request if the
 				 * ep type is "reliable datagram" */
 				req->work_fn = __gnix_rndzv_iov_req_build;

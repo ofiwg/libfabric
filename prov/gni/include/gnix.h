@@ -873,14 +873,23 @@ struct gnix_fab_req {
 };
 
 /*
- * macro to test whether a request is replayable
+ * test whether a request is replayable
  * or not based on the value of the tx_failures field
  */
-#define GNIX_REQ_REPLAYABLE(req)                                            \
-	(((req)->tx_failures != UINT_MAX) &&                                 \
-	 (++(req)->tx_failures <                                            \
-		(req)->gnix_ep->domain->params.max_retransmits))
 
+static inline bool _gnix_req_replayable(struct gnix_fab_req *req)
+{
+	bool ret = false;
+	uint32_t tx_failures, max_retrans;
+
+	tx_failures = req->tx_failures;
+	max_retrans = req->gnix_ep->domain->params.max_retransmits;
+	if ((req->tx_failures != UINT_MAX) &&
+	    (++tx_failures < max_retrans))
+		ret = true;
+
+	return ret;
+}
 static inline int _gnix_req_inject_err(struct gnix_fab_req *req)
 {
 	int err_cnt = req->gnix_ep->domain->params.err_inject_count;
