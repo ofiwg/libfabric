@@ -574,6 +574,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 					tail->fabric_attr->prov_name);
 			tail->fabric_attr->prov_name = strdup(prov->provider->name);
 			tail->fabric_attr->prov_version = prov->provider->version;
+			tail->fabric_attr->api_version = version;
 		}
 		if (tail->fabric_attr->prov_name != NULL)
 			FI_WARN(&core_prov, FI_LOG_CORE,
@@ -581,6 +582,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 				tail->fabric_attr->prov_name);
 		tail->fabric_attr->prov_name = strdup(prov->provider->name);
 		tail->fabric_attr->prov_version = prov->provider->version;
+		tail->fabric_attr->api_version = version;
 	}
 
 	return *info ? 0 : -FI_ENODATA;

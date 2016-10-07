@@ -138,6 +138,7 @@ struct fi_fabric_attr {
 	char              *name;
 	char              *prov_name;
 	uint32_t          prov_version;
+	uint32_t          api_version;
 };
 ```
 
@@ -170,6 +171,11 @@ environment variables in a production setting.
 ## prov_version
 
 Version information for the fabric provider.
+
+## api_version
+
+The interface version requested by the application.  This value corresponds to
+the version parameter passed into `fi_getinfo(3)`.
 
 # RETURN VALUE
 

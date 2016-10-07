@@ -484,6 +484,8 @@ static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 	strcatf(buf, "%s%sprov_name: %s\n", prefix, TAB, attr->prov_name);
 	strcatf(buf, "%s%sprov_version: %d.%d\n", prefix, TAB,
 		FI_MAJOR(attr->prov_version), FI_MINOR(attr->prov_version));
+	strcatf(buf, "%s%sapi_version: %d.%d\n", prefix, TAB,
+		FI_MAJOR(attr->api_version), FI_MINOR(attr->api_version));
 }
 
 static void fi_tostr_info(char *buf, const struct fi_info *info)

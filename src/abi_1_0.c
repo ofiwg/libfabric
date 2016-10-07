@@ -43,6 +43,13 @@
 /*
  * TODO: Add structures that change between 1.0 and 1.1
  */
+struct fi_fabric_attr_1_0 {
+	struct fid_fabric	*fabric;
+	char			*name;
+	char			*prov_name;
+	uint32_t		prov_version;
+};
+
 struct fi_info_1_0 {
 	struct fi_info		*next;
 	uint64_t		caps;
