@@ -240,16 +240,6 @@ long parse_ulong(char *str, long max)
 	return ret;
 }
 
-int size_to_count(int size)
-{
-	if (size >= (1 << 20))
-		return 100;
-	else if (size >= (1 << 16))
-		return 1000;
-	else
-		return 10000;
-}
-
 void pp_banner_fabric_info(struct ct_pingpong *ct)
 {
 	PP_DEBUG(
@@ -280,7 +270,6 @@ void pp_banner_options(struct ct_pingpong *ct)
 		snprintf(iter_msg, 50, "selected iterations: %d",
 			 opts.iterations);
 	else {
-		opts.iterations = size_to_count(opts.transfer_size);
 		snprintf(iter_msg, 50, "default iterations: %d",
 			 opts.iterations);
 	}
@@ -1238,8 +1227,6 @@ void init_test(struct ct_pingpong *ct, struct pp_opts *opts)
 	char sstr[PP_STR_LEN];
 
 	size_str(sstr, opts->transfer_size);
-	if (!(opts->options & PP_OPT_ITER))
-		opts->iterations = size_to_count(opts->transfer_size);
 
 	ct->cnt_ack_msg = 0;
 }
