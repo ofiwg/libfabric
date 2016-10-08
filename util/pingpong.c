@@ -1851,8 +1851,10 @@ int pp_finalize(struct ct_pingpong *ct)
  *                                CLI: Usage and Options parsing
  ******************************************************************************/
 
-void pp_pingpong_usage(char *name, char *desc)
+void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 {
+	char *str;
+
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
 	fprintf(stderr, "  %s [OPTIONS] <srv_addr>\tconnect to server\n", name);
@@ -1873,8 +1875,9 @@ void pp_pingpong_usage(char *name, char *desc)
 	fprintf(stderr, " %-20s %s\n", "-e <ep_type>",
 		"endpoint type: msg|rdm|dgram (dgram)");
 
-	fprintf(stderr, " %-20s %s\n", "-I <number>",
-		"number of iterations (1000)");
+	asprintf(&str, "number of iterations (%d)", ct->opts.iterations);
+	fprintf(stderr, " %-20s %s\n", "-I <number>", str);
+	free(str);
 	fprintf(stderr, " %-20s %s\n", "-S <size>",
 		"specific transfer size or 'all' (all)");
 
@@ -2153,7 +2156,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			pp_pingpong_usage(argv[0],
+			pp_pingpong_usage(&ct, argv[0],
 					  "Ping pong client and server");
 			return EXIT_FAILURE;
 		}
