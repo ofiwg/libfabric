@@ -253,32 +253,12 @@ int size_to_count(int size)
 void pp_banner_fabric_info(struct ct_pingpong *ct)
 {
 	PP_DEBUG(
-	    "Running pingpong test with the %s endpoint trough a %s provider\n",
-	    fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE),
-	    ct->fi->fabric_attr->prov_name);
-	PP_DEBUG(" * Fabric Attributes:\n");
-	PP_DEBUG("  - %-20s: %s\n", "name", ct->fi->fabric_attr->name);
-	PP_DEBUG("  - %-20s: %s\n", "prov_name",
-		 ct->fi->fabric_attr->prov_name);
-	PP_DEBUG("  - %-20s: %" PRIu32 "\n", "prov_version",
-		 ct->fi->fabric_attr->prov_version);
-	PP_DEBUG(" * Domain Attributes:\n");
-	PP_DEBUG("  - %-20s: %s\n", "name", ct->fi->domain_attr->name);
-	PP_DEBUG("  - %-20s: %zu\n", "cq_cnt", ct->fi->domain_attr->cq_cnt);
-	PP_DEBUG("  - %-20s: %zu\n", "cq_data_size",
-		 ct->fi->domain_attr->cq_data_size);
-	PP_DEBUG("  - %-20s: %zu\n", "ep_cnt", ct->fi->domain_attr->ep_cnt);
-	PP_DEBUG(" * Endpoint Attributes:\n");
-	PP_DEBUG("  - %-20s: %s\n", "type",
-		 fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE));
-	PP_DEBUG("  - %-20s: %" PRIu32 "\n", "protocol",
-		 ct->fi->ep_attr->protocol);
-	PP_DEBUG("  - %-20s: %" PRIu32 "\n", "protocol_version",
-		 ct->fi->ep_attr->protocol_version);
-	PP_DEBUG("  - %-20s: %zu\n", "max_msg_size",
-		 ct->fi->ep_attr->max_msg_size);
-	PP_DEBUG("  - %-20s: %zu\n", "max_order_raw_size",
-		 ct->fi->ep_attr->max_order_raw_size);
+	    "Running pingpong test with the %s provider and %s endpoint type\n",
+	    ct->fi->fabric_attr->prov_name,
+	    fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE));
+	PP_DEBUG("%s", fi_tostr(ct->fi->fabric_attr, FI_TYPE_FABRIC_ATTR));
+	PP_DEBUG("%s", fi_tostr(ct->fi->domain_attr, FI_TYPE_DOMAIN_ATTR));
+	PP_DEBUG("%s", fi_tostr(ct->fi->ep_attr, FI_TYPE_EP_ATTR));
 }
 
 void pp_banner_options(struct ct_pingpong *ct)
