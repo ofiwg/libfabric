@@ -38,49 +38,37 @@
 
 #include <rdma/fabric.h>
 #include <fi_abi.h>
+#include <fi_util.h>
 
 
 /*
- * TODO: Add structures that change between 1.0 and 1.1
+ * The conversion from abi 1.0 requires being able to cast from a newer
+ * structure back to the older version.
  */
 struct fi_fabric_attr_1_0 {
-	struct fid_fabric	*fabric;
-	char			*name;
-	char			*prov_name;
-	uint32_t		prov_version;
+	struct fid_fabric		*fabric;
+	char				*name;
+	char				*prov_name;
+	uint32_t			prov_version;
 };
 
 struct fi_info_1_0 {
-	struct fi_info		*next;
-	uint64_t		caps;
-	uint64_t		mode;
-	uint32_t		addr_format;
-	size_t			src_addrlen;
-	size_t			dest_addrlen;
-	void			*src_addr;
-	void			*dest_addr;
-	fid_t			handle;
-	struct fi_tx_attr	*tx_attr;
-	struct fi_rx_attr	*rx_attr;
-	struct fi_ep_attr	*ep_attr;
-	struct fi_domain_attr	*domain_attr;
-	struct fi_fabric_attr	*fabric_attr;
+	struct fi_info			*next;
+	uint64_t			caps;
+	uint64_t			mode;
+	uint32_t			addr_format;
+	size_t				src_addrlen;
+	size_t				dest_addrlen;
+	void				*src_addr;
+	void				*dest_addr;
+	fid_t				handle;
+	struct fi_tx_attr		*tx_attr;
+	struct fi_rx_attr		*rx_attr;
+	struct fi_ep_attr		*ep_attr;
+	struct fi_domain_attr		*domain_attr;
+	struct fi_fabric_attr_1_0	*fabric_attr;
 };
 
-
-/*
- * TODO: translate from 1.0 structures to 1.1 where needed on all calls below.
- */
-__attribute__((visibility ("default")))
-int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
-		    uint64_t flags, struct fi_info_1_0 *hints,
-		    struct fi_info_1_0 **info)
-{
-	return fi_getinfo(version, node, service, flags,
-			  (struct fi_info *) hints,
-			  (struct fi_info **) info);
-}
-COMPAT_SYMVER(fi_getinfo_1_0, fi_getinfo, FABRIC_1.0);
 
 __attribute__((visibility ("default")))
 void fi_freeinfo_1_0(struct fi_info_1_0 *info)
@@ -92,6 +80,99 @@ COMPAT_SYMVER(fi_freeinfo_1_0, fi_freeinfo, FABRIC_1.0);
 __attribute__((visibility ("default")))
 struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
 {
-	return (struct fi_info_1_0 *) fi_dupinfo((const struct fi_info *) info);
+	struct fi_info *dup;
+
+	if (!info)
+		return (struct fi_info_1_0 *) ofi_allocinfo_internal();
+
+	dup = mem_dup(info, sizeof(*dup));
+	if (dup == NULL) {
+		return NULL;
+	}
+	dup->src_addr = NULL;
+	dup->dest_addr = NULL;
+	dup->tx_attr = NULL;
+	dup->rx_attr = NULL;
+	dup->ep_attr = NULL;
+	dup->domain_attr = NULL;
+	dup->fabric_attr = NULL;
+	dup->next = NULL;
+
+	if (info->src_addr != NULL) {
+		dup->src_addr = mem_dup(info->src_addr, info->src_addrlen);
+		if (dup->src_addr == NULL)
+			goto fail;
+	}
+	if (info->dest_addr != NULL) {
+		dup->dest_addr = mem_dup(info->dest_addr, info->dest_addrlen);
+		if (dup->dest_addr == NULL)
+			goto fail;
+	}
+	if (info->tx_attr != NULL) {
+		dup->tx_attr = mem_dup(info->tx_attr, sizeof(*info->tx_attr));
+		if (dup->tx_attr == NULL)
+			goto fail;
+	}
+	if (info->rx_attr != NULL) {
+		dup->rx_attr = mem_dup(info->rx_attr, sizeof(*info->rx_attr));
+		if (dup->rx_attr == NULL)
+			goto fail;
+	}
+	if (info->ep_attr != NULL) {
+		dup->ep_attr = mem_dup(info->ep_attr, sizeof(*info->ep_attr));
+		if (dup->ep_attr == NULL)
+			goto fail;
+	}
+	if (info->domain_attr) {
+		dup->domain_attr = mem_dup(info->domain_attr, sizeof(*info->domain_attr));
+		if (dup->domain_attr == NULL)
+			goto fail;
+		if (info->domain_attr->name != NULL) {
+			dup->domain_attr->name = strdup(info->domain_attr->name);
+			if (dup->domain_attr->name == NULL)
+				goto fail;
+		}
+	}
+	if (info->fabric_attr) {
+		dup->fabric_attr = mem_dup(info->fabric_attr, sizeof(*info->fabric_attr));
+		if (dup->fabric_attr == NULL)
+			goto fail;
+		dup->fabric_attr->name = NULL;
+		dup->fabric_attr->prov_name = NULL;
+		if (info->fabric_attr->name != NULL) {
+			dup->fabric_attr->name = strdup(info->fabric_attr->name);
+			if (dup->fabric_attr->name == NULL)
+				goto fail;
+		}
+		if (info->fabric_attr->prov_name != NULL) {
+			dup->fabric_attr->prov_name = strdup(info->fabric_attr->prov_name);
+			if (dup->fabric_attr->prov_name == NULL)
+				goto fail;
+		}
+	}
+	return (struct fi_info_1_0 *) dup;
+
+fail:
+	fi_freeinfo(dup);
+	return NULL;
 }
 COMPAT_SYMVER(fi_dupinfo_1_0, fi_dupinfo, FABRIC_1.0);
+
+__attribute__((visibility ("default")))
+int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
+		    uint64_t flags, struct fi_info_1_0 *hints_1_0,
+		    struct fi_info_1_0 **info)
+{
+	struct fi_info *hints;
+
+	if (hints_1_0) {
+		hints = (struct fi_info *) fi_dupinfo_1_0(hints_1_0);
+		if (!hints)
+			return -FI_ENOMEM;
+	} else {
+		hints = NULL;
+	}
+	return fi_getinfo(version, node, service, flags, hints,
+			  (struct fi_info **) info);
+}
+COMPAT_SYMVER(fi_getinfo_1_0, fi_getinfo, FABRIC_1.0);

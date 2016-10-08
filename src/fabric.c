@@ -589,7 +589,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 }
 CURRENT_SYMVER(fi_getinfo_, fi_getinfo);
 
-static struct fi_info *fi_allocinfo_internal(void)
+struct fi_info *ofi_allocinfo_internal(void)
 {
 	struct fi_info *info;
 
@@ -619,7 +619,7 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 	struct fi_info *dup;
 
 	if (!info)
-		return fi_allocinfo_internal();
+		return ofi_allocinfo_internal();
 
 	dup = mem_dup(info, sizeof(*dup));
 	if (dup == NULL) {
