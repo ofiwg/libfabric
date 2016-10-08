@@ -2132,8 +2132,8 @@ int main(int argc, char **argv)
 		.timeout_sec = -1,
 		.ctrl_connfd = -1,
 		.opts = {
-			.iterations = 1000,
-			.transfer_size = 1024,
+			.iterations = 10,
+			.transfer_size = 64,
 			.sizes_enabled = PP_DEFAULT_SIZE
 		},
 		.eq_attr.wait_obj = FI_WAIT_UNSPEC,
