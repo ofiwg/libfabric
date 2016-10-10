@@ -253,12 +253,12 @@ struct fi_cq_tagged_entry {
   as a wait object.
 
 - *FI_WAIT_CRITSEC_COND*
-: Windows specific.  Specifies that the EQ should use a critical
+: Windows specific.  Specifies that the CQ should use a critical
   section and condition variable as a wait object.
 
 *signaling_vector*
 : If the FI_AFFINITY flag is set, this indicates the logical cpu number
-  (0..max cpu - 1) that interrupts associated with the EQ should target.
+  (0..max cpu - 1) that interrupts associated with the CQ should target.
   This field should be treated as a hint to the provider and may be
   ignored if the provider does not support interrupt affinity.
 
