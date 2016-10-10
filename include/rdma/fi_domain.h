@@ -48,6 +48,8 @@ extern "C" {
  */
 
 #define FI_SYMMETRIC		(1ULL << 59)
+#define FI_SYNC_ERR		(1ULL << 58)
+
 
 struct fi_av_attr {
 	enum fi_av_type		type;
