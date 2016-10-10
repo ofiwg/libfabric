@@ -81,6 +81,13 @@ extension, which returns IP and SR-IOV information about a usNIC
 interface obtained from the [`fi_getinfo`(3)](fi_getinfo.3.html)
 function.
 
+## Compatibility issues
+
+The 1.3.0 release of Libfabric introduced a version 2 of the getinfo extension
+that caused an alignment issue that could lead to invalid data in the v1
+portion of the structure. This issue was fixed on the v1.2.x branch after the
+v1.2.0 release.
+
 {% highlight c %}
 #include <stdio.h>
 #include <rdma/fabric.h>
