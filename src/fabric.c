@@ -712,7 +712,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 
 	return prov->provider->fabric(attr, fabric, context);
 }
-DEFAULT_SYMVER(fi_fabric_, fi_fabric, FABRIC_1.0);
+CURRENT_SYMVER(fi_fabric_, fi_fabric);
 
 __attribute__((visibility ("default")))
 uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)

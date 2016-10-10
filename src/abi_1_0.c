@@ -176,3 +176,18 @@ int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
 			  (struct fi_info **) info);
 }
 COMPAT_SYMVER(fi_getinfo_1_0, fi_getinfo, FABRIC_1.0);
+
+__attribute__((visibility ("default")))
+int fi_fabric_1_0(struct fi_fabric_attr_1_0 *attr_1_0,
+		  struct fid_fabric **fabric, void *context)
+{
+	struct fi_fabric_attr attr;
+
+	if (!attr_1_0)
+		return -FI_EINVAL;
+
+	memcpy(&attr, attr_1_0, sizeof(*attr_1_0));
+	attr.api_version = FI_VERSION(1, 0);
+	return fi_fabric(&attr, fabric, context);
+}
+COMPAT_SYMVER(fi_fabric_1_0, fi_fabric, FABRIC_1.0);

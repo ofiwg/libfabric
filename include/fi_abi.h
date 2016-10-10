@@ -80,7 +80,7 @@ extern "C" {
  *
  * Example:
  * ABI version 1.0 introduced functions foo() and bar().
- * ABI version 1.1 modified the behavior for funtion foo().
+ * ABI version 1.1 modified the behavior for function foo().
  * This scenario would result in the following definitions.
  *
  * CURRENT_ABI "MYLIB_1.1"
