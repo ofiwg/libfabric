@@ -354,7 +354,9 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	ep->is_closing = 1;
 	_fi_ibv_rdm_tagged_cm_progress_running = 0;
 	pthread_join(ep->cm_progress_thread, &status);
-	pthread_mutex_destroy(&ep->cm_lock);
+
+	/* CM thread is joined, no need to sleep on closing */
+	ep->cm_progress_timeout = 0;
 
 	if (ep->send_cntr) {
 		atomic_dec(&ep->send_cntr->ep_ref);
@@ -395,7 +397,9 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 					break;
 				}
 			}
-			ret = fi_ibv_rdm_start_disconnect(ep, conn);
+			if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
+				ret = fi_ibv_rdm_start_disconnect(ep, conn);
+			}
 			break;
 		case FI_VERBS_CONN_DISCONNECT_REQUESTED:
 		case FI_VERBS_CONN_DISCONNECT_STARTED:
@@ -420,8 +424,13 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);
-	if (ibv_destroy_cq(ep->scq) || ibv_destroy_cq(ep->rcq)) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_cq failed\n", errno);
+	if (ibv_destroy_cq(ep->scq)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_cq SCQ failed\n", errno);
+		ret = (ret == FI_SUCCESS) ? -errno : ret;
+	}
+
+	if (ibv_destroy_cq(ep->rcq)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_cq RCQ failed\n", errno);
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
 	}
 
@@ -438,6 +447,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	util_buf_pool_destroy(fi_ibv_rdm_request_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_extra_buffers_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
+	pthread_mutex_destroy(&ep->cm_lock);
 
 	free(ep);
 

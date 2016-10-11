@@ -79,33 +79,42 @@ static inline ssize_t
 fi_ibv_rdm_disconnect_request(struct fi_ibv_rdm_ep *ep,
 			      struct fi_ibv_rdm_conn *conn)
 {
-	struct fi_ibv_rdm_buf *sbuf = NULL;
-	ssize_t ret = FI_SUCCESS;
-
-	if (!ep->is_closing) {
-		pthread_mutex_lock(&ep->cm_lock);
-	}
-	/* The latest control message MUST be in order */
-	while (conn->postponed_entry) {
-		fi_ibv_rdm_tagged_poll(ep);
-	}
-
-	/*
-	 * Wait untill resources will be available.
-	 * (Remote side should process all recvs then release local buffer)
-	 */
-	while ( !(sbuf = fi_ibv_rdm_prepare_send_resources(conn, ep)) ) {
-		if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
-			goto out;
-		}
-	};
-
-	/* To make sure it's still in order */
-	assert(!conn->postponed_entry);
+	struct ibv_qp_attr attr;
+	struct ibv_qp_init_attr init_attr;
 
 	struct ibv_sge sge = {0};
 	struct ibv_send_wr wr = {0};
 	struct ibv_send_wr *bad_wr = NULL;
+	struct fi_ibv_rdm_buf *sbuf = NULL;
+	ssize_t ret = FI_SUCCESS;
+
+	/*
+	 * As this is a part of 2-sided handshake, at lest 1 side already have
+	 * all posted operations completed. Everything else is erroneous.
+	 */
+	assert(!conn->postponed_entry);
+	if (conn->postponed_entry) {
+		return -FI_EBUSY;
+	}
+
+	/*
+	 * If all buffers are busy, wait untill resources will be available.
+	 * (Remote side should process all recvs then release local buffers)
+	 */
+	while ( !(sbuf = fi_ibv_rdm_prepare_send_resources(conn, ep)) ) {
+		if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
+			ret = -FI_ESHUTDOWN;
+			goto out;
+		} else {
+			ret = ibv_query_qp(conn->qp[0], &attr, IBV_QP_STATE,
+					   &init_attr);
+			if (ret ||  attr.qp_state == IBV_QPS_ERR) {
+				/* Disconnection is initiated by remote side or
+				 * it's crashed. */
+				conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+			}
+		}
+	};
 
 	sge.addr = (uintptr_t)(void*)sbuf;
 	sge.length = sizeof(*sbuf);
@@ -140,9 +149,6 @@ fi_ibv_rdm_disconnect_request(struct fi_ibv_rdm_ep *ep,
 			  sge.length, conn);
 	}
 out:
-	if (!ep->is_closing) {
-		pthread_mutex_unlock(&ep->cm_lock);
-	}
 	return ret;
 }
 
@@ -164,10 +170,19 @@ fi_ibv_rdm_start_disconnect(struct fi_ibv_rdm_ep *ep,
 			ret = -errno;
 		}
 		conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+		return ret;
 	} else if (conn->state != FI_VERBS_CONN_DISCONNECT_REQUESTED) {
-		ret = fi_ibv_rdm_conn_cleanup(conn);
+		return fi_ibv_rdm_conn_cleanup(conn);
 	}
 
+	if (ret == -FI_ESHUTDOWN) {
+		if (conn->id[0] && rdma_disconnect(conn->id[0])) {
+			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
+		}
+		if (conn->id[1] && rdma_disconnect(conn->id[1])) {
+			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
+		}
+	}
 	return ret;
 }
 

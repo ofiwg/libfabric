@@ -469,7 +469,9 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %p\n", conn, request);
 	} else if (pkt_type == FI_IBV_RDM_DISCONNECT_PKT) {
+		pthread_mutex_lock(&ep->cm_lock);
 		fi_ibv_rdm_start_disconnect(ep, conn);
+		pthread_mutex_unlock(&ep->cm_lock);
 		return;
 	} else {
 		struct fi_ibv_rdm_minfo minfo = {
@@ -543,9 +545,14 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	FI_IBV_DBG_OPCODE(wc->opcode, "RECV");
 
 	if (!FI_IBV_RDM_CHECK_RECV_WC(wc)) {
-		VERBS_INFO(FI_LOG_EP_DATA, "conn %p state %d, wc status %d:s\n",
-			conn, conn->state, wc->status,
-			ibv_wc_status_str(wc->status));
+		pthread_mutex_lock(&ep->cm_lock);
+		if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
+			VERBS_INFO(FI_LOG_EP_DATA, "conn %p state %d, wc status %d:%s\n",
+				conn, conn->state, wc->status,
+				ibv_wc_status_str(wc->status));
+			conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+		}
+		pthread_mutex_unlock(&ep->cm_lock);
 		return;
 	}
 
@@ -630,12 +637,16 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 			req = (void *)wc->wr_id;
 			conn = req->minfo.conn;
 		}
-
-		VERBS_INFO(FI_LOG_EP_DATA,
-			"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
-			wc->status,
-			ibv_wc_status_str(wc->status),
-			ep->posted_sends, conn);
+		pthread_mutex_lock(&ep->cm_lock);
+		if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
+			VERBS_INFO(FI_LOG_EP_DATA,
+				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
+				wc->status,
+				ibv_wc_status_str(wc->status),
+				ep->posted_sends, conn);
+			conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+		}
+		pthread_mutex_unlock(&ep->cm_lock);
 	} else if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
 		VERBS_DBG(FI_LOG_EP_DATA, "CQ COMPL: SEND -> 0x1\n");
 		conn = (struct fi_ibv_rdm_conn *)
