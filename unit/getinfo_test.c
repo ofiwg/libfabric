@@ -156,22 +156,20 @@ fail:										\
  * Tests:
  */
 
-getinfo_test(1, "Test with no node, service, flags or hints",
-		NULL, NULL, 0, NULL, NULL, check_srcaddr, 0)
-getinfo_test(2, "Test with no node, service or flags",
+getinfo_test(1, "Test with no node, service or flags",
 		NULL, NULL, 0, hints, NULL, check_srcaddr, 0)
-getinfo_test(3, "Test with no node, valid service and FI_SOURCE flag",
+getinfo_test(2, "Test with no node, valid service and FI_SOURCE flag",
 		NULL, opts.src_port, FI_SOURCE, hints, NULL, check_srcaddr, 0)
-getinfo_test(4, "Test with node, valid service and FI_SOURCE flag",
+getinfo_test(3, "Test with node, valid service and FI_SOURCE flag",
 		opts.src_addr ? opts.src_addr : "localhost", opts.src_port,
 		FI_SOURCE, hints, NULL, check_srcaddr, 0)
-getinfo_test(5, "Test with node, no service and FI_SOURCE flag",
+getinfo_test(4, "Test with node, no service and FI_SOURCE flag",
 		opts.src_addr ? opts.src_addr : "localhost", NULL,
 		FI_SOURCE, hints, NULL, check_srcaddr, 0)
-getinfo_test(6, "Test with node, service and no flags",
+getinfo_test(5, "Test with node, service and no flags",
 		opts.dst_addr ? opts.dst_addr : "localhost", opts.dst_port,
 		0, hints, NULL, check_src_dest_addr, 0)
-getinfo_test(7, "Test with non-existent domain name",
+getinfo_test(6, "Test with non-existent domain name",
 		NULL, NULL, 0, hints, invalid_dom, NULL, -FI_ENODATA)
 
 static void usage(void)
@@ -191,7 +189,6 @@ int main(int argc, char **argv)
 		TEST_ENTRY(getinfo4, getinfo4_desc),
 		TEST_ENTRY(getinfo5, getinfo5_desc),
 		TEST_ENTRY(getinfo6, getinfo6_desc),
-		TEST_ENTRY(getinfo7, getinfo7_desc),
 		{ NULL, "" }
 	};
 
