@@ -38,6 +38,17 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#ifdef __GNUC__
+#define FI_DEPRECATED_FUNC __attribute__((deprecated))
+#define FI_DEPRECATED_FIELD __attribute__((deprecated))
+#elif defined(_MSC_VER)
+#define FI_DEPRECATED_FUNC __declspec(deprecated)
+#define FI_DEPRECATED_FIELD
+#else
+#define FI_DEPRECATED_FUNC
+#define FI_DEPRECATED_FIELD
+#endif
+
 #if defined(_WIN32)
 #include <BaseTsd.h>
 #include <windows.h>

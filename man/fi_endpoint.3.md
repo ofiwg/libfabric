@@ -40,9 +40,10 @@ fi_getopt / fi_setopt
 fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
 :   Open a transmit or receive context.
 
-fi_rx_size_left / fi_tx_size_left
+fi_rx_size_left / fi_tx_size_left (DEPRECATED)
 :   Query the lower bound on how many RX/TX operations may be posted without
-    an operation returning -FI_EAGAIN.
+    an operation returning -FI_EAGAIN.  This functions have been deprecated
+    and will be removed in a future version of the library.
 
 # SYNOPSIS
 
@@ -98,9 +99,9 @@ int fi_getopt(struct fid *ep, int level, int optname,
 int fi_setopt(struct fid *ep, int level, int optname,
     const void *optval, size_t optlen);
 
-ssize_t fi_rx_size_left(struct fid_ep *ep);
+DEPRECATED ssize_t fi_rx_size_left(struct fid_ep *ep);
 
-ssize_t fi_tx_size_left(struct fid_ep *ep);
+DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
 ```
 
 # ARGUMENTS
@@ -489,7 +490,10 @@ The following option levels and option names and parameters are defined.
   the maximum size of the data that may be present as part of a connection
   request event. This option is read only.
 
-## fi_rx_size_left
+## fi_rx_size_left (DEPRECATED)
+
+This function has been deprecated and will be removed in a future version
+of the library.  It may not be supported by all providers.
 
 The fi_rx_size_left call returns a lower bound on the number of receive
 operations that may be posted to the given endpoint without that operation
@@ -498,7 +502,10 @@ posted receive operations (e.g., number of iov entries, which receive function
 is called, etc.), it may be possible to post more receive operations than
 originally indicated by fi_rx_size_left.
 
-## fi_tx_size_left
+## fi_tx_size_left (DEPRECATED)
+
+This function has been deprecated and will be removed in a future version
+of the library.  It may not be supported by all providers.
 
 The fi_tx_size_left call returns a lower bound on the number of transmit
 operations that may be posted to the given endpoint without that operation
