@@ -253,6 +253,7 @@ enum {
 #define FI_ASYNC_IOV		(1ULL << 57)
 #define FI_RX_CQ_DATA		(1ULL << 56)
 #define FI_LOCAL_MR		(1ULL << 55)
+#define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54)
 
 struct fi_tx_attr {
 	uint64_t		caps;

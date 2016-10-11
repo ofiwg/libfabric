@@ -567,6 +567,12 @@ operation.  The following completion flags are defined.
 A completion queue must be bound to at least one enabled endpoint before any
 operation such as fi_cq_read, fi_cq_readfrom, fi_cq_sread, fi_cq_sreadfrom etc.
 can be called on it.
+
+Completion flags may be suppressed if the FI_NOTIFY_FLAGS_ONLY mode bit
+has been set.  When enabled, only the following flags are guaranteed to
+be set in completion data when they are valid: FI_REMOTE_READ and
+FI_REMOTE_WRITE (when FI_RMA_EVENT capability bit has been set),
+FI_REMOTE_CQ_DATA, and FI_MULTI_RECV.
  
 # RETURN VALUES
 
