@@ -574,6 +574,15 @@ be set in completion data when they are valid: FI_REMOTE_READ and
 FI_REMOTE_WRITE (when FI_RMA_EVENT capability bit has been set),
 FI_REMOTE_CQ_DATA, and FI_MULTI_RECV.
  
+# NOTES
+
+If a completion queue has been overrun, it will be placed into an 'overrun'
+state.  Read operations will continue to return any valid, non-corrupted
+completions, if available.  After all valid completions have been retrieved,
+any attempt to read the CQ will result in it returning an FI_EOVERRUN error
+event.  Overrun completion queues are considered fatal and may not be used
+to report additional completions once the overrun occurs.
+
 # RETURN VALUES
 
 fi_cq_open / fi_cq_signal

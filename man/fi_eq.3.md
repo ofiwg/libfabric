@@ -410,6 +410,16 @@ user-accessible.  The contents of the buffer will remain valid until a
 subsequent read call against the EQ.  Applications which read the err_data
 buffer must ensure that they do not read past the end of the referenced buffer.
 
+# NOTES
+
+If an event queue has been overrun, it will be placed into an 'overrun'
+state.  Write operations against an overrun EQ will fail with -FI_EOVERRUN.
+Read operations will continue to return any valid, non-corrupted events, if
+available.  After all valid events have been retrieved, any attempt to read
+the EQ will result in it returning an FI_EOVERRUN error event.  Overrun
+event queues are considered fatal and may not be used to report additional
+events once the overrun occurs.
+
 # RETURN VALUES
 
 fi_eq_open
