@@ -336,6 +336,27 @@ static void  __cm_nic_destruct(void *obj)
 	free(cm_nic);
 }
 
+static int __gnix_cm_nic_intra_progress_fn(void *data, int *complete_ptr)
+{
+	struct gnix_datagram *dgram;
+	struct gnix_cm_nic *cm_nic;
+	int ret;
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "\n");
+
+	dgram = (struct gnix_datagram *)data;
+	cm_nic = (struct gnix_cm_nic *)dgram->cache;
+	ret = __process_datagram(dgram,
+				 cm_nic->my_name.gnix_addr,
+				 GNI_POST_COMPLETED);
+	if (ret == FI_SUCCESS) {
+		GNIX_INFO(FI_LOG_EP_CTRL, "Intra-CM NIC dgram completed\n");
+		*complete_ptr = 1;
+	}
+
+	return FI_SUCCESS;
+}
+
 int _gnix_cm_nic_send(struct gnix_cm_nic *cm_nic,
 		      char *sbuf, size_t len,
 		      struct gnix_address target_addr)
@@ -344,6 +365,7 @@ int _gnix_cm_nic_send(struct gnix_cm_nic *cm_nic,
 	struct gnix_datagram *dgram = NULL;
 	ssize_t  __attribute__((unused)) plen;
 	uint8_t tag;
+	struct gnix_work_req *work_req;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -374,10 +396,39 @@ int _gnix_cm_nic_send(struct gnix_cm_nic *cm_nic,
 				   sbuf, len);
 	assert (plen == len);
 
-	ret = _gnix_dgram_bnd_post(dgram);
-	if (ret == -FI_EBUSY) {
-		ret = -FI_EAGAIN;
-		_gnix_dgram_free(dgram);
+	/* If connecting with the same CM NIC, skip datagram exchange.  The
+	 * caller could be holding an endpoint lock, so schedule connection
+	 * completion for later. */
+	if (GNIX_ADDR_EQUAL(target_addr, cm_nic->my_name.gnix_addr)) {
+		char tmp_buf[GNIX_CM_NIC_MAX_MSG_SIZE];
+
+		/* Pack output buffer with input data. */
+		_gnix_dgram_unpack_buf(dgram, GNIX_DGRAM_IN_BUF, tmp_buf,
+				       GNIX_CM_NIC_MAX_MSG_SIZE);
+		_gnix_dgram_pack_buf(dgram, GNIX_DGRAM_OUT_BUF, tmp_buf,
+				       GNIX_CM_NIC_MAX_MSG_SIZE);
+
+		work_req = calloc(1, sizeof(*work_req));
+		if (work_req == NULL) {
+			_gnix_dgram_free(dgram);
+			return -FI_ENOMEM;
+		}
+
+		work_req->progress_fn = __gnix_cm_nic_intra_progress_fn;
+		work_req->data = dgram;
+		work_req->completer_fn = NULL;
+
+		fastlock_acquire(&cm_nic->wq_lock);
+		dlist_insert_before(&work_req->list, &cm_nic->cm_nic_wq);
+		fastlock_release(&cm_nic->wq_lock);
+
+		GNIX_INFO(FI_LOG_EP_CTRL, "Initiated intra-CM NIC connect\n");
+	} else {
+		ret = _gnix_dgram_bnd_post(dgram);
+		if (ret == -FI_EBUSY) {
+			ret = -FI_EAGAIN;
+			_gnix_dgram_free(dgram);
+		}
 	}
 
 exit:
