@@ -98,17 +98,31 @@ request a version rather than using the header provided
 `FI_EXT_USNIC_INFO_VERSION`. Although there is a version 1 of the extension,
 its use is discouraged, and it may not be available in future releases.
 
+### Compatibility issues
+
+The addition of version 2 of the extension caused an alignmment issue that
+could lead to invalid data in the v1 portion of the structure. This means that
+the alignment difference manifests when an application using v1 of the
+extension is compiled with Libfabric v1.1.x or v1.2.x, but then runs with
+Libfabric.so that is v1.3.x or higher (and vice versa).
+
+The v1.4.0 release of Libfabric introduced a padding field to explicitly
+maintain compatibility with the v1.3.0 release. If the issue is encountered,
+then it is recommended that you upgrade to a release containing version 2 of
+the extension, or recompile with a patched version of an older release.
+
 
 ```c
 #include <rdma/fi_ext_usnic.h>
 
 struct fi_usnic_info {
     uint32_t ui_version;
+    uint8_t ui_pad0[4];
     union {
         struct fi_usnic_info_v1 v1;
         struct fi_usnic_info_v2 v2;
     } ui;
-};
+} __attribute__((packed));
 
 int getinfo(uint32_t version, struct fid_fabric *fabric,
         struct fi_usnic_info *info);
@@ -130,7 +144,7 @@ fabric.
 struct fi_usnic_cap {
     const char *uc_capability;
     int uc_present;
-};
+} __attribute__((packed));
 
 struct fi_usnic_info_v2 {
     uint32_t        ui_link_speed;
@@ -143,10 +157,14 @@ struct fi_usnic_info_v2 {
     char            ui_devname[FI_EXT_USNIC_MAX_DEVNAME];
     uint8_t         ui_mac_addr[6];
 
+    uint8_t         ui_pad0[2];
+
     uint32_t        ui_ipaddr_be;
     uint32_t        ui_prefixlen;
     uint32_t        ui_mtu;
     uint8_t         ui_link_up;
+
+    uint8_t         ui_pad1[3];
 
     uint32_t        ui_vendor_id;
     uint32_t        ui_vendor_part_id;
@@ -165,7 +183,7 @@ struct fi_usnic_info_v2 {
     const char      *ui_pid;
 
     struct fi_usnic_cap **ui_caps;
-};
+} __attribute__((packed));
 ```
 
 - Version 1
@@ -179,7 +197,7 @@ struct fi_usnic_info_v1 {
     uint32_t ui_num_vf;
     uint32_t ui_qp_per_vf;
     uint32_t ui_cq_per_vf;
-};
+} __attribute__((packed));
 ```
 
 Version 1 of the "fabric getinfo" extension can be used by explicitly

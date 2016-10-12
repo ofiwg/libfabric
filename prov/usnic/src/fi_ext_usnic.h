@@ -51,11 +51,13 @@
 /*
  * usNIC specific info
  */
+/* Packed in 1.4, maintains the same alignment as <= 1.3.0 */
 struct fi_usnic_cap {
 	const char *uc_capability;
 	int uc_present;
-};
+} __attribute__((packed));
 
+/* Packed in 1.4, maintains the same alignment as <= 1.3.0 */
 struct fi_usnic_info_v1 {
 	uint32_t ui_link_speed;
 	uint32_t ui_netmask_be;
@@ -64,7 +66,7 @@ struct fi_usnic_info_v1 {
 	uint32_t ui_num_vf;
 	uint32_t ui_qp_per_vf;
 	uint32_t ui_cq_per_vf;
-};
+} __attribute__((packed));
 
 struct fi_usnic_info_v2 {
 	/* Put all of the v1 fields at the start to provide some backward
@@ -80,10 +82,16 @@ struct fi_usnic_info_v2 {
 	char			ui_devname[FI_EXT_USNIC_MAX_DEVNAME];
 	uint8_t			ui_mac_addr[6];
 
+	/* Explicit padding to match 1.3 alignment */
+	uint8_t			ui_pad0[2];
+
 	uint32_t		ui_ipaddr_be;
 	uint32_t		ui_prefixlen;
 	uint32_t		ui_mtu;
 	uint8_t			ui_link_up;
+
+	/* Explicit padding to match 1.3 alignment */
+	uint8_t			ui_pad1[3];
 
 	uint32_t		ui_vendor_id;
 	uint32_t		ui_vendor_part_id;
@@ -102,15 +110,25 @@ struct fi_usnic_info_v2 {
 	const char		*ui_pid;
 
 	struct fi_usnic_cap	**ui_caps;
-};
+} __attribute__((packed));
 
+/* In API version 1.2 and below, the v1 structure did not contain any 64-bit
+ * data types and therefore had a 4-byte alignment. Once v2 of the extension API
+ * was introduced in version 1.3, the extra pointers mandated an 8-byte
+ * alignment thus changing the offset of the v1 structure. This means that the
+ * alignment difference manifests when an application using v1 of the extension
+ * is compiled with Libfabric v1.1.x or v1.2.x, but then runs with libfabric.so
+ * that is v1.3.x or higher (and vice versa). Make the alignment explicit and
+ * consistent by adding an extra 32-bit padding (4 uint8_t).
+ */
 struct fi_usnic_info {
 	uint32_t ui_version;
+	uint8_t ui_pad0[4];
 	union {
 		struct fi_usnic_info_v1 v1;
 		struct fi_usnic_info_v2 v2;
 	} ui;
-};
+} __attribute__((packed));
 
 /*
  * usNIC-specific fabric ops
