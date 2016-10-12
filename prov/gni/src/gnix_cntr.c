@@ -73,9 +73,11 @@ static int __verify_cntr_attr(struct fi_cntr_attr *attr)
 		return -FI_EINVAL;
 	}
 
-	/*
-	 * TODO: need to support wait objects on cntr
-	 */
+	/* TODO: Wait objects are not yet implemented. */
+	if (attr->wait_obj != FI_WAIT_NONE) {
+		return -FI_EINVAL;
+	}
+
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_NONE:

@@ -493,7 +493,7 @@ Test(cq_msg, multi_read)
 		cr_assert_eq(entry[j].flags, (uint64_t) j);
 }
 
-Test(cq_msg, multi_sread, .init = cq_wait_unspec_setup)
+Test(cq_msg, multi_sread, .init = cq_wait_unspec_setup, .disabled = true)
 {
 	int ret = 0;
 	size_t count = 3;
@@ -526,7 +526,7 @@ Test(cq_wait_obj, none, .init = cq_wait_none_setup)
 	cr_expect(!wait_priv, "wait_priv is not null.");
 }
 
-Test(cq_wait_obj, unspec, .init = cq_wait_unspec_setup)
+Test(cq_wait_obj, unspec, .init = cq_wait_unspec_setup, .disabled = true)
 {
 	cr_expect_eq(wait_priv->type, FI_WAIT_FD);
 	cr_expect_eq(wait_priv->type, cq_priv->attr.wait_obj);
@@ -535,7 +535,7 @@ Test(cq_wait_obj, unspec, .init = cq_wait_unspec_setup)
 	cr_expect_eq(wait_priv->cond_type, FI_CQ_COND_NONE);
 }
 
-Test(cq_wait_obj, fd, .init = cq_wait_fd_setup)
+Test(cq_wait_obj, fd, .init = cq_wait_fd_setup, .disabled = true)
 {
 	cr_expect_eq(wait_priv->type, FI_WAIT_FD);
 	cr_expect_eq(wait_priv->type, cq_priv->attr.wait_obj);
@@ -544,7 +544,7 @@ Test(cq_wait_obj, fd, .init = cq_wait_fd_setup)
 	cr_expect_eq(wait_priv->cond_type, FI_CQ_COND_NONE);
 }
 
-Test(cq_wait_obj, mutex_cond, .init = cq_wait_mutex_cond_setup)
+Test(cq_wait_obj, mutex_cond, .init = cq_wait_mutex_cond_setup, .disabled = true)
 {
 	cr_expect_eq(wait_priv->type, FI_WAIT_MUTEX_COND);
 	cr_expect_eq(wait_priv->type, cq_priv->attr.wait_obj);
@@ -562,7 +562,7 @@ Test(cq_wait_control, none, .init = cq_wait_none_setup)
 	cr_expect_eq(-FI_ENOSYS, ret, "fi_control exists for none.");
 }
 
-Test(cq_wait_control, unspec, .init = cq_wait_unspec_setup)
+Test(cq_wait_control, unspec, .init = cq_wait_unspec_setup, .disabled = true)
 {
 	int ret;
 	int fd;
@@ -613,7 +613,7 @@ Test(cq_wait_ops, none, .init = cq_wait_none_setup)
 		     "control implementation available.");
 }
 
-Test(cq_wait_ops, fd, .init = cq_wait_fd_setup)
+Test(cq_wait_ops, fd, .init = cq_wait_fd_setup, .disabled = true)
 {
 	cr_expect_neq(cq_priv->cq_fid.ops->signal, fi_no_cq_signal,
 		      "signal implementation not available.");
