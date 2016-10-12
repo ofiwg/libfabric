@@ -146,7 +146,6 @@ rdmainclude_HEADERS += \
 
 if HAVE_DIRECT
 nodist_rdmainclude_HEADERS = \
-	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_domain.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_endpoint.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_tagged.h \
@@ -156,6 +155,11 @@ nodist_rdmainclude_HEADERS = \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_cm.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_eq.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_trigger.h
+if FI_DIRECT_H_IN
+nodist_rdmainclude_HEADERS += $(top_builddir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h
+else
+nodist_rdmainclude_HEADERS += $(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h
+endif
 endif HAVE_DIRECT
 
 real_man_pages = \
