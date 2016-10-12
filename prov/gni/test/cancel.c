@@ -266,7 +266,7 @@ Test(gnix_cancel, cancel_ep_send)
 	ret = _gnix_vc_alloc(gnix_ep, NULL, &vc);
 	cr_assert(ret == FI_SUCCESS, "_gnix_vc_alloc failed");
 
-	key = (gnix_ht_key_t *)&gnix_ep->my_name.gnix_addr;
+	key = (gnix_ht_key_t *)&gnix_ep->src_addr.gnix_addr;
 	ret = _gnix_ht_insert(gnix_ep->vc_ht, *key, vc);
 	cr_assert(!ret);
 

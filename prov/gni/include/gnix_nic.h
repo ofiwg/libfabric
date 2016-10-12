@@ -65,6 +65,8 @@ extern uint32_t gnix_max_nics_per_ptag;
  */
 typedef int (*smsg_callback_fn_t)(void  *ptr, void *msg);
 
+extern smsg_callback_fn_t gnix_ep_smsg_callbacks[];
+
 /*
  * typedef for completer functions invoked
  * at initiator when local CQE (tx) is processed

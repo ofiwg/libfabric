@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,28 +30,52 @@
  * SOFTWARE.
  */
 
-#ifndef _GNIX_NAMESERVER_H_
-#define _GNIX_NAMESERVER_H_
+#ifndef _GNIX_CM_H_
+#define _GNIX_CM_H_
 
 #include "gnix.h"
 
-/*
- * defines, data structs, and prototypes for gnix nameserver
- */
+struct gnix_pep_sock_connreq {
+	int type;
+	int msg_id;
+	struct fi_info info;
+	struct gnix_ep_name src_addr;
+	struct gnix_ep_name dest_addr;
+	struct fi_tx_attr tx_attr;
+	struct fi_rx_attr rx_attr;
+	struct fi_ep_attr ep_attr;
+	struct fi_domain_attr domain_attr;
+	struct fi_fabric_attr fabric_attr;
+	int vc_id;
+	gni_smsg_attr_t vc_mbox_attr;
+	gni_mem_handle_t cq_irq_mdh;
+	uint64_t peer_caps;
+};
 
-/*
- * prototypes
- */
+enum gnix_pep_sock_resp_cmd {
+	GNIX_PEP_SOCK_RESP_ACCEPT,
+	GNIX_PEP_SOCK_RESP_REJECT
+};
 
-int _gnix_local_ipaddr(struct sockaddr_in *sin);
+struct gnix_pep_sock_connresp {
+	enum gnix_pep_sock_resp_cmd cmd;
+	int vc_id;
+	gni_smsg_attr_t vc_mbox_attr;
+	gni_mem_handle_t cq_irq_mdh;
+	uint64_t peer_caps;
+};
 
-int _gnix_pe_to_ip(const struct gnix_ep_name *ep_name,
-		   struct sockaddr_in *saddr);
+struct gnix_pep_sock_conn {
+	struct fid fid;
+	struct dlist_entry list;
+	int sock_fd;
+	struct gnix_pep_sock_connreq req;
+	int bytes_read;
+	struct fi_info *info;
+};
 
-int _gnix_resolve_name(IN const char *node, IN const char *service,
-		       IN uint64_t flags, INOUT struct gnix_ep_name
-		       *resolved_addr);
+int _gnix_pep_progress(struct gnix_fid_pep *pep);
+int _gnix_ep_progress(struct gnix_fid_ep *ep);
 
-int _gnix_src_addr(struct gnix_ep_name *resolved_addr);
+#endif
 
-#endif /* _GNIX_NAMESERVER_H_ */

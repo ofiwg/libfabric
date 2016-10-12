@@ -175,22 +175,22 @@
 
 /* Primary capabilities.  Each must be explicitly requested (unless the full
  * set is requested by setting input hints->caps to NULL). */
-#define GNIX_EP_RDM_PRIMARY_CAPS                                               \
+#define GNIX_EP_PRIMARY_CAPS                                               \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
 	 FI_DIRECTED_RECV | FI_READ | FI_NAMED_RX_CTX |                        \
 	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 /* No overhead secondary capabilities.  These can be silently enabled by the
  * provider. */
-#define GNIX_EP_RDM_SEC_CAPS (FI_MULTI_RECV | FI_TRIGGER | FI_FENCE)
+#define GNIX_EP_SEC_CAPS (FI_MULTI_RECV | FI_TRIGGER | FI_FENCE)
 
 /* Secondary capabilities that introduce overhead.  Must be requested. */
-#define GNIX_EP_RDM_SEC_CAPS_OH (FI_SOURCE | FI_RMA_EVENT)
+#define GNIX_EP_SEC_CAPS_OH (FI_SOURCE | FI_RMA_EVENT)
 
 /* FULL set of capabilities for the provider.  */
-#define GNIX_EP_RDM_CAPS_FULL (GNIX_EP_RDM_PRIMARY_CAPS | \
-			       GNIX_EP_RDM_SEC_CAPS | \
-			       GNIX_EP_RDM_SEC_CAPS_OH)
+#define GNIX_EP_CAPS_FULL (GNIX_EP_PRIMARY_CAPS | \
+			   GNIX_EP_SEC_CAPS | \
+			   GNIX_EP_SEC_CAPS_OH)
 
 /*
  * see Operations flags in fi_endpoint.3
@@ -244,9 +244,6 @@
 /*
  * if this has to be changed, check gnix_getinfo, etc.
  */
-#define GNIX_EP_MSG_CAPS GNIX_EP_RDM_CAPS
-#define GNIX_EP_MSG_SEC_CAPS GNIX_EP_RDM_SEC_CAPS
-
 #define GNIX_MAX_MSG_SIZE ((0x1ULL << 32) - 1)
 #define GNIX_CACHELINE_SIZE (64)
 #define GNIX_INJECT_SIZE GNIX_CACHELINE_SIZE
@@ -367,7 +364,8 @@ struct gnix_fid_fabric {
 	struct gnix_mr_notifier mr_notifier;
 };
 
-extern struct fi_ops_cm gnix_cm_ops;
+extern struct fi_ops_cm gnix_ep_msg_ops_cm;
+extern struct fi_ops_cm gnix_ep_ops_cm;
 
 /*
  * a gnix_fid_domain is associated with one or more gnix_nic's.
@@ -415,6 +413,33 @@ struct gnix_fid_domain {
 #endif
 };
 
+/**
+ * gnix_fid_pep structure - GNIX passive endpoint
+ *
+ * @var pep_fid		libfabric passive EP fid structure
+ * @var fabric		Fabric associated with this endpoint
+ * @var eq		Event queue bound to this endpoint
+ * @var src_addr	Source address of this endpoint
+ * @var lock		Lock protecting all endpoint fields
+ * @var listen_fd	TCP socket used to listen for connections
+ * @var backlog		Maximum number of pending connetions
+ * @var bound		Flag indicating if the endpoint source address is set
+ * @var cm_data_size	Maximum size of CM data
+ * @var ref_cnt		Endpoint reference count
+ */
+struct gnix_fid_pep {
+	struct fid_pep pep_fid;
+	struct gnix_fid_fabric *fabric;
+	struct gnix_fid_eq *eq;
+	struct gnix_ep_name src_addr;
+	fastlock_t lock;
+	int listen_fd;
+	int backlog;
+	int bound;
+	size_t cm_data_size;
+	struct gnix_reference ref_cnt;
+};
+
 #define GNIX_CQS_PER_EP		8
 
 struct gnix_fid_ep_ops_en {
@@ -449,6 +474,14 @@ struct gnix_addr_cache_entry {
 	struct gnix_vc *vc;
 };
 
+enum gnix_conn_state {
+	GNIX_EP_UNCONNECTED,
+	GNIX_EP_CONNECTED,
+	GNIX_EP_SHUTDOWN
+};
+
+#define GNIX_EP_CONNECTED(ep)	((ep)->conn_state == GNIX_EP_CONNECTED)
+
 /*
  *   gnix endpoint structure
  *
@@ -473,16 +506,9 @@ struct gnix_fid_ep {
 	struct gnix_fid_cntr *rread_cntr;
 	struct gnix_fid_av *av;
 	struct gnix_fid_stx *stx_ctx;
-	struct gnix_ep_name my_name;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
 	fastlock_t vc_lock;
-	union {
-		struct gnix_hashtable *vc_ht;	/* FI_AV_MAP */
-		struct gnix_vector *vc_table;	/* FI_AV_TABLE */
-	};
-	struct gnix_vc *vc;		/* used for FI_EP_MSG */
-	struct dlist_entry unmapped_vcs;
 	/* lock for unexp and posted recv queue */
 	fastlock_t recv_queue_lock;
 	/* used for unexpected receives */
@@ -512,6 +538,24 @@ struct gnix_fid_ep {
 	struct gnix_htd_pool htd_pool;
 	struct gnix_reference ref_cnt;
 	struct gnix_fid_ep_ops_en ep_ops;
+
+	struct fi_info *info;
+	struct fi_ep_attr ep_attr;
+	struct gnix_ep_name src_addr;
+
+	/* FI_EP_MSG specific. */
+	struct gnix_vc *vc;
+	int conn_fd;
+	int conn_state;
+	struct gnix_ep_name dest_addr;
+	struct gnix_fid_eq *eq;
+
+	/* Unconnected EP specific. */
+	union {
+		struct gnix_hashtable *vc_ht;	/* FI_AV_MAP */
+		struct gnix_vector *vc_table;	/* FI_AV_TABLE */
+	};
+	struct dlist_entry unmapped_vcs;
 };
 
 #define GNIX_EP_RDM(type)         (type == FI_EP_RDM)
@@ -1066,6 +1110,10 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
+
+int gnix_passive_ep_open(struct fid_fabric *fabric,
+			 struct fi_info *info, struct fid_pep **pep,
+			 void *context);
 
 int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);

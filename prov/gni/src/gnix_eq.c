@@ -38,6 +38,7 @@
 #include "gnix.h"
 #include "gnix_eq.h"
 #include "gnix_util.h"
+#include "gnix_cm.h"
 
 /*******************************************************************************
  * Forward declaration for ops structures.
@@ -233,6 +234,99 @@ static void __eq_destruct(void *obj)
 	free(eq);
 }
 
+int _gnix_eq_poll_obj_add(struct gnix_fid_eq *eq, struct fid *obj_fid)
+{
+	struct gnix_eq_poll_obj *pobj;
+
+	COND_WRITE_ACQUIRE(eq->requires_lock, &eq->poll_obj_lock);
+
+	pobj = malloc(sizeof(struct gnix_eq_poll_obj));
+	if (!pobj) {
+		GNIX_WARN(FI_LOG_EQ, "Failed to add object to EQ poll list.\n");
+		COND_RW_RELEASE(eq->requires_lock, &eq->poll_obj_lock);
+		return -FI_ENOMEM;
+	}
+
+	pobj->obj_fid = obj_fid;
+	dlist_init(&pobj->list);
+	dlist_insert_tail(&pobj->list, &eq->poll_objs);
+
+	COND_RW_RELEASE(eq->requires_lock, &eq->poll_obj_lock);
+
+	GNIX_INFO(FI_LOG_EQ, "Added object(%d, %p) to EQ(%p) poll list\n",
+		  obj_fid->fclass, obj_fid, eq);
+
+	return FI_SUCCESS;
+}
+
+int _gnix_eq_poll_obj_rem(struct gnix_fid_eq *eq, struct fid *obj_fid)
+{
+	struct gnix_eq_poll_obj *pobj, *tmp;
+
+	COND_WRITE_ACQUIRE(eq->requires_lock, &eq->poll_obj_lock);
+
+	dlist_for_each_safe(&eq->poll_objs, pobj, tmp, list) {
+		if (pobj->obj_fid == obj_fid) {
+			dlist_remove(&pobj->list);
+			free(pobj);
+			GNIX_INFO(FI_LOG_EQ,
+				  "Removed object(%d, %p) from EQ(%p) poll list\n",
+				  pobj->obj_fid->fclass, pobj, eq);
+			COND_RW_RELEASE(eq->requires_lock, &eq->poll_obj_lock);
+			return FI_SUCCESS;
+		}
+	}
+
+	COND_RW_RELEASE(eq->requires_lock, &eq->poll_obj_lock);
+
+	GNIX_WARN(FI_LOG_EQ, "object not found on EQ poll list.\n");
+	return -FI_EINVAL;
+}
+
+static int __gnix_eq_progress(struct gnix_fid_eq *eq)
+{
+	struct gnix_eq_poll_obj *pobj, *tmp;
+	int rc;
+	struct gnix_fid_pep *pep;
+	struct gnix_fid_ep *ep;
+
+	COND_READ_ACQUIRE(eq->requires_lock, &eq->poll_obj_lock);
+
+	dlist_for_each_safe(&eq->poll_objs, pobj, tmp, list) {
+		switch (pobj->obj_fid->fclass) {
+		case FI_CLASS_PEP:
+			pep = container_of(pobj->obj_fid, struct gnix_fid_pep,
+					   pep_fid.fid);
+			rc = _gnix_pep_progress(pep);
+			if (rc) {
+				GNIX_WARN(FI_LOG_EQ,
+					  "_gnix_pep_progress failed: %d\n",
+					  rc);
+			}
+			break;
+		case FI_CLASS_EP:
+			ep = container_of(pobj->obj_fid, struct gnix_fid_ep,
+					  ep_fid.fid);
+			rc = _gnix_ep_progress(ep);
+			if (rc) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_ep_progress failed: %d\n",
+					  rc);
+			}
+			break;
+		default:
+			GNIX_WARN(FI_LOG_EQ,
+				  "invalid poll object: %d %p\n",
+				  pobj->obj_fid->fclass, pobj);
+			break;
+		}
+	}
+
+	COND_RW_RELEASE(eq->requires_lock, &eq->poll_obj_lock);
+
+	return FI_SUCCESS;
+}
+
 /*******************************************************************************
  * API function implementations.
  ******************************************************************************/
@@ -271,9 +365,13 @@ DIRECT_FN int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	eq_priv->eq_fid.fid.context = context;
 	eq_priv->eq_fid.fid.ops = &gnix_fi_eq_ops;
 	eq_priv->eq_fid.ops = &gnix_eq_ops;
+	eq_priv->requires_lock = 1;
 	eq_priv->attr = *attr;
 
 	fastlock_init(&eq_priv->lock);
+
+	rwlock_init(&eq_priv->poll_obj_lock);
+	dlist_init(&eq_priv->poll_objs);
 
 	ret = gnix_eq_set_wait(eq_priv);
 	if (ret)
@@ -337,6 +435,8 @@ DIRECT_FN STATIC ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event,
 		return -FI_EINVAL;
 
 	eq_priv = container_of(eq, struct gnix_fid_eq, eq_fid);
+
+	__gnix_eq_progress(eq_priv);
 
 	if (_gnix_queue_peek(eq_priv->errors))
 		return -FI_EAVAIL;

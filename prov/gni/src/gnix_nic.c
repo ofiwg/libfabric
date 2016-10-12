@@ -1345,6 +1345,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
 		dlist_insert_tail(&nic->dom_nic_list, &domain->nic_list);
 
+		nic->smsg_callbacks = gnix_ep_smsg_callbacks;
+
 		++gnix_nics_per_ptag[domain->ptag];
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Allocated NIC:%p\n", nic);

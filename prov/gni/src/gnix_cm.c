@@ -31,14 +31,31 @@
  * SOFTWARE.
  */
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include "gnix_cm.h"
 #include "gnix.h"
 #include "gnix_util.h"
 #include "gnix_nic.h"
 #include "gnix_cm_nic.h"
+#include "gnix_nameserver.h"
+#include "gnix_eq.h"
+#include "gnix_vc.h"
+#include "gnix_av.h"
 
-/*******************************************************************************
- * API function implementations.
- ******************************************************************************/
+struct fi_ops gnix_pep_fi_ops;
+struct fi_ops_ep gnix_pep_ops_ep;
+struct fi_ops_cm gnix_pep_ops_cm;
+
+/******************************************************************************
+ *
+ * Common CM handling (supported for all types of endpoints).
+ *
+ *****************************************************************************/
+
 /**
  * Retrieve the local endpoint address.
  *
@@ -53,107 +70,446 @@
  */
 DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct gnix_ep_name name = {{0}};
 	struct gnix_fid_ep *ep = NULL;
-	struct gnix_fid_sep *sep_priv = NULL;
-	int ret = FI_SUCCESS;
-	size_t copy_size;
-
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	copy_size = sizeof(struct gnix_ep_name);
-
-	/*
-	 * If addrlen is less than the size necessary then continue copying with
-	 * truncation and return error value -FI_ETOOSMALL.
-	 */
-	if (*addrlen < copy_size) {
-		copy_size = *addrlen;
-		ret = -FI_ETOOSMALL;
-	}
-
-	/* copy the address length */
-	*addrlen = sizeof(struct gnix_ep_name);
+	struct gnix_fid_sep *sep = NULL;
+	struct gnix_fid_pep *pep = NULL;
+	size_t len;
 
 	if (!addr) {
-		if (copy_size >= *addrlen) {
-			ret = -FI_EINVAL;
-		}
-
-		goto err;
+		*addrlen = sizeof(struct gnix_ep_name);
+		return -FI_ETOOSMALL;
 	}
 
-	if (!fid) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
+	len = MIN(*addrlen, sizeof(struct gnix_ep_name));
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
 		ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-
-		if (!ep || !ep->nic || !ep->domain) {
-			ret = -FI_EINVAL;
-			goto err;
-		}
-
-		if (GNIX_EP_RDM_DGM(ep->type)) {
-			name = ep->my_name;
-		} else {
-			/*TODO: need to implement FI_EP_MSG */
-			return -FI_ENOSYS;
-		}
-
+		memcpy(addr, &ep->src_addr, len);
 		break;
 	case FI_CLASS_SEP:
-		sep_priv = container_of(fid, struct gnix_fid_sep, ep_fid);
-		name = sep_priv->my_name;
+		sep = container_of(fid, struct gnix_fid_sep, ep_fid);
+		memcpy(addr, &sep->my_name, len);
+		break;
+	case FI_CLASS_PEP:
+		pep = container_of(fid, struct gnix_fid_pep, pep_fid.fid);
+		memcpy(addr, &pep->src_addr, len);
 		break;
 	default:
-		ret = -FI_EINVAL;
-		goto err;
+		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
+			  fid->fclass);
+		return -FI_EINVAL;
 	}
 
-	/*
-	 * Retrieve the cdm_id & device_addr from the gnix_cm_nic structure.
-	 */
-
-	memcpy(addr, &name, copy_size);
-
-err:
-	return ret;
+	*addrlen = sizeof(struct gnix_ep_name);
+	return (len == sizeof(struct gnix_ep_name)) ? 0 : -FI_ETOOSMALL;
 }
 
 DIRECT_FN STATIC int gnix_setname(fid_t fid, void *addr, size_t addrlen)
 {
-	return -FI_ENOSYS;
+	struct gnix_fid_ep *ep = NULL;
+	struct gnix_fid_sep *sep = NULL;
+	struct gnix_fid_pep *pep = NULL;
+
+	if (addrlen != sizeof(struct gnix_ep_name))
+		return -FI_EINVAL;
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+		memcpy(&ep->src_addr, addr, sizeof(struct gnix_ep_name));
+		break;
+	case FI_CLASS_SEP:
+		sep = container_of(fid, struct gnix_fid_sep, ep_fid);
+		memcpy(&sep->my_name, addr, sizeof(struct gnix_ep_name));
+		break;
+	case FI_CLASS_PEP:
+		pep = container_of(fid, struct gnix_fid_pep, pep_fid.fid);
+		/* TODO: make sure we're unconnected. */
+		pep->bound = 1;
+		memcpy(&pep->src_addr, addr, sizeof(struct gnix_ep_name));
+		break;
+	default:
+		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
+			  fid->fclass);
+		return -FI_EINVAL;
+	}
+
+	return 0;
 }
 
-DIRECT_FN STATIC int gnix_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+DIRECT_FN STATIC int gnix_getpeer(struct fid_ep *ep, void *addr,
+				  size_t *addrlen)
 {
-	return -FI_ENOSYS;
+	struct gnix_fid_ep *ep_priv = NULL;
+	size_t len;
+
+	len = MIN(*addrlen, sizeof(struct gnix_ep_name));
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
+	memcpy(addr, &ep_priv->dest_addr, len);
+	*addrlen = sizeof(struct gnix_ep_name);
+	return (len == sizeof(struct gnix_ep_name)) ? 0 : -FI_ETOOSMALL;
+}
+
+struct fi_ops_cm gnix_ep_ops_cm = {
+	.size = sizeof(struct fi_ops_cm),
+	.setname = gnix_setname,
+	.getname = gnix_getname,
+	.getpeer = gnix_getpeer,
+	.connect = fi_no_connect,
+	.listen = fi_no_listen,
+	.accept = fi_no_accept,
+	.reject = fi_no_reject,
+	.shutdown = fi_no_shutdown
+};
+
+/******************************************************************************
+ *
+ * FI_EP_MSG endpoint handling
+ *
+ *****************************************************************************/
+
+/* Process a connection response on an FI_EP_MSG. */
+static int __gnix_ep_connresp(struct gnix_fid_ep *ep,
+			      struct gnix_pep_sock_connresp *resp)
+{
+	int ret = FI_SUCCESS;
+	struct fi_eq_cm_entry eq_entry;
+
+	switch (resp->cmd) {
+	case GNIX_PEP_SOCK_RESP_ACCEPT:
+		ep->vc->peer_caps = resp->peer_caps;
+		ep->vc->peer_id = resp->vc_id;
+
+		/* Initialize the GNI connection. */
+		ret = _gnix_vc_smsg_init(ep->vc, resp->vc_id,
+					 &resp->vc_mbox_attr,
+					 &resp->cq_irq_mdh);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_vc_smsg_init returned %s\n",
+				  fi_strerror(-ret));
+			return ret;
+		}
+
+		ep->vc->conn_state = GNIX_VC_CONNECTED;
+		ep->conn_state = GNIX_EP_CONNECTED;
+
+		/* Notify user that this side is connected. */
+		eq_entry.fid = &ep->ep_fid.fid;
+		/*  eq_entry.data = ;  TODO pass data from accept call. */
+
+		ret = fi_eq_write(&ep->eq->eq_fid, FI_CONNECTED, &eq_entry,
+				  sizeof(eq_entry), 0);
+		if (ret != sizeof(eq_entry)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "fi_eq_write failed, err: %d\n", ret);
+			return ret;
+		}
+
+		break;
+	case GNIX_PEP_SOCK_RESP_REJECT:
+		GNIX_INFO(FI_LOG_EP_CTRL, "reject not implemented\n");
+		return -FI_EINVAL;
+	default:
+		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid response command: %d\n",
+			  resp->cmd);
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Check for a connection response on an FI_EP_MSG. */
+int _gnix_ep_progress(struct gnix_fid_ep *ep)
+{
+	int ret, bytes_read;
+	struct gnix_pep_sock_connresp resp;
+
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
+
+	/* Check for a connection response. */
+	bytes_read = read(ep->conn_fd, &resp, sizeof(resp));
+	if (bytes_read >= 0) {
+		if (bytes_read == sizeof(resp)) {
+			/* Received response. */
+			ret = __gnix_ep_connresp(ep, &resp);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "__gnix_pep_connreq failed, %d\n",
+					  ret);
+			}
+		} else {
+			GNIX_FATAL(FI_LOG_EP_CTRL,
+				   "Unexpected read size: %d\n",
+				   bytes_read);
+		}
+	} else if (errno != EAGAIN) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "Read error: %d\n", errno);
+	}
+
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	return FI_SUCCESS;
 }
 
 DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
-			   const void *param, size_t paramlen)
+				  const void *param, size_t paramlen)
 {
-	return -FI_ENOSYS;
+	int ret;
+	struct gnix_fid_ep *ep_priv;
+	struct sockaddr_in saddr;
+	struct gnix_pep_sock_connreq req;
+	struct gnix_vc *vc;
+	struct gnix_mbox *mbox = NULL;
+	struct gnix_av_addr_entry av_entry;
+
+	if (!ep || !addr)
+		return -FI_EINVAL;
+
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
+
+	COND_ACQUIRE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	if (ep_priv->conn_state != GNIX_EP_UNCONNECTED) {
+		ret = -FI_EINVAL;
+		goto err_unlock;
+	}
+
+	ret = _gnix_pe_to_ip(addr, &saddr);
+	if (ret != FI_SUCCESS) {
+		GNIX_INFO(FI_LOG_EP_CTRL,
+			  "Failed to translate gnix_ep_name to IP\n");
+		goto err_unlock;
+	}
+
+	/* Create new VC without CM data. */
+	av_entry.gnix_addr = ep_priv->dest_addr.gnix_addr;
+	av_entry.cm_nic_cdm_id = ep_priv->dest_addr.cm_nic_cdm_id;
+	ret = _gnix_vc_alloc(ep_priv, &av_entry, &vc);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to create VC:: %d\n",
+			  ret);
+		goto err_unlock;
+	}
+	ep_priv->vc = vc;
+
+	ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl, &mbox);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_mbox_alloc returned %s\n",
+			  fi_strerror(-ret));
+		goto err_mbox_alloc;
+	}
+	vc->smsg_mbox = mbox;
+
+	ep_priv->conn_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (ep_priv->conn_fd < 0) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to create connect socket, errno: %d\n",
+			  errno);
+		ret = -FI_ENOSPC;
+		goto err_socket;
+	}
+
+	/* Currently blocks until connected. */
+	ret = connect(ep_priv->conn_fd, (struct sockaddr *)&saddr,
+		      sizeof(saddr));
+	if (ret) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to connect, errno: %d\n",
+			  errno);
+		ret = -FI_EIO;
+		goto err_connect;
+	}
+
+	req.type = 0; /* TODO GNIX_CONN_REQ; */
+	req.msg_id = 0; /* TODO */
+
+	req.info = *ep_priv->info;
+
+	/* Note addrs are swapped. */
+	memcpy(&req.dest_addr, (void *)&ep_priv->src_addr,
+	       sizeof(req.dest_addr));
+	memcpy(&ep_priv->dest_addr, addr, sizeof(ep_priv->dest_addr));
+	memcpy(&req.src_addr, addr, sizeof(req.src_addr));
+
+	if (ep_priv->info->tx_attr)
+		req.tx_attr = *ep_priv->info->tx_attr;
+	if (ep_priv->info->rx_attr)
+		req.rx_attr = *ep_priv->info->rx_attr;
+	if (ep_priv->info->ep_attr)
+		req.ep_attr = *ep_priv->info->ep_attr;
+	if (ep_priv->info->domain_attr)
+		req.domain_attr = *ep_priv->info->domain_attr;
+	if (ep_priv->info->fabric_attr)
+		req.fabric_attr = *ep_priv->info->fabric_attr;
+
+	req.fabric_attr.fabric = NULL;
+	req.domain_attr.domain = NULL;
+
+	req.vc_id = vc->vc_id;
+	req.vc_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
+	req.vc_mbox_attr.msg_buffer = mbox->base;
+	req.vc_mbox_attr.buff_size =  vc->ep->nic->mem_per_mbox;
+	req.vc_mbox_attr.mem_hndl = *mbox->memory_handle;
+	req.vc_mbox_attr.mbox_offset = (uint64_t)mbox->offset;
+	req.vc_mbox_attr.mbox_maxcredit =
+			ep_priv->domain->params.mbox_maxcredit;
+	req.vc_mbox_attr.msg_maxsize = ep_priv->domain->params.mbox_msg_maxsize;
+	req.cq_irq_mdh = ep_priv->nic->irq_mem_hndl;
+	req.peer_caps = ep_priv->caps;
+
+	ret = write(ep_priv->conn_fd, &req, sizeof(req));
+	if (ret != sizeof(req)) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to send req, errno: %d\n",
+			  errno);
+		ret = -FI_EIO;
+		goto err_write;
+	}
+
+	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "Sent conn req: %p, %s\n",
+		   ep_priv, inet_ntoa(saddr.sin_addr));
+
+	return FI_SUCCESS;
+
+err_write:
+err_connect:
+	close(ep_priv->conn_fd);
+	ep_priv->conn_fd = -1;
+err_socket:
+	_gnix_mbox_free(ep_priv->vc->smsg_mbox);
+	ep_priv->vc->smsg_mbox = NULL;
+err_mbox_alloc:
+	_gnix_vc_destroy(ep_priv->vc);
+	ep_priv->vc = NULL;
+err_unlock:
+	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	return ret;
 }
 
-DIRECT_FN STATIC int gnix_listen(struct fid_pep *pep)
+DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
+				 size_t paramlen)
 {
-	return -FI_ENOSYS;
-}
+	int ret;
+	struct gnix_vc *vc;
+	struct gnix_fid_ep *ep_priv;
+	struct gnix_pep_sock_conn *conn;
+	struct gnix_pep_sock_connresp resp;
+	struct fi_eq_cm_entry eq_entry;
+	struct gnix_mbox *mbox = NULL;
+	struct gnix_av_addr_entry av_entry;
 
-DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param, size_t paramlen)
-{
-	return -FI_ENOSYS;
-}
+	if (!ep)
+		return -FI_EINVAL;
 
-DIRECT_FN STATIC int gnix_reject(struct fid_pep *pep, fid_t handle,
-				 const void *param, size_t paramlen)
-{
-	return -FI_ENOSYS;
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
+
+	COND_ACQUIRE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	/* Look up and unpack the connection request used to create this EP. */
+	conn = (struct gnix_pep_sock_conn *)ep_priv->info->handle;
+	if (!conn || conn->fid.fclass != FI_CLASS_CONNREQ) {
+		ret = -FI_EINVAL;
+		goto err_unlock;
+	}
+
+	/* Create new VC without CM data. */
+	av_entry.gnix_addr = ep_priv->dest_addr.gnix_addr;
+	av_entry.cm_nic_cdm_id = ep_priv->dest_addr.cm_nic_cdm_id;
+	ret = _gnix_vc_alloc(ep_priv, &av_entry, &vc);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "Failed to create VC: %d\n", ret);
+		goto err_unlock;
+	}
+	ep_priv->vc = vc;
+	ep_priv->vc->peer_caps = conn->req.peer_caps;
+	ep_priv->vc->peer_id = conn->req.vc_id;
+
+	ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl, &mbox);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA, "_gnix_mbox_alloc returned %s\n",
+			  fi_strerror(-ret));
+		goto err_mbox_alloc;
+	}
+	vc->smsg_mbox = mbox;
+
+	/* Initialize the GNI connection. */
+	ret = _gnix_vc_smsg_init(vc, conn->req.vc_id,
+				 &conn->req.vc_mbox_attr,
+				 &conn->req.cq_irq_mdh);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_vc_smsg_init returned %s\n",
+			  fi_strerror(-ret));
+		goto err_smsg_init;
+	}
+
+	vc->conn_state = GNIX_VC_CONNECTED;
+
+	/* Send ACK with VC attrs to allow peer to initialize GNI connection. */
+	resp.cmd = GNIX_PEP_SOCK_RESP_ACCEPT;
+
+	resp.vc_id = vc->vc_id;
+	resp.vc_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
+	resp.vc_mbox_attr.msg_buffer = mbox->base;
+	resp.vc_mbox_attr.buff_size =  vc->ep->nic->mem_per_mbox;
+	resp.vc_mbox_attr.mem_hndl = *mbox->memory_handle;
+	resp.vc_mbox_attr.mbox_offset = (uint64_t)mbox->offset;
+	resp.vc_mbox_attr.mbox_maxcredit =
+			ep_priv->domain->params.mbox_maxcredit;
+	resp.vc_mbox_attr.msg_maxsize =
+			ep_priv->domain->params.mbox_msg_maxsize;
+	resp.cq_irq_mdh = ep_priv->nic->irq_mem_hndl;
+	resp.peer_caps = ep_priv->caps;
+
+	ret = write(conn->sock_fd, &resp, sizeof(resp));
+	if (ret != sizeof(resp)) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to send resp, errno: %d\n",
+			  errno);
+		ret = -FI_EIO;
+		goto err_write;
+	}
+
+	/* Notify user that this side is connected. */
+	eq_entry.fid = &ep_priv->ep_fid.fid;
+
+	ret = fi_eq_write(&ep_priv->eq->eq_fid, FI_CONNECTED, &eq_entry,
+			  sizeof(eq_entry), 0);
+	if (ret != sizeof(eq_entry)) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "fi_eq_write failed, err: %d\n", ret);
+		goto err_eq_write;
+	}
+
+	/* Free the connection request. */
+	free(conn);
+
+	ep_priv->conn_state = GNIX_EP_CONNECTED;
+
+	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "Sent conn resp: %p\n", ep_priv);
+
+	return FI_SUCCESS;
+
+err_eq_write:
+err_write:
+err_smsg_init:
+	_gnix_mbox_free(ep_priv->vc->smsg_mbox);
+	ep_priv->vc->smsg_mbox = NULL;
+err_mbox_alloc:
+	_gnix_vc_destroy(ep_priv->vc);
+	ep_priv->vc = NULL;
+err_unlock:
+	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	return ret;
 }
 
 DIRECT_FN STATIC int gnix_shutdown(struct fid_ep *ep, uint64_t flags)
@@ -161,14 +517,351 @@ DIRECT_FN STATIC int gnix_shutdown(struct fid_ep *ep, uint64_t flags)
 	return -FI_ENOSYS;
 }
 
-struct fi_ops_cm gnix_cm_ops = {
+struct fi_ops_cm gnix_ep_msg_ops_cm = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = gnix_setname,
 	.getname = gnix_getname,
 	.getpeer = gnix_getpeer,
 	.connect = gnix_connect,
-	.listen = gnix_listen,
+	.listen = fi_no_listen,
 	.accept = gnix_accept,
-	.reject = gnix_reject,
-	.shutdown = gnix_shutdown
+	.reject = fi_no_reject,
+	.shutdown = gnix_shutdown,
 };
+
+/******************************************************************************
+ *
+ * Passive endpoint handling
+ *
+ *****************************************************************************/
+
+/* Process an incoming connection request at a listening PEP. */
+static int __gnix_pep_connreq(struct gnix_fid_pep *pep, int fd)
+{
+	int ret;
+	struct gnix_pep_sock_conn *conn;
+	struct fi_eq_cm_entry eq_entry;
+
+	/* Create and initialize a new connection request. */
+	conn = calloc(1, sizeof(*conn));
+	if (!conn) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to alloc accepted socket conn\n");
+		return -FI_ENOMEM;
+	}
+
+	conn->fid.fclass = FI_CLASS_CONNREQ;
+	conn->fid.context = pep;
+	conn->sock_fd = fd;
+
+	/* Pull request data from the listening socket. */
+	conn->bytes_read += read(fd, &conn->req, sizeof(conn->req));
+	if (conn->bytes_read != sizeof(conn->req)) {
+		/* TODO Wait for more bytes. */
+		GNIX_FATAL(FI_LOG_EP_CTRL, "Unexpected read size\n");
+	}
+
+	conn->req.info.src_addr = &conn->req.src_addr;
+	conn->req.info.dest_addr = &conn->req.dest_addr;
+	conn->req.info.tx_attr = &conn->req.tx_attr;
+	conn->req.info.rx_attr = &conn->req.rx_attr;
+	conn->req.info.ep_attr = &conn->req.ep_attr;
+	conn->req.info.domain_attr = &conn->req.domain_attr;
+	conn->req.info.fabric_attr = &conn->req.fabric_attr;
+	conn->req.info.domain_attr->name = NULL;
+	conn->req.info.fabric_attr->name = NULL;
+	conn->req.info.fabric_attr->prov_name = NULL;
+
+	conn->info = &conn->req.info;
+	conn->info->handle = &conn->fid;
+
+	eq_entry.fid = &pep->pep_fid.fid;
+	eq_entry.info = fi_dupinfo(conn->info);
+
+	/* Tell user of a new conn req via the EQ. */
+	ret = fi_eq_write(&pep->eq->eq_fid, FI_CONNREQ, &eq_entry,
+			  sizeof(eq_entry), 0);
+	if (ret != sizeof(eq_entry)) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "fi_eq_write failed, err: %d\n", ret);
+		fi_freeinfo(conn->info);
+		free(conn);
+		return ret;
+	}
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "Added FI_CONNREQ EQE: %p, %p\n",
+		   pep->eq, pep);
+
+	return FI_SUCCESS;
+}
+
+/* Process incoming connection requests on a listening PEP. */
+int _gnix_pep_progress(struct gnix_fid_pep *pep)
+{
+	int accept_fd, ret;
+
+	fastlock_acquire(&pep->lock);
+
+	accept_fd = accept(pep->listen_fd, NULL, NULL);
+	if (accept_fd >= 0) {
+		/* New Connection. */
+		ret = __gnix_pep_connreq(pep, accept_fd);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "__gnix_pep_connreq failed, err: %d\n",
+				  ret);
+		}
+	} else if (errno != EAGAIN) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "(accept) Unexpected errno on listen socket: %d\n",
+			  errno);
+	}
+
+	fastlock_release(&pep->lock);
+
+	return FI_SUCCESS;
+}
+
+static void __pep_destruct(void *obj)
+{
+	struct gnix_fid_pep *pep = (struct gnix_fid_pep *)obj;
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "Destroying PEP: %p\n", pep);
+
+	fastlock_destroy(&pep->lock);
+
+	if (pep->listen_fd >= 0)
+		close(pep->listen_fd);
+
+	if (pep->eq) {
+		_gnix_eq_poll_obj_rem(pep->eq, &pep->pep_fid.fid);
+		_gnix_ref_put(pep->eq);
+	}
+
+	free(pep);
+}
+
+static int gnix_pep_close(fid_t fid)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_fid_pep *pep;
+	int references_held;
+
+	pep = container_of(fid, struct gnix_fid_pep, pep_fid.fid);
+
+	references_held = _gnix_ref_put(pep);
+	if (references_held)
+		GNIX_INFO(FI_LOG_EP_CTRL, "failed to fully close pep due "
+			  "to lingering references. references=%i pep=%p\n",
+			  references_held, pep);
+
+	return ret;
+}
+
+DIRECT_FN int gnix_pep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_fid_pep  *pep;
+	struct gnix_fid_eq *eq;
+
+	if (!fid || !bfid)
+		return -FI_EINVAL;
+
+	pep = container_of(fid, struct gnix_fid_pep, pep_fid.fid);
+
+	fastlock_acquire(&pep->lock);
+
+	switch (bfid->fclass) {
+	case FI_CLASS_EQ:
+		eq = container_of(bfid, struct gnix_fid_eq, eq_fid.fid);
+		if (pep->fabric != eq->fabric) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		if (pep->eq) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		pep->eq = eq;
+		_gnix_eq_poll_obj_add(eq, &pep->pep_fid.fid);
+		_gnix_ref_get(eq);
+
+		GNIX_DEBUG(FI_LOG_EP_CTRL, "Bound EQ to PEP: %p, %p\n",
+			   eq, pep);
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	fastlock_release(&pep->lock);
+
+	return ret;
+}
+
+DIRECT_FN int gnix_pep_listen(struct fid_pep *pep)
+{
+	int ret;
+	struct gnix_fid_pep *pep_priv;
+	struct sockaddr_in saddr;
+	int sockopt = 1;
+
+	if (!pep)
+		return -FI_EINVAL;
+
+	pep_priv = container_of(pep, struct gnix_fid_pep, pep_fid.fid);
+
+	fastlock_acquire(&pep_priv->lock);
+
+	if (!pep_priv->eq) {
+		ret = -FI_EINVAL;
+		goto err_unlock;
+	}
+
+	pep_priv->listen_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	if (pep_priv->listen_fd < 0) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to create listening socket, errno: %d\n",
+			  errno);
+		ret = -FI_ENOSPC;
+		goto err_unlock;
+	}
+
+	ret = setsockopt(pep_priv->listen_fd, SOL_SOCKET, SO_REUSEADDR,
+			 &sockopt, sizeof(sockopt));
+	if (ret < 0)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "setsockopt(SO_REUSEADDR) failed, errno: %d\n",
+			  errno);
+
+	/* Bind to the ipogif interface using resolved service number as CDM
+	 * ID. */
+	ret = _gnix_local_ipaddr(&saddr);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "Failed to find local IP\n");
+		ret = -FI_ENOSPC;
+		goto err_sock;
+	}
+
+	/* If source addr was not specified, use auto assigned port. */
+	if (pep_priv->bound)
+		saddr.sin_port = pep_priv->src_addr.gnix_addr.cdm_id;
+	else
+		saddr.sin_port = 0;
+
+	ret = bind(pep_priv->listen_fd, &saddr, sizeof(struct sockaddr_in));
+	if (ret < 0) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to bind listening socket, errno: %d\n",
+			  errno);
+		ret = -FI_ENOSPC;
+		goto err_sock;
+	}
+
+	ret = listen(pep_priv->listen_fd, pep_priv->backlog);
+	if (ret < 0) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to start listening socket, errno: %d\n",
+			  errno);
+		ret = -FI_ENOSPC;
+		goto err_sock;
+	}
+
+	fastlock_release(&pep_priv->lock);
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL,
+		   "Configured PEP for listening: %p (%s:%d)\n",
+		   pep, inet_ntoa(saddr.sin_addr), saddr.sin_port);
+
+	return FI_SUCCESS;
+
+err_sock:
+	close(pep_priv->listen_fd);
+err_unlock:
+	fastlock_release(&pep_priv->lock);
+	return ret;
+}
+
+DIRECT_FN STATIC int gnix_reject(struct fid_pep *pep, fid_t handle,
+				 const void *param, size_t paramlen)
+{
+	/* Reject connection using handle from EQ conn req. */
+	return -FI_ENOSYS;
+}
+
+DIRECT_FN int gnix_passive_ep_open(struct fid_fabric *fabric,
+				   struct fi_info *info, struct fid_pep **pep,
+				   void *context)
+{
+	struct gnix_fid_fabric *fabric_priv;
+	struct gnix_fid_pep *pep_priv;
+
+	if (!fabric || !info || !pep)
+		return -FI_EINVAL;
+
+	fabric_priv = container_of(fabric, struct gnix_fid_fabric, fab_fid);
+
+	pep_priv = calloc(1, sizeof(*pep_priv));
+	if (!pep_priv)
+		return -FI_ENOMEM;
+
+	pep_priv->pep_fid.fid.fclass = FI_CLASS_PEP;
+	pep_priv->pep_fid.fid.context = context;
+
+	pep_priv->pep_fid.fid.ops = &gnix_pep_fi_ops;
+	pep_priv->pep_fid.ops = &gnix_pep_ops_ep;
+	pep_priv->pep_fid.cm = &gnix_pep_ops_cm;
+
+	pep_priv->listen_fd = -1;
+	pep_priv->backlog = 5; /* TODO set via fi_control parameter. */
+	pep_priv->cm_data_size = 0; /* TODO Support CM data. */
+	pep_priv->fabric = fabric_priv;
+	fastlock_init(&pep_priv->lock);
+	if (info->src_addr) {
+		pep_priv->bound = 1;
+		memcpy(&pep_priv->src_addr, info->src_addr,
+		       sizeof(struct sockaddr_in));
+	} else
+		pep_priv->bound = 0;
+
+	_gnix_ref_init(&pep_priv->ref_cnt, 1, __pep_destruct);
+
+	*pep = &pep_priv->pep_fid;
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "Opened PEP: %p\n", pep_priv);
+
+	return FI_SUCCESS;
+}
+
+struct fi_ops gnix_pep_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = gnix_pep_close,
+	.bind = gnix_pep_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+struct fi_ops_ep gnix_pep_ops_ep = {
+	.size = sizeof(struct fi_ops_ep),
+	.cancel = fi_no_cancel,
+	.getopt = fi_no_getopt,
+	.setopt = fi_no_setopt,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
+};
+
+struct fi_ops_cm gnix_pep_ops_cm = {
+	.size = sizeof(struct fi_ops_cm),
+	.setname = gnix_setname,
+	.getname = gnix_getname,
+	.getpeer = fi_no_getpeer,
+	.connect = fi_no_connect,
+	.listen = gnix_pep_listen,
+	.accept = fi_no_accept,
+	.reject = gnix_reject,
+	.shutdown = fi_no_shutdown,
+};
+

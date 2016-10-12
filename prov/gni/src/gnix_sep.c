@@ -645,7 +645,7 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	sep_priv->ep_fid.fid.ops = &gnix_sep_fi_ops;
 	sep_priv->ep_fid.ops = &gnix_sep_ops;
-	sep_priv->ep_fid.cm = &gnix_cm_ops;
+	sep_priv->ep_fid.cm = &gnix_ep_ops_cm;
 	sep_priv->domain = domain;
 
 	sep_priv->info = fi_dupinfo(info);
@@ -658,7 +658,7 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	_gnix_ref_init(&sep_priv->ref_cnt, 1, __sep_destruct);
 
-	sep_priv->caps = info->caps & GNIX_EP_RDM_PRIMARY_CAPS;
+	sep_priv->caps = info->caps & GNIX_EP_PRIMARY_CAPS;
 
 	sep_priv->op_flags = info->tx_attr->op_flags;
 	sep_priv->op_flags |= info->rx_attr->op_flags;

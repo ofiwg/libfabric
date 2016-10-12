@@ -508,10 +508,9 @@ static void __gnix_vc_get_msg_type(char *rbuf,
  * helper function to initialize an SMSG connection, plus
  * a mem handle to use for delivering IRQs to peer when needed
  */
-static int __gnix_vc_smsg_init(struct gnix_vc *vc,
-				int peer_id,
-				gni_smsg_attr_t *peer_smsg_attr,
-				gni_mem_handle_t *peer_irq_mem_hndl)
+int _gnix_vc_smsg_init(struct gnix_vc *vc, int peer_id,
+		       gni_smsg_attr_t *peer_smsg_attr,
+		       gni_mem_handle_t *peer_irq_mem_hndl)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep;
@@ -649,7 +648,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 	smsg_mbox_attr.mbox_maxcredit = dom->params.mbox_maxcredit;
 	smsg_mbox_attr.msg_maxsize = dom->params.mbox_msg_maxsize;
 
-	ret = __gnix_vc_smsg_init(vc, vc->vc_id, &smsg_mbox_attr, NULL);
+	ret = _gnix_vc_smsg_init(vc, vc->vc_id, &smsg_mbox_attr, NULL);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_vc_smsg_init returned %s\n",
@@ -759,11 +758,11 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	 * build the SMSG connection
 	 */
 
-	ret = __gnix_vc_smsg_init(vc, peer_id, &peer_smsg_attr,
-				  &tmp_mem_hndl);
+	ret = _gnix_vc_smsg_init(vc, peer_id, &peer_smsg_attr,
+				 &tmp_mem_hndl);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			"__gnix_vc_smsg_init returned %s\n",
+			"_gnix_vc_smsg_init returned %s\n",
 			fi_strerror(-ret));
 		goto err;
 	}
@@ -1010,9 +1009,9 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 			goto err;
 		}
 
-		ret = __gnix_vc_smsg_init(vc, src_vc_id,
-					  &src_smsg_attr,
-					  &tmp_mem_hndl);
+		ret = _gnix_vc_smsg_init(vc, src_vc_id,
+					 &src_smsg_attr,
+					 &tmp_mem_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_vc_smsg_init returned %s\n",
@@ -1206,10 +1205,10 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 				GNIX_CM_NIC_MAX_MSG_SIZE,
 				vc->peer_cm_nic_addr);
 	if (ret == FI_SUCCESS) {
-		ret = __gnix_vc_smsg_init(vc,
-					  work_req_data->src_vc_id,
-					  &work_req_data->src_smsg_attr,
-					  &work_req_data->irq_mem_hndl);
+		ret = _gnix_vc_smsg_init(vc,
+					 work_req_data->src_vc_id,
+					 &work_req_data->src_smsg_attr,
+					 &work_req_data->irq_mem_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_vc_smsg_init returned %s\n",
@@ -1332,8 +1331,8 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		"conn req tx: (From Aries addr 0x%x Id %d to Aries 0x%x Id %d CM NIC Id %d vc %p)\n",
-		 ep->my_name.gnix_addr.device_addr,
-		 ep->my_name.gnix_addr.cdm_id,
+		 ep->src_addr.gnix_addr.device_addr,
+		 ep->src_addr.gnix_addr.cdm_id,
 		 vc->peer_addr.device_addr,
 		 vc->peer_addr.cdm_id,
 		 vc->peer_cm_nic_addr.cdm_id,
@@ -1349,7 +1348,7 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 
 	__gnix_vc_pack_conn_req(sbuf,
 				&vc->peer_addr,
-				&ep->my_name.gnix_addr,
+				&ep->src_addr.gnix_addr,
 				vc->vc_id,
 				(uint64_t)vc,
 				&smsg_mbox_attr,
@@ -1687,7 +1686,7 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	 * check if this EP is connecting to itself
 	 */
 
-	if (GNIX_ADDR_EQUAL(ep->my_name.gnix_addr, vc->peer_addr)) {
+	if (GNIX_ADDR_EQUAL(ep->src_addr.gnix_addr, vc->peer_addr)) {
 		return __gnix_vc_connect_to_self(vc);
 	}
 
@@ -2305,7 +2304,15 @@ int _gnix_vc_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			return ret;
 		}
 	} else if (ep->type == FI_EP_MSG) {
-		*vc_ptr = ep->vc;
+		/* TODO Allow VC to be torn down. */
+		COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
+		if (GNIX_EP_CONNECTED(ep)) {
+			*vc_ptr = ep->vc;
+		} else {
+			COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+			return -FI_EINVAL;
+		}
+		COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 	} else {
 		GNIX_WARN(FI_LOG_EP_DATA, "Invalid endpoint type: %d\n",
 			  ep->type);
