@@ -1877,6 +1877,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	uint32_t cdm_id;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
+	struct gnix_ep_name *name;
 	gnix_ht_key_t *key_ptr;
 	bool free_list_inited = false;
 
@@ -1958,7 +1959,10 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	if (GNIX_EP_RDM_DGM(ep_priv->type)) {
-		if (info->src_addr != NULL) {
+		name = (struct gnix_ep_name *)info->src_addr;
+		if ((name != NULL) &&
+			(name->name_type == GNIX_EPN_TYPE_BOUND)) {
+
 			ret = __gnix_ep_bound_prep(domain_priv,
 						   info,
 						   ep_priv);
