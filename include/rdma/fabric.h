@@ -158,7 +158,8 @@ enum {
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
 	FI_ADDR_PSMX,		/* uint64_t */
-	FI_ADDR_GNI
+	FI_ADDR_GNI,
+	FI_ADDR_BGQ
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
