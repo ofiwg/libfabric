@@ -41,8 +41,9 @@ fi_addr_t rxd_av_get_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
 
 fi_addr_t rxd_av_get_fi_addr(struct rxd_av *av, fi_addr_t dg_addr)
 {
-	return (fi_addr_t) ofi_av_lookup_index(&av->util_av,
-					      &dg_addr, (int) dg_addr);
+	int ret = ofi_av_lookup_index(&av->util_av,
+				      &dg_addr, (int) dg_addr);
+	return (ret == -FI_ENODATA) ? FI_ADDR_UNSPEC : ret;
 }
 
 int rxd_av_insert_dg_av(struct rxd_av *av, const void *addr)
@@ -86,10 +87,10 @@ out:
 	return ret;
 }
 
-size_t rxd_av_insert_check(struct rxd_av *av, const void *addr, size_t count,
-			   fi_addr_t *fi_addr, uint64_t flags, void *context)
+int rxd_av_insert_check(struct rxd_av *av, const void *addr, size_t count,
+			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	size_t i, success_cnt = 0;
+	int i, success_cnt = 0;
 	int ret, index;
 	void *curr_addr;
 	uint64_t dg_av_idx;
@@ -132,10 +133,10 @@ size_t rxd_av_insert_check(struct rxd_av *av, const void *addr, size_t count,
 	return ret;
 }
 
-size_t rxd_av_insert_fast(struct rxd_av *av, const void *addr, size_t count,
-			   fi_addr_t *fi_addr, uint64_t flags, void *context)
+int rxd_av_insert_fast(struct rxd_av *av, const void *addr, size_t count,
+		       fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	size_t i, num, ret, success_cnt = 0;
+	int i, num, ret, success_cnt = 0;
 	int index;
 	fi_addr_t *fi_addrs;
 
