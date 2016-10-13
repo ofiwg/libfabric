@@ -50,6 +50,6 @@ int usdf_cq_trywait(struct fid *fcq);
 void usdf_progress_hard_cq(struct usdf_cq_hard *hcq);
 
 void usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context,
-		size_t len, int prov_errno);
+		size_t len, int prov_errno, uint64_t flags);
 
 #endif /* _USDF_CQ_H_ */

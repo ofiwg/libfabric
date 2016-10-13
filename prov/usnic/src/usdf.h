@@ -362,7 +362,7 @@ struct usdf_cq_hard {
 	atomic_t cqh_refcnt;
 	void (*cqh_progress)(struct usdf_cq_hard *hcq);
 	void (*cqh_post)(struct usdf_cq_hard *hcq, void *context, size_t len,
-			int prov_errno);
+			int prov_errno, uint64_t flags);
 	TAILQ_ENTRY(usdf_cq_hard) cqh_link;
 	TAILQ_ENTRY(usdf_cq_hard) cqh_dom_link;
 };

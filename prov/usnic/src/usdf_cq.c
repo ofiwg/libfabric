@@ -437,7 +437,7 @@ usdf_progress_hard_cq(struct usdf_cq_hard *hcq)
 
 void
 usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
-		int prov_errno)
+		int prov_errno, uint64_t flags)
 {
 	int ret;
 	struct usdf_cq_soft_entry *entry;
@@ -460,6 +460,7 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 	entry->cse_context = context;
 	entry->cse_len = len;
 	entry->cse_prov_errno = prov_errno;
+	entry->cse_flags = flags;
 
 	/* update with wrap */
 	entry++;

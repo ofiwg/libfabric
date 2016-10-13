@@ -1144,7 +1144,8 @@ static inline void usdf_rdm_recv_complete(struct usdf_rx *rx,
 	USDF_DBG_SYS(EP_DATA, "RECV complete ID=%u len=%lu with status %d\n",
 		     rdc->dc_rx_msg_id, rqe->rd_length, status);
 	hcq = rx->r.rdm.rx_hcq;
-	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length, status);
+	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length, status,
+		      FI_MSG | FI_RECV);
 
 	usdf_rdm_put_rx_rqe(rx, rqe);
 
@@ -1318,7 +1319,9 @@ usdf_rdm_process_ack(struct usdf_rdm_connection *rdc,
 				USDF_DBG_SYS(EP_DATA, "send ID=%u complete\n", msg_id);
 				if (wqe->rd_signal_comp)
 					hcq->cqh_post(hcq, wqe->rd_context,
-							wqe->rd_length, FI_SUCCESS);
+						      wqe->rd_length,
+						      FI_SUCCESS,
+						      FI_MSG | FI_SEND);
 
 				usdf_rdm_put_tx_wqe(tx, wqe);
 
