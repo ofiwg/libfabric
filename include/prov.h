@@ -158,4 +158,15 @@ RXD_INI ;
 #  define RXD_INIT NULL
 #endif
 
+#if (HAVE_BGQ) && (HAVE_BGQ_DL)
+#  define BGQ_INI FI_EXT_INI
+#  define BGQ_INIT NULL
+#elif (HAVE_BGQ)
+#  define BGQ_INI INI_SIG(fi_bgq_ini)
+#  define BGQ_INIT fi_bgq_ini()
+BGQ_INI ;
+#else
+#  define BGQ_INIT NULL
+#endif
+
 #endif /* _PROV_H_ */
