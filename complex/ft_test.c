@@ -29,11 +29,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 #include <stdlib.h>
 
 #include "fabtest.h"
-
 
 void ft_record_error(int error)
 {

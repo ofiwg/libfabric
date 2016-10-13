@@ -33,23 +33,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <getopt.h>
-#include <poll.h>
-#include <time.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netdb.h>
-#include <arpa/inet.h>
-#include <inttypes.h>
-#include <netinet/in.h>
 
-#include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_cm.h>
 
 #include "shared.h"
 #include "unit_common.h"

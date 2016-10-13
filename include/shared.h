@@ -34,16 +34,13 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <inttypes.h>
 #include <netinet/tcp.h>
+#include <sys/uio.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_eq.h>
 #include <rdma/fi_rma.h>
-
-#include <time.h>
+#include <rdma/fi_domain.h>
 
 #ifdef __cplusplus
 extern "C" {

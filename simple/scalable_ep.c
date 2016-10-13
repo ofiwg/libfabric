@@ -29,19 +29,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <getopt.h>
-#include <time.h>
-#include <netdb.h>
-#include <unistd.h>
 
-#include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include <shared.h>
-#include <math.h>
 
+#include <shared.h>
 
 static int ctx_cnt = 2;
 static int rx_ctx_bits = 0;
@@ -50,7 +44,6 @@ static struct fid_ep **tx_ep, **rx_ep;
 static struct fid_cq **txcq_array;
 static struct fid_cq **rxcq_array;
 static fi_addr_t *remote_rx_addr;
-
 
 static void free_res(void)
 {
@@ -117,7 +110,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 
 		ret = fi_rx_context(sep, i, NULL, &rx_ep[i], NULL);
 		if (ret) {
-			FT_PRINTERR("fi_tx_context", ret);
+			FT_PRINTERR("fi_rx_context", ret);
 			return ret;
 		}
 
@@ -137,7 +130,7 @@ static int bind_ep_res(void)
 
 	ret = fi_scalable_ep_bind(sep, &av->fid, 0);
 	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_scalable_ep_bind", ret);
 		return ret;
 	}
 

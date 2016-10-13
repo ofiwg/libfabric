@@ -33,21 +33,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <netdb.h>
 #include <getopt.h>
 
-#include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
-#include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
-#include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
-#include <shared.h>
 
+#include <shared.h>
 
 struct cma_node {
 	int			id;

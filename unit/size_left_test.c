@@ -33,13 +33,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <getopt.h>
 #include <string.h>
-#include <sys/types.h>
 
-#include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 

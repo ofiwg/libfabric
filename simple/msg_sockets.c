@@ -33,7 +33,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
-#include <unistd.h>
 #include <netdb.h>
 #include <netinet/in.h>
 
@@ -42,7 +41,6 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
-
 
 union sockaddr_any {
 	struct sockaddr		sa;
