@@ -1,0 +1,4 @@
+/*
+ * used for exporting BGQ provider
+ * symbols when building to support FI_DIRECT
+ */
