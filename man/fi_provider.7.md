@@ -53,6 +53,9 @@ This distribution of libfabric contains the following providers
   Verbs-based networking.
   See [`fi_verbs`(7)](fi_verbs.7.html) for more information.
 
+*Blue Gene/Q*
+: See [`fi_bgq`(7)](fi_bgq.7.html) for more information.
+
 # PROVIDER REQUIREMENTS
 
 Libfabric provides a general framework for supporting multiple types
@@ -164,3 +167,4 @@ Logging is performed using the FI_ERR, FI_LOG, and FI_DEBUG macros.
 [`fi_sockets`(7)](fi_sockets.7.html),
 [`fi_usnic`(7)](fi_usnic.7.html),
 [`fi_verbs`(7)](fi_verbs.7.html),
+[`fi_bgq`(7)](fi_bgq.7.html),
