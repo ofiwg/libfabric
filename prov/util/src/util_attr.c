@@ -220,6 +220,7 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 					fi, alter_base_info, &temp);
 			if (ret)
 				goto err3;
+			ofi_alter_info(temp, hints);
 			if (!tail)
 				*info = temp;
 			else
