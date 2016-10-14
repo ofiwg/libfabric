@@ -153,7 +153,7 @@
 
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
 #define GNIX_MSG_GET_TAIL		(1ULL << 62)	/* MSG only flag */
-#define LAST_FLAG			(1ULL << 63)	/* MSG only flag */
+#define GNIX_MSG_MULTI_RECV_SUP		(1ULL << 63)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
