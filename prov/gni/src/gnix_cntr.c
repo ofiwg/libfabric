@@ -75,7 +75,7 @@ static int __verify_cntr_attr(struct fi_cntr_attr *attr)
 
 	/* TODO: Wait objects are not yet implemented. */
 	if (attr->wait_obj != FI_WAIT_NONE) {
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	}
 
 	switch (attr->wait_obj) {
