@@ -358,14 +358,10 @@ struct util_cmap {
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);
 void ofi_cmap_update_state(struct util_cmap_handle *handle,
 		enum util_cmap_state state);
-/*
- * Caller must hold cmap->lock. Either fi_addr or
- * addr and addrlen args should be present.
- */
+/* Either fi_addr or addr and addrlen args must be given. */
 int ofi_cmap_add_handle(struct util_cmap *cmap, struct util_cmap_handle *handle,
 		enum util_cmap_state state, fi_addr_t fi_addr, void *addr,
 		size_t addrlen);
-/* Caller must hold cmap->lock */
 struct util_cmap_handle *ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr);
 void ofi_cmap_del_handle(struct util_cmap_handle *handle);
 void ofi_cmap_free(struct util_cmap *cmap);
