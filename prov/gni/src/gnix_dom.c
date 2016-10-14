@@ -648,18 +648,6 @@ DIRECT_FN int gnix_srx_context(struct fid_domain *domain,
 	return -FI_ENOSYS;
 }
 
-DIRECT_FN int gnix_scalable_ep_open(struct fid_domain *domain,
-				    struct fi_info *info,
-				    struct fid_ep **sep, void *context)
-{
-	return -FI_ENOSYS;
-}
-
-DIRECT_FN int gnix_scalable_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
@@ -691,7 +679,7 @@ static struct fi_ops_domain gnix_domain_ops = {
 	.av_open = gnix_av_open,
 	.cq_open = gnix_cq_open,
 	.endpoint = gnix_ep_open,
-	.scalable_ep = fi_no_scalable_ep,
+	.scalable_ep = gnix_sep_open,
 	.cntr_open = gnix_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = gnix_stx_open,

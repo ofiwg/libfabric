@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -197,26 +197,49 @@ int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
 	uint32_t cdm_id;
 	int v;
 
-/*
- * generate a cdm_id, use the 16 LSB of base_id from domain
- * with 16 MSBs being obtained from atomic increment of
- * a local variable.
- */
+	if (*id != GNIX_CREATE_CDM_ID) {
+		return FI_SUCCESS;
+	}
+
+	/*
+	 * generate a cdm_id, use the 16 LSB of base_id from domain
+	 * with 16 MSBs being obtained from atomic increment of
+	 * a local variable.
+	 */
+
 	v = atomic_inc(&gnix_id_counter);
+
 	cdm_id = ((domain->cdm_id_seed & 0xFFF) << 12) | v;
 	*id = cdm_id;
 	return FI_SUCCESS;
 }
 
+/**
+ * This function will return a block of id's starting at id through nids
+ *
+ * @param domain  gnix domain
+ * @param nids    number of id's
+ * @param id      if -1 return an id based on the counter and seed
+ */
 int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
 			     uint32_t *id)
 {
 	uint32_t cdm_id;
 	int v;
 
-	v = atomic_add(&gnix_id_counter, nids);
-	cdm_id = ((domain->cdm_id_seed & 0xFFF) << 12) | v;
-	*id = cdm_id;
+	if (*id == -1) {
+		v = atomic_add(&gnix_id_counter, nids);
+		cdm_id = ((domain->cdm_id_seed & 0xFFF) << 12) | v;
+		*id = cdm_id;
+	} else {
+		/*
+		 * asking for a block starting at a chosen base
+		 * TODO: sanity check that requested base is reasonable
+		 */
+		if (*id <= atomic_get(&gnix_id_counter))
+			return -FI_ENOSPC;
+		atomic_set(&gnix_id_counter, (*(int *)id + nids));
+	}
 	return FI_SUCCESS;
 }
 
@@ -333,6 +356,7 @@ static void  __cm_nic_destruct(void *obj)
 	if (cm_nic->nic != NULL)
 		_gnix_ref_put(cm_nic->nic);
 
+	cm_nic->domain->cm_nic = NULL;
 	free(cm_nic);
 }
 
@@ -464,8 +488,15 @@ int _gnix_cm_nic_enable(struct gnix_cm_nic *cm_nic)
 	if (cm_nic == NULL)
 		return -FI_EINVAL;
 
-	fabric = cm_nic->fabric;
-	assert(fabric != NULL);
+	if (cm_nic->domain == NULL) {
+		GNIX_FATAL(FI_LOG_EP_CTRL, "domain is NULL\n");
+	}
+
+	if (cm_nic->domain->fabric == NULL) {
+		GNIX_FATAL(FI_LOG_EP_CTRL, "fabric is NULL\n");
+	}
+
+	fabric = cm_nic->domain->fabric;
 
 	assert(cm_nic->dgram_hndl != NULL);
 
@@ -575,9 +606,8 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	cm_nic->my_name.gnix_addr.cdm_id = cdm_id;
 	cm_nic->ptag = domain->ptag;
 	cm_nic->my_name.cookie = domain->cookie;
-	cm_nic->my_name.gnix_addr.device_addr =
-	cm_nic->nic->device_addr;
-	cm_nic->fabric = domain->fabric;
+	cm_nic->my_name.gnix_addr.device_addr = cm_nic->nic->device_addr;
+	cm_nic->domain = domain;
 	cm_nic->ctrl_progress = domain->control_progress;
 	cm_nic->my_name.name_type = name_type;
 	cm_nic->poll_cnt = 0;

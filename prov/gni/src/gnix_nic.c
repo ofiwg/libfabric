@@ -940,7 +940,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	struct gnix_nic *nic = NULL;
 	uint32_t device_addr;
 	gni_return_t status;
-	uint32_t fake_cdm_id;
+	uint32_t fake_cdm_id = GNIX_CREATE_CDM_ID;
 	gni_smsg_attr_t smsg_mbox_attr;
 	struct gnix_nic_attr *nic_attr = &default_attr;
 	uint32_t num_corespec_cpus = 0;

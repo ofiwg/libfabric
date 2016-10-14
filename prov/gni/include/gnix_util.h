@@ -85,7 +85,7 @@ extern atomic_t gnix_debug_next_tid;
 				gnix_debug_pid = getpid();		\
 			}						\
 			snprintf(new_fmt, fmt_len, "[%%d:%%d] %s", fmt);	\
-			FI_LOG_FN(&gnix_prov, subsystem, new_fmt,		\
+			FI_LOG_FN(&gnix_prov, subsystem, new_fmt,	\
 				  gnix_debug_pid, gnix_debug_tid, ##__VA_ARGS__); \
 		} \
 	} while (0)

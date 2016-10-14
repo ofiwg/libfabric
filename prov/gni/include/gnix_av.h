@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -55,6 +55,7 @@
  *                           is associated
  * @var cookie               RDMA cookie credential for the endpoint
  *                           this entry corresponds to
+ * @var rx_ctx_cnt           number of contexts associated with this AV
  */
 struct gnix_av_addr_entry {
 	struct gnix_address gnix_addr;
@@ -62,6 +63,10 @@ struct gnix_av_addr_entry {
 		uint32_t name_type : 8;
 		uint32_t cm_nic_cdm_id : 24;
 		uint32_t cookie;
+	};
+	struct {
+		uint32_t rx_ctx_cnt : 8;
+		uint32_t unused1 : 24;
 	};
 };
 

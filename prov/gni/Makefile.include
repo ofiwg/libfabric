@@ -36,6 +36,7 @@ _gni_files = \
 	prov/gni/src/gnix_poll.c \
 	prov/gni/src/gnix_queue.c \
 	prov/gni/src/gnix_rma.c \
+	prov/gni/src/gnix_sep.c \
 	prov/gni/src/gnix_tags.c \
 	prov/gni/src/gnix_trigger.c \
 	prov/gni/src/gnix_util.c \
@@ -111,6 +112,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/api.c \
 	prov/gni/test/api_cq.c \
 	prov/gni/test/api_cntr.c \
+	prov/gni/test/sep.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
 	prov/gni/test/vc_lookup.c \
