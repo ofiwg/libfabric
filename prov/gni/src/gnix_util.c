@@ -147,8 +147,9 @@ static int __gnix_ccm_init(void)
 {
 	int rc, fd;
 	FILE *f;
-	char ccm_nodelist[PATH_MAX];
-	const char *home, *jobid;
+	char *nodefile;
+	char nodelist[PATH_MAX];
+	const char *home;
 	ccm_alps_info_t info;
 	uint32_t num_nids = 0;
 
@@ -172,18 +173,18 @@ static int __gnix_ccm_init(void)
 		   gnix_app_ptag, gnix_app_cookie);
 
 	home = getenv("HOME");
-	jobid = getenv("PBS_JOBID");
-	if (!jobid) {
-		/* This path hasn't been tested yet (no access to resources) */
-		jobid = getenv("SLURM_JOB_ID");
+	/* use the WLM node file if using PBS */
+	nodefile = getenv("PBS_NODEFILE");
+	if (!nodefile) {
+		const char *jobid = getenv("SLURM_JOB_ID");
 		if (!jobid) {
 			jobid = getenv("SLURM_JOBID");
 		}
-		/* Should we do something else if this fails? */
+		snprintf(nodelist, PATH_MAX, "%s/%s%s", home ? home : ".",
+			 CCM_NODELIST_FN, jobid ? jobid : "sdb");
+		nodefile = nodelist;
 	}
-	snprintf(ccm_nodelist, PATH_MAX, "%s/%s%s", home ? home : ".",
-		 CCM_NODELIST_FN, jobid ? jobid : "sdb");
-	f = fopen(ccm_nodelist, "r");
+	f = fopen(nodefile, "r");
 	if (f) {
 		char mynid[PATH_MAX];
 		char next_nid[PATH_MAX];
@@ -210,7 +211,7 @@ static int __gnix_ccm_init(void)
 	} else {
 		/* what would be a better default? */
 		GNIX_WARN(FI_LOG_FABRIC,
-			  "CCM nodelist not found.  Assuming 1 PE per node");
+			  "CCM nodelist not found.  Assuming 1 PE per node\n");
 		gnix_pes_on_node = 1;
 	}
 	GNIX_DEBUG(FI_LOG_FABRIC, "pes per node=%u\n", gnix_pes_on_node);
