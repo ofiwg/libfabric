@@ -1872,25 +1872,23 @@ void do_multirecv(int len)
 	dbg_printf("got context events!\n");
 }
 
-Test(rdm_sr, multirecv)
-{
-	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
-}
-
 /*
- * for now disable this test since the current test assumes
+ * for now disable multirecv tests since the current test assumes
  * recv-side CQ events arrive in order of buffer consumption
  * for multi recv.  But actually this isn't always the case.
  * We need a test which keeps track of each CQE on the receive
  * side.
  */
-#if 0
-Test(rdm_sr, multirecv_retrans)
+Test(rdm_sr, multirecv, .disabled = true)
+{
+	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
+}
+
+Test(rdm_sr, multirecv_retrans, .disabled = true)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
-#endif
 
 void do_multirecv2(int len)
 {
@@ -1965,12 +1963,12 @@ void do_multirecv2(int len)
 	dbg_printf("got context events!\n");
 }
 
-Test(rdm_sr, multirecv2)
+Test(rdm_sr, multirecv2, .disabled = true)
 {
 	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
 }
 
-Test(rdm_sr, multirecv2_retrans)
+Test(rdm_sr, multirecv2_retrans, .disabled = true)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
