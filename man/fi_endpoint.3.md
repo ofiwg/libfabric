@@ -412,15 +412,21 @@ period of time.
 
 This call creates an alias to the specified endpoint.  Conceptually,
 an endpoint alias provides an alternate software path from the
-application to the underlying provider hardware.  Applications
-configure an alias endpoint with data transfer flags, specified
-through the fi_ep_alias call. The flags must include FI_TRANSMIT or FI_RECV
-(not both) with other flags OR'ed to indicate the type of data transfer the
-flags should apply to. This will override the transmit and receive attributes
-of the alias endpoint. Typically the attributes of the alias endpoint are
-different than those assigned to the actual endpoint. The alias mechanism
-allows a single endpoint to have multiple optimized software interfaces.
-All allocated aliases must be closed for the underlying endpoint to be released.
+application to the underlying provider hardware.  An alias EP differs
+from its parent endpoint only by its default data transfer flags.  For
+example, an alias EP may be configured to use a different completion
+mode.  By default, an alias EP inherits the same data transfer flags
+as the parent endpoint.  An application can use fi_control to modify
+the alias EP operational flags.
+
+When allocating an alias, an application may configure either the transmit
+or receive operational flags.  This avoids needing a separate call to
+fi_control to set those flags.  The flags passed to fi_ep_alias must
+include FI_TRANSMIT or FI_RECV (not both) with other operational flags OR'ed
+in.  This will override the transmit or receive flags,
+respectively, for operations posted through the alias endpoint.
+All allocated aliases must be closed for the underlying endpoint to be
+released.
 
 ## fi_control
 
