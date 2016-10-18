@@ -174,6 +174,7 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
 void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
 int ft_parse_rma_opts(int op, char *optarg, struct ft_opts *opts);
+void ft_addr_usage();
 void ft_usage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
 void ft_fill_buf(void *buf, int size);
@@ -192,7 +193,8 @@ extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:"
-#define INFO_OPTS "d:p:e:"
+#define FAB_OPTS "f:d:p:"
+#define INFO_OPTS FAB_OPTS "e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 
 extern char default_port[8];

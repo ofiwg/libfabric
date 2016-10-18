@@ -1008,7 +1008,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:p:g:G:n:s:h")) != -1) {
+	while ((op = getopt(argc, argv, FAB_OPTS "g:G:n:s:h")) != -1) {
 		switch (op) {
 		case 'g':
 			good_address = optarg;

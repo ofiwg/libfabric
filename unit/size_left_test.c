@@ -303,7 +303,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:p:h")) != -1) {
+	while ((op = getopt(argc, argv, FAB_OPTS "h")) != -1) {
 		switch (op) {
 		default:
 			ft_parseinfo(op, optarg, hints);
