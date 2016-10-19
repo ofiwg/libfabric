@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2016\-10\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2016\-10\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -15,16 +15,18 @@ control and data transfer operations.
 The verbs provider supports a subset of OFI features.
 .SS Endpoint types
 .PP
-: FI_EP_MSG, FI_EP_RDM (Experimental support FI_MSG, FI_TAGGED, FI_RMA
+FI_EP_MSG, FI_EP_RDM (Experimental support FI_MSG, FI_TAGGED, FI_RMA
 interfaces).
 .SS Endpoint capabilities and features
 .SS MSG endpoints
 .PP
-: FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
-##### RDM endpoints : FI_MSG, FI_TAGGED, FI_RMA
+FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
+.SS RDM endpoints
+.PP
+FI_MSG, FI_TAGGED, FI_RMA
 .SS Modes
 .PP
-: Verbs provider requires applications to support the following modes:
+Verbs provider requires applications to support the following modes:
 .IP \[bu] 2
 FI_LOCAL_MR for all applications.
 .IP \[bu] 2
@@ -36,19 +38,18 @@ FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
 capability.
 .SS Addressing Formats
 .PP
-: Supported addressing formats include FI_SOCKADDR, FI_SOCKADDR_IN,
+Supported addressing formats include FI_SOCKADDR, FI_SOCKADDR_IN,
 FI_SOCKADDR_IN6, FI_SOCKADDR_IB
 .SS Progress
 .PP
-: Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make
+Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make
 forward progress automatically.
 .SS Operation flags
 .PP
-: Verbs provider supports FI_INJECT, FI_COMPLETION, FI_REMOTE_CQ_DATA.
+Verbs provider supports FI_INJECT, FI_COMPLETION, FI_REMOTE_CQ_DATA.
 .SS Msg Ordering
 .PP
-: Verbs provider support the following messaging ordering on the TX
-side:
+Verbs provider support the following messaging ordering on the TX side:
 .IP \[bu] 2
 Read after Read
 .IP \[bu] 2
@@ -65,7 +66,7 @@ Send after Write
 Send after Send
 .SS Fork
 .PP
-: Verbs provider supports the fork system call by default.
+Verbs provider supports the fork system call by default.
 See the limitations section for restrictions.
 It can be turned off by setting the FI_FORK_UNSAFE environment variable
 to "yes".
@@ -74,38 +75,38 @@ makes the use of fork unsafe.
 .SH LIMITATIONS
 .SS Memory Regions
 .PP
-: Only FI_MR_BASIC mode is supported.
+Only FI_MR_BASIC mode is supported.
 Adding regions via s/g list is not supported.
 Generic fi_mr_regattr is not supported.
 No support for binding memory regions to a counter.
 .SS Wait objects
 .PP
-: Only FI_WAIT_FD wait object is supported.
+Only FI_WAIT_FD wait object is supported.
 Wait sets are not supported.
 .SS Resource Management
 .PP
-: Application has to make sure CQs are not overrun as this cannot be
+Application has to make sure CQs are not overrun as this cannot be
 detected by the provider.
 .SS Unsupported Features
 .PP
-: The following features are not supported in verbs provider.
+The following features are not supported in verbs provider:
 .SS Unsupported Endpoint types
 .PP
-: FI_EP_DGRAM
+FI_EP_DGRAM
 .SS Unsupported Capabilities
 .PP
-: FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_MULTI_RECV,
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_MULTI_RECV,
 FI_RMA_EVENT, FI_FENCE
 .SS Other unsupported features
 .PP
-: Scalable endpoints, FABRIC_DIRECT
+Scalable endpoints, FABRIC_DIRECT
 .SS Unsupported features specific to MSG endpoints
 .PP
-: Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel,
-fi_ep_alias, Shared TX context, cq_readfrom operations.
+Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel,
+fi_ep_alias, shared TX context, cq_readfrom operations.
 .SS Unsupported features specific to RDM endpoints
 .PP
-: The RDM support for verbs have the following limitations:
+The RDM support for verbs have the following limitations:
 .IP \[bu] 2
 Supports iovs of only size 1.
 .IP \[bu] 2
@@ -114,47 +115,46 @@ Wait objects are not supported.
 Not thread safe.
 .SS Fork
 .PP
-: The support for fork in the provider has the following limitations: *
+The support for fork in the provider has the following limitations:
+.IP \[bu] 2
 Fabric resources like endpoint, CQ, EQ, etc.
 should not be used in the forked process.
-* The memory registered using fi_mr_reg has to be page aligned since
+.IP \[bu] 2
+The memory registered using fi_mr_reg has to be page aligned since
 ibv_reg_mr marks the entire page that a memory region belongs to as not
 to be re\-mapped when the process is forked (MADV_DONTFORK).
 .SH RUNTIME PARAMETERS
 .PP
 The verbs provider checks for the following environment variables.
 .SS Variables specific to RDM endpoints
-.SS FI_VERBS_IFACE
 .PP
-: The prefix or the full name of the network interface associated with
-the IB device (default: ib)
-.SS FI_VERBS_RDM_BUFFER_NUM
+\f[I]FI_VERBS_IFACE\f[] : The prefix or the full name of the network
+interface associated with the IB device (default: ib)
 .PP
-: The number of pre\-registered buffers for buffered operations between
-the endpoints, must be a power of 2 (default: 8).
-.SS FI_VERBS_RDM_BUFFER_SIZE
+\f[I]FI_VERBS_RDM_BUFFER_NUM\f[] : The number of pre\-registered buffers
+for buffered operations between the endpoints, must be a power of 2
+(default: 8).
 .PP
-: The maximum size of a buffered operation (bytes) (default: platform
-specific).
-.SS FI_VERBS_RDM_RNDV_SEG_SIZE
+\f[I]FI_VERBS_RDM_BUFFER_SIZE\f[] : The maximum size of a buffered
+operation (bytes) (default: platform specific).
 .PP
-: The segment size for zero copy protocols (bytes)(default: 1073741824).
-.SS FI_VERBS_RDM_CQREAD_BUNCH_SIZE
+\f[I]FI_VERBS_RDM_RNDV_SEG_SIZE\f[] : The segment size for zero copy
+protocols (bytes)(default: 1073741824).
 .PP
-: The number of entries to be read from the verbs completion queue at a
-time (default: 8).
-.SS FI_VERBS_RDM_THREAD_TIMEOUT
+\f[I]FI_VERBS_RDM_CQREAD_BUNCH_SIZE\f[] : The number of entries to be
+read from the verbs completion queue at a time (default: 8).
 .PP
-: The wake up timeout of the helper thread (usec) (default: 100).
-.SS FI_VERBS_RDM_EAGER_SEND_OPCODE
+\f[I]FI_VERBS_RDM_THREAD_TIMEOUT\f[] : The wake up timeout of the helper
+thread (usec) (default: 100).
 .PP
-: The operation code that will be used for eager messaging.
+\f[I]FI_VERBS_RDM_EAGER_SEND_OPCODE\f[] : The operation code that will
+be used for eager messaging.
 Only IBV_WR_SEND and IBV_WR_RDMA_WRITE_WITH_IMM are supported.
 The last one is not applicable for iWarp.
 (default: IBV_WR_SEND)
 .SS Environment variables notes
 .PP
-: The fi_info utility would give the up\-to\-date information on
+The fi_info utility would give the up\-to\-date information on
 environment variables: fi_info \-p verbs \-e
 .SH SEE ALSO
 .PP
