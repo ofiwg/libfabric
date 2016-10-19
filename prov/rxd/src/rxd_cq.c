@@ -989,7 +989,7 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 			ret = rxd_mr_verify(ep->domain,
 					    rma_iov[i].len,
 					    (uintptr_t *) &rma_iov[i].addr,
-					    rma_iov[i].key, FI_WRITE);
+					    rma_iov[i].key, FI_REMOTE_WRITE);
 			if (ret) {
 				/* todo: handle invalid key case */
 				FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid key/access permissions\n");
@@ -1021,7 +1021,7 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 			ret = rxd_mr_verify(ep->domain,
 					    rma_iov[i].len,
 					    (uintptr_t *) &rma_iov[i].addr,
-					    rma_iov[i].key, FI_READ);
+					    rma_iov[i].key, FI_REMOTE_READ);
 			if (ret) {
 				/* todo: handle invalid key case */
 				FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid key/access permissions\n");

@@ -32,9 +32,13 @@
 
 #include "rxd.h"
 
+#define RXD_EP_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_DIRECTED_RECV |	\
+		     FI_READ | FI_WRITE | FI_RECV | FI_SEND |		\
+		     FI_REMOTE_READ | FI_REMOTE_WRITE | FI_SOURCE |	\
+		     FI_RMA_EVENT)
+
 struct fi_tx_attr rxd_tx_attr = {
-	.caps = FI_MSG | FI_TAGGED | FI_SEND | FI_RMA | FI_WRITE |
-	FI_READ | FI_RMA_EVENT | FI_REMOTE_READ | FI_REMOTE_WRITE,
+	.caps = RXD_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = 0,
 	.size = (1ULL << RXD_MAX_TX_BITS),
@@ -42,7 +46,7 @@ struct fi_tx_attr rxd_tx_attr = {
 };
 
 struct fi_rx_attr rxd_rx_attr = {
-	.caps = FI_MSG | FI_TAGGED | FI_RECV | FI_SOURCE | FI_RMA_EVENT,
+	.caps = RXD_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.total_buffered_recv = 0,
 	.size = (1ULL << RXD_MAX_RX_BITS),
@@ -66,6 +70,7 @@ struct fi_domain_attr rxd_domain_attr = {
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_SCALABLE,
+	.mr_key_size = sizeof(uint64_t),
 	.cq_cnt = RXD_DEF_CQ_CNT,
 	.ep_cnt = RXD_DEF_EP_CNT,
 	.tx_ctx_cnt = 1,
@@ -81,9 +86,7 @@ struct fi_fabric_attr rxd_fabric_attr = {
 };
 
 struct fi_info rxd_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_TAGGED |
-	FI_RMA | FI_WRITE | FI_READ | FI_RMA_EVENT |
-	FI_REMOTE_WRITE | FI_REMOTE_READ,
+	.caps = RXD_EP_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxd_tx_attr,
 	.rx_attr = &rxd_rx_attr,
