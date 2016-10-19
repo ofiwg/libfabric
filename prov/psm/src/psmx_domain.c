@@ -252,7 +252,8 @@ static int psmx_key_compare(void *key1, void *key2)
 	return (key1 < key2) ? -1 : (key1 > key2);
 }
 
-static int psmx_domain_init(struct psmx_fid_domain *domain)
+static int psmx_domain_init(struct psmx_fid_domain *domain,
+			    struct psmx_src_name *src_addr)
 {
 	struct psmx_fid_fabric *fabric = domain->fabric;
 	struct psm_ep_open_opts opts;
@@ -262,6 +263,13 @@ static int psmx_domain_init(struct psmx_fid_domain *domain)
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"uuid: %s\n", psmx_uuid_to_string(fabric->uuid));
+
+	if (src_addr) {
+		opts.unit = src_addr->unit;
+		opts.port = src_addr->port;
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"ep_open_opts: unit=%d port=%u\n", opts.unit, opts.port);
+	}
 
 	err = psm_ep_open(fabric->uuid, &opts,
 			  &domain->psm_ep, &domain->psm_epid);
@@ -390,7 +398,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO && psmx_env.prog_thread);
 
-	err = psmx_domain_init(domain_priv);
+	err = psmx_domain_init(domain_priv, info->src_addr);
 	if (err)
 		goto err_out_close_domain;
 
