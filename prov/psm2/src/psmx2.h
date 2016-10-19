@@ -369,6 +369,16 @@ struct psmx2_ep_name {
 	uint8_t			vlane;
 };
 
+#define PSMX2_DEFAULT_UNIT	(-1)
+#define PSMX2_DEFAULT_PORT	0
+#define PSMX2_DEFAULT_SERVICE	0
+
+struct psmx2_src_name {
+	int	unit;		/* start from 0. -1 means any */
+	int	port;		/* start from 1. 0 means any */
+	int	service;	/* 0 means any */
+};
+
 struct psmx2_cq_event {
 	union {
 		struct fi_cq_entry		context;

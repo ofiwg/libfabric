@@ -125,7 +125,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct fi_info *psmx_info;
 	uint32_t cnt = 0;
-	void *dest_addr = NULL;
+	psm_epid_t *dest_addr = NULL;
+	struct psmx_src_name *src_addr;
 	int ep_type = FI_EP_RDM;
 	int av_type = FI_AV_UNSPEC;
 	uint64_t mode = FI_CONTEXT;
@@ -149,16 +150,36 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	psmx_init_env();
 
-	if (node && !(flags & FI_SOURCE)) {
-		dest_addr = psmx_resolve_name(node, 0);
-		if (dest_addr) {
+	src_addr = calloc(1, sizeof(*src_addr));
+	if (!src_addr) {
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"failed to allocate src addr.\n");
+		return -FI_ENODATA;
+        }
+	src_addr->unit = PSMX_DEFAULT_UNIT;
+	src_addr->port = PSMX_DEFAULT_PORT;
+	src_addr->service = PSMX_DEFAULT_SERVICE;
+
+	if (node) {
+		if (flags & FI_SOURCE) {
+			sscanf(node, "%*[^:]:%d:%d", &src_addr->unit, &src_addr->port);
+			if (service)
+				sscanf(service, "%d", &src_addr->service);
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"node '%s' resolved to <epid=0x%llx>\n", node,
-				*(psm_epid_t *)dest_addr);
+				"node '%s' service '%s' converted to <unit=%d, port=%d, service=%d>\n",
+				node, service, src_addr->unit, src_addr->port, src_addr->service);
 		} else {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"failed to resolve node '%s'.\n", node);
-			return -FI_ENODATA;
+			dest_addr = psmx_resolve_name(node, 0);
+			if (dest_addr) {
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"node '%s' resolved to <epid=0x%llx>\n", node,
+					*dest_addr);
+			} else {
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"failed to resolve node '%s'.\n", node);
+				err = -FI_ENODATA;
+				goto err_out;
+			}
 		}
 	}
 
@@ -486,10 +507,10 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
 	psmx_info->mode = mode;
 	psmx_info->addr_format = FI_ADDR_PSMX;
-	psmx_info->src_addrlen = 0;
-	psmx_info->dest_addrlen = sizeof(psm_epid_t);
-	psmx_info->src_addr = NULL;
+	psmx_info->src_addr = src_addr;
+	psmx_info->src_addrlen = sizeof(*src_addr);
 	psmx_info->dest_addr = dest_addr;
+	psmx_info->dest_addrlen = sizeof(*dest_addr);
 	psmx_info->fabric_attr->name = strdup(PSMX_FABRIC_NAME);
 	psmx_info->fabric_attr->prov_name = NULL;
 	psmx_info->fabric_attr->prov_version = PSMX_VERSION;
@@ -519,8 +540,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	return 0;
 
 err_out:
-	if (dest_addr)
-		free(dest_addr);
+	free(dest_addr);
+	free(src_addr);
 
 	return err;
 }
