@@ -353,8 +353,10 @@ static void  __cm_nic_destruct(void *obj)
 		cm_nic->addr_to_ep_ht = NULL;
 	}
 
-	if (cm_nic->nic != NULL)
+	if (cm_nic->nic != NULL) {
 		_gnix_ref_put(cm_nic->nic);
+		cm_nic->nic = NULL;
+	}
 
 	cm_nic->domain->cm_nic = NULL;
 	free(cm_nic);

@@ -44,6 +44,11 @@
 #include "gnix_vc.h"
 #include "gnix_mbox_allocator.h"
 
+/*
+ * TODO: make this a domain parameter
+ */
+#define GNIX_VC_FL_MIN_SIZE 128
+
 static int gnix_nics_per_ptag[GNI_PTAG_USER_END];
 static DLIST_HEAD(gnix_nic_list);
 static pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -333,30 +338,38 @@ static int __process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 	struct gnix_vc *vc;
 
 	vc_id =  GNI_CQ_GET_INST_ID(cqe);
-	vc = __gnix_nic_elem_by_rem_id(nic, vc_id);
 
-#if 1 /* Process RX inline with arrival of an RX CQE. */
-	if (unlikely(vc->conn_state != GNIX_VC_CONNECTED)) {
-		GNIX_DEBUG(FI_LOG_EP_DATA,
-			  "Scheduling VC for RX processing (%p)\n",
-			  vc);
-		ret = _gnix_vc_rx_schedule(vc);
-		assert(ret == FI_SUCCESS);
-	} else {
-		GNIX_DEBUG(FI_LOG_EP_DATA,
-			  "Processing VC RX (%p)\n",
-			  vc);
-		ret = _gnix_vc_dequeue_smsg(vc);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
+	/*
+	 * its possible this vc has been destroyed, so may get NULL
+	 * back.
+	 */
+
+	vc = __gnix_nic_elem_by_rem_id(nic, vc_id);
+	if (vc != NULL) {
+		switch (vc->conn_state) {
+		case GNIX_VC_CONNECTING:
+			GNIX_DEBUG(FI_LOG_EP_DATA,
+				  "Scheduling VC for RX processing (%p)\n",
+				  vc);
+			ret = _gnix_vc_rx_schedule(vc);
+			assert(ret == FI_SUCCESS);
+			break;
+		case GNIX_VC_CONNECTED:
+			GNIX_DEBUG(FI_LOG_EP_DATA,
+				  "Processing VC RX (%p)\n",
+				  vc);
+			ret = _gnix_vc_dequeue_smsg(vc);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_DATA,
 					"_gnix_vc_dqueue_smsg returned %d\n",
 					ret);
+			}
+			break;
+		default:
+			break;  /* VC not in a state for scheduling or
+				   SMSG processing */
 		}
 	}
-#else /* Defer RX processing until after the RX CQ is cleared. */
-	ret = _gnix_vc_rx_schedule(vc);
-	assert(ret == FI_SUCCESS);
-#endif
 
 	return ret;
 }
@@ -898,6 +911,12 @@ static void __nic_destruct(void *obj)
 	}
 
 	/*
+	 * destroy VC free list associated with this nic
+	 */
+
+	_gnix_fl_destroy(&nic->vc_freelist);
+
+	/*
 	 * remove the nic from the linked lists
 	 * for the domain and the global nic list
 	 */
@@ -945,6 +964,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	struct gnix_nic_attr *nic_attr = &default_attr;
 	uint32_t num_corespec_cpus = 0;
 	bool must_alloc_nic = false;
+	bool free_list_inited = false;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1155,6 +1175,38 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		}
 		fastlock_init(&nic->vc_id_lock);
 
+		/*
+		 * initialize free list for VC's
+		 * In addition to hopefully allowing for a more compact
+		 * allocation of VC structs, the free list is also import
+		 * because there is a window of time when using auto progress
+		 * that a thread may be going through the progress engine
+		 * while one of the application threads is actively tearing
+		 * down an endpoint (and hence its associated VCs) before the
+		 * rem_id for the vc is removed from the vector.
+		 * As a consequence, it is important that
+		 * the memory allocated within the freelist allocator not be
+		 * returned to the system prior to the freelist being destroyed
+		 * as part of the nic destructor procedure.  The freelist is
+		 * destroyed in that procedure after the progress thread
+		 * has been joined.
+		 */
+
+		ret = _gnix_fl_init_ts(sizeof(struct gnix_vc),
+				       offsetof(struct gnix_vc, fr_list),
+				       GNIX_VC_FL_MIN_SIZE,
+				       0,
+				       0,
+				       0,
+				       &nic->vc_freelist);
+		if (ret == FI_SUCCESS) {
+			free_list_inited = true;
+		} else {
+			GNIX_DEBUG(FI_LOG_EP_DATA, "_gnix_fl_init returned: %s\n",
+				   fi_strerror(-ret));
+			goto err1;
+		}
+
 		fastlock_init(&nic->lock);
 
 		ret = __gnix_nic_tx_freelist_init(nic, domain->gni_tx_cq_size);
@@ -1327,6 +1379,8 @@ err:
 		if ((nic->gni_cdm_hndl != NULL) && (nic->allocd_gni_res &
 		    GNIX_NIC_CDM_ALLOCD))
 			GNI_CdmDestroy(nic->gni_cdm_hndl);
+		if (free_list_inited == true)
+			_gnix_fl_destroy(&nic->vc_freelist);
 		free(nic);
 	}
 
