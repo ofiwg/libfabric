@@ -175,6 +175,8 @@ getinfo_test(6, "Test with non-existent domain name",
 static void usage(void)
 {
 	ft_unit_usage("getinfo_test", "Unit tests for fi_getinfo");
+	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)");
+	ft_addr_usage();
 }
 
 int main(int argc, char **argv)
@@ -198,7 +200,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, ADDR_OPTS "p:h")) != -1) {
+	while ((op = getopt(argc, argv, ADDR_OPTS INFO_OPTS "h")) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);

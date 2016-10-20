@@ -1618,6 +1618,13 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	printf(" }\n");
 }
 
+void ft_addr_usage()
+{
+	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
+	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number");
+	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
+}
+
 void ft_usage(char *name, char *desc)
 {
 	fprintf(stderr, "Usage:\n");
@@ -1628,11 +1635,9 @@ void ft_usage(char *name, char *desc)
 		fprintf(stderr, "\n%s\n", desc);
 
 	fprintf(stderr, "\nOptions:\n");
+	ft_addr_usage();
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
-	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
-	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
 	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)");
 	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
 	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
