@@ -456,7 +456,6 @@ static inline void *__gnix_nic_elem_by_rem_id(struct gnix_nic *nic, int rem_id)
 	assert(nic);
 	assert(rem_id <= nic->vc_id_table_count);
 	return nic->vc_id_table[rem_id];
-	return 0;
 }
 
 void _gnix_nic_txd_err_inject(struct gnix_nic *nic,
