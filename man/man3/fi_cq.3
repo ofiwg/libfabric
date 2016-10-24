@@ -1,4 +1,4 @@
-.TH "fi_cq" "3" "2016\-06\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cq" "3" "2016\-10\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq \- Completion queue operations
@@ -406,10 +406,11 @@ The \f[I]Completion Flags\f[] section below lists valid flag values.
 Flags are set for all relevant completions.
 .PP
 \f[I]len\f[] : This len field only applies to completed receive
-operations.
-It indicates the size of received message data \-\- i.e.
-how many data bytes were actually placed into the associated receive
-buffer.
+operations (e.g.
+fi_recv, fi_trecv, etc.).
+It indicates the size of received \f[I]message\f[] data \-\- i.e.
+how many data bytes were placed into the associated receive buffer by a
+corresponding fi_send/fi_tsend/et al call.
 If an endpoint has been configured with the FI_MSG_PREFIX mode, the len
 also reflects the size of the prefix buffer.
 .PP

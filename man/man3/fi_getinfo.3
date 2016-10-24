@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2016\-06\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2016\-10\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
@@ -145,19 +145,19 @@ below.
 \f[I]src_addrlen \- source address length\f[] : Indicates the length of
 the source address.
 This value must be > 0 if \f[I]src_addr\f[] is non\-NULL.
-This field will be ignored in hints if FI_SOURCE is specified, or
+This field will be ignored in hints if FI_SOURCE flag is set, or
 \f[I]src_addr\f[] is NULL.
 .PP
 \f[I]dest_addrlen \- destination address length\f[] : Indicates the
 length of the destination address.
 This value must be > 0 if \f[I]dest_addr\f[] is non\-NULL.
 This field will be ignored in hints unless the node and service
-parameters are NULL or FI_SOURCE is specified, or if \f[I]dst_addr\f[]
-is NULL.
+parameters are NULL or FI_SOURCE flag is set, or if \f[I]dst_addr\f[] is
+NULL.
 .PP
 \f[I]src_addr \- source address\f[] : If specified, indicates the source
 address.
-This field will be ignored in hints if FI_SOURCE is specified.
+This field will be ignored in hints if FI_SOURCE flag is set.
 On output a provider shall return an address that corresponds to the
 indicated fabric or domain, with the format indicated by the returned
 \f[I]addr_format\f[] field.
@@ -165,7 +165,7 @@ indicated fabric or domain, with the format indicated by the returned
 \f[I]dest_addr \- destination address\f[] : If specified, indicates the
 destination address.
 This field will be ignored in hints unless the node and service
-parameters are NULL or FI_SOURCE is specified.
+parameters are NULL or FI_SOURCE flag is set.
 .PP
 \f[I]handle \- provider context handle\f[] : References a provider
 specific handle.
