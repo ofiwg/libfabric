@@ -151,24 +151,24 @@ struct fi_info {
 *src_addrlen - source address length*
 : Indicates the length of the source address.  This value must be > 0
   if *src_addr* is non-NULL.  This field will be ignored in hints if
-  FI_SOURCE is specified, or *src_addr* is NULL.
+  FI_SOURCE flag is set, or *src_addr* is NULL.
 
 *dest_addrlen - destination address length*
 : Indicates the length of the destination address.  This value must be > 0
   if *dest_addr* is non-NULL.  This field will be ignored in hints
-  unless the node and service parameters are NULL or FI_SOURCE is
-  specified, or if *dst_addr* is NULL.
+  unless the node and service parameters are NULL or FI_SOURCE flag is
+  set, or if *dst_addr* is NULL.
 
 *src_addr - source address*
 : If specified, indicates the source address.  This field will be
-  ignored in hints if FI_SOURCE is specified.  On output a provider shall
+  ignored in hints if FI_SOURCE flag is set.  On output a provider shall
   return an address that corresponds to the indicated fabric or domain,
   with the format indicated by the returned *addr_format* field.
 
 *dest_addr - destination address*
 : If specified, indicates the destination address.  This field will be
   ignored in hints unless the node and service parameters are NULL or
-  FI_SOURCE is specified.
+  FI_SOURCE flag is set.
 
 *handle - provider context handle*
 : References a provider specific handle.  The use of this field
