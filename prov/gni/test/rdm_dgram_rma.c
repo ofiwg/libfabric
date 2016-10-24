@@ -538,7 +538,8 @@ void do_write(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0xab);
@@ -595,7 +596,8 @@ void do_writev(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
@@ -657,7 +659,8 @@ void do_writemsg(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -742,7 +745,8 @@ void do_write_fence(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -787,6 +791,10 @@ void do_write_fence(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 
 	/* event B */
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -885,7 +893,10 @@ void do_writedata(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe, dcqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry dcqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 
@@ -954,7 +965,10 @@ void do_inject_writedata(int len)
 {
 	ssize_t sz;
 	int ret, i, loops = 0;
-	struct fi_cq_tagged_entry cqe, dcqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry dcqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					   (void *) -1, UINT_MAX, UINT_MAX };
 
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
@@ -1019,7 +1033,8 @@ void do_read(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 #define READ_CTX 0x4e3dda1aULL
@@ -1067,7 +1082,8 @@ void do_readv(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
@@ -1116,7 +1132,8 @@ void do_readmsg(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -1195,7 +1212,10 @@ void do_readmsgdata(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe, dcqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry dcqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					   (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -1268,7 +1288,8 @@ void inject_common(void)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -1330,7 +1351,8 @@ void do_write_autoreg(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0xab);
@@ -1369,7 +1391,8 @@ void do_write_autoreg_uncached(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(uc_source, len, 0xab);
@@ -1538,7 +1561,8 @@ void do_read_buf(void *s, void *t, int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 #define READ_CTX 0x4e3dda1aULL
@@ -1598,7 +1622,8 @@ void do_write_buf(void *s, void *t, int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(s, len, 0xab);
@@ -1713,6 +1738,9 @@ void do_trigger(int len)
 	}
 
 	for (i = 0; i < 4; i++) {
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}

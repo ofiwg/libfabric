@@ -448,7 +448,8 @@ void do_min(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -488,6 +489,9 @@ void do_min(int len)
 		       FI_INT32, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -512,6 +516,9 @@ void do_min(int len)
 		       FI_FLOAT, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -535,6 +542,9 @@ void do_min(int len)
 		       FI_DOUBLE, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -560,7 +570,8 @@ void do_max(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -600,6 +611,9 @@ void do_max(int len)
 		       FI_INT32, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -624,6 +638,9 @@ void do_max(int len)
 		       FI_FLOAT, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -647,6 +664,9 @@ void do_max(int len)
 		       FI_DOUBLE, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -672,7 +692,8 @@ void do_sum(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -707,6 +728,9 @@ void do_sum(int len)
 		       FI_UINT32, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -729,6 +753,9 @@ void do_sum(int len)
 		       FI_INT64, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -750,6 +777,9 @@ void do_sum(int len)
 		       FI_INT32, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -772,6 +802,9 @@ void do_sum(int len)
 		       FI_FLOAT, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -796,7 +829,8 @@ void do_bor(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t res;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -833,6 +867,9 @@ void do_bor(int len)
 		       FI_UINT32, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -856,6 +893,9 @@ void do_bor(int len)
 		       FI_INT64, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -878,6 +918,9 @@ void do_bor(int len)
 		       FI_INT32, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -903,7 +946,8 @@ void do_band(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t res;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -940,6 +984,9 @@ void do_band(int len)
 		       FI_UINT32, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -963,6 +1010,9 @@ void do_band(int len)
 		       FI_INT64, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -985,6 +1035,9 @@ void do_band(int len)
 		       FI_INT32, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1010,7 +1063,8 @@ void do_bxor(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t res;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -1047,6 +1101,9 @@ void do_bxor(int len)
 		       FI_UINT32, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1070,6 +1127,9 @@ void do_bxor(int len)
 		       FI_INT64, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1092,6 +1152,9 @@ void do_bxor(int len)
 		       FI_INT32, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1121,7 +1184,8 @@ void do_axor(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t exp;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -1174,6 +1238,9 @@ void do_axor(int len)
 				GNIX_FAB_RQ_NAMO_AX_S, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1205,6 +1272,9 @@ void do_axor(int len)
 				GNIX_FAB_RQ_NAMO_FAX, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1243,6 +1313,9 @@ void do_axor(int len)
 				GNIX_FAB_RQ_NAMO_FAX_S, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1276,7 +1349,8 @@ void do_atomic_write(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -1311,6 +1385,9 @@ void do_atomic_write(int len)
 		       FI_UINT32, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1334,6 +1411,9 @@ void do_atomic_write(int len)
 		       FI_INT64, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1355,6 +1435,9 @@ void do_atomic_write(int len)
 		       FI_INT32, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1378,6 +1461,9 @@ void do_atomic_write(int len)
 		       FI_FLOAT, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1399,6 +1485,9 @@ void do_atomic_write(int len)
 		       FI_DOUBLE, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1422,7 +1511,8 @@ void do_min_buf(void *s, void *t)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -1469,6 +1559,9 @@ void do_min_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -1499,6 +1592,9 @@ void do_min_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -1528,6 +1624,9 @@ void do_min_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -1563,7 +1662,8 @@ Test(rdm_atomic, atomicv)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -1605,6 +1705,9 @@ Test(rdm_atomic, atomicv)
 			(uint64_t)target, mr_key[1], FI_INT32, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1628,6 +1731,9 @@ Test(rdm_atomic, atomicv)
 			(uint64_t)target, mr_key[1], FI_FLOAT, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1650,6 +1756,9 @@ Test(rdm_atomic, atomicv)
 			(uint64_t)target, mr_key[1], FI_DOUBLE, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1670,7 +1779,8 @@ Test(rdm_atomic, atomicmsg)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -1724,6 +1834,9 @@ Test(rdm_atomic, atomicmsg)
 	sz = fi_atomicmsg(ep[0], &msg, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1747,6 +1860,9 @@ Test(rdm_atomic, atomicmsg)
 	sz = fi_atomicmsg(ep[0], &msg, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1769,6 +1885,9 @@ Test(rdm_atomic, atomicmsg)
 	sz = fi_atomicmsg(ep[0], &msg, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -1941,7 +2060,8 @@ void do_fetch_min(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -1986,6 +2106,9 @@ void do_fetch_min(int len)
 			     mr_key[1], FI_INT32, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2014,6 +2137,9 @@ void do_fetch_min(int len)
 			     mr_key[1], FI_FLOAT, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2040,6 +2166,9 @@ void do_fetch_min(int len)
 			     mr_key[1], FI_DOUBLE, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2067,7 +2196,8 @@ void do_fetch_max(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -2112,6 +2242,9 @@ void do_fetch_max(int len)
 			     mr_key[1], FI_INT32, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2140,6 +2273,9 @@ void do_fetch_max(int len)
 			     mr_key[1], FI_FLOAT, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2166,6 +2302,9 @@ void do_fetch_max(int len)
 			     mr_key[1], FI_DOUBLE, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2193,7 +2332,8 @@ void do_fetch_sum(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t operand = SOURCE_DATA;
 	float operand_fp;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
@@ -2232,6 +2372,9 @@ void do_fetch_sum(int len)
 			     mr_key[1], FI_UINT32, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2258,6 +2401,9 @@ void do_fetch_sum(int len)
 			     mr_key[1], FI_INT64, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2281,6 +2427,9 @@ void do_fetch_sum(int len)
 			     mr_key[1], FI_INT32, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2308,6 +2457,9 @@ void do_fetch_sum(int len)
 			     mr_key[1], FI_FLOAT, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2334,7 +2486,8 @@ void do_fetch_bor(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t res;
 	uint64_t operand = SOURCE_DATA;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
@@ -2374,6 +2527,9 @@ void do_fetch_bor(int len)
 			     mr_key[1], FI_UINT32, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2400,6 +2556,9 @@ void do_fetch_bor(int len)
 			     mr_key[1], FI_INT64, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2424,6 +2583,9 @@ void do_fetch_bor(int len)
 			     mr_key[1], FI_INT32, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2452,7 +2614,8 @@ void do_fetch_band(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t res;
 	uint64_t operand = SOURCE_DATA;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
@@ -2492,6 +2655,9 @@ void do_fetch_band(int len)
 			     mr_key[1], FI_UINT32, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2518,6 +2684,9 @@ void do_fetch_band(int len)
 			     mr_key[1], FI_INT64, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2542,6 +2711,9 @@ void do_fetch_band(int len)
 			     mr_key[1], FI_INT32, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2570,7 +2742,8 @@ void do_fetch_bxor(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t res;
 	uint64_t operand = SOURCE_DATA;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
@@ -2610,6 +2783,9 @@ void do_fetch_bxor(int len)
 			     mr_key[1], FI_UINT32, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2636,6 +2812,9 @@ void do_fetch_bxor(int len)
 			     mr_key[1], FI_INT64, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2660,6 +2839,9 @@ void do_fetch_bxor(int len)
 			     mr_key[1], FI_INT32, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2688,7 +2870,8 @@ void do_fetch_atomic_write(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t operand = SOURCE_DATA;
 	float operand_fp;
 	double operand_dp;
@@ -2728,6 +2911,9 @@ void do_fetch_atomic_write(int len)
 			     mr_key[1], FI_UINT32, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2755,6 +2941,9 @@ void do_fetch_atomic_write(int len)
 			     mr_key[1], FI_INT64, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2778,6 +2967,9 @@ void do_fetch_atomic_write(int len)
 			     mr_key[1], FI_INT32, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2806,6 +2998,9 @@ void do_fetch_atomic_write(int len)
 			     mr_key[1], FI_FLOAT, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2830,6 +3025,9 @@ void do_fetch_atomic_write(int len)
 			     mr_key[1], FI_DOUBLE, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2855,7 +3053,8 @@ void do_fetch_atomic_read(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t operand;
 	float operand_fp;
 	double operand_dp;
@@ -2899,6 +3098,9 @@ void do_fetch_atomic_read(int len)
 			     mr_key[1], FI_UINT32, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2929,6 +3131,9 @@ void do_fetch_atomic_read(int len)
 			     mr_key[1], FI_INT64, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2955,6 +3160,9 @@ void do_fetch_atomic_read(int len)
 			     mr_key[1], FI_INT32, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -2985,6 +3193,9 @@ void do_fetch_atomic_read(int len)
 			     mr_key[1], FI_FLOAT, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3011,6 +3222,9 @@ void do_fetch_atomic_read(int len)
 			     mr_key[1], FI_DOUBLE, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3038,7 +3252,8 @@ void do_fetch_min_buf(void *s, void *t)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -3090,6 +3305,9 @@ void do_fetch_min_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -3125,6 +3343,9 @@ void do_fetch_min_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -3157,6 +3378,9 @@ void do_fetch_min_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -3193,7 +3417,8 @@ Test(rdm_atomic, fatomicv)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -3248,6 +3473,9 @@ Test(rdm_atomic, fatomicv)
 			      FI_INT32, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3279,6 +3507,9 @@ Test(rdm_atomic, fatomicv)
 			      FI_FLOAT, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3308,6 +3539,9 @@ Test(rdm_atomic, fatomicv)
 			      FI_DOUBLE, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3330,7 +3564,8 @@ Test(rdm_atomic, fatomicmsg)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t min;
 	float min_fp;
 	double min_dp;
@@ -3393,6 +3628,9 @@ Test(rdm_atomic, fatomicmsg)
 	sz = fi_fetch_atomicmsg(ep[0], &msg, &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3421,6 +3659,9 @@ Test(rdm_atomic, fatomicmsg)
 	sz = fi_fetch_atomicmsg(ep[0], &msg, &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3447,6 +3688,9 @@ Test(rdm_atomic, fatomicmsg)
 	sz = fi_fetch_atomicmsg(ep[0], &msg, &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3530,7 +3774,8 @@ void do_cswap(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
@@ -3545,6 +3790,9 @@ void do_cswap(int len)
 			       mr_key[1], FI_UINT64, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3570,6 +3818,9 @@ void do_cswap(int len)
 			       mr_key[1], FI_UINT32, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3597,6 +3848,9 @@ void do_cswap(int len)
 			       mr_key[1], FI_INT64, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3620,6 +3874,9 @@ void do_cswap(int len)
 			       mr_key[1], FI_INT32, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3649,6 +3906,9 @@ void do_cswap(int len)
 			       mr_key[1], FI_FLOAT, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3674,6 +3934,9 @@ void do_cswap(int len)
 			       mr_key[1], FI_DOUBLE, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3699,7 +3962,8 @@ void do_mswap(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t res;
 	uint64_t operand = SOURCE_DATA, op2 = DATA_MASK;
 	float operand_fp, op2_fp;
@@ -3741,6 +4005,9 @@ void do_mswap(int len)
 			       mr_key[1], FI_UINT32, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3769,6 +4036,9 @@ void do_mswap(int len)
 			       mr_key[1], FI_INT64, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3793,6 +4063,9 @@ void do_mswap(int len)
 			       mr_key[1], FI_INT32, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3823,6 +4096,9 @@ void do_mswap(int len)
 			       mr_key[1], FI_FLOAT, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3848,6 +4124,9 @@ void do_mswap(int len)
 			       mr_key[1], FI_DOUBLE, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -3873,7 +4152,8 @@ void do_cswap_buf(void *s, void *t)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
@@ -3920,6 +4200,9 @@ void do_cswap_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -3954,6 +4237,9 @@ void do_cswap_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -3983,6 +4269,9 @@ void do_cswap_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -4019,6 +4308,9 @@ void do_cswap_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -4050,6 +4342,9 @@ void do_cswap_buf(void *s, void *t)
 	} else {
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		cqe.op_context = cqe.buf = (void *) -1;
+		cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 			pthread_yield();
 		}
@@ -4084,7 +4379,8 @@ Test(rdm_atomic, catomicv)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
@@ -4141,6 +4437,9 @@ Test(rdm_atomic, catomicv)
 				FI_UINT32, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4174,6 +4473,9 @@ Test(rdm_atomic, catomicv)
 				FI_INT64, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4203,6 +4505,9 @@ Test(rdm_atomic, catomicv)
 				FI_INT32, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4238,6 +4543,9 @@ Test(rdm_atomic, catomicv)
 				FI_FLOAT, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4269,6 +4577,9 @@ Test(rdm_atomic, catomicv)
 				FI_DOUBLE, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4289,7 +4600,8 @@ Test(rdm_atomic, catomicmsg)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
@@ -4353,6 +4665,9 @@ Test(rdm_atomic, catomicmsg)
 				  &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4383,6 +4698,9 @@ Test(rdm_atomic, catomicmsg)
 				  &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4409,6 +4727,9 @@ Test(rdm_atomic, catomicmsg)
 				  &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4441,6 +4762,9 @@ Test(rdm_atomic, catomicmsg)
 				  &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4469,6 +4793,9 @@ Test(rdm_atomic, catomicmsg)
 				  &res_iov, (void **)loc_mr, 1, 0);
 	cr_assert_eq(sz, 0);
 
+	/* reset cqe */
+	cqe.op_context = cqe.buf = (void *) -1;
+	cqe.flags = cqe.len = cqe.data = cqe.tag = UINT_MAX;
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
@@ -4496,7 +4823,10 @@ Test(rdm_atomic, atomic_err)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
-	struct fi_cq_err_entry err_cqe;
+	struct fi_cq_err_entry err_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					   (void *) -1, UINT_MAX, UINT_MAX,
+					   UINT_MAX, INT_MAX, INT_MAX,
+					   (void *) -1 };
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -4541,7 +4871,10 @@ Test(rdm_atomic, fetch_atomic_err)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand = SOURCE_DATA;
-	struct fi_cq_err_entry err_cqe;
+	struct fi_cq_err_entry err_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					   (void *) -1, UINT_MAX, UINT_MAX,
+					   UINT_MAX, INT_MAX, INT_MAX,
+					   (void *) -1 };
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -4586,7 +4919,10 @@ Test(rdm_atomic, compare_atomic_err)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
-	struct fi_cq_err_entry err_cqe;
+	struct fi_cq_err_entry err_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					   (void *) -1, UINT_MAX, UINT_MAX,
+					   UINT_MAX, INT_MAX, INT_MAX,
+					   (void *) -1 };
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
