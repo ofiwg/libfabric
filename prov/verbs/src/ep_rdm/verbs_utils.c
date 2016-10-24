@@ -178,64 +178,6 @@ void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_conn *conn,
 	}
 }
 
-/* Find the IPoIB address of the device opened in the fi_ibv_domain call.
- * The logic of the function is: iterate through all the available network 
- * interfaces, find those having "ib" (or iface param value if it's defined) in
- * the name. If the name is the desired one then we're done. If user defines
- * wrong interface, following rdma_bind_addr call will fail with corresponding
- * propagation of error code.
- */
-int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
-			       struct sockaddr_in *ipoib_addr)
-{
-	struct ifaddrs *addrs = NULL;
-	struct ifaddrs *tmp = NULL;
-	int found = 0;
-
-	char iface[IFNAMSIZ];
-	char *iface_tmp = "ib";
-	size_t iface_len = 2;
-
-	if (!addr || !addr->sin_addr.s_addr) {
-		return 1;
-	}
-
-	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
-		iface_len = strlen(iface_tmp);
-		if (iface_len > IFNAMSIZ) {
-			VERBS_INFO(FI_LOG_EP_CTRL,
-				   "Too long iface name: %s, max: %d\n",
-				   iface_tmp, IFNAMSIZ);
-			return 1;
-		}
-	}
-
-	strncpy(iface, iface_tmp, iface_len);
-
-	if (getifaddrs(&addrs)) {
-		return 1;
-	}
-
-	tmp = addrs;
-	while (tmp) {
-		if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
-			found = !strncmp(tmp->ifa_name, iface, iface_len);
-			if (found) {
-				memcpy(ipoib_addr, tmp->ifa_addr,
-					sizeof(*ipoib_addr));
-				ipoib_addr->sin_port = addr->sin_port;
-				break;
-			}
-		}
-
-		tmp = tmp->ifa_next;
-	}
-
-	freeifaddrs(addrs);
-
-	return !found;
-}
-
 void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 {
 	struct fi_ibv_rdm_request *request;

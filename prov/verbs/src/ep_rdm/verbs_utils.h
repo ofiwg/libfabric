@@ -180,8 +180,6 @@ int fi_ibv_rdm_req_match_by_info3(struct dlist_entry *item, const void *info);
 int fi_ibv_rdm_postponed_process(struct dlist_entry *item, const void *arg);
 void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_conn *conn,
 				  struct fi_ibv_rdm_ep *ep);
-int fi_ibv_rdm_find_ipoib_addr(const struct sockaddr_in *addr,
-			       struct sockaddr_in *ipoib_addr);
 
 ssize_t fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata);
 ssize_t rdm_trecv_second_event(struct fi_ibv_rdm_request *request,

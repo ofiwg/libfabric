@@ -70,15 +70,10 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr)
 int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep)
 {
 	char my_ipoib_addr_str[INET6_ADDRSTRLEN];
-	struct sockaddr_in* src_addr = (struct sockaddr_in*)ep->rai->ai_src_addr;
 
 	assert(cm->ec && cm->listener);
 
-	if (fi_ibv_rdm_find_ipoib_addr(src_addr, &ep->my_addr)) {
-		VERBS_INFO(FI_LOG_EP_CTRL, 
-			   "Failed to find correct IPoIB address\n");
-		return -FI_ENODEV;
-	}
+	memcpy(&ep->my_addr, ep->domain->info->src_addr, sizeof(ep->my_addr));
 
 	inet_ntop(ep->my_addr.sin_family,
 		  &ep->my_addr.sin_addr.s_addr,
