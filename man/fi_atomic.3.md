@@ -20,7 +20,7 @@ fi_compare_atomic / fi_compare_atomicv / fi_compare_atomicmsg
 : Initiates an atomic compare-operation to remote memory, retrieving
   the initial value.
 
-fi_atomic_valid / fi_fetch_atomic_valid / fi_compare_atomic_valid
+fi_atomicvalid / fi_fetch_atomicvalid / fi_compare_atomicvalid
 : Indicates if a provider supports a specific atomic operation
 
 # SYNOPSIS
