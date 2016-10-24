@@ -397,10 +397,15 @@ endpoint has successfully be re-enabled.
 fi_cancel attempts to cancel an outstanding asynchronous operation.
 Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
-canceled.  If multiple outstanding operations match the context
-parameter, only one will be canceled.  In this case, the operation
-which is canceled is provider specific.  The cancel operation is
-asynchronous, but will complete within a bounded period of time.
+canceled. An error queue entry will be available in the the
+associated error queue with error code FI_ECANCELED. On the other hand,
+if the operation completed before the call to fi_cancel, then the
+completion status of that operation will be available in the associated
+completion queue.  No specific entry related to fi_cancel itself will be posted.
+If multiple outstanding operations match the context parameter, only one
+will be canceled. In this case, the operation which is canceled is provider specific.
+The cancel operation is asynchronous, but will complete within a bounded
+period of time.
 
 ## fi_ep_alias
 
