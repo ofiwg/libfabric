@@ -79,10 +79,12 @@ static struct fi_cq_attr cq_attr[2];
 
 #define BUF_SZ (64*1024)
 char *target;
+char *target2;
 char *source;
+char *source2;
 char *uc_source;
-struct fid_mr *rem_mr[2], *loc_mr[2];
-uint64_t mr_key[2];
+struct fid_mr *rem_mr[2], *loc_mr[2], *rem_mr2[2], *loc_mr2[2];
+uint64_t mr_key[2], mr_key2[2];
 
 static struct fid_cntr *write_cntr[2], *read_cntr[2];
 static struct fid_cntr *rwrite_cntr;
@@ -221,14 +223,25 @@ void common_setup(void)
 
 	target = malloc(BUF_SZ);
 	assert(target);
+	target2 = malloc(BUF_SZ);
+	assert(target2);
 	source = malloc(BUF_SZ);
 	assert(source);
+	source2 = malloc(BUF_SZ);
+	assert(source2);
 
 	ret = fi_mr_reg(dom[0], target, BUF_SZ,
 			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[0], &target);
 	cr_assert_eq(ret, 0);
 	ret = fi_mr_reg(dom[1], target, BUF_SZ,
 			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[1], &target);
+	cr_assert_eq(ret, 0);
+
+	ret = fi_mr_reg(dom[0], target2, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr2[0], &target2);
+	cr_assert_eq(ret, 0);
+	ret = fi_mr_reg(dom[1], target2, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr2[1], &target2);
 	cr_assert_eq(ret, 0);
 
 	ret = fi_mr_reg(dom[0], source, BUF_SZ,
@@ -238,11 +251,20 @@ void common_setup(void)
 			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[1], &source);
 	cr_assert_eq(ret, 0);
 
+	ret = fi_mr_reg(dom[0], source2, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr2[0], &source2);
+	cr_assert_eq(ret, 0);
+	ret = fi_mr_reg(dom[1], source2, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr2[1], &source2);
+	cr_assert_eq(ret, 0);
+
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
 
 	mr_key[0] = fi_mr_key(rem_mr[0]);
 	mr_key[1] = fi_mr_key(rem_mr[1]);
+	mr_key2[0] = fi_mr_key(rem_mr2[0]);
+	mr_key2[1] = fi_mr_key(rem_mr2[1]);
 
 	ret = fi_cntr_open(dom[0], &cntr_attr, write_cntr, 0);
 	cr_assert(!ret, "fi_cntr_open");
@@ -529,6 +551,14 @@ void rdm_rma_teardown(void)
 		cr_assert(!ret, "failure in closing dom[1] local mr.");
 	}
 
+	ret = fi_close(&loc_mr2[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] local mr.");
+
+	if (loc_mr2[1] != NULL) {
+		ret = fi_close(&loc_mr2[1]->fid);
+		cr_assert(!ret, "failure in closing dom[1] local mr.");
+	}
+
 	ret = fi_close(&rem_mr[0]->fid);
 	cr_assert(!ret, "failure in closing dom[0] remote mr.");
 
@@ -537,8 +567,18 @@ void rdm_rma_teardown(void)
 		cr_assert(!ret, "failure in closing dom[1] remote mr.");
 	}
 
+	ret = fi_close(&rem_mr2[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] remote mr.");
+
+	if (rem_mr2[1] != NULL) {
+		ret = fi_close(&rem_mr2[1]->fid);
+		cr_assert(!ret, "failure in closing dom[1] remote mr.");
+	}
+
 	free(target);
+	free(target2);
 	free(source);
+	free(source2);
 
 	ret = fi_close(&ep[0]->fid);
 	cr_assert(!ret, "failure in closing ep[0].");
@@ -934,6 +974,90 @@ Test(dgram_rma_1dom, writemsg_retrans)
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+void do_writemsg_more(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct iovec iov, iov2;
+	struct fi_msg_rma msg, msg2;
+	struct fi_rma_iov rma_iov, rma_iov2;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
+
+	iov.iov_base = source;
+	iov.iov_len = len;
+
+	iov2.iov_base = source2;
+	iov2.iov_len = len;
+
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.len = len;
+	rma_iov.key = mr_key[1];
+
+	rma_iov2.addr = (uint64_t)target2;
+	rma_iov2.len = len;
+	rma_iov2.key = mr_key2[1];  /* use different mr_key? */
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.context = target;
+	msg.data = (uint64_t)target;
+
+	msg2.msg_iov = &iov2;
+	msg2.desc = (void **)loc_mr2;
+	msg2.iov_count = 1;
+	msg2.addr = gni_addr[1];
+	msg2.rma_iov = &rma_iov2;
+	msg2.rma_iov_count = 1;
+	msg2.context = target2;
+	msg2.data = (uint64_t)target2;
+
+	init_data(source, len, 0xef);
+	init_data(target, len, 0);
+	init_data(source2, len, 0xef);
+	init_data(target2, len, 0);
+
+	sz = fi_writemsg(ep[0], &msg, FI_MORE);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_writemsg(ep[0], &msg2, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_rma_check_tcqe(&cqe, target2, FI_RMA | FI_WRITE, 0);
+
+
+        w[0] = 2;
+        rdm_rma_check_cntrs(w, r, w_e, r_e);
+
+	dbg_printf("got 2 write context events!\n");
+
+	cr_assert(check_data(source, target, len), "Data mismatch");
+	cr_assert(check_data(source2, target2, len), "Data mismatch2");
+
+}
+
+Test(rdm_rma, writemsgmore)
+{
+	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
 }
 
 /*

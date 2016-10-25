@@ -313,6 +313,8 @@ struct gnix_smsg_amo_cntr_hdr {
  * @var gni_desc         embedded GNI post descriptor
  * @var gnix_ct_descs    embedded GNI post descriptors for concatenated gets
  *                       used for unaligned gets
+ * @var gni_more_ct_descs embedded GNI post descriptors for concatenated puts
+			  or gets for FI_MORE.
  * @var gnix_smsg_eager_hdr embedded header for SMSG eager protocol
  * @var gnix_smsg_rndzv_start_hdr embedded header for rendezvous protocol
  * @var gnix_smsg_rndzv_iov_start_hdr embedded header for iovec rndzv protocol
@@ -335,6 +337,7 @@ struct gnix_tx_descriptor {
 		struct {
 			gni_post_descriptor_t        gni_desc;
 			gni_ct_get_post_descriptor_t gni_ct_descs[2];
+			void			     *gni_more_ct_descs;
 		};
 		struct gnix_smsg_eager_hdr           eager_hdr;
 		struct gnix_smsg_rndzv_start_hdr     rndzv_start_hdr;
