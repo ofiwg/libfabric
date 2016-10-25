@@ -1013,9 +1013,10 @@ create transmit and receive contexts as described below.
 Transmit contexts are independent transmit queues.  Ordering and
 synchronization between contexts are not defined.  Conceptually a
 transmit context behaves similar to a send-only endpoint.  A transmit
-context may be configured with relaxed capabilities, and has its own
-completion queue.  The number of transmit contexts associated with an
-endpoint is specified during endpoint creation.
+context may be configured with fewer attributes than the base endpoint,
+such as fewer capabilities, relaxed ordering, etc.  Each transmit context
+has its own completion queue.  The number of transmit contexts associated
+with an endpoint is specified during endpoint creation.
 
 The fi_tx_context call is used to retrieve a specific context,
 identified by an index.  Providers may dynamically allocate contexts
@@ -1033,8 +1034,9 @@ Receive contexts are independent receive queues for receiving incoming
 data.  Ordering and synchronization between contexts are not
 guaranteed.  Conceptually a receive context behaves similar to a
 receive-only endpoint.  A receive context may be configured with
-relaxed endpoint capabilities, and has its own completion queue.  The
-number of receive contexts associated with an endpoint is specified
+fewer attributes than the base endpoint, such as fewer capabilities,
+relaxed ordering, etc.  Each receive context has its own completion queue.
+The number of receive contexts associated with an endpoint is specified
 during endpoint creation.
 
 Receive contexts are often associated with steering flows, that
