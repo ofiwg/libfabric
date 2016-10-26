@@ -46,18 +46,15 @@
 
 #include "unix/osd.h"
 
+#include <AvailabilityMacros.h>
+#ifndef MAC_OS_X_VERSION_10_12
+#define MAC_OS_X_VERSION_10_12 101200
+#endif
+
+#if MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_12
+
 #define CLOCK_REALTIME CALENDAR_CLOCK
 #define CLOCK_MONOTONIC SYSTEM_CLOCK
-
-#define pthread_yield pthread_yield_np
-
-#define bswap_64 OSSwapInt64
-
-#ifdef _POSIX_HOST_NAME_MAX
-#define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
-#else
-#define HOST_NAME_MAX 255
-#endif
 
 typedef int clockid_t;
 
@@ -66,6 +63,26 @@ extern "C" {
 #endif
 
 int clock_gettime(clockid_t clk_id, struct timespec *tp);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+
+#ifdef _POSIX_HOST_NAME_MAX
+#define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+#else
+#define HOST_NAME_MAX 255
+#endif
+
+#define pthread_yield pthread_yield_np
+
+#define bswap_64 OSSwapInt64
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
 {
