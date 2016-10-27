@@ -141,6 +141,12 @@ const struct verbs_ep_domain verbs_rdm_domain = {
 	.caps			= VERBS_RDM_CAPS,
 };
 
+struct fi_ibv_rdm_sysaddr
+{
+	struct sockaddr_in addr;
+	int is_found;
+};
+
 static struct fi_info *verbs_info = NULL;
 static pthread_mutex_t verbs_info_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -1080,18 +1086,22 @@ err1:
 	return ret;
 }
 
-static int fi_ibv_remove_nonaddr_rdm_info(struct fi_info **info)
+static int
+fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
+			 struct fi_ibv_rdm_sysaddr *lo_addr)
 {
-	struct fi_info *fi, *prev, *tmp;
-
 	struct ifaddrs *ifaddr, *ifa;
-	struct sockaddr_in iface_addr, lo_addr, *src_addr;
-	int iface_found, lo_found, retain;
-	int ret;
-
 	char iface[IFNAMSIZ];
 	char *iface_tmp = "ib";
 	size_t iface_len = 2;
+	int ret;
+
+	if (!iface_addr || !lo_addr) {
+		return -FI_EINVAL;
+	}
+
+	iface_addr->is_found = 0;
+	lo_addr->is_found = 0;
 
 	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
 		iface_len = strlen(iface_tmp);
@@ -1111,64 +1121,89 @@ static int fi_ibv_remove_nonaddr_rdm_info(struct fi_info **info)
 		return ret;
 	}
 
-	iface_found = 0;
-	lo_found = 0;
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!iface_found && (ifa->ifa_addr->sa_family == AF_INET) &&
+		if (!iface_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
 		    !strncmp(ifa->ifa_name, iface, iface_len)) {
-			memcpy(&iface_addr, ifa->ifa_addr, sizeof(iface_addr));
-			iface_found = 1;
+			memcpy(&iface_addr->addr, ifa->ifa_addr,
+				sizeof(iface_addr->addr));
+			iface_addr->is_found = 1;
 			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
 				"iface addr %s:%u\n",
-				inet_ntoa(iface_addr.sin_addr),
-				ntohs(iface_addr.sin_port));
+				inet_ntoa(iface_addr->addr.sin_addr),
+				ntohs(iface_addr->addr.sin_port));
 		}
-		if (!lo_found && (ifa->ifa_addr->sa_family == AF_INET) &&
+		if (!lo_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
 		    !strncmp(ifa->ifa_name, "lo", strlen(ifa->ifa_name))) {
-			memcpy(&lo_addr, ifa->ifa_addr, sizeof(lo_addr));
-			lo_found = 1;
+			memcpy(&lo_addr->addr, ifa->ifa_addr, sizeof(lo_addr->addr));
+			lo_addr->is_found = 1;
 			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "lo addr %s:%u\n",
-				inet_ntoa(lo_addr.sin_addr),
-				ntohs(lo_addr.sin_port));
+				inet_ntoa(lo_addr->addr.sin_addr),
+				ntohs(lo_addr->addr.sin_port));
 		}
-		if (iface_found && lo_found) {
+		if (iface_addr->is_found && lo_addr->is_found) {
 			break;
 		}
 	}
 
 	freeifaddrs(ifaddr);
 
+	return 0;
+}
+
+static inline int fi_ibv_retain_info(struct fi_info *info,
+				     struct fi_ibv_rdm_sysaddr *iface_addr,
+				      struct fi_ibv_rdm_sysaddr *lo_addr)
+{
+	struct sockaddr_in *src_addr;
+	int retain = 1;
+
+	assert(info && iface_addr && lo_addr);
+	if (!info || !iface_addr || !lo_addr) {
+		return retain;
+	}
+
+	src_addr = info->src_addr;
+	if (FI_IBV_EP_TYPE_IS_RDM(info)) {
+		retain = 0;
+		if (iface_addr->is_found) {
+			retain = !memcmp(&iface_addr->addr.sin_addr,
+					 &src_addr->sin_addr,
+					 sizeof(src_addr->sin_addr));
+		}
+		if (!retain && lo_addr->is_found) {
+			retain = src_addr && src_addr->sin_port &&
+				!memcmp(&lo_addr->addr.sin_addr,
+					&src_addr->sin_addr,
+					sizeof(src_addr->sin_addr));
+		}
+	}
+
+	FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+		retain ? "retain %s:%u\n" : "remove %s:%u\n",
+		(src_addr ? inet_ntoa(src_addr->sin_addr) : "n/a"),
+		(src_addr ? ntohs(src_addr->sin_port) : 0));
+
+	return retain;
+}
+
+static int fi_ibv_rdm_remove_nonaddr_info(struct fi_info **info)
+{
+	struct fi_info *fi, *prev, *tmp;
+	struct fi_ibv_rdm_sysaddr iface_addr, lo_addr;
+	int ret;
+
+	ret = fi_ibv_rdm_find_sysaddrs(&iface_addr, &lo_addr);
+	if (ret || (!iface_addr.is_found && !lo_addr.is_found)) {
+		return ret;
+	}
+
 	prev = NULL;
 	fi = *info;
 	while (fi) {
-		src_addr = fi->src_addr;
-		retain = 1;
-		if (FI_IBV_EP_TYPE_IS_RDM(fi)) {
-			retain = 0;
-			if (iface_found) {
-				retain = !memcmp(&iface_addr.sin_addr,
-						 &src_addr->sin_addr,
-						 sizeof(src_addr->sin_addr));
-			}
-			if (!retain && lo_found) {
-				retain = src_addr && src_addr->sin_port &&
-					!memcmp(&lo_addr.sin_addr,
-						&src_addr->sin_addr,
-						sizeof(src_addr->sin_addr));
-			}
-		}
-
-		if (retain) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "retain %s:%u\n",
-				(src_addr ? inet_ntoa(src_addr->sin_addr) : "n/a"),
-				(src_addr ? ntohs(src_addr->sin_port) : 0));
+		if (fi_ibv_retain_info(fi, &iface_addr, &lo_addr)) {
 			prev = fi;
 			fi = fi->next;
 		} else {
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "remove %s:%u\n",
-				(src_addr ? inet_ntoa(src_addr->sin_addr) : "n/a"),
-				(src_addr ? ntohs(src_addr->sin_port) : 0));
-
 			if (fi == *info) {
 				*info = (*info)->next;
 			}
@@ -1184,11 +1219,7 @@ static int fi_ibv_remove_nonaddr_rdm_info(struct fi_info **info)
 		}
 	}
 
-	if (!*info) {
-		return -FI_ENODEV;
-	}
-
-	return 0;
+	return *info ? 0 : -FI_ENODEV;
 }
 
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
@@ -1222,7 +1253,9 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
-	ret = fi_ibv_remove_nonaddr_rdm_info(info);
+	if (!ret) {
+		ret = fi_ibv_rdm_remove_nonaddr_info(info);
+	}
 
 	ofi_alter_info(*info, hints);
 
