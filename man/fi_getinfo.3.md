@@ -496,6 +496,10 @@ fabric.  See `fi_av`(3).
 : Address is an Intel proprietary format that is used with their PSMX
   (extended performance scaled messaging) protocol.
 
+*FI_ADDR_GNI*
+: Address is a Cray proprietary format that is used with their GNI
+  protocol.
+
 # FLAGS
 
 The operation of the fi_getinfo call may be controlled through the use of
