@@ -5,12 +5,12 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.4.0rc2, Mon Oct 17, 2016
-===========
+v1.4.0, Fri Oct 28, 2016
+========================
 
-- Add new options, `-f` and `-d`, to fi_info that can be used to specify hints
-  about the fabric and domain name. Change port to `-P` and provider to `-p` to
-  be more in line with fi_pingpong.
+- Add new options, `-f` and `-d`, to fi_info that can be used to
+  specify hints about the fabric and domain name. Change port to `-P`
+  and provider to `-p` to be more in line with fi_pingpong.
 
 ## GNI provider notes
 
@@ -33,7 +33,8 @@ v1.4.0rc2, Mon Oct 17, 2016
 
 ## MXM provider
 
-- The mxm provider has been deprecated and will be replaced in a future release.
+- The mxm provider has been deprecated and will be replaced in a
+  future release.
 
 ## PSM provider notes
 
@@ -52,25 +53,27 @@ v1.4.0rc2, Mon Oct 17, 2016
 - General code cleanup and bug fixes
 - Set tx/rx op_flags correctly to be consistent with manpage
 - Restructure struct sock_ep to support alias ep
-- Refactor CQ/Cntr bindings, CQ completion generation, and counter increments
+- Refactor CQ/Cntr bindings, CQ completion generation, and counter
+  increments
 - Copy compare data to internal buffer when FI_INJECT is set in
   fi_compare_atomic
 - Correctly handle triggered operation when FI_INJECT is set or
-  triggered op is enqueued or counter is incremented. Initialize counter
-  threshold to INT_MAX
+  triggered op is enqueued or counter is incremented. Initialize
+  counter threshold to INT_MAX
 - Refactor and cleanup connection management code, add locks to avoid
-  race between main thread and progress thread, add logic to correctly handle
-  FI_SHUTDOWN and FI_REJECT
+  race between main thread and progress thread, add logic to correctly
+  handle FI_SHUTDOWN and FI_REJECT
 - Set fabric name as network address in the format of a.b.c.d/e and
   domain name as network interface name
 - Remove sock_compare_addr and add two utility functions ofi_equals_ipaddr
   and ofi_equals_sockaddr in fi.h
 - Refactor fi_getinfo to handle corner cases and add logic if a given
   src_addr matches to any local interface addr
-- Restructure acquiring/releasing the list_lock in progress thread so that
-  it is only acquired once per iteration
-- Refactor connection management of MSG ep so that it uses TCP instead of
-  UDP for connection management msg and new port for every MSG endpoint
+- Restructure acquiring/releasing the list_lock in progress thread so
+  that it is only acquired once per iteration
+- Refactor connection management of MSG ep so that it uses TCP instead
+  of UDP for connection management msg and new port for every MSG
+  endpoint
 - Add sock_cq_sanitize_flags function to make sure only flags returned in
   CQ events are the ones that are listed on the manpage
 - Update fi_poll semantics for counters so that it returns success if the
@@ -79,8 +82,8 @@ v1.4.0rc2, Mon Oct 17, 2016
 - Update code to use ofi_util_mr - the new MR structure added to util code
 - Fix fi_av_insert not to report error when the number of inserted addr
   exceeds the count attribute in fi_av_attr
-- Add garbage collection of AV indices after fi_av_remove, add ep list in AV
-  and cleanup conn map during fi_av_remove
+- Add garbage collection of AV indices after fi_av_remove, add ep list
+  in AV and cleanup conn map during fi_av_remove
 - Use correct fi_tx_attr/fi_rx_attr for scalable ep
 
 ## UDP provider notes
@@ -91,43 +94,49 @@ v1.4.0rc2, Mon Oct 17, 2016
 - Reduce reported resource limits (domain attributes).
 
 ## usNIC provider notes
+
 - Fix handling of EP_MSG peers on different IP subnets [PR #1988]
-- Fix handling of CM data. Fixes a bug where data received would overwrite
-  parts of the connection management structure [PR #1991]
-- Fix bug in CM connect/accept handling that would cause a seg fault if data
-  was sent as part of a connection request [PR #1991]
-- Fix invalid completion lengths in the MSG and RDM endpoint implementations of
-  fi_recvv and fi_recvmsg [PR #2026]
-- Implement the FI_CM_DATA_SIZE option for fi_getopt on passive endpoints
-  [PR #2033]
+- Fix handling of CM data. Fixes a bug where data received would
+  overwrite parts of the connection management structure [PR #1991]
+- Fix bug in CM connect/accept handling that would cause a seg fault
+  if data was sent as part of a connection request [PR #1991]
+- Fix invalid completion lengths in the MSG and RDM endpoint
+  implementations of fi_recvv and fi_recvmsg [PR #2026]
+- Implement the FI_CM_DATA_SIZE option for fi_getopt on passive
+  endpoints [PR #2033]
 - Add fi_reject implementation that supports data exchange [PR #2038]
 - Fix fi_av_straddr bug that reported port in network order [PR #2244]
-- Report -FI_EOPBADSTATE if the size left functions are used on an endpoint
-  which has not been enabled [PR #2266]
-- Change the domain/fabric naming. The fabric is now represented as the network
-  address in the form of a.b.c.d/e and the domain name is the usNIC device
-  name. For more information see fi_usnic(7) [PR #2287]
+- Report -FI_EOPBADSTATE if the size left functions are used on an
+  endpoint which has not been enabled [PR #2266]
+- Change the domain/fabric naming. The fabric is now represented as
+  the network address in the form of a.b.c.d/e and the domain name is
+  the usNIC device name. For more information see fi_usnic(7) [PR
+  #2287]
 - Fix the domain name matching in fi_getinfo/fi_domain [PR #2298]
-- Fix issue with AV where it is fully closed before pending asynchronous
-  inserts can finish leading to invalid data accesses [PR #2397]
-- Free all data associated with AV when fi_av_close is called [PR #2397]
-- Fail with -FI_EINVAL if a value of FI_ADDR_NOTAVAIL is given to fi_av_lookup.
-  [PR #2397]
-- Verify AV attributes and return an error if anything that is unsupported is
-  requested (FI_AV_TABLE, named AVs, FI_READ, etc.) [PR #2397]
+- Fix issue with AV where it is fully closed before pending
+  asynchronous inserts can finish leading to invalid data accesses [PR
+  #2397]
+- Free all data associated with AV when fi_av_close is called [PR
+  #2397]
+- Fail with -FI_EINVAL if a value of FI_ADDR_NOTAVAIL is given to
+  fi_av_lookup.  [PR #2397]
+- Verify AV attributes and return an error if anything that is
+  unsupported is requested (FI_AV_TABLE, named AVs, FI_READ, etc.) [PR
+  #2397]
 
 ## Verbs provider notes
 
-- Add fork support. It is enabled by default and can be turned off by setting the 
-  FI_FORK_UNSAFE variable to "yes". This can improve performance of memory registrations
-  but also makes fork unsafe. The following are the limitations of fork support:
-  - Fabric resources like endpoint, CQ, EQ, etc. should not be used in the
-    forked process.
-  - The memory registered using fi_mr_reg has to be page aligned since ibv_reg_mr
-    marks the entire page that a memory region belongs to as not to be re-mapped
-    when the process is forked (MADV_DONTFORK).
-- Fix a bug where source address info was not being returned in fi_info when
-  destination node is specified.
+- Add fork support. It is enabled by default and can be turned off by
+  setting the FI_FORK_UNSAFE variable to "yes". This can improve
+  performance of memory registrations but also makes fork unsafe. The
+  following are the limitations of fork support:
+  - Fabric resources like endpoint, CQ, EQ, etc. should not be used in
+    the forked process.
+  - The memory registered using fi_mr_reg has to be page aligned since
+    ibv_reg_mr marks the entire page that a memory region belongs to
+    as not to be re-mapped when the process is forked (MADV_DONTFORK).
+- Fix a bug where source address info was not being returned in
+  fi_info when destination node is specified.
 
 - verbs/MSG
   - Add fi_getopt for passive endpoints.
@@ -144,10 +153,10 @@ v1.4.0rc2, Mon Oct 17, 2016
   - Add large data transfer support (> 1 GB)
   - Add FI_AV_TABLE support
   - Add fi_cntr support
-  - Add environment variables for the provider tuning: FI_VERBS_RDM_BUFFER_NUM,
-    FI_VERBS_RDM_BUFFER_SIZE, FI_VERBS_RDM_RNDV_SEG_SIZE,
-    FI_VERBS_RDM_CQREAD_BUNCH_SIZE, FI_VERBS_RDM_THREAD_TIMEOUT,
-    FI_VERBS_RDM_EAGER_SEND_OPCODE
+  - Add environment variables for the provider tuning:
+    FI_VERBS_RDM_BUFFER_NUM, FI_VERBS_RDM_BUFFER_SIZE,
+    FI_VERBS_RDM_RNDV_SEG_SIZE, FI_VERBS_RDM_CQREAD_BUNCH_SIZE,
+    FI_VERBS_RDM_THREAD_TIMEOUT, FI_VERBS_RDM_EAGER_SEND_OPCODE
   - Add iWarp support
 
 v1.3.0, Mon Apr 11, 2016
