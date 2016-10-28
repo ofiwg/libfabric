@@ -107,7 +107,8 @@ void common_setup(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
-	hints->caps |= GNIX_EP_RDM_PRIMARY_CAPS;
+	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
+		       FI_WRITE | FI_REMOTE_WRITE;
 
 	hints->fabric_attr->name = strdup("gni");
 
