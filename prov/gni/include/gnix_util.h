@@ -249,6 +249,8 @@ struct gnix_reference {
 	({ \
 		struct gnix_reference *ref = &(ptr)->var; \
 		int references_held = atomic_inc(&ref->references); \
+		GNIX_DEBUG(FI_LOG_CORE, "%p refs %d\n", \
+			   ref, references_held); \
 		assert(references_held > 0); \
 		references_held; })
 
@@ -256,6 +258,8 @@ struct gnix_reference {
 	({ \
 		struct gnix_reference *ref = &(ptr)->var; \
 		int references_held = atomic_dec(&ref->references); \
+		GNIX_DEBUG(FI_LOG_CORE, "%p refs %d\n", \
+			   ref, references_held); \
 		assert(references_held >= 0); \
 		if (references_held == 0) \
 			ref->destruct((void *) (ptr)); \
@@ -273,6 +277,8 @@ static inline void _gnix_ref_init(
 		void (*destruct)(void *))
 {
 	atomic_initialize(&ref->references, initial_value);
+	GNIX_DEBUG(FI_LOG_CORE, "%p refs %d\n",
+		   ref, initial_value);
 	ref->destruct = destruct;
 }
 
