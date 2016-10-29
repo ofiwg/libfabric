@@ -46,12 +46,9 @@
 
 #include "unix/osd.h"
 
-#include <AvailabilityMacros.h>
-#ifndef MAC_OS_X_VERSION_10_12
-#define MAC_OS_X_VERSION_10_12 101200
-#endif
+#include "config.h"
 
-#if MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_12
+#if HAVE_CLOCK_GETTIME == 0
 
 #define CLOCK_REALTIME CALENDAR_CLOCK
 #define CLOCK_MONOTONIC SYSTEM_CLOCK

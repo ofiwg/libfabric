@@ -32,6 +32,8 @@
 
 #include "osx/osd.h"
 
+#if HAVE_CLOCK_GETTIME == 0
+
 int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 	int retval;
 
@@ -47,3 +49,5 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 
 	return retval;
 }
+
+#endif
