@@ -38,7 +38,7 @@
 extern "C" {
 #endif
 
-#include <stdbool.h>
+#include <rdma/fi_rma.h>
 
 #define BENCHMARK_OPTS "vkj:W:"
 #define FT_BENCHMARK_MAX_MSG_SIZE (test_size[TEST_CNT - 1].size)

@@ -46,15 +46,12 @@
 #include <string.h>
 #include <sys/time.h>
 #include <getopt.h>
-#include <time.h>
 #include <limits.h>
-#include <errno.h>
 
-#include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
-#include <rdma/fi_domain.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
+
 #include <shared.h>
 
 #define FT_CLOSE(DESC, STR) 				\
@@ -117,7 +114,7 @@ static int pp_eq_create(struct pingpong_context *ctx)
 	int rc;
 
 	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.wait_obj 	= FI_WAIT_FD;				
+	cm_attr.wait_obj 	= FI_WAIT_FD;
 
 	rc = fi_eq_open(ctx->fabric, &cm_attr, &ctx->eq, NULL);
 	if (rc)
@@ -134,7 +131,7 @@ static int pp_cq_create(struct pingpong_context *ctx)
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format 		= FI_CQ_FORMAT_CONTEXT;
 	if (ctx->use_event)
-		cq_attr.wait_obj = FI_WAIT_FD;				
+		cq_attr.wait_obj = FI_WAIT_FD;
 	else
 		cq_attr.wait_obj = FI_WAIT_UNSPEC;
 	cq_attr.size 		= ctx->rx_depth + 1;
@@ -288,7 +285,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		fprintf(stderr, "Unable to create event queue\n");
 		return 1;
 	}
-	
+
 	rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_mr_reg", rc);
@@ -301,19 +298,19 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		FT_PRINTERR("fi_endpoint", rc);
 		return 1;
 	}
-	
+
 	/* Create event queue */
 	if (pp_cq_create(ctx)) {
 		fprintf(stderr, "Unable to create event queue\n");
 		return 1;
 	}
-	
+
 	/* Bind eq to ep */
 	rc = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (rc) {
 		FT_PRINTERR("fi_ep_bind", rc);
 		return 1;
-	}	
+	}
 
 	rc = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (rc) {
@@ -415,7 +412,7 @@ static int pp_post_send(struct pingpong_context *ctx)
 {
 	int rc = 0;
 
-	rc = fi_send(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr), 
+	rc = fi_send(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr),
 		     0, (void *)(uintptr_t)PINGPONG_SEND_WCID);
 	if (rc) {
 		FT_PRINTERR("fi_send", rc);
@@ -531,7 +528,7 @@ int main(int argc, char *argv[])
 	rc = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (rc)
 		return -rc;
-	
+
 	rc = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (rc) {
 		FT_PRINTERR("fi_getinfo", rc);

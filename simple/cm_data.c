@@ -32,8 +32,6 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
-#include <inttypes.h>
-#include <assert.h>
 
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>

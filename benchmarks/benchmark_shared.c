@@ -34,10 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_cm.h>
 
 #include "shared.h"
 #include "benchmark_shared.h"
