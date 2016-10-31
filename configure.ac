@@ -141,6 +141,7 @@ AC_SEARCH_LIBS([clock_gettime],[rt],
 
 AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
 		   [Define to 1 if clock_gettime is available.])
+AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
 dnl Check for gcc atomic intrinsics
 AC_MSG_CHECKING(compiler support for c11 atomics)

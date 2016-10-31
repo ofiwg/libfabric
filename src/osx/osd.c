@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -31,7 +32,12 @@
  */
 
 #include "osx/osd.h"
+#include "config.h"
 
+/* Define clock_gettime if it is not already defined. As of macOS Sierra, it is
+ * available in libc.
+ */
+#if !HAVE_CLOCK_GETTIME
 int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 	int retval;
 
@@ -47,3 +53,4 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 
 	return retval;
 }
+#endif
