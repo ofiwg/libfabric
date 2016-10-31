@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _MACH_CLOCK_GETTIME_H_
-#define _MACH_CLOCK_GETTIME_H_
+#ifndef OSX_OSD_H
+#define OSX_OSD_H
 
 #include <sys/time.h>
 #include <time.h>
