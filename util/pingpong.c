@@ -1474,7 +1474,7 @@ int pp_init_ep(struct ct_pingpong *ct)
 	if (ret)
 		return ret;
 
-	PP_DEBUG("Endpoint initialzed\n");
+	PP_DEBUG("Endpoint initialized\n");
 
 	return 0;
 }

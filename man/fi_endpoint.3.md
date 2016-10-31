@@ -415,7 +415,7 @@ application to the underlying provider hardware.  Applications
 configure an alias endpoint with data transfer flags, specified
 through the fi_ep_alias call. The flags must include FI_TRANSMIT or FI_RECV
 (not both) with other flags OR'ed to indicate the type of data transfer the
-flags should apply to. This will override the transmit and recieve attributes
+flags should apply to. This will override the transmit and receive attributes
 of the alias endpoint. Typically the attributes of the alias endpoint are
 different than those assigned to the actual endpoint. The alias mechanism
 allows a single endpoint to have multiple optimized software interfaces.
