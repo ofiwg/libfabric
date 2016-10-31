@@ -83,8 +83,13 @@ struct fi_ibv_msg_ep;
  */
 size_t rdm_buffer_size(size_t buf_send_size);
 
+#ifdef HAVE_VERBS_EXP_H
+/* 128MB is ODP MR limitation */
+#define FI_IBV_RDM_SEG_MAXSIZE (128*1024*1024)
+#else /* HAVE_VERBS_EXP_H */
 /* 1GB is RC_QP limitation */
 #define FI_IBV_RDM_SEG_MAXSIZE (1024*1024*1024)
+#endif /* HAVE_VERBS_EXP_H */
 
 /* TODO: CQs depths increased from 100 to 1000 to prevent
  *      "Work Request Flushed Error" in stress tests like alltoall.

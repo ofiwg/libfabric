@@ -379,9 +379,12 @@ VERBS_INI
 	fi_param_define(&fi_ibv_prov, "rdm_buffer_size", FI_PARAM_INT,
 			"the maximum size of a buffered operation (bytes) "
 			"(default: platform specific)");
+	fi_param_define(&fi_ibv_prov, "rdm_use_odp", FI_PARAM_BOOL,
+			"enable on-demand paging experimental feature"
+			"(default: platform specific)");
 	fi_param_define(&fi_ibv_prov, "rdm_rndv_seg_size", FI_PARAM_INT,
 			"the segment size for zero copy protocols (bytes)"
-			"(default: 1073741824)");
+			"(default: platform specific");
 	fi_param_define(&fi_ibv_prov, "rdm_cqread_bunch_size", FI_PARAM_INT,
 			"the number of entries to be read from the verbs "
 			"completion queue at a time (default: 8)");
