@@ -541,7 +541,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_sreadfrom(struct fid_cq *cq, void *buf,
 	int ret;
 
 	ret = gnix_cq_readfrom(cq, buf, count, NULL);
-	if (ret != -FI_EAGAIN)
+	if (ret != -FI_EAGAIN || timeout == 0)
 		return ret;
 
 	if (timeout > 0)
