@@ -977,8 +977,8 @@ run_test_set()
 static void usage(void)
 {
 	ft_unit_usage("av_test", "Unit test for Address Vector (AV)");
-	FT_PRINT_OPTS_USAGE("-d <good_address>", "");
-	FT_PRINT_OPTS_USAGE("-D <bad_address>]", "");
+	FT_PRINT_OPTS_USAGE("-g <good_address>", "");
+	FT_PRINT_OPTS_USAGE("-G <bad_address>]", "");
 	fprintf(stderr, FT_OPTS_USAGE_FORMAT " (max=%d)\n", "-n <num_good_addr>",
 			"Number of good addresses", MAX_ADDR - 1);
 	FT_PRINT_OPTS_USAGE("-s <source_address>", "");
@@ -1022,7 +1022,7 @@ int main(int argc, char **argv)
 	}
 
 	if (good_address == NULL ||  num_good_addr == 0) {
-		printf("Test requires -g  and -n\n");
+		printf("Test requires -g and -n\n");
 		return EXIT_FAILURE;
 	}
 
