@@ -33,6 +33,8 @@
 #ifndef _FABTESTS_OSX_OSD_H_
 #define _FABTESTS_OSX_OSD_H_
 
+#include <config.h>
+
 #include <sys/time.h>
 #include <time.h>
 
