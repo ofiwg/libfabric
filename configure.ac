@@ -76,6 +76,16 @@ AM_PROG_CC_C_O
 
 LT_INIT
 
+have_clock_gettime=0
+
+AC_SEARCH_LIBS([clock_gettime],[rt],
+	       [have_clock_gettime=1],
+	       [])
+
+AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
+		   [Define to 1 if clock_gettime is available.])
+AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
+
 AC_ARG_WITH([libfabric],
             AC_HELP_STRING([--with-libfabric], [Use non-default libfabric location - default NO]),
             [AS_IF([test -d $withval/lib64], [fab_libdir="lib64"], [fab_libdir="lib"])

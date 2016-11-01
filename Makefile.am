@@ -69,7 +69,10 @@ libfabtests_la_SOURCES = \
 
 if MACOS
 libfabtests_la_SOURCES += include/osx/osd.h
+
+if !HAVE_CLOCK_GETTIME
 libfabtests_la_SOURCES += common/osx/osd.c
+endif
 endif
 
 simple_fi_msg_sockets_SOURCES = \

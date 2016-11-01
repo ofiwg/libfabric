@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -31,11 +32,14 @@
  */
 
 #include "osx/osd.h"
+#include "config.h"
 
-// clock_gettime() does not exist on OS X.  Instead, simply use
-// gettimeofday(), which is apparently fairly efficient on OS X (i.e.,
-// ignore the clk_id that is passed in and always return the system
-// clock time).
+/* clock_gettime() does not exist on OS X before the mac OS Sierra release. If
+ * the symbol is not already defined, then define a workaround using
+ * gettimeofday. Ignore the clk_id that is passed in and always return the
+ * system clock time.
+ */
+#if !HAVE_CLOCK_GETTIME
 int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 	int retval;
 	struct timeval tv;
@@ -47,3 +51,4 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 
 	return retval;
 }
+#endif
