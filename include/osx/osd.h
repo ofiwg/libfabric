@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _MACH_CLOCK_GETTIME_H_
-#define _MACH_CLOCK_GETTIME_H_
+#ifndef OSX_OSD_H
+#define OSX_OSD_H
 
 #include <sys/time.h>
 #include <time.h>
@@ -46,8 +46,7 @@
 
 #include "unix/osd.h"
 
-#define CLOCK_REALTIME CALENDAR_CLOCK
-#define CLOCK_MONOTONIC SYSTEM_CLOCK
+#include "config.h"
 
 #define pthread_yield pthread_yield_np
 
@@ -59,13 +58,22 @@
 #define HOST_NAME_MAX 255
 #endif
 
-typedef int clockid_t;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* macOS Sierra added clock_gettime to libc. This implementation should only
+ * take effect if it is not available.
+ */
+#if !HAVE_CLOCK_GETTIME
+
+#define CLOCK_REALTIME CALENDAR_CLOCK
+#define CLOCK_MONOTONIC SYSTEM_CLOCK
+
+typedef int clockid_t;
 int clock_gettime(clockid_t clk_id, struct timespec *tp);
+
+#endif
 
 static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
 {

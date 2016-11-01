@@ -205,8 +205,7 @@ static const int integ_alphabet_length =
 /*******************************************************************************
  *                                  Compatibility methods
  ******************************************************************************/
-
-#ifdef __APPLE__
+#if defined(__APPLE__) && !HAVE_CLOCK_GETTIME
 int clock_gettime(clockid_t clk_id, struct timespec *tp)
 {
 	int retval;
