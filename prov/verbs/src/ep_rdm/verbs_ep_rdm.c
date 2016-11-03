@@ -550,6 +550,27 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 
+#ifdef HAVE_VERBS_EXP_H
+	struct ibv_exp_device_attr exp_attr;
+	exp_attr.comp_mask = IBV_EXP_DEVICE_ATTR_ODP | IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
+	ret = ibv_exp_query_device(_ep->domain->verbs, &exp_attr);
+	if (!ret && exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP) {
+		_ep->use_odp = 1;
+	} else {
+		_ep->use_odp = 0;
+	}
+#else /* HAVE_VERBS_EXP_H */
+	_ep->use_odp = 0;
+#endif /* HAVE_VERBS_EXP_H */
+	if (!fi_param_get_bool(&fi_ibv_prov, "rdm_use_odp", &param)) {
+		if (!_ep->use_odp && param) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
+				"ODP is not supported on this configuration, ignore \n");
+		} else {
+			_ep->use_odp = param;
+		}
+	}
+
 	_ep->cm_progress_timeout = FI_IBV_RDM_CM_THREAD_TIMEOUT;
 	if (!fi_param_get_int(&fi_ibv_prov, "rdm_thread_timeout", &param)) {
 		if (param < 0) {

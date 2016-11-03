@@ -33,6 +33,10 @@
 #include <inttypes.h>
 #include <stdlib.h>
 
+#ifdef HAVE_VERBS_EXP_H
+#include <infiniband/verbs_exp.h>
+#endif /* HAVE_VERBS_EXP_H */
+
 #include <fi_list.h>
 #include "../fi_verbs.h"
 #include "verbs_rdm.h"
@@ -899,6 +903,38 @@ fi_ibv_rdm_eager_recv_discard(struct fi_ibv_rdm_request *request, void *data)
 	return FI_SUCCESS;
 }
 
+static inline ssize_t
+fi_ibv_rdm_rndv_read_reg_mr(struct fi_ibv_rdm_ep *ep,
+			    struct fi_ibv_rdm_request *request)
+{
+#if defined HAVE_VERBS_EXP_H
+	struct ibv_exp_reg_mr_in in;
+	in.pd = ep->domain->pd;
+	in.addr = request->dest_buf;
+	in.length = request->len;
+	in.exp_access = IBV_EXP_ACCESS_LOCAL_WRITE;
+	if (ep->use_odp) {
+		in.exp_access |= IBV_EXP_ACCESS_RELAXED |
+				 IBV_EXP_ACCESS_ON_DEMAND;
+	}
+	in.comp_mask = 0;
+	request->rndv.mr = ibv_exp_reg_mr(&in);
+#else /* HAVE_VERBS_EXP_H */
+	request->rndv.mr = ibv_reg_mr(ep->domain->pd, request->dest_buf,
+					request->len,
+					IBV_ACCESS_LOCAL_WRITE |
+					IBV_ACCESS_REMOTE_WRITE);
+#endif /* HAVE_VERBS_EXP_H */
+
+	if (!request->rndv.mr) {
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "failed ibv_reg_mr",
+				 errno);
+		assert(0);
+		return -FI_ENOMEM;
+	}
+	return FI_SUCCESS;
+}
+
 static ssize_t
 fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 {
@@ -914,6 +950,7 @@ fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_sge sge;
+	ssize_t ret;
 
 	fi_ibv_rdm_remove_from_postponed_queue(request);
 	VERBS_DBG(FI_LOG_EP_DATA,
@@ -928,16 +965,9 @@ fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 
 	/* First segment */
 	if (offset == 0) {
-		request->rndv.mr =
-			ibv_reg_mr(p->ep->domain->pd, request->dest_buf,
-				   request->len,
-				   IBV_ACCESS_LOCAL_WRITE |
-				   IBV_ACCESS_REMOTE_WRITE);
-		if (!request->rndv.mr) {
-			VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "failed ibv_reg_mr",
-					 errno);
-			assert(0);
-			return -FI_ENOMEM;
+		ret = fi_ibv_rdm_rndv_read_reg_mr(p->ep, request);
+		if (ret) {
+			return ret;
 		}
 		request->post_counter = 0;
 	}
@@ -961,7 +991,7 @@ fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
 		  sge.length, request->minfo.conn, request->minfo.tag);
-	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
+	ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
