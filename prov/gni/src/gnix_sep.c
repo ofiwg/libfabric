@@ -75,7 +75,6 @@ static void __trx_destruct(void *obj)
 	struct gnix_fid_trx *trx = (struct gnix_fid_trx *) obj;
 	struct gnix_fid_ep *ep_priv;
 	struct gnix_fid_sep *sep_priv;
-	struct fid_domain *domain;
 	int refs_held;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -84,8 +83,6 @@ static void __trx_destruct(void *obj)
 	assert(ep_priv != NULL);
 	sep_priv = trx->sep;
 	assert(sep_priv != NULL);
-	domain = sep_priv->domain;
-	assert(domain != NULL);
 
 	refs_held = _gnix_ref_put(ep_priv);
 	if (refs_held == 0)
