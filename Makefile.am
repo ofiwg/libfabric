@@ -327,7 +327,6 @@ include prov/verbs/Makefile.include
 include prov/usnic/Makefile.include
 include prov/psm/Makefile.include
 include prov/psm2/Makefile.include
-include prov/mxm/Makefile.include
 include prov/gni/Makefile.include
 include prov/rxm/Makefile.include
 include prov/rxd/Makefile.include
