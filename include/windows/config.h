@@ -38,12 +38,6 @@
 /* Define to 1 if you have the <memory.h> header file. */
 /* #undef HAVE_MEMORY_H */
 
-/* mxm provider is built */
-/* #undef HAVE_MXM */
-
-/* mxm provider is built as DSO */
-/* #undef HAVE_MXM_DL */
-
 /* Define to 1 if you have the <netlink/netlink.h> header file. */
 /* #undef HAVE_NETLINK_NETLINK_H */
 
