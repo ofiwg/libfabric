@@ -285,6 +285,7 @@ static const uint32_t default_tx_cq_size = 2048;
 static const uint32_t default_max_retransmits = 5;
 static const int32_t default_err_inject_count; /* static var is zeroed */
 static const uint32_t default_dgram_progress_timeout = 100;
+static const uint32_t default_eager_auto_progress = 0;
 
 static int __gnix_string_to_mr_type(const char *name)
 {
@@ -399,6 +400,9 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_DGRAM_PROGRESS_TIMEOUT:
 		*(uint32_t *)val = domain->params.dgram_progress_timeout;
 		break;
+	case GNI_EAGER_AUTO_PROGRESS:
+		*(uint32_t *)val = domain->params.eager_auto_progress;
+		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
 		return -FI_EINVAL;
@@ -510,6 +514,9 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_DGRAM_PROGRESS_TIMEOUT:
 		domain->params.dgram_progress_timeout = *(uint32_t *)val;
+		break;
+	case GNI_EAGER_AUTO_PROGRESS:
+		domain->params.eager_auto_progress = *(uint32_t *)val;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -635,6 +642,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->params.xpmem_enabled = false;
 #endif
 	domain->params.dgram_progress_timeout = default_dgram_progress_timeout;
+	domain->params.eager_auto_progress = default_eager_auto_progress;
 
 	domain->gni_tx_cq_size = default_tx_cq_size;
 	domain->gni_rx_cq_size = default_rx_cq_size;

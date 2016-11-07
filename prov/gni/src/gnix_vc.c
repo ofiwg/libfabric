@@ -1250,7 +1250,6 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_vc_sched_new_conn returned %s\n",
 				  fi_strerror(-ret));
-
 	} else if (ret == -FI_EAGAIN) {
 		ret = FI_SUCCESS;
 	} else {
@@ -2024,11 +2023,33 @@ static struct gnix_vc *__gnix_nic_next_pending_vc(struct gnix_nic *nic)
 	return vc;
 }
 
+int _gnix_vc_progress(struct gnix_vc *vc)
+{
+	int ret, ret_tx;
+
+	ret = __gnix_vc_rx_progress(vc);
+	if (ret != FI_SUCCESS)
+		GNIX_DEBUG(FI_LOG_EP_CTRL,
+			   "__gnix_vc_rx_progress failed: %d\n", ret);
+
+	ret = __gnix_vc_push_work_reqs(vc);
+	if (ret != FI_SUCCESS)
+		GNIX_DEBUG(FI_LOG_EP_CTRL,
+			   "__gnix_vc_push_work_reqs failed: %d\n", ret);
+
+	ret_tx = __gnix_vc_push_tx_reqs(vc);
+	if (ret != FI_SUCCESS)
+		GNIX_DEBUG(FI_LOG_EP_CTRL,
+			   "__gnix_vc_push_tx_reqs failed: %d\n", ret);
+
+	return ret_tx;
+}
+
 /* Progress all NIC VCs needing work. */
 int _gnix_vc_nic_progress(struct gnix_nic *nic)
 {
 	struct gnix_vc *vc;
-	int ret, ret_tx;
+	int ret;
 
 	/*
 	 * we can't just spin and spin in this loop because
@@ -2039,31 +2060,14 @@ int _gnix_vc_nic_progress(struct gnix_nic *nic)
 	while ((vc = __gnix_nic_next_pending_vc(nic))) {
 		COND_ACQUIRE(vc->ep->requires_lock, &vc->ep->vc_lock);
 
-		if (vc->conn_state != GNIX_VC_CONNECTED) {
-			COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
-			continue;
+		if (vc->conn_state == GNIX_VC_CONNECTED) {
+			ret = _gnix_vc_progress(vc);
 		}
-
-		ret = __gnix_vc_rx_progress(vc);
-		if (ret != FI_SUCCESS)
-			GNIX_DEBUG(FI_LOG_EP_CTRL,
-				   "__gnix_vc_rx_progress failed: %d\n", ret);
-
-		ret = __gnix_vc_push_work_reqs(vc);
-		if (ret != FI_SUCCESS)
-			GNIX_DEBUG(FI_LOG_EP_CTRL,
-				   "__gnix_vc_push_work_reqs failed: %d\n", ret);
-
-
-		ret_tx = __gnix_vc_push_tx_reqs(vc);
 
 		COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
 
-		if (ret_tx != FI_SUCCESS) {
-			GNIX_DEBUG(FI_LOG_EP_CTRL,
-				   "__gnix_vc_push_tx_reqs failed: %d\n", ret_tx);
+		if (ret != FI_SUCCESS)
 			break;
-		}
 	}
 
 	return FI_SUCCESS;
@@ -2111,14 +2115,8 @@ int _gnix_vc_tx_schedule(struct gnix_vc *vc)
  * Note: EP must be locked. */
 int _gnix_vc_sched_new_conn(struct gnix_vc *vc)
 {
-	int ret;
-
-	ret = __gnix_vc_push_tx_reqs(vc);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA, "__gnix_vc_push_tx_reqs failed: %d\n",
-			  ret);
-	}
-	return _gnix_vc_schedule(vc);
+	_gnix_vc_schedule(vc);
+	return _gnix_vc_progress(vc);
 }
 
 /* Look up an EP's VC using fi_addr_t.

@@ -150,7 +150,7 @@ try_again:
 		/*
 		 * first dequeue RX CQEs
 		 */
-		if (which == 1) {
+		if (nic->rx_cq_blk != nic->rx_cq && which == 1) {
 			do {
 				status = GNI_CqGetEvent(nic->rx_cq_blk,
 							&cqe);
@@ -563,7 +563,7 @@ int _gnix_nic_progress(void *arg)
 	if (unlikely(ret != FI_SUCCESS))
 		return ret;
 
-	if (nic->tx_cq_blk) {
+	if (nic->tx_cq_blk && nic->tx_cq_blk != nic->tx_cq) {
 		ret =  __nic_tx_progress(nic, nic->tx_cq_blk);
 		if (unlikely(ret != FI_SUCCESS))
 			return ret;
@@ -785,6 +785,17 @@ static void __nic_destruct(void *obj)
 
 	assert(nic->gni_cdm_hndl != NULL);
 
+	if (nic->rx_cq != NULL && nic->rx_cq != nic->rx_cq_blk) {
+		status = GNI_CqDestroy(nic->rx_cq);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqDestroy returned %s\n",
+				 gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+	}
+
 	if (nic->rx_cq_blk != NULL) {
 		status = GNI_CqDestroy(nic->rx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
@@ -796,8 +807,8 @@ static void __nic_destruct(void *obj)
 		}
 	}
 
-	if (nic->rx_cq != NULL) {
-		status = GNI_CqDestroy(nic->rx_cq);
+	if (nic->tx_cq != NULL && nic->tx_cq != nic->tx_cq_blk) {
+		status = GNI_CqDestroy(nic->tx_cq);
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqDestroy returned %s\n",
@@ -809,17 +820,6 @@ static void __nic_destruct(void *obj)
 
 	if (nic->tx_cq_blk != NULL) {
 		status = GNI_CqDestroy(nic->tx_cq_blk);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "GNI_CqDestroy returned %s\n",
-				 gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-	}
-
-	if (nic->tx_cq != NULL) {
-		status = GNI_CqDestroy(nic->tx_cq);
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqDestroy returned %s\n",
@@ -1008,25 +1008,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		 */
 
 		status = GNI_CqCreate(nic->gni_nic_hndl,
-					domain->gni_tx_cq_size,
-					0,                  /* no delay count */
-					GNI_CQ_NOBLOCK |
-					domain->gni_cq_modes,
-					NULL,              /* useless handler */
-					NULL,               /* useless handler
-								context */
-					&nic->tx_cq);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "GNI_CqCreate returned %s\n",
-				  gni_err_str[status]);
-			_gnix_dump_gni_res(domain->ptag);
-			ret = gnixu_to_fi_errno(status);
-			goto err1;
-		}
-
-		status = GNI_CqCreate(nic->gni_nic_hndl,
-					domain->gni_tx_cq_size,
+					domain->params.tx_cq_size,
 					0,
 					GNI_CQ_BLOCKING |
 						domain->gni_cq_modes,
@@ -1042,29 +1024,35 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err1;
 		}
 
+		/* Use blocking CQs for all operations if eager_auto_progress
+		 * is used.  */
+		if (domain->params.eager_auto_progress) {
+			nic->tx_cq = nic->tx_cq_blk;
+		} else {
+			status = GNI_CqCreate(nic->gni_nic_hndl,
+						domain->params.tx_cq_size,
+						0, /* no delay count */
+						domain->gni_cq_modes,
+						NULL, /* useless handler */
+						NULL, /* useless handler ctx */
+						&nic->tx_cq);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "GNI_CqCreate returned %s\n",
+					  gni_err_str[status]);
+				_gnix_dump_gni_res(domain->ptag);
+				ret = gnixu_to_fi_errno(status);
+				goto err1;
+			}
+		}
+
+
 		/*
 		 * create RX CQs - first polling, then blocking
 		 */
 
 		status = GNI_CqCreate(nic->gni_nic_hndl,
-					domain->gni_rx_cq_size,
-					0,
-					GNI_CQ_NOBLOCK |
-						domain->gni_cq_modes,
-					NULL,
-					NULL,
-					&nic->rx_cq);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "GNI_CqCreate returned %s\n",
-				  gni_err_str[status]);
-			_gnix_dump_gni_res(domain->ptag);
-			ret = gnixu_to_fi_errno(status);
-			goto err1;
-		}
-
-		status = GNI_CqCreate(nic->gni_nic_hndl,
-					domain->gni_rx_cq_size,
+					domain->params.rx_cq_size,
 					0,
 					GNI_CQ_BLOCKING |
 					domain->gni_cq_modes,
@@ -1078,6 +1066,28 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			_gnix_dump_gni_res(domain->ptag);
 			ret = gnixu_to_fi_errno(status);
 			goto err1;
+		}
+
+		/* Use blocking CQs for all operations if eager_auto_progress
+		 * is used.  */
+		if (domain->params.eager_auto_progress) {
+			nic->rx_cq = nic->rx_cq_blk;
+		} else {
+			status = GNI_CqCreate(nic->gni_nic_hndl,
+						domain->params.rx_cq_size,
+						0,
+						domain->gni_cq_modes,
+						NULL,
+						NULL,
+						&nic->rx_cq);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "GNI_CqCreate returned %s\n",
+					  gni_err_str[status]);
+				_gnix_dump_gni_res(domain->ptag);
+				ret = gnixu_to_fi_errno(status);
+				goto err1;
+			}
 		}
 
 		nic->device_addr = device_addr;
@@ -1295,14 +1305,14 @@ err:
 			_gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
 		if (nic->mbox_hndl != NULL)
 			_gnix_mbox_allocator_destroy(nic->mbox_hndl);
+		if (nic->rx_cq != NULL && nic->rx_cq != nic->rx_cq_blk)
+			GNI_CqDestroy(nic->rx_cq);
 		if (nic->rx_cq_blk != NULL)
 			GNI_CqDestroy(nic->rx_cq_blk);
-		if (nic->rx_cq != NULL)
-			GNI_CqDestroy(nic->rx_cq);
+		if (nic->tx_cq != NULL && nic->tx_cq != nic->tx_cq_blk)
+			GNI_CqDestroy(nic->tx_cq);
 		if (nic->tx_cq_blk != NULL)
 			GNI_CqDestroy(nic->tx_cq_blk);
-		if (nic->tx_cq != NULL)
-			GNI_CqDestroy(nic->tx_cq);
 		if ((nic->gni_cdm_hndl != NULL) && (nic->allocd_gni_res &
 		    GNIX_NIC_CDM_ALLOCD))
 			GNI_CdmDestroy(nic->gni_cdm_hndl);
