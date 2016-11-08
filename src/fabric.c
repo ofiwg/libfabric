@@ -394,7 +394,6 @@ libdl_done:
 	fi_register_provider(PSM_INIT, NULL);
 	fi_register_provider(USNIC_INIT, NULL);
 	fi_register_provider(VERBS_INIT, NULL);
-	fi_register_provider(MXM_INIT, NULL);
 	fi_register_provider(GNI_INIT, NULL);
 	/* fi_register_provider(RXM_INIT, NULL); */
 	/* fi_register_provider(RXD_INIT, NULL); */

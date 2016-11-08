@@ -142,14 +142,7 @@ See the `fi_gni(7)` man page for more details.
 
 ### mxm
 
-***
-
-The `mxm` provider runs over the MXM (Mellanox messaging) interface that is
-currently supported by the Mellanox InfiniBand fabrics.  The `mxm` provider
-makes use of MXM tag matching API in order to implement a limited set of the
-Libfabric data transfer APIs, namely, tagged message queue.
-
-See the `fi_mxm(7)` man page for more details.
+The MXM provider has been deprecated and was removed after the 1.4.0 release.
 
 ### psm
 
