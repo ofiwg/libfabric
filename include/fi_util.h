@@ -56,6 +56,7 @@
 #include <fi_signal.h>
 #include <fi_enosys.h>
 #include <fi_osd.h>
+#include <fi_indexer.h>
 
 #ifndef _FI_UTIL_H_
 #define _FI_UTIL_H_
@@ -307,6 +308,8 @@ int ofi_av_get_index(struct util_av *av, const void *addr);
  * Connection Map
  */
 
+#define UTIL_CMAP_IDX_BITS 48
+
 enum util_cmap_state {
 	CMAP_UNSPEC,
 	CMAP_CONNECTING,
@@ -316,16 +319,15 @@ enum util_cmap_state {
 struct util_cmap_handle {
 	struct util_cmap *cmap;
 	enum util_cmap_state state;
-	struct util_cmap_key *key;
-	size_t key_index;
+	/* Unique identifier for a connection. Can be exchanged with a peer
+	 * during connection setup and can later be used in a messsage header
+	 * to identify the source of the message (Used for FI_SOURCE, RNDV
+	 * protocol, etc.) */
+	uint64_t key;
+	uint64_t remote_key;
 	fi_addr_t fi_addr;
 	struct util_cmap_peer *peer;
 };
-
-struct util_cmap_key {
-	struct util_cmap_handle *handle;
-};
-DECLARE_FREESTACK(struct util_cmap_key, util_cmap_keypool);
 
 struct util_cmap_peer {
 	struct util_cmap_handle *handle;
@@ -338,23 +340,28 @@ typedef void (*ofi_cmap_free_handle_func)(void *arg);
 
 struct util_cmap {
 	struct util_av *av;
-	struct util_cmap_handle **handles;
-	struct util_cmap_keypool *keypool;
+
+	/* cmap handles that correspond to addresses in AV */
+	struct util_cmap_handle **handles_av;
+
+	/* Store all cmap handles (inclusive of handles_av) in an indexer.
+	 * This allows reverse lookup of the handle using the index. */
+	struct indexer handles_idx;
+
+	struct ofi_key_idx key_idx;
+
 	struct dlist_entry peer_list;
 	ofi_cmap_free_handle_func free_handle;
 	fastlock_t lock;
 };
 
+struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);
 void ofi_cmap_update_state(struct util_cmap_handle *handle,
 		enum util_cmap_state state);
-/*
- * Caller must hold cmap->lock. Either fi_addr or
- * addr and addrlen args should be present.
- */
+/* Either fi_addr or addr and addrlen args must be given. */
 int ofi_cmap_add_handle(struct util_cmap *cmap, struct util_cmap_handle *handle,
 		enum util_cmap_state state, fi_addr_t fi_addr, void *addr,
 		size_t addrlen);
-/* Caller must hold cmap->lock */
 struct util_cmap_handle *ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr);
 void ofi_cmap_del_handle(struct util_cmap_handle *handle);
 void ofi_cmap_free(struct util_cmap *cmap);

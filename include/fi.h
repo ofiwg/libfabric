@@ -161,6 +161,7 @@ static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
 size_t fi_datatype_size(enum fi_datatype datatype);
 uint64_t fi_tag_bits(uint64_t mem_tag_format);
 uint64_t fi_tag_format(uint64_t tag_bits);
+int fi_size_bits(uint64_t num);
 
 int ofi_send_allowed(uint64_t caps);
 int ofi_recv_allowed(uint64_t caps);
@@ -182,6 +183,40 @@ static inline int ofi_equals_sockaddr(struct sockaddr_in *addr1,
 {
         return (ofi_equals_ipaddr(addr1, addr2) &&
                 (addr1->sin_port == addr2->sin_port));
+}
+
+/*
+ * Key Index
+ */
+
+/*
+ * The key_idx object and related functions can be used to generate unique keys
+ * from an index. The key and index would refer to an object defined by the user.
+ * A local endpoint can exchange this key with a remote endpoint in the first message.
+ * The remote endpoint would then use this key in subsequent messages to reference
+ * the correct object at the local endpoint.
+ */
+struct ofi_key_idx {
+	uint64_t seq_no;
+	/* The uniqueness of the generated key would depend on how many bits are
+	 * used for the index */
+	uint8_t idx_bits;
+};
+
+static inline void ofi_key_idx_init(struct ofi_key_idx *key_idx, uint8_t idx_bits)
+{
+	key_idx->seq_no = 0;
+	key_idx->idx_bits = idx_bits;
+}
+
+static inline uint64_t ofi_idx2key(struct ofi_key_idx *key_idx, uint64_t idx)
+{
+	return ((++(key_idx->seq_no)) << key_idx->idx_bits) | idx;
+}
+
+static inline uint64_t ofi_key2idx(struct ofi_key_idx *key_idx, uint64_t key)
+{
+	return key & ((1ULL << key_idx->idx_bits) - 1);
 }
 
 #ifdef __cplusplus

@@ -56,6 +56,8 @@ static int rxm_msg_cq_read(struct util_cq *util_cq, struct fid_cq *cq,
 		}
 		slist_insert_tail(&entry->list_entry, &util_cq->err_list);
 		comp->flags = UTIL_FLAG_ERROR;
+		cirque_commit(util_cq->cirq);
+		return -FI_EAVAIL;
 	}
 
 	return ret;

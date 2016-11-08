@@ -129,16 +129,12 @@ ssize_t rxm_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	fastlock_acquire(&rxm_ep->cmap->lock);
 	ret = rxm_get_msg_ep(rxm_ep, dest_addr, &msg_ep);
 	if (ret)
-		goto unlock;
+		return ret;
 
 	// TODO handle the case when send fails due to connection shutdown
-	ret = fi_send(msg_ep, buf, len, desc, 0, context);
-unlock:
-	fastlock_release(&rxm_ep->cmap->lock);
-	return ret;
+	return fi_send(msg_ep, buf, len, desc, 0, context);
 }
 
 ssize_t rxm_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
@@ -149,15 +145,11 @@ ssize_t rxm_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	fastlock_acquire(&rxm_ep->cmap->lock);
 	ret = rxm_get_msg_ep(rxm_ep, msg->addr, &msg_ep);
 	if (ret)
-		goto unlock;
+		return ret;
 
-	ret = fi_sendmsg(msg_ep, msg, flags);
-unlock:
-	fastlock_release(&rxm_ep->cmap->lock);
-	return ret;
+	return fi_sendmsg(msg_ep, msg, flags);
 }
 
 ssize_t rxm_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -168,15 +160,11 @@ ssize_t rxm_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	fastlock_acquire(&rxm_ep->cmap->lock);
 	ret = rxm_get_msg_ep(rxm_ep, dest_addr, &msg_ep);
 	if (ret)
-		goto unlock;
+		return ret;
 
-	ret = fi_sendv(msg_ep, iov, desc, count, 0, context);
-unlock:
-	fastlock_release(&rxm_ep->cmap->lock);
-	return ret;
+	return fi_sendv(msg_ep, iov, desc, count, 0, context);
 }
 
 ssize_t rxm_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -187,15 +175,11 @@ ssize_t rxm_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	fastlock_acquire(&rxm_ep->cmap->lock);
 	ret = rxm_get_msg_ep(rxm_ep, dest_addr, &msg_ep);
 	if (ret)
-		goto unlock;
+		return ret;
 
-	ret = fi_inject(msg_ep, buf, len, 0);
-unlock:
-	fastlock_release(&rxm_ep->cmap->lock);
-	return ret;
+	return fi_inject(msg_ep, buf, len, 0);
 }
 
 static struct fi_ops_msg rxm_msg_ops = {

@@ -78,6 +78,13 @@ uint64_t fi_tag_format(uint64_t tag_bits)
 	return FI_TAG_GENERIC >> (ffsll(htonll(tag_bits)) - 1);
 }
 
+int fi_size_bits(uint64_t num)
+{
+	int size_bits = 0;
+	while (num >> ++size_bits);
+	return size_bits;
+}
+
 static const size_t fi_datatype_size_table[] = {
 	[FI_INT8]   = sizeof(int8_t),
 	[FI_UINT8]  = sizeof(uint8_t),
