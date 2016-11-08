@@ -164,8 +164,8 @@ struct fi_msg_tagged as input.
 struct fi_msg_tagged {
 	const struct iovec *msg_iov; /* scatter-gather array */
 	void               *desc;    /* data descriptor */
-	size_t             iov_count;/* # elements in msg_iov *
-	const void         *addr;    /* optional endpoint address */
+	size_t             iov_count;/* # elements in msg_iov */
+	fi_addr_t          addr;    /* optional endpoint address */
 	uint64_t           tag;      /* tag associated with message */
 	uint64_t           ignore;   /* mask applied to tag for receives */
 	void               *context; /* user-defined context */
