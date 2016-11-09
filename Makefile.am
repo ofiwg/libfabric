@@ -23,7 +23,7 @@ pkglib_LTLIBRARIES = $(DL_PROVIDERS)
 
 
 ACLOCAL_AMFLAGS = -I config
-AM_CFLAGS = -g -Wall
+AM_CFLAGS = -Wall
 
 if HAVE_LD_VERSION_SCRIPT
     libfabric_version_script = -Wl,--version-script=$(builddir)/libfabric.map
