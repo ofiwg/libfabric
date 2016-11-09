@@ -55,6 +55,7 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct gnix_ep_name name = {{0}};
 	struct gnix_fid_ep *ep = NULL;
+	struct gnix_fid_sep *sep_priv = NULL;
 	int ret = FI_SUCCESS;
 	size_t copy_size;
 
@@ -87,8 +88,28 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 		goto err;
 	}
 
-	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-	if (!ep || !ep->nic || !ep->domain) {
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+
+		if (!ep || !ep->nic || !ep->domain) {
+			ret = -FI_EINVAL;
+			goto err;
+		}
+
+		if (GNIX_EP_RDM_DGM(ep->type)) {
+			name = ep->my_name;
+		} else {
+			/*TODO: need to implement FI_EP_MSG */
+			return -FI_ENOSYS;
+		}
+
+		break;
+	case FI_CLASS_SEP:
+		sep_priv = container_of(fid, struct gnix_fid_sep, ep_fid);
+		name = sep_priv->my_name;
+		break;
+	default:
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -96,12 +117,6 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	/*
 	 * Retrieve the cdm_id & device_addr from the gnix_cm_nic structure.
 	 */
-
-	if (GNIX_EP_RDM_DGM(ep->type)) {
-		name = ep->my_name;
-	} else {
-		return -FI_ENOSYS;  /*TODO: need to implement FI_EP_MSG */
-	}
 
 	memcpy(addr, &name, copy_size);
 

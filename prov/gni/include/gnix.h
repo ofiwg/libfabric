@@ -177,7 +177,7 @@
  * set is requested by setting input hints->caps to NULL). */
 #define GNIX_EP_RDM_PRIMARY_CAPS                                               \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
-	 FI_DIRECTED_RECV | FI_READ |                                          \
+	 FI_DIRECTED_RECV | FI_READ | FI_NAMED_RX_CTX |                        \
 	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 /* No overhead secondary capabilities.  These can be silently enabled by the
@@ -235,6 +235,11 @@
  */
 #define GNIX_TX_SIZE_DEFAULT	500
 #define GNIX_RX_SIZE_DEFAULT	500
+/*
+ * based on the max number of fma descriptors without fma sharing
+ */
+#define GNIX_RX_CTX_MAX_BITS	8
+#define GNIX_SEP_MAX_CNT	(1 << (GNIX_RX_CTX_MAX_BITS - 1))
 
 /*
  * if this has to be changed, check gnix_getinfo, etc.
@@ -257,8 +262,14 @@
  */
 #define GNIX_FAB_MODES_CLEAR (FI_MSG_PREFIX | FI_ASYNC_IOV)
 
-/*
- * gnix address format - used for fi_send/fi_recv, etc.
+/**
+ * gnix_address struct
+ *
+ * @note - gnix address format - used for fi_send/fi_recv, etc.
+ *         These values are passed to GNI_EpBind
+ *
+ * @var device_addr     physical NIC address of the remote peer
+ * @var cdm_id          user supplied id of the remote instance
  */
 struct gnix_address {
 	uint32_t device_addr;
@@ -278,13 +289,25 @@ struct gnix_address {
 #define GNIX_ADDR_EQUAL(a, b) (((a).device_addr == (b).device_addr) && \
 				((a).cdm_id == (b).cdm_id))
 
+#define GNIX_CREATE_CDM_ID	0
 
-#define GNIX_EPN_TYPE_UNBOUND	0
-#define GNIX_EPN_TYPE_BOUND	1
+#define GNIX_EPN_TYPE_UNBOUND	(1 << 0)
+#define GNIX_EPN_TYPE_BOUND	(1 << 1)
+#define GNIX_EPN_TYPE_SEP	(1 << 2)
 
-/*
- * info returned by fi_getname/fi_getpeer - has enough
- * side band info for RDM ep's to be able to connect, etc.
+/**
+ * gnix_ep_name struct
+ *
+ * @note - info returned by fi_getname/fi_getpeer - has enough
+ *         side band info for RDM ep's to be able to connect, etc.
+ *
+ * @var gnix_addr       address of remote peer
+ * @var name_type       bound, unbound, scalable endpoint name types
+ * @var cm_nic_cdm_id   id of the cm nic associated with this endpoint
+ * @var cookie          communication domain identifier
+ * @var rx_ctx_cnt      number of contexts associated with this endpoint
+ * @var unused1/2       for future use
+ * @var reserved        for future use
  */
 struct gnix_ep_name {
 	struct gnix_address gnix_addr;
@@ -293,7 +316,12 @@ struct gnix_ep_name {
 		uint32_t cm_nic_cdm_id : 24;
 		uint32_t cookie;
 	};
-	uint64_t reserved[4];
+	struct {
+		uint32_t rx_ctx_cnt : 8;
+		uint32_t unused1 : 24;
+		uint32_t unused2;
+	};
+	uint64_t reserved[3];
 };
 
 /* AV address string revision. */
@@ -498,15 +526,73 @@ struct gnix_fid_ep {
 				   (type == FI_EP_MSG))
 
 /**
- * gnix_fid_stx struct
- * @note - this is essentially a dummy structure for the GNI
- *         provider.  Added as a convenience for those consumers
- *         who need to use the fid_stx construct for other
- *         providers.
+ * gnix_fid_sep struct
  *
- * @var stx_fid              embedded struct fid_stx field
- * @var domain               pointer to domain used to create the stx instance
- * @var ref_cnt              ref cnt on this object
+ * @var ep_fid          embedded struct fid_ep field
+ * @var domain          pointer to domain used to create the sep instance
+ * @var info            pointer to dup of info struct supplied to fi_scalable_ep
+ *                      operation
+ * @var op_flags        quick access for op_flags for tx/rx contexts
+ *                      instantiated using this sep
+ * @var caps            quick access for caps for tx/rx contexts instantiated
+ *                      using this sep
+ * @var cdm_id_base     base cdm id to use for tx/rx contexts instantiated
+ *                      using this sep
+ * @var ep_table        array of pointers to EPs used by the rx/tx contexts
+ *                      instantiated using this sep
+ * @var tx_ep_table     array of pointers to tx contexts instantiated using
+ *                      this sep
+ * @var rx_ep_table     array of pointers to rx contexts instantiated using
+ *                      this sep
+ * @var cm_nic          gnix cm nic associated with this SEP.
+ * @var av              address vector bound to this SEP
+ * @var my_name         ep name for this endpoint
+ * @var sep_lock        lock protecting this sep object
+ * @var ref_cnt         ref cnt on this object
+ */
+struct gnix_fid_sep {
+	struct fid_ep ep_fid;
+	enum fi_ep_type type;
+	struct fid_domain *domain;
+	struct fi_info *info;
+	uint64_t op_flags;
+	uint64_t caps;
+	uint32_t cdm_id_base;
+	struct fid_ep **ep_table;
+	struct fid_ep **tx_ep_table;
+	struct fid_ep **rx_ep_table;
+	struct gnix_cm_nic *cm_nic;
+	struct gnix_fid_av *av;
+	struct gnix_ep_name my_name;
+	fastlock_t sep_lock;
+	struct gnix_reference ref_cnt;
+};
+
+/**
+ * gnix_fid_trx struct
+ *
+ * @var ep_fid          embedded struct fid_ep field
+ * @var ep              pointer to gnix_fid_ep used by this tx/rx context
+ * @var sep             pointer to associated gnix_fid_sep for this context
+ * @var op_flags        op flags for this tx context
+ * @var caps            caps for this tx context
+ * @var ref_cnt         ref cnt on this object
+ */
+struct gnix_fid_trx {
+	struct fid_ep ep_fid;
+	struct gnix_fid_ep *ep;
+	struct gnix_fid_sep *sep;
+	uint64_t op_flags;
+	uint64_t caps;
+	struct gnix_reference ref_cnt;
+};
+
+/**
+ * gnix_fid_stx struct
+ *
+ * @var stx_fid         embedded struct fid_stx field
+ * @var domain          pointer to domain used to create the stx instance
+ * @var ref_cnt         ref cnt on this object
  */
 struct gnix_fid_stx {
 	struct fid_stx stx_fid;
@@ -514,8 +600,24 @@ struct gnix_fid_stx {
 	struct gnix_reference ref_cnt;
 };
 
-/*
- * TODO: Support shared named AVs
+/**
+ * gnix_fid_av struct
+ * @TODO - Support shared named AVs
+ *
+ * @var fid_av          embedded struct fid_stx field
+ * @var domain          pointer to domain used to create the av
+ * @var type
+ * @var table
+ * @var valid_entry_vec
+ * @var addrlen
+ * @var capacity        current size of AV
+ * @var count           number of address are currently stored in AV
+ * @var rx_ctx_bits     address bits to identify an rx context
+ * @var mask            mask of the fi_addr to resolve the base address
+ * @var map_ht          Hash table for mapping FI_AV_MAP
+ * @var block_list      linked list of blocks used for allocating entries
+ *                      for FI_AV_MAP
+ * @var ref_cnt         ref cnt on this object
  */
 struct gnix_fid_av {
 	struct fid_av av_fid;
@@ -524,16 +626,11 @@ struct gnix_fid_av {
 	struct gnix_av_addr_entry* table;
 	int *valid_entry_vec;
 	size_t addrlen;
-	/* How many addresses AV can hold before it needs to be resized */
 	size_t capacity;
-	/* How many address are currently stored in AV */
 	size_t count;
-	/* Hash table for mapping FI_AV_MAP */
+	uint64_t rx_ctx_bits;
+	uint64_t mask;
 	struct gnix_hashtable *map_ht;
-	/*
-	 * linked list of blocks used for allocating entries
-	 *  for FI_AV_MAP
-	 */
 	struct slist block_list;
 	struct gnix_reference ref_cnt;
 };
@@ -969,7 +1066,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_ep **ep, void *context);
+		   struct fid_ep **ep, void *context);
 
 int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
@@ -981,6 +1078,12 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		 struct fid_cntr **cntr, void *context);
 
+int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
+		 struct fid_ep **sep, void *context);
+
+int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
+
+int gnix_ep_close(fid_t fid);
 
 /* Prepend DIRECT_FN to provider specific API functions for global visibility
  * when using fabric direct.  If the API function is static use the STATIC

@@ -46,15 +46,15 @@ extern int gnix_passive_ep_open(struct fid_fabric *fabric, struct fi_info *info,
 extern int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
 
-extern int gnix_scalable_ep_open(struct fid_domain *domain,
-				 struct fi_info *info, struct fid_ep **ep,
-				 void *context);
+extern int gnix_sep_open(struct fid_domain *domain,
+			 struct fi_info *info, struct fid_ep **ep,
+			 void *context);
 
 extern int gnix_ep_bind(fid_t fid, fid_t bfid, uint64_t flags);
 
 extern int gnix_pep_bind(fid_t pep, fid_t bfid, uint64_t flags);
 
-extern int gnix_scalable_ep_bind(fid_t sep, fid_t bfid, uint64_t flags);
+extern int gnix_sep_bind(fid_t sep, fid_t bfid, uint64_t flags);
 
 extern int gnix_ep_control(fid_t fid, int command, void *arg);
 
@@ -134,7 +134,7 @@ static inline int fi_scalable_ep(struct fid_domain *domain,
 				 struct fi_info *info, struct fid_ep **sep,
 				 void *context)
 {
-	return gnix_scalable_ep_open(domain, info, sep, context);
+	return gnix_sep_open(domain, info, sep, context);
 }
 
 static inline int fi_ep_bind(struct fid_ep *ep, fid_t bfid, uint64_t flags)
@@ -150,7 +150,7 @@ static inline int fi_pep_bind(struct fid_pep *pep, fid_t bfid, uint64_t flags)
 static inline int fi_scalable_ep_bind(struct fid_ep *sep, fid_t bfid,
 				      uint64_t flags)
 {
-	return gnix_scalable_ep_bind(&sep->fid, bfid, flags);
+	return gnix_sep_bind(&sep->fid, bfid, flags);
 }
 
 static inline int fi_enable(struct fid_ep *ep)

@@ -308,12 +308,15 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
 	gnix_info->domain_attr->tx_ctx_cnt = gnix_max_nics_per_ptag;
+	gnix_info->domain_attr->rx_ctx_cnt = gnix_max_nics_per_ptag;
 	/* only one aries per node */
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
 	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
 	gnix_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t),
+	gnix_info->domain_attr->max_ep_tx_ctx = GNIX_SEP_MAX_CNT;
+	gnix_info->domain_attr->max_ep_rx_ctx = GNIX_SEP_MAX_CNT;
 
 	gnix_info->next = NULL;
 	gnix_info->addr_format = FI_ADDR_GNI;
@@ -363,13 +366,18 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > 1) {
+			if (hints->ep_attr->tx_ctx_cnt > GNIX_SEP_MAX_CNT) {
 				goto err;
 			}
 
-			if (hints->ep_attr->rx_ctx_cnt > 1) {
+			if (hints->ep_attr->rx_ctx_cnt > GNIX_SEP_MAX_CNT) {
 				goto err;
 			}
+
+			gnix_info->ep_attr->tx_ctx_cnt =
+				hints->ep_attr->tx_ctx_cnt;
+			gnix_info->ep_attr->rx_ctx_cnt =
+				hints->ep_attr->rx_ctx_cnt;
 
 			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
 				goto err;

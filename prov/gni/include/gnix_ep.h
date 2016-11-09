@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -61,6 +62,33 @@ enum {
 	GNIX_SMSG_T_RMA_DATA,
 	GNIX_SMSG_T_AMO_CNTR,
 	GNIX_SMSG_T_RNDZV_IOV_START
+};
+
+/**
+ * Set of attributes that can be passed to the _gnix_alloc_ep
+ *
+ * @var cm_ops               pointer to connection management interface
+ * @var msg_ops              pointer to message transfer interface
+ * @var rma_ops              pointer to rma transfer interface
+ * @var tagged_ops           pointer to tagged message transfer interface
+ * @var atomic_ops           pointer to atomic interface
+ * @var cm_nic               cm_nic associated with this EP
+ * @var nic                  gnix nic associated with this EP
+ * @var gni_cdm_modes        The mode bits gni_cdm_hndl was created with.
+ * @var use_cdm_id           true if the cdm_id field should be used for
+ *                           initializing underlying gni cdm, etc.
+ * @var cdm_id               user supplied cmd_id to use for this endpoint
+ */
+struct gnix_ep_attr {
+	struct fi_ops_cm *cm_ops;
+	struct fi_ops_msg *msg_ops;
+	struct fi_ops_rma *rma_ops;
+	struct fi_ops_tagged *tagged_ops;
+	struct fi_ops_atomic *atomic_ops;
+	struct gnix_cm_nic *cm_nic;
+	struct gnix_nic  *nic;
+	bool use_cdm_id;
+	uint32_t cdm_id;
 };
 
 extern smsg_completer_fn_t gnix_ep_smsg_completers[];
@@ -223,13 +251,58 @@ __msg_match_fab_req(struct dlist_entry *item, const void *arg)
 				(GNIX_ADDR_EQUAL(req->addr, *addr_ptr)));
 }
 
+/*
+ * EP related internal helper functions
+ */
+
+ssize_t _ep_recv(struct fid_ep *ep, void *buf, size_t len,
+		 void *desc, fi_addr_t src_addr, void *context,
+		 uint64_t flags, uint64_t tag, uint64_t ignore);
+ssize_t _ep_recvv(struct fid_ep *ep, const struct iovec *iov,
+		  void **desc, size_t count, fi_addr_t src_addr,
+		  void *context, uint64_t flags, uint64_t tag,
+		  uint64_t ignore);
+ssize_t _ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
+		    uint64_t flags, uint64_t tag,
+		    uint64_t ignore);
+ssize_t _ep_send(struct fid_ep *ep, const void *buf, size_t len,
+		 void *desc, fi_addr_t dest_addr, void *context,
+		 uint64_t flags, uint64_t tag);
+ssize_t _ep_sendv(struct fid_ep *ep, const struct iovec *iov,
+		  void **desc, size_t count, fi_addr_t dest_addr,
+		  void *context, uint64_t flags, uint64_t tag);
+ssize_t _ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+		    uint64_t flags, uint64_t tag);
+ssize_t _ep_inject(struct fid_ep *ep, const void *buf,
+		   size_t len, uint64_t data, fi_addr_t dest_addr,
+		   uint64_t flags, uint64_t tag);
+ssize_t _ep_senddata(struct fid_ep *ep, const void *buf,
+		     size_t len, void *desc, uint64_t data,
+		     fi_addr_t dest_addr, void *context,
+		     uint64_t flags, uint64_t tag);
+
+/**
+ * Allocate a gnix ep struct
+ *
+ * @param[in] domain	the domain from which this EP is being created
+ * @param[in] info	details about the domain endpoint to be opened
+ * @param[in] attr	attributes to be used for allocating the EP
+ * @param[out] ep	the endpoint to open
+ * @param[in] context	the context associated with the endpoint
+ *
+ * @return FI_SUCCESS	upon successfully opening a passive endpoint
+ * @return -FI_EINVAL	invalid input arguments supplied
+ * @return -FI_ENOMEM	no memory to allocate EP struct
+ */
+int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
+			   struct gnix_ep_attr *attr,
+			   struct fid_ep **ep, void *context);
+
+int _gnix_ep_init_vc(struct gnix_fid_ep *ep_priv);
+
 /*******************************************************************************
  * API Functions
  ******************************************************************************/
-int gnix_scalable_ep_open(struct fid_domain *domain,
-			  struct fi_info *info,
-			  struct fid_ep **ep, void *context);
-
 /**
  * Allocates a new passive endpoint.
  *

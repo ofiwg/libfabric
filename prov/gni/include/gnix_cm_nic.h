@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -66,7 +66,7 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
 struct gnix_cm_nic {
 	struct gnix_nic *nic;
 	struct gnix_dgram_hndl *dgram_hndl;
-	struct gnix_fid_fabric *fabric;
+	struct gnix_fid_domain *domain;
 	struct gnix_hashtable *addr_to_ep_ht;
 	fastlock_t wq_lock;
 	struct dlist_entry cm_nic_wq;
@@ -128,6 +128,7 @@ int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic);
  * @param[in]  domain   pointer to a previously allocated gnix_fid_domain struct
  * @param[in]  info     pointer to fi_info struct returned from fi_getinfo (may
  *                      be NULL)
+ * @param[in]  cdm_id   cdm id to be used for this cm nic
  * @param[out] cm_nic   pointer to address where address of the allocated
  *                      cm nic structure should be returned
  * @return              FI_SUCCESS on success, -EINVAL on invalid argument,
