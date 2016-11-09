@@ -1813,7 +1813,7 @@ Test(rdm_sr_alignment_edge, iov_alignment_edge)
 
 void do_multirecv(int len)
 {
-	int i, ret;
+	int i, j, ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
@@ -1822,6 +1822,8 @@ void do_multirecv(int len)
 	uint64_t r_e[NUMEPS] = {0};
 	uint64_t flags;
 	int nrecvs = 3;
+	uint64_t *expected_addrs;
+	bool *addr_recvd, found;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -1836,6 +1838,17 @@ void do_multirecv(int len)
 	msg.addr = gni_addr[0];
 	msg.context = source;
 	msg.data = (uint64_t)source;
+
+	addr_recvd = calloc(nrecvs, sizeof(bool));
+	cr_assert(addr_recvd);
+
+	expected_addrs = calloc(nrecvs, sizeof(uint64_t));
+	cr_assert(expected_addrs);
+
+	for (i = 0; i < nrecvs; i++) {
+		expected_addrs[i] = (uint64_t)target +
+				(uint64_t) (i * len);
+	}
 
 	sz = fi_recvmsg(ep[1], &msg, FI_MULTI_RECV);
 	cr_assert_eq(sz, 0);
@@ -1855,12 +1868,24 @@ void do_multirecv(int len)
 			s[0]++;
 		}
 		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
-		flags = (r[1] < (nrecvs -1 )) ? FI_MSG | FI_RECV :
-				FI_MSG | FI_RECV | FI_MULTI_RECV;
 		if (ret == 1) {
+			for (j = 0, found = false; j < nrecvs; j++) {
+				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
+					cr_assert(addr_recvd[j] == false,
+						  "address already received");
+					addr_recvd[j] = true;
+					found = true;
+					break;
+				}
+			}
+			cr_assert(found == true, "Address not found");
+			flags = FI_MSG | FI_RECV;
+			flags = (j == (nrecvs - 1)) ? flags | FI_MULTI_RECV :
+							flags;
 			rdm_sr_check_cqe(&d_cqe, source,
 					 flags,
-					 target + (r[1] * len), len, 0, true);
+					 (void *)expected_addrs[j],
+					 len, 0, true);
 			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
 				  "Data mismatch");
 			r[1]++;
@@ -1868,6 +1893,9 @@ void do_multirecv(int len)
 	} while (s[0] < nrecvs || r[1] < nrecvs);
 
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+	free(addr_recvd);
+	free(expected_addrs);
 
 	dbg_printf("got context events!\n");
 }
@@ -1879,12 +1907,12 @@ void do_multirecv(int len)
  * We need a test which keeps track of each CQE on the receive
  * side.
  */
-Test(rdm_sr, multirecv, .disabled = true)
+Test(rdm_sr, multirecv, .disabled = false)
 {
 	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
 
-Test(rdm_sr, multirecv_retrans, .disabled = true)
+Test(rdm_sr, multirecv_retrans, .disabled = false)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
@@ -1892,7 +1920,7 @@ Test(rdm_sr, multirecv_retrans, .disabled = true)
 
 void do_multirecv2(int len)
 {
-	int i, ret;
+	int i, j, ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
@@ -1901,9 +1929,22 @@ void do_multirecv2(int len)
 	uint64_t r_e[NUMEPS] = {0};
 	uint64_t flags;
 	int nrecvs = 3;
+	uint64_t *expected_addrs;
+	bool *addr_recvd, found;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
+
+	addr_recvd = calloc(nrecvs, sizeof(bool));
+	cr_assert(addr_recvd);
+
+	expected_addrs = calloc(nrecvs, sizeof(uint64_t));
+	cr_assert(expected_addrs);
+
+	for (i = 0; i < nrecvs; i++) {
+		expected_addrs[i] = (uint64_t)target +
+				(uint64_t) (i * len);
+	}
 
 	/* Post sends first to force matching in the _gnix_recv() path. */
 	for (i = 0; i < nrecvs; i++) {
@@ -1947,11 +1988,23 @@ void do_multirecv2(int len)
 		}
 		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
 		if (ret == 1) {
-			flags = (r[1] < (nrecvs -1 )) ? FI_MSG | FI_RECV :
-					FI_MSG | FI_RECV | FI_MULTI_RECV;
+			for (j = 0, found = false; j < nrecvs; j++) {
+				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
+					cr_assert(addr_recvd[j] == false,
+						  "address already received");
+					addr_recvd[j] = true;
+					found = true;
+					break;
+				}
+			}
+			cr_assert(found == true, "Address not found");
+			flags = FI_MSG | FI_RECV;
+			flags = (j == (nrecvs - 1)) ? flags | FI_MULTI_RECV :
+							flags;
 			rdm_sr_check_cqe(&d_cqe, source,
 					 flags,
-					 target + (r[1] * len), len, 0, true);
+					 (void *)expected_addrs[j],
+					 len, 0, true);
 			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
 				  "Data mismatch");
 			r[1]++;
@@ -1960,15 +2013,18 @@ void do_multirecv2(int len)
 
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
+	free(addr_recvd);
+	free(expected_addrs);
+
 	dbg_printf("got context events!\n");
 }
 
-Test(rdm_sr, multirecv2, .disabled = true)
+Test(rdm_sr, multirecv2, .disabled = false)
 {
 	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
 }
 
-Test(rdm_sr, multirecv2_retrans, .disabled = true)
+Test(rdm_sr, multirecv2_retrans, .disabled = false)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
