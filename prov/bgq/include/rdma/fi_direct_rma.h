@@ -73,8 +73,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 		const uint64_t tx_op_flags,
 		const uint64_t enable_cq,
 		const uint64_t enable_cntr,
-		const int lock_required,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	assert(niov <= 8);
 
@@ -84,7 +83,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 	const uint64_t do_cntr = enable_cntr && (write_cntr != 0);
 
 	MUHWI_Descriptor_t * model =		/* branch will compile out */
-		(mr_mode == FI_MR_BASIC) ?
+		(FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) ?
 			&bgq_ep->tx.read.direct.rget_model :
 			&bgq_ep->tx.read.emulation.mfifo_model;
 
@@ -107,9 +106,9 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			desc, &desc->Pa_Payload);
 	desc->Message_Length = (niov << BGQ_MU_DESCRIPTOR_SIZE_IN_POWER_OF_2);
 
-	assert(mr_mode == FI_MR_SCALABLE);
+	assert(FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE);
 
-	if (mr_mode == FI_MR_SCALABLE) {	/* branch will compile out */
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 			fi_bgq_addr_rec_fifo_id(bgq_target_addr->fi);
@@ -158,7 +157,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			MUSPI_GetAtomicAddress(write_cntr->std.paddr, MUHWI_ATOMIC_OPCODE_STORE_ADD));
 
 		desc->Message_Length += sizeof(MUHWI_Descriptor_t);
-		if (mr_mode == FI_MR_SCALABLE) {	/* branch will compile out */
+		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 			union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 			hdr->rma.ndesc += 1;
 		}
@@ -197,7 +196,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 				FI_BGQ_MU_BAT_ID_GLOBAL, byte_counter_paddr);
 
 			desc->Message_Length += sizeof(MUHWI_Descriptor_t);
-			if (mr_mode == FI_MR_SCALABLE) {	/* branch will compile out */
+			if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 				union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 				hdr->rma.ndesc += 1;
 			}
@@ -221,7 +220,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 				bgq_context, tx_op_flags,
 				1,			/* enable cq */
 				0,			/* disable cntr */
-				lock_required, mr_mode);
+				lock_required);
 		}
 
 	} else if (do_cntr) {	/* unlikely */
@@ -238,7 +237,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			bgq_context, tx_op_flags,
 			do_cq,
 			1,			/* enable cntr */
-			lock_required, mr_mode);
+			lock_required);
 
 	} else if (do_cq && niov < 8) {
 
@@ -272,7 +271,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			FI_BGQ_MU_BAT_ID_GLOBAL, byte_counter_paddr);
 
 		desc->Message_Length += sizeof(MUHWI_Descriptor_t);
-		if (mr_mode == FI_MR_SCALABLE) {	/* branch will compile out */
+		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 			union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 			hdr->rma.ndesc += 1;
 		}
@@ -295,7 +294,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			bgq_context, tx_op_flags,
 			1,	/* enable cq */
 			0,	/* disable cntr */
-			lock_required, mr_mode);
+			lock_required);
 
 	} else {
 		/* no cntr and no cq? very unlikely, if not invalid */
@@ -311,16 +310,14 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 static inline ssize_t fi_bgq_inject_write_generic(struct fid_ep *ep,
 		const void *buf, size_t len, fi_addr_t dst_addr,
 		uint64_t addr, uint64_t key,
-		int lock_required,
-		enum fi_av_type av_type,
-		enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_rma(bgq_ep, av_type);
+	ret = fi_bgq_check_rma(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 //	if (av_type == FI_AV_TABLE)
@@ -330,7 +327,7 @@ static inline ssize_t fi_bgq_inject_write_generic(struct fid_ep *ep,
 	if (ret) return ret;
 
 	MUHWI_Descriptor_t * model =
-		(mr_mode == FI_MR_BASIC) ?
+		(FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) ?
 			&bgq_ep->tx.write.direct.dput_model :
 			&bgq_ep->tx.write.emulation.mfifo_model;
 
@@ -356,12 +353,12 @@ static inline ssize_t fi_bgq_inject_write_generic(struct fid_ep *ep,
 	assert(len <= sizeof(union fi_bgq_mu_packet_payload));
 	memcpy(payload, buf, len);
 
-	if (mr_mode == FI_MR_BASIC) {		/* branch will compile out */
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {		/* branch will compile out */
 
 		/* the 'key' is the paddr of the remote memory region */
 		MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, key+addr);
 
-	} else if (mr_mode == FI_MR_SCALABLE) {	/* branch will compile out */
+	} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 			fi_bgq_addr_rec_fifo_id(bgq_dst_addr->fi);
@@ -393,8 +390,7 @@ static inline void fi_bgq_write_fence (struct fi_bgq_ep * bgq_ep,
 		const uint64_t tx_op_flags,
 		const union fi_bgq_addr * bgq_dst_addr,
 		union fi_bgq_context * bgq_context,
-		const int lock_required,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	fi_bgq_readv_internal(bgq_ep,
 		NULL, 0,		/* no iovec array */
@@ -403,7 +399,7 @@ static inline void fi_bgq_write_fence (struct fi_bgq_ep * bgq_ep,
 		bgq_context, tx_op_flags,
 		1,
 		1,
-		lock_required, mr_mode);
+		lock_required);
 }
 
 static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
@@ -416,8 +412,7 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 		const uint64_t tx_op_flags,
 		const uint64_t enable_cq,
 		const uint64_t enable_cntr,
-		const int lock_required,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	const uint64_t do_cq = enable_cq && ((tx_op_flags & FI_COMPLETION) == FI_COMPLETION);
 
@@ -425,7 +420,7 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 	const uint64_t do_cntr = enable_cntr && (write_cntr != 0);
 
 	MUHWI_Descriptor_t * model =
-		(mr_mode == FI_MR_BASIC) ?
+		(FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) ?
 			&bgq_ep->tx.write.direct.dput_model :
 			&bgq_ep->tx.write.emulation.mfifo_model;
 
@@ -452,12 +447,12 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 		memcpy(payload, buf, len);
 		desc->Message_Length = len;
 
-		if (mr_mode == FI_MR_BASIC) {		/* branch will compile out */
+		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {		/* branch will compile out */
 
 			/* the 'key' is the paddr of the remote memory region */
 			MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, key+addr);
 
-		} else if (mr_mode == FI_MR_SCALABLE) {	/* branch will compile out */
+		} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 
 			desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 				fi_bgq_addr_rec_fifo_id(bgq_dst_addr->fi);
@@ -498,12 +493,12 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 	} else {
 		size_t xfer_bytes = MIN(len, sizeof(union fi_bgq_mu_packet_payload));
 
-		if (mr_mode == FI_MR_BASIC) {		/* branch will compile out */
+		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {		/* branch will compile out */
 
 			/* the 'key' is the paddr of the remote memory region */
 			MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, key+addr);
 
-		} else if (mr_mode == FI_MR_SCALABLE) {	/* branch will compile out */
+		} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 
 			desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 				fi_bgq_addr_rec_fifo_id(bgq_dst_addr->fi);
@@ -565,7 +560,7 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 		if (do_cq || do_cntr)
 			fi_bgq_readv_internal(bgq_ep, NULL, 0, bgq_dst_addr,
 				NULL, NULL, bgq_context,
-				tx_op_flags, do_cq, do_cntr, lock_required, mr_mode);
+				tx_op_flags, do_cq, do_cntr, lock_required);
 	}
 }
 
@@ -576,16 +571,14 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 static inline ssize_t fi_bgq_write_generic(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc, fi_addr_t dst_addr,
 		uint64_t addr, uint64_t key, void *context,
-		int lock_required,
-		enum fi_av_type av_type,
-		enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_rma(bgq_ep, av_type);
+	ret = fi_bgq_check_rma(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -593,7 +586,7 @@ static inline ssize_t fi_bgq_write_generic(struct fid_ep *ep,
 
 	fi_bgq_write_internal(bgq_ep, buf, len, (union fi_bgq_addr *)&dst_addr,
 		addr, key, (union fi_bgq_context *)context,
-		bgq_ep->tx.op_flags, 1, 1, lock_required, mr_mode);
+		bgq_ep->tx.op_flags, 1, 1, lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) {
@@ -606,14 +599,14 @@ static inline ssize_t fi_bgq_write_generic(struct fid_ep *ep,
 static inline ssize_t fi_bgq_writev_generic(struct fid_ep *ep,
 		const struct iovec *iov, void **desc, size_t count,
 		fi_addr_t dst_addr, uint64_t addr, uint64_t key, void *context,
-		int lock_required, enum fi_av_type av_type, enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_rma(bgq_ep, av_type);
+	ret = fi_bgq_check_rma(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -629,13 +622,13 @@ static inline ssize_t fi_bgq_writev_generic(struct fid_ep *ep,
 
 		fi_bgq_write_internal(bgq_ep, buf, len, &bgq_dst_addr,
 			addr, key, (union fi_bgq_context *)context,
-			0, 0, 0, lock_required, mr_mode);
+			0, 0, 0, lock_required);
 
 		addr += len;
 	}
 
 	fi_bgq_write_fence(bgq_ep, bgq_ep->tx.op_flags, &bgq_dst_addr, (union fi_bgq_context *)context,
-		lock_required, mr_mode);
+		lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) return ret;
@@ -646,16 +639,14 @@ static inline ssize_t fi_bgq_writev_generic(struct fid_ep *ep,
 
 static inline ssize_t fi_bgq_writemsg_generic(struct fid_ep *ep,
 		const struct fi_msg_rma *msg, uint64_t flags,
-		int lock_required,
-		enum fi_av_type av_type,
-		enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_rma(bgq_ep, av_type);
+	ret = fi_bgq_check_rma(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -680,7 +671,7 @@ static inline ssize_t fi_bgq_writemsg_generic(struct fid_ep *ep,
 		size_t len = (msg_iov_bytes <= rma_iov_bytes) ? msg_iov_bytes : rma_iov_bytes;
 
 		fi_bgq_write_internal(bgq_ep, (void*)msg_iov_vaddr, len, bgq_dst_addr,
-			rma_iov_addr, rma_iov_key, NULL, 0, 0, 0, lock_required, mr_mode);
+			rma_iov_addr, rma_iov_key, NULL, 0, 0, 0, lock_required);
 
 		msg_iov_bytes -= len;
 		msg_iov_vaddr += len;
@@ -704,7 +695,7 @@ static inline ssize_t fi_bgq_writemsg_generic(struct fid_ep *ep,
 
 	fi_bgq_write_fence(bgq_ep, flags, bgq_dst_addr,
 		(union fi_bgq_context *)msg->context,
-		lock_required, mr_mode);
+		lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) return ret;
@@ -716,16 +707,14 @@ static inline ssize_t fi_bgq_writemsg_generic(struct fid_ep *ep,
 static inline ssize_t fi_bgq_read_generic(struct fid_ep *ep,
 		void *buf, size_t len, void *desc, fi_addr_t src_addr,
 		uint64_t addr, uint64_t key, void *context,
-		int lock_required,
-		enum fi_av_type av_type,
-		enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_rma(bgq_ep, av_type);
+	ret = fi_bgq_check_rma(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -737,7 +726,7 @@ static inline ssize_t fi_bgq_read_generic(struct fid_ep *ep,
 
 	fi_bgq_readv_internal(bgq_ep, &iov, 1, (union fi_bgq_addr *)&src_addr,
 		&addr, &key, (union fi_bgq_context *)context,
-		bgq_ep->tx.op_flags, 1, 1, lock_required, mr_mode);
+		bgq_ep->tx.op_flags, 1, 1, lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret)
@@ -749,14 +738,14 @@ static inline ssize_t fi_bgq_read_generic(struct fid_ep *ep,
 static inline ssize_t fi_bgq_readv_generic (struct fid_ep *ep,
 		const struct iovec *iov, void **desc, size_t count,
 		fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context,
-		int lock_required, enum fi_av_type av_type, enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_rma(bgq_ep, av_type);
+	ret = fi_bgq_check_rma(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -776,14 +765,14 @@ static inline ssize_t fi_bgq_readv_generic (struct fid_ep *ep,
 
 		fi_bgq_readv_internal(bgq_ep, &iov[index], 8, bgq_addr,
 			addr_v, key_v, NULL, 0, 0, 0,
-			lock_required, mr_mode);
+			lock_required);
 	}
 
 	/* if 'partial_ndesc' is zero, the fi_bgq_readv_internal() will fence */
 	const size_t partial_ndesc = count & 0x07ull;
 	fi_bgq_readv_internal(bgq_ep, &iov[index], partial_ndesc, bgq_addr,
 		addr_v, key_v, bgq_context, tx_op_flags, 1, 1,
-		lock_required, mr_mode);
+		lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret)
@@ -795,16 +784,14 @@ static inline ssize_t fi_bgq_readv_generic (struct fid_ep *ep,
 
 static inline ssize_t fi_bgq_readmsg_generic(struct fid_ep *ep,
 		const struct fi_msg_rma *msg, uint64_t flags,
-		int lock_required,
-		enum fi_av_type av_type,
-		enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_rma(bgq_ep, av_type);
+	ret = fi_bgq_check_rma(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -866,7 +853,7 @@ static inline ssize_t fi_bgq_readmsg_generic(struct fid_ep *ep,
 						bgq_context,
 						flags,
 						enable_cq, 1,				/* enable_cq, enable_cntr */
-						lock_required, mr_mode);
+						lock_required);
 
 					ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 					if (ret) return ret;
@@ -916,7 +903,7 @@ static inline ssize_t fi_bgq_readmsg_generic(struct fid_ep *ep,
 		fi_bgq_readv_internal(bgq_ep, iov, 8, bgq_src_addr, addr, key,
 			NULL, 0,
 			0, 0,	/* disable_cq, disable_cntr */
-			lock_required, mr_mode);
+			lock_required);
 
 	}	/* end while */
 
@@ -932,45 +919,32 @@ static inline ssize_t fi_bgq_readmsg_generic(struct fid_ep *ep,
 
 /* Declare specialized functions that qualify for FABRIC_DIRECT.
  * - No locks
- * - FI_AV_MAP
- * - FI_MR_SCALABLE */
+ */
 
 #define FI_BGQ_RMA_FABRIC_DIRECT_LOCK	0
-#define FI_BGQ_RMA_FABRIC_DIRECT_AV	FI_AV_MAP
-#define FI_BGQ_RMA_FABRIC_DIRECT_MR	FI_MR_SCALABLE
 
-FI_BGQ_RMA_SPECIALIZED_FUNC(FI_BGQ_RMA_FABRIC_DIRECT_LOCK,
-		FI_BGQ_RMA_FABRIC_DIRECT_AV,
-		FI_BGQ_RMA_FABRIC_DIRECT_MR)
+FI_BGQ_RMA_SPECIALIZED_FUNC(FI_BGQ_RMA_FABRIC_DIRECT_LOCK)
 
 #ifdef FABRIC_DIRECT
 
 #define fi_write(ep, buf, len, desc, dst_addr, addr, key, context)	\
 	(FI_BGQ_RMA_SPECIALIZED_FUNC_NAME(write,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_AV,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_MR)			\
+			FI_BGQ_RMA_FABRIC_DIRECT_LOCK)			\
 	(ep, buf, len, desc, dst_addr, addr, key, context))
 
 #define fi_inject_write(ep, buf, len, dst_addr, addr, key)		\
 	(FI_BGQ_RMA_SPECIALIZED_FUNC_NAME(inject_write,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_AV,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_MR)			\
+			FI_BGQ_RMA_FABRIC_DIRECT_LOCK)			\
 			(ep, buf, len, dst_addr, addr, key))
 
 #define fi_read(ep, buf, len, desc, src_addr, addr, key, context)	\
 	(FI_BGQ_RMA_SPECIALIZED_FUNC_NAME(read,				\
-			FI_BGQ_RMA_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_AV,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_MR)			\
+			FI_BGQ_RMA_FABRIC_DIRECT_LOCK)			\
 			(ep, buf, len, desc, src_addr, addr, key, context))
 
 #define fi_readmsg(ep, msg, flags)					\
 	(FI_BGQ_RMA_SPECIALIZED_FUNC_NAME(readmsg,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_AV,			\
-			FI_BGQ_RMA_FABRIC_DIRECT_MR)			\
+			FI_BGQ_RMA_FABRIC_DIRECT_LOCK)			\
 			(ep, msg, flags))
 
 static inline ssize_t

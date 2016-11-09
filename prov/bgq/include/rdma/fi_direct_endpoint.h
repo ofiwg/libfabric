@@ -453,8 +453,6 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		fi_addr_t dest_addr,
 		uint64_t tag,
 		int lock_required,
-		enum fi_av_type av_type,
-		enum fi_progress progress,
 		const unsigned is_msg)
 {
 	assert(is_msg == 0 || is_msg == 1);
@@ -462,7 +460,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 	struct fi_bgq_ep *bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
 	ssize_t ret;
-	ret = fi_bgq_ep_tx_check(&bgq_ep->tx, av_type);
+	ret = fi_bgq_ep_tx_check(&bgq_ep->tx, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	/* TODO - if this is a FI_CLASS_STX_CTX, then the lock is required */
@@ -549,7 +547,7 @@ static inline
 ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, uint64_t tag, void *context,
-		int lock_required, enum fi_av_type av_type,
+		int lock_required,
 		const unsigned is_msg, const unsigned is_contiguous,
 		const unsigned override_flags, uint64_t tx_op_flags)
 {
@@ -559,7 +557,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 	struct fi_bgq_ep *bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
 	ssize_t ret;
-	ret = fi_bgq_ep_tx_check(&bgq_ep->tx, av_type);
+	ret = fi_bgq_ep_tx_check(&bgq_ep->tx, FI_BGQ_FABRIC_DIRECT_AV);
 	if (ret) return ret;
 
 	/* TODO - if this is a FI_CLASS_STX_CTX, then the lock is required */
@@ -776,12 +774,12 @@ static inline
 ssize_t fi_bgq_send_generic(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc,
 		fi_addr_t dst_addr, uint64_t tag, void *context,
-		int lock_required, enum fi_av_type av_type, enum fi_progress progress,
+		int lock_required,
 		const unsigned is_msg)
 {
 	assert(is_msg == 0 || is_msg == 1);
 	return fi_bgq_send_generic_flags(ep, buf, len, desc, dst_addr,
-		tag, context, lock_required, av_type, is_msg,
+		tag, context, lock_required, is_msg,
 		1 /* is_contiguous */,
 		0 /* do not override flags */,
 		0 /* no flags */);
@@ -798,8 +796,6 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 	       	void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context,
 		const int lock_required,
-		const enum fi_av_type av_type,
-		const enum fi_progress progress,
 		const uint64_t is_msg)
 {
 	assert(is_msg == 0 || is_msg == 1);
@@ -817,7 +813,7 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 	bgq_context->tag = tag;
 	bgq_context->ignore = ignore;
 
-	if (FI_PROGRESS_MANUAL == progress) {	/* constant expression will compile out */
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* constant expression will compile out */
 
 		int ret;
 		ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -860,7 +856,7 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 static inline
 ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		const struct fi_msg *msg, uint64_t flags,
-		int lock_required, enum fi_av_type av_type, enum fi_progress progress)
+		int lock_required)
 {
 	struct fi_bgq_ep *bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
@@ -943,7 +939,7 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 
 		context_rsh3b = (uint64_t)ext >> 3;
 		rx_op_flags = flags | FI_BGQ_CQ_CONTEXT_EXT;
-		if (FI_PROGRESS_MANUAL == progress) {	/* constant expression will compile out */
+		if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* constant expression will compile out */
 
 			int ret;
 			ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -962,7 +958,7 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		}
 	}
 
-	if (FI_PROGRESS_MANUAL == progress) {	/* constant expression will compile out */
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* constant expression will compile out */
 
 		int ret;
 		ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -995,7 +991,7 @@ static inline
 ssize_t fi_bgq_injectdata_generic(struct fid_ep *ep,
 		const void *buf, size_t len, uint64_t data,
 		fi_addr_t dst_addr, uint64_t tag,
-		int lock_required, enum fi_av_type av_type, enum fi_progress progress,
+		int lock_required,
 		const unsigned is_msg)
 {
 	assert(0);
@@ -1007,7 +1003,7 @@ static inline
 ssize_t fi_bgq_senddata_generic(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc, uint64_t data,
 		fi_addr_t dst_addr, uint64_t tag, void *context,
-		int lock_required, enum fi_av_type av_type, enum fi_progress progress,
+		int lock_required,
 		const unsigned is_msg)
 {
 	assert(0);
@@ -1020,71 +1016,52 @@ ssize_t fi_bgq_inject(struct fid_ep *ep,
 		const void *buf,
 		size_t len,
 		fi_addr_t dest_addr,
-		int lock_required,
-		enum fi_av_type av_type,
-		enum fi_progress progress)
+		int lock_required)
 {
 	return fi_bgq_inject_generic(ep, buf, len, dest_addr, 0,
-			lock_required, av_type, progress, 1);
+			lock_required, 1);
 }
 
 
 /*
  * Declare specialized functions that qualify for FABRIC_DIRECT.
  * - No locks
- * - FI_AV_MAP
- * - FI_PROGRESS_MANUAL
  */
 
 #define FI_BGQ_MSG_FABRIC_DIRECT_LOCK		0
-#define FI_BGQ_MSG_FABRIC_DIRECT_AV		FI_AV_MAP
 
-FI_BGQ_MSG_SPECIALIZED_FUNC(FI_BGQ_MSG_FABRIC_DIRECT_LOCK,
-                FI_BGQ_MSG_FABRIC_DIRECT_AV,
-		FI_BGQ_FABRIC_DIRECT_PROGRESS)
+FI_BGQ_MSG_SPECIALIZED_FUNC(FI_BGQ_MSG_FABRIC_DIRECT_LOCK)
 
 
 #ifdef FABRIC_DIRECT
 #define fi_send(ep, buf, len, desc, dest_addr, context)			\
 	(FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(send,				\
-			FI_BGQ_MSG_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_AV,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_MSG_FABRIC_DIRECT_LOCK)			\
 	(ep, buf, len, desc, dest_addr, context))
 
 #define fi_recv(ep, buf, len, desc, src_addr, context)			\
 	(FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recv,				\
-			FI_BGQ_MSG_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_AV,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_MSG_FABRIC_DIRECT_LOCK)			\
 	(ep, buf, len, desc, src_addr, context))
 
 #define fi_inject(ep, buf, len, dest_addr)				\
 	(FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(inject,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_AV,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_MSG_FABRIC_DIRECT_LOCK)			\
 	(ep, buf, len, dest_addr))
 
 #define fi_recvmsg(ep, msg, flags)					\
 	(FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recvmsg,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_AV,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_MSG_FABRIC_DIRECT_LOCK)			\
 	(ep, msg, flags))
 
 #define fi_senddata(ep, buf, len, desc, data, dest_addr, context)	\
 	(FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(senddata,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_AV,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_MSG_FABRIC_DIRECT_LOCK)			\
 	(ep, buf, len, desc, data, dest_addr, context))
 
 #define fi_injectdata(ep, buf, len, data, dest_addr)			\
 	(FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(injectdata,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_MSG_FABRIC_DIRECT_AV,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_MSG_FABRIC_DIRECT_LOCK)			\
 	(ep, buf, len, data, dest_addr))
 
 static inline ssize_t

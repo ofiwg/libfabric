@@ -486,11 +486,9 @@ ssize_t fi_bgq_atomic(struct fid_ep *ep,
 		enum fi_op op, void* context)
 {
 	int lock_required = 0;
-	enum fi_av_type av_type = FI_AV_MAP;
 
 	struct fi_bgq_ep * bgq_ep;
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
-        av_type = bgq_ep->av_type;
 
         switch (bgq_ep->threading) {
         case FI_THREAD_ENDPOINT:
@@ -509,7 +507,7 @@ ssize_t fi_bgq_atomic(struct fid_ep *ep,
 
 	return fi_bgq_atomic_generic(ep, buf, count, dst_addr,
 			addr, key, datatype, op, context,
-			lock_required, av_type, FI_MR_SCALABLE);
+			lock_required);
 
 }
 
@@ -522,11 +520,9 @@ ssize_t fi_bgq_fetch_atomic(struct fid_ep *ep,
 		enum fi_op op, void *context)
 {
 	int lock_required = 0;
-	enum fi_av_type av_type = FI_AV_MAP;
 
 	struct fi_bgq_ep * bgq_ep;
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
-        av_type = bgq_ep->av_type;
 
         switch (bgq_ep->threading) {
         case FI_THREAD_ENDPOINT:
@@ -547,7 +543,7 @@ ssize_t fi_bgq_fetch_atomic(struct fid_ep *ep,
 			buf, count, desc,
 			result, result_desc, dest_addr, addr,
 			key, datatype, op, context,
-			lock_required, av_type, FI_MR_SCALABLE);
+			lock_required);
 }
 
 ssize_t fi_bgq_compare_atomic(struct fid_ep *ep,
@@ -559,11 +555,9 @@ ssize_t fi_bgq_compare_atomic(struct fid_ep *ep,
 		enum fi_op op, void *context)
 {
 	int lock_required = 0;
-	enum fi_av_type av_type = FI_AV_MAP;
 
 	struct fi_bgq_ep * bgq_ep;
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
-        av_type = bgq_ep->av_type;
 
         switch (bgq_ep->threading) {
         case FI_THREAD_ENDPOINT:
@@ -585,7 +579,7 @@ ssize_t fi_bgq_compare_atomic(struct fid_ep *ep,
 			compare, compare_desc,
 			result, result_desc, dest_addr, addr,
 			key, datatype, op, context,
-			lock_required, av_type, FI_MR_SCALABLE);
+			lock_required);
 }
 
 ssize_t fi_bgq_inject_atomic(struct fid_ep *ep,
@@ -594,11 +588,9 @@ ssize_t fi_bgq_inject_atomic(struct fid_ep *ep,
                 enum fi_datatype datatype, enum fi_op op)
 {
 	int lock_required = 0;
-	enum fi_av_type av_type = FI_AV_MAP;
 
 	struct fi_bgq_ep * bgq_ep;
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
-        av_type = bgq_ep->av_type;
 
         switch (bgq_ep->threading) {
         case FI_THREAD_ENDPOINT:
@@ -619,7 +611,7 @@ ssize_t fi_bgq_inject_atomic(struct fid_ep *ep,
 			buf, count,
 			dest_addr, addr,
 			key, datatype, op,
-			lock_required, av_type, FI_MR_SCALABLE);
+			lock_required);
 }
 
 ssize_t	fi_bgq_atomicv(struct fid_ep *ep,
@@ -642,12 +634,12 @@ ssize_t fi_bgq_atomic_writemsg(struct fid_ep *ep,
         case FI_THREAD_DOMAIN:
         case FI_THREAD_COMPLETION:
 		return fi_bgq_atomic_writemsg_generic(ep, msg, flags,
-				0, bgq_ep->av_type, bgq_ep->mr_mode);
+				0);
         case FI_THREAD_FID:
         case FI_THREAD_UNSPEC:
         case FI_THREAD_SAFE:
 		return fi_bgq_atomic_writemsg_generic(ep, msg, flags,
-				1, bgq_ep->av_type, bgq_ep->mr_mode);
+				1);
 	}
 
 	errno = FI_EINVAL;
@@ -669,13 +661,13 @@ ssize_t	fi_bgq_atomic_readwritemsg(struct fid_ep *ep,
         case FI_THREAD_COMPLETION:
 		return fi_bgq_atomic_readwritemsg_generic(ep, msg,
 				resultv, result_count, flags,
-				0, bgq_ep->av_type, bgq_ep->mr_mode);
+				0);
         case FI_THREAD_FID:
         case FI_THREAD_UNSPEC:
         case FI_THREAD_SAFE:
 		return fi_bgq_atomic_readwritemsg_generic(ep, msg,
 				resultv, result_count, flags,
-				1, bgq_ep->av_type, bgq_ep->mr_mode);
+				1);
 	}
 
 	errno = FI_EINVAL;
@@ -700,14 +692,14 @@ ssize_t	fi_bgq_atomic_compwritemsg(struct fid_ep *ep,
 		return fi_bgq_atomic_compwritemsg_generic(ep, msg,
 				comparev, compare_count,
 				resultv, result_count,
-				flags, 0, bgq_ep->av_type, bgq_ep->mr_mode);
+				flags, 0);
         case FI_THREAD_FID:
         case FI_THREAD_UNSPEC:
         case FI_THREAD_SAFE:
 		return fi_bgq_atomic_compwritemsg_generic(ep, msg,
 				comparev, compare_count,
 				resultv, result_count,
-				flags, 1, bgq_ep->av_type, bgq_ep->mr_mode);
+				flags, 1);
 	}
 
 	errno = FI_EINVAL;

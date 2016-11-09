@@ -242,7 +242,7 @@ int fi_bgq_ep_progress_manual (struct fi_bgq_ep *bgq_ep);
 
 static ssize_t fi_bgq_cq_poll(struct fid_cq *cq, void *buf, size_t count,
 		fi_addr_t *src_addr, const enum fi_cq_format format,
-		const int lock_required, const enum fi_progress progress)
+		const int lock_required)
 {
 	ssize_t num_entries = 0;
 
@@ -259,7 +259,7 @@ static ssize_t fi_bgq_cq_poll(struct fid_cq *cq, void *buf, size_t count,
 	ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
 	if (ret) return ret;
 
-	if (progress == FI_PROGRESS_MANUAL) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* branch will compile out */	/* TODO - FI_PROGRESS_AUTO + 64 ppn */
 		const uint64_t count = bgq_cq->progress.ep_count;
 		uint64_t i;
 		for (i=0; i<count; ++i) {
@@ -295,7 +295,7 @@ static ssize_t fi_bgq_cq_poll(struct fid_cq *cq, void *buf, size_t count,
 		context = context->next;
 	}
 
-	if (progress == FI_PROGRESS_AUTO) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {	/* branch will compile out */
 
 		/* drain the std fifo and initialize the cq entries in the application
 		 * buffer if the operation is complete; otherwise append to the
@@ -343,19 +343,19 @@ static ssize_t fi_bgq_cq_poll(struct fid_cq *cq, void *buf, size_t count,
 
 static inline
 ssize_t fi_bgq_cq_read_generic (struct fid_cq *cq, void *buf, size_t count,
-		const enum fi_cq_format format, const int lock_required, const enum fi_progress progress)
+		const enum fi_cq_format format, const int lock_required)
 {
 	int ret;
-	ret = fi_bgq_cq_poll(cq, buf, count, NULL, format, lock_required, progress);
+	ret = fi_bgq_cq_poll(cq, buf, count, NULL, format, lock_required);
 	return ret;
 }
 
 static inline
 ssize_t fi_bgq_cq_readfrom_generic (struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr,
-		const enum fi_cq_format format, const int lock_required, const enum fi_progress progress)
+		const enum fi_cq_format format, const int lock_required)
 {
 	int ret;
-	ret = fi_bgq_cq_poll(cq, buf, count, src_addr, format, lock_required, progress);
+	ret = fi_bgq_cq_poll(cq, buf, count, src_addr, format, lock_required);
 	if (ret > 0) {
 		unsigned n;
 		for (n=0; n<ret; ++n) src_addr[n] = FI_ADDR_NOTAVAIL;
@@ -368,28 +368,24 @@ ssize_t fi_bgq_cq_readfrom_generic (struct fid_cq *cq, void *buf, size_t count, 
  * Declare specialized functions that qualify for FABRIC_DIRECT.
  * - No locks
  * - FI_CQ_FORMAT_TAGGED
- * - FI_PROGRESS_MANUAL
  */
 #define FI_BGQ_CQ_FABRIC_DIRECT_LOCK		0
 #define FI_BGQ_CQ_FABRIC_DIRECT_FORMAT		FI_CQ_FORMAT_TAGGED
 
 FI_BGQ_CQ_SPECIALIZED_FUNC(FI_BGQ_CQ_FABRIC_DIRECT_FORMAT,
-		FI_BGQ_CQ_FABRIC_DIRECT_LOCK,
-		FI_BGQ_FABRIC_DIRECT_PROGRESS)
+		FI_BGQ_CQ_FABRIC_DIRECT_LOCK)
 
 #ifdef FABRIC_DIRECT
 #define fi_cq_read(cq, buf, count)					\
 	(FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_read,			\
 			FI_BGQ_CQ_FABRIC_DIRECT_FORMAT,			\
-			FI_BGQ_CQ_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_CQ_FABRIC_DIRECT_LOCK)			\
 	(cq, buf, count))
 
 #define fi_cq_readfrom(cq, buf, count, src_addr)			\
 	(FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom,			\
 			FI_BGQ_CQ_FABRIC_DIRECT_FORMAT,			\
-			FI_BGQ_CQ_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_CQ_FABRIC_DIRECT_LOCK)			\
 	(cq, buf, count, src_addr))
 
 

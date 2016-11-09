@@ -1622,9 +1622,8 @@ static
 ssize_t fi_bgq_cancel(fid_t fid, void *context)
 {
 	struct fi_bgq_ep *bgq_ep = container_of(fid, struct fi_bgq_ep, ep_fid);
-	const enum fi_progress progress = bgq_ep->domain->data_progress;
 
-	if (progress == FI_PROGRESS_MANUAL) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* TODO - FI_PROGRESS_AUTO + 64 ppn */
 		const enum fi_threading threading = bgq_ep->domain->threading;
 		const int lock_required =
 			(threading == FI_THREAD_FID) ||

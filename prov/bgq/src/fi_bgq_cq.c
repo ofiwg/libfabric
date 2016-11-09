@@ -116,7 +116,7 @@ static ssize_t fi_bgq_cq_read(struct fid_cq *cq, void *buf, size_t count)
 		lock_required = 1;
 	}
 
-	ret = fi_bgq_cq_read_generic(cq, buf, count, bgq_cq->format, lock_required, bgq_cq->domain->data_progress);
+	ret = fi_bgq_cq_read_generic(cq, buf, count, bgq_cq->format, lock_required);
 	return ret;
 }
 
@@ -135,7 +135,7 @@ fi_bgq_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_ad
 		lock_required = 1;
 	}
 
-	ret = fi_bgq_cq_readfrom_generic(cq, buf, count, src_addr, bgq_cq->format, lock_required, bgq_cq->domain->data_progress);
+	ret = fi_bgq_cq_readfrom_generic(cq, buf, count, src_addr, bgq_cq->format, lock_required);
 	if (ret > 0) {
 		unsigned n;
 		for (n=0; n<ret; ++n) src_addr[n] = FI_ADDR_NOTAVAIL;
@@ -194,7 +194,7 @@ fi_bgq_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond, int 
 		ULLONG_MAX :
 		GetTimeBase() + (1600UL * 1000 * timeout);
 	do {
-		ssize_t count = fi_bgq_cq_read_generic(cq, buf, len, bgq_cq->format, lock_required, bgq_cq->domain->data_progress);
+		ssize_t count = fi_bgq_cq_read_generic(cq, buf, len, bgq_cq->format, lock_required);
 		if (count) return count;
 
 	} while (GetTimeBase() < timeout_cycles);
@@ -221,7 +221,7 @@ fi_bgq_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
 		ULLONG_MAX :
 		GetTimeBase() + (1600UL * 1000 * timeout);
 	do {
-		ssize_t count = fi_bgq_cq_readfrom_generic(cq, buf, len, src_addr, bgq_cq->format, lock_required, bgq_cq->domain->data_progress);
+		ssize_t count = fi_bgq_cq_readfrom_generic(cq, buf, len, src_addr, bgq_cq->format, lock_required);
 		if (count) return count;
 
 	} while (GetTimeBase() < timeout_cycles);
@@ -269,37 +269,26 @@ err:
 	return -errno;
 }
 
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 0, FI_PROGRESS_MANUAL)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 1, FI_PROGRESS_MANUAL)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_CONTEXT, 0, FI_PROGRESS_MANUAL)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_CONTEXT, 1, FI_PROGRESS_MANUAL)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_MSG, 0, FI_PROGRESS_MANUAL)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_MSG, 1, FI_PROGRESS_MANUAL)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_DATA, 0, FI_PROGRESS_MANUAL)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_DATA, 1, FI_PROGRESS_MANUAL)
-/* "FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_TAGGED, 0, FI_PROGRESS_MANUAL)" is already declared via FABRIC_DIRECT */
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_TAGGED, 1, FI_PROGRESS_MANUAL)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 0)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 1)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_CONTEXT, 0)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_CONTEXT, 1)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_MSG, 0)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_MSG, 1)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_DATA, 0)
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_DATA, 1)
+/* "FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_TAGGED, 0)" is already declared via FABRIC_DIRECT */
+FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_TAGGED, 1)
 
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 0, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 1, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_CONTEXT, 0, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_CONTEXT, 1, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_MSG, 0, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_MSG, 1, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_DATA, 0, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_DATA, 1, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_TAGGED, 0, FI_PROGRESS_AUTO)
-FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_TAGGED, 1, FI_PROGRESS_AUTO)
+#define FI_BGQ_CQ_OPS_STRUCT_NAME(FORMAT, LOCK)					\
+  fi_bgq_ops_cq_ ## FORMAT ## _ ## LOCK						\
 
-#define FI_BGQ_CQ_OPS_STRUCT_NAME(FORMAT, LOCK, PROGRESS)			\
-  fi_bgq_ops_cq_ ## FORMAT ## _ ## LOCK	## _ ## PROGRESS			\
-
-#define FI_BGQ_CQ_OPS_STRUCT(FORMAT, LOCK, PROGRESS)				\
+#define FI_BGQ_CQ_OPS_STRUCT(FORMAT, LOCK)					\
 static struct fi_ops_cq								\
-	FI_BGQ_CQ_OPS_STRUCT_NAME(FORMAT, LOCK, PROGRESS) = {			\
+	FI_BGQ_CQ_OPS_STRUCT_NAME(FORMAT, LOCK) = {				\
     .size    = sizeof(struct fi_ops_cq),					\
-    .read      = FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_read, FORMAT, LOCK, PROGRESS),	\
-    .readfrom  = FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, FORMAT, LOCK, PROGRESS),	\
+    .read      = FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_read, FORMAT, LOCK),	\
+    .readfrom  = FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, FORMAT, LOCK),	\
     .readerr   = fi_bgq_cq_readerr,						\
     .sread     = fi_bgq_cq_sread,						\
     .sreadfrom = fi_bgq_cq_sreadfrom,						\
@@ -307,27 +296,17 @@ static struct fi_ops_cq								\
     .strerror  = fi_bgq_cq_strerror,						\
 }
 
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_UNSPEC, 0, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_UNSPEC, 1, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_CONTEXT, 0, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_CONTEXT, 1, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_MSG, 0, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_MSG, 1, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_DATA, 0, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_DATA, 1, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_TAGGED, 0, FI_PROGRESS_MANUAL);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_TAGGED, 1, FI_PROGRESS_MANUAL);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_UNSPEC, 0);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_UNSPEC, 1);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_CONTEXT, 0);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_CONTEXT, 1);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_MSG, 0);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_MSG, 1);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_DATA, 0);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_DATA, 1);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_TAGGED, 0);
+FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_TAGGED, 1);
 
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_UNSPEC, 0, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_UNSPEC, 1, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_CONTEXT, 0, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_CONTEXT, 1, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_MSG, 0, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_MSG, 1, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_DATA, 0, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_DATA, 1, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_TAGGED, 0, FI_PROGRESS_AUTO);
-FI_BGQ_CQ_OPS_STRUCT(FI_CQ_FORMAT_TAGGED, 1, FI_PROGRESS_AUTO);
 
 static struct fi_ops_cq fi_bgq_ops_cq_default = {
 	.size		= sizeof(struct fi_ops_cq),
@@ -393,106 +372,45 @@ int fi_bgq_cq_open(struct fid_domain *dom,
 	}
 
 	if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_UNSPEC) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_UNSPEC, 0, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_UNSPEC, 0);
 	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_CONTEXT) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_CONTEXT, 0, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_CONTEXT, 0);
 	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_MSG) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_MSG, 0, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_MSG, 0);
 	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_DATA) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_DATA, 0, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_DATA, 0);
 	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_TAGGED) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_TAGGED, 0, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_TAGGED, 0);
 	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_UNSPEC) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_UNSPEC, 1, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_UNSPEC, 1);
 	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_CONTEXT) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_CONTEXT, 1, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_CONTEXT, 1);
 	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_MSG) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_MSG, 1, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_MSG, 1);
 	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_DATA) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_DATA, 1, FI_PROGRESS_MANUAL);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_DATA, 1);
 	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL &&
 			bgq_cq->format == FI_CQ_FORMAT_TAGGED) {
 		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_TAGGED, 1, FI_PROGRESS_MANUAL);
-
-	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_UNSPEC) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_UNSPEC, 0, FI_PROGRESS_AUTO);
-	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_CONTEXT) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_CONTEXT, 0, FI_PROGRESS_AUTO);
-	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_MSG) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_MSG, 0, FI_PROGRESS_AUTO);
-	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_DATA) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_DATA, 0, FI_PROGRESS_AUTO);
-	} else if (lock_required == 0 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_TAGGED) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_TAGGED, 0, FI_PROGRESS_AUTO);
-	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_UNSPEC) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_UNSPEC, 1, FI_PROGRESS_AUTO);
-	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_CONTEXT) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_CONTEXT, 1, FI_PROGRESS_AUTO);
-	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_MSG) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_MSG, 1, FI_PROGRESS_AUTO);
-	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_DATA) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_DATA, 1, FI_PROGRESS_AUTO);
-	} else if (lock_required == 1 &&
-			bgq_cq->domain->data_progress == FI_PROGRESS_AUTO &&
-			bgq_cq->format == FI_CQ_FORMAT_TAGGED) {
-		bgq_cq->cq_fid.ops =
-			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_TAGGED, 1, FI_PROGRESS_AUTO);
+			&FI_BGQ_CQ_OPS_STRUCT_NAME(FI_CQ_FORMAT_TAGGED, 1);
 
 	} else {
 		bgq_cq->cq_fid.ops =
