@@ -442,6 +442,8 @@ uint32_t __udreg_deregister(void *registration, void *context)
 
 	grc = __gnix_deregister_region(registration, NULL);
 
+	free(registration);
+
 	return (grc == GNI_RC_SUCCESS) ? 0 : 1;
 }
 
