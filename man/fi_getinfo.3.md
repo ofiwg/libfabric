@@ -89,7 +89,13 @@ Node, service, or hints may be provided, with any combination
 being supported.  If node is provided, fi_getinfo will attempt to
 resolve the fabric address to the given node.  If node is not given,
 fi_getinfo will attempt to resolve the fabric addressing information
-based on the provided hints.
+based on the provided hints.  Node is commonly used to provide a network
+address (such as an IP address) or hostname.  Service is usually
+associated with a transport address (such as a TCP port number).  Node
+and service parameters may be mapped by providers to native fabric
+addresses.  Applications may also pass in an FI_ADDR_STR formatted
+address (see format details below) as the node parameter.  In such cases,
+the service parameter must be NULL.
 
 The hints parameter, if provided, may be used to limit the resulting
 output as indicated below.  As a general rule, specifying a non-zero
@@ -508,6 +514,14 @@ fabric.  See `fi_av`(3).
 *FI_ADDR_GNI*
 : Address is a Cray proprietary format that is used with their GNI
   protocol.
+
+*FI_ADDR_STR*
+: Address is a formatted character string.  The length and content of
+  the string is address and/or provider specific, but follows this model:
+
+  address_family[;[node][;[service][;[field3]...]]]
+
+  Examples: AF_INET;10.31.6.12;7471, AF_INET;;7471
 
 # FLAGS
 
