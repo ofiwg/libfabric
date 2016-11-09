@@ -300,7 +300,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 			MUSPI_SetRecPayloadBaseAddressInfo(cq_desc,
 				FI_BGQ_MU_BAT_ID_GLOBAL, byte_counter_paddr);
 
-			fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+			fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 
 			if (do_cntr) {
 
@@ -436,7 +436,7 @@ static inline size_t fi_bgq_atomic_internal(struct fi_bgq_ep *bgq_ep,
 				fi_bgq_cnk_vaddr2paddr((const void*)&bgq_context->byte_counter,
 					sizeof(uint64_t), &payload->atomic_fetch.metadata.cq_paddr);
 
-				fi_bgq_cq_context_append(bgq_ep->tx.send_cq, bgq_context, lock_required);
+				fi_bgq_cq_enqueue_pending(bgq_ep->tx.send_cq, bgq_context, lock_required);
 			}
 
 		} else {

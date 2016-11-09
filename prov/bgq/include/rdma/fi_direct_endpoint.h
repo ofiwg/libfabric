@@ -647,7 +647,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
-			fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+			fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 
 		} else {
 
@@ -684,7 +684,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 				MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
-				fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+				fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 			}
 		}
 
@@ -760,7 +760,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
-		fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+		fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 	}
 
 	/* TODO - if this is a FI_CLASS_STX_CTX, then the lock is required */

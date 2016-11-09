@@ -354,6 +354,10 @@ int fi_bgq_cq_open(struct fid_domain *dom,
 
 	bgq_cq->format = attr->format ? attr->format : FI_CQ_FORMAT_CONTEXT;
 
+	bgq_cq->pending_head = NULL;
+	bgq_cq->pending_tail = NULL;
+	bgq_cq->completed_head = NULL;
+	bgq_cq->completed_tail = NULL;
 
 	switch (bgq_cq->domain->threading) {
 	case FI_THREAD_ENDPOINT:

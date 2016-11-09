@@ -203,7 +203,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 
 			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
-			fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+			fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 
 		} else {
 
@@ -278,7 +278,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
-		fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+		fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 
 	} else if (do_cq) {
 
@@ -484,7 +484,7 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 			bgq_context->byte_counter = 0;
 			bgq_context->tag = 0;
 
-			fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+			fi_bgq_cq_enqueue_completed(bgq_ep->send_cq, bgq_context, lock_required);
 		}
 
 		/* the src buffer is available for reuse - increment the endpoint counter */
