@@ -131,8 +131,10 @@ fi_bgq_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_ad
 	case FI_THREAD_ENDPOINT:
 	case FI_THREAD_DOMAIN:
 		lock_required = 0;
+		break;
 	default:
 		lock_required = 1;
+		break;
 	}
 
 	ret = fi_bgq_cq_readfrom_generic(cq, buf, count, src_addr, bgq_cq->format, lock_required);
@@ -149,29 +151,73 @@ fi_bgq_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 {
 	struct fi_bgq_cq *bgq_cq = container_of(cq, struct fi_bgq_cq, cq_fid);
 
-	uint64_t value = 0;
-	if (l2atomic_fifo_peek(&bgq_cq->err_consumer, &value) != 0) {
-		errno = FI_EAGAIN;
-		return -errno;
+	if (bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL) {
+
+		struct fi_bgq_context_ext * ext = bgq_cq->err_head;
+		if (NULL == ext) {
+			errno = FI_EAGAIN;
+			return -errno;
+		}
+
+		if (ext->bgq_context.byte_counter != 0) {
+			/* perhaps an in-progress truncated rendezvous receive? */
+			errno = FI_EAGAIN;
+			return -errno;
+		}
+
+		assert(ext->bgq_context.flags & FI_BGQ_CQ_CONTEXT_EXT);	/* DEBUG */
+
+		int lock_required = 0;
+		switch (bgq_cq->domain->threading) {
+		case FI_THREAD_ENDPOINT:
+		case FI_THREAD_DOMAIN:
+			lock_required = 0;
+			break;
+		default:
+			lock_required = 1;
+			break;
+		}
+
+		int ret;
+		ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
+		bgq_cq->err_head = (struct fi_bgq_context_ext *)ext->bgq_context.next;
+		if (NULL == bgq_cq->err_head)
+			bgq_cq->err_tail = NULL;
+
+		*buf = ext->err_entry;
+		free(ext);
+
+		ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
+	} else {
+
+		uint64_t value = 0;
+		if (l2atomic_fifo_peek(&bgq_cq->err_consumer, &value) != 0) {
+			errno = FI_EAGAIN;
+			return -errno;
+		}
+
+		/* const uint64_t flags = value & 0xE000000000000000ull; -- currently not used */
+
+		/* convert the fifo value into a context pointer */
+		struct fi_bgq_context_ext * ext = (struct fi_bgq_context_ext *) (value << 3);
+
+		if (ext->bgq_context.byte_counter != 0) {
+			/* perhaps an in-progress truncated rendezvous receive? */
+			errno = FI_EAGAIN;
+			return -errno;
+		}
+
+		assert(ext->bgq_context.flags & FI_BGQ_CQ_CONTEXT_EXT);	/* DEBUG */
+
+		*buf = ext->err_entry;
+		free(ext);
+
+		l2atomic_fifo_advance(&bgq_cq->err_consumer);
 	}
-
-	/* const uint64_t flags = value & 0xE000000000000000ull; -- currently not used */
-
-	/* convert the fifo value into a context pointer */
-	struct fi_bgq_context_ext * ext = (struct fi_bgq_context_ext *) (value << 3);
-
-	if (ext->bgq_context.byte_counter != 0) {
-		/* perhaps an in-progress truncated rendezvous receive? */
-		errno = FI_EAGAIN;
-		return -errno;
-	}
-
-	assert(ext->bgq_context.flags & FI_BGQ_CQ_CONTEXT_EXT);	/* DEBUG */
-
-	*buf = ext->err_entry;
-	free(ext);
-
-	l2atomic_fifo_advance(&bgq_cq->err_consumer);
 
 	return 1;
 }
@@ -269,6 +315,53 @@ err:
 	return -errno;
 }
 
+int fi_bgq_cq_enqueue_err (struct fi_bgq_cq * bgq_cq,
+		struct fi_bgq_context_ext * ext,
+		const int lock_required)
+{
+	if (bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL) {
+
+		int lock_required = 0;
+		switch (bgq_cq->domain->threading) {
+		case FI_THREAD_ENDPOINT:
+		case FI_THREAD_DOMAIN:
+			lock_required = 0;
+		default:
+			lock_required = 1;
+		}
+
+		int ret;
+		ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
+		struct fi_bgq_context_ext * tail = bgq_cq->err_tail;
+		if (tail) {
+			assert(NULL != bgq_cq->err_head);
+
+			tail->bgq_context.next = (union fi_bgq_context *)ext;
+			bgq_cq->err_tail = ext;
+
+		} else {
+			assert(NULL == bgq_cq->err_head);
+
+			bgq_cq->err_tail = ext;
+			bgq_cq->err_head = ext;
+		}
+		ext->bgq_context.next = NULL;
+
+		ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
+	} else {
+
+		struct l2atomic_fifo_producer * err_producer = &bgq_cq->err_producer;
+		uint64_t ext_rsh3b = (uint64_t)ext >> 3;
+		while(0 != l2atomic_fifo_produce(err_producer, ext_rsh3b));
+	}
+
+	return 0;
+}
+
 FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 0)
 FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_UNSPEC, 1)
 FI_BGQ_CQ_SPECIALIZED_FUNC(FI_CQ_FORMAT_CONTEXT, 0)
@@ -358,6 +451,8 @@ int fi_bgq_cq_open(struct fid_domain *dom,
 	bgq_cq->pending_tail = NULL;
 	bgq_cq->completed_head = NULL;
 	bgq_cq->completed_tail = NULL;
+	bgq_cq->err_head = NULL;
+	bgq_cq->err_tail = NULL;
 
 	switch (bgq_cq->domain->threading) {
 	case FI_THREAD_ENDPOINT:
