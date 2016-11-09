@@ -83,17 +83,11 @@ struct rxm_mr {
 	struct fid_mr *msg_mr;
 };
 
-struct rxm_cq {
-	struct util_cq util_cq;
-	struct fid_cq *msg_cq;
-};
-
 struct rxm_ep {
 	struct util_ep util_ep;
 	struct fi_info *msg_info;
 	struct fid_pep *msg_pep;
-	struct rxm_cq *tx_cq;
-	struct rxm_cq *rx_cq;
+	struct fid_cq *msg_cq;
 	struct fid_ep *srx_ctx;
 	struct util_cmap *cmap;
 };
@@ -111,6 +105,10 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
+int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
+		void *buf, uint64_t data, uint64_t tag);
+int rxm_cq_report_error(struct util_cq *util_cq, struct fi_cq_err_entry *err_entry);
+
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 

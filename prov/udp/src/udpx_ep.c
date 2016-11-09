@@ -152,7 +152,7 @@ static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 }
 
-void udpx_ep_progress(struct util_ep *util_ep)
+void udpx_ep_progress(struct util_ep *util_ep, struct util_cq *util_cq)
 {
 	struct udpx_ep *ep;
 	struct udpx_ep_entry *entry;
@@ -368,8 +368,8 @@ static int udpx_ep_close(struct fid *fid)
 					    struct util_wait_fd, util_wait);
 			fi_epoll_del(wait->epoll_fd, ep->sock);
 		}
-		fid_list_remove(&ep->util_ep.rx_cq->list,
-				&ep->util_ep.rx_cq->list_lock,
+		fid_list_remove(&ep->util_ep.rx_cq->ep_list,
+				&ep->util_ep.rx_cq->ep_list_lock,
 				&ep->util_ep.ep_fid.fid);
 		atomic_dec(&ep->util_ep.rx_cq->ref);
 	}
@@ -428,8 +428,8 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flag
 				      udpx_rx_src_comp : udpx_rx_comp;
 		}
 
-		ret = fid_list_insert(&cq->list,
-				      &cq->list_lock,
+		ret = fid_list_insert(&cq->ep_list,
+				      &cq->ep_list_lock,
 				      &ep->util_ep.ep_fid.fid);
 		if (ret)
 			return ret;
