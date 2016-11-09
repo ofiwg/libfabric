@@ -1,4 +1,4 @@
-.TH "fi_rma" "3" "2016\-10\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rma" "3" "2016\-11\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_rma \- Remote memory access operations
@@ -67,6 +67,9 @@ Valid transfers are from 0 bytes up to the endpoint\[aq]s max_msg_size.
 \f[I]count\f[] : Count of vectored data entries.
 .PP
 \f[I]addr\f[] : Address of remote memory to access.
+This will be the virtual address of the remote region in the case of
+FI_MR_BASIC, or the offset from the starting address in the case of
+FI_MR_SCALABLE.
 .PP
 \f[I]key\f[] : Protection key associated with the remote memory.
 .PP
