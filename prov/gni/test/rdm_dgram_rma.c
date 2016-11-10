@@ -239,12 +239,6 @@ void common_setup(void)
 	ret = fi_ep_bind(ep[1], &av[1]->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
-	ret = fi_enable(ep[0]);
-	cr_assert(!ret, "fi_ep_enable");
-
-	ret = fi_enable(ep[1]);
-	cr_assert(!ret, "fi_ep_enable");
-
 	target = malloc(BUF_SZ);
 	assert(target);
 	source = malloc(BUF_SZ);
@@ -307,6 +301,13 @@ void common_setup(void)
 		ret = fi_ep_bind(ep[1], &rread_cntr->fid, FI_REMOTE_READ);
 		cr_assert(!ret, "fi_ep_bind");
 	}
+
+	ret = fi_enable(ep[0]);
+	cr_assert(!ret, "fi_ep_enable");
+
+	ret = fi_enable(ep[1]);
+	cr_assert(!ret, "fi_ep_enable");
+
 }
 
 void rdm_rma_setup(void)

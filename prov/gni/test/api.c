@@ -168,12 +168,6 @@ void rdm_api_setup_ep(void)
 		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
 		cr_assert(!ret, "fi_ep_bind");
 
-		ret = fi_enable(ep[i]);
-		cr_assert(!ret, "fi_ep_enable");
-
-		ret = fi_enable(ep[i]);
-		cr_assert_eq(ret, -FI_EOPBADSTATE);
-
 		ret = fi_cntr_open(dom[i], &cntr_attr, send_cntr + i, 0);
 		cr_assert(!ret, "fi_cntr_open");
 
@@ -185,6 +179,14 @@ void rdm_api_setup_ep(void)
 
 		ret = fi_ep_bind(ep[i], &recv_cntr[i]->fid, FI_RECV);
 		cr_assert(!ret, "fi_ep_bind");
+
+		ret = fi_enable(ep[i]);
+		cr_assert(!ret, "fi_ep_enable");
+
+		ret = fi_enable(ep[i]);
+		cr_assert_eq(ret, -FI_EOPBADSTATE);
+
+
 	}
 
 	for (i = 0; i < NUMEPS; i++) {

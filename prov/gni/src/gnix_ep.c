@@ -1579,6 +1579,17 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	if (ret)
 		return ret;
 
+	/*
+	 * per fi_endpoint man page, can't bind an object
+	 * to an ep after its been enabled.
+	 */
+	if ((ep->send_cq && ep->tx_enabled) ||
+		(ep->recv_cq && ep->rx_enabled)) {
+		ret = -FI_EOPBADSTATE;
+		goto err;
+	}
+
+
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
 		ret = -FI_ENOSYS;
