@@ -119,6 +119,27 @@ err:
 	return -errno;
 }
 
+static int fi_ibv_mr_regv(struct fid *fid, const struct iovec * iov,
+		size_t count, uint64_t access, uint64_t offset, uint64_t requested_key,
+		uint64_t flags, struct fid_mr **mr, void *context)
+{
+	if (count > VERBS_MR_IOV_LIMIT) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+				"iov count > %d not supported\n",
+				VERBS_MR_IOV_LIMIT);
+		return -FI_EINVAL;
+	}
+	return fi_ibv_mr_reg(fid, iov->iov_base, iov->iov_len, access, offset,
+			requested_key, flags, mr, context);
+}
+
+static int fi_ibv_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		uint64_t flags, struct fid_mr **mr)
+{
+	return fi_ibv_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
+			0, attr->requested_key, flags, mr, attr->context);
+}
+
 static int fi_ibv_domain_close(fid_t fid)
 {
 	struct fi_ibv_domain *domain;
@@ -182,8 +203,8 @@ static struct fi_ops fi_ibv_fid_ops = {
 static struct fi_ops_mr fi_ibv_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = fi_ibv_mr_reg,
-	.regv = fi_no_mr_regv,
-	.regattr = fi_no_mr_regattr,
+	.regv = fi_ibv_mr_regv,
+	.regattr = fi_ibv_mr_regattr,
 };
 
 static struct fi_ops_domain fi_ibv_domain_ops = {
