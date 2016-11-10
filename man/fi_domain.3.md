@@ -127,6 +127,7 @@ struct fi_domain_attr {
 	size_t                max_ep_stx_ctx;
 	size_t                max_ep_srx_ctx;
 	size_t                cntr_cnt;
+	size_t                mr_iov_limit;
 };
 ```
 
@@ -498,6 +499,11 @@ The optimal number of completion counters supported by the domain.
 The cq_cnt value may be a fixed value of the maximum number of counters
 supported by the underlying hardware, or may be a dynamic value, based on
 the default attributes of the domain.
+
+## MR IOV Limit (mr_iov_limit)
+
+This is the maximum number of IO vectors (scatter-gather elements)
+that a single memory registration operation may reference.
 
 # RETURN VALUE
 
