@@ -286,6 +286,11 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of atomic operations supported by an endpoint.
 
+*FI_MULTICAST*
+: Indicates that the endpoint support multicast data transfers.  This
+  capability must be paired with at least one other data transfer capability,
+  (e.g. FI_MSG, FI_SEND, FI_RECV, ...).
+
 *FI_NAMED_RX_CTX*
 : Requests that endpoints which support multiple receive contexts
   allow an initiator to target (or name) a specific receive context as

@@ -1276,6 +1276,11 @@ value of transmit or receive context attributes of an endpoint.
   the source endpoint is also considered a destination endpoint.  This is the
   default completion mode for such operations.
 
+*FI_MULTICAST*
+: Indicates that data transfers will target multicast addresses by default.
+  Any fi_addr_t passed into a data transfer operation will be treated as a
+  multicast address.
+
 # NOTES
 
 Users should call fi_close to release all resources allocated to the

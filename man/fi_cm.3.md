@@ -37,6 +37,13 @@ int fi_setname(fid_t fid, void *addr, size_t addrlen);
 int fi_getname(fid_t fid, void *addr, size_t *addrlen);
 
 int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
+
+int fi_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+	struct fid_mc **mc, void *context);
+
+int fi_close(struct fid *mc);
+
+fi_addr_t fi_mc_addr(struct fid_mc *mc);
 ```
 
 # ARGUMENTS
@@ -66,6 +73,9 @@ Active or passive endpoint to get/set address.
 
 *info*
 : Fabric information associated with a connection request.
+
+*mc*
+: Multicast group associated with an endpoint.
 
 *flags*
 : Additional flags for controlling connection operation.
@@ -150,6 +160,12 @@ generated if the peer system is reachable and a service or kernel agent
 on the peer system is able to notify the local endpoint that the connection
 has been aborted.
 
+## fi_close
+
+Fi_close is used to disassociate an endpoint from a multicast group and
+close all resources associated with the group.  Fi_close must be called on
+all multicast groups that an endpoint joins.
+
 ## fi_setname
 
 The fi_setname call may be used to modify or assign the address of the
@@ -185,9 +201,47 @@ through fi_connect or fi_listen.  An address may be assigned using fi_setname.
 fi_getpeer is not guaranteed to return a valid peer address until an endpoint
 has been completely connected -- an FI_CONNECTED event has been generated.
 
+## fi_join
+
+This call attaches an endpoint to a multicast group.  By default, the endpoint
+will join the group based on the data transfer capabilities of the endpoint.
+For example, if the endpoint has been configured to both send and receive data,
+then the endpoint will be able to initiate and receive transfers to and from
+the multicast group.  The fi_join flags may be used to restrict access to the
+multicast group, subject to endpoint capability limitations.
+
+Multicast join operations complete asynchronously.  An endpoint must be bound
+to an event queue prior to calling fi_join.  The result of the join operation
+will be reported to the EQ as an FI_JOIN_COMPLETE event.  Applications cannot
+issue multicast transfers until receiving notification that the join
+operation has completed.  Note that an endpoint may begin receiving
+messages from the multicast group as soon as the join completes, which can
+occur prior to the FI_JOIN_COMPLETE event being generated.
+
+Applications must call fi_close on the multicast group to disconnect the
+endpoint from the group.  After a join operation has completed, the
+fi_mc_addr call may be used to retrieve the address associated with the
+multicast group.
+
+## fi_mc_addr
+
+Returns the fi_addr_t address associated with a multicast group.  This address
+must be used when transmitting data to a multicast group and paired with
+the FI_MULTICAST operation flag.
+
 # FLAGS
 
-Flag values are reserved and must be 0.
+Except in functions noted below, flags are reserved and must be 0.
+
+*FI_SEND*
+: Applies to fi_join.  This flag indicates that the endpoint should join the
+  multicast group as a send only member.  The endpoint must be configured for
+  transmit operations to use this flag, or an error will occur.
+
+*FI_RECV*
+: Applies to fi_join.  This flag indicates that the endpoint should join the
+  multicast group with receive permissions only.  The endpoint must be
+  configured for receive operations to use this flag, or an error will occur.
 
 # RETURN VALUE
 

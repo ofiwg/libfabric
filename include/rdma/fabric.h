@@ -121,6 +121,7 @@ typedef struct fid *fid_t;
 #define FI_TAGGED		(1ULL << 3)
 #define FI_ATOMIC		(1ULL << 4)
 #define FI_ATOMICS		FI_ATOMIC
+#define FI_MULTICAST		(1ULL << 5)
 
 #define FI_READ			(1ULL << 8)
 #define FI_WRITE		(1ULL << 9)
@@ -377,7 +378,8 @@ enum {
 	FI_CLASS_CNTR,
 	FI_CLASS_WAIT,
 	FI_CLASS_POLL,
-	FI_CLASS_CONNREQ
+	FI_CLASS_CONNREQ,
+	FI_CLASS_MC,
 };
 
 struct fi_eq_attr;

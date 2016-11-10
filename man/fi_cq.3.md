@@ -523,6 +523,10 @@ operation.  The following completion flags are defined.
 : Indicates that a tagged message operation completed.  This flag may be
   combined with an FI_SEND or FI_RECV flag.
 
+*FI_MULTICAST*
+: Indicates that a multicast operation completed.  This flag may be combined
+  with FI_MSG and relevant flags.
+
 *FI_READ*
 : Indicates that a locally initiated RMA or atomic read operation has
   completed.  This flag may be combined with an FI_RMA or FI_ATOMIC flag.

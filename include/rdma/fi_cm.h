@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +41,11 @@ extern "C" {
 #endif
 
 
+struct fid_mc {
+	struct fid		fid;
+	fi_addr_t		fi_addr;
+};
+
 struct fi_ops_cm {
 	size_t	size;
 	int	(*setname)(fid_t fid, void *addr, size_t addrlen);
@@ -53,6 +58,8 @@ struct fi_ops_cm {
 	int	(*reject)(struct fid_pep *pep, fid_t handle,
 			const void *param, size_t paramlen);
 	int	(*shutdown)(struct fid_ep *ep, uint64_t flags);
+	int	(*join)(struct fid_ep *ep, const void *addr, uint64_t flags,
+			struct fid_mc **mc, void *context);
 };
 
 
@@ -107,6 +114,18 @@ fi_reject(struct fid_pep *pep, fid_t handle,
 static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	return ep->cm->shutdown(ep, flags);
+}
+
+static inline int fi_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+			  struct fid_mc **mc, void *context)
+{
+	return FI_CHECK_OP(ep->cm, struct fi_ops_cm, join) ?
+		ep->cm->join(ep, addr, flags, mc, context) : -FI_ENOSYS;
+}
+
+static inline fi_addr_t fi_mc_addr(struct fid_mc *mc)
+{
+	return mc->fi_addr;
 }
 
 #endif

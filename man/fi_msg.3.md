@@ -270,6 +270,12 @@ fi_sendmsg.
   known as the fenced operation, be deferred until all previous operations
   targeting the same target endpoint have completed.
 
+*FI_MULTICAST*
+: Applies to transmits.  This flag indicates that the address specified
+  as the data transfer destination is a multicast address.  This flag must
+  be used in all multicast transfers, in conjunction with a multicast
+  fi_addr_t.
+
 # NOTES
 
 If an endpoint has been configured with FI_MSG_PREFIX, the application
