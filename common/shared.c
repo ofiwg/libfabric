@@ -213,7 +213,7 @@ static void ft_cntr_set_wait_attr(void)
 	}
 }
 
-static uint64_t ft_info_to_mr_access(struct fi_info *info)
+uint64_t ft_info_to_mr_access(struct fi_info *info)
 {
 	uint64_t mr_access = 0;
 

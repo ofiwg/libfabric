@@ -346,6 +346,7 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
 int send_recv_greeting(struct fid_ep *ep);
 int check_recv_msg(const char *message);
+uint64_t ft_info_to_mr_access(struct fi_info *info);
 
 #define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\
 	do {							\
