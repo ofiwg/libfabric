@@ -45,7 +45,7 @@ struct fi_context {
 
 static const uint64_t FI_BGQ_MAX_MSG_SIZE	= (0x7FFFFFFFULL);	/* 2^31-1 */
 static const uint64_t FI_BGQ_MAX_PREFIX_SIZE	= (0ULL);
-static const uint64_t FI_BGQ_INJECT_SIZE	= (128ULL);		/* could be as much as 512 */
+static const uint64_t FI_BGQ_INJECT_SIZE	= (512ULL);
 static const uint64_t FI_BGQ_MAX_ORDER_RAW_SIZE	= (256ULL);		/* FI_MR_BASIC: 2^37 */
 static const uint64_t FI_BGQ_MAX_ORDER_WAR_SIZE	= (256ULL);		/* FI_MR_BASIC: 2^37 */
 static const uint64_t FI_BGQ_MAX_ORDER_WAW_SIZE	= (256ULL);		/* FI_MR_BASIC: 2^37 */
