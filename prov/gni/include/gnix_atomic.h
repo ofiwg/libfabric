@@ -34,6 +34,9 @@
 #ifndef _GNIX_ATOMIC_H_
 #define _GNIX_ATOMIC_H_
 
+#define GNIX_ATOMIC_WRITE_FLAGS_DEF	(FI_ATOMIC | FI_WRITE)
+#define GNIX_ATOMIC_READ_FLAGS_DEF	(FI_ATOMIC | FI_READ)
+
 int _gnix_atomic_cmd(enum fi_datatype dt, enum fi_op op,
 		     enum gnix_fab_req_type fr_type);
 ssize_t _gnix_atomic(struct gnix_fid_ep *ep,

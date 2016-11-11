@@ -44,6 +44,9 @@
 #include "gnix_vc.h"
 #include "gnix_util.h"
 #include "gnix_msg.h"
+#include "gnix_cntr.h"
+#include "gnix_rma.h"
+#include "gnix_atomic.h"
 
 /******************************************************************************
  * Forward declaration for ops structures.
@@ -293,7 +296,7 @@ static int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	struct gnix_fid_ep  *ep;
 	struct gnix_fid_av  *av;
 	struct gnix_fid_sep *sep;
-	struct gnix_fid_trx *trx_priv;
+	struct gnix_fid_cntr *cntr;
 	struct gnix_fid_domain *domain_priv;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -303,8 +306,7 @@ static int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_TX_CTX:
 	case FI_CLASS_RX_CTX:
-		trx_priv = container_of(fid, struct gnix_fid_trx, ep_fid);
-		return gnix_ep_bind(&trx_priv->ep->ep_fid.fid, bfid, flags);
+		return gnix_ep_bind(fid, bfid, flags);
 	default:
 		return -FI_ENOSYS;
 	}
@@ -352,6 +354,110 @@ static int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		}
 
 		break;
+	case FI_CLASS_CNTR:
+		cntr = container_of(bfid, struct gnix_fid_cntr, cntr_fid.fid);
+		if (domain_priv != cntr->domain) {
+			return -FI_EINVAL;
+		}
+
+		for (i = 0; i < sep->info->ep_attr->tx_ctx_cnt; i++) {
+			ep = container_of(sep->tx_ep_table[i],
+					  struct gnix_fid_ep, ep_fid);
+			if (ep == NULL) {
+				return -FI_EINVAL;
+			}
+
+			/* don't allow rebinding */
+			if (flags & FI_SEND) {
+				if (ep->send_cntr) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						  "rebind send counter (%p)\n",
+						  cntr);
+					ret = -FI_EINVAL;
+					break;
+				}
+				ep->send_cntr = cntr;
+				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_ref_get(cntr);
+			}
+
+			if (flags & FI_WRITE) {
+				if (ep->write_cntr) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						  "rebind write counter (%p)\n",
+						  cntr);
+					ret = -FI_EINVAL;
+					break;
+				}
+				ep->write_cntr = cntr;
+				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_ref_get(cntr);
+			}
+
+			if (flags & FI_REMOTE_WRITE) {
+				if (ep->rwrite_cntr) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						  "rebind rwrite counter (%p)\n",
+						  cntr);
+					ret = -FI_EINVAL;
+					break;
+				}
+				ep->rwrite_cntr = cntr;
+				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_ref_get(cntr);
+			}
+		}
+
+		for (i = 0; i < sep->info->ep_attr->rx_ctx_cnt; i++) {
+			ep = container_of(sep->rx_ep_table[i],
+					  struct gnix_fid_ep, ep_fid);
+			if (ep == NULL) {
+				return -FI_EINVAL;
+			}
+
+			/* don't allow rebinding */
+			if (flags & FI_RECV) {
+				if (ep->recv_cntr) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						  "rebind recv counter (%p)\n",
+						  cntr);
+					ret = -FI_EINVAL;
+					break;
+				}
+				ep->recv_cntr = cntr;
+				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_ref_get(cntr);
+			}
+
+			if (flags & FI_READ) {
+				if (ep->read_cntr) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						  "rebind read counter (%p)\n",
+						  cntr);
+					ret = -FI_EINVAL;
+					break;
+				}
+				ep->read_cntr = cntr;
+				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_ref_get(cntr);
+			}
+
+			if (flags & FI_REMOTE_READ) {
+				if (ep->rread_cntr) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						  "rebind rread counter (%p)\n",
+						  cntr);
+					ret = -FI_EINVAL;
+					break;
+				}
+				ep->rread_cntr = cntr;
+				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_ref_get(cntr);
+			}
+		}
+
+		break;
+			break;
 	default:
 		ret = -FI_ENOSYS;
 		break;
@@ -778,6 +884,520 @@ gnix_sep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 			  NULL, flags, data, 0);
 }
 
+DIRECT_FN STATIC ssize_t
+gnix_sep_read(struct fid_ep *ep, void *buf, size_t len,
+	      void *desc, fi_addr_t src_addr, uint64_t addr,
+	      uint64_t key, void *context)
+{
+	uint64_t flags;
+	struct gnix_fid_trx *rx_ep;
+
+	if (!ep) {
+		return -FI_EINVAL;
+	}
+
+	rx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(rx_ep->ep->type));
+	flags = rx_ep->ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
+
+	return _gnix_rma(rx_ep->ep, GNIX_FAB_RQ_RDMA_READ,
+			 (uint64_t)buf, len, desc,
+			 src_addr, addr, key,
+			 context, flags, 0);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+	       size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
+	       void *context)
+{
+	uint64_t flags;
+	struct gnix_fid_trx *rx_ep;
+
+	if (!ep || !iov || !desc || count > GNIX_MAX_RMA_IOV_LIMIT) {
+		return -FI_EINVAL;
+	}
+
+	rx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(rx_ep->ep->type));
+	flags = rx_ep->ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
+
+	return _gnix_rma(rx_ep->ep, GNIX_FAB_RQ_RDMA_READ,
+			 (uint64_t)iov[0].iov_base, iov[0].iov_len, desc[0],
+			 src_addr, addr, key,
+			 context, flags, 0);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+		 uint64_t flags)
+{
+	struct gnix_fid_trx *rx_ep;
+
+	if (!ep || !msg || !msg->msg_iov || !msg->rma_iov || !msg->desc ||
+	    msg->iov_count != 1 || msg->rma_iov_count != 1 ||
+	    msg->rma_iov[0].len > msg->msg_iov[0].iov_len) {
+		return -FI_EINVAL;
+	}
+
+	rx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(rx_ep->ep->type));
+
+	flags = (flags & GNIX_READMSG_FLAGS) | GNIX_RMA_READ_FLAGS_DEF;
+
+	return _gnix_rma(rx_ep->ep, GNIX_FAB_RQ_RDMA_READ,
+			 (uint64_t)msg->msg_iov[0].iov_base,
+			 msg->msg_iov[0].iov_len, msg->desc[0],
+			 msg->addr, msg->rma_iov[0].addr, msg->rma_iov[0].key,
+			 msg->context, flags, msg->data);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	       fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context)
+{
+	uint64_t flags;
+	struct gnix_fid_trx *tx_ep;
+
+	if (!ep) {
+		return -FI_EINVAL;
+	}
+
+	tx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(tx_ep->ep->type));
+	flags = tx_ep->ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
+
+	return _gnix_rma(tx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
+			 (uint64_t)buf, len, desc, dest_addr, addr, key,
+			 context, flags, 0);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
+		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+		void *context)
+{
+	uint64_t flags;
+	struct gnix_fid_trx *tx_ep;
+
+	if (!ep || !iov || !desc || count > GNIX_MAX_RMA_IOV_LIMIT) {
+		return -FI_EINVAL;
+	}
+
+	tx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(tx_ep->ep->type));
+	flags = tx_ep->ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
+
+	return _gnix_rma(tx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
+			 (uint64_t)iov[0].iov_base, iov[0].iov_len, desc[0],
+			 dest_addr, addr, key, context, flags, 0);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+		  uint64_t flags)
+{
+	struct gnix_fid_trx *trx_ep;
+
+	if (!ep || !msg || !msg->msg_iov || !msg->rma_iov ||
+	    msg->iov_count != 1 ||
+		msg->rma_iov_count > GNIX_MAX_RMA_IOV_LIMIT ||
+	    msg->rma_iov[0].len > msg->msg_iov[0].iov_len) {
+		return -FI_EINVAL;
+	}
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	flags = (flags & GNIX_WRITEMSG_FLAGS) | GNIX_RMA_WRITE_FLAGS_DEF;
+
+	return _gnix_rma(trx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
+			 (uint64_t)msg->msg_iov[0].iov_base,
+			 msg->msg_iov[0].iov_len,
+			 msg->desc ? msg->desc[0] : NULL,
+			 msg->addr, msg->rma_iov[0].addr, msg->rma_iov[0].key,
+			 msg->context, flags, msg->data);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_rma_inject(struct fid_ep *ep, const void *buf,
+		    size_t len, fi_addr_t dest_addr,
+		    uint64_t addr, uint64_t key)
+{
+	uint64_t flags;
+	struct gnix_fid_trx *trx_ep;
+
+	if (!ep) {
+		return -FI_EINVAL;
+	}
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	flags = trx_ep->ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
+			GNIX_RMA_WRITE_FLAGS_DEF;
+
+	return _gnix_rma(trx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
+			 (uint64_t)buf, len, NULL,
+			 dest_addr, addr, key,
+			 NULL, flags, 0);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+		   uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+		   uint64_t key, void *context)
+{
+	uint64_t flags;
+	struct gnix_fid_trx *trx_ep;
+
+	if (!ep) {
+		return -FI_EINVAL;
+	}
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	flags = trx_ep->ep->op_flags | FI_REMOTE_CQ_DATA |
+			GNIX_RMA_WRITE_FLAGS_DEF;
+
+	return _gnix_rma(trx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
+			 (uint64_t)buf, len, desc,
+			 dest_addr, addr, key,
+			 context, flags, data);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+			uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+			uint64_t key)
+{
+	uint64_t flags;
+	struct gnix_fid_trx *trx_ep;
+
+	if (!ep) {
+		return -FI_EINVAL;
+	}
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	flags = trx_ep->ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
+			GNIX_SUPPRESS_COMPLETION | GNIX_RMA_WRITE_FLAGS_DEF;
+
+	return _gnix_rma(trx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
+			 (uint64_t)buf, len, NULL,
+			 dest_addr, addr, key,
+			 NULL, flags, data);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
+		      void *desc, fi_addr_t dest_addr, uint64_t addr,
+		      uint64_t key, enum fi_datatype datatype, enum fi_op op,
+		      void *context)
+{
+	struct gnix_fid_trx *trx_ep;
+
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	uint64_t flags;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_AMO) < 0)
+		return -FI_ENOENT;
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.op = op;
+	msg.context = context;
+
+	flags = trx_ep->ep->op_flags | GNIX_ATOMIC_WRITE_FLAGS_DEF;
+
+	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_AMO, &msg,
+			    NULL, NULL, 0, NULL, NULL, 0, flags);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_writev(struct fid_ep *ep, const struct fi_ioc *iov, void **desc,
+		      size_t count, fi_addr_t dest_addr, uint64_t addr,
+		      uint64_t key, enum fi_datatype datatype, enum fi_op op,
+		      void *context)
+{
+	if (!ep || !iov || count > 1)
+		return -FI_EINVAL;
+
+	return gnix_sep_atomic_write(ep, iov[0].addr,
+				     iov[0].count, desc ? desc[0] : NULL,
+				     dest_addr, addr, key, datatype, op,
+				     context);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
+			uint64_t flags)
+{
+	struct gnix_fid_trx *trx_ep;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (_gnix_atomic_cmd(msg->datatype, msg->op, GNIX_FAB_RQ_AMO) < 0)
+		return -FI_ENOENT;
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	flags = (flags & GNIX_ATOMICMSG_FLAGS) | GNIX_ATOMIC_WRITE_FLAGS_DEF;
+
+	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_AMO, msg,
+			    NULL, NULL, 0, NULL, NULL, 0, flags);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_inject(struct fid_ep *ep, const void *buf, size_t count,
+		       fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+		       enum fi_datatype datatype, enum fi_op op)
+{
+	struct gnix_fid_trx *trx_ep;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	uint64_t flags;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_AMO) < 0)
+		return -FI_ENOENT;
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	msg.msg_iov = &msg_iov;
+	msg.desc = NULL;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.op = op;
+
+	flags = trx_ep->ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
+			GNIX_ATOMIC_WRITE_FLAGS_DEF;
+
+	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_AMO, &msg,
+			    NULL, NULL, 0, NULL, NULL, 0, flags);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
+			 void *desc, void *result, void *result_desc,
+			 fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			 enum fi_datatype datatype, enum fi_op op,
+			 void *context)
+{
+	struct gnix_fid_trx *trx_ep;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	struct fi_ioc result_iov;
+	uint64_t flags;
+
+	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_FAMO) < 0)
+		return -FI_ENOENT;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.op = op;
+	msg.context = context;
+	result_iov.addr = result;
+	result_iov.count = 1;
+
+	flags = trx_ep->ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
+
+	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_FAMO, &msg,
+			    NULL, NULL, 0,
+			    &result_iov, &result_desc, 1,
+			    flags);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
+			  void **desc, size_t count, struct fi_ioc *resultv,
+			  void **result_desc, size_t result_count,
+			  fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			  enum fi_datatype datatype, enum fi_op op,
+			  void *context)
+{
+	if (!iov || count > 1 || !resultv)
+		return -FI_EINVAL;
+
+	return gnix_sep_atomic_readwrite(ep, iov[0].addr, iov[0].count,
+					desc ? desc[0] : NULL,
+					resultv[0].addr,
+					result_desc ? result_desc[0] : NULL,
+					dest_addr, addr, key, datatype, op,
+					context);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
+			    struct fi_ioc *resultv, void **result_desc,
+			    size_t result_count, uint64_t flags)
+{
+	struct gnix_fid_trx *trx_ep;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (_gnix_atomic_cmd(msg->datatype, msg->op, GNIX_FAB_RQ_FAMO) < 0)
+		return -FI_ENOENT;
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	flags = (flags & GNIX_FATOMICMSG_FLAGS) | GNIX_ATOMIC_READ_FLAGS_DEF;
+
+	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_FAMO, msg, NULL, NULL, 0,
+			    resultv, result_desc, result_count, flags);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
+			  void *desc, const void *compare, void *compare_desc,
+			  void *result, void *result_desc, fi_addr_t dest_addr,
+			  uint64_t addr, uint64_t key,
+			  enum fi_datatype datatype, enum fi_op op,
+			  void *context)
+{
+	struct gnix_fid_trx *trx_ep;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	struct fi_ioc result_iov;
+	struct fi_ioc compare_iov;
+	uint64_t flags;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_CAMO) < 0)
+		return -FI_ENOENT;
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.op = op;
+	msg.context = context;
+	result_iov.addr = result;
+	result_iov.count = 1;
+	compare_iov.addr = (void *)compare;
+	compare_iov.count = 1;
+
+	flags = trx_ep->ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
+
+	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_CAMO, &msg,
+			    &compare_iov, &compare_desc, 1,
+			    &result_iov, &result_desc, 1,
+			    flags);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_compwritev(struct fid_ep *ep, const struct fi_ioc *iov,
+			   void **desc, size_t count,
+			   const struct fi_ioc *comparev,
+			   void **compare_desc, size_t compare_count,
+			   struct fi_ioc *resultv, void **result_desc,
+			   size_t result_count, fi_addr_t dest_addr,
+			   uint64_t addr, uint64_t key,
+			   enum fi_datatype datatype, enum fi_op op,
+			   void *context)
+{
+	if (!iov || count > 1 || !resultv || !comparev)
+		return -FI_EINVAL;
+
+	return gnix_sep_atomic_compwrite(ep, iov[0].addr, iov[0].count,
+					 desc ? desc[0] : NULL,
+					 comparev[0].addr,
+					 compare_desc ? compare_desc[0] : NULL,
+					 resultv[0].addr,
+					 result_desc ? result_desc[0] : NULL,
+					 dest_addr, addr, key, datatype, op,
+					 context);
+}
+
+DIRECT_FN STATIC ssize_t
+gnix_sep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
+			     const struct fi_ioc *comparev, void **compare_desc,
+			     size_t compare_count, struct fi_ioc *resultv,
+			     void **result_desc, size_t result_count,
+			     uint64_t flags)
+{
+	struct gnix_fid_trx *trx_ep;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (_gnix_atomic_cmd(msg->datatype, msg->op, GNIX_FAB_RQ_CAMO) < 0)
+		return -FI_ENOENT;
+
+	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
+
+	flags = (flags & GNIX_CATOMICMSG_FLAGS) | GNIX_ATOMIC_READ_FLAGS_DEF;
+
+	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_CAMO, msg,
+			    comparev, compare_desc, compare_count,
+			    resultv, result_desc, result_count,
+			    flags);
+}
+
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
@@ -816,45 +1436,45 @@ static struct fi_ops_msg gnix_sep_msg_ops = {
 
 static struct fi_ops_rma gnix_sep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
-	.read = NULL,
-	.readv = NULL,
-	.readmsg = NULL,
-	.write = NULL,
-	.writev = NULL,
-	.writemsg = NULL,
-	.inject = NULL,
-	.writedata = NULL,
-	.injectdata = NULL,
+	.read = gnix_sep_read,
+	.readv = gnix_sep_readv,
+	.readmsg = gnix_sep_readmsg,
+	.write = gnix_sep_write,
+	.writev = gnix_sep_writev,
+	.writemsg = gnix_sep_writemsg,
+	.inject = gnix_sep_rma_inject,
+	.writedata = gnix_sep_writedata,
+	.injectdata = gnix_sep_rma_injectdata,
 };
 
 static struct fi_ops_tagged gnix_sep_tagged_ops = {
 	.size = sizeof(struct fi_ops_tagged),
-	.recv = NULL,
-	.recvv = NULL,
-	.recvmsg = NULL,
-	.send = NULL,
-	.sendv = NULL,
-	.sendmsg = NULL,
-	.inject = NULL,
-	.senddata = NULL,
-	.injectdata = NULL,
+	.recv = fi_no_tagged_recv,
+	.recvv = fi_no_tagged_recvv,
+	.recvmsg = fi_no_tagged_recvmsg,
+	.send = fi_no_tagged_send,
+	.sendv = fi_no_tagged_sendv,
+	.sendmsg = fi_no_tagged_sendmsg,
+	.inject = fi_no_tagged_inject,
+	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 };
 
 static struct fi_ops_atomic gnix_sep_atomic_ops = {
 	.size = sizeof(struct fi_ops_atomic),
-	.write = NULL,
-	.writev = NULL,
-	.writemsg = NULL,
-	.inject = NULL,
-	.readwrite = NULL,
-	.readwritev = NULL,
-	.readwritemsg = NULL,
-	.compwrite = NULL,
-	.compwritev = NULL,
-	.compwritemsg = NULL,
-	.writevalid = NULL,
-	.readwritevalid = NULL,
-	.compwritevalid = NULL,
+	.write = gnix_sep_atomic_write,
+	.writev = gnix_sep_atomic_writev,
+	.writemsg = gnix_sep_atomic_writemsg,
+	.inject = gnix_sep_atomic_inject,
+	.readwrite = gnix_sep_atomic_readwrite,
+	.readwritev = gnix_sep_atomic_readwritev,
+	.readwritemsg = gnix_sep_atomic_readwritemsg,
+	.compwrite = gnix_sep_atomic_compwrite,
+	.compwritev = gnix_sep_atomic_compwritev,
+	.compwritemsg = gnix_sep_atomic_compwritemsg,
+	.writevalid = gnix_ep_atomic_valid,
+	.readwritevalid = gnix_ep_fetch_atomic_valid,
+	.compwritevalid = gnix_ep_cmp_atomic_valid,
 };
 
 /*

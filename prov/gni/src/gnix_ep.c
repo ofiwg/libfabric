@@ -571,9 +571,6 @@ gnix_ep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
  * EP RMA API function implementations.
  ******************************************************************************/
 
-#define GNIX_RMA_READ_FLAGS_DEF		(FI_RMA | FI_READ)
-#define GNIX_RMA_WRITE_FLAGS_DEF	(FI_RMA | FI_WRITE)
-
 DIRECT_FN STATIC ssize_t gnix_ep_read(struct fid_ep *ep, void *buf, size_t len,
 				      void *desc, fi_addr_t src_addr, uint64_t addr,
 				      uint64_t key, void *context)
@@ -928,10 +925,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_tinjectdata(struct fid_ep *ep, const void *buf,
  * EP atomic API implementation.
  ******************************************************************************/
 
-#define GNIX_ATOMIC_WRITE_FLAGS_DEF	(FI_ATOMIC | FI_WRITE)
-#define GNIX_ATOMIC_READ_FLAGS_DEF	(FI_ATOMIC | FI_READ)
-
-DIRECT_FN STATIC int gnix_ep_atomic_valid(struct fid_ep *ep,
+DIRECT_FN int gnix_ep_atomic_valid(struct fid_ep *ep,
 					  enum fi_datatype datatype,
 					  enum fi_op op, size_t *count)
 {
@@ -942,7 +936,7 @@ DIRECT_FN STATIC int gnix_ep_atomic_valid(struct fid_ep *ep,
 		0 : -FI_ENOENT;
 }
 
-DIRECT_FN STATIC int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
+DIRECT_FN int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
 						enum fi_datatype datatype,
 						enum fi_op op, size_t *count)
 {
@@ -953,7 +947,7 @@ DIRECT_FN STATIC int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
 		0 : -FI_ENOENT;
 }
 
-DIRECT_FN STATIC int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
+DIRECT_FN int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
 					      enum fi_datatype datatype,
 					      enum fi_op op, size_t *count)
 {
@@ -1580,15 +1574,29 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		return ret;
 
 	/*
-	 * per fi_endpoint man page, can't bind an object
+	 * Per fi_endpoint man page, can't bind an object
 	 * to an ep after its been enabled.
+	 * For scalable endpoints, the rx/tx contexts are bound to the same
+	 * gnix_ep so we allow enabling of the tx before binding the rx and
+	 * vice versa.
 	 */
-	if ((ep->send_cq && ep->tx_enabled) ||
-		(ep->recv_cq && ep->rx_enabled)) {
-		ret = -FI_EOPBADSTATE;
-		goto err;
+	switch (fid->fclass) {
+	case FI_CLASS_TX_CTX:
+		if (ep->send_cq && ep->tx_enabled) {
+			return -FI_EOPBADSTATE;
+		}
+		break;
+	case FI_CLASS_RX_CTX:
+		if (ep->recv_cq && ep->rx_enabled) {
+			return -FI_EOPBADSTATE;
+		}
+		break;
+	default:
+		if ((ep->send_cq && ep->tx_enabled) ||
+			(ep->recv_cq && ep->rx_enabled)) {
+			return -FI_EOPBADSTATE;
+		}
 	}
-
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
