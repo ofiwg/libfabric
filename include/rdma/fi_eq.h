@@ -38,6 +38,7 @@
 #endif /* _WIN32 */
 
 #include <rdma/fabric.h>
+#include <rdma/fi_errno.h>
 
 
 #ifdef __cplusplus
@@ -289,6 +290,8 @@ struct fi_ops_cntr {
 	int	(*add)(struct fid_cntr *cntr, uint64_t value);
 	int	(*set)(struct fid_cntr *cntr, uint64_t value);
 	int	(*wait)(struct fid_cntr *cntr, uint64_t threshold, int timeout);
+	int	(*adderr)(struct fid_cntr *cntr, uint64_t value);
+	int	(*seterr)(struct fid_cntr *cntr, uint64_t value);
 };
 
 struct fid_cntr {
@@ -433,9 +436,21 @@ static inline int fi_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	return cntr->ops->add(cntr, value);
 }
 
+static inline int fi_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
+{
+	return FI_CHECK_OP(cntr->ops, struct fi_ops_cntr, adderr) ?
+		cntr->ops->adderr(cntr, value) : -FI_ENOSYS;
+}
+
 static inline int fi_cntr_set(struct fid_cntr *cntr, uint64_t value)
 {
 	return cntr->ops->set(cntr, value);
+}
+
+static inline int fi_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
+{
+	return FI_CHECK_OP(cntr->ops, struct fi_ops_cntr, seterr) ?
+		cntr->ops->seterr(cntr, value) : -FI_ENOSYS;
 }
 
 static inline int
