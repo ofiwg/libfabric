@@ -380,26 +380,80 @@ Test(reading, issue192)
 	cr_assert_eq(ret, -FI_EAGAIN);
 }
 
-TestSuite(cq_msg, .init = cq_msg_setup, .fini = cq_teardown);
 
-Test(cq_msg, single)
+static void cq_add_read_setup(enum fi_cq_format format)
+{
+	switch (format) {
+	default:
+	case FI_CQ_FORMAT_UNSPEC:
+		cq_setup();
+		break;
+	case FI_CQ_FORMAT_MSG:
+		cq_msg_setup();
+		break;
+	case FI_CQ_FORMAT_DATA:
+		cq_data_setup();
+		break;
+	case FI_CQ_FORMAT_TAGGED:
+		cq_tagged_setup();
+		break;
+	}
+}
+
+static void cq_add_read_check(enum fi_cq_format format,
+			      struct fi_cq_tagged_entry *entry,
+			      struct fi_cq_tagged_entry *expected)
+{
+	cr_assert_eq(*(char *) entry->op_context,
+		     *(char *) expected->op_context);
+
+	if (format == FI_CQ_FORMAT_UNSPEC ||
+	    format == FI_CQ_FORMAT_CONTEXT) {
+		return;
+	}
+
+	cr_assert_eq(entry->flags, expected->flags);
+	cr_assert_eq(entry->len, expected->len);
+
+	if (format == FI_CQ_FORMAT_MSG) {
+		return;
+	}
+
+	cr_assert_eq(entry->buf, expected->buf);
+	cr_assert_eq(entry->data, expected->data);
+
+	if (format == FI_CQ_FORMAT_DATA) {
+		return;
+	}
+
+	cr_assert_eq(entry->tag, expected->tag);
+}
+
+/*
+ * Add an event and read the cq.
+ */
+static void cq_add_read(enum fi_cq_format format)
 {
 	int ret = 0;
 	char input_ctx = 'a';
-	struct fi_cq_msg_entry entry;
+	struct fi_cq_tagged_entry entry; /* biggest one */
+	struct fi_cq_tagged_entry expected = { &input_ctx, 2, 4, (void *) 8,
+					       16, 32 };
+
+	cq_add_read_setup(format);
 
 	cr_assert(!cq_priv->events->item_list.head);
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, 2, 4, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, expected.op_context, expected.flags,
+			   expected.len, expected.buf, expected.data,
+			   expected.tag, 0x0);
 
 	cr_assert(cq_priv->events->item_list.head);
 
 	ret = fi_cq_read(rcq, &entry, 1);
 	cr_assert_eq(ret, 1);
 
-	cr_assert_eq(entry.flags, 2);
-	cr_assert_eq(*(char *) entry.op_context, input_ctx);
-	cr_assert_eq(entry.len, 4);
+	cq_add_read_check(format, &entry, &expected);
 
 	cr_assert(!cq_priv->events->item_list.head);
 }
@@ -410,40 +464,49 @@ Test(cq_msg, single)
  * add an error and try reading. Ensure that we get back -FI_EAVAIL. Then read
  * the last item and make sure it's the same values put in originally.
  */
-Test(cq_msg, fill)
+static void cq_fill_test(enum fi_cq_format format)
 {
-	struct fi_cq_msg_entry entry;
+	char input_ctx = 'a';
+	struct fi_cq_tagged_entry entry; /* biggest one */
+	struct fi_cq_tagged_entry expected = { &input_ctx, 2, 4, (void *) 8,
+					       16, 32 };
 	struct fi_cq_err_entry err_entry;
 	int ret = 0;
-	char input_ctx = 'a';
 	uint64_t flags = 2;
 	size_t len = 4;
-	const size_t cq_size = cq_priv->attr.size;
+	size_t cq_size;
+
+	cq_add_read_setup(format);
 
 	cr_assert(!cq_priv->events->item_list.head);
 	cr_assert(cq_priv->events->free_list.head);
 
-	for (size_t i = 0; i < cq_size; i++)
-		_gnix_cq_add_event(cq_priv, &input_ctx, flags, len, 0, 0, 0, 0);
+	cq_size = cq_priv->attr.size;
+	for (size_t i = 0; i < cq_size; i++) {
+		_gnix_cq_add_event(cq_priv, expected.op_context,
+				   expected.flags, expected.len,
+				   expected.buf, expected.data,
+				   expected.tag, 0x0);
+	}
 
 	cr_assert(cq_priv->events->item_list.head);
 	cr_assert(!cq_priv->events->free_list.head);
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, flags * 2, len * 2, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, expected.op_context,
+			   expected.flags, 2 * expected.len, expected.buf,
+			   expected.data, expected.tag, 0x0);
 
 	for (size_t i = 0; i < cq_size; i++) {
 		ret = fi_cq_read(rcq, &entry, 1);
 		cr_assert_eq(ret, 1);
-
-		cr_assert_eq(*(char *) entry.op_context, input_ctx);
-		cr_assert_eq(entry.len, len);
-		cr_assert_eq(entry.flags, flags);
+		cq_add_read_check(format, &entry, &expected);
 	}
 
 	/*
 	 * If we insert an error it should return -FI_EAVAIL despite having
 	 * something to read.
 	 */
+
 	_gnix_cq_add_error(cq_priv, &input_ctx, flags, len, 0, 0, 0, 0, 0, 0,
 			   0);
 	cr_assert(cq_priv->errors->item_list.head);
@@ -467,32 +530,134 @@ Test(cq_msg, fill)
 	cr_assert(cq_priv->events->free_list.head);
 	cr_assert(!cq_priv->events->item_list.head);
 
-	cr_assert_eq(*(char *) entry.op_context, input_ctx);
-	cr_assert_eq(entry.len, (len * 2));
-	cr_assert_eq(entry.flags, (flags * 2));
+	expected.len *= 2;
+	cq_add_read_check(format, &entry, &expected);
 }
 
-Test(cq_msg, multi_read)
+/*
+ * Read more than one cqe at a time.
+ */
+static void cq_multi_read_test(enum fi_cq_format format)
 {
 	int ret = 0;
 	size_t count = 3;
-	struct fi_cq_msg_entry entry[count];
+	char input_ctx = 'a';
+	struct fi_cq_tagged_entry entry[count]; /* biggest one */
+	struct fi_cq_tagged_entry expected = { &input_ctx, 2, 4, (void *) 8,
+					       16, 32 };
+
+	cq_add_read_setup(format);
 
 	cr_assert(cq_priv->events->free_list.head);
 	cr_assert(!cq_priv->events->item_list.head);
 
-	for (size_t i = 0; i < count; i++)
-		_gnix_cq_add_event(cq_priv, 0, (uint64_t) i, 0, 0, 0, 0, 0);
+	for (size_t i = 0; i < count; i++) {
+		_gnix_cq_add_event(cq_priv, expected.op_context,
+				   expected.flags, expected.len,
+				   expected.buf, expected.data,
+				   expected.tag, 0x0);
+	}
 
 	cr_assert(cq_priv->events->item_list.head);
 
 	ret = fi_cq_read(rcq, &entry, count);
 	cr_assert_eq(ret, count);
 
-	for (size_t j = 0; j < count; j++)
-		cr_assert_eq(entry[j].flags, (uint64_t) j);
+	for (size_t j = 0; j < count; j++) {
+		/* This is gross */
+		switch (format) {
+		default:
+		case FI_CQ_FORMAT_UNSPEC:
+		{
+			struct fi_cq_entry *e = (struct fi_cq_entry *) entry;
+
+			cq_add_read_check(format,
+					  (struct fi_cq_tagged_entry *) &e[j],
+					  &expected);
+			break;
+		}
+		case FI_CQ_FORMAT_MSG:
+		{
+			struct fi_cq_msg_entry *e =
+				(struct fi_cq_msg_entry *) entry;
+
+			cq_add_read_check(format,
+					  (struct fi_cq_tagged_entry *) &e[j],
+					  &expected);
+			break;
+		}
+		case FI_CQ_FORMAT_DATA:
+		{
+			struct fi_cq_data_entry *e =
+				(struct fi_cq_data_entry *) entry;
+
+			cq_add_read_check(format,
+					  (struct fi_cq_tagged_entry *) &e[j],
+					  &expected);
+			break;
+		}
+		case FI_CQ_FORMAT_TAGGED:
+		{
+			cq_add_read_check(format, &entry[j], &expected);
+			break;
+		}
+		}
+	}
 }
 
+TestSuite(check_cqe, .init = NULL, .fini = cq_teardown);
+
+Test(check_cqe, context) {
+	cq_add_read(FI_CQ_FORMAT_CONTEXT);
+}
+
+Test(check_cqe, context_fill) {
+	cq_fill_test(FI_CQ_FORMAT_CONTEXT);
+}
+
+Test(check_cqe, context_multi_read) {
+	cq_multi_read_test(FI_CQ_FORMAT_CONTEXT);
+}
+
+Test(check_cqe, msg) {
+	cq_add_read(FI_CQ_FORMAT_MSG);
+}
+
+Test(check_cqe, msg_fill) {
+	cq_fill_test(FI_CQ_FORMAT_MSG);
+}
+
+Test(check_cqe, msg_multi_read) {
+	cq_multi_read_test(FI_CQ_FORMAT_MSG);
+}
+
+Test(check_cqe, data) {
+	cq_add_read(FI_CQ_FORMAT_DATA);
+}
+
+Test(check_cqe, data_fill) {
+	cq_fill_test(FI_CQ_FORMAT_DATA);
+}
+
+Test(check_cqe, data_multi_read) {
+	cq_multi_read_test(FI_CQ_FORMAT_DATA);
+}
+
+Test(check_cqe, tagged) {
+	cq_add_read(FI_CQ_FORMAT_TAGGED);
+}
+
+Test(check_cqe, tagged_fill) {
+	cq_fill_test(FI_CQ_FORMAT_TAGGED);
+}
+
+Test(check_cqe, tagged_multi_read) {
+	cq_multi_read_test(FI_CQ_FORMAT_TAGGED);
+}
+
+/* This test should be combined with cq_multi_read_test above when
+ * wait object are implemented.
+ */
 Test(cq_msg, multi_sread, .init = cq_wait_unspec_setup, .disabled = true)
 {
 	int ret = 0;

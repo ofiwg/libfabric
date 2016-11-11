@@ -582,7 +582,10 @@ void do_send(int len)
 	int ret;
 	int source_done = 0, dest_done = 0;
 	int scanceled = 0, dcanceled = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -689,6 +692,12 @@ void do_sendv(int len)
 			     gni_addr[0], src_iov);
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+
 		/* need to progress both CQs simultaneously for rendezvous */
 		do {
 			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
@@ -737,7 +746,10 @@ void do_sendmsg(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	struct fi_msg msg;
 	struct iovec iov;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
@@ -807,7 +819,10 @@ void do_sendmsgdata(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	struct fi_msg msg;
 	struct iovec iov;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
@@ -876,7 +891,8 @@ void do_inject(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -927,7 +943,8 @@ Test(rdm_sr, inject_progress)
 {
 	int ret, len = 64;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -982,7 +999,10 @@ void do_senddata(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -1039,7 +1059,8 @@ void do_injectdata(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -1122,6 +1143,12 @@ void do_recvv(int len)
 		sz = fi_recvv(ep[1], dest_iov, NULL, iov_cnt, gni_addr[0], iov_src_buf);
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+
 		/*  need to progress both CQs simultaneously for rendezvous */
 		do {
 			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
@@ -1169,7 +1196,10 @@ void do_recvmsg(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	struct iovec iov;
 	struct fi_msg msg;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
@@ -1238,7 +1268,10 @@ void do_send_autoreg(int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -1291,7 +1324,10 @@ void do_send_autoreg_uncached(int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -1401,7 +1437,10 @@ void do_send_autoreg_uncached_nolazydereg(int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -1451,7 +1490,10 @@ Test(rdm_sr, send_readfrom)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	ssize_t sz;
 	fi_addr_t src_addr;
 	int len = 64;
@@ -1496,7 +1538,10 @@ void do_send_buf(void *p, void *t, int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
@@ -1563,7 +1608,10 @@ void do_sendrecv_buf(void *p, void *t, int send_len, int recv_len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
 	ssize_t sz;
 	int xfer_len;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
@@ -1647,6 +1695,12 @@ void do_sendvrecv_alignment(int slen, int dlen, int offset)
 			     gni_addr[0], s_iov);
 		cr_assert_eq(sz, 0);
 
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+
 		/* need to progress both CQs simultaneously for rendezvous */
 		do {
 			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
@@ -1704,6 +1758,12 @@ void do_sendrecvv_alignment(int slen, int dlen, int offset)
 
 		sz = fi_recvv(ep[1], d_iov, NULL, iov_cnt, gni_addr[0], (void *) iov_s_buf);
 		cr_assert_eq(sz, 0);
+
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
 
 		/*  need to progress both CQs simultaneously for rendezvous */
 		do {
@@ -1861,6 +1921,12 @@ void do_multirecv(int len)
 
 	/* need to progress both CQs simultaneously for rendezvous */
 	do {
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
 			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
@@ -1955,6 +2021,10 @@ void do_multirecv2(int len)
 
 	/* Progress our sends. */
 	for (i = 0; i < 10000; i++) {
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
 			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
@@ -1980,6 +2050,12 @@ void do_multirecv2(int len)
 
 	/* need to progress both CQs simultaneously for rendezvous */
 	do {
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
 			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
