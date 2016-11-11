@@ -29,6 +29,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <getopt.h>
 
 #include <rdma/fi_errno.h>
@@ -36,6 +37,7 @@
 #include <rdma/fi_cm.h>
 
 #include <shared.h>
+
 
 static int ctx_cnt = 2;
 static int rx_ctx_bits = 0;
@@ -78,11 +80,9 @@ static int alloc_ep_res(struct fid_ep *sep)
 
 	av_attr.rx_ctx_bits = rx_ctx_bits;
 
-	ret = ft_alloc_active_res(fi);
+	ret = ft_alloc_ep_res(fi);
 	if (ret)
 		return ret;
-	/* Closes non-scalable endpoint that was allocated in the common code */
-	FT_CLOSE_FID(ep);
 
 	txcq_array = calloc(ctx_cnt, sizeof *txcq_array);
 	rxcq_array = calloc(ctx_cnt, sizeof *rxcq_array);
@@ -195,14 +195,20 @@ static int wait_for_comp(struct fid_cq *cq)
 	return ret;
 }
 
+#define DATA 0x12345670
+
 static int run_test()
 {
 	int ret = 0, i;
+	uint32_t data;
+	uint32_t *tb = (uint32_t *)tx_buf;
+	uint32_t *rb = (uint32_t *)rx_buf;
 
 	if (opts.dst_addr) {
 		for (i = 0; i < ctx_cnt && !ret; i++) {
 			fprintf(stdout, "Posting send for ctx: %d\n", i);
-			ret = fi_send(tx_ep[i], buf, tx_size, fi_mr_desc(mr),
+			tb[0] = DATA + i;
+			ret = fi_send(tx_ep[i], tx_buf, tx_size, fi_mr_desc(mr),
 					remote_rx_addr[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_send", ret);
@@ -215,6 +221,12 @@ static int run_test()
 		for (i = 0; i < ctx_cnt && !ret; i++) {
 			fprintf(stdout, "wait for recv completion for ctx: %d\n", i);
 			ret = wait_for_comp(rxcq_array[i]);
+
+			data = DATA + i;
+			if (memcmp(&data, rx_buf, 4) != 0) {
+				fprintf(stdout, "failed compare expected 0x%x,"
+					" read 0x%x\n", data, rb[0]);
+			}
 		}
 	}
 
