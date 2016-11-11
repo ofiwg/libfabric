@@ -41,7 +41,6 @@ int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 {
 	struct rxm_domain *rxm_domain;
 	struct rxm_fabric *rxm_fabric;
-	struct rxm_cq *rxm_cq;
 	struct fid_ep *msg_ep;
 	int ret;
 
@@ -68,24 +67,11 @@ int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	}
 
 	// TODO add other completion flags
-	if (rxm_ep->util_ep.tx_cq) {
-		rxm_cq = container_of(rxm_ep->util_ep.tx_cq, struct rxm_cq, util_cq);
-		ret = fi_ep_bind(msg_ep, &rxm_cq->msg_cq->fid, FI_TRANSMIT);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Unable to bind msg_ep to tx_cq\n");
-			goto err;
-		}
-	}
-
-	if (rxm_ep->util_ep.rx_cq) {
-		rxm_cq = container_of(rxm_ep->util_ep.rx_cq, struct rxm_cq, util_cq);
-		ret = fi_ep_bind(msg_ep, &rxm_cq->msg_cq->fid, FI_RECV);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Unable to bind msg_ep to rx_cq\n");
-			goto err;
-		}
+	ret = fi_ep_bind(msg_ep, &rxm_ep->msg_cq->fid, FI_TRANSMIT | FI_RECV);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to bind msg_ep to msg_cq\n");
+		goto err;
 	}
 
 	ret = fi_enable(msg_ep);

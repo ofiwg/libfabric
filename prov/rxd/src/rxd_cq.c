@@ -36,6 +36,13 @@
 #include <inttypes.h>
 #include "rxd.h"
 
+static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
+		const void *err_data, char *buf, size_t len)
+{
+	struct rxd_cq *rxd_cq = container_of(cq_fid, struct rxd_cq, util_cq.cq_fid);
+	return fi_cq_strerror(rxd_cq->dg_cq, prov_errno, err_data, buf, len);
+}
+
 static int rxd_cq_write_ctx(struct rxd_cq *cq,
 			     struct fi_cq_tagged_entry *cq_entry)
 {
@@ -1290,7 +1297,7 @@ int rxd_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = ofi_cq_init(&rxd_prov, domain, attr, &cq->util_cq,
-			  &rxd_cq_progress, context);
+			  &rxd_cq_progress, &rxd_cq_strerror, context);
 	if (ret)
 		goto err1;
 

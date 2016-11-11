@@ -163,7 +163,9 @@ int ofi_domain_close(struct util_domain *domain);
  */
 
 struct util_ep;
-typedef void (*fi_ep_progress_func)(struct util_ep *util_ep);
+struct util_cq;
+typedef void (*ofi_ep_progress_func)(struct util_ep *util_ep,
+		struct util_cq *util_cq);
 
 struct util_ep {
 	struct fid_ep		ep_fid;
@@ -173,12 +175,12 @@ struct util_ep {
 	struct util_cq		*tx_cq;
 	uint64_t		caps;
 	uint64_t		flags;
-	fi_ep_progress_func	progress;
+	ofi_ep_progress_func	progress;
 };
 
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		struct fi_info *info, struct util_ep *ep, void *context,
-		enum fi_match_type type);
+		ofi_ep_progress_func progress, enum fi_match_type type);
 
 int ofi_endpoint_close(struct util_ep *util_ep);
 
@@ -202,14 +204,17 @@ struct util_cq_err_entry {
 
 DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
 
-typedef void (*fi_cq_progress_func)(struct util_cq *cq);
+typedef void (*ofi_cq_progress_func)(struct util_cq *cq);
+typedef const char * (*ofi_cq_strerror_func)(struct fid_cq *cq, int prov_errno,
+		const void *err_data, char *buf, size_t len);
+
 struct util_cq {
 	struct fid_cq		cq_fid;
 	struct util_domain	*domain;
 	struct util_wait	*wait;
 	atomic_t		ref;
-	struct dlist_entry	list;
-	fastlock_t		list_lock;
+	struct dlist_entry	ep_list;
+	fastlock_t		ep_list_lock;
 	fastlock_t		cq_lock;
 
 	struct util_comp_cirq	*cirq;
@@ -218,12 +223,14 @@ struct util_cq {
 	struct slist		err_list;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
-	fi_cq_progress_func	progress;
+	ofi_cq_progress_func	progress;
+	ofi_cq_strerror_func	strerror;
 };
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
-		 fi_cq_progress_func progress, void *context);
+		 ofi_cq_progress_func progress, ofi_cq_strerror_func strerror,
+		 void *context);
 void ofi_cq_progress(struct util_cq *cq);
 int ofi_cq_cleanup(struct util_cq *cq);
 

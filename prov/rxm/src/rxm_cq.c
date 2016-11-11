@@ -35,74 +35,81 @@
 
 #include "rxm.h"
 
-static int rxm_msg_cq_read(struct util_cq *util_cq, struct fid_cq *cq,
-		struct fi_cq_tagged_entry *comp)
+static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
+		const void *err_data, char *buf, size_t len)
 {
-	struct util_cq_err_entry *entry;
-	int ret;
+	struct util_cq *cq;
+	struct rxm_ep *rxm_ep;
+	struct fid_list_entry *fid_entry;
 
-	ret = fi_cq_read(cq, comp, 1);
-	if (ret == -FI_EAVAIL) {
-		entry = calloc(1, sizeof(*entry));
-		if (!entry) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to allocate util_cq_err_entry\n");
-			return -FI_ENOMEM;
-		}
-		OFI_CQ_READERR(&rxm_prov, FI_LOG_CQ, cq, ret, entry->err_entry);
-		if (ret < 0) {
-			free(entry);
-			return ret;
-		}
-		slist_insert_tail(&entry->list_entry, &util_cq->err_list);
-		comp->flags = UTIL_FLAG_ERROR;
-		cirque_commit(util_cq->cirq);
-		return -FI_EAVAIL;
-	}
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	fid_entry = container_of(cq->ep_list.next, struct fid_list_entry, entry);
+	rxm_ep = container_of(fid_entry->fid, struct rxm_ep, util_ep.ep_fid);
 
-	return ret;
+	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
-void rxm_cq_progress(struct util_cq *util_cq)
+int rxm_cq_report_error(struct util_cq *util_cq, struct fi_cq_err_entry *err_entry)
 {
-	ssize_t ret = 0;
-	struct rxm_cq *rxm_cq;
+	struct util_cq_err_entry *entry;
 	struct fi_cq_tagged_entry *comp;
 
-	rxm_cq = container_of(util_cq, struct rxm_cq, util_cq);
+	entry = calloc(1, sizeof(*entry));
+	if (!entry) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unable to allocate util_cq_err_entry\n");
+		return -FI_ENOMEM;
+	}
+
+	entry->err_entry = *err_entry;
+	fastlock_acquire(&util_cq->cq_lock);
+	slist_insert_tail(&entry->list_entry, &util_cq->err_list);
+
+	comp = cirque_tail(util_cq->cirq);
+	comp->flags = UTIL_FLAG_ERROR;
+	cirque_commit(util_cq->cirq);
+	fastlock_release(&util_cq->cq_lock);
+
+	return 0;
+}
+
+int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
+		void *buf, uint64_t data, uint64_t tag)
+{
+	struct fi_cq_tagged_entry *comp;
+	int ret = 0;
 
 	fastlock_acquire(&util_cq->cq_lock);
-	do {
-		if (cirque_isfull(util_cq->cirq))
-			goto out;
+	if (cirque_isfull(util_cq->cirq)) {
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "util_cq cirq is full!\n");
+		ret = -FI_EAGAIN;
+		goto out;
+	}
 
-		comp = cirque_tail(util_cq->cirq);
-		ret = rxm_msg_cq_read(util_cq, rxm_cq->msg_cq, comp);
-		if (ret < 0)
-			goto out;
-		cirque_commit(util_cq->cirq);
-	} while (ret > 0);
+	comp = cirque_tail(util_cq->cirq);
+	comp->op_context = context;
+	comp->flags = flags;
+	comp->len = len;
+	comp->buf = buf;
+	comp->data = data;
+	cirque_commit(util_cq->cirq);
 out:
 	fastlock_release(&util_cq->cq_lock);
+	return ret;
 }
 
 static int rxm_cq_close(struct fid *fid)
 {
-	struct rxm_cq *rxm_cq;
+	struct util_cq *util_cq;
 	int ret, retv = 0;
 
-	rxm_cq = container_of(fid, struct rxm_cq, util_cq.cq_fid.fid);
+	util_cq = container_of(fid, struct util_cq, cq_fid.fid);
 
-	ret = ofi_cq_cleanup(&rxm_cq->util_cq);
+	ret = ofi_cq_cleanup(util_cq);
 	if (ret)
 		retv = ret;
 
-	ret = fi_close(&rxm_cq->msg_cq->fid);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to close MSG CQ\n");
-		retv = ret;
-	}
-	free(rxm_cq);
+	free(util_cq);
 	return retv;
 }
 
@@ -117,34 +124,23 @@ static struct fi_ops rxm_cq_fi_ops = {
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	struct rxm_domain *rxm_domain;
-	struct rxm_cq *rxm_cq;
+	struct util_cq *util_cq;
 	int ret;
 
-	rxm_cq = calloc(1, sizeof(*rxm_cq));
-	if (!rxm_cq)
+	util_cq = calloc(1, sizeof(*util_cq));
+	if (!util_cq)
 		return -FI_ENOMEM;
 
-	rxm_domain = container_of(domain, struct rxm_domain, util_domain.domain_fid);
-
-	ret = fi_cq_open(rxm_domain->msg_domain, attr, &rxm_cq->msg_cq, context);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to open MSG CQ\n");
-		goto err1;
-	}
-
-	ret = ofi_cq_init(&rxm_prov, domain, attr, &rxm_cq->util_cq,
-			&rxm_cq_progress, context);
+	ret = ofi_cq_init(&rxm_prov, domain, attr, util_cq, &ofi_cq_progress,
+			&rxm_cq_strerror, context);
 	if (ret)
-		goto err2;
+		goto err1;
 
-	*cq_fid = &rxm_cq->util_cq.cq_fid;
+	*cq_fid = &util_cq->cq_fid;
 	/* Override util_cq_fi_ops */
 	(*cq_fid)->fid.ops = &rxm_cq_fi_ops;
 	return 0;
-err2:
-	fi_close(&rxm_cq->msg_cq->fid);
 err1:
-	free(rxm_cq);
+	free(util_cq);
 	return ret;
 }

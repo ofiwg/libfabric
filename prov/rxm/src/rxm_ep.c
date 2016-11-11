@@ -207,6 +207,12 @@ static int rxm_ep_close(struct fid *fid)
 		atomic_dec(&rxm_ep->util_ep.av->ref);
 	}
 
+	ret = fi_close(&rxm_ep->msg_cq->fid);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
+		retv = ret;
+	}
+
 	ret = fi_close(&rxm_ep->srx_ctx->fid);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg shared ctx\n");
@@ -221,11 +227,19 @@ static int rxm_ep_close(struct fid *fid)
 
 	fi_freeinfo(rxm_ep->msg_info);
 
-	if (rxm_ep->util_ep.rx_cq)
-		atomic_dec(&rxm_ep->util_ep.rx_cq->ref);
-
-	if (rxm_ep->util_ep.tx_cq)
+	if (rxm_ep->util_ep.tx_cq) {
+		fid_list_remove(&rxm_ep->util_ep.tx_cq->ep_list,
+				&rxm_ep->util_ep.tx_cq->ep_list_lock,
+				&rxm_ep->util_ep.ep_fid.fid);
 		atomic_dec(&rxm_ep->util_ep.tx_cq->ref);
+	}
+
+	if (rxm_ep->util_ep.rx_cq) {
+		fid_list_remove(&rxm_ep->util_ep.rx_cq->ep_list,
+				&rxm_ep->util_ep.rx_cq->ep_list_lock,
+				&rxm_ep->util_ep.ep_fid.fid);
+		atomic_dec(&rxm_ep->util_ep.rx_cq->ref);
+	}
 
 	atomic_dec(&rxm_ep->util_ep.domain->ref);
 	free(rxm_ep);
@@ -234,30 +248,36 @@ static int rxm_ep_close(struct fid *fid)
 
 static int rxm_ep_bind_cq(struct rxm_ep *rxm_ep, struct util_cq *util_cq, uint64_t flags)
 {
-	struct rxm_cq *rxm_cq;
-
-	rxm_cq = container_of(util_cq, struct rxm_cq, util_cq);
+	int ret;
 
 	if (flags & ~(FI_TRANSMIT | FI_RECV)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unsupported flags\n");
 		return -FI_EBADFLAGS;
 	}
 
-	if (((flags & FI_TRANSMIT) && rxm_ep->tx_cq) ||
-	    ((flags & FI_RECV) && rxm_ep->rx_cq)) {
+	if (((flags & FI_TRANSMIT) && rxm_ep->util_ep.tx_cq) ||
+	    ((flags & FI_RECV) && rxm_ep->util_ep.rx_cq)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "duplicate CQ binding\n");
 		return -FI_EINVAL;
 	}
 
 	if (flags & FI_TRANSMIT) {
-		rxm_ep->util_ep.tx_cq = &rxm_cq->util_cq;
-		atomic_inc(&rxm_cq->util_cq.ref);
+		rxm_ep->util_ep.tx_cq = util_cq;
+		atomic_inc(&util_cq->ref);
 	}
 
 	if (flags & FI_RECV) {
-		rxm_ep->util_ep.rx_cq = &rxm_cq->util_cq;
-		atomic_inc(&rxm_cq->util_cq.ref);
+		rxm_ep->util_ep.rx_cq = util_cq;
+		atomic_inc(&util_cq->ref);
 	}
+	if (flags & (FI_TRANSMIT | FI_RECV)) {
+		ret = fid_list_insert(&util_cq->ep_list,
+				      &util_cq->ep_list_lock,
+				      &rxm_ep->util_ep.ep_fid.fid);
+	}
+	if (ret)
+		return ret;
+
 	return 0;
 }
 
@@ -350,6 +370,7 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_info,
 {
 	struct rxm_fabric *rxm_fabric;
 	struct rxm_domain *rxm_domain;
+	struct fi_cq_attr cq_attr;
 	int ret;
 
 	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
@@ -364,6 +385,16 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_info,
 	ret = fi_passive_ep(rxm_fabric->msg_fabric, rxm_ep->msg_info, &rxm_ep->msg_pep, rxm_ep);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open msg PEP\n");
+		goto err1;
+	}
+
+	memset(&cq_attr, 0, sizeof(cq_attr));
+	cq_attr.size = rxm_info->tx_attr->size + rxm_info->rx_attr->size;
+	cq_attr.format = FI_CQ_FORMAT_MSG;
+
+	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to open MSG CQ\n");
 		goto err1;
 	}
 
@@ -395,6 +426,39 @@ err1:
 	return ret;
 }
 
+void rxm_ep_progress(struct util_ep *util_ep, struct util_cq *util_cq)
+{
+	struct rxm_ep *rxm_ep;
+	struct fi_cq_msg_entry comp;
+	struct fi_cq_err_entry err_entry;
+	int ret = 0;
+
+	rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
+	do {
+		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
+		if (ret == -FI_EAVAIL) {
+			OFI_CQ_READERR(&rxm_prov, FI_LOG_CQ, rxm_ep->msg_cq,
+					ret, err_entry);
+			if (ret < 0)
+				goto err;
+
+			rxm_cq_report_error(util_cq, &err_entry);
+			break;
+		}
+		if (ret < 0)
+			goto err;
+
+		ret = rxm_cq_comp(util_cq, comp.op_context, comp.flags, 0, NULL, 0, 0);
+		// TODO store completion on a temp queue
+		if (ret)
+			goto err;
+	} while (ret > 0);
+	return;
+err:
+	// TODO report error on RXM EP/domain since EP/CQ is broken.
+	return;
+}
+
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
@@ -407,7 +471,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_endpoint_init(domain, &rxm_util_prov, info, &rxm_ep->util_ep,
-			context, FI_MATCH_PREFIX);
+			context, rxm_ep_progress, FI_MATCH_PREFIX);
 	if (ret)
 		goto err;
 

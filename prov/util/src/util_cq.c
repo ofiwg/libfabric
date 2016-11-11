@@ -255,10 +255,12 @@ static int util_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
-static const char *util_cq_strerror(struct fid_cq *cq, int prov_errno,
+static const char *util_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 				    const void *err_data, char *buf, size_t len)
 {
-	return fi_strerror(prov_errno);
+	struct util_cq *cq = container_of(cq_fid, struct util_cq, cq_fid.fid);
+	return cq->strerror ? cq->strerror(cq_fid, prov_errno, err_data, buf, len) :
+		fi_strerror(prov_errno);
 }
 
 static struct fi_ops_cq util_cq_ops = {
@@ -281,7 +283,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 		return -FI_EBUSY;
 
 	fastlock_destroy(&cq->cq_lock);
-	fastlock_destroy(&cq->list_lock);
+	fastlock_destroy(&cq->ep_list_lock);
 
 	while (!slist_empty(&cq->err_list)) {
 		entry = slist_remove_head(&cq->err_list);
@@ -332,8 +334,8 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq->domain = container_of(domain, struct util_domain, domain_fid);
 	atomic_initialize(&cq->ref, 0);
-	dlist_init(&cq->list);
-	fastlock_init(&cq->list_lock);
+	dlist_init(&cq->ep_list);
+	fastlock_init(&cq->ep_list_lock);
 	fastlock_init(&cq->cq_lock);
 	slist_init(&cq->err_list);
 	cq->read_entry = read_entry;
@@ -377,19 +379,20 @@ void ofi_cq_progress(struct util_cq *cq)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	fastlock_acquire(&cq->list_lock);
-	dlist_foreach(&cq->list, item) {
+	fastlock_acquire(&cq->ep_list_lock);
+	dlist_foreach(&cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
-		ep->progress(ep);
+		ep->progress(ep, cq);
 
 	}
-	fastlock_release(&cq->list_lock);
+	fastlock_release(&cq->ep_list_lock);
 }
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
-		 fi_cq_progress_func progress, void *context)
+		 ofi_cq_progress_func progress, ofi_cq_strerror_func strerror,
+		 void *context)
 {
 	fi_cq_read_func read_func;
 	int ret;
@@ -402,6 +405,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	cq->cq_fid.fid.ops = &util_cq_fi_ops;
 	cq->cq_fid.ops = &util_cq_ops;
 	cq->progress = progress;
+	cq->strerror = strerror;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
