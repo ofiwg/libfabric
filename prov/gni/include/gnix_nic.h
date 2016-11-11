@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -173,6 +173,8 @@ struct gnix_nic {
 	struct dlist_entry work_vcs;
 	fastlock_t tx_vc_lock;
 	struct dlist_entry tx_vcs;
+	/* note this free list will be initialized for thread safe */
+	struct gnix_freelist vc_freelist;
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t device_id;

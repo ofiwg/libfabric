@@ -1422,6 +1422,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	struct gnix_vc *vc_ptr = NULL;
 	struct gnix_cm_nic *cm_nic = NULL;
 	struct gnix_nic *nic = NULL;
+	struct dlist_entry *de;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1433,9 +1434,17 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	if (cm_nic == NULL)
 		return -FI_EINVAL;
 
-	vc_ptr = calloc(1, sizeof(*vc_ptr));
-	if (!vc_ptr)
-		return -FI_ENOMEM;
+	/*
+	 * allocate VC from domain's vc_freelist
+	 */
+
+	ret = _gnix_fl_alloc(&de, &nic->vc_freelist);
+	while (ret == -FI_EAGAIN)
+		ret = _gnix_fl_alloc(&de, &nic->vc_freelist);
+	if (ret == FI_SUCCESS) {
+		vc_ptr = container_of(de, struct gnix_vc, fr_list);
+	} else
+		return ret;
 
 	vc_ptr->conn_state = GNIX_VC_CONN_NONE;
 	if (entry) {
@@ -1630,7 +1639,12 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 
 	_gnix_free_bitmap(&vc->flags);
 
-	free(vc);
+	/*
+	 * put VC back on the freelist
+	 */
+
+	vc->conn_state = GNIX_VC_CONN_NONE;
+	_gnix_fl_free(&vc->fr_list, &nic->vc_freelist);
 
 	return ret;
 }

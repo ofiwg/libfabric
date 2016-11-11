@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -89,6 +90,8 @@ enum gnix_vc_conn_req_type {
  * @var tx_queue             TX request queue
  * @var tx_queue_lock        TX request queue lock
  * @var tx_list              NIC TX VC list
+ * @var list                 used for unmapped vc list
+ * @var fr_list              used for vc free list
  * @var entry                used internally for managing linked lists
  *                           of vc structs that require O(1) insertion/removal
  * @var peer_fi_addr         FI address of peer with which this VC is connected
@@ -127,6 +130,7 @@ struct gnix_vc {
 	struct dlist_entry tx_list;	/* TX VC list entry */
 
 	struct dlist_entry list;	/* General purpose list */
+	struct dlist_entry fr_list;	/* fr list */
 	fi_addr_t peer_fi_addr;
 	struct gnix_address peer_addr;
 	struct gnix_address peer_cm_nic_addr;
