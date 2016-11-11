@@ -213,20 +213,20 @@ static void ft_cntr_set_wait_attr(void)
 	}
 }
 
-static uint64_t ft_caps_to_mr_access(uint64_t caps)
+static uint64_t ft_info_to_mr_access(struct fi_info *info)
 {
 	uint64_t mr_access = 0;
 
-	if (caps & (FI_MSG | FI_TAGGED)) {
-		if (caps & FT_MSG_MR_ACCESS)
-			mr_access |= caps & FT_MSG_MR_ACCESS;
+	if ((info->mode & FI_LOCAL_MR) && (info->caps & (FI_MSG | FI_TAGGED))) {
+		if (info->caps & FT_MSG_MR_ACCESS)
+			mr_access |= info->caps & FT_MSG_MR_ACCESS;
 		else
 			mr_access |= FT_MSG_MR_ACCESS;
 	}
 
-	if (caps & (FI_RMA | FI_ATOMIC)) {
-		if (caps & FT_RMA_MR_ACCESS)
-			mr_access |= caps & FT_RMA_MR_ACCESS;
+	if (info->caps & (FI_RMA | FI_ATOMIC)) {
+		if (info->caps & FT_RMA_MR_ACCESS)
+			mr_access |= info->caps & FT_RMA_MR_ACCESS;
 		else
 			mr_access |= FT_RMA_MR_ACCESS;
 	}
@@ -285,7 +285,7 @@ int ft_alloc_msgs(void)
 
 	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
-		ret = fi_mr_reg(domain, buf, buf_size, ft_caps_to_mr_access(fi->caps),
+		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi),
 				0, FT_MR_KEY, 0, &mr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_mr_reg", ret);
