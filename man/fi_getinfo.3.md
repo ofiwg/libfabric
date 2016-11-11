@@ -168,13 +168,19 @@ struct fi_info {
 *src_addr - source address*
 : If specified, indicates the source address.  This field will be
   ignored in hints if FI_SOURCE flag is set.  On output a provider shall
-  return an address that corresponds to the indicated fabric or domain,
-  with the format indicated by the returned *addr_format* field.
+  return an address that corresponds to the indicated fabric, domain,
+  node, and/or service fields.  The format of the address is indicated
+  by the returned *addr_format* field.  Note that any returned address
+  is only used when opening a local endpoint.  The address is not
+  guaranteed to be usable by a peer process.
 
 *dest_addr - destination address*
 : If specified, indicates the destination address.  This field will be
   ignored in hints unless the node and service parameters are NULL or
-  FI_SOURCE flag is set.
+  FI_SOURCE flag is set.  If FI_SOURCE is not specified, on output a
+  provider shall return an address the corresponds to the indicated
+  node and/or service fields, relative to the fabric and domain.  Note
+  that any returned address is only usable locally.
 
 *handle - provider context handle*
 : References a provider specific handle.  The use of this field
