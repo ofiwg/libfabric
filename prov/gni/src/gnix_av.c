@@ -400,7 +400,8 @@ static int map_reverse_lookup(struct gnix_fid_av *av_priv,
 
 			if ((index >= 0) && (index < entry->rx_ctx_cnt)) {
 				/* we have a match */
-				rx_addr = *(fi_addr_t *)&entry->gnix_addr;
+				memcpy(&rx_addr, &entry->gnix_addr,
+					sizeof(fi_addr_t));
 				*fi_addr = fi_rx_addr(rx_addr,
 						      index,
 						      av_priv->rx_ctx_bits);
