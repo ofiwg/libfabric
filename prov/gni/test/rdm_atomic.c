@@ -3056,17 +3056,15 @@ void do_fetch_atomic_read(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					  (void *) -1, UINT_MAX, UINT_MAX };
-	uint64_t operand;
 	float operand_fp;
 	double operand_dp;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
-	operand = SOURCE_DATA;
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
-	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
+	sz = fi_fetch_atomic(ep[0], NULL, 1, NULL,
 			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
 			     mr_key[1], FI_UINT64, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
@@ -3087,14 +3085,11 @@ void do_fetch_atomic_read(int len)
 	cr_assert(ret, "Data mismatch");
 	ret = *((uint64_t *)source) == (uint64_t)TARGET_DATA;
 	cr_assert(ret, "Fetch data mismatch");
-	ret = *((uint64_t *)&operand) == TARGET_DATA;
-	cr_assert(ret, "Read data mismatch");
 
 	/* U32 */
-	operand = SOURCE_DATA;
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
-	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
+	sz = fi_fetch_atomic(ep[0], NULL, 1, NULL,
 			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
 			     mr_key[1], FI_UINT32, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
@@ -3118,16 +3113,11 @@ void do_fetch_atomic_read(int len)
 		(uint64_t)((TARGET_DATA & U32_MASK) |
 			   (FETCH_SOURCE_DATA & (U32_MASK << 32)));
 	cr_assert(ret, "Fetch data mismatch");
-	ret = *((uint64_t *)&operand) ==
-		(uint64_t)((TARGET_DATA & U32_MASK) |
-			   (SOURCE_DATA & (U32_MASK << 32)));
-	cr_assert(ret, "Read data mismatch");
 
 	/* i64 */
-	operand = SOURCE_DATA;
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
-	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
+	sz = fi_fetch_atomic(ep[0], NULL, 1, NULL,
 			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
 			     mr_key[1], FI_INT64, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
@@ -3149,14 +3139,11 @@ void do_fetch_atomic_read(int len)
 	cr_assert(ret, "Data mismatch");
 	ret = *((uint64_t *)source) == TARGET_DATA;
 	cr_assert(ret, "Fetch data mismatch");
-	ret = *((uint64_t *)&operand) == TARGET_DATA;
-	cr_assert(ret, "Read data mismatch");
 
 	/* i32 */
-	operand = SOURCE_DATA;
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
-	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
+	sz = fi_fetch_atomic(ep[0], NULL, 1, NULL,
 			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
 			     mr_key[1], FI_INT32, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
@@ -3180,16 +3167,12 @@ void do_fetch_atomic_read(int len)
 		(uint64_t)((TARGET_DATA & U32_MASK) |
 			   (FETCH_SOURCE_DATA & (U32_MASK << 32)));
 	cr_assert(ret, "Fetch data mismatch");
-	ret = *((uint64_t *)&operand) ==
-		(uint64_t)((TARGET_DATA & U32_MASK) |
-			   (SOURCE_DATA & (U32_MASK << 32)));
-	cr_assert(ret, "Read data mismatch");
 
 	/* float */
 	*((float *)&operand_fp) = SOURCE_DATA_FP;
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
-	sz = fi_fetch_atomic(ep[0], &operand_fp, 1, NULL,
+	sz = fi_fetch_atomic(ep[0], NULL, 1, NULL,
 			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
 			     mr_key[1], FI_FLOAT, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
@@ -3211,14 +3194,12 @@ void do_fetch_atomic_read(int len)
 	cr_assert(ret, "Data mismatch");
 	ret = *((float *)source) == (float)TARGET_DATA_FP;
 	cr_assert(ret, "Fetch data mismatch");
-	ret = *((float *)&operand_fp) == (float)TARGET_DATA_FP;
-	cr_assert(ret, "Read data mismatch");
 
 	/* double */
 	*(double *)&operand_dp = SOURCE_DATA_FP;
 	*((double *)source) = FETCH_SOURCE_DATA;
 	*((double *)target) = TARGET_DATA_FP;
-	sz = fi_fetch_atomic(ep[0], &operand_dp, 1, NULL,
+	sz = fi_fetch_atomic(ep[0], NULL, 1, NULL,
 			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
 			     mr_key[1], FI_DOUBLE, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
@@ -3240,8 +3221,6 @@ void do_fetch_atomic_read(int len)
 	cr_assert(ret, "Data mismatch");
 	ret = *((double *)source) == (double)TARGET_DATA_FP;
 	cr_assert(ret, "Fetch data mismatch");
-	ret = *((double *)&operand_dp) == (double)TARGET_DATA_FP;
-	cr_assert(ret, "Read data mismatch");
 }
 
 Test(rdm_atomic, fetch_atomic_read)

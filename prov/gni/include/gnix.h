@@ -724,7 +724,6 @@ struct gnix_fab_req_amo {
 	enum fi_op               op;
 	uint64_t                 first_operand;
 	uint64_t                 second_operand;
-	void                     *read_buf;
 };
 
 /*

@@ -274,32 +274,11 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
 	int rc = FI_SUCCESS;
-	uint32_t read_data32;
-	uint64_t read_data64;
 
 	_gnix_nic_tx_free(req->vc->ep->nic, txd);
 
 	if (tx_status != GNI_RC_SUCCESS) {
 		return __gnix_amo_post_err(req, FI_ECANCELED);
-	}
-
-	/* FI_ATOMIC_READ data is delivered to operand buffer in addition to
-	 * the results buffer. */
-	if (req->amo.op == FI_ATOMIC_READ) {
-		switch(fi_datatype_size(req->amo.datatype)) {
-		case sizeof(uint32_t):
-			read_data32 = *(uint32_t *)req->amo.loc_addr;
-			*(uint32_t *)req->amo.read_buf = read_data32;
-			break;
-		case sizeof(uint64_t):
-			read_data64 = *(uint64_t *)req->amo.loc_addr;
-			*(uint64_t *)req->amo.read_buf = read_data64;
-			break;
-		default:
-			GNIX_FATAL(FI_LOG_EP_DATA, "Invalid datatype: %d\n",
-				   req->amo.datatype);
-			break;
-		}
 	}
 
 	if (req->vc->peer_caps & FI_RMA_EVENT) {
@@ -532,10 +511,17 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 
 
 	if (!ep || !msg || !msg->msg_iov ||
-	    !msg->msg_iov[0].addr ||
 	    msg->msg_iov[0].count != 1 ||
 	    msg->iov_count != GNIX_MAX_ATOMIC_IOV_LIMIT ||
 	    !msg->rma_iov || !msg->rma_iov[0].addr)
+		return -FI_EINVAL;
+
+	/*
+	 * see fi_atomic man page
+	 */
+
+	if ((msg->op != FI_ATOMIC_READ) &&
+		!msg->msg_iov[0].addr)
 		return -FI_EINVAL;
 
 	if (flags & FI_TRIGGER) {
@@ -639,13 +625,7 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		req->amo.second_operand =
 			*((uint64_t *)(msg->msg_iov[0].addr) + 1);
 	} else if (msg->op == FI_ATOMIC_READ) {
-		/* Atomic reads are the only AMO which write to the operand
-		 * buffer.  It's assumed that this is in addition to writing
-		 * fetched data to the result buffer.  Make the NIC write to
-		 * the result buffer, like all other AMOS, and copy read data
-		 * to the operand buffer after the completion is received. */
 		req->amo.first_operand = 0xFFFFFFFFFFFFFFFF; /* operand to FAND */
-		req->amo.read_buf = msg->msg_iov[0].addr;
 	} else if (msg->op == FI_CSWAP) {
 		req->amo.first_operand = compare_operand;
 		req->amo.second_operand = *(uint64_t *)msg->msg_iov[0].addr;
