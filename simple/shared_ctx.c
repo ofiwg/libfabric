@@ -129,7 +129,7 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
-	ret = ft_alloc_active_res(fi);
+	ret = ft_alloc_ep_res(fi);
 	if (ret)
 		return ret;
 
