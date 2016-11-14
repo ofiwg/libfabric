@@ -1,4 +1,4 @@
-.TH fi_bgq 7 "2016\-03\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_bgq" "7" "2016\-11\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Blue Gene/Q Fabric Provider
@@ -43,7 +43,7 @@ added in the future.
 supported, however use of this mode for hardware accelerated rma
 transfers is severely limited due to a mismatch between the libfabric
 API and the Blue Gene/Q hardware capabilities.
-Support for a non-standard version of \f[I]FI_MR_BASIC\f[] may be added
+Support for a non\-standard version of \f[I]FI_MR_BASIC\f[] may be added
 in the future which would enable hardware accelerated rma read, rma
 write, and network atomic operations.
 .SH UNSUPPORTED FEATURES
@@ -55,8 +55,8 @@ support for all of these features may be added in the future.
 The \f[I]FI_ATOMIC\f[] endpoint capability is disabled, however support
 may be added in the future.
 Native hardware accelerated atomic operations will require a
-non-standard version of \f[I]FI_MR_BASIC\f[] that uses offset-based
-remote addressing and will be limited to the operation-datatype
+non\-standard version of \f[I]FI_MR_BASIC\f[] that uses offset\-based
+remote addressing and will be limited to the operation\-datatype
 combinations common to the libfabric API and the Blue Gene/Q network
 hardware.
 .SH LIMITATIONS
@@ -64,8 +64,8 @@ hardware.
 The bgq provider only supports \f[I]FABRIC_DIRECT\f[].
 The size of the fi_context structure for \f[I]FI_CONTEXT\f[] is too
 small to be useful.
-In the \[aq]direct\[aq] mode the bgq provider can re-define the struct
-fi_context to a larger size - currently 64 bytes which is the L1 cache
+In the \[aq]direct\[aq] mode the bgq provider can re\-define the struct
+fi_context to a larger size \- currently 64 bytes which is the L1 cache
 size.
 .PP
 The fi_context structure for \f[I]FI_CONTEXT\f[] must be aligned to 8
@@ -77,13 +77,13 @@ Unfortunately, the libfabric API has no mechanism for applications to
 programmatically determine these alignment requirements.
 Because unaligned MU atomics operations are a fatal error, the bgq
 provider will assert on the alignment for "debug" builds (i.e., the
-\[aq]-DNDEBUG\[aq] pre-processor flag is not specified).
+\[aq]\-DNDEBUG\[aq] pre\-processor flag is not specified).
 .PP
 The progress thread used for \f[I]FI_PROGRESS_AUTO\f[] effectively
-limits the maximum number of ranks-per-node to 32.
+limits the maximum number of ranks\-per\-node to 32.
 .PP
 The definition of the memory region key size (mr_key_size) effectively
-limits the maximum number of ranks-per-node to 2 for hardware
+limits the maximum number of ranks\-per\-node to 2 for hardware
 accelerated rma transfers.
 This is because each compute node has a Base Address Table (BAT)
 composed of 512 entries and must be shared among all processes on the
@@ -91,8 +91,8 @@ node.
 The mr_key_size reports the number of \f[I]bytes\f[] for the size of the
 memory region key variable which limits the maximum number of keys to
 256 (2^8) even when the hardware could support 512 keys with 1
-rank-per-node.
-At 4 ranks-per-node and higher the maximum number of keys for each
+rank\-per\-node.
+At 4 ranks\-per\-node and higher the maximum number of keys for each
 process would be less than 256 and forces the bgq provider to report a
 key size of zero bytes.
 This effectively disables support for memory regions in
@@ -100,14 +100,14 @@ This effectively disables support for memory regions in
 .PP
 It is invalid to register memory at the base virtual address "0" with a
 length of "UINTPTR_MAX" (or equivalent).
-The Blue Gene/Q hardware operates on 37-bit physical addresses and all
+The Blue Gene/Q hardware operates on 37\-bit physical addresses and all
 virtual addresses specified in the libfabric API, such as the location
 of source/destination data and remote memory locations, must be
 converted to a physical address before use.
-A 64-bit virtual address space will not fit into a 37-bit physical
+A 64\-bit virtual address space will not fit into a 37\-bit physical
 address space.
 .PP
-fi_trecvmsg() fnd fi_recvmsg() unctions do not support non-contiguous
+fi_trecvmsg() fnd fi_recvmsg() unctions do not support non\-contiguous
 receives and the iovec count must be 1.
 The fi_trecvv() and fi_recvv() functions are currently not supported.
 .SH RUNTIME PARAMETERS

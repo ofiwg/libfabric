@@ -1,4 +1,4 @@
-.TH "fi_provider" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_provider" "7" "2016\-11\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Fabric Interface Providers
@@ -43,6 +43,8 @@ Analogous to the Sockets provider, the Verbs provider is intended to
 enable developers to write, test, and debug application code on
 platforms that only have Linux Verbs\-based networking.
 See \f[C]fi_verbs\f[](7) for more information.
+.PP
+\f[I]Blue Gene/Q\f[] : See \f[C]fi_bgq\f[](7) for more information.
 .SH PROVIDER REQUIREMENTS
 .PP
 Libfabric provides a general framework for supporting multiple types of
@@ -173,6 +175,6 @@ flag.
 .SH SEE ALSO
 .PP
 \f[C]fi_gni\f[](7), \f[C]fi_psm\f[](7), \f[C]fi_sockets\f[](7),
-\f[C]fi_usnic\f[](7), \f[C]fi_verbs\f[](7),
+\f[C]fi_usnic\f[](7), \f[C]fi_verbs\f[](7), \f[C]fi_bgq\f[](7),
 .SH AUTHORS
 OpenFabrics.
