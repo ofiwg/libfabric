@@ -16,6 +16,7 @@ You have been warned.
 
 * General information
   * [fabric(7)](fabric.7.html)
+  * [fi_bgq(7)](fi_bgq.7.html)
   * [fi_direct(7)](fi_direct.7.html)
   * [fi_gni(7)](fi_gni.7.html)
   * [fi_provider(7)](fi_provider.7.html)
