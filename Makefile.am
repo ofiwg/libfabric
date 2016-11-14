@@ -99,6 +99,7 @@ util_fi_pingpong_SOURCES = \
 	util/pingpong.c
 util_fi_pingpong_LDADD = $(linkback)
 
+nodist_src_libfabric_la_SOURCES =
 src_libfabric_la_SOURCES = \
 	include/fi.h \
 	include/fi_abi.h \
@@ -130,7 +131,10 @@ src_libfabric_la_LDFLAGS =
 src_libfabric_la_LIBADD =
 src_libfabric_la_DEPENDENCIES = libfabric.map
 
-src_libfabric_la_LDFLAGS += -version-info 3:1:2 -export-dynamic \
+if !EMBEDDED
+src_libfabric_la_LDFLAGS += -version-info 3:1:2
+endif
+src_libfabric_la_LDFLAGS += -export-dynamic \
 			   $(libfabric_version_script)
 rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fabric.h \
@@ -146,7 +150,6 @@ rdmainclude_HEADERS += \
 
 if HAVE_DIRECT
 nodist_rdmainclude_HEADERS = \
-	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_domain.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_endpoint.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_tagged.h \
@@ -156,6 +159,11 @@ nodist_rdmainclude_HEADERS = \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_cm.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_eq.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_trigger.h
+if FI_DIRECT_H_IN
+nodist_rdmainclude_HEADERS += $(top_builddir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h
+else
+nodist_rdmainclude_HEADERS += $(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h
+endif
 endif HAVE_DIRECT
 
 real_man_pages = \
@@ -302,7 +310,7 @@ pkgconfig_DATA = libfabric.pc
 nroff:
 	@for file in $(real_man_pages) $(prov_install_man_pages); do \
 	    source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
-	    config/md2nroff.pl --source=$$source.md; \
+	    $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
 	done
 
 dist-hook: libfabric.spec
@@ -330,6 +338,7 @@ include prov/psm2/Makefile.include
 include prov/gni/Makefile.include
 include prov/rxm/Makefile.include
 include prov/rxd/Makefile.include
+include prov/bgq/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 

@@ -127,8 +127,15 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 		 AS_IF([test -f "$srcdir/prov/$1/include/rdma/fi_direct.h"],
 			[AC_MSG_RESULT(yes)],
 			[AC_MSG_RESULT(no)
-			  AC_MSG_ERROR([$1 provider was requested as direct, but is missing fi_direct.h])]
-			)])
+			 AC_MSG_CHECKING(for $srcdir/prov/$1/include/rdma/fi_direct.h.in)
+			 AS_IF([test -f "$srcdir/prov/$1/include/rdma/fi_direct.h.in"],
+				[AC_MSG_RESULT(yes)],
+				[AC_MSG_RESULT(no)
+				 AC_MSG_ERROR([$1 provider was requested as direct, but is missing fi_direct.h and fi_direct.h.in])]
+			      )])])
+
+	AM_CONDITIONAL([FI_DIRECT_H_IN], [test -f "$srcdir/prov/$1/include/rdma/fi_direct.h.in"])
+
 
 	# Restore CPPFLAGS/LDFLAGS/LIBS
 	CPPFLAGS=$$1_orig_CPPFLAGS
