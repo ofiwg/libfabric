@@ -36,6 +36,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
