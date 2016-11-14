@@ -495,3 +495,35 @@
    fun:GNI_PostCqWrite
    ...
 }
+
+
+{
+   UDREG_BUG_841637_1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:ckalloc
+   fun:avl_insert
+   ...
+}
+
+{
+   UDREG_BUG_841637_2 
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ckalloc
+   fun:avlinit
+   fun:UDREG_CacheCreate
+   ... 
+}
+
+{
+   UDRED_BUG_841637_3 
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:UDREG_Register
+   ...
+}
+
