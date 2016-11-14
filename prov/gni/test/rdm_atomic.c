@@ -177,9 +177,6 @@ void common_atomic_setup(void)
 		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
 		cr_assert(!ret, "fi_ep_bind");
 
-		ret = fi_enable(ep[i]);
-		cr_assert(!ret, "fi_ep_enable");
-
 		ret = fi_mr_reg(dom[i], target, BUF_SZ,
 				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
 		cr_assert_eq(ret, 0);
@@ -201,6 +198,11 @@ void common_atomic_setup(void)
 
 		ret = fi_ep_bind(ep[i], &read_cntr[i]->fid, FI_READ);
 		cr_assert(!ret, "fi_ep_bind");
+
+		if (i != 1) {
+			ret = fi_enable(ep[i]);
+			cr_assert(!ret, "fi_ep_enable");
+		}
 	}
 
 	if (hints->caps & FI_RMA_EVENT) {
@@ -215,7 +217,12 @@ void common_atomic_setup(void)
 
 		ret = fi_ep_bind(ep[1], &rread_cntr->fid, FI_REMOTE_READ);
 		cr_assert(!ret, "fi_ep_bind");
+
 	}
+
+	ret = fi_enable(ep[1]);
+	cr_assert(!ret, "fi_ep_enable");
+
 }
 
 void rdm_atomic_setup(void)
