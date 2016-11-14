@@ -185,12 +185,12 @@ void sep_setup(void)
 					 FI_SEND);
 			cr_assert(!ret, "fi_ep_bind");
 
-			ret = fi_enable(tx_ep[i][j]);
-			cr_assert(!ret, "fi_enable");
-
 			ret = fi_ep_bind(tx_ep[i][j], &rxcq_array[i][j]->fid,
 					 FI_RECV);
 			cr_assert(!ret, "fi_ep_bind");
+
+			ret = fi_enable(tx_ep[i][j]);
+			cr_assert(!ret, "fi_enable");
 
 			ret = fi_enable(rx_ep[i][j]);
 			cr_assert(!ret, "fi_enable");
