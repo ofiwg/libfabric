@@ -35,6 +35,8 @@
 #include <getopt.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
