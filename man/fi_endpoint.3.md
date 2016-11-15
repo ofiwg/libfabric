@@ -1014,13 +1014,21 @@ the _Transmit Context Attribute_ section.
 
 ## total_buffered_recv
 
-Defines the total available space allocated by the provider to buffer messages
-that are received for which there is no matching receive operation.  That is,
-this defines the minimal amount of receive side buffering available.  If
-receive side buffering is disabled (total_buffered_recv = 0) and a message is
-received by an endpoint, then the behavior is dependent on whether resource
-management has been enabled (FI_RM_ENABLED has be set or not).  See
-the Resource Management section of fi_domain.3 for further clarification.
+This field is supported for backwards compatibility purposes.
+It is a hint to the provider of the total available space
+that may be needed to buffer messages that are received for which there
+is no matching receive operation.  The provider may adjust or ignore
+this value.  The allocation of internal network buffering among received
+message is provider specific.  For instance, a provider may limit the size
+of messages which can be buffered or the amount of buffering allocated to
+a single message.
+
+If receive side buffering is disabled (total_buffered_recv = 0)
+and a message is received by an endpoint, then the behavior is dependent on
+whether resource management has been enabled (FI_RM_ENABLED has be set or not).
+See the Resource Management section of fi_domain.3 for further clarification.
+It is recommended that applications enable resource management if they
+anticipate receiving unexpected messages, rather than modifying this value.
 
 ## size
 
