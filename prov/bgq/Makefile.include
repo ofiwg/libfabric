@@ -52,7 +52,7 @@ bgq_files = prov/bgq/src/fi_bgq_atomic.c \
 
 bgq_files_nodist = prov/bgq/external/memory_impl.c
 
-bgq_CPPFLAGS = -I@bgq_driver@ -I@bgq_driver@/spi/include/kernel/cnk
+bgq_CPPFLAGS = -I@bgq_driver@ -I@bgq_driver@/spi/include/kernel/cnk -I$(builddir)/prov/bgq/include -I$(srcdir)/prov/bgq/include
 bgq_LDFLAGS = -static
 
 prov/bgq/external/memory_impl.c: @bgq_external_source@/spi/src/kernel/cnk/memory_impl.c
@@ -63,7 +63,7 @@ if HAVE_BGQ_DL
 pkglib_LTLIBRARIES += libbgq-fi.la
 libbgq_fi_la_SOURCES = $(bgq_files) $(common_srcs)
 nodist_libbgq_fi_la_SOURCES = $(bgq_files_nodist)
-libbgq_fi_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(builddir)/prov/bgq/include -I$(srcdir)/prov/bgq/include $(bgq_CPPFLAGS)
+libbgq_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(bgq_CPPFLAGS)
 libbgq_fi_la_LDFLAGS = \
     -module -avoid-version -export-dynamic $(bgq_LDFLAGS)
 libbgq_fi_la_LIBADD = $(linkback) $(bgq_LIBS)
@@ -78,7 +78,7 @@ endif
 
 sbin_PROGRAMS = fi_bgq_agent0 fi_bgq_agent1
 fi_bgq_agent1_SOURCES = prov/bgq/src/fi_bgq_agent.c
-fi_bgq_agent1_CPPFLAGS = $(AM_CPPFLAGS) -I$(builddir)/prov/bgq/include -I$(srcdir)/prov/bgq/include $(bgq_CPPFLAGS)
+fi_bgq_agent1_CPPFLAGS = $(AM_CPPFLAGS) $(bgq_CPPFLAGS)
 fi_bgq_agent1_LDFLAGS = -all-static $(bgq_LDFLAGS) -Wl,--script=@bgq_driver@/cnk/tools/AppAgent1.lds
 fi_bgq_agent0_SOURCES = $(fi_bgq_agent1_SOURCES)
 fi_bgq_agent0_CPPFLAGS = $(fi_bgq_agent1_CPPFLAGS)
