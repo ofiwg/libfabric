@@ -109,6 +109,12 @@ Similar to the send operations, receive operations operate
 asynchronously.  Users should not touch the posted data buffer(s)
 until the receive operation has completed.
 
+An endpoint must be enabled before an application can post send
+or receive operations to it.  For connected endpoints, receive
+buffers may be posted prior to connect or accept being called on
+the endpoint.  This ensures that buffers are available to receive
+incoming data immediately after the connection has been established.
+
 Completed message operations are reported to the user through one or
 more event collectors associated with the endpoint.  Users provide
 context which are associated with each operation, and is returned to
