@@ -29,43 +29,53 @@ Key features include:
 : The Blue Gene/Q hardware is connectionless and reliable. Therefore, the
   bgq provider only supports the *FI_EP_RDM* endpoint type.
 
-*Endpoint capabilities*
-: The following data transfer interfaces are supported: *FI_MSG*, *FI_RMA*, *FI_TAGGED*,
-  *FI_MULTI_RECV*, *FI_READ*, *FI_WRITE*, *FI_SEND*, *FI_RECV*, *FI_REMOTE_READ*,
-  and *FI_REMOTE_WRITE*.
+*Primary capabilities*
+: Supported primary capabilities include *FI_MSG*, *FI_RMA*, *FI_TAGGED*,
+  *FI_ATOMIC*, *FI_NAMED_RX_CTX*, *FI_READ*, *FI_WRITE*, *FI_SEND*, *FI_RECV*,
+  *FI_REMOTE_READ*, and *FI_REMOTE_WRITE*.
+
+*Secondary capabilities*
+: Supported secondary capabilities include *FI_MULTI_RECV* and *FI_FENCE*.
 
 *Modes*
 : The bgq provider requires *FI_CONTEXT* and *FI_ASYNC_IOV*
 
+*Memory registration modes*
+: Only *FI_MR_SCALABLE* is supported, however hardware acceleration of
+  rdma transfers is not enabled. The FI_ATOMIC, FI_READ, FI_WRITE,
+  FI_REMOTE_READ, and FI_REMOTE_WRITE capabilities are emulated in
+  software.
+
+*Additional features*
+: Supported additional features include *FABRIC_DIRECT*, *scalable endpoints*,
+  and *counters*.
+
 *Progress*
-: Only *FI_PROGRESS_AUTO* is supported, however support for
-  *FI_PROGRESS_MANUAL* may be added in the future.  When progress is set
-  to auto, a background thread runs to ensure that progress is made for
-  asynchronous requests.
+: Both progress modes, *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*, are
+  supported. The progress mode may be specified via the "--with-bgq-progress"
+  configure option.
 
 *Address vector*
-: Only the *FI_AV_MAP* address vector format is supported, however support
-  for *FI_AV_TABLE* may be added in the future.
-
-*Memory registration*
-: Only *FI_MR_SCALABLE* is supported, however use of this mode for hardware
-  accelerated rma transfers is severely limited due to a mismatch between
-  the libfabric API and the Blue Gene/Q hardware capabilities. Support for
-  a non-standard version of *FI_MR_BASIC* may be added in the future
-  which would enable hardware accelerated rma read, rma write, and
-  network atomic operations.
+: Only the *FI_AV_MAP* address vector format is supported.
 
 # UNSUPPORTED FEATURES
 
-The bgq provider does not support *shared contexts*, *multiple endpoints*, or
-*scalable endpoints*, however support for all of these features may be added
-in the future.
+*Endpoint types*
+: Unsupported endpoint types include *FI_EP_DGRAM* and *FI_EP_MSG*
 
-The *FI_ATOMIC* endpoint capability is disabled, however support may be added
-in the future. Native hardware accelerated atomic operations will require
-a non-standard version of *FI_MR_BASIC* that uses offset-based remote
-addressing and will be limited to the operation-datatype combinations common
-to the libfabric API and the Blue Gene/Q network hardware.
+*Primary capabilities*
+: The bgq provider does not support the *FI_DIRECTED_RECV *capability.
+
+*Secondary capabilities*
+: The bgq provider does not support the *FI_SOURCE*, *FI_RMA_EVENT*, and
+  *FI_TRIGGER* capabilities.
+
+*Memory registration modes*
+: The bgq provider does not support the *FI_MR_BASIC* memory region mode.
+
+*Address vector*
+: The bgq provider does not support the *FI_AV_TABLE* address vector format.
+  Support for *FI_AV_TABLE* may be added in the future.
 
 # LIMITATIONS
 
@@ -85,16 +95,8 @@ pre-processor flag is not specified).
 The progress thread used for *FI_PROGRESS_AUTO* effectively limits the maximum
 number of ranks-per-node to 32.
 
-The definition of the memory region key size (mr_key_size) effectively limits
-the maximum number of ranks-per-node to 2 for hardware accelerated rma transfers.
-This is because each compute node has a Base Address Table (BAT) composed of
-512 entries and must be shared among all processes on the node. The mr_key_size
-reports the number of *bytes* for the size of the memory region key variable which
-limits the maximum number of keys to 256 (2^8) even when the hardware could support
-512 keys with 1 rank-per-node. At 4 ranks-per-node and higher the maximum
-number of keys for each process would be less than 256 and forces the bgq provider
-to report a key size of zero bytes. This effectively disables support for memory
-regions in *FI_MR_SCALABLE* mode.
+The memory region key size (mr_key_size) is 2 *bytes*; Valid key values are
+0..2^16-1.
 
 It is invalid to register memory at the base virtual address "0" with a
 length of "UINTPTR_MAX" (or equivalent). The Blue Gene/Q hardware operates on
