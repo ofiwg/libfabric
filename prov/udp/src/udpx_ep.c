@@ -379,7 +379,7 @@ static int udpx_ep_close(struct fid *fid)
 
 	udpx_rx_cirq_free(ep->rxq);
 	close(ep->sock);
-	atomic_dec(&ep->util_ep.domain->ref);
+	ofi_endpoint_close(&ep->util_ep);
 	free(ep);
 	return 0;
 }
@@ -574,16 +574,14 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct udpx_ep *ep;
 	int ret;
 
-	if (!info || !info->ep_attr || !info->rx_attr || !info->tx_attr)
-		return -FI_EINVAL;
-
-	ret = udpx_check_info(info);
-	if (ret)
-		return ret;
-
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
 		return -FI_ENOMEM;
+
+	ret = ofi_endpoint_init(domain, &udpx_util_prov, info, &ep->util_ep,
+			context, udpx_ep_progress, FI_MATCH_EXACT);
+	if (ret)
+		goto err;
 
 	ret = udpx_ep_init(ep, info);
 	if (ret) {
@@ -591,17 +589,14 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return ret;
 	}
 
-	ep->util_ep.ep_fid.fid.fclass = FI_CLASS_EP;
-	ep->util_ep.ep_fid.fid.context = context;
-	ep->util_ep.ep_fid.fid.ops = &udpx_ep_fi_ops;
-	ep->util_ep.ep_fid.ops = &udpx_ep_ops;
-	ep->util_ep.ep_fid.cm = &udpx_cm_ops;
-	ep->util_ep.ep_fid.msg = &udpx_msg_ops;
-	ep->util_ep.progress = udpx_ep_progress;
-
-	ep->util_ep.domain = container_of(domain, struct util_domain, domain_fid);
-	atomic_inc(&ep->util_ep.domain->ref);
-
 	*ep_fid = &ep->util_ep.ep_fid;
+	(*ep_fid)->fid.ops = &udpx_ep_fi_ops;
+	(*ep_fid)->ops = &udpx_ep_ops;
+	(*ep_fid)->cm = &udpx_cm_ops;
+	(*ep_fid)->msg = &udpx_msg_ops;
+
 	return 0;
+err:
+	free(ep);
+	return ret;
 }

@@ -178,7 +178,7 @@ struct util_ep {
 
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		struct fi_info *info, struct util_ep *ep, void *context,
-		enum fi_match_type type);
+		ofi_ep_progress_func progress, enum fi_match_type type);
 
 int ofi_endpoint_close(struct util_ep *util_ep);
 
