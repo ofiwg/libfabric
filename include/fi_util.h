@@ -227,6 +227,16 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 ofi_cq_progress_func progress, void *context);
 void ofi_cq_progress(struct util_cq *cq);
 int ofi_cq_cleanup(struct util_cq *cq);
+ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count);
+ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+		fi_addr_t *src_addr);
+ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
+		uint64_t flags);
+ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+		const void *cond, int timeout);
+ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+		fi_addr_t *src_addr, const void *cond, int timeout);
+int ofi_cq_signal(struct fid_cq *cq_fid);
 
 /*
  * Counter
