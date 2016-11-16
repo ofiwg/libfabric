@@ -447,7 +447,10 @@ static int sock_cq_signal(struct fid_cq *cq)
 {
 	struct sock_cq *sock_cq;
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
+
+	fastlock_acquire(&sock_cq->lock);
 	rbfdsignal(&sock_cq->cq_rbfd);
+	fastlock_release(&sock_cq->lock);
 	return 0;
 }
 
