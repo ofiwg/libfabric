@@ -113,7 +113,7 @@ int sock_cq_progress(struct sock_cq *cq)
 		if (tx_ctx->use_shared)
 			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx->stx_ctx);
 		else
-			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx);		      
+			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx);
 	}
 
 	for (entry = cq->rx_list.next; entry != &cq->rx_list;
@@ -368,6 +368,8 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				ret = sock_cq_rbuf_read(sock_cq, buf,
 					MIN(threshold, avail / cq_entry_len),
 					src_addr, cq_entry_len);
+			else /* No CQ entry available, read the fd */
+				rbfdreset(&sock_cq->cq_rbfd);
 			fastlock_release(&sock_cq->lock);
 		}
 	}
@@ -701,6 +703,8 @@ int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 	rbwrite(&cq->cqerr_rb, &err_entry, sizeof(err_entry));
 	rbcommit(&cq->cqerr_rb);
 	ret = 0;
+
+	rbfdsignal(&cq->cq_rbfd);
 
 out:
 	fastlock_release(&cq->lock);
