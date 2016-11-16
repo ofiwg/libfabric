@@ -281,7 +281,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 		return -FI_EBUSY;
 
 	fastlock_destroy(&cq->cq_lock);
-	fastlock_destroy(&cq->list_lock);
+	fastlock_destroy(&cq->ep_list_lock);
 
 	while (!slist_empty(&cq->err_list)) {
 		entry = slist_remove_head(&cq->err_list);
@@ -332,8 +332,8 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq->domain = container_of(domain, struct util_domain, domain_fid);
 	atomic_initialize(&cq->ref, 0);
-	dlist_init(&cq->list);
-	fastlock_init(&cq->list_lock);
+	dlist_init(&cq->ep_list);
+	fastlock_init(&cq->ep_list_lock);
 	fastlock_init(&cq->cq_lock);
 	slist_init(&cq->err_list);
 	cq->read_entry = read_entry;
@@ -377,19 +377,19 @@ void ofi_cq_progress(struct util_cq *cq)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	fastlock_acquire(&cq->list_lock);
-	dlist_foreach(&cq->list, item) {
+	fastlock_acquire(&cq->ep_list_lock);
+	dlist_foreach(&cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 		ep->progress(ep);
 
 	}
-	fastlock_release(&cq->list_lock);
+	fastlock_release(&cq->ep_list_lock);
 }
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
-		 fi_cq_progress_func progress, void *context)
+		 ofi_cq_progress_func progress, void *context)
 {
 	fi_cq_read_func read_func;
 	int ret;
