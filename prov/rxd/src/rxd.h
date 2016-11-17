@@ -101,9 +101,6 @@
 #define RXD_PKT_MARK_REMOTE_ACK(_pkt)	((_pkt)->ref |= RXD_PKT_REMOTE_ACK)
 #define RXD_PKT_IS_COMPLETE(_pkt)	((_pkt)->ref == RXD_PKT_DONE)
 
-#define RXD_COPY_IOV_TO_BUF	(1)
-#define RXD_COPY_BUF_TO_IOV	(2)
-
 extern struct fi_provider rxd_prov;
 extern struct fi_info rxd_info;
 extern struct fi_fabric_attr rxd_fabric_attr;
@@ -432,8 +429,6 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 			    struct rxd_rx_buf *rx_buf);
 void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 			    uint32_t seg_no);
-uint64_t rxd_ep_copy_iov_buf(const struct iovec *iov, size_t iov_count,
-			     void *buf, uint64_t data_sz, uint64_t skip, int dir);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 		     struct rxd_pkt_meta *pkt);
 void rxd_ep_copy_msg_iov(const struct iovec *src_iov,
