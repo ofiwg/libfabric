@@ -512,6 +512,11 @@ that a single memory registration operation may reference.
 Domain level capabilities.  Domain capabilities indicate domain
 level features that are supported by the provider.
 
+*FI_SHARED_AV*
+: Indicates that the domain supports the ability to share address
+  vectors among multiple processes using the named address vector
+  feature.
+
 ## mode
 
 The operational mode bit related to using the domain.

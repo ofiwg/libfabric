@@ -345,6 +345,10 @@ additional optimizations.
   flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled on
   the endpoint.
 
+*FI_SHARED_AV*
+: Requests or indicates support for address vectors which may be shared
+  among multiple processes.
+
 *FI_TRIGGER*
 : Indicates that the endpoint should support triggered operations.
   Endpoints support this capability must meet the usage model as
@@ -371,7 +375,8 @@ Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
 FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
-Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_TRIGGER, FI_FENCE.
+Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
+FI_TRIGGER, FI_FENCE.
 
 # MODE
 
