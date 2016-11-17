@@ -521,6 +521,11 @@ level features that are supported by the provider.
 
 The operational mode bit related to using the domain.
 
+*FI_RESTRICTED_COMP*
+: This bit indicates that the domain limits completion queues and counters
+  to only be used with endpoints, transmit contexts, and receive contexts that
+  have the same set of capability flags.
+
 # RETURN VALUE
 
 Returns 0 on success. On error, a negative value corresponding to fabric

@@ -361,6 +361,11 @@ binding an endpoint to a counter, the following flags may be specified.
   the given endpoint.  Use of this flag requires that the
   endpoint be created using FI_RMA_EVENT.
 
+An endpoint may only be bound to a single CQ or counter for a given
+type of operation.  For example, a EP may not bind to two counters
+both using FI_WRITE.  Furthermore, providers may limit CQ and counter
+bindings to endpoints of the same endpoint type (DGRAM, MSG, RDM, etc.).
+
 Connectionless endpoints must be bound to a single address vector.
 If an endpoint is using a shared transmit and/or receive context, the
 shared contexts must be bound to the endpoint.  CQs, counters, AV, and

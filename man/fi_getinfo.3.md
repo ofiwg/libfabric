@@ -481,6 +481,11 @@ supported set of modes will be returned in the info structure(s).
   be set when applicable.  See `fi_cq`(3) for details on which completion
   flags are valid when this mode bit is enabled.
 
+*FI_RESTRICTED_COMP*
+: This bit indicates that the application will only share completion queues
+  and counters among endpoints, transmit contexts, and receive contexts that
+  have the same set of capability flags.
+
 # ADDRESSING FORMATS
 
 Multiple fabric interfaces take as input either a source or

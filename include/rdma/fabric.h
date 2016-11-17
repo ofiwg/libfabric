@@ -267,6 +267,7 @@ enum {
 #define FI_RX_CQ_DATA		(1ULL << 56)
 #define FI_LOCAL_MR		(1ULL << 55)
 #define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54)
+#define FI_RESTRICTED_COMP	(1ULL << 53)
 
 struct fi_tx_attr {
 	uint64_t		caps;
