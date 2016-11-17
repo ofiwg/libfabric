@@ -38,18 +38,6 @@
 #include <fi.h>
 #include <fi_osd.h>
 
-#if ENABLE_DEBUG
-static inline int util_buf_use_ftr(struct util_buf_pool *pool)
-{
-	return 1;
-}
-#else
-static inline int util_buf_use_ftr(struct util_buf_pool *pool)
-{
-	return (pool->alloc_hndlr || pool->free_hndlr) ? 1 : 0;
-}
-#endif
-
 static inline void util_buf_set_region(union util_buf *buf,
 				       struct util_buf_region *region,
 				       struct util_buf_pool *pool)

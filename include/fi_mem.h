@@ -248,6 +248,26 @@ static inline void *util_buf_alloc_ex(struct util_buf_pool *pool, void **context
 	return buf;
 }
 
+#if ENABLE_DEBUG
+static inline int util_buf_use_ftr(struct util_buf_pool *pool)
+{
+	return 1;
+}
+#else
+static inline int util_buf_use_ftr(struct util_buf_pool *pool)
+{
+	return (pool->alloc_hndlr || pool->free_hndlr) ? 1 : 0;
+}
+#endif
+
+static inline void *util_buf_get_ctx(struct util_buf_pool *pool, void *buf)
+{
+	struct util_buf_footer *buf_ftr;
+	assert(util_buf_use_ftr(pool));
+	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+	return buf_ftr->region->context;
+}
+
 void util_buf_pool_destroy(struct util_buf_pool *pool);
 
 #endif /* _FI_MEM_H_ */
