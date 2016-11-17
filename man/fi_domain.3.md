@@ -128,6 +128,8 @@ struct fi_domain_attr {
 	size_t                max_ep_srx_ctx;
 	size_t                cntr_cnt;
 	size_t                mr_iov_limit;
+	uint64_t              caps;
+	uint64_t              mode;
 };
 ```
 
@@ -504,6 +506,15 @@ the default attributes of the domain.
 
 This is the maximum number of IO vectors (scatter-gather elements)
 that a single memory registration operation may reference.
+
+## Capabilities (caps)
+
+Domain level capabilities.  Domain capabilities indicate domain
+level features that are supported by the provider.
+
+## mode
+
+The operational mode bit related to using the domain.
 
 # RETURN VALUE
 

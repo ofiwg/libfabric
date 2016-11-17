@@ -325,6 +325,8 @@ struct fi_domain_attr {
 	size_t			max_ep_srx_ctx;
 	size_t			cntr_cnt;
 	size_t			mr_iov_limit;
+	uint64_t		caps;
+	uint64_t		mode;
 };
 
 struct fi_fabric_attr {
