@@ -227,7 +227,7 @@ static int rxm_ep_close(struct fid *fid)
 	if (rxm_ep->util_ep.tx_cq)
 		atomic_dec(&rxm_ep->util_ep.tx_cq->ref);
 
-	atomic_dec(&rxm_ep->util_ep.domain->ref);
+	ofi_endpoint_close(&rxm_ep->util_ep);
 	free(rxm_ep);
 	return retv;
 }
@@ -407,7 +407,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_endpoint_init(domain, &rxm_util_prov, info, &rxm_ep->util_ep,
-			context, FI_MATCH_PREFIX);
+			context, NULL, FI_MATCH_PREFIX);
 	if (ret)
 		goto err;
 

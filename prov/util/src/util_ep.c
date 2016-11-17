@@ -38,7 +38,7 @@
 
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		struct fi_info *info, struct util_ep *ep, void *context,
-		enum fi_match_type type)
+		ofi_ep_progress_func progress, enum fi_match_type type)
 {
 	struct util_domain *util_domain;
 	int ret;
@@ -55,6 +55,7 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->ep_fid.fid.fclass = FI_CLASS_EP;
 	ep->ep_fid.fid.context = context;
 	ep->domain = util_domain;
+	ep->progress = progress;
 	atomic_inc(&util_domain->ref);
 	return 0;
 }

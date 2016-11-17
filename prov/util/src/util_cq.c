@@ -114,7 +114,7 @@ static void util_cq_read_tagged(void **dst, void *src)
 	*(char **)dst += sizeof(struct fi_cq_tagged_entry);
 }
 
-static ssize_t util_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
+ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	struct util_cq *cq;
 	struct fi_cq_tagged_entry *entry;
@@ -150,8 +150,8 @@ out:
 	return i;
 }
 
-static ssize_t util_cq_readfrom(struct fid_cq *cq_fid, void *buf,
-				size_t count, fi_addr_t *src_addr)
+ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+		fi_addr_t *src_addr)
 {
 	struct util_cq *cq;
 	struct fi_cq_tagged_entry *entry;
@@ -159,7 +159,7 @@ static ssize_t util_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	if (!cq->src) {
-		i = util_cq_read(cq_fid, buf, count);
+		i = ofi_cq_read(cq_fid, buf, count);
 		if (i > 0) {
 			for (count = 0; count < i; count++)
 				src_addr[i] = FI_ADDR_NOTAVAIL;
@@ -197,8 +197,8 @@ out:
 	return i;
 }
 
-static ssize_t util_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
-			       uint64_t flags)
+ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
+		uint64_t flags)
 {
 	struct util_cq *cq;
 	struct util_cq_err_entry *err;
@@ -222,30 +222,29 @@ static ssize_t util_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *bu
 	return ret;
 }
 
-static ssize_t util_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
-			     const void *cond, int timeout)
+ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+		const void *cond, int timeout)
 {
 	struct util_cq *cq;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);
 	fi_wait(&cq->wait->wait_fid, timeout);
-	return util_cq_read(cq_fid, buf, count);
+	return ofi_cq_read(cq_fid, buf, count);
 }
 
-static ssize_t util_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
-				 fi_addr_t *src_addr, const void *cond,
-				 int timeout)
+ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+		fi_addr_t *src_addr, const void *cond, int timeout)
 {
 	struct util_cq *cq;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);
 	fi_wait(&cq->wait->wait_fid, timeout);
-	return util_cq_readfrom(cq_fid, buf, count, src_addr);
+	return ofi_cq_readfrom(cq_fid, buf, count, src_addr);
 }
 
-static int util_cq_signal(struct fid_cq *cq_fid)
+int ofi_cq_signal(struct fid_cq *cq_fid)
 {
 	struct util_cq *cq;
 
@@ -263,12 +262,12 @@ static const char *util_cq_strerror(struct fid_cq *cq, int prov_errno,
 
 static struct fi_ops_cq util_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = util_cq_read,
-	.readfrom = util_cq_readfrom,
-	.readerr = util_cq_readerr,
-	.sread = util_cq_sread,
-	.sreadfrom = util_cq_sreadfrom,
-	.signal = util_cq_signal,
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
+	.sread = ofi_cq_sread,
+	.sreadfrom = ofi_cq_sreadfrom,
+	.signal = ofi_cq_signal,
 	.strerror = util_cq_strerror,
 };
 
@@ -281,7 +280,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 		return -FI_EBUSY;
 
 	fastlock_destroy(&cq->cq_lock);
-	fastlock_destroy(&cq->list_lock);
+	fastlock_destroy(&cq->ep_list_lock);
 
 	while (!slist_empty(&cq->err_list)) {
 		entry = slist_remove_head(&cq->err_list);
@@ -332,8 +331,8 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq->domain = container_of(domain, struct util_domain, domain_fid);
 	atomic_initialize(&cq->ref, 0);
-	dlist_init(&cq->list);
-	fastlock_init(&cq->list_lock);
+	dlist_init(&cq->ep_list);
+	fastlock_init(&cq->ep_list_lock);
 	fastlock_init(&cq->cq_lock);
 	slist_init(&cq->err_list);
 	cq->read_entry = read_entry;
@@ -377,19 +376,19 @@ void ofi_cq_progress(struct util_cq *cq)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	fastlock_acquire(&cq->list_lock);
-	dlist_foreach(&cq->list, item) {
+	fastlock_acquire(&cq->ep_list_lock);
+	dlist_foreach(&cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 		ep->progress(ep);
 
 	}
-	fastlock_release(&cq->list_lock);
+	fastlock_release(&cq->ep_list_lock);
 }
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
-		 fi_cq_progress_func progress, void *context)
+		 ofi_cq_progress_func progress, void *context)
 {
 	fi_cq_read_func read_func;
 	int ret;

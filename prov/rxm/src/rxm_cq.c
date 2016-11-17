@@ -35,6 +35,13 @@
 
 #include "rxm.h"
 
+static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
+	       const void *err_data, char *buf, size_t len)
+{
+	struct rxm_cq *rxm_cq = container_of(cq_fid, struct rxm_cq, util_cq.cq_fid);
+	return fi_cq_strerror(rxm_cq->msg_cq, prov_errno, err_data, buf, len);
+}
+
 static int rxm_msg_cq_read(struct util_cq *util_cq, struct fid_cq *cq,
 		struct fi_cq_tagged_entry *comp)
 {
@@ -114,6 +121,17 @@ static struct fi_ops rxm_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static struct fi_ops_cq rxm_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
+	.sread = ofi_cq_sread,
+	.sreadfrom = ofi_cq_sreadfrom,
+	.signal = ofi_cq_signal,
+	.strerror = rxm_cq_strerror,
+};
+
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
@@ -141,6 +159,7 @@ int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	*cq_fid = &rxm_cq->util_cq.cq_fid;
 	/* Override util_cq_fi_ops */
 	(*cq_fid)->fid.ops = &rxm_cq_fi_ops;
+	(*cq_fid)->ops = &rxm_cq_ops;
 	return 0;
 err2:
 	fi_close(&rxm_cq->msg_cq->fid);
