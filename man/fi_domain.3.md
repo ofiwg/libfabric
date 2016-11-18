@@ -512,6 +512,21 @@ that a single memory registration operation may reference.
 Domain level capabilities.  Domain capabilities indicate domain
 level features that are supported by the provider.
 
+*FI_LOCAL_COMM*
+: At a conceptual level, this field indicates that the underlying device
+  supports loopback communication.  More specifically, this field
+  indicates that an endpoint may communicate with other endpoints that
+  are allocated from the same underlying named domain.  If this field
+  is not set, an application may need to use an alternate domain or
+  mechanism (e.g. shared memory) to communicate with peers that execute
+  on the same node.
+
+*FI_REMOTE_COMM*
+: This field indicates that the underlying provider supports communication
+  with nodes that are reachable over the network.  If this field is not set,
+  then the provider only supports communication between processes that
+  execute on the same node -- a shared memory provider, for example.
+
 *FI_SHARED_AV*
 : Indicates that the domain supports the ability to share address
   vectors among multiple processes using the named address vector

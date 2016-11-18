@@ -362,6 +362,23 @@ additional optimizations.
   used to enforce ordering between operations that are not otherwise
   guaranteed by the underlying provider or protocol.
 
+*FI_LOCAL_COMM*
+: Indicates that the endpoint support host local communication.  This
+  flag may be used in conjunction with FI_REMOTE_COMM to indicate that
+  local and remote communication are required.  If neither FI_LOCAL_COMM
+  or FI_REMOTE_COMM are specified, then the provider will indicate
+  support for the configuration that minimally affects performance.
+  Providers that set FI_LOCAL_COMM but not FI_REMOTE_COMM, for example
+  a shared memory provider, may only be used to communication between
+  processes on the same system.
+
+*FI_REMOTE_COMM*
+: Indicates that the endpoint support communication with endpoints
+  located at remote nodes (across the fabric).  See FI_LOCAL_COMM for
+  additional details.  Providers that set FI_REMOTE_COMM but not
+  FI_LOCAL_COMM, for example NICs that lack loopback support, cannot
+  be used to communicate with processes on the same system.
+
 Capabilities may be grouped into two general categories: primary and
 secondary.  Primary capabilities must explicitly be requested by an
 application, and a provider must enable support for only those primary
@@ -376,7 +393,7 @@ FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
 Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
-FI_TRIGGER, FI_FENCE.
+FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM.
 
 # MODE
 
