@@ -118,7 +118,6 @@ const struct fi_tx_attr verbs_tx_attr = {
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
-	.rma_iov_limit		= 1,
 };
 
 const struct fi_tx_attr verbs_rdm_tx_attr = {
@@ -635,6 +634,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 
 	info->tx_attr->inject_size	= init_attr.cap.max_inline_data;
 	info->tx_attr->iov_limit 	= init_attr.cap.max_send_sge;
+	info->tx_attr->rma_iov_limit	= init_attr.cap.max_send_sge;
 	info->tx_attr->size	 	= init_attr.cap.max_send_wr;
 
 	info->rx_attr->iov_limit 	= init_attr.cap.max_recv_sge;
