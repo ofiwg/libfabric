@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fi_mem.h>
+#include <fi_iov.h>
 #include "rxd.h"
 
 static ssize_t	rxd_ep_cancel(fid_t fid, void *context)
@@ -268,14 +269,6 @@ void rxd_ep_unlock_if_required(struct rxd_ep *ep)
 	fastlock_release(&ep->lock);
 }
 
-size_t rxd_get_msg_len(const struct iovec *iov, size_t iov_count)
-{
-	size_t i, ret = 0;
-	for (i = 0; i < iov_count; i++)
-		ret += iov[i].iov_len;
-	return ret;
-}
-
 static void rxd_init_ctrl_hdr(struct ofi_ctrl_hdr *ctrl,
 			      uint8_t type, uint16_t seg_size,
 			      uint32_t seg_no, uint64_t msg_id,
@@ -316,35 +309,6 @@ static uint32_t rxd_prepare_tx_flags(uint64_t flags)
 	return tx_flags;
 }
 
-uint64_t rxd_ep_copy_iov_buf(const struct iovec *iov, size_t iov_count,
-			     void *buf, uint64_t data_sz, uint64_t skip, int dir)
-{
-	int i;
-	uint64_t rem, offset, len, iov_offset;
-	offset = 0, rem = data_sz, iov_offset = 0;
-
-	for (i = 0; i < iov_count; i++) {
-		len = iov[i].iov_len;
-		iov_offset = 0;
-
-		if (skip) {
-			iov_offset = MIN(skip, len);
-			skip -= iov_offset;
-			len -= iov_offset;
-		}
-
-		len = MIN(rem, len);
-		if (dir == RXD_COPY_BUF_TO_IOV)
-			memcpy((char *) iov[i].iov_base + iov_offset,
-			       (char *) buf + offset, len);
-		else if (dir == RXD_COPY_IOV_TO_BUF)
-			memcpy((char *) buf + offset,
-			       (char *) iov[i].iov_base + iov_offset, len);
-		rem -= len, offset += len;
-	}
-	return offset;
-}
-
 struct rxd_pkt_meta *rxd_tx_pkt_acquire(struct rxd_ep *ep)
 {
 	struct rxd_pkt_meta *pkt_meta;
@@ -373,31 +337,31 @@ static uint64_t rxd_ep_copy_data(struct rxd_tx_entry *tx_entry,
 	uint64_t done;
 	switch(tx_entry->op_hdr.op) {
 	case ofi_op_msg:
-		done = rxd_ep_copy_iov_buf(tx_entry->msg.msg_iov,
+		done = ofi_copy_iov_buf(tx_entry->msg.msg_iov,
 					   tx_entry->msg.msg.iov_count,
 					   pkt->data, data_sz, tx_entry->done,
-					   RXD_COPY_IOV_TO_BUF);
+					   OFI_COPY_IOV_TO_BUF);
 		break;
 
 	case ofi_op_tagged:
-		done = rxd_ep_copy_iov_buf(tx_entry->tmsg.msg_iov,
+		done = ofi_copy_iov_buf(tx_entry->tmsg.msg_iov,
 					   tx_entry->tmsg.tmsg.iov_count,
 					   pkt->data, data_sz, tx_entry->done,
-					   RXD_COPY_IOV_TO_BUF);
+					   OFI_COPY_IOV_TO_BUF);
 		break;
 
 	case ofi_op_write:
-		done = rxd_ep_copy_iov_buf(tx_entry->write.src_iov,
+		done = ofi_copy_iov_buf(tx_entry->write.src_iov,
 					   tx_entry->write.msg.iov_count,
 					   pkt->data, data_sz, tx_entry->done,
-					   RXD_COPY_IOV_TO_BUF);
+					   OFI_COPY_IOV_TO_BUF);
 		break;
 
 	case ofi_op_read_rsp:
-		done = rxd_ep_copy_iov_buf(tx_entry->read_rsp.src_iov,
+		done = ofi_copy_iov_buf(tx_entry->read_rsp.src_iov,
 					   tx_entry->read_rsp.iov_count,
 					   pkt->data, data_sz, tx_entry->done,
-					   RXD_COPY_IOV_TO_BUF);
+					   OFI_COPY_IOV_TO_BUF);
 		break;
 
 	default:
@@ -705,26 +669,26 @@ void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
 
 	switch(op) {
 	case ofi_op_msg:
-		*msg_sz = rxd_get_msg_len(tx_entry->msg.msg_iov, tx_entry->msg.msg.iov_count);
+		*msg_sz = ofi_get_iov_len(tx_entry->msg.msg_iov, tx_entry->msg.msg.iov_count);
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 		rxd_init_op_hdr(&pkt->op, tx_entry->msg.msg.data, *msg_sz, 0, op, 0, flags);
-		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->msg.msg_iov,
+		tx_entry->done = ofi_copy_iov_buf(tx_entry->msg.msg_iov,
 						     tx_entry->msg.msg.iov_count,
-						     pkt->data, *data_sz, 0, RXD_COPY_IOV_TO_BUF);
+						     pkt->data, *data_sz, 0, OFI_COPY_IOV_TO_BUF);
 		break;
 
 	case ofi_op_tagged:
-		*msg_sz = rxd_get_msg_len(tx_entry->tmsg.msg_iov, tx_entry->tmsg.tmsg.iov_count);
+		*msg_sz = ofi_get_iov_len(tx_entry->tmsg.msg_iov, tx_entry->tmsg.tmsg.iov_count);
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 		rxd_init_op_hdr(&pkt->op, tx_entry->tmsg.tmsg.data, *msg_sz, 0, op,
 				 tx_entry->tmsg.tmsg.tag, flags);
-		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->tmsg.msg_iov,
+		tx_entry->done = ofi_copy_iov_buf(tx_entry->tmsg.msg_iov,
 						     tx_entry->tmsg.tmsg.iov_count,
-						     pkt->data, *data_sz, 0, RXD_COPY_IOV_TO_BUF);
+						     pkt->data, *data_sz, 0, OFI_COPY_IOV_TO_BUF);
 		break;
 
 	case ofi_op_write:
-		*msg_sz = rxd_get_msg_len(tx_entry->write.msg.msg_iov, tx_entry->write.msg.iov_count);
+		*msg_sz = ofi_get_iov_len(tx_entry->write.msg.msg_iov, tx_entry->write.msg.iov_count);
 		iov_sz = sizeof(struct ofi_rma_iov) * tx_entry->write.msg.rma_iov_count;
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 		*data_sz -= iov_sz;
@@ -740,15 +704,15 @@ void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
 			memcpy(pkt->data + curr_offset, &rma_iov, sizeof(struct ofi_rma_iov));
 			curr_offset += sizeof(struct ofi_rma_iov);
 		}
-		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->write.msg.msg_iov,
+		tx_entry->done = ofi_copy_iov_buf(tx_entry->write.msg.msg_iov,
 						     tx_entry->write.msg.iov_count,
 						     pkt->data + curr_offset, *data_sz, 0,
-						     RXD_COPY_IOV_TO_BUF);
+						     OFI_COPY_IOV_TO_BUF);
 		*data_sz = tx_entry->done + iov_sz;
 		break;
 
 	case ofi_op_read_req:
-		*msg_sz = rxd_get_msg_len(tx_entry->read_req.msg.msg_iov,
+		*msg_sz = ofi_get_iov_len(tx_entry->read_req.msg.msg_iov,
 					  tx_entry->read_req.msg.iov_count);
 
 		rxd_init_op_hdr(&pkt->op, tx_entry->read_req.msg.data, *msg_sz,
@@ -770,17 +734,17 @@ void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
 		break;
 
 	case ofi_op_read_rsp:
-		*msg_sz = rxd_get_msg_len(tx_entry->read_rsp.src_iov,
+		*msg_sz = ofi_get_iov_len(tx_entry->read_rsp.src_iov,
 					  tx_entry->read_rsp.iov_count);
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 
 		rxd_init_op_hdr(&pkt->op, 0, *msg_sz, 0, op, 0, flags);
 		pkt->op.remote_idx = tx_entry->read_rsp.peer_msg_id;
 
-		tx_entry->done = rxd_ep_copy_iov_buf(tx_entry->read_rsp.src_iov,
+		tx_entry->done = ofi_copy_iov_buf(tx_entry->read_rsp.src_iov,
 						     tx_entry->read_rsp.iov_count,
 						     pkt->data, *data_sz, 0,
-						     RXD_COPY_IOV_TO_BUF);
+						     OFI_COPY_IOV_TO_BUF);
 		break;
 
 	default:

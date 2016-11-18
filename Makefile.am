@@ -42,6 +42,7 @@ common_srcs = \
 	src/rbtree.c \
 	src/fasthash.c \
 	src/indexer.c \
+	src/iov.c \
 	prov/util/src/util_attr.c   \
 	prov/util/src/util_av.c     \
 	prov/util/src/util_cq.c     \
@@ -107,6 +108,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_file.h \
 	include/fi_indexer.h \
+	include/fi_iov.h \
 	include/fi_list.h \
 	include/fi_lock.h \
 	include/fi_mem.h \

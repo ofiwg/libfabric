@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <fi_iov.h>
 #include "rxd.h"
 
 static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
@@ -647,8 +648,8 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 	uint64_t done;
 
 	ep->credits++;
-	done = rxd_ep_copy_iov_buf(iov, iov_count, data, ctrl->seg_size,
-				   rx_entry->done, RXD_COPY_BUF_TO_IOV);
+	done = ofi_copy_iov_buf(iov, iov_count, data, ctrl->seg_size,
+				   rx_entry->done, OFI_COPY_BUF_TO_IOV);
 	rx_entry->done += done;
 	rx_entry->window--;
 	rx_entry->exp_seg_no++;
