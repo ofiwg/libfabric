@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -199,9 +200,9 @@ static inline int ofi_sockerr(void)
 	}
 }
 
-static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
+static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 {
-	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
+	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout_ms);
 }
 
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
