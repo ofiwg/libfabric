@@ -56,10 +56,6 @@ common_srcs = \
 	prov/util/src/util_mr.c
 
 if MACOS
-if !HAVE_CLOCK_GETTIME
-common_srcs += src/osx/osd.c
-endif
-
 common_srcs += src/unix/osd.c
 common_srcs += include/osx/osd.h
 common_srcs += include/unix/osd.h
