@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,6 +43,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include "fi.h"
 #include "fi_osd.h"
@@ -65,16 +67,17 @@ int fi_fd_nonblock(int fd)
 	return 0;
 }
 
-int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 {
+	uint64_t t;
 	struct timespec ts;
 
-	if (timeout < 0)
+	if (timeout_ms < 0)
 		return pthread_cond_wait(cond, mut);
 
-	clock_gettime(CLOCK_REALTIME, &ts);
-	ts.tv_sec += timeout / 1000;
-	ts.tv_nsec += (timeout % 1000) * 1000000;
+	t = fi_gettime_us();
+	ts.tv_sec = t / 1000000;
+	ts.tv_nsec = t % 1000000;
 	return pthread_cond_timedwait(cond, mut, &ts);
 }
 
