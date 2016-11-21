@@ -33,16 +33,19 @@
 #include "rxm.h"
 
 struct fi_tx_attr rxm_tx_attr = {
-	.caps = FI_MSG | FI_SEND,
+	.caps = FI_MSG | FI_TAGGED | FI_SEND,
 	.comp_order = FI_ORDER_STRICT,
+	// TODO set correct inject size and support inject
 	.inject_size = 0,
 	.size = 1024,
+	.iov_limit = RXM_IOV_LIMIT,
 };
 
 struct fi_rx_attr rxm_rx_attr = {
-	.caps = FI_MSG | FI_RECV,
+	.caps = FI_MSG | FI_TAGGED | FI_RECV,
 	.comp_order = FI_ORDER_STRICT,
 	.size = 1024,
+	.iov_limit= RXM_IOV_LIMIT,
 };
 
 struct fi_ep_attr rxm_ep_attr = {
@@ -77,8 +80,8 @@ struct fi_fabric_attr rxm_fabric_attr = {
 };
 
 struct fi_info rxm_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE,
-	.mode = FI_LOCAL_MR,
+	.caps = FI_MSG | FI_TAGGED | FI_SEND | FI_RECV | FI_SOURCE | FI_DIRECTED_RECV,
+	.mode = FI_LOCAL_MR, // TODO remove this requirement
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,

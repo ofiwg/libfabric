@@ -7,6 +7,7 @@ _rxm_files = \
        prov/rxm/src/rxm_conn.c		\
        prov/rxm/src/rxm_ep.c		\
        prov/rxm/src/rxm_cq.c		\
+       prov/rxm/src/rxm.c		\
        prov/rxm/src/rxm.h
 
 if HAVE_RXM_DL

@@ -111,6 +111,9 @@ static int rxm_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
 	if (!(rxm_mr = calloc(1, sizeof(*rxm_mr))))
 		return -FI_ENOMEM;
 
+	/* Additional flags to use RMA read for large message transfers */
+	access |= FI_READ | FI_REMOTE_READ;
+
 	ret = fi_mr_reg(rxm_domain->msg_domain, buf, len, access, offset, requested_key,
 			flags, &rxm_mr->msg_mr, context);
 	if (ret) {
@@ -121,7 +124,10 @@ static int rxm_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
 	rxm_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	rxm_mr->mr_fid.fid.context = context;
 	rxm_mr->mr_fid.fid.ops = &rxm_mr_ops;
-	rxm_mr->mr_fid.mem_desc = fi_mr_desc(rxm_mr->msg_mr);
+	/* Store msg_mr as rxm_mr descriptor so that we can get its key when
+	 * the app passes msg_mr as the descriptor in fi_send and friends.
+	 * The key would be used in large message transfer protocol. */
+	rxm_mr->mr_fid.mem_desc = rxm_mr->msg_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
 	*mr = &rxm_mr->mr_fid;
 

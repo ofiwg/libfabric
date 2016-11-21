@@ -53,7 +53,14 @@ int rxm_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info)
 	layer_info->mode = rxm_info.mode;
 
 	*layer_info->tx_attr = *rxm_info.tx_attr;
+	layer_info->tx_attr->iov_limit = MIN(MIN(layer_info->tx_attr->iov_limit,
+			base_info->tx_attr->iov_limit),
+			base_info->tx_attr->rma_iov_limit);
+
 	*layer_info->rx_attr = *rxm_info.rx_attr;
+	layer_info->rx_attr->iov_limit = MIN(layer_info->rx_attr->iov_limit,
+			base_info->rx_attr->iov_limit);
+
 	*layer_info->ep_attr = *rxm_info.ep_attr;
 	layer_info->ep_attr->max_msg_size = base_info->ep_attr->max_msg_size;
 	*layer_info->domain_attr = *rxm_info.domain_attr;

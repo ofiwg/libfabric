@@ -41,7 +41,6 @@ int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 {
 	struct rxm_domain *rxm_domain;
 	struct rxm_fabric *rxm_fabric;
-	struct rxm_cq *rxm_cq;
 	struct fid_ep *msg_ep;
 	int ret;
 
@@ -68,24 +67,11 @@ int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	}
 
 	// TODO add other completion flags
-	if (rxm_ep->util_ep.tx_cq) {
-		rxm_cq = container_of(rxm_ep->util_ep.tx_cq, struct rxm_cq, util_cq);
-		ret = fi_ep_bind(msg_ep, &rxm_cq->msg_cq->fid, FI_TRANSMIT);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Unable to bind msg_ep to tx_cq\n");
-			goto err;
-		}
-	}
-
-	if (rxm_ep->util_ep.rx_cq) {
-		rxm_cq = container_of(rxm_ep->util_ep.rx_cq, struct rxm_cq, util_cq);
-		ret = fi_ep_bind(msg_ep, &rxm_cq->msg_cq->fid, FI_RECV);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Unable to bind msg_ep to rx_cq\n");
-			goto err;
-		}
+	ret = fi_ep_bind(msg_ep, &rxm_ep->msg_cq->fid, FI_TRANSMIT | FI_RECV);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to bind msg_ep to msg_cq\n");
+		goto err;
 	}
 
 	ret = fi_enable(msg_ep);
@@ -125,16 +111,12 @@ out:
 }
 
 int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
-		void *data, ssize_t datalen)
+		void *data)
 {
 	struct rxm_conn *rxm_conn;
+	struct rxm_cm_data *remote_cm_data = data;
+	struct rxm_cm_data cm_data;
 	int ret;
-
-	if (!datalen) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "No addr info received in cm_data\n");
-		ret = -FI_EINVAL;
-		goto err1;
-	}
 
 	if  (!(rxm_conn = calloc(1, sizeof(*rxm_conn)))) {
 		ret = -FI_ENOMEM;
@@ -142,17 +124,22 @@ int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	}
 
 	ret = ofi_cmap_add_handle(rxm_ep->cmap, &rxm_conn->handle, CMAP_CONNECTING,
-			FI_ADDR_UNSPEC, data, datalen);
+			FI_ADDR_UNSPEC, &remote_cm_data->name,
+			sizeof(remote_cm_data->name));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to add handle/peer\n");
 		goto err2;
 	}
 
+	rxm_conn->handle.remote_key = remote_cm_data->conn_id;
+
 	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn);
 	if (ret)
 		goto err2;
 
-	ret = fi_accept(rxm_conn->msg_ep, NULL, 0);
+	cm_data.conn_id = rxm_conn->handle.key;
+
+	ret = fi_accept(rxm_conn->msg_ep, &cm_data, sizeof(cm_data));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
 				"Unable to accept incoming connection\n");
@@ -168,10 +155,15 @@ err1:
 	return ret;
 }
 
-static void rxm_msg_process_connect_event(fid_t fid)
+static void rxm_msg_process_connect_event(fid_t fid, void *data, size_t datalen)
 {
 	struct rxm_conn *rxm_conn = (struct rxm_conn *)fid->context;
+	struct rxm_cm_data *cm_data;
 	ofi_cmap_update_state(&rxm_conn->handle, CMAP_CONNECTED);
+	if (datalen) {
+		cm_data = data;
+		rxm_conn->handle.remote_key = cm_data->conn_id;
+	}
 }
 static void rxm_msg_process_shutdown_event(fid_t fid)
 {
@@ -183,7 +175,7 @@ void *rxm_msg_listener(void *arg)
 {
 	struct fi_eq_cm_entry *entry;
 	struct fi_eq_err_entry err_entry;
-	size_t datalen = sizeof(struct sockaddr);
+	size_t datalen = sizeof(struct rxm_cm_data);
 	size_t len = sizeof(*entry) + datalen;
 	struct rxm_fabric *rxm_fabric = (struct rxm_fabric *)arg;
 	uint32_t event;
@@ -219,14 +211,15 @@ void *rxm_msg_listener(void *arg)
 				goto err;
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
 			ret = rxm_msg_process_connreq(entry->fid->context, entry->info,
-					entry->data, rd - sizeof(*entry));
+					entry->data);
 			if (ret)
 				FI_WARN(&rxm_prov, FI_LOG_FABRIC,
 						"Unable to process connection request\n");
 			break;
 		case FI_CONNECTED:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Connected\n");
-			rxm_msg_process_connect_event(entry->fid);
+			rxm_msg_process_connect_event(entry->fid, entry->data,
+					rd - sizeof(*entry));
 			break;
 		case FI_SHUTDOWN:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Received connection shutdown\n");
@@ -242,24 +235,33 @@ err:
 	}
 }
 
-static int rxm_prepare_cm_data(struct fid_pep *pep, void *cm_data, size_t *cm_data_size)
+static int rxm_prepare_cm_data(struct fid_pep *pep, struct util_cmap_handle *handle,
+		struct rxm_cm_data *cm_data)
 {
-	size_t opt_size = sizeof(*cm_data_size);
+	size_t cm_data_size = 0;
+	size_t name_size = sizeof(cm_data->name);
+	size_t opt_size = sizeof(cm_data_size);
 	int ret;
 
 	ret = fi_getopt(&pep->fid, FI_OPT_ENDPOINT, FI_OPT_CM_DATA_SIZE,
-			cm_data_size, &opt_size);
+			&cm_data_size, &opt_size);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "fi_getopt failed\n");
 		return ret;
 	}
 
-	ret = fi_getname(&pep->fid, cm_data, cm_data_size);
+	if (cm_data_size < sizeof(*cm_data)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "MSG EP CM data size too small\n");
+		return -FI_EOTHER;
+	}
+
+	ret = fi_getname(&pep->fid, &cm_data->name, &name_size);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get msg pep name\n");
 		return ret;
 	}
 
+	cm_data->conn_id = handle->key;
 	return 0;
 }
 
@@ -268,8 +270,7 @@ int rxm_msg_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 {
 	struct rxm_conn *rxm_conn;
 	struct fi_info *msg_info;
-	struct sockaddr name;
-	size_t name_len = 0;
+	struct rxm_cm_data cm_data;
 	int ret;
 
 	assert(!msg_hints->dest_addr);
@@ -299,11 +300,11 @@ int rxm_msg_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	/* We have to send passive endpoint's address to the server since the
 	 * address from which connection request would be sent would have a
 	 * different port. */
-	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &name, &name_len);
+	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &rxm_conn->handle, &cm_data);
 	if (ret)
 		goto err2;
 
-	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr, &name, name_len);
+	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr, &cm_data, sizeof(cm_data));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to connect msg_ep\n");
 		goto err2;
@@ -317,11 +318,10 @@ err1:
 	return ret;
 }
 
-int rxm_get_msg_ep(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
-		struct fid_ep **msg_ep)
+int rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
+		struct rxm_conn **rxm_conn)
 {
 	struct util_cmap_handle *handle;
-	struct rxm_conn *rxm_conn;
 
 	if (fi_addr > rxm_ep->util_ep.av->count) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Invalid fi_addr\n");
@@ -336,8 +336,7 @@ int rxm_get_msg_ep(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	case CMAP_CONNECTING:
 		return -FI_EAGAIN;
 	case CMAP_CONNECTED:
-		rxm_conn = container_of(handle, struct rxm_conn, handle);
-		*msg_ep = rxm_conn->msg_ep;
+		*rxm_conn = container_of(handle, struct rxm_conn, handle);
 		return 0;
 	default:
 		/* We shouldn't be here */
