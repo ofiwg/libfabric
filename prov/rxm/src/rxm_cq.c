@@ -173,26 +173,31 @@ int rxm_write_send_comp(struct rxm_tx_entry *tx_entry)
 }
 
 /* Get an iov whose size matches given length */
-static void rxm_match_iov(struct rxm_match_iov *match_iov, size_t len,
+static int rxm_match_iov(struct rxm_match_iov *match_iov, size_t len,
 		struct rxm_iovx_entry *iovx)
 {
 	int i, j;
 
-	for (i = match_iov->index, j = 0; i < match_iov->count; i++) {
+	for (i = match_iov->index, j = 0; i < match_iov->count; i++, j++) {
 		iovx->iov[j].iov_base = (char *)match_iov->iov[i].iov_base + match_iov->offset;
 		iovx->iov[j].iov_len = MIN(match_iov->iov[i].iov_len - match_iov->offset, len);
 		iovx->desc[j] = match_iov->desc[i];
 
-		len -= match_iov->iov[j].iov_len;
-		j++;
+		len -= iovx->iov[j].iov_len;
 		if (!len)
 			break;
 		match_iov->offset = 0;
 	}
 
-	iovx->count = j;
+	if (len) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "iovx size < len\n");
+		return -FI_EINVAL;
+	}
+
+	iovx->count = j + 1;
 	match_iov->index = i;
-	match_iov->offset += iovx->iov[j - 1].iov_len;
+	match_iov->offset += iovx->iov[j].iov_len;
+	return 0;
 }
 
 static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
@@ -201,8 +206,11 @@ static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
 	int i, ret;
 
 	memset(&iovx, 0, sizeof(iovx));
+	iovx.count = RXM_IOV_LIMIT;
 
-	rxm_match_iov(&rx_buf->match_iov, rx_buf->rma_iov->iov[rx_buf->index].len, &iovx);
+	ret = rxm_match_iov(&rx_buf->match_iov, rx_buf->rma_iov->iov[rx_buf->index].len, &iovx);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < iovx.count; i++)
 		iovx.desc[i] = fi_mr_desc(iovx.desc[i]);

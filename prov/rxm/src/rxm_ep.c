@@ -424,7 +424,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_pkt *pkt;
 	struct fid_mr *mr;
-	void *desc_tx_buf;
+	void *desc_tx_buf = NULL;
 	struct rxm_rma_iov *rma_iov;
 	int pkt_size = 0;
 	int i, ret;
