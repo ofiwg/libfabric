@@ -452,14 +452,12 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_msg_entry *comp)
 			return rxm_cq_report_error(rx_buf->ep->util_ep.rx_cq, &err_entry);
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown ctx type!\n");
+			FI_WARN(&rxm_prov, FI_LOG_CQ, "msg cq readerr: %s\n",
+					fi_cq_strerror(msg_cq, err_entry.prov_errno,
+						err_entry.err_data, NULL, 0));
 			assert(0);
-			return -FI_EOTHER;
+			return err_entry.err;
 		}
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"msg cq readerr:  %s\n",
-				fi_cq_strerror(msg_cq, err_entry.prov_errno,
-					err_entry.err_data, NULL, 0));
-		return err_entry.err;
 	}
 	return ret;
 }
