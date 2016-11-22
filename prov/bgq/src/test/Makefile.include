@@ -115,6 +115,13 @@ l2atomic_fifo_perf_CPPFLAGS = $(AM_CPPFLAGS) $(bgq_CPPFLAGS)
 l2atomic_fifo_perf_LDFLAGS = \
 		-module -avoid-version -export-dynamic $(bgq_LDFLAGS)
 
+test_PROGRAMS += muspi_speedoflight_pingpong
+muspi_speedoflight_pingpong_SOURCES = prov/bgq/src/test/muspi_speedoflight_pingpong.c prov/bgq/src/fi_bgq_spi.c prov/bgq/external/memory_impl.c
+muspi_speedoflight_pingpong_CPPFLAGS = $(AM_CPPFLAGS) $(bgq_CPPFLAGS)
+muspi_speedoflight_pingpong_LDFLAGS = \
+		-module -avoid-version -export-dynamic $(bgq_LDFLAGS)
+
+
 #bin_PROGRAMS += test_cq_agent_init
 #test_cq_agent_init_SOURCES = prov/bgq/src/test/cq_agent_init.c \
 #		prov/bgq/src/l2atomic.c \
