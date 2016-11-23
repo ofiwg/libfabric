@@ -42,6 +42,9 @@ enum { PASS, FAIL, NOTSUPP, SKIPPED };
 #define TEST_RET_VAL(_ret, _testret) \
 	(_ret == -FI_ENOSYS || _ret == -FI_ENODATA) ? SKIPPED : (_testret)
 
+#define FT_UNIT_STRERR(buf, str, ret) \
+	sprintf(buf, str ": ret=%d (%s)", (int)-ret, fi_strerror((int)-ret))
+
 struct test_entry {
 	int (*test)();
 	char *name;

@@ -169,6 +169,7 @@ unit_tests=(
 	"dom_test -n 2"
 	"eq_test"
 	"cq_test"
+	"mr_test"
 	"size_left_test"
 )
 
