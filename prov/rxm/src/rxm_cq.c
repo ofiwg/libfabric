@@ -173,26 +173,31 @@ int rxm_write_send_comp(struct rxm_tx_entry *tx_entry)
 }
 
 /* Get an iov whose size matches given length */
-static void rxm_match_iov(struct rxm_match_iov *match_iov, size_t len,
+static int rxm_match_iov(struct rxm_match_iov *match_iov, size_t len,
 		struct rxm_iovx_entry *iovx)
 {
 	int i, j;
 
-	for (i = match_iov->index, j = 0; i < match_iov->count; i++) {
+	for (i = match_iov->index, j = 0; i < match_iov->count; i++, j++) {
 		iovx->iov[j].iov_base = (char *)match_iov->iov[i].iov_base + match_iov->offset;
 		iovx->iov[j].iov_len = MIN(match_iov->iov[i].iov_len - match_iov->offset, len);
 		iovx->desc[j] = match_iov->desc[i];
 
-		len -= match_iov->iov[j].iov_len;
-		j++;
+		len -= iovx->iov[j].iov_len;
 		if (!len)
 			break;
 		match_iov->offset = 0;
 	}
 
-	iovx->count = j;
+	if (len) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "iovx size < len\n");
+		return -FI_EINVAL;
+	}
+
+	iovx->count = j + 1;
 	match_iov->index = i;
-	match_iov->offset += iovx->iov[j - 1].iov_len;
+	match_iov->offset += iovx->iov[j].iov_len;
+	return 0;
 }
 
 static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
@@ -201,8 +206,11 @@ static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
 	int i, ret;
 
 	memset(&iovx, 0, sizeof(iovx));
+	iovx.count = RXM_IOV_LIMIT;
 
-	rxm_match_iov(&rx_buf->match_iov, rx_buf->rma_iov->iov[rx_buf->index].len, &iovx);
+	ret = rxm_match_iov(&rx_buf->match_iov, rx_buf->rma_iov->iov[rx_buf->index].len, &iovx);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < iovx.count; i++)
 		iovx.desc[i] = fi_mr_desc(iovx.desc[i]);
@@ -444,14 +452,12 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_msg_entry *comp)
 			return rxm_cq_report_error(rx_buf->ep->util_ep.rx_cq, &err_entry);
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown ctx type!\n");
+			FI_WARN(&rxm_prov, FI_LOG_CQ, "msg cq readerr: %s\n",
+					fi_cq_strerror(msg_cq, err_entry.prov_errno,
+						err_entry.err_data, NULL, 0));
 			assert(0);
-			return -FI_EOTHER;
+			return err_entry.err;
 		}
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"msg cq readerr:  %s\n",
-				fi_cq_strerror(msg_cq, err_entry.prov_errno,
-					err_entry.err_data, NULL, 0));
-		return err_entry.err;
 	}
 	return ret;
 }
