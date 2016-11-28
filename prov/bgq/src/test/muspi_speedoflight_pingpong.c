@@ -29,14 +29,42 @@ the network is....
 
 
 
-#define NUM_LOOPS   1024
+#define NUM_LOOPS   			1024
 
-#define MAX_MESSAGE_SIZE             2097152
+#define MAX_MESSAGE_SIZE		2097152
+
+#define BYTE_COUNTER_BAT_ID		(0)
+#define RECEIVE_BUFFER_BAT_ID		(1)
 
 uint64_t sbuf[MAX_MESSAGE_SIZE/sizeof(uint64_t)];
 uint64_t rbuf[MAX_MESSAGE_SIZE/sizeof(uint64_t)];
 
 MUHWI_Descriptor_t desc[NUM_LOOPS] __attribute__((__aligned__(64)));
+
+
+
+
+static inline void bat_allocate (MUSPI_BaseAddressTableSubGroup_t * bat_subgroup)
+{
+	uint32_t nbatids;
+	uint32_t batids[BGQ_MU_NUM_DATA_COUNTERS_PER_SUBGROUP];
+	int32_t cnk_rc = 0;
+	cnk_rc = Kernel_QueryBaseAddressTable(0, &nbatids, batids);
+	assert(cnk_rc == 0);
+	assert(nbatids > 0);
+
+	cnk_rc = Kernel_AllocateBaseAddressTable(0, bat_subgroup, nbatids, &batids[0], 0);
+	assert(cnk_rc == 0);
+}
+
+static inline void bat_write (MUSPI_BaseAddressTableSubGroup_t * bat_subgroup, uint64_t index, uint64_t offset)
+{
+
+	int32_t cnk_rc = 0;
+	cnk_rc = MUSPI_SetBaseAddress(bat_subgroup, index, offset);
+	assert(cnk_rc == 0);
+
+}
 
 
 static inline void init_gi_barrier (MUSPI_GIBarrier_t * GIBarrier)
@@ -57,6 +85,17 @@ static inline void do_gi_barrier (MUSPI_GIBarrier_t * GIBarrier)
 	if (rc) exit(1);
 
 	rc = MUSPI_GIBarrierPollWithTimeout(GIBarrier, gi_timeout);
+	if (rc) exit(1);
+}
+
+
+static inline void do_gi_barrier_no_timeout (MUSPI_GIBarrier_t * GIBarrier)
+{
+	int rc;
+	rc = MUSPI_GIBarrierEnter(GIBarrier);
+	if (rc) exit(1);
+
+	rc = MUSPI_GIBarrierPoll(GIBarrier);
 	if (rc) exit(1);
 }
 
@@ -95,7 +134,7 @@ static inline MUSPI_RecFifo_t * allocate_reception_fifo (MUSPI_RecFifoSubGroup_t
 	rc = Kernel_RecFifoEnable(0, 0x08000ull);
 	assert(0 == rc);
 
-	assert(rfifo_subgroupi->_recfifos[0]._fifo.hwfifo);
+	assert(rfifo_subgroup->_recfifos[0]._fifo.hwfifo);
 
 	return &rfifo_subgroup->_recfifos[0];
 }
@@ -177,6 +216,27 @@ int main (int argc, char **argv)
 		is_neighbor = (local.e == 1);
 	}
 
+
+	MUSPI_BaseAddressTableSubGroup_t bat_subgroup;
+	bat_allocate(&bat_subgroup);
+
+	volatile uint64_t byte_counter __attribute__((__aligned__(64)));
+	byte_counter = 0;
+
+	uint64_t byte_counter_paddr = 0;
+	fi_bgq_cnk_vaddr2paddr((const void *)&byte_counter, sizeof(uint64_t), &byte_counter_paddr);
+	uint64_t atomic_byte_counter_paddr = MUSPI_GetAtomicAddress(byte_counter_paddr, MUHWI_ATOMIC_OPCODE_STORE_ADD);
+	bat_write(&bat_subgroup, BYTE_COUNTER_BAT_ID, atomic_byte_counter_paddr);
+
+	uint64_t rbuf_paddr = 0;
+	fi_bgq_cnk_vaddr2paddr((const void *)&rbuf[0], MAX_MESSAGE_SIZE, &rbuf_paddr);
+	bat_write(&bat_subgroup, RECEIVE_BUFFER_BAT_ID, rbuf_paddr);
+	
+
+	struct fi_bgq_spi_injfifo rget_ififo;
+	MUSPI_InjFifoSubGroup_t rget_ififo_subgroup;
+	fi_bgq_spi_injfifo_init(&rget_ififo, &rget_ififo_subgroup, 1, NUM_LOOPS, 0, 1, 0);
+
 	struct fi_bgq_spi_injfifo ififo;
 	MUSPI_InjFifoSubGroup_t ififo_subgroup;
 	fi_bgq_spi_injfifo_init(&ififo, &ififo_subgroup, 1, NUM_LOOPS, 0, 0, 1);
@@ -184,34 +244,94 @@ int main (int argc, char **argv)
 	MUSPI_RecFifoSubGroup_t rfifo_subgroup;
 	MUSPI_RecFifo_t * recfifo = allocate_reception_fifo(&rfifo_subgroup);
 
-	MUHWI_Descriptor_t model __attribute__((__aligned__(64)));
-	MUSPI_DescriptorZeroOut(&model);
 
-	model.Half_Word0.Prefetch_Only = MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
-	model.Half_Word1.Interrupt = MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
-	fi_bgq_cnk_vaddr2paddr((const void *)&sbuf[0], MAX_MESSAGE_SIZE+64, &model.Pa_Payload);
-	model.Message_Length = 0;
-	model.PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type = MUHWI_PT2PT_DATA_PACKET_TYPE;
-	model.PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 = MUHWI_PACKET_VIRTUAL_CHANNEL_DETERMINISTIC;
-	model.PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 = MUHWI_PACKET_TYPE_FIFO;
-	model.PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = 0;
-	model.PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
+	/*
+	 * Create the 'memory fifo' descriptor - used for eager-style transfers
+	 * and rendezvous-style RTS messages.
+	 */
+	MUHWI_Descriptor_t fifo_model __attribute__((__aligned__(64)));
+	MUSPI_DescriptorZeroOut(&fifo_model);
 
-	model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.A_Destination = 0;
-	model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.B_Destination = 0;
-	model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.C_Destination = 0;
-	model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.D_Destination = 0;
+	fifo_model.Half_Word0.Prefetch_Only = MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
+	fifo_model.Half_Word1.Interrupt = MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
+	fi_bgq_cnk_vaddr2paddr((const void *)&sbuf[0], MAX_MESSAGE_SIZE+64, &fifo_model.Pa_Payload);
+	fifo_model.Message_Length = 0;
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type = MUHWI_PT2PT_DATA_PACKET_TYPE;
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 = MUHWI_PACKET_VIRTUAL_CHANNEL_DETERMINISTIC;
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 = MUHWI_PACKET_TYPE_FIFO;
+	fifo_model.PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = 0;
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
+
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.A_Destination = 0;
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.B_Destination = 0;
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.C_Destination = 0;
+	fifo_model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.D_Destination = 0;
 
 	if (is_root) {
 
-		model.Torus_FIFO_Map = MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP;
-		model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.E_Destination = 1;
+		fifo_model.Torus_FIFO_Map = MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP;
+		fifo_model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.E_Destination = 1;
 
 	} else if (is_neighbor) {
 
-		model.Torus_FIFO_Map = MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM;
-		model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.E_Destination = 0;
+		fifo_model.Torus_FIFO_Map = MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM;
+		fifo_model.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.E_Destination = 0;
 	}
+
+
+	MUHWI_Descriptor_t dput __attribute__((__aligned__(64)));
+	MUSPI_DescriptorZeroOut(&dput);
+
+	dput = fifo_model;
+	dput.Torus_FIFO_Map =
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP;
+	dput.PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 = MUHWI_PACKET_TYPE_PUT;
+	dput.PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Pacing = MUHWI_PACKET_DIRECT_PUT_IS_NOT_PACED;
+	MUSPI_SetRecPayloadBaseAddressInfo(&dput, RECEIVE_BUFFER_BAT_ID, 0);
+	dput.PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Rec_Counter_Base_Address_Id = BYTE_COUNTER_BAT_ID;
+	dput.PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Counter_Offset = 0;
+
+	dput.Message_Length = 0;	/* updated during the test */
+	dput.PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Put_Offset_MSB = 0;
+	dput.PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Put_Offset_LSB = 0;
+
+	dput.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.A_Destination = local.a;
+	dput.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.B_Destination = local.b;
+	dput.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.C_Destination = local.c;
+	dput.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.D_Destination = local.d;
+	dput.PacketHeader.NetworkHeader.pt2pt.Destination.Destination.E_Destination = local.e;
+	dput.PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
+
+
+	MUHWI_Descriptor_t rget_model __attribute__((__aligned__(64)));
+	MUSPI_DescriptorZeroOut(&rget_model);
+
+	rget_model = fifo_model;
+	rget_model.Torus_FIFO_Map =
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM |
+		MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP;
+	rget_model.PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 = MUHWI_PACKET_TYPE_GET;
+	fi_bgq_cnk_vaddr2paddr((const void *)&dput, sizeof(MUHWI_Descriptor_t), &rget_model.Pa_Payload);
+	rget_model.Message_Length = sizeof(MUHWI_Descriptor_t);
+
+	rget_model.PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 
 
 	/*
@@ -224,16 +344,23 @@ int main (int argc, char **argv)
 
 	if (is_root) {
 
-		fprintf(stdout, "# %10s %10s %9s\n", "bytes", "cycles", "usec");
-		fprintf(stdout, "# =================================================\n");
+		fprintf(stdout, "#                       eager            rendezvous\n");
+		fprintf(stdout, "# %10s %10s %9s %10s %9s\n", "bytes", "cycles", "usec", "cycles", "usec");
+		fprintf(stdout, "# ====================================================\n");
 
 	}
+
+	const uint64_t num_loops = NUM_LOOPS;
 
 	uint64_t i = 0;
 	uint64_t msg_size = 0;
 	while (msg_size <= MAX_MESSAGE_SIZE) {
 
-		model.Message_Length = msg_size;
+		fifo_model.Message_Length = msg_size;
+		dput.Message_Length = msg_size;
+
+		uint64_t eager_cycles = 0;
+		uint64_t rendezvous_cycles = 0;
 
 		/*
 		 * each torus chunk is 32 bytes and the first 32 bytes in each
@@ -246,9 +373,9 @@ int main (int argc, char **argv)
 			Delay(500000);	/* make sure receiver is ready */
 
 			const unsigned long long t0 = GetTimeBase();
-			for (i=0; i<NUM_LOOPS; ++i) {
+			for (i=0; i<num_loops; ++i) {
 
-				inject(&ififo, &model);
+				inject(&ififo, &fifo_model);
 
 				unsigned n = nchunks;
 				while (n > 0) {
@@ -256,20 +383,89 @@ int main (int argc, char **argv)
 				}
 			}
 			const unsigned long long t1 = GetTimeBase();
-
-			/* report half pingpong */
-			fprintf(stdout, "  %10lu %10llu %9.2f\n", msg_size, (t1-t0)/(NUM_LOOPS*2), (((t1-t0)*1.0)/1600.0) / (NUM_LOOPS * 2.0));
+			eager_cycles = t1 - t0;
 
 		} else if (is_neighbor) {
-			for (i=0; i<NUM_LOOPS; ++i) {
+			for (i=0; i<num_loops; ++i) {
 
 				unsigned n = nchunks;
 				while (n > 0) {
 					n -= receive(recfifo);
 				}
 
-				inject(&ififo, &model);
+				inject(&ififo, &fifo_model);
 			}
+
+			Delay(500000);	/* make sure sender is finished */
+		}
+
+
+		/*
+		 * rendezvous
+		 */
+		if (msg_size > 0) {
+
+			fifo_model.Message_Length = 0;
+
+			if (is_root) {
+
+				Delay(500000);	/* make sure receiver is ready */
+
+				const unsigned long long t0 = GetTimeBase();
+				for (i=0; i<num_loops; ++i) {
+
+					/* inject the 'ping' rts */
+					inject(&ififo, &fifo_model);
+
+					/* wait for the 'pong' rts */
+					unsigned n = 1;
+					while (n > 0) {
+						unsigned chunks = receive(recfifo);
+						n -= chunks;
+					}
+
+					/* transfer the 'pong' data */
+					byte_counter = msg_size;
+					inject(&ififo, &rget_model);
+
+					/* wait until all 'pong' data is delivered */
+					while (byte_counter > 0);
+				}
+				const unsigned long long t1 = GetTimeBase();
+				rendezvous_cycles = t1 - t0;
+
+			} else if (is_neighbor) {
+
+				for (i=0; i<num_loops; ++i) {
+
+					/* wait for the 'ping' rts */
+					unsigned n = 1;
+					while (n > 0) {
+						unsigned chunks = receive(recfifo);
+						n -= chunks;
+					}
+
+					/* transfer the 'ping' data */
+					byte_counter = msg_size;
+					inject(&ififo, &rget_model);
+
+					/* wait until all 'ping' data is delivered */
+					while (byte_counter > 0);
+
+					/* inject the 'pong' rts */
+					inject(&ififo, &fifo_model);
+				}
+
+				Delay(500000);	/* make sure sender is finished */
+			}
+		}
+
+		if (is_root) {
+
+			/* report half pingpong */
+			fprintf(stdout, "  %10lu %10lu %9.2f %10lu %9.2f\n", msg_size,
+				(eager_cycles)/(num_loops*2), (((eager_cycles)*1.0)/1600.0) / (num_loops * 2.0),
+				(rendezvous_cycles)/(num_loops*2), (((rendezvous_cycles)*1.0)/1600.0) / (num_loops * 2.0));
 		}
 
 		msg_size = msg_size == 0 ? 1 : msg_size*2;
