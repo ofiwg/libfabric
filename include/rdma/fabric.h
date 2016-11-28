@@ -340,6 +340,7 @@ struct fi_fabric_attr {
 	char			*prov_name;
 	uint32_t		prov_version;
 	uint32_t		api_version;
+	char			*comp_list;
 };
 
 struct fi_info {

@@ -139,6 +139,7 @@ struct fi_fabric_attr {
 	char              *prov_name;
 	uint32_t          prov_version;
 	uint32_t          api_version;
+	char              *comp_list;
 };
 ```
 
@@ -154,7 +155,7 @@ instance.  If no instance has been opened, this field will be NULL.
 
 A fabric identifier.
 
-## prov_name
+## prov_name - Provider Name
 
 The name of the underlying fabric provider.
 
@@ -168,7 +169,7 @@ Applications which need a specific set of providers should implement
 their own filtering of fi_getinfo's results rather than relying on these
 environment variables in a production setting.
 
-## prov_version
+## prov_version - Provider Version
 
 Version information for the fabric provider.
 
@@ -176,6 +177,19 @@ Version information for the fabric provider.
 
 The interface version requested by the application.  This value corresponds to
 the version parameter passed into `fi_getinfo(3)`.
+
+## comp_list - Component List
+
+This string lists details of the selected software implementation.  Its use
+is primarily for debugging purposes to indicate which software components
+are in use by a provider.  Direct application use of this field is currently
+reserved and undefined.
+
+The component list is a comma separated set of string identifiers, each
+corresponding to a specific core or utility provider or feature.  On input
+to fi_getinfo, if an identifier is preceded by a '^', then the corresponding
+component will be excluded from any output.  Otherwise, all selected
+components will be included as part of the output.
 
 # RETURN VALUE
 
