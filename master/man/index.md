@@ -23,6 +23,7 @@ You have been warned.
   * [fi_psm(7)](fi_psm.7.html)
   * [fi_psm2(7)](fi_psm2.7.html)
   * [fi_rxd(7)](fi_rxd.7.html)
+  * [fi_rxm(7)](fi_rxm.7.html)
   * [fi_sockets(7)](fi_sockets.7.html)
   * [fi_udp(7)](fi_udp.7.html)
   * [fi_usnic(7)](fi_usnic.7.html)
