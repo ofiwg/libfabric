@@ -459,8 +459,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			switch (hints->domain_attr->mr_mode) {
 			case FI_MR_UNSPEC:
 			case FI_MR_BASIC:
-				gnix_info->domain_attr->mr_mode =
-					hints->domain_attr->mr_mode;
+				gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
 				break;
 			case FI_MR_SCALABLE:
 				goto err;
