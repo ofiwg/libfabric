@@ -24,6 +24,8 @@
 #include <errno.h>
 #include "pthread.h"
 
+#include <sys/uio.h>
+
 #include <rdma/fi_errno.h>
 #include <rdma/fabric.h>
 
@@ -156,12 +158,6 @@ static inline char* strsep(char **stringp, const char *delim)
 
 	return ptr;
 }
-
-struct iovec
-{
-	void *iov_base; /* Pointer to data.  */
-	size_t iov_len; /* Length of data.  */
-};
 
 #define __attribute__(x)
 
