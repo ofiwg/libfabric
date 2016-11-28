@@ -35,8 +35,7 @@
 struct fi_tx_attr rxm_tx_attr = {
 	.caps = FI_MSG | FI_TAGGED | FI_SEND,
 	.comp_order = FI_ORDER_STRICT,
-	// TODO set correct inject size and support inject
-	.inject_size = 0,
+	.inject_size = RXM_TX_DATA_SIZE,
 	.size = 1024,
 	.iov_limit = RXM_IOV_LIMIT,
 };

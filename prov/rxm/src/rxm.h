@@ -192,6 +192,7 @@ struct rxm_tx_entry {
 	enum rxm_ctx_type ctx_type;
 	struct rxm_ep *ep;
 	void *context;
+	uint64_t flags;
 	// TODO use a tx_buf instead. Add posted tx_buf to list for clean up
 	// on endpont close: similar to rx_buf
 	struct rxm_pkt *pkt;
@@ -247,6 +248,8 @@ extern struct fi_provider rxm_prov;
 extern struct fi_info rxm_info;
 extern struct fi_fabric_attr rxm_fabric_attr;
 extern struct fi_domain_attr rxm_domain_attr;
+extern struct fi_tx_attr rxm_tx_attr;
+extern struct fi_rx_attr rxm_rx_attr;
 
 // TODO move to common code?
 static inline int rxm_match_addr(fi_addr_t addr, fi_addr_t match_addr)
@@ -286,7 +289,6 @@ void rxm_conn_close(void *arg);
 int rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr, struct rxm_conn **rxm_conn);
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
-int rxm_write_recv_comp(struct rxm_rx_buf *rx_buf);
 int ofi_match_addr(fi_addr_t addr, fi_addr_t match_addr);
 int ofi_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag);
 void rxm_pkt_init(struct rxm_pkt *pkt);
