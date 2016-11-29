@@ -532,6 +532,12 @@ operation.  The following completion flags are defined.
   If other flag bits are zero, the provider is reporting that the multi-recv
   buffer has been freed, and the completion entry is not associated
   with a received message.
+
+# NOTES
+
+A completion queue must be bound to at least one enabled endpoint before any
+operation such as fi_cq_read, fi_cq_readfrom, fi_cq_sread, fi_cq_sreadfrom etc.
+can be called on it.
  
 # RETURN VALUES
 
