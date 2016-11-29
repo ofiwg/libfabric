@@ -349,7 +349,7 @@ void cm_basic_send(void)
 		   source, target);
 }
 
-Test(cm_basic, srv_setup, .disabled = true)
+Test(cm_basic, srv_setup, .disabled = false)
 {
 	int cli_connected = 0, srv_connected = 0;
 	int i;
