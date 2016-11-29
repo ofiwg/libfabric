@@ -244,7 +244,7 @@ int _gnix_ep_progress(struct gnix_fid_ep *ep)
 				   bytes_read);
 		}
 	} else if (errno != EAGAIN) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "Read error: %d\n", errno);
+		GNIX_WARN(FI_LOG_EP_CTRL, "Read error: %s\n", strerror(errno));
 	}
 
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
