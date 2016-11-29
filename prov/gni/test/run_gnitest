@@ -34,8 +34,13 @@
 #
 # disable use of xpmem bypass for criterion tests
 #
-
 export GNIX_DISABLE_XPMEM=1
+
+#
+# disable fma sharing for criterion tests
+#
+export UGNI_FMA_SHARED=0
+
 #
 # Check for srun or aprun
 #
