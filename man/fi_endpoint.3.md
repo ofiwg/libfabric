@@ -544,6 +544,8 @@ struct fi_ep_attr {
 	uint64_t        mem_tag_format;
 	size_t          tx_ctx_cnt;
 	size_t          rx_ctx_cnt;
+	size_t          auth_keylen;
+	uint8_t         *auth_key;
 };
 {% endhighlight %}
 
@@ -760,6 +762,21 @@ fail the request.
 
 See the scalable endpoint and shared contexts sections for additional
 details.
+
+## auth_keylen - Authorization Key Length
+
+The length of the authorization key.  This field will be 0 if
+authorization keys are not available or used.
+
+## auth_key - Authorization Key
+
+If supported by the fabric, an authorization key (a.k.a. job
+key) to associate with the endpoint.  An authorization key is used
+to limit communication between endpoints.  Only peer endpoints that are
+programmed to use the same authorization key may communicate.
+Authorization keys are often used to implement job keys, to ensure
+that processes running in different jobs do not accidentally
+cross traffic.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
