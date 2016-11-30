@@ -1458,9 +1458,7 @@ static void __ep_destruct(void *obj)
 {
 	int ret;
 	struct gnix_fid_domain *domain;
-	struct gnix_nic *nic;
 	struct gnix_fid_av *av;
-	struct gnix_cm_nic *cm_nic;
 	gnix_ht_key_t *key_ptr;
 	struct gnix_fid_ep *ep = (struct gnix_fid_ep *) obj;
 
@@ -1556,25 +1554,23 @@ static void __ep_destruct(void *obj)
 	assert(domain != NULL);
 	_gnix_ref_put(domain);
 
-	cm_nic = ep->cm_nic;
-	assert(cm_nic != NULL);
-
-	nic = ep->nic;
-	assert(nic != NULL);
-
 	av = ep->av;
 	if (av != NULL)
 		_gnix_ref_put(av);
 
-	/* There is no other choice here, we need to assert if we can't free */
-	ret = _gnix_nic_free(nic);
-	assert(ret == FI_SUCCESS);
+	if (ep->nic) {
+		ret = _gnix_nic_free(ep->nic);
+		if (ret != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_EP_CTRL,
+				   "_gnix_nic_free failed: %d\n");
+	}
 
-	ep->nic = NULL;
-
-	/* This currently always returns FI_SUCCESS */
-	ret = _gnix_cm_nic_free(cm_nic);
-	assert(ret == FI_SUCCESS);
+	if (ep->cm_nic) {
+		ret = _gnix_cm_nic_free(ep->cm_nic);
+		if (ret != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_EP_CTRL,
+				   "_gnix_cm_nic_free failed: %d\n");
+	}
 
 	__destruct_tag_storages(ep);
 
@@ -1907,9 +1903,21 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 			     struct fi_info *info,
 			     struct gnix_fid_ep *ep)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 	uint32_t cdm_id = GNIX_CREATE_CDM_ID;
 	struct gnix_ep_name *name;
+
+	if (ep->type == FI_EP_MSG) {
+		if (ep->shared_tx == false) {
+			ret = gnix_nic_alloc(domain, NULL, &ep->nic);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_nic_alloc call returned %d\n",
+					  ret);
+			}
+		}
+		return ret;
+	}
 
 	name = (struct gnix_ep_name *)info->src_addr;
 	if (name && name->name_type == GNIX_EPN_TYPE_BOUND) {

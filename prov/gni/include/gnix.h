@@ -476,6 +476,7 @@ struct gnix_addr_cache_entry {
 
 enum gnix_conn_state {
 	GNIX_EP_UNCONNECTED,
+	GNIX_EP_CONNECTING,
 	GNIX_EP_CONNECTED,
 	GNIX_EP_SHUTDOWN
 };
