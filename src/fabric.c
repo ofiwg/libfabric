@@ -555,6 +555,13 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 			continue;
 		}
 
+		if (!cur) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"fi_getinfo: provider %s output empty list\n",
+				prov->provider->name);
+			continue;
+		}
+
 		if (!*info)
 			*info = cur;
 		else
