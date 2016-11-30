@@ -395,6 +395,15 @@ ssize_t fi_no_eq_sread(struct fid_eq *eq, uint32_t *event,
 /*
  * struct fi_ops_cq
  */
+ssize_t fi_no_cq_read(struct fid_cq *cq, void *buf, size_t count)
+{
+	return -FI_ENOSYS;
+}
+ssize_t fi_no_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+		                uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
 ssize_t fi_no_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		fi_addr_t *src_addr)
 {
