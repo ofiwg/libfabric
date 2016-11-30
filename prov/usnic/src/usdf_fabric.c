@@ -666,11 +666,11 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 	if (node != NULL || service != NULL) {
 		ret = getaddrinfo(node, service, NULL, &ai);
 		if (ret != 0) {
-			USDF_DBG("getaddrinfo failed, likely bad node/service specified (%s:%s)\n",
-				node, service);
-			ret = -errno;
+			USDF_DBG("getaddrinfo failed: %d: <%s>\n", ret,
+				 gai_strerror(ret));
 			goto fail;
 		}
+
 		if (flags & FI_SOURCE) {
 			src = (struct sockaddr_in *)ai->ai_addr;
 		} else {
