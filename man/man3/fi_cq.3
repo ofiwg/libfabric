@@ -1,4 +1,4 @@
-.TH "fi_cq" "3" "2016\-10\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cq" "3" "2016\-11\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq \- Completion queue operations
@@ -528,6 +528,12 @@ received message.
 If other flag bits are zero, the provider is reporting that the
 multi\-recv buffer has been freed, and the completion entry is not
 associated with a received message.
+.SH NOTES
+.PP
+A completion queue must be bound to at least one enabled endpoint before
+any operation such as fi_cq_read, fi_cq_readfrom, fi_cq_sread,
+fi_cq_sreadfrom etc.
+can be called on it.
 .SH RETURN VALUES
 .PP
 fi_cq_open / fi_cq_signal : Returns 0 on success.
