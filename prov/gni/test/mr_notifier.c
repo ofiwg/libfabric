@@ -38,10 +38,13 @@
 
 #include <criterion/criterion.h>
 
-static struct gnix_mr_notifier mr_notifier;
+static struct gnix_mr_notifier *mr_notifier;
 static void mr_notifier_setup(void)
 {
 	int ret;
+
+	ret = _gnix_notifier_init();
+	cr_assert(ret == 0, "_gnix_notifier_init failed");
 
 	ret = _gnix_notifier_open(&mr_notifier);
 	cr_assert(ret == 0, "_gnix_notifier_open failed");
@@ -51,8 +54,8 @@ static void mr_notifier_teardown(void)
 {
 	int ret;
 
-	ret = _gnix_notifier_close(&mr_notifier);
-	cr_assert(ret == 0, "_gnix_notifier_open failed");
+	ret = _gnix_notifier_close(mr_notifier);
+	cr_assert(ret == 0, "_gnix_notifier_close failed");
 }
 
 TestSuite(mr_notifier,
@@ -67,12 +70,12 @@ monitor_single(size_t len) {
 			 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	cr_assert_neq(mem, MAP_FAILED, "Could not allocate %ld bytes\n", len);
 
-	ret = _gnix_notifier_monitor(&mr_notifier, mem, len, (uint64_t) mem);
+	ret = _gnix_notifier_monitor(mr_notifier, mem, len, (uint64_t) mem);
 	cr_assert(ret == 0, "_gnix_notifier_monitor failed");
 
 	munmap(mem, len);
 
-	ret = _gnix_notifier_get_event(&mr_notifier, &cookie, sizeof(cookie));
+	ret = _gnix_notifier_get_event(mr_notifier, &cookie, sizeof(cookie));
 	if (ret >= 0) {
 		cr_assert(cookie == (uint64_t) mem,
 			  "Unexpected cookie (got %lu, expected %lu)",
@@ -82,7 +85,7 @@ monitor_single(size_t len) {
 			  ret, sizeof(cookie));
 	} else if (ret == -FI_EAGAIN) {
 		/* Nothing to read, ok */
-		ret = _gnix_notifier_unmonitor(&mr_notifier, (uint64_t) mem);
+		ret = _gnix_notifier_unmonitor(mr_notifier, (uint64_t) mem);
 		cr_assert(ret == 0, "_gnix_notifier_unmonitor failed");
 	} else {
 		cr_assert(0, "Unexpected error");
@@ -111,7 +114,7 @@ monitor_multiple(size_t *lens, size_t num_lens)
 		cr_assert_neq(mems[i], MAP_FAILED,
 			      "Could not allocate %ld bytes\n", lens[i]);
 
-		ret = _gnix_notifier_monitor(&mr_notifier, mems[i], lens[i],
+		ret = _gnix_notifier_monitor(mr_notifier, mems[i], lens[i],
 					     (uint64_t) &mems[i]);
 		cr_assert(ret == 0, "_gnix_notifier_monitor failed");
 		unmapped[i] = false;
@@ -121,10 +124,10 @@ monitor_multiple(size_t *lens, size_t num_lens)
 		munmap(mems[i], lens[i]);
 	}
 
-	for (ret = _gnix_notifier_get_event(&mr_notifier,
+	for (ret = _gnix_notifier_get_event(mr_notifier,
 					    &cookie, sizeof(cookie));
 	     ret > 0;
-	     ret = _gnix_notifier_get_event(&mr_notifier,
+	     ret = _gnix_notifier_get_event(mr_notifier,
 					    &cookie, sizeof(cookie))) {
 		i = (int) (cookie - (uint64_t) mems)/8;
 		cr_assert(cookie == (uint64_t) &mems[i],
@@ -138,7 +141,7 @@ monitor_multiple(size_t *lens, size_t num_lens)
 
 	for (i = 0; i < num_lens; i++) {
 		if (unmapped[i] == false) {
-			ret = _gnix_notifier_unmonitor(&mr_notifier,
+			ret = _gnix_notifier_unmonitor(mr_notifier,
 						       (uint64_t) &mems[i]);
 			cr_assert(ret == 0, "_gnix_notifier_unmonitor failed");
 		}
