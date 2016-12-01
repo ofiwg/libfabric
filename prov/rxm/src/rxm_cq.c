@@ -138,36 +138,42 @@ out:
 	return ret;
 }
 
-int rxm_write_recv_comp(struct rxm_rx_buf *rx_buf)
+int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 {
 	int ret;
 
-	// TODO deal with other flags, specify recv buf
-	ret = rxm_cq_comp(rx_buf->ep->util_ep.rx_cq, rx_buf->recv_entry->context,
-			FI_RECV, rx_buf->pkt.hdr.size, NULL, rx_buf->pkt.hdr.data,
-			rx_buf->pkt.hdr.tag);
-	if (ret) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Unable to write recv completion\n");
-		return ret;
+	if (rx_buf->recv_entry->flags & FI_COMPLETION) {
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
+		ret = rxm_cq_comp(rx_buf->ep->util_ep.rx_cq,
+				rx_buf->recv_entry->context,
+				FI_RECV, rx_buf->pkt.hdr.size, NULL,
+				rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Unable to write recv completion\n");
+			return ret;
+		}
 	}
 
 	freestack_push(rx_buf->recv_fs, rx_buf->recv_entry);
-
 	return rxm_ep_repost_buf(rx_buf);
 }
 
-int rxm_write_send_comp(struct rxm_tx_entry *tx_entry)
+int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 {
 	int ret;
 
-	util_buf_release(tx_entry->ep->tx_pool, tx_entry->pkt);
-	ret = rxm_cq_comp(tx_entry->ep->util_ep.tx_cq, tx_entry->context,
-			FI_SEND, 0, NULL, 0, 0);
-	if (ret) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Unable to write send comletion\n");
-		return ret;
+	if (tx_entry->flags & FI_COMPLETION) {
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing send completion\n");
+		ret = rxm_cq_comp(tx_entry->ep->util_ep.tx_cq, tx_entry->context,
+				FI_SEND, 0, NULL, 0, 0);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Unable to write send completion\n");
+			return ret;
+		}
 	}
-
+	util_buf_release(tx_entry->ep->tx_pool, tx_entry->pkt);
 	freestack_push(tx_entry->ep->txe_fs, tx_entry);
 	return 0;
 }
@@ -241,7 +247,7 @@ int rxm_cq_handle_ack(struct rxm_rx_buf *rx_buf)
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "tx_entry->state -> RXM_LMT_FINISH\n");
 	tx_entry->state = RXM_LMT_FINISH;
 
-	ret = rxm_write_send_comp(tx_entry);
+	ret = rxm_finish_send(tx_entry);
 	if (ret)
 		return ret;
 
@@ -272,7 +278,7 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 	} else {
 		ofi_copy_iov_buf(rx_buf->recv_entry->iov, rx_buf->recv_entry->count, rx_buf->pkt.data,
 			rx_buf->pkt.hdr.size, 0, OFI_COPY_BUF_TO_IOV);
-		return rxm_write_recv_comp(rx_buf);
+		return rxm_finish_recv(rx_buf);
 	}
 }
 
@@ -355,7 +361,7 @@ int rxm_handle_send_comp(void *op_context)
 			tx_entry->state = RXM_LMT_ACK;
 			return 0;
 		}
-		ret = rxm_write_send_comp(tx_entry);
+		ret = rxm_finish_send(tx_entry);
 		break;
 	case RXM_RX_BUF:
 		rx_buf = (struct rxm_rx_buf *)op_context;
@@ -368,7 +374,7 @@ int rxm_handle_send_comp(void *op_context)
 		}
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "rx_buf->state -> RXM_LMT_FINISH\n");
 		rx_buf->state = RXM_LMT_FINISH;
-		ret = rxm_write_recv_comp(rx_buf);
+		ret = rxm_finish_recv(rx_buf);
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown entry type!\n");
