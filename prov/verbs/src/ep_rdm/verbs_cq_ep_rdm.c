@@ -70,6 +70,8 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 		entry[ret].op_context = cq_entry->context;
 		entry[ret].flags = (cq_entry->comp_flags & ~FI_COMPLETION);
 		entry[ret].len = cq_entry->len;
+		entry[ret].buf = (cq_entry->comp_flags & FI_TRANSMIT) ?
+			cq_entry->src_addr : cq_entry->dest_buf;
 		entry[ret].data = cq_entry->imm;
 		entry[ret].tag = cq_entry->minfo.tag;
 

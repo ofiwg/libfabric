@@ -221,7 +221,7 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 
 static struct fi_ops_domain fi_ibv_rdm_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = fi_ibv_av_open,
+	.av_open = fi_ibv_rdm_av_open,
 	.cq_open = fi_ibv_rdm_cq_open,
 	.endpoint = fi_ibv_rdm_open_ep,
 	.scalable_ep = fi_no_scalable_ep,
