@@ -67,7 +67,7 @@ static int fi_find_name(char **names, const char *name)
 	int i;
 
 	for (i = 0; names[i]; i++) {
-		if (!strcmp(name, names[i]))
+		if (!strcasecmp(name, names[i]))
 			return i;
 	}
 	return -1;
