@@ -348,6 +348,8 @@ static void rdm_sr_teardown_common(bool unreg)
 		if (unreg) {
 			fi_close(&loc_mr[i]->fid);
 			fi_close(&rem_mr[i]->fid);
+			fi_close(&iov_dest_buf_mr[i]->fid);
+			fi_close(&iov_src_buf_mr[i]->fid);
 		}
 
 		ret = fi_close(&ep[i]->fid);
