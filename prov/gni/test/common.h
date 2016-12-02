@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,6 +36,11 @@
 #include <time.h>
 #include <stdint.h>
 #include <sys/time.h>
+#include "gnix_rdma_headers.h"
+
+/* defined in rdm_atomic.c */
+extern int supported_compare_atomic_ops[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST];
+extern int supported_fetch_atomic_ops[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST];
 
 void calculate_time_difference(struct timeval *start, struct timeval *end,
 		int *secs_out, int *usec_out);

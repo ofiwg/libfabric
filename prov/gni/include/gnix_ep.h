@@ -334,4 +334,15 @@ int gnix_scalable_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
  */
 int gnix_pep_bind(fid_t fid, fid_t *bfid, uint64_t flags);
 
-#endif /* _GNIX_EP_H_ */
+DIRECT_FN int gnix_ep_atomic_valid(struct fid_ep *ep,
+				   enum fi_datatype datatype,
+				   enum fi_op op, size_t *count);
+
+DIRECT_FN int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
+					 enum fi_datatype datatype,
+					 enum fi_op op, size_t *count);
+
+DIRECT_FN int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
+				       enum fi_datatype datatype,
+				       enum fi_op op, size_t *count);
+#endif /* _GN IX_EP_H_ */
