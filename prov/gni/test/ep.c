@@ -98,6 +98,7 @@ Test(endpoint_info, info)
 	cr_assert(!ret, "fi_getinfo");
 	cr_assert_eq(fi->ep_attr->type, FI_EP_RDM);
 	cr_assert_eq(fi->next->ep_attr->type, FI_EP_DGRAM);
+	cr_assert_eq(fi->next->next->ep_attr->type, FI_EP_MSG);
 
 	fi_freeinfo(fi);
 

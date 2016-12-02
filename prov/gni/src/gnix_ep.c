@@ -52,6 +52,7 @@
 #include "gnix_atomic.h"
 #include "gnix_cntr.h"
 #include "gnix_xpmem.h"
+#include "gnix_eq.h"
 
 
 /*******************************************************************************
@@ -1421,9 +1422,19 @@ static void __ep_destruct(void *obj)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (ep->av) {
+	if (ep->type == FI_EP_MSG) {
+		if (GNIX_EP_CONNECTED(ep)) {
+			assert(ep->vc);
+			ret = _gnix_vc_destroy(ep->vc);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_vc_destroy returned %s\n",
+					  fi_strerror(-ret));
+			}
+		}
+	} else if (ep->av) {
 		/* Remove EP from CM NIC lookup list. */
-		key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
+		key_ptr = (gnix_ht_key_t *)&ep->src_addr.gnix_addr;
 		ret =  _gnix_ht_remove(ep->cm_nic->addr_to_ep_ht,
 				       *key_ptr);
 		if (ret != FI_SUCCESS) {
@@ -1439,6 +1450,11 @@ static void __ep_destruct(void *obj)
 				  "_gnix_ht_remove returned %s\n",
 				  fi_strerror(-ret));
 		}
+	}
+
+	if (ep->eq) {
+		_gnix_eq_poll_obj_rem(ep->eq, &ep->ep_fid.fid);
+		_gnix_ref_put(ep->eq);
 	}
 
 	if (ep->send_cq) {
@@ -1525,6 +1541,8 @@ static void __ep_destruct(void *obj)
 	__fr_freelist_destroy(ep);
 	_gnix_ep_htd_pool_fini(ep);
 
+	fi_freeinfo(ep->info);
+
 	free(ep);
 }
 
@@ -1551,6 +1569,7 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
 	int ret;
 	struct gnix_fid_ep  *ep;
+	struct gnix_fid_eq *eq;
 	struct gnix_fid_av  *av;
 	struct gnix_fid_cq  *cq;
 	struct gnix_fid_stx *stx;
@@ -1600,8 +1619,22 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
-		ret = -FI_ENOSYS;
-		goto err;
+		eq = container_of(bfid, struct gnix_fid_eq, eq_fid.fid);
+		if (ep->domain->fabric != eq->fabric) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		if (ep->eq) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		ep->eq = eq;
+		_gnix_eq_poll_obj_add(eq, &ep->ep_fid.fid);
+		_gnix_ref_get(eq);
+
+		GNIX_DEBUG(FI_LOG_EP_CTRL, "Bound EQ to EP: %p, %p\n", eq, ep);
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct gnix_fid_cq, cq_fid.fid);
@@ -1759,84 +1792,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		break;
 	}
 
-err:
-	return ret;
-}
-
-DIRECT_FN int gnix_pep_bind(fid_t fid, fid_t *bfid, uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
-static int __gnix_ep_cm_nic_prep(struct gnix_fid_domain *domain,
-				 struct fi_info *info,
-				 uint32_t *cdm_id)
-{
-	int ret = FI_SUCCESS;
-	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
-	struct gnix_ep_name *name;
-
-	if (info->src_addr &&
-	    info->src_addrlen == sizeof(struct gnix_ep_name)) {
-		name = (struct gnix_ep_name *)info->src_addr;
-		if (name->name_type & GNIX_EPN_TYPE_BOUND) {
-			/* the EP name cdm_id contains the user specified
-			 * port for bound endpoints */
-			*cdm_id = name->gnix_addr.cdm_id;
-			name_type = name->name_type;
-		}
-	}
-
-	if (name_type & GNIX_EPN_TYPE_UNBOUND) {
-		ret = _gnix_cm_nic_create_cdm_id(domain, cdm_id);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				"gnix_cm_nic_create_cdm_id returned %s\n",
-				  fi_strerror(-ret));
-			return ret;
-		}
-	}
-
-	return ret;
-}
-
-/*
- * helper function for initializing an ep of type
- * GNIX_EPN_TYPE_BOUND
- */
-static int __gnix_ep_bound_prep(struct gnix_fid_domain *domain,
-				struct fi_info *info,
-				struct gnix_fid_ep *ep)
-{
-	int ret = FI_SUCCESS;
-	uint32_t cdm_id;
-
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	assert(domain != NULL);
-	assert(info != NULL);
-	assert(ep != NULL);
-
-	ret = __gnix_ep_cm_nic_prep(domain, info, &cdm_id);
-	if (ret != FI_SUCCESS) {
-		return ret;
-	}
-
-	ret = _gnix_cm_nic_alloc(domain,
-				 info,
-				 cdm_id,
-				 &ep->cm_nic);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_cm_nic_alloc returned %s\n",
-			  fi_strerror(-ret));
-		return ret;
-	}
-
-	ep->my_name = ep->cm_nic->my_name;
-	ep->nic = ep->cm_nic->nic;
-	_gnix_ref_get(ep->nic);
-
 	return ret;
 }
 
@@ -1856,13 +1811,13 @@ static void gnix_ep_caps(struct gnix_fid_ep *ep_priv, uint64_t caps)
 
 }
 
-
-static int __init_tag_storages(struct gnix_fid_ep *ep, int tag_type)
+static int __init_tag_storages(struct gnix_fid_ep *ep, int tag_type,
+			       int use_addrs)
 {
 	int tsret;
 	struct gnix_tag_storage_attr untagged_attr = {
 			.type = tag_type,
-			.use_src_addr_matching = 1,
+			.use_src_addr_matching = use_addrs,
 	};
 	struct gnix_tag_storage_attr tagged_attr = {
 			.type = tag_type,
@@ -1894,16 +1849,150 @@ static int __init_tag_storages(struct gnix_fid_ep *ep, int tag_type)
 	return tsret;
 }
 
+static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
+			     struct fi_info *info,
+			     struct gnix_fid_ep *ep)
+{
+	int ret;
+	uint32_t cdm_id = GNIX_CREATE_CDM_ID;
+	struct gnix_ep_name *name;
+
+	name = (struct gnix_ep_name *)info->src_addr;
+	if (name && name->name_type == GNIX_EPN_TYPE_BOUND) {
+		name = (struct gnix_ep_name *)info->src_addr;
+
+		/* Endpoint was bound to a specific source address.  Create a
+		 * new CM NIC to listen on this address. */
+		ret = _gnix_cm_nic_alloc(domain, info, name->gnix_addr.cdm_id,
+					 &ep->cm_nic);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_cm_nic_alloc returned %s\n",
+				  fi_strerror(-ret));
+			return ret;
+		}
+
+		ep->src_addr = ep->cm_nic->my_name;
+		ep->nic = ep->cm_nic->nic;
+		_gnix_ref_get(ep->nic);
+
+		GNIX_INFO(FI_LOG_EP_CTRL,
+			  "Allocated new NIC for bound EP: %p (ID:%d)\n",
+			  ep->src_addr.gnix_addr.cdm_id);
+	} else {
+		fastlock_acquire(&domain->cm_nic_lock);
+
+		/* Allocate a domain CM NIC, if needed. */
+		if (domain->cm_nic == NULL) {
+			ret = _gnix_cm_nic_create_cdm_id(domain, &cdm_id);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "gnix_cm_nic_create_cdm_id returned %s\n",
+					  fi_strerror(-ret));
+				return ret;
+			}
+
+			ret = _gnix_cm_nic_alloc(domain, info, cdm_id,
+						 &domain->cm_nic);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_cm_nic_alloc returned %s\n",
+					  fi_strerror(-ret));
+				fastlock_release(&domain->cm_nic_lock);
+				return ret;
+			}
+
+			/* Use the newly allocated domain CM NIC for data
+			 * movement on this EP. */
+			ep->cm_nic = domain->cm_nic;
+			ep->nic = ep->cm_nic->nic;
+			_gnix_ref_get(ep->nic);
+
+			GNIX_INFO(FI_LOG_EP_CTRL,
+				  "Allocated new NIC for EP: %p (ID:%d)\n",
+				  ep->src_addr.gnix_addr.cdm_id);
+		} else {
+			/* Re-use the existing domain CM NIC. */
+			ep->cm_nic = domain->cm_nic;
+			_gnix_ref_get(ep->cm_nic);
+
+			/* Allocate a new NIC for data movement on this EP. */
+			ret = gnix_nic_alloc(domain, NULL, &ep->nic);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					    "_gnix_nic_alloc call returned %d\n",
+					     ret);
+				fastlock_release(&domain->cm_nic_lock);
+				return ret;
+			}
+
+			GNIX_INFO(FI_LOG_EP_CTRL,
+				  "Allocated new NIC for xfers: %p (ID:%d)\n",
+				  ep->src_addr.gnix_addr.cdm_id);
+		}
+
+		fastlock_release(&domain->cm_nic_lock);
+
+		ep->src_addr.gnix_addr.device_addr =
+			ep->cm_nic->my_name.gnix_addr.device_addr;
+		ep->src_addr.cm_nic_cdm_id =
+			ep->cm_nic->my_name.gnix_addr.cdm_id;
+
+		ret = _gnix_cm_nic_create_cdm_id(domain, &cdm_id);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "gnix_cm_nic_create_cdm_id returned %s\n",
+				  fi_strerror(-ret));
+			_gnix_ref_put(ep->nic);
+			return ret;
+		}
+		ep->src_addr.gnix_addr.cdm_id = cdm_id;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int _gnix_ep_msg_open(struct gnix_fid_domain *domain,
+			     struct fi_info *info,
+			     struct gnix_fid_ep *ep)
+{
+	ep->ep_fid.cm = &gnix_ep_msg_ops_cm;
+	ep->conn_fd = -1;
+	ep->conn_state = GNIX_EP_UNCONNECTED;
+
+	return FI_SUCCESS;
+}
+
+static int _gnix_ep_unconn_open(struct gnix_fid_domain *domain,
+				struct fi_info *info,
+				struct gnix_fid_ep *ep)
+{
+	int ret;
+	gnix_ht_key_t *key_ptr;
+
+	key_ptr = (gnix_ht_key_t *)&ep->src_addr.gnix_addr;
+	ret = _gnix_ht_insert(ep->cm_nic->addr_to_ep_ht,
+			      *key_ptr, ep);
+	if ((ret != FI_SUCCESS) && (ret != -FI_ENOSPC)) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "__gnix_ht_insert returned %d\n",
+			  ret);
+		return ret;
+	}
+
+	/* Unconnected endpoints use a limited set of CM ops. */
+	ep->ep_fid.cm = &gnix_ep_ops_cm;
+
+	return FI_SUCCESS;
+}
+
 DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			   struct fid_ep **ep, void *context)
 {
 	int ret = FI_SUCCESS;
-	uint32_t cdm_id = GNIX_CREATE_CDM_ID;
+	int err_ret;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
-	struct gnix_ep_name *name;
-	gnix_ht_key_t *key_ptr;
-	bool free_list_inited = false;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1911,210 +2000,141 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	    (info->ep_attr == NULL))
 		return -FI_EINVAL;
 
-	/*
-	 * TODO: need to implement other endpoint types
-	 */
-	if (!GNIX_EP_RDM_DGM(info->ep_attr->type))
-		return -FI_ENOSYS;
-
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 
 	ep_priv = calloc(1, sizeof *ep_priv);
 	if (!ep_priv)
 		return -FI_ENOMEM;
 
-
-	ep_priv->requires_lock = (domain_priv->thread_model !=
-				FI_THREAD_COMPLETION);
-	ret = __init_tag_storages(ep_priv, GNIX_TAG_LIST);
-	if (ret) {
-		goto err;
-	}
-
+	/* Set up libfabric fid data. */
 	ep_priv->ep_fid.fid.fclass = FI_CLASS_EP;
 	ep_priv->ep_fid.fid.context = context;
-
 	ep_priv->ep_fid.fid.ops = &gnix_ep_fi_ops;
 	ep_priv->ep_fid.ops = &gnix_ep_ops;
-	ep_priv->domain = domain_priv;
+	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
+	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;
+	ep_priv->ep_fid.tagged = &gnix_ep_tagged_ops;
+	ep_priv->ep_fid.atomic = &gnix_ep_atomic_ops;
+
+	/* Init GNIX data. */
 	ep_priv->type = info->ep_attr->type;
-
+	ep_priv->domain = domain_priv;
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
-
 	fastlock_init(&ep_priv->recv_queue_lock);
 	fastlock_init(&ep_priv->tagged_queue_lock);
-
-	ep_priv->caps = info->caps & GNIX_EP_RDM_CAPS_FULL;
-
-	if (info->tx_attr)
-		ep_priv->op_flags = info->tx_attr->op_flags;
-	if (info->rx_attr)
-		ep_priv->op_flags |= info->rx_attr->op_flags;
-	ep_priv->op_flags &= GNIX_EP_OP_FLAGS;
-
 	ep_priv->min_multi_recv = GNIX_OPT_MIN_MULTI_RECV_DEFAULT;
+	fastlock_init(&ep_priv->vc_lock);
+	ep_priv->progress_fn = NULL;
+	ep_priv->rx_progress_fn = NULL;
+	ep_priv->tx_enabled = false;
+	ep_priv->rx_enabled = false;
+	ep_priv->requires_lock = (domain_priv->thread_model !=
+				  FI_THREAD_COMPLETION);
+	ep_priv->info = fi_dupinfo(info);
+
+	if (ep_priv->info->src_addr)
+		memcpy(&ep_priv->src_addr,
+		       ep_priv->info->src_addr,
+		       sizeof(struct gnix_ep_name));
+
+	if (ep_priv->info->dest_addr)
+		memcpy(&ep_priv->dest_addr,
+		       ep_priv->info->dest_addr,
+		       sizeof(struct gnix_ep_name));
+
+	ret = __init_tag_storages(ep_priv, GNIX_TAG_LIST,
+				  ep_priv->type == FI_EP_MSG ? 0 : 1);
+	if (ret)
+		goto err_tag_init;
 
 	ret = __fr_freelist_init(ep_priv);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			 "Error allocating gnix_fab_req freelist (%s)",
 			 fi_strerror(-ret));
-		goto err;
-	} else
-		free_list_inited = true;
+		goto err_fl_init;
+	}
 
-	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
-	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;
-	ep_priv->ep_fid.tagged = &gnix_ep_tagged_ops;
-	ep_priv->ep_fid.atomic = &gnix_ep_atomic_ops;
-	gnix_ep_caps(ep_priv, ep_priv->caps);
-
-	ep_priv->ep_fid.cm = &gnix_cm_ops;
-
-	/*
-	 * try out XPMEM
-	 */
-
+	/* Check for xpmem. */
 	ret = _gnix_xpmem_handle_create(domain_priv,
 					&ep_priv->xpmem_hndl);
 	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "_gnix_xpmem_handl_create returned %s\n",
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_xpmem_handl_create returned %s\n",
 			  fi_strerror(-ret));
 	}
 
-	if (GNIX_EP_RDM_DGM(ep_priv->type)) {
-		name = (struct gnix_ep_name *)info->src_addr;
-		if ((name != NULL) &&
-			(name->name_type == GNIX_EPN_TYPE_BOUND)) {
+	/* Initialize caps, modes, permissions, behaviors. */
+	ep_priv->caps = info->caps & GNIX_EP_CAPS_FULL;
 
-			ret = __gnix_ep_bound_prep(domain_priv,
-						   info,
-						   ep_priv);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-				 "__gnix_ep_bound_prep returned error (%s)",
-				 fi_strerror(-ret));
-				goto err;
-			}
-		} else {
-			fastlock_acquire(&domain_priv->cm_nic_lock);
+	if (ep_priv->info->tx_attr)
+		ep_priv->op_flags = ep_priv->info->tx_attr->op_flags;
+	if (ep_priv->info->rx_attr)
+		ep_priv->op_flags |= ep_priv->info->rx_attr->op_flags;
+	ep_priv->op_flags &= GNIX_EP_OP_FLAGS;
 
-			/*
-			 * if a cm_nic has not yet been allocated for this
-			 * domain, do it now.  Reuse the embedded gnix_nic
-			 * in the cm_nic as the nic for this endpoint
-			 * to reduce demand on Aries hw resources.
-			 */
-			if (domain_priv->cm_nic == NULL) {
-				__gnix_ep_cm_nic_prep(domain_priv, info,
-						      &cdm_id);
-				if (ret != FI_SUCCESS) {
-					fastlock_release(
-						 &domain_priv->cm_nic_lock);
-					goto err;
-				}
-				ret = _gnix_cm_nic_alloc(domain_priv,
-							 info,
-							 cdm_id,
-							 &domain_priv->cm_nic);
-				if (ret != FI_SUCCESS) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						"_gnix_cm_nic_alloc returned %s\n",
-						fi_strerror(-ret));
-					fastlock_release(
-						 &domain_priv->cm_nic_lock);
-					goto err;
-				}
-				ep_priv->cm_nic = domain_priv->cm_nic;
-				ep_priv->nic = ep_priv->cm_nic->nic;
-				_gnix_ref_get(ep_priv->nic);
-			} else {
-				ep_priv->cm_nic = domain_priv->cm_nic;
-				_gnix_ref_get(ep_priv->cm_nic);
-			}
+	gnix_ep_caps(ep_priv, ep_priv->caps);
 
-			fastlock_release(&domain_priv->cm_nic_lock);
-
-			ep_priv->my_name.gnix_addr.device_addr =
-				ep_priv->cm_nic->my_name.gnix_addr.device_addr;
-			ep_priv->my_name.cm_nic_cdm_id =
-				ep_priv->cm_nic->my_name.gnix_addr.cdm_id;
-
-			ret = _gnix_cm_nic_create_cdm_id(domain_priv, &cdm_id);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					    "gnix_cm_nic_create_cdm_id returned %s\n",
-					     fi_strerror(-ret));
-				goto err;
-			}
-			ep_priv->my_name.gnix_addr.cdm_id = cdm_id;
-		}
-
-		key_ptr = (gnix_ht_key_t *)&ep_priv->my_name.gnix_addr;
-		ret = _gnix_ht_insert(ep_priv->cm_nic->addr_to_ep_ht,
-				      *key_ptr,
-				      ep_priv);
-		if ((ret != FI_SUCCESS) && (ret != -FI_ENOSPC)) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "__gnix_ht_insert returned %d\n",
-				  ret);
-			goto err;
-		}
-	} else {
-		ep_priv->cm_nic = NULL;
-		ep_priv->vc = NULL;
+	ret = _gnix_ep_nic_init(domain_priv, ep_priv->info, ep_priv);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_ep_nic_init returned %d\n",
+			  ret);
+		goto err_nic_init;
 	}
-	fastlock_init(&ep_priv->vc_lock);
 
-	ep_priv->progress_fn = NULL;
-	ep_priv->rx_progress_fn = NULL;
-	ep_priv->tx_enabled = false;
-	ep_priv->rx_enabled = false;
-
-	if (ep_priv->nic == NULL) {
-		ret = gnix_nic_alloc(domain_priv, NULL, &ep_priv->nic);
+	/* Do EP type specific initialization. */
+	switch (ep_priv->type) {
+	case FI_EP_DGRAM:
+	case FI_EP_RDM:
+		ret = _gnix_ep_unconn_open(domain_priv, ep_priv->info, ep_priv);
 		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				    "gnix_nic_alloc call returned %d\n", ret);
-			goto err;
+			GNIX_INFO(FI_LOG_EP_CTRL,
+				  "_gnix_ep_unconn_open() failed, err: %d\n",
+				  ret);
+			goto err_type_init;
 		}
+		break;
+	case FI_EP_MSG:
+		ret = _gnix_ep_msg_open(domain_priv, ep_priv->info, ep_priv);
+		if (ret != FI_SUCCESS) {
+			GNIX_INFO(FI_LOG_EP_CTRL,
+				  "_gnix_ep_msg_open() failed, err: %d\n",
+				  ret);
+			goto err_type_init;
+		}
+		break;
+	default:
+		ret = -FI_EINVAL;
+		goto err_type_init;
 	}
-
-	/*
-	 * if smsg callbacks not present hook them up now
-	 */
-
-	if (ep_priv->nic->smsg_callbacks == NULL)
-		ep_priv->nic->smsg_callbacks = gnix_ep_smsg_callbacks;
 
 	_gnix_ref_get(ep_priv->domain);
+
 	*ep = &ep_priv->ep_fid;
+
 	return ret;
 
-err:
+err_type_init:
+	_gnix_nic_free(ep_priv->nic);
+	_gnix_cm_nic_free(ep_priv->cm_nic);
+err_nic_init:
 	if (ep_priv->xpmem_hndl) {
-		if (_gnix_xpmem_handle_destroy(ep_priv->xpmem_hndl) !=
-		    FI_SUCCESS) {
+		err_ret = _gnix_xpmem_handle_destroy(ep_priv->xpmem_hndl);
+		if (err_ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_xpmem_handle_destroy returned %s\n",
-				  fi_strerror(-ret));
+				  fi_strerror(-err_ret));
 		}
 	}
 
+	__fr_freelist_destroy(ep_priv);
+err_fl_init:
 	__destruct_tag_storages(ep_priv);
-
-	if (free_list_inited == true)
-		__fr_freelist_destroy(ep_priv);
-
-	if (ep_priv->cm_nic != NULL)
-		ret = _gnix_cm_nic_free(ep_priv->cm_nic);
-
-	if (ep_priv->nic != NULL)
-		ret = _gnix_nic_free(ep_priv->nic);
-
+err_tag_init:
 	free(ep_priv);
-	return ret;
 
+	return ret;
 }
 
 int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
@@ -2157,7 +2177,7 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 	fastlock_init(&ep_priv->recv_queue_lock);
 	fastlock_init(&ep_priv->tagged_queue_lock);
 
-	ep_priv->caps = info->caps & GNIX_EP_RDM_CAPS_FULL;
+	ep_priv->caps = info->caps & GNIX_EP_CAPS_FULL;
 
 	if (info->tx_attr)
 		ep_priv->op_flags = info->tx_attr->op_flags;
@@ -2190,11 +2210,11 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 	if (attr && attr->cm_ops)
 		ep_priv->ep_fid.cm = attr->cm_ops;
 	else
-		ep_priv->ep_fid.cm = &gnix_cm_ops;
+		ep_priv->ep_fid.cm = &gnix_ep_ops_cm;
 
 	gnix_ep_caps(ep_priv, ep_priv->caps);
 
-	ret = __init_tag_storages(ep_priv, GNIX_TAG_LIST);
+	ret = __init_tag_storages(ep_priv, GNIX_TAG_LIST, 1);
 	if (ret) {
 		goto err;
 	}
@@ -2256,9 +2276,9 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 
 	}
 
-	ep_priv->my_name.gnix_addr.device_addr =
+	ep_priv->src_addr.gnix_addr.device_addr =
 		ep_priv->cm_nic->my_name.gnix_addr.device_addr;
-	ep_priv->my_name.cm_nic_cdm_id =
+	ep_priv->src_addr.cm_nic_cdm_id =
 		ep_priv->cm_nic->my_name.gnix_addr.cdm_id;
 
 	if (attr && attr->use_cdm_id) {
@@ -2272,9 +2292,9 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 			goto err;
 		}
 	}
-	ep_priv->my_name.gnix_addr.cdm_id = cdm_id;
+	ep_priv->src_addr.gnix_addr.cdm_id = cdm_id;
 
-	key_ptr = (gnix_ht_key_t *)&ep_priv->my_name.gnix_addr;
+	key_ptr = (gnix_ht_key_t *)&ep_priv->src_addr.gnix_addr;
 	ret = _gnix_ht_insert(ep_priv->cm_nic->addr_to_ep_ht,
 			      *key_ptr,
 			      ep_priv);
@@ -2325,16 +2345,16 @@ err:
 		err_ret = _gnix_xpmem_handle_destroy(ep_priv->xpmem_hndl);
 		if (err_ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_xpmem_handle_destroy returned %s\n",
-				  fi_strerror(-err_ret));
+					"_gnix_xpmem_handle_destroy returned %s\n",
+					fi_strerror(-err_ret));
 		}
 	}
 
 	err_ret = __destruct_tag_storages(ep_priv);
 	if (err_ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "__destruct_tag_stroages returned %s\n",
-			  fi_strerror(-err_ret));
+				"__destruct_tag_stroages returned %s\n",
+				fi_strerror(-err_ret));
 	}
 
 	if (free_list_inited == true)
@@ -2344,8 +2364,8 @@ err:
 		err_ret = _gnix_cm_nic_free(ep_priv->cm_nic);
 		if (err_ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_cm_nic_free returned %s\n",
-				  fi_strerror(-err_ret));
+					"_gnix_cm_nic_free returned %s\n",
+					fi_strerror(-err_ret));
 		}
 	}
 
@@ -2353,21 +2373,13 @@ err:
 		err_ret = _gnix_nic_free(ep_priv->nic);
 		if (err_ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_nic_free returned %s\n",
-				  fi_strerror(-err_ret));
+					"_gnix_nic_free returned %s\n",
+					fi_strerror(-err_ret));
 		}
 	}
 
 	free(ep_priv);
 	return ret;
-
-}
-
-DIRECT_FN int gnix_passive_ep_open(struct fid_fabric *fabric,
-				   struct fi_info *info, struct fid_pep **pep,
-				   void *context)
-{
-	return -FI_ENOSYS;
 }
 
 static int __match_context(struct dlist_entry *item, const void *arg)
@@ -2627,7 +2639,7 @@ __gnix_ep_ops_set_val(struct fid *fid, ep_ops_val_t t, void *val)
 
 			tag_type = (v) ? GNIX_TAG_HLIST : GNIX_TAG_LIST;
 
-			ret = __init_tag_storages(ep, tag_type);
+			ret = __init_tag_storages(ep, tag_type, 1);
 			if (ret)
 				return ret;
 

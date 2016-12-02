@@ -534,12 +534,6 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
 	fabric_priv = container_of(fabric, struct gnix_fid_fabric, fab_fid);
-	if (!info->domain_attr->name ||
-	    strncmp(info->domain_attr->name, gnix_dom_name,
-		    strlen(gnix_dom_name))) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
 
 	/*
 	 * check cookie/ptag credentials - for FI_EP_MSG we may be creating a

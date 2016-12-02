@@ -450,7 +450,7 @@ int _gnix_xpmem_accessible(struct gnix_fid_ep *ep,
 	 * of the supplied address, return true, else false
 	 */
 
-	*accessible = (ep->my_name.gnix_addr.device_addr ==
+	*accessible = (ep->src_addr.gnix_addr.device_addr ==
 			addr.device_addr) ? true : false;
 
 	return FI_SUCCESS;

@@ -178,21 +178,6 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
  */
 int _gnix_vc_connect(struct gnix_vc *vc);
 
-
-/**
- * @brief Sets up an accepting vc - one accepting vc can accept a
- *        single incoming connection request
- *
- * @param[in]  vc   pointer to previously allocated vc struct with
- *                  FI_ADDR_UNSPEC value supplied for the fi_addr_t
- *                  argument
- *
- * @return FI_SUCCESS on success, -FI_EINVAL if an invalid field in the vc
- *         struct is encountered, -ENOMEM if insufficient memory to initiate
- *         accept request.
- */
-int _gnix_vc_accept(struct gnix_vc *vc);
-
 /**
  * @brief Initiates a non-blocking disconnect of a vc from its peer
  *
@@ -203,7 +188,6 @@ int _gnix_vc_accept(struct gnix_vc *vc);
  *         connection request.
  */
 int _gnix_vc_disconnect(struct gnix_vc *vc);
-
 
 /**
  * @brief Destroys a previously allocated vc and cleans up resources
@@ -329,6 +313,10 @@ fi_addr_t _gnix_vc_peer_fi_addr(struct gnix_vc *vc);
 
 int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic);
 int _gnix_vc_schedule(struct gnix_vc *vc);
+int _gnix_vc_smsg_init(struct gnix_vc *vc,
+		       int peer_id,
+		       gni_smsg_attr_t *peer_smsg_attr,
+		       gni_mem_handle_t *peer_irq_mem_hndl);
 
 /*
  * inline functions

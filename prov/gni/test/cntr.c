@@ -101,7 +101,7 @@ static inline void cntr_setup_eps(void)
 
 	/* This test hangs with the FI_RMA_EVENT capability enabled because the
 	 * receiver does not progress libfabric. */
-	hints->caps = GNIX_EP_RDM_PRIMARY_CAPS;
+	hints->caps = GNIX_EP_PRIMARY_CAPS;
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");

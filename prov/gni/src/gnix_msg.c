@@ -52,6 +52,8 @@
 
 #define GNIX_TAGGED_PCD_COMPLETION_FLAGS	(FI_MSG | FI_RECV | FI_TAGGED)
 
+smsg_completer_fn_t gnix_ep_smsg_completers[];
+
 /*******************************************************************************
  * helper functions
  ******************************************************************************/
@@ -2366,10 +2368,8 @@ static int __gnix_msg_addr_lookup(struct gnix_fid_ep *ep, uint64_t src_addr,
 		} else {
 			*(uint64_t *)gnix_addr = FI_ADDR_UNSPEC;
 		}
-	} else {
-		assert(ep->vc != NULL);
-		*gnix_addr = ep->vc->peer_addr;
 	}
+	/* NOP for MSG EPs. */
 
 	return FI_SUCCESS;
 }
