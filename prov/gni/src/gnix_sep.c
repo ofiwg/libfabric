@@ -326,11 +326,6 @@ static int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		}
 
-		/* We currently only support FI_AV_MAP */
-		if (av->type != FI_AV_MAP) {
-			return -FI_EINVAL;
-		}
-
 		for (i = 0; i < sep->info->ep_attr->tx_ctx_cnt; i++) {
 			ep = container_of(sep->tx_ep_table[i],
 					  struct gnix_fid_ep, ep_fid);
