@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,16 +40,14 @@ int mlx_cq_open (
 	struct util_cq *u_cq;
 
 	u_cq = calloc(1, sizeof(struct util_cq));
-	if (!u_cq)
-	{
+	if (!u_cq) {
 		return -FI_ENOMEM;
 	}
 
 	status = ofi_cq_init(
 			&mlx_prov, domain, 
 			attr, u_cq, &ofi_cq_progress, context);
-	if (status)
-	{
+	if (status) {
 		free(u_cq);
 		return status;
 	}

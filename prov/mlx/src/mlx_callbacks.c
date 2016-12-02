@@ -49,8 +49,7 @@ void mlx_send_callback( void *request,
 
 	cq = mlx_req->cq;
 
-	if (status == UCS_ERR_CANCELED)
-	{
+	if (status == UCS_ERR_CANCELED) {
 		ucp_request_release(request);
 		return;
 	}
@@ -61,8 +60,7 @@ void mlx_send_callback( void *request,
 	*t_entry = (mlx_req->completion.tagged);
 	cirque_commit(cq->cirq);
 
-	if (status != UCS_OK)
-	{
+	if (status != UCS_OK){
 		t_entry->flags |= UTIL_FLAG_ERROR;
 		err = calloc(1, sizeof(struct util_cq_err_entry));
 		if (!err) {
@@ -93,8 +91,7 @@ void mlx_recv_callback (
 	struct mlx_request *mlx_req;
 
 	mlx_req = (struct mlx_request*)request;
-	if (status == UCS_ERR_CANCELED)
-	{
+	if (status == UCS_ERR_CANCELED) {
 		ucp_request_release(request);
 		return;
 	}
@@ -104,24 +101,20 @@ void mlx_recv_callback (
 	mlx_req->completion.tagged.tag = info->sender_tag;
 	mlx_req->completion.tagged.len = info->length;
 
-	if (status != UCS_OK)
-	{
+	if (status != UCS_OK) {
 		mlx_req->completion.error.prov_errno = (int)status;
 		mlx_req->completion.error.err = MLX_TRANSLATE_ERRCODE(status);
 	}
 
-	if (mlx_req->type == MLX_FI_REQ_UNINITIALIZED)
-	{
-		if (status != UCS_OK)
-		{
+	if (mlx_req->type == MLX_FI_REQ_UNINITIALIZED) {
+		if (status != UCS_OK) {
 			mlx_req->completion.error.olen = info->length;
 			mlx_req->type = MLX_FI_REQ_UNEXPECTED_ERR;
 		} else {
 			mlx_req->type = MLX_FI_REQ_UNEXPECTED;
 		}
 	} else {
-		if (status != UCS_OK)
-		{
+		if (status != UCS_OK) {
 			mlx_req->completion.error.olen = info->length -
 						mlx_req->completion.error.len;
 		}
@@ -130,8 +123,7 @@ void mlx_recv_callback (
 		t_entry = cirque_tail(cq->cirq);
 		*t_entry = (mlx_req->completion.tagged);
 
-		if (status != UCS_OK)
-		{
+		if (status != UCS_OK) {
 			struct util_cq_err_entry* err;
 			t_entry->flags |= UTIL_FLAG_ERROR;
 
@@ -151,8 +143,7 @@ void mlx_recv_callback (
 					FI_ADDR_NOTAVAIL;
 		}
 
-		if (cq->wait)
-		{
+		if (cq->wait) {
 			cq->wait->signal(cq->wait);
 		}
 

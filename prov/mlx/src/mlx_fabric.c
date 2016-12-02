@@ -67,12 +67,12 @@ int mlx_fabric_open(
 
 	FI_INFO( &mlx_prov, FI_LOG_CORE, "\n" );
 
-	if (strcmp(attr->name, FI_MLX_FABRIC_NAME))
+	if (strcmp(attr->name, FI_MLX_FABRIC_NAME)) {
 		return -FI_ENODATA;
+	}
 
 	fabric_priv = calloc(1, sizeof(struct mlx_fabric));
-	if (!fabric_priv)
-	{
+	if (!fabric_priv) {
 		return -FI_ENOMEM;
 	}
 

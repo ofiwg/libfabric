@@ -42,8 +42,7 @@ static int mlx_domain_close(fid_t fid)
 
 	ucp_cleanup(domain->context);
 	status = ofi_domain_close( &(domain->u_domain));
-	if (!status)
-	{
+	if (!status) {
 		util_buf_pool_destroy(domain->fast_path_pool);
 		free(domain);
 	}
@@ -80,27 +79,23 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	ucp_params_t params;
 
 	if (!info->domain_attr->name 
-		|| strcmp(info->domain_attr->name, FI_MLX_FABRIC_NAME))
-	{
+		|| strcmp(info->domain_attr->name, FI_MLX_FABRIC_NAME)) {
 		return -FI_EINVAL;
 	}
 
 	ofi_status = fi_check_info(&mlx_util_prov, info, FI_MATCH_EXACT);
-	if (ofi_status)
-	{
+	if (ofi_status) {
 		return ofi_status;
 	}
 
 	domain = (struct mlx_domain*)
 				calloc(1, sizeof(struct mlx_domain));
-	if (!domain)
-	{
+	if (!domain) {
 		return -ENOMEM;
 	}
 
 	ofi_status = ofi_domain_init(fabric, info, &(domain->u_domain), context);
-	if (ofi_status)
-	{
+	if (ofi_status) {
 		goto domain_free;
 	}
 
@@ -113,7 +108,7 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			(const ucp_params_t *)&params,
 			mlx_descriptor.config,
 			&(domain->context));
-	if (status != UCS_OK){
+	if (status != UCS_OK) {
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);
 		goto destroy_domain;
 	}
@@ -122,8 +117,7 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->fast_path_pool = util_buf_pool_create(
 						sizeof(struct mlx_request),
 						16, 0, 1024 );
-	if (!domain->fast_path_pool)
-	{
+	if (!domain->fast_path_pool) {
 		ofi_status = -ENOMEM;
 		goto cleanup_mlx;
 	}
@@ -141,7 +135,9 @@ destroy_domain:
 	ofi_domain_close(&(domain->u_domain));
 domain_free:
 	free(domain);
-	if (!ofi_status) ofi_status = FI_ENETUNREACH; 
+	if (!ofi_status) {
+		ofi_status = FI_ENETUNREACH;
+	}
 	return ofi_status;
 }
 

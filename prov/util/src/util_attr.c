@@ -413,7 +413,10 @@ int fi_check_ep_attr(const struct util_prov *util_prov,
 			}
 		} else {
 			FI_INFO(prov, FI_LOG_CORE,
-					"Requested tx_ctx_cnt exceeds supported. Expected:%d, supported%d\n",util_prov->info->domain_attr->max_ep_tx_ctx, user_attr->tx_ctx_cnt);
+					"Requested tx_ctx_cnt exceeds supported."
+					" Expected:%d, supported%d\n",
+					util_prov->info->domain_attr->max_ep_tx_ctx,
+					user_attr->tx_ctx_cnt);
 			return -FI_ENODATA;
 		}
 	}

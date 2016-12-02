@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -78,12 +78,10 @@ static int mlx_ep_close(fid_t fid)
 
 	ucp_worker_flush(fid_ep->worker);
 	ucp_worker_destroy(fid_ep->worker);
-	if (fid_ep->ep.tx_cq) 
-	{
+	if (fid_ep->ep.tx_cq) {
 		atomic_dec(&(fid_ep->ep.tx_cq->ref));
 	}
-	if (fid_ep->ep.rx_cq) 
-	{
+	if (fid_ep->ep.rx_cq) {
 		atomic_dec(&(fid_ep->ep.rx_cq->ref));
 	}
 
@@ -101,57 +99,52 @@ static int mlx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	int status = FI_SUCCESS;
 
 	switch (bfid->fclass) {
-		case FI_CLASS_CQ:
-			/* TODO: check rest flags for send/recv ECs */
-			do {
-				cq = container_of(bfid, struct util_cq, cq_fid.fid);
+	case FI_CLASS_CQ:
+		/* TODO: check rest flags for send/recv ECs */
+		do {
+			cq = container_of(bfid, struct util_cq, cq_fid.fid);
 
-				if ( ((flags & FI_TRANSMIT) && ep->ep.tx_cq)||
-					((flags & FI_RECV) && ep->ep.rx_cq))
-				{
-					FI_WARN( &mlx_prov, FI_LOG_EP_CTRL,
-						"CQ already binded\n");
-					status = -FI_EINVAL;
-					break;
-				}
-
-				if (flags & FI_TRANSMIT)
-				{
-					ep->ep.tx_cq = cq;
-					atomic_inc(&(cq->ref));
-				}
-
-				if (flags & FI_RECV)
-				{
-					ep->ep.rx_cq = cq;
-					atomic_inc(&(cq->ref));
-					status = fid_list_insert( &cq->ep_list,
-								&cq->ep_list_lock,
-								&ep->ep.ep_fid.fid);
-					if (status) break;
-				}
-
-				if (flags & FI_SELECTIVE_COMPLETION)
-				{
-					ep->ep.flags |= FI_SELECTIVE_COMPLETION;
-				}
-
-			} while (0);
-			break;
-		case FI_CLASS_AV:
-			if (ep->av)
-			{
+			if ( ((flags & FI_TRANSMIT) && ep->ep.tx_cq)||
+				((flags & FI_RECV) && ep->ep.rx_cq)) {
 				FI_WARN( &mlx_prov, FI_LOG_EP_CTRL,
-					"AV already binded\n");
+					"CQ already binded\n");
 				status = -FI_EINVAL;
 				break;
 			}
-			ep->av = container_of(bfid, struct mlx_av, av.fid);
-			ep->av->ep = ep;
-			break;
-		default:
+
+			if (flags & FI_TRANSMIT) {
+				ep->ep.tx_cq = cq;
+				atomic_inc(&(cq->ref));
+			}
+
+			if (flags & FI_RECV) {
+				ep->ep.rx_cq = cq;
+				atomic_inc(&(cq->ref));
+				status = fid_list_insert( &cq->ep_list,
+							&cq->ep_list_lock,
+							&ep->ep.ep_fid.fid);
+				if (status) break;
+			}
+
+			if (flags & FI_SELECTIVE_COMPLETION) {
+				ep->ep.flags |= FI_SELECTIVE_COMPLETION;
+			}
+
+		} while (0);
+		break;
+	case FI_CLASS_AV:
+		if (ep->av) {
+			FI_WARN( &mlx_prov, FI_LOG_EP_CTRL,
+				"AV already binded\n");
 			status = -FI_EINVAL;
 			break;
+		}
+		ep->av = container_of(bfid, struct mlx_av, av.fid);
+		ep->av->ep = ep;
+		break;
+	default:
+		status = -FI_EINVAL;
+		break;
 	}
 	return status;
 }
@@ -201,8 +194,7 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	u_domain = container_of( domain, struct mlx_domain, u_domain.domain_fid);
 
 	ep = (struct mlx_ep *) calloc(1, sizeof (struct mlx_ep));
-	if (!ep)
-	{
+	if (!ep) {
 		return -ENOMEM;
 	}
 
@@ -210,16 +202,14 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 				domain, &mlx_util_prov, info,
 				&ep->ep, context,
 				mlx_ep_progress, FI_MATCH_EXACT);
-	if (ofi_status)
-	{
+	if (ofi_status) {
 		goto free_ep;
 	}
 
 	status = ucp_worker_create( u_domain->context,
 				UCS_THREAD_MODE_MULTI,
 				&(ep->worker));
-	if (status != UCS_OK)
-	{
+	if (status != UCS_OK) {
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);
 		atomic_dec(&(u_domain->u_domain.ref));
 		goto free_ep;

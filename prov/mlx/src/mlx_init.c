@@ -161,24 +161,21 @@ static int mlx_getinfo (
 	status = fi_param_get( &mlx_prov,
 				"mlx_tinject_limit",
 				&inject_thresh);
-	if (!status)
-	{
+	if (!status) {
 		inject_thresh = FI_MLX_DEFAULT_INJECT_SIZE;
 	}
 	FI_INFO( &mlx_prov, FI_LOG_CORE,
 		"used inlect size = %d \n", inject_thresh);
 
 	status = fi_param_get( &mlx_prov, "mlx_config", &configfile_name);
-	if (!status)
-	{
+	if (!status) {
 		configfile_name = NULL;
 	}
 
 	status = ucp_config_read( NULL,
 				status? NULL: configfile_name,
 				&mlx_descriptor.config);
-	if (status != UCS_OK)
-	{
+	if (status != UCS_OK) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"MLX error: invalid config file\n\t%d (%s)\n", 
 			status, ucs_status_string(status));
@@ -186,8 +183,7 @@ static int mlx_getinfo (
 
 	/*Setup some presets*/
 	status = ucm_config_modify("MLX_MEM_MALLOC_HOOKS", "no");
-	if (status != UCS_OK)
-	{
+	if (status != UCS_OK) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"MLX error: failed to switch off UCM memory hooks:\t%d (%s)\n", 
 			status, ucs_status_string(status));
@@ -199,8 +195,7 @@ static int mlx_getinfo (
 
 #if ENABLE_DEBUG
 	if (mlx_descriptor.config &&
-		fi_log_enabled( &mlx_prov, FI_LOG_INFO, FI_LOG_CORE))
-	{
+			fi_log_enabled( &mlx_prov, FI_LOG_INFO, FI_LOG_CORE)) {
 		ucp_config_print( mlx_descriptor.config, 
 				stderr, "Used MLX configuration", (1<<4)-1); 
 	}
@@ -221,8 +216,7 @@ static int mlx_getinfo (
 void mlx_cleanup(void)
 {
 	FI_INFO(&mlx_prov, FI_LOG_CORE, "provider goes cleanup sequence\n");
-	if (mlx_descriptor.config)
-	{
+	if (mlx_descriptor.config) {
 		ucp_config_release(mlx_descriptor.config);
 		mlx_descriptor.config = NULL;
 	}

@@ -47,13 +47,11 @@ static int mlx_cm_getname(
 	status = ucp_worker_get_address( ep->worker,
 					(ucp_address_t **)&addr_local,
 					(size_t*) &addr_len_local );
-	if (status != UCS_OK)
-	{
+	if (status != UCS_OK) {
 		return MLX_TRANSLATE_ERRCODE(status);
 	}
 
-	if ((*addrlen) < addr_len_local)
-	{
+	if ((*addrlen) < addr_len_local) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"Buffer storage for ep address is too small %d "
 			"instead of %d [%s]\n",

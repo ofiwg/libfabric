@@ -67,13 +67,11 @@ static int mlx_av_remove(
 	int i;
 
 	av = container_of(fi_av, struct mlx_av, av);
-	if ((av->async) && (!av->eq))
-	{
+	if ((av->async) && (!av->eq)) {
 		return -FI_ENOEQ;
 	}
 
-	for (i = 0; i < count; ++i)
-	{
+	for (i = 0; i < count; ++i) {
 		ucp_ep_destroy((ucp_ep_h)(fi_addr[i]));
 	}
 	return FI_SUCCESS;
@@ -94,13 +92,11 @@ static int mlx_av_insert(
 	av = container_of(fi_av, struct mlx_av, av);
 	ep = av->ep;
 
-	if ((av->async) && (!av->eq))
-	{
+	if ((av->async) && (!av->eq)) {
 		return -FI_ENOEQ;
 	}
 
-	for ( i = 0; i < count ; ++i)
-	{
+	for ( i = 0; i < count ; ++i) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"Try to insert address #%d, offset=%d (size=%d)"
 			" fi_addr=%p \naddr = %s",
@@ -114,12 +110,10 @@ static int mlx_av_insert(
 					(ucp_ep_h*)(&(fi_addr[i])));
 
 		FI_WARN( &mlx_prov, FI_LOG_CORE, "address inserted\n");
-		if (status == UCS_OK)
-		{
+		if (status == UCS_OK) {
 			added++;
 		} else {
-			if (av->eq)
-			{
+			if (av->eq) {
 				mlx_av_write_event( av, i,
 						MLX_TRANSLATE_ERRCODE(status),
 						context);
@@ -127,8 +121,7 @@ static int mlx_av_insert(
 		}
 	}
 
-	if (av->eq)
-	{
+	if (av->eq) {
 		mlx_av_write_event(av, added, 0, context);
 		count = 0;
 	} else {
@@ -152,8 +145,7 @@ static int mlx_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct util_eq *eq;
 
 	av = container_of(fid, struct mlx_av, av.fid);
-	if ((!(av->async)) || (bfid->fclass != FI_CLASS_EQ))
-	{
+	if ((!(av->async)) || (bfid->fclass != FI_CLASS_EQ)){
 		FI_WARN( &mlx_prov, FI_LOG_EP_CTRL,
 			"Try to bind not a EQ to AV, "
 			"or attemt to bind EQ and syncronious AV\n");
@@ -189,22 +181,22 @@ int mlx_av_open(
 	int is_async = 0;
 	if (attr) {
 		switch (attr->type) {
-			case FI_AV_MAP:
-				type = attr->type;
-				break;
-			default:
-				return -EINVAL;
+		case FI_AV_MAP:
+			type = attr->type;
+			break;
+		default:
+			return -EINVAL;
 		}
-		if (attr->flags && FI_EVENT)
-		{
+		if (attr->flags && FI_EVENT){
 			is_async = 1;
 		}
 		count = attr->count;
 	}
 
 	av = (struct mlx_av *) calloc(1, sizeof(struct mlx_av));
-	if (!av)
+	if (!av) {
 		return -ENOMEM;
+	}
 
 	av->domain = domain;
 	av->async = is_async;

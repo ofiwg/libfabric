@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -48,14 +48,14 @@ extern "C" {
 #include <string.h>
 #include <unistd.h>
 #include <rdma/fabric.h>
-#include <rdma/fi_prov.h>
+#include <rdma/providers/fi_prov.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_log.h>
+#include <rdma/providers/fi_log.h>
 #include <fi.h>
 #include <fi_lock.h>
 #include <fi_list.h>

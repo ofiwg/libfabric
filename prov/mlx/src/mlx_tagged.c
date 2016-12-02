@@ -44,13 +44,11 @@ static ssize_t mlx_tagged_recvmsg(
 	struct util_cq* cq;
 	u_ep = container_of(ep, struct mlx_ep, ep.ep_fid);
 
-	if(flags & FI_REMOTE_CQ_DATA)
-	{
+	if(flags & FI_REMOTE_CQ_DATA) {
 		return -FI_EBADFLAGS;
 	}
 
-	if (msg->iov_count == 1)
-	{
+	if (msg->iov_count == 1) {
 		status = ucp_tag_recv_nb(u_ep->worker, msg->msg_iov[0].iov_base,
 					msg->msg_iov[0].iov_len,
 					ucp_dt_make_contig(1),
@@ -60,8 +58,7 @@ static ssize_t mlx_tagged_recvmsg(
 		return -FI_EINVAL; /*Do not return IOV for a while*/
 	}
 
-	if (UCS_PTR_IS_ERR(status))
-	{
+	if (UCS_PTR_IS_ERR(status)) {
 		FI_DBG( &mlx_prov,FI_LOG_CORE,
 			"Send operation returns error: %s",
 			ucs_status_string(*(ucs_status_t*)status));
@@ -73,8 +70,7 @@ static ssize_t mlx_tagged_recvmsg(
 	req->cq = cq;
 	req->ep =u_ep;
 
-	if (msg->context)
-	{
+	if (msg->context) {
 		struct fi_context* _ctx =((struct fi_context *)(msg->context)); 
 		_ctx->internal[0] = (void*)req;
 		_ctx->internal[1] = NULL;
@@ -86,8 +82,7 @@ static ssize_t mlx_tagged_recvmsg(
 	req->completion.tagged.buf = msg->msg_iov[0].iov_base;
 	req->completion.tagged.data = 0;
 
-	if (req->type == MLX_FI_REQ_UNINITIALIZED)
-	{
+	if (req->type == MLX_FI_REQ_UNINITIALIZED) {
 		req->type = MLX_FI_REQ_REGULAR;
 		req->completion.tagged.tag = msg->tag;
 		req->completion.tagged.len = msg->msg_iov[0].iov_len;
@@ -100,8 +95,7 @@ static ssize_t mlx_tagged_recvmsg(
 	t_entry = cirque_tail(cq->cirq);
 	*t_entry = (req->completion.tagged);
 
-	if(req->type == MLX_FI_REQ_UNEXPECTED_ERR)
-	{
+	if(req->type == MLX_FI_REQ_UNEXPECTED_ERR) {
 		struct util_cq_err_entry* err;
 		req->completion.error.olen -= req->completion.tagged.len;
 		t_entry->flags |= UTIL_FLAG_ERROR;
@@ -121,12 +115,10 @@ static ssize_t mlx_tagged_recvmsg(
 	fastlock_release(&cq->cq_lock);
 
 fence:
-	if(flags & FI_FENCE)
-	{
+	if(flags & FI_FENCE) {
 		ucs_status_t cstatus;
 		cstatus = ucp_worker_flush(u_ep->worker);
-		if(status != UCS_OK)
-		{
+		if(status != UCS_OK) {
 			return MLX_TRANSLATE_ERRCODE(cstatus);
 		}
 	}
@@ -149,18 +141,15 @@ static ssize_t mlx_tagged_sendmsg(
 	dst_ep = __mlx_get_dstep_from_fi_addr(u_ep, msg->addr);
 	cq = u_ep->ep.tx_cq;
 
-	if(flags & FI_REMOTE_CQ_DATA)
-	{
+	if(flags & FI_REMOTE_CQ_DATA) {
 		return -FI_EBADFLAGS;
 	}
 
 	cbf = ((!(u_ep->ep.flags & FI_SELECTIVE_COMPLETION)) 
 			|| (flags & FI_COMPLETION)) ? 
 				mlx_send_callback : mlx_send_callback_no_compl;
-	if (msg->iov_count == 1)
-	{
-		if (flags & FI_TRANSMIT_COMPLETE)
-		{
+	if (msg->iov_count == 1) {
+		if (flags & FI_TRANSMIT_COMPLETE) {
 			status = ucp_tag_send_sync_nb (
 						dst_ep,
 						msg->msg_iov[0].iov_base,
@@ -179,18 +168,15 @@ static ssize_t mlx_tagged_sendmsg(
 		return -FI_EINVAL; /*Do not return IOV for a while*/
 	}
 
-	if (UCS_PTR_IS_ERR(status))
-	{
+	if (UCS_PTR_IS_ERR(status)) {
 		FI_DBG( &mlx_prov,FI_LOG_CORE,
 			"Send operation returns error: %s",
 			ucs_status_string(*(ucs_status_t*)status));
 		return MLX_TRANSLATE_ERRCODE(*(ucs_status_t*)status);
 	}
 
-	if (flags & FI_INJECT)
-	{
-		while (!ucp_request_is_completed(status))
-		{
+	if (flags & FI_INJECT) {
+		while (!ucp_request_is_completed(status)) {
 			ucp_worker_progress(u_ep->worker);
 		}
 		ucp_request_release(status);
@@ -198,13 +184,11 @@ static ssize_t mlx_tagged_sendmsg(
 	}
 
 	if((u_ep->ep.flags & FI_SELECTIVE_COMPLETION)
-			&& !(flags & FI_COMPLETION))
-	{
+			&& !(flags & FI_COMPLETION)) {
 		goto fence;
 	}
 
-	if (msg->context)
-	{
+	if (msg->context) {
 		struct fi_context* _ctx = ((struct fi_context*)(msg->context));
 		_ctx->internal[0] = status;
 		_ctx->internal[1] = NULL;
@@ -213,8 +197,7 @@ static ssize_t mlx_tagged_sendmsg(
 	}
 
 
-	if (status != UCS_OK)
-	{
+	if (status != UCS_OK) {
 		struct mlx_request *req;
 		req = (struct mlx_request *) status;
 		req->cq = cq;
@@ -241,11 +224,9 @@ static ssize_t mlx_tagged_sendmsg(
 	}
 
 fence:
-	if(flags & FI_FENCE)
-	{
+	if(flags & FI_FENCE) {
 		cstatus = ucp_worker_flush(u_ep->worker);
-		if(status != UCS_OK)
-		{
+		if(status != UCS_OK) {
 			return MLX_TRANSLATE_ERRCODE(cstatus);
 		}
 	}
@@ -267,21 +248,18 @@ static ssize_t mlx_tagged_inject(
 	status = ucp_tag_send_nb( dst_ep, buf, len,
 				ucp_dt_make_contig(1),
 				tag, mlx_send_callback_no_compl);
-	if (status == UCS_OK)
-	{
+	if (status == UCS_OK) {
 		return FI_SUCCESS;
 	}
 
-	if (UCS_PTR_IS_ERR(status))
-	{
+	if (UCS_PTR_IS_ERR(status)) {
 		FI_DBG( &mlx_prov,FI_LOG_CORE,
 			"Send operation returns error: %s",
 			ucs_status_string(*(ucs_status_t*)status));
 		return MLX_TRANSLATE_ERRCODE(*(ucs_status_t*)status);
 	}
 
-	while (!ucp_request_is_completed(status))
-	{
+	while (!ucp_request_is_completed(status)) {
 		ucp_worker_progress(u_ep->worker);
 	}
 
