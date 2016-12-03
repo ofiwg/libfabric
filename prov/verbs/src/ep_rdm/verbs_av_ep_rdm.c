@@ -122,7 +122,11 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
 	struct fi_ibv_rdm_ep *ep = av->ep;
 	size_t i;
+	int failed = 0;
 	int ret = 0;
+
+	if((av->flags & FI_EVENT) && !av->eq)
+		return -FI_ENOEQ;
 
 	if (ep) {
 		pthread_mutex_lock(&ep->cm_lock);
@@ -156,6 +160,22 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 
 			FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 				"fi_av_insert: bad addr #%i\n", i);
+
+			if (av->flags & FI_EVENT) {
+				/* due to limited functionality of
+				 * verbs EQ notify last failed element
+				 * only. */
+				/* TODO: what about utils EQ? */
+				struct fi_eq_err_entry err = {
+					.fid = &av->av_fid.fid,
+					.context = context,
+					.data = i,
+					.err = FI_EINVAL,
+					.prov_errno = FI_EINVAL
+				};
+				av->eq->err = err;
+				failed++;
+			}
 
 			continue;
 		}
@@ -212,11 +232,21 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 		ret++;
 	}
 
+	if(av->flags & FI_EVENT) {
+                struct fi_eq_entry entry = {
+			.fid = &av->av_fid.fid,
+			.context = context,
+			.data = count - failed
+		};
+		fi_ibv_eq_write_event(
+			av->eq, FI_AV_COMPLETE, &entry, sizeof(entry));
+	}
+
 out:
 	if (ep) {
 		pthread_mutex_unlock(&ep->cm_lock);
 	}
-	return ret;
+	return (av->flags & FI_EVENT) ? FI_SUCCESS : (ret - failed);
 }
 
 static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
@@ -227,6 +257,9 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
 	int i;
+
+	if(av->flags & FI_EVENT && !av->eq)
+		return -FI_ENOEQ;
 
 	if (!fi_addr || (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)) {
 		return -FI_EINVAL;
@@ -362,6 +395,7 @@ int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av->domain = fid_domain;
 	av->type = attr->type;
 	av->count = count;
+	av->flags = attr->flags;
 	av->used = 0;
 
 	if (av->type == FI_AV_TABLE && av->count > 0) {

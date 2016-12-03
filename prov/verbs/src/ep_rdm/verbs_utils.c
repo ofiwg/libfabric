@@ -250,6 +250,8 @@ fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata)
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err   = FI_SUCCESS;
 
+	/* postponed_entry means that there are elements postponed to
+	 * send & current request must be queued */
 	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
 	int ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_SEND_START, sdata);
 
