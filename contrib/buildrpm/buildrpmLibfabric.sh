@@ -46,6 +46,7 @@ noop=""
 install_in_opt=""
 unpack_spec=""
 verbose=""
+verboseoption=""
 st=""
 
 ##################################
@@ -68,7 +69,12 @@ verbose()
 
 runcmd()
 {
-  verbose "Executing: $*"
+  if [[ -z "$noop" ]]; then
+    verbose "Executing: $*"
+  else
+    verbose "Would have executed: $*"
+  fi
+
   if [[ -z "$noop" ]]; then
     eval "$*"
     st=$?
@@ -98,14 +104,13 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
  Provider options:
 
   -i    provider_name
-    include 'provider_name' provider support to the build
+             include 'provider_name' provider support to the build
 
   -e    provider_name
-    exclude 'provider_name' provider support from the build
+             exclude 'provider_name' provider support from the build
 
  General options:
-  -n         no op, do nothing
-               useful with -v option
+  -n         no op, do nothing (useful with -v option)
 
   -o         install under /opt/libfabric/_VERSION_
                {default: install under /usr/ }
@@ -160,6 +165,10 @@ while getopts noi:e:dc:r:svh flag; do
 done
 shift $(( OPTIND - 1 ));
 
+if [[ -n "$verbose" ]]; then
+  verboseoption="-v"
+fi
+
 ########################################
 # Check if there is at least 1 parameter
 # specified (tarball is mandatory)
@@ -176,9 +185,9 @@ if [[ -n "$verbose" ]]; then
 cat <<EOF
 
 ------------------------------------------------------------------------------
-====              Welcome to Libfabric RPM build script                   ====
+====              Welcome to the Libfabric RPM build script               ====
 ------------------------------------------------------------------------------
-You have specified this options:
+You have specified these options:
  $arguments
 ------------------------------------------------------------------------------
 
@@ -229,18 +238,12 @@ if [[ -f "$specfile" ]]; then
 fi
 
 if [[ -n "$unpack_spec" ]]; then
-  if [[ -z "$verbose" ]]; then
-    runcmd "tar -xf \"$tarball\""
-    runcmd "cp -fp \"$tardirname/$specfile\" ."
-    runcmd "rm -rf \"$tardirname\""
-  else
-    verbose "Extracting tarball"
-    runcmd "tar -xvf \"$tarball\""
-    verbose "Copying specfile"
-    runcmd "cp -fpv \"$tardirname/$specfile\" ."
-    verbose "Cleanup after extraction"
-    runcmd "rm -rfv \"$tardirname\""
-  fi
+  verbose "Extracting tarball"
+  runcmd "tar -xf $verboseoption \"$tarball\""
+  verbose "Copying specfile"
+  runcmd "cp -fp $verboseoption \"$tardirname/$specfile\" ."
+  verbose "Cleanup after extraction"
+  runcmd "rm -rf $verboseoption \"$tardirname\""
 fi
 
 ##############################
@@ -261,18 +264,12 @@ fi
 #############################
 # Prepare directory for build
 #############################
-if [[ -z "$verbose" ]]; then
-  runcmd "rm -rf \"$rpmbuilddir\""
-  runcmd "mkdir -p \"$rpmbuilddir/SOURCES/\""
-  runcmd "cp -fp \"$tarball\" \"$rpmbuilddir/SOURCES/\""
-else
-  verbose "Cleanup old rpmbuild directory"
-  runcmd "rm -rfv \"$rpmbuilddir\""
-  verbose "Create rpmbuild SOURCES directory"
-  runcmd "mkdir -pv \"$rpmbuilddir/SOURCES/\""
-  verbose "Copy tarball to rpmbuild directory"
-  runcmd "cp -fpv \"$tarball\" \"$rpmbuilddir/SOURCES/\""
-fi
+verbose "Cleanup old rpmbuild directory"
+runcmd "rm -rf $verboseoption \"$rpmbuilddir\""
+verbose "Create rpmbuild SOURCES directory"
+runcmd "mkdir -p $verboseoption \"$rpmbuilddir/SOURCES/\""
+verbose "Copy tarball to rpmbuild directory"
+runcmd "cp -fp $verboseoption \"$tarball\" \"$rpmbuilddir/SOURCES/\""
 
 ###########
 # Build RPM
@@ -286,12 +283,15 @@ else
   build_opt="-v"
 fi
 cmd="rpmbuild $build_opt -bb $specfile $rpmbuild_options \
-  --define 'configopts $configure_options' \
   --define '_topdir $rpmbuilddir' \
   --define '_sourcedir $rpmbuilddir/SOURCES' \
   --define '_rpmdir $rpmbuilddir/RPMS' \
   --define '_specdir $rpmbuilddir/SPECS' \
   --define '_tmppath $rpmbuilddir/tmp'"
+
+if [[ -n "$configure_options" ]]; then
+  cmd="$cmd --define 'configopts $configure_options'"
+fi
 
 verbose "Build command used:"
 verbose "$cmd"
