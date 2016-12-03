@@ -103,10 +103,10 @@ int cm_local_ip(struct sockaddr_in *sa)
 
 	ifa = ifap;
 	while (ifa) {
-		fprintf(stderr, "IF: %s, IP ADDR: %s\n",
-			ifa->ifa_name,
-			inet_ntoa(((struct sockaddr_in *)
-					(ifa->ifa_addr))->sin_addr));
+		dbg_printf(stderr, "IF: %s, IP ADDR: %s\n",
+			   ifa->ifa_name,
+			   inet_ntoa(((struct sockaddr_in *)
+				      (ifa->ifa_addr))->sin_addr));
 		/* Return first non loopback interface. */
 		if (ifa->ifa_addr &&
 		    ifa->ifa_addr->sa_family == AF_INET &&
@@ -349,7 +349,7 @@ void cm_basic_send(void)
 		   source, target);
 }
 
-Test(cm_basic, srv_setup)
+Test(cm_basic, srv_setup, .disabled = true)
 {
 	int cli_connected = 0, srv_connected = 0;
 	int i;
@@ -365,14 +365,16 @@ Test(cm_basic, srv_setup)
 	do {
 		if (!srv_connected) {
 			srv_connected += cm_server_finish_connect();
-			if (srv_connected)
+			if (srv_connected) {
 				dbg_printf("Server connect complete!\n");
+			}
 		}
 
 		if (!cli_connected) {
 			cli_connected += cm_client_finish_connect();
-			if (cli_connected)
+			if (cli_connected) {
 				dbg_printf("Client connect complete!\n");
+			}
 		}
 	} while (!srv_connected || !cli_connected);
 
