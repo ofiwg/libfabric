@@ -1,4 +1,4 @@
-%{!?configopts: %global configopts %{nil}}
+%{!?configopts: %global configopts LDFLAGS=-Wl,--build-id}
 
 Name: libfabric
 Version: @VERSION@
@@ -27,8 +27,7 @@ Development files for the libfabric library.
 %setup -q -n %{name}-%{version}
 
 %build
-# defaults: with-dlopen and without-valgrind can be over-rode:
-%configure %{?_without_dlopen} %{?_with_valgrind} %{configopts}
+%configure %{configopts}
 make %{?_smp_mflags}
 
 %install
