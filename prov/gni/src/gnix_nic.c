@@ -698,8 +698,6 @@ static int __gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 {
 	int i, ret = FI_SUCCESS;
 	struct gnix_tx_descriptor *desc_base, *desc_ptr;
-	void *int_bufs;
-	gni_return_t status;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -713,29 +711,11 @@ static int __gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 		goto err;
 	}
 
-	int_bufs = calloc(n_descs, GNIX_CACHELINE_SIZE);
-	if (int_bufs == NULL) {
-		ret = -FI_ENOMEM;
-		goto err_buf_alloc;
-	}
-
-	/* We don't have a domain here to use for caching the registration. */
-	status = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t)int_bufs,
-				 n_descs * GNIX_CACHELINE_SIZE, NULL,
-				 GNI_MEM_READWRITE, 0, &nic->int_bufs_mdh);
-	if (status != GNI_RC_SUCCESS) {
-		ret = gnixu_to_fi_errno(status);
-		goto err_buf_reg;
-	}
-	nic->int_bufs = int_bufs;
-
 	dlist_init(&nic->tx_desc_free_list);
 	dlist_init(&nic->tx_desc_active_list);
 
 	for (i = 0, desc_ptr = desc_base; i < n_descs; i++, desc_ptr++) {
 		desc_ptr->id = i;
-		desc_ptr->int_buf = (void *) ((uint8_t *) int_bufs +
-					      (i * GNIX_CACHELINE_SIZE));
 		dlist_insert_tail(&desc_ptr->list,
 				  &nic->tx_desc_free_list);
 	}
@@ -747,10 +727,6 @@ static int __gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 
 	return ret;
 
-err_buf_reg:
-	free(int_bufs);
-err_buf_alloc:
-	free(desc_base);
 err:
 	return ret;
 
@@ -761,15 +737,7 @@ err:
  */
 static void __gnix_nic_tx_freelist_destroy(struct gnix_nic *nic)
 {
-	gni_return_t status;
-
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	status = GNI_MemDeregister(nic->gni_nic_hndl, &nic->int_bufs_mdh);
-	if (status != GNI_RC_SUCCESS)
-		GNIX_WARN(FI_LOG_DOMAIN, "GNI_MemDeregister() failed: %s\n",
-			  gni_err_str[status]);
-	free(nic->int_bufs);
 
 	free(nic->tx_desc_base);
 	fastlock_destroy(&nic->tx_desc_lock);

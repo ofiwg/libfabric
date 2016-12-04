@@ -203,8 +203,6 @@ struct gnix_nic {
 	struct gnix_reference ref_cnt;
 	smsg_callback_fn_t const *smsg_callbacks;
 	struct slist err_txds;
-	void *int_bufs;
-	gni_mem_handle_t int_bufs_mdh;
 	gni_mem_handle_t irq_mem_hndl;
 	void *irq_mmap_addr;
 	size_t irq_mmap_len;
@@ -334,7 +332,6 @@ struct gnix_smsg_amo_cntr_hdr {
  * @var id               the id of this descriptor - the value returned
  *                       from GNI_CQ_MSG_ID
  * @var err_list         Error TXD list entry
- * @var int_buf          Intermediate buffer for landing unaligned data, etc.
  * @var tx_failures	 Number of times this transmission descriptor failed.
  */
 struct gnix_tx_descriptor {
@@ -356,7 +353,6 @@ struct gnix_tx_descriptor {
 	int  (*completer_fn)(void *, gni_return_t);
 	int id;
 	struct slist_entry err_list;
-	void *int_buf;
 };
 
 /*

@@ -66,79 +66,82 @@
 #define GNIX_FAB_REQ_FL_MIN_SIZE 100
 #define GNIX_FAB_REQ_FL_REFILL_SIZE 10
 
-void _gnix_ep_htd_pool_init(struct gnix_fid_ep *ep)
+void _gnix_ep_int_tx_pool_init(struct gnix_fid_ep *ep)
 {
 	int ret, i;
 	struct fid_mr *auto_mr = NULL;
-	uint8_t *htd_bufs;
-	struct gnix_htd_buf *htd_buf_list;
+	uint8_t *int_tx_bufs;
+	struct gnix_int_tx_buf *int_tx_buf_list;
 
 	assert(ep);
 
-	htd_bufs = malloc(GNIX_HTD_POOL_SIZE * GNIX_HTD_BUF_SZ);
-	if (htd_bufs == NULL) {
+	int_tx_bufs = malloc(GNIX_INT_TX_POOL_SIZE * GNIX_INT_TX_BUF_SZ);
+	if (int_tx_bufs == NULL) {
 		GNIX_FATAL(FI_LOG_EP_DATA, "\n");
 	}
 
-	htd_buf_list = malloc(GNIX_HTD_POOL_SIZE * sizeof(struct gnix_htd_buf));
-	if (htd_buf_list == NULL) {
+	int_tx_buf_list = malloc(GNIX_INT_TX_POOL_SIZE *
+				 sizeof(struct gnix_int_tx_buf));
+	if (int_tx_buf_list == NULL) {
 		GNIX_FATAL(FI_LOG_EP_DATA, "\n");
 	}
 
-	ep->htd_pool.buf_ptr = (void *) htd_bufs;
-	ep->htd_pool.sl_ptr = (void *) htd_buf_list;
+	ep->int_tx_pool.buf_ptr = (void *) int_tx_bufs;
+	ep->int_tx_pool.sl_ptr = (void *) int_tx_buf_list;
 
-	ret = gnix_mr_reg(&ep->domain->domain_fid.fid, htd_bufs,
-	      		  GNIX_HTD_BUF_SZ * GNIX_HTD_POOL_SIZE,
-			  FI_READ | FI_WRITE, 0, 0, 0, &auto_mr, NULL);
+	ret = gnix_mr_reg(&ep->domain->domain_fid.fid, int_tx_bufs,
+			GNIX_INT_TX_BUF_SZ * GNIX_INT_TX_POOL_SIZE,
+			FI_READ | FI_WRITE, 0, 0, 0, &auto_mr, NULL);
 
 	if (unlikely(ret != FI_SUCCESS)) {
 		GNIX_DEBUG(FI_LOG_EP_DATA, "gnix_mr_req returned: %s\n",
 			   fi_strerror(-ret));
 	} else {
-		ep->htd_pool.md = container_of(auto_mr, struct gnix_fid_mem_desc, mr_fid);
+		ep->int_tx_pool.md = container_of(auto_mr,
+					struct gnix_fid_mem_desc, mr_fid);
 	}
 
-	slist_init(&ep->htd_pool.sl);
+	slist_init(&ep->int_tx_pool.sl);
 
-	for (i = 0; i < GNIX_HTD_POOL_SIZE; i++) {
-		GNIX_DEBUG(FI_LOG_EP_DATA, "htd_bufs + (%d * GNIX_HTD_BUF_SZ) = %p\n",
-			   i, htd_bufs + (i * GNIX_HTD_BUF_SZ));
-		htd_buf_list[i].buf = htd_bufs + (i * GNIX_HTD_BUF_SZ);
-		slist_insert_tail(&htd_buf_list[i].e, &ep->htd_pool.sl);
+	for (i = 0; i < GNIX_INT_TX_POOL_SIZE; i++) {
+		GNIX_DEBUG(FI_LOG_EP_DATA,
+			"int_tx_bufs + (%d * GNIX_INT_TX_BUF_SZ) = %p\n",
+			i, int_tx_bufs + (i * GNIX_INT_TX_BUF_SZ));
+		int_tx_buf_list[i].buf = int_tx_bufs + (i * GNIX_INT_TX_BUF_SZ);
+		slist_insert_tail(&int_tx_buf_list[i].e, &ep->int_tx_pool.sl);
 	}
 
-	fastlock_init(&ep->htd_pool.lock);
+	fastlock_init(&ep->int_tx_pool.lock);
 
-	ep->htd_pool.enabled = true;
+	ep->int_tx_pool.enabled = true;
 }
 
-void _gnix_ep_htd_pool_fini(struct gnix_fid_ep *ep)
+void _gnix_ep_int_tx_pool_fini(struct gnix_fid_ep *ep)
 {
 	int ret;
 
 	assert(ep);
 
-	if (ep->htd_pool.enabled == false)
+	if (ep->int_tx_pool.enabled == false)
 		return;
 
-	ret = fi_close(&ep->htd_pool.md->mr_fid.fid);
+	ret = fi_close(&ep->int_tx_pool.md->mr_fid.fid);
 
 	if (ret != FI_SUCCESS) {
 		GNIX_DEBUG(FI_LOG_EP_DATA, "fi_close returned: %s\n", fi_strerror(-ret));
 	}
 
-	if (ep->htd_pool.buf_ptr != NULL) {
-		free(ep->htd_pool.buf_ptr);
-		ep->htd_pool.buf_ptr = NULL;
+	if (ep->int_tx_pool.buf_ptr != NULL) {
+		free(ep->int_tx_pool.buf_ptr);
+		ep->int_tx_pool.buf_ptr = NULL;
 	}
 
-	if (ep->htd_pool.sl_ptr != NULL) {
-		free(ep->htd_pool.sl_ptr);
-		ep->htd_pool.sl_ptr = NULL;
+	if (ep->int_tx_pool.sl_ptr != NULL) {
+		free(ep->int_tx_pool.sl_ptr);
+		ep->int_tx_pool.sl_ptr = NULL;
 	}
 
-	ep->htd_pool.enabled = false;
+	ep->int_tx_pool.enabled = false;
 }
 
 static int __fr_freelist_init(struct gnix_fid_ep *ep)
@@ -1417,7 +1420,7 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 			goto err;
 		}
 
-		_gnix_ep_htd_pool_init(ep);
+		_gnix_ep_int_tx_pool_init(ep);
 		break;
 
 	case FI_GETOPSFLAG:
@@ -1580,7 +1583,7 @@ static void __ep_destruct(void *obj)
 	 */
 
 	__fr_freelist_destroy(ep);
-	_gnix_ep_htd_pool_fini(ep);
+	_gnix_ep_int_tx_pool_fini(ep);
 
 	fi_freeinfo(ep->info);
 
@@ -2823,7 +2826,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_rx_size_left(struct fid_ep *ep)
 						   ep_fid);
 
 	/* A little arbitrary... */
-	if (ep_priv->htd_pool.enabled == false) {
+	if (ep_priv->int_tx_pool.enabled == false) {
 		return -FI_EOPBADSTATE;
 	}
 
@@ -2853,7 +2856,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_tx_size_left(struct fid_ep *ep)
 						   ep_fid);
 
 	/* A little arbitrary... */
-	if (ep_priv->htd_pool.enabled == false) {
+	if (ep_priv->int_tx_pool.enabled == false) {
 		return -FI_EOPBADSTATE;
 	}
 

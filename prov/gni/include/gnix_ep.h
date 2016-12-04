@@ -170,34 +170,36 @@ typedef ssize_t (*trecvmsg_func_t)(struct fid_ep *ep,
  * inline functions
  */
 
-static inline struct slist_entry *_gnix_ep_get_htd_buf(struct gnix_fid_ep *ep)
+static inline struct slist_entry
+*_gnix_ep_get_int_tx_buf(struct gnix_fid_ep *ep)
 {
 	struct slist_entry *e;
 
-	fastlock_acquire(&ep->htd_pool.lock);
+	fastlock_acquire(&ep->int_tx_pool.lock);
 
-	e = slist_remove_head(&ep->htd_pool.sl);
+	e = slist_remove_head(&ep->int_tx_pool.sl);
 
-	fastlock_release(&ep->htd_pool.lock);
+	fastlock_release(&ep->int_tx_pool.lock);
 
 	return e;
 }
 
-static inline gni_mem_handle_t _gnix_ep_get_htd_mdh(struct gnix_fid_ep *ep)
+static inline gni_mem_handle_t _gnix_ep_get_int_tx_mdh(struct gnix_fid_ep *ep)
 {
-	return ep->htd_pool.md->mem_hndl;
+	return ep->int_tx_pool.md->mem_hndl;
 }
 
-static inline void _gnix_ep_release_htd_buf(struct gnix_fid_ep *ep, struct slist_entry *e)
+static inline void _gnix_ep_release_int_tx_buf(struct gnix_fid_ep *ep,
+					       struct slist_entry *e)
 {
-	fastlock_acquire(&ep->htd_pool.lock);
+	fastlock_acquire(&ep->int_tx_pool.lock);
 
-	GNIX_DEBUG(FI_LOG_EP_DATA, "sl.head = %p, sl.tail = %p\n", ep->htd_pool.sl.head,
-		   ep->htd_pool.sl.tail);
+	GNIX_DEBUG(FI_LOG_EP_DATA, "sl.head = %p, sl.tail = %p\n",
+		   ep->int_tx_pool.sl.head, ep->int_tx_pool.sl.tail);
 
-	slist_insert_head(e, &ep->htd_pool.sl);
+	slist_insert_head(e, &ep->int_tx_pool.sl);
 
-	fastlock_release(&ep->htd_pool.lock);
+	fastlock_release(&ep->int_tx_pool.lock);
 }
 
 static inline struct gnix_fab_req *
@@ -229,10 +231,10 @@ _gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
 
-	if (fr->msg.htd_buf_e != NULL) {
-		_gnix_ep_release_htd_buf(ep, fr->msg.htd_buf_e);
-		fr->msg.htd_buf_e = NULL;
-		fr->msg.htd_buf = NULL;
+	if (fr->int_tx_buf_e != NULL) {
+		_gnix_ep_release_int_tx_buf(ep, fr->int_tx_buf_e);
+		fr->int_tx_buf_e = NULL;
+		fr->int_tx_buf = NULL;
 	}
 
 	_gnix_fl_free(&fr->dlist, &ep->fr_freelist);
