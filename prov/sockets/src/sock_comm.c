@@ -54,7 +54,11 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 	if (ret < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			ret = 0;
-		else
+		else if (errno == EPIPE) {
+			conn->connected = 0;
+			SOCK_LOG_DBG("Disconnected: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
+                               ntohs(conn->addr.sin_port));
+		} else
 			SOCK_LOG_DBG("write error: %s\n", strerror(errno));
 	}
 	if (ret > 0)
