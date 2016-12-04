@@ -50,6 +50,7 @@
 #include "gnix_cm_nic.h"
 #include "gnix_hashtable.h"
 #include "gnix_atomic.h"
+#include "gnix_cm.h"
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
@@ -68,6 +69,9 @@
 
 #define DEF_PORT "1973"
 
+#define EQE_SIZE	(sizeof(struct fi_eq_cm_entry) + GNIX_CM_DATA_MAX_SIZE)
+
+
 static struct fid_fabric *cli_fab;
 static struct fid_domain *cli_dom;
 static struct fid_ep *cli_ep;
@@ -75,6 +79,7 @@ static struct fi_info *cli_hints;
 static struct fi_info *cli_fi;
 static struct fid_eq *cli_eq;
 static struct fid_cq *cli_cq;
+char *cli_cm_in_data = "Hola.  Soy cliente.";
 
 static struct fid_fabric *srv_fab;
 static struct fid_domain *srv_dom;
@@ -84,6 +89,7 @@ static struct fi_info *srv_hints;
 static struct fi_info *srv_fi;
 static struct fid_eq *srv_eq;
 static struct fid_cq *srv_cq;
+char *srv_cm_in_data = "Este es servidor.";
 
 struct fi_eq_attr eq_attr = {
 	.wait_obj = FI_WAIT_UNSPEC
@@ -177,22 +183,26 @@ void cm_stop_server(void)
 int cm_server_accept(void)
 {
 	uint32_t event;
-	struct fi_eq_cm_entry entry;
 	ssize_t rd;
 	int ret;
+	struct fi_eq_cm_entry *entry;
+	void *eqe_buf[EQE_SIZE] = {0};
 
-	rd = fi_eq_sread(srv_eq, &event, &entry, sizeof(entry), -1, 0);
-	cr_assert(rd == sizeof(entry));
-
+	rd = fi_eq_sread(srv_eq, &event, &eqe_buf, EQE_SIZE, -1, 0);
+	cr_assert(rd == (sizeof(*entry) + strlen(cli_cm_in_data)));
 	cr_assert(event == FI_CONNREQ);
 
-	ret = fi_domain(srv_fab, entry.info, &srv_dom, NULL);
+	entry = (struct fi_eq_cm_entry *)eqe_buf;
+	cr_assert(!memcmp(cli_cm_in_data, entry->data,
+			  strlen(cli_cm_in_data)));
+
+	ret = fi_domain(srv_fab, entry->info, &srv_dom, NULL);
 	cr_assert(!ret);
 
-	ret = fi_endpoint(srv_dom, entry.info, &srv_ep, NULL);
+	ret = fi_endpoint(srv_dom, entry->info, &srv_ep, NULL);
 	cr_assert(!ret, "fi_endpoint");
 
-	fi_freeinfo(entry.info);
+	fi_freeinfo(entry->info);
 
 	cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cq_attr.size = 1024;
@@ -210,7 +220,10 @@ int cm_server_accept(void)
 	ret = fi_enable(srv_ep);
 	cr_assert(!ret);
 
-	ret = fi_accept(srv_ep, NULL, 0);
+	ret = fi_accept(srv_ep, srv_cm_in_data, GNIX_CM_DATA_MAX_SIZE+1);
+	cr_assert(ret == -FI_EINVAL);
+
+	ret = fi_accept(srv_ep, srv_cm_in_data, strlen(srv_cm_in_data));
 	cr_assert(!ret);
 
 	dbg_printf("Server accept complete.\n");
@@ -279,7 +292,12 @@ int cm_client_start_connect(void)
 	ret = fi_enable(cli_ep);
 	cr_assert(!ret);
 
-	ret = fi_connect(cli_ep, cli_fi->dest_addr, NULL, 0);
+	ret = fi_connect(cli_ep, cli_fi->dest_addr, cli_cm_in_data,
+			 GNIX_CM_DATA_MAX_SIZE+1);
+	cr_assert(ret == -FI_EINVAL);
+
+	ret = fi_connect(cli_ep, cli_fi->dest_addr, cli_cm_in_data,
+			 strlen(cli_cm_in_data));
 	cr_assert(!ret);
 
 	dbg_printf("Client connect complete.\n");
@@ -290,14 +308,18 @@ int cm_client_start_connect(void)
 int cm_client_finish_connect(void)
 {
 	uint32_t event;
-	struct fi_eq_cm_entry entry;
 	ssize_t rd;
+	struct fi_eq_cm_entry *entry;
+	void *eqe_buf[EQE_SIZE] = {0};
 
-	rd = fi_eq_read(cli_eq, &event, &entry, sizeof(entry), 0);
+	rd = fi_eq_read(cli_eq, &event, eqe_buf, EQE_SIZE, 0);
 	if (rd > 0) {
 		dbg_printf("got event: %d\n", event);
-		cr_assert(rd == sizeof(entry));
-		cr_assert(event == FI_CONNECTED && entry.fid == &cli_ep->fid);
+		entry = (struct fi_eq_cm_entry *)eqe_buf;
+		cr_assert(rd == (sizeof(*entry) + strlen(srv_cm_in_data)));
+		cr_assert(event == FI_CONNECTED && entry->fid == &cli_ep->fid);
+		cr_assert(!memcmp(srv_cm_in_data, entry->data,
+				  strlen(srv_cm_in_data)));
 		return 1;
 	}
 

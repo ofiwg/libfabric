@@ -173,7 +173,8 @@ static int __gnix_ep_connresp(struct gnix_fid_ep *ep,
 			      struct gnix_pep_sock_connresp *resp)
 {
 	int ret = FI_SUCCESS;
-	struct fi_eq_cm_entry eq_entry;
+	struct fi_eq_cm_entry *eq_entry;
+	int eqe_size;
 
 	switch (resp->cmd) {
 	case GNIX_PEP_SOCK_RESP_ACCEPT:
@@ -195,12 +196,13 @@ static int __gnix_ep_connresp(struct gnix_fid_ep *ep,
 		ep->conn_state = GNIX_EP_CONNECTED;
 
 		/* Notify user that this side is connected. */
-		eq_entry.fid = &ep->ep_fid.fid;
-		/*  eq_entry.data = ;  TODO pass data from accept call. */
+		eq_entry = (struct fi_eq_cm_entry *)resp->eqe_buf;
+		eq_entry->fid = &ep->ep_fid.fid;
 
-		ret = fi_eq_write(&ep->eq->eq_fid, FI_CONNECTED, &eq_entry,
-				  sizeof(eq_entry), 0);
-		if (ret != sizeof(eq_entry)) {
+		eqe_size = sizeof(*eq_entry) + resp->cm_data_len;
+		ret = fi_eq_write(&ep->eq->eq_fid, FI_CONNECTED, eq_entry,
+				  eqe_size, 0);
+		if (ret != eqe_size) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "fi_eq_write failed, err: %d\n", ret);
 			return ret;
@@ -269,11 +271,13 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 	struct gnix_fid_ep *ep_priv;
 	struct sockaddr_in saddr;
 	struct gnix_pep_sock_connreq req;
+	struct fi_eq_cm_entry *eqe_ptr;
 	struct gnix_vc *vc;
 	struct gnix_mbox *mbox = NULL;
 	struct gnix_av_addr_entry av_entry;
 
-	if (!ep || !addr)
+	if (!ep || !addr || (paramlen && !param) ||
+	    paramlen > GNIX_CM_DATA_MAX_SIZE)
 		return -FI_EINVAL;
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
@@ -370,6 +374,12 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 	req.cq_irq_mdh = ep_priv->nic->irq_mem_hndl;
 	req.peer_caps = ep_priv->caps;
 
+	req.cm_data_len = paramlen;
+	if (paramlen) {
+		eqe_ptr = (struct fi_eq_cm_entry *)req.eqe_buf;
+		memcpy(eqe_ptr->data, param, paramlen);
+	}
+
 	ret = write(ep_priv->conn_fd, &req, sizeof(req));
 	if (ret != sizeof(req)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -416,11 +426,11 @@ DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 	struct gnix_fid_ep *ep_priv;
 	struct gnix_pep_sock_conn *conn;
 	struct gnix_pep_sock_connresp resp;
-	struct fi_eq_cm_entry eq_entry;
+	struct fi_eq_cm_entry eq_entry, *eqe_ptr;
 	struct gnix_mbox *mbox = NULL;
 	struct gnix_av_addr_entry av_entry;
 
-	if (!ep)
+	if (!ep || (paramlen && !param) || paramlen > GNIX_CM_DATA_MAX_SIZE)
 		return -FI_EINVAL;
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
@@ -482,6 +492,12 @@ DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 			ep_priv->domain->params.mbox_msg_maxsize;
 	resp.cq_irq_mdh = ep_priv->nic->irq_mem_hndl;
 	resp.peer_caps = ep_priv->caps;
+
+	resp.cm_data_len = paramlen;
+	if (paramlen) {
+		eqe_ptr = (struct fi_eq_cm_entry *)resp.eqe_buf;
+		memcpy(eqe_ptr->data, param, paramlen);
+	}
 
 	ret = write(conn->sock_fd, &resp, sizeof(resp));
 	if (ret != sizeof(resp)) {
@@ -556,7 +572,8 @@ static int __gnix_pep_connreq(struct gnix_fid_pep *pep, int fd)
 {
 	int ret;
 	struct gnix_pep_sock_conn *conn;
-	struct fi_eq_cm_entry eq_entry;
+	struct fi_eq_cm_entry *eq_entry;
+	int eqe_size;
 
 	/* Create and initialize a new connection request. */
 	conn = calloc(1, sizeof(*conn));
@@ -591,13 +608,14 @@ static int __gnix_pep_connreq(struct gnix_fid_pep *pep, int fd)
 	conn->info = &conn->req.info;
 	conn->info->handle = &conn->fid;
 
-	eq_entry.fid = &pep->pep_fid.fid;
-	eq_entry.info = fi_dupinfo(conn->info);
-
 	/* Tell user of a new conn req via the EQ. */
-	ret = fi_eq_write(&pep->eq->eq_fid, FI_CONNREQ, &eq_entry,
-			  sizeof(eq_entry), 0);
-	if (ret != sizeof(eq_entry)) {
+	eq_entry = (struct fi_eq_cm_entry *)conn->req.eqe_buf;
+	eq_entry->fid = &pep->pep_fid.fid;
+	eq_entry->info = fi_dupinfo(conn->info);
+
+	eqe_size = sizeof(*eq_entry) + conn->req.cm_data_len;
+	ret = fi_eq_write(&pep->eq->eq_fid, FI_CONNREQ, eq_entry, eqe_size, 0);
+	if (ret != eqe_size) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "fi_eq_write failed, err: %d\n", ret);
 		fi_freeinfo(conn->info);
 		free(conn);
@@ -831,7 +849,6 @@ DIRECT_FN int gnix_passive_ep_open(struct fid_fabric *fabric,
 
 	pep_priv->listen_fd = -1;
 	pep_priv->backlog = 5; /* TODO set via fi_control parameter. */
-	pep_priv->cm_data_size = 0; /* TODO Support CM data. */
 	pep_priv->fabric = fabric_priv;
 	fastlock_init(&pep_priv->lock);
 	if (info->src_addr) {
