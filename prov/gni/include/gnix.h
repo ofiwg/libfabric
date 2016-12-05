@@ -1132,6 +1132,11 @@ int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
 
 int gnix_ep_close(fid_t fid);
 
+/*
+ * prototype for static data initialization method
+ */
+void _gnix_init(void);
+
 /* Prepend DIRECT_FN to provider specific API functions for global visibility
  * when using fabric direct.  If the API function is static use the STATIC
  * macro to bind symbols globally when compiling with fabric direct.
