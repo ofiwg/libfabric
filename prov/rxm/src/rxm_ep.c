@@ -741,10 +741,8 @@ static int rxm_ep_close(struct fid *fid)
 
 	rxm_ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	if (rxm_ep->util_ep.av) {
+	if (rxm_ep->cmap)
 		ofi_cmap_free(rxm_ep->cmap);
-		atomic_dec(&rxm_ep->util_ep.av->ref);
-	}
 
 	rxm_ep_txrx_res_close(rxm_ep);
 	ret = rxm_ep_msg_res_close(rxm_ep);
@@ -810,32 +808,22 @@ static int rxm_ep_bind_cq(struct rxm_ep *rxm_ep, struct util_cq *util_cq, uint64
 	return 0;
 }
 
-int rxm_ep_bind_av(struct rxm_ep *rxm_ep, struct util_av *av)
-{
-	if (rxm_ep->util_ep.av) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"duplicate AV binding\n");
-		return -FI_EINVAL;
-	}
-	rxm_ep->cmap = ofi_cmap_alloc(av, rxm_conn_close);
-	if (!rxm_ep->cmap)
-		return -FI_ENOMEM;
-
-	atomic_inc(&av->ref);
-	rxm_ep->util_ep.av = av;
-	return 0;
-}
-
 static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct rxm_ep *rxm_ep;
+	struct util_av *util_av;
 	int ret = 0;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
-		ret = rxm_ep_bind_av(rxm_ep, container_of(bfid, struct util_av,
-					av_fid.fid));
+		util_av = container_of(bfid, struct util_av, av_fid.fid);
+		ret = ofi_ep_bind_av(&rxm_ep->util_ep, util_av);
+		if (ret)
+			return ret;
+		rxm_ep->cmap = ofi_cmap_alloc(util_av, rxm_conn_close);
+		if (!rxm_ep->cmap)
+			return -FI_ENOMEM;
 		break;
 	case FI_CLASS_CQ:
 		ret = rxm_ep_bind_cq(rxm_ep, container_of(bfid, struct util_cq,

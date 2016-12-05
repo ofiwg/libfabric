@@ -176,6 +176,7 @@ struct util_ep {
 	ofi_ep_progress_func	progress;
 };
 
+int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		struct fi_info *info, struct util_ep *ep, void *context,
 		ofi_ep_progress_func progress, enum fi_match_type type);
