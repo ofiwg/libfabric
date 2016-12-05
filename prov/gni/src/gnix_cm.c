@@ -368,6 +368,10 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 		ret = -FI_EIO;
 		goto err_write;
 	}
+	/* set fd to non-blocking now since we can't block within the eq
+	 * progress system
+	 */
+	fi_fd_nonblock(ep_priv->conn_fd);
 
 	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
 

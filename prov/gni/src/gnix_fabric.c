@@ -76,6 +76,9 @@ static int gnix_def_gni_n_dgrams = 128;
 static int gnix_def_gni_n_wc_dgrams = 4;
 static uint64_t gnix_def_gni_datagram_timeouts = -1;
 
+static struct fi_ops gnix_fab_fi_ops;
+static struct fi_gni_ops_fab gnix_ops_fab;
+
 const struct fi_fabric_attr gnix_fabric_attr = {
 	.fabric = NULL,
 	.name = NULL,
@@ -111,6 +114,17 @@ static void __fabric_destruct(void *obj)
 	free(fab);
 }
 
+static int gnix_fab_ops_open(struct fid *fid, const char *ops_name,
+				uint64_t flags, void **ops, void *context)
+{
+	if (strcmp(ops_name, FI_GNI_FAB_OPS_1) == 0)
+		*ops = &gnix_ops_fab;
+	else
+		return -FI_EINVAL;
+
+	return 0;
+}
+
 static int gnix_fabric_close(fid_t fid)
 {
 	struct gnix_fid_fabric *fab;
@@ -126,14 +140,6 @@ static int gnix_fabric_close(fid_t fid)
 
 	return FI_SUCCESS;
 }
-
-static struct fi_ops gnix_fab_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = gnix_fabric_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
 
 /*
  * define methods needed for the GNI fabric provider
@@ -622,3 +628,68 @@ GNI_INI
 
 	return (provider);
 }
+
+static int
+__gnix_fab_ops_get_val(struct fid *fid, fab_ops_val_t t, void *val)
+{
+	GNIX_TRACE(FI_LOG_FABRIC, "\n");
+
+	assert(val);
+
+	if (fid->fclass != FI_CLASS_FABRIC) {
+		GNIX_WARN(FI_LOG_FABRIC, "Invalid fabric\n");
+		return -FI_EINVAL;
+	}
+
+	switch (t) {
+	case GNI_WAIT_THREAD_SLEEP:
+		*(uint32_t *)val = gnix_wait_thread_sleep_time;
+		break;
+	default:
+		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
+	}
+
+	return FI_SUCCESS;
+}
+
+static int
+__gnix_fab_ops_set_val(struct fid *fid, fab_ops_val_t t, void *val)
+{
+	int v;
+
+	assert(val);
+
+	if (fid->fclass != FI_CLASS_FABRIC) {
+		GNIX_WARN(FI_LOG_FABRIC, "Invalid fabric\n");
+		return -FI_EINVAL;
+	}
+
+	switch (t) {
+	case GNI_WAIT_THREAD_SLEEP:
+		v = *(uint32_t *) val;
+		gnix_wait_thread_sleep_time = v;
+		break;
+	default:
+		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+/*******************************************************************************
+ * FI_OPS_* data structures.
+ ******************************************************************************/
+
+static struct fi_gni_ops_fab gnix_ops_fab = {
+	.set_val = __gnix_fab_ops_set_val,
+	.get_val = __gnix_fab_ops_get_val
+};
+
+static struct fi_ops gnix_fab_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = gnix_fabric_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = gnix_fab_ops_open,
+};

@@ -78,6 +78,7 @@ static struct fid_cq *recv_cq;
 static struct fi_cq_attr cq_attr;
 static struct fid_cntr *write_cntr, *read_cntr, *rcv_cntr;
 static struct fi_cntr_attr cntr_attr = {.events = FI_CNTR_EVENTS_COMP,
+					.wait_obj = FI_WAIT_UNSPEC,
 					.flags = 0};
 
 #define BUF_SZ (64*1024)
