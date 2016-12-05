@@ -159,7 +159,8 @@ enum {
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
 	FI_ADDR_PSMX,		/* uint64_t */
 	FI_ADDR_GNI,
-	FI_ADDR_BGQ
+	FI_ADDR_BGQ,
+	FI_ADDR_MLX
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -242,7 +243,8 @@ enum {
 	FI_PROTO_IB_RDM,
 	FI_PROTO_GNI,
 	FI_PROTO_RXM,
-	FI_PROTO_RXD
+	FI_PROTO_RXD,
+	FI_PROTO_MLX
 };
 
 /* Mode bits */
