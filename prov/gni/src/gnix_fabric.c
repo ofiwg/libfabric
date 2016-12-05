@@ -66,7 +66,7 @@ const char gnix_dom_name[] = "/sys/class/gni/kgni0";
 const char gnix_prov_name[] = "gni";
 
 uint32_t gnix_cdm_modes =
-	(GNI_CDM_MODE_FAST_DATAGRAM_POLL | /* GNI_CDM_MODE_FMA_SHARED | */
+	(GNI_CDM_MODE_FAST_DATAGRAM_POLL | GNI_CDM_MODE_FMA_SHARED |
 	GNI_CDM_MODE_FMA_SMALL_WINDOW | GNI_CDM_MODE_FORK_PARTCOPY |
 	GNI_CDM_MODE_ERR_NO_KILL);
 
