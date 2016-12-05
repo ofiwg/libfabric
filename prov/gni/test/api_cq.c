@@ -110,7 +110,7 @@ void api_cq_setup(void)
 		hints[i]->domain_attr->cq_data_size = NUMEPS * 2;
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
 		hints[i]->mode = ~0;
-		hints[i]->fabric_attr->name = strdup("gni");
+		hints[i]->fabric_attr->prov_name = strdup("gni");
 	}
 
 	/* Get info about fabric services with the provided hints */

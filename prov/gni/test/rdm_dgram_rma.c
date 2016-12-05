@@ -110,7 +110,7 @@ void common_setup(void)
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
 		       FI_WRITE | FI_REMOTE_WRITE;
 
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");

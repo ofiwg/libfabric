@@ -64,7 +64,7 @@ void vc_lookup_setup(int av_type, int av_size)
 	hints = fi_allocinfo();
 
 	hints->mode = ~0;
-	hints->fabric_attr->name = strdup("gni");
+	hints->fabric_attr->prov_name = strdup("gni");
 
 	/* Create endpoint */
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
