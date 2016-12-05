@@ -849,23 +849,25 @@ static int fi_ibv_copy_ifaddr(const char *name, const char *service, uint64_t fl
 	}
 	ret = rdma_create_ep(&id, rai, NULL, NULL);
 	if (!ret) {
-		for (fi = info; fi; fi = fi->next)
+		int matched = 0;
+		for (fi = info; fi; fi = fi->next) {
 			if (!strncmp(id->verbs->device->name, fi->domain_attr->name,
-						strlen(id->verbs->device->name)))
-				break;
-		if (!fi) {
+						strlen(id->verbs->device->name))) {
+				if (fi->src_addr) {
+					free(fi->src_addr);
+					fi->src_addr = NULL;
+				}
+				fi_ibv_rai_to_fi(rai, fi);
+				matched = 1;
+			}
+		}
+		rdma_destroy_ep(id);
+		if(!matched) {
 			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
 					"No matching fi_info for device: "
 					"%s with address: %s\n",
 					id->verbs->device->name, name);
-		} else {
-			if (fi->src_addr) {
-				free(fi->src_addr);
-				fi->src_addr = NULL;
-			}
-			fi_ibv_rai_to_fi(rai, fi);
 		}
-		rdma_destroy_ep(id);
 	}
 	rdma_freeaddrinfo(rai);
 	return 0;
@@ -875,8 +877,11 @@ static int fi_ibv_getifaddrs(const char *service, uint64_t flags, struct fi_info
 {
 	struct ifaddrs *ifaddr, *ifa;
 	char name[INET6_ADDRSTRLEN];
-	const char *ret_ptr;
+	const char *ret_ptr = NULL;
 	int ret, num_verbs_ifs = 0;
+	struct fi_info *clone = NULL;
+	struct fi_info *added_info = NULL;
+	struct fi_info *info_ptr = NULL;
 
 	flags |= FI_NUMERICHOST | FI_SOURCE;
 
@@ -887,34 +892,69 @@ static int fi_ibv_getifaddrs(const char *service, uint64_t flags, struct fi_info
 		return ret;
 	}
 
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
-				!strcmp(ifa->ifa_name, "lo"))
-			continue;
-		switch (ifa->ifa_addr->sa_family) {
-		case AF_INET:
-			ret_ptr = inet_ntop(AF_INET, &ofi_sin_addr(ifa->ifa_addr),
-				name, INET6_ADDRSTRLEN);
-			break;
-		case AF_INET6:
-			ret_ptr = inet_ntop(AF_INET6, &ofi_sin6_addr(ifa->ifa_addr),
-				name, INET6_ADDRSTRLEN);
-			break;
-		default:
-			continue;
+	for(info_ptr = info; info_ptr; info_ptr = info_ptr->next) {
+		clone = NULL;
+		for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+			if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
+					!strcmp(ifa->ifa_name, "lo"))
+				continue;
+			switch (ifa->ifa_addr->sa_family) {
+				case AF_INET:
+					ret_ptr = inet_ntop(AF_INET, &ofi_sin_addr(ifa->ifa_addr),
+							name, INET6_ADDRSTRLEN);
+					break;
+				case AF_INET6:
+					ret_ptr = inet_ntop(AF_INET6, &ofi_sin6_addr(ifa->ifa_addr),
+							name, INET6_ADDRSTRLEN);
+					break;
+				default:
+					continue;
+			}
+			if (!ret_ptr) {
+				FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+						"inet_ntop failed: %s(%d)\n",
+						strerror(errno), errno);
+				goto err;
+			}
+			if(!FI_IBV_EP_TYPE_IS_RDM(info_ptr)) {
+				ret = fi_ibv_copy_ifaddr(name, service, flags, info_ptr);
+			}
+			else {
+				/* for RDM EP we create separate info for every
+				 * active interface. later wrong ifaces will
+				 * be filtered */
+				/* use original info for first iface, for other ifaces
+				 * create fi_info duplicates */
+				if(!clone) {
+					ret = fi_ibv_copy_ifaddr(
+						name, service, flags, info_ptr);
+					clone = info_ptr;
+				}
+				else {
+					clone = fi_dupinfo(info_ptr);
+					if(!clone) {
+						ret = -FI_ENOMEM;
+						goto err;
+					}
+					ret = fi_ibv_copy_ifaddr(
+						name, service, flags, clone);
+					clone->next = added_info;
+					added_info = clone;
+				}
+			}
+			if (ret)
+				goto err;
+			num_verbs_ifs++;
 		}
-		if (!ret_ptr) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-					"inet_ntop failed: %s(%d)\n",
-					strerror(errno), errno);
-			goto err;
+		/* if no more info available - join newly created infos
+		 * to existing list & break loop */
+		if(!info_ptr->next) {
+			info_ptr->next = added_info;
+			break;
 		}
-		ret = fi_ibv_copy_ifaddr(name, service, flags, info);
-		if (ret)
-			goto err;
-		num_verbs_ifs++;
 	}
 	freeifaddrs(ifaddr);
+
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
 err:
 	freeifaddrs(ifaddr);
@@ -1095,6 +1135,7 @@ fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
 	char *iface_tmp = "ib";
 	size_t iface_len = 2;
 	int ret;
+	int exact_match = 0;
 
 	if (!iface_addr || !lo_addr) {
 		return -FI_EINVAL;
@@ -1112,7 +1153,7 @@ fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
 			return -FI_EINVAL;
 		}
 	}
-	strncpy(iface, iface_tmp, iface_len);
+	strncpy(iface, iface_tmp, iface_len + 1);
 
 	ret = getifaddrs(&ifaddr);
 	if (ret) {
@@ -1122,8 +1163,9 @@ fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
 	}
 
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!iface_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
+		if (!exact_match && (ifa->ifa_addr->sa_family == AF_INET) &&
 		    !strncmp(ifa->ifa_name, iface, iface_len)) {
+			exact_match = !strncmp(ifa->ifa_name, iface, iface_len + 1);
 			memcpy(&iface_addr->addr, ifa->ifa_addr,
 				sizeof(iface_addr->addr));
 			iface_addr->is_found = 1;
@@ -1140,7 +1182,7 @@ fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
 				inet_ntoa(lo_addr->addr.sin_addr),
 				ntohs(lo_addr->addr.sin_port));
 		}
-		if (iface_addr->is_found && lo_addr->is_found) {
+		if (exact_match && lo_addr->is_found) {
 			break;
 		}
 	}
@@ -1179,7 +1221,8 @@ static inline int fi_ibv_retain_info(struct fi_info *info,
 	}
 
 	FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
-		retain ? "retain %s:%u\n" : "remove %s:%u\n",
+		retain ? "retain %s: %s:%u\n" : "remove %s: %s:%u\n",
+		info->domain_attr->name,
 		(src_addr ? inet_ntoa(src_addr->sin_addr) : "n/a"),
 		(src_addr ? ntohs(src_addr->sin_port) : 0));
 
