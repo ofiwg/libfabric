@@ -123,7 +123,7 @@ int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err1;
 	}
 
-	ret = ofi_cmap_add_handle(rxm_ep->cmap, &rxm_conn->handle, CMAP_CONNECTING,
+	ret = ofi_cmap_add_handle(rxm_ep->util_ep.cmap, &rxm_conn->handle, CMAP_CONNECTING,
 			FI_ADDR_UNSPEC, &remote_cm_data->name,
 			sizeof(remote_cm_data->name));
 	if (ret) {
@@ -288,7 +288,7 @@ int rxm_msg_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		goto err1;
 	}
 
-	ret = ofi_cmap_add_handle(rxm_ep->cmap, &rxm_conn->handle,
+	ret = ofi_cmap_add_handle(rxm_ep->util_ep.cmap, &rxm_conn->handle,
 			CMAP_CONNECTING, fi_addr, NULL, 0);
 	if (ret)
 		goto err2;
@@ -328,7 +328,7 @@ int rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		return -FI_EINVAL;
 	}
 
-	handle = ofi_cmap_get_handle(rxm_ep->cmap, fi_addr);
+	handle = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, fi_addr);
 	if (!handle)
 		goto connect;
 

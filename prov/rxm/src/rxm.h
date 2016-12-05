@@ -229,7 +229,6 @@ struct rxm_ep {
 	struct fid_pep *msg_pep;
 	struct fid_cq *msg_cq;
 	struct fid_ep *srx_ctx;
-	struct util_cmap *cmap;
 
 	struct util_buf_pool *tx_pool;
 	struct slist tx_buf_list;

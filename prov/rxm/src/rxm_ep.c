@@ -741,8 +741,8 @@ static int rxm_ep_close(struct fid *fid)
 
 	rxm_ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	if (rxm_ep->cmap)
-		ofi_cmap_free(rxm_ep->cmap);
+	if (rxm_ep->util_ep.cmap)
+		ofi_cmap_free(rxm_ep->util_ep.cmap);
 
 	rxm_ep_txrx_res_close(rxm_ep);
 	ret = rxm_ep_msg_res_close(rxm_ep);
@@ -821,8 +821,8 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_av(&rxm_ep->util_ep, util_av);
 		if (ret)
 			return ret;
-		rxm_ep->cmap = ofi_cmap_alloc(util_av, rxm_conn_close);
-		if (!rxm_ep->cmap)
+		rxm_ep->util_ep.cmap = ofi_cmap_alloc(util_av, rxm_conn_close);
+		if (!rxm_ep->util_ep.cmap)
 			return -FI_ENOMEM;
 		break;
 	case FI_CLASS_CQ:

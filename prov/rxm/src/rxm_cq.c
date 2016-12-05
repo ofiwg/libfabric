@@ -61,7 +61,7 @@ static int rxm_match_recv_entry_tagged(struct dlist_entry *item, const void *arg
 static struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	struct util_cmap_handle *handle;
-	handle = ofi_cmap_key2handle(rxm_ep->cmap, key);
+	handle = ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
 	if (!handle) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Can't find handle!\n");
 		return NULL;
