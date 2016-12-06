@@ -359,9 +359,6 @@ static int udpx_ep_close(struct fid *fid)
 
 	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
 
-	if (ep->util_ep.av)
-		atomic_dec(&ep->util_ep.av->ref);
-
 	if (ep->util_ep.rx_cq) {
 		if (ep->util_ep.rx_cq->wait) {
 			wait = container_of(ep->util_ep.rx_cq->wait,
@@ -451,14 +448,8 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
-		if (ep->util_ep.av) {
-			FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
-				"duplicate AV binding\n");
-			return -FI_EINVAL;
-		}
 		av = container_of(bfid, struct util_av, av_fid.fid);
-		atomic_inc(&av->ref);
-		ep->util_ep.av = av;
+		ret = ofi_ep_bind_av(&ep->util_ep, av);
 		break;
 	case FI_CLASS_CQ:
 		ret = udpx_ep_bind_cq(ep, container_of(bfid, struct util_cq,

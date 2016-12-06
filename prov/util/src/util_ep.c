@@ -36,6 +36,23 @@
 #include <fi_enosys.h>
 #include <fi_util.h>
 
+int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av)
+{
+	if (util_ep->av) {
+		FI_WARN(util_ep->av->prov, FI_LOG_EP_CTRL,
+				"duplicate AV binding\n");
+		return -FI_EINVAL;
+	}
+	util_ep->av = av;
+	atomic_inc(&av->ref);
+
+	fastlock_acquire(&av->lock);
+	dlist_insert_tail(&util_ep->av_entry, &av->ep_list);
+	fastlock_release(&av->lock);
+
+	return 0;
+}
+
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		struct fi_info *info, struct util_ep *ep, void *context,
 		ofi_ep_progress_func progress, enum fi_match_type type)
@@ -62,6 +79,14 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 
 int ofi_endpoint_close(struct util_ep *util_ep)
 {
+	if (util_ep->av) {
+		fastlock_acquire(&util_ep->av->lock);
+		dlist_remove(&util_ep->av_entry);
+		fastlock_release(&util_ep->av->lock);
+
+		atomic_dec(&util_ep->av->ref);
+	}
+
 	atomic_dec(&util_ep->domain->ref);
 	return 0;
 }

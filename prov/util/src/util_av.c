@@ -323,6 +323,8 @@ static void util_av_hash_remove(struct util_av_hash *hash, int slot, int index)
 
 static int fi_av_remove_addr(struct util_av *av, int slot, int index)
 {
+	struct util_ep *ep;
+	struct dlist_entry *av_entry;
 	int *entry, *next, i;
 
 	if (index < 0 || index > av->count) {
@@ -346,6 +348,16 @@ static int fi_av_remove_addr(struct util_av *av, int slot, int index)
 		}
 		util_av_set_data(av, index, next, sizeof index);
 		*next = index;
+	}
+
+	dlist_foreach(&av->ep_list, av_entry) {
+		ep = container_of(av_entry, struct util_ep, av_entry);
+		if (ep->cmap) {
+			fastlock_acquire(&ep->cmap->lock);
+			ep->cmap->free_handle(ep->cmap->handles_av[index]);
+			ep->cmap->handles_av[index] = NULL;
+			fastlock_release(&ep->cmap->lock);
+		}
 	}
 
 	fastlock_release(&av->lock);
@@ -540,6 +552,7 @@ int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
 	 */
 	av->context = context;
 	av->domain = domain;
+	dlist_init(&av->ep_list);
 	atomic_inc(&domain->ref);
 	return 0;
 }

@@ -169,13 +169,16 @@ struct util_ep {
 	struct fid_ep		ep_fid;
 	struct util_domain	*domain;
 	struct util_av		*av;
+	struct dlist_entry	av_entry;
 	struct util_cq		*rx_cq;
 	struct util_cq		*tx_cq;
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
+	struct util_cmap	*cmap;
 };
 
+int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		struct fi_info *info, struct util_ep *ep, void *context,
 		ofi_ep_progress_func progress, enum fi_match_type type);
@@ -280,6 +283,7 @@ struct util_av {
 	ssize_t			free_list;
 	struct util_av_hash	hash;
 	void			*data;
+	struct dlist_entry	ep_list;
 };
 
 struct util_av_attr {
