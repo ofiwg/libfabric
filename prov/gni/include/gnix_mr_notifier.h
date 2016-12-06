@@ -67,16 +67,15 @@ struct gnix_mr_notifier {
 	int fd;
 	kdreg_user_delta_t *cntr;
 	fastlock_t lock;
+	int ref_cnt;
 };
 
 /**
- * @brief initialize the gnix_mr_notifier struct
+ * @brief initialize the process for use of the notifier
  *
- * @param[out] k        Empty (zeroed) gnix_mr_notifier struct
  * @return              FI_SUCESSS on success
- *                      -FI_EINVAL if k == NULL
  */
-int _gnix_notifier_init(struct gnix_mr_notifier *mrn);
+int _gnix_notifier_init(void);
 
 /**
  * @brief open the kdreg device and prepare for notifications
@@ -87,7 +86,7 @@ int _gnix_notifier_init(struct gnix_mr_notifier *mrn);
  *                      -FI_ENODATA if user delta unavailable
  *                      -fi_errno or -errno on other failures
  */
-int _gnix_notifier_open(struct gnix_mr_notifier *mrn);
+int _gnix_notifier_open(struct gnix_mr_notifier **mrn);
 
 /**
  * @brief close the kdreg device and zero the notifier
@@ -142,7 +141,7 @@ struct gnix_mr_notifier {
 };
 
 static inline int
-_gnix_notifier_init(struct gnix_mr_notifier *mrn)
+_gnix_notifier_init(void)
 {
 	return FI_SUCCESS;
 }

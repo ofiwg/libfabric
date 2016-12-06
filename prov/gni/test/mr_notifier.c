@@ -43,9 +43,6 @@ static void mr_notifier_setup(void)
 {
 	int ret;
 
-	ret = _gnix_notifier_init(&mr_notifier);
-	cr_assert(ret == 0, "_gnix_notifier_init failed");
-
 	ret = _gnix_notifier_open(&mr_notifier);
 	cr_assert(ret == 0, "_gnix_notifier_open failed");
 }

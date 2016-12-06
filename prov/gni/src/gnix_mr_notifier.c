@@ -34,6 +34,8 @@
 
 #include "gnix_mr_notifier.h"
 
+struct gnix_mr_notifier global_mr_not;
+
 static inline int
 notifier_verify_stuff(struct gnix_mr_notifier *mrn) {
 	/* Can someone confirm that these values are POSIX so we can
@@ -55,69 +57,68 @@ notifier_verify_stuff(struct gnix_mr_notifier *mrn) {
 }
 
 int
-_gnix_notifier_init(struct gnix_mr_notifier *mrn)
+_gnix_notifier_init(void)
 {
-	if (mrn == NULL) {
-		GNIX_INFO(FI_LOG_MR, "mr notifier NULL\n");
-		return -FI_EINVAL;
-	}
-
-	mrn->fd = 0;
-	mrn->cntr = NULL;
-	fastlock_init(&mrn->lock);
+	global_mr_not.fd = -1;
+	global_mr_not.cntr = NULL;
+	fastlock_init(&global_mr_not.lock);
+	global_mr_not.ref_cnt = 0;
 
 	return FI_SUCCESS;
 }
 
 int
-_gnix_notifier_open(struct gnix_mr_notifier *mrn)
+_gnix_notifier_open(struct gnix_mr_notifier **mrn)
 {
 	int ret = FI_SUCCESS;
 	int kdreg_fd, ret_errno;
         kdreg_get_user_delta_args_t get_user_delta_args;
 
-	if ((mrn->fd != 0) || (mrn->cntr != NULL)) {
-		GNIX_INFO(FI_LOG_MR, "mr notifier already open\n");
-		return -FI_EBUSY;
-	}
+	fastlock_acquire(&global_mr_not.lock);
 
-	fastlock_acquire(&mrn->lock);
-
-	kdreg_fd = open(KDREG_DEV, O_RDWR | O_NONBLOCK);
-	if (kdreg_fd < 0) {
-		ret_errno = errno;
-		if (ret_errno != FI_EBUSY) {
-			GNIX_INFO(FI_LOG_MR, "kdreg device open failed: %s\n",
-				  strerror(ret_errno));
+	if (!global_mr_not.ref_cnt) {
+		kdreg_fd = open(KDREG_DEV, O_RDWR | O_NONBLOCK);
+		if (kdreg_fd < 0) {
+			ret_errno = errno;
+			if (ret_errno != FI_EBUSY) {
+				GNIX_INFO(FI_LOG_MR,
+					  "kdreg device open failed: %s\n",
+					  strerror(ret_errno));
+			}
+			/* Not all of these map to fi_errno values */
+			ret = -ret_errno;
+			goto err_exit;
 		}
-		// Not all of these map to fi_errno values
-		ret = -ret_errno;
-		goto err_exit;
+
+		memset(&get_user_delta_args, 0, sizeof(get_user_delta_args));
+		if (ioctl(kdreg_fd, KDREG_IOC_GET_USER_DELTA,
+			  &get_user_delta_args) < 0) {
+			ret_errno = errno;
+			GNIX_INFO(FI_LOG_MR,
+				  "kdreg get_user_delta failed: %s\n",
+				  strerror(ret_errno));
+			close(kdreg_fd);
+			/* Not all of these map to fi_errno values */
+			ret = -ret_errno;
+			goto err_exit;
+		}
+
+		if (get_user_delta_args.user_delta == NULL) {
+			GNIX_INFO(FI_LOG_MR, "kdreg get_user_delta is NULL\n");
+			ret = -FI_ENODATA;
+			goto err_exit;
+		}
+
+		global_mr_not.fd = kdreg_fd;
+		global_mr_not.cntr = (kdreg_user_delta_t *)
+				get_user_delta_args.user_delta;
 	}
 
-	(void) memset(&get_user_delta_args,0,sizeof(get_user_delta_args));
-	if (ioctl(kdreg_fd, KDREG_IOC_GET_USER_DELTA,
-		  &get_user_delta_args) < 0) {
-		ret_errno = errno;
-		GNIX_INFO(FI_LOG_MR, "kdreg get_user_delta failed: %s\n",
-			  strerror(ret_errno));
-		close(kdreg_fd);
-		// Not all of these map to fi_errno values
-		ret = -ret_errno;
-		goto err_exit;
-	}
-
-	if (get_user_delta_args.user_delta == NULL) {
-		GNIX_INFO(FI_LOG_MR, "kdreg get_user_delta is NULL\n");
-		ret = -FI_ENODATA;
-		goto err_exit;
-	}
-
-	mrn->fd = kdreg_fd;
-	mrn->cntr = (kdreg_user_delta_t *) get_user_delta_args.user_delta;
+	global_mr_not.ref_cnt++;
+	*mrn = &global_mr_not;
 
 err_exit:
-	fastlock_release(&mrn->lock);
+	fastlock_release(&global_mr_not.lock);
 
 	return ret;
 }
@@ -128,30 +129,39 @@ _gnix_notifier_close(struct gnix_mr_notifier *mrn)
 	int ret = FI_SUCCESS;
 	int ret_errno;
 
+	fastlock_acquire(&mrn->lock);
+
 	ret = notifier_verify_stuff(mrn);
-
-	if (ret == 0) {
-		fastlock_acquire(&mrn->lock);
-
-		if (close(mrn->fd) != 0) {
-			ret_errno = errno;
-			GNIX_INFO(FI_LOG_MR, "error closing kdreg device: %s\n",
-				  strerror(ret_errno));
-			// Not all of these map to fi_errno values
-			ret = -ret_errno;
-			goto err_exit;
-		}
-
-		mrn->cntr = NULL;
-	err_exit:
-		fastlock_release(&mrn->lock);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_MR, "Invalid MR notifier\n");
+		goto err_exit;
 	}
+
+	assert(mrn->ref_cnt > 0);
+	if (--mrn->ref_cnt) {
+		goto err_exit;
+	}
+
+	if (close(mrn->fd) != 0) {
+		ret_errno = errno;
+		GNIX_INFO(FI_LOG_MR, "error closing kdreg device: %s\n",
+			  strerror(ret_errno));
+		/* Not all of these map to fi_errno values */
+		ret = -ret_errno;
+		goto err_exit;
+	}
+
+	mrn->fd = -1;
+	mrn->cntr = NULL;
+err_exit:
+	fastlock_release(&mrn->lock);
 
 	return ret;
 }
 
 static inline int
-kdreg_write(struct gnix_mr_notifier *mrn, void *buf, size_t len) {
+kdreg_write(struct gnix_mr_notifier *mrn, void *buf, size_t len)
+{
 	int ret;
 
 	ret = write(mrn->fd, buf, len);
@@ -173,7 +183,13 @@ _gnix_notifier_monitor(struct gnix_mr_notifier *mrn,
 	int ret;
 	struct registration_monitor rm;
 
+	fastlock_acquire(&mrn->lock);
+
 	ret = notifier_verify_stuff(mrn);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_MR, "Invalid MR notifier\n");
+		goto err_exit;
+	}
 
 	if (ret == 0) {
 		GNIX_DEBUG(FI_LOG_MR, "monitoring %p (len=%lu) cookie=%lu\n",
@@ -188,6 +204,9 @@ _gnix_notifier_monitor(struct gnix_mr_notifier *mrn,
 		ret = kdreg_write(mrn, &rm, sizeof(rm));
 	}
 
+err_exit:
+	fastlock_release(&mrn->lock);
+
 	return ret;
 }
 
@@ -197,17 +216,25 @@ _gnix_notifier_unmonitor(struct gnix_mr_notifier *mrn, uint64_t cookie)
 	int ret;
 	struct registration_monitor rm;
 
+	fastlock_acquire(&mrn->lock);
+
 	ret = notifier_verify_stuff(mrn);
-	if (ret == 0) {
-		GNIX_DEBUG(FI_LOG_MR, "unmonitoring cookie=%lu\n", cookie);
-
-		memset(&rm, 0, sizeof(rm));
-
-		rm.type = REGISTRATION_UNMONITOR;
-		rm.u.unmon.user_cookie = cookie;
-
-		ret = kdreg_write(mrn, &rm, sizeof(rm));
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_MR, "Invalid MR notifier\n");
+		goto err_exit;
 	}
+
+	GNIX_DEBUG(FI_LOG_MR, "unmonitoring cookie=%lu\n", cookie);
+
+	memset(&rm, 0, sizeof(rm));
+
+	rm.type = REGISTRATION_UNMONITOR;
+	rm.u.unmon.user_cookie = cookie;
+
+	ret = kdreg_write(mrn, &rm, sizeof(rm));
+
+err_exit:
+	fastlock_release(&mrn->lock);
 
 	return ret;
 }
@@ -223,25 +250,29 @@ _gnix_notifier_get_event(struct gnix_mr_notifier *mrn, void* buf, size_t len)
 		return -FI_EINVAL;
 	}
 
+	fastlock_acquire(&mrn->lock);
+
 	if (*(mrn->cntr) > 0) {
 		GNIX_DEBUG(FI_LOG_MR, "reading kdreg event\n");
 		ret = read(mrn->fd, buf, len);
-		if (ret >= 0) {
-			return ret;
-		} else {
+		if (ret < 0) {
 			ret_errno = errno;
 			if (ret_errno != EAGAIN) {
 				GNIX_WARN(FI_LOG_MR,
 					  "kdreg event read failed: %s\n",
 					  strerror(ret_errno));
 			}
-			// Not all of these map to fi_errno values
-			return -ret_errno;
+			/* Not all of these map to fi_errno values */
+			ret = -ret_errno;
 		}
 	} else {
 		GNIX_DEBUG(FI_LOG_MR, "nothing to read from kdreg :(\n");
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
 	}
+
+	fastlock_release(&mrn->lock);
+
+	return ret;
 }
 
 #endif /* HAVE_KDREG */

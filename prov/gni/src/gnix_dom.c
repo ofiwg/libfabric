@@ -72,6 +72,11 @@ static void __domain_destruct(void *obj)
 	ret = _gnix_close_cache(domain);
 	if (ret != FI_SUCCESS)
 		GNIX_FATAL(FI_LOG_MR, "failed to close memory registration cache\n");
+
+	ret = _gnix_notifier_close(domain->mr_cache_attr.notifier);
+	if (ret != FI_SUCCESS)
+		GNIX_FATAL(FI_LOG_MR, "failed to close MR notifier\n");
+
 	/*
 	 * Drop a reference to each NIC used by this domain.
 	 */
@@ -595,7 +600,11 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->mr_cache_attr.reg_context = (void *) domain;
 	domain->mr_cache_attr.dereg_context = NULL;
 	domain->mr_cache_attr.destruct_context = NULL;
-	domain->mr_cache_attr.notifier = &fabric_priv->mr_notifier;
+
+	ret = _gnix_notifier_open(&domain->mr_cache_attr.notifier);
+	if (ret != FI_SUCCESS)
+		goto err;
+
 	domain->mr_cache = NULL;
 	fastlock_init(&domain->mr_cache_lock);
 
