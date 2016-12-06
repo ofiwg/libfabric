@@ -515,10 +515,17 @@ static int gnix_sep_control(fid_t fid, int command, void *arg)
 					ret);
 				goto err;
 			}
-			if (ep->send_cq)
-				ep->tx_enabled = true;
-			if (ep->recv_cq)
-				ep->rx_enabled = true;
+
+			/*
+			 * enable the EP
+			 */
+			ret = _gnix_ep_enable(ep);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				     "_gnix_ep_enable call returned %d\n",
+					ret);
+				goto err;
+			}
 		}
 
 		break;

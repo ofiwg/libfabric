@@ -167,8 +167,47 @@ static void __fr_freelist_destroy(struct gnix_fid_ep *ep)
 	_gnix_fl_destroy(&ep->fr_freelist);
 }
 
+int _gnix_ep_enable(struct gnix_fid_ep *ep)
+{
+	/*
+	 * set enable flags and add nic to poll lists
+	 */
+
+	if (ep->send_cq) {
+		_gnix_cq_poll_nic_add(ep->send_cq, ep->nic);
+		ep->tx_enabled = true;
+	}
+
+	if (ep->recv_cq) {
+		_gnix_cq_poll_nic_add(ep->recv_cq, ep->nic);
+		ep->rx_enabled = true;
+	}
+
+	if (ep->send_cntr)
+		_gnix_cntr_poll_nic_add(ep->send_cntr, ep->nic);
+
+	if (ep->recv_cntr)
+		_gnix_cntr_poll_nic_add(ep->recv_cntr, ep->nic);
+
+	if (ep->write_cntr)
+		_gnix_cntr_poll_nic_add(ep->write_cntr,
+					ep->nic);
+
+	if (ep->read_cntr)
+		_gnix_cntr_poll_nic_add(ep->read_cntr, ep->nic);
+
+	if (ep->rwrite_cntr)
+		_gnix_cntr_poll_nic_add(ep->rwrite_cntr,
+					ep->nic);
+
+	if (ep->rread_cntr)
+		_gnix_cntr_poll_nic_add(ep->rread_cntr,
+					ep->nic);
+	return FI_SUCCESS;
+}
+
 /*******************************************************************************
- * Forward declaration for ops structures.
+ * Forward declaration for ops structures
  ******************************************************************************/
 
 static struct fi_ops gnix_ep_fi_ops;
@@ -1343,6 +1382,7 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 	 * with this ep.
 	 */
 	case FI_ENABLE:
+
 		if (GNIX_EP_RDM_DGM(ep->type)) {
 			if ((ep->send_cq && ep->tx_enabled)) {
 				ret = -FI_EOPBADSTATE;
@@ -1366,10 +1406,15 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 					ret);
 				goto err;
 			}
-			if (ep->send_cq)
-				ep->tx_enabled = true;
-			if (ep->recv_cq)
-				ep->rx_enabled = true;
+
+			ret = _gnix_ep_enable(ep);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				     "_gnix_ep_enable call returned %d\n",
+					ret);
+				goto err;
+			}
+
 		}
 
 		_gnix_ep_htd_pool_init(ep);
@@ -1567,7 +1612,7 @@ int gnix_ep_close(fid_t fid)
 
 DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 	struct gnix_fid_ep  *ep;
 	struct gnix_fid_eq *eq;
 	struct gnix_fid_av  *av;
@@ -1654,7 +1699,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				ep->send_selective_completion = 1;
 			}
 
-			_gnix_cq_poll_nic_add(cq, ep->nic);
 			_gnix_ref_get(cq);
 		}
 		if (flags & FI_RECV) {
@@ -1669,7 +1713,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				ep->recv_selective_completion = 1;
 			}
 
-			_gnix_cq_poll_nic_add(cq, ep->nic);
 			_gnix_ref_get(cq);
 		}
 		break;
@@ -1700,7 +1743,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				break;
 			}
 			ep->send_cntr = cntr;
-			_gnix_cntr_poll_nic_add(cntr, ep->nic);
 			_gnix_ref_get(cntr);
 		}
 
@@ -1714,7 +1756,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				break;
 			}
 			ep->recv_cntr = cntr;
-			_gnix_cntr_poll_nic_add(cntr, ep->nic);
 			_gnix_ref_get(cntr);
 		}
 
@@ -1728,7 +1769,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				break;
 			}
 			ep->write_cntr = cntr;
-			_gnix_cntr_poll_nic_add(cntr, ep->nic);
 			_gnix_ref_get(cntr);
 		}
 
@@ -1742,7 +1782,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				break;
 			}
 			ep->read_cntr = cntr;
-			_gnix_cntr_poll_nic_add(cntr, ep->nic);
 			_gnix_ref_get(cntr);
 		}
 
@@ -1756,7 +1795,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				break;
 			}
 			ep->rwrite_cntr = cntr;
-			_gnix_cntr_poll_nic_add(cntr, ep->nic);
 			_gnix_ref_get(cntr);
 		}
 
@@ -1770,20 +1808,37 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				break;
 			}
 			ep->rread_cntr = cntr;
-			_gnix_cntr_poll_nic_add(cntr, ep->nic);
 			_gnix_ref_get(cntr);
 		}
 
 		break;
 
 	case FI_CLASS_STX_CTX:
+
 		stx = container_of(bfid, struct gnix_fid_stx, stx_fid.fid);
 		if (ep->domain != stx->domain) {
 			ret = -FI_EINVAL;
 			break;
 		}
+
+		/*
+		 * can only bind an STX to an ep opened with
+		 * FI_SHARED_CONTEXT ep_attr->tx_ctx_cnt and also
+		 * if a nic has not been previously bound
+		 */
+
+		if (ep->shared_tx == false || ep->nic) {
+			ret =  -FI_EOPBADSTATE;
+			break;
+		}
+
 		ep->stx_ctx = stx;
 		_gnix_ref_get(ep->stx_ctx);
+
+		ep->nic = stx->nic;
+		if (ep->nic->smsg_callbacks == NULL)
+			ep->nic->smsg_callbacks = gnix_ep_smsg_callbacks;
+		_gnix_ref_get(ep->nic);
 		break;
 
 	case FI_CLASS_MR:/*TODO: got to figure this one out */
@@ -1873,12 +1928,21 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 		}
 
 		ep->src_addr = ep->cm_nic->my_name;
-		ep->nic = ep->cm_nic->nic;
-		_gnix_ref_get(ep->nic);
 
-		GNIX_INFO(FI_LOG_EP_CTRL,
-			  "Allocated new NIC for bound EP: %p (ID:%d)\n",
-			  ep->src_addr.gnix_addr.cdm_id);
+		/*
+		 * if this endpoint is not going to use a shared TX
+		 * aka gnix_nic, link its nic with the one being
+		 * used for the cm_nic to reduce pressure on underlying
+		* hardware resources.
+		*/
+		if (ep->shared_tx == false) {
+			ep->nic = ep->cm_nic->nic;
+			_gnix_ref_get(ep->nic);
+
+			GNIX_INFO(FI_LOG_EP_CTRL,
+				  "Allocated new NIC for bound EP: %p (ID:%d)\n",
+				  ep->src_addr.gnix_addr.cdm_id);
+			}
 	} else {
 		fastlock_acquire(&domain->cm_nic_lock);
 
@@ -1903,10 +1967,12 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 			}
 
 			/* Use the newly allocated domain CM NIC for data
-			 * movement on this EP. */
+			 * movement on this EP if not using STX. */
 			ep->cm_nic = domain->cm_nic;
-			ep->nic = ep->cm_nic->nic;
-			_gnix_ref_get(ep->nic);
+			if (ep->shared_tx == false) {
+				ep->nic = ep->cm_nic->nic;
+				_gnix_ref_get(ep->nic);
+			}
 
 			GNIX_INFO(FI_LOG_EP_CTRL,
 				  "Allocated new NIC for EP: %p (ID:%d)\n",
@@ -1916,19 +1982,24 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 			ep->cm_nic = domain->cm_nic;
 			_gnix_ref_get(ep->cm_nic);
 
-			/* Allocate a new NIC for data movement on this EP. */
-			ret = gnix_nic_alloc(domain, NULL, &ep->nic);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
+			if (ep->shared_tx == false) {
+
+				/* Allocate a new NIC for data
+				   movement on this EP. */
+				ret = gnix_nic_alloc(domain,
+						     NULL, &ep->nic);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
 					    "_gnix_nic_alloc call returned %d\n",
 					     ret);
-				fastlock_release(&domain->cm_nic_lock);
-				return ret;
-			}
+					fastlock_release(&domain->cm_nic_lock);
+					return ret;
+				}
 
-			GNIX_INFO(FI_LOG_EP_CTRL,
-				  "Allocated new NIC for xfers: %p (ID:%d)\n",
-				  ep->src_addr.gnix_addr.cdm_id);
+				GNIX_INFO(FI_LOG_EP_CTRL,
+					  "Allocated new NIC for xfers: %p (ID:%d)\n",
+					  ep->src_addr.gnix_addr.cdm_id);
+			}
 		}
 
 		fastlock_release(&domain->cm_nic_lock);
@@ -2055,7 +2126,11 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		goto err_fl_init;
 	}
 
-	/* Check for xpmem. */
+	ep_priv->shared_tx = (info->ep_attr->tx_ctx_cnt == FI_SHARED_CONTEXT) ?
+				true : false;
+	/*
+	 * try out XPMEM
+	 */
 	ret = _gnix_xpmem_handle_create(domain_priv,
 					&ep_priv->xpmem_hndl);
 	if (ret != FI_SUCCESS) {

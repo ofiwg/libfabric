@@ -979,8 +979,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		if (ret != FI_SUCCESS)
 			return ret;
 		nic_attr = attr;
-		if (nic_attr->use_cdm_id == true)
-			must_alloc_nic = true;
+		must_alloc_nic = nic_attr->must_alloc;
 	}
 
 	/*
@@ -1003,7 +1002,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 
 	/*
 	 * we can reuse previously allocated nics as long as a
-	 * cdm_id is not specified in the nic_attr arg.
+	 * must_alloc is not specified in the nic_attr arg.
 	 */
 
 	if ((must_alloc_nic == false) && (gnix_nics_per_ptag[domain->ptag] >=

@@ -95,9 +95,18 @@ static void __domain_destruct(void *obj)
 
 static void __stx_destruct(void *obj)
 {
+	int ret;
 	struct gnix_fid_stx *stx = (struct gnix_fid_stx *) obj;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
+
+	if (stx->nic) {
+		ret = _gnix_nic_free(stx->nic);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				    "_gnix_nic_free call returned %s\n",
+			     fi_strerror(-ret));
+	}
 
 	memset(stx, 0, sizeof(*stx));
 	free(stx);
@@ -109,7 +118,6 @@ static void __stx_destruct(void *obj)
 
 /**
  * Creates a shared transmit context.
- * @note This is basically a no-op for the GNI provider.
  *
  * @param[in]  val  value to be sign extended
  * @param[in]  len  length to sign extend the value
@@ -123,7 +131,9 @@ DIRECT_FN STATIC int gnix_stx_open(struct fid_domain *dom,
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain;
+	struct gnix_nic *nic;
 	struct gnix_fid_stx *stx_priv;
+	struct gnix_nic_attr nic_attr = {0};
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
@@ -140,6 +150,23 @@ DIRECT_FN STATIC int gnix_stx_open(struct fid_domain *dom,
 	}
 
 	stx_priv->domain = domain;
+
+	/*
+	 * we force allocation of a nic to make semantics
+	 * match the intent fi_endpoint man page, provide
+	 * a TX context (aka gnix nic) that can be shared
+	 * explicitly amongst endpoints
+	 */
+	nic_attr.must_alloc = true;
+	ret = gnix_nic_alloc(domain, &nic_attr, &nic);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			    "_gnix_nic_alloc call returned %d\n",
+			     ret);
+		goto err;
+	}
+	stx_priv->nic = nic;
+
 	_gnix_ref_init(&stx_priv->ref_cnt, 1, __stx_destruct);
 
 	_gnix_ref_get(stx_priv->domain);

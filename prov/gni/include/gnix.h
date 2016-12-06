@@ -527,6 +527,7 @@ struct gnix_fid_ep {
 	struct gnix_xpmem_handle *xpmem_hndl;
 	bool tx_enabled;
 	bool rx_enabled;
+	bool shared_tx;
 	bool requires_lock;
 	int last_cached;
 	struct gnix_addr_cache_entry addr_cache[GNIX_ADDR_CACHE_SIZE];
@@ -633,14 +634,17 @@ struct gnix_fid_trx {
 
 /**
  * gnix_fid_stx struct
+ * @note - another way to associated gnix_nic's with an ep
  *
- * @var stx_fid         embedded struct fid_stx field
- * @var domain          pointer to domain used to create the stx instance
- * @var ref_cnt         ref cnt on this object
+ * @var stx_fid              embedded struct fid_stx field
+ * @var domain               pointer to domain used to create the stx instance
+ * @var nic                  pointer to gnix_nic associated with this stx
+ * @var ref_cnt              ref cnt on this object
  */
 struct gnix_fid_stx {
 	struct fid_stx stx_fid;
 	struct gnix_fid_domain *domain;
+	struct gnix_nic *nic;
 	struct gnix_reference ref_cnt;
 };
 

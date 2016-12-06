@@ -92,6 +92,7 @@ struct gnix_nic_attr {
 	gni_nic_handle_t gni_nic_hndl;
 	bool use_cdm_id;
 	uint32_t cdm_id;
+	bool must_alloc;
 };
 
 /**
