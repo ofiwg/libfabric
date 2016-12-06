@@ -551,8 +551,10 @@ void rdm_rma_teardown(void)
 		cr_assert(!ret, "failure in closing dom[1] local mr.");
 	}
 
-	ret = fi_close(&loc_mr2[0]->fid);
-	cr_assert(!ret, "failure in closing dom[0] local mr.");
+	if (loc_mr2[0] != NULL) {
+		ret = fi_close(&loc_mr2[0]->fid);
+		cr_assert(!ret, "failure in closing dom[0] local mr.");
+	}
 
 	if (loc_mr2[1] != NULL) {
 		ret = fi_close(&loc_mr2[1]->fid);
@@ -567,8 +569,10 @@ void rdm_rma_teardown(void)
 		cr_assert(!ret, "failure in closing dom[1] remote mr.");
 	}
 
-	ret = fi_close(&rem_mr2[0]->fid);
-	cr_assert(!ret, "failure in closing dom[0] remote mr.");
+	if (rem_mr2[0] != NULL) {
+		ret = fi_close(&rem_mr2[0]->fid);
+		cr_assert(!ret, "failure in closing dom[0] remote mr.");
+	}
 
 	if (rem_mr2[1] != NULL) {
 		ret = fi_close(&rem_mr2[1]->fid);
