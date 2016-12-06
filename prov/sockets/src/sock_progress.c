@@ -2086,16 +2086,19 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 				     struct sock_tx_ctx *tx_ctx,
 				     struct sock_pe_entry *pe_entry)
 {
-	int ret;
+	int ret = 0;
 	struct sock_conn *conn = pe_entry->conn;
 
+	if (pe_entry->is_complete)
+		goto out;
+
 	if (!pe_entry->conn || pe_entry->pe.tx.send_done)
-		return 0;
+		goto out;
 
 	if (conn->tx_pe_entry != NULL && conn->tx_pe_entry != pe_entry) {
 		SOCK_LOG_DBG("Cannot progress %p as conn %p is being used by %p\n",
 			      pe_entry, conn, conn->tx_pe_entry);
-		return 0;
+		goto out;
 	}
 
 	if (conn->tx_pe_entry == NULL) {
@@ -2106,13 +2109,13 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 	if ((pe_entry->flags & FI_FENCE) &&
 	    (tx_ctx->pe_entry_list.next != &pe_entry->ctx_entry)) {
 		SOCK_LOG_DBG("Waiting for FI_FENCE\n");
-		return 0;
+		goto out;
 	}
 
 	if (!pe_entry->pe.tx.header_sent) {
 		if (sock_pe_send_field(pe_entry, &pe_entry->msg_hdr,
 				       sizeof(struct sock_msg_hdr), 0))
-			return 0;
+			goto out;
 		pe_entry->pe.tx.header_sent = 1;
 	}
 
@@ -2139,6 +2142,11 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		break;
 	}
 
+out:
+	if (pe_entry->is_complete) {
+		sock_pe_release_entry(pe, pe_entry);
+		SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
+	}
 	return ret;
 }
 
@@ -2397,6 +2405,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	pe_entry->total_len = msg_hdr->msg_len;
 	msg_hdr->msg_len = htonll(msg_hdr->msg_len);
 	msg_hdr->pe_entry_id = htons(msg_hdr->pe_entry_id);
+
 	return sock_pe_progress_tx_entry(pe, tx_ctx, pe_entry);
 }
 
@@ -2612,11 +2621,6 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		if (ret < 0) {
 			SOCK_LOG_ERROR("Error in progressing %p\n", pe_entry);
 			goto out;
-		}
-
-		if (pe_entry->is_complete) {
-			sock_pe_release_entry(pe, pe_entry);
-			SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
 		}
 	}
 
