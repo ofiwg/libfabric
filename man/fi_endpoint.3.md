@@ -1105,7 +1105,7 @@ alternate type.
 
 This call is used to open a shareable transmit context.  See
 fi_tx_context call under the SCALABLE ENDPOINTS section for details on
-the transit context attributes.  The exception is that endpoints
+the transmit context attributes.  The exception is that endpoints
 attached to a shared transmit context must use a subset of the
 transmit context attributes.  This is opposite of the requirement for
 scalable endpoints.
