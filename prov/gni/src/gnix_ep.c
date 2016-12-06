@@ -1406,15 +1406,14 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 					ret);
 				goto err;
 			}
+		}
 
-			ret = _gnix_ep_enable(ep);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-				     "_gnix_ep_enable call returned %d\n",
-					ret);
-				goto err;
-			}
-
+		ret = _gnix_ep_enable(ep);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			     "_gnix_ep_enable call returned %d\n",
+				ret);
+			goto err;
 		}
 
 		_gnix_ep_htd_pool_init(ep);
@@ -2014,7 +2013,8 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "gnix_cm_nic_create_cdm_id returned %s\n",
 				  fi_strerror(-ret));
-			_gnix_ref_put(ep->nic);
+			if(ep->nic != NULL)
+				_gnix_ref_put(ep->nic);
 			return ret;
 		}
 		ep->src_addr.gnix_addr.cdm_id = cdm_id;
@@ -2191,7 +2191,8 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	return ret;
 
 err_type_init:
-	_gnix_nic_free(ep_priv->nic);
+	if (ep_priv->nic)
+		_gnix_nic_free(ep_priv->nic);
 	_gnix_cm_nic_free(ep_priv->cm_nic);
 err_nic_init:
 	if (ep_priv->xpmem_hndl) {
