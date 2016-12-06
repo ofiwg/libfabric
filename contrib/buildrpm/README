@@ -1,5 +1,5 @@
 
-# Copyright (c) 2016      Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2016-2017   Cisco Systems, Inc.  All rights reserved.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -56,6 +56,10 @@ General parameters:
     /opt/libfabric/_VERSION_. Default install
     path of the RPM is /usr.
 
+-m
+    Modulefile will be installed during RPM installation.
+    By default, modulefile is not installed.
+
 -d
     Build with debugging support. By default,
     RPM is build without debugging support.
@@ -79,5 +83,5 @@ General parameters:
     Print usage message and exit.
 
 Example usages of the script:
-  buildrpmLibfabric.sh -osv -i usnic -e sockets -e verbs -e psm libfabric-1.4.0.tar.bz2
-  buildrpmLibfabric.sh -osv -c "--disable-silent-rules" libfabric-1.4.0.tar.bz2
+  buildrpmLibfabric.sh -omsv -i usnic -e sockets -e verbs -e psm libfabric-1.4.1.tar.bz2
+  buildrpmLibfabric.sh -omsv -c "--disable-silent-rules" libfabric-1.4.1.tar.bz2

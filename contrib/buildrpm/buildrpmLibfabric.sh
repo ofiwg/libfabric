@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2016      Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2016-2017   Cisco Systems, Inc.  All rights reserved.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,6 +44,7 @@ rpmbuilddir="$PWD/rpmbuild"
 prefix="/usr"
 noop=""
 install_in_opt=""
+create_modulefile=""
 unpack_spec=""
 verbose=""
 verboseoption=""
@@ -78,9 +79,9 @@ runcmd()
   if [[ -z "$noop" ]]; then
     eval "$*"
     st=$?
-    if [[ "$st" != "0" ]]; then
+    if [[ $st -ne 0 ]]; then
       echo "$0: FATAL: command failed with status $st: $*" 1>&2
-      exit 9
+      exit 1
     fi
   fi
 }
@@ -99,7 +100,7 @@ error()
 # usage information
 ###################
 usage="Usage: $0 [-i provider_name] [-e provider_name]
-       [-n] [-o] [-d] [-s] [-c] [-r] [-v] [-h] tarball
+       [-n] [-o] [-m] [-d] [-s] [-c] [-r] [-v] [-h] tarball
 
  Provider options:
 
@@ -114,6 +115,9 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
 
   -o         install under /opt/libfabric/_VERSION_
                {default: install under /usr/ }
+
+  -m         install modulefile
+              {default: don't install modulefile}
 
   -d         build with Debugging support
               {default: without debugging support}
@@ -138,11 +142,14 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
 # parse args
 ############
 export arguments="$@"
-while getopts noi:e:dc:r:svh flag; do
+while getopts nomi:e:dc:r:svh flag; do
     case "$flag" in
       n) noop="true"
          ;;
       o) install_in_opt="true"
+         ;;
+      m) create_modulefile="true"
+         rpmbuild_options="$rpmbuild_options --define 'install_modulefile 1'"
          ;;
       i) configure_options="$configure_options --enable-$OPTARG"
          ;;
@@ -231,15 +238,12 @@ fi
 ######################################
 # Try to unpack spec file from tarball
 ######################################
-if [[ -f "$specfile" ]]; then
-  if [[ -n "$verbose" ]]; then
-    echo "$0: --> WARNING: $specfile already exists and will be overwritten" 1>&2
-  fi
-fi
-
 if [[ -n "$unpack_spec" ]]; then
+  if [[ -f "$specfile" ]]; then
+    verbose "WARNING: $specfile already exists and will be overwritten" 1>&2
+  fi
   verbose "Extracting tarball"
-  runcmd "tar -xf $verboseoption \"$tarball\""
+  runcmd "tar $verboseoption -xf \"$tarball\""
   verbose "Copying specfile"
   runcmd "cp -fp $verboseoption \"$tardirname/$specfile\" ."
   verbose "Cleanup after extraction"
@@ -253,12 +257,10 @@ if [[ ! -r $specfile ]]; then
   if [[ -z "$noop" ]]; then
     error 5 "Cannot find $specfile"
   else
-    verbose "WARNING: Cannot find $specfile"
+    verbose "WARNING: Cannot find $specfile" 1>&2
   fi
 else
-  if [[ -n "$verbose" ]]; then
-    echo "$0: --> Found specfile: $specfile"
-  fi
+  verbose "Found specfile: $specfile"
 fi
 
 #############################
@@ -296,16 +298,7 @@ fi
 verbose "Build command used:"
 verbose "$cmd"
 verbose "RPM build will start"
-
-if [[ -z "$noop" ]]; then
-  eval "$cmd"
-
-  status="$?"
-  if [[ "$status" != "0" ]]; then
-    echo "$0: FATAL: *** FAILURE BUILDING RPM! ERROR CODE: $status" 1>&2
-    error 6 "Aborting"
-  fi
-fi
+runcmd "$cmd"
 verbose "Done building the RPM"
 
 ##############
