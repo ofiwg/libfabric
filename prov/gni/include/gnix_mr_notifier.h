@@ -147,7 +147,7 @@ _gnix_notifier_init(void)
 }
 
 static inline int
-_gnix_notifier_open(struct gnix_mr_notifier *mrn)
+_gnix_notifier_open(struct gnix_mr_notifier **mrn)
 {
 	return FI_SUCCESS;
 }

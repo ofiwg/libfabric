@@ -135,6 +135,7 @@ dnl looks like we need to get rid of some white space
 
         if test "$with_kdreg" != "" && test "$with_kdreg" != "no"; then
 		    gni_CPPFLAGS="-I$with_kdreg/include -DHAVE_KDREG $gni_CPPFLAGS"
+		    gnitest_CPPFLAGS="-I$with_kdreg/include -DHAVE_KDREG $gnitest_CPPFLAGS"
         fi
 
 
