@@ -50,6 +50,8 @@
 /* Threshold to switch from indirect transfer to chained transfer to move
  * unaligned read data. */
 #define GNIX_RMA_UREAD_CHAINED_THRESH		60
+#define slist_entry_foreach(head, item)\
+	for (item = head; item; item = item->next)
 
 static int __gnix_rma_send_err(struct gnix_fid_ep *ep,
 			       struct gnix_fab_req *req,
@@ -162,6 +164,20 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_tx_descriptor *txd)
 		       (void *) ((uint8_t *) txd->int_buf + GNI_READ_ALIGN),
 		       tail_len);
 	}
+}
+
+static void __gnix_rma_more_fr_complete(struct gnix_fab_req *req)
+{
+	if (req->flags & FI_LOCAL_MR) {
+		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
+			  req->rma.loc_md);
+		fi_close(&req->rma.loc_md->mr_fid.fid);
+	}
+
+	/* Schedule VC TX queue in case the VC is 'fenced'. */
+	_gnix_vc_tx_schedule(req->vc);
+
+	_gnix_fr_free(req->vc->ep, req);
 }
 
 static void __gnix_rma_fr_complete(struct gnix_fab_req *req)
@@ -369,6 +385,43 @@ static int __gnix_rma_send_data_req(void *arg)
 	}
 
 	return gnixu_to_fi_errno(status);
+}
+
+static int __gnix_rma_more_txd_complete(void *arg, gni_return_t tx_status)
+{
+	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
+	struct gnix_fab_req *req = txd->req;
+	struct gnix_fab_req *more_req;
+	struct slist_entry *item;
+	int rc = FI_SUCCESS;
+
+	free(txd->gni_more_ct_descs);
+	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+
+	if (tx_status != GNI_RC_SUCCESS) {
+		return __gnix_rma_post_err(req, FI_ECANCELED);
+	}
+
+	/* complete request */
+	rc = __gnix_rma_send_completion(req->vc->ep, req);
+	if (rc != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_rma_send_completion() failed: %d\n",
+			  rc);
+	__gnix_rma_fr_complete(req);
+
+	/* Create completion events for each fab request */
+	slist_entry_foreach(req->rma.sle.next, item) {
+		more_req = container_of(item, struct gnix_fab_req, rma.sle);
+
+		rc = __gnix_rma_send_completion(more_req->vc->ep, more_req);
+		if (rc != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_rma_send_completion() failed: %d\n",
+			  rc);
+		__gnix_rma_more_fr_complete(more_req);
+	}
+	return FI_SUCCESS;
 }
 
 static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
@@ -740,6 +793,148 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	return FI_SUCCESS;
 }
 
+static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
+				    struct gnix_tx_descriptor *txd)
+{
+	gni_ct_put_post_descriptor_t *more_put;
+	gni_ct_get_post_descriptor_t *more_get;
+	gni_mem_handle_t mdh;
+	struct gnix_fab_req *more_req;
+	struct slist_entry *item;
+	int entries = 0, idx = 0;
+
+	/* Count number of post-descriptors to be chained. */
+	slist_entry_foreach(req->rma.sle.next, item) {
+		entries++;
+	}
+
+	GNIX_DEBUG(FI_LOG_EP_DATA, "FI_MORE: %d sub descs to be populated\n",
+		  entries);
+
+	if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+		txd->gni_more_ct_descs = malloc(entries *
+					 sizeof(gni_ct_put_post_descriptor_t));
+		more_put = (gni_ct_put_post_descriptor_t *)
+			   txd->gni_more_ct_descs;
+	} else {
+		txd->gni_more_ct_descs = malloc(entries *
+					 sizeof(gni_ct_get_post_descriptor_t));
+		more_get = (gni_ct_get_post_descriptor_t *)
+			   txd->gni_more_ct_descs;
+	}
+
+	slist_entry_foreach(req->rma.sle.next, item) {
+		/* Get fab_req pointer */
+		more_req = container_of(item, struct gnix_fab_req, rma.sle);
+
+		/* Populate txd based on type */
+		if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+			more_put[idx].ep_hndl = more_req->vc->gni_ep;
+			more_put[idx].length = more_req->rma.len;
+			more_put[idx].remote_addr = more_req->rma.rem_addr;
+			more_put[idx].local_addr = (uint64_t)more_req->
+								rma.loc_addr;
+
+			_gnix_convert_key_to_mhdl_no_crc(
+				(gnix_mr_key_t *)&more_req->rma.rem_mr_key,
+				&mdh);
+			more_put[idx].remote_mem_hndl = mdh;
+
+			if (idx < entries - 1)
+				more_put[idx].next_descr = &more_put[idx + 1];
+			else
+				more_put[idx].next_descr = NULL;
+		} else {
+			/* TODO Populate for reads*/
+			if (idx < entries - 1)
+				more_get[idx].next_descr = &more_get[idx + 1];
+			else
+				more_get[idx].next_descr = NULL;
+		}
+		idx++;
+	}
+
+	if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+		txd->gni_desc.next_descr = &more_put[0];
+	} else {
+		txd->gni_desc.next_descr = &more_get[0];
+	}
+}
+
+int _gnix_rma_more_post_req(void *data)
+{
+	struct gnix_fab_req *fab_req = (struct gnix_fab_req *)data;
+	struct gnix_fid_ep *ep = fab_req->gnix_ep;
+	struct gnix_nic *nic = ep->nic;
+	struct gnix_fid_mem_desc *loc_md;
+	struct gnix_tx_descriptor *txd;
+	gni_mem_handle_t mdh;
+	gni_return_t status;
+	int rc;
+
+	if (!gnix_ops_allowed(ep, fab_req->vc->peer_caps, fab_req->flags)) {
+		rc = __gnix_rma_post_err_no_retrans(fab_req, FI_EOPNOTSUPP);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_rma_post_err_no_retrans() failed: %d\n",
+				  rc);
+		return -FI_ECANCELED;
+	}
+
+	rc = _gnix_nic_tx_alloc(nic, &txd);
+	if (rc) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+				"_gnix_nic_tx_alloc() failed: %d\n",
+				rc);
+		return -FI_ENOSPC;
+	}
+
+	txd->completer_fn = __gnix_rma_more_txd_complete;
+	txd->req = fab_req;
+
+	_gnix_convert_key_to_mhdl_no_crc(
+			(gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
+			&mdh);
+
+	txd->gni_desc.type = __gnix_fr_post_type(fab_req->type, 0);
+	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT; /* check flags */
+	txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE; /* check flags */
+
+	__gnix_rma_more_fill_pd(fab_req, txd);
+
+	if (fab_req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+		GNIX_INFO(FI_LOG_EP_DATA, "MORE: Doing a Write\n");
+		txd->gni_desc.local_addr = (uint64_t)fab_req->rma.loc_addr;
+		txd->gni_desc.length = fab_req->rma.len;
+		assert(txd->gni_desc.length);
+		txd->gni_desc.remote_addr = (uint64_t)fab_req->rma.rem_addr;
+
+		loc_md = (struct gnix_fid_mem_desc *)fab_req->rma.loc_md;
+		if (loc_md) {
+			txd->gni_desc.local_mem_hndl = loc_md->mem_hndl;
+		}
+	}
+	txd->gni_desc.remote_mem_hndl = mdh;
+	txd->gni_desc.rdma_mode = 0; /* check flags */
+	txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
+
+	GNIX_LOG_DUMP_TXD(txd);
+
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
+	status = GNI_CtPostFma(fab_req->vc->gni_ep, &txd->gni_desc);
+	GNIX_DEBUG(FI_LOG_EP_DATA, "MORE: Returned from GNI_CtPostFma\n");
+
+	COND_RELEASE(nic->requires_lock, &nic->lock);
+
+	if (status != GNI_RC_SUCCESS) {
+		free(txd->gni_more_ct_descs);
+		_gnix_nic_tx_free(nic, txd);
+		GNIX_WARN(FI_LOG_EP_DATA, "GNI_Post*() failed: %s\n",
+			  gni_err_str[status]);
+	}
+
+	return gnixu_to_fi_errno(status);
+}
 int _gnix_rma_post_req(void *data)
 {
 	struct gnix_fab_req *fab_req = (struct gnix_fab_req *)data;
@@ -881,6 +1076,8 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	int rc;
 	int rdma;
 	struct fid_mr *auto_mr = NULL;
+	struct gnix_fab_req *more_req;
+	struct slist_entry *sle;
 
 	if (!(flags & FI_INJECT) && !ep->send_cq &&
 	    (((fr_type == GNIX_FAB_RQ_RDMA_WRITE) && !ep->write_cntr) ||
@@ -927,6 +1124,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	req->vc = vc;
 	req->user_context = context;
 	req->work_fn = _gnix_rma_post_req;
+	req->rma.sle.next = NULL;
 	atomic_initialize(&req->rma.outstanding_txds, 0);
 
 	if (fr_type == GNIX_FAB_RQ_RDMA_READ &&
@@ -995,6 +1193,48 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		req->flags |= GNIX_RMA_RDMA;
 	}
 
+	/* Add reads/writes to slist when FI_MORE is present, Or
+	 * if this is the first message in the chain without FI_MORE.
+	 * When FI_MORE is not present, if the slists are not empty
+	 * it is the first message without FI_MORE. */
+	if ((flags & FI_MORE) ||
+	    (!(slist_empty(&ep->more_write)) ||
+	     !(slist_empty(&ep->more_read)))) {
+		if (fr_type == GNIX_FAB_RQ_RDMA_WRITE) {
+			slist_insert_tail(&req->rma.sle, &ep->more_write);
+			req->work_fn = _gnix_rma_more_post_req;
+		} else if (fr_type == GNIX_FAB_RQ_RDMA_READ) {
+			/* Not fully implemented. List won't be populated. */
+			/* slist_insert_tail(&req->rma.sle, &ep->more_read); */
+		}
+		if ((flags & FI_MORE) && (fr_type == GNIX_FAB_RQ_RDMA_WRITE))
+			return FI_SUCCESS;
+	}
+
+	/* Initiate reads and writes on first message without FI_MORE */
+	if (!(flags & FI_MORE) &&
+	    (!(slist_empty(&ep->more_write)) ||
+	     !(slist_empty(&ep->more_read)))) {
+		if (!(slist_empty(&ep->more_write))) {
+			sle = ep->more_write.head;
+			more_req = container_of(sle, struct gnix_fab_req,
+						rma.sle);
+			GNIX_DEBUG(FI_LOG_EP_DATA,
+				   "FI_MORE: got fab_request from more_write. Queuing Request\n");
+			_gnix_vc_queue_tx_req(more_req);
+			slist_init(&ep->more_write); /* For future reqs */
+		}
+		if (!(slist_empty(&ep->more_read))) {
+			sle = ep->more_read.head;
+			more_req = container_of(sle, struct gnix_fab_req,
+						rma.sle);
+			GNIX_DEBUG(FI_LOG_EP_DATA,
+				   "FI_MORE: got fab_request from more_read. Queuing Request\n");
+			_gnix_vc_queue_tx_req(more_req);
+			slist_init(&ep->more_read);
+		}
+		return FI_SUCCESS;
+	}
 	GNIX_DEBUG(FI_LOG_EP_DATA, "Queuing (%p %p %d)\n",
 		  (void *)loc_addr, (void *)rem_addr, len);
 
