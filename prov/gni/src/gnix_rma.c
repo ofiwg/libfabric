@@ -510,6 +510,7 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 					   gni_mem_handle_t *rem_mdh)
 {
 	int head_off, head_len, tail_len, desc_idx = 0;
+	struct gnix_fid_mem_desc *loc_md;
 
 	/* Copy head and tail through intermediate buffer.  Copy
 	 * aligned data directly to user buffer. */
@@ -518,6 +519,8 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 	tail_len = (req->rma.rem_addr + req->rma.len) & GNI_READ_ALIGN_MASK;
 
 	/* Use full post descriptor for aligned data */
+	loc_md = (struct gnix_fid_mem_desc *)req->rma.loc_md;
+	txd->gni_desc.local_mem_hndl = loc_md->mem_hndl;
 	txd->gni_desc.local_addr = (uint64_t)req->rma.loc_addr + head_len;
 	txd->gni_desc.remote_addr = (uint64_t)req->rma.rem_addr + head_len;
 	txd->gni_desc.length = req->rma.len - head_len - tail_len;
@@ -796,8 +799,8 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 				    struct gnix_tx_descriptor *txd)
 {
-	gni_ct_put_post_descriptor_t *more_put;
-	gni_ct_get_post_descriptor_t *more_get;
+	gni_ct_put_post_descriptor_t *more_put = NULL;
+	gni_ct_get_post_descriptor_t *more_get = NULL;
 	gni_mem_handle_t mdh;
 	struct gnix_fab_req *more_req;
 	struct slist_entry *item;
@@ -829,6 +832,7 @@ static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 
 		/* Populate txd based on type */
 		if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+			assert(more_put);
 			more_put[idx].ep_hndl = more_req->vc->gni_ep;
 			more_put[idx].length = more_req->rma.len;
 			more_put[idx].remote_addr = more_req->rma.rem_addr;
@@ -846,6 +850,7 @@ static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 				more_put[idx].next_descr = NULL;
 		} else {
 			/* TODO Populate for reads*/
+			assert(more_get);
 			if (idx < entries - 1)
 				more_get[idx].next_descr = &more_get[idx + 1];
 			else

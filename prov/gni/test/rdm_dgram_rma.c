@@ -2016,6 +2016,10 @@ void do_read_alignment(int len)
 	}
 }
 
+Test(rdm_rma, read_chained)
+{
+	do_read_buf(source, target, 60);
+}
 Test(rdm_rma, read_alignment)
 {
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
