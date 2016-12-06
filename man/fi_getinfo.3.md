@@ -329,8 +329,8 @@ additional optimizations.
 
 *FI_RMA_EVENT*
 : Requests that an endpoint support the generation of completion events
-  when it is the target of an RMA and/or atomic operation.  This
-  flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled on
+  or counter updates when it is the target of an RMA and/or atomic operation.
+  This flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled on
   the endpoint.
 
 *FI_TRIGGER*
