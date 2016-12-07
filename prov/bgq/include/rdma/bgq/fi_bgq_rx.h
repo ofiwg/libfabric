@@ -33,6 +33,7 @@
 #define _FI_PROV_BGQ_RX_H_
 
 #define FI_BGQ_UEPKT_BLOCKSIZE (1024)
+#define PROCESS_RFIFO_MAX 64
 
 /* forward declaration - see: prov/bgq/src/fi_bgq_atomic.c */
 void fi_bgq_rx_atomic_dispatch (void * buf, void * addr, size_t nbytes,
@@ -814,8 +815,10 @@ int poll_rfifo (struct fi_bgq_ep * bgq_ep, const unsigned is_manual_progress) {
 		_bgq_msync();
 
 		const uintptr_t stop = va_head + offset_tail - offset_head;
-		while ((uintptr_t)hdr < stop) {
+		int process_rfifo_iter = 0;
+		while (((uintptr_t)hdr < stop) && (process_rfifo_iter < PROCESS_RFIFO_MAX)) {
 
+			process_rfifo_iter++;
 			struct fi_bgq_mu_packet *pkt = (struct fi_bgq_mu_packet *) hdr;
 			const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
@@ -844,8 +847,10 @@ int poll_rfifo (struct fi_bgq_ep * bgq_ep, const unsigned is_manual_progress) {
 			_bgq_msync();
 
 			const uintptr_t stop = va_end - 544;
-			while ((uintptr_t)hdr < stop) {
+			int process_rfifo_iter = 0;
+			while  (((uintptr_t)hdr < stop) && (process_rfifo_iter < PROCESS_RFIFO_MAX)) {
 
+				process_rfifo_iter++;
 				struct fi_bgq_mu_packet *pkt = (struct fi_bgq_mu_packet *) hdr;
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
