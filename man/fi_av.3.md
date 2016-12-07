@@ -420,7 +420,7 @@ resources from removed entries.
 Insertion calls for an AV opened for synchronous operation will return
 the number of addresses that were successfully inserted.  In the case of
 failure, the return value will be less than the number of addresses that
-were specified.
+was specified.
 
 Insertion calls for an AV opened for asynchronous operation (with FI_EVENT
 flag specified) will return 0 if the operation was successfully initiated.

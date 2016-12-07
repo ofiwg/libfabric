@@ -131,7 +131,7 @@ Associates a completion queue or counter with a poll set.
 
 ## fi_poll_del
 
-Removes an completion queue or counter from a poll set.
+Removes a completion queue or counter from a poll set.
 
 ## fi_poll
 
