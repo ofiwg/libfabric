@@ -661,6 +661,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 	/* search the match queue */
 	union fi_bgq_context * head = bgq_ep->rx.poll.rfifo[poll_msg].mq.head;
 	union fi_bgq_context * context = head;
+	union fi_bgq_context * prev = NULL;
 
 	while (context) {
 
@@ -671,14 +672,12 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 			if (!poll_msg || ((rx_op_flags | FI_MULTI_RECV) == 0)) {	/* branch should compile out for tagged receives */
 
 				union fi_bgq_context * next = context->next;
-				union fi_bgq_context * prev = context->prev;
 
 				/* remove the context from the match queue */
 				if (prev) prev->next = next;
 				else bgq_ep->rx.poll.rfifo[poll_msg].mq.head = next;
 
-				if (next) next->prev = prev;
-				else bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
+				if (!next) bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
 
 				const uint64_t is_context_ext = rx_op_flags & FI_BGQ_CQ_CONTEXT_EXT;
 
@@ -715,6 +714,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 					/* not enough space available in the multi-receive
 					 * buffer; continue as if "a match was not found"
 					 * and advance to the next match entry */
+					prev = context;
 					context = context->next;
 
 				} else {
@@ -730,14 +730,12 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 						 * queue and return. */
 
 						union fi_bgq_context * next = context->next;
-						union fi_bgq_context * prev = context->prev;
 
 						/* remove the context from the match queue */
 						if (prev) prev->next = next;
 						else bgq_ep->rx.poll.rfifo[poll_msg].mq.head = next;
 
-						if (next) next->prev = prev;
-						else bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
+						if (!next) bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
 
 						/* post a completion event for the multi-receive */
 						context->byte_counter = 0;
@@ -748,6 +746,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 			}
 
 		} else {
+			prev = context;
 			context = context->next;
 		}
 	}
@@ -1036,7 +1035,6 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			union fi_bgq_context * tail = bgq_ep->rx.poll.rfifo[poll_msg].mq.tail;
 
 			context->next = NULL;
-			context->prev = tail;
 			if (tail == NULL) {
 				bgq_ep->rx.poll.rfifo[poll_msg].mq.head = context;
 			} else {
@@ -1254,7 +1252,6 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			union fi_bgq_context * tail = bgq_ep->rx.poll.rfifo[poll_msg].mq.tail;
 
 			context->next = NULL;
-			context->prev = tail;
 			if (tail == NULL) {
 				bgq_ep->rx.poll.rfifo[poll_msg].mq.head = context;
 			} else {
@@ -1309,6 +1306,7 @@ int cancel_match_queue (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, cons
 	union fi_bgq_context * head = bgq_ep->rx.poll.rfifo[poll_msg].mq.head;
 	union fi_bgq_context * tail = bgq_ep->rx.poll.rfifo[poll_msg].mq.tail;
 	union fi_bgq_context * context = head;
+	union fi_bgq_context * prev = NULL;
 	while (context) {
 
 		const uint64_t is_context_ext = context->flags & FI_BGQ_CQ_CONTEXT_EXT;
@@ -1322,12 +1320,10 @@ int cancel_match_queue (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, cons
 			if (context == head)
 				bgq_ep->rx.poll.rfifo[poll_msg].mq.head = context->next;
 			else
-				context->prev->next = context->next;
+				prev->next = context->next;
 
 			if (context == tail)
-				bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = context->prev;
-			else
-				context->next->prev = context->prev;
+				bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
 
 			struct fi_bgq_context_ext * ext;
 			if (is_context_ext) {
@@ -1356,7 +1352,8 @@ int cancel_match_queue (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, cons
 
 			return FI_ECANCELED;
 		}
-
+		else
+			prev = context;
 		context = context->next;
 	}
 

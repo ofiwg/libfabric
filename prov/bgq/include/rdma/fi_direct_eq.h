@@ -96,7 +96,6 @@ union fi_bgq_context {
 			struct fi_bgq_mu_packet	*claim;	// only for peek/claim
 			void			*multi_recv_context;	// only for individual FI_MULTI_RECV's
 		};
-		union fi_bgq_context	*prev;
 	};
 };
 
@@ -191,10 +190,8 @@ int fi_bgq_cq_enqueue_pending (struct fi_bgq_cq * bgq_cq,
 		union fi_bgq_context * tail = bgq_cq->pending_tail;
 		context->next = NULL;
 		if (tail) {
-			context->prev = tail;
 			tail->next = context;
 		} else {
-			context->prev = NULL;
 			bgq_cq->pending_head = context;
 		}
 		bgq_cq->pending_tail = context;
@@ -346,23 +343,25 @@ static ssize_t fi_bgq_cq_poll (struct fi_bgq_cq *bgq_cq,
 	union fi_bgq_context * pending_tail = bgq_cq->pending_tail;
 	if (NULL != pending_head) {
 		union fi_bgq_context * context = pending_head;
+		union fi_bgq_context * prev = NULL;
 		while ((count - num_entries) > 0 && context != NULL) {
 
 			if (context->byte_counter == 0) {
 				output += fi_bgq_cq_fill(output, context, format);
 				++ num_entries;
 
-				if (context->prev)
-					context->prev->next = context->next;
+				if (prev)
+					prev->next = context->next;
 				else
+					/* remove the head */
 					pending_head = context->next;
 
-				if (context->next)
-					context->next->prev = context->prev;
-				else
-					pending_tail = context->prev;
+				if (!(context->next))
+					/* remove the tail */
+					pending_tail = prev;
 			}
-
+			else
+				prev = context;
 			context = context->next;
 		}
 
@@ -406,7 +405,6 @@ static ssize_t fi_bgq_cq_poll (struct fi_bgq_cq *bgq_cq,
 				++ num_entries;
 			} else {
 				context->next = NULL;
-				context->prev = pending_tail;
 				if (pending_tail)
 					pending_tail->next = context;
 				else
