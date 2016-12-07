@@ -49,7 +49,8 @@
  */
 #define GNIX_VC_FL_MIN_SIZE 128
 
-static int gnix_nics_per_ptag[GNI_PTAG_USER_END];
+static int gnix_nics_per_ptag[GNI_PTAG_MAX];
+struct dlist_entry gnix_nic_list_ptag[GNI_PTAG_MAX];
 DLIST_HEAD(gnix_nic_list);
 pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -794,7 +795,7 @@ static void __nic_destruct(void *obj)
 
 	dlist_remove(&nic->gnix_nic_list);
 	--gnix_nics_per_ptag[nic->ptag];
-	dlist_remove(&nic->dom_nic_list);
+	dlist_remove(&nic->ptag_nic_list);
 
 	pthread_mutex_unlock(&gnix_nic_list_lock);
 	__gnix_nic_tx_freelist_destroy(nic);
@@ -1005,14 +1006,15 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	 * must_alloc is not specified in the nic_attr arg.
 	 */
 
-	if ((must_alloc_nic == false) && (gnix_nics_per_ptag[domain->ptag] >=
-					 gnix_max_nics_per_ptag)) {
-		assert(!dlist_empty(&domain->nic_list));
+	if ((must_alloc_nic == false) &&
+	    (gnix_nics_per_ptag[domain->ptag] >= gnix_max_nics_per_ptag)) {
+		assert(!dlist_empty(&gnix_nic_list_ptag[domain->ptag]));
 
-		nic = dlist_first_entry(&domain->nic_list, struct gnix_nic,
-					dom_nic_list);
-		dlist_remove(&nic->dom_nic_list);
-		dlist_insert_tail(&nic->dom_nic_list, &domain->nic_list);
+		nic = dlist_first_entry(&gnix_nic_list_ptag[domain->ptag],
+					struct gnix_nic, ptag_nic_list);
+		dlist_remove(&nic->ptag_nic_list);
+		dlist_insert_tail(&nic->ptag_nic_list,
+				  &gnix_nic_list_ptag[domain->ptag]);
 		_gnix_ref_get(nic);
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Reusing NIC:%p\n", nic);
@@ -1345,7 +1347,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		}
 
 		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
-		dlist_insert_tail(&nic->dom_nic_list, &domain->nic_list);
+		dlist_insert_tail(&nic->ptag_nic_list,
+				  &gnix_nic_list_ptag[domain->ptag]);
 
 		nic->smsg_callbacks = gnix_ep_smsg_callbacks;
 
@@ -1392,3 +1395,35 @@ out:
 	pthread_mutex_unlock(&gnix_nic_list_lock);
 	return ret;
 }
+
+void _gnix_nic_init(void)
+{
+	int i, rc;
+
+	for (i = 0; i <= GNI_PTAG_MAX; i++) {
+		dlist_init(&gnix_nic_list_ptag[i]);
+	}
+
+	rc = _gnix_nics_per_rank(&gnix_max_nics_per_ptag);
+	if (rc == FI_SUCCESS) {
+		GNIX_DEBUG(FI_LOG_FABRIC, "gnix_max_nics_per_ptag: %u\n",
+			   gnix_max_nics_per_ptag);
+	} else {
+		GNIX_WARN(FI_LOG_FABRIC, "_gnix_nics_per_rank failed: %d\n",
+			  rc);
+	}
+
+	if (getenv("GNIX_MAX_NICS") != NULL)
+		gnix_max_nics_per_ptag = atoi(getenv("GNIX_MAX_NICS"));
+
+	/*
+	 * Well if we didn't get 1 nic, that means we must really be doing
+	 * FMA sharing.
+	 */
+
+	if (gnix_max_nics_per_ptag == 0) {
+		gnix_max_nics_per_ptag = 1;
+		GNIX_WARN(FI_LOG_FABRIC, "Using inter-procss FMA sharing\n");
+	}
+}
+

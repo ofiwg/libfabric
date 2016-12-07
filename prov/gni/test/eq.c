@@ -144,13 +144,12 @@ void eq_rw(int blocking)
 	uint64_t in_err_idx = 10;
 	int in_err_err = 255;
 	int in_err_perrno = -13;
-	uint64_t in_err_data = 12445079;
-	size_t in_err_data_size = sizeof(in_err_data);
 
 	char *in_buf = "12345";
 	char out_buf[1024];
 	const size_t eq_size = 1025;
 	struct fi_eq_err_entry err_buf;
+	char *err_data_buf = "abcd";
 	int err_cnt = 0;
 
 	for (i = 0; i < eq_size; i++) {
@@ -167,15 +166,14 @@ void eq_rw(int blocking)
 		void            *err_data;   /* additional error data */
 		size_t           err_data_size; /* size of err_data */
 #endif
-
-		ret = _gnix_eq_write_error(eq,
+		ret = _gnix_eq_write_error(eq_priv,
 					   (fid_t)(in_err_fid + i),
 					   (void *)(in_err_ctx + i),
 					   in_err_idx + i,
 					   in_err_err + i,
 					   in_err_perrno + i,
-					   (void *)(in_err_data + i),
-					   in_err_data_size + i);
+					   err_data_buf,
+					   sizeof(err_data_buf));
 		cr_assert_eq(ret, FI_SUCCESS);
 		err_cnt++;
 	}
@@ -194,12 +192,17 @@ void eq_rw(int blocking)
 				.data = in_err_idx + i,
 				.err = in_err_err + i,
 				.prov_errno = in_err_perrno + i,
-				.err_data = (void *)(in_err_data + i),
-				.err_data_size = in_err_data_size + i
 			};
 
 			ret = fi_eq_readerr(eq, &err_buf, 0);
-			cr_assert(!memcmp(&tmp_err, &err_buf, sizeof(err_buf)),
+			cr_assert(!memcmp(&tmp_err, &err_buf,
+					  offsetof(struct fi_eq_err_entry,
+						   err_data)),
+				  "bad error fields");
+			cr_assert(err_buf.err_data_size = strlen(err_data_buf),
+				  "bad error data size");
+			cr_assert(!strncmp(err_buf.err_data, err_data_buf,
+					   err_buf.err_data_size),
 				  "bad error data");
 			err_cnt--;
 		} else {

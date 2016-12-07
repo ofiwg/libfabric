@@ -40,8 +40,6 @@
 				 GNIX_CM_DATA_MAX_SIZE)
 
 struct gnix_pep_sock_connreq {
-	int type;
-	int msg_id;
 	struct fi_info info;
 	struct gnix_ep_name src_addr;
 	struct gnix_ep_name dest_addr;

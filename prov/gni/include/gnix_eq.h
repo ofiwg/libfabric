@@ -69,6 +69,12 @@ struct gnix_eq_poll_obj {
 	struct fid *obj_fid;
 };
 
+struct gnix_eq_err_buf {
+	struct dlist_entry dlist;
+	int do_free;
+	char buf[];
+};
+
 /*
  * EQ structure. Contains error and event queue.
  */
@@ -91,9 +97,11 @@ struct gnix_fid_eq {
 	rwlock_t poll_obj_lock;
 	struct dlist_entry poll_objs;
 	struct dlist_entry gnix_fid_eq_list;
+
+	struct dlist_entry err_bufs;
 };
 
-ssize_t _gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
+ssize_t _gnix_eq_write_error(struct gnix_fid_eq *eq, fid_t fid,
 			     void *context, uint64_t index, int err,
 			     int prov_errno, void *err_data,
 			     size_t err_size);

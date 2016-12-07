@@ -56,6 +56,19 @@ static struct fi_ops gnix_fi_eq_ops;
 /*******************************************************************************
  * Helper functions.
  ******************************************************************************/
+
+static void gnix_eq_cleanup_err_bufs(struct gnix_fid_eq *eq, int free_all)
+{
+	struct gnix_eq_err_buf *ebuf, *tmp;
+
+	dlist_for_each_safe(&eq->err_bufs, ebuf, tmp, dlist) {
+		if (free_all || ebuf->do_free) {
+			dlist_remove(&ebuf->dlist);
+			free(ebuf);
+		}
+	}
+}
+
 static int gnix_eq_set_wait(struct gnix_fid_eq *eq)
 {
 	int ret = FI_SUCCESS;
@@ -156,26 +169,24 @@ err:
 	return NULL;
 }
 
-ssize_t _gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
+ssize_t _gnix_eq_write_error(struct gnix_fid_eq *eq, fid_t fid,
 			     void *context, uint64_t index, int err,
 			     int prov_errno, void *err_data,
 			     size_t err_size)
 {
 	struct fi_eq_err_entry *error;
 	struct gnix_eq_entry *event;
-	struct gnix_fid_eq *eq_priv;
 	struct slist_entry *item;
+	struct gnix_eq_err_buf *err_buf;
 
 	ssize_t ret = FI_SUCCESS;
 
 	if (!eq)
 		return -FI_EINVAL;
 
-	eq_priv = container_of(eq, struct gnix_fid_eq, eq_fid);
+	fastlock_acquire(&eq->lock);
 
-	fastlock_acquire(&eq_priv->lock);
-
-	item = _gnix_queue_get_free(eq_priv->errors);
+	item = _gnix_queue_get_free(eq->errors);
 	if (!item) {
 		GNIX_WARN(FI_LOG_EQ, "error creating error entry\n");
 		ret = -FI_ENOMEM;
@@ -191,13 +202,33 @@ ssize_t _gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
 	error->data = index;
 	error->err = err;
 	error->prov_errno = prov_errno;
-	error->err_data = err_data;
-	error->err_data_size = err_size;
 
-	_gnix_queue_enqueue(eq_priv->errors, &event->item);
+	if (err_size) {
+		err_buf = malloc(sizeof(struct gnix_eq_err_buf) + err_size);
+		if (!err_buf) {
+			_gnix_queue_enqueue_free(eq->errors, &event->item);
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+		err_buf->do_free = 0;
+
+		memcpy(err_buf->buf, err_data, err_size);
+		error->err_data = err_buf->buf;
+		error->err_data_size = err_size;
+
+		dlist_insert_tail(&err_buf->dlist, &eq->err_bufs);
+	} else {
+		error->err_data = NULL;
+		error->err_data_size = 0;
+	}
+
+	_gnix_queue_enqueue(eq->errors, &event->item);
+
+	if (eq->wait)
+		_gnix_signal_wait_obj(eq->wait);
 
 err:
-	fastlock_release(&eq_priv->lock);
+	fastlock_release(&eq->lock);
 
 	return ret;
 }
@@ -233,6 +264,8 @@ static void __eq_destruct(void *obj)
 
 	_gnix_queue_destroy(eq->events);
 	_gnix_queue_destroy(eq->errors);
+
+	gnix_eq_cleanup_err_bufs(eq, 1);
 
 	free(eq);
 }
@@ -376,6 +409,8 @@ DIRECT_FN int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	rwlock_init(&eq_priv->poll_obj_lock);
 	dlist_init(&eq_priv->poll_objs);
 
+	dlist_init(&eq_priv->err_bufs);
+
 	ret = gnix_eq_set_wait(eq_priv);
 	if (ret)
 		goto err1;
@@ -451,6 +486,8 @@ static ssize_t __gnix_eq_sread(int blocking, struct fid_eq *eq,
 		return -FI_EINVAL;
 	}
 
+	gnix_eq_cleanup_err_bufs(eq_priv, 0);
+
 	_gnix_eq_progress(eq_priv);
 
 	if (_gnix_queue_peek(eq_priv->errors))
@@ -460,6 +497,11 @@ static ssize_t __gnix_eq_sread(int blocking, struct fid_eq *eq,
 		gnix_wait_wait((struct fid_wait *) eq_priv->wait, timeout);
 
 	fastlock_acquire(&eq_priv->lock);
+
+	if (_gnix_queue_peek(eq_priv->errors)) {
+		read_size = -FI_EAVAIL;
+		goto err;
+	}
 
 	item = _gnix_queue_peek(eq_priv->events);
 
@@ -531,6 +573,8 @@ DIRECT_FN STATIC ssize_t gnix_eq_readerr(struct fid_eq *eq,
 	struct gnix_fid_eq *eq_priv;
 	struct gnix_eq_entry *entry;
 	struct slist_entry *item;
+	struct gnix_eq_err_buf *err_buf;
+	struct fi_eq_err_entry *fi_err;
 
 	ssize_t read_size = sizeof(*buf);
 
@@ -549,8 +593,17 @@ DIRECT_FN STATIC ssize_t gnix_eq_readerr(struct fid_eq *eq,
 	}
 
 	entry = container_of(item, struct gnix_eq_entry, item);
+	fi_err = (struct fi_eq_err_entry *)entry->the_entry;
 
 	memcpy(buf, entry->the_entry, read_size);
+
+	/* If removing an event with err_data, mark err buf to be freed during
+	 * the next EQ read. */
+	if (!(flags & FI_PEEK) && fi_err->err_data) {
+		err_buf = container_of(fi_err->err_data,
+				       struct gnix_eq_err_buf, buf);
+		err_buf->do_free = 1;
+	}
 
 	_gnix_queue_enqueue_free(eq_priv->errors, &entry->item);
 
@@ -585,6 +638,7 @@ DIRECT_FN STATIC ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event,
 
 	entry->the_entry = calloc(1, len);
 	if (!entry->the_entry) {
+		_gnix_queue_enqueue_free(eq_priv->events, &entry->item);
 		GNIX_WARN(FI_LOG_EQ, "error allocating buffer\n");
 		ret = -FI_ENOMEM;
 		goto err;

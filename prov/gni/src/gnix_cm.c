@@ -208,10 +208,39 @@ static int __gnix_ep_connresp(struct gnix_fid_ep *ep,
 			return ret;
 		}
 
+		GNIX_DEBUG(FI_LOG_EP_CTRL, "Received conn accept: %p\n", ep);
+
 		break;
 	case GNIX_PEP_SOCK_RESP_REJECT:
-		GNIX_INFO(FI_LOG_EP_CTRL, "reject not implemented\n");
-		return -FI_EINVAL;
+		/* Undo the connect and generate a failure EQE. */
+		close(ep->conn_fd);
+		ep->conn_fd = -1;
+
+		_gnix_mbox_free(ep->vc->smsg_mbox);
+		ep->vc->smsg_mbox = NULL;
+
+		_gnix_vc_destroy(ep->vc);
+		ep->vc = NULL;
+
+		ep->conn_state = GNIX_EP_UNCONNECTED;
+
+		/* Generate EQE. */
+		eq_entry = (struct fi_eq_cm_entry *)resp->eqe_buf;
+		eq_entry->fid = &ep->ep_fid.fid;
+
+		eq_entry = (struct fi_eq_cm_entry *)resp->eqe_buf;
+		ret = _gnix_eq_write_error(ep->eq, &ep->ep_fid.fid, NULL, 0,
+					   FI_ECONNREFUSED, FI_ECONNREFUSED,
+					   &eq_entry->data, resp->cm_data_len);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "fi_eq_write failed, err: %d\n", ret);
+			return ret;
+		}
+
+		GNIX_DEBUG(FI_LOG_EP_CTRL, "Conn rejected: %p\n", ep);
+
+		break;
 	default:
 		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid response command: %d\n",
 			  resp->cmd);
@@ -336,9 +365,6 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 		ret = -FI_EIO;
 		goto err_connect;
 	}
-
-	req.type = 0; /* TODO GNIX_CONN_REQ; */
-	req.msg_id = 0; /* TODO */
 
 	req.info = *ep_priv->info;
 
@@ -526,7 +552,7 @@ DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 
 	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
 
-	GNIX_DEBUG(FI_LOG_EP_CTRL, "Sent conn resp: %p\n", ep_priv);
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "Sent conn accept: %p\n", ep_priv);
 
 	return FI_SUCCESS;
 
@@ -546,7 +572,31 @@ err_unlock:
 
 DIRECT_FN STATIC int gnix_shutdown(struct fid_ep *ep, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	int ret;
+	struct gnix_fid_ep *ep_priv;
+	struct fi_eq_cm_entry eq_entry = {0};
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
+
+	COND_ACQUIRE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	eq_entry.fid = &ep_priv->ep_fid.fid;
+
+	ret = fi_eq_write(&ep_priv->eq->eq_fid, FI_SHUTDOWN, &eq_entry,
+			  sizeof(eq_entry), 0);
+	if (ret != sizeof(eq_entry)) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "fi_eq_write failed, err: %d\n", ret);
+	} else {
+		ret = FI_SUCCESS;
+	}
+
+	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
+
+	return ret;
 }
 
 struct fi_ops_cm gnix_ep_msg_ops_cm = {
@@ -566,6 +616,26 @@ struct fi_ops_cm gnix_ep_msg_ops_cm = {
  * Passive endpoint handling
  *
  *****************************************************************************/
+
+DIRECT_FN STATIC int gnix_pep_getopt(fid_t fid, int level, int optname,
+				     void *optval, size_t *optlen)
+{
+	if (!fid || !optval || !optlen)
+		return -FI_EINVAL;
+	else if (level != FI_OPT_ENDPOINT)
+		return -FI_ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_CM_DATA_SIZE:
+		*(size_t *)optval = GNIX_CM_DATA_MAX_SIZE;
+		*optlen = sizeof(size_t);
+		break;
+	default:
+		return -FI_ENOPROTOOPT;
+	}
+
+	return 0;
+}
 
 /* Process an incoming connection request at a listening PEP. */
 static int __gnix_pep_connreq(struct gnix_fid_pep *pep, int fd)
@@ -820,8 +890,50 @@ err_unlock:
 DIRECT_FN STATIC int gnix_reject(struct fid_pep *pep, fid_t handle,
 				 const void *param, size_t paramlen)
 {
-	/* Reject connection using handle from EQ conn req. */
-	return -FI_ENOSYS;
+	struct gnix_fid_pep *pep_priv;
+	struct gnix_pep_sock_conn *conn;
+	struct gnix_pep_sock_connresp resp;
+	struct fi_eq_cm_entry *eqe_ptr;
+	int ret;
+
+	if (!pep)
+		return -FI_EINVAL;
+
+	pep_priv = container_of(pep, struct gnix_fid_pep, pep_fid.fid);
+
+	fastlock_acquire(&pep_priv->lock);
+
+	conn = (struct gnix_pep_sock_conn *)handle;
+	if (!conn || conn->fid.fclass != FI_CLASS_CONNREQ) {
+		fastlock_release(&pep_priv->lock);
+		return -FI_EINVAL;
+	}
+
+	resp.cmd = GNIX_PEP_SOCK_RESP_REJECT;
+
+	resp.cm_data_len = paramlen;
+	if (paramlen) {
+		eqe_ptr = (struct fi_eq_cm_entry *)resp.eqe_buf;
+		memcpy(eqe_ptr->data, param, paramlen);
+	}
+
+	ret = write(conn->sock_fd, &resp, sizeof(resp));
+	if (ret != sizeof(resp)) {
+		fastlock_release(&pep_priv->lock);
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Failed to send resp, errno: %d\n",
+			  errno);
+		return -FI_EIO;
+	}
+
+	close(conn->sock_fd);
+	free(conn);
+
+	fastlock_release(&pep_priv->lock);
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "Sent conn reject: %p\n", pep_priv);
+
+	return FI_SUCCESS;
 }
 
 DIRECT_FN int gnix_passive_ep_open(struct fid_fabric *fabric,
@@ -878,7 +990,7 @@ struct fi_ops gnix_pep_fi_ops = {
 struct fi_ops_ep gnix_pep_ops_ep = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = fi_no_cancel,
-	.getopt = fi_no_getopt,
+	.getopt = gnix_pep_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,

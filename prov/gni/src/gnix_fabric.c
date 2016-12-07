@@ -563,7 +563,6 @@ GNI_INI
 	gni_return_t status;
 	gni_version_info_t lib_version;
 	int num_devices;
-	int rc;
 
 	/*
 	 * if no GNI devices available, don't register as provider
@@ -592,33 +591,14 @@ GNI_INI
 		provider = &gnix_prov;
 	}
 
-	rc = _gnix_nics_per_rank(&gnix_max_nics_per_ptag);
-	if (rc == FI_SUCCESS) {
-		GNIX_INFO(FI_LOG_FABRIC, "gnix_max_nics_per_ptag: %u\n",
-			  gnix_max_nics_per_ptag);
-	} else {
-		GNIX_WARN(FI_LOG_FABRIC, "_gnix_nics_per_rank failed: %d\n",
-			  rc);
-	}
+	/* Initialize global MR notifier. */
+	_gnix_notifier_init();
 
-	if (getenv("GNIX_MAX_NICS") != NULL)
-		gnix_max_nics_per_ptag = atoi(getenv("GNIX_MAX_NICS"));
+	/* Initialize global NIC data. */
+	_gnix_nic_init();
 
 	if (getenv("GNIX_DISABLE_XPMEM") != NULL)
 		gnix_xpmem_disabled = true;
-
-	/*
-	 * well if we didn't get 1 nic, that means we must really be doing
-	 * FMA sharing.
-	 */
-
-	if (gnix_max_nics_per_ptag == 0) {
-		gnix_max_nics_per_ptag = 1;
-		GNIX_WARN(FI_LOG_FABRIC, "Using inter-procss FMA sharing\n");
-	}
-
-	/* Initialize global MR notifier. */
-	_gnix_notifier_init();
 
 	return (provider);
 }
