@@ -1,4 +1,4 @@
-.TH "fi_cq" "3" "2016\-11\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cq" "3" "2016\-12\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq \- Completion queue operations
@@ -205,9 +205,9 @@ object.
 Wait objects allow applications to block until the wait object is
 signaled, indicating that a completion is available to be read.
 Users may use fi_control to retrieve the underlying wait object
-associated with an CQ, in order to use it in other system calls.
+associated with a CQ, in order to use it in other system calls.
 The following values may be used to specify the type of wait object
-associated with an CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET,
+associated with a CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET,
 FI_WAIT_FD, and FI_WAIT_MUTEX_COND.
 .IP \[bu] 2
 \f[I]FI_WAIT_NONE\f[] : Used to indicate that the user will not block
@@ -248,8 +248,8 @@ associated with the CQ should target.
 This field should be treated as a hint to the provider and may be
 ignored if the provider does not support interrupt affinity.
 .PP
-\f[I]wait_cond\f[] : By default, when a completion is inserted into an
-CQ that supports blocking reads (fi_cq_sread/fi_cq_sreadfrom), the
+\f[I]wait_cond\f[] : By default, when a completion is inserted into a CQ
+that supports blocking reads (fi_cq_sread/fi_cq_sreadfrom), the
 corresponding wait object is signaled.
 Users may specify a condition that must first be met before the wait is
 satisfied.
@@ -295,7 +295,7 @@ The fi_control call is used to access provider or implementation
 specific details of the completion queue.
 Access to the CQ should be serialized across all calls when fi_control
 is invoked, as it may redirect the implementation of CQ operations.
-The following control commands are usable with an CQ.
+The following control commands are usable with a CQ.
 .PP
 \f[I]FI_GETWAIT (void **)\f[] : This command allows the user to retrieve
 the low\-level wait object associated with the CQ.
@@ -330,9 +330,9 @@ successfully.
 Operations which fail are reported \[aq]out of band\[aq].
 Such operations are retrieved using the fi_cq_readerr function.
 When an operation that completes with an unexpected error is inserted
-into an CQ, it is placed into a temporary error queue.
-Attempting to read from an CQ while an item is in the error queue
-results in an FI_EAVAIL failure.
+into a CQ, it is placed into a temporary error queue.
+Attempting to read from a CQ while an item is in the error queue results
+in an FI_EAVAIL failure.
 Applications may use this return code to determine when to call
 fi_cq_readerr.
 .SS fi_cq_sread / fi_cq_sreadfrom
