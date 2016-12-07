@@ -110,7 +110,7 @@ struct fi_cntr_attr {
 : The counter increments for every successful completion that occurs
   on an associated bound endpoint.  The type of completions -- sends
   and/or receives -- which are counted may be restricted using control
-  flags when binding the counter an the endpoint.  Counters increment
+  flags when binding the counter and the endpoint.  Counters increment
   on all successful completions, separately from whether the operation
   generates an entry in an event queue.
 

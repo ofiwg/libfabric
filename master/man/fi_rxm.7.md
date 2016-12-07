@@ -11,7 +11,7 @@ The RxM (RDM over MSG) Utility Provider
 
 # OVERVIEW
 
-The RxM provider is an utility provider that supports RDM endpoints
+The RxM provider is a utility provider that supports RDM endpoints
 emulated over a base MSG provider.
 
 # REQUIREMENTS

@@ -218,9 +218,9 @@ struct fi_cq_tagged_entry {
 : CQ's may be associated with a specific wait object.  Wait objects
   allow applications to block until the wait object is signaled,
   indicating that a completion is available to be read.  Users may use
-  fi_control to retrieve the underlying wait object associated with an
+  fi_control to retrieve the underlying wait object associated with a
   CQ, in order to use it in other system calls.  The following values
-  may be used to specify the type of wait object associated with an
+  may be used to specify the type of wait object associated with a
   CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD, and
   FI_WAIT_MUTEX_COND.
 
@@ -263,7 +263,7 @@ struct fi_cq_tagged_entry {
   ignored if the provider does not support interrupt affinity.
 
 *wait_cond*
-: By default, when a completion is inserted into an CQ that supports
+: By default, when a completion is inserted into a CQ that supports
   blocking reads (fi_cq_sread/fi_cq_sreadfrom), the corresponding wait
   object is signaled.  Users may specify a condition that must first
   be met before the wait is satisfied.  This field indicates how the
@@ -310,7 +310,7 @@ The fi_control call is used to access provider or implementation
 specific details of the completion queue.  Access to the CQ should be
 serialized across all calls when fi_control is invoked, as it may
 redirect the implementation of CQ operations.  The following control
-commands are usable with an CQ.
+commands are usable with a CQ.
 
 *FI_GETWAIT (void \*\*)*
 : This command allows the user to retrieve the low-level wait object
@@ -341,9 +341,9 @@ the the same as the count parameter.
 CQs are optimized to report operations which have completed
 successfully.  Operations which fail are reported 'out of band'.  Such
 operations are retrieved using the fi_cq_readerr function.  When an
-operation that completes with an unexpected error is inserted into an
+operation that completes with an unexpected error is inserted into a
 CQ, it is placed into a temporary error queue.  Attempting to read
-from an CQ while an item is in the error queue results in an FI_EAVAIL
+from a CQ while an item is in the error queue results in an FI_EAVAIL
 failure.  Applications may use this return code to determine when to
 call fi_cq_readerr.
 
