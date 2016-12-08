@@ -1659,8 +1659,8 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 		fastlock_acquire(&map->lock);
 		conn = sock_ep_lookup_conn(ep_attr, index, addr);
 		if (conn == NULL || conn == SOCK_CM_CONN_IN_PROGRESS) {
-			if (idm_set(&ep_attr->av_idm, index, pe_entry->conn) < 0)
-				SOCK_LOG_ERROR("idm_set failed\n");
+			if (ofi_idm_set(&ep_attr->av_idm, index, pe_entry->conn) < 0)
+				SOCK_LOG_ERROR("ofi_idm_set failed\n");
 		}
 		fastlock_release(&map->lock);
 	}
@@ -2540,9 +2540,9 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep_attr *ep_at
 		if (fd == -1) /* failed to lookup fd due to connection failures */
 			continue;
 
-		conn = idm_lookup(&ep_attr->conn_idm, fd);
+		conn = ofi_idm_lookup(&ep_attr->conn_idm, fd);
 		if (!conn)
-			SOCK_LOG_ERROR("idm_lookup failed\n");
+			SOCK_LOG_ERROR("ofi_idm_lookup failed\n");
 
 		if (!conn || conn->rx_pe_entry)
 			continue;

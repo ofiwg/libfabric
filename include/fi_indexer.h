@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc .  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,35 +45,35 @@
  * indexer by setting free_list and size to 0.
  */
 
-union idx_entry {
+union ofi_idx_entry {
 	void *item;
 	int   next;
 };
 
-#define IDX_INDEX_BITS 16
-#define IDX_ENTRY_BITS 10
-#define IDX_ENTRY_SIZE (1 << IDX_ENTRY_BITS)
-#define IDX_ARRAY_SIZE (1 << (IDX_INDEX_BITS - IDX_ENTRY_BITS))
-#define IDX_MAX_INDEX  ((1 << IDX_INDEX_BITS) - 1)
+#define OFI_IDX_INDEX_BITS 16
+#define OFI_IDX_ENTRY_BITS 10
+#define OFI_IDX_ENTRY_SIZE (1 << OFI_IDX_ENTRY_BITS)
+#define OFI_IDX_ARRAY_SIZE (1 << (OFI_IDX_INDEX_BITS - OFI_IDX_ENTRY_BITS))
+#define OFI_IDX_MAX_INDEX  ((1 << OFI_IDX_INDEX_BITS) - 1)
 
 struct indexer
 {
-	union idx_entry *array[IDX_ARRAY_SIZE];
+	union ofi_idx_entry *array[OFI_IDX_ARRAY_SIZE];
 	int		 free_list;
 	int		 size;
 };
 
-#define idx_array_index(index) (index >> IDX_ENTRY_BITS)
-#define idx_entry_index(index) (index & (IDX_ENTRY_SIZE - 1))
+#define ofi_idx_array_index(index) (index >> OFI_IDX_ENTRY_BITS)
+#define ofi_idx_entry_index(index) (index & (OFI_IDX_ENTRY_SIZE - 1))
 
-int idx_insert(struct indexer *idx, void *item);
-void *idx_remove(struct indexer *idx, int index);
-void idx_replace(struct indexer *idx, int index, void *item);
-void idx_reset(struct indexer *idx);
+int ofi_idx_insert(struct indexer *idx, void *item);
+void *ofi_idx_remove(struct indexer *idx, int index);
+void ofi_idx_replace(struct indexer *idx, int index, void *item);
+void ofi_idx_reset(struct indexer *idx);
 
-static inline void *idx_at(struct indexer *idx, int index)
+static inline void *ofi_idx_at(struct indexer *idx, int index)
 {
-	return (idx->array[idx_array_index(index)] + idx_entry_index(index))->item;
+	return (idx->array[ofi_idx_array_index(index)] + ofi_idx_entry_index(index))->item;
 }
 
 /*
@@ -83,25 +84,25 @@ static inline void *idx_at(struct indexer *idx, int index)
 
 struct index_map
 {
-	void **array[IDX_ARRAY_SIZE];
-	int count[IDX_ARRAY_SIZE];
+	void **array[OFI_IDX_ARRAY_SIZE];
+	int count[OFI_IDX_ARRAY_SIZE];
 };
 
-int idm_set(struct index_map *idm, int index, void *item);
-void *idm_clear(struct index_map *idm, int index);
-void idm_reset(struct index_map *idm);
+int ofi_idm_set(struct index_map *idm, int index, void *item);
+void *ofi_idm_clear(struct index_map *idm, int index);
+void ofi_idm_reset(struct index_map *idm);
 
-static inline void *idm_at(struct index_map *idm, int index)
+static inline void *ofi_idm_at(struct index_map *idm, int index)
 {
 	void **entry;
-	entry = idm->array[idx_array_index(index)];
-	return entry[idx_entry_index(index)];
+	entry = idm->array[ofi_idx_array_index(index)];
+	return entry[ofi_idx_entry_index(index)];
 }
 
-static inline void *idm_lookup(struct index_map *idm, int index)
+static inline void *ofi_idm_lookup(struct index_map *idm, int index)
 {
-	return ((index <= IDX_MAX_INDEX) && idm->array[idx_array_index(index)]) ?
-		idm_at(idm, index) : NULL;
+	return ((index <= OFI_IDX_MAX_INDEX) && idm->array[ofi_idx_array_index(index)]) ?
+		ofi_idm_at(idm, index) : NULL;
 }
 
 #endif /* INDEXER_H */

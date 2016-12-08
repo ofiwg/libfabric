@@ -1033,7 +1033,7 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 static void util_cmap_set_key(struct util_cmap_handle *handle)
 {
 	handle->key = ofi_idx2key(&handle->cmap->key_idx,
-		idx_insert(&handle->cmap->handles_idx, handle));
+		ofi_idx_insert(&handle->cmap->handles_idx, handle));
 }
 
 static void util_cmap_clear_key(struct util_cmap_handle *handle)
@@ -1043,7 +1043,7 @@ static void util_cmap_clear_key(struct util_cmap_handle *handle)
 		FI_WARN(handle->cmap->av->prov, FI_LOG_AV, "Invalid key\n");
 		return;
 	}
-	idx_remove(&handle->cmap->handles_idx, index);
+	ofi_idx_remove(&handle->cmap->handles_idx, index);
 }
 
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key)
@@ -1055,7 +1055,7 @@ struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t ke
 		FI_WARN(cmap->av->prov, FI_LOG_AV, "Invalid key\n");
 		return NULL;
 	}
-	handle = idx_at(&cmap->handles_idx, index);
+	handle = ofi_idx_at(&cmap->handles_idx, index);
 	if (handle->key != key) {
 		FI_WARN(cmap->av->prov, FI_LOG_AV,
 				"handle->key not matching given key\n");

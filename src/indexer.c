@@ -52,23 +52,23 @@
  * list without taking a lock during data lookups.
  */
 
-static int idx_grow(struct indexer *idx)
+static int ofi_idx_grow(struct indexer *idx)
 {
-	union idx_entry *entry;
+	union ofi_idx_entry *entry;
 	int i, start_index;
 
-	if (idx->size >= IDX_ARRAY_SIZE)
+	if (idx->size >= OFI_IDX_ARRAY_SIZE)
 		goto nomem;
 
-	idx->array[idx->size] = calloc(IDX_ENTRY_SIZE, sizeof(union idx_entry));
+	idx->array[idx->size] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(union ofi_idx_entry));
 	if (!idx->array[idx->size])
 		goto nomem;
 
 	entry = idx->array[idx->size];
-	start_index = idx->size << IDX_ENTRY_BITS;
-	entry[IDX_ENTRY_SIZE - 1].next = idx->free_list;
+	start_index = idx->size << OFI_IDX_ENTRY_BITS;
+	entry[OFI_IDX_ENTRY_SIZE - 1].next = idx->free_list;
 
-	for (i = IDX_ENTRY_SIZE - 2; i >= 0; i--)
+	for (i = OFI_IDX_ENTRY_SIZE - 2; i >= 0; i--)
 		entry[i].next = start_index + i + 1;
 
 	/* Index 0 is reserved */
@@ -83,43 +83,43 @@ nomem:
 	return -1;
 }
 
-int idx_insert(struct indexer *idx, void *item)
+int ofi_idx_insert(struct indexer *idx, void *item)
 {
-	union idx_entry *entry;
+	union ofi_idx_entry *entry;
 	int index;
 
 	if ((index = idx->free_list) == 0) {
-		if ((index = idx_grow(idx)) <= 0)
+		if ((index = ofi_idx_grow(idx)) <= 0)
 			return index;
 	}
 
-	entry = idx->array[idx_array_index(index)];
-	idx->free_list = entry[idx_entry_index(index)].next;
-	entry[idx_entry_index(index)].item = item;
+	entry = idx->array[ofi_idx_array_index(index)];
+	idx->free_list = entry[ofi_idx_entry_index(index)].next;
+	entry[ofi_idx_entry_index(index)].item = item;
 	return index;
 }
 
-void *idx_remove(struct indexer *idx, int index)
+void *ofi_idx_remove(struct indexer *idx, int index)
 {
-	union idx_entry *entry;
+	union ofi_idx_entry *entry;
 	void *item;
 
-	entry = idx->array[idx_array_index(index)];
-	item = entry[idx_entry_index(index)].item;
-	entry[idx_entry_index(index)].next = idx->free_list;
+	entry = idx->array[ofi_idx_array_index(index)];
+	item = entry[ofi_idx_entry_index(index)].item;
+	entry[ofi_idx_entry_index(index)].next = idx->free_list;
 	idx->free_list = index;
 	return item;
 }
 
-void idx_replace(struct indexer *idx, int index, void *item)
+void ofi_idx_replace(struct indexer *idx, int index, void *item)
 {
-	union idx_entry *entry;
+	union ofi_idx_entry *entry;
 
-	entry = idx->array[idx_array_index(index)];
-	entry[idx_entry_index(index)].item = item;
+	entry = idx->array[ofi_idx_array_index(index)];
+	entry[ofi_idx_entry_index(index)].item = item;
 }
 
-void idx_reset(struct indexer *idx)
+void ofi_idx_reset(struct indexer *idx)
 {
 	while (idx->size) {
 		free(idx->array[idx->size - 1]);
@@ -129,10 +129,10 @@ void idx_reset(struct indexer *idx)
 	idx->free_list = 0;
 }
 
-static int idm_grow(struct index_map *idm, int index)
+static int ofi_idm_grow(struct index_map *idm, int index)
 {
-	idm->array[idx_array_index(index)] = calloc(IDX_ENTRY_SIZE, sizeof(void *));
-	if (!idm->array[idx_array_index(index)])
+	idm->array[ofi_idx_array_index(index)] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(void *));
+	if (!idm->array[ofi_idx_array_index(index)])
 		goto nomem;
 
 	return index;
@@ -142,46 +142,46 @@ nomem:
 	return -1;
 }
 
-int idm_set(struct index_map *idm, int index, void *item)
+int ofi_idm_set(struct index_map *idm, int index, void *item)
 {
 	void **entry;
 
-	if (index > IDX_MAX_INDEX) {
+	if (index > OFI_IDX_MAX_INDEX) {
 		errno = ENOMEM;
 		return -1;
 	}
 
-	if (!idm->array[idx_array_index(index)]) {
-		if (idm_grow(idm, index) < 0)
+	if (!idm->array[ofi_idx_array_index(index)]) {
+		if (ofi_idm_grow(idm, index) < 0)
 			return -1;
 	}
 
-	entry = idm->array[idx_array_index(index)];
-	entry[idx_entry_index(index)] = item;
-	idm->count[idx_array_index(index)]++;
+	entry = idm->array[ofi_idx_array_index(index)];
+	entry[ofi_idx_entry_index(index)] = item;
+	idm->count[ofi_idx_array_index(index)]++;
 	return index;
 }
 
-void *idm_clear(struct index_map *idm, int index)
+void *ofi_idm_clear(struct index_map *idm, int index)
 {
 	void **entry;
 	void *item;
 
-	entry = idm->array[idx_array_index(index)];
-	item = entry[idx_entry_index(index)];
-	entry[idx_entry_index(index)] = NULL;
-	if (--idm->count[idx_array_index(index)] == 0) {
-		free(idm->array[idx_array_index(index)]);
-		idm->array[idx_array_index(index)] = NULL;
+	entry = idm->array[ofi_idx_array_index(index)];
+	item = entry[ofi_idx_entry_index(index)];
+	entry[ofi_idx_entry_index(index)] = NULL;
+	if (--idm->count[ofi_idx_array_index(index)] == 0) {
+		free(idm->array[ofi_idx_array_index(index)]);
+		idm->array[ofi_idx_array_index(index)] = NULL;
 	}
 	return item;
 }
 
-void idm_reset(struct index_map *idm)
+void ofi_idm_reset(struct index_map *idm)
 {
 	int i;
 
-	for (i=0; i<IDX_ARRAY_SIZE; i++) {
+	for (i=0; i<OFI_IDX_ARRAY_SIZE; i++) {
 		if (idm->array[i]) {
 			free(idm->array[i]);
 			idm->array[i] = NULL;
