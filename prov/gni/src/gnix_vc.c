@@ -1419,7 +1419,6 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	int ret = FI_SUCCESS;
 	int remote_id;
 	struct gnix_vc *vc_ptr = NULL;
-	struct gnix_cm_nic *cm_nic = NULL;
 	struct gnix_nic *nic = NULL;
 	struct dlist_entry *de;
 
@@ -1427,10 +1426,6 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 
 	nic = ep_priv->nic;
 	if (nic == NULL)
-		return -FI_EINVAL;
-
-	cm_nic = ep_priv->cm_nic;
-	if (cm_nic == NULL)
 		return -FI_EINVAL;
 
 	/*
