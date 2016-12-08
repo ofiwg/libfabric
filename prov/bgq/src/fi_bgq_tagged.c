@@ -107,10 +107,12 @@ static struct fi_ops_tagged						\
 		FI_BGQ_TAGGED_SPECIALIZED_FUNC_NAME(tsend, LOCK),	\
 	.sendv		= fi_no_tagged_sendv,				\
 	.sendmsg	= fi_bgq_tsendmsg,				\
-	.inject =							\
+	.inject 	=						\
 		FI_BGQ_TAGGED_SPECIALIZED_FUNC_NAME(tinject, LOCK),	\
-	.senddata	= fi_no_tagged_senddata,			\
-	.injectdata	= fi_no_tagged_injectdata			\
+	.senddata	=						\
+		FI_BGQ_TAGGED_SPECIALIZED_FUNC_NAME(tsenddata, LOCK),	\
+	.injectdata	=						\
+		FI_BGQ_TAGGED_SPECIALIZED_FUNC_NAME(tinjectdata, LOCK),	\
 }
 
 FI_BGQ_TAGGED_OPS_STRUCT(0);

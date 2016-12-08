@@ -105,7 +105,7 @@ int fi_bgq_set_default_info()
 		.av_type	= FI_AV_MAP,
 		.mr_mode	= FI_MR_SCALABLE,
 		.mr_key_size	= 2,
-		.cq_data_size	= 0,
+		.cq_data_size	= FI_BGQ_REMOTE_CQ_DATA_SIZE,
 		.cq_cnt		= 128 / ppn,
 		.ep_cnt		= SIZE_MAX,
 		.tx_ctx_cnt	= tx_ctx_cnt,

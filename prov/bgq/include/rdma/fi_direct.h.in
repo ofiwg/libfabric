@@ -53,6 +53,7 @@ static const size_t FI_BGQ_TOTAL_BUFFERED_RECV	= (512ULL);
 static const uint64_t FI_BGQ_TX_SIZE		= (16*1024);
 static const uint64_t FI_BGQ_RX_SIZE		= (16*1024);
 static const uint64_t FI_BGQ_MR_KEY_SIZE	= (2);
+static const size_t   FI_BGQ_REMOTE_CQ_DATA_SIZE= 4;
 /* TODO: revisit these values, these are just placeholders now */
 /*
 static const uint64_t FI_BGQ_CMD_SLOT_AVAIL_POLL= (1ULL<<10);
@@ -61,8 +62,6 @@ static const uint64_t FI_BGQ_UNEXPECTED_COUNT	= (1ULL<<8);
 static const uint64_t FI_BGQ_TRIG_OP_COUNT	= (0);
 static const uint64_t FI_BGQ_MAX_NUM_EP		= (1ULL<<10); // TODO: is it needed?
 static const size_t   FI_BGQ_CACHE_LINE_SIZE	= 128;
-static const size_t   FI_BGQ_RMA_CQ_DATA_SIZE	= 8;
-static const size_t   FI_BGQ_TAGGED_CQ_DATA_SIZE= 4;
 static const size_t   FI_BGQ_DEFAULT_CQ_DEPTH   = 32768;
 */
 static const uint64_t FI_BGQ_MEM_TAG_FORMAT	= (0xFFFFFFFFFFFFFFFFULL);

@@ -77,26 +77,28 @@ ssize_t fi_bgq_senddata(struct fid_ep *ep, const void *buf, size_t len, void *de
 /* "FI_BGQ_MSG_SPECIALIZED_FUNC(0)" is already declared via FABRIC_DIRECT */
 FI_BGQ_MSG_SPECIALIZED_FUNC(1)
 
-#define FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK)			\
+#define FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK)				\
 	fi_bgq_ops_msg_ ## LOCK
 
-#define FI_BGQ_MSG_OPS_STRUCT(LOCK)				\
-static struct fi_ops_msg					\
-	FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK) = {			\
-	.size		= sizeof(struct fi_ops_msg),		\
-	.recv		=					\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recv, LOCK),	\
-	.recvv		= fi_no_msg_recvv,			\
-	.recvmsg	=					\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recvmsg, LOCK),\
-	.send		=					\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(send, LOCK),	\
-	.sendv		= fi_bgq_sendv,				\
-	.sendmsg	= fi_bgq_sendmsg,			\
-	.inject	=						\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(inject, LOCK),	\
-	.senddata	= fi_no_msg_senddata,			\
-	.injectdata	= fi_no_msg_injectdata			\
+#define FI_BGQ_MSG_OPS_STRUCT(LOCK)					\
+static struct fi_ops_msg						\
+	FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK) = {				\
+	.size		= sizeof(struct fi_ops_msg),			\
+	.recv		=						\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recv, LOCK),		\
+	.recvv		= fi_no_msg_recvv,				\
+	.recvmsg	=						\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recvmsg, LOCK),	\
+	.send		=						\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(send, LOCK),		\
+	.sendv		= fi_bgq_sendv,					\
+	.sendmsg	= fi_bgq_sendmsg,				\
+	.inject		=						\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(inject, LOCK),		\
+	.senddata	=						\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(senddata, LOCK),	\
+	.injectdata	=						\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(injectdata, LOCK),	\
 }
 
 FI_BGQ_MSG_OPS_STRUCT(0);

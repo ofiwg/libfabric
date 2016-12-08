@@ -263,7 +263,7 @@ int fi_bgq_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->av_type		= FI_AV_MAP;
 	attr->mr_mode		= FI_MR_SCALABLE;
 	attr->mr_key_size 	= 2;			/* 2^16 keys */
-	attr->cq_data_size 	= 0;
+	attr->cq_data_size 	= FI_BGQ_REMOTE_CQ_DATA_SIZE;
 	attr->cq_cnt		= 128 / ppn;
 	attr->ep_cnt		= 1;			/* TODO - what about endpoints that only use a shared receive context and a shared transmit context? */
 	attr->tx_ctx_cnt	= tx_ctx_cnt;
@@ -366,7 +366,7 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	switch(type) {
 	case FI_BGQ_DOMAIN_AVMAP:
 	case FI_BGQ_DOMAIN_AVTABLE:
-		domain_attr->cq_data_size = 0;//FI_BGQ_TAGGED_CQ_DATA_SIZE;
+		domain_attr->cq_data_size = FI_BGQ_REMOTE_CQ_DATA_SIZE;
 		break;
 	default:
 		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
@@ -484,11 +484,6 @@ int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 	}
 	if (attr->mr_key_size) {
 		switch(type) {
-		//case FI_BGQ_DOMAIN_RMA_AVTABLE:
-		//case FI_BGQ_DOMAIN_RMA_AVMAP:
-		//	FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-		//			"memory keys not supported with this domain\n");
-		//	goto err;
 		case FI_BGQ_DOMAIN_AVTABLE:
 		case FI_BGQ_DOMAIN_AVMAP:
 			if (attr->mr_key_size > FI_BGQ_MR_KEY_SIZE) {
@@ -505,27 +500,14 @@ int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 	}
 	if (attr->cq_data_size) {
 		switch(type) {
-		//case FI_BGQ_DOMAIN_RMA_AVTABLE:
-		//case FI_BGQ_DOMAIN_RMA_AVMAP:
-#ifdef TODO
-			if (attr->cq_data_size > FI_BGQ_RMA_CQ_DATA_SIZE) {
-				FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-						"max cq data supported is %d\n",
-						FI_BGQ_RMA_CQ_DATA_SIZE);
-				goto err;
-			}
-#endif
-			break;
 		case FI_BGQ_DOMAIN_AVTABLE:
 		case FI_BGQ_DOMAIN_AVMAP:
-#ifdef TODO
-			if (attr->cq_data_size > FI_BGQ_TAGGED_CQ_DATA_SIZE) {
+			if (attr->cq_data_size > FI_BGQ_REMOTE_CQ_DATA_SIZE) {
 				FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
 						"max cq data supported is %d\n",
-						FI_BGQ_TAGGED_CQ_DATA_SIZE);
+						FI_BGQ_REMOTE_CQ_DATA_SIZE);
 				goto err;
 			}
-#endif
 			break;
 		default:
 			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
