@@ -51,6 +51,7 @@ _gni_headers = \
 	prov/gni/include/gnix_av.h \
 	prov/gni/include/gnix_bitmap.h \
 	prov/gni/include/gnix_buddy_allocator.h \
+	prov/gni/include/gnix_cm.h \
 	prov/gni/include/gnix_cm_nic.h \
 	prov/gni/include/gnix_cntr.h \
 	prov/gni/include/gnix_cq.h \
