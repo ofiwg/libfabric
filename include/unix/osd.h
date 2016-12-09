@@ -36,6 +36,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/socket.h>
+
+/* MSG_NOSIGNAL doesn't exist on OS X */
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 #define FI_DESTRUCTOR(func) static __attribute__((destructor)) void func
 
@@ -65,6 +71,12 @@ static inline ssize_t ofi_read_socket(int fd, void *buf, size_t count)
 static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
 {
 	return write(fd, buf, count);
+}
+
+static inline ssize_t ofi_send_socket(int fd, const void *buf, size_t count,
+        int flags)
+{
+	return send(fd, buf, count, flags);
 }
 
 static inline int ofi_close_socket(int socket)

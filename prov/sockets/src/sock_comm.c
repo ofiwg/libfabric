@@ -48,12 +48,17 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 				     const void *buf, size_t len)
 {
 	ssize_t ret;
+	int flags = 0;
 
-	ret = ofi_write_socket(conn->sock_fd, buf, len);
+	ret = ofi_send_socket(conn->sock_fd, buf, len, MSG_NOSIGNAL);
 	if (ret < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			ret = 0;
-		else
+		else if (errno == EPIPE) {
+			conn->connected = 0;
+			SOCK_LOG_DBG("Disconnected: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
+                               ntohs(conn->addr.sin_port));
+		} else
 			SOCK_LOG_DBG("write error: %s\n", strerror(errno));
 	}
 	if (ret > 0)
@@ -151,8 +156,8 @@ static void sock_comm_recv_buffer(struct sock_pe_entry *pe_entry)
 
 	avail = rbavail(&pe_entry->comm_buf);
 	assert(avail == pe_entry->comm_buf.size);
-	pe_entry->comm_buf.rcnt = 
-		pe_entry->comm_buf.wcnt = 
+	pe_entry->comm_buf.rcnt =
+		pe_entry->comm_buf.wcnt =
 		pe_entry->comm_buf.wpos = 0;
 
 	max_read = pe_entry->rem ? pe_entry->rem :

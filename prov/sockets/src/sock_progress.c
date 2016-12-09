@@ -357,6 +357,15 @@ static void sock_pe_report_rx_error(struct sock_pe_entry *pe_entry, int rem, int
 				     err, -err, NULL);
 }
 
+static void sock_pe_report_tx_error(struct sock_pe_entry *pe_entry, int rem, int err)
+{
+	if (pe_entry->comp->send_cntr)
+		sock_cntr_err_inc(pe_entry->comp->send_cntr);
+	if (pe_entry->comp->send_cq)
+		sock_cq_report_error(pe_entry->comp->send_cq, pe_entry, rem,
+				     err, -err, NULL);
+}
+
 static void sock_pe_report_tx_rma_read_err(struct sock_pe_entry *pe_entry,
 						int err)
 {
@@ -2086,16 +2095,32 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 				     struct sock_tx_ctx *tx_ctx,
 				     struct sock_pe_entry *pe_entry)
 {
-	int ret;
+	int ret = 0;
 	struct sock_conn *conn = pe_entry->conn;
 
+	if (pe_entry->is_complete)
+		goto out;
+
+	if (sock_comm_is_disconnected(pe_entry)) {
+		SOCK_LOG_DBG("conn disconnected: removing fd from pollset\n");
+		if (pe_entry->ep_attr->cmap.used > 0 &&
+		     pe_entry->conn->sock_fd != -1) {
+			fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
+			sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
+			fastlock_release(&pe_entry->ep_attr->cmap.lock);
+		}
+
+		sock_pe_report_tx_error(pe_entry, 0, FI_EIO);
+		goto out;
+	}
+
 	if (!pe_entry->conn || pe_entry->pe.tx.send_done)
-		return 0;
+		goto out;
 
 	if (conn->tx_pe_entry != NULL && conn->tx_pe_entry != pe_entry) {
 		SOCK_LOG_DBG("Cannot progress %p as conn %p is being used by %p\n",
 			      pe_entry, conn, conn->tx_pe_entry);
-		return 0;
+		goto out;
 	}
 
 	if (conn->tx_pe_entry == NULL) {
@@ -2106,13 +2131,13 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 	if ((pe_entry->flags & FI_FENCE) &&
 	    (tx_ctx->pe_entry_list.next != &pe_entry->ctx_entry)) {
 		SOCK_LOG_DBG("Waiting for FI_FENCE\n");
-		return 0;
+		goto out;
 	}
 
 	if (!pe_entry->pe.tx.header_sent) {
 		if (sock_pe_send_field(pe_entry, &pe_entry->msg_hdr,
 				       sizeof(struct sock_msg_hdr), 0))
-			return 0;
+			goto out;
 		pe_entry->pe.tx.header_sent = 1;
 	}
 
@@ -2139,6 +2164,11 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		break;
 	}
 
+out:
+	if (pe_entry->is_complete) {
+		sock_pe_release_entry(pe, pe_entry);
+		SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
+	}
 	return ret;
 }
 
@@ -2397,6 +2427,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	pe_entry->total_len = msg_hdr->msg_len;
 	msg_hdr->msg_len = htonll(msg_hdr->msg_len);
 	msg_hdr->pe_entry_id = htons(msg_hdr->pe_entry_id);
+
 	return sock_pe_progress_tx_entry(pe, tx_ctx, pe_entry);
 }
 
@@ -2613,11 +2644,6 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 			SOCK_LOG_ERROR("Error in progressing %p\n", pe_entry);
 			goto out;
 		}
-
-		if (pe_entry->is_complete) {
-			sock_pe_release_entry(pe, pe_entry);
-			SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
-		}
 	}
 
 	fastlock_acquire(&tx_ctx->rlock);
@@ -2646,7 +2672,7 @@ static int sock_pe_wait_ok(struct sock_pe *pe)
 		return 0;
 
 	if (dlist_empty(&pe->tx_list) && dlist_empty(&pe->rx_list))
-		return 0;
+		return 1;
 
 	if (!dlist_empty(&pe->tx_list)) {
 		for (entry = pe->tx_list.next;
