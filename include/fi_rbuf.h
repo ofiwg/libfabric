@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,8 +32,8 @@
  *
  */
 
-#if !defined(RBUF_H)
-#define RBUF_H
+#if !defined(FI_RBUF_H)
+#define FI_RBUF_H
 
 #include "config.h"
 
@@ -342,4 +343,4 @@ static inline size_t rbfdwait(struct ringbuffd *rbfd, int timeout)
 }
 
 
-#endif /* RBUF_H */
+#endif /* FI_RBUF_H */
