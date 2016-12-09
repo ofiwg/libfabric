@@ -48,7 +48,6 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 				     const void *buf, size_t len)
 {
 	ssize_t ret;
-	int flags = 0;
 
 	ret = ofi_send_socket(conn->sock_fd, buf, len, MSG_NOSIGNAL);
 	if (ret < 0) {

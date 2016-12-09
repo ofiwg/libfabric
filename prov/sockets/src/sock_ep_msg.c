@@ -390,7 +390,6 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 static int sock_cm_send(int fd, const void *buf, int len)
 {
 	int ret, done = 0;
-	int flags = 0;
 
 	while (done != len) {
 		ret = ofi_send_socket(fd, (const char*) buf + done, len - done, MSG_NOSIGNAL);
