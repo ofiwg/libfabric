@@ -312,7 +312,7 @@ int fi_bgq_progress_disable (struct fi_bgq_domain *bgq_domain, const unsigned id
 		fi_bgq_msync(FI_BGQ_MSYNC_TYPE_RO);
 	}
 
-	int rc = 1;
+	int rc __attribute__ ((unused));
 	void *retval = NULL;
 	rc = pthread_join(bgq_domain->progress.thread[id].pthread, &retval);
 	assert(0 == rc);

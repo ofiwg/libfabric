@@ -176,7 +176,7 @@ fi_bgq_domain_bat_write(struct fi_bgq_domain *bgq_domain, uint64_t requested_key
 		bgq_domain->bat[requested_key].paddr = 0;
 	} else {
 		Kernel_MemoryRegion_t cnk_mr;
-		uint32_t cnk_rc;
+		uint32_t cnk_rc __attribute__ ((unused));
 		cnk_rc = Kernel_CreateMemoryRegion(&cnk_mr, (void *)buf, len);
 		assert(cnk_rc == 0);
 

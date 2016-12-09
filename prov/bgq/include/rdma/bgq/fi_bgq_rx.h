@@ -756,7 +756,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 
 	if (bgq_ep->rx.poll.rfifo[poll_msg].ue.free == NULL) { /* unlikely */
 		struct fi_bgq_mu_packet * block = NULL;
-		int rc = 0;
+		int rc __attribute__ ((unused));
 		rc = posix_memalign((void **)&block,
 			32, sizeof(struct fi_bgq_mu_packet)*FI_BGQ_UEPKT_BLOCKSIZE);
 		assert(rc==0);

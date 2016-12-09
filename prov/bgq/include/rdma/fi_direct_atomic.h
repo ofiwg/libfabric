@@ -284,7 +284,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 			bgq_context->tag = 0;
 
 			uint64_t byte_counter_paddr = 0;
-			uint32_t cnk_rc = 0;
+			uint32_t cnk_rc __attribute__ ((unused));
 			cnk_rc = fi_bgq_cnk_vaddr2paddr((void*)&bgq_context->byte_counter,
 					sizeof(uint64_t), &byte_counter_paddr);
 			assert(cnk_rc == 0);
@@ -466,7 +466,7 @@ static inline ssize_t fi_bgq_atomic_generic(struct fid_ep *ep,
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) return ret;
 
-	size_t xfer = 0;
+	size_t xfer __attribute__ ((unused));
 	xfer = fi_bgq_atomic_internal(bgq_ep, buf, count,
 		(union fi_bgq_addr *)&dst_addr,	addr, key, datatype, op,
 		context, 0, NULL, 0, NULL,

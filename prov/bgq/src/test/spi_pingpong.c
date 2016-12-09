@@ -48,7 +48,7 @@ static inline void bat_allocate (MUSPI_BaseAddressTableSubGroup_t * bat_subgroup
 {
 	uint32_t nbatids;
 	uint32_t batids[BGQ_MU_NUM_DATA_COUNTERS_PER_SUBGROUP];
-	int32_t cnk_rc = 0;
+	int32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_QueryBaseAddressTable(0, &nbatids, batids);
 	assert(cnk_rc == 0);
 	assert(nbatids > 0);
@@ -60,7 +60,7 @@ static inline void bat_allocate (MUSPI_BaseAddressTableSubGroup_t * bat_subgroup
 static inline void bat_write (MUSPI_BaseAddressTableSubGroup_t * bat_subgroup, uint64_t index, uint64_t offset)
 {
 
-	int32_t cnk_rc = 0;
+	int32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = MUSPI_SetBaseAddress(bat_subgroup, index, offset);
 	assert(cnk_rc == 0);
 
@@ -103,7 +103,7 @@ static inline void do_gi_barrier_no_timeout (MUSPI_GIBarrier_t * GIBarrier)
 static inline MUSPI_RecFifo_t * allocate_reception_fifo (MUSPI_RecFifoSubGroup_t * rfifo_subgroup)
 {
 
-	int rc;
+	int rc __attribute__ ((unused));
 	uint8_t * memptr;
 
 	size_t nbytes = 8 * 1024 * 1024;

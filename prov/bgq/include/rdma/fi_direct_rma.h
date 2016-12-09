@@ -132,7 +132,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 
 			/* determine the physical address of the destination data location */
 			uint64_t iov_base_paddr = 0;
-			uint32_t cnk_rc = 0;
+			uint32_t cnk_rc __attribute__ ((unused));
 			cnk_rc = fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &iov_base_paddr);
 			assert(cnk_rc==0);
 			MUSPI_SetRecPayloadBaseAddressInfo(&dput_desc[i], FI_BGQ_MU_BAT_ID_GLOBAL, iov_base_paddr);
@@ -181,7 +181,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			bgq_context->tag = 0;
 
 			uint64_t byte_counter_paddr = 0;
-			uint32_t cnk_rc = 0;
+			uint32_t cnk_rc __attribute__ ((unused));
 			cnk_rc = fi_bgq_cnk_vaddr2paddr((void*)&bgq_context->byte_counter,
 						sizeof(uint64_t), &byte_counter_paddr);
 			assert(cnk_rc == 0);
@@ -256,7 +256,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 		bgq_context->tag = 0;
 
 		uint64_t byte_counter_paddr = 0;
-		uint32_t cnk_rc = 0;
+		uint32_t cnk_rc __attribute__ ((unused));
 		cnk_rc = fi_bgq_cnk_vaddr2paddr((void*)&bgq_context->byte_counter,
 				sizeof(uint64_t), &byte_counter_paddr);
 		assert(cnk_rc == 0);
@@ -516,7 +516,7 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 
 		/* determine the physical address of the source data */
 		uint64_t src_paddr = 0;
-		uint32_t cnk_rc = 0;
+		uint32_t cnk_rc __attribute__ ((unused));
 		cnk_rc = fi_bgq_cnk_vaddr2paddr(buf, len, &src_paddr);
 		assert(cnk_rc==0);
 

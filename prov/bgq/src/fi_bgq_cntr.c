@@ -223,7 +223,7 @@ int fi_bgq_cntr_open(struct fid_domain *domain,
 
 	/* ---- allocate and initialize the "std" and "err" mu/l2 counters ---- */
 	{
-		uint32_t cnk_rc = 0;
+		uint32_t cnk_rc __attribute__ ((unused));
 		struct l2atomic_lock * lock = &bgq_cntr->domain->mu.lock;
 		struct fi_bgq_node * node = &bgq_cntr->domain->fabric->node;
 

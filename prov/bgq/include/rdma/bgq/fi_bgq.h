@@ -110,7 +110,7 @@ static inline void always_assert(bool val, char *msg)
 static inline void fi_bgq_ref_init(struct fi_bgq_node *node,
 		struct l2atomic_counter *ref, char *name)
 {
-	int ret = -1;
+	int ret __attribute__ ((unused));
 	ret = fi_bgq_node_counter_allocate(node, ref);
 	assert(ret == 0);
 
