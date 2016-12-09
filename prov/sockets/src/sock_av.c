@@ -397,10 +397,10 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 		fastlock_acquire(&sock_ep->attr->cmap.lock);
 		for (i = 0; i < count; i++) {
         		idx = fi_addr[i] & sock_ep->attr->av->mask;
-			conn = idm_lookup(&sock_ep->attr->av_idm, idx);
+			conn = ofi_idm_lookup(&sock_ep->attr->av_idm, idx);
 			if (conn && conn->sock_fd != -1) {
 				sock_ep_remove_conn(sock_ep->attr, conn);
-				idm_clear(&sock_ep->attr->av_idm, idx);
+				ofi_idm_clear(&sock_ep->attr->av_idm, idx);
 			}
 		}
 		fastlock_release(&sock_ep->attr->cmap.lock);

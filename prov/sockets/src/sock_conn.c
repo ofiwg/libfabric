@@ -73,7 +73,7 @@ ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx
 	total_len = tx_op.src_iov_len + sizeof(struct sock_op_send);
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbavail(&tx_ctx->rb) < total_len) {
+	if (ofi_rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}
@@ -189,8 +189,8 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 	sock_set_sockopts(conn_fd);
 
 
-	if (idm_set(&ep_attr->conn_idm, conn_fd, &map->table[index]) < 0)
-		SOCK_LOG_ERROR("idm_set failed\n");
+	if (ofi_idm_set(&ep_attr->conn_idm, conn_fd, &map->table[index]) < 0)
+		SOCK_LOG_ERROR("ofi_idm_set failed\n");
 
 	if (sock_epoll_add(&map->epoll_set, conn_fd))
 		SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
@@ -511,10 +511,10 @@ out:
 		goto err;
 	}
 	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ? FI_ADDR_NOTAVAIL : index;
-	conn = idm_lookup(&ep_attr->av_idm, index);
+	conn = ofi_idm_lookup(&ep_attr->av_idm, index);
 	if (conn == SOCK_CM_CONN_IN_PROGRESS) {
-		if (idm_set(&ep_attr->av_idm, index, new_conn) < 0)
-			SOCK_LOG_ERROR("idm_set failed\n");
+		if (ofi_idm_set(&ep_attr->av_idm, index, new_conn) < 0)
+			SOCK_LOG_ERROR("ofi_idm_set failed\n");
 		conn = new_conn;
 	}
 	fastlock_release(&ep_attr->cmap.lock);

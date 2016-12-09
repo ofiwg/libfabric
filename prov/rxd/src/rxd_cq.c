@@ -48,12 +48,12 @@ static int rxd_cq_write_ctx(struct rxd_cq *cq,
 			     struct fi_cq_tagged_entry *cq_entry)
 {
 	struct fi_cq_tagged_entry *comp;
-	if (cirque_isfull(cq->util_cq.cirq))
+	if (ofi_cirque_isfull(cq->util_cq.cirq))
 		return -FI_ENOSPC;
 
-	comp = cirque_tail(cq->util_cq.cirq);
+	comp = ofi_cirque_tail(cq->util_cq.cirq);
 	comp->op_context = cq_entry->op_context;
-	cirque_commit(cq->util_cq.cirq);
+	ofi_cirque_commit(cq->util_cq.cirq);
 	return 0;
 }
 
@@ -69,14 +69,14 @@ static int rxd_cq_write_msg(struct rxd_cq *cq,
 			     struct fi_cq_tagged_entry *cq_entry)
 {
 	struct fi_cq_tagged_entry *comp;
-	if (cirque_isfull(cq->util_cq.cirq))
+	if (ofi_cirque_isfull(cq->util_cq.cirq))
 		return -FI_ENOSPC;
 
-	comp = cirque_tail(cq->util_cq.cirq);
+	comp = ofi_cirque_tail(cq->util_cq.cirq);
 	comp->op_context = cq_entry->op_context;
 	comp->flags = cq_entry->flags;
 	comp->len = cq_entry->len;
-	cirque_commit(cq->util_cq.cirq);
+	ofi_cirque_commit(cq->util_cq.cirq);
 	return 0;
 }
 
@@ -92,16 +92,16 @@ static int rxd_cq_write_data(struct rxd_cq *cq,
 			      struct fi_cq_tagged_entry *cq_entry)
 {
 	struct fi_cq_tagged_entry *comp;
-	if (cirque_isfull(cq->util_cq.cirq))
+	if (ofi_cirque_isfull(cq->util_cq.cirq))
 		return -FI_ENOSPC;
 
-	comp = cirque_tail(cq->util_cq.cirq);
+	comp = ofi_cirque_tail(cq->util_cq.cirq);
 	comp->op_context = cq_entry->op_context;
 	comp->flags = cq_entry->flags;
 	comp->len = cq_entry->len;
 	comp->buf = cq_entry->buf;
 	comp->data = cq_entry->data;
-	cirque_commit(cq->util_cq.cirq);
+	ofi_cirque_commit(cq->util_cq.cirq);
 	return 0;
 }
 
@@ -117,15 +117,15 @@ static int rxd_cq_write_tagged(struct rxd_cq *cq,
 				struct fi_cq_tagged_entry *cq_entry)
 {
 	struct fi_cq_tagged_entry *comp;
-	if (cirque_isfull(cq->util_cq.cirq))
+	if (ofi_cirque_isfull(cq->util_cq.cirq))
 		return -FI_ENOSPC;
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
 		"report completion: %p\n", cq_entry->tag);
 
-	comp = cirque_tail(cq->util_cq.cirq);
+	comp = ofi_cirque_tail(cq->util_cq.cirq);
 	*comp = *cq_entry;
-	cirque_commit(cq->util_cq.cirq);
+	ofi_cirque_commit(cq->util_cq.cirq);
 	return 0;
 }
 

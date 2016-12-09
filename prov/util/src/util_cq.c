@@ -122,28 +122,28 @@ ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	fastlock_acquire(&cq->cq_lock);
-	if (cirque_isempty(cq->cirq)) {
+	if (ofi_cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->cq_lock);
 		cq->progress(cq);
 		fastlock_acquire(&cq->cq_lock);
-		if (cirque_isempty(cq->cirq)) {
+		if (ofi_cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
 			goto out;
 		}
 	}
 
-	if (count > cirque_usedcnt(cq->cirq))
-		count = cirque_usedcnt(cq->cirq);
+	if (count > ofi_cirque_usedcnt(cq->cirq))
+		count = ofi_cirque_usedcnt(cq->cirq);
 
 	for (i = 0; i < count; i++) {
-		entry = cirque_head(cq->cirq);
+		entry = ofi_cirque_head(cq->cirq);
 		if (entry->flags & UTIL_FLAG_ERROR) {
 			if (!i)
 				i = -FI_EAVAIL;
 			break;
 		}
 		cq->read_entry(&buf, entry);
-		cirque_discard(cq->cirq);
+		ofi_cirque_discard(cq->cirq);
 	}
 out:
 	fastlock_release(&cq->cq_lock);
@@ -168,29 +168,29 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	}
 
 	fastlock_acquire(&cq->cq_lock);
-	if (cirque_isempty(cq->cirq)) {
+	if (ofi_cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->cq_lock);
 		cq->progress(cq);
 		fastlock_acquire(&cq->cq_lock);
-		if (cirque_isempty(cq->cirq)) {
+		if (ofi_cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
 			goto out;
 		}
 	}
 
-	if (count > cirque_usedcnt(cq->cirq))
-		count = cirque_usedcnt(cq->cirq);
+	if (count > ofi_cirque_usedcnt(cq->cirq))
+		count = ofi_cirque_usedcnt(cq->cirq);
 
 	for (i = 0; i < count; i++) {
-		entry = cirque_head(cq->cirq);
+		entry = ofi_cirque_head(cq->cirq);
 		if (entry->flags & UTIL_FLAG_ERROR) {
 			if (!i)
 				i = -FI_EAVAIL;
 			break;
 		}
-		src_addr[i] = cq->src[cirque_rindex(cq->cirq)];
+		src_addr[i] = cq->src[ofi_cirque_rindex(cq->cirq)];
 		cq->read_entry(&buf, entry);
-		cirque_discard(cq->cirq);
+		ofi_cirque_discard(cq->cirq);
 	}
 out:
 	fastlock_release(&cq->cq_lock);
@@ -207,9 +207,9 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	fastlock_acquire(&cq->cq_lock);
-	if (!cirque_isempty(cq->cirq) &&
-	    (cirque_head(cq->cirq)->flags & UTIL_FLAG_ERROR)) {
-		cirque_discard(cq->cirq);
+	if (!ofi_cirque_isempty(cq->cirq) &&
+	    (ofi_cirque_head(cq->cirq)->flags & UTIL_FLAG_ERROR)) {
+		ofi_cirque_discard(cq->cirq);
 		entry = slist_remove_head(&cq->err_list);
 		err = container_of(entry, struct util_cq_err_entry, list_entry);
 		*buf = err->err_entry;

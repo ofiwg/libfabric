@@ -101,13 +101,13 @@ static void udpx_tx_comp(struct udpx_ep *ep, void *context)
 {
 	struct fi_cq_tagged_entry *comp;
 
-	comp = cirque_tail(ep->util_ep.tx_cq->cirq);
+	comp = ofi_cirque_tail(ep->util_ep.tx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_SEND;
 	comp->len = 0;
 	comp->buf = NULL;
 	comp->data = 0;
-	cirque_commit(ep->util_ep.tx_cq->cirq);
+	ofi_cirque_commit(ep->util_ep.tx_cq->cirq);
 }
 
 static void udpx_tx_comp_signal(struct udpx_ep *ep, void *context)
@@ -121,19 +121,19 @@ static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 {
 	struct fi_cq_tagged_entry *comp;
 
-	comp = cirque_tail(ep->util_ep.rx_cq->cirq);
+	comp = ofi_cirque_tail(ep->util_ep.rx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_RECV | flags;
 	comp->len = len;
 	comp->buf = buf;
 	comp->data = 0;
-	cirque_commit(ep->util_ep.rx_cq->cirq);
+	ofi_cirque_commit(ep->util_ep.rx_cq->cirq);
 }
 
 static void udpx_rx_src_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 			     size_t len, void *buf, void *addr)
 {
-	ep->util_ep.rx_cq->src[cirque_windex(ep->util_ep.rx_cq->cirq)] =
+	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] =
 			ip_av_get_index(ep->util_ep.av, addr);
 	udpx_rx_comp(ep, context, flags, len, buf, addr);
 }
@@ -168,17 +168,17 @@ void udpx_ep_progress(struct util_ep *util_ep)
 	hdr.msg_flags = 0;
 
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	if (cirque_isempty(ep->rxq))
+	if (ofi_cirque_isempty(ep->rxq))
 		goto out;
 
-	entry = cirque_head(ep->rxq);
+	entry = ofi_cirque_head(ep->rxq);
 	hdr.msg_iov = entry->iov;
 	hdr.msg_iovlen = entry->iov_count;
 
 	ret = recvmsg(ep->sock, &hdr, 0);
 	if (ret >= 0) {
 		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr);
-		cirque_discard(ep->rxq);
+		ofi_cirque_discard(ep->rxq);
 	}
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
@@ -193,12 +193,12 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	if (cirque_isfull(ep->rxq)) {
+	if (ofi_cirque_isfull(ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	entry = cirque_tail(ep->rxq);
+	entry = ofi_cirque_tail(ep->rxq);
 	entry->context = msg->context;
 	for (entry->iov_count = 0; entry->iov_count < msg->iov_count;
 	     entry->iov_count++) {
@@ -206,7 +206,7 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	}
 	entry->flags = 0;
 
-	cirque_commit(ep->rxq);
+	ofi_cirque_commit(ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
@@ -233,19 +233,19 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	if (cirque_isfull(ep->rxq)) {
+	if (ofi_cirque_isfull(ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	entry = cirque_tail(ep->rxq);
+	entry = ofi_cirque_tail(ep->rxq);
 	entry->context = context;
 	entry->iov_count = 1;
 	entry->iov[0].iov_base = buf;
 	entry->iov[0].iov_len = len;
 	entry->flags = 0;
 
-	cirque_commit(ep->rxq);
+	ofi_cirque_commit(ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
@@ -260,7 +260,7 @@ ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-	if (cirque_isfull(ep->util_ep.tx_cq->cirq)) {
+	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -296,7 +296,7 @@ ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	hdr.msg_flags = 0;
 
 	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-	if (cirque_isfull(ep->util_ep.tx_cq->cirq)) {
+	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}

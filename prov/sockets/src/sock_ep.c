@@ -588,7 +588,7 @@ static ssize_t sock_tx_size_left(struct fid_ep *ep)
 		return -FI_EOPBADSTATE;
 
 	fastlock_acquire(&tx_ctx->wlock);
-	num_left = rbavail(&tx_ctx->rb)/SOCK_EP_TX_ENTRY_SZ;
+	num_left = ofi_rbavail(&tx_ctx->rb)/SOCK_EP_TX_ENTRY_SZ;
 	fastlock_release(&tx_ctx->wlock);
 	return num_left;
 }
@@ -706,8 +706,8 @@ static int sock_ep_close(struct fid *fid)
 		free(sock_ep->attr->dest_addr);
 
 	fastlock_acquire(&sock_ep->attr->domain->pe->lock);
-	idm_reset(&sock_ep->attr->conn_idm);
-	idm_reset(&sock_ep->attr->av_idm);
+	ofi_idm_reset(&sock_ep->attr->conn_idm);
+	ofi_idm_reset(&sock_ep->attr->av_idm);
 	sock_conn_map_destroy(sock_ep->attr);
 	fastlock_release(&sock_ep->attr->domain->pe->lock);
 
@@ -1742,7 +1742,7 @@ err1:
 void sock_ep_remove_conn(struct sock_ep_attr *attr, struct sock_conn *conn)
 {
 	sock_pe_poll_del(attr->domain->pe, conn->sock_fd);
-	idm_clear(&attr->conn_idm, conn->sock_fd);
+	ofi_idm_clear(&attr->conn_idm, conn->sock_fd);
 	sock_conn_release_entry(&attr->cmap, conn);
 }
 
@@ -1755,7 +1755,7 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 
-	conn = idm_lookup(&attr->av_idm, idx);
+	conn = ofi_idm_lookup(&attr->av_idm, idx);
 	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS)
 		return conn;
 
@@ -1785,8 +1785,8 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 	conn = sock_ep_lookup_conn(attr, av_index, addr);
 	if (!conn) {
 		conn = SOCK_CM_CONN_IN_PROGRESS;
-		if (idm_set(&attr->av_idm, av_index, conn) < 0)
-			SOCK_LOG_ERROR("idm_set failed\n");
+		if (ofi_idm_set(&attr->av_idm, av_index, conn) < 0)
+			SOCK_LOG_ERROR("ofi_idm_set failed\n");
 	}
 	fastlock_release(&attr->cmap.lock);
 

@@ -56,9 +56,9 @@ void mlx_send_callback( void *request,
 
 	fastlock_acquire(&cq->cq_lock);
 
-	t_entry = cirque_tail(cq->cirq);
+	t_entry = ofi_cirque_tail(cq->cirq);
 	*t_entry = (mlx_req->completion.tagged);
-	cirque_commit(cq->cirq);
+	ofi_cirque_commit(cq->cirq);
 
 	if (status != UCS_OK){
 		t_entry->flags |= UTIL_FLAG_ERROR;
@@ -120,7 +120,7 @@ void mlx_recv_callback (
 		}
 
 		struct fi_cq_tagged_entry *t_entry;
-		t_entry = cirque_tail(cq->cirq);
+		t_entry = ofi_cirque_tail(cq->cirq);
 		*t_entry = (mlx_req->completion.tagged);
 
 		if (status != UCS_OK) {
@@ -139,7 +139,7 @@ void mlx_recv_callback (
 		}
 
 		if (cq->src){
-			cq->src[cirque_windex((struct mlx_comp_cirq*)(cq->cirq))] =
+			cq->src[ofi_cirque_windex((struct mlx_comp_cirq*)(cq->cirq))] =
 					FI_ADDR_NOTAVAIL;
 		}
 
@@ -148,7 +148,7 @@ void mlx_recv_callback (
 		}
 
 		mlx_req->type = MLX_FI_REQ_UNINITIALIZED;
-		cirque_commit(cq->cirq);
+		ofi_cirque_commit(cq->cirq);
 		ucp_request_release(request);
 	}
 	fastlock_release(&cq->cq_lock);

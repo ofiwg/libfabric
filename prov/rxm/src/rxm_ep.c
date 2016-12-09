@@ -292,7 +292,7 @@ static int rxm_check_unexp_msg_list(struct util_cq *util_cq, struct rxm_recv_que
 	int ret = 0;
 
 	fastlock_acquire(&util_cq->cq_lock);
-	if (cirque_isfull(util_cq->cirq)) {
+	if (ofi_cirque_isfull(util_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}

@@ -130,7 +130,7 @@ static int sock_poll_poll(struct fid_poll *pollset, void **context, int count)
 						cq_fid);
 			sock_cq_progress(cq);
 			fastlock_acquire(&cq->lock);
-			if (rbfdused(&cq->cq_rbfd) || rbused(&cq->cqerr_rb)) {
+			if (ofi_rbfdused(&cq->cq_rbfd) || ofi_rbused(&cq->cqerr_rb)) {
 				*context++ = cq->cq_fid.fid.context;
 				ret_count++;
 			}

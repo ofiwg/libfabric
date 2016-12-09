@@ -105,9 +105,9 @@ int rxm_cq_report_error(struct util_cq *util_cq, struct fi_cq_err_entry *err_ent
 	fastlock_acquire(&util_cq->cq_lock);
 	slist_insert_tail(&entry->list_entry, &util_cq->err_list);
 
-	comp = cirque_tail(util_cq->cirq);
+	comp = ofi_cirque_tail(util_cq->cirq);
 	comp->flags = UTIL_FLAG_ERROR;
-	cirque_commit(util_cq->cirq);
+	ofi_cirque_commit(util_cq->cirq);
 	fastlock_release(&util_cq->cq_lock);
 
 	return 0;
@@ -120,19 +120,19 @@ int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t l
 	int ret = 0;
 
 	fastlock_acquire(&util_cq->cq_lock);
-	if (cirque_isfull(util_cq->cirq)) {
+	if (ofi_cirque_isfull(util_cq->cirq)) {
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "util_cq cirq is full!\n");
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	comp = cirque_tail(util_cq->cirq);
+	comp = ofi_cirque_tail(util_cq->cirq);
 	comp->op_context = context;
 	comp->flags = flags;
 	comp->len = len;
 	comp->buf = buf;
 	comp->data = data;
-	cirque_commit(util_cq->cirq);
+	ofi_cirque_commit(util_cq->cirq);
 out:
 	fastlock_release(&util_cq->cq_lock);
 	return ret;
@@ -310,7 +310,7 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		match_attr.addr = FI_ADDR_UNSPEC;
 
 	if (rx_buf->ep->rxm_info->caps & FI_SOURCE)
-		util_cq->src[cirque_windex(util_cq->cirq)] = rx_buf->conn->handle.fi_addr;
+		util_cq->src[ofi_cirque_windex(util_cq->cirq)] = rx_buf->conn->handle.fi_addr;
 
 	switch(rx_buf->pkt.hdr.op) {
 	case ofi_op_msg:
