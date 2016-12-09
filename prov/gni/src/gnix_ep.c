@@ -53,6 +53,7 @@
 #include "gnix_cntr.h"
 #include "gnix_xpmem.h"
 #include "gnix_eq.h"
+#include "gnix_cm.h"
 
 
 /*******************************************************************************
@@ -2773,6 +2774,10 @@ DIRECT_FN STATIC int gnix_ep_getopt(fid_t fid, int level, int optname,
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
 		*(size_t *)optval = gnix_ep->min_multi_recv;
+		*optlen = sizeof(size_t);
+		break;
+	case FI_OPT_CM_DATA_SIZE:
+		*(size_t *)optval = GNIX_CM_DATA_MAX_SIZE;
 		*optlen = sizeof(size_t);
 		break;
 	default:

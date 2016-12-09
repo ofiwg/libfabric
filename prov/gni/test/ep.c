@@ -39,8 +39,8 @@
 #include <time.h>
 #include <string.h>
 
-
 #include "gnix_ep.h"
+#include "gnix_cm.h"
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
@@ -162,7 +162,7 @@ Test(endpoint, getsetopt)
 			(void *)&val, &len);
 	cr_assert(ret == -FI_ENOPROTOOPT, "fi_getopt");
 
-	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, !FI_OPT_MIN_MULTI_RECV,
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_CM_DATA_SIZE+1,
 			(void *)&val, &len);
 	cr_assert(ret == -FI_ENOPROTOOPT, "fi_getopt");
 
@@ -195,6 +195,12 @@ Test(endpoint, getsetopt)
 			(void *)&val, &len);
 	cr_assert(!ret, "fi_getopt");
 	cr_assert(val == GNIX_OPT_MIN_MULTI_RECV_DEFAULT, "fi_getopt");
+	cr_assert(len == sizeof(size_t), "fi_getopt");
+
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_CM_DATA_SIZE,
+			(void *)&val, &len);
+	cr_assert(!ret, "fi_getopt");
+	cr_assert(val == GNIX_CM_DATA_MAX_SIZE, "fi_getopt");
 	cr_assert(len == sizeof(size_t), "fi_getopt");
 
 	val = 128;

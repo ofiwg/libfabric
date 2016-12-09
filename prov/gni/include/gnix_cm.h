@@ -35,6 +35,10 @@
 
 #include "gnix.h"
 
+#define GNIX_CM_DATA_MAX_SIZE	256
+#define GNIX_CM_EQE_BUF_SIZE	(sizeof(struct fi_eq_cm_entry) + \
+				 GNIX_CM_DATA_MAX_SIZE)
+
 struct gnix_pep_sock_connreq {
 	int type;
 	int msg_id;
@@ -50,6 +54,8 @@ struct gnix_pep_sock_connreq {
 	gni_smsg_attr_t vc_mbox_attr;
 	gni_mem_handle_t cq_irq_mdh;
 	uint64_t peer_caps;
+	size_t cm_data_len;
+	char eqe_buf[GNIX_CM_EQE_BUF_SIZE];
 };
 
 enum gnix_pep_sock_resp_cmd {
@@ -63,6 +69,8 @@ struct gnix_pep_sock_connresp {
 	gni_smsg_attr_t vc_mbox_attr;
 	gni_mem_handle_t cq_irq_mdh;
 	uint64_t peer_caps;
+	size_t cm_data_len;
+	char eqe_buf[GNIX_CM_EQE_BUF_SIZE];
 };
 
 struct gnix_pep_sock_conn {
