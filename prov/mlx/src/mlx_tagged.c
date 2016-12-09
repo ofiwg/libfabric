@@ -92,7 +92,7 @@ static ssize_t mlx_tagged_recvmsg(
 	/*Unexpected path*/
 	struct fi_cq_tagged_entry *t_entry;
 	fastlock_acquire(&cq->cq_lock);
-	t_entry = cirque_tail(cq->cirq);
+	t_entry = ofi_cirque_tail(cq->cirq);
 	*t_entry = (req->completion.tagged);
 
 	if(req->type == MLX_FI_REQ_UNEXPECTED_ERR) {
@@ -111,7 +111,7 @@ static ssize_t mlx_tagged_recvmsg(
 	}
 
 	//ucp_request_release(req);
-	cirque_commit(cq->cirq);
+	ofi_cirque_commit(cq->cirq);
 	fastlock_release(&cq->cq_lock);
 
 fence:
@@ -212,14 +212,14 @@ static ssize_t mlx_tagged_sendmsg(
 	} else {
 		struct fi_cq_tagged_entry *t_entry;
 		fastlock_acquire(&cq->cq_lock);
-		t_entry = cirque_tail(cq->cirq);
+		t_entry = ofi_cirque_tail(cq->cirq);
 		t_entry->op_context = msg->context;
 		t_entry->flags = FI_SEND;
 		t_entry->len = msg->msg_iov[0].iov_len;
 		t_entry->buf = msg->msg_iov[0].iov_base;
 		t_entry->data = 0;
 		t_entry->tag = msg->tag;
-		cirque_commit(cq->cirq);
+		ofi_cirque_commit(cq->cirq);
 		fastlock_release(&cq->cq_lock);
 	}
 

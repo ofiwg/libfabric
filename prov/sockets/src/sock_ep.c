@@ -588,7 +588,7 @@ static ssize_t sock_tx_size_left(struct fid_ep *ep)
 		return -FI_EOPBADSTATE;
 
 	fastlock_acquire(&tx_ctx->wlock);
-	num_left = rbavail(&tx_ctx->rb)/SOCK_EP_TX_ENTRY_SZ;
+	num_left = ofi_rbavail(&tx_ctx->rb)/SOCK_EP_TX_ENTRY_SZ;
 	fastlock_release(&tx_ctx->wlock);
 	return num_left;
 }

@@ -117,7 +117,7 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		(msg->rma_iov_count * sizeof(union sock_iov));
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbavail(&tx_ctx->rb) < total_len) {
+	if (ofi_rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}
@@ -298,7 +298,7 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		      (msg->rma_iov_count * sizeof(union sock_iov)));
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbavail(&tx_ctx->rb) < total_len) {
+	if (ofi_rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}

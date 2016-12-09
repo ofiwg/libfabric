@@ -136,7 +136,7 @@ struct mlx_request {
 	struct mlx_ep* ep;
 };
 
-DECLARE_CIRQUE(struct fi_cq_tagged_entry, mlx_comp_cirq);
+OFI_DECLARE_CIRQUE(struct fi_cq_tagged_entry, mlx_comp_cirq);
 
 extern int mlx_errcode_translation_table[];
 #define MLX_TRANSLATE_ERRCODE(X) mlx_errcode_translation_table[(-X)+1]

@@ -85,7 +85,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	if (!tx_ctx)
 		return NULL;
 
-	if (!use_shared && rbinit(&tx_ctx->rb,
+	if (!use_shared && ofi_rbinit(&tx_ctx->rb,
 				 (attr->size) ? attr->size * SOCK_EP_TX_ENTRY_SZ :
 				 SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ))
 		goto err;
@@ -151,7 +151,7 @@ void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 	fastlock_destroy(&tx_ctx->lock);
 
 	if (!tx_ctx->use_shared) {
-		rbfree(&tx_ctx->rb);
+		ofi_rbfree(&tx_ctx->rb);
 		sock_rx_ctx_free(tx_ctx->rx_ctrl_ctx);
 	}
 	free(tx_ctx);
@@ -164,19 +164,19 @@ void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx)
 
 void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len)
 {
-	rbwrite(&tx_ctx->rb, buf, len);
+	ofi_rbwrite(&tx_ctx->rb, buf, len);
 }
 
 void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx)
 {
-	rbcommit(&tx_ctx->rb);
+	ofi_rbcommit(&tx_ctx->rb);
 	sock_pe_signal(tx_ctx->domain->pe);
 	fastlock_release(&tx_ctx->wlock);
 }
 
 void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx)
 {
-	rbabort(&tx_ctx->rb);
+	ofi_rbabort(&tx_ctx->rb);
 	fastlock_release(&tx_ctx->wlock);
 }
 
@@ -209,11 +209,11 @@ void sock_tx_ctx_read_op_send(struct sock_tx_ctx *tx_ctx,
 		uint64_t *dest_addr, uint64_t *buf, struct sock_ep_attr **ep_attr,
 		struct sock_conn **conn)
 {
-	rbread(&tx_ctx->rb, op, sizeof(*op));
-	rbread(&tx_ctx->rb, flags, sizeof(*flags));
-	rbread(&tx_ctx->rb, context, sizeof(*context));
-	rbread(&tx_ctx->rb, dest_addr, sizeof(*dest_addr));
-	rbread(&tx_ctx->rb, buf, sizeof(*buf));
-	rbread(&tx_ctx->rb, ep_attr, sizeof(*ep_attr));
-	rbread(&tx_ctx->rb, conn, sizeof(*conn));
+	ofi_rbread(&tx_ctx->rb, op, sizeof(*op));
+	ofi_rbread(&tx_ctx->rb, flags, sizeof(*flags));
+	ofi_rbread(&tx_ctx->rb, context, sizeof(*context));
+	ofi_rbread(&tx_ctx->rb, dest_addr, sizeof(*dest_addr));
+	ofi_rbread(&tx_ctx->rb, buf, sizeof(*buf));
+	ofi_rbread(&tx_ctx->rb, ep_attr, sizeof(*ep_attr));
+	ofi_rbread(&tx_ctx->rb, conn, sizeof(*conn));
 }

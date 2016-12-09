@@ -629,7 +629,7 @@ struct sock_tx_ctx {
 	} fid;
 	size_t fclass;
 
-	struct ringbuf rb;
+	struct ofi_ringbuf rb;
 	fastlock_t wlock;
 	fastlock_t rlock;
 
@@ -798,7 +798,7 @@ struct sock_pe_entry {
 
 	struct dlist_entry entry;
 	struct dlist_entry ctx_entry;
-	struct ringbuf comm_buf;
+	struct ofi_ringbuf comm_buf;
 	size_t cache_sz;
 };
 
@@ -845,9 +845,9 @@ struct sock_cq {
 	atomic_t ref;
 	struct fi_cq_attr attr;
 
-	struct ringbuf addr_rb;
-	struct ringbuffd cq_rbfd;
-	struct ringbuf cqerr_rb;
+	struct ofi_ringbuf addr_rb;
+	struct ofi_ringbuffd cq_rbfd;
+	struct ofi_ringbuf cqerr_rb;
 	struct dlist_entry overflow_list;
 	fastlock_t lock;
 	fastlock_t list_lock;

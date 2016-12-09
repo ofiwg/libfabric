@@ -73,7 +73,7 @@ ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx
 	total_len = tx_op.src_iov_len + sizeof(struct sock_op_send);
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbavail(&tx_ctx->rb) < total_len) {
+	if (ofi_rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}

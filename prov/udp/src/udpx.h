@@ -92,7 +92,7 @@ struct udpx_ep_entry {
 	uint8_t			resv[sizeof(size_t) - 2];
 };
 
-DECLARE_CIRQUE(struct udpx_ep_entry, udpx_rx_cirq);
+OFI_DECLARE_CIRQUE(struct udpx_ep_entry, udpx_rx_cirq);
 
 struct udpx_ep;
 typedef void (*udpx_rx_comp_func)(struct udpx_ep *ep, void *context,

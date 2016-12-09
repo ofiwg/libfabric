@@ -203,7 +203,7 @@ struct util_cq_err_entry {
 	struct slist_entry	list_entry;
 };
 
-DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
+OFI_DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
 
 typedef void (*ofi_cq_progress_func)(struct util_cq *cq);
 
