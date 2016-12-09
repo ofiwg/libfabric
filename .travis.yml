@@ -10,6 +10,7 @@ addons:
     apt:
         packages:
             - rpm
+            - libibverbs-dev
             - libnl-3-200
             - libnl-3-dev
             - libnl-route-3-200
@@ -17,6 +18,13 @@ addons:
     ssh_known_hosts:
         - www.openfabrics.org
         - git.kernel.org
+
+# NOTE: The librdmacm-dev package in the "precise" Ubuntu image that
+# we use at Travis does not have <rdma/rsocket.h> that the verbs
+# provider needs (it's too old).  If we move to a newer Ubuntu image
+# that has a newer librdmacm-dev package, it may have
+# <rdma/rsocket.h>, and you can --enable-verbs in the
+# LIBFABRIC_CONFIGURE_OPTIONS.
 
 env:
     global:
@@ -33,6 +41,7 @@ before_install:
 
 install:
     - ./autogen.sh
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic"; fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" && "$CC" == "gcc" ]]; then ./configure $LIBFABRIC_CONFIGURE_ARGS --enable-debug && make -j2; fi
     - ./configure --prefix=$PREFIX --enable-direct=sockets --enable-udp=no --enable-psm=no --enable-gni=no --enable-psm2=no --enable-verbs=no --enable-usnic=no --enable-rxm=no --enable-rxd=no && make -j2
     - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-rxd --disable-verbs --disable-usnic --prefix=$PREFIX && make -j2  && make install && make test
