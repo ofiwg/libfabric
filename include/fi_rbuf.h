@@ -327,7 +327,7 @@ static inline size_t rbfdsread(struct ringbuffd *rbfd, void *buf, size_t len,
 		rbfdread(rbfd, buf, len);
 		return len;
 	}
-	
+
 	ret = fi_poll_fd(rbfd->fd[RB_READ_FD], timeout);
 	if (ret == 1) {
 		len = MIN(len, rbfdused(rbfd));
