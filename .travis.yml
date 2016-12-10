@@ -10,6 +10,7 @@ addons:
     apt:
         packages:
             - rpm
+            - libibverbs-dev
             - libnl-3-200
             - libnl-3-dev
             - libnl-route-3-200
@@ -18,33 +19,49 @@ addons:
         - www.openfabrics.org
         - git.kernel.org
 
+# NOTE: The librdmacm-dev package in the "precise" Ubuntu image that
+# we use at Travis does not have <rdma/rsocket.h> that the verbs
+# provider needs (it's too old).  If we move to a newer Ubuntu image
+# that has a newer librdmacm-dev package, it may have
+# <rdma/rsocket.h>, and you can --enable-verbs in the
+# LIBFABRIC_CONFIGURE_OPTIONS.
+
 env:
     global:
-        - CPPFLAGS=-I$HOME/include
-        - LDFLAGS=-L$HOME/lib
-        - LD_LIBRARY_PATH=$HOME/lib
-        - LIBFABRIC_CONFIGURE_ARGS="--prefix=$HOME --enable-sockets"
+        - PREFIX=$HOME/install
+        - PATH=$PREFIX/bin:$PATH
+        - CPPFLAGS=-I$PREFIX/include
+        - LDFLAGS=-L$PREFIX/lib
+        - LD_LIBRARY_PATH=$PREFIX/lib
+        - LIBFABRIC_CONFIGURE_ARGS="--prefix=$PREFIX --enable-sockets"
 
-# install dependencies for the usnic providers
+# Brew update GNU Autotools so that autogen can succeed
 before_install:
     - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; brew upgrade automake || true; brew upgrade libtool || true; fi
 
 install:
     - ./autogen.sh
-    - if [[ "$TRAVIS_OS_NAME" == "linux" && "$CC" == "gcc" ]]; then ./configure $LIBFABRIC_CONFIGURE_ARGS --enable-debug && make -j2; fi
-    - ./configure --prefix=$HOME --enable-direct=sockets --enable-udp=no --enable-psm=no --enable-mxm=no --enable-gni=no --enable-psm2=no --enable-verbs=no --enable-usnic=no --enable-rxm=no --enable-rxd=no && make -j2
-    - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-rxd --disable-verbs --disable-usnic --prefix=$HOME && make -j2  && make install && make test
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic"; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" && "`basename $CC`" == "clang" ]]; then ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS --enable-debug && make -j2; fi
+    - ./configure --prefix=$PREFIX --enable-direct=sockets --enable-udp=no --enable-psm=no --enable-gni=no --enable-psm2=no --enable-verbs=no --enable-usnic=no --enable-rxm=no --enable-rxd=no
+    - make -j2
+    - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-rxd --disable-verbs --disable-usnic --prefix=$PREFIX
+    - make -j2
+    - make install
+    - make test
+    - rm -rf $PREFIX
     - ./configure $LIBFABRIC_CONFIGURE_ARGS
     - make -j2
     - make install
     - make test
     - make distcheck
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
+
 script:
     - git clone https://github.com/ofiwg/fabtests.git
     - cd fabtests
     - ./autogen.sh
-    - ./configure --prefix=$HOME --with-libfabric=$HOME
+    - ./configure --prefix=$PREFIX --with-libfabric=$PREFIX
     - make -j2
     - make install
     - make test
