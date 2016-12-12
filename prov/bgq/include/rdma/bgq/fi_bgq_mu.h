@@ -169,8 +169,7 @@ union fi_bgq_mu_packet_hdr {
 		uint64_t		message_length	: 10;	/* 0..512 bytes of payload data */
 		uint64_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
 
-		MUHWI_Destination_t	origin;
-		uint32_t		cntr_paddr_rsh3b;	/* 34b paddr, 8 byte aligned; See: NOTE_MU_PADDR */
+		uint32_t		unused[2];
 		uint64_t		ofi_tag;
 	} __attribute__((__packed__)) send;
 
@@ -179,7 +178,7 @@ union fi_bgq_mu_packet_hdr {
 		uint32_t		reserved_1;
 		uint16_t		reserved_2	: 10;
 		uint16_t		is_local	:  1;	/* used to specify fifo map */
-		uint16_t		niov_minus_1	:  5;	/* 1..32 mu iov elements in payload data */
+		uint16_t		niov_minus_1	:  5;	/* 1..31 mu iov elements in payload data */
 		uint8_t			rget_inj_fifo_id;	/* 0..255 */
 		uint8_t			reserved_3;		/* a.k.a. common::packet_type */
 
@@ -294,7 +293,10 @@ struct fi_bgq_mu_fetch_metadata {
 
 union fi_bgq_mu_packet_payload {
 	uint8_t				byte[512];
-	struct fi_bgq_mu_iov		mu_iov[32];
+	struct {
+		uint32_t		unused[4];
+		struct fi_bgq_mu_iov	mu_iov[31];
+	} rendezvous;
 	struct {
 		struct fi_bgq_mu_fetch_metadata	metadata;
 		uint8_t				data[512-sizeof(struct fi_bgq_mu_fetch_metadata)];

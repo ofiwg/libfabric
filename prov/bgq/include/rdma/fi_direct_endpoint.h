@@ -753,17 +753,18 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 		if (is_contiguous) {
 			/* only send one mu iov */
-			fi_bgq_cnk_vaddr2paddr(buf, len, &payload->mu_iov[0].src_paddr);
-			payload->mu_iov[0].message_length = len;
+			fi_bgq_cnk_vaddr2paddr(buf, len, &payload->rendezvous.mu_iov[0].src_paddr);
+			payload->rendezvous.mu_iov[0].message_length = len;
 			hdr->rendezvous.niov_minus_1 = 0;
 		} else {
-			assert(len <= 32);
+			assert(len <= 31);
 			size_t i;
 			const struct iovec * iov = (const struct iovec *)buf;
-			send_desc->Message_Length = len * sizeof(struct fi_bgq_mu_iov);
+			send_desc->Message_Length = len * sizeof(struct fi_bgq_mu_iov)
+				+ sizeof(uint32_t)*4;	/* "unused" payload space */
 			for (i=0; i<len; ++i) {
-				fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &payload->mu_iov[i].src_paddr);
-				payload->mu_iov[i].message_length = iov[i].iov_len;
+				fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &payload->rendezvous.mu_iov[i].src_paddr);
+				payload->rendezvous.mu_iov[i].message_length = iov[i].iov_len;
 			}
 			hdr->rendezvous.niov_minus_1 = len - 1;
 		}

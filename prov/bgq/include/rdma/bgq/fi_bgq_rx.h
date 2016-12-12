@@ -417,10 +417,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 		uint64_t niov = pkt->hdr.rendezvous.niov_minus_1 + 1;
 		assert(niov <= (7-is_multi_receive));
-		uint64_t xfer_len = pkt->payload.mu_iov[0].message_length;
+		uint64_t xfer_len = pkt->payload.rendezvous.mu_iov[0].message_length;
 		{
 			uint64_t i;
-			for (i=1; i<niov; ++i) xfer_len += pkt->payload.mu_iov[i].message_length;
+			for (i=1; i<niov; ++i) xfer_len += pkt->payload.rendezvous.mu_iov[i].message_length;
 		}
 
 		uint64_t byte_counter_vaddr = 0;
@@ -559,8 +559,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 			qpx_memcpy64((void*)xfer_desc, (const void*)&bgq_ep->rx.poll.rzv.dput_model[is_local]);
 
-			xfer_desc->Pa_Payload = pkt->payload.mu_iov[i].src_paddr;
-			const uint64_t message_length = pkt->payload.mu_iov[i].message_length;
+			xfer_desc->Pa_Payload = pkt->payload.rendezvous.mu_iov[i].src_paddr;
+			const uint64_t message_length = pkt->payload.rendezvous.mu_iov[i].message_length;
 			xfer_desc->Message_Length = message_length;
 			MUSPI_SetRecPayloadBaseAddressInfo(xfer_desc, FI_BGQ_MU_BAT_ID_GLOBAL, dst_paddr);
 			dst_paddr += message_length;
@@ -706,9 +706,9 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 					send_len = pkt->hdr.send.message_length;
 				} else /* FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS */ {
 					const uint64_t niov = pkt->hdr.rendezvous.niov_minus_1 + 1;
-					send_len = pkt->payload.mu_iov[0].message_length;
+					send_len = pkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
-					for (i=1; i<niov; ++i) send_len += pkt->payload.mu_iov[i].message_length;
+					for (i=1; i<niov; ++i) send_len += pkt->payload.rendezvous.mu_iov[i].message_length;
 				}
 
 				if (send_len > recv_len) {
@@ -1069,7 +1069,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 					const uint64_t niov = uepkt->hdr.rendezvous.niov_minus_1 + 1;
 					uint64_t len = 0;
 					unsigned i;
-					for (i=0; i<niov; ++i) len += uepkt->payload.mu_iov[i].message_length;
+					for (i=0; i<niov; ++i) len += uepkt->payload.rendezvous.mu_iov[i].message_length;
 					context->len = len;
 				} else {	/* "eager" or "eager with completion" packet type */
 					context->len = uepkt->hdr.send.message_length;
@@ -1191,9 +1191,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 					send_len = uepkt->hdr.send.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
 					const uint64_t niov = uepkt->hdr.rendezvous.niov_minus_1 + 1;
-					send_len = uepkt->payload.mu_iov[0].message_length;
+					send_len = uepkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
-					for (i=1; i<niov; ++i) send_len += uepkt->payload.mu_iov[i].message_length;
+					for (i=1; i<niov; ++i) send_len += uepkt->payload.rendezvous.mu_iov[i].message_length;
 				}
 
 				if (send_len > recv_len) {

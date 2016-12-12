@@ -509,8 +509,8 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
-
-		hdr->send.origin = self.Destination;
+		hdr->send.unused[0] = 0;
+		hdr->send.unused[1] = 0;
 	}
 
 	/*
@@ -528,7 +528,8 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
 		desc->Half_Word1.Interrupt =
 			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
-		desc->Message_Length = sizeof(struct fi_bgq_mu_iov);
+		desc->Message_Length = sizeof(struct fi_bgq_mu_iov)
+			+ sizeof(uint32_t)*4; 	/* "unused" payload space */
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
