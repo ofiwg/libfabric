@@ -86,7 +86,7 @@ union fi_bgq_context {
 		size_t			len;		// fi_cq_msg_entry::len (only need 37 bits)
 		void			*buf;		// fi_cq_data_entry::buf (unused for tagged cq's and non-multi-receive message cq's)
 
-		uint64_t		byte_counter;	// fi_cq_data_entry::data
+		volatile uint64_t	byte_counter;	// fi_cq_data_entry::data
 		union {
 			uint64_t	tag;		// fi_cq_tagged_entry::tag
 			union fi_bgq_context	*multi_recv_next;	// only for multi-receives
@@ -96,6 +96,8 @@ union fi_bgq_context {
 			struct fi_bgq_mu_packet	*claim;	// only for peek/claim
 			void			*multi_recv_context;	// only for individual FI_MULTI_RECV's
 		};
+
+		uint64_t		unused;
 	};
 };
 
@@ -346,7 +348,9 @@ static ssize_t fi_bgq_cq_poll (struct fi_bgq_cq *bgq_cq,
 		union fi_bgq_context * prev = NULL;
 		while ((count - num_entries) > 0 && context != NULL) {
 
-			if (context->byte_counter == 0) {
+			const uint64_t byte_counter = context->byte_counter;
+
+			if (byte_counter == 0) {
 				output += fi_bgq_cq_fill(output, context, format);
 				++ num_entries;
 

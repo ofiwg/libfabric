@@ -239,8 +239,8 @@ static inline
 void inject_eager_completion (struct fi_bgq_ep * bgq_ep,
 		struct fi_bgq_mu_packet * pkt) {
 
-	const uint64_t is_local = pkt->hdr.send.is_local;
-	const uint64_t cntr_paddr = ((uint64_t)pkt->hdr.send.cntr_paddr_rsh3b) << 3;
+	const uint64_t is_local = pkt->hdr.completion.is_local;
+	const uint64_t cntr_paddr = ((uint64_t)pkt->hdr.completion.cntr_paddr_rsh3b) << 3;
 
 	MUHWI_Descriptor_t * desc =
 		fi_bgq_spi_injfifo_tail_wait(&bgq_ep->rx.poll.injfifo);
@@ -248,7 +248,7 @@ void inject_eager_completion (struct fi_bgq_ep * bgq_ep,
 	qpx_memcpy64((void*)desc, (const void*)&bgq_ep->rx.poll.ack_model[is_local]);
 
 	MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, cntr_paddr);
-	desc->PacketHeader.NetworkHeader.pt2pt.Destination = pkt->hdr.send.origin;
+	desc->PacketHeader.NetworkHeader.pt2pt.Destination = pkt->hdr.completion.origin;
 
 	MUSPI_InjFifoAdvanceDesc(bgq_ep->rx.poll.injfifo.muspi_injfifo);
 
@@ -655,6 +655,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 	if ((packet_type & (FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER)) ==
 			(FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER)) {	/* unlikely? */
 		inject_eager_completion(bgq_ep, pkt);
+		return;
 	}
 
 	assert(packet_type & (FI_BGQ_MU_PACKET_TYPE_INJECT | FI_BGQ_MU_PACKET_TYPE_EAGER | FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS));

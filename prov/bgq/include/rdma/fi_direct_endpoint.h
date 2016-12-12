@@ -110,10 +110,12 @@ struct fi_bgq_ep_tx {
 
 	/* == L2 CACHE LINE == */
 
-	struct {	/* two l2 cache lines */
+	struct {	/* three l2 cache lines */
 		MUHWI_Descriptor_t	send_model;
 		MUHWI_Descriptor_t	local_completion_model;	/* only "local completion eager" */
 		MUHWI_Descriptor_t	rzv_model[2];	/* [0]=="internode"; [1]=="intranode" */
+		MUHWI_Descriptor_t	remote_completion_model;
+		uint8_t			unused[64];
 	} send __attribute((aligned(L2_CACHE_LINE_SIZE)));
 	/* == L2 CACHE LINE == */
 
@@ -622,14 +624,32 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		hdr->send.message_length = xfer_len;
 		hdr->send.ofi_tag = tag;
 
-		if (tx_op_flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
-			if (is_msg) {
-				fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER);
-			} else {
-				fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER|FI_BGQ_MU_PACKET_TYPE_TAG);
-			}
+		if (is_msg) {
+			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);	/* clear the 'TAG' bit in the packet type */
+		}
 
-			hdr->send.is_local = fi_bgq_addr_is_local(dest_addr);
+		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
+
+#ifdef FI_BGQ_REMOTE_COMPLETION
+		if (tx_op_flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+
+			/*
+			 * TODO - this code is buggy and results in a hang at job completion for 'cpi'
+			 *
+			 * Suspect that remote processes are exiting before the 'request for ack'
+			 * remote completion packet is received, then the process that issued the
+			 * 'request for ack' messagee will hang because the ack is never received.
+			 *
+			 * Alternative implementations:
+			 *   1. Do not support remote completions on bgq (current)
+			 *   2. Support remote completions via rendezvous protocol
+			 */
+
+			/* inject the 'remote completion' descriptor */
+			send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
+
+			/* copy the descriptor model into the injection fifo */
+			qpx_memcpy64((void*)send_desc, (const void *)&bgq_ep->tx.send.remote_completion_model);
 
 			/* initialize the completion entry */
 			assert(context);
@@ -643,21 +663,26 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 			uint64_t byte_counter_paddr = 0;
 			fi_bgq_cnk_vaddr2paddr((const void*)&bgq_context->byte_counter, sizeof(uint64_t), &byte_counter_paddr);
-			hdr->send.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
 
-			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
+			/* set the destination torus address and fifo map */
+			send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
+			send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
+			send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
+				fi_bgq_addr_rec_fifo_id(dest_addr);
+
+			hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
+			hdr->completion.is_local = fi_bgq_addr_is_local(dest_addr);
+			hdr->completion.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
 
 			fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 
-		} else {
-
-			if (is_msg) {
-				fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);	/* clear the 'TAG' bit in the packet type */
-			}
-
 			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
-			if (tx_op_flags & FI_INJECT_COMPLETE) {
+		} else
+#endif
+		{
+
+			if (tx_op_flags & (FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
 
 				/* inject the 'local completion' direct put descriptor */
 				send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
@@ -682,9 +707,9 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 					MUSPI_GetAtomicAddress(byte_counter_paddr,
 						MUHWI_ATOMIC_OPCODE_LOAD_CLEAR);
 
-				MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
-
 				fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
+
+				MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 			}
 		}
 

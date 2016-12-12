@@ -152,6 +152,18 @@ union fi_bgq_mu_packet_hdr {
 		uint64_t		reserved_0;
 		uint64_t		reserved_1	: 32;
 		uint64_t		reserved_2	: 10;
+		uint64_t		unused_0	: 14;
+		uint64_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
+
+		MUHWI_Destination_t	origin;
+		uint32_t		cntr_paddr_rsh3b;	/* 34b paddr, 8 byte aligned; See: NOTE_MU_PADDR */
+		uint64_t		is_local;		/* only 1 bit is needed */
+	} __attribute__((__packed__)) completion;
+
+	struct {
+		uint64_t		reserved_0;
+		uint64_t		reserved_1	: 32;
+		uint64_t		reserved_2	: 10;
 		uint64_t		is_local	:  1;	/* used to specify fifo map */
 		uint64_t		unused_0	:  3;
 		uint64_t		message_length	: 10;	/* 0..512 bytes of payload data */

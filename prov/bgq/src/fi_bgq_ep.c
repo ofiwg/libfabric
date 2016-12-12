@@ -557,6 +557,18 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		desc = &bgq_ep->tx.send.rzv_model[1];
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		hdr->rendezvous.is_local = 1;
+
+		/* remote completion model - used for FI_DELIVERY_COMPLETE */
+		desc = &bgq_ep->tx.send.remote_completion_model;
+		*desc = bgq_ep->tx.inject.send_model;
+
+		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER|FI_BGQ_MU_PACKET_TYPE_ACK);
+		hdr->completion.origin = self.Destination;
+
+		/* specified at injection time */
+		hdr->completion.is_local = 0;
+		hdr->completion.cntr_paddr_rsh3b = 0;
 	}
 
 	/*
