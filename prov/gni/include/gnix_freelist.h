@@ -36,6 +36,7 @@
 
 #include <fi.h>
 #include <fi_list.h>
+#include "include/gnix_util.h"
 
 /* Number of elements to seed the freelist with */
 #define GNIX_FL_INIT_SIZE 100
@@ -102,20 +103,74 @@ int _gnix_fl_init_ts(int elem_size, int offset, int init_size,
  */
 void _gnix_fl_destroy(struct gnix_freelist *fl);
 
+extern int __gnix_fl_refill(struct gnix_freelist *fl, int n);
+
 /** Return an item from the freelist
  *
  * @param e     item
  * @param fl    gnix_freelist
  * @return      FI_SUCCESS on success, -FI_ENOMEM or -FI_EAGAIN on failure
  */
-int _gnix_fl_alloc(struct dlist_entry **e, struct gnix_freelist *fl);
+__attribute__((unused))
+static inline int _gnix_fl_alloc(struct dlist_entry **e, struct gnix_freelist *fl)
+{
+    int ret = FI_SUCCESS;
+    struct dlist_entry *de = NULL;
+
+    assert(fl);
+
+    if (fl->ts)
+        fastlock_acquire(&fl->lock);
+
+    if (dlist_empty(&fl->freelist)) {
+        ret = __gnix_fl_refill(fl, fl->refill_size);
+        if (ret != FI_SUCCESS)
+            goto err;
+        if (fl->refill_size < fl->max_refill_size) {
+            int ns = fl->refill_size *= fl->growth_factor;
+
+            fl->refill_size = (ns >= fl->max_refill_size ?
+                            fl->max_refill_size : ns);
+        }
+
+        if (dlist_empty(&fl->freelist)) {
+            /* Can't happen unless multithreaded */
+            ret = -FI_EAGAIN;
+            goto err;
+        }
+    }
+
+    de = fl->freelist.next;
+    dlist_remove_init(de);
+
+    *e = de;
+err:
+    if (fl->ts)
+        fastlock_release(&fl->lock);
+    return ret;
+}
 
 /** Return an item to the free list
  *
  * @param e     item
  * @param fl    gnix_freelist
  */
-void _gnix_fl_free(struct dlist_entry *e, struct gnix_freelist *fl);
+__attribute__((unused))
+static inline void _gnix_fl_free(struct dlist_entry *e, struct gnix_freelist *fl)
+{
+    assert(e);
+    assert(fl);
+
+    e->next = NULL;  /* keep slist implementation happy */
+
+    if (fl->ts)
+        fastlock_acquire(&fl->lock);
+    dlist_init(e);
+    dlist_insert_head(e, &fl->freelist);
+    if (fl->ts)
+        fastlock_release(&fl->lock);
+}
+
 
 /** Is freelist empty (primarily used for testing
  *

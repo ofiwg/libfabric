@@ -43,6 +43,7 @@
 #include "gnix_bitmap.h"
 #include "gnix_av.h"
 #include "gnix_xpmem.h"
+#include "gnix_cm_nic.h"
 
 /*
  * mode bits
@@ -332,6 +333,26 @@ static inline enum gnix_vc_conn_state _gnix_vc_state(struct gnix_vc *vc)
 {
 	assert(vc);
 	return vc->conn_state;
+}
+
+/* Return 0 if VC is connected.  Progress VC CM if not. */
+static inline int __gnix_vc_connected(struct gnix_vc *vc)
+{
+    struct gnix_cm_nic *cm_nic;
+    int ret;
+
+    if (unlikely(vc->conn_state < GNIX_VC_CONNECTED)) {
+        cm_nic = vc->ep->cm_nic;
+        ret = _gnix_cm_nic_progress(cm_nic);
+        if ((ret != FI_SUCCESS) && (ret != -FI_EAGAIN))
+            GNIX_WARN(FI_LOG_EP_CTRL,
+                "_gnix_cm_nic_progress() failed: %s\n",
+            fi_strerror(-ret));
+        /* waiting to connect, check back later */
+        return -FI_EAGAIN;
+    }
+
+    return 0;
 }
 
 

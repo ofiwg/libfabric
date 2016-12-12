@@ -57,7 +57,7 @@
  * it just has to be at least as big as an slist_entry.
  */
 
-static int __gnix_fl_refill(struct gnix_freelist *fl, int n)
+int __gnix_fl_refill(struct gnix_freelist *fl, int n)
 {	int i, ret = FI_SUCCESS;
 	unsigned char *elems;
 
@@ -160,57 +160,4 @@ void _gnix_fl_destroy(struct gnix_freelist *fl)
 		fastlock_destroy(&fl->lock);
 }
 
-int _gnix_fl_alloc(struct dlist_entry **e, struct gnix_freelist *fl)
-{
-	int ret = FI_SUCCESS;
-	struct dlist_entry *de;
-
-	assert(fl);
-
-	if (fl->ts)
-		fastlock_acquire(&fl->lock);
-
-	if (dlist_empty(&fl->freelist)) {
-		ret = __gnix_fl_refill(fl, fl->refill_size);
-		if (ret != FI_SUCCESS)
-			goto err;
-		if (fl->refill_size < fl->max_refill_size) {
-			int ns = fl->refill_size *= fl->growth_factor;
-
-			fl->refill_size = (ns >= fl->max_refill_size ?
-					   fl->max_refill_size :
-					   ns);
-		}
-
-		if (dlist_empty(&fl->freelist)) {
-			/* Can't happen unless multithreaded */
-			ret = -FI_EAGAIN;
-			goto err;
-		}
-	}
-
-	de = fl->freelist.next;
-	dlist_remove_init(de);
-
-	*e = de;
-err:
-	if (fl->ts)
-		fastlock_release(&fl->lock);
-	return ret;
-}
-
-void _gnix_fl_free(struct dlist_entry *e, struct gnix_freelist *fl)
-{
-	assert(e);
-	assert(fl);
-
-	e->next = NULL;  /* keep slist implementation happy */
-
-	if (fl->ts)
-		fastlock_acquire(&fl->lock);
-	dlist_init(e);
-	dlist_insert_head(e, &fl->freelist);
-	if (fl->ts)
-		fastlock_release(&fl->lock);
-}
 

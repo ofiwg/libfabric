@@ -205,11 +205,11 @@ static inline void _gnix_ep_release_int_tx_buf(struct gnix_fid_ep *ep,
 static inline struct gnix_fab_req *
 _gnix_fr_alloc(struct gnix_fid_ep *ep)
 {
-	struct dlist_entry *de;
+	struct dlist_entry *de = NULL;
 	struct gnix_fab_req *fr = NULL;
 	int ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
-	while (ret == -FI_EAGAIN)
+	while (unlikely(ret == -FI_EAGAIN))
 		ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
 	if (ret == FI_SUCCESS) {
