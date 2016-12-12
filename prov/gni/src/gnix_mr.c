@@ -198,7 +198,7 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
 
 	/* If the nic list is empty, create a nic */
-	if (unlikely(dlist_empty(&domain->nic_list))) {
+	if (unlikely((dlist_empty(&gnix_nic_list_ptag[domain->ptag])))) {
 		rc = gnix_nic_alloc(domain, NULL, &nic);
 		if (rc) {
 			GNIX_INFO(FI_LOG_MR,
@@ -312,7 +312,7 @@ static inline void *__gnix_generic_register(
 	struct gnix_nic *nic;
 	gni_return_t grc = GNI_RC_SUCCESS;
 
-	dlist_for_each(&domain->nic_list, nic, dom_nic_list)
+	dlist_for_each(&gnix_nic_list_ptag[domain->ptag], nic, ptag_nic_list)
 	{
 		COND_ACQUIRE(nic->requires_lock, &nic->lock);
 		grc = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t) address,

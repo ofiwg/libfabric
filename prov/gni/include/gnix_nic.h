@@ -47,9 +47,15 @@
 
 #define GNIX_DEF_MAX_NICS_PER_PTAG	4
 
+/*
+ * globals
+ */
+
 extern uint32_t gnix_max_nics_per_ptag;
+extern struct dlist_entry gnix_nic_list_ptag[];
 extern struct dlist_entry gnix_nic_list;
 extern pthread_mutex_t gnix_nic_list_lock;
+
 /*
  * allocation flags for cleaning up GNI resources
  * when closing a gnix_nic - needed since these
@@ -99,8 +105,8 @@ struct gnix_nic_attr {
  * GNIX nic struct
  *
  * @var gnix_nic_list        list element used for global NIC list
- * @var dom_nic_list         list element used for nic linked list associated
- *                           with a given gnix_fid_domain
+ * @var ptag_nic_list        list element used for NIC linked list associated
+ *                           with a given PTAG.
  * @var lock                 lock used for serializing access to
  *                           gni_nic_hndl, rx_cq, and tx_cq
  * @var gni_cdm_hndl         handle for the GNI communication domain (CDM)
@@ -156,7 +162,7 @@ struct gnix_nic_attr {
  */
 struct gnix_nic {
 	struct dlist_entry gnix_nic_list; /* global NIC list */
-	struct dlist_entry dom_nic_list;  /* domain NIC list */
+	struct dlist_entry ptag_nic_list; /* global PTAG NIC list */
 	fastlock_t lock;
 	uint32_t allocd_gni_res;
 	gni_cdm_handle_t gni_cdm_hndl;
@@ -354,12 +360,6 @@ struct gnix_tx_descriptor {
 };
 
 /*
- * globals
- */
-
-extern uint32_t gnix_def_max_nics_per_ptag;
-
-/*
  * prototypes
  */
 
@@ -469,5 +469,10 @@ static inline void *__gnix_nic_elem_by_rem_id(struct gnix_nic *nic, int rem_id)
 
 void _gnix_nic_txd_err_inject(struct gnix_nic *nic,
 			      struct gnix_tx_descriptor *txd);
+
+/**
+ * @brief Initialize global NIC data.
+ */
+void _gnix_nic_init(void);
 
 #endif /* _GNIX_NIC_H_ */

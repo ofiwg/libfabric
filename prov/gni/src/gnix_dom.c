@@ -64,7 +64,6 @@ static struct fi_ops_domain gnix_domain_ops;
 static void __domain_destruct(void *obj)
 {
 	int ret = FI_SUCCESS;
-	struct gnix_nic *p, *next;
 	struct gnix_fid_domain *domain = (struct gnix_fid_domain *) obj;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
@@ -76,15 +75,6 @@ static void __domain_destruct(void *obj)
 	ret = _gnix_notifier_close(domain->mr_cache_attr.notifier);
 	if (ret != FI_SUCCESS)
 		GNIX_FATAL(FI_LOG_MR, "failed to close MR notifier\n");
-
-	/*
-	 * Drop a reference to each NIC used by this domain.
-	 */
-
-	dlist_for_each_safe(&domain->nic_list, p, next, dom_nic_list) {
-		dlist_remove(&p->dom_nic_list);
-		_gnix_ref_put(p);
-	}
 
 	/*
 	 * remove from the list of cdms attached to fabric
@@ -404,8 +394,6 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 static int
 __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 {
-	gni_return_t grc = GNI_RC_SUCCESS;
-	struct gnix_nic *nic;
 	struct gnix_fid_domain *domain;
 	int ret, type;
 
@@ -458,21 +446,6 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_MAX_RETRANSMITS:
 		domain->params.max_retransmits = *(uint32_t *)val;
-		dlist_for_each(&domain->nic_list, nic, dom_nic_list)
-		{
-			COND_ACQUIRE(nic->requires_lock, &nic->lock);
-			grc = GNI_SmsgSetMaxRetrans(nic->gni_nic_hndl,
-						    *(uint16_t *)val);
-			fastlock_release(&nic->lock);
-			if (grc != GNI_RC_SUCCESS)
-				break;
-		}
-
-		if (unlikely(grc != GNI_RC_SUCCESS)) {
-			GNIX_WARN(FI_LOG_DOMAIN, "failed to set smsg max "
-				  "retrans, ret=%s\n", gni_err_str[grc]);
-			return gnixu_to_fi_errno(grc);
-		}
 		break;
 	case GNI_ERR_INJECT_COUNT:
 		domain->params.err_inject_count = *(int32_t *)val;
