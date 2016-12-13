@@ -26,22 +26,30 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                       [Enable xpmem (gni provider) @<:@default=yes@:>@])],
                       )
 
+        AC_ARG_ENABLE([ugni-static],
+                      [AS_HELP_STRING([--enable-ugni-static],
+                                      [Enable static linking with uGNI.  Recommended for KNL.])],
+                     )
+
         AS_IF([test x"$enable_gni" != x"no"],
                [FI_PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
                                  [gni_header_happy=1
                                   gni_CPPFLAGS="$CRAY_GNI_HEADERS_CFLAGS $gni_CPPFLAGS"
-                                  gni_LDFLAGS="$CRAY_GNI_HEADER_LIBS $gni_LDFLAGS"
                                  ],
                                  [gni_header_happy=0])
               ])
 
         AS_IF([test "$gni_header_happy" -eq 1],
-              [FI_PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
+              [FI_PKG_CHECK_MODULES_STATIC([CRAY_UGNI], [cray-ugni],
                                  [ugni_lib_happy=1
                                   gni_CPPFLAGS=$CRAY_UGNI_CFLAGS
                                   gni_LDFLAGS=$CRAY_UGNI_LIBS
                                  ],
                                  [ugni_lib_happy=0])
+
+               AS_IF([test x"$enable_ugni_static" == x"yes" && test $ugni_lib_happy -eq 1],
+                     [gni_LDFLAGS=$(echo $gni_LDFLAGS | sed -e 's/lugni/l:libugni.a/')],[])
+
                FI_PKG_CHECK_MODULES_STATIC([CRAY_ALPS_LLI], [cray-alpslli],
                                  [alps_lli_happy=1
                                   gni_CPPFLAGS="$CRAY_ALPS_LLI_CFLAGS $gni_CPPFLAGS"
