@@ -135,6 +135,8 @@ typedef struct fid *fid_t;
 #define FI_AFFINITY		(1ULL << 29)
 
 /* fi_getinfo()-specific flags/caps */
+#define FI_COMM_REMOTE		(1ULL << 52)
+#define FI_COMM_LOCAL		(1ULL << 53)
 #define FI_PROV_ATTR_ONLY	(1ULL << 54)
 #define FI_NUMERICHOST		(1ULL << 55)
 #define FI_RMA_EVENT		(1ULL << 56)
