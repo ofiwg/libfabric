@@ -282,6 +282,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 	if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
 
 		const uint64_t send_len = pkt->hdr.inject.message_length;
+		const uint64_t immediate_data = pkt->hdr.inject.immediate_data;
 
 		if (is_multi_receive) {		/* branch should compile out */
 			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.inject.data, send_len);
@@ -293,9 +294,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			context->flags = FI_RECV | FI_MSG | FI_BGQ_CQ_CONTEXT_MULTIRECV;
 			context->buf = recv_buf;
 			context->len = send_len;
-			context->byte_counter = 0;
+			context->data = immediate_data;
 			context->tag = 0;	/* tag is not valid for multi-receives */
 			context->multi_recv_context = original_multi_recv_context;
+			context->byte_counter = 0;
 
 			/* the next 'fi_bgq_context' must be 8-byte aligned */
 			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
@@ -310,8 +312,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 			context->buf = NULL;
 			context->len = send_len;
-			context->byte_counter = 0;
+			context->data = immediate_data;
 			context->tag = origin_tag;
+			context->byte_counter = 0;
 
 			/* post a completion event for the individual receive */
 			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
@@ -330,7 +333,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			ext->err_entry.flags = context->flags;
 			ext->err_entry.len = recv_len;
 			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = 0;
+			ext->err_entry.data = immediate_data;
 			ext->err_entry.tag = origin_tag;
 			ext->err_entry.olen = send_len - recv_len;
 			ext->err_entry.err = FI_ETRUNC;
@@ -349,6 +352,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 	} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 
 		const uint64_t send_len = pkt->hdr.send.message_length;
+		const uint64_t immediate_data = pkt->hdr.send.immediate_data;
 
 		if (is_multi_receive) {		/* branch should compile out */
 			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
@@ -360,9 +364,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			context->flags = FI_RECV | FI_MSG | FI_BGQ_CQ_CONTEXT_MULTIRECV;
 			context->buf = recv_buf;
 			context->len = send_len;
-			context->byte_counter = 0;
+			context->data = immediate_data;
 			context->tag = 0;	/* tag is not valid for multi-receives */
 			context->multi_recv_context = original_multi_recv_context;
+			context->byte_counter = 0;
 
 			/* the next 'fi_bgq_context' must be 8-byte aligned */
 			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
@@ -377,8 +382,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 			context->buf = NULL;
 			context->len = send_len;
-			context->byte_counter = 0;
+			context->data = immediate_data;
 			context->tag = origin_tag;
+			context->byte_counter = 0;
 
 			/* post a completion event for the individual receive */
 			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
@@ -397,7 +403,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			ext->err_entry.flags = context->flags;
 			ext->err_entry.len = recv_len;
 			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = 0;
+			ext->err_entry.data = immediate_data;
 			ext->err_entry.tag = origin_tag;
 			ext->err_entry.olen = send_len - recv_len;
 			ext->err_entry.err = FI_ETRUNC;
@@ -414,6 +420,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 		return;
 
 	} else {			/* rendezvous packet */
+
+		const uint64_t immediate_data = pkt->payload.rendezvous.immediate_data;
 
 		uint64_t niov = pkt->hdr.rendezvous.niov_minus_1 + 1;
 		assert(niov <= (7-is_multi_receive));
@@ -434,9 +442,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			multi_recv_context->flags = FI_RECV | FI_MSG | FI_BGQ_CQ_CONTEXT_MULTIRECV;
 			multi_recv_context->buf = recv_buf;
 			multi_recv_context->len = xfer_len;
-			multi_recv_context->byte_counter = xfer_len;
+			multi_recv_context->data = immediate_data;
 			multi_recv_context->tag = 0;	/* tag is not valid for multi-receives */
 			multi_recv_context->multi_recv_context = context;
+			multi_recv_context->byte_counter = xfer_len;
 
 			/* the next 'fi_bgq_context' must be 8-byte aligned */
 			uint64_t bytes_consumed = ((xfer_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
@@ -456,8 +465,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 		} else if (xfer_len <= recv_len) {
 
 			context->len = xfer_len;
-			context->byte_counter = xfer_len;
+			context->data = immediate_data;
 			context->tag = origin_tag;
+			context->byte_counter = xfer_len;
 
 			byte_counter_vaddr = (uint64_t)&context->byte_counter;
 
@@ -479,7 +489,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			ext->err_entry.flags = context->flags;
 			ext->err_entry.len = recv_len;
 			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = 0;
+			ext->err_entry.data = immediate_data;
 			ext->err_entry.tag = origin_tag;
 			ext->err_entry.olen = xfer_len - recv_len;
 			ext->err_entry.err = FI_ETRUNC;

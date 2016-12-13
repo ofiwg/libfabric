@@ -169,7 +169,8 @@ union fi_bgq_mu_packet_hdr {
 		uint64_t		message_length	: 10;	/* 0..512 bytes of payload data */
 		uint64_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
 
-		uint32_t		unused[2];
+		uint32_t		unused_1;
+		uint32_t		immediate_data;
 		uint64_t		ofi_tag;
 	} __attribute__((__packed__)) send;
 
@@ -219,7 +220,7 @@ union fi_bgq_mu_packet_hdr {
 		uint8_t			data;
 		uint8_t			reserved_3;		/* a.k.a. common::packet_type */
 		uint32_t		unused_1;
-		uint32_t		unused_2;
+		uint32_t		immediate_data;
 		uint64_t		ofi_tag;
 	} __attribute__((__packed__)) inject;
 
@@ -296,7 +297,8 @@ struct fi_bgq_mu_fetch_metadata {
 union fi_bgq_mu_packet_payload {
 	uint8_t				byte[512];
 	struct {
-		uint32_t		unused[4];
+		uint32_t		immediate_data;
+		uint32_t		unused[3];
 		struct fi_bgq_mu_iov	mu_iov[31];
 	} rendezvous;
 	struct {

@@ -498,6 +498,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		if (buf) hdr->inject.data = *((uint8_t*)buf);
 		hdr->inject.ofi_tag = tag;
 		hdr->inject.message_length = len;
+		hdr->inject.immediate_data = data;
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
@@ -535,6 +536,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 
 		hdr->send.message_length = len;
 		hdr->send.ofi_tag = tag;
+		hdr->send.immediate_data = data;
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 	}
@@ -624,6 +626,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
 		hdr->send.message_length = xfer_len;
 		hdr->send.ofi_tag = tag;
+		hdr->send.immediate_data = data;
 
 		if (is_msg) {
 			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);	/* clear the 'TAG' bit in the packet type */
@@ -752,6 +755,8 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 				send_desc, &payload_paddr);
 		send_desc->Pa_Payload = payload_paddr;
 
+		payload->rendezvous.immediate_data = data;
+
 		if (is_contiguous) {
 			/* only send one mu iov */
 			fi_bgq_cnk_vaddr2paddr(buf, len, &payload->rendezvous.mu_iov[0].src_paddr);
@@ -761,8 +766,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 			assert(len <= 31);
 			size_t i;
 			const struct iovec * iov = (const struct iovec *)buf;
-			send_desc->Message_Length = len * sizeof(struct fi_bgq_mu_iov)
-				+ sizeof(uint32_t)*4;	/* "unused" payload space */
+			send_desc->Message_Length += (len-1) * sizeof(struct fi_bgq_mu_iov);
 			for (i=0; i<len; ++i) {
 				fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &payload->rendezvous.mu_iov[i].src_paddr);
 				payload->rendezvous.mu_iov[i].message_length = iov[i].iov_len;

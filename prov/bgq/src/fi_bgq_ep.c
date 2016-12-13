@@ -503,7 +503,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_INJECT);
 		hdr->inject.unused_1 = 0;
-		hdr->inject.unused_2 = 0;
+		hdr->inject.immediate_data = 0;
 
 		/* send model - copy from inject model and update */
 		desc = &bgq_ep->tx.inject.send_model;
@@ -511,8 +511,8 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
-		hdr->send.unused[0] = 0;
-		hdr->send.unused[1] = 0;
+		hdr->send.unused_1 = 0;
+		hdr->send.immediate_data = 0;
 	}
 
 	/*
@@ -530,8 +530,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
 		desc->Half_Word1.Interrupt =
 			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
-		desc->Message_Length = sizeof(struct fi_bgq_mu_iov)
-			+ sizeof(uint32_t)*4; 	/* "unused" payload space */
+		desc->Message_Length = sizeof(struct fi_bgq_mu_iov) + offsetof(union fi_bgq_mu_packet_payload, rendezvous.mu_iov);
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
