@@ -48,7 +48,7 @@ extern struct fi_provider gnix_prov;
  * For debug logging (#undef NDEBUG)
  * Q: should this just always be available?
  */
-#ifdef NDEBUG
+#ifdef ENABLE_DEBUG
 
 #define GNIX_LOG_INTERNAL(FI_LOG_FN, LEVEL, subsystem, fmt, ...)	\
 	FI_LOG_FN(&gnix_prov, subsystem, fmt, ##__VA_ARGS__)
