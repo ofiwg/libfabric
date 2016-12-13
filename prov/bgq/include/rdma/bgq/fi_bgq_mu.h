@@ -214,10 +214,12 @@ union fi_bgq_mu_packet_hdr {
 		uint64_t		reserved_0;
 		uint32_t		reserved_1;
 		uint16_t		reserved_2	: 10;
-		uint16_t		unused_0	:  6;
-		uint8_t			message_length;		/* 0..8 bytes of immediate data; only 4 bits are actually needed */
+		uint16_t		unused_0	:  5;
+		uint16_t		message_length	:  1;	/* 0..1 bytes of immediate data */
+		uint8_t			data;
 		uint8_t			reserved_3;		/* a.k.a. common::packet_type */
-		uint64_t		data;
+		uint32_t		unused_1;
+		uint32_t		unused_2;
 		uint64_t		ofi_tag;
 	} __attribute__((__packed__)) inject;
 

@@ -502,6 +502,8 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_INJECT);
+		hdr->inject.unused_1 = 0;
+		hdr->inject.unused_2 = 0;
 
 		/* send model - copy from inject model and update */
 		desc = &bgq_ep->tx.inject.send_model;

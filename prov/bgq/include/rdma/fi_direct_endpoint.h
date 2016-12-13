@@ -454,6 +454,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		size_t len,
 		fi_addr_t dest_addr,
 		uint64_t tag,
+		const uint32_t data,
 		int lock_required,
 		const unsigned is_msg)
 {
@@ -473,7 +474,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 	union fi_bgq_addr bgq_dst_addr;
 	bgq_dst_addr.fi = dest_addr;
 
-	if (len <= 8) {		/* likely ? */
+	if (len <= 1) {		/* likely ? ... what's the point? */
 
 		/* busy-wait until a fifo slot is available ... */
 		MUHWI_Descriptor_t * inject_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
@@ -494,7 +495,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_INJECT);
 		}
 
-		if (buf) hdr->inject.data = *((uint64_t*)buf);
+		if (buf) hdr->inject.data = *((uint8_t*)buf);
 		hdr->inject.ofi_tag = tag;
 		hdr->inject.message_length = len;
 
@@ -549,7 +550,7 @@ static inline
 ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, uint64_t tag, void *context,
-		int lock_required,
+		const uint32_t data, int lock_required,
 		const unsigned is_msg, const unsigned is_contiguous,
 		const unsigned override_flags, uint64_t tx_op_flags)
 {
@@ -805,7 +806,7 @@ ssize_t fi_bgq_send_generic(struct fid_ep *ep,
 {
 	assert(is_msg == 0 || is_msg == 1);
 	return fi_bgq_send_generic_flags(ep, buf, len, desc, dst_addr,
-		tag, context, lock_required, is_msg,
+		tag, context, 0, lock_required, is_msg,
 		1 /* is_contiguous */,
 		0 /* do not override flags */,
 		0 /* no flags */);
@@ -1020,8 +1021,11 @@ ssize_t fi_bgq_injectdata_generic(struct fid_ep *ep,
 		int lock_required,
 		const unsigned is_msg)
 {
-	assert(0);
-	return -1;
+	/* assert that the most significant bits are zero */
+	assert(0 == (~((0x01ull << (FI_BGQ_REMOTE_CQ_DATA_SIZE * sizeof(uint8_t))) - 1) & data));
+
+	return fi_bgq_inject_generic(ep, buf, len, dst_addr, tag, data,
+			lock_required, is_msg);
 }
 
 
@@ -1032,8 +1036,15 @@ ssize_t fi_bgq_senddata_generic(struct fid_ep *ep,
 		int lock_required,
 		const unsigned is_msg)
 {
-	assert(0);
-	return -1;
+	/* assert that the most significant bits are zero */
+	assert(0 == (~((0x01ull << (FI_BGQ_REMOTE_CQ_DATA_SIZE * sizeof(uint8_t))) - 1) & data));
+
+	assert(is_msg == 0 || is_msg == 1);
+	return fi_bgq_send_generic_flags(ep, buf, len, desc, dst_addr,
+		tag, context, data, lock_required, is_msg,
+		1 /* is_contiguous */,
+		0 /* do not override flags */,
+		0 /* no flags */);
 }
 
 
@@ -1044,7 +1055,7 @@ ssize_t fi_bgq_inject(struct fid_ep *ep,
 		fi_addr_t dest_addr,
 		int lock_required)
 {
-	return fi_bgq_inject_generic(ep, buf, len, dest_addr, 0,
+	return fi_bgq_inject_generic(ep, buf, len, dest_addr, 0, 0,
 			lock_required, 1);
 }
 

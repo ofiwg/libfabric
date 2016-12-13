@@ -38,8 +38,11 @@ ssize_t fi_bgq_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct fi_bgq_ep * bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 	const enum fi_threading threading = bgq_ep->threading;
 
+	/* assert that the most significant bits are zero in the immediate data */
+	assert(0 == (~((0x01ull << (FI_BGQ_REMOTE_CQ_DATA_SIZE * sizeof(uint8_t))) - 1) & msg->data));
+
 	return fi_bgq_send_generic_flags(ep, msg->msg_iov, msg->iov_count,
-		msg->desc, msg->addr, 0, msg->context,
+		msg->desc, msg->addr, 0, msg->context, msg->data,
 		(threading != FI_THREAD_ENDPOINT && threading != FI_THREAD_DOMAIN),	/* "lock required"? */
 		1 /* is_msg */,
 		0 /* is_contiguous */,
@@ -55,7 +58,7 @@ ssize_t fi_bgq_sendv(struct fid_ep *ep, const struct iovec *iov,
 	const enum fi_threading threading = bgq_ep->threading;
 
 	return fi_bgq_send_generic_flags(ep, iov, count,
-		desc, dest_addr, 0, context,
+		desc, dest_addr, 0, context, 0,
 		(threading != FI_THREAD_ENDPOINT && threading != FI_THREAD_DOMAIN),	/* "lock required"? */
 		1 /* is_msg */,
 		0 /* is_contiguous */,

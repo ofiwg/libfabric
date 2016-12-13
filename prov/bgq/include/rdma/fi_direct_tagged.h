@@ -54,7 +54,7 @@ ssize_t fi_bgq_tinject(struct fid_ep *ep,
 		uint64_t tag,
 		int lock_required)
 {
-	return fi_bgq_inject_generic(ep, buf, len, dest_addr, tag,
+	return fi_bgq_inject_generic(ep, buf, len, dest_addr, tag, 0,
 			lock_required, 0);
 }
 
