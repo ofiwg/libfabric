@@ -126,6 +126,7 @@ struct fi_domain_attr {
 	size_t                max_ep_rx_ctx;
 	size_t                max_ep_stx_ctx;
 	size_t                max_ep_srx_ctx;
+	uint64_t              comm_scope;
 };
 ```
 
@@ -490,6 +491,22 @@ shared transmit context.
 
 The maximum number of endpoints that may be associated with a
 shared receive context.
+
+## Communication Scope (comm_scope)
+
+Specifies the scope of the communication that will be used with this domain.
+Communication scope is determined using a set of bits. Each set bit indicates
+that a specific form of communication is required.
+
+*FI_COMM_LOCAL*
+: Indicates that local communication is required.
+
+*FI_COMM_REMOTE*
+: Indicates that remote communication is required.
+
+If no scope is provided in the attribute or no attribute is given, then the
+provider may choose to support whichever scope results in minimal
+performance impact.
 
 # RETURN VALUE
 
