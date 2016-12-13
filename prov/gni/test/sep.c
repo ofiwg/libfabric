@@ -48,20 +48,15 @@
 #include <inttypes.h>
 
 #include <criterion/criterion.h>
+#include <criterion/logging.h>
 #include "gnix_rdma_headers.h"
 #include "common.h"
 #include "fi_ext_gni.h"
 #include "gnix.h"
 
-#if 1
-#define dbg_printf(...)
-#else
-#define dbg_printf(...)				\
-	do {					\
-		printf(__VA_ARGS__);		\
-		fflush(stdout);			\
-	} while (0)
-#endif
+#define BLUE "\x1b[34m"
+#define COLOR_RESET "\x1b[0m"
+#define cr_log_info criterion_info
 
 #define NUMEPS 2
 #define BUF_SZ (1<<20)
@@ -98,10 +93,11 @@ static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
 };
+
 static uint64_t sends[NUMEPS] = {0}, recvs[NUMEPS] = {0},
 	send_errs[NUMEPS] = {0}, recv_errs[NUMEPS] = {0};
 
-void sep_setup(void)
+void sep_setup_common(int av_type)
 {
 	int ret, i, j;
 	struct fi_av_attr av_attr = {0};
@@ -140,9 +136,10 @@ void sep_setup(void)
 	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
+	rx_ctx_bits = 0;
 	while (ctx_cnt >> ++rx_ctx_bits);
 	av_attr.rx_ctx_bits = rx_ctx_bits;
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = av_type;
 	av_attr.count = NUMEPS;
 
 	cq_attr.format = FI_CQ_FORMAT_TAGGED;
@@ -281,8 +278,17 @@ void sep_setup(void)
 
 	for (i = 0; i < ctx_cnt; i++) {
 		rx_addr[i] = fi_rx_addr(gni_addr[1], i, rx_ctx_bits);
-		dbg_printf("fi_rx_addr[%d] %016lx\n", i, rx_addr[i]);
 	}
+}
+
+void sep_setup_map(void)
+{
+	sep_setup_common(FI_AV_MAP);
+}
+
+void sep_setup_table(void)
+{
+	sep_setup_common(FI_AV_TABLE);
 }
 
 static void sep_teardown(void)
@@ -529,42 +535,6 @@ check_iov_data(struct iovec *ib, struct iovec *ob, size_t cnt)
  * Test MSG functions
  ******************************************************************************/
 
-TestSuite(scalable, .init = sep_setup, .fini = sep_teardown);
-
-Test(scalable, bind)
-{
-	int ret;
-	struct fi_av_attr av_attr = {0};
-
-	/* test if bind fails */
-	ret = fi_ep_bind(tx_ep[0][0], &tx_cq[0][0]->fid,
-			 FI_TRANSMIT);
-	cr_assert(ret, "fi_ep_bind should fail");
-
-	ret = fi_ep_bind(rx_ep[0][0], &rx_cq[0][0]->fid,
-			 FI_TRANSMIT);
-	cr_assert(ret, "fi_ep_bind should fail");
-
-	/* test for inserting an ep_name that doesn't fit in the AV */
-	av_attr.type = FI_AV_MAP;
-	av_attr.count = NUMEPS;
-	av_attr.rx_ctx_bits = 1;
-
-	ret = fi_av_open(dom[0], &av_attr, &t_av, NULL);
-	cr_assert(!ret, "fi_av_open");
-	ret = fi_av_insert(t_av, ep_name[0], 1, &gni_addr[0], 0, NULL);
-	cr_assert(ret == -FI_EINVAL);
-	ret = fi_close(&t_av->fid);
-	cr_assert(!ret, "failure in closing av.");
-}
-
-/*
- * ssize_t fi_send(struct fid_ep *ep, void *buf, size_t len,
- *		void *desc, fi_addr_t dest_addr, void *context);
- *
- * ssize_t fi_recv(struct fid_ep *ep, void * buf, size_t len,
- *		void *desc, fi_addr_t src_addr, void *context);
- */
 static void sep_send_recv(int index, int len)
 {
 	ssize_t ret;
@@ -587,19 +557,6 @@ static void sep_send_recv(int index, int len)
 	cr_assert(ret == 1, "Data check failed");
 }
 
-Test(scalable, sr)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_send_recv, i, 1, BUF_SZ);
-	}
-}
-
-/*
-ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		 size_t count, fi_addr_t dest_addr, void *context);
-*/
 static void sep_sendv(int index, int len)
 {
 	int i, iov_cnt;
@@ -639,15 +596,6 @@ static void sep_sendv(int index, int len)
 		sep_check_cntrs(s, r, s_e, r_e);
 		cr_assert(sep_check_iov_data(src_iov, iov_dest_buf, iov_cnt,
 			len * iov_cnt), "Data mismatch");
-	}
-}
-
-Test(scalable, sendv)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_sendv, i, 1, BUF_SZ);
 	}
 }
 
@@ -697,15 +645,6 @@ static void sep_recvv(int index, int len)
 	}
 }
 
-Test(scalable, recvv)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_recvv, i, 1, BUF_SZ);
-	}
-}
-
 static void sep_sendmsg(int index, int len)
 {
 	ssize_t sz;
@@ -748,12 +687,19 @@ static void sep_sendmsg(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, sendmsg)
+void sep_clear_counters(void)
 {
-	int i;
+	int i, ret;
 
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_sendmsg, i, 1, BUF_SZ);
+	for (i = 0; i < NUMEPS; i++) {
+		ret = fi_cntr_set(send_cntr[i], 0);
+		cr_assert(!ret, "fi_cntr_set");
+		ret = fi_cntr_set(recv_cntr[i], 0);
+		cr_assert(!ret, "fi_cntr_set");
+		sends[i] = 0;
+		recvs[i] = 0;
+		send_errs[i] = 0;
+		recv_errs[i] = 0;
 	}
 }
 
@@ -799,15 +745,6 @@ void sep_sendmsgdata(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, sendmsgdata)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_sendmsgdata, i, 1, BUF_SZ);
-	}
-}
-
 #define INJECT_SIZE 64
 void sep_inject(int index, int len)
 {
@@ -850,19 +787,6 @@ void sep_inject(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, inject)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_inject, i, 1, INJECT_SIZE);
-	}
-}
-
-/*
-ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		    uint64_t data, fi_addr_t dest_addr, void *context);
-*/
 void sep_senddata(int index, int len)
 {
 	ssize_t sz;
@@ -894,19 +818,6 @@ void sep_senddata(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, senddata)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_senddata, i, 1, INJECT_SIZE);
-	}
-}
-
-/*
-ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-		      uint64_t data, fi_addr_t dest_addr);
-*/
 void sep_injectdata(int index, int len)
 {
 	int ret;
@@ -948,15 +859,6 @@ void sep_injectdata(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, injectdata)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_injectdata, i, 1, INJECT_SIZE);
-	}
-}
-
 void sep_read(int index, int len)
 {
 	int ret;
@@ -984,15 +886,6 @@ void sep_read(int index, int len)
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
-}
-
-Test(scalable, read)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_read, i, 8, BUF_SZ);
-	}
 }
 
 void sep_readv(int index, int len)
@@ -1026,14 +919,6 @@ void sep_readv(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, readv)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_readv, i, 8, BUF_SZ);
-	}
-}
 
 void sep_readmsg(int index, int len)
 {
@@ -1079,15 +964,6 @@ void sep_readmsg(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, readmsg)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_readmsg, i, 8, BUF_SZ);
-	}
-}
-
 void sep_write(int index, int len)
 {
 	int ret;
@@ -1113,15 +989,6 @@ void sep_write(int index, int len)
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
-}
-
-Test(scalable, write)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_write, i, 8, BUF_SZ);
-	}
 }
 
 void sep_writev(int index, int len)
@@ -1154,15 +1021,6 @@ void sep_writev(int index, int len)
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
-}
-
-Test(scalable, writev)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_writev, i, 8, BUF_SZ);
-	}
 }
 
 void sep_writemsg(int index, int len)
@@ -1209,15 +1067,6 @@ void sep_writemsg(int index, int len)
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
-Test(scalable, writemsg)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_writemsg, i, 8, BUF_SZ);
-	}
-}
-
 void sep_inject_write(int index, int len)
 {
 	ssize_t sz;
@@ -1240,15 +1089,6 @@ void sep_inject_write(int index, int len)
 
 			pthread_yield();
 		}
-	}
-}
-
-Test(scalable, injectwrite)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_inject_write, i, 8, INJECT_SIZE);
 	}
 }
 
@@ -1292,15 +1132,6 @@ void sep_writedata(int index, int len)
 		       WRITE_DATA);
 }
 
-Test(scalable, writedata)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_writedata, i, 8, BUF_SZ);
-	}
-}
-
 #define INJECTWRITE_DATA 0xdededadadeadbeaf
 void sep_inject_writedata(int index, int len)
 {
@@ -1339,15 +1170,6 @@ void sep_inject_writedata(int index, int len)
 		      INJECTWRITE_DATA);
 }
 
-Test(scalable, inject_writedata)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		xfer_each_size(sep_inject_writedata, i, 8, INJECT_SIZE);
-	}
-}
-
 #define SOURCE_DATA	0xBBBB0000CCCCULL
 #define TARGET_DATA	0xAAAA0000DDDDULL
 void sep_atomic(int index)
@@ -1379,15 +1201,6 @@ void sep_atomic(int index)
 	ret = *((uint64_t *)target) == SOURCE_DATA;
 	cr_assert(ret, "Data mismatch");
 
-}
-
-Test(scalable, atomic)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic(i);
-	}
 }
 
 void sep_atomic_v(int index)
@@ -1425,15 +1238,6 @@ void sep_atomic_v(int index)
 		SOURCE_DATA : TARGET_DATA;
 	ret = *((int64_t *)target) == min;
 	cr_assert(ret, "Data mismatch");
-}
-
-Test(scalable, atomicv)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_v(i);
-	}
 }
 
 #define U32_MASK	0xFFFFFFFFULL
@@ -1489,15 +1293,6 @@ void sep_atomic_msg(int index)
 	cr_assert(ret, "Data mismatch");
 }
 
-Test(scalable, atomicmsg)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_msg(i);
-	}
-}
-
 void sep_atomic_inject(int index)
 {
 	int ret, loops;
@@ -1523,15 +1318,6 @@ void sep_atomic_inject(int index)
 
 		pthread_yield();
 		cr_assert(++loops < 10000, "Data mismatch");
-	}
-}
-
-Test(scalable, atomicinj)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_inject(i);
 	}
 }
 
@@ -1567,15 +1353,6 @@ void sep_atomic_rw(int index)
 	cr_assert(ret, "Data mismatch");
 	ret = *((uint64_t *)source) == TARGET_DATA;
 	cr_assert(ret, "Fetch data mismatch");
-}
-
-Test(scalable, atomicrw)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_rw(i);
-	}
 }
 
 void sep_atomic_rwv(int index)
@@ -1619,15 +1396,6 @@ void sep_atomic_rwv(int index)
 	cr_assert(ret, "Data mismatch");
 	ret = *((int64_t *)source) == TARGET_DATA;
 	cr_assert(ret, "Fetch data mismatch");
-}
-
-Test(scalable, atomicrwv)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_rw(i);
-	}
 }
 
 void sep_atomic_rwmsg(int index)
@@ -1685,15 +1453,6 @@ void sep_atomic_rwmsg(int index)
 	cr_assert(ret, "Fetch data mismatch");
 }
 
-Test(scalable, atomicrwmsg)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_rwmsg(i);
-	}
-}
-
 void sep_atomic_compwrite(int index)
 {
 	int ret;
@@ -1730,15 +1489,6 @@ void sep_atomic_compwrite(int index)
 	cr_assert(ret, "Data mismatch");
 	ret = *((uint64_t *)source) == TARGET_DATA;
 	cr_assert(ret, "Fetch data mismatch");
-}
-
-Test(scalable, atomiccompwrite)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_compwrite(i);
-	}
 }
 
 #define SOURCE_DATA_FP	0.83203125
@@ -1790,15 +1540,6 @@ void sep_atomic_compwritev(int index)
 	cr_assert(ret, "Data mismatch");
 	ret = *((double *)source) == (double)TARGET_DATA_FP;
 	cr_assert(ret, "Fetch data mismatch");
-}
-
-Test(scalable, atomiccompwritev)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_compwritev(i);
-	}
 }
 
 void sep_atomic_compwritemsg(int index)
@@ -1857,15 +1598,6 @@ void sep_atomic_compwritemsg(int index)
 	cr_assert(ret, "Fetch data mismatch");
 }
 
-Test(scalable, atomiccompwritemsg)
-{
-	int i;
-
-	for (i = 0; i < ctx_cnt; i++) {
-		sep_atomic_compwritemsg(i);
-	}
-}
-
 void sep_invalid_compare_atomic(enum fi_datatype dt, enum fi_op op)
 {
 	ssize_t sz;
@@ -1885,17 +1617,6 @@ void sep_invalid_compare_atomic(enum fi_datatype dt, enum fi_op op)
 		sz = fi_compare_atomicvalid(tx_ep[0][0], dt, op, &count);
 		cr_assert(!sz, "fi_atomicvalid() failed\n");
 		cr_assert(count == 1, "fi_atomicvalid(): bad count\n");
-	}
-}
-
-Test(scalable, atomic_invalid_compare)
-{
-	int i, j;
-
-	for (i = 0; i < FI_ATOMIC_OP_LAST; i++) {
-		for (j = 0; j < FI_DATATYPE_LAST; j++) {
-			sep_invalid_compare_atomic(j, i);
-		}
 	}
 }
 
@@ -1921,13 +1642,218 @@ void sep_invalid_fetch_atomic(enum fi_datatype dt, enum fi_op op)
 	}
 }
 
-Test(scalable, atomic_invalid_fetch)
+void run_tests(void)
 {
 	int i, j;
 
+	cr_log_info("sep_send_recv\n");
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_send_recv, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_sendv\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_sendv, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_recvv\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_recvv, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_sendmsg\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_sendmsg, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_sendmsgdata\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_sendmsgdata, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_inject\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_inject, i, 1, INJECT_SIZE);
+	}
+
+	cr_log_info("sep_senddata\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_senddata, i, 1, INJECT_SIZE);
+	}
+
+	cr_log_info("sep_injectdata\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_injectdata, i, 1, INJECT_SIZE);
+	}
+
+	cr_log_info("sep_read\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_read, i, 8, BUF_SZ);
+	}
+
+	cr_log_info("sep_readv\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_readv, i, 8, BUF_SZ);
+	}
+
+	cr_log_info("sep_readmsg\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_readmsg, i, 8, BUF_SZ);
+	}
+
+	cr_log_info("sep_write\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_write, i, 8, BUF_SZ);
+	}
+
+	cr_log_info("sep_writev\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_writev, i, 8, BUF_SZ);
+	}
+
+	cr_log_info("sep_writemsg\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_writemsg, i, 8, BUF_SZ);
+	}
+
+	cr_log_info("sep_writedata\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_writedata, i, 8, BUF_SZ);
+	}
+
+	cr_log_info("sep_atomic\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic(i);
+	}
+
+	cr_log_info("sep_atomic_v\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_v(i);
+	}
+
+	cr_log_info("sep_atomic_msg\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_msg(i);
+	}
+
+	cr_log_info("sep_atomic_rw\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_rw(i);
+	}
+
+	cr_log_info("sep_atomic_rwmsg\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_rwmsg(i);
+	}
+
+	cr_log_info("sep_atomic_compwrite\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_compwrite(i);
+	}
+
+	cr_log_info("sep_atomic_compwritev\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_compwritev(i);
+	}
+
+	cr_log_info("sep_atomic_compwritemsg\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_compwritemsg(i);
+	}
+
+	cr_log_info("sep_atomic_inject\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		sep_atomic_inject(i);
+	}
+
+	cr_log_info("sep_inject_write\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_inject_write, i, 8, INJECT_SIZE);
+	}
+
+	cr_log_info("sep_inject_writedata\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_inject_writedata, i, 8, INJECT_SIZE);
+	}
+
+	cr_log_info("sep_invalid_compare_atomic\n");
+	for (i = 0; i < FI_ATOMIC_OP_LAST; i++) {
+		for (j = 0; j < FI_DATATYPE_LAST; j++) {
+			sep_invalid_compare_atomic(j, i);
+		}
+	}
+
+	cr_log_info("sep_invalid_fetch_atomic\n");
 	for (i = 0; i < FI_ATOMIC_OP_LAST; i++) {
 		for (j = 0; j < FI_DATATYPE_LAST; j++) {
 			sep_invalid_fetch_atomic(j, i);
 		}
 	}
+}
+
+TestSuite(scalablem, .init = sep_setup_map, .fini = sep_teardown);
+TestSuite(scalablet, .init = sep_setup_table, .fini = sep_teardown);
+
+Test(scalablem, bind)
+{
+	int ret;
+	struct fi_av_attr av_attr = {0};
+
+	/* test if bind fails */
+	ret = fi_ep_bind(tx_ep[0][0], &tx_cq[0][0]->fid,
+			 FI_TRANSMIT);
+	cr_assert(ret, "fi_ep_bind should fail");
+
+	ret = fi_ep_bind(rx_ep[0][0], &rx_cq[0][0]->fid,
+			 FI_TRANSMIT);
+	cr_assert(ret, "fi_ep_bind should fail");
+
+	/* test for inserting an ep_name that doesn't fit in the AV */
+	av_attr.type = FI_AV_MAP;
+	av_attr.count = NUMEPS;
+	av_attr.rx_ctx_bits = 1;
+
+	ret = fi_av_open(dom[0], &av_attr, &t_av, NULL);
+	cr_assert(!ret, "fi_av_open");
+	ret = fi_av_insert(t_av, ep_name[0], 1, &gni_addr[0], 0, NULL);
+	cr_assert(ret == -FI_EINVAL);
+	ret = fi_close(&t_av->fid);
+	cr_assert(!ret, "failure in closing av.");
+}
+
+Test(scalablem, all)
+{
+	cr_log_info(BLUE "sep:FI_AV_MAP tests:\n" COLOR_RESET);
+	run_tests();
+}
+
+Test(scalablet, all)
+{
+	cr_log_info(BLUE "sep:FI_AV_TABLE tests:\n" COLOR_RESET);
+	run_tests();
 }

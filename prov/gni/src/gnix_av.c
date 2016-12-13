@@ -168,10 +168,19 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 	assert(av_priv->table);
 	for (index = av_priv->count, i = 0; i < count; index++, i++) {
 		temp = &((struct gnix_ep_name *)addr)[i];
+
+		/* check if this ep_name fits in the av context bits */
+		if (temp->name_type & GNIX_EPN_TYPE_SEP) {
+			if ((1 << av_priv->rx_ctx_bits) < temp->rx_ctx_cnt) {
+				return -FI_EINVAL;
+			}
+		}
+
 		av_priv->table[index].gnix_addr = temp->gnix_addr;
 		av_priv->valid_entry_vec[index] = 1;
 		av_priv->table[index].name_type = temp->name_type;
 		av_priv->table[index].cookie = temp->cookie;
+		av_priv->table[index].rx_ctx_cnt = temp->rx_ctx_cnt;
 		av_priv->table[index].cm_nic_cdm_id =
 				temp->cm_nic_cdm_id;
 		if (fi_addr)
@@ -250,7 +259,21 @@ static int table_reverse_lookup(struct gnix_fid_av *av_priv,
 
 	for (i = 0; i < av_priv->count; i++) {
 		entry = &av_priv->table[i];
-		if (GNIX_ADDR_EQUAL(entry->gnix_addr, gnix_addr)) {
+		/*
+		 * for SEP endpoint entry we may have a delta in the cdm_id
+		 * component of the address to process
+		 */
+		if ((entry->name_type & GNIX_EPN_TYPE_SEP) &&
+		    (entry->gnix_addr.device_addr == gnix_addr.device_addr)) {
+			int index = gnix_addr.cdm_id - entry->gnix_addr.cdm_id;
+
+			if ((index >= 0) && (index < entry->rx_ctx_cnt)) {
+				/* we have a match */
+				*fi_addr = fi_rx_addr(i, index,
+						      av_priv->rx_ctx_bits);
+				return FI_SUCCESS;
+			}
+		} else if (GNIX_ADDR_EQUAL(entry->gnix_addr, gnix_addr)) {
 			*fi_addr = i;
 			return FI_SUCCESS;
 		}
@@ -373,11 +396,6 @@ static int map_lookup(struct gnix_fid_av *av_priv, fi_addr_t fi_addr,
 
 	memcpy(entry_ptr, entry, sizeof(*entry));
 
-	if (fi_addr & ~av_priv->mask) {
-		entry_ptr->gnix_addr.cdm_id +=
-				fi_addr >> (64 - av_priv->rx_ctx_bits);
-	}
-
 	return FI_SUCCESS;
 }
 
@@ -421,25 +439,11 @@ static int map_reverse_lookup(struct gnix_fid_av *av_priv,
 /*******************************************************************************
  * FI_AV API implementations.
  ******************************************************************************/
-int _gnix_table_lookup(struct gnix_fid_av *av_priv,
-		       fi_addr_t fi_addr,
-		       struct gnix_av_addr_entry *entry_ptr)
-{
-	return table_lookup(av_priv, fi_addr, entry_ptr);
-}
-
 int _gnix_table_reverse_lookup(struct gnix_fid_av *av_priv,
 			       struct gnix_address gnix_addr,
 			       fi_addr_t *fi_addr)
 {
 	return table_reverse_lookup(av_priv, gnix_addr, fi_addr);
-}
-
-int _gnix_map_lookup(struct gnix_fid_av *av_priv,
-		     fi_addr_t fi_addr,
-		     struct gnix_av_addr_entry *entry_ptr)
-{
-	return map_lookup(av_priv, fi_addr, entry_ptr);
 }
 
 int _gnix_map_reverse_lookup(struct gnix_fid_av *av_priv,
@@ -453,6 +457,7 @@ int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 		    struct gnix_av_addr_entry *entry_ptr)
 {
 	int ret = FI_SUCCESS;
+	fi_addr_t addr = fi_addr & gnix_av->mask;
 
 	GNIX_TRACE(FI_LOG_AV, "\n");
 
@@ -463,14 +468,19 @@ int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 
 	switch (gnix_av->type) {
 	case FI_AV_TABLE:
-		ret = table_lookup(gnix_av, fi_addr, entry_ptr);
+		ret = table_lookup(gnix_av, addr, entry_ptr);
 		break;
 	case FI_AV_MAP:
-		ret = map_lookup(gnix_av, fi_addr, entry_ptr);
+		ret = map_lookup(gnix_av, addr, entry_ptr);
 		break;
 	default:
 		ret = -FI_EINVAL;
 		break;
+	}
+
+	if (fi_addr & ~gnix_av->mask) {
+		entry_ptr->gnix_addr.cdm_id +=
+				fi_addr >> (64 - gnix_av->rx_ctx_bits);
 	}
 
 err:
