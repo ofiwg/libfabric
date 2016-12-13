@@ -134,7 +134,7 @@
  *
  * Note: "* 2" for head and tail
  */
-#define GNIX_HTD_BUF_SZ (GNIX_MAX_MSG_IOV_LIMIT * GNI_READ_ALIGN * 2)
+#define GNIX_INT_TX_BUF_SZ (GNIX_MAX_MSG_IOV_LIMIT * GNI_READ_ALIGN * 2)
 
 /*
  * Flags
@@ -452,14 +452,14 @@ struct gnix_fid_ep_ops_en {
 	uint32_t atomic_write_allowed: 1;
 };
 
-#define GNIX_HTD_POOL_SIZE 128
+#define GNIX_INT_TX_POOL_SIZE 128
 
-struct gnix_htd_buf {
+struct gnix_int_tx_buf {
 	struct slist_entry e;
 	uint8_t *buf;
 };
 
-struct gnix_htd_pool {
+struct gnix_int_tx_pool {
 	bool enabled;
 	fastlock_t lock;
 	struct gnix_fid_mem_desc *md;
@@ -536,7 +536,7 @@ struct gnix_fid_ep {
 	int min_multi_recv;
 	/* note this free list will be initialized for thread safe */
 	struct gnix_freelist fr_freelist;
-	struct gnix_htd_pool htd_pool;
+	struct gnix_int_tx_pool int_tx_pool;
 	struct gnix_reference ref_cnt;
 	struct gnix_fid_ep_ops_en ep_ops;
 
@@ -751,11 +751,6 @@ struct gnix_fab_req_msg {
 	size_t			     recv_iov_cnt;
 	uint64_t                     recv_flags; /* protocol, API info */
 	size_t			     cum_recv_len;
-
-	/* @var htd_buf->buf "head(H) tail(T) data buf" layout: '[T|T|...|H|H]' */
-	struct slist_entry	     *htd_buf_e;
-	uint8_t			     *htd_buf;
-	gni_mem_handle_t	     htd_mdh;
 
 	uint64_t                     tag;
 	uint64_t                     ignore;
@@ -1002,6 +997,10 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
+
+	struct slist_entry           *int_tx_buf_e;
+	uint8_t                      *int_tx_buf;
+	gni_mem_handle_t             int_tx_mdh;
 
 	/* TODO: change the size of this for unaligned data? */
 	struct gnix_tx_descriptor *iov_txds[GNIX_MAX_MSG_IOV_LIMIT];
