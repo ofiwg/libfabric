@@ -840,9 +840,10 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 	bgq_context->flags = rx_op_flags;
 	bgq_context->len = len;
 	bgq_context->buf = buf;
-	bgq_context->byte_counter = (uint64_t)-1;
+	bgq_context->src_addr = src_addr;
 	bgq_context->tag = tag;
 	bgq_context->ignore = ignore;
+	bgq_context->byte_counter = (uint64_t)-1;
 
 	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* constant expression will compile out */
 
@@ -916,6 +917,7 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		bgq_context->flags = FI_MULTI_RECV;
 		bgq_context->len = len - sizeof(union fi_bgq_context);
 		bgq_context->buf = (void *)((uintptr_t)base + sizeof(union fi_bgq_context));
+		bgq_context->src_addr = msg->addr;
 		bgq_context->byte_counter = 0;
 		bgq_context->multi_recv_next = (union fi_bgq_context *)base;
 		bgq_context->ignore = (uint64_t)-1;
@@ -933,9 +935,10 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		bgq_context->flags = flags;
 		bgq_context->len = 0;
 		bgq_context->buf = NULL;
-		bgq_context->byte_counter = (uint64_t)-1;
+		bgq_context->src_addr = msg->addr;
 		bgq_context->tag = 0;
 		bgq_context->ignore = (uint64_t)-1;
+		bgq_context->byte_counter = (uint64_t)-1;
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
 		rx_op_flags = flags;
@@ -949,9 +952,10 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		bgq_context->flags = flags;
 		bgq_context->len = msg->msg_iov[0].iov_len;
 		bgq_context->buf = msg->msg_iov[0].iov_base;
-		bgq_context->byte_counter = (uint64_t)-1;
+		bgq_context->src_addr = msg->addr;
 		bgq_context->tag = 0;
 		bgq_context->ignore = (uint64_t)-1;
+		bgq_context->byte_counter = (uint64_t)-1;
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
 		rx_op_flags = flags;
@@ -962,6 +966,7 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 
 		ext->bgq_context.flags = flags | FI_BGQ_CQ_CONTEXT_EXT;
 		ext->bgq_context.byte_counter = (uint64_t)-1;
+		ext->bgq_context.src_addr = msg->addr;
 		ext->bgq_context.tag = 0;
 		ext->bgq_context.ignore = (uint64_t)-1;
 		ext->msg.op_context = (struct fi_context *)msg->context;

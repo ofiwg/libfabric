@@ -625,7 +625,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 static inline
 unsigned is_match(struct fi_bgq_mu_packet *pkt, union fi_bgq_context * context, const unsigned poll_msg)
 {
-	if (poll_msg) return 1;		/* branch should compile out */
+	if (poll_msg && context->src_addr == FI_ADDR_UNSPEC) return 1;
 
 	const uint64_t origin_tag = pkt->hdr.inject.ofi_tag;
 	const uint64_t ignore = context->ignore;
