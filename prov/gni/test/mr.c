@@ -49,6 +49,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "gnix.h"
 
 #define CHECK_HOOK(name, args...) \
 	({ \
@@ -315,6 +316,31 @@ Test(mr_internal_bare, basic_init)
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
+}
+
+/* Test simple init, register and deregister, no NIC present */
+Test(mr_internal_bare, bug_1086)
+{
+	struct gnix_fid_mem_desc *g_mr;
+	struct gnix_nic *g_nic;
+	int ret;
+
+	_set_lazy_deregistration(0);
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+                        default_offset, default_req_key,
+                        default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	g_mr = (struct gnix_fid_mem_desc *) container_of(mr, \
+		struct gnix_fid_mem_desc, mr_fid);
+
+	g_nic = g_mr->nic;
+	cr_assert(atomic_get(&g_nic->ref_cnt.references) > 0);
+	
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert(atomic_get(&g_nic->ref_cnt.references) == 0);
 }
 
 /* Test invalid flags to fi_mr_reg */
