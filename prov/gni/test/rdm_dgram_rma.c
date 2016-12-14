@@ -1605,6 +1605,166 @@ Test(dgram_rma_1dom, readmsg)
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
+void do_readmsg_more(int len, void *s, void *t, int len2, void *s2, void *t2)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct iovec iov, iov2;
+	struct fi_msg_rma msg, msg2;
+	struct fi_rma_iov rma_iov, rma_iov2;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
+
+	iov.iov_base = s;
+	iov.iov_len = len;
+
+	rma_iov.addr = (uint64_t)t;
+	rma_iov.len = len;
+	rma_iov.key = mr_key[1];
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.context = t;
+	msg.data = (uint64_t)t;
+
+	iov2.iov_base = s2;
+	iov2.iov_len = len2;
+
+	rma_iov2.addr = (uint64_t)t2;
+	rma_iov2.len = len2;
+	rma_iov2.key = mr_key2[1];
+
+	msg2.msg_iov = &iov2;
+	msg2.desc = (void **)loc_mr2;
+	msg2.iov_count = 1;
+	msg2.addr = gni_addr[1];
+	msg2.rma_iov = &rma_iov2;
+	msg2.rma_iov_count = 1;
+	msg2.context = t2;
+	msg2.data = (uint64_t)t2;
+
+
+	init_data(t, len, 0xef);
+	init_data(t2, len2, 0xff);
+	init_data(s, len, 0);
+	init_data(s2, len2, 0);
+
+	sz = fi_readmsg(ep[0], &msg, FI_MORE);
+	cr_assert_eq(sz, 0);
+	sz = fi_readmsg(ep[0], &msg2, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_READ, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_rma_check_tcqe(&cqe, t2, FI_RMA | FI_READ, 0);
+
+	r[0] = 2;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
+
+	dbg_printf("got write context event!\n");
+
+	cr_assert(check_data(s, t, len), "Data mismatch1");
+	cr_assert(check_data(s2, t2, len2), "Data mismatch2");
+}
+
+void do_read_alignment_more(void)
+{
+	/* Size below GNIX_RMA_UREAD_CHAINED_THRESH size. All of these should
+	 * have the same behavior. Code related to head/tail buffers should
+	 * be bypassed */
+	do_readmsg_more(8, source, target, 8, source2, target2);
+	dbg_printf("MORE All Aligned\n");
+
+	do_readmsg_more(8, source, target, 9, source2, target2);
+	dbg_printf("MORE M1 A M2 TUA INDIRECT\n");
+
+	do_readmsg_more(9, source, target, 8, source2, target2);
+	dbg_printf("MORE M1 UA M2 A INDIRECT\n");
+
+	do_readmsg_more(8, source, target, 8, source2, target2+2);
+	dbg_printf("MORE M1 A M2 H&TUA INDIRECT\n");
+
+	/* Size above GNIX_RMA_UREAD_CHAINED_THRESH 'H/T buffers will actually
+	 * be used. Have one test for each possible combination of 2 messages
+	 * with 4 possible paths to follow.
+	 * 'Aligned', 'Head Unaligned', 'Tail Unaligned', 'H&T Unaligned' */
+
+	/* M1 Aligned */
+	do_readmsg_more(64, source, target, 64, source2, target2);
+	dbg_printf("MORE M1 A M2 A\n");
+
+	do_readmsg_more(64, source, target, 65, source2, target2);
+	dbg_printf("MORE M1 A M2 TUA\n");
+
+	do_readmsg_more(64, source, target, 65, source2, target2+3);
+	dbg_printf("MORE M1 A M2 HUA\n");
+
+	do_readmsg_more(64, source, target, 64, source2, target2+2);
+	dbg_printf("MORE M1 A M2 H&TUA\n");
+
+
+	/* M1 Tail Unaligned */
+	do_readmsg_more(65, source, target, 64, source2, target2);
+	dbg_printf("MORE M1 TUA M2 A\n");
+
+	do_readmsg_more(65, source, target, 65, source2, target2);
+	dbg_printf("MORE M1 TUA M2 TUA\n");
+
+	do_readmsg_more(65, source, target, 65, source2, target2+3);
+	dbg_printf("MORE M1 TUA M2 HUA\n");
+
+	do_readmsg_more(65, source, target, 64, source2, target2+2);
+	dbg_printf("MORE M1 TUA M2 H&TUA\n");
+
+	/* M1 Head Unaligned */
+	do_readmsg_more(65, source, target+3, 64, source2, target2);
+	dbg_printf("MORE M1 HUA M2 A\n");
+
+	do_readmsg_more(65, source, target+3, 65, source2, target2);
+	dbg_printf("MORE M1 HUA M2 TUA\n");
+
+	do_readmsg_more(65, source, target+3, 65, source2, target2+3);
+	dbg_printf("MORE M1 HUA M2 HUA\n");
+
+	do_readmsg_more(65, source, target+3, 64, source2, target2+2);
+	dbg_printf("MORE M1 HUA M2 H&TUA\n");
+
+
+	/* M1 Head&Tail Unaligned */
+	do_readmsg_more(64, source, target+2, 64, source2, target2);
+	dbg_printf("MORE M1 H&TUA M2 A\n");
+
+	do_readmsg_more(64, source, target+2, 65, source2, target2);
+	dbg_printf("MORE M1 H&TUA M2 TUA\n");
+
+	do_readmsg_more(64, source, target+2, 65, source2, target2+3);
+	dbg_printf("MORE M1 H&TUA M2 HUA\n");
+
+	do_readmsg_more(64, source, target+2, 64, source2, target2+2);
+	dbg_printf("MORE M1 H&TUA M2 H&TUA\n");
+
+}
+
+Test(rdm_rma, readmsgmore)
+{
+	do_read_alignment_more();
+}
+
 #define READ_DATA 0xdededadadeaddeef
 void do_readmsgdata(int len)
 {
