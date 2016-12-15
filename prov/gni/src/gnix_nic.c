@@ -651,46 +651,6 @@ err:
 }
 
 /*
- * allocate a tx desc for this nic
- */
-
-int _gnix_nic_tx_alloc(struct gnix_nic *nic,
-		       struct gnix_tx_descriptor **desc)
-{
-	struct dlist_entry *entry;
-
-	COND_ACQUIRE(nic->requires_lock, &nic->tx_desc_lock);
-	if (dlist_empty(&nic->tx_desc_free_list)) {
-		COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
-		return -FI_ENOSPC;
-	}
-
-	entry = nic->tx_desc_free_list.next;
-	dlist_remove_init(entry);
-	dlist_insert_head(entry, &nic->tx_desc_active_list);
-	*desc = dlist_entry(entry, struct gnix_tx_descriptor, list);
-	COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
-
-	return FI_SUCCESS;
-}
-
-/*
- * free a tx desc for this nic - the nic is not embedded in the
- * descriptor to help keep it small
- */
-
-int _gnix_nic_tx_free(struct gnix_nic *nic,
-		      struct gnix_tx_descriptor *desc)
-{
-	COND_ACQUIRE(nic->requires_lock, &nic->tx_desc_lock);
-	dlist_remove_init(&desc->list);
-	dlist_insert_head(&desc->list, &nic->tx_desc_free_list);
-	COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
-
-	return FI_SUCCESS;
-}
-
-/*
  * allocate a free list of tx descs for a gnix_nic struct.
  */
 

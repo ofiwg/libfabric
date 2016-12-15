@@ -1420,7 +1420,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	int remote_id;
 	struct gnix_vc *vc_ptr = NULL;
 	struct gnix_nic *nic = NULL;
-	struct dlist_entry *de;
+	struct dlist_entry *de = NULL;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1729,27 +1729,6 @@ int _gnix_vc_disconnect(struct gnix_vc *vc)
 	vc->conn_state = GNIX_VC_CONN_TERMINATED;
 	return FI_SUCCESS;
 }
-
-/* Return 0 if VC is connected.  Progress VC CM if not. */
-static int __gnix_vc_connected(struct gnix_vc *vc)
-{
-	struct gnix_cm_nic *cm_nic;
-	int ret;
-
-	if (unlikely(vc->conn_state < GNIX_VC_CONNECTED)) {
-		cm_nic = vc->ep->cm_nic;
-		ret = _gnix_cm_nic_progress(cm_nic);
-		if ((ret != FI_SUCCESS) && (ret != -FI_EAGAIN))
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_cm_nic_progress() failed: %s\n",
-			fi_strerror(-ret));
-		/* waiting to connect, check back later */
-		return -FI_EAGAIN;
-	}
-
-	return 0;
-}
-
 
 /******************************************************************************
  *

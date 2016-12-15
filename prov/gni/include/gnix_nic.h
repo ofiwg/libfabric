@@ -367,7 +367,26 @@ struct gnix_tx_descriptor {
  *                     is to be stored
  * @return             FI_SUCCESS on success, -FI_ENOSPC no free tx descriptors
  */
-int _gnix_nic_tx_alloc(struct gnix_nic *nic, struct gnix_tx_descriptor **tdesc);
+static inline int _gnix_nic_tx_alloc(struct gnix_nic *nic,
+               struct gnix_tx_descriptor **desc)
+{
+    struct dlist_entry *entry;
+
+    COND_ACQUIRE(nic->requires_lock, &nic->tx_desc_lock);
+    if (dlist_empty(&nic->tx_desc_free_list)) {
+        COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
+        return -FI_ENOSPC;
+    }
+
+    entry = nic->tx_desc_free_list.next;
+    dlist_remove_init(entry);
+    dlist_insert_head(entry, &nic->tx_desc_active_list);
+    *desc = dlist_entry(entry, struct gnix_tx_descriptor, list);
+    COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
+
+    return FI_SUCCESS;
+}
+
 
 /**
  * @brief frees a previously allocated tx descriptor
@@ -377,7 +396,17 @@ int _gnix_nic_tx_alloc(struct gnix_nic *nic, struct gnix_tx_descriptor **tdesc);
  * @param[in] tdesc    pointer to previously allocated tx descriptor
  * @return             FI_SUCCESS on success
  */
-int _gnix_nic_tx_free(struct gnix_nic *nic, struct gnix_tx_descriptor *tdesc);
+static inline int _gnix_nic_tx_free(struct gnix_nic *nic,
+                                struct gnix_tx_descriptor *desc)
+{
+    COND_ACQUIRE(nic->requires_lock, &nic->tx_desc_lock);
+    dlist_remove_init(&desc->list);
+    dlist_insert_head(&desc->list, &nic->tx_desc_free_list);
+    COND_RELEASE(nic->requires_lock, &nic->tx_desc_lock);
+
+    return FI_SUCCESS;
+}
+
 
 /**
  * @brief allocate a gnix_nic struct
