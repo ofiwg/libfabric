@@ -966,9 +966,10 @@ static int __gnix_rndzv_req(void *arg)
 
 		if (req->int_tx_buf_e == NULL) {
 			req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
-			if (req->int_tx_buf_e == NULL)
+			if (req->int_tx_buf_e == NULL) {
 				GNIX_WARN(FI_LOG_EP_DATA,
 					  "RAN OUT OF INT_TX_BUFS");
+			}
 		}
 
 		req->int_tx_buf = ((struct gnix_int_tx_buf *)

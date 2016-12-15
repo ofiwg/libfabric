@@ -515,9 +515,10 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 
 	if (req->int_tx_buf_e == NULL) {
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
-		if (req->int_tx_buf_e == NULL)
+		if (req->int_tx_buf_e == NULL) {
 			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
 			/* TODO Create growable list of buffers */
+		}
 	}
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
@@ -585,9 +586,10 @@ static void __gnix_rma_fill_pd_indirect_get(struct gnix_fab_req *req,
 
 	if (req->int_tx_buf_e == NULL) {
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
-		if (req->int_tx_buf_e == NULL)
+		if (req->int_tx_buf_e == NULL) {
 			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
 			/* TODO Create growable list of buffers */
+		}
 	}
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
@@ -663,10 +665,11 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 
 	if (req->int_tx_buf_e == NULL) {
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
-		if (req->int_tx_buf_e == NULL)
+		if (req->int_tx_buf_e == NULL) {
 			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
 			return -FI_ENOSPC;
 			/* TODO Create growable list of buffers */
+		}
 	}
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
