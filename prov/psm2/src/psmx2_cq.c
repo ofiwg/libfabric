@@ -191,6 +191,8 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		op_context = fi_context;
 		buf = PSMX2_CTXT_USER(fi_context);
 		flags = FI_RECV | FI_MSG;
+		if (psm2_status->msg_tag.tag2 & PSMX2_IMM_BIT)
+			flags |= FI_REMOTE_CQ_DATA;
 		is_recv = 1;
 		break;
 	case PSMX2_MULTI_RECV_CONTEXT:
@@ -198,6 +200,8 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		req = PSMX2_CTXT_USER(fi_context);
 		buf = req->buf + req->offset;
 		flags = FI_RECV | FI_MSG;
+		if (psm2_status->msg_tag.tag2 & PSMX2_IMM_BIT)
+			flags |= FI_REMOTE_CQ_DATA;
 		if (req->offset + psm2_status->nbytes + req->min_buf_size > req->len)
 			flags |= FI_MULTI_RECV;	/* buffer used up */
 		is_recv = 1;

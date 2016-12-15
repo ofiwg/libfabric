@@ -88,11 +88,11 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 			vlane = PSMX2_ADDR_TO_VL(src_addr);
 		}
 		tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, vlane, ep_priv->vlane);
-		tagsel32 = ~PSMX2_IOV_BIT;
+		tagsel32 = ~(PSMX2_IOV_BIT | PSMX2_IMM_BIT);
 	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, 0, ep_priv->vlane);
-		tagsel32 = ~(PSMX2_IOV_BIT | PSMX2_SRC_BITS);
+		tagsel32 = ~(PSMX2_IOV_BIT | PSMX2_IMM_BIT | PSMX2_SRC_BITS);
 	}
 
 	PSMX2_SET_TAG(psm2_tag, 0ULL, tag32);
@@ -267,6 +267,8 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, ep_priv->vlane, vlane);
+	if (flags & FI_REMOTE_CQ_DATA)
+		tag32 |= PSMX2_IMM_BIT;
 	PSMX2_SET_TAG(psm2_tag, data, tag32);
 
 	if ((flags & PSMX2_NO_COMPLETION) ||
@@ -439,6 +441,8 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	tag32 = PSMX2_TAG32(tag32_base, ep_priv->vlane, vlane);
+	if (flags & FI_REMOTE_CQ_DATA)
+		tag32 |= PSMX2_IMM_BIT;
 	PSMX2_SET_TAG(psm2_tag, data, tag32);
 
 	if ((flags & PSMX2_NO_COMPLETION) ||
@@ -505,7 +509,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 		PSMX2_CTXT_TYPE(fi_context) = PSMX2_IOV_SEND_CONTEXT;
 		PSMX2_CTXT_USER(fi_context) = req;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
-		tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, ep_priv->vlane, vlane);
+		tag32 &= ~PSMX2_IOV_BIT;
 		PSMX2_TAG32_SET_SEQ(tag32, req->iov_info.seq_num);
 		PSMX2_SET_TAG(psm2_tag, data, tag32);
 		for (i=0; i<count; i++) {
@@ -581,6 +585,8 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	PSMX2_TAG32_SET_SEQ(psm2_tag.tag2, rep->iov_info.seq_num);
 
 	rep->comp_flag = (psm2_tag.tag2 & PSMX2_MSG_BIT) ? FI_MSG : FI_TAGGED;
+	if (psm2_tag.tag2 & PSMX2_IMM_BIT)
+		rep->comp_flag |= FI_REMOTE_CQ_DATA;
 
 	/* match every bit of the tag */
 	PSMX2_SET_TAG(psm2_tagsel, -1UL, -1);
@@ -706,7 +712,7 @@ static ssize_t psmx2_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_send_generic(ep, buf, len, desc, dest_addr, context,
-				  ep_priv->tx_flags, data);
+				  ep_priv->tx_flags | FI_REMOTE_CQ_DATA, data);
 }
 
 static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -717,7 +723,8 @@ static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	return psmx2_send_generic(ep, buf, len, NULL, dest_addr, NULL,
-				  ep_priv->tx_flags | FI_INJECT | PSMX2_NO_COMPLETION,
+				  ep_priv->tx_flags | FI_INJECT | PSMX2_NO_COMPLETION |
+					FI_REMOTE_CQ_DATA,
 				  data);
 }
 
