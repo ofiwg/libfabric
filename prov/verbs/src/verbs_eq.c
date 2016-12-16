@@ -163,7 +163,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	return sizeof(*entry) + datalen;
 }
 
-static ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
+ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 		const void *buf, size_t len)
 {
 	struct fi_ibv_eq_entry *entry;

@@ -153,8 +153,10 @@ struct fi_ibv_av {
 	struct fid_av		av_fid;
 	struct fi_ibv_domain	*domain;
 	struct fi_ibv_rdm_ep	*ep;
+	struct fi_ibv_eq	*eq;
 	size_t			count;
 	size_t			used;
+	uint64_t		flags;
 	enum fi_av_type		type;
 	fi_ibv_rdm_addr_to_conn_func addr_to_conn;
 	fi_ibv_rdm_conn_to_addr_func conn_to_addr;
@@ -189,6 +191,8 @@ struct fi_ibv_domain {
 	struct fi_ibv_rdm_cm	*rdm_cm;
 	struct fi_info		*info;
 	struct fi_ibv_fabric	*fab;
+	struct fi_ibv_eq	*eq;
+	uint64_t		eq_flags;
 };
 
 struct fi_ibv_cq;
@@ -343,6 +347,9 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			      void *context, uint64_t flags);
 ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 int fi_ibv_cq_signal(struct fid_cq *cq);
+
+ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
+		const void *buf, size_t len);
 
 #define fi_ibv_set_sge(sge, buf, len, desc)				\
 	do {								\

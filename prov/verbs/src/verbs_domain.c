@@ -112,6 +112,14 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	md->mr_fid.mem_desc = (void *) (uintptr_t) md->mr->lkey;
 	md->mr_fid.key = md->mr->rkey;
 	*mr = &md->mr_fid;
+	if(md->domain->eq && (md->domain->eq_flags & FI_REG_MR)) {
+		struct fi_eq_entry entry = {
+			.fid = &md->mr_fid.fid,
+			.context = context
+		};
+		fi_ibv_eq_write_event(md->domain->eq, FI_MR_COMPLETE,
+			 	      &entry, sizeof(entry));
+	}
 	return 0;
 
 err:
@@ -138,6 +146,26 @@ static int fi_ibv_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 {
 	return fi_ibv_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
 			0, attr->requested_key, flags, mr, attr->context);
+}
+
+static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+{
+	struct fi_ibv_domain *domain;
+	struct fi_ibv_eq *eq;
+
+	domain = container_of(fid, struct fi_ibv_domain, domain_fid.fid);
+
+	switch (bfid->fclass) {
+	case FI_CLASS_EQ:
+		eq = container_of(bfid, struct fi_ibv_eq, eq_fid);
+		domain->eq = eq;
+		domain->eq_flags = flags;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int fi_ibv_domain_close(fid_t fid)
@@ -195,7 +223,7 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 static struct fi_ops fi_ibv_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_domain_close,
-	.bind = fi_no_bind,
+	.bind = fi_ibv_domain_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
