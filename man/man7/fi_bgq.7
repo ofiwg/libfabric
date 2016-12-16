@@ -1,4 +1,4 @@
-.TH "fi_bgq" "7" "2016\-11\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_bgq" "7" "2016\-12\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Blue Gene/Q Fabric Provider
@@ -21,44 +21,53 @@ reliable.
 Therefore, the bgq provider only supports the \f[I]FI_EP_RDM\f[]
 endpoint type.
 .PP
-\f[I]Endpoint capabilities\f[] : The following data transfer interfaces
-are supported: \f[I]FI_MSG\f[], \f[I]FI_RMA\f[], \f[I]FI_TAGGED\f[],
-\f[I]FI_MULTI_RECV\f[], \f[I]FI_READ\f[], \f[I]FI_WRITE\f[],
-\f[I]FI_SEND\f[], \f[I]FI_RECV\f[], \f[I]FI_REMOTE_READ\f[], and
-\f[I]FI_REMOTE_WRITE\f[].
+\f[I]Primary capabilities\f[] : Supported primary capabilities include
+\f[I]FI_MSG\f[], \f[I]FI_RMA\f[], \f[I]FI_TAGGED\f[],
+\f[I]FI_ATOMIC\f[], \f[I]FI_NAMED_RX_CTX\f[], \f[I]FI_READ\f[],
+\f[I]FI_WRITE\f[], \f[I]FI_SEND\f[], \f[I]FI_RECV\f[],
+\f[I]FI_REMOTE_READ\f[], and \f[I]FI_REMOTE_WRITE\f[].
+.PP
+\f[I]Secondary capabilities\f[] : Supported secondary capabilities
+include \f[I]FI_MULTI_RECV\f[] and \f[I]FI_FENCE\f[].
 .PP
 \f[I]Modes\f[] : The bgq provider requires \f[I]FI_CONTEXT\f[] and
 \f[I]FI_ASYNC_IOV\f[]
 .PP
-\f[I]Progress\f[] : Only \f[I]FI_PROGRESS_AUTO\f[] is supported, however
-support for \f[I]FI_PROGRESS_MANUAL\f[] may be added in the future.
-When progress is set to auto, a background thread runs to ensure that
-progress is made for asynchronous requests.
+\f[I]Memory registration modes\f[] : Only \f[I]FI_MR_SCALABLE\f[] is
+supported, however hardware acceleration of rdma transfers is not
+enabled.
+The FI_ATOMIC, FI_READ, FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE
+capabilities are emulated in software.
+.PP
+\f[I]Additional features\f[] : Supported additional features include
+\f[I]FABRIC_DIRECT\f[], \f[I]scalable endpoints\f[], and
+\f[I]counters\f[].
+.PP
+\f[I]Progress\f[] : Both progress modes, \f[I]FI_PROGRESS_AUTO\f[] and
+\f[I]FI_PROGRESS_MANUAL\f[], are supported.
+The progress mode may be specified via the "\-\-with\-bgq\-progress"
+configure option.
 .PP
 \f[I]Address vector\f[] : Only the \f[I]FI_AV_MAP\f[] address vector
-format is supported, however support for \f[I]FI_AV_TABLE\f[] may be
-added in the future.
-.PP
-\f[I]Memory registration\f[] : Only \f[I]FI_MR_SCALABLE\f[] is
-supported, however use of this mode for hardware accelerated rma
-transfers is severely limited due to a mismatch between the libfabric
-API and the Blue Gene/Q hardware capabilities.
-Support for a non\-standard version of \f[I]FI_MR_BASIC\f[] may be added
-in the future which would enable hardware accelerated rma read, rma
-write, and network atomic operations.
+format is supported.
 .SH UNSUPPORTED FEATURES
 .PP
-The bgq provider does not support \f[I]shared contexts\f[],
-\f[I]multiple endpoints\f[], or \f[I]scalable endpoints\f[], however
-support for all of these features may be added in the future.
+\f[I]Endpoint types\f[] : Unsupported endpoint types include
+\f[I]FI_EP_DGRAM\f[] and \f[I]FI_EP_MSG\f[]
 .PP
-The \f[I]FI_ATOMIC\f[] endpoint capability is disabled, however support
-may be added in the future.
-Native hardware accelerated atomic operations will require a
-non\-standard version of \f[I]FI_MR_BASIC\f[] that uses offset\-based
-remote addressing and will be limited to the operation\-datatype
-combinations common to the libfabric API and the Blue Gene/Q network
-hardware.
+\f[I]Primary capabilities\f[] : The bgq provider does not support the
+\f[I]FI_DIRECTED_RECV \f[]capability.
+.PP
+\f[I]Secondary capabilities\f[] : The bgq provider does not support the
+\f[I]FI_SOURCE\f[], \f[I]FI_RMA_EVENT\f[], and \f[I]FI_TRIGGER\f[]
+capabilities.
+.PP
+\f[I]Memory registration modes\f[] : The bgq provider does not support
+the \f[I]FI_MR_BASIC\f[] memory region mode.
+.PP
+\f[I]Address vector\f[] : The bgq provider does not support the
+\f[I]FI_AV_TABLE\f[] address vector format.
+Support for \f[I]FI_AV_TABLE\f[] may be added in the future.
 .SH LIMITATIONS
 .PP
 The bgq provider only supports \f[I]FABRIC_DIRECT\f[].
@@ -82,21 +91,8 @@ provider will assert on the alignment for "debug" builds (i.e., the
 The progress thread used for \f[I]FI_PROGRESS_AUTO\f[] effectively
 limits the maximum number of ranks\-per\-node to 32.
 .PP
-The definition of the memory region key size (mr_key_size) effectively
-limits the maximum number of ranks\-per\-node to 2 for hardware
-accelerated rma transfers.
-This is because each compute node has a Base Address Table (BAT)
-composed of 512 entries and must be shared among all processes on the
-node.
-The mr_key_size reports the number of \f[I]bytes\f[] for the size of the
-memory region key variable which limits the maximum number of keys to
-256 (2^8) even when the hardware could support 512 keys with 1
-rank\-per\-node.
-At 4 ranks\-per\-node and higher the maximum number of keys for each
-process would be less than 256 and forces the bgq provider to report a
-key size of zero bytes.
-This effectively disables support for memory regions in
-\f[I]FI_MR_SCALABLE\f[] mode.
+The memory region key size (mr_key_size) is 2 \f[I]bytes\f[]; Valid key
+values are 0..2^16\-1.
 .PP
 It is invalid to register memory at the base virtual address "0" with a
 length of "UINTPTR_MAX" (or equivalent).
