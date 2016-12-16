@@ -191,7 +191,7 @@ struct fi_ibv_rdm_request {
 		
 		/* RMA info */
 		struct {
-			/* registered buffer on sender side */
+			struct ibv_mr* mr;
 			uint64_t remote_addr;
 			uint32_t rkey;
 			uint32_t lkey;
