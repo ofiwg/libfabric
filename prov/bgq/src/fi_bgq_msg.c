@@ -37,12 +37,10 @@ ssize_t fi_bgq_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 {
 	struct fi_bgq_ep * bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 	const enum fi_threading threading = bgq_ep->threading;
-	const enum fi_av_type av_type = bgq_ep->av_type;
 
 	return fi_bgq_send_generic_flags(ep, msg->msg_iov, msg->iov_count,
 		msg->desc, msg->addr, 0, msg->context,
 		(threading != FI_THREAD_ENDPOINT && threading != FI_THREAD_DOMAIN),	/* "lock required"? */
-		av_type,
 		1 /* is_msg */,
 		0 /* is_contiguous */,
 		1 /* override the default tx flags */,
@@ -55,12 +53,10 @@ ssize_t fi_bgq_sendv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct fi_bgq_ep * bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 	const enum fi_threading threading = bgq_ep->threading;
-	const enum fi_av_type av_type = bgq_ep->av_type;
 
 	return fi_bgq_send_generic_flags(ep, iov, count,
 		desc, dest_addr, 0, context,
 		(threading != FI_THREAD_ENDPOINT && threading != FI_THREAD_DOMAIN),	/* "lock required"? */
-		av_type,
 		1 /* is_msg */,
 		0 /* is_contiguous */,
 		0 /* do not override flags */,
@@ -75,49 +71,33 @@ ssize_t fi_bgq_senddata(struct fid_ep *ep, const void *buf, size_t len, void *de
 	return -errno;
 }
 
-/* "FI_BGQ_MSG_SPECIALIZED_FUNC(0, FI_AV_MAP, FI_PROGRESS_MANUAL)" is already declared via FABRIC_DIRECT */
-FI_BGQ_MSG_SPECIALIZED_FUNC(1, FI_AV_MAP, FI_PROGRESS_MANUAL)
-FI_BGQ_MSG_SPECIALIZED_FUNC(0, FI_AV_TABLE, FI_PROGRESS_MANUAL)
-FI_BGQ_MSG_SPECIALIZED_FUNC(1, FI_AV_TABLE, FI_PROGRESS_MANUAL)
-FI_BGQ_MSG_SPECIALIZED_FUNC(0, FI_AV_MAP, FI_PROGRESS_AUTO)
-FI_BGQ_MSG_SPECIALIZED_FUNC(1, FI_AV_MAP, FI_PROGRESS_AUTO)
-FI_BGQ_MSG_SPECIALIZED_FUNC(0, FI_AV_TABLE, FI_PROGRESS_AUTO)
-FI_BGQ_MSG_SPECIALIZED_FUNC(1, FI_AV_TABLE, FI_PROGRESS_AUTO)
+/* "FI_BGQ_MSG_SPECIALIZED_FUNC(0)" is already declared via FABRIC_DIRECT */
+FI_BGQ_MSG_SPECIALIZED_FUNC(1)
 
-#define FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK, AV, PROGRESS)		\
-	fi_bgq_ops_msg_ ## LOCK ## _ ## AV ## _ ## PROGRESS	\
+#define FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK)			\
+	fi_bgq_ops_msg_ ## LOCK
 
-#define FI_BGQ_MSG_OPS_STRUCT(LOCK, AV, PROGRESS)		\
+#define FI_BGQ_MSG_OPS_STRUCT(LOCK)				\
 static struct fi_ops_msg					\
-	FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK, AV, PROGRESS) = {	\
+	FI_BGQ_MSG_OPS_STRUCT_NAME(LOCK) = {			\
 	.size		= sizeof(struct fi_ops_msg),		\
 	.recv		=					\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recv,		\
-			LOCK, AV, PROGRESS),			\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recv, LOCK),	\
 	.recvv		= fi_no_msg_recvv,			\
 	.recvmsg	=					\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recvmsg,	\
-			LOCK, AV, PROGRESS),			\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(recvmsg, LOCK),\
 	.send		=					\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(send,		\
-			LOCK, AV, PROGRESS),			\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(send, LOCK),	\
 	.sendv		= fi_bgq_sendv,				\
 	.sendmsg	= fi_bgq_sendmsg,			\
 	.inject	=						\
-		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(inject,	\
-			LOCK, AV, PROGRESS),			\
+		FI_BGQ_MSG_SPECIALIZED_FUNC_NAME(inject, LOCK),	\
 	.senddata	= fi_no_msg_senddata,			\
 	.injectdata	= fi_no_msg_injectdata			\
 }
 
-FI_BGQ_MSG_OPS_STRUCT(0, FI_AV_MAP, FI_PROGRESS_MANUAL);
-FI_BGQ_MSG_OPS_STRUCT(1, FI_AV_MAP, FI_PROGRESS_MANUAL);
-FI_BGQ_MSG_OPS_STRUCT(0, FI_AV_TABLE, FI_PROGRESS_MANUAL);
-FI_BGQ_MSG_OPS_STRUCT(1, FI_AV_TABLE, FI_PROGRESS_MANUAL);
-FI_BGQ_MSG_OPS_STRUCT(0, FI_AV_MAP, FI_PROGRESS_AUTO);
-FI_BGQ_MSG_OPS_STRUCT(1, FI_AV_MAP, FI_PROGRESS_AUTO);
-FI_BGQ_MSG_OPS_STRUCT(0, FI_AV_TABLE, FI_PROGRESS_AUTO);
-FI_BGQ_MSG_OPS_STRUCT(1, FI_AV_TABLE, FI_PROGRESS_AUTO);
+FI_BGQ_MSG_OPS_STRUCT(0);
+FI_BGQ_MSG_OPS_STRUCT(1);
 
 static struct fi_ops_msg fi_bgq_no_msg_ops = {
 	.size		= sizeof(struct fi_ops_msg),
@@ -155,10 +135,6 @@ err:
 
 int fi_bgq_enable_msg_ops(struct fi_bgq_ep *bgq_ep)
 {
-	int lock_required;
-	enum fi_av_type av_type;
-	enum fi_progress progress;
-
 	if (!bgq_ep || !bgq_ep->domain)
 		return -FI_EINVAL;
 
@@ -169,68 +145,20 @@ int fi_bgq_enable_msg_ops(struct fi_bgq_ep *bgq_ep)
 		return 0;
 	}
 
-	av_type = bgq_ep->av->type;
-	progress = bgq_ep->domain->data_progress;
 
 	switch (bgq_ep->domain->threading) {
 	case FI_THREAD_ENDPOINT:
 	case FI_THREAD_DOMAIN:
 	case FI_THREAD_COMPLETION:
-		lock_required = 0;
+		bgq_ep->ep_fid.msg = &FI_BGQ_MSG_OPS_STRUCT_NAME(0);
 		break;
 	case FI_THREAD_FID:
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
-		lock_required = 1;
+		bgq_ep->ep_fid.msg = &FI_BGQ_MSG_OPS_STRUCT_NAME(1);
 		break;
 	default:
 		return -FI_EINVAL;
-	}
-
-	if (lock_required == 0 &&
-			progress == FI_PROGRESS_MANUAL &&
-			av_type == FI_AV_MAP) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(0, FI_AV_MAP, FI_PROGRESS_MANUAL);
-	} else if (lock_required == 1 &&
-			progress == FI_PROGRESS_MANUAL &&
-			av_type == FI_AV_MAP) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(1, FI_AV_MAP, FI_PROGRESS_MANUAL);
-	} else if (lock_required == 0 &&
-			progress == FI_PROGRESS_MANUAL &&
-			av_type == FI_AV_TABLE) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(0, FI_AV_TABLE, FI_PROGRESS_MANUAL);
-	} else if (lock_required == 1 &&
-			progress == FI_PROGRESS_MANUAL &&
-			av_type == FI_AV_TABLE) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(1, FI_AV_TABLE, FI_PROGRESS_MANUAL);
-	} else if (lock_required == 0 &&
-			progress == FI_PROGRESS_AUTO &&
-			av_type == FI_AV_MAP) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(0, FI_AV_MAP, FI_PROGRESS_AUTO);
-	} else if (lock_required == 1 &&
-			progress == FI_PROGRESS_AUTO &&
-			av_type == FI_AV_MAP) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(1, FI_AV_MAP, FI_PROGRESS_AUTO);
-	} else if (lock_required == 0 &&
-			progress == FI_PROGRESS_AUTO &&
-			av_type == FI_AV_TABLE) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(0, FI_AV_TABLE, FI_PROGRESS_AUTO);
-	} else if (lock_required == 1 &&
-			progress == FI_PROGRESS_AUTO &&
-			av_type == FI_AV_TABLE) {
-		bgq_ep->ep_fid.msg =
-			&FI_BGQ_MSG_OPS_STRUCT_NAME(1, FI_AV_TABLE, FI_PROGRESS_AUTO);
-	} else {
-		bgq_ep->ep_fid.msg = &fi_bgq_no_msg_ops;
-		FI_WARN(fi_bgq_global.prov, FI_LOG_EP_DATA,
-				"Msg ops not enabled on EP\n");
 	}
 
 	return 0;

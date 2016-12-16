@@ -220,8 +220,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 		const uint64_t tx_op_flags,
 		const union fi_bgq_addr * bgq_dst_addr,
 		union fi_bgq_context * bgq_context,
-		const int lock_required,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	const uint64_t do_cq = ((tx_op_flags & FI_COMPLETION) == FI_COMPLETION);
 
@@ -230,11 +229,11 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 
 	assert(do_cq || do_cntr);
 
-	if (mr_mode == FI_MR_BASIC) {
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
 
 		assert(0);	/* TODO */
 
-	} else {	/* mr_mode == FI_MR_SCALABLE */
+	} else {	/* FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE */
 
 		MUHWI_Descriptor_t * model = &bgq_ep->tx.atomic.emulation.fence.mfifo_model;
 
@@ -301,7 +300,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 			MUSPI_SetRecPayloadBaseAddressInfo(cq_desc,
 				FI_BGQ_MU_BAT_ID_GLOBAL, byte_counter_paddr);
 
-			fi_bgq_cq_context_append(bgq_ep->send_cq, bgq_context, lock_required);
+			fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 
 			if (do_cntr) {
 
@@ -336,7 +335,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 static inline size_t fi_bgq_atomic_internal(struct fi_bgq_ep *bgq_ep,
 		const void *buf, size_t count, union fi_bgq_addr *bgq_dst_addr,
 		uint64_t addr, uint64_t key, enum fi_datatype datatype,
-		enum fi_op op, void *context, enum fi_mr_mode mr_mode,
+		enum fi_op op, void *context,
 		const unsigned is_fetch, const void * fetch_vaddr,
 		const unsigned is_compare, const void * compare_vaddr,
 		const uint64_t tx_op_flags, const int lock_required,
@@ -437,7 +436,7 @@ static inline size_t fi_bgq_atomic_internal(struct fi_bgq_ep *bgq_ep,
 				fi_bgq_cnk_vaddr2paddr((const void*)&bgq_context->byte_counter,
 					sizeof(uint64_t), &payload->atomic_fetch.metadata.cq_paddr);
 
-				fi_bgq_cq_context_append(bgq_ep->tx.send_cq, bgq_context, lock_required);
+				fi_bgq_cq_enqueue_pending(bgq_ep->tx.send_cq, bgq_context, lock_required);
 			}
 
 		} else {
@@ -456,9 +455,7 @@ static inline ssize_t fi_bgq_atomic_generic(struct fid_ep *ep,
 		fi_addr_t dst_addr, uint64_t addr,
 		uint64_t key, enum fi_datatype datatype,
 		enum fi_op op, void* context,
-		const int lock_required,
-		const enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
@@ -472,7 +469,7 @@ static inline ssize_t fi_bgq_atomic_generic(struct fid_ep *ep,
 	size_t xfer = 0;
 	xfer = fi_bgq_atomic_internal(bgq_ep, buf, count,
 		(union fi_bgq_addr *)&dst_addr,	addr, key, datatype, op,
-		context, mr_mode, 0, NULL, 0, NULL,
+		context, 0, NULL, 0, NULL,
 		bgq_ep->tx.op_flags, lock_required, 0, 0, 0);
 	assert(xfer == count);
 
@@ -485,8 +482,7 @@ static inline ssize_t fi_bgq_atomic_generic(struct fid_ep *ep,
 
 static inline ssize_t fi_bgq_atomic_writemsg_generic(struct fid_ep *ep,
 		const struct fi_msg_atomic *msg, const uint64_t flags,
-		const int lock_required, const enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
@@ -496,7 +492,7 @@ static inline ssize_t fi_bgq_atomic_writemsg_generic(struct fid_ep *ep,
 	const enum fi_datatype datatype = msg->datatype;
 	const enum fi_op op = msg->op;
 
-	ret = fi_bgq_check_atomic(bgq_ep, av_type, datatype, op, 1);
+	ret = fi_bgq_check_atomic(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV, datatype, op, 1);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -524,7 +520,7 @@ static inline ssize_t fi_bgq_atomic_writemsg_generic(struct fid_ep *ep,
 		const size_t count_transfered =
 			fi_bgq_atomic_internal(bgq_ep, (void*)msg_iov_vaddr,
 				count_requested, bgq_dst_addr, rma_iov_addr,
-				rma_iov_key, datatype, op, NULL, mr_mode,
+				rma_iov_key, datatype, op, NULL,
 				0, NULL, 0, NULL, flags, lock_required, 0, 0, 0);
 
 		const size_t bytes_transfered = dtsize * count_transfered;
@@ -551,7 +547,7 @@ static inline ssize_t fi_bgq_atomic_writemsg_generic(struct fid_ep *ep,
 
 	fi_bgq_atomic_fence(bgq_ep, flags, bgq_dst_addr,
 		(union fi_bgq_context *)msg->context,
-		lock_required, mr_mode);
+		lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) return ret;
@@ -566,9 +562,7 @@ static inline ssize_t fi_bgq_atomic_readwritemsg_generic (struct fid_ep *ep,
 		struct fi_ioc *resultv,
 		const size_t result_count,
 		const uint64_t flags,
-		const int lock_required,
-		const enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
@@ -578,7 +572,7 @@ static inline ssize_t fi_bgq_atomic_readwritemsg_generic (struct fid_ep *ep,
 	const enum fi_datatype datatype = msg->datatype;
 	const enum fi_op op = msg->op;
 
-	ret = fi_bgq_check_atomic(bgq_ep, av_type, datatype, op, 1);
+	ret = fi_bgq_check_atomic(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV, datatype, op, 1);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -613,7 +607,7 @@ static inline ssize_t fi_bgq_atomic_readwritemsg_generic (struct fid_ep *ep,
 			const size_t count_transfered =
 				fi_bgq_atomic_internal(bgq_ep, (void*)msg_iov_vaddr,
 					count_requested, bgq_dst_addr, rma_iov_addr,
-					rma_iov_key, datatype, op, NULL, mr_mode,
+					rma_iov_key, datatype, op, NULL,
 					1, (const void *)rst_iov_vaddr, 0, NULL,
 					flags, lock_required, 0, 0, 0);
 
@@ -659,7 +653,7 @@ static inline ssize_t fi_bgq_atomic_readwritemsg_generic (struct fid_ep *ep,
 			const size_t count_transfered =
 				fi_bgq_atomic_internal(bgq_ep, NULL,
 					count_requested, bgq_dst_addr, rma_iov_addr,
-					rma_iov_key, datatype, op, NULL, mr_mode,
+					rma_iov_key, datatype, op, NULL,
 					1, (const void *)rst_iov_vaddr, 0, NULL,
 					flags, lock_required, 0, 0, 0);
 
@@ -690,7 +684,7 @@ static inline ssize_t fi_bgq_atomic_readwritemsg_generic (struct fid_ep *ep,
 
 	fi_bgq_atomic_fence(bgq_ep, flags, bgq_dst_addr,
 		(union fi_bgq_context *)msg->context,
-		lock_required, mr_mode);
+		lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) return ret;
@@ -705,9 +699,7 @@ static inline ssize_t fi_bgq_atomic_compwritemsg_generic (struct fid_ep *ep,
 		struct fi_ioc *resultv,
 		size_t result_count,
 		uint64_t flags,
-		const int lock_required,
-		const enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		const int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
@@ -717,7 +709,7 @@ static inline ssize_t fi_bgq_atomic_compwritemsg_generic (struct fid_ep *ep,
 	const enum fi_datatype datatype = msg->datatype;
 	const enum fi_op op = msg->op;
 
-	ret = fi_bgq_check_atomic(bgq_ep, av_type, datatype, op, 1);
+	ret = fi_bgq_check_atomic(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV, datatype, op, 1);
 	if (ret) return ret;
 
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
@@ -756,7 +748,7 @@ static inline ssize_t fi_bgq_atomic_compwritemsg_generic (struct fid_ep *ep,
 		const size_t count_transfered =
 			fi_bgq_atomic_internal(bgq_ep, (void*)msg_iov_vaddr,
 				count_requested, bgq_dst_addr, rma_iov_addr,
-				rma_iov_key, datatype, op, NULL, mr_mode,
+				rma_iov_key, datatype, op, NULL,
 				1, (const void *)rst_iov_vaddr, 1, (const void *)cmp_iov_vaddr,
 				flags, lock_required, 0, 0, 0);
 
@@ -802,7 +794,7 @@ static inline ssize_t fi_bgq_atomic_compwritemsg_generic (struct fid_ep *ep,
 
 	fi_bgq_atomic_fence(bgq_ep, flags, bgq_dst_addr,
 		(union fi_bgq_context *)msg->context,
-		lock_required, mr_mode);
+		lock_required);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) return ret;
@@ -822,8 +814,7 @@ static inline ssize_t fi_bgq_fetch_compare_atomic_generic(struct fid_ep *ep,
 		fi_addr_t dest_addr, uint64_t addr,
 		uint64_t key, enum fi_datatype datatype,
 		enum fi_op op, void *context,
-		int lock_required, enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
@@ -834,7 +825,7 @@ static inline ssize_t fi_bgq_fetch_compare_atomic_generic(struct fid_ep *ep,
 	assert(0);
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
 
-	ret = fi_bgq_check_atomic(bgq_ep, av_type, datatype, op, count);
+	ret = fi_bgq_check_atomic(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV, datatype, op, count);
 	if (ret)
 		return ret;
 
@@ -857,8 +848,7 @@ static inline ssize_t fi_bgq_fetch_atomic_generic(struct fid_ep *ep,
 		fi_addr_t dest_addr, uint64_t addr,
 		uint64_t key, enum fi_datatype datatype,
 		enum fi_op op, void *context,
-		int lock_required, enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 
 
@@ -867,7 +857,7 @@ static inline ssize_t fi_bgq_fetch_atomic_generic(struct fid_ep *ep,
 			buf, count, desc, NULL, NULL,
 			result, result_desc, dest_addr, addr,
 			key, datatype, op, context,
-			lock_required, av_type, FI_MR_SCALABLE);
+			lock_required);
 }
 
 static inline ssize_t fi_bgq_compare_atomic_generic(struct fid_ep *ep,
@@ -877,28 +867,26 @@ static inline ssize_t fi_bgq_compare_atomic_generic(struct fid_ep *ep,
 		fi_addr_t dest_addr, uint64_t addr,
 		uint64_t key, enum fi_datatype datatype,
 		enum fi_op op, void *context,
-		int lock_required, enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	return fi_bgq_fetch_compare_atomic_generic(ep,
 			buf, count, desc, compare, compare_desc,
 			result, result_desc, dest_addr, addr,
 			key, datatype, op, context,
-			lock_required, av_type, FI_MR_SCALABLE);
+			lock_required);
 }
 
 static inline ssize_t fi_bgq_inject_atomic_generic(struct fid_ep *ep,
                 const void *buf, size_t count,
                 fi_addr_t dest_addr, uint64_t addr, uint64_t key,
                 enum fi_datatype datatype, enum fi_op op,
-		int lock_required, enum fi_av_type av_type,
-		const enum fi_mr_mode mr_mode)
+		int lock_required)
 {
 	int			ret = 0;
 	struct fi_bgq_ep        *bgq_ep;
 
 	bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
-	ret = fi_bgq_check_atomic(bgq_ep, av_type, datatype, op, count);
+	ret = fi_bgq_check_atomic(bgq_ep, FI_BGQ_FABRIC_DIRECT_AV, datatype, op, count);
 	if (ret)
 		return ret;
 
@@ -908,7 +896,7 @@ static inline ssize_t fi_bgq_inject_atomic_generic(struct fid_ep *ep,
 
 	fi_bgq_atomic_internal(bgq_ep, buf, count,
 		(union fi_bgq_addr *)&dest_addr, addr, key, datatype, op,
-		NULL, mr_mode, 0, NULL, 0, NULL,
+		NULL, 0, NULL, 0, NULL,
 		bgq_ep->tx.op_flags, lock_required, 1, 0, 1);
 
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
@@ -920,51 +908,38 @@ static inline ssize_t fi_bgq_inject_atomic_generic(struct fid_ep *ep,
 
 /* Declare specialized functions that qualify for FABRIC_DIRECT.
  * - No locks
- * - FI_AV_MAP
- * - FI_MR_SCALABLE */
+ */
 
 #define FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK	0
-#define FI_BGQ_ATOMIC_FABRIC_DIRECT_AV		FI_AV_MAP
-#define FI_BGQ_ATOMIC_FABRIC_DIRECT_MR		FI_MR_SCALABLE
 
-FI_BGQ_ATOMIC_SPECIALIZED_FUNC(FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK,
-		FI_BGQ_ATOMIC_FABRIC_DIRECT_AV,
-		FI_BGQ_ATOMIC_FABRIC_DIRECT_MR)
+FI_BGQ_ATOMIC_SPECIALIZED_FUNC(FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK)
 
 #ifdef FABRIC_DIRECT
 #define fi_atomic(ep, buf, count, desc, dest_addr, 			\
 		addr, key, datatype, op, context) 			\
 	(FI_BGQ_ATOMIC_SPECIALIZED_FUNC_NAME(atomic,			\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK,		\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_AV,			\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_MR)			\
-	(ep, buf, count, desc, dest_addr, addr, key,				\
+			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK)		\
+	(ep, buf, count, desc, dest_addr, addr, key,			\
 		datatype, op, context))
 
 #define fi_inject_atomic(ep, buf, count, dest_addr, addr, key,		\
 		datatype, op)						\
 	(FI_BGQ_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic,		\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK,		\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_AV,			\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_MR)			\
+			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK)		\
 	(ep, buf, count, dest_addr, addr, key, datatype, op))
 
 #define fi_fetch_atomic(ep, buf, count, desc, result, result_desc,	\
 		dest_addr, addr, key, datatype, op, context)		\
 	(FI_BGQ_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic,		\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK,		\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_AV,			\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_MR)			\
-	 (ep, buf, count, desc, result, result_desc,				\
+			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK)		\
+	 (ep, buf, count, desc, result, result_desc,			\
 		dest_addr, addr, key, datatype, op, context))
 
 #define fi_compare_atomic(ep, buf, count, desc, compare, compare_desc,	\
 		result, result_desc, dest_addr, addr, key, datatype,	\
 		op, context)						\
 	(FI_BGQ_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic,		\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK,		\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_AV,			\
-			FI_BGQ_ATOMIC_FABRIC_DIRECT_MR)		\
+			FI_BGQ_ATOMIC_FABRIC_DIRECT_LOCK)		\
 	 (ep, buf, count, desc, compare, compare_desc,			\
 		result, result_desc, dest_addr, addr, key,		\
 		datatype, op, context))

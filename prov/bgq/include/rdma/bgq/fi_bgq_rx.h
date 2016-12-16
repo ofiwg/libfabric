@@ -302,13 +302,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
 
 			/* post a completion event for the individual receive */
-			if (is_manual_progress) {
-				fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-			} else {
-				struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-				uint64_t context_rsh3b = (uint64_t)context >> 3;
-				while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-			}
+			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else if (send_len <= recv_len) {
 			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.inject.data, send_len);
@@ -319,13 +313,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			context->tag = origin_tag;
 
 			/* post a completion event for the individual receive */
-			if (is_manual_progress) {
-				fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-			} else {
-				struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-				uint64_t context_rsh3b = (uint64_t)context >> 3;
-				while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-			}
+			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
+
 		} else {	/* truncation - unlikely */
 			struct fi_bgq_context_ext * ext;
 			if (is_context_ext) {
@@ -380,13 +369,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
 
 			/* post a completion event for the individual receive */
-			if (is_manual_progress) {
-				fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-			} else {
-				struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-				uint64_t context_rsh3b = (uint64_t)context >> 3;
-				while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-			}
+			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else if (send_len <= recv_len) {
 			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
@@ -397,13 +380,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			context->tag = origin_tag;
 
 			/* post a completion event for the individual receive */
-			if (is_manual_progress) {
-				fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-			} else {
-				struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-				uint64_t context_rsh3b = (uint64_t)context >> 3;
-				while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-			}
+			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else {	/* truncation - unlikely */
 			struct fi_bgq_context_ext * ext;
@@ -473,13 +450,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			context->byte_counter += 1;
 
 			/* post a completion event for the individual receive */
-			if (is_manual_progress) {
-				fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-			} else {
-				struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-				uint64_t context_rsh3b = (uint64_t)context >> 3;
-				while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-			}
+			fi_bgq_cq_enqueue_pending(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else if (xfer_len <= recv_len) {
 
@@ -490,13 +461,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			byte_counter_vaddr = (uint64_t)&context->byte_counter;
 
 			/* post a completion event for the individual receive */
-			if (is_manual_progress) {
-				fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-			} else {
-				struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-				uint64_t context_rsh3b = (uint64_t)context >> 3;
-				while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-			}
+			fi_bgq_cq_enqueue_pending(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else {
 			/* truncation */
@@ -775,13 +740,8 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 						else bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
 
 						/* post a completion event for the multi-receive */
-						if (is_manual_progress) {
-							fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-						} else {
-							struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-							uint64_t context_rsh3b = (uint64_t)context >> 3;
-							while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-						}
+						context->byte_counter = 0;
+						fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 					}
 				}
 				return;
@@ -1133,14 +1093,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				}
 
 				/* post a completion event for the receive */
-				if (is_manual_progress) {
-					fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-				} else {
-					struct l2atomic_fifo_producer * producer =
-						&bgq_ep->recv_cq->std_producer;
-					const uint64_t mfifo_value = (uint64_t)context >> 3;
-					while(0 != l2atomic_fifo_produce(producer, mfifo_value));	/* spin loop! */
-				}
+				fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 				found_match = 1;
 				uepkt = NULL;
@@ -1278,13 +1231,8 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 						found_match = 1;
 
 						/* post a completion event for the multi-receive */
-						if (is_manual_progress) {
-							fi_bgq_cq_context_append(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-						} else {
-							uint64_t context_rsh3b = (uint64_t)context >> 3;
-							struct l2atomic_fifo_producer * std_producer = &bgq_ep->recv_cq->std_producer;
-							while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
-						}
+						context->byte_counter = 0;
+						fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 					}
 				}
 

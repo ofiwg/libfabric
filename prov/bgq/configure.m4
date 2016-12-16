@@ -90,7 +90,7 @@ AC_DEFUN([FI_BGQ_CONFIGURE],[
 
 			AC_ARG_WITH([bgq-progress],
 				[AS_HELP_STRING([--with-bgq-progress(=auto|manual|runtime)],
-					[Specify the FABRIC_DIRECT bgq progess mode  @<:@default=manual@:>@])
+					[Specify the bgq FABRIC_DIRECT progess mode  @<:@default=manual@:>@])
 				])
 
 			AS_CASE([$with_bgq_progress],
@@ -100,6 +100,19 @@ AC_DEFUN([FI_BGQ_CONFIGURE],[
 				[BGQ_FABRIC_DIRECT_PROGRESS=FI_PROGRESS_MANUAL])
 
 			AC_SUBST(bgq_fabric_direct_progress, [$BGQ_FABRIC_DIRECT_PROGRESS])
+
+			dnl Only FI_AV_MAP is supported by the bgq provider
+			BGQ_FABRIC_DIRECT_AV=FI_AV_MAP
+			AC_SUBST(bgq_fabric_direct_av, [$BGQ_FABRIC_DIRECT_AV])
+
+			dnl Only FI_MR_SCALABLE is supported by the bgq provider
+			BGQ_FABRIC_DIRECT_MR=FI_MR_SCALABLE
+			AC_SUBST(bgq_fabric_direct_mr, [$BGQ_FABRIC_DIRECT_MR])
+
+			dnl Only FI_THREAD_ENDPOINT is supported by the bgq provider
+			BGQ_FABRIC_DIRECT_THREAD=FI_THREAD_ENDPOINT
+			AC_SUBST(bgq_fabric_direct_thread, [$BGQ_FABRIC_DIRECT_THREAD])
+
 
 			AC_CONFIG_FILES([prov/bgq/include/rdma/fi_direct.h])
 		])

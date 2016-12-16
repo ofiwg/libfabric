@@ -110,22 +110,38 @@ struct fi_bgq_context_ext {
 	} msg;
 };
 
+/* This structure is organized in a way that minimizes cacheline use for the
+ * "FI_PROGRESS_MANUAL + inject" poll scenario.
+ */
 struct fi_bgq_cq {
 	struct fid_cq			cq_fid;		/* must be the first field in the structure */
+	uint64_t			pad_0[5];
 
-	struct l2atomic_fifo_consumer	err_consumer;
+	/* == L2 CACHE LINE == */
 
-	struct l2atomic_lock		lock;
+	struct fi_bgq_context_ext	*err_head;
+
 	union fi_bgq_context		*pending_head;
 	union fi_bgq_context		*pending_tail;
+	union fi_bgq_context		*completed_head;
+	union fi_bgq_context		*completed_tail;
 
+	struct {
+		uint64_t		ep_count;
+		struct fi_bgq_ep	*ep[64];	/* TODO - check this array size */
+	} progress;
+
+	struct fi_bgq_context_ext	*err_tail;
+	uint64_t			pad_1[9];
+
+	/* == L2 CACHE LINE == */
+
+	struct l2atomic_lock		lock;
+
+	struct l2atomic_fifo_consumer	err_consumer;
 	struct l2atomic_fifo_consumer	std_consumer;
-
-
-
 	struct l2atomic_fifo_producer	err_producer;
 	struct l2atomic_fifo_producer	std_producer;
-
 
 
 	struct fi_bgq_domain	*domain;
@@ -134,11 +150,6 @@ struct fi_bgq_cq {
 	enum fi_cq_format	format;
 
 	MUHWI_Descriptor_t	local_completion_model;
-
-	struct {
-		uint64_t		ep_count;
-		struct fi_bgq_ep	*ep[64];	/* TODO - check this array size */
-	} progress;
 
 	uint64_t		ep_bind_count;
 	struct fi_bgq_ep	*ep[64];		/* TODO - check this array size */
@@ -160,30 +171,89 @@ struct fi_bgq_cq {
 	fprintf(stderr,"%s:%s():%d   entry_id   = %u\n", __FILE__, __func__, __LINE__, (entry)->recv.entry_id);		\
 })
 
+int fi_bgq_cq_enqueue_err (struct fi_bgq_cq * bgq_cq,
+		struct fi_bgq_context_ext * ext,
+		const int lock_required);
+
 static inline
-int fi_bgq_cq_context_append (struct fi_bgq_cq * bgq_cq,
-		union fi_bgq_context * context, const int lock_required)
+int fi_bgq_cq_enqueue_pending (struct fi_bgq_cq * bgq_cq,
+		union fi_bgq_context * context,
+		const int lock_required)
 {
-	int ret;
-	ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
-	if (ret) return ret;
+	assert(0 != context->byte_counter);
 
-	union fi_bgq_context * tail = bgq_cq->pending_tail;
-	context->next = NULL;
-	if (tail) {
-		context->prev = tail;
-		tail->next = context;
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
+
+		int ret;
+		ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
+		union fi_bgq_context * tail = bgq_cq->pending_tail;
+		context->next = NULL;
+		if (tail) {
+			context->prev = tail;
+			tail->next = context;
+		} else {
+			context->prev = NULL;
+			bgq_cq->pending_head = context;
+		}
+		bgq_cq->pending_tail = context;
+
+		ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
 	} else {
-		context->prev = NULL;
-		bgq_cq->pending_head = context;
-	}
-	bgq_cq->pending_tail = context;
 
-	ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
-	if (ret) return ret;
+		struct l2atomic_fifo_producer * std_producer = &bgq_cq->std_producer;
+		uint64_t context_rsh3b = (uint64_t)context >> 3;
+		while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
+	}
 
 	return 0;
 }
+
+
+static inline
+int fi_bgq_cq_enqueue_completed (struct fi_bgq_cq * bgq_cq,
+		union fi_bgq_context * context,
+		const int lock_required)
+{
+	assert(0 == context->byte_counter);
+
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
+
+		int ret;
+		ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
+		union fi_bgq_context * tail = bgq_cq->completed_tail;
+		context->next = NULL;
+		if (tail) {
+
+			assert(NULL != bgq_cq->completed_head);
+			tail->next = context;
+			bgq_cq->completed_tail = context;
+
+		} else {
+
+			assert(NULL == bgq_cq->completed_head);
+			bgq_cq->completed_head = context;
+			bgq_cq->completed_tail = context;
+		}
+
+		ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
+		if (ret) return ret;
+
+	} else {
+
+		struct l2atomic_fifo_producer * std_producer = &bgq_cq->std_producer;
+		uint64_t context_rsh3b = (uint64_t)context >> 3;
+		while(0 != l2atomic_fifo_produce(std_producer, context_rsh3b));	/* spin loop! */
+	}
+
+	return 0;
+}
+
 
 
 static size_t fi_bgq_cq_fill(uintptr_t output,
@@ -240,62 +310,83 @@ static size_t fi_bgq_cq_fill(uintptr_t output,
 
 int fi_bgq_ep_progress_manual (struct fi_bgq_ep *bgq_ep);
 
-static ssize_t fi_bgq_cq_poll(struct fid_cq *cq, void *buf, size_t count,
-		fi_addr_t *src_addr, const enum fi_cq_format format,
-		const int lock_required, const enum fi_progress progress)
+static ssize_t fi_bgq_cq_poll (struct fi_bgq_cq *bgq_cq,
+		void *buf,
+		size_t count,
+		const enum fi_cq_format format)
 {
-	ssize_t num_entries = 0;
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* branch will compile out */	/* TODO - FI_PROGRESS_AUTO + 64 ppn */
 
-	struct fi_bgq_cq *bgq_cq = (struct fi_bgq_cq *)cq;
+		/* check if the err list has anything in it and return */
+		if (NULL != bgq_cq->err_head) {		/* unlikely */
+			assert(NULL != bgq_cq->err_tail);
 
-	/* check if the err fifo has anything in it and return */
-	/* TODO - don't use atomic fifo to report error events in FI_PROGRESS_MANUAL mode */
-	if (!l2atomic_fifo_isempty(&bgq_cq->err_consumer)) {
-		errno = FI_EAVAIL;
-		return -errno;
-	}
-
-	int ret;
-	ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
-	if (ret) return ret;
-
-	if (progress == FI_PROGRESS_MANUAL) {
-		const uint64_t count = bgq_cq->progress.ep_count;
-		uint64_t i;
-		for (i=0; i<count; ++i) {
-			fi_bgq_ep_progress_manual(bgq_cq->progress.ep[i]);
+			errno = FI_EAVAIL;
+			return -errno;
 		}
-	}
 
+	} else if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {	/* branch will compile out */
+
+		/* check if the err fifo has anything in it and return */
+		if (!l2atomic_fifo_isempty(&bgq_cq->err_consumer)) {
+
+			errno = FI_EAVAIL;
+			return -errno;
+		}
+
+	} else assert(0);	/* huh? */
+
+	ssize_t num_entries = 0;
 	uintptr_t output = (uintptr_t)buf;
 
 	/* examine each context in the pending completion queue and, if the
 	 * operation is complete, initialize the cq entry in the application
 	 * buffer and remove the context from the queue. */
-	union fi_bgq_context * head = bgq_cq->pending_head;
-	union fi_bgq_context * tail = bgq_cq->pending_tail;
-	union fi_bgq_context * context = head;
-	while ((count - num_entries) > 0 && context != NULL) {
+	union fi_bgq_context * pending_head = bgq_cq->pending_head;
+	union fi_bgq_context * pending_tail = bgq_cq->pending_tail;
+	if (NULL != pending_head) {
+		union fi_bgq_context * context = pending_head;
+		while ((count - num_entries) > 0 && context != NULL) {
 
-		if (context->byte_counter == 0) {
-			output += fi_bgq_cq_fill(output, context, format);
-			++ num_entries;
+			if (context->byte_counter == 0) {
+				output += fi_bgq_cq_fill(output, context, format);
+				++ num_entries;
 
-			if (context->prev)
-				context->prev->next = context->next;
-			else
-				head = context->next;
+				if (context->prev)
+					context->prev->next = context->next;
+				else
+					pending_head = context->next;
 
-			if (context->next)
-				context->next->prev = context->prev;
-			else
-				tail = context->prev;
+				if (context->next)
+					context->next->prev = context->prev;
+				else
+					pending_tail = context->prev;
+			}
+
+			context = context->next;
 		}
 
-		context = context->next;
+		/* save the updated pending head and pending tail pointers */
+		bgq_cq->pending_head = pending_head;
+		bgq_cq->pending_tail = pending_tail;
 	}
 
-	if (progress == FI_PROGRESS_AUTO) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* branch will compile out */
+
+		union fi_bgq_context * head = bgq_cq->completed_head;
+		if (head) {
+			union fi_bgq_context * context = head;
+			while ((count - num_entries) > 0 && context != NULL) {
+				output += fi_bgq_cq_fill(output, context, format);
+				++ num_entries;
+				context = context->next;
+			}
+			bgq_cq->completed_head = context;
+			if (!context) bgq_cq->completed_tail = NULL;
+
+		}
+
+	} else if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {	/* branch will compile out */
 
 		/* drain the std fifo and initialize the cq entries in the application
 		 * buffer if the operation is complete; otherwise append to the
@@ -308,26 +399,87 @@ static ssize_t fi_bgq_cq_poll(struct fid_cq *cq, void *buf, size_t count,
 			/* const uint64_t flags = value & 0xE000000000000000ull; -- currently not used */
 
 			/* convert the fifo value into a context pointer */
-			context = (union fi_bgq_context *) (value << 3);
+			union fi_bgq_context *context = (union fi_bgq_context *) (value << 3);
 
 			if (context->byte_counter == 0) {
 				output += fi_bgq_cq_fill(output, context, format);
 				++ num_entries;
 			} else {
 				context->next = NULL;
-				context->prev = tail;
-				if (tail)
-					tail->next = context;
+				context->prev = pending_tail;
+				if (pending_tail)
+					pending_tail->next = context;
 				else
-					head = context;
-				tail = context;
+					pending_head = context;
+				pending_tail = context;
 			}
+		}
+
+		/* save the updated pending head and pending tail pointers */
+		bgq_cq->pending_head = pending_head;
+		bgq_cq->pending_tail = pending_tail;
+	}
+
+	return num_entries;
+}
+
+static ssize_t fi_bgq_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
+		fi_addr_t *src_addr, const enum fi_cq_format format,
+		const int lock_required)
+{
+	ssize_t num_entries = 0;
+
+	struct fi_bgq_cq *bgq_cq = (struct fi_bgq_cq *)cq;
+
+	int ret;
+	ret = fi_bgq_lock_if_required(&bgq_cq->lock, lock_required);
+	if (ret) return ret;
+
+
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* branch will compile out */	/* TODO - FI_PROGRESS_AUTO + 64 ppn */
+
+		const uint64_t count = bgq_cq->progress.ep_count;
+		uint64_t i;
+		for (i=0; i<count; ++i) {
+			fi_bgq_ep_progress_manual(bgq_cq->progress.ep[i]);
+		}
+
+		const uintptr_t tmp_eh = (const uintptr_t)bgq_cq->err_head;
+		const uintptr_t tmp_ph = (const uintptr_t)bgq_cq->pending_head;
+		const uintptr_t tmp_ch = (const uintptr_t)bgq_cq->completed_head;
+
+		/* check for "all empty" and return */
+		if (0 == (tmp_eh | tmp_ph | tmp_ch)) {
+
+			ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
+			if (ret) return ret;
+
+			errno = FI_EAGAIN;
+			return -errno;
+		}
+
+		/* check for "fast path" and return */
+		if (tmp_ch == (tmp_eh | tmp_ph | tmp_ch)) {
+
+			uintptr_t output = (uintptr_t)buf;
+
+			union fi_bgq_context * context = (union fi_bgq_context *)tmp_ch;
+			while ((count - num_entries) > 0 && context != NULL) {
+				output += fi_bgq_cq_fill(output, context, format);
+				++ num_entries;
+				context = context->next;
+			}
+			bgq_cq->completed_head = context;
+			if (!context) bgq_cq->completed_tail = NULL;
+
+			ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
+			if (ret) return ret;
+
+			return num_entries;
 		}
 	}
 
-	/* save the updated head and tail pointers */
-	bgq_cq->pending_head = head;
-	bgq_cq->pending_tail = tail;
+	num_entries = fi_bgq_cq_poll(bgq_cq, buf, count, format);
 
 	ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
 	if (ret) return ret;
@@ -343,19 +495,19 @@ static ssize_t fi_bgq_cq_poll(struct fid_cq *cq, void *buf, size_t count,
 
 static inline
 ssize_t fi_bgq_cq_read_generic (struct fid_cq *cq, void *buf, size_t count,
-		const enum fi_cq_format format, const int lock_required, const enum fi_progress progress)
+		const enum fi_cq_format format, const int lock_required)
 {
 	int ret;
-	ret = fi_bgq_cq_poll(cq, buf, count, NULL, format, lock_required, progress);
+	ret = fi_bgq_cq_poll_inline(cq, buf, count, NULL, format, lock_required);
 	return ret;
 }
 
 static inline
 ssize_t fi_bgq_cq_readfrom_generic (struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr,
-		const enum fi_cq_format format, const int lock_required, const enum fi_progress progress)
+		const enum fi_cq_format format, const int lock_required)
 {
 	int ret;
-	ret = fi_bgq_cq_poll(cq, buf, count, src_addr, format, lock_required, progress);
+	ret = fi_bgq_cq_poll_inline(cq, buf, count, src_addr, format, lock_required);
 	if (ret > 0) {
 		unsigned n;
 		for (n=0; n<ret; ++n) src_addr[n] = FI_ADDR_NOTAVAIL;
@@ -368,28 +520,24 @@ ssize_t fi_bgq_cq_readfrom_generic (struct fid_cq *cq, void *buf, size_t count, 
  * Declare specialized functions that qualify for FABRIC_DIRECT.
  * - No locks
  * - FI_CQ_FORMAT_TAGGED
- * - FI_PROGRESS_MANUAL
  */
 #define FI_BGQ_CQ_FABRIC_DIRECT_LOCK		0
 #define FI_BGQ_CQ_FABRIC_DIRECT_FORMAT		FI_CQ_FORMAT_TAGGED
 
 FI_BGQ_CQ_SPECIALIZED_FUNC(FI_BGQ_CQ_FABRIC_DIRECT_FORMAT,
-		FI_BGQ_CQ_FABRIC_DIRECT_LOCK,
-		FI_BGQ_FABRIC_DIRECT_PROGRESS)
+		FI_BGQ_CQ_FABRIC_DIRECT_LOCK)
 
 #ifdef FABRIC_DIRECT
 #define fi_cq_read(cq, buf, count)					\
 	(FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_read,			\
 			FI_BGQ_CQ_FABRIC_DIRECT_FORMAT,			\
-			FI_BGQ_CQ_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_CQ_FABRIC_DIRECT_LOCK)			\
 	(cq, buf, count))
 
 #define fi_cq_readfrom(cq, buf, count, src_addr)			\
 	(FI_BGQ_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom,			\
 			FI_BGQ_CQ_FABRIC_DIRECT_FORMAT,			\
-			FI_BGQ_CQ_FABRIC_DIRECT_LOCK,			\
-			FI_BGQ_FABRIC_DIRECT_PROGRESS)			\
+			FI_BGQ_CQ_FABRIC_DIRECT_LOCK)			\
 	(cq, buf, count, src_addr))
 
 
