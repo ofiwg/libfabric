@@ -466,6 +466,117 @@ fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_request *request,
 	return ret;
 }
 
+/*
+ * FI_MULTI_RECV path is implemented through a parent multi_request.
+ * This is a kind of supervisor which keep another preposted request while multi
+ * recv buffer has enough space for incoming data. The last prepost releases
+ * the parent and sets FI_MULTI_RECV completion flag.
+ */
+static struct fi_ibv_rdm_request *
+fi_ibv_rdm_repost_multi_recv(struct fi_ibv_rdm_request *request,
+			     size_t offset, struct fi_ibv_rdm_ep *ep)
+{
+	struct fi_ibv_rdm_multi_request *parent;
+	struct fi_ibv_rdm_request *prepost =
+		util_buf_alloc(fi_ibv_rdm_request_pool);
+	fi_ibv_rdm_zero_request(prepost);
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", prepost, FI_LOG_DEBUG);
+	FI_IBV_RDM_DBG_REQUEST("repost from: ", request, FI_LOG_DEBUG);
+
+	parent = request->parent;
+	request->parent = NULL;
+	parent->prepost = prepost;
+	parent->offset += offset;
+
+	VERBS_DBG(FI_LOG_EP_DATA,
+		"multi_recv parent: prepost %p, buf %p, len %d, offset %d min_size %d\n",
+		parent->prepost, parent->buf, parent->len, parent->offset, parent->min_size);
+
+	prepost->parent = parent;
+	prepost->minfo = request->minfo;
+	prepost->dest_buf = parent->buf + parent->offset;
+
+	prepost->comp_flags = request->comp_flags;
+	prepost->len = parent->len - parent->offset;
+	if (prepost->len < parent->min_size) {
+		/* This is the last one, parent can be released */
+		prepost->comp_flags |= FI_MULTI_RECV;
+		free(prepost->parent);
+		prepost->parent = NULL;
+		FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", prepost, FI_LOG_DEBUG);
+	}
+	prepost->context = request->context;
+	prepost->context->internal[0] = (void *)prepost;
+
+	/* TODO: way for (RNDV) optimization is do registration only once */
+	//prepost->rndv = request->rndv;
+
+	prepost->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4PKT;
+	prepost->state.rndv = FI_IBV_STATE_RNDV_NOT_USED;
+	prepost->state.err = FI_SUCCESS;
+	fi_ibv_rdm_move_to_posted_queue(prepost, ep);
+	return prepost;
+}
+
+static inline ssize_t
+fi_ibv_rdm_try_unexp_recv(struct fi_ibv_rdm_request *request,
+			  struct fi_ibv_rdm_tagged_recv_start_data *rdata)
+{
+	struct dlist_entry *found_entry = NULL;
+	struct fi_ibv_rdm_request *found_request = NULL;
+	struct fi_ibv_rdm_request *repost = NULL;
+	ssize_t ret = FI_ENOMSG;
+
+	do {
+		found_entry =
+			dlist_find_first_match(&fi_ibv_rdm_unexp_queue,
+						fi_ibv_rdm_req_match_by_info3,
+						&rdata->peek_data);
+
+		if (found_entry) {
+			ret = FI_SUCCESS;
+			found_request =
+				container_of(found_entry,
+					     struct fi_ibv_rdm_request,
+					     queue_entry);
+
+			fi_ibv_rdm_remove_from_unexp_queue(found_request);
+
+			if (request->parent) {
+				repost = fi_ibv_rdm_repost_multi_recv(request,
+					 found_request->len, rdata->ep);
+			}
+
+			ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
+
+			assert((ret != FI_SUCCESS) ||
+				((rdata->peek_data.flags & FI_CLAIM) &&
+					(request->state.eager == 
+						FI_IBV_STATE_EAGER_RECV_CLAIMED) &&
+					(request->context == found_request->context)) ||
+			       (!(rdata->peek_data.flags & FI_CLAIM) && 
+					(request->state.eager == 
+						FI_IBV_STATE_EAGER_RECV_WAIT4RECV)));
+
+			FI_IBV_RDM_DBG_REQUEST("to_pool: ", found_request, FI_LOG_DEBUG);
+			util_buf_release(fi_ibv_rdm_request_pool, found_request);
+
+			if (ret == FI_SUCCESS &&
+			    request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES)
+			{
+				request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
+				fi_ibv_rdm_move_to_postponed_queue(request);
+			}
+		}
+	/* 
+	* Unexpected queue may contain several entries
+	* in case of multi recv, we need to handle them all
+	*/
+	} while (repost && repost->parent && found_entry && !ret);
+
+	return ret;
+}
+
 static ssize_t
 fi_ibv_rdm_init_recv_request(struct fi_ibv_rdm_request *request, void *data)
 {
@@ -473,6 +584,18 @@ fi_ibv_rdm_init_recv_request(struct fi_ibv_rdm_request *request, void *data)
 
 	ssize_t ret = FI_SUCCESS;
 	struct fi_ibv_rdm_tagged_recv_start_data *p = data;
+
+	if (p->peek_data.flags & FI_MULTI_RECV) {
+		/* TODO: optimization - replace allocation with a buffer pool */
+		request->parent = calloc(1, sizeof(*request->parent));
+		request->parent->prepost = request;
+		request->parent->buf = p->dest_addr;
+		request->parent->len = p->data_len;
+		request->parent->offset = 0;
+		request->parent->min_size = p->ep->min_multi_recv_size;
+		VERBS_DBG(FI_LOG_EP_DATA, "conn %p, multi_recv %p, parent %p\n",
+			request->minfo.conn, request, request->parent);
+	}
 
 	request->minfo = p->peek_data.minfo;
 	request->context = p->peek_data.context;
@@ -489,60 +612,11 @@ fi_ibv_rdm_init_recv_request(struct fi_ibv_rdm_request *request, void *data)
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n",
 		request->minfo.conn, request->minfo.tag, request->len);
 
-	struct dlist_entry *found_entry =
-	    dlist_find_first_match(&fi_ibv_rdm_unexp_queue,
-				   fi_ibv_rdm_req_match_by_info3,
-				   &p->peek_data);
-
-	if (found_entry) {
-
-		struct fi_ibv_rdm_request *found_request =
-		    container_of(found_entry, struct fi_ibv_rdm_request,
-				 queue_entry);
-
-		fi_ibv_rdm_remove_from_unexp_queue(found_request);
-
-		ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
-
-		assert((ret != FI_SUCCESS) ||
-			((p->peek_data.flags & FI_CLAIM) &&
-				(request->state.eager == 
-					FI_IBV_STATE_EAGER_RECV_CLAIMED) &&
-				(request->context == found_request->context)) ||
-		       (!(p->peek_data.flags & FI_CLAIM) && 
-				(request->state.eager == 
-					FI_IBV_STATE_EAGER_RECV_WAIT4RECV)));
-
-		FI_IBV_RDM_HNDL_REQ_LOG();
-
-		FI_IBV_RDM_DBG_REQUEST("to_pool: ", found_request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, found_request);
-
-		if (ret == FI_SUCCESS &&
-		    request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES)
-		{
-			request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
-			FI_IBV_RDM_HNDL_REQ_LOG();
-			fi_ibv_rdm_move_to_postponed_queue(request);
-		}
-#if ENABLE_DEBUG
-		request->minfo.conn->unexp_counter++;
-#endif // ENABLE_DEBUG
-
-	} else {
-
-#if ENABLE_DEBUG
-		if (request->minfo.conn) {
-			request->minfo.conn->exp_counter++;
-		}
-#endif // ENABLE_DEBUG
-
-		if (ret == FI_SUCCESS) {
-			fi_ibv_rdm_move_to_posted_queue(request, p->ep);
-		}
-	}
-	
-	if (ret != FI_SUCCESS) {
+	ret = fi_ibv_rdm_try_unexp_recv(request, p);
+	if (ret == FI_ENOMSG) {
+		fi_ibv_rdm_move_to_posted_queue(request, p->ep);
+		ret = FI_SUCCESS;
+	} else if (ret != FI_SUCCESS) {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 
 		fi_ibv_rdm_cntr_inc_err(p->ep->recv_cntr);
@@ -572,6 +646,9 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_request *request, void *data)
 		dlist_find_first_match(&fi_ibv_rdm_unexp_queue,
 					fi_ibv_rdm_req_match_by_info2,
 					&peek_data->minfo);
+
+	/* TODO: to check behaviour for multi recv */
+	assert(!(peek_data->flags & FI_MULTI_RECV));
 
 	request->context = peek_data->context;
 	request->comp_flags = peek_data->flags;
@@ -730,20 +807,28 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 		const size_t data_len = p->arrived_len - sizeof(rbuf->header);
 		assert(data_len <= p->ep->rndv_threshold);
 
+		if (request->parent) {
+			fi_ibv_rdm_repost_multi_recv(request, data_len, p->ep);
+		}
+
 		if (request->len >= data_len) {
 			request->minfo.conn = p->conn;
 			request->minfo.tag = rbuf->header.tag;
 			request->minfo.is_tagged = FI_IBV_RDM_EAGER_PKT ? 1 : 0;
 
-			request->len = p->arrived_len - sizeof(rbuf->header);
+			request->len = data_len;
 			request->exp_rbuf = &rbuf->payload;
 			request->imm = p->imm_data;
-
 
 			if (request->dest_buf) {
 				assert(request->exp_rbuf);
 				memcpy(request->dest_buf,
 					request->exp_rbuf, request->len);
+			}
+
+			if (request->parent) {
+				fi_ibv_rdm_repost_multi_recv(request, data_len,
+							     p->ep);
 			}
 
 			fi_ibv_rdm_cntr_inc(p->ep->recv_cntr);
@@ -767,6 +852,11 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 				request->minfo.conn,
 				request->minfo.tag,
 				request->minfo.tagmask);
+
+			if (request->parent) {
+				fi_ibv_rdm_repost_multi_recv(request, data_len,
+							     p->ep);
+			}
 
 			request->state.eager =
 				FI_IBV_STATE_EAGER_READY_TO_FREE;
@@ -804,6 +894,12 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 		request->rest_len = rndv_header->total_len;
 		request->imm = p->imm_data;
 		request->rndv.id = rndv_header->id;
+
+		if (request->parent) {
+			fi_ibv_rdm_repost_multi_recv(request,
+						     rndv_header->total_len,
+						     p->ep);
+		}
 
 		fi_ibv_rdm_move_to_postponed_queue(request);
 
