@@ -208,7 +208,7 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
+static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 {
 	struct fi_context *context = (struct fi_context *)ctx;
 	struct fi_ibv_rdm_ep *ep_rdm = 
@@ -261,41 +261,43 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 	return err;
 }
 
-static int fi_ibv_rdm_tagged_ep_getopt(fid_t fid, int level, int optname,
-				       void *optval, size_t * optlen)
+static int fi_ibv_rdm_getopt(fid_t fid, int level, int optname, void *optval,
+			     size_t * optlen)
 {
-	switch (level) {
-	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
-	default:
+	struct fi_ibv_rdm_ep *ep_rdm = 
+		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
+
+	if (level != FI_OPT_ENDPOINT) {
 		return -FI_ENOPROTOOPT;
 	}
-	return 0;
-}
 
-static int fi_ibv_rdm_tagged_setopt(fid_t fid, int level, int optname,
-				    const void *optval, size_t optlen)
-{
-	switch (level) {
-	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
-	default:
+	if (optname != FI_OPT_MIN_MULTI_RECV) {
 		return -FI_ENOPROTOOPT;
 	}
+
+	*(size_t *)optval = ep_rdm->min_multi_recv_size;
+	*optlen = sizeof(size_t);
+
 	return 0;
 }
 
-#if 0
-static int fi_ibv_ep_enable(struct fid_ep *ep)
+static int fi_ibv_rdm_setopt(fid_t fid, int level, int optname,
+			     const void *optval, size_t optlen)
 {
-	struct fi_ibv_rdm_ep *_ep;
+	struct fi_ibv_rdm_ep *ep_rdm =
+		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
 
-	_ep = container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
+	if (level != FI_OPT_ENDPOINT) {
+		return -FI_ENOPROTOOPT;
+	}
 
-	assert(_ep->type == FI_EP_RDM);
+	if (optname != FI_OPT_MIN_MULTI_RECV) {
+		return -FI_ENOPROTOOPT;
+	}
+
+	ep_rdm->min_multi_recv_size = *(size_t *)optval;
 	return 0;
 }
-#endif /* 0 */
 
 static int fi_ibv_rdm_tagged_control(fid_t fid, int command, void *arg)
 {
@@ -309,11 +311,11 @@ static int fi_ibv_rdm_tagged_control(fid_t fid, int command, void *arg)
 	return 0;
 }
 
-struct fi_ops_ep fi_ibv_rdm_tagged_ep_base_ops = {
+struct fi_ops_ep fi_ibv_rdm_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_ibv_rdm_tagged_ep_cancel,
-	.getopt = fi_ibv_rdm_tagged_ep_getopt,
-	.setopt = fi_ibv_rdm_tagged_setopt,
+	.cancel = fi_ibv_rdm_cancel,
+	.getopt = fi_ibv_rdm_getopt,
+	.setopt = fi_ibv_rdm_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
@@ -510,7 +512,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.fid.fclass = FI_CLASS_EP;
 	_ep->ep_fid.fid.context = context;
 	_ep->ep_fid.fid.ops = &fi_ibv_rdm_ep_ops;
-	_ep->ep_fid.ops = &fi_ibv_rdm_tagged_ep_base_ops;
+	_ep->ep_fid.ops = &fi_ibv_rdm_ep_base_ops;
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
 	_ep->ep_fid.msg = fi_ibv_rdm_ep_ops_msg();
 	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma();
@@ -537,6 +539,10 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->buff_len = rdm_buffer_size(info->tx_attr->inject_size);
 	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "buff_len: %d\n", _ep->buff_len);
+
+	_ep->rx_op_flags = info->rx_attr->op_flags;
+	_ep->min_multi_recv_size = (_ep->rx_op_flags & FI_MULTI_RECV) ?
+				   info->tx_attr->inject_size : 0;
 
 	_ep->rndv_seg_size = FI_IBV_RDM_SEG_MAXSIZE;
 	if (!fi_param_get_int(&fi_ibv_prov, "rdm_rndv_seg_size", &param)) {

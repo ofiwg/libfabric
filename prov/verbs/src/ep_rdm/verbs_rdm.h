@@ -124,13 +124,23 @@ struct fi_ibv_rdm_rndv_header {
 	uint32_t is_tagged;
 };
 
+struct fi_ibv_rdm_multi_request {
+	/* working request, will be renewed for every data arriving */
+	struct fi_ibv_rdm_request *prepost;
+	uint8_t *buf;
+	uint64_t len;
+	uint64_t offset;
+	uint64_t min_size;
+};
+
 struct fi_ibv_rdm_request {
 
 	/* Accessors and match info */
 
 	/* Request can be an element of only one queue at the moment */
 	struct dlist_entry queue_entry;
-
+	/* multi recv handling */
+	struct fi_ibv_rdm_multi_request *parent;
 	struct {
 		enum fi_ibv_rdm_request_eager_state eager;
 		enum fi_ibv_rdm_request_rndv_state rndv;
@@ -181,7 +191,7 @@ struct fi_ibv_rdm_request {
 		
 		/* RMA info */
 		struct {
-			/* registered buffer on sender side */
+			struct ibv_mr* mr;
 			uint64_t remote_addr;
 			uint32_t rkey;
 			uint32_t lkey;
@@ -255,6 +265,8 @@ struct fi_ibv_rdm_ep {
 	struct fi_ibv_av *av;
 	int tx_selective_completion;
 	int rx_selective_completion;
+	size_t min_multi_recv_size;
+	uint64_t rx_op_flags;
 
 	/*
 	 * ibv_post_send opcode for eager messaging.

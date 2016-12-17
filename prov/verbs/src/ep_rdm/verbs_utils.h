@@ -175,7 +175,7 @@ struct fi_ibv_rdm_tagged_peek_data {
 };
 
 struct fi_ibv_rdm_cm;
-struct fi_ibv_rdm_request *request;
+struct fi_ibv_rdm_request;
 struct fi_ibv_rdm_send_start_data;
 
 int fi_ibv_rdm_req_match(struct dlist_entry *item, const void *other);

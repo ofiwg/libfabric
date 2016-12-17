@@ -113,6 +113,9 @@ fi_ibv_rdm_move_to_unexpected_queue(struct fi_ibv_rdm_request *request)
 	FI_IBV_RDM_DBG_REQUEST("move_to_unexpected_queue: ", request,
 				FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry, &fi_ibv_rdm_unexp_queue);
+#if ENABLE_DEBUG
+	request->minfo.conn->unexp_counter++;
+#endif // ENABLE_DEBUG
 }
 
 static inline void
@@ -143,6 +146,11 @@ fi_ibv_rdm_move_to_posted_queue(struct fi_ibv_rdm_request *request,
 	FI_IBV_RDM_DBG_REQUEST("move_to_posted_queue: ", request, FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry, &fi_ibv_rdm_posted_queue);
 	ep->posted_recvs++;
+#if ENABLE_DEBUG
+	if (request->minfo.conn) {
+		request->minfo.conn->exp_counter++;
+	}
+#endif // ENABLE_DEBUG
 }
 
 static inline void
@@ -156,13 +164,13 @@ fi_ibv_rdm_remove_from_posted_queue(struct fi_ibv_rdm_request *request,
 }
 
 static inline struct fi_ibv_rdm_request *
-fi_ibv_rdm_take_first_from_posted_queue()
+fi_ibv_rdm_take_first_from_posted_queue(struct fi_ibv_rdm_ep* ep)
 {
 	if (!dlist_empty(&fi_ibv_rdm_posted_queue)) {
 		struct fi_ibv_rdm_request *entry =
 			container_of(fi_ibv_rdm_posted_queue.next,
 				     struct fi_ibv_rdm_request, queue_entry);
-		fi_ibv_rdm_remove_from_unexp_queue(entry);
+		fi_ibv_rdm_remove_from_posted_queue(entry, ep);
 		return entry;
 	}
 	return NULL;

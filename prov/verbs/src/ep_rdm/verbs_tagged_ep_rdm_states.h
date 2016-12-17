@@ -176,10 +176,10 @@ struct fi_ibv_rdm_rma_start_data {
 	void *context;
 	uint64_t flags;
 	uint64_t data_len;
-	uint64_t rbuf;
+	uintptr_t rbuf;
 	uintptr_t lbuf;
-	uint32_t rkey;
-	uint32_t lkey;
+	uint64_t rkey;
+	uint64_t lkey;
 	enum ibv_wr_opcode op_code;
 };
 

@@ -61,8 +61,9 @@ static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				.is_tagged = 0
 			},
 			.context = msg->context,
-			.flags = (ep_rdm->rx_selective_completion ?
-				flags : (flags | FI_COMPLETION))
+			.flags = ep_rdm->rx_op_flags |
+				(ep_rdm->rx_selective_completion ? flags :
+				(flags | FI_COMPLETION))
 		},
 		.dest_addr =
 			(msg->iov_count) ? msg->msg_iov[0].iov_base : NULL,
@@ -95,9 +96,6 @@ fi_ibv_rdm_recvv(struct fid_ep *ep, const struct iovec *iov,
 		 void **desc, size_t count, fi_addr_t src_addr,
 		 void *context)
 {
-	struct fi_ibv_rdm_ep *ep_rdm =
-		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
-
 	const struct fi_msg msg = {
 		.msg_iov = iov,
 		.desc = desc,
@@ -107,8 +105,7 @@ fi_ibv_rdm_recvv(struct fid_ep *ep, const struct iovec *iov,
 		.data = 0
 	};
 
-	return fi_ibv_rdm_recvmsg(ep, &msg,
-		(ep_rdm->rx_selective_completion ? 0ULL : FI_COMPLETION));
+	return fi_ibv_rdm_recvmsg(ep, &msg, 0ULL);
 }
 
 static ssize_t

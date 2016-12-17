@@ -244,35 +244,28 @@ struct fi_ops_rma *fi_ibv_msg_ep_ops_rma(struct fi_ibv_msg_ep *ep)
 }
 
 static inline ssize_t
-fi_ibv_rdm_ep_rma_preinit(void **desc, void **raw_buf, size_t len,
-			  struct fi_ibv_rdm_conn *conn,
+fi_ibv_rdm_ep_rma_preinit(void **desc, struct fi_ibv_rdm_buf **rdm_buf,
+			  size_t len, struct fi_ibv_rdm_conn *conn,
 			  struct fi_ibv_rdm_ep *ep)
 {
-	int again = 0;
+	assert(desc && rdm_buf);
 
-	if ((desc == NULL && len >= ep->rndv_threshold) ||
-	    (desc && *desc == NULL && len >= ep->rndv_threshold))
-	{
-		return -FI_EINVAL;
-	}
-
-	again = (!fi_ibv_rdm_check_connection(conn, ep) ||
-		RMA_RESOURCES_IS_BUSY(conn, ep) || conn->postponed_entry);
-
-	if ((!again) && raw_buf && desc && (*desc == NULL)) {
-		*raw_buf = fi_ibv_rdm_rma_prepare_resources(conn, ep);
-		if (*raw_buf) {
+	if (*desc == NULL && len < ep->rndv_threshold) {
+		*rdm_buf = fi_ibv_rdm_rma_prepare_resources(conn, ep);
+		if (*rdm_buf) {
 			*desc = (void*)(uintptr_t)conn->rma_mr->lkey;
+		} else {
+			goto again;
 		}
-		again = !(*raw_buf);
-	}
-
-	if (again) {
-		fi_ibv_rdm_tagged_poll(ep);
-		return -FI_EAGAIN;
+	} else if (!fi_ibv_rdm_check_connection(conn, ep) ||
+		RMA_RESOURCES_IS_BUSY(conn, ep) || conn->postponed_entry) {
+		goto again;
 	}
 
 	return FI_SUCCESS;
+again:
+	fi_ibv_rdm_tagged_poll(ep);
+	return -FI_EAGAIN;
 }
 
 static ssize_t
@@ -291,16 +284,16 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.flags = FI_RMA | FI_READ | (ep->tx_selective_completion ?
 			(flags & FI_COMPLETION) : FI_COMPLETION),
 		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
-		.rbuf = msg->rma_iov[0].addr,
+		.rbuf = (uintptr_t)msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
-		.rkey = (uint32_t)msg->rma_iov[0].key,
-		.lkey = (uint32_t)(uintptr_t)msg->desc[0],
+		.rkey = (uint64_t)(uintptr_t)(msg->rma_iov[0].key),
+		.lkey = (uint64_t)(uintptr_t)(msg->desc ? msg->desc[0] : NULL),
 		.op_code = IBV_WR_RDMA_READ
 	};
 
 	struct fi_ibv_rma_post_ready_data post_ready_data = { .ep_rdm = ep };
 
-	void *raw_buf = NULL;
+	struct fi_ibv_rdm_buf *rdm_buf = NULL;
 	ssize_t ret = FI_SUCCESS;
 
 	if(msg->iov_count != 1 || msg->rma_iov_count != 1) {
@@ -308,7 +301,7 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return -FI_EMSGSIZE;
 	}
 
-	ret = fi_ibv_rdm_ep_rma_preinit(&msg->desc[0], &raw_buf,
+	ret = fi_ibv_rdm_ep_rma_preinit((void**)&start_data.lkey, &rdm_buf,
 					msg->msg_iov[0].iov_len,
 					conn, ep);
 	if (ret) {
@@ -325,7 +318,7 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	request->state.err   = FI_SUCCESS;
 
 	request->minfo.is_tagged = 0;
-	request->rmabuf = raw_buf;
+	request->rmabuf = rdm_buf;
 
 	fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
 
@@ -389,7 +382,7 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 						ep_fid);
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, msg->addr);
 	struct fi_ibv_rdm_request *request = NULL;
-	void *raw_buf = NULL;
+	struct fi_ibv_rdm_buf *rdm_buf = NULL;
 	ssize_t ret = FI_SUCCESS;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {
@@ -401,8 +394,8 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
 		.rbuf = msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
-		.rkey = (uint32_t)msg->rma_iov[0].key,
-		.lkey = (uint32_t)(uintptr_t)msg->desc[0],
+		.rkey = msg->rma_iov[0].key,
+		.lkey = (uint64_t)(uintptr_t)(msg->desc ? msg->desc[0] : NULL),
 		.op_code = IBV_WR_RDMA_WRITE
 	};
 
@@ -411,7 +404,7 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return -FI_EMSGSIZE;
 	}
 
-	ret = fi_ibv_rdm_ep_rma_preinit(&msg->desc[0], &raw_buf,
+	ret = fi_ibv_rdm_ep_rma_preinit((void**)&start_data.lkey, &rdm_buf,
 					msg->msg_iov[0].iov_len,
 					conn, ep);
 	if (ret) {
@@ -427,7 +420,7 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	request->state.err   = FI_SUCCESS;
 
 	request->minfo.is_tagged = 0;
-	request->rmabuf = raw_buf;
+	request->rmabuf = rdm_buf;
 
 	fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
 
@@ -493,8 +486,6 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	struct fi_ibv_rdm_ep *ep_rdm = container_of(ep, struct fi_ibv_rdm_ep,
 						    ep_fid);
 	struct fi_ibv_rdm_conn *conn = ep_rdm->av->addr_to_conn(ep_rdm, dest_addr);
-	struct fi_ibv_rdm_request *request = NULL;
-
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.conn = conn,
 		.ep_rdm = ep_rdm,
@@ -502,16 +493,12 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 		.data_len = (uint64_t)len,
 		.rbuf = addr,
 		.lbuf = (uintptr_t)buf,
-		.rkey = (uint32_t)key,
+		.rkey = (uint64_t)key,
 		.lkey = 0
 	};
-
-	ssize_t ret = fi_ibv_rdm_ep_rma_preinit(NULL, NULL, len, conn, ep_rdm);
-	if (ret) {
-		return ret;
-	}
-
-	request = util_buf_alloc(fi_ibv_rdm_request_pool);
+	struct fi_ibv_rdm_request *request =
+		util_buf_alloc(fi_ibv_rdm_request_pool);
+	ssize_t ret;
 
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
