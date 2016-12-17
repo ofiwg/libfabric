@@ -445,6 +445,16 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 	assert(bgq_domain);
 	assert(bgq_ep->tx.state == FI_BGQ_EP_UNINITIALIZED);
 
+	Personality_t p;
+	Kernel_GetPersonality(&p, sizeof(Personality_t));
+	int8_t a_coord, b_coord, c_coord, d_coord, e_coord, t_coord;
+	a_coord = p.Network_Config.Acoord;
+	b_coord = p.Network_Config.Bcoord;
+	c_coord = p.Network_Config.Ccoord;
+	d_coord = p.Network_Config.Dcoord;
+	e_coord = p.Network_Config.Ecoord;
+	t_coord = Kernel_MyTcoord();
+
 	if (bgq_ep->tx.stx) {
 
 		assert(bgq_domain == bgq_ep->tx.stx->domain);
@@ -473,7 +483,10 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 	union fi_bgq_addr self;
 	fi_bgq_create_addr_self((fi_addr_t*)(&self.fi));
 
-
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_ep_tx_init created addr:\n");
+	fi_bgq_addr_dump(self);
+#endif
 	/*
 	 *  fi_[t]inject() descriptor models
 	 */
@@ -502,16 +515,42 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_INJECT);
-		hdr->inject.unused_1 = 0;
-		hdr->inject.immediate_data = 0;
+		hdr->inject.a = a_coord;
+		hdr->inject.b = b_coord;
+		hdr->inject.c = c_coord;
+		hdr->inject.d = d_coord;
+		hdr->inject.e = e_coord;
 
+		uint32_t domain_id = 0;
+		uint32_t domains_per_process = 1;
+		uint32_t endpoint_id = 0;
+		uint32_t endpoints_per_domain = 1;
+		uint32_t ppn = Kernel_ProcessCount();
+		const uint32_t rx_per_node = ((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP);
+		const uint32_t rx_per_process = rx_per_node / ppn;
+		const uint32_t rx_per_domain = rx_per_process / domains_per_process;
+		const uint32_t rx_per_endpoint = rx_per_domain / endpoints_per_domain;
+        	hdr->inject.rx = (rx_per_process * t_coord) + (rx_per_domain * domain_id) + (rx_per_endpoint * endpoint_id);
+
+		hdr->inject.immediate_data = 0;
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"hdr->inject and origin rx set to %u %u %u %u %u %u\n",a_coord,b_coord,c_coord,d_coord,e_coord,hdr->inject.rx);
+#endif
 		/* send model - copy from inject model and update */
 		desc = &bgq_ep->tx.inject.send_model;
 		*desc = bgq_ep->tx.inject.inject_model;
 
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
-		hdr->send.unused_1 = 0;
+		hdr->send.a = a_coord;
+		hdr->send.b = b_coord;
+		hdr->send.c = c_coord;
+		hdr->send.d = d_coord;
+		hdr->send.e = e_coord;
+		hdr->send.rx = hdr->inject.rx;
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"hdr->send and origin rx set to %u %u %u %u %u %u\n",a_coord,b_coord,c_coord,d_coord,e_coord,hdr->send.rx);
+#endif
 		hdr->send.immediate_data = 0;
 	}
 
@@ -991,9 +1030,11 @@ static int fi_bgq_ep_rx_init(struct fi_bgq_ep *bgq_ep)
 	struct fi_bgq_domain * bgq_domain = bgq_ep->domain;
 
 	fi_bgq_create_addr_self(&bgq_ep->rx.self.fi);
-	bgq_ep->rx.self.rx = (((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP) / Kernel_ProcessCount()) * Kernel_MyTcoord() +
-		bgq_ep->rx.index;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_ep_rx_init created addr:\n");
+	fi_bgq_addr_dump(bgq_ep->rx.self);
+#endif
 	/* assign the mu reception fifos - all potential
 	 * reception fifos were allocated at domain initialization */
 

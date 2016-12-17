@@ -56,6 +56,8 @@
 
 #define FI_BGQ_MUHWI_DESTINATION_MASK (0x073CF3C1ul)
 
+// #define FI_BGQ_TRACE 1
+
 union fi_bgq_addr {
 	fi_addr_t			fi;
 	uint64_t			raw;
@@ -69,14 +71,14 @@ union fi_bgq_addr {
 				uint32_t	c		:  6;	/* only 4 bits are needed for Mira */
 				uint32_t	d		:  6;	/* only 4 bits are needed for Mira */
 				uint32_t	e		:  6;	/* only 1 bit is needed */
-			};
-		};
+			} __attribute__((__packed__));
+		} __attribute__((__packed__));
 		uint16_t		fifo_map;			/* only 12 bits are needed for normal pt2pt; and only 10 bits for internode */
 		uint16_t		is_local	:  1;		/* same as fifo_map::MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 | fifo_map::MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL1 */
 		uint16_t		unused		:  7;
 		uint16_t		rx		:  8;		/* node-scoped reception context identifier; see NOTE_MU_RECFIFO */
-	};
-};
+	} __attribute__((__packed__));
+} __attribute__((__packed__));
 
 static inline
 uint64_t fi_bgq_addr_is_local (fi_addr_t addr) {
@@ -85,7 +87,7 @@ uint64_t fi_bgq_addr_is_local (fi_addr_t addr) {
 
 static inline
 uint64_t fi_bgq_addr_rec_fifo_id (fi_addr_t addr) {
-	return ((((uint64_t)addr) & 0x0FFull) << 1);
+	return (((uint64_t)addr) & 0x0FFull);
 }
 
 static inline
@@ -169,7 +171,19 @@ union fi_bgq_mu_packet_hdr {
 		uint64_t		message_length	: 10;	/* 0..512 bytes of payload data */
 		uint64_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
 
-		uint32_t		unused_1;
+		union {
+			uint32_t                origin_rx_addr;
+			struct {
+				uint32_t	a		:  3;
+				uint32_t	b		:  4;
+				uint32_t	c		:  4;
+				uint32_t	d		:  4;
+				uint32_t	e		:  1;
+				uint8_t		rx		:  8;
+				uint8_t		unused_1	:  8;
+			};
+		};
+
 		uint32_t		immediate_data;
 		uint64_t		ofi_tag;
 	} __attribute__((__packed__)) send;
@@ -219,7 +233,19 @@ union fi_bgq_mu_packet_hdr {
 		uint16_t		message_length	:  1;	/* 0..1 bytes of immediate data */
 		uint8_t			data;
 		uint8_t			reserved_3;		/* a.k.a. common::packet_type */
-		uint32_t		unused_1;
+
+		union {
+			uint32_t                origin_rx_addr;
+			struct {
+				uint32_t	a		:  3;
+				uint32_t	b		:  4;
+				uint32_t	c		:  4;
+				uint32_t	d		:  4;
+				uint32_t	e		:  1;
+				uint8_t		rx		:  8;
+				uint8_t		unused_1	:  8;
+			};
+		};
 		uint32_t		immediate_data;
 		uint64_t		ofi_tag;
 	} __attribute__((__packed__)) inject;
@@ -298,7 +324,20 @@ union fi_bgq_mu_packet_payload {
 	uint8_t				byte[512];
 	struct {
 		uint32_t		immediate_data;
-		uint32_t		unused[3];
+
+		union {
+			uint32_t                origin_rx_addr;
+			struct {
+				uint32_t	a		:  3;
+				uint32_t	b		:  4;
+				uint32_t	c		:  4;
+				uint32_t	d		:  4;
+				uint32_t	e		:  1;
+				uint8_t		rx		:  8;
+				uint8_t		unused_1	:  8;
+			};
+		};
+		uint32_t		unused[2];
 		struct fi_bgq_mu_iov	mu_iov[31];
 	} rendezvous;
 	struct {
@@ -602,7 +641,20 @@ void fi_bgq_create_addr (int8_t a_coord, int8_t b_coord,
 	bgq_addr->e = (e_coord == -1) ? p.Network_Config.Ecoord : e_coord;
 
 	if (t_coord == -1) t_coord = Kernel_MyTcoord();
-	bgq_addr->rx = (rx == -1) ? (64 / Kernel_ProcessCount()) * t_coord : rx;
+	/* Match the logic used in the av code for the rx - for now
+	 * hard-code 1 domain 1 endpoint.
+	 */
+	uint32_t domain_id = 0;
+	uint32_t domains_per_process = 1;
+	uint32_t endpoint_id = 0;
+	uint32_t endpoints_per_domain = 1;
+	uint32_t ppn = Kernel_ProcessCount();
+	const uint32_t rx_per_node = ((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP);
+	const uint32_t rx_per_process = rx_per_node / ppn;
+	const uint32_t rx_per_domain = rx_per_process / domains_per_process;
+	const uint32_t rx_per_endpoint = rx_per_domain / endpoints_per_domain;
+	bgq_addr->rx = (rx == -1) ? ((rx_per_process * t_coord) + (rx_per_domain * domain_id) + (rx_per_endpoint * endpoint_id)) : rx;
+
 	bgq_addr->fifo_map = 0;	/* FIFO_Map to self? doesn't make sense, so set to zero to catch any usage and fix it */
 	bgq_addr->is_local =
 		(bgq_addr->a == p.Network_Config.Acoord) &&
@@ -610,6 +662,10 @@ void fi_bgq_create_addr (int8_t a_coord, int8_t b_coord,
 		(bgq_addr->c == p.Network_Config.Ccoord) &&
 		(bgq_addr->d == p.Network_Config.Dcoord) &&
 		(bgq_addr->e == p.Network_Config.Ecoord);
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"Created bgq addr:\n");
+	fi_bgq_addr_dump(*bgq_addr);
+#endif
 
 	return;
 }

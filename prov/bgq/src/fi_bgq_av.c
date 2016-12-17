@@ -41,7 +41,7 @@ void fi_bgq_addr_initialize (union fi_bgq_addr * output,
 		uint32_t domain_id, uint32_t domains_per_process,
 		uint32_t endpoint_id, uint32_t endpoints_per_domain)
 {
-	const uint32_t rx_per_node = ((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP) / 2;	/* each rx uses two mu reception fifos */
+	const uint32_t rx_per_node = ((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP) ;
 	const uint32_t rx_per_process = rx_per_node / ppn;
 	const uint32_t rx_per_domain = rx_per_process / domains_per_process;
 	const uint32_t rx_per_endpoint = rx_per_domain / endpoints_per_domain;
@@ -53,7 +53,7 @@ void fi_bgq_addr_initialize (union fi_bgq_addr * output,
 	output->d		= d;
 	output->e		= e;
 
-	output->is_local	=
+	output->is_local        =
 		(my_coords->a == a) &&
 		(my_coords->b == b) &&
 		(my_coords->c == c) &&
@@ -70,9 +70,14 @@ void fi_bgq_addr_initialize (union fi_bgq_addr * output,
 	 * converted into a 'scalable' address by simply adding the rx index
 	 * to the fi_addr_t.
 	 */
+
 	output->rx		= (rx_per_process * t) +
 				(rx_per_domain * domain_id) +
 				(rx_per_endpoint * endpoint_id);
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_addr_initialize acbde rx is %u %u %u %u %u %u\n",a,b,c,d,e,output->rx );
+#endif
+
 }
 
 static int fi_bgq_close_av(fid_t fid)

@@ -64,6 +64,7 @@
 
 #define FI_BGQ_PFX "bgq"
 
+// #define FI_BGQ_TRACE 1
 
 /* --- Will be exposed by fabric.h */
 #define FI_BGQ_PROTOCOL		0x0008

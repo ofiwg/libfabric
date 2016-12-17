@@ -628,12 +628,40 @@ unsigned is_match(struct fi_bgq_mu_packet *pkt, union fi_bgq_context * context, 
 	if (poll_msg && context->src_addr == FI_ADDR_UNSPEC) return 1;
 
 	const uint64_t origin_tag = pkt->hdr.inject.ofi_tag;
+	const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
+	union fi_bgq_addr bgq_addr;
+	bgq_addr.fi = context->src_addr;
+	bool src_addr_match = 0;
+
+
+	if (context->src_addr == FI_ADDR_UNSPEC) {
+		src_addr_match = 1;
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"is_match context->src_addr == FI_ADDR_UNSPEC\n");
+#endif
+	}
+	else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
+		src_addr_match = ((bgq_addr.a == pkt->payload.rendezvous.a) && (bgq_addr.b == pkt->payload.rendezvous.b) && (bgq_addr.c == pkt->payload.rendezvous.c) && (bgq_addr.d == pkt->payload.rendezvous.d) && (bgq_addr.e == pkt->payload.rendezvous.e) && (bgq_addr.rx == pkt->payload.rendezvous.rx));
+
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"is_match FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS comparing %u %u %u %u %u %u  to   %u %u %u %u %u %u\n",bgq_addr.a,bgq_addr.b,bgq_addr.c,bgq_addr.d,bgq_addr.e,bgq_addr.rx,pkt->payload.rendezvous.a,pkt->payload.rendezvous.b,pkt->payload.rendezvous.c,pkt->payload.rendezvous.d,pkt->payload.rendezvous.e,pkt->payload.rendezvous.rx);
+#endif
+	}
+	else {
+		src_addr_match = ((bgq_addr.a == pkt->hdr.inject.a) && (bgq_addr.b == pkt->hdr.inject.b) && (bgq_addr.c == pkt->hdr.inject.c) && (bgq_addr.d == pkt->hdr.inject.d) && (bgq_addr.e == pkt->hdr.inject.e) && (bgq_addr.rx == pkt->hdr.inject.rx));
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"is_match eager or inject comparing %u %u %u %u %u %u  to   %u %u %u %u %u %u\n",bgq_addr.a,bgq_addr.b,bgq_addr.c,bgq_addr.d,bgq_addr.e,bgq_addr.rx,pkt->hdr.inject.a,pkt->hdr.inject.b,pkt->hdr.inject.c,pkt->hdr.inject.d,pkt->hdr.inject.e,pkt->hdr.inject.rx);
+#endif
+	}
+
 	const uint64_t ignore = context->ignore;
 	const uint64_t target_tag = context->tag;
 	const uint64_t target_tag_and_not_ignore = target_tag & ~ignore;
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
-
-	return origin_tag_and_not_ignore == target_tag_and_not_ignore;
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"src_addr_match is %u and (origin_tag_and_not_ignore == target_tag_and_not_ignore) is %u target_tag is %lu origin_tag is %lu\n",src_addr_match,(origin_tag_and_not_ignore == target_tag_and_not_ignore),target_tag,origin_tag);
+#endif
+	return ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && src_addr_match);
 }
 
 
