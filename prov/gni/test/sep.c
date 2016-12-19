@@ -106,7 +106,7 @@ void sep_setup_common(int av_type)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_ATOMIC | FI_RMA | FI_MSG | FI_NAMED_RX_CTX;
+	hints->caps = FI_ATOMIC | FI_RMA | FI_MSG | FI_NAMED_RX_CTX | FI_TAGGED;
 	hints->mode = FI_LOCAL_MR;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
@@ -410,10 +410,12 @@ xfer_each_size(void (*xfer)(int index, int len), int index, int slen, int elen)
 static void
 sep_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 		uint64_t flags, void *addr, size_t len,
-		uint64_t data, bool buf_is_non_null)
+		uint64_t data, bool buf_is_non_null, uint64_t tag)
 {
 	cr_assert(cqe->op_context == ctx, "CQE Context mismatch");
-	cr_assert(cqe->flags == flags, "CQE flags mismatch");
+	cr_assert(cqe->flags == flags,
+		  "CQE flags mismatch cqe flags:0x%lx, flags:0x%lx", cqe->flags,
+		  flags);
 
 	if (flags & FI_RECV) {
 		cr_assert(cqe->len == len, "CQE length mismatch");
@@ -432,7 +434,8 @@ sep_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 		cr_assert(cqe->data == 0, "Invalid CQE data");
 	}
 
-	cr_assert(cqe->tag == 0, "Invalid CQE tag");
+	cr_assert(cqe->tag == tag, "Invalid CQE tag:0x%lx, tag:0x%lx",
+		  cqe->tag, tag);
 }
 
 static void
@@ -557,6 +560,96 @@ static void sep_send_recv(int index, int len)
 	cr_assert(ret == 1, "Data check failed");
 }
 
+static void sep_tsend(int index, int len)
+{
+	ssize_t ret;
+	struct fi_cq_tagged_entry cqe;
+
+	sep_init_data(source, len, 0xab + index);
+	sep_init_data(target, len, 0);
+
+	ret = fi_tsend(tx_ep[0][index], source, len, loc_mr[0],
+		       rx_addr[index], len, target);
+	cr_assert(ret == 0, "fi_tsend failed err:%ld", ret);
+
+	ret = fi_trecv(rx_ep[1][index], target, len, rem_mr[0],
+		       FI_ADDR_UNSPEC, len, 0, source);
+	cr_assert(ret == 0, "fi_trecv failed err:%ld", ret);
+
+	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &cqe, &cqe);
+
+	ret = sep_check_data(source, target, 8);
+	cr_assert(ret == 1, "Data check failed");
+}
+
+static void sep_recvmsg(int index, int len)
+{
+	ssize_t ret;
+	struct iovec iov;
+	struct fi_msg msg;
+	struct fi_cq_tagged_entry cqe;
+
+	sep_init_data(source, len, 0xab + index);
+	sep_init_data(target, len, 0);
+
+	ret = fi_send(tx_ep[0][index], source, len, loc_mr[0],
+		      rx_addr[index], target);
+	cr_assert(ret == 0, "fi_send failed err:%ld", ret);
+
+	iov.iov_base = target;
+	iov.iov_len = len;
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)rem_mr;
+	msg.iov_count = 1;
+	msg.addr = FI_ADDR_UNSPEC;
+	msg.context = source;
+	msg.data = (uint64_t)source;
+
+	ret = fi_recvmsg(rx_ep[1][index], &msg, 0);
+	cr_assert(ret == 0, "fi_recvmsg failed err:%ld", ret);
+
+	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &cqe, &cqe);
+
+	ret = sep_check_data(source, target, 8);
+	cr_assert(ret == 1, "Data check failed");
+}
+
+static void sep_trecvmsg(int index, int len)
+{
+	ssize_t ret;
+	struct iovec iov;
+	struct fi_msg_tagged tmsg;
+	struct fi_cq_tagged_entry cqe;
+
+	sep_init_data(source, len, 0xab + index);
+	sep_init_data(target, len, 0);
+
+	ret = fi_tsend(tx_ep[0][index], source, len, loc_mr[0],
+		       rx_addr[index], len, target);
+	cr_assert(ret == 0, "fi_send failed err:%ld", ret);
+
+	iov.iov_base = target;
+	iov.iov_len = len;
+
+	tmsg.msg_iov = &iov;
+	tmsg.desc = (void **)rem_mr;
+	tmsg.iov_count = 1;
+	tmsg.addr = FI_ADDR_UNSPEC;
+	tmsg.context = source;
+	tmsg.data = (uint64_t)source;
+	tmsg.tag = (uint64_t)len;
+	tmsg.ignore = 0;
+
+	ret = fi_trecvmsg(rx_ep[1][index], &tmsg, 0);
+	cr_assert(ret == 0, "fi_recvmsg failed err:%ld", ret);
+
+	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &cqe, &cqe);
+
+	ret = sep_check_data(source, target, 8);
+	cr_assert(ret == 1, "Data check failed");
+}
+
 static void sep_sendv(int index, int len)
 {
 	int i, iov_cnt;
@@ -588,9 +681,53 @@ static void sep_sendv(int index, int len)
 
 		wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
 		sep_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND),
-				 0, 0, 0, false);
+				 0, 0, 0, false, 0);
 		sep_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV), iov_dest_buf,
-				 len * iov_cnt, 0, false);
+				 len * iov_cnt, 0, false, 0);
+
+		s[0] = 1; r[1] = 1;
+		sep_check_cntrs(s, r, s_e, r_e);
+		cr_assert(sep_check_iov_data(src_iov, iov_dest_buf, iov_cnt,
+			len * iov_cnt), "Data mismatch");
+	}
+}
+
+static void sep_tsendv(int index, int len)
+{
+	int i, iov_cnt;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+
+	for (iov_cnt = 1; iov_cnt <= IOV_CNT; iov_cnt++) {
+		for (i = 0; i < iov_cnt; i++) {
+			sep_init_data(src_iov[i].iov_base, len, 0x25);
+			src_iov[i].iov_len = len;
+		}
+		sep_init_data(iov_dest_buf, len * iov_cnt, 0);
+
+		sz = fi_tsendv(tx_ep[0][index], src_iov, NULL, iov_cnt,
+			       rx_addr[index], len * iov_cnt, iov_dest_buf);
+		cr_assert_eq(sz, 0);
+
+		sz = fi_trecv(rx_ep[1][index], iov_dest_buf, len * iov_cnt,
+			      iov_dest_buf_mr[0], FI_ADDR_UNSPEC, len * iov_cnt,
+			      0, src_iov);
+		cr_assert_eq(sz, 0);
+
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+
+		wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
+		sep_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND|FI_TAGGED),
+				 0, 0, 0, false, 0);
+		sep_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV|FI_TAGGED),
+			      iov_dest_buf, len * iov_cnt, 0, false,
+			      len * iov_cnt);
 
 		s[0] = 1; r[1] = 1;
 		sep_check_cntrs(s, r, s_e, r_e);
@@ -634,9 +771,9 @@ static void sep_recvv(int index, int len)
 
 		wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
 		sep_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND),
-				 0, 0, 0, false);
+				 0, 0, 0, false, 0);
 		sep_check_cqe(&d_cqe, iov_src_buf, (FI_MSG|FI_RECV),
-				iov_dest_buf, len * iov_cnt, 0, false);
+				iov_dest_buf, len * iov_cnt, 0, false, 0);
 
 		s[0] = 1; r[1] = 1;
 		sep_check_cntrs(s, r, s_e, r_e);
@@ -645,7 +782,7 @@ static void sep_recvv(int index, int len)
 	}
 }
 
-static void sep_sendmsg(int index, int len)
+static void _sendmsg(int index, int len, bool tagged)
 {
 	ssize_t sz;
 	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
@@ -653,9 +790,12 @@ static void sep_sendmsg(int index, int len)
 	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					    (void *) -1, UINT_MAX, UINT_MAX };
 	struct fi_msg msg;
+	struct fi_msg_tagged tmsg;
 	struct iovec iov;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
+	uint64_t sflags = FI_MSG|FI_SEND|(tagged ? FI_TAGGED : 0);
+	uint64_t dflags = FI_MSG|FI_RECV|(tagged ? FI_TAGGED : 0);
 
 	iov.iov_base = source;
 	iov.iov_len = len;
@@ -667,24 +807,52 @@ static void sep_sendmsg(int index, int len)
 	msg.context = target;
 	msg.data = (uint64_t)target;
 
+	tmsg.msg_iov = &iov;
+	tmsg.desc = (void **)loc_mr;
+	tmsg.iov_count = 1;
+	tmsg.addr = rx_addr[index];
+	tmsg.context = target;
+	tmsg.data = (uint64_t)target;
+	tmsg.tag = (uint64_t)len;
+	tmsg.ignore = 0;
+
 	sep_init_data(source, len, 0xd0 + index);
 	sep_init_data(target, len, 0);
 
-	sz = fi_sendmsg(tx_ep[0][index], &msg, 0);
+	if (tagged) {
+		sz = fi_tsendmsg(tx_ep[0][index], &tmsg, 0);
+	} else {
+		sz = fi_sendmsg(tx_ep[0][index], &msg, 0);
+	}
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(rx_ep[1][index], target, len, rem_mr[0],
-		     FI_ADDR_UNSPEC, source);
+	if (tagged) {
+		sz = fi_trecv(rx_ep[1][index], target, len, rem_mr[0],
+			      FI_ADDR_UNSPEC, len, 0, source);
+	} else {
+		sz = fi_recv(rx_ep[1][index], target, len, rem_mr[0],
+			     FI_ADDR_UNSPEC, source);
+	}
 	cr_assert_eq(sz, 0);
 
 	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
-	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
-	sep_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0,
-			false);
+	sep_check_cqe(&s_cqe, target, sflags, 0, 0, 0, false, 0);
+	sep_check_cqe(&d_cqe, source, dflags, target, len, 0,
+			false, tagged ? len : 0);
 
 	s[0] = 1; r[1] = 1;
 	sep_check_cntrs(s, r, s_e, r_e);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
+}
+
+static void sep_sendmsg(int index, int len)
+{
+	_sendmsg(index, len, false);
+}
+
+static void sep_tsendmsg(int index, int len)
+{
+	_sendmsg(index, len, true);
 }
 
 void sep_clear_counters(void)
@@ -736,9 +904,9 @@ void sep_sendmsgdata(int index, int len)
 	cr_assert_eq(sz, 0);
 
 	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
-	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false, 0);
 	sep_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-		      target, len, (uint64_t)source, false);
+		      target, len, (uint64_t)source, false, 0);
 
 	s[0] = 1; r[1] = 1;
 	sep_check_cntrs(s, r, s_e, r_e);
@@ -773,7 +941,48 @@ void sep_inject(int index, int len)
 
 	cr_assert_eq(ret, 1);
 	sep_check_cqe(&cqe, source, (FI_MSG|FI_RECV),
-			 target, len, (uint64_t)source, false);
+			 target, len, (uint64_t)source, false, 0);
+
+	/* do progress until send counter is updated */
+	while (fi_cntr_read(send_cntr[0]) < 1) {
+		pthread_yield();
+	}
+	s[0] = 1; r[1] = 1;
+	sep_check_cntrs(s, r, s_e, r_e);
+
+	/* make sure inject does not generate a send competion */
+	cr_assert_eq(fi_cq_read(tx_cq[0][index], &cqe, 1), -FI_EAGAIN);
+	cr_assert(sep_check_data(source, target, len), "Data mismatch");
+}
+
+void sep_tinject(int index, int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+
+	sep_init_data(source, len, 0x13 + index);
+	sep_init_data(target, len, 0);
+
+	sz = fi_tinject(tx_ep[0][index], source, len, rx_addr[index], len);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_trecv(rx_ep[1][index], target, len, rem_mr[1],
+		     FI_ADDR_UNSPEC, len, 0, source);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(rx_cq[1][index], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+		/* Manually progress connection to domain 1 */
+		fi_cq_read(tx_cq[0][index], &cqe, 1);
+	}
+
+	cr_assert_eq(ret, 1);
+	sep_check_cqe(&cqe, source, (FI_MSG|FI_RECV|FI_TAGGED),
+			 target, len, (uint64_t)source, false, len);
 
 	/* do progress until send counter is updated */
 	while (fi_cntr_read(send_cntr[0]) < 1) {
@@ -809,9 +1018,42 @@ void sep_senddata(int index, int len)
 	cr_assert_eq(sz, 0);
 
 	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
-	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false);
+	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false, 0);
 	sep_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			 target, len, (uint64_t)source, false);
+			 target, len, (uint64_t)source, false, 0);
+
+	s[0] = 1; r[1] = 1;
+	sep_check_cntrs(s, r, s_e, r_e);
+	cr_assert(sep_check_data(source, target, len), "Data mismatch");
+}
+
+void sep_tsenddata(int index, int len)
+{
+	ssize_t sz;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+
+	sep_init_data(source, len, 0xab + index);
+	sep_init_data(target, len, 0);
+
+	sz = fi_tsenddata(tx_ep[0][index], source, len, loc_mr[0],
+			 (uint64_t)source, rx_addr[index], len, target);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_trecv(rx_ep[1][index], target, len, rem_mr[0],
+		      FI_ADDR_UNSPEC, len, 0, source);
+	cr_assert_eq(sz, 0);
+
+	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
+	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND|FI_TAGGED), 0, 0, 0,
+		      false, 0);
+	sep_check_cqe(&d_cqe, source,
+		      (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA|FI_TAGGED),
+		      target, len, (uint64_t)source, false, len);
 
 	s[0] = 1; r[1] = 1;
 	sep_check_cntrs(s, r, s_e, r_e);
@@ -844,7 +1086,49 @@ void sep_injectdata(int index, int len)
 		fi_cq_read(tx_cq[0][index], &cqe, 1);
 	}
 	sep_check_cqe(&cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			 target, len, (uint64_t)source, false);
+			 target, len, (uint64_t)source, false, 0);
+
+	/* don't progress until send counter is updated */
+	while (fi_cntr_read(send_cntr[0]) < 1) {
+		pthread_yield();
+	}
+
+	s[0] = 1; r[1] = 1;
+	sep_check_cntrs(s, r, s_e, r_e);
+
+	/* make sure inject does not generate a send competion */
+	cr_assert_eq(fi_cq_read(tx_cq[0][index], &cqe, 1), -FI_EAGAIN);
+	cr_assert(sep_check_data(source, target, len), "Data mismatch");
+}
+
+void sep_tinjectdata(int index, int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+
+	sep_init_data(source, len, 0x9b + index);
+	sep_init_data(target, len, 0);
+
+	sz = fi_tinjectdata(tx_ep[0][index], source, len, (uint64_t)source,
+			   rx_addr[index], len);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_trecv(rx_ep[1][index], target, len, rem_mr[0],
+		     FI_ADDR_UNSPEC, len, 0, source);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(rx_cq[1][index], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+		/* Manually progress connection to domain 1 */
+		fi_cq_read(tx_cq[0][index], &cqe, 1);
+	}
+	sep_check_cqe(&cqe, source,
+		      (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA|FI_TAGGED),
+		      target, len, (uint64_t)source, false, len);
 
 	/* don't progress until send counter is updated */
 	while (fi_cntr_read(send_cntr[0]) < 1) {
@@ -1651,10 +1935,31 @@ void run_tests(void)
 		xfer_each_size(sep_send_recv, i, 1, BUF_SZ);
 	}
 
+	cr_log_info("sep_tsend\n");
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_tsend, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_recvmsg\n");
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_recvmsg, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_trecvmsg\n");
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_trecvmsg, i, 1, BUF_SZ);
+	}
+
 	cr_log_info("sep_sendv\n");
 	sep_clear_counters();
 	for (i = 0; i < ctx_cnt; i++) {
 		xfer_each_size(sep_sendv, i, 1, BUF_SZ);
+	}
+
+	cr_log_info("sep_tsendv\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_tsendv, i, 1, BUF_SZ);
 	}
 
 	cr_log_info("sep_recvv\n");
@@ -1669,6 +1974,12 @@ void run_tests(void)
 		xfer_each_size(sep_sendmsg, i, 1, BUF_SZ);
 	}
 
+	cr_log_info("sep_tsendmsg\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_tsendmsg, i, 1, BUF_SZ);
+	}
+
 	cr_log_info("sep_sendmsgdata\n");
 	sep_clear_counters();
 	for (i = 0; i < ctx_cnt; i++) {
@@ -1681,16 +1992,34 @@ void run_tests(void)
 		xfer_each_size(sep_inject, i, 1, INJECT_SIZE);
 	}
 
+	cr_log_info("sep_tinject\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_tinject, i, 1, INJECT_SIZE);
+	}
+
 	cr_log_info("sep_senddata\n");
 	sep_clear_counters();
 	for (i = 0; i < ctx_cnt; i++) {
 		xfer_each_size(sep_senddata, i, 1, INJECT_SIZE);
 	}
 
+	cr_log_info("sep_tsenddata\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_tsenddata, i, 1, INJECT_SIZE);
+	}
+
 	cr_log_info("sep_injectdata\n");
 	sep_clear_counters();
 	for (i = 0; i < ctx_cnt; i++) {
 		xfer_each_size(sep_injectdata, i, 1, INJECT_SIZE);
+	}
+
+	cr_log_info("sep_tinjectdata\n");
+	sep_clear_counters();
+	for (i = 0; i < ctx_cnt; i++) {
+		xfer_each_size(sep_tinjectdata, i, 1, INJECT_SIZE);
 	}
 
 	cr_log_info("sep_read\n");
