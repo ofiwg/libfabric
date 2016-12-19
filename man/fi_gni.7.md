@@ -46,7 +46,7 @@ libfabric API:
 *Completion events*
 : The GNI provider supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*,
   *FI_CQ_FORMAT_DATA* and *FI_CQ_FORMAT_TAGGED* with wait objects of type
-  *FI_WAIT_NONE*, *FI_WAIT_FD*, and *FI_WAIT_MUTEX_COND*.
+  *FI_WAIT_NONE*, *FI_WAIT_UNSPEC*, *FI_WAIT_SET*.
 
 *Modes*
 : The GNI provider does not require any operation modes.
@@ -56,6 +56,16 @@ libfabric API:
 : For both control and data progress, the GNI provider supports both
   *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*, with a default set to
   *FI_PROGRESS_AUTO*.
+  Note that for data progress, progression is only performed
+  when data transfers use the rendezvous protocol.
+
+*Wait Objects*
+: The GNI provider specifically supports wait object types *FI_WAIT_UNSPEC*,
+  and *FI_WAIT_SET*. A wait object must be used when calling fi_cntr_wait,
+  fi_cq_sread/from, fi_eq_sread/from, fi_wait.
+  The GNI provider spawns an internal wait progress thread that is woken up 
+  when clients utilize the wait system (e.g., calling fi_wait).
+ 
 
 *Additional Features*
 : The GNI provider also supports the following capabilities and features:
