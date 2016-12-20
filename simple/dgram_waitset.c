@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -83,6 +83,13 @@ static int send_recv()
 {
 	struct fi_cq_entry comp;
 	int ret;
+
+	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(), fi_mr_desc(mr),
+		      0, &rx_ctx);
+	if (ret)
+		return ret;
+
+	ft_sync();
 
 	fprintf(stdout, "Posting a send...\n");
 	ret = ft_post_tx(ep, remote_fi_addr, tx_size, &tx_ctx);
