@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2016\-10\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2016\-12\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -38,8 +38,8 @@ See DATA TRANSFER OPERATIONS below for more details.
 \f[I]Completion events\f[] : The GNI provider supports
 \f[I]FI_CQ_FORMAT_CONTEXT\f[], \f[I]FI_CQ_FORMAT_MSG\f[],
 \f[I]FI_CQ_FORMAT_DATA\f[] and \f[I]FI_CQ_FORMAT_TAGGED\f[] with wait
-objects of type \f[I]FI_WAIT_NONE\f[], \f[I]FI_WAIT_FD\f[], and
-\f[I]FI_WAIT_MUTEX_COND\f[].
+objects of type \f[I]FI_WAIT_NONE\f[], \f[I]FI_WAIT_UNSPEC\f[],
+\f[I]FI_WAIT_SET\f[].
 .PP
 \f[I]Modes\f[] : The GNI provider does not require any operation modes.
 .PP
@@ -48,6 +48,15 @@ objects of type \f[I]FI_WAIT_NONE\f[], \f[I]FI_WAIT_FD\f[], and
 : For both control and data progress, the GNI provider supports both
 \f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[], with a
 default set to \f[I]FI_PROGRESS_AUTO\f[].
+Note that for data progress, progression is only performed when data
+transfers use the rendezvous protocol.
+.PP
+\f[I]Wait Objects\f[] : The GNI provider specifically supports wait
+object types \f[I]FI_WAIT_UNSPEC\f[], and \f[I]FI_WAIT_SET\f[].
+A wait object must be used when calling fi_cntr_wait, fi_cq_sread/from,
+fi_eq_sread/from, fi_wait.
+The GNI provider spawns an internal wait progress thread that is woken
+up when clients utilize the wait system (e.g., calling fi_wait).
 .PP
 \f[I]Additional Features\f[] : The GNI provider also supports the
 following capabilities and features: \- \f[I]FI_MULTI_RECV\f[] \-
