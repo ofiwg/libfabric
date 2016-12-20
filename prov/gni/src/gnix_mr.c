@@ -166,7 +166,6 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 {
 	struct gnix_fid_mem_desc *mr = NULL;
 	struct gnix_fid_domain *domain;
-	struct gnix_nic *nic;
 	int rc;
 	uint64_t reg_addr, reg_len;
 	struct _gnix_fi_reg_context fi_reg_context = {
@@ -196,17 +195,6 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		return -FI_EINVAL;
 
 	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
-
-	/* If the nic list is empty, create a nic */
-	if (unlikely((dlist_empty(&gnix_nic_list_ptag[domain->ptag])))) {
-		rc = gnix_nic_alloc(domain, NULL, &nic);
-		if (rc) {
-			GNIX_INFO(FI_LOG_MR,
-				  "could not allocate nic to do mr_reg,"
-				  " ret=%i\n", rc);
-			goto err;
-		}
-	}
 
 	reg_addr = ((uint64_t) buf) & ~((1 << GNIX_MR_PAGE_SHIFT) - 1);
 	reg_len = __calculate_length((uint64_t) buf, len,
@@ -244,7 +232,6 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	mr->mr_fid.key = _gnix_convert_mhdl_to_key(&mr->mem_hndl);
 
 	_gnix_ref_get(mr->domain);
-	_gnix_ref_get(mr->nic);
 
 	/* set up mr_o out pointer */
 	*mr_o = &mr->mr_fid;
@@ -270,7 +257,6 @@ static int fi_gnix_mr_close(fid_t fid)
 	struct gnix_fid_mem_desc *mr;
 	gni_return_t ret;
 	struct gnix_fid_domain *domain;
-	struct gnix_nic *nic;
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
@@ -280,7 +266,6 @@ static int fi_gnix_mr_close(fid_t fid)
 	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
 
 	domain = mr->domain;
-	nic = mr->nic;
 
 	/* call cache deregister op */
 	fastlock_acquire(&domain->mr_cache_lock);
@@ -291,7 +276,6 @@ static int fi_gnix_mr_close(fid_t fid)
 	if (likely(ret == FI_SUCCESS)) {
 		/* release references to the domain and nic */
 		_gnix_ref_put(domain);
-		_gnix_ref_put(nic);
 	} else {
 		GNIX_INFO(FI_LOG_MR, "failed to deregister memory, "
 			  "ret=%i\n", ret);
@@ -311,21 +295,36 @@ static inline void *__gnix_generic_register(
 {
 	struct gnix_nic *nic;
 	gni_return_t grc = GNI_RC_SUCCESS;
+	int rc;
 
-	dlist_for_each(&gnix_nic_list_ptag[domain->ptag], nic, ptag_nic_list)
-	{
-		COND_ACQUIRE(nic->requires_lock, &nic->lock);
-		grc = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t) address,
-					  length,	dst_cq_hndl, flags,
-					  vmdh_index, &md->mem_hndl);
-		COND_RELEASE(nic->requires_lock, &nic->lock);
-		if (grc == GNI_RC_SUCCESS)
-			break;
-	}
+	/* If the nic list is empty, create a nic */
+        if (unlikely((dlist_empty(&gnix_nic_list_ptag[domain->ptag])))) {
+                rc = gnix_nic_alloc(domain, NULL, &nic);
+                if (rc) {
+                        GNIX_INFO(FI_LOG_MR,
+                                  "could not allocate nic to do mr_reg,"
+                                  " ret=%i\n", rc);
+                        return NULL;
+                }
+        } else {
+                nic = dlist_first_entry(&gnix_nic_list_ptag[domain->ptag], 
+			struct gnix_nic, ptag_nic_list);
+                if (!nic)
+                        return NULL;
+		_gnix_ref_get(nic);	
+        }
+
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
+	grc = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t) address,
+				  length,	dst_cq_hndl, flags,
+				  vmdh_index, &md->mem_hndl);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (unlikely(grc != GNI_RC_SUCCESS)) {
 		GNIX_INFO(FI_LOG_MR, "failed to register memory with uGNI, "
 			  "ret=%s\n", gni_err_str[grc]);
+		_gnix_ref_put(nic);
+
 		return NULL;
 	}
 
@@ -333,9 +332,8 @@ static inline void *__gnix_generic_register(
 	md->nic = nic;
 	md->domain = domain;
 
-	/* take references on domain and nic */
+	/* take references on domain */
 	_gnix_ref_get(md->domain);
-	_gnix_ref_get(md->nic);
 
 	return md;
 }
