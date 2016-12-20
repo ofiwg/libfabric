@@ -297,21 +297,33 @@ static inline void *__gnix_generic_register(
 	gni_return_t grc = GNI_RC_SUCCESS;
 	int rc;
 
+	pthread_mutex_lock(&gnix_nic_list_lock);
+
 	/* If the nic list is empty, create a nic */
-        if (unlikely((dlist_empty(&gnix_nic_list_ptag[domain->ptag])))) {
-                rc = gnix_nic_alloc(domain, NULL, &nic);
-                if (rc) {
-                        GNIX_INFO(FI_LOG_MR,
-                                  "could not allocate nic to do mr_reg,"
-                                  " ret=%i\n", rc);
-                        return NULL;
-                }
-        } else {
-                nic = dlist_first_entry(&gnix_nic_list_ptag[domain->ptag], 
+	if (unlikely((dlist_empty(&gnix_nic_list_ptag[domain->ptag])))) {
+		/* release the lock because we are not checking the list after
+			this point. Additionally, gnix_nic_alloc takes the 
+			lock to add the nic. */
+		pthread_mutex_unlock(&gnix_nic_list_lock);
+
+		rc = gnix_nic_alloc(domain, NULL, &nic);
+		if (rc) {
+			GNIX_INFO(FI_LOG_MR,
+				  "could not allocate nic to do mr_reg,"
+				  " ret=%i\n", rc);
+			return NULL;
+		}
+	} else {
+		nic = dlist_first_entry(&gnix_nic_list_ptag[domain->ptag], 
 			struct gnix_nic, ptag_nic_list);
-                if (!nic)
-                        return NULL;
+		if (unlikely(nic == NULL)) {
+			GNIX_ERR(FI_LOG_MR, "Failed to find nic on "
+				"ptag list\n");
+			pthread_mutex_unlock(&gnix_nic_list_lock);
+			return NULL;
+		}
 		_gnix_ref_get(nic);	
+		pthread_mutex_unlock(&gnix_nic_list_lock);
         }
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
