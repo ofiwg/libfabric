@@ -343,9 +343,9 @@ successfully.  Operations which fail are reported 'out of band'.  Such
 operations are retrieved using the fi_cq_readerr function.  When an
 operation that completes with an unexpected error is inserted into a
 CQ, it is placed into a temporary error queue.  Attempting to read
-from a CQ while an item is in the error queue results in an FI_EAVAIL
-failure.  Applications may use this return code to determine when to
-call fi_cq_readerr.
+from a CQ while an item is in the error queue results in a failure
+with a return code of -FI_EAVAIL.  Applications may use this return 
+code to determine when to call fi_cq_readerr.
 
 ## fi_cq_sread / fi_cq_sreadfrom
 
