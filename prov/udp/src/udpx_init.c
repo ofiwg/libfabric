@@ -46,6 +46,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 	struct ifaddrs *ifaddrs, *ifa;
 	struct fi_info *head, *tail, *cur;
 	size_t addrlen;
+	uint32_t addr_format;
 	int ret;
 
 	ret = getifaddrs(&ifaddrs);
@@ -60,9 +61,11 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			addrlen = sizeof(struct sockaddr_in);
+			addr_format = FI_SOCKADDR_IN;
 			break;
 		case AF_INET6:
 			addrlen = sizeof(struct sockaddr_in6);
+			addr_format = FI_SOCKADDR_IN6;
 			break;
 		default:
 			continue;
@@ -78,8 +81,10 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 			tail->next = cur;
 		tail = cur;
 
-		if ((cur->src_addr = mem_dup(ifa->ifa_addr, addrlen)))
+		if ((cur->src_addr = mem_dup(ifa->ifa_addr, addrlen))) {
 			cur->src_addrlen = addrlen;
+			cur->addr_format = addr_format;
+		}
 	}
 	freeifaddrs(ifaddrs);
 
