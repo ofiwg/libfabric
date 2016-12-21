@@ -51,7 +51,6 @@ DEFINE_LIST(fi_ibv_rdm_unexp_queue);
 DEFINE_LIST(fi_ibv_rdm_postponed_queue);
 
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
-static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
 
 int
 fi_ibv_rdm_tagged_prepare_send_request(struct fi_ibv_rdm_request *request,
@@ -546,6 +545,17 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 		VERBS_INFO(FI_LOG_EP_DATA, "conn %p state %d, wc status %d\n",
 			conn, conn->state, wc->status);
+		/* on QP error initiate disconnection procedure:
+		 * flush as many as possible preposted (and failed)
+		 * entries and after this set connection to 'closed' state */
+		if (!conn->recv_preposted) {
+			VERBS_DBG(FI_LOG_EP_DATA, "no more preposted entries: "
+				"conn %p state %d\n",
+				conn, conn->state);
+			return 0;
+		}
+
+		conn->recv_preposted--;
 		if (wc->status == IBV_WC_WR_FLUSH_ERR &&
 		    conn->state == FI_VERBS_CONN_ESTABLISHED)
 		{
@@ -561,8 +571,10 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 			       (!ep->is_closing ||
 				conn->state != FI_VERBS_CONN_ESTABLISHED));
 		}
-
-		return 1;
+		conn->state = FI_VERBS_CONN_CLOSED;
+	}
+	else {
+		check_and_repost_receives(ep, conn);
 	}
 
 	conn->recv_completions++;
@@ -572,8 +584,6 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p recv_completions %d\n",
 		conn, conn->recv_completions);
-
-	check_and_repost_receives(ep, conn);
 
 	if ((rbuf->service_data.status == BUF_STATUS_RECVED) &&
 	    /* NOTE: the ibverbs bug?
@@ -622,7 +632,7 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	return 0;
 }
 
-static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
+int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 {
 	const int wc_count = ep->fi_rcq->read_bunch_size;
 	struct ibv_wc wc[wc_count];

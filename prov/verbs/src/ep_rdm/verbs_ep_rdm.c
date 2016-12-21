@@ -343,6 +343,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
 	void *status = NULL;
+	struct slist_entry *item;
 	struct fi_ibv_rdm_ep *ep =
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
@@ -386,7 +387,6 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
 
 	HASH_ITER(hh, ep->domain->rdm_cm->conn_hash, conn, tmp) {
-		HASH_DEL(ep->domain->rdm_cm->conn_hash, conn);
 		switch (conn->state) {
 		case FI_VERBS_CONN_ALLOCATED:
 		case FI_VERBS_CONN_REMOTE_DISCONNECT:
@@ -408,12 +408,31 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 			break;
 		}
 	}
-	while (ep->num_active_conns) {
-		err = fi_ibv_rdm_cm_progress(ep);
-		if (err) {
-			VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
-			ret = (ret == FI_SUCCESS) ? err : ret;
+
+        /* ok, all connections are initiated to disconnect. now wait
+	 * till all connections are switch to state 'closed' */
+	HASH_ITER(hh, ep->domain->rdm_cm->conn_hash, conn, tmp) {
+		while(conn->state != FI_VERBS_CONN_CLOSED &&
+		      conn->state != FI_VERBS_CONN_ALLOCATED) {
+			fi_ibv_rdm_tagged_poll_recv(ep);
+			err = fi_ibv_rdm_cm_progress(ep);
+			if (err) {
+				VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
+				ret = (ret == FI_SUCCESS) ? err : ret;
+			}
 		}
+	}
+
+        /* now destroy all connections */
+	HASH_ITER(hh, ep->domain->rdm_cm->conn_hash, conn, tmp) {
+		HASH_DEL(ep->domain->rdm_cm->conn_hash, conn);
+		fi_ibv_rdm_conn_cleanup(conn);
+	}
+
+	for(item = slist_remove_head(&ep->av_removed_conn_head); item;
+		item = slist_remove_head(&ep->av_removed_conn_head)) {
+		conn = container_of(item, struct fi_ibv_rdm_conn, removed_next);
+		fi_ibv_rdm_conn_cleanup(conn);
 	}
 
 	assert(HASH_COUNT(ep->domain->rdm_cm->conn_hash) == 0 &&
@@ -422,15 +441,20 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);
-	if (ibv_destroy_cq(ep->scq) || ibv_destroy_cq(ep->rcq)) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_destroy_cq failed\n", errno);
+	if (ibv_destroy_cq(ep->scq)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ep->scq: ibv_destroy_cq failed", errno);
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
 	}
 
-	rdma_freeaddrinfo(ep->rai);
+	if (ibv_destroy_cq(ep->rcq)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ep->rcq: ibv_destroy_cq failed", errno);
+		ret = (ret == FI_SUCCESS) ? -errno : ret;
+	}
+
 	errno = 0;
+	rdma_freeaddrinfo(ep->rai);
 	if (errno) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_freeaddrinfo failed\n", errno);
+		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_freeaddrinfo failed", errno);
 		ret = (ret == FI_SUCCESS) ? -ret : ret;
 	}
 
@@ -519,6 +543,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
 	_ep->tx_selective_completion = 0;
 	_ep->rx_selective_completion = 0;
+
+	slist_init(&_ep->av_removed_conn_head);
 
 	_ep->n_buffs = fi_param_get_int(&fi_ibv_prov, "rdm_buffer_num", &param) ?
 		FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM : param;
