@@ -690,5 +690,5 @@ int main(int argc, char **argv)
 	free(addr_array);
 	free(ep_array);
 	free(fi_dup);
-	return -ret;
+	return ft_exit_code(ret);
 }

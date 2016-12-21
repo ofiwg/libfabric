@@ -505,5 +505,5 @@ out:
 	if (opts.dst_addr)
 		fts_close(series);
 	ft_free();
-	return ret;
+	return ft_exit_code(ret);
 }

@@ -670,5 +670,5 @@ err2:
 		rc = ret;
 err1:
 	fi_freeinfo(fi);
-	return rc;
+	return ft_exit_code(rc);
 }

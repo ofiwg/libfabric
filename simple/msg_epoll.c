@@ -225,7 +225,7 @@ int main(int argc, char **argv)
 
 	ft_free_res();
 	close(epfd);
-	return -ret;
+	return ft_exit_code(ret);
 }
 
 #else
@@ -234,6 +234,6 @@ int main(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	return FI_ENODATA;
+	return ft_exit_code(FI_ENODATA);
 }
 #endif

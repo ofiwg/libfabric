@@ -385,5 +385,5 @@ int main(int argc, char **argv)
 	/* Closes the scalable ep that was allocated in the test */
 	FT_CLOSE_FID(sep);
 	ft_free_res();
-	return -ret;
+	return ft_exit_code(ret);
 }
