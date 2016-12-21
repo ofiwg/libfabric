@@ -89,9 +89,9 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 
 	if (ep->eopcode == IBV_WR_SEND) {
 		for (i = 0; i < num_to_post; i++) {
-			sge[i].addr = (uint64_t)(void *)
-			fi_ibv_rdm_get_rbuf(conn, ep, i % ep->n_buffs);
-			sge[i].length = FI_IBV_RDM_DFLT_BUFFER_SIZE;
+			sge[i].addr = (uint64_t)(uintptr_t)
+				fi_ibv_rdm_get_rbuf(conn, ep, i % ep->n_buffs);
+			sge[i].length = ep->buff_len;
 			sge[i].lkey = conn->r_mr->lkey;
 		}
 	}
