@@ -48,7 +48,7 @@
 
 atomic_t gnix_id_counter;
 atomic_t file_id_counter;
-#ifndef NDEBUG
+#ifdef ENABLE_DEBUG
 /* don't think this needs to be in tls */
 __thread pid_t gnix_debug_pid = ~(uint32_t) 0;
 __thread uint32_t gnix_debug_tid = ~(uint32_t) 0;
