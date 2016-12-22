@@ -35,6 +35,8 @@
 #define FI_BGQ_UEPKT_BLOCKSIZE (1024)
 #define PROCESS_RFIFO_MAX 64
 
+//#define FI_BGQ_TRACE
+
 /* forward declaration - see: prov/bgq/src/fi_bgq_atomic.c */
 void fi_bgq_rx_atomic_dispatch (void * buf, void * addr, size_t nbytes,
 	enum fi_datatype dt, enum fi_op op);
@@ -279,13 +281,14 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 	struct l2atomic_fifo_producer * err_producer = &bgq_ep->recv_cq->err_producer;
 
+	const uint64_t immediate_data = pkt->hdr.pt2pt.immediate_data;
+
 	if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
 
-		const uint64_t send_len = pkt->hdr.inject.message_length;
-		const uint64_t immediate_data = pkt->hdr.inject.immediate_data;
+		const uint64_t send_len = pkt->hdr.pt2pt.inject.message_length;
 
 		if (is_multi_receive) {		/* branch should compile out */
-			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.inject.data, send_len);
+			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.pt2pt.inject.data, send_len);
 
 			union fi_bgq_context * original_multi_recv_context = context;
 			context = (union fi_bgq_context *)((uintptr_t)recv_buf - sizeof(union fi_bgq_context));
@@ -308,7 +311,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else if (send_len <= recv_len) {
-			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.inject.data, send_len);
+			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.pt2pt.inject.data, send_len);
 
 			context->buf = NULL;
 			context->len = send_len;
@@ -351,8 +354,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 	} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 
-		const uint64_t send_len = pkt->hdr.send.message_length;
-		const uint64_t immediate_data = pkt->hdr.send.immediate_data;
+		const uint64_t send_len = pkt->hdr.pt2pt.send.message_length;
 
 		if (is_multi_receive) {		/* branch should compile out */
 			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
@@ -421,9 +423,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 	} else {			/* rendezvous packet */
 
-		const uint64_t immediate_data = pkt->payload.rendezvous.immediate_data;
-
-		uint64_t niov = pkt->hdr.rendezvous.niov_minus_1 + 1;
+		uint64_t niov = pkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 		assert(niov <= (7-is_multi_receive));
 		uint64_t xfer_len = pkt->payload.rendezvous.mu_iov[0].message_length;
 		{
@@ -524,7 +524,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			dst_paddr = (uint64_t)mr.BasePa + ((uint64_t)recv_buf - (uint64_t)mr.BaseVa);
 		}
 
-		const uint64_t is_local = pkt->hdr.rendezvous.is_local;
+		const uint64_t fifo_map = fi_bgq_mu_packet_get_fifo_map(pkt);
+		const uint64_t is_local = (fifo_map & (MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 | MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL1)) != 0;
 
 		/*
 		 * inject a "remote get" descriptor - the payload is composed
@@ -558,9 +559,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 		rget_desc->Pa_Payload = payload_paddr;
 		rget_desc->PacketHeader.messageUnitHeader.Packet_Types.Remote_Get.Rget_Inj_FIFO_Id =
-			pkt->hdr.rendezvous.rget_inj_fifo_id;	/* TODO - different rget inj fifos for tag vs msg operations? */
+			pkt->hdr.pt2pt.rendezvous.rget_inj_fifo_id;	/* TODO - different rget inj fifos for tag vs msg operations? */
 
-		fi_bgq_mu_packet_rendezvous_origin(pkt, &rget_desc->PacketHeader.NetworkHeader.pt2pt.Destination);
+		rget_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(pkt->hdr.pt2pt.uid.fi);
 
 		/* initialize the direct-put ("data transfer") descriptor(s) in the rget payload */
 		unsigned i;
@@ -582,10 +583,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			rget_desc->Message_Length += sizeof(MUHWI_Descriptor_t);
 
 			if (is_multi_receive) {		/* branch should compile out */
-				if (is_local)
-					xfer_desc->Torus_FIFO_Map = MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0;
-				else
-					xfer_desc->Torus_FIFO_Map = fi_bgq_mu_packet_rendezvous_fifomap(pkt);
+				xfer_desc->Torus_FIFO_Map = fifo_map;
 			}
 		}
 
@@ -594,7 +592,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			MUHWI_Descriptor_t * dput_desc = payload;
 			qpx_memcpy64((void*)dput_desc, (const void*)&bgq_ep->rx.poll.rzv.dput_completion_model);
 
-			const uint64_t counter_paddr = ((uint64_t) pkt->hdr.rendezvous.cntr_paddr_rsh3b) << 3;
+			const uint64_t counter_paddr = ((uint64_t) pkt->payload.rendezvous.cntr_paddr_rsh3b) << 3;
 			dput_desc->Pa_Payload =
 				MUSPI_GetAtomicAddress(counter_paddr,
 					MUHWI_ATOMIC_OPCODE_LOAD_CLEAR);
@@ -605,9 +603,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			MUHWI_Descriptor_t * ack_desc = ++payload;
 			qpx_memcpy64((void*)ack_desc, (const void*)&bgq_ep->rx.poll.rzv.multi_recv_ack_model);
 
-			const uint64_t torus_fifo_map = is_local ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 : fi_bgq_mu_packet_rendezvous_fifomap(pkt);
-			ack_desc->Torus_FIFO_Map = torus_fifo_map;
-			rget_desc->Torus_FIFO_Map = torus_fifo_map;
+			ack_desc->Torus_FIFO_Map = fifo_map;
+			rget_desc->Torus_FIFO_Map = fifo_map;
 			rget_desc->Message_Length += sizeof(MUHWI_Descriptor_t);
 
 			union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &ack_desc->PacketHeader;
@@ -625,43 +622,20 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 static inline
 unsigned is_match(struct fi_bgq_mu_packet *pkt, union fi_bgq_context * context, const unsigned poll_msg)
 {
-	if (poll_msg && context->src_addr == FI_ADDR_UNSPEC) return 1;
-
-	const uint64_t origin_tag = pkt->hdr.inject.ofi_tag;
-	const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
-	union fi_bgq_addr bgq_addr;
-	bgq_addr.fi = context->src_addr;
-	bool src_addr_match = 0;
-
-
-	if (context->src_addr == FI_ADDR_UNSPEC) {
-		src_addr_match = 1;
-#ifdef FI_BGQ_TRACE
-		fprintf(stderr,"is_match context->src_addr == FI_ADDR_UNSPEC\n");
-#endif
-	}
-	else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
-		src_addr_match = ((bgq_addr.a == pkt->payload.rendezvous.a) && (bgq_addr.b == pkt->payload.rendezvous.b) && (bgq_addr.c == pkt->payload.rendezvous.c) && (bgq_addr.d == pkt->payload.rendezvous.d) && (bgq_addr.e == pkt->payload.rendezvous.e) && (bgq_addr.rx == pkt->payload.rendezvous.rx));
-
-#ifdef FI_BGQ_TRACE
-		fprintf(stderr,"is_match FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS comparing %u %u %u %u %u %u  to   %u %u %u %u %u %u\n",bgq_addr.a,bgq_addr.b,bgq_addr.c,bgq_addr.d,bgq_addr.e,bgq_addr.rx,pkt->payload.rendezvous.a,pkt->payload.rendezvous.b,pkt->payload.rendezvous.c,pkt->payload.rendezvous.d,pkt->payload.rendezvous.e,pkt->payload.rendezvous.rx);
-#endif
-	}
-	else {
-		src_addr_match = ((bgq_addr.a == pkt->hdr.inject.a) && (bgq_addr.b == pkt->hdr.inject.b) && (bgq_addr.c == pkt->hdr.inject.c) && (bgq_addr.d == pkt->hdr.inject.d) && (bgq_addr.e == pkt->hdr.inject.e) && (bgq_addr.rx == pkt->hdr.inject.rx));
-#ifdef FI_BGQ_TRACE
-		fprintf(stderr,"is_match eager or inject comparing %u %u %u %u %u %u  to   %u %u %u %u %u %u\n",bgq_addr.a,bgq_addr.b,bgq_addr.c,bgq_addr.d,bgq_addr.e,bgq_addr.rx,pkt->hdr.inject.a,pkt->hdr.inject.b,pkt->hdr.inject.c,pkt->hdr.inject.d,pkt->hdr.inject.e,pkt->hdr.inject.rx);
-#endif
-	}
-
+	const uint64_t origin_tag = pkt->hdr.pt2pt.ofi_tag;
+	const fi_bgq_uid_t origin_uid = pkt->hdr.pt2pt.uid.fi;
+	const fi_bgq_uid_t target_uid = fi_bgq_addr_uid(context->src_addr);
 	const uint64_t ignore = context->ignore;
 	const uint64_t target_tag = context->tag;
 	const uint64_t target_tag_and_not_ignore = target_tag & ~ignore;
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
+
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr,"src_addr_match is %u and (origin_tag_and_not_ignore == target_tag_and_not_ignore) is %u target_tag is %lu origin_tag is %lu\n",src_addr_match,(origin_tag_and_not_ignore == target_tag_and_not_ignore),target_tag,origin_tag);
+	int anysrc = (context->src_addr == FI_ADDR_UNSPEC);
+	fprintf(stderr, "%s:%s():%d origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %d returning %u\n", __FILE__, __func__, __LINE__, origin_uid, target_uid, origin_tag, target_tag, ignore, anysrc,((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid))));
 #endif
-	return ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && src_addr_match);
+
+	return ((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid)));
 }
 
 
@@ -727,7 +701,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 						0, context, is_context_ext, 0, is_manual_progress);
 				else
 					complete_receive_operation(bgq_ep, pkt,
-						pkt->hdr.inject.ofi_tag, context, is_context_ext, 0, is_manual_progress);
+						pkt->hdr.pt2pt.ofi_tag, context, is_context_ext, 0, is_manual_progress);
 
 				return;
 
@@ -739,11 +713,11 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 				uint64_t send_len = 0;
 
 				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					send_len = pkt->hdr.inject.message_length;
+					send_len = pkt->hdr.pt2pt.inject.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
-					send_len = pkt->hdr.send.message_length;
+					send_len = pkt->hdr.pt2pt.send.message_length;
 				} else /* FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS */ {
-					const uint64_t niov = pkt->hdr.rendezvous.niov_minus_1 + 1;
+					const uint64_t niov = pkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					send_len = pkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
 					for (i=1; i<niov; ++i) send_len += pkt->payload.rendezvous.mu_iov[i].message_length;
@@ -1038,7 +1012,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 						0, context, 0, 0, is_manual_progress);
 				else
 					complete_receive_operation(bgq_ep, uepkt,
-						uepkt->hdr.inject.ofi_tag, context, 0, 0, is_manual_progress);
+						uepkt->hdr.pt2pt.ofi_tag, context, 0, 0, is_manual_progress);
 
 				/* remove the uepkt from the ue queue */
 				if (head == tail) {
@@ -1102,17 +1076,17 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(uepkt);
 				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					context->len = uepkt->hdr.inject.message_length;
+					context->len = uepkt->hdr.pt2pt.inject.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
-					const uint64_t niov = uepkt->hdr.rendezvous.niov_minus_1 + 1;
+					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					uint64_t len = 0;
 					unsigned i;
 					for (i=0; i<niov; ++i) len += uepkt->payload.rendezvous.mu_iov[i].message_length;
 					context->len = len;
 				} else {	/* "eager" or "eager with completion" packet type */
-					context->len = uepkt->hdr.send.message_length;
+					context->len = uepkt->hdr.pt2pt.send.message_length;
 				}
-				context->tag = poll_msg ? 0 : uepkt->hdr.inject.ofi_tag;
+				context->tag = poll_msg ? 0 : uepkt->hdr.pt2pt.ofi_tag;
 				context->byte_counter = 0;
 
 				if (rx_op_flags & FI_CLAIM) { /* both FI_PEEK and FI_CLAIM were specified */
@@ -1198,7 +1172,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				0, context, 0, 0, is_manual_progress);
 		else
 			complete_receive_operation(bgq_ep, claimed_pkt,
-				claimed_pkt->hdr.inject.ofi_tag, context, 0, 0, is_manual_progress);
+				claimed_pkt->hdr.pt2pt.ofi_tag, context, 0, 0, is_manual_progress);
 
 		/* ... and prepend the uehdr to the ue free list. */
 		claimed_pkt->next = bgq_ep->rx.poll.rfifo[poll_msg].ue.free;
@@ -1224,11 +1198,11 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				uint64_t send_len = 0;
 
 				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					send_len = uepkt->hdr.inject.message_length;
+					send_len = uepkt->hdr.pt2pt.inject.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
-					send_len = uepkt->hdr.send.message_length;
+					send_len = uepkt->hdr.pt2pt.send.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
-					const uint64_t niov = uepkt->hdr.rendezvous.niov_minus_1 + 1;
+					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					send_len = uepkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
 					for (i=1; i<niov; ++i) send_len += uepkt->payload.rendezvous.mu_iov[i].message_length;

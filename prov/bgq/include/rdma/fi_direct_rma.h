@@ -87,7 +87,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			&bgq_ep->tx.read.direct.rget_model :
 			&bgq_ep->tx.read.emulation.mfifo_model;
 
-	const uint64_t fifo_map = (uint64_t) bgq_target_addr->fifo_map;
+	const uint64_t fifo_map = fi_bgq_addr_get_fifo_map(bgq_target_addr->fi);
 
 	/* busy-wait until a fifo slot is available .. */
 	MUHWI_Descriptor_t * desc =
@@ -97,7 +97,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 	qpx_memcpy64((void*)desc, (const void *)model);
 
 	/* set the target torus address and fifo map */
-	desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_target_addr->Destination;
+	desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_target_addr->uid.fi);
 	desc->Torus_FIFO_Map = fifo_map;
 
 	/* locate the payload lookaside slot */
@@ -342,8 +342,8 @@ static inline ssize_t fi_bgq_inject_write_generic(struct fid_ep *ep,
 
 	/* set the destination torus address and fifo map */
 	union fi_bgq_addr * bgq_dst_addr = (union fi_bgq_addr *)&dst_addr;
-	desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr->Destination;
-	desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr->fifo_map;
+	desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr->uid.fi);
+	desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(bgq_dst_addr->fi);
 	desc->Message_Length = len;
 
 	/* locate the payload lookaside slot */
@@ -432,8 +432,8 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 	qpx_memcpy64((void*)desc, (const void *)model);
 
 	/* set the destination torus address and fifo map */
-	desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr->Destination;
-	desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr->fifo_map;
+	desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr->uid.fi);
+	desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(bgq_dst_addr->fi);
 
 	if (tx_op_flags & FI_INJECT) {	/* unlikely */
 

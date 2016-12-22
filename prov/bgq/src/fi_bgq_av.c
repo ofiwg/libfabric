@@ -34,52 +34,6 @@
 
 #include "rdma/bgq/fi_bgq_spi.h"
 
-static inline
-void fi_bgq_addr_initialize (union fi_bgq_addr * output,
-		BG_CoordinateMapping_t * my_coords, uint32_t a, uint32_t b,
-		uint32_t c, uint32_t d, uint32_t e, uint32_t t, uint32_t ppn,
-		uint32_t domain_id, uint32_t domains_per_process,
-		uint32_t endpoint_id, uint32_t endpoints_per_domain)
-{
-	const uint32_t rx_per_node = ((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP) ;
-	const uint32_t rx_per_process = rx_per_node / ppn;
-	const uint32_t rx_per_domain = rx_per_process / domains_per_process;
-	const uint32_t rx_per_endpoint = rx_per_domain / endpoints_per_domain;
-
-	output->reserved	= 0;
-	output->a		= a;
-	output->b		= b;
-	output->c		= c;
-	output->d		= d;
-	output->e		= e;
-
-	output->is_local        =
-		(my_coords->a == a) &&
-		(my_coords->b == b) &&
-		(my_coords->c == c) &&
-		(my_coords->d == d) &&
-		(my_coords->e == e);
-
-	output->fifo_map = fi_bgq_mu_calculate_fifo_map(*my_coords, a, b, c, d, e, t);
-
-	/*
-	 * The least significant bits are initially zero, which represents the
-	 * 'base' reception context for a scalable endpoint, and the 'rx'
-	 * field is the last field in the address structure which means that
-	 * a 'base' address stored in the address vector object can be
-	 * converted into a 'scalable' address by simply adding the rx index
-	 * to the fi_addr_t.
-	 */
-
-	output->rx		= (rx_per_process * t) +
-				(rx_per_domain * domain_id) +
-				(rx_per_endpoint * endpoint_id);
-#ifdef FI_BGQ_TRACE
-	fprintf(stderr,"fi_bgq_addr_initialize acbde rx is %u %u %u %u %u %u\n",a,b,c,d,e,output->rx );
-#endif
-
-}
-
 static int fi_bgq_close_av(fid_t fid)
 {
 	int ret;
@@ -146,16 +100,35 @@ fi_bgq_av_insert(struct fid_av *av, const void *addr, size_t count,
 		return -errno;
 	}
 
-	BG_CoordinateMapping_t * coords = (BG_CoordinateMapping_t *) addr;
+	BG_CoordinateMapping_t my_coords = bgq_av->domain->my_coords;
+	BG_CoordinateMapping_t * your_coords = (BG_CoordinateMapping_t *) addr;
 	union fi_bgq_addr * output = (union fi_bgq_addr *) fi_addr;
 	uint32_t ppn = Kernel_ProcessCount();
+
+	Personality_t personality;
+	int rc;
+	rc = Kernel_GetPersonality(&personality, sizeof(Personality_t));
+	if (rc) {
+		errno = FI_EINVAL;
+		return -errno;
+	}
+	uint64_t dcr_value = DCRReadUser(ND_500_DCR(CTRL_CUTOFFS));
+
+
 	uint32_t n;
 	for (n=0; n<count; ++n) {
 
-		fi_bgq_addr_initialize(&output[n], &bgq_av->domain->my_coords,
-			coords[n].a, coords[n].b, coords[n].c,
-			coords[n].d, coords[n].e, coords[n].t, ppn,
-			0, 1, 0, 1);
+		const uint32_t fifo_map =
+			fi_bgq_mu_calculate_fifo_map(my_coords, your_coords[n],
+					&personality, dcr_value);
+
+		const MUHWI_Destination_t destination =
+			fi_bgq_spi_coordinates_to_destination(your_coords[n]);
+
+		const uint32_t base_rx =
+			fi_bgq_addr_calculate_base_rx(your_coords[n].t, ppn);
+
+		output[n].fi = fi_bgq_addr_create(destination, fifo_map, base_rx);
 	}
 
 	return count;
@@ -201,10 +174,26 @@ fi_bgq_av_insertsvc(struct fid_av *av, const char *node, const char *service,
 	uint32_t a, b, c, d, e, t;
 	const char * node_str = (const char *) node;
 	sscanf(node_str, "%u.%u.%u.%u.%u.%u", &a, &b, &c, &d, &e, &t);
+	BG_CoordinateMapping_t your_coords;
+	your_coords.a = a;
+	your_coords.b = b;
+	your_coords.c = c;
+	your_coords.d = d;
+	your_coords.e = e;
+	your_coords.t = t;
 
-	union fi_bgq_addr * output = (union fi_bgq_addr *) fi_addr;
-	fi_bgq_addr_initialize (output, &bgq_av->domain->my_coords,
-		a, b, c, d, e, t, Kernel_ProcessCount(), 0, 1, 0, 1);
+	BG_CoordinateMapping_t my_coords = bgq_av->domain->my_coords;
+
+	const uint32_t fifo_map =
+		fi_bgq_mu_calculate_fifo_map_single(my_coords, your_coords);
+
+	const MUHWI_Destination_t destination =
+		fi_bgq_spi_coordinates_to_destination(your_coords);
+
+	const uint32_t base_rx =
+		fi_bgq_addr_calculate_base_rx(your_coords.t, Kernel_ProcessCount());
+
+	*fi_addr = fi_bgq_addr_create(destination, fifo_map, base_rx);
 
 	return 0;
 }
@@ -292,21 +281,39 @@ fi_bgq_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
 
 	uint32_t maximum_to_insert = (node_count < nodecnt) ? node_count : nodecnt;
 
+	BG_CoordinateMapping_t my_coords = bgq_av->domain->my_coords;
+	BG_CoordinateMapping_t your_coords;
+	uint64_t dcr_value = DCRReadUser(ND_500_DCR(CTRL_CUTOFFS));
+
 	int n = 0;
 	uint32_t _a, _b, _c, _d, _e, _t;
 	union fi_bgq_addr * output = (union fi_bgq_addr *) fi_addr;
 	for (_a = a; _a < personality.Network_Config.Anodes; ++_a) {
+		your_coords.a = _a;
 	for (_b = b; _b < personality.Network_Config.Bnodes; ++_b) {
+		your_coords.b = _b;
 	for (_c = c; _c < personality.Network_Config.Cnodes; ++_c) {
+		your_coords.c = _c;
 	for (_d = d; _d < personality.Network_Config.Dnodes; ++_d) {
+		your_coords.d = _d;
 	for (_e = e; _e < personality.Network_Config.Enodes; ++_e) {
+		your_coords.e = _e;
 	for (_t = t; _t < ppn; ++_t) {
+		your_coords.t = _t;
 
 		if (n == maximum_to_insert) break;
 
-		fi_bgq_addr_initialize (&output[n++],
-			&bgq_av->domain->my_coords,
-			_a, _b, _c, _d, _e, _t, ppn, 0, 1, 0, 1);
+		const uint32_t fifo_map =
+			fi_bgq_mu_calculate_fifo_map(my_coords, your_coords,
+				&personality, dcr_value);
+
+		const MUHWI_Destination_t destination =
+			fi_bgq_spi_coordinates_to_destination(your_coords);
+
+		const uint32_t base_rx =
+			fi_bgq_addr_calculate_base_rx(your_coords.t, ppn);
+
+		fi_addr[n++] = fi_bgq_addr_create(destination, fifo_map, base_rx);
 
 	}}}}}}
 
@@ -322,20 +329,19 @@ fi_bgq_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count, uint64_t f
 static int
 fi_bgq_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, size_t *addrlen)
 {
-	union fi_bgq_addr bgq_addr;
-	bgq_addr.fi = fi_addr;
+	const union fi_bgq_addr bgq_addr = {.fi=fi_addr};
 
 	BG_CoordinateMapping_t tmp;
-	tmp.a = bgq_addr.a;
-	tmp.b = bgq_addr.b;
-	tmp.c = bgq_addr.c;
-	tmp.d = bgq_addr.d;
-	tmp.e = bgq_addr.e;
+	tmp.a = bgq_addr.uid.a;
+	tmp.b = bgq_addr.uid.b;
+	tmp.c = bgq_addr.uid.c;
+	tmp.d = bgq_addr.uid.d;
+	tmp.e = bgq_addr.uid.e;
 
 	const uint32_t ppn = Kernel_ProcessCount();
 	const uint32_t rx_per_node = ((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP) / 2;	/* each rx uses two mu reception fifos */
 	const uint32_t rx_per_process = rx_per_node / ppn;
-	tmp.t = (uint32_t)(bgq_addr.rx / rx_per_process);
+	tmp.t = fi_bgq_addr_rec_fifo_id(bgq_addr.fi) / rx_per_process;
 
 	memcpy(addr, (const void *)&tmp, *addrlen);
 
@@ -446,23 +452,29 @@ int fi_bgq_av_open(struct fid_domain *dom,
 
 		size_t mapsize = node_count * ppn;
 		BG_CoordinateMapping_t map[mapsize];
-		uint64_t ep_count;
+		uint64_t ep_count;	/* one endpoint per process */
 		rc = Kernel_RanksToCoords(sizeof(map), map, &ep_count);
 
-		// For now just 1 end point per process
-		const size_t ep_per_process = 1;
+		fi_addr_t *addr = (fi_addr_t *)malloc(sizeof(fi_addr_t)*ep_count);	/* TODO - mmap this into shared memory */
 
-		union fi_bgq_addr *addr = (union fi_bgq_addr *)malloc(sizeof(fi_addr_t)*ep_count);	/* TODO - mmap this into shared memory */
-
-		size_t ep = 0, n = 0;
+		size_t n = 0;
 		int i;
 
-		/* Call the fi_bgq_addr_initialize for the exact processes in the block. */
+		BG_CoordinateMapping_t my_coords = bgq_av->domain->my_coords;
+		uint64_t dcr_value = DCRReadUser(ND_500_DCR(CTRL_CUTOFFS));
 		for (i=0;i<ep_count;i++) {
-			fi_bgq_addr_initialize (&addr[n++],
-				&bgq_av->domain->my_coords,
-				map[i].a, map[i].b, map[i].c, map[i].d, map[i].e, map[i].t, ppn, 0, 1,
-				ep, ep_per_process);
+
+			const uint32_t fifo_map =
+				fi_bgq_mu_calculate_fifo_map(my_coords, map[i],
+					&personality, dcr_value);
+
+			const MUHWI_Destination_t destination =
+				fi_bgq_spi_coordinates_to_destination(map[i]);
+
+			const uint32_t base_rx =
+				fi_bgq_addr_calculate_base_rx(map[i].t, ppn);
+
+			addr[n++] = fi_bgq_addr_create(destination, fifo_map, base_rx);
 		}
 
 		bgq_av->map_addr = (void *)addr;

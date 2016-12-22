@@ -333,14 +333,20 @@ static inline fi_addr_t
 fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 {
 	/*
-	 * The least significant bits of a 'base' fi_addr_t (stored in the
-	 * address vector object) are initially zero, and the 'rx' field is
-	 * the last field in the address structure which means that
-	 * a 'base' address stored in the address vector object can be
-	 * converted into a 'scalable' address by simply adding the rx index
+	 * The 'rx_lsb' field in the uid, located in the upper 4 bytes of the
+	 * fi_addr_t, is 5 bits wide and, for scalable endpoints, represents
+	 * the 'base mu reception fifo id'. To specialize the rx field the
+	 * 'rx index' must be added to the 'rx base'.
+	 *
+	 * This can be done by shifting the 'rx index' 33 bits and adding it
 	 * to the fi_addr_t (which is typedef'd to uint64_t).
 	 */
-	return fi_addr + rx_index;
+
+	assert(rx_ctx_bits <= 4);
+
+	assert(0);	/* TODO - double check that this actually works! */
+
+	return fi_addr + ((uint64_t)rx_index << 33);
 }
 
 static inline int fi_wait_open(struct fid_fabric *fabric,

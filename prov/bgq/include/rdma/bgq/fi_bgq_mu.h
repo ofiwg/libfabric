@@ -58,52 +58,187 @@
 
 // #define FI_BGQ_TRACE 1
 
-union fi_bgq_addr {
-	fi_addr_t			fi;
-	uint64_t			raw;
+
+typedef uint32_t		fi_bgq_uid_t;
+
+union fi_bgq_uid {
+	fi_bgq_uid_t		fi;
+	uint32_t		raw32b;
+	uint16_t		raw16b[2];
+	uint8_t			raw8b[4];
+	MUHWI_Destination_t	muhwi;		/* see fi_bgq_uid_get_destination() */
 	struct {
-		union {
-			MUHWI_Destination_t	Destination;
-			struct {
-				uint32_t	reserved	:  2;
-				uint32_t	a		:  6;	/* only 3 bits are needed for Mira */
-				uint32_t	b		:  6;	/* only 4 bits are needed for Mira */
-				uint32_t	c		:  6;	/* only 4 bits are needed for Mira */
-				uint32_t	d		:  6;	/* only 4 bits are needed for Mira */
-				uint32_t	e		:  6;	/* only 1 bit is needed */
-			} __attribute__((__packed__));
-		} __attribute__((__packed__));
-		uint16_t		fifo_map;			/* only 12 bits are needed for normal pt2pt; and only 10 bits for internode */
-		uint16_t		is_local	:  1;		/* same as fifo_map::MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 | fifo_map::MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL1 */
-		uint16_t		unused		:  7;
-		uint16_t		rx		:  8;		/* node-scoped reception context identifier; see NOTE_MU_RECFIFO */
+		uint32_t	rx_msb	:  4;	/* see fi_bgq_uid_get_rx(); see NOTE_MU_RECFIFO */
+		uint32_t	unused_0:  1;
+		uint32_t	a	:  3;	/* 3 bits needed for the A dimention of the torus on Mira */
+		uint32_t	unused_1:  2;
+		uint32_t	b	:  4;	/* 4 bits needed for the B dimention of the torus on Mira */
+		uint32_t	unused_2:  2;
+		uint32_t	c	:  4;	/* 4 bits needed for the C dimention of the torus on Mira */
+		uint32_t	unused_3:  2;
+		uint32_t	d	:  4;	/* 4 bits needed for the D dimention of the torus on Mira */
+		uint32_t	rx_lsb	:  5;	/* see fi_bgq_uid_get_rx(); see NOTE_MU_RECFIFO */
+		uint32_t	e	:  1;	/* 1 bit needed for the E dimention of the torus on all BG/Q systems */
 	} __attribute__((__packed__));
 } __attribute__((__packed__));
 
+static inline void
+fi_bgq_uid_dump (char * prefix, const fi_bgq_uid_t * const uid) {
+
+	const union fi_bgq_uid tmp = {.fi=*uid};
+	uint32_t * ptr = (uint32_t *)uid;
+	fprintf(stderr, "%s [%p]: %08x\n", prefix, ptr, *(ptr));
+	fprintf(stderr, "%s fi_bgq_uid_t dump at %p\n", prefix, (void*)uid);
+
+	fprintf(stderr, "%s   .rx_msb .................................... %u\n", prefix, tmp.rx_msb);
+	fprintf(stderr, "%s   .unused_0 .................................. %u\n", prefix, tmp.unused_0);
+	fprintf(stderr, "%s   .a ......................................... %u\n", prefix, tmp.a);
+	fprintf(stderr, "%s   .unused_1 .................................. %u\n", prefix, tmp.unused_1);
+	fprintf(stderr, "%s   .b ......................................... %u\n", prefix, tmp.b);
+	fprintf(stderr, "%s   .unused_2 .................................. %u\n", prefix, tmp.unused_2);
+	fprintf(stderr, "%s   .c ......................................... %u\n", prefix, tmp.c);
+	fprintf(stderr, "%s   .unused_3 .................................. %u\n", prefix, tmp.unused_3);
+	fprintf(stderr, "%s   .d ......................................... %u\n", prefix, tmp.d);
+	fprintf(stderr, "%s   .rx_lsb .................................... %u\n", prefix, tmp.rx_lsb);
+	fprintf(stderr, "%s   .e ......................................... %u\n", prefix, tmp.e);
+
+	fflush(stderr);
+}
+
+#define FI_BGQ_UID_DUMP(uid)							\
+({										\
+	char prefix[1024];							\
+	snprintf(prefix, 1023, "%s:%s():%d", __FILE__, __func__, __LINE__);	\
+	fi_bgq_uid_dump(prefix, (uid));						\
+})
+
 static inline
-uint64_t fi_bgq_addr_is_local (fi_addr_t addr) {
-	return (((uint64_t)addr) >> 15) & 0x01ull;
+fi_bgq_uid_t fi_bgq_uid_set_rx (const fi_bgq_uid_t uid, const uint32_t rx) {
+	return (uid & 0x0FFFFFC1u) |		/* clear rx_msb and rx_lsb */
+		((rx << 23) & 0xF0000000u) |	/* set rx_msb */
+		((rx << 1) & 0x0000003Eu);	/* set rx_lsb */
 }
 
 static inline
-uint64_t fi_bgq_addr_rec_fifo_id (fi_addr_t addr) {
-	return (((uint64_t)addr) & 0x0FFull);
+uint32_t fi_bgq_uid_get_rx (const fi_bgq_uid_t uid) {
+	return ((uid & 0xF0000000u) >> 23) | ((uid & 0x0000003Eu) >> 1);
 }
 
 static inline
-void fi_bgq_addr_dump (union fi_bgq_addr addr)
-{
-	fprintf(stderr, "==== %s ====\n", __func__);
-	fprintf(stderr, "addr.a = %u\n", addr.a);
-	fprintf(stderr, "addr.b = %u\n", addr.b);
-	fprintf(stderr, "addr.c = %u\n", addr.c);
-	fprintf(stderr, "addr.d = %u\n", addr.d);
-	fprintf(stderr, "addr.e = %u\n", addr.e);
-	fprintf(stderr, "addr.fifo_map = 0x%04x\n", addr.fifo_map);
-	fprintf(stderr, "addr.is_local = %u\n", addr.is_local);
-	fprintf(stderr, "addr.rx = %u\n", addr.rx);
-	fprintf(stderr, "==== %s ====\n", __func__);
+fi_bgq_uid_t fi_bgq_uid_set_destination (const fi_bgq_uid_t uid, const MUHWI_Destination_t destination) {
+	const union fi_bgq_uid tmp = {.muhwi=destination};
+	return (uid & 0xF8C30C3Eu) | tmp.fi;	/* clear torus fields (a,b,c,d,e); then set */
 }
+
+static inline
+MUHWI_Destination_t fi_bgq_uid_get_destination (const fi_bgq_uid_t uid) {
+	/* clear all bits except the torus coordinates */
+	const union fi_bgq_uid tmp = {.fi=(uid & 0x073CF3C1ul)};
+	return tmp.muhwi;
+}
+
+static inline
+fi_bgq_uid_t fi_bgq_uid_create (const MUHWI_Destination_t destination, const uint32_t rx) {
+	const union fi_bgq_uid tmp = {.muhwi=destination};
+	return fi_bgq_uid_set_rx(tmp.fi, rx);
+}
+
+
+union fi_bgq_addr {
+	fi_addr_t			fi;
+	uint64_t			raw64b;
+	struct {
+		union fi_bgq_uid	uid;
+		uint16_t		unused_0;
+		uint16_t		fifo_map;	/* only the 12 msb are used */
+	} __attribute__((__packed__));
+} __attribute__((__packed__));
+
+static inline void
+fi_bgq_addr_dump (char * prefix, fi_addr_t * addr) {
+
+	const union fi_bgq_addr tmp = {.fi=*addr};
+	uint32_t * ptr = (uint32_t *)addr;
+	fprintf(stderr, "%s [%p]: %08x %08x\n", prefix, ptr, *(ptr), *(ptr+1));
+	fprintf(stderr, "%s bgq addr dump at %p\n", prefix, (void*)addr);
+
+	fprintf(stderr, "%s   .uid.rx_msb .................................... %u\n", prefix, tmp.uid.rx_msb);
+	fprintf(stderr, "%s   .uid.unused_0 .................................. %u\n", prefix, tmp.uid.unused_0);
+	fprintf(stderr, "%s   .uid.a ......................................... %u\n", prefix, tmp.uid.a);
+	fprintf(stderr, "%s   .uid.unused_1 .................................. %u\n", prefix, tmp.uid.unused_1);
+	fprintf(stderr, "%s   .uid.b ......................................... %u\n", prefix, tmp.uid.b);
+	fprintf(stderr, "%s   .uid.unused_2 .................................. %u\n", prefix, tmp.uid.unused_2);
+	fprintf(stderr, "%s   .uid.c ......................................... %u\n", prefix, tmp.uid.c);
+	fprintf(stderr, "%s   .uid.unused_3 .................................. %u\n", prefix, tmp.uid.unused_3);
+	fprintf(stderr, "%s   .uid.d ......................................... %u\n", prefix, tmp.uid.d);
+	fprintf(stderr, "%s   .uid.rx_lsb .................................... %u\n", prefix, tmp.uid.rx_lsb);
+	fprintf(stderr, "%s   .uid.e ......................................... %u\n", prefix, tmp.uid.e);
+
+	fprintf(stderr, "%s   .unused_0 ................................... %u\n", prefix, tmp.unused_0);
+	fprintf(stderr, "%s   .fifo_map ................................... %u\n", prefix, tmp.fifo_map);
+
+	fflush(stderr);
+}
+
+#define FI_BGQ_ADDR_DUMP(addr)							\
+({										\
+	char prefix[1024];							\
+	snprintf(prefix, 1023, "%s:%s():%d", __FILE__, __func__, __LINE__);	\
+	fi_bgq_addr_dump(prefix, (addr));					\
+})
+
+static inline
+fi_bgq_uid_t fi_bgq_addr_uid (const fi_addr_t addr) {
+	return ((union fi_bgq_addr*)&addr)->uid.fi;
+}
+
+
+static inline
+uint64_t fi_bgq_addr_rec_fifo_id (const fi_addr_t addr) {
+	return (uint64_t) fi_bgq_uid_get_rx(fi_bgq_addr_uid(addr));
+}
+
+static inline
+uint64_t fi_bgq_addr_get_fifo_map (const fi_addr_t addr) {
+	return addr & 0x000000000000FFFFu;
+}
+
+static inline
+uint64_t fi_bgq_addr_is_local (const fi_addr_t addr) {
+	return (addr & (MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 | MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL1)) != 0;
+}
+
+
+static inline
+uint32_t fi_bgq_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {
+
+	/* only one domain per process is currently supported */
+	const uint32_t domain_id = 0;
+	const uint32_t domains_per_process = 1;
+
+	/* only one endpoint per domain is currently supported */
+	const uint32_t endpoint_id = 0;
+	const uint32_t endpoints_per_domain = 1;
+
+	/* each rx uses one mu reception fifo; See NOTE_MU_RECFIFO */
+	const uint32_t rx_per_node =
+		((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP);
+
+	const uint32_t rx_per_process = rx_per_node / processes_per_node;
+	const uint32_t rx_per_domain = rx_per_process / domains_per_process;
+	const uint32_t rx_per_endpoint = rx_per_domain / endpoints_per_domain;
+
+	return (rx_per_process * process_id) + (rx_per_domain * domain_id) + (rx_per_endpoint * endpoint_id);
+}
+
+static inline
+fi_addr_t fi_bgq_addr_create (const MUHWI_Destination_t destination,
+	const uint64_t fifo_map, const uint32_t rx) {
+
+	const union fi_bgq_addr tmp = {.uid={fi_bgq_uid_create(destination, rx)}, .unused_0=0, .fifo_map=fifo_map};
+	return tmp.fi;
+}
+
 
 
 #define FI_BGQ_MU_PACKET_TYPE_TAG			(0x01ul<<1)
@@ -113,7 +248,6 @@ void fi_bgq_addr_dump (union fi_bgq_addr addr)
 #define FI_BGQ_MU_PACKET_TYPE_RMA			(0x01ul<<5)
 #define FI_BGQ_MU_PACKET_TYPE_ATOMIC			(0x01ul<<6)
 #define FI_BGQ_MU_PACKET_TYPE_ACK			(0x01ul<<7)
-
 
 /**
  * \brief MU packet header
@@ -164,91 +298,39 @@ union fi_bgq_mu_packet_hdr {
 
 	struct {
 		uint64_t		reserved_0;
-		uint64_t		reserved_1	: 32;
-		uint64_t		reserved_2	: 10;
-		uint64_t		is_local	:  1;	/* used to specify fifo map */
-		uint64_t		unused_0	:  3;
-		uint64_t		message_length	: 10;	/* 0..512 bytes of payload data */
-		uint64_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
+		uint32_t		reserved_1;
 
 		union {
-			uint32_t                origin_rx_addr;
 			struct {
-				uint32_t	a		:  3;
-				uint32_t	b		:  4;
-				uint32_t	c		:  4;
-				uint32_t	d		:  4;
-				uint32_t	e		:  1;
-				uint8_t		rx		:  8;
-				uint8_t		unused_1	:  8;
-			};
+				uint16_t		reserved_2	: 10;
+				uint16_t		unused_0	:  5;
+				uint16_t		message_length	:  1;	/* 0..1 bytes of immediate data */
+				uint8_t			data;
+				uint8_t			reserved_3;		/* a.k.a. common::packet_type */
+			} __attribute__((__packed__)) inject;
+
+			struct {
+				uint64_t		reserved_2	: 10;
+				uint64_t		is_local	:  1;	/* used to specify fifo map */
+				uint64_t		unused_0	:  3;
+				uint64_t		message_length	: 10;	/* 0..512 bytes of payload data */
+				uint64_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
+			} __attribute__((__packed__)) send;
+
+			struct {
+				uint16_t		reserved_2	: 10;
+				uint16_t		is_local	:  1;	/* used to specify fifo map */
+				uint16_t		niov_minus_1	:  5;	/* 1..31 mu iov elements in payload data */
+				uint8_t			rget_inj_fifo_id;	/* 0..255 */
+				uint8_t			reserved_3;		/* a.k.a. common::packet_type */
+			} __attribute__((__packed__)) rendezvous;
 		};
 
+		union fi_bgq_uid	uid;
 		uint32_t		immediate_data;
 		uint64_t		ofi_tag;
-	} __attribute__((__packed__)) send;
 
-	struct {
-		uint64_t		reserved_0;
-		uint32_t		reserved_1;
-		uint16_t		reserved_2	: 10;
-		uint16_t		is_local	:  1;	/* used to specify fifo map */
-		uint16_t		niov_minus_1	:  5;	/* 1..31 mu iov elements in payload data */
-		uint8_t			rget_inj_fifo_id;	/* 0..255 */
-		uint8_t			reserved_3;		/* a.k.a. common::packet_type */
-
-		union {
-			uint32_t		origin_raw;
-			MUHWI_Destination_t	origin;
-			struct {
-				uint32_t	fifo_am	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM */
-				uint32_t	fifo_ap	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP */
-				uint32_t	fifo_bm	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM */
-				uint32_t	fifo_bp	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP */
-				uint32_t	fifo_cm	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM */
-				uint32_t	a	:  3;
-				uint32_t	unused0	:  2;
-				uint32_t	b	:  4;
-				uint32_t	unused1	:  2;
-				uint32_t	c	:  4;
-				uint32_t	unused2	:  2;
-				uint32_t	d	:  4;
-				uint32_t	fifo_cp	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP */
-				uint32_t	fifo_dm	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM */
-				uint32_t	fifo_dp	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP */
-				uint32_t	fifo_em	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM */
-				uint32_t	fifo_ep	:  1;	/* MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP */
-				uint32_t	e	:  1;
-			};
-		};
-		uint32_t		cntr_paddr_rsh3b;	/* 34b paddr, 8 byte aligned; See: NOTE_MU_PADDR */
-		uint64_t		ofi_tag;
-	} __attribute__((__packed__)) rendezvous;
-
-	struct {
-		uint64_t		reserved_0;
-		uint32_t		reserved_1;
-		uint16_t		reserved_2	: 10;
-		uint16_t		unused_0	:  5;
-		uint16_t		message_length	:  1;	/* 0..1 bytes of immediate data */
-		uint8_t			data;
-		uint8_t			reserved_3;		/* a.k.a. common::packet_type */
-
-		union {
-			uint32_t                origin_rx_addr;
-			struct {
-				uint32_t	a		:  3;
-				uint32_t	b		:  4;
-				uint32_t	c		:  4;
-				uint32_t	d		:  4;
-				uint32_t	e		:  1;
-				uint8_t		rx		:  8;
-				uint8_t		unused_1	:  8;
-			};
-		};
-		uint32_t		immediate_data;
-		uint64_t		ofi_tag;
-	} __attribute__((__packed__)) inject;
+	} __attribute__((__packed__)) pt2pt;
 
 	struct {
 		uint64_t		reserved_0;
@@ -323,21 +405,9 @@ struct fi_bgq_mu_fetch_metadata {
 union fi_bgq_mu_packet_payload {
 	uint8_t				byte[512];
 	struct {
-		uint32_t		immediate_data;
-
-		union {
-			uint32_t                origin_rx_addr;
-			struct {
-				uint32_t	a		:  3;
-				uint32_t	b		:  4;
-				uint32_t	c		:  4;
-				uint32_t	d		:  4;
-				uint32_t	e		:  1;
-				uint8_t		rx		:  8;
-				uint8_t		unused_1	:  8;
-			};
-		};
-		uint32_t		unused[2];
+		uint32_t		unused;
+		uint32_t		cntr_paddr_rsh3b;	/* 34b paddr, 8 byte aligned; See: NOTE_MU_PADDR */
+		uint64_t		fifo_map;
 		struct fi_bgq_mu_iov	mu_iov[31];
 	} rendezvous;
 	struct {
@@ -365,15 +435,15 @@ fi_bgq_mu_packet_type_set (union fi_bgq_mu_packet_hdr * hdr, const uint64_t pack
 	hdr->common.packet_type = (uint8_t)packet_type;
 }
 
-static inline void
-fi_bgq_mu_packet_rendezvous_origin (struct fi_bgq_mu_packet * pkt, MUHWI_Destination_t * out) {
-	*((uint32_t*)out) = (((uint32_t)pkt->hdr.rendezvous.origin_raw) & 0x073CF3C1u);
+static inline uint64_t
+fi_bgq_mu_packet_get_fifo_map (struct fi_bgq_mu_packet * pkt) {
+	return pkt->payload.rendezvous.fifo_map;
 }
 
-static inline uint64_t
-fi_bgq_mu_packet_rendezvous_fifomap (struct fi_bgq_mu_packet * pkt) {
-	const uint32_t raw = (uint32_t)pkt->hdr.rendezvous.origin_raw;
-	return (uint64_t) (((raw & 0x0000003Eu) << 5) | ((raw & 0xF8000000u) >> 16));
+static inline void
+fi_bgq_mu_packet_set_fifo_map (struct fi_bgq_mu_packet * pkt, const uint64_t fifo_map) {
+	pkt->payload.rendezvous.fifo_map = fifo_map;
+	return;
 }
 
 #define FI_BGQ_MU_DESCRIPTOR_UPDATE_BAT_TYPE_NONE	(0)
@@ -499,41 +569,35 @@ dump_descriptor (char * prefix, MUHWI_Descriptor_t * desc) {
 
 
 /* expensive .. not for critical path! */
-static
-inline uint16_t fi_bgq_mu_calculate_fifo_map(BG_CoordinateMapping_t local,
-		uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e,
-		uint32_t t) {
+static inline
+uint32_t fi_bgq_mu_calculate_fifo_map(BG_CoordinateMapping_t local,
+		BG_CoordinateMapping_t remote, Personality_t * personality,
+		uint64_t dcr_value) {
 
 	/* calculate the signed coordinate difference between the source and
 	 * destination torus coordinates
 	 */
-	ssize_t dA = (ssize_t)a - (ssize_t)local.a;
-	ssize_t dB = (ssize_t)b - (ssize_t)local.b;
-	ssize_t dC = (ssize_t)c - (ssize_t)local.c;
-	ssize_t dD = (ssize_t)d - (ssize_t)local.d;
-	ssize_t dE = (ssize_t)e - (ssize_t)local.e;
+	ssize_t dA = (ssize_t)remote.a - (ssize_t)local.a;
+	ssize_t dB = (ssize_t)remote.b - (ssize_t)local.b;
+	ssize_t dC = (ssize_t)remote.c - (ssize_t)local.c;
+	ssize_t dD = (ssize_t)remote.d - (ssize_t)local.d;
+	ssize_t dE = (ssize_t)remote.e - (ssize_t)local.e;
 
 	/* select the fifo based on the t coordinate only if local */
 	if ((dA | dB | dC | dD | dE) == 0) {
-		return (t & 0x01) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL1;
+		return (remote.t & 0x01) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL1;
 	}
-
-	uint64_t dcr_value;
-	dcr_value = DCRReadUser(ND_500_DCR(CTRL_CUTOFFS));
-
-	Personality_t personality;
-	Kernel_GetPersonality(&personality, sizeof(personality));
 
 	/* select either A- or A+ if communicating only along the A dimension */
 	if ((dB | dC | dD | dE) == 0) {
-		if (ND_ENABLE_TORUS_DIM_A & personality.Network_Config.NetFlags) {
+		if (ND_ENABLE_TORUS_DIM_A & personality->Network_Config.NetFlags) {
 			uint64_t cutoff;
 			if (dA > 0) {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__A_PLUS_get(dcr_value);
-				return (a > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP;
+				return (remote.a > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP;
 			} else {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__A_MINUS_get(dcr_value);
-				return (a < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM;
+				return (remote.a < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM;
 			}
 		} else {
 			return (dA > 0) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_AM;
@@ -542,14 +606,14 @@ inline uint16_t fi_bgq_mu_calculate_fifo_map(BG_CoordinateMapping_t local,
 
 	/* select either B- or B+ if communicating only along the B dimension */
 	if ((dA | dC | dD | dE) == 0) {
-		if (ND_ENABLE_TORUS_DIM_B & personality.Network_Config.NetFlags) {
+		if (ND_ENABLE_TORUS_DIM_B & personality->Network_Config.NetFlags) {
 			uint64_t cutoff;
 			if (dB > 0) {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__B_PLUS_get(dcr_value);
-				return (b > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP;
+				return (remote.b > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP;
 			} else {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__B_MINUS_get(dcr_value);
-				return (b < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM;
+				return (remote.b < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM;
 			}
 		} else {
 			return (dB > 0) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_BM;
@@ -558,14 +622,14 @@ inline uint16_t fi_bgq_mu_calculate_fifo_map(BG_CoordinateMapping_t local,
 
 	/* select either C- or C+ if communicating only along the C dimension */
 	if ((dA | dB | dD | dE) == 0) {
-		if (ND_ENABLE_TORUS_DIM_C & personality.Network_Config.NetFlags) {
+		if (ND_ENABLE_TORUS_DIM_C & personality->Network_Config.NetFlags) {
 			uint64_t cutoff;
 			if (dC > 0) {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__C_PLUS_get(dcr_value);
-				return (c > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP;
+				return (remote.c > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP;
 			} else {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__C_MINUS_get(dcr_value);
-				return (c < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM;
+				return (remote.c < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM;
 			}
 		} else {
 			return (dC > 0) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_CM;
@@ -574,14 +638,14 @@ inline uint16_t fi_bgq_mu_calculate_fifo_map(BG_CoordinateMapping_t local,
 
 	/* select either D- or D+ if communicating only along the D dimension */
 	if ((dA | dB | dC | dE) == 0) {
-		if (ND_ENABLE_TORUS_DIM_D & personality.Network_Config.NetFlags) {
+		if (ND_ENABLE_TORUS_DIM_D & personality->Network_Config.NetFlags) {
 			uint64_t cutoff;
 			if (dD > 0) {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__D_PLUS_get(dcr_value);
-				return (d > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP;
+				return (remote.d > cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP;
 			} else {
 				cutoff = ND_500_DCR__CTRL_CUTOFFS__D_MINUS_get(dcr_value);
-				return (d < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM;
+				return (remote.d < cutoff) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM;
 			}
 		} else {
 			return (dD > 0) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_DM;
@@ -591,7 +655,7 @@ inline uint16_t fi_bgq_mu_calculate_fifo_map(BG_CoordinateMapping_t local,
 	/* select either E- or E+ if communicating only along the E dimension */
 	if ((dA | dB | dC | dD) == 0) {
 		/* the maximum 'e' dimension size is 2 - and is a torus */
-		return (t & 0x01) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM;
+		return (remote.t & 0x01) ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP : MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM;
 	}
 
 	/* communicating along diagonal */
@@ -620,66 +684,17 @@ inline uint16_t fi_bgq_mu_calculate_fifo_map(BG_CoordinateMapping_t local,
 	return 0xFFFFu;
 }
 
-
-/* any coordinate specified as '-1' will be replaced with the corresponding
- * coordinate of "this process"
- */
 static inline
-void fi_bgq_create_addr (int8_t a_coord, int8_t b_coord,
-	int8_t c_coord, int8_t d_coord, int8_t e_coord,
-	int8_t t_coord, int8_t rx, fi_addr_t * addr)
-{
-	union fi_bgq_addr * bgq_addr = (union fi_bgq_addr *) addr;
+uint32_t fi_bgq_mu_calculate_fifo_map_single (BG_CoordinateMapping_t local, BG_CoordinateMapping_t remote) {
 
-	Personality_t p;
-	Kernel_GetPersonality(&p, sizeof(Personality_t));
+	Personality_t personality;
+	int rc = Kernel_GetPersonality(&personality, sizeof(Personality_t));
+	if (rc) return 0;	/* error!? */
 
-	bgq_addr->a = (a_coord == -1) ? p.Network_Config.Acoord : a_coord;
-	bgq_addr->b = (b_coord == -1) ? p.Network_Config.Bcoord : b_coord;
-	bgq_addr->c = (c_coord == -1) ? p.Network_Config.Ccoord : c_coord;
-	bgq_addr->d = (d_coord == -1) ? p.Network_Config.Dcoord : d_coord;
-	bgq_addr->e = (e_coord == -1) ? p.Network_Config.Ecoord : e_coord;
+	uint64_t dcr_value = DCRReadUser(ND_500_DCR(CTRL_CUTOFFS));
 
-	if (t_coord == -1) t_coord = Kernel_MyTcoord();
-	/* Match the logic used in the av code for the rx - for now
-	 * hard-code 1 domain 1 endpoint.
-	 */
-	uint32_t domain_id = 0;
-	uint32_t domains_per_process = 1;
-	uint32_t endpoint_id = 0;
-	uint32_t endpoints_per_domain = 1;
-	uint32_t ppn = Kernel_ProcessCount();
-	const uint32_t rx_per_node = ((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP);
-	const uint32_t rx_per_process = rx_per_node / ppn;
-	const uint32_t rx_per_domain = rx_per_process / domains_per_process;
-	const uint32_t rx_per_endpoint = rx_per_domain / endpoints_per_domain;
-	bgq_addr->rx = (rx == -1) ? ((rx_per_process * t_coord) + (rx_per_domain * domain_id) + (rx_per_endpoint * endpoint_id)) : rx;
-
-	bgq_addr->fifo_map = 0;	/* FIFO_Map to self? doesn't make sense, so set to zero to catch any usage and fix it */
-	bgq_addr->is_local =
-		(bgq_addr->a == p.Network_Config.Acoord) &&
-		(bgq_addr->b == p.Network_Config.Bcoord) &&
-		(bgq_addr->c == p.Network_Config.Ccoord) &&
-		(bgq_addr->d == p.Network_Config.Dcoord) &&
-		(bgq_addr->e == p.Network_Config.Ecoord);
-#ifdef FI_BGQ_TRACE
-	fprintf(stderr,"Created bgq addr:\n");
-	fi_bgq_addr_dump(*bgq_addr);
-#endif
-
-	return;
+	return fi_bgq_mu_calculate_fifo_map(local, remote, &personality, dcr_value);
 }
-
-static inline
-void fi_bgq_create_addr_self (fi_addr_t * addr) {
-	return fi_bgq_create_addr(-1, -1, -1, -1, -1, -1, -1, addr);
-}
-
-static inline
-void fi_bgq_create_addr_self_cx (fi_addr_t * addr, int8_t cx) {
-	return fi_bgq_create_addr(-1, -1, -1, -1, -1, -1, cx, addr);
-}
-
 
 
 #define FI_BGQ_DEBUG_MEMORY()					\
@@ -792,14 +807,16 @@ static inline void fi_bgq_mu_checks ()
  *
  * NOTE_MU_RECFIFO - There are 16 "user" MU groups (not including the 17th MU
  * group which is normally used by cnk and agents) and there are 16 MU
- * reception fifos in each group (BGQ_MU_NUM_REC_FIFOS_PER_GROUP). There are
- * 2 MU reception fifos allocated to each ofi receive context - one for
- * "tagged" transfers (critical for MPI performance), and one for all other
- * transfers (not critical for MPI performance).
+ * reception fifos in each group (BGQ_MU_NUM_REC_FIFOS_PER_GROUP). There is
+ * one MU reception fifo allocated to each ofi receive context. There are a
+ * maximum of 256 ofi receive contexts on a compute node which must be
+ * allocated between all processes, domains, and endpoints.
  *
- * This means that there are a maximum of 128 ofi receive contexts on a compute
- * node which must be allocated between all processes, domains, and endpoints
- * on that compute node.
+ * When configured to support "scalable endpoints" multiple ofi receive
+ * contexts will be associated with each endpoint.
+ *
+ * The ofi address contains 9 bits for the receive context (a.k.a. mu reception
+ * fifo id) for the application agent (17th core) reception fifos.
  *
  * ************************************************************************** */
 

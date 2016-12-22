@@ -53,6 +53,7 @@
 #define IS_MSG (1)
 
 // #define FI_BGQ_TRACE 1
+// #define FI_BGQ_REMOTE_COMPLETION
 
 enum fi_bgq_ep_state {
 	FI_BGQ_EP_UNINITIALIZED = 0,
@@ -476,8 +477,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 	if (ret) return ret;
 
 	/* get the destination bgq torus address */
-	union fi_bgq_addr bgq_dst_addr;
-	bgq_dst_addr.fi = dest_addr;
+	const union fi_bgq_addr bgq_dst_addr = {.fi=dest_addr};
 
 	if (len <= 1) {		/* likely ? ... what's the point? */
 
@@ -488,8 +488,8 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		qpx_memcpy64((void*)inject_desc, (const void*)&bgq_ep->tx.inject.inject_model);
 
 		/* set the destination torus address and fifo map */
-		inject_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		inject_desc->Torus_FIFO_Map = bgq_dst_addr.fifo_map;
+		inject_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+		inject_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
 		inject_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 			fi_bgq_addr_rec_fifo_id(dest_addr);
@@ -500,14 +500,13 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_INJECT);
 		}
 
-		if (buf) hdr->inject.data = *((uint8_t*)buf);
-		hdr->inject.ofi_tag = tag;
-		hdr->inject.message_length = len;
-		hdr->inject.immediate_data = data;
+		if (buf) hdr->pt2pt.inject.data = *((uint8_t*)buf);
+		hdr->pt2pt.ofi_tag = tag;
+		hdr->pt2pt.inject.message_length = len;
+		hdr->pt2pt.immediate_data = data;
 
 #ifdef FI_BGQ_TRACE
-		fprintf(stderr,"1 byte hdr->inject src addr set to %u %u %u %u %u %u rec fifo is %u dumping target addr:\n",hdr->inject.a,hdr->inject.b,hdr->inject.c,hdr->inject.d,hdr->inject.e,hdr->inject.rx,inject_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id);
-		fi_bgq_addr_dump(bgq_dst_addr);
+		FI_BGQ_ADDR_DUMP((fi_addr_t *)&bgq_dst_addr.fi);
 #endif
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
@@ -521,8 +520,8 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		qpx_memcpy64((void*)send_desc, (const void*)&bgq_ep->tx.send.send_model);
 
 		/* set the destination torus address and fifo map */
-		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
+		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+		send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
 		send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 			fi_bgq_addr_rec_fifo_id(dest_addr);
@@ -543,13 +542,12 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		send_desc->Message_Length = len;
 		memcpy(payload_vaddr, buf, len);
 
-		hdr->send.message_length = len;
-		hdr->send.ofi_tag = tag;
-		hdr->send.immediate_data = data;
+		hdr->pt2pt.send.message_length = len;
+		hdr->pt2pt.ofi_tag = tag;
+		hdr->pt2pt.immediate_data = data;
 
 #ifdef FI_BGQ_TRACE
-		fprintf(stderr,"multi-byte inject hdr->send src addr set to %u %u %u %u %u %u rec fifo is %u dumping target addr:\n",hdr->send.a,hdr->send.b,hdr->send.c,hdr->send.d,hdr->send.e,hdr->send.rx,send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id);
-		fi_bgq_addr_dump(bgq_dst_addr);
+		FI_BGQ_ADDR_DUMP((fi_addr_t *)&dest_addr);
 #endif
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 	}
@@ -583,8 +581,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 	if (ret) return ret;
 
 	/* get the destination bgq torus address */
-	union fi_bgq_addr bgq_dst_addr;
-	bgq_dst_addr.fi = dest_addr;
+	const union fi_bgq_addr bgq_dst_addr = {.fi=dest_addr};
 
 	size_t xfer_len = 0;
 	if (is_contiguous) xfer_len = len;
@@ -606,8 +603,8 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		qpx_memcpy64((void*)send_desc, (const void *)&bgq_ep->tx.send.send_model);
 
 		/* set the destination torus address and fifo map */
-		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
+		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+		send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
 		send_desc->Message_Length = xfer_len;
 
@@ -637,13 +634,12 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		}
 
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
-		hdr->send.message_length = xfer_len;
-		hdr->send.ofi_tag = tag;
-		hdr->send.immediate_data = data;
+		hdr->pt2pt.send.message_length = xfer_len;
+		hdr->pt2pt.ofi_tag = tag;
+		hdr->pt2pt.immediate_data = data;
 
 #ifdef FI_BGQ_TRACE
-		fprintf(stderr,"hdr->send src addr set to %u %u %u %u %u %u rec fifo is %u dumping target addr:\n",hdr->send.a,hdr->send.b,hdr->send.c,hdr->send.d,hdr->send.e,hdr->send.rx,send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id);
-		fi_bgq_addr_dump(bgq_dst_addr);
+		FI_BGQ_ADDR_DUMP(&dest_addr);
 #endif
 		if (is_msg) {
 			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);	/* clear the 'TAG' bit in the packet type */
@@ -686,7 +682,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 			fi_bgq_cnk_vaddr2paddr((const void*)&bgq_context->byte_counter, sizeof(uint64_t), &byte_counter_paddr);
 
 			/* set the destination torus address and fifo map */
-			send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
+			send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
 			send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
 			send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 				fi_bgq_addr_rec_fifo_id(dest_addr);
@@ -745,8 +741,8 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		qpx_memcpy64((void*)send_desc, (const void *)&bgq_ep->tx.send.rzv_model[is_local]);
 
 		/* set the destination torus address and fifo map */
-		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
+		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+		send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
 		send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 			fi_bgq_addr_rec_fifo_id(dest_addr);
@@ -754,14 +750,6 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
 
 		if (is_msg) {
-			/* 'non-tagged' rendezvous send must also pack the fifo
-			 * map bits into the origin destination in case the transfer
-			 * is processed as a multi-receive at the target */
-			const uint32_t origin = (uint32_t) hdr->rendezvous.origin_raw;
-			const uint32_t fifo_map = (uint32_t) bgq_dst_addr.fifo_map;
-
-			hdr->rendezvous.origin_raw = (((fifo_map >> 5) & 0x0000003Eu) | (fifo_map & 0x0000F800u)) | origin;
-
 			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS);
 		}
 
@@ -772,22 +760,13 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 				send_desc, &payload_paddr);
 		send_desc->Pa_Payload = payload_paddr;
 
-		payload->rendezvous.immediate_data = data;
-		payload->rendezvous.a = bgq_ep->rx.self.a;
-		payload->rendezvous.b = bgq_ep->rx.self.b;
-		payload->rendezvous.c = bgq_ep->rx.self.c;
-		payload->rendezvous.d = bgq_ep->rx.self.d;
-		payload->rendezvous.e = bgq_ep->rx.self.e;
-		payload->rendezvous.rx = bgq_ep->rx.self.rx;
-#ifdef FI_BGQ_TRACE
-		fprintf(stderr,"payload->rendezvous tx addr set to %u %u %u %u %u %u rec fifo is %u dumping target bgq addr:\n",payload->rendezvous.a,payload->rendezvous.b,payload->rendezvous.c,payload->rendezvous.d,payload->rendezvous.e,payload->rendezvous.rx,send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id);
-		fi_bgq_addr_dump(bgq_dst_addr);
-#endif
+		payload->rendezvous.fifo_map = fi_bgq_addr_get_fifo_map(bgq_dst_addr.fi);
+
 		if (is_contiguous) {
 			/* only send one mu iov */
 			fi_bgq_cnk_vaddr2paddr(buf, len, &payload->rendezvous.mu_iov[0].src_paddr);
 			payload->rendezvous.mu_iov[0].message_length = len;
-			hdr->rendezvous.niov_minus_1 = 0;
+			hdr->pt2pt.rendezvous.niov_minus_1 = 0;
 		} else {
 			assert(len <= 31);
 			size_t i;
@@ -797,7 +776,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 				fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &payload->rendezvous.mu_iov[i].src_paddr);
 				payload->rendezvous.mu_iov[i].message_length = iov[i].iov_len;
 			}
-			hdr->rendezvous.niov_minus_1 = len - 1;
+			hdr->pt2pt.rendezvous.niov_minus_1 = len - 1;
 		}
 
 		/* initialize the completion entry */
@@ -812,8 +791,10 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 		uint64_t byte_counter_paddr = 0;
 		fi_bgq_cnk_vaddr2paddr((const void*)&bgq_context->byte_counter, sizeof(uint64_t), &byte_counter_paddr);
-		hdr->rendezvous.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
-		hdr->rendezvous.ofi_tag = tag;
+		payload->rendezvous.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
+
+		hdr->pt2pt.ofi_tag = tag;
+		hdr->pt2pt.immediate_data = data;
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
@@ -869,13 +850,7 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 	bgq_context->src_addr = src_addr;
 
 #ifdef FI_BGQ_TRACE
-	union fi_bgq_addr bgq_addr;
-	bgq_addr.fi = bgq_context->src_addr;
-	fprintf(stderr,"fi_bgq_recv_generic for src addr:\n");
-	fi_bgq_addr_dump(bgq_addr);
-	if (src_addr == FI_ADDR_UNSPEC) {
-		fprintf(stderr,"fi_bgq_recv_generic src addr  == FI_ADDR_UNSPEC\n");
-	}
+	FI_BGQ_ADDR_DUMP(&bgq_context->src_addr);
 #endif
 
 	bgq_context->tag = tag;

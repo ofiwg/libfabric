@@ -172,4 +172,23 @@ void * fi_bgq_spi_injfifo_immediate_payload (struct fi_bgq_spi_injfifo *f,
 	return (void*)(f->immediate_payload_base_vaddr + offset);
 }
 
+
+static inline
+MUHWI_Destination_t fi_bgq_spi_coordinates_to_destination (BG_CoordinateMapping_t coords) {
+
+	union foo {
+		BG_CoordinateMapping_t	coords;
+		uint32_t		raw;
+	};
+
+	const union foo tmp = {.coords=coords};
+
+	const uint32_t tmp2 = (tmp.raw & 0x3FFFFFC0ul) | (tmp.raw >> 31);
+	const MUHWI_Destination_t * const out = (const MUHWI_Destination_t * const)&tmp2;
+
+	return *out;
+}
+
+
+
 #endif /* _FI_PROV_BGQ_SPI_H_ */
