@@ -107,5 +107,5 @@ int main(int argc, char **argv)
 	ret = run();
 
 	ft_free_res();
-	return -ret;
+	return ft_exit_code(ret);
 }

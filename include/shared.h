@@ -34,6 +34,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdlib.h>
 #include <inttypes.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -56,6 +57,13 @@ extern "C" {
 #include "freebsd/osd.h"
 #endif
 
+
+/* exit codes must be 0-255 */
+static inline int ft_exit_code(int ret)
+{
+	int absret = ret < 0 ? -ret : ret;
+	return absret > 255 ? EXIT_FAILURE : absret;
+}
 
 #define ft_foreach_info(fi, info) \
 	for (fi = info; fi; fi = fi->next)

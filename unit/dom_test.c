@@ -128,5 +128,5 @@ int main(int argc, char **argv)
 	free(domain_vec);
 out:
 	ft_free_res();
-	return -ret;
+	return ft_exit_code(ret);
 }

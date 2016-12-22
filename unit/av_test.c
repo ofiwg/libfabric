@@ -948,7 +948,7 @@ struct test_entry test_array_good[] = {
 struct test_entry test_array_bad[] = {
 	TEST_ENTRY(av_bad_sync, "Test sync AV insert of bad address"),
 	TEST_ENTRY(av_goodbad_vector_sync,
-			"Test sync AV inset of 1 good and 1 bad address"),
+			"Test sync AV insert of 1 good and 1 bad address"),
 	TEST_ENTRY(av_goodbad_vector_async,
 			"Test async AV insert with good and bad address"),
 	TEST_ENTRY(av_goodbad_2vector_async, "Test async AV insert with two vectors:"
@@ -1084,5 +1084,5 @@ int main(int argc, char **argv)
 
 err:
 	ft_free_res();
-	return ret ? -ret : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+	return ret ? ft_exit_code(ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

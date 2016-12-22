@@ -602,5 +602,5 @@ int main(int argc, char **argv)
 
 err:
 	ft_free_res();
-	return ret ? -ret : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+	return ret ? ft_exit_code(ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
