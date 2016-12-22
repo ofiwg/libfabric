@@ -466,7 +466,7 @@ The following option levels and option names and parameters are defined.
 
 - *FI_OPT_MIN_MULTI_RECV - size_t*
 : Defines the minimum receive buffer space available when the receive
-  buffer is automatically freed (see FI_MULTI_RECV).  Modifying this
+  buffer is released by the provider (see FI_MULTI_RECV).  Modifying this
   value is only guaranteed to set the minimum buffer space needed on
   receives posted after the value has been changed.  It is recommended
   that applications that want to override the default MIN_MULTI_RECV
@@ -1144,10 +1144,9 @@ value of transmit or receive context attributes of an endpoint.
   posted receive operation to generate multiple completions as
   messages are placed into the buffer.  The placement of received data
   into the buffer may be subjected to provider specific alignment
-  restrictions.  The buffer will be returned to the application's
-  control, and an *FI_MULTI_RECV* completion will be generated, when a
-  message is received that cannot fit into the remaining free buffer
-  space.
+  restrictions.  The buffer will be released by the provider when the
+  available buffer space falls below the specified minimum (see
+  FI_OPT_MIN_MULTI_RECV).
 
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for data

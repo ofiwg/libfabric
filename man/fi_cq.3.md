@@ -521,7 +521,7 @@ operation.  The following completion flags are defined.
   consumed and was released by the provider.  Providers may set
   this flag on the last message that is received into the multi-
   recv buffer, or may generate a separate completion that indicates
-  that the buffer has been freed.
+  that the buffer has been released.
   
   Applications can distinguish between these two cases by examining
   the completion entry flags field.  If additional flags, such as
@@ -530,7 +530,7 @@ operation.  The following completion flags are defined.
   message was placed into the multi-recv buffer.  Other fields in the
   completion entry will be determined based on the received message.
   If other flag bits are zero, the provider is reporting that the multi-recv
-  buffer has been freed, and the completion entry is not associated
+  buffer has been released, and the completion entry is not associated
   with a received message.
 
 # NOTES
