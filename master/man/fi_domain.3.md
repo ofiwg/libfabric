@@ -126,6 +126,10 @@ struct fi_domain_attr {
 	size_t                max_ep_rx_ctx;
 	size_t                max_ep_stx_ctx;
 	size_t                max_ep_srx_ctx;
+	size_t                cntr_cnt;
+	size_t                mr_iov_limit;
+	uint64_t              caps;
+	uint64_t              mode;
 };
 ```
 
@@ -490,6 +494,52 @@ shared transmit context.
 
 The maximum number of endpoints that may be associated with a
 shared receive context.
+
+## Counter Count (cntr_cnt)
+
+The optimal number of completion counters supported by the domain.
+The cq_cnt value may be a fixed value of the maximum number of counters
+supported by the underlying hardware, or may be a dynamic value, based on
+the default attributes of the domain.
+
+## MR IOV Limit (mr_iov_limit)
+
+This is the maximum number of IO vectors (scatter-gather elements)
+that a single memory registration operation may reference.
+
+## Capabilities (caps)
+
+Domain level capabilities.  Domain capabilities indicate domain
+level features that are supported by the provider.
+
+*FI_LOCAL_COMM*
+: At a conceptual level, this field indicates that the underlying device
+  supports loopback communication.  More specifically, this field
+  indicates that an endpoint may communicate with other endpoints that
+  are allocated from the same underlying named domain.  If this field
+  is not set, an application may need to use an alternate domain or
+  mechanism (e.g. shared memory) to communicate with peers that execute
+  on the same node.
+
+*FI_REMOTE_COMM*
+: This field indicates that the underlying provider supports communication
+  with nodes that are reachable over the network.  If this field is not set,
+  then the provider only supports communication between processes that
+  execute on the same node -- a shared memory provider, for example.
+
+*FI_SHARED_AV*
+: Indicates that the domain supports the ability to share address
+  vectors among multiple processes using the named address vector
+  feature.
+
+## mode
+
+The operational mode bit related to using the domain.
+
+*FI_RESTRICTED_COMP*
+: This bit indicates that the domain limits completion queues and counters
+  to only be used with endpoints, transmit contexts, and receive contexts that
+  have the same set of capability flags.
 
 # RETURN VALUE
 

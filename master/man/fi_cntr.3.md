@@ -43,7 +43,11 @@ uint64_t fi_cntr_readerr(struct fid_cntr *cntr);
 
 int fi_cntr_add(struct fid_cntr *cntr, uint64_t value);
 
+int fi_cntr_adderr(struct fid_cntr *cntr, uint64_t value);
+
 int fi_cntr_set(struct fid_cntr *cntr, uint64_t value);
+
+int fi_cntr_seterr(struct fid_cntr *cntr, uint64_t value);
 
 int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
     int timeout);
@@ -86,7 +90,8 @@ request.
 
 Counters typically only count successful completions.  However, if an
 operation completes in error, it may increment an associated error
-value.
+value.  That is, a counter actually stores two distinct values, with
+error completions updating an error specific value.
 
 ## fi_cntr_open
 
@@ -170,7 +175,6 @@ receive contexts or memory regions associated with the counter.  If resources
 are still associated with the counter when attempting to close, the call will
 return -FI_EBUSY.
 
-
 ## fi_cntr_control
 
 The fi_cntr_control call is used to access provider or implementation
@@ -205,9 +209,17 @@ error and were unable to update the counter.
 
 This adds the user-specified value to the counter.
 
+## fi_cntr_adderr
+
+This adds the user-specified value to the error value of the counter.
+
 ## fi_cntr_set
 
 This sets the counter to the specified value.
+
+## fi_cntr_seterr
+
+This sets the error value of the counter to the specified value.
 
 ## fi_cntr_wait
 

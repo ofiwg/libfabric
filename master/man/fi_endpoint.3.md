@@ -40,9 +40,10 @@ fi_getopt / fi_setopt
 fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
 :   Open a transmit or receive context.
 
-fi_rx_size_left / fi_tx_size_left
+fi_rx_size_left / fi_tx_size_left (DEPRECATED)
 :   Query the lower bound on how many RX/TX operations may be posted without
-    an operation returning -FI_EAGAIN.
+    an operation returning -FI_EAGAIN.  This functions have been deprecated
+    and will be removed in a future version of the library.
 
 # SYNOPSIS
 
@@ -98,9 +99,9 @@ int fi_getopt(struct fid *ep, int level, int optname,
 int fi_setopt(struct fid *ep, int level, int optname,
     const void *optval, size_t optlen);
 
-ssize_t fi_rx_size_left(struct fid_ep *ep);
+DEPRECATED ssize_t fi_rx_size_left(struct fid_ep *ep);
 
-ssize_t fi_tx_size_left(struct fid_ep *ep);
+DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
 ```
 
 # ARGUMENTS
@@ -360,6 +361,11 @@ binding an endpoint to a counter, the following flags may be specified.
   the given endpoint.  Use of this flag requires that the
   endpoint be created using FI_RMA_EVENT.
 
+An endpoint may only be bound to a single CQ or counter for a given
+type of operation.  For example, a EP may not bind to two counters
+both using FI_WRITE.  Furthermore, providers may limit CQ and counter
+bindings to endpoints of the same endpoint type (DGRAM, MSG, RDM, etc.).
+
 Connectionless endpoints must be bound to a single address vector.
 If an endpoint is using a shared transmit and/or receive context, the
 shared contexts must be bound to the endpoint.  CQs, counters, AV, and
@@ -411,15 +417,21 @@ period of time.
 
 This call creates an alias to the specified endpoint.  Conceptually,
 an endpoint alias provides an alternate software path from the
-application to the underlying provider hardware.  Applications
-configure an alias endpoint with data transfer flags, specified
-through the fi_ep_alias call. The flags must include FI_TRANSMIT or FI_RECV
-(not both) with other flags OR'ed to indicate the type of data transfer the
-flags should apply to. This will override the transmit and receive attributes
-of the alias endpoint. Typically the attributes of the alias endpoint are
-different than those assigned to the actual endpoint. The alias mechanism
-allows a single endpoint to have multiple optimized software interfaces.
-All allocated aliases must be closed for the underlying endpoint to be released.
+application to the underlying provider hardware.  An alias EP differs
+from its parent endpoint only by its default data transfer flags.  For
+example, an alias EP may be configured to use a different completion
+mode.  By default, an alias EP inherits the same data transfer flags
+as the parent endpoint.  An application can use fi_control to modify
+the alias EP operational flags.
+
+When allocating an alias, an application may configure either the transmit
+or receive operational flags.  This avoids needing a separate call to
+fi_control to set those flags.  The flags passed to fi_ep_alias must
+include FI_TRANSMIT or FI_RECV (not both) with other operational flags OR'ed
+in.  This will override the transmit or receive flags,
+respectively, for operations posted through the alias endpoint.
+All allocated aliases must be closed for the underlying endpoint to be
+released.
 
 ## fi_control
 
@@ -452,6 +464,14 @@ assigned to an endpoint.
 : This option only applies to passive endpoints.  It is used to set the
   connection request backlog for listening endpoints.
 
+*FI_GETWAIT (void \*\*)*
+: This command allows the user to retrieve the file descriptor associated
+  with a socket endpoint.  The fi_control arg parameter should be an address
+  where a pointer to the returned file descriptor will be written.  See fi_eq.3
+  for addition details using fi_control with FI_GETWAIT.  The file descriptor
+  may be used for notification that the endpoint is ready to send or receive
+  data.
+
 ## fi_getopt / fi_setopt
 
 Endpoint protocol operations may be retrieved using fi_getopt or set
@@ -481,7 +501,10 @@ The following option levels and option names and parameters are defined.
   the maximum size of the data that may be present as part of a connection
   request event. This option is read only.
 
-## fi_rx_size_left
+## fi_rx_size_left (DEPRECATED)
+
+This function has been deprecated and will be removed in a future version
+of the library.  It may not be supported by all providers.
 
 The fi_rx_size_left call returns a lower bound on the number of receive
 operations that may be posted to the given endpoint without that operation
@@ -490,7 +513,10 @@ posted receive operations (e.g., number of iov entries, which receive function
 is called, etc.), it may be possible to post more receive operations than
 originally indicated by fi_rx_size_left.
 
-## fi_tx_size_left
+## fi_tx_size_left (DEPRECATED)
+
+This function has been deprecated and will be removed in a future version
+of the library.  It may not be supported by all providers.
 
 The fi_tx_size_left call returns a lower bound on the number of transmit
 operations that may be posted to the given endpoint without that operation
@@ -518,6 +544,8 @@ struct fi_ep_attr {
 	uint64_t        mem_tag_format;
 	size_t          tx_ctx_cnt;
 	size_t          rx_ctx_cnt;
+	size_t          auth_keylen;
+	uint8_t         *auth_key;
 };
 {% endhighlight %}
 
@@ -544,6 +572,20 @@ desired.  Supported types are:
 : Reliable datagram message.  Provides a reliable, unconnected data
   transfer service with flow control that maintains message
   boundaries.
+
+*FI_EP_SOCK_STREAM*
+: Data streaming endpoint with TCP socket-like semantics.  Provides
+  a reliable, connection-oriented data transfer service that does
+  not maintain message boundaries.  FI_EP_SOCK_STREAM is most useful for
+  applications designed around using TCP sockets.  See the SOCKET
+  ENDPOINT section for additional details and restrictions that apply
+  to stream endpoints.
+
+*FI_EP_SOCK_DGRAM*
+: A connectionless, unreliable datagram endpoint with UDP socket-like
+  semantics.  FI_EP_SOCK_DGRAM is most useful for applications designed
+  around using UDP sockets.  See the SOCKET ENDPOINT section for additional
+  details and restrictions that apply to datagram socket endpoints.
 
 ## Protocol
 
@@ -720,6 +762,21 @@ fail the request.
 
 See the scalable endpoint and shared contexts sections for additional
 details.
+
+## auth_keylen - Authorization Key Length
+
+The length of the authorization key.  This field will be 0 if
+authorization keys are not available or used.
+
+## auth_key - Authorization Key
+
+If supported by the fabric, an authorization key (a.k.a. job
+key) to associate with the endpoint.  An authorization key is used
+to limit communication between endpoints.  Only peer endpoints that are
+programmed to use the same authorization key may communicate.
+Authorization keys are often used to implement job keys, to ensure
+that processes running in different jobs do not accidentally
+cross traffic.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
@@ -979,13 +1036,21 @@ the _Transmit Context Attribute_ section.
 
 ## total_buffered_recv
 
-Defines the total available space allocated by the provider to buffer messages
-that are received for which there is no matching receive operation.  That is,
-this defines the minimal amount of receive side buffering available.  If
-receive side buffering is disabled (total_buffered_recv = 0) and a message is
-received by an endpoint, then the behavior is dependent on whether resource
-management has been enabled (FI_RM_ENABLED has be set or not).  See
-the Resource Management section of fi_domain.3 for further clarification.
+This field is supported for backwards compatibility purposes.
+It is a hint to the provider of the total available space
+that may be needed to buffer messages that are received for which there
+is no matching receive operation.  The provider may adjust or ignore
+this value.  The allocation of internal network buffering among received
+message is provider specific.  For instance, a provider may limit the size
+of messages which can be buffered or the amount of buffering allocated to
+a single message.
+
+If receive side buffering is disabled (total_buffered_recv = 0)
+and a message is received by an endpoint, then the behavior is dependent on
+whether resource management has been enabled (FI_RM_ENABLED has be set or not).
+See the Resource Management section of fi_domain.3 for further clarification.
+It is recommended that applications enable resource management if they
+anticipate receiving unexpected messages, rather than modifying this value.
 
 ## size
 
@@ -1118,6 +1183,40 @@ attributes.  The exception is that endpoints attached to a shared
 receive context must use a subset of the receive context attributes.
 This is opposite of the requirement for scalable endpoints.
 
+# SOCKET ENDPOINTS
+
+This section applies to endpoints of type FI_EP_SOCK_STREAM and
+FI_EP_SOCK_DGRAM, commonly referred to as socket endpoints.
+
+Socket endpoints are defined with semantics that allow them to more
+easily be adopted by developers familiar with the UNIX socket API, or
+by middleware that exposes the socket API, while still taking advantage
+of high-performance hardware features.
+
+The key difference between socket endpoints and other active endpoints
+are socket endpoints use synchronous data transfers.  Buffers passed
+into send and receive operations revert to the control of the application
+upon returning from the function call.  As a result, no data transfer
+completions are reported to the application, and socket endpoints are not
+associated with completion queues or counters.
+
+Socket endpoints support a subset of message operations: fi_send,
+fi_sendv, fi_sendmsg, fi_recv, fi_recvv, fi_recvmsg, and fi_inject.
+Because data transfers are synchronous, the return value from send and receive
+operations indicate the number of bytes transferred on success, or a negative
+value on error, including -FI_EAGAIN if the endpoint cannot send or
+receive any data because of full or empty queues, respectively.
+
+Socket endpoints are associated with event queues and address vectors, and
+process connection management events asynchronously, similar to other endpoints.
+Unlike UNIX sockets, socket endpoint must still be declared as either active
+or passive.
+
+Socket endpoints behave like non-blocking sockets.  In order to support
+select and poll semantics, active socket endpoints are associated with a
+file descriptor that is signaled whenever the endpoint is ready to send
+and/or receive data.  The file descriptor may be retrieved using fi_control.
+
 # OPERATION FLAGS
 
 Operation flags are obtained by OR-ing the following flags together.
@@ -1193,6 +1292,11 @@ value of transmit or receive context attributes of an endpoint.
   that return data to the initiator, such as RMA read or atomic-fetch,
   the source endpoint is also considered a destination endpoint.  This is the
   default completion mode for such operations.
+
+*FI_MULTICAST*
+: Indicates that data transfers will target multicast addresses by default.
+  Any fi_addr_t passed into a data transfer operation will be treated as a
+  multicast address.
 
 # NOTES
 

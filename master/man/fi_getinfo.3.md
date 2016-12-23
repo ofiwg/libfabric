@@ -89,7 +89,13 @@ Node, service, or hints may be provided, with any combination
 being supported.  If node is provided, fi_getinfo will attempt to
 resolve the fabric address to the given node.  If node is not given,
 fi_getinfo will attempt to resolve the fabric addressing information
-based on the provided hints.
+based on the provided hints.  Node is commonly used to provide a network
+address (such as an IP address) or hostname.  Service is usually
+associated with a transport address (such as a TCP port number).  Node
+and service parameters may be mapped by providers to native fabric
+addresses.  Applications may also pass in an FI_ADDR_STR formatted
+address (see format details below) as the node parameter.  In such cases,
+the service parameter must be NULL.
 
 The hints parameter, if provided, may be used to limit the resulting
 output as indicated below.  As a general rule, specifying a non-zero
@@ -162,13 +168,19 @@ struct fi_info {
 *src_addr - source address*
 : If specified, indicates the source address.  This field will be
   ignored in hints if FI_SOURCE flag is set.  On output a provider shall
-  return an address that corresponds to the indicated fabric or domain,
-  with the format indicated by the returned *addr_format* field.
+  return an address that corresponds to the indicated fabric, domain,
+  node, and/or service fields.  The format of the address is indicated
+  by the returned *addr_format* field.  Note that any returned address
+  is only used when opening a local endpoint.  The address is not
+  guaranteed to be usable by a peer process.
 
 *dest_addr - destination address*
 : If specified, indicates the destination address.  This field will be
   ignored in hints unless the node and service parameters are NULL or
-  FI_SOURCE flag is set.
+  FI_SOURCE flag is set.  If FI_SOURCE is not specified, on output a
+  provider shall return an address the corresponds to the indicated
+  node and/or service fields, relative to the fabric and domain.  Note
+  that any returned address is only usable locally.
 
 *handle - provider context handle*
 : References a provider specific handle.  The use of this field
@@ -274,6 +286,11 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of atomic operations supported by an endpoint.
 
+*FI_MULTICAST*
+: Indicates that the endpoint support multicast data transfers.  This
+  capability must be paired with at least one other data transfer capability,
+  (e.g. FI_MSG, FI_SEND, FI_RECV, ...).
+
 *FI_NAMED_RX_CTX*
 : Requests that endpoints which support multiple receive contexts
   allow an initiator to target (or name) a specific receive context as
@@ -333,6 +350,10 @@ additional optimizations.
   flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled on
   the endpoint.
 
+*FI_SHARED_AV*
+: Requests or indicates support for address vectors which may be shared
+  among multiple processes.
+
 *FI_TRIGGER*
 : Indicates that the endpoint should support triggered operations.
   Endpoints support this capability must meet the usage model as
@@ -345,6 +366,23 @@ additional optimizations.
   to initiating the fenced operation.  Fenced operations are often
   used to enforce ordering between operations that are not otherwise
   guaranteed by the underlying provider or protocol.
+
+*FI_LOCAL_COMM*
+: Indicates that the endpoint support host local communication.  This
+  flag may be used in conjunction with FI_REMOTE_COMM to indicate that
+  local and remote communication are required.  If neither FI_LOCAL_COMM
+  or FI_REMOTE_COMM are specified, then the provider will indicate
+  support for the configuration that minimally affects performance.
+  Providers that set FI_LOCAL_COMM but not FI_REMOTE_COMM, for example
+  a shared memory provider, may only be used to communication between
+  processes on the same system.
+
+*FI_REMOTE_COMM*
+: Indicates that the endpoint support communication with endpoints
+  located at remote nodes (across the fabric).  See FI_LOCAL_COMM for
+  additional details.  Providers that set FI_REMOTE_COMM but not
+  FI_LOCAL_COMM, for example NICs that lack loopback support, cannot
+  be used to communicate with processes on the same system.
 
 Capabilities may be grouped into two general categories: primary and
 secondary.  Primary capabilities must explicitly be requested by an
@@ -359,7 +397,8 @@ Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
 FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
-Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_TRIGGER, FI_FENCE.
+Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
+FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM.
 
 # MODE
 
@@ -455,6 +494,20 @@ supported set of modes will be returned in the info structure(s).
   receive buffer at the target.  This is true even for operations that would
   normally not consume posted receive buffers, such as RMA write operations.
 
+*FI_NOTIFY_FLAGS_ONLY*
+: This bit indicates that general completion flags may not be set by
+  the provider, and are not needed by the application.  If specified,
+  completion flags which simply report the type of operation that
+  completed (e.g. send or receive) may not be set.  However,
+  completion flags that are used for remote notifications will still
+  be set when applicable.  See `fi_cq`(3) for details on which completion
+  flags are valid when this mode bit is enabled.
+
+*FI_RESTRICTED_COMP*
+: This bit indicates that the application will only share completion queues
+  and counters among endpoints, transmit contexts, and receive contexts that
+  have the same set of capability flags.
+
 # ADDRESSING FORMATS
 
 Multiple fabric interfaces take as input either a source or
@@ -499,6 +552,14 @@ fabric.  See `fi_av`(3).
 *FI_ADDR_GNI*
 : Address is a Cray proprietary format that is used with their GNI
   protocol.
+
+*FI_ADDR_STR*
+: Address is a formatted character string.  The length and content of
+  the string is address and/or provider specific, but follows this model:
+
+  address_family[;[node][;[service][;[field3]...]]]
+
+  Examples: AF_INET;10.31.6.12;7471, AF_INET;;7471
 
 # FLAGS
 

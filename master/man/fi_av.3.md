@@ -302,8 +302,8 @@ insertions complete.
 Because insertions occur at a pre-determined index, the fi_addr
 parameter may be NULL.  If fi_addr is non-NULL, it must reference
 an array of fi_addr_t, and the buffer must remain valid until the
-insertion operation completes.  Note that if
-fi_addr is NULL and synchronous operation is requested, individual
+insertion operation completes.  Note that if fi_addr is NULL and
+synchronous operation is requested without using FI_SYNC_ERR flag, individual
 insertion failures cannot be reported and the application must use
 other calls, such as `fi_av_lookup` to learn which specific addresses
 failed to insert.  Since fi_av_remove is provider-specific, it is recommended
@@ -312,7 +312,8 @@ valid buffer in the fi_addr parameter.  Otherwise it may be difficult to
 determine what the next assigned index will be.
 
 *flags*
-: The following flag may be passed to fi_av_insert
+: The following flag may be passed to AV insertion calls: fi_av_insert,
+  fi_av_insertsvc, or fi_av_insertsym.
 
 - *FI_MORE*
 : In order to allow optimized address insertion, the application may
@@ -320,6 +321,15 @@ determine what the next assigned index will be.
   provider that more insertion requests will follow, allowing the
   provider to aggregate insertion requests if desired.  Providers are
   free to ignore FI_MORE.
+
+- *FI_SYNC_ERR*
+: This flag applies to synchronous insertions only, and is used to
+  retrieve error details of failed insertions.  If set, the context
+  parameter of insertion calls references an array of integers, with
+  context set to address of the first element of the array.
+  The resulting status of attempting to insert each address will be
+  written to the corresponding array location.  Successful insertions
+  will be updated to 0.  Failures will contain a fabric errno code.
 
 ## fi_av_insertsvc
 
@@ -424,10 +434,14 @@ was specified.
 
 Insertion calls for an AV opened for asynchronous operation (with FI_EVENT
 flag specified) will return 0 if the operation was successfully initiated.
-In the case of failure, a negative fabric errno will be returned.
+In the case of failure, a negative fabric errno will be returned.  Providers
+are allowed to abort insertion operations in the case of an error. Addresses
+that are not inserted because they were aborted will fail with an error code
+of FI_ECANCELED.
 
 In both the synchronous and asynchronous modes of operation, the fi_addr
-buffer associated with a failed insertion will be set to FI_ADDR_NOTAVAIL.
+buffer associated with a failed or aborted insertion will be set to
+FI_ADDR_NOTAVAIL.
 
 All other calls return 0 on success, or a negative value corresponding to
 fabric errno on error.
