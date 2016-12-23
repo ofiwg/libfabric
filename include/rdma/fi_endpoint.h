@@ -231,13 +231,13 @@ fi_rx_context(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	return ep->ops->rx_ctx(ep, index, attr, rx_ep, context);
 }
 
-static inline ssize_t
+static inline FI_DEPRECATED_FUNC ssize_t
 fi_rx_size_left(struct fid_ep *ep)
 {
 	return ep->ops->rx_size_left(ep);
 }
 
-static inline ssize_t
+static inline FI_DEPRECATED_FUNC ssize_t
 fi_tx_size_left(struct fid_ep *ep)
 {
 	return ep->ops->tx_size_left(ep);

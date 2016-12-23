@@ -192,6 +192,7 @@ enum {
 	FI_ETRUNC        = 265, /* Truncation error */
 	FI_ENOKEY        = 266, /* Required key not available */
 	FI_ENOAV	 = 267, /* Missing or unavailable address vector */
+	FI_EOVERRUN	 = 268, /* Queue has been overrun */
 	FI_ERRNO_MAX
 };
 

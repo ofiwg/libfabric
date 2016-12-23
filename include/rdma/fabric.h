@@ -38,6 +38,17 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#ifdef __GNUC__
+#define FI_DEPRECATED_FUNC __attribute__((deprecated))
+#define FI_DEPRECATED_FIELD __attribute__((deprecated))
+#elif defined(_MSC_VER)
+#define FI_DEPRECATED_FUNC __declspec(deprecated)
+#define FI_DEPRECATED_FIELD
+#else
+#define FI_DEPRECATED_FUNC
+#define FI_DEPRECATED_FIELD
+#endif
+
 #if defined(_WIN32)
 #include <BaseTsd.h>
 #include <windows.h>
@@ -110,6 +121,7 @@ typedef struct fid *fid_t;
 #define FI_TAGGED		(1ULL << 3)
 #define FI_ATOMIC		(1ULL << 4)
 #define FI_ATOMICS		FI_ATOMIC
+#define FI_MULTICAST		(1ULL << 5)
 
 #define FI_READ			(1ULL << 8)
 #define FI_WRITE		(1ULL << 9)
@@ -135,6 +147,9 @@ typedef struct fid *fid_t;
 #define FI_AFFINITY		(1ULL << 29)
 
 /* fi_getinfo()-specific flags/caps */
+#define FI_LOCAL_COMM		(1ULL << 51)
+#define FI_REMOTE_COMM		(1ULL << 52)
+#define FI_SHARED_AV		(1ULL << 53)
 #define FI_PROV_ATTR_ONLY	(1ULL << 54)
 #define FI_NUMERICHOST		(1ULL << 55)
 #define FI_RMA_EVENT		(1ULL << 56)
@@ -160,7 +175,8 @@ enum {
 	FI_ADDR_PSMX,		/* uint64_t */
 	FI_ADDR_GNI,
 	FI_ADDR_BGQ,
-	FI_ADDR_MLX
+	FI_ADDR_MLX,
+	FI_ADDR_STR,		/* formatted char * */
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -219,8 +235,8 @@ enum fi_ep_type {
 	FI_EP_MSG,
 	FI_EP_DGRAM,
 	FI_EP_RDM,
-	/* FI_EP_RAW, */
-	/* FI_EP_PACKET, */
+	FI_EP_SOCK_STREAM,
+	FI_EP_SOCK_DGRAM,
 };
 
 /* Endpoint protocol
@@ -253,6 +269,8 @@ enum {
 #define FI_ASYNC_IOV		(1ULL << 57)
 #define FI_RX_CQ_DATA		(1ULL << 56)
 #define FI_LOCAL_MR		(1ULL << 55)
+#define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54)
+#define FI_RESTRICTED_COMP	(1ULL << 53)
 
 struct fi_tx_attr {
 	uint64_t		caps;
@@ -289,6 +307,8 @@ struct fi_ep_attr {
 	uint64_t		mem_tag_format;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
+	size_t			auth_keylen;
+	uint8_t			*auth_key;
 };
 
 struct fi_domain_attr {
@@ -310,6 +330,10 @@ struct fi_domain_attr {
 	size_t			max_ep_rx_ctx;
 	size_t			max_ep_stx_ctx;
 	size_t			max_ep_srx_ctx;
+	size_t			cntr_cnt;
+	size_t			mr_iov_limit;
+	uint64_t		caps;
+	uint64_t		mode;
 };
 
 struct fi_fabric_attr {
@@ -317,6 +341,8 @@ struct fi_fabric_attr {
 	char			*name;
 	char			*prov_name;
 	uint32_t		prov_version;
+	uint32_t		api_version;
+	char			*comp_list;
 };
 
 struct fi_info {
@@ -355,7 +381,8 @@ enum {
 	FI_CLASS_CNTR,
 	FI_CLASS_WAIT,
 	FI_CLASS_POLL,
-	FI_CLASS_CONNREQ
+	FI_CLASS_CONNREQ,
+	FI_CLASS_MC,
 };
 
 struct fi_eq_attr;

@@ -531,6 +531,7 @@ int fi_check_info(const struct util_prov *util_prov,
 void ofi_alter_info(struct fi_info *info,
 		   const struct fi_info *hints);
 
+struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
 		 struct fi_info *hints, struct fi_info **info);

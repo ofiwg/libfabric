@@ -122,6 +122,7 @@ src_libfabric_la_SOURCES = \
 	src/fi_tostr.c \
 	src/log.c \
 	src/var.c \
+	src/abi_1_0.c \
 	$(common_srcs)
 
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)

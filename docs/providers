@@ -67,7 +67,7 @@ that handles progress or timeout/retries.
 
 // include/fi_rbuf.h
 
-This provides inline implemenations of ring buffers.
+This provides inline implementations of ring buffers.
 
 ringbuf:
 This defines a fixed-sized ring buffer that supports variable-sized
@@ -108,4 +108,3 @@ fi_datatype_size() - return size of an atomic datatype
 fi_[capability]_allowed() - routines to check caps bits
 fi_gettime_ms() - return current time in milliseconds
 fi_fd_nonblock() - set fd to nonblocking
-

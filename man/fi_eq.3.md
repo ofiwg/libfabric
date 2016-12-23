@@ -243,8 +243,8 @@ information regarding the format associated with each event.
 *Asynchronous Control Operations*
 : Asynchronous control operations are basic requests that simply need
   to generate an event to indicate that they have completed.  These
-  include the following types of events: memory registration and address
-  vector resolution.
+  include the following types of events: memory registration, address
+  vector resolution, and multicast joins.
 
   Control requests report their completion by inserting a `struct
   fi_eq_entry` into the EQ.  The format of this structure is:
@@ -261,8 +261,9 @@ struct fi_eq_entry {
   returned event will indicate the operation that has completed, and
   the fid will reference the fabric descriptor associated with
   the event.  For memory registration, this will be an FI_MR_COMPLETE
-  event and the fid_mr; address resolution will reference an
-  FI_AV_COMPLETE event and fid_av.  The context field will be set
+  event and the fid_mr.  Address resolution will reference an
+  FI_AV_COMPLETE event and fid_av.  Multicast joins will report an
+  FI_JOIN_COMPLETE and fid_mc.  The context field will be set
   to the context specified as part of the operation, if available,
   otherwise the context will be associated with the fabric descriptor.
   The data field will be set as described in the man page for the
@@ -409,6 +410,16 @@ If err_data_size is > 0, then the buffer referenced by err_data is directly
 user-accessible.  The contents of the buffer will remain valid until a
 subsequent read call against the EQ.  Applications which read the err_data
 buffer must ensure that they do not read past the end of the referenced buffer.
+
+# NOTES
+
+If an event queue has been overrun, it will be placed into an 'overrun'
+state.  Write operations against an overrun EQ will fail with -FI_EOVERRUN.
+Read operations will continue to return any valid, non-corrupted events, if
+available.  After all valid events have been retrieved, any attempt to read
+the EQ will result in it returning an FI_EOVERRUN error event.  Overrun
+event queues are considered fatal and may not be used to report additional
+events once the overrun occurs.
 
 # RETURN VALUES
 

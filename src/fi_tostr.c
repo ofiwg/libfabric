@@ -208,6 +208,8 @@ static void fi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
 	CASEENUMSTR(FI_EP_MSG);
 	CASEENUMSTR(FI_EP_DGRAM);
 	CASEENUMSTR(FI_EP_RDM);
+	CASEENUMSTR(FI_EP_SOCK_STREAM);
+	CASEENUMSTR(FI_EP_SOCK_DGRAM);
 	default:
 		strcatf(buf, "Unknown");
 		break;
@@ -246,6 +248,7 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_ASYNC_IOV);
 	IFFLAGSTR(mode, FI_RX_CQ_DATA);
 	IFFLAGSTR(mode, FI_LOCAL_MR);
+	IFFLAGSTR(mode, FI_NOTIFY_FLAGS_ONLY);
 
 	fi_remove_comma(buf);
 }
@@ -467,6 +470,7 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s%smax_ep_rx_ctx: %zd\n", prefix, TAB, attr->max_ep_rx_ctx);
 	strcatf(buf, "%s%smax_ep_stx_ctx: %zd\n", prefix, TAB, attr->max_ep_stx_ctx);
 	strcatf(buf, "%s%smax_ep_srx_ctx: %zd\n", prefix, TAB, attr->max_ep_srx_ctx);
+	strcatf(buf, "%s%scntr_cnt: %zd\n", prefix, TAB, attr->cntr_cnt);
 }
 
 static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
@@ -482,6 +486,8 @@ static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 	strcatf(buf, "%s%sprov_name: %s\n", prefix, TAB, attr->prov_name);
 	strcatf(buf, "%s%sprov_version: %d.%d\n", prefix, TAB,
 		FI_MAJOR(attr->prov_version), FI_MINOR(attr->prov_version));
+	strcatf(buf, "%s%sapi_version: %d.%d\n", prefix, TAB,
+		FI_MAJOR(attr->api_version), FI_MINOR(attr->api_version));
 }
 
 static void fi_tostr_info(char *buf, const struct fi_info *info)
@@ -696,7 +702,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 	}
 	return buf;
 }
-DEFAULT_SYMVER(fi_tostr_, fi_tostr);
+DEFAULT_SYMVER(fi_tostr_, fi_tostr, FABRIC_1.0);
 
 #undef CASEENUMSTR
 #undef IFFLAGSTR
