@@ -248,8 +248,8 @@ fi_sendmsg.
   posted receive operation to generate multiple events as messages are
   placed into the buffer.  The placement of received data into the
   buffer may be subjected to provider specific alignment restrictions.
-  The buffer will be freed from the endpoint when the available buffer
-  space falls below the network's MTU size (see
+  The buffer will be released by the provider when the available buffer
+  space falls below the specified minimum (see
   FI_OPT_MIN_MULTI_RECV).
 
 *FI_INJECT_COMPLETE*
