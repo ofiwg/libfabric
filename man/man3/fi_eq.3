@@ -1,4 +1,4 @@
-.TH "fi_eq" "3" "2016\-06\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_eq" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_eq \- Event queue operations
@@ -223,8 +223,8 @@ information regarding the format associated with each event.
 \f[I]Asynchronous Control Operations\f[] : Asynchronous control
 operations are basic requests that simply need to generate an event to
 indicate that they have completed.
-These include the following types of events: memory registration and
-address vector resolution.
+These include the following types of events: memory registration,
+address vector resolution, and multicast joins.
 .PP
 Control requests report their completion by inserting a
 \f[C]struct\ \ \ fi_eq_entry\f[] into the EQ.
@@ -244,8 +244,9 @@ For the completion of basic asynchronous control operations, the
 returned event will indicate the operation that has completed, and the
 fid will reference the fabric descriptor associated with the event.
 For memory registration, this will be an FI_MR_COMPLETE event and the
-fid_mr; address resolution will reference an FI_AV_COMPLETE event and
-fid_av.
+fid_mr.
+Address resolution will reference an FI_AV_COMPLETE event and fid_av.
+Multicast joins will report an FI_JOIN_COMPLETE and fid_mc.
 The context field will be set to the context specified as part of the
 operation, if available, otherwise the context will be associated with
 the fabric descriptor.
@@ -408,6 +409,17 @@ The contents of the buffer will remain valid until a subsequent read
 call against the EQ.
 Applications which read the err_data buffer must ensure that they do not
 read past the end of the referenced buffer.
+.SH NOTES
+.PP
+If an event queue has been overrun, it will be placed into an
+\[aq]overrun\[aq] state.
+Write operations against an overrun EQ will fail with \-FI_EOVERRUN.
+Read operations will continue to return any valid, non\-corrupted
+events, if available.
+After all valid events have been retrieved, any attempt to read the EQ
+will result in it returning an FI_EOVERRUN error event.
+Overrun event queues are considered fatal and may not be used to report
+additional events once the overrun occurs.
 .SH RETURN VALUES
 .PP
 fi_eq_open : Returns 0 on success.

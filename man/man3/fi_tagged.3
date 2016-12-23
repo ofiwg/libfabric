@@ -1,4 +1,4 @@
-.TH "fi_tagged" "3" "2016\-11\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_tagged" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_tagged \- Tagged data transfer operations
@@ -122,6 +122,13 @@ Users should not touch the posted data buffer(s) until the receive
 operation has completed.
 Posted receive buffers are matched with inbound send messages based on
 the tags associated with the send and receive buffers.
+.PP
+An endpoint must be enabled before an application can post send or
+receive operations to it.
+For connected endpoints, receive buffers may be posted prior to connect
+or accept being called on the endpoint.
+This ensures that buffers are available to receive incoming data
+immediately after the connection has been established.
 .PP
 Completed message operations are reported to the user through one or
 more event collectors associated with the endpoint.

@@ -1,4 +1,4 @@
-.TH "fi_cntr" "3" "2016\-12\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cntr" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cntr \- Completion and event counter operations
@@ -33,7 +33,11 @@ uint64_t\ fi_cntr_readerr(struct\ fid_cntr\ *cntr);
 
 int\ fi_cntr_add(struct\ fid_cntr\ *cntr,\ uint64_t\ value);
 
+int\ fi_cntr_adderr(struct\ fid_cntr\ *cntr,\ uint64_t\ value);
+
 int\ fi_cntr_set(struct\ fid_cntr\ *cntr,\ uint64_t\ value);
+
+int\ fi_cntr_seterr(struct\ fid_cntr\ *cntr,\ uint64_t\ value);
 
 int\ fi_cntr_wait(struct\ fid_cntr\ *cntr,\ uint64_t\ threshold,
 \ \ \ \ int\ timeout);
@@ -69,6 +73,8 @@ to a request.
 Counters typically only count successful completions.
 However, if an operation completes in error, it may increment an
 associated error value.
+That is, a counter actually stores two distinct values, with error
+completions updating an error specific value.
 .SS fi_cntr_open
 .PP
 fi_cntr_open allocates a new fabric counter.
@@ -181,9 +187,15 @@ error and were unable to update the counter.
 .SS fi_cntr_add
 .PP
 This adds the user\-specified value to the counter.
+.SS fi_cntr_adderr
+.PP
+This adds the user\-specified value to the error value of the counter.
 .SS fi_cntr_set
 .PP
 This sets the counter to the specified value.
+.SS fi_cntr_seterr
+.PP
+This sets the error value of the counter to the specified value.
 .SS fi_cntr_wait
 .PP
 This call may be used to wait until the counter reaches the specified

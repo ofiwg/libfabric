@@ -1,4 +1,4 @@
-.TH "fi_msg" "3" "2016\-09\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_msg" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_msg \- Message data transfer operations
@@ -99,6 +99,13 @@ Similar to the send operations, receive operations operate
 asynchronously.
 Users should not touch the posted data buffer(s) until the receive
 operation has completed.
+.PP
+An endpoint must be enabled before an application can post send or
+receive operations to it.
+For connected endpoints, receive buffers may be posted prior to connect
+or accept being called on the endpoint.
+This ensures that buffers are available to receive incoming data
+immediately after the connection has been established.
 .PP
 Completed message operations are reported to the user through one or
 more event collectors associated with the endpoint.
@@ -248,6 +255,12 @@ been processed by the destination.
 Indicates that the requested operation, also known as the fenced
 operation, be deferred until all previous operations targeting the same
 target endpoint have completed.
+.PP
+\f[I]FI_MULTICAST\f[] : Applies to transmits.
+This flag indicates that the address specified as the data transfer
+destination is a multicast address.
+This flag must be used in all multicast transfers, in conjunction with a
+multicast fi_addr_t.
 .SH NOTES
 .PP
 If an endpoint has been configured with FI_MSG_PREFIX, the application

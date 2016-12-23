@@ -1,4 +1,4 @@
-.TH "fi_provider" "7" "2016\-11\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_provider" "7" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Fabric Interface Providers
@@ -45,6 +45,30 @@ platforms that only have Linux Verbs\-based networking.
 See \f[C]fi_verbs\f[](7) for more information.
 .PP
 \f[I]Blue Gene/Q\f[] : See \f[C]fi_bgq\f[](7) for more information.
+.SH CORE VERSUS UTILITY PROVIDERS
+.PP
+The providers listed above are referred to as core providers.
+Core providers implement the libfabric interfaces directly over
+low\-level hardware and software interfaces.
+They are designed to support a specific class of hardware, and may be
+limited to supporting a single NIC.
+Core providers often only support libfabric features and interfaces that
+map efficiently to their underlying hardware.
+.PP
+Utility providers are distinct from core providers in that they are not
+associated with specific classes of devices.
+They instead work with core providers to expand their features, and
+interact with core providers through libfabric interfaces internally.
+Utility providers are often used to support a specific endpoint type
+over a simpler endpoint type.
+For example, the RXD provider implements reliability over unreliable
+datagram endpoints.
+.PP
+Utility providers show up as a component in the core provider\[aq]s
+component list.
+See \f[C]fi_fabric\f[](3)`.
+Utility providers are enabled automatically for core providers that do
+not support the feature set requested by an application.
 .SH PROVIDER REQUIREMENTS
 .PP
 Libfabric provides a general framework for supporting multiple types of
