@@ -449,15 +449,27 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 			int arrived_len, struct fi_ibv_rdm_buf *rbuf)
 {
 	struct fi_ibv_rdm_request *request = NULL;
-
-	int pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
+	uint32_t pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
+	struct fi_ibv_recv_got_pkt_preprocess_data p = {
+		.conn = conn,
+		.ep = ep,
+		.rbuf = rbuf,
+		.arrived_len = arrived_len,
+		.pkt_type = pkt_type,
+		.imm_data = 0 // TODO:
+	};
 
 	if (pkt_type == FI_IBV_RDM_RNDV_ACK_PKT) {
 		memcpy(&request, &rbuf->payload, sizeof(request));
 		assert(request);
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %p\n", conn, request);
-	} else if (pkt_type != FI_IBV_RDM_RMA_PKT) {
+	} else if (pkt_type == FI_IBV_RDM_DISCONNECT_PKT) {
+		pthread_mutex_lock(&ep->cm_lock);
+		fi_ibv_rdm_start_disconnect(ep, conn);
+		pthread_mutex_unlock(&ep->cm_lock);
+		return;
+	} else {
 		struct fi_ibv_rdm_minfo minfo = {
 			.conn = conn,
 			.tag = rbuf->header.tag,
@@ -493,21 +505,7 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 		}
 	}
 
-	/* RMA packets are not handled yet (without IMM) */
-	if (pkt_type != FI_IBV_RDM_RMA_PKT) {
-
-		struct fi_ibv_recv_got_pkt_preprocess_data p = {
-			.conn = conn,
-			.ep = ep,
-			.rbuf = rbuf,
-			.arrived_len = arrived_len,
-			.pkt_type = pkt_type,
-			.imm_data = 0 // TODO:
-		};
-
-		fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_GOT_PKT_PROCESS,
-				    &p);
-	}
+	fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_GOT_PKT_PROCESS, &p);
 }
 
 static inline
@@ -530,7 +528,7 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 	}
 }
 
-static inline int 
+static inline void
 fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 {
 	struct fi_ibv_rdm_conn *conn = (void *) wc->wr_id;
@@ -543,31 +541,15 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	FI_IBV_DBG_OPCODE(wc->opcode, "RECV");
 
 	if (!FI_IBV_RDM_CHECK_RECV_WC(wc)) {
-
-		VERBS_INFO(FI_LOG_EP_DATA, "conn %p state %d, wc status %d\n",
-			conn, conn->state, wc->status);
-		if (wc->status == IBV_WC_WR_FLUSH_ERR &&
-		    conn->state == FI_VERBS_CONN_ESTABLISHED)
-		{
-			/*
-			 * It means that remote side initiated disconnection
-			 * and QP is flushed earlier then disconnect event was
-			 * handled or arrived. Just initiate disconnect to
-			 * opposite direction.
-			 */
-			fi_ibv_rdm_start_disconnection(conn);
-		} else {
-			assert("Error recv wc\n" &&
-			       (!ep->is_closing ||
-				conn->state != FI_VERBS_CONN_ESTABLISHED));
+		pthread_mutex_lock(&ep->cm_lock);
+		if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
+			VERBS_INFO(FI_LOG_EP_DATA, "conn %p state %d, wc status %d:%s\n",
+				conn, conn->state, wc->status,
+				ibv_wc_status_str(wc->status));
+			conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
 		}
-
-		return 1;
-	}
-
-	conn->recv_completions++;
-	if (conn->recv_completions & ep->n_buffs) {
-		conn->recv_completions = 0;
+		pthread_mutex_unlock(&ep->cm_lock);
+		return;
 	}
 
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p recv_completions %d\n",
@@ -588,7 +570,7 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	    fi_ibv_rdm_buffer_check_seq_num(rbuf, conn->recv_processed) : 1))
 	{
 		do {
-			assert(rbuf->service_data.pkt_len > 0);
+			assert(rbuf->service_data.pkt_len >= 0);
 
 			fi_ibv_rdm_process_recv(ep, conn, 
 				rbuf->service_data.pkt_len, rbuf);
@@ -617,8 +599,6 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 		VERBS_DBG(FI_LOG_EP_DATA, "not processed: conn %p, status: %d\n",
 			conn, rbuf->service_data.status);
 	}
-
-	return 0;
 }
 
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
@@ -626,75 +606,51 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 	const int wc_count = ep->fi_rcq->read_bunch_size;
 	struct ibv_wc wc[wc_count];
 	int ret = 0;
-	int err = 0;
 	int i = 0;
 
 	do {
 		ret = ibv_poll_cq(ep->rcq, wc_count, wc);
-		for (i = 0; i < ret && !err; ++i) {
-			err = fi_ibv_rdm_process_recv_wc(ep, &wc[i]);
+		for (i = 0; i < ret; ++i) {
+			fi_ibv_rdm_process_recv_wc(ep, &wc[i]);
 		}
-	} while (!err && ret == wc_count);
+	} while (ret == wc_count);
 
-	if (!err && ret >= 0) {
-		return FI_SUCCESS;
-	}
-
-	/* error handling */
-
-	VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n", ret);
-
-	for(i = 0; i < wc_count; i++) {
-
-		if (wc[i].status != IBV_WC_SUCCESS) {
-			struct fi_ibv_rdm_conn *conn = (void *)wc[i].wr_id;
-
-			if (wc[i].status == IBV_WC_WR_FLUSH_ERR && conn &&
-				conn->state != FI_VERBS_CONN_ESTABLISHED)
-			{
-				return FI_SUCCESS;
-			}
-
-			VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc[%d].status = %d:%s\n",
-				i, wc[i].status, ibv_wc_status_str(wc[i].status));
-			return -FI_EOTHER;
-		}
-
-		if (wc[i].opcode != IBV_WC_RECV_RDMA_WITH_IMM &&
-		    wc[i].opcode != IBV_WC_RECV)
-		{
-			VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc[%d].opcode = %d\n",
-				i, wc[i].opcode);
-		}
-	}
-
-	return -FI_EOTHER;
+	return ret >= 0 ? FI_SUCCESS : -FI_EOTHER;
 }
 
-static inline int
+static inline void
 fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 {
-	if (wc->status != IBV_WC_SUCCESS) {
-		return 1;
-	}
+	struct fi_ibv_rdm_conn *conn = NULL;
+	struct fi_ibv_rdm_request *req = NULL;
+	struct fi_ibv_rdm_tagged_send_completed_data data = { .ep = ep };
 
-	if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
+	if (wc->status != IBV_WC_SUCCESS) {
+		if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
+			conn = FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
+		} else {
+			req = (void *)wc->wr_id;
+			conn = req->minfo.conn;
+		}
+		pthread_mutex_lock(&ep->cm_lock);
+		if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
+			VERBS_INFO(FI_LOG_EP_DATA,
+				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
+				wc->status,
+				ibv_wc_status_str(wc->status),
+				ep->posted_sends, conn);
+			conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+		}
+		pthread_mutex_unlock(&ep->cm_lock);
+	} else if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
 		VERBS_DBG(FI_LOG_EP_DATA, "CQ COMPL: SEND -> 0x1\n");
-		struct fi_ibv_rdm_conn *conn =
-			(struct fi_ibv_rdm_conn *)
+		conn = (struct fi_ibv_rdm_conn *)
 			FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
 		FI_IBV_RDM_DEC_SIG_POST_COUNTERS(conn, ep);
-
-		return 0;
 	} else {
 		FI_IBV_DBG_OPCODE(wc->opcode, "SEND");
-		struct fi_ibv_rdm_request *request =
-			(void *)FI_IBV_RDM_UNPACK_WR(wc->wr_id);
-
-		struct fi_ibv_rdm_tagged_send_completed_data data = 
-			{ .ep = ep };
-
-		return fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_LC, &data);
+		req = (void *)FI_IBV_RDM_UNPACK_WR(wc->wr_id);
+		fi_ibv_rdm_req_hndl(req, FI_IBV_EVENT_POST_LC, &data);
 	}
 }
 
@@ -703,20 +659,20 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	const int wc_count = ep->fi_scq->read_bunch_size;
 	struct ibv_wc wc[wc_count];
 	int ret = 0;
-	int err = 0;
 	int i = 0;
 
 	if (ep->posted_sends > 0) {
 		do {
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
-			for (i = 0; i < ret && !err; ++i) {
-				err = fi_ibv_rdm_process_send_wc(ep, &wc[i]);
+			for (i = 0; i < ret; ++i) {
+				fi_ibv_rdm_process_send_wc(ep, &wc[i]);
 			}
-		} while (!err && ret == wc_count);
+		} while (ret == wc_count);
 	}
 
-	if (err || ret < 0) {
-		goto wc_error;
+	if (ret < 0) {
+		VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n", ret);
+		return -FI_EOTHER;
 	}
 
 	struct fi_ibv_rdm_tagged_send_ready_data data = { .ep = ep };
@@ -731,41 +687,12 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	}
 
 	return FI_SUCCESS;
-
-wc_error:
-	if (ret < 0) {
-		VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n", ret);
-		assert(0);
-	}
-
-	for (i = 0; i < wc_count; i++) {
-		if (wc[i].status != IBV_WC_SUCCESS) {
-			struct fi_ibv_rdm_conn *conn;
-			if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc[i].wr_id)) {
-				conn = FI_IBV_RDM_UNPACK_SERVICE_WR(wc[i].wr_id);
-			} else {
-				struct fi_ibv_rdm_request *req =
-					(void *)wc[i].wr_id;
-				conn = req->minfo.conn;
-			}
-
-			VERBS_INFO(FI_LOG_EP_DATA,
-				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
-				wc[i].status,
-				ibv_wc_status_str(wc[i].status),
-				ep->posted_sends, conn);
-			assert(0);
-		}
-	}
-
-	return -FI_EOTHER;
 }
 
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep)
 {
 	int ret = fi_ibv_rdm_tagged_poll_send(ep);
-	/* Only already posted sends should be processed during EP closing */
-	if (ret || ep->is_closing) {
+	if (ret) {
 		return ret;
 	}
 

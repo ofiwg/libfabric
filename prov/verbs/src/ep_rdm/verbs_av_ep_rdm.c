@@ -75,37 +75,114 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	return FI_SUCCESS;
 }
 
-ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
+static inline ssize_t
+fi_ibv_rdm_disconnect_request(struct fi_ibv_rdm_ep *ep,
+			      struct fi_ibv_rdm_conn *conn)
+{
+	struct ibv_qp_attr attr;
+	struct ibv_qp_init_attr init_attr;
+
+	struct ibv_sge sge = {0};
+	struct ibv_send_wr wr = {0};
+	struct ibv_send_wr *bad_wr = NULL;
+	struct fi_ibv_rdm_buf *sbuf = NULL;
+	ssize_t ret = FI_SUCCESS;
+
+	/*
+	 * As this is a part of 2-sided handshake, at lest 1 side already have
+	 * all posted operations completed. Everything else is erroneous.
+	 */
+	assert(!conn->postponed_entry);
+	if (conn->postponed_entry) {
+		return -FI_EBUSY;
+	}
+
+	/*
+	 * If all buffers are busy, wait untill resources will be available.
+	 * (Remote side should process all recvs then release local buffers)
+	 */
+	while ( !(sbuf = fi_ibv_rdm_prepare_send_resources(conn, ep)) ) {
+		if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
+			ret = -FI_ESHUTDOWN;
+			goto out;
+		} else {
+			ret = ibv_query_qp(conn->qp[0], &attr, IBV_QP_STATE,
+					   &init_attr);
+			if (ret ||  attr.qp_state == IBV_QPS_ERR) {
+				/* Disconnection is initiated by remote side or
+				 * it's crashed. */
+				conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+			}
+		}
+	};
+
+	sge.addr = (uintptr_t)(void*)sbuf;
+	sge.length = sizeof(*sbuf);
+	sge.lkey = conn->s_mr->lkey;
+
+	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
+	wr.sg_list = &sge;
+	wr.num_sge = 1;
+	wr.wr.rdma.remote_addr =
+		(uintptr_t)fi_ibv_rdm_get_remote_addr(conn, sbuf);
+	wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
+	wr.send_flags = (sge.length < ep->max_inline_rc)
+		? IBV_SEND_INLINE : 0;
+	wr.imm_data = 0;
+	wr.opcode = ep->eopcode;
+
+	sbuf->service_data.pkt_len = 0;
+	sbuf->header.tag = 0;
+	sbuf->header.service_tag = 0;
+
+	FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
+			       FI_IBV_RDM_DISCONNECT_PKT);
+
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep, wr.send_flags);
+	if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+		assert(0);
+		ret =  -errno;
+	} else {
+		conn->state = FI_VERBS_CONN_DISCONNECT_REQUESTED;
+
+		VERBS_INFO(FI_LOG_EP_DATA, "posted %d bytes, conn %p\n",
+			  sge.length, conn);
+	}
+out:
+	return ret;
+}
+
+ssize_t
+fi_ibv_rdm_start_disconnect(struct fi_ibv_rdm_ep *ep,
+			    struct fi_ibv_rdm_conn *conn)
 {
 	ssize_t ret = FI_SUCCESS;
-	ssize_t err = FI_SUCCESS;
 
 	FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 		"Closing connection %p, state %d\n", conn, conn->state);
 
-	if (conn->id[0]) {
+	if (conn->state == FI_VERBS_CONN_ESTABLISHED) {
+		assert(ep);
+		ret = fi_ibv_rdm_disconnect_request(ep, conn);
+	} else if (conn->id[0]) {
 		if (rdma_disconnect(conn->id[0])) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
 			ret = -errno;
 		}
+		conn->state = FI_VERBS_CONN_DISCONNECT_STARTED;
+		return ret;
+	} else if (conn->state != FI_VERBS_CONN_DISCONNECT_REQUESTED) {
+		return fi_ibv_rdm_conn_cleanup(conn);
 	}
 
-	switch (conn->state) {
-	case FI_VERBS_CONN_ALLOCATED:
-	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		err = fi_ibv_rdm_conn_cleanup(conn);
-		ret = (ret == FI_SUCCESS) ? err : ret;
-		break;
-	case FI_VERBS_CONN_ESTABLISHED:
-		conn->state = FI_VERBS_CONN_LOCAL_DISCONNECT;
-		break;
-	case FI_VERBS_CONN_REJECTED:
-		conn->state = FI_VERBS_CONN_CLOSED;
-		break;
-	default:
-		ret = -FI_EOTHER;
+	if (ret == -FI_ESHUTDOWN) {
+		if (conn->id[0] && rdma_disconnect(conn->id[0])) {
+			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
+		}
+		if (conn->id[1] && rdma_disconnect(conn->id[1])) {
+			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_disconnect\n", errno);
+		}
 	}
-
 	return ret;
 }
 
@@ -285,7 +362,7 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
 		HASH_DEL(av->domain->rdm_cm->conn_hash, conn);
-		err = fi_ibv_rdm_start_disconnection(conn);
+		err = fi_ibv_rdm_start_disconnect(av->ep, conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
 	}
 
