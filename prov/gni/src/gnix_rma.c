@@ -953,7 +953,7 @@ static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 	struct gnix_fab_req *more_req;
 	struct gnix_fid_mem_desc *loc_md;
 	struct slist_entry *item;
-	int head_off, head_len, tail_len, entries = 0, idx = 0;
+	int head_off, head_len = 0, tail_len = 0, entries = 0, idx = 0;
 	int indirect = !!(req->flags & GNIX_RMA_INDIRECT);
 	int sub_indirect;
 
