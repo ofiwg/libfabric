@@ -118,7 +118,7 @@ int ofi_mr_insert(struct ofi_util_mr * in_mr_h, const struct fi_mr_attr *in_attr
         if (rbtFind(in_mr_h->map_handle, &item->requested_key)) {
                 free((void *)item->mr_iov);
                 free(item);
-                return -FI_EINVAL;
+                return -FI_ENOKEY;
         }
     } else {
         item->requested_key = get_mr_key(in_mr_h);
