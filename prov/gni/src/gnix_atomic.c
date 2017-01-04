@@ -587,15 +587,6 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		}
 	}
 
-	/* find VC for target */
-	rc = _gnix_vc_ep_get_vc(ep, msg->addr, &vc);
-	if (rc) {
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "_gnix_vc_ep_get_vc() failed, addr: %lx, rc:\n",
-			  msg->addr, rc);
-		goto err_get_vc;
-	}
-
 	/* setup fabric request */
 	req = _gnix_fr_alloc(ep);
 	if (!req) {
@@ -606,7 +597,6 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 
 	req->type = fr_type;
 	req->gnix_ep = ep;
-	req->vc = vc;
 	req->user_context = msg->context;
 	req->work_fn = _gnix_amo_post_req;
 
@@ -655,10 +645,28 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		req->flags |= FI_COMPLETION;
 	}
 
-	return _gnix_vc_queue_tx_req(req);
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 
-err_fr_alloc:
+	/* find VC for target */
+	rc = _gnix_vc_ep_get_vc(ep, msg->addr, &vc);
+	if (rc) {
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "_gnix_vc_ep_get_vc() failed, addr: %lx, rc:\n",
+			  msg->addr, rc);
+		goto err_get_vc;
+	}
+
+	req->vc = vc;
+
+	rc = _gnix_vc_queue_tx_req(req);
+
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	return rc;
+
 err_get_vc:
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+err_fr_alloc:
 	if (auto_mr) {
 		fi_close(&auto_mr->fid);
 	}

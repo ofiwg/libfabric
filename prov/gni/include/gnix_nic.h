@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -124,6 +124,8 @@ struct gnix_nic_attr {
  *                           with this nic
  * @var tx_desc_base         base address for the block of memory from which
  *                           tx descriptors were allocated
+ * @var prog_vcs_lock        lock for prog_vcs
+ * @var prog_vcs             list of VCs needing progress
  * @var wq_lock              lock for serializing access to the nic's work queue
  * @var nic_wq               head of linked list of work queue elements
  *                           associated with this nic
@@ -177,12 +179,8 @@ struct gnix_nic {
 	struct dlist_entry tx_desc_active_list;
 	struct dlist_entry tx_desc_free_list;
 	struct gnix_tx_descriptor *tx_desc_base;
-	fastlock_t rx_vc_lock;
-	struct dlist_entry rx_vcs;
-	fastlock_t work_vc_lock;
-	struct dlist_entry work_vcs;
-	fastlock_t tx_vc_lock;
-	struct dlist_entry tx_vcs;
+	fastlock_t prog_vcs_lock;
+	struct dlist_entry prog_vcs;
 	/* note this free list will be initialized for thread safe */
 	struct gnix_freelist vc_freelist;
 	uint8_t ptag;
@@ -440,12 +438,12 @@ int _gnix_nic_free(struct gnix_nic *nic);
 /**
  * @brief progresses control/data operations associated with the nic
  *
- * @param[in] nic      pointer to previously allocated gnix_nic struct
+ * @param[in] arg      pointer to previously allocated gnix_nic struct
  * @return             FI_SUCCESS on success, -FI_EINVAL if an invalid
  *                     nic struct was supplied. TODO: a lot more error
  *                     values can be returned.
  */
-int _gnix_nic_progress(struct gnix_nic *nic);
+int _gnix_nic_progress(void *arg);
 
 /**
  * @brief allocate a remote id for an object, used for looking up an object

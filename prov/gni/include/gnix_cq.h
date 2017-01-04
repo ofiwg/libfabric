@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,6 +36,7 @@
 
 #include <fi.h>
 
+#include "gnix_progress.h"
 #include "gnix_queue.h"
 #include "gnix_wait.h"
 #include "gnix_util.h"
@@ -54,13 +55,6 @@ struct gnix_cq_entry {
 	struct slist_entry item;
 };
 
-/* many to many relationship between CQs and polled NICs */
-struct gnix_cq_poll_nic {
-	struct dlist_entry list;
-	int ref_cnt;
-	struct gnix_nic *nic;
-};
-
 struct gnix_fid_cq {
 	struct fid_cq cq_fid;
 	struct gnix_fid_domain *domain;
@@ -76,8 +70,8 @@ struct gnix_fid_cq {
 	fastlock_t lock;
 	struct gnix_reference ref_cnt;
 
-	struct dlist_entry poll_nics;
-	rwlock_t nic_lock;
+	struct gnix_prog_set pset;
+
 	bool requires_lock;
 };
 
@@ -92,7 +86,9 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 			  uint64_t data, uint64_t tag, size_t olen,
 			  int err, int prov_errno, void *err_data);
 
-int _gnix_cq_poll_nic_add(struct gnix_fid_cq *cq, struct gnix_nic *nic);
-int _gnix_cq_poll_nic_rem(struct gnix_fid_cq *cq, struct gnix_nic *nic);
+int _gnix_cq_poll_obj_add(struct gnix_fid_cq *cq, void *obj,
+			  int (*prog_fn)(void *data));
+int _gnix_cq_poll_obj_rem(struct gnix_fid_cq *cq, void *obj,
+			  int (*prog_fn)(void *data));
 
 #endif

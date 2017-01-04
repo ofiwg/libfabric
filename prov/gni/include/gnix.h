@@ -522,14 +522,11 @@ struct gnix_fid_ep {
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
 	fastlock_t vc_lock;
-	/* lock for unexp and posted recv queue */
-	fastlock_t recv_queue_lock;
 	/* used for unexpected receives */
 	struct gnix_tag_storage unexp_recv_queue;
 	/* used for posted receives */
 	struct gnix_tag_storage posted_recv_queue;
 
-	fastlock_t tagged_queue_lock;
 	struct gnix_tag_storage tagged_unexp_recv_queue;
 	struct gnix_tag_storage tagged_posted_recv_queue;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -39,6 +39,9 @@
 
 #define GNIX_CM_NIC_MAX_MSG_SIZE (GNI_DATAGRAM_MAXSIZE - sizeof(uint8_t))
 
+extern struct dlist_entry gnix_cm_nic_list;
+extern pthread_mutex_t gnix_cm_nic_list_lock;
+
 typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
 				    char *rbuf,
 				    struct gnix_address addr);
@@ -46,6 +49,7 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
 /**
  * @brief GNI provider connection management (cm) nic structure
  *
+ * @var cm_nic_list    global CM NIC list element
  * @var nic            pointer to gnix_nic associated with this cm nic
  * @var dgram_hndl     handle to dgram allocator associated with this nic
  * @var fabric         GNI provider fabric associated with this nic
@@ -64,6 +68,7 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
  * @var device_id      local Aries device id associated with this nic.
  */
 struct gnix_cm_nic {
+	struct dlist_entry cm_nic_list;
 	struct gnix_nic *nic;
 	struct gnix_dgram_hndl *dgram_hndl;
 	struct gnix_fid_domain *domain;
@@ -151,13 +156,13 @@ int _gnix_cm_nic_enable(struct gnix_cm_nic *cm_nic);
 /**
  * @brief poke the cm nic's progress engine
  *
- * @param[in] cm_nic   pointer to previously allocated gnix_cm_nic struct
- * @return              FI_SUCCESS on success, -EINVAL on invalid argument.
+ * @param[in] arg      pointer to previously allocated gnix_cm_nic struct
+ * @return             FI_SUCCESS on success, -EINVAL on invalid argument.
  *                     Other error codes may be returned depending on the
  *                     error codes returned from callback function
  *                     that had been added to the nic's work queue.
  */
-int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic);
+int _gnix_cm_nic_progress(void *arg);
 
 /**
  * @brief generate a cdm_id to be used in call to  GNI_CdmCreate based on a seed

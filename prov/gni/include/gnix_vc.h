@@ -60,6 +60,7 @@
 #define GNIX_VC_FLAG_RX_SCHEDULED	0
 #define GNIX_VC_FLAG_WORK_SCHEDULED	1
 #define GNIX_VC_FLAG_TX_SCHEDULED	2
+#define GNIX_VC_FLAG_SCHEDULED		4
 
 /*
  * defines for connection state for gnix VC
@@ -84,13 +85,9 @@ enum gnix_vc_conn_req_type {
 /**
  * Virual Connection (VC) struct
  *
- * @var rx_list              NIC RX VC list
+ * @var prog_list            NIC VC progress list
  * @var work_queue           Deferred work request queue
- * @var work_queue_lock      Deferred work request queue lock
- * @var work_list            NIC work VC list
  * @var tx_queue             TX request queue
- * @var tx_queue_lock        TX request queue lock
- * @var tx_list              NIC TX VC list
  * @var list                 used for unmapped vc list
  * @var fr_list              used for vc free list
  * @var entry                used internally for managing linked lists
@@ -121,15 +118,9 @@ enum gnix_vc_conn_req_type {
  *
  */
 struct gnix_vc {
-	struct dlist_entry rx_list;	/* RX VC list entry */
-
+	struct dlist_entry prog_list;	/* NIC VC progress list entry */
 	struct dlist_entry work_queue;	/* Work reqs */
-	fastlock_t work_queue_lock;	/* Work req lock */
-	struct dlist_entry work_list;	/* Work VC list entry */
-
 	struct dlist_entry tx_queue;	/* TX reqs */
-	fastlock_t tx_queue_lock;	/* TX reqs lock */
-	struct dlist_entry tx_list;	/* TX VC list entry */
 
 	struct dlist_entry list;	/* General purpose list */
 	struct dlist_entry fr_list;	/* fr list */
@@ -181,17 +172,6 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 int _gnix_vc_connect(struct gnix_vc *vc);
 
 /**
- * @brief Initiates a non-blocking disconnect of a vc from its peer
- *
- * @param[in]  vc   pointer to previously allocated and connected vc struct
- *
- * @return FI_SUCCESS on success, -FI_EINVAL if an invalid field in the vc
- *         struct is encountered, -ENOMEM if insufficient memory to initiate
- *         connection request.
- */
-int _gnix_vc_disconnect(struct gnix_vc *vc);
-
-/**
  * @brief Destroys a previously allocated vc and cleans up resources
  *        associated with the vc
  *
@@ -238,6 +218,14 @@ int _gnix_vc_rx_schedule(struct gnix_vc *vc);
  * @param[in] req The GNIX fabric request to queue.
  */
 int _gnix_vc_queue_work_req(struct gnix_fab_req *req);
+
+/**
+ * @brief Requeue a request with deferred work.  Used only in TX completers
+ * where the VC lock is not yet held.
+ *
+ * @param[in] req The GNIX fabric request to requeue.
+ */
+int _gnix_vc_requeue_work_req(struct gnix_fab_req *req);
 
 /**
  * @brief Schedule a VC for TX progress.
@@ -335,26 +323,5 @@ static inline enum gnix_vc_conn_state _gnix_vc_state(struct gnix_vc *vc)
 	assert(vc);
 	return vc->conn_state;
 }
-
-/* Return 0 if VC is connected.  Progress VC CM if not. */
-static inline int __gnix_vc_connected(struct gnix_vc *vc)
-{
-    struct gnix_cm_nic *cm_nic;
-    int ret;
-
-    if (unlikely(vc->conn_state < GNIX_VC_CONNECTED)) {
-        cm_nic = vc->ep->cm_nic;
-        ret = _gnix_cm_nic_progress(cm_nic);
-        if ((ret != FI_SUCCESS) && (ret != -FI_EAGAIN))
-            GNIX_WARN(FI_LOG_EP_CTRL,
-                "_gnix_cm_nic_progress() failed: %s\n",
-            fi_strerror(-ret));
-        /* waiting to connect, check back later */
-        return -FI_EAGAIN;
-    }
-
-    return 0;
-}
-
 
 #endif /* _GNIX_VC_H_ */

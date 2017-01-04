@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -121,22 +121,7 @@ static int gnix_cntr_set_wait(struct gnix_fid_cntr *cntr)
 
 static int __gnix_cntr_progress(struct gnix_fid_cntr *cntr)
 {
-	struct gnix_cq_poll_nic *pnic, *tmp;
-	int rc = FI_SUCCESS;
-
-	COND_READ_ACQUIRE(cntr->requires_lock, &cntr->nic_lock);
-
-	dlist_for_each_safe(&cntr->poll_nics, pnic, tmp, list) {
-		rc = _gnix_nic_progress(pnic->nic);
-		if (rc) {
-			GNIX_WARN(FI_LOG_CQ,
-				  "_gnix_nic_progress failed: %d\n", rc);
-		}
-	}
-
-	COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
-
-	return rc;
+	return _gnix_prog_progress(&cntr->pset);
 }
 
 /*******************************************************************************
@@ -172,65 +157,16 @@ int _gnix_cntr_inc_err(struct gnix_fid_cntr *cntr)
 	return FI_SUCCESS;
 }
 
-int _gnix_cntr_poll_nic_add(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
+int _gnix_cntr_poll_obj_add(struct gnix_fid_cntr *cntr, void *obj,
+			    int (*prog_fn)(void *data))
 {
-	struct gnix_cntr_poll_nic *pnic, *tmp;
-
-	COND_WRITE_ACQUIRE(cntr->requires_lock, &cntr->nic_lock);
-
-	dlist_for_each_safe(&cntr->poll_nics, pnic, tmp, list) {
-		if (pnic->nic == nic) {
-			pnic->ref_cnt++;
-			COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
-			return FI_SUCCESS;
-		}
-	}
-
-	pnic = malloc(sizeof(struct gnix_cntr_poll_nic));
-	if (!pnic) {
-		GNIX_WARN(FI_LOG_CQ, "Failed to add NIC to CNTR poll list.\n");
-		COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
-		return -FI_ENOMEM;
-	}
-
-	/* EP holds a ref count on the NIC */
-	pnic->nic = nic;
-	pnic->ref_cnt = 1;
-	dlist_init(&pnic->list);
-	dlist_insert_tail(&pnic->list, &cntr->poll_nics);
-
-	COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
-
-	GNIX_INFO(FI_LOG_CQ, "Added NIC(%p) to CNTR(%p) poll list\n",
-		  nic, cntr);
-
-	return FI_SUCCESS;
+	return _gnix_prog_obj_add(&cntr->pset, obj, prog_fn);
 }
 
-int _gnix_cntr_poll_nic_rem(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
+int _gnix_cntr_poll_obj_rem(struct gnix_fid_cntr *cntr, void *obj,
+			    int (*prog_fn)(void *data))
 {
-	struct gnix_cntr_poll_nic *pnic, *tmp;
-
-	COND_WRITE_ACQUIRE(cntr->requires_lock, &cntr->nic_lock);
-
-	dlist_for_each_safe(&cntr->poll_nics, pnic, tmp, list) {
-		if (pnic->nic == nic) {
-			if (!--pnic->ref_cnt) {
-				dlist_remove(&pnic->list);
-				free(pnic);
-				GNIX_INFO(FI_LOG_CQ,
-					  "Removed NIC(%p) from CNTR(%p) poll list\n",
-					  nic, cntr);
-			}
-			COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
-			return FI_SUCCESS;
-		}
-	}
-
-	COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
-
-	GNIX_WARN(FI_LOG_CQ, "NIC not found on CNTR poll list.\n");
-	return -FI_EINVAL;
+	return _gnix_prog_obj_rem(&cntr->pset, obj, prog_fn);
 }
 
 /*******************************************************************************
@@ -345,6 +281,8 @@ static void __cntr_destruct(void *obj)
 			  cntr->attr.wait_obj);
 		break;
 	}
+
+	_gnix_prog_fini(&cntr->pset);
 
 	free(cntr);
 }
@@ -515,8 +453,9 @@ DIRECT_FN int gnix_cntr_open(struct fid_domain *domain,
 	atomic_initialize(&cntr_priv->cnt_err, 0);
 
 	_gnix_ref_get(cntr_priv->domain);
-	dlist_init(&cntr_priv->poll_nics);
-	rwlock_init(&cntr_priv->nic_lock);
+
+	_gnix_prog_init(&cntr_priv->pset);
+
 	dlist_init(&cntr_priv->trigger_list);
 	fastlock_init(&cntr_priv->trigger_lock);
 
