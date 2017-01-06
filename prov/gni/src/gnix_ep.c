@@ -849,8 +849,6 @@ DIRECT_FN STATIC ssize_t gnix_ep_trecvmsg(struct fid_ep *ep,
 					  const struct fi_msg_tagged *msg,
 					  uint64_t flags)
 {
-	uint64_t clean_flags;
-
 	const struct fi_msg _msg = {
 			.msg_iov = msg->msg_iov,
 			.desc = msg->desc,
@@ -860,7 +858,8 @@ DIRECT_FN STATIC ssize_t gnix_ep_trecvmsg(struct fid_ep *ep,
 			.data = msg->data
 	};
 
-	clean_flags = (flags & (GNIX_TRECVMSG_FLAGS)) | FI_TAGGED;
+	if (flags & ~GNIX_TRECVMSG_FLAGS)
+		return -FI_EINVAL;
 
 	/* From the fi_tagged man page regarding the use of FI_CLAIM:
 	 *
@@ -883,7 +882,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_trecvmsg(struct fid_ep *ep,
 	if ((flags & FI_DISCARD) && !(flags & (FI_PEEK | FI_CLAIM)))
 		return -FI_EINVAL;
 
-	return _ep_recvmsg(ep, &_msg, clean_flags, msg->tag,
+	return _ep_recvmsg(ep, &_msg, flags | FI_TAGGED, msg->tag,
 			msg->ignore);
 }
 
@@ -910,8 +909,6 @@ DIRECT_FN STATIC ssize_t gnix_ep_tsendmsg(struct fid_ep *ep,
 					  const struct fi_msg_tagged *msg,
 					  uint64_t flags)
 {
-	uint64_t clean_flags;
-
 	const struct fi_msg _msg = {
 			.msg_iov = msg->msg_iov,
 			.desc = msg->desc,
@@ -921,9 +918,10 @@ DIRECT_FN STATIC ssize_t gnix_ep_tsendmsg(struct fid_ep *ep,
 			.data = msg->data
 	};
 
-	clean_flags = (flags & GNIX_SENDMSG_FLAGS) | FI_TAGGED;
+	if (flags & ~(GNIX_SENDMSG_FLAGS))
+		return -FI_EINVAL;
 
-	return _ep_sendmsg(ep, &_msg, clean_flags, msg->tag);
+	return _ep_sendmsg(ep, &_msg, flags | FI_TAGGED, msg->tag);
 }
 
 DIRECT_FN STATIC ssize_t gnix_ep_tinject(struct fid_ep *ep, const void *buf,
