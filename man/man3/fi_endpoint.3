@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2017\-01\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -1140,14 +1140,17 @@ Transmit contexts are independent transmit queues.
 Ordering and synchronization between contexts are not defined.
 Conceptually a transmit context behaves similar to a send\-only
 endpoint.
-A transmit context may be configured with fewer attributes than the base
-endpoint, such as fewer capabilities, relaxed ordering, etc.
+A transmit context may be configured with fewer capabilities than the
+base endpoint and with different attributes (such as ordering
+requirements and inject size) than other contexts associated with the
+same scalable endpoint.
 Each transmit context has its own completion queue.
 The number of transmit contexts associated with an endpoint is specified
 during endpoint creation.
 .PP
 The fi_tx_context call is used to retrieve a specific context,
-identified by an index.
+identified by an index (see above for details on transmit context
+attributes).
 Providers may dynamically allocate contexts when fi_tx_context is
 called, or may statically create all contexts when fi_endpoint is
 invoked.
@@ -1166,8 +1169,10 @@ data.
 Ordering and synchronization between contexts are not guaranteed.
 Conceptually a receive context behaves similar to a receive\-only
 endpoint.
-A receive context may be configured with fewer attributes than the base
-endpoint, such as fewer capabilities, relaxed ordering, etc.
+A receive context may be configured with fewer capabilities than the
+base endpoint and with different attributes (such as ordering
+requirements and inject size) than other contexts associated with the
+same scalable endpoint.
 Each receive context has its own completion queue.
 The number of receive contexts associated with an endpoint is specified
 during endpoint creation.
@@ -1183,7 +1188,8 @@ Support for named receive contexts is coordinated with address vectors.
 See fi_av(3) and fi_rx_addr(3).
 .PP
 The fi_rx_context call is used to retrieve a specific context,
-identified by an index.
+identified by an index (see above for details on receive context
+attributes).
 Providers may dynamically allocate contexts when fi_rx_context is
 called, or may statically create all contexts when fi_endpoint is
 invoked.
@@ -1239,20 +1245,20 @@ Furthermore, an endpoint may use a shared context of one type, but a
 scalable set of contexts of the alternate type.
 .SS fi_stx_context
 .PP
-This call is used to open a shareable transmit context.
-See fi_tx_context call under the SCALABLE ENDPOINTS section for details
-on the transmit context attributes.
-The exception is that endpoints attached to a shared transmit context
-must use a subset of the transmit context attributes.
-This is opposite of the requirement for scalable endpoints.
+This call is used to open a shareable transmit context (see above for
+details on the transmit context attributes).
+Endpoints associated with a shared transmit context must use a subset of
+the transmit context\[aq]s attributes.
+Note that this is the reverse of the requirement for transmit contexts
+for scalable endpoints.
 .SS fi_srx_context
 .PP
-This allocates a shareable receive context.
-See fi_rx_context call under SCALABLE ENDPOINTS section for details on
-the receive context attributes.
-The exception is that endpoints attached to a shared receive context
-must use a subset of the receive context attributes.
-This is opposite of the requirement for scalable endpoints.
+This allocates a shareable receive context (see above for details on the
+receive context attributes).
+Endpoints associated with a shared receive context must use a subset of
+the receive context\[aq]s attributes.
+Note that this is the reverse of the requirement for receive contexts
+for scalable endpoints.
 .SH SOCKET ENDPOINTS
 .PP
 This section applies to endpoints of type FI_EP_SOCK_STREAM and
