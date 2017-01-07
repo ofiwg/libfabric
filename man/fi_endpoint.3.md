@@ -1083,16 +1083,19 @@ create transmit and receive contexts as described below.
 Transmit contexts are independent transmit queues.  Ordering and
 synchronization between contexts are not defined.  Conceptually a
 transmit context behaves similar to a send-only endpoint.  A transmit
-context may be configured with fewer attributes than the base endpoint,
-such as fewer capabilities, relaxed ordering, etc.  Each transmit context
-has its own completion queue.  The number of transmit contexts associated
-with an endpoint is specified during endpoint creation.
+context may be configured with fewer capabilities than the base
+endpoint and with different attributes (such as ordering requirements
+and inject size) than other contexts associated with the same scalable
+endpoint.  Each transmit context has its own completion queue.  The
+number of transmit contexts associated with an endpoint is specified
+during endpoint creation.
 
 The fi_tx_context call is used to retrieve a specific context,
-identified by an index.  Providers may dynamically allocate contexts
-when fi_tx_context is called, or may statically create all contexts
-when fi_endpoint is invoked.  By default, a transmit context inherits
-the properties of its associated endpoint.  However, applications may
+identified by an index (see above for details on transmit context
+attributes).  Providers may dynamically allocate contexts when
+fi_tx_context is called, or may statically create all contexts when
+fi_endpoint is invoked.  By default, a transmit context inherits the
+properties of its associated endpoint.  However, applications may
 request context specific attributes through the attr parameter.
 Support for per transmit context attributes is provider specific and
 not guaranteed.  Providers will return the actual attributes assigned
@@ -1103,11 +1106,12 @@ to the context through the attr parameter, if provided.
 Receive contexts are independent receive queues for receiving incoming
 data.  Ordering and synchronization between contexts are not
 guaranteed.  Conceptually a receive context behaves similar to a
-receive-only endpoint.  A receive context may be configured with
-fewer attributes than the base endpoint, such as fewer capabilities,
-relaxed ordering, etc.  Each receive context has its own completion queue.
-The number of receive contexts associated with an endpoint is specified
-during endpoint creation.
+receive-only endpoint.  A receive context may be configured with fewer
+capabilities than the base endpoint and with different attributes
+(such as ordering requirements and inject size) than other contexts
+associated with the same scalable endpoint.  Each receive context has
+its own completion queue.  The number of receive contexts associated
+with an endpoint is specified during endpoint creation.
 
 Receive contexts are often associated with steering flows, that
 specify which incoming packets targeting a scalable endpoint to
@@ -1119,10 +1123,11 @@ endpoint is created.  Support for named receive contexts is
 coordinated with address vectors.  See fi_av(3) and fi_rx_addr(3).
 
 The fi_rx_context call is used to retrieve a specific context,
-identified by an index.  Providers may dynamically allocate contexts
-when fi_rx_context is called, or may statically create all contexts
-when fi_endpoint is invoked.  By default, a receive context inherits
-the properties of its associated endpoint.  However, applications may
+identified by an index (see above for details on receive context
+attributes).  Providers may dynamically allocate contexts when
+fi_rx_context is called, or may statically create all contexts when
+fi_endpoint is invoked.  By default, a receive context inherits the
+properties of its associated endpoint.  However, applications may
 request context specific attributes through the attr parameter.
 Support for per receive context attributes is provider specific and
 not guaranteed.  Providers will return the actual attributes assigned
@@ -1168,20 +1173,19 @@ alternate type.
 
 ## fi_stx_context
 
-This call is used to open a shareable transmit context.  See
-fi_tx_context call under the SCALABLE ENDPOINTS section for details on
-the transmit context attributes.  The exception is that endpoints
-attached to a shared transmit context must use a subset of the
-transmit context attributes.  This is opposite of the requirement for
-scalable endpoints.
+This call is used to open a shareable transmit context (see above for
+details on the transmit context attributes).  Endpoints associated
+with a shared transmit context must use a subset of the transmit
+context's attributes.  Note that this is the reverse of the
+requirement for transmit contexts for scalable endpoints.
 
 ## fi_srx_context
 
-This allocates a shareable receive context.  See fi_rx_context call
-under SCALABLE ENDPOINTS section for details on the receive context
-attributes.  The exception is that endpoints attached to a shared
-receive context must use a subset of the receive context attributes.
-This is opposite of the requirement for scalable endpoints.
+This allocates a shareable receive context (see above for details on
+the receive context attributes).  Endpoints associated with a shared
+receive context must use a subset of the receive context's attributes.
+Note that this is the reverse of the requirement for receive contexts
+for scalable endpoints.
 
 # SOCKET ENDPOINTS
 
