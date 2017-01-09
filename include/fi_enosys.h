@@ -186,6 +186,7 @@ static struct fi_ops_domain X = {
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
+	.query_atomic = fi_no_query_atomic,
 };
 */
 int fi_no_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -204,6 +205,9 @@ int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr,
 		struct fid_stx **stx, void *context);
 int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		struct fid_ep **rx_ep, void *context);
+int fi_no_query_atomic(struct fid_ep *ep, enum fi_datatype datatype,
+		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
+
 
 /*
 static struct fi_ops_mr X = {
