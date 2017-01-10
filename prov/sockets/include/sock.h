@@ -224,7 +224,7 @@ struct sock_domain {
 	struct sock_eq *mr_eq;
 
 	enum fi_progress progress_mode;
-	struct ofi_util_mr *mr_heap;
+	struct ofi_mr_map mr_map;
 	struct sock_pe *pe;
 	struct dlist_entry dom_list_entry;
 	struct fi_domain_attr attr;

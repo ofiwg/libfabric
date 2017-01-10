@@ -146,7 +146,7 @@ struct rxd_domain {
 
 	struct dlist_entry ep_list;
 	struct dlist_entry cq_list;
-	struct ofi_util_mr *mr_heap;
+	struct ofi_mr_map mr_map;
 	fastlock_t mr_lock;
 };
 
