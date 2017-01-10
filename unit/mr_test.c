@@ -49,7 +49,7 @@ static char err_buf[512];
 static int mr_reg()
 {
 	int i;
-	int ret;
+	int ret = 0;
 	int testret;
 	struct fid_mr *mr;
 
