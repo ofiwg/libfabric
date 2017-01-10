@@ -129,7 +129,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA;
+	hints->mode = FI_LOCAL_MR | FI_RX_CQ_DATA;
 
 	ret = run();
 
