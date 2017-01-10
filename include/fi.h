@@ -172,6 +172,14 @@ int ofi_ep_bind_valid(struct fi_provider *prov, struct fid *bfid, uint64_t flags
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
 
+/*
+ * Address utility functions
+ */
+
+#ifndef AF_IB
+#define AF_IB 27
+#endif
+
 static inline int ofi_equals_ipaddr(struct sockaddr_in *addr1,
                              struct sockaddr_in *addr2)
 {
@@ -183,6 +191,20 @@ static inline int ofi_equals_sockaddr(struct sockaddr_in *addr1,
 {
         return (ofi_equals_ipaddr(addr1, addr2) &&
                 (addr1->sin_port == addr2->sin_port));
+}
+
+static inline int ofi_translate_addr_format(int family)
+{
+	switch (family) {
+	case AF_INET:
+		return FI_SOCKADDR_IN;
+	case AF_INET6:
+		return FI_SOCKADDR_IN6;
+	case AF_IB:
+		return FI_SOCKADDR_IB;
+	default:
+		return FI_FORMAT_UNSPEC;
+	}
 }
 
 /*
