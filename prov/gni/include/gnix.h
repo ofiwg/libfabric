@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
@@ -606,7 +606,6 @@ struct gnix_fid_sep {
 	enum fi_ep_type type;
 	struct fid_domain *domain;
 	struct fi_info *info;
-	uint64_t op_flags;
 	uint64_t caps;
 	uint32_t cdm_id_base;
 	struct fid_ep **ep_table;
