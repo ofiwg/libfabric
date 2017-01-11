@@ -285,7 +285,7 @@ static void sock_pe_report_mr_completion(struct sock_domain *domain,
 
 	for (i = 0; i < pe_entry->msg_hdr.dest_iov_len; i++) {
 		fastlock_acquire(&domain->lock);
-		mr = ofi_mr_retrieve(domain->mr_heap, pe_entry->pe.rx.rx_iov[i].iov.key);
+		mr = ofi_mr_get(&domain->mr_map, pe_entry->pe.rx.rx_iov[i].iov.key);
 		fastlock_release(&domain->lock);
 		if (!mr || (!mr->cq && !mr->cntr))
 			continue;

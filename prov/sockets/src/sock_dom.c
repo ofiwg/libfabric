@@ -162,7 +162,7 @@ static int sock_dom_close(struct fid *fid)
 
 	sock_pe_finalize(dom->pe);
 	fastlock_destroy(&dom->lock);
-	ofi_mr_close(dom->mr_heap);
+	ofi_mr_map_close(&dom->mr_map);
 	sock_dom_remove_from_list(dom);
 	free(dom);
 	return 0;
@@ -172,15 +172,13 @@ static int sock_mr_close(struct fid *fid)
 {
 	struct sock_domain *dom;
 	struct sock_mr *mr;
-	uint64_t mr_key;
 	int err = 0;
 
 	mr = container_of(fid, struct sock_mr, mr_fid.fid);
 	dom = mr->domain;
-	mr_key = mr->key;
 
 	fastlock_acquire(&dom->lock);
-	err = ofi_mr_erase(dom->mr_heap, mr_key);
+	err = ofi_mr_remove(&dom->mr_map, mr->key);
 	if (err != 0)
 		SOCK_LOG_ERROR("MR Erase error %d \n", err);
 
@@ -238,9 +236,8 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
 
 	fastlock_acquire(&domain->lock);
 
-	err = ofi_mr_retrieve_and_verify(domain->mr_heap, len, buf, key, access,
-                                        (void **)&mr);
-	if(err != 0) {
+	err = ofi_mr_verify(&domain->mr_map, buf, len, key, access, (void **) &mr);
+	if (err != 0) {
 		SOCK_LOG_ERROR("MR check failed\n");
 		mr = NULL;
 	}
@@ -286,10 +283,9 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr->domain = dom;
 	_mr->flags = flags;
 
-	ret = ofi_mr_insert(dom->mr_heap, attr, &key, _mr);
+	ret = ofi_mr_insert(&dom->mr_map, attr, &key, _mr);
 	if (ret != 0)
 		goto err;
-
 
 	_mr->mr_fid.key = _mr->key = key;
 	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
@@ -470,10 +466,10 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	else
 		sock_domain->attr = sock_domain_attr;
 
-	ret = ofi_mr_init(&sock_prov, sock_domain->attr.mr_mode, &sock_domain->mr_heap);
-	if (!ret) {
+	ret = ofi_mr_map_init(&sock_prov, sock_domain->attr.mr_mode,
+			      &sock_domain->mr_map);
+	if (!ret)
 		return ret;
-	}
 
 	sock_dom_add_to_list(sock_domain);
 	return 0;
