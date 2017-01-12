@@ -41,10 +41,6 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <limits.h>
-
-
-#include <stdio.h>
-#include <stdlib.h>
 #include <inttypes.h>
 
 #include "gnix_vc.h"
@@ -61,7 +57,12 @@
 #define dbg_printf(...) fprintf(stderr, __VA_ARGS__); fflush(stderr)
 #endif
 
+/*
+ * The multirecv tests fail when NUMEPS are > 2 (GitHub issue #1116).
+ * Increase this number when the issues is fixed.
+ */
 #define NUMEPS 2
+#define NUM_MULTIRECVS 5
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
@@ -115,7 +116,7 @@ void rdm_sr_setup_common_eps(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
-	target = malloc(BUF_SZ * 3); /* 3x BUF_SZ for multi recv testing */
+	target = malloc(BUF_SZ * NUM_MULTIRECVS);
 	assert(target);
 
 	dest_iov = malloc(sizeof(struct iovec) * IOV_CNT);
@@ -219,7 +220,7 @@ void rdm_sr_setup_common(void)
 	rdm_sr_setup_common_eps();
 
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_mr_reg(dom[i], target, 3 * BUF_SZ,
+		ret = fi_mr_reg(dom[i], target, NUM_MULTIRECVS * BUF_SZ,
 				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
 		cr_assert_eq(ret, 0);
 
@@ -413,7 +414,7 @@ void rdm_sr_init_data(char *buf, int len, char seed)
 	}
 }
 
-int rdm_sr_check_data(char *buf1, char *buf2, int len)
+static inline int rdm_sr_check_data(char *buf1, char *buf2, int len)
 {
 	int i;
 
@@ -428,7 +429,8 @@ int rdm_sr_check_data(char *buf1, char *buf2, int len)
 	return 1;
 }
 
-int rdm_sr_check_iov_data(struct iovec *iov_buf, char *buf, size_t cnt, size_t buf_len)
+static inline int rdm_sr_check_iov_data(struct iovec *iov_buf, char *buf,
+					size_t cnt, size_t buf_len)
 {
 	size_t i, j, cum_len = 0, len, iov_idx;
 
@@ -472,9 +474,9 @@ void rdm_sr_xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 	}
 }
 
-void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
-		      uint64_t flags, void *addr, size_t len,
-		      uint64_t data, bool buf_is_non_null)
+static inline void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
+				    uint64_t flags, void *addr, size_t len,
+				    uint64_t data, bool buf_is_non_null)
 {
 	cr_assert(cqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(cqe->flags == flags, "CQE flags mismatch");
@@ -499,8 +501,8 @@ void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 	cr_assert(cqe->tag == 0, "Invalid CQE tag");
 }
 
-void rdm_sr_check_cntrs(uint64_t s[], uint64_t r[], uint64_t s_e[],
-			uint64_t r_e[])
+static inline void rdm_sr_check_cntrs(uint64_t s[], uint64_t r[],
+				      uint64_t s_e[], uint64_t r_e[])
 {
 	int i = 0;
 	for (; i < NUMEPS; i++) {
@@ -544,7 +546,7 @@ void rdm_sr_lazy_dereg_disable(void)
 	}
 }
 
-int rdm_sr_check_canceled(struct fid_cq *cq)
+static inline int rdm_sr_check_canceled(struct fid_cq *cq)
 {
 	struct fi_cq_err_entry ee;
 
@@ -1881,25 +1883,34 @@ void do_multirecv(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 	uint64_t flags;
-	int nrecvs = 3;
+	uint64_t min_multi_recv;
+	size_t optlen;
+	const int nrecvs = NUM_MULTIRECVS;
+	const int dest_ep = NUMEPS-1;
 	uint64_t *expected_addrs;
 	bool *addr_recvd, found;
+	int sends_done = 0;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
+	ret = fi_getopt(&ep[dest_ep]->fid, FI_OPT_ENDPOINT,
+			FI_OPT_MIN_MULTI_RECV,
+			(void *)&min_multi_recv, &optlen);
+	cr_assert(ret == FI_SUCCESS, "fi_getopt");
+
 	/* Post receives first to force matching in SMSG callback. */
 	iov.iov_base = target;
-	iov.iov_len = len * nrecvs + 63;
+	iov.iov_len = len * nrecvs + (min_multi_recv-1);
 
 	msg.msg_iov = &iov;
 	msg.desc = (void **)rem_mr;
 	msg.iov_count = 1;
-	msg.addr = gni_addr[0];
+	msg.addr = FI_ADDR_UNSPEC;
 	msg.context = source;
 	msg.data = (uint64_t)source;
 
@@ -1914,30 +1925,41 @@ void do_multirecv(int len)
 				(uint64_t) (i * len);
 	}
 
-	sz = fi_recvmsg(ep[1], &msg, FI_MULTI_RECV);
+	sz = fi_recvmsg(ep[dest_ep], &msg, FI_MULTI_RECV);
 	cr_assert_eq(sz, 0);
 
-	for (i = 0; i < nrecvs; i++) {
-		sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1],
-			     target);
+	for (i = nrecvs-1; i >= 0; i--) {
+		int iep = i%(NUMEPS-1);
+
+		sz = fi_send(ep[iep], source, len,
+			     loc_mr[iep], gni_addr[dest_ep], target);
 		cr_assert_eq(sz, 0);
 	}
 
 	/* need to progress both CQs simultaneously for rendezvous */
 	do {
-		/* reset cqe */
-		s_cqe.op_context = s_cqe.buf = (void *) -1;
-		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
-		d_cqe.op_context = d_cqe.buf = (void *) -1;
-		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+		for (i = 0; i < nrecvs; i++) {
+			int iep = i%(NUMEPS-1);
 
-		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
-		if (ret == 1) {
-			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
-					 0, 0, 0, false);
-			s[0]++;
+			/* reset cqe */
+			s_cqe.op_context = s_cqe.buf = (void *) -1;
+			s_cqe.flags = s_cqe.len = UINT_MAX;
+			s_cqe.data = s_cqe.tag = UINT_MAX;
+			d_cqe.op_context = d_cqe.buf = (void *) -1;
+			d_cqe.flags = d_cqe.len = UINT_MAX;
+			d_cqe.data = d_cqe.tag = UINT_MAX;
+
+			ret = fi_cq_read(msg_cq[iep], &s_cqe, 1);
+			if (ret == 1) {
+				rdm_sr_check_cqe(&s_cqe, target,
+						 (FI_MSG|FI_SEND),
+						 0, 0, 0, false);
+				s[iep]++;
+				sends_done++;
+			}
 		}
-		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+
+		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
 		if (ret == 1) {
 			for (j = 0, found = false; j < nrecvs; j++) {
 				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
@@ -1954,13 +1976,13 @@ void do_multirecv(int len)
 							flags;
 			rdm_sr_check_cqe(&d_cqe, source,
 					 flags,
-					 (void *)expected_addrs[j],
+					 (void *) expected_addrs[j],
 					 len, 0, true);
 			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
 				  "Data mismatch");
-			r[1]++;
+			r[dest_ep]++;
 		}
-	} while (s[0] < nrecvs || r[1] < nrecvs);
+	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
 
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -1970,13 +1992,6 @@ void do_multirecv(int len)
 	dbg_printf("got context events!\n");
 }
 
-/*
- * for now disable multirecv tests since the current test assumes
- * recv-side CQ events arrive in order of buffer consumption
- * for multi recv.  But actually this isn't always the case.
- * We need a test which keeps track of each CQE on the receive
- * side.
- */
 Test(rdm_sr, multirecv, .disabled = false)
 {
 	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
@@ -1988,7 +2003,7 @@ Test(rdm_sr, multirecv_retrans, .disabled = false)
 	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
 
-void do_multirecv2(int len)
+void do_multirecv_send_first(int len)
 {
 	int i, j, ret;
 	ssize_t sz;
@@ -1998,12 +2013,21 @@ void do_multirecv2(int len)
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 	uint64_t flags;
-	int nrecvs = 3;
+	uint64_t min_multi_recv;
+	size_t optlen;
+	const int nrecvs = NUM_MULTIRECVS;
+	const int dest_ep = NUMEPS-1;
 	uint64_t *expected_addrs;
 	bool *addr_recvd, found;
+	int sends_done = 0;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
+
+	ret = fi_getopt(&ep[NUMEPS-1]->fid, FI_OPT_ENDPOINT,
+			FI_OPT_MIN_MULTI_RECV,
+			(void *)&min_multi_recv, &optlen);
+	cr_assert(ret == FI_SUCCESS, "fi_getopt");
 
 	addr_recvd = calloc(nrecvs, sizeof(bool));
 	cr_assert(addr_recvd);
@@ -2017,35 +2041,46 @@ void do_multirecv2(int len)
 	}
 
 	/* Post sends first to force matching in the _gnix_recv() path. */
-	for (i = 0; i < nrecvs; i++) {
-		sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1],
-			     target);
+	for (i = nrecvs-1; i >= 0; i--) {
+		sz = fi_send(ep[i%(NUMEPS-1)], source, len,
+			     loc_mr[i%(NUMEPS-1)], gni_addr[dest_ep], target);
 		cr_assert_eq(sz, 0);
 	}
 
 	/* Progress our sends. */
-	for (i = 0; i < 10000; i++) {
-		/* reset cqe */
-		s_cqe.op_context = s_cqe.buf = (void *) -1;
-		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
+	for (j = 0; j < 10000; j++) {
+		for (i = 0; i < nrecvs; i++) {
+			int iep = i%(NUMEPS-1);
 
-		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
-		if (ret == 1) {
-			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
-					 0, 0, 0, false);
-			s[0]++;
+			/* reset cqe */
+			s_cqe.op_context = s_cqe.buf = (void *) -1;
+			s_cqe.flags = s_cqe.len = UINT_MAX;
+			s_cqe.data = s_cqe.tag = UINT_MAX;
+			d_cqe.op_context = d_cqe.buf = (void *) -1;
+			d_cqe.flags = d_cqe.len = UINT_MAX;
+			d_cqe.data = d_cqe.tag = UINT_MAX;
+
+			ret = fi_cq_read(msg_cq[iep], &s_cqe, 1);
+			if (ret == 1) {
+				rdm_sr_check_cqe(&s_cqe, target,
+						 (FI_MSG|FI_SEND),
+						 0, 0, 0, false);
+				s[iep]++;
+				sends_done++;
+			}
+
 		}
-		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
 		cr_assert_eq(ret, -FI_EAGAIN);
 	}
 
 	iov.iov_base = target;
-	iov.iov_len = len * nrecvs + 63;
+	iov.iov_len = len * nrecvs + (min_multi_recv-1);
 
 	msg.msg_iov = &iov;
 	msg.desc = (void **)rem_mr;
 	msg.iov_count = 1;
-	msg.addr = gni_addr[0];
+	msg.addr = FI_ADDR_UNSPEC;
 	msg.context = source;
 	msg.data = (uint64_t)source;
 
@@ -2054,19 +2089,28 @@ void do_multirecv2(int len)
 
 	/* need to progress both CQs simultaneously for rendezvous */
 	do {
-		/* reset cqe */
-		s_cqe.op_context = s_cqe.buf = (void *) -1;
-		s_cqe.flags = s_cqe.len = s_cqe.data = s_cqe.tag = UINT_MAX;
-		d_cqe.op_context = d_cqe.buf = (void *) -1;
-		d_cqe.flags = d_cqe.len = d_cqe.data = d_cqe.tag = UINT_MAX;
+		for (i = 0; i < nrecvs; i++) {
+			int iep = i%(NUMEPS-1);
 
-		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
-		if (ret == 1) {
-			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
-					 0, 0, 0, false);
-			s[0]++;
+			/* reset cqe */
+			s_cqe.op_context = s_cqe.buf = (void *) -1;
+			s_cqe.flags = s_cqe.len = UINT_MAX;
+			s_cqe.data = s_cqe.tag = UINT_MAX;
+			d_cqe.op_context = d_cqe.buf = (void *) -1;
+			d_cqe.flags = d_cqe.len = UINT_MAX;
+			d_cqe.data = d_cqe.tag = UINT_MAX;
+
+			ret = fi_cq_read(msg_cq[iep], &s_cqe, 1);
+			if (ret == 1) {
+				rdm_sr_check_cqe(&s_cqe, target,
+						 (FI_MSG|FI_SEND),
+						 0, 0, 0, false);
+				s[iep]++;
+				sends_done++;
+			}
 		}
-		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+
+		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
 		if (ret == 1) {
 			for (j = 0, found = false; j < nrecvs; j++) {
 				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
@@ -2087,9 +2131,9 @@ void do_multirecv2(int len)
 					 len, 0, true);
 			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
 				  "Data mismatch");
-			r[1]++;
+			r[dest_ep]++;
 		}
-	} while (s[0] < nrecvs || r[1] < nrecvs);
+	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
 
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -2099,13 +2143,184 @@ void do_multirecv2(int len)
 	dbg_printf("got context events!\n");
 }
 
-Test(rdm_sr, multirecv2, .disabled = false)
+Test(rdm_sr, multirecv_send_first, .disabled = false)
 {
-	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
+	rdm_sr_xfer_for_each_size(do_multirecv_send_first, 1, BUF_SZ);
 }
 
-Test(rdm_sr, multirecv2_retrans, .disabled = false)
+Test(rdm_sr, multirecv_send_first_retrans, .disabled = false)
 {
 	rdm_sr_err_inject_enable();
-	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
+	rdm_sr_xfer_for_each_size(do_multirecv_send_first, 1, BUF_SZ);
+}
+
+void do_multirecv_trunc_last(int len)
+{
+	int i, j, ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct fi_cq_err_entry err_cqe;
+	struct iovec iov;
+	struct fi_msg msg = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+	uint64_t flags;
+	uint64_t min_multi_recv = len-1;
+	const int nrecvs = 2; /* first one will fit, second will overflow */
+	const int dest_ep = NUMEPS-1;
+	uint64_t *expected_addrs;
+	bool *addr_recvd, found;
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	/* set min multirecv length */
+	ret = fi_setopt(&ep[dest_ep]->fid, FI_OPT_ENDPOINT,
+			FI_OPT_MIN_MULTI_RECV,
+			(void *)&min_multi_recv, sizeof(size_t));
+	cr_assert(ret == FI_SUCCESS, "fi_setopt");
+
+	iov.iov_base = target;
+	iov.iov_len = len + min_multi_recv;
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)rem_mr;
+	msg.iov_count = 1;
+	msg.addr = FI_ADDR_UNSPEC;
+	msg.context = source;
+	msg.data = (uint64_t)source;
+
+	addr_recvd = calloc(nrecvs, sizeof(bool));
+	cr_assert(addr_recvd);
+
+	expected_addrs = calloc(nrecvs, sizeof(uint64_t));
+	cr_assert(expected_addrs);
+
+	for (i = 0; i < nrecvs; i++) {
+		expected_addrs[i] = (uint64_t)target +
+				(uint64_t) (i * len);
+	}
+
+	sz = fi_recvmsg(ep[dest_ep], &msg, FI_MULTI_RECV);
+	cr_assert_eq(sz, 0);
+
+	/* Send first one... */
+	sz = fi_send(ep[0], source, len, loc_mr[0],
+		     gni_addr[dest_ep], target);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = UINT_MAX;
+		s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = UINT_MAX;
+		d_cqe.data = d_cqe.tag = UINT_MAX;
+
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			rdm_sr_check_cqe(&s_cqe, target,
+					 (FI_MSG|FI_SEND),
+					 0, 0, 0, false);
+			s[0]++;
+		}
+
+		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
+		if (ret == 1) {
+			for (j = 0, found = false; j < nrecvs; j++) {
+				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
+					cr_assert(addr_recvd[j] == false,
+						  "address already received");
+					addr_recvd[j] = true;
+					found = true;
+					break;
+				}
+			}
+			cr_assert(found == true, "Address not found");
+			flags = FI_MSG | FI_RECV; fflush(stdout);
+			rdm_sr_check_cqe(&d_cqe, source,
+					 flags,
+					 (void *) expected_addrs[j],
+					 len, 0, true);
+			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
+				  "Data mismatch");
+			r[dest_ep]++;
+		}
+	} while (s[0] != 1 || r[dest_ep] != 1);
+
+	/* ...second one will overflow */
+	sz = fi_send(ep[0], source, min_multi_recv+1, loc_mr[0],
+		     gni_addr[dest_ep], target);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		/* reset cqe */
+		s_cqe.op_context = s_cqe.buf = (void *) -1;
+		s_cqe.flags = s_cqe.len = UINT_MAX;
+		s_cqe.data = s_cqe.tag = UINT_MAX;
+		d_cqe.op_context = d_cqe.buf = (void *) -1;
+		d_cqe.flags = d_cqe.len = UINT_MAX;
+		d_cqe.data = d_cqe.tag = UINT_MAX;
+
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			rdm_sr_check_cqe(&s_cqe, target,
+					 (FI_MSG|FI_SEND),
+					 0, 0, 0, false);
+			s[0]++;
+		}
+
+		/* Should not return a CQ event */
+		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
+		cr_assert_eq(ret, 0, "fi_cq_read should return 0");
+
+		ret = fi_cq_readerr(msg_cq[1], &err_cqe, 0);
+		if (ret == 1) {
+			cr_assert((uint64_t)err_cqe.op_context ==
+				  (uint64_t)target,
+				  "Bad error context");
+			cr_assert(err_cqe.flags ==
+				  (FI_MSG | FI_SEND | FI_MULTI_RECV));
+			cr_assert(err_cqe.len == min_multi_recv,
+				  "Bad error len");
+			cr_assert(err_cqe.buf == (void *) expected_addrs[1],
+				  "Bad error buf");
+			cr_assert(err_cqe.data == 0, "Bad error data");
+			cr_assert(err_cqe.tag == 0, "Bad error tag");
+			cr_assert(err_cqe.olen == 1, "Bad error olen");
+			cr_assert(err_cqe.err == FI_ETRUNC, "Bad error errno");
+			cr_assert(err_cqe.prov_errno == 0, "Bad prov errno");
+			cr_assert(err_cqe.err_data == NULL,
+				  "Bad error provider data");
+			s_e[0]++;
+		}
+
+	} while (s[0] != 2 || r_e[dest_ep] != 1);
+
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+	free(addr_recvd);
+	free(expected_addrs);
+
+	dbg_printf("got context events!\n");
+}
+
+/*
+ * These two tests should be enabled when multirecv generates errors
+ * for truncated message (GitHub issue #1119).  Also, the initial
+ * message size of 1 below might change depending on whether 0 is a
+ * valid value for FI_OPT_MIN_MULTI_RECV (Github issue #1120)
+ */
+Test(rdm_sr, multirecv_trunc_last, .disabled = true)
+{
+	rdm_sr_xfer_for_each_size(do_multirecv_trunc_last, 1, BUF_SZ);
+}
+
+Test(rdm_sr, multirecv_trunc_last_retrans, .disabled = true)
+{
+	rdm_sr_err_inject_enable();
+	rdm_sr_xfer_for_each_size(do_multirecv_trunc_last, 1, BUF_SZ);
 }
