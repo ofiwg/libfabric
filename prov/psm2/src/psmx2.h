@@ -88,6 +88,8 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_SEND | FI_RECV)
 
+#define PSMX2_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
+
 #define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX2_INJECT_SIZE	(64)
 #define PSMX2_MSG_ORDER		FI_ORDER_SAS

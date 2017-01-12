@@ -378,6 +378,13 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 					FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO);
 				goto err_out;
 			}
+
+			if (hints->domain_attr->caps & FI_SHARED_AV) {
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"hints->domain_attr->caps=%lx, shared AV is unsupported\n",
+					hints->domain_attr->caps);
+				goto err_out;
+			}
 		}
 
 		if (hints->ep_attr) {
@@ -502,6 +509,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->max_ep_rx_ctx = 1;
 	psmx_info->domain_attr->max_ep_stx_ctx = 65535;
 	psmx_info->domain_attr->max_ep_srx_ctx = 0;
+	psmx_info->domain_attr->caps = PSMX_DOM_CAPS;
+	psmx_info->domain_attr->mode = 0;
 
 	psmx_info->next = NULL;
 	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
