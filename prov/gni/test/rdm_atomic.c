@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -430,10 +430,10 @@ void do_invalid_atomic(enum fi_datatype dt, enum fi_op op)
 			       loc_mr[0], gni_addr[1], (uint64_t)target,
 			       mr_key[1], dt, op, target);
 
-		cr_assert(sz == -FI_ENOENT);
+		cr_assert(sz == -FI_EOPNOTSUPP);
 
 		sz = fi_atomicvalid(ep[0], dt, op, &count);
-		cr_assert(sz == -FI_ENOENT, "fi_atomicvalid() succeeded\n");
+		cr_assert(sz == -FI_EOPNOTSUPP, "fi_atomicvalid() succeeded\n");
 	} else {
 		sz = fi_atomicvalid(ep[0], dt, op, &count);
 		cr_assert(!sz, "fi_atomicvalid() failed\n");
@@ -2042,10 +2042,10 @@ void do_invalid_fetch_atomic(enum fi_datatype dt, enum fi_op op)
 				     source, loc_mr[0],
 				     gni_addr[1], (uint64_t)target, mr_key[1],
 				     dt, op, target);
-		cr_assert(sz == -FI_ENOENT);
+		cr_assert(sz == -FI_EOPNOTSUPP);
 
 		sz = fi_fetch_atomicvalid(ep[0], dt, op, &count);
-		cr_assert(sz == -FI_ENOENT, "fi_atomicvalid() succeeded\n");
+		cr_assert(sz == -FI_EOPNOTSUPP, "fi_atomicvalid() succeeded\n");
 	} else {
 		sz = fi_fetch_atomicvalid(ep[0], dt, op, &count);
 		cr_assert(!sz, "fi_atomicvalid() failed\n");
@@ -3735,10 +3735,10 @@ void do_invalid_compare_atomic(enum fi_datatype dt, enum fi_op op)
 				       source, loc_mr,
 				       gni_addr[1], (uint64_t)target, mr_key[1],
 				       dt, op, target);
-		cr_assert(sz == -FI_ENOENT);
+		cr_assert(sz == -FI_EOPNOTSUPP);
 
 		sz = fi_compare_atomicvalid(ep[0], dt, op, &count);
-		cr_assert(sz == -FI_ENOENT, "fi_atomicvalid() succeeded\n");
+		cr_assert(sz == -FI_EOPNOTSUPP, "fi_atomicvalid() succeeded\n");
 	} else {
 		sz = fi_compare_atomicvalid(ep[0], dt, op, &count);
 		cr_assert(!sz, "fi_atomicvalid() failed\n");

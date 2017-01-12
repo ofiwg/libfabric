@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1249,7 +1249,7 @@ gnix_sep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 
 	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_AMO) < 0)
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
@@ -1299,7 +1299,7 @@ gnix_sep_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 		return -FI_EINVAL;
 
 	if (_gnix_atomic_cmd(msg->datatype, msg->op, GNIX_FAB_RQ_AMO) < 0)
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
@@ -1325,7 +1325,7 @@ gnix_sep_atomic_inject(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 
 	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_AMO) < 0)
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
@@ -1365,7 +1365,7 @@ gnix_sep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	uint64_t flags;
 
 	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_FAMO) < 0)
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;
@@ -1427,7 +1427,7 @@ gnix_sep_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 		return -FI_EINVAL;
 
 	if (_gnix_atomic_cmd(msg->datatype, msg->op, GNIX_FAB_RQ_FAMO) < 0)
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
@@ -1458,7 +1458,7 @@ gnix_sep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 
 	if (_gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_CAMO) < 0)
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
@@ -1526,7 +1526,7 @@ gnix_sep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 		return -FI_EINVAL;
 
 	if (_gnix_atomic_cmd(msg->datatype, msg->op, GNIX_FAB_RQ_CAMO) < 0)
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -977,7 +977,7 @@ DIRECT_FN int gnix_ep_atomic_valid(struct fid_ep *ep,
 		*count = 1;
 
 	return _gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_AMO) >= 0 ?
-		0 : -FI_ENOENT;
+		0 : -FI_EOPNOTSUPP;
 }
 
 DIRECT_FN int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
@@ -988,7 +988,7 @@ DIRECT_FN int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
 		*count = 1;
 
 	return _gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_FAMO) >= 0 ?
-		0 : -FI_ENOENT;
+		0 : -FI_EOPNOTSUPP;
 }
 
 DIRECT_FN int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
@@ -999,7 +999,7 @@ DIRECT_FN int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
 		*count = 1;
 
 	return _gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_CAMO) >= 0 ?
-		0 : -FI_ENOENT;
+		0 : -FI_EOPNOTSUPP;
 }
 
 size_t
@@ -1063,7 +1063,7 @@ gnix_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 	uint64_t flags;
 
 	if (gnix_ep_atomic_valid(ep, datatype, op, NULL))
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;
@@ -1114,7 +1114,7 @@ gnix_ep_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	struct gnix_fid_ep *gnix_ep;
 
 	if (gnix_ep_atomic_valid(ep, msg->datatype, msg->op, NULL))
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;
@@ -1140,7 +1140,7 @@ gnix_ep_atomic_inject(struct fid_ep *ep, const void *buf, size_t count,
 	uint64_t flags;
 
 	if (gnix_ep_atomic_valid(ep, datatype, op, NULL))
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;
@@ -1183,7 +1183,7 @@ gnix_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	uint64_t flags;
 
 	if (gnix_ep_fetch_atomic_valid(ep, datatype, op, NULL))
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;
@@ -1242,7 +1242,7 @@ gnix_ep_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	struct gnix_fid_ep *gnix_ep;
 
 	if (gnix_ep_fetch_atomic_valid(ep, msg->datatype, msg->op, NULL))
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;
@@ -1274,7 +1274,7 @@ gnix_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	uint64_t flags;
 
 	if (gnix_ep_cmp_atomic_valid(ep, datatype, op, NULL))
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;
@@ -1350,7 +1350,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_atomic_compwritemsg(struct fid_ep *ep,
 	struct gnix_fid_ep *gnix_ep;
 
 	if (gnix_ep_cmp_atomic_valid(ep, msg->datatype, msg->op, NULL))
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 
 	if (!ep)
 		return -FI_EINVAL;

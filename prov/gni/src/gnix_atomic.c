@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -360,16 +360,16 @@ int _gnix_atomic_cmd(enum fi_datatype dt, enum fi_op op,
 	      (fr_type == GNIX_FAB_RQ_NAMO_AX_S) ||
 	      (fr_type == GNIX_FAB_RQ_NAMO_FAX_S)) &&
 	    (dt >= FI_DATATYPE_LAST || op >= FI_ATOMIC_OP_LAST)) {
-		return -FI_ENOENT;
+		return -FI_EOPNOTSUPP;
 	}
 
 	switch(fr_type) {
 	case GNIX_FAB_RQ_AMO:
-		return __gnix_amo_cmds[op][dt] ?: -FI_ENOENT;
+		return __gnix_amo_cmds[op][dt] ?: -FI_EOPNOTSUPP;
 	case GNIX_FAB_RQ_FAMO:
-		return __gnix_fetch_amo_cmds[op][dt] ?: -FI_ENOENT;
+		return __gnix_fetch_amo_cmds[op][dt] ?: -FI_EOPNOTSUPP;
 	case GNIX_FAB_RQ_CAMO:
-		return __gnix_cmp_amo_cmds[op][dt] ?: -FI_ENOENT;
+		return __gnix_cmp_amo_cmds[op][dt] ?: -FI_EOPNOTSUPP;
 	case GNIX_FAB_RQ_NAMO_AX:
 		return GNI_FMA_ATOMIC2_AX;
 	case GNIX_FAB_RQ_NAMO_AX_S:
@@ -382,7 +382,7 @@ int _gnix_atomic_cmd(enum fi_datatype dt, enum fi_op op,
 		break;
 	}
 
-	return -FI_ENOENT;
+	return -FI_EOPNOTSUPP;
 }
 
 int _gnix_amo_post_req(void *data)
