@@ -158,11 +158,11 @@ static void psmx2_av_post_completion(struct psmx2_fid_av *av, void *context,
 	}
 }
 
-static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
-			       psm2_epid_t *epids, int *mask,
-			       psm2_error_t *errors,
-			       psm2_epaddr_t *epaddrs,
-			       void *context)
+static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
+			        psm2_epid_t *epids, int *mask,
+			        psm2_error_t *errors,
+			        psm2_epaddr_t *epaddrs,
+			        void *context)
 {
 	int i;
 	psm2_epconn_t epconn;
@@ -186,12 +186,15 @@ static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
 			epaddrs, psmx2_conn_timeout(count));
 
 	for (i=0; i<count; i++){
-		if (!mask[i])
+		if (!mask[i]) {
+			errors[i] = PSM2_OK;
 			continue;
+		}
 
 		if (errors[i] == PSM2_OK ||
 		    errors[i] == PSM2_EPID_ALREADY_CONNECTED) {
 			psmx2_set_epaddr_context(av->domain, epids[i], epaddrs[i]);
+			errors[i] = PSM2_OK;
 		} else {
 			/* If duplicated addrs are passed to psm2_ep_connect(),
 			 * all but one will fail with error "Endpoint could not
@@ -203,6 +206,7 @@ static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
 				if (epaddr_context &&
 				    epaddr_context->epid == epids[i]) {
 					epaddrs[i] = epconn.addr;
+					errors[i] = PSM2_OK;
 					continue;
 				}
 			}
@@ -239,7 +243,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	int *mask;
 	const struct psmx2_ep_name *names = addr;
 	int error_count;
-	int i;
+	int i, ret;
 
 	if (count && !addr) {
 		FI_INFO(&psmx2_prov, FI_LOG_AV,
@@ -272,11 +276,8 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 		return -FI_ENOMEM;
 	}
 
-	error_count = psmx2_av_connet_eps(av_priv, count, epids, mask,
-					  errors, epaddrs, context);
-
-	free(mask);
-	free(errors);
+	error_count = psmx2_av_connect_eps(av_priv, count, epids, mask,
+					   errors, epaddrs, context);
 
 	if (fi_addr) {
 		for (i=0; i<count; i++) {
@@ -292,12 +293,21 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	if (av_priv->type == FI_AV_TABLE)
 		av_priv->last += count;
 
-	if (!(av_priv->flags & FI_EVENT))
-		return count - error_count;
+	if (av_priv->flags & FI_EVENT) {
+		psmx2_av_post_completion(av_priv, context, count - error_count, 0);
+		ret = 0;
+	} else {
+		if (flags & FI_SYNC_ERR) {
+			int *fi_errors = context;
+			for (i=0; i<count; i++)
+				fi_errors[i] = psmx2_errno(errors[i]);
+		}
+		ret = count - error_count;
+	}
 
-	psmx2_av_post_completion(av_priv, context, count - error_count, 0);
-
-	return 0;
+	free(mask);
+	free(errors);
+	return ret;
 }
 
 static int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
