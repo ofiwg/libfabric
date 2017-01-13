@@ -338,7 +338,7 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		name.epid = av_priv->epids[idx];
 		name.vlane = av_priv->vlanes[idx];
 	} else {
-		context = psm2_epaddr_getctxt((void *)fi_addr);
+		context = psm2_epaddr_getctxt(PSMX2_ADDR_TO_EP(fi_addr));
 		name.epid = context->epid;
 		name.vlane = PSMX2_ADDR_TO_VL(fi_addr);
 	}
