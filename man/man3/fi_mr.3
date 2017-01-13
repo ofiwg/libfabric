@@ -1,4 +1,4 @@
-.TH "fi_mr" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2017\-01\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr \- Memory region operations
@@ -270,7 +270,9 @@ The type of events tracked against the memory region is based on the
 bitwise OR of the following flags.
 .PP
 \f[I]FI_REMOTE_WRITE\f[] : Generates an event whenever a remote RMA
-write or atomic operation modify the memory region.
+write or atomic operation modifies the memory region.
+Use of this flag requires that the endpoint through which the MR is
+accessed be created with the FI_RMA_EVENT capability.
 .SH FLAGS
 .PP
 Flags are reserved for future use and must be 0.
