@@ -33,7 +33,7 @@
 
 int fi_bgq_set_default_info()
 {
-	struct fi_info *fi, *prev_fi;
+	struct fi_info *fi;
 	uint32_t ppn = Kernel_ProcessCount();
 
 	/*
@@ -124,16 +124,17 @@ int fi_bgq_set_default_info()
 		.prov_version	= FI_BGQ_PROVIDER_VERSION
 	};
 
-	fi->caps		= FI_RMA | FI_ATOMIC |
-					FI_NAMED_RX_CTX | FI_TRANSMIT_COMPLETE;
+	fi->caps		= FI_BGQ_DEFAULT_CAPS;
 	fi->mode		= FI_ASYNC_IOV;
+	fi->mode		|= (FI_CONTEXT);
+	fi->mode		&= (~FI_LOCAL_MR);
+	fi->mode		&= (~FI_MSG_PREFIX);
+
 	fi->addr_format		= FI_ADDR_BGQ;
 	fi->src_addrlen		= 24; // includes null
 	fi->dest_addrlen	= 24; // includes null
-
-	prev_fi = fi;
-	fi = fi_dupinfo(prev_fi);
-	prev_fi->next = fi;
+	fi->dest_addr = NULL;
+	fi->next = NULL;
 
 	return 0;
 }
