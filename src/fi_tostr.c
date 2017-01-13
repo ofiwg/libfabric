@@ -415,16 +415,18 @@ static void fi_tostr_av_type(char *buf, enum fi_av_type type)
 	}
 }
 
-static void fi_tostr_mr_mode(char *buf, enum fi_mr_mode type)
+static void fi_tostr_mr_mode(char *buf, int mr_mode)
 {
-	switch (type) {
-	CASEENUMSTR(FI_MR_UNSPEC);
-	CASEENUMSTR(FI_MR_BASIC);
-	CASEENUMSTR(FI_MR_SCALABLE);
-	default:
-		strcatf(buf, "Unknown");
-		break;
-	}
+	IFFLAGSTR(mr_mode, FI_MR_BASIC);
+	IFFLAGSTR(mr_mode, FI_MR_SCALABLE);
+	IFFLAGSTR(mr_mode, FI_MR_LOCAL);
+	IFFLAGSTR(mr_mode, FI_MR_RAW);
+	IFFLAGSTR(mr_mode, FI_MR_VIRT_ADDR);
+	IFFLAGSTR(mr_mode, FI_MR_ALLOCATED);
+	IFFLAGSTR(mr_mode, FI_MR_PROV_KEY);
+	IFFLAGSTR(mr_mode, FI_MR_MMU_NOTIFY);
+
+	fi_remove_comma(buf);
 }
 
 static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
@@ -456,9 +458,9 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s%sav_type: ", prefix, TAB);
 	fi_tostr_av_type(buf, attr->av_type);
 	strcatf(buf, "\n");
-	strcatf(buf, "%s%smr_mode: ", prefix, TAB);
+	strcatf(buf, "%s%smr_mode: [ ", prefix, TAB);
 	fi_tostr_mr_mode(buf, attr->mr_mode);
-	strcatf(buf, "\n");
+	strcatf(buf, " ]\n");
 
 	strcatf(buf, "%s%smr_key_size: %zd\n", prefix, TAB, attr->mr_key_size);
 	strcatf(buf, "%s%scq_data_size: %zd\n", prefix, TAB, attr->cq_data_size);

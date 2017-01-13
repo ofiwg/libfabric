@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -181,6 +181,7 @@ enum {
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
 #define FI_ADDR_NOTAVAIL	((uint64_t) -1)
+#define FI_KEY_NOTAVAIL		((uint64_t) -1)
 #define FI_SHARED_CONTEXT	(-(size_t)1)
 typedef uint64_t		fi_addr_t;
 
@@ -190,11 +191,18 @@ enum fi_av_type {
 	FI_AV_TABLE
 };
 
+/* Named enum for backwards compatibility */
 enum fi_mr_mode {
 	FI_MR_UNSPEC,
-	FI_MR_BASIC,
-	FI_MR_SCALABLE
+	FI_MR_BASIC,	     /* (1 << 0) */
+	FI_MR_SCALABLE,	     /* (1 << 1) */
 };
+#define FI_MR_LOCAL		(1 << 2)
+#define FI_MR_RAW		(1 << 3)
+#define FI_MR_VIRT_ADDR		(1 << 4)
+#define FI_MR_ALLOCATED		(1 << 5)
+#define FI_MR_PROV_KEY		(1 << 6)
+#define FI_MR_MMU_NOTIFY	(1 << 7)
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
@@ -319,7 +327,7 @@ struct fi_domain_attr {
 	enum fi_progress	data_progress;
 	enum fi_resource_mgmt	resource_mgmt;
 	enum fi_av_type		av_type;
-	enum fi_mr_mode		mr_mode;
+	int			mr_mode;
 	size_t			mr_key_size;
 	size_t			cq_data_size;
 	size_t			cq_cnt;
@@ -451,6 +459,21 @@ struct fi_alias {
 	uint64_t		flags;
 };
 
+struct fi_mr_raw_attr {
+	uint64_t	flags;
+	uint64_t	*base_addr;
+	uint8_t		*raw_key;
+	size_t		*key_size;
+};
+
+struct fi_mr_map_raw {
+	uint64_t	flags;
+	uint64_t	base_addr;
+	uint8_t		*raw_key;
+	size_t		key_size;
+	uint64_t	*key;
+};
+
 /* control commands */
 enum {
 	FI_GETFIDFLAG,		/* uint64_t flags */
@@ -461,6 +484,9 @@ enum {
 	FI_GETWAIT,		/* void * wait object */
 	FI_ENABLE,		/* NULL */
 	FI_BACKLOG,		/* integer * */
+	FI_GET_RAW_MR,		/* fi_mr_raw_attr */
+	FI_MAP_RAW_MR,		/* fi_mr_map_raw */
+	FI_UNMAP_KEY,		/* uint64_t key */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)
