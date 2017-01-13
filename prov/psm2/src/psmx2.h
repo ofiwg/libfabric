@@ -391,7 +391,9 @@ struct psmx2_cq_event {
 		struct fi_cq_err_entry		err;
 	} cqe;
 	int error;
+	int source_is_valid;
 	fi_addr_t source;
+	struct psmx2_fid_av *source_av;
 	struct slist_entry list_entry;
 };
 
@@ -408,6 +410,7 @@ struct psmx2_fid_cq {
 	struct util_wait		*wait;
 	int				wait_cond;
 	int				wait_is_local;
+	uint64_t			error_data[4];
 };
 
 enum psmx2_triggered_op {
@@ -843,6 +846,21 @@ static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr)
 	psmx2_cntr_check_trigger(cntr);
 	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
+}
+
+fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source);
+
+static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name *name)
+{
+	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
+
+	/*
+	 * FIXME: This is a hack based on the fact that the internal representation of
+	 * epaddr has epid as the first field. Ideally PSM2 would provide a utility
+	 * function to retrieve epid from epaddr.
+	 */
+	name->epid = *(psm2_epid_t *)epaddr;
+	name->vlane = PSMX2_ADDR_TO_VL(source);
 }
 
 static inline void psmx2_progress(struct psmx2_fid_domain *domain)

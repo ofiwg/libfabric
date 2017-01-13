@@ -39,7 +39,7 @@ static inline double psmx2_conn_timeout(int sec)
 {
 	if (sec < PSMX2_MIN_CONN_TIMEOUT)
 		return PSMX2_MIN_CONN_TIMEOUT * 1e9;
-	
+
 	if (sec > PSMX2_MAX_CONN_TIMEOUT)
 		return PSMX2_MAX_CONN_TIMEOUT * 1e9;
 
@@ -127,7 +127,7 @@ static int psmx2_av_check_table_size(struct psmx2_fid_av *av, size_t count)
 
 	av->epaddrs = new_epaddrs;
 	new_vlanes = realloc(av->vlanes, new_count * sizeof(*new_vlanes));
-	if (!new_vlanes) 
+	if (!new_vlanes)
 		return -FI_ENOMEM;
 
 	av->vlanes = new_vlanes;
@@ -230,7 +230,7 @@ static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 
 	return error_count;
 }
- 
+
 static int psmx2_av_insert(struct fid_av *av, const void *addr,
 			   size_t count, fi_addr_t *fi_addr,
 			   uint64_t flags, void *context)
@@ -350,6 +350,31 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	*addrlen = sizeof(name);
 
 	return 0;
+}
+
+fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
+{
+	struct psmx2_epaddr_context *context;
+	psm2_epaddr_t epaddr;
+	int vlane;
+	int i;
+
+	epaddr = PSMX2_ADDR_TO_EP(source);
+	vlane = PSMX2_ADDR_TO_VL(source);
+
+	context = psm2_epaddr_getctxt(epaddr);
+	if (!context)
+		return FI_ADDR_NOTAVAIL;
+
+	if (av->type == FI_AV_MAP)
+		return source;
+
+	for (i = av->last - 1; i >= 0; i--) {
+		if (av->epaddrs[i] == epaddr && av->vlanes[i] == vlane)
+			return (fi_addr_t)i;
+	}
+
+	return FI_ADDR_NOTAVAIL;
 }
 
 static const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
