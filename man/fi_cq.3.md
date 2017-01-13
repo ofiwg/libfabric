@@ -540,7 +540,7 @@ operation.  The following completion flags are defined.
   completed.  This flag may be combined with an FI_RMA or FI_ATOMIC flag.
 
 *FI_REMOTE_WRITE*
-: Indicates that a remotely initiated RMA or atomic read operation has
+: Indicates that a remotely initiated RMA or atomic write operation has
   completed.  This flag may be combined with an FI_RMA or FI_ATOMIC flag.
 
 *FI_REMOTE_CQ_DATA*
