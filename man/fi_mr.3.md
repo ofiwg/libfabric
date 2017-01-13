@@ -279,7 +279,9 @@ memory region is based on the bitwise OR of the following flags.
 
 *FI_REMOTE_WRITE*
 : Generates an event whenever a remote RMA write or atomic operation
-  modify the memory region.
+  modifies the memory region.  Use of this flag requires that the endpoint
+  through which the MR is accessed be created with the FI_RMA_EVENT
+  capability.
 
 # FLAGS
 
