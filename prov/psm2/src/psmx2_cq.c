@@ -152,6 +152,7 @@ out:
 
 static struct psmx2_cq_event *
 psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
+				  struct psmx2_fid_av *av,
 				  psm2_mq_status2_t *psm2_status,
 				  uint64_t data,
 				  struct psmx2_cq_event *event_in,
@@ -319,10 +320,23 @@ out:
 		uint8_t vlane = PSMX2_TAG32_GET_SRC(psm2_status->msg_tag.tag2);
 		fi_addr_t source = PSMX2_EP_TO_ADDR(psm2_status->msg_peer, vlane);
 		if (event == event_in) {
-			if (src_addr)
-				*src_addr = source;
+			if (src_addr) {
+				*src_addr = psmx2_av_translate_source(av, source);
+				if (*src_addr == FI_ADDR_NOTAVAIL) {
+					event = psmx2_cq_alloc_event(cq);
+					if (!event)
+						return NULL;
+
+					event->error = -FI_EADDRNOTAVAIL;
+					event->cqe = event_in->cqe;
+					event->cqe.err.err_data = &cq->error_data;
+					psmx2_get_source_name(source, (void *)&cq->error_data);
+				}
+			}
 		} else {
+			event->source_is_valid = 1;
 			event->source = source;
+			event->source_av = av;
 		}
 	}
 
@@ -454,7 +468,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				  mr = PSMX2_CTXT_USER(fi_context);
 				  if (req->ep->recv_cq && (req->cq_flags & FI_REMOTE_CQ_DATA)) {
 					event = psmx2_cq_create_event_from_status(
-							req->ep->recv_cq,
+							req->ep->recv_cq, req->ep->av,
 							&psm2_status, req->write.data,
 							(req->ep->recv_cq == cq) ?
 								event_buffer : NULL,
@@ -559,7 +573,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			if (tmp_cq) {
 				event = psmx2_cq_create_event_from_status(
-						tmp_cq, &psm2_status, 0,
+						tmp_cq, tmp_ep->av, &psm2_status, 0,
 						(tmp_cq == cq) ? event_buffer : NULL, count,
 						src_addr);
 				if (!event)
@@ -630,6 +644,7 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	struct psmx2_cq_event *event;
 	int ret;
 	ssize_t read_count;
+	fi_addr_t source;
 	int i;
 
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
@@ -655,10 +670,23 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		event = psmx2_cq_dequeue_event(cq_priv);
 		if (event) {
 			if (!event->error) {
-				memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
-				if (src_addr)
-					*src_addr = event->source;
+				if (src_addr && event->source_is_valid) {
+					source = psmx2_av_translate_source(event->source_av,
+									   event->source);
+					if (source == FI_ADDR_NOTAVAIL) {
+						psmx2_get_source_name(event->source, (void *)&cq_priv->error_data);
+						event->cqe.err.err_data = &cq_priv->error_data;
+						event->error = -FI_EADDRNOTAVAIL;
+						cq_priv->pending_error = event;
+						if (!read_count)
+							read_count = -FI_EAVAIL;
+						break;
+					}
 
+					*src_addr = source;
+				}
+
+				memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
 				psmx2_cq_free_event(cq_priv, event);
 
 				read_count++;

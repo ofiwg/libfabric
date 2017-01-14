@@ -145,7 +145,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	psm_error_t *errors;
 	int error_count = 0;
 	int *mask;
-	int i, j;
+	int i, j, ret;
 	fi_addr_t *result = NULL;
 	struct psmx_epaddr_context *epaddr_context;
 
@@ -204,13 +204,16 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
 
 	for (i=0; i<count; i++){
-		if (!mask[i])
+		if (!mask[i]) {
+			errors[i] = PSM_OK;
 			continue;
+		}
 
 		if (errors[i] == PSM_OK || errors[i] == PSM_EPID_ALREADY_CONNECTED) {
 			psmx_set_epaddr_context(av_priv->domain,
 						((psm_epid_t *) addr)[i],
 						((psm_epaddr_t *) fi_addr)[i]);
+			errors[i] = PSM_OK;
 		} else {
 			psm_epconn_t epconn;
 
@@ -222,6 +225,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				epaddr_context = psm_epaddr_getctxt(epconn.addr);
 				if (epaddr_context && epaddr_context->epid  == ((psm_epid_t *) addr)[i]) {
 					((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
+					errors[i] = PSM_OK;
 					continue;
 				}
 			}
@@ -244,9 +248,6 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		}
 	}
 
-	free(mask);
-	free(errors);
-
 	if (av_priv->type == FI_AV_TABLE) {
 		/* NOTE: unresolved addresses are left in the AV table */
 		if (result) {
@@ -261,11 +262,21 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		av_priv->last += count;
 	}
 
-	if (!(av_priv->flags & FI_EVENT))
-		return count - error_count;
+	if (av_priv->flags & FI_EVENT) {
+		psmx_av_post_completion(av_priv, context, count - error_count, 0);
+		ret = 0;
+	} else {
+		if (flags & FI_SYNC_ERR) {
+			int *fi_errors = context;
+			for (i=0; i<count; i++)
+				fi_errors[i] = psmx_errno(errors[i]);
+		}
+		ret = count - error_count;
+	}
 
-	psmx_av_post_completion(av_priv, context, count - error_count, 0);
-	return 0;
+	free(mask);
+	free(errors);
+	return ret;
 }
 
 static int psmx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,

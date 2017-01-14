@@ -418,6 +418,23 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!domain_priv)
 		return -FI_EINVAL;
 
+	if (info && info->ep_attr && info->ep_attr->auth_key) {
+		if (info->ep_attr->auth_keylen != sizeof(psm_uuid_t)) {
+			FI_WARN(&psmx_prov, FI_LOG_EP_CTRL,
+				"Invalid auth_key_len %d, should be %d.\n",
+				info->ep_attr->auth_keylen,
+				sizeof(psm_uuid_t));
+			return -FI_EINVAL;
+		}
+		if (memcmp(domain_priv->fabric->uuid, info->ep_attr->auth_key,
+			   sizeof(psm_uuid_t))) {
+			FI_WARN(&psmx_prov, FI_LOG_EP_CTRL,
+				"Invalid auth_key: %s\n",
+				psmx_uuid_to_string((void *)info->ep_attr->auth_key));
+			return -FI_EINVAL;
+		}
+	}
+
 	err = psmx_domain_check_features(domain_priv, ep_cap);
 	if (err)
 		return err; 

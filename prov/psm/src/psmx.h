@@ -91,6 +91,8 @@ extern int psmx_am_compat_mode;
 #define PSMX_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_SEND | FI_RECV)
 
+#define PSMX_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
+
 #define PSMX_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX_INJECT_SIZE	(64)
 #define PSMX_MSG_ORDER	FI_ORDER_SAS

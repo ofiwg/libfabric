@@ -319,6 +319,36 @@ static int psmx2_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
+static int psmx2_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
+{
+	struct psmx2_fid_cntr *cntr_priv;
+
+	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
+	atomic_add(&cntr_priv->error_counter, value);
+
+	psmx2_cntr_check_trigger(cntr_priv);
+
+	if (cntr_priv->wait)
+		cntr_priv->wait->signal(cntr_priv->wait);
+
+	return 0;
+}
+
+static int psmx2_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
+{
+	struct psmx2_fid_cntr *cntr_priv;
+
+	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
+	atomic_set(&cntr_priv->error_counter, value);
+
+	psmx2_cntr_check_trigger(cntr_priv);
+
+	if (cntr_priv->wait)
+		cntr_priv->wait->signal(cntr_priv->wait);
+
+	return 0;
+}
+
 static int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	struct psmx2_fid_cntr *cntr_priv;
@@ -424,6 +454,8 @@ static struct fi_ops_cntr psmx2_cntr_ops = {
 	.add = psmx2_cntr_add,
 	.set = psmx2_cntr_set,
 	.wait = psmx2_cntr_wait,
+	.adderr = psmx2_cntr_adderr,
+	.seterr = psmx2_cntr_seterr,
 };
 
 int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
