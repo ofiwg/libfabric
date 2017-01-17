@@ -1346,6 +1346,12 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		return -FI_EINVAL;
 	}
 
+	/* Adding FI_FENCE to an FI_MORE list will break the FI_MORE Chain.
+	 * Remove FI_MORE flag when FI_FENCE flag is present. */
+	if (flags & FI_FENCE) {
+		flags &= ~FI_MORE;
+	}
+
 	/* find VC for target */
 	rc = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
 	if (rc) {
@@ -1441,10 +1447,11 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	/* Add reads/writes to slist when FI_MORE is present, Or
 	 * if this is the first message in the chain without FI_MORE.
 	 * When FI_MORE is not present, if the slists are not empty
-	 * it is the first message without FI_MORE. */
-	if ((flags & FI_MORE) ||
-	    (!(slist_empty(&ep->more_write)) ||
-	     !(slist_empty(&ep->more_read)))) {
+	 * it is the first message without FI_MORE. Do not add fence
+	 * reqs to the fi_more list. */
+	if ((flags & FI_MORE) || (!(flags & FI_FENCE) &&
+	   (!(slist_empty(&ep->more_write)) ||
+	    !(slist_empty(&ep->more_read))))) {
 		if (fr_type == GNIX_FAB_RQ_RDMA_WRITE) {
 			slist_insert_tail(&req->rma.sle, &ep->more_write);
 			req->work_fn = _gnix_rma_more_post_req;
@@ -1477,6 +1484,11 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 				   "FI_MORE: got fab_request from more_read. Queuing Request\n");
 			_gnix_vc_queue_tx_req(more_req);
 			slist_init(&ep->more_read);
+		}
+		/* Requests with FI_FENCE are not added to the FI_MORE List.
+		 * They must be queued separately. */
+		if (flags & FI_FENCE) {
+			return _gnix_vc_queue_tx_req(req);
 		}
 		return FI_SUCCESS;
 	}
