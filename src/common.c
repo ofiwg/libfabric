@@ -42,6 +42,7 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 #include <poll.h>
 #include <pthread.h>
 #include <sys/time.h>
