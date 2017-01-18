@@ -307,63 +307,74 @@ The following values for resource management are defined.
 
 The behavior of the various resource management options depends on whether
 the endpoint is reliable or unreliable, as well as provider and protocol
-specific implementation details, as shown in the following tables.
+specific implementation details, as shown in the following table.  The
+table assumes that all peers enable or disable RM the same.
 
-| Resource | Unrel EP-RM Disabled| Unrel EP-RM Enabled | Rel EP-RM Disabled | Rel EP-RM Enabled |
+| Resource | DGRAM EP-no RM | DGRAM EP-with RM | RDM/MSG EP-no RM | RDM/MSG EP-with RM |
 |:--------:|:-------------------:|:-------------------:|:------------------:|:-----------------:|
-| Tx             | error            | EAGAIN           | error             | EAGAIN             |
-| Rx             | error            | EAGAIN           | error             | EAGAIN             |
-| Tx CQ          | error            | EAGAIN           | error             | EAGAIN             |
-| Rx CQ          | error            | EAGAIN or drop   | error             | EAGAIN or retry    |
-| Unmatched Recv | buffered or drop | buffered or drop | buffered or error | buffered or retry  |
-| Recv Overrun   | truncate or drop | truncate or drop | truncate or error | truncate or error  |
-| Unmatched RMA  | not applicable   | not applicable   | error             | error              |
-| RMA Overrun    | not applicable   | not applicable   | error             | error              |
+| Tx Ctx         | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
+| Rx Ctx         | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
+| Tx CQ          | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
+| Rx CQ          | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
+| Target EP      | dropped          | dropped          | transmit error    | retried            |
+| No Rx Buffer   | dropped          | dropped          | transmit error    | retried            |
+| Rx Buf Overrun | truncate or drop | truncate or drop | truncate or error | truncate or error  |
+| Unmatched RMA  | not applicable   | not applicable   | transmit error    | transmit error     |
+| RMA Overrun    | not applicable   | not applicable   | transmit error    | transmit error     |
 
 The resource column indicates the resource being accessed by a data
-transfer operation. Tx refers to the transmit context when a data
-transfer operation posted.  Rx refers to the receive context when
-receive data buffers are posted.  When RM is enabled, the
-provider will ensure that space is available to accept the operation.
-If space is not available, the operation will fail with -FI_EAGAIN.
-If resource management is disabled, the application is responsible for
-ensuring that there is space available before attempting to queue an
-operation.
+transfer operation.
 
-Tx CQ and Rx CQ refer to the completion queues associated with the
-transmit and receive contexts, respectively.  When RM is disabled,
-applications must take care to ensure that completion queues do not
-get overrun.  This can be accomplished by sizing the CQs appropriately
-or by deferring the posting of a data transfer operation unless CQ space
-is available to store its completion.  When RM is enabled, providers
-may use different mechanisms to prevent CQ overruns.  This includes
-failing (returning -FI_EAGAIN) the posting of operations that could
-result in CQ overruns, dropping received messages, or forcing requests
-to be retried.
+*Tx Ctx / Rx Ctx*
+: Refers to the transmit/receive contexts when a data transfer operation
+  is submitted.  When RM is enabled, attempting to submit a request will fail if
+  the context is full.  If RM is disabled, an undefined error (provider specific)
+  will occur.  Such errors should be considered fatal to the context,
+  and applications must take steps to avoid queue overruns.
 
-Unmatched receives and receive overruns deal with the processing of
-messages that consume a receive buffers.  Unmatched receives references
-incoming messages that are received by an endpoint, but do not have an
-application data buffer to consume.  No buffers may be available at the
-receive side, or buffers may available, but restricted from accepting
-the received message (such as being associated with different tags).
-Unmatched receives may be handled by protocol flow control, resulting
-in the message being retried.  For unreliable endpoints, unmatched
-messages are usually dropped, unless the provider can internally buffer
-the data.  An error will usually occur on a reliable endpoint if received
-data cannot be placed if RM is disabled, or the data cannot be received
-with RM enabled after retries have been exhausted.
+*Tx CQ / Rx CQ*
+: Refers to the completion queue associated with the Tx or Rx context when
+  a local operation completes.  When RM is disabled, applications must take
+  care to ensure that completion queues do not get overrun.  When an overrun
+  occurs, an undefined, but fatal, error will occur affecting all endpoints
+  associated with the CQ.  Overruns can be avoided by sizing the CQs
+  appropriately or by deferring the posting of a data transfer operation unless
+  CQ space is available to store its completion.  When RM is enabled, providers
+  may use different mechanisms to prevent CQ overruns.  This includes
+  failing (returning -FI_EAGAIN) the posting of operations that could
+  result in CQ overruns, or internally retrying requests (which will be hidden
+  from the application).
 
-In some cases, buffering on the receive side may be available, but
-insufficient space may have been provided to receive the full message
-that was sent.  This is considered an error, however, rather than
-failing the operation, a provider may instead truncate the message and
-report the truncation to the app.
+*Target EP / No Rx Buffer*
+: Target EP refers to resources associated with the endpoint that is the target
+  of a transmit operation.  This includes the target endpoint's receive queue,
+  posted receive buffers (no Rx buffers), the receive side completion queue,
+  and other related packet processing queues.  The defined behavior is that
+  seen by the initiator of a request.  For FI_EP_DGRAM endpoints, if the target EP
+  queues are unable to accept incoming messages, received messages will
+  be dropped.  For reliable endpoints, if RM is disabled, the transmit
+  operation will complete in error.  If RM is enabled, the provider will
+  internally retry the operation.
 
-Unmatched RMA and RMA overruns deal with the processing of RMA and
-atomic operations that access registered memory buffers directly.
-RMA operations are not defined for unreliable endpoints.  For reliable
-endpoints, unmatched RMA and RMA overruns are both treated as errors.
+*Rx Buffer Overrun*
+: This refers to buffers posted to receive incoming tagged or untagged messages,
+  with the behavior defined from the viewpoint of the sender.  The behavior
+  for handling received messages that are larger than the buffers provided by
+  the application is provider specific.  Providers may either truncate the
+  message and report a successful completion, or fail the operation.  For
+  datagram endpoints, failed sends will result in the message being dropped.
+  For reliable endpoints, send operations may complete successfully,
+  yet be truncated at the receive side.  This can occur when the target side
+  buffers received data until an application buffer is made available.
+  The completion status may also be dependent upon the completion model selected
+  byt the application (e.g. FI_DELIVERY_COMPLETE versus FI_TRANSMIT_COMPLETE).
+
+*Unmatched RMA / RMA Overrun*
+: Unmatched RMA and RMA overruns deal with the processing of RMA and
+  atomic operations.  Unlike send operations, RMA operations that attempt
+  to access a memory address that is either not registered for such
+  operations, or attempt to access outside of the target memory region
+  will fail, resulting in a transmit error.
 
 When a resource management error occurs on an endpoint, the endpoint is
 transitioned into a disabled state.  Any operations which have not
