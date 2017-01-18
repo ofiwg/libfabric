@@ -64,7 +64,21 @@ int fi_poll_fd(int fd, int timeout)
 
 	fds.fd = fd;
 	fds.events = POLLIN;
-	ret = poll(&fds, 1, timeout);
+
+	// set the timeout value
+	struct timespec tmo = {0, timeout*1000000 /* milisec -> nanosec */};
+
+	// to set the signal mask
+        sigset_t set;
+
+         /* Block SIGUSR1, SIGUSR2, and all realtime signals from SIGRTMIN to SIGRTMAX */
+        sigemptyset(&set);
+        sigaddset(&set, SIGUSR1);
+        sigaddset(&set, SIGUSR2);
+	for (int i = SIGRTMIN; i <= SIGRTMAX; i++)
+	        sigaddset(&set, i);
+
+	ret = ppoll(&fds, 1, &tmo, &set);
 	return ret == -1 ? -errno : ret;
 }
 
