@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,7 @@
 #ifndef PROV_GNI_TEST_COMMON_H_
 #define PROV_GNI_TEST_COMMON_H_
 
+#include <stdio.h>
 #include <time.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -50,6 +51,7 @@ extern int supported_fetch_atomic_ops[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST];
 
 void calculate_time_difference(struct timeval *start, struct timeval *end,
 		int *secs_out, int *usec_out);
+int dump_cq_error(struct fid_cq *cq, void *context, uint64_t flags);
 
 static inline struct gnix_fid_ep *get_gnix_ep(struct fid_ep *fid_ep)
 {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,4 +42,33 @@ void calculate_time_difference(struct timeval *start, struct timeval *end,
 	} else {
 		*usec_out = end->tv_usec - start->tv_usec;
 	}
+}
+
+int dump_cq_error(struct fid_cq *cq, void *context, uint64_t flags)
+{
+	int ret;
+	struct fi_cq_err_entry err_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					   (void *) -1, UINT_MAX, UINT_MAX,
+					   UINT_MAX, INT_MAX, INT_MAX,
+					   (void *) -1 };
+
+	ret = fi_cq_readerr(cq, &err_cqe, flags);
+
+	if (ret > 0) {
+		if (context && ((uint64_t)err_cqe.op_context !=
+				(uint64_t)context)) {
+			fprintf(stderr, "Bad err context: ctx %p err ctx %p\n",
+				context, err_cqe.op_context);
+		}
+
+		fprintf(stderr, "err flags 0x%lx\n", err_cqe.flags);
+		fprintf(stderr, "err len   %ld\n", err_cqe.len);
+		fprintf(stderr, "err data  0x%lx\n", err_cqe.data);
+		fprintf(stderr, "err tag   0x%lx\n", err_cqe.tag);
+		fprintf(stderr, "err olen  %ld\n", err_cqe.olen);
+		fprintf(stderr, "err err   %d\n", err_cqe.err);
+		fprintf(stderr, "err prov_errno %d\n", err_cqe.prov_errno);
+	}
+
+	return 0;
 }
