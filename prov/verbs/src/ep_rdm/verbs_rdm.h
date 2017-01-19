@@ -296,6 +296,7 @@ struct fi_ibv_rdm_ep {
 	int cm_progress_timeout;
 	int is_closing;
 	int recv_preposted_threshold;
+	struct slist av_removed_conn_head;
 };
 
 enum {
@@ -363,6 +364,7 @@ struct fi_ibv_rdm_conn {
 	size_t unexp_counter;
 	size_t exp_counter;
 #endif
+	struct slist_entry removed_next;
 };
 
 struct fi_ibv_rdm_postponed_entry {
@@ -505,6 +507,7 @@ static inline void fi_ibv_rdm_cntr_inc_err(struct fi_ibv_rdm_cntr *cntr)
 }
 
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep);
+int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
 ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep);
 ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn);

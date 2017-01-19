@@ -93,7 +93,6 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
 	switch (conn->state) {
 	case FI_VERBS_CONN_ALLOCATED:
 	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		err = fi_ibv_rdm_conn_cleanup(conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
 		break;
 	case FI_VERBS_CONN_ESTABLISHED:
@@ -284,9 +283,15 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
-		HASH_DEL(av->domain->rdm_cm->conn_hash, conn);
 		err = fi_ibv_rdm_start_disconnection(conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
+		/* do not destroy connection here because we may
+		 * get WC for this connection. just move connection
+		 * to list of av-removed objects to clean later */
+
+		/* TODO: add cleaning into av_insert */
+		HASH_DEL(av->ep->domain->rdm_cm->conn_hash, conn);
+		slist_insert_tail(&conn->removed_next, &av->ep->av_removed_conn_head);
 	}
 
 	if (av->ep) {
