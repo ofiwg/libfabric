@@ -143,20 +143,51 @@ fail:										\
  * Tests:
  */
 
-getinfo_test(1, "Test with no node, service or flags",
+
+/* 1. No hints tests
+ * These tests may not run exclusively for a particular provider but are added
+ * here to exercise certain code paths in the provider initialization code. So
+ * test failures may not be attributable to a particular provider. */
+
+/* 1.1 Source address only tests */
+getinfo_test(1, "Test with no node, service, flags or hints",
+		NULL, NULL, 0, NULL, NULL, check_srcaddr, 0)
+getinfo_test(2, "Test with node, no service, FI_SOURCE flag and no hints",
+		opts.src_addr ? opts.src_addr : "localhost", NULL, FI_SOURCE,
+		NULL, NULL, check_srcaddr, 0)
+getinfo_test(3, "Test with service, FI_SOURCE flag and no node or hints",
+		 NULL, opts.src_port, FI_SOURCE, NULL, NULL,
+		 check_srcaddr, 0)	// TODO should we check for wildcard addr?
+getinfo_test(4, "Test with node, service, FI_SOURCE flags and no hints",
+		opts.src_addr ? opts.src_addr : "localhost", opts.src_port,
+		FI_SOURCE, NULL, NULL, check_srcaddr, 0)
+
+/* 1.2 Source and destination address tests */
+getinfo_test(5, "Test with node, service and no hints",
+		opts.dst_addr ? opts.dst_addr : "localhost", opts.dst_port,
+		0, NULL, NULL, check_src_dest_addr, 0)
+
+/* 2. Test with hints */
+/* 2.1 Source address only tests */
+getinfo_test(6, "Test with no node, service, or flags",
 		NULL, NULL, 0, hints, NULL, check_srcaddr, 0)
-getinfo_test(2, "Test with no node, valid service and FI_SOURCE flag",
-		NULL, opts.src_port, FI_SOURCE, hints, NULL, check_srcaddr, 0)
-getinfo_test(3, "Test with node, valid service and FI_SOURCE flag",
+getinfo_test(7, "Test with node, no service, FI_SOURCE flag",
+		opts.src_addr ? opts.src_addr : "localhost", NULL, FI_SOURCE,
+		hints, NULL, check_srcaddr, 0)
+getinfo_test(8, "Test with service, FI_SOURCE flag and no node",
+		 NULL, opts.src_port, FI_SOURCE, hints, NULL,
+		 check_srcaddr, 0)	// TODO should we check for wildcard addr?
+getinfo_test(9, "Test with node, service, FI_SOURCE flags",
 		opts.src_addr ? opts.src_addr : "localhost", opts.src_port,
 		FI_SOURCE, hints, NULL, check_srcaddr, 0)
-getinfo_test(4, "Test with node, no service and FI_SOURCE flag",
-		opts.src_addr ? opts.src_addr : "localhost", NULL,
-		FI_SOURCE, hints, NULL, check_srcaddr, 0)
-getinfo_test(5, "Test with node, service and no flags",
+
+/* 2.2 Source and destination address tests */
+getinfo_test(10, "Test with node, service",
 		opts.dst_addr ? opts.dst_addr : "localhost", opts.dst_port,
 		0, hints, NULL, check_src_dest_addr, 0)
-getinfo_test(6, "Test with non-existent domain name",
+
+/* Negative tests */
+getinfo_test(11, "Test with non-existent domain name",
 		NULL, NULL, 0, hints, invalid_dom, NULL, -FI_ENODATA)
 
 static void usage(void)
@@ -178,6 +209,11 @@ int main(int argc, char **argv)
 		TEST_ENTRY(getinfo4, getinfo4_desc),
 		TEST_ENTRY(getinfo5, getinfo5_desc),
 		TEST_ENTRY(getinfo6, getinfo6_desc),
+		TEST_ENTRY(getinfo7, getinfo7_desc),
+		TEST_ENTRY(getinfo8, getinfo8_desc),
+		TEST_ENTRY(getinfo9, getinfo9_desc),
+		TEST_ENTRY(getinfo10, getinfo10_desc),
+		TEST_ENTRY(getinfo11, getinfo11_desc),
 		{ NULL, "" }
 	};
 
@@ -211,6 +247,10 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 
+	FT_WARN("\nTests getinfo1 to getinfo5 may not run exclusively for a "
+			"particular provider since we don't pass hints.\n"
+			"So the failures in any of those tests may not be "
+			"attributable to a single provider.\n");
 	failed = run_tests(test_array, err_buf);
 	if (failed > 0) {
 		printf("\nSummary: %d tests failed\n", failed);
