@@ -62,15 +62,17 @@ void sock_cq_add_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx)
 			goto out;
 	}
 	dlist_insert_tail(&tx_ctx->cq_entry, &cq->tx_list);
+	atomic_inc(&cq->ref);
 out:
 	fastlock_release(&cq->list_lock);
 }
 
 void sock_cq_remove_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx)
 {
-		fastlock_acquire(&cq->list_lock);
-		dlist_remove(&tx_ctx->cq_entry);
-		fastlock_release(&cq->list_lock);
+	fastlock_acquire(&cq->list_lock);
+	dlist_remove(&tx_ctx->cq_entry);
+	atomic_dec(&cq->ref);
+	fastlock_release(&cq->list_lock);
 }
 
 void sock_cq_add_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx)
@@ -86,15 +88,17 @@ void sock_cq_add_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx)
 			goto out;
 	}
 	dlist_insert_tail(&rx_ctx->cq_entry, &cq->rx_list);
+	atomic_inc(&cq->ref);
 out:
 	fastlock_release(&cq->list_lock);
 }
 
 void sock_cq_remove_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx)
 {
-		fastlock_acquire(&cq->list_lock);
-		dlist_remove(&rx_ctx->cq_entry);
-		fastlock_release(&cq->list_lock);
+	fastlock_acquire(&cq->list_lock);
+	dlist_remove(&rx_ctx->cq_entry);
+	atomic_dec(&cq->ref);
+	fastlock_release(&cq->list_lock);
 }
 
 int sock_cq_progress(struct sock_cq *cq)
