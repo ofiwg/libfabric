@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,10 +32,8 @@
 
 #include "rxd.h"
 
-#define RXD_EP_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_DIRECTED_RECV |	\
-		     FI_READ | FI_WRITE | FI_RECV | FI_SEND |		\
-		     FI_REMOTE_READ | FI_REMOTE_WRITE | FI_SOURCE |	\
-		     FI_RMA_EVENT)
+#define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_DIRECTED_RECV |	\
+		     FI_RECV | FI_SEND | FI_SOURCE)
 
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_EP_CAPS,
@@ -43,6 +41,7 @@ struct fi_tx_attr rxd_tx_attr = {
 	.inject_size = 0,
 	.size = (1ULL << RXD_MAX_TX_BITS),
 	.iov_limit = RXD_IOV_LIMIT,
+	.rma_iov_limit = 0,
 };
 
 struct fi_rx_attr rxd_rx_attr = {
@@ -64,14 +63,13 @@ struct fi_ep_attr rxd_ep_attr = {
 
 struct fi_domain_attr rxd_domain_attr = {
 	.threading = FI_THREAD_SAFE,
-	.control_progress = FI_PROGRESS_AUTO,
-	.data_progress = FI_PROGRESS_AUTO,
+	.control_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = 0,
 	.mr_key_size = sizeof(uint64_t),
-	.cq_cnt = RXD_DEF_CQ_CNT,
-	.ep_cnt = RXD_DEF_EP_CNT,
+	.cq_cnt = 128,
+	.ep_cnt = 128,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,
 	.max_ep_tx_ctx = 1,

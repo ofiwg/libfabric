@@ -271,15 +271,16 @@ static int util_av_hash_insert(struct util_av_hash *hash, int slot, int index)
 	return 0;
 }
 
+/*
+ * Must hold AV lock
+ */
 int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index)
 {
-	int ret = 0;
+	int ret;
 
-	fastlock_acquire(&av->lock);
 	if (av->free_list == UTIL_NO_ENTRY) {
 		FI_WARN(av->prov, FI_LOG_AV, "AV is full\n");
-		ret = -FI_ENOSPC;
-		goto out;
+		return -FI_ENOSPC;
 	}
 
 	if (av->flags & FI_SOURCE) {
@@ -287,16 +288,14 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
 				"failed to insert addr into hash table\n");
-			goto out;
+			return ret;
 		}
 	}
 
 	*index = av->free_list;
 	av->free_list = *(int *) util_av_get_data(av, av->free_list);
 	util_av_set_data(av, *index, addr, av->addrlen);
-out:
-	fastlock_release(&av->lock);
-	return ret;
+	return 0;
 }
 
 /*
@@ -656,7 +655,9 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 	int ret, index = -1;
 
 	if (ip_av_valid_addr(av, addr)) {
+		fastlock_acquire(&av->lock);
 		ret = ofi_av_insert_addr(av, addr, ip_av_slot(av, addr), &index);
+		fastlock_release(&av->lock);
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
 		FI_WARN(av->prov, FI_LOG_AV, "invalid address\n");
@@ -968,8 +969,9 @@ static struct fi_ops_av ip_av_ops = {
 
 static int ip_av_close(struct fid *av_fid)
 {
-	int ret;
 	struct util_av *av;
+	int ret;
+
 	av = container_of(av_fid, struct util_av, av_fid.fid);
 	ret = ofi_av_close(av);
 	if (ret)

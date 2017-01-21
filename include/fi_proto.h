@@ -76,16 +76,20 @@ enum {
  * conn_id: Communication identifier.  Conn_id values are exchanged between
  *     peer endpoints as part of communication setup.  This field is valid
  *     as part of the first message in any data transfer.
- * msg_id: Unique number identifying all segments of a message
+ * msg_id: This is the sender's identifier for a message.
+ *     Unique number identifying all segments of a message
  *     Message id can be formed using an equation similar to:
  *     (seq_no++ << tx size) | tx_key
  * conn_data: Connection specific data.  This may be set to the index
  *     of the transmit endpoint's address in its local AV, which may
  *     be used as a hint at the Rx side to locate the Tx EP address in
- *     its AV.
- * rx_key: Key returned by the Rx side, that the Tx side includes in
- *     subsequent packets.  This field is used for rendezvous and
- *     segmentation and reassembly protocols.
+ *     its AV.  The assumption is that all addresses were inserted into
+ *     all AVs across the fabric using a copied array.  (This is an
+ *     optimization hint only; the peer validates the actual entry.)
+ * rx_key: This is the receiver's identifier for a message (receive side
+ *     equivalent of msg_id).  Key returned by the Rx side, that the
+ *     Tx side includes in subsequent packets.  This field is used for
+ *     rendezvous and segmentation and reassembly protocols.
  *     The rx_key may be formed similar to message_id.
  */
 struct ofi_ctrl_hdr {
