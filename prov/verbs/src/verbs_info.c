@@ -150,116 +150,6 @@ struct fi_ibv_rdm_sysaddr
 static struct fi_info *verbs_info = NULL;
 static pthread_mutex_t verbs_info_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int fi_ibv_check_fabric_attr(const struct fi_fabric_attr *attr,
-			     const struct fi_info *info)
-{
-	if (attr->name && strcmp(attr->name, info->fabric_attr->name)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown fabric name\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->prov_version > info->fabric_attr->prov_version) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Unsupported provider version\n");
-		return -FI_ENODATA;
-	}
-
-	return 0;
-}
-
-int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
-			     const struct fi_info *info)
-{
-	if (attr->name && strcmp(attr->name, info->domain_attr->name)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown domain name\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->threading) {
-	case FI_THREAD_UNSPEC:
-	case FI_THREAD_SAFE:
-	case FI_THREAD_FID:
-	case FI_THREAD_DOMAIN:
-	case FI_THREAD_COMPLETION:
-	case FI_THREAD_ENDPOINT:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Invalid threading model\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->control_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
-	case FI_PROGRESS_MANUAL:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Given control progress mode not supported\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->data_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
-	case FI_PROGRESS_MANUAL:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Given data progress mode not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->mr_mode) {
-	case FI_MR_UNSPEC:
-	case FI_MR_BASIC:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"MR mode not supported\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->mr_key_size > info->domain_attr->mr_key_size) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"MR key size too large\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->cq_data_size > info->domain_attr->cq_data_size) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"CQ data size too large\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->cq_cnt > info->domain_attr->cq_cnt) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"cq_cnt exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->ep_cnt > info->domain_attr->ep_cnt) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"ep_cnt exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->max_ep_tx_ctx > info->domain_attr->max_ep_tx_ctx) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"domain_attr: max_ep_tx_ctx exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->max_ep_rx_ctx > info->domain_attr->max_ep_rx_ctx) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"domain_attr: max_ep_rx_ctx exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	return 0;
-}
-
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 			 const struct fi_info *info)
 {
@@ -459,13 +349,15 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 	}
 
 	if (hints->fabric_attr) {
-		ret = fi_ibv_check_fabric_attr(hints->fabric_attr, info);
+		ret = ofi_check_fabric_attr(&fi_ibv_prov, info->fabric_attr,
+				hints->fabric_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
 	}
 
 	if (hints->domain_attr) {
-		ret = fi_ibv_check_domain_attr(hints->domain_attr, info);
+		ret = ofi_check_domain_attr(&fi_ibv_prov, info->domain_attr,
+				hints->domain_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
 	}
@@ -1174,7 +1066,8 @@ int fi_ibv_find_fabric(const struct fi_fabric_attr *attr)
 	struct fi_info *fi;
 
 	for (fi = verbs_info; fi; fi = fi->next) {
-		if (!fi_ibv_check_fabric_attr(attr, fi))
+		if (!ofi_check_fabric_attr(&fi_ibv_prov, fi->fabric_attr, attr,
+					FI_MATCH_EXACT))
 			return 0;
 	}
 
