@@ -372,6 +372,18 @@ int ofi_check_domain_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
+	if (user_attr->caps & ~(prov_attr->caps)) {
+		FI_INFO(prov, FI_LOG_CORE, "Requested domain caps not supported\n");
+		FI_INFO_CAPS(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
+		return -FI_ENODATA;
+	}
+
+	if ((user_attr->mode & prov_attr->mode) != prov_attr->mode) {
+		FI_INFO(prov, FI_LOG_CORE, "Required domain mode missing\n");
+		FI_INFO_MODE(prov, prov_attr, user_attr);
+		return -FI_ENODATA;
+	}
+
 	return 0;
 }
 
@@ -615,6 +627,28 @@ int ofi_check_info(const struct util_prov *util_prov,
 	return 0;
 }
 
+static void fi_alter_domain_attr(struct fi_domain_attr *attr,
+			     const struct fi_domain_attr *hints,
+			     uint64_t info_caps)
+{
+	if (!hints) {
+		attr->caps = (info_caps & attr->caps & FI_PRIMARY_CAPS) |
+			     (attr->caps & FI_SECONDARY_CAPS);
+		return;
+	}
+
+	if (hints->threading)
+		attr->threading = hints->threading;
+	if (hints->control_progress)
+		attr->control_progress = hints->control_progress;
+	if (hints->data_progress)
+		attr->data_progress = hints->data_progress;
+	if (hints->av_type)
+		attr->av_type = hints->av_type;
+	attr->caps = (hints->caps & FI_PRIMARY_CAPS) |
+		     (attr->caps & FI_SECONDARY_CAPS);
+}
+
 static void fi_alter_ep_attr(struct fi_ep_attr *attr,
 			     const struct fi_ep_attr *hints)
 {
@@ -685,6 +719,9 @@ void ofi_alter_info(struct fi_info *info,
 		info->caps = (hints->caps & FI_PRIMARY_CAPS) |
 			     (info->caps & FI_SECONDARY_CAPS);
 
+		info->handle = hints->handle;
+
+		fi_alter_domain_attr(info->domain_attr, hints->domain_attr, info->caps);
 		fi_alter_ep_attr(info->ep_attr, hints->ep_attr);
 		fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
 		fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);

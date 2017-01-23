@@ -494,7 +494,8 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 			 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 #define FI_SECONDARY_CAPS (FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
-			   FI_TRIGGER | FI_FENCE)
+			   FI_SHARED_AV | FI_TRIGGER | FI_FENCE | \
+			   FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 int ofi_check_fabric_attr(const struct fi_provider *prov,
 			 const struct fi_fabric_attr *prov_attr,
