@@ -199,7 +199,7 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *temp = NULL, *fi, *tail = NULL;
 	int ret;
 
-	ret = fi_check_info(util_prov, hints, FI_MATCH_PREFIX);
+	ret = ofi_check_info(util_prov, hints, FI_MATCH_PREFIX);
 	if (ret)
 		goto err1;
 
@@ -246,7 +246,7 @@ static int fi_check_name(char *user_name, char *prov_name, enum fi_match_type ty
 		strcasecmp(prov_name, user_name);
 }
 
-int fi_check_fabric_attr(const struct fi_provider *prov,
+int ofi_check_fabric_attr(const struct fi_provider *prov,
 			 const struct fi_fabric_attr *prov_attr,
 			 const struct fi_fabric_attr *user_attr,
 			 enum fi_match_type type)
@@ -321,7 +321,7 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 	}
 }
 
-int fi_check_domain_attr(const struct fi_provider *prov,
+int ofi_check_domain_attr(const struct fi_provider *prov,
 			 const struct fi_domain_attr *prov_attr,
 			 const struct fi_domain_attr *user_attr,
 			 enum fi_match_type type)
@@ -375,7 +375,7 @@ int fi_check_domain_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_check_ep_attr(const struct util_prov *util_prov,
+int ofi_check_ep_attr(const struct util_prov *util_prov,
 		     const struct fi_ep_attr *user_attr)
 {
 	const struct fi_provider *prov = util_prov->prov;
@@ -438,7 +438,7 @@ int fi_check_ep_attr(const struct util_prov *util_prov,
 	return 0;
 }
 
-int fi_check_rx_attr(const struct fi_provider *prov,
+int ofi_check_rx_attr(const struct fi_provider *prov,
 		     const struct fi_rx_attr *prov_attr,
 		     const struct fi_rx_attr *user_attr)
 {
@@ -490,7 +490,7 @@ int fi_check_rx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_check_tx_attr(const struct fi_provider *prov,
+int ofi_check_tx_attr(const struct fi_provider *prov,
 		     const struct fi_tx_attr *prov_attr,
 		     const struct fi_tx_attr *user_attr)
 {
@@ -547,7 +547,7 @@ int fi_check_tx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_check_info(const struct util_prov *util_prov,
+int ofi_check_info(const struct util_prov *util_prov,
 		  const struct fi_info *user_info,
 		  enum fi_match_type type)
 {
@@ -577,7 +577,7 @@ int fi_check_info(const struct util_prov *util_prov,
 	}
 
 	if (user_info->fabric_attr) {
-		ret = fi_check_fabric_attr(prov, prov_info->fabric_attr,
+		ret = ofi_check_fabric_attr(prov, prov_info->fabric_attr,
 					   user_info->fabric_attr,
 					   type);
 		if (ret)
@@ -585,7 +585,7 @@ int fi_check_info(const struct util_prov *util_prov,
 	}
 
 	if (user_info->domain_attr) {
-		ret = fi_check_domain_attr(prov, prov_info->domain_attr,
+		ret = ofi_check_domain_attr(prov, prov_info->domain_attr,
 				user_info->domain_attr,
 				type);
 		if (ret)
@@ -593,20 +593,20 @@ int fi_check_info(const struct util_prov *util_prov,
 	}
 
 	if (user_info->ep_attr) {
-		ret = fi_check_ep_attr(util_prov, user_info->ep_attr);
+		ret = ofi_check_ep_attr(util_prov, user_info->ep_attr);
 		if (ret)
 			return ret;
 	}
 
 	if (user_info->rx_attr) {
-		ret = fi_check_rx_attr(prov, prov_info->rx_attr,
+		ret = ofi_check_rx_attr(prov, prov_info->rx_attr,
 				user_info->rx_attr);
 		if (ret)
 			return ret;
 	}
 
 	if (user_info->tx_attr) {
-		ret = fi_check_tx_attr(prov, prov_info->tx_attr,
+		ret = ofi_check_tx_attr(prov, prov_info->tx_attr,
 				user_info->tx_attr);
 		if (ret)
 			return ret;

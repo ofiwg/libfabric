@@ -62,7 +62,7 @@ int ofi_fabric_init(const struct fi_provider *prov,
 {
 	int ret;
 
-	ret = fi_check_fabric_attr(prov, prov_attr, user_attr, type);
+	ret = ofi_check_fabric_attr(prov, prov_attr, user_attr, type);
 	if (ret)
 		return ret;
 

@@ -237,7 +237,7 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct rxd_domain *rxd_domain;
 	struct rxd_fabric *rxd_fabric;
 
-	ret = fi_check_info(&rxd_util_prov, info, FI_MATCH_PREFIX);
+	ret = ofi_check_info(&rxd_util_prov, info, FI_MATCH_PREFIX);
 	if (ret)
 		return ret;
 
