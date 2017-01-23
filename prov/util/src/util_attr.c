@@ -612,6 +612,23 @@ int fi_check_info(const struct util_prov *util_prov,
 	return 0;
 }
 
+static void fi_alter_domain_attr(struct fi_domain_attr *attr,
+			     const struct fi_domain_attr *hints,
+			     uint64_t info_caps)
+{
+	if (!hints)
+		return;
+
+	if (hints->threading)
+		attr->threading = hints->threading;
+	if (hints->control_progress)
+		attr->control_progress = hints->control_progress;
+	if (hints->data_progress)
+		attr->data_progress = hints->data_progress;
+	if (hints->av_type)
+		attr->av_type = hints->av_type;
+}
+
 static void fi_alter_ep_attr(struct fi_ep_attr *attr,
 			     const struct fi_ep_attr *hints)
 {
@@ -682,6 +699,9 @@ void ofi_alter_info(struct fi_info *info,
 		info->caps = (hints->caps & FI_PRIMARY_CAPS) |
 			     (info->caps & FI_SECONDARY_CAPS);
 
+		info->handle = hints->handle;
+
+		fi_alter_domain_attr(info->domain_attr, hints->domain_attr, info->caps);
 		fi_alter_ep_attr(info->ep_attr, hints->ep_attr);
 		fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
 		fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);
