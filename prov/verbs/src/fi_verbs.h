@@ -183,6 +183,7 @@ struct fi_ibv_pep {
 	int			backlog;
 	int			bound;
 	size_t			src_addrlen;
+	struct fi_info		*info;
 };
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
