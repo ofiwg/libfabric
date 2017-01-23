@@ -176,32 +176,8 @@ not be generated unless the registration call returns success (0).
 
 The fi_mr_reg call registers the user-specified memory buffer with
 the resource domain.  The buffer is enabled for access by the fabric
-hardware based on the provided access permissions.  Supported access
-permissions are the bitwise OR of the following:
-
-*FI_SEND*
-: The memory buffer may be used in outgoing message data transfers.  This
-  includes fi_msg and fi_tagged operations.
-
-*FI_RECV*
-: The memory buffer may be used to receive inbound message transfers.
-  This includes fi_msg and fi_tagged operations.
-
-*FI_READ*
-: The memory buffer may be used as the result buffer for RMA read
-  and atomic operations on the initiator side.
-
-*FI_WRITE*
-: The memory buffer may be used as the source buffer for RMA write
-  and atomic operations on the initiator side.
-
-*FI_REMOTE_READ*
-: The memory buffer may be used as the source buffer of an RMA read
-  operation on the target side.
-
-*FI_REMOTE_WRITE*
-: The memory buffer may be used as the target buffer of an RMA write
-  or atomic operation.
+hardware based on the provided access permissions.  See the access
+field description for memory region attributes below.
 
 Registered memory is associated with a local memory descriptor and,
 optionally, a remote memory key.  A memory descriptor is a provider
@@ -241,17 +217,7 @@ region.  Otherwise, the operation is the same.
 
 The fi_mr_regattr call is a more generic, extensible registration call
 that allows the user to specify the registration request using a
-struct fi_mr_attr.
-
-```c
-struct fi_mr_attr {
-	const struct iovec *mr_iov;       /* scatter-gather array */
-	size_t             iov_count;     /* # elements in mr_iov */
-	uint64_t           access;        /* access permission flags */
-	uint64_t           requested_key; /* requested remote key */
-	void               *context;      /* user-defined context */
-};
-```
+struct fi_mr_attr (defined below).
 
 ## fi_close
 
@@ -282,6 +248,97 @@ memory region is based on the bitwise OR of the following flags.
   modifies the memory region.  Use of this flag requires that the endpoint
   through which the MR is accessed be created with the FI_RMA_EVENT
   capability.
+
+# MEMORY REGION ATTRIBUTES
+
+Memory regions are created using the following attributes.  The struct
+fi_mr_attr is passed into fi_mr_regattr, but individual fields also
+apply to other memory registration calls, with the fields passed directly
+into calls as function parameters.
+
+```c
+struct fi_mr_attr {
+	const struct iovec *mr_iov;
+	size_t             iov_count;
+	uint64_t           access;
+	uint64_t           requested_key;
+	void               *context;
+	size_t             auth_keylen;
+	uint8_t            *auth_key;
+};
+```
+## mr_iov
+
+This is an IO vector of addresses that will represent a single memory
+region.  The number of entries in the iovec is specified by iov_count.
+
+## iov_count
+
+The number of entries in the mr_iov array.  The maximum number of memory
+buffers that may be associated with a single memory region is specified
+as the mr_iov_limit domain attribute.  See `fi_domain(3)`.
+
+## access
+
+Indicates the type of access that the local or a peer endpoint has to
+the registered memory region.  Supported access permissions are the
+bitwise OR of the following flags:
+
+*FI_SEND*
+: The memory buffer may be used in outgoing message data transfers.  This
+  includes fi_msg and fi_tagged operations.
+
+*FI_RECV*
+: The memory buffer may be used to receive inbound message transfers.
+  This includes fi_msg and fi_tagged operations.
+
+*FI_READ*
+: The memory buffer may be used as the result buffer for RMA read
+  and atomic operations on the initiator side.
+
+*FI_WRITE*
+: The memory buffer may be used as the source buffer for RMA write
+  and atomic operations on the initiator side.
+
+*FI_REMOTE_READ*
+: The memory buffer may be used as the source buffer of an RMA read
+  operation on the target side.
+
+*FI_REMOTE_WRITE*
+: The memory buffer may be used as the target buffer of an RMA write
+  or atomic operation.
+
+## requested_key
+
+An application specified access key associated with the memory region.
+The MR key must be provided by a remote process when performing RMA
+or atomic operations to a memory region.  Applications
+can use the requested_key field to indicate that a specific key be
+used by the provider.  This allows applications to use well known key
+values, which can avoid applications needing to exchange and store keys.
+Support for user requested keys is provider specific and is determined
+by the mr_mode domain attribute.
+
+## context
+
+Application context associated with asynchronous memory registration
+operations.  This value is returned as part of any asynchronous event
+associated with the registration.  This field is ignored for synchronous
+registration calls.
+
+## auth_keylen
+
+The size of key referenced by the auth_key field, or 0 if no authorization
+key is given.  This field is ignored unless the fabric is opened with API
+version 1.5 or greater.
+
+## auth_key
+
+Indicates the key to associate with this memory registration.  Authorization
+keys are used to limit communication between endpoints.  Only peer endpoints
+that are programmed to use the same authorization key may access the memory
+region.  This field is ignored unless the fabric is opened with API version 1.5
+or greater.
 
 # FLAGS
 
