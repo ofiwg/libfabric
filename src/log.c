@@ -40,6 +40,7 @@
 
 #include "fi.h"
 
+
 static const char * const log_subsys[] = {
 	[FI_LOG_CORE] = "core",
 	[FI_LOG_FABRIC] = "fabric",
@@ -78,6 +79,28 @@ enum {
 
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
+
+
+const char *ofi_hex_str(const uint8_t *data, size_t len)
+{
+	static char str[64];
+	const char hex[] = "0123456789abcdef";
+	int i, p;
+
+	if (len >= (sizeof(str) >> 1))
+		len = (sizeof(str) >> 1) - 1;
+
+	for (p = 0, i = 0; i < len; i++) {
+		str[p++] = hex[data[i] >> 4];
+		str[p++] = hex[data[i] & 0xF];
+	}
+
+	if (len == (sizeof(str) >> 1) - 1)
+		str[p++] = '~';
+
+	str[p] = '\0';
+	return str;
+}
 
 static int fi_convert_log_str(const char *value)
 {
