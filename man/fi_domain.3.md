@@ -115,7 +115,7 @@ struct fi_domain_attr {
 	enum fi_progress      data_progress;
 	enum fi_resource_mgmt resource_mgmt;
 	enum fi_av_type       av_type;
-	enum fi_mr_mode       mr_mode;
+	int                   mr_mode;
 	size_t                mr_key_size;
 	size_t                cq_data_size;
 	size_t                cq_cnt;
@@ -408,18 +408,51 @@ another AV type to indicate the optimal AV type supported by this domain.
 
 ## Memory Registration Mode (mr_mode)
 
-Specifies the method of memory registration that is used with this domain.
-For additional details on MR mode, see [`fi_mr`(3)](fi_mr.3.html).
+Defines memory registration specific mode bits used with this domain.
+Full details on MR mode options are available in [`fi_mr`(3)](fi_mr.3.html).
 The following values may be specified.
 
+*FI_MR_LOCAL*
+: The provider is optimized around having applications register memory
+  for locally accessed data buffers.  Data buffers used in send and
+  receive operations and as the source buffer for RMA and atomic
+  operations must be registered by the application for access domains
+  opened with this capability.
+
+*FI_MR_RAW*
+: The provider requires additional setup as part of their memory registration
+  process.  This mode is required by providers that use a memory key
+  that is larger than 64-bits.
+
+*FI_MR_VIRT_ADDR*
+: Registered memory regions are referenced by peers using the virtual address
+  of the registered memory region, rather than a 0-based offset.
+
+*FI_MR_PROV_KEY*
+: Memory registration keys are selected and returned by the provider.
+
+*FI_MR_MMU_NOTIFY*
+: Indicates that the application is responsible for notifying the provider
+  when the page tables referencing a registered memory region may have been
+  updated.
+
 *FI_MR_UNSPEC*
-: Any memory registration mode is requested and supported.
+: Defined for compatibility -- library versions 1.4 and earlier.  Setting
+  mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are requested
+  and supported.
 
 *FI_MR_BASIC*
-: Only basic memory registration operations are requested or supported.
+: Defined for compatibility -- library versions 1.4 and earlier.  Only
+  basic memory registration operations are requested or supported.
+  This mode is equivalent to the FI_MR_VIRT_ADDR and FI_MR_PROV_KEY
+  flags being set in later library versions.
 
 *FI_MR_SCALABLE*
-: Only scalable memory registration operations are requested or supported.
+: Defined for compatibility -- library versions 1.4 and earlier.
+  Only scalable memory registration operations
+  are requested or supported.  Scalable registration uses offset based
+  addressing, with application selectable memory keys.  For library versions
+  1.5 and later, this is the default if no mr_mode bits are set.
 
 Buffers used in data transfer operations may require notifying the provider
 of their use before a data transfer can occur.  The mr_mode field indicates
@@ -433,7 +466,8 @@ registration mode.
 
 Size of the memory region remote access key, in bytes.  Applications
 that request their own MR key must select a value within the range
-specified by this value.
+specified by this value.  Key sizes larger than 8 bytes require using the
+FI_RAW_KEY mode bit.
 
 ## CQ Data Size (cq_data_size)
 

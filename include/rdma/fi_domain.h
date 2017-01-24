@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -239,6 +239,39 @@ static inline void *fi_mr_desc(struct fid_mr *mr)
 static inline uint64_t fi_mr_key(struct fid_mr *mr)
 {
 	return mr->key;
+}
+
+static inline int
+fi_mr_raw_attr(struct fid_mr *mr, uint64_t *base_addr,
+	       uint8_t *raw_key, size_t *key_size, uint64_t flags)
+{
+	struct fi_mr_raw_attr attr = {
+		.flags = flags,
+		.base_addr = base_addr,
+		.raw_key = raw_key,
+		.key_size = key_size
+	};
+	return mr->fid.ops->control(&mr->fid, FI_GET_RAW_MR, &attr);
+}
+
+static inline int
+fi_mr_map_raw(struct fid_domain *domain, uint64_t base_addr,
+	      uint8_t *raw_key, size_t key_size, uint64_t *key, uint64_t flags)
+{
+	struct fi_mr_map_raw map = {
+		.flags = flags,
+		.base_addr = base_addr,
+		.raw_key = raw_key,
+		.key_size = key_size,
+		.key = key
+	};
+	return domain->fid.ops->control(&domain->fid, FI_MAP_RAW_MR, &map);
+}
+
+static inline int
+fi_mr_unmap_key(struct fid_domain *domain, uint64_t key)
+{
+	return domain->fid.ops->control(&domain->fid, FI_UNMAP_KEY, &key);
 }
 
 static inline int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags)

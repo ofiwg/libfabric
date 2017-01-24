@@ -438,7 +438,10 @@ supported set of modes will be returned in the info structure(s).
   for locally accessed data buffers.  Data buffers used in send and
   receive operations and as the source buffer for RMA and atomic
   operations must be registered by the application for access domains
-  opened with this capability.
+  opened with this capability.  This flag is defined for compatibility
+  and is ignored if the FI_MR_LOCAL domain mr_mode bit is set.
+  See the domain attribute mr_mode [`fi_domain`(3)](fi_domain.3.html)
+  and [`fi_mr`(3)](fi_mr.3.html).
 
 *FI_MSG_PREFIX*
 : Message prefix mode indicates that an application will provide
