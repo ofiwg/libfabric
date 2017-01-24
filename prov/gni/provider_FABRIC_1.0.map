@@ -40,6 +40,8 @@
 		gnix_listen;
 		gnix_mr_bind;
 		gnix_mr_reg;
+		gnix_mr_regv;
+		gnix_mr_regattr;
 		gnix_passive_ep_open;
 		gnix_pep_bind;
 		gnix_poll_add;

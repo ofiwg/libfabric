@@ -629,6 +629,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->data_progress = info->domain_attr->data_progress;
 	domain->thread_model = info->domain_attr->threading;
 	domain->mr_is_init = 0;
+	domain->mr_iov_limit = info->domain_attr->mr_iov_limit;
 
 	fastlock_init(&domain->cm_nic_lock);
 
@@ -673,8 +674,8 @@ static struct fi_ops gnix_domain_fi_ops = {
 static struct fi_ops_mr gnix_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = gnix_mr_reg,
-	.regv = fi_no_mr_regv,
-	.regattr = fi_no_mr_regattr
+	.regv = gnix_mr_regv,
+	.regattr = gnix_mr_regattr, 
 };
 
 static struct fi_ops_domain gnix_domain_ops = {

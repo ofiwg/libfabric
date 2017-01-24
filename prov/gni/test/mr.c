@@ -318,6 +318,51 @@ Test(mr_internal_bare, basic_init)
 	cr_assert(ret == FI_SUCCESS);
 }
 
+
+/* Test simple init, register and deregister */
+Test(mr_internal_bare, basic_init_regv)
+{
+	int ret;
+	const struct iovec iov = {
+		.iov_base = buf, 
+		.iov_len = buf_len,
+	};
+
+	ret = fi_mr_regv(dom, &iov, 1, default_access,
+		default_offset, default_req_key,
+		default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+
+/* Test simple init, register and deregister */
+Test(mr_internal_bare, basic_init_regattr)
+{
+	int ret;
+	const struct iovec iov = {
+		.iov_base = buf, 
+		.iov_len = buf_len, 
+	};
+	struct fi_mr_attr attr = {
+		.mr_iov = &iov, 
+		.iov_count = 1, 
+		.access = default_access,
+		.offset = default_offset, 
+		.requested_key = default_req_key,
+		.context = NULL,
+	};
+
+	ret = fi_mr_regattr(dom, &attr, default_flags, &mr);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+
 /* Test simple init, register and deregister, no NIC present */
 Test(mr_internal_bare, bug_1086)
 {
@@ -396,6 +441,61 @@ Test(mr_internal_bare, invalid_mr_ptr)
 			default_offset, default_req_key, default_flags,
 			NULL, NULL);
 	cr_assert(ret == -FI_EINVAL);
+}
+
+
+Test(mr_internal_bare, invalid_attr)
+{
+	int ret;
+	
+	ret = fi_mr_regattr(dom, NULL, default_flags, &mr); 
+	cr_assert(ret == -FI_EINVAL);
+}
+
+
+Test(mr_internal_bare, invalid_iov_count)
+{
+	int ret;
+	const struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = buf_len, 
+	};
+		
+
+	ret = fi_mr_regv(dom, &iov, 0, default_access,
+		default_offset, default_req_key, default_flags,
+		&mr, NULL);
+	cr_assert(ret == -FI_EINVAL);
+}
+
+Test(mr_internal_bare, invalid_iov)
+{
+	int ret;
+
+	ret = fi_mr_regv(dom, NULL, 1, default_access,
+		default_offset, default_req_key, default_flags,
+		&mr, NULL);
+	cr_assert(ret == -FI_EINVAL);
+}
+
+Test(mr_internal_bare, unsupported_iov_count)
+{
+	int ret;
+	const struct iovec iov[2] = {
+		{
+			.iov_base = buf,
+			.iov_len = buf_len >> 2, 
+		}, 
+		{
+			.iov_base = buf + (buf_len >> 1),
+			.iov_len = buf_len >> 2,
+		},
+	};
+
+	ret = fi_mr_regv(dom,(const struct iovec *) &iov, 2, default_access,
+		default_offset, default_req_key, default_flags,
+		&mr, NULL);
+	cr_assert(ret == -FI_EOPNOTSUPP);
 }
 
 /* Test invalid fid param to fi_mr_reg */
