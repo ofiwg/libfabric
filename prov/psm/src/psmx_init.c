@@ -34,6 +34,8 @@
 #include "prov.h"
 
 static int psmx_init_count = 0;
+static int psmx_lib_initialized = 0;
+static pthread_mutex_t psmx_lib_mutex; 
 
 struct psmx_env psmx_env = {
 	.name_server	= 1,
@@ -61,6 +63,51 @@ static void psmx_init_env(void)
 	fi_param_get_int(&psmx_prov, "prog_thread", &psmx_env.prog_thread);
 	fi_param_get_int(&psmx_prov, "prog_interval", &psmx_env.prog_interval);
 	fi_param_get_str(&psmx_prov, "prog_affinity", &psmx_env.prog_affinity);
+}
+
+static int psmx_init_lib(void)
+{
+	int major, minor;
+	int ret = 0, err;
+
+	if (psmx_lib_initialized)
+		return 0;
+
+	pthread_mutex_lock(&psmx_lib_mutex);
+
+	if (psmx_lib_initialized)
+		goto out;
+
+	psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
+
+	major = PSM_VERNO_MAJOR;
+	minor = PSM_VERNO_MINOR;
+
+	err = psm_init(&major, &minor);
+	if (err != PSM_OK) {
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
+			"psm_init failed: %s\n", psm_error_get_string(err));
+		ret = err;
+		goto out;
+	}
+
+	FI_INFO(&psmx_prov, FI_LOG_CORE,
+		"PSM header version = (%d, %d)\n", PSM_VERNO_MAJOR, PSM_VERNO_MINOR);
+	FI_INFO(&psmx_prov, FI_LOG_CORE,
+		"PSM library version = (%d, %d)\n", major, minor);
+
+	if (major != PSM_VERNO_MAJOR) {
+		psmx_am_compat_mode = 1;
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"PSM AM compat mode enabled: appliation %d.%d, library %d.%d.\n",
+			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
+	}
+
+	psmx_lib_initialized = 1;
+
+out:
+	pthread_mutex_unlock(&psmx_lib_mutex);
+	return ret;
 }
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
@@ -142,6 +189,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	*info = NULL;
 
+	if (psmx_init_lib())
+		return -FI_ENODATA;
+
 	if (psm_ep_num_devunits(&cnt) || !cnt) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
 			"no PSM device is found.\n");
@@ -155,7 +205,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
 			"failed to allocate src addr.\n");
 		return -FI_ENODATA;
-        }
+	}
 	src_addr->unit = PSMX_DEFAULT_UNIT;
 	src_addr->port = PSMX_DEFAULT_PORT;
 	src_addr->service = PSMX_DEFAULT_SERVICE;
@@ -561,7 +611,7 @@ static void psmx_fini(void)
 {
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	if (! --psmx_init_count) {
+	if (! --psmx_init_count && psmx_lib_initialized) {
 		/* This function is called from a library destructor, which is called
 		 * automatically when exit() is called. The call to psm_finalize()
 		 * might cause deadlock if the applicaiton is terminated with Ctrl-C
@@ -569,11 +619,13 @@ static void psmx_fini(void)
 		 * psm_finalize() tries to acquire. This can be avoided by only
 		 * calling psm_finalize() when PSM is guaranteed to be unused.
 		 */
-		if (psmx_active_fabric)
+		if (psmx_active_fabric) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"psmx_active_fabric != NULL, skip psm_finalize\n");
-		else
+		} else {
 			psm_finalize();
+			psmx_lib_initialized = 0;
+		}
 	}
 }
 
@@ -588,9 +640,6 @@ struct fi_provider psmx_prov = {
 
 PROVIDER_INI
 {
-	int major, minor;
-	int err;
-
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
 	fi_param_define(&psmx_prov, "name_server", FI_PARAM_BOOL,
@@ -631,30 +680,7 @@ PROVIDER_INI
 			"(when >=0) or core_id - num_cores (when <0). "
 			"(default: affinity not set)");
 
-        psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
-
-	major = PSM_VERNO_MAJOR;
-	minor = PSM_VERNO_MINOR;
-
-        err = psm_init(&major, &minor);
-	if (err != PSM_OK) {
-		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"psm_init failed: %s\n", psm_error_get_string(err));
-		return NULL;
-	}
-
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"PSM header version = (%d, %d)\n", PSM_VERNO_MAJOR, PSM_VERNO_MINOR);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"PSM library version = (%d, %d)\n", major, minor);
-
-	if (major != PSM_VERNO_MAJOR) {
-		psmx_am_compat_mode = 1;
-		FI_INFO(&psmx_prov, FI_LOG_CORE,
-			"PSM AM compat mode enabled: appliation %d.%d, library %d.%d.\n",
-			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
-	}
-
+	pthread_mutex_init(&psmx_lib_mutex, NULL);
 	psmx_init_count++;
 	return (&psmx_prov);
 }
