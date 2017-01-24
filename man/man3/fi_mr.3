@@ -1,4 +1,4 @@
-.TH "fi_mr" "3" "2017\-01\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2017\-01\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr \- Memory region operations
@@ -13,6 +13,13 @@ memory region
 .PP
 fi_mr_key : Return the remote key needed to access a registered memory
 region
+.PP
+fi_mr_raw_attr : Return raw memory region attributes.
+.PP
+fi_mr_map_raw : Converts a raw memory region key into a key that is
+usable for data transfer operations.
+.PP
+fi_mr_unmap_key : Releases a previously mapped raw memory region key.
 .PP
 fi_mr_bind : Associate a registered memory region with a completion
 counter.
@@ -38,6 +45,14 @@ int\ fi_close(struct\ fid\ *mr);
 void\ *\ fi_mr_desc(struct\ fid_mr\ *mr);
 
 uint64_t\ fi_mr_key(struct\ fid_mr\ *mr);
+
+int\ fi_mr_raw_attr(struct\ fid_mr\ *mr,\ uint64_t\ *base_addr,
+\ \ \ \ uint8_t\ *raw_key,\ size_t\ *key_size,\ uint64_t\ flags);
+
+int\ fi_mr_map_raw(struct\ fid_domain\ *domain,\ uint64_t\ base_addr,
+\ \ \ \ uint8_t\ *raw_key,\ size_t\ key_size,\ uint64_t\ *key,\ uint64_t\ flags);
+
+int\ fi_mr_unmap_key(struct\ fid_domain\ *domain,\ uint64_t\ key);
 
 int\ fi_mr_bind(struct\ fid_mr\ *mr,\ struct\ fid\ *bfid,\ uint64_t\ flags);
 \f[]
@@ -81,6 +96,53 @@ A memory buffer must be registered with a resource domain before it can
 be used as the target of a remote RMA or atomic data transfer.
 Additionally, a fabric provider may require that data buffers be
 registered before being used in local transfers.
+Memory registration restrictions are controlled using a separate set of
+mode bits, specified through the domain attributes (mr_mode field).
+.PP
+The following apply to memory registration.
+.PP
+\f[I]Scalable Memory Registration\f[] : By default, memory registration
+is considered scalable.
+(For library versions 1.4 and earlier, this is indicated by setting
+mr_mode to FI_MR_SCALABLE, with the fi_info mode bit FI_LOCAL_MR set to
+0).
+For versions 1.5 and later, scalable is implied by the lack of any
+mr_mode bits being set.
+The setting of mr_mode bits therefore adjusts application behavior as
+described below.
+Default, scalable registration has several properties.
+.PP
+In scalable mode, registration occurs on memory address ranges.
+Because registration refers to memory regions, versus data buffers, the
+address ranges given for a registration request do not need to map to
+data buffers allocated by the application at the time the registration
+call is made.
+That is, an application can register any range of addresses in their
+virtual address space, whether or not those addresses are backed by
+physical pages or have been allocated.
+.PP
+The resulting memory regions are accessible by peers starting at a base
+address of 0.
+That is, the target address that is specified is a byte offset into the
+registered region.
+.PP
+The application also selects the access key associated with the MR.
+The key size is restricted to a maximum of 8 bytes.
+.PP
+With scalable registration, locally accessed data buffers are not
+registered.
+This includes source buffers for all transmit operations \-\- sends,
+tagged sends, RMA, and atomics \-\- as well as buffers posted for
+receive and tagged receive operations.
+.PP
+\f[I]FI_MR_LOCAL\f[] : When the FI_MR_LOCAL mode bit is set,
+applications must register all data buffers that will be accessed by the
+local hardware and provide a valid mem_desc parameter into applicable
+data transfer operations.
+When FI_MR_LOCAL is zero, applications are not required to register data
+buffers before using them for local operations (e.g.
+send and receive data buffers), and the mem_desc parameter into data
+transfer operations is ignored.
 .PP
 A provider may hide local registration requirements from applications by
 making use of an internal registration cache or similar mechanisms.
@@ -90,54 +152,61 @@ In order to support as broad range of applications as possible, without
 unduly affecting their performance, applications that wish to manage
 their own local memory registrations may do so by using the memory
 registration calls.
-Applications may use the FI_LOCAL_MR domain mode bit as a guide.
 .PP
-When the FI_LOCAL_MR mode bit is set, applications must register all
-data buffers that will be accessed by the local hardware and provide a
-valid mem_desc parameter into applicable data transfer operations.
-When FI_LOCAL_MR is zero, applications are not required to register data
-buffers before using them for local operations (e.g.
-send and receive data buffers), and the mem_desc parameter into data
-transfer operations is ignored.
+Note: the FI_MR_LOCAL mr_mode bit replaces the FI_LOCAL_MR fi_info mode
+bit.
+When FI_MR_LOCAL is set, FI_LOCAL_MR is ignored.
 .PP
-Further behavior of memory registration operations is controlled based
-on the mr_mode field in the domain attribute.
+\f[I]FI_MR_RAW\f[] : Raw memory regions are used to support providers
+with keys larger than 64\-bits or require setup at the peer.
+When the FI_MR_RAW bit is set, applications must use fi_mr_raw_attr()
+locally and fi_mr_map_raw() at the peer before targeting a memory region
+as part of any data transfer request.
 .PP
-\f[I]Basic Memory Registration Mode\f[] : If the mr_mode field is set to
-FI_MR_BASIC, then memory registration operations are set to basic mode.
-In basic mode, registration occurs on allocated data buffers, and the MR
-attributes are selected by the provider.
+\f[I]FI_MR_VIRT_ADDR\f[] : The FI_MR_VIRT_ADDR bit indicates that the
+provider references memory regions by virtual address, rather than a
+0\-based offset.
+Peers that target memory regions registered with FI_MR_VIRT_ADDR specify
+the destination memory buffer using the target\[aq]s virtual address,
+with any offset into the region specified as virtual address + offset.
+Support of this bit typically implies that peers must exchange
+addressing data prior to initiating any RMA or atomic operation.
 .PP
-Basic mode uses provider assigned attributes for the registered buffers.
-The local memory descriptor and remote memory key are selected by the
-provider.
-The address used to access a buffer as the target of an RMA or atomic
-operation is the same as the virtual address of the buffer.
+\f[I]FI_MR_ALLOCATED\f[] : When set, all registered memory regions must
+be backed by physical memory pages at the time the registration call is
+made.
 .PP
-Applications that support the basic registration mode will need to
-exchange MR parameters with remote peers for RMA and atomic operations.
-The exchanged data should include both the address of the memory region
-as well as the MR key.
+\f[I]FI_MR_PROV_KEY\f[] : This memory region mode indicates that the
+provider does not support application requested MR keys.
+MR keys are returned by the provider.
+Applications that support FI_MR_PROV_KEY can obtain the provider key
+using fi_mr_key(), unless FI_MR_RAW is also set.
+The returned key should then be exchanged with peers prior to initiating
+an RMA or atomic operation.
 .PP
-\f[I]Scalable Memory Registration Mode\f[] : If the mr_mode field is set
-to FI_MR_SCALABLE, then memory registration operations are set to
-scalable mode.
-In scalable mode, registration occurs on memory address ranges, and the
-MR attributes are selected by the user.
+\f[I]FI_MR_MMU_NOTIFY\f[] : FI_MR_MMU_NOTIFY is typically set by
+providers that support memory registration against memory regions that
+are not necessarily backed by allocated physical pages at the time the
+memory registration occurs.
+(That is, FI_MR_ALLOCATED is typically 0).
+However, such providers require that applications notify the provider
+prior to the MR being accessed as part of a data transfer operation.
+This notification informs the provider that all necessary physical pages
+now back the region.
+The notification is necessary for providers that cannot hook directly
+into the operating system page tables or memory management unit.
+TODO: Define notification mechanism and data.
 .PP
-Memory regions registered as the target of RMA and atomic operations are
-associated with a MR key selected by the application.
-If local registrations are required (see FI_LOCAL_MR mode), the local
-descriptor will be the same as the remote key.
-The resulting memory region will be accessible by remote peers starting
-at a base address of 0.
-Because scalable registration mode refers to memory regions, versus data
-buffers, the address ranges given for a registration request do not need
-to map to data buffers allocated by the application at the time the
-registration call is made.
-That is, an application can register any range of addresses in their
-virtual address space, whether or not those addresses are backed by
-physical pages or have been allocated.
+\f[I]Basic Memory Registration\f[] : Basic memory registration is
+indicated by the FI_MR_BASIC mr_mode bit in library versions 1.4 and
+earlier.
+Basic registration is equivalent to setting the following mr_mode bits
+to one: FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, and FI_MR_PROV_KEY.
+Additionally, providers that supported basic registation usually
+required FI_MR_LOCAL.
+FI_MR_BASIC is provided for backwards compatibility.
+Applications coding to libfabric version 1.5 or later should set the
+independent mr_mode bits.
 .PP
 The registrations functions \-\- fi_mr_reg, fi_mr_regv, and
 fi_mr_regattr \-\- are used to register one or more memory regions with
@@ -223,12 +292,51 @@ When closing the MR, there must be no opened endpoints or counters
 associated with the MR.
 If resources are still associated with the MR when attempting to close,
 the call will return \-FI_EBUSY.
-.SS fi_mr_desc / fi_mr_key
+.SS fi_mr_desc
 .PP
-The local memory descriptor and remote protection key associated with a
-MR may be obtained by calling fi_mr_desc and fi_mr_key, respectively.
+Obtains the local memory descriptor associated with a MR.
 The memory registration must have completed successfully before invoking
-these calls.
+this call.
+.SS fi_mr_key
+.PP
+Returns the remote protection key associated with a MR.
+The memory registration must have completed successfully before invoking
+this.
+The returned key may be used in data transfer operations at a peer.
+If the FI_RAW_MR mode bit has been set for the domain, then the memory
+key must be obtained using the fi_mr_raw_key function instead.
+A return value of FI_KEY_NOTAVAIL will be returned if the registration
+has not completed or a raw memory key is required.
+.SS fi_mr_raw_attr
+.PP
+Returns the raw, remote protection key and base address associated with
+a MR.
+The memory registration must have completed successfully before invoking
+this routine.
+Use of this call is required if the FI_RAW_MR mode bit has been set by
+the provider; however, it is safe to use this call with any memory
+region.
+.PP
+A raw key must be mapped by a peer before it can be used in data
+transfer operations.
+See fi_mr_map_key below.
+.SS fi_mr_map_raw
+.PP
+Raw protection keys must be mapped to a usable key value before they can
+be used for data transfer operations.
+The mapping is done by the peer that initiates the RMA or atomic
+operation.
+The mapping function takes as input the raw key and its size, and
+returns the mapped key.
+Use of the fi_mr_map_raw function is required if the peer has the
+FI_RAW_MR mode bit set, but this routine may be called on any valid key.
+All mapped keys must be freed by calling fi_mr_unmap_key when access to
+the peer memory region is no longer necessary.
+.SS fi_mr_unmap_key
+.PP
+This call releases any resources that may have been allocated as part of
+mapping a raw memory key.
+All mapped keys must be freed before the corresponding domain is closed.
 .SS fi_mr_bind
 .PP
 The fi_mr_bind function associates a memory region with a counter, for
@@ -329,6 +437,31 @@ Only peer endpoints that are programmed to use the same authorization
 key may access the memory region.
 This field is ignored unless the fabric is opened with API version 1.5
 or greater.
+.SH NOTES
+.PP
+Direct access to an application\[aq]s memory by a remote peer requires
+that the application register the targeted memory buffer(s).
+This is typically done by calling one of the fi_mr_reg* routines.
+For FI_MR_PROV_KEY, the provider will return a key that must be used by
+the peer when accessing the memory region.
+The application is responsible for transferring this key to the peer.
+If FI_MR_RAW mode has been set, the key must be retrieved using the
+fi_mr_raw_attr function.
+.PP
+FI_RAW_MR allows support for providers that require more than 8\-bytes
+for their protection keys or need additional setup before a key can be
+used for transfers.
+After a raw key has been retrieved, it must be exchanged with the remote
+peer.
+The peer must use fi_mr_map_raw to convert the raw key into a usable
+64\-bit key.
+The mapping must be done even if the raw key is 64\-bits or smaller.
+.PP
+The raw key support functions are usable with all registered memory
+regions, even if FI_MR_RAW has not been set.
+It is recommended that portable applications target using those
+interfaces; however, their use does carry extra message and memory
+footprint overhead, making it less desirable for highly scalable apps.
 .SH FLAGS
 .PP
 Flags are reserved for future use and must be 0.
