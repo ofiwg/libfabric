@@ -103,9 +103,7 @@ int _gnix_fl_init(int elem_size, int offset, int init_size,
 
 	int fill_size = init_size != 0 ? init_size : GNIX_FL_INIT_SIZE;
 
-	fl->refill_size = (refill_size != 0 ?
-			   refill_size :
-			   GNIX_FL_INIT_REFILL_SIZE);
+	fl->refill_size = refill_size;
 	fl->growth_factor = (growth_factor != 0 ?
 			     growth_factor :
 			     GNIX_FL_GROWTH_FACTOR);
