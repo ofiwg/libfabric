@@ -2501,10 +2501,10 @@ static void sock_pe_wait(struct sock_pe *pe)
 }
 
 #if !defined __APPLE__ && !defined _WIN32
-static void sock_thread_set_affinity(char *s)
+static void sock_thread_set_affinity(const char *s)
 {
 	char *saveptra = NULL, *saveptrb = NULL, *saveptrc = NULL;
-	char *a, *b, *c;
+	char *dup_s, *a, *b, *c;
 	int j, first, last, stride;
 	cpu_set_t mycpuset;
 	pthread_t mythread;
@@ -2512,7 +2512,13 @@ static void sock_thread_set_affinity(char *s)
 	mythread = pthread_self();
 	CPU_ZERO(&mycpuset);
 
-	a = strtok_r(s, ",", &saveptra);
+	dup_s = strdup(s);
+	if (dup_s == NULL) {
+		SOCK_LOG_ERROR("strdup cannot allocate memory\n");
+		return;
+	}
+
+	a = strtok_r(dup_s, ",", &saveptra);
 	while (a) {
 		first = last = -1;
 		stride = 1;
@@ -2542,11 +2548,17 @@ static void sock_thread_set_affinity(char *s)
 	j = pthread_setaffinity_np(mythread, sizeof(cpu_set_t), &mycpuset);
 	if (j != 0)
 		SOCK_LOG_ERROR("pthread_setaffinity_np failed\n");
+
+	free(dup_s);
 }
 #endif
 
 static void sock_pe_set_affinity(void)
 {
+	char *sock_pe_affinity_str;
+	if (fi_param_get_str(&sock_prov, "pe_affinity", &sock_pe_affinity_str) != FI_SUCCESS)
+		return;
+
 	if (sock_pe_affinity_str == NULL)
 		return;
 
