@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -427,6 +427,29 @@ void api_send_recv(int len)
 		cr_assert(sz < 0, "fi_recv should fail caps:0x%lx err:%ld",
 			  caps, sz);
 	}
+}
+
+Test(api, dom_caps)
+{
+	int ret;
+
+	hints[0] = fi_allocinfo();
+	cr_assert(hints[0], "fi_allocinfo");
+
+	hints[0]->mode = ~0;
+	hints[0]->fabric_attr->prov_name = strdup("gni");
+
+	/* we only support REMOTE_COMM */
+	hints[0]->domain_attr->caps = FI_LOCAL_COMM;
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints[0], &fi[0]);
+	cr_assert_eq(ret, -FI_ENODATA, "fi_getinfo");
+
+	hints[0]->domain_attr->caps = FI_REMOTE_COMM;
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints[0], &fi[0]);
+	cr_assert_eq(ret, 0, "fi_getinfo");
+
+	fi_freeinfo(hints[0]);
+	fi_freeinfo(fi[0]);
 }
 
 Test(rdm_api, msg_no_caps)
