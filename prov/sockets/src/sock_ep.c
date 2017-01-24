@@ -219,29 +219,38 @@ static int sock_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
-		if (flags & FI_SEND)
+		if (flags & FI_SEND) {
 			tx_ctx->comp.send_cntr = cntr;
+			sock_cntr_add_tx_ctx(cntr, tx_ctx);
+		}
 
-		if (flags & FI_READ)
+		if (flags & FI_READ) {
 			tx_ctx->comp.read_cntr = cntr;
+			sock_cntr_add_tx_ctx(cntr, tx_ctx);
+		}
 
-		if (flags & FI_WRITE)
+		if (flags & FI_WRITE) {
 			tx_ctx->comp.write_cntr = cntr;
-
-		sock_cntr_add_tx_ctx(cntr, tx_ctx);
+			sock_cntr_add_tx_ctx(cntr, tx_ctx);
+		}
 		break;
 
 	case FI_CLASS_RX_CTX:
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
-		if (flags & FI_RECV)
+		if (flags & FI_RECV) {
 			rx_ctx->comp.recv_cntr = cntr;
+			sock_cntr_add_rx_ctx(cntr, rx_ctx);
+		}
 
-		if (flags & FI_REMOTE_READ)
+		if (flags & FI_REMOTE_READ) {
 			rx_ctx->comp.rem_read_cntr = cntr;
+			sock_cntr_add_rx_ctx(cntr, rx_ctx);
+		}
 
-		if (flags & FI_REMOTE_WRITE)
+		if (flags & FI_REMOTE_WRITE) {
 			rx_ctx->comp.rem_write_cntr = cntr;
-		sock_cntr_add_rx_ctx(cntr, rx_ctx);
+			sock_cntr_add_rx_ctx(cntr, rx_ctx);
+		}
 		break;
 
 	default:
