@@ -1722,7 +1722,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct rxd_ep *rxd_ep;
 	struct rxd_domain *rxd_domain;
 
-	ret = fi_check_info(&rxd_util_prov, info, FI_MATCH_PREFIX);
+	ret = ofi_check_info(&rxd_util_prov, info, FI_MATCH_PREFIX);
 	if (ret)
 		return ret;
 

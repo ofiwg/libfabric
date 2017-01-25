@@ -32,6 +32,7 @@
 
 #include "config.h"
 
+#include <fi_util.h>
 #include "fi_verbs.h"
 
 
@@ -51,9 +52,9 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	return sizeof(*entry);
 }
 
-/* TODO: This should copy the listening fi_info as the base */
 static struct fi_info *
-fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
+fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
+		struct fi_info *pep_info)
 {
 	struct fi_info *info, *fi;
 	struct fi_ibv_connreq *connreq;
@@ -70,7 +71,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	if (!(info->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
 		goto err;
 
-	fi_ibv_update_info(NULL, info);
+	ofi_alter_info(info, pep_info);
 
 	info->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(info->src_addr = malloc(info->src_addrlen)))
@@ -107,10 +108,12 @@ static ssize_t
 fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event,
 	uint32_t *event, struct fi_eq_cm_entry *entry, size_t len)
 {
+	struct fi_ibv_pep *pep;
 	fid_t fid;
 	size_t datalen;
 
 	fid = cma_event->id->context;
+	pep = container_of(fid, struct fi_ibv_pep, pep_fid);
 	switch (cma_event->event) {
 //	case RDMA_CM_EVENT_ADDR_RESOLVED:
 //		return 0;
@@ -118,7 +121,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 //		return 0;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
-		entry->info = fi_ibv_eq_cm_getinfo(eq->fab, cma_event);
+		entry->info = fi_ibv_eq_cm_getinfo(eq->fab, cma_event, pep->info);
 		if (!entry->info) {
 			rdma_destroy_id(cma_event->id);
 			return 0;

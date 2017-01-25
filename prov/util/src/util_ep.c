@@ -65,7 +65,7 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	if (!info || !info->ep_attr || !info->rx_attr || !info->tx_attr)
 		return -FI_EINVAL;
 
-	ret = fi_check_info(util_prov, info, type);
+	ret = ofi_check_info(util_prov, info, type);
 	if (ret)
 		return ret;
 

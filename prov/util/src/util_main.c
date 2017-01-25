@@ -165,7 +165,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		return -FI_EINVAL;
 	}
 
-	ret = fi_check_info(util_prov, hints, FI_MATCH_EXACT);
+	ret = ofi_check_info(util_prov, hints, FI_MATCH_EXACT);
 	if (ret)
 		return ret;
 

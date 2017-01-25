@@ -183,6 +183,7 @@ struct fi_ibv_pep {
 	int			backlog;
 	int			bound;
 	size_t			src_addrlen;
+	struct fi_info		*info;
 };
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
@@ -319,7 +320,6 @@ void fi_ibv_free_info();
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
 struct fi_info *fi_ibv_get_verbs_info(const char *domain_name);
-void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
 int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
@@ -334,10 +334,6 @@ struct verbs_ep_domain {
 
 extern const struct verbs_ep_domain verbs_rdm_domain;
 
-int fi_ibv_check_fabric_attr(const struct fi_fabric_attr *attr,
-			     const struct fi_info *info);
-int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
-			     const struct fi_info *info);
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 			 const struct fi_info *info);
 int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,

@@ -32,6 +32,7 @@
 
 #include "config.h"
 
+#include <fi_util.h>
 #include "fi_verbs.h"
 #include "ep_rdm/verbs_rdm.h"
 
@@ -277,7 +278,8 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!fi)
 		return -FI_EINVAL;
 
-	ret = fi_ibv_check_domain_attr(info->domain_attr, fi);
+	ret = ofi_check_domain_attr(&fi_ibv_prov, fi->domain_attr,
+			info->domain_attr, FI_MATCH_EXACT);
 	if (ret)
 		return ret;
 
