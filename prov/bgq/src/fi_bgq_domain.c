@@ -415,13 +415,6 @@ err:
 
 int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 {
-	enum fi_bgq_domain_type type = FI_BGQ_DOMAIN_UNSPEC;
-
-	if (attr->name) {
-		if (fi_bgq_domain_str_to_type(attr->name, &type) < 0) {
-			goto err;
-		}
-	}
 	switch(attr->threading) {
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
@@ -440,38 +433,6 @@ int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 		FI_LOG(fi_bgq_global.prov, FI_LOG_WARN, FI_LOG_DOMAIN,
 				"control auto progress is not fully implemented\n");
 	}
-	switch (attr->av_type) {
-	case FI_AV_UNSPEC:
-		break;
-	case FI_AV_MAP:
-		switch (type) {
-		//case FI_BGQ_DOMAIN_RMA_AVTABLE:
-		case FI_BGQ_DOMAIN_AVTABLE:
-			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"mismatch between domain and av type\n");
-			errno = FI_EINVAL;
-			goto err;
-		default:
-			break;
-		}
-		break;
-	case FI_AV_TABLE:
-		switch (type) {
-		//case FI_BGQ_DOMAIN_RMA_AVMAP:
-		case FI_BGQ_DOMAIN_AVMAP:
-			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"mismatch between domain and av type\n");
-			errno = FI_EINVAL;
-			goto err;
-		default:
-			break;
-		}
-		break;
-	default:
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-				"incorrect av type\n");
-		goto err;
-	}
 	switch (attr->mr_mode) {
 	case FI_MR_UNSPEC:
 	case FI_MR_SCALABLE:
@@ -483,37 +444,18 @@ int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 			goto err;
 	}
 	if (attr->mr_key_size) {
-		switch(type) {
-		case FI_BGQ_DOMAIN_AVTABLE:
-		case FI_BGQ_DOMAIN_AVMAP:
-			if (attr->mr_key_size > FI_BGQ_MR_KEY_SIZE) {
-				FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-						"memory key size too large\n");
-				goto err;
-			}
-			break;
-		default:
+		if (attr->mr_key_size > FI_BGQ_MR_KEY_SIZE) {
 			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"Unknown error\n");
+					"memory key size too large\n");
 			goto err;
 		}
 	}
 	if (attr->cq_data_size) {
-		switch(type) {
-		case FI_BGQ_DOMAIN_AVTABLE:
-		case FI_BGQ_DOMAIN_AVMAP:
-			if (attr->cq_data_size > FI_BGQ_REMOTE_CQ_DATA_SIZE) {
-				FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-						"max cq data supported is %d\n",
-						FI_BGQ_REMOTE_CQ_DATA_SIZE);
-				goto err;
-			}
-			break;
-		default:
+		if (attr->cq_data_size > FI_BGQ_REMOTE_CQ_DATA_SIZE) {
 			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"Unknown error\n");
-			errno = FI_EINVAL;
-			return -errno;
+					"max cq data supported is %d\n",
+					FI_BGQ_REMOTE_CQ_DATA_SIZE);
+			goto err;
 		}
 	}
 
