@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -220,6 +220,7 @@ static inline void dlist_splice_tail(
 /*
  * prototypes
  */
+int _gnix_get_cq_limit(void);
 int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie);
 int gnixu_to_fi_errno(int err);
 

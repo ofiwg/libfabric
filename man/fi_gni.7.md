@@ -38,7 +38,6 @@ libfabric API:
 : The provider implements the *FI_MR_BASIC* memory registration mode.
 
 *Data transfer operations*
-
 : The following data transfer interfaces are supported for all
   endpoint types: *FI_ATOMIC*, *FI_MSG*, *FI_RMA*, *FI_TAGGED*.  See
   DATA TRANSFER OPERATIONS below for more details.
@@ -52,7 +51,6 @@ libfabric API:
 : The GNI provider does not require any operation modes.
 
 *Progress*
-
 : For both control and data progress, the GNI provider supports both
   *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*, with a default set to
   *FI_PROGRESS_AUTO*.
@@ -63,9 +61,8 @@ libfabric API:
 : The GNI provider specifically supports wait object types *FI_WAIT_UNSPEC*,
   and *FI_WAIT_SET*. A wait object must be used when calling fi_cntr_wait,
   fi_cq_sread/from, fi_eq_sread/from, fi_wait.
-  The GNI provider spawns an internal wait progress thread that is woken up 
+  The GNI provider spawns an internal wait progress thread that is woken up
   when clients utilize the wait system (e.g., calling fi_wait).
- 
 
 *Additional Features*
 : The GNI provider also supports the following capabilities and features:
@@ -244,6 +241,10 @@ but adds the following parameter:
  (AND and XOR), and GNIX_FAB_RQ_NAMO_AX_S (AND and XOR 32 bit),
 GNIX_FAB_RQ_NAMO_FAX (Fetch AND and XOR) and GNIX_FAB_RQ_NAMO_FAX_S
  (Fetch AND and XOR 32 bit).
+
+#NOTES
+
+The GNI provider sets the domain attribute *cntr_cnt* to the the CQ limit divided by 2.
 
 # SEE ALSO
 

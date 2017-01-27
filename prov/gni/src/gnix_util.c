@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -83,6 +83,7 @@ typedef struct ccm_alps_info {
 static uint64_t gnix_apid;
 static alpsAppLayout_t gnix_appLayout;
 static uint32_t gnix_device_id;
+static int gnix_cq_limit;
 /* These are not used currently and could be static to gnix_alps_init */
 static int alps_init;
 static int *gnix_app_placementList;
@@ -95,6 +96,11 @@ static int *gnix_app_totalPes;
 static int *gnix_app_nodePes;
 static int *gnix_app_peCpus;
 
+
+int _gnix_get_cq_limit(void)
+{
+	return gnix_cq_limit;
+}
 
 static inline void __gnix_ccm_cleanup(void)
 {
@@ -617,6 +623,8 @@ int _gnix_nics_per_rank(uint32_t *nics_per_rank)
 	if (rc) {
 		return rc;
 	}
+
+	gnix_cq_limit = cqs;
 	cqs /= GNIX_CQS_PER_EP;
 
 	rc = _gnix_pes_on_node(&npes);
