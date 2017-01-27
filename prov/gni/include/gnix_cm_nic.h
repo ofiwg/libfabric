@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -184,5 +184,30 @@ int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t *id);
  */
 int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
 				uint32_t *id);
+
+/**
+ * @brief helper function to quickly check whether progress is required on
+ *        a cm_nic
+ *
+ * @param cm_nic  pointer to previously allocated gnix_cm_nic struct
+ * @return true if progress is needed, otherwise false
+ */
+static inline bool _gnix_cm_nic_need_progress(struct gnix_cm_nic *cm_nic)
+{
+	bool ret;
+
+	/*
+	 * if control progress is manual, always need to progress
+	 */
+	if (cm_nic->domain->control_progress == FI_PROGRESS_MANUAL)
+		return true;
+
+	/*
+	 * otherwise we only need to see if the wq has stuff to
+	 * progress
+	 */
+	ret = (dlist_empty(&cm_nic->cm_nic_wq)) ? false : true;
+	return ret;
+}
 
 #endif /* _GNIX_CM_NIC_H_ */
