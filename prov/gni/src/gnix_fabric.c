@@ -491,10 +491,10 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 					hints->domain_attr->caps;
 			}
 
-			ret = fi_check_domain_attr(&gnix_prov,
-						   gnix_info->domain_attr,
-						   hints->domain_attr,
-						   FI_MATCH_EXACT);
+			ret = ofi_check_domain_attr(&gnix_prov,
+						    gnix_info->domain_attr,
+						    hints->domain_attr,
+						    FI_MATCH_EXACT);
 			if (ret)
 				goto err;
 		}
