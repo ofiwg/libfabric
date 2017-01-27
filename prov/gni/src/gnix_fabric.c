@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -203,9 +203,12 @@ static struct fi_info *_gnix_allocinfo()
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
 	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
 	gnix_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
-	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t),
+	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	gnix_info->domain_attr->max_ep_tx_ctx = GNIX_SEP_MAX_CNT;
 	gnix_info->domain_attr->max_ep_rx_ctx = GNIX_SEP_MAX_CNT;
+	gnix_info->domain_attr->mr_iov_limit = 1;
+	gnix_info->domain_attr->caps = GNIX_DOM_CAPS;
+	gnix_info->domain_attr->mode = 0;
 
 	gnix_info->next = NULL;
 	gnix_info->addr_format = FI_ADDR_GNI;
@@ -475,6 +478,17 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				break;
 			default:
 				break;
+			}
+
+			if (hints->domain_attr->caps) {
+				if (hints->domain_attr->caps & ~GNIX_DOM_CAPS) {
+					GNIX_WARN(FI_LOG_FABRIC,
+						  "Invalid domain caps\n");
+					goto err;
+				}
+
+				gnix_info->domain_attr->caps =
+					hints->domain_attr->caps;
 			}
 
 			ret = fi_check_domain_attr(&gnix_prov,

@@ -172,6 +172,8 @@
  * See capabilities section in fi_getinfo.3.
  */
 
+#define GNIX_DOM_CAPS (FI_REMOTE_COMM)
+
 /* Primary capabilities.  Each must be explicitly requested (unless the full
  * set is requested by setting input hints->caps to NULL). */
 #define GNIX_EP_PRIMARY_CAPS                                               \
