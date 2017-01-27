@@ -2148,7 +2148,7 @@ void run_tests(void)
 TestSuite(scalablem, .init = sep_setup_map, .fini = sep_teardown);
 TestSuite(scalablet, .init = sep_setup_table, .fini = sep_teardown);
 
-Test(scalablem, bind)
+Test(scalablem, misc)
 {
 	int ret;
 	struct fi_av_attr av_attr = {0};
@@ -2173,6 +2173,10 @@ Test(scalablem, bind)
 	cr_assert(ret == -FI_EINVAL);
 	ret = fi_close(&t_av->fid);
 	cr_assert(!ret, "failure in closing av.");
+
+	/* test closing a scalable endpoint with open contexts */
+	ret = fi_close(&sep[0]->fid);
+	cr_assert_eq(ret, -FI_EBUSY, "close should have failed.");
 }
 
 Test(scalablem, all)

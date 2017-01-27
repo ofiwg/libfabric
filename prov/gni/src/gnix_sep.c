@@ -577,7 +577,6 @@ static void __sep_destruct(void *obj)
 static int gnix_sep_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
-	int refs_held;
 	struct gnix_fid_sep *sep;
 	struct gnix_fid_trx *trx_priv;
 
@@ -586,12 +585,12 @@ static int gnix_sep_close(fid_t fid)
 	switch (fid->fclass) {
 	case FI_CLASS_SEP:
 		sep = container_of(fid, struct gnix_fid_sep, ep_fid.fid);
-		refs_held = _gnix_ref_put(sep);
-		if (refs_held) {
-			GNIX_INFO(FI_LOG_CQ, "failed to fully close sep due to"
-				  " lingering references. refs=%i sep=%p\n",
-				  refs_held, sep);
+		if (atomic_get(&sep->ref_cnt.references) > 1) {
+			GNIX_WARN(FI_LOG_EP_CTRL, "Contexts associated with "
+				  "this endpoint are still open\n");
+			return -FI_EBUSY;
 		}
+		_gnix_ref_put(sep);
 		break;
 	case FI_CLASS_TX_CTX:
 	case FI_CLASS_RX_CTX:
