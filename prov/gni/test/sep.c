@@ -93,6 +93,8 @@ static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
 };
+struct fi_tx_attr tx_attr;
+struct fi_rx_attr rx_attr;
 
 static uint64_t sends[NUMEPS] = {0}, recvs[NUMEPS] = {0},
 	send_errs[NUMEPS] = {0}, recv_errs[NUMEPS] = {0};
@@ -313,8 +315,6 @@ static void sep_teardown(void)
 			cr_assert(!ret, "failure closing rx cq.");
 		}
 
-		cr_assert(1);
-
 		ret = fi_close(&sep[i]->fid);
 		cr_assert(!ret, "failure in closing ep.");
 
@@ -346,6 +346,90 @@ static void sep_teardown(void)
 	fi_freeinfo(hints);
 	free(target);
 	free(source);
+
+	ret = fi_close(&fab->fid);
+	cr_assert(!ret, "failure in closing fabric.");
+}
+
+void sep_setup_context(void)
+{
+	int ret;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_ATOMIC | FI_RMA | FI_MSG | FI_NAMED_RX_CTX | FI_TAGGED;
+	hints->mode = FI_LOCAL_MR;
+	hints->domain_attr->cq_data_size = NUMEPS * 2;
+	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->fabric_attr->prov_name = strdup("gni");
+	hints->ep_attr->tx_ctx_cnt = ctx_cnt;
+	hints->ep_attr->rx_ctx_cnt = ctx_cnt;
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	cr_assert(!ret, "fi_getinfo");
+
+	tx_ep[0] = calloc(ctx_cnt, sizeof(*tx_ep));
+	rx_ep[0] = calloc(ctx_cnt, sizeof(*rx_ep));
+	if (!tx_ep[0] || !rx_ep[0]) {
+		cr_assert(0, "calloc");
+	}
+
+	ctx_cnt = MIN(ctx_cnt, fi[0]->domain_attr->rx_ctx_cnt);
+	ctx_cnt = MIN(ctx_cnt, fi[0]->domain_attr->tx_ctx_cnt);
+	cr_assert(ctx_cnt, "ctx_cnt is 0");
+
+	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);
+	cr_assert(!ret, "fi_fabric");
+
+	fi[0]->ep_attr->tx_ctx_cnt = ctx_cnt;
+	fi[0]->ep_attr->rx_ctx_cnt = ctx_cnt;
+
+	ret = fi_domain(fab, fi[0], &dom[0], NULL);
+	cr_assert(!ret, "fi_domain");
+
+	ret = fi_scalable_ep(dom[0], fi[0], &sep[0], NULL);
+	cr_assert(!ret, "fi_scalable_ep");
+
+	/* add bits to check failure path */
+	tx_attr.mode = FI_RESTRICTED_COMP;
+	ret = fi_tx_context(sep[0], 0, &tx_attr, &tx_ep[0][0],
+			    NULL);
+	tx_attr.mode = 0;
+	tx_attr.caps = FI_MULTICAST;
+	ret = fi_tx_context(sep[0], 0, &tx_attr, &tx_ep[0][0],
+			    NULL);
+	cr_assert(-FI_EINVAL, "fi_tx_context");
+
+	rx_attr.caps = FI_MULTICAST;
+	ret = fi_rx_context(sep[0], 0, &rx_attr, &rx_ep[0][0],
+			    NULL);
+	cr_assert(-FI_EINVAL, "fi_rx_context");
+
+	rx_attr.caps = 0;
+	rx_attr.mode = FI_RESTRICTED_COMP;
+	ret = fi_rx_context(sep[0], 0, &rx_attr, &rx_ep[0][0],
+			    NULL);
+	cr_assert(-FI_EINVAL, "fi_rx_context");
+}
+
+static void sep_teardown_context(void)
+{
+	int ret;
+
+	ret = fi_close(&sep[0]->fid);
+	cr_assert(!ret, "failure in closing ep.");
+
+	ret = fi_close(&dom[0]->fid);
+	cr_assert(!ret, "failure in closing domain.");
+
+	free(tx_ep[0]);
+	free(rx_ep[0]);
+	free(ep_name[0]);
+	fi_freeinfo(fi[0]);
+
+	fi_freeinfo(hints);
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
@@ -2145,8 +2229,13 @@ void run_tests(void)
 	}
 }
 
+TestSuite(scalablea, .init = sep_setup_context, .fini = sep_teardown_context);
 TestSuite(scalablem, .init = sep_setup_map, .fini = sep_teardown);
 TestSuite(scalablet, .init = sep_setup_table, .fini = sep_teardown);
+
+Test(scalablea, misc)
+{
+}
 
 Test(scalablem, misc)
 {

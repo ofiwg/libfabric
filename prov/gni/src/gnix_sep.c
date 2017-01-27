@@ -119,6 +119,22 @@ static int gnix_sep_tx_ctx(struct fid_ep *sep, int index,
 		(index >= sep_priv->info->ep_attr->tx_ctx_cnt))
 		return -FI_EINVAL;
 
+	if (attr && attr->op_flags & ~GNIX_EP_OP_FLAGS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "invalid op_flags\n");
+		return -FI_EINVAL;
+	}
+
+	/* caps and mode bits are required to be a subset of info */
+	if (attr && attr->caps && (attr->caps & ~sep_priv->info->caps)) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "invalid capabilities\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr && attr->mode && (attr->mode & ~sep_priv->info->mode)) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "invalid mode\n");
+		return -FI_EINVAL;
+	}
+
 	/*
 	 * check to see if the tx context was already
 	 * allocated
@@ -187,6 +203,14 @@ static int gnix_sep_tx_ctx(struct fid_ep *sep, int index,
 	_gnix_ref_get(sep_priv);
 	tx_priv->caps = ep_priv->caps;
 	*tx_ep = &tx_priv->ep_fid;
+	tx_priv->op_flags = ep_priv->op_flags;
+
+	if (attr) {
+		tx_priv->op_flags |= attr->op_flags;
+		memcpy(attr, sep_priv->info->tx_attr,
+		       sizeof(struct fi_tx_attr));
+		attr->op_flags = tx_priv->op_flags;
+	}
 err:
 	fastlock_release(&sep_priv->sep_lock);
 
@@ -216,6 +240,22 @@ static int gnix_sep_rx_ctx(struct fid_ep *sep, int index,
 	if ((sep_priv->ep_fid.fid.fclass != FI_CLASS_SEP) ||
 		(index >= sep_priv->info->ep_attr->rx_ctx_cnt))
 		return -FI_EINVAL;
+
+	if (attr && attr->op_flags & ~GNIX_EP_OP_FLAGS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "invalid op_flags\n");
+		return -FI_EINVAL;
+	}
+
+	/* caps and mode bits are required to be a subset of info */
+	if (attr && attr->caps && (attr->caps & ~sep_priv->info->caps)) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "invalid capabilities\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr && attr->mode && (attr->mode & ~sep_priv->info->mode)) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "invalid mode\n");
+		return -FI_EINVAL;
+	}
 
 	/*
 	 * check to see if the rx context was already
@@ -284,6 +324,14 @@ static int gnix_sep_rx_ctx(struct fid_ep *sep, int index,
 	_gnix_ref_get(sep_priv);
 	rx_priv->caps = ep_priv->caps;
 	*rx_ep = &rx_priv->ep_fid;
+	rx_priv->op_flags = ep_priv->op_flags;
+
+	if (attr) {
+		rx_priv->op_flags |= attr->op_flags;
+		memcpy(attr, sep_priv->info->rx_attr,
+		       sizeof(struct fi_rx_attr));
+		attr->op_flags = rx_priv->op_flags;
+	}
 err:
 	fastlock_release(&sep_priv->sep_lock);
 
@@ -661,10 +709,6 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	sep_priv->caps = info->caps & GNIX_EP_PRIMARY_CAPS;
 
-	sep_priv->op_flags = info->tx_attr->op_flags;
-	sep_priv->op_flags |= info->rx_attr->op_flags;
-	sep_priv->op_flags &= GNIX_EP_OP_FLAGS;
-
 	sep_priv->ep_table = calloc(n_ids, sizeof(struct gnix_fid_ep *));
 	if (sep_priv->ep_table == NULL) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -878,7 +922,7 @@ gnix_sep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	tx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(tx_ep->ep->type));
 
-	flags = tx_ep->ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
+	flags = tx_ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
 		GNIX_SUPPRESS_COMPLETION;
 
 	return _gnix_send(tx_ep->ep, (uint64_t)buf, len, NULL, dest_addr,
@@ -1038,7 +1082,7 @@ gnix_sep_read(struct fid_ep *ep, void *buf, size_t len,
 
 	rx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(rx_ep->ep->type));
-	flags = rx_ep->ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
+	flags = rx_ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
 
 	return _gnix_rma(rx_ep->ep, GNIX_FAB_RQ_RDMA_READ,
 			 (uint64_t)buf, len, desc,
@@ -1060,7 +1104,7 @@ gnix_sep_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	rx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(rx_ep->ep->type));
-	flags = rx_ep->ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
+	flags = rx_ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
 
 	return _gnix_rma(rx_ep->ep, GNIX_FAB_RQ_RDMA_READ,
 			 (uint64_t)iov[0].iov_base, iov[0].iov_len, desc[0],
@@ -1105,7 +1149,7 @@ gnix_sep_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 	tx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(tx_ep->ep->type));
-	flags = tx_ep->ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
+	flags = tx_ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(tx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)buf, len, desc, dest_addr, addr, key,
@@ -1126,7 +1170,7 @@ gnix_sep_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	tx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(tx_ep->ep->type));
-	flags = tx_ep->ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
+	flags = tx_ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(tx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)iov[0].iov_base, iov[0].iov_len, desc[0],
@@ -1174,7 +1218,7 @@ gnix_sep_rma_inject(struct fid_ep *ep, const void *buf,
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
 
-	flags = trx_ep->ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
+	flags = trx_ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
 			GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(trx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
@@ -1198,8 +1242,7 @@ gnix_sep_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
 
-	flags = trx_ep->ep->op_flags | FI_REMOTE_CQ_DATA |
-			GNIX_RMA_WRITE_FLAGS_DEF;
+	flags = trx_ep->op_flags | FI_REMOTE_CQ_DATA | GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(trx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)buf, len, desc,
@@ -1222,7 +1265,7 @@ gnix_sep_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	trx_ep = container_of(ep, struct gnix_fid_trx, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(trx_ep->ep->type));
 
-	flags = trx_ep->ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
+	flags = trx_ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
 			GNIX_SUPPRESS_COMPLETION | GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(trx_ep->ep, GNIX_FAB_RQ_RDMA_WRITE,
@@ -1267,7 +1310,7 @@ gnix_sep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 	msg.op = op;
 	msg.context = context;
 
-	flags = trx_ep->ep->op_flags | GNIX_ATOMIC_WRITE_FLAGS_DEF;
+	flags = trx_ep->op_flags | GNIX_ATOMIC_WRITE_FLAGS_DEF;
 
 	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_AMO, &msg,
 			    NULL, NULL, 0, NULL, NULL, 0, flags);
@@ -1342,7 +1385,7 @@ gnix_sep_atomic_inject(struct fid_ep *ep, const void *buf, size_t count,
 	msg.datatype = datatype;
 	msg.op = op;
 
-	flags = trx_ep->ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
+	flags = trx_ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
 			GNIX_ATOMIC_WRITE_FLAGS_DEF;
 
 	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_AMO, &msg,
@@ -1388,7 +1431,7 @@ gnix_sep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	result_iov.addr = result;
 	result_iov.count = 1;
 
-	flags = trx_ep->ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
+	flags = trx_ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
 
 	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_FAMO, &msg,
 			    NULL, NULL, 0,
@@ -1480,7 +1523,7 @@ gnix_sep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	compare_iov.addr = (void *)compare;
 	compare_iov.count = 1;
 
-	flags = trx_ep->ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
+	flags = trx_ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
 
 	return _gnix_atomic(trx_ep->ep, GNIX_FAB_RQ_CAMO, &msg,
 			    &compare_iov, &compare_desc, 1,
