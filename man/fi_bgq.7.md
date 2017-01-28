@@ -29,13 +29,19 @@ Key features include:
 : The Blue Gene/Q hardware is connectionless and reliable. Therefore, the
   bgq provider only supports the *FI_EP_RDM* endpoint type.
 
-*Primary capabilities*
-: Supported primary capabilities include *FI_MSG*, *FI_RMA*, *FI_TAGGED*,
+*Capabilities*
+: Supported capabilities include *FI_MSG*, *FI_RMA*, *FI_TAGGED*,
   *FI_ATOMIC*, *FI_NAMED_RX_CTX*, *FI_READ*, *FI_WRITE*, *FI_SEND*, *FI_RECV*,
-  *FI_REMOTE_READ*, and *FI_REMOTE_WRITE*.
+  *FI_REMOTE_READ*,  *FI_REMOTE_WRITE*, *FI_MULTI_RECV*, *FI_DIRECTED_RECV*,
+  *FI_SOURCE* and *FI_FENCE*.
 
-*Secondary capabilities*
-: Supported secondary capabilities include *FI_MULTI_RECV* and *FI_FENCE*.
+Notes on FI_DIRECTED_RECV capability:
+The immediate data which is sent within the *senddata* call to support
+FI_DIRECTED_RECV for BGQ must be exactly 4 bytes, which BGQ uses to
+completely identify the source address to an exascale-level number of ranks
+for tag matching on the recv and can be managed within the MU packet.
+Therefore the domain attribute cq_data_size is set to 4 which is the OFI
+standard minimum.
 
 *Modes*
 : The bgq provider requires *FI_CONTEXT* and *FI_ASYNC_IOV*
@@ -63,11 +69,8 @@ Key features include:
 *Endpoint types*
 : Unsupported endpoint types include *FI_EP_DGRAM* and *FI_EP_MSG*
 
-*Primary capabilities*
-: The bgq provider does not support the *FI_DIRECTED_RECV *capability.
-
-*Secondary capabilities*
-: The bgq provider does not support the *FI_SOURCE*, *FI_RMA_EVENT*, and
+*Capabilities*
+: The bgq provider does not support the *FI_RMA_EVENT*, and
   *FI_TRIGGER* capabilities.
 
 *Memory registration modes*
@@ -93,7 +96,7 @@ bgq provider will assert on the alignment for "debug" builds (i.e., the '-DNDEBU
 pre-processor flag is not specified).
 
 The progress thread used for *FI_PROGRESS_AUTO* effectively limits the maximum
-number of ranks-per-node to 32.
+number of ranks-per-node to 32.  However for FI_PROGRESS_MANUAL the maximum is 64.
 
 The memory region key size (mr_key_size) is 2 *bytes*; Valid key values are
 0..2^16-1.
