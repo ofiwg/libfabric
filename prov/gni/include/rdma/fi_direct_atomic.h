@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All
  * rights reserved.
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
@@ -115,17 +115,17 @@ gnix_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			    void **result_desc, size_t result_count,
 			    uint64_t flags);
 
-extern ssize_t gnix_ep_atomic_valid(struct fid_ep *ep,
-				    enum fi_datatype datatype, enum fi_op op,
-				    size_t *);
+extern int gnix_ep_atomic_valid(struct fid_ep *ep,
+				enum fi_datatype datatype, enum fi_op op,
+				size_t *count);
 
 extern int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
 				      enum fi_datatype datatype, enum fi_op op,
 				      size_t *count);
 
-extern ssize_t gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
-					enum fi_datatype datatype,
-					enum fi_op op, size_t *count);
+extern int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
+				    enum fi_datatype datatype,
+				    enum fi_op op, size_t *count);
 
 /*******************************************************************************
  * Libfabric API Functions

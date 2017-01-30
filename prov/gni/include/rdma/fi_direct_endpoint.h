@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All
  * rights reserved.
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
@@ -52,7 +52,7 @@ extern int gnix_sep_open(struct fid_domain *domain,
 
 extern int gnix_ep_bind(fid_t fid, fid_t bfid, uint64_t flags);
 
-extern int gnix_pep_bind(fid_t pep, fid_t bfid, uint64_t flags);
+extern int gnix_pep_bind(fid_t pep, struct fid *bfid, uint64_t flags);
 
 extern int gnix_sep_bind(fid_t sep, fid_t bfid, uint64_t flags);
 

@@ -887,6 +887,12 @@ err_unlock:
 	return ret;
 }
 
+__attribute__((unused))
+DIRECT_FN STATIC int gnix_listen(struct fid_pep *pep)
+{
+        return -FI_ENOSYS;
+}
+
 DIRECT_FN STATIC int gnix_reject(struct fid_pep *pep, fid_t handle,
 				 const void *param, size_t paramlen)
 {

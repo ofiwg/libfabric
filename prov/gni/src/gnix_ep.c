@@ -2882,7 +2882,7 @@ DIRECT_FN STATIC int gnix_tx_context(struct fid_ep *ep, int index,
 
 __attribute__((unused))
 DIRECT_FN STATIC int gnix_rx_context(struct fid_ep *ep, int index,
-				     struct fi_tx_attr *attr,
+				     struct fi_rx_attr *attr,
 				     struct fid_ep **rx_ep, void *context)
 {
 	return -FI_ENOSYS;
