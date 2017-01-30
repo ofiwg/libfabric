@@ -37,8 +37,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "rdma/fi_errno.h"
+#include "config.h"
 
-#ifdef HAVE_KDREG
+#if HAVE_KDREG
 
 #include <sys/types.h>
 #include <sys/stat.h>

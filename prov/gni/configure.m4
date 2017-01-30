@@ -1,3 +1,41 @@
+dnl
+dnl Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+dnl Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+dnl                         All rights reserved.
+dnl
+dnl This software is available to you under a choice of one of two
+dnl licenses.  You may choose to be licensed under the terms of the GNU
+dnl General Public License (GPL) Version 2, available from the file
+dnl COPYING in the main directory of this source tree, or the
+dnl BSD license below:
+dnl
+dnl     Redistribution and use in source and binary forms, with or
+dnl     without modification, are permitted provided that the following
+dnl     conditions are met:
+dnl
+dnl      - Redistributions of source code must retain the above
+dnl        copyright notice, this list of conditions and the following
+dnl        disclaimer.
+dnl
+dnl      - Redistributions in binary form must reproduce the above
+dnl        copyright notice, this list of conditions and the following
+dnl        disclaimer in the documentation and/or other materials
+dnl        provided with the distribution.
+dnl
+dnl THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+dnl "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+dnl LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+dnl FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+dnl COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+dnl INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+dnl BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+dnl LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+dnl CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+dnl LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+dnl ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+dnl POSSIBILITY OF SUCH DAMAGE.
+dnl
+
 dnl Configury specific to the libfabrics GNI provider
 
 dnl Called to configure this provider
@@ -19,6 +57,8 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	gnitest_CPPFLAGS=
 	gnitest_LDFLAGS=
         gnitest_LIBS=
+        xpmem_happy=0
+        kdreg_happy=0
 
 
         AC_ARG_ENABLE([xpmem],
@@ -74,7 +114,7 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                   gni_CPPFLAGS="$CRAY_XPMEM_CFLAGS $gni_CPPFLAGS"
                                   gni_LDFLAGS="$CRAY_XPMEM_LIBS $gni_LDFLAGS"
                                  ],
-                                 [])
+                                 [xpmem_happy=0])
                       ],
                       [AC_DEFINE_UNQUOTED([HAVE_XPMEM], [0], [Define to 1 if xpmem available])
                       ])
@@ -136,15 +176,30 @@ dnl looks like we need to get rid of some white space
                               AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling GNI provider.])
                               ugni_lib_happy=0])
 
+
+
+dnl kdreg configury handling:
+dnl First check to see config line has --with-kdreg arg.  If yes and something other than
+dnl no, use the old way, otherwise if with_kdreg is not equal to no, try pkg-config method.
+dnl Note kdreg only supplies an include file, no library
+
+                AC_ARG_WITH([kdreg], [AS_HELP_STRING([--with-kdreg],
+                             [Install directory for kdreg headers])])
+
+                AS_IF([test "$with_kdreg" != "" && test "$with_kdreg" != "no"],
+                      [gni_CPPFLAGS="-I$with_kdreg/include $gni_CPPFLAGS"
+                       gnitest_CPPFLAGS="-I$with_kdreg/include $gnitest_CPPFLAGS"
+                       kdreg_happy=1],
+                      [AS_IF([test "$with_kdreg" != "no"],
+                       [FI_PKG_CHECK_MODULES([CRAY_KDREG], [cray-kdreg],
+                                             [kdreg_happy=1
+                                              gni_CPPFLAGS="$CRAY_KDREG_CFLAGS $gni_CPPFLAGS"
+                                              gnitest_CPPFLAGS="$CRAY_KDREG_CFLAGS $gnitest_CPPFLAGS"],
+                                             [kdreg_happy=0])])])
+
+                AC_DEFINE_UNQUOTED([HAVE_KDREG],[$kdreg_happy], [Define to 1 if kdreg available])
+
         ])
-
-	AC_ARG_WITH([kdreg], [AS_HELP_STRING([--with-kdreg],
-                                             [Install directory for kdreg headers])])
-
-        if test "$with_kdreg" != "" && test "$with_kdreg" != "no"; then
-		    gni_CPPFLAGS="-I$with_kdreg/include -DHAVE_KDREG $gni_CPPFLAGS"
-		    gnitest_CPPFLAGS="-I$with_kdreg/include -DHAVE_KDREG $gnitest_CPPFLAGS"
-        fi
 
 
         AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])

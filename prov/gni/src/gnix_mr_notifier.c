@@ -30,9 +30,10 @@
  * SOFTWARE.
  */
 
-#ifdef HAVE_KDREG
 
 #include "gnix_mr_notifier.h"
+
+#if HAVE_KDREG
 
 struct gnix_mr_notifier global_mr_not;
 
