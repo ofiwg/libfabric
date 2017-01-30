@@ -106,13 +106,6 @@ struct fi_bgq_ep_tx {
 
 	/* == L2 CACHE LINE == */
 
-	struct {	/* one l2 cache line */
-		MUHWI_Descriptor_t	inject_model;
-		MUHWI_Descriptor_t	send_model;
-	} inject __attribute((aligned(L2_CACHE_LINE_SIZE)));
-
-	/* == L2 CACHE LINE == */
-
 	struct {	/* three l2 cache lines */
 		MUHWI_Descriptor_t	send_model;
 		MUHWI_Descriptor_t	local_completion_model;	/* only "local completion eager" */
@@ -479,78 +472,45 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 	/* get the destination bgq torus address */
 	const union fi_bgq_addr bgq_dst_addr = {.fi=dest_addr};
 
-	if (len <= 1) {		/* likely ? ... what's the point? */
+	/* eager with lookaside payload buffer and no completion */
 
-		/* busy-wait until a fifo slot is available ... */
-		MUHWI_Descriptor_t * inject_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
+	/* busy-wait until a fifo slot is available ... */
+	MUHWI_Descriptor_t * send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
 
-		/* copy the descriptor model into the injection fifo */
-		qpx_memcpy64((void*)inject_desc, (const void*)&bgq_ep->tx.inject.inject_model);
+	/* copy the descriptor model into the injection fifo */
+	qpx_memcpy64((void*)send_desc, (const void*)&bgq_ep->tx.send.send_model);
 
-		/* set the destination torus address and fifo map */
-		inject_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
-		inject_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
+	/* set the destination torus address and fifo map */
+	send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+	send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
-		inject_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
-			fi_bgq_addr_rec_fifo_id(dest_addr);
+	send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
+		fi_bgq_addr_rec_fifo_id(dest_addr);
 
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &inject_desc->PacketHeader;
+	union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
 
-		if (is_msg) {
-			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_INJECT);
-		}
-
-		if (buf) hdr->pt2pt.inject.data = *((uint8_t*)buf);
-		hdr->pt2pt.ofi_tag = tag;
-		hdr->pt2pt.inject.message_length = len;
-		hdr->pt2pt.immediate_data = data;
-
-#ifdef FI_BGQ_TRACE
-		FI_BGQ_ADDR_DUMP((fi_addr_t *)&bgq_dst_addr.fi);
-#endif
-		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
-
-	} else {
-		/* eager with lookaside payload buffer and no completion */
-
-		/* busy-wait until a fifo slot is available ... */
-		MUHWI_Descriptor_t * send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
-
-		/* copy the descriptor model into the injection fifo */
-		qpx_memcpy64((void*)send_desc, (const void*)&bgq_ep->tx.send.send_model);
-
-		/* set the destination torus address and fifo map */
-		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
-		send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
-
-		send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
-			fi_bgq_addr_rec_fifo_id(dest_addr);
-
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
-
-		if (is_msg) {
-			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);
-		}
-
-		/* locate the payload lookaside slot */
-		uint64_t payload_paddr = 0;
-		void *payload_vaddr =
-			fi_bgq_spi_injfifo_immediate_payload(&bgq_ep->tx.injfifo,
-				send_desc, &payload_paddr);
-		send_desc->Pa_Payload = payload_paddr;
-
-		send_desc->Message_Length = len;
-		memcpy(payload_vaddr, buf, len);
-
-		hdr->pt2pt.send.message_length = len;
-		hdr->pt2pt.ofi_tag = tag;
-		hdr->pt2pt.immediate_data = data;
-
-#ifdef FI_BGQ_TRACE
-		FI_BGQ_ADDR_DUMP((fi_addr_t *)&dest_addr);
-#endif
-		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
+	if (is_msg) {
+		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);
 	}
+
+	/* locate the payload lookaside slot */
+	uint64_t payload_paddr = 0;
+	void *payload_vaddr =
+		fi_bgq_spi_injfifo_immediate_payload(&bgq_ep->tx.injfifo,
+			send_desc, &payload_paddr);
+	send_desc->Pa_Payload = payload_paddr;
+
+	send_desc->Message_Length = len;
+	memcpy(payload_vaddr, buf, len);	/* TODO use a qpx-optimized memcpy instead */
+
+	hdr->pt2pt.send.message_length = len;
+	hdr->pt2pt.ofi_tag = tag;
+	hdr->pt2pt.immediate_data = data;
+
+#ifdef FI_BGQ_TRACE
+	FI_BGQ_ADDR_DUMP((fi_addr_t *)&dest_addr);
+#endif
+	MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
 	/* TODO - if this is a FI_CLASS_STX_CTX, then the lock is required */
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);

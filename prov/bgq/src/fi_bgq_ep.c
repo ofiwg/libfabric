@@ -488,10 +488,10 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 	FI_BGQ_ADDR_DUMP((fi_addr_t *)&self.fi);
 #endif
 	/*
-	 *  fi_[t]inject() descriptor models
+	 *  fi_[t]send*() descriptor models
 	 */
-	{	/* inject model */
-		MUHWI_Descriptor_t * desc = &bgq_ep->tx.inject.inject_model;
+	{	/* send model */
+		MUHWI_Descriptor_t * desc = &bgq_ep->tx.send.send_model;
 		MUSPI_DescriptorZeroOut(desc);
 
 		desc->Half_Word0.Prefetch_Only =
@@ -514,26 +514,12 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = -1;
 
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_INJECT);
+		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
 
 		hdr->pt2pt.uid.fi = self.uid.fi;
 		hdr->pt2pt.immediate_data = 0;
 		hdr->pt2pt.ofi_tag = (uint64_t)-1;
 
-		/* send model - copy from inject model and update */
-		desc = &bgq_ep->tx.inject.send_model;
-		*desc = bgq_ep->tx.inject.inject_model;
-
-		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
-	}
-
-	/*
-	 * fi_[t]send*() descriptor models
-	 */
-	{	/* send model - copy from inject send model and update */
-		MUHWI_Descriptor_t * desc = &bgq_ep->tx.send.send_model;
-		*desc = bgq_ep->tx.inject.send_model;
 
 		/* send rendezvous models */
 		desc = &bgq_ep->tx.send.rzv_model[0];	/* "internode" */	/* TODO - use an enum */
@@ -552,7 +538,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_FIFO;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS);
 		hdr->pt2pt.rendezvous.is_local = 0;
 		hdr->pt2pt.rendezvous.niov_minus_1 = 0;
@@ -571,7 +557,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 
 		/* remote completion model - used for FI_DELIVERY_COMPLETE */
 		desc = &bgq_ep->tx.send.remote_completion_model;
-		*desc = bgq_ep->tx.inject.send_model;
+		*desc = bgq_ep->tx.send.send_model;
 
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER|FI_BGQ_MU_PACKET_TYPE_ACK);

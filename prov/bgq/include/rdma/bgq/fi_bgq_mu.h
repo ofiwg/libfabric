@@ -242,7 +242,7 @@ fi_addr_t fi_bgq_addr_create (const MUHWI_Destination_t destination,
 
 
 #define FI_BGQ_MU_PACKET_TYPE_TAG			(0x01ul<<1)
-#define FI_BGQ_MU_PACKET_TYPE_INJECT			(0x01ul<<2)
+#define FI_BGQ_MU_PACKET_TYPE_UNUSED			(0x01ul<<2)
 #define FI_BGQ_MU_PACKET_TYPE_EAGER			(0x01ul<<3)
 #define FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS		(0x01ul<<4)
 #define FI_BGQ_MU_PACKET_TYPE_RMA			(0x01ul<<5)
@@ -301,14 +301,6 @@ union fi_bgq_mu_packet_hdr {
 		uint32_t		reserved_1;
 
 		union {
-			struct {
-				uint16_t		reserved_2	: 10;
-				uint16_t		unused_0	:  5;
-				uint16_t		message_length	:  1;	/* 0..1 bytes of immediate data */
-				uint8_t			data;
-				uint8_t			reserved_3;		/* a.k.a. common::packet_type */
-			} __attribute__((__packed__)) inject;
-
 			struct {
 				uint64_t		reserved_2	: 10;
 				uint64_t		is_local	:  1;	/* used to specify fifo map */

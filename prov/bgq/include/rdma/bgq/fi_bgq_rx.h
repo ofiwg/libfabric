@@ -283,76 +283,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 	const uint64_t immediate_data = pkt->hdr.pt2pt.immediate_data;
 
-	if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-
-		const uint64_t send_len = pkt->hdr.pt2pt.inject.message_length;
-
-		if (is_multi_receive) {		/* branch should compile out */
-			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.pt2pt.inject.data, send_len);
-
-			union fi_bgq_context * original_multi_recv_context = context;
-			context = (union fi_bgq_context *)((uintptr_t)recv_buf - sizeof(union fi_bgq_context));
-			assert((((uintptr_t)context) & 0x07) == 0);
-
-			context->flags = FI_RECV | FI_MSG | FI_BGQ_CQ_CONTEXT_MULTIRECV;
-			context->buf = recv_buf;
-			context->len = send_len;
-			context->data = immediate_data;
-			context->tag = 0;	/* tag is not valid for multi-receives */
-			context->multi_recv_context = original_multi_recv_context;
-			context->byte_counter = 0;
-
-			/* the next 'fi_bgq_context' must be 8-byte aligned */
-			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
-			original_multi_recv_context->len -= bytes_consumed;
-			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
-
-			/* post a completion event for the individual receive */
-			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-
-		} else if (send_len <= recv_len) {
-			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.pt2pt.inject.data, send_len);
-
-			context->buf = NULL;
-			context->len = send_len;
-			context->data = immediate_data;
-			context->tag = origin_tag;
-			context->byte_counter = 0;
-
-			/* post a completion event for the individual receive */
-			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-
-		} else {	/* truncation - unlikely */
-			struct fi_bgq_context_ext * ext;
-			if (is_context_ext) {
-				ext = (struct fi_bgq_context_ext *)context;
-				ext->err_entry.op_context = ext->msg.op_context;
-			} else {
-				posix_memalign((void**)&ext, 32, sizeof(struct fi_bgq_context_ext));
-				ext->bgq_context.flags = FI_BGQ_CQ_CONTEXT_EXT;
-				ext->err_entry.op_context = context;
-			}
-
-			ext->err_entry.flags = context->flags;
-			ext->err_entry.len = recv_len;
-			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = immediate_data;
-			ext->err_entry.tag = origin_tag;
-			ext->err_entry.olen = send_len - recv_len;
-			ext->err_entry.err = FI_ETRUNC;
-			ext->err_entry.prov_errno = 0;
-			ext->err_entry.err_data = NULL;
-
-			ext->bgq_context.byte_counter = 0;
-
-			/* post an 'error' completion event for the receive - spin loop! */
-			uint64_t ext_rsh3b = (uint64_t)ext >> 3;
-			while(0 != l2atomic_fifo_produce(err_producer, ext_rsh3b));
-		}
-
-		return;
-
-	} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
+	if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 
 		const uint64_t send_len = pkt->hdr.pt2pt.send.message_length;
 
@@ -670,7 +601,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 		return;
 	}
 
-	assert(packet_type & (FI_BGQ_MU_PACKET_TYPE_INJECT | FI_BGQ_MU_PACKET_TYPE_EAGER | FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS));
+	assert(packet_type & (FI_BGQ_MU_PACKET_TYPE_EAGER | FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS));
 
 	/* search the match queue */
 	union fi_bgq_context * head = bgq_ep->rx.poll.rfifo[poll_msg].mq.head;
@@ -712,9 +643,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 				const uint64_t recv_len = context->len;
 				uint64_t send_len = 0;
 
-				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					send_len = pkt->hdr.pt2pt.inject.message_length;
-				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
+				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 					send_len = pkt->hdr.pt2pt.send.message_length;
 				} else /* FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS */ {
 					const uint64_t niov = pkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
@@ -1075,9 +1004,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			if (is_match(uepkt, context, poll_msg)) {
 
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(uepkt);
-				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					context->len = uepkt->hdr.pt2pt.inject.message_length;
-				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
+				if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
 					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					uint64_t len = 0;
 					unsigned i;
@@ -1197,9 +1124,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(uepkt);
 				uint64_t send_len = 0;
 
-				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					send_len = uepkt->hdr.pt2pt.inject.message_length;
-				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
+				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 					send_len = uepkt->hdr.pt2pt.send.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
 					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
