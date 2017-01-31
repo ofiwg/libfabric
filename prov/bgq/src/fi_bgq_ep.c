@@ -1454,15 +1454,6 @@ err:
 	return -1;
 }
 
-
-
-
-
-
-
-
-
-
 static int fi_bgq_enable_ep(struct fid_ep *ep)
 {
 	int ret;
@@ -1511,8 +1502,9 @@ static int fi_bgq_enable_ep(struct fid_ep *ep)
 
 	bgq_ep->state = FI_BGQ_EP_INITITALIZED_ENABLED;
 
-	/* create an async progress thread for the receive context */
-	if (ofi_recv_allowed(bgq_ep->rx.caps) && (bgq_ep->domain->data_progress == FI_PROGRESS_AUTO)) {
+	/* create an async progress thread for the receive context for FI_PROGRESS_AUTO mode*/
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO)
+	if (ofi_recv_allowed(bgq_ep->rx.caps)) {
 
 		if (bgq_ep->domain->rx.count == 1) {
 
@@ -1936,6 +1928,7 @@ int fi_bgq_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	bgq_ep->rx.index = rx_index;
 	bgq_ep->tx.index = tx_index;
 	bgq_ep->rx.caps = info->rx_attr ? info->rx_attr->caps : info->caps;
+	bgq_ep->rx.caps |= FI_RECV;
 
 	bgq_ep->tx.caps = info->tx_attr ? info->tx_attr->caps : info->caps;
 
@@ -1992,8 +1985,6 @@ int fi_bgq_endpoint (struct fid_domain *dom, struct fi_info *info,
 
 void fi_bgq_ep_progress_manual_cancel (struct fi_bgq_ep * bgq_ep, const uint64_t cancel_context) {
 
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
-
 	if (bgq_ep->rx.caps & FI_MSG) {
 		cancel_match_queue(bgq_ep, 1, cancel_context);
 	}
@@ -2011,7 +2002,6 @@ int fi_bgq_ep_progress_manual_recv (struct fi_bgq_ep *bgq_ep,
 		const uint64_t is_context_ext) {
 
 	assert(bgq_ep->rx.poll.injfifo.muspi_injfifo);
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
 	return process_mfifo_context(bgq_ep, is_msg, 0, context, rx_op_flags, is_context_ext, 1);
 }
 
@@ -2020,14 +2010,12 @@ int fi_bgq_ep_progress_manual_recv_fast (struct fi_bgq_ep *bgq_ep,
 		const uint64_t is_msg,
 		union fi_bgq_context * context) {
 
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
 	return process_mfifo_context(bgq_ep, is_msg, 0, context, 0, 0, 1);
 }
 
 
 int fi_bgq_ep_progress_manual (struct fi_bgq_ep *bgq_ep) {
 
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
 
 	poll_rfifo(bgq_ep, 1);
 

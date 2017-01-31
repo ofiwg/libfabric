@@ -454,9 +454,6 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		int lock_required,
 		const unsigned is_msg)
 {
-#ifdef FI_BGQ_TRACE
-	fprintf(stderr,"fi_bgq_inject_generic\n");
-#endif
 	assert(is_msg == 0 || is_msg == 1);
 
 	struct fi_bgq_ep *bgq_ep = container_of(ep, struct fi_bgq_ep, ep_fid);
@@ -508,6 +505,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 	hdr->pt2pt.immediate_data = data;
 
 #ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_inject_generic dest addr is:\n");
 	FI_BGQ_ADDR_DUMP((fi_addr_t *)&dest_addr);
 #endif
 	MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
@@ -527,6 +525,9 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		const unsigned is_msg, const unsigned is_contiguous,
 		const unsigned override_flags, uint64_t tx_op_flags)
 {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_send_generic_flags starting\n");
+#endif
 	assert(is_msg == 0 || is_msg == 1);
 	assert(is_contiguous == 0 || is_contiguous == 1);
 
@@ -599,6 +600,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		hdr->pt2pt.immediate_data = data;
 
 #ifdef FI_BGQ_TRACE
+		fprintf(stderr,"eager sending to dest:\n");
 		FI_BGQ_ADDR_DUMP(&dest_addr);
 #endif
 		if (is_msg) {
@@ -661,6 +663,10 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 			if (tx_op_flags & (FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
 
+#ifdef FI_BGQ_TRACE
+                fprintf(stderr,"eager injecting local completion dput\n");
+#endif
+
 				/* inject the 'local completion' direct put descriptor */
 				send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
 
@@ -692,6 +698,11 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 	} else {
 		/* rendezvous */
+
+#ifdef FI_BGQ_TRACE
+                fprintf(stderr,"rendezvous sending to dest:\n");
+                FI_BGQ_ADDR_DUMP(&dest_addr);
+#endif
 
 		assert((tx_op_flags & FI_INJECT) == 0);
 
@@ -810,6 +821,7 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 	bgq_context->src_addr = src_addr;
 
 #ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_recv_generic from source addr:\n");
 	FI_BGQ_ADDR_DUMP(&bgq_context->src_addr);
 #endif
 
@@ -822,6 +834,9 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 		int ret;
 		ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
 		if (ret) return ret;
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_recv_generic calling fi_bgq_ep_progress_manual_recv_fast:\n");
+#endif
 
 		fi_bgq_ep_progress_manual_recv_fast(bgq_ep, is_msg, context);
 

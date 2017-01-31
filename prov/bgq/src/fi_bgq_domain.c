@@ -258,7 +258,7 @@ int fi_bgq_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 
 	attr->threading		= FI_THREAD_ENDPOINT;
 	attr->control_progress 	= FI_PROGRESS_MANUAL;
-	attr->data_progress	= FI_PROGRESS_MANUAL;
+	attr->data_progress	= FI_BGQ_FABRIC_DIRECT_PROGRESS;
 	attr->resource_mgmt	= FI_RM_DISABLED;
 	attr->av_type		= FI_AV_MAP;
 	attr->mr_mode		= FI_MR_SCALABLE;
@@ -295,14 +295,16 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	}
 
 	*domain_attr = *fi_bgq_global.default_domain_attr;
+	/* Set the data progress mode to the option used in the configure.
+ 	 * Ignore any setting by the application.
+ 	 */
+	domain_attr->data_progress = FI_BGQ_FABRIC_DIRECT_PROGRESS;
 
 	if (hints) {
-
 		if (hints->domain) {
 			struct fi_bgq_domain *bgq_domain = bgq_domain = container_of(hints->domain, struct fi_bgq_domain, domain_fid);
 
 			domain_attr->threading		= bgq_domain->threading;
-			domain_attr->data_progress	= bgq_domain->data_progress;
 			domain_attr->resource_mgmt	= bgq_domain->resource_mgmt;
 			domain_attr->mr_mode		= bgq_domain->mr_mode;
 			domain_attr->tx_ctx_cnt		= fi_bgq_domain_get_tx_max(bgq_domain);
@@ -315,7 +317,6 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 
 			if (hints->threading)		domain_attr->threading = hints->threading;
 			if (hints->control_progress)	domain_attr->control_progress = hints->control_progress;
-			if (hints->data_progress)	domain_attr->data_progress = hints->data_progress;
 			if (hints->resource_mgmt)	domain_attr->resource_mgmt = hints->resource_mgmt;
 			if (hints->av_type)		domain_attr->av_type = hints->av_type;
 			if (hints->mr_mode)		domain_attr->mr_mode = hints->mr_mode;
@@ -333,7 +334,12 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 		}
 	}
 
-	if (64 == Kernel_ProcessCount()) domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO)
+		if (Kernel_ProcessCount() > 16) {
+			fprintf(stderr,"BGQ Provider configure in FI_PROGRESS_AUTO mode and cannot be run higher than 16 ppn due to need for progress thread\n");
+			assert(0);
+			exit(1);
+		}
 
 	enum fi_av_type av_type = domain_attr->av_type;
 
@@ -496,7 +502,6 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 	bgq_domain->type		= FI_BGQ_DOMAIN_UNSPEC;
 	bgq_domain->threading		= fi_bgq_global.default_domain_attr->threading;
 	bgq_domain->resource_mgmt	= fi_bgq_global.default_domain_attr->resource_mgmt;
-	bgq_domain->data_progress	= fi_bgq_global.default_domain_attr->data_progress;
 
 	if (info->domain_attr) {
 		if (info->domain_attr->domain) {
@@ -513,15 +518,22 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 		}
 		bgq_domain->threading = info->domain_attr->threading;
 		bgq_domain->resource_mgmt = info->domain_attr->resource_mgmt;
-		bgq_domain->data_progress = info->domain_attr->data_progress;
 	}
 
+        /* Set the data progress mode to the option used in the configure.
+	 * Ignore any setting by the application.
+ 	 */
+        bgq_domain->data_progress = FI_BGQ_FABRIC_DIRECT_PROGRESS;
+
+
 	uint32_t ppn = Kernel_ProcessCount();
-	if (bgq_domain->data_progress == FI_PROGRESS_AUTO && ppn == 64) {
-		FI_LOG(fi_bgq_global.prov, FI_LOG_WARN, FI_LOG_DOMAIN,
-				"data auto progress requires a progress thread; 64 ppn is not supported\n");
-		errno = FI_EINVAL;
-		goto err;
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {
+		uint32_t ppn = Kernel_ProcessCount();
+ 		if (ppn > 16) {
+			fprintf(stderr,"BGQ Provider configure in FI_PROGRESS_AUTO mode and cannot be run higher than 16 ppn due to need for progress thread\n");
+			assert(0);
+			exit(1);
+		}
 	}
 
 	bgq_domain->fabric = bgq_fabric;
@@ -554,15 +566,15 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 
 	fi_bgq_ref_init(&bgq_fabric->node, &bgq_domain->ref_cnt, "domain");
 
-	if (bgq_domain->data_progress == FI_PROGRESS_AUTO) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {
 		uint32_t ppn = Kernel_ProcessCount();
 		fi_bgq_progress_init(bgq_domain, 64/ppn - 1);	/* TODO - what should the "max threads" be? */
 		if (0 != fi_bgq_progress_enable(bgq_domain, 0)) {
 
 			/* Unable to start progress threads! */
+			fprintf(stderr,"BGQ Provider unable to start progress thread for FI_PROGRESS_AUTO mode\n");
 			assert(0);
-
-			bgq_domain->data_progress = FI_PROGRESS_MANUAL;
+			exit(1);
 		}
 	} else {
 		fi_bgq_progress_init(bgq_domain, 0);

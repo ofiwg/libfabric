@@ -100,7 +100,7 @@ int fi_bgq_set_default_info()
 		.name		= NULL, /* TODO: runtime query for name? */
 		.threading	= FI_THREAD_FID,
 		.control_progress = FI_PROGRESS_MANUAL,
-		.data_progress	= FI_PROGRESS_AUTO, // + FI_PROGRESS_MANUAL ?
+		.data_progress	= FI_BGQ_FABRIC_DIRECT_PROGRESS,
 		.resource_mgmt	= FI_RM_DISABLED,
 		.av_type	= FI_AV_MAP,
 		.mr_mode	= FI_MR_SCALABLE,

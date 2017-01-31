@@ -35,7 +35,7 @@
 #define FI_BGQ_UEPKT_BLOCKSIZE (1024)
 #define PROCESS_RFIFO_MAX 64
 
-//#define FI_BGQ_TRACE
+// #define FI_BGQ_TRACE
 
 /* forward declaration - see: prov/bgq/src/fi_bgq_atomic.c */
 void fi_bgq_rx_atomic_dispatch (void * buf, void * addr, size_t nbytes,
@@ -275,6 +275,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 		const unsigned is_multi_receive,
 		const unsigned is_manual_progress) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"complete_receive_operation starting\n");
+#endif
 	const uint64_t recv_len = context->len;
 	void * recv_buf = context->buf;
 	const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
@@ -284,6 +287,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 	const uint64_t immediate_data = pkt->hdr.pt2pt.immediate_data;
 
 	if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"complete_receive_operation - packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER\n");
+#endif
 
 		const uint64_t send_len = pkt->hdr.pt2pt.send.message_length;
 
@@ -306,13 +312,20 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
 			original_multi_recv_context->len -= bytes_consumed;
 			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"complete_receive_operation - is_multi_receive\n");
+#endif
+
 
 			/* post a completion event for the individual receive */
 			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else if (send_len <= recv_len) {
 			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
-
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"EAGER complete_receive_operation send_len %lu <= recv_len %lu calling fi_bgq_cq_enqueue_completed\n",send_len,recv_len);
+#endif
+ 
 			context->buf = NULL;
 			context->len = send_len;
 			context->data = immediate_data;
@@ -323,6 +336,11 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else {	/* truncation - unlikely */
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"EAGER complete_receive_operation truncation - send_len %lu > recv_len %lu posting error\n",send_len,recv_len);
+
+#endif
+
 			struct fi_bgq_context_ext * ext;
 			if (is_context_ext) {
 				ext = (struct fi_bgq_context_ext *)context;
@@ -365,7 +383,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 		uint64_t byte_counter_vaddr = 0;
 
 		if (is_multi_receive) {		/* branch should compile out */
-
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"rendezvous multirecv\n");
+#endif
+ 
 			union fi_bgq_context * multi_recv_context =
 				(union fi_bgq_context *)((uintptr_t)recv_buf - sizeof(union fi_bgq_context));
 			assert((((uintptr_t)multi_recv_context) & 0x07) == 0);
@@ -395,6 +416,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 		} else if (xfer_len <= recv_len) {
 
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"rendezvous complete_receive_operation xfer_len %lu <= recv_len %lu calling fi_bgq_cq_enqueue_pending\n",xfer_len,recv_len);
+#endif
 			context->len = xfer_len;
 			context->data = immediate_data;
 			context->tag = origin_tag;
@@ -406,6 +430,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			fi_bgq_cq_enqueue_pending(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"rendezvous truncation xfer_len %lu > recv_len %lu posting error\n",xfer_len,recv_len);
+#endif
+
 			/* truncation */
 			struct fi_bgq_context_ext * ext;
 			if (is_context_ext) {
@@ -562,13 +590,11 @@ unsigned is_match(struct fi_bgq_mu_packet *pkt, union fi_bgq_context * context, 
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
 
 #ifdef FI_BGQ_TRACE
-	int anysrc = (context->src_addr == FI_ADDR_UNSPEC);
-	fprintf(stderr, "%s:%s():%d origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %d returning %u\n", __FILE__, __func__, __LINE__, origin_uid, target_uid, origin_tag, target_tag, ignore, anysrc,((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid))));
+	fprintf(stderr, "%s:%s():%d origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %u returning %u\n", __FILE__, __func__, __LINE__, origin_uid, target_uid, origin_tag, target_tag, ignore, (context->src_addr == FI_ADDR_UNSPEC),((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid))));
 #endif
 
 	return ((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid)));
 }
-
 
 static inline
 void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu_packet * pkt, const unsigned poll_msg, const unsigned is_manual_progress)
@@ -885,7 +911,10 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		const uint64_t cancel_context, union fi_bgq_context * context,
 		const uint64_t rx_op_flags, const uint64_t is_context_ext,
 		const unsigned is_manual_progress) {
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context starting\n");
 
+#endif
 	if (cancel_context) {	/* branch should compile out */
 		const uint64_t compare_context = is_context_ext ?
 			(uint64_t)(((struct fi_bgq_context_ext *)context)->msg.op_context) :
@@ -933,6 +962,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		unsigned found_match = 0;
 		while (uepkt != NULL) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context - searching unexpected queue\n");
+#endif
 			if (is_match(uepkt, context, poll_msg)) {
 
 				/* branch will compile out */
@@ -974,6 +1006,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 		if (!found_match) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context -  nothing found on unexpected queue adding to match queue\n");
+#endif
 			/*
 			 * no unexpected headers were matched; add this match
 			 * information to the appropriate match queue
@@ -1001,6 +1036,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		unsigned found_match = 0;
 		while (uepkt != NULL) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context - rx_op_flags & FI_PEEK searching unexpected queue\n");
+#endif
 			if (is_match(uepkt, context, poll_msg)) {
 
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(uepkt);
@@ -1077,6 +1115,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			ext->err_entry.err_data = NULL;
 			ext->bgq_context.byte_counter = 0;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context -  no match found on unexpected queue posting error\n");
+#endif
 			/* post an 'error' completion event for the receive - spin loop! */
 			struct l2atomic_fifo_producer * producer =
 				&bgq_ep->recv_cq->err_producer;
@@ -1085,6 +1126,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 	} else if (rx_op_flags & FI_CLAIM) {	/* unlikely */
 		assert((rx_op_flags & FI_BGQ_CQ_CONTEXT_EXT) == 0);
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context -  rx_op_flags & FI_CLAIM complete receive operation\n");
+#endif
 
 		/* only FI_CLAIM was specified
 		 *
