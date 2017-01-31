@@ -228,8 +228,12 @@ AC_DEFUN([USNIC_CHECK_LIBNL_SADNESS],[
 	# handled in Makefile.am via an AM_CONDITIONAL.  However, to
 	# properly support pkg-config, we have to make this decision
 	# here/now and AC SUBST the final result into usnic_LIBS.
-	AS_IF([test "$verbs_dl" = "1" || test "$usnic_dl" = "1"],
-	      [usnic_LIBS="$usnic_LIBS -libverbs"])
+	usnic_verbs_lib=
+	AS_IF([test "$verbs_dl" = "1"],
+	      [usnic_verbs_lib="-libverbs"])
+	AS_IF([test "$usnic_dl" = "1" -a $usnic_build_fake_driver -eq 1],
+	      [usnic_verbs_lib="-libverbs"])
+	usnic_LIBS="$usnic_LIBS $usnic_verbs_lib"
 
 	AC_SUBST([usnic_CPPFLAGS])
 	AC_SUBST([usnic_LDFLAGS])
