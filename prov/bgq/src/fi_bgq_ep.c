@@ -498,8 +498,6 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
 		desc->Half_Word1.Interrupt =
 			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
-		desc->Pa_Payload = 0;
-		desc->Message_Length = 0;
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
@@ -507,11 +505,6 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 =
 			MUHWI_PACKET_TYPE_FIFO;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
-
-		/* specified at injection time */
-		desc->Torus_FIFO_Map = -1;
-		desc->PacketHeader.NetworkHeader.pt2pt.Destination.Destination.Destination = -1;
-		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = -1;
 
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
@@ -520,23 +513,19 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		hdr->pt2pt.immediate_data = 0;
 		hdr->pt2pt.ofi_tag = (uint64_t)-1;
 
+		/* specified at injection time */
+		desc->Pa_Payload = 0;
+		desc->Message_Length = 0;
+		desc->Torus_FIFO_Map = 0;
+		desc->PacketHeader.NetworkHeader.pt2pt.Destination.Destination.Destination = -1;
+		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = -1;
+
 
 		/* send rendezvous models */
 		desc = &bgq_ep->tx.send.rzv_model[0];	/* "internode" */	/* TODO - use an enum */
-		MUSPI_DescriptorZeroOut(desc);
+		*desc = bgq_ep->tx.send.send_model;
 
-		desc->Half_Word0.Prefetch_Only =
-			MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
-		desc->Half_Word1.Interrupt =
-			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
 		desc->Message_Length = sizeof(struct fi_bgq_mu_iov) + offsetof(union fi_bgq_mu_packet_payload, rendezvous.mu_iov);
-		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
-			MUHWI_PT2PT_DATA_PACKET_TYPE;
-		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
-			MUHWI_PACKET_VIRTUAL_CHANNEL_DETERMINISTIC;
-		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 =
-			MUHWI_PACKET_TYPE_FIFO;
-		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS);
@@ -544,17 +533,12 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		hdr->pt2pt.rendezvous.niov_minus_1 = 0;
 		hdr->pt2pt.rendezvous.rget_inj_fifo_id = bgq_ep->tx.stx->rgetfifo.node_scoped_fifo_id;
 
-		/* specified at injection time */
-		desc->Pa_Payload = -1;
-		desc->Torus_FIFO_Map = -1;
-		desc->PacketHeader.NetworkHeader.pt2pt.Destination.Destination.Destination = -1;
-		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = -1;
-
-		bgq_ep->tx.send.rzv_model[1] = *desc;				/* "intranode" */	/* TODO - use an enum */
-		desc = &bgq_ep->tx.send.rzv_model[1];
+		desc = &bgq_ep->tx.send.rzv_model[1];	/* "intranode" */	/* TODO - use an enum */
+		*desc = bgq_ep->tx.send.rzv_model[0];
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		hdr->pt2pt.rendezvous.is_local = 1;
 
+#ifdef FI_BGQ_REMOTE_COMPLETION
 		/* remote completion model - used for FI_DELIVERY_COMPLETE */
 		desc = &bgq_ep->tx.send.remote_completion_model;
 		*desc = bgq_ep->tx.send.send_model;
@@ -566,6 +550,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		/* specified at injection time */
 		hdr->completion.is_local = 0;
 		hdr->completion.cntr_paddr_rsh3b = 0;
+#endif
 	}
 
 	/*
