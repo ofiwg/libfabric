@@ -37,8 +37,6 @@ struct psmx_fid_fabric *psmx_active_fabric = NULL;
 static int psmx_fabric_close(fid_t fid)
 {
 	struct psmx_fid_fabric *fabric;
-	void *exit_code;
-	int ret;
 
 	fabric = container_of(fid, struct psmx_fid_fabric,
 			      util_fabric.fabric_fid.fid);
@@ -51,24 +49,9 @@ static int psmx_fabric_close(fid_t fid)
 	if (ofi_fabric_close(&fabric->util_fabric))
 		return 0;
 
-	if (psmx_env.name_server &&
-	    !pthread_equal(fabric->name_server_thread, pthread_self())) {
-		ret = pthread_cancel(fabric->name_server_thread);
-		if (ret) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"pthread_cancel returns %d\n", ret);
-		}
-		ret = pthread_join(fabric->name_server_thread, &exit_code);
-		if (ret) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"pthread_join returns %d\n", ret);
-		} else {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"name server thread exited with code %ld (%s)\n",
-				(uintptr_t)exit_code,
-				(exit_code == PTHREAD_CANCELED) ? "PTHREAD_CANCELED" : "?");
-		}
-	}
+	if (psmx_env.name_server)
+		psmx_ns_stop_server(fabric);
+
 	if (fabric->active_domain) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE, "forced closing of active_domain\n");
 		fi_close(&fabric->active_domain->util_domain.domain_fid.fid);
@@ -135,15 +118,8 @@ int psmx_fabric(struct fi_fabric_attr *attr,
 
 	psmx_get_uuid(fabric_priv->uuid);
 
-	if (psmx_env.name_server) {
-		ret = pthread_create(&fabric_priv->name_server_thread, NULL,
-				     psmx_name_server, (void *)fabric_priv);
-		if (ret) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE, "pthread_create returns %d\n", ret);
-			/* use the main thread's ID as invalid value for the new thread */
-			fabric_priv->name_server_thread = pthread_self();
-		}
-	}
+	if (psmx_env.name_server)
+		psmx_ns_start_server(fabric_priv);
 
 	psmx_query_mpi();
 

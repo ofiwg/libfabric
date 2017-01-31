@@ -182,10 +182,9 @@ static int psmx_ep_close(fid_t fid)
 	if (atomic_get(&ep->ref))
 		return -FI_EBUSY;
 
+	psmx_ns_del_local_name(ep->service, ep->domain->psm_epid);
 	psmx_domain_disable_ep(ep->domain, ep);
-
 	psmx_domain_release(ep->domain);
-
 	free(ep);
 
 	return 0;
@@ -485,6 +484,15 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	psmx_ep_optimize_ops(ep_priv);
+
+	ep_priv->service = PSMX_ANY_SERVICE;
+	if (info && info->src_addr)
+		ep_priv->service = ((struct psmx_src_name *)info->src_addr)->service;
+
+	if (ep_priv->service == PSMX_ANY_SERVICE)
+		ep_priv->service = (getpid() << 16) + ((uintptr_t)ep_priv & 0xFFFF);
+
+       psmx_ns_add_local_name(ep_priv->service, domain_priv->psm_epid);
 
 	*ep = &ep_priv->ep;
 

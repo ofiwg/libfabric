@@ -374,7 +374,7 @@ struct psmx2_ep_name {
 
 #define PSMX2_DEFAULT_UNIT	(-1)
 #define PSMX2_DEFAULT_PORT	0
-#define PSMX2_DEFAULT_SERVICE	0
+#define PSMX2_ANY_SERVICE	0
 
 struct psmx2_src_name {
 	int	unit;		/* start from 0. -1 means any */
@@ -700,6 +700,7 @@ struct psmx2_fid_ep {
 	fastlock_t		context_lock;
 	size_t			min_multi_recv;
 	uint32_t		iov_seq_num;
+	int			service;
 };
 
 struct psmx2_fid_stx {
@@ -793,8 +794,13 @@ static inline void psmx2_domain_release(struct psmx2_fid_domain *domain)
 
 int	psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap);
 int	psmx2_domain_enable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep *ep);
-void 	*psmx2_name_server(void *args);
-void	*psmx2_resolve_name(const char *servername, int port);
+
+void	psmx2_ns_start_server(struct psmx2_fid_fabric *fabric);
+void	psmx2_ns_stop_server(struct psmx2_fid_fabric *fabric);
+void	psmx2_ns_add_local_name(int service, struct psmx2_ep_name *name);
+void	psmx2_ns_del_local_name(int service, struct psmx2_ep_name *name);
+void	*psmx2_ns_resolve_name(const char *server, int *service);
+
 void	psmx2_get_uuid(psm2_uuid_t uuid);
 int	psmx2_uuid_to_port(psm2_uuid_t uuid);
 char	*psmx2_uuid_to_string(psm2_uuid_t uuid);
