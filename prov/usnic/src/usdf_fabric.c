@@ -975,7 +975,7 @@ struct fi_provider usdf_ops = {
 
 USNIC_INI
 {
-#if HAVE_VERBS
+#if USNIC_BUILD_FAKE_VERBS_DRIVER
 	usdf_setup_fake_ibv_provider();
 #endif
 	return (&usdf_ops);
