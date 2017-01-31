@@ -50,8 +50,6 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-#include <infiniband/driver.h>
-
 #include "usd.h"
 #include "usd_ib_sysfs.h"
 #include "usd_util.h"

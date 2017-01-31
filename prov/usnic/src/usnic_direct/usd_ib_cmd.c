@@ -52,7 +52,7 @@
 #include <sys/mman.h>
 #include <sched.h>
 
-#include <infiniband/driver.h>
+#include <infiniband/verbs.h>
 
 #include "kcompat.h"
 #include "usnic_ib_abi.h"
