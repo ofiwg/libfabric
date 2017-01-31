@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -159,10 +159,10 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 	int ret = count;
 	size_t index;
 	size_t i;
+	int *entry_err = context;
 
 	if (gnix_check_capacity(av_priv, count)) {
-		ret = -FI_ENOMEM;
-		goto err;
+		return -FI_ENOMEM;
 	}
 
 	assert(av_priv->table);
@@ -172,6 +172,12 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 		/* check if this ep_name fits in the av context bits */
 		if (temp->name_type & GNIX_EPN_TYPE_SEP) {
 			if ((1 << av_priv->rx_ctx_bits) < temp->rx_ctx_cnt) {
+				if (flags && FI_SYNC_ERR) {
+					entry_err[i] = -FI_EINVAL;
+					fi_addr[i] = FI_ADDR_NOTAVAIL;
+					ret = -FI_EINVAL;
+					continue;
+				}
 				return -FI_EINVAL;
 			}
 		}
@@ -185,11 +191,14 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 				temp->cm_nic_cdm_id;
 		if (fi_addr)
 			fi_addr[i] = index;
+
+		if (flags && FI_SYNC_ERR) {
+			entry_err[i] = FI_SUCCESS;
+		}
 	}
 
 	av_priv->count += count;
 
-err:
 	return ret;
 }
 
@@ -296,6 +305,8 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 	gnix_ht_key_t key;
 	size_t i;
 	struct gnix_av_block *blk = NULL;
+	int ret_cnt = count;
+	int *entry_err = context;
 
 	assert(av_priv->map_ht != NULL);
 
@@ -320,6 +331,12 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 		/* check if this ep_name fits in the av context bits */
 		if (temp->name_type & GNIX_EPN_TYPE_SEP) {
 			if ((1 << av_priv->rx_ctx_bits) < temp->rx_ctx_cnt) {
+				if (flags && FI_SYNC_ERR) {
+					entry_err[i] = -FI_EINVAL;
+					fi_addr[i] = FI_ADDR_NOTAVAIL;
+					ret_cnt = -FI_EINVAL;
+					continue;
+				}
 				return -FI_EINVAL;
 			}
 		}
@@ -336,6 +353,11 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 		ret = _gnix_ht_insert(av_priv->map_ht,
 				      key,
 				      the_entry);
+
+		if (flags && FI_SYNC_ERR) {
+			entry_err[i] = FI_SUCCESS;
+		}
+
 		/*
 		 * we are okay with user trying to add more
 		 * entries with same key.
@@ -344,12 +366,17 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 			GNIX_WARN(FI_LOG_AV,
 				  "_gnix_ht_insert failed %d\n",
 				  ret);
+			if (flags && FI_SYNC_ERR) {
+				entry_err[i] = ret;
+				fi_addr[i] = FI_ADDR_NOTAVAIL;
+				ret_cnt = ret;
+				continue;
+			}
 			return ret;
 		}
-
 	}
 
-	return count;
+	return ret_cnt;
 }
 
 /*
@@ -575,16 +602,17 @@ DIRECT_FN STATIC int gnix_av_insert(struct fid_av *av, const void *addr,
 
 	GNIX_TRACE(FI_LOG_AV, "\n");
 
-	if (!av) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
+	if (!av)
+		return -FI_EINVAL;
 
 	av_priv = container_of(av, struct gnix_fid_av, av_fid);
 
-	if (!av_priv) {
-		ret = -FI_EINVAL;
-		goto err;
+	if (!av_priv)
+		return -FI_EINVAL;
+
+	if ((flags & FI_SYNC_ERR) && (context == NULL)) {
+		GNIX_WARN(FI_LOG_AV, "FI_SYNC_ERR requires context\n");
+		return -FI_EINVAL;
 	}
 
 	switch (av_priv->type) {
@@ -600,7 +628,6 @@ DIRECT_FN STATIC int gnix_av_insert(struct fid_av *av, const void *addr,
 		break;
 	}
 
-err:
 	return ret;
 }
 

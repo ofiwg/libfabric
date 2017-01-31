@@ -36,7 +36,13 @@
 #include <time.h>
 #include <stdint.h>
 #include <sys/time.h>
+#include <criterion/criterion.h>
+#include <criterion/logging.h>
 #include "gnix_rdma_headers.h"
+
+#define BLUE "\x1b[34m"
+#define COLOR_RESET "\x1b[0m"
+#define cr_log_info criterion_info
 
 /* defined in rdm_atomic.c */
 extern int supported_compare_atomic_ops[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST];

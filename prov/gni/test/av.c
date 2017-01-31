@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -43,6 +43,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -283,6 +284,41 @@ Test(av_full_map, remove_addr)
 Test(av_full_table, remove_addr)
 {
 	remove_addr_test();
+}
+
+static void addr_insert_test(void)
+{
+	int i, ret;
+	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
+
+	int err[SIMPLE_ADDR_COUNT] = {0};
+
+	cr_log_info("check for sync err flag but no context\n");
+	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT,
+			   addresses, FI_SYNC_ERR, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "%d", ret);
+
+	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT,
+			   addresses, FI_SYNC_ERR, err);
+	cr_assert_eq(ret, SIMPLE_ADDR_COUNT);
+
+	cr_log_info("check for errors\n");
+	for (i = 0; i < SIMPLE_ADDR_COUNT; i++) {
+		cr_assert_eq(err[i], 0);
+	}
+
+	ret = fi_av_remove(av, addresses, SIMPLE_ADDR_COUNT, 0);
+	cr_assert_eq(ret, FI_SUCCESS);
+}
+
+Test(av_full_map, insert_addr)
+{
+	addr_insert_test();
+}
+
+Test(av_full_table, insert_addr)
+{
+	addr_insert_test();
 }
 
 static void lookup_invalid_test(void)
