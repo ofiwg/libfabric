@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2016-2017 Cisco Systems, Inc.  All rights reserved.
 #
 # Makefile.am for libfabric
 
@@ -130,7 +130,7 @@ src_libfabric_la_LDFLAGS =
 src_libfabric_la_LIBADD =
 src_libfabric_la_DEPENDENCIES = libfabric.map
 
-src_libfabric_la_LDFLAGS += -version-info 3:1:2 -export-dynamic \
+src_libfabric_la_LDFLAGS += -version-info 3:2:2 -export-dynamic \
 			   $(libfabric_version_script)
 rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fabric.h \
