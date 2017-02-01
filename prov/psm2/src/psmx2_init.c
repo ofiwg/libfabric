@@ -34,6 +34,8 @@
 #include "prov.h"
 
 static int psmx2_init_count = 0;
+static int psmx2_lib_initialized = 0;
+static pthread_mutex_t psmx2_lib_mutex;
 
 struct psmx2_env psmx2_env = {
 	.name_server	= 1,
@@ -59,6 +61,44 @@ static void psmx2_init_env(void)
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
 }
 
+static int psmx2_init_lib(void)
+{
+	int major, minor;
+	int ret = 0, err;
+
+	if (psmx2_lib_initialized)
+		return 0;
+
+	pthread_mutex_lock(&psmx2_lib_mutex);
+
+	if (psmx2_lib_initialized)
+		goto out;
+
+	psm2_error_register_handler(NULL, PSM2_ERRHANDLER_NO_HANDLER);
+
+	major = PSM2_VERNO_MAJOR;
+	minor = PSM2_VERNO_MINOR;
+
+	err = psm2_init(&major, &minor);
+	if (err != PSM2_OK) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"psm2_init failed: %s\n", psm2_error_get_string(err));
+		ret = err;
+		goto out;
+	}
+
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"PSM header version = (%d, %d)\n", PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"PSM library version = (%d, %d)\n", major, minor);
+
+	psmx2_lib_initialized = 1;
+
+out:
+	pthread_mutex_unlock(&psmx2_lib_mutex);
+	return ret;
+}
+
 static int psmx2_getinfo(uint32_t version, const char *node,
 			 const char *service, uint64_t flags,
 			 struct fi_info *hints, struct fi_info **info)
@@ -82,6 +122,9 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
 	*info = NULL;
+
+	if (psmx2_init_lib())
+		return -FI_ENODATA;
 
 	/*
 	 * psm2_ep_num_devunits() may wait for 15 seconds before return
@@ -493,7 +536,7 @@ static void psmx2_fini(void)
 {
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
 
-	if (! --psmx2_init_count) {
+	if (! --psmx2_init_count && psmx2_lib_initialized) {
 		/* This function is called from a library destructor, which is called
 		 * automatically when exit() is called. The call to psm2_finalize()
 		 * might cause deadlock if the applicaiton is terminated with Ctrl-C
@@ -501,11 +544,13 @@ static void psmx2_fini(void)
 		 * psm2_finalize() tries to acquire. This can be avoided by only
 		 * calling psm2_finalize() when PSM is guaranteed to be unused.
 		 */
-		if (psmx2_active_fabric)
+		if (psmx2_active_fabric) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"psmx2_active_fabric != NULL, skip psm2_finalize\n");
-		else
+		} else {
 			psm2_finalize();
+			psmx2_lib_initialized = 0;
+		}
 	}
 }
 
@@ -520,9 +565,6 @@ struct fi_provider psmx2_prov = {
 
 PROVIDER_INI
 {
-	int major, minor;
-	int err;
-
 #ifdef HAVE_PSM2_DL
 	fi_util_init();
 #endif
@@ -558,23 +600,7 @@ PROVIDER_INI
 			"(when >=0) or core_id - num_cores (when <0). "
 			"(default: affinity not set)");
 
-        psm2_error_register_handler(NULL, PSM2_ERRHANDLER_NO_HANDLER);
-
-	major = PSM2_VERNO_MAJOR;
-	minor = PSM2_VERNO_MINOR;
-
-        err = psm2_init(&major, &minor);
-	if (err != PSM2_OK) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"psm2_init failed: %s\n", psm2_error_get_string(err));
-		return NULL;
-	}
-
-	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"PSM header version = (%d, %d)\n", PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
-	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"PSM library version = (%d, %d)\n", major, minor);
-
+	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;
 	return (&psmx2_prov);
 }
