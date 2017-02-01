@@ -523,6 +523,9 @@ PROVIDER_INI
 	int major, minor;
 	int err;
 
+#ifdef HAVE_PSM2_DL
+	fi_util_init();
+#endif
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
 
 	fi_param_define(&psmx2_prov, "name_server", FI_PARAM_BOOL,
