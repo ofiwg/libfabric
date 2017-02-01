@@ -56,13 +56,13 @@ extern int gnix_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 extern int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			struct fid_eq **eq, void *context);
 
-extern int gnix_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
+extern ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
 			size_t len, uint64_t flags);
 
-extern int gnix_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
+extern ssize_t gnix_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			   uint64_t flags);
 
-extern int gnix_eq_write(struct fid_eq *eq, uint32_t event, const void *buf,
+extern ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event, const void *buf,
 			 size_t len, uint64_t flags);
 
 extern ssize_t gnix_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
@@ -72,18 +72,18 @@ extern const char *gnix_eq_strerror(struct fid_eq *eq, int prov_errno,
 				    const void *err_data, char *buf,
 				    size_t len);
 
-extern int gnix_cq_read(struct fid_cq *cq, void *buf, size_t count);
+extern ssize_t gnix_cq_read(struct fid_cq *cq, void *buf, size_t count);
 
-extern int gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
+extern ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 			    fi_addr_t *src_addr);
 
 extern ssize_t gnix_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			       uint64_t flags);
 
-extern int gnix_cq_sread(struct fid_cq *cq, void *buf, size_t count,
+extern ssize_t gnix_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 			 const void *cond, int timeout);
 
-extern int gnix_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
+extern ssize_t gnix_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			     fi_addr_t *src_addr, const void *cond,
 			     int timeout);
 
@@ -93,9 +93,9 @@ extern const char *gnix_cq_strerror(struct fid_cq *cq, int prov_errno,
 				    const void *err_data, char *buf,
 				    size_t len);
 
-extern int gnix_cntr_read(struct fid_cntr *cntr);
+extern uint64_t gnix_cntr_read(struct fid_cntr *cntr);
 
-extern int gnix_cntr_readerr(struct fid_cntr *cntr);
+extern uint64_t gnix_cntr_readerr(struct fid_cntr *cntr);
 
 extern int gnix_cntr_add(struct fid_cntr *cntr, uint64_t value);
 

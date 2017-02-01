@@ -338,7 +338,7 @@ err:
 	return ret;
 }
 
-static int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
+DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
 	int i, ret;
 	struct gnix_fid_ep  *ep;
