@@ -159,7 +159,7 @@ static inline uint64_t __calculate_length(
 	return pages * pagesize;
 }
 
-DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
+static int __mr_reg(struct fid *fid, const void *buf, size_t len,
 			  uint64_t access, uint64_t offset,
 			  uint64_t requested_key, uint64_t flags,
 			  struct fid_mr **mr_o, void *context)
@@ -239,6 +239,68 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 err:
 	return rc;
+}
+
+DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
+	uint64_t access, uint64_t offset,
+	uint64_t requested_key, uint64_t flags,
+	struct fid_mr **mr, void *context)
+{
+	const struct iovec mr_iov = {
+		.iov_base = (void *) buf,
+		.iov_len = len,
+	};
+	const struct fi_mr_attr attr = {
+		.mr_iov = &mr_iov,
+		.iov_count = 1,
+		.access = access, 
+		.offset = offset,
+		.requested_key = requested_key, 
+		.context = context,
+	};
+
+	return gnix_mr_regattr(fid, &attr, flags, mr);
+}
+
+DIRECT_FN int gnix_mr_regv(struct fid *fid, const struct iovec *iov,
+	size_t count, uint64_t access,	
+	uint64_t offset, uint64_t requested_key,
+	uint64_t flags, struct fid_mr **mr, void *context)
+{
+	const struct fi_mr_attr attr = {
+		.mr_iov = iov, 
+		.iov_count = count,
+		.access = access,
+		.offset = offset,
+		.requested_key = requested_key, 
+		.context = context,
+	};
+
+	return gnix_mr_regattr(fid, &attr, flags, mr);
+}
+
+
+DIRECT_FN int gnix_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+	uint64_t flags, struct fid_mr **mr)
+{
+	struct gnix_fid_domain *domain = container_of(fid, 
+		struct gnix_fid_domain, domain_fid.fid);
+
+	if (!attr)
+		return -FI_EINVAL;
+	if (!attr->mr_iov || !attr->iov_count)
+		return -FI_EINVAL;
+
+	if (domain->mr_iov_limit < attr->iov_count)
+		return -FI_EOPNOTSUPP;
+
+	if (attr->iov_count == 1)
+		return __mr_reg(fid, attr->mr_iov[0].iov_base, 
+			attr->mr_iov[0].iov_len, attr->access, attr->offset,
+			attr->requested_key, flags, mr, attr->context);
+	
+	/* regv limited to one iov at this time */
+	return -FI_EOPNOTSUPP;
 }
 
 /**
