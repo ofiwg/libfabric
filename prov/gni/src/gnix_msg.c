@@ -335,7 +335,7 @@ static int __recv_completion(
 	int rc;
 
 	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
-		rc = _gnix_cq_add_event(ep->recv_cq, context, flags, len,
+		rc = _gnix_cq_add_event(ep->recv_cq, ep, context, flags, len,
 					addr, data, tag, src_addr);
 		if (rc != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
@@ -419,9 +419,8 @@ static int __gnix_msg_send_completion(struct gnix_fid_ep *ep,
 	GNIX_DEBUG(FI_LOG_EP_DATA, "send_cq = %p\n", ep->send_cq);
 
 	if ((req->msg.send_flags & FI_COMPLETION) && ep->send_cq) {
-		rc = _gnix_cq_add_event(ep->send_cq,
-				req->user_context,
-				flags, 0, 0, 0, 0, FI_ADDR_NOTAVAIL);
+		rc = _gnix_cq_add_event(ep->send_cq, ep, req->user_context,
+					flags, 0, 0, 0, 0, FI_ADDR_NOTAVAIL);
 		if (rc != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
 					"_gnix_cq_add_event returned %d\n",

@@ -97,7 +97,7 @@ static int __gnix_rma_send_completion(struct gnix_fid_ep *ep,
 	uint64_t flags = req->flags & GNIX_RMA_COMPLETION_FLAGS;
 
 	if ((req->flags & FI_COMPLETION) && ep->send_cq) {
-		rc = _gnix_cq_add_event(ep->send_cq, req->user_context,
+		rc = _gnix_cq_add_event(ep->send_cq, ep, req->user_context,
 					flags, 0, 0, 0, 0, FI_ADDR_NOTAVAIL);
 		if (rc) {
 			GNIX_WARN(FI_LOG_EP_DATA,
@@ -251,8 +251,8 @@ int __smsg_rma_data(void *data, void *msg)
 	gni_return_t status;
 
 	if (hdr->flags & FI_REMOTE_CQ_DATA && ep->recv_cq) {
-		ret = _gnix_cq_add_event(ep->recv_cq, NULL, hdr->user_flags, 0,
-					 0, hdr->user_data, 0,
+		ret = _gnix_cq_add_event(ep->recv_cq, ep, NULL, hdr->user_flags,
+					 0, 0, hdr->user_data, 0,
 					 FI_ADDR_NOTAVAIL);
 		if (ret != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,

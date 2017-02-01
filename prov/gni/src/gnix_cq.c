@@ -282,12 +282,30 @@ static int __gnix_cq_progress(struct gnix_fid_cq *cq)
 /*******************************************************************************
  * Exposed helper functions
  ******************************************************************************/
-ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
-			   uint64_t flags, size_t len, void *buf,
-			   uint64_t data, uint64_t tag, fi_addr_t src_addr)
+ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
+			   void *op_context, uint64_t flags, size_t len,
+			   void *buf, uint64_t data, uint64_t tag,
+			   fi_addr_t src_addr)
 {
 	struct gnix_cq_entry *event;
 	struct slist_entry *item;
+	uint64_t op_flags, mask;
+
+	/* TODO: Move below conditional to gnix_cq.h and make static/inline */
+	if (ep) {
+		op_flags = ep->op_flags;
+
+		if (op_flags & FI_NOTIFY_FLAGS_ONLY) {
+			mask = (FI_REMOTE_CQ_DATA | FI_MULTI_RECV);
+
+			if (op_flags & FI_RMA_EVENT) {
+				mask |= (FI_REMOTE_READ | FI_REMOTE_WRITE |
+					 FI_RMA);
+			}
+
+			flags &= mask;
+		}
+	}
 
 	COND_ACQUIRE(cq->requires_lock, &cq->lock);
 
