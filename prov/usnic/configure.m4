@@ -101,12 +101,17 @@ dnl
 AC_DEFUN([FI_USNIC_CONFIGURE],[
     # Determine if we can support the usnic provider
     usnic_happy=0
+    usnic_build_fake_driver=0
     AS_IF([test "x$enable_usnic" != "xno"],
 	  [AC_CHECK_HEADER([infiniband/verbs.h], [usnic_happy=1])
 	   AS_IF([test $usnic_happy -eq 1],
 	       [USNIC_CHECK_IF_NEED_FAKE_USNIC
 	        USNIC_CHECK_LIBNL_SADNESS])
 	  ])
+
+    # AM_CONDITIONALs must always be defined
+    AM_CONDITIONAL([USNIC_BUILD_FAKE_VERBS_DRIVER],
+	[test $usnic_build_fake_driver -eq 1])
 ])
 
 dnl
@@ -155,7 +160,6 @@ dnl Compile the fake usnic verbs provider if <infiniband/driver.h>
 dnl exists and do not contain a prototype for verbs_register_driver().
 dnl
 AC_DEFUN([USNIC_CHECK_IF_NEED_FAKE_USNIC],[
-	usnic_build_fake_driver=0
 	AC_CHECK_HEADER([infiniband/driver.h],
 		[AC_CHECK_DECL([verbs_register_driver],
 			[],
@@ -170,8 +174,6 @@ AC_DEFUN([USNIC_CHECK_IF_NEED_FAKE_USNIC],[
 	AC_DEFINE_UNQUOTED([USNIC_BUILD_FAKE_VERBS_DRIVER],
 		[$usnic_build_fake_driver],
 		[Whether to build the fake usNIC verbs provider or not])
-	AM_CONDITIONAL([USNIC_BUILD_FAKE_VERBS_DRIVER],
-		[test $usnic_build_fake_driver -eq 1])
 ])
 
 dnl
