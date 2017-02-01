@@ -96,6 +96,7 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_MSG_BIT	(0x80000000)
 #define PSMX2_RMA_BIT	(0x40000000)
 #define PSMX2_IOV_BIT	(0x20000000)
+#define PSMX2_IMM_BIT	(0x10000000)
 #define PSMX2_SEQ_BITS	(0x0FFF0000)
 #define PSMX2_SRC_BITS	(0x0000FF00)
 #define PSMX2_DST_BITS	(0x000000FF)
