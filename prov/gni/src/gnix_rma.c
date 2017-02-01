@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -1356,7 +1356,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	rc = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA,
-			  "_gnix_vc_ep_get_vc() failed, addr: %lx, rc:\n",
+			  "_gnix_vc_ep_get_vc() failed, addr: %lx, rc: %d\n",
 			  dest_addr, rc);
 		return rc;
 	}
