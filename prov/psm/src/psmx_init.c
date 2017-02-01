@@ -184,6 +184,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	int caps = 0;
 	uint64_t max_tag_value = 0;
 	int err = -FI_ENODATA;
+	int svc0, svc = PSMX_ANY_SERVICE;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE,"\n");
 
@@ -208,28 +209,30 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	}
 	src_addr->unit = PSMX_DEFAULT_UNIT;
 	src_addr->port = PSMX_DEFAULT_PORT;
-	src_addr->service = PSMX_DEFAULT_SERVICE;
+	src_addr->service = PSMX_ANY_SERVICE;
 
-	if (node) {
-		if (flags & FI_SOURCE) {
+	if (flags & FI_SOURCE) {
+		if (node)
 			sscanf(node, "%*[^:]:%d:%d", &src_addr->unit, &src_addr->port);
-			if (service)
-				sscanf(service, "%d", &src_addr->service);
+		if (service)
+			sscanf(service, "%d", &src_addr->service);
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"node '%s' service '%s' converted to <unit=%d, port=%d, service=%d>\n",
+			node, service, src_addr->unit, src_addr->port, src_addr->service);
+	} else if (node) {
+		if (service)
+			svc = atoi(service);
+		svc0 = svc;
+		dest_addr = psmx_ns_resolve_name(node, &svc);
+		if (dest_addr) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"node '%s' service '%s' converted to <unit=%d, port=%d, service=%d>\n",
-				node, service, src_addr->unit, src_addr->port, src_addr->service);
+				"'%s:%u' resolved to <epid=0x%llx>:%u\n", node, svc0,
+				*dest_addr, svc);
 		} else {
-			dest_addr = psmx_resolve_name(node, 0);
-			if (dest_addr) {
-				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"node '%s' resolved to <epid=0x%llx>\n", node,
-					*dest_addr);
-			} else {
-				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"failed to resolve node '%s'.\n", node);
-				err = -FI_ENODATA;
-				goto err_out;
-			}
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"failed to resolve '%s:%u'.\n", node, svc);
+			err = -FI_ENODATA;
+			goto err_out;
 		}
 	}
 

@@ -234,6 +234,7 @@ static int psmx2_ep_setopt(fid_t fid, int level, int optname,
 static int psmx2_ep_close(fid_t fid)
 {
 	struct psmx2_fid_ep *ep;
+	struct psmx2_ep_name ep_name;
 	struct slist_entry *entry;
 	struct psmx2_context *item;
 
@@ -246,6 +247,10 @@ static int psmx2_ep_close(fid_t fid)
 
 	if (atomic_get(&ep->ref))
 		return -FI_EBUSY;
+
+	ep_name.epid = ep->domain->psm2_epid;
+	ep_name.vlane = ep->vlane;
+	psmx2_ns_del_local_name(ep->service, &ep_name);
 
 	ep->domain->eps[ep->vlane] = NULL;
 	psmx2_free_vlane(ep->domain, ep->vlane);
@@ -479,6 +484,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_context *item;
+	struct psmx2_ep_name ep_name;
 	uint8_t vlane;
 	uint64_t ep_cap;
 	int err = -FI_EINVAL;
@@ -579,8 +585,18 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		slist_insert_tail(&item->list_entry, &ep_priv->free_context_list);
 	}
 
-	*ep = &ep_priv->ep;
+	ep_priv->service = PSMX2_ANY_SERVICE;
+	if (info && info->src_addr)
+		ep_priv->service = ((struct psmx2_src_name *)info->src_addr)->service;
 
+	if (ep_priv->service == PSMX2_ANY_SERVICE)
+		ep_priv->service = (getpid() << 16) + ((uintptr_t)ep_priv & 0xFFFF);
+
+	ep_name.epid = domain_priv->psm2_epid;
+	ep_name.vlane = ep_priv->vlane;
+	psmx2_ns_add_local_name(ep_priv->service, &ep_name);
+
+	*ep = &ep_priv->ep;
 	return 0;
 
 errout_free_ep:

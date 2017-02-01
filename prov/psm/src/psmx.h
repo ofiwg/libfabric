@@ -297,7 +297,7 @@ struct psmx_fid_domain {
 
 #define PSMX_DEFAULT_UNIT	(-1)
 #define PSMX_DEFAULT_PORT	0
-#define PSMX_DEFAULT_SERVICE	0
+#define PSMX_ANY_SERVICE	0
 
 struct psmx_src_name {
 	int	unit;		/* start from 0. -1 means any */
@@ -514,6 +514,7 @@ struct psmx_fid_ep {
 	struct fi_context	nocomp_send_context;
 	struct fi_context	nocomp_recv_context;
 	size_t			min_multi_recv;
+	int			service;
 };
 
 struct psmx_fid_stx {
@@ -610,8 +611,13 @@ static inline void psmx_domain_release(struct psmx_fid_domain *domain)
 int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
 int	psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 void	psmx_domain_disable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
-void 	*psmx_name_server(void *args);
-void	*psmx_resolve_name(const char *servername, int port);
+
+void	psmx_ns_start_server(struct psmx_fid_fabric *fabric);
+void	psmx_ns_stop_server(struct psmx_fid_fabric *fabric);
+void	psmx_ns_add_local_name(int service, psm_epid_t name);
+void	psmx_ns_del_local_name(int service, psm_epid_t name);
+void	*psmx_ns_resolve_name(const char *server, int *service);
+
 void	psmx_get_uuid(psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
 char	*psmx_uuid_to_string(psm_uuid_t uuid);
