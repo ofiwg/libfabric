@@ -346,11 +346,12 @@ static const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
 				    char *buf, size_t *len)
 {
 	int n;
+	const struct psmx2_ep_name *name = addr;
 
 	if (!buf || !len)
 		return NULL;
 
-	n = snprintf(buf, *len, "%lx", (uint64_t)(uintptr_t)addr);
+	n = snprintf(buf, *len, "%lx-%x", name->epid, name->vlane);
 	if (n < 0)
 		return NULL;
 
