@@ -19,6 +19,10 @@ v1.4.1, Fri Feb  3, 2017
   different versions of the same provider before fi_getinfo is called.
 - General bug fixes.
 
+## UDP provider notes
+
+- Fix setting address format in fi_getinfo call.
+
 ## usNIC provider notes
 
 - Fixed compilation issues with newer versions of libibverbs.
