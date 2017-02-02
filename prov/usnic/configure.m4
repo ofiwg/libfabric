@@ -218,22 +218,11 @@ AC_DEFUN([USNIC_CHECK_LIBNL_SADNESS],[
 	usnic_LDFLAGS=$usnic_nl_LDFLAGS
 	usnic_LIBS=$usnic_nl_LIBS
 
-	# If the verbs or usnic providers are being built as a DL,
-	# then we need to add libibverbs to usnic_LIBS.  We can tell
-	# if verbs/usnic are being built as DL because fi_provider.m4
-	# will set $PROVIDER_dl to 1.  Also, per note in configure.ac,
-	# the verbs provider *must* be configured before the usnic
-	# provider explicitly for this case: so that $verbs_dl will be
-	# (potentially) set by the time we get here.
-
-	# NOTE: this decision whether to -libverbs or not used to be
-	# handled in Makefile.am via an AM_CONDITIONAL.  However, to
-	# properly support pkg-config, we have to make this decision
-	# here/now and AC SUBST the final result into usnic_LIBS.
+	# If we're building the usNIC fake verbs provider, we need to
+	# -libverbs, so put it in usnic_LIBS (so that it will also get
+	# properly substituted into the pkg-config data files).
 	usnic_verbs_lib=
-	AS_IF([test "$verbs_dl" = "1"],
-	      [usnic_verbs_lib="-libverbs"])
-	AS_IF([test "$usnic_dl" = "1" -a $usnic_build_fake_driver -eq 1],
+	AS_IF([test $usnic_build_fake_driver -eq 1],
 	      [usnic_verbs_lib="-libverbs"])
 	usnic_LIBS="$usnic_LIBS $usnic_verbs_lib"
 
