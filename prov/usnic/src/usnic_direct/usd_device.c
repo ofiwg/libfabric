@@ -51,8 +51,6 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
-#include <infiniband/driver.h>
-
 #include "usnic_direct.h"
 #include "usd.h"
 #include "usd_ib_sysfs.h"

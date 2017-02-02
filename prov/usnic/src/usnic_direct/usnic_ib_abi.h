@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2013-2017, Cisco Systems, Inc. All rights reserved.
  *
  * LICENSE_BEGIN
  *
@@ -44,68 +44,110 @@
 #ifndef USNIC_IB_ABI_H
 #define USNIC_IB_ABI_H
 
-#include <infiniband/kern-abi.h>
+#include "kcompat.h"
+#include <rdma/ib_user_verbs.h>
 
 /*
  * Pick up common file with driver
  */
 #include "usnic_abi.h"
 
-struct usnic_create_qp_resp {
-	struct ibv_create_qp_resp   ibv_resp;
-	struct usnic_ib_create_qp_resp usnic_resp;
+struct usnic_query_device {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_query_device	ibv_cmd;
+};
+
+struct usnic_query_port {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_query_port	ibv_cmd;
 };
 
 struct usnic_get_context {
-	struct ibv_get_context		ibv_cmd;
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_get_context	ibv_cmd;
 	struct usnic_ib_get_context_cmd usnic_cmd;
 	__u64				reserved;
 };
 
 struct usnic_get_context_resp {
-	struct ibv_get_context_resp	ibv_resp;
+	struct ib_uverbs_get_context_resp ibv_resp;
 	struct usnic_ib_get_context_resp usnic_resp;
 	__u64				reserved;
 };
 
 struct usnic_alloc_pd {
-	struct ibv_alloc_pd		ibv_cmd;
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_alloc_pd	ibv_cmd;
 	struct usnic_ib_alloc_pd_cmd	usnic_cmd;
 };
 
 struct usnic_alloc_pd_resp {
-	struct ibv_alloc_pd_resp	ibv_resp;
+	struct ib_uverbs_alloc_pd_resp	ibv_resp;
 	struct usnic_ib_alloc_pd_resp	usnic_resp;
 };
 
 struct usnic_dealloc_pd {
-	struct ibv_dealloc_pd		ibv_cmd;
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_dealloc_pd	ibv_cmd;
+};
+
+struct usnic_create_comp_channel {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_create_comp_channel	ibv_cmd;
 };
 
 struct usnic_reg_mr {
-	struct ibv_reg_mr		ibv_cmd;
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_reg_mr		ibv_cmd;
 	__u64				reserved;
 };
 
 struct usnic_reg_mr_resp {
-	struct ibv_reg_mr_resp		ibv_resp;
+	struct ib_uverbs_reg_mr_resp	ibv_resp;
 	__u64				reserved;
 };
 
+struct usnic_dereg_mr {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_dereg_mr	ibv_cmd;
+};
+
+struct usnic_create_qp {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_create_qp	ibv_cmd;
+	struct usnic_ib_create_qp_cmd	usnic_cmd;
+	__u64				reserved[8];
+};
+
+struct usnic_create_qp_resp {
+	struct ib_uverbs_create_qp_resp	ibv_resp;
+	struct usnic_ib_create_qp_resp	usnic_resp;
+};
+
+struct usnic_modify_qp {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_modify_qp	ibv_cmd;
+};
+
+struct usnic_destroy_qp {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_destroy_qp	ibv_cmd;
+};
+
 struct usnic_create_cq {
-	struct ibv_create_cq		ibv_cmd;
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_create_cq	ibv_cmd;
 	struct usnic_ib_create_cq	usnic_cmd;
 };
 
 struct usnic_create_cq_resp {
-	struct ibv_create_cq_resp	ibv_resp;
+	struct ib_uverbs_create_cq_resp	ibv_resp;
 	struct usnic_ib_create_cq_resp	usnic_resp;
 };
 
-struct usnic_create_qp {
-	struct ibv_create_qp		ibv_cmd;
-	struct usnic_ib_create_qp_cmd	usnic_cmd;
-	__u64				reserved[8];
+struct usnic_destroy_cq {
+	struct ib_uverbs_cmd_hdr	ibv_cmd_hdr;
+	struct ib_uverbs_destroy_cq	ibv_cmd;
 };
 
 #endif /* USNIC_IB_ABI_H */

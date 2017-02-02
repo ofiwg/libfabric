@@ -1,5 +1,5 @@
 dnl
-dnl Copyright (c) 2015-2016, Cisco Systems, Inc. All rights reserved.
+dnl Copyright (c) 2015-2017, Cisco Systems, Inc. All rights reserved.
 dnl
 dnl This software is available to you under a choice of one of two
 dnl licenses.  You may choose to be licensed under the terms of the GNU
@@ -101,11 +101,17 @@ dnl
 AC_DEFUN([FI_USNIC_CONFIGURE],[
     # Determine if we can support the usnic provider
     usnic_happy=0
+    usnic_build_fake_driver=0
     AS_IF([test "x$enable_usnic" != "xno"],
 	  [AC_CHECK_HEADER([infiniband/verbs.h], [usnic_happy=1])
 	   AS_IF([test $usnic_happy -eq 1],
-	       [USNIC_CHECK_LIBNL_SADNESS])
+	       [USNIC_CHECK_IF_NEED_FAKE_USNIC
+	        USNIC_CHECK_LIBNL_SADNESS])
 	  ])
+
+    # AM_CONDITIONALs must always be defined
+    AM_CONDITIONAL([USNIC_BUILD_FAKE_VERBS_DRIVER],
+	[test $usnic_build_fake_driver -eq 1])
 ])
 
 dnl
@@ -135,6 +141,39 @@ AC_DEFUN([USNIC_PARSE_WITH],[
 		usnic_$1_location="$2"
 		;;
 	esac
+])
+
+dnl
+dnl Check for ibv_register_driver
+dnl
+dnl If libibverbs is available and is old enough, we need to install a
+dnl "fake" usnic verbs driver to keep it from complaining to stderr
+dnl that there is no usnic verbs provider.  Newer versions of
+dnl libibverbs won't complain.  If we can detect a new-enough
+dnl libibverbs, don't bother to compile the fake usnic verbs driver.
+dnl
+dnl Per
+dnl https://github.com/ofiwg/libfabric/pull/2684#issuecomment-276462368,
+dnl the logic boils down to:
+dnl
+dnl Compile the fake usnic verbs provider if <infiniband/driver.h>
+dnl exists and do not contain a prototype for verbs_register_driver().
+dnl
+AC_DEFUN([USNIC_CHECK_IF_NEED_FAKE_USNIC],[
+	AC_CHECK_HEADER([infiniband/driver.h],
+		[AC_CHECK_DECL([verbs_register_driver],
+			[],
+			[usnic_build_fake_driver=1],
+			[#include <infiniband/driver.h>
+			])])
+
+	AC_MSG_CHECKING([if building usnic fake verbs driver])
+	AS_IF([test $usnic_build_fake_driver -eq 1],
+		[AC_MSG_RESULT([yes])],
+		[AC_MSG_RESULT([no])])
+	AC_DEFINE_UNQUOTED([USNIC_BUILD_FAKE_VERBS_DRIVER],
+		[$usnic_build_fake_driver],
+		[Whether to build the fake usNIC verbs provider or not])
 ])
 
 dnl
@@ -191,8 +230,12 @@ AC_DEFUN([USNIC_CHECK_LIBNL_SADNESS],[
 	# handled in Makefile.am via an AM_CONDITIONAL.  However, to
 	# properly support pkg-config, we have to make this decision
 	# here/now and AC SUBST the final result into usnic_LIBS.
-	AS_IF([test "$verbs_dl" = "1" || test "$usnic_dl" = "1"],
-	      [usnic_LIBS="$usnic_LIBS -libverbs"])
+	usnic_verbs_lib=
+	AS_IF([test "$verbs_dl" = "1"],
+	      [usnic_verbs_lib="-libverbs"])
+	AS_IF([test "$usnic_dl" = "1" -a $usnic_build_fake_driver -eq 1],
+	      [usnic_verbs_lib="-libverbs"])
+	usnic_LIBS="$usnic_LIBS $usnic_verbs_lib"
 
 	AC_SUBST([usnic_CPPFLAGS])
 	AC_SUBST([usnic_LDFLAGS])
