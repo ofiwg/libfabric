@@ -51,17 +51,24 @@ dnl
 dnl HAVE_$1_DL: same value as $1_dl
 dnl
 AC_DEFUN([FI_PROVIDER_SETUP],[
-	AC_MSG_NOTICE([*** Configuring $1 provider])
-	AC_ARG_ENABLE([$1],
-	      [AS_HELP_STRING([--enable-$1@<:@=yes|no|auto|dl|PATH@:>@],
-			      [Enable $1 provider @<:@default=auto@:>@
-				(yes: enable $1 provider; no: disable $1 provider;
-				auto: enable $1 provider if possible;
-				dl: enable $1 provider and build as a loadable library;
-				PATH: enable $1 provider and use $1 installed under PATH)])
-	      ],
-	      [],
-	      [enable_$1=auto])
+
+dnl
+dnl Check if --enable-direct is being used.  If yes, exclude all other providers
+dnl
+	AS_IF([test x"$enable_direct" != x"no" && test x"$enable_direct" != x"$1"],
+	      [enable_$1=no
+               AC_MSG_NOTICE([*** Skipping $1 provider because $enable_direct direct requested])],
+	      [AC_MSG_NOTICE([*** Configuring $1 provider])
+	       AC_ARG_ENABLE([$1],
+			     [AS_HELP_STRING([--enable-$1@<:@=yes|no|auto|dl|PATH@:>@],
+					[Enable $1 provider @<:@default=auto@:>@
+					(yes: enable $1 provider; no: disable $1 provider;
+					auto: enable $1 provider if possible;
+					dl: enable $1 provider and build as a loadable library;
+					PATH: enable $1 provider and use $1 installed under PATH)])
+			     ],
+			     [],
+			     [enable_$1=auto])])
 
 	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR.
 	# Provider's local macros could use the value if needed.
