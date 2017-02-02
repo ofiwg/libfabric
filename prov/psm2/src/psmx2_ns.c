@@ -116,12 +116,12 @@ static int psmx2_ns_map_add(int service, struct psmx2_ep_name *name_in)
 static void psmx2_ns_map_del(int service, struct psmx2_ep_name *name_in)
 {
 	RbtIterator it;
-	int key;
+	void *key;
 	struct psmx2_ep_name *name;
 
         it = rbtFind(psmx2_ns_map, (void *)(uintptr_t)service);
         if (it) {
-		rbtKeyValue(psmx2_ns_map, it, (void **)&key, (void **)&name);
+		rbtKeyValue(psmx2_ns_map, it, &key, (void **)&name);
 		if (name->epid != name_in->epid ||
 		    name->vlane != name_in->vlane) {
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
@@ -139,17 +139,17 @@ static void psmx2_ns_map_del(int service, struct psmx2_ep_name *name_in)
 static int psmx2_ns_map_lookup(int *service, struct psmx2_ep_name *name_out)
 {
 	RbtIterator it;
-	int key;
+	void *key;
 	struct psmx2_ep_name *name;
 
         it = rbtFind(psmx2_ns_map, (void *)(uintptr_t)(*service));
 	if (!it)
 		return -FI_ENOENT;
 
-	rbtKeyValue(psmx2_ns_map, it, (void **)&key, (void **)&name);
+	rbtKeyValue(psmx2_ns_map, it, &key, (void **)&name);
 	*name_out = *name;
 	if (*service == PSMX2_ANY_SERVICE)
-		*service = key;
+		*service = (uintptr_t)key;
 
 	return 0;
 }
