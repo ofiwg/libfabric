@@ -10,11 +10,14 @@ v1.4.1, Fri Feb  3, 2017
 
 ## PSM provider notes
 
-- INTEL TO FILL IN HERE
+- Defer initialization of the PSM library to allow runtime selection from
+  different versions of the same provider before fi_getinfo is called.
 
 ## PSM2 provider notes
 
-- INTEL TO FILL IN HERE
+- Defer initialization of the PSM2 library to allow runtime selection from
+  different versions of the same provider before fi_getinfo is called.
+- General bug fixes.
 
 ## usNIC provider notes
 
