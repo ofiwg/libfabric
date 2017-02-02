@@ -5,6 +5,21 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.4.1, Fri Feb  3, 2017
+========================
+
+## PSM provider notes
+
+- INTEL TO FILL IN HERE
+
+## PSM2 provider notes
+
+- INTEL TO FILL IN HERE
+
+## usNIC provider notes
+
+- Fixed compilation issues with newer versions of libibverbs.
+
 v1.4.0, Fri Oct 28, 2016
 ========================
 
