@@ -105,12 +105,12 @@ static int psmx_ns_map_add(int service, psm_epid_t name)
 static void psmx_ns_map_del(int service, psm_epid_t name_in)
 {
 	RbtIterator it;
-	int key;
+	void *key;
 	psm_epid_t name;
 
         it = rbtFind(psmx_ns_map, (void *)(uintptr_t)service);
         if (it) {
-		rbtKeyValue(psmx_ns_map, it, (void **)&key, (void **)&name);
+		rbtKeyValue(psmx_ns_map, it, &key, (void **)&name);
 		if (name != name_in) {
 			FI_WARN(&psmx_prov, FI_LOG_CORE,
 				"failed to delete address for service %u: "
@@ -125,15 +125,15 @@ static void psmx_ns_map_del(int service, psm_epid_t name_in)
 static int psmx_ns_map_lookup(int *service, psm_epid_t *name_out)
 {
 	RbtIterator it;
-	int key;
+	void *key;
 
         it = rbtFind(psmx_ns_map, (void *)(uintptr_t)(*service));
 	if (!it)
 		return -FI_ENOENT;
 
-	rbtKeyValue(psmx_ns_map, it, (void **)&key, (void **)name_out);
+	rbtKeyValue(psmx_ns_map, it, &key, (void **)name_out);
 	if (*service == PSMX_ANY_SERVICE)
-		*service = key;
+		*service = (uintptr_t)key;
 
 	return 0;
 }

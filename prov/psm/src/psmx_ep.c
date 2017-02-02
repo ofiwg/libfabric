@@ -490,7 +490,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->service = ((struct psmx_src_name *)info->src_addr)->service;
 
 	if (ep_priv->service == PSMX_ANY_SERVICE)
-		ep_priv->service = (getpid() << 16) + ((uintptr_t)ep_priv & 0xFFFF);
+		ep_priv->service = ((getpid() & 0x7FFF) << 16) +
+				   ((uintptr_t)ep_priv & 0xFFFF);
 
        psmx_ns_add_local_name(ep_priv->service, domain_priv->psm_epid);
 
