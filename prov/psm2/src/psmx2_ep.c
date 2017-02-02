@@ -590,7 +590,8 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->service = ((struct psmx2_src_name *)info->src_addr)->service;
 
 	if (ep_priv->service == PSMX2_ANY_SERVICE)
-		ep_priv->service = (getpid() << 16) + ((uintptr_t)ep_priv & 0xFFFF);
+		ep_priv->service = ((getpid() & 0x7FFF) << 16) +
+				   ((uintptr_t)ep_priv & 0xFFFF);
 
 	ep_name.epid = domain_priv->psm2_epid;
 	ep_name.vlane = ep_priv->vlane;
