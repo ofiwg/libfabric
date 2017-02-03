@@ -343,8 +343,6 @@ fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 
 	assert(rx_ctx_bits <= 4);
 
-	assert(0);	/* TODO - double check that this actually works! */
-
 	return fi_addr + ((uint64_t)rx_index << 33);
 }
 
