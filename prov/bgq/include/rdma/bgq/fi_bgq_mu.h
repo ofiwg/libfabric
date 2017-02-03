@@ -302,11 +302,11 @@ union fi_bgq_mu_packet_hdr {
 
 		union {
 			struct {
-				uint64_t		reserved_2	: 10;
-				uint64_t		is_local	:  1;	/* used to specify fifo map; only needed for FI_BGQ_REMOTE_COMPLETION */
-				uint64_t		unused_0	:  3;
-				uint64_t		message_length	: 10;	/* 0..512 bytes of payload data */
-				uint64_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
+				uint32_t		reserved_2	: 10;
+				uint32_t		is_local	:  1;	/* used to specify fifo map; only needed for FI_BGQ_REMOTE_COMPLETION */
+				uint32_t		unused_0	:  3;
+				uint32_t		message_length	: 10;	/* 0..512 bytes of payload data */
+				uint32_t		reserved_3	:  8;	/* a.k.a. common::packet_type */
 			} __attribute__((__packed__)) send;
 
 			struct {
