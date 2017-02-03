@@ -145,7 +145,7 @@ static int fi_bgq_mu_init(struct fi_bgq_domain *bgq_domain,
 		bgq_domain->rx.rfifo[n] = NULL;
 	}
 
-	const uint32_t subgroups_to_allocate_per_process = ppn == 64 ? 1 : 2;
+	const uint32_t subgroups_to_allocate_per_process = ppn == 64 ? 1 : ppn == 32 ? 2 : 4;
 	for (n = 0; n < subgroups_to_allocate_per_process; ++n) {
 
 		const uint32_t requested_subgroup = subgroup_offset + n;
