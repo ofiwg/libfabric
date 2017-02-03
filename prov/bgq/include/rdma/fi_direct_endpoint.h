@@ -36,6 +36,7 @@
 
 #include <stdint.h>
 #include <pthread.h>
+#include <sys/uio.h>
 
 #include "rdma/bgq/fi_bgq_compiler.h"
 #include "rdma/bgq/fi_bgq_hwi.h"
