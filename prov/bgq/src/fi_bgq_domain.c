@@ -287,9 +287,6 @@ err:
 
 int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints)
 {
-	char *name;
-	enum fi_bgq_domain_type type;
-
 	if (!domain_attr) {
 		goto err;
 	}
@@ -345,27 +342,8 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 			exit(1);
 		}
 
-	enum fi_av_type av_type = domain_attr->av_type;
 
-
-		if (av_type == FI_AV_MAP) {
-			name = FI_BGQ_DOMAIN_AVMAP_STR;
-			type = FI_BGQ_DOMAIN_AVMAP;
-		}
-		else if (av_type == FI_AV_TABLE) {
-			name = FI_BGQ_DOMAIN_AVTABLE_STR;
-			type = FI_BGQ_DOMAIN_AVTABLE;
-		}
-		else {
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"unknown av_type %d\n", av_type);
-			goto err;
-		}
-
-	FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-			"choosing domain %s\n", name);
-
-	domain_attr->name = strdup(name);
+	domain_attr->name = strdup(FI_BGQ_PROVIDER_NAME);
 	if (!domain_attr->name) {
 		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
 				"no memory\n");
@@ -373,54 +351,12 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 		return -errno;
 	}
 
-	switch(type) {
-	case FI_BGQ_DOMAIN_AVMAP:
-	case FI_BGQ_DOMAIN_AVTABLE:
-		domain_attr->cq_data_size = FI_BGQ_REMOTE_CQ_DATA_SIZE;
-		break;
-	default:
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-				"unknown error\n");
-		errno = FI_EOTHER;
-		return -errno;
-	}
+	domain_attr->cq_data_size = FI_BGQ_REMOTE_CQ_DATA_SIZE;
 
 	return 0;
 err:
 	errno = FI_EINVAL;
 	return -errno;
-}
-
-static int fi_bgq_domain_str_to_type(char *s, enum fi_bgq_domain_type *type)
-{
-	if (!s || !type) {
-		errno = FI_EOTHER;
-		return -errno;
-	}
-
-	*type = FI_BGQ_DOMAIN_UNSPEC;
-
-	if (s) {
-		if (!strncmp(s, FI_BGQ_DOMAIN_AVTABLE_STR,
-					strlen(FI_BGQ_DOMAIN_AVTABLE_STR))) {
-			*type = FI_BGQ_DOMAIN_AVTABLE;
-		} else if (!strncmp(s, FI_BGQ_DOMAIN_AVMAP_STR,
-					strlen(FI_BGQ_DOMAIN_AVMAP_STR))) {
-			*type = FI_BGQ_DOMAIN_AVMAP;
-		} else if (!strncmp(s, FI_BGQ_DOMAIN_UNSPEC_STR,
-					strlen(FI_BGQ_DOMAIN_UNSPEC_STR))) {
-			*type = FI_BGQ_DOMAIN_UNSPEC;
-		} else {
-			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"incorrect domain name supplied\n");
-			goto err;
-		}
-	}
-
-	return 0;
-err:
-	errno = FI_EINVAL;
-	return -1;
 }
 
 int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
@@ -541,7 +477,6 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 	}
 
 	/* fill in default domain attributes */
-	bgq_domain->type		= FI_BGQ_DOMAIN_UNSPEC;
 	bgq_domain->threading		= fi_bgq_global.default_domain_attr->threading;
 	bgq_domain->resource_mgmt	= fi_bgq_global.default_domain_attr->resource_mgmt;
 
@@ -554,10 +489,6 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 		ret = fi_bgq_check_domain_attr(info->domain_attr);
 		if (ret)
 			goto err;
-		if (fi_bgq_domain_str_to_type(info->domain_attr->name,
-				&bgq_domain->type) < 0) {
-			goto err;
-		}
 		bgq_domain->threading = info->domain_attr->threading;
 		bgq_domain->resource_mgmt = info->domain_attr->resource_mgmt;
 	}

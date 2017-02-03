@@ -78,12 +78,6 @@ static const uint64_t FI_BGQ_DEFAULT_CAPS = (FI_MSG | FI_RMA | FI_TAGGED | FI_AT
 						FI_NAMED_RX_CTX | FI_DIRECTED_RECV |
 						FI_MULTI_RECV | FI_SOURCE);
 
-enum fi_bgq_domain_type {
-	FI_BGQ_DOMAIN_AVTABLE,
-	FI_BGQ_DOMAIN_AVMAP,
-	FI_BGQ_DOMAIN_UNSPEC,
-};
-
 #define FI_BGQ_FABRIC_DIRECT_PROGRESS	@bgq_fabric_direct_progress@
 #define FI_BGQ_FABRIC_DIRECT_AV		@bgq_fabric_direct_av@
 #define FI_BGQ_FABRIC_DIRECT_MR		@bgq_fabric_direct_mr@

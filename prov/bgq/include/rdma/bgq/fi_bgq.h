@@ -76,12 +76,6 @@
 #define FI_BGQ_DEVICE_MAX_PATH_NAME	(32)
 #define FI_BGQ_FABRIC_NAME	"BGQ"
 
-#define FI_BGQ_DOMAIN_RMA_AVTABLE_STR "bgq-rma-avtable"
-#define FI_BGQ_DOMAIN_RMA_AVMAP_STR   "bgq-rma-avmap"
-#define FI_BGQ_DOMAIN_AVTABLE_STR     "bgq-avtable"
-#define FI_BGQ_DOMAIN_AVMAP_STR       "bgq-avmap"
-#define FI_BGQ_DOMAIN_UNSPEC_STR "bgq"
-
 #define FI_BGQ_CACHE_LINE_SIZE	(L2_CACHE_LINE_SIZE)
 
 #define FI_BGQ_MAX_STRLEN	(64)

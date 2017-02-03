@@ -60,7 +60,6 @@ struct fi_bgq_domain {
 	struct fid_domain	domain_fid;
 	struct fi_bgq_fabric	*fabric;
 
-	enum fi_bgq_domain_type type;
 	enum fi_threading	threading;
 	enum fi_resource_mgmt	resource_mgmt;
 	enum fi_mr_mode		mr_mode;
