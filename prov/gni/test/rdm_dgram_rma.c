@@ -1119,7 +1119,6 @@ void do_mixed_more(int len)
 		pthread_yield();
 	}
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
 
 	while ((ret = fi_cq_read(recv_cq[1], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
