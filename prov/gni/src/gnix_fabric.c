@@ -383,10 +383,12 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			if (hints->ep_attr->rx_ctx_cnt > GNIX_SEP_MAX_CNT)
 				goto err;
 
-			gnix_info->ep_attr->tx_ctx_cnt =
-				hints->ep_attr->tx_ctx_cnt;
-			gnix_info->ep_attr->rx_ctx_cnt =
-				hints->ep_attr->rx_ctx_cnt;
+			if (hints->ep_attr->tx_ctx_cnt)
+				gnix_info->ep_attr->tx_ctx_cnt =
+					hints->ep_attr->tx_ctx_cnt;
+			if (hints->ep_attr->rx_ctx_cnt)
+				gnix_info->ep_attr->rx_ctx_cnt =
+					hints->ep_attr->rx_ctx_cnt;
 
 			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE)
 				goto err;

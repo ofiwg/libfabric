@@ -364,6 +364,15 @@ void sep_setup_context(void)
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	hints->domain_attr->mr_mode = FI_MR_BASIC;
 	hints->fabric_attr->prov_name = strdup("gni");
+
+	hints->ep_attr->tx_ctx_cnt = 0;
+	hints->ep_attr->rx_ctx_cnt = 0;
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	cr_assert(!ret, "fi_getinfo");
+	cr_assert_eq(fi[0]->ep_attr->tx_ctx_cnt, 1, "incorrect tx_ctx_cnt");
+	cr_assert_eq(fi[0]->ep_attr->rx_ctx_cnt, 1, "incorrect rx_ctx_cnt");
+
 	hints->ep_attr->tx_ctx_cnt = ctx_cnt;
 	hints->ep_attr->rx_ctx_cnt = ctx_cnt;
 
