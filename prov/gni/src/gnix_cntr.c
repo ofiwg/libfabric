@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -296,6 +296,32 @@ DIRECT_FN STATIC int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 	return gnix_cntr_wait_sleep(cntr_priv, threshold, timeout);
 }
 
+DIRECT_FN STATIC int gnix_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
+{
+	struct gnix_fid_cntr *cntr_priv;
+
+	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
+	atomic_add(&cntr_priv->cnt_err, (int)value);
+
+	if (cntr_priv->wait)
+		_gnix_signal_wait_obj(cntr_priv->wait);
+
+	return FI_SUCCESS;
+}
+
+DIRECT_FN STATIC int gnix_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
+{
+	struct gnix_fid_cntr *cntr_priv;
+
+	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
+	atomic_set(&cntr_priv->cnt_err, (int)value);
+
+	if (cntr_priv->wait)
+		_gnix_signal_wait_obj(cntr_priv->wait);
+
+	return FI_SUCCESS;
+}
+
 static void __cntr_destruct(void *obj)
 {
 	struct gnix_fid_cntr *cntr = (struct gnix_fid_cntr *) obj;
@@ -532,4 +558,6 @@ static struct fi_ops_cntr gnix_cntr_ops = {
 	.add = gnix_cntr_add,
 	.set = gnix_cntr_set,
 	.wait = gnix_cntr_wait,
+	.adderr = gnix_cntr_adderr,
+	.seterr = gnix_cntr_seterr
 };

@@ -104,6 +104,10 @@ extern int gnix_cntr_set(struct fid_cntr *cntr, uint64_t value);
 extern int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 			  int timeout);
 
+extern int gnix_cntr_adderr(struct fid_cntr *cntr, uint64_t value);
+
+extern int gnix_cntr_seterr(struct fid_cntr *cntr, uint64_t value);
+
 /*******************************************************************************
  * Libfabric API Functions
  ******************************************************************************/
@@ -238,6 +242,16 @@ static inline int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 			       int timeout)
 {
 	return gnix_cntr_wait(cntr, threshold, timeout);
+}
+
+static inline int fi_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
+{
+	return gnix_cntr_adderr(cntr, value);
+}
+
+static inline int fi_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
+{
+	return gnix_cntr_seterr(cntr, value);
 }
 
 #endif /* _FI_DIRECT_EQ_H_ */

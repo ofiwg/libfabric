@@ -797,3 +797,191 @@ Test(cntr_mt, write_wait)
 
 	dbg_printf("done\n");
 }
+
+void *do_add_cntr_mt(void *arg)
+{
+	int i = 0, ret, iters = ((int *)arg)[0];
+
+	for (; i < iters; i++) {
+		ret = fi_cntr_add(ep_write_cntrs[0], 1);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	return NULL;
+}
+
+void *do_add_err_cntr_mt(void *arg)
+{
+	int i = 0, ret, iters = ((int *)arg)[0];
+
+	for (; i < iters; i++) {
+		ret = fi_cntr_adderr(ep_write_cntrs[0], 1);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	return NULL;
+}
+
+Test(cntr_mt, set_add_read_cntr)
+{
+	int iters = 128, nthreads = 4, i, ret;
+	uint64_t cntr_val;
+	pthread_t threads[nthreads];
+	void *pt_ret;
+
+	ret = fi_cntr_set(ep_write_cntrs[0], 0);
+	cr_assert(ret == FI_SUCCESS);
+
+	cntr_val = fi_cntr_read(ep_write_cntrs[0]);
+	cr_assert_eq(cntr_val, 0, "write error counter is incorrect.");
+
+	/* Create & Spawn threads */
+	for (i = 0; i < nthreads; i++) {
+		cr_assert(!pthread_create(threads + i, NULL, do_add_cntr_mt,
+					  (void *) &iters));
+	}
+
+	/* Wait until all threads are done */
+	for (i = 0; i < nthreads; i++) {
+		cr_assert(!pthread_join(threads[i], &pt_ret));
+		cr_assert(!pt_ret);
+	}
+
+	cntr_val = fi_cntr_read(ep_write_cntrs[0]);
+	cr_assert_eq(cntr_val, (iters * nthreads), "write error counter "
+		"is incorrect.");
+}
+
+Test(cntr_mt, set_add_read_err_cntr)
+{
+	int iters = 128, nthreads = 4, i, ret;
+	uint64_t err_cntr_val;
+	pthread_t threads[nthreads];
+	void *pt_ret;
+
+	ret = fi_cntr_seterr(ep_write_cntrs[0], 0);
+	cr_assert(ret == FI_SUCCESS);
+
+	err_cntr_val = fi_cntr_readerr(ep_write_cntrs[0]);
+	cr_assert_eq(err_cntr_val, 0, "write error counter is incorrect.");
+
+	/* Create & Spawn threads */
+	for (i = 0; i < nthreads; i++) {
+		cr_assert(!pthread_create(threads + i, NULL, do_add_err_cntr_mt,
+					  (void *) &iters));
+	}
+
+	/* Wait until all threads are done */
+	for (i = 0; i < nthreads; i++) {
+		cr_assert(!pthread_join(threads[i], &pt_ret));
+		cr_assert(!pt_ret);
+	}
+
+	err_cntr_val = fi_cntr_readerr(ep_write_cntrs[0]);
+	cr_assert_eq(err_cntr_val, (iters * nthreads), "write error counter "
+		"is incorrect.");
+}
+
+static void *do_thread_adderr_wait(void *data)
+{
+	int i, ret;
+	i = *((int *) data);
+
+	dbg_printf("%d: waiting\n", i);
+	ret = fi_cntr_wait(ep_write_cntrs[i], ~0, -1);
+	cr_assert(ret != FI_SUCCESS, "Bad return value from fi_cntr_wait");
+
+	dbg_printf("%d: done\n", i);
+	return NULL;
+}
+
+Test(cntr_mt, adderr_wait)
+{
+	int i, ret;
+	pthread_t threads[NUM_EPS];
+	int thread_args[NUM_EPS];
+	void *pt_ret;
+
+	/* Each thread waits for an err cntr change on the i'th ep_write_cntr */
+	dbg_printf("creating threads\n");
+	for (i = 0; i < NUM_EPS; i++) {
+		thread_args[i] = i;
+		cr_assert(!pthread_create(&threads[i], NULL,
+					  do_thread_adderr_wait, (void *) &thread_args[i]));
+	}
+
+	dbg_printf("Adding errors\n");
+	for (i = 0; i < NUM_EPS; i++) {
+		ret = fi_cntr_adderr(ep_write_cntrs[i], 1);
+		cr_assert(ret == FI_SUCCESS, "Bad return value from "
+			"fi_cntr_adderr");
+	}
+
+	for (i = 0; i < NUM_EPS; i++) {
+		cr_assert(!pthread_join(threads[i], &pt_ret));
+		cr_assert(!pt_ret);
+	}
+
+	dbg_printf("done\n");
+}
+
+Test(cntr, adderr_wait)
+{
+	int ret;
+
+	ret = fi_cntr_adderr(write_cntr, 1);
+	cr_assert(ret == FI_SUCCESS, "Bad return value from fi_cntr_adderr");
+
+	ret = fi_cntr_wait(write_cntr, ~0, -1);
+	cr_assert(ret != FI_SUCCESS, "Bad return value from fi_cntr_wait");
+}
+
+Test(cntr, set_add_read_cntr)
+{
+	int iters = 128, ret, i = 0, init_val = 0xabcdefab;
+	uint64_t cntr_val, prev_cntr_val;
+
+	ret = fi_cntr_set(write_cntr, init_val);
+	cr_assert(ret == FI_SUCCESS);
+
+	cntr_val = fi_cntr_read(write_cntr);
+	cr_assert_eq(cntr_val, init_val, "write or counter is incorrect.");
+
+	ret = fi_cntr_set(write_cntr, 0);
+	cr_assert(ret == FI_SUCCESS);
+
+	for (; i < iters; i++) {
+		prev_cntr_val = fi_cntr_read(write_cntr);
+		ret = fi_cntr_add(write_cntr, 1);
+		cr_assert(ret == FI_SUCCESS);
+
+		cntr_val = fi_cntr_read(write_cntr);
+		cr_assert_eq(cntr_val, prev_cntr_val + 1, "counter is "
+			"incorrect");
+	}
+}
+
+Test(cntr, set_add_read_err_cntr)
+{
+	int iters = 128, ret, i = 0,  init_val = 0xabcdefab;
+	uint64_t cntr_val, prev_cntr_val;
+
+	ret = fi_cntr_seterr(write_cntr, init_val);
+	cr_assert(ret == FI_SUCCESS);
+
+	cntr_val = fi_cntr_readerr(write_cntr);
+	cr_assert_eq(cntr_val, init_val, "write or counter is incorrect.");
+
+	ret = fi_cntr_seterr(write_cntr, 0);
+	cr_assert(ret == FI_SUCCESS);
+
+	for (; i < iters; i++) {
+		prev_cntr_val = fi_cntr_readerr(write_cntr);
+		ret = fi_cntr_adderr(write_cntr, 1);
+		cr_assert(ret == FI_SUCCESS);
+
+		cntr_val = fi_cntr_readerr(write_cntr);
+		cr_assert_eq(cntr_val, prev_cntr_val + 1, "error counter is "
+			"incorrect");
+	}
+}
