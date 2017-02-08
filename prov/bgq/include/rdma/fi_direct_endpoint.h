@@ -499,7 +499,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 	send_desc->Pa_Payload = payload_paddr;
 
 	send_desc->Message_Length = len;
-	memcpy(payload_vaddr, buf, len);	/* TODO use a qpx-optimized memcpy instead */
+	if (len) memcpy(payload_vaddr, buf, len);	/* TODO use a qpx-optimized memcpy instead */
 
 	hdr->pt2pt.send.message_length = len;
 	hdr->pt2pt.ofi_tag = tag;
@@ -584,7 +584,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 			send_desc->Pa_Payload = payload_paddr;
 
 			if (is_contiguous) {
-				memcpy((void*)payload_vaddr, buf, len);
+				if (len) memcpy((void*)payload_vaddr, buf, len);
 			} else {
 				unsigned i;
 				const struct iovec * iov = (const struct iovec *)buf;

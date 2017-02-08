@@ -185,8 +185,6 @@ int fi_bgq_cq_enqueue_pending (struct fi_bgq_cq * bgq_cq,
 		union fi_bgq_context * context,
 		const int lock_required)
 {
-	assert(0 != context->byte_counter);
-
 	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
 
 		int ret;
