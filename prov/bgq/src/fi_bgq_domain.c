@@ -261,7 +261,7 @@ int fi_bgq_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->data_progress	= FI_BGQ_FABRIC_DIRECT_PROGRESS;
 	attr->resource_mgmt	= FI_RM_DISABLED;
 	attr->av_type		= FI_AV_MAP;
-	attr->mr_mode		= FI_MR_SCALABLE;
+	attr->mr_mode		= FI_BGQ_FABRIC_DIRECT_MR;
 	attr->mr_key_size 	= 2;			/* 2^16 keys */
 	attr->cq_data_size 	= FI_BGQ_REMOTE_CQ_DATA_SIZE;
 	attr->cq_cnt		= 128 / ppn;
@@ -300,13 +300,18 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
  	 */
 	domain_attr->data_progress = FI_BGQ_FABRIC_DIRECT_PROGRESS;
 
+	/* Set the mr_mode to the option used in the configure.
+ 	 * Ignore any setting by the application - the checkinfo should have verified
+ 	 * it was set to the same setting.
+ 	 */
+	domain_attr->mr_mode = FI_BGQ_FABRIC_DIRECT_MR;
+ 
 	if (hints) {
 		if (hints->domain) {
 			struct fi_bgq_domain *bgq_domain = bgq_domain = container_of(hints->domain, struct fi_bgq_domain, domain_fid);
 
 			domain_attr->threading		= bgq_domain->threading;
 			domain_attr->resource_mgmt	= bgq_domain->resource_mgmt;
-			domain_attr->mr_mode		= bgq_domain->mr_mode;
 			domain_attr->tx_ctx_cnt		= fi_bgq_domain_get_tx_max(bgq_domain);
 			domain_attr->rx_ctx_cnt		= fi_bgq_domain_get_rx_max(bgq_domain);
 			domain_attr->max_ep_tx_ctx	= fi_bgq_domain_get_tx_max(bgq_domain);
@@ -319,7 +324,6 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 			if (hints->control_progress)	domain_attr->control_progress = hints->control_progress;
 			if (hints->resource_mgmt)	domain_attr->resource_mgmt = hints->resource_mgmt;
 			if (hints->av_type)		domain_attr->av_type = hints->av_type;
-			if (hints->mr_mode)		domain_attr->mr_mode = hints->mr_mode;
 			if (hints->mr_key_size)		domain_attr->mr_key_size = hints->mr_key_size;
 			if (hints->cq_data_size)	domain_attr->cq_data_size = hints->cq_data_size;
 			if (hints->cq_cnt)		domain_attr->cq_cnt = hints->cq_cnt;
@@ -439,15 +443,28 @@ int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 		FI_LOG(fi_bgq_global.prov, FI_LOG_WARN, FI_LOG_DOMAIN,
 				"control auto progress is not fully implemented\n");
 	}
-	switch (attr->mr_mode) {
-	case FI_MR_UNSPEC:
-	case FI_MR_SCALABLE:
-		break;
-	case FI_MR_BASIC:
-	default:
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"MR mode not supported with this domain\n");
-			goto err;
+
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+		if (attr->mr_mode != FI_MR_SCALABLE) {
+			fprintf(stderr,"BGQ Provider configured with mr mode of FI_MR_SCALABLE but application specified something else.\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
+		}
+	}
+	else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
+		if (attr->mr_mode != FI_MR_BASIC) {
+			fprintf(stderr,"BGQ Provider configured with mr mode of FI_MR_BASIC but application specified something else.\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
+		}
+	}
+	else {
+		fprintf(stderr,"BGQ Provider mr mode not properly configured.\n");
+		fflush(stderr);
+		assert(0);
+		exit(1);
 	}
 	if (attr->mr_key_size) {
 		if (attr->mr_key_size > FI_BGQ_MR_KEY_SIZE) {

@@ -103,7 +103,7 @@ int fi_bgq_set_default_info()
 		.data_progress	= FI_BGQ_FABRIC_DIRECT_PROGRESS,
 		.resource_mgmt	= FI_RM_DISABLED,
 		.av_type	= FI_AV_MAP,
-		.mr_mode	= FI_MR_SCALABLE,
+		.mr_mode	= FI_BGQ_FABRIC_DIRECT_MR,
 		.mr_key_size	= 2,
 		.cq_data_size	= FI_BGQ_REMOTE_CQ_DATA_SIZE,
 		.cq_cnt		= 128 / ppn,
