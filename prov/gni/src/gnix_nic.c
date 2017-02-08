@@ -48,6 +48,7 @@
  * TODO: make this a domain parameter
  */
 #define GNIX_VC_FL_MIN_SIZE 128
+#define GNIX_VC_FL_INIT_REFILL_SIZE 10
 
 static int gnix_nics_per_ptag[GNI_PTAG_MAX];
 struct dlist_entry gnix_nic_list_ptag[GNI_PTAG_MAX];
@@ -1127,7 +1128,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		ret = _gnix_fl_init_ts(sizeof(struct gnix_vc),
 				       offsetof(struct gnix_vc, fr_list),
 				       GNIX_VC_FL_MIN_SIZE,
-				       0,
+				       GNIX_VC_FL_INIT_REFILL_SIZE,
 				       0,
 				       0,
 				       &nic->vc_freelist);
