@@ -75,6 +75,10 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 		const uint64_t enable_cntr,
 		const int lock_required)
 {
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_readv_internal starting - niov is %ld do_cntr is %d\n",niov,(enable_cntr && ( bgq_ep->write_cntr != 0)));
+fflush(stderr);
+#endif
 	assert(niov <= 8);
 
 	const uint64_t do_cq = enable_cq && (tx_op_flags & FI_COMPLETION);
@@ -82,10 +86,7 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 	struct fi_bgq_cntr * write_cntr = bgq_ep->write_cntr;
 	const uint64_t do_cntr = enable_cntr && (write_cntr != 0);
 
-	MUHWI_Descriptor_t * model =		/* branch will compile out */
-		(FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) ?
-			&bgq_ep->tx.read.direct.rget_model :
-			&bgq_ep->tx.read.emulation.mfifo_model;
+	MUHWI_Descriptor_t * model = &bgq_ep->tx.read.emulation.mfifo_model;
 
 	const uint64_t fifo_map = fi_bgq_addr_get_fifo_map(bgq_target_addr->fi);
 
@@ -106,45 +107,43 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			desc, &desc->Pa_Payload);
 	desc->Message_Length = (niov << BGQ_MU_DESCRIPTOR_SIZE_IN_POWER_OF_2);
 
-	assert(FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE);
 
-	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
+	desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
+	fi_bgq_addr_rec_fifo_id(bgq_target_addr->fi);
 
-		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
-			fi_bgq_addr_rec_fifo_id(bgq_target_addr->fi);
+	union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+	hdr->rma.ndesc = niov;
 
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-		hdr->rma.ndesc = niov;
+	/* TODO - how to specify multiple remote injection fifos? */
 
-		/* TODO - how to specify multiple remote injection fifos? */
+	union fi_bgq_mu_descriptor * fi_dput_desc = (union fi_bgq_mu_descriptor *) dput_desc;
 
-		union fi_bgq_mu_descriptor * fi_dput_desc = (union fi_bgq_mu_descriptor *) dput_desc;
+	unsigned i;
+	for (i = 0; i < niov; ++i) {	/* on fence this loop will compile out (niov is 0) */
 
-		unsigned i;
-		for (i = 0; i < niov; ++i) {	/* on fence this loop will compile out (niov is 0) */
+		qpx_memcpy64((void*)&dput_desc[i],
+			(const void*)&bgq_ep->tx.read.emulation.dput_model);
 
-			qpx_memcpy64((void*)&dput_desc[i],
-				(const void*)&bgq_ep->tx.read.emulation.dput_model);
+		dput_desc[i].Torus_FIFO_Map = fifo_map;
+		dput_desc[i].Message_Length = iov[i].iov_len;
+		dput_desc[i].Pa_Payload = addr[i];
 
-			dput_desc[i].Torus_FIFO_Map = fifo_map;
-			dput_desc[i].Message_Length = iov[i].iov_len;
-			dput_desc[i].Pa_Payload = addr[i];
+		/* determine the physical address of the destination data location */
+		uint64_t iov_base_paddr = 0;
+		uint32_t cnk_rc __attribute__ ((unused));
+		cnk_rc = fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &iov_base_paddr);
+		assert(cnk_rc==0);
+		MUSPI_SetRecPayloadBaseAddressInfo(&dput_desc[i], FI_BGQ_MU_BAT_ID_GLOBAL, iov_base_paddr);
 
-			/* determine the physical address of the destination data location */
-			uint64_t iov_base_paddr = 0;
-			uint32_t cnk_rc __attribute__ ((unused));
-			cnk_rc = fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &iov_base_paddr);
-			assert(cnk_rc==0);
-			MUSPI_SetRecPayloadBaseAddressInfo(&dput_desc[i], FI_BGQ_MU_BAT_ID_GLOBAL, iov_base_paddr);
-
-			assert((key[i] & 0xFFFF000000000000ul) == 0);	/* TODO - change this when key size > 48b */
-			//fi_dput_desc[i].rma.key_msb = 0;
-			fi_dput_desc[i].rma.key_lsb = key[i];
-		}
+		assert((key[i] & 0xFFFF000000000000ul) == 0);	/* TODO - change this when key size > 48b */
+		fi_dput_desc[i].rma.key_lsb = key[i];
 	}
 
 	if (do_cntr && niov < 8) {	/* likely */
-
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_readv_internal do_cntr && niov %d < 8\n",niov);
+fflush(stderr);
+#endif
 		/* add the counter update direct-put descriptor to the
 		 * tail of the rget/mfifo payload */
 
@@ -157,13 +156,15 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			MUSPI_GetAtomicAddress(write_cntr->std.paddr, MUHWI_ATOMIC_OPCODE_STORE_ADD));
 
 		desc->Message_Length += sizeof(MUHWI_Descriptor_t);
-		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
-			union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-			hdr->rma.ndesc += 1;
-		}
+		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		hdr->rma.ndesc += 1;
 
 		if (!do_cq) {	/* likely */
 
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_readv_internal do_cntr && niov < 8 AND (!do_cq)\n");
+fflush(stderr);
+#endif
 			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
 		} else 	if (niov < 7) {
@@ -196,10 +197,8 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 				FI_BGQ_MU_BAT_ID_GLOBAL, byte_counter_paddr);
 
 			desc->Message_Length += sizeof(MUHWI_Descriptor_t);
-			if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
-				union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-				hdr->rma.ndesc += 1;
-			}
+			union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+			hdr->rma.ndesc += 1;
 
 			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
@@ -271,10 +270,8 @@ static inline void fi_bgq_readv_internal (struct fi_bgq_ep * bgq_ep,
 			FI_BGQ_MU_BAT_ID_GLOBAL, byte_counter_paddr);
 
 		desc->Message_Length += sizeof(MUHWI_Descriptor_t);
-		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
-			union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-			hdr->rma.ndesc += 1;
-		}
+		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		hdr->rma.ndesc += 1;
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
@@ -312,6 +309,9 @@ static inline ssize_t fi_bgq_inject_write_generic(struct fid_ep *ep,
 		uint64_t addr, uint64_t key,
 		int lock_required)
 {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_inject_write_generic starting\n");
+#endif
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
@@ -354,9 +354,12 @@ static inline ssize_t fi_bgq_inject_write_generic(struct fid_ep *ep,
 	memcpy(payload, buf, len);
 
 	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {		/* branch will compile out */
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_inject_write_generic - virtual addr is 0x%016lx physical addr is 0x%016lx key is %lu  \n",addr,(addr-key),key);
+#endif
 
 		/* the 'key' is the paddr of the remote memory region */
-		MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, key+addr);
+		MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, addr-key);
 
 	} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 
@@ -414,6 +417,10 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 		const uint64_t enable_cntr,
 		const int lock_required)
 {
+
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_write_internal starting\n");
+#endif
 	const uint64_t do_cq = enable_cq && ((tx_op_flags & FI_COMPLETION) == FI_COMPLETION);
 
 	struct fi_bgq_cntr * write_cntr = bgq_ep->write_cntr;
@@ -449,8 +456,11 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 
 		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {		/* branch will compile out */
 
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_write_internal tx_op_flags & FI_INJECT - virtual addr is 0x%016lx physical addr is 0x%016lx key is %lu  \n",addr,(addr-key),key);
+#endif
 			/* the 'key' is the paddr of the remote memory region */
-			MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, key+addr);
+			MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, addr-key);
 
 		} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 
@@ -495,8 +505,11 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 
 		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {		/* branch will compile out */
 
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_write_internal - NOT tx_op_flags & FI_INJECT - virtual addr is 0x%016lx physical addr is 0x%016lx key is %lu  \n",addr,(addr-key),key);
+#endif
 			/* the 'key' is the paddr of the remote memory region */
-			MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, key+addr);
+			MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, addr-key);
 
 		} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {	/* branch will compile out */
 
@@ -546,8 +559,22 @@ static inline void fi_bgq_write_internal (struct fi_bgq_ep * bgq_ep,
 				desc->Pa_Payload = src_paddr;
 
 				union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-				hdr->rma.offset = addr;
-				hdr->rma.nbytes = xfer_bytes;
+				if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_write_internal for multiple packets - NOT tx_op_flags & FI_INJECT - virtual addr is 0x%016lx physical addr is 0x%016lx key is %lu  \n",addr,(addr-key),key);
+#endif
+					/* the 'key' is the paddr of the remote memory region */
+					MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, addr-key);
+
+				}
+				else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+					hdr->rma.offset = addr;
+					hdr->rma.nbytes = xfer_bytes;
+				}
+				else {
+                		        assert(0);
+		                }
+
 
 				MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
@@ -666,10 +693,18 @@ static inline ssize_t fi_bgq_writemsg_generic(struct fid_ep *ep,
 	uint64_t msg_iov_bytes = msg->msg_iov[msg_iov_index].iov_len;
 	uintptr_t msg_iov_vaddr = (uintptr_t)msg->msg_iov[msg_iov_index].iov_base;
 
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_writemsg_generic msg_iov_bytes is %lu rma_iov_bytes is %lu base vadder is 0x%016lx lock_required is %d\n",msg_iov_bytes,rma_iov_bytes,msg_iov_vaddr,lock_required);
+fflush(stderr);
+#endif
 	while (msg_iov_bytes != 0 && rma_iov_bytes != 0) {
 
 		size_t len = (msg_iov_bytes <= rma_iov_bytes) ? msg_iov_bytes : rma_iov_bytes;
 
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_writemsg_generic calling fi_bgq_write_internal with msg_iov_vaddr 0x%016lx and len %lu\n",msg_iov_vaddr,len);
+fflush(stderr);
+#endif
 		fi_bgq_write_internal(bgq_ep, (void*)msg_iov_vaddr, len, bgq_dst_addr,
 			rma_iov_addr, rma_iov_key, NULL, 0, 0, 0, lock_required);
 
@@ -693,6 +728,10 @@ static inline ssize_t fi_bgq_writemsg_generic(struct fid_ep *ep,
 		}
 	}
 
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_writemsg_generic calling fi_bgq_write_fence\n");
+fflush(stderr);
+#endif
 	fi_bgq_write_fence(bgq_ep, flags, bgq_dst_addr,
 		(union fi_bgq_context *)msg->context,
 		lock_required);
@@ -740,6 +779,12 @@ static inline ssize_t fi_bgq_readv_generic (struct fid_ep *ep,
 		fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context,
 		int lock_required)
 {
+
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_readv_generic count is %lu addr is 0x%016lx key is 0x%016lx\n",count,addr,key);
+fflush(stderr);
+#endif
+
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 
@@ -786,6 +831,10 @@ static inline ssize_t fi_bgq_readmsg_generic(struct fid_ep *ep,
 		const struct fi_msg_rma *msg, uint64_t flags,
 		int lock_required)
 {
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"fi_bgq_readmsg_generic starting\n");
+fflush(stderr);
+#endif
 	int			ret;
 	struct fi_bgq_ep	*bgq_ep;
 

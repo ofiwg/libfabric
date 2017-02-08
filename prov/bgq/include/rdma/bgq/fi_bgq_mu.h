@@ -346,8 +346,8 @@ union fi_bgq_mu_packet_hdr {
 		uint8_t			reserved_3;		/* a.k.a. common::packet_type (FI_BGQ_MU_PACKET_TYPE_RMA) */
 		uint64_t		nbytes		: 16;	/* 0..512 bytes */
 		uint64_t		unused_2	: 11;
-		uint64_t		offset		: 37;	/* really only need 34 bits to reference all of physical memory (no mu atomics) TODO - FI_MR_SCALABLE uses virtual address as the offset? */
-		uint64_t		key;			/* only 16 bits needed for FI_MR_SCALABLE */
+		uint64_t		offset		: 37;	/* FI_MR_BASIC uses virtual address as the offset */
+		uint64_t		key;			/* only 16 bits needed for FI_MR_SCALABLE but need up to 34 for FI_MR_BASIC vaddr-paddr delta */
 	} __attribute__((__packed__)) rma;
 
 	struct {
@@ -376,8 +376,8 @@ union fi_bgq_mu_packet_hdr {
 			} __attribute__((__packed__));
 		};
 		uint16_t		nbytes_minus_1;			/* only 9 bits needed */
-		uint16_t		key;				/* only 16 bits needed for FI_MR_SCALABLE; TODO 34 bits to hold paddr for FI_MR_BASIC */
-		uint64_t		offset;				/* TODO FI_MR_BASIC* only needs 34 bits */
+		uint16_t		key;				/* only 16 bits needed for FI_MR_SCALABLE and not used for FI_MR_BASIC */
+		uint64_t		offset;				/* FI_MR_BASIC needs 34 bits */
 	} __attribute__((__packed__)) atomic;
 
 } __attribute__((__aligned__(32)));

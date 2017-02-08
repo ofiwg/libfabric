@@ -229,12 +229,6 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 
 	assert(do_cq || do_cntr);
 
-	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
-
-		assert(0);	/* TODO */
-
-	} else {	/* FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE */
-
 		MUHWI_Descriptor_t * model = &bgq_ep->tx.atomic.emulation.fence.mfifo_model;
 
 		MUHWI_Descriptor_t * desc =
@@ -331,7 +325,6 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 		}
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
-	}
 }
 
 static inline size_t fi_bgq_atomic_internal(struct fi_bgq_ep *bgq_ep,
