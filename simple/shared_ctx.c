@@ -689,6 +689,6 @@ int main(int argc, char **argv)
 	ft_free_res();
 	free(addr_array);
 	free(ep_array);
-	free(fi_dup);
+	fi_freeinfo(fi_dup);
 	return ft_exit_code(ret);
 }
