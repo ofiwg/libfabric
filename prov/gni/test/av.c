@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
@@ -890,6 +891,16 @@ static void straddr_test(void)
 
 	/* verify the cookie has been returned. */
 	cr_assert_eq(simple_ep_names[0].cookie, value, "Invalid cookie");
+
+	/* extract the seventh component */
+	buf = strtok(NULL, ":");
+	cr_assert_not_null(buf, "number of contexts not found");
+
+	value = strtol(buf, &pend, 10);
+
+	/* verify the rx_ctx_cnt has been returned. */
+	cr_assert_eq(simple_ep_names[0].rx_ctx_cnt, value,
+		     "Invalid number of contexts");
 
 	/* check to see if additional component are specified */
 	buf = strtok(NULL, ":");

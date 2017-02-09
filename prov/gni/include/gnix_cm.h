@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2017 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -83,5 +84,76 @@ struct gnix_pep_sock_conn {
 int _gnix_pep_progress(struct gnix_fid_pep *pep);
 int _gnix_ep_progress(struct gnix_fid_ep *ep);
 
+/**
+ * Parse a given address (of format FI_ADDR_GNI) into FI_ADDR_STR.
+ * @param ep_name [IN]     the FI_ADDR_GNI address.
+ * @param out_buf [IN/OUT] the FI_ADDR_STR address.
+ * @return either FI_SUCCESS or a negative integer on failure.
+ */
+int _gnix_ep_name_to_str(struct gnix_ep_name *ep_name, char **out_buf);
+
+/**
+ * Parse a given address (of format FI_ADDR_STR) into FI_ADDR_GNI.
+ * @param addr[IN]           the FI_ADDR_STR address.
+ * @param resolved_addr[OUT] the FI_ADDR_GNI address.
+ * @return either FI_SUCCESS or a negative integer on failure.
+ */
+int _gnix_ep_name_from_str(const char *addr,
+			    struct gnix_ep_name *resolved_addr);
+
+/**
+ * Find a FI_ADDR_GNI.
+ * @param ep_name[IN]  the array of addresses.
+ * @param idx    [IN]  the index of the desired address.
+ * @param addr   [OUT] the desired address.
+ */
+static inline void
+_gnix_resolve_gni_ep_name(const char *ep_name, int idx,
+			   struct gnix_ep_name *addr)
+{
+	static size_t addr_size = sizeof(struct gnix_ep_name);
+
+	GNIX_TRACE(FI_LOG_TRACE, "\n");
+
+	/*TODO (optimization): Just return offset into ep_name */
+	memcpy(addr, &ep_name[addr_size * idx], addr_size);
+}
+
+/**
+ * Find and convert a FI_ADDR_STR to FI_ADDR_GNI.
+ * @param ep_name [IN]  the FI_ADDR_STR address.
+ * @param idx     [IN]  the index of the desired address.
+ * @param addr    [OUT] the desired address converted to FI_ADDR_GNI.
+ */
+static inline void
+_gnix_resolve_str_ep_name(const char *ep_name, int idx,
+			   struct gnix_ep_name *addr)
+{
+	static size_t addr_size = GNIX_FI_ADDR_STR_LEN;
+
+	GNIX_TRACE(FI_LOG_TRACE, "\n");
+
+	_gnix_ep_name_from_str(&ep_name[addr_size * idx], addr);
+}
+
+/**
+ * Find and resolve the given ep_name.
+ *
+ * @param ep_name [IN]  the ep name to resolve.
+ * @param idx     [IN]  the index of the desired address.
+ * @param addr    [OUT] the desired address.
+ * @param domain  [IN]  the given domain.
+ */
+static inline void
+_gnix_get_ep_name(const char *ep_name, int idx, struct gnix_ep_name *addr,
+		  struct gnix_fid_domain *domain)
+{
+	/* Use a function pointer to resolve the address */
+	if (domain->addr_format == FI_ADDR_STR) {
+		_gnix_resolve_str_ep_name(ep_name, idx, addr);
+	} else {
+		_gnix_resolve_gni_ep_name(ep_name, idx, addr);
+	}
+}
 #endif
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
@@ -607,6 +607,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->ptag = ptag;
 	domain->cookie = cookie;
 	domain->cdm_id_seed = getpid();  /* TODO: direct syscall better */
+	domain->addr_format = info->addr_format;
 
 	/* user tunables */
 	domain->params.msg_rendezvous_thresh = default_msg_rendezvous_thresh;
@@ -688,7 +689,7 @@ static struct fi_ops_mr gnix_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = gnix_mr_reg,
 	.regv = gnix_mr_regv,
-	.regattr = gnix_mr_regattr, 
+	.regattr = gnix_mr_regattr,
 };
 
 static struct fi_ops_domain gnix_domain_ops = {

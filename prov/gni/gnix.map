@@ -39,7 +39,7 @@
 		gnix_listen;
 		gnix_mr_bind;
 		gnix_mr_reg;
-		gnix_passive_ep_open;
+		gnix_pep_open;
 		gnix_pep_bind;
 		gnix_poll_add;
 		gnix_poll_del;

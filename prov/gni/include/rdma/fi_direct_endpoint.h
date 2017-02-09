@@ -40,8 +40,8 @@
 /*******************************************************************************
  * GNI API Functions
  ******************************************************************************/
-extern int gnix_passive_ep_open(struct fid_fabric *fabric, struct fi_info *info,
-				struct fid_pep **pep, void *context);
+extern int gnix_pep_open(struct fid_fabric *fabric, struct fi_info *info,
+			 struct fid_pep **pep, void *context);
 
 extern int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
@@ -121,7 +121,7 @@ extern ssize_t gnix_ep_msg_injectdata(struct fid_ep *ep, const void *buf,
 static inline int fi_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 				struct fid_pep **pep, void *context)
 {
-	return gnix_passive_ep_open(fabric, info, pep, context);
+	return gnix_pep_open(fabric, info, pep, context);
 }
 
 static inline int fi_endpoint(struct fid_domain *domain, struct fi_info *info,

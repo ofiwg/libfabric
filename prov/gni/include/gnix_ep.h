@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -324,9 +324,9 @@ int _gnix_ep_enable(struct gnix_fid_ep *ep_priv);
  * @return -FI_ERRNO	upon an error
  * @return -FI_ENOSYS	if this operation is not supported
  */
-int gnix_passive_ep_open(struct fid_fabric *fabric,
-			 struct fi_info *info, struct fid_pep **pep,
-			 void *context);
+int gnix_pep_open(struct fid_fabric *fabric,
+		  struct fi_info *info, struct fid_pep **pep,
+		  void *context);
 
 int gnix_scalable_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
 

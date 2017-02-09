@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -1018,8 +1018,8 @@ __gnix_fabric_ops_native_amo(struct fid_ep *ep, const void *buf, size_t count,
 
 	if (!ep)
 		return -FI_EINVAL;
-	if ((req_type < 0) || (req_type > GNIX_FAB_RQ_MAX_TYPES) || 
-		(req_type >= GNIX_FAB_RQ_END_NON_NATIVE && 
+	if ((req_type < 0) || (req_type > GNIX_FAB_RQ_MAX_TYPES) ||
+		(req_type >= GNIX_FAB_RQ_END_NON_NATIVE &&
 		 req_type < GNIX_FAB_RQ_START_NATIVE))
 		return -FI_EINVAL;
 
@@ -1923,8 +1923,6 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 
 	name = (struct gnix_ep_name *)info->src_addr;
 	if (name && name->name_type == GNIX_EPN_TYPE_BOUND) {
-		name = (struct gnix_ep_name *)info->src_addr;
-
 		/* Endpoint was bound to a specific source address.  Create a
 		 * new CM NIC to listen on this address. */
 		ret = _gnix_cm_nic_alloc(domain, info, name->gnix_addr.cdm_id,
@@ -2112,16 +2110,21 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->requires_lock = (domain_priv->thread_model !=
 				  FI_THREAD_COMPLETION);
 	ep_priv->info = fi_dupinfo(info);
+	ep_priv->info->addr_format = info->addr_format;
 
-	if (ep_priv->info->src_addr)
-		memcpy(&ep_priv->src_addr,
-		       ep_priv->info->src_addr,
-		       sizeof(struct gnix_ep_name));
+	GNIX_DEBUG(FI_LOG_DEBUG, "ep(%p) is using addr_format(%s)\n", ep_priv,
+		  ep_priv->info->addr_format == FI_ADDR_STR ? "FI_ADDR_STR" :
+		  "FI_ADDR_GNI");
 
-	if (ep_priv->info->dest_addr)
-		memcpy(&ep_priv->dest_addr,
-		       ep_priv->info->dest_addr,
+	if (info->src_addr) {
+		memcpy(&ep_priv->src_addr, info->src_addr,
 		       sizeof(struct gnix_ep_name));
+	}
+
+	if (info->dest_addr) {
+		memcpy(&ep_priv->dest_addr, info->dest_addr,
+		       sizeof(struct gnix_ep_name));
+	}
 
 	ret = __init_tag_storages(ep_priv, GNIX_TAG_LIST,
 				  ep_priv->type == FI_EP_MSG ? 0 : 1);

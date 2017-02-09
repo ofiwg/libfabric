@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,13 +37,13 @@
 //
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 #include <assert.h>
 
 #include "gnix.h"
 #include "gnix_util.h"
 #include "gnix_hashtable.h"
 #include "gnix_av.h"
+#include "gnix_cm.h"
 
 /*
  * local variables and structs
@@ -155,10 +156,9 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 			size_t count, fi_addr_t *fi_addr, uint64_t flags,
 			void *context)
 {
-	struct gnix_ep_name *temp = NULL;
+	struct gnix_ep_name ep_name;
 	int ret = count;
-	size_t index;
-	size_t i;
+	size_t index, i;
 	int *entry_err = context;
 
 	if (gnix_check_capacity(av_priv, count)) {
@@ -166,29 +166,32 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 	}
 
 	assert(av_priv->table);
+
 	for (index = av_priv->count, i = 0; i < count; index++, i++) {
-		temp = &((struct gnix_ep_name *)addr)[i];
+		_gnix_get_ep_name(addr, i, &ep_name, av_priv->domain);
 
 		/* check if this ep_name fits in the av context bits */
-		if (temp->name_type & GNIX_EPN_TYPE_SEP) {
-			if ((1 << av_priv->rx_ctx_bits) < temp->rx_ctx_cnt) {
+		if (ep_name.name_type & GNIX_EPN_TYPE_SEP) {
+			if ((1 << av_priv->rx_ctx_bits) < ep_name.rx_ctx_cnt) {
 				if (flags && FI_SYNC_ERR) {
 					entry_err[i] = -FI_EINVAL;
 					fi_addr[i] = FI_ADDR_NOTAVAIL;
 					ret = -FI_EINVAL;
 					continue;
 				}
+				GNIX_DEBUG(FI_LOG_AV, "ep_name doesn't fit "
+					"into the av context bits\n");
 				return -FI_EINVAL;
 			}
 		}
 
-		av_priv->table[index].gnix_addr = temp->gnix_addr;
+		av_priv->table[index].gnix_addr = ep_name.gnix_addr;
 		av_priv->valid_entry_vec[index] = 1;
-		av_priv->table[index].name_type = temp->name_type;
-		av_priv->table[index].cookie = temp->cookie;
-		av_priv->table[index].rx_ctx_cnt = temp->rx_ctx_cnt;
+		av_priv->table[index].name_type = ep_name.name_type;
+		av_priv->table[index].cookie = ep_name.cookie;
+		av_priv->table[index].rx_ctx_cnt = ep_name.rx_ctx_cnt;
 		av_priv->table[index].cm_nic_cdm_id =
-				temp->cm_nic_cdm_id;
+			ep_name.cm_nic_cdm_id;
 		if (fi_addr)
 			fi_addr[i] = index;
 
@@ -300,7 +303,7 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 		      void *context)
 {
 	int ret;
-	struct gnix_ep_name *temp = NULL;
+	struct gnix_ep_name ep_name;
 	struct gnix_av_addr_entry *the_entry;
 	gnix_ht_key_t key;
 	size_t i;
@@ -326,30 +329,32 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 	slist_insert_tail(&blk->slist, &av_priv->block_list);
 
 	for (i = 0; i < count; i++) {
-		temp = &((struct gnix_ep_name *)addr)[i];
+		_gnix_get_ep_name(addr, i, &ep_name, av_priv->domain);
 
 		/* check if this ep_name fits in the av context bits */
-		if (temp->name_type & GNIX_EPN_TYPE_SEP) {
-			if ((1 << av_priv->rx_ctx_bits) < temp->rx_ctx_cnt) {
+		if (ep_name.name_type & GNIX_EPN_TYPE_SEP) {
+			if ((1 << av_priv->rx_ctx_bits) < ep_name.rx_ctx_cnt) {
 				if (flags && FI_SYNC_ERR) {
 					entry_err[i] = -FI_EINVAL;
 					fi_addr[i] = FI_ADDR_NOTAVAIL;
 					ret_cnt = -FI_EINVAL;
 					continue;
 				}
+				GNIX_DEBUG(FI_LOG_DEBUG, "ep_name doesn't fit "
+					"into the av context bits\n");
 				return -FI_EINVAL;
 			}
 		}
 
-		((struct gnix_address *)fi_addr)[i] = temp->gnix_addr;
+		((struct gnix_address *)fi_addr)[i] = ep_name.gnix_addr;
 		the_entry =  &blk->base[i];
-		memcpy(&the_entry->gnix_addr, &temp->gnix_addr,
+		memcpy(&the_entry->gnix_addr, &ep_name.gnix_addr,
 		       sizeof(struct gnix_address));
-		the_entry->name_type = temp->name_type;
-		the_entry->cm_nic_cdm_id = temp->cm_nic_cdm_id;
-		the_entry->cookie = temp->cookie;
-		the_entry->rx_ctx_cnt = temp->rx_ctx_cnt;
-		memcpy(&key, &temp->gnix_addr, sizeof(gnix_ht_key_t));
+		the_entry->name_type = ep_name.name_type;
+		the_entry->cm_nic_cdm_id = ep_name.cm_nic_cdm_id;
+		the_entry->cookie = ep_name.cookie;
+		the_entry->rx_ctx_cnt = ep_name.rx_ctx_cnt;
+		memcpy(&key, &ep_name.gnix_addr, sizeof(gnix_ht_key_t));
 		ret = _gnix_ht_insert(av_priv->map_ht,
 				      key,
 				      the_entry);
@@ -694,7 +699,20 @@ DIRECT_FN const char *gnix_av_straddr(struct fid_av *av,
 {
 	char int_buf[GNIX_AV_MAX_STR_ADDR_LEN];
 	int size;
-	const struct gnix_ep_name *gnix_ep = addr;
+	struct gnix_ep_name ep_name;
+	struct gnix_fid_av *av_priv;
+
+	if (!av || !addr || !buf || !len) {
+		GNIX_DEBUG(FI_LOG_DEBUG, "NULL parameter in gnix_av_straddr\n");
+		return NULL;
+	}
+
+	av_priv = container_of(av, struct gnix_fid_av, av_fid);
+
+	if (av_priv->domain->addr_format == FI_ADDR_STR)
+		_gnix_resolve_str_ep_name(addr, 0, &ep_name);
+	else
+		ep_name = ((struct gnix_ep_name *) addr)[0];
 
 	/*
 	 * if additional information is added to this string, then
@@ -703,13 +721,14 @@ DIRECT_FN const char *gnix_av_straddr(struct fid_av *av,
 	 *   GNIX_AV_MAX_STR_ADDR_LEN, to be the number of characters printed
 	 */
 	size = snprintf(int_buf, sizeof(int_buf), "%04i:0x%08" PRIx32 ":0x%08"
-			PRIx32 ":%02i:0x%06" PRIx32 ":0x%08" PRIx32,
-			GNIX_AV_STR_ADDR_VERSION,
-			gnix_ep->gnix_addr.device_addr,
-			gnix_ep->gnix_addr.cdm_id,
-			gnix_ep->name_type,
-			gnix_ep->cm_nic_cdm_id,
-			gnix_ep->cookie);
+			PRIx32 ":%02i:0x%06" PRIx32 ":0x%08" PRIx32
+			":%02i", GNIX_AV_STR_ADDR_VERSION,
+			ep_name.gnix_addr.device_addr,
+			ep_name.gnix_addr.cdm_id,
+			ep_name.name_type,
+			ep_name.cm_nic_cdm_id,
+			ep_name.cookie,
+			ep_name.rx_ctx_cnt);
 
 	/*
 	 * snprintf returns the number of character written
