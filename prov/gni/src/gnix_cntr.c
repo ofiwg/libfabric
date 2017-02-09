@@ -276,7 +276,7 @@ static int gnix_cntr_wait_sleep(struct gnix_fid_cntr *cntr_priv,
 		}
 	}
 
-	return ret;
+	return (atomic_get(&cntr_priv->cnt_err)) ? -FI_EAVAIL : ret;
 }
 
 
