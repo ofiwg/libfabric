@@ -121,7 +121,7 @@ void _gnix_convert_key_to_mhdl(
  */
 uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl)
 {
-	gnix_mr_key_t key = {{{{0}}}};
+	gnix_mr_key_t key = {{{0}}};
 	key.pfn = GNI_MEMHNDL_GET_VA((*mhdl)) >> GNIX_MR_PAGE_SHIFT;
 	key.mdd = GNI_MEMHNDL_GET_MDH((*mhdl));
 	//key->format = GNI_MEMHNDL_NEW_FRMT((*mhdl));
