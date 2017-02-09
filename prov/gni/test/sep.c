@@ -48,31 +48,28 @@
 #include <inttypes.h>
 
 #include <criterion/criterion.h>
-#include <criterion/logging.h>
 #include "gnix_rdma_headers.h"
 #include "common.h"
 #include "fi_ext_gni.h"
 #include "gnix.h"
 
-#define BLUE "\x1b[34m"
-#define COLOR_RESET "\x1b[0m"
-#define cr_log_info criterion_info
-
+#define NUMCONTEXTS 4
 #define NUMEPS 2
+#define EXTRAEPS 2
+#define TOTALEPS (NUMEPS+EXTRAEPS)
 #define BUF_SZ (1<<20)
 #define IOV_CNT (4)
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
-static struct fid_ep *sep[NUMEPS];
 static struct fid_av *av[NUMEPS];
 static struct fid_av *t_av;
-static void *ep_name[NUMEPS];
+static void *ep_name[TOTALEPS];
 fi_addr_t gni_addr[NUMEPS];
 static struct fi_cq_attr cq_attr;
 struct fi_info *hints;
 static struct fi_info *fi[NUMEPS];
-static struct fid_ep *sep[NUMEPS];
+static struct fid_ep *sep[TOTALEPS];
 
 char *target;
 char *source;
@@ -82,7 +79,7 @@ struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
 struct fid_mr *iov_dest_buf_mr[NUMEPS], *iov_src_buf_mr[NUMEPS];
 uint64_t mr_key[NUMEPS];
 
-static int ctx_cnt = 4;
+static int ctx_cnt = NUMCONTEXTS;
 static int rx_ctx_bits;
 static struct fid_ep **tx_ep[NUMEPS], **rx_ep[NUMEPS];
 static struct fid_cq **tx_cq[NUMEPS];
@@ -2287,4 +2284,133 @@ Test(scalablet, all)
 {
 	cr_log_info(BLUE "sep:FI_AV_TABLE tests:\n" COLOR_RESET);
 	run_tests();
+}
+
+#define INSERT_ADDR_COUNT (NUMCONTEXTS + 6)
+
+/* test for inserting an ep_name that doesn't fit in the AV */
+Test(scalable, av_insert)
+{
+	int ret, i;
+	size_t addrlen = sizeof(struct gnix_ep_name);
+	struct fi_av_attr av_attr = {0};
+	int err[INSERT_ADDR_COUNT] = {0};
+	fi_addr_t addresses[INSERT_ADDR_COUNT];
+	struct gnix_ep_name epname[TOTALEPS];
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_ATOMIC | FI_RMA | FI_MSG | FI_NAMED_RX_CTX | FI_TAGGED;
+	hints->mode = FI_LOCAL_MR;
+	hints->domain_attr->cq_data_size = NUMEPS * 2;
+	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->fabric_attr->prov_name = strdup("gni");
+	hints->ep_attr->tx_ctx_cnt = NUMCONTEXTS;
+	hints->ep_attr->rx_ctx_cnt = NUMCONTEXTS;
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	cr_assert(!ret, "fi_getinfo");
+
+	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);
+	cr_assert(!ret, "fi_fabric");
+
+	fi[0]->ep_attr->tx_ctx_cnt = NUMCONTEXTS;
+	fi[0]->ep_attr->rx_ctx_cnt = NUMCONTEXTS;
+
+	ret = fi_domain(fab, fi[0], &dom[0], NULL);
+	cr_assert(!ret, "fi_domain");
+
+	ret = fi_scalable_ep(dom[0], fi[0], &sep[0], NULL);
+	cr_assert(!ret, "fi_scalable_ep");
+
+	for (i = 0; i < NUMEPS; i++) {
+		ret = fi_scalable_ep(dom[0], fi[0], &sep[i], NULL);
+		cr_assert(!ret, "fi_scalable_ep");
+
+		ret = fi_enable(sep[i]);
+		cr_assert(!ret, "fi_enable");
+
+		ret = fi_getname(&sep[i]->fid, &epname[i], &addrlen);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	fi[0]->ep_attr->rx_ctx_cnt = INSERT_ADDR_COUNT;
+
+	for (i = NUMEPS; i < TOTALEPS; i++) {
+		ret = fi_scalable_ep(dom[0], fi[0], &sep[i], NULL);
+		cr_assert(!ret, "fi_scalable_ep");
+
+		ret = fi_enable(sep[i]);
+		cr_assert(!ret, "fi_enable");
+
+		ret = fi_getname(&sep[i]->fid, &epname[i], &addrlen);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	rx_ctx_bits = 0;
+	ctx_cnt = NUMCONTEXTS;
+	while (ctx_cnt >> ++rx_ctx_bits);
+	av_attr.type = FI_AV_TABLE;
+	av_attr.count = NUMCONTEXTS;
+	av_attr.rx_ctx_bits = rx_ctx_bits;
+
+	cr_log_info("test av table error path\n");
+	ret = fi_av_open(dom[0], &av_attr, &t_av, NULL);
+	cr_assert(!ret, "fi_av_open");
+
+	ret = fi_av_insert(t_av, epname, TOTALEPS,
+			   addresses, FI_SYNC_ERR, err);
+	cr_assert_eq(ret, -FI_EINVAL, "%d", ret);
+
+	cr_log_info("check for errors\n");
+	for (i = 0; i < NUMEPS; i++) {
+		cr_assert_eq(err[i], 0, "err[%d]:%d", i, err[i]);
+		cr_assert_neq(addresses[i], FI_ADDR_NOTAVAIL,
+				"addresses[%d]:%lx", i, addresses[i]);
+	}
+	for (; i < TOTALEPS; i++) {
+		cr_assert_eq(err[i], -FI_EINVAL, "err[%d]:%d", i, err[i]);
+		cr_assert_eq(addresses[i], FI_ADDR_NOTAVAIL,
+				"addresses[%d]:%lx", i, addresses[i]);
+	}
+
+	ret = fi_close(&t_av->fid);
+	cr_assert(!ret, "failure in closing av.");
+
+	cr_log_info("test av map error path\n");
+	av_attr.type = FI_AV_MAP;
+
+	ret = fi_av_open(dom[0], &av_attr, &t_av, NULL);
+	cr_assert(!ret, "fi_av_open");
+
+	ret = fi_av_insert(t_av, epname, TOTALEPS,
+			   addresses, FI_SYNC_ERR, err);
+	cr_assert_eq(ret, -FI_EINVAL, "%d", ret);
+
+	cr_log_info("check for errors\n");
+
+	for (i = 0; i < NUMEPS; i++) {
+		cr_assert_eq(err[i], 0, "err[%d]:%d", i, err[i]);
+		cr_assert_neq(addresses[i], FI_ADDR_NOTAVAIL,
+				"addresses[%d]:%lx", i, addresses[i]);
+	}
+
+	for (; i < TOTALEPS; i++) {
+		cr_assert_eq(err[i], -FI_EINVAL, "err[%d]:%d", i, err[i]);
+		cr_assert_eq(addresses[i], FI_ADDR_NOTAVAIL,
+				"addresses[%d]:%lx", i, addresses[i]);
+	}
+
+	ret = fi_close(&t_av->fid);
+	cr_assert(!ret, "failure in closing av.");
+
+	ret = fi_close(&sep[0]->fid);
+	cr_assert(!ret, "failure in closing ep.");
+
+	ret = fi_close(&dom[0]->fid);
+	cr_assert(!ret, "failure in closing domain.");
+	fi_freeinfo(hints);
+
 }
