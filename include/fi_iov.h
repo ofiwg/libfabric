@@ -40,10 +40,8 @@
 #include <sys/uio.h>
 #include <inttypes.h>
 
-#define OFI_COPY_IOV_TO_BUF 0
-#define OFI_COPY_BUF_TO_IOV 1
 
-static inline size_t ofi_get_iov_len(const struct iovec *iov, size_t iov_count)
+static inline size_t ofi_total_iov_len(const struct iovec *iov, size_t iov_count)
 {
 	size_t i, len = 0;
 	for (i = 0; i < iov_count; i++)
@@ -51,8 +49,30 @@ static inline size_t ofi_get_iov_len(const struct iovec *iov, size_t iov_count)
 	return len;
 }
 
+
+#define OFI_COPY_IOV_TO_BUF 0
+#define OFI_COPY_BUF_TO_IOV 1
+
 uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count,
-		void *buf, uint64_t rem, uint64_t skip, int dir);
+			uint64_t iov_offset, void *buf, uint64_t bufsize,
+			int dir);
+
+static inline uint64_t
+ofi_copy_to_iov(const struct iovec *iov, size_t iov_count,
+		uint64_t iov_offset, void *buf, uint64_t bufsize)
+{
+	return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
+				OFI_COPY_BUF_TO_IOV);
+}
+
+static inline uint64_t
+ofi_copy_from_iov(void *buf, uint64_t bufsize,
+		  const struct iovec *iov, size_t iov_count, uint64_t iov_offset)
+{
+	return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
+				OFI_COPY_IOV_TO_BUF);
+}
+
 
 #endif /* IOV_H */
 

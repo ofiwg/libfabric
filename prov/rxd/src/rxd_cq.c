@@ -648,8 +648,7 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 	uint64_t done;
 
 	ep->credits++;
-	done = ofi_copy_iov_buf(iov, iov_count, data, ctrl->seg_size,
-				   rx_entry->done, OFI_COPY_BUF_TO_IOV);
+	done = ofi_copy_to_iov(iov, iov_count, rx_entry->done, data, ctrl->seg_size);
 	rx_entry->done += done;
 	rx_entry->window--;
 	rx_entry->exp_seg_no++;
