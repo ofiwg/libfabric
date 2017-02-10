@@ -109,7 +109,7 @@ void common_setup(void)
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
-		       FI_WRITE | FI_REMOTE_WRITE;
+		       FI_WRITE | FI_REMOTE_WRITE | FI_MSG | FI_SEND | FI_RECV;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
@@ -269,25 +269,25 @@ void common_setup(void)
 	ret = fi_cntr_open(dom[0], &cntr_attr, write_cntr, 0);
 	cr_assert(!ret, "fi_cntr_open");
 
-	ret = fi_ep_bind(ep[0], &write_cntr[0]->fid, FI_WRITE);
+	ret = fi_ep_bind(ep[0], &write_cntr[0]->fid, FI_SEND | FI_WRITE);
 	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_cntr_open(dom[0], &cntr_attr, read_cntr, 0);
 	cr_assert(!ret, "fi_cntr_open");
 
-	ret = fi_ep_bind(ep[0], &read_cntr[0]->fid, FI_READ);
+	ret = fi_ep_bind(ep[0], &read_cntr[0]->fid, FI_RECV | FI_READ);
 	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_cntr_open(dom[1], &cntr_attr, write_cntr + 1, 0);
 	cr_assert(!ret, "fi_cntr_open");
 
-	ret = fi_ep_bind(ep[1], &write_cntr[1]->fid, FI_WRITE);
+	ret = fi_ep_bind(ep[1], &write_cntr[1]->fid, FI_SEND | FI_WRITE);
 	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_cntr_open(dom[1], &cntr_attr, read_cntr + 1, 0);
 	cr_assert(!ret, "fi_cntr_open");
 
-	ret = fi_ep_bind(ep[1], &read_cntr[1]->fid, FI_READ);
+	ret = fi_ep_bind(ep[1], &read_cntr[1]->fid, FI_RECV | FI_READ);
 	cr_assert(!ret, "fi_ep_bind");
 
 	if (hints->caps & FI_RMA_EVENT) {
@@ -1063,6 +1063,84 @@ Test(rdm_rma, writemsgmore)
 {
 	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
 }
+
+void do_mixed_more(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct iovec iov, iov2;
+	struct fi_msg_rma msg;
+	struct fi_msg  msg2;
+	struct fi_rma_iov rma_iov;
+
+	iov.iov_base = source;
+	iov.iov_len = len;
+
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.len = len;
+	rma_iov.key = mr_key[1];
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.context = target;
+	msg.data = (uint64_t)target;
+
+	iov2.iov_base = source2;
+	iov2.iov_len = len;
+
+	msg2.msg_iov = &iov2;
+	msg2.desc = (void **)loc_mr2;
+	msg2.iov_count = 1;
+	msg2.addr = gni_addr[1];
+	msg2.context = target2;
+	msg2.data = (uint64_t)target2;
+
+	init_data(source, len, 0xef);
+	init_data(target, len, 0);
+	init_data(source2, len, 0xef);
+	init_data(target2, len, 0);
+
+	sz = fi_writemsg(ep[0], &msg, FI_MORE);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target2, len, rem_mr2[0], FI_ADDR_UNSPEC, source2);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_sendmsg(ep[0], &msg2, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+	cr_assert_eq(ret, 1);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
+	while ((ret = fi_cq_read(recv_cq[1], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+	cr_assert_eq(ret, 1);
+
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+	cr_assert_eq(ret, 1);
+
+	cr_assert(check_data(source, target, len), "Data mismatch");
+	cr_assert(check_data(source2, target2, len), "Data mismatch2");
+
+}
+
+Test(rdm_rma, mixedmore)
+{
+	xfer_for_each_size(do_mixed_more, 8, BUF_SZ);
+}
+
 
 /*
  * write_fence should be validated by inspecting debug.

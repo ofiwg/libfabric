@@ -1021,19 +1021,21 @@ static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 		  entries);
 
 	/* Allocate space for sub descriptors */
-	if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
-		txd->gni_more_ct_descs = malloc(entries *
+	if (entries > 0) {
+		if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+			txd->gni_more_ct_descs = malloc(entries *
 					 sizeof(gni_ct_put_post_descriptor_t));
-		more_put = (gni_ct_put_post_descriptor_t *)
-			   txd->gni_more_ct_descs;
-	} else {
-		txd->gni_more_ct_descs = malloc(entries *
-					 sizeof(gni_ct_get_post_descriptor_t));
-		more_get = (gni_ct_get_post_descriptor_t *)
-			   txd->gni_more_ct_descs;
-		/* Populate Head and Tail of TOP Req if req is unaligned */
-		 __gnix_rma_more_fill_sub_htd(req, more_get,
-			&txd->gni_desc.remote_mem_hndl, &idx, &entries);
+			more_put = (gni_ct_put_post_descriptor_t *)
+				   txd->gni_more_ct_descs;
+		} else {
+			txd->gni_more_ct_descs = malloc(entries *
+				sizeof(gni_ct_get_post_descriptor_t));
+			more_get = (gni_ct_get_post_descriptor_t *)
+				   txd->gni_more_ct_descs;
+			/* Populate Head/Tail of TOP Req if req is unaligned */
+			 __gnix_rma_more_fill_sub_htd(req, more_get,
+				&txd->gni_desc.remote_mem_hndl, &idx, &entries);
+		}
 	}
 
 	/* Populate sub descriptors */
@@ -1101,11 +1103,12 @@ static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 			}
 		}
 	}
-
-	if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
-		txd->gni_desc.next_descr = &more_put[0];
-	} else {
-		txd->gni_desc.next_descr = &more_get[0];
+	if (entries > 0) {
+		if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+			txd->gni_desc.next_descr = &more_put[0];
+		} else {
+			txd->gni_desc.next_descr = &more_get[0];
+		}
 	}
 }
 
@@ -1160,6 +1163,8 @@ int _gnix_rma_more_post_req(void *data)
 	txd->gni_desc.remote_mem_hndl = mdh;
 	txd->gni_desc.rdma_mode = 0; /* check flags */
 	txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
+	txd->gni_desc.next_descr = NULL; /*Assume no sub descs */
+	txd->gni_desc.prev_descr = NULL;
 
 	__gnix_rma_more_fill_pd(fab_req, txd);
 

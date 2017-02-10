@@ -2025,7 +2025,33 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 {
 	int rc = FI_SUCCESS, queue_tx = 0;
 	struct gnix_vc *vc = req->vc;
+	struct gnix_fid_ep *ep = req->gnix_ep;
+	struct gnix_fab_req *more_req;
 	int connected, injecting;
+	struct slist_entry *sle;
+
+	/* Check if there is an outstanding fi_more chain to initiate */
+	if ((!(req->flags & FI_MORE)) && (!(slist_empty(&ep->more_write)) ||
+		!(slist_empty(&ep->more_read)))) {
+		if (!slist_empty(&ep->more_write)) {
+			sle = ep->more_write.head;
+			more_req = container_of(sle, struct gnix_fab_req,
+						rma.sle);
+			GNIX_DEBUG(FI_LOG_EP_DATA, "FI_MORE: got fab_request "
+					"from more_write. Queuing Request\n");
+			_gnix_vc_queue_tx_req(more_req);
+			slist_init(&ep->more_write);
+		}
+		if (!slist_empty(&ep->more_read)) {
+			sle = ep->more_read.head;
+			more_req = container_of(sle, struct gnix_fab_req,
+						rma.sle);
+			GNIX_DEBUG(FI_LOG_EP_DATA, "FI_MORE: got fab_request "
+					"from more_read. Queuing Request\n");
+			_gnix_vc_queue_tx_req(more_req);
+			slist_init(&ep->more_read);
+		}
+	}
 
 	if (req->flags & FI_TRIGGER) {
 		rc = _gnix_trigger_queue_req(req);
