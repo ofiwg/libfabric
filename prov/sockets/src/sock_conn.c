@@ -411,6 +411,9 @@ struct sock_conn *sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index)
 	struct pollfd poll_fd;
 
 	if (ep_attr->ep_type == FI_EP_MSG) {
+		/* Need to check that destination address has been
+		   passed to endpoint */
+		assert(ep_attr->dest_addr);
 		addr = *ep_attr->dest_addr;
 		addr.sin_port = htons(ep_attr->msg_dest_port);
 	} else {
@@ -437,7 +440,7 @@ do_connect:
 		SOCK_LOG_ERROR("failed to set conn_fd nonblocking, errno: %d\n", errno);
 		errno = FI_EOTHER;
 		ofi_close_socket(conn_fd);
-                return NULL;
+		return NULL;
 	}
 
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
