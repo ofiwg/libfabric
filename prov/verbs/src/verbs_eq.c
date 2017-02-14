@@ -349,6 +349,7 @@ static int fi_ibv_eq_close(fid_t fid)
 	}
 
 	dlistfd_head_free(&eq->list_head);
+	fastlock_release(&eq->lock);
 	fastlock_destroy(&eq->lock);
 	free(eq);
 
