@@ -390,11 +390,6 @@ static int fi_ibv_trywait(struct fid_fabric *fabric, struct fid **fids, int coun
 
 static int fi_ibv_fabric_close(fid_t fid)
 {
-	struct fi_ibv_fabric *fab;
-
-	fab = container_of(fid, struct fi_ibv_fabric, fabric_fid.fid);
-	util_buf_pool_destroy(fab->wce_pool);
-	util_buf_pool_destroy(fab->epe_pool);
 	free(fid);
 	return 0;
 }
@@ -439,25 +434,6 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	fab->fabric_fid.fid.ops = &fi_ibv_fi_ops;
 	fab->fabric_fid.ops = &fi_ibv_ops_fabric;
 
-	fab->wce_pool = util_buf_pool_create(sizeof(struct fi_ibv_wce), 16, 0, VERBS_WCE_CNT);
-	if (!fab->wce_pool) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create wce_pool\n");
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
-	fab->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0, VERBS_EPE_CNT);
-	if (!fab->epe_pool) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create epe_pool\n");
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-
 	*fabric = &fab->fabric_fid;
 	return 0;
-err2:
-	util_buf_pool_destroy(fab->wce_pool);
-err1:
-	free(fab);
-	return ret;
 }
