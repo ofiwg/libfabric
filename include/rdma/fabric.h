@@ -342,6 +342,8 @@ struct fi_domain_attr {
 	size_t			mr_iov_limit;
 	uint64_t		caps;
 	uint64_t		mode;
+	uint8_t			*auth_key;
+	size_t 			auth_keylen;
 };
 
 struct fi_fabric_attr {
