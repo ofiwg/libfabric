@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -253,7 +253,7 @@ static int __gnix_ep_connresp(struct gnix_fid_ep *ep,
 /* Check for a connection response on an FI_EP_MSG. */
 int _gnix_ep_progress(struct gnix_fid_ep *ep)
 {
-	int ret, bytes_read;
+	int ret, bytes_read, errno_keep;
 	struct gnix_pep_sock_connresp resp;
 
 	/* No lock, fast exit. */
@@ -280,12 +280,15 @@ int _gnix_ep_progress(struct gnix_fid_ep *ep)
 					  ret);
 			}
 		} else {
+			errno_keep = errno;
 			GNIX_FATAL(FI_LOG_EP_CTRL,
-				   "Unexpected read size: %d\n",
-				   bytes_read);
+				   "Unexpected read size: %d err: %s\n",
+				   bytes_read, strerror(errno_keep));
 		}
 	} else if (errno != EAGAIN) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "Read error: %s\n", strerror(errno));
+		errno_keep = errno;
+		GNIX_WARN(FI_LOG_EP_CTRL, "Read error: %s\n",
+				strerror(errno_keep));
 	}
 
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
@@ -296,7 +299,7 @@ int _gnix_ep_progress(struct gnix_fid_ep *ep)
 DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 				  const void *param, size_t paramlen)
 {
-	int ret;
+	int ret, errno_keep;
 	struct gnix_fid_ep *ep_priv;
 	struct sockaddr_in saddr;
 	struct gnix_pep_sock_connreq req;
@@ -348,9 +351,10 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 
 	ep_priv->conn_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (ep_priv->conn_fd < 0) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to create connect socket, errno: %d\n",
-			  errno);
+			  "Failed to create connect socket, err: %s\n",
+			  strerror(errno_keep));
 		ret = -FI_ENOSPC;
 		goto err_socket;
 	}
@@ -359,9 +363,10 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 	ret = connect(ep_priv->conn_fd, (struct sockaddr *)&saddr,
 		      sizeof(saddr));
 	if (ret) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to connect, errno: %d\n",
-			  errno);
+			  "Failed to connect, err: %s\n",
+			  strerror(errno_keep));
 		ret = -FI_EIO;
 		goto err_connect;
 	}
@@ -408,9 +413,10 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 
 	ret = write(ep_priv->conn_fd, &req, sizeof(req));
 	if (ret != sizeof(req)) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to send req, errno: %d\n",
-			  errno);
+			  "Failed to send req, err: %s\n",
+			  strerror(errno_keep));
 		ret = -FI_EIO;
 		goto err_write;
 	}
@@ -447,7 +453,7 @@ err_unlock:
 DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 				 size_t paramlen)
 {
-	int ret;
+	int ret, errno_keep;
 	struct gnix_vc *vc;
 	struct gnix_fid_ep *ep_priv;
 	struct gnix_pep_sock_conn *conn;
@@ -527,9 +533,10 @@ DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 
 	ret = write(conn->sock_fd, &resp, sizeof(resp));
 	if (ret != sizeof(resp)) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to send resp, errno: %d\n",
-			  errno);
+			  "Failed to send resp, err: %s\n",
+			  strerror(errno_keep));
 		ret = -FI_EIO;
 		goto err_write;
 	}
@@ -701,7 +708,7 @@ static int __gnix_pep_connreq(struct gnix_fid_pep *pep, int fd)
 /* Process incoming connection requests on a listening PEP. */
 int _gnix_pep_progress(struct gnix_fid_pep *pep)
 {
-	int accept_fd, ret;
+	int accept_fd, ret, errno_keep;
 
 	fastlock_acquire(&pep->lock);
 
@@ -715,9 +722,10 @@ int _gnix_pep_progress(struct gnix_fid_pep *pep)
 				  ret);
 		}
 	} else if (errno != EAGAIN) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "(accept) Unexpected errno on listen socket: %d\n",
-			  errno);
+			  "(accept) Unexpected errno on listen socket: %s\n",
+			  strerror(errno_keep));
 	}
 
 	fastlock_release(&pep->lock);
@@ -806,7 +814,7 @@ DIRECT_FN int gnix_pep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 DIRECT_FN int gnix_pep_listen(struct fid_pep *pep)
 {
-	int ret;
+	int ret, errno_keep;
 	struct gnix_fid_pep *pep_priv;
 	struct sockaddr_in saddr;
 	int sockopt = 1;
@@ -825,9 +833,10 @@ DIRECT_FN int gnix_pep_listen(struct fid_pep *pep)
 
 	pep_priv->listen_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	if (pep_priv->listen_fd < 0) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to create listening socket, errno: %d\n",
-			  errno);
+			  "Failed to create listening socket, err: %s\n",
+			  strerror(errno_keep));
 		ret = -FI_ENOSPC;
 		goto err_unlock;
 	}
@@ -835,9 +844,10 @@ DIRECT_FN int gnix_pep_listen(struct fid_pep *pep)
 	ret = setsockopt(pep_priv->listen_fd, SOL_SOCKET, SO_REUSEADDR,
 			 &sockopt, sizeof(sockopt));
 	if (ret < 0)
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "setsockopt(SO_REUSEADDR) failed, errno: %d\n",
-			  errno);
+			  "setsockopt(SO_REUSEADDR) failed, err: %s\n",
+			  strerror(errno_keep));
 
 	/* Bind to the ipogif interface using resolved service number as CDM
 	 * ID. */
@@ -856,18 +866,20 @@ DIRECT_FN int gnix_pep_listen(struct fid_pep *pep)
 
 	ret = bind(pep_priv->listen_fd, &saddr, sizeof(struct sockaddr_in));
 	if (ret < 0) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to bind listening socket, errno: %d\n",
-			  errno);
+			  "Failed to bind listening socket, err: %s\n",
+			  strerror(errno_keep));
 		ret = -FI_ENOSPC;
 		goto err_sock;
 	}
 
 	ret = listen(pep_priv->listen_fd, pep_priv->backlog);
 	if (ret < 0) {
+		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to start listening socket, errno: %d\n",
-			  errno);
+			  "Failed to start listening socket, err: %s\n",
+			  strerror(errno_keep));
 		ret = -FI_ENOSPC;
 		goto err_sock;
 	}
