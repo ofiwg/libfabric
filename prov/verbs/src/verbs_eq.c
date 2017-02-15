@@ -332,15 +332,16 @@ static int fi_ibv_eq_close(fid_t fid)
 	struct fi_ibv_eq_entry *entry;
 
 	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
+	/* TODO: use util code, if possible, and add ref counting */
 
 	if (eq->channel)
 		rdma_destroy_event_channel(eq->channel);
 
 	close(eq->epfd);
 
-	fastlock_acquire(&eq->lock);
-	while(!dlistfd_empty(&eq->list_head)) {
-		entry = container_of(eq->list_head.list.next, struct fi_ibv_eq_entry, item);
+	while (!dlistfd_empty(&eq->list_head)) {
+		entry = container_of(eq->list_head.list.next,
+				     struct fi_ibv_eq_entry, item);
 		dlistfd_remove(eq->list_head.list.next, &eq->list_head);
 		free(entry);
 	}
