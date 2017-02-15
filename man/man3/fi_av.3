@@ -1,4 +1,4 @@
-.TH "fi_av" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_av" "3" "2017\-02\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_av \- Address vector operations
@@ -253,6 +253,7 @@ If an AV has been opened with \f[C]FI_EVENT\f[], then an event queue
 must be bound to the AV before any insertion calls are attempted.
 Any calls to insert addresses before an event queue has been bound will
 fail with \f[C]\-FI_ENOEQ\f[].
+Flags are reserved for future use and must be 0.
 .SS fi_av_insert
 .PP
 The fi_av_insert call inserts zero or more addresses into an AV.
@@ -309,6 +310,9 @@ fi_av_insert, fi_av_insertsvc, or fi_av_insertsym.
 application may specify the FI_MORE flag to the insert call to give a
 hint to the provider that more insertion requests will follow, allowing
 the provider to aggregate insertion requests if desired.
+An application may make any number of insertion calls with FI_MORE set,
+provided that they are followed by an insertion call without FI_MORE.
+This signifies to the provider that the insertion list is complete.
 Providers are free to ignore FI_MORE.
 .IP \[bu] 2
 \f[I]FI_SYNC_ERR\f[] : This flag applies to synchronous insertions only,
@@ -329,6 +333,7 @@ Node should be a string that corresponds to a hostname or network
 address.
 The service string corresponds to a textual representation of a
 transport address.
+Supported flags are the same as for fi_av_insert.
 .SS fi_av_insertsym
 .PP
 fi_av_insertsym performs a symmetric insert that inserts a sequential
@@ -356,6 +361,8 @@ If node were replaced by the hostname "host10", the addresses would be:
 host10:5000, host10:5001, host11:5000, host11:5001.
 .PP
 The total number of inserted addresses will be nodecnt x svccnt.
+.PP
+Supported flags are the same as for fi_av_insert.
 .SS fi_av_remove
 .PP
 fi_av_remove removes a set of addresses from an address vector.
@@ -372,6 +379,8 @@ free memory allocated with addresses that will no longer be accessed.
 Inserted addresses are not required to be removed.
 fi_av_close will automatically cleanup any resources associated with
 addresses remaining in the AV when it is invoked.
+.PP
+Flags are reserved for future use and must be 0.
 .SS fi_av_lookup
 .PP
 This call returns the address stored in the address vector that
