@@ -1,3 +1,4 @@
+dist: trusty
 sudo: false
 language: c
 compiler:
@@ -11,6 +12,7 @@ addons:
         packages:
             - rpm
             - libibverbs-dev
+            - librdmacm-dev
             - libnl-3-200
             - libnl-3-dev
             - libnl-route-3-200
@@ -18,13 +20,6 @@ addons:
     ssh_known_hosts:
         - www.openfabrics.org
         - git.kernel.org
-
-# NOTE: The librdmacm-dev package in the "precise" Ubuntu image that
-# we use at Travis does not have <rdma/rsocket.h> that the verbs
-# provider needs (it's too old).  If we move to a newer Ubuntu image
-# that has a newer librdmacm-dev package, it may have
-# <rdma/rsocket.h>, and you can --enable-verbs in the
-# LIBFABRIC_CONFIGURE_OPTIONS.
 
 env:
     global:
@@ -41,15 +36,19 @@ before_install:
 
 install:
     - ./autogen.sh
-    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic"; fi
+    # Build verbs only in linux as OS X doesn't have verbs support
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic --enable-verbs"; fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" && "`basename $CC`" == "clang" ]]; then ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS --enable-debug && make -j2; fi
+    # Test fabric direct
     - ./configure --prefix=$PREFIX --enable-direct=sockets --enable-udp=no --enable-psm=no --enable-gni=no --enable-psm2=no --enable-verbs=no --enable-usnic=no --enable-rxm=no --enable-rxd=no
     - make -j2
+    # Test loadable library option
     - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-rxd --disable-verbs --disable-usnic --prefix=$PREFIX
     - make -j2
     - make install
     - make test
     - rm -rf $PREFIX
+    # Test regular build
     - ./configure $LIBFABRIC_CONFIGURE_ARGS
     - make -j2
     - make install
