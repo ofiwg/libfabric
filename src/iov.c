@@ -38,29 +38,33 @@
 #include <fi_iov.h>
 
 uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count,
-		void *buf, uint64_t rem, uint64_t skip, int dir)
+			uint64_t iov_offset, void *buf, uint64_t bufsize,
+			int dir)
 {
-	int i;
 	uint64_t done = 0, len;
-	char *iov_base;
+	char *iov_buf;
+	int i;
 
-	for (i = 0; i < iov_count && rem; i++) {
+	for (i = 0; i < iov_count && bufsize; i++) {
 		len = iov[i].iov_len;
 
-		if (skip > len) {
-			skip -= len;
+		if (iov_offset > len) {
+			iov_offset -= len;
 			continue;
 		}
 
-		iov_base = (char *)iov[i].iov_base + skip;
-		len -= skip;
+		iov_buf = (char *)iov[i].iov_base + iov_offset;
+		len -= iov_offset;
 
-		len = MIN(len, rem);
+		len = MIN(len, bufsize);
 		if (dir == OFI_COPY_BUF_TO_IOV)
-			memcpy(iov_base, (char *) buf + done, len);
+			memcpy(iov_buf, (char *) buf + done, len);
 		else if (dir == OFI_COPY_IOV_TO_BUF)
-			memcpy((char *) buf + done, iov_base, len);
-		skip = 0, rem -= len, done += len;
+			memcpy((char *) buf + done, iov_buf, len);
+
+		iov_offset = 0;
+		bufsize -= len;
+		done += len;
 	}
 	return done;
 }

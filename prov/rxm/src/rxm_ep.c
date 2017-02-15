@@ -472,7 +472,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	rxm_pkt_init(pkt);
 	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	pkt->hdr.op = op;
-	pkt->hdr.size = ofi_get_iov_len(iov, count);
+	pkt->hdr.size = ofi_total_iov_len(iov, count);
 	rxm_op_hdr_process_flags(&pkt->hdr, flags, data);
 
 	if (op == ofi_op_tagged)
@@ -507,8 +507,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		tx_entry->state = RXM_LMT_START;
 	} else {
 		pkt->ctrl_hdr.type = ofi_ctrl_data;
-		ofi_copy_iov_buf(iov, count, pkt->data, pkt->hdr.size, 0,
-				OFI_COPY_IOV_TO_BUF);
+		ofi_copy_to_iov(iov, count, 0, pkt->data, pkt->hdr.size);
 		pkt_size = sizeof(*pkt) + pkt->hdr.size;
 	}
 

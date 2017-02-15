@@ -134,6 +134,8 @@ void fi_param_init(void);
 void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
 
+const char *ofi_hex_str(const uint8_t *data, size_t len);
+
 static inline uint64_t roundup_power_of_two(uint64_t n)
 {
 	if (!n || !(n & (n - 1)))

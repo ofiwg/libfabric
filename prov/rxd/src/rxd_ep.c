@@ -337,31 +337,31 @@ static uint64_t rxd_ep_copy_data(struct rxd_tx_entry *tx_entry,
 	uint64_t done;
 	switch(tx_entry->op_hdr.op) {
 	case ofi_op_msg:
-		done = ofi_copy_iov_buf(tx_entry->msg.msg_iov,
-					   tx_entry->msg.msg.iov_count,
-					   pkt->data, data_sz, tx_entry->done,
-					   OFI_COPY_IOV_TO_BUF);
+		done = ofi_copy_from_iov(pkt->data, data_sz,
+					tx_entry->msg.msg_iov,
+					tx_entry->msg.msg.iov_count,
+					tx_entry->done);
 		break;
 
 	case ofi_op_tagged:
-		done = ofi_copy_iov_buf(tx_entry->tmsg.msg_iov,
-					   tx_entry->tmsg.tmsg.iov_count,
-					   pkt->data, data_sz, tx_entry->done,
-					   OFI_COPY_IOV_TO_BUF);
+		done = ofi_copy_from_iov(pkt->data, data_sz,
+					tx_entry->tmsg.msg_iov,
+					tx_entry->tmsg.tmsg.iov_count,
+					tx_entry->done);
 		break;
 
 	case ofi_op_write:
-		done = ofi_copy_iov_buf(tx_entry->write.src_iov,
-					   tx_entry->write.msg.iov_count,
-					   pkt->data, data_sz, tx_entry->done,
-					   OFI_COPY_IOV_TO_BUF);
+		done = ofi_copy_from_iov(pkt->data, data_sz,
+					tx_entry->write.src_iov,
+					tx_entry->write.msg.iov_count,
+					tx_entry->done);
 		break;
 
 	case ofi_op_read_rsp:
-		done = ofi_copy_iov_buf(tx_entry->read_rsp.src_iov,
-					   tx_entry->read_rsp.iov_count,
-					   pkt->data, data_sz, tx_entry->done,
-					   OFI_COPY_IOV_TO_BUF);
+		done = ofi_copy_from_iov(pkt->data, data_sz,
+					tx_entry->read_rsp.src_iov,
+					tx_entry->read_rsp.iov_count,
+					tx_entry->done);
 		break;
 
 	default:
@@ -669,26 +669,24 @@ void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
 
 	switch(op) {
 	case ofi_op_msg:
-		*msg_sz = ofi_get_iov_len(tx_entry->msg.msg_iov, tx_entry->msg.msg.iov_count);
+		*msg_sz = ofi_total_iov_len(tx_entry->msg.msg_iov, tx_entry->msg.msg.iov_count);
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 		rxd_init_op_hdr(&pkt->op, tx_entry->msg.msg.data, *msg_sz, 0, op, 0, flags);
-		tx_entry->done = ofi_copy_iov_buf(tx_entry->msg.msg_iov,
-						     tx_entry->msg.msg.iov_count,
-						     pkt->data, *data_sz, 0, OFI_COPY_IOV_TO_BUF);
+		tx_entry->done = ofi_copy_from_iov(pkt->data, *data_sz,
+				tx_entry->msg.msg_iov, tx_entry->msg.msg.iov_count, 0);
 		break;
 
 	case ofi_op_tagged:
-		*msg_sz = ofi_get_iov_len(tx_entry->tmsg.msg_iov, tx_entry->tmsg.tmsg.iov_count);
+		*msg_sz = ofi_total_iov_len(tx_entry->tmsg.msg_iov, tx_entry->tmsg.tmsg.iov_count);
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 		rxd_init_op_hdr(&pkt->op, tx_entry->tmsg.tmsg.data, *msg_sz, 0, op,
 				 tx_entry->tmsg.tmsg.tag, flags);
-		tx_entry->done = ofi_copy_iov_buf(tx_entry->tmsg.msg_iov,
-						     tx_entry->tmsg.tmsg.iov_count,
-						     pkt->data, *data_sz, 0, OFI_COPY_IOV_TO_BUF);
+		tx_entry->done = ofi_copy_from_iov(pkt->data, *data_sz,
+				tx_entry->tmsg.msg_iov, tx_entry->tmsg.tmsg.iov_count, 0);
 		break;
 
 	case ofi_op_write:
-		*msg_sz = ofi_get_iov_len(tx_entry->write.msg.msg_iov, tx_entry->write.msg.iov_count);
+		*msg_sz = ofi_total_iov_len(tx_entry->write.msg.msg_iov, tx_entry->write.msg.iov_count);
 		iov_sz = sizeof(struct ofi_rma_iov) * tx_entry->write.msg.rma_iov_count;
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 		*data_sz -= iov_sz;
@@ -704,15 +702,14 @@ void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
 			memcpy(pkt->data + curr_offset, &rma_iov, sizeof(struct ofi_rma_iov));
 			curr_offset += sizeof(struct ofi_rma_iov);
 		}
-		tx_entry->done = ofi_copy_iov_buf(tx_entry->write.msg.msg_iov,
-						     tx_entry->write.msg.iov_count,
-						     pkt->data + curr_offset, *data_sz, 0,
-						     OFI_COPY_IOV_TO_BUF);
+		tx_entry->done = ofi_copy_from_iov(pkt->data + curr_offset, *data_sz,
+				tx_entry->write.msg.msg_iov,
+				tx_entry->write.msg.iov_count, 0);
 		*data_sz = tx_entry->done + iov_sz;
 		break;
 
 	case ofi_op_read_req:
-		*msg_sz = ofi_get_iov_len(tx_entry->read_req.msg.msg_iov,
+		*msg_sz = ofi_total_iov_len(tx_entry->read_req.msg.msg_iov,
 					  tx_entry->read_req.msg.iov_count);
 
 		rxd_init_op_hdr(&pkt->op, tx_entry->read_req.msg.data, *msg_sz,
@@ -734,17 +731,16 @@ void rxd_ep_init_start_hdr(struct rxd_ep *ep, struct rxd_peer *peer,
 		break;
 
 	case ofi_op_read_rsp:
-		*msg_sz = ofi_get_iov_len(tx_entry->read_rsp.src_iov,
+		*msg_sz = ofi_total_iov_len(tx_entry->read_rsp.src_iov,
 					  tx_entry->read_rsp.iov_count);
 		*data_sz = MIN(RXD_MAX_STRT_DATA_PKT_SZ(ep), *msg_sz);
 
 		rxd_init_op_hdr(&pkt->op, 0, *msg_sz, 0, op, 0, flags);
 		pkt->op.remote_idx = tx_entry->read_rsp.peer_msg_id;
 
-		tx_entry->done = ofi_copy_iov_buf(tx_entry->read_rsp.src_iov,
-						     tx_entry->read_rsp.iov_count,
-						     pkt->data, *data_sz, 0,
-						     OFI_COPY_IOV_TO_BUF);
+		tx_entry->done = ofi_copy_from_iov(pkt->data, *data_sz,
+				tx_entry->read_rsp.src_iov,
+				tx_entry->read_rsp.iov_count, 0);
 		break;
 
 	default:

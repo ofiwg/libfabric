@@ -211,12 +211,16 @@ static void *util_av_get_data(struct util_av *av, int index)
 
 void *ofi_av_get_addr(struct util_av *av, int index)
 {
+	FI_DBG(av->prov, FI_LOG_AV, "get[%d]:%s\n", index,
+		ofi_hex_str(util_av_get_data(av, index), av->addrlen));
 	return util_av_get_data(av, index);
 }
 
 static void util_av_set_data(struct util_av *av, int index,
 			     const void *data, size_t len)
 {
+	FI_DBG(av->prov, FI_LOG_AV, "set[%d]:%s\n", index,
+		ofi_hex_str(data, len));
 	memcpy(util_av_get_data(av, index), data, len);
 }
 

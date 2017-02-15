@@ -42,9 +42,13 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 	int ret;
 
 	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
+	FI_DBG(&udpx_prov, FI_LOG_EP_CTRL, "%s\n", ofi_hex_str(addr, addrlen));
 	ret = bind(ep->sock, addr, addrlen);
-	if (ret)
+	if (ret) {
+		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "bind %d (%s)\n",
+			errno, strerror(errno));
 		return -errno;
+	}
 	ep->is_bound = 1;
 	return 0;
 }
@@ -540,11 +544,10 @@ static int udpx_ep_init(struct udpx_ep *ep, struct fi_info *info)
 	}
 
 	if (info->src_addr) {
-		ret = bind(ep->sock, info->src_addr, info->src_addrlen);
-		if (ret) {
-			ret = -errno;
+		ret = udpx_setname(&ep->util_ep.ep_fid.fid, info->src_addr,
+				   info->src_addrlen);
+		if (ret)
 			goto err1;
-		}
 	}
 
 	ret = fi_fd_nonblock(ep->sock);

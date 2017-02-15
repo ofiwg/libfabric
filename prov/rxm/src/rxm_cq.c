@@ -276,8 +276,8 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 
 		return rxm_lmt_rma_read(rx_buf);
 	} else {
-		ofi_copy_iov_buf(rx_buf->recv_entry->iov, rx_buf->recv_entry->count, rx_buf->pkt.data,
-			rx_buf->pkt.hdr.size, 0, OFI_COPY_BUF_TO_IOV);
+		ofi_copy_to_iov(rx_buf->recv_entry->iov, rx_buf->recv_entry->count, 0,
+				rx_buf->pkt.data, rx_buf->pkt.hdr.size);
 		return rxm_finish_recv(rx_buf);
 	}
 }
