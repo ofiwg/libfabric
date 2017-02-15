@@ -35,7 +35,6 @@ bin_PROGRAMS = \
 	unit/fi_cq_test \
 	unit/fi_mr_test \
 	unit/fi_av_test \
-	unit/fi_size_left_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
 	ported/libibverbs/fi_rc_pingpong \
@@ -224,11 +223,6 @@ unit_fi_av_test_SOURCES = \
 	unit/av_test.c \
 	unit/common.c
 unit_fi_av_test_LDADD = libfabtests.la
-
-unit_fi_size_left_test_SOURCES = \
-	unit/size_left_test.c \
-	unit/common.c
-unit_fi_size_left_test_LDADD = libfabtests.la
 
 unit_fi_dom_test_SOURCES = \
 	unit/dom_test.c \

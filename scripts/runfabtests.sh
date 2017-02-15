@@ -170,7 +170,6 @@ unit_tests=(
 	"eq_test"
 	"cq_test"
 	"mr_test"
-	"size_left_test"
 )
 
 complex_tests=(
