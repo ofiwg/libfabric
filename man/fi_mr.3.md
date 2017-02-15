@@ -342,8 +342,13 @@ corresponding domain is closed.
 
 The fi_mr_bind function associates a memory region with a
 counter, for providers that support the generation of completions
-based on fabric operations.  The type of events tracked against the
-memory region is based on the bitwise OR of the following flags.
+based on fabric operations. Users should ensure that the counter is
+bound to the memory region before any incoming RMA operations can
+access the memory region. The outcome of any RMA operations that
+are concurrent with the bind operation is undefined.
+
+The type of events tracked against the memory region is based on the
+bitwise OR of the following flags.
 
 *FI_REMOTE_WRITE*
 : Generates an event whenever a remote RMA write or atomic operation
