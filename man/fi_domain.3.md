@@ -132,6 +132,7 @@ struct fi_domain_attr {
 	uint64_t              mode;
 	uint8_t               *auth_key;
 	size_t                auth_keylen;
+	size_t                max_err_data;
 };
 ```
 
@@ -588,7 +589,6 @@ The operational mode bit related to using the domain.
   to only be used with endpoints, transmit contexts, and receive contexts that
   have the same set of capability flags.
 
-
 ## Default authorization key (auth_key)
 
 The default authorization key to associate with endpoint and memory
@@ -602,6 +602,12 @@ no authorization key will be associated with endpoints and memory
 registrations created within the domain unless specified in the endpoint or 
 memory registration attributes. This field is ignored unless the fabric is 
 opened with API version 1.5 or greater.
+
+## Max Error Data Size (max_err_data)
+
+: The maximum amount of error data, in bytes, that may be returned as part of
+  a completion or event queue error.  This value corresponds to the
+  err_data_size field in struct fi_cq_err_entry and struct fi_eq_err_entry.
 
 # RETURN VALUE
 

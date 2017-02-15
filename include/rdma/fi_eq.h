@@ -229,6 +229,7 @@ struct fi_cq_err_entry {
 	int			prov_errno;
 	/* err_data is available until the next time the CQ is read */
 	void			*err_data;
+	size_t			err_data_size;
 };
 
 enum fi_cq_wait_cond {
