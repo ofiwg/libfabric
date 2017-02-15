@@ -65,6 +65,18 @@ struct fi_msg_atomic {
 	uint64_t		data;
 };
 
+struct fi_msg_fetch {
+	struct fi_ioc		*msg_iov;
+	void			**desc;
+	size_t			iov_count;
+};
+
+struct fi_msg_compare {
+	const struct fi_ioc	*msg_iov;
+	void			**desc;
+	size_t			iov_count;
+};
+
 struct fi_ops_atomic {
 	size_t	size;
 	ssize_t	(*write)(struct fid_ep *ep,

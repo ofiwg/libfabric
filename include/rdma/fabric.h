@@ -487,6 +487,9 @@ enum {
 	FI_GET_RAW_MR,		/* fi_mr_raw_attr */
 	FI_MAP_RAW_MR,		/* fi_mr_map_raw */
 	FI_UNMAP_KEY,		/* uint64_t key */
+	FI_QUEUE_WORK,		/* struct fi_deferred_work */
+	FI_CANCEL_WORK,		/* struct fi_deferred_work */
+	FI_FLUSH_WORK,		/* NULL */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)

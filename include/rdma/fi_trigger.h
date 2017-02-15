@@ -34,6 +34,10 @@
 #define FI_TRIGGER_H
 
 #include <rdma/fabric.h>
+#include <rdma/fi_endpoint.h>
+#include <rdma/fi_rma.h>
+#include <rdma/fi_tagged.h>
+#include <rdma/fi_atomic.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,9 +47,67 @@ enum fi_trigger_event {
 	FI_TRIGGER_THRESHOLD,
 };
 
+enum fi_trigger_op {
+	FI_OP_RECV,
+	FI_OP_SEND,
+	FI_OP_TRECV,
+	FI_OP_TSEND,
+	FI_OP_READ,
+	FI_OP_WRITE,
+	FI_OP_ATOMIC,
+	FI_OP_FETCH_ATOMIC,
+	FI_OP_COMPARE_ATOMIC,
+	FI_OP_CNTR_SET,
+	FI_OP_CNTR_ADD
+};
+
 struct fi_trigger_threshold {
 	struct fid_cntr		*cntr;
 	size_t			threshold;
+};
+
+struct fi_op_msg {
+	struct fid_ep		*ep;
+	struct fi_msg		msg;
+	uint64_t		flags;
+};
+
+struct fi_op_tagged {
+	struct fid_ep		*ep;
+	struct fi_msg_tagged	msg;
+	uint64_t		flags;
+};
+
+struct fi_op_rma {
+	struct fid_ep		*ep;
+	struct fi_msg_rma	msg;
+	uint64_t		flags;
+};
+
+struct fi_op_atomic {
+	struct fid_ep		*ep;
+	struct fi_msg_atomic	msg;
+	uint64_t		flags;
+};
+
+struct fi_op_fetch_atomic {
+	struct fid_ep		*ep;
+	struct fi_msg_atomic	msg;
+	struct fi_msg_fetch	fetch;
+	uint64_t		flags;
+};
+
+struct fi_op_compare_atomic {
+	struct fid_ep		*ep;
+	struct fi_msg_atomic	msg;
+	struct fi_msg_fetch	fetch;
+	struct fi_msg_compare	compare;
+	uint64_t		flags;
+};
+
+struct fi_op_cntr {
+	struct fid_cntr		*cntr;
+	uint64_t		value;
 };
 
 #ifdef FABRIC_DIRECT
@@ -56,11 +118,32 @@ struct fi_trigger_threshold {
 
 /* Size must match struct fi_context */
 struct fi_triggered_context {
-	enum fi_trigger_event	event_type;
+	enum fi_trigger_event			event_type;
 	union {
 		struct fi_trigger_threshold	threshold;
 		void				*internal[3];
 	} trigger;
+};
+
+struct fi_deferred_work {
+	struct fi_context			context;
+
+	enum fi_trigger_event			event_type;
+	enum fi_trigger_op			op_type;
+
+	union {
+		struct fi_trigger_threshold	*threshold;
+	} event;
+
+	union {
+		struct fi_op_msg		*msg;
+		struct fi_op_tagged		*tagged;
+		struct fi_op_rma		*rma;
+		struct fi_op_atomic		*atomic;
+		struct fi_op_fetch_atomic	*fetch_atomic;
+		struct fi_op_compare_atomic	*compare_atomic;
+		struct fi_op_cntr		*cntr;
+	} op;
 };
 
 #endif
