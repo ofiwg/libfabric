@@ -266,7 +266,8 @@ close, the call will return -FI_EBUSY.
 Associates an event queue with the AV.  If an AV has been opened with
 `FI_EVENT`, then an event queue must be bound to the AV before any
 insertion calls are attempted.  Any calls to insert addresses before
-an event queue has been bound will fail with `-FI_ENOEQ`.
+an event queue has been bound will fail with `-FI_ENOEQ`.  Flags are
+reserved for future use and must be 0.
 
 ## fi_av_insert
 
@@ -319,8 +320,11 @@ determine what the next assigned index will be.
 : In order to allow optimized address insertion, the application may
   specify the FI_MORE flag to the insert call to give a hint to the
   provider that more insertion requests will follow, allowing the
-  provider to aggregate insertion requests if desired.  Providers are
-  free to ignore FI_MORE.
+  provider to aggregate insertion requests if desired.  An application
+  may make any number of insertion calls with FI_MORE set, provided
+  that they are followed by an insertion call without FI_MORE.  This
+  signifies to the provider that the insertion list is complete.
+  Providers are free to ignore FI_MORE.
 
 - *FI_SYNC_ERR*
 : This flag applies to synchronous insertions only, and is used to
@@ -338,7 +342,8 @@ application to specify the node and service names, similar to the
 fi_getinfo inputs, rather than an encoded address.  The node and service
 parameters are defined the same as fi_getinfo(3).  Node should be a string
 that corresponds to a hostname or network address.  The service string
-corresponds to a textual representation of a transport address.
+corresponds to a textual representation of a transport address.  Supported
+flags are the same as for fi_av_insert.
 
 ## fi_av_insertsym
 
@@ -366,6 +371,8 @@ host11:5001.
 
 The total number of inserted addresses will be nodecnt x svccnt.
 
+Supported flags are the same as for fi_av_insert.
+
 ## fi_av_remove
 
 fi_av_remove removes a set of addresses from an address vector.  All
@@ -382,6 +389,8 @@ to free memory allocated with addresses that will no longer be
 accessed.  Inserted addresses are not required to be removed.
 fi_av_close will automatically cleanup any resources associated with
 addresses remaining in the AV when it is invoked.
+
+Flags are reserved for future use and must be 0.
 
 ## fi_av_lookup
 
