@@ -72,18 +72,18 @@ The following trigger events are defined.
   value.  The threshold is specified using struct
   fi_trigger_threshold:
 
-```c
-struct fi_trigger_threshold {
+  ```c
+  struct fi_trigger_threshold {
 	struct fid_cntr *cntr; /* event counter to check */
 	size_t threshold;      /* threshold value */
-};
-```
+  };
+  ```
 
-Threshold operations are triggered in the order of the threshold
-values.  This is true even if the counter increments by a value
-greater than 1.  If two triggered operations have the same threshold,
-they will be triggered in the order in which they were submitted to
-the endpoint.
+  Threshold operations are triggered in the order of the threshold
+  values.  This is true even if the counter increments by a value
+  greater than 1.  If two triggered operations have the same threshold,
+  they will be triggered in the order in which they were submitted to
+  the endpoint.
 
 # EXPERIMENTAL TRIGGERED OPERATIONS
 
@@ -114,6 +114,7 @@ struct fi_deferred_work {
 
 	union {
 		struct fi_trigger_threshold *threshold;
+		struct fi_trigger_completion *completion;
 	} event;
 
 	union {
@@ -156,6 +157,26 @@ not read or otherwise accessed.  But the provider may validate fabric
 objects, such as endpoints and counters, and that input parameters fall
 within supported ranges.  If a specific request is not supported by the
 provider, it will fail the operation with -FI_ENOSYS.
+
+## EXPERIMENTAL TRIGGER EVENTS
+
+The following trigger events are defined.
+
+*FI_TRIGGER_THRESHOLD*
+: See the above definition.
+
+*FI_TRIGGER_COMPLETION*
+: This indicates that the data transfer operation will be deferred
+  until the specified operation has completed.  The operation is specified
+  using struct fi_trigger_completion:
+
+  ```c
+  struct fi_trigger_completion {
+	struct fi_context *context;
+  };
+  ```
+
+  The context must refer to the fi_context of the posted operation.
 
 # SEE ALSO
 

@@ -45,6 +45,7 @@ extern "C" {
 
 enum fi_trigger_event {
 	FI_TRIGGER_THRESHOLD,
+	FI_TRIGGER_COMPLETION
 };
 
 enum fi_trigger_op {
@@ -64,6 +65,10 @@ enum fi_trigger_op {
 struct fi_trigger_threshold {
 	struct fid_cntr		*cntr;
 	size_t			threshold;
+};
+
+struct fi_trigger_completion {
+	struct fi_context	*context;
 };
 
 struct fi_op_msg {
@@ -133,6 +138,7 @@ struct fi_deferred_work {
 
 	union {
 		struct fi_trigger_threshold	*threshold;
+		struct fi_trigger_completion	*completion;
 	} event;
 
 	union {
