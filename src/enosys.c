@@ -212,6 +212,11 @@ int fi_no_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
+int fi_no_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+			  struct fid_mc **mc, void *context)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_av

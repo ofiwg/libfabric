@@ -1674,4 +1674,5 @@ static struct fi_ops_cm gnix_sep_rxtx_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };

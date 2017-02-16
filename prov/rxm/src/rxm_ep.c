@@ -228,6 +228,7 @@ static struct fi_ops_cm rxm_ops_cm = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 int rxm_getopt(fid_t fid, int level, int optname,

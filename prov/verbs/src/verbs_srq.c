@@ -55,6 +55,7 @@ static struct fi_ops_cm fi_ibv_srq_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 static struct fi_ops_rma fi_ibv_srq_rma_ops = {
