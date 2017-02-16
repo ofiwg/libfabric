@@ -117,8 +117,6 @@ struct verbs_dev_info {
 
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
-	struct util_buf_pool	*wce_pool;
-	struct util_buf_pool	*epe_pool;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -232,6 +230,8 @@ struct fi_ibv_cq {
 	uint64_t		wr_id_mask;
 	fi_ibv_trywait_func	trywait;
 	atomic_t		nevents;
+	struct util_buf_pool	*epe_pool;
+	struct util_buf_pool	*wce_pool;
 };
 
 struct fi_ibv_rdm_cq {
