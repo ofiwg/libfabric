@@ -42,54 +42,15 @@
 extern "C" {
 #endif
 
-#ifdef FABRIC_DIRECT
-#include <rdma/fi_direct_atomic_def.h>
-#endif /* FABRIC_DIRECT */
 
-#ifndef FABRIC_DIRECT_ATOMIC_DEF
+/* Atomic flags */
+#define FI_FETCH_ATOMIC		(1ULL << 58)
+#define FI_COMPARE_ATOMIC	(1ULL << 59)
 
-enum fi_datatype {
-	FI_INT8,
-	FI_UINT8,
-	FI_INT16,
-	FI_UINT16,
-	FI_INT32,
-	FI_UINT32,
-	FI_INT64,
-	FI_UINT64,
-	FI_FLOAT,
-	FI_DOUBLE,
-	FI_FLOAT_COMPLEX,
-	FI_DOUBLE_COMPLEX,
-	FI_LONG_DOUBLE,
-	FI_LONG_DOUBLE_COMPLEX,
-	FI_DATATYPE_LAST
+struct fi_atomic_attr {
+	size_t			count;
+	size_t			size;
 };
-
-enum fi_op {
-	FI_MIN,
-	FI_MAX,
-	FI_SUM,
-	FI_PROD,
-	FI_LOR,
-	FI_LAND,
-	FI_BOR,
-	FI_BAND,
-	FI_LXOR,
-	FI_BXOR,
-	FI_ATOMIC_READ,
-	FI_ATOMIC_WRITE,
-	FI_CSWAP,
-	FI_CSWAP_NE,
-	FI_CSWAP_LE,
-	FI_CSWAP_LT,
-	FI_CSWAP_GE,
-	FI_CSWAP_GT,
-	FI_MSWAP,
-	FI_ATOMIC_OP_LAST
-};
-
-#endif
 
 struct fi_msg_atomic {
 	const struct fi_ioc	*msg_iov;
@@ -102,6 +63,18 @@ struct fi_msg_atomic {
 	enum fi_op		op;
 	void			*context;
 	uint64_t		data;
+};
+
+struct fi_msg_fetch {
+	struct fi_ioc		*msg_iov;
+	void			**desc;
+	size_t			iov_count;
+};
+
+struct fi_msg_compare {
+	const struct fi_ioc	*msg_iov;
+	void			**desc;
+	size_t			iov_count;
 };
 
 struct fi_ops_atomic {
@@ -306,6 +279,16 @@ fi_compare_atomicvalid(struct fid_ep *ep,
 		       enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
 	return ep->atomic->compwritevalid(ep, datatype, op, count);
+}
+
+static inline int
+fi_query_atomic(struct fid_domain *domain,
+		enum fi_datatype datatype, enum fi_op op,
+		struct fi_atomic_attr *attr, uint64_t flags)
+{
+	return FI_CHECK_OP(domain->ops, struct fi_ops_domain, query_atomic) ?
+		domain->ops->query_atomic(domain, datatype, op, attr, flags) :
+		-FI_ENOSYS;
 }
 
 #endif

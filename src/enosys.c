@@ -260,6 +260,11 @@ int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 {
 	return -FI_ENOSYS;
 }
+int fi_no_query_atomic(struct fid_ep *ep, enum fi_datatype datatype,
+		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_mr

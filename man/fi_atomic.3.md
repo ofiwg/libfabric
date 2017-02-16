@@ -20,7 +20,8 @@ fi_compare_atomic / fi_compare_atomicv / fi_compare_atomicmsg
 : Initiates an atomic compare-operation to remote memory, retrieving
   the initial value.
 
-fi_atomicvalid / fi_fetch_atomicvalid / fi_compare_atomicvalid
+fi_atomicvalid / fi_fetch_atomicvalid / fi_compare_atomicvalid /
+fi_query_atomic
 : Indicates if a provider supports a specific atomic operation
 
 # SYNOPSIS
@@ -88,6 +89,10 @@ int fi_fetch_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
 
 int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
     enum fi_op op, size_t *count);
+
+int fi_query_atomic(struct fid_domain *domain,
+    enum fi_datatype datatype, enum fi_op op,
+    struct fi_atomic_attr *attr, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -473,6 +478,39 @@ If an operation is supported, an atomic valid call will return 0,
 along with a count of atomic data units that a single function call
 will operate on.
 
+## Query Atomic Attributes
+
+The fi_query_atomic call acts as an enhanced atomic valid operation (see
+the atomic valid function definitions above).  It
+is provided, in part, for future extensibility.  The query operation reports
+which atomic operations are supported by the domain, for suitably configured
+endpoints.
+
+The behavior of fi_query_atomic is adjusted based on the flags parameter.
+If flags is 0, then the operation reports the supported atomic attributes
+for base atomic operations, similar to fi_atomicvalid for endpoints.  If
+flags has the FI_FETCH_ATOMIC bit set, the operation behaves similar to
+fi_fetch_atomicvalid.  Similarly, the flag bit FI_COMPARE_ATOMIC results in
+query acting as fi_compare_atomicvalid.  The FI_FETCH_ATOMIC and
+FI_COMPARE_ATOMIC bits may not both be set.
+
+If the FI_TAGGED bit is set, the provider will indicate if it supports
+atomic operations to tagged receive buffers.  The FI_TAGGED bit may be used
+by itself, or in conjunction with the FI_FETCH_ATOMIC and FI_COMPARE_ATOMIC
+flags.
+
+The output of fi_query_atomic is struct fi_atomic_attr:
+
+```c
+struct fi_atomic_attr {
+	size_t count;
+	size_t size;
+};
+```
+
+The count attribute field is as defined for the atomic valid calls.  The
+size field indicates the size in bytes of the atomic datatype.
+
 ## Completions
 
 Completed atomic operations are reported to the user through one or
@@ -523,6 +561,12 @@ with atomic message calls.
 : Indicates that the requested operation, also
   known as the fenced operation, be deferred until all previous operations
   targeting the same target endpoint have completed.
+
+*FI_TAGGED*
+: Specifies that the target of the atomic operation is a tagged receive
+  buffer instead of an RMA buffer.  When a tagged buffer is the target
+  memory region, the addr parameter is used as a 0-based byte offset into
+  the tagged buffer, with the key parameter specifying the tag.
 
 # RETURN VALUE
 

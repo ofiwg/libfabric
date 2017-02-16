@@ -105,7 +105,6 @@ struct fi_ops_cm;
 struct fi_ops_rma;
 struct fi_ops_tagged;
 struct fi_ops_atomic;
-/* struct fi_ops_collectives; */
 
 /*
  * Calls which modify the properties of a endpoint (control, setopt, bind, ...)
