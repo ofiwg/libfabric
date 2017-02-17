@@ -130,6 +130,8 @@ struct fi_domain_attr {
 	size_t                mr_iov_limit;
 	uint64_t              caps;
 	uint64_t              mode;
+	uint8_t               *auth_key;
+	size_t                auth_keylen;
 };
 ```
 
@@ -585,6 +587,21 @@ The operational mode bit related to using the domain.
 : This bit indicates that the domain limits completion queues and counters
   to only be used with endpoints, transmit contexts, and receive contexts that
   have the same set of capability flags.
+
+
+## Default authorization key (auth_key)
+
+The default authorization key to associate with endpoint and memory
+registrations created within the domain. This field is ignored unless the 
+fabric is opened with API version 1.5 or greater.
+
+## Default authorization key length (auth_keylen)
+
+The length of the default authorization key for the domain. If set to 0, then
+no authorization key will be associated with endpoints and memory
+registrations created within the domain unless specified in the endpoint or 
+memory registration attributes. This field is ignored unless the fabric is 
+opened with API version 1.5 or greater.
 
 # RETURN VALUE
 
