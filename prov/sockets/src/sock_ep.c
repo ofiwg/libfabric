@@ -502,7 +502,7 @@ static ssize_t sock_rx_ctx_cancel(struct sock_rx_ctx *rx_ctx, void *context)
 			}
 
 			if (rx_ctx->comp.recv_cntr)
-				sock_cntr_err_inc(rx_ctx->comp.recv_cntr);
+				fi_cntr_adderr(&rx_ctx->comp.recv_cntr->cntr_fid, 1);
 
 			dlist_remove(&rx_entry->entry);
 			sock_rx_release_entry(rx_entry);
@@ -1432,6 +1432,8 @@ static void sock_set_domain_attr(void *src_addr, const struct fi_domain_attr *hi
 		attr->max_ep_tx_ctx = sock_domain_attr.max_ep_tx_ctx;
 	if (attr->max_ep_rx_ctx == 0)
 		attr->max_ep_rx_ctx = sock_domain_attr.max_ep_rx_ctx;
+	if (attr->cntr_cnt == 0)
+		attr->cntr_cnt = sock_domain_attr.cntr_cnt;
 
 	attr->mr_key_size = sock_domain_attr.mr_key_size;
 	attr->cq_data_size = sock_domain_attr.cq_data_size;
