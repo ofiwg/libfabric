@@ -1104,42 +1104,6 @@ err1:
 	return ret;
 }
 
-static inline int fi_ibv_retain_info(struct fi_info *info,
-				     struct fi_ibv_rdm_sysaddr *iface_addr,
-				      struct fi_ibv_rdm_sysaddr *lo_addr)
-{
-	struct sockaddr_in *src_addr;
-	int retain = 1;
-
-	assert(info && iface_addr && lo_addr);
-	if (!info || !iface_addr || !lo_addr) {
-		return retain;
-	}
-
-	src_addr = info->src_addr;
-	if (FI_IBV_EP_TYPE_IS_RDM(info)) {
-		retain = 0;
-		if (iface_addr->is_found) {
-			retain = !memcmp(&iface_addr->addr.sin_addr,
-					 &src_addr->sin_addr,
-					 sizeof(src_addr->sin_addr));
-		}
-		if (!retain && lo_addr->is_found) {
-			retain = src_addr && src_addr->sin_port &&
-				!memcmp(&lo_addr->addr.sin_addr,
-					&src_addr->sin_addr,
-					sizeof(src_addr->sin_addr));
-		}
-	}
-
-	FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
-		retain ? "retain %s:%u\n" : "remove %s:%u\n",
-		(src_addr ? inet_ntoa(src_addr->sin_addr) : "n/a"),
-		(src_addr ? ntohs(src_addr->sin_port) : 0));
-
-	return retain;
-}
-
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
