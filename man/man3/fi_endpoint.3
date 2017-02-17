@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2017\-01\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2017\-02\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -821,6 +821,8 @@ details.
 .PP
 The length of the authorization key.
 This field will be 0 if authorization keys are not available or used.
+This field is ignored unless the fabric is opened with API version 1.5
+or greater.
 .SS auth_key \- Authorization Key
 .PP
 If supported by the fabric, an authorization key (a.k.a.
@@ -830,6 +832,9 @@ Only peer endpoints that are programmed to use the same authorization
 key may communicate.
 Authorization keys are often used to implement job keys, to ensure that
 processes running in different jobs do not accidentally cross traffic.
+The domain authorization key will be used if auth_keylen is set to 0.
+This field is ignored unless the fabric is opened with API version 1.5
+or greater.
 .SH TRANSMIT CONTEXT ATTRIBUTES
 .PP
 Attributes specific to the transmit capabilities of an endpoint are

@@ -1,5 +1,5 @@
 .\"t
-.TH "fi_domain" "3" "2017\-01\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_domain" "3" "2017\-02\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain \- Open a fabric access domain
@@ -118,6 +118,8 @@ struct\ fi_domain_attr\ {
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ mr_iov_limit;
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ caps;
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ mode;
+\ \ \ \ uint8_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *auth_key;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ auth_keylen;
 };
 \f[]
 .fi
@@ -685,6 +687,20 @@ The operational mode bit related to using the domain.
 completion queues and counters to only be used with endpoints, transmit
 contexts, and receive contexts that have the same set of capability
 flags.
+.SS Default authorization key (auth_key)
+.PP
+The default authorization key to associate with endpoint and memory
+registrations created within the domain.
+This field is ignored unless the fabric is opened with API version 1.5
+or greater.
+.SS Default authorization key length (auth_keylen)
+.PP
+The length of the default authorization key for the domain.
+If set to 0, then no authorization key will be associated with endpoints
+and memory registrations created within the domain unless specified in
+the endpoint or memory registration attributes.
+This field is ignored unless the fabric is opened with API version 1.5
+or greater.
 .SH RETURN VALUE
 .PP
 Returns 0 on success.
