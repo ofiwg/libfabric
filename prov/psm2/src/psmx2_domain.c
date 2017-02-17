@@ -32,6 +32,103 @@
 
 #include "psmx2.h"
 
+void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
+{
+	int err;
+
+	if (trx_ctxt->am_initialized)
+		psmx2_am_fini(trx_ctxt);
+
+#if 0
+	/* AM messages could arrive after MQ is finalized, causing segfault
+	 * when trying to dereference the MQ pointer. There is no mechanism
+	 * to properly shutdown AM. The workaround is to keep MQ valid.
+	 */
+	psm2_mq_finalize(trx_ctxt->psm2_mq);
+#endif
+
+	/* workaround for:
+	 * Assertion failure at psm2_ep.c:1059: ep->mctxt_master == ep
+	 */
+	sleep(psmx2_env.delay);
+
+	if (psmx2_env.timeout)
+		err = psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
+				    (int64_t) psmx2_env.timeout * 1000000000LL);
+	else
+		err = PSM2_EP_CLOSE_TIMEOUT;
+
+	if (err != PSM2_OK)
+		psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
+
+	fastlock_destroy(&trx_ctxt->poll_lock);
+	free(trx_ctxt);
+}
+
+struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
+					    struct psmx2_src_name *src_addr)
+{
+	struct psmx2_trx_ctxt *trx_ctxt;
+	struct psm2_ep_open_opts opts;
+	int err;
+
+	trx_ctxt = calloc(1, sizeof(*trx_ctxt));
+	if (!trx_ctxt) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"failed to allocate trx_ctxt.\n");
+		return NULL;
+	}
+
+	psm2_ep_open_opts_get_defaults(&opts);
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"uuid: %s\n", psmx2_uuid_to_string(domain->fabric->uuid));
+
+	if (src_addr) {
+		opts.unit = src_addr->unit;
+		opts.port = src_addr->port;
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"ep_open_opts: unit=%d port=%u\n", opts.unit, opts.port);
+	}
+
+	err = psm2_ep_open(domain->fabric->uuid, &opts,
+			   &trx_ctxt->psm2_ep, &trx_ctxt->psm2_epid);
+	if (err != PSM2_OK) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"psm2_ep_open returns %d, errno=%d\n", err, errno);
+		err = psmx2_errno(err);
+		goto err_out;
+	}
+
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"epid: 0x%016lx\n", trx_ctxt->psm2_epid);
+
+	err = psm2_mq_init(trx_ctxt->psm2_ep, PSM2_MQ_ORDERMASK_ALL,
+			   NULL, 0, &trx_ctxt->psm2_mq);
+	if (err != PSM2_OK) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"psm2_mq_init returns %d, errno=%d\n", err, errno);
+		err = psmx2_errno(err);
+		goto err_out_close_ep;
+	}
+
+	fastlock_init(&trx_ctxt->poll_lock);
+	fastlock_init(&trx_ctxt->rma_queue.lock);
+	fastlock_init(&trx_ctxt->trigger_queue.lock);
+	slist_init(&trx_ctxt->rma_queue.list);
+	slist_init(&trx_ctxt->trigger_queue.list);
+
+	return trx_ctxt;
+
+err_out_close_ep:
+	if (psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
+			  (int64_t) psmx2_env.timeout * 1000000000LL) != PSM2_OK)
+		psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
+
+err_out:
+	free(trx_ctxt);
+	return NULL;
+}
+
 static inline int normalize_core_id(int core_id, int num_cores)
 {
 	if (core_id < 0)
@@ -177,7 +274,6 @@ static void psmx2_domain_stop_progress(struct psmx2_fid_domain *domain)
 static int psmx2_domain_close(fid_t fid)
 {
 	struct psmx2_fid_domain *domain;
-	int err;
 
 	domain = container_of(fid, struct psmx2_fid_domain,
 			      util_domain.domain_fid.fid);
@@ -193,39 +289,15 @@ static int psmx2_domain_close(fid_t fid)
 	if (domain->progress_thread_enabled)
 		psmx2_domain_stop_progress(domain);
 
-	if (domain->am_initialized)
-		psmx2_am_fini(domain);
-
-	fastlock_destroy(&domain->poll_lock);
 	fastlock_destroy(&domain->vl_lock);
 	rbtDelete(domain->mr_map);
 	fastlock_destroy(&domain->mr_lock);
 
-#if 0
-	/* AM messages could arrive after MQ is finalized, causing segfault
-	 * when trying to dereference the MQ pointer. There is no mechanism
-	 * to properly shutdown AM. The workaround is to keep MQ valid.
-	 */
-	psm2_mq_finalize(domain->psm2_mq);
-#endif
-
-	/* workaround for:
-	 * Assertion failure at psm2_ep.c:1059: ep->mctxt_master == ep
-	 */
-	sleep(psmx2_env.delay);
-
-	if (psmx2_env.timeout)
-		err = psm2_ep_close(domain->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
-				    (int64_t) psmx2_env.timeout * 1000000000LL);
-	else
-		err = PSM2_EP_CLOSE_TIMEOUT;
-
-	if (err != PSM2_OK)
-		psm2_ep_close(domain->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
-
+	psmx2_trx_ctxt_free(domain->base_trx_ctxt);
 	domain->fabric->active_domain = NULL;
-
 	free(domain);
+
+	psmx2_atomic_fini();
 	return 0;
 }
 
@@ -257,48 +329,19 @@ static int psmx2_key_compare(void *key1, void *key2)
 static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 			     struct psmx2_src_name *src_addr)
 {
-	struct psmx2_fid_fabric *fabric = domain->fabric;
-	struct psm2_ep_open_opts opts;
 	int err;
 
-	psm2_ep_open_opts_get_defaults(&opts);
+	psmx2_atomic_init();
 
-	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"uuid: %s\n", psmx2_uuid_to_string(fabric->uuid));
-
-	if (src_addr) {
-		opts.unit = src_addr->unit;
-		opts.port = src_addr->port;
-		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"ep_open_opts: unit=%d port=%u\n", opts.unit, opts.port);
-	}
-
-	err = psm2_ep_open(fabric->uuid, &opts,
-			   &domain->psm2_ep, &domain->psm2_epid);
-	if (err != PSM2_OK) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"psm2_ep_open returns %d, errno=%d\n", err, errno);
-		err = psmx2_errno(err);
-		goto err_out;
-	}
-
-	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"epid: 0x%016lx\n", domain->psm2_epid);
-
-	err = psm2_mq_init(domain->psm2_ep, PSM2_MQ_ORDERMASK_ALL,
-			   NULL, 0, &domain->psm2_mq);
-	if (err != PSM2_OK) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"psm2_mq_init returns %d, errno=%d\n", err, errno);
-		err = psmx2_errno(err);
-		goto err_out_close_ep;
-	}
+	domain->base_trx_ctxt = psmx2_trx_ctxt_alloc(domain, src_addr);
+	if (!domain->base_trx_ctxt)
+		return -FI_ENODEV;
 
 	err = fastlock_init(&domain->mr_lock);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"fastlock_init(mr_lock) returns %d\n", err);
-		goto err_out_finalize_mq;
+		goto err_out_free_trx_ctxt;
 	}
 
 	domain->mr_map = rbtNew(&psmx2_key_compare);
@@ -319,20 +362,13 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	memset(domain->vl_map, 0, sizeof(domain->vl_map));
 	domain->vl_alloc = 0;
 
-	err = fastlock_init(&domain->poll_lock);
-	if (err) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"fastlock_init(poll_lock) returns %d\n", err);
-		goto err_out_destroy_vl_lock;
-	}
-
 	/* Set active domain before psmx2_domain_enable_ep() installs the
 	 * AM handlers to ensure that psmx2_active_fabric->active_domain
 	 * is always non-NULL inside the handlers. Notice that the vlaue
 	 * active_domain becomes NULL again only when the domain is closed.
 	 * At that time the AM handlers are gone with the PSM endpoint.
 	 */
-	fabric->active_domain = domain;
+	domain->fabric->active_domain = domain;
 
 	if (psmx2_domain_enable_ep(domain, NULL) < 0)
 		goto err_out_reset_active_domain;
@@ -343,10 +379,7 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	return 0;
 
 err_out_reset_active_domain:
-	fabric->active_domain = NULL;
-	fastlock_destroy(&domain->poll_lock);
-
-err_out_destroy_vl_lock:
+	domain->fabric->active_domain = NULL;
 	fastlock_destroy(&domain->vl_lock);
 
 err_out_delete_mr_map:
@@ -355,15 +388,8 @@ err_out_delete_mr_map:
 err_out_destroy_mr_lock:
 	fastlock_destroy(&domain->mr_lock);
 
-err_out_finalize_mq:
-	psm2_mq_finalize(domain->psm2_mq);
-
-err_out_close_ep:
-	if (psm2_ep_close(domain->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
-			  (int64_t) psmx2_env.timeout * 1000000000LL) != PSM2_OK)
-		psm2_ep_close(domain->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
-
-err_out:
+err_out_free_trx_ctxt:
+	psmx2_trx_ctxt_free(domain->base_trx_ctxt);
 	return err;
 }
 
@@ -463,14 +489,8 @@ int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 		return -FI_EOPNOTSUPP;
 	}
 
-	if (((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS)) &&
-	    !domain->am_initialized) {
-		int err = psmx2_am_init(domain);
-		if (err)
-			return err;
-
-		domain->am_initialized = 1;
-	}
+	if ((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS))
+		return psmx2_am_init(ep->trx_ctxt);
 
 	return 0;
 }

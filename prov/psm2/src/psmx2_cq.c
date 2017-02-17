@@ -371,14 +371,14 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 		 * freed because the two psm2_mq_ipeek calls may return the
 		 * same request. Use a lock to ensure that won't happen.
 		 */
-		if (fastlock_tryacquire(&domain->poll_lock))
+		if (fastlock_tryacquire(&domain->base_trx_ctxt->poll_lock))
 			return read_count;
 
-		err = psm2_mq_ipeek(domain->psm2_mq, &psm2_req, NULL);
+		err = psm2_mq_ipeek(domain->base_trx_ctxt->psm2_mq, &psm2_req, NULL);
 
 		if (err == PSM2_OK) {
 			err = psm2_mq_test2(&psm2_req, &psm2_status);
-			fastlock_release(&domain->poll_lock);
+			fastlock_release(&domain->base_trx_ctxt->poll_lock);
 
 			fi_context = psm2_status.context;
 
@@ -609,7 +609,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (len_remaining >= req->min_buf_size) {
 					if (len_remaining > PSMX2_MAX_MSG_SIZE)
 						len_remaining = PSMX2_MAX_MSG_SIZE;
-					err = psm2_mq_irecv2(tmp_ep->domain->psm2_mq,
+					err = psm2_mq_irecv2(tmp_ep->trx_ctxt->psm2_mq,
 							    req->src_addr, &req->tag,
 							    &req->tagsel, req->flag,
 							    req->buf + req->offset, 
@@ -629,10 +629,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			return read_count;
 		} else if (err == PSM2_MQ_NO_COMPLETIONS) {
-			fastlock_release(&domain->poll_lock);
+			fastlock_release(&domain->base_trx_ctxt->poll_lock);
 			return read_count;
 		} else {
-			fastlock_release(&domain->poll_lock);
+			fastlock_release(&domain->base_trx_ctxt->poll_lock);
 			return psmx2_errno(err);
 		}
 	}
@@ -656,8 +656,8 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		if (ret > 0)
 			return ret;
 
-		if (cq_priv->domain->am_initialized)
-			psmx2_am_progress(cq_priv->domain);
+		if (cq_priv->domain->base_trx_ctxt->am_initialized)
+			psmx2_am_progress(cq_priv->domain->base_trx_ctxt);
 	}
 
 	if (cq_priv->pending_error)

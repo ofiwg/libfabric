@@ -137,7 +137,7 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 		PSMX2_CTXT_SIZE(fi_context) = len;
 	}
 
-	err = psm2_mq_irecv2(ep_priv->domain->psm2_mq, psm2_epaddr,
+	err = psm2_mq_irecv2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, recv_flag, buf, len,
 			     (void *)fi_context, &psm2_req);
 	if (err != PSM2_OK)
@@ -279,7 +279,7 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		if (len > PSMX2_INJECT_SIZE)
 			return -FI_EMSGSIZE;
 
-		err = psm2_mq_send2(ep_priv->domain->psm2_mq, psm2_epaddr,
+		err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
 				    send_flag, &psm2_tag, buf, len);
 
 		if (err != PSM2_OK)
@@ -318,7 +318,7 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	}
 
-	err = psm2_mq_isend2(ep_priv->domain->psm2_mq, psm2_epaddr,
+	err = psm2_mq_isend2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
 			     send_flag, &psm2_tag, buf, len,
 			     (void *)fi_context, &psm2_req);
 
@@ -455,7 +455,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 			return -FI_EMSGSIZE;
 		}
 
-		err = psm2_mq_send2(ep_priv->domain->psm2_mq, psm2_epaddr,
+		err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
 				    send_flag, &psm2_tag, req->buf, len);
 
 		free(req);
@@ -493,7 +493,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 	PSMX2_CTXT_USER(fi_context) = req;
 	PSMX2_CTXT_EP(fi_context) = ep_priv;
 
-	err = psm2_mq_isend2(ep_priv->domain->psm2_mq, psm2_epaddr,
+	err = psm2_mq_isend2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
 			     send_flag, &psm2_tag, req->buf, len,
 			     (void *)fi_context, &psm2_req);
 
@@ -514,7 +514,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 		PSMX2_SET_TAG(psm2_tag, data, tag32);
 		for (i=0; i<count; i++) {
 			if (iov[i].iov_len) {
-				err = psm2_mq_isend2(ep_priv->domain->psm2_mq,
+				err = psm2_mq_isend2(ep_priv->trx_ctxt->psm2_mq,
 						     psm2_epaddr, send_flag, &psm2_tag,
 						     iov[i].iov_base, iov[i].iov_len,
 						     (void *)fi_context, &psm2_req);
@@ -594,7 +594,7 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	for (i=0; i<rep->iov_info.count; i++) {
 		if (recv_len) {
 			len = MIN(recv_len, rep->iov_info.len[i]);
-			err = psm2_mq_irecv2(ep->domain->psm2_mq,
+			err = psm2_mq_irecv2(ep->trx_ctxt->psm2_mq,
 					     psm2_status->msg_peer,
 					     &psm2_tag, &psm2_tagsel,
 					     0/*flag*/, recv_buf, len,
@@ -607,7 +607,7 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 			recv_len -= len;
 		} else {
 			/* recv buffer full, pust empty recvs */
-			err = psm2_mq_irecv2(ep->domain->psm2_mq,
+			err = psm2_mq_irecv2(ep->trx_ctxt->psm2_mq,
 					     psm2_status->msg_peer,
 					     &psm2_tag, &psm2_tagsel,
 					     0/*flag*/, NULL, 0,

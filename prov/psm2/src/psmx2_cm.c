@@ -47,7 +47,7 @@ static int psmx2_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	}
 
 	memset(epname, 0, sizeof(*epname));
-	epname->epid = ep->domain->psm2_epid;
+	epname->epid = ep->trx_ctxt->psm2_epid;
 	epname->vlane = ep->vlane;
 	*addrlen = sizeof(struct psmx2_ep_name);
 

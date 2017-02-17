@@ -92,7 +92,7 @@ int psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
 		}
 	}
 
-        err = psm2_ep_connect(domain->psm2_ep, 1, &epid, NULL, &errors,
+        err = psm2_ep_connect(domain->base_trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
 			      epaddr, psmx2_conn_timeout(1));
         if (err != PSM2_OK)
                 return psmx2_errno(err);
@@ -182,7 +182,7 @@ static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 		}
 	}
 
-	psm2_ep_connect(av->domain->psm2_ep, count, epids, mask, errors,
+	psm2_ep_connect(av->domain->base_trx_ctxt->psm2_ep, count, epids, mask, errors,
 			epaddrs, psmx2_conn_timeout(count));
 
 	for (i=0; i<count; i++){

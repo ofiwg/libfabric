@@ -331,26 +331,12 @@ struct psmx2_fid_fabric {
 	pthread_t		name_server_thread;
 };
 
-struct psmx2_fid_domain {
-	struct util_domain	util_domain;
-	struct psmx2_fid_fabric	*fabric;
+struct psmx2_trx_ctxt {
 	psm2_ep_t		psm2_ep;
 	psm2_epid_t		psm2_epid;
 	psm2_mq_t		psm2_mq;
-	uint64_t		mode;
-	uint64_t		caps;
-
-	enum fi_mr_mode		mr_mode;
-	fastlock_t		mr_lock;
-	uint64_t		mr_reserved_key;
-	RbtHandle		mr_map;
-
-	fastlock_t		vl_lock;
-	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
-	int			vl_alloc;
-	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
-
 	int			am_initialized;
+	struct psm2_am_parameters psm2_am_param;
 
 	/* incoming req queue for AM based RMA request. */
 	struct psmx2_req_queue	rma_queue;
@@ -362,6 +348,36 @@ struct psmx2_fid_domain {
 	 * interleaved in a multithreaded environment.
 	 */
 	fastlock_t		poll_lock;
+
+	struct slist_entry	entry;
+};
+
+struct psmx2_fid_domain {
+	struct util_domain	util_domain;
+	struct psmx2_fid_fabric	*fabric;
+	uint64_t		mode;
+	uint64_t		caps;
+
+	enum fi_mr_mode		mr_mode;
+	fastlock_t		mr_lock;
+	uint64_t		mr_reserved_key;
+	RbtHandle		mr_map;
+
+	/*
+	 * A list of all opened hw contexts, including the base hw context.
+	 * The list is used for making progress.
+	 */
+	struct slist		trx_ctxt_list;
+
+	/*
+	 * The base hw context is multiplexed for all regular endpoints via
+	 * logical "virtual lanes".
+	 */
+	struct psmx2_trx_ctxt	*base_trx_ctxt;
+	fastlock_t		vl_lock;
+	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
+	int			vl_alloc;
+	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
 
 	int			progress_thread_enabled;
 	pthread_t		progress_thread;
@@ -675,6 +691,7 @@ struct psmx2_fid_av {
 
 struct psmx2_fid_ep {
 	struct fid_ep		ep;
+	struct psmx2_trx_ctxt	*trx_ctxt;
 	struct psmx2_fid_ep	*base_ep;
 	struct psmx2_fid_domain	*domain;
 	struct psmx2_fid_av	*av;
@@ -749,7 +766,6 @@ extern struct fi_ops_msg	psmx2_msg_ops;
 extern struct fi_ops_msg	psmx2_msg2_ops;
 extern struct fi_ops_rma	psmx2_rma_ops;
 extern struct fi_ops_atomic	psmx2_atomic_ops;
-extern struct psm2_am_parameters psmx2_am_param;
 extern struct psmx2_env		psmx2_env;
 extern struct psmx2_fid_fabric	*psmx2_active_fabric;
 
@@ -820,14 +836,14 @@ struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_fid_domain *domain,
 			struct psmx2_cq_event *event, int count, fi_addr_t *src_addr);
 
-int	psmx2_am_init(struct psmx2_fid_domain *domain);
-int	psmx2_am_fini(struct psmx2_fid_domain *domain);
-int	psmx2_am_progress(struct psmx2_fid_domain *domain);
-int	psmx2_am_process_send(struct psmx2_fid_domain *domain,
+int	psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt);
+void	psmx2_am_fini(struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_process_send(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_am_request *req);
-int	psmx2_am_process_rma(struct psmx2_fid_domain *domain,
+int	psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_am_request *req);
-int	psmx2_process_trigger(struct psmx2_fid_domain *domain,
+int	psmx2_process_trigger(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_trigger *trigger);
 int	psmx2_am_rma_handler(psm2_am_token_t token,
 				psm2_amarg_t *args, int nargs, void *src, uint32_t len);
@@ -873,8 +889,8 @@ static inline void psmx2_progress(struct psmx2_fid_domain *domain)
 {
 	if (domain) {
 		psmx2_cq_poll_mq(NULL, domain, NULL, 0, NULL);
-		if (domain->am_initialized)
-			psmx2_am_progress(domain);
+		if (domain->base_trx_ctxt->am_initialized)
+			psmx2_am_progress(domain->base_trx_ctxt);
 	}
 }
 

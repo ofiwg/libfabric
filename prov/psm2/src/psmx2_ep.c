@@ -248,7 +248,7 @@ static int psmx2_ep_close(fid_t fid)
 	if (ofi_atomic_get32(&ep->ref))
 		return -FI_EBUSY;
 
-	ep_name.epid = ep->domain->psm2_epid;
+	ep_name.epid = ep->trx_ctxt->psm2_epid;
 	ep_name.vlane = ep->vlane;
 	psmx2_ns_del_local_name(ep->service, &ep_name);
 
@@ -537,6 +537,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep.ops = &psmx2_ep_ops;
 	ep_priv->ep.cm = &psmx2_cm_ops;
 	ep_priv->domain = domain_priv;
+	ep_priv->trx_ctxt = domain_priv->base_trx_ctxt;
 	ep_priv->vlane = vlane;
 	ofi_atomic_initialize32(&ep_priv->ref, 0);
 
@@ -593,7 +594,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->service = ((getpid() & 0x7FFF) << 16) +
 				   ((uintptr_t)ep_priv & 0xFFFF);
 
-	ep_name.epid = domain_priv->psm2_epid;
+	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
 	ep_name.vlane = ep_priv->vlane;
 	psmx2_ns_add_local_name(ep_priv->service, &ep_name);
 

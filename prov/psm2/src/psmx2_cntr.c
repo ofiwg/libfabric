@@ -32,7 +32,7 @@
 
 #include "psmx2.h"
 
-int psmx2_process_trigger(struct psmx2_fid_domain *domain,
+int psmx2_process_trigger(struct psmx2_trx_ctxt *trx_ctxt,
 			  struct psmx2_trigger *trigger)
 {
 	switch (trigger->op) {
@@ -225,13 +225,13 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 
 		cntr->trigger = trigger->next;
 
-		if (domain->am_initialized) {
-			fastlock_acquire(&domain->trigger_queue.lock);
+		if (domain->base_trx_ctxt->am_initialized) {
+			fastlock_acquire(&domain->base_trx_ctxt->trigger_queue.lock);
 			slist_insert_tail(&trigger->list_entry,
-					  &domain->trigger_queue.list);
-			fastlock_release(&domain->trigger_queue.lock);
+					  &domain->base_trx_ctxt->trigger_queue.list);
+			fastlock_release(&domain->base_trx_ctxt->trigger_queue.lock);
 		} else {
-			psmx2_process_trigger(domain, trigger);
+			psmx2_process_trigger(domain->base_trx_ctxt, trigger);
 		}
 
 		trigger = cntr->trigger;
