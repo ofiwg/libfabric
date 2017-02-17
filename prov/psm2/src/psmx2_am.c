@@ -32,7 +32,7 @@
 
 #include "psmx2.h"
 
-#define PSMX2_AM_MAX_TRX_CTXT 80
+#define PSMX2_AM_MAX_TRX_CTXT PSMX2_MAX_TRX_CTXT
 static struct {
 	struct psmx2_trx_ctxt *trx_ctxts[PSMX2_AM_MAX_TRX_CTXT];
 	psm2_am_handler_fn_t rma_handlers[PSMX2_AM_MAX_TRX_CTXT];

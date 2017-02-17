@@ -90,6 +90,7 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
 
+#define PSMX2_MAX_TRX_CTXT	(80)
 #define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX2_INJECT_SIZE	(64)
 #define PSMX2_MSG_ORDER		FI_ORDER_SAS
@@ -382,13 +383,24 @@ struct psmx2_fid_domain {
 	int			vl_alloc;
 	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
 
+	ofi_atomic32_t		sep_cnt;
+	fastlock_t		sep_lock;
+	struct dlist_entry	sep_list;
+
 	int			progress_thread_enabled;
 	pthread_t		progress_thread;
 };
 
+#define PSMX2_EP_REGULAR	0
+#define PSMX2_EP_SCALABLE	1
+
 struct psmx2_ep_name {
 	psm2_epid_t		epid;
-	uint8_t			vlane;
+	union {
+		uint8_t		vlane;
+		uint8_t		sep_id;
+	};
+	uint8_t			type;
 };
 
 #define PSMX2_DEFAULT_UNIT	(-1)
@@ -694,9 +706,12 @@ struct psmx2_fid_av {
 
 struct psmx2_fid_ep {
 	struct fid_ep		ep;
+	int			type;
+	struct psmx2_fid_domain	*domain;
+	/* above fields are common with sep */
+
 	struct psmx2_trx_ctxt	*trx_ctxt;
 	struct psmx2_fid_ep	*base_ep;
-	struct psmx2_fid_domain	*domain;
 	struct psmx2_fid_av	*av;
 	struct psmx2_fid_cq	*send_cq;
 	struct psmx2_fid_cq	*recv_cq;
@@ -721,6 +736,27 @@ struct psmx2_fid_ep {
 	size_t			min_multi_recv;
 	uint32_t		iov_seq_num;
 	int			service;
+};
+
+struct psmx2_sep_ctxt {
+	struct psmx2_trx_ctxt	*trx_ctxt;
+	struct psmx2_fid_ep	*ep;
+};
+
+struct psmx2_fid_sep {
+	struct fid_ep		ep;
+	int			type;
+	struct psmx2_fid_domain	*domain;
+	/* above fields are common with regular ep */
+
+	struct dlist_entry	entry;
+
+	ofi_atomic32_t		ref;
+	int			service;
+	uint8_t			id;
+	uint8_t			enabled;
+	size_t			ctxt_cnt;
+	struct psmx2_sep_ctxt	ctxts[]; /* must be last element */
 };
 
 struct psmx2_fid_stx {
@@ -813,6 +849,10 @@ static inline void psmx2_domain_release(struct psmx2_fid_domain *domain)
 
 int	psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap);
 int	psmx2_domain_enable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep *ep);
+
+void	psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt);
+struct	psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
+					     struct psmx2_src_name *src_addr);
 
 void	psmx2_ns_start_server(struct psmx2_fid_fabric *fabric);
 void	psmx2_ns_stop_server(struct psmx2_fid_fabric *fabric);

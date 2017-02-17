@@ -36,6 +36,9 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	int err;
 
+	if (!trx_ctxt)
+		return;
+
 	if (trx_ctxt->am_initialized)
 		psmx2_am_fini(trx_ctxt);
 
@@ -289,6 +292,8 @@ static int psmx2_domain_close(fid_t fid)
 	if (domain->progress_thread_enabled)
 		psmx2_domain_stop_progress(domain);
 
+	fastlock_destroy(&domain->sep_lock);
+
 	fastlock_destroy(&domain->vl_lock);
 	rbtDelete(domain->mr_map);
 	fastlock_destroy(&domain->mr_lock);
@@ -363,6 +368,10 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	}
 	memset(domain->vl_map, 0, sizeof(domain->vl_map));
 	domain->vl_alloc = 0;
+
+	ofi_atomic_initialize32(&domain->sep_cnt, 0);
+	fastlock_init(&domain->sep_lock);
+	dlist_init(&domain->sep_list);
 
 	/* Set active domain before psmx2_domain_enable_ep() installs the
 	 * AM handlers to ensure that psmx2_active_fabric->active_domain
