@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -35,6 +35,7 @@
 
 #include "verbs_rdm.h"
 
+
 static uint64_t fi_ibv_rdm_cntr_read(struct fid_cntr *cntr_fid)
 {
 	struct fi_ibv_rdm_cntr *cntr =
@@ -65,6 +66,22 @@ static int fi_ibv_rdm_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
 	return 0;
 }
 
+static int fi_ibv_rdm_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct fi_ibv_rdm_cntr *cntr =
+		container_of(cntr_fid, struct fi_ibv_rdm_cntr, fid);
+	cntr->err_count += value;
+	return 0;
+}
+
+static int fi_ibv_rdm_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct fi_ibv_rdm_cntr *cntr =
+		container_of(cntr_fid, struct fi_ibv_rdm_cntr, fid);
+	cntr->err_count = value;
+	return 0;
+}
+
 static struct fi_ops_cntr fi_ibv_rdm_cntr_ops = {
 	.size = sizeof(struct fi_ops_cntr),
 	.read = fi_ibv_rdm_cntr_read,
@@ -72,6 +89,8 @@ static struct fi_ops_cntr fi_ibv_rdm_cntr_ops = {
 	.add = fi_ibv_rdm_cntr_add,
 	.set = fi_ibv_rdm_cntr_set,
 	.wait = fi_no_cntr_wait,
+	.adderr = fi_ibv_rdm_cntr_adderr,
+	.seterr = fi_ibv_rdm_cntr_seterr,
 };
 
 static int fi_ibv_rdm_cntr_close(struct fid *fid)
