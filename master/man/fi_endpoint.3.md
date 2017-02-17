@@ -766,7 +766,8 @@ details.
 ## auth_keylen - Authorization Key Length
 
 The length of the authorization key.  This field will be 0 if
-authorization keys are not available or used.
+authorization keys are not available or used.  This field is ignored 
+unless the fabric is opened with API version 1.5 or greater.
 
 ## auth_key - Authorization Key
 
@@ -776,7 +777,9 @@ to limit communication between endpoints.  Only peer endpoints that are
 programmed to use the same authorization key may communicate.
 Authorization keys are often used to implement job keys, to ensure
 that processes running in different jobs do not accidentally
-cross traffic.
+cross traffic.  The domain authorization key will be used if auth_keylen 
+is set to 0.  This field is ignored unless the fabric is opened with API
+version 1.5 or greater. 
 
 # TRANSMIT CONTEXT ATTRIBUTES
 

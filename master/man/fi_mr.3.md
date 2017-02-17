@@ -439,8 +439,9 @@ version 1.5 or greater.
 Indicates the key to associate with this memory registration.  Authorization
 keys are used to limit communication between endpoints.  Only peer endpoints
 that are programmed to use the same authorization key may access the memory
-region.  This field is ignored unless the fabric is opened with API version 1.5
-or greater.
+region.  The domain authorization key will be used if the auth_keylen 
+provided is 0.  This field is ignored unless the fabric is opened with API 
+version 1.5 or greater.
 
 # NOTES
 
