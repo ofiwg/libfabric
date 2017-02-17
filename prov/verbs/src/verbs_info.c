@@ -89,6 +89,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.rx_ctx_cnt		= 1024,
 	.max_ep_tx_ctx		= 1,
 	.max_ep_rx_ctx		= 1,
+	.mr_iov_limit		= 1,
 };
 
 const struct fi_ep_attr verbs_ep_attr = {

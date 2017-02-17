@@ -274,6 +274,7 @@ int fi_bgq_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 
 	attr->max_ep_stx_ctx	= attr->max_ep_tx_ctx;
 	attr->max_ep_srx_ctx	= 0;	/* TODO - reserve some mu reception fifos for use as shared receive context ... how to address? */
+	attr->mr_iov_limit	= 1;
 
 	*domain_attr = attr;
 
@@ -328,6 +329,7 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 			if (hints->max_ep_rx_ctx)	domain_attr->max_ep_rx_ctx = hints->max_ep_rx_ctx;
 			if (hints->max_ep_stx_ctx)	domain_attr->max_ep_stx_ctx = hints->max_ep_stx_ctx;
 			if (hints->max_ep_srx_ctx)	domain_attr->max_ep_srx_ctx = hints->max_ep_srx_ctx;
+			if (hints->mr_iov_limit)	domain_attr->mr_iov_limit = hints->mr_iov_limit;
 		}
 	}
 

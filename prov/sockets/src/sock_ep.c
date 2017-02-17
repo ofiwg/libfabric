@@ -1434,6 +1434,8 @@ static void sock_set_domain_attr(void *src_addr, const struct fi_domain_attr *hi
 		attr->max_ep_rx_ctx = sock_domain_attr.max_ep_rx_ctx;
 	if (attr->cntr_cnt == 0)
 		attr->cntr_cnt = sock_domain_attr.cntr_cnt;
+	if (attr->mr_iov_limit == 0)
+		attr->mr_iov_limit = sock_domain_attr.mr_iov_limit;
 
 	attr->mr_key_size = sock_domain_attr.mr_key_size;
 	attr->cq_data_size = sock_domain_attr.cq_data_size;
