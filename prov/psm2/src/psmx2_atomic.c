@@ -50,22 +50,15 @@
  */
 
 static fastlock_t psmx2_atomic_lock;
-static int psmx2_atomic_initialized = 0;
 
-void psmx2_atomic_init(void)
+void psmx2_atomic_global_init(void)
 {
-	if (!psmx2_atomic_initialized) {
-		fastlock_init(&psmx2_atomic_lock);
-		psmx2_atomic_initialized = 1;
-	}
+	fastlock_init(&psmx2_atomic_lock);
 }
 
-void psmx2_atomic_fini(void)
+void psmx2_atomic_global_fini(void)
 {
-	if (psmx2_atomic_initialized) {
-		fastlock_destroy(&psmx2_atomic_lock);
-		psmx2_atomic_initialized = 0;
-	}
+	fastlock_destroy(&psmx2_atomic_lock);
 }
 
 static inline void psmx2_ioc_read(const struct fi_ioc *ioc, size_t count,
@@ -422,9 +415,9 @@ static void psmx2_am_atomic_completion(void *buf)
 		free(buf);
 }
 
-int psmx2_am_atomic_handler(psm2_am_token_t token,
-			    psm2_amarg_t *args, int nargs, void *src,
-			    uint32_t len)
+int psmx2_am_atomic_handler_ext(psm2_am_token_t token,
+				psm2_amarg_t *args, int nargs, void *src,
+				uint32_t len, struct psmx2_trx_ctxt *trx_ctxt)
 {
 	psm2_amarg_t rep_args[8];
 	int count;
@@ -448,10 +441,15 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 	psm2_am_get_source(token, &epaddr);
 
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
-	vlane = PSMX2_AM_GET_DST(args[0].u32w0);
-
 	domain = psmx2_active_fabric->active_domain;
-	target_ep = domain->eps[vlane];
+
+	if (trx_ctxt->ep) {
+		vlane = 0;
+		target_ep = trx_ctxt->ep;
+	} else {
+		vlane = PSMX2_AM_GET_DST(args[0].u32w0);
+		target_ep = domain->eps[vlane];
+	}
 
 	switch (cmd) {
 	case PSMX2_AM_REQ_ATOMIC_WRITE:

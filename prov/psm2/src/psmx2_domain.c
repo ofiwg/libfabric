@@ -297,7 +297,8 @@ static int psmx2_domain_close(fid_t fid)
 	domain->fabric->active_domain = NULL;
 	free(domain);
 
-	psmx2_atomic_fini();
+	psmx2_atomic_global_fini();
+	psmx2_am_global_fini();
 	return 0;
 }
 
@@ -331,7 +332,8 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 {
 	int err;
 
-	psmx2_atomic_init();
+	psmx2_am_global_init();
+	psmx2_atomic_global_init();
 
 	domain->base_trx_ctxt = psmx2_trx_ctxt_alloc(domain, src_addr);
 	if (!domain->base_trx_ctxt)

@@ -98,8 +98,9 @@ static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
  *	args[2].u64	offset
  */
 
-int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
-			 int nargs, void *src, uint32_t len)
+int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
+			     int nargs, void *src, uint32_t len,
+			     struct psmx2_trx_ctxt *trx_ctxt)
 {
 	psm2_amarg_t rep_args[8];
 	uint8_t *rma_addr;
@@ -120,10 +121,15 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	psm2_am_get_source(token, &epaddr);
 
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
-	dst_vl = PSMX2_AM_GET_DST(args[0].u32w0);
-
 	domain = psmx2_active_fabric->active_domain;
-	ep = domain->eps[dst_vl];
+
+	if (trx_ctxt->ep) {
+		dst_vl = 0;
+		ep = trx_ctxt->ep;
+	} else {
+		dst_vl = PSMX2_AM_GET_DST(args[0].u32w0);
+		ep = domain->eps[dst_vl];
+	}
 
 	eom = args[0].u32w0 & PSMX2_AM_EOM;
 	has_data = args[0].u32w0 & PSMX2_AM_DATA;

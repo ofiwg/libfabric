@@ -338,6 +338,9 @@ struct psmx2_trx_ctxt {
 	int			am_initialized;
 	struct psm2_am_parameters psm2_am_param;
 
+	/* ep bound to this tx/rx context, NULL if multiplexed */
+	struct psmx2_fid_ep	*ep;
+
 	/* incoming req queue for AM based RMA request. */
 	struct psmx2_req_queue	rma_queue;
 
@@ -836,6 +839,8 @@ struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_fid_domain *domain,
 			struct psmx2_cq_event *event, int count, fi_addr_t *src_addr);
 
+void	psmx2_am_global_init(void);
+void	psmx2_am_global_fini(void);
 int	psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt);
 void	psmx2_am_fini(struct psmx2_trx_ctxt *trx_ctxt);
 int	psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt);
@@ -845,12 +850,14 @@ int	psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_am_request *req);
 int	psmx2_process_trigger(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_trigger *trigger);
-int	psmx2_am_rma_handler(psm2_am_token_t token,
-				psm2_amarg_t *args, int nargs, void *src, uint32_t len);
-int	psmx2_am_atomic_handler(psm2_am_token_t token,
-				psm2_amarg_t *args, int nargs, void *src, uint32_t len);
-void	psmx2_atomic_init(void);
-void	psmx2_atomic_fini(void);
+int	psmx2_am_rma_handler_ext(psm2_am_token_t token,
+				 psm2_amarg_t *args, int nargs, void *src, uint32_t len,
+				 struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_atomic_handler_ext(psm2_am_token_t token,
+				    psm2_amarg_t *args, int nargs, void *src, uint32_t len,
+				    struct psmx2_trx_ctxt *trx_ctxt);
+void	psmx2_atomic_global_init(void);
+void	psmx2_atomic_global_fini(void);
 
 void	psmx2_am_ack_rma(struct psmx2_am_request *req);
 
