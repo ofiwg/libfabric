@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2006-2016 Cisco Systems, Inc.  All rights reserved.
- * Copyright (c) 2013 Intel Corp., Inc.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corp., Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -120,10 +120,11 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 	 */
 	if (provider->fi_version < FI_VERSION(1, 3)) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
-		       "provider has unsupported FI version (provider %d.%d != libfabric %d.%d); ignoring\n",
-		       FI_MAJOR(provider->fi_version),
-		       FI_MINOR(provider->fi_version), FI_MAJOR_VERSION,
-		       FI_MINOR_VERSION);
+			"provider has unsupported FI version "
+			"(provider %d.%d != libfabric %d.%d); ignoring\n",
+			FI_MAJOR(provider->fi_version),
+			FI_MINOR(provider->fi_version), FI_MAJOR_VERSION,
+			FI_MINOR_VERSION);
 
 		ret = -FI_ENOSYS;
 		goto cleanup;
@@ -149,8 +150,8 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 		 */
 		if (FI_VERSION_GE(prov->provider->version, provider->version)) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
-			       "a newer %s provider was already loaded; ignoring this one\n",
-			       provider->name);
+				"a newer %s provider was already loaded; "
+				"ignoring this one\n", provider->name);
 			ret = -FI_EALREADY;
 			goto cleanup;
 		}
@@ -160,8 +161,9 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 		 * already-loaded one.
 		 */
 		FI_INFO(&core_prov, FI_LOG_CORE,
-		       "an older %s provider was already loaded; keeping this one and ignoring the older one\n",
-		       provider->name);
+			"an older %s provider was already loaded; "
+			"keeping this one and ignoring the older one\n",
+			provider->name);
 		cleanup_provider(prov->provider, prov->dlhandle);
 
 		prov->dlhandle = dlhandle;
@@ -375,7 +377,8 @@ void fi_ini(void)
 	dlclose(dlhandle);
 
 	fi_param_define(NULL, "provider_path", FI_PARAM_STRING,
-			"Search for providers in specific path (default: " PROVDLDIR ")");
+			"Search for providers in specific path (default: "
+			PROVDLDIR ")");
 	fi_param_get_str(NULL, "provider_path", &provdir);
 	if (!provdir)
 		provdir = PROVDLDIR;
@@ -660,7 +663,8 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 			goto fail;
 	}
 	if (info->domain_attr) {
-		dup->domain_attr = mem_dup(info->domain_attr, sizeof(*info->domain_attr));
+		dup->domain_attr = mem_dup(info->domain_attr,
+					   sizeof(*info->domain_attr));
 		if (dup->domain_attr == NULL)
 			goto fail;
 		if (info->domain_attr->name != NULL) {
@@ -670,7 +674,8 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 		}
 	}
 	if (info->fabric_attr) {
-		dup->fabric_attr = mem_dup(info->fabric_attr, sizeof(*info->fabric_attr));
+		dup->fabric_attr = mem_dup(info->fabric_attr,
+					   sizeof(*info->fabric_attr));
 		if (dup->fabric_attr == NULL)
 			goto fail;
 		dup->fabric_attr->name = NULL;
