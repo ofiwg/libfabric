@@ -89,6 +89,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.rx_ctx_cnt		= 1024,
 	.max_ep_tx_ctx		= 1,
 	.max_ep_rx_ctx		= 1,
+	.mr_iov_limit		= 1,
 };
 
 const struct fi_ep_attr verbs_ep_attr = {
@@ -559,6 +560,8 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	info->domain_attr->rx_ctx_cnt 		= MIN(info->domain_attr->rx_ctx_cnt, device_attr.max_qp);
 	info->domain_attr->max_ep_tx_ctx 	= device_attr.max_qp;
 	info->domain_attr->max_ep_rx_ctx 	= device_attr.max_qp;
+	if (info->ep_attr->type == FI_EP_RDM)
+		info->domain_attr->cntr_cnt	= device_attr.max_qp * 4;
 
 	ret = fi_ibv_get_qp_cap(ctx, &device_attr, info);
 	if (ret)

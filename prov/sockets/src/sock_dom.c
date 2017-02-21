@@ -58,6 +58,8 @@ const struct fi_domain_attr sock_domain_attr = {
 	.max_ep_rx_ctx = SOCK_EP_MAX_RX_CNT,
 	.max_ep_stx_ctx = SOCK_EP_MAX_EP_CNT,
 	.max_ep_srx_ctx = SOCK_EP_MAX_EP_CNT,
+	.cntr_cnt = SOCK_EP_MAX_CNTR_CNT,
+	.mr_iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
 int sock_verify_domain_attr(struct fi_domain_attr *attr)
@@ -148,6 +150,12 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 
 	if (attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
+		return -FI_ENODATA;
+
+	if (attr->cntr_cnt > sock_domain_attr.cntr_cnt)
+		return -FI_ENODATA;
+
+	if (attr->mr_iov_limit > sock_domain_attr.mr_iov_limit)
 		return -FI_ENODATA;
 
 	return 0;

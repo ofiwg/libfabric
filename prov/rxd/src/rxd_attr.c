@@ -76,7 +76,8 @@ struct fi_domain_attr rxd_domain_attr = {
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,
 	.max_ep_tx_ctx = 1,
-	.max_ep_rx_ctx = 1
+	.max_ep_rx_ctx = 1,
+	.mr_iov_limit = 1,
 };
 
 struct fi_fabric_attr rxd_fabric_attr = {

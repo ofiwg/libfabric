@@ -69,6 +69,7 @@
 #define SOCK_EP_MEM_TAG_FMT FI_TAG_GENERIC
 #define SOCK_EP_MAX_EP_CNT (128)
 #define SOCK_EP_MAX_CQ_CNT (32)
+#define SOCK_EP_MAX_CNTR_CNT (128)
 #define SOCK_EP_MAX_TX_CNT (16)
 #define SOCK_EP_MAX_RX_CNT (16)
 #define SOCK_EP_MAX_IOV_LIMIT (8)
@@ -1031,7 +1032,6 @@ int sock_eq_openwait(struct sock_eq *eq, const char *service);
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
 void sock_cntr_inc(struct sock_cntr *cntr);
-void sock_cntr_err_inc(struct sock_cntr *cntr);
 int sock_cntr_progress(struct sock_cntr *cntr);
 void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx);
 void sock_cntr_remove_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx);
