@@ -52,6 +52,8 @@
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
+static struct gnix_fid_ep *ep;
+static struct fid_ep *fid_ep;
 static struct fid_cq *rcq;
 static struct fi_info *hints;
 static struct fi_info *fi;
@@ -166,10 +168,34 @@ void cq_wait_mutex_cond_setup(void)
 	cq_create(FI_CQ_FORMAT_MSG, FI_WAIT_MUTEX_COND, 8);
 }
 
+void cq_notify_setup(void)
+{
+	int ret;
+
+	setup();
+
+	ret = fi_endpoint(dom, fi, &fid_ep, NULL);
+	cr_assert(!ret, "fi_endpoint");
+	cr_assert(fid_ep != NULL);
+
+	ep = container_of(fid_ep, struct gnix_fid_ep, ep_fid);
+	cr_assert(ep, "ep not allocated");
+
+	cq_create(FI_CQ_FORMAT_MSG, FI_WAIT_NONE, 0);
+}
+
 void cq_teardown(void)
 {
 	cr_assert(!fi_close(&rcq->fid), "failure in closing cq.");
 	teardown();
+}
+
+void cq_notify_teardown(void)
+{
+	cr_assert(!fi_close(&rcq->fid), "failure in closing cq.");
+	cr_assert(!fi_close(&fid_ep->fid), "failure in closing ep.");
+	teardown();
+
 }
 
 /*******************************************************************************
@@ -256,7 +282,7 @@ Test(insertion, single)
 
 	cr_assert(!cq_priv->events->item_list.head);
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	cr_assert(cq_priv->events->item_list.head);
 	cr_assert_eq(cq_priv->events->item_list.head,
@@ -278,12 +304,12 @@ Test(insertion, limit)
 	const size_t cq_size = cq_priv->attr.size;
 
 	for (size_t i = 0; i < cq_size; i++)
-		_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+		_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	cr_assert(cq_priv->events->item_list.head);
 	cr_assert(!cq_priv->events->free_list.head);
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	for (size_t i = 0; i < cq_size + 1; i++) {
 		ret = fi_cq_read(rcq, &entry, 1);
@@ -371,7 +397,7 @@ Test(reading, issue192)
 	char input_ctx = 'a';
 	struct fi_cq_entry entries[ENTRY_CNT];
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	ret = fi_cq_read(rcq, &entries, ENTRY_CNT);
 	cr_assert_eq(ret, 1);
@@ -444,7 +470,7 @@ static void cq_add_read(enum fi_cq_format format)
 
 	cr_assert(!cq_priv->events->item_list.head);
 
-	_gnix_cq_add_event(cq_priv, expected.op_context, expected.flags,
+	_gnix_cq_add_event(cq_priv, NULL, expected.op_context, expected.flags,
 			   expected.len, expected.buf, expected.data,
 			   expected.tag, 0x0);
 
@@ -483,7 +509,7 @@ static void cq_fill_test(enum fi_cq_format format)
 
 	cq_size = cq_priv->attr.size;
 	for (size_t i = 0; i < cq_size; i++) {
-		_gnix_cq_add_event(cq_priv, expected.op_context,
+		_gnix_cq_add_event(cq_priv, NULL, expected.op_context,
 				   expected.flags, expected.len,
 				   expected.buf, expected.data,
 				   expected.tag, 0x0);
@@ -492,7 +518,7 @@ static void cq_fill_test(enum fi_cq_format format)
 	cr_assert(cq_priv->events->item_list.head);
 	cr_assert(!cq_priv->events->free_list.head);
 
-	_gnix_cq_add_event(cq_priv, expected.op_context,
+	_gnix_cq_add_event(cq_priv, NULL, expected.op_context,
 			   expected.flags, 2 * expected.len, expected.buf,
 			   expected.data, expected.tag, 0x0);
 
@@ -552,7 +578,7 @@ static void cq_multi_read_test(enum fi_cq_format format)
 	cr_assert(!cq_priv->events->item_list.head);
 
 	for (size_t i = 0; i < count; i++) {
-		_gnix_cq_add_event(cq_priv, expected.op_context,
+		_gnix_cq_add_event(cq_priv, NULL, expected.op_context,
 				   expected.flags, expected.len,
 				   expected.buf, expected.data,
 				   expected.tag, 0x0);
@@ -671,7 +697,7 @@ Test(cq_msg, multi_sread, .init = cq_wait_unspec_setup, .disabled = false)
 	cr_assert_eq(ret, -FI_EAGAIN);
 
 	for (size_t i = 0; i < count; i++)
-		_gnix_cq_add_event(cq_priv, 0, (uint64_t) i, 0, 0, 0, 0, 0);
+		_gnix_cq_add_event(cq_priv, NULL, 0, (uint64_t) i, 0, 0, 0, 0, 0);
 
 	cr_assert(cq_priv->events->item_list.head);
 
@@ -822,4 +848,62 @@ Test(cq_wait_set, fd, .init = setup, .disabled = true)
 	cr_expect_eq(FI_SUCCESS, ret, "failure in closing waitset.");
 
 	teardown();
+}
+
+TestSuite(cq_notify_flags, .init = cq_notify_setup, .fini = cq_notify_teardown);
+
+void do_cq_notify(uint64_t op_flags)
+{
+	ssize_t ret;
+	struct fi_cq_msg_entry entry;
+	uint64_t expected_flags = ~((uint64_t) 0);
+
+	ep->op_flags = op_flags;
+
+	ret = _gnix_cq_add_event(cq_priv, ep, NULL, expected_flags, 0, NULL,
+				 0, 0, 0);
+	cr_assert(ret == FI_SUCCESS, "failing in _gnix_cq_add_event");
+
+	ret = fi_cq_read(rcq, &entry, 1);
+	cr_assert(ret == 1, "failing in fi_cq_read");
+
+	switch(op_flags) {
+		case 0:
+			break;
+		case FI_RMA_EVENT:
+			break;
+		case FI_NOTIFY_FLAGS_ONLY:
+			expected_flags &= (FI_REMOTE_CQ_DATA | FI_MULTI_RECV);
+			break;
+		case (FI_RMA_EVENT | FI_NOTIFY_FLAGS_ONLY):
+			expected_flags &= (FI_REMOTE_READ | FI_REMOTE_WRITE |
+					   FI_RMA | FI_REMOTE_CQ_DATA |
+					   FI_MULTI_RECV);
+			break;
+		default:
+			cr_assert(0, "invalid op flags");
+
+	}
+
+	cr_assert_eq(expected_flags, entry.flags, "unexpected cq entry flags");
+}
+
+Test(cq_notify_flags, notify_and_rma_event_unset)
+{
+	do_cq_notify(0);
+}
+
+Test(cq_notify_flags, notify_unset_and_rma_event_set)
+{
+	do_cq_notify(FI_RMA_EVENT);
+}
+
+Test(cq_notify_flags, notify_set_and_rma_event_unset)
+{
+	do_cq_notify(FI_NOTIFY_FLAGS_ONLY);
+}
+
+Test(cq_notify_flags, notify_set_and_rma_event_set)
+{
+	do_cq_notify(FI_NOTIFY_FLAGS_ONLY | FI_RMA_EVENT);
 }
