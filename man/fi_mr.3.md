@@ -34,6 +34,9 @@ fi_mr_unmap_key
 fi_mr_bind
 : Associate a registered memory region with a completion counter.
 
+fi_mr_refresh
+: Updates the memory pages associated with a memory region.
+
 # SYNOPSIS
 
 ```c
@@ -65,6 +68,9 @@ int fi_mr_map_raw(struct fid_domain *domain, uint64_t base_addr,
 int fi_mr_unmap_key(struct fid_domain *domain, uint64_t key);
 
 int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags);
+
+int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size, count,
+    uint64_t flags)
 ```
 
 # ARGUMENTS
@@ -209,7 +215,7 @@ The following apply to memory registration.
   informs the provider that all necessary physical pages now back the
   region.  The notification is necessary for providers that cannot
   hook directly into the operating system page tables or memory management
-  unit.  TODO: Define notification mechanism and data.
+  unit.  See fi_mr_refresh() for notification details.
 
 *Basic Memory Registration*
 : Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit
@@ -350,6 +356,27 @@ memory region is based on the bitwise OR of the following flags.
   modifies the memory region.  Use of this flag requires that the endpoint
   through which the MR is accessed be created with the FI_RMA_EVENT
   capability.
+
+## fi_mr_refresh
+
+The use of this call is required to notify the provider of any change
+to the physical pages backing a registered memory region if the
+FI_MR_MMU_NOTIFY mode bit has been set.  This call informs the provider
+that the page table entries associated with the region may have been
+modified, and the provider should verify and update the registered
+region accordingly.  The iov parameter is optional and may be used
+to specify which portions of the registered region requires updating.
+If provider, providers are only guaranteed to update the specified
+address ranges.
+
+The refresh operation has the effect of disabling and re-enabling
+access to the registered region.  Any operations from peers that attempt
+to access the region will fail while the refresh is occurring.
+Additionally, attempts to access the region by the local process
+through libfabric APIs may result in a page fault or other fatal operation.
+
+The fi_mr_refresh call is only needed if the physical pages might have
+been updated after the memory region was created.
 
 # MEMORY REGION ATTRIBUTES
 
