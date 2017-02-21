@@ -50,6 +50,7 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 #include "gnix.h"
+#include "gnix_mr.h"
 
 #define CHECK_HOOK(name, args...) \
 	({ \
@@ -308,6 +309,9 @@ static int __simple_post_dereg_hook(const char *func, int line,
 Test(mr_internal_bare, basic_init)
 {
 	int ret;
+
+	// ensure that the memory registration key is the right size
+	cr_assert_eq(sizeof(gnix_mr_key_t), 8);
 
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,

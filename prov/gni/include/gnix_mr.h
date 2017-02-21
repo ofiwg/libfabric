@@ -105,10 +105,8 @@ struct gnix_fid_mem_desc {
 typedef struct gnix_mr_key {
 	union {
 		struct {
-			struct {
-				uint64_t pfn: GNIX_MR_PFN_BITS;
-				uint64_t mdd: GNIX_MR_MDD_BITS;
-			};
+			uint64_t pfn: GNIX_MR_PFN_BITS;
+			uint64_t mdd: GNIX_MR_MDD_BITS;
 			uint64_t format : GNIX_MR_FMT_BITS;
 			uint64_t flags : GNIX_MR_FLAG_BITS;
 			uint64_t padding: GNIX_MR_PADDING_LENGTH;
