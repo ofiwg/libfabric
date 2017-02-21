@@ -400,7 +400,8 @@ struct gnix_fid_domain {
 	enum fi_threading thread_model;
 	struct gnix_reference ref_cnt;
 	gnix_mr_cache_attr_t mr_cache_attr;
-	gnix_mr_cache_t *mr_cache;
+	gnix_mr_cache_t *mr_cache_rw;
+	gnix_mr_cache_t *mr_cache_ro;
 	fastlock_t mr_cache_lock;
 	struct gnix_mr_ops *mr_ops;
 	int mr_cache_type;
