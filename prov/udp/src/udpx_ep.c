@@ -76,6 +76,7 @@ static struct fi_ops_cm udpx_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 int udpx_getopt(fid_t fid, int level, int optname,

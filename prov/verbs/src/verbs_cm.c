@@ -227,6 +227,7 @@ static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.accept = fi_ibv_msg_ep_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_ibv_msg_ep_shutdown,
+	.join = fi_no_join,
 };
 
 struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep)
@@ -308,6 +309,7 @@ static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_ibv_msg_ep_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep)

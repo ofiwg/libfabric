@@ -159,7 +159,8 @@ struct fi_ops_cm gnix_ep_ops_cm = {
 	.listen = fi_no_listen,
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown
+	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 /******************************************************************************
@@ -609,6 +610,7 @@ struct fi_ops_cm gnix_ep_msg_ops_cm = {
 	.accept = gnix_accept,
 	.reject = fi_no_reject,
 	.shutdown = gnix_shutdown,
+	.join = fi_no_join,
 };
 
 /******************************************************************************
@@ -1014,5 +1016,6 @@ struct fi_ops_cm gnix_pep_ops_cm = {
 	.accept = fi_no_accept,
 	.reject = gnix_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 

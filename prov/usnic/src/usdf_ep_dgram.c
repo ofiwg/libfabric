@@ -359,6 +359,7 @@ static struct fi_ops_cm usdf_cm_dgram_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 /*******************************************************************************

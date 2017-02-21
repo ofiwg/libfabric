@@ -742,6 +742,7 @@ struct fi_ops_cm sock_ep_cm_ops = {
 	.accept = sock_ep_cm_accept,
 	.reject = fi_no_reject,
 	.shutdown = sock_ep_cm_shutdown,
+	.join = fi_no_join,
 };
 
 static int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -1109,7 +1110,9 @@ static struct fi_ops_cm sock_pep_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = sock_pep_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
+
 
 int sock_pep_getopt(fid_t fid, int level, int optname,
 		      void *optval, size_t *optlen)

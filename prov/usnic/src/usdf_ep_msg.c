@@ -830,6 +830,7 @@ static struct fi_ops_cm usdf_cm_msg_ops = {
 	.accept = usdf_cm_msg_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 static struct fi_ops_msg usdf_msg_ops = {

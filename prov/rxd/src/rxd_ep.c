@@ -1625,6 +1625,7 @@ struct fi_ops_cm rxd_ep_cm = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 static int rxd_buf_region_alloc_hndlr(void *pool_ctx, void *addr, size_t len,
