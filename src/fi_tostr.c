@@ -425,6 +425,7 @@ static void fi_tostr_mr_mode(char *buf, int mr_mode)
 	IFFLAGSTR(mr_mode, FI_MR_ALLOCATED);
 	IFFLAGSTR(mr_mode, FI_MR_PROV_KEY);
 	IFFLAGSTR(mr_mode, FI_MR_MMU_NOTIFY);
+	IFFLAGSTR(mr_mode, FI_MR_RMA_EVENT);
 
 	fi_remove_comma(buf);
 }

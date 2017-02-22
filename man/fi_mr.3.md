@@ -37,6 +37,9 @@ fi_mr_bind
 fi_mr_refresh
 : Updates the memory pages associated with a memory region.
 
+fi_mr_enable
+: Enables a memory region for use.
+
 # SYNOPSIS
 
 ```c
@@ -71,6 +74,8 @@ int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags);
 
 int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size, count,
     uint64_t flags)
+
+int fi_mr_enable(struct fid_mr *mr);
 ```
 
 # ARGUMENTS
@@ -216,6 +221,21 @@ The following apply to memory registration.
   region.  The notification is necessary for providers that cannot
   hook directly into the operating system page tables or memory management
   unit.  See fi_mr_refresh() for notification details.
+
+*FI_MR_RMA_EVENT*
+: This mode bit indicates that the provider must configure memory
+  regions that are associated with RMA events prior to their use.  This
+  includes all memory regions that are associated with completion counters.
+  When set, applications must indicate if a memory region will be
+  associated with a completion counter as part of the region's creation.
+  This is done by passing in the FI_RMA_EVENT flag to the memory
+  registration call.
+
+  Such memory regions will be created in a disabled state and must be
+  associated with all completion counters prior to being enabled.  To
+  enable a memory region, the application must call fi_mr_enable().
+  After calling fi_mr_enable(), no further resource bindings may be
+  made to the memory region.
 
 *Basic Memory Registration*
 : Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit
@@ -378,6 +398,14 @@ through libfabric APIs may result in a page fault or other fatal operation.
 The fi_mr_refresh call is only needed if the physical pages might have
 been updated after the memory region was created.
 
+## fi_mr_enable
+
+The enable call is used with memory registration associated with the
+FI_MR_RMA_EVENT mode bit.  Memory regions created in the disabled state
+must be explicitly enabled after being fully configured by the
+application.  Any resource bindings to the MR must be done prior
+to enabling the MR.
+
 # MEMORY REGION ATTRIBUTES
 
 Memory regions are created using the following attributes.  The struct
@@ -495,7 +523,12 @@ desirable for highly scalable apps.
 
 # FLAGS
 
-Flags are reserved for future use and must be 0.
+The follow flag may be specified to any memory registration call.
+
+*FI_RMA_EVENT*
+: This flag indicates that the specified memory region will be
+  associated with a completion counter used to count RMA operations
+  that access the MR.
 
 # RETURN VALUES
 

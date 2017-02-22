@@ -192,6 +192,8 @@ struct fi_ops_domain {
 			struct fi_atomic_attr *attr, uint64_t flags);
 };
 
+/* Memory registration flags */
+/* #define FI_RMA_EVENT		(1ULL << 56) */
 
 struct fi_ops_mr {
 	size_t	size;
@@ -346,6 +348,11 @@ fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size_t count,
 	modify.attr.mr_iov = iov;
 	modify.attr.iov_count = count;
 	return mr->fid.ops->control(&mr->fid, FI_REFRESH, &modify);
+}
+
+static inline int fi_mr_enable(struct fid_mr *mr)
+{
+	return mr->fid.ops->control(&mr->fid, FI_ENABLE, NULL);
 }
 
 static inline int

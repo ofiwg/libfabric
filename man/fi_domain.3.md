@@ -439,6 +439,10 @@ The following values may be specified.
   when the page tables referencing a registered memory region may have been
   updated.
 
+*FI_MR_RMA_EVENT*
+: Indicates that the memory regions associated with completion counters
+  must be explicitly enabled after being bound to any counter.
+
 *FI_MR_UNSPEC*
 : Defined for compatibility -- library versions 1.4 and earlier.  Setting
   mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are requested
