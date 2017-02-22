@@ -264,6 +264,11 @@ static size_t fi_bgq_cq_fill(uintptr_t output,
 		const enum fi_cq_format format)
 {
 	assert((context->flags & FI_BGQ_CQ_CONTEXT_EXT)==0);
+#ifndef FABRIC_DIRECT
+	fprintf(stderr,"BGQ provider must be run in fabric-direct mode only\n");
+	assert(0);
+#endif
+	assert(sizeof(struct fi_context) == sizeof(union fi_bgq_context));
 
 	struct fi_cq_tagged_entry * entry = (struct fi_cq_tagged_entry *) output;
 	switch (format) {

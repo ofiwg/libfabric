@@ -276,13 +276,6 @@ static int fi_bgq_getinfo(uint32_t version, const char *node,
 		struct fi_info *hints, struct fi_info **info)
 {
 
-#ifndef FABRIC_DIRECT
-	fprintf(stderr,"BGQ provider must be run in fabric-direct mode only\n");
-	assert(0);
-
-#endif
-	assert(sizeof(struct fi_context) == sizeof(union fi_bgq_context));
-
 	if (!((FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) || (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO))){
 		fprintf(stderr,"BGQ Provider must be configured with either auto or manual progresss mode specified\n");
 		assert(0);
