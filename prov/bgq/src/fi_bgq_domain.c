@@ -439,9 +439,34 @@ int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 		goto err;
 	}
 	if (attr->control_progress &&
-			attr->control_progress == FI_PROGRESS_AUTO) {
-		FI_LOG(fi_bgq_global.prov, FI_LOG_WARN, FI_LOG_DOMAIN,
-				"control auto progress is not fully implemented\n");
+			attr->control_progress != FI_PROGRESS_MANUAL) {
+		fprintf(stderr,"BGQ Provider only supports control_progress of FI_PROGRESS_MANUAL\n");
+		assert(0);
+		exit(1);
+	}
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {
+		if (attr->data_progress &&
+				attr->data_progress == FI_PROGRESS_MANUAL) {
+			fprintf(stderr,"BGQ Provider configured with data progress mode of FI_PROGRESS_AUTO but application specified FI_PROGRESS_MANUAL\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
+		}
+	}
+	else if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
+		if (attr->data_progress &&
+				attr->data_progress == FI_PROGRESS_AUTO) {
+			fprintf(stderr,"BGQ Provider configured with data progress mode of FI_PROGRESS_MANUAL but application specified FI_PROGRESS_AUTO\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
+		}
+	}
+	else {
+		fprintf(stderr,"BGQ Provider progress mode not properly configured.\n");
+		fflush(stderr);
+		assert(0);
+		exit(1);
 	}
 
 	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
