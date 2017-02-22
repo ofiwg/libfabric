@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2017\-01\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2017\-02\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -28,11 +28,9 @@ and \f[I]FI_EP_DGRAM\f[] endpoint types.
 \f[I]Memory registration modes\f[] : The provider implements the
 \f[I]FI_MR_BASIC\f[] memory registration mode.
 .PP
-\f[I]Data transfer operations\f[]
-.PP
-: The following data transfer interfaces are supported for all endpoint
-types: \f[I]FI_ATOMIC\f[], \f[I]FI_MSG\f[], \f[I]FI_RMA\f[],
-\f[I]FI_TAGGED\f[].
+\f[I]Data transfer operations\f[] : The following data transfer
+interfaces are supported for all endpoint types: \f[I]FI_ATOMIC\f[],
+\f[I]FI_MSG\f[], \f[I]FI_RMA\f[], \f[I]FI_TAGGED\f[].
 See DATA TRANSFER OPERATIONS below for more details.
 .PP
 \f[I]Completion events\f[] : The GNI provider supports
@@ -43,11 +41,9 @@ objects of type \f[I]FI_WAIT_NONE\f[], \f[I]FI_WAIT_UNSPEC\f[],
 .PP
 \f[I]Modes\f[] : The GNI provider does not require any operation modes.
 .PP
-\f[I]Progress\f[]
-.PP
-: For both control and data progress, the GNI provider supports both
-\f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[], with a
-default set to \f[I]FI_PROGRESS_AUTO\f[].
+\f[I]Progress\f[] : For both control and data progress, the GNI provider
+supports both \f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[],
+with a default set to \f[I]FI_PROGRESS_AUTO\f[].
 Note that for data progress, progression is only performed when data
 transfers use the rendezvous protocol.
 .PP
@@ -251,6 +247,10 @@ adds the following parameter:
 with this call are GNIX_FAB_RQ_NAMO_AX (AND and XOR), and
 GNIX_FAB_RQ_NAMO_AX_S (AND and XOR 32 bit), GNIX_FAB_RQ_NAMO_FAX (Fetch
 AND and XOR) and GNIX_FAB_RQ_NAMO_FAX_S (Fetch AND and XOR 32 bit).
+.SH NOTES
+.PP
+The GNI provider sets the domain attribute \f[I]cntr_cnt\f[] to the the
+CQ limit divided by 2.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
