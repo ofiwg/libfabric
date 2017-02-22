@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -99,6 +99,7 @@ Test(endpoint_info, info)
 	cr_assert_eq(fi->ep_attr->type, FI_EP_RDM);
 	cr_assert_eq(fi->next->ep_attr->type, FI_EP_DGRAM);
 	cr_assert_eq(fi->next->next->ep_attr->type, FI_EP_MSG);
+	cr_assert_neq(fi->domain_attr->cntr_cnt, 0);
 
 	fi_freeinfo(fi);
 
