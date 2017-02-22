@@ -499,6 +499,14 @@ void rdm_rma_setup(void)
 	common_setup();
 }
 
+void more_rdm_rma_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	common_setup();
+}
+
 void dgram_setup(void)
 {
 	hints = fi_allocinfo();
@@ -765,6 +773,9 @@ TestSuite(dgram_rma, .init = dgram_setup, .fini = rdm_rma_teardown,
 	  .disabled = false);
 
 TestSuite(rdm_rma, .init = rdm_rma_setup, .fini = rdm_rma_teardown,
+	  .disabled = false);
+
+TestSuite(more_rdm_rma, .init = more_rdm_rma_setup, .fini = rdm_rma_teardown,
 	  .disabled = false);
 
 TestSuite(dgram_rma_1dom, .init = dgram_setup_1dom, .fini = rdm_rma_teardown,
@@ -1049,26 +1060,46 @@ void do_writemsg_more(int len)
 	init_data(source2, len, 0xef);
 	init_data(target2, len, 0);
 
+	/* Write first message, with FI_MORE */
 	sz = fi_writemsg(ep[0], &msg, FI_MORE);
 	cr_assert_eq(sz, 0);
 
+	/* If FI_RMA_EVENT is a capability, check if the FI_MORE chain is interrupted */
+	if (hints->caps & FI_RMA_EVENT) {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
+	}
+
+	/* Write second message */
 	sz = fi_writemsg(ep[0], &msg2, 0);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
-		pthread_yield();
+	/* If FI_RMA_EVENT is a capability, check cq now */
+	if (hints->caps & FI_RMA_EVENT) {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, target2, FI_RMA | FI_WRITE, 0, ep[0]);
+	/* Otherwise, check for both events now */
+	} else {
+
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
+
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, target2, FI_RMA | FI_WRITE, 0, ep[0]);
 	}
-
-	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
-
-	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
-		pthread_yield();
-	}
-
-	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target2, FI_RMA | FI_WRITE, 0, ep[0]);
-
 
         w[0] = 2;
         rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1080,6 +1111,12 @@ void do_writemsg_more(int len)
 
 }
 
+Test(more_rdm_rma, writemsgmore)
+{
+	fi_more_set = true;
+	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
+	fi_more_set = false;
+}
 Test(rdm_rma, writemsgmore)
 {
 	fi_more_set = true;
@@ -1158,11 +1195,14 @@ void do_mixed_more(int len)
 
 }
 
+Test(more_rdm_rma, mixedmore)
+{
+	xfer_for_each_size(do_mixed_more, 8, BUF_SZ);
+}
 Test(rdm_rma, mixedmore)
 {
 	xfer_for_each_size(do_mixed_more, 8, BUF_SZ);
 }
-
 
 /*
  * write_fence should be validated by inspecting debug.
@@ -1769,25 +1809,44 @@ void do_readmsg_more(int len, void *s, void *t, int len2, void *s2, void *t2)
 	init_data(s, len, 0);
 	init_data(s2, len2, 0);
 
+	/* Read first message, with FI_MORE */
 	sz = fi_readmsg(ep[0], &msg, FI_MORE);
 	cr_assert_eq(sz, 0);
+
+	/* If FI_RMA_EVENT is a capability, check if the FI_MORE chain is interrupted */
+	if (hints->caps & FI_RMA_EVENT) {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_READ, 0, ep[0]);
+	}
+
+	/* Read second message */
 	sz = fi_readmsg(ep[0], &msg2, 0);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
-		pthread_yield();
+	/* If FI_RMA_EVENT is a capability, check cq now */
+	if (hints->caps & FI_RMA_EVENT) {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, t2, FI_RMA | FI_READ, 0, ep[0]);
+	/* Otherwise, check for both events now */
+	} else {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_READ, 0, ep[0]);
+
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+		cr_assert_eq(ret, 1);
+		rdm_rma_check_tcqe(&cqe, t2, FI_RMA | FI_READ, 0, ep[0]);
 	}
-
-	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_READ, 0, ep[0]);
-
-	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
-		pthread_yield();
-	}
-
-	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, t2, FI_RMA | FI_READ, 0, ep[0]);
-
 	r[0] = 2;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -1875,6 +1934,12 @@ void do_read_alignment_more(void)
 
 }
 
+Test(more_rdm_rma, readmsgmore)
+{
+	fi_more_set = true;
+	do_read_alignment_more();
+	fi_more_set = false;
+}
 Test(rdm_rma, readmsgmore)
 {
 	fi_more_set = true;
