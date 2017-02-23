@@ -42,7 +42,6 @@ dup_mr_attr(const struct fi_mr_attr *attr)
 {
 	struct fi_mr_attr *dup_attr;
 
-	assert(attr->iov_count == 1);
 	dup_attr = calloc(1, sizeof(*attr) +
 			     sizeof(*attr->mr_iov) * attr->iov_count);
 	if (!dup_attr)
