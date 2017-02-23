@@ -208,6 +208,51 @@ static void __gnix_msg_pack_data_from_iov(uint64_t dest, size_t dest_len,
 	}
 }
 
+
+/*
+ * TODO: this can eventually be used in more places in this
+ * but the msg component of the fab request structure would
+ * need to be refactored.
+ */
+static inline int __gnix_msg_register_iov(struct gnix_fid_domain *dom,
+					  const struct iovec *iov,
+					  size_t count,
+					  struct gnix_fid_mem_desc **md_vec)
+{
+	int i, ret = FI_SUCCESS;
+	struct fid_mr *auto_mr = NULL;
+
+	for (i = 0; i < count; i++) {
+		ret = gnix_mr_reg(&dom->domain_fid.fid,
+				  iov[i].iov_base,
+				  iov[i].iov_len,
+				  FI_READ | FI_WRITE, 0,
+				  0, 0, &auto_mr,
+				  NULL);
+
+		if (ret != FI_SUCCESS) {
+			GNIX_DEBUG(FI_LOG_EP_DATA,
+				   "Failed to "
+				   "auto-register"
+				   " local buffer: %s\n",
+				   fi_strerror(-ret));
+
+			for (i--; i >= 0; i--) {
+				fi_close(&md_vec[i]->mr_fid.fid);
+			}
+
+			goto fn_exit;
+		}
+
+		md_vec[i] = container_of((void *) auto_mr,
+					struct gnix_fid_mem_desc,
+					mr_fid);
+	}
+
+fn_exit:
+	return ret;
+}
+
 static void __gnix_msg_copy_data_to_recv_addr(struct gnix_fab_req *req,
 					      void *data)
 {
@@ -556,6 +601,7 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	if ((status == GNI_RC_SUCCESS) &&
 		(ep->domain->data_progress == FI_PROGRESS_AUTO))
 		_gnix_rma_post_irq(req->vc);
+
 	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (status == GNI_RC_NOT_DONE) {
@@ -863,13 +909,26 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 
 static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
 {
-	int ret = FI_SUCCESS, send_idx = 0, recv_idx = 0;
+	int ret = FI_SUCCESS, send_idx = 0, recv_idx = 0, i;
 	size_t cpy_len, recv_len;
 	uint64_t recv_ptr = 0UL;
 	struct gnix_xpmem_access_handle *access_hndl;
 
 	recv_len = req->msg.recv_info[0].recv_len;
 	recv_ptr = req->msg.recv_info[0].recv_addr;
+
+	/* to avoid small xpmem cross maps first get/release
+	 * xpmem handles for all of the send_iov_cnt bufs
+	 */
+
+	for (i = 0; i < req->msg.send_iov_cnt; i++) {
+		ret = _gnix_xpmem_access_hndl_get(req->gnix_ep->xpmem_hndl,
+						  req->vc->peer_apid,
+						  req->msg.send_info[i].send_addr,
+						  req->msg.send_info[i].send_len,
+						  &access_hndl);
+		ret = _gnix_xpmem_access_hndl_put(access_hndl);
+	}
 
 	/* Copy data from/to (>=1) iovec entries */
 	while (send_idx < req->msg.send_iov_cnt) {
@@ -937,7 +996,8 @@ static int __gnix_rndzv_req_xpmem(struct gnix_fab_req *req)
 			send_idx++;
 			recv_ptr += cpy_len;
 		}
-		GNIX_DEBUG(FI_LOG_EP_DATA, "send_idx = %d, recv_idx = %d\n", send_idx, recv_idx);
+		GNIX_DEBUG(FI_LOG_EP_DATA, "send_idx = %d, recv_idx = %d\n",
+				send_idx, recv_idx);
 	}
 
 	/*
@@ -964,9 +1024,6 @@ static int __gnix_rndzv_req(void *arg)
 	void *tail_data = NULL;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
-	/*
-	 * TODO: xpmem intercept here
-	 */
 
 	if (req->vc->modes & GNIX_VC_MODE_XPMEM)
 		return  __gnix_rndzv_req_xpmem(req);
@@ -1191,11 +1248,9 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 	gni_ct_get_post_descriptor_t *cur_ct = NULL;
 	void **next_ct = NULL;
 	int head_off, head_len, tail_len;
+	struct fid_mr *auto_mr;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
-	/*
-	 * TODO: xpmem intercept here
-	 */
 
 	if (req->vc->modes & GNIX_VC_MODE_XPMEM)
 		return  __gnix_rndzv_req_xpmem(req);
@@ -1217,7 +1272,6 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 
 	/* Ensure the user's recv buffer is registered for recv/recvv */
 	if (!req->msg.recv_md[0]) {
-		struct fid_mr *auto_mr;
 
 		for (recv_idx = 0; recv_idx < recv_cnt; recv_idx++) {
 			auto_mr = NULL;
@@ -3032,7 +3086,6 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	struct gnix_tag_storage *unexp_queue = NULL;
 	uint64_t match_flags;
 	int tagged = flags & FI_TAGGED;
-	struct fid_mr *auto_mr;
 
 	if (!ep->recv_cq && !ep->recv_cntr) {
 		return -FI_ENOCQ;
@@ -3136,77 +3189,55 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 			goto pdc_exit;
 		}
 
+		for (i = 0; i < count; i++) {
+			req->msg.recv_info[i].recv_addr = (uint64_t) iov[i].iov_base;
+			req->msg.recv_info[i].recv_len = iov[i].iov_len;
+		}
+
 		if (req->msg.send_flags & GNIX_MSG_RENDEZVOUS) {
 			req->work_fn = __gnix_rndzv_iov_req_build;
-			if (!desc) {	/* Register the memory for the user */
-				for (i = 0; i < count; i++) {
-					auto_mr = NULL;
-					ret = gnix_mr_reg(&ep->domain->
-							  domain_fid.fid,
-							  iov[i].iov_base,
-							  iov[i].iov_len,
-							  FI_READ | FI_WRITE, 0,
-							  0, 0, &auto_mr,
-							  NULL);
-
+			if (!(req->vc->modes & GNIX_VC_MODE_XPMEM)) {
+				if (!desc) {
+					ret = __gnix_msg_register_iov(ep->domain,
+								      iov,
+								      count,
+								      req->msg.recv_md);
 					if (ret != FI_SUCCESS) {
 						GNIX_DEBUG(FI_LOG_EP_DATA,
 							   "Failed to "
 							   "auto-register"
 							   " local buffer: %s\n"
 							   , fi_strerror(-ret));
+						goto err;
+					}
+					req->msg.send_flags |= FI_LOCAL_MR;
 
-						for (i--; i >= 0; i--) {
-							fi_close(&req->msg.recv_md[i]->mr_fid.fid);
+				} else {	/* User registered their memory */
+
+					for (i = 0; i < count; i++) {
+						if (!desc[i]) {
+							GNIX_WARN(FI_LOG_EP_DATA,
+								  "invalid memory reg"
+								  "istration (%p).\n",
+								  desc[i]);
+							ret = -FI_EINVAL;
+							goto err;
 						}
 
-						goto err;
+						req->msg.recv_md[i] =
+							container_of(desc[i],
+							struct gnix_fid_mem_desc,
+							mr_fid);
 					}
-
-					req->msg.recv_md[i] = container_of(
-						(void *) auto_mr,
-						struct gnix_fid_mem_desc,
-						mr_fid);
-
-					req->msg.recv_info[i].recv_addr = (uint64_t) iov[i].iov_base;
-					req->msg.recv_info[i].recv_len = iov[i].iov_len;
-					req->msg.recv_info[i].mem_hndl =
-						req->msg.recv_md[i]->mem_hndl;
-
-					GNIX_DEBUG(FI_LOG_EP_DATA, "auto-reg MR"
-						   ": %p\n",
-						   req->msg.recv_md[i]);
-
 				}
 
-				req->msg.send_flags |= FI_LOCAL_MR;
-			} else {	/* User registered their memory */
-				for (i = 0; i < count; i++) {
-					if (!desc[i]) {
-						GNIX_WARN(FI_LOG_EP_DATA,
-							  "invalid memory reg"
-							  "istration (%p).\n",
-							  desc[i]);
-						ret = -FI_EINVAL;
-						goto err;
-					}
-
-					req->msg.recv_md[i] =
-						container_of(desc[i],
-						struct gnix_fid_mem_desc,
-						mr_fid);
-
+				for (i = 0; i < count; i++)
 					req->msg.recv_info[i].mem_hndl =
 						req->msg.recv_md[i]->mem_hndl;
-				}
 			}
 
 			ret = _gnix_vc_queue_work_req(req);
 		} else {
-			for (i = 0; i < count; i++) {
-				req->msg.recv_info[i].recv_addr = (uint64_t) iov[i].iov_base;
-				req->msg.recv_info[i].recv_len = iov[i].iov_len;
-			}
 
 			/*
 			 * This request is associate with a regular eager smsg,
