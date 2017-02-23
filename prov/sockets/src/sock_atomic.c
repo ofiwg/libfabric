@@ -53,6 +53,7 @@
 
 #include "sock.h"
 #include "sock_util.h"
+#include <fi_iov.h>
 
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
@@ -416,7 +417,7 @@ static ssize_t sock_ep_atomic_readwrite(struct fid_ep *ep,
 	msg.addr = dest_addr;
 
 	rma_iov.addr = addr;
-	rma_iov.count = 1;
+	rma_iov.count = count;
 	rma_iov.key = key;
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
@@ -425,7 +426,7 @@ static ssize_t sock_ep_atomic_readwrite(struct fid_ep *ep,
 	msg.context = context;
 
 	resultv.addr = result;
-	resultv.count = 1;
+	resultv.count = count;
 
 	return sock_ep_atomic_readwritemsg(ep, &msg, &resultv, &result_desc, 1,
 						SOCK_USE_OP_FLAGS);
@@ -447,7 +448,7 @@ static ssize_t sock_ep_atomic_readwritev(struct fid_ep *ep,
 	msg.addr = dest_addr;
 
 	rma_iov.addr = addr;
-	rma_iov.count = 1;
+	rma_iov.count = ofi_total_ioc_cnt(iov, count);
 	rma_iov.key = key;
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
@@ -507,7 +508,7 @@ static ssize_t sock_ep_atomic_compwrite(struct fid_ep *ep,
 	msg.addr = dest_addr;
 
 	rma_iov.addr = addr;
-	rma_iov.count = 1;
+	rma_iov.count = count;
 	rma_iov.key = key;
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
@@ -516,9 +517,9 @@ static ssize_t sock_ep_atomic_compwrite(struct fid_ep *ep,
 	msg.context = context;
 
 	resultv.addr = result;
-	resultv.count = 1;
+	resultv.count = count;
 	comparev.addr = (void *)compare;
-	comparev.count = 1;
+	comparev.count = count;
 
 	return sock_ep_atomic_compwritemsg(ep, &msg, &comparev, &compare_desc,
 			1, &resultv, &result_desc, 1, SOCK_USE_OP_FLAGS);
@@ -541,7 +542,7 @@ static ssize_t sock_ep_atomic_compwritev(struct fid_ep *ep,
 	msg.addr = dest_addr;
 
 	rma_iov.addr = addr;
-	rma_iov.count = 1;
+	rma_iov.count = ofi_total_ioc_cnt(iov, count);
 	rma_iov.key = key;
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
@@ -549,8 +550,9 @@ static ssize_t sock_ep_atomic_compwritev(struct fid_ep *ep,
 	msg.op = op;
 	msg.context = context;
 
-	return sock_ep_atomic_compwritemsg(ep, &msg, comparev, compare_desc, 1,
-					   resultv, result_desc, 1,
+	return sock_ep_atomic_compwritemsg(ep, &msg,
+					   comparev, compare_desc, compare_count,
+					   resultv, result_desc, result_count,
 					   SOCK_USE_OP_FLAGS);
 }
 
