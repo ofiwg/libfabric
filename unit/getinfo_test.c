@@ -45,6 +45,8 @@ typedef int (*ft_getinfo_init)(struct fi_info *);
 typedef int (*ft_getinfo_check)(void *);
 
 static char err_buf[512];
+static char old_prov_var[128];
+static char new_prov_var[128];
 
 static int check_addr(void *addr, size_t addrlen, char *str)
 {
@@ -151,9 +153,10 @@ fail:										\
 
 
 /* 1. No hints tests
- * These tests may not run exclusively for a particular provider but are added
- * here to exercise certain code paths in the provider initialization code. So
- * test failures may not be attributable to a particular provider. */
+ * These tests do not receive hints. If a particular provider has been
+ * requested, the environment variable FI_PROVIDER will be set to restrict
+ * the provider used. Otherwise, test failures may occur for any provider.
+ */
 
 /* 1.1 Source address only tests */
 getinfo_test(1, "Test with no node, service, flags or hints",
@@ -206,17 +209,35 @@ static void usage(void)
 	ft_addr_usage();
 }
 
+static void set_prov(char *prov_name)
+{
+	snprintf(old_prov_var, sizeof(old_prov_var) - 1, "FI_PROVIDER=%s",
+		 getenv("FI_PROVIDER"));
+	snprintf(new_prov_var, sizeof(new_prov_var) - 1, "FI_PROVIDER=%s",
+		 prov_name);
+	putenv(new_prov_var);
+}
+
+static void reset_prov(void)
+{
+	putenv(old_prov_var);
+}
+
 int main(int argc, char **argv)
 {
 	int failed;
 	int op;
 
-	struct test_entry test_array[] = {
+	struct test_entry no_hint_tests[] = {
 		TEST_ENTRY(getinfo1, getinfo1_desc),
 		TEST_ENTRY(getinfo2, getinfo2_desc),
 		TEST_ENTRY(getinfo3, getinfo3_desc),
 		TEST_ENTRY(getinfo4, getinfo4_desc),
 		TEST_ENTRY(getinfo5, getinfo5_desc),
+		{ NULL, "" }
+	};
+
+	struct test_entry hint_tests[] = {
 		TEST_ENTRY(getinfo6, getinfo6_desc),
 		TEST_ENTRY(getinfo7, getinfo7_desc),
 		TEST_ENTRY(getinfo8, getinfo8_desc),
@@ -257,11 +278,22 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 
-	FT_WARN("\nTests getinfo1 to getinfo5 may not run exclusively for a "
-			"particular provider since we don't pass hints.\n"
-			"So the failures in any of those tests may not be "
-			"attributable to a single provider.\n");
-	failed = run_tests(test_array, err_buf);
+	if (hints->fabric_attr->prov_name) {
+		set_prov(hints->fabric_attr->prov_name);
+	} else {
+	       FT_WARN("\nTests getinfo1 to getinfo5 may not run exclusively "
+		       "for a particular provider since we don't pass hints.\n"
+		       "So the failures in any of those tests may not be "
+		       "attributable to a single provider.\n");
+	}
+
+	failed = run_tests(no_hint_tests, err_buf);
+
+	if (hints->fabric_attr->prov_name) {
+		reset_prov();
+	}
+
+	failed += run_tests(hint_tests, err_buf);
 	if (failed > 0) {
 		printf("\nSummary: %d tests failed\n", failed);
 	} else {
