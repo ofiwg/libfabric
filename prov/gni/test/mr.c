@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -52,6 +52,9 @@
 #include "gnix.h"
 #include "gnix_mr.h"
 
+#define CACHE_RO 0
+#define CACHE_RW 1
+
 #define CHECK_HOOK(name, args...) \
 	({ \
 		int __hook_return_val = 0; \
@@ -76,8 +79,6 @@
 #define HOOK_ASSERT(cond, message, args...) do { } while (0)
 #endif
 
-
-
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_mr *mr;
@@ -93,6 +94,7 @@ static int regions;
 
 static uint64_t default_access = (FI_REMOTE_READ | FI_REMOTE_WRITE
 				  | FI_READ | FI_WRITE);
+static uint64_t ro_access = (FI_REMOTE_READ | FI_WRITE);
 
 static uint64_t default_flags;
 static uint64_t default_req_key;
@@ -103,7 +105,7 @@ struct timeval s1, s2;
 struct _mr_test_hooks {
 	int (*init_hook)(const char *func, int line);
 	int (*post_reg_hook)(const char *func, int line,
-			int inuse, int stale);
+			int cache_type, int inuse, int stale);
 	int (*post_dereg_hook)(const char *func, int line,
 			int inuse, int stale);
 	int (*get_lazy_dereg_limit)(const char *func, int line);
@@ -263,29 +265,27 @@ TestSuite(perf_mr_no_cache, .init = no_cache_setup, .fini = mr_teardown,
 
 static int __simple_init_hook(const char *func, int line)
 {
-	cache = domain->mr_cache;
-
-	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+	cr_assert(domain->mr_cache_ro->state == GNIX_MRC_STATE_READY);
+	cr_assert(domain->mr_cache_rw->state == GNIX_MRC_STATE_READY);
 
 	return 0;
 }
 
-static int __simple_post_reg_hook(const char *func, int line,
+static int __simple_post_reg_hook(const char *func, int line, int cache_type,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache;
+	if (cache_type == CACHE_RO)
+		cache = domain->mr_cache_ro;
+	else
+		cache = domain->mr_cache_rw;
 
-	HOOK_ASSERT(atomic_get(&cache->inuse.elements) == expected_inuse,
-			"failed expected inuse condition, actual=%d expected=%d\n",
-			atomic_get(&cache->inuse.elements),
-			expected_inuse);
-	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
-	HOOK_ASSERT(atomic_get(&cache->stale.elements) == expected_stale,
-				"failed expected inuse condition, actual=%d expected=%d\n",
-				atomic_get(&cache->stale.elements),
-				expected_stale);
-	cr_assert(atomic_get(&cache->stale.elements) == expected_stale);
+	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse,
+		"%s:%d failed expected inuse condition, actual=%d expected=%d\n",
+		func, line, atomic_get(&cache->inuse.elements), expected_inuse);
+	cr_assert(atomic_get(&cache->stale.elements) == expected_stale,
+		"%s:%d failed expected stale condition, actual=%d expected=%d\n",
+		func, line, atomic_get(&cache->stale.elements), expected_stale);
 
 	return 0;
 }
@@ -294,7 +294,7 @@ static int __simple_post_dereg_hook(const char *func, int line,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
 	cr_assert(atomic_get(&cache->stale.elements) == expected_stale);
 
@@ -451,7 +451,7 @@ Test(mr_internal_bare, invalid_mr_ptr)
 Test(mr_internal_bare, invalid_attr)
 {
 	int ret;
-	
+
 	ret = fi_mr_regattr(dom, NULL, default_flags, &mr); 
 	cr_assert(ret == -FI_EINVAL);
 }
@@ -464,7 +464,6 @@ Test(mr_internal_bare, invalid_iov_count)
 		.iov_base = buf,
 		.iov_len = buf_len, 
 	};
-		
 
 	ret = fi_mr_regv(dom, &iov, 0, default_access,
 		default_offset, default_req_key, default_flags,
@@ -537,12 +536,35 @@ static void __simple_init_test(HOOK_DECL)
 
 	CHECK_HOOK(init_hook);
 
-	CHECK_HOOK(post_reg_hook, 1, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, 1, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RO, 0, 0);
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
 	CHECK_HOOK(post_dereg_hook, 0, 1);
+	CHECK_HOOK(post_reg_hook, CACHE_RO, 0, 0);
+}
+
+static void __simple_init_ro_test(HOOK_DECL)
+{
+	int ret;
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, ro_access,
+			default_offset, default_req_key,
+			default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	CHECK_HOOK(init_hook);
+
+	CHECK_HOOK(post_reg_hook, CACHE_RW, 0, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RO, 1, 0);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	CHECK_HOOK(post_dereg_hook, 0, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RO, 0, 1);
 }
 
 Test(mr_internal_cache, change_hard_soft_limits)
@@ -591,7 +613,7 @@ Test(mr_internal_cache, change_hard_soft_limits)
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 	cr_assert(cache->state == GNIX_MRC_STATE_READY);
 	cr_assert(cache->attr.hard_reg_limit == 8192);
 	cr_assert(cache->attr.soft_reg_limit == 4096);
@@ -623,14 +645,15 @@ static void __simple_duplicate_registration_test(HOOK_DECL)
 
 	CHECK_HOOK(init_hook);
 
-	CHECK_HOOK(post_reg_hook, 1, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, 1, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RO, 0, 0);
 
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	CHECK_HOOK(post_reg_hook, 1, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, 1, 0);
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
@@ -638,25 +661,23 @@ static void __simple_duplicate_registration_test(HOOK_DECL)
 	ret = fi_close(&f_mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-	CHECK_HOOK(post_reg_hook, 0, 1);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, 0, 1);
 }
 
 static int __post_dereg_greater_or_equal(const char *func, int line,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 
-	HOOK_ASSERT(atomic_get(&cache->inuse.elements) == expected_inuse,
-			"failed expected inuse test, actual=%d expected=%d\n",
-			atomic_get(&cache->inuse.elements),
-			expected_inuse);
-	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
-	HOOK_ASSERT(atomic_get(&cache->stale.elements) >= expected_stale,
-			"failed expected stale test, actual=%d expected=%d\n",
-			atomic_get(&cache->stale.elements),
-			expected_stale);
-	cr_assert(atomic_get(&cache->stale.elements) >= expected_stale);
+	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse,
+		"failed expected inuse test, actual=%d expected=%d\n",
+		atomic_get(&cache->inuse.elements),
+		expected_inuse);
+	cr_assert(atomic_get(&cache->stale.elements) >= expected_stale,
+		"failed expected stale test, actual=%d expected=%d\n",
+		atomic_get(&cache->stale.elements),
+		expected_stale);
 
 	return 0;
 }
@@ -697,7 +718,7 @@ static void __simple_register_1024_distinct_regions(HOOK_DECL)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	CHECK_HOOK(post_reg_hook, regions, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, regions, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -720,7 +741,7 @@ static int __post_dereg_greater_than(const char *func, int line,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
 	cr_assert(atomic_get(&cache->stale.elements) > expected_stale);
 
@@ -771,7 +792,7 @@ static void __simple_register_1024_non_unique_regions_test(HOOK_DECL)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	CHECK_HOOK(post_reg_hook, 1, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, 1, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -795,7 +816,7 @@ static void __simple_register_1024_non_unique_regions_test(HOOK_DECL)
 
 static int __get_lazy_dereg_limit(const char *func, int line)
 {
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 
 	return cache->attr.hard_stale_limit;
 }
@@ -847,7 +868,7 @@ static void __simple_cyclic_register_128_distinct_regions(HOOK_DECL)
 	}
 
 	/* all registrations should now be 'in-use' */
-	CHECK_HOOK(post_reg_hook, regions, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, regions, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -863,11 +884,11 @@ static void __simple_cyclic_register_128_distinct_regions(HOOK_DECL)
 				default_flags, &mr_arr[i], NULL);
 		cr_assert(ret == FI_SUCCESS);
 
-		CHECK_HOOK(post_reg_hook, i + 1, regions - (i + 1));
+		CHECK_HOOK(post_reg_hook, CACHE_RW, i + 1, regions - (i + 1));
 	}
 
 	/* all registrations should have been moved from 'stale' to 'in-use' */
-	CHECK_HOOK(post_reg_hook, regions, 0);
+	CHECK_HOOK(post_reg_hook, CACHE_RW, regions, 0);
 
 	for (i = 0; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -888,10 +909,14 @@ static void __simple_cyclic_register_128_distinct_regions(HOOK_DECL)
 }
 
 static int __test_stale_lt_or_equal(const char *func, int line,
+		int cache_type,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache;
+	if (cache_type == CACHE_RO)
+		cache = domain->mr_cache_ro;
+	else
+		cache = domain->mr_cache_rw;
 
 	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
 	cr_assert(atomic_get(&cache->stale.elements) <= expected_stale);
@@ -901,7 +926,7 @@ static int __test_stale_lt_or_equal(const char *func, int line,
 
 static struct _mr_test_hooks __simple_sais_hooks = {
 		.post_reg_hook = __test_stale_lt_or_equal,
-		.post_dereg_hook = __simple_post_reg_hook,
+		.post_dereg_hook = __simple_post_dereg_hook,
 		.get_lazy_dereg_limit = __get_lazy_dereg_limit,
 };
 
@@ -924,7 +949,7 @@ static void __simple_same_addr_incr_size_test(HOOK_DECL)
 
 		CHECK_HOOK(init_hook);
 
-		CHECK_HOOK(post_reg_hook, 1, 1);
+		CHECK_HOOK(post_reg_hook, CACHE_RW, 1, 1);
 
 		ret = fi_close(&mr->fid);
 		cr_assert(ret == FI_SUCCESS);
@@ -947,7 +972,7 @@ static void  __simple_same_addr_decr_size_test(HOOK_DECL)
 
 		CHECK_HOOK(init_hook);
 
-		CHECK_HOOK(post_reg_hook, 1, 0);
+		CHECK_HOOK(post_reg_hook, CACHE_RW, 1, 0);
 
 		ret = fi_close(&mr->fid);
 		cr_assert(ret == FI_SUCCESS);
@@ -960,6 +985,11 @@ static void  __simple_same_addr_decr_size_test(HOOK_DECL)
 Test(mr_internal_cache, basic_init)
 {
 	__simple_init_test(&__simple_test_hooks);
+}
+
+Test(mr_internal_cache, basic_init_ro)
+{
+	__simple_init_ro_test(&__simple_test_hooks);
 }
 
 /* Test duplicate registration. Since this is a valid operation, we
@@ -1044,7 +1074,7 @@ Test(mr_internal_cache, lru_evict_first_entry)
 	}
 
 	/* all registrations should now be 'in-use' */
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 	cr_assert(atomic_get(&cache->inuse.elements) == regions);
 	cr_assert(atomic_get(&cache->stale.elements) == 0);
 
@@ -1120,7 +1150,7 @@ Test(mr_internal_cache, lru_evict_middle_entry)
 	}
 
 	/* all registrations should now be 'in-use' */
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 	limit = cache->attr.hard_stale_limit;
 	cr_assert(limit < regions);
 
@@ -1193,7 +1223,7 @@ static inline void _repeated_registration(const char *label)
 					default_offset, default_req_key,
 					default_flags, &mr, NULL);
 
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 
 	gettimeofday(&s1, 0);
 	for (i = 0; i < registrations; i++) {
@@ -1251,7 +1281,7 @@ static inline void _single_large_registration(const char *label)
 					default_offset, default_req_key,
 					default_flags, &mr, NULL);
 
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 
 	gettimeofday(&s1, 0);
 	for (i = 0; i < registrations; i++) {
@@ -1402,7 +1432,7 @@ Test(mr_internal_cache, regression_615)
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cache = domain->mr_cache;
+	cache = domain->mr_cache_rw;
 
 	cr_assert(atomic_get(&cache->inuse.elements) == 1);
 	cr_assert(atomic_get(&cache->stale.elements) == 0);

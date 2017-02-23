@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -219,9 +219,21 @@ static int gnix_domain_close(fid_t fid)
 	}
 
 	/* before checking the refcnt, flush the memory registration cache */
-	if (domain->mr_cache) {
+	if (domain->mr_cache_ro) {
 		fastlock_acquire(&domain->mr_cache_lock);
-		ret = _gnix_mr_cache_flush(domain->mr_cache);
+		ret = _gnix_mr_cache_flush(domain->mr_cache_ro);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_DOMAIN,
+				  "failed to flush memory cache on domain close\n");
+			fastlock_release(&domain->mr_cache_lock);
+			goto err;
+		}
+		fastlock_release(&domain->mr_cache_lock);
+	}
+
+	if (domain->mr_cache_rw) {
+		fastlock_acquire(&domain->mr_cache_lock);
+		ret = _gnix_mr_cache_flush(domain->mr_cache_rw);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_DOMAIN,
 				  "failed to flush memory cache on domain close\n");
@@ -578,7 +590,8 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret != FI_SUCCESS)
 		goto err;
 
-	domain->mr_cache = NULL;
+	domain->mr_cache_ro = NULL;
+	domain->mr_cache_rw = NULL;
 	fastlock_init(&domain->mr_cache_lock);
 
 	domain->udreg_reg_limit = 4096;

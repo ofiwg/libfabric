@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  *
@@ -431,6 +431,8 @@ static void *__gnix_register_region(
 	else
 		flags |= GNI_MEM_READ_ONLY;
 
+	GNIX_DEBUG(FI_LOG_MR, "addr %p len %d flags 0x%x\n", address, length,
+		   flags);
 	return __gnix_generic_register(domain, md, address, length, dst_cq_hndl,
 			flags, vmdh_index);
 }
@@ -676,8 +678,15 @@ struct gnix_mr_ops udreg_mr_ops = {
 static int __cache_init(struct gnix_fid_domain *domain) {
 	int ret;
 
-	ret = _gnix_mr_cache_init(&domain->mr_cache,
+	ret = _gnix_mr_cache_init(&domain->mr_cache_ro,
 			&domain->mr_cache_attr);
+
+	if (ret)
+		return ret;
+
+	ret = _gnix_mr_cache_init(&domain->mr_cache_rw,
+				&domain->mr_cache_attr);
+
 	if (ret == FI_SUCCESS)
 		domain->mr_is_init = 1;
 
@@ -685,7 +694,7 @@ static int __cache_init(struct gnix_fid_domain *domain) {
 }
 
 static int __cache_is_init(struct gnix_fid_domain *domain) {
-	return domain->mr_cache != NULL;
+	return domain->mr_is_init;
 }
 
 static int __cache_reg_mr(
@@ -695,28 +704,52 @@ static int __cache_reg_mr(
 		struct _gnix_fi_reg_context *fi_reg_context,
 		void                        **handle) {
 
-	return _gnix_mr_cache_register(domain->mr_cache, address, length,
+	struct gnix_mr_cache *cache;
+
+	if (fi_reg_context->access & (FI_RECV | FI_READ | FI_REMOTE_WRITE))
+		cache = domain->mr_cache_rw;
+	else
+		cache = domain->mr_cache_ro;
+
+	return _gnix_mr_cache_register(cache, address, length,
 			fi_reg_context, handle);
 }
 
 static int __cache_dereg_mr(struct gnix_fid_domain *domain,
 		struct gnix_fid_mem_desc *md)
 {
-	return _gnix_mr_cache_deregister(domain->mr_cache, md);
+	gnix_mr_cache_t *cache;
+
+	if (GNI_MEMHNDL_GET_FLAGS((md->mem_hndl)) &
+	    GNI_MEMHNDL_FLAG_READONLY)
+		cache = domain->mr_cache_ro;
+	else
+		cache = domain->mr_cache_rw;
+
+	return _gnix_mr_cache_deregister(cache, md);
 }
 
 static int __cache_close(struct gnix_fid_domain *domain)
 {
 	int ret;
 
-	if (domain->mr_cache) {
-		ret = _gnix_mr_cache_destroy(domain->mr_cache);
+	if (domain->mr_cache_ro) {
+		ret = _gnix_mr_cache_destroy(domain->mr_cache_ro);
 		if (ret != FI_SUCCESS)
-			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr cache "
-					"during domain destruct, dom=%p ret=%d\n",
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy ro mr "
+					"cache dom=%p ret=%d\n",
 					domain, ret);
 	}
 
+	if (domain->mr_cache_rw) {
+		ret = _gnix_mr_cache_destroy(domain->mr_cache_rw);
+		if (ret != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy rw mr "
+					"cache dom=%p ret=%d\n",
+					domain, ret);
+	}
+
+	domain->mr_is_init = 0;
 	return FI_SUCCESS;
 }
 
@@ -725,9 +758,15 @@ static int __cache_flush(struct gnix_fid_domain *domain)
 	int ret;
 
 	fastlock_acquire(&domain->mr_cache_lock);
-	ret = _gnix_mr_cache_flush(domain->mr_cache);
-	fastlock_release(&domain->mr_cache_lock);
+	ret = _gnix_mr_cache_flush(domain->mr_cache_ro);
 
+	if (ret)
+		goto flush_err;
+
+	ret = _gnix_mr_cache_flush(domain->mr_cache_rw);
+
+flush_err:
+	fastlock_release(&domain->mr_cache_lock);
 	return ret;
 }
 
@@ -780,8 +819,8 @@ static int __basic_mr_reg_mr(
 static int __basic_mr_dereg_mr(struct gnix_fid_domain *domain,
 		struct gnix_fid_mem_desc *md)
 {
-	int ret; 
-	
+	int ret;
+
 	ret = __gnix_deregister_region((void *) md, NULL);
 	if (ret == FI_SUCCESS)
 		free((void *) md);
