@@ -845,11 +845,12 @@ DIRECT_FN int gnix_pep_listen(struct fid_pep *pep)
 
 	ret = setsockopt(pep_priv->listen_fd, SOL_SOCKET, SO_REUSEADDR,
 			 &sockopt, sizeof(sockopt));
-	if (ret < 0)
+	if (ret < 0) {
 		errno_keep = errno;
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "setsockopt(SO_REUSEADDR) failed, err: %s\n",
 			  strerror(errno_keep));
+	}
 
 	/* Bind to the ipogif interface using resolved service number as CDM
 	 * ID. */
