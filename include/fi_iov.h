@@ -39,6 +39,7 @@
 #include <stdlib.h>
 #include <sys/uio.h>
 #include <inttypes.h>
+#include <rdma/fabric.h>
 
 
 static inline size_t ofi_total_iov_len(const struct iovec *iov, size_t iov_count)
@@ -49,6 +50,13 @@ static inline size_t ofi_total_iov_len(const struct iovec *iov, size_t iov_count
 	return len;
 }
 
+static inline size_t ofi_total_ioc_cnt(const struct fi_ioc *ioc, size_t ioc_count)
+{
+	size_t i, cnt = 0;
+	for (i = 0; i < ioc_count; i++)
+		cnt += ioc[i].count;
+	return cnt;
+}
 
 #define OFI_COPY_IOV_TO_BUF 0
 #define OFI_COPY_BUF_TO_IOV 1
