@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
@@ -213,6 +213,12 @@ static void ft_cntr_set_wait_attr(void)
 	}
 }
 
+int ft_cntr_open(struct fid_cntr **cntr)
+{
+	ft_cntr_set_wait_attr();
+	return fi_cntr_open(domain, &cntr_attr, cntr, cntr);
+}
+
 uint64_t ft_info_to_mr_access(struct fi_info *info)
 {
 	uint64_t mr_access = 0;
@@ -232,6 +238,67 @@ uint64_t ft_info_to_mr_access(struct fi_info *info)
 	}
 
 	return mr_access;
+}
+
+#define bit_isset(x, i) (x >> i & 1)
+#define for_each_bit(x, i) for (i = 0; i < (8 * sizeof(x)); i++)
+
+static inline int bit_set_count(uint64_t val)
+{
+	int cnt = 0;
+	while (val) {
+		cnt++;
+		val &= val - 1;
+	}
+	return cnt;
+}
+
+int ft_alloc_bit_combo(uint64_t fixed, uint64_t opt,
+		       uint64_t **combos, int *len)
+{
+	uint64_t *flags;
+	int i, num_flags;
+	uint64_t index;
+	int ret;
+
+	num_flags = bit_set_count(opt) + 1;
+	flags = calloc(num_flags, sizeof(fixed));
+	if (!flags) {
+		perror("calloc");
+		return -FI_ENOMEM;
+	}
+
+	*len = 1 << (num_flags - 1);
+	*combos = calloc(*len, sizeof(fixed));
+	if (!(*combos)) {
+		perror("calloc");
+		ret = -FI_ENOMEM;
+		goto clean;
+	}
+
+	num_flags = 0;
+	for_each_bit(opt, i) {
+		if (bit_isset(opt, i))
+			flags[num_flags++] = 1 << i;
+	}
+
+	for (index = 0; index < (*len); index++) {
+		(*combos)[index] = fixed;
+		for_each_bit(index, i) {
+			if (bit_isset(index, i))
+				(*combos)[index] |= flags[i];
+		}
+	}
+	ret = FI_SUCCESS;
+
+clean:
+	free(flags);
+	return ret;
+}
+
+void ft_free_bit_combo(uint64_t *combo)
+{
+	free(combo);
 }
 
 /*

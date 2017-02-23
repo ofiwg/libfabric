@@ -447,7 +447,6 @@ int main(int argc, char **argv)
 	}
 
 	opts.dst_addr = (optind == argc - 1) ? argv[optind] : NULL;
-
 	if (opts.dst_addr) {
 		if (!opts.dst_port)
 			opts.dst_port = default_port;

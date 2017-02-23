@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2014-2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -48,105 +48,150 @@ static char err_buf[512];
  */
 static int mr_reg()
 {
-	int i;
+	int i, j;
 	int ret = 0;
-	int testret;
+	int testret = FAIL;
 	struct fid_mr *mr;
+	uint64_t access;
+	uint64_t *access_combinations;
+	int cnt;
 
-	testret = FAIL;
+	access = ft_info_to_mr_access(fi);
+	ret = ft_alloc_bit_combo(0, access, &access_combinations, &cnt);
+	if (ret) {
+		FT_UNIT_STRERR(err_buf, "ft_alloc_bit_combo failed", ret);
+		goto out;
+	}
 
 	for (i = 0; i < test_cnt; i++) {
 		buf_size = test_size[i].size;
+		for (j = 0; j < cnt; j++) {
+			ret = fi_mr_reg(domain, buf, buf_size,
+					access_combinations[j], 0,
+					FT_MR_KEY, 0, &mr, NULL);
+			if (ret) {
+				FT_UNIT_STRERR(err_buf, "fi_mr_reg failed", ret);
+				goto free;
+			}
 
-		// TODO test for various access
-		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi), 0,
-				FT_MR_KEY, 0, &mr, NULL);
-		if (ret) {
-			FT_UNIT_STRERR(err_buf, "fi_mr_reg failed", ret);
-			goto fail;
-		}
-		ret = fi_close(&mr->fid);
-		if (ret) {
-			FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
-			goto fail;
+			ret = fi_close(&mr->fid);
+			if (ret) {
+				FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
+				goto free;
+			}
 		}
 	}
 	testret = PASS;
-fail:
-	mr = NULL;
+free:
+	ft_free_bit_combo(access_combinations);
+out:
 	return TEST_RET_VAL(ret, testret);
 }
 
 static int mr_regv()
 {
-	int ret;
-	int testret;
+	int i, j, n;
+	int ret = 0;
+	int testret = FAIL;
 	struct fid_mr *mr;
-	struct iovec iov;
+	struct iovec *iov;
+	char *base;
 
-	testret = FAIL;
-
-	iov.iov_base = buf;
-	iov.iov_len = test_size[test_cnt / 2].size;
-
-	// TODO test for various iov counts
-	ret = fi_mr_regv(domain, &iov, 1, ft_info_to_mr_access(fi), 0,
-			FT_MR_KEY, 0, &mr, NULL);
-	if (ret) {
-		FT_UNIT_STRERR(err_buf, "fi_mr_regv failed", ret);
-		goto fail;
+	iov = calloc(fi->domain_attr->mr_iov_limit, sizeof(*iov));
+	if (!iov) {
+		perror("calloc");
+		ret = -FI_ENOMEM;
+		goto out;
 	}
-	ret = fi_close(&mr->fid);
-	if (ret) {
-		FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
-		goto fail;
+
+	for (i = 0; i < test_cnt &&
+	     test_size[i].size <= fi->domain_attr->mr_iov_limit; i++) {
+		n = test_size[i].size;
+		base = buf;
+
+		for (j = 0; j < n; j++) {
+			iov[j].iov_base = base;
+			iov[j].iov_len = test_size[test_cnt - 1].size / n;
+			base += iov[j].iov_len;
+		}
+
+		ret = fi_mr_regv(domain, &iov[0], n, ft_info_to_mr_access(fi), 0,
+				 FT_MR_KEY, 0, &mr, NULL);
+		if (ret) {
+			FT_UNIT_STRERR(err_buf, "fi_mr_regv failed", ret);
+			goto free;
+		}
+
+		ret = fi_close(&mr->fid);
+		if (ret) {
+			FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
+			goto free;
+		}
 	}
 	testret = PASS;
-fail:
-	mr = NULL;
+free:
+	free(iov);
+out:
 	return TEST_RET_VAL(ret, testret);
 }
 
 static int mr_regattr()
 {
-	int ret;
-	int testret;
+	int i, j, n;
+	int ret = 0;
+	int testret = FAIL;
 	struct fid_mr *mr;
-	struct iovec iov;
+	struct iovec *iov;
 	struct fi_mr_attr attr;
+	char *base;
 
-	testret = FAIL;
-
-	iov.iov_base = buf;
-	iov.iov_len = test_size[test_cnt / 2].size;
-
-	attr.mr_iov = &iov;
-	attr.iov_count = 1;
 	attr.access = ft_info_to_mr_access(fi);
 	attr.requested_key = FT_MR_KEY;
 	attr.context = NULL;
 
-	// TODO test for various iov sizes
-	ret = fi_mr_regattr(domain, &attr, 0, &mr);
-	if (ret) {
-		FT_UNIT_STRERR(err_buf, "fi_mr_regattr failed", ret);
-		goto fail;
+	iov = calloc(fi->domain_attr->mr_iov_limit, sizeof(*iov));
+	if (!iov) {
+		perror("calloc");
+		ret = -FI_ENOMEM;
+		goto out;
 	}
-	ret = fi_close(&mr->fid);
-	if (ret) {
-		FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
-		goto fail;
+
+	for (i = 0; i < test_cnt &&
+	     test_size[i].size <= fi->domain_attr->mr_iov_limit; i++) {
+
+		n = test_size[i].size;
+		base = buf;
+		for (j = 0; j < n; j++) {
+			iov[j].iov_base = base;
+			iov[j].iov_len = test_size[test_cnt - 1].size / n;
+			base += iov[j].iov_len;
+		}
+
+		attr.iov_count = n;
+		attr.mr_iov = &iov[0];
+		ret = fi_mr_regattr(domain, &attr, 0, &mr);
+		if (ret) {
+			FT_UNIT_STRERR(err_buf, "fi_mr_regattr failed", ret);
+			goto free;
+		}
+
+		ret = fi_close(&mr->fid);
+		if (ret) {
+			FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
+			goto free;
+		}
 	}
 	testret = PASS;
-fail:
-	mr = NULL;
+free:
+	free(iov);
+out:
 	return TEST_RET_VAL(ret, testret);
 }
 
 struct test_entry test_array[] = {
-	TEST_ENTRY(mr_reg, "Test fi_mr_reg for various buffer sizes"),
-	TEST_ENTRY(mr_regv, "Test fi_mr_regv"),
-	TEST_ENTRY(mr_regattr, "Test fi_mr_regattr"),
+	TEST_ENTRY(mr_reg, "Test fi_mr_reg across different access combinations"),
+	TEST_ENTRY(mr_regv, "Test fi_mr_regv across various buffer sizes"),
+	TEST_ENTRY(mr_regattr, "Test fi_mr_regattr across various buffer sizes"),
 	{ NULL, "" }
 };
 
@@ -158,7 +203,7 @@ static void usage(void)
 int main(int argc, char **argv)
 {
 	int op, ret;
-	int failed;
+	int failed = 0;
 
 	buf = NULL;
 
@@ -188,18 +233,27 @@ int main(int argc, char **argv)
 		ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 		if (ret) {
 			FT_PRINTERR("fi_getinfo", ret);
-			goto err;
+			goto out;
 		}
+	}
+
+	if (!ft_info_to_mr_access(fi))
+		goto out;
+
+	if (!fi->domain_attr->mr_iov_limit) {
+		ret = -FI_EINVAL;
+		FT_PRINTERR("mr_iov_limit not set", ret);
+		goto out;
 	}
 
 	ret = ft_open_fabric_res();
 	if (ret)
-		goto err;
+		goto out;
 
 	buf = malloc(test_size[test_cnt - 1].size);
 	if (!buf) {
 		ret = -FI_ENOMEM;
-		goto err;
+		goto out;
 	}
 
 	printf("Testing MR on fabric %s\n", fi->fabric_attr->name);
@@ -211,7 +265,7 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
-err:
-	ft_free_res(); // frees buf as well
-	return ret ? -ret : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+out:
+	ft_free_res();
+	return ret ? ft_exit_code(ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
