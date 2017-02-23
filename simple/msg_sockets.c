@@ -306,6 +306,7 @@ static int setup_handle(void)
 	struct addrinfo *ai, aihints;
 	const char *bound_addr_str;
 	int ret;
+	char* saved_src_addr;
 
 	memset(&aihints, 0, sizeof aihints);
 	aihints.ai_flags = AI_PASSIVE;
@@ -334,7 +335,8 @@ static int setup_handle(void)
 		FT_PRINTERR("fi_getinfo", ret);
 		goto out;
 	}
-	free(fi_pep->src_addr);
+	/* save source address pointer for later restore */
+	saved_src_addr = fi_pep->src_addr;
 	fi_pep->src_addr = NULL;
 	fi_pep->src_addrlen = 0;
 
@@ -356,6 +358,9 @@ static int setup_handle(void)
 		FT_PRINTERR("fi_passive_ep", ret);
 		goto out;
 	}
+
+	/* restore original src_addr to avoid memory leak */
+	fi_pep->src_addr = saved_src_addr;
 
 	ret = fi_setname(&pep->fid, ai->ai_addr, ai->ai_addrlen);
 	if (ret) {
