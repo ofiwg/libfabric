@@ -61,13 +61,13 @@ static int check_addr(void *addr, size_t addrlen, char *str)
 
 static int check_srcaddr(void *arg)
 {
-	struct fi_info *info = (struct fi_info *)arg;
+	struct fi_info *info = arg;
 	return check_addr(info->src_addr, info->src_addrlen, "source");
 }
 
 static int check_src_dest_addr(void *arg)
 {
-	struct fi_info *info = (struct fi_info *)arg;
+	struct fi_info *info = arg;
 	int ret;
 
 	ret = check_addr(info->src_addr, info->src_addrlen, "source");
@@ -75,6 +75,12 @@ static int check_src_dest_addr(void *arg)
 		return ret;
 
 	return check_addr(info->dest_addr, info->dest_addrlen, "destination");
+}
+
+static int check_api_version(void *arg)
+{
+	struct fi_info *info = arg;
+	return info->fabric_attr->api_version != FT_FIVERSION;
 }
 
 int invalid_dom(struct fi_info *hints)
@@ -186,8 +192,11 @@ getinfo_test(10, "Test with node, service",
 		opts.dst_addr ? opts.dst_addr : "localhost", opts.dst_port,
 		0, hints, NULL, check_src_dest_addr, 0)
 
+getinfo_test(11, "Test API version",
+		NULL, NULL, 0, hints, NULL, check_api_version ,0)
+
 /* Negative tests */
-getinfo_test(11, "Test with non-existent domain name",
+getinfo_test(12, "Test with non-existent domain name",
 		NULL, NULL, 0, hints, invalid_dom, NULL, -FI_ENODATA)
 
 static void usage(void)
@@ -214,6 +223,7 @@ int main(int argc, char **argv)
 		TEST_ENTRY(getinfo9, getinfo9_desc),
 		TEST_ENTRY(getinfo10, getinfo10_desc),
 		TEST_ENTRY(getinfo11, getinfo11_desc),
+		TEST_ENTRY(getinfo12, getinfo12_desc),
 		{ NULL, "" }
 	};
 
