@@ -34,6 +34,12 @@ fi_mr_unmap_key
 fi_mr_bind
 : Associate a registered memory region with a completion counter.
 
+fi_mr_refresh
+: Updates the memory pages associated with a memory region.
+
+fi_mr_enable
+: Enables a memory region for use.
+
 # SYNOPSIS
 
 ```c
@@ -65,6 +71,11 @@ int fi_mr_map_raw(struct fid_domain *domain, uint64_t base_addr,
 int fi_mr_unmap_key(struct fid_domain *domain, uint64_t key);
 
 int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags);
+
+int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size, count,
+    uint64_t flags)
+
+int fi_mr_enable(struct fid_mr *mr);
 ```
 
 # ARGUMENTS
@@ -209,7 +220,22 @@ The following apply to memory registration.
   informs the provider that all necessary physical pages now back the
   region.  The notification is necessary for providers that cannot
   hook directly into the operating system page tables or memory management
-  unit.  TODO: Define notification mechanism and data.
+  unit.  See fi_mr_refresh() for notification details.
+
+*FI_MR_RMA_EVENT*
+: This mode bit indicates that the provider must configure memory
+  regions that are associated with RMA events prior to their use.  This
+  includes all memory regions that are associated with completion counters.
+  When set, applications must indicate if a memory region will be
+  associated with a completion counter as part of the region's creation.
+  This is done by passing in the FI_RMA_EVENT flag to the memory
+  registration call.
+
+  Such memory regions will be created in a disabled state and must be
+  associated with all completion counters prior to being enabled.  To
+  enable a memory region, the application must call fi_mr_enable().
+  After calling fi_mr_enable(), no further resource bindings may be
+  made to the memory region.
 
 *Basic Memory Registration*
 : Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit
@@ -351,6 +377,35 @@ memory region is based on the bitwise OR of the following flags.
   through which the MR is accessed be created with the FI_RMA_EVENT
   capability.
 
+## fi_mr_refresh
+
+The use of this call is required to notify the provider of any change
+to the physical pages backing a registered memory region if the
+FI_MR_MMU_NOTIFY mode bit has been set.  This call informs the provider
+that the page table entries associated with the region may have been
+modified, and the provider should verify and update the registered
+region accordingly.  The iov parameter is optional and may be used
+to specify which portions of the registered region requires updating.
+If provider, providers are only guaranteed to update the specified
+address ranges.
+
+The refresh operation has the effect of disabling and re-enabling
+access to the registered region.  Any operations from peers that attempt
+to access the region will fail while the refresh is occurring.
+Additionally, attempts to access the region by the local process
+through libfabric APIs may result in a page fault or other fatal operation.
+
+The fi_mr_refresh call is only needed if the physical pages might have
+been updated after the memory region was created.
+
+## fi_mr_enable
+
+The enable call is used with memory registration associated with the
+FI_MR_RMA_EVENT mode bit.  Memory regions created in the disabled state
+must be explicitly enabled after being fully configured by the
+application.  Any resource bindings to the MR must be done prior
+to enabling the MR.
+
 # MEMORY REGION ATTRIBUTES
 
 Memory regions are created using the following attributes.  The struct
@@ -468,7 +523,12 @@ desirable for highly scalable apps.
 
 # FLAGS
 
-Flags are reserved for future use and must be 0.
+The follow flag may be specified to any memory registration call.
+
+*FI_RMA_EVENT*
+: This flag indicates that the specified memory region will be
+  associated with a completion counter used to count RMA operations
+  that access the MR.
 
 # RETURN VALUES
 

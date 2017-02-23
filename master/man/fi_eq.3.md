@@ -406,10 +406,17 @@ through the prov_errno and err_data fields.  Users may call fi_eq_strerror to
 convert provider specific error information into a printable string
 for debugging purposes.
 
-If err_data_size is > 0, then the buffer referenced by err_data is directly
-user-accessible.  The contents of the buffer will remain valid until a
-subsequent read call against the EQ.  Applications which read the err_data
-buffer must ensure that they do not read past the end of the referenced buffer.
+On input, err_data_size indicates the size of the err_data buffer in bytes.
+On output, err_data_size will be set to the number of bytes copied to the
+err_data buffer.  The err_data information is typically used with
+fi_eq_strerror to provide details about the type of error that occurred.
+
+For compatibility purposes, if err_data_size is 0 on input, or the fabric
+was opened with release < 1.5, err_data will be set to a data buffer
+owned by the provider.  The contents of the buffer will remain valid until a
+subsequent read call against the EQ.  Applications must serialize access
+to the EQ when processing errors to ensure that the buffer referenced by
+err_data does not change.
 
 # NOTES
 
