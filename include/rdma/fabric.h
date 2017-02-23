@@ -203,6 +203,7 @@ enum fi_mr_mode {
 #define FI_MR_ALLOCATED		(1 << 5)
 #define FI_MR_PROV_KEY		(1 << 6)
 #define FI_MR_MMU_NOTIFY	(1 << 7)
+#define FI_MR_RMA_EVENT		(1 << 8)
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
@@ -344,6 +345,7 @@ struct fi_domain_attr {
 	uint64_t		mode;
 	uint8_t			*auth_key;
 	size_t 			auth_keylen;
+	size_t			max_err_data;
 };
 
 struct fi_fabric_attr {
@@ -492,6 +494,7 @@ enum {
 	FI_QUEUE_WORK,		/* struct fi_deferred_work */
 	FI_CANCEL_WORK,		/* struct fi_deferred_work */
 	FI_FLUSH_WORK,		/* NULL */
+	FI_REFRESH,		/* mr: fi_mr_modify */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)

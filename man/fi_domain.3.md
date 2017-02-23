@@ -132,6 +132,7 @@ struct fi_domain_attr {
 	uint64_t              mode;
 	uint8_t               *auth_key;
 	size_t                auth_keylen;
+	size_t                max_err_data;
 };
 ```
 
@@ -438,6 +439,10 @@ The following values may be specified.
   when the page tables referencing a registered memory region may have been
   updated.
 
+*FI_MR_RMA_EVENT*
+: Indicates that the memory regions associated with completion counters
+  must be explicitly enabled after being bound to any counter.
+
 *FI_MR_UNSPEC*
 : Defined for compatibility -- library versions 1.4 and earlier.  Setting
   mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are requested
@@ -588,7 +593,6 @@ The operational mode bit related to using the domain.
   to only be used with endpoints, transmit contexts, and receive contexts that
   have the same set of capability flags.
 
-
 ## Default authorization key (auth_key)
 
 The default authorization key to associate with endpoint and memory
@@ -602,6 +606,12 @@ no authorization key will be associated with endpoints and memory
 registrations created within the domain unless specified in the endpoint or 
 memory registration attributes. This field is ignored unless the fabric is 
 opened with API version 1.5 or greater.
+
+## Max Error Data Size (max_err_data)
+
+: The maximum amount of error data, in bytes, that may be returned as part of
+  a completion or event queue error.  This value corresponds to the
+  err_data_size field in struct fi_cq_err_entry and struct fi_eq_err_entry.
 
 # RETURN VALUE
 

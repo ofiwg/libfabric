@@ -395,6 +395,7 @@ struct fi_cq_err_entry {
 	int      err;         /* positive error code */
 	int      prov_errno;  /* provider error code */
 	void    *err_data;    /*  error data */
+	size_t   err_data_size; /* size of err_data */
 };
 ```
 
@@ -490,9 +491,20 @@ of these fields are the same for all CQ entry structure formats.
   associated with an error.  The use of this field and its meaning is
   provider specific.  It is intended to be used as a debugging aid.  See
   fi_cq_strerror for additional details on converting this error data into
-  a human readable string.  Providers are allowed to reuse a single internal
-  buffer to store additional error information.  As a result, error data
-  is only guaranteed to be available until the next time the CQ is read.
+  a human readable string.
+
+*err_data_size*
+: On input, err_data_size indicates the size of the err_data buffer in bytes.
+  On output, err_data_size will be set to the number of bytes copied to the
+  err_data buffer.  The err_data information is typically used with
+  fi_cq_strerror to provide details about the type of error that occurred.
+
+  For compatibility purposes, if err_data_size is 0 on input, or the fabric
+  was opened with release < 1.5, err_data will be set to a data buffer
+  owned by the provider.  The contents of the buffer will remain valid until a
+  subsequent read call against the CQ.  Applications must serialize access
+  to the CQ when processing errors to ensure that the buffer referenced by
+  err_data does no change.
 
 # COMPLETION FLAGS
 

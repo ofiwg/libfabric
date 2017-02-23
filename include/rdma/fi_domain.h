@@ -107,6 +107,11 @@ struct fi_mr_attr {
 	uint8_t			*auth_key;
 };
 
+struct fi_mr_modify {
+	uint64_t		flags;
+	struct fi_mr_attr	attr;
+};
+
 
 #ifdef FABRIC_DIRECT
 #include <rdma/fi_direct_atomic_def.h>
@@ -187,6 +192,8 @@ struct fi_ops_domain {
 			struct fi_atomic_attr *attr, uint64_t flags);
 };
 
+/* Memory registration flags */
+/* #define FI_RMA_EVENT		(1ULL << 56) */
 
 struct fi_ops_mr {
 	size_t	size;
@@ -330,6 +337,22 @@ fi_mr_unmap_key(struct fid_domain *domain, uint64_t key)
 static inline int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags)
 {
 	return mr->fid.ops->bind(&mr->fid, bfid, flags);
+}
+
+static inline int
+fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size_t count,
+	      uint64_t flags)
+{
+	struct fi_mr_modify modify = {0};
+	modify.flags = flags;
+	modify.attr.mr_iov = iov;
+	modify.attr.iov_count = count;
+	return mr->fid.ops->control(&mr->fid, FI_REFRESH, &modify);
+}
+
+static inline int fi_mr_enable(struct fid_mr *mr)
+{
+	return mr->fid.ops->control(&mr->fid, FI_ENABLE, NULL);
 }
 
 static inline int
