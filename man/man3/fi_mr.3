@@ -1,4 +1,4 @@
-.TH "fi_mr" "3" "2017\-02\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2017\-02\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr \- Memory region operations
@@ -23,6 +23,11 @@ fi_mr_unmap_key : Releases a previously mapped raw memory region key.
 .PP
 fi_mr_bind : Associate a registered memory region with a completion
 counter.
+.PP
+fi_mr_refresh : Updates the memory pages associated with a memory
+region.
+.PP
+fi_mr_enable : Enables a memory region for use.
 .SH SYNOPSIS
 .IP
 .nf
@@ -55,6 +60,11 @@ int\ fi_mr_map_raw(struct\ fid_domain\ *domain,\ uint64_t\ base_addr,
 int\ fi_mr_unmap_key(struct\ fid_domain\ *domain,\ uint64_t\ key);
 
 int\ fi_mr_bind(struct\ fid_mr\ *mr,\ struct\ fid\ *bfid,\ uint64_t\ flags);
+
+int\ fi_mr_refresh(struct\ fid_mr\ *mr,\ const\ struct\ iovec\ *iov,\ size,\ count,
+\ \ \ \ uint64_t\ flags)
+
+int\ fi_mr_enable(struct\ fid_mr\ *mr);
 \f[]
 .fi
 .SH ARGUMENTS
@@ -195,7 +205,24 @@ This notification informs the provider that all necessary physical pages
 now back the region.
 The notification is necessary for providers that cannot hook directly
 into the operating system page tables or memory management unit.
-TODO: Define notification mechanism and data.
+See fi_mr_refresh() for notification details.
+.PP
+\f[I]FI_MR_RMA_EVENT\f[] : This mode bit indicates that the provider
+must configure memory regions that are associated with RMA events prior
+to their use.
+This includes all memory regions that are associated with completion
+counters.
+When set, applications must indicate if a memory region will be
+associated with a completion counter as part of the region\[aq]s
+creation.
+This is done by passing in the FI_RMA_EVENT flag to the memory
+registration call.
+.PP
+Such memory regions will be created in a disabled state and must be
+associated with all completion counters prior to being enabled.
+To enable a memory region, the application must call fi_mr_enable().
+After calling fi_mr_enable(), no further resource bindings may be made
+to the memory region.
 .PP
 \f[I]Basic Memory Registration\f[] : Basic memory registration is
 indicated by the FI_MR_BASIC mr_mode bit in library versions 1.4 and
@@ -349,6 +376,35 @@ bitwise OR of the following flags.
 write or atomic operation modifies the memory region.
 Use of this flag requires that the endpoint through which the MR is
 accessed be created with the FI_RMA_EVENT capability.
+.SS fi_mr_refresh
+.PP
+The use of this call is required to notify the provider of any change to
+the physical pages backing a registered memory region if the
+FI_MR_MMU_NOTIFY mode bit has been set.
+This call informs the provider that the page table entries associated
+with the region may have been modified, and the provider should verify
+and update the registered region accordingly.
+The iov parameter is optional and may be used to specify which portions
+of the registered region requires updating.
+If provider, providers are only guaranteed to update the specified
+address ranges.
+.PP
+The refresh operation has the effect of disabling and re\-enabling
+access to the registered region.
+Any operations from peers that attempt to access the region will fail
+while the refresh is occurring.
+Additionally, attempts to access the region by the local process through
+libfabric APIs may result in a page fault or other fatal operation.
+.PP
+The fi_mr_refresh call is only needed if the physical pages might have
+been updated after the memory region was created.
+.SS fi_mr_enable
+.PP
+The enable call is used with memory registration associated with the
+FI_MR_RMA_EVENT mode bit.
+Memory regions created in the disabled state must be explicitly enabled
+after being fully configured by the application.
+Any resource bindings to the MR must be done prior to enabling the MR.
 .SH MEMORY REGION ATTRIBUTES
 .PP
 Memory regions are created using the following attributes.
@@ -466,7 +522,11 @@ interfaces; however, their use does carry extra message and memory
 footprint overhead, making it less desirable for highly scalable apps.
 .SH FLAGS
 .PP
-Flags are reserved for future use and must be 0.
+The follow flag may be specified to any memory registration call.
+.PP
+\f[I]FI_RMA_EVENT\f[] : This flag indicates that the specified memory
+region will be associated with a completion counter used to count RMA
+operations that access the MR.
 .SH RETURN VALUES
 .PP
 Returns 0 on success.
