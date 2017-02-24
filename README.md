@@ -259,8 +259,8 @@ See the `fi_verbs(7)` man page for more details.
 ***
 
 The `bgq` provider is a native provider that directly utilizes the hardware
-interfaces of the Blue Gene/Q system to implement all aspects of the libfabric
-interface.
+interfaces of the Blue Gene/Q system to implement aspects of the libfabric
+interface to fully support MPICH3 CH4.
 
 See the `fi_bgq(7)` man page for more details
 
@@ -273,7 +273,14 @@ See the `fi_bgq(7)` man page for more details
 #### Configure options
 
 ```
---with-bgq-progress=(auto|manual|runtime)
+--with-bgq-progress=(auto|manual)
 ```
 
-If specified, set the progress mode enabled in FABRIC_DIRECT.
+If specified, set the progress mode enabled in FABRIC_DIRECT (default is FI_PROGRESS_MANUAL).
+
+```
+--with-bgq-mr=(basic|scalable)
+```
+
+If specified, set the memory registration mode (default is FI_MR_BASIC).
+
