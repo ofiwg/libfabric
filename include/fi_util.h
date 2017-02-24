@@ -123,15 +123,16 @@ struct util_fabric {
 	atomic_t		ref;
 	const char		*name;
 	const struct fi_provider *prov;
+	uint32_t		api_version;
 
 	struct dlist_entry	domain_list;
 };
 
 int ofi_fabric_init(const struct fi_provider *prov,
-		   struct fi_fabric_attr *prov_attr,
-		   struct fi_fabric_attr *user_attr,
-		   struct util_fabric *fabric, void *context,
-		   enum fi_match_type type);
+		    const struct fi_fabric_attr *prov_attr,
+		    const struct fi_fabric_attr *user_attr,
+		    struct util_fabric *fabric, void *context,
+		    enum fi_match_type type);
 int ofi_fabric_close(struct util_fabric *fabric);
 int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 

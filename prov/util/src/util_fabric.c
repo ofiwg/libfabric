@@ -46,19 +46,11 @@ int ofi_fabric_close(struct util_fabric *fabric)
 	return 0;
 }
 
-static void util_fabric_init(struct util_fabric *fabric, const char *name)
-{
-	atomic_initialize(&fabric->ref, 0);
-	dlist_init(&fabric->domain_list);
-	fastlock_init(&fabric->lock);
-	fabric->name = name;
-}
-
 int ofi_fabric_init(const struct fi_provider *prov,
-		   struct fi_fabric_attr *prov_attr,
-		   struct fi_fabric_attr *user_attr,
-		   struct util_fabric *fabric, void *context,
-		   enum fi_match_type type)
+		    const struct fi_fabric_attr *prov_attr,
+		    const struct fi_fabric_attr *user_attr,
+		    struct util_fabric *fabric, void *context,
+		    enum fi_match_type type)
 {
 	int ret;
 
@@ -67,7 +59,11 @@ int ofi_fabric_init(const struct fi_provider *prov,
 		return ret;
 
 	fabric->prov = prov;
-	util_fabric_init(fabric, prov_attr->name);
+	atomic_initialize(&fabric->ref, 0);
+	dlist_init(&fabric->domain_list);
+	fastlock_init(&fabric->lock);
+	fabric->name = prov_attr->name;
+	fabric->api_version = user_attr->api_version;
 
 	fabric->fabric_fid.fid.fclass = FI_CLASS_FABRIC;
 	fabric->fabric_fid.fid.context = context;
