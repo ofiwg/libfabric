@@ -305,8 +305,9 @@ static int setup_handle(void)
 	static char buf[BUFSIZ];
 	struct addrinfo *ai, aihints;
 	const char *bound_addr_str;
+	char *saved_addr;
+	size_t saved_addrlen;
 	int ret;
-	char* saved_src_addr;
 
 	memset(&aihints, 0, sizeof aihints);
 	aihints.ai_flags = AI_PASSIVE;
@@ -333,10 +334,12 @@ static int setup_handle(void)
 	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, FI_SOURCE, hints, &fi_pep);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
-		goto out;
+		goto freeai;
 	}
-	/* save source address pointer for later restore */
-	saved_src_addr = fi_pep->src_addr;
+
+	/* Open passive endpoint without source address */
+	saved_addr = fi_pep->src_addr;
+	saved_addrlen = fi_pep->src_addrlen;
 	fi_pep->src_addr = NULL;
 	fi_pep->src_addrlen = 0;
 
@@ -358,9 +361,6 @@ static int setup_handle(void)
 		FT_PRINTERR("fi_passive_ep", ret);
 		goto out;
 	}
-
-	/* restore original src_addr to avoid memory leak */
-	fi_pep->src_addr = saved_src_addr;
 
 	ret = fi_setname(&pep->fid, ai->ai_addr, ai->ai_addrlen);
 	if (ret) {
@@ -402,6 +402,9 @@ static int setup_handle(void)
 
 	hints->handle = &pep->fid;
 out:
+	fi_pep->src_addr = saved_addr;
+	fi_pep->src_addrlen = saved_addrlen;
+freeai:
 	freeaddrinfo(ai);
 	return ret;
 }
