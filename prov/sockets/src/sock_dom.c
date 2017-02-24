@@ -445,7 +445,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		sock_domain->info = *info;
 	} else {
 		SOCK_LOG_ERROR("invalid fi_info\n");
-		goto err;
+		goto err1;
 	}
 
 	sock_domain->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
@@ -463,7 +463,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->pe = sock_pe_init(sock_domain);
 	if (!sock_domain->pe) {
 		SOCK_LOG_ERROR("Failed to init PE\n");
-		goto err;
+		goto err1;
 	}
 
 	sock_domain->fab = fab;
@@ -476,13 +476,16 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = ofi_mr_map_init(&sock_prov, sock_domain->attr.mr_mode,
 			      &sock_domain->mr_map);
-	if (!ret)
-		return ret;
+	if (ret)
+		goto err2;
 
 	sock_dom_add_to_list(sock_domain);
 	return 0;
 
-err:
+err2:
+	sock_pe_finalize(sock_domain->pe);
+err1:
+	fastlock_destroy(&sock_domain->lock);
 	free(sock_domain);
 	return -FI_EINVAL;
 }
