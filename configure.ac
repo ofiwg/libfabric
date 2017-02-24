@@ -125,23 +125,10 @@ fi
 AC_DEFINE_UNQUOTED([PT_LOCK_SPIN], [$have_spinlock],
 	[Define to 1 if pthread_spin_init is available.])
 
-have_clock_gettime=0
-
 AC_CHECK_FUNCS([epoll_create])
 if test "$ac_cv_func_epoll_create" = yes; then
   AC_DEFINE([HAVE_EPOLL], [1], [Define if you have epoll support.])
 fi
-
-AC_SEARCH_LIBS([clock_gettime],[rt],
-		[have_clock_gettime=1],
-		[AC_CHECK_FUNCS([host_get_clock_service],
-			[],
-			[AC_MSG_ERROR([clock_gettime or host_get_clock_service
-			 not found.])])])
-
-AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
-		   [Define to 1 if clock_gettime is available.])
-AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
 dnl Check for gcc atomic intrinsics
 AC_MSG_CHECKING(compiler support for c11 atomics)

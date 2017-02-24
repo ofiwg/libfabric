@@ -181,8 +181,8 @@ struct ct_pingpong {
 	void *buf, *tx_buf, *rx_buf;
 	size_t buf_size, tx_size, rx_size;
 
-	int timeout;
-	struct timespec start, end;
+	int timeout_sec;
+	uint64_t start, end;
 
 	struct fi_av_attr av_attr;
 	struct fi_eq_attr eq_attr;
@@ -203,26 +203,16 @@ static const int integ_alphabet_length =
 	(sizeof(integ_alphabet) / sizeof(*integ_alphabet)) - 1;
 
 /*******************************************************************************
- *                                  Compatibility methods
- ******************************************************************************/
-#if defined(__APPLE__) && !HAVE_CLOCK_GETTIME
-int clock_gettime(clockid_t clk_id, struct timespec *tp)
-{
-	int retval;
-	struct timeval tv;
-
-	retval = gettimeofday(&tv, NULL);
-
-	tp->tv_sec = tv.tv_sec;
-	tp->tv_nsec = tv.tv_usec * 1000;
-
-	return retval;
-}
-#endif
-
-/*******************************************************************************
  *                                         Utils
  ******************************************************************************/
+
+uint64_t pp_gettime_us(void)
+{
+	struct timeval now;
+
+	gettimeofday(&now, NULL);
+	return now.tv_sec * 1000000 + now.tv_usec;
+}
 
 long parse_ulong(char *str, long max)
 {
@@ -804,12 +794,12 @@ static inline void pp_start(struct ct_pingpong *ct)
 {
 	PP_DEBUG("Starting test chrono\n");
 	ct->opts.options |= PP_OPT_ACTIVE;
-	clock_gettime(CLOCK_MONOTONIC, &(ct->start));
+	ct->start = pp_gettime_us();
 }
 
 static inline void pp_stop(struct ct_pingpong *ct)
 {
-	clock_gettime(CLOCK_MONOTONIC, &(ct->end));
+	ct->end = pp_gettime_us();
 	ct->opts.options &= ~PP_OPT_ACTIVE;
 	PP_DEBUG("Stopped test chrono\n");
 }
@@ -1015,22 +1005,12 @@ char *cnt_str(char *str, size_t size, uint64_t cnt)
 	return str;
 }
 
-int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
-		    enum precision p)
-{
-	int64_t elapsed;
-
-	elapsed = difftime(a->tv_sec, b->tv_sec) * 1000 * 1000 * 1000;
-	elapsed += a->tv_nsec - b->tv_nsec;
-	return elapsed / p;
-}
-
 void show_perf(char *name, int tsize, int sent, int acked,
-	       struct timespec *start, struct timespec *end, int xfers_per_iter)
+	       uint64_t start, uint64_t end, int xfers_per_iter)
 {
 	static int header = 1;
 	char str[PP_STR_LEN];
-	int64_t elapsed = get_elapsed(start, end, MICRO);
+	int64_t elapsed = end - start;
 	uint64_t bytes = (uint64_t)sent * tsize * xfers_per_iter;
 	float usec_per_xfer;
 
@@ -1094,20 +1074,20 @@ int pp_cq_readerr(struct fid_cq *cq)
 }
 
 static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
-			  int timeout)
+			  int timeout_sec)
 {
 	struct fi_cq_err_entry comp;
-	struct timespec a = {0}, b = {0};
+	uint64_t a = 0, b = 0;
 	int ret = 0;
 
-	if (timeout >= 0)
-		clock_gettime(CLOCK_MONOTONIC, &a);
+	if (timeout_sec >= 0)
+		a = pp_gettime_us();
 
 	while (total - *cur > 0) {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
-			if (timeout >= 0)
-				clock_gettime(CLOCK_MONOTONIC, &a);
+			if (timeout_sec >= 0)
+				a = pp_gettime_us();
 
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -1119,11 +1099,11 @@ static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 			}
 
 			return ret;
-		} else if (timeout >= 0) {
-			clock_gettime(CLOCK_MONOTONIC, &b);
-			if ((b.tv_sec - a.tv_sec) > timeout) {
+		} else if (timeout_sec >= 0) {
+			b = pp_gettime_us();
+			if ((b - a) / 1000000 > timeout_sec) {
 				fprintf(stderr, "%ds timeout expired\n",
-					timeout);
+					timeout_sec);
 				return -FI_ENODATA;
 			}
 		}
@@ -1138,7 +1118,7 @@ int pp_get_rx_comp(struct ct_pingpong *ct, uint64_t total)
 
 	if (ct->rxcq) {
 		ret = pp_get_cq_comp(ct->rxcq, &(ct->rx_cq_cntr), total,
-				     ct->timeout);
+				     ct->timeout_sec);
 	} else {
 		PP_ERR(
 		    "Trying to get a RX completion when no RX CQ was opened");
@@ -1163,7 +1143,7 @@ int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 
 #define PP_POST(post_fn, comp_fn, seq, op_str, ...)                            \
 	do {                                                                   \
-		int timeout_save;                                              \
+		int timeout_sec_save;                                          \
 		int ret, rc;                                                   \
 									       \
 		while (1) {                                                    \
@@ -1176,10 +1156,10 @@ int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 				return ret;                                    \
 			}                                                      \
 									       \
-			timeout_save = ct->timeout;                            \
-			ct->timeout = 0;                                       \
+			timeout_sec_save = ct->timeout_sec;                    \
+			ct->timeout_sec = 0;                                   \
 			rc = comp_fn(ct, seq);                                 \
-			ct->timeout = timeout_save;                            \
+			ct->timeout_sec = timeout_sec_save;                    \
 			if (rc && rc != -FI_EAGAIN) {                          \
 				PP_ERR("Failed to get " op_str " completion"); \
 				return rc;                                     \
@@ -2035,7 +2015,7 @@ int pingpong(struct ct_pingpong *ct)
 
 	PP_DEBUG("Results:\n");
 	show_perf(NULL, ct->opts.transfer_size, ct->opts.iterations,
-		  ct->cnt_ack_msg, &(ct->start), &(ct->end), 2);
+		  ct->cnt_ack_msg, ct->start, ct->end, 2);
 
 	return 0;
 }
@@ -2149,7 +2129,7 @@ int main(int argc, char **argv)
 	ret = EXIT_SUCCESS;
 
 	struct ct_pingpong ct = {
-		.timeout = -1,
+		.timeout_sec = -1,
 		.ctrl_connfd = -1,
 		.opts = {
 			.iterations = 1000,
