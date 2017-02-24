@@ -40,45 +40,93 @@
 #include "unit_common.h"
 #include "shared.h"
 
-static char err_buf[512];
 
-static int cntr_open_close()
+static char err_buf[512];
+#define MAX_COUNTER_CHECK 100
+
+
+static int cntr_loop()
 {
-	int i, opened;
-	int ret = 0;
-	int testret = FAIL;
-	struct fid_cntr **cntrs = calloc(fi->domain_attr->cntr_cnt,
-					 sizeof(struct fid_cntr *));
+	size_t i, opened, cntr_cnt;
+	uint64_t value;
+	int ret, testret = FAIL;
+
+	cntr_cnt = MIN(fi->domain_attr->cntr_cnt, MAX_COUNTER_CHECK);
+	struct fid_cntr **cntrs = calloc(cntr_cnt, sizeof(struct fid_cntr *));
 	if (!cntrs) {
 		perror("calloc");
 		return -FI_ENOMEM;
 	}
 
-	for (opened = 0; opened < fi->domain_attr->cntr_cnt; opened++) {
+	for (opened = 0; opened < cntr_cnt; opened++) {
 		ret = ft_cntr_open(&cntrs[opened]);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
-			break;
+			goto close;
 		}
 	}
 
 	for (i = 0; i < opened; i++) {
+		ret = fi_cntr_set(cntrs[i], i);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_set", ret);
+			goto close;
+		}
+
+		ret = fi_cntr_seterr(cntrs[i], i << 1);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_seterr", ret);
+			goto close;
+		}
+	}
+
+	for (i = 0; i < opened; i++) {
+		ret = fi_cntr_add(cntrs[i], i);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_add", ret);
+			goto close;
+		}
+
+		ret = fi_cntr_adderr(cntrs[i], i);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_adderr", ret);
+			goto close;
+		}
+	}
+
+	for (i = 0; i < opened; i++) {
+		value = fi_cntr_read(cntrs[i]);
+		if (value != i + i) {
+			FT_PRINTERR("fi_cntr_read", value);
+			goto close;
+		}
+
+		value = fi_cntr_readerr(cntrs[i]);
+		if (value != (i << 1) + i) {
+			FT_PRINTERR("fi_cntr_readerr", value);
+			goto close;
+		}
+	}
+	testret = PASS;
+
+close:
+	for (i = 0; i < opened; i++) {
 		ret = fi_close(&(cntrs[i])->fid);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_close", ret);
-			goto fail;
+			break;
 		}
 	}
-	if (opened == fi->domain_attr->cntr_cnt)
-		testret = PASS;
 
-fail:
+	if (i < cntr_cnt)	
+		testret = FAIL;
+
 	free(cntrs);
 	return TEST_RET_VAL(ret, testret);
 }
 
 struct test_entry test_array[] = {
-	TEST_ENTRY(cntr_open_close, "Test open/close counters to limit"),
+	TEST_ENTRY(cntr_loop, "Test counter open/set/read/close operations"),
 	{ NULL, "" }
 };
 
