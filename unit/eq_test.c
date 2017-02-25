@@ -178,10 +178,10 @@ fail:
 
 /*
  * Tests:
- * - write overflow
+ * - eq size test
  */
 static int
-eq_write_overflow()
+eq_size_verify()
 {
 	struct fi_eq_entry entry;
 	int testret;
@@ -205,12 +205,6 @@ eq_write_overflow()
 			sprintf(err_buf, "fi_eq_write ret=%d, %s", ret, fi_strerror(-ret));
 			goto fail;
 		}
-	}
-
-	ret = fi_eq_write(eq, FI_NOTIFY, &entry, sizeof(entry), 0);
-	if (ret != -FI_EAGAIN && ret != sizeof(entry)) {
-		sprintf(err_buf, "fi_eq_write of full EQ returned %d", ret);
-		goto fail;
 	}
 
 	testret = PASS;
@@ -543,7 +537,7 @@ fail:
 struct test_entry test_array[] = {
 	TEST_ENTRY(eq_open_close, "Test open and close of EQ for various sizes"),
 	TEST_ENTRY(eq_write_read_self, "Test writing and reading to EQ"),
-	TEST_ENTRY(eq_write_overflow, "Test writing # of entries that exceed EQ size"),
+	TEST_ENTRY(eq_size_verify, "Test EQ supports writing # of entries = size"),
 	TEST_ENTRY(eq_wait_fd_poll, "Test polling on fd extracted from EQ"),
 	TEST_ENTRY(eq_wait_fd_sread, "Test EQ sread"),
 	TEST_ENTRY(eq_wait_read_peek, "Test EQ read with FI_PEEK"),
