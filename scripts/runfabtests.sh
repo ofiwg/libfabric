@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 #
+# Copyright (c) 2017, Intel Corporation.  All rights reserved.
 # Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
 # Copyright (c) 2016, Cray, Inc. All rights reserved.
 #
@@ -170,6 +171,7 @@ unit_tests=(
 	"eq_test"
 	"cq_test"
 	"mr_test"
+	"cntr_test"
 )
 
 complex_tests=(

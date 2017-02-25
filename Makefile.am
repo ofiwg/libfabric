@@ -34,6 +34,7 @@ bin_PROGRAMS = \
 	unit/fi_eq_test \
 	unit/fi_cq_test \
 	unit/fi_mr_test \
+	unit/fi_cntr_test \
 	unit/fi_av_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
@@ -218,6 +219,11 @@ unit_fi_mr_test_SOURCES = \
 	unit/mr_test.c \
 	unit/common.c
 unit_fi_mr_test_LDADD = libfabtests.la
+
+unit_fi_cntr_test_SOURCES = \
+	unit/cntr_test.c \
+	unit/common.c
+unit_fi_cntr_test_LDADD = libfabtests.la
 
 unit_fi_av_test_SOURCES = \
 	unit/av_test.c \
