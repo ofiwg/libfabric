@@ -208,7 +208,7 @@ int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr,
 		struct fid_stx **stx, void *context);
 int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		struct fid_ep **rx_ep, void *context);
-int fi_no_query_atomic(struct fid_ep *ep, enum fi_datatype datatype,
+int fi_no_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
 
 
