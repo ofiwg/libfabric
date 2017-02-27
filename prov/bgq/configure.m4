@@ -105,8 +105,16 @@ AC_DEFUN([FI_BGQ_CONFIGURE],[
 			BGQ_FABRIC_DIRECT_AV=FI_AV_MAP
 			AC_SUBST(bgq_fabric_direct_av, [$BGQ_FABRIC_DIRECT_AV])
 
-			dnl Only FI_MR_SCALABLE is supported by the bgq provider
-			BGQ_FABRIC_DIRECT_MR=FI_MR_SCALABLE
+			AC_ARG_WITH([bgq-mr],
+				[AS_HELP_STRING([--with-bgq-mr(=scalable|basic)],
+					[Specify the bgq FABRIC_DIRECT mr mode  @<:@default=scalable@:>@])
+				])
+
+			AS_CASE([$with_bgq_mr],
+				[scalable], [BGQ_FABRIC_DIRECT_MR=FI_MR_SCALABLE],
+				[basic], [BGQ_FABRIC_DIRECT_MR=FI_MR_BASIC],
+				[BGQ_FABRIC_DIRECT_MR=FI_MR_SCALABLE])
+
 			AC_SUBST(bgq_fabric_direct_mr, [$BGQ_FABRIC_DIRECT_MR])
 
 			dnl Only FI_THREAD_ENDPOINT is supported by the bgq provider

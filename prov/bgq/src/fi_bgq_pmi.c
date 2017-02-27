@@ -67,7 +67,7 @@ convert_virtual_address_to_global_virtual_address (void * vaddr, size_t len)
 {
 	uint64_t paddr = 0;
 	void * global_vaddr = NULL;
-	uint32_t cnk_rc = 0;
+	uint32_t cnk_rc __attribute__ ((unused));
 
 	Kernel_MemoryRegion_t cnk_mr;
 	cnk_rc = Kernel_CreateMemoryRegion(&cnk_mr, (void *)vaddr, len);

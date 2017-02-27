@@ -34,17 +34,18 @@
 
 static int fi_bgq_close_mr(fid_t fid)
 {
-	int ret;
 	struct fi_bgq_domain *bgq_domain;
 	struct fi_bgq_mr *bgq_mr = (struct fi_bgq_mr *) fid;
 
 	bgq_domain = bgq_mr->domain;
 
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+	int ret;
 	fi_bgq_domain_bat_clear(bgq_domain, bgq_mr->mr_fid.key);
 
 	ret = fi_bgq_ref_dec(&bgq_domain->ref_cnt, "domain");
 	if (ret) return ret;
-
+	}
 	free(bgq_mr);
 	return 0;
 }
@@ -71,7 +72,6 @@ static int fi_bgq_bind_mr(struct fid *fid,
 		errno = FI_ENOSYS;
 		return -errno;
 	}
-
 	return 0;
 }
 
@@ -89,6 +89,7 @@ static int fi_bgq_mr_reg(struct fid *fid, const void *buf,
 		struct fid_mr **mr, void *context)
 {
 	int ret;
+
 	struct fi_bgq_mr *bgq_mr;
 	struct fi_bgq_domain *bgq_domain;
 
@@ -109,12 +110,13 @@ static int fi_bgq_mr_reg(struct fid *fid, const void *buf,
 
 	bgq_domain = (struct fi_bgq_domain *) container_of(fid, struct fid_domain, fid);
 
-	if (requested_key >= bgq_domain->num_mr_keys) {
-		/* requested key is too large */
-		errno = FI_EKEYREJECTED;
-		return -errno;
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+		if (requested_key >= bgq_domain->num_mr_keys) {
+			/* requested key is too large */
+			errno = FI_EKEYREJECTED;
+			return -errno;
+		}
 	}
-
 	bgq_mr = calloc(1, sizeof(*bgq_mr));
 	if (!bgq_mr) {
 		errno = FI_ENOMEM;
@@ -124,8 +126,22 @@ static int fi_bgq_mr_reg(struct fid *fid, const void *buf,
 	bgq_mr->mr_fid.fid.fclass	= FI_CLASS_MR;
 	bgq_mr->mr_fid.fid.context	= context;
 	bgq_mr->mr_fid.fid.ops		= &fi_bgq_fi_ops;
-	bgq_mr->mr_fid.key		= requested_key;
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+		bgq_mr->mr_fid.key		= requested_key;
+	}
+	else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
 
+		uint64_t paddr = 0;
+
+		fi_bgq_cnk_vaddr2paddr(buf,1,&paddr);
+		bgq_mr->mr_fid.key		= ((uint64_t)buf - paddr);
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_mr_reg - FI_MR_BASIC virtual addr is 0x%016lx physical addr is 0x%016lx key is %lu  \n",(uint64_t)buf,paddr,(uint64_t)((uint64_t)buf - paddr));
+fflush(stderr);
+
+#endif
+
+	}
 	bgq_mr->buf 	= buf;
 	bgq_mr->len	= len;
 	bgq_mr->offset	= offset;
@@ -133,9 +149,11 @@ static int fi_bgq_mr_reg(struct fid *fid, const void *buf,
 	bgq_mr->flags	= flags;
 	bgq_mr->domain  = bgq_domain;
 
-	fi_bgq_domain_bat_write(bgq_domain, requested_key, buf, len);
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+		fi_bgq_domain_bat_write(bgq_domain, requested_key, buf, len);
 
-	fi_bgq_ref_inc(&bgq_domain->ref_cnt, "domain");
+		fi_bgq_ref_inc(&bgq_domain->ref_cnt, "domain");
+	}
 
 	*mr = &bgq_mr->mr_fid;
 
@@ -167,9 +185,11 @@ int fi_bgq_init_mr_ops(struct fi_bgq_domain *bgq_domain, struct fi_info *info)
 
 	bgq_domain->mr_mode = info->domain_attr->mr_mode;
 
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
 	bgq_domain->num_mr_keys = (1<<(8*info->domain_attr->mr_key_size));
 	bgq_domain->bat = (struct fi_bgq_bat_entry *) calloc(bgq_domain->num_mr_keys, sizeof(struct fi_bgq_bat_entry));
 
+	}
 	return 0;
 err:
 	errno = FI_EINVAL;
@@ -178,9 +198,10 @@ err:
 
 int fi_bgq_finalize_mr_ops(struct fi_bgq_domain *bgq_domain)
 {
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
 	free((void*)bgq_domain->bat);
 	bgq_domain->bat = (void*)NULL;
 	bgq_domain->num_mr_keys = 0;
-
+	}
 	return 0;
 }

@@ -470,23 +470,34 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 	/* copy the 'shared tx' resources and information */
 	fi_bgq_spi_injfifo_clone(&bgq_ep->tx.injfifo, &bgq_ep->tx.stx->injfifo);
 
-	union fi_bgq_addr self;
-	fi_bgq_create_addr_self((fi_addr_t*)(&self.fi));
+	BG_CoordinateMapping_t my_coords = bgq_domain->my_coords;
 
+	const uint32_t fifo_map =
+		fi_bgq_mu_calculate_fifo_map_single(my_coords, my_coords);
 
+	const MUHWI_Destination_t destination =
+		fi_bgq_spi_coordinates_to_destination(my_coords);
+
+	const uint32_t base_rx =
+		fi_bgq_addr_calculate_base_rx(my_coords.t, Kernel_ProcessCount());
+
+	const union fi_bgq_addr self = {.fi=fi_bgq_addr_create(destination, fifo_map, base_rx)};
+
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_ep_tx_init created addr:\n");
+	FI_BGQ_ADDR_DUMP((fi_addr_t *)&self.fi);
+#endif
 	/*
-	 *  fi_[t]inject() descriptor models
+	 *  fi_[t]send*() descriptor models
 	 */
-	{	/* inject model */
-		MUHWI_Descriptor_t * desc = &bgq_ep->tx.inject.inject_model;
+	{	/* send model */
+		MUHWI_Descriptor_t * desc = &bgq_ep->tx.send.send_model;
 		MUSPI_DescriptorZeroOut(desc);
 
 		desc->Half_Word0.Prefetch_Only =
 			MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
 		desc->Half_Word1.Interrupt =
 			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
-		desc->Pa_Payload = 0;
-		desc->Message_Length = 0;
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
@@ -495,68 +506,51 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_FIFO;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 
+		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
+
+		hdr->pt2pt.uid.fi = self.uid.fi;
+		hdr->pt2pt.immediate_data = 0;
+		hdr->pt2pt.ofi_tag = (uint64_t)-1;
+
 		/* specified at injection time */
-		desc->Torus_FIFO_Map = -1;
+		desc->Pa_Payload = 0;
+		desc->Message_Length = 0;
+		desc->Torus_FIFO_Map = 0;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination.Destination.Destination = -1;
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = -1;
 
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_INJECT);
-
-		/* send model - copy from inject model and update */
-		desc = &bgq_ep->tx.inject.send_model;
-		*desc = bgq_ep->tx.inject.inject_model;
-
-		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_EAGER);
-
-		hdr->send.origin = self.Destination;
-	}
-
-	/*
-	 * fi_[t]send*() descriptor models
-	 */
-	{	/* send model - copy from inject send model and update */
-		MUHWI_Descriptor_t * desc = &bgq_ep->tx.send.send_model;
-		*desc = bgq_ep->tx.inject.send_model;
 
 		/* send rendezvous models */
 		desc = &bgq_ep->tx.send.rzv_model[0];	/* "internode" */	/* TODO - use an enum */
-		MUSPI_DescriptorZeroOut(desc);
+		*desc = bgq_ep->tx.send.send_model;
 
-		desc->Half_Word0.Prefetch_Only =
-			MUHWI_DESCRIPTOR_PRE_FETCH_ONLY_NO;
-		desc->Half_Word1.Interrupt =
-			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
-		desc->Message_Length = sizeof(struct fi_bgq_mu_iov);
-		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
-			MUHWI_PT2PT_DATA_PACKET_TYPE;
-		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
-			MUHWI_PACKET_VIRTUAL_CHANNEL_DETERMINISTIC;
-		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 =
-			MUHWI_PACKET_TYPE_FIFO;
-		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
+		desc->Message_Length = sizeof(struct fi_bgq_mu_iov) + offsetof(union fi_bgq_mu_packet_payload, rendezvous.mu_iov);
 
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_TAG|FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS);
-		hdr->rendezvous.is_local = 0;
-		hdr->rendezvous.niov_minus_1 = 0;
-		hdr->rendezvous.rget_inj_fifo_id = bgq_ep->tx.stx->rgetfifo.node_scoped_fifo_id;
-		hdr->rendezvous.origin = self.Destination;
+		hdr->pt2pt.rendezvous.is_local = 0;
+		hdr->pt2pt.rendezvous.niov_minus_1 = 0;
+		hdr->pt2pt.rendezvous.rget_inj_fifo_id = bgq_ep->tx.stx->rgetfifo.node_scoped_fifo_id;
+
+		desc = &bgq_ep->tx.send.rzv_model[1];	/* "intranode" */	/* TODO - use an enum */
+		*desc = bgq_ep->tx.send.rzv_model[0];
+		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		hdr->pt2pt.rendezvous.is_local = 1;
+
+#ifdef FI_BGQ_REMOTE_COMPLETION
+		/* remote completion model - used for FI_DELIVERY_COMPLETE */
+		desc = &bgq_ep->tx.send.remote_completion_model;
+		*desc = bgq_ep->tx.send.send_model;
+
+		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
+		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER|FI_BGQ_MU_PACKET_TYPE_ACK);
+		hdr->completion.origin = fi_bgq_uid_get_destination(self.uid.fi);
 
 		/* specified at injection time */
-		desc->Pa_Payload = -1;
-		desc->Torus_FIFO_Map = -1;
-		desc->PacketHeader.NetworkHeader.pt2pt.Destination.Destination.Destination = -1;
-		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id = -1;
-		hdr->rendezvous.cntr_paddr_rsh3b = -1;
-		hdr->rendezvous.ofi_tag = -1;
-		/* also hdr->rendezvous.origin fifo map information */
-
-		bgq_ep->tx.send.rzv_model[1] = *desc;				/* "intranode" */	/* TODO - use an enum */
-		desc = &bgq_ep->tx.send.rzv_model[1];
-		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
-		hdr->rendezvous.is_local = 1;
+		hdr->completion.is_local = 0;
+		hdr->completion.cntr_paddr_rsh3b = 0;
+#endif
 	}
 
 	/*
@@ -642,7 +636,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_GET;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Remote_Get.Rget_Inj_FIFO_Id =
 			bgq_ep->tx.stx->rgetfifo.node_scoped_fifo_id;
 
@@ -711,7 +705,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		desc->Half_Word1.Interrupt =
 			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
@@ -750,7 +744,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_PUT;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Rec_Payload_Base_Address_Id =
 			FI_BGQ_MU_BAT_ID_GLOBAL;
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Pacing =
@@ -786,7 +780,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_PUT;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Pacing =
 			MUHWI_PACKET_DIRECT_PUT_IS_NOT_PACED;
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Counter_Offset = 0;
@@ -816,7 +810,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_PUT;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Pacing =
 			MUHWI_PACKET_DIRECT_PUT_IS_NOT_PACED;
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Counter_Offset = 0;
@@ -849,7 +843,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		desc->Half_Word1.Interrupt =
 			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
@@ -862,7 +856,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 
 		hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_ATOMIC);
-		hdr->atomic.origin = self.Destination;
+		hdr->atomic.origin = fi_bgq_uid_get_destination(self.uid.fi);
 
 		/* ==== specified at injection time ==== */
 		desc->Torus_FIFO_Map = -1;
@@ -878,7 +872,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		desc->Half_Word1.Interrupt =
 			MUHWI_DESCRIPTOR_DO_NOT_INTERRUPT_ON_PACKET_ARRIVAL;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
@@ -917,7 +911,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_PUT;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Pacing =
 			MUHWI_PACKET_DIRECT_PUT_IS_NOT_PACED;
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Counter_Offset = 0;
@@ -950,7 +944,7 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 			MUHWI_PACKET_TYPE_PUT;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			self.Destination;
+			fi_bgq_uid_get_destination(self.uid.fi);
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Pacing =
 			MUHWI_PACKET_DIRECT_PUT_IS_NOT_PACED;
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Direct_Put.Counter_Offset = 0;
@@ -976,22 +970,36 @@ static int fi_bgq_ep_rx_init(struct fi_bgq_ep *bgq_ep)
 
 	struct fi_bgq_domain * bgq_domain = bgq_ep->domain;
 
-	fi_bgq_create_addr_self(&bgq_ep->rx.self.fi);
-	bgq_ep->rx.self.rx = (((BGQ_MU_NUM_REC_FIFO_GROUPS-1) * BGQ_MU_NUM_REC_FIFOS_PER_GROUP) / Kernel_ProcessCount()) * Kernel_MyTcoord() +
-		bgq_ep->rx.index;
+	BG_CoordinateMapping_t my_coords = bgq_domain->my_coords;
 
+	const uint32_t fifo_map =
+		fi_bgq_mu_calculate_fifo_map_single(my_coords, my_coords);
+
+	const MUHWI_Destination_t destination =
+		fi_bgq_spi_coordinates_to_destination(my_coords);
+
+	const uint32_t rx =
+		fi_bgq_addr_calculate_base_rx(my_coords.t, Kernel_ProcessCount()) + bgq_ep->rx.index;
+
+	bgq_ep->rx.self.fi = fi_bgq_addr_create(destination, fifo_map, rx);
+
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_ep_rx_init created addr:\n");
+	FI_BGQ_ADDR_DUMP(&bgq_ep->rx.self.fi);
+#endif
 	/* assign the mu reception fifos - all potential
 	 * reception fifos were allocated at domain initialization */
-
-	if (NULL == bgq_domain->rx.rfifo[bgq_ep->rx.self.rx]) {
+	if (NULL == bgq_domain->rx.rfifo[fi_bgq_uid_get_rx(bgq_ep->rx.self.uid.fi)]) {
+		assert(0);
 		goto err;
 	}
 
 	if (NULL != bgq_ep->rx.poll.muspi_recfifo) {
+		assert(0);
 		goto err;
 	}
 
-	bgq_ep->rx.poll.muspi_recfifo = bgq_domain->rx.rfifo[bgq_ep->rx.self.rx];
+	bgq_ep->rx.poll.muspi_recfifo = bgq_domain->rx.rfifo[fi_bgq_uid_get_rx(bgq_ep->rx.self.uid.fi)];
 
 	bgq_ep->rx.poll.bat = bgq_domain->bat;
 
@@ -1009,6 +1017,7 @@ static int fi_bgq_ep_rx_init(struct fi_bgq_ep *bgq_ep)
 			sizeof(union fi_bgq_mu_packet_payload),
 			0 /* is_remote_get */,
 			1 /* is_top_down */)) {
+		assert(0);
 		goto err;
 	}
 
@@ -1176,7 +1185,7 @@ static int fi_bgq_ep_rx_init(struct fi_bgq_ep *bgq_ep)
 			MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EM |
 			MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_EP;
 		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
-			bgq_ep->rx.self.Destination;
+			fi_bgq_uid_get_destination(bgq_ep->rx.self.uid.fi);
 		desc->PacketHeader.NetworkHeader.pt2pt.Data_Packet_Type =
 			MUHWI_PT2PT_DATA_PACKET_TYPE;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte3.Byte3 =
@@ -1259,10 +1268,11 @@ static int fi_bgq_ep_rx_init(struct fi_bgq_ep *bgq_ep)
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Byte8 =
 			MUHWI_PACKET_TYPE_FIFO;
 		desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Size = 16;
-		desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_ep->rx.self.Destination;
+		desc->PacketHeader.NetworkHeader.pt2pt.Destination =
+			fi_bgq_uid_get_destination(bgq_ep->rx.self.uid.fi);
 
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
-			fi_bgq_addr_rec_fifo_id(bgq_ep->rx.self.fi);
+			fi_bgq_uid_get_rx(bgq_ep->rx.self.uid.fi);
 
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &desc->PacketHeader;
 		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_ACK);
@@ -1444,15 +1454,6 @@ err:
 	return -1;
 }
 
-
-
-
-
-
-
-
-
-
 static int fi_bgq_enable_ep(struct fid_ep *ep)
 {
 	int ret;
@@ -1501,8 +1502,9 @@ static int fi_bgq_enable_ep(struct fid_ep *ep)
 
 	bgq_ep->state = FI_BGQ_EP_INITITALIZED_ENABLED;
 
-	/* create an async progress thread for the receive context */
-	if (ofi_recv_allowed(bgq_ep->rx.caps) && (bgq_ep->domain->data_progress == FI_PROGRESS_AUTO)) {
+	/* create an async progress thread for the receive context for FI_PROGRESS_AUTO mode*/
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO)
+	if (ofi_recv_allowed(bgq_ep->rx.caps)) {
 
 		if (bgq_ep->domain->rx.count == 1) {
 
@@ -1926,6 +1928,7 @@ int fi_bgq_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	bgq_ep->rx.index = rx_index;
 	bgq_ep->tx.index = tx_index;
 	bgq_ep->rx.caps = info->rx_attr ? info->rx_attr->caps : info->caps;
+	bgq_ep->rx.caps |= FI_RECV;
 
 	bgq_ep->tx.caps = info->tx_attr ? info->tx_attr->caps : info->caps;
 
@@ -1982,8 +1985,6 @@ int fi_bgq_endpoint (struct fid_domain *dom, struct fi_info *info,
 
 void fi_bgq_ep_progress_manual_cancel (struct fi_bgq_ep * bgq_ep, const uint64_t cancel_context) {
 
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
-
 	if (bgq_ep->rx.caps & FI_MSG) {
 		cancel_match_queue(bgq_ep, 1, cancel_context);
 	}
@@ -2001,7 +2002,6 @@ int fi_bgq_ep_progress_manual_recv (struct fi_bgq_ep *bgq_ep,
 		const uint64_t is_context_ext) {
 
 	assert(bgq_ep->rx.poll.injfifo.muspi_injfifo);
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
 	return process_mfifo_context(bgq_ep, is_msg, 0, context, rx_op_flags, is_context_ext, 1);
 }
 
@@ -2010,14 +2010,12 @@ int fi_bgq_ep_progress_manual_recv_fast (struct fi_bgq_ep *bgq_ep,
 		const uint64_t is_msg,
 		union fi_bgq_context * context) {
 
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
 	return process_mfifo_context(bgq_ep, is_msg, 0, context, 0, 0, 1);
 }
 
 
 int fi_bgq_ep_progress_manual (struct fi_bgq_ep *bgq_ep) {
 
-	assert(bgq_ep->domain->data_progress == FI_PROGRESS_MANUAL);
 
 	poll_rfifo(bgq_ep, 1);
 

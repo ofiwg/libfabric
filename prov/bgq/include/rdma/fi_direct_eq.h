@@ -86,7 +86,11 @@ union fi_bgq_context {
 		size_t			len;		// fi_cq_msg_entry::len (only need 37 bits)
 		void			*buf;		// fi_cq_data_entry::buf (unused for tagged cq's and non-multi-receive message cq's)
 
-		uint64_t		byte_counter;	// fi_cq_data_entry::data
+		union {
+			uint64_t	data;		// fi_cq_data_entry::data; only used after a message is matched
+			fi_addr_t	src_addr;	/* only used before a message is matched ('FI_DIRECTED_RECEIVE') */
+		};
+
 		union {
 			uint64_t	tag;		// fi_cq_tagged_entry::tag
 			union fi_bgq_context	*multi_recv_next;	// only for multi-receives
@@ -96,7 +100,8 @@ union fi_bgq_context {
 			struct fi_bgq_mu_packet	*claim;	// only for peek/claim
 			void			*multi_recv_context;	// only for individual FI_MULTI_RECV's
 		};
-		union fi_bgq_context	*prev;
+
+		volatile uint64_t	byte_counter;
 	};
 };
 
@@ -180,8 +185,6 @@ int fi_bgq_cq_enqueue_pending (struct fi_bgq_cq * bgq_cq,
 		union fi_bgq_context * context,
 		const int lock_required)
 {
-	assert(0 != context->byte_counter);
-
 	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
 
 		int ret;
@@ -191,10 +194,8 @@ int fi_bgq_cq_enqueue_pending (struct fi_bgq_cq * bgq_cq,
 		union fi_bgq_context * tail = bgq_cq->pending_tail;
 		context->next = NULL;
 		if (tail) {
-			context->prev = tail;
 			tail->next = context;
 		} else {
-			context->prev = NULL;
 			bgq_cq->pending_head = context;
 		}
 		bgq_cq->pending_tail = context;
@@ -261,6 +262,11 @@ static size_t fi_bgq_cq_fill(uintptr_t output,
 		const enum fi_cq_format format)
 {
 	assert((context->flags & FI_BGQ_CQ_CONTEXT_EXT)==0);
+#ifndef FABRIC_DIRECT
+	fprintf(stderr,"BGQ provider must be run in fabric-direct mode only\n");
+	assert(0);
+#endif
+	assert(sizeof(struct fi_context) == sizeof(union fi_bgq_context));
 
 	struct fi_cq_tagged_entry * entry = (struct fi_cq_tagged_entry *) output;
 	switch (format) {
@@ -288,7 +294,6 @@ static size_t fi_bgq_cq_fill(uintptr_t output,
 		} else {
 			entry->op_context = (void *)context->multi_recv_context;
 		}
-		((struct fi_cq_data_entry *)output)->data = 0; /* bgq does not provide completion data - TODO */
 		return sizeof(struct fi_cq_data_entry);
 		break;
 	case FI_CQ_FORMAT_TAGGED:
@@ -298,7 +303,6 @@ static size_t fi_bgq_cq_fill(uintptr_t output,
 		} else {
 			entry->op_context = (void *)context->multi_recv_context;
 		}
-		((struct fi_cq_tagged_entry *)output)->data = 0; /* bgq does not provide completion data - TODO */
 		return sizeof(struct fi_cq_tagged_entry);
 		break;
 	default:
@@ -346,23 +350,27 @@ static ssize_t fi_bgq_cq_poll (struct fi_bgq_cq *bgq_cq,
 	union fi_bgq_context * pending_tail = bgq_cq->pending_tail;
 	if (NULL != pending_head) {
 		union fi_bgq_context * context = pending_head;
+		union fi_bgq_context * prev = NULL;
 		while ((count - num_entries) > 0 && context != NULL) {
 
-			if (context->byte_counter == 0) {
+			const uint64_t byte_counter = context->byte_counter;
+
+			if (byte_counter == 0) {
 				output += fi_bgq_cq_fill(output, context, format);
 				++ num_entries;
 
-				if (context->prev)
-					context->prev->next = context->next;
+				if (prev)
+					prev->next = context->next;
 				else
+					/* remove the head */
 					pending_head = context->next;
 
-				if (context->next)
-					context->next->prev = context->prev;
-				else
-					pending_tail = context->prev;
+				if (!(context->next))
+					/* remove the tail */
+					pending_tail = prev;
 			}
-
+			else
+				prev = context;
 			context = context->next;
 		}
 
@@ -406,7 +414,6 @@ static ssize_t fi_bgq_cq_poll (struct fi_bgq_cq *bgq_cq,
 				++ num_entries;
 			} else {
 				context->next = NULL;
-				context->prev = pending_tail;
 				if (pending_tail)
 					pending_tail->next = context;
 				else

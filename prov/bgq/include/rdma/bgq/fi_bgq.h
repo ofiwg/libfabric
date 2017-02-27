@@ -64,6 +64,7 @@
 
 #define FI_BGQ_PFX "bgq"
 
+// #define FI_BGQ_TRACE 1
 
 /* --- Will be exposed by fabric.h */
 #define FI_BGQ_PROTOCOL		0x0008
@@ -74,12 +75,6 @@
 #define FI_BGQ_PROVIDER_VERSION (1)
 #define FI_BGQ_DEVICE_MAX_PATH_NAME	(32)
 #define FI_BGQ_FABRIC_NAME	"BGQ"
-
-#define FI_BGQ_DOMAIN_RMA_AVTABLE_STR "bgq-rma-avtable"
-#define FI_BGQ_DOMAIN_RMA_AVMAP_STR   "bgq-rma-avmap"
-#define FI_BGQ_DOMAIN_AVTABLE_STR     "bgq-avtable"
-#define FI_BGQ_DOMAIN_AVMAP_STR       "bgq-avmap"
-#define FI_BGQ_DOMAIN_UNSPEC_STR "bgq"
 
 #define FI_BGQ_CACHE_LINE_SIZE	(L2_CACHE_LINE_SIZE)
 
@@ -110,7 +105,7 @@ static inline void always_assert(bool val, char *msg)
 static inline void fi_bgq_ref_init(struct fi_bgq_node *node,
 		struct l2atomic_counter *ref, char *name)
 {
-	int ret = -1;
+	int ret __attribute__ ((unused));
 	ret = fi_bgq_node_counter_allocate(node, ref);
 	assert(ret == 0);
 

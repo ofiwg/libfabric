@@ -83,7 +83,7 @@ struct fi_bgq_node_shared {
 
 void calculate_local_process_count (uint64_t * local_process_count, uint32_t * leader_tcoord) {
 
-	int cnk_rc;
+	int cnk_rc __attribute__ ((unused));
 
 	Personality_t personality;
 	cnk_rc = Kernel_GetPersonality(&personality, sizeof(Personality_t));
@@ -165,7 +165,7 @@ int fi_bgq_node_init (struct fi_bgq_node * node) {
 
 	struct fi_bgq_node_shared * shared = (struct fi_bgq_node_shared *) node->shm_ptr;
 
-	uint32_t cnk_rc = 0;
+	uint32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_L2AtomicsAllocate((void *)shared, FI_BGQ_NODE_SHM_FILESIZE);
 	assert(cnk_rc==0);
 
@@ -231,7 +231,7 @@ int fi_bgq_node_init (struct fi_bgq_node * node) {
 		 * variable which is used as a 'garbage' location to write
 		 * data that is to be ignored.
 		 */
-		uint64_t rc = 0;
+		uint64_t rc __attribute__ ((unused));
 
 		rc = fi_bgq_node_bat_allocate_id(node, NULL, FI_BGQ_MU_BAT_ID_GLOBAL);
 		assert(rc == 0);
@@ -369,7 +369,7 @@ void fi_bgq_node_bat_write (struct fi_bgq_node * node, struct l2atomic_lock * lo
 
 	if (lock) l2atomic_lock_acquire(lock);
 
-	int32_t cnk_rc = 0;
+	int32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = MUSPI_SetBaseAddress(&node->bat.subgroup[index], requested_bat_id, offset);
 	assert(cnk_rc == 0);
 
@@ -400,7 +400,7 @@ uint64_t fi_bgq_node_bat_allocate (struct fi_bgq_node * node, struct l2atomic_lo
 
 		uint32_t nbatids;
 		uint32_t batids[BGQ_MU_NUM_DATA_COUNTERS_PER_SUBGROUP];
-		int32_t cnk_rc = 0;
+		int32_t cnk_rc __attribute__ ((unused));
 		cnk_rc = Kernel_QueryBaseAddressTable(subgroup_id, &nbatids, batids);
 		assert(cnk_rc == 0);
 
@@ -412,7 +412,7 @@ uint64_t fi_bgq_node_bat_allocate (struct fi_bgq_node * node, struct l2atomic_lo
 				&node->bat.subgroup[index], 1, &batids[0], 0);
 			assert(cnk_rc == 0);
 
-			uint64_t bat_offset = 0;
+			uint64_t bat_offset __attribute__ ((unused));
 			bat_offset = fi_bgq_node_bat_read(node, index);
 			assert(bat_offset == 0xFFFFFFFFFFFFFFFFull);
 
@@ -438,7 +438,7 @@ uint64_t fi_bgq_node_bat_allocate_id (struct fi_bgq_node * node, struct l2atomic
 
 	uint32_t nbatids;
 	uint32_t batids[BGQ_MU_NUM_DATA_COUNTERS_PER_SUBGROUP];
-	int32_t cnk_rc = 0;
+	int32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_QueryBaseAddressTable(requested_subgroup_id, &nbatids, batids);
 	assert(cnk_rc == 0);
 	assert(nbatids > 0);
@@ -453,7 +453,7 @@ uint64_t fi_bgq_node_bat_allocate_id (struct fi_bgq_node * node, struct l2atomic
 				&node->bat.subgroup[index], 1, &batids[i], 0);
 			assert(cnk_rc == 0);
 
-			uint64_t bat_offset = 0;
+			uint64_t bat_offset __attribute__ ((unused));
 			bat_offset = fi_bgq_node_bat_read(node, index);
 			assert(bat_offset == 0xFFFFFFFFFFFFFFFFull);
 
@@ -478,7 +478,7 @@ void fi_bgq_node_bat_free (struct fi_bgq_node * node, struct l2atomic_lock * loc
 
 	uint32_t batid = index & 0x07;
 
-	int32_t cnk_rc = 0;
+	int32_t cnk_rc  __attribute__ ((unused));
 	cnk_rc = Kernel_DeallocateBaseAddressTable(&node->bat.subgroup[index], 1, &batid);
 	assert(cnk_rc == 0);
 

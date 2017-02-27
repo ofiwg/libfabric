@@ -229,12 +229,6 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 
 	assert(do_cq || do_cntr);
 
-	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
-
-		assert(0);	/* TODO */
-
-	} else {	/* FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE */
-
 		MUHWI_Descriptor_t * model = &bgq_ep->tx.atomic.emulation.fence.mfifo_model;
 
 		MUHWI_Descriptor_t * desc =
@@ -243,8 +237,10 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 		qpx_memcpy64((void*)desc, (const void*)model);
 
 		/* set the destination torus address and fifo map */
-		desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr->Destination;
-		desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr->fifo_map;
+		desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr->uid.fi);
+
+		const uint64_t fifo_map = (uint64_t) fi_bgq_addr_get_fifo_map(bgq_dst_addr->fi);
+		desc->Torus_FIFO_Map = fifo_map;
 
 		desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 			fi_bgq_addr_rec_fifo_id(bgq_dst_addr->fi);
@@ -264,7 +260,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 			MUHWI_Descriptor_t * cntr_desc = (MUHWI_Descriptor_t *) payload;
 			qpx_memcpy64((void*)cntr_desc, (const void*)model);
 
-			cntr_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr->fifo_map;
+			cntr_desc->Torus_FIFO_Map = fifo_map;
 
 			MUSPI_SetRecPayloadBaseAddressInfo(cntr_desc, write_cntr->std.batid,
 				MUSPI_GetAtomicAddress(0, MUHWI_ATOMIC_OPCODE_STORE_ADD));	/* TODO - init */
@@ -284,7 +280,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 			bgq_context->tag = 0;
 
 			uint64_t byte_counter_paddr = 0;
-			uint32_t cnk_rc = 0;
+			uint32_t cnk_rc __attribute__ ((unused));
 			cnk_rc = fi_bgq_cnk_vaddr2paddr((void*)&bgq_context->byte_counter,
 					sizeof(uint64_t), &byte_counter_paddr);
 			assert(cnk_rc == 0);
@@ -295,7 +291,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 			MUHWI_Descriptor_t * cq_desc = (MUHWI_Descriptor_t *) payload;
 			qpx_memcpy64((void*)cq_desc, (const void*)model);
 
-			cq_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr->fifo_map;
+			cq_desc->Torus_FIFO_Map = fifo_map;
 
 			MUSPI_SetRecPayloadBaseAddressInfo(cq_desc,
 				FI_BGQ_MU_BAT_ID_GLOBAL, byte_counter_paddr);
@@ -312,7 +308,7 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 				MUHWI_Descriptor_t * cntr_desc = &(((MUHWI_Descriptor_t *) payload)[1]);
 				qpx_memcpy64((void*)cntr_desc, (const void*)model);
 
-				cntr_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr->fifo_map;
+				cntr_desc->Torus_FIFO_Map = fifo_map;
 
 				MUSPI_SetRecPayloadBaseAddressInfo(cntr_desc, write_cntr->std.batid,
 					MUSPI_GetAtomicAddress(0, MUHWI_ATOMIC_OPCODE_STORE_ADD));	/* TODO - init */
@@ -329,7 +325,6 @@ static inline void fi_bgq_atomic_fence (struct fi_bgq_ep * bgq_ep,
 		}
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
-	}
 }
 
 static inline size_t fi_bgq_atomic_internal(struct fi_bgq_ep *bgq_ep,
@@ -355,8 +350,9 @@ static inline size_t fi_bgq_atomic_internal(struct fi_bgq_ep *bgq_ep,
 	qpx_memcpy64((void*)desc, (const void*)&bgq_ep->tx.atomic.emulation.mfifo_model);
 
 	/* set the destination torus address and fifo map */
-	desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr->Destination;
-	desc->Torus_FIFO_Map = bgq_dst_addr->fifo_map;
+	desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr->uid.fi);
+	const uint64_t fifo_map = (uint64_t) fi_bgq_addr_get_fifo_map(bgq_dst_addr->fi);
+	desc->Torus_FIFO_Map = fifo_map;
 
 	desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 		fi_bgq_addr_rec_fifo_id(bgq_dst_addr->fi);
@@ -404,7 +400,7 @@ static inline size_t fi_bgq_atomic_internal(struct fi_bgq_ep *bgq_ep,
 				desc, &desc->Pa_Payload);
 
 		/* initialize the atomic operation metadata in the packet payload */
-		payload->atomic_fetch.metadata.fifo_map = bgq_dst_addr->fifo_map;
+		payload->atomic_fetch.metadata.fifo_map = fifo_map;
 		payload->atomic_fetch.metadata.cq_paddr = 0;
 
 		if (is_fetch) {
@@ -466,7 +462,7 @@ static inline ssize_t fi_bgq_atomic_generic(struct fid_ep *ep,
 	ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
 	if (ret) return ret;
 
-	size_t xfer = 0;
+	size_t xfer __attribute__ ((unused));
 	xfer = fi_bgq_atomic_internal(bgq_ep, buf, count,
 		(union fi_bgq_addr *)&dst_addr,	addr, key, datatype, op,
 		context, 0, NULL, 0, NULL,

@@ -33,7 +33,7 @@
 
 int fi_bgq_set_default_info()
 {
-	struct fi_info *fi, *prev_fi;
+	struct fi_info *fi;
 	uint32_t ppn = Kernel_ProcessCount();
 
 	/*
@@ -100,12 +100,12 @@ int fi_bgq_set_default_info()
 		.name		= NULL, /* TODO: runtime query for name? */
 		.threading	= FI_THREAD_FID,
 		.control_progress = FI_PROGRESS_MANUAL,
-		.data_progress	= FI_PROGRESS_AUTO, // + FI_PROGRESS_MANUAL ?
+		.data_progress	= FI_BGQ_FABRIC_DIRECT_PROGRESS,
 		.resource_mgmt	= FI_RM_DISABLED,
 		.av_type	= FI_AV_MAP,
-		.mr_mode	= FI_MR_SCALABLE,
+		.mr_mode	= FI_BGQ_FABRIC_DIRECT_MR,
 		.mr_key_size	= 2,
-		.cq_data_size	= 0,
+		.cq_data_size	= FI_BGQ_REMOTE_CQ_DATA_SIZE,
 		.cq_cnt		= 128 / ppn,
 		.ep_cnt		= SIZE_MAX,
 		.tx_ctx_cnt	= tx_ctx_cnt,
@@ -124,16 +124,17 @@ int fi_bgq_set_default_info()
 		.prov_version	= FI_BGQ_PROVIDER_VERSION
 	};
 
-	fi->caps		= FI_RMA | FI_ATOMIC |
-					FI_NAMED_RX_CTX | FI_TRANSMIT_COMPLETE;
+	fi->caps		= FI_BGQ_DEFAULT_CAPS;
 	fi->mode		= FI_ASYNC_IOV;
+	fi->mode		|= (FI_CONTEXT);
+	fi->mode		&= (~FI_LOCAL_MR);
+	fi->mode		&= (~FI_MSG_PREFIX);
+
 	fi->addr_format		= FI_ADDR_BGQ;
 	fi->src_addrlen		= 24; // includes null
 	fi->dest_addrlen	= 24; // includes null
-
-	prev_fi = fi;
-	fi = fi_dupinfo(prev_fi);
-	prev_fi->next = fi;
+	fi->dest_addr = NULL;
+	fi->next = NULL;
 
 	return 0;
 }

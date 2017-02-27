@@ -77,7 +77,7 @@ static int fi_bgq_close_sep(fid_t fid)
 
 static int fi_bgq_control_sep(fid_t fid, int command, void *arg)
 {
-	struct fid_ep *ep;
+	struct fid_ep *ep __attribute__ ((unused));
 	ep = container_of(fid, struct fid_ep, fid);
 	return 0;
 }

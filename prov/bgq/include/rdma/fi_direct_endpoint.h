@@ -36,6 +36,7 @@
 
 #include <stdint.h>
 #include <pthread.h>
+#include <sys/uio.h>
 
 #include "rdma/bgq/fi_bgq_compiler.h"
 #include "rdma/bgq/fi_bgq_hwi.h"
@@ -51,6 +52,9 @@
 
 #define IS_TAG (0)
 #define IS_MSG (1)
+
+// #define FI_BGQ_TRACE 1
+// #define FI_BGQ_REMOTE_COMPLETION
 
 enum fi_bgq_ep_state {
 	FI_BGQ_EP_UNINITIALIZED = 0,
@@ -103,17 +107,12 @@ struct fi_bgq_ep_tx {
 
 	/* == L2 CACHE LINE == */
 
-	struct {	/* one l2 cache line */
-		MUHWI_Descriptor_t	inject_model;
-		MUHWI_Descriptor_t	send_model;
-	} inject __attribute((aligned(L2_CACHE_LINE_SIZE)));
-
-	/* == L2 CACHE LINE == */
-
-	struct {	/* two l2 cache lines */
+	struct {	/* three l2 cache lines */
 		MUHWI_Descriptor_t	send_model;
 		MUHWI_Descriptor_t	local_completion_model;	/* only "local completion eager" */
 		MUHWI_Descriptor_t	rzv_model[2];	/* [0]=="internode"; [1]=="intranode" */
+		MUHWI_Descriptor_t	remote_completion_model;
+		uint8_t			unused[64];
 	} send __attribute((aligned(L2_CACHE_LINE_SIZE)));
 	/* == L2 CACHE LINE == */
 
@@ -452,6 +451,7 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 		size_t len,
 		fi_addr_t dest_addr,
 		uint64_t tag,
+		const uint32_t data,
 		int lock_required,
 		const unsigned is_msg)
 {
@@ -468,73 +468,48 @@ ssize_t fi_bgq_inject_generic(struct fid_ep *ep,
 	if (ret) return ret;
 
 	/* get the destination bgq torus address */
-	union fi_bgq_addr bgq_dst_addr;
-	bgq_dst_addr.fi = dest_addr;
+	const union fi_bgq_addr bgq_dst_addr = {.fi=dest_addr};
 
-	if (len <= 8) {		/* likely ? */
+	/* eager with lookaside payload buffer and no completion */
 
-		/* busy-wait until a fifo slot is available ... */
-		MUHWI_Descriptor_t * inject_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
+	/* busy-wait until a fifo slot is available ... */
+	MUHWI_Descriptor_t * send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
 
-		/* copy the descriptor model into the injection fifo */
-		qpx_memcpy64((void*)inject_desc, (const void*)&bgq_ep->tx.inject.inject_model);
+	/* copy the descriptor model into the injection fifo */
+	qpx_memcpy64((void*)send_desc, (const void*)&bgq_ep->tx.send.send_model);
 
-		/* set the destination torus address and fifo map */
-		inject_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		inject_desc->Torus_FIFO_Map = bgq_dst_addr.fifo_map;
+	/* set the destination torus address and fifo map */
+	send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+	send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
-		inject_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
-			fi_bgq_addr_rec_fifo_id(dest_addr);
+	send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
+		fi_bgq_addr_rec_fifo_id(dest_addr);
 
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &inject_desc->PacketHeader;
+	union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
 
-		if (is_msg) {
-			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_INJECT);
-		}
-
-		if (buf) hdr->inject.data = *((uint64_t*)buf);
-		hdr->inject.ofi_tag = tag;
-		hdr->inject.message_length = len;
-
-		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
-
-	} else {
-		/* eager with lookaside payload buffer and no completion */
-
-		/* busy-wait until a fifo slot is available ... */
-		MUHWI_Descriptor_t * send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
-
-		/* copy the descriptor model into the injection fifo */
-		qpx_memcpy64((void*)send_desc, (const void*)&bgq_ep->tx.send.send_model);
-
-		/* set the destination torus address and fifo map */
-		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
-
-		send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
-			fi_bgq_addr_rec_fifo_id(dest_addr);
-
-		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
-
-		if (is_msg) {
-			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);
-		}
-
-		/* locate the payload lookaside slot */
-		uint64_t payload_paddr = 0;
-		void *payload_vaddr =
-			fi_bgq_spi_injfifo_immediate_payload(&bgq_ep->tx.injfifo,
-				send_desc, &payload_paddr);
-		send_desc->Pa_Payload = payload_paddr;
-
-		send_desc->Message_Length = len;
-		memcpy(payload_vaddr, buf, len);
-
-		hdr->send.message_length = len;
-		hdr->send.ofi_tag = tag;
-
-		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
+	if (is_msg) {
+		fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);
 	}
+
+	/* locate the payload lookaside slot */
+	uint64_t payload_paddr = 0;
+	void *payload_vaddr =
+		fi_bgq_spi_injfifo_immediate_payload(&bgq_ep->tx.injfifo,
+			send_desc, &payload_paddr);
+	send_desc->Pa_Payload = payload_paddr;
+
+	send_desc->Message_Length = len;
+	if (len) memcpy(payload_vaddr, buf, len);	/* TODO use a qpx-optimized memcpy instead */
+
+	hdr->pt2pt.send.message_length = len;
+	hdr->pt2pt.ofi_tag = tag;
+	hdr->pt2pt.immediate_data = data;
+
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_inject_generic dest addr is:\n");
+	FI_BGQ_ADDR_DUMP((fi_addr_t *)&dest_addr);
+#endif
+	MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
 	/* TODO - if this is a FI_CLASS_STX_CTX, then the lock is required */
 	ret = fi_bgq_unlock_if_required(&bgq_ep->lock, lock_required);
@@ -547,10 +522,13 @@ static inline
 ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, uint64_t tag, void *context,
-		int lock_required,
+		const uint32_t data, int lock_required,
 		const unsigned is_msg, const unsigned is_contiguous,
 		const unsigned override_flags, uint64_t tx_op_flags)
 {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"fi_bgq_send_generic_flags starting\n");
+#endif
 	assert(is_msg == 0 || is_msg == 1);
 	assert(is_contiguous == 0 || is_contiguous == 1);
 
@@ -565,8 +543,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 	if (ret) return ret;
 
 	/* get the destination bgq torus address */
-	union fi_bgq_addr bgq_dst_addr;
-	bgq_dst_addr.fi = dest_addr;
+	const union fi_bgq_addr bgq_dst_addr = {.fi=dest_addr};
 
 	size_t xfer_len = 0;
 	if (is_contiguous) xfer_len = len;
@@ -588,8 +565,8 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		qpx_memcpy64((void*)send_desc, (const void *)&bgq_ep->tx.send.send_model);
 
 		/* set the destination torus address and fifo map */
-		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
+		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+		send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
 		send_desc->Message_Length = xfer_len;
 
@@ -607,7 +584,7 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 			send_desc->Pa_Payload = payload_paddr;
 
 			if (is_contiguous) {
-				memcpy((void*)payload_vaddr, buf, len);
+				if (len) memcpy((void*)payload_vaddr, buf, len);
 			} else {
 				unsigned i;
 				const struct iovec * iov = (const struct iovec *)buf;
@@ -619,17 +596,40 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		}
 
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
-		hdr->send.message_length = xfer_len;
-		hdr->send.ofi_tag = tag;
+		hdr->pt2pt.send.message_length = xfer_len;
+		hdr->pt2pt.ofi_tag = tag;
+		hdr->pt2pt.immediate_data = data;
 
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"eager sending to dest:\n");
+		FI_BGQ_ADDR_DUMP(&dest_addr);
+#endif
+		if (is_msg) {
+			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);	/* clear the 'TAG' bit in the packet type */
+		}
+
+		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
+
+#ifdef FI_BGQ_REMOTE_COMPLETION
 		if (tx_op_flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
-			if (is_msg) {
-				fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER);
-			} else {
-				fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER|FI_BGQ_MU_PACKET_TYPE_TAG);
-			}
 
-			hdr->send.is_local = fi_bgq_addr_is_local(dest_addr);
+			/*
+			 * TODO - this code is buggy and results in a hang at job completion for 'cpi'
+			 *
+			 * Suspect that remote processes are exiting before the 'request for ack'
+			 * remote completion packet is received, then the process that issued the
+			 * 'request for ack' messagee will hang because the ack is never received.
+			 *
+			 * Alternative implementations:
+			 *   1. Do not support remote completions on bgq (current)
+			 *   2. Support remote completions via rendezvous protocol
+			 */
+
+			/* inject the 'remote completion' descriptor */
+			send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
+
+			/* copy the descriptor model into the injection fifo */
+			qpx_memcpy64((void*)send_desc, (const void *)&bgq_ep->tx.send.remote_completion_model);
 
 			/* initialize the completion entry */
 			assert(context);
@@ -643,21 +643,30 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 			uint64_t byte_counter_paddr = 0;
 			fi_bgq_cnk_vaddr2paddr((const void*)&bgq_context->byte_counter, sizeof(uint64_t), &byte_counter_paddr);
-			hdr->send.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
 
-			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
+			/* set the destination torus address and fifo map */
+			send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+			send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
+			send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
+				fi_bgq_addr_rec_fifo_id(dest_addr);
+
+			hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
+			hdr->completion.is_local = fi_bgq_addr_is_local(dest_addr);
+			hdr->completion.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
 
 			fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
 
-		} else {
-
-			if (is_msg) {
-				fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_EAGER);	/* clear the 'TAG' bit in the packet type */
-			}
-
 			MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
-			if (tx_op_flags & FI_INJECT_COMPLETE) {
+		} else
+#endif
+		{
+
+			if (tx_op_flags & (FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+
+#ifdef FI_BGQ_TRACE
+                fprintf(stderr,"eager injecting local completion dput\n");
+#endif
 
 				/* inject the 'local completion' direct put descriptor */
 				send_desc = fi_bgq_spi_injfifo_tail_wait(&bgq_ep->tx.injfifo);
@@ -682,14 +691,19 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 					MUSPI_GetAtomicAddress(byte_counter_paddr,
 						MUHWI_ATOMIC_OPCODE_LOAD_CLEAR);
 
-				MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
-
 				fi_bgq_cq_enqueue_pending(bgq_ep->send_cq, bgq_context, lock_required);
+
+				MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 			}
 		}
 
 	} else {
 		/* rendezvous */
+
+#ifdef FI_BGQ_TRACE
+                fprintf(stderr,"rendezvous sending to dest:\n");
+                FI_BGQ_ADDR_DUMP(&dest_addr);
+#endif
 
 		assert((tx_op_flags & FI_INJECT) == 0);
 
@@ -699,8 +713,8 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		qpx_memcpy64((void*)send_desc, (const void *)&bgq_ep->tx.send.rzv_model[is_local]);
 
 		/* set the destination torus address and fifo map */
-		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = bgq_dst_addr.Destination;
-		send_desc->Torus_FIFO_Map = (uint64_t) bgq_dst_addr.fifo_map;
+		send_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(bgq_dst_addr.uid.fi);
+		send_desc->Torus_FIFO_Map = fi_bgq_addr_get_fifo_map(dest_addr);
 
 		send_desc->PacketHeader.messageUnitHeader.Packet_Types.Memory_FIFO.Rec_FIFO_Id =
 			fi_bgq_addr_rec_fifo_id(dest_addr);
@@ -708,14 +722,6 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 		union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &send_desc->PacketHeader;
 
 		if (is_msg) {
-			/* 'non-tagged' rendezvous send must also pack the fifo
-			 * map bits into the origin destination in case the transfer
-			 * is processed as a multi-receive at the target */
-			const uint32_t origin = (uint32_t) hdr->rendezvous.origin_raw;
-			const uint32_t fifo_map = (uint32_t) bgq_dst_addr.fifo_map;
-
-			hdr->rendezvous.origin_raw = (((fifo_map >> 5) & 0x0000003Eu) | (fifo_map & 0x0000F800u)) | origin;
-
 			fi_bgq_mu_packet_type_set(hdr, FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS);
 		}
 
@@ -726,21 +732,23 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 				send_desc, &payload_paddr);
 		send_desc->Pa_Payload = payload_paddr;
 
+		payload->rendezvous.fifo_map = fi_bgq_addr_get_fifo_map(bgq_dst_addr.fi);
+
 		if (is_contiguous) {
 			/* only send one mu iov */
-			fi_bgq_cnk_vaddr2paddr(buf, len, &payload->mu_iov[0].src_paddr);
-			payload->mu_iov[0].message_length = len;
-			hdr->rendezvous.niov_minus_1 = 0;
+			fi_bgq_cnk_vaddr2paddr(buf, len, &payload->rendezvous.mu_iov[0].src_paddr);
+			payload->rendezvous.mu_iov[0].message_length = len;
+			hdr->pt2pt.rendezvous.niov_minus_1 = 0;
 		} else {
-			assert(len <= 32);
+			assert(len <= 31);
 			size_t i;
 			const struct iovec * iov = (const struct iovec *)buf;
-			send_desc->Message_Length = len * sizeof(struct fi_bgq_mu_iov);
+			send_desc->Message_Length += (len-1) * sizeof(struct fi_bgq_mu_iov);
 			for (i=0; i<len; ++i) {
-				fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &payload->mu_iov[i].src_paddr);
-				payload->mu_iov[i].message_length = iov[i].iov_len;
+				fi_bgq_cnk_vaddr2paddr(iov[i].iov_base, iov[i].iov_len, &payload->rendezvous.mu_iov[i].src_paddr);
+				payload->rendezvous.mu_iov[i].message_length = iov[i].iov_len;
 			}
-			hdr->rendezvous.niov_minus_1 = len - 1;
+			hdr->pt2pt.rendezvous.niov_minus_1 = len - 1;
 		}
 
 		/* initialize the completion entry */
@@ -755,8 +763,10 @@ ssize_t fi_bgq_send_generic_flags(struct fid_ep *ep,
 
 		uint64_t byte_counter_paddr = 0;
 		fi_bgq_cnk_vaddr2paddr((const void*)&bgq_context->byte_counter, sizeof(uint64_t), &byte_counter_paddr);
-		hdr->rendezvous.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
-		hdr->rendezvous.ofi_tag = tag;
+		payload->rendezvous.cntr_paddr_rsh3b = byte_counter_paddr >> 3;
+
+		hdr->pt2pt.ofi_tag = tag;
+		hdr->pt2pt.immediate_data = data;
 
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->tx.injfifo.muspi_injfifo);
 
@@ -779,7 +789,7 @@ ssize_t fi_bgq_send_generic(struct fid_ep *ep,
 {
 	assert(is_msg == 0 || is_msg == 1);
 	return fi_bgq_send_generic_flags(ep, buf, len, desc, dst_addr,
-		tag, context, lock_required, is_msg,
+		tag, context, 0, lock_required, is_msg,
 		1 /* is_contiguous */,
 		0 /* do not override flags */,
 		0 /* no flags */);
@@ -809,15 +819,25 @@ ssize_t fi_bgq_recv_generic(struct fid_ep *ep,
 	bgq_context->flags = rx_op_flags;
 	bgq_context->len = len;
 	bgq_context->buf = buf;
-	bgq_context->byte_counter = (uint64_t)-1;
+	bgq_context->src_addr = src_addr;
+
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_recv_generic from source addr:\n");
+	FI_BGQ_ADDR_DUMP(&bgq_context->src_addr);
+#endif
+
 	bgq_context->tag = tag;
 	bgq_context->ignore = ignore;
+	bgq_context->byte_counter = (uint64_t)-1;
 
 	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {	/* constant expression will compile out */
 
 		int ret;
 		ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
 		if (ret) return ret;
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_recv_generic calling fi_bgq_ep_progress_manual_recv_fast:\n");
+#endif
 
 		fi_bgq_ep_progress_manual_recv_fast(bgq_ep, is_msg, context);
 
@@ -885,6 +905,7 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		bgq_context->flags = FI_MULTI_RECV;
 		bgq_context->len = len - sizeof(union fi_bgq_context);
 		bgq_context->buf = (void *)((uintptr_t)base + sizeof(union fi_bgq_context));
+		bgq_context->src_addr = msg->addr;
 		bgq_context->byte_counter = 0;
 		bgq_context->multi_recv_next = (union fi_bgq_context *)base;
 		bgq_context->ignore = (uint64_t)-1;
@@ -902,9 +923,10 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		bgq_context->flags = flags;
 		bgq_context->len = 0;
 		bgq_context->buf = NULL;
-		bgq_context->byte_counter = (uint64_t)-1;
+		bgq_context->src_addr = msg->addr;
 		bgq_context->tag = 0;
 		bgq_context->ignore = (uint64_t)-1;
+		bgq_context->byte_counter = (uint64_t)-1;
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
 		rx_op_flags = flags;
@@ -918,9 +940,10 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 		bgq_context->flags = flags;
 		bgq_context->len = msg->msg_iov[0].iov_len;
 		bgq_context->buf = msg->msg_iov[0].iov_base;
-		bgq_context->byte_counter = (uint64_t)-1;
+		bgq_context->src_addr = msg->addr;
 		bgq_context->tag = 0;
 		bgq_context->ignore = (uint64_t)-1;
+		bgq_context->byte_counter = (uint64_t)-1;
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
 		rx_op_flags = flags;
@@ -931,6 +954,7 @@ ssize_t fi_bgq_recvmsg_generic(struct fid_ep *ep,
 
 		ext->bgq_context.flags = flags | FI_BGQ_CQ_CONTEXT_EXT;
 		ext->bgq_context.byte_counter = (uint64_t)-1;
+		ext->bgq_context.src_addr = msg->addr;
 		ext->bgq_context.tag = 0;
 		ext->bgq_context.ignore = (uint64_t)-1;
 		ext->msg.op_context = (struct fi_context *)msg->context;
@@ -994,8 +1018,8 @@ ssize_t fi_bgq_injectdata_generic(struct fid_ep *ep,
 		int lock_required,
 		const unsigned is_msg)
 {
-	assert(0);
-	return -1;
+	return fi_bgq_inject_generic(ep, buf, len, dst_addr, tag, data,
+			lock_required, is_msg);
 }
 
 
@@ -1006,8 +1030,13 @@ ssize_t fi_bgq_senddata_generic(struct fid_ep *ep,
 		int lock_required,
 		const unsigned is_msg)
 {
-	assert(0);
-	return -1;
+
+	assert(is_msg == 0 || is_msg == 1);
+	return fi_bgq_send_generic_flags(ep, buf, len, desc, dst_addr,
+		tag, context, data, lock_required, is_msg,
+		1 /* is_contiguous */,
+		0 /* do not override flags */,
+		0 /* no flags */);
 }
 
 
@@ -1018,7 +1047,7 @@ ssize_t fi_bgq_inject(struct fid_ep *ep,
 		fi_addr_t dest_addr,
 		int lock_required)
 {
-	return fi_bgq_inject_generic(ep, buf, len, dest_addr, 0,
+	return fi_bgq_inject_generic(ep, buf, len, dest_addr, 0, 0,
 			lock_required, 1);
 }
 

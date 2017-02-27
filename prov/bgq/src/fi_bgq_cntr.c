@@ -71,7 +71,7 @@ static uint64_t fi_bgq_cntr_read(struct fid_cntr *cntr)
 
 	const uint64_t value = L2_AtomicLoad(bgq_cntr->std.l2_vaddr);
 
-	if (bgq_cntr->domain->data_progress == FI_PROGRESS_MANUAL) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
 		const uint64_t count = bgq_cntr->progress.ep_count;
 		uint64_t i;
 		for (i=0; i<count; ++i) {
@@ -124,7 +124,7 @@ fi_bgq_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 	do {
 		current_value = L2_AtomicLoad(bgq_cntr->std.l2_vaddr);
 
-		if (bgq_cntr->domain->data_progress == FI_PROGRESS_MANUAL) {
+		if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
 			const uint64_t count = bgq_cntr->progress.ep_count;
 			uint64_t i;
 			for (i=0; i<count; ++i) {
@@ -223,7 +223,7 @@ int fi_bgq_cntr_open(struct fid_domain *domain,
 
 	/* ---- allocate and initialize the "std" and "err" mu/l2 counters ---- */
 	{
-		uint32_t cnk_rc = 0;
+		uint32_t cnk_rc __attribute__ ((unused));
 		struct l2atomic_lock * lock = &bgq_cntr->domain->mu.lock;
 		struct fi_bgq_node * node = &bgq_cntr->domain->fabric->node;
 

@@ -145,7 +145,7 @@ static int fi_bgq_mu_init(struct fi_bgq_domain *bgq_domain,
 		bgq_domain->rx.rfifo[n] = NULL;
 	}
 
-	const uint32_t subgroups_to_allocate_per_process = ppn == 64 ? 1 : 2;
+	const uint32_t subgroups_to_allocate_per_process = ppn == 64 ? 1 : ppn == 32 ? 2 : 4;
 	for (n = 0; n < subgroups_to_allocate_per_process; ++n) {
 
 		const uint32_t requested_subgroup = subgroup_offset + n;
@@ -258,12 +258,12 @@ int fi_bgq_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 
 	attr->threading		= FI_THREAD_ENDPOINT;
 	attr->control_progress 	= FI_PROGRESS_MANUAL;
-	attr->data_progress	= FI_PROGRESS_MANUAL;
+	attr->data_progress	= FI_BGQ_FABRIC_DIRECT_PROGRESS;
 	attr->resource_mgmt	= FI_RM_DISABLED;
 	attr->av_type		= FI_AV_MAP;
-	attr->mr_mode		= FI_MR_SCALABLE;
+	attr->mr_mode		= FI_BGQ_FABRIC_DIRECT_MR;
 	attr->mr_key_size 	= 2;			/* 2^16 keys */
-	attr->cq_data_size 	= 0;
+	attr->cq_data_size 	= FI_BGQ_REMOTE_CQ_DATA_SIZE;
 	attr->cq_cnt		= 128 / ppn;
 	attr->ep_cnt		= 1;			/* TODO - what about endpoints that only use a shared receive context and a shared transmit context? */
 	attr->tx_ctx_cnt	= tx_ctx_cnt;
@@ -287,24 +287,28 @@ err:
 
 int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints)
 {
-	char *name;
-	enum fi_bgq_domain_type type;
-
 	if (!domain_attr) {
 		goto err;
 	}
 
 	*domain_attr = *fi_bgq_global.default_domain_attr;
+	/* Set the data progress mode to the option used in the configure.
+ 	 * Ignore any setting by the application.
+ 	 */
+	domain_attr->data_progress = FI_BGQ_FABRIC_DIRECT_PROGRESS;
 
+	/* Set the mr_mode to the option used in the configure.
+ 	 * Ignore any setting by the application - the checkinfo should have verified
+ 	 * it was set to the same setting.
+ 	 */
+	domain_attr->mr_mode = FI_BGQ_FABRIC_DIRECT_MR;
+ 
 	if (hints) {
-
 		if (hints->domain) {
 			struct fi_bgq_domain *bgq_domain = bgq_domain = container_of(hints->domain, struct fi_bgq_domain, domain_fid);
 
 			domain_attr->threading		= bgq_domain->threading;
-			domain_attr->data_progress	= bgq_domain->data_progress;
 			domain_attr->resource_mgmt	= bgq_domain->resource_mgmt;
-			domain_attr->mr_mode		= bgq_domain->mr_mode;
 			domain_attr->tx_ctx_cnt		= fi_bgq_domain_get_tx_max(bgq_domain);
 			domain_attr->rx_ctx_cnt		= fi_bgq_domain_get_rx_max(bgq_domain);
 			domain_attr->max_ep_tx_ctx	= fi_bgq_domain_get_tx_max(bgq_domain);
@@ -315,10 +319,8 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 
 			if (hints->threading)		domain_attr->threading = hints->threading;
 			if (hints->control_progress)	domain_attr->control_progress = hints->control_progress;
-			if (hints->data_progress)	domain_attr->data_progress = hints->data_progress;
 			if (hints->resource_mgmt)	domain_attr->resource_mgmt = hints->resource_mgmt;
 			if (hints->av_type)		domain_attr->av_type = hints->av_type;
-			if (hints->mr_mode)		domain_attr->mr_mode = hints->mr_mode;
 			if (hints->mr_key_size)		domain_attr->mr_key_size = hints->mr_key_size;
 			if (hints->cq_data_size)	domain_attr->cq_data_size = hints->cq_data_size;
 			if (hints->cq_cnt)		domain_attr->cq_cnt = hints->cq_cnt;
@@ -333,29 +335,15 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 		}
 	}
 
-	if (64 == Kernel_ProcessCount()) domain_attr->data_progress = FI_PROGRESS_MANUAL;
-
-	enum fi_av_type av_type = domain_attr->av_type;
-
-
-		if (av_type == FI_AV_MAP) {
-			name = FI_BGQ_DOMAIN_AVMAP_STR;
-			type = FI_BGQ_DOMAIN_AVMAP;
-		}
-		else if (av_type == FI_AV_TABLE) {
-			name = FI_BGQ_DOMAIN_AVTABLE_STR;
-			type = FI_BGQ_DOMAIN_AVTABLE;
-		}
-		else {
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"unknown av_type %d\n", av_type);
-			goto err;
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO)
+		if (Kernel_ProcessCount() > 16) {
+			fprintf(stderr,"BGQ Provider configure in FI_PROGRESS_AUTO mode and cannot be run higher than 16 ppn due to need for progress thread\n");
+			assert(0);
+			exit(1);
 		}
 
-	FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-			"choosing domain %s\n", name);
 
-	domain_attr->name = strdup(name);
+	domain_attr->name = strdup(FI_BGQ_PROVIDER_NAME);
 	if (!domain_attr->name) {
 		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
 				"no memory\n");
@@ -363,17 +351,7 @@ int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 		return -errno;
 	}
 
-	switch(type) {
-	case FI_BGQ_DOMAIN_AVMAP:
-	case FI_BGQ_DOMAIN_AVTABLE:
-		domain_attr->cq_data_size = 0;//FI_BGQ_TAGGED_CQ_DATA_SIZE;
-		break;
-	default:
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-				"unknown error\n");
-		errno = FI_EOTHER;
-		return -errno;
-	}
+	domain_attr->cq_data_size = FI_BGQ_REMOTE_CQ_DATA_SIZE;
 
 	return 0;
 err:
@@ -381,47 +359,8 @@ err:
 	return -errno;
 }
 
-static int fi_bgq_domain_str_to_type(char *s, enum fi_bgq_domain_type *type)
-{
-	if (!s || !type) {
-		errno = FI_EOTHER;
-		return -errno;
-	}
-
-	*type = FI_BGQ_DOMAIN_UNSPEC;
-
-	if (s) {
-		if (!strncmp(s, FI_BGQ_DOMAIN_AVTABLE_STR,
-					strlen(FI_BGQ_DOMAIN_AVTABLE_STR))) {
-			*type = FI_BGQ_DOMAIN_AVTABLE;
-		} else if (!strncmp(s, FI_BGQ_DOMAIN_AVMAP_STR,
-					strlen(FI_BGQ_DOMAIN_AVMAP_STR))) {
-			*type = FI_BGQ_DOMAIN_AVMAP;
-		} else if (!strncmp(s, FI_BGQ_DOMAIN_UNSPEC_STR,
-					strlen(FI_BGQ_DOMAIN_UNSPEC_STR))) {
-			*type = FI_BGQ_DOMAIN_UNSPEC;
-		} else {
-			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"incorrect domain name supplied\n");
-			goto err;
-		}
-	}
-
-	return 0;
-err:
-	errno = FI_EINVAL;
-	return -1;
-}
-
 int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 {
-	enum fi_bgq_domain_type type = FI_BGQ_DOMAIN_UNSPEC;
-
-	if (attr->name) {
-		if (fi_bgq_domain_str_to_type(attr->name, &type) < 0) {
-			goto err;
-		}
-	}
 	switch(attr->threading) {
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
@@ -436,102 +375,71 @@ int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
 		goto err;
 	}
 	if (attr->control_progress &&
-			attr->control_progress == FI_PROGRESS_AUTO) {
-		FI_LOG(fi_bgq_global.prov, FI_LOG_WARN, FI_LOG_DOMAIN,
-				"control auto progress is not fully implemented\n");
+			attr->control_progress != FI_PROGRESS_MANUAL) {
+		fprintf(stderr,"BGQ Provider only supports control_progress of FI_PROGRESS_MANUAL\n");
+		assert(0);
+		exit(1);
 	}
-	switch (attr->av_type) {
-	case FI_AV_UNSPEC:
-		break;
-	case FI_AV_MAP:
-		switch (type) {
-		//case FI_BGQ_DOMAIN_RMA_AVTABLE:
-		case FI_BGQ_DOMAIN_AVTABLE:
-			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"mismatch between domain and av type\n");
-			errno = FI_EINVAL;
-			goto err;
-		default:
-			break;
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {
+		if (attr->data_progress &&
+				attr->data_progress == FI_PROGRESS_MANUAL) {
+			fprintf(stderr,"BGQ Provider configured with data progress mode of FI_PROGRESS_AUTO but application specified FI_PROGRESS_MANUAL\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
 		}
-		break;
-	case FI_AV_TABLE:
-		switch (type) {
-		//case FI_BGQ_DOMAIN_RMA_AVMAP:
-		case FI_BGQ_DOMAIN_AVMAP:
-			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"mismatch between domain and av type\n");
-			errno = FI_EINVAL;
-			goto err;
-		default:
-			break;
-		}
-		break;
-	default:
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-				"incorrect av type\n");
-		goto err;
 	}
-	switch (attr->mr_mode) {
-	case FI_MR_UNSPEC:
-	case FI_MR_SCALABLE:
-		break;
-	case FI_MR_BASIC:
-	default:
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"MR mode not supported with this domain\n");
-			goto err;
+	else if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
+		if (attr->data_progress &&
+				attr->data_progress == FI_PROGRESS_AUTO) {
+			fprintf(stderr,"BGQ Provider configured with data progress mode of FI_PROGRESS_MANUAL but application specified FI_PROGRESS_AUTO\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
+		}
+	}
+	else {
+		fprintf(stderr,"BGQ Provider progress mode not properly configured.\n");
+		fflush(stderr);
+		assert(0);
+		exit(1);
+	}
+
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+		if (attr->mr_mode != FI_MR_SCALABLE) {
+			fprintf(stderr,"BGQ Provider configured with mr mode of FI_MR_SCALABLE but application specified something else.\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
+		}
+	}
+	else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
+		if (attr->mr_mode != FI_MR_BASIC) {
+			fprintf(stderr,"BGQ Provider configured with mr mode of FI_MR_BASIC but application specified something else.\n");
+			fflush(stderr);
+			assert(0);
+			exit(1);
+		}
+	}
+	else {
+		fprintf(stderr,"BGQ Provider mr mode not properly configured.\n");
+		fflush(stderr);
+		assert(0);
+		exit(1);
 	}
 	if (attr->mr_key_size) {
-		switch(type) {
-		//case FI_BGQ_DOMAIN_RMA_AVTABLE:
-		//case FI_BGQ_DOMAIN_RMA_AVMAP:
-		//	FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-		//			"memory keys not supported with this domain\n");
-		//	goto err;
-		case FI_BGQ_DOMAIN_AVTABLE:
-		case FI_BGQ_DOMAIN_AVMAP:
-			if (attr->mr_key_size > FI_BGQ_MR_KEY_SIZE) {
-				FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-						"memory key size too large\n");
-				goto err;
-			}
-			break;
-		default:
+		if (attr->mr_key_size > FI_BGQ_MR_KEY_SIZE) {
 			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"Unknown error\n");
+					"memory key size too large\n");
 			goto err;
 		}
 	}
 	if (attr->cq_data_size) {
-		switch(type) {
-		//case FI_BGQ_DOMAIN_RMA_AVTABLE:
-		//case FI_BGQ_DOMAIN_RMA_AVMAP:
-#ifdef TODO
-			if (attr->cq_data_size > FI_BGQ_RMA_CQ_DATA_SIZE) {
-				FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-						"max cq data supported is %d\n",
-						FI_BGQ_RMA_CQ_DATA_SIZE);
-				goto err;
-			}
-#endif
-			break;
-		case FI_BGQ_DOMAIN_AVTABLE:
-		case FI_BGQ_DOMAIN_AVMAP:
-#ifdef TODO
-			if (attr->cq_data_size > FI_BGQ_TAGGED_CQ_DATA_SIZE) {
-				FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-						"max cq data supported is %d\n",
-						FI_BGQ_TAGGED_CQ_DATA_SIZE);
-				goto err;
-			}
-#endif
-			break;
-		default:
+		if (attr->cq_data_size > FI_BGQ_REMOTE_CQ_DATA_SIZE) {
 			FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_DOMAIN,
-					"Unknown error\n");
-			errno = FI_EINVAL;
-			return -errno;
+					"max cq data supported is %d\n",
+					FI_BGQ_REMOTE_CQ_DATA_SIZE);
+			goto err;
 		}
 	}
 
@@ -569,10 +477,8 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 	}
 
 	/* fill in default domain attributes */
-	bgq_domain->type		= FI_BGQ_DOMAIN_UNSPEC;
 	bgq_domain->threading		= fi_bgq_global.default_domain_attr->threading;
 	bgq_domain->resource_mgmt	= fi_bgq_global.default_domain_attr->resource_mgmt;
-	bgq_domain->data_progress	= fi_bgq_global.default_domain_attr->data_progress;
 
 	if (info->domain_attr) {
 		if (info->domain_attr->domain) {
@@ -583,21 +489,24 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 		ret = fi_bgq_check_domain_attr(info->domain_attr);
 		if (ret)
 			goto err;
-		if (fi_bgq_domain_str_to_type(info->domain_attr->name,
-				&bgq_domain->type) < 0) {
-			goto err;
-		}
 		bgq_domain->threading = info->domain_attr->threading;
 		bgq_domain->resource_mgmt = info->domain_attr->resource_mgmt;
-		bgq_domain->data_progress = info->domain_attr->data_progress;
 	}
 
+        /* Set the data progress mode to the option used in the configure.
+	 * Ignore any setting by the application.
+ 	 */
+        bgq_domain->data_progress = FI_BGQ_FABRIC_DIRECT_PROGRESS;
+
+
 	uint32_t ppn = Kernel_ProcessCount();
-	if (bgq_domain->data_progress == FI_PROGRESS_AUTO && ppn == 64) {
-		FI_LOG(fi_bgq_global.prov, FI_LOG_WARN, FI_LOG_DOMAIN,
-				"data auto progress requires a progress thread; 64 ppn is not supported\n");
-		errno = FI_EINVAL;
-		goto err;
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {
+		uint32_t ppn = Kernel_ProcessCount();
+ 		if (ppn > 16) {
+			fprintf(stderr,"BGQ Provider configure in FI_PROGRESS_AUTO mode and cannot be run higher than 16 ppn due to need for progress thread\n");
+			assert(0);
+			exit(1);
+		}
 	}
 
 	bgq_domain->fabric = bgq_fabric;
@@ -630,15 +539,15 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 
 	fi_bgq_ref_init(&bgq_fabric->node, &bgq_domain->ref_cnt, "domain");
 
-	if (bgq_domain->data_progress == FI_PROGRESS_AUTO) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO) {
 		uint32_t ppn = Kernel_ProcessCount();
 		fi_bgq_progress_init(bgq_domain, 64/ppn - 1);	/* TODO - what should the "max threads" be? */
 		if (0 != fi_bgq_progress_enable(bgq_domain, 0)) {
 
 			/* Unable to start progress threads! */
+			fprintf(stderr,"BGQ Provider unable to start progress thread for FI_PROGRESS_AUTO mode\n");
 			assert(0);
-
-			bgq_domain->data_progress = FI_PROGRESS_MANUAL;
+			exit(1);
 		}
 	} else {
 		fi_bgq_progress_init(bgq_domain, 0);

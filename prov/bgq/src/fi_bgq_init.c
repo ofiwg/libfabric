@@ -275,6 +275,12 @@ static int fi_bgq_getinfo(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
 		struct fi_info *hints, struct fi_info **info)
 {
+
+	if (!((FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) || (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO))){
+		fprintf(stderr,"BGQ Provider must be configured with either auto or manual progresss mode specified\n");
+		assert(0);
+	}
+
 	int ret;
 	struct fi_info *fi, *prev_fi, *curr;
 
@@ -301,19 +307,10 @@ static int fi_bgq_getinfo(uint32_t version, const char *node,
 			errno = FI_ENODATA;
 			return -errno;
 		} else {
-			curr = fi_bgq_global.info;
-			*info = curr;
-			prev_fi = NULL;
-			do {
-				if (!(fi = fi_dupinfo(curr))) {
-					return -FI_ENOMEM;
-				}
-				if (prev_fi) {
-					prev_fi->next = fi;
-				}
-				prev_fi = fi;
-				curr    = curr->next;
-			} while(curr);
+			if (!(fi = fi_dupinfo(fi_bgq_global.info))) {
+				return -FI_ENOMEM;
+			}
+			*info = fi;
 		}
 	}
 

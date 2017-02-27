@@ -33,6 +33,9 @@
 #define _FI_PROV_BGQ_RX_H_
 
 #define FI_BGQ_UEPKT_BLOCKSIZE (1024)
+#define PROCESS_RFIFO_MAX 64
+
+// #define FI_BGQ_TRACE
 
 /* forward declaration - see: prov/bgq/src/fi_bgq_atomic.c */
 void fi_bgq_rx_atomic_dispatch (void * buf, void * addr, size_t nbytes,
@@ -61,10 +64,18 @@ void complete_atomic_operation (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu_pack
 
 	const uint16_t nbytes = pkt->hdr.atomic.nbytes_minus_1 + 1;
 
-	const uint16_t key = pkt->hdr.atomic.key;
-	const uint64_t offset = pkt->hdr.atomic.offset;
-	const uintptr_t base = (uintptr_t)fi_bgq_domain_bat_read_vaddr(bgq_ep->rx.poll.bat, key);
-	void * addr = (void*)(base + offset);
+	void * addr;
+	if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
+		addr = (void*) pkt->hdr.atomic.offset;
+	} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+		const uint16_t key = pkt->hdr.atomic.key;
+		const uint64_t offset = pkt->hdr.atomic.offset;
+		const uintptr_t base = (uintptr_t)fi_bgq_domain_bat_read_vaddr(bgq_ep->rx.poll.bat, key);
+		addr = (void*)(base + offset);
+	}
+	else {
+		assert(0);
+	}
 
 	const uint32_t origin = pkt->hdr.atomic.origin_raw & FI_BGQ_MUHWI_DESTINATION_MASK;
 
@@ -130,14 +141,15 @@ void complete_atomic_operation (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu_pack
 }
 
 
-/* The 'convert_batid_to_paddr' function assumes that the base+offset is a
- * virtual address, which then must be converted into a physical address in
- * FI_MR_SCALABLE mode.
+/* The 'set_desc_payload_paddr' function sets an mu desc payload addr
+ * in one of two ways based on the mr mode.
+ * For FI_MR_SCALABLE is assumes that the base+offset is a
+ * virtual address, which then must be converted into a physical address.
  *
- * TODO - FI_MR_BASIC will use the base+offset as a physical addess
+ * For FI_MR_BASIC will set offset-key as the physical address.
  */
 static inline
-void convert_batid_to_paddr (union fi_bgq_mu_descriptor * fi_mu_desc, struct fi_bgq_bat_entry * bat) {
+void set_desc_payload_paddr (union fi_bgq_mu_descriptor * fi_mu_desc, struct fi_bgq_bat_entry * bat) {
 
 
 	const uint8_t rma_update_type = fi_mu_desc->rma.update_type;
@@ -146,11 +158,23 @@ void convert_batid_to_paddr (union fi_bgq_mu_descriptor * fi_mu_desc, struct fi_
 		const uint64_t key_msb = fi_mu_desc->rma.key_msb;
 		const uint64_t key_lsb = fi_mu_desc->rma.key_lsb;
 		const uint64_t key = (key_msb << 48) | key_lsb;
-		const uintptr_t base = (uintptr_t) fi_bgq_domain_bat_read_vaddr(bat, key);
+		uint64_t paddr = 0;
 		const uint64_t offset = fi_mu_desc->rma.dput.put_offset;
 
-		uint64_t paddr = 0;
-		fi_bgq_cnk_vaddr2paddr((const void *)(base+offset), 1, &paddr);
+		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
+			paddr = offset-key;
+		} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+
+			const uintptr_t base = (uintptr_t) fi_bgq_domain_bat_read_vaddr(bat, key);
+			fi_bgq_cnk_vaddr2paddr((const void *)(base+offset), 1, &paddr);
+		}
+		else {
+			assert(0);
+		}
+
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"set_desc_payload_paddr rma_update_type == FI_BGQ_MU_DESCRIPTOR_UPDATE_BAT_TYPE_DST paddr is 0x%016lx\n",paddr);
+#endif
 		MUSPI_SetRecPayloadBaseAddressInfo((MUHWI_Descriptor_t *)fi_mu_desc,
 			FI_BGQ_MU_BAT_ID_GLOBAL, paddr);
 
@@ -158,10 +182,25 @@ void convert_batid_to_paddr (union fi_bgq_mu_descriptor * fi_mu_desc, struct fi_
 		const uint64_t key_msb = fi_mu_desc->rma.key_msb;
 		const uint64_t key_lsb = fi_mu_desc->rma.key_lsb;
 		const uint64_t key = (key_msb << 48) | key_lsb;
-		const uintptr_t base = (uintptr_t) fi_bgq_domain_bat_read_vaddr(bat, key);
 		const uint64_t offset = fi_mu_desc->rma.Pa_Payload;
+		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
+			fi_mu_desc->rma.Pa_Payload = offset-key;
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"set_desc_payload_paddr rma_update_type == FI_BGQ_MU_DESCRIPTOR_UPDATE_BAT_TYPE_SRC for FI_MR_BASIC fi_mu_desc->rma.Pa_Payload set to paddr 0x%016lx\n",(offset-key));
+fflush(stderr);
+#endif
+		} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
 
-		fi_bgq_cnk_vaddr2paddr((const void *)(base+offset), 1, &fi_mu_desc->rma.Pa_Payload);
+			const uintptr_t base = (uintptr_t) fi_bgq_domain_bat_read_vaddr(bat, key);
+			fi_bgq_cnk_vaddr2paddr((const void *)(base+offset), 1, &fi_mu_desc->rma.Pa_Payload);
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"set_desc_payload_paddr rma_update_type == FI_BGQ_MU_DESCRIPTOR_UPDATE_BAT_TYPE_SRC for FI_MR_SCALABLE fi_mu_desc->rma.Pa_Payload set to paddr 0x%016lx\n",fi_mu_desc->rma.Pa_Payload);
+fflush(stderr);
+#endif
+		}
+		else {
+			assert(0);
+		}
 	} else {
 		/* no update requested */
 	}
@@ -175,22 +214,33 @@ void complete_rma_operation (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu_packet 
 	const uint64_t ndesc = pkt->hdr.rma.ndesc;
 	MUHWI_Descriptor_t * payload = (MUHWI_Descriptor_t *) &pkt->payload;
 
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"complete_rma_operation starting - nbytes is %lu ndesc is %lu\n",nbytes,ndesc);
+fflush(stderr);
+#endif
 	if (nbytes > 0) {	/* only for direct-put emulation */
-
-		uintptr_t vaddr = (uintptr_t)fi_bgq_domain_bat_read_vaddr(bat, pkt->hdr.rma.key);
-		vaddr += pkt->hdr.rma.offset;
-
 		const uint64_t payload_offset = ndesc << BGQ_MU_DESCRIPTOR_SIZE_IN_POWER_OF_2;
-		memcpy((void*)vaddr, (void *)((uintptr_t)payload + payload_offset), nbytes);
-	}
+		if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_BASIC) {
+			uintptr_t vaddr = (uintptr_t) pkt->hdr.rma.offset;
+			memcpy((void*)vaddr, (void *)((uintptr_t)payload + payload_offset), nbytes);
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"direct-put emulation memcpy vaddr is 0x%016lx nbytes is %lu\n",vaddr,nbytes);
+#endif
 
-	/* The 'convert_batid_to_paddr' function assumes that the base+offset is
-	 * a virtual address, which then must be converted into a physical
-	 * address in FI_MR_SCALABLE mode.
-	 *
-	 * TODO - FI_MR_BASIC will use the base+offset as a physical addess
-	 */
-	assert(bgq_ep->domain->mr_mode == FI_MR_SCALABLE);	// rx->poll.domain->mr_mode
+		} else if (FI_BGQ_FABRIC_DIRECT_MR == FI_MR_SCALABLE) {
+
+			uintptr_t vaddr = (uintptr_t)fi_bgq_domain_bat_read_vaddr(bat, pkt->hdr.rma.key);
+			vaddr += pkt->hdr.rma.offset;
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"direct-put emulation memcpy vaddr is 0x%016lx nbytes is %lu\n",vaddr,nbytes);
+#endif
+
+			memcpy((void*)vaddr, (void *)((uintptr_t)payload + payload_offset), nbytes);
+		}
+		else {
+			assert(0);
+		}
+	}
 
 	unsigned i;
 	for (i = 0; i < ndesc; ++i) {
@@ -205,6 +255,10 @@ void complete_rma_operation (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu_packet 
 
 		if (desc->PacketHeader.NetworkHeader.pt2pt.Byte8.Packet_Type == 2) {	/* rget descriptor */
 
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"complete_rma_operation - processing rgat desc %d\n",i);
+fflush(stderr);
+#endif
 			/* locate the payload lookaside slot */
 			uint64_t payload_paddr = 0;
 			void * payload_vaddr =
@@ -221,16 +275,24 @@ void complete_rma_operation (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu_packet 
 
 			unsigned j;
 			for (j = 0; j < rget_ndesc; ++j) {
-				convert_batid_to_paddr(&rget_payload[j], bat);
+				set_desc_payload_paddr(&rget_payload[j], bat);
 			}
 
 		} else {
 
-			convert_batid_to_paddr((union fi_bgq_mu_descriptor *)desc, bat);
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"complete_rma_operation - processing fifo desc %d\n",i);
+fflush(stderr);
+#endif
+			set_desc_payload_paddr((union fi_bgq_mu_descriptor *)desc, bat);
 
 		}
 		MUSPI_InjFifoAdvanceDesc(bgq_ep->rx.poll.injfifo.muspi_injfifo);
 	}
+#ifdef FI_BGQ_TRACE
+fprintf(stderr,"complete_rma_operation complete\n");
+fflush(stderr);
+#endif
 }
 
 
@@ -238,8 +300,8 @@ static inline
 void inject_eager_completion (struct fi_bgq_ep * bgq_ep,
 		struct fi_bgq_mu_packet * pkt) {
 
-	const uint64_t is_local = pkt->hdr.send.is_local;
-	const uint64_t cntr_paddr = ((uint64_t)pkt->hdr.send.cntr_paddr_rsh3b) << 3;
+	const uint64_t is_local = pkt->hdr.completion.is_local;
+	const uint64_t cntr_paddr = ((uint64_t)pkt->hdr.completion.cntr_paddr_rsh3b) << 3;
 
 	MUHWI_Descriptor_t * desc =
 		fi_bgq_spi_injfifo_tail_wait(&bgq_ep->rx.poll.injfifo);
@@ -247,7 +309,7 @@ void inject_eager_completion (struct fi_bgq_ep * bgq_ep,
 	qpx_memcpy64((void*)desc, (const void*)&bgq_ep->rx.poll.ack_model[is_local]);
 
 	MUSPI_SetRecPayloadBaseAddressInfo(desc, FI_BGQ_MU_BAT_ID_GLOBAL, cntr_paddr);
-	desc->PacketHeader.NetworkHeader.pt2pt.Destination = pkt->hdr.send.origin;
+	desc->PacketHeader.NetworkHeader.pt2pt.Destination = pkt->hdr.completion.origin;
 
 	MUSPI_InjFifoAdvanceDesc(bgq_ep->rx.poll.injfifo.muspi_injfifo);
 
@@ -272,18 +334,26 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 		const unsigned is_multi_receive,
 		const unsigned is_manual_progress) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"complete_receive_operation starting\n");
+#endif
 	const uint64_t recv_len = context->len;
 	void * recv_buf = context->buf;
 	const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
 	struct l2atomic_fifo_producer * err_producer = &bgq_ep->recv_cq->err_producer;
 
-	if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
+	const uint64_t immediate_data = pkt->hdr.pt2pt.immediate_data;
 
-		const uint64_t send_len = pkt->hdr.inject.message_length;
+	if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"complete_receive_operation - packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER\n");
+#endif
+
+		const uint64_t send_len = pkt->hdr.pt2pt.send.message_length;
 
 		if (is_multi_receive) {		/* branch should compile out */
-			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.inject.data, send_len);
+			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
 
 			union fi_bgq_context * original_multi_recv_context = context;
 			context = (union fi_bgq_context *)((uintptr_t)recv_buf - sizeof(union fi_bgq_context));
@@ -292,30 +362,44 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			context->flags = FI_RECV | FI_MSG | FI_BGQ_CQ_CONTEXT_MULTIRECV;
 			context->buf = recv_buf;
 			context->len = send_len;
-			context->byte_counter = 0;
+			context->data = immediate_data;
 			context->tag = 0;	/* tag is not valid for multi-receives */
 			context->multi_recv_context = original_multi_recv_context;
+			context->byte_counter = 0;
 
 			/* the next 'fi_bgq_context' must be 8-byte aligned */
 			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
 			original_multi_recv_context->len -= bytes_consumed;
 			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"complete_receive_operation - is_multi_receive\n");
+#endif
+
 
 			/* post a completion event for the individual receive */
 			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else if (send_len <= recv_len) {
-			if (send_len) memcpy(recv_buf, (void*)&pkt->hdr.inject.data, send_len);
-
+			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"EAGER complete_receive_operation send_len %lu <= recv_len %lu calling fi_bgq_cq_enqueue_completed\n",send_len,recv_len);
+#endif
+ 
 			context->buf = NULL;
 			context->len = send_len;
-			context->byte_counter = 0;
+			context->data = immediate_data;
 			context->tag = origin_tag;
+			context->byte_counter = 0;
 
 			/* post a completion event for the individual receive */
 			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else {	/* truncation - unlikely */
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"EAGER complete_receive_operation truncation - send_len %lu > recv_len %lu posting error\n",send_len,recv_len);
+
+#endif
+
 			struct fi_bgq_context_ext * ext;
 			if (is_context_ext) {
 				ext = (struct fi_bgq_context_ext *)context;
@@ -329,74 +413,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			ext->err_entry.flags = context->flags;
 			ext->err_entry.len = recv_len;
 			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = 0;
-			ext->err_entry.tag = origin_tag;
-			ext->err_entry.olen = send_len - recv_len;
-			ext->err_entry.err = FI_ETRUNC;
-			ext->err_entry.prov_errno = 0;
-			ext->err_entry.err_data = NULL;
-
-			ext->bgq_context.byte_counter = 0;
-
-			/* post an 'error' completion event for the receive - spin loop! */
-			uint64_t ext_rsh3b = (uint64_t)ext >> 3;
-			while(0 != l2atomic_fifo_produce(err_producer, ext_rsh3b));
-		}
-
-		return;
-
-	} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
-
-		const uint64_t send_len = pkt->hdr.send.message_length;
-
-		if (is_multi_receive) {		/* branch should compile out */
-			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
-
-			union fi_bgq_context * original_multi_recv_context = context;
-			context = (union fi_bgq_context *)((uintptr_t)recv_buf - sizeof(union fi_bgq_context));
-			assert((((uintptr_t)context) & 0x07) == 0);
-
-			context->flags = FI_RECV | FI_MSG | FI_BGQ_CQ_CONTEXT_MULTIRECV;
-			context->buf = recv_buf;
-			context->len = send_len;
-			context->byte_counter = 0;
-			context->tag = 0;	/* tag is not valid for multi-receives */
-			context->multi_recv_context = original_multi_recv_context;
-
-			/* the next 'fi_bgq_context' must be 8-byte aligned */
-			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
-			original_multi_recv_context->len -= bytes_consumed;
-			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
-
-			/* post a completion event for the individual receive */
-			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-
-		} else if (send_len <= recv_len) {
-			if (send_len) memcpy(recv_buf, (void*)&pkt->payload.byte[0], send_len);
-
-			context->buf = NULL;
-			context->len = send_len;
-			context->byte_counter = 0;
-			context->tag = origin_tag;
-
-			/* post a completion event for the individual receive */
-			fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
-
-		} else {	/* truncation - unlikely */
-			struct fi_bgq_context_ext * ext;
-			if (is_context_ext) {
-				ext = (struct fi_bgq_context_ext *)context;
-				ext->err_entry.op_context = ext->msg.op_context;
-			} else {
-				posix_memalign((void**)&ext, 32, sizeof(struct fi_bgq_context_ext));
-				ext->bgq_context.flags = FI_BGQ_CQ_CONTEXT_EXT;
-				ext->err_entry.op_context = context;
-			}
-
-			ext->err_entry.flags = context->flags;
-			ext->err_entry.len = recv_len;
-			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = 0;
+			ext->err_entry.data = immediate_data;
 			ext->err_entry.tag = origin_tag;
 			ext->err_entry.olen = send_len - recv_len;
 			ext->err_entry.err = FI_ETRUNC;
@@ -414,18 +431,21 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 	} else {			/* rendezvous packet */
 
-		uint64_t niov = pkt->hdr.rendezvous.niov_minus_1 + 1;
+		uint64_t niov = pkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 		assert(niov <= (7-is_multi_receive));
-		uint64_t xfer_len = pkt->payload.mu_iov[0].message_length;
+		uint64_t xfer_len = pkt->payload.rendezvous.mu_iov[0].message_length;
 		{
 			uint64_t i;
-			for (i=1; i<niov; ++i) xfer_len += pkt->payload.mu_iov[i].message_length;
+			for (i=1; i<niov; ++i) xfer_len += pkt->payload.rendezvous.mu_iov[i].message_length;
 		}
 
 		uint64_t byte_counter_vaddr = 0;
 
 		if (is_multi_receive) {		/* branch should compile out */
-
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"rendezvous multirecv\n");
+#endif
+ 
 			union fi_bgq_context * multi_recv_context =
 				(union fi_bgq_context *)((uintptr_t)recv_buf - sizeof(union fi_bgq_context));
 			assert((((uintptr_t)multi_recv_context) & 0x07) == 0);
@@ -433,9 +453,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			multi_recv_context->flags = FI_RECV | FI_MSG | FI_BGQ_CQ_CONTEXT_MULTIRECV;
 			multi_recv_context->buf = recv_buf;
 			multi_recv_context->len = xfer_len;
-			multi_recv_context->byte_counter = xfer_len;
+			multi_recv_context->data = immediate_data;
 			multi_recv_context->tag = 0;	/* tag is not valid for multi-receives */
 			multi_recv_context->multi_recv_context = context;
+			multi_recv_context->byte_counter = xfer_len;
 
 			/* the next 'fi_bgq_context' must be 8-byte aligned */
 			uint64_t bytes_consumed = ((xfer_len + 8) & (~0x07ull)) + sizeof(union fi_bgq_context);
@@ -454,9 +475,13 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 		} else if (xfer_len <= recv_len) {
 
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"rendezvous complete_receive_operation xfer_len %lu <= recv_len %lu calling fi_bgq_cq_enqueue_pending\n",xfer_len,recv_len);
+#endif
 			context->len = xfer_len;
-			context->byte_counter = xfer_len;
+			context->data = immediate_data;
 			context->tag = origin_tag;
+			context->byte_counter = xfer_len;
 
 			byte_counter_vaddr = (uint64_t)&context->byte_counter;
 
@@ -464,6 +489,10 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			fi_bgq_cq_enqueue_pending(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 
 		} else {
+#ifdef FI_BGQ_TRACE
+        fprintf(stderr,"rendezvous truncation xfer_len %lu > recv_len %lu posting error\n",xfer_len,recv_len);
+#endif
+
 			/* truncation */
 			struct fi_bgq_context_ext * ext;
 			if (is_context_ext) {
@@ -478,7 +507,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			ext->err_entry.flags = context->flags;
 			ext->err_entry.len = recv_len;
 			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = 0;
+			ext->err_entry.data = immediate_data;
 			ext->err_entry.tag = origin_tag;
 			ext->err_entry.olen = xfer_len - recv_len;
 			ext->err_entry.err = FI_ETRUNC;
@@ -513,7 +542,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			dst_paddr = (uint64_t)mr.BasePa + ((uint64_t)recv_buf - (uint64_t)mr.BaseVa);
 		}
 
-		const uint64_t is_local = pkt->hdr.rendezvous.is_local;
+		const uint64_t fifo_map = fi_bgq_mu_packet_get_fifo_map(pkt);
+		const uint64_t is_local = (fifo_map & (MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 | MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL1)) != 0;
 
 		/*
 		 * inject a "remote get" descriptor - the payload is composed
@@ -547,9 +577,9 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 		rget_desc->Pa_Payload = payload_paddr;
 		rget_desc->PacketHeader.messageUnitHeader.Packet_Types.Remote_Get.Rget_Inj_FIFO_Id =
-			pkt->hdr.rendezvous.rget_inj_fifo_id;	/* TODO - different rget inj fifos for tag vs msg operations? */
+			pkt->hdr.pt2pt.rendezvous.rget_inj_fifo_id;	/* TODO - different rget inj fifos for tag vs msg operations? */
 
-		fi_bgq_mu_packet_rendezvous_origin(pkt, &rget_desc->PacketHeader.NetworkHeader.pt2pt.Destination);
+		rget_desc->PacketHeader.NetworkHeader.pt2pt.Destination = fi_bgq_uid_get_destination(pkt->hdr.pt2pt.uid.fi);
 
 		/* initialize the direct-put ("data transfer") descriptor(s) in the rget payload */
 		unsigned i;
@@ -558,8 +588,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 			qpx_memcpy64((void*)xfer_desc, (const void*)&bgq_ep->rx.poll.rzv.dput_model[is_local]);
 
-			xfer_desc->Pa_Payload = pkt->payload.mu_iov[i].src_paddr;
-			const uint64_t message_length = pkt->payload.mu_iov[i].message_length;
+			xfer_desc->Pa_Payload = pkt->payload.rendezvous.mu_iov[i].src_paddr;
+			const uint64_t message_length = pkt->payload.rendezvous.mu_iov[i].message_length;
 			xfer_desc->Message_Length = message_length;
 			MUSPI_SetRecPayloadBaseAddressInfo(xfer_desc, FI_BGQ_MU_BAT_ID_GLOBAL, dst_paddr);
 			dst_paddr += message_length;
@@ -571,10 +601,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			rget_desc->Message_Length += sizeof(MUHWI_Descriptor_t);
 
 			if (is_multi_receive) {		/* branch should compile out */
-				if (is_local)
-					xfer_desc->Torus_FIFO_Map = MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0;
-				else
-					xfer_desc->Torus_FIFO_Map = fi_bgq_mu_packet_rendezvous_fifomap(pkt);
+				xfer_desc->Torus_FIFO_Map = fifo_map;
 			}
 		}
 
@@ -583,7 +610,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			MUHWI_Descriptor_t * dput_desc = payload;
 			qpx_memcpy64((void*)dput_desc, (const void*)&bgq_ep->rx.poll.rzv.dput_completion_model);
 
-			const uint64_t counter_paddr = ((uint64_t) pkt->hdr.rendezvous.cntr_paddr_rsh3b) << 3;
+			const uint64_t counter_paddr = ((uint64_t) pkt->payload.rendezvous.cntr_paddr_rsh3b) << 3;
 			dput_desc->Pa_Payload =
 				MUSPI_GetAtomicAddress(counter_paddr,
 					MUHWI_ATOMIC_OPCODE_LOAD_CLEAR);
@@ -594,9 +621,8 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			MUHWI_Descriptor_t * ack_desc = ++payload;
 			qpx_memcpy64((void*)ack_desc, (const void*)&bgq_ep->rx.poll.rzv.multi_recv_ack_model);
 
-			const uint64_t torus_fifo_map = is_local ? MUHWI_DESCRIPTOR_TORUS_FIFO_MAP_LOCAL0 : fi_bgq_mu_packet_rendezvous_fifomap(pkt);
-			ack_desc->Torus_FIFO_Map = torus_fifo_map;
-			rget_desc->Torus_FIFO_Map = torus_fifo_map;
+			ack_desc->Torus_FIFO_Map = fifo_map;
+			rget_desc->Torus_FIFO_Map = fifo_map;
 			rget_desc->Message_Length += sizeof(MUHWI_Descriptor_t);
 
 			union fi_bgq_mu_packet_hdr * hdr = (union fi_bgq_mu_packet_hdr *) &ack_desc->PacketHeader;
@@ -614,17 +640,20 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 static inline
 unsigned is_match(struct fi_bgq_mu_packet *pkt, union fi_bgq_context * context, const unsigned poll_msg)
 {
-	if (poll_msg) return 1;		/* branch should compile out */
-
-	const uint64_t origin_tag = pkt->hdr.inject.ofi_tag;
+	const uint64_t origin_tag = pkt->hdr.pt2pt.ofi_tag;
+	const fi_bgq_uid_t origin_uid = pkt->hdr.pt2pt.uid.fi;
+	const fi_bgq_uid_t target_uid = fi_bgq_addr_uid(context->src_addr);
 	const uint64_t ignore = context->ignore;
 	const uint64_t target_tag = context->tag;
 	const uint64_t target_tag_and_not_ignore = target_tag & ~ignore;
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
 
-	return origin_tag_and_not_ignore == target_tag_and_not_ignore;
-}
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr, "%s:%s():%d origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %u returning %u\n", __FILE__, __func__, __LINE__, origin_uid, target_uid, origin_tag, target_tag, ignore, (context->src_addr == FI_ADDR_UNSPEC),((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid))));
+#endif
 
+	return ((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid)));
+}
 
 static inline
 void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu_packet * pkt, const unsigned poll_msg, const unsigned is_manual_progress)
@@ -654,13 +683,15 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 	if ((packet_type & (FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER)) ==
 			(FI_BGQ_MU_PACKET_TYPE_ACK|FI_BGQ_MU_PACKET_TYPE_EAGER)) {	/* unlikely? */
 		inject_eager_completion(bgq_ep, pkt);
+		return;
 	}
 
-	assert(packet_type & (FI_BGQ_MU_PACKET_TYPE_INJECT | FI_BGQ_MU_PACKET_TYPE_EAGER | FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS));
+	assert(packet_type & (FI_BGQ_MU_PACKET_TYPE_EAGER | FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS));
 
 	/* search the match queue */
 	union fi_bgq_context * head = bgq_ep->rx.poll.rfifo[poll_msg].mq.head;
 	union fi_bgq_context * context = head;
+	union fi_bgq_context * prev = NULL;
 
 	while (context) {
 
@@ -671,14 +702,12 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 			if (!poll_msg || ((rx_op_flags | FI_MULTI_RECV) == 0)) {	/* branch should compile out for tagged receives */
 
 				union fi_bgq_context * next = context->next;
-				union fi_bgq_context * prev = context->prev;
 
 				/* remove the context from the match queue */
 				if (prev) prev->next = next;
 				else bgq_ep->rx.poll.rfifo[poll_msg].mq.head = next;
 
-				if (next) next->prev = prev;
-				else bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
+				if (!next) bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
 
 				const uint64_t is_context_ext = rx_op_flags & FI_BGQ_CQ_CONTEXT_EXT;
 
@@ -688,7 +717,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 						0, context, is_context_ext, 0, is_manual_progress);
 				else
 					complete_receive_operation(bgq_ep, pkt,
-						pkt->hdr.inject.ofi_tag, context, is_context_ext, 0, is_manual_progress);
+						pkt->hdr.pt2pt.ofi_tag, context, is_context_ext, 0, is_manual_progress);
 
 				return;
 
@@ -699,15 +728,13 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 				const uint64_t recv_len = context->len;
 				uint64_t send_len = 0;
 
-				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					send_len = pkt->hdr.inject.message_length;
-				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
-					send_len = pkt->hdr.send.message_length;
+				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
+					send_len = pkt->hdr.pt2pt.send.message_length;
 				} else /* FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS */ {
-					const uint64_t niov = pkt->hdr.rendezvous.niov_minus_1 + 1;
-					send_len = pkt->payload.mu_iov[0].message_length;
+					const uint64_t niov = pkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
+					send_len = pkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
-					for (i=1; i<niov; ++i) send_len += pkt->payload.mu_iov[i].message_length;
+					for (i=1; i<niov; ++i) send_len += pkt->payload.rendezvous.mu_iov[i].message_length;
 				}
 
 				if (send_len > recv_len) {
@@ -715,6 +742,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 					/* not enough space available in the multi-receive
 					 * buffer; continue as if "a match was not found"
 					 * and advance to the next match entry */
+					prev = context;
 					context = context->next;
 
 				} else {
@@ -730,14 +758,12 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 						 * queue and return. */
 
 						union fi_bgq_context * next = context->next;
-						union fi_bgq_context * prev = context->prev;
 
 						/* remove the context from the match queue */
 						if (prev) prev->next = next;
 						else bgq_ep->rx.poll.rfifo[poll_msg].mq.head = next;
 
-						if (next) next->prev = prev;
-						else bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
+						if (!next) bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
 
 						/* post a completion event for the multi-receive */
 						context->byte_counter = 0;
@@ -748,6 +774,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 			}
 
 		} else {
+			prev = context;
 			context = context->next;
 		}
 	}
@@ -756,7 +783,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 
 	if (bgq_ep->rx.poll.rfifo[poll_msg].ue.free == NULL) { /* unlikely */
 		struct fi_bgq_mu_packet * block = NULL;
-		int rc = 0;
+		int rc __attribute__ ((unused));
 		rc = posix_memalign((void **)&block,
 			32, sizeof(struct fi_bgq_mu_packet)*FI_BGQ_UEPKT_BLOCKSIZE);
 		assert(rc==0);
@@ -815,8 +842,10 @@ int poll_rfifo (struct fi_bgq_ep * bgq_ep, const unsigned is_manual_progress) {
 		_bgq_msync();
 
 		const uintptr_t stop = va_head + offset_tail - offset_head;
-		while ((uintptr_t)hdr < stop) {
+		int process_rfifo_iter = 0;
+		while (((uintptr_t)hdr < stop) && (process_rfifo_iter < PROCESS_RFIFO_MAX)) {
 
+			process_rfifo_iter++;
 			struct fi_bgq_mu_packet *pkt = (struct fi_bgq_mu_packet *) hdr;
 			const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
@@ -845,8 +874,10 @@ int poll_rfifo (struct fi_bgq_ep * bgq_ep, const unsigned is_manual_progress) {
 			_bgq_msync();
 
 			const uintptr_t stop = va_end - 544;
-			while ((uintptr_t)hdr < stop) {
+			int process_rfifo_iter = 0;
+			while  (((uintptr_t)hdr < stop) && (process_rfifo_iter < PROCESS_RFIFO_MAX)) {
 
+				process_rfifo_iter++;
 				struct fi_bgq_mu_packet *pkt = (struct fi_bgq_mu_packet *) hdr;
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
@@ -939,7 +970,10 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		const uint64_t cancel_context, union fi_bgq_context * context,
 		const uint64_t rx_op_flags, const uint64_t is_context_ext,
 		const unsigned is_manual_progress) {
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context starting\n");
 
+#endif
 	if (cancel_context) {	/* branch should compile out */
 		const uint64_t compare_context = is_context_ext ?
 			(uint64_t)(((struct fi_bgq_context_ext *)context)->msg.op_context) :
@@ -987,6 +1021,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		unsigned found_match = 0;
 		while (uepkt != NULL) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context - searching unexpected queue\n");
+#endif
 			if (is_match(uepkt, context, poll_msg)) {
 
 				/* branch will compile out */
@@ -995,7 +1032,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 						0, context, 0, 0, is_manual_progress);
 				else
 					complete_receive_operation(bgq_ep, uepkt,
-						uepkt->hdr.inject.ofi_tag, context, 0, 0, is_manual_progress);
+						uepkt->hdr.pt2pt.ofi_tag, context, 0, 0, is_manual_progress);
 
 				/* remove the uepkt from the ue queue */
 				if (head == tail) {
@@ -1028,6 +1065,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 		if (!found_match) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context -  nothing found on unexpected queue adding to match queue\n");
+#endif
 			/*
 			 * no unexpected headers were matched; add this match
 			 * information to the appropriate match queue
@@ -1036,7 +1076,6 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			union fi_bgq_context * tail = bgq_ep->rx.poll.rfifo[poll_msg].mq.tail;
 
 			context->next = NULL;
-			context->prev = tail;
 			if (tail == NULL) {
 				bgq_ep->rx.poll.rfifo[poll_msg].mq.head = context;
 			} else {
@@ -1056,21 +1095,22 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		unsigned found_match = 0;
 		while (uepkt != NULL) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context - rx_op_flags & FI_PEEK searching unexpected queue\n");
+#endif
 			if (is_match(uepkt, context, poll_msg)) {
 
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(uepkt);
-				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					context->len = uepkt->hdr.inject.message_length;
-				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
-					const uint64_t niov = uepkt->hdr.rendezvous.niov_minus_1 + 1;
+				if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
+					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					uint64_t len = 0;
 					unsigned i;
-					for (i=0; i<niov; ++i) len += uepkt->payload.mu_iov[i].message_length;
+					for (i=0; i<niov; ++i) len += uepkt->payload.rendezvous.mu_iov[i].message_length;
 					context->len = len;
 				} else {	/* "eager" or "eager with completion" packet type */
-					context->len = uepkt->hdr.send.message_length;
+					context->len = uepkt->hdr.pt2pt.send.message_length;
 				}
-				context->tag = poll_msg ? 0 : uepkt->hdr.inject.ofi_tag;
+				context->tag = poll_msg ? 0 : uepkt->hdr.pt2pt.ofi_tag;
 				context->byte_counter = 0;
 
 				if (rx_op_flags & FI_CLAIM) { /* both FI_PEEK and FI_CLAIM were specified */
@@ -1134,6 +1174,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			ext->err_entry.err_data = NULL;
 			ext->bgq_context.byte_counter = 0;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context -  no match found on unexpected queue posting error\n");
+#endif
 			/* post an 'error' completion event for the receive - spin loop! */
 			struct l2atomic_fifo_producer * producer =
 				&bgq_ep->recv_cq->err_producer;
@@ -1142,6 +1185,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 	} else if (rx_op_flags & FI_CLAIM) {	/* unlikely */
 		assert((rx_op_flags & FI_BGQ_CQ_CONTEXT_EXT) == 0);
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context -  rx_op_flags & FI_CLAIM complete receive operation\n");
+#endif
 
 		/* only FI_CLAIM was specified
 		 *
@@ -1156,7 +1202,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				0, context, 0, 0, is_manual_progress);
 		else
 			complete_receive_operation(bgq_ep, claimed_pkt,
-				claimed_pkt->hdr.inject.ofi_tag, context, 0, 0, is_manual_progress);
+				claimed_pkt->hdr.pt2pt.ofi_tag, context, 0, 0, is_manual_progress);
 
 		/* ... and prepend the uehdr to the ue free list. */
 		claimed_pkt->next = bgq_ep->rx.poll.rfifo[poll_msg].ue.free;
@@ -1181,15 +1227,13 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				const uint64_t packet_type = fi_bgq_mu_packet_type_get(uepkt);
 				uint64_t send_len = 0;
 
-				if (packet_type & FI_BGQ_MU_PACKET_TYPE_INJECT) {
-					send_len = uepkt->hdr.inject.message_length;
-				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
-					send_len = uepkt->hdr.send.message_length;
+				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
+					send_len = uepkt->hdr.pt2pt.send.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
-					const uint64_t niov = uepkt->hdr.rendezvous.niov_minus_1 + 1;
-					send_len = uepkt->payload.mu_iov[0].message_length;
+					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
+					send_len = uepkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
-					for (i=1; i<niov; ++i) send_len += uepkt->payload.mu_iov[i].message_length;
+					for (i=1; i<niov; ++i) send_len += uepkt->payload.rendezvous.mu_iov[i].message_length;
 				}
 
 				if (send_len > recv_len) {
@@ -1254,7 +1298,6 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			union fi_bgq_context * tail = bgq_ep->rx.poll.rfifo[poll_msg].mq.tail;
 
 			context->next = NULL;
-			context->prev = tail;
 			if (tail == NULL) {
 				bgq_ep->rx.poll.rfifo[poll_msg].mq.head = context;
 			} else {
@@ -1309,6 +1352,7 @@ int cancel_match_queue (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, cons
 	union fi_bgq_context * head = bgq_ep->rx.poll.rfifo[poll_msg].mq.head;
 	union fi_bgq_context * tail = bgq_ep->rx.poll.rfifo[poll_msg].mq.tail;
 	union fi_bgq_context * context = head;
+	union fi_bgq_context * prev = NULL;
 	while (context) {
 
 		const uint64_t is_context_ext = context->flags & FI_BGQ_CQ_CONTEXT_EXT;
@@ -1322,12 +1366,10 @@ int cancel_match_queue (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, cons
 			if (context == head)
 				bgq_ep->rx.poll.rfifo[poll_msg].mq.head = context->next;
 			else
-				context->prev->next = context->next;
+				prev->next = context->next;
 
 			if (context == tail)
-				bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = context->prev;
-			else
-				context->next->prev = context->prev;
+				bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
 
 			struct fi_bgq_context_ext * ext;
 			if (is_context_ext) {
@@ -1356,7 +1398,8 @@ int cancel_match_queue (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, cons
 
 			return FI_ECANCELED;
 		}
-
+		else
+			prev = context;
 		context = context->next;
 	}
 

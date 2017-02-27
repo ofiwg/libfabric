@@ -151,7 +151,7 @@ fi_bgq_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 {
 	struct fi_bgq_cq *bgq_cq = container_of(cq, struct fi_bgq_cq, cq_fid);
 
-	if (bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
 
 		struct fi_bgq_context_ext * ext = bgq_cq->err_head;
 		if (NULL == ext) {
@@ -319,7 +319,7 @@ int fi_bgq_cq_enqueue_err (struct fi_bgq_cq * bgq_cq,
 		struct fi_bgq_context_ext * ext,
 		const int lock_required)
 {
-	if (bgq_cq->domain->data_progress == FI_PROGRESS_MANUAL) {
+	if (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) {
 
 		int lock_required = 0;
 		switch (bgq_cq->domain->threading) {

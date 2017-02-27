@@ -58,7 +58,7 @@ struct l2atomic_lock_data {
 static inline
 void l2atomic_lock_initialize (struct l2atomic_lock * lock, struct l2atomic_lock_data * data) {
 
-	uint32_t cnk_rc = 0;
+	uint32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_L2AtomicsAllocate((void*)data, sizeof(struct l2atomic_lock_data));
 	assert(0==cnk_rc);
 
@@ -274,7 +274,7 @@ void l2atomic_fifo_initialize (struct l2atomic_fifo_consumer * consumer,
 #endif
 #endif
 
-	uint32_t cnk_rc = 0;
+	uint32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_L2AtomicsAllocate((void*)data, sizeof(struct l2atomic_fifo_data) + sizeof(uint64_t) * npackets);
 	assert(0==cnk_rc);
 
@@ -607,7 +607,7 @@ void l2atomic_counter_initialize (struct l2atomic_counter * counter,
 	assert(data);
 	assert(((uintptr_t)data & 0x07) == 0);	/* 8 byte aligned */
 
-	uint32_t cnk_rc = 0;
+	uint32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_L2AtomicsAllocate((void*)data, sizeof(struct l2atomic_counter_data));
 	assert(0==cnk_rc);
 
@@ -666,7 +666,7 @@ void l2atomic_boundedcounter_initialize (struct l2atomic_boundedcounter * counte
 	assert(data);
 	assert(((uintptr_t)data & 0x01F) == 0);	/* 32 byte aligned */
 
-	uint32_t cnk_rc = 0;
+	uint32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_L2AtomicsAllocate((void*)data, sizeof(struct l2atomic_boundedcounter_data));
 	assert(0==cnk_rc);
 
@@ -714,7 +714,7 @@ void l2atomic_barrier_initialize (struct l2atomic_barrier * barrier,
 	assert(data);
 	assert(((uintptr_t)data & (L1D_CACHE_LINE_SIZE-1)) == 0);
 
-	uint32_t cnk_rc = 0;
+	uint32_t cnk_rc __attribute__ ((unused));
 	cnk_rc = Kernel_L2AtomicsAllocate((void*)data, sizeof(struct l2atomic_barrier_data));
 	assert(0==cnk_rc);
 
