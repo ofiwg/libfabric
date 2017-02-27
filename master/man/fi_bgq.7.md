@@ -16,35 +16,47 @@ that makes direct use of the unique hardware features such as the
 Messaging Unit (MU), Base Address Table (BAT), and L2 Atomics.
 
 The purpose of this provider is to demonstrate the scalability and
-performance of libfabric, and to provide an "extreme scale"
+performance of libfabric, providing an "extreme scale"
 development environment for applications and middleware using the
-libfabric API.
+libfabric API, and to support a functional and performant version of
+MPI3 on Blue Gene/Q via MPICH CH4.
 
 # SUPPORTED FEATURES
 
-The bgq provider supports most features defined for the libfabric API. 
+The bgq provider supports most features defined for the libfabric API.
 Key features include:
 
 *Endpoint types*
 : The Blue Gene/Q hardware is connectionless and reliable. Therefore, the
   bgq provider only supports the *FI_EP_RDM* endpoint type.
 
-*Primary capabilities*
-: Supported primary capabilities include *FI_MSG*, *FI_RMA*, *FI_TAGGED*,
+*Capabilities*
+: Supported capabilities include *FI_MSG*, *FI_RMA*, *FI_TAGGED*,
   *FI_ATOMIC*, *FI_NAMED_RX_CTX*, *FI_READ*, *FI_WRITE*, *FI_SEND*, *FI_RECV*,
-  *FI_REMOTE_READ*, and *FI_REMOTE_WRITE*.
+  *FI_REMOTE_READ*,  *FI_REMOTE_WRITE*, *FI_MULTI_RECV*, *FI_DIRECTED_RECV*,
+  *FI_SOURCE* and *FI_FENCE*.
 
-*Secondary capabilities*
-: Supported secondary capabilities include *FI_MULTI_RECV* and *FI_FENCE*.
+Notes on FI_DIRECTED_RECV capability:
+The immediate data which is sent within the *senddata* call to support
+FI_DIRECTED_RECV for BGQ must be exactly 4 bytes, which BGQ uses to
+completely identify the source address to an exascale-level number of ranks
+for tag matching on the recv and can be managed within the MU packet.
+Therefore the domain attribute cq_data_size is set to 4 which is the OFI
+standard minimum.
 
 *Modes*
 : The bgq provider requires *FI_CONTEXT* and *FI_ASYNC_IOV*
 
 *Memory registration modes*
-: Only *FI_MR_SCALABLE* is supported, however hardware acceleration of
-  rdma transfers is not enabled. The FI_ATOMIC, FI_READ, FI_WRITE,
-  FI_REMOTE_READ, and FI_REMOTE_WRITE capabilities are emulated in
-  software.
+: Both FI_MR_SCALABLE and FI_MR_BASIC are supported, specified at configuration
+  time with the "--with-bgq-mr" configure option.  The base address table
+  utilized by FI_MR_SCALABLE for rdma transfers is completely software emulated,
+  supporting FI_ATOMIC, FI_READ, FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE
+  capabilities.  With FI_MR_BASIC the FI_WRITE is completely hardware
+  accelerated, the other rdma transfers are still software emulated but the
+  use of a base address table is no longer required as the offset is now the
+  virtual address of the memory from the application and the key is the delta
+  from which the physical address can be computed if necessary.
 
 *Additional features*
 : Supported additional features include *FABRIC_DIRECT*, *scalable endpoints*,
@@ -63,15 +75,9 @@ Key features include:
 *Endpoint types*
 : Unsupported endpoint types include *FI_EP_DGRAM* and *FI_EP_MSG*
 
-*Primary capabilities*
-: The bgq provider does not support the *FI_DIRECTED_RECV *capability.
-
-*Secondary capabilities*
-: The bgq provider does not support the *FI_SOURCE*, *FI_RMA_EVENT*, and
+*Capabilities*
+: The bgq provider does not support the *FI_RMA_EVENT*, and
   *FI_TRIGGER* capabilities.
-
-*Memory registration modes*
-: The bgq provider does not support the *FI_MR_BASIC* memory region mode.
 
 *Address vector*
 : The bgq provider does not support the *FI_AV_TABLE* address vector format.
@@ -93,9 +99,9 @@ bgq provider will assert on the alignment for "debug" builds (i.e., the '-DNDEBU
 pre-processor flag is not specified).
 
 The progress thread used for *FI_PROGRESS_AUTO* effectively limits the maximum
-number of ranks-per-node to 32.
+number of ranks-per-node to 32.  However for FI_PROGRESS_MANUAL the maximum is 64.
 
-The memory region key size (mr_key_size) is 2 *bytes*; Valid key values are
+For FI_MR_SCALABLE mr mode the memory region key size (mr_key_size) is 2 *bytes*; Valid key values are
 0..2^16-1.
 
 It is invalid to register memory at the base virtual address "0" with a
