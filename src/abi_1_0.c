@@ -90,6 +90,13 @@ struct fi_info_1_0 {
 	struct fi_fabric_attr_1_0	*fabric_attr;
 };
 
+#define ofi_dup_attr(dst, src)				\
+	do {						\
+		dst = calloc(1, sizeof(*dst));		\
+		if (dst)				\
+			memcpy(dst, src, sizeof(*src));	\
+	} while (0);
+
 
 __attribute__((visibility ("default")))
 void fi_freeinfo_1_0(struct fi_info_1_0 *info)
@@ -97,6 +104,7 @@ void fi_freeinfo_1_0(struct fi_info_1_0 *info)
 	fi_freeinfo((struct fi_info *) info);
 }
 COMPAT_SYMVER(fi_freeinfo_1_0, fi_freeinfo, FABRIC_1.0);
+
 
 __attribute__((visibility ("default")))
 struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
@@ -106,7 +114,7 @@ struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
 	if (!info)
 		return (struct fi_info_1_0 *) ofi_allocinfo_internal();
 
-	dup = mem_dup(info, sizeof(*dup));
+	ofi_dup_attr(dup, info);
 	if (dup == NULL) {
 		return NULL;
 	}
@@ -130,22 +138,22 @@ struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
 			goto fail;
 	}
 	if (info->tx_attr != NULL) {
-		dup->tx_attr = mem_dup(info->tx_attr, sizeof(*info->tx_attr));
+		ofi_dup_attr(dup->tx_attr, info->tx_attr);
 		if (dup->tx_attr == NULL)
 			goto fail;
 	}
 	if (info->rx_attr != NULL) {
-		dup->rx_attr = mem_dup(info->rx_attr, sizeof(*info->rx_attr));
+		ofi_dup_attr(dup->rx_attr, info->rx_attr);
 		if (dup->rx_attr == NULL)
 			goto fail;
 	}
 	if (info->ep_attr != NULL) {
-		dup->ep_attr = mem_dup(info->ep_attr, sizeof(*info->ep_attr));
+		ofi_dup_attr(dup->ep_attr, info->ep_attr);
 		if (dup->ep_attr == NULL)
 			goto fail;
 	}
 	if (info->domain_attr) {
-		dup->domain_attr = mem_dup(info->domain_attr, sizeof(*info->domain_attr));
+		ofi_dup_attr(dup->domain_attr, info->domain_attr);
 		if (dup->domain_attr == NULL)
 			goto fail;
 		if (info->domain_attr->name != NULL) {
@@ -155,7 +163,7 @@ struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
 		}
 	}
 	if (info->fabric_attr) {
-		dup->fabric_attr = mem_dup(info->fabric_attr, sizeof(*info->fabric_attr));
+		ofi_dup_attr(dup->fabric_attr, info->fabric_attr);
 		if (dup->fabric_attr == NULL)
 			goto fail;
 		dup->fabric_attr->name = NULL;
