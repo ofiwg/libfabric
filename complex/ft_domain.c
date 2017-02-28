@@ -206,6 +206,35 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 	return 0;
 }
 
+static int ft_setup_mr_control(struct ft_mr_control *ctrl)
+{
+	size_t size;
+	int ret;
+	uint64_t access;
+
+	size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
+	if (!ctrl->buf) {
+		ctrl->buf = calloc(1, size);
+		if (!ctrl->buf)
+			return -FI_ENOMEM;
+	} else {
+		memset(ctrl->buf, 0, size);
+	}
+
+	if (!ctrl->mr) {
+		access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
+		ret = fi_mr_reg(domain, ctrl->buf, size, access, 0,
+				FT_MR_KEY, 0, &ctrl->mr, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_mr_reg", ret);
+			return ret;
+		}
+		ctrl->memdesc = fi_mr_desc(ctrl->mr);
+	}
+	
+	return 0;
+}
+
 static int ft_setup_bufs(void)
 {
 	int ret;
@@ -215,6 +244,10 @@ static int ft_setup_bufs(void)
 		return ret;
 
 	ret = ft_setup_xcontrol_bufs(&ft_tx_ctrl);
+	if (ret)
+		return ret;
+
+	ret = ft_setup_mr_control(&ft_mr_ctrl);
 	if (ret)
 		return ret;
 

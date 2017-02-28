@@ -378,12 +378,12 @@ int ft_cntr_open(struct fid_cntr **cntr);
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define ARRAY_SIZE(A) (sizeof(A)/sizeof(*A))
 
-#define TEST_ENUM_SET_N_RETURN(str, enum_val, type, data)	\
-	TEST_SET_N_RETURN(str, #enum_val, enum_val, type, data)
+#define TEST_ENUM_SET_N_RETURN(str, len,  enum_val, type, data)	\
+	TEST_SET_N_RETURN(str, len, #enum_val, enum_val, type, data)
 
-#define TEST_SET_N_RETURN(str, val_str, val, type, data)	\
+#define TEST_SET_N_RETURN(str, len, val_str, val, type, data)	\
 	do {							\
-		if (!strncmp(str, val_str, strlen(val_str))) {	\
+		if (!strncmp(str, val_str, len)) {	\
 			*(type *)(data) = val;			\
 			return 0;				\
 		}						\

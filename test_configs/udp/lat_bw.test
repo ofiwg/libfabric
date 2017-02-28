@@ -15,10 +15,10 @@
 		FI_AV_TABLE,
 	],
 	comp_type: [
-		FT_COMP_QUEUE
+		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL
+		FT_MODE_ALL,
 	],
 	caps: [
 		FT_CAP_MSG,
