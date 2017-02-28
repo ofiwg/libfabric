@@ -254,7 +254,6 @@ static int __gnix_cq_progress(struct gnix_fid_cq *cq)
 	return _gnix_prog_progress(&cq->pset);
 }
 
-
 /*******************************************************************************
  * Exposed helper functions
  ******************************************************************************/
@@ -313,7 +312,8 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 			   uint64_t flags, size_t len, void *buf,
 			   uint64_t data, uint64_t tag, size_t olen,
-			   int err, int prov_errno, void *err_data)
+			   int err, int prov_errno, void *err_data,
+			   size_t err_data_size)
 {
 	struct fi_cq_err_entry *error;
 	struct gnix_cq_entry *event;
@@ -347,6 +347,7 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 	error->err = err;
 	error->prov_errno = prov_errno;
 	error->err_data = err_data;
+	error->err_data_size = err_data_size;
 
 	_gnix_queue_enqueue(cq->errors, &event->item);
 
@@ -524,6 +525,8 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 	struct gnix_fid_cq *cq_priv;
 	struct gnix_cq_entry *event;
 	struct slist_entry *entry;
+	size_t err_data_cpylen;
+	struct fi_cq_err_entry *gnix_cq_err;
 
 	ssize_t read_count = 0;
 
@@ -541,8 +544,40 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 	}
 
 	event = container_of(entry, struct gnix_cq_entry, item);
+	gnix_cq_err = event->the_entry;
 
-	memcpy(buf, event->the_entry, sizeof(struct fi_cq_err_entry));
+	buf->op_context = gnix_cq_err->op_context;
+	buf->flags = gnix_cq_err->flags;
+	buf->len = gnix_cq_err->len;
+	buf->buf = gnix_cq_err->buf;
+	buf->data = gnix_cq_err->data;
+	buf->tag = gnix_cq_err->tag;
+	buf->olen = gnix_cq_err->olen;
+	buf->err = gnix_cq_err->err;
+	buf->prov_errno = gnix_cq_err->prov_errno;
+
+	if (gnix_cq_err->err_data != NULL) {
+		/*
+		 * TODO: check for api version once we figure out how to.
+		 * Note: If the api version is >= 1.5 then copy err_data into
+		 * buf->err_data and copy at most buf->err_data_size.
+		 * If buf->err_data_size is zero or the api version is < 1.5,
+		 * use the method implemented below.
+		 */
+
+		err_data_cpylen = sizeof(*cq_priv->err_data);
+
+		memcpy(cq_priv->err_data, gnix_cq_err->err_data,
+		       err_data_cpylen);
+
+		buf->err_data = cq_priv->err_data;
+		free(gnix_cq_err->err_data);
+		gnix_cq_err->err_data = NULL;
+		buf->err_data_size = err_data_cpylen;
+	} else {
+		buf->err_data = NULL;
+		buf->err_data_size = 0;
+	}
 
 	_gnix_queue_enqueue_free(cq_priv->errors, &event->item);
 
@@ -599,14 +634,13 @@ DIRECT_FN int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq_ops = calloc(1, sizeof(*cq_ops));
 	if (!cq_ops) {
-		ret = -FI_ENOMEM;
-		goto err;
+		return -FI_ENOMEM;
 	}
 
 	fi_cq_ops = calloc(1, sizeof(*fi_cq_ops));
 	if (!fi_cq_ops) {
 		ret = -FI_ENOMEM;
-		goto err1;
+		goto free_cq_ops;
 	}
 
 	*cq_ops = gnix_cq_ops;
@@ -614,18 +648,18 @@ DIRECT_FN int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	ret = verify_cq_attr(attr, cq_ops, fi_cq_ops);
 	if (ret)
-		goto err2;
+		goto free_fi_cq_ops;
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 	if (!domain_priv) {
 		ret = -FI_EINVAL;
-		goto err2;
+		goto free_fi_cq_ops;
 	}
 
 	cq_priv = calloc(1, sizeof(*cq_priv));
 	if (!cq_priv) {
 		ret = -FI_ENOMEM;
-		goto err2;
+		goto free_fi_cq_ops;
 	}
 
 	cq_priv->requires_lock = (domain_priv->thread_model !=
@@ -654,34 +688,34 @@ DIRECT_FN int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	fastlock_init(&cq_priv->lock);
 	ret = gnix_cq_set_wait(cq_priv);
 	if (ret)
-		goto err3;
+		goto free_cq_priv;
 
 	ret = _gnix_queue_create(&cq_priv->events, alloc_cq_entry,
 				 free_cq_entry, cq_priv->entry_size,
 				 cq_priv->attr.size);
 	if (ret)
-		goto err3;
+		goto free_cq_priv;
 
 	ret = _gnix_queue_create(&cq_priv->errors, alloc_cq_entry,
 				 free_cq_entry, sizeof(struct fi_cq_err_entry),
 				 0);
 	if (ret)
-		goto err4;
+		goto free_gnix_queue;
 
 	*cq = &cq_priv->cq_fid;
 	return ret;
 
-err4:
+free_gnix_queue:
 	_gnix_queue_destroy(cq_priv->events);
-err3:
+free_cq_priv:
 	_gnix_ref_put(cq_priv->domain);
 	fastlock_destroy(&cq_priv->lock);
 	free(cq_priv);
-err2:
+free_fi_cq_ops:
 	free(fi_cq_ops);
-err1:
+free_cq_ops:
 	free(cq_ops);
-err:
+
 	return ret;
 }
 

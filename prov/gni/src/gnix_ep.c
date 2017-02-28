@@ -2676,7 +2676,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_cancel(fid_t fid, void *context)
 		flags = req->flags;
 
 		_gnix_cq_add_error(err_cq, context, flags, len, addr, 0 /* data */,
-				tag, len, FI_ECANCELED, FI_ECANCELED, 0);
+				tag, len, FI_ECANCELED, FI_ECANCELED, 0, 0);
 
 	}
 

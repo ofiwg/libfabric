@@ -1011,7 +1011,6 @@ struct gnix_fab_req {
 	uint8_t                      *int_tx_buf;
 	gni_mem_handle_t             int_tx_mdh;
 
-	/* TODO: change the size of this for unaligned data? */
 	struct gnix_tx_descriptor *iov_txds[GNIX_MAX_MSG_IOV_LIMIT];
 	/*
 	 * special value of UINT_MAX is used to indicate

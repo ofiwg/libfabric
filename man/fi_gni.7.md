@@ -253,6 +253,14 @@ gni;node;service;GNIX_AV_STR_ADDR_VERSION;device_addr;cdm_id;name_type;cm_nic_cd
 
 The GNI provider sets the domain attribute *cntr_cnt* to the the CQ limit divided by 2.
 
+Completion queue events may report unknown source address information when
+using *FI_SOURCE*. The source address information will be reported in the
+err_data member of the struct fi_cq_err_entry populated by fi_cq_readerr. The
+err_data member will contain the source address information in the FI_ADDR_GNI
+address format. In order to populate the remote peer's address vector
+with this mechanism, the application must call fi_cq_readerr to get the
+source address followed by fi_av_insert on the populated err_data member.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
