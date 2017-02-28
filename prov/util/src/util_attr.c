@@ -199,7 +199,7 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *temp = NULL, *fi, *tail = NULL;
 	int ret;
 
-	ret = ofi_check_info(util_prov, hints, FI_MATCH_PREFIX);
+	ret = ofi_check_info(util_prov, version, hints, FI_MATCH_PREFIX);
 	if (ret)
 		goto err1;
 
@@ -559,9 +559,8 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int ofi_check_info(const struct util_prov *util_prov,
-		  const struct fi_info *user_info,
-		  enum fi_match_type type)
+int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
+		   const struct fi_info *user_info, enum fi_match_type type)
 {
 	const struct fi_info *prov_info = util_prov->info;
 	const struct fi_provider *prov = util_prov->prov;

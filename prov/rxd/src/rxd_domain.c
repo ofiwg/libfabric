@@ -237,7 +237,9 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct rxd_domain *rxd_domain;
 	struct rxd_fabric *rxd_fabric;
 
-	ret = ofi_check_info(&rxd_util_prov, info, FI_MATCH_PREFIX);
+	rxd_fabric = container_of(fabric, struct rxd_fabric, util_fabric.fabric_fid);
+	ret = ofi_check_info(&rxd_util_prov, rxd_fabric->util_fabric.api_version,
+			     info, FI_MATCH_PREFIX);
 	if (ret)
 		return ret;
 
@@ -245,14 +247,13 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (!rxd_domain)
 		return -FI_ENOMEM;
 
-	ret = ofix_getinfo(rxd_prov.version, NULL, NULL, 0, &rxd_util_prov,
-			info, rxd_alter_layer_info,
-			rxd_alter_base_info, 1, &dg_info);
+	ret = ofix_getinfo(rxd_fabric->util_fabric.api_version, NULL, NULL, 0,
+			   &rxd_util_prov, info, rxd_alter_layer_info,
+			   rxd_alter_base_info, 1, &dg_info);
 	if (ret)
 		goto err1;
 
 
-	rxd_fabric = container_of(fabric, struct rxd_fabric, util_fabric.fabric_fid);
 	ret = fi_domain(rxd_fabric->dg_fabric, dg_info, &rxd_domain->dg_domain, context);
 	if (ret)
 		goto err2;

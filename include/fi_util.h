@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -518,11 +518,10 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 int ofi_check_tx_attr(const struct fi_provider *prov,
 		     const struct fi_tx_attr *prov_attr,
 		     const struct fi_tx_attr *user_attr);
-int ofi_check_info(const struct util_prov *util_prov,
-		  const struct fi_info *user_info,
-		  enum fi_match_type type);
+int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
+		   const struct fi_info *user_info, enum fi_match_type type);
 void ofi_alter_info(struct fi_info *info,
-		   const struct fi_info *hints);
+		    const struct fi_info *hints);
 
 struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
