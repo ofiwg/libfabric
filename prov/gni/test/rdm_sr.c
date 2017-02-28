@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -64,6 +64,8 @@
 #define NUMEPS 2
 #define NUM_MULTIRECVS 5
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
 struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
@@ -253,7 +255,7 @@ void rdm_sr_setup(bool is_noreg, enum fi_progress pm)
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->control_progress = pm;
 	hints->domain_attr->data_progress = pm;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
 	hints->fabric_attr->prov_name = strdup("gni");
 
@@ -281,7 +283,7 @@ void dgram_sr_setup(bool is_noreg, enum fi_progress pm)
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->control_progress = pm;
 	hints->domain_attr->data_progress = pm;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->ep_attr->type = FI_EP_DGRAM;
@@ -320,7 +322,7 @@ void rdm_sr_bnd_ep_setup(void)
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->caps = FI_SOURCE | FI_MSG;
 

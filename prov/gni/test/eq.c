@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -39,6 +39,8 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fi_info *hints;
 static struct fi_info *fi;
@@ -58,7 +60,7 @@ void _setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo failed.");
 
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);

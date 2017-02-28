@@ -328,7 +328,7 @@ Test(mr_internal_bare, basic_init_regv)
 {
 	int ret;
 	const struct iovec iov = {
-		.iov_base = buf, 
+		.iov_base = buf,
 		.iov_len = buf_len,
 	};
 
@@ -347,14 +347,14 @@ Test(mr_internal_bare, basic_init_regattr)
 {
 	int ret;
 	const struct iovec iov = {
-		.iov_base = buf, 
-		.iov_len = buf_len, 
+		.iov_base = buf,
+		.iov_len = buf_len,
 	};
 	struct fi_mr_attr attr = {
-		.mr_iov = &iov, 
-		.iov_count = 1, 
+		.mr_iov = &iov,
+		.iov_count = 1,
 		.access = default_access,
-		.offset = default_offset, 
+		.offset = default_offset,
 		.requested_key = default_req_key,
 		.context = NULL,
 	};
@@ -386,7 +386,7 @@ Test(mr_internal_bare, bug_1086)
 
 	g_nic = g_mr->nic;
 	cr_assert(atomic_get(&g_nic->ref_cnt.references) > 0);
-	
+
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 	cr_assert(atomic_get(&g_nic->ref_cnt.references) == 0);
@@ -452,7 +452,7 @@ Test(mr_internal_bare, invalid_attr)
 {
 	int ret;
 
-	ret = fi_mr_regattr(dom, NULL, default_flags, &mr); 
+	ret = fi_mr_regattr(dom, NULL, default_flags, &mr);
 	cr_assert(ret == -FI_EINVAL);
 }
 
@@ -462,7 +462,7 @@ Test(mr_internal_bare, invalid_iov_count)
 	int ret;
 	const struct iovec iov = {
 		.iov_base = buf,
-		.iov_len = buf_len, 
+		.iov_len = buf_len,
 	};
 
 	ret = fi_mr_regv(dom, &iov, 0, default_access,
@@ -487,8 +487,8 @@ Test(mr_internal_bare, unsupported_iov_count)
 	const struct iovec iov[2] = {
 		{
 			.iov_base = buf,
-			.iov_len = buf_len >> 2, 
-		}, 
+			.iov_len = buf_len >> 2,
+		},
 		{
 			.iov_base = buf + (buf_len >> 1),
 			.iov_len = buf_len >> 2,

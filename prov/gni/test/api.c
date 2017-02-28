@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -63,6 +63,8 @@
 
 #define NUMEPS 2
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
 struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
@@ -212,7 +214,7 @@ void rdm_api_setup(void)
 
 		hints[i]->domain_attr->cq_data_size = NUMEPS * 2;
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
-		hints[i]->mode = ~0;
+		hints[i]->mode = mode_bits;
 		hints[i]->domain_attr->mr_mode = FI_MR_BASIC;
 		hints[i]->fabric_attr->prov_name = strdup("gni");
 	}
@@ -436,7 +438,7 @@ Test(api, dom_caps)
 	hints[0] = fi_allocinfo();
 	cr_assert(hints[0], "fi_allocinfo");
 
-	hints[0]->mode = ~0;
+	hints[0]->mode = mode_bits;
 	hints[0]->fabric_attr->prov_name = strdup("gni");
 
 	/* we only support REMOTE_COMM */

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -50,6 +51,8 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct gnix_fid_ep *ep;
@@ -64,7 +67,7 @@ static struct gnix_fid_wait *wait_priv;
 static struct fid_wait *wait_set;
 static struct fi_wait_attr wait_attr;
 
-void setup(void)
+void setup()
 {
 	int ret = 0;
 
@@ -72,7 +75,7 @@ void setup(void)
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
@@ -172,6 +175,7 @@ void cq_notify_setup(void)
 {
 	int ret;
 
+	mode_bits = FI_NOTIFY_FLAGS_ONLY;
 	setup();
 
 	ret = fi_endpoint(dom, fi, &fid_ep, NULL);
@@ -852,58 +856,37 @@ Test(cq_wait_set, fd, .init = setup, .disabled = true)
 
 TestSuite(cq_notify_flags, .init = cq_notify_setup, .fini = cq_notify_teardown);
 
-void do_cq_notify(uint64_t op_flags)
+void do_cq_notify(uint64_t flags)
 {
 	ssize_t ret;
 	struct fi_cq_msg_entry entry;
-	uint64_t expected_flags = ~((uint64_t) 0);
 
-	ep->op_flags = op_flags;
-
-	ret = _gnix_cq_add_event(cq_priv, ep, NULL, expected_flags, 0, NULL,
+	ret = _gnix_cq_add_event(cq_priv, ep, NULL, flags, 0, NULL,
 				 0, 0, 0);
 	cr_assert(ret == FI_SUCCESS, "failing in _gnix_cq_add_event");
 
 	ret = fi_cq_read(rcq, &entry, 1);
 	cr_assert(ret == 1, "failing in fi_cq_read");
 
-	switch(op_flags) {
-		case 0:
-			break;
-		case FI_RMA_EVENT:
-			break;
-		case FI_NOTIFY_FLAGS_ONLY:
-			expected_flags &= (FI_REMOTE_CQ_DATA | FI_MULTI_RECV);
-			break;
-		case (FI_RMA_EVENT | FI_NOTIFY_FLAGS_ONLY):
-			expected_flags &= (FI_REMOTE_READ | FI_REMOTE_WRITE |
-					   FI_RMA | FI_REMOTE_CQ_DATA |
-					   FI_MULTI_RECV);
-			break;
-		default:
-			cr_assert(0, "invalid op flags");
-
+	if (flags & FI_RMA_EVENT) {
+		flags &= (FI_REMOTE_READ | FI_REMOTE_WRITE |
+			  FI_RMA | FI_REMOTE_CQ_DATA |
+			  FI_MULTI_RECV);
+	} else {
+		flags &= (FI_REMOTE_CQ_DATA | FI_MULTI_RECV);
 	}
 
-	cr_assert_eq(expected_flags, entry.flags, "unexpected cq entry flags");
+	cr_assert_eq(flags, entry.flags, "unexpected cq entry flags");
 }
 
-Test(cq_notify_flags, notify_and_rma_event_unset)
+Test(cq_notify_flags, fi_rma_event)
 {
-	do_cq_notify(0);
+	do_cq_notify(FI_REMOTE_READ | FI_REMOTE_WRITE |
+		     FI_RMA | FI_REMOTE_CQ_DATA |
+		     FI_MULTI_RECV | FI_RMA_EVENT);
 }
 
-Test(cq_notify_flags, notify_unset_and_rma_event_set)
+Test(cq_notify_flags, not_fi_rma_event)
 {
-	do_cq_notify(FI_RMA_EVENT);
-}
-
-Test(cq_notify_flags, notify_set_and_rma_event_unset)
-{
-	do_cq_notify(FI_NOTIFY_FLAGS_ONLY);
-}
-
-Test(cq_notify_flags, notify_set_and_rma_event_set)
-{
-	do_cq_notify(FI_NOTIFY_FLAGS_ONLY | FI_RMA_EVENT);
+	do_cq_notify(~FI_RMA_EVENT);
 }

@@ -64,6 +64,8 @@
 	} while (0)
 #endif
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[2];
 struct fi_gni_ops_domain *gni_domain_ops[2];
@@ -107,7 +109,7 @@ void common_setup(void)
 	dgm_fail = 0;
 
 	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
 		       FI_WRITE | FI_REMOTE_WRITE | FI_MSG | FI_SEND | FI_RECV;
 
@@ -321,7 +323,7 @@ void common_setup_1dom(void)
 	dgm_fail = 0;
 
 	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
 		       FI_WRITE | FI_REMOTE_WRITE;
 
