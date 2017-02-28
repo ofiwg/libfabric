@@ -2326,6 +2326,7 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.ops = &gnix_ep_ops;
 	ep_priv->domain = domain_priv;
 	ep_priv->type = info->ep_attr->type;
+	ep_priv->info = fi_dupinfo(info);
 
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -65,6 +65,8 @@
 
 #define NUMEPS 2
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
 struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
@@ -111,7 +113,7 @@ void common_atomic_setup(void)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->caps |= FI_ATOMIC | FI_READ | FI_REMOTE_READ |
 			FI_WRITE | FI_REMOTE_WRITE;
