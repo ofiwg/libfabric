@@ -234,7 +234,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	}
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
-	
+
 	check_mode = FI_IBV_EP_TYPE_IS_RDM(info) ? VERBS_RDM_MODE :
 		(hints->caps & FI_RMA) ? info->rx_attr->mode : VERBS_MODE;
 
@@ -357,8 +357,9 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 	}
 
 	if (hints->domain_attr) {
-		ret = ofi_check_domain_attr(&fi_ibv_prov, info->domain_attr,
-				hints->domain_attr, FI_MATCH_EXACT);
+		ret = ofi_check_domain_attr(&fi_ibv_prov, OFI_TODO_API_VERSION,
+					    info->domain_attr,
+					    hints->domain_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
 	}

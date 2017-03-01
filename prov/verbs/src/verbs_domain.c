@@ -278,8 +278,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!fi)
 		return -FI_EINVAL;
 
-	ret = ofi_check_domain_attr(&fi_ibv_prov, fi->domain_attr,
-			info->domain_attr, FI_MATCH_EXACT);
+	ret = ofi_check_domain_attr(&fi_ibv_prov, OFI_TODO_API_VERSION,
+				    fi->domain_attr, info->domain_attr,
+				    FI_MATCH_EXACT);
 	if (ret)
 		return ret;
 

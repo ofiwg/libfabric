@@ -321,10 +321,10 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 	}
 }
 
-int ofi_check_domain_attr(const struct fi_provider *prov,
-			 const struct fi_domain_attr *prov_attr,
-			 const struct fi_domain_attr *user_attr,
-			 enum fi_match_type type)
+int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
+			  const struct fi_domain_attr *prov_attr,
+			  const struct fi_domain_attr *user_attr,
+			  enum fi_match_type type)
 {
 	if (user_attr->name && fi_check_name(user_attr->name, prov_attr->name, type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
@@ -596,9 +596,9 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 	}
 
 	if (user_info->domain_attr) {
-		ret = ofi_check_domain_attr(prov, prov_info->domain_attr,
-				user_info->domain_attr,
-				type);
+		ret = ofi_check_domain_attr(prov, api_version,
+					    prov_info->domain_attr,
+					    user_info->domain_attr, type);
 		if (ret)
 			return ret;
 	}
