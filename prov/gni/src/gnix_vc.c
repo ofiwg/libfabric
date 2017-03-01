@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -657,7 +657,6 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 			  fi_strerror(-ret));
 		goto err_mbox_init;
 	}
-	vc->conn_state = GNIX_VC_CONNECTED;
 
 	/* TODO: use special send-to-self mechanism to avoid overhead of XPMEM
 	 * when just sending a message to oneself. */
@@ -679,8 +678,9 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 	}
 
 	vc->peer_id = vc->vc_id;
-	vc->peer_caps = ep->caps;
 	vc->peer_irq_mem_hndl = ep->nic->irq_mem_hndl;
+	vc->peer_caps = ep->caps;
+	vc->conn_state = GNIX_VC_CONNECTED;
 
 	ret = _gnix_vc_sched_new_conn(vc);
 	if (ret != FI_SUCCESS)
@@ -790,12 +790,12 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	 * further processing
 	 */
 
-	vc->conn_state = GNIX_VC_CONNECTED;
+	vc->peer_caps = peer_caps;
 	vc->peer_id = peer_id;
+	vc->conn_state = GNIX_VC_CONNECTED;
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		   " moving vc %p to state connected\n",vc);
 
-	vc->peer_caps = peer_caps;
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	ret = _gnix_vc_sched_new_conn(vc);
@@ -966,6 +966,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 			vc->conn_state = GNIX_VC_CONNECTING;
 		}
 
+		vc->peer_caps = peer_caps;
 		/*
 		 * prepare a work request to
 		 * initiate an request response
@@ -1041,8 +1042,9 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 			}
 		}
 
-		vc->conn_state = GNIX_VC_CONNECTED;
+		vc->peer_caps = peer_caps;
 		vc->peer_id = src_vc_id;
+		vc->conn_state = GNIX_VC_CONNECTED;
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 			vc);
 
@@ -1052,8 +1054,6 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				  "_gnix_vc_sched_new_conn returned %s\n",
 				  fi_strerror(-ret));
 	}
-
-	vc->peer_caps = peer_caps;
 
 err:
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
