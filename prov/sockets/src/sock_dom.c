@@ -411,6 +411,7 @@ static struct fi_ops_domain sock_dom_ops = {
 	.poll_open = sock_poll_open,
 	.stx_ctx = sock_stx_ctx,
 	.srx_ctx = sock_srx_ctx,
+	.query_atomic = sock_query_atomic,
 };
 
 static struct fi_ops_mr sock_dom_mr_ops = {

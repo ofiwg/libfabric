@@ -556,10 +556,12 @@ static ssize_t sock_ep_atomic_compwritev(struct fid_ep *ep,
 					   SOCK_USE_OP_FLAGS);
 }
 
-static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype,
-			      enum fi_op op, size_t *count)
+int sock_query_atomic(struct fid_domain *domain,
+		      enum fi_datatype datatype, enum fi_op op,
+		      struct fi_atomic_attr *attr, uint64_t flags)
 {
-	size_t datatype_sz;
+	if (flags)
+		return -FI_ENOSYS;
 
 	switch (datatype) {
 	case FI_FLOAT:
@@ -567,9 +569,8 @@ static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype,
 	case FI_LONG_DOUBLE:
 		if (op == FI_BOR || op == FI_BAND ||
 		    op == FI_BXOR || op == FI_MSWAP)
-			return -FI_ENOENT;
+			return -FI_EOPNOTSUPP;
 		break;
-
 	case FI_FLOAT_COMPLEX:
 	case FI_DOUBLE_COMPLEX:
 	case FI_LONG_DOUBLE_COMPLEX:
@@ -578,18 +579,33 @@ static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype,
 		    op == FI_MIN      || op == FI_MAX      ||
 		    op == FI_CSWAP_LE || op == FI_CSWAP_LT ||
 		    op == FI_CSWAP_GE || op == FI_CSWAP_GT)
-			return -FI_ENOENT;
+			return -FI_EOPNOTSUPP;
 	break;
 	default:
 		break;
 	}
 
-	datatype_sz = fi_datatype_size(datatype);
-	if (datatype_sz == 0)
-		return -FI_ENOENT;
+	attr->size = fi_datatype_size(datatype);
+	if (attr->size == 0)
+		return -FI_EINVAL;
 
-	*count = (SOCK_EP_MAX_ATOMIC_SZ/datatype_sz);
+	attr->count = (SOCK_EP_MAX_ATOMIC_SZ / attr->size);
 	return 0;
+}
+
+static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype,
+				enum fi_op op, size_t *count)
+{
+	struct sock_ep *sock_ep;
+	struct fi_atomic_attr attr;
+	int ret;
+
+	sock_ep = container_of(ep, struct sock_ep, ep);
+	ret = sock_query_atomic(&sock_ep->attr->domain->dom_fid, datatype,
+				op, &attr, 0);
+	if (!ret)
+		*count = attr.count;
+	return ret;
 }
 
 struct fi_ops_atomic sock_ep_atomic = {
