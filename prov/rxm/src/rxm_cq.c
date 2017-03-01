@@ -182,7 +182,7 @@ int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 static int rxm_match_iov(struct rxm_match_iov *match_iov, size_t len,
 		struct rxm_iovx_entry *iovx)
 {
-	int i, j;
+	size_t i, j;
 
 	for (i = match_iov->index, j = 0; i < match_iov->count; i++, j++) {
 		iovx->iov[j].iov_base = (char *)match_iov->iov[i].iov_base + match_iov->offset;
