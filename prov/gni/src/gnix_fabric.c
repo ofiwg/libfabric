@@ -173,7 +173,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	return FI_SUCCESS;
 }
 
-static struct fi_info *_gnix_allocinfo()
+static struct fi_info *_gnix_allocinfo(void)
 {
 	struct fi_info *gnix_info;
 
@@ -358,7 +358,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 		return -FI_ENODATA;
 	}
 
-	gnix_info = _gnix_allocinfo(info);
+	gnix_info = _gnix_allocinfo();
 	if (!gnix_info)
 		return -FI_ENOMEM;
 
