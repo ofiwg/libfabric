@@ -124,6 +124,12 @@ static void ft_cleanup_xcontrol(struct ft_xcontrol *ctrl)
 	memset(ctrl, 0, sizeof *ctrl);
 }
 
+static void ft_cleanup_mr_control(struct ft_mr_control *ctrl)
+{
+	free(ctrl->buf);
+	memset(ctrl, 0, sizeof *ctrl);
+}
+
 static void ft_format_iov_distributed(struct iovec *iov, size_t cnt, char *buf,
 		size_t len)
 {
@@ -354,7 +360,29 @@ static int ft_run_latency(void)
 			return ret;
 		}
 
-		show_perf("lat", ft_tx_ctrl.msg_size, ft_ctrl.xfer_iter, &start, &end, 2);
+		show_perf("lat", ft_ctrl.size_array[i], ft_ctrl.xfer_iter, &start, &end, 2);
+	}
+
+	return 0;
+}
+
+static int ft_bw_rma(void)
+{
+	int ret, i;
+	if (listen_sock < 0) {
+		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+			ret = ft_send_rma();
+			if (ret)
+				return ret;
+		}
+		ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
+		ret = ft_send_msg();
+		if (ret)
+			return ret;
+	} else {
+		ret = ft_recv_msg();
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -363,6 +391,9 @@ static int ft_run_latency(void)
 static int ft_bw(void)
 {
 	int ret, i;
+
+	if (test_info.caps & FI_RMA)
+		return ft_bw_rma();
 
 	if (listen_sock < 0) {
 		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
@@ -454,7 +485,9 @@ static int ft_run_bandwidth(void)
 			break;
 
 		if (((test_info.class_function == FT_FUNC_INJECT) ||
-			(test_info.class_function == FT_FUNC_INJECTDATA)) &&
+			(test_info.class_function == FT_FUNC_INJECTDATA) ||
+			(test_info.class_function == FT_FUNC_INJECT_WRITE) ||
+			(test_info.class_function == FT_FUNC_INJECT_WRITEDATA)) &&
 			(ft_tx_ctrl.msg_size > fabric_info->tx_attr->inject_size))
 			break;
 
@@ -479,7 +512,7 @@ static int ft_run_bandwidth(void)
 			return ret;
 		}
 
-		show_perf("bw", ft_tx_ctrl.msg_size, recv_cnt, &start, &end, 1);
+		show_perf("bw", ft_ctrl.size_array[i], recv_cnt, &start, &end, 1);
 	}
 
 	return 0;
@@ -489,9 +522,11 @@ static void ft_cleanup(void)
 {
 	FT_CLOSE_FID(ft_rx_ctrl.mr);
 	FT_CLOSE_FID(ft_tx_ctrl.mr);
+	FT_CLOSE_FID(ft_mr_ctrl.mr);
 	ft_free_res();
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
+	ft_cleanup_mr_control(&ft_mr_ctrl);
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
 

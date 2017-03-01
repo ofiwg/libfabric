@@ -48,6 +48,7 @@ static int test_start_index, test_end_index = INT_MAX;
 struct ft_info test_info;
 struct fi_info *fabric_info;
 struct ft_xcontrol ft_rx_ctrl, ft_tx_ctrl;
+struct ft_mr_control ft_mr_ctrl;
 struct ft_control ft_ctrl;
 
 size_t recv_size, send_size;
@@ -101,6 +102,24 @@ static char *ft_class_func_str(enum ft_class_function enum_str)
 		return "inject";
 	case FT_FUNC_INJECTDATA:
 		return "injectdata";
+	case FT_FUNC_READ:
+		return "read";
+	case FT_FUNC_READV:
+		return "readv";
+	case FT_FUNC_READMSG:
+		return "readmsg";
+	case FT_FUNC_WRITE:
+		return "write";
+	case FT_FUNC_WRITEV:
+		return "writev";
+	case FT_FUNC_WRITEMSG:
+		return "writemsg";
+	case FT_FUNC_INJECT_WRITE:
+		return "inject_write";
+	case FT_FUNC_WRITEDATA:
+		return "writedata";
+	case FT_FUNC_INJECT_WRITEDATA:
+		return "inject_writedata";
 	default:
 		return "func_unspec";
 	}

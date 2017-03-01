@@ -89,6 +89,12 @@ struct ft_xcontrol {
 	uint64_t		remote_cq_data;
 };
 
+struct ft_mr_control {
+	void			*buf;
+	struct fid_mr		*mr;
+	void			*memdesc;
+};
+
 struct ft_control {
 	size_t			*size_array;
 	int			size_cnt;
@@ -100,6 +106,7 @@ struct ft_control {
 };
 
 extern struct ft_xcontrol ft_rx_ctrl, ft_tx_ctrl;
+extern struct ft_mr_control ft_mr_ctrl;
 extern struct ft_control ft_ctrl;
 
 enum {
@@ -133,7 +140,16 @@ enum ft_class_function {
 	FT_FUNC_SENDMSG,
 	FT_FUNC_INJECT,
 	FT_FUNC_INJECTDATA,
-	FT_MAX_FUNCTIONS
+	FT_FUNC_READ,
+	FT_FUNC_READV,
+	FT_FUNC_READMSG,
+	FT_FUNC_WRITE,
+	FT_FUNC_WRITEV,
+	FT_FUNC_WRITEMSG,
+	FT_FUNC_INJECT_WRITE,
+	FT_FUNC_WRITEDATA,
+	FT_FUNC_INJECT_WRITEDATA,
+	FT_MAX_FUNCTIONS	
 };
 
 #define FT_FLAG_QUICKTEST	(1ULL << 0)
@@ -233,6 +249,7 @@ int ft_recv_dgram();
 int ft_recv_dgram_flood(size_t *recv_cnt);
 int ft_send_dgram_flood();
 int ft_sendrecv_dgram();
+int ft_send_rma();
 
 int ft_run_test();
 int ft_reset_ep();

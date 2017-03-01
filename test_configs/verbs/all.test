@@ -16,10 +16,10 @@
 		FI_EP_MSG,
 	],
 	comp_type: [
-		FT_COMP_QUEUE
+		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL
+		FT_MODE_ALL,
 	],
 	caps: [
 		FT_CAP_MSG,
@@ -37,18 +37,18 @@
 		FI_EP_MSG,
 	],
 	comp_type: [
-		FT_COMP_QUEUE
+		FT_COMP_QUEUE,
 	],
 	eq_wait_obj: [
-		FI_WAIT_NONE
+		FI_WAIT_NONE,
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
 	],
 	cq_wait_obj: [
-		FI_WAIT_NONE
+		FI_WAIT_NONE,
 	],
 	mode: [
-		FT_MODE_ALL
+		FT_MODE_ALL,
 	],
 	caps: [
 		FT_CAP_MSG,
@@ -67,18 +67,18 @@
 		FI_EP_MSG,
 	],
 	comp_type: [
-		FT_COMP_QUEUE
+		FT_COMP_QUEUE,
 	],
 	eq_wait_obj: [
-		FI_WAIT_NONE
+		FI_WAIT_NONE,
 	],
 	cq_wait_obj: [
-		FI_WAIT_NONE
+		FI_WAIT_NONE,
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
 	],
 	mode: [
-		FT_MODE_ALL
+		FT_MODE_ALL,
 	],
 	caps: [
 		FT_CAP_MSG,
