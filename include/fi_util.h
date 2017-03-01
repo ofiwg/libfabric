@@ -502,15 +502,15 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 			 const struct fi_fabric_attr *prov_attr,
 			 const struct fi_fabric_attr *user_attr,
 			 enum fi_match_type type);
-int fi_check_wait_attr(const struct fi_provider *prov,
-		       const struct fi_wait_attr *attr);
+int ofi_check_wait_attr(const struct fi_provider *prov,
+		        const struct fi_wait_attr *attr);
 int ofi_check_domain_attr(const struct fi_provider *prov,
 			 const struct fi_domain_attr *prov_attr,
 			 const struct fi_domain_attr *user_attr,
 			 enum fi_match_type type);
 int ofi_check_ep_attr(const struct util_prov *util_prov,
-		     const struct fi_ep_attr *user_attr);
-int fi_check_cq_attr(const struct fi_provider *prov,
+		      const struct fi_ep_attr *user_attr);
+int ofi_check_cq_attr(const struct fi_provider *prov,
 		     const struct fi_cq_attr *attr);
 int ofi_check_rx_attr(const struct fi_provider *prov,
 		     const struct fi_rx_attr *prov_attr,
