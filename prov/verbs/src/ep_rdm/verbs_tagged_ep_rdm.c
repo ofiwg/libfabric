@@ -87,16 +87,25 @@ fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_request *request,
 
 static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 {
-	struct fi_ibv_rdm_ep *ep =
-		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
+	struct fi_ibv_rdm_ep *ep;
+
+	if (fid->fclass == FI_CLASS_EP) {
+ 		ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
+	} else {
+		VERBS_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
+			  fid->fclass);
+		return -FI_EINVAL;
+	}
 
 	if (FI_IBV_RDM_DFLT_ADDRLEN > *addrlen) {
 		*addrlen = FI_IBV_RDM_DFLT_ADDRLEN;
 		return -FI_ETOOSMALL;
 	}
+
 	memset(addr, 0, *addrlen);
 	memcpy(addr, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
-	ep->addrlen = *addrlen;
+	*addrlen = FI_IBV_RDM_DFLT_ADDRLEN;
+	ep->addrlen = FI_IBV_RDM_DFLT_ADDRLEN;
 
 	return 0;
 }

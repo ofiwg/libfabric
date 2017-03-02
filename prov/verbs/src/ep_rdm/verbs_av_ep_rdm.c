@@ -127,9 +127,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 	if((av->flags & FI_EVENT) && !av->eq)
 		return -FI_ENOEQ;
 
-	if (ep) {
+	if (ep)
 		pthread_mutex_lock(&ep->cm_lock);
-	}
 
 	if (av->used + count > av->count) {
 		const size_t new_av_count = av->used + count;
@@ -139,7 +138,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 					  sizeof(*av->domain->rdm_cm->conn_table)));
 			if (p) {
 				av->domain->rdm_cm->conn_table = p;
-			} else {
+			}
+			else {
 				ret = -FI_ENOMEM;
 				goto out;
 			}
@@ -153,9 +153,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			i * (ep ? ep->addrlen : FI_IBV_RDM_DFLT_ADDRLEN);
 
 		if (!fi_ibv_rdm_av_is_valid_address(addr_i)) {
-			if (fi_addr) {
+			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			}
 
 			FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 				"fi_av_insert: bad addr #%i\n", i);
@@ -201,21 +200,17 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 				 FI_IBV_RDM_DFLT_ADDRLEN, conn);
 		}
 
-		if (ep) {
+		if (ep)
 			fi_ibv_rdm_conn_init_cm_role(conn, ep);
-		}
-
 
 		switch (av->type) {
 		case FI_AV_MAP:
-			if (fi_addr) {
+			if (fi_addr)
 				fi_addr[i] = (uintptr_t) (void *) conn;
-			}
 			break;
 		case FI_AV_TABLE:
-			if (fi_addr) {
+			if (fi_addr)
 				fi_addr[i] = av->used;
-			}
 			av->domain->rdm_cm->conn_table[av->used] = conn;
 			break;
 		default:
@@ -242,9 +237,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 	}
 
 out:
-	if (ep) {
+	if (ep)
 		pthread_mutex_unlock(&ep->cm_lock);
-	}
 	return (av->flags & FI_EVENT) ? FI_SUCCESS : (ret - failed);
 }
 
@@ -253,36 +247,36 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 {
 	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
 	struct fi_ibv_rdm_conn *conn = NULL;
+	/* TODO: EP in AV is a temporary solution
+	 * that doesn't support multiple endpoints */
+	struct fi_ibv_rdm_ep *ep = av->ep;
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
-	int i;
+	size_t i;
 
 	if(av->flags & FI_EVENT && !av->eq)
 		return -FI_ENOEQ;
 
-	if (!fi_addr || (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)) {
+	if (!fi_addr || (av->type != FI_AV_MAP && av->type != FI_AV_TABLE))
 		return -FI_EINVAL;
-	}
 
-	if (av->ep) {
-		pthread_mutex_lock(&av->ep->cm_lock);
-	}
+	if (ep)
+		pthread_mutex_lock(&ep->cm_lock);
 
 	for (i = 0; i < count; i++) {
 
-		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+		if (fi_addr[i] == FI_ADDR_NOTAVAIL)
 			continue;
-		}
 
-		if (av->type == FI_AV_MAP) {
+		if (av->type == FI_AV_MAP)
 			conn = (struct fi_ibv_rdm_conn *) fi_addr[i];
-		} else { /* (av->type == FI_AV_TABLE) */
+		else /* (av->type == FI_AV_TABLE) */
 			conn = av->domain->rdm_cm->conn_table[fi_addr[i]];
-		}
 
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
 			conn, inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port));
+
 		err = fi_ibv_rdm_start_disconnection(conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
 		/* do not destroy connection here because we may
@@ -290,13 +284,13 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 		 * to list of av-removed objects to clean later */
 
 		/* TODO: add cleaning into av_insert */
-		HASH_DEL(av->ep->domain->rdm_cm->conn_hash, conn);
-		slist_insert_tail(&conn->removed_next, &av->ep->av_removed_conn_head);
+		HASH_DEL(av->domain->rdm_cm->conn_hash, conn);
+		if (ep)
+			slist_insert_tail(&conn->removed_next, &ep->av_removed_conn_head);
 	}
 
-	if (av->ep) {
-		pthread_mutex_unlock(&av->ep->cm_lock);
-	}
+	if (ep)
+		pthread_mutex_unlock(&ep->cm_lock);
 	return ret;
 }
 

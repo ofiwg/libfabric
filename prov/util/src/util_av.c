@@ -825,7 +825,7 @@ static int ip_av_insert_nodesym(struct util_av *av,
 			name[FI_NAME_MAX - 1] = '\0';
 		} else {
 			snprintf(name + name_len, sizeof(name) - name_len - 1,
-				 "%d", name_index + n);
+				 "%zu", name_index + n);
 		}
 
 		for (s = 0; s < svccnt; s++, fi++) {
@@ -834,7 +834,7 @@ static int ip_av_insert_nodesym(struct util_av *av,
 				svc[FI_NAME_MAX - 1] = '\0';
 			} else {
 				snprintf(svc, sizeof(svc) - 1,
-					 "%d", svc_index + s);
+					 "%zu", svc_index + s);
 			}
 
 			ret = ip_av_insert_svc(av, name, svc, fi_addr ?
@@ -933,7 +933,7 @@ static int ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr, void *addr,
 			size_t *addrlen)
 {
 	struct util_av *av;
-	size_t index;
+	int index;
 
 	av = container_of(av_fid, struct util_av, av_fid);
 	index = (int) fi_addr;

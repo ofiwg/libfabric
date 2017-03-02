@@ -121,10 +121,10 @@ static int rxd_mr_close(struct fid *fid)
 
 	fastlock_acquire(&dom->lock);
 	err = ofi_mr_remove(&dom->mr_map, mr->key);
+	fastlock_release(&dom->lock);
 	if (err)
 		return err;
 
-	fastlock_release(&dom->lock);
 	atomic_dec(&dom->util_domain.ref);
 	free(mr);
 	return 0;
