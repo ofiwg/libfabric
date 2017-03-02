@@ -83,7 +83,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
 	.resource_mgmt		= FI_RM_ENABLED,
-	.mr_mode		= FI_MR_BASIC,
+	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= sizeof_field(struct ibv_send_wr, imm_data),
 	.tx_ctx_cnt		= 1024,
@@ -1159,7 +1159,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		goto err;
 	}
 
-	ofi_alter_info(*info, hints);
+	ofi_alter_info(*info, hints, version);
 err:
 	fi_ibv_destroy_ep(rai, &id);
 out:

@@ -220,7 +220,7 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 					fi, alter_base_info, &temp);
 			if (ret)
 				goto err3;
-			ofi_alter_info(temp, hints);
+			ofi_alter_info(temp, hints, version);
 			if (!tail)
 				*info = temp;
 			else
@@ -327,12 +327,35 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 	}
 }
 
+static int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
+			     uint32_t user_mode)
+{
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
+		prov_mode &= ~FI_MR_LOCAL; /* ignore local bit */
+
+		switch (user_mode) {
+		case FI_MR_UNSPEC:
+			return !prov_mode || (prov_mode == OFI_MR_BASIC_MAP) ?
+				0 : -FI_ENODATA;
+		case FI_MR_BASIC:
+			return prov_mode == OFI_MR_BASIC_MAP ? 0 : -FI_ENODATA;
+		case FI_MR_SCALABLE:
+			return !prov_mode ? 0 : -FI_ENODATA;
+		default:
+			return -FI_ENODATA;
+		}
+	} else {
+		return ((user_mode & prov_mode) == prov_mode) ? 0 : -FI_ENODATA;
+	}
+}
+
 int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 			  const struct fi_domain_attr *prov_attr,
 			  const struct fi_domain_attr *user_attr,
 			  enum fi_match_type type)
 {
-	if (user_attr->name && fi_check_name(user_attr->name, prov_attr->name, type)) {
+	if (user_attr->name &&
+	    fi_check_name(user_attr->name, prov_attr->name, type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
 		return -FI_ENODATA;
 	}
@@ -368,13 +391,28 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	   	return -FI_ENODATA;
 	}
 
-	if (user_attr->mr_mode && (user_attr->mr_mode != prov_attr->mr_mode)) {
+	if (user_attr->cq_data_size > prov_attr->cq_data_size) {
+		FI_INFO(prov, FI_LOG_CORE, "CQ data size too large\n");
+		return -FI_ENODATA;
+	}
+
+	if (ofi_check_mr_mode(api_version, prov_attr->mr_mode,
+			       user_attr->mr_mode)) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid memory registration mode\n");
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->cq_data_size > prov_attr->cq_data_size) {
-		FI_INFO(prov, FI_LOG_CORE, "CQ data size too large\n");
+	/* following checks only apply to api 1.5 and beyond */
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
+		return 0;
+
+	if (user_attr->cntr_cnt > prov_attr->cntr_cnt) {
+		FI_INFO(prov, FI_LOG_CORE, "Cntr count too large\n");
+		return -FI_ENODATA;
+	}
+
+	if (user_attr->mr_iov_limit > prov_attr->mr_iov_limit) {
+		FI_INFO(prov, FI_LOG_CORE, "MR iov limit too large\n");
 		return -FI_ENODATA;
 	}
 
@@ -635,8 +673,11 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 
 static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 			     const struct fi_domain_attr *hints,
-			     uint64_t info_caps)
+			     uint64_t info_caps, uint32_t api_version)
 {
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
+		attr->mr_mode = attr->mr_mode ? FI_MR_BASIC : FI_MR_SCALABLE;
+
 	if (!hints) {
 		attr->caps = (info_caps & attr->caps & FI_PRIMARY_CAPS) |
 			     (attr->caps & FI_SECONDARY_CAPS);
@@ -715,8 +756,8 @@ static void fi_alter_tx_attr(struct fi_tx_attr *attr,
  * the hints have been validated and the starting fi_info is properly
  * configured by the provider.
  */
-void ofi_alter_info(struct fi_info *info,
-		   const struct fi_info *hints)
+void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
+		    uint32_t api_version)
 {
 	if (!hints)
 		return;
@@ -727,7 +768,8 @@ void ofi_alter_info(struct fi_info *info,
 
 		info->handle = hints->handle;
 
-		fi_alter_domain_attr(info->domain_attr, hints->domain_attr, info->caps);
+		fi_alter_domain_attr(info->domain_attr, hints->domain_attr,
+				     info->caps, api_version);
 		fi_alter_ep_attr(info->ep_attr, hints->ep_attr);
 		fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
 		fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);

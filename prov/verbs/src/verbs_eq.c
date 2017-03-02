@@ -71,7 +71,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 	if (!(info->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
 		goto err;
 
-	ofi_alter_info(info, pep_info);
+	ofi_alter_info(info, pep_info, OFI_TODO_API_VERSION);
 
 	info->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(info->src_addr = malloc(info->src_addrlen)))

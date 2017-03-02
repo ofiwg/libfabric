@@ -55,6 +55,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_util.h"
 
 #include "usnic_direct.h"
 #include "usd.h"
@@ -115,7 +116,7 @@ static const struct fi_domain_attr msg_dflt_domain_attr = {
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
-	.mr_mode = FI_MR_BASIC
+	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL,
 };
 
 /*******************************************************************************

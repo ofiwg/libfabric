@@ -464,6 +464,8 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 /*
  * MR
  */
+#define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
+
 struct ofi_mr_map {
 	const struct fi_provider *prov;
 	void			*rbtree;
@@ -522,8 +524,8 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 		      const struct fi_tx_attr *user_attr);
 int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 		   const struct fi_info *user_info, enum fi_match_type type);
-void ofi_alter_info(struct fi_info *info,
-		    const struct fi_info *hints);
+void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
+		    uint32_t api_version);
 
 struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,

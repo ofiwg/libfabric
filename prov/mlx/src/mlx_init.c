@@ -38,7 +38,7 @@ struct mlx_global_descriptor mlx_descriptor = {
 	.config = NULL,
 };
 
-static int mlx_init_errcodes() 
+static int mlx_init_errcodes()
 {
 	memset(mlx_errcode_translation_table, -FI_EOTHER, (-UCS_ERR_LAST)+2);
 	MLX_TRANSLATE_ERRCODE (UCS_OK)                  = -FI_SUCCESS;
@@ -77,7 +77,7 @@ struct fi_domain_attr mlx_domain_attrs = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_RM_DISABLED,
+	.mr_mode = OFI_MR_BASIC_MAP,
 	.mr_key_size = -1, /*Should be setup after init*/
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,
@@ -177,7 +177,7 @@ static int mlx_getinfo (
 				&mlx_descriptor.config);
 	if (status != UCS_OK) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"MLX error: invalid config file\n\t%d (%s)\n", 
+			"MLX error: invalid config file\n\t%d (%s)\n",
 			status, ucs_status_string(status));
 	}
 
@@ -185,19 +185,19 @@ static int mlx_getinfo (
 	status = ucm_config_modify("MLX_MEM_MALLOC_HOOKS", "no");
 	if (status != UCS_OK) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"MLX error: failed to switch off UCM memory hooks:\t%d (%s)\n", 
+			"MLX error: failed to switch off UCM memory hooks:\t%d (%s)\n",
 			status, ucs_status_string(status));
 	}
 
 	FI_INFO( &mlx_prov, FI_LOG_CORE,
-		"Loaded MLX version %s\n", 
+		"Loaded MLX version %s\n",
 		ucp_get_version_string());
 
 #if ENABLE_DEBUG
 	if (mlx_descriptor.config &&
 			fi_log_enabled( &mlx_prov, FI_LOG_INFO, FI_LOG_CORE)) {
-		ucp_config_print( mlx_descriptor.config, 
-				stderr, "Used MLX configuration", (1<<4)-1); 
+		ucp_config_print( mlx_descriptor.config,
+				stderr, "Used MLX configuration", (1<<4)-1);
 	}
 #endif
 
@@ -236,7 +236,7 @@ struct fi_provider mlx_prov = {
 MLX_INI
 {
 	mlx_init_errcodes();
-	fi_param_define( &mlx_prov, 
+	fi_param_define( &mlx_prov,
 			"mlx_config", FI_PARAM_STRING,
 			"MLX configuration file name");
 
