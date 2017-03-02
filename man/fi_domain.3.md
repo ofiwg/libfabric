@@ -605,6 +605,10 @@ level features that are supported by the provider.
   vectors among multiple processes using the named address vector
   feature.
 
+See [`fi_getinfo`(3)](fi_getinfo.3.html) for a discussion on primary versus
+secondary capabilities.  All domain capabilities are considered secondary
+capabilities.
+
 ## mode
 
 The operational mode bit related to using the domain.
