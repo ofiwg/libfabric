@@ -649,10 +649,10 @@ unsigned is_match(struct fi_bgq_mu_packet *pkt, union fi_bgq_context * context, 
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
 
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr, "%s:%s():%d origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %u returning %u\n", __FILE__, __func__, __LINE__, origin_uid, target_uid, origin_tag, target_tag, ignore, (context->src_addr == FI_ADDR_UNSPEC),((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid))));
+	fprintf(stderr, "%s:%s():%d origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %u returning %u\n", __FILE__, __func__, __LINE__, origin_uid, target_uid, origin_tag, target_tag, ignore, (context->src_addr == FI_ADDR_UNSPEC),((origin_tag_and_not_ignore == target_tag_and_not_ignore) && ((context->src_addr == FI_ADDR_UNSPEC) || (origin_uid == target_uid))));
 #endif
 
-	return ((context->src_addr == FI_ADDR_UNSPEC) || ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && (origin_uid == target_uid)));
+	return ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && ((context->src_addr == FI_ADDR_UNSPEC) || (origin_uid == target_uid)));
 }
 
 static inline
