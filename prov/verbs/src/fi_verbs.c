@@ -73,11 +73,15 @@ int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep)
 
 	assert(cm->ec && cm->listener);
 
-	memcpy(&ep->my_addr, ep->domain->info->src_addr, sizeof(ep->my_addr));
+	if (ep->domain->info->src_addr) {
+		memcpy(&ep->my_addr, ep->domain->info->src_addr, sizeof(ep->my_addr));
 
-	inet_ntop(ep->my_addr.sin_family,
-		  &ep->my_addr.sin_addr.s_addr,
-		  my_ipoib_addr_str, INET_ADDRSTRLEN);
+		inet_ntop(ep->my_addr.sin_family,
+			  &ep->my_addr.sin_addr.s_addr,
+			  my_ipoib_addr_str, INET_ADDRSTRLEN);
+	} else {
+		strcpy(my_ipoib_addr_str, "undefined");
+	}
 
 	VERBS_INFO(FI_LOG_EP_CTRL, "My IPoIB: %s\n", my_ipoib_addr_str);
 
