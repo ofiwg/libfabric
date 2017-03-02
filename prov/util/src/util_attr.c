@@ -387,7 +387,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	return 0;
 }
 
-int ofi_check_ep_attr(const struct util_prov *util_prov,
+int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		     const struct fi_ep_attr *user_attr)
 {
 	const struct fi_provider *prov = util_prov->prov;
@@ -604,7 +604,8 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 	}
 
 	if (user_info->ep_attr) {
-		ret = ofi_check_ep_attr(util_prov, user_info->ep_attr);
+		ret = ofi_check_ep_attr(util_prov, api_version,
+					user_info->ep_attr);
 		if (ret)
 			return ret;
 	}
