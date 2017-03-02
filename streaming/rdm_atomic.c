@@ -116,49 +116,76 @@ static inline size_t datatype_to_size(enum fi_datatype datatype)
 	}
 }
 
-static int is_valid_base_atomic_op(enum fi_op op)
+static int check_atomic_attr(enum fi_op op, enum fi_datatype datatype)
+{
+	struct fi_atomic_attr attr;
+	int ret;
+
+	ret = fi_query_atomic(domain, datatype, op, &attr, 0);
+	if (ret) {
+		FT_PRINTERR("fi_query_atomic", ret);
+		return ret;
+	}
+
+	if (attr.size != datatype_to_size(datatype)) {
+		fprintf(stderr, "Provider atomic size mismatch\n");
+		return -FI_ENOSYS;
+	}
+
+	return 0;
+}
+
+/*
+ * Endpoint level checks are for compatibility only.  Domain level checks are
+ * sufficient.
+ */
+
+static int check_base_atomic_op(enum fi_op op, enum fi_datatype datatype)
 {
 	int ret;
 
 	ret = fi_atomicvalid(ep, datatype, op, count);
 	if (ret) {
-		fprintf(stderr, "Provider doesn't support %s base atomic operation ",
-			fi_tostr(&op, FI_TYPE_ATOMIC_OP));
-		fprintf(stderr, "on %s\n", fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-		return 0;
+		fprintf(stderr, "Provider doesn't support %s "
+			"base atomic operation on %s\n",
+			fi_tostr(&op, FI_TYPE_ATOMIC_OP),
+			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
+		return ret;
 	}
 
-	return 1;
+	return check_atomic_attr(op, datatype);
 }
 
-static int is_valid_fetch_atomic_op(enum fi_op op)
+static int check_fetch_atomic_op(enum fi_op op, enum fi_datatype datatype)
 {
 	int ret;
 
 	ret = fi_fetch_atomicvalid(ep, datatype, op, count);
 	if (ret) {
-		fprintf(stderr, "Provider doesn't support %s fetch atomic operation ",
-			fi_tostr(&op, FI_TYPE_ATOMIC_OP));
-		fprintf(stderr, "on %s\n", fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-		return 0;
+		fprintf(stderr, "Provider doesn't support %s "
+			"fetch atomic operation on %s\n",
+			fi_tostr(&op, FI_TYPE_ATOMIC_OP),
+			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
+		return ret;
 	}
 
-	return 1;
+	return check_atomic_attr(op, datatype);
 }
 
-static int is_valid_compare_atomic_op(enum fi_op op)
+static int check_compare_atomic_op(enum fi_op op, enum fi_datatype datatype)
 {
 	int ret;
 
 	ret = fi_compare_atomicvalid(ep, datatype, op, count);
 	if (ret) {
-		fprintf(stderr, "Provider doesn't support %s compare atomic operation ",
-			fi_tostr(&op, FI_TYPE_ATOMIC_OP));
-		fprintf(stderr, "on %s\n", fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-		return 0;
+		fprintf(stderr, "Provider doesn't support %s "
+			"compare atomic operation on %s\n",
+			fi_tostr(&op, FI_TYPE_ATOMIC_OP),
+			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
+		return ret;
 	}
 
-	return 1;
+	return check_atomic_attr(op, datatype);
 }
 
 static int execute_base_atomic_op(enum fi_op op)
@@ -237,10 +264,12 @@ static int run_op(void)
 	case FI_LXOR:
 	case FI_BXOR:
 	case FI_ATOMIC_WRITE:
-		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
-			ret = is_valid_base_atomic_op(op_type);
-			if (ret <= 0)
+		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
+			ret = check_base_atomic_op(op_type, datatype);
+			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP)
 				continue;
+			else if (ret)
+				break;
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
@@ -258,11 +287,14 @@ static int run_op(void)
 			ft_stop();
 			report_perf();
 		}
+		break;
 	case FI_ATOMIC_READ:
-		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
-			ret = is_valid_fetch_atomic_op(op_type);
-			if (ret <= 0)
+		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
+			ret = check_fetch_atomic_op(op_type, datatype);
+			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP)
 				continue;
+			else if (ret)
+				break;
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
@@ -288,10 +320,12 @@ static int run_op(void)
 	case FI_CSWAP_GE:
 	case FI_CSWAP_GT:
 	case FI_MSWAP:
-		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
-			ret = is_valid_compare_atomic_op(op_type);
-			if (ret <= 0)
+		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
+			ret = check_compare_atomic_op(op_type, datatype);
+			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP)
 				continue;
+			else if (ret)
+				break;
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
@@ -312,14 +346,9 @@ static int run_op(void)
 		break;
 	default:
 		ret = -EINVAL;
-		goto out;
+		break;
 	}
 
-	if (ret)
-		goto out;
-
-	ret = 0;
-out:
 	free(count);
 	return ret;
 }
@@ -330,7 +359,7 @@ static int run_ops(void)
 
 	for (op_type = FI_MIN; op_type < FI_ATOMIC_OP_LAST; op_type++) {
 		ret = run_op();
-		if (ret)
+		if (ret != -FI_ENOSYS && ret != -FI_EOPNOTSUPP)
 			return ret;
 	}
 
