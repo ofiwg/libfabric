@@ -67,7 +67,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 	if (!info)
 		return NULL;
 
-	info->fabric_attr->fabric = &fab->fabric_fid;
+	info->fabric_attr->fabric = &fab->util_fabric.fabric_fid;
 	if (!(info->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
 		goto err;
 
@@ -375,7 +375,7 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (!_eq)
 		return -ENOMEM;
 
-	_eq->fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
+	_eq->fab = container_of(fabric, struct fi_ibv_fabric, util_fabric.fabric_fid);
 
 	fastlock_init(&_eq->lock);
 	ret = dlistfd_head_init(&_eq->list_head);

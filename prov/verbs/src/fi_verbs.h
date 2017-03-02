@@ -66,6 +66,7 @@
 #include "prov.h"
 #include "fi_list.h"
 #include "fi_signal.h"
+#include "fi_util.h"
 
 #ifndef AF_IB
 #define AF_IB 27
@@ -103,6 +104,7 @@
 #define VERBS_MR_IOV_LIMIT 1
 
 extern struct fi_provider fi_ibv_prov;
+extern struct fi_info *verbs_info;
 
 struct verbs_addr {
 	struct dlist_entry entry;
@@ -116,7 +118,7 @@ struct verbs_dev_info {
 };
 
 struct fi_ibv_fabric {
-	struct fid_fabric	fabric_fid;
+	struct util_fabric	util_fabric;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,

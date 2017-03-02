@@ -148,7 +148,7 @@ struct fi_ibv_rdm_sysaddr
 	int is_found;
 };
 
-static struct fi_info *verbs_info = NULL;
+struct fi_info *verbs_info = NULL;
 static pthread_mutex_t verbs_info_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
@@ -1075,19 +1075,6 @@ int fi_ibv_init_info(void)
 unlock:
 	pthread_mutex_unlock(&verbs_info_lock);
 	return ret;
-}
-
-int fi_ibv_find_fabric(const struct fi_fabric_attr *attr)
-{
-	struct fi_info *fi;
-
-	for (fi = verbs_info; fi; fi = fi->next) {
-		if (!ofi_check_fabric_attr(&fi_ibv_prov, fi->fabric_attr, attr,
-					FI_MATCH_EXACT))
-			return 0;
-	}
-
-	return -FI_ENODATA;
 }
 
 struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)

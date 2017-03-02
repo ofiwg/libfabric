@@ -36,6 +36,8 @@
 #include "fi_verbs.h"
 #include "ep_rdm/verbs_rdm.h"
 
+#include "fi_verbs.h"
+
 static int fi_ibv_mr_close(fid_t fid)
 {
 	struct fi_ibv_mem_desc *mr;
@@ -345,7 +347,8 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	} else {
 		_domain->domain_fid.ops = &fi_ibv_domain_ops;
 	}
-	_domain->fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
+	_domain->fab = container_of(fabric, struct fi_ibv_fabric,
+			util_fabric.fabric_fid);
 
 	*domain = &_domain->domain_fid;
 	return 0;
@@ -391,7 +394,15 @@ static int fi_ibv_trywait(struct fid_fabric *fabric, struct fid **fids, int coun
 
 static int fi_ibv_fabric_close(fid_t fid)
 {
-	free(fid);
+	struct fi_ibv_fabric *fab;
+	int ret;
+
+	fab = container_of(fid, struct fi_ibv_fabric, util_fabric.fabric_fid.fid);
+	ret = ofi_fabric_close(&fab->util_fabric);
+	if (ret)
+		return ret;
+	free(fab);
+
 	return 0;
 }
 
@@ -416,13 +427,10 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context)
 {
 	struct fi_ibv_fabric *fab;
+	struct fi_info *info;
 	int ret;
 
 	ret = fi_ibv_init_info();
-	if (ret)
-		return ret;
-
-	ret = fi_ibv_find_fabric(attr);
 	if (ret)
 		return ret;
 
@@ -430,11 +438,20 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (!fab)
 		return -FI_ENOMEM;
 
-	fab->fabric_fid.fid.fclass = FI_CLASS_FABRIC;
-	fab->fabric_fid.fid.context = context;
-	fab->fabric_fid.fid.ops = &fi_ibv_fi_ops;
-	fab->fabric_fid.ops = &fi_ibv_ops_fabric;
+	for (info = verbs_info; info; info = info->next) {
+		ret = ofi_fabric_init(&fi_ibv_prov, info->fabric_attr, attr,
+				&fab->util_fabric, context, FI_MATCH_EXACT);
+		if (ret != -FI_ENODATA)
+			break;
+	}
+	if (ret) {
+		free(fab);
+		return ret;
+	}
 
-	*fabric = &fab->fabric_fid;
+	*fabric = &fab->util_fabric.fabric_fid;
+	(*fabric)->fid.ops = &fi_ibv_fi_ops;
+	(*fabric)->ops = &fi_ibv_ops_fabric;
+
 	return 0;
 }
