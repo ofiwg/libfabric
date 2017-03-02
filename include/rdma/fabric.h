@@ -68,7 +68,7 @@ extern "C" {
  * tarball/libfabric package version number).
  */
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 4
+#define FI_MINOR_VERSION 5
 
 enum {
 	FI_PATH_MAX		= 256,
