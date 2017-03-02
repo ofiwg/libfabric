@@ -247,17 +247,23 @@ static int fi_check_name(char *user_name, char *prov_name, enum fi_match_type ty
 }
 
 int ofi_check_fabric_attr(const struct fi_provider *prov,
-			 const struct fi_fabric_attr *prov_attr,
-			 const struct fi_fabric_attr *user_attr,
-			 enum fi_match_type type)
+			  const struct fi_fabric_attr *prov_attr,
+			  const struct fi_fabric_attr *user_attr,
+			  enum fi_match_type type)
 {
-	if (user_attr->name && fi_check_name(user_attr->name, prov_attr->name, type)) {
+	if (user_attr->name &&
+	    fi_check_name(user_attr->name, prov_attr->name, type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown fabric name\n");
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->prov_version > prov_attr->prov_version) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported provider version\n");
+		return -FI_ENODATA;
+	}
+
+	if (FI_VERSION_LT(user_attr->api_version, prov_attr->api_version)) {
+		FI_INFO(prov, FI_LOG_CORE, "Unsupported api version\n");
 		return -FI_ENODATA;
 	}
 
