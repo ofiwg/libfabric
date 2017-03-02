@@ -331,7 +331,7 @@ int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
 	return 0;
 }
 
-static int fi_ibv_check_hints(const struct fi_info *hints,
+static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 		const struct fi_info *info)
 {
 	int ret;
@@ -357,8 +357,7 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 	}
 
 	if (hints->domain_attr) {
-		ret = ofi_check_domain_attr(&fi_ibv_prov, OFI_TODO_API_VERSION,
-					    info->domain_attr,
+		ret = ofi_check_domain_attr(&fi_ibv_prov, version, info->domain_attr,
 					    hints->domain_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
@@ -1089,8 +1088,8 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
 	return NULL;
 }
 
-static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
-		struct fi_info **info)
+static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
+		struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *check_info;
 	struct fi_info *fi, *tail;
@@ -1105,7 +1104,7 @@ static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 			continue;
 
 		if (hints) {
-			ret = fi_ibv_check_hints(hints, check_info);
+			ret = fi_ibv_check_hints(version, hints, check_info);
 			if (ret)
 				continue;
 		}
@@ -1150,7 +1149,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (id->verbs)
 		dev_name = ibv_get_device_name(id->verbs->device);
 
-	ret = fi_ibv_get_matching_info(dev_name, hints, info);
+	ret = fi_ibv_get_matching_info(version, dev_name, hints, info);
 	if (ret)
 		goto err;
 

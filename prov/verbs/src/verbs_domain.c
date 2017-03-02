@@ -273,6 +273,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
 {
 	struct fi_ibv_domain *_domain;
+	struct fi_ibv_fabric *fab;
 	struct fi_info *fi;
 	int ret;
 
@@ -280,9 +281,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!fi)
 		return -FI_EINVAL;
 
-	ret = ofi_check_domain_attr(&fi_ibv_prov, OFI_TODO_API_VERSION,
-				    fi->domain_attr, info->domain_attr,
-				    FI_MATCH_EXACT);
+	fab = container_of(fabric, struct fi_ibv_fabric, util_fabric.fabric_fid);
+	ret = ofi_check_domain_attr(&fi_ibv_prov, fab->util_fabric.api_version,
+			fi->domain_attr, info->domain_attr, FI_MATCH_EXACT);
 	if (ret)
 		return ret;
 
@@ -347,8 +348,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	} else {
 		_domain->domain_fid.ops = &fi_ibv_domain_ops;
 	}
-	_domain->fab = container_of(fabric, struct fi_ibv_fabric,
-			util_fabric.fabric_fid);
+	_domain->fab = fab;
 
 	*domain = &_domain->domain_fid;
 	return 0;
