@@ -279,7 +279,7 @@ int ft_alloc_bit_combo(uint64_t fixed, uint64_t opt,
 	num_flags = 0;
 	for_each_bit(opt, i) {
 		if (bit_isset(opt, i))
-			flags[num_flags++] = 1 << i;
+			flags[num_flags++] = 1ULL << i;
 	}
 
 	for (index = 0; index < (*len); index++) {
