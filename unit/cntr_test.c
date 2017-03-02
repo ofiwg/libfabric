@@ -166,7 +166,9 @@ int main(int argc, char **argv)
 	if (!fi->domain_attr->cntr_cnt)
 		goto out;
 
-	ft_open_fabric_res();
+	ret = ft_open_fabric_res();
+	if (ret)
+		goto out;
 
 	printf("Testing CNTRS on fabric %s\n", fi->fabric_attr->name);
 
