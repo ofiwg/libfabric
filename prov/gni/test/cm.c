@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -145,7 +145,7 @@ int cm_server_start(void)
 	srv_hints->fabric_attr->name = strdup("gni");
 	srv_hints->ep_attr->type = FI_EP_MSG;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), inet_ntoa(loc_sa.sin_addr),
+	ret = fi_getinfo(fi_version(), inet_ntoa(loc_sa.sin_addr),
 			 DEF_PORT, FI_SOURCE, srv_hints, &srv_fi);
 	cr_assert(!ret);
 
@@ -260,7 +260,7 @@ int cm_client_start_connect(void)
 	cli_hints->caps = GNIX_EP_PRIMARY_CAPS;
 	cli_hints->ep_attr->type = FI_EP_MSG;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), inet_ntoa(loc_sa.sin_addr),
+	ret = fi_getinfo(fi_version(), inet_ntoa(loc_sa.sin_addr),
 			 DEF_PORT, 0, cli_hints, &cli_fi);
 	cr_assert(!ret);
 

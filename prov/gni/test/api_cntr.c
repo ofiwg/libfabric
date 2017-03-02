@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -144,7 +144,7 @@ void api_cntr_setup(void)
 
 	/* Get info about fabric services with the provided hints */
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints[i],
+		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[i],
 				 &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 	}

@@ -115,7 +115,7 @@ void sep_setup_common(int av_type)
 	hints->ep_attr->rx_ctx_cnt = ctx_cnt;
 
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[i]);
+		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 
 		tx_cq[i] = calloc(ctx_cnt, sizeof(*tx_cq));
@@ -365,7 +365,7 @@ void sep_setup_context(void)
 	hints->ep_attr->tx_ctx_cnt = 0;
 	hints->ep_attr->rx_ctx_cnt = 0;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[0]);
 	cr_assert(!ret, "fi_getinfo");
 	cr_assert_eq(fi[0]->ep_attr->tx_ctx_cnt, 1, "incorrect tx_ctx_cnt");
 	cr_assert_eq(fi[0]->ep_attr->rx_ctx_cnt, 1, "incorrect rx_ctx_cnt");
@@ -373,7 +373,7 @@ void sep_setup_context(void)
 	hints->ep_attr->tx_ctx_cnt = ctx_cnt;
 	hints->ep_attr->rx_ctx_cnt = ctx_cnt;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[0]);
 	cr_assert(!ret, "fi_getinfo");
 
 	tx_ep[0] = calloc(ctx_cnt, sizeof(*tx_ep));
@@ -2310,7 +2310,7 @@ Test(scalable, av_insert)
 	hints->ep_attr->tx_ctx_cnt = NUMCONTEXTS;
 	hints->ep_attr->rx_ctx_cnt = NUMCONTEXTS;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[0]);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);

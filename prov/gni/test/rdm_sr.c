@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -259,7 +259,7 @@ void rdm_sr_setup(bool is_noreg, enum fi_progress pm)
 
 	/* Get info about fabric services with the provided hints */
 	for (; i < NUMEPS; i++) {
-		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[i]);
+		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 	}
 
@@ -288,7 +288,7 @@ void dgram_sr_setup(bool is_noreg, enum fi_progress pm)
 
 	/* Get info about fabric services with the provided hints */
 	for (; i < NUMEPS; i++) {
-		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[i]);
+		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 	}
 
@@ -328,7 +328,7 @@ void rdm_sr_bnd_ep_setup(void)
 	cr_assert(!ret, "gethostname");
 
 	for (; i < NUMEPS; i++) {
-		ret = fi_getinfo(FI_VERSION(1, 0), my_hostname,
+		ret = fi_getinfo(fi_version(), my_hostname,
 				 cdm_id[i], 0, hints, fi + i);
 		cr_assert(!ret, "fi_getinfo");
 	}

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -77,7 +77,7 @@ void dg_setup(void)
 	ret = gethostname(my_hostname, sizeof(my_hostname));
 	cr_assert(!ret, "gethostname");
 
-	ret = fi_getinfo(FI_VERSION(1, 0), my_hostname, my_cdm_id, FI_SOURCE,
+	ret = fi_getinfo(fi_version(), my_hostname, my_cdm_id, FI_SOURCE,
 			 hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
@@ -104,7 +104,7 @@ void dg_setup_prog_manual(void)
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
