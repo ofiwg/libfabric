@@ -199,7 +199,7 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *temp = NULL, *fi, *tail = NULL;
 	int ret;
 
-	ret = ofi_check_info(util_prov, hints, FI_MATCH_PREFIX);
+	ret = ofi_check_info(util_prov, version, hints, FI_MATCH_PREFIX);
 	if (ret)
 		goto err1;
 
@@ -321,10 +321,10 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 	}
 }
 
-int ofi_check_domain_attr(const struct fi_provider *prov,
-			 const struct fi_domain_attr *prov_attr,
-			 const struct fi_domain_attr *user_attr,
-			 enum fi_match_type type)
+int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
+			  const struct fi_domain_attr *prov_attr,
+			  const struct fi_domain_attr *user_attr,
+			  enum fi_match_type type)
 {
 	if (user_attr->name && fi_check_name(user_attr->name, prov_attr->name, type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
@@ -559,9 +559,8 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int ofi_check_info(const struct util_prov *util_prov,
-		  const struct fi_info *user_info,
-		  enum fi_match_type type)
+int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
+		   const struct fi_info *user_info, enum fi_match_type type)
 {
 	const struct fi_info *prov_info = util_prov->info;
 	const struct fi_provider *prov = util_prov->prov;
@@ -597,9 +596,9 @@ int ofi_check_info(const struct util_prov *util_prov,
 	}
 
 	if (user_info->domain_attr) {
-		ret = ofi_check_domain_attr(prov, prov_info->domain_attr,
-				user_info->domain_attr,
-				type);
+		ret = ofi_check_domain_attr(prov, api_version,
+					    prov_info->domain_attr,
+					    user_info->domain_attr, type);
 		if (ret)
 			return ret;
 	}

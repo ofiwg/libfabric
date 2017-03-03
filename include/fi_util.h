@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -498,31 +498,32 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 			   FI_SHARED_AV | FI_TRIGGER | FI_FENCE | \
 			   FI_LOCAL_COMM | FI_REMOTE_COMM)
 
+#define OFI_TODO_API_VERSION 0 /* remove when no longer used by providers */
+
 int ofi_check_fabric_attr(const struct fi_provider *prov,
-			 const struct fi_fabric_attr *prov_attr,
-			 const struct fi_fabric_attr *user_attr,
-			 enum fi_match_type type);
-int fi_check_wait_attr(const struct fi_provider *prov,
-		       const struct fi_wait_attr *attr);
-int ofi_check_domain_attr(const struct fi_provider *prov,
-			 const struct fi_domain_attr *prov_attr,
-			 const struct fi_domain_attr *user_attr,
-			 enum fi_match_type type);
+			  const struct fi_fabric_attr *prov_attr,
+			  const struct fi_fabric_attr *user_attr,
+			  enum fi_match_type type);
+int ofi_check_wait_attr(const struct fi_provider *prov,
+		        const struct fi_wait_attr *attr);
+int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
+			  const struct fi_domain_attr *prov_attr,
+			  const struct fi_domain_attr *user_attr,
+			  enum fi_match_type type);
 int ofi_check_ep_attr(const struct util_prov *util_prov,
-		     const struct fi_ep_attr *user_attr);
-int fi_check_cq_attr(const struct fi_provider *prov,
-		     const struct fi_cq_attr *attr);
+		      const struct fi_ep_attr *user_attr);
+int ofi_check_cq_attr(const struct fi_provider *prov,
+		      const struct fi_cq_attr *attr);
 int ofi_check_rx_attr(const struct fi_provider *prov,
-		     const struct fi_rx_attr *prov_attr,
-		     const struct fi_rx_attr *user_attr);
+		      const struct fi_rx_attr *prov_attr,
+		      const struct fi_rx_attr *user_attr);
 int ofi_check_tx_attr(const struct fi_provider *prov,
-		     const struct fi_tx_attr *prov_attr,
-		     const struct fi_tx_attr *user_attr);
-int ofi_check_info(const struct util_prov *util_prov,
-		  const struct fi_info *user_info,
-		  enum fi_match_type type);
+		      const struct fi_tx_attr *prov_attr,
+		      const struct fi_tx_attr *user_attr);
+int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
+		   const struct fi_info *user_info, enum fi_match_type type);
 void ofi_alter_info(struct fi_info *info,
-		   const struct fi_info *hints);
+		    const struct fi_info *hints);
 
 struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,

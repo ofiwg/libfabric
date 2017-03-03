@@ -37,7 +37,7 @@ static int mlx_domain_close(fid_t fid)
 	int status;
 
 	domain = container_of( fid,
-				struct mlx_domain, 
+				struct mlx_domain,
 				u_domain.domain_fid.fid);
 
 	ucp_cleanup(domain->context);
@@ -71,19 +71,22 @@ struct fi_ops_mr mlx_mr_ops = {
 };
 
 int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-                     struct fid_domain **fid, void *context){
-
+                     struct fid_domain **fid, void *context)
+{
+	struct mlx_fabric *fab;
 	ucs_status_t status = UCS_OK;
 	int ofi_status;
 	struct mlx_domain* domain;
 	ucp_params_t params;
 
-	if (!info->domain_attr->name 
-		|| strcmp(info->domain_attr->name, FI_MLX_FABRIC_NAME)) {
+	if (!info->domain_attr->name ||
+	    strcmp(info->domain_attr->name, FI_MLX_FABRIC_NAME)) {
 		return -FI_EINVAL;
 	}
 
-	ofi_status = ofi_check_info(&mlx_util_prov, info, FI_MATCH_EXACT);
+	fab = container_of(fabric, struct mlx_fabric, u_fabric.fabric_fid);
+	ofi_status = ofi_check_info(&mlx_util_prov, fab->u_fabric.api_version,
+				    info, FI_MATCH_EXACT);
 	if (ofi_status) {
 		return ofi_status;
 	}

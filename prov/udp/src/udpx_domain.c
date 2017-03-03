@@ -72,10 +72,13 @@ static struct fi_ops udpx_domain_fi_ops = {
 int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
-	int ret;
+	struct util_fabric *util_fabric;
 	struct util_domain *util_domain;
+	int ret;
 
-	ret = udpx_check_info(info);
+	util_fabric = container_of(fabric, struct util_fabric, fabric_fid);
+	ret = ofi_check_info(&udpx_util_prov, util_fabric->api_version, info,
+			     FI_MATCH_EXACT);
 	if (ret)
 		return ret;
 

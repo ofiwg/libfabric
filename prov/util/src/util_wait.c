@@ -71,8 +71,8 @@ int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 	return 0;
 }
 
-int fi_check_wait_attr(const struct fi_provider *prov,
-		       const struct fi_wait_attr *attr)
+int ofi_check_wait_attr(const struct fi_provider *prov,
+		        const struct fi_wait_attr *attr)
 {
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
@@ -244,7 +244,7 @@ static int util_verify_wait_fd_attr(const struct fi_provider *prov,
 {
 	int ret;
 
-	ret = fi_check_wait_attr(prov, attr);
+	ret = ofi_check_wait_attr(prov, attr);
 	if (ret)
 		return ret;
 

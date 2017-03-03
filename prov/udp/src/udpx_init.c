@@ -97,11 +97,6 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 #define udpx_getinfo_ifs(info) do{}while(0)
 #endif
 
-int udpx_check_info(struct fi_info *info)
-{
-	return ofi_check_info(&udpx_util_prov, info, FI_MATCH_EXACT);
-}
-
 static int udpx_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {

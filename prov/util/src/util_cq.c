@@ -38,8 +38,8 @@
 
 #define UTIL_DEF_CQ_SIZE (1024)
 
-int fi_check_cq_attr(const struct fi_provider *prov,
-		     const struct fi_cq_attr *attr)
+int ofi_check_cq_attr(const struct fi_provider *prov,
+		      const struct fi_cq_attr *attr)
 {
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
@@ -394,7 +394,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	int ret;
 
 	assert(progress);
-	ret = fi_check_cq_attr(prov, attr);
+	ret = ofi_check_cq_attr(prov, attr);
 	if (ret)
 		return ret;
 
