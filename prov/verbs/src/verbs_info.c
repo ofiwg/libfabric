@@ -148,7 +148,7 @@ struct fi_ibv_rdm_sysaddr
 	int is_found;
 };
 
-static struct fi_info *verbs_info = NULL;
+struct fi_info *verbs_info = NULL;
 static pthread_mutex_t verbs_info_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
@@ -331,7 +331,7 @@ int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
 	return 0;
 }
 
-static int fi_ibv_check_hints(const struct fi_info *hints,
+static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 		const struct fi_info *info)
 {
 	int ret;
@@ -357,8 +357,7 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 	}
 
 	if (hints->domain_attr) {
-		ret = ofi_check_domain_attr(&fi_ibv_prov, OFI_TODO_API_VERSION,
-					    info->domain_attr,
+		ret = ofi_check_domain_attr(&fi_ibv_prov, version, info->domain_attr,
 					    hints->domain_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
@@ -1077,19 +1076,6 @@ unlock:
 	return ret;
 }
 
-int fi_ibv_find_fabric(const struct fi_fabric_attr *attr)
-{
-	struct fi_info *fi;
-
-	for (fi = verbs_info; fi; fi = fi->next) {
-		if (!ofi_check_fabric_attr(&fi_ibv_prov, fi->fabric_attr, attr,
-					FI_MATCH_EXACT))
-			return 0;
-	}
-
-	return -FI_ENODATA;
-}
-
 struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
 {
 	struct fi_info *fi;
@@ -1102,8 +1088,8 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
 	return NULL;
 }
 
-static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
-		struct fi_info **info)
+static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
+		struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *check_info;
 	struct fi_info *fi, *tail;
@@ -1118,7 +1104,7 @@ static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 			continue;
 
 		if (hints) {
-			ret = fi_ibv_check_hints(hints, check_info);
+			ret = fi_ibv_check_hints(version, hints, check_info);
 			if (ret)
 				continue;
 		}
@@ -1163,7 +1149,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (id->verbs)
 		dev_name = ibv_get_device_name(id->verbs->device);
 
-	ret = fi_ibv_get_matching_info(dev_name, hints, info);
+	ret = fi_ibv_get_matching_info(version, dev_name, hints, info);
 	if (ret)
 		goto err;
 
