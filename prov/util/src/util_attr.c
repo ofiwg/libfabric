@@ -464,15 +464,15 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		if (user_attr->tx_ctx_cnt == FI_SHARED_CONTEXT) {
 			if (!(util_prov->flags & UTIL_TX_SHARED_CTX)) {
 				FI_INFO(prov, FI_LOG_CORE,
-						"Shared tx context not supported\n");
+					"Shared tx context not supported\n");
 				return -FI_ENODATA;
 			}
 		} else {
 			FI_INFO(prov, FI_LOG_CORE,
-					"Requested tx_ctx_cnt exceeds supported."
-					" Expected:%d, supported%d\n",
-					util_prov->info->domain_attr->max_ep_tx_ctx,
-					user_attr->tx_ctx_cnt);
+				"Requested tx_ctx_cnt exceeds supported."
+				" Expected:%d, supported%d\n",
+				util_prov->info->domain_attr->max_ep_tx_ctx,
+				user_attr->tx_ctx_cnt);
 			return -FI_ENODATA;
 		}
 	}
@@ -481,12 +481,12 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		if (user_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 			if (!(util_prov->flags & UTIL_RX_SHARED_CTX)) {
 				FI_INFO(prov, FI_LOG_CORE,
-						"Shared rx context not supported\n");
+					"Shared rx context not supported\n");
 				return -FI_ENODATA;
 			}
 		} else {
 			FI_INFO(prov, FI_LOG_CORE,
-					"Requested rx_ctx_cnt exceeds supported\n");
+				"Requested rx_ctx_cnt exceeds supported\n");
 			return -FI_ENODATA;
 		}
 	}
@@ -495,8 +495,8 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 }
 
 int ofi_check_rx_attr(const struct fi_provider *prov,
-		     const struct fi_rx_attr *prov_attr,
-		     const struct fi_rx_attr *user_attr)
+		      const struct fi_rx_attr *prov_attr,
+		      const struct fi_rx_attr *user_attr, uint64_t info_mode)
 {
 	if (user_attr->caps & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
@@ -504,7 +504,8 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if ((user_attr->mode & prov_attr->mode) != prov_attr->mode) {
+	info_mode = user_attr->mode ? user_attr->mode : info_mode;
+	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
 		FI_INFO_MODE(prov, prov_attr, user_attr);
 		return -FI_ENODATA;
@@ -512,19 +513,22 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 
 	if (prov_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, op_flags, FI_TYPE_OP_FLAGS);
+		FI_INFO_CAPS(prov, prov_attr, user_attr, op_flags,
+			     FI_TYPE_OP_FLAGS);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->msg_order & ~(prov_attr->msg_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "msg_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, msg_order, FI_TYPE_MSG_ORDER);
+		FI_INFO_CAPS(prov, prov_attr, user_attr, msg_order,
+			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, comp_order, FI_TYPE_MSG_ORDER);
+		FI_INFO_CAPS(prov, prov_attr, user_attr, comp_order,
+			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
@@ -547,8 +551,8 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 }
 
 int ofi_check_tx_attr(const struct fi_provider *prov,
-		     const struct fi_tx_attr *prov_attr,
-		     const struct fi_tx_attr *user_attr)
+		      const struct fi_tx_attr *prov_attr,
+		      const struct fi_tx_attr *user_attr, uint64_t info_mode)
 {
 	if (user_attr->caps & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
@@ -556,7 +560,8 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if ((user_attr->mode & prov_attr->mode) != prov_attr->mode) {
+	info_mode = user_attr->mode ? user_attr->mode : info_mode;
+	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
 		FI_INFO_MODE(prov, prov_attr, user_attr);
 		return -FI_ENODATA;
@@ -564,19 +569,22 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 
 	if (prov_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, op_flags, FI_TYPE_OP_FLAGS);
+		FI_INFO_CAPS(prov, prov_attr, user_attr, op_flags,
+			     FI_TYPE_OP_FLAGS);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->msg_order & ~(prov_attr->msg_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "msg_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, msg_order, FI_TYPE_MSG_ORDER);
+		FI_INFO_CAPS(prov, prov_attr, user_attr, msg_order,
+			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, comp_order, FI_TYPE_MSG_ORDER);
+		FI_INFO_CAPS(prov, prov_attr, user_attr, comp_order,
+			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
@@ -656,14 +664,14 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_info->rx_attr) {
 		ret = ofi_check_rx_attr(prov, prov_info->rx_attr,
-				user_info->rx_attr);
+					user_info->rx_attr, user_info->mode);
 		if (ret)
 			return ret;
 	}
 
 	if (user_info->tx_attr) {
 		ret = ofi_check_tx_attr(prov, prov_info->tx_attr,
-				user_info->tx_attr);
+					user_info->tx_attr, user_info->mode);
 		if (ret)
 			return ret;
 	}
