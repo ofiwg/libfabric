@@ -123,7 +123,6 @@ struct util_fabric {
 	atomic_t		ref;
 	const char		*name;
 	const struct fi_provider *prov;
-	uint32_t		api_version;
 
 	struct dlist_entry	domain_list;
 };

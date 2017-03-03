@@ -282,7 +282,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 
 	fab = container_of(fabric, struct fi_ibv_fabric, util_fabric.fabric_fid);
-	ret = ofi_check_domain_attr(&fi_ibv_prov, fab->util_fabric.api_version,
+	ret = ofi_check_domain_attr(&fi_ibv_prov, fabric->api_version,
 			fi->domain_attr, info->domain_attr, FI_MATCH_EXACT);
 	if (ret)
 		return ret;
