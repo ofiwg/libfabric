@@ -566,6 +566,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->buff_len = rdm_buffer_size(info->tx_attr->inject_size);
 	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "buff_len: %d\n", _ep->buff_len);
 
+	_ep->tx_op_flags = info->tx_attr->op_flags;
 	_ep->rx_op_flags = info->rx_attr->op_flags;
 	_ep->min_multi_recv_size = (_ep->rx_op_flags & FI_MULTI_RECV) ?
 				   info->tx_attr->inject_size : 0;

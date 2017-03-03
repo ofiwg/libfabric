@@ -108,6 +108,16 @@ do {									\
 #define RMA_RESOURCES_IS_BUSY(_connection, _ep)				\
 	(OUTGOING_POST_LIMIT(_connection, _ep) || PEND_POST_LIMIT(_ep))
 
+#define GET_TX_COMP(ep_rdm)						\
+	(!ep_rdm->rx_selective_completion ||		\
+	(ep_rdm->rx_op_flags & FI_COMPLETION) ?		\
+	FI_COMPLETION : 0ULL)
+
+#define GET_TX_COMP_FLAG(ep_rdm, flag)			\
+	(!ep_rdm->rx_selective_completion ||		\
+	(ep_rdm->rx_op_flags & FI_COMPLETION) ?		\
+	FI_COMPLETION : (flags & FI_COMPLETION))
+
 struct fi_ibv_rdm_header {
 /*	uint64_t imm_data; TODO: not implemented */
 	uint64_t tag;
@@ -266,6 +276,7 @@ struct fi_ibv_rdm_ep {
 	int tx_selective_completion;
 	int rx_selective_completion;
 	size_t min_multi_recv_size;
+	uint64_t tx_op_flags;
 	uint64_t rx_op_flags;
 
 	/*
