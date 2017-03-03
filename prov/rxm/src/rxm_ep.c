@@ -185,7 +185,8 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
 {
 	struct rxm_rx_buf *rx_buf;
-	int ret, i;
+	int ret;
+	size_t i;
 
 	for (i = 0; i < rxm_ep->rx_pool->chunk_cnt; i++) {
 		rx_buf = util_buf_get(rxm_ep->rx_pool);
@@ -326,7 +327,8 @@ int rxm_ep_recv_common(struct fid_ep *ep_fid, const struct iovec *iov, void **de
 	struct rxm_ep *rxm_ep;
 	struct rxm_recv_queue *recv_queue;
 	dlist_func_t *match;
-	int ret, i;
+	int ret;
+	size_t i;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
@@ -508,7 +510,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		tx_entry->state = RXM_LMT_START;
 	} else {
 		pkt->ctrl_hdr.type = ofi_ctrl_data;
-		ofi_copy_to_iov(iov, count, 0, pkt->data, pkt->hdr.size);
+		ofi_copy_from_iov(pkt->data, pkt->hdr.size, iov, count, 0);
 		pkt_size = sizeof(*pkt) + pkt->hdr.size;
 	}
 
@@ -889,7 +891,7 @@ static struct fi_ops rxm_ep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int rxm_ep_msg_res_open(struct fi_info *rxm_info,
+static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 		struct util_domain *util_domain, struct rxm_ep *rxm_ep)
 {
 	struct rxm_fabric *rxm_fabric;
@@ -898,7 +900,7 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_info,
 	int ret;
 
 	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
-			rxm_info, rxm_alter_layer_info, rxm_alter_base_info,
+			rxm_fi_info, rxm_alter_layer_info, rxm_alter_base_info,
 			1, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
@@ -913,7 +915,7 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_info,
 	}
 
 	memset(&cq_attr, 0, sizeof(cq_attr));
-	cq_attr.size = rxm_info->tx_attr->size + rxm_info->rx_attr->size;
+	cq_attr.size = rxm_fi_info->tx_attr->size + rxm_fi_info->rx_attr->size;
 	cq_attr.format = FI_CQ_FORMAT_MSG;
 
 	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
@@ -938,8 +940,12 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_info,
 
 	/* Zero out the port as we would be creating multiple MSG EPs for a single
 	 * RXM EP and we don't want address conflicts. */
-	if (rxm_ep->msg_info->src_addr)
-		((struct sockaddr_in *)(rxm_ep->msg_info->src_addr))->sin_port = 0;
+	if (rxm_ep->msg_info->src_addr) {
+		if (((struct sockaddr *)rxm_ep->msg_info->src_addr)->sa_family == AF_INET) 
+			((struct sockaddr_in *)(rxm_ep->msg_info->src_addr))->sin_port = 0;
+		else 
+			((struct sockaddr_in6 *)(rxm_ep->msg_info->src_addr))->sin6_port = 0;
+	}
 
 	return 0;
 err2:

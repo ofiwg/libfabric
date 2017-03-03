@@ -669,7 +669,8 @@ static int ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct util_av *av;
-	int i, ret, success_cnt = 0;
+	int ret, success_cnt = 0;
+	size_t i;
 	size_t addrlen;
 
 	av = container_of(av_fid, struct util_av, av_fid);
@@ -743,7 +744,8 @@ static int ip_av_insert_ip4sym(struct util_av *av,
 			       fi_addr_t *fi_addr, void *context)
 {
 	struct sockaddr_in sin;
-	int i, p, fi, ret, success_cnt = 0;
+	int fi, ret, success_cnt = 0;
+	size_t i, p;
 
 	memset(&sin, 0, sizeof sin);
 	sin.sin_family = AF_INET;
@@ -772,7 +774,8 @@ static int ip_av_insert_ip6sym(struct util_av *av,
 			       fi_addr_t *fi_addr, void *context)
 {
 	struct sockaddr_in6 sin6;
-	int i, j, p, fi, ret, success_cnt = 0;
+	int j, fi, ret, success_cnt = 0;
+	size_t i, p;
 
 	memset(&sin6, 0, sizeof sin6);
 	sin6.sin6_family = AF_INET6;
@@ -806,8 +809,8 @@ static int ip_av_insert_nodesym(struct util_av *av,
 {
 	char name[FI_NAME_MAX];
 	char svc[FI_NAME_MAX];
-	size_t name_len;
-	int fi, n, s, ret, name_index, svc_index, success_cnt = 0;
+	size_t name_len, n, s;
+	int fi, ret, name_index, svc_index, success_cnt = 0;
 
 	for (name_len = strlen(node); isdigit(node[name_len - 1]); )
 		name_len--;
@@ -822,7 +825,7 @@ static int ip_av_insert_nodesym(struct util_av *av,
 			name[FI_NAME_MAX - 1] = '\0';
 		} else {
 			snprintf(name + name_len, sizeof(name) - name_len - 1,
-				 "%d", name_index + n);
+				 "%zu", name_index + n);
 		}
 
 		for (s = 0; s < svccnt; s++, fi++) {
@@ -831,7 +834,7 @@ static int ip_av_insert_nodesym(struct util_av *av,
 				svc[FI_NAME_MAX - 1] = '\0';
 			} else {
 				snprintf(svc, sizeof(svc) - 1,
-					 "%d", svc_index + s);
+					 "%zu", svc_index + s);
 			}
 
 			ret = ip_av_insert_svc(av, name, svc, fi_addr ?
@@ -1221,7 +1224,7 @@ void ofi_cmap_del_handles(struct util_cmap *cmap)
 {
 	struct util_cmap_peer *peer;
 	struct dlist_entry *entry;
-	int i;
+	size_t i;
 
 	fastlock_acquire(&cmap->lock);
 	for (i = 0; i < cmap->av->count; i++) {
