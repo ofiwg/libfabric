@@ -182,6 +182,7 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 		map->used++;
 	}
 
+	map->table[index].av_index = FI_ADDR_NOTAVAIL;
 	map->table[index].connected = 1;
 	map->table[index].addr = *addr;
 	map->table[index].sock_fd = conn_fd;
