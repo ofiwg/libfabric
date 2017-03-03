@@ -130,8 +130,7 @@ static ssize_t fi_ibv_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		.conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr),
 		.data_len = 0,
 		.context = msg->context,
-		.flags = FI_MSG | FI_SEND | (ep_rdm->tx_selective_completion ?
-			(flags & FI_COMPLETION) : FI_COMPLETION),
+		.flags = FI_MSG | FI_SEND | GET_TX_COMP_FLAG(ep_rdm, flags),
 		.tag = 0,
 		.is_tagged = 0,
 		.buf.src_addr = NULL,
@@ -193,8 +192,7 @@ static ssize_t fi_ibv_rdm_sendv(struct fid_ep *ep, const struct iovec *iov,
 		.data = 0
 	};
 
-	return fi_ibv_rdm_sendmsg(ep, &msg,
-		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
+	return fi_ibv_rdm_sendmsg(ep, &msg, GET_TX_COMP(ep_rdm));
 }
 
 static ssize_t fi_ibv_rdm_send(struct fid_ep *ep, const void *buf, size_t len,
