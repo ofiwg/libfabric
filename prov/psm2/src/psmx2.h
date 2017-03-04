@@ -83,7 +83,8 @@ extern struct fi_provider psmx2_prov;
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_TRIGGER | FI_RMA_EVENT | FI_REMOTE_CQ_DATA | \
-			 FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV)
+			 FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV | \
+			 FI_NAMED_RX_CTX)
 
 #define PSMX2_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_SEND | FI_RECV)
@@ -820,6 +821,8 @@ struct psmx2_env {
 	int timeout;
 	int prog_interval;
 	char *prog_affinity;
+	int sep;
+	int max_trx_ctxt;
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
@@ -846,6 +849,8 @@ int	psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
 int	psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **ep, void *context);
+int	psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
+		       struct fid_ep **sep, void *context);
 int	psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		     struct fid_stx **stx, void *context);
 int	psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

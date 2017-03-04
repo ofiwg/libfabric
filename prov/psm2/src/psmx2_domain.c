@@ -320,7 +320,7 @@ static struct fi_ops_domain psmx2_domain_ops = {
 	.av_open = psmx2_av_open,
 	.cq_open = psmx2_cq_open,
 	.endpoint = psmx2_ep_open,
-	.scalable_ep = fi_no_scalable_ep,
+	.scalable_ep = psmx2_sep_open,
 	.cntr_open = psmx2_cntr_open,
 	.poll_open = fi_poll_create,
 	.stx_ctx = psmx2_stx_ctx,
@@ -413,6 +413,9 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	int err;
 
 	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "\n");
+
+	if (!psmx2_env.sep)
+		psmx2_domain_ops.scalable_ep = fi_no_scalable_ep;
 
 	fabric_priv = container_of(fabric, struct psmx2_fid_fabric,
 				   util_fabric.fabric_fid);
