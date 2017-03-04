@@ -54,8 +54,6 @@ struct fi_prov {
 	void			*dlhandle;
 };
 
-static struct fi_prov *fi_getprov(const char *prov_name);
-
 static struct fi_prov *prov_head, *prov_tail;
 int ofi_init = 0;
 pthread_mutex_t ofi_ini_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -82,6 +80,18 @@ int fi_apply_filter(struct fi_filter *filter, const char *name)
 		return filter->negated ? 0 : 1;
 	}
 	return 0;
+}
+
+static struct fi_prov *ofi_getprov(const char *prov_name)
+{
+	struct fi_prov *prov;
+
+	for (prov = prov_head; prov; prov = prov->next) {
+		if (!strcmp(prov_name, prov->provider->name))
+			return prov;
+	}
+
+	return NULL;
 }
 
 static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
@@ -143,7 +153,7 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 		ctx->disable_logging = 1;
 	}
 
-	prov = fi_getprov(provider->name);
+	prov = ofi_getprov(provider->name);
 	if (prov) {
 		/* If this provider is older than an already-loaded
 		 * provider of the same name, then discard this one.
@@ -437,18 +447,6 @@ FI_DESTRUCTOR(fi_fini(void))
 	ofi_osd_fini();
 }
 
-static struct fi_prov *fi_getprov(const char *prov_name)
-{
-	struct fi_prov *prov;
-
-	for (prov = prov_head; prov; prov = prov->next) {
-		if (!strcmp(prov_name, prov->provider->name))
-			return prov;
-	}
-
-	return NULL;
-}
-
 __attribute__((visibility ("default")))
 void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 {
@@ -711,7 +709,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 	if (!ofi_init)
 		fi_ini();
 
-	prov = fi_getprov(attr->prov_name);
+	prov = ofi_getprov(attr->prov_name);
 	if (!prov || !prov->provider->fabric)
 		return -FI_ENODEV;
 
