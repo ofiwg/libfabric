@@ -48,19 +48,20 @@
 #include <dlfcn.h>
 #endif
 
-struct fi_prov {
-	struct fi_prov		*next;
+struct ofi_prov {
+	struct ofi_prov		*next;
 	struct fi_provider	*provider;
 	void			*dlhandle;
 };
 
-static struct fi_prov *prov_head, *prov_tail;
+static struct ofi_prov *prov_head, *prov_tail;
 int ofi_init = 0;
 pthread_mutex_t ofi_ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static struct fi_filter prov_filter;
 
-static int fi_find_name(char **names, const char *name)
+
+static int ofi_find_name(char **names, const char *name)
 {
 	int i;
 
@@ -71,10 +72,10 @@ static int fi_find_name(char **names, const char *name)
 	return -1;
 }
 
-int fi_apply_filter(struct fi_filter *filter, const char *name)
+int ofi_apply_filter(struct fi_filter *filter, const char *name)
 {
 	if (filter->names) {
-		if (fi_find_name(filter->names, name) >= 0)
+		if (ofi_find_name(filter->names, name) >= 0)
 			return filter->negated ? 1 : 0;
 
 		return filter->negated ? 0 : 1;
@@ -82,9 +83,9 @@ int fi_apply_filter(struct fi_filter *filter, const char *name)
 	return 0;
 }
 
-static struct fi_prov *ofi_getprov(const char *prov_name)
+static struct ofi_prov *ofi_getprov(const char *prov_name)
 {
-	struct fi_prov *prov;
+	struct ofi_prov *prov;
 
 	for (prov = prov_head; prov; prov = prov->next) {
 		if (!strcmp(prov_name, prov->provider->name))
@@ -109,10 +110,10 @@ static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
 #endif
 }
 
-static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
+static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov_context *ctx;
-	struct fi_prov *prov;
+	struct ofi_prov *prov;
 	int ret;
 
 	if (!provider) {
@@ -140,7 +141,7 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 		goto cleanup;
 	}
 
-	if (fi_apply_filter(&prov_filter, provider->name)) {
+	if (ofi_apply_filter(&prov_filter, provider->name)) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"\"%s\" filtered by provider include/exclude list, skipping\n",
 			provider->name);
@@ -148,7 +149,7 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 		goto cleanup;
 	}
 
-	if (fi_apply_filter(&prov_log_filter, provider->name)) {
+	if (ofi_apply_filter(&prov_log_filter, provider->name)) {
 		ctx = (struct fi_prov_context *) &provider->context;
 		ctx->disable_logging = 1;
 	}
@@ -280,12 +281,12 @@ static void free_string_array(char **s)
 	free(s);
 }
 
-void fi_free_filter(struct fi_filter *filter)
+void ofi_free_filter(struct fi_filter *filter)
 {
 	free_string_array(filter->names);
 }
 
-void fi_create_filter(struct fi_filter *filter, const char *raw_filter)
+void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
 {
 	memset(filter, 0, sizeof *filter);
 	if (raw_filter == NULL)
@@ -303,7 +304,7 @@ void fi_create_filter(struct fi_filter *filter, const char *raw_filter)
 }
 
 #ifdef HAVE_LIBDL
-static void fi_ini_dir(const char *dir)
+static void ofi_ini_dir(const char *dir)
 {
 	int n = 0;
 	char *lib;
@@ -338,7 +339,7 @@ static void fi_ini_dir(const char *dir)
 			FI_WARN(&core_prov, FI_LOG_CORE, "dlsym: %s\n", dlerror());
 			dlclose(dlhandle);
 		} else
-			fi_register_provider((inif)(), dlhandle);
+			ofi_register_provider((inif)(), dlhandle);
 	}
 
 libdl_done:
@@ -370,7 +371,7 @@ void fi_ini(void)
 			" performance at the expense of making fork() potentially"
 			" unsafe");
 	fi_param_get_str(NULL, "provider", &param_val);
-	fi_create_filter(&prov_filter, param_val);
+	ofi_create_filter(&prov_filter, param_val);
 
 #ifdef HAVE_LIBDL
 	int n = 0;
@@ -396,26 +397,26 @@ void fi_ini(void)
 	dirs = split_and_alloc(provdir, ":");
 	if (dirs) {
 		for (n = 0; dirs[n]; ++n) {
-			fi_ini_dir(dirs[n]);
+			ofi_ini_dir(dirs[n]);
 		}
 		free_string_array(dirs);
 	}
 libdl_done:
 #endif
 
-	fi_register_provider(PSM2_INIT, NULL);
-	fi_register_provider(PSM_INIT, NULL);
-	fi_register_provider(USNIC_INIT, NULL);
-	fi_register_provider(MLX_INIT, NULL);
-	fi_register_provider(VERBS_INIT, NULL);
-	fi_register_provider(GNI_INIT, NULL);
-	fi_register_provider(RXM_INIT, NULL);
-	fi_register_provider(BGQ_INIT, NULL);
+	ofi_register_provider(PSM2_INIT, NULL);
+	ofi_register_provider(PSM_INIT, NULL);
+	ofi_register_provider(USNIC_INIT, NULL);
+	ofi_register_provider(MLX_INIT, NULL);
+	ofi_register_provider(VERBS_INIT, NULL);
+	ofi_register_provider(GNI_INIT, NULL);
+	ofi_register_provider(RXM_INIT, NULL);
+	ofi_register_provider(BGQ_INIT, NULL);
 
         /* Initialize the socket(s) provider last.  This will result in
            it being the least preferred provider. */
-	fi_register_provider(UDP_INIT, NULL);
-	fi_register_provider(SOCKETS_INIT, NULL);
+	ofi_register_provider(UDP_INIT, NULL);
+	ofi_register_provider(SOCKETS_INIT, NULL);
 	/* Before you add ANYTHING here, read the comment above!!! */
 
 	/* Seriously, read it! */
@@ -428,7 +429,7 @@ unlock:
 
 FI_DESTRUCTOR(fi_fini(void))
 {
-	struct fi_prov *prov;
+	struct ofi_prov *prov;
 
 	if (!ofi_init)
 		return;
@@ -440,7 +441,7 @@ FI_DESTRUCTOR(fi_fini(void))
 		free(prov);
 	}
 
-	fi_free_filter(&prov_filter);
+	ofi_free_filter(&prov_filter);
 	fi_log_fini();
 	fi_param_fini();
 	fi_util_fini();
@@ -476,9 +477,9 @@ CURRENT_SYMVER(fi_freeinfo_, fi_freeinfo);
 
 /* Make a dummy info object for each provider, and copy in the
  * provider name and version */
-static int fi_getprovinfo(struct fi_info **info)
+static int ofi_getprovinfo(struct fi_info **info)
 {
-	struct fi_prov *prov;
+	struct ofi_prov *prov;
 	struct fi_info *tail, *cur;
 	int ret = -FI_ENODATA;
 
@@ -521,7 +522,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
 		struct fi_info *hints, struct fi_info **info)
 {
-	struct fi_prov *prov;
+	struct ofi_prov *prov;
 	struct fi_info *tail, *cur;
 	int ret;
 
@@ -535,7 +536,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	}
 
 	if (flags == FI_PROV_ATTR_ONLY) {
-		return fi_getprovinfo(info);
+		return ofi_getprovinfo(info);
 	}
 
 	*info = tail = NULL;
@@ -700,7 +701,7 @@ __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric, void *context)
 {
-	struct fi_prov *prov;
+	struct ofi_prov *prov;
 	int ret;
 
 	if (!attr || !attr->prov_name || !attr->name)

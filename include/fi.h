@@ -122,9 +122,9 @@ struct fi_filter {
 extern struct fi_filter prov_log_filter;
 extern struct fi_provider core_prov;
 
-void fi_create_filter(struct fi_filter *filter, const char *env_name);
-void fi_free_filter(struct fi_filter *filter);
-int fi_apply_filter(struct fi_filter *filter, const char *name);
+void ofi_create_filter(struct fi_filter *filter, const char *env_name);
+void ofi_free_filter(struct fi_filter *filter);
+int ofi_apply_filter(struct fi_filter *filter, const char *name);
 
 void fi_util_init(void);
 void fi_util_fini(void);
