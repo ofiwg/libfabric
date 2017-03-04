@@ -387,6 +387,7 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	if (domain->progress_thread_enabled)
 		psmx2_domain_start_progress(domain);
 
+	psmx2_am_init(domain->base_trx_ctxt);
 	return 0;
 
 err_out_reset_active_domain:

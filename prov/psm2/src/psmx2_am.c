@@ -269,8 +269,9 @@ int psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt)
 
 int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 {
-	psm2_am_handler_fn_t psmx2_am_handlers[2];
-	int psmx2_am_handlers_idx[2];
+	psm2_am_handler_fn_t psmx2_am_handlers[3];
+	int psmx2_am_handlers_idx[3];
+	int num_handlers = 3;
 	psm2_ep_t psm2_ep = trx_ctxt->psm2_ep;
 	size_t size;
 	int err = 0;
@@ -297,20 +298,22 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 		idx = psmx2_am_global.cnt++;
 		psmx2_am_handlers[0] = psmx2_am_global.rma_handlers[idx];
 		psmx2_am_handlers[1] = psmx2_am_global.atomic_handlers[idx];
+		psmx2_am_handlers[2] = psmx2_am_sep_handler;
 		psmx2_am_global.trx_ctxts[idx] = trx_ctxt;
 		fastlock_release(&psmx2_am_global.lock);
 
-		err = psm2_am_register_handlers(psm2_ep, psmx2_am_handlers, 2,
-						psmx2_am_handlers_idx);
+		err = psm2_am_register_handlers(psm2_ep, psmx2_am_handlers,
+						num_handlers, psmx2_am_handlers_idx);
 		if (err)
 			return psmx2_errno(err);
 
 		if ((psmx2_am_handlers_idx[0] != PSMX2_AM_RMA_HANDLER) ||
-		    (psmx2_am_handlers_idx[1] != PSMX2_AM_ATOMIC_HANDLER)) {
+		    (psmx2_am_handlers_idx[1] != PSMX2_AM_ATOMIC_HANDLER) ||
+		    (psmx2_am_handlers_idx[2] != PSMX2_AM_SEP_HANDLER)) {
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
 				"failed to register one or more AM handlers "
-				"at indecies %d, %d\n", PSMX2_AM_RMA_HANDLER,
-				PSMX2_AM_ATOMIC_HANDLER);
+				"at indecies %d, %d, %d\n", PSMX2_AM_RMA_HANDLER,
+				PSMX2_AM_ATOMIC_HANDLER, PSMX2_AM_SEP_HANDLER);
 			return -FI_EBUSY;
 		}
 

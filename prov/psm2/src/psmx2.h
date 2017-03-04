@@ -120,8 +120,14 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
 
-/* Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
- * are sign extensions. We can put vlane into part of these 16 bits of an epaddr.
+/*
+ * Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
+ * are sign extensions. We can put some extra information into the 16 bits.
+ *
+ * Here is the layout:  AA-B-C-DDDDDDDDDDDD
+ *
+ * C == 0xE: scalable endpoint, AAB is context index, DDDDDDDDDDDD is the address
+ * C != 0xE: regular endpoint, AA is vlane, BCDDDDDDDDDDDD is epaddr
  */
 #define PSMX2_MAX_VL			(0xFF)
 #define PSMX2_EP_MASK			(0x00FFFFFFFFFFFFFFUL)
@@ -136,6 +142,16 @@ extern struct fi_provider psmx2_prov;
 						((addr & PSMX2_SIGN_MASK) ? \
                                                  (addr | PSMX2_SIGN_EXT) : \
                                                  (addr & PSMX2_EP_MASK)))
+
+#define PSMX2_MAX_RX_CTX_BITS		(12)
+#define PSMX2_SEP_ADDR_FLAG		(0x000E000000000000UL)
+#define PSMX2_SEP_ADDR_MASK		(0x000F000000000000UL)
+#define PSMX2_SEP_CTXT_MASK		(0xFFF0000000000000UL)
+#define PSMX2_SEP_IDX_MASK		(0x0000FFFFFFFFFFFFUL)
+#define PSMX2_SEP_ADDR_TEST(addr)	(((addr) & PSMX2_SEP_ADDR_MASK) == PSMX2_SEP_ADDR_FLAG)
+#define PSMX2_SEP_ADDR_CTXT(addr, ctxt_bits) \
+					(((addr) & PSMX2_SEP_CTXT_MASK) >> (64-(ctxt_bits)))
+#define PSMX2_SEP_ADDR_IDX(addr)	((addr) & PSMX2_SEP_IDX_MASK)
 
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
@@ -179,6 +195,7 @@ union psmx2_pi {
 
 #define PSMX2_AM_RMA_HANDLER	0
 #define PSMX2_AM_ATOMIC_HANDLER	1
+#define PSMX2_AM_SEP_HANDLER	2
 
 #define PSMX2_AM_OP_MASK	0x000000FF
 #define PSMX2_AM_DST_MASK	0x0000FF00
@@ -212,6 +229,8 @@ enum {
 	PSMX2_AM_REP_ATOMIC_COMPWRITE,
 	PSMX2_AM_REQ_WRITEV,
 	PSMX2_AM_REQ_READV,
+	PSMX2_AM_REQ_SEP_QUERY,
+	PSMX2_AM_REP_SEP_QUERY,
 };
 
 struct psmx2_am_request {
@@ -690,11 +709,22 @@ struct psmx2_fid_cntr {
 	pthread_mutex_t		trigger_lock;
 };
 
+struct psmx2_ctxt_addr {
+	psm2_epid_t		epid;
+	psm2_epaddr_t		epaddr;
+};
+
+struct psmx2_sep_addr {
+	int			ctxt_cnt;
+	struct psmx2_ctxt_addr	ctxt_addrs[];
+};
+
 struct psmx2_fid_av {
 	struct fid_av		av;
 	struct psmx2_fid_domain	*domain;
 	struct fid_eq		*eq;
 	int			type;
+	int			rx_ctx_bits;
 	uint64_t		flags;
 	size_t			addrlen;
 	size_t			count;
@@ -702,6 +732,8 @@ struct psmx2_fid_av {
 	psm2_epid_t		*epids;
 	psm2_epaddr_t		*epaddrs;
 	uint8_t			*vlanes;
+	uint8_t			*types;
+	struct psmx2_sep_addr	**sepaddrs;
 };
 
 struct psmx2_fid_ep {
@@ -772,7 +804,7 @@ struct psmx2_fid_mr {
 	uint64_t		flags;
 	uint64_t		offset;
 	size_t			iov_count;
-	struct iovec		iov[0];	/* must be the last field */
+	struct iovec		iov[];	/* must be the last field */
 };
 
 struct psmx2_epaddr_context {
@@ -896,6 +928,8 @@ int	psmx2_am_rma_handler_ext(psm2_am_token_t token,
 int	psmx2_am_atomic_handler_ext(psm2_am_token_t token,
 				    psm2_amarg_t *args, int nargs, void *src, uint32_t len,
 				    struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args, int nargs,
+			     void *src, uint32_t len);
 void	psmx2_atomic_global_init(void);
 void	psmx2_atomic_global_fini(void);
 
