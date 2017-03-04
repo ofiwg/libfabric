@@ -808,7 +808,7 @@ struct psmx2_fid_mr {
 };
 
 struct psmx2_epaddr_context {
-	struct psmx2_fid_domain	*domain;
+	struct psmx2_trx_ctxt	*trx_ctxt;
 	psm2_epid_t		epid;
 };
 
@@ -896,8 +896,6 @@ void	psmx2_get_uuid(psm2_uuid_t uuid);
 int	psmx2_uuid_to_port(psm2_uuid_t uuid);
 char	*psmx2_uuid_to_string(psm2_uuid_t uuid);
 int	psmx2_errno(int err);
-int	psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
-			    psm2_epid_t epid, psm2_epaddr_t *epaddr);
 void	psmx2_query_mpi(void);
 
 struct	fi_context *psmx2_ep_get_op_context(struct psmx2_fid_ep *ep);
@@ -910,6 +908,9 @@ struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 					size_t olen, int err);
 int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_fid_domain *domain,
 			struct psmx2_cq_event *event, int count, fi_addr_t *src_addr);
+
+psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
+				     struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
 
 void	psmx2_am_global_init(void);
 void	psmx2_am_global_fini(void);

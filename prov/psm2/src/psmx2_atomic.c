@@ -855,7 +855,10 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else  if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
 			return -FI_EINVAL;
@@ -990,7 +993,10 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
 			return -FI_EINVAL;
@@ -1219,7 +1225,10 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
 			return -FI_EINVAL;
@@ -1384,7 +1393,10 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 		return -FI_EINVAL;
 	
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
 			return -FI_EINVAL;
@@ -1671,7 +1683,10 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
 			return -FI_EINVAL;
@@ -1850,7 +1865,10 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
 			return -FI_EINVAL;

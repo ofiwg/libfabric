@@ -182,16 +182,16 @@ static inline double psmx2_conn_timeout(int sec)
 	return sec * 1e9;
 }
 
-static void psmx2_set_epaddr_context(struct psmx2_fid_domain *domain,
+static void psmx2_set_epaddr_context(struct psmx2_trx_ctxt *trx_ctxt,
 				     psm2_epid_t epid, psm2_epaddr_t epaddr)
 {
 	struct psmx2_epaddr_context *context;
 
 	context = (void *)psm2_epaddr_getctxt(epaddr);
 	if (context) {
-		if (context->domain != domain || context->epid != epid) {
+		if (context->trx_ctxt != trx_ctxt || context->epid != epid) {
 			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"domain or epid doesn't match\n");
+				"trx_ctxt or epid doesn't match\n");
 			context = NULL;
 		}
 	}
@@ -206,12 +206,12 @@ static void psmx2_set_epaddr_context(struct psmx2_fid_domain *domain,
 		return;
 	}
 
-	context->domain = domain;
+	context->trx_ctxt = trx_ctxt;
 	context->epid = epid;
 	psm2_epaddr_setctxt(epaddr, context);
 }
 
-int psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
+int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 			 psm2_epid_t epid, psm2_epaddr_t *epaddr)
 {
         int err;
@@ -228,17 +228,23 @@ int psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
 		}
 	}
 
-        err = psm2_ep_connect(domain->base_trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
+        err = psm2_ep_connect(trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
 			      epaddr, psmx2_conn_timeout(1));
-        if (err != PSM2_OK)
+        if (err != PSM2_OK) {
+		FI_WARN(&psmx2_prov, FI_LOG_AV,
+			"psm2_ep_connect retured error %s, remote epid=%lx.\n",
+			psm2_error_get_string(err), epid);
                 return psmx2_errno(err);
+	}
 
-	psmx2_set_epaddr_context(domain,epid,*epaddr);
+	psmx2_set_epaddr_context(trx_ctxt,epid,*epaddr);
 
         return 0;
 }
 
-fi_addr_t psmx2_av_translate_sep(struct psmx2_fid_av *av, fi_addr_t addr)
+psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
+				     struct psmx2_trx_ctxt *trx_ctxt,
+				     fi_addr_t addr)
 {
 	int idx = PSMX2_SEP_ADDR_IDX(addr);
 	int ctxt = PSMX2_SEP_ADDR_CTXT(addr, av->rx_ctx_bits);
@@ -246,20 +252,26 @@ fi_addr_t psmx2_av_translate_sep(struct psmx2_fid_av *av, fi_addr_t addr)
 	int err;
 
 	if (!av->sepaddrs[idx])
-		return FI_ADDR_NOTAVAIL;
+		return NULL;
 
 	if (ctxt >= av->sepaddrs[idx]->ctxt_cnt)
-		return FI_ADDR_NOTAVAIL;
+		return NULL;
 
 	if ((fi_addr_t)av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr == FI_ADDR_NOTAVAIL) {
-		err = psmx2_epid_to_epaddr(av->domain,
+		err = psmx2_epid_to_epaddr(trx_ctxt,
 					   av->sepaddrs[idx]->ctxt_addrs[ctxt].epid,
 					   &epaddr);
-		if (!err)
-			av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr = epaddr;
+		if (err) {
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"fatal error: unable to translate epid %lx to epaddr.\n",
+				av->sepaddrs[idx]->ctxt_addrs[ctxt].epid);
+			return NULL;
+		}
+
+		av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr = epaddr;
 	}
 
-	return (fi_addr_t)av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr;
+	return av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr;
 }
 
 static int psmx2_av_check_table_size(struct psmx2_fid_av *av, size_t count)
@@ -367,7 +379,7 @@ static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 
 		if (errors[i] == PSM2_OK ||
 		    errors[i] == PSM2_EPID_ALREADY_CONNECTED) {
-			psmx2_set_epaddr_context(av->domain, epids[i], epaddrs[i]);
+			psmx2_set_epaddr_context(av->domain->base_trx_ctxt, epids[i], epaddrs[i]);
 			errors[i] = PSM2_OK;
 		} else {
 			/* If duplicated addrs are passed to psm2_ep_connect(),

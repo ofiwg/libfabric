@@ -76,7 +76,10 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
-		if (av && av->type == FI_AV_TABLE) {
+		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
+			vlane = 0;
+		} else if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;
 			if (idx >= av->last)
 				return -FI_EINVAL;
@@ -254,7 +257,10 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
 		if (idx >= av->last)
 			return -FI_EINVAL;
@@ -426,7 +432,10 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	av = ep_priv->av;
-	if (av && av->type == FI_AV_TABLE) {
+	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		vlane = 0;
+	} else if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
 		if (idx >= av->last) {
 			free(req);
