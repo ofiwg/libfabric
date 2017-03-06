@@ -106,6 +106,7 @@
 {
 	prov_name: sockets,
 	test_type: [
+		FT_TEST_LATENCY,
 		FT_TEST_BANDWIDTH,
 	],
 	class_function: [
@@ -115,9 +116,13 @@
 		FT_FUNC_INJECT_WRITE,
 		FT_FUNC_WRITEDATA,
 		FT_FUNC_INJECT_WRITEDATA,
+		FT_FUNC_READ,
+		FT_FUNC_READV,
+		FT_FUNC_READMSG,
 	],
 	ep_type: [
 		FI_EP_MSG,
+		FI_EP_RDM,
 	],
 	av_type: [
 		FI_AV_TABLE,
