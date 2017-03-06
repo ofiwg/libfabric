@@ -1,5 +1,5 @@
 .\"t
-.TH "fi_domain" "3" "2017\-02\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_domain" "3" "2017\-03\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain \- Open a fabric access domain
@@ -446,6 +446,8 @@ overruns.
 This includes failing (returning \-FI_EAGAIN) the posting of operations
 that could result in CQ overruns, or internally retrying requests (which
 will be hidden from the application).
+See notes at the end of this section regarding CQ resource management
+restrictions.
 .PP
 \f[I]Target EP / No Rx Buffer\f[] : Target EP refers to resources
 associated with the endpoint that is the target of a transmit operation.
@@ -491,6 +493,26 @@ For unconnected endpoints, the endpoint must be re\-enabled before it
 will accept new data transfer operations.
 For connected endpoints, the connection is torn down and must be
 re\-established.
+.PP
+There is one notable restriction on the protections offered by resource
+management.
+This occurs when resource management is enabled on an endpoint that has
+been bound to completion queue(s) using the FI_SELECTIVE_COMPLETION
+flag.
+Operations posted to such an endpoint may specify that a successful
+completion should not generate a entry on the corresponding completion
+queue.
+(I.e.
+the operation leaves the FI_COMPLETION flag unset).
+In such situations, the provider is not required to reserve an entry in
+the completion queue to handle the case where the operation fails and
+does generate a CQ entry, which would effectively require tracking the
+operation to completion.
+Applications concerned with avoiding CQ overruns in the occurrence of
+errors must ensure that there is sufficient space in the CQ to report
+failed operations.
+This can typically be achieved by sizing the CQ to at least the same
+size as the endpoint queue(s) that are bound to it.
 .SS AV Type (av_type)
 .PP
 Specifies the type of address vectors that are usable with this domain.
