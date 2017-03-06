@@ -149,6 +149,8 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 	while(!slist_empty(&rxm_ep->rx_buf_list)) {
 		entry = slist_remove_head(&rxm_ep->rx_buf_list);
 		rx_buf = container_of(entry, struct rxm_rx_buf, entry);
+		/* Cancel pre-posted context and relese it */
+		(void)fi_cancel(&rx_buf->ep->srx_ctx->fid, rx_buf);
 		util_buf_release(rxm_ep->rx_pool, rx_buf);
 	}
 
@@ -185,7 +187,8 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
 {
 	struct rxm_rx_buf *rx_buf;
-	int ret, i;
+	int ret;
+	size_t i;
 
 	for (i = 0; i < rxm_ep->rx_pool->chunk_cnt; i++) {
 		rx_buf = util_buf_get(rxm_ep->rx_pool);
@@ -326,7 +329,8 @@ int rxm_ep_recv_common(struct fid_ep *ep_fid, const struct iovec *iov, void **de
 	struct rxm_ep *rxm_ep;
 	struct rxm_recv_queue *recv_queue;
 	dlist_func_t *match;
-	int ret, i;
+	int ret;
+	size_t i;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
@@ -439,8 +443,8 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	struct fid_mr *mr;
 	void *desc_tx_buf = NULL;
 	struct rxm_rma_iov *rma_iov;
-	int pkt_size = 0;
-	int i, ret;
+	int ret, pkt_size = 0;
+	size_t i;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
@@ -486,7 +490,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 					rxm_tx_attr.inject_size,
 					pkt->hdr.size);
 			ret = -FI_EMSGSIZE;
-			goto err;
+			goto done;
 		}
 		tx_entry->msg_id = ofi_idx2key(&rxm_ep->tx_key_idx,
 				rxm_txe_fs_index(rxm_ep->txe_fs, tx_entry));
@@ -512,13 +516,21 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		pkt_size = sizeof(*pkt) + pkt->hdr.size;
 	}
 
-	ret = fi_send(rxm_conn->msg_ep, pkt, pkt_size, desc_tx_buf, 0, tx_entry);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_send for MSG provider failed\n");
-		goto err;
+	if (flags & FI_INJECT & ~FI_COMPLETION) {
+		ret = fi_inject(rxm_conn->msg_ep, pkt, pkt_size, 0);
+		if (ret)
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_inject for MSG provider failed\n");
+		/* release allocated buffer for further reuse */
+		goto done;
+	} else {
+		ret = fi_send(rxm_conn->msg_ep, pkt, pkt_size, desc_tx_buf, 0, tx_entry);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_send for MSG provider failed\n");
+			goto done;
+		}
 	}
 	return 0;
-err:
+done:
 	util_buf_release(rxm_ep->tx_pool, pkt);
 	freestack_push(rxm_ep->txe_fs, tx_entry);
 	return ret;
