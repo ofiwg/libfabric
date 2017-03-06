@@ -180,19 +180,19 @@ interfaces enables a provider to eliminate lower-level locks.
   For example, one thread may be initiating a data transfer on an
   endpoint, while another thread reads from a completion queue
   associated with the endpoint.
-  
+
   Serialization to endpoint access is only required when accessing
   the same endpoint data flow.  Multiple threads may initiate transfers
   on different transmit contexts of the same endpoint without serializing,
   and no serialization is required between the submission of data
   transmit requests and data receive operations.
-  
+
   In general, FI_THREAD_FID allows the provider to be implemented
   without needing internal locking when handling data transfers.
   Conceptually, FI_THREAD_FID maps well to providers that implement
   fabric services in hardware and provide separate command queues to
   different data flows.
-  
+
 *FI_THREAD_ENDPOINT*
 : The endpoint threading model is similar to FI_THREAD_FID, but with
   the added restriction that serialization is required when accessing
@@ -207,11 +207,11 @@ interfaces enables a provider to eliminate lower-level locks.
   that are associated through the use of having a shared completion
   structure.  This includes endpoint, completion queue, counter, wait set,
   and poll set objects.
-  
+
   For example, threads must serialize access to an endpoint and its
   bound completion queue(s) and/or counters.  Access to endpoints that
   share the same completion queue must also be serialized.
-  
+
   The use of FI_THREAD_COMPLETION can increase parallelism over
   FI_THREAD_SAFE, but requires the use of isolated resources.
 
@@ -346,7 +346,8 @@ transfer operation.
   may use different mechanisms to prevent CQ overruns.  This includes
   failing (returning -FI_EAGAIN) the posting of operations that could
   result in CQ overruns, or internally retrying requests (which will be hidden
-  from the application).
+  from the application).  See notes at the end of this section regarding
+  CQ resource management restrictions.
 
 *Target EP / No Rx Buffer*
 : Target EP refers to resources associated with the endpoint that is the target
@@ -386,6 +387,22 @@ the endpoint must be re-enabled before it will accept new data transfer
 operations.  For connected endpoints, the connection is torn down and
 must be re-established.
 
+There is one notable restriction on the protections offered by resource
+management.  This occurs when resource management is enabled on an
+endpoint that has been bound to completion queue(s) using the
+FI_SELECTIVE_COMPLETION flag.  Operations posted to such an endpoint
+may specify that a successful completion should not generate a entry
+on the corresponding completion queue.  (I.e. the operation leaves the
+FI_COMPLETION flag unset).  In such situations, the provider is not
+required to reserve an entry in the completion queue to handle the
+case where the operation fails and does generate a CQ entry, which
+would effectively require tracking the operation to completion.
+Applications concerned with avoiding CQ overruns in the occurrence
+of errors must ensure that there is sufficient space in the CQ to
+report failed operations.  This can typically be achieved by sizing
+the CQ to at least the same size as the endpoint queue(s) that are
+bound to it.
+
 ## AV Type (av_type)
 
 Specifies the type of address vectors that are usable with this domain.
@@ -407,7 +424,7 @@ domain attribute av_type to the necessary value when calling fi_getinfo.
 The value FI_AV_UNSPEC may be used to indicate that the provider can support
 either address vector format.  In this case, a provider may return
 FI_AV_UNSPEC to indicate that either format is supportable, or may return
-another AV type to indicate the optimal AV type supported by this domain. 
+another AV type to indicate the optimal AV type supported by this domain.
 
 ## Memory Registration Mode (mr_mode)
 
@@ -596,15 +613,15 @@ The operational mode bit related to using the domain.
 ## Default authorization key (auth_key)
 
 The default authorization key to associate with endpoint and memory
-registrations created within the domain. This field is ignored unless the 
+registrations created within the domain. This field is ignored unless the
 fabric is opened with API version 1.5 or greater.
 
 ## Default authorization key length (auth_keylen)
 
 The length of the default authorization key for the domain. If set to 0, then
 no authorization key will be associated with endpoints and memory
-registrations created within the domain unless specified in the endpoint or 
-memory registration attributes. This field is ignored unless the fabric is 
+registrations created within the domain unless specified in the endpoint or
+memory registration attributes. This field is ignored unless the fabric is
 opened with API version 1.5 or greater.
 
 ## Max Error Data Size (max_err_data)
