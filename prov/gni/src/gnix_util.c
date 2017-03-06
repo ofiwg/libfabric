@@ -667,9 +667,10 @@ void _gnix_dump_gni_res(uint8_t ptag)
 					    dev_res_desc.reserved,
 					    dev_res_desc.held,
 					    dev_res_desc.total);
-			GNIX_WARN(FI_LOG_FABRIC, "%s", buf);
 		}
 	}
+
+	GNIX_WARN(FI_LOG_FABRIC, "%s", buf);
 
 	written = 0;
 	written += snprintf(buf + written, size - written,
@@ -682,9 +683,10 @@ void _gnix_dump_gni_res(uint8_t ptag)
 					    ptag, gni_job_res_to_str(i),
 					    job_res_desc.used,
 					    job_res_desc.limit);
-			GNIX_WARN(FI_LOG_FABRIC, "%s", buf);
 		}
 	}
+
+	GNIX_WARN(FI_LOG_FABRIC, "%s", buf);
 }
 
 int _gnix_get_num_corespec_cpus(uint32_t *num_core_spec_cpus)
