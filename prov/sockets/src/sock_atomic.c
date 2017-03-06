@@ -596,13 +596,11 @@ int sock_query_atomic(struct fid_domain *domain,
 static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype,
 				enum fi_op op, size_t *count)
 {
-	struct sock_ep *sock_ep;
 	struct fi_atomic_attr attr;
 	int ret;
 
-	sock_ep = container_of(ep, struct sock_ep, ep);
-	ret = sock_query_atomic(&sock_ep->attr->domain->dom_fid, datatype,
-				op, &attr, 0);
+	/* domain parameter is ignored - okay to pass in NULL */
+	ret = sock_query_atomic(NULL, datatype, op, &attr, 0);
 	if (!ret)
 		*count = attr.count;
 	return ret;
