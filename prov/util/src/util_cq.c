@@ -203,21 +203,37 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	struct util_cq *cq;
 	struct util_cq_err_entry *err;
 	struct slist_entry *entry;
+	char *err_buf_save;
+	size_t err_data_size;
+	uint32_t api_version;
 	ssize_t ret;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	api_version = cq->domain->fabric->fabric_fid.api_version;
+
 	fastlock_acquire(&cq->cq_lock);
-	if (!ofi_cirque_isempty(cq->cirq) &&
-	    (ofi_cirque_head(cq->cirq)->flags & UTIL_FLAG_ERROR)) {
-		ofi_cirque_discard(cq->cirq);
-		entry = slist_remove_head(&cq->err_list);
-		err = container_of(entry, struct util_cq_err_entry, list_entry);
-		*buf = err->err_entry;
-		free(err);
-		ret = 0;
-	} else {
+	if (ofi_cirque_isempty(cq->cirq) ||
+	    !(ofi_cirque_head(cq->cirq)->flags & UTIL_FLAG_ERROR)) {
 		ret = -FI_EAGAIN;
+		goto unlock;
 	}
+
+	ofi_cirque_discard(cq->cirq);
+	entry = slist_remove_head(&cq->err_list);
+	err = container_of(entry, struct util_cq_err_entry, list_entry);
+	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) && buf->err_data_size) {
+		err_data_size = MIN(buf->err_data_size, err->err_entry.err_data_size);
+		memcpy(buf->err_data, err->err_entry.err_data, err_data_size);
+		err_buf_save = buf->err_data;
+		*buf = err->err_entry;
+		buf->err_data = err_buf_save;
+		buf->err_data_size = err_data_size;
+	} else {
+		*buf = err->err_entry;
+	}
+	ret = 1;
+	free(err);
+unlock:
 	fastlock_release(&cq->cq_lock);
 	return ret;
 }
