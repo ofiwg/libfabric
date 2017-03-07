@@ -516,19 +516,26 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		pkt_size = sizeof(*pkt) + pkt->hdr.size;
 	}
 
-	if (flags & FI_INJECT & ~FI_COMPLETION) {
-		ret = fi_inject(rxm_conn->msg_ep, pkt, pkt_size, 0);
-		if (ret)
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_inject for MSG provider failed\n");
-		/* release allocated buffer for further reuse */
-		goto done;
-	} else {
-		ret = fi_send(rxm_conn->msg_ep, pkt, pkt_size, desc_tx_buf, 0, tx_entry);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_send for MSG provider failed\n");
+	if ((flags & FI_INJECT) && !(flags & FI_COMPLETION)) {
+		if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
+			ret = fi_inject(rxm_conn->msg_ep, pkt, pkt_size, 0);
+			if (ret)
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_inject for MSG provider failed\n");
+			/* release allocated buffer for further reuse */
 			goto done;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %d) is too "
+				"big for MSG provider (max inject size = %d) \n",
+				pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
 		}
 	}
+
+	ret = fi_send(rxm_conn->msg_ep, pkt, pkt_size, desc_tx_buf, 0, tx_entry);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_send for MSG provider failed\n");
+		goto done;
+	}
+
 	return 0;
 done:
 	util_buf_release(rxm_ep->tx_pool, pkt);
@@ -782,7 +789,7 @@ static int rxm_ep_bind_cq(struct rxm_ep *rxm_ep, struct util_cq *util_cq, uint64
 {
 	int ret;
 
-	if (flags & ~(FI_TRANSMIT | FI_RECV)) {
+	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unsupported flags\n");
 		return -FI_EBADFLAGS;
 	}
