@@ -32,6 +32,7 @@
 
 #include "psmx2.h"
 #include "prov.h"
+#include "glob.h"
 
 static int psmx2_init_count = 0;
 static int psmx2_lib_initialized = 0;
@@ -117,8 +118,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	uint64_t caps = PSMX2_CAPS;
 	uint64_t max_tag_value = -1ULL;
 	int err = -FI_ENODATA;
-	struct stat st;
 	int svc0, svc = PSMX2_ANY_SERVICE;
+	glob_t glob_buf;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
@@ -129,12 +130,24 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 
 	/*
 	 * psm2_ep_num_devunits() may wait for 15 seconds before return
-	 * when /dev/hfi1_0 is not present. Check the existence of this
-	 * device first to avoid this delay.
+	 * when /dev/hfi1_0 is not present. Check the existence of any hfi1
+	 * device interface first to avoid this delay. Note that the devices
+	 * don't necessarily appear consecutively so we need to check all
+	 * possible device names before returning "no device found" error.
+	 * This also means if "/dev/hfi1_0" doesn't exist but other devices
+	 * exist, we are still going to see the delay; but that's a rare case.
 	 */
-	if (stat("/dev/hfi1_0", &st) || psm2_ep_num_devunits(&cnt) || !cnt) {
+	if ((glob("/dev/hfi1_[0-9]", 0, NULL, &glob_buf) != 0) &&
+	    (glob("/dev/hfi1_[0-9][0-9]", GLOB_APPEND, NULL, &glob_buf) != 0)) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"no PSM device is found.\n");
+			"no hfi1 device is found.\n");
+		return -FI_ENODATA;
+	}
+	globfree(&glob_buf);
+
+	if (psm2_ep_num_devunits(&cnt) || !cnt) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"no PSM2 device is found.\n");
 		return -FI_ENODATA;
 	}
 
