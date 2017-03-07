@@ -74,10 +74,12 @@ static struct fi_ops_atomic gnix_sep_atomic_ops;
 
 static void __trx_destruct(void *obj)
 {
+	int index;
 	int __attribute__((unused)) ret;
 	struct gnix_fid_trx *trx = (struct gnix_fid_trx *) obj;
 	struct gnix_fid_ep *ep_priv;
 	struct gnix_fid_sep *sep_priv;
+	struct gnix_fid_av *av;
 	int refs_held;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -87,9 +89,31 @@ static void __trx_destruct(void *obj)
 	sep_priv = trx->sep;
 	assert(sep_priv != NULL);
 
+	/* These assignments must be done before we free ep_priv */
+	av = ep_priv->av;
+	index = ep_priv->src_addr.gnix_addr.cdm_id -
+		sep_priv->cdm_id_base;
+
 	refs_held = _gnix_ref_put(ep_priv);
-	if (refs_held == 0)
+
+	if (refs_held == 0) {
 		_gnix_ref_put(sep_priv->cm_nic);
+		/* Remove the context from the sep's list */
+		if ((index >= 0) &&
+		    (index < sep_priv->info->ep_attr->tx_ctx_cnt)) {
+			if (sep_priv->ep_table[index]) {
+				sep_priv->ep_table[index] = NULL;
+				_gnix_ref_put(av);
+			} else {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "rx/tx context already freed\n");
+			}
+		} else {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "rx/tx context index out of range\n");
+		}
+	}
+
 	_gnix_ref_put(sep_priv);
 
 	free(trx);
@@ -606,6 +630,9 @@ static void __sep_destruct(void *obj)
 				continue;
 			}
 
+			/* tx/rx contexts still open.  This should
+			 * warn in gnix_sep_close, but we will still
+			 * try to clean up a bit. */
 			if (ep->av) {
 				_gnix_ref_put(ep->av);
 			}
