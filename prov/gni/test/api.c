@@ -100,7 +100,7 @@ void rdm_api_setup_ep(void)
 
 	/* Get info about fabric services with the provided hints */
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints[i],
+		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[i],
 				 &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 	}
@@ -441,11 +441,11 @@ Test(api, dom_caps)
 
 	/* we only support REMOTE_COMM */
 	hints[0]->domain_attr->caps = FI_LOCAL_COMM;
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints[0], &fi[0]);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[0], &fi[0]);
 	cr_assert_eq(ret, -FI_ENODATA, "fi_getinfo");
 
 	hints[0]->domain_attr->caps = FI_REMOTE_COMM;
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints[0], &fi[0]);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[0], &fi[0]);
 	cr_assert_eq(ret, 0, "fi_getinfo");
 
 	fi_freeinfo(hints[0]);

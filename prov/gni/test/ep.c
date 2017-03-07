@@ -59,7 +59,7 @@ static void setup(void)
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -94,7 +94,7 @@ Test(endpoint_info, info)
 	cr_assert(hints, "fi_allocinfo");
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 	cr_assert_eq(fi->ep_attr->type, FI_EP_RDM);
 	cr_assert_eq(fi->next->ep_attr->type, FI_EP_DGRAM);
@@ -104,14 +104,14 @@ Test(endpoint_info, info)
 	fi_freeinfo(fi);
 
 	hints->ep_attr->type = FI_EP_RDM;
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 	cr_assert_eq(fi->ep_attr->type, FI_EP_RDM);
 
 	fi_freeinfo(fi);
 
 	hints->ep_attr->type = FI_EP_DGRAM;
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 	cr_assert_eq(fi->ep_attr->type, FI_EP_DGRAM);
 
