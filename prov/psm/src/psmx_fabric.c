@@ -104,8 +104,7 @@ int psmx_fabric(struct fi_fabric_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = ofi_fabric_init(&psmx_prov, &psmx_fabric_attr, attr,
-			     &fabric_priv->util_fabric, context,
-			     FI_MATCH_EXACT);
+			      &fabric_priv->util_fabric, context);
 	if (ret) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE, "ofi_fabric_init returns %d\n", ret);
 		free(fabric_priv);

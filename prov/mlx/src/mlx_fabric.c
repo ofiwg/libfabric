@@ -59,7 +59,7 @@ static struct fi_ops_fabric mlx_fabric_ops = {
 
 int mlx_fabric_open(
 		struct fi_fabric_attr *attr,
-		struct fid_fabric **fabric, 
+		struct fid_fabric **fabric,
 		void *context)
 {
 	struct mlx_fabric *fabric_priv;
@@ -76,11 +76,8 @@ int mlx_fabric_open(
 		return -FI_ENOMEM;
 	}
 
-	status = ofi_fabric_init(
-			&mlx_prov,
-			&mlx_fabric_attrs, attr,
-			&(fabric_priv->u_fabric), context,
-			FI_MATCH_EXACT );
+	status = ofi_fabric_init(&mlx_prov, &mlx_fabric_attrs, attr,
+				 &(fabric_priv->u_fabric), context);
 	if (status) {
 		FI_INFO( &mlx_prov, FI_LOG_CORE,
 			"Error in ofi_fabric_init: %d\n", status);

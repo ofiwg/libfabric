@@ -354,14 +354,14 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if (hints->fabric_attr) {
 		ret = ofi_check_fabric_attr(&fi_ibv_prov, info->fabric_attr,
-				hints->fabric_attr, FI_MATCH_EXACT);
+					    hints->fabric_attr);
 		if (ret)
 			return ret;
 	}
 
 	if (hints->domain_attr) {
 		ret = ofi_check_domain_attr(&fi_ibv_prov, version, info->domain_attr,
-					    hints->domain_attr, FI_MATCH_EXACT);
+					    hints->domain_attr);
 		if (ret)
 			return ret;
 	}

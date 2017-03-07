@@ -283,7 +283,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	fab = container_of(fabric, struct fi_ibv_fabric, util_fabric.fabric_fid);
 	ret = ofi_check_domain_attr(&fi_ibv_prov, fabric->api_version,
-			fi->domain_attr, info->domain_attr, FI_MATCH_EXACT);
+				    fi->domain_attr, info->domain_attr);
 	if (ret)
 		return ret;
 
@@ -440,7 +440,7 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 	for (info = verbs_info; info; info = info->next) {
 		ret = ofi_fabric_init(&fi_ibv_prov, info->fabric_attr, attr,
-				&fab->util_fabric, context, FI_MATCH_EXACT);
+				      &fab->util_fabric, context);
 		if (ret != -FI_ENODATA)
 			break;
 	}

@@ -1720,15 +1720,14 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct rxd_domain *rxd_domain;
 
 	rxd_domain = container_of(domain, struct rxd_domain, util_domain.domain_fid);
-	ret = ofi_check_info(&rxd_util_prov,
-			     rxd_domain->util_domain.fabric->fabric_fid.api_version,
-			     info, FI_MATCH_PREFIX);
+	ret = ofi_check_info(&rxd_util_prov, rxd_domain->util_domain.fabric->
+			     fabric_fid.api_version, info);
 	if (ret)
 		return ret;
 
-	ret = ofix_getinfo(rxd_domain->util_domain.fabric->fabric_fid.api_version,
-			   NULL, NULL, 0, &rxd_util_prov, info,
-			   rxd_alter_layer_info, rxd_alter_base_info, 1, &dg_info);
+	ret = ofi_get_core_info(rxd_domain->util_domain.fabric->fabric_fid.api_version,
+				NULL, NULL, 0, &rxd_util_prov, info,
+				rxd_info_to_core, &dg_info);
 	if (ret)
 		return ret;
 

@@ -198,10 +198,8 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 		return -ENOMEM;
 	}
 
-	ofi_status = ofi_endpoint_init(
-				domain, &mlx_util_prov, info,
-				&ep->ep, context,
-				mlx_ep_progress, FI_MATCH_EXACT);
+	ofi_status = ofi_endpoint_init(domain, &mlx_util_prov, info,
+				       &ep->ep, context, mlx_ep_progress);
 	if (ofi_status) {
 		goto free_ep;
 	}
@@ -219,7 +217,7 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	ep->ep.ep_fid.ops = &mlx_ep_ops;
 	ep->ep.ep_fid.cm = &mlx_cm_ops;
 	ep->ep.ep_fid.tagged = &mlx_tagged_ops;
-	ep->ep.flags = info->mode; 
+	ep->ep.flags = info->mode;
 	ep->ep.caps = u_domain->u_domain.caps;
 
 	*fid = &(ep->ep.ep_fid);

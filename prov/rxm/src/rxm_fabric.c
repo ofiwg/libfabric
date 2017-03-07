@@ -100,7 +100,7 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		return -FI_ENOMEM;
 
 	ret = ofi_fabric_init(&rxm_prov, &rxm_fabric_attr, attr,
-			     &rxm_fabric->util_fabric, context, FI_MATCH_PREFIX);
+			      &rxm_fabric->util_fabric, context);
 	if (ret)
 		goto err1;
 
@@ -112,9 +112,8 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	hints.fabric_attr->name = attr->name;
 	hints.mode = rxm_info.mode;
 
-	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
-			&hints, rxm_alter_layer_info,
-			rxm_alter_base_info, 1, &msg_info);
+	ret = ofi_get_core_info(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
+				&hints, rxm_info_to_core, &msg_info);
 	if (ret) {
 		ret = -FI_EINVAL;
 		goto err3;

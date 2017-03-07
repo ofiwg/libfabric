@@ -75,8 +75,7 @@ int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct util_domain *util_domain;
 	int ret;
 
-	ret = ofi_check_info(&udpx_util_prov, fabric->api_version, info,
-			     FI_MATCH_EXACT);
+	ret = ofi_check_info(&udpx_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 

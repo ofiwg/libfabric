@@ -35,35 +35,35 @@
 #include <prov.h>
 #include "rxm.h"
 
-int rxm_alter_layer_info(struct fi_info *layer_info, struct fi_info *base_info)
+int rxm_info_to_core(struct fi_info *rxm_info, struct fi_info *core_info)
 {
-	/* TODO choose base_info attr based on layer_info attr */
-	base_info->caps = FI_MSG;
-	base_info->mode = FI_LOCAL_MR;
-	base_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
-	base_info->ep_attr->type = FI_EP_MSG;
+	/* TODO choose core_info attr based on rxm_info attr */
+	core_info->caps = FI_MSG;
+	core_info->mode = FI_LOCAL_MR;
+	core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+	core_info->ep_attr->type = FI_EP_MSG;
 
 	return 0;
 }
 
-int rxm_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info)
+int rxm_info_to_rxm(struct fi_info *core_info, struct fi_info *info)
 {
-	// TODO choose caps based on base_info caps
-	layer_info->caps = rxm_info.caps;
-	layer_info->mode = rxm_info.mode;
+	// TODO choose caps based on core_info caps
+	info->caps = rxm_info.caps;
+	info->mode = rxm_info.mode;
 
-	*layer_info->tx_attr = *rxm_info.tx_attr;
-	layer_info->tx_attr->iov_limit = MIN(MIN(layer_info->tx_attr->iov_limit,
-			base_info->tx_attr->iov_limit),
-			base_info->tx_attr->rma_iov_limit);
+	*info->tx_attr = *rxm_info.tx_attr;
+	info->tx_attr->iov_limit = MIN(MIN(info->tx_attr->iov_limit,
+			core_info->tx_attr->iov_limit),
+			core_info->tx_attr->rma_iov_limit);
 
-	*layer_info->rx_attr = *rxm_info.rx_attr;
-	layer_info->rx_attr->iov_limit = MIN(layer_info->rx_attr->iov_limit,
-			base_info->rx_attr->iov_limit);
+	*info->rx_attr = *rxm_info.rx_attr;
+	info->rx_attr->iov_limit = MIN(info->rx_attr->iov_limit,
+			core_info->rx_attr->iov_limit);
 
-	*layer_info->ep_attr = *rxm_info.ep_attr;
-	layer_info->ep_attr->max_msg_size = base_info->ep_attr->max_msg_size;
-	*layer_info->domain_attr = *rxm_info.domain_attr;
+	*info->ep_attr = *rxm_info.ep_attr;
+	info->ep_attr->max_msg_size = core_info->ep_attr->max_msg_size;
+	*info->domain_attr = *rxm_info.domain_attr;
 
 	return 0;
 }
@@ -72,7 +72,7 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	return ofix_getinfo(version, node, service, flags, &rxm_util_prov,
-			hints, rxm_alter_layer_info, rxm_alter_base_info, 0, info);
+			    hints, rxm_info_to_core, rxm_info_to_rxm, info);
 }
 
 static void rxm_fini(void)

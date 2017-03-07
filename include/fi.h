@@ -61,6 +61,8 @@
 extern "C" {
 #endif
 
+#define OFI_CORE_PROV_ONLY	(1ULL << 59)
+
 /*
  * OS X doesn't have __BYTE_ORDER, Linux usually has BYTE_ORDER but not under
  * all features.h flags
@@ -112,6 +114,7 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 /* Restrict to size of struct fi_context */
 struct fi_prov_context {
 	int disable_logging;
+	int is_util_prov;
 };
 
 struct fi_filter {
@@ -122,6 +125,7 @@ struct fi_filter {
 extern struct fi_filter prov_log_filter;
 extern struct fi_provider core_prov;
 
+int ofi_is_util_prov(struct fi_provider *provider);
 void ofi_create_filter(struct fi_filter *filter, const char *env_name);
 void ofi_free_filter(struct fi_filter *filter);
 int ofi_apply_filter(struct fi_filter *filter, const char *name);

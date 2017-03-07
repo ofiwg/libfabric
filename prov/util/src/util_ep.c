@@ -54,8 +54,8 @@ int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av)
 }
 
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
-		struct fi_info *info, struct util_ep *ep, void *context,
-		ofi_ep_progress_func progress, enum fi_match_type type)
+		      struct fi_info *info, struct util_ep *ep, void *context,
+		      ofi_ep_progress_func progress)
 {
 	struct util_domain *util_domain;
 	int ret;
@@ -65,8 +65,8 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	if (!info || !info->ep_attr || !info->rx_attr || !info->tx_attr)
 		return -FI_EINVAL;
 
-	ret = ofi_check_info(util_prov, util_domain->fabric->fabric_fid.api_version,
-			     info, type);
+	ret = ofi_check_info(util_prov,
+			     util_domain->fabric->fabric_fid.api_version, info);
 	if (ret)
 		return ret;
 

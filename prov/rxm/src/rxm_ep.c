@@ -916,9 +916,8 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 	struct fi_cq_attr cq_attr;
 	int ret;
 
-	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
-			rxm_fi_info, rxm_alter_layer_info, rxm_alter_base_info,
-			1, &rxm_ep->msg_info);
+	ret = ofi_get_core_info(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
+				rxm_fi_info, rxm_info_to_core, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
 
@@ -958,9 +957,9 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 	/* Zero out the port as we would be creating multiple MSG EPs for a single
 	 * RXM EP and we don't want address conflicts. */
 	if (rxm_ep->msg_info->src_addr) {
-		if (((struct sockaddr *)rxm_ep->msg_info->src_addr)->sa_family == AF_INET) 
+		if (((struct sockaddr *)rxm_ep->msg_info->src_addr)->sa_family == AF_INET)
 			((struct sockaddr_in *)(rxm_ep->msg_info->src_addr))->sin_port = 0;
-		else 
+		else
 			((struct sockaddr_in6 *)(rxm_ep->msg_info->src_addr))->sin6_port = 0;
 	}
 
@@ -997,7 +996,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	ret = ofi_endpoint_init(domain, &rxm_util_prov, info, &rxm_ep->util_ep,
-			context, &rxm_ep_progress, FI_MATCH_PREFIX);
+				context, &rxm_ep_progress);
 	if (ret)
 		goto err1;
 
