@@ -82,6 +82,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.threading		= FI_THREAD_SAFE,
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
+	.resource_mgmt		= FI_RM_ENABLED,
 	.mr_mode		= FI_MR_BASIC,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= sizeof_field(struct ibv_send_wr, imm_data),
@@ -660,7 +661,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 				goto err;
 			}
 		}
-		fi->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	}
 
 	switch (ctx->device->transport_type) {
