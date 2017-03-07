@@ -389,7 +389,6 @@ Test(mr_internal_bare, bug_1086)
 	
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
-	cr_assert(atomic_get(&g_nic->ref_cnt.references) == 0);
 }
 
 /* Test invalid flags to fi_mr_reg */
