@@ -1328,6 +1328,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	struct fid_mr *auto_mr = NULL;
 	struct gnix_fab_req *more_req;
 	struct slist_entry *sle;
+	int connected;
 
 	if (!(flags & FI_INJECT) && !ep->send_cq &&
 	    (((fr_type == GNIX_FAB_RQ_RDMA_WRITE) && !ep->write_cntr) ||
@@ -1512,8 +1513,13 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 			(void *)loc_addr, (void *)rem_addr, len);
 
 	rc = _gnix_vc_queue_tx_req(req);
+	connected = (vc->conn_state == GNIX_VC_CONNECTED);
 
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	/* If a new VC was allocated, progress CM before returning. */
+	if (!connected)
+		_gnix_cm_nic_progress(ep->cm_nic);
 
 	return rc;
 

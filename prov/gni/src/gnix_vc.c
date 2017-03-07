@@ -2065,6 +2065,13 @@ int _gnix_vc_tx_schedule(struct gnix_vc *vc)
  * Note: EP must be locked. */
 int _gnix_vc_sched_new_conn(struct gnix_vc *vc)
 {
+	int ret;
+
+	ret = __gnix_vc_push_tx_reqs(vc);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_DATA, "__gnix_vc_push_tx_reqs failed: %d\n",
+			  ret);
+	}
 	return _gnix_vc_schedule(vc);
 }
 

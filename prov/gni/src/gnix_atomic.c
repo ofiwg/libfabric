@@ -495,6 +495,7 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	uint64_t compare_operand = 0;
 	void *loc_addr = NULL;
 	int dt_len, dt_align;
+	int connected;
 
 	if (!(flags & FI_INJECT) && !ep->send_cq &&
 	    (((fr_type == GNIX_FAB_RQ_AMO ||
@@ -659,8 +660,13 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	req->vc = vc;
 
 	rc = _gnix_vc_queue_tx_req(req);
+	connected = (vc->conn_state == GNIX_VC_CONNECTED);
 
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	/* If a new VC was allocated, progress CM before returning. */
+	if (!connected)
+		_gnix_cm_nic_progress(ep->cm_nic);
 
 	return rc;
 
