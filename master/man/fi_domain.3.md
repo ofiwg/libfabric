@@ -448,6 +448,10 @@ The following values may be specified.
 : Registered memory regions are referenced by peers using the virtual address
   of the registered memory region, rather than a 0-based offset.
 
+*FI_MR_ALLOCATED*
+: Indicates that memory registration occurs on allocated data buffers, and
+  physical pages must back all virtual addresses being registered.
+
 *FI_MR_PROV_KEY*
 : Memory registration keys are selected and returned by the provider.
 
@@ -468,8 +472,8 @@ The following values may be specified.
 *FI_MR_BASIC*
 : Defined for compatibility -- library versions 1.4 and earlier.  Only
   basic memory registration operations are requested or supported.
-  This mode is equivalent to the FI_MR_VIRT_ADDR and FI_MR_PROV_KEY
-  flags being set in later library versions.
+  This mode is equivalent to the FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, and
+  FI_MR_PROV_KEY flags being set in later library versions.
 
 *FI_MR_SCALABLE*
 : Defined for compatibility -- library versions 1.4 and earlier.
@@ -600,6 +604,10 @@ level features that are supported by the provider.
 : Indicates that the domain supports the ability to share address
   vectors among multiple processes using the named address vector
   feature.
+
+See [`fi_getinfo`(3)](fi_getinfo.3.html) for a discussion on primary versus
+secondary capabilities.  All domain capabilities are considered secondary
+capabilities.
 
 ## mode
 
