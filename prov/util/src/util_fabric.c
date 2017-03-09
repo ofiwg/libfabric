@@ -63,7 +63,6 @@ int ofi_fabric_init(const struct fi_provider *prov,
 	dlist_init(&fabric->domain_list);
 	fastlock_init(&fabric->lock);
 	fabric->name = prov_attr->name;
-	fabric->api_version = user_attr->api_version;
 
 	fabric->fabric_fid.fid.fclass = FI_CLASS_FABRIC;
 	fabric->fabric_fid.fid.context = context;

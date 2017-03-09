@@ -68,7 +68,7 @@ extern "C" {
  * tarball/libfabric package version number).
  */
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 4
+#define FI_MINOR_VERSION 5
 
 enum {
 	FI_PATH_MAX		= 256,
@@ -446,6 +446,7 @@ struct fi_ops_fabric {
 struct fid_fabric {
 	struct fid		fid;
 	struct fi_ops_fabric	*ops;
+	uint32_t		api_version;
 };
 
 int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context);

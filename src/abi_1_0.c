@@ -73,6 +73,20 @@ struct fi_domain_attr_1_0 {
 	size_t				max_ep_srx_ctx;
 };
 
+struct fi_ep_attr_1_0 {
+	enum fi_ep_type		type;
+	uint32_t		protocol;
+	uint32_t		protocol_version;
+	size_t			max_msg_size;
+	size_t			msg_prefix_size;
+	size_t			max_order_raw_size;
+	size_t			max_order_war_size;
+	size_t			max_order_waw_size;
+	uint64_t		mem_tag_format;
+	size_t			tx_ctx_cnt;
+	size_t			rx_ctx_cnt;
+};
+
 struct fi_info_1_0 {
 	struct fi_info			*next;
 	uint64_t			caps;
@@ -85,7 +99,7 @@ struct fi_info_1_0 {
 	fid_t				handle;
 	struct fi_tx_attr		*tx_attr;
 	struct fi_rx_attr		*rx_attr;
-	struct fi_ep_attr		*ep_attr;
+	struct fi_ep_attr_1_0		*ep_attr;
 	struct fi_domain_attr_1_0	*domain_attr;
 	struct fi_fabric_attr_1_0	*fabric_attr;
 };

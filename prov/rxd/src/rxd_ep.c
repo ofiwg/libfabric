@@ -1721,14 +1721,14 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	rxd_domain = container_of(domain, struct rxd_domain, util_domain.domain_fid);
 	ret = ofi_check_info(&rxd_util_prov,
-			     rxd_domain->util_domain.fabric->api_version,
+			     rxd_domain->util_domain.fabric->fabric_fid.api_version,
 			     info, FI_MATCH_PREFIX);
 	if (ret)
 		return ret;
 
-	ret = ofix_getinfo(rxd_domain->util_domain.fabric->api_version, NULL, NULL,
-			   0, &rxd_util_prov, info, rxd_alter_layer_info,
-			   rxd_alter_base_info, 1, &dg_info);
+	ret = ofix_getinfo(rxd_domain->util_domain.fabric->fabric_fid.api_version,
+			   NULL, NULL, 0, &rxd_util_prov, info,
+			   rxd_alter_layer_info, rxd_alter_base_info, 1, &dg_info);
 	if (ret)
 		return ret;
 

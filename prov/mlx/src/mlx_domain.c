@@ -73,7 +73,6 @@ struct fi_ops_mr mlx_mr_ops = {
 int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
                      struct fid_domain **fid, void *context)
 {
-	struct mlx_fabric *fab;
 	ucs_status_t status = UCS_OK;
 	int ofi_status;
 	struct mlx_domain* domain;
@@ -84,15 +83,13 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	fab = container_of(fabric, struct mlx_fabric, u_fabric.fabric_fid);
-	ofi_status = ofi_check_info(&mlx_util_prov, fab->u_fabric.api_version,
+	ofi_status = ofi_check_info(&mlx_util_prov, fabric->api_version,
 				    info, FI_MATCH_EXACT);
 	if (ofi_status) {
 		return ofi_status;
 	}
 
-	domain = (struct mlx_domain*)
-				calloc(1, sizeof(struct mlx_domain));
+	domain = calloc(1, sizeof(struct mlx_domain));
 	if (!domain) {
 		return -ENOMEM;
 	}

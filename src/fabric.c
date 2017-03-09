@@ -703,6 +703,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric, void *context)
 {
 	struct fi_prov *prov;
+	int ret;
 
 	if (!attr || !attr->prov_name || !attr->name)
 		return -FI_EINVAL;
@@ -714,7 +715,10 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 	if (!prov || !prov->provider->fabric)
 		return -FI_ENODEV;
 
-	return prov->provider->fabric(attr, fabric, context);
+	ret = prov->provider->fabric(attr, fabric, context);
+	if (!ret && FI_VERSION_GE(prov->provider->fi_version, FI_VERSION(1, 5)))
+		(*fabric)->api_version = attr->api_version;
+	return ret;
 }
 CURRENT_SYMVER(fi_fabric_, fi_fabric);
 
