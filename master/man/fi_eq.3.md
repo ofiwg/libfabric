@@ -151,7 +151,7 @@ struct fi_eq_attr {
 - *FI_WAIT_NONE*
 : Used to indicate that the user will not block (wait) for events on
   the EQ.  When FI_WAIT_NONE is specified, the application may not
-  call fi_eq_sread.
+  call fi_eq_sread.  This is the default is no wait object is specified.
 
 - *FI_WAIT_UNSPEC*
 : Specifies that the user will only wait on the EQ using fabric
