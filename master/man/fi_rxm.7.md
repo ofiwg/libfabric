@@ -59,7 +59,7 @@ base MSG provider.
 
 RxM provider does not support the following features:
 
-  * op_flags: FI_INJECT, FI_COMPLETION, FI_CLAIM, FI_PEEK, FI_FENCE.
+  * op_flags: FI_INJECT, FI_CLAIM, FI_PEEK, FI_FENCE.
 
   * FI_ATOMIC
 
