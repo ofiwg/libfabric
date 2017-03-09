@@ -222,7 +222,7 @@ struct fi_cq_tagged_entry {
   CQ, in order to use it in other system calls.  The following values
   may be used to specify the type of wait object associated with a
   CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD, and
-  FI_WAIT_MUTEX_COND.
+  FI_WAIT_MUTEX_COND.  The default is FI_WAIT_NONE.
 
 - *FI_WAIT_NONE*
 : Used to indicate that the user will not block (wait) for completions
