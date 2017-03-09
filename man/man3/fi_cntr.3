@@ -1,4 +1,4 @@
-.TH "fi_cntr" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cntr" "3" "2017\-03\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cntr \- Completion and event counter operations
@@ -112,6 +112,7 @@ associated with a counter, in order to use it in other system calls.
 The following values may be used to specify the type of wait object
 associated with a counter: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET,
 FI_WAIT_FD, and FI_WAIT_MUTEX_COND.
+The default is FI_WAIT_NONE.
 .IP \[bu] 2
 \f[I]FI_WAIT_NONE\f[] : Used to indicate that the user will not block
 (wait) for events on the counter.
