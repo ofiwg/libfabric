@@ -2322,9 +2322,6 @@ Test(scalable, av_insert)
 	ret = fi_domain(fab, fi[0], &dom[0], NULL);
 	cr_assert(!ret, "fi_domain");
 
-	ret = fi_scalable_ep(dom[0], fi[0], &sep[0], NULL);
-	cr_assert(!ret, "fi_scalable_ep");
-
 	for (i = 0; i < NUMEPS; i++) {
 		ret = fi_scalable_ep(dom[0], fi[0], &sep[i], NULL);
 		cr_assert(!ret, "fi_scalable_ep");
