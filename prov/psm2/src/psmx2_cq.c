@@ -345,7 +345,7 @@ out:
 }
 
 int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
-		     struct psmx2_fid_domain *domain,
+		     struct psmx2_trx_ctxt *trx_ctxt,
 		     struct psmx2_cq_event *event_in,
 		     int count, fi_addr_t *src_addr)
 {
@@ -371,14 +371,14 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 		 * freed because the two psm2_mq_ipeek calls may return the
 		 * same request. Use a lock to ensure that won't happen.
 		 */
-		if (fastlock_tryacquire(&domain->base_trx_ctxt->poll_lock))
+		if (fastlock_tryacquire(&trx_ctxt->poll_lock))
 			return read_count;
 
-		err = psm2_mq_ipeek(domain->base_trx_ctxt->psm2_mq, &psm2_req, NULL);
+		err = psm2_mq_ipeek(trx_ctxt->psm2_mq, &psm2_req, NULL);
 
 		if (err == PSM2_OK) {
 			err = psm2_mq_test2(&psm2_req, &psm2_status);
-			fastlock_release(&domain->base_trx_ctxt->poll_lock);
+			fastlock_release(&trx_ctxt->poll_lock);
 
 			fi_context = psm2_status.context;
 
@@ -629,10 +629,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			return read_count;
 		} else if (err == PSM2_MQ_NO_COMPLETIONS) {
-			fastlock_release(&domain->base_trx_ctxt->poll_lock);
+			fastlock_release(&trx_ctxt->poll_lock);
 			return read_count;
 		} else {
-			fastlock_release(&domain->base_trx_ctxt->poll_lock);
+			fastlock_release(&trx_ctxt->poll_lock);
 			return psmx2_errno(err);
 		}
 	}
@@ -651,13 +651,13 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 
 	if (slist_empty(&cq_priv->event_queue) || !buf) {
-		ret = psmx2_cq_poll_mq(cq_priv, cq_priv->domain,
+		ret = psmx2_cq_poll_mq(cq_priv, cq_priv->trx_ctxt,
 				       (struct psmx2_cq_event *)buf, count, src_addr);
 		if (ret > 0)
 			return ret;
 
-		if (cq_priv->domain->base_trx_ctxt->am_initialized)
-			psmx2_am_progress(cq_priv->domain->base_trx_ctxt);
+		if (cq_priv->trx_ctxt->am_initialized)
+			psmx2_am_progress(cq_priv->trx_ctxt);
 	}
 
 	if (cq_priv->pending_error)
@@ -762,7 +762,7 @@ static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		} else {
 			clock_gettime(CLOCK_REALTIME, &ts0);
 			while (1) {
-				if (psmx2_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL))
+				if (psmx2_cq_poll_mq(cq_priv, cq_priv->trx_ctxt, NULL, 0, NULL))
 					break;
 
 				/* CQ may be updated asynchronously by the AM handlers */

@@ -467,7 +467,7 @@ static int psmx2_av_query_seps(struct psmx2_fid_av *av, size_t count, psm2_epid_
 	 * (2) to simplify the logic of generating the final completion event.
 	 */
 	while (ofi_atomic_get32(&req->pending))
-		psmx2_progress(av->domain);
+		psmx2_progress_all(av->domain);
 
 	if (req) {
 		error_count = ofi_atomic_get32(&req->error_count);

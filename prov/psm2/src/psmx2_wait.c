@@ -62,7 +62,7 @@ static void *psmx2_wait_progress(void *args)
 
 		psmx2_wait_thread_busy = 1;
 		while (psmx2_wait_thread_enabled)
-			psmx2_progress(domain);
+			psmx2_progress_all(domain);
 
 		psmx2_wait_thread_busy = 0;
 

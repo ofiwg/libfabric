@@ -222,7 +222,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 					(has_data ? FI_REMOTE_CQ_DATA : 0),
 			PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_REMOTE_WRITE_CONTEXT;
 			PSMX2_CTXT_USER(&req->fi_context) = mr;
-			psmx2_am_enqueue_rma(mr->domain->base_trx_ctxt, req);
+			psmx2_am_enqueue_rma(trx_ctxt, req);
 		}
 		break;
 
@@ -293,7 +293,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 			req->read.peer_vl = src_vl;
 			PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_REMOTE_READ_CONTEXT;
 			PSMX2_CTXT_USER(&req->fi_context) = mr;
-			psmx2_am_enqueue_rma(mr->domain->base_trx_ctxt, req);
+			psmx2_am_enqueue_rma(trx_ctxt, req);
 		}
 		break;
 

@@ -227,7 +227,7 @@ static void *psmx2_progress_func(void *args)
 	ts.tv_nsec = (sleep_usec % 1000000) * 1000;
 
 	while (1) {
-		psmx2_progress(domain);
+		psmx2_progress_all(domain);
 		nanosleep(&ts, NULL);
 	}
 
@@ -372,6 +372,9 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	ofi_atomic_initialize32(&domain->sep_cnt, 0);
 	fastlock_init(&domain->sep_lock);
 	dlist_init(&domain->sep_list);
+	dlist_init(&domain->trx_ctxt_list);
+	fastlock_init(&domain->trx_ctxt_lock);
+	dlist_insert_before(&domain->base_trx_ctxt->entry, &domain->trx_ctxt_list);
 
 	/* Set active domain before psmx2_domain_enable_ep() installs the
 	 * AM handlers to ensure that psmx2_active_fabric->active_domain

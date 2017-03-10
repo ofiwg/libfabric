@@ -92,6 +92,7 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 #define PSMX2_MAX_TRX_CTXT	(80)
+#define PSMX2_ALL_TRX_CTXT	((void *)-1)
 #define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX2_INJECT_SIZE	(64)
 #define PSMX2_MSG_ORDER		FI_ORDER_SAS
@@ -373,7 +374,7 @@ struct psmx2_trx_ctxt {
 	 */
 	fastlock_t		poll_lock;
 
-	struct slist_entry	entry;
+	struct dlist_entry	entry;
 };
 
 struct psmx2_fid_domain {
@@ -391,7 +392,8 @@ struct psmx2_fid_domain {
 	 * A list of all opened hw contexts, including the base hw context.
 	 * The list is used for making progress.
 	 */
-	struct slist		trx_ctxt_list;
+	fastlock_t		trx_ctxt_lock;
+	struct dlist_entry	trx_ctxt_list;
 
 	/*
 	 * The base hw context is multiplexed for all regular endpoints via
@@ -451,6 +453,7 @@ struct psmx2_cq_event {
 struct psmx2_fid_cq {
 	struct fid_cq			cq;
 	struct psmx2_fid_domain		*domain;
+	struct psmx2_trx_ctxt		*trx_ctxt;
 	int 				format;
 	int				entry_size;
 	size_t				event_count;
@@ -700,6 +703,7 @@ struct psmx2_fid_cntr {
 		struct util_cntr	util_cntr; /* for util_poll_run */
 	};
 	struct psmx2_fid_domain	*domain;
+	struct psmx2_trx_ctxt	*trx_ctxt;
 	int			events;
 	uint64_t		flags;
 	ofi_atomic64_t		counter;
@@ -911,7 +915,7 @@ struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
 					size_t olen, int err);
-int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_fid_domain *domain,
+int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_trx_ctxt *trx_ctxt,
 			struct psmx2_cq_event *event, int count, fi_addr_t *src_addr);
 
 psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
@@ -972,13 +976,26 @@ static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name 
 	name->vlane = PSMX2_ADDR_TO_VL(source);
 }
 
-static inline void psmx2_progress(struct psmx2_fid_domain *domain)
+static inline void psmx2_progress(struct psmx2_trx_ctxt *trx_ctxt)
 {
-	if (domain) {
-		psmx2_cq_poll_mq(NULL, domain, NULL, 0, NULL);
-		if (domain->base_trx_ctxt->am_initialized)
-			psmx2_am_progress(domain->base_trx_ctxt);
+	if (trx_ctxt) {
+		psmx2_cq_poll_mq(NULL, trx_ctxt, NULL, 0, NULL);
+		if (trx_ctxt->am_initialized)
+			psmx2_am_progress(trx_ctxt);
 	}
+}
+
+static inline void psmx2_progress_all(struct psmx2_fid_domain *domain)
+{
+	struct dlist_entry *item;
+	struct psmx2_trx_ctxt *trx_ctxt;
+
+	fastlock_acquire(&domain->trx_ctxt_lock);
+	dlist_foreach(&domain->trx_ctxt_list, item) {
+		trx_ctxt = container_of(item, struct psmx2_trx_ctxt, entry);
+		psmx2_progress(trx_ctxt);
+	}
+	fastlock_release(&domain->trx_ctxt_lock);
 }
 
 /* The following functions are used by triggered operations */

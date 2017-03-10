@@ -291,6 +291,13 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cq = container_of(bfid, struct psmx2_fid_cq, cq.fid);
 		if (ep->domain != cq->domain)
 			return -FI_EINVAL;
+		if (cq->trx_ctxt == PSMX2_ALL_TRX_CTXT) {
+			/* do nothing */
+		} else if (!cq->trx_ctxt) {
+			cq->trx_ctxt = ep->trx_ctxt;
+		} else if (cq->trx_ctxt != ep->trx_ctxt) {
+			return -FI_EINVAL;
+		}
 		if (flags & FI_SEND) {
 			ep->send_cq = cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
@@ -308,6 +315,13 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cntr = container_of(bfid, struct psmx2_fid_cntr, cntr.fid);
 		if (ep->domain != cntr->domain)
 			return -FI_EINVAL;
+		if (cntr->trx_ctxt == PSMX2_ALL_TRX_CTXT) {
+			/* do nothing */
+		} else if (!cntr->trx_ctxt) {
+			cntr->trx_ctxt = ep->trx_ctxt;
+		} else if (cntr->trx_ctxt != ep->trx_ctxt) {
+			return -FI_EINVAL;
+		}
 		if (flags & FI_SEND)
 			ep->send_cntr = cntr;
 		if (flags & FI_RECV)
@@ -737,6 +751,10 @@ static int psmx2_sep_close(fid_t fid)
 	for (i = 0; i < sep->ctxt_cnt; i++) {
 		if (sep->ctxts[i].ep)
 			fi_close(&sep->ctxts[i].ep->ep.fid);
+
+		fastlock_acquire(&sep->domain->trx_ctxt_lock);
+		dlist_remove(&sep->ctxts[i].trx_ctxt->entry);
+		fastlock_release(&sep->domain->trx_ctxt_lock);
 		psmx2_trx_ctxt_free(sep->ctxts[i].trx_ctxt);
 	}
 
@@ -907,8 +925,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 		if (err)
 			goto errout_free_ctxt;
 
-		/* modify the fi_ops: especially close op */
-
+		trx_ctxt->ep = ep_priv;
 		sep_priv->ctxts[i].ep = ep_priv;
 	}
 
@@ -926,6 +943,13 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	fastlock_acquire(&domain_priv->sep_lock);
 	dlist_insert_before(&sep_priv->entry, &domain_priv->sep_list);
 	fastlock_release(&domain_priv->sep_lock);
+
+	fastlock_acquire(&domain_priv->trx_ctxt_lock);
+	for (i = 0; i< ctxt_cnt; i++) {
+		dlist_insert_before(&sep_priv->ctxts[i].trx_ctxt->entry,
+				    &domain_priv->trx_ctxt_list);
+	}
+	fastlock_release(&domain_priv->trx_ctxt_lock);
 
 	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
 	ep_name.sep_id = sep_priv->id;
