@@ -417,7 +417,6 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				return -FI_EINVAL;
 			}
 			ep->av = av;
-			_gnix_ep_init_vc(ep);
 			_gnix_ref_get(ep->av);
 		}
 
