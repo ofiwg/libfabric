@@ -78,6 +78,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	struct fi_ibv_cq *cq;
 	struct fi_ibv_wce *wce;
 	struct slist_entry *slist_entry;
+	uint32_t api_version;
 
 	cq = container_of(cq_fid, struct fi_ibv_cq, cq_fid);
 
@@ -89,6 +90,8 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	if (!wce->wc.status)
 		goto err;
 
+	api_version = cq->domain->fab->util_fabric.fabric_fid.api_version;
+
 	slist_entry = slist_remove_head(&cq->wcq);
 	fastlock_release(&cq->lock);
 
@@ -98,8 +101,16 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	entry->flags = fi_ibv_comp_flags(&wce->wc);
 	entry->err = EIO;
 	entry->prov_errno = wce->wc.status;
-	memcpy(&entry->err_data, &wce->wc.vendor_err,
-	       sizeof(wce->wc.vendor_err));
+
+	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) &&
+		entry->err_data && entry->err_data_size) {
+		entry->err_data_size = MIN(entry->err_data_size,
+			sizeof(wce->wc.vendor_err));
+		memcpy(entry->err_data, &wce->wc.vendor_err, entry->err_data_size);
+	} else {
+		memcpy(&entry->err_data, &wce->wc.vendor_err,
+			sizeof(wce->wc.vendor_err));
+	}
 
 	util_buf_release(cq->wce_pool, wce);
 	return sizeof(*entry);

@@ -186,6 +186,7 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
                              uint64_t flags)
 {
 	ssize_t ret = 0;
+	uint32_t api_version;
 	struct fi_ibv_rdm_cq *cq =
 		container_of(cq_fid, struct fi_ibv_rdm_cq, cq_fid.fid);
 
@@ -202,7 +203,13 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 		entry->olen = -1; /* TODO: */
 		entry->err = err_request->state.err;
 		entry->prov_errno = -err_request->state.err;
-		entry->err_data = NULL;
+
+		api_version = cq->domain->fab->util_fabric.fabric_fid.api_version;
+
+		if (!entry->err_data_size)
+			entry->err_data = NULL;
+		else if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+			entry->err_data_size = 0;
 
 		if (err_request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", err_request,
