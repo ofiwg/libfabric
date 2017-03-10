@@ -204,7 +204,7 @@ static struct fi_info *_gnix_allocinfo(void)
 
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
-	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
+	gnix_info->domain_attr->mr_mode = OFI_MR_BASIC_MAP;
 	gnix_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	gnix_info->domain_attr->max_ep_tx_ctx = GNIX_SEP_MAX_CNT;
@@ -505,10 +505,14 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				gnix_info->domain_attr->data_progress =
 					hints->domain_attr->data_progress;
 
+
 			switch (hints->domain_attr->mr_mode) {
 			case FI_MR_UNSPEC:
 			case FI_MR_BASIC:
-				gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
+				if (FI_VERSION_GE(version, FI_VERSION(1, 5))) {
+					hints->domain_attr->mr_mode =
+						OFI_MR_BASIC_MAP;
+				}
 				break;
 			case FI_MR_SCALABLE:
 				goto err;

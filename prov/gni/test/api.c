@@ -448,6 +448,12 @@ Test(api, dom_caps)
 	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[0], &fi[0]);
 	cr_assert_eq(ret, 0, "fi_getinfo");
 
+	fi_freeinfo(fi[0]);
+
+	hints[0]->domain_attr->mr_mode = FI_MR_UNSPEC;
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints[0], &fi[0]);
+	cr_assert_eq(ret, 0, "fi_getinfo");
+
 	fi_freeinfo(hints[0]);
 	fi_freeinfo(fi[0]);
 }
