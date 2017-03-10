@@ -354,7 +354,7 @@ static void sock_pe_report_rx_error(struct sock_pe_entry *pe_entry, int rem, int
 		fi_cntr_adderr(&pe_entry->comp->recv_cntr->cntr_fid, 1);
 	if (pe_entry->comp->recv_cq)
 		sock_cq_report_error(pe_entry->comp->recv_cq, pe_entry, rem,
-				     err, -err, NULL);
+				     err, -err, NULL, 0);
 }
 
 static void sock_pe_report_tx_error(struct sock_pe_entry *pe_entry, int rem, int err)
@@ -363,7 +363,7 @@ static void sock_pe_report_tx_error(struct sock_pe_entry *pe_entry, int rem, int
 		fi_cntr_adderr(&pe_entry->comp->send_cntr->cntr_fid, 1);
 	if (pe_entry->comp->send_cq)
 		sock_cq_report_error(pe_entry->comp->send_cq, pe_entry, rem,
-				     err, -err, NULL);
+				     err, -err, NULL, 0);
 }
 
 static void sock_pe_report_tx_rma_read_err(struct sock_pe_entry *pe_entry,
@@ -373,7 +373,7 @@ static void sock_pe_report_tx_rma_read_err(struct sock_pe_entry *pe_entry,
 		fi_cntr_adderr(&pe_entry->comp->read_cntr->cntr_fid, 1);
 	if (pe_entry->comp->send_cq)
 		sock_cq_report_error(pe_entry->comp->send_cq, pe_entry, 0,
-				     err, -err, NULL);
+				     err, -err, NULL, 0);
 }
 
 static void sock_pe_report_tx_rma_write_err(struct sock_pe_entry *pe_entry,
@@ -383,7 +383,7 @@ static void sock_pe_report_tx_rma_write_err(struct sock_pe_entry *pe_entry,
 		fi_cntr_adderr(&pe_entry->comp->write_cntr->cntr_fid, 1);
 	if (pe_entry->comp->send_cq)
 		sock_cq_report_error(pe_entry->comp->send_cq, pe_entry, 0,
-				     err, -err, NULL);
+			 	     err, -err, NULL, 0);
 }
 
 static void sock_pe_progress_pending_ack(struct sock_pe *pe,
@@ -1303,7 +1303,7 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 		sock_pe_report_recv_completion(&pe_entry);
 	} else {
 		sock_cq_report_error(rx_ctx->comp.recv_cq, &pe_entry, 0,
-				     FI_ENOMSG, -FI_ENOMSG, NULL);
+				     FI_ENOMSG, -FI_ENOMSG, NULL, 0);
 	}
 	fastlock_release(&rx_ctx->lock);
 	return 0;

@@ -153,6 +153,10 @@
 #define SOCK_PE_COMM_BUFF_SZ (1024)
 #define SOCK_PE_OVERFLOW_COMM_BUFF_SZ (128)
 
+/* it must be adjusted if error data size in CQ/EQ 
+ * will be larger than SOCK_EP_MAX_CM_DATA_SZ */
+#define SOCK_MAX_ERR_CQ_EQ_DATA_SZ SOCK_EP_MAX_CM_DATA_SZ
+
 enum {
 	SOCK_SIGNAL_RD_FD = 0,
 	SOCK_SIGNAL_WR_FD
@@ -195,22 +199,22 @@ struct sock_fabric {
 };
 
 struct sock_conn {
-        int sock_fd;
-        int connected;
+	int sock_fd;
+	int connected;
 	int address_published;
-        struct sockaddr_in addr;
-        struct sock_pe_entry *rx_pe_entry;
-        struct sock_pe_entry *tx_pe_entry;
+	struct sockaddr_in addr;
+	struct sock_pe_entry *rx_pe_entry;
+	struct sock_pe_entry *tx_pe_entry;
 	struct sock_ep_attr *ep_attr;
 	fi_addr_t av_index;
 	struct dlist_entry ep_entry;
 };
 
 struct sock_conn_map {
-        struct sock_conn *table;
+	struct sock_conn *table;
 	struct sock_epoll_set epoll_set;
-        int used;
-        int size;
+	int used;
+	int size;
 	fastlock_t lock;
 };
 
@@ -1015,7 +1019,8 @@ int sock_srx_ctx(struct fid_domain *domain,
 int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
-			 size_t olen, int err, int prov_errno, void *err_data);
+			 size_t olen, int err, int prov_errno, void *err_data,
+			 size_t err_data_size);
 int sock_cq_progress(struct sock_cq *cq);
 void sock_cq_add_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx);
 void sock_cq_remove_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx);
