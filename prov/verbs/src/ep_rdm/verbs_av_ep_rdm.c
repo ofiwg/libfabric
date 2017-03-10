@@ -123,9 +123,15 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 	size_t i;
 	int failed = 0;
 	int ret = 0;
+	int *fi_errors = context;
 
 	if((av->flags & FI_EVENT) && !av->eq)
 		return -FI_ENOEQ;
+
+	if ((flags & FI_SYNC_ERR) && ((!context) || (flags & FI_EVENT)))
+		return -FI_EINVAL;
+	else if (flags & FI_SYNC_ERR)
+		memset(context, 0, sizeof(int) * count);
 
 	if (ep)
 		pthread_mutex_lock(&ep->cm_lock);
@@ -152,6 +158,9 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 		void *addr_i = (uint8_t *) addr +
 			i * (ep ? ep->addrlen : FI_IBV_RDM_DFLT_ADDRLEN);
 
+		if (flags & FI_SYNC_ERR)
+			fi_errors[i] = FI_SUCCESS;
+
 		if (!fi_ibv_rdm_av_is_valid_address(addr_i)) {
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
@@ -173,6 +182,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 				};
 				av->eq->err = err;
 				failed++;
+			} else if (flags & FI_SYNC_ERR) {
+				fi_errors[i] = -FI_EADDRNOTAVAIL;
 			}
 
 			continue;
@@ -226,8 +237,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 		ret++;
 	}
 
-	if(av->flags & FI_EVENT) {
-                struct fi_eq_entry entry = {
+	if (av->flags & FI_EVENT) {
+		struct fi_eq_entry entry = {
 			.fid = &av->av_fid.fid,
 			.context = context,
 			.data = count - failed
