@@ -231,12 +231,27 @@ static int psmx2_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
+static void psmx2_ep_close_internal(struct psmx2_fid_ep *ep)
+{
+	struct slist_entry *entry;
+	struct psmx2_context *item;
+
+	psmx2_domain_release(ep->domain);
+
+	while (!slist_empty(&ep->free_context_list)) {
+		entry = slist_remove_head(&ep->free_context_list);
+		item = container_of(entry, struct psmx2_context, list_entry);
+		free(item);
+	}
+
+	fastlock_destroy(&ep->context_lock);
+	free(ep);
+}
+
 static int psmx2_ep_close(fid_t fid)
 {
 	struct psmx2_fid_ep *ep;
 	struct psmx2_ep_name ep_name;
-	struct slist_entry *entry;
-	struct psmx2_context *item;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
@@ -254,18 +269,8 @@ static int psmx2_ep_close(fid_t fid)
 
 	ep->domain->eps[ep->vlane] = NULL;
 	psmx2_free_vlane(ep->domain, ep->vlane);
-	psmx2_domain_release(ep->domain);
 
-	while (!slist_empty(&ep->free_context_list)) {
-		entry = slist_remove_head(&ep->free_context_list);
-		item = container_of(entry, struct psmx2_context, list_entry);
-		free(item);
-	}
-
-	fastlock_destroy(&ep->context_lock);
-
-	free(ep);
-
+	psmx2_ep_close_internal(ep);
 	return 0;
 }
 
@@ -749,8 +754,13 @@ static int psmx2_sep_close(fid_t fid)
 		return -FI_EBUSY;
 
 	for (i = 0; i < sep->ctxt_cnt; i++) {
+		if (sep->ctxts[i].ep && ofi_atomic_get32(&sep->ctxts[i].ep->ref))
+			return -FI_EBUSY;
+	}
+
+	for (i = 0; i < sep->ctxt_cnt; i++) {
 		if (sep->ctxts[i].ep)
-			fi_close(&sep->ctxts[i].ep->ep.fid);
+			psmx2_ep_close_internal(sep->ctxts[i].ep);
 
 		fastlock_acquire(&sep->domain->trx_ctxt_lock);
 		dlist_remove(&sep->ctxts[i].trx_ctxt->entry);
@@ -833,6 +843,26 @@ static int psmx2_rx_context(struct fid_ep *ep, int index, struct fi_rx_attr *att
 	*rx_ep = &sep->ctxts[index].ep->ep;
 	return 0;
 }
+
+static int psmx2_sep_ctxt_close(fid_t fid)
+{
+	struct psmx2_fid_ep *ep;
+
+	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
+
+	if (ep->base_ep)
+		ofi_atomic_dec32(&ep->base_ep->ref);
+
+	return 0;
+}
+
+static struct fi_ops psmx2_fi_ops_sep_ctxt = {
+	.size = sizeof(struct fi_ops),
+	.close = psmx2_sep_ctxt_close,
+	.bind = psmx2_ep_bind,
+	.control = psmx2_ep_control,
+	.ops_open = fi_no_ops_open,
+};
 
 static struct fi_ops psmx2_fi_ops_sep = {
 	.size = sizeof(struct fi_ops),
@@ -925,6 +955,9 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 		if (err)
 			goto errout_free_ctxt;
 
+		/* override the ops so the fid can't be closed individually */
+		ep_priv->ep.fid.ops = &psmx2_fi_ops_sep_ctxt;
+
 		trx_ctxt->ep = ep_priv;
 		sep_priv->ctxts[i].ep = ep_priv;
 	}
@@ -962,7 +995,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 errout_free_ctxt:
 	while (i) {
 		if (sep_priv->ctxts[i].ep)
-			fi_close(&sep_priv->ctxts[i].ep->ep.fid);
+			psmx2_ep_close_internal(sep_priv->ctxts[i].ep);
 
 		if (sep_priv->ctxts[i].trx_ctxt)
 			psmx2_trx_ctxt_free(sep_priv->ctxts[i].trx_ctxt);
