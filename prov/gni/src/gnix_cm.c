@@ -265,7 +265,7 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	int ret;
 
 	if (unlikely(addrlen == NULL)) {
-		GNIX_WARN(FI_LOG_FABRIC, "parameter \"addrlen\" is NULL in "
+		GNIX_INFO(FI_LOG_EP_CTRL, "parameter \"addrlen\" is NULL in "
 			"gnix_getname\n");
 		return -FI_EINVAL;
 	}
@@ -335,7 +335,7 @@ DIRECT_FN STATIC int gnix_setname(fid_t fid, void *addr, size_t addrlen)
 	int ret;
 
 	if (unlikely(addr == NULL)) {
-		GNIX_WARN(FI_LOG_FABRIC, "parameter \"addr\" is NULL in "
+		GNIX_INFO(FI_LOG_EP_CTRL, "parameter \"addr\" is NULL in "
 			"gnix_setname\n");
 		return -FI_EINVAL;
 	}
@@ -400,7 +400,8 @@ DIRECT_FN STATIC int gnix_getpeer(struct fid_ep *ep, void *addr,
 	int ret;
 
 	if (unlikely(addrlen == NULL || addr == NULL)) {
-		GNIX_WARN(FI_LOG_FABRIC, "parameter is NULL in gnix_getpeer\n");
+		GNIX_INFO(FI_LOG_EP_CTRL,
+			  "parameter is NULL in gnix_getpeer\n");
 		return -FI_EINVAL;
 	}
 
