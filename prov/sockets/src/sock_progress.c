@@ -1774,7 +1774,7 @@ static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 
 	msg_hdr = &pe_entry->msg_hdr;
 	if (sock_pe_peek_hdr(pe, pe_entry))
-		return 0;
+		return -1;
 
 	if (rx_ctx->is_ctrl_ctx && sock_pe_is_data_msg(msg_hdr->op_type))
 		return -1;
