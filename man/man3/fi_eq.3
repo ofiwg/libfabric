@@ -1,4 +1,4 @@
-.TH "fi_eq" "3" "2017\-03\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_eq" "3" "2017\-03\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_eq \- Event queue operations
@@ -469,7 +469,7 @@ into a human readable string.
 the err_data buffer in bytes.
 On output, err_data_size will be set to the number of bytes copied to
 the err_data buffer.
-The err_data information is typically used with fi_cq_strerror to
+The err_data information is typically used with fi_eq_strerror to
 provide details about the type of error that occurred.
 .PP
 For compatibility purposes, if err_data_size is 0 on input, or the
