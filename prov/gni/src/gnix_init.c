@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <gni_pub.h>
 #include "gnix.h"
+#include "gnix_auth_key.h"
 #include "gnix_util.h"
 #include "fi.h"
 #include "prov.h"
@@ -150,6 +151,16 @@ void _gnix_init(void)
 	static int called=0;
 
 	if (called==0) {
+		if (sizeof(struct gnix_mr_key) != sizeof(uint64_t)) {
+			GNIX_FATAL(FI_LOG_FABRIC,
+				"gnix_mr_key size is invalid, "
+				"size=%d expected=%d\n",
+				sizeof(struct gnix_mr_key),
+				sizeof(uint64_t));
+			assert(0);
+		}
+
+		_gnix_auth_key_subsys_init();
 
 		ofi_atomic_initialize32(&gnix_id_counter, 0);
 		ofi_atomic_initialize32(&file_id_counter, 0);

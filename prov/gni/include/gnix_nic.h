@@ -99,6 +99,7 @@ struct gnix_nic_attr {
 	bool use_cdm_id;
 	uint32_t cdm_id;
 	bool must_alloc;
+	struct gnix_auth_key *auth_key;
 };
 
 /**

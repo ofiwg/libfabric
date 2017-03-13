@@ -1108,7 +1108,7 @@ void do_inject(int len)
 	rdm_sr_init_data(target, len, 0);
 
 	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
-	cache = ep_priv->domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(ep_priv->domain);
 	cr_assert(cache != NULL);
 	already_registered = ofi_atomic_get32(&cache->inuse.elements);
 

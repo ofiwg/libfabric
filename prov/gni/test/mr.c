@@ -52,9 +52,6 @@
 #include "gnix.h"
 #include "gnix_mr.h"
 
-#define CACHE_RO 0
-#define CACHE_RW 1
-
 #define CHECK_HOOK(name, args...) \
 	({ \
 		int __hook_return_val = 0; \
@@ -89,6 +86,7 @@ static struct fi_info *fi;
 static unsigned char *buf;
 static int buf_len = __BUF_LEN * sizeof(unsigned char);
 static struct gnix_fid_domain *domain;
+static uint8_t ptag;
 static gnix_mr_cache_t *cache;
 static int regions;
 
@@ -162,6 +160,8 @@ static void _mr_setup(void)
 	cr_assert(buf, "buffer allocation");
 
 	domain = container_of(dom, struct gnix_fid_domain, domain_fid.fid);
+	ptag = domain->auth_key->ptag;
+
 	regions = 1024;
 }
 
@@ -265,8 +265,8 @@ TestSuite(perf_mr_no_cache, .init = no_cache_setup, .fini = mr_teardown,
 
 static int __simple_init_hook(const char *func, int line)
 {
-	cr_assert(domain->mr_cache_ro->state == GNIX_MRC_STATE_READY);
-	cr_assert(domain->mr_cache_rw->state == GNIX_MRC_STATE_READY);
+	cr_assert(GET_DOMAIN_RO_CACHE(domain)->state == GNIX_MRC_STATE_READY);
+	cr_assert(GET_DOMAIN_RW_CACHE(domain)->state == GNIX_MRC_STATE_READY);
 
 	return 0;
 }
@@ -276,9 +276,9 @@ static int __simple_post_reg_hook(const char *func, int line, int cache_type,
 		int expected_stale)
 {
 	if (cache_type == CACHE_RO)
-		cache = domain->mr_cache_ro;
+		cache = GET_DOMAIN_RO_CACHE(domain);
 	else
-		cache = domain->mr_cache_rw;
+		cache = GET_DOMAIN_RW_CACHE(domain);
 
 	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse,
 		"%s:%d failed expected inuse condition, actual=%d expected=%d\n",
@@ -294,7 +294,7 @@ static int __simple_post_dereg_hook(const char *func, int line,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse);
 	cr_assert(ofi_atomic_get32(&cache->stale.elements) == expected_stale);
 
@@ -612,7 +612,7 @@ Test(mr_internal_cache, change_hard_soft_limits)
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 	cr_assert(cache->state == GNIX_MRC_STATE_READY);
 	cr_assert(cache->attr.hard_reg_limit == 8192);
 	cr_assert(cache->attr.soft_reg_limit == 4096);
@@ -667,7 +667,7 @@ static int __post_dereg_greater_or_equal(const char *func, int line,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 
 	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse,
 		"failed expected inuse test, actual=%d expected=%d\n",
@@ -740,7 +740,7 @@ static int __post_dereg_greater_than(const char *func, int line,
 		int expected_inuse,
 		int expected_stale)
 {
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse);
 	cr_assert(ofi_atomic_get32(&cache->stale.elements) > expected_stale);
 
@@ -815,7 +815,7 @@ static void __simple_register_1024_non_unique_regions_test(HOOK_DECL)
 
 static int __get_lazy_dereg_limit(const char *func, int line)
 {
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 
 	return cache->attr.hard_stale_limit;
 }
@@ -913,9 +913,9 @@ static int __test_stale_lt_or_equal(const char *func, int line,
 		int expected_stale)
 {
 	if (cache_type == CACHE_RO)
-		cache = domain->mr_cache_ro;
+		cache = GET_DOMAIN_RO_CACHE(domain);
 	else
-		cache = domain->mr_cache_rw;
+		cache = GET_DOMAIN_RW_CACHE(domain);
 
 	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse);
 	cr_assert(ofi_atomic_get32(&cache->stale.elements) <= expected_stale);
@@ -1073,7 +1073,7 @@ Test(mr_internal_cache, lru_evict_first_entry)
 	}
 
 	/* all registrations should now be 'in-use' */
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == regions);
 	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 0);
 
@@ -1149,7 +1149,7 @@ Test(mr_internal_cache, lru_evict_middle_entry)
 	}
 
 	/* all registrations should now be 'in-use' */
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 	limit = cache->attr.hard_stale_limit;
 	cr_assert(limit < regions);
 
@@ -1222,7 +1222,7 @@ static inline void _repeated_registration(const char *label)
 					default_offset, default_req_key,
 					default_flags, &mr, NULL);
 
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 
 	gettimeofday(&s1, 0);
 	for (i = 0; i < registrations; i++) {
@@ -1280,7 +1280,7 @@ static inline void _single_large_registration(const char *label)
 					default_offset, default_req_key,
 					default_flags, &mr, NULL);
 
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 
 	gettimeofday(&s1, 0);
 	for (i = 0; i < registrations; i++) {
@@ -1431,7 +1431,7 @@ Test(mr_internal_cache, regression_615)
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cache = domain->mr_cache_rw;
+	cache = GET_DOMAIN_RW_CACHE(domain);
 
 	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == 1);
 	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 0);

@@ -91,11 +91,18 @@ Test(nic, alloc_free)
 	int i, ret;
 	const int num_nics = 79;
 	struct gnix_nic *nics[num_nics];
+	struct gnix_fid_domain *domain = container_of(
+		dom, struct gnix_fid_domain, domain_fid);
+	struct gnix_auth_key *auth_key = domain->auth_key;
+	struct gnix_nic_attr nic_attr = {0};
+
+
+	nic_attr.auth_key = auth_key;
 
 	for (i = 0; i < num_nics; i++) {
 		ret = gnix_nic_alloc(container_of(dom, struct gnix_fid_domain,
 						  domain_fid),
-						  NULL,
+						  &nic_attr,
 						  &nics[i]);
 		cr_assert_eq(ret, FI_SUCCESS, "Could not allocate nic");
 	}

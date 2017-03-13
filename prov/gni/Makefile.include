@@ -11,6 +11,7 @@ AM_CPPFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni
 
 _gni_files = \
 	prov/gni/src/gnix_atomic.c \
+	prov/gni/src/gnix_auth_key.c \
 	prov/gni/src/gnix_av.c \
 	prov/gni/src/gnix_bitmap.c \
 	prov/gni/src/gnix_buddy_allocator.c \
@@ -99,6 +100,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/dom.c \
 	prov/gni/test/ep.c \
 	prov/gni/test/eq.c \
+	prov/gni/test/fabric.c \
 	prov/gni/test/fi_addr_str.c \
 	prov/gni/test/freelist.c \
 	prov/gni/test/hashtable.c \

@@ -43,6 +43,11 @@
 #include "gnix_nic.h"
 #include "gnix_util.h"
 #include "gnix_xpmem.h"
+#include "gnix_hashtable.h"
+#include "gnix_auth_key.h"
+
+#define GNIX_MR_MODE_DEFAULT FI_MR_BASIC
+#define GNIX_NUM_PTAGS 256
 
 gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
 
@@ -65,13 +70,25 @@ static void __domain_destruct(void *obj)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain = (struct gnix_fid_domain *) obj;
+	struct gnix_mr_cache_info *info;
+	int i;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
-	ret = _gnix_close_cache(domain);
-	if (ret != FI_SUCCESS)
-		GNIX_FATAL(FI_LOG_MR, "failed to close memory registration cache\n");
+	for (i = 0; i < GNIX_NUM_PTAGS; i++) {
+		info = &domain->mr_cache_info[i];
 
+		fastlock_acquire(&info->mr_cache_lock);
+		ret = _gnix_close_cache(domain, info);
+		fastlock_release(&info->mr_cache_lock);
+
+		if (ret != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_MR,
+					"failed to close memory "
+					"registration cache\n");
+	}
+
+	/* TODO: known issue of multiple consumers of notifier notifications */
 	ret = _gnix_notifier_close(domain->mr_cache_attr.notifier);
 	if (ret != FI_SUCCESS)
 		GNIX_FATAL(FI_LOG_MR, "failed to close MR notifier\n");
@@ -126,9 +143,7 @@ DIRECT_FN STATIC int gnix_stx_open(struct fid_domain *dom,
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain;
-	struct gnix_nic *nic;
 	struct gnix_fid_stx *stx_priv;
-	struct gnix_nic_attr nic_attr = {0};
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
@@ -145,23 +160,8 @@ DIRECT_FN STATIC int gnix_stx_open(struct fid_domain *dom,
 	}
 
 	stx_priv->domain = domain;
-
-	/*
-	 * we force allocation of a nic to make semantics
-	 * match the intent fi_endpoint man page, provide
-	 * a TX context (aka gnix nic) that can be shared
-	 * explicitly amongst endpoints
-	 */
-	nic_attr.must_alloc = (domain->num_allocd_stxs <
-					gnix_max_nics_per_ptag) ? true : false;
-	ret = gnix_nic_alloc(domain, &nic_attr, &nic);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			    "_gnix_nic_alloc call returned %d\n",
-			     ret);
-		goto err;
-	}
-	stx_priv->nic = nic;
+	stx_priv->auth_key = NULL;
+	stx_priv->nic = NULL;
 
 	_gnix_ref_init(&stx_priv->ref_cnt, 1, __stx_destruct);
 
@@ -211,6 +211,8 @@ static int gnix_domain_close(fid_t fid)
 {
 	int ret = FI_SUCCESS, references_held;
 	struct gnix_fid_domain *domain;
+	int i;
+	struct gnix_mr_cache_info *info;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
@@ -220,29 +222,38 @@ static int gnix_domain_close(fid_t fid)
 		goto err;
 	}
 
-	/* before checking the refcnt, flush the memory registration cache */
-	if (domain->mr_cache_ro) {
-		fastlock_acquire(&domain->mr_cache_lock);
-		ret = _gnix_mr_cache_flush(domain->mr_cache_ro);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_DOMAIN,
-				  "failed to flush memory cache on domain close\n");
-			fastlock_release(&domain->mr_cache_lock);
-			goto err;
-		}
-		fastlock_release(&domain->mr_cache_lock);
-	}
+	for (i = 0; i < GNIX_NUM_PTAGS; i++) {
+		info = &domain->mr_cache_info[i];
 
-	if (domain->mr_cache_rw) {
-		fastlock_acquire(&domain->mr_cache_lock);
-		ret = _gnix_mr_cache_flush(domain->mr_cache_rw);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_DOMAIN,
-				  "failed to flush memory cache on domain close\n");
-			fastlock_release(&domain->mr_cache_lock);
-			goto err;
+		if (!domain->mr_cache_info[i].inuse)
+			continue;
+
+		/* before checking the refcnt,
+		 * flush the memory registration cache
+		 */
+		if (info->mr_cache_ro) {
+			fastlock_acquire(&info->mr_cache_lock);
+			ret = _gnix_mr_cache_flush(info->mr_cache_ro);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_DOMAIN,
+					  "failed to flush memory cache on domain close\n");
+				fastlock_release(&info->mr_cache_lock);
+				goto err;
+			}
+			fastlock_release(&info->mr_cache_lock);
 		}
-		fastlock_release(&domain->mr_cache_lock);
+
+		if (info->mr_cache_rw) {
+			fastlock_acquire(&info->mr_cache_lock);
+			ret = _gnix_mr_cache_flush(info->mr_cache_rw);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_DOMAIN,
+					  "failed to flush memory cache on domain close\n");
+				fastlock_release(&info->mr_cache_lock);
+				goto err;
+			}
+			fastlock_release(&info->mr_cache_lock);
+		}
 	}
 
 	/*
@@ -560,42 +571,43 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct gnix_fid_domain *domain = NULL;
 	int ret = FI_SUCCESS;
-	uint8_t ptag;
-	uint32_t cookie;
 	struct gnix_fid_fabric *fabric_priv;
+	struct gnix_auth_key *auth_key = NULL;
+	int i;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
 	fabric_priv = container_of(fabric, struct gnix_fid_fabric, fab_fid);
 
-	/*
-	 * check cookie/ptag credentials - for FI_EP_MSG we may be creating a
-	 * domain
-	 * using a cookie supplied being used by the server.  Otherwise, we use
-	 * use the cookie/ptag supplied by the job launch system.
-	 */
-	if (info->dest_addr) {
-		ret =
-		    gnixu_get_rdma_credentials(info->dest_addr, &ptag, &cookie);
-		if (ret) {
-			GNIX_WARN(FI_LOG_DOMAIN,
-				   "gnixu_get_rdma_credentials returned ptag %u cookie 0x%x\n",
-				   ptag, cookie);
-			goto err;
-		}
-	} else {
-		ret = gnixu_get_rdma_credentials(NULL, &ptag, &cookie);
-	}
+#if 0 /* TODO: Enable after 1.5 version update */
+	if (FI_VERSION_LT(fabric->api_version, FI_VERSION(1, 5)) &&
+		(info->domain_attr->auth_key_size || info->domain_attr->auth_key))
+			return -FI_EINVAL;
+#endif
+
+	auth_key = GNIX_GET_AUTH_KEY(info->domain_attr->auth_key,
+			info->domain_attr->auth_key_size);
+	if (!auth_key)
+		return -FI_EINVAL;
 
 	GNIX_INFO(FI_LOG_DOMAIN,
-		  "gnix rdma credentials returned ptag %u cookie 0x%x\n",
-		  ptag, cookie);
+		  "authorization key=%p ptag %u cookie 0x%x\n",
+		  auth_key, auth_key->ptag, auth_key->cookie);
 
 	domain = calloc(1, sizeof *domain);
 	if (domain == NULL) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
+
+	domain->mr_cache_info = calloc(sizeof(*domain->mr_cache_info),
+		GNIX_NUM_PTAGS);
+	if (!domain->mr_cache_info) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	domain->auth_key = auth_key;
 
 	domain->mr_cache_attr = _gnix_default_mr_cache_attr;
 	domain->mr_cache_attr.reg_context = (void *) domain;
@@ -606,9 +618,12 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret != FI_SUCCESS)
 		goto err;
 
-	domain->mr_cache_ro = NULL;
-	domain->mr_cache_rw = NULL;
 	fastlock_init(&domain->mr_cache_lock);
+	for (i = 0; i < GNIX_NUM_PTAGS; i++) {
+		domain->mr_cache_info[i].inuse = 0;
+		domain->mr_cache_info[i].domain = domain;
+		fastlock_init(&domain->mr_cache_info[i].mr_cache_lock);
+	}
 
 	domain->udreg_reg_limit = 4096;
 
@@ -620,8 +635,6 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->fabric = fabric_priv;
 	_gnix_ref_get(domain->fabric);
 
-	domain->ptag = ptag;
-	domain->cookie = cookie;
 	domain->cdm_id_seed = getpid();  /* TODO: direct syscall better */
 	domain->addr_format = info->addr_format;
 
@@ -671,6 +684,9 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	return FI_SUCCESS;
 
 err:
+	if (domain && domain->mr_cache_info)
+		free(domain->mr_cache_info);
+
 	if (domain != NULL) {
 		free(domain);
 	}

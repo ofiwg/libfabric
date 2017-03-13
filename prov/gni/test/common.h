@@ -45,6 +45,14 @@
 #define BLUE "\x1b[34m"
 #define COLOR_RESET "\x1b[0m"
 
+#define CACHE_RO 0
+#define CACHE_RW 1
+
+#define GET_DOMAIN_RO_CACHE(domain) \
+    ({ domain->mr_cache_info[domain->auth_key->ptag].mr_cache_ro; })
+#define GET_DOMAIN_RW_CACHE(domain) \
+    ({ domain->mr_cache_info[domain->auth_key->ptag].mr_cache_rw; })
+
 /* defined in rdm_atomic.c */
 extern int supported_compare_atomic_ops[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST];
 extern int supported_fetch_atomic_ops[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST];
