@@ -41,12 +41,29 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 		  uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
+	uint32_t api_version;
+	void *err_data = NULL;
+	size_t err_data_size = 0;
 
 	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 	if (!_eq->err.err)
 		return 0;
 
+	
+	api_version = _eq->fab->util_fabric.fabric_fid.api_version;
+
+	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+		&& entry->err_data && entry->err_data_size) {
+		err_data_size = MIN(entry->err_data_size, _eq->err.err_data_size);
+		err_data = _eq->err.err_data;
+	}
+
 	*entry = _eq->err;
+	if (err_data) {
+		memcpy(entry->err_data, err_data, err_data_size);
+		entry->err_data_size = err_data_size;
+	}
+
 	_eq->err.err = 0;
 	_eq->err.prov_errno = 0;
 	return sizeof(*entry);

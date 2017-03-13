@@ -466,7 +466,7 @@ described below.
 : On input, err_data_size indicates the size of the err_data buffer in bytes.
   On output, err_data_size will be set to the number of bytes copied to the
   err_data buffer.  The err_data information is typically used with
-  fi_cq_strerror to provide details about the type of error that occurred.
+  fi_eq_strerror to provide details about the type of error that occurred.
 
   For compatibility purposes, if err_data_size is 0 on input, or the fabric
   was opened with release < 1.5, err_data will be set to a data buffer
