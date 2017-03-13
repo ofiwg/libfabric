@@ -499,8 +499,6 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 			   FI_SHARED_AV | FI_TRIGGER | FI_FENCE | \
 			   FI_LOCAL_COMM | FI_REMOTE_COMM)
 
-#define OFI_TODO_API_VERSION 0 /* remove when no longer used by providers */
-
 int ofi_check_fabric_attr(const struct fi_provider *prov,
 			  const struct fi_fabric_attr *prov_attr,
 			  const struct fi_fabric_attr *user_attr,
