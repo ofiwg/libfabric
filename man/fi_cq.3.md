@@ -353,14 +353,23 @@ the the same as the count parameter.
 
 Returned source addressing data is converted from the native address
 used by the underlying fabric into an fi_addr_t, which may be used in
-transmit operations.  Returning fi_addr_t requires that the source
-address be inserted into the address vector associated with the
-receiving endpoint.  For applications using API version 1.5 and later
-(specified through the fi_getinfo call), if the source address has not
-been inserted into the address vector, fi_cq_readfrom will return
--FI_EAVAIL.  The completion will then be reported through
-fi_cq_readerr with error code -FI_EADDRNOTAVAIL.  See fi_cq_readerr
-for details.
+transmit operations.  Typically, returning fi_addr_t requires that
+the source address be inserted into the address vector associated with the
+receiving endpoint.  For endpoints allocated using the FI_SOURCE_ERR
+capability, if the source address has not been inserted into the
+address vector, fi_cq_readfrom will return -FI_EAVAIL.  The
+completion will then be reported through fi_cq_readerr with error
+code -FI_EADDRNOTAVAIL.  See fi_cq_readerr for details.
+
+If FI_SOURCE is specified without FI_SOURCE_ERR, source addresses
+which cannot be mapped to a local fi_addr_t will be reported as
+FI_ADDR_NOTAVAIL.  The behavior is dependent on the type of address
+vector in use.  For AVs of type FI_AV_MAP, source addresses may be
+mapped directly to an fi_addr_t value, even if the source address
+were not inserted into the AV.  This allows the provider to optimize
+the reporting of the source fi_addr_t without the overhead of
+verifying whether the address is in the AV.  If full address
+validation is necessary, FI_SOURCE_ERR must be used.
 
 ## fi_cq_sread / fi_cq_sreadfrom
 
@@ -410,7 +419,7 @@ information into a printable string for debugging purposes.
 Notable completion error codes are given below.
 
 *FI_EADDRNOTAVAIL*
-: This error code is used by CQs configured with FI_SOURCE to report
+: This error code is used by CQs configured with FI_SOURCE_ERR to report
   completions for which a matching fi_addr_t source address could not
   be found.  An error code of FI_EADDRNOTAVAIL indicates that the data
   transfer was successfully received and processed, with the
@@ -437,7 +446,7 @@ of these fields are the same for all CQ entry structure formats.
 : The operation context is the application specified context value that
   was provided with an asynchronous operation.  The op_context field is
   valid for all completions.
-  
+
 *flags*
 : This specifies flags associated with the completed operation.  The
   _Completion Flags_ section below lists valid flag values.  Flags are
@@ -445,7 +454,7 @@ of these fields are the same for all CQ entry structure formats.
 
 *len*
 : This len field only applies to completed receive operations (e.g. fi_recv,
-  fi_trecv, etc.).  It indicates the size of received _message_ data -- 
+  fi_trecv, etc.).  It indicates the size of received _message_ data --
   i.e. how many data bytes were placed into the associated receive buffer by
   a corresponding fi_send/fi_tsend/et al call.  If an endpoint has
   been configured with the FI_MSG_PREFIX mode, the len also reflects the size
@@ -567,7 +576,7 @@ operation.  The following completion flags are defined.
   this flag on the last message that is received into the multi-
   recv buffer, or may generate a separate completion that indicates
   that the buffer has been released.
-  
+
   Applications can distinguish between these two cases by examining
   the completion entry flags field.  If additional flags, such as
   FI_RECV, are set, the completion is associated with a received message.  In
@@ -589,8 +598,6 @@ has been set.  When enabled, only the following flags are guaranteed to
 be set in completion data when they are valid: FI_REMOTE_READ and
 FI_REMOTE_WRITE (when FI_RMA_EVENT capability bit has been set),
 FI_REMOTE_CQ_DATA, and FI_MULTI_RECV.
- 
-# NOTES
 
 If a completion queue has been overrun, it will be placed into an 'overrun'
 state.  Read operations will continue to return any valid, non-corrupted

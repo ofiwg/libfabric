@@ -313,6 +313,8 @@ additional optimizations.
   require that the provider perform address translation and/or look-up
   based on data available in the underlying protocol in order to
   provide the requested data, which may adversely affect performance.
+  The performance impact may be greater for address vectors of type
+  FI_AV_TABLE.
 
 *FI_READ*
 : Indicates that the user requires an endpoint capable of initiating
@@ -384,6 +386,14 @@ additional optimizations.
   FI_LOCAL_COMM, for example NICs that lack loopback support, cannot
   be used to communicate with processes on the same system.
 
+*FI_SOURCE_ERR*
+: Must be paired with FI_SOURCE.  When specified, this requests that
+  raw source addressing data be returned as part of completion data
+  for any address that has not been inserted into the local address
+  vector.  Use of this capability may require the provider to
+  validate incoming source address data against addresses stored in
+  the local address vector, which may adversely affect performance.
+
 Capabilities may be grouped into two general categories: primary and
 secondary.  Primary capabilities must explicitly be requested by an
 application, and a provider must enable support for only those primary
@@ -398,7 +408,7 @@ FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
 Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
-FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM.
+FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR.
 
 # MODE
 
