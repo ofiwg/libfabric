@@ -457,7 +457,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		goto err1;
 	}
 
-	if (cq->domain->caps & FI_SOURCE) {
+	if (cq->domain->info_domain_caps & FI_SOURCE) {
 		cq->src = calloc(cq->cirq->size, sizeof *cq->src);
 		if (!cq->src) {
 			ret = -FI_ENOMEM;

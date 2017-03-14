@@ -141,8 +141,9 @@ struct util_domain {
 	const struct fi_provider *prov;
 
 	char			*name;
-	uint64_t		caps;
-	uint64_t		mode;
+	uint64_t		info_domain_caps;
+	uint64_t		info_domain_mode;
+	int			mr_mode;
 	uint32_t		addr_format;
 	enum fi_av_type		av_type;
 };

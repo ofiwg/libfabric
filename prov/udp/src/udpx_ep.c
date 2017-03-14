@@ -415,7 +415,7 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flag
 		atomic_inc(&cq->ref);
 
 		if (cq->wait) {
-			ep->rx_comp = (cq->domain->caps & FI_SOURCE) ?
+			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?
 				      udpx_rx_src_comp_signal :
 				      udpx_rx_comp_signal;
 
@@ -426,7 +426,7 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flag
 			if (ret)
 				return ret;
 		} else {
-			ep->rx_comp = (cq->domain->caps & FI_SOURCE) ?
+			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?
 				      udpx_rx_src_comp : udpx_rx_comp;
 		}
 
