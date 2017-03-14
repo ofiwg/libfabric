@@ -38,12 +38,14 @@ AM_CONDITIONAL([LINUX], [test "x$linux" = "x1"])
 AM_CONDITIONAL([FREEBSD], [test "x$freebsd" = "x1"])
 
 base_c_warn_flags="-Wall -Wundef -Wpointer-arith"
+debug_c_warn_flags="-Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers"
+picky_c_warn_flags="-Wno-long-long -Wmissing-prototypes -Wstrict-prototypes -Wcomment -pedantic"
 
 AC_ARG_ENABLE([debug],
 	      [AS_HELP_STRING([--enable-debug],
 			      [Enable debugging @<:@default=no@:>@])
 	      ],
-	      [CFLAGS="-g -O0 ${base_c_warn_flags} -Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers $CFLAGS"
+	      [CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} $CFLAGS"
 	       dbg=1],
 	      [enable_debug=no
                dbg=0])
@@ -104,6 +106,16 @@ AC_CHECK_LIB(dl, dlopen, [],
     AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.]))
 ])
 fi
+
+dnl handle picky option
+AC_ARG_ENABLE([picky],
+    [AC_HELP_STRING([--enable-picky],
+                    [Enable developer-level compiler pickyness when building @<:@default=no@:>@])])
+AS_IF([test x"$enable_picky" = x"yes" && test x"$GCC" = x"yes"],
+      [AS_IF([test x"$enable_debug" = x"no"],
+             [CFLAGS="${base_c_warn_flags} ${debug_c_warn_flags} ${picky_c_warn_flags} $CFLAGS"],
+             [CFLAGS="${picky_c_warn_flags} $CFLAGS"])
+      ])
 
 dnl Checks for libraries
 AC_CHECK_LIB(pthread, pthread_mutex_init, [],
