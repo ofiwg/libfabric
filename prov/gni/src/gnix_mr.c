@@ -253,9 +253,9 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	const struct fi_mr_attr attr = {
 		.mr_iov = &mr_iov,
 		.iov_count = 1,
-		.access = access, 
+		.access = access,
 		.offset = offset,
-		.requested_key = requested_key, 
+		.requested_key = requested_key,
 		.context = context,
 	};
 
@@ -263,16 +263,16 @@ DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 }
 
 DIRECT_FN int gnix_mr_regv(struct fid *fid, const struct iovec *iov,
-	size_t count, uint64_t access,	
+	size_t count, uint64_t access,
 	uint64_t offset, uint64_t requested_key,
 	uint64_t flags, struct fid_mr **mr, void *context)
 {
 	const struct fi_mr_attr attr = {
-		.mr_iov = iov, 
+		.mr_iov = iov,
 		.iov_count = count,
 		.access = access,
 		.offset = offset,
-		.requested_key = requested_key, 
+		.requested_key = requested_key,
 		.context = context,
 	};
 
@@ -283,7 +283,7 @@ DIRECT_FN int gnix_mr_regv(struct fid *fid, const struct iovec *iov,
 DIRECT_FN int gnix_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	uint64_t flags, struct fid_mr **mr)
 {
-	struct gnix_fid_domain *domain = container_of(fid, 
+	struct gnix_fid_domain *domain = container_of(fid,
 		struct gnix_fid_domain, domain_fid.fid);
 
 	if (!attr)
@@ -295,10 +295,10 @@ DIRECT_FN int gnix_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EOPNOTSUPP;
 
 	if (attr->iov_count == 1)
-		return __mr_reg(fid, attr->mr_iov[0].iov_base, 
+		return __mr_reg(fid, attr->mr_iov[0].iov_base,
 			attr->mr_iov[0].iov_len, attr->access, attr->offset,
 			attr->requested_key, flags, mr, attr->context);
-	
+
 	/* regv limited to one iov at this time */
 	return -FI_EOPNOTSUPP;
 }
@@ -364,7 +364,7 @@ static inline void *__gnix_generic_register(
 	/* If the nic list is empty, create a nic */
 	if (unlikely((dlist_empty(&gnix_nic_list_ptag[domain->ptag])))) {
 		/* release the lock because we are not checking the list after
-			this point. Additionally, gnix_nic_alloc takes the 
+			this point. Additionally, gnix_nic_alloc takes the
 			lock to add the nic. */
 		pthread_mutex_unlock(&gnix_nic_list_lock);
 
@@ -376,7 +376,7 @@ static inline void *__gnix_generic_register(
 			return NULL;
 		}
 	} else {
-		nic = dlist_first_entry(&gnix_nic_list_ptag[domain->ptag], 
+		nic = dlist_first_entry(&gnix_nic_list_ptag[domain->ptag],
 			struct gnix_nic, ptag_nic_list);
 		if (unlikely(nic == NULL)) {
 			GNIX_ERR(FI_LOG_MR, "Failed to find nic on "
@@ -384,7 +384,7 @@ static inline void *__gnix_generic_register(
 			pthread_mutex_unlock(&gnix_nic_list_lock);
 			return NULL;
 		}
-		_gnix_ref_get(nic);	
+		_gnix_ref_get(nic);
 		pthread_mutex_unlock(&gnix_nic_list_lock);
         }
 
