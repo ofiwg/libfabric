@@ -114,7 +114,7 @@ enum gnix_vc_conn_req_type {
  * @var flags                Bitmap used to hold vc schedule state
  * @var peer_irq_mem_hndl    peer GNI memhndl used for delivering
  *                           GNI_PostCqWrite requests to remote peer
- *
+ * @var peer_caps            peer capability flags
  */
 struct gnix_vc {
 	struct dlist_entry prog_list;	/* NIC VC progress list entry */

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -50,6 +51,8 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 #include "fi_ext_gni.h"
+#include "gnix_util.h"
+#include "common.h"
 
 #if 1
 #define dbg_printf(...)
@@ -289,8 +292,10 @@ int rdm_api_check_data(char *buf1, char *buf2, int len)
 
 void rdm_api_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 		      uint64_t flags, void *addr, size_t len,
-		      uint64_t data)
+		      uint64_t data, struct fid_ep *fid_ep)
 {
+	struct gnix_fid_ep *gnix_ep = get_gnix_ep(fid_ep);
+
 	cr_assert(cqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(cqe->flags == flags, "CQE flags mismatch");
 
@@ -298,7 +303,8 @@ void rdm_api_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 		cr_assert(cqe->len == len, "CQE length mismatch");
 		cr_assert(cqe->buf == addr, "CQE address mismatch");
 
-		if (flags & FI_REMOTE_CQ_DATA)
+	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps))
 			cr_assert(cqe->data == data, "CQE data mismatch");
 	} else {
 		cr_assert(cqe->len == 0, "Invalid CQE length");

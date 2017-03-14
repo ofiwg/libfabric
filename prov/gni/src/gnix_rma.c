@@ -250,7 +250,7 @@ int __smsg_rma_data(void *data, void *msg)
 	struct gnix_fid_ep *ep = vc->ep;
 	gni_return_t status;
 
-	if (hdr->flags & FI_REMOTE_CQ_DATA && ep->recv_cq) {
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(hdr->flags, ep->caps) && ep->recv_cq) {
 		ret = _gnix_cq_add_event(ep->recv_cq, ep, NULL, hdr->user_flags,
 					 0, 0, hdr->user_data, 0,
 					 FI_ADDR_NOTAVAIL);
@@ -335,7 +335,7 @@ static int __gnix_rma_send_data_req(void *arg)
 	txd->completer_fn = __gnix_rma_txd_data_complete;
 	txd->rma_data_hdr.flags = 0;
 
-	if (req->flags & FI_REMOTE_CQ_DATA) {
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(req->flags, ep->caps)) {
 		txd->rma_data_hdr.flags |= FI_REMOTE_CQ_DATA;
 		txd->rma_data_hdr.user_flags = FI_RMA | FI_REMOTE_CQ_DATA;
 		if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
@@ -488,7 +488,7 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
-	if (req->flags & FI_REMOTE_CQ_DATA ||
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(req->flags, req->gnix_ep->caps) ||
 	    req->vc->peer_caps & FI_RMA_EVENT) {
 		/* control message needed for imm. data or a counter event. */
 		req->tx_failures = 0;
