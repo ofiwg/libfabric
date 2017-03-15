@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2017\-03\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2017\-03\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -248,6 +248,15 @@ with this call are GNIX_FAB_RQ_NAMO_AX (AND and XOR), and
 GNIX_FAB_RQ_NAMO_AX_S (AND and XOR 32 bit), GNIX_FAB_RQ_NAMO_FAX (Fetch
 AND and XOR) and GNIX_FAB_RQ_NAMO_FAX_S (Fetch AND and XOR 32 bit).
 .SH NOTES
+.PP
+The default address format is FI_ADDR_GNI.
+This is the only address format used within the GNI provider for message
+passing.
+FI_ADDR_STR is always parsed and converted to FI_ADDR_GNI for use within
+the GNI provider.
+.PP
+\f[I]FI_ADDR_STR\f[] is formatted as follows:
+gni;node;service;GNIX_AV_STR_ADDR_VERSION;device_addr;cdm_id;name_type;cm_nic_cdm_id;cookie;rx_ctx_cnt
 .PP
 The GNI provider sets the domain attribute \f[I]cntr_cnt\f[] to the the
 CQ limit divided by 2.
