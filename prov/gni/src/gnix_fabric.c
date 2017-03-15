@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -55,6 +56,7 @@
 
 #include "gnix.h"
 #include "gnix_nic.h"
+#include "gnix_cm.h"
 #include "gnix_cm_nic.h"
 #include "gnix_util.h"
 #include "gnix_nameserver.h"
@@ -94,7 +96,7 @@ DIRECT_FN int gnix_fabric_trywait(struct fid_fabric *fabric, struct fid **fids, 
 static struct fi_ops_fabric gnix_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = gnix_domain_open,
-	.passive_ep = gnix_passive_ep_open,
+	.passive_ep = gnix_pep_open,
 	.eq_open = gnix_eq_open,
 	.wait_open = gnix_wait_open,
 	.trywait = gnix_fabric_trywait
@@ -239,19 +241,31 @@ static int __gnix_getinfo_resolve_node(const char *node, const char *service,
 	int ret;
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
-	struct gnix_ep_name *addr = NULL;
+	bool is_fi_addr_str = hints->addr_format == FI_ADDR_STR;
+
+	if (unlikely(is_fi_addr_str && node && service)) {
+		GNIX_WARN(FI_LOG_FABRIC, "service parameter must be NULL when "
+			"node parameter is not and using FI_ADDR_STR.\n");
+		return -FI_EINVAL;
+	}
 
 	if (flags & FI_SOURCE) {
 		/* -resolve node/port to make info->src_addr
 		 * -ignore hints->src_addr
 		 * -copy hints->dest_addr to output info */
-		src_addr = malloc(sizeof(*addr));
+		src_addr = malloc(sizeof(*src_addr));
 		if (!src_addr) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}
 
-		ret = _gnix_resolve_name(node, service, flags, src_addr);
+		if (is_fi_addr_str) {
+			ret = _gnix_ep_name_from_str(node, src_addr);
+		} else {
+			ret = _gnix_resolve_name(node, service, flags,
+						 src_addr);
+		}
+
 		if (ret != FI_SUCCESS) {
 			ret = -FI_ENODATA;
 			goto err;
@@ -279,8 +293,13 @@ static int __gnix_getinfo_resolve_node(const char *node, const char *service,
 				goto err;
 			}
 
-			ret = _gnix_resolve_name(node, service, flags,
-						 dest_addr);
+			if (is_fi_addr_str) {
+				ret = _gnix_ep_name_from_str(node, dest_addr);
+			} else {
+				ret = _gnix_resolve_name(node, service, flags,
+							 dest_addr);
+			}
+
 			if (ret != FI_SUCCESS) {
 				ret = -FI_ENODATA;
 				goto err;
@@ -331,8 +350,15 @@ static int __gnix_getinfo_resolve_node(const char *node, const char *service,
 			  dest_addr->gnix_addr.device_addr,
 			  dest_addr->gnix_addr.cdm_id);
 
-	info->src_addr = src_addr;
-	info->dest_addr = dest_addr;
+	if (src_addr) {
+		info->src_addr = src_addr;
+		info->src_addrlen = sizeof(*src_addr);
+	}
+
+	if (dest_addr) {
+		info->dest_addr = dest_addr;
+		info->dest_addrlen = sizeof(*dest_addr);
+	}
 
 	return FI_SUCCESS;
 
@@ -350,7 +376,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 {
 	uint64_t mode = GNIX_FAB_MODES;
 	struct fi_info *gnix_info = NULL;
-	int ret;
+	int ret = -FI_ENODATA;
 
 	if ((hints && hints->ep_attr) &&
 	    (hints->ep_attr->type != FI_EP_UNSPEC &&
@@ -361,6 +387,20 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	gnix_info = _gnix_allocinfo();
 	if (!gnix_info)
 		return -FI_ENOMEM;
+
+	if (hints->addr_format == FI_ADDR_STR) {
+		gnix_info->addr_format = FI_ADDR_STR;
+		/* TODO: uncomment the ifdef below after the 1.5 release */
+#if 0
+		if (!FI_VERSION_GE(version, FI_VERSION(1, 5))) {
+			GNIX_WARN(FI_LOG_FABRIC, "FI_ADDR_STR is only "
+				"supported in api versions >= 1.5 but the "
+				"current api version is: %u.%u",
+				  FI_MAJOR(version), FI_MINOR(version));
+			goto err;
+		}
+#endif
+	}
 
 	gnix_info->ep_attr->type = ep_type;
 
@@ -522,7 +562,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	return FI_SUCCESS;
 err:
 	fi_freeinfo(gnix_info);
-	return -FI_ENODATA;
+	return ret;
 }
 
 static int gnix_getinfo(uint32_t version, const char *node, const char *service,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
@@ -42,6 +42,7 @@
 #include "gnix.h"
 #include "gnix_datagram.h"
 #include "gnix_cm_nic.h"
+#include "gnix_cm.h"
 #include "gnix_nic.h"
 #include "gnix_hashtable.h"
 
@@ -568,6 +569,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	gnix_hashtable_attr_t gnix_ht_attr = {0};
 	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
 	struct gnix_nic_attr nic_attr = {0};
+	struct gnix_ep_name ep_name;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -581,10 +583,10 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	 * and just use it.
 	 */
 
-	if (info->src_addr &&
-	    info->src_addrlen == sizeof(struct gnix_ep_name)) {
-		name_type = ((struct gnix_ep_name *)(info->src_addr))->
-								name_type;
+	if (info->src_addr) {
+		/*TODO (optimization): strchr to name_type and strtol */
+		_gnix_get_ep_name(info->src_addr, 0, &ep_name, domain);
+		name_type = ep_name.name_type;
 	}
 
 	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -118,6 +118,7 @@ enum gnix_vc_conn_req_type {
  * @var flags                Bitmap used to hold vc schedule state
  * @var peer_irq_mem_hndl    peer GNI memhndl used for delivering
  *                           GNI_PostCqWrite requests to remote peer
+ *
  */
 struct gnix_vc {
 	struct dlist_entry rx_list;	/* RX VC list entry */

@@ -50,6 +50,189 @@ struct fi_ops gnix_pep_fi_ops;
 struct fi_ops_ep gnix_pep_ops_ep;
 struct fi_ops_cm gnix_pep_ops_cm;
 
+int _gnix_ep_name_to_str(struct gnix_ep_name *ep_name, char **out_buf)
+{
+	char *str;
+	size_t len = GNIX_FI_ADDR_STR_LEN;
+
+	GNIX_TRACE(FI_LOG_TRACE, "\n");
+
+	if (*out_buf == NULL) {
+		str = calloc(len, sizeof(char));
+		if (str == NULL) {
+			GNIX_WARN(FI_LOG_FABRIC, fi_strerror(FI_ENOMEM));
+			return -FI_ENOMEM;
+		}
+	} else {
+		str = *out_buf;
+	}
+
+	/* Convert raw address info to string */
+	snprintf(str, len, "gni;NONE;NONE;%04i;0x%08" PRIx32 ";0x%08" PRIx32
+		";%02i;0x%06" PRIx32 ";0x%08" PRIx32 ";%02i",
+		 GNIX_AV_STR_ADDR_VERSION,
+		 ep_name->gnix_addr.device_addr,
+		 ep_name->gnix_addr.cdm_id,
+		 ep_name->name_type,
+		 ep_name->cm_nic_cdm_id,
+		 ep_name->cookie,
+		 ep_name->rx_ctx_cnt);
+
+	return FI_SUCCESS;
+}
+
+int _gnix_ep_name_from_str(const char *addr,
+			    struct gnix_ep_name *resolved_addr)
+{
+	char *tok, *endptr;
+	int ret;
+	struct gnix_ep_name ep_name;
+	long tok_val;
+	char *dup_addr;
+
+	GNIX_TRACE(FI_LOG_TRACE, "\n");
+
+	if (!addr || !resolved_addr) {
+		GNIX_WARN(FI_LOG_WARN, "NULL parameter in "
+			"__gnix_resolved_name_from_str");
+		return -FI_EINVAL;
+	}
+
+	dup_addr = strdup(addr);
+	if (!dup_addr) {
+		return -FI_ENOMEM;
+	}
+
+	tok = strtok(dup_addr, ";");
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		return -FI_EINVAL;
+	}
+
+	ret = memcmp(tok, "gni", 3);
+	if (ret) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+
+	tok = strtok(NULL, ";");/*node*/
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+
+	tok = strtok(NULL, ";");/*service*/
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+
+	tok = strtok(NULL, ";");/*GNIX_AV_STR_ADDR_VERSION*/
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+
+	/*device_addr*/
+	tok = strtok(NULL, ";");
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	tok_val = strtol(tok, &endptr, 16);
+	if (*endptr) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid device_addr.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	ep_name.gnix_addr.device_addr = (uint32_t) tok_val;
+
+	/*cdm_id*/
+	tok = strtok(NULL, ";");
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	tok_val = strtol(tok, &endptr, 16);
+	if (*endptr) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid cdm_id.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	ep_name.gnix_addr.cdm_id = (uint32_t) tok_val;
+
+	/*name_type*/
+	tok = strtok(NULL, ";");
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	tok_val = strtol(tok, &endptr, 10);
+	if (*endptr) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid name_type.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	ep_name.name_type = (uint32_t) tok_val;
+
+	/*cm_nic_cdm_id*/
+	tok = strtok(NULL, ";");
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	tok_val = strtol(tok, &endptr, 16);
+	if (*endptr) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid cm_nic_cdm_id.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	ep_name.cm_nic_cdm_id = (uint32_t) tok_val;
+
+	/*cookie*/
+	tok = strtok(NULL, ";");
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	tok_val = strtol(tok, &endptr, 16);
+	if (*endptr) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid cookie.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	ep_name.cookie = (uint32_t) tok_val;
+
+	/*rx_ctx_cnt*/
+	tok = strtok(NULL, ";");
+	if (!tok) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid address.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	tok_val = strtol(tok, &endptr, 10);
+	if (*endptr) {
+		GNIX_WARN(FI_LOG_WARN, "Invalid rx_ctx_cnt.\n");
+		free(dup_addr);
+		return -FI_EINVAL;
+	}
+	ep_name.rx_ctx_cnt = (uint32_t) tok_val;
+
+	*resolved_addr = ep_name;
+	free(dup_addr);
+
+	return FI_SUCCESS;
+}
+
 /******************************************************************************
  *
  * Common CM handling (supported for all types of endpoints).
@@ -62,9 +245,11 @@ struct fi_ops_cm gnix_pep_ops_cm;
  * addrlen: Should indicate the size of the addr buffer. On output will contain
  *     the size necessary to copy the proper address structure.
  *
- * addr: Pointer to memory that will conatin the address structure. Should be
+ * addr: Pointer to memory that will contain the address structure. Should be
  *     allocated and of size addrlen. If addrlen is less than necessary to copy
  *     the proper address structure then addr will contain a truncated address.
+ *     Depending on what hints were used during setup, addr will either be in
+ *     the FI_ADDR_STR or FI_ADDR_GNI format.
  *
  * return: FI_SUCCESS or negative error value.
  */
@@ -73,35 +258,70 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	struct gnix_fid_ep *ep = NULL;
 	struct gnix_fid_sep *sep = NULL;
 	struct gnix_fid_pep *pep = NULL;
-	size_t len;
+	size_t len = 0, cpylen;
+	bool is_fi_addr_str;
+	struct fi_info *info;
+	struct gnix_ep_name *ep_name;
+	int ret;
 
-	if (!addr) {
-		*addrlen = sizeof(struct gnix_ep_name);
-		return -FI_ETOOSMALL;
+	if (unlikely(addrlen == NULL)) {
+		GNIX_WARN(FI_LOG_FABRIC, "parameter \"addrlen\" is NULL in "
+			"gnix_getname\n");
+		return -FI_EINVAL;
 	}
 
-	len = MIN(*addrlen, sizeof(struct gnix_ep_name));
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
 		ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-		memcpy(addr, &ep->src_addr, len);
+		info = ep->info;
+		ep_name = &ep->src_addr;
 		break;
 	case FI_CLASS_SEP:
 		sep = container_of(fid, struct gnix_fid_sep, ep_fid);
-		memcpy(addr, &sep->my_name, len);
+		info = sep->info;
+		ep_name = &sep->my_name;
 		break;
 	case FI_CLASS_PEP:
-		pep = container_of(fid, struct gnix_fid_pep, pep_fid.fid);
-		memcpy(addr, &pep->src_addr, len);
+		pep = container_of(fid, struct gnix_fid_pep,
+				   pep_fid.fid);
+		info = pep->info;
+		ep_name = &pep->src_addr;
 		break;
 	default:
-		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
+		GNIX_INFO(FI_LOG_EP_CTRL,
+			  "Invalid fid class: %d\n",
 			  fid->fclass);
 		return -FI_EINVAL;
 	}
 
-	*addrlen = sizeof(struct gnix_ep_name);
-	return (len == sizeof(struct gnix_ep_name)) ? 0 : -FI_ETOOSMALL;
+	is_fi_addr_str = info->addr_format == FI_ADDR_STR;
+
+	if (!addr) {
+		if (unlikely(is_fi_addr_str)) {
+			*addrlen = GNIX_FI_ADDR_STR_LEN;
+		} else {
+			*addrlen = sizeof(struct gnix_ep_name);
+		}
+
+		return -FI_ETOOSMALL;
+	}
+
+	if (unlikely(is_fi_addr_str)) {
+		ret = _gnix_ep_name_to_str(ep_name, (char **) &addr);
+
+		if (ret)
+			return ret;
+
+		len = GNIX_FI_ADDR_STR_LEN;
+		cpylen = MIN(len, *addrlen);
+	} else {
+		len = sizeof(struct gnix_ep_name);
+		cpylen = MIN(len, *addrlen);
+		memcpy(addr, ep_name, cpylen);
+	}
+
+	*addrlen = len;
+	return (len == cpylen) ? FI_SUCCESS : -FI_ETOOSMALL;
 }
 
 DIRECT_FN STATIC int gnix_setname(fid_t fid, void *addr, size_t addrlen)
@@ -109,24 +329,36 @@ DIRECT_FN STATIC int gnix_setname(fid_t fid, void *addr, size_t addrlen)
 	struct gnix_fid_ep *ep = NULL;
 	struct gnix_fid_sep *sep = NULL;
 	struct gnix_fid_pep *pep = NULL;
+	struct fi_info *info;
+	struct gnix_ep_name *ep_name;
+	size_t len;
+	int ret;
 
-	if (addrlen != sizeof(struct gnix_ep_name))
+	if (unlikely(addr == NULL)) {
+		GNIX_WARN(FI_LOG_FABRIC, "parameter \"addr\" is NULL in "
+			"gnix_setname\n");
 		return -FI_EINVAL;
+	}
+
+	len = sizeof(struct gnix_ep_name);
 
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
 		ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-		memcpy(&ep->src_addr, addr, sizeof(struct gnix_ep_name));
+		info = ep->info;
+		ep_name = &ep->src_addr;
 		break;
 	case FI_CLASS_SEP:
 		sep = container_of(fid, struct gnix_fid_sep, ep_fid);
-		memcpy(&sep->my_name, addr, sizeof(struct gnix_ep_name));
+		info = sep->info;
+		ep_name = &sep->my_name;
 		break;
 	case FI_CLASS_PEP:
 		pep = container_of(fid, struct gnix_fid_pep, pep_fid.fid);
 		/* TODO: make sure we're unconnected. */
 		pep->bound = 1;
-		memcpy(&pep->src_addr, addr, sizeof(struct gnix_ep_name));
+		info = pep->info;
+		ep_name = &pep->src_addr;
 		break;
 	default:
 		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
@@ -134,20 +366,80 @@ DIRECT_FN STATIC int gnix_setname(fid_t fid, void *addr, size_t addrlen)
 		return -FI_EINVAL;
 	}
 
-	return 0;
+	if (unlikely(info->addr_format == FI_ADDR_STR)) {
+		len = GNIX_FI_ADDR_STR_LEN;
+
+		if (addrlen != len)
+			return -FI_EINVAL;
+
+		ret = _gnix_ep_name_from_str((const char *) addr,
+					     ep_name);
+
+		if (ret)
+			return ret;
+
+		return FI_SUCCESS;
+	}
+
+	if (addrlen != len)
+		return -FI_EINVAL;
+
+	memcpy(ep_name, addr, len);
+
+	return FI_SUCCESS;
 }
 
 DIRECT_FN STATIC int gnix_getpeer(struct fid_ep *ep, void *addr,
 				  size_t *addrlen)
 {
 	struct gnix_fid_ep *ep_priv = NULL;
-	size_t len;
+	struct gnix_fid_sep *sep_priv = NULL;
+	struct gnix_ep_name *ep_name = NULL;
+	size_t len = 0, cpylen = 0;
+	struct fi_info *info = NULL;
+	int ret;
 
-	len = MIN(*addrlen, sizeof(struct gnix_ep_name));
-	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
-	memcpy(addr, &ep_priv->dest_addr, len);
-	*addrlen = sizeof(struct gnix_ep_name);
-	return (len == sizeof(struct gnix_ep_name)) ? 0 : -FI_ETOOSMALL;
+	if (unlikely(addrlen == NULL || addr == NULL)) {
+		GNIX_WARN(FI_LOG_FABRIC, "parameter is NULL in gnix_getpeer\n");
+		return -FI_EINVAL;
+	}
+
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid.fid);
+		info = ep_priv->info;
+		ep_name = &ep_priv->dest_addr;
+		break;
+
+	case FI_CLASS_SEP:
+		sep_priv = container_of(ep, struct gnix_fid_sep, ep_fid);
+		info = sep_priv->info;
+		ep_name = info->dest_addr;
+		break;
+
+	default:
+		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
+			  ep->fid.fclass);
+			return -FI_EINVAL;
+	}
+
+	if (info->addr_format == FI_ADDR_STR) {
+		ret = _gnix_ep_name_to_str(ep_name, (char **) &addr);
+
+		if (ret)
+			return ret;
+
+		len = GNIX_FI_ADDR_STR_LEN;
+		cpylen = MIN(len, *addrlen);
+	} else {
+		len = sizeof(struct gnix_ep_name);
+		cpylen = MIN(len, *addrlen);
+		memcpy(addr, ep_name, cpylen);
+	}
+
+	*addrlen = len;
+
+	return (len == cpylen) ? FI_SUCCESS : -FI_ETOOSMALL;
 }
 
 struct fi_ops_cm gnix_ep_ops_cm = {
@@ -957,12 +1249,13 @@ DIRECT_FN STATIC int gnix_reject(struct fid_pep *pep, fid_t handle,
 	return FI_SUCCESS;
 }
 
-DIRECT_FN int gnix_passive_ep_open(struct fid_fabric *fabric,
-				   struct fi_info *info, struct fid_pep **pep,
-				   void *context)
+DIRECT_FN int gnix_pep_open(struct fid_fabric *fabric,
+			    struct fi_info *info, struct fid_pep **pep,
+			    void *context)
 {
 	struct gnix_fid_fabric *fabric_priv;
 	struct gnix_fid_pep *pep_priv;
+	struct gnix_ep_name *ep_name;
 
 	if (!fabric || !info || !pep)
 		return -FI_EINVAL;
@@ -979,17 +1272,23 @@ DIRECT_FN int gnix_passive_ep_open(struct fid_fabric *fabric,
 	pep_priv->pep_fid.fid.ops = &gnix_pep_fi_ops;
 	pep_priv->pep_fid.ops = &gnix_pep_ops_ep;
 	pep_priv->pep_fid.cm = &gnix_pep_ops_cm;
+	pep_priv->fabric = fabric_priv;
+	pep_priv->info = fi_dupinfo(info);
+	pep_priv->info->addr_format = info->addr_format;
 
 	pep_priv->listen_fd = -1;
 	pep_priv->backlog = 5; /* TODO set via fi_control parameter. */
-	pep_priv->fabric = fabric_priv;
 	fastlock_init(&pep_priv->lock);
+
 	if (info->src_addr) {
+		ep_name = info->src_addr;
+		info->src_addrlen = sizeof(struct sockaddr_in);
+
 		pep_priv->bound = 1;
-		memcpy(&pep_priv->src_addr, info->src_addr,
-		       sizeof(struct sockaddr_in));
-	} else
+		memcpy(&pep_priv->src_addr, ep_name, info->src_addrlen);
+	} else {
 		pep_priv->bound = 0;
+	}
 
 	_gnix_ref_init(&pep_priv->ref_cnt, 1, __pep_destruct);
 

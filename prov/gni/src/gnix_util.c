@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -393,6 +394,8 @@ static int __gnix_app_init(void)
 int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 {
 	int ret = FI_SUCCESS;
+
+	/*TODO: If addr is used, ensure that ep->info->addr_format is checked*/
 
 	if ((ptag == NULL) || (cookie == NULL)) {
 		return -FI_EINVAL;

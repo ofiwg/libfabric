@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
  *
@@ -42,6 +42,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -326,16 +327,22 @@ struct gnix_ep_name {
 #define GNIX_AV_STR_ADDR_VERSION  1
 
 /*
- * 49 is the number of characters printed out in gnix_av_straddr.
+ * 52 is the number of characters printed out in gnix_av_straddr.
  *  1 is for the null terminator
  */
-#define GNIX_AV_MAX_STR_ADDR_LEN  (49 + 1)
+#define GNIX_AV_MAX_STR_ADDR_LEN  (52 + 1)
 
 /*
  * 15 is the number of characters for the device addr.
  *  1 is for the null terminator
  */
 #define GNIX_AV_MIN_STR_ADDR_LEN  (15 + 1)
+
+/*
+ * 69 is the number of characters for the printable portion of the address
+ *  1 is for the null terminator
+ */
+#define GNIX_FI_ADDR_STR_LEN (69 + 1)
 
 /*
  * enum for blocking/non-blocking progress
@@ -386,6 +393,7 @@ struct gnix_fid_domain {
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t cdm_id_seed;
+	uint32_t addr_format;
 	/* user tunable parameters accessed via open_ops functions */
 	struct gnix_ops_domain params;
 	/* size of gni tx cqs for this domain */
@@ -433,6 +441,7 @@ struct gnix_fid_domain {
 struct gnix_fid_pep {
 	struct fid_pep pep_fid;
 	struct gnix_fid_fabric *fabric;
+	struct fi_info *info;
 	struct gnix_fid_eq *eq;
 	struct gnix_ep_name src_addr;
 	fastlock_t lock;
@@ -661,7 +670,7 @@ struct gnix_fid_stx {
  *
  * @var fid_av          embedded struct fid_stx field
  * @var domain          pointer to domain used to create the av
- * @var type
+ * @var type            the type of the AV, FI_AV_{TABLE,MAP}
  * @var table
  * @var valid_entry_vec
  * @var addrlen
@@ -1122,9 +1131,9 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 
-int gnix_passive_ep_open(struct fid_fabric *fabric,
-			 struct fi_info *info, struct fid_pep **pep,
-			 void *context);
+int gnix_pep_open(struct fid_fabric *fabric,
+		  struct fi_info *info, struct fid_pep **pep,
+		  void *context);
 
 int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);

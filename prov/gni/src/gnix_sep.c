@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2016 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2016-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -725,6 +726,7 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 	sep_priv->domain = domain;
 
 	sep_priv->info = fi_dupinfo(info);
+	sep_priv->info->addr_format = info->addr_format;
 	if (!sep_priv->info) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			    "fi_dupinfo NULL\n");
@@ -766,9 +768,8 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 	 * via a node/service option to fi_getinfo
 	 */
 
-	if ((info->src_addr != NULL) &&
-		info->src_addrlen == sizeof(struct gnix_ep_name)) {
-		name = (struct gnix_ep_name *)info->src_addr;
+	if (info->src_addr != NULL) {
+		name = (struct gnix_ep_name *) info->src_addr;
 
 		if (name->name_type & GNIX_EPN_TYPE_BOUND) {
 			cdm_id_base = name->gnix_addr.cdm_id;
@@ -794,7 +795,7 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 	 * allocate cm_nic for this SEP
 	 */
 	ret = _gnix_cm_nic_alloc(domain_priv,
-				 info,
+				 sep_priv->info,
 				 cdm_id,
 				 &sep_priv->cm_nic);
 	if (ret != FI_SUCCESS) {
