@@ -278,7 +278,16 @@ static int fi_bgq_getinfo(uint32_t version, const char *node,
 
 	if (!((FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) || (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO))){
 		fprintf(stderr,"BGQ Provider must be configured with either auto or manual progresss mode specified\n");
+		exit(1);
 		assert(0);
+	}
+
+	BG_JobCoords_t jobCoords;
+	uint32_t jcrc = Kernel_JobCoords(&jobCoords);
+	if (jobCoords.isSubBlock) {
+		fprintf(stderr,"BGQ Provider cannot be run in a sub-block.\n");
+		fflush(stderr);
+		exit(1);
 	}
 
 	int ret;
