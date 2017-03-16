@@ -132,22 +132,22 @@ void fi_log_init(void)
 	fi_param_define(NULL, "log_prov", FI_PARAM_STRING,
 			"Specify specific provider to log (default: all)");
 	fi_param_get_str(NULL, "log_prov", &provstr);
-	fi_create_filter(&prov_log_filter, provstr);
+	ofi_create_filter(&prov_log_filter, provstr);
 
 	fi_param_define(NULL, "log_subsys", FI_PARAM_STRING,
 			"Specify specific subsystem to log (default: all)");
 	fi_param_get_str(NULL, "log_subsys", &subsysstr);
-	fi_create_filter(&subsys_filter, subsysstr);
+	ofi_create_filter(&subsys_filter, subsysstr);
 	for (i = 0; i < FI_LOG_SUBSYS_MAX; i++) {
-		if (!fi_apply_filter(&subsys_filter, log_subsys[i]))
+		if (!ofi_apply_filter(&subsys_filter, log_subsys[i]))
 			log_mask |= (1 << (i + FI_LOG_SUBSYS_OFFSET));
 	}
-	fi_free_filter(&subsys_filter);
+	ofi_free_filter(&subsys_filter);
 }
 
 void fi_log_fini(void)
 {
-	fi_free_filter(&prov_log_filter);
+	ofi_free_filter(&prov_log_filter);
 }
 
 __attribute__((visibility ("default")))

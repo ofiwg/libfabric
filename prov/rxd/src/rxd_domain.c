@@ -238,8 +238,7 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct rxd_fabric *rxd_fabric;
 
 	rxd_fabric = container_of(fabric, struct rxd_fabric, util_fabric.fabric_fid);
-	ret = ofi_check_info(&rxd_util_prov, fabric->api_version,
-			     info, FI_MATCH_PREFIX);
+	ret = ofi_check_info(&rxd_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 
@@ -247,20 +246,21 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (!rxd_domain)
 		return -FI_ENOMEM;
 
-	ret = ofix_getinfo(fabric->api_version, NULL, NULL, 0,
-			   &rxd_util_prov, info, rxd_alter_layer_info,
-			   rxd_alter_base_info, 1, &dg_info);
+	ret = ofi_get_core_info(fabric->api_version, NULL, NULL, 0,
+				&rxd_util_prov, info, rxd_info_to_core, &dg_info);
 	if (ret)
 		goto err1;
 
 
-	ret = fi_domain(rxd_fabric->dg_fabric, dg_info, &rxd_domain->dg_domain, context);
+	ret = fi_domain(rxd_fabric->dg_fabric, dg_info,
+			&rxd_domain->dg_domain, context);
 	if (ret)
 		goto err2;
 
 	rxd_domain->max_mtu_sz = dg_info->ep_attr->max_msg_size;
 	rxd_domain->dg_mode = dg_info->mode;
-	rxd_domain->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
+	rxd_domain->addrlen = (info->src_addr) ? info->src_addrlen :
+						 info->dest_addrlen;
 
 	ret = ofi_domain_init(fabric, info, &rxd_domain->util_domain, context);
 	if (ret) {

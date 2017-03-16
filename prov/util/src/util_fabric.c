@@ -49,12 +49,11 @@ int ofi_fabric_close(struct util_fabric *fabric)
 int ofi_fabric_init(const struct fi_provider *prov,
 		    const struct fi_fabric_attr *prov_attr,
 		    const struct fi_fabric_attr *user_attr,
-		    struct util_fabric *fabric, void *context,
-		    enum fi_match_type type)
+		    struct util_fabric *fabric, void *context)
 {
 	int ret;
 
-	ret = ofi_check_fabric_attr(prov, prov_attr, user_attr, type);
+	ret = ofi_check_fabric_attr(prov, prov_attr, user_attr);
 	if (ret)
 		return ret;
 

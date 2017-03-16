@@ -71,41 +71,83 @@ static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 	}
 }
 
-char *ofi_strdup_less_prefix(char *name, char *prefix)
+/*
+char *ofi_strdup_head(const char *str)
 {
-	return strdup(name + strlen(prefix) + 1);
+	char *delim;
+	delim = strchr(str, OFI_NAME_DELIM);
+	return delim ? strndup(str, delim - str) : strdup(str);
 }
 
-char *ofi_strdup_add_prefix(char *name, char *prefix)
+char *ofi_strdup_tail(const char *str)
 {
-	char *prefix_name;
-	char *base = "";
-	ssize_t size;
-	int ret;
+	char *delim;
+	delim = strchr(str, OFI_NAME_DELIM);
+	return delim ? strup(delim + 1) : strdup(str);
+}
+*/
 
-	if (name)
-		base = name;
+char *ofi_strdup_append(const char *head, const char *tail)
+{
+	char *str;
+	size_t len;
 
-	size = snprintf(NULL, 0, "%s_%s", prefix, base) + 1;
-	if (size < 0)
-		return NULL;
+	len = strlen(head) + strlen(tail) + 2;
+	str = malloc(len);
+	if (str)
+		sprintf(str, "%s%c%s", head, OFI_NAME_DELIM, tail);
+	return str;
+}
 
-	prefix_name = calloc(size, sizeof(*prefix_name));
-	if (!prefix_name)
-		return NULL;
+static int ofi_has_util_prefix(const char *str)
+{
+	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
+}
 
-	ret = snprintf(prefix_name, size, "%s_%s", prefix, base);
-	if (ret < 0 || ret > size)
-		goto err;
+const char *ofi_util_name(const char *str, size_t *len)
+{
+	char *delim;
 
-	return prefix_name;
-
-err:
-	free(prefix_name);
+	delim = strchr(str, OFI_NAME_DELIM);
+	if (delim) {
+		if (ofi_has_util_prefix(delim + 1)) {
+			*len = strlen(delim + 1);
+			return delim + 1;
+		} else if (ofi_has_util_prefix(str)) {
+			*len = delim - str;
+			return str;
+		}
+	} else if (ofi_has_util_prefix(str)) {
+		*len = strlen(str);
+		return str;
+	}
+	*len = 0;
 	return NULL;
 }
 
-static int ofix_dup_addr(struct fi_info *info, struct fi_info *dup)
+const char *ofi_core_name(const char *str, size_t *len)
+{
+	char *delim;
+
+	delim = strchr(str, OFI_NAME_DELIM);
+	if (delim) {
+		if (!ofi_has_util_prefix(delim + 1)) {
+			*len = strlen(delim + 1);
+			return delim + 1;
+		} else if (!ofi_has_util_prefix(str)) {
+			*len = delim - str;
+			return str;
+		}
+	} else if (!ofi_has_util_prefix(str)) {
+		*len = strlen(str);
+		return str;
+	}
+	*len = 0;
+	return NULL;
+
+}
+
+static int ofi_dup_addr(struct fi_info *info, struct fi_info *dup)
 {
 	dup->addr_format = info->addr_format;
 	if (info->src_addr) {
@@ -126,136 +168,171 @@ static int ofix_dup_addr(struct fi_info *info, struct fi_info *dup)
 	return 0;
 }
 
-static int ofix_alter_layer_info(const struct fi_provider *prov,
-		const struct fi_info *prov_info,
-		struct fi_info *layer_info, ofi_alter_info_t alter_layer_info,
-		struct fi_info **base_info)
+static int ofi_info_to_core(const struct fi_provider *prov,
+			    struct fi_info *util_info,
+			    ofi_alter_info_t info_to_core,
+			    struct fi_info **core_hints)
 {
-	if (!(*base_info = fi_allocinfo()))
+	const char *core_name;
+	size_t len;
+
+	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (alter_layer_info(layer_info, *base_info))
+	if (info_to_core(util_info, *core_hints))
 		goto err;
 
-	if (!layer_info)
+	if (!util_info)
 		return 0;
 
-	if (ofix_dup_addr(layer_info, *base_info))
+	if (ofi_dup_addr(util_info, *core_hints))
 		goto err;
 
-	if (layer_info->domain_attr && layer_info->domain_attr->name &&
-			!((*base_info)->domain_attr->name =
-			ofi_strdup_less_prefix(layer_info->domain_attr->name,
-			prov_info->domain_attr->name))) {
-		FI_WARN(prov, FI_LOG_FABRIC,
-				"Unable to alter layer_info domain name\n");
-		goto err;
+	if (util_info->fabric_attr) {
+		if (util_info->fabric_attr->name) {
+			(*core_hints)->fabric_attr->name =
+				strdup(util_info->fabric_attr->name);
+			if (!(*core_hints)->fabric_attr->name) {
+				FI_WARN(prov, FI_LOG_FABRIC,
+					"Unable to allocate fabric name\n");
+				goto err;
+			}
+		}
+
+		if (util_info->fabric_attr->prov_name) {
+			core_name = ofi_core_name(util_info->fabric_attr->
+						  prov_name, &len);
+			if (core_name) {
+				(*core_hints)->fabric_attr->prov_name =
+					strndup(core_name, len);
+				if (!(*core_hints)->fabric_attr->prov_name) {
+					FI_WARN(prov, FI_LOG_FABRIC,
+						"Unable to alloc prov name\n");
+					goto err;
+				}
+			}
+		}
+	}
+
+	if (util_info->domain_attr && util_info->domain_attr->name) {
+		(*core_hints)->domain_attr->name =
+			strdup(util_info->domain_attr->name);
+		if (!(*core_hints)->domain_attr->name) {
+			FI_WARN(prov, FI_LOG_FABRIC,
+				"Unable to allocate domain name\n");
+			goto err;
+		}
 	}
 	return 0;
+
 err:
-	fi_freeinfo(*base_info);
+	fi_freeinfo(*core_hints);
 	return -FI_ENOMEM;
 }
 
-static int ofix_alter_base_info(const struct fi_provider *prov,
-		const struct fi_info *prov_info,
-		struct fi_info *base_info, ofi_alter_info_t alter_base_info,
-		struct fi_info **layer_info)
+static int ofi_info_to_util(const struct fi_provider *prov,
+			    struct fi_info *core_info,
+			    ofi_alter_info_t info_to_util,
+			    struct fi_info **util_info)
 {
-	if (!(*layer_info = fi_allocinfo()))
+	if (!(*util_info = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (alter_base_info(base_info, *layer_info))
+	if (info_to_util(core_info, *util_info))
 		goto err;
 
-	if (ofix_dup_addr(base_info, *layer_info))
+	if (ofi_dup_addr(core_info, *util_info))
 		goto err;
 
-	if (!((*layer_info)->domain_attr->name =
-				ofi_strdup_add_prefix(base_info->domain_attr->name,
-					prov_info->domain_attr->name))) {
+	(*util_info)->domain_attr->name = strdup(core_info->domain_attr->name);
+	if (!(*util_info)->domain_attr->name) {
 		FI_WARN(prov, FI_LOG_FABRIC,
-				"Unable to alter base prov domain name\n");
+			"Unable to allocate domain name\n");
 		goto err;
 	}
-	(*layer_info)->fabric_attr->prov_version = prov->version;
-	if (!((*layer_info)->fabric_attr->name = strdup(base_info->fabric_attr->name)))
+
+	(*util_info)->fabric_attr->name = strdup(core_info->fabric_attr->name);
+	if (!(*util_info)->fabric_attr->name) {
+		FI_WARN(prov, FI_LOG_FABRIC,
+			"Unable to allocate fabric name\n");
 		goto err;
+	}
+
+	(*util_info)->fabric_attr->prov_name = strdup(core_info->fabric_attr->
+						      prov_name);
+	if (!(*util_info)->fabric_attr->prov_name) {
+		FI_WARN(prov, FI_LOG_FABRIC,
+			"Unable to allocate fabric name\n");
+		goto err;
+	}
 
 	return 0;
 err:
-	fi_freeinfo(*layer_info);
+	fi_freeinfo(*util_info);
 	return -FI_ENOMEM;
+}
+
+int ofi_get_core_info(uint32_t version, const char *node, const char *service,
+		      uint64_t flags, const struct util_prov *util_prov,
+		      struct fi_info *util_hints, ofi_alter_info_t info_to_core,
+		      struct fi_info **core_info)
+{
+	struct fi_info *core_hints = NULL;
+	int ret;
+
+	ret = ofi_check_info(util_prov, version, util_hints);
+	if (ret)
+		return ret;
+
+	ret = ofi_info_to_core(util_prov->prov, util_hints, info_to_core,
+			       &core_hints);
+	if (ret)
+		return ret;
+
+	ret = fi_getinfo(version, node, service, flags | OFI_CORE_PROV_ONLY,
+			 core_hints, core_info);
+	fi_freeinfo(core_hints);
+	return ret;
 }
 
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct util_prov *util_prov,
-			struct fi_info *hints,
-			ofi_alter_info_t alter_layer_info,
-			ofi_alter_info_t alter_base_info,
-			int get_base_info, struct fi_info **info)
+		 uint64_t flags, const struct util_prov *util_prov,
+		 struct fi_info *hints, ofi_alter_info_t info_to_core,
+		 ofi_alter_info_t info_to_util, struct fi_info **info)
 {
-	struct fi_info *base_hints = NULL, *base_info;
-	struct fi_info *temp = NULL, *fi, *tail = NULL;
+	struct fi_info *core_info, *util_info, *cur, *tail;
 	int ret;
 
-	ret = ofi_check_info(util_prov, version, hints, FI_MATCH_PREFIX);
+	ret = ofi_get_core_info(version, node, service, flags, util_prov,
+				hints, info_to_core, &core_info);
 	if (ret)
-		goto err1;
+		return ret;
 
-	ret = ofix_alter_layer_info(util_prov->prov, util_prov->info, hints,
-			alter_layer_info, &base_hints);
-	if (ret)
-		goto err1;
-
-	ret = fi_getinfo(version, node, service, flags, base_hints, &base_info);
-	if (ret)
-		goto err2;
-
-	if (get_base_info) {
-		*info = base_info;
-	} else {
-		for (fi = base_info; fi; fi = fi->next) {
-			ret = ofix_alter_base_info(util_prov->prov, util_prov->info,
-					fi, alter_base_info, &temp);
-			if (ret)
-				goto err3;
-			ofi_alter_info(temp, hints, version);
-			if (!tail)
-				*info = temp;
-			else
-				tail->next = temp;
-			tail = temp;
+	*info = tail = NULL;
+	for (cur = core_info; cur; cur = cur->next) {
+		ret = ofi_info_to_util(util_prov->prov, cur, info_to_util,
+				       &util_info);
+		if (ret) {
+			fi_freeinfo(*info);
+			break;
 		}
-		fi_freeinfo(base_info);
-	}
-	fi_freeinfo(base_hints);
-	return 0;
-err3:
-	fi_freeinfo(*info);
-err2:
-	fi_freeinfo(base_hints);
-err1:
-	return -FI_ENODATA;
-}
 
-static int fi_check_name(char *user_name, char *prov_name, enum fi_match_type type)
-{
-	return (type == FI_MATCH_PREFIX) ?
-		strncasecmp(user_name, prov_name, strlen(prov_name)) :
-		strcasecmp(prov_name, user_name);
+		ofi_alter_info(util_info, hints, version);
+		if (!*info)
+			*info = util_info;
+		else
+			tail->next = util_info;
+		tail = util_info;
+	}
+	fi_freeinfo(core_info);
+	return ret;
 }
 
 int ofi_check_fabric_attr(const struct fi_provider *prov,
 			  const struct fi_fabric_attr *prov_attr,
-			  const struct fi_fabric_attr *user_attr,
-			  enum fi_match_type type)
+			  const struct fi_fabric_attr *user_attr)
 {
-	if (user_attr->name &&
-	    fi_check_name(user_attr->name, prov_attr->name, type)) {
-		FI_INFO(prov, FI_LOG_CORE, "Unknown fabric name\n");
-		return -FI_ENODATA;
-	}
+	/* Provider names are checked by the framework */
 
 	if (user_attr->prov_version > prov_attr->prov_version) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported provider version\n");
@@ -351,11 +428,9 @@ static int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
 
 int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 			  const struct fi_domain_attr *prov_attr,
-			  const struct fi_domain_attr *user_attr,
-			  enum fi_match_type type)
+			  const struct fi_domain_attr *user_attr)
 {
-	if (user_attr->name &&
-	    fi_check_name(user_attr->name, prov_attr->name, type)) {
+	if (user_attr->name && strcasecmp(user_attr->name, prov_attr->name)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
 		return -FI_ENODATA;
 	}
@@ -612,7 +687,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 }
 
 int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
-		   const struct fi_info *user_info, enum fi_match_type type)
+		   const struct fi_info *user_info)
 {
 	const struct fi_info *prov_info = util_prov->info;
 	const struct fi_provider *prov = util_prov->prov;
@@ -641,8 +716,7 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_info->fabric_attr) {
 		ret = ofi_check_fabric_attr(prov, prov_info->fabric_attr,
-					   user_info->fabric_attr,
-					   type);
+					    user_info->fabric_attr);
 		if (ret)
 			return ret;
 	}
@@ -650,7 +724,7 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 	if (user_info->domain_attr) {
 		ret = ofi_check_domain_attr(prov, api_version,
 					    prov_info->domain_attr,
-					    user_info->domain_attr, type);
+					    user_info->domain_attr);
 		if (ret)
 			return ret;
 	}

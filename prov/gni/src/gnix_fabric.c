@@ -536,8 +536,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 
 			ret = ofi_check_domain_attr(&gnix_prov, version,
 						    gnix_info->domain_attr,
-						    hints->domain_attr,
-						    FI_MATCH_EXACT);
+						    hints->domain_attr);
 			if (ret)
 				goto err;
 		}

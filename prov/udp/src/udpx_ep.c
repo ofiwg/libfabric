@@ -574,7 +574,7 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_endpoint_init(domain, &udpx_util_prov, info, &ep->util_ep,
-			context, udpx_ep_progress, FI_MATCH_EXACT);
+				context, udpx_ep_progress);
 	if (ret)
 		goto err;
 

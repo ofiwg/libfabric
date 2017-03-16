@@ -93,11 +93,6 @@
 #define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
 #define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
 
-enum fi_match_type {
-	FI_MATCH_EXACT,
-	FI_MATCH_PREFIX,
-};
-
 enum {
 	UTIL_TX_SHARED_CTX = 1 << 0,
 	UTIL_RX_SHARED_CTX = 1 << 1,
@@ -130,8 +125,7 @@ struct util_fabric {
 int ofi_fabric_init(const struct fi_provider *prov,
 		    const struct fi_fabric_attr *prov_attr,
 		    const struct fi_fabric_attr *user_attr,
-		    struct util_fabric *fabric, void *context,
-		    enum fi_match_type type);
+		    struct util_fabric *fabric, void *context);
 int ofi_fabric_close(struct util_fabric *fabric);
 int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
@@ -180,8 +174,8 @@ struct util_ep {
 
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
-		struct fi_info *info, struct util_ep *ep, void *context,
-		ofi_ep_progress_func progress, enum fi_match_type type);
+		      struct fi_info *info, struct util_ep *ep, void *context,
+		      ofi_ep_progress_func progress);
 
 int ofi_endpoint_close(struct util_ep *util_ep);
 
@@ -501,14 +495,12 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 
 int ofi_check_fabric_attr(const struct fi_provider *prov,
 			  const struct fi_fabric_attr *prov_attr,
-			  const struct fi_fabric_attr *user_attr,
-			  enum fi_match_type type);
+			  const struct fi_fabric_attr *user_attr);
 int ofi_check_wait_attr(const struct fi_provider *prov,
 		        const struct fi_wait_attr *attr);
 int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 			  const struct fi_domain_attr *prov_attr,
-			  const struct fi_domain_attr *user_attr,
-			  enum fi_match_type type);
+			  const struct fi_domain_attr *user_attr);
 int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		      const struct fi_ep_attr *user_attr);
 int ofi_check_cq_attr(const struct fi_provider *prov,
@@ -520,7 +512,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 		      const struct fi_tx_attr *prov_attr,
 		      const struct fi_tx_attr *user_attr, uint64_t info_mode);
 int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
-		   const struct fi_info *user_info, enum fi_match_type type);
+		   const struct fi_info *user_info);
 void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		    uint32_t api_version);
 
@@ -545,19 +537,31 @@ struct util_fabric *fi_fabric_find(const char *name);
 void fi_fabric_remove(struct util_fabric *fabric);
 
 /*
- * Layered Providers
+ * Utility Providers
  */
 
-typedef int (*ofi_alter_info_t)(struct fi_info *src_info, struct fi_info *dest_info);
+typedef int (*ofi_alter_info_t)(struct fi_info *src_info,
+				struct fi_info *dest_info);
 
+int ofi_get_core_info(uint32_t version, const char *node, const char *service,
+		      uint64_t flags, const struct util_prov *util_prov,
+		      struct fi_info *util_hints, ofi_alter_info_t info_to_core,
+		      struct fi_info **core_info);
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct util_prov *util_prov,
-			struct fi_info *hints,
-			ofi_alter_info_t alter_layer_info,
-			ofi_alter_info_t alter_base_info,
-			int get_base_info, struct fi_info **info);
-char *ofi_strdup_less_prefix(char *name, char *prefix);
-char *ofi_strdup_add_prefix(char *name, char *prefix);
+		 uint64_t flags, const struct util_prov *util_prov,
+		 struct fi_info *hints, ofi_alter_info_t info_to_core,
+		 ofi_alter_info_t info_to_util, struct fi_info **info);
+
+
+#define OFI_NAME_DELIM	';'
+#define OFI_UTIL_PREFIX "ofi-"
+
+char *ofi_strdup_append(const char *head, const char *tail);
+// char *ofi_strdup_head(const char *str);
+// char *ofi_strdup_tail(const char *str);
+const char *ofi_util_name(const char *prov_name, size_t *len);
+const char *ofi_core_name(const char *prov_name, size_t *len);
+
 
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		int readonly, void **mapped);

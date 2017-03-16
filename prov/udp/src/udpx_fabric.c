@@ -76,7 +76,7 @@ int udpx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		return -FI_ENOMEM;
 
 	ret = ofi_fabric_init(&udpx_prov, udpx_info.fabric_attr, attr,
-			     util_fabric, context, FI_MATCH_EXACT);
+			      util_fabric, context);
 	if (ret)
 		return ret;
 

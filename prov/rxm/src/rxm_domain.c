@@ -158,9 +158,8 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	rxm_fabric = container_of(fabric, struct rxm_fabric, util_fabric.fabric_fid);
 
-	ret = ofix_getinfo(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
-			info, rxm_alter_layer_info, rxm_alter_base_info,
-			1, &msg_info);
+	ret = ofi_get_core_info(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
+				info, rxm_info_to_core, &msg_info);
 	if (ret)
 		goto err1;
 

@@ -382,8 +382,8 @@ struct rxd_pkt_meta {
 	char pkt_data[]; /* rxd_pkt, followed by data */
 };
 
-int rxd_alter_layer_info(struct fi_info *layer_info, struct fi_info *base_info);
-int rxd_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info);
+int rxd_info_to_core(struct fi_info *rxd_info, struct fi_info *core_info);
+int rxd_info_to_rxd(struct fi_info *core_info, struct fi_info *info);
 
 int rxd_fabric(struct fi_fabric_attr *attr,
 	       struct fid_fabric **fabric, void *context);
