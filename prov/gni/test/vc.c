@@ -554,9 +554,6 @@ Test(vc_management_auto, vc_connect)
 		state = _gnix_vc_state(vc_conn);
 	}
 
-	ret = _gnix_vc_disconnect(vc_conn);
-	cr_assert_eq(ret, FI_SUCCESS);
-
 	/* VC is destroyed by the EP */
 }
 
@@ -624,12 +621,6 @@ Test(vc_management_auto, vc_connect2)
 		pthread_yield();
 		state = _gnix_vc_state(vc_conn1);
 	}
-
-	ret = _gnix_vc_disconnect(vc_conn0);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_disconnect(vc_conn1);
-	cr_assert_eq(ret, FI_SUCCESS);
 
 	/* VC is destroyed by the EP */
 }

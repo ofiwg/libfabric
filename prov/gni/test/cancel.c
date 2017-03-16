@@ -271,9 +271,7 @@ Test(gnix_cancel, cancel_ep_send)
 	cr_assert(!ret);
 
 	/* make a dummy request */
-	fastlock_acquire(&vc->tx_queue_lock);
 	dlist_insert_head(&req->dlist, &vc->tx_queue);
-	fastlock_release(&vc->tx_queue_lock);
 
 	/* cancel simulated request */
 	ret = fi_cancel(&ep[0]->fid, foobar_ptr);

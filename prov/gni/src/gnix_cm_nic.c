@@ -50,6 +50,9 @@
 #define GNIX_CM_NIC_BND_TAG (100)
 #define GNIX_CM_NIC_WC_TAG (99)
 
+DLIST_HEAD(gnix_cm_nic_list);
+pthread_mutex_t gnix_cm_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
+
 /*******************************************************************************
  * Helper functions
  ******************************************************************************/
@@ -156,6 +159,12 @@ static int __process_datagram(struct gnix_datagram *dgram,
 				fi_strerror(-ret));
 			goto err;
 		}
+
+		ret = _gnix_cm_nic_progress(cm_nic);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_cm_nic_progress returned %s\n",
+				  fi_strerror(-ret));
 	}
 
 	/*
@@ -244,8 +253,9 @@ int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
 	return FI_SUCCESS;
 }
 
-int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic)
+int _gnix_cm_nic_progress(void *arg)
 {
+	struct gnix_cm_nic *cm_nic = (struct gnix_cm_nic *)arg;
 	int ret = FI_SUCCESS;
 	int complete;
 	struct gnix_work_req *p = NULL;
@@ -337,6 +347,10 @@ static void  __cm_nic_destruct(void *obj)
 	struct gnix_cm_nic *cm_nic = (struct gnix_cm_nic *)obj;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	pthread_mutex_lock(&gnix_cm_nic_list_lock);
+	dlist_remove(&cm_nic->cm_nic_list);
+	pthread_mutex_unlock(&gnix_cm_nic_list_lock);
 
 	if (cm_nic->dgram_hndl != NULL) {
 		ret = _gnix_dgram_hndl_free(cm_nic->dgram_hndl);
@@ -666,6 +680,11 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	_gnix_ref_init(&cm_nic->ref_cnt, 1, __cm_nic_destruct);
 
 	*cm_nic_ptr = cm_nic;
+
+	pthread_mutex_lock(&gnix_cm_nic_list_lock);
+	dlist_insert_tail(&cm_nic->cm_nic_list, &gnix_cm_nic_list);
+	pthread_mutex_unlock(&gnix_cm_nic_list_lock);
+
 	return ret;
 
 err:

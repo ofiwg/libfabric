@@ -156,7 +156,9 @@ try_again:
 							&cqe);
 			} while (status == GNI_RC_SUCCESS);
 		}
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &prev_state);
 		_gnix_nic_progress(nic);
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &prev_state);
 		retry = 1;
 		break;
 	case GNI_RC_TIMEOUT:
@@ -322,12 +324,8 @@ static int __nic_rx_overrun(struct gnix_nic *nic)
 		ret = _gnix_test_bit(&nic->vc_id_bitmap, i);
 		if (ret) {
 			vc = __gnix_nic_elem_by_rem_id(nic, i);
-			ret = _gnix_vc_dequeue_smsg(vc);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_DATA,
-					  "_gnix_vc_dqueue_smsg returned %d\n",
-					  ret);
-			}
+			ret = _gnix_vc_rx_schedule(vc);
+			assert(ret == FI_SUCCESS);
 		}
 	}
 
@@ -360,12 +358,8 @@ static int __process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "Processing VC RX (%p)\n",
 				  vc);
-			ret = _gnix_vc_dequeue_smsg(vc);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_DATA,
-					"_gnix_vc_dqueue_smsg returned %d\n",
-					ret);
-			}
+			ret = _gnix_vc_rx_schedule(vc);
+			assert(ret == FI_SUCCESS);
 			break;
 		default:
 			break;  /* VC not in a state for scheduling or
@@ -560,8 +554,9 @@ static int __nic_tx_progress(struct gnix_nic *nic, gni_cq_handle_t cq)
 	return ret;
 }
 
-int _gnix_nic_progress(struct gnix_nic *nic)
+int _gnix_nic_progress(void *arg)
 {
+	struct gnix_nic *nic = (struct gnix_nic *)arg;
 	int ret = FI_SUCCESS;
 
 	ret =  __nic_tx_progress(nic, nic->tx_cq);
@@ -1146,12 +1141,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		if (ret != FI_SUCCESS)
 			goto err1;
 
-		fastlock_init(&nic->rx_vc_lock);
-		dlist_init(&nic->rx_vcs);
-		fastlock_init(&nic->work_vc_lock);
-		dlist_init(&nic->work_vcs);
-		fastlock_init(&nic->tx_vc_lock);
-		dlist_init(&nic->tx_vcs);
+		fastlock_init(&nic->prog_vcs_lock);
+		dlist_init(&nic->prog_vcs);
 
 		_gnix_ref_init(&nic->ref_cnt, 1, __nic_destruct);
 

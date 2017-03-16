@@ -521,6 +521,7 @@ void do_tinject(int len)
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[1], &cqe, 1)) == -FI_EAGAIN) {
+		ret = fi_cq_read(msg_cq[0], &cqe, 1);
 		pthread_yield();
 	}
 

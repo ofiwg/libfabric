@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -250,16 +250,13 @@ static struct gnix_fab_req *__gnix_msg_dup_req(struct gnix_fab_req *req)
 
 static void __gnix_msg_queues(struct gnix_fid_ep *ep,
 			      int tagged,
-			      fastlock_t **queue_lock,
 			      struct gnix_tag_storage **posted_queue,
 			      struct gnix_tag_storage **unexp_queue)
 {
 	if (tagged) {
-		*queue_lock = &ep->tagged_queue_lock;
 		*posted_queue = &ep->tagged_posted_recv_queue;
 		*unexp_queue = &ep->tagged_unexp_recv_queue;
 	} else {
-		*queue_lock = &ep->recv_queue_lock;
 		*posted_queue = &ep->posted_recv_queue;
 		*unexp_queue = &ep->unexp_recv_queue;
 	}
@@ -277,7 +274,6 @@ static void __gnix_msg_send_fr_complete(struct gnix_fab_req *req,
 
 	/* Schedule VC TX queue in case the VC is 'fenced'. */
 	_gnix_vc_tx_schedule(vc);
-
 }
 
 static int __recv_err(struct gnix_fid_ep *ep, void *context, uint64_t flags,
@@ -671,7 +667,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 			req->tx_failures++;
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Requeueing failed request: %p\n", req);
-			return _gnix_vc_queue_work_req(req);
+			return _gnix_vc_requeue_work_req(req);
 		}
 
 		if (!GNIX_EP_DGM(req->gnix_ep->type)) {
@@ -689,7 +685,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 
 		req->msg.status = tx_status;
 		req->work_fn = __gnix_rndzv_req_send_fin;
-		return _gnix_vc_queue_work_req(req);
+		return _gnix_vc_requeue_work_req(req);
 	}
 
 	__gnix_msg_copy_unaligned_get_data(req);
@@ -703,9 +699,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	}
 
 	req->work_fn = __gnix_rndzv_req_send_fin;
-	ret = _gnix_vc_queue_work_req(req);
-
-	return ret;
+	return _gnix_vc_requeue_work_req(req);
 }
 
 /*
@@ -750,7 +744,7 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 				/* Build and re-tx the entire iov request if the
 				 * ep type is "reliable datagram" */
 				req->work_fn = __gnix_rndzv_iov_req_build;
-				return _gnix_vc_queue_work_req(req);
+				return _gnix_vc_requeue_work_req(req);
 			}
 
 			if (!GNIX_EP_DGM(req->gnix_ep->type)) {
@@ -778,7 +772,7 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 
 		/* Generate remote CQE and send fin msg back to sender */
 		req->work_fn = __gnix_rndzv_req_send_fin;
-		return _gnix_vc_queue_work_req(req);
+		return _gnix_vc_requeue_work_req(req);
 	}
 
 	/*
@@ -1743,7 +1737,6 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	void *data_ptr;
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
-	fastlock_t *queue_lock;
 	int tagged;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
@@ -1754,9 +1747,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	data_ptr = (void *)((char *)msg + sizeof(*hdr));
 
 	tagged = !!(hdr->flags & FI_TAGGED);
-	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
-
-	COND_ACQUIRE(ep->requires_lock, queue_lock);
+	__gnix_msg_queues(ep, tagged, &posted_queue, &unexp_queue);
 
 	/* Lookup a matching posted request. */
 	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
@@ -1807,14 +1798,12 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
 		if (req == NULL) {
-			COND_RELEASE(ep->requires_lock, queue_lock);
 			return -FI_ENOMEM;
 		}
 
 		/* TODO: Buddy alloc */
 		req->msg.send_info[0].send_addr = (uint64_t)malloc(hdr->len);
 		if (unlikely(req->msg.send_info[0].send_addr == 0ULL)) {
-			COND_RELEASE(ep->requires_lock, queue_lock);
 			_gnix_fr_free(ep, req);
 			return -FI_ENOMEM;
 		}
@@ -1839,8 +1828,6 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		GNIX_DEBUG(FI_LOG_EP_DATA, "New req: %p (%u)\n",
 			  req, req->msg.cum_send_len);
 	}
-
-	COND_RELEASE(ep->requires_lock, queue_lock);
 
 	status = GNI_SmsgRelease(vc->gni_ep);
 	if (unlikely(status != GNI_RC_SUCCESS)) {
@@ -1918,7 +1905,6 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	struct gnix_fab_req *req = NULL, *dup_req;
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
-	fastlock_t *queue_lock;
 	int tagged;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
@@ -1927,9 +1913,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	assert(ep);
 
 	tagged = !!(hdr->flags & FI_TAGGED);
-	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
-
-	COND_ACQUIRE(ep->requires_lock, queue_lock);
+	__gnix_msg_queues(ep, tagged, &posted_queue, &unexp_queue);
 
 	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
 			      &vc->peer_addr);
@@ -1989,7 +1973,6 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			/* Allocate new request for this transfer. */
 			dup_req = __gnix_msg_dup_req(req);
 			if (!dup_req) {
-				COND_RELEASE(ep->requires_lock, queue_lock);
 				return -FI_ENOMEM;
 			}
 
@@ -2020,7 +2003,6 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
 		if (req == NULL) {
-			COND_RELEASE(ep->requires_lock, queue_lock);
 			return -FI_ENOMEM;
 		}
 
@@ -2049,8 +2031,6 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			  req, req->msg.send_info[0].send_len);
 	}
 
-	COND_RELEASE(ep->requires_lock, queue_lock);
-
 	status = GNI_SmsgRelease(vc->gni_ep);
 	if (unlikely(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
@@ -2073,7 +2053,6 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	struct gnix_fab_req *req = NULL;
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
-	fastlock_t *queue_lock;
 	char is_req_posted = 0;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
@@ -2090,10 +2069,8 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	ep = vc->ep;
 	assert(ep != NULL);
 
-	__gnix_msg_queues(ep, hdr->flags & FI_TAGGED, &queue_lock,
+	__gnix_msg_queues(ep, hdr->flags & FI_TAGGED,
 			  &posted_queue, &unexp_queue);
-
-	COND_ACQUIRE(ep->requires_lock, queue_lock);
 
 	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
 			      &vc->peer_addr);
@@ -2109,7 +2086,6 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	} else {		/* Unexpected receive, enqueue it */
 		req = _gnix_fr_alloc(ep);
 		if (req == NULL) {
-			COND_RELEASE(ep->requires_lock, queue_lock);
 			return -FI_ENOMEM;
 		}
 
@@ -2138,9 +2114,6 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 		ret = _gnix_vc_queue_work_req(req);
 	else
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
-
-
-	COND_RELEASE(ep->requires_lock, queue_lock);
 
 	/*
 	 * Release the message buffer on the nic, need to copy the data
@@ -2400,7 +2373,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	int ret;
 	struct gnix_fab_req *req = NULL;
 	struct gnix_address gnix_addr;
-	fastlock_t *queue_lock = NULL;
 	struct gnix_tag_storage *posted_queue = NULL;
 	struct gnix_tag_storage *unexp_queue = NULL;
 	uint64_t match_flags;
@@ -2426,7 +2398,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	if (ret != FI_SUCCESS)
 		return ret;
 
-	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
+	__gnix_msg_queues(ep, tagged, &posted_queue, &unexp_queue);
 
 	GNIX_DEBUG(FI_LOG_EP_DATA, "posted_queue = %p\n", posted_queue);
 
@@ -2435,7 +2407,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		ignore = ~0;
 	}
 
-	COND_ACQUIRE(ep->requires_lock, queue_lock);
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 
 retry_match:
 	try_again = false;
@@ -2638,7 +2610,7 @@ retry_match:
 
 pdc_exit:
 err:
-	COND_RELEASE(ep->requires_lock, queue_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	return ret;
 }
@@ -2882,20 +2854,13 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		GNIX_DEBUG(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
 	}
 
-	ret = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
-	if (ret) {
-		goto err_get_vc;
-	}
-
 	req = _gnix_fr_alloc(ep);
 	if (req == NULL) {
-		ret = -FI_ENOSPC;
-		goto err_fr_alloc;
+		return -FI_ENOSPC;
 	}
 
 	req->type = GNIX_FAB_RQ_SEND;
 	req->gnix_ep = ep;
-	req->vc = vc;
 	req->user_context = context;
 	req->work_fn = _gnix_send_req;
 
@@ -2947,13 +2912,26 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	GNIX_DEBUG(FI_LOG_EP_DATA, "Queuing (%p %d)\n",
 		  (void *)loc_addr, len);
 
-	return _gnix_vc_queue_tx_req(req);
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 
-err_fr_alloc:
-err_get_vc:
-	if (auto_mr) {
-		fi_close(&auto_mr->fid);
+	ret = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
+	if (ret) {
+		goto err_get_vc;
 	}
+
+	req->vc = vc;
+
+	ret = _gnix_vc_queue_tx_req(req);
+
+	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+
+	return ret;
+
+err_get_vc:
+	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+	_gnix_fr_free(ep, req);
+	if (flags & FI_LOCAL_MR)
+		fi_close(&auto_mr->fid);
 	return ret;
 }
 
@@ -2965,7 +2943,6 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	size_t cum_len = 0;
 	struct gnix_fab_req *req = NULL;
 	struct gnix_address gnix_addr;
-	fastlock_t *queue_lock = NULL;
 	struct gnix_tag_storage *posted_queue = NULL;
 	struct gnix_tag_storage *unexp_queue = NULL;
 	uint64_t match_flags;
@@ -3024,9 +3001,9 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	 * in the posted queue (i.e. no fi_recvs have been called (or posted)
 	 * on the remote endpoint).
 	 */
-	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
+	__gnix_msg_queues(ep, tagged, &posted_queue, &unexp_queue);
 
-	COND_ACQUIRE(ep->requires_lock, queue_lock);
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 
 	/*
 	 * Posting a recv, look for an existing request in the
@@ -3098,7 +3075,7 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 							fi_close(&req->msg.recv_md[i]->mr_fid.fid);
 						}
 
-						return ret;
+						goto err;
 					}
 
 					req->msg.recv_md[i] = container_of(
@@ -3125,7 +3102,8 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 							  "invalid memory reg"
 							  "istration (%p).\n",
 							  desc[i]);
-						return -FI_EINVAL;
+						ret = -FI_EINVAL;
+						goto err;
 					}
 
 					req->msg.recv_md[i] =
@@ -3233,7 +3211,7 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 
 pdc_exit:
 err:
-	COND_RELEASE(ep->requires_lock, queue_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	return ret;
 }
@@ -3261,11 +3239,6 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	} else {
 		if (!ep->ep_ops.tagged_send_allowed)
 			return -FI_EOPNOTSUPP;
-	}
-
-	ret = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
-	if (ret != FI_SUCCESS) {
-		return ret;
 	}
 
 	req = _gnix_fr_alloc(ep);
@@ -3296,7 +3269,6 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 
 	req->gnix_ep = ep;
 	req->user_context = context;
-	req->vc = vc;
 	req->work_fn = _gnix_send_req;
 	req->flags = 0; /* Flags that apply to all message types? */
 	req->msg.send_flags = flags;
@@ -3332,7 +3304,7 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 						fi_close(&req->msg.send_md[i]->mr_fid.fid);
 					}
 
-					return ret;
+					goto err_mr_reg;
 				}
 
 				req->msg.send_md[i] = container_of(
@@ -3369,7 +3341,7 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 						  "invalid memory reg"
 						  "istration (%p).\n",
 						  mdesc[i]);
-					return -FI_EINVAL;
+					goto err_mr_reg;
 				}
 
 				req->msg.send_md[i] =
@@ -3411,5 +3383,30 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 
 	req->msg.cum_send_len = (size_t) cum_len;
 
-	return _gnix_vc_queue_tx_req(req);
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
+
+	ret = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
+	if (ret != FI_SUCCESS) {
+		goto err_get_vc;
+	}
+
+	req->vc = vc;
+
+	ret = _gnix_vc_queue_tx_req(req);
+
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	return ret;
+
+err_get_vc:
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+	if (req->msg.send_flags & FI_LOCAL_MR) {
+		for (i = 0; i < count; i++) {
+			fi_close(&req->msg.send_md[i]->mr_fid.fid);
+		}
+	}
+err_mr_reg:
+	_gnix_fr_free(ep, req);
+
+	return ret;
 }

@@ -178,35 +178,71 @@ int _gnix_ep_enable(struct gnix_fid_ep *ep)
 	 */
 
 	if (ep->send_cq) {
-		_gnix_cq_poll_nic_add(ep->send_cq, ep->nic);
+		_gnix_cq_poll_obj_add(ep->send_cq, ep->nic,
+				      _gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cq_poll_obj_add(ep->send_cq, ep->cm_nic,
+					      _gnix_cm_nic_progress);
 		ep->tx_enabled = true;
 	}
 
 	if (ep->recv_cq) {
-		_gnix_cq_poll_nic_add(ep->recv_cq, ep->nic);
+		_gnix_cq_poll_obj_add(ep->recv_cq, ep->nic,
+				      _gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cq_poll_obj_add(ep->recv_cq, ep->cm_nic,
+					      _gnix_cm_nic_progress);
 		ep->rx_enabled = true;
 	}
 
-	if (ep->send_cntr)
-		_gnix_cntr_poll_nic_add(ep->send_cntr, ep->nic);
+	if (ep->send_cntr) {
+		_gnix_cntr_poll_obj_add(ep->send_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->send_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
 
-	if (ep->recv_cntr)
-		_gnix_cntr_poll_nic_add(ep->recv_cntr, ep->nic);
+	if (ep->recv_cntr) {
+		_gnix_cntr_poll_obj_add(ep->recv_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->recv_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
 
-	if (ep->write_cntr)
-		_gnix_cntr_poll_nic_add(ep->write_cntr,
-					ep->nic);
+	if (ep->write_cntr) {
+		_gnix_cntr_poll_obj_add(ep->write_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->write_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
 
-	if (ep->read_cntr)
-		_gnix_cntr_poll_nic_add(ep->read_cntr, ep->nic);
+	if (ep->read_cntr) {
+		_gnix_cntr_poll_obj_add(ep->read_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->read_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
 
-	if (ep->rwrite_cntr)
-		_gnix_cntr_poll_nic_add(ep->rwrite_cntr,
-					ep->nic);
+	if (ep->rwrite_cntr) {
+		_gnix_cntr_poll_obj_add(ep->rwrite_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->rwrite_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
 
-	if (ep->rread_cntr)
-		_gnix_cntr_poll_nic_add(ep->rread_cntr,
-					ep->nic);
+	if (ep->rread_cntr) {
+		_gnix_cntr_poll_obj_add(ep->rread_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->rread_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
+
 	return FI_SUCCESS;
 }
 
@@ -1502,42 +1538,74 @@ static void __ep_destruct(void *obj)
 	}
 
 	if (ep->send_cq) {
-		_gnix_cq_poll_nic_rem(ep->send_cq, ep->nic);
+		_gnix_cq_poll_obj_rem(ep->send_cq, ep->nic,
+				      _gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cq_poll_obj_rem(ep->send_cq, ep->cm_nic,
+					      _gnix_cm_nic_progress);
 		_gnix_ref_put(ep->send_cq);
 	}
 
 	if (ep->recv_cq) {
-		_gnix_cq_poll_nic_rem(ep->recv_cq, ep->nic);
+		_gnix_cq_poll_obj_rem(ep->recv_cq, ep->nic,
+				       _gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cq_poll_obj_rem(ep->recv_cq, ep->cm_nic,
+					      _gnix_cm_nic_progress);
 		_gnix_ref_put(ep->recv_cq);
 	}
 
 	if (ep->send_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->send_cntr, ep->nic);
+		_gnix_cntr_poll_obj_rem(ep->send_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_rem(ep->send_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
 		_gnix_ref_put(ep->send_cntr);
 	}
 
 	if (ep->recv_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->recv_cntr, ep->nic);
+		_gnix_cntr_poll_obj_rem(ep->recv_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_rem(ep->recv_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
 		_gnix_ref_put(ep->recv_cntr);
 	}
 
 	if (ep->write_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->write_cntr, ep->nic);
+		_gnix_cntr_poll_obj_rem(ep->write_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_rem(ep->write_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
 		_gnix_ref_put(ep->write_cntr);
 	}
 
 	if (ep->read_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->read_cntr, ep->nic);
+		_gnix_cntr_poll_obj_rem(ep->read_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_rem(ep->read_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
 		_gnix_ref_put(ep->read_cntr);
 	}
 
 	if (ep->rwrite_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->rwrite_cntr, ep->nic);
+		_gnix_cntr_poll_obj_rem(ep->rwrite_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_rem(ep->rwrite_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
 		_gnix_ref_put(ep->rwrite_cntr);
 	}
 
 	if (ep->rread_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->rread_cntr, ep->nic);
+		_gnix_cntr_poll_obj_rem(ep->rread_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_rem(ep->rread_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
 		_gnix_ref_put(ep->rread_cntr);
 	}
 
@@ -2099,8 +2167,6 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->type = info->ep_attr->type;
 	ep_priv->domain = domain_priv;
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
-	fastlock_init(&ep_priv->recv_queue_lock);
-	fastlock_init(&ep_priv->tagged_queue_lock);
 	ep_priv->min_multi_recv = GNIX_OPT_MIN_MULTI_RECV_DEFAULT;
 	fastlock_init(&ep_priv->vc_lock);
 	ep_priv->progress_fn = NULL;
@@ -2262,9 +2328,6 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->type = info->ep_attr->type;
 
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
-
-	fastlock_init(&ep_priv->recv_queue_lock);
-	fastlock_init(&ep_priv->tagged_queue_lock);
 
 	ep_priv->caps = info->caps & GNIX_EP_CAPS_FULL;
 
@@ -2498,13 +2561,9 @@ static inline struct gnix_fab_req *__find_tx_req(
 
 		while ((vc = (struct gnix_vc *)
 				_gnix_vec_iterator_next(&iter))) {
-			COND_ACQUIRE(vc->ep->requires_lock,
-				     &vc->tx_queue_lock);
 			entry = dlist_remove_first_match(&vc->tx_queue,
 							 __match_context,
 							 context);
-			COND_RELEASE(vc->ep->requires_lock,
-				     &vc->tx_queue_lock);
 
 			if (entry) {
 				req = container_of(entry,
@@ -2517,13 +2576,9 @@ static inline struct gnix_fab_req *__find_tx_req(
 		GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
 
 		while ((vc = _gnix_ht_iterator_next(&iter))) {
-			COND_ACQUIRE(vc->ep->requires_lock,
-				     &vc->tx_queue_lock);
 			entry = dlist_remove_first_match(&vc->tx_queue,
 							 __match_context,
 							 context);
-			COND_RELEASE(vc->ep->requires_lock,
-				     &vc->tx_queue_lock);
 
 			if (entry) {
 				req = container_of(entry,
@@ -2545,17 +2600,16 @@ static inline struct gnix_fab_req *__find_rx_req(
 {
 	struct gnix_fab_req *req = NULL;
 
-	COND_ACQUIRE(ep->requires_lock, &ep->recv_queue_lock);
+	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 	req = _gnix_remove_req_by_context(&ep->posted_recv_queue, context);
-	COND_RELEASE(ep->requires_lock, &ep->recv_queue_lock);
-
-	if (req)
+	if (req) {
+		COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 		return req;
+	}
 
-	COND_ACQUIRE(ep->requires_lock, &ep->tagged_queue_lock);
 	req = _gnix_remove_req_by_context(&ep->tagged_posted_recv_queue,
 			context);
-	COND_RELEASE(ep->requires_lock, &ep->tagged_queue_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	return req;
 }

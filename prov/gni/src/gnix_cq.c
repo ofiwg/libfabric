@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -251,31 +251,7 @@ err:
 
 static int __gnix_cq_progress(struct gnix_fid_cq *cq)
 {
-	struct gnix_cq_poll_nic *pnic, *tmp;
-	int rc;
-
-	COND_READ_ACQUIRE(cq->requires_lock, &cq->nic_lock);
-
-	dlist_for_each_safe(&cq->poll_nics, pnic, tmp, list) {
-		rc = _gnix_nic_progress(pnic->nic);
-		if (rc) {
-			GNIX_WARN(FI_LOG_CQ,
-				  "_gnix_nic_progress failed: %d\n", rc);
-		}
-	}
-
-	COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
-
-	if (unlikely(cq->domain->control_progress != FI_PROGRESS_AUTO)) {
-		if (cq->domain->cm_nic != NULL) {
-			rc = _gnix_cm_nic_progress(cq->domain->cm_nic);
-			if (rc)
-				GNIX_WARN(FI_LOG_CQ,
-				  "_gnix_cm_nic_progress returned: %d\n", rc);
-		}
-	}
-
-	return FI_SUCCESS;
+	return _gnix_prog_progress(&cq->pset);
 }
 
 
@@ -380,65 +356,16 @@ err:
 	return ret;
 }
 
-int _gnix_cq_poll_nic_add(struct gnix_fid_cq *cq, struct gnix_nic *nic)
+int _gnix_cq_poll_obj_add(struct gnix_fid_cq *cq, void *obj,
+			  int (*prog_fn)(void *data))
 {
-	struct gnix_cq_poll_nic *pnic, *tmp;
-
-	COND_WRITE_ACQUIRE(cq->requires_lock, &cq->nic_lock);
-
-	dlist_for_each_safe(&cq->poll_nics, pnic, tmp, list) {
-		if (pnic->nic == nic) {
-			pnic->ref_cnt++;
-			rwlock_unlock(&cq->nic_lock);
-			return FI_SUCCESS;
-		}
-	}
-
-	pnic = malloc(sizeof(struct gnix_cq_poll_nic));
-	if (!pnic) {
-		GNIX_WARN(FI_LOG_CQ, "Failed to add NIC to CQ poll list.\n");
-		COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
-		return -FI_ENOMEM;
-	}
-
-	/* EP holds a ref count on the NIC */
-	pnic->nic = nic;
-	pnic->ref_cnt = 1;
-	dlist_init(&pnic->list);
-	dlist_insert_tail(&pnic->list, &cq->poll_nics);
-
-	COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
-
-	GNIX_INFO(FI_LOG_CQ, "Added NIC(%p) to CQ(%p) poll list\n",
-		  nic, cq);
-
-	return FI_SUCCESS;
+	return _gnix_prog_obj_add(&cq->pset, obj, prog_fn);
 }
 
-int _gnix_cq_poll_nic_rem(struct gnix_fid_cq *cq, struct gnix_nic *nic)
+int _gnix_cq_poll_obj_rem(struct gnix_fid_cq *cq, void *obj,
+			  int (*prog_fn)(void *data))
 {
-	struct gnix_cq_poll_nic *pnic, *tmp;
-
-	COND_WRITE_ACQUIRE(cq->requires_lock, &cq->nic_lock);
-
-	dlist_for_each_safe(&cq->poll_nics, pnic, tmp, list) {
-		if (pnic->nic == nic) {
-			if (!--pnic->ref_cnt) {
-				dlist_remove(&pnic->list);
-				free(pnic);
-				GNIX_INFO(FI_LOG_CQ,
-					  "Removed NIC(%p) from CQ(%p) poll list\n",
-					  nic, cq);
-			}
-			rwlock_unlock(&cq->nic_lock);
-			return FI_SUCCESS;
-		}
-	}
-
-	COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
-
-	GNIX_WARN(FI_LOG_CQ, "NIC not found on CQ poll list.\n");
-	return -FI_EINVAL;
+	return _gnix_prog_obj_rem(&cq->pset, obj, prog_fn);
 }
 
 static void __cq_destruct(void *obj)
@@ -464,6 +391,8 @@ static void __cq_destruct(void *obj)
 			  cq->attr.wait_obj);
 		break;
 	}
+
+	_gnix_prog_fini(&cq->pset);
 
 	_gnix_queue_destroy(cq->events);
 	_gnix_queue_destroy(cq->errors);
@@ -707,8 +636,8 @@ DIRECT_FN int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	_gnix_ref_init(&cq_priv->ref_cnt, 1, __cq_destruct);
 	_gnix_ref_get(cq_priv->domain);
-	dlist_init(&cq_priv->poll_nics);
-	rwlock_init(&cq_priv->nic_lock);
+
+	_gnix_prog_init(&cq_priv->pset);
 
 	cq_priv->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq_fid.fid.context = context;
