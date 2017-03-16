@@ -235,6 +235,11 @@ int fi_fabric_1_0(struct fi_fabric_attr_1_0 *attr_1_0,
 		return -FI_EINVAL;
 
 	memcpy(&attr, attr_1_0, sizeof(*attr_1_0));
+
+	/* Since the API version is not available in ABI 1.0, set the field to
+	 * FI_VERSION(1, 0) for compatibility. The actual API version could be
+	 * anywhere from FI_VERSION(1, 0) to FI_VERSION(1, 4).
+	 */
 	attr.api_version = FI_VERSION(1, 0);
 	return fi_fabric(&attr, fabric, context);
 }
