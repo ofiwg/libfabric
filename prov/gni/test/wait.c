@@ -39,6 +39,8 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fi_info *hints;
 static struct fi_info *fi;
@@ -53,7 +55,7 @@ void wait_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 

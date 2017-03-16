@@ -46,6 +46,8 @@
 
 static struct fi_info *hints;
 static struct fi_info *fi;
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
@@ -63,7 +65,7 @@ void vc_lookup_setup(int av_type, int av_size)
 
 	hints = fi_allocinfo();
 
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	/* Create endpoint */
