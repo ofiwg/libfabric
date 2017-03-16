@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license below:
@@ -262,9 +262,65 @@ static int ft_sync_test(int value)
 	return ft_sock_sync(value);
 }
 
+static int ft_pingpong_rma(void)
+{
+	int ret, i;
+
+	if (listen_sock < 0) {
+		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+			ret = ft_send_rma();
+			if (ret)
+				return ret;
+
+			if (test_info.class_function == FT_FUNC_READ ||
+				test_info.class_function == FT_FUNC_READV ||
+				test_info.class_function == FT_FUNC_READMSG) {
+				ret = ft_comp_tx(FT_COMP_TO);
+				if (ret)
+					return ret;
+			}
+
+			ret = ft_send_msg();
+			if (ret)
+				return ret;
+
+			ret = ft_recv_msg();
+			if (ret)
+				return ret;
+		}	
+	} else {
+		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+			ret = ft_recv_msg();
+			if (ret)
+				return ret;
+
+			ret = ft_send_rma();
+			if (ret)
+				return ret;
+
+			if (test_info.class_function == FT_FUNC_READ ||
+				test_info.class_function == FT_FUNC_READV ||
+				test_info.class_function == FT_FUNC_READMSG) {
+				ret = ft_comp_tx(FT_COMP_TO);
+				if (ret)
+					return ret;
+			}
+
+			ret = ft_send_msg();
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int ft_pingpong(void)
 {
 	int ret, i;
+
+	if (test_info.caps & FI_RMA)
+		return ft_pingpong_rma();
 
 	// TODO: current flow will not handle manual progress mode
 	// it can get stuck with both sides receiving
@@ -331,17 +387,25 @@ static int ft_run_latency(void)
 	int ret, i;
 
 	for (i = 0; i < ft_ctrl.size_cnt; i += ft_ctrl.inc_step) {
-		ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
-		if (ft_tx_ctrl.msg_size > fabric_info->ep_attr->max_msg_size)
+		if (ft_ctrl.size_array[i] > fabric_info->ep_attr->max_msg_size)
 			break;
 
+		if (test_info.caps & FI_RMA) {
+			ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
+			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
+		} else {
+			ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
+		}
+
 		if (((test_info.class_function == FT_FUNC_INJECT) ||
-			(test_info.class_function == FT_FUNC_INJECTDATA)) &&
-			(ft_tx_ctrl.msg_size > fabric_info->tx_attr->inject_size))
+			(test_info.class_function == FT_FUNC_INJECTDATA) ||
+			(test_info.class_function == FT_FUNC_INJECT_WRITE) ||
+			(test_info.class_function == FT_FUNC_INJECT_WRITEDATA)) &&
+			(ft_ctrl.size_array[i] > fabric_info->tx_attr->inject_size))
 			break;
 
 		ft_ctrl.xfer_iter = test_info.test_flags & FT_FLAG_QUICKTEST ?
-				5 : size_to_count(ft_tx_ctrl.msg_size);
+				5 : size_to_count(ft_ctrl.size_array[i]);
 
 		ret = ft_sync_test(0);
 		if (ret)
@@ -375,7 +439,15 @@ static int ft_bw_rma(void)
 			if (ret)
 				return ret;
 		}
-		ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
+
+		if (test_info.class_function == FT_FUNC_READ ||
+			test_info.class_function == FT_FUNC_READV ||
+			test_info.class_function == FT_FUNC_READMSG) {
+			ret = ft_comp_tx(FT_COMP_TO);
+			if (ret)
+				return ret;
+		}
+
 		ret = ft_send_msg();
 		if (ret)
 			return ret;
@@ -480,19 +552,25 @@ static int ft_run_bandwidth(void)
 	int ret, i;
 
 	for (i = 0; i < ft_ctrl.size_cnt; i += ft_ctrl.inc_step) {
-		ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
-		if (ft_tx_ctrl.msg_size > fabric_info->ep_attr->max_msg_size)
+		if (ft_ctrl.size_array[i] > fabric_info->ep_attr->max_msg_size)
 			break;
+
+		if (test_info.caps & FI_RMA) {
+			ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
+			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
+		} else {
+			ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
+		}		
 
 		if (((test_info.class_function == FT_FUNC_INJECT) ||
 			(test_info.class_function == FT_FUNC_INJECTDATA) ||
 			(test_info.class_function == FT_FUNC_INJECT_WRITE) ||
 			(test_info.class_function == FT_FUNC_INJECT_WRITEDATA)) &&
-			(ft_tx_ctrl.msg_size > fabric_info->tx_attr->inject_size))
+			(ft_ctrl.size_array[i] > fabric_info->tx_attr->inject_size))
 			break;
 
 		ft_ctrl.xfer_iter = test_info.test_flags & FT_FLAG_QUICKTEST ?
-				5 : size_to_count(ft_tx_ctrl.msg_size);
+				5 : size_to_count(ft_ctrl.size_array[i]);
 		recv_cnt = ft_ctrl.xfer_iter;
 
 		ret = ft_sync_test(0);

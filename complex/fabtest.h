@@ -79,6 +79,7 @@ struct ft_xcontrol {
 	void			**iov_desc;
 	int			iov_iter;
 	size_t			msg_size;
+	size_t			rma_msg_size;
 	size_t			credits;
 	size_t			max_credits;
 	fi_addr_t		addr;
@@ -93,6 +94,7 @@ struct ft_mr_control {
 	void			*buf;
 	struct fid_mr		*mr;
 	void			*memdesc;
+	uint64_t		mr_key;
 };
 
 struct ft_control {

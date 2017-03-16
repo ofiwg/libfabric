@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -205,28 +205,31 @@ static int ft_post_tsend(void)
 	return ret;
 }
 
-int ft_send_rma(void)
+static int ft_post_send_rma(void)
 {
-	int ret = 0;
+	int ret, i;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
 
 	switch (test_info.class_function) {
-	case FT_FUNC_WRITEV:
+	case FT_FUNC_READ:
+		ft_send_retry(ret, fi_read, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key, NULL);
+		ft_tx_ctrl.credits--;
+		break;
+	case FT_FUNC_READV:
 		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
-			ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
-		ft_send_retry(ret, fi_writev, ft_tx_ctrl.ep, ft_tx_ctrl.iov,
+			ft_tx_ctrl.buf, ft_tx_ctrl.rma_msg_size);
+		ft_send_retry(ret, fi_readv, ft_tx_ctrl.ep, ft_tx_ctrl.iov,
 			ft_tx_ctrl.iov_desc, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
-			ft_tx_ctrl.addr, 0, FT_MR_KEY, NULL);
+			ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key, NULL);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		ft_tx_ctrl.credits--;
 		break;
-	case FT_FUNC_WRITEMSG:
+	case FT_FUNC_READMSG:
 		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
-			ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
-		rma_iov.addr = 0;
-		rma_iov.len = ft_tx_ctrl.msg_size;
-		rma_iov.key = FT_MR_KEY;
+			ft_tx_ctrl.buf, ft_tx_ctrl.rma_msg_size);
 
 		msg.msg_iov = ft_tx_ctrl.iov;
 		msg.desc = ft_tx_ctrl.iov_desc;
@@ -234,6 +237,43 @@ int ft_send_rma(void)
 		msg.addr = ft_tx_ctrl.addr;
 		msg.context = NULL;
 		msg.data = 0;
+
+		rma_iov.addr = 0;
+		rma_iov.key = ft_mr_ctrl.mr_key;
+		for (i = 0, rma_iov.len = 0; i < msg.iov_count; i++)
+			rma_iov.len += ft_tx_ctrl.iov[i].iov_len;
+
+		msg.rma_iov = &rma_iov;
+		msg.rma_iov_count = 1;
+		ft_send_retry(ret, fi_readmsg, ft_tx_ctrl.ep, &msg, 0);
+		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
+		ft_tx_ctrl.credits--;
+		break;
+	case FT_FUNC_WRITEV:
+		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+			ft_tx_ctrl.buf, ft_tx_ctrl.rma_msg_size);
+		ft_send_retry(ret, fi_writev, ft_tx_ctrl.ep, ft_tx_ctrl.iov,
+			ft_tx_ctrl.iov_desc, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+			ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key, NULL);
+		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
+		ft_tx_ctrl.credits--;
+		break;
+	case FT_FUNC_WRITEMSG:
+		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+			ft_tx_ctrl.buf, ft_tx_ctrl.rma_msg_size);
+
+		msg.msg_iov = ft_tx_ctrl.iov;
+		msg.desc = ft_tx_ctrl.iov_desc;
+		msg.iov_count = ft_ctrl.iov_array[ft_tx_ctrl.iov_iter];
+		msg.addr = ft_tx_ctrl.addr;
+		msg.context = NULL;
+		msg.data = 0;
+	
+		rma_iov.addr = 0;
+		rma_iov.key = ft_mr_ctrl.mr_key;
+		for (i = 0, rma_iov.len = 0; i < msg.iov_count; i++)
+			rma_iov.len += ft_tx_ctrl.iov[i].iov_len;
+
 		msg.rma_iov = &rma_iov;
 		msg.rma_iov_count = 1;
 		ft_send_retry(ret, fi_writemsg, ft_tx_ctrl.ep, &msg, 0);
@@ -242,26 +282,51 @@ int ft_send_rma(void)
 		break;
 	case FT_FUNC_INJECT_WRITE:
 		ft_send_retry(ret, fi_inject_write, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.msg_size, ft_tx_ctrl.addr, 0, FT_MR_KEY);
+			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key);
 		break;
 	case FT_FUNC_WRITEDATA:
 		ft_send_retry(ret, fi_writedata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.msg_size, ft_mr_ctrl.memdesc, 0, ft_tx_ctrl.addr,
-			0, FT_MR_KEY, NULL);
+			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc, 0, ft_tx_ctrl.addr,
+			0, ft_mr_ctrl.mr_key, NULL);
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_INJECT_WRITEDATA:
 		ft_send_retry(ret, fi_inject_writedata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.msg_size, 0, ft_tx_ctrl.addr, 0, FT_MR_KEY);
+			ft_tx_ctrl.rma_msg_size, 0, ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key);
 		break;
 	default:
 		ft_send_retry(ret, fi_write, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.msg_size, ft_mr_ctrl.memdesc,
-			ft_tx_ctrl.addr, 0, FT_MR_KEY, NULL);
+			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key, NULL);
 		ft_tx_ctrl.credits--;
 		break;
 	}
 	return ret;
+}
+
+int ft_send_rma(void)
+{
+	int ret;
+
+	while (!ft_tx_ctrl.credits) {
+		ret = ft_comp_tx(FT_COMP_TO);
+		if (ret)
+			return ret;
+	}
+	
+	ret = ft_post_send_rma();
+	if (ret) {
+		FT_PRINTERR("send_rma", ret);
+		return ret;
+	}
+
+	if (!ft_tx_ctrl.credits) {
+		ret = ft_comp_tx(0);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 int ft_post_recv_bufs(void)
