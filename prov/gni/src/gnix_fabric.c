@@ -241,7 +241,12 @@ static int __gnix_getinfo_resolve_node(const char *node, const char *service,
 	int ret;
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
-	bool is_fi_addr_str = hints->addr_format == FI_ADDR_STR;
+	bool is_fi_addr_str = false;
+
+	/* TODO: Add version check when we decide on how to do it */
+	if (hints && hints->addr_format == FI_ADDR_STR) {
+		is_fi_addr_str = true;
+	}
 
 	if (unlikely(is_fi_addr_str && node && service)) {
 		GNIX_WARN(FI_LOG_FABRIC, "service parameter must be NULL when "
@@ -388,23 +393,14 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	if (!gnix_info)
 		return -FI_ENOMEM;
 
-	if (hints->addr_format == FI_ADDR_STR) {
-		gnix_info->addr_format = FI_ADDR_STR;
-		/* TODO: uncomment the ifdef below after the 1.5 release */
-#if 0
-		if (!FI_VERSION_GE(version, FI_VERSION(1, 5))) {
-			GNIX_WARN(FI_LOG_FABRIC, "FI_ADDR_STR is only "
-				"supported in api versions >= 1.5 but the "
-				"current api version is: %u.%u",
-				  FI_MAJOR(version), FI_MINOR(version));
-			goto err;
-		}
-#endif
-	}
-
 	gnix_info->ep_attr->type = ep_type;
 
 	if (hints) {
+		/* TODO: Add version check when we decide on how to do it */
+		if (hints->addr_format == FI_ADDR_STR) {
+			gnix_info->addr_format = FI_ADDR_STR;
+		}
+
 		if (hints->ep_attr) {
 			/* Only support FI_PROTO_GNI protocol. */
 			switch (hints->ep_attr->protocol) {
