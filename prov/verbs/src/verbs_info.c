@@ -969,46 +969,46 @@ static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
 	}
 }
 
-static int fi_ibv_fill_addr(uint64_t flags, struct rdma_addrinfo *rai,
-		struct fi_info **info, struct rdma_cm_id *id)
+static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
+		struct rdma_cm_id *id)
 {
 	struct fi_info *fi;
 	struct sockaddr *local_addr;
 	int ret;
 
-	/* Just FI_SOURCE would correspond to a wildcard address */
-	if (id->verbs || (flags & FI_SOURCE)) {
-		/* Handle the case when rdma_cm doesn't fill src address even
-		 * though it fills the destination address (presence of id->verbs
-		 * corresponds to a valid dest addr) */
-		if (id->verbs && !rai->ai_src_addr) {
-			local_addr = rdma_get_local_addr(id);
-			if (!local_addr) {
-				FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
-						"Unable to get local address\n");
-				return -FI_ENODATA;
-			}
+	if (rai->ai_src_addr)
+		goto rai_to_fi;
 
-			rai->ai_src_len = fi_ibv_sockaddr_len(local_addr);
-			if (!(rai->ai_src_addr = malloc(rai->ai_src_len)))
-				return -FI_ENOMEM;
-
-			memcpy(rai->ai_src_addr, local_addr, rai->ai_src_len);
-			/* User didn't specify a port. Zero out the random port
-			 * assigned by rdmamcm so that this rai/fi_info can be
-			 * used multiple times to create rdma endpoints.*/
-			fi_ibv_sockaddr_set_port(rai->ai_src_addr, 0);
-		}
-
-		for (fi = *info; fi; fi = fi->next) {
-			ret = fi_ibv_rai_to_fi(rai, fi);
-			if (ret)
-				return ret;
-		}
-		return 0;
-	} else {
+	if (!id->verbs)
 		return fi_ibv_get_srcaddr_devs(info);
+
+	/* Handle the case when rdma_cm doesn't fill src address even
+	 * though it fills the destination address (presence of id->verbs
+	 * corresponds to a valid dest addr) */
+	local_addr = rdma_get_local_addr(id);
+	if (!local_addr) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
+				"Unable to get local address\n");
+		return -FI_ENODATA;
 	}
+
+	rai->ai_src_len = fi_ibv_sockaddr_len(local_addr);
+	if (!(rai->ai_src_addr = malloc(rai->ai_src_len)))
+		return -FI_ENOMEM;
+
+	memcpy(rai->ai_src_addr, local_addr, rai->ai_src_len);
+	/* User didn't specify a port. Zero out the random port
+	 * assigned by rdmamcm so that this rai/fi_info can be
+	 * used multiple times to create rdma endpoints.*/
+	fi_ibv_sockaddr_set_port(rai->ai_src_addr, 0);
+
+rai_to_fi:
+	for (fi = *info; fi; fi = fi->next) {
+		ret = fi_ibv_rai_to_fi(rai, fi);
+		if (ret)
+			return ret;
+	}
+	return 0;
 }
 
 int fi_ibv_init_info(void)
@@ -1155,7 +1155,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		goto err;
 
-	ret = fi_ibv_fill_addr(flags, rai, info, id);
+	ret = fi_ibv_fill_addr(rai, info, id);
 	if (ret) {
 		fi_freeinfo(*info);
 		goto err;
