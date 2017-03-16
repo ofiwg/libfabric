@@ -171,12 +171,26 @@ int cm_server_start(void)
 
 void cm_stop_server(void)
 {
-	fi_close(&srv_cq->fid);
-	fi_close(&srv_ep->fid);
-	fi_close(&srv_dom->fid);
-	fi_close(&srv_pep->fid);
-	fi_close(&srv_eq->fid);
-	fi_close(&srv_fab->fid);
+	int ret;
+
+	ret = fi_close(&srv_cq->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&srv_ep->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&srv_dom->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&srv_pep->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&srv_eq->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&srv_fab->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
 	fi_freeinfo(srv_fi);
 }
 
@@ -328,11 +342,23 @@ int cm_client_finish_connect(void)
 
 void cm_stop_client(void)
 {
-	fi_close(&cli_cq->fid);
-	fi_close(&cli_ep->fid);
-	fi_close(&cli_dom->fid);
-	fi_close(&cli_eq->fid);
-	fi_close(&cli_fab->fid);
+	int ret;
+
+	ret = fi_close(&cli_cq->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&cli_ep->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&cli_dom->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&cli_eq->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = fi_close(&cli_fab->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
 	fi_freeinfo(cli_fi);
 }
 
