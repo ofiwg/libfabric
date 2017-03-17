@@ -430,7 +430,8 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 			  const struct fi_domain_attr *prov_attr,
 			  const struct fi_domain_attr *user_attr)
 {
-	if (user_attr->name && strcasecmp(user_attr->name, prov_attr->name)) {
+	if (prov_attr->name && user_attr->name &&
+	    strcasecmp(user_attr->name, prov_attr->name)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
 		return -FI_ENODATA;
 	}
