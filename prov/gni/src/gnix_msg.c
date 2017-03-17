@@ -2807,6 +2807,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	struct gnix_fid_mem_desc *md = NULL;
 	int rendezvous;
 	struct fid_mr *auto_mr = NULL;
+	int connected;
 
 	if (!ep->send_cq && !ep->send_cntr) {
 		return -FI_ENOCQ;
@@ -2922,8 +2923,13 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->vc = vc;
 
 	ret = _gnix_vc_queue_tx_req(req);
+	connected = (vc->conn_state == GNIX_VC_CONNECTED);
 
 	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+
+	/* If a new VC was allocated, progress CM before returning. */
+	if (!connected)
+		_gnix_cm_nic_progress(ep->cm_nic);
 
 	return ret;
 
@@ -3226,6 +3232,7 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	struct gnix_vc *vc = NULL;
 	struct gnix_fab_req *req = NULL;
 	struct fid_mr *auto_mr;
+	int connected;
 
 	GNIX_DEBUG(FI_LOG_EP_DATA, "iov_count = %lu\n", count);
 
@@ -3393,8 +3400,13 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	req->vc = vc;
 
 	ret = _gnix_vc_queue_tx_req(req);
+	connected = (vc->conn_state == GNIX_VC_CONNECTED);
 
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	/* If a new VC was allocated, progress CM before returning. */
+	if (!connected)
+		_gnix_cm_nic_progress(ep->cm_nic);
 
 	return ret;
 
