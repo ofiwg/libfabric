@@ -563,7 +563,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 {
 	struct ofi_prov *prov;
 	struct fi_info *tail, *cur;
-	const char *util_name, *core_name;
+	const char *util_name = NULL, *core_name = NULL;
 	size_t util_len = 0, core_len = 0;
 	int ret;
 
@@ -597,10 +597,10 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		    (flags & OFI_CORE_PROV_ONLY))
 			continue;
 
-		if (util_len) {
+		if (util_len && util_name) {
 			if (strncasecmp(util_name, prov->provider->name, util_len))
 				continue;
-		} else if (core_len) {
+		} else if (core_len && core_name) {
 			if (!ofi_is_util_prov(prov->provider) &&
 			    strncasecmp(core_name, prov->provider->name, core_len))
 				continue;
