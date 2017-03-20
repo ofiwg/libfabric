@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -207,16 +208,20 @@ int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
 		    struct fi_info_1_0 **info)
 {
 	struct fi_info *hints;
+	int ret;
 
 	if (hints_1_0) {
-		hints = (struct fi_info *) fi_dupinfo_1_0(hints_1_0);
+		hints = (struct fi_info *)fi_dupinfo_1_0(hints_1_0);
 		if (!hints)
 			return -FI_ENOMEM;
 	} else {
 		hints = NULL;
 	}
-	return fi_getinfo(version, node, service, flags, hints,
-			  (struct fi_info **) info);
+	ret = fi_getinfo(version, node, service, flags, hints,
+			 (struct fi_info **)info);
+	fi_freeinfo(hints);
+
+	return ret;
 }
 COMPAT_SYMVER(fi_getinfo_1_0, fi_getinfo, FABRIC_1.0);
 
@@ -230,6 +235,11 @@ int fi_fabric_1_0(struct fi_fabric_attr_1_0 *attr_1_0,
 		return -FI_EINVAL;
 
 	memcpy(&attr, attr_1_0, sizeof(*attr_1_0));
+
+	/* Since the API version is not available in ABI 1.0, set the field to
+	 * FI_VERSION(1, 0) for compatibility. The actual API version could be
+	 * anywhere from FI_VERSION(1, 0) to FI_VERSION(1, 4).
+	 */
 	attr.api_version = FI_VERSION(1, 0);
 	return fi_fabric(&attr, fabric, context);
 }
