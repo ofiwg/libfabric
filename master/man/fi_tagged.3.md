@@ -329,7 +329,7 @@ The following flags may be used with fi_trecvmsg.
   FI_CLAIM in order to retrieve and discard a message previously claimed
   using an FI_PEEK + FI_CLAIM request.
 
-  If this flag is set, the input buffer(s) and length parameters.
+  If this flag is set, the input buffer(s) and length parameters are ignored.
 
 # RETURN VALUE
 
