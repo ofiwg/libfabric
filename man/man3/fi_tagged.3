@@ -1,4 +1,4 @@
-.TH "fi_tagged" "3" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_tagged" "3" "2017\-03\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_tagged \- Tagged data transfer operations
@@ -326,7 +326,8 @@ This flag may also be used in conjunction with FI_CLAIM in order to
 retrieve and discard a message previously claimed using an FI_PEEK +
 FI_CLAIM request.
 .PP
-If this flag is set, the input buffer(s) and length parameters.
+If this flag is set, the input buffer(s) and length parameters are
+ignored.
 .SH RETURN VALUE
 .PP
 The tagged send and receive calls return 0 on success.
