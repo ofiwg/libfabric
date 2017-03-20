@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2017\-03\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2017\-03\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -260,6 +260,16 @@ gni;node;service;GNIX_AV_STR_ADDR_VERSION;device_addr;cdm_id;name_type;cm_nic_cd
 .PP
 The GNI provider sets the domain attribute \f[I]cntr_cnt\f[] to the the
 CQ limit divided by 2.
+.PP
+Completion queue events may report unknown source address information
+when using \f[I]FI_SOURCE\f[].
+The source address information will be reported in the err_data member
+of the struct fi_cq_err_entry populated by fi_cq_readerr.
+The err_data member will contain the source address information in the
+FI_ADDR_GNI address format.
+In order to populate the remote peer\[aq]s address vector with this
+mechanism, the application must call fi_cq_readerr to get the source
+address followed by fi_av_insert on the populated err_data member.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
