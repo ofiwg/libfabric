@@ -42,6 +42,7 @@ int ofi_fabric_close(struct util_fabric *fabric)
 		return -FI_EBUSY;
 
 	fi_fabric_remove(fabric);
+	free((char *)fabric->name);
 	fastlock_destroy(&fabric->lock);
 	return 0;
 }
@@ -61,7 +62,8 @@ int ofi_fabric_init(const struct fi_provider *prov,
 	atomic_initialize(&fabric->ref, 0);
 	dlist_init(&fabric->domain_list);
 	fastlock_init(&fabric->lock);
-	fabric->name = prov_attr->name;
+	if (!(fabric->name = strdup(user_attr->name)))
+	    return -FI_ENOMEM;
 
 	fabric->fabric_fid.fid.fclass = FI_CLASS_FABRIC;
 	fabric->fabric_fid.fid.context = context;

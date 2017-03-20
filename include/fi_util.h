@@ -111,6 +111,11 @@ struct util_prov {
 /*
  * Fabric
  */
+struct util_fabric_info {
+	const char 			*name;
+	const struct fi_provider 	*prov;
+};
+
 struct util_fabric {
 	struct fid_fabric	fabric_fid;
 	struct dlist_entry	list_entry;
@@ -534,7 +539,7 @@ void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
 		     struct fid *fid);
 
 void fi_fabric_insert(struct util_fabric *fabric);
-struct util_fabric *fi_fabric_find(const char *name);
+struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info);
 void fi_fabric_remove(struct util_fabric *fabric);
 
 /*
