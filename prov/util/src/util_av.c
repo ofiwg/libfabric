@@ -1011,7 +1011,7 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		util_attr.addrlen = sizeof(struct sockaddr_in6);
 
 	util_attr.overhead = attr->count >> 1;
-	util_attr.flags = domain->caps & FI_SOURCE ? FI_SOURCE : 0;
+	util_attr.flags = domain->info_domain_caps & FI_SOURCE ? FI_SOURCE : 0;
 
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_MAP;

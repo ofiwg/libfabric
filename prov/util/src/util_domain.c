@@ -64,8 +64,9 @@ static int util_domain_init(struct util_domain *domain,
 {
 	atomic_initialize(&domain->ref, 0);
 	fastlock_init(&domain->lock);
-	domain->caps = info->caps;
-	domain->mode = info->mode;
+	domain->info_domain_caps = info->caps | info->domain_attr->caps;
+	domain->info_domain_mode = info->mode | info->domain_attr->mode;
+	domain->mr_mode = info->domain_attr->mr_mode;
 	domain->addr_format = info->addr_format;
 	domain->av_type = info->domain_attr->av_type;
 	domain->name = strdup(info->domain_attr->name);

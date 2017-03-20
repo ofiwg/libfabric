@@ -143,8 +143,10 @@ int util_find_domain(struct dlist_entry *item, const void *arg)
 	domain = container_of(item, struct util_domain, list_entry);
 
 	return !strcmp(domain->name, info->domain_attr->name) &&
-		!(info->caps & ~domain->caps) &&
-		 ((info->mode & domain->mode) == domain->mode);
+		!((info->caps | info->domain_attr->caps) & ~domain->info_domain_caps) &&
+		 (((info->mode | info->domain_attr->mode) &
+		   domain->info_domain_mode) == domain->info_domain_mode) &&
+		 ((info->domain_attr->mr_mode & domain->mr_mode) == domain->mr_mode);
 }
 
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
