@@ -83,7 +83,7 @@ enum gnix_vc_conn_req_type {
 #define REMOTE_MBOX_RCVD (1UL << 1)
 
 /**
- * Virual Connection (VC) struct
+ * Virtual Connection (VC) struct
  *
  * @var prog_list            NIC VC progress list
  * @var work_queue           Deferred work request queue
@@ -101,7 +101,6 @@ enum gnix_vc_conn_req_type {
  *                           associated
  * @var smsg_mbox            pointer to GNI SMSG mailbox used by this VC
  *                           to exchange SMSG messages with its peer
- * @var dgram                pointer to dgram - used in connection setup
  * @var gni_ep               GNI endpoint for this VC
  * @var outstanding_fab_reqs Count of outstanding libfabric level requests
  *                           associated with this endpoint.
@@ -129,7 +128,7 @@ struct gnix_vc {
 	struct gnix_address peer_cm_nic_addr;
 	struct gnix_fid_ep *ep;
 	void *smsg_mbox;
-	struct gnix_datagram *dgram;
+	void *gnix_ep_name;
 	gni_ep_handle_t gni_ep;
 	atomic_t outstanding_tx_reqs;
 	enum gnix_vc_conn_state conn_state;

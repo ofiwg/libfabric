@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -64,7 +64,7 @@ static int __gnix_rma_send_err(struct gnix_fid_ep *ep,
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_error(ep->send_cq, req->user_context,
 					flags, 0, 0, 0, 0, 0, error,
-					GNI_RC_TRANSACTION_ERROR, NULL);
+					GNI_RC_TRANSACTION_ERROR, NULL, 0);
 		if (rc) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_cq_add_error() failed: %d\n", rc);
@@ -93,7 +93,7 @@ static int __gnix_rma_send_completion(struct gnix_fid_ep *ep,
 				      struct gnix_fab_req *req)
 {
 	struct gnix_fid_cntr *cntr = NULL;
-	int rc = FI_SUCCESS;
+	int rc;
 	uint64_t flags = req->flags & GNIX_RMA_COMPLETION_FLAGS;
 
 	if ((req->flags & FI_COMPLETION) && ep->send_cq) {

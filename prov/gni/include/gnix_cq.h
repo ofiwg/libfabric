@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -45,6 +46,7 @@
 
 #define GNIX_CQ_DEFAULT_FORMAT struct fi_cq_entry
 #define GNIX_CQ_DEFAULT_SIZE   256
+#define GNIX_CQ_MAX_ERR_DATA_SIZE 64
 
 /* forward declaration */
 struct gnix_fid_ep;
@@ -73,8 +75,8 @@ struct gnix_fid_cq {
 	struct gnix_prog_set pset;
 
 	bool requires_lock;
+	char err_data[GNIX_CQ_MAX_ERR_DATA_SIZE];
 };
-
 
 ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 			   void *op_context, uint64_t flags, size_t len,
@@ -84,7 +86,8 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 			  uint64_t flags, size_t len, void *buf,
 			  uint64_t data, uint64_t tag, size_t olen,
-			  int err, int prov_errno, void *err_data);
+			  int err, int prov_errno, void *err_data,
+			  size_t err_data_size);
 
 int _gnix_cq_poll_obj_add(struct gnix_fid_cq *cq, void *obj,
 			  int (*prog_fn)(void *data));

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
@@ -1690,6 +1690,8 @@ static void do_write_error(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_cq_err_entry err_cqe;
+
+	err_cqe.err_data_size = 0;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0xab);
@@ -1763,6 +1765,8 @@ static void do_read_error(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_cq_err_entry err_cqe;
+
+	err_cqe.err_data_size = 0;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0);

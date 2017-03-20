@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -278,14 +279,15 @@ static void __gnix_msg_send_fr_complete(struct gnix_fab_req *req,
 
 static int __recv_err(struct gnix_fid_ep *ep, void *context, uint64_t flags,
 		      size_t len, void *addr, uint64_t data, uint64_t tag,
-		      size_t olen, int err, int prov_errno, void *err_data)
+		      size_t olen, int err, int prov_errno, void *err_data,
+		      size_t err_data_size)
 {
 	int rc;
 
 	if (ep->recv_cq) {
 		rc = _gnix_cq_add_error(ep->recv_cq, context, flags, len,
 					addr, data, tag, olen, err,
-					prov_errno, err_data);
+					prov_errno, err_data, err_data_size);
 		if (rc != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_cq_add_error returned %d\n",
@@ -314,25 +316,83 @@ static int __gnix_msg_recv_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 	return __recv_err(ep, req->user_context, flags, req->msg.cum_recv_len,
 			  (void *)req->msg.recv_info[0].recv_addr, req->msg.imm,
 			  req->msg.tag, 0, FI_ECANCELED,
-			  GNI_RC_TRANSACTION_ERROR, NULL);
+			  GNI_RC_TRANSACTION_ERROR, NULL, 0);
 }
 
 static int __recv_completion(
 		struct gnix_fid_ep *ep,
 		struct gnix_fab_req *req,
-		void *context,
+		uint64_t flags,
+		size_t len,
+		void *addr)
+{
+	ssize_t rc;
+
+	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
+		rc = _gnix_cq_add_event(ep->recv_cq,
+					ep,
+					req->user_context,
+					flags,
+					len,
+					addr,
+					req->msg.imm,
+					req->msg.tag,
+					FI_ADDR_NOTAVAIL);
+		if (rc != FI_SUCCESS)  {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				"_gnix_cq_add_event returned %d\n",
+				rc);
+		}
+	}
+
+	if (ep->recv_cntr) {
+		rc = _gnix_cntr_inc(ep->recv_cntr);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cntr_inc() failed: %d\n",
+				  rc);
+	}
+
+	return FI_SUCCESS;
+}
+
+static int __recv_completion_src(
+		struct gnix_fid_ep *ep,
+		struct gnix_fab_req *req,
 		uint64_t flags,
 		size_t len,
 		void *addr,
-		uint64_t data,
-		uint64_t tag,
 		fi_addr_t src_addr)
 {
-	int rc;
+	ssize_t rc;
+
+	GNIX_TRACE(FI_LOG_TRACE, "\n");
 
 	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
-		rc = _gnix_cq_add_event(ep->recv_cq, ep, context, flags, len,
-					addr, data, tag, src_addr);
+		if (src_addr == FI_ADDR_NOTAVAIL) {
+			rc = _gnix_cq_add_error(ep->recv_cq,
+						req->user_context,
+						flags,
+						len,
+						addr,
+						req->msg.imm,
+						req->msg.tag,
+						0,
+						FI_EADDRNOTAVAIL,
+						0,
+						req->vc->gnix_ep_name,
+						sizeof(struct gnix_ep_name));
+		} else {
+			rc = _gnix_cq_add_event(ep->recv_cq,
+						ep,
+						req->user_context,
+						flags,
+						len,
+						addr,
+						req->msg.imm,
+						req->msg.tag,
+						src_addr);
+		}
 		if (rc != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
 					"_gnix_cq_add_event returned %d\n",
@@ -354,7 +414,11 @@ static int __recv_completion(
 static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 					     struct gnix_fab_req *req)
 {
+	int ret;
 	uint64_t flags = FI_RECV | FI_MSG;
+	size_t len;
+	void *recv_addr = NULL;
+	fi_addr_t src_addr;
 
 	flags |= req->msg.send_flags & (FI_TAGGED | FI_REMOTE_CQ_DATA);
 	flags |= req->msg.recv_flags & (FI_PEEK | FI_CLAIM | FI_DISCARD |
@@ -366,13 +430,28 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 	if (req->msg.recv_flags & GNIX_MSG_MULTI_RECV_SUP)
 		flags &= ~FI_MULTI_RECV;
 
-	return __recv_completion(ep, req, req->user_context, flags,
-				 MIN(req->msg.cum_send_len, req->msg.cum_recv_len),
-				 req->msg.recv_flags & FI_MULTI_RECV ?
-				 (void *)req->msg.recv_info[0].recv_addr :
-				 NULL,
-				 req->msg.imm, req->msg.tag,
-				 _gnix_vc_peer_fi_addr(req->vc));
+	len = MIN(req->msg.cum_send_len, req->msg.cum_recv_len);
+
+	if (unlikely(req->msg.recv_flags & FI_MULTI_RECV))
+		recv_addr = (void *)req->msg.recv_info[0].recv_addr;
+
+	if (likely(!(ep->caps & FI_SOURCE))) {
+		ret = __recv_completion(ep,
+					 req,
+					 flags,
+					 len,
+					 recv_addr);
+	} else {
+		src_addr = _gnix_vc_peer_fi_addr(req->vc);
+		ret = __recv_completion_src(ep,
+					     req,
+					     flags,
+					     len,
+					     recv_addr,
+					     src_addr);
+	}
+
+	return ret;
 }
 
 static int __gnix_msg_send_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
@@ -385,7 +464,7 @@ static int __gnix_msg_send_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_error(ep->send_cq, req->user_context,
 					flags, 0, 0, 0, 0, 0, FI_ECANCELED,
-					GNI_RC_TRANSACTION_ERROR, NULL);
+					GNI_RC_TRANSACTION_ERROR, NULL, 0);
 		if (rc != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				   "_gnix_cq_add_error() returned %d\n",
@@ -2553,7 +2632,7 @@ retry_match:
 		if (match_flags) {
 			__recv_err(ep, context, flags, len,
 				   (void *)buf, 0, tag, len, FI_ENOMSG,
-				   FI_ENOMSG, NULL);
+				   FI_ENOMSG, NULL, 0);
 
 			/* if handling trecvmsg flags, return here
 			 * Never post a receive request from this type of context
@@ -3149,7 +3228,7 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 		if (match_flags) {
 			__recv_err(ep, context, flags, cum_len,
 				   (void *) iov, 0, tag, cum_len, FI_ENOMSG,
-				   FI_ENOMSG, NULL);
+				   FI_ENOMSG, NULL, 0);
 
 			/* if handling trecvmsg flags, return here
 			 * Never post a receive request from this type of
