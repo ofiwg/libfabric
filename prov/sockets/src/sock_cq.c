@@ -402,6 +402,10 @@ static ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 {
 	struct sock_cq *sock_cq;
 	ssize_t ret;
+	struct fi_cq_err_entry entry;
+	uint32_t api_version;
+	size_t err_data_size = 0;
+	void *err_data = NULL;
 
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
 	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL)
@@ -409,7 +413,23 @@ static ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
 	fastlock_acquire(&sock_cq->lock);
 	if (ofi_rbused(&sock_cq->cqerr_rb) >= sizeof(struct fi_cq_err_entry)) {
-		ofi_rbread(&sock_cq->cqerr_rb, buf, sizeof(*buf));
+		api_version = sock_cq->domain->fab->fab_fid.api_version;
+		ofi_rbread(&sock_cq->cqerr_rb, &entry, sizeof(entry));
+
+		if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+			&& buf->err_data && buf->err_data_size) {
+			err_data = buf->err_data;
+			err_data_size = buf->err_data_size;
+			*buf = entry;
+			buf->err_data = err_data;
+
+			/* Fill provided user's buffer */
+			buf->err_data_size = MIN(entry.err_data_size, err_data_size);
+			memcpy(buf->err_data, entry.err_data, buf->err_data_size);
+		} else {
+			*buf = entry;
+		}
+
 		ret = 1;
 	} else {
 		ret = -FI_EAGAIN;
@@ -585,9 +605,9 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	sock_cq->cq_fid.fid.ops = &sock_cq_fi_ops;
 	sock_cq->cq_fid.ops = &sock_cq_ops;
 
-	if (attr == NULL)
+	if (attr == NULL) {
 		sock_cq->attr = _sock_cq_def_attr;
-	else {
+	} else {
 		sock_cq->attr = *attr;
 		if (attr->size == 0)
 			sock_cq->attr.size = _sock_cq_def_attr.size;
@@ -678,7 +698,8 @@ err1:
 }
 
 int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
-			 size_t olen, int err, int prov_errno, void *err_data)
+			 size_t olen, int err, int prov_errno, void *err_data,
+			 size_t err_data_size)
 {
 	int ret;
 	struct fi_cq_err_entry err_entry;
@@ -692,6 +713,7 @@ int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 	err_entry.err = err;
 	err_entry.olen = olen;
 	err_entry.err_data = err_data;
+	err_entry.err_data_size = err_data_size;
 	err_entry.len = entry->data_len;
 	err_entry.prov_errno = prov_errno;
 	err_entry.flags = entry->flags;

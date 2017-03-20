@@ -131,6 +131,9 @@ static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 	struct sock_eq_entry *entry;
 	struct fi_eq_err_entry *err_entry;
 	struct sock_eq_err_data_entry *err_data_entry;
+	void *err_data = NULL;
+	size_t err_data_size = 0;
+	uint32_t api_version;
 
 	sock_eq = container_of(eq, struct sock_eq, eq);
 	fastlock_acquire(&sock_eq->lock);
@@ -139,14 +142,29 @@ static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 		goto out;
 	}
 
+	api_version = sock_eq->sock_fab->fab_fid.api_version;
+
 	list = sock_eq->err_list.list.next;
 	entry = container_of(list, struct sock_eq_entry, entry);
+	err_entry = (struct fi_eq_err_entry *) entry->event;
 
 	ret = entry->len;
-	memcpy(buf, entry->event, entry->len);
+
+	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+		&& buf->err_data && buf->err_data_size) {
+		err_data = buf->err_data;
+		err_data_size = buf->err_data_size;
+ 		*buf = *err_entry;
+		buf->err_data = err_data;
+
+		/* Fill provided user's buffer */
+ 		buf->err_data_size = MIN(err_entry->err_data_size, err_data_size);
+ 		memcpy(buf->err_data, err_entry->err_data, buf->err_data_size);
+	} else {
+	    	*buf = *err_entry;
+	}
 
 	if (!(flags & FI_PEEK)) {
-		err_entry = (struct fi_eq_err_entry *) entry->event;
 		if (err_entry->err_data) {
 			err_data_entry = container_of(
 				err_entry->err_data,
