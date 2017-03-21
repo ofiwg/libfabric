@@ -796,13 +796,13 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		   " moving vc %p to state connected\n",vc);
 
-	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
-
 	ret = _gnix_vc_sched_new_conn(vc);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_vc_sched_new_conn returned %s\n",
 			  fi_strerror(-ret));
+
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	return ret;
 err:
