@@ -174,6 +174,8 @@ Test(mr_notifier, multiple)
 #include <pthread.h>
 #include "gnix_rdma_headers.h"
 static struct fi_info *fi;
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static uint64_t default_access = (FI_REMOTE_READ | FI_REMOTE_WRITE |
@@ -237,7 +239,7 @@ static void mr_stressor_setup_common(void)
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 

@@ -1,6 +1,7 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
+ *
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,6 +55,8 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep[2];
@@ -90,7 +93,7 @@ static void vc_setup_auto(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 
 	vc_setup_common();
 }
@@ -103,7 +106,7 @@ static void vc_setup_manual(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	vc_setup_common();
 }
 
@@ -379,7 +382,7 @@ static void vc_conn_ping_setup_auto(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 
 	vc_conn_ping_setup();
 }
@@ -392,7 +395,7 @@ static void vc_conn_ping_setup_manual(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	vc_conn_ping_setup();
 }
 

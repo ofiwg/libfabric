@@ -65,6 +65,8 @@
 #define NUMEPS 2
 #define NUMCONTEXTS (NUMEPS * 2)
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
 static struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
@@ -291,7 +293,7 @@ static void fas_setup_common(uint32_t version)
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->addr_format = use_str_fmt ? FI_ADDR_STR : FI_ADDR_GNI;
 	if (ep_type == SEP) {

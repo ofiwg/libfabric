@@ -46,6 +46,8 @@
 #include "gnix_rdma_headers.h"
 #include "common.h"
 
+/* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
+static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fi_info *hints;
@@ -138,7 +140,7 @@ static void av_setup(void)
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
+	hints->mode = mode_bits;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 

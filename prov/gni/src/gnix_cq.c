@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -264,16 +264,13 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 {
 	struct gnix_cq_entry *event;
 	struct slist_entry *item;
-	uint64_t op_flags, mask;
+	uint64_t mask;
 
-	/* TODO: Move below conditional to gnix_cq.h and make static/inline */
 	if (ep) {
-		op_flags = ep->op_flags;
-
-		if (op_flags & FI_NOTIFY_FLAGS_ONLY) {
+		if (ep->info && ep->info->mode & FI_NOTIFY_FLAGS_ONLY) {
 			mask = (FI_REMOTE_CQ_DATA | FI_MULTI_RECV);
 
-			if (op_flags & FI_RMA_EVENT) {
+			if (flags & FI_RMA_EVENT) {
 				mask |= (FI_REMOTE_READ | FI_REMOTE_WRITE |
 					 FI_RMA);
 			}
