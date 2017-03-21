@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -664,6 +664,7 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 		goto err_connect;
 	}
 
+	memset(&req, 0, sizeof(req));
 	req.info = *ep_priv->info;
 
 	/* Note addrs are swapped. */
@@ -682,9 +683,6 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 		req.domain_attr = *ep_priv->info->domain_attr;
 	if (ep_priv->info->fabric_attr)
 		req.fabric_attr = *ep_priv->info->fabric_attr;
-
-	req.fabric_attr.fabric = NULL;
-	req.domain_attr.domain = NULL;
 
 	req.vc_id = vc->vc_id;
 	req.vc_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
