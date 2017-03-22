@@ -340,15 +340,14 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 	int ret;
 
 	if (hints->caps & ~(info->caps)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Unsupported capabilities\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unsupported capabilities\n");
+		FI_INFO_CHECK(&fi_ibv_prov, hints, info, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
 	if ((hints->mode & info->mode) != info->mode) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Required hints mode bits not set. Expected:0x%llx"
-			" Given:0x%llx\n", info->mode, hints->mode);
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "needed mode not set\n");
+		FI_INFO_MODE(&fi_ibv_prov, hints, info);
 		return -FI_ENODATA;
 	}
 

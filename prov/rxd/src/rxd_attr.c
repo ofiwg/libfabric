@@ -63,7 +63,6 @@ struct fi_ep_attr rxd_ep_attr = {
 };
 
 struct fi_domain_attr rxd_domain_attr = {
-	.name = "rxd",
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
@@ -81,9 +80,7 @@ struct fi_domain_attr rxd_domain_attr = {
 };
 
 struct fi_fabric_attr rxd_fabric_attr = {
-	.name = "",
 	.prov_version = FI_VERSION(RXD_MAJOR_VERSION, RXD_MINOR_VERSION),
-	.prov_name = "rxd",
 };
 
 struct fi_info rxd_info = {

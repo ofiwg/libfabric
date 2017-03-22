@@ -59,20 +59,22 @@ void fi_fabric_insert(struct util_fabric *fabric)
 	fastlock_release(&lock);
 }
 
-static int fabric_match_name(struct dlist_entry *item, const void *arg)
+static int util_match_fabric(struct dlist_entry *item, const void *arg)
 {
 	struct util_fabric *fabric;
+	struct util_fabric_info *fabric_info = (struct util_fabric_info *)arg;
 
 	fabric = container_of(item, struct util_fabric, list_entry);
-	return !strcmp(fabric->name, arg);
+	return (fabric_info->prov == fabric->prov) &&
+		!strcmp(fabric->name, fabric_info->name);
 }
 
-struct util_fabric *fi_fabric_find(const char *name)
+struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info)
 {
 	struct dlist_entry *item;
 
 	fastlock_acquire(&lock);
-	item = dlist_find_first_match(&fabric_list, fabric_match_name, name);
+	item = dlist_find_first_match(&fabric_list, util_match_fabric, fabric_info);
 	fastlock_release(&lock);
 
 	return item ? container_of(item, struct util_fabric, list_entry) : NULL;
@@ -80,7 +82,12 @@ struct util_fabric *fi_fabric_find(const char *name)
 
 void fi_fabric_remove(struct util_fabric *fabric)
 {
-	assert(fi_fabric_find(fabric->name));
+	struct util_fabric_info fabric_info = {
+		.name = fabric->name,
+		.prov = fabric->prov,
+	};
+
+	assert(ofi_fabric_find(&fabric_info));
 	fastlock_acquire(&lock);
 	dlist_remove(&fabric->list_entry);
 	fastlock_release(&lock);
@@ -157,6 +164,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 	struct util_domain *domain;
 	struct dlist_entry *item;
 	const struct fi_provider *prov = util_prov->prov;
+	struct util_fabric_info fabric_info;
 	int ret, copy_dest;
 
 	FI_DBG(prov, FI_LOG_CORE, "checking info\n");
@@ -179,7 +187,10 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 
 	ofi_alter_info(*info, hints, version);
 
-	fabric = fi_fabric_find((*info)->fabric_attr->name);
+	fabric_info.name = (*info)->fabric_attr->name;
+	fabric_info.prov = util_prov->prov;
+
+	fabric = ofi_fabric_find(&fabric_info);
 	if (fabric) {
 		FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
 		(*info)->fabric_attr->fabric = &fabric->fabric_fid;

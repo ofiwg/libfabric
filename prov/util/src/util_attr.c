@@ -34,20 +34,6 @@
 
 #include <fi_util.h>
 
-#define FI_INFO_FIELD(provider, prov, user, prov_str, user_str, field, type)	\
-	do {									\
-		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",		\
-				fi_tostr(&prov->field, type));			\
-		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",		\
-				fi_tostr(&user->field, type));			\
-	} while (0)
-
-#define FI_INFO_CAPS(provider, prov, user, field, type) \
-	FI_INFO_FIELD(provider, prov, user, "Supported", "Requested", field, type)
-
-#define FI_INFO_MODE(provider, prov, user) \
-	FI_INFO_FIELD(provider, prov, user, "Expected", "Given", mode, FI_TYPE_MODE)
-
 static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC)
@@ -430,8 +416,11 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 			  const struct fi_domain_attr *prov_attr,
 			  const struct fi_domain_attr *user_attr)
 {
-	if (user_attr->name && strcasecmp(user_attr->name, prov_attr->name)) {
+	if (prov_attr->name && user_attr->name &&
+	    strcasecmp(user_attr->name, prov_attr->name)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
+		FI_INFO_CHECK(prov, prov_attr, user_attr, name,
+			      FI_TYPE_DOMAIN_ATTR);
 		return -FI_ENODATA;
 	}
 
@@ -493,7 +482,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if (user_attr->caps & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "Requested domain caps not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
+		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
@@ -514,13 +503,13 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_attr->type && (user_attr->type != prov_attr->type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported endpoint type\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);
+		FI_INFO_CHECK(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->protocol && (user_attr->protocol != prov_attr->protocol)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported protocol\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, protocol, FI_TYPE_PROTOCOL);
+		FI_INFO_CHECK(prov, prov_attr, user_attr, protocol, FI_TYPE_PROTOCOL);
 		return -FI_ENODATA;
 	}
 
@@ -575,7 +564,7 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 {
 	if (user_attr->caps & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
+		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
@@ -588,21 +577,21 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 
 	if (prov_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, op_flags,
+		FI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
 			     FI_TYPE_OP_FLAGS);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->msg_order & ~(prov_attr->msg_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "msg_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, msg_order,
+		FI_INFO_CHECK(prov, prov_attr, user_attr, msg_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, comp_order,
+		FI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
@@ -631,7 +620,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 {
 	if (user_attr->caps & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
+		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
@@ -644,21 +633,21 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 
 	if (prov_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, op_flags,
+		FI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
 			     FI_TYPE_OP_FLAGS);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->msg_order & ~(prov_attr->msg_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "msg_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, msg_order,
+		FI_INFO_CHECK(prov, prov_attr, user_attr, msg_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
-		FI_INFO_CAPS(prov, prov_attr, user_attr, comp_order,
+		FI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
@@ -698,7 +687,7 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_info->caps & ~(prov_info->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported capabilities\n");
-		FI_INFO_CAPS(prov, prov_info, user_info, caps, FI_TYPE_CAPS);
+		FI_INFO_CHECK(prov, prov_info, user_info, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 

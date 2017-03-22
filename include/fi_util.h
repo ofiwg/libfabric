@@ -93,6 +93,20 @@
 #define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
 #define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
 
+#define FI_INFO_FIELD(provider, prov, user, prov_str, user_str, field, type)	\
+	do {									\
+		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",		\
+				fi_tostr(&prov->field, type));			\
+		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",		\
+				fi_tostr(&user->field, type));			\
+	} while (0)
+
+#define FI_INFO_CHECK(provider, prov, user, field, type) \
+	FI_INFO_FIELD(provider, prov, user, "Supported", "Requested", field, type)
+
+#define FI_INFO_MODE(provider, prov, user) \
+	FI_INFO_FIELD(provider, prov, user, "Expected", "Given", mode, FI_TYPE_MODE)
+
 enum {
 	UTIL_TX_SHARED_CTX = 1 << 0,
 	UTIL_RX_SHARED_CTX = 1 << 1,
@@ -111,6 +125,11 @@ struct util_prov {
 /*
  * Fabric
  */
+struct util_fabric_info {
+	const char 			*name;
+	const struct fi_provider 	*prov;
+};
+
 struct util_fabric {
 	struct fid_fabric	fabric_fid;
 	struct dlist_entry	list_entry;
@@ -534,7 +553,7 @@ void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
 		     struct fid *fid);
 
 void fi_fabric_insert(struct util_fabric *fabric);
-struct util_fabric *fi_fabric_find(const char *name);
+struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info);
 void fi_fabric_remove(struct util_fabric *fabric);
 
 /*
