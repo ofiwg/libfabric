@@ -68,8 +68,38 @@
    fun:pthread_create@@GLIBC_2.2.5
    fun:_gnix_dgram_hndl_alloc
    fun:_gnix_cm_nic_alloc
+   fun:_gnix_ep_nic_init
    fun:gnix_ep_open
    fun:fi_endpoint
+}
+
+#
+# This is due to not initializing unused attr fields in struct
+# gnix_pep_sock_connreq
+#
+# {
+#    fi_connect_memcheck
+#    Memcheck:Param
+#    write(buf)
+#    obj:/lib64/libpthread-2.11.3.so
+#    fun:gnix_connect
+#    fun:fi_connect
+#    ...
+# }
+
+#
+# This is due to not initializing all or part the eqe_buf field in
+# struct gnix_pep_sock_connresp.  This is fine, as the amount data
+# needed is given by the cm_data_len field.
+#
+{
+   fi_accept_memcheck
+   Memcheck:Param
+   write(buf)
+   obj:/lib64/libpthread-2.11.3.so
+   fun:gnix_accept
+   fun:fi_accept
+   ...
 }
 
 #
@@ -176,11 +206,20 @@
 }
 
 #
-# These are due to writing fewer than 4 bytes of data, but the
+# These are due to writing a subset of the bytes in a word, but the
 # compiler reading a whole word in the generated code.
 #
 {
-   rdm_rma_check_data
+   rdm_rma_readmsg_check_data
+   Memcheck:Cond
+   fun:check_data
+   fun:do_readmsg_more
+   fun:do_read_alignment_more
+   ...
+}
+
+{
+   rdm_rma_read_alignment_check_data
    Memcheck:Cond
    fun:check_data
    fun:do_read_buf
@@ -199,10 +238,20 @@
 }
 
 {
-   rdm_src_check_data_multirecv2
+   rdm_sr_check_data_multirecv_send_first
    Memcheck:Cond
    fun:rdm_sr_check_data
-   fun:do_multirecv2
+   fun:do_multirecv_send_first
+   fun:rdm_sr_xfer_for_each_size
+   ...
+}
+
+{
+   rdm_sr_check_data_sendrecv_buf
+   Memcheck:Cond
+   fun:rdm_sr_check_data
+   fun:do_sendrecv_buf
+   fun:do_sendrecv_alignment
    fun:rdm_sr_xfer_for_each_size
    ...
 }
