@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2017\-03\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2017\-03\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -216,6 +216,10 @@ The value must be greater than 0.
 \f[I]GNI_XPMEM_ENABLE\f[] : Enable or disable use of XPMEM for on node
 messages using the GNI provider internal rendezvous protocol.
 The value is of type bool.
+.PP
+\f[I]GNI_DGRAM_PROGRESS_TIMEOUT\f[] : Controls timeout value in
+milliseconds for the control progress thread.
+The value is of type uint32_t.
 .PP
 The \f[C]flush_cache\f[] function allows the user to flush any stale
 registration cache entries from the cache.
