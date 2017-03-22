@@ -593,6 +593,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		if (!prov->provider->getinfo)
 			continue;
 
+		if (FI_VERSION_LT(prov->provider->fi_version, version))
+			continue;
+
 		if (ofi_is_util_prov(prov->provider) &&
 		    (flags & OFI_CORE_PROV_ONLY))
 			continue;
