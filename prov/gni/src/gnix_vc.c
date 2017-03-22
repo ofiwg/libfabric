@@ -2041,18 +2041,18 @@ int _gnix_vc_nic_progress(struct gnix_nic *nic)
 
 		ret = __gnix_vc_rx_progress(vc);
 		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "__gnix_vc_rx_progress failed: %d\n", ret);
+			GNIX_DEBUG(FI_LOG_EP_CTRL,
+				   "__gnix_vc_rx_progress failed: %d\n", ret);
 
 		ret = __gnix_vc_push_work_reqs(vc);
 		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "__gnix_vc_push_work_reqs failed: %d\n", ret);
+			GNIX_DEBUG(FI_LOG_EP_CTRL,
+				   "__gnix_vc_push_work_reqs failed: %d\n", ret);
 
 		ret = __gnix_vc_push_tx_reqs(vc);
 		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "__gnix_vc_push_tx_reqs failed: %d\n", ret);
+			GNIX_DEBUG(FI_LOG_EP_CTRL,
+				   "__gnix_vc_push_tx_reqs failed: %d\n", ret);
 
 		COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
 	}
