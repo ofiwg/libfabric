@@ -125,7 +125,9 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	size_t len;
 	int ret;
 
-	if (!provider) {
+	if (!provider || !provider->name) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"no provider structure or name\n");
 		ret = -FI_EINVAL;
 		goto cleanup;
 	}
@@ -133,6 +135,13 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	FI_INFO(&core_prov, FI_LOG_CORE,
 	       "registering provider: %s (%d.%d)\n", provider->name,
 	       FI_MAJOR(provider->version), FI_MINOR(provider->version));
+
+	if (!provider->getinfo || !provider->fabric) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"provider missing mandatory entry points\n");
+		ret = -FI_EINVAL;
+		goto cleanup;
+	}
 
 	/* The current core implementation is not backward compatible
 	 * with providers that support a release earlier than v1.3.
@@ -590,9 +599,6 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->provider->getinfo)
-			continue;
-
 		if (FI_VERSION_LT(prov->provider->fi_version, version))
 			continue;
 
