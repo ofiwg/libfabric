@@ -694,7 +694,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 err_mbox_init:
 	_gnix_mbox_free(vc->smsg_mbox);
 	vc->smsg_mbox = NULL;
-	
+
 	return ret;
 }
 
@@ -1812,7 +1812,7 @@ static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 
 		ret = req->work_fn(req);
 		if (ret != FI_SUCCESS) {
-			/* Re-schedule faield work. */
+			/* Re-schedule failed work. */
 			_gnix_vc_queue_work_req(req);
 
 			/* FI_ENOSPC is reserved to indicate a lack of
@@ -1821,7 +1821,10 @@ static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 			 * due to a lack of SMSG credits. */
 			if ((ret != -FI_ENOSPC) &&
 			    (ret != -FI_EAGAIN)) {
-				/* TODO report error? */
+				/*
+				 * TODO: Report error (via CQ err?)
+				 * Note: This error can't be reported here.
+				 */
 				GNIX_FATAL(FI_LOG_EP_DATA,
 					   "Failed to push request %p: %s\n",
 					   req, fi_strerror(-ret));
