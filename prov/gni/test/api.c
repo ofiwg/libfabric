@@ -844,3 +844,12 @@ Test(rdm_api, amo_write_read_w_msg)
 	rdm_api_setup_ep();
 	api_write_read(BUF_SZ);
 }
+
+Test(rdm_api, getinfo_w_null_hints)
+{
+	int ret;
+
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, NULL, &fi[0]);
+	cr_assert(ret == FI_SUCCESS, "fi_getinfo returned: %s",
+		  fi_strerror(-ret));
+}
