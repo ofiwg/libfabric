@@ -198,6 +198,24 @@ err:
 	return ret;
 }
 
+static bool __gnix_cm_nic_timeout_needed(void *data)
+{
+	struct gnix_cm_nic *cm_nic = (struct gnix_cm_nic *)data;
+	return _gnix_cm_nic_need_progress(cm_nic);
+}
+
+static void __gnix_cm_nic_timeout_progress(void *data)
+{
+	int ret;
+	struct gnix_cm_nic *cm_nic = (struct gnix_cm_nic *)data;
+	ret = _gnix_cm_nic_progress(cm_nic);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			"_gnix_cm_nic_progress returned %s\n",
+			fi_strerror(-ret));
+}
+
+
 /*******************************************************************************
  * Internal API functions
  ******************************************************************************/
@@ -584,6 +602,8 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
 	struct gnix_nic_attr nic_attr = {0};
 	struct gnix_ep_name ep_name;
+	struct gnix_dgram_hndl_attr dgram_hndl_attr = {0};
+	struct gnix_dgram_hndl_attr *dgram_hndl_attr_ptr = NULL;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -642,9 +662,17 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	/*
 	 * prep the cm nic's dgram component
 	 */
-	ret = _gnix_dgram_hndl_alloc(domain->fabric,
-				     cm_nic,
+	if (domain->control_progress == FI_PROGRESS_AUTO) {
+		dgram_hndl_attr.timeout_needed = __gnix_cm_nic_timeout_needed;
+		dgram_hndl_attr.timeout_progress = __gnix_cm_nic_timeout_progress;
+		dgram_hndl_attr.timeout_data = (void *)cm_nic;
+		dgram_hndl_attr.timeout = domain->params.dgram_progress_timeout;
+		dgram_hndl_attr_ptr = &dgram_hndl_attr;
+	};
+
+	ret = _gnix_dgram_hndl_alloc(cm_nic,
 				     domain->control_progress,
+				     dgram_hndl_attr_ptr,
 				     &cm_nic->dgram_hndl);
 	if (ret != FI_SUCCESS)
 		goto err;

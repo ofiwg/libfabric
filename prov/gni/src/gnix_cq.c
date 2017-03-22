@@ -251,7 +251,29 @@ err:
 
 static int __gnix_cq_progress(struct gnix_fid_cq *cq)
 {
+        int ret;
+	struct gnix_cm_nic *cm_nic = cq->domain->cm_nic;
+
+	/*
+	 * check to see if we need to poke the cm nic to progress
+	 * backlogged datagram requests.  This is needed even if
+	 * control_progress is set to FI_PROGRESS_AUTO since we
+	 * don't get notification back from kGNI when a previously
+	 * posted bound datagram has actually completed, allowing
+	 * subsequent pending bound datagrams to be posted to kGNI.
+	 */
+
+	if (cm_nic != NULL &&
+		_gnix_cm_nic_need_progress(cm_nic)) {
+			ret = _gnix_cm_nic_progress(cm_nic);
+			if (ret)
+				GNIX_WARN(FI_LOG_CQ,
+				  "_gnix_cm_nic_progress returned: %d\n",
+				  ret);
+	}
+
 	return _gnix_prog_progress(&cq->pset);
+
 }
 
 /*******************************************************************************
@@ -531,6 +553,12 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 		return -FI_EINVAL;
 
 	cq_priv = container_of(cq, struct gnix_fid_cq, cq_fid);
+
+	/*
+	 * we need to progress cq.  some apps may be only using
+	 * cq to check for errors.
+	 */
+	__gnix_cq_progress(cq_priv);
 
 	COND_ACQUIRE(cq_priv->requires_lock, &cq_priv->lock);
 

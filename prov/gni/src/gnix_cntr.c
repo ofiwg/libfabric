@@ -121,7 +121,30 @@ static int gnix_cntr_set_wait(struct gnix_fid_cntr *cntr)
 
 static int __gnix_cntr_progress(struct gnix_fid_cntr *cntr)
 {
-	return _gnix_prog_progress(&cntr->pset);
+	int ret;
+	struct gnix_cm_nic *cm_nic = cntr->domain->cm_nic;
+
+	ret = _gnix_prog_progress(&cntr->pset);
+
+	/*
+	 * check to see if we need to poke the cm nic to progress
+	 * backlogged datagram requests.  This is needed even if
+	 * control_progress is set to FI_PROGRESS_AUTO since we
+	 * don't get notification back from kGNI when a previously
+	 * posted bound datagram has actually completed, allowing
+	 * subsequent pending bound datagrams to be posted to kGNI.
+	 */
+
+	if (cm_nic != NULL &&
+		_gnix_cm_nic_need_progress(cm_nic)) {
+			ret = _gnix_cm_nic_progress(cm_nic);
+			if (ret)
+				GNIX_WARN(FI_LOG_CQ,
+				  "_gnix_cm_nic_progress returned: %d\n",
+				  ret);
+	}
+
+	return ret;
 }
 
 /*******************************************************************************

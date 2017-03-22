@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
@@ -366,11 +366,11 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 	if (post) {
 		/*
 		 * if we get GNI_RC_ERROR_RESOURCE status return from
-		 * GNI_EpPostDataWId  that means that a previously posted
+		 * GNI_EpPostDataWId  that means that either a previously posted
 		 * wildcard datagram has matched up with an incoming
-		 * connect request from the rank we are trying to send
-		 * a connect request to.  Don't treat this case as an
-		 * error.
+		 * bound datagram or we have a previously posted bound
+		 * datagram whose transfer to the target node has
+		 * not yet completed.  Don't treat this case as an error.
 		 */
 		status = GNI_EpPostDataWId(d->gni_ep,
 					   d->dgram_in_buf,
@@ -420,6 +420,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 	gni_return_t status;
 	gni_post_state_t post_state = GNI_POST_PENDING;
 	uint32_t responding_remote_id;
+	uint32_t timeout = -1;
 	unsigned int responding_remote_addr;
 	struct gnix_datagram *dg_ptr;
 	uint64_t datagram_id = 0UL;
@@ -435,8 +436,12 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (type == GNIX_DGRAM_BLOCK) {
+		if (hndl->timeout_needed &&
+			(hndl->timeout_needed(hndl->timeout_data) == true))
+				timeout = hndl->timeout;
+
 		status = GNI_PostdataProbeWaitById(nic->gni_nic_hndl,
-						   -1,
+						   timeout,
 						   &datagram_id);
 		if ((status != GNI_RC_SUCCESS) &&
 			(status  != GNI_RC_TIMEOUT)) {
@@ -459,8 +464,8 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 		}
 	}
 
-	if (status == GNI_RC_SUCCESS) {
-
+	switch (status) {
+	case GNI_RC_SUCCESS:
 		dg_ptr = (struct gnix_datagram *)datagram_id;
 		assert(dg_ptr != NULL);
 
@@ -537,21 +542,34 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 				   post_state);
 			break;
 		}
+		break;
+	case GNI_RC_TIMEOUT:
+		/* call progress function */
+		if (hndl->timeout_progress)
+			hndl->timeout_progress(hndl->timeout_data);
+		break;
+	case GNI_RC_NO_MATCH:
+		break;
+	default:
+		/* an error */
+		break;
 	}
 
 err:
 	return ret;
 }
 
-int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
-				struct gnix_cm_nic *cm_nic,
-				enum fi_progress progress,
-				struct gnix_dgram_hndl **hndl_ptr)
+int _gnix_dgram_hndl_alloc(struct gnix_cm_nic *cm_nic,
+			   enum fi_progress progress,
+			   const struct gnix_dgram_hndl_attr *attr,
+			   struct gnix_dgram_hndl **hndl_ptr)
 {
 	int i, ret = FI_SUCCESS;
 	int n_dgrams_tot;
 	struct gnix_datagram *dgram_base = NULL, *dg_ptr;
 	struct gnix_dgram_hndl *the_hndl = NULL;
+	struct gnix_fid_domain *dom = cm_nic->domain;
+	struct gnix_fid_fabric *fabric = NULL;
 	struct gnix_nic *nic;
 	gni_return_t status;
 	uint32_t num_corespec_cpus = 0;
@@ -559,6 +577,11 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	nic = cm_nic->nic;
+
+	if (dom == NULL)
+		return -FI_EINVAL;
+
+	fabric = dom->fabric;
 
 	the_hndl = calloc(1, sizeof(struct gnix_dgram_hndl));
 	if (the_hndl == NULL) {
@@ -573,6 +596,8 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 
 	dlist_init(&the_hndl->wc_dgram_free_list);
 	dlist_init(&the_hndl->wc_dgram_active_list);
+
+	the_hndl->timeout = -1;
 
 	/*
 	 * inherit some stuff from the fabric object being
@@ -643,6 +668,13 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	 */
 
 	if (progress == FI_PROGRESS_AUTO) {
+
+		if (attr != NULL) {
+			the_hndl->timeout_needed = attr->timeout_needed;
+			the_hndl->timeout_progress = attr->timeout_progress;
+			the_hndl->timeout_data = attr->timeout_data;
+			the_hndl->timeout = attr->timeout;
+		}
 
 		/*
 		 * tell CLE job container that next thread should be

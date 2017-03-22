@@ -215,6 +215,9 @@ The `set_val` function sets the value of a given parameter; the
 *GNI_XPMEM_ENABLE*
 : Enable or disable use of XPMEM for on node messages using the GNI provider internal rendezvous protocol.  The value is of type bool.
 
+*GNI_DGRAM_PROGRESS_TIMEOUT*
+: Controls timeout value in milliseconds for the control progress thread.  The value is of type uint32_t.
+
 The `flush_cache` function allows the user to flush any stale registration
 cache entries from the cache. This has the effect of removing registrations
 from the cache that have been deregistered with the provider, but still
