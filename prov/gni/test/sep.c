@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -105,7 +106,8 @@ void sep_setup_common(int av_type)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_ATOMIC | FI_RMA | FI_MSG | FI_NAMED_RX_CTX | FI_TAGGED;
+	hints->caps = FI_RMA_EVENT | FI_ATOMIC | FI_RMA | FI_MSG |
+		      FI_NAMED_RX_CTX | FI_TAGGED;
 	hints->mode = FI_LOCAL_MR;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
@@ -500,8 +502,10 @@ xfer_each_size(void (*xfer)(int index, int len), int index, int slen, int elen)
 static void
 sep_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 		uint64_t flags, void *addr, size_t len,
-		uint64_t data, bool buf_is_non_null, uint64_t tag)
+		uint64_t data, bool buf_is_non_null, uint64_t tag,
+		struct fid_ep *fid_ep)
 {
+	struct gnix_fid_ep *gnix_ep = get_gnix_ep(fid_ep);
 	cr_assert(cqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(cqe->flags == flags,
 		  "CQE flags mismatch cqe flags:0x%lx, flags:0x%lx", cqe->flags,
@@ -516,7 +520,8 @@ sep_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 			cr_assert(cqe->buf == NULL, "CQE address mismatch");
 
 
-		if (flags & FI_REMOTE_CQ_DATA)
+	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps))
 			cr_assert(cqe->data == data, "CQE data mismatch");
 	} else {
 		cr_assert(cqe->len == 0, "Invalid CQE length");
@@ -530,12 +535,15 @@ sep_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 
 static void
 sep_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
-	       uint64_t flags, uint64_t data)
+	       uint64_t flags, uint64_t data, struct fid_ep *fid_ep)
 {
+	struct gnix_fid_ep *gnix_ep = get_gnix_ep(fid_ep);
+
 	cr_assert(tcqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(tcqe->flags == flags, "CQE flags mismatch");
 
-	if (flags & FI_REMOTE_CQ_DATA) {
+	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps)) {
 		cr_assert(tcqe->data == data, "CQE data invalid");
 	} else {
 		cr_assert(tcqe->data == 0, "CQE data invalid");
@@ -771,9 +779,9 @@ static void sep_sendv(int index, int len)
 
 		wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
 		sep_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND),
-				 0, 0, 0, false, 0);
+				 0, 0, 0, false, 0, tx_ep[0][index]);
 		sep_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV), iov_dest_buf,
-				 len * iov_cnt, 0, false, 0);
+				 len * iov_cnt, 0, false, 0, rx_ep[1][index]);
 
 		s[0] = 1; r[1] = 1;
 		sep_check_cntrs(s, r, s_e, r_e);
@@ -814,10 +822,10 @@ static void sep_tsendv(int index, int len)
 
 		wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
 		sep_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND|FI_TAGGED),
-				 0, 0, 0, false, 0);
+				 0, 0, 0, false, 0, tx_ep[0][index]);
 		sep_check_cqe(&d_cqe, src_iov, (FI_MSG|FI_RECV|FI_TAGGED),
 			      iov_dest_buf, len * iov_cnt, 0, false,
-			      len * iov_cnt);
+			      len * iov_cnt, rx_ep[1][index]);
 
 		s[0] = 1; r[1] = 1;
 		sep_check_cntrs(s, r, s_e, r_e);
@@ -861,9 +869,10 @@ static void sep_recvv(int index, int len)
 
 		wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
 		sep_check_cqe(&s_cqe, iov_dest_buf, (FI_MSG|FI_SEND),
-				 0, 0, 0, false, 0);
+				 0, 0, 0, false, 0, tx_ep[0][index]);
 		sep_check_cqe(&d_cqe, iov_src_buf, (FI_MSG|FI_RECV),
-				iov_dest_buf, len * iov_cnt, 0, false, 0);
+				iov_dest_buf, len * iov_cnt, 0, false, 0,
+			      rx_ep[1][index]);
 
 		s[0] = 1; r[1] = 1;
 		sep_check_cntrs(s, r, s_e, r_e);
@@ -926,9 +935,10 @@ static void _sendmsg(int index, int len, bool tagged)
 	cr_assert_eq(sz, 0);
 
 	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
-	sep_check_cqe(&s_cqe, target, sflags, 0, 0, 0, false, 0);
+	sep_check_cqe(&s_cqe, target, sflags, 0, 0, 0, false, 0,
+		      tx_ep[0][index]);
 	sep_check_cqe(&d_cqe, source, dflags, target, len, 0,
-			false, tagged ? len : 0);
+			false, tagged ? len : 0, rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
 	sep_check_cntrs(s, r, s_e, r_e);
@@ -994,9 +1004,10 @@ void sep_sendmsgdata(int index, int len)
 	cr_assert_eq(sz, 0);
 
 	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
-	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false, 0);
+	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false, 0,
+		      tx_ep[0][index]);
 	sep_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-		      target, len, (uint64_t)source, false, 0);
+		      target, len, (uint64_t)source, false, 0, rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
 	sep_check_cntrs(s, r, s_e, r_e);
@@ -1031,7 +1042,8 @@ void sep_inject(int index, int len)
 
 	cr_assert_eq(ret, 1);
 	sep_check_cqe(&cqe, source, (FI_MSG|FI_RECV),
-			 target, len, (uint64_t)source, false, 0);
+			 target, len, (uint64_t)source, false, 0,
+		      rx_ep[1][index]);
 
 	/* do progress until send counter is updated */
 	while (fi_cntr_read(send_cntr[0]) < 1) {
@@ -1072,7 +1084,8 @@ void sep_tinject(int index, int len)
 
 	cr_assert_eq(ret, 1);
 	sep_check_cqe(&cqe, source, (FI_MSG|FI_RECV|FI_TAGGED),
-			 target, len, (uint64_t)source, false, len);
+			 target, len, (uint64_t)source, false, len,
+		      rx_ep[1][index]);
 
 	/* do progress until send counter is updated */
 	while (fi_cntr_read(send_cntr[0]) < 1) {
@@ -1108,9 +1121,11 @@ void sep_senddata(int index, int len)
 	cr_assert_eq(sz, 0);
 
 	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
-	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false, 0);
+	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false, 0,
+		      tx_ep[0][index]);
 	sep_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			 target, len, (uint64_t)source, false, 0);
+			 target, len, (uint64_t)source, false, 0,
+		      rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
 	sep_check_cntrs(s, r, s_e, r_e);
@@ -1140,10 +1155,11 @@ void sep_tsenddata(int index, int len)
 
 	wait_for_cqs(tx_cq[0][index], rx_cq[1][index], &s_cqe, &d_cqe);
 	sep_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND|FI_TAGGED), 0, 0, 0,
-		      false, 0);
+		      false, 0, tx_ep[0][index]);
 	sep_check_cqe(&d_cqe, source,
 		      (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA|FI_TAGGED),
-		      target, len, (uint64_t)source, false, len);
+		      target, len, (uint64_t)source, false, len,
+		      rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
 	sep_check_cntrs(s, r, s_e, r_e);
@@ -1176,7 +1192,8 @@ void sep_injectdata(int index, int len)
 		fi_cq_read(tx_cq[0][index], &cqe, 1);
 	}
 	sep_check_cqe(&cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			 target, len, (uint64_t)source, false, 0);
+			 target, len, (uint64_t)source, false, 0,
+		      rx_ep[1][index]);
 
 	/* don't progress until send counter is updated */
 	while (fi_cntr_read(send_cntr[0]) < 1) {
@@ -1218,7 +1235,8 @@ void sep_tinjectdata(int index, int len)
 	}
 	sep_check_cqe(&cqe, source,
 		      (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA|FI_TAGGED),
-		      target, len, (uint64_t)source, false, len);
+		      target, len, (uint64_t)source, false, len,
+		      rx_ep[1][index]);
 
 	/* don't progress until send counter is updated */
 	while (fi_cntr_read(send_cntr[0]) < 1) {
@@ -1255,7 +1273,7 @@ void sep_read(int index, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
+	sep_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1286,7 +1304,7 @@ void sep_readv(int index, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1331,7 +1349,7 @@ void sep_readmsg(int index, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1358,7 +1376,7 @@ void sep_write(int index, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1390,7 +1408,7 @@ void sep_writev(int index, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1434,7 +1452,7 @@ void sep_writemsg(int index, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1490,7 +1508,7 @@ void sep_writedata(int index, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1503,7 +1521,7 @@ void sep_writedata(int index, int len)
 
 	sep_check_tcqe(&dcqe, NULL,
 		       (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
-		       WRITE_DATA);
+		       WRITE_DATA, rx_ep[1][index]);
 }
 
 #define INJECTWRITE_DATA 0xdededadadeadbeaf
@@ -1541,7 +1559,7 @@ void sep_inject_writedata(int index, int len)
 
 	sep_check_tcqe(&dcqe, NULL,
 		      (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
-		      INJECTWRITE_DATA);
+		      INJECTWRITE_DATA, rx_ep[1][index]);
 }
 
 #define SOURCE_DATA	0xBBBB0000CCCCULL
@@ -1568,7 +1586,7 @@ void sep_atomic(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1604,7 +1622,7 @@ void sep_atomic_v(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1656,7 +1674,7 @@ void sep_atomic_msg(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1719,7 +1737,7 @@ void sep_atomic_rw(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1760,7 +1778,7 @@ void sep_atomic_rwv(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1815,7 +1833,7 @@ void sep_atomic_rwmsg(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1855,7 +1873,7 @@ void sep_atomic_compwrite(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
@@ -1907,7 +1925,7 @@ void sep_atomic_compwritev(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
 	ret = *((double *)target) == (double)SOURCE_DATA_FP;
@@ -1963,7 +1981,7 @@ void sep_atomic_compwritemsg(int index)
 	}
 
 	cr_assert_eq(ret, 1);
-	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 	r[0] = 1;
 	sep_check_cntrs(w, r, w_e, r_e);
 	ret = *((uint64_t *)target) == SOURCE_DATA;

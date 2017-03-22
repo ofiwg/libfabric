@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
@@ -272,6 +273,15 @@ struct gnix_reference {
 #define _gnix_ref_get(ptr) __ref_get(ptr, ref_cnt)
 #define _gnix_ref_put(ptr) __ref_put(ptr, ref_cnt)
 
+/**
+ * Only allow FI_REMOTE_CQ_DATA when the EP cap, FI_RMA_EVENT, is also set.
+ *
+ * @return zero if FI_REMOTE_CQ_DATA is not permitted; otherwise one.
+ */
+#define GNIX_ALLOW_FI_REMOTE_CQ_DATA(_flags, _ep_caps) \
+					(((_flags) & FI_REMOTE_CQ_DATA) && \
+					 ((_ep_caps) & FI_RMA_EVENT))
+
 static inline void _gnix_ref_init(
 		struct gnix_reference *ref,
 		int initial_value,
@@ -306,7 +316,7 @@ static inline void _gnix_ref_init(
 	__COND_FUNC((cond), (lock), rwlock_unlock)
 #ifdef __GNUC__
 #define __PREFETCH(addr, rw, locality) __builtin_prefetch(addr, rw, locality)
-#else 
+#else
 #define __PREFETCH(addr, rw, locality) ((void *) 0)
 #endif
 

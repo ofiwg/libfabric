@@ -39,6 +39,7 @@
 #include <criterion/criterion.h>
 #include <criterion/logging.h>
 #include "gnix_rdma_headers.h"
+#include "gnix.h"
 
 #define BLUE "\x1b[34m"
 #define COLOR_RESET "\x1b[0m"
@@ -49,5 +50,10 @@ extern int supported_fetch_atomic_ops[FI_ATOMIC_OP_LAST][FI_DATATYPE_LAST];
 
 void calculate_time_difference(struct timeval *start, struct timeval *end,
 		int *secs_out, int *usec_out);
+
+static inline struct gnix_fid_ep *get_gnix_ep(struct fid_ep *fid_ep)
+{
+	return container_of(fid_ep, struct gnix_fid_ep, ep_fid);
+}
 
 #endif /* PROV_GNI_TEST_COMMON_H_ */
