@@ -676,7 +676,8 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 					if (source == FI_ADDR_NOTAVAIL) {
 						psmx2_get_source_name(event->source, (void *)&cq_priv->error_data);
 						event->cqe.err.err_data = &cq_priv->error_data;
-						event->error = -FI_EADDRNOTAVAIL;
+						event->cqe.err.err = FI_EADDRNOTAVAIL;
+						event->error = !!event->cqe.err.err;
 						cq_priv->pending_error = event;
 						if (!read_count)
 							read_count = -FI_EAVAIL;

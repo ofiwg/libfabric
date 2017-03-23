@@ -82,8 +82,8 @@ extern struct fi_provider psmx2_prov;
 			 FI_RMA | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
-			 FI_TRIGGER | FI_RMA_EVENT | \
-			 FI_REMOTE_CQ_DATA | FI_SOURCE | FI_DIRECTED_RECV)
+			 FI_TRIGGER | FI_RMA_EVENT | FI_REMOTE_CQ_DATA | \
+			 FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV)
 
 #define PSMX2_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_SEND | FI_RECV)
