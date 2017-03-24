@@ -327,9 +327,10 @@ out:
 					if (!event)
 						return NULL;
 
-					event->error = -FI_EADDRNOTAVAIL;
 					event->cqe = event_in->cqe;
+					event->cqe.err.err = FI_EADDRNOTAVAIL;
 					event->cqe.err.err_data = &cq->error_data;
+					event->error = !!event->cqe.err.err;
 					psmx2_get_source_name(source, (void *)&cq->error_data);
 				}
 			}
