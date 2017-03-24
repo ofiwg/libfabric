@@ -47,8 +47,9 @@
 extern "C" {
 #endif
 
+// TODO Update version to 1.5 before release
 #ifndef FT_FIVERSION
-#define FT_FIVERSION FI_VERSION(1,3)
+#define FT_FIVERSION FI_VERSION(1,4)
 #endif
 
 #ifdef __APPLE__
