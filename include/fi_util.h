@@ -486,7 +486,7 @@ struct ofi_mr_map {
 	enum fi_mr_mode		mode;
 };
 
-int ofi_mr_map_init(const struct fi_provider *in_prov, enum fi_mr_mode mode,
+int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,
 		    struct ofi_mr_map *map);
 void ofi_mr_map_close(struct ofi_mr_map *map);
 
