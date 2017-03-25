@@ -35,6 +35,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <fi_util.h>
+
 #include "sock.h"
 #include "sock_util.h"
 
@@ -63,7 +65,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.max_err_data = SOCK_MAX_ERR_CQ_EQ_DATA_SZ,
 };
 
-int sock_verify_domain_attr(struct fi_domain_attr *attr)
+int sock_verify_domain_attr(uint32_t version, struct fi_domain_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -125,13 +127,10 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	switch (attr->mr_mode) {
-	case FI_MR_UNSPEC:
-	case FI_MR_BASIC:
-	case FI_MR_SCALABLE:
-		break;
-	default:
-		SOCK_LOG_DBG("MR mode not supported\n");
+	if (ofi_check_mr_mode(version, sock_domain_attr.mr_mode,
+			      attr->mr_mode)) {
+		FI_INFO(&sock_prov, FI_LOG_CORE,
+			"Invalid memory registration mode\n");
 		return -FI_ENODATA;
 	}
 
@@ -434,7 +433,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	fab = container_of(fabric, struct sock_fabric, fab_fid);
 	if (info && info->domain_attr) {
-		ret = sock_verify_domain_attr(info->domain_attr);
+		ret = sock_verify_domain_attr(fabric->api_version, info->domain_attr);
 		if (ret)
 			return -FI_EINVAL;
 	}

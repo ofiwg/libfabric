@@ -197,10 +197,10 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 	return 0;
 }
 
-int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
-			struct fi_info **info)
+int sock_dgram_fi_info(uint32_t version, void *src_addr, void *dest_addr,
+		       struct fi_info *hints, struct fi_info **info)
 {
-	*info = sock_fi_info(FI_EP_DGRAM, hints, src_addr, dest_addr);
+	*info = sock_fi_info(version, FI_EP_DGRAM, hints, src_addr, dest_addr);
 	if (!*info)
 		return -FI_ENOMEM;
 

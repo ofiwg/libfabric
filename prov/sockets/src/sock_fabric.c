@@ -215,7 +215,7 @@ int sock_verify_fabric_attr(struct fi_fabric_attr *attr)
 	return 0;
 }
 
-int sock_verify_info(struct fi_info *hints)
+int sock_verify_info(uint32_t version, struct fi_info *hints)
 {
 	uint64_t caps;
 	enum fi_ep_type ep_type;
@@ -275,7 +275,7 @@ int sock_verify_info(struct fi_info *hints)
 			return -FI_ENODATA;
 		}
 	}
-	ret = sock_verify_domain_attr(hints->domain_attr);
+	ret = sock_verify_domain_attr(version, hints->domain_attr);
 	if (ret)
 		return ret;
 
@@ -417,7 +417,8 @@ static int sock_fi_checkinfo(struct fi_info *info, struct fi_info *hints)
 	return 0;
 }
 
-static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags,
+static int sock_ep_getinfo(uint32_t version, const char *node,
+			   const char *service, uint64_t flags,
 			   struct fi_info *hints, enum fi_ep_type ep_type,
 			   struct fi_info **info)
 {
@@ -471,13 +472,13 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 
 	switch (ep_type) {
 	case FI_EP_MSG:
-		ret = sock_msg_fi_info(src_addr, dest_addr, hints, info);
+		ret = sock_msg_fi_info(version, src_addr, dest_addr, hints, info);
 		break;
 	case FI_EP_DGRAM:
-		ret = sock_dgram_fi_info(src_addr, dest_addr, hints, info);
+		ret = sock_dgram_fi_info(version, src_addr, dest_addr, hints, info);
 		break;
 	case FI_EP_RDM:
-		ret = sock_rdm_fi_info(src_addr, dest_addr, hints, info);
+		ret = sock_rdm_fi_info(version, src_addr, dest_addr, hints, info);
 		break;
 	default:
 		ret = -FI_ENODATA;
@@ -540,9 +541,9 @@ void sock_get_list_of_addr(struct slist *addr_list)
 }
 #endif
 
-int sock_node_getinfo(const char *node, const char *service, uint64_t flags,
-			struct fi_info *hints, struct fi_info **info,
-			struct fi_info **tail)
+int sock_node_getinfo(uint32_t version, const char *node, const char *service,
+		      uint64_t flags, struct fi_info *hints, struct fi_info **info,
+		      struct fi_info **tail)
 {
 	enum fi_ep_type ep_type;
 	struct fi_info *cur;
@@ -553,8 +554,8 @@ int sock_node_getinfo(const char *node, const char *service, uint64_t flags,
 		case FI_EP_RDM:
 		case FI_EP_DGRAM:
 		case FI_EP_MSG:
-			ret = sock_ep_getinfo(node, service, flags, hints,
-						hints->ep_attr->type, &cur);
+			ret = sock_ep_getinfo(version, node, service, flags,
+					      hints, hints->ep_attr->type, &cur);
 			if (ret) {
 				if (ret == -FI_ENODATA)
 					return ret;
@@ -573,8 +574,8 @@ int sock_node_getinfo(const char *node, const char *service, uint64_t flags,
 		}
 	}
 	for (ep_type = FI_EP_MSG; ep_type <= FI_EP_RDM; ep_type++) {
-		ret = sock_ep_getinfo(node, service, flags,
-					hints, ep_type, &cur);
+		ret = sock_ep_getinfo(version, node, service, flags, hints,
+				      ep_type, &cur);
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;
@@ -676,7 +677,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	    (hints->dest_addrlen != sizeof(struct sockaddr_in)))
 		return -FI_ENODATA;
 
-	ret = sock_verify_info(hints);
+	ret = sock_verify_info(version, hints);
 	if (ret)
 		return ret;
 
@@ -701,7 +702,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	     (!(flags & FI_SOURCE) && hints && hints->src_addr) ||
 	     (!(flags & FI_SOURCE) && hints && hints->dest_addr)) {
 		sock_free_addr_list(&addr_list);
-		return sock_node_getinfo(node, service, flags, hints, info, &tail);
+		return sock_node_getinfo(version, node, service, flags, hints, info, &tail);
 	}
 
 	while (!slist_empty(&addr_list)) {
@@ -709,7 +710,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		host_entry = container_of(entry, struct sock_host_list_entry, entry);
 		node = host_entry->hostname;
 		flags |= FI_SOURCE;
-		ret = sock_node_getinfo(node, service, flags, hints, info, &tail);
+		ret = sock_node_getinfo(version, node, service, flags, hints, info, &tail);
 		free(host_entry);
 		if (ret) {
 			if (ret == -FI_ENODATA)

@@ -198,10 +198,10 @@ int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr,
 	return 0;
 }
 
-int sock_msg_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
-		     struct fi_info **info)
+int sock_msg_fi_info(uint32_t version, void *src_addr, void *dest_addr,
+		     struct fi_info *hints, struct fi_info **info)
 {
-	*info = sock_fi_info(FI_EP_MSG, hints, src_addr, dest_addr);
+	*info = sock_fi_info(version, FI_EP_MSG, hints, src_addr, dest_addr);
 	if (!*info)
 		return -FI_ENOMEM;
 
@@ -875,8 +875,8 @@ static struct fi_info *sock_ep_msg_get_info(struct sock_pep *pep,
 
 	hints = pep->info;
 	hints.caps = req->caps;
-	return sock_fi_info(FI_EP_MSG, &hints,
-			    &pep->src_addr, &req->src_addr);
+	return sock_fi_info(pep->sock_fab->fab_fid.api_version, FI_EP_MSG,
+			    &hints, &pep->src_addr, &req->src_addr);
 }
 
 static void *sock_pep_req_handler(void *data)
@@ -1161,7 +1161,7 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	struct addrinfo hints, *result;
 
 	if (info) {
-		ret = sock_verify_info(info);
+		ret = sock_verify_info(fabric->api_version, info);
 		if (ret) {
 			SOCK_LOG_DBG("Cannot support requested options!\n");
 			return ret;
