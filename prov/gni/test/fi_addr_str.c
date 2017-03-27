@@ -69,7 +69,6 @@
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
-static struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
 
 static struct fid_ep *ep[NUMEPS];
 static struct fid_pep *pep[NUMEPS];
@@ -348,11 +347,6 @@ static void fas_ep_setup(void)
 
 		ret = fi_domain(fab, fi[i], dom + i, NULL);
 		cr_assert(!ret, "fi_domain returned: %s", fi_strerror(-ret));
-
-		ret = fi_open_ops(&dom[i]->fid, FI_GNI_DOMAIN_OPS_1,
-				  0, (void **) (gni_domain_ops + i), NULL);
-		cr_assert(ret == FI_SUCCESS, "fi_ops_open returned: %s",
-			  fi_strerror(-ret));
 
 		ret = fi_cntr_open(dom[i], &cntr_attr, send_cntr + i, 0);
 		cr_assert(!ret, "fi_cntr_open returned: %s", fi_strerror(-ret));
@@ -706,6 +700,14 @@ static void fas_teardown_common(void)
 	int ret = 0, i = 0, j;
 
 	for (; i < NUMEPS; i++) {
+		if (ep_type == SEP || ep_type == EP) {
+			ret = fi_close(&recv_cntr[i]->fid);
+			cr_assert(!ret, "failure in closing recv cntr.");
+
+			ret = fi_close(&send_cntr[i]->fid);
+			cr_assert(!ret, "failure in closing send cntr.");
+		}
+
 		switch (ep_type) {
 		case EP:
 			ret = fi_close(&msg_cq[i]->fid);
@@ -731,18 +733,14 @@ static void fas_teardown_common(void)
 			}
 			break;
 		case PEP:
+			ret = fi_close(get_fid[ep_type](i));
+			cr_assert(!ret, "failure in closing ep.");
 			continue;
 			break;
 		default:
 			cr_assert_fail("Unknown endpoint type.");
 			break;
 		}
-
-		ret = fi_close(&recv_cntr[i]->fid);
-		cr_assert(!ret, "failure in closing recv cntr.");
-
-		ret = fi_close(&send_cntr[i]->fid);
-		cr_assert(!ret, "failure in closing send cntr.");
 
 		ret = fi_close(get_fid[ep_type](i));
 		cr_assert(!ret, "failure in closing ep.");
@@ -753,16 +751,21 @@ static void fas_teardown_common(void)
 		ret = fi_close(&dom[i]->fid);
 		cr_assert(!ret, "failure in closing domain.");
 
-		fi_freeinfo(fi[i]);
-
 		free(ep_name[i]);
 		free(target[i]);
 		free(source[i]);
+		free(tx_cq[i]);
+		free(tx_ep[i]);
+		free(rx_cq[i]);
+		free(rx_ep[i]);
+
+		fi_freeinfo(fi[i]);
 	}
 
-	fi_freeinfo(hints);
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
+
+	fi_freeinfo(hints);
 }
 /******************************************************************************
 * End setup and teardown routines
