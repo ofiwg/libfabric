@@ -69,5 +69,11 @@ else
     args="-n1 -N1 -j0 -cc none -t1200"
 fi
 
+# As of Criterion 2.3, it seems that the PRE_ALL hook is being run
+# more than once.  These two environment variables insure we never
+# fork and never initialize more than once.
+export PMI_NO_PREINITIALIZE=1
+export PMI_NO_FORK=1
+
 # pass all command line args to gnitest
 $launcher $args $gnitest_bin -j1 "$@"
