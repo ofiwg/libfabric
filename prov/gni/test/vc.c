@@ -656,20 +656,37 @@ static void vc_conn_proc_cqes(struct fid_cq *cq0, void *ctx0,
 	struct fi_cq_tagged_entry cqe;
 
 	do {
-		if ((ret = fi_cq_read(cq0, &cqe, 1)) != -FI_EAGAIN) {
-			cr_assert(!cqe0);
-			cr_assert_eq(ret, 1);
-			cr_assert(cqe.op_context == ctx0,
-				  "CQE Context mismatch");
-			cqe0++;
-		}
+		if (cq0 == cq1) {
+			if ((ret = fi_cq_read(cq0, &cqe, 1)) != -FI_EAGAIN) {
+				cr_assert_eq(ret, 1);
+				if (cqe.op_context == ctx0) {
+					cr_assert(!cqe0);
+					cqe0++;
+				} else if (cqe.op_context == ctx1) {
+					cr_assert(!cqe1);
+					cqe1++;
+				} else {
+					cr_assert(cqe.op_context == ctx0 ||
+						  cqe.op_context == ctx1,
+						  "CQE Context mismatch");
+				}
+			}
+		} else {
+			if ((ret = fi_cq_read(cq0, &cqe, 1)) != -FI_EAGAIN) {
+				cr_assert(!cqe0);
+				cr_assert_eq(ret, 1);
+				cr_assert(cqe.op_context == ctx0,
+					  "CQE Context mismatch");
+				cqe0++;
+			}
 
-		if ((ret = fi_cq_read(cq1, &cqe, 1)) != -FI_EAGAIN) {
-			cr_assert(!cqe1);
-			cr_assert_eq(ret, 1);
-			cr_assert(cqe.op_context == ctx1,
-				  "CQE Context mismatch");
-			cqe1++;
+			if ((ret = fi_cq_read(cq1, &cqe, 1)) != -FI_EAGAIN) {
+				cr_assert(!cqe1);
+				cr_assert_eq(ret, 1);
+				cr_assert(cqe.op_context == ctx1,
+					  "CQE Context mismatch");
+				cqe1++;
+			}
 		}
 
 		pthread_yield();
