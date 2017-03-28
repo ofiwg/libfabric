@@ -17,6 +17,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #define PTHREAD_MUTEX_INITIALIZER {0}
 
