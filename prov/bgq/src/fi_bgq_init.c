@@ -169,12 +169,6 @@ static int fi_bgq_fillinfo(struct fi_info *fi, const char *node,
 				"memory allocation failed");
 		goto err;
 	}
-	fi->fabric_attr->prov_name = strdup(FI_BGQ_PROVIDER_NAME);
-	if (!fi->fabric_attr->prov_name) {
-		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-				"memory allocation failed");
-		goto err;
-	}
 	fi->fabric_attr->prov_version = FI_BGQ_PROVIDER_VERSION;
 
 	memcpy(fi->tx_attr, fi_bgq_global.default_tx_attr, sizeof(*fi->tx_attr));
