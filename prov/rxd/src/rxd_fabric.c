@@ -93,7 +93,7 @@ int rxd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	}
 	hints.fabric_attr->name = attr->name;
 
-	ret = ofi_get_core_info(rxd_prov.version, NULL, NULL, 0, &rxd_util_prov,
+	ret = ofi_get_core_info(rxd_prov.fi_version, NULL, NULL, 0, &rxd_util_prov,
 				&hints, rxd_info_to_core, &dg_info);
 	if (ret) {
 		ret = -FI_EINVAL;

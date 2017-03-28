@@ -112,7 +112,7 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	hints.fabric_attr->name = attr->name;
 	hints.mode = rxm_info.mode;
 
-	ret = ofi_get_core_info(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
+	ret = ofi_get_core_info(rxm_prov.fi_version, NULL, NULL, 0, &rxm_util_prov,
 				&hints, rxm_info_to_core, &msg_info);
 	if (ret) {
 		ret = -FI_EINVAL;
