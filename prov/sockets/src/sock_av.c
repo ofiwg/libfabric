@@ -66,7 +66,7 @@ int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
 	int i;
 	struct sock_av_addr *av_addr;
 
-	for (i = 0; i < av->table_hdr->size; i++) {
+	for (i = 0; i < (int)av->table_hdr->size; i++) {
 		av_addr = &av->table[i];
 		if (!av_addr->valid)
 			continue;
@@ -87,8 +87,8 @@ int sock_av_compare_addr(struct sock_av *av,
 	index1 = ((uint64_t)addr1 & av->mask);
 	index2 = ((uint64_t)addr2 & av->mask);
 
-	if (index1 >= av->table_hdr->size || index1 < 0 ||
-	    index2 >= av->table_hdr->size || index2 < 0) {
+	if (index1 >= (int)av->table_hdr->size || index1 < 0 ||
+	    index2 >= (int)av->table_hdr->size || index2 < 0) {
 		SOCK_LOG_ERROR("requested rank is larger than av table\n");
 		return -1;
 	}
@@ -168,7 +168,7 @@ static int sock_resize_av_table(struct sock_av *av)
 
 static int sock_av_get_next_index(struct sock_av *av)
 {
-	int i;
+	uint64_t i;
 
 	for (i = 0; i < av->table_hdr->size; i++) {
 		if (!av->table[i].valid)
@@ -182,7 +182,8 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			       fi_addr_t *fi_addr, int count, uint64_t flags,
 			       void *context)
 {
-	int i, j, ret = 0;
+	int i, ret = 0;
+	uint64_t j;
 	char sa_ip[INET_ADDRSTRLEN];
 	struct sock_av_addr *av_addr;
 	int index;
@@ -273,13 +274,13 @@ static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	_av = container_of(av, struct sock_av, av_fid);
 	index = ((uint64_t)fi_addr & _av->mask);
-	if (index >= _av->table_hdr->size || index < 0) {
+	if (index >= (int)_av->table_hdr->size || index < 0) {
 		SOCK_LOG_ERROR("requested address not inserted\n");
 		return -EINVAL;
 	}
 
 	av_addr = &_av->table[index];
-	memcpy(addr, &av_addr->addr, MIN(*addrlen, _av->addrlen));
+	memcpy(addr, &av_addr->addr, MIN(*addrlen, (size_t)_av->addrlen));
 	*addrlen = _av->addrlen;
 	return 0;
 }
@@ -334,7 +335,8 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 	char base_host[FI_NAME_MAX] = {0};
 	char tmp_host[FI_NAME_MAX] = {0};
 	char tmp_port[FI_NAME_MAX] = {0};
-	int hostlen, offset = 0, fmt, i, j;
+	int hostlen, offset = 0, fmt;
+	size_t i, j;
 
 	if (!node || !service || node[0] == '\0') {
 		SOCK_LOG_ERROR("Node/service not provided\n");
@@ -358,9 +360,9 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 	for (i = 0; i < nodecnt; i++) {
 		for (j = 0; j < svccnt; j++) {
 			len1 = snprintf(tmp_host, FI_NAME_MAX, "%s%0*d",
-					base_host, fmt, var_host + i);
+					base_host, fmt, var_host + (int)i);
 			len2 = snprintf(tmp_port, FI_NAME_MAX,  "%d",
-					var_port + j);
+					var_port + (int)j);
 			if (len1 > 0 && len1 < FI_NAME_MAX && len2 > 0 && len2 < FI_NAME_MAX) {
 				ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, context);
 				if (ret == 1)
@@ -380,7 +382,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
-	int i;
+	size_t i;
 	struct sock_av *_av;
 	struct sock_av_addr *av_addr;
 	struct dlist_entry *item;

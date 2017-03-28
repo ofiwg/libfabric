@@ -1158,7 +1158,8 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 				struct sock_rx_ctx *rx_ctx,
 				struct sock_pe_entry *pe_entry)
 {
-	int i, j, ret = 0;
+	int i, ret = 0;
+	size_t j;
 	size_t datatype_sz;
 	struct sock_mr *mr;
 	uint64_t offset, len, entry_len;
@@ -2668,7 +2669,7 @@ static int sock_pe_wait_ok(struct sock_pe *pe)
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 
-	if (pe->waittime && ((fi_gettime_ms() - pe->waittime) < sock_pe_waittime))
+	if (pe->waittime && ((fi_gettime_ms() - pe->waittime) < (uint64_t)sock_pe_waittime))
 		return 0;
 
 	if (dlist_empty(&pe->tx_list) && dlist_empty(&pe->rx_list))

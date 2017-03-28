@@ -118,7 +118,7 @@ ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	struct util_cq *cq;
 	struct fi_cq_tagged_entry *entry;
-	ssize_t i;
+	size_t i;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	fastlock_acquire(&cq->cq_lock);
@@ -161,7 +161,7 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	if (!cq->src) {
 		i = ofi_cq_read(cq_fid, buf, count);
 		if (i > 0) {
-			for (count = 0; count < i; count++)
+			for (count = 0; count < (size_t)i; count++)
 				src_addr[i] = FI_ADDR_NOTAVAIL;
 		}
 		return i;
@@ -181,7 +181,7 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	if (count > ofi_cirque_usedcnt(cq->cirq))
 		count = ofi_cirque_usedcnt(cq->cirq);
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < (ssize_t)count; i++) {
 		entry = ofi_cirque_head(cq->cirq);
 		if (entry->flags & UTIL_FLAG_ERROR) {
 			if (!i)

@@ -729,7 +729,8 @@ static int sock_ep_close(struct fid *fid)
 
 static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int ret, i;
+	int ret;
+	size_t i;
 	struct sock_ep *ep;
 	struct sock_eq *eq;
 	struct sock_cq *cq;
@@ -965,7 +966,7 @@ struct fi_ops sock_ep_fi_ops = {
 
 int sock_ep_enable(struct fid_ep *ep)
 {
-	int i;
+	size_t i;
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
@@ -1010,7 +1011,7 @@ int sock_ep_enable(struct fid_ep *ep)
 
 int sock_ep_disable(struct fid_ep *ep)
 {
-	int i;
+	size_t i;
 	struct sock_ep *sock_ep;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
@@ -1071,7 +1072,7 @@ static int sock_ep_getopt(fid_t fid, int level, int optname,
 static int sock_ep_setopt(fid_t fid, int level, int optname,
 		       const void *optval, size_t optlen)
 {
-	int i;
+	size_t i;
 	struct sock_ep *sock_ep;
 	sock_ep = container_of(fid, struct sock_ep, ep.fid);
 
@@ -1104,7 +1105,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
 	if (sock_ep->attr->fclass != FI_CLASS_SEP ||
-		index >= sock_ep->attr->ep_attr.tx_ctx_cnt)
+		index >= (int)sock_ep->attr->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
 	if (attr) {
@@ -1145,7 +1146,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
 	if (sock_ep->attr->fclass != FI_CLASS_SEP ||
-		index >= sock_ep->attr->ep_attr.rx_ctx_cnt)
+		index >= (int)sock_ep->attr->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
 	if (attr) {

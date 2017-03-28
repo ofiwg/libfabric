@@ -236,7 +236,7 @@ static ssize_t rxd_ep_writev(struct fid_ep *ep, const struct iovec *iov,
 			     void **desc, size_t count, fi_addr_t dest_addr,
 			     uint64_t addr, uint64_t key, void *context)
 {
-	int i;
+	size_t i;
 	size_t len;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;

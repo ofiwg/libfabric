@@ -108,7 +108,8 @@ struct fi_ops_ep rxd_ops_ep = {
 static ssize_t rxd_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			       uint64_t flags)
 {
-	ssize_t ret = 0, i;
+	ssize_t ret = 0;
+	size_t i;
 	struct rxd_ep *rxd_ep;
 	struct rxd_recv_entry *recv_entry;
 
@@ -211,7 +212,8 @@ static int rxd_ep_set_conn_id(struct rxd_ep *ep)
 
 int rxd_ep_enable(struct rxd_ep *ep)
 {
-	ssize_t i, ret;
+	size_t i;
+	ssize_t ret;
 	void *mr = NULL;
 	struct rxd_rx_buf *rx_buf;
 
@@ -800,7 +802,8 @@ uint64_t rxd_find_av_index(struct rxd_av *av, uint64_t start_idx,
 			    const void *addr, size_t addrlen, int *p_found)
 {
 	void *tmp_addr;
-	uint64_t idx = 0, count;
+	uint64_t idx = 0;
+	int count;
 	size_t tmp_addrlen;
 
 	if (p_found)
@@ -1156,7 +1159,8 @@ static ssize_t rxd_trx_peek_recv(struct rxd_ep *ep,
 ssize_t rxd_trx_claim_recv(struct rxd_ep *ep, const struct fi_msg_tagged *msg,
 			    uint64_t flags)
 {
-	int ret = 0, i;
+	int ret = 0;
+	size_t i;
 	struct fi_context *context;
 	struct rxd_rx_entry *rx_entry;
 	struct rxd_trecv_entry *trecv_entry;
@@ -1203,7 +1207,8 @@ out:
 ssize_t rxd_ep_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			 uint64_t flags)
 {
-	ssize_t ret = 0, i;
+	ssize_t ret = 0;
+	size_t i;
 	struct rxd_ep *rxd_ep;
 	struct rxd_trecv_entry *trecv_entry;
 

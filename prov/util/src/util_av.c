@@ -333,7 +333,7 @@ static int fi_av_remove_addr(struct util_av *av, int slot, int index)
 	struct dlist_entry *av_entry;
 	int *entry, *next, i;
 
-	if (index < 0 || index > av->count) {
+	if (index < 0 || (size_t)index > av->count) {
 		FI_WARN(av->prov, FI_LOG_AV, "index out of range\n");
 		return -FI_EINVAL;
 	}
@@ -484,7 +484,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	if (!av->data)
 		return -FI_ENOMEM;
 
-	for (i = 0; i < av->count - 1; i++) {
+	for (i = 0; i < (int)av->count - 1; i++) {
 		entry = util_av_get_data(av, i);
 		*entry = i + 1;
 	}
@@ -939,7 +939,7 @@ static int ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr, void *addr,
 
 	av = container_of(av_fid, struct util_av, av_fid);
 	index = (int) fi_addr;
-	if (index < 0 || index > av->count) {
+	if (index < 0 || (size_t)index > av->count) {
 		FI_WARN(av->prov, FI_LOG_AV, "unknown address\n");
 		return -FI_EINVAL;
 	}
