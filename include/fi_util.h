@@ -468,7 +468,7 @@ struct util_event {
 	int			size;
 	int			event;
 	int			err;
-	uint8_t			data[0];
+	uint8_t			data[];
 };
 
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
