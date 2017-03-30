@@ -223,6 +223,14 @@ void rdm_api_setup(void)
 	}
 }
 
+void api_setup(void)
+{
+}
+
+void api_teardown(void)
+{
+}
+
 static void rdm_api_teardown_common(bool unreg)
 {
 	int ret = 0, i = 0;
@@ -851,7 +859,9 @@ Test(rdm_api, amo_write_read_w_msg)
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api, getinfo_w_null_hints)
+TestSuite(api, .init = api_setup, .fini = api_teardown, .disabled = false);
+
+Test(api, getinfo_w_null_hints)
 {
 	int ret;
 
