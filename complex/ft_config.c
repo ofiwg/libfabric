@@ -222,6 +222,12 @@ static struct key_t keys[] = {
 		.val_size = sizeof(((struct ft_set *)0)->cq_wait_obj) / FT_MAX_WAIT_OBJ,
 	},
 	{
+		.str = "op",
+		.offset = offsetof(struct ft_set, op),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->op) / FI_ATOMIC_OP_LAST,
+	},
+	{
 		.str = "mode",
 		.offset = offsetof(struct ft_set, mode),
 		.val_type = VAL_NUM,
@@ -264,6 +270,18 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_READ, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_READV, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_READMSG, enum ft_class_function, buf);
+
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_ATOMIC, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_ATOMICV, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_ATOMICMSG, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_INJECT_ATOMIC, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_FETCH_ATOMIC, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_FETCH_ATOMICV, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_FETCH_ATOMICMSG, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_COMPARE_ATOMIC, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_COMPARE_ATOMICV, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_COMPARE_ATOMICMSG, enum ft_class_function, buf);
+
 		FT_ERR("Unknown class_function");
 	} else if (!strncmp(key->str, "ep_type", strlen("ep_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_EP_MSG, enum fi_ep_type, buf);
@@ -287,6 +305,27 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_FD, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_MUTEX_COND, enum fi_wait_obj, buf);
 		FT_ERR("Unknown (eq/cq)_wait_obj");
+	} else if (!strncmp(key->str, "op", strlen("atomic_op"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MIN, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MAX, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_SUM, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_PROD, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_LOR, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_LAND, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_BOR, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_BAND, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_LXOR, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_BXOR, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_ATOMIC_READ, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_ATOMIC_WRITE, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP_NE, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP_LE, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP_LT, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP_GE, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP_GT, enum fi_op, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MSWAP, enum fi_op, buf);
+		FT_ERR("Unknown op");
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
@@ -575,6 +614,10 @@ void fts_next(struct ft_series *series)
 		return;
 	series->cur_func = 0;
 
+	if (set->op[++series->cur_op])
+		return;
+	series->cur_op = 0;
+
 	if (set->comp_type[++series->cur_comp])
 		return;
 	series->cur_comp = 0;
@@ -623,6 +666,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->test_type = set->test_type[series->cur_type];
 	info->test_index = series->test_index;
 	info->class_function = set->class_function[series->cur_func];
+	info->op = set->op[series->cur_op];
 	info->test_flags = set->test_flags;
 	info->caps = set->caps[series->cur_caps];
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?

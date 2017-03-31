@@ -38,6 +38,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <complex.h>
 
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -1087,6 +1088,42 @@ int size_to_count(int size)
 		return (opts.options & FT_OPT_BW) ? 2000 : 1000;
 	else
 		return (opts.options & FT_OPT_BW) ? 20000: 10000;
+}
+
+size_t datatype_to_size(enum fi_datatype datatype)
+{
+	switch (datatype) {
+	case FI_INT8:
+		return sizeof(int8_t);
+	case FI_UINT8:
+		return sizeof(uint8_t);
+	case FI_INT16:
+		return sizeof(int16_t);
+	case FI_UINT16:
+		return sizeof(uint16_t);
+	case FI_INT32:
+		return sizeof(int32_t);
+	case FI_UINT32:
+		return sizeof(uint32_t);
+	case FI_FLOAT:
+		return sizeof(float);
+	case FI_INT64:
+		return sizeof(int64_t);
+	case FI_UINT64:
+		return sizeof(uint64_t);
+	case FI_DOUBLE:
+		return sizeof(double);
+	case FI_FLOAT_COMPLEX:
+		return sizeof(float complex);
+	case FI_DOUBLE_COMPLEX:
+		return sizeof(double complex);
+	case FI_LONG_DOUBLE:
+		return sizeof(long double);
+	case FI_LONG_DOUBLE_COMPLEX:
+		return sizeof(long double complex);
+	default:
+		return 0;
+	}
 }
 
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
