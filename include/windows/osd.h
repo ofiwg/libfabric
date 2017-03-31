@@ -96,12 +96,8 @@ do						\
 #define getpid (int)GetCurrentProcessId
 #define sleep(x) Sleep(x * 1000)
 
-#define PRIx8         "hhx"
-#define PRIx16        "hx"
-#define PRIx32        "lx"
-#define PRIx64        "llx"
 #define __PRI64_PREFIX "ll"
-# define PRIu64 __PRI64_PREFIX "u"
+
 #define HOST_NAME_MAX 256
 
 #define MIN min
@@ -226,6 +222,18 @@ static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **map
 	OFI_UNUSED(mapped);
 
 	return -FI_ENOENT;
+}
+
+static inline char * strndup(char const *src, size_t n)
+{
+	size_t len = strnlen(src, n);
+	char *dst = malloc(len + 1);
+
+	if (dst) {
+		memcpy(dst, src, len);
+		dst[len] = 0;
+	}
+	return dst;
 }
 
 int ofi_shm_unmap(struct util_shm *shm);
