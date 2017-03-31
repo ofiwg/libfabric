@@ -125,11 +125,11 @@ event details.
 
 The call fi_send transfers the data contained in the user-specified
 data buffer to a remote endpoint, with message boundaries being
-maintained.  The local endpoint must be connected to a remote endpoint
-or destination before fi_send is called.  Unless the endpoint has been
-configured differently, the data buffer passed into fi_send must not
-be touched by the application until the fi_send call completes
-asynchronously.
+maintained.  For connection based endpoints (FI_EP_MSG) the local
+endpoint must be connected to a remote endpoint or destination before
+fi_send is called.  Unless the endpoint has been configured
+differently, the data buffer passed into fi_send must not be touched
+by the application until the fi_send call completes asynchronously.
 
 ## fi_sendv
 
