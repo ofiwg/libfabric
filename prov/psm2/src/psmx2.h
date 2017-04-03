@@ -847,6 +847,54 @@ extern struct fi_ops_atomic	psmx2_atomic_ops;
 extern struct psmx2_env		psmx2_env;
 extern struct psmx2_fid_fabric	*psmx2_active_fabric;
 
+#ifdef PSM2_MULTI_EP_CAP
+
+static inline int psmx2_sep_ok(void)
+{
+	uint64_t caps = PSM2_MULTI_EP_CAP;
+	return (psm2_get_capability_mask(caps) == caps);
+}
+
+static inline psm2_error_t psmx2_ep_epid_lookup(psm2_ep_t ep, psm2_epid_t epid,
+						psm2_epconn_t *epconn)
+{
+	return psm2_ep_epid_lookup2(ep, epid, epconn);
+}
+
+static inline psm2_epid_t psmx2_epaddr_to_epid(psm2_epaddr_t epaddr)
+{
+	psm2_epid_t epid;
+
+	/* Caller ensures that epaddr is not NULL */
+	psm2_epaddr_to_epid(epaddr, &epid);
+	return epid;
+}
+
+#else
+
+static inline int psmx2_sep_ok(void)
+{
+	return 0;
+}
+
+static inline psm2_error_t psmx2_ep_epid_lookup(psm2_ep_t ep, psm2_epid_t epid,
+						psm2_epconn_t *epconn)
+{
+	return psm2_ep_epid_lookup(epid, epconn);
+}
+
+static inline psm2_epid_t psmx2_epaddr_to_epid(psm2_epaddr_t epaddr)
+{
+	/*
+	 * This is a hack based on the fact that the internal representation of
+	 * epaddr has epid as the first field. This is a workaround before a PSM2
+	 * function is availale to retrieve this information.
+	 */
+	return *(psm2_epid_t *)epaddr;
+}
+
+#endif /* PSM2_MULTI_EP_CAP */
+
 int	psmx2_fabric(struct fi_fabric_attr *attr,
 		    struct fid_fabric **fabric, void *context);
 int	psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
@@ -967,12 +1015,7 @@ static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name 
 {
 	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
 
-	/*
-	 * FIXME: This is a hack based on the fact that the internal representation of
-	 * epaddr has epid as the first field. Ideally PSM2 would provide a utility
-	 * function to retrieve epid from epaddr.
-	 */
-	name->epid = *(psm2_epid_t *)epaddr;
+	name->epid = psmx2_epaddr_to_epid(epaddr);
 	name->vlane = PSMX2_ADDR_TO_VL(source);
 }
 

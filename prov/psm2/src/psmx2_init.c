@@ -67,14 +67,7 @@ static void psmx2_init_env(void)
 
 static int psmx2_check_sep_cap(void)
 {
-	uint64_t (*func)(uint64_t);
-	int mask = 1; /* PSM2_MULTI_EP_CAP */
-
-	func = dlsym(NULL, "psm2_get_capability_mask");
-	if (!func)
-		return 0;
-
-	if ((*func)(mask) != mask)
+	if (!psmx2_sep_ok())
 		return 0;
 
 	psmx2_env.sep = 1;

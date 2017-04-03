@@ -219,7 +219,7 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 	psm2_epconn_t epconn;
 	struct psmx2_epaddr_context *context;
 
-	err = psm2_ep_epid_lookup(epid, &epconn);
+	err = psmx2_ep_epid_lookup(trx_ctxt->psm2_ep, epid, &epconn);
 	if (err == PSM2_OK) {
 		context = psm2_epaddr_getctxt(epconn.addr);
 		if (context && context->epid  == epid) {
@@ -354,10 +354,11 @@ static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 	psm2_epconn_t epconn;
 	struct psmx2_epaddr_context *epaddr_context;
 	int error_count = 0;
+	psm2_ep_t ep = av->domain->base_trx_ctxt->psm2_ep;
 
 	/* set up mask to prevent connecting to an already connected ep */
 	for (i=0; i<count; i++) {
-		if (psm2_ep_epid_lookup(epids[i], &epconn) == PSM2_OK) {
+		if (psmx2_ep_epid_lookup(ep, epids[i], &epconn) == PSM2_OK) {
 			epaddr_context = psm2_epaddr_getctxt(epconn.addr);
 			if (epaddr_context && epaddr_context->epid == epids[i])
 				epaddrs[i] = epconn.addr;
@@ -368,8 +369,7 @@ static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 		}
 	}
 
-	psm2_ep_connect(av->domain->base_trx_ctxt->psm2_ep, count, epids, mask, errors,
-			epaddrs, psmx2_conn_timeout(count));
+	psm2_ep_connect(ep, count, epids, mask, errors, epaddrs, psmx2_conn_timeout(count));
 
 	for (i=0; i<count; i++){
 		if (!mask[i]) {
@@ -387,7 +387,7 @@ static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 			 * be reached". This should be treated the same as
 			 * "Endpoint already connected".
 			 */
-			if (psm2_ep_epid_lookup(epids[i], &epconn) == PSM2_OK) {
+			if (psmx2_ep_epid_lookup(ep, epids[i], &epconn) == PSM2_OK) {
 				epaddr_context = psm2_epaddr_getctxt(epconn.addr);
 				if (epaddr_context &&
 				    epaddr_context->epid == epids[i]) {
