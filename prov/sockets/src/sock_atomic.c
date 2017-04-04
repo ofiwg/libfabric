@@ -64,7 +64,8 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 			  size_t compare_count, struct fi_ioc *resultv,
 			  void **result_desc, size_t result_count, uint64_t flags)
 {
-	int i, ret;
+	ssize_t ret;
+	size_t i;
 	size_t datatype_sz;
 	struct sock_op tx_op;
 	union sock_iov tx_iov;

@@ -43,7 +43,7 @@ uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count,
 {
 	uint64_t done = 0, len;
 	char *iov_buf;
-	int i;
+	size_t i;
 
 	for (i = 0; i < iov_count && bufsize; i++) {
 		len = iov[i].iov_len;

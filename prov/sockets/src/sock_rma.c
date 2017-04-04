@@ -60,7 +60,8 @@
 ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			    uint64_t flags)
 {
-	int ret, i;
+	int ret;
+	size_t i;
 	struct sock_op tx_op;
 	union sock_iov tx_iov;
 	struct sock_conn *conn;
@@ -224,7 +225,8 @@ static ssize_t sock_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			     uint64_t flags)
 {
-	int ret, i;
+	int ret;
+	size_t i;
 	struct sock_op tx_op;
 	union sock_iov tx_iov;
 	struct sock_conn *conn;
@@ -384,7 +386,7 @@ static ssize_t sock_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 				void **desc, size_t count, fi_addr_t dest_addr,
 				uint64_t addr, uint64_t key, void *context)
 {
-	int i;
+	size_t i;
 	size_t len;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;

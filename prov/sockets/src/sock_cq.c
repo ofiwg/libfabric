@@ -285,7 +285,7 @@ static void sock_cq_set_report_fn(struct sock_cq *sock_cq)
 
 static inline void sock_cq_copy_overflow_list(struct sock_cq *cq, size_t count)
 {
-	ssize_t i;
+	size_t i;
 	struct sock_cq_overflow_entry_t *overflow_entry;
 
 	for (i = 0; i < count && !dlist_empty(&cq->overflow_list); i++) {
@@ -310,7 +310,7 @@ static inline ssize_t sock_cq_rbuf_read(struct sock_cq *cq, void *buf,
 					size_t count, fi_addr_t *src_addr,
 					size_t cq_entry_len)
 {
-	ssize_t i;
+	size_t i;
 	fi_addr_t addr;
 
 	ofi_rbfdread(&cq->cq_rbfd, buf, cq_entry_len * count);
@@ -354,7 +354,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			avail = ofi_rbfdused(&sock_cq->cq_rbfd);
 			if (avail)
 				ret = sock_cq_rbuf_read(sock_cq, buf,
-					MIN(threshold, avail / cq_entry_len),
+					MIN(threshold, (size_t)(avail / cq_entry_len)),
 					src_addr, cq_entry_len);
 			fastlock_release(&sock_cq->lock);
 			if (ret == 0 && timeout >= 0) {
@@ -370,7 +370,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			avail = ofi_rbfdused(&sock_cq->cq_rbfd);
 			if (avail)
 				ret = sock_cq_rbuf_read(sock_cq, buf,
-					MIN(threshold, avail / cq_entry_len),
+					MIN(threshold, (size_t)(avail / cq_entry_len)),
 					src_addr, cq_entry_len);
 			else /* No CQ entry available, read the fd */
 				ofi_rbfdreset(&sock_cq->cq_rbfd);

@@ -138,7 +138,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 		trigger = container_of(entry, struct sock_trigger, entry);
 		entry = entry->next;
 
-		if (atomic_get(&cntr->value) < trigger->threshold)
+		if (atomic_get(&cntr->value) < (int)trigger->threshold)
 			continue;
 
 		switch (trigger->op_type) {
@@ -302,7 +302,7 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 		goto out;
 	}
 
-	if (atomic_get(&cntr->value) >= threshold) {
+	if (atomic_get(&cntr->value) >= (int)threshold) {
 		ret = 0;
 		goto out;
 	}
@@ -317,7 +317,7 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 	last_read = atomic_get(&cntr->value);
 	remaining_ms = timeout;
 
-	while (!ret && last_read < threshold) {
+	while (!ret && last_read < (int)threshold) {
 		if (cntr->domain->progress_mode == FI_PROGRESS_MANUAL) {
 			pthread_mutex_unlock(&cntr->mut);
 			ret = sock_cntr_progress(cntr);

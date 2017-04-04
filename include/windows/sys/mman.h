@@ -34,31 +34,54 @@ typedef uint32_t mode_t;
 /* stubs for Linux only functions */
 static inline void *mremap(void *old_address, size_t old_size, size_t new_size, int flags)
 {
+	OFI_UNUSED(old_address);
+	OFI_UNUSED(old_size);
+	OFI_UNUSED(new_size);
+	OFI_UNUSED(flags);
+
 	return MAP_FAILED;
 }
 
 static inline int shm_open(const char *name, int oflag, mode_t mode)
 {
+	OFI_UNUSED(name);
+	OFI_UNUSED(oflag);
+	OFI_UNUSED(mode);
+
 	return -1;
 }
 
 static inline int shm_unlink(const char *name)
 {
+	OFI_UNUSED(name);
 	return -1;
 }
 
 static inline void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
+	OFI_UNUSED(addr);
+	OFI_UNUSED(length);
+	OFI_UNUSED(prot);
+	OFI_UNUSED(flags);
+	OFI_UNUSED(fd);
+	OFI_UNUSED(offset);
+
 	return MAP_FAILED;
 }
 
 static inline int munmap(void *addr, size_t length)
 {
+	OFI_UNUSED(addr);
+	OFI_UNUSED(length);
+
 	return -1;
 }
 
 static inline int ftruncate(int fd, off_t length)
 {
+	OFI_UNUSED(fd);
+	OFI_UNUSED(length);
+
 	return -1;
 }
 

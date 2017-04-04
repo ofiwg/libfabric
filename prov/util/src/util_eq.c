@@ -64,7 +64,7 @@ static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	if (event)
 		*event = entry->event;
 	if (buf) {
-		ret = MIN(len, entry->size);
+		ret = MIN(len, (size_t)entry->size);
 		memcpy(buf, entry->data, ret);
 	}  else {
 		ret = 0;

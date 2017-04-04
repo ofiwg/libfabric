@@ -71,7 +71,7 @@ int rxd_av_dg_reverse_lookup(struct rxd_av *av, uint64_t start_idx,
 	if (!curr_addr)
 		return -FI_ENOMEM;
 
-	for (i = 0; i < av->dg_av_used; i++) {
+	for (i = 0; i < (size_t)av->dg_av_used; i++) {
 		ret = fi_av_lookup(av->dg_av, (i + start_idx) % av->dg_av_used,
 				   curr_addr, &len);
 		if (ret)
@@ -90,7 +90,8 @@ out:
 int rxd_av_insert_check(struct rxd_av *av, const void *addr, size_t count,
 			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	int i, success_cnt = 0;
+	int success_cnt = 0;
+	size_t i;
 	int ret, index;
 	void *curr_addr;
 	uint64_t dg_av_idx;
