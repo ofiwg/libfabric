@@ -1993,14 +1993,13 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 			/* _gnix_vc_tx_schedule() must come after the request
 			 * is inserted into the VC's tx_queue. */
 			_gnix_vc_tx_schedule(vc);
-
 			break;
+
 		}
 
 		req = dlist_first_entry(&vc->tx_queue,
 					struct gnix_fab_req,
 					dlist);
-		/* Return success if the queue is emptied. */
 	}
 
 	return fi_rc;
@@ -2029,8 +2028,14 @@ static struct gnix_vc *__gnix_nic_next_pending_vc(struct gnix_nic *nic)
 int _gnix_vc_nic_progress(struct gnix_nic *nic)
 {
 	struct gnix_vc *vc;
-	int ret;
+	int ret, ret_tx;
 
+	/*
+	 * we can't just spin and spin in this loop because
+	 * none of the functions invoked below end up dequeuing
+	 * GNI CQE's and subsequently freeing up TX descriptors.
+	 * So, if the tx reqs routine returns -FI_EAGAIN, break out.
+	 */
 	while ((vc = __gnix_nic_next_pending_vc(nic))) {
 		COND_ACQUIRE(vc->ep->requires_lock, &vc->ep->vc_lock);
 
@@ -2049,12 +2054,16 @@ int _gnix_vc_nic_progress(struct gnix_nic *nic)
 			GNIX_DEBUG(FI_LOG_EP_CTRL,
 				   "__gnix_vc_push_work_reqs failed: %d\n", ret);
 
-		ret = __gnix_vc_push_tx_reqs(vc);
-		if (ret != FI_SUCCESS)
-			GNIX_DEBUG(FI_LOG_EP_CTRL,
-				   "__gnix_vc_push_tx_reqs failed: %d\n", ret);
+
+		ret_tx = __gnix_vc_push_tx_reqs(vc);
 
 		COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+
+		if (ret_tx != FI_SUCCESS) {
+			GNIX_DEBUG(FI_LOG_EP_CTRL,
+				   "__gnix_vc_push_tx_reqs failed: %d\n", ret_tx);
+			break;
+		}
 	}
 
 	return FI_SUCCESS;
