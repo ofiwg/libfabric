@@ -272,7 +272,7 @@ static uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
 
-	if (poll_cnt++ == PSMX2_CNTR_POLL_THRESHOLD) {
+	if (poll_cnt++ >= PSMX2_CNTR_POLL_THRESHOLD) {
 		if (cntr_priv->trx_ctxt == PSMX2_ALL_TRX_CTXT)
 			psmx2_progress_all(cntr_priv->domain);
 		else
