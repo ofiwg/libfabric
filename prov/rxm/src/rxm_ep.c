@@ -917,7 +917,7 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 	struct fi_cq_attr cq_attr;
 	int ret;
 
-	ret = ofi_get_core_info(rxm_prov.version, NULL, NULL, 0, &rxm_util_prov,
+	ret = ofi_get_core_info(rxm_prov.fi_version, NULL, NULL, 0, &rxm_util_prov,
 				rxm_fi_info, rxm_info_to_core, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
