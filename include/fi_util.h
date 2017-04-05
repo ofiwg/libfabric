@@ -486,7 +486,7 @@ struct ofi_mr_map {
 	enum fi_mr_mode		mode;
 };
 
-int ofi_mr_map_init(const struct fi_provider *in_prov, enum fi_mr_mode mode,
+int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,
 		    struct ofi_mr_map *map);
 void ofi_mr_map_close(struct ofi_mr_map *map);
 
@@ -513,6 +513,8 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 			   FI_SHARED_AV | FI_TRIGGER | FI_FENCE | \
 			   FI_LOCAL_COMM | FI_REMOTE_COMM)
 
+int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
+			     uint32_t user_mode);
 int ofi_check_fabric_attr(const struct fi_provider *prov,
 			  const struct fi_fabric_attr *prov_attr,
 			  const struct fi_fabric_attr *user_attr);

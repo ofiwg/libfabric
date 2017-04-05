@@ -390,7 +390,7 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 	}
 }
 
-static int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
+int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
 			     uint32_t user_mode)
 {
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {

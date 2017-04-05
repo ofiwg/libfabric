@@ -942,9 +942,9 @@ union sock_tx_op {
 };
 #define SOCK_EP_TX_ENTRY_SZ (sizeof(union sock_tx_op))
 
-int sock_verify_info(struct fi_info *hints);
+int sock_verify_info(uint32_t version, struct fi_info *hints);
 int sock_verify_fabric_attr(struct fi_fabric_attr *attr);
-int sock_verify_domain_attr(struct fi_domain_attr *attr);
+int sock_verify_domain_attr(uint32_t version, struct fi_domain_attr *attr);
 
 size_t sock_get_tx_size(size_t size);
 int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr, struct fi_tx_attr *tx_attr,
@@ -957,14 +957,15 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 		      struct sockaddr_in *src_addr);
 int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr, const char *service);
 
-struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
-			     struct fi_info *hints, void *src_addr, void *dest_addr);
-int sock_msg_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
-		     struct fi_info **info);
-int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
-			struct fi_info **info);
-int sock_rdm_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
-		     struct fi_info **info);
+struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
+			     struct fi_info *hints, void *src_addr,
+			     void *dest_addr);
+int sock_msg_fi_info(uint32_t version, void *src_addr, void *dest_addr,
+		     struct fi_info *hints, struct fi_info **info);
+int sock_dgram_fi_info(uint32_t version, void *src_addr, void *dest_addr,
+		       struct fi_info *hints, struct fi_info **info);
+int sock_rdm_fi_info(uint32_t version, void *src_addr, void *dest_addr,
+		     struct fi_info *hints, struct fi_info **info);
 void free_fi_info(struct fi_info *info);
 
 int sock_msg_getinfo(uint32_t version, const char *node, const char *service,

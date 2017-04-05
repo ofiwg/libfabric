@@ -64,8 +64,10 @@ int ofi_mr_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 	if (!item)
 		return -FI_ENOMEM;
 
-	if (map->mode == FI_MR_SCALABLE) {
+	if (!(map->mode & FI_MR_VIRT_ADDR))
 		item->offset = (uintptr_t) attr->mr_iov[0].iov_base;
+
+	if (!(map->mode & FI_MR_PROV_KEY)) {
 		if (rbtFind(map->rbtree, &item->requested_key)) {
 			free(item);
 			return -FI_ENOKEY;
@@ -152,14 +154,27 @@ static int compare_mr_keys(void *key1, void *key2)
 }
 
 
-int ofi_mr_map_init(const struct fi_provider *prov, enum fi_mr_mode mode,
+/*
+ * If a provider or app whose version is < 1.5, calls this function and passes
+ * FI_MR_UNSPEC as mode, it would be treated as MR scalable.
+ */
+int ofi_mr_map_init(const struct fi_provider *prov, int mode,
 		    struct ofi_mr_map *map)
 {
 	map->rbtree = rbtNew(compare_mr_keys);
 	if (!map->rbtree)
 		return -FI_ENOMEM;
 
-	map->mode = mode;
+	switch (mode) {
+	case FI_MR_BASIC:
+		map->mode = OFI_MR_BASIC_MAP;
+		break;
+	case FI_MR_SCALABLE:
+		map->mode = 0;
+		break;
+	default:
+		map->mode = mode;
+	}
 	map->prov = prov;
 	map->key = 1;
 
