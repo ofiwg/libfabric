@@ -151,17 +151,26 @@ static int verify_hugepages(void)
 
 /*
  * Open an allocator with the given parameters and immediately close it. Verify
- * that everything returned a successful error code.
+ * that everything returned a successful error code.  Note that for large
+ * page sizes over ~64 MB, it can be iffy whether or not large pages can
+ * be synthesized if the linux page cache has become highly fragmented, so
+ * we have a may fail parameter that checks to see if the error return is
+ * -FI_ENOMEM, in which case don't treat as fatal.
  */
 static void open_close_allocator(enum gnix_page_size page_size,
 				 size_t mbox_size,
-				 size_t mpmmap)
+				 size_t mpmmap, bool may_fail)
 {
 	int ret;
 
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, page_size,
 					  mbox_size, mpmmap, &allocator);
-	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed.");
+	if ((ret == -FI_ENOMEM) && (may_fail == true)) {
+		fprintf(stderr, "Allocation of page size %d MB failed -"
+				"skipping\n", page_size);
+		return;
+	}
+	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed5.");
 	cr_expect_eq(verify_hugepages(), 4,
 		     "memory not found in /proc/self/maps.");
 
@@ -179,15 +188,15 @@ Test(mbox_creation, alloc_single_page)
 	/*
 	 * Test creation of all predefined page sizes.
 	 */
-	open_close_allocator(GNIX_PAGE_2MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_4MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_8MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_16MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_32MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_64MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_128MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_256MB, 100, 100);
-	open_close_allocator(GNIX_PAGE_512MB, 100, 100);
+	open_close_allocator(GNIX_PAGE_2MB, 100, 100, false);
+	open_close_allocator(GNIX_PAGE_4MB, 100, 100, false);
+	open_close_allocator(GNIX_PAGE_8MB, 100, 100, false);
+	open_close_allocator(GNIX_PAGE_16MB, 100, 100, false);
+	open_close_allocator(GNIX_PAGE_32MB, 100, 100, false);
+	open_close_allocator(GNIX_PAGE_64MB, 100, 100, true);
+	open_close_allocator(GNIX_PAGE_128MB, 100, 100, true);
+	open_close_allocator(GNIX_PAGE_256MB, 100, 100, true);
+	open_close_allocator(GNIX_PAGE_512MB, 100, 100, true);
 }
 
 Test(mbox_creation, alloc_three_pages)
@@ -195,7 +204,7 @@ Test(mbox_creation, alloc_three_pages)
 	/*
 	 * This should allocate a single slab that's 3 pages in size.
 	 */
-	open_close_allocator(GNIX_PAGE_4MB, 1000, 12000);
+	open_close_allocator(GNIX_PAGE_4MB, 1000, 12000, false);
 }
 
 Test(mbox_creation, alloc_mbox)
@@ -210,7 +219,7 @@ Test(mbox_creation, alloc_mbox)
 
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  1000, 12000, &allocator);
-	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed1.");
 
 	/*
 	 *value is 4 because the provider has internally already opened
@@ -362,7 +371,7 @@ Test(mbox_creation, multi_allocation)
 
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  mbox_size, array_size, &allocator);
-	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed2.");
 	cr_expect_eq(verify_hugepages(), 4,
 		     "memory not found in /proc/self/maps.");
 
@@ -418,7 +427,7 @@ Test(mbox_creation, check_errors)
 
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  1000, 12000, &allocator);
-	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed3");
 	cr_expect_eq(verify_hugepages(), 4,
 		     "memory not found in /proc/self/maps.");
 
@@ -479,7 +488,7 @@ Test(mbox_creation, two_slabs)
 
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  mbox_size, mpmmap, &allocator);
-	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed4.");
 	cr_expect_eq(verify_hugepages(), 4,
 		     "memory not found in /proc/self/maps.");
 
