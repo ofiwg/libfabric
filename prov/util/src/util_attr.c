@@ -390,6 +390,9 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 	}
 }
 
+/* If a provider supports basic registration mode it should set the FI_MR_BASIC
+ * mode bit in prov_mode. Support for FI_MR_SCALABLE is indicated by not setting
+ * any of OFI_MR_BASIC_MAP bits. */
 int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
 			     uint32_t user_mode)
 {
@@ -398,17 +401,28 @@ int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
 
 		switch (user_mode) {
 		case FI_MR_UNSPEC:
-			return !prov_mode || (prov_mode == OFI_MR_BASIC_MAP) ?
+			return OFI_CHECK_MR_SCALABLE(prov_mode) ||
+				OFI_CHECK_MR_BASIC(prov_mode) ?
 				0 : -FI_ENODATA;
 		case FI_MR_BASIC:
-			return prov_mode == OFI_MR_BASIC_MAP ? 0 : -FI_ENODATA;
+			return OFI_CHECK_MR_BASIC(prov_mode) ? 0 : -FI_ENODATA;
 		case FI_MR_SCALABLE:
-			return !prov_mode ? 0 : -FI_ENODATA;
+			return OFI_CHECK_MR_SCALABLE(prov_mode) ? 0 : -FI_ENODATA;
 		default:
 			return -FI_ENODATA;
 		}
 	} else {
-		return ((user_mode & prov_mode) == prov_mode) ? 0 : -FI_ENODATA;
+		if (user_mode & FI_MR_BASIC) {
+			if (!OFI_CHECK_MR_BASIC(prov_mode))
+				return -FI_ENODATA;
+			if ((user_mode & prov_mode & ~OFI_MR_BASIC_MAP) ==
+			    (prov_mode & ~OFI_MR_BASIC_MAP))
+				return 0;
+			return -FI_ENODATA;
+		} else {
+			return (((user_mode | FI_MR_BASIC) & prov_mode) == prov_mode) ?
+				0 : -FI_ENODATA;
+		}
 	}
 }
 
@@ -681,6 +695,7 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 {
 	const struct fi_info *prov_info = util_prov->info;
 	const struct fi_provider *prov = util_prov->prov;
+	uint64_t prov_mode;
 	int ret;
 
 	if (!user_info)
@@ -692,9 +707,15 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if ((user_info->mode & prov_info->mode) != prov_info->mode) {
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
+		prov_mode = (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
+			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
+	else
+		prov_mode = prov_info->mode;
+
+	if ((user_info->mode & prov_mode) != prov_mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_info->mode, user_info->mode);
+		FI_INFO_MODE(prov, prov_mode, user_info->mode);
 		return -FI_ENODATA;
 	}
 
