@@ -69,14 +69,13 @@ union fi_bgq_uid {
 	MUHWI_Destination_t	muhwi;		/* see fi_bgq_uid_get_destination() */
 	struct {
 		uint32_t	rx_msb	:  4;	/* see fi_bgq_uid_get_rx(); see NOTE_MU_RECFIFO */
-		uint32_t	unused_0:  1;
-		uint32_t	a	:  3;	/* 3 bits needed for the A dimention of the torus on Mira */
+		uint32_t	a	:  4;	/* 4 bits needed for the A dimention of the torus on Mira and Sequoia */
 		uint32_t	unused_1:  2;
-		uint32_t	b	:  4;	/* 4 bits needed for the B dimention of the torus on Mira */
+		uint32_t	b	:  4;	/* 4 bits needed for the B dimention of the torus on Mira and Sequoia */
 		uint32_t	unused_2:  2;
-		uint32_t	c	:  4;	/* 4 bits needed for the C dimention of the torus on Mira */
+		uint32_t	c	:  4;	/* 4 bits needed for the C dimention of the torus on Mira and Sequoia */
 		uint32_t	unused_3:  2;
-		uint32_t	d	:  4;	/* 4 bits needed for the D dimention of the torus on Mira */
+		uint32_t	d	:  4;	/* 4 bits needed for the D dimention of the torus on Mira and Sequoia */
 		uint32_t	rx_lsb	:  5;	/* see fi_bgq_uid_get_rx(); see NOTE_MU_RECFIFO */
 		uint32_t	e	:  1;	/* 1 bit needed for the E dimention of the torus on all BG/Q systems */
 	} __attribute__((__packed__));
@@ -91,7 +90,7 @@ fi_bgq_uid_dump (char * prefix, const fi_bgq_uid_t * const uid) {
 	fprintf(stderr, "%s fi_bgq_uid_t dump at %p\n", prefix, (void*)uid);
 
 	fprintf(stderr, "%s   .rx_msb .................................... %u\n", prefix, tmp.rx_msb);
-	fprintf(stderr, "%s   .unused_0 .................................. %u\n", prefix, tmp.unused_0);
+
 	fprintf(stderr, "%s   .a ......................................... %u\n", prefix, tmp.a);
 	fprintf(stderr, "%s   .unused_1 .................................. %u\n", prefix, tmp.unused_1);
 	fprintf(stderr, "%s   .b ......................................... %u\n", prefix, tmp.b);
@@ -127,13 +126,13 @@ uint32_t fi_bgq_uid_get_rx (const fi_bgq_uid_t uid) {
 static inline
 fi_bgq_uid_t fi_bgq_uid_set_destination (const fi_bgq_uid_t uid, const MUHWI_Destination_t destination) {
 	const union fi_bgq_uid tmp = {.muhwi=destination};
-	return (uid & 0xF8C30C3Eu) | tmp.fi;	/* clear torus fields (a,b,c,d,e); then set */
+	return (uid & 0xF0C30C3Eu) | tmp.fi;	/* clear torus fields (a,b,c,d,e); then set */
 }
 
 static inline
 MUHWI_Destination_t fi_bgq_uid_get_destination (const fi_bgq_uid_t uid) {
 	/* clear all bits except the torus coordinates */
-	const union fi_bgq_uid tmp = {.fi=(uid & 0x073CF3C1ul)};
+	const union fi_bgq_uid tmp = {.fi=(uid & 0x0F3CF3C1ul)};
 	return tmp.muhwi;
 }
 
@@ -163,7 +162,6 @@ fi_bgq_addr_dump (char * prefix, fi_addr_t * addr) {
 	fprintf(stderr, "%s bgq addr dump at %p\n", prefix, (void*)addr);
 
 	fprintf(stderr, "%s   .uid.rx_msb .................................... %u\n", prefix, tmp.uid.rx_msb);
-	fprintf(stderr, "%s   .uid.unused_0 .................................. %u\n", prefix, tmp.uid.unused_0);
 	fprintf(stderr, "%s   .uid.a ......................................... %u\n", prefix, tmp.uid.a);
 	fprintf(stderr, "%s   .uid.unused_1 .................................. %u\n", prefix, tmp.uid.unused_1);
 	fprintf(stderr, "%s   .uid.b ......................................... %u\n", prefix, tmp.uid.b);
