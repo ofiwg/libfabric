@@ -82,6 +82,16 @@
 #define ENUM(X) X
 #define STR(X) #X
 
+#define RXM_MR_LOCAL(info) \
+	((FI_VERSION_LT(info->fabric_attr->api_version, FI_VERSION(1, 5)) && \
+	  (info->mode & FI_LOCAL_MR)) || (info->domain_attr->mr_mode & FI_MR_LOCAL))
+
+#define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
+				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
+
+#define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
+			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
+
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 
@@ -113,7 +123,7 @@ struct rxm_cm_data {
 };
 
 struct rxm_rma_iov {
-	uint32_t count;
+	uint8_t count;
 	struct ofi_rma_iov iov[];
 };
 
@@ -156,7 +166,7 @@ struct rxm_unexp_msg {
 struct rxm_match_iov {
 	struct iovec *iov;
 	void **desc;
-	size_t count;
+	uint8_t count;
 	size_t index;
 	size_t offset;
 };
@@ -178,19 +188,20 @@ struct rxm_rx_buf {
 
 	/* Used for large messages */
 	enum rxm_lmt_state state;
-	struct rxm_match_iov match_iov;
 	struct rxm_rma_iov *rma_iov;
 	size_t index;
+	struct fid_mr *mr[RXM_IOV_LIMIT];
 
 	struct rxm_pkt pkt;
 };
 
-#define RXM_BUF_SIZE 4096
+#define RXM_BUF_SIZE 16384
 #define RXM_TX_DATA_SIZE (RXM_BUF_SIZE - sizeof(struct rxm_pkt))
 
 struct rxm_tx_entry {
 	enum rxm_ctx_type ctx_type;
 	struct rxm_ep *ep;
+	uint8_t count;
 	void *context;
 	uint64_t flags;
 	// TODO use a tx_buf instead. Add posted tx_buf to list for clean up
@@ -200,6 +211,7 @@ struct rxm_tx_entry {
 	/* Used for large messages */
 	enum rxm_lmt_state state;
 	uint64_t msg_id;
+	struct fid_mr *mr[RXM_IOV_LIMIT];
 };
 DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
 
@@ -293,3 +305,6 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
 int ofi_match_addr(fi_addr_t addr, fi_addr_t match_addr);
 int ofi_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag);
 void rxm_pkt_init(struct rxm_pkt *pkt);
+int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		       size_t count, uint64_t access, struct fid_mr **mr);
+void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);

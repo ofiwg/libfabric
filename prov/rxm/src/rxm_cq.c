@@ -208,13 +208,19 @@ static int rxm_match_iov(struct rxm_match_iov *match_iov, size_t len,
 
 static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
 {
+	struct rxm_match_iov match_iov;
 	struct rxm_iovx_entry iovx;
 	int i, ret;
 
 	memset(&iovx, 0, sizeof(iovx));
 	iovx.count = RXM_IOV_LIMIT;
 
-	ret = rxm_match_iov(&rx_buf->match_iov, rx_buf->rma_iov->iov[rx_buf->index].len, &iovx);
+	memset(&match_iov, 0, sizeof(match_iov));
+	match_iov.iov = rx_buf->recv_entry->iov;
+	match_iov.desc = rx_buf->recv_entry->desc;
+	match_iov.count = rx_buf->recv_entry->count;
+
+	ret = rxm_match_iov(&match_iov, rx_buf->rma_iov->iov[rx_buf->index].len, &iovx);
 	if (ret)
 		return ret;
 
@@ -222,8 +228,8 @@ static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
 		iovx.desc[i] = fi_mr_desc(iovx.desc[i]);
 
 	ret = fi_readv(rx_buf->conn->msg_ep, iovx.iov, iovx.desc, iovx.count, 0,
-			rx_buf->rma_iov->iov[0].addr, rx_buf->rma_iov->iov[0].key, rx_buf);
-	// TODO do any cleanup?
+		       rx_buf->rma_iov->iov[0].addr,rx_buf->rma_iov->iov[0].key,
+		       rx_buf);
 	if (ret)
 		return ret;
 	rx_buf->index++;
@@ -247,6 +253,9 @@ int rxm_cq_handle_ack(struct rxm_rx_buf *rx_buf)
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "tx_entry->state -> RXM_LMT_FINISH\n");
 	tx_entry->state = RXM_LMT_FINISH;
 
+	if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info))
+		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
+
 	ret = rxm_finish_send(tx_entry);
 	if (ret)
 		return ret;
@@ -256,6 +265,9 @@ int rxm_cq_handle_ack(struct rxm_rx_buf *rx_buf)
 
 int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 {
+	size_t i;
+	int ret;
+
 	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) {
 		if (!rx_buf->conn) {
 			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
@@ -263,13 +275,21 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 				return -FI_EOTHER;
 		}
 
+		if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info)) {
+			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
+						 rx_buf->recv_entry->count,
+						 FI_WRITE, rx_buf->mr);
+			if (ret)
+				return ret;
+
+			for (i = 0; i < RXM_IOV_LIMIT; i++) {
+				assert(!rx_buf->recv_entry->desc[i]);
+				rx_buf->recv_entry->desc[i] = rx_buf->mr[i];
+			}
+		}
+
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "rx_buf->state -> RXM_LMT_START\n");
 		rx_buf->state = RXM_LMT_START;
-
-		memset(&rx_buf->match_iov, 0, sizeof(rx_buf->match_iov));
-		rx_buf->match_iov.iov = rx_buf->recv_entry->iov;
-		rx_buf->match_iov.desc = rx_buf->recv_entry->desc;
-		rx_buf->match_iov.count = rx_buf->recv_entry->count;
 
 		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
 		rx_buf->index = 0;
@@ -374,6 +394,8 @@ int rxm_handle_send_comp(void *op_context)
 		}
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "rx_buf->state -> RXM_LMT_FINISH\n");
 		rx_buf->state = RXM_LMT_FINISH;
+		if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info))
+			rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
 		ret = rxm_finish_recv(rx_buf);
 		break;
 	default:

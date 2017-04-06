@@ -73,9 +73,6 @@ int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
 	info->caps = rxm_info.caps;
 	info->mode = core_info->mode | rxm_info.mode;
 
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-		info->mode = FI_LOCAL_MR;
-
 	*info->tx_attr = *rxm_info.tx_attr;
 	info->tx_attr->iov_limit = MIN(MIN(info->tx_attr->iov_limit,
 			core_info->tx_attr->iov_limit),
@@ -89,11 +86,7 @@ int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
 	info->ep_attr->max_msg_size = core_info->ep_attr->max_msg_size;
 
 	*info->domain_attr = *rxm_info.domain_attr;
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-		info->domain_attr->mr_mode = core_info->domain_attr->mr_mode;
-	else
-		info->domain_attr->mode |= core_info->domain_attr->mr_mode |
-			FI_MR_LOCAL;
+	info->domain_attr->mr_mode = core_info->domain_attr->mr_mode;
 
 	return 0;
 }
@@ -101,9 +94,44 @@ int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
 static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
-	return ofix_getinfo(version, node, service, flags, &rxm_util_prov,
-			    hints, rxm_info_to_core, rxm_info_to_rxm, info);
+	struct fi_info *cur, *dup;
+	int ret;
+
+	ret = ofix_getinfo(version, node, service, flags, &rxm_util_prov, hints,
+			   rxm_info_to_core, rxm_info_to_rxm, info);
+	if (ret)
+		return ret;
+
+	/* If app supports FI_MR_LOCAL, prioritize requiring it for
+	 * better performance. */
+	if (hints && hints->domain_attr &&
+	    (RXM_MR_LOCAL(hints))) {
+		for (cur = *info; cur; cur = cur->next) {
+			if (!RXM_MR_LOCAL(cur))
+				continue;
+			if (!(dup = fi_dupinfo(cur))) {
+				fi_freeinfo(*info);
+				return -FI_ENOMEM;
+			}
+			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+				dup->mode &= ~FI_LOCAL_MR;
+			else
+				dup->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+			dup->next = cur->next;
+			cur->next = dup;
+			cur = dup;
+		}
+	} else {
+		for (cur = *info; cur; cur = cur->next) {
+			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+				cur->mode &= ~FI_LOCAL_MR;
+			else
+				cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+		}
+	}
+	return 0;
 }
+
 
 static void rxm_fini(void)
 {

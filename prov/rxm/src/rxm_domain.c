@@ -163,6 +163,12 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err1;
 
+	/* Force core provider to supply MR key */
+	if (FI_VERSION_LT(fabric->api_version, FI_VERSION(1, 5)))
+		msg_info->domain_attr->mr_mode = FI_MR_BASIC;
+	else
+		msg_info->domain_attr->mr_mode |= FI_MR_PROV_KEY;
+
 	ret = fi_domain(rxm_fabric->msg_fabric, msg_info,
 			&rxm_domain->msg_domain, context);
 	if (ret)
