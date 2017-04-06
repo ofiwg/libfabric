@@ -602,16 +602,19 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		if (FI_VERSION_LT(prov->provider->fi_version, version))
 			continue;
 
-		if (ofi_is_util_prov(prov->provider) &&
-		    (flags & OFI_CORE_PROV_ONLY))
-			continue;
-
-		if (util_len && util_name) {
-			if (strncasecmp(util_name, prov->provider->name, util_len))
+		if (ofi_is_util_prov(prov->provider)) {
+			if (flags & OFI_CORE_PROV_ONLY)
 				continue;
-		} else if (core_len && core_name) {
-			if (!ofi_is_util_prov(prov->provider) &&
-			    strncasecmp(core_name, prov->provider->name, core_len))
+
+			if (util_len && util_name &&
+			    strncasecmp(util_name,
+					prov->provider->name,
+					util_len))
+				continue;
+		} else if (core_len && core_name &&
+			   strncasecmp(core_name,
+				       prov->provider->name,
+				       core_len)) {
 				continue;
 		}
 
