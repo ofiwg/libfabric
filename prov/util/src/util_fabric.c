@@ -41,7 +41,7 @@ int ofi_fabric_close(struct util_fabric *fabric)
 	if (atomic_get(&fabric->ref))
 		return -FI_EBUSY;
 
-	fi_fabric_remove(fabric);
+	ofi_fabric_remove(fabric);
 	free((char *)fabric->name);
 	fastlock_destroy(&fabric->lock);
 	return 0;
@@ -70,6 +70,6 @@ int ofi_fabric_init(const struct fi_provider *prov,
 	/*
 	 * fabric ops set by provider
 	 */
-	fi_fabric_insert(fabric);
+	ofi_fabric_insert(fabric);
 	return 0;
 }
