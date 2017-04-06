@@ -599,12 +599,23 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (FI_VERSION_LT(prov->provider->fi_version, version))
+		if (FI_VERSION_LT(prov->provider->fi_version, version)) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Provider %s fi_version %d.%d < requested %d.%d\n",
+				prov->provider->name,
+				FI_MAJOR(prov->provider->fi_version),
+				FI_MINOR(prov->provider->fi_version),
+				FI_MAJOR(version), FI_MINOR(version));
 			continue;
+		}
 
 		if (ofi_is_util_prov(prov->provider) &&
-		    (flags & OFI_CORE_PROV_ONLY))
+		    (flags & OFI_CORE_PROV_ONLY)) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+			       "Need core provider, skipping util %s\n",
+			       prov->provider->name);
 			continue;
+		}
 
 		if (util_len && util_name) {
 			if (strncasecmp(util_name, prov->provider->name, util_len))
