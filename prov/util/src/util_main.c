@@ -82,12 +82,6 @@ struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info)
 
 void ofi_fabric_remove(struct util_fabric *fabric)
 {
-	struct util_fabric_info fabric_info = {
-		.name = fabric->name,
-		.prov = fabric->prov,
-	};
-
-	assert(ofi_fabric_find(&fabric_info));
 	fastlock_acquire(&lock);
 	dlist_remove(&fabric->list_entry);
 	fastlock_release(&lock);
