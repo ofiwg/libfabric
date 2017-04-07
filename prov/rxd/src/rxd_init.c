@@ -35,7 +35,8 @@
 #include <prov.h>
 #include "rxd.h"
 
-int rxd_info_to_core(struct fi_info *rxd_info, struct fi_info *core_info)
+int rxd_info_to_core(uint32_t version, struct fi_info *rxd_info,
+		     struct fi_info *core_info)
 {
 	core_info->caps = FI_MSG;
 	core_info->mode = FI_LOCAL_MR;
@@ -43,7 +44,8 @@ int rxd_info_to_core(struct fi_info *rxd_info, struct fi_info *core_info)
 	return 0;
 }
 
-int rxd_info_to_rxd(struct fi_info *core_info, struct fi_info *info)
+int rxd_info_to_rxd(uint32_t version, struct fi_info *core_info,
+		    struct fi_info *info)
 {
 	info->caps = rxd_info.caps;
 	info->mode = rxd_info.mode;

@@ -279,7 +279,8 @@ int rxm_msg_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	msg_hints->dest_addr = mem_dup(ofi_av_get_addr(rxm_ep->util_ep.av,
 				fi_addr), msg_hints->dest_addrlen);
 
-	ret = fi_getinfo(rxm_prov.version, NULL, NULL, 0, msg_hints, &msg_info);
+	ret = fi_getinfo(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
+			 NULL, NULL, 0, msg_hints, &msg_info);
 	if (ret)
 		return ret;
 

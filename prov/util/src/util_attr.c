@@ -154,7 +154,7 @@ static int ofi_dup_addr(struct fi_info *info, struct fi_info *dup)
 	return 0;
 }
 
-static int ofi_info_to_core(const struct fi_provider *prov,
+static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    struct fi_info *util_info,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
@@ -165,7 +165,7 @@ static int ofi_info_to_core(const struct fi_provider *prov,
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(util_info, *core_hints))
+	if (info_to_core(version, util_info, *core_hints))
 		goto err;
 
 	if (!util_info)
@@ -216,7 +216,7 @@ err:
 	return -FI_ENOMEM;
 }
 
-static int ofi_info_to_util(const struct fi_provider *prov,
+static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
 			    struct fi_info *core_info,
 			    ofi_alter_info_t info_to_util,
 			    struct fi_info **util_info)
@@ -224,7 +224,7 @@ static int ofi_info_to_util(const struct fi_provider *prov,
 	if (!(*util_info = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_util(core_info, *util_info))
+	if (info_to_util(version, core_info, *util_info))
 		goto err;
 
 	if (ofi_dup_addr(core_info, *util_info))
@@ -270,7 +270,7 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	ret = ofi_info_to_core(util_prov->prov, util_hints, info_to_core,
+	ret = ofi_info_to_core(version, util_prov->prov, util_hints, info_to_core,
 			       &core_hints);
 	if (ret)
 		return ret;
@@ -296,8 +296,8 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 
 	*info = tail = NULL;
 	for (cur = core_info; cur; cur = cur->next) {
-		ret = ofi_info_to_util(util_prov->prov, cur, info_to_util,
-				       &util_info);
+		ret = ofi_info_to_util(version, util_prov->prov, cur,
+				       info_to_util, &util_info);
 		if (ret) {
 			fi_freeinfo(*info);
 			break;
@@ -858,6 +858,11 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 	for (; info; info = info->next) {
 		info->caps = (hints->caps & FI_PRIMARY_CAPS) |
 			     (info->caps & FI_SECONDARY_CAPS);
+
+		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
+			if (info->domain_attr->mr_mode & FI_MR_LOCAL)
+				info->mode |= FI_LOCAL_MR;
+		}
 
 		info->handle = hints->handle;
 

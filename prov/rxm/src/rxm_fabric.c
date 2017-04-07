@@ -110,7 +110,8 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto err2;
 	}
 	hints.fabric_attr->name = attr->name;
-	hints.mode = rxm_info.mode;
+	hints.fabric_attr->api_version = attr->api_version;
+	hints.mode = ~0;
 
 	ret = ofi_get_core_info(attr->api_version, NULL, NULL, 0, &rxm_util_prov,
 				&hints, rxm_info_to_core, &msg_info);

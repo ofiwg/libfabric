@@ -569,7 +569,7 @@ void fi_fabric_remove(struct util_fabric *fabric);
  * Utility Providers
  */
 
-typedef int (*ofi_alter_info_t)(struct fi_info *src_info,
+typedef int (*ofi_alter_info_t)(uint32_t version, struct fi_info *src_info,
 				struct fi_info *dest_info);
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
