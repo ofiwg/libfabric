@@ -290,6 +290,7 @@ static int client_expect_reject(size_t paramlen)
 		return ret;
 	}
 
+	memset(&err_entry, 0, sizeof(err_entry));
 	ret = fi_eq_readerr(eq, &err_entry, 0);
 	if (ret != sizeof(err_entry)) {
 		FT_EQ_ERR(eq, err_entry, NULL, 0);

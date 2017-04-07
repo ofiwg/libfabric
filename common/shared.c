@@ -1454,6 +1454,7 @@ int ft_cq_readerr(struct fid_cq *cq)
 	struct fi_cq_err_entry cq_err;
 	int ret;
 
+	memset(&cq_err, 0, sizeof(cq_err));
 	ret = fi_cq_readerr(cq, &cq_err, 0);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cq_readerr", ret);
@@ -1469,6 +1470,7 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str)
 	struct fi_eq_err_entry eq_err;
 	int rd;
 
+	memset(&eq_err, 0, sizeof(eq_err));
 	rd = fi_eq_readerr(eq, &eq_err, 0);
 	if (rd != sizeof(eq_err)) {
 		FT_PRINTERR("fi_eq_readerr", rd);

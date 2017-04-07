@@ -74,6 +74,7 @@ int ft_eq_readerr(void)
 	struct fi_eq_err_entry err;
 	ssize_t ret;
 
+	memset(&err, 0, sizeof(err));
 	ret = fi_eq_readerr(eq, &err, 0);
 	if (ret != sizeof(err)) {
 		FT_PRINTERR("fi_eq_readerr", ret);
