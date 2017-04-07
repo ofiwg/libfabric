@@ -554,9 +554,9 @@ int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
 void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
 		     struct fid *fid);
 
-void fi_fabric_insert(struct util_fabric *fabric);
+void ofi_fabric_insert(struct util_fabric *fabric);
 struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info);
-void fi_fabric_remove(struct util_fabric *fabric);
+void ofi_fabric_remove(struct util_fabric *fabric);
 
 /*
  * Utility Providers
