@@ -60,6 +60,7 @@ check_eq_readerr(struct fid_eq *eq, fid_t fid, void *context, int index)
 	int ret;
 	struct fi_eq_err_entry err_entry;
 
+	memset(&err_entry, 0, sizeof(err_entry));
 	ret = fi_eq_readerr(eq, &err_entry, 0);
 	if (ret != sizeof(err_entry)) {
 		sprintf(err_buf, "fi_eq_readerr ret = %d, %s", ret,
