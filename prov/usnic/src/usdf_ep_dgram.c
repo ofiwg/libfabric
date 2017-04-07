@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,6 +55,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_util.h"
 
 #include "usnic_direct.h"
 #include "usd.h"
@@ -403,7 +404,7 @@ static const struct fi_domain_attr dgram_dflt_domain_attr = {
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
-	.mr_mode = FI_MR_BASIC
+	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL
 };
 
 /*******************************************************************************
@@ -520,13 +521,9 @@ int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-	switch (hints->domain_attr->mr_mode) {
-	case FI_MR_UNSPEC:
-	case FI_MR_BASIC:
-		break;
-	default:
+	if (ofi_check_mr_mode(version, defaults.mr_mode,
+			      hints->domain_attr->mr_mode))
 		return -FI_ENODATA;
-	}
 
 out:
 	*fi->domain_attr = defaults;

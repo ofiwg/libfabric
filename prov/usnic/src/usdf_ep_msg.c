@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -214,13 +214,9 @@ int usdf_msg_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-	switch (hints->domain_attr->mr_mode) {
-	case FI_MR_UNSPEC:
-	case FI_MR_BASIC:
-		break;
-	default:
+	if (ofi_check_mr_mode(version, defaults.mr_mode,
+			      hints->domain_attr->mr_mode))
 		return -FI_ENODATA;
-	}
 
 out:
 	*fi->domain_attr = defaults;
