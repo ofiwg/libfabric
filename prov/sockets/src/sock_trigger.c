@@ -44,7 +44,7 @@
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
-			  uint64_t flags, uint8_t op_type)
+			  uint64_t flags, enum fi_trigger_op op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
@@ -87,7 +87,7 @@ ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 }
 
 ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
-			  uint64_t flags, uint8_t op_type)
+			  uint64_t flags, enum fi_trigger_op op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
@@ -127,7 +127,7 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 }
 
 ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-			   uint64_t flags, uint8_t op_type)
+			   uint64_t flags, enum fi_trigger_op op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
@@ -169,7 +169,7 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			     const struct fi_ioc *comparev, size_t compare_count,
 			     struct fi_ioc *resultv, size_t result_count,
-			     uint64_t flags, uint8_t op_type)
+			     uint64_t flags, enum fi_trigger_op op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;

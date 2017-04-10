@@ -114,8 +114,8 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 
 	if (flags & FI_TRIGGER) {
 		ret = sock_queue_atomic_op(ep, msg, comparev, compare_count,
-					resultv, result_count, flags,
-					SOCK_OP_ATOMIC);
+					   resultv, result_count, flags,
+					   FI_OP_ATOMIC);
 		if (ret != 1)
 			return ret;
 	}
