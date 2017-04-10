@@ -280,6 +280,7 @@ enum {
 #define FI_LOCAL_MR		(1ULL << 55)
 #define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54)
 #define FI_RESTRICTED_COMP	(1ULL << 53)
+#define FI_CONTEXT2		(1ULL << 52)
 
 struct fi_tx_attr {
 	uint64_t		caps;
@@ -567,6 +568,10 @@ void fi_freeparams(struct fi_param *params);
 #ifndef FABRIC_DIRECT_
 struct fi_context {
 	void			*internal[4];
+};
+
+struct fi_context2 {
+	void			*internal[8];
 };
 #endif
 

@@ -61,8 +61,9 @@ values may be used by an application to test for provider support of
 supported features.
 
 *FI_DIRECT_CONTEXT*
-: The provider sets FI_CONTEXT for fi_info:mode.  See fi_getinfo
-  for additional details.
+: The provider sets FI_CONTEXT or FI_CONTEXT2 for fi_info:mode.  See fi_getinfo
+  for additional details.  When FI_DIRECT_CONTEXT is defined, applications
+  should use struct fi_context in their definitions, even if FI_CONTEXT2 is set.
 
 *FI_DIRECT_LOCAL_MR*
 : The provider sets FI_LOCAL_MR for fi_info:mode.  See fi_getinfo
