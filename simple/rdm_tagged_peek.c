@@ -248,7 +248,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->rx_attr->total_buffered_recv = 1024;
+	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->tx_attr->msg_order = FI_ORDER_SAS;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_TAGGED;
