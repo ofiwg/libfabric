@@ -347,7 +347,7 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if ((hints->mode & info->mode) != info->mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(&fi_ibv_prov, hints, info);
+		FI_INFO_MODE(&fi_ibv_prov, hints->mode, info->mode);
 		return -FI_ENODATA;
 	}
 

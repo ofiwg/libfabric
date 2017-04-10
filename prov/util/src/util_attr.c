@@ -463,6 +463,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	if (ofi_check_mr_mode(api_version, prov_attr->mr_mode,
 			       user_attr->mr_mode)) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid memory registration mode\n");
+		FI_INFO_MODE(prov, prov_attr->mr_mode, user_attr->mr_mode);
 		return -FI_ENODATA;
 	}
 
@@ -488,7 +489,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if ((user_attr->mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "Required domain mode missing\n");
-		FI_INFO_MODE(prov, prov_attr, user_attr);
+		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
@@ -571,7 +572,7 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 	info_mode = user_attr->mode ? user_attr->mode : info_mode;
 	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_attr, user_attr);
+		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
@@ -627,7 +628,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 	info_mode = user_attr->mode ? user_attr->mode : info_mode;
 	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_attr, user_attr);
+		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
@@ -693,7 +694,7 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 
 	if ((user_info->mode & prov_info->mode) != prov_info->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_info, user_info);
+		FI_INFO_MODE(prov, prov_info->mode, user_info->mode);
 		return -FI_ENODATA;
 	}
 
