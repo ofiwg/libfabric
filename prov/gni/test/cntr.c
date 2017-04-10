@@ -64,21 +64,26 @@ do {				\
 #endif
 
 #define NUM_EPS 5
+/* NUM_THREADS must be <= NUM_EPS */
+#define NUM_THREADS NUM_EPS
 
 /* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
-static struct fid_domain *dom;
+static struct fid_domain *dom[NUM_EPS];
 static struct fid_ep *ep[NUM_EPS];
-static struct fid_av *av;
+static struct fid_av *av[NUM_EPS];
 static struct fi_info *hints;
 static struct fi_info *fi;
 static void *ep_name[NUM_EPS];
-static size_t gni_addr[NUM_EPS];
+static size_t gni_addr[NUM_EPS][NUM_EPS];
 static struct fid_cq *send_cq;
 static struct fid_cq *recv_cq;
 static struct fi_cq_attr cq_attr;
-static struct fid_cntr *write_cntr, *read_cntr, *rcv_cntr;
+static struct fid_cntr *write_cntrs[NUM_EPS];
+static struct fid_cntr *read_cntrs[NUM_EPS];
+static struct fid_cntr *recv_cntrs[NUM_EPS];
+
 static struct fi_cntr_attr cntr_attr = {.events = FI_CNTR_EVENTS_COMP,
 					.wait_obj = FI_WAIT_UNSPEC,
 					.flags = 0};
@@ -86,10 +91,10 @@ static struct fi_cntr_attr cntr_attr = {.events = FI_CNTR_EVENTS_COMP,
 #define BUF_SZ (64*1024)
 char *target;
 char *source;
-struct fid_mr *rem_mr, *loc_mr;
-uint64_t mr_key;
+struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
+uint64_t mr_key[NUM_EPS];
 
-static inline void cntr_setup_eps(void)
+static inline void cntr_setup_eps(const uint64_t caps)
 {
 	int i, ret;
 	struct fi_av_attr attr;
@@ -102,9 +107,7 @@ static inline void cntr_setup_eps(void)
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	/* This test hangs with the FI_RMA_EVENT capability enabled because the
-	 * receiver does not progress libfabric. */
-	hints->caps = GNIX_EP_PRIMARY_CAPS;
+	hints->caps = caps;
 
 	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
@@ -112,22 +115,23 @@ static inline void cntr_setup_eps(void)
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
-	ret = fi_domain(fab, fi, &dom, NULL);
-	cr_assert(!ret, "fi_domain");
-
 	memset(&attr, 0, sizeof(attr));
 	attr.type = FI_AV_MAP;
 	attr.count = 16;
 
-	ret = fi_av_open(dom, &attr, &av, NULL);
-	cr_assert(!ret, "fi_av_open");
-
 	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_endpoint(dom, fi, &ep[i], NULL);
+		ret = fi_domain(fab, fi, &dom[i], NULL);
+		cr_assert(!ret, "fi_domain");
+
+		ret = fi_av_open(dom[i], &attr, &av[i], NULL);
+		cr_assert(!ret, "fi_av_open");
+
+		ret = fi_endpoint(dom[i], fi, &ep[i], NULL);
 		cr_assert(!ret, "fi_endpoint");
 	}
 }
 
+/* Only used by cntr suite for now */
 static inline void cntr_setup_cqs(void)
 {
 	int ret;
@@ -136,32 +140,64 @@ static inline void cntr_setup_cqs(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
-	ret = fi_cq_open(dom, &cq_attr, &send_cq, 0);
+	ret = fi_cq_open(dom[0], &cq_attr, &send_cq, 0);
 	cr_assert(!ret, "fi_cq_open");
+	ret = fi_ep_bind(ep[0], &send_cq->fid, FI_SEND);
+	cr_assert(!ret, "fi_ep_bind cq");
 
-	ret = fi_cq_open(dom, &cq_attr, &recv_cq, 0);
+	ret = fi_cq_open(dom[1], &cq_attr, &recv_cq, 0);
 	cr_assert(!ret, "fi_cq_open");
+	ret = fi_ep_bind(ep[1], &recv_cq->fid, FI_RECV);
+	cr_assert(!ret, "fi_ep_bind cq");
 
 }
 
-static inline void cntr_setup_cntrs(void)
+static inline void cntr_setup_cntrs(uint64_t write_flags,
+				    uint64_t read_flags,
+				    uint64_t recv_flags)
 {
-	int ret;
+	int i, ret;
 
-	ret = fi_cntr_open(dom, &cntr_attr, &write_cntr, 0);
-	cr_assert(!ret, "fi_cntr_open");
+	for (i = 0; i < NUM_EPS; i++) {
+		if (write_flags) {
+			ret = fi_cntr_open(dom[i], &cntr_attr,
+					   &write_cntrs[i], 0);
+			cr_assert(!ret, "fi_cntr_open");
+			ret = fi_ep_bind(ep[i], &write_cntrs[i]->fid,
+					 write_flags);
+			cr_assert(!ret, "fi_ep_bind cntr");
+		} else {
+			write_cntrs[i] = NULL;
+		}
 
-	ret = fi_cntr_open(dom, &cntr_attr, &read_cntr, 0);
-	cr_assert(!ret, "fi_cntr_open");
+		if (read_flags) {
+			ret = fi_cntr_open(dom[i], &cntr_attr,
+					   &read_cntrs[i], 0);
+			cr_assert(!ret, "fi_cntr_open");
+			ret = fi_ep_bind(ep[i], &read_cntrs[i]->fid,
+					 read_flags);
+			cr_assert(!ret, "fi_ep_bind cntr");
+		} else {
+			read_cntrs[i] = NULL;
+		}
 
-	ret = fi_cntr_open(dom, &cntr_attr, &rcv_cntr, 0);
-	cr_assert(!ret, "fi_cntr_open");
+		if (recv_flags) {
+			ret = fi_cntr_open(dom[i], &cntr_attr,
+					   &recv_cntrs[i], 0);
+			cr_assert(!ret, "fi_cntr_open");
+			ret = fi_ep_bind(ep[i], &recv_cntrs[i]->fid,
+					 recv_flags);
+			cr_assert(!ret, "fi_ep_bind cntr");
+		} else {
+			recv_cntrs[i] = NULL;
+		}
+	}
 
 }
 
 static inline void cntr_setup_av(void)
 {
-	int i, ret;
+	int i, j, ret;
 	size_t addrlen = 0;
 
 	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
@@ -174,43 +210,16 @@ static inline void cntr_setup_av(void)
 		ret = fi_getname(&ep[i]->fid, ep_name[i], &addrlen);
 		cr_assert(ret == FI_SUCCESS);
 
-		ret = fi_av_insert(av, ep_name[i], 1, &gni_addr[i], 0,
-				   NULL);
-		cr_assert(ret == 1);
+		for (j = 0; j < NUM_EPS; j++) {
+			ret = fi_av_insert(av[j], ep_name[i], 1,
+					   &gni_addr[j][i], 0, NULL);
+			cr_assert(ret == 1);
+		}
 	}
 
 	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_ep_bind(ep[i], &av->fid, 0);
+		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
 		cr_assert(!ret, "fi_ep_bind av");
-	}
-}
-
-static inline void cntr_setup_bind_cqs(void)
-{
-	int i, ret;
-
-	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_ep_bind(ep[i], &send_cq->fid, FI_SEND);
-		cr_assert(!ret, "fi_ep_bind cq");
-
-		ret = fi_ep_bind(ep[i], &recv_cq->fid, FI_RECV);
-		cr_assert(!ret, "fi_ep_bind cq");
-	}
-}
-
-static inline void cntr_setup_bind_cntrs(void)
-{
-	int i, ret;
-
-	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_ep_bind(ep[i], &write_cntr->fid, FI_WRITE | FI_SEND);
-		cr_assert(!ret, "fi_ep_bind cntr");
-
-		ret = fi_ep_bind(ep[i], &read_cntr->fid, FI_READ);
-		cr_assert(!ret, "fi_ep_bind cntr");
-
-		ret = fi_ep_bind(ep[i], &rcv_cntr->fid, FI_RECV);
-		cr_assert(!ret, "fi_ep_bind cntr");
 	}
 }
 
@@ -226,7 +235,7 @@ static inline void cntr_setup_enable_ep(void)
 
 static inline void cntr_setup_mr(void)
 {
-	int ret;
+	int i, ret;
 
 	target = malloc(BUF_SZ);
 	assert(target);
@@ -234,33 +243,38 @@ static inline void cntr_setup_mr(void)
 	source = malloc(BUF_SZ);
 	assert(source);
 
-	ret = fi_mr_reg(dom, target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
-	cr_assert_eq(ret, 0);
+	for (i = 0; i < NUM_EPS; i++) {
+		ret = fi_mr_reg(dom[i], target, BUF_SZ,
+				FI_REMOTE_READ | FI_REMOTE_WRITE,
+				0, 0, 0, &rem_mr[i], &target);
+		cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom, source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
-	cr_assert_eq(ret, 0);
+		ret = fi_mr_reg(dom[i], source, BUF_SZ,	FI_READ | FI_WRITE,
+				0, 0, 0, &loc_mr[i], &source);
+		cr_assert_eq(ret, 0);
 
-	mr_key = fi_mr_key(rem_mr);
+		mr_key[i] = fi_mr_key(rem_mr[i]);
+	}
 }
 
 static void cntr_setup(void)
 {
-	cntr_setup_eps();
+	cntr_setup_eps(GNIX_EP_PRIMARY_CAPS);
 	cntr_setup_av();
 	cntr_setup_cqs();
-	cntr_setup_bind_cqs();
-	cntr_setup_cntrs();
-	cntr_setup_bind_cntrs();
+	cntr_setup_cntrs(FI_WRITE | FI_SEND, FI_READ, FI_RECV);
 	cntr_setup_enable_ep();
 	cntr_setup_mr();
 }
 
 static inline void cntr_teardown_mr(void)
 {
-	fi_close(&loc_mr->fid);
-	fi_close(&rem_mr->fid);
+	int i;
+
+	for (i = 0; i < NUM_EPS; i++) {
+		fi_close(&loc_mr[i]->fid);
+		fi_close(&rem_mr[i]->fid);
+	}
 
 	free(target);
 	free(source);
@@ -290,16 +304,24 @@ static inline void cntr_teardown_cqs(void)
 
 static inline void cntr_teardown_cntrs(void)
 {
-	int ret;
+	int i, ret;
 
-	ret = fi_close(&write_cntr->fid);
-	cr_assert(!ret, "failure in closing write_cntr.");
+	for (i = 0; i < NUM_EPS; i++) {
+		if (write_cntrs[i]) {
+			ret = fi_close(&write_cntrs[i]->fid);
+			cr_assert(!ret, "failure in closing write_cntr.");
+		}
 
-	ret = fi_close(&read_cntr->fid);
-	cr_assert(!ret, "failure in closing read_cntr.");
+		if (read_cntrs[i]) {
+			ret = fi_close(&read_cntrs[i]->fid);
+			cr_assert(!ret, "failure in closing read_cntr.");
+		}
 
-	ret = fi_close(&rcv_cntr->fid);
-	cr_assert(!ret, "failure in closing read_cntr.");
+		if (recv_cntrs[i]) {
+			ret = fi_close(&recv_cntrs[i]->fid);
+			cr_assert(!ret, "failure in closing read_cntr.");
+		}
+	}
 
 }
 
@@ -307,21 +329,22 @@ static inline void cntr_teardown_fini(void)
 {
 	int i, ret;
 
-	ret = fi_close(&av->fid);
-	cr_assert(!ret, "failure in closing av.");
+	for (i = 0; i < NUM_EPS; i++) {
+		ret = fi_close(&av[i]->fid);
+		cr_assert(!ret, "failure in closing av.");
 
-	ret = fi_close(&dom->fid);
-	cr_assert(!ret, "failure in closing domain.");
+		ret = fi_close(&dom[i]->fid);
+		cr_assert(!ret, "failure in closing domain.");
+
+		free(ep_name[i]);
+	}
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
 
+	/* This can be moved up to set up */
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
-
-	for (i = 0; i < NUM_EPS; i++) {
-		free(ep_name[i]);
-	}
 }
 
 static void cntr_teardown(void)
@@ -381,16 +404,15 @@ static void do_write(int len)
 	init_data(target, len, 0);
 
 
-	old_w_cnt = fi_cntr_read(write_cntr);
-	old_r_cnt = fi_cntr_read(read_cntr);
+	old_w_cnt = fi_cntr_read(write_cntrs[0]);
+	old_r_cnt = fi_cntr_read(read_cntrs[0]);
 
-	sz = fi_write(ep[0], source, len,
-			 loc_mr, gni_addr[1], (uint64_t)target, mr_key,
-			 target);
+	sz = fi_write(ep[0], source, len, loc_mr[0], gni_addr[0][1],
+		      (uint64_t)target, mr_key[1], target);
 	cr_assert_eq(sz, 0);
 
 	do {
-		new_w_cnt = fi_cntr_read(write_cntr);
+		new_w_cnt = fi_cntr_read(write_cntrs[0]);
 		if (new_w_cnt == (old_w_cnt + 1))
 			break;
 		pthread_yield();
@@ -398,7 +420,7 @@ static void do_write(int len)
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
-	new_r_cnt = fi_cntr_read(read_cntr);
+	new_r_cnt = fi_cntr_read(read_cntrs[0]);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -422,23 +444,23 @@ static void do_write_wait(int len)
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 
-	old_w_cnt = fi_cntr_read(write_cntr);
-	old_r_cnt = fi_cntr_read(read_cntr);
+	old_w_cnt = fi_cntr_read(write_cntrs[0]);
+	old_r_cnt = fi_cntr_read(read_cntrs[0]);
 
 	for (i = 0; i < iters; i++) {
-		sz = fi_write(ep[0], source, len,
-			      loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+		sz = fi_write(ep[0], source, len, loc_mr[0],
+			      gni_addr[0][1], (uint64_t)target, mr_key[1],
 			      target);
 		cr_assert_eq(sz, 0);
 	}
 
-	fi_cntr_wait(write_cntr, old_w_cnt+iters, -1);
-	new_w_cnt = fi_cntr_read(write_cntr);
+	fi_cntr_wait(write_cntrs[0], old_w_cnt+iters, -1);
+	new_w_cnt = fi_cntr_read(write_cntrs[0]);
 	cr_assert(old_w_cnt + iters == new_w_cnt);
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
-	new_r_cnt = fi_cntr_read(read_cntr);
+	new_r_cnt = fi_cntr_read(read_cntrs[0]);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -461,16 +483,16 @@ static void do_read(int len)
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
 
-	old_w_cnt = fi_cntr_read(write_cntr);
-	old_r_cnt = fi_cntr_read(read_cntr);
+	old_w_cnt = fi_cntr_read(write_cntrs[0]);
+	old_r_cnt = fi_cntr_read(read_cntrs[0]);
 
-	sz = fi_read(ep[0], source, len,
-			loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+	sz = fi_read(ep[0], source, len, loc_mr[0],
+		     gni_addr[0][1], (uint64_t)target, mr_key[1],
 			(void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	do {
-		new_r_cnt = fi_cntr_read(read_cntr);
+		new_r_cnt = fi_cntr_read(read_cntrs[0]);
 		if (new_r_cnt == (old_r_cnt + 1))
 			break;
 		pthread_yield();
@@ -478,7 +500,7 @@ static void do_read(int len)
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
-	new_w_cnt = fi_cntr_read(write_cntr);
+	new_w_cnt = fi_cntr_read(write_cntrs[0]);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -497,21 +519,21 @@ static void do_read_wait(int len)
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
 
-	old_w_cnt = fi_cntr_read(write_cntr);
-	old_r_cnt = fi_cntr_read(read_cntr);
+	old_w_cnt = fi_cntr_read(write_cntrs[0]);
+	old_r_cnt = fi_cntr_read(read_cntrs[0]);
 
 	for (i = 0; i < iters; i++) {
-		sz = fi_read(ep[0], source, len,
-				loc_mr, gni_addr[1], (uint64_t)target,
-				mr_key, (void *)READ_CTX);
+		sz = fi_read(ep[0], source, len, loc_mr[0],
+			     gni_addr[0][1], (uint64_t)target,
+			     mr_key[1], (void *)READ_CTX);
 		cr_assert_eq(sz, 0);
 	}
 
-	fi_cntr_wait(read_cntr, old_r_cnt + iters, -1);
+	fi_cntr_wait(read_cntrs[0], old_r_cnt + iters, -1);
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
-	new_w_cnt = fi_cntr_read(write_cntr);
+	new_w_cnt = fi_cntr_read(write_cntrs[0]);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -539,8 +561,8 @@ Test(cntr, send_recv)
 	uint64_t old_r_cnt, new_r_cnt;
 	char s_buffer[128], r_buffer[128];
 
-	old_s_cnt = fi_cntr_read(write_cntr);
-	old_r_cnt = fi_cntr_read(rcv_cntr);
+	old_s_cnt = fi_cntr_read(write_cntrs[0]);
+	old_r_cnt = fi_cntr_read(recv_cntrs[1]);
 
 	for (i = 0; i < 16; i++) {
 		sprintf(s_buffer, "Hello there iter=%d", i);
@@ -549,14 +571,14 @@ Test(cntr, send_recv)
 			      r_buffer,
 			      sizeof(r_buffer),
 			      NULL,
-			      gni_addr[0],
+			      gni_addr[1][0],
 			      &r_context);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_recv");
 		ret = fi_send(ep[0],
 			      s_buffer,
 			      strlen(s_buffer),
 			      NULL,
-			      gni_addr[1],
+			      gni_addr[0][1],
 			      &s_context);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_send");
 
@@ -568,11 +590,11 @@ Test(cntr, send_recv)
 		got_r = (cqe.op_context == &r_context) ? 1 : 0;
 
 		if (got_r) {
-			new_r_cnt = fi_cntr_read(rcv_cntr);
+			new_r_cnt = fi_cntr_read(recv_cntrs[1]);
 			old_r_cnt++;
 			cr_assert(new_r_cnt == old_r_cnt);
 		} else {
-			new_s_cnt = fi_cntr_read(write_cntr);
+			new_s_cnt = fi_cntr_read(write_cntrs[0]);
 			old_s_cnt++;
 			cr_assert(new_s_cnt == old_s_cnt);
 		}
@@ -585,11 +607,11 @@ Test(cntr, send_recv)
 			cr_assert((cqe.op_context == &r_context), "fi_cq_read");
 
 		if (got_r) {
-			new_s_cnt = fi_cntr_read(write_cntr);
+			new_s_cnt = fi_cntr_read(write_cntrs[0]);
 			old_s_cnt++;
 			cr_assert(new_s_cnt == old_s_cnt);
 		} else {
-			new_r_cnt = fi_cntr_read(rcv_cntr);
+			new_r_cnt = fi_cntr_read(recv_cntrs[1]);
 			old_r_cnt++;
 			cr_assert(new_r_cnt == old_r_cnt);
 		}
@@ -620,33 +642,13 @@ static __thread uint32_t cntr_test_tid = ~(uint32_t) 0;
 	 cntr_test_tid)
 
 
-static struct fid_cntr *ep_write_cntrs[NUM_EPS];
-static struct fid_cntr *ep_read_cntrs[NUM_EPS];
-
 static void cntr_setup_mt(void)
 {
-	int i, ret;
+	cr_assert(NUM_EPS >= NUM_THREADS);
 
-	cntr_setup_eps();
+	cntr_setup_eps(GNIX_EP_PRIMARY_CAPS);
 	cntr_setup_av();
-	cntr_setup_cqs();
-	cntr_setup_bind_cqs();
-
-	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_cntr_open(dom, &cntr_attr, &ep_write_cntrs[i], 0);
-		cr_assert(!ret, "fi_cntr_open");
-
-		ret = fi_ep_bind(ep[i], &ep_write_cntrs[i]->fid,
-				 FI_WRITE | FI_SEND);
-		cr_assert(!ret, "fi_ep_bind cntr");
-
-		ret = fi_cntr_open(dom, &cntr_attr, &ep_read_cntrs[i], 0);
-		cr_assert(!ret, "fi_cntr_open");
-
-		ret = fi_ep_bind(ep[i], &ep_read_cntrs[i]->fid, FI_READ);
-		cr_assert(!ret, "fi_ep_bind cntr");
-	}
-
+	cntr_setup_cntrs(FI_WRITE | FI_SEND, FI_READ, 0x0);
 	cntr_setup_enable_ep();
 	cntr_setup_mr();
 
@@ -655,20 +657,9 @@ static void cntr_setup_mt(void)
 
 static void cntr_teardown_mt(void)
 {
-	int i, ret;
-
 	cntr_teardown_mr();
 	cntr_teardown_eps();
-	cntr_teardown_cqs();
-
-	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_close(&ep_write_cntrs[i]->fid);
-		cr_assert(!ret, "failure in closing write_cntr.");
-
-		ret = fi_close(&ep_read_cntrs[i]->fid);
-		cr_assert(!ret, "failure in closing read_cntr.");
-	}
-
+	cntr_teardown_cntrs();
 	cntr_teardown_fini();
 }
 
@@ -687,14 +678,15 @@ static void *do_thread_read_wait(void *data)
 
 	dbg_printf("%d: reading\n", tid);
 	for (i = 0; i < iters; i++) {
-		sz = fi_read(ep[tid], &source[tid*msg_size], msg_size, loc_mr,
-			     gni_addr[0], (uint64_t)&target[tid*msg_size],
-			     mr_key, (void *)(READ_CTX+i));
+		sz = fi_read(ep[tid], &source[tid*msg_size], msg_size,
+			     loc_mr[tid], gni_addr[tid][0],
+			     (uint64_t)&target[tid*msg_size],
+			     mr_key[0], (void *)(READ_CTX+i));
 		cr_assert_eq(sz, 0);
 	}
 
 	dbg_printf("%d: waiting\n", tid);
-	ret = fi_cntr_wait(ep_read_cntrs[tid], iters, -1);
+	ret = fi_cntr_wait(read_cntrs[tid], iters, -1);
 	cr_assert(ret == FI_SUCCESS);
 
 	dbg_printf("%d: done\n", tid);
@@ -704,31 +696,31 @@ static void *do_thread_read_wait(void *data)
 Test(cntr_mt, read_wait)
 {
 	int i, j;
-	pthread_t threads[NUM_EPS];
+	pthread_t threads[NUM_THREADS];
 	const int msg_size = 128;
 	struct tinfo info = { msg_size, 500 /* iters */};
 
-	cr_assert(NUM_EPS*msg_size <= BUF_SZ);
+	cr_assert(NUM_THREADS*msg_size <= BUF_SZ);
 
-	memset(source, 0, NUM_EPS*msg_size);
-	for (i = 0; i < NUM_EPS; i++) {
+	memset(source, 0, NUM_THREADS*msg_size);
+	for (i = 0; i < NUM_THREADS; i++) {
 		memset(&target[i*msg_size], get_mark(i), msg_size);
 	}
 
 	dbg_printf("creating threads\n");
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < NUM_THREADS; i++) {
 		pthread_create(&threads[i], NULL, do_thread_read_wait, &info);
 	}
 
 	dbg_printf("joining\n");
 
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < NUM_THREADS; i++) {
 		pthread_join(threads[i], NULL);
 	}
 
 	/* Must wait until all threads are done, since we don't know
 	 * which thread got which id */
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < NUM_THREADS; i++) {
 		for (j = 0; j < msg_size; j++) {
 			cr_assert(source[i*msg_size+j] == get_mark(i));
 		}
@@ -750,14 +742,15 @@ static void *do_thread_write_wait(void *data)
 
 	dbg_printf("%d: writing\n", tid);
 	for (i = 0; i < iters; i++) {
-		sz = fi_write(ep[tid], &source[tid*msg_size], msg_size, loc_mr,
-			      gni_addr[0], (uint64_t)&target[tid*msg_size],
-			      mr_key, (void *)(READ_CTX+i));
+		sz = fi_write(ep[tid], &source[tid*msg_size], msg_size,
+			      loc_mr[tid], gni_addr[tid][0],
+			      (uint64_t)&target[tid*msg_size],
+			      mr_key[0], (void *)(READ_CTX+i));
 		cr_assert_eq(sz, 0);
 	}
 
 	dbg_printf("%d: waiting\n", tid);
-	ret = fi_cntr_wait(ep_write_cntrs[tid], iters, -1);
+	ret = fi_cntr_wait(write_cntrs[tid], iters, -1);
 	cr_assert(ret == FI_SUCCESS);
 
 	dbg_printf("%d: done\n", tid);
@@ -767,31 +760,31 @@ static void *do_thread_write_wait(void *data)
 Test(cntr_mt, write_wait)
 {
 	int i, j;
-	pthread_t threads[NUM_EPS];
+	pthread_t threads[NUM_THREADS];
 	const int msg_size = 128;
 	struct tinfo info = { msg_size, 500 /* iters */};
 
-	cr_assert(NUM_EPS*msg_size <= BUF_SZ);
+	cr_assert(NUM_THREADS*msg_size <= BUF_SZ);
 
-	memset(target, 0, NUM_EPS*msg_size);
-	for (i = 0; i < NUM_EPS; i++) {
+	memset(target, 0, NUM_THREADS*msg_size);
+	for (i = 0; i < NUM_THREADS; i++) {
 		memset(&source[i*msg_size], get_mark(i), msg_size);
 	}
 
 	dbg_printf("creating threads\n");
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < NUM_THREADS; i++) {
 		pthread_create(&threads[i], NULL, do_thread_write_wait, &info);
 	}
 
 	dbg_printf("joining\n");
 
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < NUM_THREADS; i++) {
 		pthread_join(threads[i], NULL);
 	}
 
 	/* Must wait until all threads are done, since we don't know
 	 * which thread got which id */
-	for (i = 1; i < NUM_EPS; i++) {
+	for (i = 1; i < NUM_THREADS; i++) {
 		for (j = 0; j < msg_size; j++) {
 			cr_assert(target[i*msg_size+j] == get_mark(i));
 		}
@@ -805,7 +798,7 @@ void *do_add_cntr_mt(void *arg)
 	int i = 0, ret, iters = ((int *)arg)[0];
 
 	for (; i < iters; i++) {
-		ret = fi_cntr_add(ep_write_cntrs[0], 1);
+		ret = fi_cntr_add(write_cntrs[0], 1);
 		cr_assert(ret == FI_SUCCESS);
 	}
 
@@ -817,7 +810,7 @@ void *do_add_err_cntr_mt(void *arg)
 	int i = 0, ret, iters = ((int *)arg)[0];
 
 	for (; i < iters; i++) {
-		ret = fi_cntr_adderr(ep_write_cntrs[0], 1);
+		ret = fi_cntr_adderr(write_cntrs[0], 1);
 		cr_assert(ret == FI_SUCCESS);
 	}
 
@@ -831,10 +824,10 @@ Test(cntr_mt, set_add_read_cntr)
 	pthread_t threads[nthreads];
 	void *pt_ret;
 
-	ret = fi_cntr_set(ep_write_cntrs[0], 0);
+	ret = fi_cntr_set(write_cntrs[0], 0);
 	cr_assert(ret == FI_SUCCESS);
 
-	cntr_val = fi_cntr_read(ep_write_cntrs[0]);
+	cntr_val = fi_cntr_read(write_cntrs[0]);
 	cr_assert_eq(cntr_val, 0, "write error counter is incorrect.");
 
 	/* Create & Spawn threads */
@@ -849,7 +842,7 @@ Test(cntr_mt, set_add_read_cntr)
 		cr_assert(!pt_ret);
 	}
 
-	cntr_val = fi_cntr_read(ep_write_cntrs[0]);
+	cntr_val = fi_cntr_read(write_cntrs[0]);
 	cr_assert_eq(cntr_val, (iters * nthreads), "write error counter "
 		"is incorrect.");
 }
@@ -861,10 +854,10 @@ Test(cntr_mt, set_add_read_err_cntr)
 	pthread_t threads[nthreads];
 	void *pt_ret;
 
-	ret = fi_cntr_seterr(ep_write_cntrs[0], 0);
+	ret = fi_cntr_seterr(write_cntrs[0], 0);
 	cr_assert(ret == FI_SUCCESS);
 
-	err_cntr_val = fi_cntr_readerr(ep_write_cntrs[0]);
+	err_cntr_val = fi_cntr_readerr(write_cntrs[0]);
 	cr_assert_eq(err_cntr_val, 0, "write error counter is incorrect.");
 
 	/* Create & Spawn threads */
@@ -879,7 +872,7 @@ Test(cntr_mt, set_add_read_err_cntr)
 		cr_assert(!pt_ret);
 	}
 
-	err_cntr_val = fi_cntr_readerr(ep_write_cntrs[0]);
+	err_cntr_val = fi_cntr_readerr(write_cntrs[0]);
 	cr_assert_eq(err_cntr_val, (iters * nthreads), "write error counter "
 		"is incorrect.");
 }
@@ -890,7 +883,7 @@ static void *do_thread_adderr_wait(void *data)
 	i = *((int *) data);
 
 	dbg_printf("%d: waiting\n", i);
-	ret = fi_cntr_wait(ep_write_cntrs[i], ~0, -1);
+	ret = fi_cntr_wait(write_cntrs[i], ~0, -1);
 	cr_assert(ret != FI_SUCCESS, "Bad return value from fi_cntr_wait");
 
 	dbg_printf("%d: done\n", i);
@@ -900,26 +893,26 @@ static void *do_thread_adderr_wait(void *data)
 Test(cntr_mt, adderr_wait)
 {
 	int i, ret;
-	pthread_t threads[NUM_EPS];
-	int thread_args[NUM_EPS];
+	pthread_t threads[NUM_THREADS];
+	int thread_args[NUM_THREADS];
 	void *pt_ret;
 
 	/* Each thread waits for an err cntr change on the i'th ep_write_cntr */
 	dbg_printf("creating threads\n");
-	for (i = 0; i < NUM_EPS; i++) {
+	for (i = 0; i < NUM_THREADS; i++) {
 		thread_args[i] = i;
 		cr_assert(!pthread_create(&threads[i], NULL,
 					  do_thread_adderr_wait, (void *) &thread_args[i]));
 	}
 
 	dbg_printf("Adding errors\n");
-	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_cntr_adderr(ep_write_cntrs[i], 1);
+	for (i = 0; i < NUM_THREADS; i++) {
+		ret = fi_cntr_adderr(write_cntrs[i], 1);
 		cr_assert(ret == FI_SUCCESS, "Bad return value from "
 			"fi_cntr_adderr");
 	}
 
-	for (i = 0; i < NUM_EPS; i++) {
+	for (i = 0; i < NUM_THREADS; i++) {
 		cr_assert(!pthread_join(threads[i], &pt_ret));
 		cr_assert(!pt_ret);
 	}
@@ -931,10 +924,10 @@ Test(cntr, adderr_wait)
 {
 	int ret;
 
-	ret = fi_cntr_adderr(write_cntr, 1);
+	ret = fi_cntr_adderr(write_cntrs[0], 1);
 	cr_assert(ret == FI_SUCCESS, "Bad return value from fi_cntr_adderr");
 
-	ret = fi_cntr_wait(write_cntr, ~0, -1);
+	ret = fi_cntr_wait(write_cntrs[0], ~0, -1);
 	cr_assert(ret != FI_SUCCESS, "Bad return value from fi_cntr_wait");
 }
 
@@ -943,21 +936,21 @@ Test(cntr, set_add_read_cntr)
 	int iters = 128, ret, i = 0, init_val = 0xabcdefab;
 	uint64_t cntr_val, prev_cntr_val;
 
-	ret = fi_cntr_set(write_cntr, init_val);
+	ret = fi_cntr_set(write_cntrs[0], init_val);
 	cr_assert(ret == FI_SUCCESS);
 
-	cntr_val = fi_cntr_read(write_cntr);
+	cntr_val = fi_cntr_read(write_cntrs[0]);
 	cr_assert_eq(cntr_val, init_val, "write or counter is incorrect.");
 
-	ret = fi_cntr_set(write_cntr, 0);
+	ret = fi_cntr_set(write_cntrs[0], 0);
 	cr_assert(ret == FI_SUCCESS);
 
 	for (; i < iters; i++) {
-		prev_cntr_val = fi_cntr_read(write_cntr);
-		ret = fi_cntr_add(write_cntr, 1);
+		prev_cntr_val = fi_cntr_read(write_cntrs[0]);
+		ret = fi_cntr_add(write_cntrs[0], 1);
 		cr_assert(ret == FI_SUCCESS);
 
-		cntr_val = fi_cntr_read(write_cntr);
+		cntr_val = fi_cntr_read(write_cntrs[0]);
 		cr_assert_eq(cntr_val, prev_cntr_val + 1, "counter is "
 			"incorrect");
 	}
@@ -968,22 +961,23 @@ Test(cntr, set_add_read_err_cntr)
 	int iters = 128, ret, i = 0,  init_val = 0xabcdefab;
 	uint64_t cntr_val, prev_cntr_val;
 
-	ret = fi_cntr_seterr(write_cntr, init_val);
+	ret = fi_cntr_seterr(write_cntrs[0], init_val);
 	cr_assert(ret == FI_SUCCESS);
 
-	cntr_val = fi_cntr_readerr(write_cntr);
+	cntr_val = fi_cntr_readerr(write_cntrs[0]);
 	cr_assert_eq(cntr_val, init_val, "write or counter is incorrect.");
 
-	ret = fi_cntr_seterr(write_cntr, 0);
+	ret = fi_cntr_seterr(write_cntrs[0], 0);
 	cr_assert(ret == FI_SUCCESS);
 
 	for (; i < iters; i++) {
-		prev_cntr_val = fi_cntr_readerr(write_cntr);
-		ret = fi_cntr_adderr(write_cntr, 1);
+		prev_cntr_val = fi_cntr_readerr(write_cntrs[0]);
+		ret = fi_cntr_adderr(write_cntrs[0], 1);
 		cr_assert(ret == FI_SUCCESS);
 
-		cntr_val = fi_cntr_readerr(write_cntr);
+		cntr_val = fi_cntr_readerr(write_cntrs[0]);
 		cr_assert_eq(cntr_val, prev_cntr_val + 1, "error counter is "
 			"incorrect");
 	}
 }
+
