@@ -320,7 +320,6 @@ static int init_av(void)
 			return ret;
 
 		memcpy(&addrlen, rx_buf + ft_rx_prefix_size(), sizeof(size_t));
-		remote_addr = malloc(addrlen * ep_cnt);
 		memcpy(remote_addr, rx_buf + ft_rx_prefix_size() + sizeof(size_t),
 				addrlen * ep_cnt);
 
