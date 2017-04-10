@@ -220,3 +220,38 @@ ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	sock_cntr_check_trigger_list(cntr);
 	return 0;
 }
+
+ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
+{
+	struct sock_cntr *cntr;
+	struct sock_trigger *trigger;
+	struct fi_trigger_threshold *threshold;
+
+	if (work->event_type != FI_TRIGGER_THRESHOLD)
+		return -FI_ENOSYS;
+
+	threshold = work->event.threshold;
+	cntr = container_of(threshold->cntr, struct sock_cntr, cntr_fid);
+	if (atomic_get(&cntr->value) >= (int) threshold->threshold) {
+		if (work->op_type == FI_OP_CNTR_SET)
+			fi_cntr_set(work->op.cntr->cntr, work->op.cntr->value);
+		else
+			fi_cntr_add(work->op.cntr->cntr, work->op.cntr->value);
+		return 1;
+	}
+
+	trigger = calloc(1, sizeof(*trigger));
+	if (!trigger)
+		return -FI_ENOMEM;
+
+	trigger->work = work;
+	trigger->op_type = work->op_type;
+	trigger->threshold = threshold->threshold;
+	trigger->flags = flags;
+
+	fastlock_acquire(&cntr->trigger_lock);
+	dlist_insert_tail(&trigger->entry, &cntr->trigger_list);
+	fastlock_release(&cntr->trigger_lock);
+	sock_cntr_check_trigger_list(cntr);
+	return 0;
+}

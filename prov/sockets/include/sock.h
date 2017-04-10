@@ -237,7 +237,8 @@ struct sock_trigger {
 	size_t threshold;
 	struct dlist_entry entry;
 
-	struct fid_ep	*ep;
+	struct fi_deferred_work *work;
+	struct fid_ep *ep;
 	uint64_t flags;
 
 	union {
@@ -1174,6 +1175,7 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			   uint64_t flags, enum fi_trigger_op op_type);
 ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 			  uint64_t flags, enum fi_trigger_op op_type);
+ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags);
 void sock_cntr_check_trigger_list(struct sock_cntr *cntr);
 
 int sock_epoll_create(struct sock_epoll_set *set, int size);

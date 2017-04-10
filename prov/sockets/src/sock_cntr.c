@@ -138,7 +138,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 		trigger = container_of(entry, struct sock_trigger, entry);
 		entry = entry->next;
 
-		if (atomic_get(&cntr->value) < (int)trigger->threshold)
+		if (atomic_get(&cntr->value) < (int) trigger->threshold)
 			continue;
 
 		switch (trigger->op_type) {
@@ -180,6 +180,18 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 						NULL,
 						trigger->op.atomic.result_count,
 						trigger->flags & ~FI_TRIGGER);
+			break;
+		case FI_OP_CNTR_SET:
+			assert(trigger->work);
+			fi_cntr_set(trigger->work->op.cntr->cntr,
+				    trigger->work->op.cntr->value);
+			ret = 0;
+			break;
+		case FI_OP_CNTR_ADD:
+			assert(trigger->work);
+			fi_cntr_add(trigger->work->op.cntr->cntr,
+				    trigger->work->op.cntr->value);
+			ret = 0;
 			break;
 		default:
 			SOCK_LOG_ERROR("unsupported op\n");
