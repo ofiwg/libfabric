@@ -238,13 +238,17 @@ The following apply to memory registration.
   made to the memory region.
 
 *Basic Memory Registration*
-: Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit
-  in library versions 1.4 and earlier.  Basic registration is equivalent
+: Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit.
+  FI_MR_BASIC is maintained for backwards compatibility (libfabric version
+  1.4 or earlier).  The behavior of basic registration is equivalent
   to setting the following mr_mode bits to one: FI_MR_VIRT_ADDR,
   FI_MR_ALLOCATED, and FI_MR_PROV_KEY.  Additionally, providers that
-  supported basic registation usually required FI_MR_LOCAL.  FI_MR_BASIC
-  is provided for backwards compatibility.  Applications coding to
-  libfabric version 1.5 or later should set the independent mr_mode bits.
+  support basic registation usually required FI_MR_LOCAL.  FI_MR_BASIC 
+  must either be set alone, or in conjunction with FI_MR_LOCAL.  Other
+  mr_mode bit pairings are invalid.  Unlike other mr_mode bits, if
+  FI_MR_BASIC is set on input to fi_getinfo(),  it will not be cleared
+  by the provider.  That is, setting FI_MR_BASIC
+  to one requests basic registration.
 
 The registrations functions -- fi_mr_reg, fi_mr_regv, and
 fi_mr_regattr -- are used to register one or more memory regions with
