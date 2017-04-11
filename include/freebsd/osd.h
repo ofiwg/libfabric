@@ -30,6 +30,9 @@
  * SOFTWARE.
  */
 
+#ifndef _FABTESTS_FREEBSD_OSD_H_
+#define _FABTESTS_FREEBSD_OSD_H_
+
 #include <sys/endian.h>
 #include <pthread_np.h>
 #include <netinet/in.h>
@@ -41,3 +44,5 @@
 #define HOST_NAME_MAX  128
 
 typedef cpuset_t cpu_set_t;
+
+#endif /* _FABTESTS_FREEBSD_OSD_H_ */

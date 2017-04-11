@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{076F757A-8827-4D3C-A87F-6E49623C16E1}</ProjectGuid>
+    <Keyword>MakeFileProj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>Intel C++ Compiler XE 15.0</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>Intel C++ Compiler XE 15.0</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <NMakePreprocessorDefinitions>WIN32;_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <ExecutablePath>$(ProjectDir)Include;$(ExecutablePath)</ExecutablePath>
+    <NMakeBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) all</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean all</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean</NMakeCleanCommandLine>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <ExecutablePath>$(ProjectDir)Include;$(ExecutablePath)</ExecutablePath>
+    <NMakeBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) all</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean all</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean</NMakeCleanCommandLine>
+  </PropertyGroup>
+  <ItemGroup>
+    <Text Include="readme.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="benchmarks\benchmark_shared.c" />
+    <ClCompile Include="benchmarks\dgram_pingpong.c" />
+    <ClCompile Include="benchmarks\msg_bw.c" />
+    <ClCompile Include="benchmarks\msg_pingpong.c" />
+    <ClCompile Include="benchmarks\rdm_cntr_pingpong.c" />
+    <ClCompile Include="benchmarks\rdm_pingpong.c" />
+    <ClCompile Include="benchmarks\rdm_tagged_bw.c" />
+    <ClCompile Include="benchmarks\rdm_tagged_pingpong.c" />
+    <ClCompile Include="benchmarks\rma_bw.c" />
+    <ClCompile Include="common\jsmn.c" />
+    <ClCompile Include="common\shared.c" />
+    <ClCompile Include="common\windows\getopt.c" />
+    <ClCompile Include="common\windows\osd.c" />
+    <ClCompile Include="complex\ft_comm.c" />
+    <ClCompile Include="complex\ft_comp.c" />
+    <ClCompile Include="complex\ft_config.c" />
+    <ClCompile Include="complex\ft_domain.c" />
+    <ClCompile Include="complex\ft_endpoint.c" />
+    <ClCompile Include="complex\ft_main.c" />
+    <ClCompile Include="complex\ft_msg.c" />
+    <ClCompile Include="complex\ft_test.c" />
+    <ClCompile Include="simple\cq_data.c" />
+    <ClCompile Include="simple\dgram.c" />
+    <ClCompile Include="simple\dgram_waitset.c" />
+    <ClCompile Include="simple\msg.c" />
+    <ClCompile Include="simple\msg_epoll.c" />
+    <ClCompile Include="simple\msg_netdir.c" />
+    <ClCompile Include="simple\msg_sockets.c" />
+    <ClCompile Include="simple\poll.c" />
+    <ClCompile Include="simple\rdm.c" />
+    <ClCompile Include="simple\rdm_rma_simple.c" />
+    <ClCompile Include="simple\rdm_rma_trigger.c" />
+    <ClCompile Include="simple\rdm_shared_ctx.c" />
+    <ClCompile Include="simple\rdm_tagged_peek.c" />
+    <ClCompile Include="simple\rdm_netdir.c" />
+    <ClCompile Include="simple\scalable_ep.c" />
+    <ClCompile Include="unit\av_test.c" />
+    <ClCompile Include="unit\cntr_test.c" />
+    <ClCompile Include="unit\common.c" />
+    <ClCompile Include="unit\cq_test.c" />
+    <ClCompile Include="unit\dom_test.c" />
+    <ClCompile Include="unit\eq_test.c" />
+    <ClCompile Include="unit\getinfo_test.c" />
+    <ClCompile Include="unit\mr_test.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="benchmarks\benchmark_shared.h" />
+    <ClInclude Include="complex\fabtest.h" />
+    <ClInclude Include="include\ft_osd.h" />
+    <ClInclude Include="include\jsmn.h" />
+    <ClInclude Include="include\shared.h" />
+    <ClInclude Include="include\unit_common.h" />
+    <ClInclude Include="include\windows\getopt\getopt.h" />
+    <ClInclude Include="include\windows\netdb.h" />
+    <ClInclude Include="include\windows\netinet\in.h" />
+    <ClInclude Include="include\windows\netinet\tcp.h" />
+    <ClInclude Include="include\windows\osd.h" />
+    <ClInclude Include="include\windows\poll.h" />
+    <ClInclude Include="include\windows\sys\socket.h" />
+    <ClInclude Include="include\windows\sys\uio.h" />
+    <ClInclude Include="include\windows\sys\wait.h" />
+    <ClInclude Include="include\windows\unistd.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="complex\test_configs\eq_cq.json" />
+    <None Include="complex\test_configs\lat_bw.json" />
+    <None Include="complex\test_configs\sockets.json" />
+    <None Include="complex\test_configs\verbs.json" />
+    <None Include="Makefile.win" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

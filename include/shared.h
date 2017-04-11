@@ -52,12 +52,7 @@ extern "C" {
 #define FT_FIVERSION FI_VERSION(1,4)
 #endif
 
-#ifdef __APPLE__
-#include "osx/osd.h"
-#elif defined __FreeBSD__
-#include "freebsd/osd.h"
-#endif
-
+#include "ft_osd.h"
 #define OFI_UTIL_PREFIX "ofi-"
 #define OFI_NAME_DELIM ';'
 
