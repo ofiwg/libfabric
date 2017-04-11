@@ -1193,30 +1193,30 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_conte
 	return ret;
 }
 
-ssize_t ft_post_inject(struct fid_ep *ep, size_t size)
+ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_tinject, ft_get_tx_comp, tx_seq, "inject",
 				ep, tx_buf, size + ft_tx_prefix_size(),
-				remote_fi_addr, tx_seq);
+				fi_addr, tx_seq);
 	} else {
 		FT_POST(fi_inject, ft_get_tx_comp, tx_seq, "inject",
 				ep, tx_buf, size + ft_tx_prefix_size(),
-				remote_fi_addr);
+				fi_addr);
 	}
 
 	tx_cq_cntr++;
 	return 0;
 }
 
-ssize_t ft_inject(struct fid_ep *ep, size_t size)
+ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
 	ssize_t ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
 		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
-	ret = ft_post_inject(ep, size);
+	ret = ft_post_inject(ep, fi_addr, size);
 	if (ret)
 		return ret;
 
