@@ -1164,7 +1164,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 			  size_t compare_count, struct fi_ioc *resultv,
 			  void **result_desc, size_t result_count, uint64_t flags);
 
-
+int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work);
 ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			  uint64_t flags, enum fi_trigger_op op_type);
 ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
