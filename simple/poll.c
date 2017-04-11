@@ -216,7 +216,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" ADDR_OPTS CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
