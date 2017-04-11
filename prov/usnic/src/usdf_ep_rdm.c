@@ -222,6 +222,8 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 			      hints->domain_attr->mr_mode))
 		return -FI_ENODATA;
 
+	defaults.mr_mode = hints->domain_attr->mr_mode;
+
 out:
 	*fi->domain_attr = defaults;
 
