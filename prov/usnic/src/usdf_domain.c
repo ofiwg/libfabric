@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -51,6 +51,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_util.h"
 
 #include "usnic_direct.h"
 #include "usdf.h"
@@ -247,14 +248,12 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			return -FI_ENODATA;
 		}
 
-		switch (info->domain_attr->mr_mode) {
-		case FI_MR_UNSPEC:
-		case FI_MR_BASIC:
-			break;
-		default:
+		if (ofi_check_mr_mode(fabric->api_version,
+				      OFI_MR_BASIC_MAP | FI_MR_LOCAL,
+				      info->domain_attr->mr_mode)) {
 			/* the caller ignored our fi_getinfo results */
 			USDF_WARN_SYS(DOMAIN, "MR mode (%d) not supported\n",
-				info->domain_attr->mr_mode);
+				      info->domain_attr->mr_mode);
 			return -FI_ENODATA;
 		}
 	}
