@@ -80,8 +80,8 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_AV,
-		"Closing connection %p, state %d\n", conn, conn->state);
+	VERBS_INFO(FI_LOG_AV, "Closing connection %p, state %d\n",
+		   conn, conn->state);
 
 	if (conn->id[0]) {
 		if (rdma_disconnect(conn->id[0])) {
@@ -165,8 +165,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
 
-			FI_INFO(&fi_ibv_prov, FI_LOG_AV,
-				"fi_av_insert: bad addr #%i\n", i);
+			VERBS_INFO(FI_LOG_AV,
+				   "fi_av_insert: bad addr #%i\n", i);
 
 			if (av->flags & FI_EVENT) {
 				/* due to limited functionality of
@@ -229,9 +229,9 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			break;
 		}
 
-		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr %s:%u conn %p %d\n",
-			inet_ntoa(conn->addr.sin_addr),
-			ntohs(conn->addr.sin_port), conn, conn->cm_role);
+		VERBS_INFO(FI_LOG_AV, "fi_av_insert: addr %s:%u conn %p %d\n",
+			   inet_ntoa(conn->addr.sin_addr),
+			   ntohs(conn->addr.sin_port), conn, conn->cm_role);
 
 		av->used++;
 		ret++;
@@ -284,9 +284,9 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 		else /* (av->type == FI_AV_TABLE) */
 			conn = av->domain->rdm_cm->conn_table[fi_addr[i]];
 
-		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
-			conn, inet_ntoa(conn->addr.sin_addr),
-			ntohs(conn->addr.sin_port));
+		VERBS_INFO(FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
+			   conn, inet_ntoa(conn->addr.sin_addr),
+			   ntohs(conn->addr.sin_port));
 
 		err = fi_ibv_rdm_start_disconnection(conn);
 		ret = (ret == FI_SUCCESS) ? err : ret;
@@ -379,8 +379,8 @@ int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return -FI_EINVAL;
 
 	if (attr->name) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_AV,
-			"Shared AV is not implemented\n");
+		VERBS_WARN(FI_LOG_AV,
+			   "Shared AV is not implemented\n");
 		return -FI_ENOSYS;
 	}
 

@@ -252,8 +252,8 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 		}
 		ret = fi_ibv_poll_cq(ep->scq, &wce->wc);
 		if (ret < 0) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,
-				"Failed to read completion for signaled send\n");
+			VERBS_WARN(FI_LOG_EP_DATA,
+				   "Failed to read completion for signaled send\n");
 			util_buf_release(ep->scq->wce_pool, wce);
 			fastlock_release(&ep->scq->lock);
 			return ret;

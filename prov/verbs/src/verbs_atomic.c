@@ -74,7 +74,7 @@ fi_ibv_msg_ep_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype
 		break;
 	case FI_SUM:
 		if (_ep->info->tx_attr->op_flags & FI_INJECT) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
+			VERBS_INFO(FI_LOG_EP_DATA,"FI_INJECT not "
 				"supported for fi_fetch_atomic with FI_SUM op\n");
 			return -FI_EINVAL;
 		}
@@ -110,8 +110,8 @@ fi_ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype
 		return -FI_ENOSYS;
 
 	if (_ep->info->tx_attr->op_flags & FI_INJECT) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
-			"for fi_compare_atomic\n");
+		VERBS_INFO(FI_LOG_EP_DATA, "FI_INJECT not supported "
+			   "for fi_compare_atomic\n");
 		return -FI_EINVAL;
 	}
 

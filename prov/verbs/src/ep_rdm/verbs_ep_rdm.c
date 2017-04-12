@@ -550,21 +550,21 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM : param;
 
 	if (_ep->n_buffs & (_ep->n_buffs - 1)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"invalid value of rdm_buffer_num\n");
+		VERBS_INFO(FI_LOG_CORE,
+			   "invalid value of rdm_buffer_num\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "inject_size: %d\n",
-		info->tx_attr->inject_size);
+	VERBS_INFO(FI_LOG_EP_CTRL, "inject_size: %d\n",
+		   info->tx_attr->inject_size);
 
 	_ep->rndv_threshold = info->tx_attr->inject_size;
-	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "rndv_threshold: %d\n",
-		_ep->rndv_threshold);
+	VERBS_INFO(FI_LOG_EP_CTRL, "rndv_threshold: %d\n",
+		   _ep->rndv_threshold);
 
 	_ep->buff_len = rdm_buffer_size(info->tx_attr->inject_size);
-	FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL, "buff_len: %d\n", _ep->buff_len);
+	VERBS_INFO(FI_LOG_EP_CTRL, "buff_len: %d\n", _ep->buff_len);
 
 	_ep->tx_op_flags = info->tx_attr->op_flags;
 	_ep->rx_op_flags = info->rx_attr->op_flags;
@@ -576,8 +576,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		if (param > 0) {
 			_ep->rndv_seg_size = param;
 		} else {
-			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-				"invalid value of rdm_rndv_seg_size\n");
+			VERBS_INFO(FI_LOG_CORE,
+				   "invalid value of rdm_rndv_seg_size\n");
 			ret = -FI_EINVAL;
 			goto err;
 		}
@@ -597,8 +597,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 #endif /* HAVE_VERBS_EXP_H */
 	if (!fi_param_get_bool(&fi_ibv_prov, "rdm_use_odp", &param)) {
 		if (!_ep->use_odp && param) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
-				"ODP is not supported on this configuration, ignore \n");
+			VERBS_WARN(FI_LOG_CORE, "ODP is not supported on this "
+				   "configuration, ignore \n");
 		} else {
 			_ep->use_odp = param;
 		}
@@ -607,8 +607,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->cm_progress_timeout = FI_IBV_RDM_CM_THREAD_TIMEOUT;
 	if (!fi_param_get_int(&fi_ibv_prov, "rdm_thread_timeout", &param)) {
 		if (param < 0) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-				"invalid value of rdm_thread_timeout\n");
+			VERBS_INFO(FI_LOG_CORE,
+				   "invalid value of rdm_thread_timeout\n");
 			ret = -FI_EINVAL;
 			goto err;
 		} else {
@@ -627,8 +627,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 				    strlen("IBV_WR_SEND"))) {
 			_ep->eopcode = IBV_WR_SEND;
 		} else {
-			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-				"invalid value of rdm_eager_send_opcode\n");
+			VERBS_INFO(FI_LOG_CORE,
+				   "invalid value of rdm_eager_send_opcode\n");
 			ret = -FI_EINVAL;
 			goto err;
 		}
@@ -640,22 +640,22 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	case FI_PROTO_IB_RDM:
 		if (_ep->eopcode != IBV_WR_RDMA_WRITE_WITH_IMM &&
 		    _ep->eopcode != IBV_WR_SEND) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Unsupported eager operation code\n");
+			VERBS_INFO(FI_LOG_CORE,
+				   "Unsupported eager operation code\n");
 			ret = -FI_ENODATA;
 			goto err;
 		}
 		break;
 	case FI_PROTO_IWARP_RDM:
 		if (_ep->eopcode != IBV_WR_SEND) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Unsupported eager operation code\n");
+			VERBS_INFO(FI_LOG_CORE,
+				   "Unsupported eager operation code\n");
 			ret = -FI_ENODATA;
 			goto err;
 		}
 		break;
 	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unsupported protocol\n");
+		VERBS_INFO(FI_LOG_CORE, "Unsupported protocol\n");
 		ret = -FI_ENODATA;
 		goto err;
 	}

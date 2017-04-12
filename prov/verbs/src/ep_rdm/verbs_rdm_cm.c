@@ -391,10 +391,10 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 
-		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
-			"CONN REQUEST, NOT found in hash, new conn %p %d, addr %s:%u, HASH ADD\n",
-			conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
-			ntohs(conn->addr.sin_port));
+		VERBS_INFO(FI_LOG_AV, "CONN REQUEST, NOT found in hash, "
+			   "new conn %p %d, addr %s:%u, HASH ADD\n",
+			   conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
+			   ntohs(conn->addr.sin_port));
 
 		HASH_ADD(hh, ep->domain->rdm_cm->conn_hash, addr,
 			 FI_IBV_RDM_DFLT_ADDRLEN, conn);
@@ -408,10 +408,10 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 						    ep);
 		}
 
-		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
-			"CONN REQUEST,  FOUND in hash, conn %p %d, addr %s:%u\n",
-			conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
-			ntohs(conn->addr.sin_port));
+		VERBS_INFO(FI_LOG_AV,
+			   "CONN REQUEST,  FOUND in hash, conn %p %d, addr %s:%u\n",
+			   conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
+			   ntohs(conn->addr.sin_port));
 	}
 
 	if (conn->cm_role == FI_VERBS_CM_ACTIVE) {
@@ -529,9 +529,9 @@ fi_ibv_rdm_process_event_established(struct rdma_cm_event *event,
 		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 	}
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_AV, "CONN ESTABLISHED, conn %p, addr %s:%u\n",
-		conn, inet_ntoa(conn->addr.sin_addr),
-		ntohs(conn->addr.sin_port));
+	VERBS_INFO(FI_LOG_AV, "CONN ESTABLISHED, conn %p, addr %s:%u\n",
+		   conn, inet_ntoa(conn->addr.sin_addr),
+		   ntohs(conn->addr.sin_port));
 	
 	/* Do not count self twice */
 	if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
