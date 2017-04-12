@@ -184,6 +184,7 @@ static struct fi_info *_gnix_allocinfo(void)
 		return NULL;
 	}
 
+	gnix_info->caps = GNIX_EP_CAPS_FULL;
 	gnix_info->tx_attr->op_flags = 0;
 	gnix_info->rx_attr->op_flags = 0;
 	gnix_info->ep_attr->type = FI_EP_RDM;
@@ -383,6 +384,8 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	struct fi_info *gnix_info = NULL;
 	int ret = -FI_ENODATA;
 
+	GNIX_TRACE(FI_LOG_FABRIC, "\n");
+
 	if ((hints && hints->ep_attr) &&
 	    (hints->ep_attr->type != FI_EP_UNSPEC &&
 	     hints->ep_attr->type != ep_type)) {
@@ -431,6 +434,8 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				goto err;
 		}
 
+		GNIX_DEBUG(FI_LOG_FABRIC, "Passed EP attributes check\n");
+
 		/*
 		 * check the mode field
 		 */
@@ -441,10 +446,9 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			mode = hints->mode & ~GNIX_FAB_MODES_CLEAR;
 		}
 
-		if (!hints->caps) {
-			/* If no caps are requested, return all supported. */
-			gnix_info->caps = GNIX_EP_CAPS_FULL;
-		} else {
+		GNIX_DEBUG(FI_LOG_FABRIC, "Passed mode check\n");
+
+		if (hints->caps) {
 			/* The provider must support all requested
 			 * capabilities. */
 			if ((hints->caps & GNIX_EP_CAPS_FULL) != hints->caps)
@@ -454,6 +458,9 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			 * capabilities that do not introduce any overhead. */
 			gnix_info->caps = hints->caps | GNIX_EP_SEC_CAPS;
 		}
+
+		GNIX_DEBUG(FI_LOG_FABRIC, "Passed caps check gnix_info->caps = 0x%016lx\n",
+			   gnix_info->caps);
 
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
@@ -467,6 +474,8 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			gnix_info->tx_attr->op_flags =
 				hints->tx_attr->op_flags & GNIX_EP_OP_FLAGS;
 		}
+
+		GNIX_DEBUG(FI_LOG_FABRIC, "Passed TX attributes check\n");
 
 		if (hints->rx_attr) {
 			if ((hints->rx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
@@ -483,6 +492,8 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			    strlen(gnix_fab_name))) {
 			goto err;
 		}
+
+		GNIX_DEBUG(FI_LOG_FABRIC, "Passed fabric name check\n");
 
 		if (hints->domain_attr) {
 			if (hints->domain_attr->name &&
@@ -511,6 +522,8 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				}
 				break;
 			case FI_MR_SCALABLE:
+				GNIX_WARN(FI_LOG_FABRIC,
+						  "GNI provider doesn't currently support MR_SCALABLE\n");
 				goto err;
 			}
 
@@ -537,8 +550,13 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			ret = ofi_check_domain_attr(&gnix_prov, version,
 						    gnix_info->domain_attr,
 						    hints->domain_attr);
-			if (ret)
+			if (ret) {
+				GNIX_WARN(FI_LOG_FABRIC,
+						  "GNI failed domain attributes check\n");
 				goto err;
+			}
+
+			GNIX_DEBUG(FI_LOG_FABRIC, "Passed the domain attributes check\n");
 		}
 	}
 
