@@ -26,6 +26,7 @@
 	],
 	mode: [
 		FT_MODE_ALL,
+		FT_MODE_NONE,
 	],
 	caps: [
 		FT_CAP_MSG,
@@ -61,6 +62,7 @@
 	],
 	mode: [
 		FT_MODE_ALL,
+		FT_MODE_NONE,
 	],
 	caps: [
 		FT_CAP_MSG,
@@ -97,6 +99,7 @@
 	],
 	mode: [
 		FT_MODE_ALL,
+		FT_MODE_NONE,
 	],
 	caps: [
 		FT_CAP_MSG,
@@ -132,6 +135,7 @@
 	],
 	mode: [
 		FT_MODE_ALL,
+		FT_MODE_NONE,
 	],
 	caps: [
 		FT_CAP_RMA,
@@ -175,6 +179,7 @@
 	],
 	mode: [
 		FT_MODE_ALL,
+		FT_MODE_NONE,
 	],
 	caps: [
 		FT_CAP_ATOMIC,
@@ -218,6 +223,7 @@
 	],
 	mode: [
 		FT_MODE_ALL,
+		FT_MODE_NONE,
 	],
 	caps: [
 		FT_CAP_ATOMIC,
@@ -256,6 +262,7 @@
 	],
 	mode: [
 		FT_MODE_ALL,
+		FT_MODE_NONE,
 	],
 	caps: [
 		FT_CAP_ATOMIC,
