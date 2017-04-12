@@ -83,7 +83,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
 	.resource_mgmt		= FI_RM_ENABLED,
-	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL,
+	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= sizeof_field(struct ibv_send_wr, imm_data),
 	.tx_ctx_cnt		= 1024,
@@ -347,7 +347,7 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if ((hints->mode & info->mode) != info->mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(&fi_ibv_prov, hints, info);
+		FI_INFO_MODE(&fi_ibv_prov, hints->mode, info->mode);
 		return -FI_ENODATA;
 	}
 

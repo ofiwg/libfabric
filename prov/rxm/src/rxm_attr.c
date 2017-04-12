@@ -62,7 +62,10 @@ struct fi_domain_attr rxm_domain_attr = {
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL,
+	/* Advertise support for FI_MR_BASIC so that ofi_check_info call
+	 * doesn't fail at RxM level. If an app requires FI_MR_BASIC, it
+	 * would be passed down to core provider. */
+	.mr_mode = FI_MR_LOCAL | FI_MR_BASIC,
 	.cq_cnt = (1 << 16),
 	.ep_cnt = (1 << 15),
 	.tx_ctx_cnt = 1,
@@ -78,7 +81,6 @@ struct fi_fabric_attr rxm_fabric_attr = {
 
 struct fi_info rxm_info = {
 	.caps = FI_MSG | FI_TAGGED | FI_SEND | FI_RECV | FI_SOURCE | FI_DIRECTED_RECV,
-	.mode = FI_LOCAL_MR, // TODO remove this requirement
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,

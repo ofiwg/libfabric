@@ -35,22 +35,46 @@
 #include <prov.h>
 #include "rxm.h"
 
-int rxm_info_to_core(struct fi_info *rxm_info, struct fi_info *core_info)
+int rxm_info_to_core(uint32_t version, struct fi_info *hints,
+		     struct fi_info *core_info)
 {
-	/* TODO choose core_info attr based on rxm_info attr */
 	core_info->caps = FI_MSG;
-	core_info->mode = FI_LOCAL_MR;
+	if (hints) {
+		core_info->mode = hints->mode;
+
+		if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+			core_info->mode |= FI_LOCAL_MR;
+
+		if (hints->domain_attr) {
+			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+				core_info->domain_attr->mr_mode =
+					hints->domain_attr->mr_mode;
+			else
+				core_info->domain_attr->mr_mode =
+					hints->domain_attr->mr_mode |
+					FI_MR_LOCAL;
+
+			if (hints->domain_attr->caps)
+				core_info->domain_attr->caps =
+					hints->domain_attr->caps | FI_MSG;
+			if (hints->domain_attr->mode)
+				core_info->domain_attr->mode = hints->domain_attr->mode;
+		}
+	}
 	core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	core_info->ep_attr->type = FI_EP_MSG;
 
 	return 0;
 }
 
-int rxm_info_to_rxm(struct fi_info *core_info, struct fi_info *info)
+int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
+		    struct fi_info *info)
 {
-	// TODO choose caps based on core_info caps
 	info->caps = rxm_info.caps;
-	info->mode = rxm_info.mode;
+	info->mode = core_info->mode | rxm_info.mode;
+
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+		info->mode = FI_LOCAL_MR;
 
 	*info->tx_attr = *rxm_info.tx_attr;
 	info->tx_attr->iov_limit = MIN(MIN(info->tx_attr->iov_limit,
@@ -63,7 +87,13 @@ int rxm_info_to_rxm(struct fi_info *core_info, struct fi_info *info)
 
 	*info->ep_attr = *rxm_info.ep_attr;
 	info->ep_attr->max_msg_size = core_info->ep_attr->max_msg_size;
+
 	*info->domain_attr = *rxm_info.domain_attr;
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+		info->domain_attr->mr_mode = core_info->domain_attr->mr_mode;
+	else
+		info->domain_attr->mode |= core_info->domain_attr->mr_mode |
+			FI_MR_LOCAL;
 
 	return 0;
 }
@@ -83,7 +113,7 @@ static void rxm_fini(void)
 struct fi_provider rxm_prov = {
 	.name = "ofi-rxm",
 	.version = FI_VERSION(RXM_MAJOR_VERSION, RXM_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 3),
+	.fi_version = FI_VERSION(1, 5),
 	.getinfo = rxm_getinfo,
 	.fabric = rxm_fabric,
 	.cleanup = rxm_fini

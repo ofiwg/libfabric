@@ -264,8 +264,10 @@ static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
-int rxm_info_to_core(struct fi_info *rxm_info, struct fi_info *core_info);
-int rxm_info_to_rxm(struct fi_info *core_info, struct fi_info *info);
+int rxm_info_to_core(uint32_t version, struct fi_info *rxm_info,
+		     struct fi_info *core_info);
+int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
+		    struct fi_info *info);
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

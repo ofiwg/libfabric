@@ -154,7 +154,7 @@ static int ofi_dup_addr(struct fi_info *info, struct fi_info *dup)
 	return 0;
 }
 
-static int ofi_info_to_core(const struct fi_provider *prov,
+static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    struct fi_info *util_info,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
@@ -165,7 +165,7 @@ static int ofi_info_to_core(const struct fi_provider *prov,
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(util_info, *core_hints))
+	if (info_to_core(version, util_info, *core_hints))
 		goto err;
 
 	if (!util_info)
@@ -216,7 +216,7 @@ err:
 	return -FI_ENOMEM;
 }
 
-static int ofi_info_to_util(const struct fi_provider *prov,
+static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
 			    struct fi_info *core_info,
 			    ofi_alter_info_t info_to_util,
 			    struct fi_info **util_info)
@@ -224,7 +224,7 @@ static int ofi_info_to_util(const struct fi_provider *prov,
 	if (!(*util_info = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_util(core_info, *util_info))
+	if (info_to_util(version, core_info, *util_info))
 		goto err;
 
 	if (ofi_dup_addr(core_info, *util_info))
@@ -270,7 +270,7 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	ret = ofi_info_to_core(util_prov->prov, util_hints, info_to_core,
+	ret = ofi_info_to_core(version, util_prov->prov, util_hints, info_to_core,
 			       &core_hints);
 	if (ret)
 		return ret;
@@ -296,8 +296,8 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 
 	*info = tail = NULL;
 	for (cur = core_info; cur; cur = cur->next) {
-		ret = ofi_info_to_util(util_prov->prov, cur, info_to_util,
-				       &util_info);
+		ret = ofi_info_to_util(version, util_prov->prov, cur,
+				       info_to_util, &util_info);
 		if (ret) {
 			fi_freeinfo(*info);
 			break;
@@ -390,6 +390,9 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 	}
 }
 
+/* If a provider supports basic registration mode it should set the FI_MR_BASIC
+ * mode bit in prov_mode. Support for FI_MR_SCALABLE is indicated by not setting
+ * any of OFI_MR_BASIC_MAP bits. */
 int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
 			     uint32_t user_mode)
 {
@@ -398,17 +401,28 @@ int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
 
 		switch (user_mode) {
 		case FI_MR_UNSPEC:
-			return !prov_mode || (prov_mode == OFI_MR_BASIC_MAP) ?
+			return OFI_CHECK_MR_SCALABLE(prov_mode) ||
+				OFI_CHECK_MR_BASIC(prov_mode) ?
 				0 : -FI_ENODATA;
 		case FI_MR_BASIC:
-			return prov_mode == OFI_MR_BASIC_MAP ? 0 : -FI_ENODATA;
+			return OFI_CHECK_MR_BASIC(prov_mode) ? 0 : -FI_ENODATA;
 		case FI_MR_SCALABLE:
-			return !prov_mode ? 0 : -FI_ENODATA;
+			return OFI_CHECK_MR_SCALABLE(prov_mode) ? 0 : -FI_ENODATA;
 		default:
 			return -FI_ENODATA;
 		}
 	} else {
-		return ((user_mode & prov_mode) == prov_mode) ? 0 : -FI_ENODATA;
+		if (user_mode & FI_MR_BASIC) {
+			if (!OFI_CHECK_MR_BASIC(prov_mode))
+				return -FI_ENODATA;
+			if ((user_mode & prov_mode & ~OFI_MR_BASIC_MAP) ==
+			    (prov_mode & ~OFI_MR_BASIC_MAP))
+				return 0;
+			return -FI_ENODATA;
+		} else {
+			return (((user_mode | FI_MR_BASIC) & prov_mode) == prov_mode) ?
+				0 : -FI_ENODATA;
+		}
 	}
 }
 
@@ -463,6 +477,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	if (ofi_check_mr_mode(api_version, prov_attr->mr_mode,
 			       user_attr->mr_mode)) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid memory registration mode\n");
+		FI_INFO_MODE(prov, prov_attr->mr_mode, user_attr->mr_mode);
 		return -FI_ENODATA;
 	}
 
@@ -488,7 +503,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if ((user_attr->mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "Required domain mode missing\n");
-		FI_INFO_MODE(prov, prov_attr, user_attr);
+		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
@@ -571,7 +586,7 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 	info_mode = user_attr->mode ? user_attr->mode : info_mode;
 	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_attr, user_attr);
+		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
@@ -627,7 +642,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 	info_mode = user_attr->mode ? user_attr->mode : info_mode;
 	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_attr, user_attr);
+		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
@@ -680,6 +695,7 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 {
 	const struct fi_info *prov_info = util_prov->info;
 	const struct fi_provider *prov = util_prov->prov;
+	uint64_t prov_mode;
 	int ret;
 
 	if (!user_info)
@@ -691,9 +707,15 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if ((user_info->mode & prov_info->mode) != prov_info->mode) {
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
+		prov_mode = (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
+			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
+	else
+		prov_mode = prov_info->mode;
+
+	if ((user_info->mode & prov_mode) != prov_mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_info, user_info);
+		FI_INFO_MODE(prov, prov_mode, user_info->mode);
 		return -FI_ENODATA;
 	}
 
@@ -836,6 +858,11 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 	for (; info; info = info->next) {
 		info->caps = (hints->caps & FI_PRIMARY_CAPS) |
 			     (info->caps & FI_SECONDARY_CAPS);
+
+		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
+			if (info->domain_attr->mr_mode & FI_MR_LOCAL)
+				info->mode |= FI_LOCAL_MR;
+		}
 
 		info->handle = hints->handle;
 

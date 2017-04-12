@@ -59,7 +59,7 @@
 #define RXD_MAJOR_VERSION 	(1)
 #define RXD_MINOR_VERSION 	(0)
 #define RXD_PROTOCOL_VERSION 	(1)
-#define RXD_FI_VERSION 		FI_VERSION(1,3)
+#define RXD_FI_VERSION 		FI_VERSION(1,5)
 
 #define RXD_IOV_LIMIT		(4)
 #define RXD_DEF_CQ_CNT		(8)
@@ -382,8 +382,10 @@ struct rxd_pkt_meta {
 	char pkt_data[]; /* rxd_pkt, followed by data */
 };
 
-int rxd_info_to_core(struct fi_info *rxd_info, struct fi_info *core_info);
-int rxd_info_to_rxd(struct fi_info *core_info, struct fi_info *info);
+int rxd_info_to_core(uint32_t version, struct fi_info *rxd_info,
+		     struct fi_info *core_info);
+int rxd_info_to_rxd(uint32_t version, struct fi_info *core_info,
+		    struct fi_info *info);
 
 int rxd_fabric(struct fi_fabric_attr *attr,
 	       struct fid_fabric **fabric, void *context);
