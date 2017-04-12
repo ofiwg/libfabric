@@ -1030,12 +1030,6 @@ int fi_ibv_init_info(void)
 	if (verbs_info)
 		goto unlock;
 
-	if (!fi_ibv_have_device()) {
-		VERBS_INFO(FI_LOG_FABRIC, "No RDMA devices found\n");
-		ret = -FI_ENODATA;
-		goto unlock;
-	}
-
 	fi_param_get_bool(NULL, "fork_unsafe", &fork_unsafe);
 
 	if (!fork_unsafe) {
@@ -1049,6 +1043,12 @@ int fi_ibv_init_info(void)
 		}
 	} else {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Not enabling IB fork support\n");
+	}
+
+	if (!fi_ibv_have_device()) {
+		VERBS_INFO(FI_LOG_FABRIC, "No RDMA devices found\n");
+		ret = -FI_ENODATA;
+		goto unlock;
 	}
 
 	ctx_list = rdma_get_devices(&num_devices);
