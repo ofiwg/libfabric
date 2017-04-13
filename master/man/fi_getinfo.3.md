@@ -443,6 +443,16 @@ supported set of modes will be returned in the info structure(s).
   or reuse it until the original operation has completed.  The
   structure is specified in rdma/fabric.h.
 
+*FI_CONTEXT2*
+: This bit is similar to FI_CONTEXT, but doubles the provider's
+  requirement on the size of the per context structure.  When set,
+  this specifies that the provider requires that applications use
+  struct fi_context2 as their per operation context parameter.
+  Or, optionally, an application can provide an array of two
+  fi_context structures (e.g. struct fi_context[2]) instead.
+  The requirements for using struct fi_context2 are identical as
+  defined for FI_CONTEXT above.
+
 *FI_LOCAL_MR*
 : The provider is optimized around having applications register memory
   for locally accessed data buffers.  Data buffers used in send and
