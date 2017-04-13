@@ -82,6 +82,21 @@ static int check_src_dest_addr(void *arg)
 	return check_addr(info->dest_addr, info->dest_addrlen, "destination");
 }
 
+static int check_util_prov(void *arg)
+{
+	struct fi_info *info = arg;
+	const char *util_name;
+	size_t len;
+
+	util_name = ft_util_name(info->fabric_attr->prov_name, &len);
+	if (!util_name) {
+		sprintf(err_buf, "Util provider name not appended to core "
+			"provider name: %s", info->fabric_attr->prov_name);
+		return EXIT_FAILURE;
+	}
+	return 0;
+}
+
 static int check_api_version(void *arg)
 {
 	struct fi_info *info = arg;
@@ -205,6 +220,11 @@ getinfo_test(src_dest, 2, "Test API version",
 getinfo_test(neg, 1, "Test with non-existent domain name",
 		NULL, NULL, 0, hints, invalid_dom, NULL, -FI_ENODATA)
 
+/* Utility provider tests */
+getinfo_test(util, 1, "Test if we get utility provider when requested",
+		NULL, NULL, 0, hints, NULL, check_util_prov, 0)
+
+
 static void usage(void)
 {
 	ft_unit_usage("getinfo_test", "Unit tests for fi_getinfo");
@@ -214,10 +234,22 @@ static void usage(void)
 
 static void set_prov(char *prov_name)
 {
+	const char *util_name;
+	const char *core_name;
+	size_t len;
+
 	snprintf(old_prov_var, sizeof(old_prov_var) - 1, "FI_PROVIDER=%s",
 		 getenv("FI_PROVIDER"));
+
+	util_name = ft_util_name(prov_name, &len);
+	core_name = ft_core_name(prov_name, &len);
+
+	if (util_name && !core_name)
+		return;
+
 	snprintf(new_prov_var, sizeof(new_prov_var) - 1, "FI_PROVIDER=%s",
-		 prov_name);
+		 core_name);
+
 	putenv(new_prov_var);
 }
 
@@ -230,6 +262,8 @@ int main(int argc, char **argv)
 {
 	int failed;
 	int op;
+	size_t len;
+	const char *util_name;
 
 	struct test_entry no_hint_tests[] = {
 		TEST_ENTRY_GETINFO(no_hints1),
@@ -247,7 +281,14 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(src4),
 		TEST_ENTRY_GETINFO(src_dest1),
 		TEST_ENTRY_GETINFO(src_dest2),
+		/* This test has to be last getinfo unit test to be run until we
+		 * find a way to reset hints->domain_attr->name*/
 		TEST_ENTRY_GETINFO(neg1),
+		{ NULL, "" }
+	};
+
+	struct test_entry util_prov_tests[] = {
+		TEST_ENTRY_GETINFO(util1),
 		{ NULL, "" }
 	};
 
@@ -296,7 +337,14 @@ int main(int argc, char **argv)
 		reset_prov();
 	}
 
+	if (hints->fabric_attr->prov_name) {
+		util_name = ft_util_name(hints->fabric_attr->prov_name, &len);
+		if (util_name)
+			failed += run_tests(util_prov_tests, err_buf);
+	}
+
 	failed += run_tests(hint_tests, err_buf);
+
 	if (failed > 0) {
 		printf("\nSummary: %d tests failed\n", failed);
 	} else {

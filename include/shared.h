@@ -58,6 +58,8 @@ extern "C" {
 #include "freebsd/osd.h"
 #endif
 
+#define OFI_UTIL_PREFIX "ofi-"
+#define OFI_NAME_DELIM ';'
 
 /* exit codes must be 0-255 */
 static inline int ft_exit_code(int ret)
@@ -359,6 +361,8 @@ uint64_t ft_info_to_mr_access(struct fi_info *info);
 int ft_alloc_bit_combo(uint64_t fixed, uint64_t opt, uint64_t **combos, int *len);
 void ft_free_bit_combo(uint64_t *combo);
 int ft_cntr_open(struct fid_cntr **cntr);
+const char *ft_util_name(const char *str, size_t *len);
+const char *ft_core_name(const char *str, size_t *len);
 
 #define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\
 	do {							\
