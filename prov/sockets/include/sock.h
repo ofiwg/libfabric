@@ -435,7 +435,7 @@ struct sock_eq_entry {
 	size_t len;
 	uint64_t flags;
 	struct dlist_entry entry;
-	char event[0];
+	char event[];
 };
 
 struct sock_eq_err_data_entry {
@@ -838,7 +838,7 @@ struct sock_cq_overflow_entry_t {
 	size_t len;
 	fi_addr_t addr;
 	struct dlist_entry entry;
-	char cq_entry[0];
+	char cq_entry[];
 };
 
 struct sock_cq {
@@ -870,14 +870,14 @@ struct sock_conn_hdr {
 	uint8_t reserved[3];
 	uint16_t port;
 	uint16_t cm_data_sz;
-	char cm_data[0];
+	char cm_data[];
 };
 
 struct sock_conn_req {
 	struct sock_conn_hdr hdr;
 	struct sockaddr_in src_addr;
 	uint64_t caps;
-	char cm_data[0];
+	char cm_data[];
 };
 
 enum {
