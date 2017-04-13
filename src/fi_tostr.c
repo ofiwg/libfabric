@@ -250,13 +250,6 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_LOCAL_MR);
 	IFFLAGSTR(mode, FI_NOTIFY_FLAGS_ONLY);
 
-	IFFLAGSTR(mode, FI_MR_LOCAL);
-	IFFLAGSTR(mode, FI_MR_RAW);
-	IFFLAGSTR(mode, FI_MR_VIRT_ADDR);
-	IFFLAGSTR(mode, FI_MR_ALLOCATED);
-	IFFLAGSTR(mode, FI_MR_MMU_NOTIFY);
-	IFFLAGSTR(mode, FI_MR_RMA_EVENT);
-
 	fi_remove_comma(buf);
 }
 
@@ -705,6 +698,10 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_CQ_EVENT_FLAGS:
 		fi_tostr_cq_event_flags(buf, val64);
+		break;
+	case FI_TYPE_MR_MODE:
+		/* mr_mode was an enum converted to int flags */
+		fi_tostr_mr_mode(buf, enumval);
 		break;
 	default:
 		strcatf(buf, "Unknown type");
