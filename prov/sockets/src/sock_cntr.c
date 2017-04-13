@@ -138,56 +138,61 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 		trigger = container_of(entry, struct sock_trigger, entry);
 		entry = entry->next;
 
-		if (atomic_get(&cntr->value) < (int)trigger->threshold)
+		if (atomic_get(&cntr->value) < (int) trigger->threshold)
 			continue;
 
 		switch (trigger->op_type) {
-		case SOCK_OP_SEND:
+		case FI_OP_SEND:
 			ret = sock_ep_sendmsg(trigger->ep, &trigger->op.msg.msg,
-					trigger->flags & ~FI_TRIGGER);
+					      trigger->flags & ~FI_TRIGGER);
 			break;
-
-		case SOCK_OP_RECV:
+		case FI_OP_RECV:
 			ret = sock_ep_recvmsg(trigger->ep, &trigger->op.msg.msg,
-					trigger->flags & ~FI_TRIGGER);
+					      trigger->flags & ~FI_TRIGGER);
 			break;
-
-		case SOCK_OP_TSEND:
-			ret = sock_ep_tsendmsg(trigger->ep,
-					&trigger->op.tmsg.msg,
-					trigger->flags & ~FI_TRIGGER);
+		case FI_OP_TSEND:
+			ret = sock_ep_tsendmsg(trigger->ep, &trigger->op.tmsg.msg,
+					       trigger->flags & ~FI_TRIGGER);
 			break;
-
-		case SOCK_OP_TRECV:
-			ret = sock_ep_trecvmsg(trigger->ep,
-					&trigger->op.tmsg.msg,
-					trigger->flags & ~FI_TRIGGER);
+		case FI_OP_TRECV:
+			ret = sock_ep_trecvmsg(trigger->ep, &trigger->op.tmsg.msg,
+					       trigger->flags & ~FI_TRIGGER);
 			break;
-
-		case SOCK_OP_WRITE:
+		case FI_OP_WRITE:
 			ret = sock_ep_rma_writemsg(trigger->ep,
-					&trigger->op.rma.msg,
-					trigger->flags & ~FI_TRIGGER);
+						   &trigger->op.rma.msg,
+						   trigger->flags & ~FI_TRIGGER);
 			break;
-
-		case SOCK_OP_READ:
+		case FI_OP_READ:
 			ret = sock_ep_rma_readmsg(trigger->ep,
-					&trigger->op.rma.msg,
-					trigger->flags & ~FI_TRIGGER);
+						  &trigger->op.rma.msg,
+						  trigger->flags & ~FI_TRIGGER);
 			break;
-
-		case SOCK_OP_ATOMIC:
+		case FI_OP_ATOMIC:
+		case FI_OP_FETCH_ATOMIC:
+		case FI_OP_COMPARE_ATOMIC:
 			ret = sock_ep_tx_atomic(trigger->ep,
-					&trigger->op.atomic.msg,
-					trigger->op.atomic.comparev,
-					NULL,
-					trigger->op.atomic.compare_count,
-					trigger->op.atomic.resultv,
-					NULL,
-					trigger->op.atomic.result_count,
-					trigger->flags & ~FI_TRIGGER);
+						&trigger->op.atomic.msg,
+						trigger->op.atomic.comparev,
+						NULL,
+						trigger->op.atomic.compare_count,
+						trigger->op.atomic.resultv,
+						NULL,
+						trigger->op.atomic.result_count,
+						trigger->flags & ~FI_TRIGGER);
 			break;
-
+		case FI_OP_CNTR_SET:
+			assert(trigger->work);
+			fi_cntr_set(trigger->work->op.cntr->cntr,
+				    trigger->work->op.cntr->value);
+			ret = 0;
+			break;
+		case FI_OP_CNTR_ADD:
+			assert(trigger->work);
+			fi_cntr_add(trigger->work->op.cntr->cntr,
+				    trigger->work->op.cntr->value);
+			ret = 0;
+			break;
 		default:
 			SOCK_LOG_ERROR("unsupported op\n");
 			ret = 0;

@@ -108,7 +108,7 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
-		ret = sock_queue_rma_op(ep, msg, flags, SOCK_OP_READ);
+		ret = sock_queue_rma_op(ep, msg, flags, FI_OP_READ);
 		if (ret != 1)
 			return ret;
 	}
@@ -273,7 +273,7 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
-		ret = sock_queue_rma_op(ep, msg, flags, SOCK_OP_WRITE);
+		ret = sock_queue_rma_op(ep, msg, flags, FI_OP_WRITE);
 		if (ret != 1)
 			return ret;
 	}

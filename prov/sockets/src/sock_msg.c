@@ -95,7 +95,7 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
-		ret = sock_queue_msg_op(ep, msg, flags, SOCK_OP_RECV);
+		ret = sock_queue_msg_op(ep, msg, flags, FI_OP_RECV);
 		if (ret != 1)
 			return ret;
 	}
@@ -226,7 +226,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
-		ret = sock_queue_msg_op(ep, msg, flags, SOCK_OP_SEND);
+		ret = sock_queue_msg_op(ep, msg, flags, FI_OP_SEND);
 		if (ret != 1)
 			return ret;
 	}
@@ -427,7 +427,7 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	flags &= ~FI_MULTI_RECV;
 
 	if (flags & FI_TRIGGER) {
-		ret = sock_queue_tmsg_op(ep, msg, flags, SOCK_OP_TRECV);
+		ret = sock_queue_tmsg_op(ep, msg, flags, FI_OP_TRECV);
 		if (ret != 1)
 			return ret;
 	}
@@ -564,7 +564,7 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
-		ret = sock_queue_tmsg_op(ep, msg, flags, SOCK_OP_TSEND);
+		ret = sock_queue_tmsg_op(ep, msg, flags, FI_OP_TSEND);
 		if (ret != 1)
 			return ret;
 	}

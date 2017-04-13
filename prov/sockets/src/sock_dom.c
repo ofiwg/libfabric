@@ -367,6 +367,19 @@ static int sock_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static int sock_dom_ctrl(struct fid *fid, int command, void *arg)
+{
+	struct sock_domain *dom;
+
+	dom = container_of(fid, struct sock_domain, dom_fid.fid);
+	switch (command) {
+	case FI_QUEUE_WORK:
+		return sock_queue_work(dom, arg);
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
 static int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 struct fid_ep **ep, void *context)
 {
@@ -401,7 +414,7 @@ static struct fi_ops sock_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_dom_close,
 	.bind = sock_dom_bind,
-	.control = fi_no_control,
+	.control = sock_dom_ctrl,
 	.ops_open = fi_no_ops_open,
 };
 
