@@ -251,6 +251,7 @@ static inline void *util_buf_alloc_ex(struct util_buf_pool *pool, void **context
 #if ENABLE_DEBUG
 static inline int util_buf_use_ftr(struct util_buf_pool *pool)
 {
+	OFI_UNUSED(pool);
 	return 1;
 }
 #else

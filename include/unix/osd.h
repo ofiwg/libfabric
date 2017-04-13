@@ -45,6 +45,12 @@
 
 #define FI_DESTRUCTOR(func) static __attribute__((destructor)) void func
 
+#ifndef UNREFERENCED_PARAMETER
+#define OFI_UNUSED(var) (void)var
+#else
+#define OFI_UNUSED UNREFERENCED_PARAMETER
+#endif
+
 struct util_shm
 {
 	int		shared_fd;
@@ -98,4 +104,3 @@ static inline void ofi_osd_fini(void)
 }
 
 #endif /* _FI_UNIX_OSD_H_ */
-

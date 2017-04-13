@@ -51,10 +51,8 @@ static inline int pthread_mutex_unlock(pthread_mutex_t* mutex)
 
 static inline int pthread_join(pthread_t thread, void** exit_code)
 {
-	if(WaitForSingleObject(thread, INFINITE) == WAIT_OBJECT_0)
-	{
-		if(exit_code)
-		{
+	if (WaitForSingleObject(thread, INFINITE) == WAIT_OBJECT_0) {
+		if (exit_code) {
 			DWORD ex = 0;
 			GetExitCodeThread(thread, &ex);
 			*exit_code = (void*)(uint64_t)ex;
