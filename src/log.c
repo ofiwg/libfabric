@@ -85,8 +85,7 @@ const char *ofi_hex_str(const uint8_t *data, size_t len)
 {
 	static char str[64];
 	const char hex[] = "0123456789abcdef";
-	int p;
-	size_t i;
+	size_t i, p;
 
 	if (len >= (sizeof(str) >> 1))
 		len = (sizeof(str) >> 1) - 1;

@@ -105,6 +105,8 @@ static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 
 static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
 {
+	OFI_UNUSED(dlhandle);
+
 	if (provider) {
 		fi_param_undefine(provider);
 
@@ -436,8 +438,8 @@ libdl_done:
 	ofi_register_provider(GNI_INIT, NULL);
 	ofi_register_provider(BGQ_INIT, NULL);
 
-        /* Initialize the socket(s) provider last.  This will result in
-           it being the least preferred provider. */
+	/* Initialize the socket(s) provider last.  This will result in
+	 * it being the least preferred provider. */
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	/* Before you add ANYTHING here, read the comment above!!! */

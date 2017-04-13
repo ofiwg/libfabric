@@ -102,7 +102,7 @@ do						\
 
 #define MIN min
 #define MAX max
-#define OFI_UNUSED(p) (void)(p)
+#define OFI_UNUSED UNREFERENCED_PARAMETER
 
 #define htonll _byteswap_uint64
 #define ntohll _byteswap_uint64
@@ -176,12 +176,12 @@ static inline void ofi_freealign(void *memptr)
 
 static inline ssize_t ofi_read_socket(int fd, void *buf, size_t count)
 {
-	return recv(fd, (char*)buf, count, 0);
+	return recv(fd, (char*)buf, (int)count, 0);
 }
 
 static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
 {
-	return send(fd, (const char*)buf, count, 0);
+	return send(fd, (const char*)buf, (int)count, 0);
 }
 
 static inline ssize_t ofi_send_socket(int fd, const void *buf, size_t count,
@@ -227,7 +227,7 @@ static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **map
 static inline char * strndup(char const *src, size_t n)
 {
 	size_t len = strnlen(src, n);
-	char *dst = malloc(len + 1);
+	char *dst = (char *)malloc(len + 1);
 
 	if (dst) {
 		memcpy(dst, src, len);
@@ -243,4 +243,3 @@ int ofi_shm_unmap(struct util_shm *shm);
 #endif
 
 #endif /* _FI_WIN_OSD_H_ */
-
