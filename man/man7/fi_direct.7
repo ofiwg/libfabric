@@ -1,4 +1,4 @@
-.TH "fi_direct" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_direct" "7" "2017\-04\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Direct fabric provider access
@@ -57,9 +57,11 @@ modes, if those capabilities are supported.
 The following #define values may be used by an application to test for
 provider support of supported features.
 .PP
-\f[I]FI_DIRECT_CONTEXT\f[] : The provider sets FI_CONTEXT for
-fi_info:mode.
+\f[I]FI_DIRECT_CONTEXT\f[] : The provider sets FI_CONTEXT or FI_CONTEXT2
+for fi_info:mode.
 See fi_getinfo for additional details.
+When FI_DIRECT_CONTEXT is defined, applications should use struct
+fi_context in their definitions, even if FI_CONTEXT2 is set.
 .PP
 \f[I]FI_DIRECT_LOCAL_MR\f[] : The provider sets FI_LOCAL_MR for
 fi_info:mode.

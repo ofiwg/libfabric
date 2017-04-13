@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2017\-03\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2017\-04\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
@@ -466,6 +466,16 @@ to debug.
 Users should not update or interpret the fields in this structure, or
 reuse it until the original operation has completed.
 The structure is specified in rdma/fabric.h.
+.PP
+\f[I]FI_CONTEXT2\f[] : This bit is similar to FI_CONTEXT, but doubles
+the provider\[aq]s requirement on the size of the per context structure.
+When set, this specifies that the provider requires that applications
+use struct fi_context2 as their per operation context parameter.
+Or, optionally, an application can provide an array of two fi_context
+structures (e.g.
+struct fi_context[2]) instead.
+The requirements for using struct fi_context2 are identical as defined
+for FI_CONTEXT above.
 .PP
 \f[I]FI_LOCAL_MR\f[] : The provider is optimized around having
 applications register memory for locally accessed data buffers.
