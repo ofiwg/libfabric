@@ -141,9 +141,9 @@ static int fi_ibv_mr_regv(struct fid *fid, const struct iovec * iov,
 		uint64_t flags, struct fid_mr **mr, void *context)
 {
 	if (count > VERBS_MR_IOV_LIMIT) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-				"iov count > %d not supported\n",
-				VERBS_MR_IOV_LIMIT);
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "iov count > %d not supported\n",
+			   VERBS_MR_IOV_LIMIT);
 		return -FI_EINVAL;
 	}
 	return fi_ibv_mr_reg(fid, iov->iov_base, iov->iov_len, access, offset,

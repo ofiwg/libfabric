@@ -100,13 +100,13 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 		goto err;
 	memcpy(info->dest_addr, rdma_get_peer_addr(event->id), info->dest_addrlen);
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "src_addr: %s:%d\n",
-		inet_ntoa(((struct sockaddr_in *)info->src_addr)->sin_addr),
-		ntohs(((struct sockaddr_in *)info->src_addr)->sin_port));
+	VERBS_INFO(FI_LOG_CORE, "src_addr: %s:%d\n",
+		   inet_ntoa(((struct sockaddr_in *)info->src_addr)->sin_addr),
+		   ntohs(((struct sockaddr_in *)info->src_addr)->sin_port));
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "dst_addr: %s:%d\n",
-		inet_ntoa(((struct sockaddr_in *)info->dest_addr)->sin_addr),
-		ntohs(((struct sockaddr_in *)info->dest_addr)->sin_port));
+	VERBS_INFO(FI_LOG_CORE, "dst_addr: %s:%d\n",
+		   inet_ntoa(((struct sockaddr_in *)info->dest_addr)->sin_addr),
+		   ntohs(((struct sockaddr_in *)info->dest_addr)->sin_port));
 
 	connreq = calloc(1, sizeof *connreq);
 	if (!connreq)
@@ -392,12 +392,13 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (!_eq)
 		return -ENOMEM;
 
-	_eq->fab = container_of(fabric, struct fi_ibv_fabric, util_fabric.fabric_fid);
+	_eq->fab = container_of(fabric, struct fi_ibv_fabric,
+				util_fabric.fabric_fid);
 
 	fastlock_init(&_eq->lock);
 	ret = dlistfd_head_init(&_eq->list_head);
 	if (ret) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_EQ, "Unable to initialize dlistfd\n");
+		VERBS_INFO(FI_LOG_EQ, "Unable to initialize dlistfd\n");
 		goto err1;
 	}
 

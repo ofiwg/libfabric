@@ -184,7 +184,8 @@ int fi_ibv_srq_close(fid_t fid)
 
 	rc = ibv_destroy_srq(ep->srq);
 	if (rc)
-		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "Cannot destroy SRQ rc=%d\n", rc);
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Cannot destroy SRQ rc=%d\n", rc);
 
 	free(ep);
 

@@ -154,7 +154,7 @@ fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
 		rc--;
 	}
 	if (rc) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Unknown poll error: check revents\n");
+		VERBS_WARN(FI_LOG_CQ, "Unknown poll error: check revents\n");
 		return -FI_EOTHER;
 	}
 
@@ -260,8 +260,8 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 
 	entry = slist_remove_first_match(&cq->ep_list, fi_ibv_match_ep_id, (void *)wc->wr_id);
 	if (!entry) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "No matching EP for :"
-				"given signaled send completion\n");
+		VERBS_WARN(FI_LOG_CQ, "No matching EP for :"
+			   "given signaled send completion\n");
 		return -FI_EOTHER;
 	}
 	epe = container_of(entry, struct fi_ibv_msg_epe, entry);
@@ -341,7 +341,7 @@ int fi_ibv_cq_signal(struct fid_cq *cq)
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 
 	if (write(_cq->signal_fd[1], &data, 1) != 1) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Error signalling CQ\n");
+		VERBS_WARN(FI_LOG_CQ, "Error signalling CQ\n");
 		return -errno;
 	}
 
@@ -358,7 +358,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
 
 	if (!cq->channel) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "No wait object object associated with CQ\n");
+		VERBS_WARN(FI_LOG_CQ, "No wait object object associated with CQ\n");
 		return -FI_EINVAL;
 	}
 
@@ -386,7 +386,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 
 	rc = ibv_req_notify_cq(cq->cq, 0);
 	if (rc) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
+		VERBS_WARN(FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
 		ret = -errno;
 		goto err;
 	}
@@ -526,8 +526,8 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		_cq->channel = ibv_create_comp_channel(_cq->domain->verbs);
 		if (!_cq->channel) {
 			ret = -errno;
-			FI_WARN(&fi_ibv_prov, FI_LOG_CQ,
-					"Unable to create completion channel\n");
+			VERBS_WARN(FI_LOG_CQ,
+				   "Unable to create completion channel\n");
 			goto err1;
 		}
 
@@ -559,29 +559,29 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	if (!_cq->cq) {
 		ret = -errno;
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Unable to create verbs CQ\n");
+		VERBS_WARN(FI_LOG_CQ, "Unable to create verbs CQ\n");
 		goto err3;
 	}
 
 	if (_cq->channel) {
 		ret = ibv_req_notify_cq(_cq->cq, 0);
 		if (ret) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_CQ,
-				"ibv_req_notify_cq failed\n");
+			VERBS_WARN(FI_LOG_CQ,
+				   "ibv_req_notify_cq failed\n");
 			goto err4;
 		}
 	}
 
 	_cq->wce_pool = util_buf_pool_create(sizeof(struct fi_ibv_wce), 16, 0, VERBS_WCE_CNT);
 	if (!_cq->wce_pool) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Failed to create wce_pool\n");
+		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
 		ret = -FI_ENOMEM;
 		goto err4;
 	}
 
 	_cq->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0, VERBS_EPE_CNT);
 	if (!_cq->epe_pool) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Failed to create epe_pool\n");
+		VERBS_WARN(FI_LOG_CQ, "Failed to create epe_pool\n");
 		ret = -FI_ENOMEM;
 		goto err5;
 	}

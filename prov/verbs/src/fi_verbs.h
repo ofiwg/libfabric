@@ -83,6 +83,7 @@
 #define VERBS_INFO(subsys, ...) FI_INFO(&fi_ibv_prov, subsys, __VA_ARGS__)
 #define VERBS_INFO_ERRNO(subsys, fn, errno) VERBS_INFO(subsys, fn ": %s(%d)\n",	\
 		strerror(errno), errno)
+#define VERBS_WARN(subsys, ...) FI_WARN(&fi_ibv_prov, subsys, __VA_ARGS__)
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags) (((flags & FI_INJECT) || \
