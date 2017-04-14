@@ -485,9 +485,18 @@ int _gnix_nic_free_rem_id(struct gnix_nic *nic, int remote_id);
  */
 static inline void *__gnix_nic_elem_by_rem_id(struct gnix_nic *nic, int rem_id)
 {
+	void *elem;
+
 	assert(nic);
+
+	COND_ACQUIRE(nic->requires_lock, &nic->vc_id_lock);
+
 	assert(rem_id <= nic->vc_id_table_count);
-	return nic->vc_id_table[rem_id];
+	elem = nic->vc_id_table[rem_id];
+
+	COND_RELEASE(nic->requires_lock, &nic->vc_id_lock);
+
+	return elem;
 }
 
 void _gnix_nic_txd_err_inject(struct gnix_nic *nic,
