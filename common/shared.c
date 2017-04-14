@@ -2165,3 +2165,50 @@ void ft_sock_shutdown(int fd)
 	close(fd);
 }
 
+static int ft_has_util_prefix(const char *str)
+{
+	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
+}
+
+const char *ft_util_name(const char *str, size_t *len)
+{
+	char *delim;
+
+	delim = strchr(str, OFI_NAME_DELIM);
+	if (delim) {
+		if (ft_has_util_prefix(delim + 1)) {
+			*len = strlen(delim + 1);
+			return delim + 1;
+		} else if (ft_has_util_prefix(str)) {
+			*len = delim - str;
+			return str;
+		}
+	} else if (ft_has_util_prefix(str)) {
+		*len = strlen(str);
+		return str;
+	}
+	*len = 0;
+	return NULL;
+}
+
+const char *ft_core_name(const char *str, size_t *len)
+{
+	char *delim;
+
+	delim = strchr(str, OFI_NAME_DELIM);
+	if (delim) {
+		if (!ft_has_util_prefix(delim + 1)) {
+			*len = strlen(delim + 1);
+			return delim + 1;
+		} else if (!ft_has_util_prefix(str)) {
+			*len = delim - str;
+			return str;
+		}
+	} else if (!ft_has_util_prefix(str)) {
+		*len = strlen(str);
+		return str;
+	}
+	*len = 0;
+	return NULL;
+
+}

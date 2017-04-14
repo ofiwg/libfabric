@@ -41,6 +41,9 @@
 #include "shared.h"
 #include "unit_common.h"
 
+#define TEST_ENTRY_GETINFO(name) TEST_ENTRY(getinfo_ ## name,\
+					    getinfo_ ## name ## _desc)
+
 typedef int (*ft_getinfo_init)(struct fi_info *);
 typedef int (*ft_getinfo_check)(void *);
 
@@ -77,6 +80,21 @@ static int check_src_dest_addr(void *arg)
 		return ret;
 
 	return check_addr(info->dest_addr, info->dest_addrlen, "destination");
+}
+
+static int check_util_prov(void *arg)
+{
+	struct fi_info *info = arg;
+	const char *util_name;
+	size_t len;
+
+	util_name = ft_util_name(info->fabric_attr->prov_name, &len);
+	if (!util_name) {
+		sprintf(err_buf, "Util provider name not appended to core "
+			"provider name: %s", info->fabric_attr->prov_name);
+		return EXIT_FAILURE;
+	}
+	return 0;
 }
 
 static int check_api_version(void *arg)
@@ -132,10 +150,10 @@ out:
 	return ret;
 }
 
-#define getinfo_test(num, desc, node, service, flags, hints, init, check,	\
+#define getinfo_test(name, num, desc, node, service, flags, hints, init, check,	\
 		ret_exp)							\
-char *getinfo ## num ## _desc = desc;						\
-static int getinfo ## num(void)							\
+char *getinfo_ ## name ## num ## _desc = desc;					\
+static int getinfo_ ## name ## num(void)					\
 {										\
 	int ret, testret = FAIL;						\
 	ret = getinfo_unit_test(node, service, flags, hints, init, check,	\
@@ -159,48 +177,53 @@ fail:										\
  */
 
 /* 1.1 Source address only tests */
-getinfo_test(1, "Test with no node, service, flags or hints",
+getinfo_test(no_hints, 1, "Test with no node, service, flags or hints",
 		NULL, NULL, 0, NULL, NULL, check_srcaddr, 0)
-getinfo_test(2, "Test with node, no service, FI_SOURCE flag and no hints",
+getinfo_test(no_hints, 2, "Test with node, no service, FI_SOURCE flag and no hints",
 		opts.src_addr ? opts.src_addr : "localhost", NULL, FI_SOURCE,
 		NULL, NULL, check_srcaddr, 0)
-getinfo_test(3, "Test with service, FI_SOURCE flag and no node or hints",
+getinfo_test(no_hints, 3, "Test with service, FI_SOURCE flag and no node or hints",
 		 NULL, opts.src_port, FI_SOURCE, NULL, NULL,
 		 check_srcaddr, 0)	// TODO should we check for wildcard addr?
-getinfo_test(4, "Test with node, service, FI_SOURCE flags and no hints",
+getinfo_test(no_hints, 4, "Test with node, service, FI_SOURCE flags and no hints",
 		opts.src_addr ? opts.src_addr : "localhost", opts.src_port,
 		FI_SOURCE, NULL, NULL, check_srcaddr, 0)
 
 /* 1.2 Source and destination address tests */
-getinfo_test(5, "Test with node, service and no hints",
+getinfo_test(no_hints, 5, "Test with node, service and no hints",
 		opts.dst_addr ? opts.dst_addr : "localhost", opts.dst_port,
 		0, NULL, NULL, check_src_dest_addr, 0)
 
 /* 2. Test with hints */
 /* 2.1 Source address only tests */
-getinfo_test(6, "Test with no node, service, or flags",
+getinfo_test(src, 1, "Test with no node, service, or flags",
 		NULL, NULL, 0, hints, NULL, check_srcaddr, 0)
-getinfo_test(7, "Test with node, no service, FI_SOURCE flag",
+getinfo_test(src, 2, "Test with node, no service, FI_SOURCE flag",
 		opts.src_addr ? opts.src_addr : "localhost", NULL, FI_SOURCE,
 		hints, NULL, check_srcaddr, 0)
-getinfo_test(8, "Test with service, FI_SOURCE flag and no node",
+getinfo_test(src, 3, "Test with service, FI_SOURCE flag and no node",
 		 NULL, opts.src_port, FI_SOURCE, hints, NULL,
 		 check_srcaddr, 0)	// TODO should we check for wildcard addr?
-getinfo_test(9, "Test with node, service, FI_SOURCE flags",
+getinfo_test(src, 4, "Test with node, service, FI_SOURCE flags",
 		opts.src_addr ? opts.src_addr : "localhost", opts.src_port,
 		FI_SOURCE, hints, NULL, check_srcaddr, 0)
 
 /* 2.2 Source and destination address tests */
-getinfo_test(10, "Test with node, service",
+getinfo_test(src_dest, 1, "Test with node, service",
 		opts.dst_addr ? opts.dst_addr : "localhost", opts.dst_port,
 		0, hints, NULL, check_src_dest_addr, 0)
 
-getinfo_test(11, "Test API version",
+getinfo_test(src_dest, 2, "Test API version",
 		NULL, NULL, 0, hints, NULL, check_api_version ,0)
 
 /* Negative tests */
-getinfo_test(12, "Test with non-existent domain name",
+getinfo_test(neg, 1, "Test with non-existent domain name",
 		NULL, NULL, 0, hints, invalid_dom, NULL, -FI_ENODATA)
+
+/* Utility provider tests */
+getinfo_test(util, 1, "Test if we get utility provider when requested",
+		NULL, NULL, 0, hints, NULL, check_util_prov, 0)
+
 
 static void usage(void)
 {
@@ -211,10 +234,22 @@ static void usage(void)
 
 static void set_prov(char *prov_name)
 {
+	const char *util_name;
+	const char *core_name;
+	size_t len;
+
 	snprintf(old_prov_var, sizeof(old_prov_var) - 1, "FI_PROVIDER=%s",
 		 getenv("FI_PROVIDER"));
+
+	util_name = ft_util_name(prov_name, &len);
+	core_name = ft_core_name(prov_name, &len);
+
+	if (util_name && !core_name)
+		return;
+
 	snprintf(new_prov_var, sizeof(new_prov_var) - 1, "FI_PROVIDER=%s",
-		 prov_name);
+		 core_name);
+
 	putenv(new_prov_var);
 }
 
@@ -227,24 +262,33 @@ int main(int argc, char **argv)
 {
 	int failed;
 	int op;
+	size_t len;
+	const char *util_name;
 
 	struct test_entry no_hint_tests[] = {
-		TEST_ENTRY(getinfo1, getinfo1_desc),
-		TEST_ENTRY(getinfo2, getinfo2_desc),
-		TEST_ENTRY(getinfo3, getinfo3_desc),
-		TEST_ENTRY(getinfo4, getinfo4_desc),
-		TEST_ENTRY(getinfo5, getinfo5_desc),
+		TEST_ENTRY_GETINFO(no_hints1),
+		TEST_ENTRY_GETINFO(no_hints2),
+		TEST_ENTRY_GETINFO(no_hints3),
+		TEST_ENTRY_GETINFO(no_hints4),
+		TEST_ENTRY_GETINFO(no_hints5),
 		{ NULL, "" }
 	};
 
 	struct test_entry hint_tests[] = {
-		TEST_ENTRY(getinfo6, getinfo6_desc),
-		TEST_ENTRY(getinfo7, getinfo7_desc),
-		TEST_ENTRY(getinfo8, getinfo8_desc),
-		TEST_ENTRY(getinfo9, getinfo9_desc),
-		TEST_ENTRY(getinfo10, getinfo10_desc),
-		TEST_ENTRY(getinfo11, getinfo11_desc),
-		TEST_ENTRY(getinfo12, getinfo12_desc),
+		TEST_ENTRY_GETINFO(src1),
+		TEST_ENTRY_GETINFO(src2),
+		TEST_ENTRY_GETINFO(src3),
+		TEST_ENTRY_GETINFO(src4),
+		TEST_ENTRY_GETINFO(src_dest1),
+		TEST_ENTRY_GETINFO(src_dest2),
+		/* This test has to be last getinfo unit test to be run until we
+		 * find a way to reset hints->domain_attr->name*/
+		TEST_ENTRY_GETINFO(neg1),
+		{ NULL, "" }
+	};
+
+	struct test_entry util_prov_tests[] = {
+		TEST_ENTRY_GETINFO(util1),
 		{ NULL, "" }
 	};
 
@@ -293,7 +337,14 @@ int main(int argc, char **argv)
 		reset_prov();
 	}
 
+	if (hints->fabric_attr->prov_name) {
+		util_name = ft_util_name(hints->fabric_attr->prov_name, &len);
+		if (util_name)
+			failed += run_tests(util_prov_tests, err_buf);
+	}
+
 	failed += run_tests(hint_tests, err_buf);
+
 	if (failed > 0) {
 		printf("\nSummary: %d tests failed\n", failed);
 	} else {
