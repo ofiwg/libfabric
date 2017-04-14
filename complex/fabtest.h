@@ -90,6 +90,22 @@ struct ft_xcontrol {
 	uint64_t		remote_cq_data;
 };
 
+struct ft_atomic_control {
+	void			*res_buf;
+	struct fid_mr		*res_mr;
+	void			*res_memdesc;
+	void			*comp_buf;
+	struct fid_mr		*comp_mr;
+	void			*comp_memdesc;
+	struct fi_ioc		*ioc;
+	struct fi_ioc		*res_ioc;
+	struct fi_ioc		*comp_ioc;
+	enum fi_op		op;
+	enum fi_datatype	datatype;
+	size_t			count;
+	size_t			datatype_size;
+};
+
 struct ft_mr_control {
 	void			*buf;
 	struct fid_mr		*mr;
@@ -110,6 +126,7 @@ struct ft_control {
 extern struct ft_xcontrol ft_rx_ctrl, ft_tx_ctrl;
 extern struct ft_mr_control ft_mr_ctrl;
 extern struct ft_control ft_ctrl;
+extern struct ft_atomic_control ft_atom_ctrl;
 
 enum {
 	FT_MAX_CAPS		= 64,
@@ -151,6 +168,16 @@ enum ft_class_function {
 	FT_FUNC_INJECT_WRITE,
 	FT_FUNC_WRITEDATA,
 	FT_FUNC_INJECT_WRITEDATA,
+	FT_FUNC_ATOMIC,
+	FT_FUNC_ATOMICV,
+	FT_FUNC_ATOMICMSG,
+	FT_FUNC_INJECT_ATOMIC,
+	FT_FUNC_FETCH_ATOMIC,
+	FT_FUNC_FETCH_ATOMICV,
+	FT_FUNC_FETCH_ATOMICMSG,
+	FT_FUNC_COMPARE_ATOMIC,
+	FT_FUNC_COMPARE_ATOMICV,
+	FT_FUNC_COMPARE_ATOMICMSG,
 	FT_MAX_FUNCTIONS	
 };
 
@@ -162,6 +189,7 @@ struct ft_set {
 	char			prov_name[FI_NAME_MAX];
 	enum ft_test_type	test_type[FT_MAX_TEST];
 	enum ft_class_function	class_function[FT_MAX_FUNCTIONS];
+	enum fi_op		op[FI_ATOMIC_OP_LAST];
 	enum fi_ep_type		ep_type[FT_MAX_EP_TYPES];
 	enum fi_av_type		av_type[FT_MAX_AV_TYPES];
 	enum ft_comp_type	comp_type[FT_MAX_COMP];
@@ -180,6 +208,7 @@ struct ft_series {
 	int			cur_set;
 	int			cur_type;
 	int			cur_func;
+	int			cur_op;
 	int			cur_ep;
 	int			cur_av;
 	int			cur_comp;
@@ -194,6 +223,8 @@ struct ft_info {
 	int			test_index;
 	int			test_subindex;
 	enum ft_class_function	class_function;
+	enum fi_op		op;
+	enum fi_datatype	datatype;
 	uint64_t		test_flags;
 	uint64_t		caps;
 	uint64_t		mode;
@@ -241,6 +272,7 @@ int ft_open_passive();
 int ft_enable_comm();
 int ft_post_recv_bufs();
 void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len);
+void ft_format_iocs(struct iovec *iov);
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 
 int ft_recv_msg();

@@ -207,6 +207,54 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 	return 0;
 }
 
+static int ft_setup_atomic_control(struct ft_atomic_control *ctrl)
+{
+	size_t size;
+	int ret = 0;
+	uint64_t access;
+
+	size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
+	if (!ctrl->res_buf) {
+		ctrl->res_buf = calloc(1, size);
+		if (!ctrl->res_buf)
+			return -FI_ENOMEM;
+	} else {
+		memset(ctrl->res_buf, 0, size);
+	}
+
+	if (!ctrl->comp_buf) {
+		ctrl->comp_buf = calloc(1, size);
+		if (!ctrl->comp_buf)
+			return -FI_ENOMEM;
+	} else {
+		memset(ctrl->comp_buf, 0, size);
+	}
+
+	if (fabric_info->mode & FI_LOCAL_MR) {
+		access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
+		if (!ctrl->res_mr) {
+			ret = fi_mr_reg(domain, ctrl->res_buf, size, access,
+				0, 0, 0, &ctrl->res_mr, NULL);
+			if (ret) {
+				FT_PRINTERR("fi_mr_reg", ret);
+				return ret;
+			}
+			ctrl->res_memdesc = fi_mr_desc(ctrl->res_mr);
+		}
+
+		if (!ctrl->comp_mr) {
+			ret = fi_mr_reg(domain, ctrl->comp_buf, size, access,
+				0, 0, 0, &ctrl->comp_mr, NULL);
+			if (ret) {
+				FT_PRINTERR("fi_mr_reg", ret);
+				return ret;
+			}
+			ctrl->comp_memdesc = fi_mr_desc(ctrl->comp_mr);
+		}
+	}
+	return ret;
+}
+
 static int ft_setup_mr_control(struct ft_mr_control *ctrl)
 {
 	size_t size;
@@ -250,6 +298,10 @@ static int ft_setup_bufs(void)
 		return ret;
 
 	ret = ft_setup_mr_control(&ft_mr_ctrl);
+	if (ret)
+		return ret;
+
+	ret = ft_setup_atomic_control(&ft_atom_ctrl);
 	if (ret)
 		return ret;
 

@@ -49,6 +49,7 @@ struct ft_info test_info;
 struct fi_info *fabric_info;
 struct ft_xcontrol ft_rx_ctrl, ft_tx_ctrl;
 struct ft_mr_control ft_mr_ctrl;
+struct ft_atomic_control ft_atom_ctrl;
 struct ft_control ft_ctrl;
 
 size_t recv_size, send_size;
@@ -120,6 +121,26 @@ static char *ft_class_func_str(enum ft_class_function enum_str)
 		return "writedata";
 	case FT_FUNC_INJECT_WRITEDATA:
 		return "inject_writedata";
+	case FT_FUNC_ATOMIC:
+		return "atomic";
+	case FT_FUNC_ATOMICV:
+		return "atomicv";
+	case FT_FUNC_ATOMICMSG:
+		return "atomic_msg";
+	case FT_FUNC_INJECT_ATOMIC:
+		return "inject_atomic";
+	case FT_FUNC_FETCH_ATOMIC:
+		return "fetch_atomic";
+	case FT_FUNC_FETCH_ATOMICV:
+		return "fetch_atomicv";
+	case FT_FUNC_FETCH_ATOMICMSG:
+		return "fetch_atomicmsg";
+	case FT_FUNC_COMPARE_ATOMIC:
+		return "compare_atomic";
+	case FT_FUNC_COMPARE_ATOMICV:
+		return "compare_atomicv";
+	case FT_FUNC_COMPARE_ATOMICMSG:
+		return "compare_atomicmsg";
 	default:
 		return "func_unspec";
 	}
@@ -147,7 +168,12 @@ static void ft_show_test_info(void)
 {
 	printf("[%s,", test_info.prov_name);
 	printf(" %s,", ft_test_type_str(test_info.test_type));
-	printf(" %s,", ft_class_func_str(test_info.class_function));
+	if (test_info.class_function >= FT_FUNC_ATOMIC) {
+		printf(" %s (%s),", ft_class_func_str(test_info.class_function),
+			fi_tostr(&test_info.op, FI_TYPE_ATOMIC_OP));
+	} else {
+		printf(" %s,", ft_class_func_str(test_info.class_function));
+	}
 	printf(" %s,", fi_tostr(&test_info.ep_type, FI_TYPE_EP_TYPE));
 	printf(" %s,", fi_tostr(&test_info.av_type, FI_TYPE_AV_TYPE));
 	printf(" eq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));

@@ -230,7 +230,7 @@ int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 char *size_str(char str[FT_STR_LEN], long long size);
 char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
-
+size_t datatype_to_size(enum fi_datatype datatype);
 
 #define FT_PRINTERR(call, retv) \
 	do { fprintf(stderr, call "(): %s:%d, ret=%d (%s)\n", __FILE__, __LINE__, \
