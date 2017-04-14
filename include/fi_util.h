@@ -109,6 +109,10 @@
 	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",\
 		      FI_TYPE_MODE)
 
+#define FI_INFO_MR_MODE(provider, prov_mode, user_mode) \
+	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",\
+		      FI_TYPE_MR_MODE)
+
 enum {
 	UTIL_TX_SHARED_CTX = 1 << 0,
 	UTIL_RX_SHARED_CTX = 1 << 1,

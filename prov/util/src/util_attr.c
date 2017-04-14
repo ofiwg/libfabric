@@ -477,7 +477,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	if (ofi_check_mr_mode(api_version, prov_attr->mr_mode,
 			       user_attr->mr_mode)) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid memory registration mode\n");
-		FI_INFO_MODE(prov, prov_attr->mr_mode, user_attr->mr_mode);
+		FI_INFO_MR_MODE(prov, prov_attr->mr_mode, user_attr->mr_mode);
 		return -FI_ENODATA;
 	}
 

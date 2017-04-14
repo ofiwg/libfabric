@@ -314,7 +314,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~0;
+	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 
 	while ((op = getopt_long(argc, argv, "n:P:c:m:t:a:p:d:f:elhv", longopts,
 				 &option_index)) != -1) {
