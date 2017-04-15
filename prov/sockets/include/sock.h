@@ -870,7 +870,7 @@ struct sock_conn_hdr {
 	uint8_t reserved[3];
 	uint16_t port;
 	uint16_t cm_data_sz;
-	char cm_data[0];
+	/* cm data follows cm_data_sz */
 };
 
 struct sock_conn_req {
