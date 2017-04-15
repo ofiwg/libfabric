@@ -182,7 +182,7 @@ enum {
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
 #define FI_ADDR_NOTAVAIL	((uint64_t) -1)
 #define FI_KEY_NOTAVAIL		((uint64_t) -1)
-#define FI_SHARED_CONTEXT	(-(size_t)1)
+#define FI_SHARED_CONTEXT	SIZE_MAX
 typedef uint64_t		fi_addr_t;
 
 enum fi_av_type {
