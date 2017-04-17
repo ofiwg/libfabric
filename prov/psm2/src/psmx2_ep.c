@@ -241,11 +241,11 @@ static int psmx2_ep_close(fid_t fid)
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
 	if (ep->base_ep) {
-		atomic_dec(&ep->base_ep->ref);
+		ofi_atomic_dec32(&ep->base_ep->ref);
 		return 0;
 	}
 
-	if (atomic_get(&ep->ref))
+	if (ofi_atomic_get32(&ep->ref))
 		return -FI_EBUSY;
 
 	ep_name.epid = ep->domain->psm2_epid;
@@ -406,7 +406,7 @@ static int psmx2_ep_control(fid_t fid, int command, void *arg)
 			return err;
 		}
 		new_ep->base_ep = ep;
-		atomic_inc(&ep->ref);
+		ofi_atomic_inc32(&ep->ref);
 		psmx2_ep_optimize_ops(new_ep);
 		*alias->fid = &new_ep->ep.fid;
 		break;
@@ -538,7 +538,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep.cm = &psmx2_cm_ops;
 	ep_priv->domain = domain_priv;
 	ep_priv->vlane = vlane;
-	atomic_initialize(&ep_priv->ref, 0);
+	ofi_atomic_initialize32(&ep_priv->ref, 0);
 
 	PSMX2_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX2_NOCOMP_SEND_CONTEXT;
 	PSMX2_CTXT_EP(&ep_priv->nocomp_send_context) = ep_priv;

@@ -220,7 +220,7 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 
 	trigger = cntr->trigger;
 	while (trigger) {
-		if (atomic_get(&cntr->counter) < trigger->threshold)
+		if (ofi_atomic_get64(&cntr->counter) < trigger->threshold)
 			break;
 
 		cntr->trigger = trigger->next;
@@ -277,7 +277,7 @@ static uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
 		poll_cnt = 0;
 	}
 
-	return atomic_get(&cntr_priv->counter);
+	return ofi_atomic_get64(&cntr_priv->counter);
 }
 
 static uint64_t psmx2_cntr_readerr(struct fid_cntr *cntr)
@@ -286,7 +286,7 @@ static uint64_t psmx2_cntr_readerr(struct fid_cntr *cntr)
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
 
-	return atomic_get(&cntr_priv->error_counter);
+	return ofi_atomic_get64(&cntr_priv->error_counter);
 }
 
 static int psmx2_cntr_add(struct fid_cntr *cntr, uint64_t value)
@@ -294,7 +294,7 @@ static int psmx2_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	struct psmx2_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
-	atomic_add(&cntr_priv->counter, value);
+	ofi_atomic_add64(&cntr_priv->counter, value);
 
 	psmx2_cntr_check_trigger(cntr_priv);
 
@@ -309,7 +309,7 @@ static int psmx2_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	struct psmx2_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
-	atomic_set(&cntr_priv->counter, value);
+	ofi_atomic_set64(&cntr_priv->counter, value);
 
 	psmx2_cntr_check_trigger(cntr_priv);
 
@@ -324,7 +324,7 @@ static int psmx2_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
 	struct psmx2_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
-	atomic_add(&cntr_priv->error_counter, value);
+	ofi_atomic_add64(&cntr_priv->error_counter, value);
 
 	psmx2_cntr_check_trigger(cntr_priv);
 
@@ -339,7 +339,7 @@ static int psmx2_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 	struct psmx2_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
-	atomic_set(&cntr_priv->error_counter, value);
+	ofi_atomic_set64(&cntr_priv->error_counter, value);
 
 	psmx2_cntr_check_trigger(cntr_priv);
 
@@ -360,7 +360,7 @@ static int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeou
 
 	clock_gettime(CLOCK_REALTIME, &ts0);
 
-	while (atomic_get(&cntr_priv->counter) < threshold) {
+	while (ofi_atomic_get64(&cntr_priv->counter) < threshold) {
 		if (cntr_priv->wait) {
 			ret = fi_wait((struct fid_wait *)cntr_priv->wait,
 				      timeout - msec_passed);
@@ -370,7 +370,7 @@ static int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeou
 			psmx2_progress(cntr_priv->domain);
 		}
 
-		if (atomic_get(&cntr_priv->counter) >= threshold)
+		if (ofi_atomic_get64(&cntr_priv->counter) >= threshold)
 			break;
 
 		if (timeout < 0)
@@ -536,8 +536,8 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	cntr_priv->cntr.fid.context = context;
 	cntr_priv->cntr.fid.ops = &psmx2_fi_ops;
 	cntr_priv->cntr.ops = &psmx2_cntr_ops;
-	atomic_initialize(&cntr_priv->counter, 0);
-	atomic_initialize(&cntr_priv->error_counter, 0);
+	ofi_atomic_initialize64(&cntr_priv->counter, 0);
+	ofi_atomic_initialize64(&cntr_priv->error_counter, 0);
 
 	pthread_mutex_init(&cntr_priv->trigger_lock, NULL);
 

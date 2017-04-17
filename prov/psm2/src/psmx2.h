@@ -651,8 +651,8 @@ struct psmx2_fid_cntr {
 	struct psmx2_fid_domain	*domain;
 	int			events;
 	uint64_t		flags;
-	atomic_t		counter;
-	atomic_t		error_counter;
+	ofi_atomic64_t		counter;
+	ofi_atomic64_t		error_counter;
 	struct util_wait	*wait;
 	int			wait_is_local;
 	struct psmx2_trigger	*trigger;
@@ -693,7 +693,7 @@ struct psmx2_fid_ep {
 	uint64_t		tx_flags;
 	uint64_t		rx_flags;
 	uint64_t		caps;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	struct fi_context	nocomp_send_context;
 	struct fi_context	nocomp_recv_context;
 	struct slist		free_context_list;
@@ -774,22 +774,22 @@ int	psmx2_wait_trywait(struct fid_fabric *fabric, struct fid **fids,
 
 static inline void psmx2_fabric_acquire(struct psmx2_fid_fabric *fabric)
 {
-	atomic_inc(&fabric->util_fabric.ref);
+	ofi_atomic_inc32(&fabric->util_fabric.ref);
 }
 
 static inline void psmx2_fabric_release(struct psmx2_fid_fabric *fabric)
 {
-	atomic_dec(&fabric->util_fabric.ref);
+	ofi_atomic_dec32(&fabric->util_fabric.ref);
 }
 
 static inline void psmx2_domain_acquire(struct psmx2_fid_domain *domain)
 {
-	atomic_inc(&domain->util_domain.ref);
+	ofi_atomic_inc32(&domain->util_domain.ref);
 }
 
 static inline void psmx2_domain_release(struct psmx2_fid_domain *domain)
 {
-	atomic_dec(&domain->util_domain.ref);
+	ofi_atomic_dec32(&domain->util_domain.ref);
 }
 
 int	psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap);
@@ -848,7 +848,7 @@ int	psmx2_handle_sendv_req(struct psmx2_fid_ep *ep, psm2_mq_status2_t *psm2_stat
 
 static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr)
 {
-	atomic_inc(&cntr->counter);
+	ofi_atomic_inc64(&cntr->counter);
 	psmx2_cntr_check_trigger(cntr);
 	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
