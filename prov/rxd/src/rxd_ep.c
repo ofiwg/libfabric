@@ -1485,12 +1485,12 @@ static int rxd_ep_close(struct fid *fid)
 	}
 
 	if (ep->tx_cq)
-		atomic_dec(&ep->tx_cq->util_cq.ref);
+		ofi_atomic_dec32(&ep->tx_cq->util_cq.ref);
 
 	if (ep->rx_cq)
-		atomic_dec(&ep->rx_cq->util_cq.ref);
+		ofi_atomic_dec32(&ep->rx_cq->util_cq.ref);
 
-	atomic_dec(&ep->domain->util_domain.ref);
+	ofi_atomic_dec32(&ep->domain->util_domain.ref);
 	fastlock_destroy(&ep->lock);
 	rxd_ep_free_buf_pools(ep);
 	free(ep->peer_info);
@@ -1522,7 +1522,7 @@ static int rxd_ep_bind_cq(struct rxd_ep *ep, struct rxd_cq *cq, uint64_t flags)
 		}
 
 		ep->tx_cq = cq;
-		atomic_inc(&cq->util_cq.ref);
+		ofi_atomic_inc32(&cq->util_cq.ref);
 	}
 
 	if (flags & FI_RECV) {
@@ -1533,7 +1533,7 @@ static int rxd_ep_bind_cq(struct rxd_ep *ep, struct rxd_cq *cq, uint64_t flags)
 		}
 
 		ep->rx_cq = cq;
-		atomic_inc(&cq->util_cq.ref);
+		ofi_atomic_inc32(&cq->util_cq.ref);
 	}
 	return 0;
 }
@@ -1772,7 +1772,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	fastlock_init(&rxd_ep->lock);
 
 	dlist_init(&rxd_ep->dom_entry);
-	atomic_inc(&rxd_ep->domain->util_domain.ref);
+	ofi_atomic_inc32(&rxd_ep->domain->util_domain.ref);
 
 	*ep = &rxd_ep->ep;
 	fi_freeinfo(dg_info);

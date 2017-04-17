@@ -125,7 +125,7 @@ static int rxd_mr_close(struct fid *fid)
 	if (err)
 		return err;
 
-	atomic_dec(&dom->util_domain.ref);
+	ofi_atomic_dec32(&dom->util_domain.ref);
 	free(mr);
 	return 0;
 }
@@ -174,7 +174,7 @@ static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	fastlock_release(&dom->mr_lock);
 
 	*mr = &_mr->mr_fid;
-	atomic_inc(&dom->util_domain.ref);
+	ofi_atomic_inc32(&dom->util_domain.ref);
 
 	return 0;
 err:
