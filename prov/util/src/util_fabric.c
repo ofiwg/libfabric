@@ -38,7 +38,7 @@
 
 int ofi_fabric_close(struct util_fabric *fabric)
 {
-	if (atomic_get(&fabric->ref))
+	if (ofi_atomic_get32(&fabric->ref))
 		return -FI_EBUSY;
 
 	ofi_fabric_remove(fabric);
@@ -59,7 +59,7 @@ int ofi_fabric_init(const struct fi_provider *prov,
 		return ret;
 
 	fabric->prov = prov;
-	atomic_initialize(&fabric->ref, 0);
+	ofi_atomic_initialize32(&fabric->ref, 0);
 	dlist_init(&fabric->domain_list);
 	fastlock_init(&fabric->lock);
 	if (!(fabric->name = strdup(user_attr->name)))

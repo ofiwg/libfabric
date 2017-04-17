@@ -136,7 +136,7 @@ struct util_fabric {
 	struct fid_fabric	fabric_fid;
 	struct dlist_entry	list_entry;
 	fastlock_t		lock;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	const char		*name;
 	const struct fi_provider *prov;
 
@@ -158,7 +158,7 @@ struct util_domain {
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
 	fastlock_t		lock;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
 	char			*name;
@@ -227,7 +227,7 @@ struct util_cq {
 	struct fid_cq		cq_fid;
 	struct util_domain	*domain;
 	struct util_wait	*wait;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	struct dlist_entry	ep_list;
 	fastlock_t		ep_list_lock;
 	fastlock_t		cq_lock;
@@ -263,7 +263,7 @@ int ofi_cq_signal(struct fid_cq *cq_fid);
 struct util_cntr {
 	struct fid_cntr		cntr_fid;
 	struct util_domain	*domain;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	uint64_t		checkpoint_cnt;
 	uint64_t		checkpoint_err;
 };
@@ -288,7 +288,7 @@ struct util_av {
 	struct fid_av		av_fid;
 	struct util_domain	*domain;
 	struct util_eq		*eq;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	fastlock_t		lock;
 	const struct fi_provider *prov;
 
@@ -407,7 +407,7 @@ struct util_poll {
 	struct util_domain	*domain;
 	struct dlist_entry	fid_list;
 	fastlock_t		lock;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 };
 
@@ -428,7 +428,7 @@ struct util_wait {
 	struct fid_wait		wait_fid;
 	struct util_fabric	*fabric;
 	struct util_poll	*pollset;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
 	enum fi_wait_obj	wait_obj;
@@ -458,7 +458,7 @@ struct util_eq {
 	struct util_fabric	*fabric;
 	struct util_wait	*wait;
 	fastlock_t		lock;
-	atomic_t		ref;
+	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
 	struct slist		list;

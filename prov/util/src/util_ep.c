@@ -44,7 +44,7 @@ int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av)
 		return -FI_EINVAL;
 	}
 	util_ep->av = av;
-	atomic_inc(&av->ref);
+	ofi_atomic_inc32(&av->ref);
 
 	fastlock_acquire(&av->lock);
 	dlist_insert_tail(&util_ep->av_entry, &av->ep_list);
@@ -74,7 +74,7 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->ep_fid.fid.context = context;
 	ep->domain = util_domain;
 	ep->progress = progress;
-	atomic_inc(&util_domain->ref);
+	ofi_atomic_inc32(&util_domain->ref);
 	return 0;
 }
 
@@ -85,9 +85,9 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 		dlist_remove(&util_ep->av_entry);
 		fastlock_release(&util_ep->av->lock);
 
-		atomic_dec(&util_ep->av->ref);
+		ofi_atomic_dec32(&util_ep->av->ref);
 	}
 
-	atomic_dec(&util_ep->domain->ref);
+	ofi_atomic_dec32(&util_ep->domain->ref);
 	return 0;
 }

@@ -417,21 +417,21 @@ int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid.fid);
 	av->eq = eq;
-	atomic_inc(&eq->ref);
+	ofi_atomic_inc32(&eq->ref);
 	return 0;
 }
 
 int ofi_av_close(struct util_av *av)
 {
-	if (atomic_get(&av->ref)) {
+	if (ofi_atomic_get32(&av->ref)) {
 		FI_WARN(av->prov, FI_LOG_AV, "AV is busy\n");
 		return -FI_EBUSY;
 	}
 
 	if (av->eq)
-		atomic_dec(&av->eq->ref);
+		ofi_atomic_dec32(&av->eq->ref);
 
-	atomic_dec(&av->domain->ref);
+	ofi_atomic_dec32(&av->domain->ref);
 	fastlock_destroy(&av->lock);
 	/* TODO: unmap data? */
 	free(av->data);
@@ -460,7 +460,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 {
 	int *entry, i, ret = 0;
 
-	atomic_initialize(&av->ref, 0);
+	ofi_atomic_initialize32(&av->ref, 0);
 	fastlock_init(&av->lock);
 	av->count = attr->count ? attr->count : UTIL_DEFAULT_AV_SIZE;
 	av->count = roundup_power_of_two(av->count);
@@ -559,7 +559,7 @@ int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
 	av->context = context;
 	av->domain = domain;
 	dlist_init(&av->ep_list);
-	atomic_inc(&domain->ref);
+	ofi_atomic_inc32(&domain->ref);
 	return 0;
 }
 

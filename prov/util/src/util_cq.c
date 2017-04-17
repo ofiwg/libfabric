@@ -292,7 +292,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 	struct util_cq_err_entry *err;
 	struct slist_entry *entry;
 
-	if (atomic_get(&cq->ref))
+	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
 
 	fastlock_destroy(&cq->cq_lock);
@@ -311,7 +311,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 			fi_close(&cq->wait->wait_fid.fid);
 	}
 
-	atomic_dec(&cq->domain->ref);
+	ofi_atomic_dec32(&cq->domain->ref);
 	util_comp_cirq_free(cq->cirq);
 	free(cq->src);
 	return 0;
@@ -346,7 +346,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	int ret;
 
 	cq->domain = container_of(domain, struct util_domain, domain_fid);
-	atomic_initialize(&cq->ref, 0);
+	ofi_atomic_initialize32(&cq->ref, 0);
 	dlist_init(&cq->ep_list);
 	fastlock_init(&cq->ep_list_lock);
 	fastlock_init(&cq->cq_lock);
@@ -382,7 +382,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (wait)
 		cq->wait = container_of(wait, struct util_wait, wait_fid);
 
-	atomic_inc(&cq->domain->ref);
+	ofi_atomic_inc32(&cq->domain->ref);
 	return 0;
 }
 
