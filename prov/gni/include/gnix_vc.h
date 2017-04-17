@@ -130,7 +130,7 @@ struct gnix_vc {
 	void *smsg_mbox;
 	void *gnix_ep_name;
 	gni_ep_handle_t gni_ep;
-	atomic_t outstanding_tx_reqs;
+	ofi_atomic32_t outstanding_tx_reqs;
 	enum gnix_vc_conn_state conn_state;
 	uint32_t post_state;
 	int vc_id;

@@ -301,7 +301,7 @@ struct gnix_tag_kdtree {
  *                  data structure to use for storing data
  */
 struct gnix_tag_storage {
-	atomic_t seq;
+	ofi_atomic32_t seq;
 	int state;
 	int gen;
 	int (*match_func)(struct dlist_entry *entry, const void *arg);

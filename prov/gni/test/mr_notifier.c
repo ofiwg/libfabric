@@ -190,13 +190,13 @@ static pthread_t freer;
 #include "fi_atom.h"
 #define buflen 23
 static void *to_free_buf[buflen];
-static atomic_t head, tail;
+static ofi_atomic32_t head, tail;
 
 static inline int next_head(void)
 {
-	int val = atomic_inc(&head);
+	int val = ofi_atomic_inc32(&head);
 
-	while (atomic_get(&tail)-buflen >= val) {
+	while (ofi_atomic_get32(&tail)-buflen >= val) {
 		pthread_yield();
 	}
 	return val%buflen;
@@ -204,9 +204,9 @@ static inline int next_head(void)
 
 static inline int next_tail(void)
 {
-	int val = atomic_inc(&tail);
+	int val = ofi_atomic_inc32(&tail);
 
-	while (atomic_get(&head) <= val) {
+	while (ofi_atomic_get32(&head) <= val) {
 		pthread_yield();
 	}
 	return val%buflen;
@@ -262,8 +262,8 @@ static void mr_notifier_stressor_setup(void)
 
 	mr_stressor_setup_common();
 
-	atomic_initialize(&head, 0);
-	atomic_initialize(&tail, -1);
+	ofi_atomic_initialize32(&head, 0);
+	ofi_atomic_initialize32(&tail, -1);
 
 	ret = pthread_create(&freer, NULL, do_free, NULL);
 	cr_assert_eq(ret, 0, "Could not create pthread");
@@ -318,7 +318,7 @@ static void do_notifier_stressor(int num_allocs, int min_len, int max_len,
 	int i, len, ret;
 	char **r = calloc(num_allocs, sizeof(char *));
 	struct fid_mr **mr = calloc(num_allocs, sizeof(struct fid_mr));
-	int loc = atomic_get(&head);
+	int loc = ofi_atomic_get32(&head);
 
 	for (i = 0; i < num_allocs; i++) {
 		len = get_len(min_len, max_len);

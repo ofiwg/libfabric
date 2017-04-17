@@ -46,13 +46,13 @@
  *        ctor will run even with static linking.
  */
 
-atomic_t gnix_id_counter;
-atomic_t file_id_counter;
+ofi_atomic32_t gnix_id_counter;
+ofi_atomic32_t file_id_counter;
 #ifdef ENABLE_DEBUG
 /* don't think this needs to be in tls */
 __thread pid_t gnix_debug_pid = ~(uint32_t) 0;
 __thread uint32_t gnix_debug_tid = ~(uint32_t) 0;
-atomic_t gnix_debug_next_tid;
+ofi_atomic32_t gnix_debug_next_tid;
 #endif
 
 /**
@@ -151,11 +151,11 @@ void _gnix_init(void)
 
 	if (called==0) {
 
-		atomic_initialize(&gnix_id_counter, 0);
-		atomic_initialize(&file_id_counter, 0);
+		ofi_atomic_initialize32(&gnix_id_counter, 0);
+		ofi_atomic_initialize32(&file_id_counter, 0);
 #ifndef NDEBUG
 		__validate_precomputed_crcs();
-		atomic_initialize(&gnix_debug_next_tid, 0);
+		ofi_atomic_initialize32(&gnix_debug_next_tid, 0);
 #endif
 		called = 1;
 	}

@@ -96,7 +96,7 @@ Test(domain, many_domains)
 				    domain_fid);
 		cr_assert(gdom, "domain not allcoated");
 		cr_assert(gdom->fabric == gfab, "Incorrect fabric");
-		cr_assert(atomic_get(&gdom->ref_cnt.references) == 1,
+		cr_assert(ofi_atomic_get32(&gdom->ref_cnt.references) == 1,
 				"Incorrect ref_cnt");
 
 	}

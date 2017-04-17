@@ -46,8 +46,8 @@ struct gnix_fid_cntr {
 	struct gnix_fid_domain *domain;
 	struct fid_wait *wait;
 	struct fi_cntr_attr attr;
-	atomic_t cnt;
-	atomic_t cnt_err;
+	ofi_atomic32_t cnt;
+	ofi_atomic32_t cnt_err;
 	struct gnix_reference ref_cnt;
 	struct dlist_entry trigger_list;
 	fastlock_t trigger_lock;

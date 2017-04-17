@@ -280,12 +280,12 @@ static int __simple_post_reg_hook(const char *func, int line, int cache_type,
 	else
 		cache = domain->mr_cache_rw;
 
-	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse,
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse,
 		"%s:%d failed expected inuse condition, actual=%d expected=%d\n",
-		func, line, atomic_get(&cache->inuse.elements), expected_inuse);
-	cr_assert(atomic_get(&cache->stale.elements) == expected_stale,
+		func, line, ofi_atomic_get32(&cache->inuse.elements), expected_inuse);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == expected_stale,
 		"%s:%d failed expected stale condition, actual=%d expected=%d\n",
-		func, line, atomic_get(&cache->stale.elements), expected_stale);
+		func, line, ofi_atomic_get32(&cache->stale.elements), expected_stale);
 
 	return 0;
 }
@@ -295,8 +295,8 @@ static int __simple_post_dereg_hook(const char *func, int line,
 		int expected_stale)
 {
 	cache = domain->mr_cache_rw;
-	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
-	cr_assert(atomic_get(&cache->stale.elements) == expected_stale);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == expected_stale);
 
 	return 0;
 }
@@ -385,7 +385,7 @@ Test(mr_internal_bare, bug_1086)
 		struct gnix_fid_mem_desc, mr_fid);
 
 	g_nic = g_mr->nic;
-	cr_assert(atomic_get(&g_nic->ref_cnt.references) > 0);
+	cr_assert(ofi_atomic_get32(&g_nic->ref_cnt.references) > 0);
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
@@ -618,14 +618,14 @@ Test(mr_internal_cache, change_hard_soft_limits)
 	cr_assert(cache->attr.soft_reg_limit == 4096);
 	cr_assert(cache->attr.hard_stale_limit == 256);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == 1);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 0);
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) == 1);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 1);
 }
 
 /* Test duplicate registration. Since this is a valid operation, we
@@ -669,13 +669,13 @@ static int __post_dereg_greater_or_equal(const char *func, int line,
 {
 	cache = domain->mr_cache_rw;
 
-	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse,
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse,
 		"failed expected inuse test, actual=%d expected=%d\n",
-		atomic_get(&cache->inuse.elements),
+		ofi_atomic_get32(&cache->inuse.elements),
 		expected_inuse);
-	cr_assert(atomic_get(&cache->stale.elements) >= expected_stale,
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) >= expected_stale,
 		"failed expected stale test, actual=%d expected=%d\n",
-		atomic_get(&cache->stale.elements),
+		ofi_atomic_get32(&cache->stale.elements),
 		expected_stale);
 
 	return 0;
@@ -741,8 +741,8 @@ static int __post_dereg_greater_than(const char *func, int line,
 		int expected_stale)
 {
 	cache = domain->mr_cache_rw;
-	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
-	cr_assert(atomic_get(&cache->stale.elements) > expected_stale);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) > expected_stale);
 
 	return 0;
 }
@@ -917,8 +917,8 @@ static int __test_stale_lt_or_equal(const char *func, int line,
 	else
 		cache = domain->mr_cache_rw;
 
-	cr_assert(atomic_get(&cache->inuse.elements) == expected_inuse);
-	cr_assert(atomic_get(&cache->stale.elements) <= expected_stale);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == expected_inuse);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) <= expected_stale);
 
 	return 0;
 }
@@ -1074,8 +1074,8 @@ Test(mr_internal_cache, lru_evict_first_entry)
 
 	/* all registrations should now be 'in-use' */
 	cache = domain->mr_cache_rw;
-	cr_assert(atomic_get(&cache->inuse.elements) == regions);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == regions);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 0);
 
 	/* deregister cache->stale_reg_limit + 1 to test if the first region was
 	 *   deregistered
@@ -1093,8 +1093,8 @@ Test(mr_internal_cache, lru_evict_first_entry)
 	}
 
 	/* all registrations should now be 'stale' */
-	cr_assert(atomic_get(&cache->inuse.elements) == regions - 1);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == regions - 1);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 0);
 
 	for (i = 1; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
@@ -1102,8 +1102,8 @@ Test(mr_internal_cache, lru_evict_first_entry)
 	}
 
 	/* all registrations should now be 'stale' */
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) == MIN(regions - 1,
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == MIN(regions - 1,
 			cache->attr.hard_stale_limit));
 
 	free(buffers);
@@ -1153,8 +1153,8 @@ Test(mr_internal_cache, lru_evict_middle_entry)
 	limit = cache->attr.hard_stale_limit;
 	cr_assert(limit < regions);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == regions);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == regions);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 0);
 
 	/* deregister cache->stale_reg_limit + 1 to test if the first region was
 	 *   deregistered
@@ -1164,8 +1164,8 @@ Test(mr_internal_cache, lru_evict_middle_entry)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	cr_assert(atomic_get(&cache->inuse.elements) == (regions - (limit + 1)));
-	cr_assert(atomic_get(&cache->stale.elements) == limit);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == (regions - (limit + 1)));
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == limit);
 
 	/* re-register this region in the middle to test removal */
 	i = (regions >> 2);
@@ -1174,24 +1174,24 @@ Test(mr_internal_cache, lru_evict_middle_entry)
 			default_flags, &mr_arr[i], NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	cr_assert(atomic_get(&cache->inuse.elements) == (regions - limit));
-	cr_assert(atomic_get(&cache->stale.elements) == (limit - 1));
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == (regions - limit));
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == (limit - 1));
 
 	for (i = limit + 1; i < regions; ++i) {
 		ret = fi_close(&mr_arr[i]->fid);
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-	cr_assert(atomic_get(&cache->stale.elements) == limit);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == 1);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == limit);
 
 	i = (regions >> 2);
 	ret = fi_close(&mr_arr[i]->fid);
 	cr_assert(ret == FI_SUCCESS);
 
 	/* all registrations should now be 'stale' */
-	cr_assert(atomic_get(&cache->inuse.elements) == 0);
-	cr_assert(atomic_get(&cache->stale.elements) == limit);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == limit);
 
 	free(buffers);
 	buffers = NULL;
@@ -1433,8 +1433,8 @@ Test(mr_internal_cache, regression_615)
 
 	cache = domain->mr_cache_rw;
 
-	cr_assert(atomic_get(&cache->inuse.elements) == 1);
-	cr_assert(atomic_get(&cache->stale.elements) == 0);
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements) == 1);
+	cr_assert(ofi_atomic_get32(&cache->stale.elements) == 0);
 
 	ret = fi_close(&f_mr->fid);
 	cr_assert(ret == FI_SUCCESS);

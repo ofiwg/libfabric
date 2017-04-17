@@ -505,7 +505,7 @@ int _gnix_tag_storage_init(
 	 */
 	ts->match_func = match_func;
 
-	atomic_initialize(&ts->seq, 1);
+	ofi_atomic_initialize32(&ts->seq, 1);
 	ts->gen = 0;
 	ts->state = GNIX_TS_STATE_INITIALIZED;
 

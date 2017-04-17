@@ -51,7 +51,7 @@ static pthread_cond_t   gnix_wait_cond;
  * be protected under the mutex.
  */
 static int              gnix_wait_thread_enabled;
-static atomic_t         gnix_wait_refcnt;
+static ofi_atomic32_t   gnix_wait_refcnt;
 
 uint32_t         gnix_wait_thread_sleep_time = 20;
 
@@ -164,7 +164,7 @@ static void __gnix_wait_start_progress(void)
 	if (!gnix_wait_thread) {
 		GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 		pthread_cond_init(&gnix_wait_cond, NULL);
-		atomic_initialize(&gnix_wait_refcnt, 0);
+		ofi_atomic_initialize32(&gnix_wait_refcnt, 0);
 		ret = _gnix_job_disable_affinity_apply();
 		if (ret != 0)
 			GNIX_WARN(WAIT_SUB,
@@ -176,7 +176,7 @@ static void __gnix_wait_start_progress(void)
 			GNIX_WARN(WAIT_SUB,
 				  "pthread_create call returned %d\n", ret);
 	}
-	atomic_inc(&gnix_wait_refcnt);
+	ofi_atomic_inc32(&gnix_wait_refcnt);
 	pthread_mutex_unlock(&gnix_wait_mutex);
 }
 
@@ -186,7 +186,7 @@ static void __gnix_wait_stop_progress(void)
 
 	pthread_mutex_lock(&gnix_wait_mutex);
 	if (gnix_wait_thread) {
-		if (atomic_dec(&gnix_wait_refcnt) == 0) {
+		if (ofi_atomic_dec32(&gnix_wait_refcnt) == 0) {
 			ret = pthread_cancel(gnix_wait_thread);
 			if (ret)
 				GNIX_WARN(WAIT_SUB,

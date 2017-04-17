@@ -235,7 +235,7 @@ int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
 	 * a local variable.
 	 */
 
-	v = atomic_inc(&gnix_id_counter);
+	v = ofi_atomic_inc32(&gnix_id_counter);
 
 	cdm_id = ((domain->cdm_id_seed & 0xFFF) << 12) | v;
 	*id = cdm_id;
@@ -256,7 +256,7 @@ int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
 	int v;
 
 	if (*id == -1) {
-		v = atomic_add(&gnix_id_counter, nids);
+		v = ofi_atomic_add32(&gnix_id_counter, nids);
 		cdm_id = ((domain->cdm_id_seed & 0xFFF) << 12) | v;
 		*id = cdm_id;
 	} else {
@@ -264,9 +264,9 @@ int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
 		 * asking for a block starting at a chosen base
 		 * TODO: sanity check that requested base is reasonable
 		 */
-		if (*id <= atomic_get(&gnix_id_counter))
+		if (*id <= ofi_atomic_get32(&gnix_id_counter))
 			return -FI_ENOSPC;
-		atomic_set(&gnix_id_counter, (*(int *)id + nids));
+		ofi_atomic_set32(&gnix_id_counter, (*(int *)id + nids));
 	}
 	return FI_SUCCESS;
 }

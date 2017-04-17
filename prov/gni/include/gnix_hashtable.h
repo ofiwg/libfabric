@@ -143,9 +143,9 @@ typedef struct gnix_hashtable {
 	gnix_ht_state_e ht_state;
 	gnix_hashtable_attr_t ht_attr;
 	gnix_hashtable_ops_t *ht_ops;
-	atomic_t ht_elements;
-	atomic_t ht_collisions;
-	atomic_t ht_insertions;
+	ofi_atomic32_t ht_elements;
+	ofi_atomic32_t ht_collisions;
+	ofi_atomic32_t ht_insertions;
 	int ht_size;
 	union {
 		gnix_ht_lf_lh_t *ht_lf_tbl;

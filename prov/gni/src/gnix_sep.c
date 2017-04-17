@@ -677,7 +677,7 @@ static int gnix_sep_close(fid_t fid)
 	switch (fid->fclass) {
 	case FI_CLASS_SEP:
 		sep = container_of(fid, struct gnix_fid_sep, ep_fid.fid);
-		if (atomic_get(&sep->ref_cnt.references) > 1) {
+		if (ofi_atomic_get32(&sep->ref_cnt.references) > 1) {
 			GNIX_WARN(FI_LOG_EP_CTRL, "Contexts associated with "
 				  "this endpoint are still open\n");
 			return -FI_EBUSY;
