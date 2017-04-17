@@ -232,7 +232,7 @@ struct fi_ibv_cq {
 	uint64_t		send_signal_wr_id;
 	uint64_t		wr_id_mask;
 	fi_ibv_trywait_func	trywait;
-	atomic_t		nevents;
+	ofi_atomic32_t		nevents;
 	struct util_buf_pool	*epe_pool;
 	struct util_buf_pool	*wce_pool;
 };
@@ -275,8 +275,8 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_srq_ep	*srq_ep;
 	uint64_t		ep_flags;
 	struct fi_info		*info;
-	atomic_t		unsignaled_send_cnt;
-	atomic_t		comp_pending;
+	ofi_atomic32_t		unsignaled_send_cnt;
+	ofi_atomic32_t		comp_pending;
 	uint64_t		ep_id;
 };
 
