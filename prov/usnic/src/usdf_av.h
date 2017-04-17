@@ -81,9 +81,9 @@ struct usdf_av {
 	struct usdf_domain *av_domain;
 	uint64_t av_flags;
 	struct usdf_eq *av_eq;
-	atomic_t av_refcnt;
-	atomic_t av_closing;
-	atomic_t av_active_inserts;
+	ofi_atomic32_t av_refcnt;
+	ofi_atomic32_t av_closing;
+	ofi_atomic32_t av_active_inserts;
 	pthread_spinlock_t av_lock;
 	LIST_HEAD(, usdf_dest) av_addresses;
 };

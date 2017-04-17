@@ -83,7 +83,7 @@ usdf_pep_bind(fid_t fid, fid_t bfid, uint64_t flags)
 			return -FI_EINVAL;
 		}
 		pep->pep_eq = eq_fidtou(bfid);
-		atomic_inc(&pep->pep_eq->eq_refcnt);
+		ofi_atomic_inc32(&pep->pep_eq->eq_refcnt);
 		break;
 
 	default:
@@ -490,7 +490,7 @@ usdf_pep_close(fid_t fid)
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
 	pep = pep_fidtou(fid);
-	if (atomic_get(&pep->pep_refcnt) > 0) {
+	if (ofi_atomic_get32(&pep->pep_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
 
@@ -498,9 +498,9 @@ usdf_pep_close(fid_t fid)
 	close(pep->pep_sock);
 	pep->pep_sock = -1;
 	if (pep->pep_eq != NULL) {
-		atomic_dec(&pep->pep_eq->eq_refcnt);
+		ofi_atomic_dec32(&pep->pep_eq->eq_refcnt);
 	}
-	atomic_dec(&pep->pep_fabric->fab_refcnt);
+	ofi_atomic_dec32(&pep->pep_fabric->fab_refcnt);
 	free(pep);
 
 	return 0;
@@ -747,8 +747,8 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto fail;
 	}
 
-	atomic_initialize(&pep->pep_refcnt, 0);
-	atomic_inc(&fp->fab_refcnt);
+	ofi_atomic_initialize32(&pep->pep_refcnt, 0);
+	ofi_atomic_inc32(&fp->fab_refcnt);
 
 	*pep_o = pep_utof(pep);
 	return 0;

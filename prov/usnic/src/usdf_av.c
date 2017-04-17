@@ -110,9 +110,9 @@ static int usdf_av_close_(struct usdf_av *av)
 	pthread_spin_lock(&av->av_lock);
 
 	if (av->av_eq)
-		atomic_dec(&av->av_eq->eq_refcnt);
+		ofi_atomic_dec32(&av->av_eq->eq_refcnt);
 
-	atomic_dec(&av->av_domain->dom_refcnt);
+	ofi_atomic_dec32(&av->av_domain->dom_refcnt);
 
 	while (!LIST_EMPTY(&av->av_addresses)) {
 		entry = LIST_FIRST(&av->av_addresses);
@@ -135,16 +135,16 @@ static int usdf_av_close(struct fid *fid)
 	USDF_TRACE_SYS(AV, "\n");
 
 	av = container_of(fid, struct usdf_av, av_fid.fid);
-	if (atomic_get(&av->av_refcnt) > 0)
+	if (ofi_atomic_get32(&av->av_refcnt) > 0)
 		return -FI_EBUSY;
 
-	pending = atomic_get(&av->av_active_inserts);
+	pending = ofi_atomic_get32(&av->av_active_inserts);
 	assert(pending >= 0);
 
 	if (pending) {
 		USDF_DBG_SYS(AV, "%d pending inserts, defer closing\n",
 			     pending);
-		atomic_set(&av->av_closing, 1);
+		ofi_atomic_set32(&av->av_closing, 1);
 	} else {
 		usdf_av_close_(av);
 	}
@@ -170,11 +170,11 @@ usdf_av_insert_async_complete(struct usdf_av_insert *insert)
 
 	usdf_timer_free(av->av_domain->dom_fabric, insert->avi_timer);
 
-	pending = atomic_dec(&av->av_active_inserts);
+	pending = ofi_atomic_dec32(&av->av_active_inserts);
 	USDF_DBG_SYS(AV, "new active insert value: %d\n", pending);
 	assert(pending >= 0);
 
-	closing = atomic_get(&av->av_closing);
+	closing = ofi_atomic_get32(&av->av_closing);
 
 	if (!pending && closing)
 		usdf_av_close_(av);
@@ -340,7 +340,7 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 	TAILQ_INIT(&insert->avi_req_list);
 	insert->avi_arps_left = USDF_AV_MAX_ARPS;
 
-	ret = atomic_inc(&av->av_active_inserts);
+	ret = ofi_atomic_inc32(&av->av_active_inserts);
 	USDF_DBG_SYS(AV, "new active insert value: %d\n", ret);
 
 	/* If no addresses, complete now */
@@ -599,7 +599,7 @@ usdf_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		}
 		av->av_eq = eq_fidtou(bfid);
-		atomic_inc(&av->av_eq->eq_refcnt);
+		ofi_atomic_inc32(&av->av_eq->eq_refcnt);
 		break;
 	default:
 		return -FI_EINVAL;
@@ -720,11 +720,11 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av->av_flags = attr->flags;
 
 	pthread_spin_init(&av->av_lock, PTHREAD_PROCESS_PRIVATE);
-	atomic_initialize(&av->av_active_inserts, 0);
-	atomic_initialize(&av->av_closing, 0);
+	ofi_atomic_initialize32(&av->av_active_inserts, 0);
+	ofi_atomic_initialize32(&av->av_closing, 0);
 
-	atomic_initialize(&av->av_refcnt, 0);
-	atomic_inc(&udp->dom_refcnt);
+	ofi_atomic_initialize32(&av->av_refcnt, 0);
+	ofi_atomic_inc32(&udp->dom_refcnt);
 	av->av_domain = udp;
 
 	*av_o = av_utof(av);

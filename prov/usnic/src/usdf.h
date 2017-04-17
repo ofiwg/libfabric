@@ -106,8 +106,8 @@ struct usdf_fabric {
 	struct fi_fabric_attr fab_attr;
 	struct usd_device_attrs *fab_dev_attrs;
 	int fab_arp_sockfd;
-	atomic_t fab_refcnt;
-	atomic_t num_blocked_waiting;
+	ofi_atomic32_t fab_refcnt;
+	ofi_atomic32_t num_blocked_waiting;
 	LIST_HEAD(,usdf_domain) fab_domain_list;
 
 	/* progression */
@@ -132,7 +132,7 @@ struct usdf_domain {
 	struct fid_domain   dom_fid;
 	struct usdf_fabric *dom_fabric;
 	struct fi_info *dom_info;
-	atomic_t dom_refcnt;
+	ofi_atomic32_t dom_refcnt;
 	struct usdf_eq *dom_eq;
 	struct usd_device   *dom_dev;
 
@@ -142,7 +142,7 @@ struct usdf_domain {
 
 	struct usdf_rdm_connection **dom_rdc_hashtab;
 	SLIST_HEAD(,usdf_rdm_connection) dom_rdc_free;
-	atomic_t dom_rdc_free_cnt;
+	ofi_atomic32_t dom_rdc_free_cnt;
 	size_t dom_rdc_total;
 
 	/* used only by connected endpoints */
@@ -167,7 +167,7 @@ enum usdf_pep_state {
 
 struct usdf_pep {
 	struct fid_pep pep_fid;
-	atomic_t pep_refcnt;
+	ofi_atomic32_t pep_refcnt;
 	struct usdf_fabric *pep_fabric;
 	struct usdf_eq *pep_eq;
 	int pep_sock;
@@ -190,7 +190,7 @@ struct usdf_pep {
 
 struct usdf_tx {
 	struct fid_stx tx_fid;
-	atomic_t tx_refcnt;
+	ofi_atomic32_t tx_refcnt;
 	struct usdf_domain *tx_domain;
 	TAILQ_ENTRY(usdf_tx) tx_link;
 
@@ -212,7 +212,7 @@ struct usdf_tx {
 		struct {
 			struct usdf_cq_hard *tx_hcq;
 
-			atomic_t tx_next_msg_id;
+			ofi_atomic32_t tx_next_msg_id;
 			struct usdf_rdm_qe *tx_wqe_buf;
 			uint8_t *tx_inject_bufs;
 			TAILQ_HEAD(,usdf_rdm_qe) tx_free_wqe;
@@ -229,7 +229,7 @@ struct usdf_tx {
 
 struct usdf_rx {
 	struct fid_ep rx_fid;
-	atomic_t rx_refcnt;
+	ofi_atomic32_t rx_refcnt;
 	struct usdf_domain *rx_domain;
 
 	struct fi_rx_attr rx_attr;
@@ -270,7 +270,7 @@ enum {
 struct usdf_ep {
 	struct fid_ep ep_fid;
 	struct usdf_domain *ep_domain;
-	atomic_t ep_refcnt;
+	ofi_atomic32_t ep_refcnt;
 	uint64_t ep_caps;
 	uint64_t ep_mode;
 
@@ -359,7 +359,7 @@ struct usdf_mr {
 struct usdf_cq_hard {
 	struct usdf_cq *cqh_cq;
 	struct usd_cq *cqh_ucq;
-	atomic_t cqh_refcnt;
+	ofi_atomic32_t cqh_refcnt;
 	void (*cqh_progress)(struct usdf_cq_hard *hcq);
 	void (*cqh_post)(struct usdf_cq_hard *hcq, void *context, size_t len,
 			int prov_errno, uint64_t flags);
@@ -378,7 +378,7 @@ struct usdf_cq_soft_entry {
 
 struct usdf_cq {
 	struct fid_cq cq_fid;
-	atomic_t cq_refcnt;
+	ofi_atomic32_t cq_refcnt;
 	struct usdf_domain *cq_domain;
 	struct fi_cq_attr cq_attr;
 	uint8_t cq_is_soft;
@@ -432,7 +432,7 @@ struct usdf_event {
 struct usdf_eq {
 	struct fid_eq eq_fid;
 	struct usdf_fabric *eq_fabric;
-	atomic_t eq_refcnt;
+	ofi_atomic32_t eq_refcnt;
 
 	pthread_spinlock_t eq_lock;
 
@@ -442,7 +442,7 @@ struct usdf_eq {
 	struct usdf_event *eq_ev_tail;
 	struct usdf_event *eq_ev_end;
 	int eq_ev_ring_size;
-	atomic_t eq_num_events;
+	ofi_atomic32_t eq_num_events;
 
 	/* various ways to wait */
 	struct fi_eq_attr eq_attr;

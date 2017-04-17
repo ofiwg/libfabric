@@ -120,7 +120,7 @@ static int usdf_poll_add(struct fid_poll *fps, struct fid *event_fid,
 		return ret;
 
 	cq = cq_fidtou(event_fid);
-	ret = atomic_inc(&cq->cq_refcnt);
+	ret = ofi_atomic_inc32(&cq->cq_refcnt);
 	assert(ret > 0);
 	USDF_DBG_SYS(DOMAIN, "associated with CQ: [%p] with new refcnt: [%d]\n",
 			cq, ret);
@@ -155,7 +155,7 @@ static int usdf_poll_del(struct fid_poll *fps, struct fid *event_fid,
 	fid_list_remove(&ps->list, &ps->lock, event_fid);
 
 	cq = cq_fidtou(event_fid);
-	ret = atomic_dec(&cq->cq_refcnt);
+	ret = ofi_atomic_dec32(&cq->cq_refcnt);
 
 	USDF_DBG_SYS(DOMAIN,
 			"disassociating from CQ: [%p] with new refcnt: [%d]\n",
@@ -187,7 +187,7 @@ static int usdf_poll_close(struct fid *fps)
 
 	ps = poll_ftou(fps);
 
-	if (atomic_get(&ps->poll_refcnt) > 0) {
+	if (ofi_atomic_get32(&ps->poll_refcnt) > 0) {
 		USDF_WARN_SYS(DOMAIN,
 				"failed to close pollset with non-zero refcnt");
 		return -FI_EBUSY;
@@ -201,7 +201,7 @@ static int usdf_poll_close(struct fid *fps)
 		switch (entry->fid->fclass) {
 		case FI_CLASS_CQ:
 			cq = cq_fidtou(entry->fid);
-			val = atomic_dec(&cq->cq_refcnt);
+			val = ofi_atomic_dec32(&cq->cq_refcnt);
 
 			USDF_DBG_SYS(DOMAIN,
 					"disassociating from CQ: [%p] with new refcnt: [%d]\n",
@@ -219,7 +219,7 @@ static int usdf_poll_close(struct fid *fps)
 		free(entry);
 	}
 
-	atomic_dec(&ps->poll_domain->dom_refcnt);
+	ofi_atomic_dec32(&ps->poll_domain->dom_refcnt);
 	fastlock_destroy(&ps->lock);
 	free(ps);
 
@@ -266,7 +266,7 @@ int usdf_poll_open(struct fid_domain *fdom, struct fi_poll_attr *attr,
 	}
 
 	dlist_init(&ps->list);
-	atomic_initialize(&ps->poll_refcnt, 0);
+	ofi_atomic_initialize32(&ps->poll_refcnt, 0);
 	fastlock_init(&ps->lock);
 
 	ps->poll_fid.fid.ops = &usdf_poll_fi_ops;
@@ -277,7 +277,7 @@ int usdf_poll_open(struct fid_domain *fdom, struct fi_poll_attr *attr,
 
 	ps->poll_domain = dom;
 
-	ret = atomic_inc(&ps->poll_domain->dom_refcnt);
+	ret = ofi_atomic_inc32(&ps->poll_domain->dom_refcnt);
 
 	USDF_DBG_SYS(DOMAIN,
 			"created pollset from domain: [%p] with new refcnt: [%d]\n",

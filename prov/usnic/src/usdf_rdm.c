@@ -260,7 +260,7 @@ usdf_rdc_alloc(struct usdf_domain *udp)
 	} else {
 		rdc = SLIST_FIRST(&udp->dom_rdc_free);
 		SLIST_REMOVE_HEAD(&udp->dom_rdc_free, dc_addr_link);
-		atomic_dec(&udp->dom_rdc_free_cnt);
+		ofi_atomic_dec32(&udp->dom_rdc_free_cnt);
 	}
 	return rdc;
 }
@@ -595,7 +595,7 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 
 	wqe->rd_context = context;
 
-	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
+	msg_id = ofi_atomic_inc32(&tx->t.rdm.tx_next_msg_id);
 	wqe->rd_msg_id_be = htonl(msg_id);
 
 	wqe->rd_iov[0].iov_base = (void *)buf;
@@ -708,7 +708,7 @@ static inline ssize_t _usdf_rdm_send_vector(struct fid_ep *fep,
 		wqe->rd_last_iov = count - 1;
 	}
 
-	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
+	msg_id = ofi_atomic_inc32(&tx->t.rdm.tx_next_msg_id);
 
 	wqe->rd_msg_id_be = htonl(msg_id);
 	wqe->rd_context = context;
@@ -786,7 +786,7 @@ usdf_rdm_inject(struct fid_ep *fep, const void *buf, size_t len,
 
 	wqe = usdf_rdm_get_tx_wqe(tx);
 	wqe->rd_context = NULL;
-	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
+	msg_id = ofi_atomic_inc32(&tx->t.rdm.tx_next_msg_id);
 	wqe->rd_msg_id_be = htonl(msg_id);
 
 	memcpy(wqe->rd_inject_buf, buf, len);
@@ -1436,7 +1436,7 @@ usdf_rdm_rdc_timeout(void *vrdc)
 		usdf_rdm_rdc_remove(udp, rdc);
 
 		SLIST_INSERT_HEAD(&udp->dom_rdc_free, rdc, dc_addr_link);
-		atomic_inc(&udp->dom_rdc_free_cnt);
+		ofi_atomic_inc32(&udp->dom_rdc_free_cnt);
 
 	} else {
 		usdf_timer_set(udp->dom_fabric, rdc->dc_timer,
