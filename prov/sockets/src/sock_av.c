@@ -451,7 +451,7 @@ static int sock_av_close(struct fid *fid)
 	struct sock_av *av;
 	int ret = 0;
 	av = container_of(fid, struct sock_av, av_fid.fid);
-	if (atomic_get(&av->ref))
+	if (ofi_atomic_get32(&av->ref))
 		return -FI_EBUSY;
 
 	if (!av->shared)
@@ -462,7 +462,7 @@ static int sock_av_close(struct fid *fid)
 			SOCK_LOG_ERROR("unmap failed: %s\n", strerror(errno));
 	}
 
-	atomic_dec(&av->domain->ref);
+	ofi_atomic_dec32(&av->domain->ref);
 	fastlock_destroy(&av->list_lock);
 	free(av);
 	return 0;
@@ -595,8 +595,8 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		goto err2;
 	}
 
-	atomic_initialize(&_av->ref, 0);
-	atomic_inc(&dom->ref);
+	ofi_atomic_initialize32(&_av->ref, 0);
+	ofi_atomic_inc32(&dom->ref);
 	_av->domain = dom;
 	switch (dom->info.addr_format) {
 	case FI_SOCKADDR_IN:

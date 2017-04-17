@@ -62,7 +62,7 @@ void sock_cq_add_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx)
 			goto out;
 	}
 	dlist_insert_tail(&tx_ctx->cq_entry, &cq->tx_list);
-	atomic_inc(&cq->ref);
+	ofi_atomic_inc32(&cq->ref);
 out:
 	fastlock_release(&cq->list_lock);
 }
@@ -71,7 +71,7 @@ void sock_cq_remove_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx)
 {
 	fastlock_acquire(&cq->list_lock);
 	dlist_remove(&tx_ctx->cq_entry);
-	atomic_dec(&cq->ref);
+	ofi_atomic_dec32(&cq->ref);
 	fastlock_release(&cq->list_lock);
 }
 
@@ -88,7 +88,7 @@ void sock_cq_add_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx)
 			goto out;
 	}
 	dlist_insert_tail(&rx_ctx->cq_entry, &cq->rx_list);
-	atomic_inc(&cq->ref);
+	ofi_atomic_inc32(&cq->ref);
 out:
 	fastlock_release(&cq->list_lock);
 }
@@ -97,7 +97,7 @@ void sock_cq_remove_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx)
 {
 	fastlock_acquire(&cq->list_lock);
 	dlist_remove(&rx_ctx->cq_entry);
-	atomic_dec(&cq->ref);
+	ofi_atomic_dec32(&cq->ref);
 	fastlock_release(&cq->list_lock);
 }
 
@@ -460,7 +460,7 @@ static int sock_cq_close(struct fid *fid)
 	struct sock_cq *cq;
 
 	cq = container_of(fid, struct sock_cq, cq_fid.fid);
-	if (atomic_get(&cq->ref))
+	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
 
 	if (cq->signal && cq->attr.wait_obj == FI_WAIT_MUTEX_COND)
@@ -472,7 +472,7 @@ static int sock_cq_close(struct fid *fid)
 
 	fastlock_destroy(&cq->lock);
 	fastlock_destroy(&cq->list_lock);
-	atomic_dec(&cq->domain->ref);
+	ofi_atomic_dec32(&cq->domain->ref);
 
 	free(cq);
 	return 0;
@@ -608,7 +608,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!sock_cq)
 		return -FI_ENOMEM;
 
-	atomic_initialize(&sock_cq->ref, 0);
+	ofi_atomic_initialize32(&sock_cq->ref, 0);
 	sock_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	sock_cq->cq_fid.fid.context = context;
 	sock_cq->cq_fid.fid.ops = &sock_cq_fi_ops;
@@ -690,7 +690,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	*cq = &sock_cq->cq_fid;
-	atomic_inc(&sock_dom->ref);
+	ofi_atomic_inc32(&sock_dom->ref);
 	fastlock_init(&sock_cq->list_lock);
 
 	return 0;

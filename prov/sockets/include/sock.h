@@ -186,7 +186,7 @@ struct sock_epoll_set {
 
 struct sock_fabric {
 	struct fid_fabric fab_fid;
-	atomic_t ref;
+	ofi_atomic32_t ref;
 #if ENABLE_DEBUG
 	uint64_t num_send_msg;
 #endif
@@ -216,20 +216,20 @@ struct sock_conn_map {
 };
 
 struct sock_domain {
-	struct fi_info info;
-	struct fid_domain dom_fid;
-	struct sock_fabric *fab;
-	fastlock_t lock;
-	atomic_t ref;
+	struct fi_info		info;
+	struct fid_domain	dom_fid;
+	struct sock_fabric	*fab;
+	fastlock_t		lock;
+	ofi_atomic32_t		ref;
 
-	struct sock_eq *eq;
-	struct sock_eq *mr_eq;
+	struct sock_eq		*eq;
+	struct sock_eq		*mr_eq;
 
-	enum fi_progress progress_mode;
-	struct ofi_mr_map mr_map;
-	struct sock_pe *pe;
-	struct dlist_entry dom_list_entry;
-	struct fi_domain_attr attr;
+	enum fi_progress	progress_mode;
+	struct ofi_mr_map	mr_map;
+	struct sock_pe		*pe;
+	struct dlist_entry	dom_list_entry;
+	struct fi_domain_attr	attr;
 };
 
 struct sock_trigger {
@@ -271,27 +271,27 @@ struct sock_trigger {
 };
 
 struct sock_cntr {
-	struct fid_cntr cntr_fid;
-	struct sock_domain *domain;
-	atomic_t value;
-	atomic_t ref;
-	atomic_t err_cnt;
-	atomic_t last_read_val;
-	pthread_cond_t 	cond;
-	pthread_mutex_t mut;
-	struct fi_cntr_attr attr;
+	struct fid_cntr		cntr_fid;
+	struct sock_domain	*domain;
+	ofi_atomic32_t		value;
+	ofi_atomic32_t		ref;
+	ofi_atomic32_t		err_cnt;
+	ofi_atomic32_t		last_read_val;
+	pthread_cond_t 		cond;
+	pthread_mutex_t		mut;
+	struct fi_cntr_attr	attr;
 
-	struct dlist_entry rx_list;
-	struct dlist_entry tx_list;
-	fastlock_t list_lock;
+	struct dlist_entry	rx_list;
+	struct dlist_entry	tx_list;
+	fastlock_t		list_lock;
 
-	fastlock_t trigger_lock;
-	struct dlist_entry trigger_list;
+	fastlock_t		trigger_lock;
+	struct dlist_entry	trigger_list;
 
-	struct fid_wait *waitset;
-	int signal;
-	atomic_t num_waiting;
-	int err_flag;
+	struct fid_wait		*waitset;
+	int			signal;
+	ofi_atomic32_t		num_waiting;
+	int			err_flag;
 };
 
 struct sock_mr {
@@ -317,7 +317,7 @@ struct sock_av_table_hdr {
 struct sock_av {
 	struct fid_av av_fid;
 	struct sock_domain *domain;
-	atomic_t ref;
+	ofi_atomic32_t ref;
 	struct fi_av_attr attr;
 	uint64_t mask;
 	int rx_ctx_bits;
@@ -506,7 +506,7 @@ struct sock_ep_attr {
 	size_t buffered_len;
 	size_t min_multi_recv;
 
-	atomic_t ref;
+	ofi_atomic32_t ref;
 	struct sock_eq *eq;
 	struct sock_av *av;
 	struct sock_domain *domain;
@@ -516,8 +516,8 @@ struct sock_ep_attr {
 
 	struct sock_rx_ctx **rx_array;
 	struct sock_tx_ctx **tx_array;
-	atomic_t num_rx_ctx;
-	atomic_t num_tx_ctx;
+	ofi_atomic32_t num_rx_ctx;
+	ofi_atomic32_t num_tx_ctx;
 
 	struct dlist_entry rx_ctx_entry;
 	struct dlist_entry tx_ctx_entry;
@@ -845,7 +845,7 @@ struct sock_cq {
 	struct fid_cq cq_fid;
 	struct sock_domain *domain;
 	ssize_t cq_entry_size;
-	atomic_t ref;
+	ofi_atomic32_t ref;
 	struct fi_cq_attr attr;
 
 	struct ofi_ringbuf addr_rb;
