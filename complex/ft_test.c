@@ -648,6 +648,8 @@ static int ft_bw_atomic(void)
 
 			for (i = 0; i < ft_ctrl.xfer_iter; i++) {
 				ret = ft_send_rma();
+				if (ret)
+					return ret;
 			}
 		}
 		ret = ft_send_msg();
