@@ -535,7 +535,7 @@ void do_tinject(int len)
 	cr_assert(rdm_tagged_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_tagged_sr, tinject)
+Test(rdm_tagged_sr, tinject, .disabled = false)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_tinject, 1, INJECT_SIZE);
 }

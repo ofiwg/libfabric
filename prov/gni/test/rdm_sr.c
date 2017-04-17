@@ -607,7 +607,8 @@ static inline void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 }
 
 static inline void rdm_sr_check_cntrs(uint64_t s[], uint64_t r[],
-				      uint64_t s_e[], uint64_t r_e[])
+				      uint64_t s_e[], uint64_t r_e[],
+				      bool need_to_spin)
 {
 	int i = 0;
 	for (; i < NUMEPS; i++) {
@@ -616,12 +617,38 @@ static inline void rdm_sr_check_cntrs(uint64_t s[], uint64_t r[],
 		send_errs[i] += s_e[i];
 		recv_errs[i] += r_e[i];
 
+		if (need_to_spin) {
+			while (fi_cntr_read(send_cntr[i]) != sends[i]) {
+				pthread_yield();
+			}
+		}
+
 		cr_assert(fi_cntr_read(send_cntr[i]) == sends[i],
 			  "Bad send count");
+
+		if (need_to_spin) {
+			while (fi_cntr_read(recv_cntr[i]) != recvs[i]) {
+				pthread_yield();
+			}
+		}
+
 		cr_assert(fi_cntr_read(recv_cntr[i]) == recvs[i],
 			  "Bad recv count");
+
+		if (need_to_spin) {
+			while (fi_cntr_readerr(send_cntr[i]) != send_errs[i]) {
+				pthread_yield();
+			}
+		}
+
 		cr_assert(fi_cntr_readerr(send_cntr[i]) == send_errs[i],
 			  "Bad send err count");
+
+		if (need_to_spin) {
+			while (fi_cntr_readerr(recv_cntr[i]) != recv_errs[i]) {
+				pthread_yield();
+			}
+		}
 		cr_assert(fi_cntr_readerr(recv_cntr[i]) == recv_errs[i],
 			  "Bad recv err count");
 	}
@@ -792,7 +819,7 @@ void do_send(int len)
 				 false, ep[0]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -891,7 +918,7 @@ void do_sendv(int len)
 				 len * iov_cnt, 0, false, ep[1]);
 
 		s[0] = 1; r[1] = 1;
-		rdm_sr_check_cntrs(s, r, s_e, r_e);
+		rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 		dbg_printf("got context events!\n");
 
@@ -967,7 +994,7 @@ void do_sendmsg(int len)
 			false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1041,7 +1068,7 @@ void do_sendmsgdata(int len)
 			 target, len, (uint64_t)source, false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1099,7 +1126,7 @@ void do_inject(int len)
 		pthread_yield();
 	}
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, true);
 
 	/* make sure inject does not generate a send completion */
 	cr_assert_eq(fi_cq_read(msg_cq[0], &cqe, 1), -FI_EAGAIN);
@@ -1107,7 +1134,7 @@ void do_inject(int len)
 	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_sr, inject)
+Test(rdm_sr, inject, .disabled = false)
 {
 	rdm_sr_xfer_for_each_size(do_inject, 1, INJECT_SIZE);
 }
@@ -1153,7 +1180,7 @@ Test(rdm_sr, inject_progress)
 	dbg_printf("got recv context event!\n");
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, true);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(msg_cq[0], &cqe, 1), -FI_EAGAIN);
@@ -1235,7 +1262,7 @@ void do_senddata_eager_auto(int len)
 			 ep[0]);
 
 	s[0] = 2; r[1] = 2;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1294,7 +1321,7 @@ void do_senddata(int len)
 			 target, len, (uint64_t)source, false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1351,7 +1378,7 @@ void do_injectdata(int len)
 	}
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, true);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(msg_cq[0], &cqe, 1), -FI_EAGAIN);
@@ -1359,12 +1386,12 @@ void do_injectdata(int len)
 	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_sr, injectdata)
+Test(rdm_sr, injectdata, .disabled = false)
 {
 	rdm_sr_xfer_for_each_size(do_injectdata, 1, INJECT_SIZE);
 }
 
-Test(rdm_sr, injectdata_retrans)
+Test(rdm_sr, injectdata_retrans, .disabled = false)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_injectdata, 1, INJECT_SIZE);
@@ -1428,7 +1455,7 @@ void do_recvv(int len)
 				 len * iov_cnt, 0, false, ep[1]);
 
 		s[0] = 1; r[1] = 1;
-		rdm_sr_check_cntrs(s, r, s_e, r_e);
+		rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 		dbg_printf("got context events!\n");
 
@@ -1504,7 +1531,7 @@ void do_recvmsg(int len)
 			false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1566,7 +1593,7 @@ void do_send_autoreg(int len)
 			false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1623,7 +1650,7 @@ void do_send_autoreg_uncached(int len)
 			 uc_target, len, 0, false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1680,7 +1707,7 @@ void do_send_err(int len)
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
 	s_e[0] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 }
 
 Test(rdm_sr, send_err)
@@ -1737,7 +1764,7 @@ void do_send_autoreg_uncached_nolazydereg(int len)
 			 uc_target, len, 0, false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1791,7 +1818,7 @@ Test(rdm_sr, send_readfrom)
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0, false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	cr_assert(src_addr == gni_addr[0], "src_addr mismatch");
 
@@ -1837,7 +1864,7 @@ void do_send_buf(void *p, void *t, int len)
 	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, len, 0, false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1909,7 +1936,7 @@ void do_sendrecv_buf(void *p, void *t, int send_len, int recv_len)
 	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, xfer_len, 0, false, ep[1]);
 
 	s[0] = 1; r[1] = 1;
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	dbg_printf("got context events!\n");
 
@@ -1986,7 +2013,7 @@ void do_sendvrecv_alignment(int slen, int dlen, int offset)
 				 0, false, ep[1]);
 
 		s[0] = 1; r[1] = 1;
-		rdm_sr_check_cntrs(s, r, s_e, r_e);
+		rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 		dbg_printf("got context events!\n");
 
@@ -2053,7 +2080,7 @@ void do_sendrecvv_alignment(int slen, int dlen, int offset)
 					 offset) * iov_cnt), 0, false, ep[1]);
 
 		s[0] = 1; r[1] = 1;
-		rdm_sr_check_cntrs(s, r, s_e, r_e);
+		rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 		dbg_printf("got context events!\n");
 
@@ -2249,7 +2276,7 @@ void do_multirecv(int len)
 		}
 	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
 
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	free(addr_recvd);
 	free(expected_addrs);
@@ -2400,7 +2427,7 @@ void do_multirecv_send_first(int len)
 		}
 	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
 
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	free(addr_recvd);
 	free(expected_addrs);
@@ -2565,7 +2592,7 @@ void do_multirecv_trunc_last(int len)
 
 	} while (s[0] != 2 || r_e[dest_ep] != 1);
 
-	rdm_sr_check_cntrs(s, r, s_e, r_e);
+	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
 	free(addr_recvd);
 	free(expected_addrs);
