@@ -565,8 +565,12 @@ int sock_query_atomic(struct fid_domain *domain,
 		      enum fi_datatype datatype, enum fi_op op,
 		      struct fi_atomic_attr *attr, uint64_t flags)
 {
-	if (flags)
-		return -FI_ENOSYS;
+	if (flags & FI_TAGGED) {
+		if (flags & (FI_FETCH_ATOMIC | FI_COMPARE_ATOMIC))
+			return -FI_ENOSYS;
+	} else if (flags & ~(FI_FETCH_ATOMIC | FI_COMPARE_ATOMIC)) {
+		 return -FI_EBADFLAGS;
+	}
 
 	switch (datatype) {
 	case FI_FLOAT:
