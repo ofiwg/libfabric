@@ -96,10 +96,10 @@ static const size_t fi_datatype_size_table[] = {
 	[FI_UINT64] = sizeof(uint64_t),
 	[FI_FLOAT]  = sizeof(float),
 	[FI_DOUBLE] = sizeof(double),
-	[FI_FLOAT_COMPLEX]  = sizeof(float complex),
-	[FI_DOUBLE_COMPLEX] = sizeof(double complex),
+	[FI_FLOAT_COMPLEX]  = sizeof(OFI_COMPLEX(float)),
+	[FI_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(double)),
 	[FI_LONG_DOUBLE]    = sizeof(long double),
-	[FI_LONG_DOUBLE_COMPLEX] = sizeof(long double complex),
+	[FI_LONG_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(long_double)),
 };
 
 size_t fi_datatype_size(enum fi_datatype datatype)

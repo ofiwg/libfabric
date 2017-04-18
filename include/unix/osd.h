@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <complex.h>
 #include <sys/socket.h>
 
 /* MSG_NOSIGNAL doesn't exist on OS X */
@@ -102,5 +103,40 @@ static inline void ofi_osd_init(void)
 static inline void ofi_osd_fini(void)
 {
 }
+
+/* complex operations implementation */
+#define OFI_COMPLEX(name) ofi_##name##_complex
+#define OFI_COMPLEX_OP(name, op) ofi_complex_##name##_##op
+#define OFI_COMPLEX_TYPE_DECL(name, type) typedef type complex OFI_COMPLEX(name);
+
+OFI_COMPLEX_TYPE_DECL(float, float)
+OFI_COMPLEX_TYPE_DECL(double, double)
+OFI_COMPLEX_TYPE_DECL(long_double, long double)
+
+#define OFI_COMPLEX_OPS(name)									      \
+static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, sum)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+{												      \
+	return v1 + v2;										      \
+}												      \
+static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, mul)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+{												      \
+	return v1 * v2;										      \
+}												      \
+static inline int OFI_COMPLEX_OP(name, equ)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)		      \
+{												      \
+	return v1 == v2;                                                                	      \
+}												      \
+static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, land)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)\
+{												      \
+	return v1 && v2;      									      \
+}												      \
+static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+{												      \
+	return v1 || v2;									      \
+}
+
+OFI_COMPLEX_OPS(float)
+OFI_COMPLEX_OPS(double)
+OFI_COMPLEX_OPS(long_double)
 
 #endif /* _FI_UNIX_OSD_H_ */
