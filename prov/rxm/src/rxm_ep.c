@@ -88,22 +88,24 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 {
 	struct rxm_domain *rxm_domain;
-	uint8_t local_mr;
 	int ret;
 
 	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
-	local_mr = rxm_ep->msg_info->mode & FI_LOCAL_MR ? 1 : 0;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "MSG provider mode & FI_LOCAL_MR: %d\n",
-			local_mr);
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "MSG provider mr_mode & FI_MR_LOCAL: %d\n",
+			RXM_MR_LOCAL(rxm_ep->msg_info));
 
-	ret = rxm_buf_pool_create(local_mr, rxm_ep->msg_info->tx_attr->size,
-			sizeof(struct rxm_pkt), &rxm_ep->tx_pool, rxm_domain->msg_domain);
+	ret = rxm_buf_pool_create(RXM_MR_LOCAL(rxm_ep->msg_info),
+				  rxm_ep->msg_info->tx_attr->size,
+				  sizeof(struct rxm_pkt), &rxm_ep->tx_pool,
+				  rxm_domain->msg_domain);
 	if (ret)
 	        return ret;
 
-	ret = rxm_buf_pool_create(local_mr, rxm_ep->msg_info->rx_attr->size,
-			sizeof(struct rxm_rx_buf), &rxm_ep->rx_pool, rxm_domain->msg_domain);
+	ret = rxm_buf_pool_create(RXM_MR_LOCAL(rxm_ep->msg_info),
+				  rxm_ep->msg_info->rx_attr->size,
+				  sizeof(struct rxm_rx_buf), &rxm_ep->rx_pool,
+				  rxm_domain->msg_domain);
 	if (ret)
 		goto err1;
 
@@ -171,7 +173,7 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	rx_buf->state = RXM_LMT_NONE;
 	rx_buf->rma_iov = NULL;
 
-	if (rx_buf->ep->msg_info->mode & FI_LOCAL_MR) {
+	if (RXM_MR_LOCAL(rx_buf->ep->msg_info)) {
 		mr = util_buf_get_ctx(rx_buf->ep->rx_pool, rx_buf);
 		desc = fi_mr_desc(mr);
 	}
@@ -431,6 +433,59 @@ void rxm_pkt_init(struct rxm_pkt *pkt)
 	pkt->hdr.version = OFI_OP_VERSION;
 }
 
+void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
+{
+	int i, ret;
+
+	for (i = 0; i < count; i++) {
+		if (mr[i]) {
+			ret = fi_close(&mr[i]->fid);
+			if (ret)
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Unable to close msg mr: %d\n", i);
+		}
+	}
+}
+
+int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		       size_t count, uint64_t access, struct fid_mr **mr)
+{
+	struct rxm_domain *rxm_domain;
+	int ret;
+	size_t i;
+
+	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
+
+	// TODO do fi_mr_regv if provider supports it
+	for (i = 0; i < count; i++) {
+		ret = fi_mr_reg(rxm_domain->msg_domain, iov->iov_base,
+				iov->iov_len, access, 0, 0, 0, &mr[i], NULL);
+		if (ret)
+			goto err;
+	}
+	return 0;
+err:
+	rxm_ep_msg_mr_closev(mr, count);
+	return ret;
+}
+
+static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
+				const struct iovec *iov, size_t count,
+				struct fid_mr **mr)
+{
+	struct rxm_rma_iov *rma_iov = (struct rxm_rma_iov *)buf;
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		rma_iov->iov[i].addr = RXM_MR_VIRT_ADDR(rxm_ep->msg_info) ?
+			(uintptr_t)iov->iov_base : 0;
+		rma_iov->iov[i].len = (uint64_t)iov->iov_len;
+		rma_iov->iov[i].key = fi_mr_key(mr[i]);
+	}
+	rma_iov->count = count;
+	return sizeof(*rma_iov) + sizeof(*rma_iov->iov) * count;
+}
+
 // TODO handle all flags
 static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov,
 		void **desc, size_t count, fi_addr_t dest_addr, void *context,
@@ -440,12 +495,11 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	struct rxm_conn *rxm_conn;
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_pkt *pkt;
-	struct fid_mr *mr;
+	struct fid_mr *mr, **mr_iov;
 	void *desc_tx_buf = NULL;
-	struct rxm_rma_iov *rma_iov;
-	int ret;
 	size_t pkt_size = 0;
-	size_t i;
+	ssize_t size;
+	int ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
@@ -462,10 +516,11 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 
 	tx_entry->ctx_type = RXM_TX_ENTRY;
 	tx_entry->ep = rxm_ep;
+	tx_entry->count = count;
 	tx_entry->context = context;
 	tx_entry->flags = flags;
 
-	if (rxm_ep->msg_info->mode & FI_LOCAL_MR) {
+	if (RXM_MR_LOCAL(rxm_ep->msg_info)) {
 		pkt = util_buf_get_ex(rxm_ep->tx_pool, (void **)&mr);
 		desc_tx_buf = fi_mr_desc(mr);
 	} else {
@@ -497,15 +552,25 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 				rxm_txe_fs_index(rxm_ep->txe_fs, tx_entry));
 		pkt->ctrl_hdr.msg_id = tx_entry->msg_id;
 		pkt->ctrl_hdr.type = ofi_ctrl_large_data;
-		rma_iov = (struct rxm_rma_iov *)pkt->data;
-		rma_iov->count = count;
-		for (i = 0; i < count; i++) {
-			rma_iov->iov[i].addr = rxm_ep->msg_info->domain_attr->mr_mode == FI_MR_SCALABLE ?
-				0 : (uintptr_t)iov->iov_base;
-			rma_iov->iov[i].len = (uint64_t)iov->iov_len;
-			rma_iov->iov[i].key = fi_mr_key(desc[i]);
+
+		if (!RXM_MR_LOCAL(rxm_ep->rxm_info)) {
+			ret = rxm_ep_msg_mr_regv(rxm_ep, iov, tx_entry->count,
+						 FI_REMOTE_READ, tx_entry->mr);
+			if (ret)
+				goto done;
+			mr_iov = tx_entry->mr;
+		} else {
+			/* desc is msg fid_mr * array */
+			mr_iov = (struct fid_mr **)desc;
 		}
-		pkt_size = sizeof(*pkt) + sizeof(*rma_iov) + sizeof(*rma_iov->iov) * count;
+		size = rxm_rma_iov_init(rxm_ep, &tx_entry->pkt->data, iov,
+					count, mr_iov);
+		if (size < 0) {
+			ret = size;
+			goto done;
+		}
+
+		pkt_size = sizeof(*pkt) + size;
 		FI_DBG(&rxm_prov, FI_LOG_CQ,
 				"Sending large msg. msg_id: 0x%" PRIx64 "\n",
 				tx_entry->msg_id);
