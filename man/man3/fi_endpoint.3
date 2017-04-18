@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2017\-02\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2017\-04\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -586,7 +586,7 @@ struct\ fi_ep_attr\ {
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ mem_tag_format;
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ tx_ctx_cnt;
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ rx_ctx_cnt;
-\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ auth_keylen;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ auth_key_size;
 \ \ \ \ uint8_t\ \ \ \ \ \ \ \ \ *auth_key;
 };
 \f[]
@@ -817,9 +817,9 @@ request.
 .PP
 See the scalable endpoint and shared contexts sections for additional
 details.
-.SS auth_keylen \- Authorization Key Length
+.SS auth_key_size \- Authorization Key Length
 .PP
-The length of the authorization key.
+The length of the authorization key in bytes.
 This field will be 0 if authorization keys are not available or used.
 This field is ignored unless the fabric is opened with API version 1.5
 or greater.
@@ -832,7 +832,7 @@ Only peer endpoints that are programmed to use the same authorization
 key may communicate.
 Authorization keys are often used to implement job keys, to ensure that
 processes running in different jobs do not accidentally cross traffic.
-The domain authorization key will be used if auth_keylen is set to 0.
+The domain authorization key will be used if auth_key_size is set to 0.
 This field is ignored unless the fabric is opened with API version 1.5
 or greater.
 .SH TRANSMIT CONTEXT ATTRIBUTES
