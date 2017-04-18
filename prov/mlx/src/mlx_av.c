@@ -97,6 +97,10 @@ static int mlx_av_insert(
 	}
 
 	for ( i = 0; i < count ; ++i) {
+		ucp_ep_params_t ep_params;
+		ep_params.address = (const ucp_address_t*)
+					(&(((const char *)addr)[i*FI_MLX_MAX_NAME_LEN]));
+		ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"Try to insert address #%d, offset=%d (size=%d)"
 			" fi_addr=%p \naddr = %s",
@@ -104,9 +108,7 @@ static int mlx_av_insert(
 			fi_addr, &(((const char *)addr)[i*FI_MLX_MAX_NAME_LEN]));
 
 		status = ucp_ep_create( ep->worker,
-					(const ucp_address_t*)
-						(&(((const char *)addr)
-							[i*FI_MLX_MAX_NAME_LEN])),
+					&ep_params,
 					(ucp_ep_h*)(&(fi_addr[i])));
 
 		FI_WARN( &mlx_prov, FI_LOG_CORE, "address inserted\n");

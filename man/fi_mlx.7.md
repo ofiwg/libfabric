@@ -17,6 +17,8 @@ The *mlx* provider makes use of UCX tag matching API in order to
 implement a limited set of the libfabric data transfer APIs, namely,
 tagged message queue.
 
+Supported UCP API version: 1.0
+
 # LIMITATIONS
 
 The *mlx* provider doesn't support all the features defined in the
