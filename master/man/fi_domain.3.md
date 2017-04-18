@@ -131,7 +131,7 @@ struct fi_domain_attr {
 	uint64_t              caps;
 	uint64_t              mode;
 	uint8_t               *auth_key;
-	size_t                auth_keylen;
+	size_t                auth_key_size;
 	size_t                max_err_data;
 };
 ```
@@ -624,10 +624,10 @@ The default authorization key to associate with endpoint and memory
 registrations created within the domain. This field is ignored unless the
 fabric is opened with API version 1.5 or greater.
 
-## Default authorization key length (auth_keylen)
+## Default authorization key length (auth_key_size)
 
-The length of the default authorization key for the domain. If set to 0, then
-no authorization key will be associated with endpoints and memory
+The length in bytes of the default authorization key for the domain. If set to 0,
+then no authorization key will be associated with endpoints and memory
 registrations created within the domain unless specified in the endpoint or
 memory registration attributes. This field is ignored unless the fabric is
 opened with API version 1.5 or greater.
