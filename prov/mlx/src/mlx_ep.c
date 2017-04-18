@@ -190,7 +190,9 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	struct mlx_domain *u_domain;
 	int ofi_status = FI_SUCCESS;
 	ucs_status_t status = UCS_OK;
-
+	ucp_worker_params_t worker_params;
+	worker_params.field_mask = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+	worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
 	u_domain = container_of( domain, struct mlx_domain, u_domain.domain_fid);
 
 	ep = (struct mlx_ep *) calloc(1, sizeof (struct mlx_ep));
@@ -205,7 +207,7 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	}
 
 	status = ucp_worker_create( u_domain->context,
-				UCS_THREAD_MODE_MULTI,
+				&worker_params,
 				&(ep->worker));
 	if (status != UCS_OK) {
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);
@@ -218,7 +220,7 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	ep->ep.ep_fid.cm = &mlx_cm_ops;
 	ep->ep.ep_fid.tagged = &mlx_tagged_ops;
 	ep->ep.flags = info->mode;
-	ep->ep.caps = u_domain->u_domain.caps;
+	ep->ep.caps = u_domain->u_domain.info_domain_caps;
 
 	*fid = &(ep->ep.ep_fid);
 
