@@ -418,10 +418,10 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		return -FI_EINVAL;
 
 	if (info && info->ep_attr && info->ep_attr->auth_key) {
-		if (info->ep_attr->auth_keylen != sizeof(psm_uuid_t)) {
+		if (info->ep_attr->auth_key_size != sizeof(psm_uuid_t)) {
 			FI_WARN(&psmx_prov, FI_LOG_EP_CTRL,
 				"Invalid auth_key_len %d, should be %d.\n",
-				info->ep_attr->auth_keylen,
+				info->ep_attr->auth_key_size,
 				sizeof(psm_uuid_t));
 			return -FI_EINVAL;
 		}

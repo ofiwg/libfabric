@@ -317,7 +317,7 @@ struct fi_ep_attr {
 	uint64_t		mem_tag_format;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
-	size_t			auth_keylen;
+	size_t			auth_key_size;
 	uint8_t			*auth_key;
 };
 
@@ -345,7 +345,7 @@ struct fi_domain_attr {
 	uint64_t		caps;
 	uint64_t		mode;
 	uint8_t			*auth_key;
-	size_t 			auth_keylen;
+	size_t 			auth_key_size;
 	size_t			max_err_data;
 };
 

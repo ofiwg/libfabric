@@ -103,7 +103,7 @@ struct fi_mr_attr {
 	uint64_t		offset;
 	uint64_t		requested_key;
 	void			*context;
-	size_t			auth_keylen;
+	size_t			auth_key_size;
 	uint8_t			*auth_key;
 };
 
