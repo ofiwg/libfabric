@@ -320,5 +320,4 @@ the version passed to `fi_getinfo`:
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
-[`fi_open_ops`(3)](fi_open_ops.3.html),
 [`fi_provider`(7)](fi_provider.7.html),

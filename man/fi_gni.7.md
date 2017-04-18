@@ -267,7 +267,6 @@ source address followed by fi_av_insert on the populated err_data member.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
-[`fi_open_ops`(3)](fi_open_ops.3.html),
 [`fi_provider`(7)](fi_provider.7.html),
 [`fi_getinfo`(3)](fi_getinfo.3.html)
 [`fi_atomic`(3)](fi_atomic.3.html)
