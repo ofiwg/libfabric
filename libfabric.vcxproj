@@ -53,18 +53,20 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_WINSOCKAPI_;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\windows</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <DisableSpecificWarnings>4127</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4127;4200;94</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <ExceptionHandling>false</ExceptionHandling>
+      <UseMSVC>false</UseMSVC>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Synchronization.lib;Ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>libfabric.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
@@ -75,24 +77,31 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_WINSOCKAPI_;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\windows</AdditionalIncludeDirectories>
-      <DisableSpecificWarnings>4127</DisableSpecificWarnings>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4127;4200;94</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>Ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Synchronization.lib;Ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>libfabric.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="prov\netdir\netdir_cntr.c" />
+    <ClCompile Include="prov\netdir\netdir_ep_msg.c" />
+    <ClCompile Include="prov\netdir\netdir_ep_rma.c" />
+    <ClCompile Include="prov\netdir\netdir_ep_srx.c" />
+    <ClCompile Include="prov\netdir\netdir_mr.c" />
+    <ClCompile Include="prov\netdir\netdir_unexp.c" />
     <ClCompile Include="prov\rxd\src\rxd_attr.c" />
     <ClCompile Include="prov\rxd\src\rxd_av.c" />
     <ClCompile Include="prov\rxd\src\rxd_cq.c" />
@@ -119,6 +128,28 @@
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
       </ForcedIncludeFiles>
     </ClCompile>
+    <ClCompile Include="prov\netdir\netdir_addr.c" />
+    <ClCompile Include="prov\netdir\netdir_attr.c">
+      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</UseMSVC>
+      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</UseMSVC>
+    </ClCompile>
+    <ClCompile Include="prov\netdir\netdir_ov.c" />
+    <ClCompile Include="prov\netdir\netdir_cq.c" />
+    <ClCompile Include="prov\netdir\netdir_domain.c" />
+    <ClCompile Include="prov\netdir\netdir_ep.c" />
+    <ClCompile Include="prov\netdir\netdir_eq.c" />
+    <ClCompile Include="prov\netdir\netdir_fabric.c" />
+    <ClCompile Include="prov\netdir\netdir_fs.c" />
+    <ClCompile Include="prov\netdir\netdir_init.c" />
+    <ClCompile Include="prov\netdir\netdir_ndinit.cpp">
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">CompileAsCpp</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">CompileAsCpp</CompileAs>
+      <Cpp0xSupport Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</Cpp0xSupport>
+      <Cpp0xSupport Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</Cpp0xSupport>
+      <C99Support Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</C99Support>
+      <C99Support Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</C99Support>
+    </ClCompile>
+    <ClCompile Include="prov\netdir\netdir_pep.c" />
     <ClCompile Include="prov\sockets\src\sock_atomic.c">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -289,8 +320,18 @@
     <ClInclude Include="include\windows\sys\socket.h" />
     <ClInclude Include="include\windows\sys\time.h" />
     <ClInclude Include="include\windows\unistd.h" />
+    <ClInclude Include="prov\netdir\netdir_buf.h" />
+    <ClInclude Include="prov\netdir\netdir_cq.h" />
+    <ClInclude Include="prov\netdir\netdir_queue.h" />
+    <ClInclude Include="prov\netdir\netdir_unexp.h" />
+    <ClInclude Include="prov\netdir\netdir_util.h" />
     <ClInclude Include="prov\rxd\src\rxd.h" />
     <ClInclude Include="prov\rxm\src\rxm.h" />
+    <ClInclude Include="prov\netdir\netdir.h" />
+    <ClInclude Include="prov\netdir\netdir_err.h" />
+    <ClInclude Include="prov\netdir\netdir_iface.h" />
+    <ClInclude Include="prov\netdir\netdir_log.h" />
+    <ClInclude Include="prov\netdir\netdir_ov.h" />
     <ClInclude Include="prov\sockets\include\sock.h" />
     <ClInclude Include="prov\sockets\include\sock_util.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
