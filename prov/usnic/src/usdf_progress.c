@@ -101,7 +101,7 @@ usdf_fabric_progression_thread(void *v)
 	epfd = fp->fab_epollfd;
 
 	while (1) {
-		num_blocked_waiting = atomic_get(&fp->num_blocked_waiting);
+		num_blocked_waiting = ofi_atomic_get32(&fp->num_blocked_waiting);
 
 		/* sleep inifinitely if nothing to do */
 		if ((fp->fab_active_timer_count > 0) ||

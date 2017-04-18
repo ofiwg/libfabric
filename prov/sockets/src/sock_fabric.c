@@ -313,7 +313,7 @@ static int sock_fabric_close(fid_t fid)
 {
 	struct sock_fabric *fab;
 	fab = container_of(fid, struct sock_fabric, fab_fid);
-	if (atomic_get(&fab->ref))
+	if (ofi_atomic_get32(&fab->ref))
 		return -FI_EBUSY;
 
 	sock_fab_remove_from_list(fab);
@@ -367,7 +367,7 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	fab->fab_fid.fid.ops = &sock_fab_fi_ops;
 	fab->fab_fid.ops = &sock_fab_ops;
 	*fabric = &fab->fab_fid;
-	atomic_initialize(&fab->ref, 0);
+	ofi_atomic_initialize32(&fab->ref, 0);
 #if ENABLE_DEBUG
 	fab->num_send_msg = 0;
 #endif

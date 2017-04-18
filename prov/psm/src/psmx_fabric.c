@@ -42,7 +42,7 @@ static int psmx_fabric_close(fid_t fid)
 			      util_fabric.fabric_fid.fid);
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "refcnt=%d\n",
-		atomic_get(&fabric->util_fabric.ref));
+		ofi_atomic_get32(&fabric->util_fabric.ref));
 
 	psmx_fabric_release(fabric);
 

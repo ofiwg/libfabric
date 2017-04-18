@@ -98,7 +98,7 @@ static int fi_ibv_rdm_cntr_close(struct fid *fid)
 	struct fi_ibv_rdm_cntr *cntr =
 		container_of(fid, struct fi_ibv_rdm_cntr, fid);
 
-	if (atomic_get(&cntr->ep_ref) > 0) {
+	if (ofi_atomic_get32(&cntr->ep_ref) > 0) {
 		return -FI_EBUSY;
 	}
 
@@ -160,7 +160,7 @@ int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	cntr->fid.fid.ops = &fi_ibv_rdm_cntr_fi_ops;
 	cntr->fid.ops = &fi_ibv_rdm_cntr_ops;
 	cntr->domain = dom;
-	atomic_initialize(&cntr->ep_ref, 0);
+	ofi_atomic_initialize32(&cntr->ep_ref, 0);
 
 	*cntr_fid = &cntr->fid;
 

@@ -96,14 +96,14 @@ int fi_wait_cleanup(struct util_wait *wait)
 {
 	int ret;
 
-	if (atomic_get(&wait->ref))
+	if (ofi_atomic_get32(&wait->ref))
 		return -FI_EBUSY;
 
 	ret = fi_close(&wait->pollset->poll_fid.fid);
 	if (ret)
 		return ret;
 
-	atomic_dec(&wait->fabric->ref);
+	ofi_atomic_dec32(&wait->fabric->ref);
 	return 0;
 }
 
@@ -115,7 +115,7 @@ int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 	int ret;
 
 	wait->prov = fabric->prov;
-	atomic_initialize(&wait->ref, 0);
+	ofi_atomic_initialize32(&wait->ref, 0);
 	wait->wait_fid.fid.fclass = FI_CLASS_WAIT;
 
 	switch (attr->wait_obj) {
@@ -138,7 +138,7 @@ int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 
 	wait->pollset = container_of(poll_fid, struct util_poll, poll_fid);
 	wait->fabric = fabric;
-	atomic_inc(&fabric->ref);
+	ofi_atomic_inc32(&fabric->ref);
 	return 0;
 }
 

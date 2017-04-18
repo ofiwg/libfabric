@@ -182,7 +182,7 @@ static int psmx_domain_close(fid_t fid)
 			      util_domain.domain_fid.fid);
 
 	FI_INFO(&psmx_prov, FI_LOG_DOMAIN, "refcnt=%d\n",
-		atomic_get(&domain->util_domain.ref));
+		ofi_atomic_get32(&domain->util_domain.ref));
 
 	psmx_domain_release(domain);
 

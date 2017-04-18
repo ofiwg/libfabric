@@ -58,7 +58,7 @@ ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 
 	threshold = &trigger_context->trigger.threshold;
 	cntr = container_of(threshold->cntr, struct sock_cntr, cntr_fid);
-	if (atomic_get(&cntr->value) >= (int)threshold->threshold)
+	if (ofi_atomic_get32(&cntr->value) >= (int)threshold->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -101,7 +101,7 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 
 	threshold = &trigger_context->trigger.threshold;
 	cntr = container_of(threshold->cntr, struct sock_cntr, cntr_fid);
-	if (atomic_get(&cntr->value) >= (int)threshold->threshold)
+	if (ofi_atomic_get32(&cntr->value) >= (int)threshold->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -141,7 +141,7 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 
 	threshold = &trigger_context->trigger.threshold;
 	cntr = container_of(threshold->cntr, struct sock_cntr, cntr_fid);
-	if (atomic_get(&cntr->value) >= (int)threshold->threshold)
+	if (ofi_atomic_get32(&cntr->value) >= (int)threshold->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -183,7 +183,7 @@ ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 
 	threshold = &trigger_context->trigger.threshold;
 	cntr = container_of(threshold->cntr, struct sock_cntr, cntr_fid);
-	if (atomic_get(&cntr->value) >= (int)threshold->threshold)
+	if (ofi_atomic_get32(&cntr->value) >= (int)threshold->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -232,7 +232,7 @@ ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
 
 	threshold = work->event.threshold;
 	cntr = container_of(threshold->cntr, struct sock_cntr, cntr_fid);
-	if (atomic_get(&cntr->value) >= (int) threshold->threshold) {
+	if (ofi_atomic_get32(&cntr->value) >= (int) threshold->threshold) {
 		if (work->op_type == FI_OP_CNTR_SET)
 			fi_cntr_set(work->op.cntr->cntr, work->op.cntr->value);
 		else

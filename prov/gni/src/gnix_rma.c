@@ -185,7 +185,7 @@ static void __gnix_rma_fr_complete(struct gnix_fab_req *req)
 		fi_close(&req->rma.loc_md->mr_fid.fid);
 	}
 
-	atomic_dec(&req->vc->outstanding_tx_reqs);
+	ofi_atomic_dec32(&req->vc->outstanding_tx_reqs);
 
 	/* Schedule VC TX queue in case the VC is 'fenced'. */
 	_gnix_vc_tx_schedule(req->vc);
@@ -461,8 +461,8 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 		 * complete. */
 		req->rma.status |= tx_status;
 
-		atomic_dec(&req->rma.outstanding_txds);
-		if (atomic_get(&req->rma.outstanding_txds)) {
+		ofi_atomic_dec32(&req->rma.outstanding_txds);
+		if (ofi_atomic_get32(&req->rma.outstanding_txds)) {
 			_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Received first RDMA chain TXD, req: %p\n",
@@ -857,7 +857,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 
 		/* Wait for the first TX to complete, then retransmit the
 		 * entire thing. */
-		atomic_set(&req->rma.outstanding_txds, 1);
+		ofi_atomic_set32(&req->rma.outstanding_txds, 1);
 		req->rma.status = GNI_RC_TRANSACTION_ERROR;
 
 		GNIX_INFO(FI_LOG_EP_DATA, "GNI_Post*() failed: %s\n",
@@ -868,7 +868,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	/* Wait for both TXs to complete, then process the request. */
-	atomic_set(&req->rma.outstanding_txds, 2);
+	ofi_atomic_set32(&req->rma.outstanding_txds, 2);
 	req->rma.status = 0;
 
 	return FI_SUCCESS;
@@ -1372,7 +1372,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	req->user_context = context;
 	req->work_fn = _gnix_rma_post_req;
 	req->rma.sle.next = NULL;
-	atomic_initialize(&req->rma.outstanding_txds, 0);
+	ofi_atomic_initialize32(&req->rma.outstanding_txds, 0);
 
 	if (fr_type == GNIX_FAB_RQ_RDMA_READ &&
 	    (rem_addr & GNI_READ_ALIGN_MASK || len & GNI_READ_ALIGN_MASK)) {

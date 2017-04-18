@@ -169,7 +169,7 @@ static int sock_dom_close(struct fid *fid)
 {
 	struct sock_domain *dom;
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
-	if (atomic_get(&dom->ref))
+	if (ofi_atomic_get32(&dom->ref))
 		return -FI_EBUSY;
 
 	sock_pe_finalize(dom->pe);
@@ -195,7 +195,7 @@ static int sock_mr_close(struct fid *fid)
 		SOCK_LOG_ERROR("MR Erase error %d \n", err);
 
 	fastlock_release(&dom->lock);
-	atomic_dec(&dom->ref);
+	ofi_atomic_dec32(&dom->ref);
 	free(mr);
 	return 0;
 }
@@ -304,7 +304,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	fastlock_release(&dom->lock);
 
 	*mr = &_mr->mr_fid;
-	atomic_inc(&dom->ref);
+	ofi_atomic_inc32(&dom->ref);
 
 	if (dom->mr_eq) {
 		eq_entry.fid = &domain->fid;
@@ -457,7 +457,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	fastlock_init(&sock_domain->lock);
-	atomic_initialize(&sock_domain->ref, 0);
+	ofi_atomic_initialize32(&sock_domain->ref, 0);
 
 	if (info) {
 		sock_domain->info = *info;

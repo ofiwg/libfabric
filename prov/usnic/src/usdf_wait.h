@@ -49,7 +49,7 @@ struct usdf_wait {
 		struct fi_mutex_cond mutex_cond;
 	} object;
 
-	atomic_t		wait_refcnt;
+	ofi_atomic32_t		wait_refcnt;
 
 	fastlock_t		lock;
 	struct dlist_entry	list;

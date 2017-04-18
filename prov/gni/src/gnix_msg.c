@@ -313,7 +313,7 @@ static void __gnix_msg_send_fr_complete(struct gnix_fab_req *req,
 {
 	struct gnix_vc *vc = req->vc;
 
-	atomic_dec(&vc->outstanding_tx_reqs);
+	ofi_atomic_dec32(&vc->outstanding_tx_reqs);
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
 	_gnix_fr_free(req->gnix_ep, req);
@@ -773,7 +773,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 		 * complete. */
 		req->msg.status |= tx_status;
 
-		if (atomic_dec(&req->msg.outstanding_txds) == 1) {
+		if (ofi_atomic_dec32(&req->msg.outstanding_txds) == 1) {
 			_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Received first RDMA chain TXD, req: %p\n",
@@ -844,13 +844,13 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
 	GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.outstanding_txds = %d\n",
-		   atomic_get(&req->msg.outstanding_txds));
+		   ofi_atomic_get32(&req->msg.outstanding_txds));
 
 	req->msg.status |= tx_status;
 
 	__gnix_msg_free_rma_txd(req, txd);
 
-	if (atomic_dec(&req->msg.outstanding_txds) == 0) {
+	if (ofi_atomic_dec32(&req->msg.outstanding_txds) == 0) {
 
 		/* All the txd's are complete, we just need our unaligned heads
 		 * and tails now
@@ -1162,7 +1162,7 @@ static int __gnix_rndzv_req(void *arg)
 
 			/* Wait for the first TX to complete, then retransmit
 			 * the entire thing. */
-			atomic_set(&req->msg.outstanding_txds, 1);
+			ofi_atomic_set32(&req->msg.outstanding_txds, 1);
 			req->msg.status = GNI_RC_TRANSACTION_ERROR;
 
 			GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostFma() failed: %s\n",
@@ -1171,7 +1171,7 @@ static int __gnix_rndzv_req(void *arg)
 		}
 
 		/* Wait for both TXs to complete, then process the request. */
-		atomic_set(&req->msg.outstanding_txds, 2);
+		ofi_atomic_set32(&req->msg.outstanding_txds, 2);
 		req->msg.status = GNI_RC_SUCCESS;
 
 	}
@@ -1190,7 +1190,7 @@ static int __gnix_rndzv_iov_req_post(void *arg)
 	struct gnix_tx_descriptor *txd;
 	gni_return_t status;
 	struct gnix_nic *nic = req->gnix_ep->nic;
-	int i, iov_txd_cnt = atomic_get(&req->msg.outstanding_txds);
+	int i, iov_txd_cnt = ofi_atomic_get32(&req->msg.outstanding_txds);
 
 	assert(nic != NULL);
 
@@ -1335,7 +1335,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 
 				/* There are no available int_tx bufs */
 				if (req->int_tx_buf_e == NULL) {
-					atomic_set(&req->msg.outstanding_txds, 0);
+					ofi_atomic_set32(&req->msg.outstanding_txds, 0);
 					req->work_fn = __gnix_rndzv_iov_req_post;
 					return _gnix_vc_queue_work_req(req);
 				}
@@ -1680,7 +1680,7 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 	}
 
 	GNIX_DEBUG(FI_LOG_EP_DATA, "txd_cnt = %lu\n", txd_cnt);
-	atomic_set(&req->msg.outstanding_txds, txd_cnt);
+	ofi_atomic_set32(&req->msg.outstanding_txds, txd_cnt);
 
 	/* All the txd's are built, update the work_fn */
 	req->work_fn = __gnix_rndzv_iov_req_post;
@@ -2156,7 +2156,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.rma_id = hdr->req_addr;
 		req->msg.send_info[0].head = hdr->head;
 		req->msg.send_info[0].tail = hdr->tail;
-		atomic_initialize(&req->msg.outstanding_txds, 0);
+		ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 
@@ -2222,7 +2222,7 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 			return -FI_ENOMEM;
 		}
 
-		atomic_initialize(&req->msg.outstanding_txds, 0);
+		ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
 
 		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p (%u)\n",
 			  req, hdr->send_len);
@@ -2318,7 +2318,7 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 		}
 	}
 
-	atomic_dec(&req->vc->outstanding_tx_reqs);
+	ofi_atomic_dec32(&req->vc->outstanding_tx_reqs);
 
 	/* Schedule VC TX queue in case the VC is 'fenced'. */
 	_gnix_vc_tx_schedule(req->vc);
@@ -2729,7 +2729,7 @@ retry_match:
 			req->msg.recv_flags |= GNIX_MSG_MULTI_RECV_SUP;
 		req->msg.tag = tag;
 		req->msg.ignore = ignore;
-		atomic_initialize(&req->msg.outstanding_txds, 0);
+		ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
 
 		if ((flags & GNIX_SUPPRESS_COMPLETION) ||
 		    (ep->recv_selective_completion &&
@@ -3039,7 +3039,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		 * but is a place holder in the event a RDMA write
 		 * path is implemented for rendezvous
 		 */
-		atomic_initialize(&req->msg.outstanding_txds, 0);
+		ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
 		req->msg.send_flags |= GNIX_MSG_RENDEZVOUS;
 	}
 
@@ -3311,7 +3311,7 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 		req->msg.cum_recv_len = cum_len;
 		req->msg.tag = tag;
 		req->msg.ignore = ignore;
-		atomic_initialize(&req->msg.outstanding_txds, 0);
+		ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
 
 
 		if ((flags & GNIX_SUPPRESS_COMPLETION) ||

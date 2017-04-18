@@ -161,7 +161,7 @@ static int util_eq_close(struct fid *fid)
 	struct util_event *event;
 
 	eq = container_of(fid, struct util_eq, eq_fid.fid);
-	if (atomic_get(&eq->ref))
+	if (ofi_atomic_get32(&eq->ref))
 		return -FI_EBUSY;
 
 	while (!slist_empty(&eq->list)) {
@@ -178,7 +178,7 @@ static int util_eq_close(struct fid *fid)
 	}
 
 	fastlock_destroy(&eq->lock);
-	atomic_dec(&eq->fabric->ref);
+	ofi_atomic_dec32(&eq->fabric->ref);
 	free(eq);
 	return 0;
 }
@@ -207,7 +207,7 @@ static int util_eq_init(struct fid_fabric *fabric, struct util_eq *eq,
 	struct fid_wait *wait;
 	int ret;
 
-	atomic_initialize(&eq->ref, 0);
+	ofi_atomic_initialize32(&eq->ref, 0);
 	slist_init(&eq->list);
 	fastlock_init(&eq->lock);
 
@@ -303,7 +303,7 @@ int ofi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	eq->eq_fid.fid.ops = &util_eq_fi_ops;
 	eq->eq_fid.ops = &util_eq_ops;
 
-	atomic_inc(&fabric->ref);
+	ofi_atomic_inc32(&fabric->ref);
 
 	/* EQ must be fully operational before adding to wait set */
 	if (eq->wait) {

@@ -133,7 +133,7 @@ int _gnix_cntr_inc(struct gnix_fid_cntr *cntr)
 	if (cntr == NULL)
 		return -FI_EINVAL;
 
-	atomic_inc(&cntr->cnt);
+	ofi_atomic_inc32(&cntr->cnt);
 
 	if (cntr->wait)
 		_gnix_signal_wait_obj(cntr->wait);
@@ -149,7 +149,7 @@ int _gnix_cntr_inc_err(struct gnix_fid_cntr *cntr)
 	if (cntr == NULL)
 		return -FI_EINVAL;
 
-	atomic_inc(&cntr->cnt_err);
+	ofi_atomic_inc32(&cntr->cnt_err);
 
 	if (cntr->wait)
 		_gnix_signal_wait_obj(cntr->wait);
@@ -181,8 +181,8 @@ static int gnix_cntr_wait_sleep(struct gnix_fid_cntr *cntr_priv,
 	int msec_passed = 0;
 
 	clock_gettime(CLOCK_REALTIME, &ts0);
-	while (atomic_get(&cntr_priv->cnt) < threshold &&
-	       atomic_get(&cntr_priv->cnt_err) == 0) {
+	while (ofi_atomic_get32(&cntr_priv->cnt) < threshold &&
+	       ofi_atomic_get32(&cntr_priv->cnt_err) == 0) {
 
 		ret = gnix_wait_wait((struct fid_wait *)cntr_priv->wait,
 					timeout - msec_passed);
@@ -196,7 +196,7 @@ static int gnix_cntr_wait_sleep(struct gnix_fid_cntr *cntr_priv,
 			break;
 		}
 
-		if (atomic_get(&cntr_priv->cnt) >= threshold)
+		if (ofi_atomic_get32(&cntr_priv->cnt) >= threshold)
 			break;
 
 		if (timeout < 0)
@@ -212,7 +212,7 @@ static int gnix_cntr_wait_sleep(struct gnix_fid_cntr *cntr_priv,
 		}
 	}
 
-	return (atomic_get(&cntr_priv->cnt_err)) ? -FI_EAVAIL : ret;
+	return (ofi_atomic_get32(&cntr_priv->cnt_err)) ? -FI_EAVAIL : ret;
 }
 
 
@@ -237,7 +237,7 @@ DIRECT_FN STATIC int gnix_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
 	struct gnix_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
-	atomic_add(&cntr_priv->cnt_err, (int)value);
+	ofi_atomic_add32(&cntr_priv->cnt_err, (int)value);
 
 	if (cntr_priv->wait)
 		_gnix_signal_wait_obj(cntr_priv->wait);
@@ -250,7 +250,7 @@ DIRECT_FN STATIC int gnix_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 	struct gnix_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
-	atomic_set(&cntr_priv->cnt_err, (int)value);
+	ofi_atomic_set32(&cntr_priv->cnt_err, (int)value);
 
 	if (cntr_priv->wait)
 		_gnix_signal_wait_obj(cntr_priv->wait);
@@ -316,7 +316,7 @@ DIRECT_FN STATIC uint64_t gnix_cntr_readerr(struct fid_cntr *cntr)
 		return -FI_EINVAL;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
-	v = atomic_get(&cntr_priv->cnt_err);
+	v = ofi_atomic_get32(&cntr_priv->cnt_err);
 
 	ret = __gnix_cntr_progress(cntr_priv);
 	if (ret != FI_SUCCESS)
@@ -335,7 +335,7 @@ DIRECT_FN STATIC uint64_t gnix_cntr_read(struct fid_cntr *cntr)
 		return -FI_EINVAL;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
-	v = atomic_get(&cntr_priv->cnt);
+	v = ofi_atomic_get32(&cntr_priv->cnt);
 
 	if (cntr_priv->wait)
 		gnix_wait_wait((struct fid_wait *)cntr_priv->wait, 0);
@@ -356,7 +356,7 @@ DIRECT_FN STATIC int gnix_cntr_add(struct fid_cntr *cntr, uint64_t value)
 		return -FI_EINVAL;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
-	atomic_add(&cntr_priv->cnt, (int)value);
+	ofi_atomic_add32(&cntr_priv->cnt, (int)value);
 
 	if (cntr_priv->wait)
 		_gnix_signal_wait_obj(cntr_priv->wait);
@@ -374,7 +374,7 @@ DIRECT_FN STATIC int gnix_cntr_set(struct fid_cntr *cntr, uint64_t value)
 		return -FI_EINVAL;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
-	atomic_set(&cntr_priv->cnt, (int)value);
+	ofi_atomic_set32(&cntr_priv->cnt, (int)value);
 
 	if (cntr_priv->wait)
 		_gnix_signal_wait_obj(cntr_priv->wait);
@@ -449,8 +449,8 @@ DIRECT_FN int gnix_cntr_open(struct fid_domain *domain,
 	_gnix_ref_init(&cntr_priv->ref_cnt, 1, __cntr_destruct);
 
 	/* initialize atomics */
-	atomic_initialize(&cntr_priv->cnt, 0);
-	atomic_initialize(&cntr_priv->cnt_err, 0);
+	ofi_atomic_initialize32(&cntr_priv->cnt, 0);
+	ofi_atomic_initialize32(&cntr_priv->cnt_err, 0);
 
 	_gnix_ref_get(cntr_priv->domain);
 

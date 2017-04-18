@@ -61,14 +61,14 @@ void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 	if (ret)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
-		atomic_inc(&cntr->ref);
+		ofi_atomic_inc32(&cntr->ref);
 }
 
 void sock_cntr_remove_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 {
 	struct fid *fid = &tx_ctx->fid.ctx.fid;
 	fid_list_remove(&cntr->tx_list, &cntr->list_lock, fid);
-	atomic_dec(&cntr->ref);
+	ofi_atomic_dec32(&cntr->ref);
 }
 
 void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
@@ -79,14 +79,14 @@ void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 	if (ret)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
-		atomic_inc(&cntr->ref);
+		ofi_atomic_inc32(&cntr->ref);
 }
 
 void sock_cntr_remove_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 {
 	struct fid *fid = &rx_ctx->ctx.fid;
 	fid_list_remove(&cntr->rx_list, &cntr->list_lock, fid);
-	atomic_dec(&cntr->ref);
+	ofi_atomic_dec32(&cntr->ref);
 }
 
 int sock_cntr_progress(struct sock_cntr *cntr)
@@ -138,7 +138,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 		trigger = container_of(entry, struct sock_trigger, entry);
 		entry = entry->next;
 
-		if (atomic_get(&cntr->value) < (int) trigger->threshold)
+		if (ofi_atomic_get32(&cntr->value) < (int) trigger->threshold)
 			continue;
 
 		switch (trigger->op_type) {
@@ -214,14 +214,14 @@ static uint64_t sock_cntr_read(struct fid_cntr *fid_cntr)
 	struct sock_cntr *cntr;
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 	sock_cntr_progress(cntr);
-	return atomic_get(&cntr->value);
+	return ofi_atomic_get32(&cntr->value);
 }
 
 void sock_cntr_inc(struct sock_cntr *cntr)
 {
 	pthread_mutex_lock(&cntr->mut);
-	atomic_inc(&cntr->value);
-	if (atomic_get(&cntr->num_waiting))
+	ofi_atomic_inc32(&cntr->value);
+	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
 	pthread_mutex_unlock(&cntr->mut);
 
@@ -235,9 +235,9 @@ static int sock_cntr_add(struct fid_cntr *fid_cntr, uint64_t value)
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 
 	pthread_mutex_lock(&cntr->mut);
-	new_val = atomic_add(&cntr->value, value);
-	atomic_set(&cntr->last_read_val, new_val);
-	if (atomic_get(&cntr->num_waiting))
+	new_val = ofi_atomic_add32(&cntr->value, value);
+	ofi_atomic_set32(&cntr->last_read_val, new_val);
+	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
 	pthread_mutex_unlock(&cntr->mut);
 
@@ -252,9 +252,9 @@ static int sock_cntr_set(struct fid_cntr *fid_cntr, uint64_t value)
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 
 	pthread_mutex_lock(&cntr->mut);
-	new_val = atomic_set(&cntr->value, value);
-	atomic_set(&cntr->last_read_val, new_val);
-	if (atomic_get(&cntr->num_waiting))
+	new_val = ofi_atomic_set32(&cntr->value, value);
+	ofi_atomic_set32(&cntr->last_read_val, new_val);
+	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
 	pthread_mutex_unlock(&cntr->mut);
 
@@ -268,7 +268,7 @@ static int sock_cntr_adderr(struct fid_cntr *fid_cntr, uint64_t value)
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 
 	pthread_mutex_lock(&cntr->mut);
-	atomic_add(&cntr->err_cnt, value);
+	ofi_atomic_add32(&cntr->err_cnt, value);
 	if (!cntr->err_flag)
 		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
@@ -283,7 +283,7 @@ static int sock_cntr_seterr(struct fid_cntr *fid_cntr, uint64_t value)
 
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 	pthread_mutex_lock(&cntr->mut);
-	atomic_set(&cntr->err_cnt, value);
+	ofi_atomic_set32(&cntr->err_cnt, value);
 	if (!cntr->err_flag)
 		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
@@ -307,19 +307,19 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 		goto out;
 	}
 
-	if (atomic_get(&cntr->value) >= (int)threshold) {
+	if (ofi_atomic_get32(&cntr->value) >= (int)threshold) {
 		ret = 0;
 		goto out;
 	}
 
-	atomic_inc(&cntr->num_waiting);
+	ofi_atomic_inc32(&cntr->num_waiting);
 
 	if (timeout >= 0) {
 		start_ms = fi_gettime_ms();
 		end_ms = start_ms + timeout;
 	}
 
-	last_read = atomic_get(&cntr->value);
+	last_read = ofi_atomic_get32(&cntr->value);
 	remaining_ms = timeout;
 
 	while (!ret && last_read < (int)threshold) {
@@ -341,11 +341,11 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 			}
 		}
 
-		last_read = atomic_get(&cntr->value);
+		last_read = ofi_atomic_get32(&cntr->value);
 	}
 
-	atomic_set(&cntr->last_read_val, last_read);
-	atomic_dec(&cntr->num_waiting);
+	ofi_atomic_set32(&cntr->last_read_val, last_read);
+	ofi_atomic_dec32(&cntr->num_waiting);
 	pthread_mutex_unlock(&cntr->mut);
 
 	sock_cntr_check_trigger_list(cntr);
@@ -408,7 +408,7 @@ static int sock_cntr_close(struct fid *fid)
 	struct sock_cntr *cntr;
 
 	cntr = container_of(fid, struct sock_cntr, cntr_fid.fid);
-	if (atomic_get(&cntr->ref))
+	if (ofi_atomic_get32(&cntr->ref))
 		return -FI_EBUSY;
 
 	if (cntr->signal && cntr->attr.wait_obj == FI_WAIT_FD)
@@ -419,7 +419,7 @@ static int sock_cntr_close(struct fid *fid)
 	fastlock_destroy(&cntr->trigger_lock);
 
 	pthread_cond_destroy(&cntr->cond);
-	atomic_dec(&cntr->domain->ref);
+	ofi_atomic_dec32(&cntr->domain->ref);
 	free(cntr);
 	return 0;
 }
@@ -432,7 +432,7 @@ static uint64_t sock_cntr_readerr(struct fid_cntr *cntr)
 		sock_cntr_progress(_cntr);
 	if (_cntr->err_flag)
 		_cntr->err_flag = 0;
-	return atomic_get(&_cntr->err_cnt);
+	return ofi_atomic_get32(&_cntr->err_cnt);
 }
 
 static struct fi_ops_cntr sock_cntr_ops = {
@@ -551,12 +551,12 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	pthread_mutex_init(&_cntr->mut, NULL);
 	fastlock_init(&_cntr->list_lock);
 
-	atomic_initialize(&_cntr->ref, 0);
-	atomic_initialize(&_cntr->err_cnt, 0);
+	ofi_atomic_initialize32(&_cntr->ref, 0);
+	ofi_atomic_initialize32(&_cntr->err_cnt, 0);
 
-	atomic_initialize(&_cntr->value, 0);
-	atomic_initialize(&_cntr->last_read_val, 0);
-	atomic_initialize(&_cntr->num_waiting, 0);
+	ofi_atomic_initialize32(&_cntr->value, 0);
+	ofi_atomic_initialize32(&_cntr->last_read_val, 0);
+	ofi_atomic_initialize32(&_cntr->num_waiting, 0);
 
 	dlist_init(&_cntr->tx_list);
 	dlist_init(&_cntr->rx_list);
@@ -569,7 +569,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	_cntr->cntr_fid.fid.ops = &sock_cntr_fi_ops;
 	_cntr->cntr_fid.ops = &sock_cntr_ops;
 
-	atomic_inc(&dom->ref);
+	ofi_atomic_inc32(&dom->ref);
 	_cntr->domain = dom;
 	*cntr = &_cntr->cntr_fid;
 	return 0;

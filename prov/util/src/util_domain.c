@@ -39,7 +39,7 @@
 
 int ofi_domain_close(struct util_domain *domain)
 {
-	if (atomic_get(&domain->ref))
+	if (ofi_atomic_get32(&domain->ref))
 		return -FI_EBUSY;
 
 	fastlock_acquire(&domain->fabric->lock);
@@ -48,7 +48,7 @@ int ofi_domain_close(struct util_domain *domain)
 
 	free(domain->name);
 	fastlock_destroy(&domain->lock);
-	atomic_dec(&domain->fabric->ref);
+	ofi_atomic_dec32(&domain->fabric->ref);
 	return 0;
 }
 
@@ -62,7 +62,7 @@ static struct fi_ops_mr util_domain_mr_ops = {
 static int util_domain_init(struct util_domain *domain,
 			    const struct fi_info *info)
 {
-	atomic_initialize(&domain->ref, 0);
+	ofi_atomic_initialize32(&domain->ref, 0);
 	fastlock_init(&domain->lock);
 	domain->info_domain_caps = info->caps | info->domain_attr->caps;
 	domain->info_domain_mode = info->mode | info->domain_attr->mode;
@@ -99,6 +99,6 @@ int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 	dlist_insert_tail(&domain->list_entry, &fabric->domain_list);
 	fastlock_release(&fabric->lock);
 
-	atomic_inc(&fabric->ref);
+	ofi_atomic_inc32(&fabric->ref);
 	return 0;
 }

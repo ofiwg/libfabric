@@ -726,7 +726,7 @@ struct gnix_fab_req_rma {
 	uint64_t                 rem_addr;
 	uint64_t                 rem_mr_key;
 	uint64_t                 imm;
-	atomic_t                 outstanding_txds;
+	ofi_atomic32_t           outstanding_txds;
 	gni_return_t             status;
 	struct slist_entry       sle;
 };
@@ -766,7 +766,7 @@ struct gnix_fab_req_msg {
 	uint64_t                     imm;
 	gni_mem_handle_t             rma_mdh;
 	uint64_t                     rma_id;
-	atomic_t                     outstanding_txds;
+	ofi_atomic32_t               outstanding_txds;
 	gni_return_t                 status;
 };
 
@@ -1098,7 +1098,7 @@ struct gnix_work_req {
 extern const char gnix_fab_name[];
 extern const char gnix_dom_name[];
 extern uint32_t gnix_cdm_modes;
-extern atomic_t gnix_id_counter;
+extern ofi_atomic32_t gnix_id_counter;
 
 
 /*

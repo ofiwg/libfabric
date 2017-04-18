@@ -136,7 +136,7 @@ static int __generate_file_name(size_t page_size, char **filename)
 		goto err_invalid;
 	}
 
-	my_file_id = atomic_inc(&file_id_counter);
+	my_file_id = ofi_atomic_inc32(&file_id_counter);
 	size = snprintf(NULL, 0, "%s/%s.%d.%d", huge_page, basename, getpid(),
 			my_file_id);
 	if (size < 0) {

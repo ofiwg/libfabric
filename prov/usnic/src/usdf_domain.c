@@ -80,7 +80,7 @@ usdf_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
                         return -FI_EINVAL;
                 }
                 udp->dom_eq = eq_fidtou(bfid);
-                atomic_inc(&udp->dom_eq->eq_refcnt);
+                ofi_atomic_inc32(&udp->dom_eq->eq_refcnt);
                 break;
         default:
                 return -FI_EINVAL;
@@ -109,7 +109,7 @@ usdf_dom_rdc_free_data(struct usdf_domain *udp)
 		pthread_spin_unlock(&udp->dom_progress_lock);
 
 		/* XXX probably want a timeout here... */
-		while (atomic_get(&udp->dom_rdc_free_cnt) <
+		while (ofi_atomic_get32(&udp->dom_rdc_free_cnt) <
 		       (int)udp->dom_rdc_total) {
 			pthread_yield();
 		}
@@ -139,7 +139,7 @@ usdf_dom_rdc_alloc_data(struct usdf_domain *udp)
 		return -FI_ENOMEM;
 	}
 	SLIST_INIT(&udp->dom_rdc_free);
-	atomic_initialize(&udp->dom_rdc_free_cnt, 0);
+	ofi_atomic_initialize32(&udp->dom_rdc_free_cnt, 0);
 	for (i = 0; i < USDF_RDM_FREE_BLOCK; ++i) {
 		rdc = calloc(1, sizeof(*rdc));
 		if (rdc == NULL) {
@@ -158,7 +158,7 @@ usdf_dom_rdc_alloc_data(struct usdf_domain *udp)
 		TAILQ_INIT(&rdc->dc_wqe_posted);
 		TAILQ_INIT(&rdc->dc_wqe_sent);
 		SLIST_INSERT_HEAD(&udp->dom_rdc_free, rdc, dc_addr_link);
-		atomic_inc(&udp->dom_rdc_free_cnt);
+		ofi_atomic_inc32(&udp->dom_rdc_free_cnt);
 	}
 	udp->dom_rdc_total = USDF_RDM_FREE_BLOCK;
 	return 0;
@@ -173,7 +173,7 @@ usdf_domain_close(fid_t fid)
 	USDF_TRACE_SYS(DOMAIN, "\n");
 
 	udp = container_of(fid, struct usdf_domain, dom_fid.fid);
-	if (atomic_get(&udp->dom_refcnt) > 0) {
+	if (ofi_atomic_get32(&udp->dom_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
 
@@ -186,9 +186,9 @@ usdf_domain_close(fid_t fid)
 	usdf_dom_rdc_free_data(udp);
 
 	if (udp->dom_eq != NULL) {
-		atomic_dec(&udp->dom_eq->eq_refcnt);
+		ofi_atomic_dec32(&udp->dom_eq->eq_refcnt);
 	}
-	atomic_dec(&udp->dom_fabric->fab_refcnt);
+	ofi_atomic_dec32(&udp->dom_fabric->fab_refcnt);
 	LIST_REMOVE(udp, dom_link);
 	fi_freeinfo(udp->dom_info);
 	free(udp);
@@ -331,8 +331,8 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	udp->dom_fabric = fp;
 	LIST_INSERT_HEAD(&fp->fab_domain_list, udp, dom_link);
-	atomic_initialize(&udp->dom_refcnt, 0);
-	atomic_inc(&fp->fab_refcnt);
+	ofi_atomic_initialize32(&udp->dom_refcnt, 0);
+	ofi_atomic_inc32(&fp->fab_refcnt);
 
 	*domain = &udp->dom_fid;
 	return 0;

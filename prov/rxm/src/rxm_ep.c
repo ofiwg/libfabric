@@ -836,14 +836,14 @@ static int rxm_ep_close(struct fid *fid)
 		fid_list_remove(&rxm_ep->util_ep.tx_cq->ep_list,
 				&rxm_ep->util_ep.tx_cq->ep_list_lock,
 				&rxm_ep->util_ep.ep_fid.fid);
-		atomic_dec(&rxm_ep->util_ep.tx_cq->ref);
+		ofi_atomic_dec32(&rxm_ep->util_ep.tx_cq->ref);
 	}
 
 	if (rxm_ep->util_ep.rx_cq) {
 		fid_list_remove(&rxm_ep->util_ep.rx_cq->ep_list,
 				&rxm_ep->util_ep.rx_cq->ep_list_lock,
 				&rxm_ep->util_ep.ep_fid.fid);
-		atomic_dec(&rxm_ep->util_ep.rx_cq->ref);
+		ofi_atomic_dec32(&rxm_ep->util_ep.rx_cq->ref);
 	}
 
 	ofi_endpoint_close(&rxm_ep->util_ep);
@@ -872,7 +872,7 @@ static int rxm_ep_bind_cq(struct rxm_ep *rxm_ep, struct util_cq *util_cq, uint64
 		if (!(flags & FI_SELECTIVE_COMPLETION))
 			rxm_ep->rxm_info->tx_attr->op_flags |= FI_COMPLETION;
 
-		atomic_inc(&util_cq->ref);
+		ofi_atomic_inc32(&util_cq->ref);
 	}
 
 	if (flags & FI_RECV) {
@@ -881,7 +881,7 @@ static int rxm_ep_bind_cq(struct rxm_ep *rxm_ep, struct util_cq *util_cq, uint64
 		if (!(flags & FI_SELECTIVE_COMPLETION))
 			rxm_ep->rxm_info->rx_attr->op_flags |= FI_COMPLETION;
 
-		atomic_inc(&util_cq->ref);
+		ofi_atomic_inc32(&util_cq->ref);
 	}
 	if (flags & (FI_TRANSMIT | FI_RECV)) {
 		ret = fid_list_insert(&util_cq->ep_list,

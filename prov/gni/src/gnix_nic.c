@@ -1285,7 +1285,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	goto out;
 
 err1:
-	atomic_dec(&gnix_id_counter);
+	ofi_atomic_dec32(&gnix_id_counter);
 err:
 	if (nic != NULL) {
 		__nic_teardown_irq_cq(nic);

@@ -373,11 +373,11 @@ static int udpx_ep_close(struct fid *fid)
 		fid_list_remove(&ep->util_ep.rx_cq->ep_list,
 				&ep->util_ep.rx_cq->ep_list_lock,
 				&ep->util_ep.ep_fid.fid);
-		atomic_dec(&ep->util_ep.rx_cq->ref);
+		ofi_atomic_dec32(&ep->util_ep.rx_cq->ref);
 	}
 
 	if (ep->util_ep.tx_cq)
-		atomic_dec(&ep->util_ep.tx_cq->ref);
+		ofi_atomic_dec32(&ep->util_ep.tx_cq->ref);
 
 	udpx_rx_cirq_free(ep->rxq);
 	close(ep->sock);
@@ -406,13 +406,13 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flag
 
 	if (flags & FI_TRANSMIT) {
 		ep->util_ep.tx_cq = cq;
-		atomic_inc(&cq->ref);
+		ofi_atomic_inc32(&cq->ref);
 		ep->tx_comp = cq->wait ? udpx_tx_comp_signal : udpx_tx_comp;
 	}
 
 	if (flags & FI_RECV) {
 		ep->util_ep.rx_cq = cq;
-		atomic_inc(&cq->ref);
+		ofi_atomic_inc32(&cq->ref);
 
 		if (cq->wait) {
 			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?

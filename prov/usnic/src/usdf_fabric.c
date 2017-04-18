@@ -831,7 +831,7 @@ usdf_fabric_close(fid_t fid)
 	USDF_TRACE("\n");
 
 	fp = fab_fidtou(fid);
-	if (atomic_get(&fp->fab_refcnt) > 0) {
+	if (ofi_atomic_get32(&fp->fab_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
 	/* Tell progression thread to exit */
@@ -981,8 +981,8 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	atomic_initialize(&fp->fab_refcnt, 0);
-	atomic_initialize(&fp->num_blocked_waiting, 0);
+	ofi_atomic_initialize32(&fp->fab_refcnt, 0);
+	ofi_atomic_initialize32(&fp->num_blocked_waiting, 0);
 
 	ret = pthread_create(&fp->fab_thread, NULL,
 			usdf_fabric_progression_thread, fp);

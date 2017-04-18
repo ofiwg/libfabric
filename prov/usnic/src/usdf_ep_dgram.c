@@ -175,7 +175,7 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		av = av_fidtou(bfid);
 		ep->e.dg.ep_av = av;
-		atomic_inc(&av->av_refcnt);
+		ofi_atomic_inc32(&av->av_refcnt);
 		break;
 
 	case FI_CLASS_CQ:
@@ -206,7 +206,7 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 					(ep->e.dg.tx_op_flags & FI_COMPLETION));
 
 			ep->e.dg.ep_wcq = cq;
-			atomic_inc(&cq->cq_refcnt);
+			ofi_atomic_inc32(&cq->cq_refcnt);
 		}
 
 		if (flags & FI_RECV) {
@@ -224,7 +224,7 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 					(ep->e.dg.rx_op_flags & FI_COMPLETION));
 
 			ep->e.dg.ep_rcq = cq;
-			atomic_inc(&cq->cq_refcnt);
+			ofi_atomic_inc32(&cq->cq_refcnt);
 		}
 		break;
 
@@ -233,7 +233,7 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		}
 		ep->ep_eq = eq_fidtou(bfid);
-		atomic_inc(&ep->ep_eq->eq_refcnt);
+		ofi_atomic_inc32(&ep->ep_eq->eq_refcnt);
 		break;
 	default:
 		return -FI_EINVAL;
@@ -251,14 +251,14 @@ usdf_ep_dgram_deref_cq(struct usdf_cq *cq)
 	if (cq == NULL) {
 		return;
 	}
-	atomic_dec(&cq->cq_refcnt);
+	ofi_atomic_dec32(&cq->cq_refcnt);
 
 	rtn = usdf_progress_hard_cq;
 
 	if (cq->cq_is_soft) {
 		TAILQ_FOREACH(hcq, &cq->c.soft.cq_list, cqh_link) {
 			if (hcq->cqh_progress == rtn) {
-				atomic_dec(&hcq->cqh_refcnt);
+				ofi_atomic_dec32(&hcq->cqh_refcnt);
 				return;
 			}
 		}
@@ -274,7 +274,7 @@ usdf_ep_dgram_close(fid_t fid)
 
 	ep = ep_fidtou(fid);
 
-	if (atomic_get(&ep->ep_refcnt) > 0) {
+	if (ofi_atomic_get32(&ep->ep_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
 
@@ -283,13 +283,13 @@ usdf_ep_dgram_close(fid_t fid)
 	if (ep->e.dg.ep_qp != NULL) {
 		usd_destroy_qp(ep->e.dg.ep_qp);
 	}
-	atomic_dec(&ep->ep_domain->dom_refcnt);
+	ofi_atomic_dec32(&ep->ep_domain->dom_refcnt);
 	if (ep->ep_eq != NULL) {
-		atomic_dec(&ep->ep_eq->eq_refcnt);
+		ofi_atomic_dec32(&ep->ep_eq->eq_refcnt);
 	}
 
 	if (ep->e.dg.ep_av)
-		atomic_dec(&ep->e.dg.ep_av->av_refcnt);
+		ofi_atomic_dec32(&ep->e.dg.ep_av->av_refcnt);
 
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_wcq);
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_rcq);
@@ -856,8 +856,8 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 		ep->ep_fid.ops = &usdf_base_dgram_ops;
 		ep->ep_fid.msg = &usdf_dgram_ops;
 	}
-	atomic_initialize(&ep->ep_refcnt, 0);
-	atomic_inc(&udp->dom_refcnt);
+	ofi_atomic_initialize32(&ep->ep_refcnt, 0);
+	ofi_atomic_inc32(&udp->dom_refcnt);
 
 	*ep_o = ep_utof(ep);
 	return 0;

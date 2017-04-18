@@ -108,7 +108,7 @@ enum {
  * This connection struct is used to manage messages in flight.
  */
 struct usdf_rdm_connection {
-	atomic_t dc_refcnt;
+	ofi_atomic32_t dc_refcnt;
 
 	struct usdf_tx *dc_tx;
 	struct usd_udp_hdr dc_hdr;

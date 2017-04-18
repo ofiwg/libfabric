@@ -634,11 +634,11 @@ struct tinfo {
 
 #define get_mark(i) ((char) (((i)%255)+0x31))
 
-static atomic_t cntr_test_next_tid;
+static ofi_atomic32_t cntr_test_next_tid;
 static __thread uint32_t cntr_test_tid = ~(uint32_t) 0;
 #define cntr_test_get_tid()						\
 	((cntr_test_tid  == ~(uint32_t) 0) ?				\
-	 atomic_inc(&cntr_test_next_tid) :				\
+	 ofi_atomic_inc32(&cntr_test_next_tid) :				\
 	 cntr_test_tid)
 
 
@@ -652,7 +652,7 @@ static void cntr_setup_mt(void)
 	cntr_setup_enable_ep();
 	cntr_setup_mr();
 
-	atomic_initialize(&cntr_test_next_tid, 0);
+	ofi_atomic_initialize32(&cntr_test_next_tid, 0);
 }
 
 static void cntr_teardown_mt(void)

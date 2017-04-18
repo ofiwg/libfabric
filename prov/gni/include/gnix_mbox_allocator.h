@@ -188,6 +188,6 @@ int _gnix_mbox_free(struct gnix_mbox *ptr);
  * Initialized in gnix_init.c, used for updating filename when creating
  * hugepages.
  */
-extern atomic_t file_id_counter;
+extern ofi_atomic32_t file_id_counter;
 
 #endif /* _GNIX_MBOX_ALLOCATOR_ */

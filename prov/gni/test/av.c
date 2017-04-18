@@ -578,7 +578,7 @@ Test(av_full_table, mt_simple)
 
 #include "fi_atom.h"
 /* add a compare-and-swap */
-static inline int atomic_cas_weak(atomic_t *atomic, int *expected, int desired)
+static inline int atomic_cas_weak(ofi_atomic32_t *atomic, int *expected, int desired)
 {
 	ATOMIC_IS_INITIALIZED(atomic);
 	return atomic_compare_exchange_weak_explicit(&atomic->val,
@@ -591,7 +591,7 @@ static void *lookup_random(void *data)
 {
 	int n, ret;
 	fi_addr_t *addresses = ((fi_addr_t **) data)[0];
-	atomic_t *done = ((atomic_t **) data)[1];
+	ofi_atomic32_t *done = ((ofi_atomic32_t **) data)[1];
 	struct gnix_ep_name found;
 	size_t addrlen = sizeof(struct gnix_ep_name);
 
@@ -602,7 +602,7 @@ static void *lookup_random(void *data)
 		pthread_exit((void *) 1UL);
 	}
 
-	while (!atomic_get(done)) {
+	while (!ofi_atomic_get32(done)) {
 		n = rand()%MT_ADDR_COUNT;
 		(void) fi_av_lookup(av, addresses[n], &found, &addrlen);
 	}
@@ -615,7 +615,7 @@ static void continuous_lookup(void)
 	int i, ret;
 	pthread_t thread;
 	fi_addr_t addresses[MT_ADDR_COUNT];
-	atomic_t done;
+	ofi_atomic32_t done;
 	void *info[2];
 	const int iters = 17;
 
@@ -624,7 +624,7 @@ static void continuous_lookup(void)
 
 	init_av_lock();
 
-	atomic_initialize(&done, 0);
+	ofi_atomic_initialize32(&done, 0);
 
 	memset(addresses, 0, MT_ADDR_COUNT*sizeof(fi_addr_t));
 
@@ -649,7 +649,7 @@ static void continuous_lookup(void)
 		}
 	}
 
-	atomic_set(&done, 1);
+	ofi_atomic_set32(&done, 1);
 
 	ret = pthread_join(thread, NULL);
 	cr_assert_eq(ret, 0);
@@ -678,10 +678,10 @@ static void *continuous_insert(void *data)
 	int expected_state;
 	struct gnix_ep_name *ep_names = ((struct gnix_ep_name **) data)[0];
 	fi_addr_t *addresses = ((fi_addr_t **) data)[1];
-	atomic_t *fe = ((atomic_t **) data)[2];
+	ofi_atomic32_t *fe = ((ofi_atomic32_t **) data)[2];
 	int num_insertions = (int) ((uint64_t *) data)[3];
 	int num_addrs = (int) ((uint64_t *) data)[4];
-	atomic_t *done = ((atomic_t **) data)[5];
+	ofi_atomic32_t *done = ((ofi_atomic32_t **) data)[5];
 
 	ret = pthread_barrier_wait(&mtbar);
 	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
@@ -690,7 +690,7 @@ static void *continuous_insert(void *data)
 
 	i = 0;
 	pos = 0;
-	while ((i < num_insertions) && !atomic_get(done)) {
+	while ((i < num_insertions) && !ofi_atomic_get32(done)) {
 		n = (pos++)%num_addrs;
 		expected_state = state_empty;
 		if (atomic_cas_weak(&fe[n], &expected_state, state_locked)) {
@@ -700,10 +700,10 @@ static void *continuous_insert(void *data)
 			av_unlock();
 			if (ret != 1) {
 				/* flag shutdown to avoid deadlock */
-				atomic_set(done, 1);
+				ofi_atomic_set32(done, 1);
 				pthread_exit((void *) 1UL);
 			}
-			atomic_set(&fe[n], state_full);
+			ofi_atomic_set32(&fe[n], state_full);
 			i++;
 		}
 	}
@@ -716,9 +716,9 @@ static void *continuous_remove(void *data)
 	int pos, n, ret;
 	int expected_state;
 	fi_addr_t *addresses = ((fi_addr_t **) data)[0];
-	atomic_t *fe = ((atomic_t **) data)[1];
+	ofi_atomic32_t *fe = ((ofi_atomic32_t **) data)[1];
 	int num_addrs = (int) ((uint64_t *) data)[2];
-	atomic_t *done = ((atomic_t **) data)[3];
+	ofi_atomic32_t *done = ((ofi_atomic32_t **) data)[3];
 
 	ret = pthread_barrier_wait(&mtbar);
 	if ((ret != PTHREAD_BARRIER_SERIAL_THREAD) && (ret != 0)) {
@@ -726,7 +726,7 @@ static void *continuous_remove(void *data)
 	}
 
 	pos = 0;
-	while (!atomic_get(done)) {
+	while (!ofi_atomic_get32(done)) {
 		n = (pos++)%num_addrs;
 		expected_state = state_full;
 		if (atomic_cas_weak(&fe[n], &expected_state, state_locked)) {
@@ -735,10 +735,10 @@ static void *continuous_remove(void *data)
 			av_unlock();
 			if (ret != FI_SUCCESS) {
 				/* flag shutdown to avoid deadlock */
-				atomic_set(done, 1);
+				ofi_atomic_set32(done, 1);
 				pthread_exit((void *) 1UL);
 			}
-			atomic_set(&fe[n], state_empty);
+			ofi_atomic_set32(&fe[n], state_empty);
 		}
 	}
 
@@ -750,9 +750,9 @@ static void continuous_insert_remove(int num_inserters, int num_removers,
 {
 	int i, ret;
 	unsigned long pret;
-	atomic_t done;
+	ofi_atomic32_t done;
 	fi_addr_t addresses[MT_ADDR_COUNT];
-	atomic_t fe[MT_ADDR_COUNT];
+	ofi_atomic32_t fe[MT_ADDR_COUNT];
 	const int addrs_per_thread = MT_ADDR_COUNT/num_inserters;
 	const int num_threads = num_inserters + num_removers;
 	pthread_t threads[num_threads];
@@ -763,9 +763,9 @@ static void continuous_insert_remove(int num_inserters, int num_removers,
 
 	init_av_lock();
 
-	atomic_initialize(&done, 0);
+	ofi_atomic_initialize32(&done, 0);
 	for (i = 0; i < MT_ADDR_COUNT; i++) {
-		atomic_initialize(&fe[i], state_empty);
+		ofi_atomic_initialize32(&fe[i], state_empty);
 	}
 
 	for (i = 0; i < num_inserters; i++) {
@@ -793,7 +793,7 @@ static void continuous_insert_remove(int num_inserters, int num_removers,
 
 	for (i = 0; i < num_threads; i++) {
 		if (i == num_inserters) {
-			atomic_set(&done, 1);
+			ofi_atomic_set32(&done, 1);
 		}
 		ret = pthread_join(threads[i], (void **) &pret);
 		cr_assert_eq(ret, 0);

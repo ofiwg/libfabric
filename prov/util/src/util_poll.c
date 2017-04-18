@@ -133,11 +133,11 @@ static int util_poll_close(struct fid *fid)
 	struct util_poll *pollset;
 
 	pollset = container_of(fid, struct util_poll, poll_fid.fid);
-	if (atomic_get(&pollset->ref))
+	if (ofi_atomic_get32(&pollset->ref))
 		return -FI_EBUSY;
 
 	if (pollset->domain)
-		atomic_dec(&pollset->domain->ref);
+		ofi_atomic_dec32(&pollset->domain->ref);
 	free(pollset);
 	return 0;
 }
@@ -183,7 +183,7 @@ int fi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
 		return -FI_ENOMEM;
 
 	pollset->prov = prov;
-	atomic_initialize(&pollset->ref, 0);
+	ofi_atomic_initialize32(&pollset->ref, 0);
 	dlist_init(&pollset->fid_list);
 	fastlock_init(&pollset->lock);
 
@@ -195,7 +195,7 @@ int fi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
 	if (domain) {
 		pollset->domain = container_of(domain, struct util_domain,
 					       domain_fid);
-		atomic_inc(&pollset->domain->ref);
+		ofi_atomic_inc32(&pollset->domain->ref);
 	}
 
 	*poll_fid = &pollset->poll_fid;

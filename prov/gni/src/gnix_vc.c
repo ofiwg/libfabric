@@ -1464,7 +1464,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 
 	dlist_init(&vc_ptr->list);
 
-	atomic_initialize(&vc_ptr->outstanding_tx_reqs, 0);
+	ofi_atomic_initialize32(&vc_ptr->outstanding_tx_reqs, 0);
 	ret = _gnix_alloc_bitmap(&vc_ptr->flags, 1);
 	assert(!ret);
 
@@ -1586,10 +1586,10 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 	if (!dlist_empty(&vc->tx_queue))
 		GNIX_FATAL(FI_LOG_EP_CTRL, "VC TX queue not empty\n");
 
-	if (atomic_get(&vc->outstanding_tx_reqs))
+	if (ofi_atomic_get32(&vc->outstanding_tx_reqs))
 		GNIX_FATAL(FI_LOG_EP_CTRL,
 			   "VC outstanding_tx_reqs out of sync: %d\n",
-			   atomic_get(&vc->outstanding_tx_reqs));
+			   ofi_atomic_get32(&vc->outstanding_tx_reqs));
 
 	if (vc->smsg_mbox != NULL) {
 		ret = _gnix_mbox_free(vc->smsg_mbox);
@@ -1894,7 +1894,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 
 	connected = (vc->conn_state == GNIX_VC_CONNECTED);
 
-	if ((req->flags & FI_FENCE) && atomic_get(&vc->outstanding_tx_reqs)) {
+	if ((req->flags & FI_FENCE) && ofi_atomic_get32(&vc->outstanding_tx_reqs)) {
 		/* Fence request must be queued until all outstanding TX
 		 * requests are completed.  Subsequent requests will be queued
 		 * due to non-empty tx_queue. */
@@ -1903,16 +1903,16 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 			  "Queued FI_FENCE request (%p) on VC\n",
 			  req);
 	} else if (connected && dlist_empty(&vc->tx_queue)) {
-		atomic_inc(&vc->outstanding_tx_reqs);
+		ofi_atomic_inc32(&vc->outstanding_tx_reqs);
 
 		/* try to initiate request */
 		rc = req->work_fn(req);
 		if (rc == FI_SUCCESS) {
 			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "TX request processed: %p (OTX: %d)\n",
-				  req, atomic_get(&vc->outstanding_tx_reqs));
+				  req, ofi_atomic_get32(&vc->outstanding_tx_reqs));
 		} else if (rc != -FI_ECANCELED) {
-			atomic_dec(&vc->outstanding_tx_reqs);
+			ofi_atomic_dec32(&vc->outstanding_tx_reqs);
 			queue_tx = 1;
 			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "Queued request (%p) on full VC\n",
@@ -1947,24 +1947,24 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 	req = dlist_first_entry(&vc->tx_queue, struct gnix_fab_req, dlist);
 	while (req) {
 		if ((req->flags & FI_FENCE) &&
-		    atomic_get(&vc->outstanding_tx_reqs)) {
+		    ofi_atomic_get32(&vc->outstanding_tx_reqs)) {
 			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "TX request queue stalled on FI_FENCE request: %p (%d)\n",
-				  req, atomic_get(&vc->outstanding_tx_reqs));
+				  req, ofi_atomic_get32(&vc->outstanding_tx_reqs));
 			/* Success is returned to allow processing of more VCs.
 			 * This VC will be rescheduled when the fence request
 			 * is completed. */
 			break;
 		}
 
-		atomic_inc(&vc->outstanding_tx_reqs);
+		ofi_atomic_inc32(&vc->outstanding_tx_reqs);
 		dlist_remove_init(&req->dlist);
 
 		ret = req->work_fn(req);
 		if (ret == FI_SUCCESS) {
 			GNIX_DEBUG(FI_LOG_EP_DATA,
 				  "TX request processed: %p (OTX: %d)\n",
-				  req, atomic_get(&vc->outstanding_tx_reqs));
+				  req, ofi_atomic_get32(&vc->outstanding_tx_reqs));
 		} else if (ret != -FI_ECANCELED) {
 			/* Work failed.  Reschedule to put this VC
 			 * back on the end of the list and return
@@ -1988,7 +1988,7 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 			}
 
 			dlist_insert_head(&req->dlist, &vc->tx_queue);
-			atomic_dec(&vc->outstanding_tx_reqs);
+			ofi_atomic_dec32(&vc->outstanding_tx_reqs);
 
 			/* _gnix_vc_tx_schedule() must come after the request
 			 * is inserted into the VC's tx_queue. */

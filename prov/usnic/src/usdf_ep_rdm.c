@@ -638,7 +638,7 @@ usdf_ep_rdm_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 			goto fail;
 
 		hcq->cqh_cq = cq;
-		atomic_initialize(&hcq->cqh_refcnt, 0);
+		ofi_atomic_initialize32(&hcq->cqh_refcnt, 0);
 		hcq->cqh_progress = usdf_rdm_hcq_progress;
 		hcq->cqh_post = usdf_cq_post_soft;
 		TAILQ_INSERT_TAIL(&cq->c.soft.cq_list, hcq, cqh_link);
@@ -647,8 +647,8 @@ usdf_ep_rdm_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 		TAILQ_INSERT_TAIL(&ep->ep_domain->dom_hcq_list,
 				hcq, cqh_dom_link);
 	}
-	atomic_inc(&hcq->cqh_refcnt);
-	atomic_inc(&cq->cq_refcnt);
+	ofi_atomic_inc32(&hcq->cqh_refcnt);
+	ofi_atomic_inc32(&cq->cq_refcnt);
 	*hcqp = hcq;
 	return 0;
 
@@ -679,7 +679,7 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		av = av_fidtou(bfid);
 		ep->e.rdm.ep_av = av;
-		atomic_inc(&av->av_refcnt);
+		ofi_atomic_inc32(&av->av_refcnt);
 		break;
 
 	case FI_CLASS_CQ:
@@ -707,7 +707,7 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		}
 		ep->ep_eq = eq_fidtou(bfid);
-		atomic_inc(&ep->ep_eq->eq_refcnt);
+		ofi_atomic_inc32(&ep->ep_eq->eq_refcnt);
 		break;
 	default:
 		return -FI_EINVAL;
@@ -729,14 +729,14 @@ usdf_rdm_rx_ctx_close(fid_t fid)
 
 	rx = rx_fidtou(fid);
 
-	if (atomic_get(&rx->rx_refcnt) > 0) {
+	if (ofi_atomic_get32(&rx->rx_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
 
 	hcq = rx->r.rdm.rx_hcq;
 	if (hcq != NULL) {
-		atomic_dec(&hcq->cqh_refcnt);
-		atomic_dec(&hcq->cqh_cq->cq_refcnt);
+		ofi_atomic_dec32(&hcq->cqh_refcnt);
+		ofi_atomic_dec32(&hcq->cqh_cq->cq_refcnt);
 	}
 	if (rx->r.rdm.rx_sock != -1) {
 		close(rx->r.rdm.rx_sock);
@@ -747,7 +747,7 @@ usdf_rdm_rx_ctx_close(fid_t fid)
 		free(rx->r.rdm.rx_rqe_buf);
 		usd_destroy_qp(rx->rx_qp);
 	}
-	atomic_dec(&rx->rx_domain->dom_refcnt);
+	ofi_atomic_dec32(&rx->rx_domain->dom_refcnt);
 
 	free(rx);
 
@@ -767,14 +767,14 @@ usdf_rdm_tx_ctx_close(fid_t fid)
 
 	tx = tx_fidtou(fid);
 
-	if (atomic_get(&tx->tx_refcnt) > 0) {
+	if (ofi_atomic_get32(&tx->tx_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
 
 	hcq = tx->t.rdm.tx_hcq;
 	if (hcq != NULL) {
-		atomic_dec(&hcq->cqh_refcnt);
-		atomic_dec(&hcq->cqh_cq->cq_refcnt);
+		ofi_atomic_dec32(&hcq->cqh_refcnt);
+		ofi_atomic_dec32(&hcq->cqh_cq->cq_refcnt);
 	}
 
 	if (tx->tx_qp != NULL) {
@@ -782,7 +782,7 @@ usdf_rdm_tx_ctx_close(fid_t fid)
 		free(tx->t.rdm.tx_wqe_buf);
 		usd_destroy_qp(tx->tx_qp);
 	}
-	atomic_dec(&tx->tx_domain->dom_refcnt);
+	ofi_atomic_dec32(&tx->tx_domain->dom_refcnt);
 
 	free(tx);
 
@@ -838,31 +838,31 @@ usdf_ep_rdm_close(fid_t fid)
 
 	ep = ep_fidtou(fid);
 
-	if (atomic_get(&ep->ep_refcnt) > 0) {
+	if (ofi_atomic_get32(&ep->ep_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
 
 	if (ep->ep_rx != NULL) {
-		atomic_dec(&ep->ep_rx->rx_refcnt);
+		ofi_atomic_dec32(&ep->ep_rx->rx_refcnt);
 		if (rx_utofid(ep->ep_rx)->fclass  == FI_CLASS_RX_CTX) {
 			(void) usdf_rdm_rx_ctx_close(rx_utofid(ep->ep_rx));
 		}
 	}
 
 	if (ep->ep_tx != NULL) {
-		atomic_dec(&ep->ep_tx->tx_refcnt);
+		ofi_atomic_dec32(&ep->ep_tx->tx_refcnt);
 		if (tx_utofid(ep->ep_tx)->fclass  == FI_CLASS_TX_CTX) {
 			(void) usdf_rdm_tx_ctx_close(tx_utofid(ep->ep_tx));
 		}
 	}
 
-	atomic_dec(&ep->ep_domain->dom_refcnt);
+	ofi_atomic_dec32(&ep->ep_domain->dom_refcnt);
 	if (ep->ep_eq != NULL) {
-		atomic_dec(&ep->ep_eq->eq_refcnt);
+		ofi_atomic_dec32(&ep->ep_eq->eq_refcnt);
 	}
 
 	if (ep->e.rdm.ep_av)
-		atomic_dec(&ep->e.rdm.ep_av->av_refcnt);
+		ofi_atomic_dec32(&ep->e.rdm.ep_av->av_refcnt);
 
 	free(ep);
 	return 0;
@@ -992,11 +992,11 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 			goto fail;
 		}
 		tx->tx_fid.fid.fclass = FI_CLASS_TX_CTX;
-		atomic_initialize(&tx->tx_refcnt, 0);
+		ofi_atomic_initialize32(&tx->tx_refcnt, 0);
 		tx->tx_domain = udp;
 		tx->tx_progress = usdf_rdm_tx_progress;
-		atomic_initialize(&tx->t.rdm.tx_next_msg_id, 1);
-		atomic_inc(&udp->dom_refcnt);
+		ofi_atomic_initialize32(&tx->t.rdm.tx_next_msg_id, 1);
+		ofi_atomic_inc32(&udp->dom_refcnt);
 
 		/* info is both hints and output */
 		ret = usdf_rdm_fill_tx_attr(info, info);
@@ -1009,7 +1009,7 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 		TAILQ_INIT(&tx->t.rdm.tx_rdc_have_acks);
 
 		ep->ep_tx = tx;
-		atomic_inc(&tx->tx_refcnt);
+		ofi_atomic_inc32(&tx->tx_refcnt);
 	}
 
 	/* implicitly create RX context if not to be shared */
@@ -1022,11 +1022,11 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		rx->rx_fid.fid.fclass = FI_CLASS_RX_CTX;
-		atomic_initialize(&rx->rx_refcnt, 0);
+		ofi_atomic_initialize32(&rx->rx_refcnt, 0);
 		rx->rx_domain = udp;
 		rx->r.rdm.rx_tx = tx;
 		rx->r.rdm.rx_sock = -1;
-		atomic_inc(&udp->dom_refcnt);
+		ofi_atomic_inc32(&udp->dom_refcnt);
 
 		ret = usdf_rx_rdm_port_bind(rx, info);
 		if (ret) {
@@ -1044,11 +1044,11 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 		TAILQ_INIT(&rx->r.rdm.rx_posted_rqe);
 
 		ep->ep_rx = rx;
-		atomic_inc(&rx->rx_refcnt);
+		ofi_atomic_inc32(&rx->rx_refcnt);
 	}
 
-	atomic_initialize(&ep->ep_refcnt, 0);
-	atomic_inc(&udp->dom_refcnt);
+	ofi_atomic_initialize32(&ep->ep_refcnt, 0);
+	ofi_atomic_inc32(&udp->dom_refcnt);
 
 	*ep_o = ep_utof(ep);
 	return 0;
@@ -1058,11 +1058,11 @@ fail:
 			close(rx->r.rdm.rx_sock);
 		}
 		free(rx);
-		atomic_dec(&udp->dom_refcnt);
+		ofi_atomic_dec32(&udp->dom_refcnt);
 	}
 	if (tx != NULL) {
 		free(tx);
-		atomic_dec(&udp->dom_refcnt);
+		ofi_atomic_dec32(&udp->dom_refcnt);
 	}
 	if (ep != NULL) {
 		free(ep);

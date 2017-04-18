@@ -143,7 +143,7 @@ fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
 		if (ret)
 			return ret;
 
-		atomic_inc(&_cq->nevents);
+		ofi_atomic_inc32(&_cq->nevents);
 		rc--;
 	}
 	if (fds[1].revents & POLLIN) {
@@ -265,9 +265,9 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 		return -FI_EOTHER;
 	}
 	epe = container_of(entry, struct fi_ibv_msg_epe, entry);
-	atomic_sub(&epe->ep->unsignaled_send_cnt,
+	ofi_atomic_sub32(&epe->ep->unsignaled_send_cnt,
 			VERBS_SEND_SIGNAL_THRESH(epe->ep));
-	atomic_dec(&epe->ep->comp_pending);
+	ofi_atomic_dec32(&epe->ep->comp_pending);
 	util_buf_release(cq->epe_pool, epe);
 
 	return 0;
@@ -382,7 +382,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 	}
 
 	while (!ibv_get_cq_event(cq->channel, &cq->cq, &context))
-		atomic_inc(&cq->nevents);
+		ofi_atomic_inc32(&cq->nevents);
 
 	rc = ibv_req_notify_cq(cq->cq, 0);
 	if (rc) {
@@ -452,8 +452,8 @@ static int fi_ibv_cq_close(fid_t fid)
 
 	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
 
-	if (atomic_get(&cq->nevents))
-		ibv_ack_cq_events(cq->cq, atomic_get(&cq->nevents));
+	if (ofi_atomic_get32(&cq->nevents))
+		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
 
 	fastlock_acquire(&cq->lock);
 	while (!slist_empty(&cq->wcq)) {
@@ -624,7 +624,7 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	_cq->wr_id_mask = (~_cq->wr_id_mask) << ep_cnt_bits;
 
 	_cq->trywait = fi_ibv_cq_trywait;
-	atomic_initialize(&_cq->nevents, 0);
+	ofi_atomic_initialize32(&_cq->nevents, 0);
 
 	*cq = &_cq->cq_fid;
 	return 0;

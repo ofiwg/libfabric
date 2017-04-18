@@ -209,8 +209,8 @@ void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id)
 }
 
 #define VERBS_SIGNAL_SEND(ep) \
-	(atomic_get(&ep->unsignaled_send_cnt) >= VERBS_SEND_SIGNAL_THRESH(ep) && \
-	 !atomic_get(&ep->comp_pending))
+	(ofi_atomic_get32(&ep->unsignaled_send_cnt) >= VERBS_SEND_SIGNAL_THRESH(ep) && \
+	 !ofi_atomic_get32(&ep->comp_pending))
 
 static int fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
 {
@@ -228,7 +228,7 @@ static int fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
 		wr->wr_id = ep->ep_id;
 		epe->ep = ep;
 		slist_insert_tail(&epe->entry, &ep->scq->ep_list);
-		atomic_inc(&ep->comp_pending);
+		ofi_atomic_inc32(&ep->comp_pending);
 	}
 	fastlock_release(&ep->scq->lock);
 	return 0;
@@ -241,7 +241,7 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 	int ret = 0;
 
 	fastlock_acquire(&ep->scq->lock);
-	while (atomic_get(&ep->comp_pending) > 0) {
+	while (ofi_atomic_get32(&ep->comp_pending) > 0) {
 		if (!wce) {
 			wce = util_buf_alloc(ep->scq->wce_pool);
 			if (!wce) {
@@ -285,16 +285,16 @@ ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len
 
 	if (wr->send_flags & IBV_SEND_SIGNALED) {
 		assert((wr->wr_id & ep->scq->wr_id_mask) != ep->scq->send_signal_wr_id);
-		atomic_set(&ep->unsignaled_send_cnt, 0);
+		ofi_atomic_set32(&ep->unsignaled_send_cnt, 0);
 	} else {
 		if (VERBS_SIGNAL_SEND(ep)) {
 			ret = fi_ibv_signal_send(ep, wr);
 			if (ret)
 				return ret;
 		} else {
-			atomic_inc(&ep->unsignaled_send_cnt);
+			ofi_atomic_inc32(&ep->unsignaled_send_cnt);
 
-			if (atomic_get(&ep->unsignaled_send_cnt) >=
+			if (ofi_atomic_get32(&ep->unsignaled_send_cnt) >=
 					VERBS_SEND_COMP_THRESH(ep)) {
 				ret = fi_ibv_reap_comp(ep);
 				if (ret)

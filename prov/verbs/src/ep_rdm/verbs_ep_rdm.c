@@ -185,19 +185,19 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		if (flags & FI_SEND) {
 			ep->send_cntr = cntr;
-			atomic_inc(&ep->send_cntr->ep_ref);
+			ofi_atomic_inc32(&ep->send_cntr->ep_ref);
 		}
 		if (flags & FI_RECV) {
 			ep->recv_cntr = cntr;
-			atomic_inc(&ep->recv_cntr->ep_ref);
+			ofi_atomic_inc32(&ep->recv_cntr->ep_ref);
 		}
 		if (flags & FI_READ) {
 			ep->read_cntr = cntr;
-			atomic_inc(&ep->read_cntr->ep_ref);
+			ofi_atomic_inc32(&ep->read_cntr->ep_ref);
 		}
 		if (flags & FI_WRITE) {
 			ep->write_cntr = cntr;
-			atomic_inc(&ep->write_cntr->ep_ref);
+			ofi_atomic_inc32(&ep->write_cntr->ep_ref);
 		}
 
 		break;
@@ -365,22 +365,22 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	}
 
 	if (ep->send_cntr) {
-		atomic_dec(&ep->send_cntr->ep_ref);
+		ofi_atomic_dec32(&ep->send_cntr->ep_ref);
 		ep->send_cntr = 0;
 	}
 
 	if (ep->recv_cntr) {
-		atomic_dec(&ep->recv_cntr->ep_ref);
+		ofi_atomic_dec32(&ep->recv_cntr->ep_ref);
 		ep->recv_cntr = 0;
 	}
 
 	if (ep->read_cntr) {
-		atomic_dec(&ep->read_cntr->ep_ref);
+		ofi_atomic_dec32(&ep->read_cntr->ep_ref);
 		ep->read_cntr = 0;
 	}
 
 	if (ep->write_cntr) {
-		atomic_dec(&ep->write_cntr->ep_ref);
+		ofi_atomic_dec32(&ep->write_cntr->ep_ref);
 		ep->write_cntr = 0;
 	}
 

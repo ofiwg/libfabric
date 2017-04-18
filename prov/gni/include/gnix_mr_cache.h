@@ -169,7 +169,7 @@ typedef enum {
  * @brief  gnix memory registration cache entry storage
  */
 struct gnix_mrce_storage {
-	atomic_t elements;
+	ofi_atomic32_t elements;
 	RbtHandle rb_tree;
 };
 

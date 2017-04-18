@@ -67,7 +67,7 @@
 static inline int
 usdf_eq_empty(struct usdf_eq *eq)
 {
-	return (atomic_get(&eq->eq_num_events) == 0);
+	return (ofi_atomic_get32(&eq->eq_num_events) == 0);
 }
 
 static inline int
@@ -107,7 +107,7 @@ static inline ssize_t usdf_eq_read_event(struct usdf_eq *eq, uint32_t *event,
 
 	if (!(flags & FI_PEEK)) {
 		/* update count */
-		atomic_dec(&eq->eq_num_events);
+		ofi_atomic_dec32(&eq->eq_num_events);
 
 		/* Free the event buf if needed */
 		if (ev->ue_flags & USDF_EVENT_FLAG_FREE_BUF)
@@ -165,7 +165,7 @@ usdf_eq_write_event(struct usdf_eq *eq, uint32_t event,
 	}
 
 	/* increment queued event count */
-	atomic_inc(&eq->eq_num_events);
+	ofi_atomic_inc32(&eq->eq_num_events);
 
 	return len;
 }
@@ -317,7 +317,7 @@ ssize_t usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event,
 	/* Return -FI_EAGAIN if the EQ is full.
 	 * TODO: Disable the EQ.
 	 */
-	if (atomic_get(&eq->eq_num_events) == eq->eq_ev_ring_size) {
+	if (ofi_atomic_get32(&eq->eq_num_events) == eq->eq_ev_ring_size) {
 		ret = -FI_EAGAIN;
 		goto done;
 	}
@@ -462,7 +462,7 @@ static int usdf_eq_unbind_wait(struct usdf_eq *eq)
 
 	fid_list_remove(&wait_priv->list, &wait_priv->lock, &eq->eq_fid.fid);
 
-	atomic_dec(&wait_priv->wait_refcnt);
+	ofi_atomic_dec32(&wait_priv->wait_refcnt);
 
 	USDF_DBG_SYS(EQ,
 			"dissasociated EQ FD %d from epoll FD %d using FID: %p\n",
@@ -481,10 +481,10 @@ usdf_eq_close(fid_t fid)
 
 	eq = eq_fidtou(fid);
 
-	if (atomic_get(&eq->eq_refcnt) > 0) {
+	if (ofi_atomic_get32(&eq->eq_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
-	atomic_dec(&eq->eq_fabric->fab_refcnt);
+	ofi_atomic_dec32(&eq->eq_fabric->fab_refcnt);
 
 	/* release wait obj */
 	switch (eq->eq_attr.wait_obj) {
@@ -550,7 +550,7 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	eq->eq_fid.ops = &eq->eq_ops_data;
 
 	eq->eq_fabric = fab;
-	atomic_initialize(&eq->eq_refcnt, 0);
+	ofi_atomic_initialize32(&eq->eq_refcnt, 0);
 	ret = pthread_spin_init(&eq->eq_lock, PTHREAD_PROCESS_PRIVATE);
 	if (ret != 0) {
 		ret = -ret;
@@ -614,9 +614,9 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	eq->eq_ev_tail = eq->eq_ev_ring;
 	eq->eq_ev_ring_size = attr->size;
 	eq->eq_ev_end = eq->eq_ev_ring + eq->eq_ev_ring_size;
-	atomic_initialize(&eq->eq_num_events, 0);
+	ofi_atomic_initialize32(&eq->eq_num_events, 0);
 
-	atomic_inc(&eq->eq_fabric->fab_refcnt);
+	ofi_atomic_inc32(&eq->eq_fabric->fab_refcnt);
 
 	eq->eq_attr = *attr;
 	*feq = eq_utof(eq);

@@ -292,7 +292,7 @@ static int sock_eq_fi_close(struct fid *fid)
 	dlistfd_head_free(&sock_eq->list);
 	dlistfd_head_free(&sock_eq->err_list);
 	fastlock_destroy(&sock_eq->lock);
-	atomic_dec(&sock_eq->sock_fab->ref);
+	ofi_atomic_dec32(&sock_eq->sock_fab->ref);
 
 	if (sock_eq->signal && sock_eq->attr.wait_obj == FI_WAIT_MUTEX_COND)
 		sock_wait_close(&sock_eq->waitset->fid);
@@ -405,7 +405,7 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		goto err2;
 
 	fastlock_init(&sock_eq->lock);
-	atomic_inc(&sock_eq->sock_fab->ref);
+	ofi_atomic_inc32(&sock_eq->sock_fab->ref);
 
 	switch (sock_eq->attr.wait_obj) {
 	case FI_WAIT_NONE:

@@ -251,7 +251,7 @@ struct fi_ibv_rdm_cm {
 struct fi_ibv_rdm_cntr {
 	struct fid_cntr		fid;
 	struct fi_ibv_domain	*domain;
-	atomic_t		ep_ref;
+	ofi_atomic32_t		ep_ref;
 	uint64_t		value;
 	struct fi_cntr_attr	attr;
 	uint64_t		err_count;

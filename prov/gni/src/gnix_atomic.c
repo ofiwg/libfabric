@@ -131,7 +131,7 @@ static void __gnix_amo_fr_complete(struct gnix_fab_req *req)
 		fi_close(&req->amo.loc_md->mr_fid.fid);
 	}
 
-	atomic_dec(&req->vc->outstanding_tx_reqs);
+	ofi_atomic_dec32(&req->vc->outstanding_tx_reqs);
 
 	/* Schedule VC TX queue in case the VC is 'fenced'. */
 	_gnix_vc_tx_schedule(req->vc);

@@ -91,7 +91,7 @@ void __gnix_hashtable_test_teardown_bare(void)
 void __gnix_hashtable_test_initialized(void)
 {
 	cr_assert(test_ht->ht_state == GNIX_HT_STATE_READY);
-	cr_assert(atomic_get(&test_ht->ht_elements) == 0);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 0);
 	cr_assert(test_ht->ht_size == test_ht->ht_attr.ht_initial_size);
 	cr_assert(test_ht->ht_lf_tbl != NULL);
 }
@@ -99,7 +99,7 @@ void __gnix_hashtable_test_initialized(void)
 void __gnix_hashtable_test_destroyed_clean(void)
 {
 	cr_assert(test_ht->ht_state == GNIX_HT_STATE_DEAD);
-	cr_assert(atomic_get(&test_ht->ht_elements) == 0);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 0);
 	cr_assert(test_ht->ht_size == 0);
 	cr_assert(test_ht->ht_lf_tbl == NULL);
 }
@@ -353,7 +353,7 @@ Test(gnix_hashtable_advanced, insert_1)
 	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	cr_assert(ret == 0);
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1);
 }
 
 Test(gnix_hashtable_advanced, insert_duplicate)
@@ -363,12 +363,12 @@ Test(gnix_hashtable_advanced, insert_duplicate)
 	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	cr_assert(ret == 0);
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1);
 
 	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	cr_assert(ret == -FI_ENOSPC);
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1);
 }
 
 Test(gnix_hashtable_advanced, insert_1_remove_1)
@@ -380,12 +380,12 @@ Test(gnix_hashtable_advanced, insert_1_remove_1)
 	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	cr_assert(ret == 0);
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1);
 
 	ret = _gnix_ht_remove(test_ht, simple_element->key);
 	cr_assert(ret == 0);
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 0);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 0);
 }
 
 
@@ -407,10 +407,10 @@ Test(gnix_hashtable_advanced, insert_1024)
 		ret = _gnix_ht_insert(test_ht,
 				test_elements[i].key, &test_elements[i]);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1024);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1024);
 }
 
 
@@ -435,7 +435,7 @@ Test(gnix_hashtable_advanced, insert_1024_remove_1024)
 		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
 	for (i = 1023; i >= 0; --i) {
@@ -445,10 +445,10 @@ Test(gnix_hashtable_advanced, insert_1024_remove_1024)
 		ret = _gnix_ht_remove(test_ht,
 				item->key);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == i);
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == i);
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 0);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 0);
 }
 
 Test(gnix_hashtable_advanced, insert_2048_remove_all_resize_down)
@@ -472,7 +472,7 @@ Test(gnix_hashtable_advanced, insert_2048_remove_all_resize_down)
 		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
 	cr_assert(test_ht->ht_size > test_ht->ht_attr.ht_initial_size);
@@ -484,10 +484,10 @@ Test(gnix_hashtable_advanced, insert_2048_remove_all_resize_down)
 		ret = _gnix_ht_remove(test_ht,
 				item->key);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == i);
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == i);
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 0);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 0);
 	/* on default settings, the hash table should resize to initial on
 	 *   removal of all elements
 	 */
@@ -504,7 +504,7 @@ Test(gnix_hashtable_advanced, insert_1_lookup_pass)
 			simple_element->key, simple_element);
 	cr_assert(ret == 0);
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1);
 
 	found = _gnix_ht_lookup(test_ht, simple_element->key);
 	cr_assert(found == simple_element);
@@ -520,7 +520,7 @@ Test(gnix_hashtable_advanced, insert_1_lookup_fail)
 			simple_element->key, simple_element);
 	cr_assert(ret == 0);
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1);
 
 	found = _gnix_ht_lookup(test_ht, simple_element->key - 1);
 	cr_assert(found != simple_element);
@@ -550,10 +550,10 @@ Test(gnix_hashtable_advanced, insert_1024_lookup_all)
 		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1024);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1024);
 
 	for (i = 0; i < 1024; ++i) {
 		found = _gnix_ht_lookup(test_ht, test_elements[i].key);
@@ -586,10 +586,10 @@ Test(gnix_hashtable_advanced, insert_1024_lookup_random)
 		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 1024);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 1024);
 
 	for (i = 0; i < 1024; ++i) {
 		to_find = &test_elements[rand() % 1024];
@@ -637,10 +637,10 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == test_size);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == test_size);
 
 	for (i = 0; i < lookups; ++i) {
 		to_find = &test_elements[rand() % test_size];
@@ -678,7 +678,7 @@ Test(gnix_hashtable_advanced, iterate)
 		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
 	{
@@ -700,10 +700,10 @@ Test(gnix_hashtable_advanced, iterate)
 		ret = _gnix_ht_remove(test_ht,
 				item->key);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == i);
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == i);
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 0);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 0);
 }
 
 Test(gnix_hashtable_locked, iterate)
@@ -728,7 +728,7 @@ Test(gnix_hashtable_locked, iterate)
 		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == (i + 1));
 	}
 
 	{
@@ -750,8 +750,8 @@ Test(gnix_hashtable_locked, iterate)
 		ret = _gnix_ht_remove(test_ht,
 				item->key);
 		cr_assert(ret == 0);
-		cr_assert(atomic_get(&test_ht->ht_elements) == i);
+		cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == i);
 	}
 
-	cr_assert(atomic_get(&test_ht->ht_elements) == 0);
+	cr_assert(ofi_atomic_get32(&test_ht->ht_elements) == 0);
 }

@@ -78,7 +78,7 @@ typedef struct gnix_mr_cache_key {
 typedef struct gnix_mr_cache_entry {
 	cache_entry_state_t state;
 	gnix_mr_cache_key_t key;
-	atomic_t ref_cnt;
+	ofi_atomic32_t ref_cnt;
 	struct dlist_entry lru_entry;
 	struct dlist_entry siblings;
 	struct dlist_entry children;
@@ -538,7 +538,7 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 						   entry, entry->key.address,
 						   entry->key.length);
 
-					atomic_dec(&cache->stale.elements);
+					ofi_atomic_dec32(&cache->stale.elements);
 
 				} else {
 					GNIX_WARN(FI_LOG_MR, "Failed to remove"
@@ -719,7 +719,7 @@ static inline int __insert_entry_into_stale(
 			   entry->key.address, entry->key.length);
 
 		__mr_cache_lru_enqueue(cache, entry);
-		atomic_inc(&cache->stale.elements);
+		ofi_atomic_inc32(&cache->stale.elements);
 		switch (__entry_get_state(entry)) {
 		case  GNIX_CES_INUSE:
 			__entry_set_state(entry, GNIX_CES_STALE);
@@ -802,7 +802,7 @@ static inline void __resolve_stale_entry_collision(
 				  " from lru list (%p)\n",
 				  c_entry);
 		}
-		atomic_dec(&cache->stale.elements);
+		ofi_atomic_dec32(&cache->stale.elements);
 		dlist_remove(&c_entry->siblings);
 		__mr_cache_entry_destroy(cache, c_entry);
 	}
@@ -851,7 +851,7 @@ static inline int __mr_cache_entry_get(
 {
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
-	return atomic_inc(&entry->ref_cnt);
+	return ofi_atomic_inc32(&entry->ref_cnt);
 }
 
 /**
@@ -879,7 +879,7 @@ static inline int __mr_cache_entry_put(
 		__clear_notifier_events(cache);
 	}
 
-	if (atomic_dec(&entry->ref_cnt) == 0) {
+	if (ofi_atomic_dec32(&entry->ref_cnt) == 0) {
 		next = entry->siblings.next;
 		dlist_remove(&entry->children);
 		dlist_remove(&entry->siblings);
@@ -896,11 +896,11 @@ static inline int __mr_cache_entry_put(
 						"failed to release reference to parent, "
 						"parent=%p refs=%d\n",
 						parent,
-						atomic_get(&parent->ref_cnt));
+						ofi_atomic_get32(&parent->ref_cnt));
 			}
 		}
 
-		atomic_dec(&cache->inuse.elements);
+		ofi_atomic_dec32(&cache->inuse.elements);
 
 		if (!__entry_is_retired(entry)) {
 			iter = rbtFind(cache->inuse.rb_tree, &entry->key);
@@ -1030,8 +1030,8 @@ int _gnix_mr_cache_init(
 	 *   destroy will have already set the element counts
 	 */
 	if (cache_p->state == GNIX_MRC_STATE_UNINITIALIZED) {
-		atomic_initialize(&cache_p->inuse.elements, 0);
-		atomic_initialize(&cache_p->stale.elements, 0);
+		ofi_atomic_initialize32(&cache_p->inuse.elements, 0);
+		ofi_atomic_initialize32(&cache_p->stale.elements, 0);
 	}
 
 	cache_p->hits = 0;
@@ -1069,7 +1069,7 @@ int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache)
 	 *   then someone forgot to deregister memory.
 	 *   We probably shouldn't destroy the cache at this point.
 	 */
-	if (atomic_get(&cache->inuse.elements) != 0) {
+	if (ofi_atomic_get32(&cache->inuse.elements) != 0) {
 		return -FI_EAGAIN;
 	}
 
@@ -1141,10 +1141,10 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 
 	GNIX_DEBUG(FI_LOG_MR, "flushed %i of %i entries from memory "
 		   "registration cache\n", destroyed,
-		   atomic_get(&cache->stale.elements));
+		   ofi_atomic_get32(&cache->stale.elements));
 
 	if (destroyed > 0) {
-		atomic_sub(&cache->stale.elements, destroyed);
+		ofi_atomic_add32(&cache->stale.elements, destroyed);
 	}
 
 	return FI_SUCCESS;
@@ -1361,7 +1361,7 @@ static int __mr_cache_search_stale(
 			} else {
 				if (__mr_cache_lru_remove(cache, mr_entry)
 				    == FI_SUCCESS) {
-					atomic_dec(&cache->stale.elements);
+					ofi_atomic_dec32(&cache->stale.elements);
 				} else {
 					GNIX_WARN(FI_LOG_MR, "Failed to remove"
 						  " entry (%p) from lru list\n",
@@ -1390,7 +1390,7 @@ static int __mr_cache_search_stale(
 					  mr_entry);
 			}
 
-			atomic_dec(&cache->stale.elements);
+			ofi_atomic_dec32(&cache->stale.elements);
 
 			/* if we made it to this point, there weren't
 			 * any entries in the inuse tree that would
@@ -1404,8 +1404,8 @@ static int __mr_cache_search_stale(
 					   "inuse tree\n");
 			}
 
-			atomic_set(&mr_entry->ref_cnt, 1);
-			atomic_inc(&cache->inuse.elements);
+			ofi_atomic_set32(&mr_entry->ref_cnt, 1);
+			ofi_atomic_inc32(&cache->inuse.elements);
 
 			*entry = mr_entry;
 		}
@@ -1478,8 +1478,8 @@ static int __mr_cache_create_registration(
 		   current_entry->key.address, current_entry->key.length);
 
 
-	atomic_inc(&cache->inuse.elements);
-	atomic_initialize(&current_entry->ref_cnt, 1);
+	ofi_atomic_inc32(&cache->inuse.elements);
+	ofi_atomic_initialize32(&current_entry->ref_cnt, 1);
 
 	*entry = current_entry;
 
@@ -1534,7 +1534,7 @@ int _gnix_mr_cache_register(
 
 	/* if we shouldn't introduce any new elements, return -FI_ENOSPC */
 	if (unlikely(cache->attr.hard_reg_limit > 0 &&
-			(atomic_get(&cache->inuse.elements) >=
+			(ofi_atomic_get32(&cache->inuse.elements) >=
 			 cache->attr.hard_reg_limit))) {
 		ret = -FI_ENOSPC;
 		goto err;
@@ -1558,8 +1558,8 @@ int _gnix_mr_cache_register(
 	 *   room for the new entry. This works because we check above to see if
 	 *   the number of inuse entries exceeds the hard reg limit
 	 */
-	if ((atomic_get(&cache->inuse.elements) +
-			atomic_get(&cache->stale.elements)) == cache->attr.hard_reg_limit)
+	if ((ofi_atomic_get32(&cache->inuse.elements) +
+			ofi_atomic_get32(&cache->stale.elements)) == cache->attr.hard_reg_limit)
 		__mr_cache_flush(cache, 1);
 
 	ret = __mr_cache_create_registration(cache, address, length,
@@ -1611,14 +1611,14 @@ int _gnix_mr_cache_deregister(
 	}
 
 	GNIX_DEBUG(FI_LOG_MR, "entry found, entry=%p refs=%d\n",
-		   entry, atomic_get(&entry->ref_cnt));
+		   entry, ofi_atomic_get32(&entry->ref_cnt));
 
 	grc = __mr_cache_entry_put(cache, entry);
 
 	/* Since we check this on each deregistration, the amount of elements
 	 * over the limit should always be 1
 	 */
-	if (atomic_get(&cache->stale.elements) > cache->attr.hard_stale_limit)
+	if (ofi_atomic_get32(&cache->stale.elements) > cache->attr.hard_stale_limit)
 		__mr_cache_flush(cache, 1);
 
 	return gnixu_to_fi_errno(grc);
