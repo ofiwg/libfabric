@@ -827,6 +827,7 @@ struct psmx2_env {
 	char *prog_affinity;
 	int sep;
 	int max_trx_ctxt;
+	int num_devunits;
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
@@ -941,7 +942,8 @@ int	psmx2_domain_enable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep 
 
 void	psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt);
 struct	psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
-					     struct psmx2_src_name *src_addr);
+					     struct psmx2_src_name *src_addr,
+					     int sep_ctxt_idx);
 
 void	psmx2_ns_start_server(struct psmx2_fid_fabric *fabric);
 void	psmx2_ns_stop_server(struct psmx2_fid_fabric *fabric);

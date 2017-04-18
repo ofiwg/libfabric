@@ -49,6 +49,7 @@ struct psmx2_env psmx2_env = {
 	.prog_affinity	= NULL,
 	.sep		= 0,
 	.max_trx_ctxt	= 1,
+	.num_devunits	= 1,
 };
 
 static void psmx2_init_env(void)
@@ -174,6 +175,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		return -FI_ENODATA;
 	}
 
+	psmx2_env.num_devunits = cnt;
 	psmx2_init_env();
 
 	src_addr = calloc(1, sizeof(*src_addr));

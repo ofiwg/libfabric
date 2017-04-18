@@ -69,10 +69,12 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 }
 
 struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
-					    struct psmx2_src_name *src_addr)
+					    struct psmx2_src_name *src_addr,
+					    int sep_ctxt_idx)
 {
 	struct psmx2_trx_ctxt *trx_ctxt;
 	struct psm2_ep_open_opts opts;
+	int should_retry = 0;
 	int err;
 
 	trx_ctxt = calloc(1, sizeof(*trx_ctxt));
@@ -93,13 +95,33 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 			"ep_open_opts: unit=%d port=%u\n", opts.unit, opts.port);
 	}
 
+	if (opts.unit < 0 && sep_ctxt_idx >= 0) {
+		should_retry = 1;
+		opts.unit = sep_ctxt_idx % psmx2_env.num_devunits;
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"sep %d: ep_open_opts: unit=%d\n", sep_ctxt_idx, opts.unit);
+	}
+
 	err = psm2_ep_open(domain->fabric->uuid, &opts,
 			   &trx_ctxt->psm2_ep, &trx_ctxt->psm2_epid);
 	if (err != PSM2_OK) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"psm2_ep_open returns %d, errno=%d\n", err, errno);
-		err = psmx2_errno(err);
-		goto err_out;
+		if (!should_retry) {
+			err = psmx2_errno(err);
+			goto err_out;
+		}
+
+		/* When round-robin fails, retry w/o explicit assignment */
+		opts.unit = -1;
+		err = psm2_ep_open(domain->fabric->uuid, &opts,
+				   &trx_ctxt->psm2_ep, &trx_ctxt->psm2_epid);
+		if (err != PSM2_OK) {
+			FI_WARN(&psmx2_prov, FI_LOG_CORE,
+				"psm2_ep_open returns %d, errno=%d\n", err, errno);
+			err = psmx2_errno(err);
+			goto err_out;
+		}
 	}
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
@@ -340,7 +362,7 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	psmx2_am_global_init();
 	psmx2_atomic_global_init();
 
-	domain->base_trx_ctxt = psmx2_trx_ctxt_alloc(domain, src_addr);
+	domain->base_trx_ctxt = psmx2_trx_ctxt_alloc(domain, src_addr, -1);
 	if (!domain->base_trx_ctxt)
 		return -FI_ENODEV;
 

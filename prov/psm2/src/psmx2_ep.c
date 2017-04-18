@@ -944,7 +944,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	for (i = 0; i < ctxt_cnt; i++) {
 		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv,
-					        info ? info->src_addr : NULL);
+					        info ? info->src_addr : NULL, i);
 		if (!trx_ctxt)
 			goto errout_free_ctxt;
 
