@@ -544,7 +544,7 @@ struct fi_ep_attr {
 	uint64_t        mem_tag_format;
 	size_t          tx_ctx_cnt;
 	size_t          rx_ctx_cnt;
-	size_t          auth_keylen;
+	size_t          auth_key_size;
 	uint8_t         *auth_key;
 };
 {% endhighlight %}
@@ -763,9 +763,9 @@ fail the request.
 See the scalable endpoint and shared contexts sections for additional
 details.
 
-## auth_keylen - Authorization Key Length
+## auth_key_size - Authorization Key Length
 
-The length of the authorization key.  This field will be 0 if
+The length of the authorization key in bytes.  This field will be 0 if
 authorization keys are not available or used.  This field is ignored 
 unless the fabric is opened with API version 1.5 or greater.
 
@@ -777,7 +777,7 @@ to limit communication between endpoints.  Only peer endpoints that are
 programmed to use the same authorization key may communicate.
 Authorization keys are often used to implement job keys, to ensure
 that processes running in different jobs do not accidentally
-cross traffic.  The domain authorization key will be used if auth_keylen 
+cross traffic.  The domain authorization key will be used if auth_key_size 
 is set to 0.  This field is ignored unless the fabric is opened with API
 version 1.5 or greater. 
 

@@ -424,7 +424,7 @@ struct fi_mr_attr {
 	uint64_t           access;
 	uint64_t           requested_key;
 	void               *context;
-	size_t             auth_keylen;
+	size_t             auth_key_size;
 	uint8_t            *auth_key;
 };
 ```
@@ -487,9 +487,9 @@ operations.  This value is returned as part of any asynchronous event
 associated with the registration.  This field is ignored for synchronous
 registration calls.
 
-## auth_keylen
+## auth_key_size
 
-The size of key referenced by the auth_key field, or 0 if no authorization
+The size of key referenced by the auth_key field in bytes, or 0 if no authorization
 key is given.  This field is ignored unless the fabric is opened with API
 version 1.5 or greater.
 
@@ -498,7 +498,7 @@ version 1.5 or greater.
 Indicates the key to associate with this memory registration.  Authorization
 keys are used to limit communication between endpoints.  Only peer endpoints
 that are programmed to use the same authorization key may access the memory
-region.  The domain authorization key will be used if the auth_keylen 
+region.  The domain authorization key will be used if the auth_key_size 
 provided is 0.  This field is ignored unless the fabric is opened with API 
 version 1.5 or greater.
 
