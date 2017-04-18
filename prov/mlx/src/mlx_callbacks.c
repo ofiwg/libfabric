@@ -106,6 +106,7 @@ void mlx_recv_callback (
 		mlx_req->completion.error.err = MLX_TRANSLATE_ERRCODE(status);
 	}
 
+	fastlock_acquire(&cq->cq_lock);
 	if (mlx_req->type == MLX_FI_REQ_UNINITIALIZED) {
 		if (status != UCS_OK) {
 			mlx_req->completion.error.olen = info->length;
