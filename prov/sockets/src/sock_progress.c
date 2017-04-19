@@ -978,26 +978,26 @@ out:
 	}								\
 } while (0)
 
-#define SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst) do {		\
+#define SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, _name) do {	\
 	switch (op) {							\
 	case FI_SUM:							\
 		*_cmp = *_dst;						\
-		*_dst = *_dst + *_src;					\
+		*_dst = OFI_COMPLEX_OP(_name, sum)(*_dst, *_src);		\
 		break;							\
 									\
 	case FI_PROD:							\
 		*_cmp = *_dst;						\
-		*_dst = *_dst * *_src;					\
+		*_dst = OFI_COMPLEX_OP(_name, mul)(*_dst, *_src);		\
 		break;							\
 									\
 	case FI_LOR:							\
 		*_cmp = *_dst;						\
-		*_dst = *_dst || *_src;					\
+		*_dst = OFI_COMPLEX_OP(_name, lor)(*_dst, *_src);		\
 		break;							\
 									\
 	case FI_LAND:							\
 		*_cmp = *_dst;						\
-		*_dst = *_dst && *_src;					\
+		*_dst = OFI_COMPLEX_OP(_name, land)(*_dst, *_src);		\
 		break;							\
 									\
 	case FI_ATOMIC_READ:						\
@@ -1010,7 +1010,7 @@ out:
 		break;							\
 									\
 	case FI_CSWAP:							\
-		if (*_cmp == *_dst)					\
+		if (OFI_COMPLEX_OP(_name, equ)(*_dst, *_src))		\
 			*_dst = *_src;					\
 		else							\
 			*_cmp = *_dst;					\
@@ -1018,7 +1018,7 @@ out:
 									\
 	case FI_CSWAP_NE:						\
 		_tmp = *_dst;						\
-		if (*_cmp != *_dst)					\
+		if (!OFI_COMPLEX_OP(_name, equ)(*_dst, *_src))		\
 			*_dst = *_src;					\
 		*_cmp = _tmp;						\
 		break;							\
@@ -1124,25 +1124,25 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 
 	case FI_DOUBLE_COMPLEX:
 	{
-		double complex *_cmp, *_dst, *_src, _tmp;
+		OFI_COMPLEX(double) *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, double);
 		break;
 	}
 
 	case FI_FLOAT_COMPLEX:
 	{
-		float complex *_cmp, *_dst, *_src, _tmp;
+		OFI_COMPLEX(float) *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, float);
 		break;
 	}
 
 	case FI_LONG_DOUBLE_COMPLEX:
 	{
-		long double complex *_cmp, *_dst, *_src, _tmp;
+		OFI_COMPLEX(long_double) *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, long_double);
 		break;
 	}
 
