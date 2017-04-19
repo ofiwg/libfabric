@@ -778,10 +778,10 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 	if (!buf)
 		return -FI_EINVAL;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if (op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
@@ -965,10 +965,10 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 	if (!buf && op != FI_ATOMIC_READ)
 		return -FI_EINVAL;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if (op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
@@ -1170,10 +1170,10 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 	if (!buf)
 		return -FI_EINVAL;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if (op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
@@ -1333,7 +1333,7 @@ static int psmx_atomic_writevalid(struct fid_ep *ep,
 {
 	int chunk_size;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
@@ -1368,7 +1368,7 @@ static int psmx_atomic_readwritevalid(struct fid_ep *ep,
 {
 	int chunk_size;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
@@ -1404,7 +1404,7 @@ static int psmx_atomic_compwritevalid(struct fid_ep *ep,
 {
 	int chunk_size;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
