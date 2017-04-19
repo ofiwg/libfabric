@@ -309,6 +309,12 @@ static int setup_handle(void)
 	size_t saved_addrlen;
 	int ret;
 
+	ret = ft_startup();
+	if (ret) {
+		FT_ERR("ft_startup: %d", ret);
+		return ret;
+	}
+
 	memset(&aihints, 0, sizeof aihints);
 	aihints.ai_flags = AI_PASSIVE;
 	ret = getaddrinfo(opts.src_addr, opts.src_port, &aihints, &ai);
