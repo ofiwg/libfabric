@@ -1144,7 +1144,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 		   ofi_atomic_get32(&cache->stale.elements));
 
 	if (destroyed > 0) {
-		ofi_atomic_add32(&cache->stale.elements, destroyed);
+		ofi_atomic_sub32(&cache->stale.elements, destroyed);
 	}
 
 	return FI_SUCCESS;
