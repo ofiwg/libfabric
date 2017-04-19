@@ -344,7 +344,7 @@ static int __gnix_ht_lf_destroy(gnix_hashtable_t *ht)
 		freed_entries = __gnix_ht_destroy_list(ht, &lh->head);
 
 		if (freed_entries)
-			ofi_atomic_add32(&ht->ht_elements, freed_entries);
+			ofi_atomic_sub32(&ht->ht_elements, freed_entries);
 	}
 
 	free(ht->ht_lf_tbl);
@@ -478,7 +478,7 @@ static int __gnix_ht_lk_destroy(gnix_hashtable_t *ht)
 		freed_entries = __gnix_ht_destroy_list(ht, &lh->head);
 
 		if (freed_entries)
-			ofi_atomic_add32(&ht->ht_elements, freed_entries);
+			ofi_atomic_sub32(&ht->ht_elements, freed_entries);
 	}
 
 	free(ht->ht_lk_tbl);
