@@ -4,6 +4,17 @@
 *.o
 *.lo
 *.la
+*.obj
+*.vcxproj.user
+*.pdb
+*.tlog
+*.exe
+*.lib
+*.dll
+*.vc.db
+*.vc.opendb
+*.ilk
+*.exp
 stamp-h?
 Makefile
 Makefile.in

@@ -66,11 +66,10 @@ nobase_dist_config_DATA = \
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
 	common/shared.c \
-	common/jsmn.c
+	common/jsmn.c \
+	common/ft_osd.h
 
 if MACOS
-libfabtests_la_SOURCES += include/osx/osd.h
-
 if !HAVE_CLOCK_GETTIME
 libfabtests_la_SOURCES += common/osx/osd.c
 endif

@@ -1,7 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation.  All rights reserved.
- * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,24 +30,19 @@
  * SOFTWARE.
  */
 
-#include "osx/osd.h"
-#include "config.h"
+#ifndef _FT_OSD_H_
+#define _FT_OSD_H_
 
-/* clock_gettime() does not exist on OS X before the mac OS Sierra release. If
- * the symbol is not already defined, then define a workaround using
- * gettimeofday. Ignore the clk_id that is passed in and always return the
- * system clock time.
- */
-#if !HAVE_CLOCK_GETTIME
-int clock_gettime(clockid_t clk_id, struct timespec *tp) {
-	int retval;
-	struct timeval tv;
-
-	retval = gettimeofday(&tv, NULL);
-
-	tp->tv_sec = tv.tv_sec;
-	tp->tv_nsec = tv.tv_usec * 1000;
-
-	return retval;
-}
+#ifdef __APPLE__
+#include <osx/osd.h>
+#include <unix/osd.h>
+#elif defined __FreeBSD__
+#include <freebsd/osd.h>
+#include <unix/osd.h>
+#elif defined _WIN32
+#include <windows/osd.h>
+#else
+#include <unix/osd.h>
 #endif
+
+#endif /* _FT_OSD_H_ */
