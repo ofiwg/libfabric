@@ -492,8 +492,12 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 		free(info->dest_addr);
 		free(info->tx_attr);
 		free(info->rx_attr);
-		free(info->ep_attr);
+		if (info->ep_attr) {
+			free(info->ep_attr->auth_key);
+			free(info->ep_attr);
+		}
 		if (info->domain_attr) {
+			free(info->domain_attr->auth_key);
 			free(info->domain_attr->name);
 			free(info->domain_attr);
 		}
@@ -730,15 +734,31 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 		dup->ep_attr = mem_dup(info->ep_attr, sizeof(*info->ep_attr));
 		if (dup->ep_attr == NULL)
 			goto fail;
+		if (info->ep_attr->auth_key != NULL) {
+			dup->ep_attr->auth_key =
+				mem_dup(info->ep_attr->auth_key,
+					info->ep_attr->auth_key_size);
+			if (dup->ep_attr->auth_key == NULL)
+				goto fail;
+		}
 	}
 	if (info->domain_attr) {
 		dup->domain_attr = mem_dup(info->domain_attr,
 					   sizeof(*info->domain_attr));
 		if (dup->domain_attr == NULL)
 			goto fail;
+		dup->domain_attr->name = NULL;
+		dup->domain_attr->auth_key = NULL;
 		if (info->domain_attr->name != NULL) {
 			dup->domain_attr->name = strdup(info->domain_attr->name);
 			if (dup->domain_attr->name == NULL)
+				goto fail;
+		}
+		if (info->domain_attr->auth_key != NULL) {
+			dup->domain_attr->auth_key =
+				mem_dup(info->domain_attr->auth_key,
+					info->domain_attr->auth_key_size);
+			if (dup->domain_attr->auth_key == NULL)
 				goto fail;
 		}
 	}
