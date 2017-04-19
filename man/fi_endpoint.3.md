@@ -1256,7 +1256,10 @@ value of transmit or receive context attributes of an endpoint.
 
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for data
-  transfer operations.
+  transfer operations. This flag only applies to operations issued on
+  endpoints that were bound to a CQ or counter with the 
+  FI_SELECTIVE_COMPLETION flag. See the fi_ep_bind section above for more
+  detail.
 
 *FI_INJECT_COMPLETE*
 : Indicates that a completion should be generated when the
