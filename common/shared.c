@@ -38,7 +38,6 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <complex.h>
 
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -1114,13 +1113,13 @@ size_t datatype_to_size(enum fi_datatype datatype)
 	case FI_DOUBLE:
 		return sizeof(double);
 	case FI_FLOAT_COMPLEX:
-		return sizeof(float complex);
+		return sizeof(OFI_COMPLEX(float));
 	case FI_DOUBLE_COMPLEX:
-		return sizeof(double complex);
+		return sizeof(OFI_COMPLEX(double));
 	case FI_LONG_DOUBLE:
 		return sizeof(long double);
 	case FI_LONG_DOUBLE_COMPLEX:
-		return sizeof(long double complex);
+		return sizeof(OFI_COMPLEX(long_double));;
 	default:
 		return 0;
 	}
@@ -2247,5 +2246,4 @@ const char *ft_core_name(const char *str, size_t *len)
 	}
 	*len = 0;
 	return NULL;
-
 }
