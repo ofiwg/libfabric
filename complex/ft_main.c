@@ -324,17 +324,25 @@ static int ft_fw_server(void)
 static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 {
 	int ret, subindex, result, sresult;
+	size_t len;
 
 	for (subindex = 1, fabric_info = info; fabric_info;
 	     fabric_info = fabric_info->next, subindex++) {
 
-		printf("Starting test %d-%d: ", series->test_index, subindex);
-		ft_show_test_info();
+		//check needed to skip utility providers, unless requested
+		if (!ft_util_name(hints->fabric_attr->prov_name, &len) &&
+		    strcmp(hints->fabric_attr->prov_name,
+		    fabric_info->fabric_attr->prov_name))
+			continue;
+
 		ret = ft_check_info(hints, fabric_info);
 		if (ret)
 			return ret;
 
 		ft_fw_update_info(&test_info, fabric_info, subindex);
+		printf("Starting test %d-%d: ", series->test_index, subindex);
+		ft_show_test_info();
+
 		ret = ft_sock_send(sock, &test_info, sizeof test_info);
 		if (ret) {
 			FT_PRINTERR("ft_sock_send", ret);
