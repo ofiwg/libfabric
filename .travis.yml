@@ -24,4 +24,5 @@ script:
     - ./configure --prefix=$HOME
     - make
     - make install
+    - make dist
     - make test

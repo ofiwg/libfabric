@@ -67,7 +67,18 @@ noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
 	common/shared.c \
 	common/jsmn.c \
-	common/ft_osd.h
+	include/shared.h \
+	include/jsmn.h \
+	include/unix/osd.h \
+	include/ft_osd.h
+
+benchmarks_srcs = \
+	benchmarks/benchmark_shared.h \
+	benchmarks/benchmark_shared.c
+
+unit_srcs = \
+	include/unit_common.h \
+	unit/common.c
 
 if MACOS
 if !HAVE_CLOCK_GETTIME
@@ -157,86 +168,78 @@ streaming_fi_rdm_rma_LDADD = libfabtests.la
 
 benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/msg_pingpong.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_msg_pingpong_LDADD = libfabtests.la
 
 benchmarks_fi_msg_bw_SOURCES = \
 	benchmarks/msg_bw.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_msg_bw_LDADD = libfabtests.la
 
 benchmarks_fi_rma_bw_SOURCES = \
 	benchmarks/rma_bw.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_rma_bw_LDADD = libfabtests.la
 
 benchmarks_fi_dgram_pingpong_SOURCES = \
 	benchmarks/dgram_pingpong.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_dgram_pingpong_LDADD = libfabtests.la
 
 benchmarks_fi_rdm_cntr_pingpong_SOURCES = \
 	benchmarks/rdm_cntr_pingpong.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_rdm_cntr_pingpong_LDADD = libfabtests.la
 
 benchmarks_fi_rdm_pingpong_SOURCES = \
 	benchmarks/rdm_pingpong.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_rdm_pingpong_LDADD = libfabtests.la
 
 benchmarks_fi_rdm_tagged_pingpong_SOURCES = \
 	benchmarks/rdm_tagged_pingpong.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_rdm_tagged_pingpong_LDADD = libfabtests.la
 
 benchmarks_fi_rdm_tagged_bw_SOURCES = \
 	benchmarks/rdm_tagged_bw.c \
-	benchmarks/benchmark_shared.h \
-	benchmarks/benchmark_shared.c
+	$(benchmarks_srcs)
 benchmarks_fi_rdm_tagged_bw_LDADD = libfabtests.la
 
 
 unit_fi_eq_test_SOURCES = \
 	unit/eq_test.c \
-	unit/common.c
+	$(unit_srcs)
 unit_fi_eq_test_LDADD = libfabtests.la
 
 unit_fi_cq_test_SOURCES = \
 	unit/cq_test.c \
-	unit/common.c
+	$(unit_srcs)
 unit_fi_cq_test_LDADD = libfabtests.la
 
 unit_fi_mr_test_SOURCES = \
 	unit/mr_test.c \
-	unit/common.c
+	$(unit_srcs)
 unit_fi_mr_test_LDADD = libfabtests.la
 
 unit_fi_cntr_test_SOURCES = \
 	unit/cntr_test.c \
-	unit/common.c
+	$(unit_srcs)
 unit_fi_cntr_test_LDADD = libfabtests.la
 
 unit_fi_av_test_SOURCES = \
 	unit/av_test.c \
-	unit/common.c
+	$(unit_srcs)
 unit_fi_av_test_LDADD = libfabtests.la
 
 unit_fi_dom_test_SOURCES = \
 	unit/dom_test.c \
-	unit/common.c
+	$(unit_srcs)
 unit_fi_dom_test_LDADD = libfabtests.la
 
 unit_fi_getinfo_test_SOURCES = \
 	unit/getinfo_test.c \
-	unit/common.c
+	$(unit_srcs)
 unit_fi_getinfo_test_LDADD = libfabtests.la
 
 ported_libibverbs_fi_rc_pingpong_SOURCES = \
@@ -248,6 +251,7 @@ ported_librdmacm_fi_cmatose_SOURCES = \
 ported_librdmacm_fi_cmatose_LDADD = libfabtests.la
 
 complex_fi_ubertest_SOURCES = \
+	complex/fabtest.h \
 	complex/ft_main.c \
 	complex/ft_comm.c \
 	complex/ft_comp.c \
@@ -261,10 +265,6 @@ complex_fi_ubertest_LDADD = libfabtests.la
 man_MANS = man/fabtests.7
 
 EXTRA_DIST = \
-	include/shared.h \
-	include/unit_common.h \
-	include/jsmn.h \
-	complex/fabtest.h \
 	fabtests.spec.in $(man_MANS)
 
 dist-hook: fabtests.spec
