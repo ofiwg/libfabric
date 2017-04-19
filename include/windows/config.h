@@ -86,6 +86,12 @@
 /* rxd provider is built as DSO */
 /* #undef HAVE_RXD_DL */
 
+/* Network Direct provider is built */
+#define HAVE_NETDIR 1
+
+/* Network Direct provider is built as DSO */
+/* #undef HAVE_NETDIR_DL */
+
 /* Define to 1 if you have the <stdint.h> header file. */
 /* #undef HAVE_STDINT_H */
 
