@@ -337,7 +337,7 @@ static ssize_t ofi_nd_cq_read(struct fid_cq *pcq, void *buf, size_t count)
 
 	ofi_nd_cq_ov2buf(cq, ov, buf, dequeue);
 	res = (ssize_t)dequeue;
-	ofi_atomic_sub32(&cq->count, (LONG)dequeue);
+	InterlockedAdd(&cq->count, -(LONG)dequeue);
 	assert(cq->count >= 0);
 
 fn_complete:
@@ -393,7 +393,7 @@ static ssize_t ofi_nd_cq_readerr(struct fid_cq *pcq, struct fi_cq_err_entry *buf
 	buf->prov_errno = entry->result.Status;
 	buf->err_data_size = 0;
 
-	ofi_atomic_dec32(&cq->count);
+	InterlockedDecrement(&cq->count);
 	assert(cq->count >= 0);
 
 	return 0;
@@ -467,7 +467,7 @@ static ssize_t ofi_nd_cq_sread(struct fid_cq *pcq, void *buf, size_t count,
 
 		ofi_nd_cq_ov2buf(cq, ov, buf, dequeue);
 		res = (ssize_t)dequeue;
-		ofi_atomic_sub32(&cq->count, (LONG)dequeue);
+		InterlockedAdd(&cq->count, -(LONG)dequeue);
 		assert(cq->count >= 0);
 		goto fn_complete;
 	} while (!OFI_ND_TIMEDOUT());
@@ -540,9 +540,9 @@ void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected)
 
 	if (ep->cntr_send) {
 		if (result->Status != S_OK) {
-			ofi_atomic_inc64(&ep->cntr_send->err);
+			InterlockedIncrement64(&ep->cntr_send->err);
 		}
-		ofi_atomic_inc64(&ep->cntr_send->counter);
+		InterlockedIncrement64(&ep->cntr_send->counter);
 		WakeByAddressAll((void*)&ep->cntr_send->counter);
 	}
 
@@ -554,7 +554,7 @@ void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected)
 		PostQueuedCompletionStatus(
 			parent_entry->result.Status == S_OK ? ep->cq_send->iocp : ep->cq_send->err,
 			0, 0, &parent_entry->base.ov);
-		ofi_atomic_inc32(&ep->cq_send->count);
+		InterlockedIncrement(&ep->cq_send->count);
 		WakeByAddressAll((void*)&ep->cq_send->count);
 	}
 	else { /* if notification is not requested - just free entry */
@@ -606,9 +606,9 @@ void ofi_nd_unexp_2_cq(nd_cq_entry *entry, nd_unexpected_entry *unexp)
 
 	if (ep->cntr_recv) {
 		if (status != S_OK) {
-			ofi_atomic_inc64(&ep->cntr_recv->err);
+			InterlockedIncrement64(&ep->cntr_recv->err);
 		}
-		ofi_atomic_inc64(&ep->cntr_recv->counter);
+		InterlockedIncrement64(&ep->cntr_recv->counter);
 		WakeByAddressAll((void*)&ep->cntr_recv->counter);
 	}
 
@@ -620,7 +620,7 @@ void ofi_nd_unexp_2_cq(nd_cq_entry *entry, nd_unexpected_entry *unexp)
 		if (notify && ep->cq_recv) {
 			PostQueuedCompletionStatus(
 				ep->cq_recv->iocp, 0, 0, &entry->base.ov);
-			ofi_atomic_inc32(&ep->cq_recv->count);
+			InterlockedIncrement(&ep->cq_recv->count);
 			WakeByAddressAll((void*)&ep->cq_recv->count);
 		}
 		else { /* if notification is not requested - just free entry */
@@ -631,7 +631,7 @@ void ofi_nd_unexp_2_cq(nd_cq_entry *entry, nd_unexpected_entry *unexp)
 		if (ep->cq_recv) {
 			PostQueuedCompletionStatus(
 				ep->cq_recv->err, 0, 0, &entry->base.ov);
-			ofi_atomic_inc32(&ep->cq_recv->count);
+			InterlockedIncrement(&ep->cq_recv->count);
 			WakeByAddressAll((void*)&ep->cq_recv->count);
 		}
 		else { /* TODO add warning here */
@@ -767,9 +767,9 @@ void ofi_nd_read_2_cq(nd_cq_entry *entry, ND2_RESULT *result)
 
 	if (ep->cntr_read) {
 		if (result->Status != S_OK) {
-			ofi_atomic_inc64(&ep->cntr_read->err);
+			InterlockedIncrement64(&ep->cntr_read->err);
 		}
-		ofi_atomic_inc64(&ep->cntr_read->counter);
+		InterlockedIncrement64(&ep->cntr_read->counter);
 		WakeByAddressAll((void*)&ep->cntr_read->counter);
 	}
 
@@ -781,7 +781,7 @@ void ofi_nd_read_2_cq(nd_cq_entry *entry, ND2_RESULT *result)
 		PostQueuedCompletionStatus(
 			entry->result.Status == S_OK ? ep->cq_recv->iocp : ep->cq_recv->err,
 			0, 0, &entry->base.ov);
-		ofi_atomic_inc32(&ep->cq_recv->count);
+		InterlockedIncrement(&ep->cq_recv->count);
 		WakeByAddressAll((void*)&ep->cq_recv->count);
 	}
 	else { /* if notification is not requested - just free entry */

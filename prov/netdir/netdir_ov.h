@@ -167,8 +167,8 @@ static inline void nd_buf_register_fini(void(*fini)(void))
 		fin->fini = fini;
 		do {
 			fin->next = nd_buf_fini_head;
-		} while (ofi_val_compare_and_swap_ptr(
-			 (volatile void**)&nd_buf_fini_head,
+		} while (InterlockedCompareExchangePointer(
+			 (volatile PVOID*)&nd_buf_fini_head,
 			 fin, (volatile PVOID)fin->next) != fin->next);
 	}
 	else {
@@ -223,7 +223,7 @@ static inline void ofi_nd_eq_push(struct nd_eq *eq, struct nd_eq_event *ev)
 
 	assert(eq->iocp);
 	PostQueuedCompletionStatus(eq->iocp, 0, 0, &ev->ov);
-	ofi_atomic_inc32(&eq->count);
+	InterlockedIncrement(&eq->count);
 	WakeByAddressAll((void*)&eq->count);
 }
 
@@ -234,7 +234,7 @@ static inline void ofi_nd_eq_push_err(struct nd_eq *eq, struct nd_eq_event *ev)
 
 	assert(eq->err);
 	PostQueuedCompletionStatus(eq->err, 0, 0, &ev->ov);
-	ofi_atomic_inc32(&eq->count);
+	InterlockedIncrement(&eq->count);
 	WakeByAddressAll((void*)&eq->count);
 }
 

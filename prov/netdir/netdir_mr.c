@@ -172,7 +172,7 @@ int ofi_nd_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (!(domain->eq_flags & FI_MR_COMPLETE)) {
 		/* sync memory registration */
 		hr = mr->mr->lpVtbl->GetOverlappedResult(mr->mr, &ov->base.ov, TRUE);
-		if (!ofi_atomic_dec32(&ov->cnt))
+		if (!InterlockedDecrement(&ov->cnt))
 			ofi_nd_mr_ov_free(&ov->base);
 		if (FAILED(hr))
 			goto fn_fail;
@@ -273,7 +273,7 @@ static void ofi_nd_mr_ov_event(struct nd_event_base* base, DWORD bytes)
 	ofi_nd_mr_ov *ov = container_of(base, ofi_nd_mr_ov, base);
 
 	if (ov->cnt) { /* this is sync mr reg operation */
-		if (!ofi_atomic_dec32(&ov->cnt))
+		if (!InterlockedDecrement(&ov->cnt))
 			ofi_nd_mr_ov_free(&ov->base);
 		return;
 	}

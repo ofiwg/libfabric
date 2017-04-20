@@ -124,7 +124,7 @@ ofi_nd_ep_sendmsg(struct fid_ep *pep, const struct fi_msg *msg, uint64_t flags)
 	entry->flags = flags | FI_MSG | FI_SEND;
 	entry->domain = ep->domain;
 	entry->context = msg->context;
-	entry->seq = ofi_atomic_add64(&ep->domain->msg_cnt, 1);
+	entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
 	/* since send operation can't be canceled, set NULL into
 	 * the 1st byte of internal data of context */
@@ -472,7 +472,7 @@ static ssize_t ofi_nd_ep_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 	entry->domain = ep->domain;
 	entry->context = msg->context;
 	entry->iov_cnt = msg->iov_count;
-	entry->seq = ofi_atomic_add64(&ep->domain->msg_cnt, 1);
+	entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
 	for (i = 0; i < msg->iov_count; i++)
 		entry->iov[i] = msg->msg_iov[i];
@@ -561,9 +561,9 @@ void ofi_nd_send_event(ND2_RESULT *result)
 
 	if (ep->cntr_send) {
 		if (result->Status != S_OK) {
-			ofi_atomic_inc64(&ep->cntr_send->err);
+			InterlockedIncrement64(&ep->cntr_send->err);
 		}
-		ofi_atomic_inc64(&ep->cntr_send->counter);
+		InterlockedIncrement64(&ep->cntr_send->counter);
 		WakeByAddressAll((void*)&ep->cntr_send->counter);
 	}
 
@@ -575,7 +575,7 @@ void ofi_nd_send_event(ND2_RESULT *result)
 		PostQueuedCompletionStatus(
 			entry->result.Status == S_OK ? ep->cq_send->iocp : ep->cq_send->err,
 			0, 0, &entry->base.ov);
-		ofi_atomic_inc32(&ep->cq_send->count);
+		InterlockedIncrement(&ep->cq_send->count);
 		WakeByAddressAll((void*)&ep->cq_send->count);
 	}
 	else { /* if notification is not requested - just free entry */

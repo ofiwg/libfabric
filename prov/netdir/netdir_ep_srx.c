@@ -193,7 +193,7 @@ static ssize_t ofi_nd_srx_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 	entry->domain = srx->domain;
 	entry->context = msg->context;
 	entry->iov_cnt = msg->iov_count;
-	entry->seq = ofi_atomic_add64(&srx->domain->msg_cnt, 1);
+	entry->seq = InterlockedAdd64(&srx->domain->msg_cnt, 1);
 
 	for (i = 0; i < msg->iov_count; i++) {
 		entry->iov[i] = msg->msg_iov[i];

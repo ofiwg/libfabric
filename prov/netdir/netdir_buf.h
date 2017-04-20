@@ -80,7 +80,7 @@ extern "C" {
  */
 
 #define OFI_ND_BUF_DEFCOUNT 1024
-#define ICEP ofi_val_compare_and_swap_ptr
+#define ICEP InterlockedCompareExchangePointer
 #define countof(x) _countof(x) /*(sizeof(x) / sizeof(*(x)))*/
 
 #define OFI_ND_NB_BUF_IMP(name) struct nd_buf_footer_##name nd_footer_##name = {0};
@@ -156,7 +156,7 @@ extern "C" {
 												\
 		assert(footer);									\
 												\
-		if (ofi_atomic_inc32(&footer->used) > footer->count) {				\
+		if (InterlockedIncrement(&footer->used) > footer->count) {			\
 			/* allocate new chunk of data */					\
 			size_t i;								\
 			nd_buf_chunk_##name *data;						\
@@ -183,16 +183,16 @@ extern "C" {
 			do {									\
 				next_free = (nd_buf_item_##name*)footer->item_free;		\
 				data->item[count - 1].next = next_free;				\
-			} while (ICEP((volatile void**)&footer->item_free,			\
+			} while (ICEP((volatile PVOID*)&footer->item_free,			\
 				      (void*)&data->item[1], (void*)next_free) != next_free);	\
 												\
-			ofi_atomic_add32(&footer->count, count);				\
+			InterlockedAdd(&footer->count, count);					\
 												\
 			/* add new chunk into footer */						\
 			do {									\
 				next = (nd_buf_chunk_##name*)footer->chunk_head;		\
 				data->next = next;						\
-			} while (ICEP((volatile void**)&footer->chunk_head,			\
+			} while (ICEP((volatile PVOID*)&footer->chunk_head,			\
 				      (void*)data, (void*)next) != next);			\
 			return &data->item[0].data;						\
 		}										\
@@ -203,7 +203,7 @@ extern "C" {
 			assert(footer->item_free);						\
 			top_free = (nd_buf_item_##name *)footer->item_free;			\
 			next_free = (nd_buf_item_##name *)footer->item_free->next;		\
-		} while (ICEP((volatile void**)&footer->item_free,				\
+		} while (ICEP((volatile PVOID*)&footer->item_free,				\
 			(void*)next_free, (void*)top_free) != top_free);			\
 												\
 		return &top_free->data;								\
@@ -226,10 +226,10 @@ extern "C" {
 												\
 		do {										\
 			item->next = (nd_buf_item_##name*)footer->item_free;			\
-		} while (ICEP((volatile void**)&footer->item_free,				\
+		} while (ICEP((volatile PVOID*)&footer->item_free,				\
 			 (void*)item, (void*)item->next) != item->next);			\
 												\
-		LONG dec = ofi_atomic_dec32(&footer->used);					\
+		LONG dec = InterlockedDecrement(&footer->used);					\
 		assert(dec >= 0);								\
 	}											\
 												\

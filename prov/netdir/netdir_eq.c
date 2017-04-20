@@ -238,7 +238,7 @@ static ssize_t ofi_nd_eq_read(struct fid_eq *peq, uint32_t *pev,
 	}
 	else {
 		eq->peek = NULL;
-		ofi_atomic_dec32(&eq->count);
+		InterlockedDecrement(&eq->count);
 		assert(eq->count >= 0);
 	}
 
@@ -274,7 +274,7 @@ static ssize_t ofi_nd_eq_readerr(struct fid_eq *peq,
 	if (!GetQueuedCompletionStatus(eq->err, &bytes, &key, &ov, 0))
 		return -FI_EAGAIN;
 
-	ofi_atomic_dec32(&eq->count);
+	InterlockedDecrement(&eq->count);
 	assert(eq->count >= 0);
 	ev = container_of(ov, struct nd_eq_event, ov);
 
@@ -360,7 +360,7 @@ static ssize_t ofi_nd_eq_sread(struct fid_eq *peq, uint32_t *pev,
 		}
 		else {
 			eq->peek = NULL;
-			ofi_atomic_dec32(&eq->count);
+			InterlockedDecrement(&eq->count);
 			assert(eq->count >= 0);
 		}
 
