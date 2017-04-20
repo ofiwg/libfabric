@@ -66,82 +66,146 @@
 #define GNIX_FAB_REQ_FL_MIN_SIZE 100
 #define GNIX_FAB_REQ_FL_REFILL_SIZE 10
 
-void _gnix_ep_int_tx_pool_init(struct gnix_fid_ep *ep)
+int _gnix_ep_int_tx_pool_grow(struct gnix_fid_ep *ep)
 {
 	int ret, i;
+	uint8_t *tx_bufs;
 	struct fid_mr *auto_mr = NULL;
-	uint8_t *int_tx_bufs;
-	struct gnix_int_tx_buf *int_tx_buf_list;
+	struct gnix_fid_mem_desc *md = NULL;
+	struct gnix_int_tx_buf *tx_buf_list;
+	struct gnix_int_tx_ptrs *tx_ptrs;
 
 	assert(ep);
 
-	int_tx_bufs = malloc(GNIX_INT_TX_POOL_SIZE * GNIX_INT_TX_BUF_SZ);
-	if (int_tx_bufs == NULL) {
-		GNIX_FATAL(FI_LOG_EP_DATA, "\n");
+	if (ep->int_tx_pool.nbufs >= GNIX_INT_TX_POOL_COUNT) {
+		GNIX_WARN(FI_LOG_EP_DATA, "int_tx_pool is at max size\n");
+		return -FI_ENOSPC;
 	}
 
-	int_tx_buf_list = malloc(GNIX_INT_TX_POOL_SIZE *
+	tx_bufs = malloc(GNIX_INT_TX_POOL_SIZE * GNIX_INT_TX_BUF_SZ);
+	if (tx_bufs == NULL) {
+		GNIX_WARN(FI_LOG_EP_DATA, "tx_bufs allocation failed\n");
+		goto tx_buf_err;
+	}
+
+	tx_buf_list = malloc(GNIX_INT_TX_POOL_SIZE *
 				 sizeof(struct gnix_int_tx_buf));
-	if (int_tx_buf_list == NULL) {
-		GNIX_FATAL(FI_LOG_EP_DATA, "\n");
+	if (tx_buf_list == NULL) {
+		GNIX_WARN(FI_LOG_EP_DATA, "tx_bufs_list allocation failed\n");
+		goto tx_buf_list_err;
 	}
 
-	ep->int_tx_pool.buf_ptr = (void *) int_tx_bufs;
-	ep->int_tx_pool.sl_ptr = (void *) int_tx_buf_list;
+	tx_ptrs = malloc(sizeof(struct gnix_int_tx_ptrs));
+	if (tx_buf_list == NULL) {
+		GNIX_WARN(FI_LOG_EP_DATA, "tx_ptrs allocation failed\n");
+		goto tx_ptrs_err;
+	}
 
-	ret = gnix_mr_reg(&ep->domain->domain_fid.fid, int_tx_bufs,
+	ret = gnix_mr_reg(&ep->domain->domain_fid.fid, tx_bufs,
 			GNIX_INT_TX_BUF_SZ * GNIX_INT_TX_POOL_SIZE,
 			FI_READ | FI_WRITE, 0, 0, 0, &auto_mr, NULL);
 
 	if (unlikely(ret != FI_SUCCESS)) {
-		GNIX_DEBUG(FI_LOG_EP_DATA, "gnix_mr_req returned: %s\n",
+		GNIX_WARN(FI_LOG_EP_DATA, "gnix_mr_req returned: %s\n",
 			   fi_strerror(-ret));
-	} else {
-		ep->int_tx_pool.md = container_of(auto_mr,
-					struct gnix_fid_mem_desc, mr_fid);
+		goto reg_err;
 	}
 
-	slist_init(&ep->int_tx_pool.sl);
+	md = container_of(auto_mr, struct gnix_fid_mem_desc, mr_fid);
+
+	fastlock_acquire(&ep->int_tx_pool.lock);
 
 	for (i = 0; i < GNIX_INT_TX_POOL_SIZE; i++) {
 		GNIX_DEBUG(FI_LOG_EP_DATA,
-			"int_tx_bufs + (%d * GNIX_INT_TX_BUF_SZ) = %p\n",
-			i, int_tx_bufs + (i * GNIX_INT_TX_BUF_SZ));
-		int_tx_buf_list[i].buf = int_tx_bufs + (i * GNIX_INT_TX_BUF_SZ);
-		slist_insert_tail(&int_tx_buf_list[i].e, &ep->int_tx_pool.sl);
+			"tx_bufs + (%d * GNIX_INT_TX_BUF_SZ) = %p\n",
+			i, tx_bufs + (i * GNIX_INT_TX_BUF_SZ));
+		tx_buf_list[i].buf = tx_bufs + (i * GNIX_INT_TX_BUF_SZ);
+		tx_buf_list[i].md = md;
+		slist_insert_tail(&tx_buf_list[i].e, &ep->int_tx_pool.sl);
 	}
 
+	tx_ptrs->md = md;
+	tx_ptrs->buf_ptr = (void *) tx_bufs;
+	tx_ptrs->sl_ptr = (void *) tx_buf_list;
+	slist_insert_tail(&tx_ptrs->e, &ep->int_tx_pool.bl);
+
+	ep->int_tx_pool.nbufs++;
+
+	fastlock_release(&ep->int_tx_pool.lock);
+
+	return FI_SUCCESS;
+
+reg_err:
+	free(tx_ptrs);
+tx_ptrs_err:
+	free(tx_buf_list);
+tx_buf_list_err:
+	free(tx_bufs);
+tx_buf_err:
+	return -FI_ENOSPC;
+}
+
+int _gnix_ep_int_tx_pool_init(struct gnix_fid_ep *ep)
+{
+	int ret;
+
+	assert(ep);
+
+	ep->int_tx_pool.nbufs = 0;
+	slist_init(&ep->int_tx_pool.sl);
+	slist_init(&ep->int_tx_pool.bl);
 	fastlock_init(&ep->int_tx_pool.lock);
 
+	ret = _gnix_ep_int_tx_pool_grow(ep);
+	if (ret != FI_SUCCESS)
+		return ret;
+
 	ep->int_tx_pool.enabled = true;
+
+	return FI_SUCCESS;
 }
 
 void _gnix_ep_int_tx_pool_fini(struct gnix_fid_ep *ep)
 {
 	int ret;
+	struct slist_entry *e;
+	struct gnix_int_tx_ptrs *tx_ptrs;
 
 	assert(ep);
 
 	if (ep->int_tx_pool.enabled == false)
 		return;
 
-	ret = fi_close(&ep->int_tx_pool.md->mr_fid.fid);
+	fastlock_acquire(&ep->int_tx_pool.lock);
 
-	if (ret != FI_SUCCESS) {
-		GNIX_DEBUG(FI_LOG_EP_DATA, "fi_close returned: %s\n", fi_strerror(-ret));
-	}
+	while (!slist_empty(&ep->int_tx_pool.bl)) {
+		e = slist_remove_head(&ep->int_tx_pool.bl);
+		tx_ptrs = (struct gnix_int_tx_ptrs *)e;
 
-	if (ep->int_tx_pool.buf_ptr != NULL) {
-		free(ep->int_tx_pool.buf_ptr);
-		ep->int_tx_pool.buf_ptr = NULL;
-	}
+		ret = fi_close(&tx_ptrs->md->mr_fid.fid);
 
-	if (ep->int_tx_pool.sl_ptr != NULL) {
-		free(ep->int_tx_pool.sl_ptr);
-		ep->int_tx_pool.sl_ptr = NULL;
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA, "fi_close returned: %s\n",
+				   fi_strerror(-ret));
+		}
+
+		if (tx_ptrs->buf_ptr != NULL) {
+			free(tx_ptrs->buf_ptr);
+			tx_ptrs->buf_ptr = NULL;
+		}
+
+		if (tx_ptrs->sl_ptr != NULL) {
+			free(tx_ptrs->sl_ptr);
+			tx_ptrs->sl_ptr = NULL;
+		}
+
+		free(tx_ptrs);
+		ep->int_tx_pool.nbufs--;
 	}
 
 	ep->int_tx_pool.enabled = false;
+
+	fastlock_release(&ep->int_tx_pool.lock);
 }
 
 static int __fr_freelist_init(struct gnix_fid_ep *ep)
@@ -1454,7 +1518,7 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 			goto err;
 		}
 
-		_gnix_ep_int_tx_pool_init(ep);
+		ret = _gnix_ep_int_tx_pool_init(ep);
 		break;
 
 	case FI_GETOPSFLAG:

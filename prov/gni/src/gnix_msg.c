@@ -1096,14 +1096,15 @@ static int __gnix_rndzv_req(void *arg)
 		if (req->int_tx_buf_e == NULL) {
 			req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
 			if (req->int_tx_buf_e == NULL) {
-				GNIX_WARN(FI_LOG_EP_DATA,
+				GNIX_FATAL(FI_LOG_EP_DATA,
 					  "RAN OUT OF INT_TX_BUFS");
+				/* TODO return error */
 			}
 		}
 
 		req->int_tx_buf = ((struct gnix_int_tx_buf *)
 				   req->int_tx_buf_e)->buf;
-		req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
+		req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(req->int_tx_buf_e);
 
 		tail_txd->completer_fn = __gnix_rndzv_req_complete;
 		tail_txd->req = req;
@@ -1342,7 +1343,8 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 
 				req->int_tx_buf = ((struct gnix_int_tx_buf *)
 						req->int_tx_buf_e)->buf;
-				req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
+				req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(
+						req->int_tx_buf_e);
 				GNIX_DEBUG(FI_LOG_EP_DATA,
 				    "req->int_tx_buf = %p\n", req->int_tx_buf);
 			}

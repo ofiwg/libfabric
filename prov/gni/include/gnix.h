@@ -463,19 +463,27 @@ struct gnix_fid_ep_ops_en {
 };
 
 #define GNIX_INT_TX_POOL_SIZE 128
+#define GNIX_INT_TX_POOL_COUNT 256
 
 struct gnix_int_tx_buf {
 	struct slist_entry e;
 	uint8_t *buf;
+	struct gnix_fid_mem_desc *md;
+};
+
+struct gnix_int_tx_ptrs {
+	struct slist_entry e;
+	void *sl_ptr;
+	void *buf_ptr;
+	struct gnix_fid_mem_desc *md;
 };
 
 struct gnix_int_tx_pool {
 	bool enabled;
+	int nbufs;
 	fastlock_t lock;
-	struct gnix_fid_mem_desc *md;
 	struct slist sl;
-	void *buf_ptr;
-	void *sl_ptr;
+	struct slist bl;
 };
 
 struct gnix_addr_cache_entry {

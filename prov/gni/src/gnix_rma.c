@@ -535,12 +535,12 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
 		if (req->int_tx_buf_e == NULL) {
 			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
-			/* TODO Create growable list of buffers */
+			/* TODO return error */
 		}
 	}
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
-	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(req->int_tx_buf_e);
 
 	/* Copy head and tail through intermediate buffer.  Copy
 	 * aligned data directly to user buffer. */
@@ -606,12 +606,12 @@ static void __gnix_rma_fill_pd_indirect_get(struct gnix_fab_req *req,
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
 		if (req->int_tx_buf_e == NULL) {
 			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
-			/* TODO Create growable list of buffers */
+			/* TODO return error */
 		}
 	}
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
-	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(req->int_tx_buf_e);
 
 	/* Copy all data through an intermediate buffer. */
 	txd->gni_desc.local_addr = (uint64_t)req->int_tx_buf;
@@ -633,12 +633,12 @@ static void __gnix_rma_more_fill_pd_indirect_get(struct gnix_fab_req *req,
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
 		if (req->int_tx_buf_e == NULL) {
 			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
-			/* TODO Create growable list of buffers */
+			/* TODO return error */
 		}
 	}
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
-	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(req->int_tx_buf_e);
 
 	/* Copy all data through an intermediate buffer. */
 	more_get[idx].local_addr = (uint64_t)req->int_tx_buf;
@@ -711,14 +711,13 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	if (req->int_tx_buf_e == NULL) {
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
 		if (req->int_tx_buf_e == NULL) {
-			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
+			GNIX_WARN(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
 			return -FI_ENOSPC;
-			/* TODO Create growable list of buffers */
 		}
 	}
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
-	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(req->int_tx_buf_e);
 
 	if (!gnix_ops_allowed(ep, req->vc->peer_caps, req->flags)) {
 		rc = __gnix_rma_post_err_no_retrans(req, FI_EOPNOTSUPP);
@@ -894,7 +893,7 @@ static void __gnix_rma_more_fill_sub_htd(struct gnix_fab_req *req,
 		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
 		if (req->int_tx_buf_e == NULL) {
 			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
-			/* TODO Create growable list of buffers */
+			/* TODO return error */
 		}
 	} else {
 		return;
@@ -902,7 +901,7 @@ static void __gnix_rma_more_fill_sub_htd(struct gnix_fab_req *req,
 
 	req->int_tx_buf = ((struct gnix_int_tx_buf *)
 				req->int_tx_buf_e)->buf;
-	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(req->int_tx_buf_e);
 
 	if (head_off) {
 		assert(*idx < *entries);

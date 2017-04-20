@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -166,6 +166,13 @@ typedef ssize_t (*trecvmsg_func_t)(struct fid_ep *ep,
 				   const struct fi_msg_tagged *msg,
 				   uint64_t flags);
 
+/**
+ * Internal function for growing tx buffer pool
+ *
+ * @param[in] ep	pointer to a EP
+ */
+int  _gnix_ep_int_tx_pool_grow(struct gnix_fid_ep *ep);
+
 /*
  * inline functions
  */
@@ -181,12 +188,24 @@ static inline struct slist_entry
 
 	fastlock_release(&ep->int_tx_pool.lock);
 
+	if (e == NULL) {
+		int ret;
+
+		ret = _gnix_ep_int_tx_pool_grow(ep);
+		if (ret != FI_SUCCESS)
+			return NULL;
+
+		fastlock_acquire(&ep->int_tx_pool.lock);
+		e = slist_remove_head(&ep->int_tx_pool.sl);
+		fastlock_release(&ep->int_tx_pool.lock);
+	}
+
 	return e;
 }
 
-static inline gni_mem_handle_t _gnix_ep_get_int_tx_mdh(struct gnix_fid_ep *ep)
+static inline gni_mem_handle_t _gnix_ep_get_int_tx_mdh(void *e)
 {
-	return ep->int_tx_pool.md->mem_hndl;
+	return ((struct gnix_int_tx_buf *)e)->md->mem_hndl;
 }
 
 static inline void _gnix_ep_release_int_tx_buf(struct gnix_fid_ep *ep,
