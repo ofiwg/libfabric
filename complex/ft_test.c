@@ -52,7 +52,8 @@ static int ft_init_xcontrol(struct ft_xcontrol *ctrl)
 	ctrl->iov = calloc(ft_ctrl.iov_array[ft_ctrl.iov_cnt - 1], sizeof *ctrl->iov);
 	ctrl->iov_desc = calloc(ft_ctrl.iov_array[ft_ctrl.iov_cnt - 1],
 				sizeof *ctrl->iov_desc);
-	if (!ctrl->iov || !ctrl->iov_desc)
+	ctrl->ctx = calloc(ctrl->max_credits, sizeof *ctrl->ctx);
+	if (!ctrl->iov || !ctrl->iov_desc || !ctrl->ctx)
 		return -FI_ENOMEM;
 
 	return 0;
@@ -141,6 +142,7 @@ static void ft_cleanup_xcontrol(struct ft_xcontrol *ctrl)
 	free(ctrl->buf);
 	free(ctrl->iov);
 	free(ctrl->iov_desc);
+	free(ctrl->ctx);
 	memset(ctrl, 0, sizeof *ctrl);
 }
 
@@ -308,6 +310,27 @@ void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt)
 	if (ctrl->iov_iter > ft_ctrl.iov_cnt ||
 	    ft_ctrl.iov_array[ctrl->iov_iter] > max_iov_cnt)
 		ctrl->iov_iter = 0;
+}
+
+int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx)
+{
+	int ret;
+
+	ctrl->curr_ctx++;
+	if (ctrl->curr_ctx < ctrl->max_credits) {
+		return 0;
+	} else {
+		if (ctrl == &ft_tx_ctrl) {
+			while (ctrl->credits < ctrl->max_credits) {
+				ret = ft_comp_tx(FT_COMP_TO);
+				if (ret)
+					return ret;
+			}
+		}
+		ctrl->curr_ctx = 0;
+	}
+	*ctx = &(ctrl->ctx[ctrl->curr_ctx]);
+	return 0;
 }
 
 static int check_atomic_attr(size_t *count)

@@ -38,7 +38,7 @@
 #define FT_CAP_RMA	FI_RMA | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 #define FT_CAP_ATOMIC	FI_ATOMICS | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 
-#define FT_MODE_ALL	/*FI_CONTEXT |*/ FI_LOCAL_MR /*| FI_MSG_PREFIX*/
+#define FT_MODE_ALL	FI_CONTEXT | FI_LOCAL_MR /*| FI_MSG_PREFIX*/
 #define FT_MODE_NONE	~0ULL
 
 struct key_t {
@@ -329,6 +329,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
+		TEST_SET_N_RETURN(str, len, "FT_MODE_NONE", FT_MODE_NONE, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
 		FT_ERR("Unknown comp_type/mode/test_flags");
 	}

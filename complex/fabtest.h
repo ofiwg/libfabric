@@ -88,6 +88,8 @@ struct ft_xcontrol {
 	enum fi_cq_format	cq_format;
 	enum fi_wait_obj	comp_wait;  /* must be NONE */
 	uint64_t		remote_cq_data;
+	struct fi_context	*ctx;
+	int			curr_ctx;
 };
 
 struct ft_atomic_control {
@@ -274,6 +276,7 @@ int ft_post_recv_bufs();
 void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len);
 void ft_format_iocs(struct iovec *iov);
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
+int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx);
 
 int ft_recv_msg();
 int ft_send_msg();
