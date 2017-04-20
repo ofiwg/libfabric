@@ -555,7 +555,8 @@ with atomic message calls.
   require that the underlying provider implementation copy the data
   into a local buffer and transfer out of that buffer.  The use of
   output result buffers are not affected by this flag. This flag can only
-  be used with messages smaller than inject_size.
+  be used with messages smaller than inject_size. This flag is not valid
+  for fetch atomic and compare atomic operations.
 
 *FI_FENCE*
 : Indicates that the requested operation, also
