@@ -604,16 +604,6 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (FI_VERSION_LT(prov->provider->fi_version, version)) {
-			FI_INFO(&core_prov, FI_LOG_CORE,
-				"Provider %s fi_version %d.%d < requested %d.%d\n",
-				prov->provider->name,
-				FI_MAJOR(prov->provider->fi_version),
-				FI_MINOR(prov->provider->fi_version),
-				FI_MAJOR(version), FI_MINOR(version));
-			continue;
-		}
-
 		if (ofi_is_util_prov(prov->provider) &&
 		    (flags & OFI_CORE_PROV_ONLY)) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
@@ -630,6 +620,16 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 			if (!ofi_is_util_prov(prov->provider) &&
 			    strncasecmp(core_name, prov->provider->name, core_len))
 				continue;
+		}
+
+		if (FI_VERSION_LT(prov->provider->fi_version, version)) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Provider %s fi_version %d.%d < requested %d.%d\n",
+				prov->provider->name,
+				FI_MAJOR(prov->provider->fi_version),
+				FI_MINOR(prov->provider->fi_version),
+				FI_MAJOR(version), FI_MINOR(version));
+			continue;
 		}
 
 		ret = prov->provider->getinfo(version, node, service, flags,
