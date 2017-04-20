@@ -141,14 +141,7 @@
     <ClCompile Include="prov\netdir\netdir_fabric.c" />
     <ClCompile Include="prov\netdir\netdir_fs.c" />
     <ClCompile Include="prov\netdir\netdir_init.c" />
-    <ClCompile Include="prov\netdir\netdir_ndinit.cpp">
-      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">CompileAsCpp</CompileAs>
-      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">CompileAsCpp</CompileAs>
-      <Cpp0xSupport Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</Cpp0xSupport>
-      <Cpp0xSupport Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</Cpp0xSupport>
-      <C99Support Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</C99Support>
-      <C99Support Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</C99Support>
-    </ClCompile>
+    <ClCompile Include="prov\netdir\netdir_ndinit.c"/>
     <ClCompile Include="prov\netdir\netdir_pep.c" />
     <ClCompile Include="prov\sockets\src\sock_atomic.c">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>

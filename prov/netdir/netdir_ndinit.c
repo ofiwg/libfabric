@@ -53,46 +53,52 @@
 #define FI_ND_PROTO_FLAG (XP1_GUARANTEED_DELIVERY | XP1_GUARANTEED_ORDER | \
 			  XP1_MESSAGE_ORIENTED | XP1_CONNECT_DATA)
 
-static bool ofi_nd_startup_done = false;
+static int ofi_nd_startup_done = 0;
+
+typedef HRESULT(*can_unload_now_t)(void);
+typedef HRESULT(*get_class_object_t)(REFCLSID rclsid, REFIID rrid, LPVOID* ppv);
+
+struct module_t {
+	const wchar_t		*path;
+	HMODULE			module;
+	can_unload_now_t	can_unload_now;
+	get_class_object_t	get_class_object;
+};
+
+struct factory_t {
+	WSAPROTOCOL_INFOW	protocol;
+	IClassFactory		*class_factory;
+	IND2Provider		*provider;
+	struct module_t		*module;
+	SOCKET_ADDRESS_LIST	*addr_list;
+};
+
+struct adapter_t {
+	union {
+		struct sockaddr		addr;
+		struct sockaddr_in	addr4;
+		struct sockaddr_in6	addr6;
+	} address;
+	ND2_ADAPTER_INFO		info;
+	IND2Adapter			*adapter;
+	struct factory_t		*factory;
+	const char			*name;
+};
 
 static struct ofi_nd_infra_t {
 	struct modules_t {
-		struct module_t {
-			typedef HRESULT(*can_unload_now_t)(void);
-			typedef HRESULT(*get_class_object_t)(REFCLSID rclsid, REFIID rrid, LPVOID* ppv);
-
-			const wchar_t		*path;
-			HMODULE			module;
-			can_unload_now_t	can_unload_now;
-			get_class_object_t	get_class_object;
-		} *modules;
-		size_t count;
+		struct module_t		*modules;
+		size_t			count;
 	} providers;
 
 	struct class_factory_t {
-		struct factory_t {
-			WSAPROTOCOL_INFOW		protocol;
-			IClassFactory			*class_factory;
-			IND2Provider			*provider;
-			struct modules_t::module_t	*module;
-			SOCKET_ADDRESS_LIST		*addr_list;
-		} *factory;
-		size_t count;
+		struct factory_t	*factory;
+		size_t			count;
 	} class_factories;
 
 	struct adapters_t {
-		struct adapter_t {
-			union {
-				struct sockaddr			addr;
-				struct sockaddr_in		addr4;
-				struct sockaddr_in6		addr6;
-			} address;
-			ND2_ADAPTER_INFO			info;
-			IND2Adapter				*adapter;
-			struct class_factory_t::factory_t	*factory;
-			const char				*name;
-		} *adapter;
-		size_t count;
+		struct adapter_t	*adapter;
+		size_t			count;
 	} adapters;
 } ofi_nd_infra = {0};
 
@@ -101,15 +107,12 @@ static inline void ofi_nd_release_infra()
 {
 	size_t i;
 
-	typedef ofi_nd_infra_t::class_factory_t::factory_t	factory_t;
-	typedef ofi_nd_infra_t::adapters_t::adapter_t		adapter_t;
-
 	if (ofi_nd_infra.adapters.count) {
 		assert(ofi_nd_infra.adapters.adapter);
 		for (i = 0; i < ofi_nd_infra.adapters.count; i++) {
-			adapter_t *adapter = &ofi_nd_infra.adapters.adapter[i];
+			struct adapter_t *adapter = &ofi_nd_infra.adapters.adapter[i];
 			if (adapter->adapter) {
-				adapter->adapter->Release();
+				adapter->adapter->lpVtbl->Release(adapter->adapter);
 				adapter->adapter = 0;
 			}
 		}
@@ -118,13 +121,13 @@ static inline void ofi_nd_release_infra()
 	if (ofi_nd_infra.class_factories.count) {
 		assert(ofi_nd_infra.class_factories.factory);
 		for (i = 0; i < ofi_nd_infra.class_factories.count; i++) {
-			factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
+			struct factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
 			if (factory->provider) {
-				factory->provider->Release();
+				factory->provider->lpVtbl->Release(factory->provider);
 				factory->provider = 0;
 			}
 			if (factory->class_factory) {
-				factory->class_factory->Release();
+				factory->class_factory->lpVtbl->Release(factory->class_factory);
 				factory->class_factory = 0;
 			}
 		}
@@ -135,16 +138,12 @@ static inline void ofi_nd_free_infra()
 {
 	size_t i;
 
-	typedef ofi_nd_infra_t::adapters_t::adapter_t		adapter_t;
-	typedef ofi_nd_infra_t::class_factory_t::factory_t	factory_t;
-	typedef ofi_nd_infra_t::modules_t::module_t		module_t;
-
 	ofi_nd_release_infra();
 
 	if (ofi_nd_infra.adapters.count) {
 		assert(ofi_nd_infra.adapters.adapter);
 		for (i = 0; i < ofi_nd_infra.adapters.count; i++) {
-			adapter_t *adapter = &ofi_nd_infra.adapters.adapter[i];
+			struct adapter_t *adapter = &ofi_nd_infra.adapters.adapter[i];
 			if (adapter->name) {
 				free((void*)adapter->name);
 				adapter->name = 0;
@@ -158,7 +157,7 @@ static inline void ofi_nd_free_infra()
 	if (ofi_nd_infra.class_factories.count) {
 		assert(ofi_nd_infra.class_factories.factory);
 		for (i = 0; i < ofi_nd_infra.class_factories.count; i++) {
-			factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
+			struct factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
 			assert(factory->module);
 			if (factory->addr_list) {
 				free(factory->addr_list);
@@ -173,7 +172,7 @@ static inline void ofi_nd_free_infra()
 	if (ofi_nd_infra.providers.count) {
 		assert(ofi_nd_infra.providers.modules);
 		for (i = 0; i < ofi_nd_infra.providers.count; i++) {
-			module_t *module = &ofi_nd_infra.providers.modules[i];
+			struct module_t *module = &ofi_nd_infra.providers.modules[i];
 			assert(module->path);
 			free((void*)module->path);
 		}
@@ -187,11 +186,11 @@ static inline HRESULT ofi_nd_alloc_infra(size_t cnt)
 {
 	memset(&ofi_nd_infra, 0, sizeof(*(&ofi_nd_infra)));
 
-	ofi_nd_infra.providers.modules = (ofi_nd_infra_t::modules_t::module_t*)malloc(cnt * sizeof(*ofi_nd_infra.providers.modules));
+	ofi_nd_infra.providers.modules = (struct module_t*)malloc(cnt * sizeof(*ofi_nd_infra.providers.modules));
 	if (!ofi_nd_infra.providers.modules)
 		return ND_NO_MEMORY;
 
-	ofi_nd_infra.class_factories.factory = (ofi_nd_infra_t::class_factory_t::factory_t*)malloc(cnt * sizeof(*ofi_nd_infra.class_factories.factory));
+	ofi_nd_infra.class_factories.factory = (struct factory_t*)malloc(cnt * sizeof(*ofi_nd_infra.class_factories.factory));
 	if (!ofi_nd_infra.class_factories.factory) {
 		ofi_nd_free_infra();
 		return ND_NO_MEMORY;
@@ -246,26 +245,26 @@ fn_fail:
 	return NULL;
 }
 
-static inline bool ofi_nd_is_valid_proto(const WSAPROTOCOL_INFOW *proto)
+static inline int ofi_nd_is_valid_proto(const WSAPROTOCOL_INFOW *proto)
 {
 	assert(proto);
 
 	if ((proto->dwServiceFlags1 & FI_ND_PROTO_FLAG) != FI_ND_PROTO_FLAG)
-		return false;
+		return 0;
 
 	if (!(proto->iAddressFamily == AF_INET ||
 	      proto->iAddressFamily == AF_INET6))
-		return false;
+		return 0;
 
 	if (proto->iSocketType != -1)
-		return false;
+		return 0;
 
 	if (proto->iProtocol || proto->iProtocolMaxOffset)
-		return false;
-	return true;
+		return 0;
+	return 1;
 }
 
-static inline ofi_nd_infra_t::modules_t::module_t *ofi_nd_search_module(const wchar_t* path)
+static inline struct module_t *ofi_nd_search_module(const wchar_t* path)
 {
 	size_t i;
 	size_t j;
@@ -282,13 +281,11 @@ static inline ofi_nd_infra_t::modules_t::module_t *ofi_nd_search_module(const wc
 	return NULL;
 }
 
-static inline ofi_nd_infra_t::modules_t::module_t *ofi_nd_create_module(const wchar_t* path)
+static inline struct module_t *ofi_nd_create_module(const wchar_t* path)
 {
-	typedef ofi_nd_infra_t::modules_t::module_t module_t;
-
 	assert(ofi_nd_infra.providers.modules);
 
-	module_t *module = ofi_nd_search_module(path);
+	struct module_t *module = ofi_nd_search_module(path);
 	if (module)
 		return module;
 
@@ -302,8 +299,8 @@ static inline ofi_nd_infra_t::modules_t::module_t *ofi_nd_create_module(const wc
 		return NULL;
 	}
 
-	module_t::can_unload_now_t unload = (module_t::can_unload_now_t)GetProcAddress(hmodule, "DllCanUnloadNow");
-	module_t::get_class_object_t getclass = (module_t::get_class_object_t)GetProcAddress(hmodule, "DllGetClassObject");
+	can_unload_now_t unload = (can_unload_now_t)GetProcAddress(hmodule, "DllCanUnloadNow");
+	get_class_object_t getclass = (get_class_object_t)GetProcAddress(hmodule, "DllGetClassObject");
 	if (!unload || !getclass) {
 		ND_LOG_WARN(FI_LOG_CORE,
 			   "ofi_nd_create_module: provider: %S, failed to import interface",
@@ -314,7 +311,7 @@ static inline ofi_nd_infra_t::modules_t::module_t *ofi_nd_create_module(const wc
 	module = &ofi_nd_infra.providers.modules[ofi_nd_infra.providers.count];
 	ofi_nd_infra.providers.count++;
 
-	module->path = wcsdup(path);
+	module->path = _wcsdup(path);
 	module->module = hmodule;
 	module->can_unload_now = unload;
 	module->get_class_object = getclass;
@@ -328,9 +325,6 @@ fn_noiface:
 
 static inline HRESULT ofi_nd_create_factory(const WSAPROTOCOL_INFOW* proto)
 {
-	typedef ofi_nd_infra_t::modules_t::module_t		module_t;
-	typedef ofi_nd_infra_t::class_factory_t::factory_t	factory_t;
-
 	assert(proto);
 	assert(ofi_nd_is_valid_proto(proto));
 	assert(ofi_nd_infra.class_factories.factory);
@@ -343,21 +337,19 @@ static inline HRESULT ofi_nd_create_factory(const WSAPROTOCOL_INFOW* proto)
 	else /* can't get provider path. just return */
 		return S_OK;
 
-	module_t *module = ofi_nd_create_module(path);
+	struct module_t *module = ofi_nd_create_module(path);
 	free(path);
 	if (!module)
 		return S_OK;;
 
 	assert(module->get_class_object);
 	IClassFactory* factory;
-	HRESULT hr = module->get_class_object(
-		proto->ProviderId,
-		IID_IClassFactory,
-		reinterpret_cast<void**>(&factory));
+	HRESULT hr = module->get_class_object(&proto->ProviderId, &IID_IClassFactory,
+					      (void**)&factory);
 	if (FAILED(hr))
 		return hr;
 
-	factory_t *ftr = &ofi_nd_infra.class_factories.factory[ofi_nd_infra.class_factories.count];
+	struct factory_t *ftr = &ofi_nd_infra.class_factories.factory[ofi_nd_infra.class_factories.count];
 	ofi_nd_infra.class_factories.count++;
 	ftr->class_factory = factory;
 	ftr->module = module;
@@ -368,29 +360,26 @@ static inline HRESULT ofi_nd_create_factory(const WSAPROTOCOL_INFOW* proto)
 
 static int ofi_nd_adapter_cmp(const void *adapter1, const void *adapter2)
 {
-	typedef ofi_nd_infra_t::adapters_t::adapter_t adapter_t;
-	return ofi_nd_addr_cmp(&((adapter_t*)adapter1)->address,
-			       &((adapter_t*)adapter2)->address);
+	return ofi_nd_addr_cmp(&((struct adapter_t*)adapter1)->address,
+			       &((struct adapter_t*)adapter2)->address);
 }
 
 static HRESULT ofi_nd_create_adapter()
 {
-	typedef ofi_nd_infra_t::adapters_t::adapter_t		adapter_t;
-	typedef ofi_nd_infra_t::class_factory_t::factory_t	factory_t;
-
 	size_t addr_count = 0;
 	HRESULT hr;
 
 	for (size_t i = 0; i < ofi_nd_infra.class_factories.count; i++) {
-		factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
+		struct factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
 		assert(factory->class_factory);
 
-		HRESULT hr = factory->class_factory->CreateInstance(NULL, IID_IND2Provider, (void**)&factory->provider);
+		HRESULT hr = factory->class_factory->lpVtbl->CreateInstance(factory->class_factory,
+			NULL, &IID_IND2Provider, (void**)&factory->provider);
 		if (FAILED(hr))
 			return hr;
 
 		ULONG listsize = 0;
-		hr = factory->provider->QueryAddressList(NULL, &listsize);
+		hr = factory->provider->lpVtbl->QueryAddressList(factory->provider, NULL, &listsize);
 		if (hr != ND_BUFFER_OVERFLOW)
 			return hr;
 		if (!listsize) {
@@ -401,7 +390,8 @@ static HRESULT ofi_nd_create_adapter()
 		if (!factory->addr_list)
 			return ND_NO_MEMORY;
 
-		hr = factory->provider->QueryAddressList(factory->addr_list, &listsize);
+		hr = factory->provider->lpVtbl->QueryAddressList(factory->provider,
+			factory->addr_list, &listsize);
 		if (FAILED(hr))
 			return hr;
 
@@ -414,16 +404,16 @@ static HRESULT ofi_nd_create_adapter()
 	if (!addr_count)
 		return E_NOINTERFACE;
 
-	ofi_nd_infra.adapters.adapter = (adapter_t*)malloc(addr_count * sizeof(*ofi_nd_infra.adapters.adapter));
+	ofi_nd_infra.adapters.adapter = (struct adapter_t*)malloc(addr_count * sizeof(*ofi_nd_infra.adapters.adapter));
 	if (!ofi_nd_infra.adapters.adapter)
 		return ND_NO_MEMORY;
 
 	/* put all available valid addresses into common array */
 	for (size_t i = 0; i < ofi_nd_infra.class_factories.count; i++) {
-		factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
+		struct factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
 		for (INT j = 0; j < factory->addr_list->iAddressCount; j++) {
 			if (ofi_nd_is_valid_addr(factory->addr_list->Address[j].lpSockaddr)) {
-				adapter_t *adapter = &ofi_nd_infra.adapters.adapter[ofi_nd_infra.adapters.count];
+				struct adapter_t *adapter = &ofi_nd_infra.adapters.adapter[ofi_nd_infra.adapters.count];
 				assert((int)sizeof(adapter->address) >= factory->addr_list->Address[j].iSockaddrLength);
 				memcpy(&adapter->address,
 				       factory->addr_list->Address[j].lpSockaddr,
@@ -440,14 +430,14 @@ static HRESULT ofi_nd_create_adapter()
 	/* sort adapters by addresses to set IP4 addresses first. then remove
 	   duplicates */
 	qsort(ofi_nd_infra.adapters.adapter, ofi_nd_infra.adapters.count,
-	      sizeof(adapter_t), ofi_nd_adapter_cmp);
+	      sizeof(struct adapter_t), ofi_nd_adapter_cmp);
 	ofi_nd_infra.adapters.count = unique(ofi_nd_infra.adapters.adapter,
 					     ofi_nd_infra.adapters.count,
-					     sizeof(adapter_t), ofi_nd_adapter_cmp);
+					     sizeof(struct adapter_t), ofi_nd_adapter_cmp);
 
 	for (size_t i = 0; i < ofi_nd_infra.adapters.count; i++) {
-		adapter_t *adapter = &ofi_nd_infra.adapters.adapter[i];
-		factory_t *factory = adapter->factory;
+		struct adapter_t *adapter = &ofi_nd_infra.adapters.adapter[i];
+		struct factory_t *factory = adapter->factory;
 		assert(factory);
 		assert(factory->provider);
 
@@ -456,25 +446,27 @@ static HRESULT ofi_nd_create_adapter()
 
 		UINT64 id;
 
-		hr = factory->provider->ResolveAddress(&adapter->address.addr,
+		hr = factory->provider->lpVtbl->ResolveAddress(factory->provider,
+			&adapter->address.addr,
 			ofi_sizeofaddr(&adapter->address.addr), &id);
 
 		if (FAILED(hr))
 			return hr;
 
-		hr = factory->provider->OpenAdapter(IID_IND2Adapter, id, (void**)&adapter->adapter);
+		hr = factory->provider->lpVtbl->OpenAdapter(factory->provider,
+			&IID_IND2Adapter, id, (void**)&adapter->adapter);
 		if (FAILED(hr))
 			return hr;
 
 		ULONG linfo = sizeof(adapter->info);
 		adapter->info.InfoVersion = ND_VERSION_2;
-		hr = adapter->adapter->Query(&adapter->info, &linfo);
+		hr = adapter->adapter->lpVtbl->Query(adapter->adapter, &adapter->info, &linfo);
 		if (FAILED(hr) && hr == ND_BUFFER_OVERFLOW) {
 			ND2_ADAPTER_INFO *info = (ND2_ADAPTER_INFO*)malloc(linfo);
 			if (!info)
 				return ND_NO_MEMORY;
 			info->InfoVersion = ND_VERSION_2;
-			hr = adapter->adapter->Query(info, &linfo);
+			hr = adapter->adapter->lpVtbl->Query(adapter->adapter, info, &linfo);
 			if (FAILED(hr))
 				return hr;
 			adapter->info = *info;
@@ -485,24 +477,24 @@ static HRESULT ofi_nd_create_adapter()
 		}
 
 		/* generate adapter's name */
-		char *saddr;
+		wchar_t *saddr;
 
 		DWORD addrlen = 0;
 
-		int res = WSAAddressToStringA(&adapter->address.addr,
+		int res = WSAAddressToStringW(&adapter->address.addr,
 					     ofi_sizeofaddr(&adapter->address.addr),
 					     NULL, NULL, &addrlen);
 		if (res == SOCKET_ERROR && WSAGetLastError() == WSAEFAULT && addrlen) {
-			saddr = (char*)malloc((addrlen + 1) * sizeof(*saddr));
-			WSAAddressToStringA(&adapter->address.addr,
+			saddr = (wchar_t*)malloc((addrlen + 1) * sizeof(*saddr));
+			WSAAddressToStringW(&adapter->address.addr,
 					    ofi_sizeofaddr(&adapter->address.addr),
 					    NULL, saddr, &addrlen);
 		}
 		else {
-			saddr = strdup("unknown");
+			saddr = _wcsdup(L"unknown");
 		}
 
-		asprintf((char**)&adapter->name, "netdir-%S-%s-%p",
+		asprintf((char**)&adapter->name, "netdir-%S-%S-%p",
 			 ofi_nd_filename(adapter->factory->module->path),
 			 saddr, adapter);
 		free(saddr);
@@ -513,9 +505,6 @@ static HRESULT ofi_nd_create_adapter()
 
 static HRESULT ofi_nd_init(ofi_nd_adapter_cb_t cb)
 {
-	typedef ofi_nd_infra_t::modules_t::module_t	module_t;
-	typedef ofi_nd_infra_t::adapters_t::adapter_t	adapter_t;
-
 	DWORD proto_len = 0;
 	HRESULT hr = ND_INTERNAL_ERROR;
 	int i;
@@ -617,7 +606,7 @@ HRESULT ofi_nd_startup(ofi_nd_adapter_cb_t cb)
 
 	HRESULT hr = ofi_nd_init(cb);
 
-	ofi_nd_startup_done = true;
+	ofi_nd_startup_done = 1;
 
 	return hr;
 }
@@ -635,14 +624,12 @@ HRESULT ofi_nd_shutdown()
 
 	int ret = WSACleanup();
 
-	ofi_nd_startup_done = false;
+	ofi_nd_startup_done = 0;
 	return HRESULT_FROM_WIN32(ret);
 }
 
-int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, sockaddr** addr)
+int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, struct sockaddr** addr)
 {
-	typedef ofi_nd_infra_t::adapters_t::adapter_t adapter_t;
-
 	assert(name);
 	assert(adapter);
 
@@ -651,13 +638,13 @@ int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, sockaddr** ad
 
 	size_t i;
 	for (i = 0; i < ofi_nd_infra.adapters.count; i++) {
-		adapter_t *ada = &ofi_nd_infra.adapters.adapter[i];
+		struct adapter_t *ada = &ofi_nd_infra.adapters.adapter[i];
 		if (ada->name && !strcmp(ada->name, name)) {
 			/* ok, we found good adapter. try to initialize it */
 			if (ada->adapter) {
 				*adapter = ada->adapter;
 				*addr = &ada->address.addr;
-				ada->adapter->AddRef();
+				ada->adapter->lpVtbl->AddRef(ada->adapter);
 				return FI_SUCCESS;
 			}
 
@@ -667,38 +654,40 @@ int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, sockaddr** ad
 
 			IClassFactory* factory = NULL;
 			HRESULT hr = ada->factory->module->get_class_object(
-				ada->factory->protocol.ProviderId,
-				IID_IClassFactory,
-				reinterpret_cast<void**>(&factory));
+				&ada->factory->protocol.ProviderId,
+				&IID_IClassFactory,
+				(void**)&factory);
 			if (FAILED(hr))
 				return H2F(hr);
 			assert(factory);
 
 			IND2Provider *provider = NULL;
-			hr = factory->CreateInstance(NULL, IID_IND2Provider, (void**)&provider);
-			factory->Release();
+			hr = factory->lpVtbl->CreateInstance(factory, NULL, &IID_IND2Provider,
+				(void**)&provider);
+			factory->lpVtbl->Release(factory);
 			if (FAILED(hr))
 				return H2F(hr);
 			assert(provider);
 
 			UINT64 adapter_id;
 
-			hr = provider->ResolveAddress(&ada->address.addr,
+			hr = provider->lpVtbl->ResolveAddress(provider, &ada->address.addr,
 				ofi_sizeofaddr(&ada->address.addr),
 				&adapter_id);
 			if (FAILED(hr)) {
-				provider->Release();
+				provider->lpVtbl->Release(provider);
 				return H2F(hr);
 			}
 
-			hr = provider->OpenAdapter(IID_IND2Adapter, adapter_id, (void**)&ada->adapter);
-			provider->Release();
+			hr = provider->lpVtbl->OpenAdapter(provider, &IID_IND2Adapter, adapter_id,
+				(void**)&ada->adapter);
+			provider->lpVtbl->Release(provider);
 			if (FAILED(hr))
 				return H2F(hr);
 
 			*adapter = ada->adapter;
 			*addr = &ada->address.addr;
-			ada->adapter->AddRef();
+			ada->adapter->lpVtbl->AddRef(ada->adapter);
 
 			return FI_SUCCESS;
 		}

@@ -315,9 +315,6 @@
     <ClCompile Include="prov\netdir\netdir_init.c">
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\netdir\netdir_ndinit.cpp">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\netdir\netdir_pep.c">
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>
@@ -343,6 +340,9 @@
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\netdir\netdir_unexp.c">
+      <Filter>Source Files\prov\netdir\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\netdir\netdir_ndinit.c">
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>
   </ItemGroup>
