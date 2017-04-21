@@ -66,17 +66,17 @@ int rxd_av_dg_reverse_lookup(struct rxd_av *av, uint64_t start_idx,
 	size_t i, len;
 	void *curr_addr;
 
-	len = addrlen;
-	curr_addr = calloc(1, av->addrlen);
+	curr_addr = calloc(1, addrlen);
 	if (!curr_addr)
 		return -FI_ENOMEM;
 
 	for (i = 0; i < (size_t)av->dg_av_used; i++) {
+		len = addrlen;
 		ret = fi_av_lookup(av->dg_av, (i + start_idx) % av->dg_av_used,
 				   curr_addr, &len);
 		if (ret)
 			continue;
-		if (len == addrlen && memcmp(curr_addr, addr, len) == 0) {
+		if (len >= addrlen && memcmp(curr_addr, addr, addrlen) == 0) {
 			*idx = (i + start_idx) % av->dg_av_used;
 			goto out;
 		}
