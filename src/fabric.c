@@ -96,7 +96,8 @@ static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 	struct ofi_prov *prov;
 
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!strncmp(prov->provider->name, prov_name, len))
+		if ((strlen(prov->provider->name) == len) &&
+		    !strncmp(prov->provider->name, prov_name, len))
 			return prov;
 	}
 
@@ -624,11 +625,13 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 		if (util_len && util_name) {
 			assert(!(flags & OFI_CORE_PROV_ONLY));
-			if (strncasecmp(util_name, prov->provider->name, util_len))
+			if ((strlen(prov->provider->name) != util_len) ||
+			    strncasecmp(util_name, prov->provider->name, util_len))
 				continue;
 		} else if (core_len && core_name) {
 			if (!ofi_is_util_prov(prov->provider) &&
-			    strncasecmp(core_name, prov->provider->name, core_len))
+			    ((strlen(prov->provider->name) != core_len) ||
+			     strncasecmp(core_name, prov->provider->name, core_len)))
 				continue;
 		}
 
