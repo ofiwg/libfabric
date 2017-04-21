@@ -55,16 +55,60 @@ static int rxm_mr_buf_reg(void *pool_ctx, void *addr, size_t len, void **context
 	return ret;
 }
 
-static int rxm_buf_pool_create(int local_mr, size_t count, size_t size,
-		struct util_buf_pool **pool, void *pool_ctx)
+void *rxm_buf_get_desc(struct rxm_buf_pool *pool, void *buf)
 {
-	*pool = local_mr ? util_buf_pool_create_ex(RXM_BUF_SIZE + size, 16, 0, count,
+	struct fid_mr *mr;
+
+	if (pool->local_mr) {
+		mr = util_buf_get_ctx(pool->pool, buf);
+		return fi_mr_desc(mr);
+	} else {
+		return NULL;
+	}
+}
+
+void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
+{
+	dlist_remove(&buf->entry);
+	util_buf_release(pool->pool, buf);
+}
+
+void rxm_buf_get(struct rxm_buf_pool *pool, struct rxm_buf **buf)
+{
+	*buf = util_buf_get(pool->pool);
+	assert(*buf);
+	memset(*buf, 0, sizeof(**buf));
+	dlist_insert_tail(&((*buf)->entry), &pool->buf_list);
+}
+
+static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
+{
+	struct dlist_entry *entry;
+	struct rxm_buf *buf;
+
+	while(!dlist_empty(&pool->buf_list)) {
+		entry = pool->buf_list.next;
+		buf = container_of(entry, struct rxm_buf, entry);
+		/* Cancel pre-posted context and release it */
+		(void)fi_cancel(&buf->msg_ep->fid, buf);
+		rxm_buf_release(pool, buf);
+	}
+
+	util_buf_pool_destroy(pool->pool);
+}
+
+static int rxm_buf_pool_create(int local_mr, size_t count, size_t size,
+		struct rxm_buf_pool *pool, void *pool_ctx)
+{
+	pool->pool = local_mr ? util_buf_pool_create_ex(RXM_BUF_SIZE + size, 16, 0, count,
 				rxm_mr_buf_reg, rxm_mr_buf_close, pool_ctx) :
 		util_buf_pool_create(RXM_BUF_SIZE, 16, 0, count);
-	if (!(*pool)) {
+	if (!pool->pool) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "Unable to create buf pool\n");
 		return -FI_ENOMEM;
 	}
+	dlist_init(&pool->buf_list);
+	pool->local_mr = local_mr;
 	return 0;
 }
 
@@ -97,7 +141,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 
 	ret = rxm_buf_pool_create(RXM_MR_LOCAL(rxm_ep->msg_info),
 				  rxm_ep->msg_info->tx_attr->size,
-				  sizeof(struct rxm_pkt), &rxm_ep->tx_pool,
+				  sizeof(struct rxm_tx_buf), &rxm_ep->tx_pool,
 				  rxm_domain->msg_domain);
 	if (ret)
 	        return ret;
@@ -131,16 +175,14 @@ err4:
 err3:
 	rxm_txe_fs_free(rxm_ep->txe_fs);
 err2:
-	util_buf_pool_destroy(rxm_ep->tx_pool);
+	rxm_buf_pool_destroy(&rxm_ep->tx_pool);
 err1:
-	util_buf_pool_destroy(rxm_ep->rx_pool);
+	rxm_buf_pool_destroy(&rxm_ep->rx_pool);
 	return ret;
 }
 
 static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 {
-	struct slist_entry *entry;
-	struct rxm_rx_buf *rx_buf;
 
 	rxm_recv_queue_close(&rxm_ep->trecv_queue);
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
@@ -148,21 +190,12 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 	if (rxm_ep->txe_fs)
 		rxm_txe_fs_free(rxm_ep->txe_fs);
 
-	while(!slist_empty(&rxm_ep->rx_buf_list)) {
-		entry = slist_remove_head(&rxm_ep->rx_buf_list);
-		rx_buf = container_of(entry, struct rxm_rx_buf, entry);
-		/* Cancel pre-posted context and relese it */
-		(void)fi_cancel(&rx_buf->ep->srx_ctx->fid, rx_buf);
-		util_buf_release(rxm_ep->rx_pool, rx_buf);
-	}
-
-	util_buf_pool_destroy(rxm_ep->rx_pool);
-	util_buf_pool_destroy(rxm_ep->tx_pool);
+	rxm_buf_pool_destroy(&rxm_ep->rx_pool);
+	rxm_buf_pool_destroy(&rxm_ep->tx_pool);
 }
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
-	struct fid_mr *mr;
 	void *desc = NULL;
 	int ret;
 
@@ -173,10 +206,7 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	rx_buf->state = RXM_LMT_NONE;
 	rx_buf->rma_iov = NULL;
 
-	if (RXM_MR_LOCAL(rx_buf->ep->msg_info)) {
-		mr = util_buf_get_ctx(rx_buf->ep->rx_pool, rx_buf);
-		desc = fi_mr_desc(mr);
-	}
+	desc = rxm_buf_get_desc(&rx_buf->ep->rx_pool, rx_buf);
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Re-posting rx buf\n");
 	ret = fi_recv(rx_buf->ep->srx_ctx, &rx_buf->pkt, RXM_BUF_SIZE, desc,
@@ -192,17 +222,17 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
 	int ret;
 	size_t i;
 
-	for (i = 0; i < rxm_ep->rx_pool->chunk_cnt; i++) {
-		rx_buf = util_buf_get(rxm_ep->rx_pool);
-		rx_buf->ctx_type = RXM_RX_BUF;
+	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
+		rxm_buf_get(&rxm_ep->rx_pool, (struct rxm_buf **)&rx_buf);
+		rx_buf->hdr.ctx_type = RXM_RX_BUF;
+		rx_buf->hdr.msg_ep = rxm_ep->srx_ctx;
 		rx_buf->ep = rxm_ep;
 
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
-			util_buf_release(rxm_ep->rx_pool, rx_buf);
+			rxm_buf_release(&rxm_ep->rx_pool, (struct rxm_buf *)rx_buf);
 			return ret;
 		}
-		slist_insert_tail(&rx_buf->entry, &rxm_ep->rx_buf_list);
 	}
 	return 0;
 }
@@ -493,8 +523,9 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	struct rxm_ep *rxm_ep;
 	struct rxm_conn *rxm_conn;
 	struct rxm_tx_entry *tx_entry;
+	struct rxm_tx_buf *tx_buf;
 	struct rxm_pkt *pkt;
-	struct fid_mr *mr, **mr_iov;
+	struct fid_mr **mr_iov;
 	void *desc_tx_buf = NULL;
 	size_t pkt_size = 0;
 	ssize_t size;
@@ -512,22 +543,20 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	}
 
 	tx_entry = freestack_pop(rxm_ep->txe_fs);
-
 	tx_entry->ctx_type = RXM_TX_ENTRY;
 	tx_entry->ep = rxm_ep;
 	tx_entry->count = count;
 	tx_entry->context = context;
 	tx_entry->flags = flags;
 
-	if (RXM_MR_LOCAL(rxm_ep->msg_info)) {
-		pkt = util_buf_get_ex(rxm_ep->tx_pool, (void **)&mr);
-		desc_tx_buf = fi_mr_desc(mr);
-	} else {
-		pkt = util_buf_get(rxm_ep->tx_pool);
-	}
-	assert(pkt);
+	rxm_buf_get(&rxm_ep->tx_pool, (struct rxm_buf **)&tx_buf);
+	tx_buf->hdr.msg_ep = rxm_conn->msg_ep;
 
-	tx_entry->pkt = pkt;
+	desc_tx_buf = rxm_buf_get_desc(&rxm_ep->tx_pool, tx_buf);
+
+	tx_entry->tx_buf = tx_buf;
+
+	pkt = &tx_buf->pkt;
 
 	rxm_pkt_init(pkt);
 	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
@@ -562,7 +591,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 			/* desc is msg fid_mr * array */
 			mr_iov = (struct fid_mr **)desc;
 		}
-		size = rxm_rma_iov_init(rxm_ep, &tx_entry->pkt->data, iov,
+		size = rxm_rma_iov_init(rxm_ep, &tx_entry->tx_buf->pkt.data, iov,
 					count, mr_iov);
 		if (size < 0) {
 			ret = size;
@@ -603,7 +632,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 
 	return 0;
 done:
-	util_buf_release(rxm_ep->tx_pool, pkt);
+	rxm_buf_release(&rxm_ep->tx_pool, (struct rxm_buf *)tx_buf);
 	freestack_push(rxm_ep->txe_fs, tx_entry);
 	return ret;
 }
