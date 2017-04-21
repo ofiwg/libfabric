@@ -108,7 +108,7 @@ HRESULT ofi_nd_unexp_init(struct nd_ep *ep)
 			(struct nd_unexpected_buf*)(tmp + (PREPOSTLEN * i));
 	}
 
-	ofi_atomic_inc32(&ep->unexpected.active);
+	InterlockedIncrement(&ep->unexpected.active);
 
 	return S_OK;
 }
@@ -125,14 +125,14 @@ HRESULT ofi_nd_unexp_fini(struct nd_ep *ep)
 
 	ND_LOG_INFO(FI_LOG_EP_CTRL, "finalize unexpected queue\n");
 
-	if (ofi_atomic_dec32(&ep->unexpected.active))
+	if (InterlockedDecrement(&ep->unexpected.active))
 		return S_OK;
-	ofi_atomic_add32(&ep->shutdown, total_count - ep->unexpected.used_counter);
+	InterlockedAdd(&ep->shutdown, total_count - ep->unexpected.used_counter);
 	if (ep->qp) {
 		ep->qp->lpVtbl->Flush(ep->qp);
 		/* wait till all preposted entries are canceled (GetResult()
 		 * ND2_RESULT entries with Status == STATUS_CANCELLED) */
-		while (ofi_atomic_add32(&ep->shutdown, 0) > 0)
+		while (InterlockedAdd(&ep->shutdown, 0) > 0)
 			/* yields execution to another thread
 			 * that is ready to run on: */
 			if (!SwitchToThread()) /* - the current processor */
@@ -359,7 +359,7 @@ void ofi_nd_unexp_event(ND2_RESULT *result)
 		/* shutdown mode */
 		ND_LOG_DEBUG(FI_LOG_EP_CTRL, "clean prepost entry\n");
 		ND_BUF_FREE(nd_unexpected_ctx, ctx);
-		ofi_atomic_dec32(&ep->shutdown);
+		InterlockedDecrement(&ep->shutdown);
 		return;
 	}
 

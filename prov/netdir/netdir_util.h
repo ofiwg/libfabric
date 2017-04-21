@@ -66,7 +66,7 @@ static HRESULT ofi_nd_util_ov_wait(void *overlapped, ofi_nd_util_ov *ov)
 	assert(ov);
 
 	HRESULT hr = ((IND2Overlapped*)overlapped)->lpVtbl->GetOverlappedResult(overlapped, &ov->base.ov, TRUE);
-	if (!ofi_atomic_dec32(&ov->cnt))
+	if (!InterlockedDecrement(&ov->cnt))
 		ov->base.free(&ov->base);
 	return hr;
 }

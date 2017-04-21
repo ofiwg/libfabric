@@ -437,6 +437,7 @@ libdl_done:
 	ofi_register_provider(VERBS_INIT, NULL);
 	ofi_register_provider(GNI_INIT, NULL);
 	ofi_register_provider(BGQ_INIT, NULL);
+	ofi_register_provider(NETDIR_INIT, NULL);
 
 	/* Initialize the socket(s) provider last.  This will result in
 	 * it being the least preferred provider. */

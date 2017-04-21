@@ -52,7 +52,7 @@ void CALLBACK domain_io_cb(DWORD err, DWORD bytes, LPOVERLAPPED ov)
 {
 	assert(ov);
 
-	ofi_atomic_inc32(&nd_async_progress);
+	InterlockedIncrement(&nd_async_progress);
 
 	nd_event_base *base = container_of(ov, nd_event_base, ov);
 
@@ -69,7 +69,7 @@ void CALLBACK domain_io_cb(DWORD err, DWORD bytes, LPOVERLAPPED ov)
 		base->event_cb(base, bytes);
 	}
 
-	ofi_atomic_dec32(&nd_async_progress);
+	InterlockedDecrement(&nd_async_progress);
 
 	return;
 }
@@ -89,7 +89,7 @@ static void ofi_nd_util_mr_ov_event(struct nd_event_base* base, DWORD bytes)
 
 	ofi_nd_util_ov *ov = container_of(base, ofi_nd_util_ov, base);
 
-	if (!ofi_atomic_dec32(&ov->cnt))
+	if (!InterlockedDecrement(&ov->cnt))
 		ov->base.free(&ov->base);
 }
 
@@ -101,7 +101,7 @@ static void ofi_nd_util_mr_ov_err(struct nd_event_base* base, DWORD bytes,
 
 	ofi_nd_util_ov *ov = container_of(base, ofi_nd_util_ov, base);
 
-	if (!ofi_atomic_dec32(&ov->cnt))
+	if (!InterlockedDecrement(&ov->cnt))
 		ov->base.free(&ov->base);
 }
 

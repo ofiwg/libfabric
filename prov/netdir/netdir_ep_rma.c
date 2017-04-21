@@ -190,7 +190,7 @@ ofi_nd_ep_readmsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 	main_entry->flags = flags;
 	main_entry->domain = ep->domain;
 	main_entry->context = msg->context;
-	main_entry->seq = ofi_atomic_add64(&ep->domain->msg_cnt, 1);
+	main_entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
 	/* since write operation can't be canceled, set NULL into
 	 * the 1st byte of internal data of context */
@@ -366,7 +366,7 @@ ofi_nd_ep_writemsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 	main_entry->flags = flags;
 	main_entry->domain = ep->domain;
 	main_entry->context = msg->context;
-	main_entry->seq = ofi_atomic_add64(&ep->domain->msg_cnt, 1);
+	main_entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
 	/* since write operation can't be canceled, set NULL into
 	* the 1st byte of internal data of context */
@@ -637,9 +637,9 @@ void ofi_nd_write_event(ND2_RESULT *result)
 
 	if (ep->cntr_write) {
 		if (result->Status != S_OK) {
-			ofi_atomic_inc64(&ep->cntr_write->err);
+			InterlockedIncrement64(&ep->cntr_write->err);
 		}
-		ofi_atomic_inc64(&ep->cntr_write->counter);
+		InterlockedIncrement64(&ep->cntr_write->counter);
 		WakeByAddressAll((void*)&ep->cntr_write->counter);
 	}
 
@@ -651,7 +651,7 @@ void ofi_nd_write_event(ND2_RESULT *result)
 		PostQueuedCompletionStatus(
 			entry->result.Status == S_OK ? ep->cq_send->iocp : ep->cq_send->err,
 			0, 0, &entry->base.ov);
-		ofi_atomic_inc32(&ep->cq_send->count);
+		InterlockedIncrement(&ep->cq_send->count);
 		WakeByAddressAll((void*)&ep->cq_send->count);
 	}
 	else { /* if notification is not requested - just free entry */
