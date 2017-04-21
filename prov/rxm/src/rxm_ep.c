@@ -317,7 +317,6 @@ static int rxm_check_unexp_msg_list(struct util_cq *util_cq, struct rxm_recv_que
 	rx_buf->recv_entry = recv_entry;
 
 	ret = rxm_cq_handle_data(rx_buf);
-	free(unexp_msg);
 out:
 	fastlock_release(&util_cq->cq_lock);
 	return ret;
@@ -590,7 +589,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 			/* release allocated buffer for further reuse */
 			goto done;
 		} else {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %d) is too "
+			FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %d) is too "
 				"big for MSG provider (max inject size = %d) \n",
 				(int)pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
 		}

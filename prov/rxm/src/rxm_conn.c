@@ -204,7 +204,8 @@ void *rxm_msg_listener(void *arg)
 
 		switch(event) {
 		case FI_NOTIFY:
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Closing rxm msg listener\n");
+			FI_TRACE(&rxm_prov, FI_LOG_FABRIC, "Closing rxm msg listener\n");
+			free(entry);
 			return NULL;
 		case FI_CONNREQ:
 			if (rd != len)
