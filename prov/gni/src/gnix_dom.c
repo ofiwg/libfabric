@@ -152,7 +152,8 @@ DIRECT_FN STATIC int gnix_stx_open(struct fid_domain *dom,
 	 * a TX context (aka gnix nic) that can be shared
 	 * explicitly amongst endpoints
 	 */
-	nic_attr.must_alloc = true;
+	nic_attr.must_alloc = (domain->num_allocd_stxs <
+					gnix_max_nics_per_ptag) ? true : false;
 	ret = gnix_nic_alloc(domain, &nic_attr, &nic);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -170,6 +171,7 @@ DIRECT_FN STATIC int gnix_stx_open(struct fid_domain *dom,
 	stx_priv->stx_fid.fid.context = context;
 	stx_priv->stx_fid.fid.ops = &gnix_stx_ops;
 	stx_priv->stx_fid.ops = NULL;
+	domain->num_allocd_stxs++;
 
 	*stx = &stx_priv->stx_fid;
 
