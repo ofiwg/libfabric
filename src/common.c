@@ -42,6 +42,7 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 #include <poll.h>
 #include <pthread.h>
 #include <sys/time.h>
@@ -64,7 +65,20 @@ int fi_poll_fd(int fd, int timeout)
 
 	fds.fd = fd;
 	fds.events = POLLIN;
-	ret = poll(&fds, 1, timeout);
+
+	// to set the signal mask
+        sigset_t orgmask, sigmask;
+
+         /* Block SIGUSR1, SIGUSR2, and all realtime signals from SIGRTMIN to SIGRTMAX */
+        sigemptyset(&sigmask);
+        sigaddset(&sigmask, SIGUSR1);
+        sigaddset(&sigmask, SIGUSR2);
+	for (int i = SIGRTMIN; i <= SIGRTMAX; i++)
+	        sigaddset(&sigmask, i);
+        pthread_sigmask(SIG_SETMASK, &sigmask, &orgmask);
+        ret = poll(&fds, 1, timeout);
+        pthread_sigmask(SIG_SETMASK, &orgmask, NULL);
+
 	return ret == -1 ? -errno : ret;
 }
 
