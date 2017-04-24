@@ -87,7 +87,7 @@ int socketpair(int af, int type, int protocol, int socks[2])
 
 	if (listen(lsock, 1))
 		goto err;
-	if ((socks[0] = WSASocket(af == AF_UNIX ? AF_INET : af, type, 0, NULL, 0, 0)) == INVALID_SOCKET)
+	if ((socks[0] = WSASocketW(af == AF_UNIX ? AF_INET : af, type, 0, NULL, 0, 0)) == INVALID_SOCKET)
 		goto err;
 	if(connect(socks[0], (const struct sockaddr*) &in_addr, sizeof(in_addr)))
 		goto err;
