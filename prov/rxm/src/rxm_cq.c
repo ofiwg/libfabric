@@ -282,6 +282,7 @@ int rxm_cq_handle_ack(struct rxm_rx_buf *rx_buf)
 
 int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 {
+	struct rxm_iov mr_match_iov;
 	size_t i, rma_total_len = 0;
 	int ret;
 
@@ -306,13 +307,22 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 		}
 
 		if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info)) {
-			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
-						 rx_buf->recv_entry->count,
-						 FI_WRITE, rx_buf->mr);
+			ret = rxm_match_iov(rx_buf->recv_entry->iov,
+					    rx_buf->recv_entry->desc,
+					    rx_buf->recv_entry->count, 0,
+					    rma_total_len, &mr_match_iov);
 			if (ret)
 				return ret;
 
-			for (i = 0; i < RXM_IOV_LIMIT; i++) {
+			ret = rxm_ep_msg_mr_regv(rx_buf->ep, mr_match_iov.iov,
+						 mr_match_iov.count, FI_WRITE,
+						 rx_buf->mr);
+			if (ret)
+				return ret;
+
+			rx_buf->recv_entry->count = mr_match_iov.count;
+
+			for (i = 0; i < rx_buf->recv_entry->count; i++) {
 				assert(!rx_buf->recv_entry->desc[i]);
 				rx_buf->recv_entry->desc[i] = rx_buf->mr[i];
 			}
