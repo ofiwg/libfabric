@@ -1941,6 +1941,7 @@ static int __init_tag_storages(struct gnix_fid_ep *ep, int tag_type,
 	};
 	struct gnix_tag_storage_attr tagged_attr = {
 			.type = tag_type,
+			.use_src_addr_matching = use_addrs,
 	};
 
 	GNIX_INFO(FI_LOG_EP_CTRL, "initializing tag storage, tag_type=%d\n",
