@@ -98,7 +98,7 @@ static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_add
 	}
 
 out:
-	close(sock);
+	ofi_close_socket(sock);
 	return ret;
 
 }
