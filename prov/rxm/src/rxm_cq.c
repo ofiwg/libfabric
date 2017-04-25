@@ -178,58 +178,75 @@ int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 	return 0;
 }
 
-/* Get an iov whose size matches given length */
-static int rxm_match_iov(struct rxm_match_iov *match_iov, size_t len,
-		struct rxm_iovx_entry *iovx)
+/* Get a match_iov derived from iov whose size matches given length */
+static int rxm_match_iov(const struct iovec *iov, void **desc,
+			 uint8_t count, uint64_t offset, size_t match_len,
+			 struct rxm_iov *match_iov)
 {
-	size_t i, j;
+	int i;
 
-	for (i = match_iov->index, j = 0; i < match_iov->count; i++, j++) {
-		iovx->iov[j].iov_base = (char *)match_iov->iov[i].iov_base + match_iov->offset;
-		iovx->iov[j].iov_len = MIN(match_iov->iov[i].iov_len - match_iov->offset, len);
-		iovx->desc[j] = match_iov->desc[i];
+	assert(count <= RXM_IOV_LIMIT);
 
-		len -= iovx->iov[j].iov_len;
-		if (!len)
-			break;
-		match_iov->offset = 0;
-	}
-
-	if (len) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "iovx size < len\n");
+	if (match_len > ofi_total_iov_len(iov, count)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "match_len > iov size!\n");
 		return -FI_EINVAL;
 	}
 
-	iovx->count = j + 1;
-	match_iov->index = i;
-	match_iov->offset += iovx->iov[j].iov_len;
+	for (i = 0; i < count; i++) {
+		assert(offset <= iov[i].iov_len);
+		match_iov->iov[i].iov_base = (char *)iov[i].iov_base + offset;
+		match_iov->iov[i].iov_len = MIN(iov[i].iov_len - offset, match_len);
+		match_iov->desc[i] = desc[i];
+
+		match_len -= match_iov->iov[i].iov_len;
+		if (!match_len)
+			break;
+		offset = 0;
+	}
+	assert(!match_len);
+	match_iov->count = i + 1;
+	return 0;
+}
+
+static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
+			     struct rxm_rma_iov *rma_iov,
+			     struct rxm_iov *match_iov)
+{
+	uint64_t offset = 0;
+	size_t i, j;
+	uint8_t count;
+	int ret;
+
+	assert(rma_iov->count <= RXM_IOV_LIMIT);
+
+	for (i = 0, j = 0; i < rma_iov->count; i++) {
+		ret = rxm_match_iov(&recv_entry->iov[j],
+			      &recv_entry->desc[j], recv_entry->count,
+			      offset, rma_iov->iov[i].len, &match_iov[i]);
+		if (ret)
+			return ret;
+		count = match_iov[i].count;
+		offset = match_iov[i].iov[match_iov[i].count].iov_len;
+
+		if (offset == recv_entry->iov[j + count - 1].iov_len) {
+			/* This iov has been completely used */
+			j += count;
+			offset = 0;
+		} else {
+			j += count - 1;
+		}
+	}
 	return 0;
 }
 
 static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_match_iov match_iov;
-	struct rxm_iovx_entry iovx;
-	int i, ret;
+	struct rxm_iov *match_iov = &rx_buf->match_iov[rx_buf->index];
+	int ret;
 
-	memset(&iovx, 0, sizeof(iovx));
-	iovx.count = RXM_IOV_LIMIT;
-
-	memset(&match_iov, 0, sizeof(match_iov));
-	match_iov.iov = rx_buf->recv_entry->iov;
-	match_iov.desc = rx_buf->recv_entry->desc;
-	match_iov.count = rx_buf->recv_entry->count;
-
-	ret = rxm_match_iov(&match_iov, rx_buf->rma_iov->iov[rx_buf->index].len, &iovx);
-	if (ret)
-		return ret;
-
-	for (i = 0; i < iovx.count; i++)
-		iovx.desc[i] = fi_mr_desc(iovx.desc[i]);
-
-	ret = fi_readv(rx_buf->conn->msg_ep, iovx.iov, iovx.desc, iovx.count, 0,
-		       rx_buf->rma_iov->iov[0].addr,rx_buf->rma_iov->iov[0].key,
-		       rx_buf);
+	ret = fi_readv(rx_buf->conn->msg_ep, match_iov->iov, match_iov->desc,
+		       match_iov->count, 0, rx_buf->rma_iov->iov[0].addr,
+		       rx_buf->rma_iov->iov[0].key, rx_buf);
 	if (ret)
 		return ret;
 	rx_buf->index++;
@@ -265,7 +282,7 @@ int rxm_cq_handle_ack(struct rxm_rx_buf *rx_buf)
 
 int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 {
-	size_t i;
+	size_t i, rma_total_len = 0;
 	int ret;
 
 	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) {
@@ -273,6 +290,19 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
 			if (!rx_buf->conn)
 				return -FI_EOTHER;
+		}
+
+		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
+		rx_buf->index = 0;
+
+		for (i = 0; i < rx_buf->rma_iov->count; i++)
+			rma_total_len += rx_buf->rma_iov->iov->len;
+
+		if (rma_total_len > ofi_total_iov_len(rx_buf->recv_entry->iov,
+				      rx_buf->recv_entry->count)) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Posted receive buffer size is not enough!\n");
+			return -FI_ETRUNC; // TODO copy data and write to CQ error
 		}
 
 		if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info)) {
@@ -288,12 +318,16 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 			}
 		}
 
+		for (i = 0; i < rx_buf->recv_entry->count; i++)
+			rx_buf->recv_entry->desc[i] = fi_mr_desc(rx_buf->recv_entry->desc[i]);
+
+		ret = rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov,
+				    rx_buf->match_iov);
+		if (ret)
+			return ret;
+
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "rx_buf->state -> RXM_LMT_START\n");
 		rx_buf->state = RXM_LMT_START;
-
-		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
-		rx_buf->index = 0;
-
 		return rxm_lmt_rma_read(rx_buf);
 	} else {
 		ofi_copy_to_iov(rx_buf->recv_entry->iov, rx_buf->recv_entry->count, 0,
