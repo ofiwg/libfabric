@@ -380,7 +380,7 @@ static int udpx_ep_close(struct fid *fid)
 		ofi_atomic_dec32(&ep->util_ep.tx_cq->ref);
 
 	udpx_rx_cirq_free(ep->rxq);
-	close(ep->sock);
+	ofi_close_socket(ep->sock);
 	ofi_endpoint_close(&ep->util_ep);
 	free(ep);
 	return 0;
@@ -557,7 +557,7 @@ static int udpx_ep_init(struct udpx_ep *ep, struct fi_info *info)
 
 	return 0;
 err2:
-	close(ep->sock);
+	ofi_close_socket(ep->sock);
 err1:
 	udpx_rx_cirq_free(ep->rxq);
 	return ret;
