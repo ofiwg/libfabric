@@ -44,6 +44,15 @@
 #define MSG_NOSIGNAL 0
 #endif
 
+#ifndef SOCKET
+#define SOCKET int
+#endif
+
+#ifndef INVALID_SOCKET
+#define INVALID_SOCKET (-1)
+#endif
+
+
 #define FI_DESTRUCTOR(func) static __attribute__((destructor)) void func
 
 #ifndef UNREFERENCED_PARAMETER
@@ -51,6 +60,9 @@
 #else
 #define OFI_UNUSED UNREFERENCED_PARAMETER
 #endif
+
+#define OFI_SOCK_TRY_RCV_AGAIN(err)			\
+	((err) == EAGAIN || (err) == EWOULDBLOCK)
 
 struct util_shm
 {
@@ -70,23 +82,36 @@ static inline void ofi_freealign(void *memptr)
 	free(memptr);
 }
 
-static inline ssize_t ofi_read_socket(int fd, void *buf, size_t count)
+static inline void ofi_osd_init(void)
+{
+}
+
+static inline void ofi_osd_fini(void)
+{
+}
+
+static inline SOCKET ofi_socket(int domain, int type, int protocol)
+{
+	return socket(domain, type, protocol);
+}
+
+static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)
 {
 	return read(fd, buf, count);
 }
 
-static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
+static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
 {
 	return write(fd, buf, count);
 }
 
-static inline ssize_t ofi_send_socket(int fd, const void *buf, size_t count,
-        int flags)
+static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
+				      int flags)
 {
 	return send(fd, buf, count, flags);
 }
 
-static inline int ofi_close_socket(int socket)
+static inline int ofi_close_socket(SOCKET socket)
 {
 	return close(socket);
 }
@@ -96,12 +121,9 @@ static inline int ofi_sockerr(void)
 	return errno;
 }
 
-static inline void ofi_osd_init(void)
+static inline int ofi_sysconf(int name)
 {
-}
-
-static inline void ofi_osd_fini(void)
-{
+	return sysconf(name);
 }
 
 /* complex operations implementation */

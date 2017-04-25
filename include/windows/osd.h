@@ -37,7 +37,11 @@ extern "C" {
 
 /* MSG_NOSIGNAL doesn't exist on Windows */
 #ifndef MSG_NOSIGNAL
-#define MSG_NOSIGNAL 0
+#define MSG_NOSIGNAL	0
+#endif
+
+#ifndef _SC_PAGESIZE
+#define _SC_PAGESIZE	0
 #endif
 
 #define FI_DESTRUCTOR(func) void func
@@ -45,6 +49,9 @@ extern "C" {
 #define LITTLE_ENDIAN 5678
 #define BIG_ENDIAN 8765
 #define BYTE_ORDER LITTLE_ENDIAN
+
+#define OFI_SOCK_TRY_RCV_AGAIN(err)				\
+	((err) == WSAETIMEDOUT || (err) == WSAEWOULDBLOCK)
 
 struct util_shm
 { /* this is dummy structure to provide compilation on Windows platform. */
@@ -54,22 +61,6 @@ struct util_shm
 	const char	*name;
 	size_t		size;
 };
-
-static inline void ofi_osd_init()
-{
-	WORD wsa_version;
-	WSADATA data;
-	int err;
-
-	wsa_version = MAKEWORD(2, 2);
-
-	err = WSAStartup(wsa_version, &data);
-}
-
-static inline void ofi_osd_fini(void)
-{
-	WSACleanup();
-}
 
 #define FI_FFSL(val)	 			\
 do						\
@@ -175,23 +166,44 @@ static inline void ofi_freealign(void *memptr)
 	_aligned_free(memptr);
 }
 
-static inline ssize_t ofi_read_socket(int fd, void *buf, size_t count)
+static inline void ofi_osd_init(void)
+{
+	WORD wsa_version;
+	WSADATA data;
+	int err;
+
+	wsa_version = MAKEWORD(2, 2);
+
+	err = WSAStartup(wsa_version, &data);
+}
+
+static inline void ofi_osd_fini(void)
+{
+	WSACleanup();
+}
+
+static inline SOCKET ofi_socket(int domain, int type, int protocol)
+{
+	return socket(domain, type, protocol);
+}
+
+static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)
 {
 	return recv(fd, (char*)buf, (int)count, 0);
 }
 
-static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
+static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
 {
 	return send(fd, (const char*)buf, (int)count, 0);
 }
 
-static inline ssize_t ofi_send_socket(int fd, const void *buf, size_t count,
+static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
         int flags)
 {
 	return send(fd, (const char*)buf, count, flags);
 }
 
-static inline int ofi_close_socket(int socket)
+static inline int ofi_close_socket(SOCKET socket)
 {
 	return closesocket(socket);
 }
@@ -235,6 +247,21 @@ static inline char * strndup(char const *src, size_t n)
 		dst[len] = 0;
 	}
 	return dst;
+}
+
+static inline int ofi_sysconf(int name)
+{
+	SYSTEM_INFO si;
+
+	GetSystemInfo(&si);
+
+	switch (name) {
+	case _SC_PAGESIZE:
+		return si.dwPageSize;
+	default:
+		errno = EINVAL;
+		return -1;
+	}
 }
 
 int ofi_shm_unmap(struct util_shm *shm);
