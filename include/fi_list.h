@@ -211,6 +211,18 @@ slist_find_first_match(const struct slist *list, slist_func_t *match,
 	return NULL;
 }
 
+static inline void slist_remove(struct slist *list,
+		struct slist_entry *item, struct slist_entry *prev)
+{
+	if (prev)
+		prev->next = item->next;
+	else
+		list->head = item->next;
+
+	if (!item->next)
+		list->tail = prev;
+}
+
 static inline struct slist_entry *
 slist_remove_first_match(struct slist *list, slist_func_t *match, const void *arg)
 {
@@ -218,14 +230,7 @@ slist_remove_first_match(struct slist *list, slist_func_t *match, const void *ar
 
 	slist_foreach(list, item, prev) {
 		if (match(item, arg)) {
-			if (prev)
-				prev->next = item->next;
-			else
-				list->head = item->next;
-
-			if (!item->next)
-				list->tail = prev;
-
+			slist_remove(list, item, prev);
 			return item;
 		}
 	}
