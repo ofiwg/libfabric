@@ -237,6 +237,14 @@ The following apply to memory registration.
   After calling fi_mr_enable(), no further resource bindings may be
   made to the memory region.
 
+*FI_MR_ENDPOINT*
+: This mode bit indicates that the provider associates memory regions
+  with endpoints rather than domains.  Memory regions that are
+  registered with the provider are created in a disabled state and
+  must be bound to an endpoint prior to being enabled.  To bind the
+  MR with an endpoint, the application must use fi_mr_bind().  To
+  enable the memory region, the application must call fi_mr_enable().
+
 *Basic Memory Registration*
 : Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit.
   FI_MR_BASIC is maintained for backwards compatibility (libfabric version
@@ -371,8 +379,12 @@ corresponding domain is closed.
 ## fi_mr_bind
 
 The fi_mr_bind function associates a memory region with a
-counter, for providers that support the generation of completions
-based on fabric operations.  The type of events tracked against the
+counter or endpoint.  Counter bindings are needed by providers
+that support the generation of completions based on fabric
+operations.  Endpoint bindings are needed if the provider
+associates memory regions with endpoints (see FI_MR_ENDPOINT).
+
+When binding with a counter, the type of events tracked against the
 memory region is based on the bitwise OR of the following flags.
 
 *FI_REMOTE_WRITE*
@@ -380,6 +392,8 @@ memory region is based on the bitwise OR of the following flags.
   modifies the memory region.  Use of this flag requires that the endpoint
   through which the MR is accessed be created with the FI_RMA_EVENT
   capability.
+
+When binding the memory region to an endpoint, flags should be 0.
 
 ## fi_mr_refresh
 
