@@ -11,6 +11,9 @@
 /* Set to 1 to use c11 atomic functions */
 /* #undef HAVE_ATOMICS */   /* TODO: add atomics support for windows */
 
+/* Set to 1 to use built-in intrincics atomics */
+#define HAVE_BUILTIN_ATOMICS 1
+
 /* Define to 1 if clock_gettime is available. */
 /* #undef HAVE_CLOCK_GETTIME */
 

@@ -159,6 +159,20 @@ AC_TRY_LINK([#include <stdatomic.h>],
     ],
     [AC_MSG_RESULT(no)])
 
+dnl Check for gcc built-in atomics
+AC_MSG_CHECKING(compiler support for built-in atomics)
+AC_TRY_LINK([#include <stdint.h>],
+    [int32_t a;
+     __sync_add_and_fetch(&a, 0);
+     __sync_sub_and_fetch(&a, 0);
+       return 0;
+    ],
+    [
+	AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_BUILTIN_ATOMICS, 1, [Set to 1 to use built-in intrincics atomics])
+    ],
+    [AC_MSG_RESULT(no)])
+
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))

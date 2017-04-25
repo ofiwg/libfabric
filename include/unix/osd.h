@@ -33,6 +33,8 @@
 #ifndef _FI_UNIX_OSD_H_
 #define _FI_UNIX_OSD_H_
 
+#include "config.h"
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
@@ -138,5 +140,11 @@ static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, 
 OFI_COMPLEX_OPS(float)
 OFI_COMPLEX_OPS(double)
 OFI_COMPLEX_OPS(long_double)
+
+/* atomics primitives */
+#ifdef HAVE_BUILTIN_ATOMICS
+#define ofi_atomic_add_and_fetch(radix, ptr, val) __sync_add_and_fetch((ptr), (val))
+#define ofi_atomic_sub_and_fetch(radix, ptr, val) __sync_sub_and_fetch((ptr), (val))
+#endif /* HAVE_BUILTIN_ATOMICS */
 
 #endif /* _FI_UNIX_OSD_H_ */
