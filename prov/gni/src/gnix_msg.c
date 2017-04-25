@@ -3015,12 +3015,11 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->msg.send_info[0].send_len = len;
 	req->msg.cum_send_len = len;
 	req->msg.imm = data;
-	req->flags = 0;
+	req->flags = flags;
 
 	if (flags & FI_INJECT) {
 		memcpy(req->inject_buf, (void *)loc_addr, len);
 		req->msg.send_info[0].send_addr = (uint64_t)req->inject_buf;
-		req->flags |= FI_INJECT;
 	} else {
 		req->msg.send_info[0].send_addr = loc_addr;
 	}
@@ -3387,7 +3386,7 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 	req->gnix_ep = ep;
 	req->user_context = context;
 	req->work_fn = _gnix_send_req;
-	req->flags = 0; /* Flags that apply to all message types? */
+	req->flags = flags;
 	req->msg.send_flags = flags;
 	req->msg.imm = 0;
 

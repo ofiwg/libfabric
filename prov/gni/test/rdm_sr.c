@@ -82,14 +82,15 @@ const char *cdm_id[NUMEPS] = { "5000", "5001" };
 struct fi_info *hints;
 static int using_bnd_ep = 0;
 static int dgram_should_fail;
+static int eager_auto = 0;
 static int peer_src_known = 1;
 
 #define BUF_SZ (1<<20)
 #define BUF_RNDZV (1<<14)
 #define IOV_CNT (1<<3)
 
-char *target;
-char *source;
+char *target, *target2;
+char *source, *source2;
 struct iovec *src_iov, *dest_iov, *s_iov, *d_iov;
 char *iov_src_buf, *iov_dest_buf;
 char *uc_target;
@@ -125,6 +126,9 @@ void rdm_sr_setup_common_eps(void)
 	target = malloc(BUF_SZ * NUM_MULTIRECVS);
 	assert(target);
 
+	target2 = malloc(BUF_SZ * NUM_MULTIRECVS);
+	assert(target2);
+
 	dest_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(dest_iov);
 	d_iov = malloc(sizeof(struct iovec) * IOV_CNT);
@@ -132,6 +136,9 @@ void rdm_sr_setup_common_eps(void)
 
 	source = malloc(BUF_SZ);
 	assert(source);
+
+	source2 = malloc(BUF_SZ);
+	assert(source2);
 
 	src_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(src_iov);
@@ -167,6 +174,11 @@ void rdm_sr_setup_common_eps(void)
 
 		ret = fi_open_ops(&dom[i]->fid, FI_GNI_DOMAIN_OPS_1,
 				  0, (void **) (gni_domain_ops + i), NULL);
+
+		if (eager_auto)
+			ret = gni_domain_ops[i]->set_val(&dom[i]->fid,
+							 GNI_EAGER_AUTO_PROGRESS,
+							 &eager_auto);
 
 		ret = fi_av_open(dom[i], &attr, av + i, NULL);
 		cr_assert(!ret, "fi_av_open");
@@ -319,28 +331,40 @@ void dgram_sr_setup(uint32_t version, bool is_noreg, enum fi_progress pm)
 		rdm_sr_setup_common();
 }
 
-static void rdm_sr_setup_reg(void) {
+static void rdm_sr_setup_reg_eager_auto(void)
+{
+	eager_auto = 1;
+	rdm_sr_setup(false, FI_PROGRESS_AUTO);
+}
+
+static void rdm_sr_setup_reg(void)
+{
+	eager_auto = 0;
 	rdm_sr_setup(false, FI_PROGRESS_AUTO);
 }
 
 static void dgram_sr_setup_reg(void)
 {
+	eager_auto = 0;
 	dgram_sr_setup(fi_version(), false, FI_PROGRESS_AUTO);
 }
 
 static void dgram_sr_setup_reg_src_unk_api_version_old(void)
 {
+	eager_auto = 0;
 	peer_src_known = 0;
 	dgram_sr_setup(FI_VERSION(1, 0), false, FI_PROGRESS_AUTO);
 }
 
 static void dgram_sr_setup_reg_src_unk_api_version_cur(void)
 {
+	eager_auto = 0;
 	peer_src_known = 0;
 	dgram_sr_setup(fi_version(), false, FI_PROGRESS_AUTO);
 }
 
 static void rdm_sr_setup_noreg(void) {
+	eager_auto = 0;
 	rdm_sr_setup(true, FI_PROGRESS_AUTO);
 }
 
@@ -348,6 +372,8 @@ void rdm_sr_bnd_ep_setup(void)
 {
 	int ret = 0, i = 0;
 	char my_hostname[HOST_NAME_MAX];
+
+	eager_auto = 0;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
@@ -409,7 +435,9 @@ static void rdm_sr_teardown_common(bool unreg)
 	free(iov_src_buf);
 	free(iov_dest_buf);
 	free(target);
+	free(target2);
 	free(source);
+	free(source2);
 
 	for (i = 0; i < IOV_CNT; i++) {
 		free(src_iov[i].iov_base);
@@ -655,6 +683,8 @@ static inline struct fi_cq_err_entry rdm_sr_check_canceled(struct fid_cq *cq)
  * Test MSG functions
  ******************************************************************************/
 
+TestSuite(rdm_sr_eager_auto, .init = rdm_sr_setup_reg_eager_auto, .fini = rdm_sr_teardown,
+	  .disabled = false);
 TestSuite(rdm_sr, .init = rdm_sr_setup_reg, .fini = rdm_sr_teardown,
 	  .disabled = false);
 
@@ -1135,6 +1165,89 @@ Test(rdm_sr, inject_retrans)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_inject, 1, INJECT_SIZE);
+}
+
+void do_senddata_eager_auto(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry s_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
+					    (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_tagged_entry d_cqe[2];
+	struct fi_msg msg;
+	struct iovec iov;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(source2, len, 0xdc);
+	rdm_sr_init_data(target, len, 0);
+	rdm_sr_init_data(target2, len, 1);
+
+	iov.iov_base = source2;
+	iov.iov_len = len;
+
+	msg.msg_iov = &iov;
+	msg.desc = NULL;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	msg.context = target;
+	msg.data = (uint64_t)target;
+
+	sz = fi_sendmsg(ep[0], &msg, FI_REMOTE_CQ_DATA);
+	cr_assert_eq(sz, 0);
+
+	iov.iov_base = source;
+	iov.iov_len = len;
+	msg.desc = (void **)loc_mr;
+
+	sz = fi_sendmsg(ep[0], &msg, FI_REMOTE_CQ_DATA | FI_FENCE);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target2, len, NULL, gni_addr[0], source2);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
+	cr_assert_eq(sz, 0);
+
+	/* Wait for auto-progress threads to do all the work. */
+	sleep(1);
+
+	/* If progress works, events should be ready right away. */
+	ret = fi_cq_read(msg_cq[1], &d_cqe, 2);
+	cr_assert_eq(ret, 2);
+
+	rdm_sr_check_cqe(&d_cqe[0], source2, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
+			 target, len, (uint64_t)target, false, ep[1]);
+	rdm_sr_check_cqe(&d_cqe[1], source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
+			 target, len, (uint64_t)target, false, ep[1]);
+
+	ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+	cr_assert_eq(ret, 1);
+
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false,
+			 ep[0]);
+
+	ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+	cr_assert_eq(ret, 1);
+
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0, false,
+			 ep[0]);
+
+	s[0] = 2; r[1] = 2;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+	dbg_printf("got context events!\n");
+
+	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+}
+
+Test(rdm_sr_eager_auto, senddata_eager_auto)
+{
+	/* Try eager and rndzv sizes */
+	do_senddata_eager_auto(1);
+	do_senddata_eager_auto(1024);
+	do_senddata_eager_auto(BUF_SZ);
 }
 
 /*
