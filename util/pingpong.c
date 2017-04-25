@@ -52,6 +52,7 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 
+#include <fi_osd.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -61,12 +62,6 @@
 
 #ifndef PP_FIVERSION
 #define PP_FIVERSION FI_VERSION(1, 4)
-#endif
-
-#ifdef __APPLE__
-#include "osx/osd.h"
-#elif defined __FreeBSD__
-#include "freebsd/osd.h"
 #endif
 
 enum precision {
@@ -191,7 +186,7 @@ struct ct_pingpong {
 
 	long cnt_ack_msg;
 
-	int ctrl_connfd;
+	SOCKET ctrl_connfd;
 	char ctrl_buf[PP_CTRL_BUF_LEN + 1];
 	char rem_name[PP_MAX_CTRL_MSG];
 };
@@ -295,6 +290,9 @@ void pp_banner_options(struct ct_pingpong *ct)
 	else if (opts.options & PP_OPT_SIZE)
 		snprintf(size_msg, 50, "selected size = %d",
 			 opts.transfer_size);
+	else
+		snprintf(size_msg, 50, "default size = %d",
+			 opts.transfer_size);
 
 	if (opts.options & PP_OPT_ITER)
 		snprintf(iter_msg, 50, "selected iterations: %d",
@@ -369,10 +367,10 @@ static int pp_ctrl_init_client(struct ct_pingpong *ct)
 	}
 
 	for (rp = results; rp; rp = rp->ai_next) {
-		ct->ctrl_connfd = socket(rp->ai_family, rp->ai_socktype,
-					 rp->ai_protocol);
-		if (ct->ctrl_connfd == -1) {
-			errno_save = errno;
+		ct->ctrl_connfd = ofi_socket(rp->ai_family, rp->ai_socktype,
+					     rp->ai_protocol);
+		if (ct->ctrl_connfd == INVALID_SOCKET) {
+			errno_save = ofi_sockerr();
 			continue;
 		}
 
@@ -385,8 +383,8 @@ static int pp_ctrl_init_client(struct ct_pingpong *ct)
 			    bind(ct->ctrl_connfd, (struct sockaddr *)&in_addr,
 				 sizeof(in_addr));
 			if (ret == -1) {
-				errno_save = errno;
-				close(ct->ctrl_connfd);
+				errno_save = ofi_sockerr();
+				ofi_close_socket(ct->ctrl_connfd);
 				continue;
 			}
 		}
@@ -395,8 +393,8 @@ static int pp_ctrl_init_client(struct ct_pingpong *ct)
 		if (ret != -1)
 			break;
 
-		errno_save = errno;
-		close(ct->ctrl_connfd);
+		errno_save = ofi_sockerr();
+		ofi_close_socket(ct->ctrl_connfd);
 	}
 
 	if (!rp || ret == -1) {
@@ -416,20 +414,20 @@ static int pp_ctrl_init_server(struct ct_pingpong *ct)
 {
 	struct sockaddr_in ctrl_addr = {0};
 	int optval = 1;
-	int listenfd;
+	SOCKET listenfd;
 	int ret;
 
-	listenfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (listenfd == -1) {
-		ret = -errno;
+	listenfd = ofi_socket(AF_INET, SOCK_STREAM, 0);
+	if (listenfd == INVALID_SOCKET) {
+		ret = -ofi_sockerr();
 		PP_PRINTERR("socket", ret);
 		return ret;
 	}
 
 	ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
-			&optval, sizeof(optval));
+			 (const char *)&optval, sizeof(optval));
 	if (ret == -1) {
-		ret = -errno;
+		ret = -ofi_sockerr();
 		PP_PRINTERR("setsockopt(SO_REUSEADDR)", ret);
 		goto fail_close_socket;
 	}
@@ -441,14 +439,14 @@ static int pp_ctrl_init_server(struct ct_pingpong *ct)
 	ret = bind(listenfd, (struct sockaddr *)&ctrl_addr,
 		   sizeof(ctrl_addr));
 	if (ret == -1) {
-		ret = -errno;
+		ret = -ofi_sockerr();
 		PP_PRINTERR("bind", ret);
 		goto fail_close_socket;
 	}
 
 	ret = listen(listenfd, 10);
 	if (ret == -1) {
-		ret = -errno;
+		ret = -ofi_sockerr();
 		PP_PRINTERR("listen", ret);
 		goto fail_close_socket;
 	}
@@ -457,12 +455,12 @@ static int pp_ctrl_init_server(struct ct_pingpong *ct)
 
 	ct->ctrl_connfd = accept(listenfd, NULL, NULL);
 	if (ct->ctrl_connfd == -1) {
-		ret = -errno;
+		ret = -ofi_sockerr();
 		PP_PRINTERR("accept", ret);
 		goto fail_close_socket;
 	}
 
-	close(listenfd);
+	ofi_close_socket(listenfd);
 
 	PP_DEBUG("SERVER: connected\n");
 
@@ -470,12 +468,12 @@ static int pp_ctrl_init_server(struct ct_pingpong *ct)
 
 fail_close_socket:
 	if (ct->ctrl_connfd != -1) {
-		close(ct->ctrl_connfd);
+		ofi_close_socket(ct->ctrl_connfd);
 		ct->ctrl_connfd = -1;
 	}
 
 	if (listenfd != -1)
-		close(listenfd);
+		ofi_close_socket(listenfd);
 
 	return ret;
 }
@@ -503,10 +501,10 @@ int pp_ctrl_init(struct ct_pingpong *ct)
 	if (ret)
 		return ret;
 
-	ret = setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO, &tv,
-			 sizeof(struct timeval));
+	ret = setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO,
+			 (const char *)&tv, sizeof(struct timeval));
 	if (ret == -1) {
-		ret = -errno;
+		ret = -ofi_sockerr();
 		PP_PRINTERR("setsockopt(SO_RCVTIMEO)", ret);
 		return ret;
 	}
@@ -520,9 +518,9 @@ int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
 {
 	int ret, err;
 
-	ret = send(ct->ctrl_connfd, buf, size, 0);
+	ret = ofi_send_socket(ct->ctrl_connfd, buf, size, 0);
 	if (ret < 0) {
-		err = -errno;
+		err = -ofi_sockerr();
 		PP_PRINTERR("ctrl/send", err);
 		return err;
 	}
@@ -541,10 +539,10 @@ int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 
 	do {
 		PP_DEBUG("receiving\n");
-		ret = recv(ct->ctrl_connfd, buf, size, 0);
-	} while (ret == -1 && errno == EAGAIN);
+		ret = ofi_read_socket(ct->ctrl_connfd, buf, size);
+	} while (ret == -1 && OFI_SOCK_TRY_RCV_AGAIN(ofi_sockerr()));
 	if (ret < 0) {
-		err = -errno;
+		err = -ofi_sockerr();
 		PP_PRINTERR("ctrl/read", err);
 		return err;
 	}
@@ -630,7 +628,7 @@ int pp_recv_name(struct ct_pingpong *ct)
 int pp_ctrl_finish(struct ct_pingpong *ct)
 {
 	if (ct->ctrl_connfd != -1) {
-		close(ct->ctrl_connfd);
+		ofi_close_socket(ct->ctrl_connfd);
 		ct->ctrl_connfd = -1;
 	}
 
@@ -1287,18 +1285,18 @@ int pp_alloc_msgs(struct ct_pingpong *ct)
 	ct->buf_size = MAX(ct->tx_size, PP_MAX_CTRL_MSG) +
 		       MAX(ct->rx_size, PP_MAX_CTRL_MSG);
 
-	alignment = sysconf(_SC_PAGESIZE);
+	alignment = ofi_sysconf(_SC_PAGESIZE);
 	if (alignment < 0) {
-		ret = -errno;
-		PP_PRINTERR("sysconf", ret);
+		ret = -ofi_sockerr();
+		PP_PRINTERR("ofi_sysconf", ret);
 		return ret;
 	}
 	/* Extra alignment for the second part of the buffer */
 	ct->buf_size += alignment;
 
-	ret = posix_memalign(&(ct->buf), (size_t)alignment, ct->buf_size);
+	ret = ofi_memalign(&(ct->buf), (size_t)alignment, ct->buf_size);
 	if (ret) {
-		PP_PRINTERR("posix_memalign", ret);
+		PP_PRINTERR("ofi_memalign", ret);
 		return ret;
 	}
 	memset(ct->buf, 0, ct->buf_size);
@@ -1785,7 +1783,7 @@ void pp_free_res(struct ct_pingpong *ct)
 	PP_CLOSE_FID(ct->fabric);
 
 	if (ct->buf) {
-		free(ct->buf);
+		ofi_freealign(ct->buf);
 		ct->buf = ct->rx_buf = ct->tx_buf = NULL;
 		ct->buf_size = ct->rx_size = ct->tx_size = 0;
 	}
@@ -2124,10 +2122,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int ret, op;
-
-	ret = EXIT_SUCCESS;
-
+	int op, ret = EXIT_SUCCESS;
 	struct ct_pingpong ct = {
 		.timeout_sec = -1,
 		.ctrl_connfd = -1,
@@ -2145,6 +2140,8 @@ int main(int argc, char **argv)
 	ct.hints->ep_attr->type = FI_EP_DGRAM;
 	ct.hints->caps = FI_MSG;
 	ct.hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+
+	ofi_osd_init();
 
 	while ((op = getopt(argc, argv, "hvd:p:e:I:S:B:P:c")) != -1) {
 		switch (op) {
