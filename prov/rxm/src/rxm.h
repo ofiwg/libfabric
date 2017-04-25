@@ -153,6 +153,7 @@ struct rxm_recv_match_attr {
 };
 
 enum rxm_ctx_type {
+	RXM_NO_CTX,
 	RXM_TX_ENTRY,
 	RXM_RX_BUF,
 };
@@ -177,9 +178,19 @@ struct rxm_iovx_entry {
 	uint8_t count;
 };
 
-struct rxm_rx_buf {
+struct rxm_buf {
+	/* Must stay at top */
 	enum rxm_ctx_type ctx_type;
-	struct slist_entry entry;
+
+	struct dlist_entry entry;
+	/* MSG EP / shared context to which bufs would be posted to */
+	struct fid_ep *msg_ep;
+};
+
+struct rxm_rx_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
 	struct rxm_ep *ep;
 	struct rxm_conn *conn;
 	struct rxm_recv_fs *recv_fs;
@@ -195,18 +206,25 @@ struct rxm_rx_buf {
 	struct rxm_pkt pkt;
 };
 
+struct rxm_tx_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	struct rxm_pkt pkt;
+};
+
 #define RXM_BUF_SIZE 16384
 #define RXM_TX_DATA_SIZE (RXM_BUF_SIZE - sizeof(struct rxm_pkt))
 
 struct rxm_tx_entry {
+	/* Must stay at top */
 	enum rxm_ctx_type ctx_type;
+
 	struct rxm_ep *ep;
 	uint8_t count;
 	void *context;
 	uint64_t flags;
-	// TODO use a tx_buf instead. Add posted tx_buf to list for clean up
-	// on endpont close: similar to rx_buf
-	struct rxm_pkt *pkt;
+	struct rxm_tx_buf *tx_buf;
 
 	/* Used for large messages */
 	enum rxm_lmt_state state;
@@ -234,6 +252,12 @@ struct rxm_recv_queue {
 	struct dlist_entry unexp_msg_list;
 };
 
+struct rxm_buf_pool {
+	struct util_buf_pool *pool;
+	struct dlist_entry buf_list;
+	uint8_t local_mr;
+};
+
 struct rxm_ep {
 	struct util_ep util_ep;
 	struct fi_info *rxm_info;
@@ -242,11 +266,8 @@ struct rxm_ep {
 	struct fid_cq *msg_cq;
 	struct fid_ep *srx_ctx;
 
-	struct util_buf_pool *tx_pool;
-	struct slist tx_buf_list;
-
-	struct util_buf_pool *rx_pool;
-	struct slist rx_buf_list;
+	struct rxm_buf_pool tx_pool;
+	struct rxm_buf_pool rx_pool;
 
 	struct rxm_txe_fs *txe_fs;
 	struct ofi_key_idx tx_key_idx;
@@ -308,3 +329,6 @@ void rxm_pkt_init(struct rxm_pkt *pkt);
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
+void rxm_buf_get(struct rxm_buf_pool *pool, struct rxm_buf **buf);
+void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf);
+void *rxm_buf_get_desc(struct rxm_buf_pool *pool, void *buf);

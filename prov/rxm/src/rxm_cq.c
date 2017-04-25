@@ -173,7 +173,7 @@ int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 			return ret;
 		}
 	}
-	util_buf_release(tx_entry->ep->tx_pool, tx_entry->pkt);
+	rxm_buf_release(&tx_entry->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
 	freestack_push(tx_entry->ep->txe_fs, tx_entry);
 	return 0;
 }
@@ -375,7 +375,7 @@ int rxm_handle_send_comp(void *op_context)
 	switch (*(enum rxm_ctx_type *)op_context) {
 	case RXM_TX_ENTRY:
 		tx_entry = (struct rxm_tx_entry *)op_context;
-		if (tx_entry->pkt->ctrl_hdr.type == ofi_ctrl_large_data) {
+		if (tx_entry->tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) {
 			assert(tx_entry->state == RXM_LMT_START);
 			FI_DBG(&rxm_prov, FI_LOG_CQ, "tx_entry->state -> RXM_LMT_ACK\n");
 			tx_entry->state = RXM_LMT_ACK;

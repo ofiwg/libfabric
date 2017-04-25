@@ -185,6 +185,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->mr = &rxm_domain_mr_ops;
 	(*domain)->ops = &rxm_domain_ops;
 
+	fi_freeinfo(msg_info);
 	return 0;
 err3:
 	fi_close(&rxm_domain->msg_domain->fid);
