@@ -201,11 +201,15 @@ int ofi_nd_cq_open(struct fid_domain *pdomain, struct fi_cq_attr *attr,
 	ND2_ADAPTER_INFO *info = &domain->ainfo;
 
 	cq->iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-	if (!cq->iocp || cq->iocp == INVALID_HANDLE_VALUE)
+	if (!cq->iocp || cq->iocp == INVALID_HANDLE_VALUE) {
+		hr = -FI_EINVAL;
 		goto hr_fail;
+	}
 	cq->err = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-	if (!cq->err || cq->err == INVALID_HANDLE_VALUE)
+	if (!cq->err || cq->err == INVALID_HANDLE_VALUE) {
+		hr = -FI_EINVAL;
 		goto hr_fail;
+	}
 
 	*pcq_fid = &cq->fid;
 

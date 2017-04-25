@@ -451,6 +451,7 @@ static void ofi_nd_ep_accepted(nd_event_base *base, DWORD bytes)
 		if (FAILED(hr)) {
 			ND_LOG_WARN(FI_LOG_EP_CTRL,
 				   "failed to complete connection\n");
+			ND_BUF_FREE(nd_ep_completed, compl);
 			goto fn_fail_compl;
 		}
 	}
@@ -462,6 +463,7 @@ static void ofi_nd_ep_accepted(nd_event_base *base, DWORD bytes)
 	if (FAILED(hr)) {
 		ND_LOG_WARN(FI_LOG_EP_CTRL,
 			   "failed to notify disconnect\n");
+		ND_BUF_FREE(nd_ep_completed, compl);
 		goto fn_fail_compl;
 	}
 
@@ -477,7 +479,6 @@ fn_fail_compl:
 		free(ev->data);
 		ev->len = 0;
 	}
-	ND_BUF_FREE(nd_ep_completed, compl);
 	connect->connector->lpVtbl->Release(connect->connector);
 
 fn_fail_data:

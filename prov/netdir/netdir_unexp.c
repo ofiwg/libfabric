@@ -234,10 +234,10 @@ void ofi_nd_unexp_match(struct nd_ep *ep)
 
 	int done = 0;
 	do {
-		nd_cq_entry *entry;
+		nd_cq_entry *entry = NULL;
 		nd_cq_entry *ep_entry = NULL;
 		nd_cq_entry *srx_entry = NULL;
-		nd_unexpected_entry *unexp;
+		nd_unexpected_entry *unexp = NULL;
 
 		if (ep->srx)
 			EnterCriticalSection(&ep->srx->prepost_lock);
@@ -307,8 +307,8 @@ void ofi_nd_srx_match(struct nd_srx *srx)
 
 	int done = 0;
 	do {
-		nd_cq_entry *entry;
-		nd_unexpected_entry *unexp;
+		nd_cq_entry *entry = NULL;
+		nd_unexpected_entry *unexp = NULL;
 
 		EnterCriticalSection(&srx->prepost_lock);
 

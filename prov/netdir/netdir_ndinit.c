@@ -294,7 +294,7 @@ static inline struct module_t *ofi_nd_create_module(const wchar_t* path)
 	HMODULE hmodule = LoadLibraryW(path);
 	if (!hmodule) {
 		ND_LOG_WARN(FI_LOG_CORE,
-			   "ofi_nd_create_module: provider : %S, failed to load: %s",
+			   "ofi_nd_create_module: provider : %S, failed to load: %s\n",
 			   path, ofi_nd_strerror(GetLastError(), 0));
 		return NULL;
 	}
@@ -303,7 +303,7 @@ static inline struct module_t *ofi_nd_create_module(const wchar_t* path)
 	get_class_object_t getclass = (get_class_object_t)GetProcAddress(hmodule, "DllGetClassObject");
 	if (!unload || !getclass) {
 		ND_LOG_WARN(FI_LOG_CORE,
-			   "ofi_nd_create_module: provider: %S, failed to import interface",
+			   "ofi_nd_create_module: provider: %S, failed to import interface\n",
 			   path);
 		goto fn_noiface;
 	}
@@ -332,7 +332,7 @@ static inline HRESULT ofi_nd_create_factory(const WSAPROTOCOL_INFOW* proto)
 	wchar_t *path = ofi_nd_get_provider_path(proto);
 	if (path)
 		ND_LOG_INFO(FI_LOG_CORE,
-			   "ofi_nd_create_factory: provider " FI_ND_GUID_FORMAT " path: %S",
+			   "ofi_nd_create_factory: provider " FI_ND_GUID_FORMAT " path: %S \n",
 			   FI_ND_GUID_ARG(proto->ProviderId), path);
 	else /* can't get provider path. just return */
 		return S_OK;
@@ -594,7 +594,7 @@ HRESULT ofi_nd_startup(ofi_nd_adapter_cb_t cb)
 	if (ofi_nd_startup_done)
 		return S_OK;
 
-	ND_LOG_INFO(FI_LOG_CORE, "ofi_nd_startup: starting initialization");
+	ND_LOG_INFO(FI_LOG_CORE, "ofi_nd_startup: starting initialization\n");
 
 	WSADATA data;
 
@@ -602,7 +602,7 @@ HRESULT ofi_nd_startup(ofi_nd_adapter_cb_t cb)
 	if (ret)
 		return HRESULT_FROM_WIN32(ret);
 
-	ND_LOG_DEBUG(FI_LOG_CORE, "ofi_nd_startup: WSAStartup complete");
+	ND_LOG_DEBUG(FI_LOG_CORE, "ofi_nd_startup: WSAStartup complete\n");
 
 	HRESULT hr = ofi_nd_init(cb);
 

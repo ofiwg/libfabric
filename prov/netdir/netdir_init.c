@@ -138,7 +138,11 @@ NETDIR_INI
 	fi_param_define(&ofi_nd_prov, "inlinethr", FI_PARAM_INT,
 		"Inline threshold: size of buffer to be send using pre-allocated buffer");
 	fi_param_define(&ofi_nd_prov, "prepostcnt", FI_PARAM_INT,
-		"Prepost Count: number of buffers to be preposted per EP");
+		"Prepost Buffer Count: number of buffers to be preposted per EP and "
+		"not required internal ACK");
+	fi_param_define(&ofi_nd_prov, "prepostbuftcnt", FI_PARAM_INT,
+		"Count of Entries in Array of Preposted Buffers: number of set of buffer "
+		"in each entry array of buffers to be preposted per EP");
 
 	//fi_param_define(&ofi_nd_prov, "presize", FI_PARAM_INT,
 	//	"Pre-post vector size, number of elements in pre-post vector");
