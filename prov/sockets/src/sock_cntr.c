@@ -223,6 +223,8 @@ void sock_cntr_inc(struct sock_cntr *cntr)
 	ofi_atomic_inc32(&cntr->value);
 	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
+	if (cntr->signal)
+		sock_wait_signal(cntr->waitset);
 	pthread_mutex_unlock(&cntr->mut);
 
 	sock_cntr_check_trigger_list(cntr);
@@ -239,6 +241,8 @@ static int sock_cntr_add(struct fid_cntr *fid_cntr, uint64_t value)
 	ofi_atomic_set32(&cntr->last_read_val, new_val);
 	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
+	if (cntr->signal)
+		sock_wait_signal(cntr->waitset);
 	pthread_mutex_unlock(&cntr->mut);
 
 	sock_cntr_check_trigger_list(cntr);
@@ -256,6 +260,8 @@ static int sock_cntr_set(struct fid_cntr *fid_cntr, uint64_t value)
 	ofi_atomic_set32(&cntr->last_read_val, new_val);
 	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
+	if (cntr->signal)
+		sock_wait_signal(cntr->waitset);
 	pthread_mutex_unlock(&cntr->mut);
 
 	sock_cntr_check_trigger_list(cntr);
@@ -272,6 +278,8 @@ static int sock_cntr_adderr(struct fid_cntr *fid_cntr, uint64_t value)
 	if (!cntr->err_flag)
 		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
+	if (cntr->signal)
+		sock_wait_signal(cntr->waitset);
 	pthread_mutex_unlock(&cntr->mut);
 
 	return 0;
@@ -287,6 +295,8 @@ static int sock_cntr_seterr(struct fid_cntr *fid_cntr, uint64_t value)
 	if (!cntr->err_flag)
 		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
+	if (cntr->signal)
+		sock_wait_signal(cntr->waitset);
 	pthread_mutex_unlock(&cntr->mut);
 
 	return 0;
