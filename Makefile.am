@@ -5,7 +5,7 @@
 
 AM_CPPFLAGS = \
 	-I$(srcdir)/include \
-	-D_GNU_SOURCE \
+	-D_GNU_SOURCE -D__USE_XOPEN2K8 \
 	-DSYSCONFDIR=\"$(sysconfdir)\" \
 	-DRDMADIR=\"@rdmadir@\" \
 	-DPROVDLDIR=\"$(pkglibdir)\"
