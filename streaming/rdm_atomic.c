@@ -124,9 +124,9 @@ static int check_base_atomic_op(enum fi_op op, enum fi_datatype datatype)
 
 	ret = fi_atomicvalid(ep, datatype, op, count);
 	if (ret) {
-		fprintf(stderr, "Provider doesn't support %s "
-			"base atomic operation on %s\n",
-			fi_tostr(&op, FI_TYPE_ATOMIC_OP),
+		fprintf(stderr, "Provider doesn't support %s ",
+			fi_tostr(&op, FI_TYPE_ATOMIC_OP));
+		fprintf(stderr, "base atomic operation on %s\n",
 			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
 		return ret;
 	}
