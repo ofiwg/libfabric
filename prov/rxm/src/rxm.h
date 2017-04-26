@@ -164,15 +164,7 @@ struct rxm_unexp_msg {
 	uint64_t tag;
 };
 
-struct rxm_match_iov {
-	struct iovec *iov;
-	void **desc;
-	uint8_t count;
-	size_t index;
-	size_t offset;
-};
-
-struct rxm_iovx_entry {
+struct rxm_iov {
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
 	uint8_t count;
@@ -199,6 +191,7 @@ struct rxm_rx_buf {
 
 	/* Used for large messages */
 	enum rxm_lmt_state state;
+	struct rxm_iov match_iov[RXM_IOV_LIMIT];
 	struct rxm_rma_iov *rma_iov;
 	size_t index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];

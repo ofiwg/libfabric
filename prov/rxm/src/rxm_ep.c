@@ -196,15 +196,14 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
+	struct rxm_buf hdr = rx_buf->hdr;
+	struct rxm_ep *rxm_ep = rx_buf->ep;
 	void *desc = NULL;
 	int ret;
 
-	rx_buf->conn = NULL;
-	rx_buf->recv_fs = NULL;
-	rx_buf->recv_entry = NULL;
-	memset(&rx_buf->unexp_msg, 0, sizeof(rx_buf->unexp_msg));
-	rx_buf->state = RXM_LMT_NONE;
-	rx_buf->rma_iov = NULL;
+	memset(rx_buf, 0, sizeof(*rx_buf));
+	rx_buf->hdr = hdr;
+	rx_buf->ep = rxm_ep;
 
 	desc = rxm_buf_get_desc(&rx_buf->ep->rx_pool, rx_buf);
 
@@ -227,7 +226,6 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
 		rx_buf->hdr.ctx_type = RXM_RX_BUF;
 		rx_buf->hdr.msg_ep = rxm_ep->srx_ctx;
 		rx_buf->ep = rxm_ep;
-
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
 			rxm_buf_release(&rxm_ep->rx_pool, (struct rxm_buf *)rx_buf);
