@@ -233,7 +233,10 @@ static inline
 fi_addr_t fi_bgq_addr_create (const MUHWI_Destination_t destination,
 	const uint64_t fifo_map, const uint32_t rx) {
 
-	const union fi_bgq_addr tmp = {.uid={fi_bgq_uid_create(destination, rx)}, .unused_0=0, .fifo_map=fifo_map};
+	union fi_bgq_addr tmp;
+	tmp.uid = (union fi_bgq_uid) fi_bgq_uid_create(destination, rx);
+	tmp.unused_0=0;
+	tmp.fifo_map=fifo_map;
 	return tmp.fi;
 }
 
