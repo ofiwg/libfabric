@@ -15,6 +15,8 @@
 #ifndef _FI_WIN_OSD_H_
 #define _FI_WIN_OSD_H_
 
+#include "config.h"
+
 #include <WinSock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -296,6 +298,16 @@ static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, 
 OFI_COMPLEX_OPS(float)
 OFI_COMPLEX_OPS(double)
 OFI_COMPLEX_OPS(long_double)
+
+/* atomics primitives */
+#ifdef HAVE_BUILTIN_ATOMICS
+#define InterlockedAdd32 InterlockedAdd
+typedef LONG ofi_atomic_int_32_t;
+typedef LONGLONG ofi_atomic_int_64_t;
+
+#define ofi_atomic_add_and_fetch(radix, ptr, val) InterlockedAdd##radix((ofi_atomic_int_##radix##_t *)(ptr), (ofi_atomic_int_##radix##_t)(val))
+#define ofi_atomic_sub_and_fetch(radix, ptr, val) InterlockedAdd##radix((ofi_atomic_int_##radix##_t *)(ptr), -(ofi_atomic_int_##radix##_t)(val))
+#endif /* HAVE_BUILTIN_ATOMICS */
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -120,7 +120,68 @@ extern "C" {
 								 memory_order_acq_rel) - val;		\
 	}
 
-#else
+#elif defined HAVE_BUILTIN_ATOMICS
+#  if ENABLE_DEBUG
+#    define ATOMIC_T(radix)		\
+	struct {			\
+		int##radix##_t val;	\
+		ATOMIC_DEF_INIT;	\
+	}
+
+#    define ofi_atomic_ptr(atomic) (&((atomic)->val))
+#  else
+#    define ATOMIC_T(radix) int##radix##_t
+#    define ofi_atomic_ptr(atomic) (atomic)
+#  endif
+
+#define OFI_ATOMIC_DEFINE(radix)									\
+	typedef ATOMIC_T(radix) ofi_atomic##radix##_t;							\
+													\
+	static inline											\
+	int##radix##_t ofi_atomic_add##radix(ofi_atomic##radix##_t *atomic, int##radix##_t val)		\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		return (int##radix##_t)ofi_atomic_add_and_fetch(radix, ofi_atomic_ptr(atomic), val);	\
+	}												\
+	static inline											\
+	int##radix##_t ofi_atomic_sub##radix(ofi_atomic##radix##_t *atomic, int##radix##_t val)		\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		return (int##radix##_t)ofi_atomic_sub_and_fetch(radix, ofi_atomic_ptr(atomic), val);	\
+	}												\
+	static inline											\
+	int##radix##_t ofi_atomic_inc##radix(ofi_atomic##radix##_t *atomic)				\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		return ofi_atomic_add##radix(atomic, 1);						\
+	}												\
+	static inline											\
+	int##radix##_t ofi_atomic_dec##radix(ofi_atomic##radix##_t *atomic)				\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		return ofi_atomic_sub##radix(atomic, 1);						\
+	}												\
+	static inline											\
+	int##radix##_t ofi_atomic_set##radix(ofi_atomic##radix##_t *atomic, int##radix##_t value)	\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		*(ofi_atomic_ptr(atomic)) = value;							\
+		return value;										\
+	}												\
+	static inline											\
+	int##radix##_t ofi_atomic_get##radix(ofi_atomic##radix##_t *atomic)				\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		return *ofi_atomic_ptr(atomic);								\
+	}												\
+	static inline											\
+	void ofi_atomic_initialize##radix(ofi_atomic##radix##_t *atomic, int##radix##_t value)		\
+	{												\
+		*(ofi_atomic_ptr(atomic)) = value;							\
+		ATOMIC_INIT(atomic);									\
+	}
+	
+#else /* HAVE_ATOMICS */
 
 #define OFI_ATOMIC_DEFINE(radix)								\
 	typedef	struct {									\
