@@ -83,13 +83,16 @@ extern struct fi_provider psmx2_prov;
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_TRIGGER | FI_RMA_EVENT | FI_REMOTE_CQ_DATA | \
-			 FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV)
+			 FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV | \
+			 FI_NAMED_RX_CTX)
 
 #define PSMX2_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_SEND | FI_RECV)
 
 #define PSMX2_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
 
+#define PSMX2_MAX_TRX_CTXT	(80)
+#define PSMX2_ALL_TRX_CTXT	((void *)-1)
 #define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX2_INJECT_SIZE	(64)
 #define PSMX2_MSG_ORDER		FI_ORDER_SAS
@@ -119,8 +122,14 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
 
-/* Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
- * are sign extensions. We can put vlane into part of these 16 bits of an epaddr.
+/*
+ * Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
+ * are sign extensions. We can put some extra information into the 16 bits.
+ *
+ * Here is the layout:  AA-B-C-DDDDDDDDDDDD
+ *
+ * C == 0xE: scalable endpoint, AAB is context index, DDDDDDDDDDDD is the address
+ * C != 0xE: regular endpoint, AA is vlane, BCDDDDDDDDDDDD is epaddr
  */
 #define PSMX2_MAX_VL			(0xFF)
 #define PSMX2_EP_MASK			(0x00FFFFFFFFFFFFFFUL)
@@ -135,6 +144,16 @@ extern struct fi_provider psmx2_prov;
 						((addr & PSMX2_SIGN_MASK) ? \
                                                  (addr | PSMX2_SIGN_EXT) : \
                                                  (addr & PSMX2_EP_MASK)))
+
+#define PSMX2_MAX_RX_CTX_BITS		(12)
+#define PSMX2_SEP_ADDR_FLAG		(0x000E000000000000UL)
+#define PSMX2_SEP_ADDR_MASK		(0x000F000000000000UL)
+#define PSMX2_SEP_CTXT_MASK		(0xFFF0000000000000UL)
+#define PSMX2_SEP_IDX_MASK		(0x0000FFFFFFFFFFFFUL)
+#define PSMX2_SEP_ADDR_TEST(addr)	(((addr) & PSMX2_SEP_ADDR_MASK) == PSMX2_SEP_ADDR_FLAG)
+#define PSMX2_SEP_ADDR_CTXT(addr, ctxt_bits) \
+					(((addr) & PSMX2_SEP_CTXT_MASK) >> (64-(ctxt_bits)))
+#define PSMX2_SEP_ADDR_IDX(addr)	((addr) & PSMX2_SEP_IDX_MASK)
 
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
@@ -178,6 +197,7 @@ union psmx2_pi {
 
 #define PSMX2_AM_RMA_HANDLER	0
 #define PSMX2_AM_ATOMIC_HANDLER	1
+#define PSMX2_AM_SEP_HANDLER	2
 
 #define PSMX2_AM_OP_MASK	0x000000FF
 #define PSMX2_AM_DST_MASK	0x0000FF00
@@ -211,6 +231,8 @@ enum {
 	PSMX2_AM_REP_ATOMIC_COMPWRITE,
 	PSMX2_AM_REQ_WRITEV,
 	PSMX2_AM_REQ_READV,
+	PSMX2_AM_REQ_SEP_QUERY,
+	PSMX2_AM_REP_SEP_QUERY,
 };
 
 struct psmx2_am_request {
@@ -331,26 +353,15 @@ struct psmx2_fid_fabric {
 	pthread_t		name_server_thread;
 };
 
-struct psmx2_fid_domain {
-	struct util_domain	util_domain;
-	struct psmx2_fid_fabric	*fabric;
+struct psmx2_trx_ctxt {
 	psm2_ep_t		psm2_ep;
 	psm2_epid_t		psm2_epid;
 	psm2_mq_t		psm2_mq;
-	uint64_t		mode;
-	uint64_t		caps;
-
-	enum fi_mr_mode		mr_mode;
-	fastlock_t		mr_lock;
-	uint64_t		mr_reserved_key;
-	RbtHandle		mr_map;
-
-	fastlock_t		vl_lock;
-	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
-	int			vl_alloc;
-	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
-
 	int			am_initialized;
+	struct psm2_am_parameters psm2_am_param;
+
+	/* ep bound to this tx/rx context, NULL if multiplexed */
+	struct psmx2_fid_ep	*ep;
 
 	/* incoming req queue for AM based RMA request. */
 	struct psmx2_req_queue	rma_queue;
@@ -363,13 +374,55 @@ struct psmx2_fid_domain {
 	 */
 	fastlock_t		poll_lock;
 
+	struct dlist_entry	entry;
+};
+
+struct psmx2_fid_domain {
+	struct util_domain	util_domain;
+	struct psmx2_fid_fabric	*fabric;
+	uint64_t		mode;
+	uint64_t		caps;
+
+	enum fi_mr_mode		mr_mode;
+	fastlock_t		mr_lock;
+	uint64_t		mr_reserved_key;
+	RbtHandle		mr_map;
+
+	/*
+	 * A list of all opened hw contexts, including the base hw context.
+	 * The list is used for making progress.
+	 */
+	fastlock_t		trx_ctxt_lock;
+	struct dlist_entry	trx_ctxt_list;
+
+	/*
+	 * The base hw context is multiplexed for all regular endpoints via
+	 * logical "virtual lanes".
+	 */
+	struct psmx2_trx_ctxt	*base_trx_ctxt;
+	fastlock_t		vl_lock;
+	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
+	int			vl_alloc;
+	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
+
+	ofi_atomic32_t		sep_cnt;
+	fastlock_t		sep_lock;
+	struct dlist_entry	sep_list;
+
 	int			progress_thread_enabled;
 	pthread_t		progress_thread;
 };
 
+#define PSMX2_EP_REGULAR	0
+#define PSMX2_EP_SCALABLE	1
+
 struct psmx2_ep_name {
 	psm2_epid_t		epid;
-	uint8_t			vlane;
+	union {
+		uint8_t		vlane;
+		uint8_t		sep_id;
+	};
+	uint8_t			type;
 };
 
 #define PSMX2_DEFAULT_UNIT	(-1)
@@ -400,6 +453,7 @@ struct psmx2_cq_event {
 struct psmx2_fid_cq {
 	struct fid_cq			cq;
 	struct psmx2_fid_domain		*domain;
+	struct psmx2_trx_ctxt		*trx_ctxt;
 	int 				format;
 	int				entry_size;
 	size_t				event_count;
@@ -649,6 +703,7 @@ struct psmx2_fid_cntr {
 		struct util_cntr	util_cntr; /* for util_poll_run */
 	};
 	struct psmx2_fid_domain	*domain;
+	struct psmx2_trx_ctxt	*trx_ctxt;
 	int			events;
 	uint64_t		flags;
 	ofi_atomic64_t		counter;
@@ -659,11 +714,22 @@ struct psmx2_fid_cntr {
 	pthread_mutex_t		trigger_lock;
 };
 
+struct psmx2_ctxt_addr {
+	psm2_epid_t		epid;
+	psm2_epaddr_t		epaddr;
+};
+
+struct psmx2_sep_addr {
+	int			ctxt_cnt;
+	struct psmx2_ctxt_addr	ctxt_addrs[];
+};
+
 struct psmx2_fid_av {
 	struct fid_av		av;
 	struct psmx2_fid_domain	*domain;
 	struct fid_eq		*eq;
 	int			type;
+	int			rx_ctx_bits;
 	uint64_t		flags;
 	size_t			addrlen;
 	size_t			count;
@@ -671,12 +737,18 @@ struct psmx2_fid_av {
 	psm2_epid_t		*epids;
 	psm2_epaddr_t		*epaddrs;
 	uint8_t			*vlanes;
+	uint8_t			*types;
+	struct psmx2_sep_addr	**sepaddrs;
 };
 
 struct psmx2_fid_ep {
 	struct fid_ep		ep;
-	struct psmx2_fid_ep	*base_ep;
+	int			type;
 	struct psmx2_fid_domain	*domain;
+	/* above fields are common with sep */
+
+	struct psmx2_trx_ctxt	*trx_ctxt;
+	struct psmx2_fid_ep	*base_ep;
 	struct psmx2_fid_av	*av;
 	struct psmx2_fid_cq	*send_cq;
 	struct psmx2_fid_cq	*recv_cq;
@@ -703,6 +775,27 @@ struct psmx2_fid_ep {
 	int			service;
 };
 
+struct psmx2_sep_ctxt {
+	struct psmx2_trx_ctxt	*trx_ctxt;
+	struct psmx2_fid_ep	*ep;
+};
+
+struct psmx2_fid_sep {
+	struct fid_ep		ep;
+	int			type;
+	struct psmx2_fid_domain	*domain;
+	/* above fields are common with regular ep */
+
+	struct dlist_entry	entry;
+
+	ofi_atomic32_t		ref;
+	int			service;
+	uint8_t			id;
+	uint8_t			enabled;
+	size_t			ctxt_cnt;
+	struct psmx2_sep_ctxt	ctxts[]; /* must be last element */
+};
+
 struct psmx2_fid_stx {
 	struct fid_stx		stx;
 	struct psmx2_fid_domain	*domain;
@@ -716,11 +809,11 @@ struct psmx2_fid_mr {
 	uint64_t		flags;
 	uint64_t		offset;
 	size_t			iov_count;
-	struct iovec		iov[0];	/* must be the last field */
+	struct iovec		iov[];	/* must be the last field */
 };
 
 struct psmx2_epaddr_context {
-	struct psmx2_fid_domain	*domain;
+	struct psmx2_trx_ctxt	*trx_ctxt;
 	psm2_epid_t		epid;
 };
 
@@ -732,6 +825,9 @@ struct psmx2_env {
 	int timeout;
 	int prog_interval;
 	char *prog_affinity;
+	int sep;
+	int max_trx_ctxt;
+	int num_devunits;
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
@@ -749,9 +845,56 @@ extern struct fi_ops_msg	psmx2_msg_ops;
 extern struct fi_ops_msg	psmx2_msg2_ops;
 extern struct fi_ops_rma	psmx2_rma_ops;
 extern struct fi_ops_atomic	psmx2_atomic_ops;
-extern struct psm2_am_parameters psmx2_am_param;
 extern struct psmx2_env		psmx2_env;
 extern struct psmx2_fid_fabric	*psmx2_active_fabric;
+
+#ifdef PSM2_MULTI_EP_CAP
+
+static inline int psmx2_sep_ok(void)
+{
+	uint64_t caps = PSM2_MULTI_EP_CAP;
+	return (psm2_get_capability_mask(caps) == caps);
+}
+
+static inline psm2_error_t psmx2_ep_epid_lookup(psm2_ep_t ep, psm2_epid_t epid,
+						psm2_epconn_t *epconn)
+{
+	return psm2_ep_epid_lookup2(ep, epid, epconn);
+}
+
+static inline psm2_epid_t psmx2_epaddr_to_epid(psm2_epaddr_t epaddr)
+{
+	psm2_epid_t epid;
+
+	/* Caller ensures that epaddr is not NULL */
+	psm2_epaddr_to_epid(epaddr, &epid);
+	return epid;
+}
+
+#else
+
+static inline int psmx2_sep_ok(void)
+{
+	return 0;
+}
+
+static inline psm2_error_t psmx2_ep_epid_lookup(psm2_ep_t ep, psm2_epid_t epid,
+						psm2_epconn_t *epconn)
+{
+	return psm2_ep_epid_lookup(epid, epconn);
+}
+
+static inline psm2_epid_t psmx2_epaddr_to_epid(psm2_epaddr_t epaddr)
+{
+	/*
+	 * This is a hack based on the fact that the internal representation of
+	 * epaddr has epid as the first field. This is a workaround before a PSM2
+	 * function is availale to retrieve this information.
+	 */
+	return *(psm2_epid_t *)epaddr;
+}
+
+#endif /* PSM2_MULTI_EP_CAP */
 
 int	psmx2_fabric(struct fi_fabric_attr *attr,
 		    struct fid_fabric **fabric, void *context);
@@ -759,6 +902,8 @@ int	psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
 int	psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **ep, void *context);
+int	psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
+		       struct fid_ep **sep, void *context);
 int	psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		     struct fid_stx **stx, void *context);
 int	psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -795,6 +940,11 @@ static inline void psmx2_domain_release(struct psmx2_fid_domain *domain)
 int	psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap);
 int	psmx2_domain_enable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep *ep);
 
+void	psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt);
+struct	psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
+					     struct psmx2_src_name *src_addr,
+					     int sep_ctxt_idx);
+
 void	psmx2_ns_start_server(struct psmx2_fid_fabric *fabric);
 void	psmx2_ns_stop_server(struct psmx2_fid_fabric *fabric);
 void	psmx2_ns_add_local_name(int service, struct psmx2_ep_name *name);
@@ -805,8 +955,6 @@ void	psmx2_get_uuid(psm2_uuid_t uuid);
 int	psmx2_uuid_to_port(psm2_uuid_t uuid);
 char	*psmx2_uuid_to_string(psm2_uuid_t uuid);
 int	psmx2_errno(int err);
-int	psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
-			    psm2_epid_t epid, psm2_epaddr_t *epaddr);
 void	psmx2_query_mpi(void);
 
 struct	fi_context *psmx2_ep_get_op_context(struct psmx2_fid_ep *ep);
@@ -817,24 +965,33 @@ struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
 					size_t olen, int err);
-int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_fid_domain *domain,
+int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_trx_ctxt *trx_ctxt,
 			struct psmx2_cq_event *event, int count, fi_addr_t *src_addr);
 
-int	psmx2_am_init(struct psmx2_fid_domain *domain);
-int	psmx2_am_fini(struct psmx2_fid_domain *domain);
-int	psmx2_am_progress(struct psmx2_fid_domain *domain);
-int	psmx2_am_process_send(struct psmx2_fid_domain *domain,
+psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
+				     struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
+
+void	psmx2_am_global_init(void);
+void	psmx2_am_global_fini(void);
+int	psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt);
+void	psmx2_am_fini(struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_process_send(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_am_request *req);
-int	psmx2_am_process_rma(struct psmx2_fid_domain *domain,
+int	psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_am_request *req);
-int	psmx2_process_trigger(struct psmx2_fid_domain *domain,
+int	psmx2_process_trigger(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_trigger *trigger);
-int	psmx2_am_rma_handler(psm2_am_token_t token,
-				psm2_amarg_t *args, int nargs, void *src, uint32_t len);
-int	psmx2_am_atomic_handler(psm2_am_token_t token,
-				psm2_amarg_t *args, int nargs, void *src, uint32_t len);
-void	psmx2_atomic_init(void);
-void	psmx2_atomic_fini(void);
+int	psmx2_am_rma_handler_ext(psm2_am_token_t token,
+				 psm2_amarg_t *args, int nargs, void *src, uint32_t len,
+				 struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_atomic_handler_ext(psm2_am_token_t token,
+				    psm2_amarg_t *args, int nargs, void *src, uint32_t len,
+				    struct psmx2_trx_ctxt *trx_ctxt);
+int	psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args, int nargs,
+			     void *src, uint32_t len);
+void	psmx2_atomic_global_init(void);
+void	psmx2_atomic_global_fini(void);
 
 void	psmx2_am_ack_rma(struct psmx2_am_request *req);
 
@@ -860,22 +1017,30 @@ static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name 
 {
 	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
 
-	/*
-	 * FIXME: This is a hack based on the fact that the internal representation of
-	 * epaddr has epid as the first field. Ideally PSM2 would provide a utility
-	 * function to retrieve epid from epaddr.
-	 */
-	name->epid = *(psm2_epid_t *)epaddr;
+	name->epid = psmx2_epaddr_to_epid(epaddr);
 	name->vlane = PSMX2_ADDR_TO_VL(source);
 }
 
-static inline void psmx2_progress(struct psmx2_fid_domain *domain)
+static inline void psmx2_progress(struct psmx2_trx_ctxt *trx_ctxt)
 {
-	if (domain) {
-		psmx2_cq_poll_mq(NULL, domain, NULL, 0, NULL);
-		if (domain->am_initialized)
-			psmx2_am_progress(domain);
+	if (trx_ctxt) {
+		psmx2_cq_poll_mq(NULL, trx_ctxt, NULL, 0, NULL);
+		if (trx_ctxt->am_initialized)
+			psmx2_am_progress(trx_ctxt);
 	}
+}
+
+static inline void psmx2_progress_all(struct psmx2_fid_domain *domain)
+{
+	struct dlist_entry *item;
+	struct psmx2_trx_ctxt *trx_ctxt;
+
+	fastlock_acquire(&domain->trx_ctxt_lock);
+	dlist_foreach(&domain->trx_ctxt_list, item) {
+		trx_ctxt = container_of(item, struct psmx2_trx_ctxt, entry);
+		psmx2_progress(trx_ctxt);
+	}
+	fastlock_release(&domain->trx_ctxt_lock);
 }
 
 /* The following functions are used by triggered operations */

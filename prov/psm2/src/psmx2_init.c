@@ -32,7 +32,8 @@
 
 #include "psmx2.h"
 #include "prov.h"
-#include "glob.h"
+#include <glob.h>
+#include <dlfcn.h>
 
 static int psmx2_init_count = 0;
 static int psmx2_lib_initialized = 0;
@@ -46,6 +47,9 @@ struct psmx2_env psmx2_env = {
 	.timeout	= 5,
 	.prog_interval	= -1,
 	.prog_affinity	= NULL,
+	.sep		= 0,
+	.max_trx_ctxt	= 1,
+	.num_devunits	= 1,
 };
 
 static void psmx2_init_env(void)
@@ -60,6 +64,17 @@ static void psmx2_init_env(void)
 	fi_param_get_int(&psmx2_prov, "timeout", &psmx2_env.timeout);
 	fi_param_get_int(&psmx2_prov, "prog_interval", &psmx2_env.prog_interval);
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
+}
+
+static int psmx2_check_sep_cap(void)
+{
+	if (!psmx2_sep_ok())
+		return 0;
+
+	psmx2_env.sep = 1;
+	psmx2_env.max_trx_ctxt = PSMX2_MAX_TRX_CTXT;
+
+	return 1;
 }
 
 static int psmx2_init_lib(void)
@@ -93,11 +108,55 @@ static int psmx2_init_lib(void)
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
 		"PSM library version = (%d, %d)\n", major, minor);
 
+	if (psmx2_check_sep_cap())
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "Scalable EP enabled.\n");
+	else
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "Scalable EP disabled.\n");
+
 	psmx2_lib_initialized = 1;
 
 out:
 	pthread_mutex_unlock(&psmx2_lib_mutex);
 	return ret;
+}
+
+#define PSMX2_SYSFS_PATH "/sys/class/infiniband/hfi1"
+static int psmx2_read_sysfs_int(int unit, char *entry)
+{
+	char path[64];
+	char buffer[32];
+	int n, ret = 0;
+
+	sprintf(path, "%s_%d", PSMX2_SYSFS_PATH, unit);
+	n = fi_read_file(path, entry, buffer, 32);
+	if (n > 0) {
+		buffer[n] = 0;
+		ret = strtol(buffer, NULL, 10);
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "%s/%s: %d\n", path, entry, ret);
+	}
+
+	return ret;
+}
+
+static void psmx2_update_sep_cap(void)
+{
+	int i, n = 0;
+
+	for (i = 0; i < psmx2_env.num_devunits; i++)
+		n += psmx2_read_sysfs_int(i, "nfreectxts");
+
+	FI_INFO(&psmx2_prov, FI_LOG_CORE, "Total free hfi1 contexts: %d\n", n);
+
+	/* reserve one context for regular ep */
+	if (n > 0)
+		n--;
+
+	if (n > PSMX2_MAX_TRX_CTXT)
+		n = PSMX2_MAX_TRX_CTXT;
+
+	psmx2_env.max_trx_ctxt = n;
+	FI_INFO(&psmx2_prov, FI_LOG_CORE, "SEP: %d Tx/Rx contexts allowed.\n",
+		psmx2_env.max_trx_ctxt);
 }
 
 static int psmx2_getinfo(uint32_t version, const char *node,
@@ -120,6 +179,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	int err = -FI_ENODATA;
 	int svc0, svc = PSMX2_ANY_SERVICE;
 	glob_t glob_buf;
+	int tx_ctx_cnt, rx_ctx_cnt;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
@@ -151,7 +211,12 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		return -FI_ENODATA;
 	}
 
+	psmx2_env.num_devunits = cnt;
 	psmx2_init_env();
+
+	psmx2_update_sep_cap();
+	tx_ctx_cnt = psmx2_env.max_trx_ctxt;
+	rx_ctx_cnt = psmx2_env.max_trx_ctxt;
 
 	src_addr = calloc(1, sizeof(*src_addr));
 	if (!src_addr) {
@@ -226,19 +291,23 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > 1) {
+			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->tx_ctx_cnt=%d, supported=0,1\n",
-					hints->ep_attr->tx_ctx_cnt);
+					"hints->ep_attr->tx_ctx_cnt=%d, max=%d\n",
+					hints->ep_attr->tx_ctx_cnt,
+					psmx2_env.max_trx_ctxt);
 				goto err_out;
 			}
+			tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
 
-			if (hints->ep_attr->rx_ctx_cnt > 1) {
+			if (hints->ep_attr->rx_ctx_cnt > psmx2_env.max_trx_ctxt) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->rx_ctx_cnt=%d, supported=0,1\n",
-					hints->ep_attr->rx_ctx_cnt);
+					"hints->ep_attr->rx_ctx_cnt=%d, max=%d\n",
+					hints->ep_attr->rx_ctx_cnt,
+					psmx2_env.max_trx_ctxt);
 				goto err_out;
 			}
+			rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
 		}
 
 		if ((hints->caps & PSMX2_CAPS) != hints->caps) {
@@ -490,8 +559,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->ep_attr->protocol_version = PSM2_VERNO;
 	psmx2_info->ep_attr->max_msg_size = PSMX2_MAX_MSG_SIZE;
 	psmx2_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
-	psmx2_info->ep_attr->tx_ctx_cnt = 1;
-	psmx2_info->ep_attr->rx_ctx_cnt = 1;
+	psmx2_info->ep_attr->tx_ctx_cnt = tx_ctx_cnt;
+	psmx2_info->ep_attr->rx_ctx_cnt = rx_ctx_cnt;
 
 	psmx2_info->domain_attr->threading = threading;
 	psmx2_info->domain_attr->control_progress = control_progress;
@@ -504,10 +573,10 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->domain_attr->cq_data_size = 4;
 	psmx2_info->domain_attr->cq_cnt = 65535;
 	psmx2_info->domain_attr->ep_cnt = 65535;
-	psmx2_info->domain_attr->tx_ctx_cnt = 1;
-	psmx2_info->domain_attr->rx_ctx_cnt = 1;
-	psmx2_info->domain_attr->max_ep_tx_ctx = 1;
-	psmx2_info->domain_attr->max_ep_rx_ctx = 1;
+	psmx2_info->domain_attr->tx_ctx_cnt = psmx2_env.max_trx_ctxt;
+	psmx2_info->domain_attr->rx_ctx_cnt = psmx2_env.max_trx_ctxt;
+	psmx2_info->domain_attr->max_ep_tx_ctx = psmx2_env.max_trx_ctxt;
+	psmx2_info->domain_attr->max_ep_rx_ctx = psmx2_env.max_trx_ctxt;
 	psmx2_info->domain_attr->max_ep_stx_ctx = 65535;
 	psmx2_info->domain_attr->max_ep_srx_ctx = 0;
 	psmx2_info->domain_attr->cntr_cnt = 65535;
