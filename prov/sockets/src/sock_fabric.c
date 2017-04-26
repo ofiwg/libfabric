@@ -47,6 +47,7 @@
 #endif
 
 #include "prov.h"
+#include "fi_osd.h"
 
 #include "sock.h"
 #include "sock_util.h"
@@ -532,6 +533,12 @@ void sock_get_list_of_addr(struct slist *addr_list)
 		freeifaddrs(ifaddrs);
 	}
 	// Always add loopback address at the end
+	sock_insert_loopback_addr(addr_list);
+}
+#elif defined HAVE_MIB_IPADDRTABLE
+void sock_get_list_of_addr(struct slist *addr_list)
+{
+	sock_get_ip_addr_table(addr_list);
 	sock_insert_loopback_addr(addr_list);
 }
 #else

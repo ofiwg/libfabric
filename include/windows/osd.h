@@ -115,6 +115,7 @@ do						\
 int fd_set_nonblock(int fd);
 
 int socketpair(int af, int type, int protocol, int socks[2]);
+void sock_get_ip_addr_table(struct slist *addr_list);
 
 static inline int ffsl(long val)
 {
