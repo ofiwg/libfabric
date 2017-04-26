@@ -470,38 +470,6 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	return ret;
 }
 
-#if 0
-static int fi_ibv_ep_sync(fid_t fid, uint64_t flags, void *context)
-{
-	struct fi_ibv_rdm_ep *ep;
-
-	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
-
-	if (ep->type == FI_EP_MSG) {
-		return 0;
-	} else if (ep->type == FI_EP_RDM) {
-		if (!flags || (flags & FI_SEND)) {
-			while (ep->pend_send) {
-				fi_ibv_rdm_tagged_poll(ep);
-			}
-		}
-
-		if (!flags || (flags & FI_RECV)) {
-			while (ep->pend_recv) {
-				fi_ibv_rdm_tagged_poll(ep);
-			}
-		}
-
-		if (!flags || (flags & FI_READ)) {
-		}
-
-		if (!flags || (flags & FI_WRITE) || (flags & FI_WRITE)) {
-		}
-	}
-	return 0;
-}
-#endif /* 0 */
-
 struct fi_ops fi_ibv_rdm_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_rdm_ep_close,
