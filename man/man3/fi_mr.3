@@ -1,4 +1,4 @@
-.TH "fi_mr" "3" "2017\-04\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2017\-04\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr \- Memory region operations
@@ -224,6 +224,13 @@ To enable a memory region, the application must call fi_mr_enable().
 After calling fi_mr_enable(), no further resource bindings may be made
 to the memory region.
 .PP
+\f[I]FI_MR_ENDPOINT\f[] : This mode bit indicates that the provider
+associates memory regions with endpoints rather than domains.
+Memory regions that are registered with the provider are created in a
+disabled state and must be bound to an endpoint prior to being enabled.
+To bind the MR with an endpoint, the application must use fi_mr_bind().
+To enable the memory region, the application must call fi_mr_enable().
+.PP
 \f[I]Basic Memory Registration\f[] : Basic memory registration is
 indicated by the FI_MR_BASIC mr_mode bit.
 FI_MR_BASIC is maintained for backwards compatibility (libfabric version
@@ -371,16 +378,22 @@ mapping a raw memory key.
 All mapped keys must be freed before the corresponding domain is closed.
 .SS fi_mr_bind
 .PP
-The fi_mr_bind function associates a memory region with a counter, for
-providers that support the generation of completions based on fabric
-operations.
-The type of events tracked against the memory region is based on the
-bitwise OR of the following flags.
+The fi_mr_bind function associates a memory region with a counter or
+endpoint.
+Counter bindings are needed by providers that support the generation of
+completions based on fabric operations.
+Endpoint bindings are needed if the provider associates memory regions
+with endpoints (see FI_MR_ENDPOINT).
+.PP
+When binding with a counter, the type of events tracked against the
+memory region is based on the bitwise OR of the following flags.
 .PP
 \f[I]FI_REMOTE_WRITE\f[] : Generates an event whenever a remote RMA
 write or atomic operation modifies the memory region.
 Use of this flag requires that the endpoint through which the MR is
 accessed be created with the FI_RMA_EVENT capability.
+.PP
+When binding the memory region to an endpoint, flags should be 0.
 .SS fi_mr_refresh
 .PP
 The use of this call is required to notify the provider of any change to
