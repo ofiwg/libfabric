@@ -237,7 +237,7 @@ ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
 			fi_cntr_set(work->op.cntr->cntr, work->op.cntr->value);
 		else
 			fi_cntr_add(work->op.cntr->cntr, work->op.cntr->value);
-		return 1;
+		return 0;
 	}
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -275,49 +275,63 @@ int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
 
 	switch (work->op_type) {
 	case FI_OP_RECV:
+		if (work->op.msg->msg.context != &work->context)
+			return -FI_EINVAL;
+		return sock_ep_recvmsg(work->op.msg->ep, &work->op.msg->msg,
+				       work->op.msg->flags | FI_TRIGGER);
 	case FI_OP_SEND:
 		if (work->op.msg->msg.context != &work->context)
 			return -FI_EINVAL;
-		return sock_queue_msg_op(work->op.msg->ep, &work->op.msg->msg,
-					 work->op.msg->flags, work->op_type);
+		return sock_ep_sendmsg(work->op.msg->ep, &work->op.msg->msg,
+				       work->op.msg->flags | FI_TRIGGER);
 	case FI_OP_TRECV:
+		if (work->op.tagged->msg.context != &work->context)
+			return -FI_EINVAL;
+		return sock_ep_trecvmsg(work->op.tagged->ep, &work->op.tagged->msg,
+					  work->op.tagged->flags | FI_TRIGGER);
 	case FI_OP_TSEND:
 		if (work->op.tagged->msg.context != &work->context)
 			return -FI_EINVAL;
-		return sock_queue_tmsg_op(work->op.tagged->ep, &work->op.tagged->msg,
-					  work->op.tagged->flags, work->op_type);
+		return sock_ep_tsendmsg(work->op.tagged->ep, &work->op.tagged->msg,
+					  work->op.tagged->flags | FI_TRIGGER);
 	case FI_OP_READ:
+		if (work->op.rma->msg.context != &work->context)
+			return -FI_EINVAL;
+		return sock_ep_rma_readmsg(work->op.rma->ep, &work->op.rma->msg,
+					   work->op.rma->flags | FI_TRIGGER);
 	case FI_OP_WRITE:
 		if (work->op.rma->msg.context != &work->context)
 			return -FI_EINVAL;
-		return sock_queue_rma_op(work->op.rma->ep, &work->op.rma->msg,
-					 work->op.rma->flags, work->op_type);
+		return sock_ep_rma_writemsg(work->op.rma->ep, &work->op.rma->msg,
+					    work->op.rma->flags | FI_TRIGGER);
 	case FI_OP_ATOMIC:
 		if (work->op.atomic->msg.context != &work->context)
 			return -FI_EINVAL;
-		return sock_queue_atomic_op(work->op.atomic->ep,
-					    &work->op.atomic->msg,
-					    NULL, 0, NULL, 0,
-					    work->op.atomic->flags, work->op_type);
+		return sock_ep_tx_atomic(work->op.atomic->ep, &work->op.atomic->msg,
+					 NULL, NULL, 0, NULL, NULL, 0,
+					 work->op.atomic->flags | FI_TRIGGER);
 	case FI_OP_FETCH_ATOMIC:
 		if (work->op.fetch_atomic->msg.context != &work->context)
 			return -FI_EINVAL;
-		return sock_queue_atomic_op(work->op.fetch_atomic->ep,
-					    &work->op.fetch_atomic->msg,
-					    NULL, 0,
-					    work->op.fetch_atomic->fetch.msg_iov,
-					    work->op.fetch_atomic->fetch.iov_count,
-					    work->op.fetch_atomic->flags, work->op_type);
+		return sock_ep_tx_atomic(work->op.fetch_atomic->ep,
+					 &work->op.fetch_atomic->msg,
+					 NULL, NULL, 0,
+					 work->op.fetch_atomic->fetch.msg_iov,
+					 work->op.fetch_atomic->fetch.desc,
+					 work->op.fetch_atomic->fetch.iov_count,
+					 work->op.fetch_atomic->flags | FI_TRIGGER);
 	case FI_OP_COMPARE_ATOMIC:
 		if (work->op.compare_atomic->msg.context != &work->context)
 			return -FI_EINVAL;
-		return sock_queue_atomic_op(work->op.compare_atomic->ep,
-					    &work->op.compare_atomic->msg,
-					    work->op.compare_atomic->compare.msg_iov,
-					    work->op.compare_atomic->compare.iov_count,
-					    work->op.compare_atomic->fetch.msg_iov,
-					    work->op.compare_atomic->fetch.iov_count,
-					    work->op.compare_atomic->flags, work->op_type);
+		return sock_ep_tx_atomic(work->op.compare_atomic->ep,
+					 &work->op.compare_atomic->msg,
+					 work->op.compare_atomic->compare.msg_iov,
+					 work->op.compare_atomic->compare.desc,
+					 work->op.compare_atomic->compare.iov_count,
+					 work->op.compare_atomic->fetch.msg_iov,
+					 work->op.compare_atomic->fetch.desc,
+					 work->op.compare_atomic->fetch.iov_count,
+					 work->op.compare_atomic->flags | FI_TRIGGER);
 	case FI_OP_CNTR_SET:
 	case FI_OP_CNTR_ADD:
 		return sock_queue_cntr_op(work, 0);
