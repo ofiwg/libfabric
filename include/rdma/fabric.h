@@ -204,6 +204,7 @@ enum fi_mr_mode {
 #define FI_MR_PROV_KEY		(1 << 6)
 #define FI_MR_MMU_NOTIFY	(1 << 7)
 #define FI_MR_RMA_EVENT		(1 << 8)
+#define FI_MR_ENDPOINT		(1 << 9)
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
