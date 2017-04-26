@@ -590,7 +590,7 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p recv_completions %d\n",
 		conn, conn->recv_completions);
 
-	if ((rbuf->service_data.status == BUF_STATUS_RECVED) &&
+	if ((rbuf->service_data.status == BUF_STATUS_RECEIVED) &&
 	    /* NOTE: Bi-direction RNDV messaging may cause "out-of-order"
 	     * consuming of pre-posts. These are RTS and ACK messages of
 	     * different requests. In this case we may check seq_num only if
@@ -627,7 +627,7 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 		/* Do not process w/o completion! */
 		} while (conn->recv_processed != conn->recv_completions &&
-			 rbuf->service_data.status == BUF_STATUS_RECVED);
+			 rbuf->service_data.status == BUF_STATUS_RECEIVED);
 	} else {
 		VERBS_DBG(FI_LOG_EP_DATA, "not processed: conn %p, status: %d\n",
 			conn, rbuf->service_data.status);
@@ -686,40 +686,11 @@ int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 	return -FI_EOTHER;
 }
 
-static inline int
-fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
-{
-	if (wc->status != IBV_WC_SUCCESS) {
-		return 1;
-	}
-
-	if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
-		VERBS_DBG(FI_LOG_EP_DATA, "CQ COMPL: SEND -> 0x1\n");
-		struct fi_ibv_rdm_conn *conn =
-			(struct fi_ibv_rdm_conn *)
-			FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
-		FI_IBV_RDM_DEC_SIG_POST_COUNTERS(conn, ep);
-
-		return 0;
-	} else {
-		FI_IBV_DBG_OPCODE(wc->opcode, "SEND");
-		struct fi_ibv_rdm_request *request =
-			(void *)FI_IBV_RDM_UNPACK_WR(wc->wr_id);
-
-		struct fi_ibv_rdm_tagged_send_completed_data data = 
-			{ .ep = ep };
-
-		return fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_LC, &data);
-	}
-}
-
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 {
 	const int wc_count = ep->fi_scq->read_bunch_size;
 	struct ibv_wc wc[wc_count];
-	int ret = 0;
-	int err = 0;
-	int i = 0;
+	int ret = 0, err = 0, i;
 
 	if (ep->posted_sends > 0) {
 		do {
@@ -753,25 +724,8 @@ wc_error:
 		assert(0);
 	}
 
-	for (i = 0; i < wc_count; i++) {
-		if (wc[i].status != IBV_WC_SUCCESS) {
-			struct fi_ibv_rdm_conn *conn;
-			if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc[i].wr_id)) {
-				conn = FI_IBV_RDM_UNPACK_SERVICE_WR(wc[i].wr_id);
-			} else {
-				struct fi_ibv_rdm_request *req =
-					(void *)wc[i].wr_id;
-				conn = req->minfo.conn;
-			}
-
-			VERBS_INFO(FI_LOG_EP_DATA,
-				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
-				wc[i].status,
-				ibv_wc_status_str(wc[i].status),
-				ep->posted_sends, conn);
-			assert(0);
-		}
-	}
+	for (i = 0; i < wc_count; i++)
+		fi_ibv_rdm_process_err_send_wc(ep, &wc[i]);
 
 	return -FI_EOTHER;
 }
