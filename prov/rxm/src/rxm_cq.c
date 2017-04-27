@@ -39,25 +39,6 @@
 
 #include "rxm.h"
 
-static int rxm_match_recv_entry(struct dlist_entry *item, const void *arg)
-{
-	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *) arg;
-	struct rxm_recv_entry *recv_entry;
-
-	recv_entry = container_of(item, struct rxm_recv_entry, entry);
-	return rxm_match_addr(recv_entry->addr, attr->addr);
-}
-
-static int rxm_match_recv_entry_tagged(struct dlist_entry *item, const void *arg)
-{
-	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
-	struct rxm_recv_entry *recv_entry;
-
-	recv_entry = container_of(item, struct rxm_recv_entry, entry);
-	return rxm_match_addr(recv_entry->addr, attr->addr) &&
-		rxm_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
-}
-
 static struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	struct util_cmap_handle *handle;
@@ -352,7 +333,6 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	struct dlist_entry *entry;
 	struct rxm_recv_queue *recv_queue;
 	struct util_cq *util_cq;
-	dlist_func_t *match;
 
 	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack)
 		return rxm_cq_handle_ack(rx_buf);
@@ -380,13 +360,11 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	case ofi_op_msg:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got MSG op\n");
 		recv_queue = &rx_buf->ep->recv_queue;
-		match = rxm_match_recv_entry;
 		break;
 	case ofi_op_tagged:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
 		match_attr.tag = rx_buf->pkt.hdr.tag;
 		recv_queue = &rx_buf->ep->trecv_queue;
-		match = rxm_match_recv_entry_tagged;
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown op!\n");
@@ -396,7 +374,8 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 
 	rx_buf->recv_fs = recv_queue->recv_fs;
 
-	entry = dlist_remove_first_match(&recv_queue->recv_list, match, &match_attr);
+	entry = dlist_remove_first_match(&recv_queue->recv_list,
+					 recv_queue->match_recv, &match_attr);
 	if (!entry) {
 		FI_DBG(&rxm_prov, FI_LOG_CQ,
 				"No matching recv found. Enqueueing msg to unexpected queue\n");
