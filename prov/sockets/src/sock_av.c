@@ -240,7 +240,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		}
 
 		av_addr = &_av->table[index];
-		memcpy(sa_ip, inet_ntoa((&addr[i])->sin_addr), INET_ADDRSTRLEN);
+		inet_ntop(addr[i].sin_family, &addr[i].sin_addr, sa_ip, INET_ADDRSTRLEN);
 		SOCK_LOG_DBG("AV-INSERT: dst_addr family: %d, IP %s, port: %d\n",
 			      ((struct sockaddr_in *)&addr[i])->sin_family,
 				sa_ip, ntohs(((struct sockaddr_in *)&addr[i])->sin_port));
@@ -418,15 +418,17 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 }
 
 static const char *sock_av_straddr(struct fid_av *av, const void *addr,
-				    char *buf, size_t *len)
+				   char *buf, size_t *len)
 {
 	const struct sockaddr_in *sin;
 	char straddr[24];
+	char ipaddr[24];
 	int size;
 
 	sin = addr;
+	inet_ntop(sin->sin_family, (void*)&sin->sin_addr, ipaddr, sizeof(ipaddr));
 	size = snprintf(straddr, sizeof(straddr), "%s:%d",
-			inet_ntoa(sin->sin_addr), ntohs(sin->sin_port));
+			ipaddr, ntohs(sin->sin_port));
 	snprintf(buf, *len, "%s", straddr);
 	*len = size + 1;
 	return buf;

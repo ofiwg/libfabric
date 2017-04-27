@@ -307,6 +307,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	struct sock_conn_listener *listener = &ep_attr->listener;
 	char service[NI_MAXSERV] = {0};
 	char *port;
+	char ipaddr[24];
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -328,7 +329,8 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	} else
 		port = listener->service;
 
-	ret = getaddrinfo(inet_ntoa(addr.sin_addr), port, &hints, &s_res);
+	inet_ntop(addr.sin_family, &addr.sin_addr, ipaddr, sizeof(ipaddr));
+	ret = getaddrinfo(ipaddr, port, &hints, &s_res);
 	if (ret) {
 		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
 			       listener->service, gai_strerror(ret));
