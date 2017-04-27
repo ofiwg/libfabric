@@ -226,7 +226,7 @@ static int fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
 
 	fastlock_acquire(&ep->scq->lock);
 	if (VERBS_SIGNAL_SEND(ep)) {
-		epe = util_buf_alloc(ep->scq->domain->fab->epe_pool);
+		epe = util_buf_alloc(ep->scq->epe_pool);
 		if (!epe) {
 			fastlock_release(&ep->scq->lock);
 			return -FI_ENOMEM;
@@ -251,7 +251,7 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 	fastlock_acquire(&ep->scq->lock);
 	while (atomic_get(&ep->comp_pending) > 0) {
 		if (!wce) {
-			wce = util_buf_alloc(ep->scq->domain->fab->wce_pool);
+			wce = util_buf_alloc(ep->scq->wce_pool);
 			if (!wce) {
 				fastlock_release(&ep->scq->lock);
 				return -FI_ENOMEM;
@@ -262,7 +262,7 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 		if (ret < 0) {
 			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,
 				"Failed to read completion for signaled send\n");
-			util_buf_release(ep->scq->domain->fab->wce_pool, wce);
+			util_buf_release(ep->scq->wce_pool, wce);
 			fastlock_release(&ep->scq->lock);
 			return ret;
 		} else if (ret > 0) {
@@ -272,7 +272,7 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 		}
 	}
 	if (wce)
-		util_buf_release(ep->scq->domain->fab->wce_pool, wce);
+		util_buf_release(ep->scq->wce_pool, wce);
 
 	if (got_wc && ep->scq->channel)
 		ret = fi_ibv_cq_signal(&ep->scq->cq_fid);
