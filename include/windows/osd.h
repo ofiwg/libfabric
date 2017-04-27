@@ -190,7 +190,7 @@ static inline ssize_t ofi_write_socket(int fd, const void *buf, size_t count)
 static inline ssize_t ofi_send_socket(int fd, const void *buf, size_t count,
         int flags)
 {
-	return send(fd, (const char*)buf, count, flags);
+	return send(fd, (const char*)buf, (int)count, flags);
 }
 
 static inline int ofi_close_socket(int socket)

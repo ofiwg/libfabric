@@ -372,7 +372,6 @@ static int sock_ep_cm_setname(fid_t fid, void *addr, size_t addrlen)
 		SOCK_LOG_ERROR("Invalid argument\n");
 		return -FI_EINVAL;
 	}
-	return 0;
 }
 
 static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)

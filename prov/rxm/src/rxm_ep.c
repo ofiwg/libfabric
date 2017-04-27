@@ -462,7 +462,8 @@ void rxm_pkt_init(struct rxm_pkt *pkt)
 
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
 {
-	int i, ret;
+	int ret;
+	size_t i;
 
 	for (i = 0; i < count; i++) {
 		if (mr[i]) {
