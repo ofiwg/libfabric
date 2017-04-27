@@ -92,6 +92,10 @@
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
+#define RXM_LOG_STATE(subsystem, prev_state, next_state) \
+		FI_DBG(&rxm_prov, subsystem, \
+		       "LMT: " #prev_state " -> " #next_state "\n");
+
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 
@@ -127,18 +131,22 @@ struct rxm_rma_iov {
 	struct ofi_rma_iov iov[];
 };
 
-/* States for large message transfer */
-#define RXM_LMT_STATES(FUNC)	\
-	FUNC(RXM_LMT_NONE),	\
-	FUNC(RXM_LMT_START),	\
-	FUNC(RXM_LMT_ACK),	\
+/* RXM protocol states / tx/rx context */
+#define RXM_PROTO_STATES(FUNC)	\
+	FUNC(RXM_NONE),		\
+	FUNC(RXM_TX),		\
+	FUNC(RXM_RX),		\
+	FUNC(RXM_LMT_TX),	\
+	FUNC(RXM_LMT_ACK_WAIT),	\
+	FUNC(RXM_LMT_READ),	\
+	FUNC(RXM_LMT_ACK_SENT), \
 	FUNC(RXM_LMT_FINISH),
 
-enum rxm_lmt_state {
-	RXM_LMT_STATES(ENUM)
+enum rxm_proto_state {
+	RXM_PROTO_STATES(ENUM)
 };
 
-extern char *rxm_lmt_state_str[];
+extern char *rxm_proto_state_str[];
 
 struct rxm_pkt {
 	struct ofi_ctrl_hdr ctrl_hdr;
@@ -150,12 +158,6 @@ struct rxm_recv_match_attr {
 	fi_addr_t addr;
 	uint64_t tag;
 	uint64_t ignore;
-};
-
-enum rxm_ctx_type {
-	RXM_NO_CTX,
-	RXM_TX_ENTRY,
-	RXM_RX_BUF,
 };
 
 struct rxm_unexp_msg {
@@ -172,7 +174,7 @@ struct rxm_iov {
 
 struct rxm_buf {
 	/* Must stay at top */
-	enum rxm_ctx_type ctx_type;
+	enum rxm_proto_state state;
 
 	struct dlist_entry entry;
 	/* MSG EP / shared context to which bufs would be posted to */
@@ -190,7 +192,6 @@ struct rxm_rx_buf {
 	struct rxm_unexp_msg unexp_msg;
 
 	/* Used for large messages */
-	enum rxm_lmt_state state;
 	struct rxm_iov match_iov[RXM_IOV_LIMIT];
 	struct rxm_rma_iov *rma_iov;
 	size_t index;
@@ -211,7 +212,7 @@ struct rxm_tx_buf {
 
 struct rxm_tx_entry {
 	/* Must stay at top */
-	enum rxm_ctx_type ctx_type;
+	enum rxm_proto_state state;
 
 	struct rxm_ep *ep;
 	uint8_t count;
@@ -220,7 +221,6 @@ struct rxm_tx_entry {
 	struct rxm_tx_buf *tx_buf;
 
 	/* Used for large messages */
-	enum rxm_lmt_state state;
 	uint64_t msg_id;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 };

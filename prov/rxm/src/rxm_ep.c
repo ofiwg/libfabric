@@ -262,6 +262,7 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 
 	memset(rx_buf, 0, sizeof(*rx_buf));
 	rx_buf->hdr = hdr;
+	rx_buf->hdr.state = RXM_RX;
 	rx_buf->ep = rxm_ep;
 
 	desc = rxm_buf_get_desc(&rx_buf->ep->rx_pool, rx_buf);
@@ -282,7 +283,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
 		rx_buf = (struct rxm_rx_buf *)rxm_buf_get(&rxm_ep->rx_pool);
-		rx_buf->hdr.ctx_type = RXM_RX_BUF;
+		rx_buf->hdr.state = RXM_RX,
 		rx_buf->hdr.msg_ep = rxm_ep->srx_ctx;
 		rx_buf->ep = rxm_ep;
 		ret = rxm_ep_repost_buf(rx_buf);
@@ -582,7 +583,6 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	}
 
 	tx_entry = freestack_pop(rxm_ep->send_queue.fs);
-	tx_entry->ctx_type = RXM_TX_ENTRY;
 	tx_entry->ep = rxm_ep;
 	tx_entry->count = count;
 	tx_entry->context = context;
@@ -639,11 +639,12 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 				"Sending large msg. msg_id: 0x%" PRIx64 "\n",
 				tx_entry->msg_id);
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "tx_entry->state -> RXM_LMT_START\n");
-		tx_entry->state = RXM_LMT_START;
+		tx_entry->state = RXM_LMT_TX;
 	} else {
 		pkt->ctrl_hdr.type = ofi_ctrl_data;
 		ofi_copy_from_iov(pkt->data, pkt->hdr.size, iov, count, 0);
 		pkt_size = sizeof(*pkt) + pkt->hdr.size;
+		tx_entry->state = RXM_TX;
 	}
 
 	if ((flags & FI_INJECT) && !(flags & FI_COMPLETION)) {

@@ -32,6 +32,6 @@
 
 #include "rxm.h"
 
-char *rxm_lmt_state_str[] = {
-	RXM_LMT_STATES(STR)
+char *rxm_proto_state_str[] = {
+	RXM_PROTO_STATES(STR)
 };
