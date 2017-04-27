@@ -272,7 +272,7 @@ static uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
 
-	if (poll_cnt++ == PSMX2_CNTR_POLL_THRESHOLD) {
+	if (poll_cnt++ >= PSMX2_CNTR_POLL_THRESHOLD) {
 		psmx2_progress(cntr_priv->domain);
 		poll_cnt = 0;
 	}
@@ -457,6 +457,7 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
 		break;
 
 	case FI_WAIT_SET:
@@ -468,7 +469,6 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		wait = attr->wait_set;
 		break;
 
-	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
 		wait_attr.wait_obj = attr->wait_obj;
