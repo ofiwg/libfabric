@@ -46,6 +46,7 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
+#include <rdma/fi_trigger.h>
 
 /* Print fi_info and related structs, enums, OR_able flags, addresses.
  *
@@ -431,6 +432,26 @@ static void fi_tostr_mr_mode(char *buf, int mr_mode)
 	fi_remove_comma(buf);
 }
 
+static void fi_tostr_op_type(char *buf, int op_type)
+{
+	switch (op_type) {
+	CASEENUMSTR(FI_OP_RECV);
+	CASEENUMSTR(FI_OP_SEND);
+	CASEENUMSTR(FI_OP_TRECV);
+	CASEENUMSTR(FI_OP_TSEND);
+	CASEENUMSTR(FI_OP_READ);
+	CASEENUMSTR(FI_OP_WRITE);
+	CASEENUMSTR(FI_OP_ATOMIC);
+	CASEENUMSTR(FI_OP_FETCH_ATOMIC);
+	CASEENUMSTR(FI_OP_COMPARE_ATOMIC);
+	CASEENUMSTR(FI_OP_CNTR_SET);
+	CASEENUMSTR(FI_OP_CNTR_ADD);
+	default:
+		strcatf(buf, "Unknown");
+		break;
+	}
+}
+
 static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 				 const char *prefix)
 {
@@ -703,6 +724,9 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 	case FI_TYPE_MR_MODE:
 		/* mr_mode was an enum converted to int flags */
 		fi_tostr_mr_mode(buf, enumval);
+		break;
+	case FI_TYPE_OP_TYPE:
+		fi_tostr_op_type(buf, enumval);
 		break;
 	default:
 		strcatf(buf, "Unknown type");
