@@ -101,7 +101,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	memcpy(&entry->err_data, &wce->wc.vendor_err,
 	       sizeof(wce->wc.vendor_err));
 
-	util_buf_release(cq->domain->fab->wce_pool, wce);
+	util_buf_release(cq->wce_pool, wce);
 	return sizeof(*entry);
 err:
 	fastlock_release(&cq->lock);
@@ -257,7 +257,7 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	atomic_sub(&epe->ep->unsignaled_send_cnt,
 			VERBS_SEND_SIGNAL_THRESH(epe->ep));
 	atomic_dec(&epe->ep->comp_pending);
-	util_buf_release(cq->domain->fab->epe_pool, epe);
+	util_buf_release(cq->epe_pool, epe);
 
 	return 0;
 }
@@ -284,7 +284,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			entry = slist_remove_head(&cq->wcq);
 			wce = container_of(entry, struct fi_ibv_wce, entry);
 			cq->read_entry(&wce->wc, i, buf);
-			util_buf_release(cq->domain->fab->wce_pool, wce);
+			util_buf_release(cq->wce_pool, wce);
 			continue;
 		}
 
@@ -294,7 +294,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 
 		/* Insert error entry into wcq */
 		if (wc.status) {
-			wce = util_buf_alloc(cq->domain->fab->wce_pool);
+			wce = util_buf_alloc(cq->wce_pool);
 			if (!wce) {
 				fastlock_release(&cq->lock);
 				return -FI_ENOMEM;
@@ -355,7 +355,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 	if (!slist_empty(&cq->wcq))
 		goto out;
 
-	wce = util_buf_alloc(cq->domain->fab->wce_pool);
+	wce = util_buf_alloc(cq->wce_pool);
 	if (!wce) {
 		ret = -FI_ENOMEM;
 		goto out;
@@ -392,7 +392,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 
 	ret = FI_SUCCESS;
 err:
-	util_buf_release(cq->domain->fab->wce_pool, wce);
+	util_buf_release(cq->wce_pool, wce);
 out:
 	fastlock_release(&cq->lock);
 	return ret;
@@ -448,15 +448,18 @@ static int fi_ibv_cq_close(fid_t fid)
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct fi_ibv_wce, entry);
-		util_buf_release(cq->domain->fab->wce_pool, wce);
+		util_buf_release(cq->wce_pool, wce);
 	}
 
 	while (!slist_empty(&cq->ep_list)) {
 		entry = slist_remove_head(&cq->ep_list);
 		epe = container_of(entry, struct fi_ibv_msg_epe, entry);
-		util_buf_release(cq->domain->fab->epe_pool, epe);
+		util_buf_release(cq->epe_pool, epe);
 	}
 	fastlock_release(&cq->lock);
+
+	util_buf_pool_destroy(cq->epe_pool);
+	util_buf_pool_destroy(cq->wce_pool);
 
 	fastlock_destroy(&cq->lock);
 
@@ -558,6 +561,20 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		}
 	}
 
+	_cq->wce_pool = util_buf_pool_create(sizeof(struct fi_ibv_wce), 16, 0, VERBS_WCE_CNT);
+	if (!_cq->wce_pool) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Failed to create wce_pool\n");
+		ret = -FI_ENOMEM;
+		goto err4;
+	}
+
+	_cq->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0, VERBS_EPE_CNT);
+	if (!_cq->epe_pool) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Failed to create epe_pool\n");
+		ret = -FI_ENOMEM;
+		goto err5;
+	}
+
 	_cq->flags |= attr->flags;
 	_cq->wait_cond = attr->wait_cond;
 	_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
@@ -582,7 +599,7 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	case FI_CQ_FORMAT_TAGGED:
 	default:
 		ret = -FI_ENOSYS;
-		goto err4;
+		goto err6;
 	}
 
 	fastlock_init(&_cq->lock);
@@ -601,6 +618,10 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	*cq = &_cq->cq_fid;
 	return 0;
 
+err6:
+	util_buf_pool_destroy(_cq->epe_pool);
+err5:
+	util_buf_pool_destroy(_cq->wce_pool);
 err4:
 	ibv_destroy_cq(_cq->cq);
 err3:
