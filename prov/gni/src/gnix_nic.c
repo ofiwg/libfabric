@@ -1010,12 +1010,12 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		status = GNI_CqCreate(nic->gni_nic_hndl,
 					domain->params.tx_cq_size,
 					0,                  /* no delay count */
-					GNI_CQ_NOBLOCK |
-					domain->gni_cq_modes,
+					GNI_CQ_BLOCKING |
+						domain->gni_cq_modes,
 					NULL,              /* useless handler */
 					NULL,               /* useless handler
 								context */
-					&nic->tx_cq);
+					&nic->tx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
@@ -1054,11 +1054,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		status = GNI_CqCreate(nic->gni_nic_hndl,
 					domain->params.rx_cq_size,
 					0,
-					GNI_CQ_NOBLOCK |
+					GNI_CQ_BLOCKING |
 						domain->gni_cq_modes,
 					NULL,
 					NULL,
-					&nic->rx_cq);
+					&nic->rx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
