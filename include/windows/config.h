@@ -164,6 +164,9 @@
 /* Define to 1 if pthread_spin_init is available. */
 /* #undef PT_LOCK_SPIN */
 
+/* Define to 1 if adapter info API is defined. */
+#define HAVE_MIB_IPADDRTABLE 1
+
 /* The size of `void *', as computed by sizeof. */
 #ifdef _WIN64
 #define SIZEOF_VOID_P 8
