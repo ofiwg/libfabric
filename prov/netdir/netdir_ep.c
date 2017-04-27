@@ -382,7 +382,7 @@ static void ofi_nd_ep_accepted(nd_event_base *base, DWORD bytes)
 	ULONG len = 0;
 	nd_ep_connect *connect = container_of(base, nd_ep_connect, base);
 	struct nd_eq_event *err;
-	nd_ep_completed *compl;
+	nd_ep_completed *compl = NULL;
 
 	assert(connect->connector);
 	assert(connect->ep);
