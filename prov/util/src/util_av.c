@@ -967,7 +967,7 @@ static const char *ip_av_straddr(struct fid_av *av, const void *addr, char *buf,
 	switch (sock_addr->sa_family) {
 	case AF_INET:
 		sin = addr;
-		if (!inet_ntop(sin->sin_family, &sin->sin_addr.s_addr, str,
+		if (!inet_ntop(sin->sin_family, (void*)&sin->sin_addr.s_addr, str,
 			       sizeof(str)))
 			return NULL;
 
