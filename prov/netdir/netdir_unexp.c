@@ -249,9 +249,50 @@ void ofi_nd_unexp_match(struct nd_ep *ep)
 		struct nd_queue_item *ep_qentry = NULL;
 		struct nd_queue_item *srx_qentry = NULL;
 
+		struct dlist_entry *qunexp = NULL;
+
+		if (!dlist_empty(&ep->unexpected.received)) {
+			qunexp = dlist_find_first_match(
+				&ep->unexpected.received, ofi_nd_return_true, 0);
+			unexp = container_of(
+				qunexp,
+				nd_unexpected_entry, ep_list);
+
+			if (unexp->buf->header.event == LARGE_MSG_ACK &&
+			    (ofi_nd_queue_peek(&ep->internal_prepost, &ep_qentry))) {
+				if (ep_qentry) {
+					ND_LOG_DEBUG(FI_LOG_EP_CTRL, "Received internal event, let's "
+						     "try to process it\n");
+					ep_entry = container_of(ep_qentry, nd_cq_entry, queue_item);
+					ofi_nd_queue_pop(&ep->internal_prepost, &ep_qentry);
+					/* Set event that was received */
+					ep_entry->event = unexp->buf->header.event;
+					ND_LOG_EVENT_INFO(ep_entry);
+					if (unexp->buf->header.flags.req_ack)
+						ofi_nd_send_ack(ep_entry, ep);
+					ofi_nd_dispatch_cq_event(unexp->buf->header.event, ep_entry, unexp);
+
+					ep_entry = NULL;
+					dlist_remove(qunexp);
+				}
+				else {
+					/* Shouldn't happen */
+					ND_LOG_WARN(FI_LOG_EP_CTRL, "Received internal event, but "
+						    "internal queue is empty\n");
+					assert(0);
+				}
+			}
+		}
+
 		if ((ofi_nd_queue_peek(&ep->prepost, &ep_qentry) ||
 		    (ep->srx && ofi_nd_queue_peek(&ep->srx->prepost, &srx_qentry))) &&
-		    !dlist_empty(&ep->unexpected.received)) {
+		    (!dlist_empty(&ep->unexpected.received))) {
+			qunexp = dlist_find_first_match(
+				&ep->unexpected.received, ofi_nd_return_true, 0);
+			unexp = container_of(
+				qunexp,
+				nd_unexpected_entry, ep_list);
+
 			if(ep_qentry)
 				ep_entry = container_of(ep_qentry, nd_cq_entry, queue_item);
 			if(srx_qentry)
@@ -276,12 +317,7 @@ void ofi_nd_unexp_match(struct nd_ep *ep)
 				ofi_nd_queue_pop(&ep->srx->prepost, &srx_qentry);
 			}
 
-			struct dlist_entry *qunexp = dlist_remove_first_match(
-				&ep->unexpected.received, ofi_nd_return_true, 0);
-
-			unexp = container_of(
-				qunexp,
-				nd_unexpected_entry, ep_list);
+			dlist_remove(qunexp);
 			/* remove element from srx queue */
 			if(unexp->ep->srx)
 				dlist_remove(&unexp->srx_list);
@@ -295,6 +331,9 @@ void ofi_nd_unexp_match(struct nd_ep *ep)
 		else
 			LeaveCriticalSection(&ep->prepost_lock);
 		if (!done) {
+			/* Set event that was received */
+			entry->event = unexp->buf->header.event;
+			ND_LOG_EVENT_INFO(entry);
 			if (unexp->buf->header.flags.req_ack)
 				ofi_nd_send_ack(entry, ep);
 			ofi_nd_dispatch_cq_event(unexp->buf->header.event, entry, unexp);
@@ -359,7 +398,6 @@ void ofi_nd_unexp_event(ND2_RESULT *result)
 
 	if (ep->shutdown || result->Status == STATUS_CANCELLED) { 
 		/* shutdown mode */
-		ND_LOG_DEBUG(FI_LOG_EP_CTRL, "clean prepost entry\n");
 		ND_BUF_FREE(nd_unexpected_ctx, ctx);
 		InterlockedDecrement(&ep->shutdown);
 		return;

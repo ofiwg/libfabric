@@ -156,11 +156,15 @@ static inline void ofi_nd_ep_progress(struct nd_ep *ep)
 		}
 
 		/* If there is prepost entry (it means that this SEND event
-		 * expects an answer). In this case, push CQ entry for
-		 * receive event to prepost queue */
-		if (send_entry->prepost_entry)
-			ofi_nd_queue_push(&ep->prepost,
+		 * expects an answer). In this case, push CQ entry to prepost
+		 * queue to receive event(answer) */
+		if (send_entry->prepost_entry) {
+			ND_LOG_DEBUG(FI_LOG_EP_DATA, "Posted entry(state = %d) that "
+				     "expects an answer from peer to which the send "
+				     "event is belong\n", send_entry->prepost_entry->state);
+			ofi_nd_queue_push(&ep->internal_prepost,
 				&send_entry->prepost_entry->queue_item);
+		}
 
 		hr = send_entry->ep->qp->lpVtbl->Send(send_entry->ep->qp,
 			send_entry->cq_entry,
@@ -168,8 +172,6 @@ static inline void ofi_nd_ep_progress(struct nd_ep *ep)
 			send_entry->sge->count, 0);
 		if (FAILED(hr))
 			ND_LOG_WARN(FI_LOG_CQ, "Send failed from Send Queue\n");
-
-		ofi_nd_free_send_entry(send_entry);
 	}
 	LeaveCriticalSection(&ep->send_op.send_lock);
 }

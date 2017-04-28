@@ -85,6 +85,8 @@ typedef struct nd_eq_event {
 	size_t			len;
 } nd_eq_event;
 
+typedef struct nd_send_entry nd_send_entry;
+
 typedef struct nd_cq_entry {
 	nd_event_base		base;
 	struct nd_domain	*domain;
@@ -128,6 +130,7 @@ typedef struct nd_cq_entry {
 	ofi_nd_cq_state		state;
 	ofi_nd_cq_event		event;
 	nd_flow_cntrl_flags	flow_cntrl_flags;
+	nd_send_entry		*send_entry;
 } nd_cq_entry;
 
 typedef struct nd_sge {
@@ -135,13 +138,13 @@ typedef struct nd_sge {
 	size_t	count;
 } nd_sge;
 
-typedef struct nd_send_entry {
+struct nd_send_entry {
 	struct nd_queue_item	queue_item;
 	nd_sge			*sge;
 	nd_cq_entry		*cq_entry;
 	nd_cq_entry		*prepost_entry;
 	struct nd_ep		*ep;
-} nd_send_entry;
+};
 
 typedef struct nd_buf_fini {
 	volatile struct nd_buf_fini *next;

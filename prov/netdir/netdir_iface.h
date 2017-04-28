@@ -229,6 +229,7 @@ struct nd_ep {
 
 	struct nd_unexpected		unexpected;
 	struct nd_queue_queue		prepost;
+	struct nd_queue_queue		internal_prepost;
 
 	nd_event_base			disconnect_ov;
 

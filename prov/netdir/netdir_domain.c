@@ -491,8 +491,10 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 	do {
 		count = domain->cq->lpVtbl->GetResults(domain->cq, result, countof(result));
 		size_t i;
-
 		for (i = 0; i < count; i++) {
+			ND_LOG_DEBUG(FI_LOG_EP_DATA, "Domain event is %d with status %s\n",
+				     result[i].RequestType,
+				     ofi_nd_error_str(result[i].Status));
 			switch (result[i].RequestType) {
 			case Nd2RequestTypeReceive:
 				ofi_nd_unexp_event(&result[i]);

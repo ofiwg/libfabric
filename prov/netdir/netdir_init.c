@@ -140,7 +140,7 @@ NETDIR_INI
 	fi_param_define(&ofi_nd_prov, "prepostcnt", FI_PARAM_INT,
 		"Prepost Buffer Count: number of buffers to be preposted per EP and "
 		"not required internal ACK");
-	fi_param_define(&ofi_nd_prov, "prepostbuftcnt", FI_PARAM_INT,
+	fi_param_define(&ofi_nd_prov, "prepostbufcnt", FI_PARAM_INT,
 		"Count of Entries in Array of Preposted Buffers: number of set of buffer "
 		"in each entry array of buffers to be preposted per EP");
 

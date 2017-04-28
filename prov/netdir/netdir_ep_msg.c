@@ -209,6 +209,7 @@ ofi_nd_ep_sendmsg(struct fid_ep *pep, const struct fi_msg *msg, uint64_t flags)
 
 		/* Push the user's transmission request into
 		 * the Send Queue for furhter handling */
+		entry->send_entry = send_entry;
 		ofi_nd_queue_push(&ep->send_queue, &send_entry->queue_item);
 	}
 	else {
@@ -327,6 +328,7 @@ ofi_nd_ep_sendmsg(struct fid_ep *pep, const struct fi_msg *msg, uint64_t flags)
 
 		/* Push the user's transmission request into
 		 * the Send Queue for furhter handling */
+		entry->send_entry = send_entry;
 		ofi_nd_queue_push(&ep->send_queue, &send_entry->queue_item);
 	}
 
@@ -475,8 +477,10 @@ static ssize_t ofi_nd_ep_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 	entry->iov_cnt = msg->iov_count;
 	entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
-	for (i = 0; i < msg->iov_count; i++)
+	for (i = 0; i < msg->iov_count; i++) {
 		entry->iov[i] = msg->msg_iov[i];
+		ND_LOG_DEBUG(FI_LOG_EP_DATA, "\nPOSTED_LEN = %lu\n", entry->iov[i].iov_len);
+	}
 
 	/* store allocated entry in 1st byte of internal data of context */
 	if (msg->context)
@@ -540,10 +544,11 @@ void ofi_nd_send_event(ND2_RESULT *result)
 	assert(ep);
 	assert(ep->fid.fid.fclass == FI_CLASS_EP);
 
-	/*if (result->Status == STATUS_CANCELLED) {
-	TODO
-		Report ERR CQ
-	}*/
+	ND_LOG_EVENT_INFO(entry);
+
+	/* Send entry is no more needed */
+	if (entry->send_entry)
+		ofi_nd_free_send_entry(entry->send_entry);
 
 	if (entry->state == LARGE_MSG_WAIT_ACK) {
 		/* If send operation isn't able to transmit large message, don't

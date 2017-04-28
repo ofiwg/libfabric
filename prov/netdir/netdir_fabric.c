@@ -110,7 +110,7 @@ int ofi_nd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fab,
 
 	fi_param_get_int(&ofi_nd_prov, "inlinethr", &gl_data.inline_thr);
 	fi_param_get_int(&ofi_nd_prov, "prepostcnt", &gl_data.prepost_cnt);
-	fi_param_get_int(&ofi_nd_prov, "prepostbuftcnt", &gl_data.prepost_buf_cnt);
+	fi_param_get_int(&ofi_nd_prov, "prepostbufcnt", &gl_data.prepost_buf_cnt);
 
 	return FI_SUCCESS;
 }
