@@ -220,7 +220,7 @@ void fi_ibv_rdm_print_request(char *buf, struct fi_ibv_rdm_request *request);
 
 #define BUF_STATUS_FREE 	((uint16_t) 0)
 #define BUF_STATUS_BUSY 	((uint16_t) 1)
-#define BUF_STATUS_RECVED 	((uint16_t) 2)
+#define BUF_STATUS_RECEIVED 	((uint16_t) 2)
 
 struct fi_ibv_rdm_buf_service_data {
 	volatile uint16_t status;
@@ -383,6 +383,8 @@ struct fi_ibv_rdm_postponed_entry {
 
 	struct fi_ibv_rdm_conn *conn;
 };
+
+extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 
 static inline void
 fi_ibv_rdm_set_buffer_status(struct fi_ibv_rdm_buf *buff, uint16_t status)
@@ -573,13 +575,13 @@ fi_ibv_rdm_get_sbuf_head(struct fi_ibv_rdm_conn *conn, struct fi_ibv_rdm_ep *ep)
 		}
 
 		/* notification for receiver */
-		fi_ibv_rdm_set_buffer_status(conn->sbuf_head, BUF_STATUS_RECVED);
+		fi_ibv_rdm_set_buffer_status(conn->sbuf_head, BUF_STATUS_RECEIVED);
 
 		sbuf = conn->sbuf_head;
 		fi_ibv_rdm_push_sbuff_head(conn, ep);
 	}
 #if ENABLE_DEBUG
-	assert(sbuf ? (sbuf->service_data.status == BUF_STATUS_RECVED) : 1);
+	assert(sbuf ? (sbuf->service_data.status == BUF_STATUS_RECEIVED) : 1);
 	{
 		int i;
 		char s[1024];
@@ -660,6 +662,60 @@ fi_ibv_rdm_rma_prepare_resources(struct fi_ibv_rdm_conn *conn,
 			fi_ibv_rdm_rma_get_buf_head(conn, ep) : NULL;
 	}
 	return NULL;
+}
+
+static inline int
+fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep,
+			   struct ibv_wc *wc)
+{
+	if (wc->status != IBV_WC_SUCCESS) {
+		return 1;
+	}
+
+	if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
+		VERBS_DBG(FI_LOG_EP_DATA, "CQ COMPL: SEND -> 0x1\n");
+		struct fi_ibv_rdm_conn *conn =
+			(struct fi_ibv_rdm_conn *)
+			FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
+		FI_IBV_RDM_DEC_SIG_POST_COUNTERS(conn, ep);
+
+		return 0;
+	} else {
+		FI_IBV_DBG_OPCODE(wc->opcode, "SEND");
+		struct fi_ibv_rdm_request *request =
+			(void *)FI_IBV_RDM_UNPACK_WR(wc->wr_id);
+
+		struct fi_ibv_rdm_tagged_send_completed_data data =
+			{ .ep = ep };
+
+		return fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_POST_LC,
+					   &data);
+	}
+}
+
+static inline void
+fi_ibv_rdm_process_err_send_wc(struct fi_ibv_rdm_ep *ep,
+			       struct ibv_wc *wc)
+{
+	if (wc->status != IBV_WC_SUCCESS) {
+		struct fi_ibv_rdm_conn *conn;
+		if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
+			conn = FI_IBV_RDM_UNPACK_SERVICE_WR(
+					wc->wr_id);
+		} else {
+			struct fi_ibv_rdm_request *req =
+					(void *)wc->wr_id;
+			conn = req->minfo.conn;
+			FI_IBV_RDM_DBG_REQUEST("to_pool: ", req,
+					       FI_LOG_DEBUG);
+			util_buf_release(fi_ibv_rdm_request_pool, req);
+		}
+		VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc.status = %d:%s, "
+			   "pend_send: %d, connection: %p\n",
+			   wc->status,
+			   ibv_wc_status_str(wc->status),
+			   ep->posted_sends, conn);
+	}
 }
 
 #endif /* _VERBS_RDM_H */

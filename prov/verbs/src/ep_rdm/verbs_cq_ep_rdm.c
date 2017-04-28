@@ -37,7 +37,6 @@
 #include "../fi_verbs.h"
 #include "verbs_queuing.h"
 
-
 struct util_buf_pool *fi_ibv_rdm_request_pool;
 struct util_buf_pool *fi_ibv_rdm_postponed_pool;
 
@@ -89,7 +88,6 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 		if (fi_ibv_rdm_tagged_poll(_cq->ep) < 0) {
 			VERBS_INFO(FI_LOG_CQ, "fi_ibv_rdm_tagged_poll failed\n");
 		}
-
 		if (!dlist_empty(&_cq->request_errcq)) {
 			ret = -FI_EAVAIL;
 		}
@@ -114,12 +112,13 @@ ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				int timeout)
 {
 	size_t threshold = count;
-	uint64_t time_limit = fi_gettime_ms() + timeout;
+	uint64_t time_limit =
+		((timeout < 0) ? SIZE_MAX : (fi_gettime_ms() + timeout));
 	size_t counter = 0;
 	ssize_t ret = 0;
 	struct fi_cq_tagged_entry *cqe_buf = buf;
-
-	struct fi_ibv_rdm_cq *_cq = container_of(cq, struct fi_ibv_rdm_cq, cq_fid);
+	struct fi_ibv_rdm_cq *_cq = container_of(cq, struct fi_ibv_rdm_cq,
+						 cq_fid);
 	switch (_cq->wait_cond) {
 	case FI_CQ_COND_THRESHOLD:
 		threshold = MIN((uintptr_t) cond, threshold);
@@ -135,8 +134,9 @@ ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 						    threshold - counter,
 						    src_addr);
 		counter += (ret > 0) ? ret : 0;
-	} while ((ret >= 0) && (counter < threshold ||
-		(timeout >= 0 && fi_gettime_ms() < time_limit)));
+	} while ((ret >= 0 || ret == -FI_EAGAIN) &&
+		 (counter < threshold) &&
+		 (fi_gettime_ms() < time_limit));
 
 	if (counter != 0 && ret >= 0) {
 		ret = counter;

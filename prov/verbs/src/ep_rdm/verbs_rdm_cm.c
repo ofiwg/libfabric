@@ -37,8 +37,10 @@
 #include "../fi_verbs.h"
 #include "verbs_utils.h"
 #include "verbs_rdm.h"
+#include "verbs_queuing.h"
 
 extern struct fi_provider fi_ibv_prov;
+extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 
 static struct ibv_mr *
 fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep, void **buf, size_t size)
@@ -615,20 +617,47 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 	return ret;
 }
 
+static int fi_ibv_rdm_poll_cq(struct fi_ibv_rdm_ep *ep)
+{
+	int i, ret = 0;
+	const int wc_count = ep->fi_scq->read_bunch_size;
+	struct ibv_wc wc[wc_count];
+
+	ret = ibv_poll_cq(ep->scq, wc_count, wc);
+	for (i = 0; i < ret; ++i)
+		if (fi_ibv_rdm_process_send_wc(ep, &wc[i]))
+			fi_ibv_rdm_process_err_send_wc(ep, &wc[i]);
+
+	return ret;
+}
+
 static ssize_t
 fi_ibv_rdm_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 				      struct rdma_cm_event *event)
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
+	struct fi_ibv_rdm_request *request = NULL;
+	int ret = 0;
 
 	ep->num_active_conns--;
-	
 	conn->state = FI_VERBS_CONN_CLOSED;
 
 	VERBS_INFO(FI_LOG_AV,
 		   "Disconnected from conn %p, addr %s:%u\n",
 		   conn, inet_ntoa(conn->addr.sin_addr),
 		   ntohs(conn->addr.sin_port));
+
+	/* Cleanup posted queue */
+	while (NULL !=
+		(request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
+	}
+
+	/* Retrieve CQ entries from send Completion Queue if any  */
+	do {
+		ret = fi_ibv_rdm_poll_cq(ep);
+	} while (ret > 0);
 
 	return FI_SUCCESS;
 }
