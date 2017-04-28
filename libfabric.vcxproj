@@ -312,6 +312,7 @@
     <ClInclude Include="include\windows\sys\select.h" />
     <ClInclude Include="include\windows\sys\socket.h" />
     <ClInclude Include="include\windows\sys\time.h" />
+    <ClInclude Include="include\windows\sys\wait.h" />
     <ClInclude Include="include\windows\unistd.h" />
     <ClInclude Include="prov\netdir\netdir_buf.h" />
     <ClInclude Include="prov\netdir\netdir_cq.h" />
