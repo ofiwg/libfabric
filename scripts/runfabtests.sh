@@ -130,7 +130,6 @@ short_tests=(
 	"rdm_tagged_bw -I 5"
 	"rdm_tagged_bw -I 5 -v"
 	"dgram_pingpong -I 5"
-	"dgram_pingpong -I 5 -v"
 	"rc_pingpong -n 5"
 	"rc_pingpong -n 5 -e"
 )
@@ -167,9 +166,7 @@ standard_tests=(
 	"rdm_tagged_bw"
 	"rdm_tagged_bw -v"
 	"dgram_pingpong"
-	"dgram_pingpong -v"
 	"dgram_pingpong -k"
-	"dgram_pingpong -k -v"
 	"rc_pingpong"
 )
 
