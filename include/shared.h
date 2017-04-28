@@ -341,6 +341,13 @@ ssize_t ft_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 		struct fi_rma_iov *remote);
 
+int check_base_atomic_op(struct fid_ep *endpoint, enum fi_op op,
+			 enum fi_datatype datatype, size_t *count);
+int check_fetch_atomic_op(struct fid_ep *endpoint, enum fi_op op,
+			  enum fi_datatype datatype, size_t *count);
+int check_compare_atomic_op(struct fid_ep *endpoint, enum fi_op op,
+			    enum fi_datatype datatype, size_t *count);
+
 int ft_cq_readerr(struct fid_cq *cq);
 int ft_get_rx_comp(uint64_t total);
 int ft_get_tx_comp(uint64_t total);

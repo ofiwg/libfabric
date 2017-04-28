@@ -94,78 +94,6 @@ static enum fi_op get_fi_op(char *op) {
 	}
 }
 
-static int check_atomic_attr(enum fi_op op, enum fi_datatype datatype)
-{
-	struct fi_atomic_attr attr;
-	int ret;
-
-	ret = fi_query_atomic(domain, datatype, op, &attr, 0);
-	if (ret) {
-		FT_PRINTERR("fi_query_atomic", ret);
-		return ret;
-	}
-
-	if (attr.size != datatype_to_size(datatype)) {
-		fprintf(stderr, "Provider atomic size mismatch\n");
-		return -FI_ENOSYS;
-	}
-
-	return 0;
-}
-
-/*
- * Endpoint level checks are for compatibility only.  Domain level checks are
- * sufficient.
- */
-
-static int check_base_atomic_op(enum fi_op op, enum fi_datatype datatype)
-{
-	int ret;
-
-	ret = fi_atomicvalid(ep, datatype, op, count);
-	if (ret) {
-		fprintf(stderr, "Provider doesn't support %s ",
-			fi_tostr(&op, FI_TYPE_ATOMIC_OP));
-		fprintf(stderr, "base atomic operation on %s\n",
-			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-		return ret;
-	}
-
-	return check_atomic_attr(op, datatype);
-}
-
-static int check_fetch_atomic_op(enum fi_op op, enum fi_datatype datatype)
-{
-	int ret;
-
-	ret = fi_fetch_atomicvalid(ep, datatype, op, count);
-	if (ret) {
-		fprintf(stderr, "Provider doesn't support %s "
-			"fetch atomic operation on %s\n",
-			fi_tostr(&op, FI_TYPE_ATOMIC_OP),
-			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-		return ret;
-	}
-
-	return check_atomic_attr(op, datatype);
-}
-
-static int check_compare_atomic_op(enum fi_op op, enum fi_datatype datatype)
-{
-	int ret;
-
-	ret = fi_compare_atomicvalid(ep, datatype, op, count);
-	if (ret) {
-		fprintf(stderr, "Provider doesn't support %s "
-			"compare atomic operation on %s\n",
-			fi_tostr(&op, FI_TYPE_ATOMIC_OP),
-			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-		return ret;
-	}
-
-	return check_atomic_attr(op, datatype);
-}
-
 static int execute_base_atomic_op(enum fi_op op)
 {
 	int ret;
@@ -243,11 +171,16 @@ static int run_op(void)
 	case FI_BXOR:
 	case FI_ATOMIC_WRITE:
 		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ret = check_base_atomic_op(op_type, datatype);
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP)
+			ret = check_base_atomic_op(ep, op_type, datatype, count);
+			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {
+				fprintf(stderr, "Provider doesn't support %s ",
+					fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
+				fprintf(stderr, "base atomic operation on %s\n",
+					fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
 				continue;
-			else if (ret)
+			} else if (ret) {
 				break;
+			}
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
@@ -268,11 +201,16 @@ static int run_op(void)
 		break;
 	case FI_ATOMIC_READ:
 		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ret = check_fetch_atomic_op(op_type, datatype);
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP)
+			ret = check_fetch_atomic_op(ep, op_type, datatype, count);
+			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {
+				fprintf(stderr, "Provider doesn't support %s ",
+					fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
+				fprintf(stderr, "fetch atomic operation on %s\n",
+					fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
 				continue;
-			else if (ret)
+			} else if (ret) {
 				break;
+			}
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
@@ -299,11 +237,16 @@ static int run_op(void)
 	case FI_CSWAP_GT:
 	case FI_MSWAP:
 		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ret = check_compare_atomic_op(op_type, datatype);
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP)
+			ret = check_compare_atomic_op(ep, op_type, datatype, count);
+			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {
+				fprintf(stderr, "Provider doesn't support %s ",
+					fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
+				fprintf(stderr, "compare atomic operation on %s\n",
+					fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
 				continue;
-			else if (ret)
+			} else if (ret) {
 				break;
+			}
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
