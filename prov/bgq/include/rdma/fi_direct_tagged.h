@@ -141,6 +141,9 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 			ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
 			if (ret) return ret;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_trecvmsg_generic calling fi_bgq_ep_progress_manual_recv:\n");
+#endif
 			fi_bgq_ep_progress_manual_recv(bgq_ep,
 				0, /* is_msg */
 				(union fi_bgq_context *)(context_rsh3b << 3),
@@ -160,6 +163,9 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 		ret = fi_bgq_lock_if_required(&bgq_ep->lock, lock_required);
 		if (ret) return ret;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_trecvmsg_generic calling fi_bgq_ep_progress_manual_recv:\n");
+#endif
 		fi_bgq_ep_progress_manual_recv(bgq_ep,
 			0, /* is_msg */
 			(union fi_bgq_context *)(context_rsh3b << 3),

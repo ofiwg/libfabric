@@ -327,7 +327,7 @@ int fi_bgq_cq_enqueue_err (struct fi_bgq_cq * bgq_cq,
 		case FI_THREAD_DOMAIN:
 			lock_required = 0;
 		default:
-			lock_required = 1;
+			lock_required = 0;
 		}
 
 		int ret;
