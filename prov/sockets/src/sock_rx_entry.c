@@ -125,8 +125,6 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 
 	rx_ctx->buffered_len += len;
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_buffered_list);
-	rx_entry->is_busy = 1;
-	rx_entry->is_tagged = 0;
 
 	return rx_entry;
 }
