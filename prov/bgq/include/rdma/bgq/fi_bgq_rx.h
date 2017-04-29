@@ -35,7 +35,7 @@
 #define FI_BGQ_UEPKT_BLOCKSIZE (1024)
 #define PROCESS_RFIFO_MAX 64
 
-// #define FI_BGQ_TRACE
+// #define FI_BGQ_TRACE 1
 
 /* forward declaration - see: prov/bgq/src/fi_bgq_atomic.c */
 void fi_bgq_rx_atomic_dispatch (void * buf, void * addr, size_t nbytes,
@@ -341,8 +341,6 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 	void * recv_buf = context->buf;
 	const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
-	struct l2atomic_fifo_producer * err_producer = &bgq_ep->recv_cq->err_producer;
-
 	const uint64_t immediate_data = pkt->hdr.pt2pt.immediate_data;
 
 	if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
@@ -422,9 +420,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 			ext->bgq_context.byte_counter = 0;
 
-			/* post an 'error' completion event for the receive - spin loop! */
-			uint64_t ext_rsh3b = (uint64_t)ext >> 3;
-			while(0 != l2atomic_fifo_produce(err_producer, ext_rsh3b));
+			fi_bgq_cq_enqueue_err (bgq_ep->recv_cq, ext,0);
 		}
 
 		return;
@@ -518,9 +514,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 			byte_counter_vaddr = (uint64_t)&ext->bgq_context.byte_counter;
 
-			/* post an 'error' completion event for the receive - spin loop! */
-			uint64_t ext_rsh3b = (uint64_t)ext >> 3;
-			while(0 != l2atomic_fifo_produce(err_producer, ext_rsh3b));
+			fi_bgq_cq_enqueue_err (bgq_ep->recv_cq, ext,0);
 
 			xfer_len = 0;
 			niov = 0;
@@ -660,6 +654,10 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 {
 	const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr, "process_rfifo_packet_optimized\n");
+	fflush(stderr);
+#endif
 	if (poll_msg) {
 		if (packet_type == FI_BGQ_MU_PACKET_TYPE_ACK) {	/* branch should compile out */
 
@@ -781,6 +779,10 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 
 	/* did not find a match .. add this packet to the unexpected queue */
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr, "process_rfifo_packet_optimized - did not find a match .. add this packet to the unexpected queue \n");
+	fflush(stderr);
+#endif
 	if (bgq_ep->rx.poll.rfifo[poll_msg].ue.free == NULL) { /* unlikely */
 		struct fi_bgq_mu_packet * block = NULL;
 		int rc __attribute__ ((unused));
@@ -972,7 +974,9 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		const unsigned is_manual_progress) {
 #ifdef FI_BGQ_TRACE
 	fprintf(stderr,"process_mfifo_context starting\n");
-
+	if (rx_op_flags & FI_PEEK)
+		fprintf(stderr,"just peeking\n");
+	fflush(stderr);
 #endif
 	if (cancel_context) {	/* branch should compile out */
 		const uint64_t compare_context = is_context_ext ?
@@ -1001,10 +1005,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			ext->err_entry.prov_errno = 0;
 			ext->err_entry.err_data = NULL;
 
-			/* post an 'error' completion event for the canceled receive - spin loop! */
-			struct l2atomic_fifo_producer * producer =
-				&bgq_ep->recv_cq->err_producer;
-			while(0 != l2atomic_fifo_produce(producer, ((uint64_t)ext) >> 3));
+			fi_bgq_cq_enqueue_err (bgq_ep->recv_cq, ext,0); 
 
 			return FI_ECANCELED;
 		}
@@ -1023,8 +1024,13 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 #ifdef FI_BGQ_TRACE
 	fprintf(stderr,"process_mfifo_context - searching unexpected queue\n");
+	fflush(stderr);
 #endif
 			if (is_match(uepkt, context, poll_msg)) {
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context - found match on unexpected queue\n");
+	fflush(stderr);
+#endif
 
 				/* branch will compile out */
 				if (poll_msg)
@@ -1067,6 +1073,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 #ifdef FI_BGQ_TRACE
 	fprintf(stderr,"process_mfifo_context -  nothing found on unexpected queue adding to match queue\n");
+	fflush(stderr);
 #endif
 			/*
 			 * no unexpected headers were matched; add this match
@@ -1092,11 +1099,21 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		struct fi_bgq_mu_packet * prev = NULL;
 		struct fi_bgq_mu_packet * uepkt = head;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"process_mfifo_context - rx_op_flags & FI_PEEK searching unexpected queue\n");
+	if (uepkt == NULL)
+		fprintf(stderr,"uepkt == NULL\n");
+	else
+		fprintf(stderr,"uepkt != NULL\n");
+
+	fflush(stderr);
+#endif
 		unsigned found_match = 0;
 		while (uepkt != NULL) {
 
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr,"process_mfifo_context - rx_op_flags & FI_PEEK searching unexpected queue\n");
+	fprintf(stderr,"process_mfifo_context uepkt != NULL - rx_op_flags & FI_PEEK searching unexpected queue\n");
+	fflush(stderr);
 #endif
 			if (is_match(uepkt, context, poll_msg)) {
 
@@ -1148,7 +1165,12 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 		if (!found_match) {
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"didn't find a match for this FI_PEEK\n");
+	fflush(stderr);
+#endif
 			/* did not find a match for this "peek" */
+
 
 			struct fi_bgq_context_ext * ext;
 			uint64_t mfifo_value;
@@ -1176,11 +1198,10 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 
 #ifdef FI_BGQ_TRACE
 	fprintf(stderr,"process_mfifo_context -  no match found on unexpected queue posting error\n");
+	fflush(stderr);
 #endif
-			/* post an 'error' completion event for the receive - spin loop! */
-			struct l2atomic_fifo_producer * producer =
-				&bgq_ep->recv_cq->err_producer;
-			while(0 != l2atomic_fifo_produce(producer, mfifo_value));
+			fi_bgq_cq_enqueue_err (bgq_ep->recv_cq, ext,0);
+
 		}
 
 	} else if (rx_op_flags & FI_CLAIM) {	/* unlikely */
@@ -1336,6 +1357,9 @@ int poll_mfifo (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, const uint64
 		const uint64_t rx_op_flags = context->flags;
 		const uint64_t is_context_ext = rx_op_flags & FI_BGQ_CQ_CONTEXT_EXT;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"poll_mfifo calling process_mfifo_context\n");
+#endif
 		process_mfifo_context(bgq_ep, poll_msg, cancel_context,
 			context, rx_op_flags, is_context_ext, is_manual_progress);
 
@@ -1391,10 +1415,7 @@ int cancel_match_queue (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg, cons
 			ext->err_entry.prov_errno = 0;
 			ext->err_entry.err_data = NULL;
 
-			/* post an 'error' completion event for the canceled receive - spin loop! */
-			struct l2atomic_fifo_producer * producer =
-				&bgq_ep->recv_cq->err_producer;
-			while(0 != l2atomic_fifo_produce(producer, ((uint64_t)ext) >> 3));
+			fi_bgq_cq_enqueue_err (bgq_ep->recv_cq, ext,0);
 
 			return FI_ECANCELED;
 		}
