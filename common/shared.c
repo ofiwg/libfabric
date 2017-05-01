@@ -1136,6 +1136,38 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		opts->iterations = size_to_count(opts->transfer_size);
 }
 
+static int ft_inject_progress(uint64_t total)
+{
+	struct fi_cq_err_entry comp;
+	int ret;
+
+	if (txcq) {
+		if (opts.comp_method == FT_COMP_SREAD)
+			ret = fi_cq_sread(txcq, &comp, 1, NULL, 0);
+		else
+			ret = fi_cq_read(txcq, &comp, 1);
+		/* Even though we're progressing inject we may get a completion from
+		 * a previous non-inject operation */
+		if (ret > 0)
+			tx_cq_cntr++;
+	} else if (txcntr) {
+		ret = fi_cntr_wait(txcntr, total, 0);
+	} else {
+		return -FI_ENOCQ;
+	}
+
+	if (ret >= 0 || ret == -FI_EAGAIN)
+		return 0;
+
+	if (ret == -FI_EAVAIL) {
+		ret = ft_cq_readerr(txcq);
+		tx_cq_cntr++;
+	} else {
+		FT_PRINTERR("fi_cntr_wait / fi_cq_read/sread", ret);
+	}
+	return ret;
+}
+
 #define FT_POST(post_fn, comp_fn, seq, op_str, ...)				\
 	do {									\
 		int timeout_save;						\
@@ -1197,11 +1229,11 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_conte
 ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
 	if (hints->caps & FI_TAGGED) {
-		FT_POST(fi_tinject, ft_get_tx_comp, tx_seq, "inject",
+		FT_POST(fi_tinject, ft_inject_progress, tx_seq, "inject",
 				ep, tx_buf, size + ft_tx_prefix_size(),
 				fi_addr, tx_seq);
 	} else {
-		FT_POST(fi_inject, ft_get_tx_comp, tx_seq, "inject",
+		FT_POST(fi_inject, ft_inject_progress, tx_seq, "inject",
 				ep, tx_buf, size + ft_tx_prefix_size(),
 				fi_addr);
 	}
@@ -1279,12 +1311,12 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t siz
 {
 	switch (op) {
 	case FT_RMA_WRITE:
-		FT_POST(fi_inject_write, ft_get_tx_comp, tx_seq, "fi_inject_write",
+		FT_POST(fi_inject_write, ft_inject_progress, tx_seq, "fi_inject_write",
 				ep, tx_buf, opts.transfer_size, remote_fi_addr,
 				remote->addr, remote->key);
 		break;
 	case FT_RMA_WRITEDATA:
-		FT_POST(fi_inject_writedata, ft_get_tx_comp, tx_seq,
+		FT_POST(fi_inject_writedata, ft_inject_progress, tx_seq,
 				"fi_inject_writedata", ep, tx_buf, opts.transfer_size,
 				remote_cq_data, remote_fi_addr, remote->addr,
 				remote->key);
