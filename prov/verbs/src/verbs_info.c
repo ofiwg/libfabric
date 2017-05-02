@@ -551,27 +551,21 @@ int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 
 static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 {
-	switch(rai->ai_family) {
-	case AF_INET:
-		fi->addr_format = FI_SOCKADDR_IN;
-		break;
-	case AF_INET6:
-		fi->addr_format = FI_SOCKADDR_IN6;
-		break;
-	case AF_IB:
-		fi->addr_format = FI_SOCKADDR_IB;
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown rai->ai_family\n");
+	fi->addr_format = ofi_translate_addr_format(rai->ai_family);
+	if (fi->addr_format == FI_FORMAT_UNSPEC) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Unknown address format\n");
+		return -FI_EINVAL;
 	}
 
 	if (rai->ai_src_len) {
+		free(fi->src_addr);
  		if (!(fi->src_addr = malloc(rai->ai_src_len)))
  			return -FI_ENOMEM;
  		memcpy(fi->src_addr, rai->ai_src_addr, rai->ai_src_len);
  		fi->src_addrlen = rai->ai_src_len;
  	}
  	if (rai->ai_dst_len) {
+		free(fi->dest_addr);
 		if (!(fi->dest_addr = malloc(rai->ai_dst_len)))
 			return -FI_ENOMEM;
  		memcpy(fi->dest_addr, rai->ai_dst_addr, rai->ai_dst_len);
@@ -833,52 +827,71 @@ err:
 	return ret;
 }
 
-static int fi_ibv_copy_ifaddr(const char *name, const char *service, uint64_t flags,
-		struct fi_info *info)
+static void fi_ibv_verbs_devs_free(struct dlist_entry *verbs_devs)
 {
-	struct rdma_addrinfo *rai;
-	struct fi_info *fi;
-	struct rdma_cm_id *id;
-	int ret;
+	struct verbs_dev_info *dev;
+	struct verbs_addr *addr;
 
-	ret = fi_ibv_get_rdma_rai(name, service, flags, NULL, &rai);
-	if (ret) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-				"rdma_getaddrinfo failed for name:%s\n", name);
-		return ret;
-	}
-	ret = rdma_create_ep(&id, rai, NULL, NULL);
-	if (!ret) {
-		for (fi = info; fi; fi = fi->next)
-			if (!strncmp(id->verbs->device->name, fi->domain_attr->name,
-						strlen(id->verbs->device->name)))
-				break;
-		if (!fi) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-					"No matching fi_info for device: "
-					"%s with address: %s\n",
-					id->verbs->device->name, name);
-		} else {
-			if (fi->src_addr) {
-				free(fi->src_addr);
-				fi->src_addr = NULL;
-			}
-			fi_ibv_rai_to_fi(rai, fi);
+	while (!dlist_empty(verbs_devs)) {
+		dlist_pop_front_container(verbs_devs, dev, entry);
+		while (!dlist_empty(&dev->addrs)) {
+			dlist_pop_front_container(&dev->addrs, addr, entry);
+			rdma_freeaddrinfo(addr->rai);
+			free(addr);
 		}
-		rdma_destroy_ep(id);
+		free(dev->name);
+		free(dev);
 	}
-	rdma_freeaddrinfo(rai);
-	return 0;
 }
 
-static int fi_ibv_getifaddrs(const char *service, uint64_t flags, struct fi_info *info)
+static int fi_ibv_add_rai(struct dlist_entry *verbs_devs, struct rdma_cm_id *id,
+		struct rdma_addrinfo *rai)
+{
+	struct verbs_dev_info *dev;
+	struct verbs_addr *addr;
+	const char *dev_name;
+
+	if (!(addr = malloc(sizeof(*addr))))
+		return -FI_ENOMEM;
+
+	addr->rai = rai;
+
+	dev_name = ibv_get_device_name(id->verbs->device);
+	dlist_foreach_container(verbs_devs, dev, entry)
+		if (!strcmp(dev_name, dev->name))
+			goto add_rai;
+
+	if (!(dev = malloc(sizeof(*dev))))
+		goto err1;
+
+	if (!(dev->name = strdup(dev_name)))
+		goto err2;
+
+	dlist_init(&dev->addrs);
+	dlist_insert_tail(&dev->entry, verbs_devs);
+add_rai:
+	dlist_insert_tail(&addr->entry, &dev->addrs);
+	return 0;
+err2:
+	free(dev);
+err1:
+	free(addr);
+	return -FI_ENOMEM;
+}
+
+/* Builds a list of interfaces that correspond to active verbs devices */
+static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 {
 	struct ifaddrs *ifaddr, *ifa;
 	char name[INET6_ADDRSTRLEN];
+	struct rdma_addrinfo *rai;
+	struct rdma_cm_id *id;
 	const char *ret_ptr;
 	int ret, num_verbs_ifs = 0;
 
-	flags |= FI_NUMERICHOST | FI_SOURCE;
+	char *iface = NULL;
+	size_t iface_len = 0;
+	int exact_match = 0;
 
 	ret = getifaddrs(&ifaddr);
 	if (ret) {
@@ -887,10 +900,34 @@ static int fi_ibv_getifaddrs(const char *service, uint64_t flags, struct fi_info
 		return ret;
 	}
 
+	/* select best iface name based on user's input */
+	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface) == FI_SUCCESS) {
+		iface_len = strlen(iface);
+		if (iface_len > IFNAMSIZ) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				   "Too long iface name: %s, max: %d\n",
+				   iface, IFNAMSIZ);
+			return -FI_EINVAL;
+		}
+		for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
+			exact_match = !strcmp(ifa->ifa_name, iface);
+	}
+
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
 				!strcmp(ifa->ifa_name, "lo"))
 			continue;
+
+		if(iface) {
+			if(exact_match) {
+				if(strcmp(ifa->ifa_name, iface))
+					continue;
+			} else {
+				if(strncmp(ifa->ifa_name, iface, iface_len))
+					continue;
+			}
+		}
+
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			ret_ptr = inet_ntop(AF_INET, &ofi_sin_addr(ifa->ifa_addr),
@@ -907,18 +944,180 @@ static int fi_ibv_getifaddrs(const char *service, uint64_t flags, struct fi_info
 			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
 					"inet_ntop failed: %s(%d)\n",
 					strerror(errno), errno);
-			goto err;
+			goto err1;
 		}
-		ret = fi_ibv_copy_ifaddr(name, service, flags, info);
+
+		ret = fi_ibv_create_ep(name, NULL, FI_NUMERICHOST | FI_SOURCE,
+				NULL, &rai, &id);
 		if (ret)
-			goto err;
+			continue;
+
+		ret = fi_ibv_add_rai(verbs_devs, id, rai);
+		if (ret)
+			goto err2;
+
+		FI_DBG(&fi_ibv_prov, FI_LOG_FABRIC,
+			"Found active interface for verbs device: %s with address: %s\n",
+			ibv_get_device_name(id->verbs->device), name);
+
+		rdma_destroy_ep(id);
+
 		num_verbs_ifs++;
 	}
 	freeifaddrs(ifaddr);
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
-err:
+err2:
+	rdma_destroy_ep(id);
+err1:
+	fi_ibv_verbs_devs_free(verbs_devs);
 	freeifaddrs(ifaddr);
 	return ret;
+}
+
+static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
+{
+	struct fi_info *fi, *add_info;
+	struct fi_info *fi_unconf = NULL, *fi_prev = NULL;
+	struct verbs_dev_info *dev;
+	struct verbs_addr *addr;
+	int ret = 0;
+
+	DEFINE_LIST(verbs_devs);
+
+	ret = fi_ibv_getifaddrs(&verbs_devs);
+	if (ret)
+		return ret;
+
+	if (dlist_empty(&verbs_devs)) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CORE, "No interface address found\n");
+		return 0;
+	}
+
+	for (fi = *info; fi; fi = fi->next) {
+		dlist_foreach_container(&verbs_devs, dev, entry)
+			if (!strncmp(fi->domain_attr->name, dev->name, strlen(dev->name))) {
+				dlist_foreach_container(&dev->addrs, addr, entry) {
+					/* When a device has multiple interfaces/addresses configured
+					 * duplicate fi_info and add the address info. fi->src_addr
+					 * would have been set in the previous iteration */
+					if (fi->src_addr) {
+						if (!(add_info = fi_dupinfo(fi))) {
+							ret = -FI_ENOMEM;
+							goto out;
+						}
+
+						add_info->next = fi->next;
+						fi->next = add_info;
+						fi = add_info;
+					}
+
+					ret = fi_ibv_rai_to_fi(addr->rai, fi);
+					if (ret)
+						goto out;
+				}
+				break;
+			}
+	}
+
+        /* re-order info: move info without src_addr to tail */
+	for (fi = *info; fi;) {
+		if (!fi->src_addr) {
+			/* re-link list - exclude current element */
+			if (fi == *info) {
+				*info = fi->next;
+				fi->next = fi_unconf;
+				fi_unconf = fi;
+				fi = *info;
+			} else {
+				assert(fi_prev);
+				fi_prev->next = fi->next;
+				fi->next = fi_unconf;
+				fi_unconf = fi;
+				fi = fi_prev->next;
+			}
+		} else {
+			fi_prev = fi;
+			fi = fi->next;
+		}
+	}
+
+	/* append excluded elements to tail of list */
+	if (fi_unconf) {
+		if (fi_prev) {
+			assert(!fi_prev->next);
+			fi_prev->next = fi_unconf;
+		} else if (*info) {
+			assert(!(*info)->next);
+			(*info)->next = fi_unconf;
+		} else /* !(*info) */ {
+			(*info) = fi_unconf;
+		}
+	}
+
+out:
+	fi_ibv_verbs_devs_free(&verbs_devs);
+	return ret;
+}
+
+static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
+{
+	switch(sa->sa_family) {
+	case AF_INET:
+		((struct sockaddr_in *)sa)->sin_port = port;
+		break;
+	case AF_INET6:
+		((struct sockaddr_in6 *)sa)->sin6_port = port;
+		break;
+	}
+}
+
+static inline int fi_ibv_is_loopback(struct sockaddr *addr)
+{
+	assert(addr);
+	return addr->sa_family == AF_INET &&
+	       ((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK);
+}
+
+static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
+		struct rdma_cm_id *id)
+{
+	struct fi_info *fi;
+	struct sockaddr *local_addr;
+	int ret;
+
+	if (rai->ai_src_addr && !fi_ibv_is_loopback(rai->ai_src_addr))
+		goto rai_to_fi;
+
+	if (!id->verbs)
+		return fi_ibv_get_srcaddr_devs(info);
+
+	/* Handle the case when rdma_cm doesn't fill src address even
+	 * though it fills the destination address (presence of id->verbs
+	 * corresponds to a valid dest addr) */
+	local_addr = rdma_get_local_addr(id);
+	if (!local_addr) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
+				"Unable to get local address\n");
+		return -FI_ENODATA;
+	}
+
+	rai->ai_src_len = fi_ibv_sockaddr_len(local_addr);
+	if (!(rai->ai_src_addr = malloc(rai->ai_src_len)))
+		return -FI_ENOMEM;
+
+	memcpy(rai->ai_src_addr, local_addr, rai->ai_src_len);
+	/* User didn't specify a port. Zero out the random port
+	 * assigned by rdmamcm so that this rai/fi_info can be
+	 * used multiple times to create rdma endpoints.*/
+	fi_ibv_sockaddr_set_port(rai->ai_src_addr, 0);
+
+rai_to_fi:
+	for (fi = *info; fi; fi = fi->next) {
+		ret = fi_ibv_rai_to_fi(rai, fi);
+		if (ret)
+			return ret;
+	}
+	return 0;
 }
 
 int fi_ibv_init_info(void)
@@ -1036,8 +1235,7 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
 	return NULL;
 }
 
-static int fi_ibv_get_matching_info(const char *domain_name,
-		struct fi_info *hints, struct rdma_addrinfo *rai,
+static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 		struct fi_info **info)
 {
 	struct fi_info *check_info;
@@ -1047,8 +1245,9 @@ static int fi_ibv_get_matching_info(const char *domain_name,
 	*info = tail = NULL;
 
 	for (check_info = verbs_info; check_info; check_info = check_info->next) {
-		if (domain_name && strncmp(check_info->domain_attr->name,
-					   domain_name, strlen(domain_name)))
+		/* Use strncmp since verbs RDM domain name would have "-rdm" suffix */
+		if (dev_name && strncmp(dev_name, check_info->domain_attr->name,
+					strlen(dev_name)))
 			continue;
 
 		if (hints) {
@@ -1061,10 +1260,6 @@ static int fi_ibv_get_matching_info(const char *domain_name,
 			ret = -FI_ENOMEM;
 			goto err1;
 		}
-
-		ret = fi_ibv_rai_to_fi(rai, fi);
-		if (ret)
-			goto err2;
 
 		fi_ibv_update_info(hints, fi);
 
@@ -1079,147 +1274,9 @@ static int fi_ibv_get_matching_info(const char *domain_name,
 		return -FI_ENODATA;
 
 	return 0;
-err2:
-	fi_freeinfo(fi);
 err1:
 	fi_freeinfo(*info);
 	return ret;
-}
-
-static int
-fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
-			 struct fi_ibv_rdm_sysaddr *lo_addr)
-{
-	struct ifaddrs *ifaddr, *ifa;
-	char iface[IFNAMSIZ];
-	char *iface_tmp = "ib";
-	size_t iface_len = 2;
-	int ret;
-
-	if (!iface_addr || !lo_addr) {
-		return -FI_EINVAL;
-	}
-
-	iface_addr->is_found = 0;
-	lo_addr->is_found = 0;
-
-	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
-		iface_len = strlen(iface_tmp);
-		if (iface_len > IFNAMSIZ) {
-			VERBS_INFO(FI_LOG_EP_CTRL,
-				   "Too long iface name: %s, max: %d\n",
-				   iface_tmp, IFNAMSIZ);
-			return -FI_EINVAL;
-		}
-	}
-	strncpy(iface, iface_tmp, iface_len);
-
-	ret = getifaddrs(&ifaddr);
-	if (ret) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-				"Unable to get interface addresses\n");
-		return ret;
-	}
-
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!iface_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
-		    !strncmp(ifa->ifa_name, iface, iface_len)) {
-			memcpy(&iface_addr->addr, ifa->ifa_addr,
-				sizeof(iface_addr->addr));
-			iface_addr->is_found = 1;
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
-				"iface addr %s:%u\n",
-				inet_ntoa(iface_addr->addr.sin_addr),
-				ntohs(iface_addr->addr.sin_port));
-		}
-		if (!lo_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
-		    !strncmp(ifa->ifa_name, "lo", strlen(ifa->ifa_name))) {
-			memcpy(&lo_addr->addr, ifa->ifa_addr, sizeof(lo_addr->addr));
-			lo_addr->is_found = 1;
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "lo addr %s:%u\n",
-				inet_ntoa(lo_addr->addr.sin_addr),
-				ntohs(lo_addr->addr.sin_port));
-		}
-		if (iface_addr->is_found && lo_addr->is_found) {
-			break;
-		}
-	}
-
-	freeifaddrs(ifaddr);
-
-	return 0;
-}
-
-static inline int fi_ibv_retain_info(struct fi_info *info,
-				     struct fi_ibv_rdm_sysaddr *iface_addr,
-				      struct fi_ibv_rdm_sysaddr *lo_addr)
-{
-	struct sockaddr_in *src_addr;
-	int retain = 1;
-
-	assert(info && iface_addr && lo_addr);
-	if (!info || !iface_addr || !lo_addr) {
-		return retain;
-	}
-
-	src_addr = info->src_addr;
-	if (FI_IBV_EP_TYPE_IS_RDM(info)) {
-		retain = 0;
-		if (iface_addr->is_found) {
-			retain = !memcmp(&iface_addr->addr.sin_addr,
-					 &src_addr->sin_addr,
-					 sizeof(src_addr->sin_addr));
-		}
-		if (!retain && lo_addr->is_found) {
-			retain = src_addr && src_addr->sin_port &&
-				!memcmp(&lo_addr->addr.sin_addr,
-					&src_addr->sin_addr,
-					sizeof(src_addr->sin_addr));
-		}
-	}
-
-	FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
-		retain ? "retain %s:%u\n" : "remove %s:%u\n",
-		(src_addr ? inet_ntoa(src_addr->sin_addr) : "n/a"),
-		(src_addr ? ntohs(src_addr->sin_port) : 0));
-
-	return retain;
-}
-
-static int fi_ibv_rdm_remove_nonaddr_info(struct fi_info **info)
-{
-	struct fi_info *fi, *prev, *tmp;
-	struct fi_ibv_rdm_sysaddr iface_addr, lo_addr;
-	int ret;
-
-	ret = fi_ibv_rdm_find_sysaddrs(&iface_addr, &lo_addr);
-	if (ret || (!iface_addr.is_found && !lo_addr.is_found)) {
-		return ret;
-	}
-
-	prev = NULL;
-	fi = *info;
-	while (fi) {
-		if (fi_ibv_retain_info(fi, &iface_addr, &lo_addr)) {
-			prev = fi;
-			fi = fi->next;
-		} else {
-			if (fi == *info) {
-				*info = (*info)->next;
-			}
-
-			if (prev) {
-				prev->next = fi->next;
-			}
-
-			tmp = fi;
-			fi = fi->next;
-			tmp->next = NULL;
-			fi_freeinfo(tmp);
-		}
-	}
-
-	return *info ? 0 : -FI_ENODEV;
 }
 
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
@@ -1227,6 +1284,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
+	const char *dev_name = NULL;
 	int ret;
 
 	ret = fi_ibv_init_info();
@@ -1237,30 +1295,22 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		goto out;
 
-	if (id->verbs) {
-		ret = fi_ibv_get_matching_info(ibv_get_device_name(id->verbs->device),
-					       hints, rai, info);
-	} else {
-		ret = fi_ibv_get_matching_info(NULL, hints, rai, info);
-		if (!ret && !(flags & FI_SOURCE) && !node 
-		&& (!hints || (!hints->src_addr && !hints->dest_addr))) {
-			ret = fi_ibv_getifaddrs(service, flags, *info);
-			if (ret) {
-				fi_freeinfo(*info);
-				fi_ibv_destroy_ep(rai, &id);
-				goto out;
-			}
-		}
-	}
+	if (id->verbs)
+		dev_name = ibv_get_device_name(id->verbs->device);
 
-	if (!ret) {
-		ret = fi_ibv_rdm_remove_nonaddr_info(info);
+	ret = fi_ibv_get_matching_info(dev_name, hints, info);
+	if (ret)
+		goto err;
+
+	ret = fi_ibv_fill_addr(rai, info, id);
+	if (ret) {
+		fi_freeinfo(*info);
+		goto err;
 	}
 
 	ofi_alter_info(*info, hints);
-
+err:
 	fi_ibv_destroy_ep(rai, &id);
-
 out:
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
 		return ret;

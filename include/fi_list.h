@@ -89,8 +89,20 @@ static inline void dlist_remove(struct dlist_entry *item)
 	item->next->prev = item->prev;
 }
 
+#define dlist_pop_front_container(head, container, member) 			\
+	do {									\
+		container = container_of((head)->next, typeof(*container),	\
+				member);					\
+		dlist_remove((head)->next);					\
+	} while (0)
+
 #define dlist_foreach(head, item) \
 	for ((item) = (head)->next; (item) != (head); (item) = (item)->next)
+
+#define dlist_foreach_container(head, container, member) \
+	for (container = container_of((head)->next, typeof(*container), member); \
+		&(container->member) != (head); \
+		container = container_of(container->member.next, typeof(*container), member))
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
