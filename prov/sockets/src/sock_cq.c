@@ -338,12 +338,12 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	else
 		threshold = count;
 
-	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
-		if (timeout >= 0) {
-			start_ms = fi_gettime_ms();
-			end_ms = start_ms + timeout;
-		}
+	if (timeout >= 0) {
+		start_ms = fi_gettime_ms();
+		end_ms = start_ms + timeout;
+	}
 
+	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
 		do {
 			sock_cq_progress(sock_cq);
 			fastlock_acquire(&sock_cq->lock);
@@ -359,8 +359,11 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			}
 		} while (ret == 0);
 	} else {
-		ret = rbfdwait(&sock_cq->cq_rbfd, timeout);
-		if (ret > 0) {
+		do {
+			ret = rbfdwait(&sock_cq->cq_rbfd, timeout);
+			if (ret <= 0)
+				break;
+
 			fastlock_acquire(&sock_cq->lock);
 			ret = 0;
 			avail = rbfdused(&sock_cq->cq_rbfd);
@@ -369,7 +372,13 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 					MIN(threshold, avail / cq_entry_len),
 					src_addr, cq_entry_len);
 			fastlock_release(&sock_cq->lock);
-		}
+
+			if ((ret == -FI_EAGAIN || ret == 0) && timeout >= 0) {
+				timeout = end_ms - fi_gettime_ms();
+				if (timeout <= 0)
+					break;
+			}
+		} while (ret == 0 || ret == -FI_EAGAIN);
 	}
 	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
 }

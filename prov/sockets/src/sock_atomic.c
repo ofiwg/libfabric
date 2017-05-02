@@ -310,6 +310,7 @@ static ssize_t sock_ep_atomic_writev(struct fid_ep *ep,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context)
 {
+	int i;
 	struct fi_msg_atomic msg;
 	struct fi_rma_ioc rma_iov;
 
@@ -320,7 +321,10 @@ static ssize_t sock_ep_atomic_writev(struct fid_ep *ep,
 
 	rma_iov.addr = addr;
 	rma_iov.key = key;
-	rma_iov.count = count;
+
+	for (i = 0, rma_iov.count = 0; i < count; i++)
+		rma_iov.count += iov[i].count;
+
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
 
