@@ -38,6 +38,44 @@
 
 #include "rxm.h"
 
+static int rxm_match_recv_entry(struct dlist_entry *item, const void *arg)
+{
+	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *) arg;
+	struct rxm_recv_entry *recv_entry;
+
+	recv_entry = container_of(item, struct rxm_recv_entry, entry);
+	return rxm_match_addr(recv_entry->addr, attr->addr);
+}
+
+static int rxm_match_recv_entry_tagged(struct dlist_entry *item, const void *arg)
+{
+	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
+	struct rxm_recv_entry *recv_entry;
+
+	recv_entry = container_of(item, struct rxm_recv_entry, entry);
+	return rxm_match_addr(recv_entry->addr, attr->addr) &&
+		rxm_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
+}
+
+static int rxm_match_unexp_msg(struct dlist_entry *item, const void *arg)
+{
+	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
+	struct rxm_unexp_msg *unexp_msg;
+
+	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
+	return rxm_match_addr(unexp_msg->addr, attr->addr);
+}
+
+static int rxm_match_unexp_msg_tagged(struct dlist_entry *item, const void *arg)
+{
+	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
+	struct rxm_unexp_msg *unexp_msg;
+
+	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
+	return rxm_match_addr(attr->tag, unexp_msg->addr) &&
+		rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
+}
+
 static void rxm_mr_buf_close(void *pool_ctx, void *context)
 {
 	/* We would get a (fid_mr *) in context but it is safe to cast it into (fid *) */
@@ -112,13 +150,17 @@ static int rxm_buf_pool_create(int local_mr, size_t count, size_t size,
 	return 0;
 }
 
-static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size)
+static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
+			       dlist_func_t match_recv,
+			       dlist_func_t match_unexp)
 {
 	recv_queue->recv_fs = rxm_recv_fs_create(size);
 	if (!recv_queue->recv_fs)
 		return -FI_ENOMEM;
 	dlist_init(&recv_queue->recv_list);
 	dlist_init(&recv_queue->unexp_msg_list);
+	recv_queue->match_recv = match_recv;
+	recv_queue->match_unexp = match_unexp;
 	return 0;
 }
 
@@ -161,11 +203,14 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 
 	ofi_key_idx_init(&rxm_ep->tx_key_idx, fi_size_bits(rxm_ep->rxm_info->tx_attr->size));
 
-	ret = rxm_recv_queue_init(&rxm_ep->recv_queue, rxm_ep->rxm_info->rx_attr->size);
+	ret = rxm_recv_queue_init(&rxm_ep->recv_queue, rxm_ep->rxm_info->rx_attr->size,
+				  rxm_match_recv_entry, rxm_match_unexp_msg);
 	if (ret)
 		goto err3;
 
-	ret = rxm_recv_queue_init(&rxm_ep->trecv_queue, rxm_ep->rxm_info->rx_attr->size);
+	ret = rxm_recv_queue_init(&rxm_ep->trecv_queue, rxm_ep->rxm_info->rx_attr->size,
+				  rxm_match_recv_entry_tagged,
+				  rxm_match_unexp_msg_tagged);
 	if (ret)
 		goto err4;
 
@@ -297,25 +342,6 @@ static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
 	return rxm_ep->rxm_info->rx_attr->op_flags;
 }
 
-static int ofi_match_unexp_msg(struct dlist_entry *item, const void *arg)
-{
-	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
-	struct rxm_unexp_msg *unexp_msg;
-
-	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_addr(unexp_msg->addr, attr->addr);
-}
-
-static int ofi_match_unexp_msg_tagged(struct dlist_entry *item, const void *arg)
-{
-	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
-	struct rxm_unexp_msg *unexp_msg;
-
-	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_addr(attr->tag, unexp_msg->addr) &&
-		rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
-}
-
 static int rxm_check_unexp_msg_list(struct util_cq *util_cq, struct rxm_recv_queue *recv_queue,
 		struct rxm_recv_entry *recv_entry, dlist_func_t *match)
 {
@@ -350,30 +376,14 @@ out:
 	return ret;
 }
 
-int rxm_ep_recv_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-		void *context, uint64_t flags, int op)
+static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
+			      void **desc, size_t count, fi_addr_t src_addr,
+			      uint64_t tag, uint64_t ignore, void *context,
+			      uint64_t flags, struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_recv_entry *recv_entry;
-	struct rxm_ep *rxm_ep;
-	struct rxm_recv_queue *recv_queue;
-	dlist_func_t *match;
 	int ret;
 	size_t i;
-
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-
-	// TODO pass recv_queue as arg
-	if (op == ofi_op_msg) {
-		recv_queue = &rxm_ep->recv_queue;
-		match = ofi_match_unexp_msg;
-	} else if (op == ofi_op_tagged) {
-		recv_queue = &rxm_ep->trecv_queue;
-		match = ofi_match_unexp_msg_tagged;
-	} else {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "Unknown op!\n");
-		return -FI_EINVAL;
-	}
 
 	if (freestack_isempty(recv_queue->recv_fs)) {
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Exhaused recv_entry freestack\n");
@@ -393,14 +403,12 @@ int rxm_ep_recv_common(struct fid_ep *ep_fid, const struct iovec *iov, void **de
 	recv_entry->addr = (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) ?
 		src_addr : FI_ADDR_UNSPEC;
 	recv_entry->flags = flags;
-	if (op == ofi_op_tagged) {
-		recv_entry->tag = tag;
-		recv_entry->ignore = ignore;
-	}
+	recv_entry->tag = tag;
+	recv_entry->ignore = ignore;
 
 	if (!dlist_empty(&recv_queue->unexp_msg_list)) {
 		ret = rxm_check_unexp_msg_list(rxm_ep->util_ep.rx_cq, recv_queue,
-				recv_entry, match);
+				recv_entry, recv_queue->match_unexp);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 					"Unable to check unexp msg list\n");
@@ -415,29 +423,40 @@ int rxm_ep_recv_common(struct fid_ep *ep_fid, const struct iovec *iov, void **de
 static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 			       uint64_t flags)
 {
-	return rxm_ep_recv_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
-			msg->addr, 0, 0, msg->context,
-			flags  | (rxm_ep_rx_flags(ep_fid) & FI_COMPLETION),
-			ofi_op_msg);
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
+
+	return rxm_ep_recv_common(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
+				  msg->addr, 0, 0, msg->context,
+				  flags | (rxm_ep_rx_flags(ep_fid) & FI_COMPLETION),
+				  &rxm_ep->recv_queue);
 }
 
 static ssize_t rxm_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 			    fi_addr_t src_addr, void *context)
 {
+	struct rxm_ep *rxm_ep;
 	struct iovec iov;
 	memset(&iov, 0, sizeof(iov));
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
-	return rxm_ep_recv_common(ep_fid, &iov, &desc, 1, src_addr, 0, 0,
-			context, rxm_ep_rx_flags(ep_fid), ofi_op_msg);
+	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+
+	return rxm_ep_recv_common(rxm_ep, &iov, &desc, 1, src_addr, 0, 0,
+				  context, rxm_ep_rx_flags(ep_fid),
+				  &rxm_ep->recv_queue);
 }
 
 static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 		void **desc, size_t count, fi_addr_t src_addr, void *context)
 {
-	return rxm_ep_recv_common(ep_fid, iov, desc, count, src_addr, 0, 0,
-			context, rxm_ep_rx_flags(ep_fid), ofi_op_msg);
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
+
+	return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr, 0, 0,
+				  context, rxm_ep_rx_flags(ep_fid),
+				  &rxm_ep->recv_queue);
 }
 
 static void rxm_op_hdr_process_flags(struct ofi_op_hdr *hdr, uint64_t flags,
@@ -717,10 +736,13 @@ static struct fi_ops_msg rxm_ops_msg = {
 ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 			 uint64_t flags)
 {
-	return rxm_ep_recv_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
-			msg->addr, msg->tag, msg->ignore, msg->context,
-			flags | (rxm_ep_rx_flags(ep_fid) & FI_COMPLETION),
-			ofi_op_tagged);
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
+
+	return rxm_ep_recv_common(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
+				  msg->addr, msg->tag, msg->ignore, msg->context,
+				  flags | (rxm_ep_rx_flags(ep_fid) & FI_COMPLETION),
+				  &rxm_ep->trecv_queue);
 }
 
 static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
@@ -730,16 +752,24 @@ static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
-	return rxm_ep_recv_common(ep_fid, &iov, &desc, 1, src_addr, tag, ignore,
-			context, rxm_ep_rx_flags(ep_fid), ofi_op_tagged);
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
+
+	return rxm_ep_recv_common(rxm_ep, &iov, &desc, 1, src_addr, tag, ignore,
+				  context, rxm_ep_rx_flags(ep_fid),
+				  &rxm_ep->trecv_queue);
 }
 
 ssize_t rxm_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 		void *context)
 {
-	return rxm_ep_recv_common(ep_fid, iov, desc, count, src_addr, tag, ignore,
-			context, rxm_ep_rx_flags(ep_fid), ofi_op_tagged);
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
+
+	return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr, tag,
+				  ignore, context, rxm_ep_rx_flags(ep_fid),
+				  &rxm_ep->trecv_queue);
 }
 
 ssize_t rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,

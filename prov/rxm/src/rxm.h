@@ -243,6 +243,8 @@ struct rxm_recv_queue {
 	struct rxm_recv_fs *recv_fs;
 	struct dlist_entry recv_list;
 	struct dlist_entry unexp_msg_list;
+	dlist_func_t *match_recv;
+	dlist_func_t *match_unexp;
 };
 
 struct rxm_buf_pool {
