@@ -1151,6 +1151,8 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 				return ret;					\
 			}							\
 										\
+			if (fi->domain_attr->data_progress == FI_PROGRESS_AUTO)	\
+				continue;					\
 			timeout_save = timeout;					\
 			timeout = 0;						\
 			rc = comp_fn(seq);					\
