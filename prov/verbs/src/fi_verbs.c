@@ -171,7 +171,6 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id)
 {
 	struct rdma_addrinfo *_rai;
-	struct sockaddr *local_addr;
 	int ret;
 
 	ret = fi_ibv_get_rdma_rai(node, service, flags, hints, &_rai);
@@ -185,15 +184,6 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		ret = -errno;
 		goto err1;
 	}
-	if (rai && !_rai->ai_src_addr) {
-		local_addr = rdma_get_local_addr(*id);
-		_rai->ai_src_len = fi_ibv_sockaddr_len(local_addr);
-		if (!(_rai->ai_src_addr = malloc(_rai->ai_src_len))) {
-			ret = -FI_ENOMEM;
-			goto err2;
-		}
-		memcpy(_rai->ai_src_addr, local_addr, _rai->ai_src_len);
-	}
 
 	if (rai) {
 		*rai = _rai;
@@ -202,8 +192,6 @@ int fi_ibv_create_ep(const char *node, const char *service,
 	}
 
 	return ret;
-err2:
-	rdma_destroy_ep(*id);
 err1:
 	rdma_freeaddrinfo(_rai);
 

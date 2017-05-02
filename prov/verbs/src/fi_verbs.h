@@ -103,6 +103,16 @@
 
 extern struct fi_provider fi_ibv_prov;
 
+struct verbs_addr {
+	struct dlist_entry entry;
+	struct rdma_addrinfo *rai;
+};
+
+struct verbs_dev_info {
+	struct dlist_entry entry;
+	char *name;
+	struct dlist_entry addrs;
+};
 
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
