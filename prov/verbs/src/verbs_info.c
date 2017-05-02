@@ -889,6 +889,10 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	const char *ret_ptr;
 	int ret, num_verbs_ifs = 0;
 
+	char *iface = NULL;
+	size_t iface_len = 0;
+	int exact_match = 0;
+
 	ret = getifaddrs(&ifaddr);
 	if (ret) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
@@ -896,11 +900,34 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 		return ret;
 	}
 
+	/* select best iface name based on user's input */
+	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface) == FI_SUCCESS) {
+		iface_len = strlen(iface);
+		if (iface_len > IFNAMSIZ) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				   "Too long iface name: %s, max: %d\n",
+				   iface, IFNAMSIZ);
+			return -FI_EINVAL;
+		}
+		for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
+			exact_match = !strcmp(ifa->ifa_name, iface);
+	}
+
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
 				!strcmp(ifa->ifa_name, "lo"))
 			continue;
-		// TODO call a function here that filters ifa based on interface name
+
+		if(iface) {
+			if(exact_match) {
+				if(strcmp(ifa->ifa_name, iface))
+					continue;
+			} else {
+				if(strncmp(ifa->ifa_name, iface, iface_len))
+					continue;
+			}
+		}
+
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			ret_ptr = inet_ntop(AF_INET, &ofi_sin_addr(ifa->ifa_addr),
@@ -1209,70 +1236,6 @@ err1:
 	return ret;
 }
 
-static int
-fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
-			 struct fi_ibv_rdm_sysaddr *lo_addr)
-{
-	struct ifaddrs *ifaddr, *ifa;
-	char iface[IFNAMSIZ];
-	char *iface_tmp = "ib";
-	size_t iface_len = 2;
-	int ret;
-
-	if (!iface_addr || !lo_addr) {
-		return -FI_EINVAL;
-	}
-
-	iface_addr->is_found = 0;
-	lo_addr->is_found = 0;
-
-	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
-		iface_len = strlen(iface_tmp);
-		if (iface_len > IFNAMSIZ) {
-			VERBS_INFO(FI_LOG_EP_CTRL,
-				   "Too long iface name: %s, max: %d\n",
-				   iface_tmp, IFNAMSIZ);
-			return -FI_EINVAL;
-		}
-	}
-	strncpy(iface, iface_tmp, iface_len);
-
-	ret = getifaddrs(&ifaddr);
-	if (ret) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-				"Unable to get interface addresses\n");
-		return ret;
-	}
-
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!iface_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
-		    !strncmp(ifa->ifa_name, iface, iface_len)) {
-			memcpy(&iface_addr->addr, ifa->ifa_addr,
-				sizeof(iface_addr->addr));
-			iface_addr->is_found = 1;
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
-				"iface addr %s:%u\n",
-				inet_ntoa(iface_addr->addr.sin_addr),
-				ntohs(iface_addr->addr.sin_port));
-		}
-		if (!lo_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
-		    !strncmp(ifa->ifa_name, "lo", strlen(ifa->ifa_name))) {
-			memcpy(&lo_addr->addr, ifa->ifa_addr, sizeof(lo_addr->addr));
-			lo_addr->is_found = 1;
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "lo addr %s:%u\n",
-				inet_ntoa(lo_addr->addr.sin_addr),
-				ntohs(lo_addr->addr.sin_port));
-		}
-		if (iface_addr->is_found && lo_addr->is_found) {
-			break;
-		}
-	}
-
-	freeifaddrs(ifaddr);
-
-	return 0;
-}
-
 static inline int fi_ibv_retain_info(struct fi_info *info,
 				     struct fi_ibv_rdm_sysaddr *iface_addr,
 				      struct fi_ibv_rdm_sysaddr *lo_addr)
@@ -1309,42 +1272,6 @@ static inline int fi_ibv_retain_info(struct fi_info *info,
 	return retain;
 }
 
-static int fi_ibv_rdm_remove_nonaddr_info(struct fi_info **info)
-{
-	struct fi_info *fi, *prev, *tmp;
-	struct fi_ibv_rdm_sysaddr iface_addr, lo_addr;
-	int ret;
-
-	ret = fi_ibv_rdm_find_sysaddrs(&iface_addr, &lo_addr);
-	if (ret || (!iface_addr.is_found && !lo_addr.is_found)) {
-		return ret;
-	}
-
-	prev = NULL;
-	fi = *info;
-	while (fi) {
-		if (fi_ibv_retain_info(fi, &iface_addr, &lo_addr)) {
-			prev = fi;
-			fi = fi->next;
-		} else {
-			if (fi == *info) {
-				*info = (*info)->next;
-			}
-
-			if (prev) {
-				prev->next = fi->next;
-			}
-
-			tmp = fi;
-			fi = fi->next;
-			tmp->next = NULL;
-			fi_freeinfo(tmp);
-		}
-	}
-
-	return *info ? 0 : -FI_ENODEV;
-}
-
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
@@ -1369,13 +1296,6 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		goto err;
 
 	ret = fi_ibv_fill_addr(flags, rai, *info, id);
-	if (ret) {
-		fi_freeinfo(*info);
-		goto err;
-	}
-
-	// TODO remove this and add a filtering function within fi_ibv_getifaddrs
-	ret = fi_ibv_rdm_remove_nonaddr_info(info);
 	if (ret) {
 		fi_freeinfo(*info);
 		goto err;
