@@ -1015,12 +1015,12 @@ static int fi_ibv_fill_addr(uint64_t flags, struct rdma_addrinfo *rai,
 	struct sockaddr *local_addr;
 	int ret;
 
-	if (id->verbs) {
-		assert(!info->next);
+	/* Just FI_SOURCE would correspond to a wildcard address */
+	if (id->verbs || (flags & FI_SOURCE)) {
 		/* Handle the case when rdma_cm doesn't fill src address even
 		 * though it fills the destination address (presence of id->verbs
 		 * corresponds to a valid dest addr) */
-		if (!rai->ai_src_addr) {
+		if (id->verbs && !rai->ai_src_addr) {
 			local_addr = rdma_get_local_addr(id);
 			if (!local_addr) {
 				FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
@@ -1039,20 +1039,15 @@ static int fi_ibv_fill_addr(uint64_t flags, struct rdma_addrinfo *rai,
 			fi_ibv_sockaddr_set_port(rai->ai_src_addr, 0);
 		}
 
-		return fi_ibv_rai_to_fi(rai, info);
-	}
-
-	/* This would correspond to a wildcard address */
-	if (flags & FI_SOURCE) {
 		for (fi = info; fi; fi = fi->next) {
 			ret = fi_ibv_rai_to_fi(rai, fi);
 			if (ret)
 				return ret;
 		}
 		return 0;
+	} else {
+		return fi_ibv_get_srcaddr_devs(info);
 	}
-
-	return fi_ibv_get_srcaddr_devs(info);
 }
 
 int fi_ibv_init_info(void)
@@ -1170,7 +1165,8 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
 	return NULL;
 }
 
-static int fi_ibv_get_matching_info(struct fi_info *hints, struct fi_info **info)
+static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
+		struct fi_info **info)
 {
 	struct fi_info *check_info;
 	struct fi_info *fi, *tail;
@@ -1179,6 +1175,11 @@ static int fi_ibv_get_matching_info(struct fi_info *hints, struct fi_info **info
 	*info = tail = NULL;
 
 	for (check_info = verbs_info; check_info; check_info = check_info->next) {
+		/* Use strncmp since verbs RDM domain name would have "-rdm" suffix */
+		if (dev_name && strncmp(dev_name, check_info->domain_attr->name,
+					strlen(dev_name)))
+			continue;
+
 		if (hints) {
 			ret = fi_ibv_check_hints(hints, check_info);
 			if (ret)
@@ -1349,6 +1350,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
+	const char *dev_name = NULL;
 	int ret;
 
 	ret = fi_ibv_init_info();
@@ -1359,13 +1361,10 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		goto out;
 
-	if (id->verbs) {
-		hints->domain_attr->name = strdup(ibv_get_device_name(id->verbs->device));
-		if (!hints->domain_attr->name)
-			goto err;
-	}
+	if (id->verbs)
+		dev_name = ibv_get_device_name(id->verbs->device);
 
-	ret = fi_ibv_get_matching_info(hints, info);
+	ret = fi_ibv_get_matching_info(dev_name, hints, info);
 	if (ret)
 		goto err;
 
