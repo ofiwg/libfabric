@@ -337,8 +337,10 @@ static int run_ops(void)
 
 	for (op_type = FI_MIN; op_type < FI_ATOMIC_OP_LAST; op_type++) {
 		ret = run_op();
-		if (ret != -FI_ENOSYS && ret != -FI_EOPNOTSUPP)
+		if (ret && ret != -FI_ENOSYS && ret != -FI_EOPNOTSUPP) {
+			FT_PRINTERR("run_op", ret);
 			return ret;
+		}
 	}
 
 	return 0;
