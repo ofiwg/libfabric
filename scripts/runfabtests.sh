@@ -275,7 +275,7 @@ function unit_test {
 	local test=$1
 	local is_neg=$2
 	local ret1=0
-	local test_exe=$(echo "fi_${test} -p $PROV" | \
+	local test_exe=$(echo "fi_${test} -p \"$PROV\"" | \
 	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${S_INTERFACE}/g")
 	local start_time
 	local end_time
@@ -326,7 +326,7 @@ function cs_test {
 	local test=$1
 	local ret1=0
 	local ret2=0
-	local test_exe="fi_${test} -p ${PROV}"
+	local test_exe="fi_${test} -p \"${PROV}\""
 	local start_time
 	local end_time
 	local test_time
@@ -398,7 +398,7 @@ function complex_test {
 	p1=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE -p ${PROV} -t $config $S_INTERFACE"
+	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE -p \"${PROV}\" -t $config $S_INTERFACE"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "$c_cmd" &> $c_outp &
 	p2=$!
 
