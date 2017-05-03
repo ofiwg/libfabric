@@ -93,25 +93,35 @@
 #define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
 #define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
 
-#define FI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str,type)	\
-	do {									\
-		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",		\
-				fi_tostr(&prov_attr, type));			\
-		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",		\
-				fi_tostr(&user_attr, type));			\
+#define FI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type)	\
+	do {										\
+		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",			\
+				fi_tostr(&prov_attr, type));				\
+		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",			\
+				fi_tostr(&user_attr, type));				\
 	} while (0)
 
-#define FI_INFO_CHECK(provider, prov, user, field, type) \
-	FI_INFO_FIELD(provider, prov->field, user->field, "Supported",\
+#define FI_INFO_STRING(provider, prov_attr, user_attr, prov_str, user_str)	\
+	do {									\
+		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n", prov_attr);	\
+		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n", user_attr);	\
+	} while (0)
+
+#define FI_INFO_CHECK(provider, prov, user, field, type)		\
+	FI_INFO_FIELD(provider, prov->field, user->field, "Supported",	\
 		      "Requested", type)
 
-#define FI_INFO_MODE(provider, prov_mode, user_mode) \
-	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",\
+#define FI_INFO_MODE(provider, prov_mode, user_mode)				\
+	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
 		      FI_TYPE_MODE)
 
-#define FI_INFO_MR_MODE(provider, prov_mode, user_mode) \
-	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",\
+#define FI_INFO_MR_MODE(provider, prov_mode, user_mode)			\
+	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
 		      FI_TYPE_MR_MODE)
+
+#define FI_INFO_NAME(provider, prov, user)				\
+	FI_INFO_STRING(provider, prov->name, user->name, "Supported",	\
+		       "Requested")
 
 enum {
 	UTIL_TX_SHARED_CTX = 1 << 0,

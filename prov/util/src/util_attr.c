@@ -394,7 +394,7 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
  * mode bit in prov_mode. Support for FI_MR_SCALABLE is indicated by not setting
  * any of OFI_MR_BASIC_MAP bits. */
 int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
-			     uint32_t user_mode)
+		      uint32_t user_mode)
 {
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
 		prov_mode &= ~FI_MR_LOCAL; /* ignore local bit */
@@ -433,8 +433,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	if (prov_attr->name && user_attr->name &&
 	    strcasecmp(user_attr->name, prov_attr->name)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, name,
-			      FI_TYPE_DOMAIN_ATTR);
+		FI_INFO_NAME(prov, prov_attr, user_attr);
 		return -FI_ENODATA;
 	}
 
