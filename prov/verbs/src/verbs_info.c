@@ -342,13 +342,13 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if (hints->caps & ~(info->caps)) {
 		VERBS_INFO(FI_LOG_CORE, "Unsupported capabilities\n");
-		FI_INFO_CHECK(&fi_ibv_prov, hints, info, caps, FI_TYPE_CAPS);
+		FI_INFO_CHECK(&fi_ibv_prov, info, hints, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
 	if ((hints->mode & info->mode) != info->mode) {
 		VERBS_INFO(FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(&fi_ibv_prov, hints->mode, info->mode);
+		FI_INFO_MODE(&fi_ibv_prov, info->mode, hints->mode);
 		return -FI_ENODATA;
 	}
 
