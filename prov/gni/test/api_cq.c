@@ -291,6 +291,44 @@ void api_cq_recv_allowed(ssize_t sz, uint64_t flags, char *fn)
 TestSuite(api_cq, .init = api_cq_setup, .fini = api_cq_teardown,
 	  .disabled = false);
 
+void api_cq_wait1(struct fid_cq *cq0, uint64_t cq_bind_flags)
+{
+	int ret;
+	struct fi_cq_tagged_entry cqe;
+
+	if (!cq_bind_flags)
+		return;
+
+	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN);
+	cr_assert(ret > 0);
+}
+
+void api_cq_wait2(struct fid_cq *cq0, struct fid_cq *cq1,
+		  uint64_t check_send, uint64_t check_rcv)
+{
+	int ret;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+
+	if (!check_send)
+		source_done = 1;
+
+	if (!check_rcv)
+		dest_done = 1;
+
+	do {
+		ret = fi_cq_read(cq0, &s_cqe, 1);
+		if (ret == 1) {
+			source_done = 1;
+		}
+
+		ret = fi_cq_read(cq1, &d_cqe, 1);
+		if (ret == 1) {
+			dest_done = 1;
+		}
+	} while (!(source_done && dest_done));
+}
+
 void api_cq_send_recv(int len)
 {
 	ssize_t sz;
@@ -310,15 +348,24 @@ void api_cq_send_recv(int len)
 	sz = fi_recv(ep[1], target, len, rem_mr[1], gni_addr[0], source);
 	api_cq_recv_allowed(sz, cq_bind_flags, "fi_recv");
 
+	/* don't expect a recv cq if we can't send and vice versa */
+	api_cq_wait2(msg_cq[0], msg_cq[1],
+		     (cq_bind_flags & FI_SEND) && (cq_bind_flags & FI_RECV),
+		     (cq_bind_flags & FI_SEND) && (cq_bind_flags & FI_RECV));
+
 	sz = fi_write(ep[0], source, len,
 		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
 		      target);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_write");
 
+	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
+
 	sz = fi_writev(ep[0], &iov, (void **)loc_mr, 1,
 		       gni_addr[1], (uint64_t)target, mr_key[1],
 		       target);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_writev");
+
+	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
 
 	iov.iov_len = len;
 	iov.iov_base = source;
@@ -337,6 +384,8 @@ void api_cq_send_recv(int len)
 
 	sz = fi_writemsg(ep[0], &rma_msg, 0);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_writemsg");
+
+	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
 
 #define WRITE_DATA 0x5123da1a145
 	sz = fi_writedata(ep[0], source, len, loc_mr[0], WRITE_DATA,
@@ -361,6 +410,8 @@ void api_cq_send_recv(int len)
 	sz = fi_inject_write(ep[0], source, 64,
 			     gni_addr[1], (uint64_t)target, mr_key[1]);
 	cr_assert_eq(sz, 0);
+
+	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
 }
 
 Test(api_cq, msg)
@@ -411,6 +462,8 @@ void api_cq_atomic(void)
 			      gni_addr[1], (uint64_t)target, mr_key[1],
 			      FI_INT64, FI_MIN);
 	cr_assert_eq(sz, 0);
+
+	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
 }
 
 Test(api_cq, atomic)
