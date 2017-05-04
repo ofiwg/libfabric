@@ -5,6 +5,38 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.4.2, Fri May  5, 2017
+========================
+
+## Core
+
+- Fix for OS X clock_gettime() portability issue.
+
+## PSM provider notes
+
+- Updated default counter wait object for improved performance
+- Fix multi-threaded RMA progress stalls
+
+## PSM2 provider notes
+
+- Updated default counter wait object for improved performance
+- Fix multi-threaded RMA progress stalls
+
+## Sockets provider notes
+
+- Fix error in fi_cq_sreadfrom aborting before timeout expires
+- Set atomic iov count correct correctly inside fi_atomicv
+
+## Verbs provider notes
+
+- Fix handling of apps that call fork.  Move ibv_fork_init() before
+  calling any other verbs call.
+- Fix crash in fi_write when connection is not yet established and
+  write data size is below inline threshold.
+- Fix issues not handling multiple ipoib interfaces
+- Reduce lock contention on buffer pools in send/completion handling
+  code.
+
 v1.4.1, Fri Feb  3, 2017
 ========================
 
