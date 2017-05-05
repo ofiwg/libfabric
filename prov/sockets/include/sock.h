@@ -233,7 +233,7 @@ struct sock_domain {
 };
 
 struct sock_trigger {
-	enum fi_trigger_op op_type;
+	enum fi_op_type op_type;
 	size_t threshold;
 	struct dlist_entry entry;
 
@@ -1166,15 +1166,15 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 
 int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work);
 ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
-			  uint64_t flags, enum fi_trigger_op op_type);
+			  uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			     const struct fi_ioc *comparev, size_t compare_count,
 			     struct fi_ioc *resultv, size_t result_count,
-			     uint64_t flags, enum fi_trigger_op op_type);
+			     uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-			   uint64_t flags, enum fi_trigger_op op_type);
+			   uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
-			  uint64_t flags, enum fi_trigger_op op_type);
+			  uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags);
 void sock_cntr_check_trigger_list(struct sock_cntr *cntr);
 

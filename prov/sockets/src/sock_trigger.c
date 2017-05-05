@@ -44,7 +44,7 @@
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
-			  uint64_t flags, enum fi_trigger_op op_type)
+			  uint64_t flags, enum fi_op_type op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
@@ -87,7 +87,7 @@ ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 }
 
 ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
-			  uint64_t flags, enum fi_trigger_op op_type)
+			  uint64_t flags, enum fi_op_type op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
@@ -127,7 +127,7 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 }
 
 ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-			   uint64_t flags, enum fi_trigger_op op_type)
+			   uint64_t flags, enum fi_op_type op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
@@ -169,7 +169,7 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			     const struct fi_ioc *comparev, size_t compare_count,
 			     struct fi_ioc *resultv, size_t result_count,
-			     uint64_t flags, enum fi_trigger_op op_type)
+			     uint64_t flags, enum fi_op_type op_type)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
@@ -225,14 +225,9 @@ ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
 {
 	struct sock_cntr *cntr;
 	struct sock_trigger *trigger;
-	struct fi_trigger_threshold *threshold;
 
-	if (work->event_type != FI_TRIGGER_THRESHOLD)
-		return -FI_ENOSYS;
-
-	threshold = work->event.threshold;
-	cntr = container_of(threshold->cntr, struct sock_cntr, cntr_fid);
-	if (ofi_atomic_get32(&cntr->value) >= (int) threshold->threshold) {
+	cntr = container_of(work->triggering_cntr, struct sock_cntr, cntr_fid);
+	if (ofi_atomic_get32(&cntr->value) >= (int) work->threshold) {
 		if (work->op_type == FI_OP_CNTR_SET)
 			fi_cntr_set(work->op.cntr->cntr, work->op.cntr->value);
 		else
@@ -246,7 +241,7 @@ ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
 
 	trigger->work = work;
 	trigger->op_type = work->op_type;
-	trigger->threshold = threshold->threshold;
+	trigger->threshold = work->threshold;
 	trigger->flags = flags;
 
 	fastlock_acquire(&cntr->trigger_lock);
@@ -260,9 +255,6 @@ int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
 {
 	struct fi_triggered_context *ctx;
 
-	if (work->event_type != FI_TRIGGER_THRESHOLD)
-		return -FI_ENOSYS;
-
 	/* We require the operation's context to point back to the fi_context
 	 * embedded within the deferred work item.  This is an implementation
 	 * limitation, which we may turn into a requirement.  The app must
@@ -270,8 +262,9 @@ int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
 	 * processing anyway.
 	 */
 	ctx = (struct fi_triggered_context *) &work->context;
-	ctx->event_type = work->event_type;
-	ctx->trigger.threshold = *work->event.threshold;
+	ctx->event_type = FI_TRIGGER_THRESHOLD;
+	ctx->trigger.threshold.cntr = work->triggering_cntr;
+	ctx->trigger.threshold.threshold = work->threshold;
 
 	switch (work->op_type) {
 	case FI_OP_RECV:
