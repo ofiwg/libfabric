@@ -5,7 +5,7 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.4.2, Fri May  5, 2017
+v1.4.2, Fri May 12, 2017
 ========================
 
 ## Core
