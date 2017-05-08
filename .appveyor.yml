@@ -9,3 +9,16 @@ configuration:
 
 before_build:
   - ps: .appveyor.ps1 -Verbose
+
+after_build:
+  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
+  - cd ..
+
+before_test:
+  - git clone https://github.com/ofiwg/fabtests
+  - cd fabtests
+  - msbuild fabtests.sln
+
+test_script:
+  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
+  - scripts\runfabtests.cmd
