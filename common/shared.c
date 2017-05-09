@@ -1151,7 +1151,7 @@ static int ft_inject_progress(uint64_t total)
 		if (ret > 0)
 			tx_cq_cntr++;
 	} else if (txcntr) {
-		ret = fi_cntr_wait(txcntr, total, 0);
+		return fi_cntr_wait(txcntr, total, 0);
 	} else {
 		return -FI_ENOCQ;
 	}
