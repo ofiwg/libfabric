@@ -10,7 +10,7 @@ configuration:
 before_build:
   - ps: Invoke-WebRequest -Uri "https://download.microsoft.com/download/5/A/E/5AEA3C34-32A1-4A70-9622-F9734E92981F/NetworkDirect_DDK.zip" -OutFile "NetworkDirect_DDK.zip"
   - ps: '$wd=$PWD.Path; & { Add-Type -A "System.IO.Compression.FileSystem"; [IO.Compression.ZipFile]::ExtractToDirectory("$wd\NetworkDirect_DDK.zip", "$wd"); }'
-  - ps: mkdir prov\netdir\NetDirect
+  - ps: mkdir -f prov\netdir\NetDirect
   - ps: move "NetDirect\include\*" "prov\netdir\NetDirect"
   - ps: >
           $tool="v140";
