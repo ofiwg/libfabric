@@ -1224,6 +1224,40 @@ select and poll semantics, active socket endpoints are associated with a
 file descriptor that is signaled whenever the endpoint is ready to send
 and/or receive data.  The file descriptor may be retrieved using fi_control.
 
+# SOCKET ENDPOINTS
+
+This section applies to endpoints of type FI_EP_SOCK_STREAM and
+FI_EP_SOCK_DGRAM, commonly referred to as socket endpoints.
+
+Socket endpoints are defined with semantics that allow them to more
+easily be adopted by developers familiar with the UNIX socket API, or
+by middleware that exposes the socket API, while still taking advantage
+of high-performance hardware features.
+
+The key difference between socket endpoints and other active endpoints
+are socket endpoints use synchronous data transfers.  Buffers passed
+into send and receive operations revert to the control of the application
+upon returning from the function call.  As a result, no data transfer
+completions are reported to the application, and socket endpoints are not
+associated with completion queues or counters.
+
+Socket endpoints support a subset of message operations: fi_send,
+fi_sendv, fi_sendmsg, fi_recv, fi_recvv, fi_recvmsg, and fi_inject.
+Because data transfers are synchronous, the return value from send and receive
+operations indicate the number of bytes transferred on success, or a negative
+value on error, including -FI_EAGAIN if the endpoint cannot send or
+receive any data because of full or empty queues, respectively.
+
+Socket endpoints are associated with event queues and address vectors, and
+process connection management events asynchronously, similar to other endpoints.
+Unlike UNIX sockets, socket endpoint must still be declared as either active
+or passive.
+
+Socket endpoints behave like non-blocking sockets.  In order to support
+select and poll semantics, active socket endpoints are associated with a
+file descriptor that is signaled whenever the endpoint is ready to send
+and/or receive data.  The file descriptor may be retrieved using fi_control.
+
 # OPERATION FLAGS
 
 Operation flags are obtained by OR-ing the following flags together.
