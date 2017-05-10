@@ -106,6 +106,7 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 	ret = ofi_get_core_info_fabric(attr, &msg_info);
 	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to get core info!\n");
 		ret = -FI_EINVAL;
 		goto err2;
 	}
