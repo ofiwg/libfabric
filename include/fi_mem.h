@@ -99,7 +99,7 @@ struct name {							\
 								\
 static inline void name ## _init(struct name *fs, size_t size)	\
 {								\
-	int i;							\
+	ssize_t i;						\
 	assert(size == roundup_power_of_two(size));		\
 	assert(sizeof(fs->buf[0]) >= sizeof(void *));		\
 	fs->size = size;					\
@@ -121,7 +121,7 @@ static inline struct name * name ## _create(size_t size)	\
 static inline int name ## _index(struct name *fs,		\
 		entrytype *entry)				\
 {								\
-	return entry - fs->buf;					\
+	return (int)(entry - fs->buf);				\
 }								\
 								\
 static inline void name ## _free(struct name *fs)		\

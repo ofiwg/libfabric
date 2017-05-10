@@ -186,7 +186,7 @@ extern "C" {
 			} while (ICEP((volatile PVOID*)&footer->item_free,			\
 				      (void*)&data->item[1], (void*)next_free) != next_free);	\
 												\
-			InterlockedAdd(&footer->count, count);					\
+			InterlockedAdd(&footer->count, (LONG)count);				\
 												\
 			/* add new chunk into footer */						\
 			do {									\
