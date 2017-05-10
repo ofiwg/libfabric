@@ -706,11 +706,17 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
+	/* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
+	 * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
+	 * The provider is assumed only to set FI_MR_LOCAL correctly.
+	 */
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)) ||
+	    !(user_info->domain_attr->mr_mode & FI_MR_LOCAL)) {
 		prov_mode = (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
 			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
-	else
+	} else {
 		prov_mode = prov_info->mode;
+	}
 
 	if ((user_info->mode & prov_mode) != prov_mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
