@@ -43,6 +43,7 @@ install:
 script:
     - git clone https://github.com/ofiwg/fabtests.git
     - cd fabtests
+    - git checkout -b v1.4.x origin/v1.4.x
     - ./autogen.sh
     - ./configure --prefix=$HOME --with-libfabric=$HOME
     - make -j2
