@@ -314,6 +314,38 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 	return ret;
 }
 
+/* Caller should use only fabric_attr in returned core_info */
+int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
+			     struct fi_info **core_info)
+{
+	struct fi_info hints;
+	const char *core_name;
+	size_t len;
+	int ret;
+
+	memset(&hints, 0, sizeof hints);
+	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr))))
+		return -FI_ENOMEM;
+
+	hints.fabric_attr->name = util_attr->name;
+	hints.fabric_attr->api_version = util_attr->api_version;
+
+	core_name = ofi_core_name(util_attr->prov_name, &len);
+
+	if (!(hints.fabric_attr->prov_name = strndup(core_name, len))) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+	hints.mode = ~0;
+
+	ret = fi_getinfo(util_attr->api_version, NULL, NULL, 0, &hints, core_info);
+
+	free(hints.fabric_attr->prov_name);
+out:
+	free(hints.fabric_attr);
+	return ret;
+}
+
 int ofi_check_fabric_attr(const struct fi_provider *prov,
 			  const struct fi_fabric_attr *prov_attr,
 			  const struct fi_fabric_attr *user_attr)
