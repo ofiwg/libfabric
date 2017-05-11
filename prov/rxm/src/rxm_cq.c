@@ -70,7 +70,7 @@ static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
-int rxm_cq_report_error(struct util_cq *util_cq, struct fi_cq_err_entry *err_entry)
+static int rxm_cq_report_error(struct util_cq *util_cq, struct fi_cq_err_entry *err_entry)
 {
 	struct util_cq_err_entry *entry;
 	struct fi_cq_tagged_entry *comp;
@@ -464,39 +464,49 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_msg_entry *comp)
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rx_buf *rx_buf;
 	struct fi_cq_err_entry err_entry;
+	struct util_cq *util_cq;
+	void *op_context;
 	ssize_t ret;
 
 	ret = fi_cq_read(msg_cq, comp, 1);
+	if (ret >= 0 || ret == -FI_EAGAIN)
+		return ret;
+
+	op_context = comp->op_context;
+	memset(&err_entry, 0, sizeof(err_entry));
+
 	if (ret == -FI_EAVAIL) {
 		OFI_CQ_READERR(&rxm_prov, FI_LOG_CQ, msg_cq,
 				ret, err_entry);
-		if (ret < 0) {
+		if (ret < 0)
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to fi_cq_readerr on msg cq\n");
-			return ret;
-		}
-		switch (*(enum rxm_proto_state *)comp->op_context) {
-		case RXM_TX:
-		case RXM_LMT_TX:
-			tx_entry = (struct rxm_tx_entry *)comp->op_context;
-			return rxm_cq_report_error(tx_entry->ep->util_ep.tx_cq, &err_entry);
-		case RXM_LMT_ACK_SENT:
-			tx_entry = (struct rxm_tx_entry *)comp->op_context;
-			return rxm_cq_report_error(tx_entry->ep->util_ep.rx_cq, &err_entry);
-		case RXM_RX:
-		case RXM_LMT_READ:
-			rx_buf = (struct rxm_rx_buf *)comp->op_context;
-			return rxm_cq_report_error(rx_buf->ep->util_ep.rx_cq, &err_entry);
-		default:
-			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown ctx type!\n");
-			FI_WARN(&rxm_prov, FI_LOG_CQ, "msg cq readerr: %s\n",
-					fi_cq_strerror(msg_cq, err_entry.prov_errno,
-						err_entry.err_data, NULL, 0));
-			assert(0);
-			return err_entry.err;
-		}
+		op_context = err_entry.op_context;
 	}
-	return ret;
+	switch (*(enum rxm_proto_state *)op_context) {
+	case RXM_TX:
+	case RXM_LMT_TX:
+		tx_entry = (struct rxm_tx_entry *)op_context;
+		util_cq = tx_entry->ep->util_ep.tx_cq;
+		break;
+	case RXM_LMT_ACK_SENT:
+		tx_entry = (struct rxm_tx_entry *)op_context;
+		util_cq = tx_entry->ep->util_ep.rx_cq;
+		break;
+	case RXM_RX:
+	case RXM_LMT_READ:
+		rx_buf = (struct rxm_rx_buf *)op_context;
+		util_cq = rx_buf->ep->util_ep.rx_cq;
+		break;
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "msg cq readerr: %s\n",
+				fi_cq_strerror(msg_cq, err_entry.prov_errno,
+					err_entry.err_data, NULL, 0));
+		assert(0);
+		return err_entry.err;
+	}
+	return rxm_cq_report_error(util_cq, &err_entry);
 }
 
 void rxm_cq_progress(struct fid_cq *msg_cq)
