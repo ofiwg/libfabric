@@ -339,6 +339,7 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 		const struct fi_info *info)
 {
 	int ret;
+	uint64_t prov_mode;
 
 	if (hints->caps & ~(info->caps)) {
 		VERBS_INFO(FI_LOG_CORE, "Unsupported capabilities\n");
@@ -346,9 +347,20 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-	if ((hints->mode & info->mode) != info->mode) {
+	/* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
+	 * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
+	 * The provider is assumed only to set FI_MR_LOCAL correctly.
+	 */
+	prov_mode = info->mode;
+	if ((FI_VERSION_LT(version, FI_VERSION(1, 5)) ||
+	     !(hints->domain_attr->mr_mode & FI_MR_LOCAL)) &&
+	    (info->domain_attr->mr_mode & FI_MR_LOCAL)) {
+		prov_mode |= FI_LOCAL_MR;
+	}
+
+	if ((hints->mode & prov_mode) != prov_mode) {
 		VERBS_INFO(FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(&fi_ibv_prov, info->mode, hints->mode);
+		FI_INFO_MODE(&fi_ibv_prov, prov_mode, hints->mode);
 		return -FI_ENODATA;
 	}
 
