@@ -78,6 +78,11 @@ also makes the use of fork unsafe.
 
 # LIMITATIONS
 
+When fi_info test is run for verbs provider over Infiniband devices, the IPoIB
+(IP over InfiniBand) network interface has to be configured with an IP address.
+Otherwise verbs provider would not show up in the list returned by fi_info test.
+fi_info -l should still list the verbs provider.
+
 ### Memory Regions
 Only FI_MR_BASIC mode is supported. Adding regions via s/g list is not supported.
 Generic fi_mr_regattr is not supported. No support for binding memory regions to
