@@ -1286,12 +1286,27 @@ void do_inject_write(int len)
 	ssize_t sz;
 	int ret, i, loops = 0;
 	struct fi_cq_tagged_entry cqe;
+	static gnix_mr_cache_t *cache;
+	struct gnix_fid_ep *ep_priv;
+	int already_registered;
 
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
+
+	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
+	cache = ep_priv->domain->mr_cache_rw;
+	cr_assert(cache != NULL);
+
+	already_registered = ofi_atomic_get32(&cache->inuse.elements);
 	sz = fi_inject_write(ep[0], source, len,
 			     gni_addr[1], (uint64_t)target, mr_key[1]);
 	cr_assert_eq(sz, 0);
+
+	/*
+	 * shouldn't have registeredd the source buffer, trust but verify
+	 */
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements)
+			== already_registered);
 
 	for (i = 0; i < len; i++) {
 		loops = 0;

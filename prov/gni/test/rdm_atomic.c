@@ -1922,14 +1922,28 @@ Test(rdm_atomic, atomicinject)
 	uint64_t min;
 	float min_fp;
 	double min_dp;
+	static gnix_mr_cache_t *cache;
+	struct gnix_fid_ep *ep_priv;
+	int already_registered;
 
 	/* i64 */
 	*((int64_t *)source) = SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
+
+	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
+	cache = ep_priv->domain->mr_cache_rw;
+	cr_assert(cache != NULL);
+	already_registered = ofi_atomic_get32(&cache->inuse.elements);
+
 	sz = fi_inject_atomic(ep[0], source, 1,
 			      gni_addr[1], (uint64_t)target, mr_key[1],
 			      FI_INT64, FI_MIN);
 	cr_assert_eq(sz, 0);
+	/*
+	 * shouldn't have registeredd the source buffer, trust but verify
+	 */
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements)
+			== already_registered);
 
 	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
 		SOURCE_DATA : TARGET_DATA;
