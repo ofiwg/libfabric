@@ -36,6 +36,9 @@ v1.4.2, Fri May  5, 2017
 - Fix issues not handling multiple ipoib interfaces
 - Reduce lock contention on buffer pools in send/completion handling
   code.
+- To see verbs provider in fi_info output, configure the corresponding
+  IPoIB interface with an IP address. This is a change in behavior from
+  previous versions. Please refer fi_verbs man page for more info.
 
 v1.4.1, Fri Feb  3, 2017
 ========================
