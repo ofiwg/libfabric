@@ -535,6 +535,7 @@ void ofi_nd_event_2_cq(nd_cq_entry *entry, void *misc)
 		ofi_nd_read_2_cq(entry, (ND2_RESULT *)misc);
 }
 
+/* do NOT release unexpected here, becuase it just an allocated on stack entry */
 void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected)
 {
 	nd_unexpected_entry *unexp = (nd_unexpected_entry *)unexpected;
@@ -572,10 +573,6 @@ void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected)
 	 * during free parent CQ entry below */
 	entry->aux_entry = NULL;
 	ofi_nd_free_cq_entry(entry);
-
-	ofi_nd_release_unexp_entry(unexp);
-
-	/*ofi_nd_free_cq_entry(entry);*/
 }
 
 void ofi_nd_unexp_2_cq(nd_cq_entry *entry, nd_unexpected_entry *unexp)
@@ -930,56 +927,13 @@ void ofi_nd_send_ack(nd_cq_entry *entry, struct nd_ep *ep)
 	assert(ep);
 	assert(ep->fid.fid.fclass == FI_CLASS_EP);
 	assert(entry);
-		
+
 	HRESULT hr;
-	struct nd_cq_entry *ack_entry = ofi_nd_buf_alloc_nd_cq_entry();
-	if (!ack_entry) {
-		ND_LOG_WARN(FI_LOG_EP_DATA, "Unable to allocate buffer "
-			    "for CQ entry");
-		return;
-	}
-	memset(ack_entry, 0, sizeof(*ack_entry));
-
-	ack_entry->data = entry->data;
-	ack_entry->flags = entry->flags;
-	ack_entry->domain = entry->domain;
-	ack_entry->context = entry->context;
-	ack_entry->iov_cnt = entry->iov_cnt;
-	ack_entry->seq = entry->seq;
-	ack_entry->state = NORMAL_STATE;
-
-	ack_entry->prefix = __ofi_nd_buf_alloc_nd_msgprefix(
-		&ep->domain->msgfooter);
-	if (!ack_entry->prefix) {
-		hr = ND_NO_MEMORY;
-		goto fn_fail;
-	}
-
-	nd_flow_cntrl_flags flow_control_flags = {
-		.req_ack = 0,
-		.ack = 1,
-		.empty = 1
-	};
-
-	struct nd_msgheader header_def = {
-		.data = entry->data,
-		.event = NORMAL_EVENT,
-		.flags = flow_control_flags,
-		.location_cnt = 0
-	};
-	ack_entry->prefix->header = header_def;
-	ack_entry->event = NORMAL_EVENT;
-	ack_entry->flow_cntrl_flags = flow_control_flags;
-
-	ND2_SGE sge = {
-		.Buffer = &ack_entry->prefix->header,
-		.BufferLength = (ULONG)sizeof(ack_entry->prefix->header),
-		.MemoryRegionToken = ack_entry->prefix->token
-	};
-
-	EnterCriticalSection(&ep->send_op.send_lock);
+	struct nd_cq_entry *ack_entry = NULL;
 	struct nd_queue_item *qentry = NULL;
 	nd_send_entry *send_entry = NULL;
+
+	EnterCriticalSection(&ep->send_op.send_lock);
 	if (ofi_nd_queue_peek(&ep->send_queue, &qentry)) {
 		send_entry = container_of(qentry, nd_send_entry, queue_item);
 		struct nd_msgheader *header = (struct nd_msgheader *)
@@ -987,6 +941,51 @@ void ofi_nd_send_ack(nd_cq_entry *entry, struct nd_ep *ep)
 		header->flags.ack = 1;
 	}
 	else {
+		ack_entry = ofi_nd_buf_alloc_nd_cq_entry();
+		if (!ack_entry) {
+			ND_LOG_WARN(FI_LOG_EP_DATA, "Unable to allocate buffer "
+				"for CQ entry");
+			return;
+		}
+		memset(ack_entry, 0, sizeof(*ack_entry));
+
+		ack_entry->data = entry->data;
+		ack_entry->flags = entry->flags;
+		ack_entry->domain = entry->domain;
+		ack_entry->context = entry->context;
+		ack_entry->iov_cnt = entry->iov_cnt;
+		ack_entry->seq = entry->seq;
+		ack_entry->state = NORMAL_STATE;
+
+		ack_entry->prefix = __ofi_nd_buf_alloc_nd_msgprefix(
+			&ep->domain->msgfooter);
+		if (!ack_entry->prefix) {
+			hr = ND_NO_MEMORY;
+			goto fn_fail;
+		}
+
+		nd_flow_cntrl_flags flow_control_flags = {
+			.req_ack = 0,
+			.ack = 1,
+			.empty = 1
+		};
+
+		struct nd_msgheader header_def = {
+			.data = entry->data,
+			.event = NORMAL_EVENT,
+			.flags = flow_control_flags,
+			.location_cnt = 0
+		};
+		ack_entry->prefix->header = header_def;
+		ack_entry->event = NORMAL_EVENT;
+		ack_entry->flow_cntrl_flags = flow_control_flags;
+
+		ND2_SGE sge = {
+			.Buffer = &ack_entry->prefix->header,
+			.BufferLength = (ULONG)sizeof(ack_entry->prefix->header),
+			.MemoryRegionToken = ack_entry->prefix->token
+		};
+
 		hr = ep->qp->lpVtbl->Send(ep->qp, ack_entry, &sge, 1, 0);
 		if (FAILED(hr))
 			ND_LOG_WARN(FI_LOG_CQ, "Send failed from Send Queue\n");

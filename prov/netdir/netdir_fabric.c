@@ -112,6 +112,8 @@ int ofi_nd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fab,
 	fi_param_get_int(&ofi_nd_prov, "prepostcnt", &gl_data.prepost_cnt);
 	fi_param_get_int(&ofi_nd_prov, "prepostbufcnt", &gl_data.prepost_buf_cnt);
 
+	gl_data.total_avail = gl_data.prepost_cnt * gl_data.prepost_buf_cnt;
+
 	return FI_SUCCESS;
 }
 

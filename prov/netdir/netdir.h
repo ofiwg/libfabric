@@ -66,6 +66,7 @@ extern struct gl_data {
 	int	prepost_cnt;
 	int	prepost_buf_cnt;
 	int	flow_control_cnt;
+	int	total_avail;
 } gl_data;
 
 extern struct fi_provider ofi_nd_prov;

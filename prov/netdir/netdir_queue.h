@@ -131,8 +131,6 @@ static inline int ofi_nd_queue_pop(struct nd_queue_queue *queue,
 	assert(queue);
 	assert(item);
 
-	int ret = 0;
-
 	BOOLEAN success;
 	struct {
 		struct nd_queue_item *head;

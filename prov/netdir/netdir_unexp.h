@@ -36,18 +36,22 @@
 #include <ndspi.h>
 
 #include "netdir_iface.h"
+#include "netdir.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
-struct nd_unexpected_buf {
+#define OFI_ND_IS_SERVICE_EVENT(event)	\
+	((event) == LARGE_MSG_ACK)
+
+typedef struct nd_unexpected_buf {
 	struct nd_msgheader	header;
 	union received {
 		struct nd_msg_location	locations[];
 		char			data[];
 	} received_buf;
-};
+} nd_unexpected_buf;
 
 typedef struct nd_unexpected_ctx {
 	struct nd_ep			*ep;
@@ -65,11 +69,11 @@ typedef struct nd_unexpected_entry {
 HRESULT ofi_nd_unexp_init(struct nd_ep *ep);
 HRESULT ofi_nd_unexp_fini(struct nd_ep *ep);
 void ofi_nd_unexp_event(ND2_RESULT *result);
+void ofi_nd_unexp_service_event(ND2_RESULT *result);
 void ofi_nd_unexp_match(struct nd_ep *ep);
 void ofi_nd_srx_match(struct nd_srx *srx);
 HRESULT ofi_nd_unexp_run(struct nd_ep *ep);
 HRESULT ofi_nd_unexp_payload_run(struct nd_ep *ep);
-
 void ofi_nd_release_unexp_entry(nd_unexpected_entry *unexp);
 
 #ifdef __cplusplus

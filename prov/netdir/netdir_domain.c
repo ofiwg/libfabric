@@ -488,6 +488,7 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 	HRESULT hr;
 	ND2_RESULT result[256];
 	DWORD count;
+	nd_unexpected_ctx *ctx;
 	do {
 		count = domain->cq->lpVtbl->GetResults(domain->cq, result, countof(result));
 		size_t i;
@@ -497,7 +498,11 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 				     ofi_nd_error_str(result[i].Status));
 			switch (result[i].RequestType) {
 			case Nd2RequestTypeReceive:
-				ofi_nd_unexp_event(&result[i]);
+				ctx = (nd_unexpected_ctx *)result[i].RequestContext;
+				if (!OFI_ND_IS_SERVICE_EVENT(ctx->entry->header.event))
+					ofi_nd_unexp_event(&result[i]);
+				else
+					ofi_nd_unexp_service_event(&result[i]);
 				break;
 			case Nd2RequestTypeSend:
 				ofi_nd_send_event(&result[i]);
@@ -509,6 +514,7 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 				ofi_nd_write_event(&result[i]);
 				break;
 			default:
+				/* shouldn't go here */
 				assert(0);
 			}
 

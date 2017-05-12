@@ -47,7 +47,8 @@ struct gl_data gl_data = {
 	.inline_thr = 4096,
 	.prepost_cnt = 8,
 	.prepost_buf_cnt = 8,
-	.flow_control_cnt = 1
+	.flow_control_cnt = 1,
+	.total_avail = 64
 };
 
 int ofi_nd_getinfo(uint32_t version, const char *node, const char *service,
@@ -84,7 +85,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->tx_attr->caps = FI_MSG | FI_SEND;
 	info->tx_attr->comp_order = FI_ORDER_STRICT;
 	info->tx_attr->inject_size = (size_t)gl_data.inline_thr;
-	info->tx_attr->size = (size_t)gl_data.inline_thr;
+	info->tx_attr->size = (size_t)adapter->MaxTransferLength;
 	/* TODO: if optimization will be needed, we can use adapter->MaxInitiatorSge,
 	 * and use ND SGE to send/write iovecs */
 	info->tx_attr->iov_limit = ND_MSG_IOV_LIMIT;
@@ -92,7 +93,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->rx_attr->caps = FI_MSG | FI_RECV;
 	info->rx_attr->comp_order = FI_ORDER_STRICT;
 	info->rx_attr->total_buffered_recv = 0;
-	info->rx_attr->size = (size_t)gl_data.inline_thr;
+	info->rx_attr->size = (size_t)adapter->MaxTransferLength;
 	/* TODO: if optimization will be needed, we can use adapter->MaxInitiatorSge,
 	 * and use ND SGE to recv iovecs */
 	info->rx_attr->iov_limit = ND_MSG_IOV_LIMIT;
@@ -117,7 +118,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 
 	info->caps = OFI_ND_CAPS;
 	info->addr_format = FI_SOCKADDR;
-	info->mode = 0;
+	info->mode = FI_LOCAL_MR;
 
 	if (!ofi_nd_util_prov.info) {
 		ofi_nd_util_prov.info = info;

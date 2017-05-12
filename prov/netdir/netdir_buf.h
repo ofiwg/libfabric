@@ -102,7 +102,7 @@ extern "C" {
 	};											\
 												\
 	struct nd_buf_footer_##name {								\
-		LONG count; /* number of elelemnts */						\
+		LONG count; /* number of elements */						\
 		LONG used; /* count of used elements */						\
 		struct nd_buf_chunk_##name*(*alloc_chunk)(					\
 			struct nd_buf_footer_##name *footer, size_t *count);			\
@@ -120,7 +120,7 @@ extern "C" {
 		return FI_SUCCESS;								\
 	}											\
 												\
-	static inline int ofi_nd_buf_init_##name()						\
+	static inline int ofi_nd_buf_init_##name(void)						\
 	{											\
 		return __ofi_nd_buf_init_##name(&nd_footer_##name);				\
 	}											\
@@ -143,7 +143,7 @@ extern "C" {
 		memset(footer, 0, sizeof(*footer));						\
 	}											\
 												\
-	static inline void ofi_nd_buf_fini_##name()						\
+	static inline void ofi_nd_buf_fini_##name(void)						\
 	{											\
 		__ofi_nd_buf_fini_##name(&nd_footer_##name);					\
 	}											\
@@ -209,7 +209,7 @@ extern "C" {
 		return &top_free->data;								\
 	}											\
 												\
-	static inline type *ofi_nd_buf_alloc_##name()						\
+	static inline type *ofi_nd_buf_alloc_##name(void)					\
 	{											\
 		return __ofi_nd_buf_alloc_##name(&nd_footer_##name);				\
 	}											\
