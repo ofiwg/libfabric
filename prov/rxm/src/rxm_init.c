@@ -46,13 +46,12 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 			core_info->mode |= FI_LOCAL_MR;
 
 		if (hints->domain_attr) {
-			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-				core_info->domain_attr->mr_mode =
-					hints->domain_attr->mr_mode;
-			else
-				core_info->domain_attr->mr_mode =
-					hints->domain_attr->mr_mode |
-					FI_MR_LOCAL;
+			core_info->domain_attr->mr_mode =
+				hints->domain_attr->mr_mode;
+
+			if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
+				core_info->domain_attr->mr_mode |=
+					(FI_MR_LOCAL | OFI_MR_BASIC_MAP);
 
 			if (hints->domain_attr->caps)
 				core_info->domain_attr->caps =

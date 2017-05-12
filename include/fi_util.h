@@ -594,6 +594,8 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
 		 struct fi_info *hints, ofi_alter_info_t info_to_core,
 		 ofi_alter_info_t info_to_util, struct fi_info **info);
+int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
+			     struct fi_info **core_info);
 
 
 #define OFI_NAME_DELIM	';'
