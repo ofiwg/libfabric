@@ -1,4 +1,4 @@
-.TH "fi_trigger" "3" "2017\-02\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_trigger" "3" "2017\-05\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_trigger \- Triggered operations
@@ -73,39 +73,42 @@ Threshold operations are triggered in the order of the threshold values.
 This is true even if the counter increments by a value greater than 1.
 If two triggered operations have the same threshold, they will be
 triggered in the order in which they were submitted to the endpoint.
-.SH EXPERIMENTAL TRIGGERED OPERATIONS
+.SH EXPERIMENTAL DEFERRED WORK QUEUES
 .PP
 The following feature and description are enhancements to triggered
 operation support, but should be considered experimental.
-Until the experimental tag is removed, the interfaces and data
-structures defined below may change between library versions.
+Until the experimental tag is removed, the interfaces, semantics, and
+data structures defined below may change between library versions.
 .PP
-Experimental triggered operations allow an application to queue
-operations to a deferred work queue that is associated with the domain.
+The deferred work queue interface is designed as primitive constructs
+that can be used to implement application\-level collective operations.
+They are a more advanced form of triggered operation.
+They allow an application to queue operations to a deferred work queue
+that is associated with the domain.
 Note that the deferred work queue is a conceptual construct, rather than
 an implementation requirement.
-Deferred work requests consist of two components: an event or condition
-that must first be met, along with an operation to perform.
+Deferred work requests consist of three main components: an event or
+condition that must first be met, an operation to perform, and a
+completion notification.
 .PP
 Because deferred work requests are posted directly to the domain, they
 can support a broader set of conditions and operations.
 Deferred work requests are submitted using struct fi_deferred_work.
-That structure, along with any event and operation structures used to
-describe the work must remain valid until the operation completes or is
-canceled.
+That structure, along with the corresponding operation structures
+(referenced through the op union) used to describe the work must remain
+valid until the operation completes or is canceled.
+The format of the deferred work request is as follows:
 .IP
 .nf
 \f[C]
 struct\ fi_deferred_work\ {
 \ \ \ \ struct\ fi_context\ \ \ \ \ context;
 
-\ \ \ \ enum\ fi_trigger_event\ event_type;
-\ \ \ \ enum\ fi_trigger_op\ \ \ \ op_type;
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ threshold;
+\ \ \ \ struct\ fid_cntr\ \ \ \ \ \ \ *triggering_cntr;
+\ \ \ \ struct\ fid_cntr\ \ \ \ \ \ \ *completion_cntr;
 
-\ \ \ \ union\ {
-\ \ \ \ \ \ \ \ struct\ fi_trigger_threshold\ *threshold;
-\ \ \ \ \ \ \ \ struct\ fi_trigger_completion\ *completion;
-\ \ \ \ }\ event;
+\ \ \ \ enum\ fi_trigger_op\ \ \ \ op_type;
 
 \ \ \ \ union\ {
 \ \ \ \ \ \ \ \ struct\ fi_op_msg\ \ \ \ \ \ \ \ \ \ \ \ *msg;
@@ -121,18 +124,32 @@ struct\ fi_deferred_work\ {
 .fi
 .PP
 Once a work request has been posted to the deferred work queue, it will
-remain on the queue until its condition has been met.
+remain on the queue until the triggering counter (success plus error
+counter values) has reached the indicated threshold.
+If the triggering condition has already been met at the time the work
+request is queued, the operation will be initiated immediately.
+.PP
+On the completion of a deferred data transfer, the specified completion
+counter will be incremented by one.
+Note that deferred counter operations do not update the completion
+counter; only the counter specified through the fi_op_cntr is modified.
+The completion_cntr field must be NULL for counter operations.
+.PP
+Because deferred work targets support of collective communication
+operations, posted work requests do not generate any completions at the
+endpoint by default.
+For example, completed operations are not written to the EP\[aq]s
+completion queue or update the EP counter (unless the EP counter is
+explicitly referenced as the completion_cntr).
+An application may request EP completions by specifying the
+FI_COMPLETION flag as part of the operation.
+.PP
 It is the responsibility of the application to detect and handle
-situations that occur which could result in the condition not being met.
+situations that occur which could result in a deferred work
+request\[aq]s condition not being met.
 For example, if a work request is dependent upon the successful
 completion of a data transfer operation, which fails, then the
 application must cancel the work request.
-A work request with its condition met at the time of posting will
-automatically have its operation initiated.
-.PP
-If the work request will generate a completion, the completion event
-will return the context field of struct fi_deferred_work as the context
-for the operation.
 .PP
 To submit a deferred work request, applications should use the
 domain\[aq]s fi_control function with command FI_QUEUE_WORK and struct
@@ -141,6 +158,8 @@ To cancel a deferred work request, use fi_control with command
 FI_CANCEL_WORK and the corresponding struct fi_deferred_work to cancel.
 The fi_control command FI_FLUSH_WORK will cancel all queued work
 requests.
+FI_FLUSH_WORK may be used to flush all work queued to the domain, or may
+be used to cancel all requests waiting on a specific triggering_cntr.
 .PP
 Deferred work requests are not acted upon by the provider until the
 associated event has occurred; although, certain validation checks may
@@ -150,19 +169,6 @@ But the provider may validate fabric objects, such as endpoints and
 counters, and that input parameters fall within supported ranges.
 If a specific request is not supported by the provider, it will fail the
 operation with \-FI_ENOSYS.
-.SS EXPERIMENTAL TRIGGER EVENTS
-.PP
-The following trigger events are defined.
-.PP
-\f[I]FI_TRIGGER_THRESHOLD\f[] : See the above definition.
-.PP
-\f[I]FI_TRIGGER_COMPLETION\f[] : This indicates that the data transfer
-operation will be deferred until the specified operation has completed.
-The operation is specified using struct fi_trigger_completion:
-.PP
-\f[C]c\ \ \ struct\ fi_trigger_completion\ {\ \ \ \ \ struct\ fi_context\ *context;\ \ \ };\f[]
-.PP
-The context must refer to the fi_context of the posted operation.
 .SH SEE ALSO
 .PP
 \f[C]fi_getinfo\f[](3), \f[C]fi_endpoint\f[](3), \f[C]fi_alias\f[](3),
