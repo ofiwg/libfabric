@@ -127,6 +127,7 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 
 void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 {
+	struct fi_deferred_work *work;
 	struct sock_trigger *trigger;
 	struct dlist_entry *entry;
 	int ret = 0;
@@ -182,15 +183,15 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 						trigger->flags & ~FI_TRIGGER);
 			break;
 		case FI_OP_CNTR_SET:
-			assert(trigger->work);
-			fi_cntr_set(trigger->work->op.cntr->cntr,
-				    trigger->work->op.cntr->value);
+			work = container_of(trigger->context,
+					    struct fi_deferred_work, context);
+			fi_cntr_set(work->op.cntr->cntr, work->op.cntr->value);
 			ret = 0;
 			break;
 		case FI_OP_CNTR_ADD:
-			assert(trigger->work);
-			fi_cntr_add(trigger->work->op.cntr->cntr,
-				    trigger->work->op.cntr->value);
+			work = container_of(trigger->context,
+					    struct fi_deferred_work, context);
+			fi_cntr_add(work->op.cntr->cntr, work->op.cntr->value);
 			ret = 0;
 			break;
 		default:

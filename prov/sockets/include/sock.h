@@ -147,6 +147,7 @@
 #define SOCK_MODE (0)
 #define SOCK_NO_COMPLETION (1ULL << 60)
 #define SOCK_USE_OP_FLAGS (1ULL << 61)
+#define SOCK_TRIGGERED_OP (1ULL << 62)
 #define SOCK_PE_COMM_BUFF_SZ (1024)
 #define SOCK_PE_OVERFLOW_COMM_BUFF_SZ (128)
 
@@ -232,12 +233,35 @@ struct sock_domain {
 	struct fi_domain_attr	attr;
 };
 
+/* move to fi_trigger.h when removing experimental tag from work queues */
+enum {
+	SOCK_DEFERRED_WORK = FI_TRIGGER_THRESHOLD + 1
+};
+
+/* move to fi_trigger.h when removing experimental tag from work queues */
+/* Overlay with fi_trigger_threshold and within fi_trigger_context */
+struct sock_trigger_work {
+	struct fid_cntr		*triggering_cntr;
+	size_t			threshold;
+	struct fid_cntr		*completion_cntr;
+};
+
+/* must overlay fi_triggered_context */
+struct sock_triggered_context {
+	int					event_type;
+	union {
+		struct fi_trigger_threshold	threshold;
+		struct sock_trigger_work	work;
+		void				*internal[3];
+	} trigger;
+};
+
 struct sock_trigger {
-	enum fi_trigger_op op_type;
+	enum fi_op_type op_type;
 	size_t threshold;
 	struct dlist_entry entry;
 
-	struct fi_deferred_work *work;
+	struct sock_triggered_context *context;
 	struct fid_ep *ep;
 	uint64_t flags;
 
@@ -1166,15 +1190,15 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 
 int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work);
 ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
-			  uint64_t flags, enum fi_trigger_op op_type);
+			  uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			     const struct fi_ioc *comparev, size_t compare_count,
 			     struct fi_ioc *resultv, size_t result_count,
-			     uint64_t flags, enum fi_trigger_op op_type);
+			     uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-			   uint64_t flags, enum fi_trigger_op op_type);
+			   uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
-			  uint64_t flags, enum fi_trigger_op op_type);
+			  uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags);
 void sock_cntr_check_trigger_list(struct sock_cntr *cntr);
 

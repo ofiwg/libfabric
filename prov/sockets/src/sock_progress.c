@@ -247,9 +247,16 @@ static void sock_pe_report_send_cq_completion(struct sock_pe_entry *pe_entry)
 
 static void sock_pe_report_send_completion(struct sock_pe_entry *pe_entry)
 {
-	sock_pe_report_send_cq_completion(pe_entry);
-	if (pe_entry->comp->send_cntr)
-		sock_cntr_inc(pe_entry->comp->send_cntr);
+	struct sock_triggered_context *trigger_context;
+
+	if (!(pe_entry->flags & SOCK_TRIGGERED_OP)) {
+		sock_pe_report_send_cq_completion(pe_entry);
+		if (pe_entry->comp->send_cntr)
+			sock_cntr_inc(pe_entry->comp->send_cntr);
+	} else {
+		trigger_context = (void *) (uintptr_t) pe_entry->context;
+		fi_cntr_add(trigger_context->trigger.work.completion_cntr, 1);
+	}
 }
 
 static void sock_pe_report_recv_cq_completion(struct sock_pe_entry *pe_entry)
@@ -276,9 +283,16 @@ static void sock_pe_report_recv_cq_completion(struct sock_pe_entry *pe_entry)
 
 static void sock_pe_report_recv_completion(struct sock_pe_entry *pe_entry)
 {
-	sock_pe_report_recv_cq_completion(pe_entry);
-	if (pe_entry->comp->recv_cntr)
-		sock_cntr_inc(pe_entry->comp->recv_cntr);
+	struct sock_triggered_context *trigger_context;
+
+	if (!(pe_entry->flags & SOCK_TRIGGERED_OP)) {
+		sock_pe_report_recv_cq_completion(pe_entry);
+		if (pe_entry->comp->recv_cntr)
+			sock_cntr_inc(pe_entry->comp->recv_cntr);
+	} else {
+		trigger_context = (void *) (uintptr_t) pe_entry->context;
+		fi_cntr_add(trigger_context->trigger.work.completion_cntr, 1);
+	}
 }
 
 static void sock_pe_report_mr_completion(struct sock_domain *domain,
@@ -322,11 +336,18 @@ static void sock_pe_report_remote_write(struct sock_rx_ctx *rx_ctx,
 
 static void sock_pe_report_write_completion(struct sock_pe_entry *pe_entry)
 {
+	struct sock_triggered_context *trigger_context;
+
 	if (!(pe_entry->flags & SOCK_NO_COMPLETION))
 		sock_pe_report_send_cq_completion(pe_entry);
 
-	if (pe_entry->comp->write_cntr)
-		sock_cntr_inc(pe_entry->comp->write_cntr);
+	if (!(pe_entry->flags & SOCK_TRIGGERED_OP)) {
+		if (pe_entry->comp->write_cntr)
+			sock_cntr_inc(pe_entry->comp->write_cntr);
+	} else {
+		trigger_context = (void *) (uintptr_t) pe_entry->context;
+		fi_cntr_add(trigger_context->trigger.work.completion_cntr, 1);
+	}
 }
 
 static void sock_pe_report_remote_read(struct sock_rx_ctx *rx_ctx,
@@ -345,11 +366,18 @@ static void sock_pe_report_remote_read(struct sock_rx_ctx *rx_ctx,
 
 static void sock_pe_report_read_completion(struct sock_pe_entry *pe_entry)
 {
+	struct sock_triggered_context *trigger_context;
+
 	if (!(pe_entry->flags & SOCK_NO_COMPLETION))
 		sock_pe_report_send_cq_completion(pe_entry);
 
-	if (pe_entry->comp->read_cntr)
-		sock_cntr_inc(pe_entry->comp->read_cntr);
+	if (!(pe_entry->flags & SOCK_TRIGGERED_OP)) {
+		if (pe_entry->comp->read_cntr)
+			sock_cntr_inc(pe_entry->comp->read_cntr);
+	} else {
+		trigger_context = (void *) (uintptr_t) pe_entry->context;
+		fi_cntr_add(trigger_context->trigger.work.completion_cntr, 1);
+	}
 }
 
 static void sock_pe_report_rx_error(struct sock_pe_entry *pe_entry, int rem, int err)
