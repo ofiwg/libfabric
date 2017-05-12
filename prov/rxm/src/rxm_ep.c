@@ -599,8 +599,12 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	pkt->hdr.size = ofi_total_iov_len(iov, count);
 	rxm_op_hdr_process_flags(&pkt->hdr, flags, data);
 
-	if (op == ofi_op_tagged)
+	if (op == ofi_op_tagged) {
 		pkt->hdr.tag = tag;
+		tx_entry->comp_flags = FI_TAGGED;
+	} else {
+		tx_entry->comp_flags = FI_MSG;
+	}
 
 	if (pkt->hdr.size > RXM_TX_DATA_SIZE) {
 		if (flags & FI_INJECT) {

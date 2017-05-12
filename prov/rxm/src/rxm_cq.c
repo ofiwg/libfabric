@@ -126,9 +126,10 @@ int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 	if (rx_buf->recv_entry->flags & FI_COMPLETION) {
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
 		ret = rxm_cq_comp(rx_buf->ep->util_ep.rx_cq,
-				rx_buf->recv_entry->context,
-				FI_RECV, rx_buf->pkt.hdr.size, NULL,
-				rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+				  rx_buf->recv_entry->context,
+				  rx_buf->comp_flags | FI_RECV,
+				  rx_buf->pkt.hdr.size, NULL,
+				  rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write recv completion\n");
@@ -147,7 +148,7 @@ int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 	if (tx_entry->flags & FI_COMPLETION) {
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing send completion\n");
 		ret = rxm_cq_comp(tx_entry->ep->util_ep.tx_cq, tx_entry->context,
-				FI_SEND, 0, NULL, 0, 0);
+				tx_entry->comp_flags | FI_SEND, 0, NULL, 0, 0);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write send completion\n");
@@ -358,9 +359,11 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	case ofi_op_msg:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got MSG op\n");
 		recv_queue = &rx_buf->ep->recv_queue;
+		rx_buf->comp_flags = FI_MSG;
 		break;
 	case ofi_op_tagged:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
+		rx_buf->comp_flags = FI_TAGGED;
 		match_attr.tag = rx_buf->pkt.hdr.tag;
 		recv_queue = &rx_buf->ep->trecv_queue;
 		break;

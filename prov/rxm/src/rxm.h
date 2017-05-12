@@ -190,6 +190,7 @@ struct rxm_rx_buf {
 	struct rxm_recv_fs *recv_fs;
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_unexp_msg unexp_msg;
+	uint64_t comp_flags;
 
 	/* Used for large messages */
 	struct rxm_iov match_iov[RXM_IOV_LIMIT];
@@ -218,6 +219,7 @@ struct rxm_tx_entry {
 	uint8_t count;
 	void *context;
 	uint64_t flags;
+	uint64_t comp_flags;
 	struct rxm_tx_buf *tx_buf;
 
 	/* Used for large messages */
