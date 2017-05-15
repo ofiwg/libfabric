@@ -3059,9 +3059,16 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 
 	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
 
-	/* If a new VC was allocated, progress CM before returning. */
-	if (!connected)
+	/*
+	 * If a new VC was allocated, progress CM before returning.
+	 * If the VC is connected and there's a backlog, poke
+	 * the nic progress engine befure returning.
+	 */
+	if (!connected) {
 		_gnix_cm_nic_progress(ep->cm_nic);
+	} else if (!dlist_empty(&vc->tx_queue)) {
+		_gnix_nic_progress(vc->ep->nic);
+	}
 
 	return ret;
 
@@ -3513,9 +3520,16 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
-	/* If a new VC was allocated, progress CM before returning. */
-	if (!connected)
+	/*
+	 * If a new VC was allocated, progress CM before returning.
+	 * If the VC is connected and there's a backlog, poke
+	 * the nic progress engine befure returning.
+	 */
+	if (!connected) {
 		_gnix_cm_nic_progress(ep->cm_nic);
+	} else if (!dlist_empty(&vc->tx_queue)) {
+		_gnix_nic_progress(vc->ep->nic);
+	}
 
 	return ret;
 
