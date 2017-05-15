@@ -144,7 +144,10 @@ ofi_nd_util_completion_blackmagic(uint64_t info_flags,
 				  uint64_t op_flags)
 {
 	OFI_UNUSED(info_flags);
-	if (op_flags & FI_COMPLETION)
+	if ((op_flags & FI_COMPLETION) || 
+	    (op_flags & (FI_INJECT_COMPLETE |
+			 FI_TRANSMIT_COMPLETE |
+			 FI_DELIVERY_COMPLETE)))
 		return 1;
 	else if (op_flags & FI_INJECT)
 		return 0;
