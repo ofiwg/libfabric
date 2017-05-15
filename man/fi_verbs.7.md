@@ -97,7 +97,7 @@ The following features are not supported in verbs provider:
 FI_EP_DGRAM
 
 #### Unsupported Capabilities
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_MULTI_RECV, FI_RMA_EVENT, FI_FENCE
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_MULTI_RECV, FI_RMA_EVENT
 
 #### Other unsupported features
 Scalable endpoints, FABRIC_DIRECT
