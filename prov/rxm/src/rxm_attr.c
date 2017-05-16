@@ -36,7 +36,7 @@ struct fi_tx_attr rxm_tx_attr = {
 	.caps = FI_MSG | FI_TAGGED | FI_SEND,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = RXM_TX_DATA_SIZE,
-	.size = 1024,
+	.size = SIZE_MAX,
 	.iov_limit = RXM_IOV_LIMIT,
 };
 
