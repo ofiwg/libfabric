@@ -207,6 +207,8 @@ static struct fi_info *_gnix_allocinfo(void)
 						1 : gnix_max_nics_per_ptag - 1;
 	gnix_info->domain_attr->rx_ctx_cnt = gnix_max_nics_per_ptag;
 	gnix_info->domain_attr->cntr_cnt = _gnix_get_cq_limit() / 2;
+	gnix_info->domain_attr->cq_cnt = _gnix_get_cq_limit() / 2;
+	gnix_info->domain_attr->ep_cnt = SIZE_MAX;
 
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
