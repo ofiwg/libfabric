@@ -239,8 +239,13 @@ struct rxm_recv_entry {
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
+struct rxm_send_queue {
+	struct rxm_txe_fs *fs;
+	struct ofi_key_idx tx_key_idx;
+};
+
 struct rxm_recv_queue {
-	struct rxm_recv_fs *recv_fs;
+	struct rxm_recv_fs *fs;
 	struct dlist_entry recv_list;
 	struct dlist_entry unexp_msg_list;
 	dlist_func_t *match_recv;
@@ -264,9 +269,7 @@ struct rxm_ep {
 	struct rxm_buf_pool tx_pool;
 	struct rxm_buf_pool rx_pool;
 
-	struct rxm_txe_fs *txe_fs;
-	struct ofi_key_idx tx_key_idx;
-
+	struct rxm_send_queue send_queue;
 	struct rxm_recv_queue recv_queue;
 	struct rxm_recv_queue trecv_queue;
 };
@@ -324,6 +327,6 @@ void rxm_pkt_init(struct rxm_pkt *pkt);
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
-void rxm_buf_get(struct rxm_buf_pool *pool, struct rxm_buf **buf);
+struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool);
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf);
 void *rxm_buf_get_desc(struct rxm_buf_pool *pool, void *buf);

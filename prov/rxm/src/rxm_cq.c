@@ -155,7 +155,7 @@ int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 		}
 	}
 	rxm_buf_release(&tx_entry->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
-	freestack_push(tx_entry->ep->txe_fs, tx_entry);
+	freestack_push(tx_entry->ep->send_queue.fs, tx_entry);
 	return 0;
 }
 
@@ -242,8 +242,9 @@ int rxm_cq_handle_ack(struct rxm_rx_buf *rx_buf)
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x" PRIx64 "\n",
 			rx_buf->pkt.ctrl_hdr.msg_id);
 
-	index = ofi_key2idx(&rx_buf->ep->tx_key_idx, rx_buf->pkt.ctrl_hdr.msg_id);
-	tx_entry = &rx_buf->ep->txe_fs->buf[index];
+	index = ofi_key2idx(&rx_buf->ep->send_queue.tx_key_idx,
+			    rx_buf->pkt.ctrl_hdr.msg_id);
+	tx_entry = &rx_buf->ep->send_queue.fs->buf[index];
 
 	assert(tx_entry->msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 	assert(tx_entry->state == RXM_LMT_ACK);
@@ -372,7 +373,7 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		return -FI_EINVAL;
 	}
 
-	rx_buf->recv_fs = recv_queue->recv_fs;
+	rx_buf->recv_fs = recv_queue->fs;
 
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, &match_attr);

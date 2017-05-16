@@ -111,12 +111,15 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 	util_buf_release(pool->pool, buf);
 }
 
-void rxm_buf_get(struct rxm_buf_pool *pool, struct rxm_buf **buf)
+struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
-	*buf = util_buf_get(pool->pool);
-	assert(*buf);
-	memset(*buf, 0, sizeof(**buf));
-	dlist_insert_tail(&((*buf)->entry), &pool->buf_list);
+	struct rxm_buf *buf;
+	buf = util_buf_get(pool->pool);
+	if (!buf)
+		return NULL;
+	memset(buf, 0, sizeof(*buf));
+	dlist_insert_tail(&buf->entry, &pool->buf_list);
+	return buf;
 }
 
 static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
@@ -150,13 +153,24 @@ static int rxm_buf_pool_create(int local_mr, size_t count, size_t size,
 	return 0;
 }
 
+static int rxm_send_queue_init(struct rxm_send_queue *send_queue, size_t size)
+{
+	send_queue->fs = rxm_txe_fs_create(size);
+	if (!send_queue->fs)
+		return -FI_ENOMEM;
+
+	ofi_key_idx_init(&send_queue->tx_key_idx, fi_size_bits(size));
+	return 0;
+}
+
 static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 			       dlist_func_t match_recv,
 			       dlist_func_t match_unexp)
 {
-	recv_queue->recv_fs = rxm_recv_fs_create(size);
-	if (!recv_queue->recv_fs)
+	recv_queue->fs = rxm_recv_fs_create(size);
+	if (!recv_queue->fs)
 		return -FI_ENOMEM;
+
 	dlist_init(&recv_queue->recv_list);
 	dlist_init(&recv_queue->unexp_msg_list);
 	recv_queue->match_recv = match_recv;
@@ -164,10 +178,16 @@ static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 	return 0;
 }
 
+static void rxm_send_queue_close(struct rxm_send_queue *send_queue)
+{
+	if (send_queue->fs)
+		rxm_txe_fs_free(send_queue->fs);
+}
+
 static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 {
-	if (recv_queue->recv_fs)
-		rxm_recv_fs_free(recv_queue->recv_fs);
+	if (recv_queue->fs)
+		rxm_recv_fs_free(recv_queue->fs);
 	// TODO cleanup recv_list and unexp msg list
 }
 
@@ -195,13 +215,9 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	if (ret)
 		goto err1;
 
-	rxm_ep->txe_fs = rxm_txe_fs_create(rxm_ep->rxm_info->tx_attr->size);
-	if (!rxm_ep->txe_fs) {
-		ret = -FI_ENOMEM;
+	ret = rxm_send_queue_init(&rxm_ep->send_queue, rxm_ep->rxm_info->tx_attr->size);
+	if (ret)
 		goto err2;
-	}
-
-	ofi_key_idx_init(&rxm_ep->tx_key_idx, fi_size_bits(rxm_ep->rxm_info->tx_attr->size));
 
 	ret = rxm_recv_queue_init(&rxm_ep->recv_queue, rxm_ep->rxm_info->rx_attr->size,
 				  rxm_match_recv_entry, rxm_match_unexp_msg);
@@ -218,7 +234,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 err4:
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
 err3:
-	rxm_txe_fs_free(rxm_ep->txe_fs);
+	rxm_send_queue_close(&rxm_ep->send_queue);
 err2:
 	rxm_buf_pool_destroy(&rxm_ep->tx_pool);
 err1:
@@ -231,9 +247,7 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 
 	rxm_recv_queue_close(&rxm_ep->trecv_queue);
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
-
-	if (rxm_ep->txe_fs)
-		rxm_txe_fs_free(rxm_ep->txe_fs);
+	rxm_send_queue_close(&rxm_ep->send_queue);
 
 	rxm_buf_pool_destroy(&rxm_ep->rx_pool);
 	rxm_buf_pool_destroy(&rxm_ep->tx_pool);
@@ -267,7 +281,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rxm_buf_get(&rxm_ep->rx_pool, (struct rxm_buf **)&rx_buf);
+		rx_buf = (struct rxm_rx_buf *)rxm_buf_get(&rxm_ep->rx_pool);
 		rx_buf->hdr.ctx_type = RXM_RX_BUF;
 		rx_buf->hdr.msg_ep = rxm_ep->srx_ctx;
 		rx_buf->ep = rxm_ep;
@@ -385,12 +399,12 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	int ret;
 	size_t i;
 
-	if (freestack_isempty(recv_queue->recv_fs)) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Exhaused recv_entry freestack\n");
+	if (freestack_isempty(recv_queue->fs)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted recv_entry freestack\n");
 		return -FI_EAGAIN;
 	}
 
-	recv_entry = freestack_pop(recv_queue->recv_fs);
+	recv_entry = freestack_pop(recv_queue->fs);
 
 	for (i = 0; i < count; i++) {
 		recv_entry->iov[i].iov_base = iov[i].iov_base;
@@ -555,24 +569,27 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	if (ret)
 		return ret;
 
-	if (freestack_isempty(rxm_ep->txe_fs)) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Exhaused tx_entry freestack\n");
-		return -FI_ENOMEM;
+	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->tx_pool);
+	if (!tx_buf) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
+		return -FI_EAGAIN;
+	}
+	desc_tx_buf = rxm_buf_get_desc(&rxm_ep->tx_pool, tx_buf);
+
+	if (freestack_isempty(rxm_ep->send_queue.fs)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted tx_entry freestack\n");
+		return -FI_EAGAIN;
 	}
 
-	tx_entry = freestack_pop(rxm_ep->txe_fs);
+	tx_entry = freestack_pop(rxm_ep->send_queue.fs);
 	tx_entry->ctx_type = RXM_TX_ENTRY;
 	tx_entry->ep = rxm_ep;
 	tx_entry->count = count;
 	tx_entry->context = context;
 	tx_entry->flags = flags;
-
-	rxm_buf_get(&rxm_ep->tx_pool, (struct rxm_buf **)&tx_buf);
-	tx_buf->hdr.msg_ep = rxm_conn->msg_ep;
-
-	desc_tx_buf = rxm_buf_get_desc(&rxm_ep->tx_pool, tx_buf);
-
 	tx_entry->tx_buf = tx_buf;
+
+	tx_buf->hdr.msg_ep = rxm_conn->msg_ep;
 
 	pkt = &tx_buf->pkt;
 
@@ -594,8 +611,9 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 			ret = -FI_EMSGSIZE;
 			goto done;
 		}
-		tx_entry->msg_id = ofi_idx2key(&rxm_ep->tx_key_idx,
-				rxm_txe_fs_index(rxm_ep->txe_fs, tx_entry));
+		tx_entry->msg_id = ofi_idx2key(&rxm_ep->send_queue.tx_key_idx,
+					       rxm_txe_fs_index(rxm_ep->send_queue.fs,
+								tx_entry));
 		pkt->ctrl_hdr.msg_id = tx_entry->msg_id;
 		pkt->ctrl_hdr.type = ofi_ctrl_large_data;
 
@@ -651,7 +669,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	return 0;
 done:
 	rxm_buf_release(&rxm_ep->tx_pool, (struct rxm_buf *)tx_buf);
-	freestack_push(rxm_ep->txe_fs, tx_entry);
+	freestack_push(rxm_ep->send_queue.fs, tx_entry);
 	return ret;
 }
 
