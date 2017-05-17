@@ -84,7 +84,8 @@ Generic fi_mr_regattr is not supported. No support for binding memory regions to
 a counter.
 
 ### Wait objects
-Only FI_WAIT_FD wait object is supported. Wait sets are not supported.
+Only FI_WAIT_FD wait object is supported only for FI_EP_MSG endpoint type.
+Wait sets are not supported.
 
 ### Resource Management
 Application has to make sure CQs are not overrun as this cannot be detected
