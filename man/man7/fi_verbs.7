@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2017\-05\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2017\-05\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -81,7 +81,8 @@ Generic fi_mr_regattr is not supported.
 No support for binding memory regions to a counter.
 .SS Wait objects
 .PP
-Only FI_WAIT_FD wait object is supported.
+Only FI_WAIT_FD wait object is supported only for FI_EP_MSG endpoint
+type.
 Wait sets are not supported.
 .SS Resource Management
 .PP
