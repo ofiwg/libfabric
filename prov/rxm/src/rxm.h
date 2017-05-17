@@ -190,6 +190,7 @@ struct rxm_rx_buf {
 	struct rxm_recv_fs *recv_fs;
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_unexp_msg unexp_msg;
+	uint64_t comp_flags;
 
 	/* Used for large messages */
 	struct rxm_iov match_iov[RXM_IOV_LIMIT];
@@ -218,6 +219,7 @@ struct rxm_tx_entry {
 	uint8_t count;
 	void *context;
 	uint64_t flags;
+	uint64_t comp_flags;
 	struct rxm_tx_buf *tx_buf;
 
 	/* Used for large messages */
@@ -306,7 +308,6 @@ int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 void rxm_cq_progress(struct fid_cq *msg_cq);
 int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
 		void *buf, uint64_t data, uint64_t tag);
-int rxm_cq_report_error(struct util_cq *util_cq, struct fi_cq_err_entry *err_entry);
 int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
