@@ -375,6 +375,7 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 
 	rx_buf->recv_fs = recv_queue->fs;
 
+	fastlock_acquire(&rx_buf->ep->util_ep.lock);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, &match_attr);
 	if (!entry) {
@@ -383,8 +384,10 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		rx_buf->unexp_msg.addr = match_attr.addr;
 		rx_buf->unexp_msg.tag = match_attr.tag;
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &recv_queue->unexp_msg_list);
+		fastlock_release(&rx_buf->ep->util_ep.lock);
 		return 0;
 	}
+	fastlock_release(&rx_buf->ep->util_ep.lock);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 	return rxm_cq_handle_data(rx_buf);

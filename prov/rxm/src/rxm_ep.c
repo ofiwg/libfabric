@@ -357,38 +357,39 @@ static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
 	return rxm_ep->rxm_info->rx_attr->op_flags;
 }
 
-static int rxm_check_unexp_msg_list(struct util_cq *util_cq, struct rxm_recv_queue *recv_queue,
-		struct rxm_recv_entry *recv_entry, dlist_func_t *match)
+static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
+				    struct rxm_recv_queue *recv_queue,
+				    struct rxm_recv_entry *recv_entry)
 {
 	struct dlist_entry *entry;
 	struct rxm_unexp_msg *unexp_msg;
 	struct rxm_recv_match_attr match_attr;
 	struct rxm_rx_buf *rx_buf;
-	int ret = 0;
 
-	fastlock_acquire(&util_cq->cq_lock);
-	if (ofi_cirque_isfull(util_cq->cirq)) {
-		ret = -FI_EAGAIN;
-		goto out;
+	fastlock_acquire(&rxm_ep->util_ep.lock);
+
+	if (dlist_empty(&recv_queue->unexp_msg_list)) {
+		fastlock_release(&rxm_ep->util_ep.lock);
+		return -FI_EAGAIN;
 	}
 
 	match_attr.addr = recv_entry->addr;
 	match_attr.tag = recv_entry->tag;
 	match_attr.ignore = recv_entry->ignore;
 
-	entry = dlist_remove_first_match(&recv_queue->unexp_msg_list, match, &match_attr);
+	entry = dlist_remove_first_match(&recv_queue->unexp_msg_list,
+					 recv_queue->match_unexp, &match_attr);
+	fastlock_release(&rxm_ep->util_ep.lock);
 	if (!entry)
-		goto out;
+		return -FI_EAGAIN;
+
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Match for posted recv found in unexp msg list\n");
 
 	unexp_msg = container_of(entry, struct rxm_unexp_msg, entry);
 	rx_buf = container_of(unexp_msg, struct rxm_rx_buf, unexp_msg);
 	rx_buf->recv_entry = recv_entry;
 
-	ret = rxm_cq_handle_data(rx_buf);
-out:
-	fastlock_release(&util_cq->cq_lock);
-	return ret;
+	return rxm_cq_handle_data(rx_buf);
 }
 
 static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
@@ -421,17 +422,17 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	recv_entry->tag = tag;
 	recv_entry->ignore = ignore;
 
-	if (!dlist_empty(&recv_queue->unexp_msg_list)) {
-		ret = rxm_check_unexp_msg_list(rxm_ep->util_ep.rx_cq, recv_queue,
-				recv_entry, recv_queue->match_unexp);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-					"Unable to check unexp msg list\n");
-			return ret;
-		}
+	ret = rxm_check_unexp_msg_list(rxm_ep, recv_queue, recv_entry);
+	if (ret == -FI_EAGAIN) {
+		fastlock_acquire(&rxm_ep->util_ep.lock);
+		dlist_insert_tail(&recv_entry->entry,
+				  &recv_queue->recv_list);
+		fastlock_release(&rxm_ep->util_ep.lock);
+	} else if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unable to check unexp msg list\n");
+		return ret;
 	}
-
-	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
 	return 0;
 }
 
@@ -655,7 +656,8 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 			ret = fi_inject(rxm_conn->msg_ep, pkt, pkt_size, 0);
 			if (ret)
-				FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_inject for MSG provider failed\n");
+				FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+				       "fi_inject for MSG provider failed\n");
 			/* release allocated buffer for further reuse */
 			goto done;
 		} else {
