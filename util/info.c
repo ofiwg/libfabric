@@ -34,6 +34,8 @@
 #include <string.h>
 #include <getopt.h>
 
+#include <fi_osd.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
 

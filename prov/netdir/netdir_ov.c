@@ -33,6 +33,7 @@
 #ifdef _WIN32
 
 #include <ntstatus.h>
+#define WIN32_NO_STATUS
 
 #include "netdir_ov.h"
 #include "netdir_log.h"
