@@ -32,6 +32,9 @@
 
 #ifdef _WIN32
 
+#include <ntstatus.h>
+#define WIN32_NO_STATUS
+
 #include "ndspi.h"
 
 #include "netdir.h"
@@ -45,7 +48,6 @@
 #include "netdir_unexp.h"
 
 #include <windows.h>
-#include <ntstatus.h>
 
 #define PREPOSTLEN (sizeof(struct nd_unexpected_buf) + gl_data.inline_thr)
 
