@@ -255,10 +255,11 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	fi_remove_comma(buf);
 }
 
-static void fi_tostr_addr(char *buf, uint32_t addr_format,
-		void *addr)
+static void fi_tostr_addr(char *buf, uint32_t addr_format, void *addr)
 {
 	char *p;
+	size_t len;
+
 	p = buf + strlen(buf);
 
 	if (addr == NULL) {
@@ -266,36 +267,8 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 		return;
 	}
 
-	switch (addr_format) {
-	case FI_SOCKADDR:
-		/* translate and recurse... */
-		switch (((struct sockaddr *)addr)->sa_family) {
-		case AF_INET:
-			fi_tostr_addr(p, FI_SOCKADDR_IN, addr);
-			break;
-		case AF_INET6:
-			fi_tostr_addr(p, FI_SOCKADDR_IN6, addr);
-			break;
-		default:
-			fi_tostr_addr(p, FI_FORMAT_UNSPEC, addr);
-			break;
-		}
-		break;
-	case FI_SOCKADDR_IN:
-		inet_ntop(AF_INET, &((struct sockaddr_in *)addr)->sin_addr,
-			p, 64);
-		break;
-	case FI_SOCKADDR_IN6:
-		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr,
-			p, 64);
-		break;
-	case FI_ADDR_GNI:  /*TODO: eventually something better */
-		sprintf(p, "0x%" PRIx64,*(uint64_t *)addr);
-		break;
-	default:
-		sprintf(p, "%p", addr);
-		break;
-	}
+	len = 64;
+	ofi_straddr(p, &len, addr_format, addr);
 }
 
 static void fi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,

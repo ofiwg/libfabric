@@ -46,6 +46,10 @@
 #include <pthread.h>
 #include <sys/time.h>
 
+#include <inttypes.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <fi_signal.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/fi_errno.h>
@@ -216,6 +220,81 @@ uint64_t fi_gettime_us(void)
 
 	gettimeofday(&now, NULL);
 	return now.tv_sec * 1000000 + now.tv_usec;
+}
+
+const char *ofi_straddr(char *buf, size_t *len,
+			uint32_t addr_format, const void *addr)
+{
+	const struct sockaddr *sock_addr;
+	const struct sockaddr_in6 *sin6;
+	const struct sockaddr_in *sin;
+	char str[INET6_ADDRSTRLEN + 8];
+	size_t size;
+
+	if (!addr || !len)
+		return NULL;
+
+	switch (addr_format) {
+	case FI_SOCKADDR:
+		sock_addr = addr;
+		switch (sock_addr->sa_family) {
+		case AF_INET:
+			goto sa_sin;
+		case AF_INET6:
+			goto sa_sin6;
+		default:
+			return NULL;
+		}
+		break;
+	case FI_SOCKADDR_IN:
+sa_sin:
+		sin = addr;
+		if (!inet_ntop(sin->sin_family, &sin->sin_addr.s_addr, str,
+			       sizeof(str)))
+			return NULL;
+
+		size = snprintf(buf, MIN(*len, sizeof(str)),
+				"inet://%s:%" PRIu16, str,
+				ntohs(sin->sin_port));
+		break;
+	case FI_SOCKADDR_IN6:
+sa_sin6:
+		sin6 = addr;
+		if (!inet_ntop(sin6->sin6_family, &sin6->sin6_addr.s6_addr, str,
+			       sizeof(str)))
+			return NULL;
+
+		size = snprintf(buf, MIN(*len, sizeof(str)),
+				"inet6://[%s]:%" PRIu16, str,
+				ntohs(sin6->sin6_port));
+		break;
+	case FI_SOCKADDR_IB:
+		size = snprintf(buf, *len, "ib://%p", addr);
+		break;
+	case FI_ADDR_PSMX:
+		size = snprintf(buf, *len, "psmx://%p", addr);
+		break;
+	case FI_ADDR_GNI:
+		size = snprintf(buf, *len, "gni://%" PRIx64, *(uint64_t *) addr);
+		break;
+	case FI_ADDR_BGQ:
+		size = snprintf(buf, *len, "bgq://%p", addr);
+		break;
+	case FI_ADDR_MLX:
+		size = snprintf(buf, *len, "mlx://%p", addr);
+		break;
+	case FI_ADDR_STR:
+		size = snprintf(buf, *len, "%s", (const char *) addr);
+		break;
+	default:
+		return NULL;
+	}
+
+	/* Make sure that possibly truncated messages have a null terminator. */
+	if (buf && *len)
+		buf[*len - 1] = '\0';
+	*len = size + 1;
+	return buf;
 }
 
 #ifndef HAVE_EPOLL

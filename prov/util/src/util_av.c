@@ -953,51 +953,7 @@ static int ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr, void *addr,
 static const char *ip_av_straddr(struct fid_av *av, const void *addr, char *buf,
 				 size_t *len)
 {
-	const struct sockaddr *sock_addr;
-	const struct sockaddr_in6 *sin6;
-	const struct sockaddr_in *sin;
-	char str[INET6_ADDRSTRLEN + 8];
-	uint16_t port;
-	int size;
-
-	if (!addr || !len)
-		return NULL;
-
-	sock_addr = addr;
-	switch (sock_addr->sa_family) {
-	case AF_INET:
-		sin = addr;
-		if (!inet_ntop(sin->sin_family, (void*)&sin->sin_addr.s_addr, str,
-			       sizeof(str)))
-			return NULL;
-
-		port = sin->sin_port;
-		break;
-	case AF_INET6:
-		sin6 = addr;
-		if (!inet_ntop(sin6->sin6_family, &sin6->sin6_addr.s6_addr, str,
-			       sizeof(str)))
-			return NULL;
-
-		port = sin6->sin6_port;
-		break;
-	default:
-		return NULL;
-	}
-
-	size = snprintf(buf, MIN(*len, sizeof(str)), "%s:%" PRIu16, str,
-			ntohs(port));
-
-	/* Make sure that possibly truncated messages have a NULL terminator. */
-	if (buf && *len)
-		buf[*len - 1] = '\0';
-
-	/* Output length includes NULL terminator, which snprintf does not
-	 * include in it's length calculation.
-	 */
-	*len = size + 1;
-
-	return buf;
+	return ofi_straddr(buf, len, FI_SOCKADDR, addr);
 }
 
 static struct fi_ops_av ip_av_ops = {
@@ -1065,6 +1021,7 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	(*av)->ops = &ip_av_ops;
 	return 0;
 }
+
 
 /*
  * Connection Map
