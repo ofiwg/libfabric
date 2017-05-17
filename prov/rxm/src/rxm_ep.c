@@ -1070,6 +1070,9 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 	if (ret)
 		return ret;
 
+	rxm_ep->comp_per_progress = MIN(rxm_ep->msg_info->tx_attr->size,
+					rxm_ep->msg_info->rx_attr->size) / 2;
+
 	rxm_domain = container_of(util_domain, struct rxm_domain, util_domain);
 	rxm_fabric = container_of(util_domain->fabric, struct rxm_fabric, util_fabric);
 
@@ -1081,7 +1084,7 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 
 	memset(&cq_attr, 0, sizeof(cq_attr));
 	cq_attr.size = rxm_fi_info->tx_attr->size + rxm_fi_info->rx_attr->size;
-	cq_attr.format = FI_CQ_FORMAT_MSG;
+	cq_attr.format = FI_CQ_FORMAT_DATA;
 
 	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
 	if (ret) {
@@ -1125,7 +1128,7 @@ void rxm_ep_progress(struct util_ep *util_ep)
 	struct rxm_ep *rxm_ep;
 
 	rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
-	rxm_cq_progress(rxm_ep->msg_cq);
+	rxm_cq_progress(rxm_ep);
 }
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
