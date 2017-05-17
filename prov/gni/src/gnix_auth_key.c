@@ -207,21 +207,22 @@ int _gnix_auth_key_free(struct gnix_auth_key *key)
 
 	fastlock_destroy(&key->lock);
 
+	if (key->enabled) {
+		ret = _gnix_free_bitmap(&key->user);
+		assert(ret == FI_SUCCESS);
+		if (ret) {
+			GNIX_ERR(FI_LOG_MR, "failed to free bitmap, bitmap=%p\n",
+				&key->user);
+		}
+
+		ret = _gnix_free_bitmap(&key->prov);
+		assert(ret == FI_SUCCESS);
+		if (ret) {
+			GNIX_ERR(FI_LOG_MR, "failed to free bitmap, bitmap=%p\n",
+				&key->prov);
+		}
+	}
 	key->enabled = 0;
-
-	ret = _gnix_free_bitmap(&key->user);
-	assert(ret == FI_SUCCESS);
-	if (ret) {
-		GNIX_ERR(FI_LOG_MR, "failed to free bitmap, bitmap=%p\n",
-			&key->user);
-	}
-
-	ret = _gnix_free_bitmap(&key->prov);
-	assert(ret == FI_SUCCESS);
-	if (ret) {
-		GNIX_ERR(FI_LOG_MR, "failed to free bitmap, bitmap=%p\n",
-			&key->prov);
-	}
 
 	free(key);
 
