@@ -157,12 +157,25 @@ fail:
 static int
 usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
+	int ret;
 	struct usdf_ep *ep;
 	struct usdf_cq *cq;
 	struct usdf_av *av;
-	int ret;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	/* Backward compatibility case for Open MPI. We haven't been validating the flags until now.
+	 * Older version of Open MPI gives FI_RECV as AV bind flag (bug). */
+	if (bfid->fclass == FI_CLASS_AV) {
+		av = av_fidtou(bfid);
+		if (av->av_domain->dom_info->fabric_attr->api_version <= FI_VERSION(1, 4) && (flags & FI_RECV))
+			flags = flags & ~FI_RECV;
+	}
+
+	/* Check if the binding flags are valid. */
+	ret = ofi_ep_bind_valid(&usdf_ops, bfid, flags);
+	if (ret)
+		return ret;
 
 	ep = ep_fidtou(fid);
 
