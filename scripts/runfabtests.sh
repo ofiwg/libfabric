@@ -51,6 +51,7 @@ declare CLIENT="127.0.0.1"
 declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
+declare -i SKIP_NEG=0
 declare COMPLEX_CFG
 declare TIMEOUT_VAL="90"
 
@@ -466,9 +467,11 @@ function main {
 				unit_test "$test" "0"
 			done
 
-			for test in "${neg_unit_tests[@]}"; do
-				unit_test "$test" "1"
-			done
+			if [ $SKIP_NEG -eq 0 ] ; then
+				for test in "${neg_unit_tests[@]}"; do
+					unit_test "$test" "1"
+				done
+			fi
 		;;
 		simple)
 			for test in "${simple_tests[@]}"; do
@@ -530,6 +533,7 @@ function usage {
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short,complex (default quick)"
 	errcho -e " -e\texclude tests: cq_data,dgram_dgram_waitset,..."
+	errcho -e " -N\tskip negative unit tests"
 	errcho -e " -p\tpath to test bins (default PATH)"
 	errcho -e " -c\tclient interface"
 	errcho -e " -s\tserver/host interface"
@@ -538,7 +542,7 @@ function usage {
 	exit 1
 }
 
-while getopts ":vt:p:g:e:c:s:u:T:" opt; do
+while getopts ":vt:p:g:e:c:s:u:T:N" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -557,6 +561,8 @@ case ${opt} in
 	u) COMPLEX_CFG=${OPTARG}
 	;;
 	T) TIMEOUT_VAL=${OPTARG}
+	;;
+	N) SKIP_NEG+=1
 	;;
 	:|\?) usage
 	;;
