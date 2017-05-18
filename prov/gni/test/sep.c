@@ -556,7 +556,7 @@ sep_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
 
 static void
 sep_check_cntrs(uint64_t s[], uint64_t r[], uint64_t s_e[],
-		uint64_t r_e[])
+		uint64_t r_e[], bool need_to_spin)
 {
 	int i = 0;
 
@@ -566,13 +566,40 @@ sep_check_cntrs(uint64_t s[], uint64_t r[], uint64_t s_e[],
 		send_errs[i] += s_e[i];
 		recv_errs[i] += r_e[i];
 
+		if (need_to_spin) {
+			while (fi_cntr_read(send_cntr[i]) != sends[i]) {
+				pthread_yield();
+			}
+		}
+
 		cr_assert(fi_cntr_read(send_cntr[i]) == sends[i],
 			  "Bad send count i:%d send_cntr:%ld sends:%ld",
 			  i, fi_cntr_read(send_cntr[i]), sends[i]);
+
+		if (need_to_spin) {
+			while (fi_cntr_read(recv_cntr[i]) != recvs[i]) {
+				pthread_yield();
+			}
+		}
+
 		cr_assert(fi_cntr_read(recv_cntr[i]) == recvs[i],
 			  "Bad recv count");
+
+		if (need_to_spin) {
+			while (fi_cntr_readerr(send_cntr[i]) != send_errs[i]) {
+				pthread_yield();
+			}
+		}
+
 		cr_assert(fi_cntr_readerr(send_cntr[i]) == send_errs[i],
 			  "Bad send err count");
+
+		if (need_to_spin) {
+			while (fi_cntr_readerr(recv_cntr[i]) != recv_errs[i]) {
+				pthread_yield();
+			}
+		}
+
 		cr_assert(fi_cntr_readerr(recv_cntr[i]) == recv_errs[i],
 			  "Bad recv err count");
 	}
@@ -784,7 +811,7 @@ static void sep_sendv(int index, int len)
 				 len * iov_cnt, 0, false, 0, rx_ep[1][index]);
 
 		s[0] = 1; r[1] = 1;
-		sep_check_cntrs(s, r, s_e, r_e);
+		sep_check_cntrs(s, r, s_e, r_e, false);
 		cr_assert(sep_check_iov_data(src_iov, iov_dest_buf, iov_cnt,
 			len * iov_cnt), "Data mismatch");
 	}
@@ -828,7 +855,7 @@ static void sep_tsendv(int index, int len)
 			      len * iov_cnt, rx_ep[1][index]);
 
 		s[0] = 1; r[1] = 1;
-		sep_check_cntrs(s, r, s_e, r_e);
+		sep_check_cntrs(s, r, s_e, r_e, false);
 		cr_assert(sep_check_iov_data(src_iov, iov_dest_buf, iov_cnt,
 			len * iov_cnt), "Data mismatch");
 	}
@@ -875,7 +902,7 @@ static void sep_recvv(int index, int len)
 			      rx_ep[1][index]);
 
 		s[0] = 1; r[1] = 1;
-		sep_check_cntrs(s, r, s_e, r_e);
+		sep_check_cntrs(s, r, s_e, r_e, false);
 		cr_assert(check_iov_data(src_iov, dest_iov, iov_cnt),
 			  "Data mismatch");
 	}
@@ -941,7 +968,7 @@ static void _sendmsg(int index, int len, bool tagged)
 			false, tagged ? len : 0, rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1010,7 +1037,7 @@ void sep_sendmsgdata(int index, int len)
 		      target, len, (uint64_t)source, false, 0, rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1050,7 +1077,7 @@ void sep_inject(int index, int len)
 		pthread_yield();
 	}
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, true);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(tx_cq[0][index], &cqe, 1), -FI_EAGAIN);
@@ -1092,7 +1119,7 @@ void sep_tinject(int index, int len)
 		pthread_yield();
 	}
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, true);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(tx_cq[0][index], &cqe, 1), -FI_EAGAIN);
@@ -1128,7 +1155,7 @@ void sep_senddata(int index, int len)
 		      rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1162,7 +1189,7 @@ void sep_tsenddata(int index, int len)
 		      rx_ep[1][index]);
 
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1201,7 +1228,7 @@ void sep_injectdata(int index, int len)
 	}
 
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, false);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(tx_cq[0][index], &cqe, 1), -FI_EAGAIN);
@@ -1244,7 +1271,7 @@ void sep_tinjectdata(int index, int len)
 	}
 
 	s[0] = 1; r[1] = 1;
-	sep_check_cntrs(s, r, s_e, r_e);
+	sep_check_cntrs(s, r, s_e, r_e, true);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(tx_cq[0][index], &cqe, 1), -FI_EAGAIN);
@@ -1276,7 +1303,7 @@ void sep_read(int index, int len)
 	sep_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1307,7 +1334,7 @@ void sep_readv(int index, int len)
 	sep_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1352,7 +1379,7 @@ void sep_readmsg(int index, int len)
 	sep_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1379,7 +1406,7 @@ void sep_write(int index, int len)
 	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1411,7 +1438,7 @@ void sep_writev(int index, int len)
 	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1455,7 +1482,7 @@ void sep_writemsg(int index, int len)
 	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 }
 
@@ -1511,7 +1538,7 @@ void sep_writedata(int index, int len)
 	sep_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	cr_assert(sep_check_data(source, target, len), "Data mismatch");
 
 	while ((ret = fi_cq_read(rx_cq[1][index], &dcqe, 1)) == -FI_EAGAIN) {
@@ -1589,7 +1616,7 @@ void sep_atomic(int index)
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	ret = *((uint64_t *)target) == SOURCE_DATA;
 	cr_assert(ret, "Data mismatch");
 
@@ -1625,7 +1652,7 @@ void sep_atomic_v(int index)
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
 		SOURCE_DATA : TARGET_DATA;
 	ret = *((int64_t *)target) == min;
@@ -1677,7 +1704,7 @@ void sep_atomic_msg(int index)
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0, tx_ep[0][index]);
 
 	w[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	min = ((int32_t)SOURCE_DATA < (int32_t)TARGET_DATA) ?
 		SOURCE_DATA : TARGET_DATA;
 	min = (min & U32_MASK) | (TARGET_DATA & (U32_MASK << 32));
@@ -1740,7 +1767,7 @@ void sep_atomic_rw(int index)
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	ret = *((uint64_t *)target) == (SOURCE_DATA + TARGET_DATA);
 	cr_assert(ret, "Data mismatch");
 	ret = *((uint64_t *)source) == TARGET_DATA;
@@ -1781,7 +1808,7 @@ void sep_atomic_rwv(int index)
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
 		SOURCE_DATA : TARGET_DATA;
 	ret = *((int64_t *)target) == min;
@@ -1836,7 +1863,7 @@ void sep_atomic_rwmsg(int index)
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
 		SOURCE_DATA : TARGET_DATA;
 	ret = *((int64_t *)target) == min;
@@ -1876,7 +1903,7 @@ void sep_atomic_compwrite(int index)
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	ret = *((uint64_t *)target) == SOURCE_DATA;
 	cr_assert(ret, "Data mismatch");
 	ret = *((uint64_t *)source) == TARGET_DATA;
@@ -1927,7 +1954,7 @@ void sep_atomic_compwritev(int index)
 	cr_assert_eq(ret, 1);
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	ret = *((double *)target) == (double)SOURCE_DATA_FP;
 	cr_assert(ret, "Data mismatch");
 	ret = *((double *)source) == (double)TARGET_DATA_FP;
@@ -1983,7 +2010,7 @@ void sep_atomic_compwritemsg(int index)
 	cr_assert_eq(ret, 1);
 	sep_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0, tx_ep[0][index]);
 	r[0] = 1;
-	sep_check_cntrs(w, r, w_e, r_e);
+	sep_check_cntrs(w, r, w_e, r_e, false);
 	ret = *((uint64_t *)target) == SOURCE_DATA;
 	cr_assert(ret, "Data mismatch");
 	ret = *((uint64_t *)source) == TARGET_DATA;

@@ -335,7 +335,6 @@ DIRECT_FN STATIC uint64_t gnix_cntr_read(struct fid_cntr *cntr)
 		return -FI_EINVAL;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
-	v = ofi_atomic_get32(&cntr_priv->cnt);
 
 	if (cntr_priv->wait)
 		gnix_wait_wait((struct fid_wait *)cntr_priv->wait, 0);
@@ -344,6 +343,8 @@ DIRECT_FN STATIC uint64_t gnix_cntr_read(struct fid_cntr *cntr)
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_CQ, " __gnix_cntr_progress returned %d.\n",
 			  ret);
+
+	v = ofi_atomic_get32(&cntr_priv->cnt);
 
 	return (uint64_t)v;
 }
