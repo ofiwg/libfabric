@@ -1294,7 +1294,15 @@ ssize_t ft_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 		return ret;
 
 	if (op == FT_RMA_WRITEDATA) {
-		ret = ft_rx(ep, 0);
+		if (fi->rx_attr->mode & FI_RX_CQ_DATA) {
+			ret = ft_rx(ep, 0);
+		} else {
+			ret = ft_get_rx_comp(rx_seq);
+			/* Just increment the seq # instead of posting recv so
+			 * that we wait for remote write completion on the next
+			 * iteration. */
+			rx_seq++;
+		}
 		if (ret)
 			return ret;
 	}

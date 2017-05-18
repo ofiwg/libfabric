@@ -265,7 +265,15 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			break;
 		case FT_RMA_WRITEDATA:
 			if (!opts.dst_addr) {
-				ret = ft_post_rx(ep, 0, &tx_ctx_arr[j]);
+				if (fi->rx_attr->mode & FI_RX_CQ_DATA)
+					ret = ft_post_rx(ep, 0, &tx_ctx_arr[j]);
+				else
+					/* Just increment the seq # instead of
+					 * posting recv so that we wait for
+					 * remote write completion on the next
+					 * iteration */
+					rx_seq++;
+
 			} else {
 				if (opts.transfer_size < fi->tx_attr->inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
