@@ -268,6 +268,8 @@ struct fi_ibv_rdm_ep {
 	struct fi_ibv_rdm_cntr *read_cntr;
 	struct fi_ibv_rdm_cntr *write_cntr;
 
+	struct fi_info *info;
+
 	size_t addrlen;
 	struct rdma_addrinfo *rai;
 	struct sockaddr_in my_addr;

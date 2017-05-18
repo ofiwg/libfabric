@@ -465,6 +465,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	util_buf_pool_destroy(fi_ibv_rdm_extra_buffers_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
 
+	fi_freeinfo(ep->info);
+
 	free(ep);
 
 	return ret;
@@ -496,10 +498,14 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	struct fi_ibv_rdm_ep *_ep;
 	_ep = calloc(1, sizeof *_ep);
-	if (!_ep) {
+	if (!_ep)
 		return -FI_ENOMEM;
-	}
 
+	_ep->info = fi_dupinfo(info);
+	if (!_ep->info) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
 	_ep->domain = _domain;
 	_ep->ep_fid.fid.fclass = FI_CLASS_EP;
 	_ep->ep_fid.fid.context = context;
@@ -521,7 +527,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		VERBS_INFO(FI_LOG_CORE,
 			   "invalid value of rdm_buffer_num\n");
 		ret = -FI_EINVAL;
-		goto err;
+		goto err2;
 	}
 
 	VERBS_INFO(FI_LOG_EP_CTRL, "inject_size: %d\n",
@@ -547,7 +553,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			VERBS_INFO(FI_LOG_CORE,
 				   "invalid value of rdm_rndv_seg_size\n");
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 	}
 
@@ -578,7 +584,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			VERBS_INFO(FI_LOG_CORE,
 				   "invalid value of rdm_thread_timeout\n");
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		} else {
 			_ep->cm_progress_timeout = param;
 		}
@@ -598,7 +604,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			VERBS_INFO(FI_LOG_CORE,
 				   "invalid value of rdm_eager_send_opcode\n");
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 	} else {
 		_ep->eopcode = IBV_WR_SEND;
@@ -611,7 +617,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			VERBS_INFO(FI_LOG_CORE,
 				   "Unsupported eager operation code\n");
 			ret = -FI_ENODATA;
-			goto err;
+			goto err2;
 		}
 		break;
 	case FI_PROTO_IWARP_RDM:
@@ -619,22 +625,22 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			VERBS_INFO(FI_LOG_CORE,
 				   "Unsupported eager operation code\n");
 			ret = -FI_ENODATA;
-			goto err;
+			goto err1;
 		}
 		break;
 	default:
 		VERBS_INFO(FI_LOG_CORE, "Unsupported protocol\n");
 		ret = -FI_ENODATA;
-		goto err;
+		goto err2;
 	}
 
 	ret = fi_ibv_get_rdma_rai(NULL, NULL, 0, info, &_ep->rai);
 	if (ret) {
-		goto err;
+		goto err2;
 	}
 	ret = fi_ibv_rdm_cm_bind_ep(_ep->domain->rdm_cm, _ep);
 	if (ret) {
-		goto err;
+		goto err2;
 	}
 
 	_ep->posted_sends = 0;
@@ -665,7 +671,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (_ep->scq == NULL) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "ibv_create_cq", errno);
 		ret = -FI_EOTHER;
-		goto err;
+		goto err2;
 	}
 
 	_ep->rcq =
@@ -673,7 +679,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (_ep->rcq == NULL) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "ibv_create_cq", errno);
 		ret = -FI_EOTHER;
-		goto err;
+		goto err2;
 	}
 
 	*ep = &_ep->ep_fid;
@@ -690,11 +696,13 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		VERBS_INFO(FI_LOG_EP_CTRL,
 			"Failed to launch CM progress thread, err :%d\n", ret);
 		ret = -FI_EOTHER;
-		goto err;
+		goto err2;
 	}
 
 	return ret;
-err:
+err2:
+	fi_freeinfo(_ep->info);
+err1:
 	free(_ep);
 	return ret;
 }

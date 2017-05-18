@@ -73,8 +73,8 @@ int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep)
 
 	assert(cm->ec && cm->listener);
 
-	if (ep->domain->info->src_addr) {
-		memcpy(&ep->my_addr, ep->domain->info->src_addr, sizeof(ep->my_addr));
+	if (ep->info->src_addr) {
+		memcpy(&ep->my_addr, ep->info->src_addr, sizeof(ep->my_addr));
 
 		inet_ntop(ep->my_addr.sin_family,
 			  &ep->my_addr.sin_addr.s_addr,
