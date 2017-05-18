@@ -31,6 +31,12 @@
  */
 
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <ctype.h>
+
+#include "fi.h"
 
 #include "verbs_rdm.h"
 
@@ -253,7 +259,148 @@ out:
 	return (av->flags & FI_EVENT) ? FI_SUCCESS : (ret - failed);
 }
 
-static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
+static int fi_ibv_rdm_av_insertsvc(struct fid_av *av_fid, const char *node,
+				   const char *service, fi_addr_t *fi_addr,
+				   uint64_t flags, void *context)
+{
+	struct addrinfo addrinfo_hints;
+	struct addrinfo *result = NULL;
+	int ret;
+
+	if (!node || !service) {
+		VERBS_WARN(FI_LOG_AV, "fi_av_insertsvc: %s provided\n",
+			   (!node ? (!service ? "node and service weren't" :
+						"node wasn't") :
+				    ("service wasn't")));
+		return -FI_EINVAL;
+	}
+
+	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
+
+	memset(&addrinfo_hints, 0, sizeof(addrinfo_hints));
+	addrinfo_hints.ai_family = AF_INET;
+	ret = getaddrinfo(node, service, &addrinfo_hints, &result);
+	if (ret) {
+		if ((av->flags & FI_EVENT) && (av->eq)) {
+			struct fi_eq_entry entry = {
+				.fid = &av->av_fid.fid,
+				.context = context,
+				.data = 0
+			};
+			struct fi_eq_err_entry err = {
+				.fid = &av->av_fid.fid,
+				.context = context,
+				.data = 0,
+				.err = FI_EINVAL,
+				.prov_errno = FI_EINVAL
+			};
+			av->eq->err = err;
+
+			fi_ibv_eq_write_event(
+				av->eq, FI_AV_COMPLETE,
+				&entry, sizeof(entry));
+		}
+		return -ret;
+	}
+
+	ret = fi_ibv_rdm_av_insert(av_fid, (struct sockaddr_in *)result->ai_addr,
+				   1, fi_addr, flags, context);
+	freeaddrinfo(result);
+	return ret;
+}
+
+static int fi_ibv_rdm_av_insertsym(struct fid_av *av, const char *node,
+				   size_t nodecnt, const char *service,
+				   size_t svccnt, fi_addr_t *fi_addr,
+				   uint64_t flags, void *context)
+{
+	int ret = 0, success = 0, err_code = 0;
+	int var_port, var_host, len_port, len_host;
+	char base_host[FI_NAME_MAX] = {0};
+	char tmp_host[FI_NAME_MAX] = {0};
+	char tmp_port[FI_NAME_MAX] = {0};
+	int hostlen, offset = 0, fmt;
+	size_t i, j;
+
+	if (!node || !service || node[0] == '\0') {
+		VERBS_WARN(FI_LOG_AV, "fi_av_insertsym: %s provided\n",
+			   (!service ? (!node ? "node and service weren't" :
+						"service wasn't") :
+				    ("node wasn't")));
+		return -FI_EINVAL;
+	}
+
+	hostlen = strlen(node);
+	while (isdigit(*(node + hostlen - (offset + 1))))
+		offset++;
+
+	if (*(node + hostlen - offset) == '.')
+		fmt = 0;
+	else
+		fmt = offset;
+
+	assert((hostlen-offset) < FI_NAME_MAX);
+	strncpy(base_host, node, hostlen - (offset));
+	var_port = atoi(service);
+	var_host = atoi(node + hostlen - offset);
+
+	for (i = 0; i < nodecnt; i++) {
+		for (j = 0; j < svccnt; j++) {
+			int check_host = 0, check_port = 0;
+
+			len_host = snprintf(tmp_host, FI_NAME_MAX, "%s%0*d",
+					    base_host, fmt,
+					    var_host + (int)i);
+			len_port = snprintf(tmp_port, FI_NAME_MAX,  "%d",
+					    var_port + (int)j);
+
+			check_host = (len_host > 0 && len_host < FI_NAME_MAX);
+			check_host = (len_port > 0 && len_port < FI_NAME_MAX);
+
+			if (check_port && check_host) {
+				ret = fi_ibv_rdm_av_insertsvc(av, tmp_host,
+							      tmp_port, fi_addr,
+							      flags, context);
+				if (ret == 1)
+					success++;
+				else
+					err_code = ret;
+			} else {
+				VERBS_WARN(FI_LOG_AV,
+					   "fi_av_insertsym: %s is invalid\n",
+					   (!check_port ?
+					    (!check_host ?
+					     "node and service weren't" :
+					     "service wasn't") :
+					    ("node wasn't")));
+				err_code = FI_ETOOSMALL;
+			}
+		}
+	}
+	return success > 0 ? success : err_code;
+}
+
+static int fi_ibv_rdm_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
+				void *addr, size_t *addrlen)
+{
+	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
+	struct fi_ibv_rdm_conn *conn = NULL;
+
+	if (fi_addr == FI_ADDR_NOTAVAIL)
+		return -FI_EINVAL;
+
+	if (av->type == FI_AV_MAP)
+		conn = (struct fi_ibv_rdm_conn *) fi_addr;
+	else /* (av->type == FI_AV_TABLE) */
+		conn = av->domain->rdm_cm->conn_table[fi_addr];
+
+	memcpy(addr, &conn->addr, MIN(*addrlen, sizeof(conn->addr)));
+	*addrlen = sizeof(conn->addr);
+
+	return 0;
+}
+
+static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
                                 size_t count, uint64_t flags)
 {
 	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
@@ -297,7 +444,8 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 		/* TODO: add cleaning into av_insert */
 		HASH_DEL(av->domain->rdm_cm->conn_hash, conn);
 		if (ep)
-			slist_insert_tail(&conn->removed_next, &ep->av_removed_conn_head);
+			slist_insert_tail(&conn->removed_next,
+					  &ep->av_removed_conn_head);
 	}
 
 	if (ep)
@@ -305,10 +453,20 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t * fi_addr,
 	return ret;
 }
 
+static const char *fi_ibv_rdm_av_straddr(struct fid_av *av, const void *addr,
+					 char *buf, size_t *len)
+{
+	return ofi_straddr(buf, len, FI_SOCKADDR, addr);
+}
+
 static struct fi_ops_av fi_ibv_rdm_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = fi_ibv_rdm_av_insert,
+	.insertsvc = fi_ibv_rdm_av_insertsvc,
+	.insertsym = fi_ibv_rdm_av_insertsym,
 	.remove = fi_ibv_rdm_av_remove,
+	.lookup = fi_ibv_rdm_av_lookup,
+	.straddr = fi_ibv_rdm_av_straddr,
 };
 
 struct fi_ops_av *fi_ibv_rdm_set_av_ops(void)
