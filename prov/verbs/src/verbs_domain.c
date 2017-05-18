@@ -87,7 +87,8 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	/* Enable local write access by default for FI_EP_RDM which hides local
 	 * registration requirements. This allows to avoid buffering or double
 	 * registration */
-	if (!(md->domain->info->caps & FI_LOCAL_MR))
+	if (!(md->domain->info->caps & FI_LOCAL_MR) ||
+	    (md->domain->info->domain_attr->mr_mode & FI_MR_LOCAL))
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
 	/* Local read access to an MR is enabled by default in verbs */
