@@ -67,7 +67,7 @@ static void *__gnix_wait_nic_prog_thread_fn(void *the_arg)
 	struct gnix_fid_eq *eq1, *eq2;
 	struct gnix_cm_nic *cm_nic1, *cm_nic2;
 	sigset_t  sigmask;
-
+	DLIST_HEAD(gnix_nic_prog_list);
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/*
@@ -135,10 +135,17 @@ static void *__gnix_wait_nic_prog_thread_fn(void *the_arg)
 		pthread_mutex_lock(&gnix_nic_list_lock);
 
 		dlist_for_each_safe(&gnix_nic_list, nic1, nic2, gnix_nic_list) {
-			_gnix_nic_progress(nic1);
+			dlist_insert_tail(&nic1->gnix_nic_prog_list, &gnix_nic_prog_list);
+			_gnix_ref_get(nic1);
 		}
 
 		pthread_mutex_unlock(&gnix_nic_list_lock);
+
+		dlist_for_each_safe(&gnix_nic_prog_list, nic1, nic2, gnix_nic_prog_list) {
+			_gnix_nic_progress(nic1);
+			dlist_remove_init(&nic1->gnix_nic_prog_list);
+			_gnix_ref_put(nic1);
+		}
 
 		/* Progress all CM NICs. */
 		pthread_mutex_lock(&gnix_cm_nic_list_lock);
@@ -335,8 +342,8 @@ void _gnix_signal_wait_obj(struct fid_wait *wait)
 			   "The Read FD is %d Write is %d\n",
 			   wait_priv->fd[WAIT_READ],
 			   wait_priv->fd[WAIT_WRITE]);
-		if (write(wait_priv->fd[WAIT_WRITE], &msg, len) != len)
-			GNIX_WARN(WAIT_SUB, "failed to signal wait object.\n");
+		/* This is a non-blocking write as the fd could become full */
+		write(wait_priv->fd[WAIT_WRITE], &msg, len);
 		break;
 	default:
 		GNIX_WARN(WAIT_SUB,
@@ -381,6 +388,9 @@ static int gnix_init_wait_obj(struct gnix_fid_wait *wait, enum fi_wait_obj type)
 			goto err;
 
 		if (fi_fd_nonblock(wait->fd[WAIT_READ]))
+			goto cleanup;
+
+		if (fi_fd_nonblock(wait->fd[WAIT_WRITE]))
 			goto cleanup;
 
 		break;

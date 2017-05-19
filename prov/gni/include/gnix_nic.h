@@ -165,6 +165,7 @@ struct gnix_nic_attr {
 struct gnix_nic {
 	struct dlist_entry gnix_nic_list; /* global NIC list */
 	struct dlist_entry ptag_nic_list; /* global PTAG NIC list */
+	struct dlist_entry gnix_nic_prog_list; /* temporary list for nic progression */
 	fastlock_t lock;
 	uint32_t allocd_gni_res;
 	gni_cdm_handle_t gni_cdm_hndl;
