@@ -307,38 +307,34 @@ fi_ibv_rdm_process_addr_resolved(struct rdma_cm_id *id,
 
 	assert(id->verbs == ep->domain->verbs);
 
-	do {
-		fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
-		if (rdma_create_qp(id, ep->domain->pd, &qp_attr)) {
-			VERBS_INFO_ERRNO(FI_LOG_AV,
-					 "rdma_create_qp failed\n", errno);
-			return -errno;
-		}
+	fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
+	if (rdma_create_qp(id, ep->domain->pd, &qp_attr)) {
+		VERBS_INFO_ERRNO(FI_LOG_AV,
+				 "rdma_create_qp failed\n", errno);
+		return -errno;
+	}
 
-		if (conn->cm_role == FI_VERBS_CM_PASSIVE) {
-			break;
-		}
+	if (conn->cm_role == FI_VERBS_CM_PASSIVE)
+		goto resolve_route;
 
-		conn->qp[0] = id->qp;
-		assert(conn->id[0] == id);
-		if (conn->cm_role == FI_VERBS_CM_SELF) {
-			break;
-		}
+	conn->qp[0] = id->qp;
+	assert(conn->id[0] == id);
+	if (conn->cm_role == FI_VERBS_CM_SELF)
+		goto resolve_route;
 
-		ret = fi_ibv_rdm_prepare_conn_memory(ep, conn);
-		if (ret != FI_SUCCESS) {
+	ret = fi_ibv_rdm_prepare_conn_memory(ep, conn);
+	if (ret != FI_SUCCESS)
 			goto err;
-		}
 
-		ret = fi_ibv_rdm_repost_receives(conn, ep, ep->rq_wr_depth);
-		if (ret < 0) {
-			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
-			goto err;
-		} else {
-			ret = FI_SUCCESS;
-		}
-	} while (0);
+	ret = fi_ibv_rdm_repost_receives(conn, ep, ep->rq_wr_depth);
+	if (ret < 0) {
+		VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
+		goto err;
+	} else {
+		ret = FI_SUCCESS;
+	}
 
+resolve_route:
 	if (rdma_resolve_route(id, FI_IBV_RDM_CM_RESOLVEADDR_TIMEOUT)) {
 		VERBS_INFO(FI_LOG_AV, "rdma_resolve_route failed\n");
 		ret = -FI_EHOSTUNREACH;
