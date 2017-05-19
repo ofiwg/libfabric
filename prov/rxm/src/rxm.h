@@ -177,6 +177,7 @@ struct rxm_buf {
 	enum rxm_proto_state state;
 
 	struct dlist_entry entry;
+	void *desc;
 	/* MSG EP / shared context to which bufs would be posted to */
 	struct fid_ep *msg_ep;
 };
@@ -331,4 +332,3 @@ int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool);
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf);
-void *rxm_buf_get_desc(struct rxm_buf_pool *pool, void *buf);
