@@ -213,7 +213,7 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 	struct fi_context *context = (struct fi_context *)ctx;
 	struct fi_ibv_rdm_ep *ep_rdm = 
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
-	int err = 1;
+	int err = -FI_ENOENT;
 
 	if (!ep_rdm->domain)
 		return -EBADF;
