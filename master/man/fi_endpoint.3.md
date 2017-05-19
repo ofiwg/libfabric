@@ -1192,6 +1192,11 @@ for scalable endpoints.
 
 # SOCKET ENDPOINTS
 
+The following feature and description should be considered experimental.
+Until the experimental tag is removed, the interfaces, semantics, and data
+structures associated with socket endpoints may change between library
+versions.
+
 This section applies to endpoints of type FI_EP_SOCK_STREAM and
 FI_EP_SOCK_DGRAM, commonly referred to as socket endpoints.
 
