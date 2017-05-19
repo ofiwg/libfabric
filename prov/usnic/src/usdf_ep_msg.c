@@ -668,10 +668,16 @@ fail:
 static int
 usdf_ep_msg_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
+	int ret;
 	struct usdf_ep *ep;
 	struct usdf_cq *cq;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	/* Validate the flags. */
+	ret = ofi_ep_bind_valid(&usdf_ops, bfid, flags);
+	if (ret)
+		return ret;
 
 	ep = ep_fidtou(fid);
 
