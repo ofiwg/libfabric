@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2017\-04\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2017\-05\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -1265,6 +1265,11 @@ the receive context\[aq]s attributes.
 Note that this is the reverse of the requirement for receive contexts
 for scalable endpoints.
 .SH SOCKET ENDPOINTS
+.PP
+The following feature and description should be considered experimental.
+Until the experimental tag is removed, the interfaces, semantics, and
+data structures associated with socket endpoints may change between
+library versions.
 .PP
 This section applies to endpoints of type FI_EP_SOCK_STREAM and
 FI_EP_SOCK_DGRAM, commonly referred to as socket endpoints.
