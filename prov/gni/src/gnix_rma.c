@@ -1392,7 +1392,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 			req->work_fn = _gnix_rma_post_rdma_chain_req;
 	}
 
-	if (!(flags & GNIX_RMA_INDIRECT) && !mdesc &&
+	if (!(flags & (GNIX_RMA_INDIRECT | FI_INJECT)) && !mdesc &&
 	    (rdma || fr_type == GNIX_FAB_RQ_RDMA_READ)) {
 		/* We need to auto-register the source buffer. */
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid, (void *)loc_addr,

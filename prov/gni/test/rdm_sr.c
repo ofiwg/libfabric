@@ -48,6 +48,7 @@
 #include "gnix_cm_nic.h"
 #include "gnix_hashtable.h"
 #include "gnix_rma.h"
+#include "gnix_mr.h"
 #include "common.h"
 
 #include <criterion/criterion.h>
@@ -1099,12 +1100,26 @@ void do_inject(int len)
 					  (void *) -1, UINT_MAX, UINT_MAX };
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
+	static gnix_mr_cache_t *cache;
+	struct gnix_fid_ep *ep_priv;
+	int already_registered;
 
 	rdm_sr_init_data(source, len, 0x23);
 	rdm_sr_init_data(target, len, 0);
 
+	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
+	cache = ep_priv->domain->mr_cache_rw;
+	cr_assert(cache != NULL);
+	already_registered = ofi_atomic_get32(&cache->inuse.elements);
+
 	sz = fi_inject(ep[0], source, len, gni_addr[1]);
 	cr_assert_eq(sz, 0);
+
+	/*
+	 * shouldn't have registeredd the source buffer, trust but verify
+	 */
+	cr_assert(ofi_atomic_get32(&cache->inuse.elements)
+			== already_registered);
 
 	sz = fi_recv(ep[1], target, len, rem_mr[1], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
