@@ -199,7 +199,12 @@ static struct fi_info *_gnix_allocinfo(void)
 	gnix_info->domain_attr->control_progress = FI_PROGRESS_AUTO;
 	gnix_info->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
-	gnix_info->domain_attr->tx_ctx_cnt = gnix_max_nics_per_ptag;
+	/*
+	 * the cm_nic currently sucks up one of the gnix_nic's so
+	 * we have to subtract one from the gnix_max_nics_per_ptag.
+	 */
+	gnix_info->domain_attr->tx_ctx_cnt = (gnix_max_nics_per_ptag == 1) ?
+						1 : gnix_max_nics_per_ptag - 1;
 	gnix_info->domain_attr->rx_ctx_cnt = gnix_max_nics_per_ptag;
 	gnix_info->domain_attr->cntr_cnt = _gnix_get_cq_limit() / 2;
 

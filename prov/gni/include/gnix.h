@@ -418,6 +418,7 @@ struct gnix_fid_domain {
 #ifdef HAVE_UDREG
 	udreg_cache_handle_t udreg_cache;
 #endif
+	uint32_t num_allocd_stxs;
 };
 
 /**

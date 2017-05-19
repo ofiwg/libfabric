@@ -261,13 +261,16 @@ static int __nic_teardown_irq_cq(struct gnix_nic *nic)
 	if (nic->irq_mmap_addr == NULL)
 		return ret;
 
-	status = GNI_MemDeregister(nic->gni_nic_hndl,
-				  &nic->irq_mem_hndl);
-	if (status != GNI_RC_SUCCESS) {
-		ret = gnixu_to_fi_errno(status);
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "GNI_MemDeregister returned %s\n",
-			  gni_err_str[status]);
+	if ((nic->irq_mem_hndl.qword1) ||
+		(nic->irq_mem_hndl.qword2)) {
+		status = GNI_MemDeregister(nic->gni_nic_hndl,
+					  &nic->irq_mem_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			ret = gnixu_to_fi_errno(status);
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_MemDeregister returned %s\n",
+				  gni_err_str[status]);
+		}
 	}
 
 	munmap(nic->irq_mmap_addr,
@@ -767,6 +770,11 @@ static void __nic_destruct(void *obj)
 			  "_gnix_mbox_allocator_destroy returned %s\n",
 			  fi_strerror(-ret));
 
+	/*
+	 * see comments in the nic constructor about why
+	 * the following code section is currently stubbed out.
+	 */
+#if 0
 	ret = _gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -778,6 +786,7 @@ static void __nic_destruct(void *obj)
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "_gnix_mbox_allocator_destroy returned %s\n",
 			  fi_strerror(-ret));
+#endif
 
 	if (!nic->gni_cdm_hndl) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "No CDM attached to nic, nic=%p");
@@ -1202,8 +1211,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		 * TODO: hardwired constants, uff
 		 * TODO: better to use a buddy allocator or some other
 		 * allocator
+		 * Disable these for now as we're not using and they
+		 * chew up a lot of IOMMU space per nic.
 		 */
 
+#if 0
 		ret = _gnix_mbox_allocator_create(nic,
 						  NULL,
 						  GNIX_PAGE_2MB,
@@ -1214,6 +1226,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_mbox_alloc returned %s\n",
 				  fi_strerror(-ret));
+			_gnix_dump_gni_res(domain->ptag);
 			goto err1;
 		}
 
@@ -1227,14 +1240,17 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_mbox_alloc returned %s\n",
 				  fi_strerror(-ret));
+			_gnix_dump_gni_res(domain->ptag);
 			goto err1;
 		}
+#endif
 
 		ret =  __nic_setup_irq_cq(nic);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "__nic_setup_irq_cq returned %s\n",
 				  fi_strerror(-ret));
+			_gnix_dump_gni_res(domain->ptag);
 			goto err1;
 		}
 
