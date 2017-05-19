@@ -578,11 +578,13 @@ fabric.  See `fi_av`(3).
 
 *FI_ADDR_STR*
 : Address is a formatted character string.  The length and content of
-  the string is address and/or provider specific, but follows this model:
+  the string is address and/or provider specific, but in general follows
+  a URI model:
 
-  address_family[;[node][;[service][;[field3]...]]]
+  address_format[://[node][:[service][/[field3]...]]]
 
-  Examples: AF_INET;10.31.6.12;7471, AF_INET;;7471
+  Examples: inet://10.31.6.12:7471, inet6://[fe80::6:12]:7471,
+  name://hostname:7471
 
 # FLAGS
 
