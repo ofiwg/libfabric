@@ -375,6 +375,7 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 
 	rx_buf->recv_fs = recv_queue->fs;
 
+	fastlock_acquire(&rx_buf->ep->util_ep.lock);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, &match_attr);
 	if (!entry) {
@@ -383,8 +384,10 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		rx_buf->unexp_msg.addr = match_attr.addr;
 		rx_buf->unexp_msg.tag = match_attr.tag;
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &recv_queue->unexp_msg_list);
+		fastlock_release(&rx_buf->ep->util_ep.lock);
 		return 0;
 	}
+	fastlock_release(&rx_buf->ep->util_ep.lock);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 	return rxm_cq_handle_data(rx_buf);
@@ -426,10 +429,10 @@ static int rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	return 0;
 }
 
-static int rxm_cq_handle_comp(struct fi_cq_msg_entry *comp) {
+static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
+			      struct fi_cq_tagged_entry *comp) {
 	enum rxm_proto_state *state = comp->op_context;
 	struct rxm_rx_buf *rx_buf = comp->op_context;
-	int ret;
 
 	switch (*state) {
 	case RXM_TX:
@@ -459,10 +462,9 @@ static int rxm_cq_handle_comp(struct fi_cq_msg_entry *comp) {
 		assert(0);
 		return -FI_EOPBADSTATE;
 	}
-	return ret;
 }
 
-static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_msg_entry *comp)
+static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *comp)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rx_buf *rx_buf;
@@ -512,20 +514,26 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_msg_entry *comp)
 	return rxm_cq_report_error(util_cq, &err_entry);
 }
 
-void rxm_cq_progress(struct fid_cq *msg_cq)
+void rxm_cq_progress(struct rxm_ep *rxm_ep)
 {
-	struct fi_cq_msg_entry comp;
-	ssize_t ret = 0;
+	struct fi_cq_tagged_entry comp;
+	ssize_t ret, comp_read = 0;
 
 	do {
-		ret = rxm_cq_read(msg_cq, &comp);
+		ret = rxm_cq_read(rxm_ep->msg_cq, &comp);
+		if (ret == -FI_EAGAIN)
+			break;
+
 		if (ret < 0)
 			goto err;
 
-		ret = rxm_cq_handle_comp(&comp);
-		if (ret)
-			goto err;
-	} while (ret > 0);
+		if (ret) {
+			comp_read += ret;
+			ret = rxm_cq_handle_comp(rxm_ep, &comp);
+			if (ret)
+				goto err;
+		}
+	} while (comp_read < rxm_ep->comp_per_progress);
 	return;
 err:
 	// TODO report error on RXM EP/domain since EP/CQ is broken.

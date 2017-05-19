@@ -206,6 +206,7 @@ struct util_ep {
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
 	struct util_cmap	*cmap;
+	fastlock_t		lock;
 };
 
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);

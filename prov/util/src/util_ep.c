@@ -75,11 +75,13 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->domain = util_domain;
 	ep->progress = progress;
 	ofi_atomic_inc32(&util_domain->ref);
+	fastlock_init(&ep->lock);
 	return 0;
 }
 
 int ofi_endpoint_close(struct util_ep *util_ep)
 {
+	fastlock_destroy(&util_ep->lock);
 	if (util_ep->av) {
 		fastlock_acquire(&util_ep->av->lock);
 		dlist_remove(&util_ep->av_entry);
