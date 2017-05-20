@@ -174,7 +174,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id)
 {
-	struct rdma_addrinfo *_rai;
+	struct rdma_addrinfo *_rai = NULL;
 	int ret;
 
 	ret = fi_ibv_get_rdma_rai(node, service, flags, hints, &_rai);
