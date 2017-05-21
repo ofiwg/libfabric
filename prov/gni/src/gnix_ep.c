@@ -337,8 +337,27 @@ ssize_t _ep_recv(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
-	return _gnix_recv(ep_priv, (uint64_t)buf, len, desc, src_addr, context,
-			  ep_priv->op_flags | flags, tag, ignore);
+	if (!(ep_priv->op_flags & FI_MULTI_RECV)) {
+		return _gnix_recv(ep_priv,
+				  (uint64_t)buf,
+				  len, desc,
+				  src_addr,
+				  context,
+				  ep_priv->op_flags | flags,
+				  tag,
+				  ignore,
+				  NULL);
+	 } else {
+		return _gnix_recv_mr(ep_priv,
+				     (uint64_t)buf,
+				     len,
+				     desc,
+				     src_addr,
+				     context,
+				     ep_priv->op_flags | flags,
+				     tag,
+				     ignore);
+	}
 }
 
 ssize_t _ep_recvv(struct fid_ep *ep, const struct iovec *iov,
@@ -356,10 +375,28 @@ ssize_t _ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
 	if (count <= 1) {
-		return _gnix_recv(ep_priv, (uint64_t)iov[0].iov_base,
-				  iov[0].iov_len, desc ? desc[0] : NULL,
-				  src_addr, context,
-				  ep_priv->op_flags | flags, tag, ignore);
+		if (!(ep_priv->op_flags & FI_MULTI_RECV)) {
+			return _gnix_recv(ep_priv,
+					  (uint64_t)iov[0].iov_base,
+					  iov[0].iov_len,
+					  desc ? desc[0] : NULL,
+					  src_addr,
+					  context,
+					  ep_priv->op_flags | flags,
+					  tag,
+					  ignore,
+					  NULL);
+		} else {
+			return _gnix_recv_mr(ep_priv,
+					  (uint64_t)iov[0].iov_base,
+					  iov[0].iov_len,
+					  desc ? desc[0] : NULL,
+					  src_addr,
+					  context,
+					  ep_priv->op_flags | flags,
+					  tag,
+					  ignore);
+		}
 	}
 
 	return _gnix_recvv(ep_priv, iov, desc, count, src_addr,
@@ -371,12 +408,28 @@ ssize_t _ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		    uint64_t ignore)
 {
 	struct iovec iov;
+	struct gnix_fid_ep *ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
+
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
+	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
 	iov.iov_base = NULL;
 	iov.iov_len = 0;
 
 	if (!msg) {
 		return -FI_EINVAL;
+	}
+
+	if (flags & FI_MULTI_RECV) {
+		return _gnix_recv_mr(ep_priv,
+				     (uint64_t)msg->msg_iov[0].iov_base,
+				     msg->msg_iov[0].iov_len,
+				     msg->desc[0],
+				     msg->addr,
+				     msg->context,
+				     ep_priv->op_flags | flags,
+				     tag,
+				     ignore);
 	}
 
 	/* msg_iov can be undefined when using FI_PEEK, etc. */

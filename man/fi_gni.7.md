@@ -277,6 +277,12 @@ address format. In order to populate the remote peer's address vector
 with this mechanism, the application must call fi_cq_readerr to get the
 source address followed by fi_av_insert on the populated err_data member.
 
+For FI_MULTI_RECV, the GNI provider generates a separate FI_MULTI_RECV CQ event
+once the receive buffer has been consumed.  Also, owing to the out-or-order nature
+of the Cray network, the CQ events associated with individual messages arriving in the
+receive buffer may be generated out of order with respect to the offset into the buffer
+into which the messages were received.
+
 # KNOWN BUGS
 
 The GNI provider currently treats the fi_shutdown() interface as a strictly

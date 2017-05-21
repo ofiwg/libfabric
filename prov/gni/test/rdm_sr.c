@@ -64,7 +64,7 @@
  * The multirecv tests fail when NUMEPS are > 2 (GitHub issue #1116).
  * Increase this number when the issues is fixed.
  */
-#define NUMEPS 2
+#define NUMEPS 4
 #define NUM_MULTIRECVS 5
 
 /* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
@@ -2208,7 +2208,7 @@ void do_multirecv(int len)
 	const int nrecvs = NUM_MULTIRECVS;
 	const int dest_ep = NUMEPS-1;
 	uint64_t *expected_addrs;
-	bool *addr_recvd, found;
+	bool *addr_recvd, found, got_fi_multi_cqe = false;
 	int sends_done = 0;
 
 	rdm_sr_init_data(source, len, 0xab);
@@ -2288,8 +2288,6 @@ void do_multirecv(int len)
 			}
 			cr_assert(found == true, "Address not found");
 			flags = FI_MSG | FI_RECV;
-			flags = (j == (nrecvs - 1)) ? flags | FI_MULTI_RECV :
-							flags;
 			rdm_sr_check_cqe(&d_cqe, source,
 					 flags,
 					 (void *) expected_addrs[j],
@@ -2299,6 +2297,18 @@ void do_multirecv(int len)
 			r[dest_ep]++;
 		}
 	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
+
+	/*
+	 * now check for final FI_MULTI_RECV CQE on dest CQ
+	 */
+
+	do {
+		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
+		if (d_cqe.flags & FI_MULTI_RECV) {
+			got_fi_multi_cqe = true;
+			r[dest_ep]++;
+		}
+	} while (got_fi_multi_cqe == false);
 
 	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 
@@ -2336,6 +2346,7 @@ void do_multirecv_send_first(int len)
 	uint64_t *expected_addrs;
 	bool *addr_recvd, found;
 	int sends_done = 0;
+	bool got_fi_multi_cqe = false;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -2400,7 +2411,7 @@ void do_multirecv_send_first(int len)
 	msg.context = source;
 	msg.data = (uint64_t)source;
 
-	sz = fi_recvmsg(ep[1], &msg, FI_MULTI_RECV);
+	sz = fi_recvmsg(ep[dest_ep], &msg, FI_MULTI_RECV);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -2439,8 +2450,6 @@ void do_multirecv_send_first(int len)
 			}
 			cr_assert(found == true, "Address not found");
 			flags = FI_MSG | FI_RECV;
-			flags = (j == (nrecvs - 1)) ? flags | FI_MULTI_RECV :
-							flags;
 			rdm_sr_check_cqe(&d_cqe, source,
 					 flags,
 					 (void *)expected_addrs[j],
@@ -2450,6 +2459,18 @@ void do_multirecv_send_first(int len)
 			r[dest_ep]++;
 		}
 	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
+
+	/*
+	 * now check for final FI_MULTI_RECV CQE on dest CQ
+	 */
+
+	do {
+		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
+		if (d_cqe.flags & FI_MULTI_RECV) {
+			got_fi_multi_cqe = true;
+			r[dest_ep]++;
+		}
+	} while (got_fi_multi_cqe == false);
 
 	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
 

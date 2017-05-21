@@ -278,22 +278,6 @@ static void __gnix_msg_copy_data_to_recv_addr(struct gnix_fab_req *req,
 	}
 }
 
-static struct gnix_fab_req *__gnix_msg_dup_req(struct gnix_fab_req *req)
-{
-	struct gnix_fab_req *new_req;
-
-	new_req = _gnix_fr_alloc(req->gnix_ep);
-	if (new_req == NULL) {
-		GNIX_WARN(FI_LOG_EP_DATA, "Failed to allocate request\n");
-		return NULL;
-	}
-
-	/* TODO: selectively copy fields. */
-	memcpy((void *)new_req, (void *)req, sizeof(*req));
-
-	return new_req;
-}
-
 static void __gnix_msg_queues(struct gnix_fid_ep *ep,
 			      int tagged,
 			      struct gnix_tag_storage **posted_queue,
@@ -357,7 +341,6 @@ static int __gnix_msg_recv_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 
 	flags |= req->msg.send_flags & FI_TAGGED;
 
-	/* TODO: Check for FI_MULTI_RECV? */
 	return __recv_err(ep, req->user_context, flags, req->msg.cum_recv_len,
 			  (void *)req->msg.recv_info[0].recv_addr, req->msg.imm,
 			  req->msg.tag, 0, FI_ECANCELED,
@@ -456,6 +439,29 @@ static int __recv_completion_src(
 	return FI_SUCCESS;
 }
 
+/*
+ * GNI provider generates a separate CQE to indicate
+ * its releasing a FI_MULTI_RECV receive buffer back to
+ * the application.
+ */
+static void __gnix_msg_mrecv_completion(void *obj)
+{
+	int ret;
+	struct gnix_fab_req *req = (struct gnix_fab_req *)obj;
+
+	ret = __recv_completion(req->gnix_ep,
+				req,
+				FI_MULTI_RECV,
+				0UL,
+				NULL);
+	if (ret != FI_SUCCESS) {
+		GNIX_DEBUG(FI_LOG_EP_DATA,
+			  "__recv_completion failed for multi recv"
+			  " complete: %d\n",
+				  ret);
+	}
+}
+
 static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 					     struct gnix_fab_req *req)
 {
@@ -466,14 +472,7 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 	fi_addr_t src_addr;
 
 	flags |= req->msg.send_flags & (FI_TAGGED | FI_REMOTE_CQ_DATA);
-	flags |= req->msg.recv_flags & (FI_PEEK | FI_CLAIM | FI_DISCARD |
-					FI_MULTI_RECV);
-
-	/*
-	 * see fi_cq man page
-	 */
-	if (req->msg.recv_flags & GNIX_MSG_MULTI_RECV_SUP)
-		flags &= ~FI_MULTI_RECV;
+	flags |= req->msg.recv_flags & (FI_PEEK | FI_CLAIM | FI_DISCARD);
 
 	len = MIN(req->msg.cum_send_len, req->msg.cum_recv_len);
 
@@ -496,6 +495,13 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 					     src_addr);
 	}
 
+	/*
+	 * if i'm child of a FI_MULTI_RECV request, decrement
+	 * ref count
+	 */
+	if (req->msg.parent != NULL) {
+		_gnix_ref_put(req->msg.parent);
+	}
 	return ret;
 }
 
@@ -1861,6 +1867,56 @@ smsg_completer_fn_t gnix_ep_smsg_completers[] = {
  * Handle SMSG message with tag GNIX_SMSG_T_EGR_W_DATA
  */
 
+static inline struct gnix_fab_req *
+		__handle_mrecv_req(struct gnix_fab_req *mrecv_req,
+				   struct gnix_fid_ep *ep,
+				   uint64_t len,
+				   struct gnix_tag_storage *queue)
+{
+	struct gnix_fab_req *req = NULL;
+
+	req = _gnix_fr_alloc(ep);
+	if (req == NULL) {
+		return NULL;
+	}
+
+	/*
+	 * set recv related fields in request,
+	 * and adjust mrecv buffer pointer and
+	 * space remaining
+	 */
+
+	req->type = GNIX_FAB_RQ_RECV;
+	req->msg.recv_flags = mrecv_req->msg.recv_flags;
+	req->msg.recv_flags |= FI_MULTI_RECV;
+	req->msg.recv_info[0].recv_addr =
+			mrecv_req->msg.mrecv_buf_addr;
+	req->msg.recv_info[0].recv_len =
+			mrecv_req->msg.mrecv_space_left;
+	req->user_context = mrecv_req->user_context;
+	req->msg.cum_recv_len = mrecv_req->msg.mrecv_space_left;
+
+	req->msg.parent = mrecv_req;
+	if (req->msg.parent)
+		_gnix_ref_get(req->msg.parent);
+
+	mrecv_req->msg.mrecv_space_left -= len;
+	mrecv_req->msg.mrecv_buf_addr += len;
+
+	if ((int64_t)mrecv_req->msg.mrecv_space_left  <
+			ep->min_multi_recv) {
+		_gnix_remove_tag(queue, mrecv_req);
+		_gnix_ref_put(mrecv_req);
+		_gnix_fr_free(ep, mrecv_req);
+		mrecv_req = NULL;
+	} else {
+		GNIX_DEBUG(FI_LOG_EP_DATA,
+			"Re-using multi-recv req: %p\n", mrecv_req);
+	}
+
+	return req;
+}
+
 static int __smsg_eager_msg_w_data(void *data, void *msg)
 {
 	int ret = FI_SUCCESS;
@@ -1873,6 +1929,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
 	int tagged;
+	bool multi_recv = false;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
@@ -1888,6 +1945,14 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
 			      &vc->peer_addr);
 	if (req) {
+		if (req->type == GNIX_FAB_RQ_MRECV) {
+			req = __handle_mrecv_req(req, ep, hdr->len, posted_queue);
+			if (req == NULL) {
+				return -FI_ENOMEM;
+			}
+			multi_recv = true;
+		}
+
 		req->addr = vc->peer_addr;
 		req->gnix_ep = ep;
 		req->vc = vc;
@@ -1904,31 +1969,19 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 		__gnix_msg_copy_data_to_recv_addr(req, data_ptr);
 
-		if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-		    ((req->msg.cum_recv_len - req->msg.cum_send_len) <
-			ep->min_multi_recv))
-			req->msg.recv_flags &= ~GNIX_MSG_MULTI_RECV_SUP;
-
 		__gnix_msg_recv_completion(ep, req);
 
-		/* Check if we're using FI_MULTI_RECV and there is space left
-		 * in the receive buffer. */
-		if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-		    ((req->msg.cum_recv_len - req->msg.cum_send_len) >=
-			     ep->min_multi_recv)) {
-			GNIX_DEBUG(FI_LOG_EP_DATA, "Re-using req: %p\n", req);
+		GNIX_DEBUG(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
 
-			/* Adjust receive buffer for the next match. */
-			req->msg.recv_info[0].recv_addr += req->msg.cum_send_len;
-			req->msg.recv_info[0].recv_len -= req->msg.cum_send_len;
-			req->msg.cum_recv_len = req->msg.recv_info[0].recv_len;
-		} else {
-			GNIX_DEBUG(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
-
-			/* Dequeue and free the request. */
+		/*
+		 * Dequeue and free the request if not
+		 * matching a FI_MULTI_RECV buffer.
+		 */
+		if (multi_recv == false) {
 			_gnix_remove_tag(posted_queue, req);
 			_gnix_fr_free(ep, req);
 		}
+
 	} else {
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
@@ -1954,6 +2007,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
+		req->msg.parent = NULL;
 
 		memcpy((void *)req->msg.send_info[0].send_addr, data_ptr, hdr->len);
 		req->addr = vc->peer_addr;
@@ -2037,10 +2091,11 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	struct gnix_smsg_rndzv_start_hdr *hdr =
 			(struct gnix_smsg_rndzv_start_hdr *)msg;
 	struct gnix_fid_ep *ep;
-	struct gnix_fab_req *req = NULL, *dup_req;
+	struct gnix_fab_req *req = NULL;
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
 	int tagged;
+	bool multi_recv = false;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
@@ -2054,6 +2109,15 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			      &vc->peer_addr);
 
 	if (req) {
+		if (req->type == GNIX_FAB_RQ_MRECV) {
+			req = __handle_mrecv_req(req, ep, hdr->len,
+						 posted_queue);
+			if (req == NULL) {
+				return -FI_ENOMEM;
+			}
+			multi_recv = true;
+		}
+
 		req->addr = vc->peer_addr;
 		req->gnix_ep = ep;
 		req->vc = vc;
@@ -2099,34 +2163,8 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			  req, req->msg.recv_info[0].recv_addr,
 			  req->msg.send_info[0].send_len);
 
-		/* Check if we're using FI_MULTI_RECV and there is space left
-		 * in the receive buffer. */
-		if (req->type == GNIX_FAB_RQ_RECV &&
-		    (req->msg.recv_flags & FI_MULTI_RECV) &&
-		    ((req->msg.cum_recv_len - req->msg.cum_send_len) >=
-			     ep->min_multi_recv)) {
-			/* Allocate new request for this transfer. */
-			dup_req = __gnix_msg_dup_req(req);
-			if (!dup_req) {
-				return -FI_ENOMEM;
-			}
-
-			/* Adjust receive buffer for the next match. */
-			req->msg.recv_info[0].recv_addr += req->msg.send_info[0].send_len;
-			req->msg.recv_info[0].recv_len -= req->msg.send_info[0].send_len;
-			req->msg.cum_recv_len = req->msg.recv_info[0].recv_len;
-
-			/* 'req' remains queued for more matches while the
-			 * duplicated request is processed. */
-			req = dup_req;
-		} else {
-			/*
-			 * doesn't hurt if its not FI_MULI_RECV
-			 */
-			req->msg.recv_flags &= ~GNIX_MSG_MULTI_RECV_SUP;
-			/* Dequeue the request. */
+		if (multi_recv == false)
 			_gnix_remove_tag(posted_queue, req);
-		}
 
 		/* Queue request to initiate pull of source data. */
 		ret = _gnix_vc_queue_work_req(req);
@@ -2159,6 +2197,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.send_info[0].head = hdr->head;
 		req->msg.send_info[0].tail = hdr->tail;
 		ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
+		req->msg.parent = NULL;
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 
@@ -2242,6 +2281,7 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	req->msg.tag = hdr->msg_tag;
 	req->msg.send_iov_cnt = hdr->iov_cnt;
 	req->msg.rma_id = hdr->req_addr;
+	req->msg.parent = NULL;
 	memcpy(req->msg.send_info, data_ptr,
 	       sizeof(struct send_info_t) * hdr->iov_cnt);
 
@@ -2503,9 +2543,10 @@ static int __gnix_msg_addr_lookup(struct gnix_fid_ep *ep, uint64_t src_addr,
 
 ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		   void *mdesc, uint64_t src_addr, void *context,
-		   uint64_t flags, uint64_t tag, uint64_t ignore)
+		   uint64_t flags, uint64_t tag, uint64_t ignore,
+		   struct gnix_fab_req *mrecv_req)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 	struct gnix_fab_req *req = NULL;
 	struct gnix_address gnix_addr;
 	struct gnix_tag_storage *posted_queue = NULL;
@@ -2513,7 +2554,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	uint64_t match_flags;
 	struct gnix_fid_mem_desc *md = NULL;
 	int tagged = !!(flags & FI_TAGGED);
-	bool try_again = false;
 
 	if (!ep->recv_cq && !ep->recv_cntr) {
 		return -FI_ENOCQ;
@@ -2527,11 +2567,11 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 			return -FI_EOPNOTSUPP;
 	}
 
-	match_flags = flags & (FI_CLAIM | FI_DISCARD | FI_PEEK);
-
 	ret = __gnix_msg_addr_lookup(ep, src_addr, &gnix_addr);
 	if (ret != FI_SUCCESS)
 		return ret;
+
+	match_flags = flags & (FI_CLAIM | FI_DISCARD | FI_PEEK);
 
 	__gnix_msg_queues(ep, tagged, &posted_queue, &unexp_queue);
 
@@ -2544,13 +2584,27 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 
 	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 
-retry_match:
-	try_again = false;
 	/* Look for a matching unexpected receive request. */
 	req = _gnix_match_tag(unexp_queue, tag, ignore,
 			      match_flags, context, &gnix_addr);
 	if (req) {
+		/*
+		 * if we posted a multi-recv buffer and we can't
+		 * hold the matched message, stop dequeuing and
+		 * return.
+		 */
+		if (unlikely(mrecv_req != NULL)) {
+
+			mrecv_req->msg.mrecv_space_left -=
+				req->msg.cum_send_len;
+			mrecv_req->msg.mrecv_buf_addr +=
+				req->msg.cum_send_len;
+			req->msg.parent = mrecv_req;
+			_gnix_ref_get(mrecv_req);
+		}
+
 		/* Found matching request, populate local fields. */
+
 		req->gnix_ep = ep;
 		req->user_context = context;
 		req->msg.recv_info[0].recv_addr = (uint64_t)buf;
@@ -2566,8 +2620,6 @@ retry_match:
 		req->msg.recv_md[0] = md;
 		req->msg.recv_iov_cnt = 1;
 		req->msg.recv_flags = flags;
-		if (flags & FI_MULTI_RECV)
-			req->msg.recv_flags |= GNIX_MSG_MULTI_RECV_SUP;
 		req->msg.ignore = ignore;
 
 		if ((flags & GNIX_SUPPRESS_COMPLETION) ||
@@ -2616,26 +2668,8 @@ retry_match:
 			req->work_fn = req->msg.send_iov_cnt == 1 ?
 				__gnix_rndzv_req : __gnix_rndzv_iov_req_build;
 
-
-			/*
-			 * Check if we're using FI_MULTI_RECV and there is
-			 * space left in the receive buffer.
-			 */
-
-			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-			    ((len - req->msg.cum_send_len) >= ep->min_multi_recv)) {
-
-				buf += req->msg.cum_send_len;
-				len -= req->msg.cum_send_len;
-				try_again = true;
-
-			} else {
-				req->msg.recv_flags &= ~GNIX_MSG_MULTI_RECV_SUP;
-			}
-
+			_gnix_remove_tag(unexp_queue, req);
 			ret = _gnix_vc_queue_work_req(req);
-			if (try_again)
-				goto retry_match;
 
 		} else {
 			/* Matched eager request.  Copy data and generate
@@ -2655,33 +2689,20 @@ retry_match:
 			       req->msg.send_info[0].send_len);
 			free((void *)req->msg.send_info[0].send_addr);
 
-			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-			    ((len - req->msg.cum_send_len) <
-						ep->min_multi_recv))
-				req->msg.recv_flags &= ~GNIX_MSG_MULTI_RECV_SUP;
-
+			_gnix_remove_tag(unexp_queue, req);
 			__gnix_msg_recv_completion(ep, req);
-
-			/* If using FI_MULTI_RECV and there is space left in
-			 * the receive buffer, try to match another unexpected
-			 * request. */
-			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
-			    ((len - req->msg.cum_send_len) >= ep->min_multi_recv)) {
-				buf += req->msg.cum_send_len;
-				len -= req->msg.cum_send_len;
-				req->msg.recv_info[0].recv_addr = buf;
-				req->msg.recv_info[0].recv_len -= req->msg.cum_send_len;
-				req->msg.cum_recv_len = req->msg.recv_info[0].recv_len;
-				GNIX_DEBUG(FI_LOG_EP_DATA,
-					  "Attempting additional matches, "
-					  "req: %p (%p %u)\n",
-					  req, buf, len);
-				goto retry_match;
-			}
 
 			_gnix_fr_free(ep, req);
 		}
 	} else {
+
+		/*
+		 * if handling a multi receive request,
+		 * just return
+		 */
+		if (mrecv_req)
+			goto mrecv_exit;
+
 		/* if peek/claim/discard, we didn't find what we
 		 * were looking for, return FI_ENOMSG
 		 */
@@ -2697,7 +2718,6 @@ retry_match:
 			goto pdc_exit;
 		}
 
-		/* Add new posted receive request. */
 		req = _gnix_fr_alloc(ep);
 		if (req == NULL) {
 			ret = -FI_EAGAIN;
@@ -2727,8 +2747,6 @@ retry_match:
 		req->msg.recv_md[0] = md;
 		req->msg.send_iov_cnt = req->msg.recv_iov_cnt = 1;
 		req->msg.recv_flags = flags;
-		if (flags & FI_MULTI_RECV)
-			req->msg.recv_flags |= GNIX_MSG_MULTI_RECV_SUP;
 		req->msg.tag = tag;
 		req->msg.ignore = ignore;
 		ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
@@ -2743,9 +2761,108 @@ retry_match:
 		_gnix_insert_tag(posted_queue, tag, req, ignore);
 	}
 
+mrecv_exit:
 pdc_exit:
 err:
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+
+	return ret;
+}
+
+ssize_t _gnix_recv_mr(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
+		      void *mdesc, uint64_t src_addr, void *context,
+		      uint64_t flags, uint64_t tag, uint64_t ignore)
+{
+	int ret;
+	int tagged = !!(flags & FI_TAGGED);
+	struct gnix_fab_req *mrecv_req = NULL;
+	struct gnix_address gnix_addr;
+	struct gnix_fid_mem_desc *md = NULL;
+	struct gnix_tag_storage *posted_queue = NULL;
+	struct gnix_tag_storage *unexp_queue = NULL;
+	uint64_t last_space_left;
+
+	assert(flags & FI_MULTI_RECV);
+
+	mrecv_req = _gnix_fr_alloc_w_cb(ep, __gnix_msg_mrecv_completion);
+	if (mrecv_req == NULL) {
+		return -FI_ENOMEM;
+	}
+
+	mrecv_req->type = GNIX_FAB_RQ_MRECV;
+
+	ret = __gnix_msg_addr_lookup(ep, src_addr, &gnix_addr);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	mrecv_req->addr = gnix_addr;
+	mrecv_req->gnix_ep = ep;
+	mrecv_req->user_context = context;
+
+	mrecv_req->msg.mrecv_buf_addr = (uint64_t)buf;
+	mrecv_req->msg.mrecv_space_left = len;
+
+	if (mdesc) {
+		md = container_of(mdesc,
+				struct gnix_fid_mem_desc,
+				mr_fid);
+
+		mrecv_req->msg.recv_info[0].mem_hndl = md->mem_hndl;
+	}
+
+	mrecv_req->msg.recv_md[0] = md;
+	mrecv_req->msg.recv_flags = flags;
+
+	if (!tagged) {
+		mrecv_req->msg.tag = 0;
+		mrecv_req->msg.ignore = ~0;
+	} else {
+		mrecv_req->msg.tag = tag;
+		mrecv_req->msg.ignore = ignore;
+	}
+
+	if ((flags & GNIX_SUPPRESS_COMPLETION) ||
+	    (ep->recv_selective_completion &&
+	    !(flags & FI_COMPLETION))) {
+		mrecv_req->msg.recv_flags &= ~FI_COMPLETION;
+	} else {
+		mrecv_req->msg.recv_flags |= FI_COMPLETION;
+	}
+
+	last_space_left = mrecv_req->msg.mrecv_space_left;
+
+	do {
+		ret = _gnix_recv(ep,
+				 mrecv_req->msg.mrecv_buf_addr,
+				 mrecv_req->msg.mrecv_space_left,
+				 mdesc,
+				 src_addr,
+				 context,
+				 mrecv_req->msg.recv_flags,
+				 mrecv_req->msg.tag,
+				 mrecv_req->msg.ignore,
+				 mrecv_req);
+		if (ret != FI_SUCCESS) {
+			_gnix_fr_free(ep, mrecv_req);
+			return ret;
+		}
+		if ((last_space_left == mrecv_req->msg.mrecv_space_left) ||
+			(mrecv_req->msg.mrecv_space_left < ep->min_multi_recv))
+			break;
+		last_space_left = mrecv_req->msg.mrecv_space_left;
+	} while (1);
+
+	/*
+	 * if space left in multi receive request
+	 * add to posted receive queue, else free request.
+	 */
+	if ((int64_t)mrecv_req->msg.mrecv_space_left > ep->min_multi_recv) {
+		__gnix_msg_queues(ep, tagged, &posted_queue, &unexp_queue);
+		_gnix_insert_tag(posted_queue, tag, mrecv_req, ignore);
+	} else {
+		_gnix_ref_put(mrecv_req);
+		_gnix_fr_free(ep, mrecv_req);
+	}
 
 	return ret;
 }
