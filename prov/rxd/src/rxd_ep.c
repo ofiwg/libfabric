@@ -756,7 +756,7 @@ ssize_t rxd_ep_post_start_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 	ssize_t ret;
 	uint32_t flags;
 	uint64_t msg_sz;
-	uint64_t data_sz;
+	uint64_t data_sz = 0UL;
 	struct rxd_pkt_meta *pkt_meta;
 	struct rxd_pkt_data_start *pkt;
 
