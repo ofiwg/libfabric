@@ -258,7 +258,7 @@ fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata)
 	int ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_SEND_START, sdata);
 
 	if (!ret && in_order &&
-		fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
+	    fi_ibv_rdm_tagged_prepare_send_request(request, sdata->ep_rdm))
 	{
 		struct fi_ibv_rdm_tagged_send_ready_data req_data = 
 			{ .ep = sdata->ep_rdm };

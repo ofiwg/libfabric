@@ -62,6 +62,7 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	}
 
 	conn->state = FI_VERBS_CONN_STARTED;
+	fi_ibv_rdm_conn_init_cm_role(conn, ep);
 
 	if (rdma_create_id(ep->domain->rdm_cm->ec, &id, conn, RDMA_PS_TCP)) {
 		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_create_id\n", errno);
@@ -125,7 +126,6 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
                                 uint64_t flags, void *context)
 {
 	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
-	struct fi_ibv_rdm_ep *ep = av->ep;
 	size_t i;
 	int failed = 0;
 	int ret = 0;
@@ -139,8 +139,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 	else if (flags & FI_SYNC_ERR)
 		memset(context, 0, sizeof(int) * count);
 
-	if (ep)
-		pthread_mutex_lock(&ep->cm_lock);
+	pthread_mutex_lock(&av->domain->rdm_cm->cm_lock);
 
 	if (av->used + count > av->count) {
 		const size_t new_av_count = av->used + count;
@@ -162,7 +161,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 	for (i = 0; i < count; i++) {
 		struct fi_ibv_rdm_conn *conn = NULL;
 		void *addr_i = (uint8_t *) addr +
-			i * (ep ? ep->addrlen : FI_IBV_RDM_DFLT_ADDRLEN);
+			i * FI_IBV_RDM_DFLT_ADDRLEN;
 
 		if (flags & FI_SYNC_ERR)
 			fi_errors[i] = FI_SUCCESS;
@@ -212,13 +211,11 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			memset(conn, 0, sizeof *conn);
 			dlist_init(&conn->postponed_requests_head);
 			conn->state = FI_VERBS_CONN_ALLOCATED;
+			conn->cm_role = FI_VERBS_CM_UNDEFINED;
 			memcpy(&conn->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
 			HASH_ADD(hh, av->domain->rdm_cm->conn_hash, addr,
 				 FI_IBV_RDM_DFLT_ADDRLEN, conn);
 		}
-
-		if (ep)
-			fi_ibv_rdm_conn_init_cm_role(conn, ep);
 
 		switch (av->type) {
 		case FI_AV_MAP:
@@ -254,8 +251,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 	}
 
 out:
-	if (ep)
-		pthread_mutex_unlock(&ep->cm_lock);
+	pthread_mutex_unlock(&av->domain->rdm_cm->cm_lock);
 	return (av->flags & FI_EVENT) ? FI_SUCCESS : (ret - failed);
 }
 
@@ -405,9 +401,6 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 {
 	struct fi_ibv_av *av = container_of(av_fid, struct fi_ibv_av, av_fid);
 	struct fi_ibv_rdm_conn *conn = NULL;
-	/* TODO: EP in AV is a temporary solution
-	 * that doesn't support multiple endpoints */
-	struct fi_ibv_rdm_ep *ep = av->ep;
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
 	size_t i;
@@ -418,8 +411,7 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	if (!fi_addr || (av->type != FI_AV_MAP && av->type != FI_AV_TABLE))
 		return -FI_EINVAL;
 
-	if (ep)
-		pthread_mutex_lock(&ep->cm_lock);
+	pthread_mutex_lock(&av->domain->rdm_cm->cm_lock);
 
 	for (i = 0; i < count; i++) {
 
@@ -443,13 +435,11 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 
 		/* TODO: add cleaning into av_insert */
 		HASH_DEL(av->domain->rdm_cm->conn_hash, conn);
-		if (ep)
-			slist_insert_tail(&conn->removed_next,
-					  &ep->av_removed_conn_head);
+		slist_insert_tail(&conn->removed_next,
+				  &av->domain->rdm_cm->av_removed_conn_head);
 	}
 
-	if (ep)
-		pthread_mutex_unlock(&ep->cm_lock);
+	pthread_mutex_unlock(&av->domain->rdm_cm->cm_lock);
 	return ret;
 }
 

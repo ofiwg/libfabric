@@ -200,6 +200,7 @@ struct fi_ibv_domain {
 	 */
 	int			rdm;
 	struct fi_ibv_rdm_cm	*rdm_cm;
+	struct slist		ep_list;
 	struct fi_info		*info;
 	struct fi_ibv_fabric	*fab;
 	struct fi_ibv_eq	*eq;

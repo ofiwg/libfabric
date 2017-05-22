@@ -169,9 +169,6 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		}
 
 		ep->av = av;
-
-		/* TODO: this is wrong, AV to EP is 1:n */
-		ep->av->ep = ep;
 		break;
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct fi_ibv_rdm_cntr, fid.fid);
@@ -322,47 +319,30 @@ struct fi_ops_ep fi_ibv_rdm_ep_base_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static int _fi_ibv_rdm_tagged_cm_progress_running = 1;
-
-static void *fi_ibv_rdm_tagged_cm_progress_thread(void *ctx)
+static int fi_ibv_rdm_ep_match(struct slist_entry *item,
+			       const void *ep)
 {
-	struct fi_ibv_rdm_ep *ep = (struct fi_ibv_rdm_ep *)ctx;
-	while (_fi_ibv_rdm_tagged_cm_progress_running) {
-		if (fi_ibv_rdm_cm_progress(ep)) {
-			VERBS_INFO (FI_LOG_EP_DATA,
-			"fi_ibv_rdm_cm_progress error\n");
-			abort();
-		}
-		usleep(ep->cm_progress_timeout);
-	}
-	return NULL;
+	const struct fi_ibv_rdm_ep *ep_obj = (struct fi_ibv_rdm_ep *)ep;
+	return (item == &ep_obj->list_entry);
 }
 
 static int fi_ibv_rdm_ep_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
 	int err = FI_SUCCESS;
-	void *status = NULL;
-	struct slist_entry *item;
 	struct fi_ibv_rdm_ep *ep =
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
-	if (ep->fi_scq) {
+	if (ep->fi_scq)
 		ep->fi_scq->ep = NULL;
-	}
-	if (ep->fi_rcq) {
+	if (ep->fi_rcq)
 		ep->fi_rcq->ep = NULL;
-	}
 
 	ep->is_closing = 1;
-	_fi_ibv_rdm_tagged_cm_progress_running = 0;
-	pthread_join(ep->cm_progress_thread, &status);
-	pthread_mutex_destroy(&ep->cm_lock);
 
 	/* All posted sends are waiting local completions */
-	while (ep->posted_sends > 0 && ep->num_active_conns > 0) {
+	while (ep->posted_sends > 0 && ep->num_active_conns > 0)
 		fi_ibv_rdm_tagged_poll(ep);
-	}
 
 	if (ep->send_cntr) {
 		ofi_atomic_dec32(&ep->send_cntr->ep_ref);
@@ -429,12 +409,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		fi_ibv_rdm_conn_cleanup(conn);
 	}
 
-	for(item = slist_remove_head(&ep->av_removed_conn_head); item;
-		item = slist_remove_head(&ep->av_removed_conn_head)) {
-		conn = container_of(item, struct fi_ibv_rdm_conn, removed_next);
-		fi_ibv_rdm_conn_cleanup(conn);
-	}
-
+	/* TODO: MUST be removed in DOMAIN_CLOSE */
 	assert(HASH_COUNT(ep->domain->rdm_cm->conn_hash) == 0 &&
 	       ep->domain->rdm_cm->conn_hash == NULL);
 	free(ep->domain->rdm_cm->conn_table);
@@ -442,20 +417,23 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);
 	if (ibv_destroy_cq(ep->scq)) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "ep->scq: ibv_destroy_cq failed", errno);
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ep->scq: ibv_destroy_cq failed",
+				 errno);
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
 	}
 
 	if (ibv_destroy_cq(ep->rcq)) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "ep->rcq: ibv_destroy_cq failed", errno);
+		VERBS_INFO_ERRNO(FI_LOG_AV, "ep->rcq: ibv_destroy_cq failed",
+				 errno);
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
 	}
 
 	errno = 0;
 	rdma_freeaddrinfo(ep->rai);
 	if (errno) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_freeaddrinfo failed", errno);
-		ret = (ret == FI_SUCCESS) ? -ret : ret;
+		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_freeaddrinfo failed",
+				 errno);
+		ret = (ret == FI_SUCCESS) ? -errno : ret;
 	}
 
 	/* TODO: move queues & related pools cleanup to close CQ*/
@@ -466,6 +444,9 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
 
 	fi_freeinfo(ep->info);
+
+	slist_find_first_match(&ep->domain->ep_list,
+			       fi_ibv_rdm_ep_match, ep);
 
 	free(ep);
 
@@ -485,8 +466,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 {
 	struct fi_ibv_domain *_domain = 
 		container_of(domain, struct fi_ibv_domain, domain_fid);
-	int ret = 0;
-	int param = 0;
+	int ret = 0, param = 0;
 	char *str_param = NULL;
 
 	if (!info || !info->ep_attr || !info->domain_attr ||
@@ -517,8 +497,6 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
 	_ep->tx_selective_completion = 0;
 	_ep->rx_selective_completion = 0;
-
-	slist_init(&_ep->av_removed_conn_head);
 
 	_ep->n_buffs = fi_param_get_int(&fi_ibv_prov, "rdm_buffer_num", &param) ?
 		FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM : param;
@@ -575,18 +553,6 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 				   "configuration, ignore \n");
 		} else {
 			_ep->use_odp = param;
-		}
-	}
-
-	_ep->cm_progress_timeout = FI_IBV_RDM_CM_THREAD_TIMEOUT;
-	if (!fi_param_get_int(&fi_ibv_prov, "rdm_thread_timeout", &param)) {
-		if (param < 0) {
-			VERBS_INFO(FI_LOG_CORE,
-				   "invalid value of rdm_thread_timeout\n");
-			ret = -FI_EINVAL;
-			goto err2;
-		} else {
-			_ep->cm_progress_timeout = param;
 		}
 	}
 
@@ -687,17 +653,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->is_closing = 0;
 	fi_ibv_rdm_req_hndls_init();
 
-	pthread_mutex_init(&_ep->cm_lock, NULL);
-	_fi_ibv_rdm_tagged_cm_progress_running = 1;
-	ret = pthread_create(&_ep->cm_progress_thread, NULL,
-			     &fi_ibv_rdm_tagged_cm_progress_thread,
-			     (void *)_ep);
-	if (ret) {
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			"Failed to launch CM progress thread, err :%d\n", ret);
-		ret = -FI_EOTHER;
-		goto err2;
-	}
+	slist_insert_tail(&_ep->list_entry, &_domain->ep_list);
 
 	return ret;
 err2:

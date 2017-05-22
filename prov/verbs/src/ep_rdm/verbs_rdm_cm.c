@@ -397,6 +397,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		HASH_ADD(hh, ep->domain->rdm_cm->conn_hash, addr,
 			 FI_IBV_RDM_DFLT_ADDRLEN, conn);
 	} else {
+		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
 			/*
 			 * Do it before rdma_create_qp since that call would
@@ -764,7 +765,7 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 	if (rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 		if(errno == EAGAIN) {
 			errno = 0;
-			usleep(ep->cm_progress_timeout);
+			usleep(ep->domain->rdm_cm->cm_progress_timeout);
 			return FI_SUCCESS;
 		} else {
 			VERBS_INFO_ERRNO(FI_LOG_AV,
@@ -774,14 +775,14 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 	}
 
 	while (ret == FI_SUCCESS && event) {
-		pthread_mutex_lock(&ep->cm_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 
 		struct rdma_cm_event event_copy;
 		memcpy(&event_copy, event, sizeof(*event));
 		if (event->param.conn.private_data_len) {
 			data = malloc(event->param.conn.private_data_len);
 			if (!data) {
-				pthread_mutex_unlock(&ep->cm_lock);
+				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 				ret = -FI_ENOMEM;
 				break;
 			}
@@ -806,7 +807,7 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 
 		event = NULL;
 
-		pthread_mutex_unlock(&ep->cm_lock);
+		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 
 		if (ret != FI_SUCCESS) {
 			break;
@@ -815,7 +816,7 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 		if(rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 			if(errno == EAGAIN) {
 				errno = 0;
-				usleep(ep->cm_progress_timeout);
+				usleep(ep->domain->rdm_cm->cm_progress_timeout);
 				break;
 			} else {
 				VERBS_INFO_ERRNO(FI_LOG_AV,
