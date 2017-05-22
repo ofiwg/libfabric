@@ -388,20 +388,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			switch (hints->domain_attr->mr_mode) {
-			case FI_MR_UNSPEC:
-				break;
-			case FI_MR_BASIC:
-			case FI_MR_SCALABLE:
-				mr_mode = hints->domain_attr->mr_mode;
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->mr_mode=%d, supported=%d %d %d\n",
-					hints->domain_attr->mr_mode, FI_MR_UNSPEC, FI_MR_BASIC,
-					FI_MR_SCALABLE);
-				goto err_out;
-			}
+			if (hints->domain_attr->mr_mode & FI_MR_BASIC)
+				mr_mode = FI_MR_BASIC;
 
 			switch (hints->domain_attr->threading) {
 			case FI_THREAD_UNSPEC:
