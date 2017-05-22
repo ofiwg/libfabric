@@ -88,7 +88,8 @@ static int rxm_mr_buf_reg(void *pool_ctx, void *addr, size_t len, void **context
 	struct fid_mr *mr;
 	struct fid_domain *msg_domain = (struct fid_domain *)pool_ctx;
 
-	ret = fi_mr_reg(msg_domain, addr, len, FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(msg_domain, addr, len, FI_SEND | FI_RECV | FI_READ |
+			FI_WRITE, 0, 0, 0, &mr, NULL);
 	*context = mr;
 	return ret;
 }
@@ -338,16 +339,6 @@ static struct fi_ops_ep rxm_ops_ep = {
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
-
-static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
-	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
-	return rxm_ep->rxm_info->tx_attr->op_flags;
-}
-
-static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
-	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
-	return rxm_ep->rxm_info->rx_attr->op_flags;
-}
 
 static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 				    struct rxm_recv_queue *recv_queue,
@@ -1160,6 +1151,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->cm = &rxm_ops_cm;
 	(*ep_fid)->msg = &rxm_ops_msg;
 	(*ep_fid)->tagged = &rxm_ops_tagged;
+	(*ep_fid)->rma = &rxm_ops_rma;
 
 	return 0;
 err3:
