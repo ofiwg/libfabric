@@ -175,9 +175,14 @@ int _gnix_auth_key_insert(
 			_tmp = _gnix_auth_key_create( \
 				(auth_key), (auth_key_size)); \
 			if (!_tmp) { \
-				GNIX_WARN(FI_LOG_FABRIC, \
+				GNIX_DEBUG(FI_LOG_FABRIC, \
 					"failed to create new " \
-					"authorization key\n"); \
+					"authorization key, "\
+					"another thread beat us to the insert " \
+					"- searching again\n"); \
+				_tmp = _gnix_auth_key_lookup((auth_key), \
+					(auth_key_size)); \
+				assert(_tmp); \
 			} \
 			_tmp_ret = _gnix_auth_key_enable(_tmp); \
 			if (_tmp_ret) { \
