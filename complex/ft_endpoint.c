@@ -88,10 +88,12 @@ int ft_open_active(void)
 	ft_rx_ctrl.ep = ep;
 	ft_tx_ctrl.ep = ep;
 
-	ret = fi_ep_bind(ep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
+	if (test_info.ep_type == FI_EP_MSG) {
+		ret = fi_ep_bind(ep, &eq->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			return ret;
+		}
 	}
 
 	ret = ft_bind_comp(ep, FI_TRANSMIT | FI_RECV);

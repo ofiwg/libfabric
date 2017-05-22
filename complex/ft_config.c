@@ -669,7 +669,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->class_function = set->class_function[series->cur_func];
 	info->op = set->op[series->cur_op];
 	info->test_flags = set->test_flags;
-	info->caps = set->caps[series->cur_caps];
+	info->caps = set->caps[series->cur_caps] | FT_CAP_MSG;
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
 			0 : set->mode[series->cur_mode];
 	info->ep_type = set->ep_type[series->cur_ep];

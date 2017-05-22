@@ -61,7 +61,9 @@ nobase_dist_config_DATA = \
         test_configs/verbs/all.test \
         test_configs/verbs/quick.test \
 	test_configs/usnic/all.test \
-	test_configs/usnic/quick.test
+	test_configs/usnic/quick.test \
+	test_configs/psm/all.test \
+	test_configs/psm2/all.test
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
