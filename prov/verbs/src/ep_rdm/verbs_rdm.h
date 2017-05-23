@@ -242,12 +242,12 @@ struct fi_ibv_rdm_cm {
 	struct rdma_cm_id*		listener;
 	int				is_bound;
 
-	/* conn_hash has a sockaddr_in -> conn associative */
-	struct fi_ibv_rdm_conn*		conn_hash;
+	/* av_hash has a sockaddr_in -> [ep - conn] associative */
+	struct fi_ibv_rdm_av_entry*	av_hash;
 	/* Used only for FI_AV_TABLE */
-	struct fi_ibv_rdm_conn**	conn_table;
+	struct fi_ibv_rdm_av_entry**	av_table;
 
-	struct slist			av_removed_conn_head;
+	struct slist			av_removed_entry_head;
 	pthread_mutex_t			cm_lock;
 	pthread_t			cm_progress_thread;
 	int				cm_progress_timeout;
@@ -315,7 +315,7 @@ struct fi_ibv_rdm_ep {
 	int	recv_preposted_threshold;
 };
 
-enum {
+enum fi_rdm_cm_conn_state {
 	FI_VERBS_CONN_ALLOCATED,
 	FI_VERBS_CONN_STARTED,
 	FI_VERBS_CONN_REJECTED,
@@ -332,6 +332,14 @@ enum fi_rdm_cm_role {
 	FI_VERBS_CM_SELF,
 };
 
+struct fi_ibv_rdm_av_entry {
+	/* association of conn and EPs */
+	struct fi_ibv_rdm_conn		*conn_hash;
+	struct sockaddr_in		addr;
+	struct slist_entry		removed_next;
+	UT_hash_handle			hh;
+};
+
 struct fi_ibv_rdm_conn {
 
 	/* 
@@ -342,8 +350,9 @@ struct fi_ibv_rdm_conn {
 	struct ibv_qp *qp[2];
 	struct rdma_cm_id *id[2];
 	struct sockaddr_in addr;
+	struct fi_ibv_rdm_ep *ep;
 	enum fi_rdm_cm_role cm_role;
-	int state;
+	enum fi_rdm_cm_conn_state state;
 
 	char *sbuf_mem_reg;
 	struct fi_ibv_rdm_buf *sbuf_head;
@@ -376,12 +385,13 @@ struct fi_ibv_rdm_conn {
 	uint16_t recv_completions;
 	/* counter to control OOO behaviour, works in pair with recv_completions */
 	uint16_t recv_processed;
+
+	struct fi_ibv_rdm_av_entry *av_entry;
 	UT_hash_handle hh;
 #if ENABLE_DEBUG
 	size_t unexp_counter;
 	size_t exp_counter;
 #endif
-	struct slist_entry removed_next;
 };
 
 struct fi_ibv_rdm_postponed_entry {
@@ -528,8 +538,11 @@ static inline void fi_ibv_rdm_cntr_inc_err(struct fi_ibv_rdm_cntr *cntr)
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep);
 int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
 ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep);
+ssize_t
+fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry);
 ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn);
+ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry);
 ssize_t fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
                                 struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_conn *conn,

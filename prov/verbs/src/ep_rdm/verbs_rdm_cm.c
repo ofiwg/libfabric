@@ -353,8 +353,9 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 {
 	struct ibv_qp_init_attr qp_attr;
 	struct rdma_conn_param cm_params;
-	struct fi_ibv_rdm_conn *conn = NULL;
+	struct fi_ibv_rdm_av_entry *av_entry = NULL;
 	struct rdma_cm_id *id = event->id;
+	struct fi_ibv_rdm_conn *conn;
 	ssize_t ret = FI_SUCCESS;
 
 	char *p = (char *) event->param.conn.private_data;
@@ -374,16 +375,24 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		return ret;
 	}
 
-	HASH_FIND(hh, ep->domain->rdm_cm->conn_hash, p, FI_IBV_RDM_DFLT_ADDRLEN,
-		  conn);
+	HASH_FIND(hh, ep->domain->rdm_cm->av_hash, p,
+		  FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 
-	if (!conn) {
+	if (!av_entry) {
+		av_entry = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof(*av_entry));
+		if (!av_entry)
+			return -FI_ENOMEM;
+		memset(av_entry, 0, sizeof(*av_entry));
+		memcpy(&av_entry->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
+
 		conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof(*conn));
 		if (!conn)
 			return -FI_ENOMEM;
-
 		memset(conn, 0, sizeof(*conn));
-
+		conn->av_entry = av_entry;
+		HASH_ADD(hh, av_entry->conn_hash, ep,
+			 sizeof(struct fi_ibv_rdm_ep *), conn);
+		conn->ep = ep;
 		conn->state = FI_VERBS_CONN_ALLOCATED;
 		dlist_init(&conn->postponed_requests_head);
 		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
@@ -394,9 +403,25 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			   conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
 			   ntohs(conn->addr.sin_port));
 
-		HASH_ADD(hh, ep->domain->rdm_cm->conn_hash, addr,
-			 FI_IBV_RDM_DFLT_ADDRLEN, conn);
+		HASH_ADD(hh, ep->domain->rdm_cm->av_hash, addr,
+			 FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 	} else {
+		HASH_FIND(hh, av_entry->conn_hash, &ep,
+			  sizeof(struct fi_ibv_rdm_ep *), conn);
+		if (!conn) {
+			conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT,
+					sizeof(*conn));
+			if (!conn)
+				return -FI_ENOMEM;
+			memset(conn, 0, sizeof(*conn));
+			conn->ep = ep;
+			conn->av_entry = av_entry;
+			dlist_init(&conn->postponed_requests_head);
+			conn->state = FI_VERBS_CONN_ALLOCATED;
+			memcpy(&conn->addr, &av_entry->addr, FI_IBV_RDM_DFLT_ADDRLEN);
+			HASH_ADD(hh, av_entry->conn_hash, ep,
+				 sizeof(struct fi_ibv_rdm_ep *), conn);
+		}
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
 			/*
@@ -538,6 +563,24 @@ fi_ibv_rdm_process_event_established(struct rdma_cm_event *event,
 		conn->state = FI_VERBS_CONN_ESTABLISHED;
 	}
 	return FI_SUCCESS;
+}
+
+ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
+{
+	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
+	ssize_t ret = FI_SUCCESS;
+	ssize_t err = FI_SUCCESS;
+
+	HASH_ITER(hh, av_entry->conn_hash, conn, tmp) {
+		ret = fi_ibv_rdm_conn_cleanup(conn);
+		if (ret) {
+			VERBS_INFO(FI_LOG_AV, "Conn cleanup failed (%d) "
+				   "for av_entry = %p", ret, av_entry);
+			err = ret;
+		}
+	}
+
+	return err;
 }
 
 ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)

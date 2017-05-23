@@ -364,55 +364,76 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		ep->write_cntr = 0;
 	}
 
-	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
+	slist_remove_first_match(&ep->domain->ep_list,
+				 fi_ibv_rdm_ep_match, ep);
 
-	HASH_ITER(hh, ep->domain->rdm_cm->conn_hash, conn, tmp) {
-		switch (conn->state) {
-		case FI_VERBS_CONN_ALLOCATED:
-		case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		case FI_VERBS_CONN_ESTABLISHED:
-			ret = fi_ibv_rdm_start_disconnection(conn);
-			break;
-		case FI_VERBS_CONN_STARTED:
-			while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
-			       conn->state != FI_VERBS_CONN_REJECTED) {
-				ret = fi_ibv_rdm_cm_progress(ep);
-				if (ret) {
-					VERBS_INFO(FI_LOG_AV, 
-						   "cm progress failed\n");
-					break;
+	struct fi_ibv_rdm_av_entry *av_entry = NULL, *tmp = NULL;
+
+	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
+		struct fi_ibv_rdm_conn *conn = NULL;
+
+		HASH_FIND(hh, av_entry->conn_hash, &ep,
+			  sizeof(struct fi_ibv_rdm_ep *), conn);
+		if (conn) {
+			switch (conn->state) {
+			case FI_VERBS_CONN_ALLOCATED:
+			case FI_VERBS_CONN_REMOTE_DISCONNECT:
+			case FI_VERBS_CONN_ESTABLISHED:
+				ret = fi_ibv_rdm_start_disconnection(conn);
+				break;
+			case FI_VERBS_CONN_STARTED:
+				while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
+				       conn->state != FI_VERBS_CONN_REJECTED) {
+					ret = fi_ibv_rdm_cm_progress(ep);
+					if (ret) {
+						VERBS_INFO(FI_LOG_AV, 
+							   "cm progress failed\n");
+						break;
+					}
 				}
-			}
-			break;
-		default:
-			break;
+				break;
+			default:
+				break;
+		}
 		}
 	}
 
         /* ok, all connections are initiated to disconnect. now wait
 	 * till all connections are switch to state 'closed' */
-	HASH_ITER(hh, ep->domain->rdm_cm->conn_hash, conn, tmp) {
-		while(conn->state != FI_VERBS_CONN_CLOSED &&
-		      conn->state != FI_VERBS_CONN_ALLOCATED) {
-			fi_ibv_rdm_tagged_poll_recv(ep);
-			err = fi_ibv_rdm_cm_progress(ep);
-			if (err) {
-				VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
-				ret = (ret == FI_SUCCESS) ? err : ret;
+	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
+		struct fi_ibv_rdm_conn *conn = NULL;
+
+		HASH_FIND(hh, av_entry->conn_hash, &ep,
+			  sizeof(struct fi_ibv_rdm_ep *), conn);
+		if (conn) {
+			while(conn->state != FI_VERBS_CONN_CLOSED &&
+			      conn->state != FI_VERBS_CONN_ALLOCATED) {
+				fi_ibv_rdm_tagged_poll_recv(ep);
+				err = fi_ibv_rdm_cm_progress(ep);
+				if (err) {
+					VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
+					ret = (ret == FI_SUCCESS) ? err : ret;
+				}
 			}
 		}
 	}
 
         /* now destroy all connections */
-	HASH_ITER(hh, ep->domain->rdm_cm->conn_hash, conn, tmp) {
-		HASH_DEL(ep->domain->rdm_cm->conn_hash, conn);
-		fi_ibv_rdm_conn_cleanup(conn);
+	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
+		struct fi_ibv_rdm_conn *conn = NULL;
+
+		HASH_FIND(hh, av_entry->conn_hash, &ep,
+			  sizeof(struct fi_ibv_rdm_ep *), conn);
+		if (conn) {
+			HASH_DEL(av_entry->conn_hash, conn);
+			fi_ibv_rdm_conn_cleanup(conn);
+		}
 	}
 
 	/* TODO: MUST be removed in DOMAIN_CLOSE */
-	assert(HASH_COUNT(ep->domain->rdm_cm->conn_hash) == 0 &&
-	       ep->domain->rdm_cm->conn_hash == NULL);
-	free(ep->domain->rdm_cm->conn_table);
+	/*assert(HASH_COUNT(av_entry->conn_hash) == 0 &&
+	       av_entry->conn_hash == NULL);*/
+	free(ep->domain->rdm_cm->av_table);
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	assert(ep->scq && ep->rcq);
@@ -444,9 +465,6 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
 
 	fi_freeinfo(ep->info);
-
-	slist_find_first_match(&ep->domain->ep_list,
-			       fi_ibv_rdm_ep_match, ep);
 
 	free(ep);
 

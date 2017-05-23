@@ -203,28 +203,28 @@ static void *fi_ibv_rdm_cm_progress_thread(void *dom)
 static int fi_ibv_domain_close(fid_t fid)
 {
 	struct fi_ibv_domain *domain;
-	struct fi_ibv_rdm_conn *conn = NULL;
+	struct fi_ibv_rdm_av_entry *av_entry = NULL;
 	struct slist_entry *item;
 	void *status = NULL;
 	int ret;
 
 	domain = container_of(fid, struct fi_ibv_domain, domain_fid.fid);
 
-	domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
-	pthread_join(domain->rdm_cm->cm_progress_thread, &status);
-	pthread_mutex_destroy(&domain->rdm_cm->cm_lock);
-
-	for (item = slist_remove_head(
-			&domain->rdm_cm->av_removed_conn_head);
-	     item;
-	     item = slist_remove_head(
-			&domain->rdm_cm->av_removed_conn_head)) {
-		conn = container_of(item, struct fi_ibv_rdm_conn, 
-				    removed_next);
-		fi_ibv_rdm_conn_cleanup(conn);
-	}
-
 	if (domain->rdm) {
+		domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
+		pthread_join(domain->rdm_cm->cm_progress_thread, &status);
+		pthread_mutex_destroy(&domain->rdm_cm->cm_lock);
+
+		for (item = slist_remove_head(
+				&domain->rdm_cm->av_removed_entry_head);
+	     	     item;
+	     	     item = slist_remove_head(
+				&domain->rdm_cm->av_removed_entry_head)) {
+			av_entry = container_of(item,
+						struct fi_ibv_rdm_av_entry,
+						removed_next);
+			fi_ibv_rdm_overall_conn_cleanup(av_entry);
+		}
 		rdma_destroy_ep(domain->rdm_cm->listener);
 		free(domain->rdm_cm);
 	}
@@ -358,7 +358,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 				_domain->rdm_cm->cm_progress_timeout = param;
 			}
 		}
-		slist_init(&_domain->rdm_cm->av_removed_conn_head);
+		slist_init(&_domain->rdm_cm->av_removed_entry_head);
 
 		pthread_mutex_init(&_domain->rdm_cm->cm_lock, NULL);
 		_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 1;
