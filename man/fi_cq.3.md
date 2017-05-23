@@ -546,7 +546,8 @@ operation.  The following completion flags are defined.
 
 *FI_MULTICAST*
 : Indicates that a multicast operation completed.  This flag may be combined
-  with FI_MSG and relevant flags.
+  with FI_MSG and relevant flags.  This flag is only guaranteed to be valid
+  for received messages if the endpoint has been configured with FI_SOURCE.
 
 *FI_READ*
 : Indicates that a locally initiated RMA or atomic read operation has

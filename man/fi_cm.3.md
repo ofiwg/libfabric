@@ -15,6 +15,9 @@ fi_connect / fi_listen / fi_accept / fi_reject / fi_shutdown
 fi_setname / fi_getname / fi_getpeer
 : Set local, or return local or peer endpoint address.
 
+fi_join / fi_close / fi_mc_addr
+: Join, leave, or retrieve a multicast address.
+
 # SYNOPSIS
 
 ```c
