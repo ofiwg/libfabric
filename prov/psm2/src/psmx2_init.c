@@ -77,7 +77,7 @@ static int psmx2_check_sep_cap(void)
 	return 1;
 }
 
-static int psmx2_init_lib(void)
+static int psmx2_init_lib(int default_multi_ep)
 {
 	int major, minor;
 	int ret = 0, err;
@@ -89,6 +89,9 @@ static int psmx2_init_lib(void)
 
 	if (psmx2_lib_initialized)
 		goto out;
+
+	if (default_multi_ep && !getenv("PSM2_MULTI_EP"))
+		putenv("PSM2_MULTI_EP=1");
 
 	psm2_error_register_handler(NULL, PSM2_ERRHANDLER_NO_HANDLER);
 
@@ -180,12 +183,21 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	int svc0, svc = PSMX2_ANY_SERVICE;
 	glob_t glob_buf;
 	int tx_ctx_cnt, rx_ctx_cnt;
+	int default_multi_ep = 0;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
 	*info = NULL;
 
-	if (psmx2_init_lib())
+	/*
+	 * Try to turn on PSM2 multi-EP support if the application asks for
+	 * more than one tx context per endpoint. This only works for the
+	 * very first fi_getinfo() call.
+	 */
+	if (hints && hints->ep_attr && hints->ep_attr->tx_ctx_cnt > 1)
+		default_multi_ep = 1;
+
+	if (psmx2_init_lib(default_multi_ep))
 		return -FI_ENODATA;
 
 	/*
