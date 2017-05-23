@@ -686,6 +686,7 @@ static inline struct fi_cq_err_entry rdm_sr_check_canceled(struct fid_cq *cq)
 {
 	struct fi_cq_err_entry ee;
 	struct gnix_ep_name err_ep_name;
+	struct gnix_fid_cq *cq_priv;
 
 	/*application provided error_data buffer and length*/
 	ee.err_data_size = sizeof(struct gnix_ep_name);
@@ -698,7 +699,11 @@ static inline struct fi_cq_err_entry rdm_sr_check_canceled(struct fid_cq *cq)
 	 * Note: The address of err_ep_name should be the same as ee.err_data
 	 * when using api version >= 1.5.
 	 */
-	cr_assert(ee.err_data != &err_ep_name, "Invalid err_data ptr");
+	cq_priv = container_of(cq, struct gnix_fid_cq, cq_fid);
+	if (FI_VERSION_LT(cq_priv->domain->fabric->fab_fid.api_version, FI_VERSION(1, 5)))
+		cr_assert(ee.err_data != &err_ep_name, "Invalid err_data ptr");
+	else
+		cr_assert(ee.err_data == &err_ep_name, "Invalid err_data ptr");
 
 	/* To test API-1.1: Reporting of unknown source addresses */
 	if ((hints->caps & FI_SOURCE) && ee.err == FI_EADDRNOTAVAIL) {
@@ -1694,6 +1699,8 @@ void do_send_err(int len)
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
+	/* Set err_data_size to 0 to have provider allocate buffer if needed */
+	err_cqe.err_data_size = 0;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);

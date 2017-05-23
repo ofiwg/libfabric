@@ -68,20 +68,22 @@ static struct gnix_fid_wait *wait_priv;
 static struct fid_wait *wait_set;
 static struct fi_wait_attr wait_attr;
 
-void setup()
+static void _setup(uint32_t version)
 {
 	int ret = 0;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
-
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+		hints->domain_attr->mr_mode = FI_MR_BASIC;
+	else
+		hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -93,7 +95,17 @@ void setup()
 	cq_attr.wait_obj = FI_WAIT_NONE;
 }
 
-void teardown(void)
+static void setup(void)
+{
+	_setup(fi_version());
+}
+
+static void setup_1_4(void)
+{
+	_setup(FI_VERSION(1, 4));
+}
+
+static void teardown(void)
 {
 	int ret = 0;
 
@@ -128,6 +140,12 @@ void cq_create(enum fi_cq_format format, enum fi_wait_obj wait_obj,
 void cq_setup(void)
 {
 	setup();
+	cq_create(FI_CQ_FORMAT_UNSPEC, FI_WAIT_NONE, 0);
+}
+
+void cq_setup_1_4(void)
+{
+	setup_1_4();
 	cq_create(FI_CQ_FORMAT_UNSPEC, FI_WAIT_NONE, 0);
 }
 
@@ -370,7 +388,72 @@ Test(reading, error)
 
 	cr_assert(!cq_priv->events->item_list.head);
 	cr_assert(cq_priv->errors->item_list.head);
+	/* Testing err_data == NULL path set size to something
+	 * other than 0 then verify it was set back to 0 */
+	err_entry.err_data_size = 12;
+	err_entry.err_data = malloc(12);
+	ret = fi_cq_readerr(rcq, &err_entry, 0);
+	cr_assert_eq(ret, 1);
 
+	/*
+	 * Item should have been removed from error queue and placed on free
+	 * queue.
+	 */
+	cr_assert(!cq_priv->errors->item_list.head);
+	cr_assert(cq_priv->errors->free_list.head);
+
+	/*
+	 * Compare structural items...
+	 */
+	cr_assert_eq(*(char *) err_entry.op_context, input_ctx);
+	cr_assert_eq(err_entry.flags, flags);
+	cr_assert_eq(err_entry.len, len);
+	cr_assert_eq(err_entry.buf, buf);
+	cr_assert_eq(err_entry.data, data);
+	cr_assert_eq(err_entry.tag, tag);
+	cr_assert_eq(err_entry.olen, olen);
+	cr_assert_eq(err_entry.err, err);
+	cr_assert_eq(err_entry.prov_errno, prov_errno);
+	cr_assert(err_entry.err_data != NULL);
+	free(err_entry.err_data);
+	cr_assert(err_entry.err_data_size == 0);
+}
+
+TestSuite(reading_1_4, .init = cq_setup_1_4, .fini = cq_teardown);
+
+Test(reading_1_4, error)
+{
+	int ret = 0;
+	struct fi_cq_entry entry;
+	struct fi_cq_err_entry err_entry;
+
+	char input_ctx = 'a';
+	uint64_t flags = 0xb;
+	size_t len = sizeof(input_ctx);
+	void *buf = &input_ctx;
+	uint64_t data = 20;
+	uint64_t tag = 40;
+	size_t olen = 20;
+	int err = 50;
+	int prov_errno = 80;
+
+	/*
+	 * By default CQ start out with no error entries and no entries
+	 * in the error entry free list.
+	 */
+	cr_assert(!cq_priv->errors->item_list.head);
+	cr_assert(!cq_priv->errors->free_list.head);
+
+	_gnix_cq_add_error(cq_priv, &input_ctx, flags, len, buf, data, tag,
+			   olen, err, prov_errno, 0, 0);
+
+	cr_assert(cq_priv->errors->item_list.head);
+
+	ret = fi_cq_read(rcq, &entry, 1);
+	cr_assert_eq(ret, -FI_EAVAIL);
+
+	cr_assert(!cq_priv->events->item_list.head);
+	cr_assert(cq_priv->errors->item_list.head);
 	ret = fi_cq_readerr(rcq, &err_entry, 0);
 	cr_assert_eq(ret, 1);
 

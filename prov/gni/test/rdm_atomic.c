@@ -4957,7 +4957,7 @@ Test(rdm_atomic, atomic_err)
 	struct fi_cq_err_entry err_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					   (void *) -1, UINT_MAX, UINT_MAX,
 					   UINT_MAX, INT_MAX, INT_MAX,
-					   (void *) -1 };
+					   (void *) NULL, 0 };
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -4975,7 +4975,7 @@ Test(rdm_atomic, atomic_err)
 		pthread_yield();
 	}
 	cr_assert_eq(ret, -FI_EAVAIL);
-
+	cr_assert_eq(err_cqe.err_data_size, 0);
 	ret = fi_cq_readerr(send_cq[0], &err_cqe, 0);
 	cr_assert_eq(ret, 1);
 
@@ -4990,6 +4990,7 @@ Test(rdm_atomic, atomic_err)
 	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
 	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
 		  "Bad prov errno");
+	cr_assert(err_cqe.err_data_size == 0);
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
 	w_e[0] = 1;
@@ -5005,7 +5006,7 @@ Test(rdm_atomic, fetch_atomic_err)
 	struct fi_cq_err_entry err_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					   (void *) -1, UINT_MAX, UINT_MAX,
 					   UINT_MAX, INT_MAX, INT_MAX,
-					   (void *) -1 };
+					   (void *) NULL, 0 };
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
@@ -5053,7 +5054,7 @@ Test(rdm_atomic, compare_atomic_err)
 	struct fi_cq_err_entry err_cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					   (void *) -1, UINT_MAX, UINT_MAX,
 					   UINT_MAX, INT_MAX, INT_MAX,
-					   (void *) -1 };
+					   (void *) NULL, 0};
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
