@@ -92,9 +92,6 @@
 	OFI_Q_READERR(prov, log, eq, "eq", fi_eq_readerr, 	\
 			fi_eq_strerror, ret, err_entry)
 
-#define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
-#define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
-
 #define FI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type)	\
 	do {										\
 		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",			\
