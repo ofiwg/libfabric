@@ -159,6 +159,14 @@ typedef fi_addr_t
 	(*fi_ibv_rdm_conn_to_addr_func)
 	(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn);
 
+typedef struct fi_ibv_rdm_av_entry *
+	(*fi_ibv_rdm_addr_to_av_entry_func)
+	(struct fi_ibv_rdm_ep *ep, fi_addr_t addr);
+
+typedef fi_addr_t
+	(*fi_ibv_rdm_av_entry_to_addr_func)
+	(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_av_entry *av_entry);
+
 struct fi_ibv_av {
 	struct fid_av		av_fid;
 	struct fi_ibv_domain	*domain;
@@ -170,6 +178,8 @@ struct fi_ibv_av {
 	enum fi_av_type		type;
 	fi_ibv_rdm_addr_to_conn_func addr_to_conn;
 	fi_ibv_rdm_conn_to_addr_func conn_to_addr;
+	fi_ibv_rdm_addr_to_av_entry_func addr_to_av_entry;
+	fi_ibv_rdm_av_entry_to_addr_func av_entry_to_addr;
 };
 
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -200,6 +210,7 @@ struct fi_ibv_domain {
 	 */
 	int			rdm;
 	struct fi_ibv_rdm_cm	*rdm_cm;
+	struct slist		ep_list;
 	struct fi_info		*info;
 	struct fi_ibv_fabric	*fab;
 	struct fi_ibv_eq	*eq;

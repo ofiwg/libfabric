@@ -87,7 +87,8 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	/* Enable local write access by default for FI_EP_RDM which hides local
 	 * registration requirements. This allows to avoid buffering or double
 	 * registration */
-	if (!(md->domain->info->caps & FI_LOCAL_MR))
+	if (!(md->domain->info->caps & FI_LOCAL_MR) ||
+	    (md->domain->info->domain_attr->mr_mode & FI_MR_LOCAL))
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
 	/* Local read access to an MR is enabled by default in verbs */
@@ -177,14 +178,53 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static void *fi_ibv_rdm_cm_progress_thread(void *dom)
+{
+	struct fi_ibv_domain *domain =
+		(struct fi_ibv_domain *)dom;
+	struct slist_entry *item, *prev;
+	while (domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running) {
+		struct fi_ibv_rdm_ep *ep = NULL;
+		slist_foreach(&domain->ep_list, item, prev) {
+			(void) prev;
+			ep = container_of(item, struct fi_ibv_rdm_ep,
+					  list_entry);
+			if (fi_ibv_rdm_cm_progress(ep)) {
+				VERBS_INFO (FI_LOG_EP_DATA,
+				            "fi_ibv_rdm_cm_progress error\n");
+				abort();
+			}
+		}
+		usleep(domain->rdm_cm->cm_progress_timeout);
+	}
+	return NULL;
+}
+
 static int fi_ibv_domain_close(fid_t fid)
 {
 	struct fi_ibv_domain *domain;
+	struct fi_ibv_rdm_av_entry *av_entry = NULL;
+	struct slist_entry *item;
+	void *status = NULL;
 	int ret;
 
 	domain = container_of(fid, struct fi_ibv_domain, domain_fid.fid);
 
 	if (domain->rdm) {
+		domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
+		pthread_join(domain->rdm_cm->cm_progress_thread, &status);
+		pthread_mutex_destroy(&domain->rdm_cm->cm_lock);
+
+		for (item = slist_remove_head(
+				&domain->rdm_cm->av_removed_entry_head);
+	     	     item;
+	     	     item = slist_remove_head(
+				&domain->rdm_cm->av_removed_entry_head)) {
+			av_entry = container_of(item,
+						struct fi_ibv_rdm_av_entry,
+						removed_next);
+			fi_ibv_rdm_overall_conn_cleanup(av_entry);
+		}
 		rdma_destroy_ep(domain->rdm_cm->listener);
 		free(domain->rdm_cm);
 	}
@@ -275,13 +315,14 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct fi_ibv_domain *_domain;
 	struct fi_ibv_fabric *fab;
 	struct fi_info *fi;
-	int ret;
+	int param = 0, ret;
 
 	fi = fi_ibv_get_verbs_info(info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 
-	fab = container_of(fabric, struct fi_ibv_fabric, util_fabric.fabric_fid);
+	fab = container_of(fabric, struct fi_ibv_fabric,
+			   util_fabric.fabric_fid);
 	ret = ofi_check_domain_attr(&fi_ibv_prov, fabric->api_version,
 				    fi->domain_attr, info->domain_attr);
 	if (ret)
@@ -300,6 +341,35 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->rdm_cm = calloc(1, sizeof(*_domain->rdm_cm));
 		if (!_domain->rdm_cm) {
 			ret = -FI_ENOMEM;
+			goto err2;
+		}
+		_domain->rdm_cm->cm_progress_timeout =
+			FI_IBV_RDM_CM_THREAD_TIMEOUT;
+		if (!fi_param_get_int(&fi_ibv_prov,
+				      "rdm_thread_timeout",
+				      &param)) {
+			if (param < 0) {
+				VERBS_INFO(FI_LOG_CORE,
+				   	   "invalid value of "
+					   "rdm_thread_timeout\n");
+				ret = -FI_EINVAL;
+				goto err2;
+			} else {
+				_domain->rdm_cm->cm_progress_timeout = param;
+			}
+		}
+		slist_init(&_domain->rdm_cm->av_removed_entry_head);
+
+		pthread_mutex_init(&_domain->rdm_cm->cm_lock, NULL);
+		_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 1;
+		ret = pthread_create(&_domain->rdm_cm->cm_progress_thread,
+				     NULL, &fi_ibv_rdm_cm_progress_thread,
+				     (void *)_domain);
+		if (ret) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				   "Failed to launch CM progress thread, "
+				   "err :%d\n", ret);
+			ret = -FI_EOTHER;
 			goto err2;
 		}
 	}

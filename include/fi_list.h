@@ -96,13 +96,15 @@ static inline void dlist_remove(struct dlist_entry *item)
 		dlist_remove((head)->next);					\
 	} while (0)
 
-#define dlist_foreach(head, item) \
+#define dlist_foreach(head, item) 						\
 	for ((item) = (head)->next; (item) != (head); (item) = (item)->next)
 
-#define dlist_foreach_container(head, container, member) \
-	for (container = container_of((head)->next, typeof(*container), member); \
-		&(container->member) != (head); \
-		container = container_of(container->member.next, typeof(*container), member))
+#define dlist_foreach_container(head, container, member)		\
+	for (container = container_of((head)->next,			\
+				      typeof(*container), member);	\
+		&(container->member) != (head);				\
+		container = container_of(container->member.next,	\
+					 typeof(*container), member))
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
@@ -192,9 +194,10 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 	return item;
 }
 
-#define slist_foreach(list, item, prev)\
-	for ((prev) = NULL, (item) = (list)->head; (item); \
+#define slist_foreach(list, item, prev)				\
+	for ((prev) = NULL, (item) = (list)->head; (item); 	\
 			(prev) = (item), (item) = (item)->next)
+
 
 typedef int slist_func_t(struct slist_entry *item, const void *arg);
 

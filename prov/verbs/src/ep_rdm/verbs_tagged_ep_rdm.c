@@ -54,7 +54,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 
 int
 fi_ibv_rdm_tagged_prepare_send_request(struct fi_ibv_rdm_request *request,
-					struct fi_ibv_rdm_ep *ep)
+				       struct fi_ibv_rdm_ep *ep)
 {
 #if ENABLE_DEBUG
 	int res = OUTGOING_POST_LIMIT(request->minfo.conn, ep);
