@@ -51,10 +51,11 @@ Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make forward
 progress automatically.
 
 ### Operation flags
-Verbs provider supports FI_INJECT, FI_COMPLETION, FI_REMOTE_CQ_DATA.
+Verbs provider supports FI_INJECT, FI_COMPLETION, FI_REMOTE_CQ_DATA,
+FI_TRANSMIT_COMPLETE.
 
 ### Msg Ordering
-Verbs provider support the following messaging ordering on the TX side:
+Verbs provider support the following message ordering:
 
   * Read after Read
 
@@ -70,6 +71,11 @@ Verbs provider support the following messaging ordering on the TX side:
 
   * Send after Send
 
+and the following completion ordering:
+
+  * TX contexts: FI_ORDER_STRICT
+  * RX contexts: FI_ORDER_DATA
+
 ### Fork
 Verbs provider supports the fork system call by default. See the limitations section
 for restrictions. It can be turned off by setting the FI_FORK_UNSAFE environment
@@ -79,9 +85,8 @@ also makes the use of fork unsafe.
 # LIMITATIONS
 
 ### Memory Regions
-Only FI_MR_BASIC mode is supported. Adding regions via s/g list is not supported.
-Generic fi_mr_regattr is not supported. No support for binding memory regions to
-a counter.
+Only FI_MR_BASIC mode is supported. Adding regions via s/g list is supported only
+upto s/g list size of 1. No support for binding memory regions to a counter.
 
 ### Wait objects
 Only FI_WAIT_FD wait object is supported only for FI_EP_MSG endpoint type.
@@ -104,8 +109,10 @@ FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_MULTI_RECV, FI_RMA_EVENT
 Scalable endpoints, FABRIC_DIRECT
 
 #### Unsupported features specific to MSG endpoints
-Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel, fi_ep_alias,
-shared TX context, cq_readfrom operations.
+  * Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel, fi_ep_alias,
+    shared TX context, cq_readfrom operations.
+  * Completion flags are not reported if a request posted to an endpoint completes
+    in error.
 
 #### Unsupported features specific to RDM endpoints
 The RDM support for verbs have the following limitations:
@@ -158,6 +165,12 @@ The verbs provider checks for the following environment variables.
 ### Environment variables notes
 The fi_info utility would give the up-to-date information on environment variables:
 fi_info -p verbs -e
+
+# Troubleshooting / Known issues
+
+When running an app over verbs provider with valgrind, there may be reports of
+memory leak in functions from dependent libraries (e.g. libibverbs, librdmacm).
+These leaks are safe to ignore.
 
 # SEE ALSO
 

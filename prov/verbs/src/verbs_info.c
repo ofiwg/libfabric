@@ -107,6 +107,7 @@ const struct fi_ep_attr verbs_ep_attr = {
 const struct fi_rx_attr verbs_rx_attr = {
 	.mode			= VERBS_RX_MODE,
 	.msg_order		= VERBS_MSG_ORDER,
+	.comp_order		= FI_ORDER_STRICT | FI_ORDER_DATA,
 	.total_buffered_recv	= 0,
 };
 
@@ -122,6 +123,7 @@ const struct fi_tx_attr verbs_tx_attr = {
 	.mode			= VERBS_TX_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
+	.comp_order		= FI_ORDER_STRICT,
 	.inject_size		= 0,
 };
 
