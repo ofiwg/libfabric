@@ -223,6 +223,10 @@ static inline int ofi_translate_addr_format(int family)
 const char *ofi_straddr(char *buf, size_t *len,
 			uint32_t addr_format, const void *addr);
 
+/* Returns allocated address to caller.  Caller must free.  */
+int ofi_str_toaddr(const char *str, uint32_t *addr_format,
+		   void **addr, size_t *len);
+
 /*
  * Key Index
  */
