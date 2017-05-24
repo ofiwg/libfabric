@@ -105,6 +105,11 @@ dnl
 				 AC_MSG_WARN([but libfabric is being built as static-only])
 				 AC_MSG_ERROR([This is an impossible situation. Cannot continue.])])
 			 AC_MSG_NOTICE([$1 provider: build as plugin])
+
+			 # See if this provider has a specfile that
+			 # needs to be generated
+			 m4_ifnblank(m4_esyscmd(ls prov/$1/libfabric-$1.spec.in 2> /dev/null),
+			       [AC_CONFIG_FILES([prov/$1/libfabric-$1.spec])])
 			],
 			[PROVIDERS_STATIC="prov/$1/lib$1.la $PROVIDERS_STATIC"
 			 AC_MSG_NOTICE([$1 provider: include in libfabric])])
