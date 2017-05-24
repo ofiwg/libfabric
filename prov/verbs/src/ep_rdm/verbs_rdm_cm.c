@@ -43,10 +43,11 @@ extern struct fi_provider fi_ibv_prov;
 extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 
 static struct ibv_mr *
-fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep, void **buf, size_t size)
+fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
+			 void **buf, size_t size)
 {
-	*buf = memalign(FI_IBV_RDM_BUF_ALIGNMENT, size);
-	if (*buf) {
+	if (!ofi_memalign((void**)buf,
+			  FI_IBV_RDM_BUF_ALIGNMENT, size)) {
 		memset(*buf, 0, size);
 		return ibv_reg_mr(ep->domain->pd, *buf, size,
 				  IBV_ACCESS_LOCAL_WRITE |
@@ -379,15 +380,22 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		  FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 
 	if (!av_entry) {
-		av_entry = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof(*av_entry));
-		if (!av_entry)
-			return -FI_ENOMEM;
+		ret = ofi_memalign((void**)&av_entry,
+				   FI_IBV_RDM_MEM_ALIGNMENT,
+				   sizeof(*av_entry));
+		if (ret)
+			return -ret;
 		memset(av_entry, 0, sizeof(*av_entry));
 		memcpy(&av_entry->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
 
-		conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof(*conn));
-		if (!conn)
-			return -FI_ENOMEM;
+		ret = ofi_memalign((void**)&conn,
+				   FI_IBV_RDM_MEM_ALIGNMENT,
+				   sizeof(*conn));
+		if (ret) {
+			/* do NOT free av_entry here, it can be used by
+			 * previously allcoated conn entries */
+			return -ret;
+		}
 		memset(conn, 0, sizeof(*conn));
 		conn->av_entry = av_entry;
 		HASH_ADD(hh, av_entry->conn_hash, ep,
@@ -409,10 +417,11 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
-			conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT,
-					sizeof(*conn));
-			if (!conn)
-				return -FI_ENOMEM;
+			ret = ofi_memalign((void**)&conn,
+					   FI_IBV_RDM_MEM_ALIGNMENT,
+					   sizeof(*conn));
+			if (ret)
+				return -ret;
 			memset(conn, 0, sizeof(*conn));
 			conn->ep = ep;
 			conn->av_entry = av_entry;
@@ -653,7 +662,7 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 		}
 	}
 
-	free(conn);
+	ofi_freealign(conn);
 	return ret;
 }
 

@@ -219,15 +219,14 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 
 		if (!av_entry) {
 			/* If addr_i is not found in HASH then we malloc it.
-			 * It could be found if the connection was initiated by the remote
-			 * side.
+			 * It could be found if the connection was initiated
+			 * by the remote side.
 			 */
-			av_entry = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof *av_entry);
-			if (!av_entry) {
-				ret = -FI_ENOMEM;
+			ret = -ofi_memalign((void**)&av_entry,
+					    FI_IBV_RDM_MEM_ALIGNMENT,
+					    sizeof *av_entry);
+			if (ret)
 				goto out;
-			}
-
 			memset(av_entry, 0, sizeof *av_entry);
 			/*dlist_init(&conn->postponed_requests_head);
 			conn->state = FI_VERBS_CONN_ALLOCATED;
@@ -252,7 +251,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			break;
 		}
 
-		VERBS_INFO(FI_LOG_AV, "fi_av_insert: addr %s:%u; av_entry - %p\n",
+		VERBS_INFO(FI_LOG_AV,
+			   "fi_av_insert: addr %s:%u; av_entry - %p\n",
 			   inet_ntoa(av_entry->addr.sin_addr),
 			   ntohs(av_entry->addr.sin_port), av_entry);
 
@@ -561,9 +561,9 @@ fi_ibv_rdm_av_map_addr_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
-			conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT,
-					sizeof(*conn));
-			if (!conn)
+			if (ofi_memalign((void**)&conn,
+					 FI_IBV_RDM_MEM_ALIGNMENT,
+					 sizeof(*conn)))
 				return NULL;
 			memset(conn, 0, sizeof(*conn));
 		    	memcpy(&conn->addr, &av_entry->addr,
@@ -591,9 +591,9 @@ fi_ibv_rdm_av_tbl_idx_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
-			conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT,
-					sizeof(*conn));
-			if (!conn)
+			if (ofi_memalign((void**)&conn,
+					 FI_IBV_RDM_MEM_ALIGNMENT,
+					 sizeof(*conn)))
 				return NULL;
 			memset(conn, 0, sizeof(*conn));
 		    	memcpy(&conn->addr, &av_entry->addr,
