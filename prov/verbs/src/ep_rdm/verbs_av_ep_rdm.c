@@ -371,7 +371,7 @@ static int fi_ibv_rdm_av_insertsym(struct fid_av *av, const char *node,
 					    var_port + (int)j);
 
 			check_host = (len_host > 0 && len_host < FI_NAME_MAX);
-			check_host = (len_port > 0 && len_port < FI_NAME_MAX);
+			check_port = (len_port > 0 && len_port < FI_NAME_MAX);
 
 			if (check_port && check_host) {
 				ret = fi_ibv_rdm_av_insertsvc(av, tmp_host,
@@ -393,7 +393,7 @@ static int fi_ibv_rdm_av_insertsym(struct fid_av *av, const char *node,
 			}
 		}
 	}
-	return success > 0 ? success : err_code;
+	return ((success > 0) ? success : err_code);
 }
 
 static int fi_ibv_rdm_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
