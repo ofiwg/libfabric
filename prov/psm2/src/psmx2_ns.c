@@ -212,7 +212,9 @@ static void *psmx2_name_server_func(void *args)
 
 	if (listenfd < 0) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"couldn't listen to port %d. try set FI_PSM2_UUID to a different value?\n",
+			"couldn't bind to port %d. It is fine if another process from the "
+			"same job has started the name server.\nHowever, if that's not the "
+			"case, try set FI_PSM2_UUID to a different value.\n",
 			port);
 		return NULL;
 	}
@@ -272,9 +274,13 @@ static void *psmx2_name_server_func(void *args)
  * Name server API: server side
  */
 
+static int psmx2_ns_connect_server(const char *server);
+
 void psmx2_ns_start_server(struct psmx2_fid_fabric *fabric)
 {
 	int ret;
+	int sockfd;
+	int sleep_usec = 1000;
 
 	ret = pthread_create(&fabric->name_server_thread, NULL,
 			     psmx2_name_server_func, (void *)fabric);
@@ -283,6 +289,23 @@ void psmx2_ns_start_server(struct psmx2_fid_fabric *fabric)
 		/* use the main thread's ID as invalid value for the new thread */
 		fabric->name_server_thread = pthread_self();
 	}
+
+	/*
+	 * Wait for the local name server to come up. It could be the thread
+	 * created above, or the thread created by another process on the same
+	 * node. The total wait time is about (1+2+4+...+8192)ms = 16 seconds.
+	 */
+	FI_INFO(&psmx2_prov, FI_LOG_CORE, "connecting to local name server\n");
+	while (sleep_usec < 10000) {
+		sockfd = psmx2_ns_connect_server("localhost");
+		if (sockfd >= 0) {
+			close(sockfd);
+			return;
+		}
+		usleep(sleep_usec);
+		sleep_usec *= 2;
+	}
+	FI_WARN(&psmx2_prov, FI_LOG_CORE, "can't connect to local name server.\n", ret);
 }
 
 void psmx2_ns_stop_server(struct psmx2_fid_fabric *fabric)
