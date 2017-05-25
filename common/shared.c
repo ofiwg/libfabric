@@ -60,6 +60,7 @@ struct fid_cntr *txcntr, *rxcntr;
 struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
+struct fid_mc *mc;
 
 struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
@@ -77,6 +78,8 @@ char *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
+const char *greeting = "Hello from Client!";
+
 
 char test_name[50] = "custom";
 int timeout = -1;
@@ -762,7 +765,7 @@ int ft_init_ep(void)
 {
 	int flags, ret;
 
-	if (fi->ep_attr->type == FI_EP_MSG)
+	if (fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST)
 		FT_EP_BIND(ep, eq, 0);
 	FT_EP_BIND(ep, av, 0);
 	FT_EP_BIND(ep, txcq, FI_TRANSMIT);
@@ -801,6 +804,36 @@ int ft_init_ep(void)
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
 			return ret;
+	}
+
+	return 0;
+}
+
+int ft_join_mc(void)
+{
+	struct fi_eq_entry entry;
+	uint32_t event;
+	ssize_t rd;
+	int ret;
+
+	ret = fi_join(ep, fi->dest_addr, 0, &mc, ep->fid.context);
+	if (ret) {
+		FT_PRINTERR("fi_join", ret);
+		return ret;
+	}
+
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
+	if (rd != sizeof entry) {
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "join");
+		ret = (int) rd;
+		return ret;
+	}
+
+	if (event != FI_JOIN_COMPLETE || entry.fid != &mc->fid) {
+		fprintf(stderr, "Unexpected join event %d fid %p (mc %p)\n",
+			event, entry.fid, ep);
+		ret = -FI_EOTHER;
+		return ret;
 	}
 
 	return 0;
@@ -910,6 +943,7 @@ static void ft_close_fids(void)
 {
 	if (mr != &no_mr)
 		FT_CLOSE_FID(mr);
+	FT_CLOSE_FID(mc);
 	FT_CLOSE_FID(alias_ep);
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(pep);
@@ -1814,6 +1848,7 @@ void ft_usage(char *name, char *desc)
 
 	fprintf(stderr, "\nOptions:\n");
 	ft_addr_usage();
+	FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)");
@@ -1821,6 +1856,27 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
 	FT_PRINT_OPTS_USAGE("", "fi_shared_ctx");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
+	FT_PRINT_OPTS_USAGE("-h", "display this help output");
+
+	return;
+}
+
+void ft_mcusage(char *name, char *desc)
+{
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS] -M <mcast_addr>\tstart listener\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <mcast_addr>\tsend to group\n", name);
+
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	ft_addr_usage();
+	FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
+	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
+	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
+	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
@@ -2052,39 +2108,45 @@ int check_recv_msg(const char *message)
 	return 0;
 }
 
-int send_recv_greeting(struct fid_ep *ep)
+int ft_send_greeting(struct fid_ep *ep)
 {
+	size_t message_len = strlen(greeting) + 1;
 	int ret;
-	const char *message = "Hello from Client!";
-	size_t message_len = strlen(message) + 1;
 
-	if (opts.dst_addr) {
-		fprintf(stdout, "Sending message...\n");
-		if (snprintf(tx_buf, tx_size, "%s", message) >= tx_size) {
-			fprintf(stderr, "Transmit buffer too small.\n");
-			return -FI_ETOOSMALL;
-		}
-
-		ret = ft_tx(ep, remote_fi_addr, message_len, &tx_ctx);
-		if (ret)
-			return ret;
-
-		fprintf(stdout, "Send completion received\n");
-	} else {
-		fprintf(stdout, "Waiting for message from client...\n");
-		ret = ft_get_rx_comp(rx_seq);
-		if (ret)
-			return ret;
-
-		ret = check_recv_msg(message);
-		if (ret)
-			return ret;
-
-		fprintf(stdout, "Received data from client: %s\n",
-				(char *) rx_buf);
+	fprintf(stdout, "Sending message...\n");
+	if (snprintf(tx_buf, tx_size, "%s", greeting) >= tx_size) {
+		fprintf(stderr, "Transmit buffer too small.\n");
+		return -FI_ETOOSMALL;
 	}
 
+	ret = ft_tx(ep, remote_fi_addr, message_len, &tx_ctx);
+	if (ret)
+		return ret;
+
+	fprintf(stdout, "Send completion received\n");
 	return 0;
+}
+
+int ft_recv_greeting(struct fid_ep *ep)
+{
+	int ret;
+
+	fprintf(stdout, "Waiting for message from client...\n");
+	ret = ft_get_rx_comp(rx_seq);
+	if (ret)
+		return ret;
+
+	ret = check_recv_msg(greeting);
+	if (ret)
+		return ret;
+
+	fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
+	return 0;
+}
+
+int ft_send_recv_greeting(struct fid_ep *ep)
+{
+	return opts.dst_addr ? ft_send_greeting(ep) : ft_recv_greeting(ep);
 }
 
 int ft_sock_listen(char *service)
