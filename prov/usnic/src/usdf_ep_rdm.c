@@ -115,6 +115,7 @@ static const struct fi_ep_attr rdm_dflt_ep_attr = {
 };
 
 static const struct fi_domain_attr rdm_dflt_domain_attr = {
+	.caps = USDF_DOM_CAPS,
 	.threading = FI_THREAD_ENDPOINT,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
@@ -179,14 +180,8 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 	if (ret < 0)
 		return -FI_ENODATA;
 
-	if (!hints || !hints->domain_attr) {
-		/* mr_mode behavior changed in version 1.5 from a single flag to mode bits.
-		* Hence, if a version less than v1.5 was requested, return the prior default:
-		* FI_MR_BASIC. */
-		if (FI_VERSION_LT(version, FI_VERSION(1,5)))
-			defaults.mr_mode = FI_MR_BASIC;
+	if (!hints || !hints->domain_attr)
 		goto out;
-	}
 
 	/* how to handle fi_thread_fid, fi_thread_completion, etc?
 	 */
@@ -224,11 +219,31 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-	if (ofi_check_mr_mode(version, defaults.mr_mode,
-			      hints->domain_attr->mr_mode))
+	switch (hints->domain_attr->caps) {
+	case FI_REMOTE_COMM:
+		if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+			return -FI_ENODATA;
+	case 0:
+		break;
+	default:
+		USDF_WARN_SYS(DOMAIN,
+			"invalid domain capabilities\n");
 		return -FI_ENODATA;
+	}
 
-	defaults.mr_mode = hints->domain_attr->mr_mode;
+	switch (hints->domain_attr->mr_mode) {
+	case FI_MR_UNSPEC:
+		/* mr_mode behavior changed in version 1.5 from a single flag to mode bits.
+		* Hence, if a version less than v1.5 was requested, return the prior default:
+		* FI_MR_BASIC. */
+		if (FI_VERSION_LT(version, FI_VERSION(1,5)))
+			defaults.mr_mode = FI_MR_BASIC;
+		break;
+	default :
+		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
+			return -FI_ENODATA;
+		defaults.mr_mode = hints->domain_attr->mr_mode;
+	}
 
 out:
 	*fi->domain_attr = defaults;
