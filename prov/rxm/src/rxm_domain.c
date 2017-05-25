@@ -114,6 +114,9 @@ static int rxm_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
 	/* Additional flags to use RMA read for large message transfers */
 	access |= FI_READ | FI_REMOTE_READ;
 
+	if (rxm_domain->mr_local)
+		access |= FI_WRITE;
+
 	ret = fi_mr_reg(rxm_domain->msg_domain, buf, len, access, offset, requested_key,
 			flags, &rxm_mr->msg_mr, context);
 	if (ret) {
@@ -184,6 +187,8 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	/* Replace MR ops set by ofi_domain_init() */
 	(*domain)->mr = &rxm_domain_mr_ops;
 	(*domain)->ops = &rxm_domain_ops;
+
+	rxm_domain->mr_local = RXM_MR_LOCAL(msg_info) && !RXM_MR_LOCAL(info);
 
 	fi_freeinfo(msg_info);
 	return 0;

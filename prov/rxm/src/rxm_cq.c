@@ -141,23 +141,27 @@ int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 	return rxm_ep_repost_buf(rx_buf);
 }
 
-int rxm_finish_send(struct rxm_tx_entry *tx_entry)
+static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 {
 	int ret;
 
 	if (tx_entry->flags & FI_COMPLETION) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing send completion\n");
 		ret = rxm_cq_comp(tx_entry->ep->util_ep.tx_cq, tx_entry->context,
-				tx_entry->comp_flags | FI_SEND, 0, NULL, 0, 0);
+				tx_entry->comp_flags, 0, NULL, 0, 0);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to write send completion\n");
+					"Unable to report completion\n");
 			return ret;
 		}
 	}
-	rxm_buf_release(&tx_entry->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
 	freestack_push(tx_entry->ep->send_queue.fs, tx_entry);
 	return 0;
+}
+
+int rxm_finish_send(struct rxm_tx_entry *tx_entry)
+{
+	rxm_buf_release(&tx_entry->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
+	return rxm_finish_send_nobuf(tx_entry);
 }
 
 /* Get a match_iov derived from iov whose size matches given length */
@@ -256,6 +260,7 @@ static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 	if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info))
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 
+	tx_entry->comp_flags |= FI_SEND;
 	ret = rxm_finish_send(tx_entry);
 	if (ret)
 		return ret;
@@ -425,19 +430,46 @@ static int rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 		rx_buf->hdr.state = RXM_NONE;
 		return ret;
 	}
-	// TODO process app RMA read
+	return 0;
+}
+
+static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
+				   struct fi_cq_tagged_entry *comp)
+{
+	int ret;
+
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing remote write completion\n");
+	ret = rxm_cq_comp(rxm_ep->util_ep.rx_cq, NULL,
+			  comp->flags, 0, NULL, comp->data, 0);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unable to write remote write completion\n");
+		return ret;
+	}
+	if (comp->op_context)
+		return rxm_ep_repost_buf((struct rxm_rx_buf *)comp->op_context);
 	return 0;
 }
 
 static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
-			      struct fi_cq_tagged_entry *comp) {
+			      struct fi_cq_tagged_entry *comp)
+{
 	enum rxm_proto_state *state = comp->op_context;
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 
+	/* Remote write events may not consume a posted recv so op context
+	 * and hence state would be NULL */
+	if (comp->flags & FI_REMOTE_WRITE)
+		return rxm_handle_remote_write(rxm_ep, comp);
+
 	switch (*state) {
+	case RXM_TX_NOBUF:
+		return rxm_finish_send_nobuf(comp->op_context);
 	case RXM_TX:
 		return rxm_finish_send(comp->op_context);
 	case RXM_RX:
+		assert(!(comp->flags & FI_REMOTE_READ));
+
 		if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack)
 			return rxm_lmt_handle_ack(rx_buf);
 		else

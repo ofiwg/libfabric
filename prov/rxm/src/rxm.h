@@ -98,6 +98,7 @@
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
+extern struct fi_ops_rma rxm_ops_rma;
 
 struct rxm_fabric {
 	struct util_fabric util_fabric;
@@ -114,6 +115,7 @@ struct rxm_conn {
 struct rxm_domain {
 	struct util_domain util_domain;
 	struct fid_domain *msg_domain;
+	uint8_t mr_local;
 };
 
 struct rxm_mr {
@@ -134,6 +136,7 @@ struct rxm_rma_iov {
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)	\
 	FUNC(RXM_NONE),		\
+	FUNC(RXM_TX_NOBUF),	\
 	FUNC(RXM_TX),		\
 	FUNC(RXM_RX),		\
 	FUNC(RXM_LMT_TX),	\
@@ -177,6 +180,7 @@ struct rxm_buf {
 	enum rxm_proto_state state;
 
 	struct dlist_entry entry;
+	void *desc;
 	/* MSG EP / shared context to which bufs would be posted to */
 	struct fid_ep *msg_ep;
 };
@@ -296,6 +300,16 @@ static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
+static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
+	return rxm_ep->rxm_info->tx_attr->op_flags;
+}
+
+static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
+	return rxm_ep->rxm_info->rx_attr->op_flags;
+}
+
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 int rxm_info_to_core(uint32_t version, struct fi_info *rxm_info,
@@ -331,4 +345,3 @@ int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool);
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf);
-void *rxm_buf_get_desc(struct rxm_buf_pool *pool, void *buf);

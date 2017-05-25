@@ -88,21 +88,10 @@ static int rxm_mr_buf_reg(void *pool_ctx, void *addr, size_t len, void **context
 	struct fid_mr *mr;
 	struct fid_domain *msg_domain = (struct fid_domain *)pool_ctx;
 
-	ret = fi_mr_reg(msg_domain, addr, len, FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(msg_domain, addr, len, FI_SEND | FI_RECV | FI_READ |
+			FI_WRITE, 0, 0, 0, &mr, NULL);
 	*context = mr;
 	return ret;
-}
-
-void *rxm_buf_get_desc(struct rxm_buf_pool *pool, void *buf)
-{
-	struct fid_mr *mr;
-
-	if (pool->local_mr) {
-		mr = util_buf_get_ctx(pool->pool, buf);
-		return fi_mr_desc(mr);
-	} else {
-		return NULL;
-	}
 }
 
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
@@ -114,11 +103,18 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
 	struct rxm_buf *buf;
-	buf = util_buf_get(pool->pool);
+	struct fid_mr *mr = NULL;
+
+	if (pool->local_mr)
+		buf = util_buf_alloc_ex(pool->pool, (void **)&mr);
+	else
+		buf = util_buf_alloc(pool->pool);
 	if (!buf)
 		return NULL;
 	memset(buf, 0, sizeof(*buf));
 	dlist_insert_tail(&buf->entry, &pool->buf_list);
+	if (pool->local_mr && mr)
+		buf->desc = fi_mr_desc(mr);
 	return buf;
 }
 
@@ -257,7 +253,6 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_buf hdr = rx_buf->hdr;
 	struct rxm_ep *rxm_ep = rx_buf->ep;
-	void *desc = NULL;
 	int ret;
 
 	memset(rx_buf, 0, sizeof(*rx_buf));
@@ -265,11 +260,9 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_RX;
 	rx_buf->ep = rxm_ep;
 
-	desc = rxm_buf_get_desc(&rx_buf->ep->rx_pool, rx_buf);
-
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Re-posting rx buf\n");
-	ret = fi_recv(rx_buf->ep->srx_ctx, &rx_buf->pkt, RXM_BUF_SIZE, desc,
-			FI_ADDR_UNSPEC,	rx_buf);
+	ret = fi_recv(rx_buf->ep->srx_ctx, &rx_buf->pkt, RXM_BUF_SIZE,
+		      rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
 	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
 	return ret;
@@ -346,16 +339,6 @@ static struct fi_ops_ep rxm_ops_ep = {
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
-
-static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
-	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
-	return rxm_ep->rxm_info->tx_attr->op_flags;
-}
-
-static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
-	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
-	return rxm_ep->rxm_info->rx_attr->op_flags;
-}
 
 static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 				    struct rxm_recv_queue *recv_queue,
@@ -560,7 +543,6 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	struct rxm_tx_buf *tx_buf;
 	struct rxm_pkt *pkt;
 	struct fid_mr **mr_iov;
-	void *desc_tx_buf = NULL;
 	size_t pkt_size = 0;
 	ssize_t size;
 	int ret;
@@ -576,7 +558,6 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
 		return -FI_EAGAIN;
 	}
-	desc_tx_buf = rxm_buf_get_desc(&rxm_ep->tx_pool, tx_buf);
 
 	if (freestack_isempty(rxm_ep->send_queue.fs)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted tx_entry freestack\n");
@@ -667,9 +648,11 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		}
 	}
 
-	ret = fi_send(rxm_conn->msg_ep, pkt, pkt_size, desc_tx_buf, 0, tx_entry);
+	ret = fi_send(rxm_conn->msg_ep, pkt, pkt_size, tx_buf->hdr.desc, 0, tx_entry);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_send for MSG provider failed\n");
+		if (ret != -FI_EAGAIN)
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"fi_send for MSG provider failed\n");
 		goto done;
 	}
 
@@ -1168,6 +1151,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->cm = &rxm_ops_cm;
 	(*ep_fid)->msg = &rxm_ops_msg;
 	(*ep_fid)->tagged = &rxm_ops_tagged;
+	(*ep_fid)->rma = &rxm_ops_rma;
 
 	return 0;
 err3:

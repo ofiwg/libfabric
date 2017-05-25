@@ -32,8 +32,12 @@
 
 #include "rxm.h"
 
+#define RXM_EP_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_DIRECTED_RECV |	\
+		     FI_READ | FI_WRITE | FI_RECV | FI_SEND |		\
+		     FI_REMOTE_READ | FI_REMOTE_WRITE | FI_SOURCE)
+
 struct fi_tx_attr rxm_tx_attr = {
-	.caps = FI_MSG | FI_TAGGED | FI_SEND,
+	.caps = RXM_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = RXM_TX_DATA_SIZE,
 	.size = SIZE_MAX,
@@ -41,7 +45,7 @@ struct fi_tx_attr rxm_tx_attr = {
 };
 
 struct fi_rx_attr rxm_rx_attr = {
-	.caps = FI_MSG | FI_TAGGED | FI_RECV,
+	.caps = RXM_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.size = 1024,
 	.iov_limit= RXM_IOV_LIMIT,
@@ -66,6 +70,7 @@ struct fi_domain_attr rxm_domain_attr = {
 	 * doesn't fail at RxM level. If an app requires FI_MR_BASIC, it
 	 * would be passed down to core provider. */
 	.mr_mode = FI_MR_BASIC,
+	.cq_data_size = sizeof_field(struct ofi_op_hdr, data),
 	.cq_cnt = (1 << 16),
 	.ep_cnt = (1 << 15),
 	.tx_ctx_cnt = 1,
@@ -80,7 +85,7 @@ struct fi_fabric_attr rxm_fabric_attr = {
 };
 
 struct fi_info rxm_info = {
-	.caps = FI_MSG | FI_TAGGED | FI_SEND | FI_RECV | FI_SOURCE | FI_DIRECTED_RECV,
+	.caps = RXM_EP_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
