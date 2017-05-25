@@ -224,6 +224,7 @@ static int fi_ibv_domain_close(fid_t fid)
 						struct fi_ibv_rdm_av_entry,
 						removed_next);
 			fi_ibv_rdm_overall_conn_cleanup(av_entry);
+			ofi_freealign(av_entry);
 		}
 		rdma_destroy_ep(domain->rdm_cm->listener);
 		free(domain->rdm_cm);
