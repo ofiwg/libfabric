@@ -228,9 +228,6 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			if (ret)
 				goto out;
 			memset(av_entry, 0, sizeof *av_entry);
-			/*dlist_init(&conn->postponed_requests_head);
-			conn->state = FI_VERBS_CONN_ALLOCATED;
-			conn->cm_role = FI_VERBS_CM_UNDEFINED;*/
 			memcpy(&av_entry->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
 			HASH_ADD(hh, av->domain->rdm_cm->av_hash, addr,
 				 FI_IBV_RDM_DFLT_ADDRLEN, av_entry);

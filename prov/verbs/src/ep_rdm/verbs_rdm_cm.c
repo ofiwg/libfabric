@@ -398,13 +398,13 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		}
 		memset(conn, 0, sizeof(*conn));
 		conn->av_entry = av_entry;
-		HASH_ADD(hh, av_entry->conn_hash, ep,
-			 sizeof(struct fi_ibv_rdm_ep *), conn);
 		conn->ep = ep;
 		conn->state = FI_VERBS_CONN_ALLOCATED;
 		dlist_init(&conn->postponed_requests_head);
 		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
+		HASH_ADD(hh, av_entry->conn_hash, ep,
+			 sizeof(struct fi_ibv_rdm_ep *), conn);
 
 		VERBS_INFO(FI_LOG_AV, "CONN REQUEST, NOT found in hash, "
 			   "new conn %p %d, addr %s:%u, HASH ADD\n",
