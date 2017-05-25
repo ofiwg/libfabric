@@ -174,6 +174,12 @@ static int usdf_validate_hints(uint32_t version, struct fi_info *hints)
 		default:
 			return -FI_ENODATA;
 		}
+
+		if (hints->ep_attr->auth_key || hints->ep_attr->auth_key_size) {
+			USDF_WARN_SYS(EP_CTRL,
+				"\"authorization key\" is not supported in this provider.\n");
+			return -FI_ENODATA;
+		}
 	}
 
 	fattrp = hints->fabric_attr;
