@@ -1925,9 +1925,6 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 	}
 
 	if (unlikely(queue_tx)) {
-		/*
-		 * TODO: for auto progress do something here
-		 */
 		dlist_insert_tail(&req->dlist, &vc->tx_queue);
 		_gnix_vc_tx_schedule(vc);
 	}
