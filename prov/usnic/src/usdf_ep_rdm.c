@@ -179,8 +179,14 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 	if (ret < 0)
 		return -FI_ENODATA;
 
-	if (!hints || !hints->domain_attr)
+	if (!hints || !hints->domain_attr) {
+		/* mr_mode behavior changed in version 1.5 from a single flag to mode bits.
+		* Hence, if a version less than v1.5 was requested, return the prior default:
+		* FI_MR_BASIC. */
+		if (FI_VERSION_LT(version, FI_VERSION(1,5)))
+			defaults.mr_mode = FI_MR_BASIC;
 		goto out;
+	}
 
 	/* how to handle fi_thread_fid, fi_thread_completion, etc?
 	 */
