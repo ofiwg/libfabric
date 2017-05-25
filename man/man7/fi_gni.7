@@ -266,6 +266,11 @@ gni;node;service;GNIX_AV_STR_ADDR_VERSION;device_addr;cdm_id;name_type;cm_nic_cd
 The GNI provider sets the domain attribute \f[I]cntr_cnt\f[] to the the
 CQ limit divided by 2.
 .PP
+The GNI provider sets the domain attribute \f[I]cq_cnt\f[] to the CQ
+limit divided by 2.
+.PP
+The GNI provider sets the domain attribute \f[I]ep_cnt\f[] to SIZE_MAX.
+.PP
 Completion queue events may report unknown source address information
 when using \f[I]FI_SOURCE\f[].
 The source address information will be reported in the err_data member
