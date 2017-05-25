@@ -52,6 +52,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 #if 1
 #define dbg_printf(...)
@@ -478,7 +479,8 @@ void do_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -506,7 +508,8 @@ void do_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -533,7 +536,8 @@ void do_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -559,7 +563,8 @@ void do_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -600,7 +605,8 @@ void do_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -628,7 +634,8 @@ void do_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -655,7 +662,8 @@ void do_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -681,7 +689,8 @@ void do_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -719,7 +728,8 @@ void do_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -745,7 +755,8 @@ void do_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -770,7 +781,8 @@ void do_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -794,7 +806,8 @@ void do_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -819,7 +832,8 @@ void do_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -857,7 +871,8 @@ void do_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -884,7 +899,8 @@ void do_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -910,7 +926,8 @@ void do_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -935,7 +952,8 @@ void do_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -974,7 +992,8 @@ void do_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -1001,7 +1020,8 @@ void do_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1027,7 +1047,8 @@ void do_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1052,7 +1073,8 @@ void do_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1091,7 +1113,8 @@ void do_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -1118,7 +1141,8 @@ void do_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1144,7 +1168,8 @@ void do_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1169,7 +1194,8 @@ void do_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1222,7 +1248,8 @@ void do_axor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -1255,7 +1282,8 @@ void do_axor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
@@ -1289,7 +1317,8 @@ void do_axor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 0;
@@ -1330,7 +1359,8 @@ void do_axor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
@@ -1376,7 +1406,8 @@ void do_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -1402,7 +1433,8 @@ void do_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1428,7 +1460,8 @@ void do_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1452,7 +1485,8 @@ void do_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1478,7 +1512,8 @@ void do_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1502,7 +1537,8 @@ void do_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1544,7 +1580,8 @@ void do_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
 
 		w[0] = 1;
@@ -1576,7 +1613,8 @@ void do_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
 
 		w[0] = 1;
@@ -1609,7 +1647,8 @@ void do_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
 
 		w[0] = 1;
@@ -1641,7 +1680,8 @@ void do_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
 
 		w[0] = 1;
@@ -1695,7 +1735,8 @@ Test(rdm_atomic, atomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -1722,7 +1763,8 @@ Test(rdm_atomic, atomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1748,7 +1790,8 @@ Test(rdm_atomic, atomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1773,7 +1816,8 @@ Test(rdm_atomic, atomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1824,7 +1868,8 @@ Test(rdm_atomic, atomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 
 	w[0] = 1;
@@ -1851,7 +1896,8 @@ Test(rdm_atomic, atomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1877,7 +1923,8 @@ Test(rdm_atomic, atomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -1902,7 +1949,8 @@ Test(rdm_atomic, atomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2107,7 +2155,8 @@ void do_fetch_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -2137,7 +2186,8 @@ void do_fetch_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2168,7 +2218,8 @@ void do_fetch_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2197,7 +2248,8 @@ void do_fetch_min(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2243,7 +2295,8 @@ void do_fetch_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -2273,7 +2326,8 @@ void do_fetch_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2304,7 +2358,8 @@ void do_fetch_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2333,7 +2388,8 @@ void do_fetch_max(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2375,7 +2431,8 @@ void do_fetch_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -2403,7 +2460,8 @@ void do_fetch_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2432,7 +2490,8 @@ void do_fetch_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2458,7 +2517,8 @@ void do_fetch_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2488,7 +2548,8 @@ void do_fetch_sum(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2529,7 +2590,8 @@ void do_fetch_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -2558,7 +2620,8 @@ void do_fetch_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2587,7 +2650,8 @@ void do_fetch_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2614,7 +2678,8 @@ void do_fetch_bor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2657,7 +2722,8 @@ void do_fetch_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -2686,7 +2752,8 @@ void do_fetch_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2715,7 +2782,8 @@ void do_fetch_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2742,7 +2810,8 @@ void do_fetch_band(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2785,7 +2854,8 @@ void do_fetch_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -2814,7 +2884,8 @@ void do_fetch_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2843,7 +2914,8 @@ void do_fetch_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2870,7 +2942,8 @@ void do_fetch_bxor(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2914,7 +2987,8 @@ void do_fetch_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -2942,7 +3016,8 @@ void do_fetch_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2972,7 +3047,8 @@ void do_fetch_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -2998,7 +3074,8 @@ void do_fetch_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3029,7 +3106,8 @@ void do_fetch_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3056,7 +3134,8 @@ void do_fetch_atomic_write(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3096,7 +3175,8 @@ void do_fetch_atomic_read(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -3124,7 +3204,8 @@ void do_fetch_atomic_read(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3152,7 +3233,8 @@ void do_fetch_atomic_read(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3178,7 +3260,8 @@ void do_fetch_atomic_read(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3207,7 +3290,8 @@ void do_fetch_atomic_read(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3234,7 +3318,8 @@ void do_fetch_atomic_read(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3281,7 +3366,8 @@ void do_fetch_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -3315,7 +3401,8 @@ void do_fetch_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -3353,7 +3440,8 @@ void do_fetch_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -3388,7 +3476,8 @@ void do_fetch_min_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -3450,7 +3539,8 @@ Test(rdm_atomic, fatomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -3483,7 +3573,8 @@ Test(rdm_atomic, fatomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3517,7 +3608,8 @@ Test(rdm_atomic, fatomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3549,7 +3641,8 @@ Test(rdm_atomic, fatomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3608,7 +3701,8 @@ Test(rdm_atomic, fatomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -3638,7 +3732,8 @@ Test(rdm_atomic, fatomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3669,7 +3764,8 @@ Test(rdm_atomic, fatomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3698,7 +3794,8 @@ Test(rdm_atomic, fatomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3800,7 +3897,8 @@ void do_cswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -3828,7 +3926,8 @@ void do_cswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3858,7 +3957,8 @@ void do_cswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3884,7 +3984,8 @@ void do_cswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3916,7 +4017,8 @@ void do_cswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3944,7 +4046,8 @@ void do_cswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -3986,7 +4089,8 @@ void do_mswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -4015,7 +4119,8 @@ void do_mswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4046,7 +4151,8 @@ void do_mswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4073,7 +4179,8 @@ void do_mswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4106,7 +4213,8 @@ void do_mswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4134,7 +4242,8 @@ void do_mswap(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4178,7 +4287,8 @@ void do_cswap_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -4210,7 +4320,8 @@ void do_cswap_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -4247,7 +4358,8 @@ void do_cswap_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -4279,7 +4391,8 @@ void do_cswap_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -4318,7 +4431,8 @@ void do_cswap_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -4352,7 +4466,8 @@ void do_cswap_buf(void *s, void *t)
 			pthread_yield();
 		}
 
-		cr_assert_eq(ret, 1);
+		cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+				dump_cq_error(send_cq[0], t, 0));
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
 
 		r[0] = 1;
@@ -4413,7 +4528,8 @@ Test(rdm_atomic, catomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -4447,7 +4563,8 @@ Test(rdm_atomic, catomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4483,7 +4600,8 @@ Test(rdm_atomic, catomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4515,7 +4633,8 @@ Test(rdm_atomic, catomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4553,7 +4672,8 @@ Test(rdm_atomic, catomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4587,7 +4707,8 @@ Test(rdm_atomic, catomicv)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], target, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4644,7 +4765,8 @@ Test(rdm_atomic, catomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 
 	r[0] = 1;
@@ -4675,7 +4797,8 @@ Test(rdm_atomic, catomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4708,7 +4831,8 @@ Test(rdm_atomic, catomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4737,7 +4861,8 @@ Test(rdm_atomic, catomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4772,7 +4897,8 @@ Test(rdm_atomic, catomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -4803,7 +4929,8 @@ Test(rdm_atomic, catomicmsg)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
+	cr_assert_eq(ret, 1, "fi_cq_read returned %d %d", ret,
+			dump_cq_error(send_cq[0], NULL, 0));
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
