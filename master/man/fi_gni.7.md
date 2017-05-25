@@ -28,7 +28,8 @@ The GNI provider supports the following features defined for the
 libfabric API:
 
 *Endpoint types*
-: The provider supports the *FI_EP_RDM* and *FI_EP_DGRAM* endpoint types.
+: The provider supports the *FI_EP_RDM*, *FI_EP_DGRAM* and *FI_EP_MSG* endpoint
+  types.
 
 *Address vectors*
 : The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE*
@@ -70,6 +71,8 @@ libfabric API:
 - *FI_SOURCE*
 - *FI_FENCE*
 - *FI_RM_ENABLED*
+- *FI_RMA_EVENT*
+- *FI_REMOTE_CQ_DATA*
 - *FABRIC_DIRECT* compilation mode
 
 # DATA TRANSFER OPERATIONS
@@ -263,6 +266,13 @@ err_data member will contain the source address information in the FI_ADDR_GNI
 address format. In order to populate the remote peer's address vector
 with this mechanism, the application must call fi_cq_readerr to get the
 source address followed by fi_av_insert on the populated err_data member.
+
+# KNOWN BUGS
+
+The GNI provider currently treats the fi_shutdown() interface as a strictly
+local operation.  That is, fi_shutdown() causes the local endpoint to be shut
+down, and a shutdown event to be generated on the local EQ.  However, a
+connected remote peer endpoint is not notified of a call to fi_shutdown().
 
 # SEE ALSO
 
