@@ -97,6 +97,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 			/* do not overwrite state from a previous "peek|claim" operation */
 			bgq_context->tag = msg->tag;
 			bgq_context->ignore = msg->ignore;
+			bgq_context->src_addr = (fi_addr_t ) (msg->addr);
 		}
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
@@ -115,6 +116,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 			/* do not overwrite state from a previous "peek|claim" operation */
 			bgq_context->tag = msg->tag;
 			bgq_context->ignore = msg->ignore;
+			bgq_context->src_addr = (fi_addr_t ) (msg->addr);
 		}
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
@@ -129,6 +131,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 		ext->bgq_context.flags = flags;
 		ext->bgq_context.byte_counter = (uint64_t)-1;
 		ext->bgq_context.tag = msg->tag;
+		ext->bgq_context.src_addr = (fi_addr_t ) (msg->addr);
 		ext->bgq_context.ignore = msg->ignore;
 		ext->msg.op_context = msg->context;
 		ext->msg.iov_count = msg->iov_count;
@@ -142,7 +145,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 			if (ret) return ret;
 
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr,"fi_bgq_trecvmsg_generic calling fi_bgq_ep_progress_manual_recv:\n");
+	fprintf(stderr,"fi_bgq_trecvmsg_generic calling fi_bgq_ep_progress_manual_recv with 1 is_context_ext:\n");
 #endif
 			fi_bgq_ep_progress_manual_recv(bgq_ep,
 				0, /* is_msg */
@@ -164,7 +167,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 		if (ret) return ret;
 
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr,"fi_bgq_trecvmsg_generic calling fi_bgq_ep_progress_manual_recv:\n");
+	fprintf(stderr,"fi_bgq_trecvmsg_generic calling fi_bgq_ep_progress_manual_recv with 0 is_context_ext:\n");
 #endif
 		fi_bgq_ep_progress_manual_recv(bgq_ep,
 			0, /* is_msg */

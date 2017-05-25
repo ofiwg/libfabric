@@ -141,7 +141,7 @@ fflush(stderr);
 
 	if (do_cntr && niov < 8) {	/* likely */
 #ifdef FI_BGQ_TRACE
-fprintf(stderr,"fi_bgq_readv_internal do_cntr && niov %d < 8\n",niov);
+fprintf(stderr,"fi_bgq_readv_internal do_cntr && niov %ld < 8\n",niov);
 fflush(stderr);
 #endif
 		/* add the counter update direct-put descriptor to the
