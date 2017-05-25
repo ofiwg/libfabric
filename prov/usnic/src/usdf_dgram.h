@@ -51,6 +51,7 @@
 #define USDF_DGRAM_SUPP_RECVMSG_FLAGS (FI_COMPLETION)
 #define USDF_DGRAM_IOV_LIMIT (USDF_DGRAM_DFLT_SGE)
 #define USDF_DGRAM_RMA_IOV_LIMIT 0
+#define USDF_DGRAM_CNTR_CNT 0
 
 
 int usdf_dgram_fill_rx_attr(struct fi_info *hints,

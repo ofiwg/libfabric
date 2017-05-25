@@ -119,7 +119,8 @@ static const struct fi_domain_attr rdm_dflt_domain_attr = {
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
-	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL
+	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL,
+	.cntr_cnt = USDF_RDM_CNTR_CNT
 };
 
 /*******************************************************************************
