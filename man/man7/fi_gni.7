@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2017\-03\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2017\-05\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -19,8 +19,8 @@ using gcc version 4.9 or higher.
 The GNI provider supports the following features defined for the
 libfabric API:
 .PP
-\f[I]Endpoint types\f[] : The provider supports the \f[I]FI_EP_RDM\f[]
-and \f[I]FI_EP_DGRAM\f[] endpoint types.
+\f[I]Endpoint types\f[] : The provider supports the \f[I]FI_EP_RDM\f[],
+\f[I]FI_EP_DGRAM\f[] and \f[I]FI_EP_MSG\f[] endpoint types.
 .PP
 \f[I]Address vectors\f[] : The provider implements both the
 \f[I]FI_AV_MAP\f[] and \f[I]FI_AV_TABLE\f[] address vector types.
@@ -57,6 +57,7 @@ up when clients utilize the wait system (e.g., calling fi_wait).
 \f[I]Additional Features\f[] : The GNI provider also supports the
 following capabilities and features: \- \f[I]FI_MULTI_RECV\f[] \-
 \f[I]FI_SOURCE\f[] \- \f[I]FI_FENCE\f[] \- \f[I]FI_RM_ENABLED\f[] \-
+\f[I]FI_RMA_EVENT\f[] \- \f[I]FI_REMOTE_CQ_DATA\f[] \-
 \f[I]FABRIC_DIRECT\f[] compilation mode
 .SH DATA TRANSFER OPERATIONS
 .SS FI_ATOMIC
@@ -274,6 +275,14 @@ FI_ADDR_GNI address format.
 In order to populate the remote peer\[aq]s address vector with this
 mechanism, the application must call fi_cq_readerr to get the source
 address followed by fi_av_insert on the populated err_data member.
+.SH KNOWN BUGS
+.PP
+The GNI provider currently treats the fi_shutdown() interface as a
+strictly local operation.
+That is, fi_shutdown() causes the local endpoint to be shut down, and a
+shutdown event to be generated on the local EQ.
+However, a connected remote peer endpoint is not notified of a call to
+fi_shutdown().
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
