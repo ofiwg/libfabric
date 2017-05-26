@@ -237,6 +237,9 @@ DIRECT_FN STATIC int gnix_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
 	struct gnix_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
+	if (FI_VERSION_LT(cntr_priv->domain->fabric->fab_fid.api_version, FI_VERSION(1, 5)))
+		return -FI_EOPNOTSUPP;
+
 	ofi_atomic_add32(&cntr_priv->cnt_err, (int)value);
 
 	if (cntr_priv->wait)
@@ -250,6 +253,10 @@ DIRECT_FN STATIC int gnix_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 	struct gnix_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
+
+	if (FI_VERSION_LT(cntr_priv->domain->fabric->fab_fid.api_version, FI_VERSION(1, 5)))
+		return -FI_EOPNOTSUPP;
+
 	ofi_atomic_set32(&cntr_priv->cnt_err, (int)value);
 
 	if (cntr_priv->wait)
