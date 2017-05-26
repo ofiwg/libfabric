@@ -98,6 +98,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 			bgq_context->tag = msg->tag;
 			bgq_context->ignore = msg->ignore;
 			bgq_context->src_addr = (fi_addr_t ) (msg->addr);
+			bgq_context->data = msg->data;
 		}
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
@@ -117,6 +118,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 			bgq_context->tag = msg->tag;
 			bgq_context->ignore = msg->ignore;
 			bgq_context->src_addr = (fi_addr_t ) (msg->addr);
+			bgq_context->data = msg->data;
 		}
 
 		context_rsh3b = (uint64_t)bgq_context >> 3;
@@ -132,6 +134,7 @@ ssize_t fi_bgq_trecvmsg_generic (struct fid_ep *ep,
 		ext->bgq_context.byte_counter = (uint64_t)-1;
 		ext->bgq_context.tag = msg->tag;
 		ext->bgq_context.src_addr = (fi_addr_t ) (msg->addr);
+		ext->bgq_context.data = msg->data;
 		ext->bgq_context.ignore = msg->ignore;
 		ext->msg.op_context = msg->context;
 		ext->msg.iov_count = msg->iov_count;
