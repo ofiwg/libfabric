@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -79,6 +79,8 @@ typedef enum ep_ops_val {
 #define FI_GNI_FAB_OPS_1 "fab ops 1"
 typedef enum fab_ops_val {
 	GNI_WAIT_THREAD_SLEEP = 0,
+	GNI_DEFAULT_USER_REGISTRATION_LIMIT,
+	GNI_DEFAULT_PROV_REGISTRATION_LIMIT,
 	GNI_NUM_FAB_OPS,
 } fab_ops_val_t;
 
@@ -132,6 +134,51 @@ struct gnix_ops_domain {
 struct fi_gni_ops_fab {
 	int (*set_val)(struct fid *fid, fab_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, fab_ops_val_t t, void *val);
+};
+
+typedef enum gnix_auth_key_opt {
+	GNIX_USER_KEY_LIMIT = 0,
+	GNIX_PROV_KEY_LIMIT,
+	GNIX_TOTAL_KEYS_NEEDED,
+	GNIX_MAX_AUTH_KEY_OPTS,
+} gnix_auth_key_opt_t;
+
+struct gnix_auth_key_attr {
+	int user_key_limit;
+	int prov_key_limit;
+};
+
+enum {
+	GNIX_AKT_RAW = 0,
+	GNIX_MAX_AKT_TYPES,
+};
+
+struct fi_gni_raw_auth_key {
+	uint32_t protection_key;
+};
+
+struct fi_gni_auth_key {
+	uint32_t type;
+	union {
+		struct fi_gni_raw_auth_key raw;
+	};
+};
+
+#define GNIX_PROV_DEFAULT_AUTH_KEY NULL
+#define GNIX_PROV_DEFAULT_AUTH_KEYLEN 0
+
+#define FI_GNI_FAB_OPS_2 "fab ops 2"
+struct fi_gni_auth_key_ops_fab {
+	int (*set_val)(
+			uint8_t *auth_key,
+			size_t auth_key_size,
+			gnix_auth_key_opt_t opt,
+			void *val);
+	int (*get_val)(
+			uint8_t *auth_key,
+			size_t auth_key_size,
+			gnix_auth_key_opt_t opt,
+			void *val);
 };
 
 #ifdef __cplusplus

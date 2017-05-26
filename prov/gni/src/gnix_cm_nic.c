@@ -594,6 +594,7 @@ int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		       struct fi_info *info,
 		       uint32_t cdm_id,
+			   struct gnix_auth_key *auth_key,
 		       struct gnix_cm_nic **cm_nic_ptr)
 {
 	int ret = FI_SUCCESS;
@@ -624,7 +625,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	}
 
 	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",
-		      domain->ptag, domain->cookie, cdm_id);
+			auth_key->ptag, auth_key->cookie, cdm_id);
 
 	cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof(*cm_nic));
 	if (cm_nic == NULL) {
@@ -639,6 +640,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	nic_attr.must_alloc = true;
 	nic_attr.use_cdm_id = true;
 	nic_attr.cdm_id = cdm_id;
+	nic_attr.auth_key = auth_key;
 
 	ret = gnix_nic_alloc(domain, &nic_attr, &cm_nic->nic);
 	if (ret != FI_SUCCESS) {
@@ -649,8 +651,8 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	}
 
 	cm_nic->my_name.gnix_addr.cdm_id = cdm_id;
-	cm_nic->ptag = domain->ptag;
-	cm_nic->my_name.cookie = domain->cookie;
+	cm_nic->ptag = auth_key->ptag;
+	cm_nic->my_name.cookie = auth_key->cookie;
 	cm_nic->my_name.gnix_addr.device_addr = cm_nic->nic->device_addr;
 	cm_nic->domain = domain;
 	cm_nic->ctrl_progress = domain->control_progress;

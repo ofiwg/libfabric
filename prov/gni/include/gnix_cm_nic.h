@@ -143,6 +143,7 @@ int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic);
 int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		       struct fi_info *info,
 		       uint32_t cdm_id,
+			   struct gnix_auth_key *auth_key,
 		       struct gnix_cm_nic **cm_nic);
 
 /**

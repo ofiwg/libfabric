@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -118,6 +118,7 @@ struct _gnix_fi_reg_context {
 	uint64_t requested_key;
 	uint64_t flags;
 	void *context;
+	struct gnix_auth_key *auth_key;
 };
 
 /**

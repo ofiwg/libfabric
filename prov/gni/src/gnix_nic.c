@@ -902,6 +902,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	uint32_t num_corespec_cpus = 0;
 	bool must_alloc_nic = false;
 	bool free_list_inited = false;
+	struct gnix_auth_key *auth_key;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -915,6 +916,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		nic_attr = attr;
 		must_alloc_nic = nic_attr->must_alloc;
 	}
+
+	auth_key = nic_attr->auth_key;
 
 	/*
 	 * If we've maxed out the number of nics for this domain/ptag,
@@ -940,14 +943,14 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	 */
 
 	if ((must_alloc_nic == false) &&
-	    (gnix_nics_per_ptag[domain->ptag] >= gnix_max_nics_per_ptag)) {
-		assert(!dlist_empty(&gnix_nic_list_ptag[domain->ptag]));
+	    (gnix_nics_per_ptag[auth_key->ptag] >= gnix_max_nics_per_ptag)) {
+		assert(!dlist_empty(&gnix_nic_list_ptag[auth_key->ptag]));
 
-		nic = dlist_first_entry(&gnix_nic_list_ptag[domain->ptag],
+		nic = dlist_first_entry(&gnix_nic_list_ptag[auth_key->ptag],
 					struct gnix_nic, ptag_nic_list);
 		dlist_remove(&nic->ptag_nic_list);
 		dlist_insert_tail(&nic->ptag_nic_list,
-				  &gnix_nic_list_ptag[domain->ptag]);
+				  &gnix_nic_list_ptag[auth_key->ptag]);
 		_gnix_ref_get(nic);
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Reusing NIC:%p\n", nic);
@@ -978,8 +981,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 
 		if (nic_attr->gni_cdm_hndl == NULL) {
 			status = GNI_CdmCreate(fake_cdm_id,
-						domain->ptag,
-						domain->cookie,
+						auth_key->ptag,
+						auth_key->cookie,
 						gnix_cdm_modes,
 						&nic->gni_cdm_hndl);
 			if (status != GNI_RC_SUCCESS) {
@@ -1005,7 +1008,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			if (status != GNI_RC_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
 					 gni_err_str[status]);
-				_gnix_dump_gni_res(domain->ptag);
+				_gnix_dump_gni_res(auth_key->ptag);
 				ret = gnixu_to_fi_errno(status);
 				goto err1;
 			}
@@ -1029,6 +1032,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
 				  gni_err_str[status]);
+			_gnix_dump_gni_res(auth_key->ptag);
 			ret = gnixu_to_fi_errno(status);
 			goto err1;
 		}
@@ -1049,7 +1053,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 				GNIX_WARN(FI_LOG_EP_CTRL,
 					  "GNI_CqCreate returned %s\n",
 					  gni_err_str[status]);
-				_gnix_dump_gni_res(domain->ptag);
+				_gnix_dump_gni_res(auth_key->ptag);
 				ret = gnixu_to_fi_errno(status);
 				goto err1;
 			}
@@ -1072,6 +1076,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
 				  gni_err_str[status]);
+			_gnix_dump_gni_res(auth_key->ptag);
 			ret = gnixu_to_fi_errno(status);
 			goto err1;
 		}
@@ -1092,15 +1097,15 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 				GNIX_WARN(FI_LOG_EP_CTRL,
 					  "GNI_CqCreate returned %s\n",
 					  gni_err_str[status]);
-				_gnix_dump_gni_res(domain->ptag);
+				_gnix_dump_gni_res(auth_key->ptag);
 				ret = gnixu_to_fi_errno(status);
 				goto err1;
 			}
 		}
 
 		nic->device_addr = device_addr;
-		nic->ptag = domain->ptag;
-		nic->cookie = domain->cookie;
+		nic->ptag = auth_key->ptag;
+		nic->cookie = auth_key->cookie;
 
 		nic->vc_id_table_capacity = domain->params.vc_id_table_capacity;
 		nic->vc_id_table = malloc(sizeof(void *) *
@@ -1250,7 +1255,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "__nic_setup_irq_cq returned %s\n",
 				  fi_strerror(-ret));
-			_gnix_dump_gni_res(domain->ptag);
+			_gnix_dump_gni_res(auth_key->ptag);
 			goto err1;
 		}
 
@@ -1294,11 +1299,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 
 		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
 		dlist_insert_tail(&nic->ptag_nic_list,
-				  &gnix_nic_list_ptag[domain->ptag]);
+				  &gnix_nic_list_ptag[auth_key->ptag]);
 
 		nic->smsg_callbacks = gnix_ep_smsg_callbacks;
 
-		++gnix_nics_per_ptag[domain->ptag];
+		++gnix_nics_per_ptag[auth_key->ptag];
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Allocated NIC:%p\n", nic);
 	}

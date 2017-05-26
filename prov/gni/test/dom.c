@@ -167,6 +167,7 @@ Test(domain, open_ops)
 			case GNI_XPMEM_ENABLE:
 				cr_assert(xpmem_toggle == xpmem_check,
 					  "Incorrect op value");
+				break;
 			default:
 				cr_assert(val == i*op+op, "Incorrect op value");
 				break;

@@ -54,7 +54,7 @@
 #include "gnix_xpmem.h"
 #include "gnix_eq.h"
 #include "gnix_cm.h"
-
+#include "gnix_auth_key.h"
 
 /*******************************************************************************
  * gnix_fab_req freelist functions
@@ -1749,6 +1749,7 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	struct gnix_fid_stx *stx;
 	struct gnix_fid_cntr *cntr;
 	struct gnix_fid_trx *trx_priv;
+	struct gnix_nic_attr nic_attr = {0};
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1943,7 +1944,6 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_STX_CTX:
-
 		stx = container_of(bfid, struct gnix_fid_stx, stx_fid.fid);
 		if (ep->domain != stx->domain) {
 			ret = -FI_EINVAL;
@@ -1959,6 +1959,31 @@ DIRECT_FN int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		if (ep->shared_tx == false || ep->nic) {
 			ret =  -FI_EOPBADSTATE;
 			break;
+		}
+
+		/*
+		 * we force allocation of a nic to make semantics
+		 * match the intent fi_endpoint man page, provide
+		 * a TX context (aka gnix nic) that can be shared
+		 * explicitly amongst endpoints
+		 */
+		if (stx->auth_key && ep->auth_key != stx->auth_key) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		if (!stx->nic) {
+			nic_attr.must_alloc = true;
+			nic_attr.auth_key = ep->auth_key;
+			ret = gnix_nic_alloc(ep->domain, &nic_attr,
+				&stx->nic);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					 "_gnix_nic_alloc call returned %d\n",
+					ret);
+					break;
+			}
+			stx->auth_key = nic_attr.auth_key;
 		}
 
 		ep->stx_ctx = stx;
@@ -2041,10 +2066,14 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 	int ret = FI_SUCCESS;
 	uint32_t cdm_id = GNIX_CREATE_CDM_ID;
 	struct gnix_ep_name *name;
+	struct gnix_nic_attr nic_attr = {0};
 
 	if (ep->type == FI_EP_MSG) {
 		if (ep->shared_tx == false) {
-			ret = gnix_nic_alloc(domain, NULL, &ep->nic);
+			nic_attr.auth_key = ep->auth_key;
+
+			ret = gnix_nic_alloc(domain, &nic_attr,
+				&ep->nic);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
 					  "_gnix_nic_alloc call returned %d\n",
@@ -2059,7 +2088,7 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 		/* Endpoint was bound to a specific source address.  Create a
 		 * new CM NIC to listen on this address. */
 		ret = _gnix_cm_nic_alloc(domain, info, name->gnix_addr.cdm_id,
-					 &ep->cm_nic);
+				ep->auth_key, &ep->cm_nic);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_cm_nic_alloc returned %s\n",
@@ -2097,7 +2126,7 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 			}
 
 			ret = _gnix_cm_nic_alloc(domain, info, cdm_id,
-						 &domain->cm_nic);
+					ep->auth_key, &domain->cm_nic);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
 					  "_gnix_cm_nic_alloc returned %s\n",
@@ -2123,11 +2152,12 @@ static int _gnix_ep_nic_init(struct gnix_fid_domain *domain,
 			_gnix_ref_get(ep->cm_nic);
 
 			if (ep->shared_tx == false) {
+				nic_attr.auth_key = ep->auth_key;
 
 				/* Allocate a new NIC for data
 				   movement on this EP. */
 				ret = gnix_nic_alloc(domain,
-						     NULL, &ep->nic);
+					&nic_attr, &ep->nic);
 				if (ret != FI_SUCCESS) {
 					GNIX_WARN(FI_LOG_EP_CTRL,
 					    "_gnix_nic_alloc call returned %d\n",
@@ -2205,6 +2235,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	int err_ret;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
+	struct gnix_auth_key *auth_key;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -2213,6 +2244,23 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		return -FI_EINVAL;
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
+
+#if 0 /* TODO: Enable after 1.5 version update */
+	if (FI_VERSION_LT(domain_priv->fabric->fab_fid.api_version,
+		FI_VERSION(1, 5)) &&
+		(info->ep_attr->auth_key || info->ep_attr->auth_key_size))
+		return -FI_EINVAL;
+#endif
+
+	if (info->ep_attr->auth_key_size) {
+		auth_key = GNIX_GET_AUTH_KEY(info->ep_attr->auth_key,
+				info->ep_attr->auth_key_size);
+		if (!auth_key)
+			return -FI_EINVAL;
+	} else {
+		auth_key = domain_priv->auth_key;
+		assert(auth_key);
+	}
 
 	ep_priv = calloc(1, sizeof *ep_priv);
 	if (!ep_priv)
@@ -2229,6 +2277,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.atomic = &gnix_ep_atomic_ops;
 
 	/* Init GNIX data. */
+	ep_priv->auth_key = auth_key;
 	ep_priv->type = info->ep_attr->type;
 	ep_priv->domain = domain_priv;
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
@@ -2366,8 +2415,10 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
 	gnix_ht_key_t *key_ptr;
+	struct gnix_auth_key *auth_key;
 	uint32_t cdm_id;
 	bool free_list_inited = false;
+	struct gnix_nic_attr nic_attr = {0};
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -2377,9 +2428,21 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 
+	if (info->ep_attr->auth_key_size) {
+		auth_key = GNIX_GET_AUTH_KEY(info->ep_attr->auth_key,
+				info->ep_attr->auth_key_size);
+		if (!auth_key)
+			return -FI_EINVAL;
+	} else {
+		auth_key = domain_priv->auth_key;
+		assert(auth_key);
+	}
+
 	ep_priv = calloc(1, sizeof(*ep_priv));
 	if (!ep_priv)
 		return -FI_ENOMEM;
+
+	ep_priv->auth_key = auth_key;
 
 	ep_priv->requires_lock = (domain_priv->thread_model !=
 				FI_THREAD_COMPLETION);
@@ -2473,6 +2536,7 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 		if (domain_priv->cm_nic == NULL) {
 			ret = _gnix_cm_nic_alloc(domain_priv, info,
 						 cdm_id,
+						 ep_priv->auth_key,
 						 &domain_priv->cm_nic);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
@@ -2534,8 +2598,10 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->nic = attr->nic;
 	} else {
 		assert(ep_priv->nic == NULL);
+		nic_attr.auth_key = ep_priv->auth_key;
 
-		ret = gnix_nic_alloc(domain_priv, NULL, &ep_priv->nic);
+		ret = gnix_nic_alloc(domain_priv, &nic_attr,
+			&ep_priv->nic);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				    "gnix_nic_alloc call returned %d\n", ret);

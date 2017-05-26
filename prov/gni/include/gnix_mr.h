@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -45,7 +45,6 @@
 #include "gnix_priv.h"
 #include "gnix_mr_cache.h"
 
-
 #define GNIX_MR_PAGE_SHIFT 12
 #define GNIX_MR_PFN_BITS 37
 #define GNIX_MR_MDD_BITS 12
@@ -56,6 +55,23 @@
 #define GNIX_MR_RESERVED_BITS \
 	(GNIX_MR_KEY_BITS + GNIX_MR_FLAG_BITS + GNIX_MR_FMT_BITS)
 #define GNIX_MR_PADDING_LENGTH (64 - GNIX_MR_RESERVED_BITS)
+
+/* TODO: optimize to save space by using a union to combine the two
+ * independent sets of data
+ */
+struct gnix_mr_cache_info {
+	/* used only with internal mr cache */
+	gnix_mr_cache_t *mr_cache_rw;
+	gnix_mr_cache_t *mr_cache_ro;
+
+	/* used only with udreg */
+	struct udreg_cache *udreg_cache;
+	struct gnix_fid_domain *domain;
+	struct gnix_auth_key *auth_key;
+
+	fastlock_t mr_cache_lock;
+	int inuse;
+};
 
 enum {
 	GNIX_MR_FLAG_READONLY = 1 << 0
@@ -88,6 +104,7 @@ struct gnix_fid_mem_desc {
 	struct gnix_fid_domain *domain;
 	gni_mem_handle_t mem_hndl;
 	struct gnix_nic *nic;
+	struct gnix_auth_key *auth_key;
 #ifdef HAVE_UDREG
 	udreg_entry_t *entry;
 #endif
@@ -119,14 +136,17 @@ typedef struct gnix_mr_key {
  *
  */
 struct gnix_mr_ops {
-	int (*init)(struct gnix_fid_domain *domain);
-	int (*is_init)(struct gnix_fid_domain *domain);
+	int (*init)(struct gnix_fid_domain *domain,
+			struct gnix_auth_key *auth_key);
+	int (*is_init)(struct gnix_fid_domain *domain,
+			struct gnix_auth_key *auth_key);
 	int (*reg_mr)(struct gnix_fid_domain *domain, uint64_t address,
 			uint64_t length, struct _gnix_fi_reg_context *fi_reg_context,
 			void **handle);
 	int (*dereg_mr)(struct gnix_fid_domain *domain,
 			struct gnix_fid_mem_desc *md);
-	int (*destroy_cache)(struct gnix_fid_domain *domain);
+	int (*destroy_cache)(struct gnix_fid_domain *domain,
+			struct gnix_mr_cache_info *info);
 	int (*flush_cache)(struct gnix_fid_domain *domain);
 };
 
@@ -164,7 +184,8 @@ uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl);
 int _gnix_open_cache(struct gnix_fid_domain *domain, int type);
 
 /* destroys mr cache for a given domain */
-int _gnix_close_cache(struct gnix_fid_domain *domain);
+int _gnix_close_cache(struct gnix_fid_domain *domain,
+	struct gnix_mr_cache_info *info);
 
 /* flushes the memory registration cache for a given domain */
 int _gnix_flush_registration_cache(struct gnix_fid_domain *domain);

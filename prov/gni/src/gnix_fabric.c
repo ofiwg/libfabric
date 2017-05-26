@@ -80,6 +80,37 @@ static uint64_t gnix_def_gni_datagram_timeouts = -1;
 
 static struct fi_ops gnix_fab_fi_ops;
 static struct fi_gni_ops_fab gnix_ops_fab;
+static struct fi_gni_auth_key_ops_fab gnix_fab_ak_ops;
+
+static int __gnix_auth_key_initialize(
+		uint8_t *auth_key,
+		size_t auth_key_size,
+		struct gnix_auth_key_attr *attr);
+static int __gnix_auth_key_set_val(
+		uint8_t *auth_key,
+		size_t auth_key_size,
+		gnix_auth_key_opt_t opt,
+		void *val);
+static int __gnix_auth_key_get_val(
+		uint8_t *auth_key,
+		size_t auth_key_size,
+		gnix_auth_key_opt_t opt,
+		void *val);
+
+#define GNIX_DEFAULT_USER_REGISTRATION_LIMIT 192
+#define GNIX_DEFAULT_PROV_REGISTRATION_LIMIT 64
+
+int gnix_default_user_registration_limit = GNIX_DEFAULT_USER_REGISTRATION_LIMIT;
+int gnix_default_prov_registration_limit = GNIX_DEFAULT_PROV_REGISTRATION_LIMIT;
+
+/* assume that the user will open additional fabrics later and that
+   ptag information will need to be retained for the lifetime of the
+   process. If the user sets this value, we can assume that they
+   intend to be done with libfabric when the last fabric instance
+   closes so that we can free the ptag information. */
+/* TODO: implement this such that the user give us more information
+	about teardown */
+int gnix_dealloc_aki_on_fabric_close = 0;
 
 const struct fi_fabric_attr gnix_fabric_attr = {
 	.fabric = NULL,
@@ -116,6 +147,8 @@ static int gnix_fab_ops_open(struct fid *fid, const char *ops_name,
 {
 	if (strcmp(ops_name, FI_GNI_FAB_OPS_1) == 0)
 		*ops = &gnix_ops_fab;
+	else if (strcmp(ops_name, FI_GNI_FAB_OPS_2) == 0)
+		*ops = &gnix_fab_ak_ops;
 	else
 		return -FI_EINVAL;
 
@@ -698,6 +731,12 @@ __gnix_fab_ops_get_val(struct fid *fid, fab_ops_val_t t, void *val)
 	case GNI_WAIT_THREAD_SLEEP:
 		*(uint32_t *)val = gnix_wait_thread_sleep_time;
 		break;
+	case GNI_DEFAULT_USER_REGISTRATION_LIMIT:
+		*(uint32_t *)val = gnix_default_user_registration_limit;
+		break;
+	case GNI_DEFAULT_PROV_REGISTRATION_LIMIT:
+		*(uint32_t *)val = gnix_default_prov_registration_limit;
+		break;
 	default:
 		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
 	}
@@ -722,6 +761,177 @@ __gnix_fab_ops_set_val(struct fid *fid, fab_ops_val_t t, void *val)
 		v = *(uint32_t *) val;
 		gnix_wait_thread_sleep_time = v;
 		break;
+	case GNI_DEFAULT_USER_REGISTRATION_LIMIT:
+		v = *(uint32_t *) val;
+		if (v > GNIX_MAX_SCALABLE_REGISTRATIONS) {
+			GNIX_ERR(FI_LOG_FABRIC,
+				"User specified an invalid user registration "
+				"limit, requested=%d maximum=%d\n",
+				v, GNIX_MAX_SCALABLE_REGISTRATIONS);
+			return -FI_EINVAL;
+		}
+		gnix_default_user_registration_limit = v;
+		break;
+	case GNI_DEFAULT_PROV_REGISTRATION_LIMIT:
+		v = *(uint32_t *) val;
+		if (v > GNIX_MAX_SCALABLE_REGISTRATIONS) {
+			GNIX_ERR(FI_LOG_FABRIC,
+				"User specified an invalid prov registration "
+				"limit, requested=%d maximum=%d\n",
+				v, GNIX_MAX_SCALABLE_REGISTRATIONS);
+			return -FI_EINVAL;
+		}
+		gnix_default_prov_registration_limit = v;
+		break;
+	default:
+		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int __gnix_auth_key_initialize(
+	uint8_t *auth_key,
+	size_t auth_key_size,
+	struct gnix_auth_key_attr *attr)
+{
+	struct gnix_auth_key *info = NULL;
+	int ret = FI_SUCCESS;
+
+	info = _gnix_auth_key_lookup(auth_key, auth_key_size);
+
+	if (info) {
+		GNIX_WARN(FI_LOG_FABRIC, "authorization key is already "
+			"initialized, auth_key=%d auth_key_size=%d\n",
+			auth_key, auth_key_size);
+		return -FI_ENOSPC; /* already initialized*/
+	}
+
+	info = _gnix_auth_key_alloc();
+	if (!info)
+		return -FI_ENOMEM;
+
+	if (attr)
+		info->attr = *attr;
+	else {
+		info->attr.user_key_limit =
+			gnix_default_user_registration_limit;
+		info->attr.prov_key_limit =
+			gnix_default_prov_registration_limit;
+	}
+
+	ret = _gnix_auth_key_insert(auth_key, auth_key_size, info);
+	if (ret) {
+		GNIX_INFO(FI_LOG_FABRIC, "failed to insert authorization key"
+			", key=%p len=%d ret=%d\n",
+			auth_key, auth_key_size, ret);
+		_gnix_auth_key_free(info);
+		info = NULL;
+	}
+
+	return ret;
+}
+
+static int __gnix_auth_key_set_val(
+	uint8_t *auth_key,
+	size_t auth_key_size,
+	gnix_auth_key_opt_t opt,
+	void *val)
+{
+	struct gnix_auth_key *info;
+	int v;
+	int ret;
+
+	if (!val)
+		return -FI_EINVAL;
+
+	info = _gnix_auth_key_lookup(auth_key, auth_key_size);
+
+	if (!info) {
+		ret = __gnix_auth_key_initialize(auth_key, auth_key_size, NULL);
+		assert(ret == FI_SUCCESS);
+
+		info = _gnix_auth_key_lookup(auth_key, auth_key_size);
+		assert(info);
+	}
+
+	/* if the limits have already been set, and the user is
+	 * trying to modify it, kick it back */
+	if (opt == GNIX_USER_KEY_LIMIT || opt == GNIX_PROV_KEY_LIMIT) {
+		fastlock_acquire(&info->lock);
+		if (info->enabled) {
+			fastlock_release(&info->lock);
+			GNIX_INFO(FI_LOG_FABRIC, "authorization key already "
+				"enabled and cannot be modified\n");
+			return -FI_EAGAIN;
+		}
+	}
+
+	switch (opt) {
+	case GNIX_USER_KEY_LIMIT:
+		v = *(int *) val;
+		if (v >= GNIX_MAX_SCALABLE_REGISTRATIONS) {
+			GNIX_ERR(FI_LOG_FABRIC,
+				"User is requesting more registrations than is present on node\n");
+			ret = -FI_EINVAL;
+		} else
+			info->attr.user_key_limit = v;
+		fastlock_release(&info->lock);
+		break;
+	case GNIX_PROV_KEY_LIMIT:
+		v = *(int *) val;
+		if (v >= GNIX_MAX_SCALABLE_REGISTRATIONS) {
+			GNIX_ERR(FI_LOG_FABRIC,
+				"User is requesting more registrations than is present on node\n");
+			ret = -FI_EINVAL;
+		}
+		info->attr.prov_key_limit = v;
+		fastlock_release(&info->lock);
+		break;
+	case GNIX_TOTAL_KEYS_NEEDED:
+		GNIX_WARN(FI_LOG_FABRIC,
+			"GNIX_TOTAL_KEYS_NEEDED is not a definable value.\n");
+		return -FI_EOPNOTSUPP;
+	default:
+		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
+		return -FI_EINVAL;
+	}
+
+	return ret;
+}
+
+static int __gnix_auth_key_get_val(
+	uint8_t *auth_key,
+	size_t auth_key_size,
+	gnix_auth_key_opt_t opt,
+	void *val)
+{
+	struct gnix_auth_key *info;
+
+	if (!val)
+		return -FI_EINVAL;
+
+	info = _gnix_auth_key_lookup(auth_key, auth_key_size);
+
+	switch (opt) {
+	case GNIX_USER_KEY_LIMIT:
+		*(int *)val = (info) ?
+			info->attr.user_key_limit :
+			gnix_default_user_registration_limit;
+		break;
+	case GNIX_PROV_KEY_LIMIT:
+		*(int *)val = (info) ?
+			info->attr.prov_key_limit :
+			gnix_default_prov_registration_limit;
+		break;
+	case GNIX_TOTAL_KEYS_NEEDED:
+		*(uint32_t *)val = ((info) ?
+			(info->attr.user_key_limit +
+			info->attr.prov_key_limit) :
+			(gnix_default_user_registration_limit +
+			 gnix_default_prov_registration_limit));
+	break;
 	default:
 		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
 		return -FI_EINVAL;
@@ -745,4 +955,9 @@ static struct fi_ops gnix_fab_fi_ops = {
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = gnix_fab_ops_open,
+};
+
+static struct fi_gni_auth_key_ops_fab gnix_fab_ak_ops = {
+	.set_val = __gnix_auth_key_set_val,
+	.get_val = __gnix_auth_key_get_val,
 };

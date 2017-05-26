@@ -705,6 +705,7 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 	int n_ids = GNIX_SEP_MAX_CNT;
 	uint32_t cdm_id, cdm_id_base;
 	struct gnix_ep_name *name;
+	struct gnix_auth_key *auth_key;
 	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -728,10 +729,21 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 
+	if (info->ep_attr->auth_key_size) {
+		auth_key = GNIX_GET_AUTH_KEY(info->ep_attr->auth_key,
+			info->ep_attr->auth_key_size);
+		if (!auth_key)
+			return -FI_EINVAL;
+	} else {
+		auth_key = domain_priv->auth_key;
+		assert(auth_key);
+	}
+
 	sep_priv = calloc(1, sizeof(*sep_priv));
 	if (!sep_priv)
 		return -FI_ENOMEM;
 
+	sep_priv->auth_key = auth_key;
 	sep_priv->type = info->ep_attr->type;
 	sep_priv->ep_fid.fid.fclass = FI_CLASS_SEP;
 	sep_priv->ep_fid.fid.context = context;
@@ -813,6 +825,7 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 	ret = _gnix_cm_nic_alloc(domain_priv,
 				 sep_priv->info,
 				 cdm_id,
+				 sep_priv->auth_key,
 				 &sep_priv->cm_nic);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
