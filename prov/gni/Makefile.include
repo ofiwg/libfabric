@@ -50,6 +50,7 @@ _gni_files = \
 _gni_headers = \
 	prov/gni/include/fi_ext_gni.h \
 	prov/gni/include/gnix_atomic.h \
+	prov/gni/include/gnix_auth_key.h \
 	prov/gni/include/gnix_av.h \
 	prov/gni/include/gnix_bitmap.h \
 	prov/gni/include/gnix_buddy_allocator.h \
