@@ -90,6 +90,7 @@ bin_SCRIPTS += prov/gni/test/run_gnitest
 nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/allocator.c \
 	prov/gni/test/av.c \
+	prov/gni/test/auth_key.c \
 	prov/gni/test/bitmap.c \
 	prov/gni/test/buddy_allocator.c \
 	prov/gni/test/cancel.c \
