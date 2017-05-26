@@ -100,6 +100,8 @@ Test(endpoint_info, info)
 	cr_assert_eq(fi->next->ep_attr->type, FI_EP_DGRAM);
 	cr_assert_eq(fi->next->next->ep_attr->type, FI_EP_MSG);
 	cr_assert_neq(fi->domain_attr->cntr_cnt, 0);
+	cr_assert_neq(fi->domain_attr->cq_cnt, 0);
+	cr_assert_eq(fi->domain_attr->ep_cnt, SIZE_MAX);
 
 	fi_freeinfo(fi);
 
