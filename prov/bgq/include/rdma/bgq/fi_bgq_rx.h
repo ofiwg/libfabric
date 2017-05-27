@@ -1148,6 +1148,8 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 						prev->next = uepkt->next;
 					}
 				}
+				/* tranfer immediate data from pkt to context for matching FI_PEEK */
+				context->data = uepkt->hdr.pt2pt.immediate_data;
 
 				/* post a completion event for the receive */
 				fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
