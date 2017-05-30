@@ -125,8 +125,17 @@ struct fi_triggered_context {
 	} trigger;
 };
 
+/* Size must match struct fi_context2 */
+struct fi_triggered_context2 {
+	enum fi_trigger_event			event_type;
+	union {
+		struct fi_trigger_threshold	threshold;
+		void				*internal[7];
+	} trigger;
+};
+
 struct fi_deferred_work {
-	struct fi_context			context;
+	struct fi_context2			context;
 
 	uint64_t				threshold;
 	struct fid_cntr				*triggering_cntr;
