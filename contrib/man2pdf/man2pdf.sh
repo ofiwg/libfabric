@@ -39,37 +39,7 @@
 #
 
 # Generate list of manpages, but exclude manpages that are symlinks to other manpages
-#MANPAGES=( `echo fabric && man -a -w fi_* | xargs basename | sort | uniq | cut -d . -f 1` )
-
-# List of manpages, sorted in suggested reading order
-MANPAGES=(  fabric
-            fi_getinfo
-            fi_fabric
-            fi_domain
-            fi_endpoint
-            fi_av
-            fi_cm
-            fi_eq
-            fi_cq
-            fi_cntr
-            fi_poll
-            fi_mr
-            fi_msg
-            fi_tagged
-            fi_rma
-            fi_atomic
-            fi_trigger
-            fi_errno
-            fi_direct
-            fi_provider
-            fi_strerror
-            fi_control
-            fi_udp
-            fi_sockets
-            fi_info
-            fi_version
-            fi_pingpong
-        )
+MANPAGES=( `echo fabric && man -a -w fi_* | xargs basename | sort | uniq | cut -d . -f 1` )
 
 PDFMANPAGES=( "${MANPAGES[@]/%/.pdf}" )
 WORKDIR=`mktemp -d /tmp/libfabric-manpages.XXXXXX || exit 1`
