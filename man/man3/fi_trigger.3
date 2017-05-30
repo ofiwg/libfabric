@@ -1,4 +1,4 @@
-.TH "fi_trigger" "3" "2017\-05\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_trigger" "3" "2017\-05\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_trigger \- Triggered operations
@@ -28,28 +28,38 @@ Trigger\-able endpoints are initialized such that only those interfaces
 supported by the provider which are trigger\-able are available.
 .PP
 Triggered operations require that applications use struct
-fi_triggered_context as their per operation context parameter.
-The use of struct fi_triggered_context replaces struct fi_context, if
-required by the provider.
-Although struct fi_triggered_context is not opaque to the application,
-the contents of the structure may be modified by the provider.
-This structure has similar requirements as struct fi_context.
+fi_triggered_context as their per operation context parameter, or if the
+provider requires the FI_CONTEXT2 mode, struct fi_trigger_context2.
+The use of struct fi_triggered_context[2] replaces struct fi_context[2],
+if required by the provider.
+Although struct fi_triggered_context[2] is not opaque to the
+application, the contents of the structure may be modified by the
+provider once it has been submitted as an operation.
+This structure has similar requirements as struct fi_context[2].
 It must be allocated by the application and remain valid until the
 corresponding operation completes or is successfully canceled.
 .PP
-Struct fi_triggered_context is used to specify the condition that must
-be met before the triggered data transfer is initiated.
+Struct fi_triggered_context[2] is used to specify the condition that
+must be met before the triggered data transfer is initiated.
 If the condition is met when the request is made, then the data transfer
 may be initiated immediately.
-The format of struct fi_triggered_context is described below.
+The format of struct fi_triggered_context[2] is described below.
 .IP
 .nf
 \f[C]
 struct\ fi_triggered_context\ {
-\ \ \ \ enum\ fi_trigger_event\ \ \ event_type;\ \ \ /*\ trigger\ type\ */
+\ \ \ \ enum\ fi_trigger_event\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ event_type;\ \ \ /*\ trigger\ type\ */
 \ \ \ \ union\ {
 \ \ \ \ \ \ \ \ struct\ fi_trigger_threshold\ threshold;
-\ \ \ \ \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *internal[3];\ /*\ reserved\ */
+\ \ \ \ \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *internal[3];\ /*\ reserved\ */
+\ \ \ \ }\ trigger;
+};
+
+struct\ fi_triggered_context2\ {
+\ \ \ \ enum\ fi_trigger_event\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ event_type;\ \ \ /*\ trigger\ type\ */
+\ \ \ \ union\ {
+\ \ \ \ \ \ \ \ struct\ fi_trigger_threshold\ threshold;
+\ \ \ \ \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *internal[7];\ /*\ reserved\ */
 \ \ \ \ }\ trigger;
 };
 \f[]
@@ -102,7 +112,7 @@ The format of the deferred work request is as follows:
 .nf
 \f[C]
 struct\ fi_deferred_work\ {
-\ \ \ \ struct\ fi_context\ \ \ \ \ context;
+\ \ \ \ struct\ fi_context2\ \ \ \ context;
 
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ threshold;
 \ \ \ \ struct\ fid_cntr\ \ \ \ \ \ \ *triggering_cntr;
