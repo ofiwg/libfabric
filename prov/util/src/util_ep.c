@@ -85,6 +85,7 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->ep_fid.fid.context = context;
 	ep->domain = util_domain;
 	ep->progress = progress;
+	ep->caps = info->caps;
 	ofi_atomic_inc32(&util_domain->ref);
 	if (util_domain->eq)
 		ofi_ep_bind_eq(ep, util_domain->eq);
