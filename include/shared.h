@@ -47,9 +47,8 @@
 extern "C" {
 #endif
 
-// TODO Update version to 1.5 before release
 #ifndef FT_FIVERSION
-#define FT_FIVERSION FI_VERSION(1,4)
+#define FT_FIVERSION FI_VERSION(1,5)
 #endif
 
 #include "ft_osd.h"
