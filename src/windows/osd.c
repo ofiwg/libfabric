@@ -276,7 +276,7 @@ int fi_fd_nonblock(int fd)
 ssize_t recvmsg(int sd, struct msghdr *msg, int flags)
 {
 	size_t len;
-	size_t offset;
+	ssize_t offset;
 	size_t i;
 	ssize_t read = -1;
 	ssize_t received;
@@ -295,13 +295,13 @@ ssize_t recvmsg(int sd, struct msghdr *msg, int flags)
 	received = recvfrom(sd, buffer, len, flags,
 		(struct sockaddr *)msg->msg_name, &msg->msg_namelen);
 
-	for(i = 0, offset = 0; i < msg->msg_iovlen && offset < len; i++) {
-		size_t chunk_len = MIN(len - offset, msg->msg_iov[i].iov_len);
+	for(i = 0, offset = 0; i < msg->msg_iovlen && offset < received; i++) {
+		ssize_t chunk_len = MIN(received - offset, msg->msg_iov[i].iov_len);
 		assert(msg->msg_iov[i].iov_base);
-		memcpy(msg->msg_iov[i].iov_base, buffer + len, chunk_len);
+		memcpy(msg->msg_iov[i].iov_base, buffer + offset, chunk_len);
 		offset += chunk_len;
 	}
-	read = (ssize_t)offset;
+	read = received;
 
 	free(buffer);
 
