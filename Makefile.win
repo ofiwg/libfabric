@@ -12,10 +12,10 @@ output_root = .\\
 
 !if "$(config)" == "Debug"
 outdir = $(output_root)$(arch)\debug
-CFLAGS = $(CFLAGS) /Zi /Od
+CFLAGS = $(CFLAGS) /Zi /Od /MTd
 !else
 outdir = $(output_root)$(arch)\release
-CFLAGS = $(CFLAGS) /O2
+CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
 basedeps = common\shared.c common\jsmn.c common\windows\getopt.c \
@@ -49,9 +49,9 @@ benchmarks: $(outdir)\msg_pingpong.exe $(outdir)\rdm_cntr_pingpong.exe \
 	$(outdir)\rdm_pingpong.exe $(outdir)\rdm_tagged_pingpong.exe
 
 simple: $(outdir)\cq_data.exe $(outdir)\dgram.exe $(outdir)\dgram_waitset.exe $(outdir)\msg.exe \
-	$(outdir)\msg_epoll.exe $(outdir)\msg_sockets.exe $(outdir)\msg_netdir.exe \
+	$(outdir)\msg_epoll.exe $(outdir)\msg_sockets.exe \
 	$(outdir)\poll.exe $(outdir)\rdm.exe $(outdir)\rdm_rma_simple.exe $(outdir)\rdm_rma_trigger.exe \
-	$(outdir)\rdm_tagged_peek.exe $(outdir)\scalable_ep.exe $(outdir)\rdm_netdir.exe
+	$(outdir)\rdm_tagged_peek.exe $(outdir)\scalable_ep.exe
 
 unit: $(outdir)\av_test.exe $(outdir)\dom_test.exe $(outdir)\eq_test.exe
 
@@ -82,8 +82,6 @@ $(outdir)\msg_epoll.exe: {simple}msg_epoll.c $(basedeps)
 
 $(outdir)\msg_sockets.exe: {simple}msg_sockets.c $(basedeps)
 
-$(outdir)\msg_netdir.exe: {simple}msg_netdir.c $(basedeps)
-
 $(outdir)\poll.exe: {simple}poll.c $(basedeps)
 
 $(outdir)\rdm.exe: {simple}rdm.c $(basedeps)
@@ -95,8 +93,6 @@ $(outdir)\rdm_rma_trigger.exe: {simple}rdm_rma_trigger.c $(basedeps)
 $(outdir)\rdm_tagged_peek.exe: {simple}rdm_tagged_peek.c $(basedeps)
 
 $(outdir)\scalable_ep.exe: {simple}scalable_ep.c $(basedeps)
-
-$(outdir)\rdm_netdir.exe: {simple}rdm_netdir.c $(basedeps)
 
 $(outdir)\av_test.exe: {unit}av_test.c $(basedeps) {unit}common.c
 
