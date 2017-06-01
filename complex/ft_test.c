@@ -317,9 +317,7 @@ int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx)
 	int ret;
 
 	ctrl->curr_ctx++;
-	if (ctrl->curr_ctx < ctrl->max_credits) {
-		return 0;
-	} else {
+	if (ctrl->curr_ctx >= ctrl->max_credits) {
 		if (ctrl == &ft_tx_ctrl) {
 			while (ctrl->credits < ctrl->max_credits) {
 				ret = ft_comp_tx(FT_COMP_TO);
@@ -865,6 +863,14 @@ int ft_run_test()
 		if (ret) {
 			FT_PRINTERR("ft_open_active", ret);
 			goto cleanup;
+		}
+	}
+
+	if (!opts.dst_addr) {
+		ret = ft_sock_send(sock, &test_info, sizeof test_info);
+		if (ret) {
+			FT_PRINTERR("ft_sock_send", ret);
+			return ret;
 		}
 	}
 
