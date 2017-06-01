@@ -7,10 +7,6 @@ FABRIC_1.0 {
 		fi_version;
 		fi_strerror;
 		fi_tostr;
-		fi_log_enabled;
-		fi_log;
-		fi_param_define;
-		fi_param_get;
 		fi_getparams;
 		fi_freeparams;
 		@FI_DIRECT_PROVIDER_API_10@
