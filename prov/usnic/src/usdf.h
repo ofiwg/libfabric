@@ -76,6 +76,9 @@ extern struct fi_provider usdf_ops;
 #define USDF_EVENT_FLAG_ERROR (1ULL << 62)
 #define USDF_EVENT_FLAG_FREE_BUF (1ULL << 63)
 
+/* usdf domain capability: no loopback */
+#define USDF_DOM_CAPS (FI_REMOTE_COMM)
+
 /*
  *  TAILQ stuff that should exist
  */
