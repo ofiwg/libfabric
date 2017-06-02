@@ -5,6 +5,113 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.5.0alpha, Fri Jun 2, 2017
+============================
+
+The 1.5 release includes updates to the libfabric API and ABI.  As a
+result, the ABI bumps from 1.0 to 1.1.  All changes are backwards
+compatible with previous versions of the interface.  The following
+features were added to the libfabric API.  (Note that individual
+providers may not support all new features).  For full details
+see the man pages.
+
+- Authorization keys
+  Authorization keys, commonly referred to as job keys, are used to
+  isolate processes from communicating with other processes for security
+  purposes.
+- Multicast support
+  Datagram endpoints can now support multicast communication.
+- (Experimental) socket-like endpoint types
+  New FI_SOCK_STREAM and FI_SOCK_DGRAM endpoint types are introduced.
+  These endpoint types target support of cloud and enterprise based
+  middleware and applications.
+- Tagged atomic support
+  Atomic operations can now target tagged receive buffers, in
+  addition to RMA buffers.
+- (Experimental) deferred work queues
+  Deferred work queues are enhanced triggerred operations.  They
+  target support for collective-based operations.
+- New mode bits: FI_RESTRICTED_COMP and FI_NOTIFY_FLAGS_ONLY
+  These mode bits support optimized completion processing to
+  minimize software overhead.
+- Multi-threaded error reporting
+  Reading CQ and EQ errors now allow the application to provide the
+  error buffer, eliminating the need for the application to synchronize
+  between multiple threads when handling errors.
+- FI_SOURCE_ERR capability
+  This feature allows the provider to validate and report the source
+  address for any received messages.
+- FI_ADDR_STR string based addressing
+  Applications can now request and use addresses provided using a
+  standardized string format.  This makes it easier to pass full
+  addressing data through a command line, or handle address exchange
+  through text files.
+- Communication scope capabilities: FI_LOCAL_COMM and FI_REMOTE_COMM
+  Used to indicate if an application requires communication with
+  peers on the same node and/or remote nodes.
+- New memory registration modes
+  The FI_BASIC_MR and FI_SCALABLE_MR memory registration modes have
+  been replaced by more refined registration mode bits.  This allows
+  applications to make better use of provider hardware capabilities
+  when dealing with registered memory regions.
+
+v1.4.2, Fri May 12, 2017
+========================
+
+## Core
+
+- Fix for OS X clock_gettime() portability issue.
+
+## PSM provider notes
+
+- Updated default counter wait object for improved performance
+- Fix multi-threaded RMA progress stalls
+
+## PSM2 provider notes
+
+- Updated default counter wait object for improved performance
+- Fix multi-threaded RMA progress stalls
+
+## Sockets provider notes
+
+- Fix error in fi_cq_sreadfrom aborting before timeout expires
+- Set atomic iov count correct correctly inside fi_atomicv
+
+## Verbs provider notes
+
+- Fix handling of apps that call fork.  Move ibv_fork_init() before
+  calling any other verbs call.
+- Fix crash in fi_write when connection is not yet established and
+  write data size is below inline threshold.
+- Fix issues not handling multiple ipoib interfaces
+- Reduce lock contention on buffer pools in send/completion handling
+  code.
+- To see verbs provider in fi_info output, configure the corresponding
+  IPoIB interface with an IP address. This is a change in behavior from
+  previous versions. Please refer fi_verbs man page for more info.
+
+v1.4.1, Fri Feb  3, 2017
+========================
+
+## PSM provider notes
+
+- Defer initialization of the PSM library to allow runtime selection from
+  different versions of the same provider before fi_getinfo is called.
+
+## PSM2 provider notes
+
+- Defer initialization of the PSM2 library to allow runtime selection from
+  different versions of the same provider before fi_getinfo is called.
+- General bug fixes.
+
+## UDP provider notes
+
+- Fix setting address format in fi_getinfo call.
+
+## usNIC provider notes
+
+- Fixed compilation issues with newer versions of libibverbs.
+
 v1.4.0, Fri Oct 28, 2016
 ========================
 
