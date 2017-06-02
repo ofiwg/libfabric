@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -52,6 +52,7 @@
 #define USDF_DGRAM_IOV_LIMIT (USDF_DGRAM_DFLT_SGE)
 #define USDF_DGRAM_RMA_IOV_LIMIT 0
 #define USDF_DGRAM_CNTR_CNT 0
+#define USDF_DGRAM_MR_IOV_LIMIT (USDF_MR_IOV_LIMIT)
 
 
 int usdf_dgram_fill_rx_attr(struct fi_info *hints,

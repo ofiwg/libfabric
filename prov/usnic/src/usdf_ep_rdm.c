@@ -121,7 +121,8 @@ static const struct fi_domain_attr rdm_dflt_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
 	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL,
-	.cntr_cnt = USDF_RDM_CNTR_CNT
+	.cntr_cnt = USDF_RDM_CNTR_CNT,
+	.mr_iov_limit = USDF_RDM_MR_IOV_LIMIT,
 };
 
 /*******************************************************************************

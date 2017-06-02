@@ -207,8 +207,8 @@ static struct fi_ops usdf_fid_ops = {
 static struct fi_ops_mr usdf_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = usdf_reg_mr,
-	.regv = fi_no_mr_regv,
-	.regattr = fi_no_mr_regattr,
+	.regv = usdf_regv_mr,
+	.regattr = usdf_regattr,
 };
 
 static struct fi_ops_domain usdf_domain_ops = {
