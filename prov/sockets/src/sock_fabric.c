@@ -265,6 +265,7 @@ int sock_verify_info(uint32_t version, struct fi_info *hints)
 	case FI_SOCKADDR_IN:
 		break;
 	default:
+		SOCK_LOG_DBG("Unsupported address format\n");
 		return -FI_ENODATA;
 	}
 
