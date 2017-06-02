@@ -175,7 +175,7 @@ int usdf_msg_fill_dom_attr(uint32_t version, struct fi_info *hints,
 	if (ret < 0)
 		return -FI_ENODATA;
 
-	if (!hints || !hints->domain_attr) {
+	if (!hints || !hints->domain_attr || !hints->domain_attr->mr_mode) {
 		/* mr_mode behavior changed in version 1.5 from a single flag to mode bits.
 		* Hence, if a version less than v1.5 was requested, return the prior default:
 		* FI_MR_BASIC. */
