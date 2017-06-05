@@ -361,6 +361,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	ofi_atomic_initialize32(&_ep->unsignaled_send_cnt, 0);
 	ofi_atomic_initialize32(&_ep->comp_pending, 0);
 
+	_ep->domain = dom;
 	*ep = &_ep->ep_fid;
 
 	return 0;

@@ -289,6 +289,7 @@ struct fi_ibv_msg_ep {
 	ofi_atomic32_t		unsignaled_send_cnt;
 	ofi_atomic32_t		comp_pending;
 	uint64_t		ep_id;
+	struct fi_ibv_domain	*domain;
 };
 
 struct fi_ibv_msg_epe {
@@ -369,6 +370,10 @@ int fi_ibv_cq_signal(struct fid_cq *cq);
 
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 		const void *buf, size_t len);
+
+int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype,
+			enum fi_op op, struct fi_atomic_attr *attr,
+			uint64_t flags);
 
 #define fi_ibv_set_sge(sge, buf, len, desc)				\
 	do {								\
