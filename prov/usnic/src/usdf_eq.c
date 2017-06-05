@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -170,44 +170,6 @@ usdf_eq_write_event(struct usdf_eq *eq, uint32_t event,
 	return len;
 }
 
-static ssize_t usdf_eq_readerr(struct fid_eq *feq,
-		struct fi_eq_err_entry *entry, uint64_t flags)
-{
-	struct usdf_err_data_entry *err_data_entry;
-	struct usdf_eq *eq;
-	ssize_t ret;
-
-	USDF_TRACE_SYS(EQ, "\n");
-
-	if (!feq) {
-		USDF_DBG_SYS(EQ, "invalid input\n");
-		return -FI_EINVAL;
-	}
-
-	eq = eq_ftou(feq);
-
-	pthread_spin_lock(&eq->eq_lock);
-
-	/* make sure there is an error on top */
-	if (usdf_eq_empty(eq) || !usdf_eq_error(eq)) {
-		ret = -FI_EAGAIN;
-		goto done;
-	}
-
-	ret = usdf_eq_read_event(eq, NULL, entry, sizeof(*entry), flags);
-
-	/* Mark as seen so it can be cleaned on the next iteration of read. */
-	if (entry->err_data_size) {
-		err_data_entry = container_of(entry->err_data,
-				struct usdf_err_data_entry, err_data);
-		err_data_entry->seen = 1;
-	}
-
-done:
-	pthread_spin_unlock(&eq->eq_lock);
-	return ret;
-}
-
 static void usdf_eq_clean_err(struct usdf_eq *eq, uint8_t destroy)
 {
 	struct usdf_err_data_entry *err_data_entry;
@@ -227,6 +189,75 @@ static void usdf_eq_clean_err(struct usdf_eq *eq, uint8_t destroy)
 			break;
 		}
 	}
+}
+
+static ssize_t usdf_eq_readerr(struct fid_eq *feq,
+		struct fi_eq_err_entry *given_buffer, uint64_t flags)
+{
+	struct usdf_err_data_entry *err_data_entry;
+	struct fi_eq_err_entry entry;
+	struct usdf_eq *eq;
+	ssize_t ret, err_data_size;
+	uint32_t api_version;
+	void *err_data = NULL;
+
+	USDF_TRACE_SYS(EQ, "\n");
+
+	if (!feq) {
+		USDF_DBG_SYS(EQ, "invalid input\n");
+		return -FI_EINVAL;
+	}
+
+	eq = eq_ftou(feq);
+
+	pthread_spin_lock(&eq->eq_lock);
+
+	/* make sure there is an error on top */
+	if (usdf_eq_empty(eq) || !usdf_eq_error(eq)) {
+		ret = -FI_EAGAIN;
+		goto done;
+	}
+
+	ret = usdf_eq_read_event(eq, NULL, &entry, sizeof(entry), flags);
+
+	pthread_spin_unlock(&eq->eq_lock);
+
+	/* read the user's setting for err_data. */
+	err_data = given_buffer->err_data;
+	err_data_size = given_buffer->err_data_size;
+
+	/* Copy the entry. */
+	*given_buffer = entry;
+
+	/* Mark as seen so it can be cleaned on the next iteration of read. */
+	if (entry.err_data_size) {
+		err_data_entry = container_of(entry.err_data,
+				struct usdf_err_data_entry, err_data);
+		err_data_entry->seen = 1;
+	}
+
+
+	/* For release > 1.5, we will copy the err_data directly
+	 * to the user's buffer.
+	 */
+	api_version = eq->eq_fabric->fab_attr.fabric->api_version;
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5))) {
+		given_buffer->err_data = err_data;
+		given_buffer->err_data_size =
+			MIN(err_data_size, entry.err_data_size);
+		memcpy(given_buffer->err_data, entry.err_data,
+				given_buffer->err_data_size);
+
+		if (err_data_size < entry.err_data_size) {
+			USDF_DBG_SYS(EQ, "err_data truncated by %zd bytes.\n",
+				entry.err_data_size - err_data_size);
+		}
+
+		usdf_eq_clean_err(eq, 0);
+	}
+
+done:
+	return ret;
 }
 
 static ssize_t _usdf_eq_read(struct usdf_eq *eq, uint32_t *event, void *buf,
