@@ -326,7 +326,12 @@ struct fi_mr_attr (defined below).
 
 Fi_close is used to release all resources associated with a
 registering a memory region.  Once unregistered, further access to the
-registered memory is not guaranteed.
+registered memory is not guaranteed.  Active or queued operations that
+reference a memory region being closed may fail or result in accesses
+to invalid memory.  Applications are responsible for ensuring that a
+MR is no longer needed prior to closing it.  Note that accesses to a
+closed MR from a remote peer will result in an error at the peer.  The
+state of the local endpoint will be unaffected.
 
 When closing the MR, there must be no opened endpoints or counters associated
 with the MR.  If resources are still associated with the MR when attempting to
