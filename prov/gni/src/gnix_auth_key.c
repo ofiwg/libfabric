@@ -266,7 +266,7 @@ _gnix_auth_key_lookup(uint8_t *auth_key, size_t auth_key_size)
 
 int _gnix_auth_key_subsys_init(void)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 
 	gnix_hashtable_attr_t attr = {
 			.ht_initial_size     = 8,
@@ -282,7 +282,7 @@ int _gnix_auth_key_subsys_init(void)
 	ret = _gnix_ht_init(&__gnix_auth_key_ht, &attr);
 	assert(ret == FI_SUCCESS);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 int _gnix_auth_key_subsys_fini(void)
