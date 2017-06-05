@@ -96,6 +96,8 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 			if (op != FI_CSWAP)
 				return -FI_ENOSYS;
 			log_str = log_str_comp;
+		} else {
+			return  -FI_EBADFLAGS;
 		}
 		if (domain->info->tx_attr->op_flags & FI_INJECT) {
 			VERBS_INFO(FI_LOG_EP_DATA,

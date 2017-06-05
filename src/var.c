@@ -128,7 +128,8 @@ DEFAULT_SYMVER(fi_getparams_, fi_getparams, FABRIC_1.0);
 __attribute__((visibility ("default")))
 void DEFAULT_SYMVER_PRE(fi_freeparams)(struct fi_param *params)
 {
-	for (int i = 0; params[i].name; ++i) {
+	int i;
+	for (i = 0; params[i].name; ++i) {
 		free((void*) params[i].name);
 		free((void*) params[i].help_string);
 		free((void*) params[i].value);

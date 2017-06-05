@@ -221,7 +221,7 @@ static const char *param_type(enum fi_param_type type)
 
 static int print_vars(void)
 {
-	int ret, count;
+	int ret, count, i;
 	struct fi_param *params;
 	char delim;
 
@@ -229,7 +229,7 @@ static int print_vars(void)
 	if (ret)
 		return ret;
 
-	for (int i = 0; i < count; ++i) {
+	for (i = 0; i < count; ++i) {
 		printf("# %s: %s\n", params[i].name, param_type(params[i].type));
 		printf("# %s\n", params[i].help_string);
 
@@ -248,7 +248,8 @@ static int print_vars(void)
 
 static int print_providers(struct fi_info *info)
 {
-	for (struct fi_info *cur = info; cur; cur = cur->next) {
+	struct fi_info *cur;
+	for (cur = info; cur; cur = cur->next) {
 		printf("%s:\n", cur->fabric_attr->prov_name);
 		printf("    version: %d.%d\n",
 			FI_MAJOR(cur->fabric_attr->prov_version),
@@ -259,7 +260,8 @@ static int print_providers(struct fi_info *info)
 
 static int print_short_info(struct fi_info *info)
 {
-	for (struct fi_info *cur = info; cur; cur = cur->next) {
+	struct fi_info *cur;
+	for (cur = info; cur; cur = cur->next) {
 		printf("provider: %s\n", cur->fabric_attr->prov_name);
 		printf("    fabric: %s\n", cur->fabric_attr->name),
 		printf("    domain: %s\n", cur->domain_attr->name),
@@ -275,7 +277,8 @@ static int print_short_info(struct fi_info *info)
 
 static int print_long_info(struct fi_info *info)
 {
-	for (struct fi_info *cur = info; cur; cur = cur->next) {
+	struct fi_info *cur;
+	for (cur = info; cur; cur = cur->next) {
 		printf("---\n");
 		printf("%s", fi_tostr(cur, FI_TYPE_INFO));
 	}
