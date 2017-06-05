@@ -148,10 +148,12 @@ static int str2cap(char *inputstr, uint64_t *value)
 static int str2mode(char *inputstr, uint64_t *value)
 {
 	ORCASE(FI_CONTEXT);
+	ORCASE(FI_CONTEXT2);
 	ORCASE(FI_LOCAL_MR);
 	ORCASE(FI_MSG_PREFIX);
 	ORCASE(FI_ASYNC_IOV);
 	ORCASE(FI_RX_CQ_DATA);
+	ORCASE(FI_RESTRICTED_COMP);
 
 	fprintf(stderr, "error: Unrecognized mode: %s\n", inputstr);
 
