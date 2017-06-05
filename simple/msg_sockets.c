@@ -317,6 +317,7 @@ static int setup_handle(void)
 
 	memset(&aihints, 0, sizeof aihints);
 	aihints.ai_flags = AI_PASSIVE;
+	aihints.ai_family = AF_INET;
 	ret = getaddrinfo(opts.src_addr, opts.src_port, &aihints, &ai);
 	if (ret == EAI_SYSTEM) {
 		FT_ERR("getaddrinfo for %s:%s: %s",
