@@ -4,20 +4,21 @@ build:
   project: libfabric.sln
 
 configuration:
-- Debug
-- Release
+  - Debug
+  - Release
 
 before_build:
-  - ps: Invoke-WebRequest -Uri "https://download.microsoft.com/download/5/A/E/5AEA3C34-32A1-4A70-9622-F9734E92981F/NetworkDirect_DDK.zip" -OutFile "NetworkDirect_DDK.zip"
-  - ps: '$wd=$PWD.Path; & { Add-Type -A "System.IO.Compression.FileSystem"; [IO.Compression.ZipFile]::ExtractToDirectory("$wd\NetworkDirect_DDK.zip", "$wd"); }'
-  - ps: mkdir -f prov\netdir\NetDirect
-  - ps: move "NetDirect\include\*" "prov\netdir\NetDirect"
-  - ps: >
-          $tool="v140";
-          $namespaces=@{ vs="http://schemas.microsoft.com/developer/msbuild/2003" };
-          Get-ChildItem "." -Filter "*.vcxproj" |
-          foreach {
-              $toolsets = Select-Xml -Path $_.FullName -XPath '/vs:Project/vs:PropertyGroup[@Label="Configuration"]/vs:PlatformToolset' -Namespace $namespaces;
-              foreach ($_ in $toolsets) {$_.Node.InnerText=$tool};
-              $toolsets[0].Node.OwnerDocument.Save($toolsets[0].Path);
-          }
+  - ps: .appveyor.ps1 -Verbose
+
+after_build:
+  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
+  - cd ..
+
+before_test:
+  - git clone https://github.com/ofiwg/fabtests
+  - cd fabtests
+  - msbuild fabtests.sln
+
+test_script:
+  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
+  - scripts\runfabtests.cmd
