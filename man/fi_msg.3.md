@@ -248,9 +248,14 @@ fi_sendmsg.
   posted receive operation to generate multiple events as messages are
   placed into the buffer.  The placement of received data into the
   buffer may be subjected to provider specific alignment restrictions.
+
   The buffer will be released by the provider when the available buffer
-  space falls below the specified minimum (see
-  FI_OPT_MIN_MULTI_RECV).
+  space falls below the specified minimum (see FI_OPT_MIN_MULTI_RECV).
+  Note that an entry to the associated receive completion queue will
+  always be generated when the buffer has been consumed, even if other
+  receive completions have been suppressed (i.e. the Rx context has been
+  configured for FI_SELECTIVE_COMPLETION).  See the FI_MULTI_RECV
+  completion flag [`fi_cq`(3)](fi_cq.3.html).
 
 *FI_INJECT_COMPLETE*
 : Applies to fi_sendmsg.  Indicates that a completion should be
