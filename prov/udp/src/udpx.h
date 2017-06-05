@@ -65,7 +65,7 @@
 
 
 #define UDPX_MAJOR_VERSION 1
-#define UDPX_MINOR_VERSION 0
+#define UDPX_MINOR_VERSION 1
 
 
 extern struct fi_provider udpx_prov;
