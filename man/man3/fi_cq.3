@@ -1,4 +1,4 @@
-.TH "fi_cq" "3" "2017\-03\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cq" "3" "2017\-06\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq \- Completion queue operations
@@ -545,6 +545,8 @@ This flag may be combined with an FI_SEND or FI_RECV flag.
 .PP
 \f[I]FI_MULTICAST\f[] : Indicates that a multicast operation completed.
 This flag may be combined with FI_MSG and relevant flags.
+This flag is only guaranteed to be valid for received messages if the
+endpoint has been configured with FI_SOURCE.
 .PP
 \f[I]FI_READ\f[] : Indicates that a locally initiated RMA or atomic read
 operation has completed.
