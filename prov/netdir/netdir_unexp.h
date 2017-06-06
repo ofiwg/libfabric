@@ -72,8 +72,8 @@ void ofi_nd_unexp_event(ND2_RESULT *result);
 void ofi_nd_unexp_service_event(ND2_RESULT *result);
 void ofi_nd_unexp_match(struct nd_ep *ep);
 void ofi_nd_srx_match(struct nd_srx *srx);
+HRESULT ofi_nd_unexp_repost(struct nd_ep *ep, struct nd_unexpected_buf *entry);
 HRESULT ofi_nd_unexp_run(struct nd_ep *ep);
-HRESULT ofi_nd_unexp_payload_run(struct nd_ep *ep);
 void ofi_nd_release_unexp_entry(nd_unexpected_entry *unexp);
 
 #ifdef __cplusplus

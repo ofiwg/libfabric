@@ -58,8 +58,8 @@ void CALLBACK domain_io_cb(DWORD err, DWORD bytes, LPOVERLAPPED ov)
 	nd_event_base *base = container_of(ov, nd_event_base, ov);
 
 	ND_LOG_DEBUG(FI_LOG_EP_CTRL,
-		"IO callback: err: %x, bytes: %d\n",
-		err, bytes);
+		"IO callback: err: %s, bytes: %d\n",
+		ofi_nd_error_str(err), bytes);
 
 	if (err) {
 		assert(base->err_cb);

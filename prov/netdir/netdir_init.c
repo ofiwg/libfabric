@@ -44,9 +44,10 @@
 #include "netdir_queue.h"
 
 struct gl_data gl_data = {
-	.inline_thr = 4096,
+	/* 8 KByte */
+	.inline_thr = 8192,
 	.prepost_cnt = 8,
-	.prepost_buf_cnt = 8,
+	.prepost_buf_cnt = 1,
 	.flow_control_cnt = 1,
 	.total_avail = 64
 };
@@ -138,6 +139,8 @@ NETDIR_INI
 {
 	fi_param_define(&ofi_nd_prov, "inlinethr", FI_PARAM_INT,
 		"Inline threshold: size of buffer to be send using pre-allocated buffer");
+	fi_param_define(&ofi_nd_prov, "largemsgthr", FI_PARAM_INT,
+		"Large msg threshold: size of user data that is considered as large message");
 	fi_param_define(&ofi_nd_prov, "prepostcnt", FI_PARAM_INT,
 		"Prepost Buffer Count: number of buffers to be preposted per EP and "
 		"not required internal ACK");

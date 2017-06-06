@@ -485,7 +485,6 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 	assert(domain->fid.fid.fclass == FI_CLASS_DOMAIN);
 	assert(domain->cq);
 
-	HRESULT hr;
 	ND2_RESULT result[256];
 	DWORD count;
 	nd_unexpected_ctx *ctx;
@@ -515,7 +514,7 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 				break;
 			default:
 				/* shouldn't go here */
-				assert(0);
+				NODEFAULT;
 			}
 
 			/* Let's walk through sending queue to send data 

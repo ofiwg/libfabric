@@ -62,7 +62,7 @@ extern "C" {
 #define OFI_ND_CAPS OFI_ND_PRIMARY_CAPS
 
 extern struct gl_data {
-	int	inline_thr;
+	size_t	inline_thr;
 	int	prepost_cnt;
 	int	prepost_buf_cnt;
 	int	flow_control_cnt;
@@ -156,6 +156,13 @@ static inline size_t unique(void *base, size_t num, size_t width,
 		(fi_gettime_ms() + (timeout) * 10000) : -1;
 
 #define OFI_ND_TIMEDOUT() ((sfinish > 0) ? fi_gettime_ms() >= sfinish : 0)
+
+#ifdef ENABLE_DEBUG  
+# define NODEFAULT	assert(0)  
+#else  
+# define NODEFAULT	__assume(0)  
+#endif  
+
 
 #ifdef __cplusplus
 }

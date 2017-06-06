@@ -43,11 +43,9 @@ extern "C" {
 
 extern struct fi_provider ofi_nd_prov;
 
-#define ND_LOG(level, subsystem, ...) FI_LOG(&ofi_nd_prov, level, subsystem, __VA_ARGS__)
-
-#define ND_LOG_WARN(subsystem, ...) ND_LOG(FI_LOG_WARN, subsystem, __VA_ARGS__)
-#define ND_LOG_INFO(subsystem, ...) ND_LOG(FI_LOG_INFO, subsystem, __VA_ARGS__)
-#define ND_LOG_DEBUG(subsystem, ...) ND_LOG(FI_LOG_DEBUG, subsystem, __VA_ARGS__)
+#define ND_LOG_WARN(subsystem, ...) FI_WARN(&ofi_nd_prov, subsystem, __VA_ARGS__)
+#define ND_LOG_INFO(subsystem, ...) FI_INFO(&ofi_nd_prov, subsystem, __VA_ARGS__)
+#define ND_LOG_DEBUG(subsystem, ...) FI_DBG(&ofi_nd_prov, subsystem, __VA_ARGS__)
 
 #if ENABLE_DEBUG
 # define ND_LOG_EVENT_INFO(entry)							\

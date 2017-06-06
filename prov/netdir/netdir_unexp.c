@@ -81,7 +81,8 @@ HRESULT ofi_nd_unexp_init(struct nd_ep *ep)
 	dlist_init(&ep->unexpected.received);
 
 	ep->unexpected.unexpected = malloc(
-		total_count * sizeof(*ep->unexpected.unexpected));
+		total_count * sizeof(*ep->unexpected.unexpected)
+	);
 	if (!ep->unexpected.unexpected)
 		return ND_NO_MEMORY;
 
@@ -125,15 +126,15 @@ HRESULT ofi_nd_unexp_fini(struct nd_ep *ep)
 	int total_count = (gl_data.prepost_cnt +
 		gl_data.flow_control_cnt) * gl_data.prepost_buf_cnt;
 
-	ND_LOG_INFO(FI_LOG_EP_CTRL, "finalize unexpected queue\n");
-
 	if (InterlockedDecrement(&ep->unexpected.active))
 		return S_OK;
-	InterlockedAdd(&ep->shutdown, total_count -
-		ep->unexpected.used_counter - (ep->unexpected.used_counter / 8));
-	fprintf(stderr, "used_counter = %d, total_count = %d, shutdown = %d \n", ep->unexpected.used_counter,
-		total_count,
-		ep->shutdown);
+
+
+	ND_LOG_INFO(FI_LOG_EP_CTRL, "finalize unexpected queue\n"
+		    "total_count = %d\n",
+		    total_count);
+
+	InterlockedAdd(&ep->shutdown, total_count);
 	if (ep->qp) {
 		ep->qp->lpVtbl->Flush(ep->qp);
 		/* wait until all preposted entries are canceled (GetResult()
@@ -335,6 +336,7 @@ void ofi_nd_unexp_event(ND2_RESULT *result)
 	assert(ep->fid.fid.fclass == FI_CLASS_EP);
 
 	nd_unexpected_ctx *ctx = (nd_unexpected_ctx *)result->RequestContext;
+	struct nd_unexpected_buf *buf = ctx->entry;
 	assert(ctx);
 
 	if (ep->shutdown || result->Status == STATUS_CANCELLED) { 
@@ -350,7 +352,6 @@ void ofi_nd_unexp_event(ND2_RESULT *result)
 			 * since no CQ are posted to be cogherent with
 			 * this unexp and this unexp isn't carrying
 			 * payload data in itself */
-			struct nd_unexpected_buf *buf = ctx->entry;
 			ND_BUF_FREE(nd_unexpected_ctx, ctx);
 
 			ofi_nd_unexp_repost(ep, buf);
@@ -392,13 +393,14 @@ void ofi_nd_unexp_event(ND2_RESULT *result)
 	}
 
 	ND_BUF_FREE(nd_unexpected_ctx, ctx);
-
+	ofi_nd_unexp_repost(ep, buf);
+#if 0
 	ep->unexpected.used_counter++;
 	if (ep->unexpected.used_counter == (size_t)gl_data.total_avail) {
 		ep->unexpected.used_counter = 0;
 		ofi_nd_unexp_payload_run(ep);
 	}
-
+#endif
 	ofi_nd_unexp_match(ep);
 }
 
@@ -415,6 +417,14 @@ void ofi_nd_unexp_service_event(ND2_RESULT *result)
 
 	nd_unexpected_ctx *ctx = (nd_unexpected_ctx *)result->RequestContext;
 	assert(ctx);
+
+	if (ep->shutdown || result->Status == STATUS_CANCELLED) {
+		/* shutdown mode */
+		ND_BUF_FREE(nd_unexpected_ctx, ctx);
+		InterlockedDecrement(&ep->shutdown);
+		return;
+	}
+
 	struct nd_unexpected_buf *unexp_buf = ctx->entry;
 	assert(unexp_buf);
 	if (unexp_buf->header.flags.ack)
@@ -452,15 +462,16 @@ void ofi_nd_unexp_service_event(ND2_RESULT *result)
 	}
 
 	ND_BUF_FREE(nd_unexpected_ctx, ctx);
-
+	ofi_nd_unexp_repost(ep, unexp_buf);
+#if 0
 	ep->unexpected.used_counter++;
 	if (ep->unexpected.used_counter == (size_t)gl_data.total_avail) {
 		ep->unexpected.used_counter = 0;
 		ofi_nd_unexp_payload_run(ep);
 	}
+#endif
 }
 
-static inline
 HRESULT ofi_nd_unexp_repost(struct nd_ep *ep, struct nd_unexpected_buf *entry)
 {
 	assert(entry);
@@ -479,8 +490,10 @@ HRESULT ofi_nd_unexp_repost(struct nd_ep *ep, struct nd_unexpected_buf *entry)
 	assert(ep->unexpected.mr);
 	assert(ep->unexpected.token);
 	ND2_SGE sge = {
-		.Buffer = entry,
-		.BufferLength = (sizeof(nd_unexpected_buf) + gl_data.inline_thr),
+		.Buffer = (void*)entry,
+		.BufferLength = (ULONG)(sizeof(nd_unexpected_buf) +
+			MIN(sizeof(struct nd_msg_location) * ND_MSG_IOV_LIMIT,
+			    gl_data.inline_thr)),
 		.MemoryRegionToken = ep->unexpected.token
 	};
 
@@ -490,18 +503,6 @@ HRESULT ofi_nd_unexp_repost(struct nd_ep *ep, struct nd_unexpected_buf *entry)
 }
 
 HRESULT ofi_nd_unexp_run(struct nd_ep *ep)
-{
-	int i;
-	int total_count = (gl_data.prepost_cnt +
-		gl_data.flow_control_cnt) * gl_data.prepost_buf_cnt;
-
-	for (i = 0; i < total_count; i++)
-		ofi_nd_unexp_repost(ep, ep->unexpected.unexpected[i]);
-
-	return S_OK;
-}
-
-HRESULT ofi_nd_unexp_payload_run(struct nd_ep *ep)
 {
 	int i;
 	int total_count = (gl_data.prepost_cnt +

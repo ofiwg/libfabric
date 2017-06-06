@@ -45,7 +45,8 @@ static uint64_t ofi_nd_cntr_read(struct fid_cntr *cntr);
 static uint64_t ofi_nd_cntr_readerr(struct fid_cntr *cntr);
 static int ofi_nd_cntr_add(struct fid_cntr *cntr, uint64_t value);
 static int ofi_nd_cntr_set(struct fid_cntr *cntr, uint64_t value);
-static int ofi_nd_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout);
+static int ofi_nd_cntr_wait(struct fid_cntr *cntr,
+			    uint64_t threshold, int timeout);
 
 static struct fi_ops ofi_nd_fi_ops = {
 	.size = sizeof(ofi_nd_fi_ops),
@@ -115,10 +116,6 @@ int ofi_nd_cntr_open(struct fid_domain *pdomain, struct fi_cntr_attr *attr,
 	*pcntr = &cntr->fid;
 
 	return FI_SUCCESS;
-
-hr_fail:
-	ofi_nd_cntr_close(&cntr->fid.fid);
-	return -FI_EOTHER;
 }
 
 static uint64_t ofi_nd_cntr_read(struct fid_cntr *pcntr)
@@ -126,11 +123,7 @@ static uint64_t ofi_nd_cntr_read(struct fid_cntr *pcntr)
 	assert(pcntr);
 	assert(pcntr->fid.fclass == FI_CLASS_CNTR);
 
-	if (pcntr->fid.fclass != FI_CLASS_CNTR)
-		return -FI_EINVAL;
-
 	struct nd_cntr *cntr = container_of(pcntr, struct nd_cntr, fid);
-
 	return cntr->counter;
 }
 
@@ -139,11 +132,7 @@ static uint64_t ofi_nd_cntr_readerr(struct fid_cntr *pcntr)
 	assert(pcntr);
 	assert(pcntr->fid.fclass == FI_CLASS_CNTR);
 
-	if (pcntr->fid.fclass != FI_CLASS_CNTR)
-		return -FI_EINVAL;
-
 	struct nd_cntr *cntr = container_of(pcntr, struct nd_cntr, fid);
-
 	return cntr->err;
 }
 
@@ -179,7 +168,8 @@ static int ofi_nd_cntr_set(struct fid_cntr *pcntr, uint64_t value)
 	return FI_SUCCESS;
 }
 
-static int ofi_nd_cntr_wait(struct fid_cntr *pcntr, uint64_t threshold, int timeout)
+static int ofi_nd_cntr_wait(struct fid_cntr *pcntr, 
+			    uint64_t threshold, int timeout)
 {
 	assert(pcntr);
 	assert(pcntr->fid.fclass == FI_CLASS_CNTR);
@@ -191,12 +181,14 @@ static int ofi_nd_cntr_wait(struct fid_cntr *pcntr, uint64_t threshold, int time
 
 	/* process corner timeouts separately to optimize */
 	if (!timeout) {	/* no wait */
-		return (cntr->counter >= (LONGLONG)threshold) ? FI_SUCCESS : -FI_ETIMEDOUT;
+		return (cntr->counter >= (LONGLONG)threshold) ?
+			FI_SUCCESS : -FI_ETIMEDOUT;
 	}
 	else if (timeout < 0) {	/* infinite wait */
 		while (cntr->counter < (LONG64)threshold) {
 			LONG64 val = cntr->counter;
-			WaitOnAddress(&cntr->counter, &val, sizeof(val), INFINITE);
+			WaitOnAddress(&cntr->counter, &val,
+				      sizeof(val), INFINITE);
 		}
 		return FI_SUCCESS;
 	}
@@ -207,7 +199,8 @@ static int ofi_nd_cntr_wait(struct fid_cntr *pcntr, uint64_t threshold, int time
 			if (cntr->counter >= (LONG64)threshold)
 				return FI_SUCCESS;
 			LONG64 val = cntr->counter;
-			WaitOnAddress(&cntr->counter, &val, sizeof(val), timeout);
+			WaitOnAddress(&cntr->counter, &val,
+				      sizeof(val), timeout);
 		} while (!OFI_ND_TIMEDOUT());
 	}
 

@@ -113,16 +113,16 @@ static int ofi_nd_ep_sendmsg_inline(struct nd_ep *ep,
 	if (!sge_entry) {
 		ND_LOG_WARN(FI_LOG_EP_DATA, "SGE entry buffer can't be allocated");
 		res = -FI_ENOMEM;
-		goto fn_fail_2;
+		goto fn_fail_1;
 	}
 	memset(sge_entry, 0, sizeof(*sge_entry));
 
-	if (!msg->desc) {
+	if (entry->flags & FI_INJECT) {
 		if (len) {
 			entry->inline_buf = __ofi_nd_buf_alloc_nd_inlinebuf(&ep->domain->inlinebuf);
 			if (!entry->inline_buf) {
 				res = -FI_ENOMEM;
-				goto fn_fail_1;
+				goto fn_fail_2;
 			}
 
 			char *buf = (char*)entry->inline_buf->buffer;
@@ -140,7 +140,7 @@ static int ofi_nd_ep_sendmsg_inline(struct nd_ep *ep,
 			},
 			{
 				.Buffer = len ? entry->inline_buf->buffer : 0,
-				.BufferLength = len,
+				.BufferLength = (ULONG)len,
 				.MemoryRegionToken = len ? entry->inline_buf->token : 0
 			}
 		};
@@ -160,8 +160,8 @@ static int ofi_nd_ep_sendmsg_inline(struct nd_ep *ep,
 		for (i = 0; i < msg->iov_count; i++) {
 			ND2_SGE sge_def = {
 				.Buffer = msg->msg_iov[i].iov_base,
-				.BufferLength = msg->msg_iov[i].iov_len,
-				.MemoryRegionToken = (UINT32)(*msg->desc)
+				.BufferLength = (ULONG)msg->msg_iov[i].iov_len,
+				.MemoryRegionToken = (UINT32)(msg->desc[i])
 			};
 			sge_entry->entries[i + 1] = sge_def;
 		}
@@ -188,11 +188,11 @@ static int ofi_nd_ep_sendmsg_inline(struct nd_ep *ep,
 
 	return FI_SUCCESS;
 fn_fail_3:
-	ofi_nd_buf_free_nd_sge(sge_entry);
-fn_fail_2:
-	if (len)
+	if (entry->inline_buf)
 		__ofi_nd_buf_free_nd_inlinebuf(entry->inline_buf,
 					       &ep->domain->inlinebuf);
+fn_fail_2:
+	ofi_nd_buf_free_nd_sge(sge_entry);
 fn_fail_1:
 	ND_LOG_WARN(FI_LOG_EP_DATA, "The error happened during handling Send");
 	return res;
@@ -248,7 +248,6 @@ static int ofi_nd_ep_sendmsg_large(struct nd_ep *ep,
 	int res;
 	size_t i;
 	struct nd_cq_entry *wait_ack_entry;
-	HRESULT hr;
 
 	nd_flow_cntrl_flags flow_control_flags = {
 		.req_ack = 0,
@@ -348,13 +347,13 @@ static int ofi_nd_ep_sendmsg_large(struct nd_ep *ep,
 fn_fail_5:
 	ofi_nd_buf_free_nd_sge(sge_entry);
 fn_fail_4:
-	__ofi_nd_buf_alloc_nd_notifybuf(wait_ack_entry->notify_buf,
-					&ep->domain->notifybuf);
+	__ofi_nd_buf_free_nd_notifybuf(wait_ack_entry->notify_buf,
+				       &ep->domain->notifybuf);
 fn_fail_3:
 	ofi_nd_free_cq_entry(wait_ack_entry);
 fn_fail_2:
-	__ofi_nd_buf_alloc_nd_notifybuf(entry->notify_buf,
-					&ep->domain->notifybuf);
+	__ofi_nd_buf_free_nd_notifybuf(entry->notify_buf,
+				       &ep->domain->notifybuf);
 fn_fail_1:
 	ND_LOG_WARN(FI_LOG_EP_DATA, "The error happened during handling Send");
 	return res;
@@ -412,21 +411,12 @@ ofi_nd_ep_sendmsg(struct fid_ep *pep, const struct fi_msg *msg, uint64_t flags)
 		goto fn_fail_1;
 	}
 
-	if (entry->len <= (size_t)gl_data.inline_thr) {
+	if (entry->len <= gl_data.inline_thr)
 		res = ofi_nd_ep_sendmsg_inline(ep, entry, msg, len);
-		if (res)
-			goto fn_fail_2;
-	}
-	else {
-		if (flags & FI_INJECT) {
-			res = -FI_EINVAL;
-			goto fn_fail_2;
-		}
+	else
 		res = ofi_nd_ep_sendmsg_large(ep, entry, msg);
-		if (res)
-			goto fn_fail_2;
-	}
-
+	if (res)
+		goto fn_fail_2;
 	/* Let's progress Send Queue for current EP if possible */
 	ofi_nd_ep_progress(ep);
 
@@ -553,7 +543,7 @@ static ssize_t ofi_nd_ep_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 		return -FI_ENOMEM;
 	memset(entry, 0, sizeof(*entry));
 
-	entry->buf = (msg->iov_count == 1) ? msg->msg_iov[0].iov_base : 0;
+	entry->buf = (msg->iov_count == 1) ? msg->msg_iov[0].iov_base : NULL;
 	entry->len = len;
 	entry->data = msg->data;
 	entry->flags = flags | FI_MSG | FI_RECV;
