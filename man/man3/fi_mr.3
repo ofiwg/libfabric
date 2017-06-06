@@ -1,4 +1,4 @@
-.TH "fi_mr" "3" "2017\-04\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2017\-06\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr \- Memory region operations
@@ -326,6 +326,13 @@ Fi_close is used to release all resources associated with a registering
 a memory region.
 Once unregistered, further access to the registered memory is not
 guaranteed.
+Active or queued operations that reference a memory region being closed
+may fail or result in accesses to invalid memory.
+Applications are responsible for ensuring that a MR is no longer needed
+prior to closing it.
+Note that accesses to a closed MR from a remote peer will result in an
+error at the peer.
+The state of the local endpoint will be unaffected.
 .PP
 When closing the MR, there must be no opened endpoints or counters
 associated with the MR.
