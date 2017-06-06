@@ -843,7 +843,7 @@ static int __gnix_auth_key_set_val(
 {
 	struct gnix_auth_key *info;
 	int v;
-	int ret;
+	int ret = FI_SUCCESS;
 
 	if (!val)
 		return -FI_EINVAL;
