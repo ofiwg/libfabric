@@ -573,11 +573,16 @@ void ofi_nd_read_event(ND2_RESULT *result)
 	nd_cq_entry *entry = (nd_cq_entry*)result->RequestContext;
 	assert(entry);
 
+	ND_LOG_EVENT_INFO(entry);
+
 	/* Check whether the operation is complex, i.e. read operation
-	 * may read from some subtasks of read */
+	 * may consists from several subtasks of read */
 	if (entry->aux_entry) {
 		EnterCriticalSection(&entry->aux_entry->wait_completion.comp_lock);
 		entry->aux_entry->wait_completion.comp_count++;
+		ND_LOG_DEBUG(FI_LOG_EP_DATA, "READ Event comp_count = %d, total_count = %d\n",
+			entry->aux_entry->wait_completion.comp_count,
+			entry->aux_entry->wait_completion.total_count);
 		if (entry->aux_entry->wait_completion.comp_count < entry->aux_entry->wait_completion.total_count) {
 			/* Should wait some remaining completion events about read operation */
 			LeaveCriticalSection(&entry->aux_entry->wait_completion.comp_lock);
@@ -605,8 +610,10 @@ void ofi_nd_write_event(ND2_RESULT *result)
 	assert(ep);
 	assert(ep->fid.fid.fclass == FI_CLASS_EP);
 
+	ND_LOG_EVENT_INFO(entry);
+
 	/* Check whether the operation is complex, i.e. write operation
-	 * may consist from some subtasks of write */
+	 * may consist from several subtasks of write */
 	if (entry->aux_entry) {
 		EnterCriticalSection(&entry->aux_entry->wait_completion.comp_lock);
 		entry->aux_entry->wait_completion.comp_count++;

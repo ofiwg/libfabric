@@ -195,7 +195,9 @@ struct nd_unexpected {
 	IND2MemoryRegion		*mr;
 	UINT32				token;
 	struct nd_unexpected_buf	**unexpected;
+#if 0
 	size_t				used_counter;
+#endif
 	CRITICAL_SECTION		unexp_lock;
 	struct dlist_entry		received;
 	LONG				active;
@@ -229,6 +231,7 @@ struct nd_ep {
 
 	struct nd_unexpected		unexpected;
 	struct nd_queue_queue		prepost;
+	struct nd_queue_queue		internal_prepost;
 
 	nd_event_base			disconnect_ov;
 

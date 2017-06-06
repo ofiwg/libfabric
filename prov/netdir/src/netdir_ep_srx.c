@@ -110,11 +110,7 @@ int ofi_nd_srx_ctx(struct fid_domain *pdomain,
 		   void *context)
 {
 	OFI_UNUSED(attr);
-
-	HRESULT hr;
-
 	struct nd_domain *domain = container_of(pdomain, struct nd_domain, fid);
-
 	struct nd_srx *srx = (struct nd_srx*) calloc(1, sizeof(*srx));
 	if (!srx)
 		return -FI_ENOMEM;
@@ -150,11 +146,6 @@ int ofi_nd_srx_ctx(struct fid_domain *pdomain,
 	InitializeCriticalSection(&srx->prepost_lock);
 
 	return FI_SUCCESS;
-
-fn_fail:
-	ofi_nd_srx_close(&srx->fid.fid);
-	ND_LOG_WARN(FI_LOG_EP_CTRL, ofi_nd_strerror((DWORD)hr, NULL));
-	return H2F(hr);
 }
 
 static ssize_t ofi_nd_srx_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
@@ -166,7 +157,6 @@ static ssize_t ofi_nd_srx_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 	if (pep->fid.fclass != FI_CLASS_SRX_CTX)
 		return -FI_EINVAL;
 
-	HRESULT hr;
 	size_t i;
 	size_t len = 0;
 
@@ -208,11 +198,6 @@ static ssize_t ofi_nd_srx_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 	ofi_nd_srx_match(srx);
 
 	return FI_SUCCESS;
-
-fn_fail:
-	ofi_nd_free_cq_entry(entry);
-	ND_LOG_WARN(FI_LOG_EP_DATA, ofi_nd_strerror((DWORD)hr, NULL));
-	return H2F(hr);
 }
 
 static ssize_t ofi_nd_srx_recvv(struct fid_ep *pep, const struct iovec *iov,

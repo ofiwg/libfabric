@@ -98,11 +98,11 @@ OFI_ND_NB_BUF_IMP(nd_sge);
 
 /* State-Event matrix callbacks. Must have the following signature 
  * "void <func_name>(nd_cq_entry*, void*)" */
-static void ofi_nd_handle_unknown(nd_cq_entry *entry, void *misc);
-static void ofi_nd_unexp_2_read(nd_cq_entry *entry, void *unexpected);
-static void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res);
-static void ofi_nd_event_2_cq(nd_cq_entry *entry, void *misc);
-static void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected);
+static inline void ofi_nd_handle_unknown(nd_cq_entry *entry, void *misc);
+static inline void ofi_nd_unexp_2_read(nd_cq_entry *entry, void *unexpected);
+static inline void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res);
+static inline void ofi_nd_event_2_cq(nd_cq_entry *entry, void *misc);
+static inline void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected);
 
 /* Auxillary functions to ensure workability of callbacks of S-E matrix
  * and are used implicitly inside these callbakcs */
@@ -127,7 +127,8 @@ void ofi_nd_dispatch_cq_event(ofi_nd_cq_event event, nd_cq_entry *entry, void *m
 {
 	ofi_nd_cq_state state = entry->state;
 	cq_matrix_cb cb = cq_matrix[state][event];
-
+	ND_LOG_DEBUG(FI_LOG_EP_DATA, "Dispatch Event - %d:%d\n",
+		     state, event);
 	cb(entry, misc);
 }
 
@@ -516,7 +517,7 @@ void ofi_nd_handle_unknown(nd_cq_entry *entry, void *unexp)
 	OFI_UNUSED(unexp);
 
 	ND_LOG_DEBUG(FI_LOG_CQ, "Unknown event-state, "
-		     "the event can't be handled");
+		     "the event can't be handled\n");
 
 	/* Shouldn't go here */
 	assert(0);
@@ -534,6 +535,7 @@ void ofi_nd_event_2_cq(nd_cq_entry *entry, void *misc)
 		ofi_nd_read_2_cq(entry, (ND2_RESULT *)misc);
 }
 
+/* do NOT release unexpected here, becuase it just an allocated on stack entry */
 void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected)
 {
 	nd_unexpected_entry *unexp = (nd_unexpected_entry *)unexpected;
@@ -571,10 +573,6 @@ void ofi_nd_unexp_ack_2_cq(nd_cq_entry *entry, void *unexpected)
 	 * during free parent CQ entry below */
 	entry->aux_entry = NULL;
 	ofi_nd_free_cq_entry(entry);
-
-	ofi_nd_release_unexp_entry(unexp);
-
-	/*ofi_nd_free_cq_entry(entry);*/
 }
 
 void ofi_nd_unexp_2_cq(nd_cq_entry *entry, nd_unexpected_entry *unexp)
@@ -677,10 +675,9 @@ void ofi_nd_unexp_2_read(nd_cq_entry *entry, void *unexpected)
 	uint64_t remote_addr[ND_MSG_INTERNAL_IOV_LIMIT];
 
 	ofi_nd_repack_iovecs(from_iovecs, location_cnt,
-		entry->iov, entry->iov_cnt,
-		new_iovecs, &new_iovecs_count,
-		from_split_map, to_split_map, remote_addr);
-
+			     entry->iov, entry->iov_cnt,
+			     new_iovecs, &new_iovecs_count,
+			     from_split_map, to_split_map, remote_addr);
 	assert(new_iovecs_count <= ND_MSG_INTERNAL_IOV_LIMIT);
 
 	entry->wait_completion.comp_count = 0;
@@ -912,6 +909,7 @@ void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res)
 	
 	/* Push the transmission of ACK into
 	 * the Send Queue for furhter handling */
+	ack_entry->send_entry = send_entry;
 	ofi_nd_queue_push(&ep->send_queue, &send_entry->queue_item);
 
 	/* Let's progress Send Queue for current EP if possible */
@@ -929,56 +927,13 @@ void ofi_nd_send_ack(nd_cq_entry *entry, struct nd_ep *ep)
 	assert(ep);
 	assert(ep->fid.fid.fclass == FI_CLASS_EP);
 	assert(entry);
-		
+
 	HRESULT hr;
-	struct nd_cq_entry *ack_entry = ofi_nd_buf_alloc_nd_cq_entry();
-	if (!ack_entry) {
-		ND_LOG_WARN(FI_LOG_EP_DATA, "Unable to allocate buffer "
-			    "for CQ entry");
-		return;
-	}
-	memset(ack_entry, 0, sizeof(*ack_entry));
-
-	ack_entry->data = entry->data;
-	ack_entry->flags = entry->flags;
-	ack_entry->domain = entry->domain;
-	ack_entry->context = entry->context;
-	ack_entry->iov_cnt = entry->iov_cnt;
-	ack_entry->seq = entry->seq;
-	ack_entry->state = NORMAL_STATE;
-
-	ack_entry->prefix = __ofi_nd_buf_alloc_nd_msgprefix(
-		&ep->domain->msgfooter);
-	if (!ack_entry->prefix) {
-		hr = ND_NO_MEMORY;
-		goto fn_fail;
-	}
-
-	nd_flow_cntrl_flags flow_control_flags = {
-		.req_ack = 0,
-		.ack = 1,
-		.empty = 1
-	};
-
-	struct nd_msgheader header_def = {
-		.data = entry->data,
-		.event = NORMAL_EVENT,
-		.flags = flow_control_flags,
-		.location_cnt = 0
-	};
-	ack_entry->prefix->header = header_def;
-	ack_entry->event = NORMAL_EVENT;
-	ack_entry->flow_cntrl_flags = flow_control_flags;
-
-	ND2_SGE sge = {
-		.Buffer = &ack_entry->prefix->header,
-		.BufferLength = (ULONG)sizeof(ack_entry->prefix->header),
-		.MemoryRegionToken = ack_entry->prefix->token
-	};
-
-	EnterCriticalSection(&ep->send_op.send_lock);
+	struct nd_cq_entry *ack_entry = NULL;
 	struct nd_queue_item *qentry = NULL;
 	nd_send_entry *send_entry = NULL;
+
+	EnterCriticalSection(&ep->send_op.send_lock);
 	if (ofi_nd_queue_peek(&ep->send_queue, &qentry)) {
 		send_entry = container_of(qentry, nd_send_entry, queue_item);
 		struct nd_msgheader *header = (struct nd_msgheader *)
@@ -986,6 +941,51 @@ void ofi_nd_send_ack(nd_cq_entry *entry, struct nd_ep *ep)
 		header->flags.ack = 1;
 	}
 	else {
+		ack_entry = ofi_nd_buf_alloc_nd_cq_entry();
+		if (!ack_entry) {
+			ND_LOG_WARN(FI_LOG_EP_DATA, "Unable to allocate buffer "
+				"for CQ entry");
+			return;
+		}
+		memset(ack_entry, 0, sizeof(*ack_entry));
+
+		ack_entry->data = entry->data;
+		ack_entry->flags = entry->flags;
+		ack_entry->domain = entry->domain;
+		ack_entry->context = entry->context;
+		ack_entry->iov_cnt = entry->iov_cnt;
+		ack_entry->seq = entry->seq;
+		ack_entry->state = NORMAL_STATE;
+
+		ack_entry->prefix = __ofi_nd_buf_alloc_nd_msgprefix(
+			&ep->domain->msgfooter);
+		if (!ack_entry->prefix) {
+			hr = ND_NO_MEMORY;
+			goto fn_fail;
+		}
+
+		nd_flow_cntrl_flags flow_control_flags = {
+			.req_ack = 0,
+			.ack = 1,
+			.empty = 1
+		};
+
+		struct nd_msgheader header_def = {
+			.data = entry->data,
+			.event = NORMAL_EVENT,
+			.flags = flow_control_flags,
+			.location_cnt = 0
+		};
+		ack_entry->prefix->header = header_def;
+		ack_entry->event = NORMAL_EVENT;
+		ack_entry->flow_cntrl_flags = flow_control_flags;
+
+		ND2_SGE sge = {
+			.Buffer = &ack_entry->prefix->header,
+			.BufferLength = (ULONG)sizeof(ack_entry->prefix->header),
+			.MemoryRegionToken = ack_entry->prefix->token
+		};
+
 		hr = ep->qp->lpVtbl->Send(ep->qp, ack_entry, &sge, 1, 0);
 		if (FAILED(hr))
 			ND_LOG_WARN(FI_LOG_CQ, "Send failed from Send Queue\n");
@@ -1008,116 +1008,50 @@ void ofi_nd_repack_iovecs(const struct iovec *from_iovecs, const size_t from_cou
 			  size_t to_split_map[ND_MSG_INTERNAL_IOV_LIMIT],
 			  uint64_t remote_addr[ND_MSG_INTERNAL_IOV_LIMIT])
 {
-	size_t to_offset = 0;
-	size_t from_offset = 0;
-	size_t result_offset = 0;
-
 	size_t from_iter = 0;
 	size_t to_iter = 0;
+	size_t new_iter = 0;
+	size_t to_offset = 0;
+	size_t from_offset = 0;
 
-	size_t result_count = 0;
-
-	while ((from_iter != (from_count)) && (to_iter != (to_count))) {
-		new_iovecs[result_count].iov_base =
-			(char *)to_iovecs[to_iter].iov_base + to_offset;
-		from_split_map[result_count] = from_iter;
-		to_split_map[result_count] = to_iter;
-		remote_addr[result_count] =
+	for(;;) {
+		new_iovecs[new_iter].iov_base = (char *)to_iovecs[to_iter].iov_base + to_offset;
+		remote_addr[new_iter] =
 			(uint64_t)((char *)from_iovecs[from_iter].iov_base + from_offset);
+		from_split_map[new_iter] = from_iter;
+		to_split_map[new_iter] = to_iter;
+		ND_LOG_DEBUG(FI_LOG_EP_DATA, "\nFL = %lu, FO = %lu, FI = %lu "
+			     "\nTL = %lu, TO = %lu, TI = %lu\n",
+			     from_iovecs[from_iter].iov_len, from_offset, from_iter,
+			     to_iovecs[to_iter].iov_len, to_offset, to_iter);
 
-		if ((to_iovecs[to_iter].iov_len - to_offset) < (from_iovecs[from_iter].iov_len - from_offset)) {
-			new_iovecs[result_count].iov_len = to_iovecs[to_iter].iov_len - to_offset;
-			from_offset += new_iovecs[result_count].iov_len;
+		if (from_iovecs[from_iter].iov_len - from_offset < to_iovecs[to_iter].iov_len - to_offset) {
+			new_iovecs[new_iter].iov_len = from_iovecs[from_iter].iov_len - from_offset;
+			to_offset += from_iovecs[from_iter].iov_len - from_offset;
+			from_iter++;
+			from_offset = 0;
+		}
+		else if (to_iovecs[to_iter].iov_len - to_offset < from_iovecs[from_iter].iov_len - from_offset) {
+			new_iovecs[new_iter].iov_len = to_iovecs[to_iter].iov_len - to_offset;
+			from_offset += to_iovecs[to_iter].iov_len - to_offset;
 			to_iter++;
 			to_offset = 0;
 		}
-		else if ((to_iovecs[to_iter].iov_len - to_offset) > (from_iovecs[from_iter].iov_len - from_offset)) {
-			new_iovecs[result_count].iov_len = from_iovecs[from_iter].iov_len - from_offset;
-			to_offset += new_iovecs[result_count].iov_len;
+		else {
+			new_iovecs[new_iter].iov_len = to_iovecs[to_iter].iov_len;
 			from_iter++;
-
-			from_offset = 0;
-		}
-		else { /* iov lengths are equal */
-			new_iovecs[result_count].iov_len = to_iovecs[to_iter].iov_len - to_offset;
+			to_iter++;
 			to_offset = 0;
 			from_offset = 0;
-			to_iter++;
-			from_iter++;
 		}
 
-		result_count++;
+		new_iter++;
+		/* Check that whether some iovecs was emptied */
+		if ((from_iter == from_count) && (!from_offset) ||
+		    ((to_iter == to_count) && (!to_offset)))
+			break;
 	}
-
-	if ((from_iter == (from_count)) && (to_iter == (to_count))) {
-		to_iter--;
-		from_iter--;
-		to_offset = 0;
-		from_offset = 0;
-
-		new_iovecs[result_count].iov_base =
-			(char *)to_iovecs[to_iter].iov_base;
-		new_iovecs[result_count].iov_len =
-			to_iovecs[to_iter].iov_len;
-		from_split_map[result_count] = from_iter;
-		to_split_map[result_count] = to_iter;
-		remote_addr[result_count] =
-			(uint64_t)((char *)from_iovecs[from_iter].iov_base);
-	}
-	else if (from_iter != (from_count)) {
-		to_iter--;
-		from_offset = 0;
-		while (from_iter != (from_count)) {
-			new_iovecs[result_count].iov_base =
-				(char *)to_iovecs[to_iter].iov_base + to_offset;
-			from_split_map[result_count] = from_iter;
-			to_split_map[result_count] = to_iter;
-			remote_addr[result_count] =
-				(uint64_t)((char *)from_iovecs[from_iter].iov_base + from_offset);
-
-			if ((to_iovecs[to_iter].iov_len - to_offset) > (from_iovecs[from_iter].iov_len - from_offset)) {
-				new_iovecs[result_count].iov_len = from_iovecs[from_iter].iov_len - from_offset;
-				to_offset += new_iovecs[result_count].iov_len;
-				from_iter++;
-			}
-			else { /* iov lengths are equal */
-				new_iovecs[result_count].iov_len = to_iovecs[to_iter].iov_len - to_offset;
-				to_offset = 0;
-				from_offset = 0;
-				from_iter++;
-			}
-
-			result_count++;
-		}
-	}
-	else if (to_iter != (to_count)) {
-		from_iter--;
-		to_offset = 0;
-		while (to_iter != (to_count)) {
-			new_iovecs[result_count].iov_base =
-				(char *)to_iovecs[to_iter].iov_base + to_offset;
-			from_split_map[result_count] = from_iter;
-			to_split_map[result_count] = to_iter;
-			remote_addr[result_count] =
-				(uint64_t)((char *)from_iovecs[from_iter].iov_base + from_offset);
-
-			if ((to_iovecs[to_iter].iov_len - to_offset) < (from_iovecs[from_iter].iov_len - from_offset)) {
-				new_iovecs[result_count].iov_len = to_iovecs[to_iter].iov_len - to_offset;
-				from_offset += new_iovecs[result_count].iov_len;
-				to_iter++;
-			}
-			else { /* iov lengths are equal */
-				new_iovecs[result_count].iov_len = to_iovecs[to_iter].iov_len - to_offset;
-				to_offset = 0;
-				from_offset = 0;
-				to_iter++;
-			}
-
-			result_count++;
-		}
-	}
-
-	*new_count = result_count;
+	*new_count = new_iter;
 }
 
 #endif /* _WIN32 */

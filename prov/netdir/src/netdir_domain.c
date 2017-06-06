@@ -485,17 +485,23 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 	assert(domain->fid.fid.fclass == FI_CLASS_DOMAIN);
 	assert(domain->cq);
 
-	HRESULT hr;
 	ND2_RESULT result[256];
 	DWORD count;
+	nd_unexpected_ctx *ctx;
 	do {
 		count = domain->cq->lpVtbl->GetResults(domain->cq, result, countof(result));
 		size_t i;
-
 		for (i = 0; i < count; i++) {
+			ND_LOG_DEBUG(FI_LOG_EP_DATA, "Domain event is %d with status %s\n",
+				     result[i].RequestType,
+				     ofi_nd_error_str(result[i].Status));
 			switch (result[i].RequestType) {
 			case Nd2RequestTypeReceive:
-				ofi_nd_unexp_event(&result[i]);
+				ctx = (nd_unexpected_ctx *)result[i].RequestContext;
+				if (!OFI_ND_IS_SERVICE_EVENT(ctx->entry->header.event))
+					ofi_nd_unexp_event(&result[i]);
+				else
+					ofi_nd_unexp_service_event(&result[i]);
 				break;
 			case Nd2RequestTypeSend:
 				ofi_nd_send_event(&result[i]);
@@ -507,7 +513,8 @@ static void ofi_nd_domain_event(struct nd_event_base* base, DWORD bytes)
 				ofi_nd_write_event(&result[i]);
 				break;
 			default:
-				assert(0);
+				/* shouldn't go here */
+				NODEFAULT;
 			}
 
 			/* Let's walk through sending queue to send data 

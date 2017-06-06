@@ -30,57 +30,55 @@
 * SOFTWARE.
 */
 
-#ifndef _FI_NETDIR_LOG_H_
-#define _FI_NETDIR_LOG_H_
+#ifndef _FI_NETDIR_UNEXP_H_
+#define _FI_NETDIR_UNEXP_H_
 
-#include <windows.h>
+#include <ndspi.h>
 
-#include "rdma/providers/fi_log.h"
+#include "netdir_iface.h"
+#include "netdir.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
-extern struct fi_provider ofi_nd_prov;
+#define OFI_ND_IS_SERVICE_EVENT(event)	\
+	((event) == LARGE_MSG_ACK)
 
-#define ND_LOG(level, subsystem, ...) FI_LOG(&ofi_nd_prov, level, subsystem, __VA_ARGS__)
+typedef struct nd_unexpected_buf {
+	struct nd_msgheader	header;
+	union received {
+		struct nd_msg_location	locations[];
+		char			data[];
+	} received_buf;
+} nd_unexpected_buf;
 
-#define ND_LOG_WARN(subsystem, ...) ND_LOG(FI_LOG_WARN, subsystem, __VA_ARGS__)
-#define ND_LOG_INFO(subsystem, ...) ND_LOG(FI_LOG_INFO, subsystem, __VA_ARGS__)
-#define ND_LOG_DEBUG(subsystem, ...) ND_LOG(FI_LOG_DEBUG, subsystem, __VA_ARGS__)
+typedef struct nd_unexpected_ctx {
+	struct nd_ep			*ep;
+	struct nd_unexpected_buf	*entry;
+} nd_unexpected_ctx;
 
-#define FI_ND_GUID_FORMAT "%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX"
-#define FI_ND_GUID_ARG(guid)					\
-	(guid).Data1, (guid).Data2, (guid).Data3,		\
-	(guid).Data4[0], (guid).Data4[1], (guid).Data4[2],	\
-	(guid).Data4[3], (guid).Data4[4], (guid).Data4[5],	\
-	(guid).Data4[6], (guid).Data4[7]
+typedef struct nd_unexpected_entry {
+	struct dlist_entry		ep_list;
+	struct dlist_entry		srx_list;
+	ND2_RESULT			result;
+	struct nd_unexpected_buf	*buf;
+	struct nd_ep			*ep;
+} nd_unexpected_entry;
 
-/* ofi_nd_strerror generates string message based on err value (GetLastError)
-   returned string is valid till next call of ofi_nd_strerror
-*/
-static inline char *ofi_nd_strerror(DWORD err, HMODULE module)
-{
-	static char *message = 0;
-
-	/* if message is allocated - free it */
-	if (message)
-		LocalFree(message);
-
-	size_t size = FormatMessageA(
-		FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		FORMAT_MESSAGE_FROM_SYSTEM |
-		FORMAT_MESSAGE_IGNORE_INSERTS |
-		(module ? FORMAT_MESSAGE_FROM_HMODULE : 0),
-		module, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		(LPSTR)&message, 0, NULL);
-
-	return size ? message : (char*)"";
-}
+HRESULT ofi_nd_unexp_init(struct nd_ep *ep);
+HRESULT ofi_nd_unexp_fini(struct nd_ep *ep);
+void ofi_nd_unexp_event(ND2_RESULT *result);
+void ofi_nd_unexp_service_event(ND2_RESULT *result);
+void ofi_nd_unexp_match(struct nd_ep *ep);
+void ofi_nd_srx_match(struct nd_srx *srx);
+HRESULT ofi_nd_unexp_repost(struct nd_ep *ep, struct nd_unexpected_buf *entry);
+HRESULT ofi_nd_unexp_run(struct nd_ep *ep);
+void ofi_nd_release_unexp_entry(nd_unexpected_entry *unexp);
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
-#endif /* _FI_NETDIR_LOG_H_ */
+#endif /* _FI_NETDIR_UNEXP_H_ */
 
