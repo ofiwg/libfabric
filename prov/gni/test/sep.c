@@ -111,7 +111,7 @@ void sep_setup_common(int av_type)
 	hints->mode = FI_LOCAL_MR;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
-	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->ep_attr->tx_ctx_cnt = ctx_cnt;
 	hints->ep_attr->rx_ctx_cnt = ctx_cnt;
@@ -361,7 +361,7 @@ void sep_setup_context(void)
 	hints->mode = FI_LOCAL_MR;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
-	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	hints->ep_attr->tx_ctx_cnt = 0;
@@ -2350,7 +2350,7 @@ Test(scalable, av_insert)
 	hints->mode = FI_LOCAL_MR;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
-	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->ep_attr->tx_ctx_cnt = NUMCONTEXTS;
 	hints->ep_attr->rx_ctx_cnt = NUMCONTEXTS;

@@ -51,6 +51,7 @@
 #include "gnix_rdma_headers.h"
 #include "gnix.h"
 #include "gnix_mr.h"
+#include "common.h"
 
 #define CHECK_HOOK(name, args...) \
 	({ \
@@ -145,6 +146,7 @@ static void _mr_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);

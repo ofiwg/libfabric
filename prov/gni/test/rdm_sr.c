@@ -284,6 +284,7 @@ void rdm_sr_setup(bool is_noreg, enum fi_progress pm)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->control_progress = pm;
 	hints->domain_attr->data_progress = pm;
@@ -312,6 +313,10 @@ void dgram_sr_setup(uint32_t version, bool is_noreg, enum fi_progress pm)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+		hints->domain_attr->mr_mode = FI_MR_BASIC;
+	else
+		hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->control_progress = pm;
 	hints->domain_attr->data_progress = pm;
@@ -379,6 +384,7 @@ void rdm_sr_bnd_ep_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->mode = mode_bits;
 	hints->fabric_attr->prov_name = strdup("gni");
@@ -465,7 +471,6 @@ static void rdm_sr_teardown_nounreg(void)
 {
 	rdm_sr_teardown_common(false);
 }
-
 
 void rdm_sr_init_data(char *buf, int len, char seed)
 {
@@ -558,7 +563,6 @@ static inline void rdm_sr_check_err_cqe(struct fi_cq_err_entry *cqe, void *ctx,
 			cr_assert(cqe->buf == NULL, "error CQE address "
 				"mismatch");
 
-
 		if (flags & FI_REMOTE_CQ_DATA)
 			cr_assert(cqe->data == data, "error CQE data mismatch");
 	} else {
@@ -593,7 +597,6 @@ static inline void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 			cr_assert(cqe->buf == addr, "CQE address mismatch");
 		else
 			cr_assert(cqe->buf == NULL, "CQE address mismatch");
-
 
 	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
 	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps))
@@ -696,7 +699,6 @@ static inline struct fi_cq_err_entry rdm_sr_check_canceled(struct fid_cq *cq)
 	 * when using api version >= 1.5.
 	 */
 	cr_assert(ee.err_data != &err_ep_name, "Invalid err_data ptr");
-
 
 	/* To test API-1.1: Reporting of unknown source addresses */
 	if ((hints->caps & FI_SOURCE) && ee.err == FI_EADDRNOTAVAIL) {

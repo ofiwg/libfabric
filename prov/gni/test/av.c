@@ -139,6 +139,7 @@ static void av_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 

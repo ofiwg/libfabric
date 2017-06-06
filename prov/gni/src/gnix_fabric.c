@@ -245,7 +245,7 @@ static struct fi_info *_gnix_allocinfo(void)
 
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
-	gnix_info->domain_attr->mr_mode = OFI_MR_BASIC_MAP;
+	gnix_info->domain_attr->mr_mode = FI_MR_BASIC | OFI_MR_BASIC_MAP;
 	gnix_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	gnix_info->domain_attr->max_ep_tx_ctx = GNIX_SEP_MAX_CNT;
@@ -493,10 +493,6 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			 * capabilities. */
 			if ((hints->caps & GNIX_EP_CAPS_FULL) != hints->caps)
 				goto err;
-
-			/* The provider may silently enable secondary
-			 * capabilities that do not introduce any overhead. */
-			gnix_info->caps = hints->caps | GNIX_EP_SEC_CAPS;
 		}
 
 		GNIX_DEBUG(FI_LOG_FABRIC, "Passed caps check gnix_info->caps = 0x%016lx\n",
@@ -552,20 +548,13 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				gnix_info->domain_attr->data_progress =
 					hints->domain_attr->data_progress;
 
-
-			switch (hints->domain_attr->mr_mode) {
-			case FI_MR_UNSPEC:
-			case FI_MR_BASIC:
-				if (FI_VERSION_GE(version, FI_VERSION(1, 5))) {
-					hints->domain_attr->mr_mode =
-						OFI_MR_BASIC_MAP;
-				}
-				break;
-			case FI_MR_SCALABLE:
-				GNIX_WARN(FI_LOG_FABRIC,
-						  "GNI provider doesn't currently support MR_SCALABLE\n");
+			if (ofi_check_mr_mode(version,
+					gnix_info->domain_attr->mr_mode,
+					hints->domain_attr->mr_mode) != FI_SUCCESS) {
 				goto err;
 			}
+
+			gnix_info->domain_attr->mr_mode = hints->domain_attr->mr_mode;
 
 			switch (hints->domain_attr->threading) {
 			case FI_THREAD_COMPLETION:
@@ -603,7 +592,16 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	ret = __gnix_getinfo_resolve_node(node, service, flags, hints,
 					  gnix_info);
 	if (ret != FI_SUCCESS)
-		goto  err;
+		goto err;
+
+	ofi_alter_info(gnix_info, hints, version);
+
+	/* The provider may silently enable secondary
+	 * capabilities that do not introduce any overhead. */
+	if (hints && hints->caps)
+	    gnix_info->caps = hints->caps | GNIX_EP_SEC_CAPS;
+	else
+		gnix_info->caps = GNIX_EP_CAPS_FULL | GNIX_EP_SEC_CAPS;
 
 	gnix_info->mode = mode;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);

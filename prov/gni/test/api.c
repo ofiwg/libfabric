@@ -105,6 +105,7 @@ void rdm_api_setup_ep(void)
 
 	/* Get info about fabric services with the provided hints */
 	for (i = 0; i < NUMEPS; i++) {
+		hints[i]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[i],
 				 &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
@@ -218,7 +219,7 @@ void rdm_api_setup(void)
 		hints[i]->domain_attr->cq_data_size = NUMEPS * 2;
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
 		hints[i]->mode = mode_bits;
-		hints[i]->domain_attr->mr_mode = FI_MR_BASIC;
+		hints[i]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 		hints[i]->fabric_attr->prov_name = strdup("gni");
 	}
 }
@@ -454,6 +455,7 @@ Test(api, dom_caps)
 
 	hints[0]->mode = mode_bits;
 	hints[0]->fabric_attr->prov_name = strdup("gni");
+	hints[0]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 
 	/* we only support REMOTE_COMM */
 	hints[0]->domain_attr->caps = FI_LOCAL_COMM;

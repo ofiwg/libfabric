@@ -66,6 +66,7 @@ void vc_lookup_setup(int av_type, int av_size)
 	hints = fi_allocinfo();
 
 	hints->mode = mode_bits;
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	/* Create endpoint */

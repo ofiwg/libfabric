@@ -110,6 +110,7 @@ void common_setup(void)
 
 	dgm_fail = 0;
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
@@ -324,6 +325,7 @@ void common_setup_1dom(void)
 
 	dgm_fail = 0;
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |

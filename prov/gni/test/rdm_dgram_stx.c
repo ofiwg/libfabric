@@ -109,6 +109,7 @@ static void common_setup_stx(void)
 
 	dgm_fail = 0;
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	hints->mode = mode_bits;
@@ -336,6 +337,7 @@ static void common_setup_stx_1dom(void)
 
 	dgm_fail = 0;
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	hints->mode = mode_bits;

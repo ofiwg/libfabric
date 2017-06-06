@@ -41,6 +41,7 @@
 #include <criterion/logging.h>
 #include "gnix_rdma_headers.h"
 #include "gnix.h"
+#include "fi_util.h"
 
 #define BLUE "\x1b[34m"
 #define COLOR_RESET "\x1b[0m"
@@ -66,4 +67,5 @@ static inline struct gnix_fid_ep *get_gnix_ep(struct fid_ep *fid_ep)
 	return container_of(fid_ep, struct gnix_fid_ep, ep_fid);
 }
 
+#define GNIX_DEFAULT_MR_MODE OFI_MR_BASIC_MAP
 #endif /* PROV_GNI_TEST_COMMON_H_ */
