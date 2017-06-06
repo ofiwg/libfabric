@@ -1,0 +1,21 @@
+image: Visual Studio 2015
+
+build:
+  project: fabtests.sln
+
+configuration:
+  - Debug
+  - Release
+
+install:
+  - cd ..
+  - git clone https://github.com/ofiwg/libfabric
+  - cd libfabric
+  - ps: .appveyor.ps1 -Verbose
+  - msbuild libfabric.sln
+  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
+  - cd ..\fabtests
+
+test_script:
+  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
+  - scripts\runfabtests.cmd
