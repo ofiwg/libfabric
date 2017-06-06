@@ -1426,7 +1426,9 @@ static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
 		if (attr->mr_mode == FI_MR_UNSPEC)
 			attr->mr_mode = FI_MR_SCALABLE;
 	} else {
-		attr->mr_mode = sock_domain_attr.mr_mode;
+		if ((attr->mr_mode != FI_MR_BASIC) &&
+		    (attr->mr_mode != FI_MR_SCALABLE))
+			attr->mr_mode = 0;
 	}
 
 	if (attr->cq_cnt == 0)
