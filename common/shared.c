@@ -904,8 +904,12 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 
 	if (opts.dst_addr) {
 		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
-		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
-				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
+		if ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
+		    (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+			rma_iov->addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
+		} else {
+			rma_iov->addr = 0;
+		}
 		rma_iov->key = fi_mr_key(mr);
 		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
 		if (ret)
@@ -930,8 +934,12 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 			return ret;
 
 		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
-		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
-				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
+		if ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
+		    (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+			rma_iov->addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
+		} else {
+			rma_iov->addr = 0;
+		}
 		rma_iov->key = fi_mr_key(mr);
 		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
 	}
