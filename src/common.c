@@ -299,13 +299,14 @@ sa_sin6:
 
 static uint32_t ofi_addr_format(const char *str)
 {
-	char *fmt = NULL;
+	char fmt[16];
 	int ret;
 
-	ret = sscanf(str, "%m[^:]://", &fmt);
-	if ((ret != 1) || !fmt)
+	ret = sscanf(str, "%16[^:]://", fmt);
+	if (ret != 1)
 		return FI_FORMAT_UNSPEC;
 
+	fmt[sizeof(fmt) - 1] = '\0';
 	if (!strcmp(fmt, "inet"))
 		return FI_SOCKADDR_IN;
 	else if (!strcmp(fmt, "inet6"))
@@ -339,7 +340,7 @@ static int ofi_str_to_psmx(const char *str, void **addr, size_t *len)
 static int ofi_str_to_sin(const char *str, void **addr, size_t *len)
 {
 	struct sockaddr_in *sin;
-	char *ip = NULL;
+	char ip[64];
 	int ret;
 
 	*len = sizeof(*sin);
@@ -349,28 +350,27 @@ static int ofi_str_to_sin(const char *str, void **addr, size_t *len)
 	sin->sin_family = AF_INET;
 	ret = sscanf(str, "%*[^:]://:%" SCNu16, &sin->sin_port);
 	if (ret == 1)
-		goto match;
+		goto match_port;
 
-	ret = sscanf(str, "%*[^:]://%m[^:]:%" SCNu16, &ip, &sin->sin_port);
+	ret = sscanf(str, "%*[^:]://%64[^:]:%" SCNu16, ip, &sin->sin_port);
 	if (ret == 2)
-		goto match;
+		goto match_ip;
 
-	ret = sscanf(str, "%*[^:]://%m[^:/]", &ip);
+	ret = sscanf(str, "%*[^:]://%64[^:/]", ip);
 	if (ret == 1)
-		goto match;
+		goto match_ip;
 
 err:
-	free(ip);
 	free(sin);
 	return -FI_EINVAL;
 
-match:
-	if (ip) {
-		ret = inet_pton(AF_INET, ip, &sin->sin_addr);
-		if (ret != 1)
-			goto err;
-		free(ip);
-	}
+match_ip:
+	ip[sizeof(ip) - 1] = '\0';
+	ret = inet_pton(AF_INET, ip, &sin->sin_addr);
+	if (ret != 1)
+		goto err;
+
+match_port:
 	sin->sin_port = htons(sin->sin_port);
 	*addr = sin;
 	return 0;
@@ -379,7 +379,7 @@ match:
 static int ofi_str_to_sin6(const char *str, void **addr, size_t *len)
 {
 	struct sockaddr_in6 *sin6;
-	char *ip = NULL;
+	char ip[64];
 	int ret;
 
 	*len = sizeof(*sin6);
@@ -389,28 +389,27 @@ static int ofi_str_to_sin6(const char *str, void **addr, size_t *len)
 	sin6->sin6_family = AF_INET6;
 	ret = sscanf(str, "%*[^:]://:%" SCNu16, &sin6->sin6_port);
 	if (ret == 1)
-		goto match;
+		goto match_port;
 
-	ret = sscanf(str, "%*[^:]://[%m[^]]]:%" SCNu16, &ip, &sin6->sin6_port);
+	ret = sscanf(str, "%*[^:]://[%64[^]]]:%" SCNu16, ip, &sin6->sin6_port);
 	if (ret == 2)
-		goto match;
+		goto match_ip;
 
-	ret = sscanf(str, "%*[^:]://[%m[^]]", &ip);
+	ret = sscanf(str, "%*[^:]://[%64[^]]", ip);
 	if (ret == 1)
-		goto match;
+		goto match_ip;
 
 err:
-	free(ip);
 	free(sin6);
 	return -FI_EINVAL;
 
-match:
-	if (ip) {
-		ret = inet_pton(AF_INET6, ip, &sin6->sin6_addr);
-		if (ret != 1)
-			goto err;
-		free(ip);
-	}
+match_ip:
+	ip[sizeof(ip) - 1] = '\0';
+	ret = inet_pton(AF_INET6, ip, &sin6->sin6_addr);
+	if (ret != 1)
+		goto err;
+
+match_port:
 	sin6->sin6_port = htons(sin6->sin6_port);
 	*addr = sin6;
 	return 0;
