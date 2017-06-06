@@ -171,6 +171,7 @@ struct util_domain {
 	struct fid_domain	domain_fid;
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
+	struct util_eq		*eq;
 	fastlock_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
@@ -185,6 +186,7 @@ struct util_domain {
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		     struct util_domain *domain, void *context);
+int ofi_domain_bind_eq(struct util_domain *domain, struct util_eq *eq);
 int ofi_domain_close(struct util_domain *domain);
 
 
@@ -198,10 +200,13 @@ typedef void (*ofi_ep_progress_func)(struct util_ep *util_ep);
 struct util_ep {
 	struct fid_ep		ep_fid;
 	struct util_domain	*domain;
+
 	struct util_av		*av;
 	struct dlist_entry	av_entry;
 	struct util_cq		*rx_cq;
 	struct util_cq		*tx_cq;
+	struct util_eq		*eq;
+
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
@@ -210,6 +215,7 @@ struct util_ep {
 };
 
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);
+int ofi_ep_bind_eq(struct util_ep *ep, struct util_eq *eq);
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		      struct fi_info *info, struct util_ep *ep, void *context,
 		      ofi_ep_progress_func progress);
@@ -526,7 +532,7 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 /*
  * Attributes and capabilities
  */
-#define FI_PRIMARY_CAPS	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | \
+#define FI_PRIMARY_CAPS	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_MULTICAST | \
 			 FI_NAMED_RX_CTX | FI_DIRECTED_RECV | \
 			 FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
 			 FI_REMOTE_READ | FI_REMOTE_WRITE)

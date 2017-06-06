@@ -186,24 +186,24 @@ uint64_t fi_gettime_us(void);
 #define AF_IB 27
 #endif
 
-static inline size_t ofi_sizeofaddr(struct sockaddr *address)
+static inline size_t ofi_sizeofaddr(const struct sockaddr *address)
 {
 	return (address->sa_family == AF_INET ?
 		sizeof(struct sockaddr_in) :
 		sizeof(struct sockaddr_in6));
 }
 
-static inline int ofi_equals_ipaddr(struct sockaddr_in *addr1,
-                             struct sockaddr_in *addr2)
+static inline int ofi_equals_ipaddr(const struct sockaddr_in *addr1,
+				    const struct sockaddr_in *addr2)
 {
         return (addr1->sin_addr.s_addr == addr2->sin_addr.s_addr);
 }
 
-static inline int ofi_equals_sockaddr(struct sockaddr_in *addr1,
-                             struct sockaddr_in *addr2)
+static inline int ofi_equals_sockaddr(const struct sockaddr_in *addr1,
+				      const struct sockaddr_in *addr2)
 {
         return (ofi_equals_ipaddr(addr1, addr2) &&
-                (addr1->sin_port == addr2->sin_port));
+        	(addr1->sin_port == addr2->sin_port));
 }
 
 static inline int ofi_translate_addr_format(int family)

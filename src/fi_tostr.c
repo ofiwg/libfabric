@@ -102,6 +102,7 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_RMA);
 	IFFLAGSTR(flags, FI_TAGGED);
 	IFFLAGSTR(flags, FI_ATOMIC);
+	IFFLAGSTR(flags, FI_MULTICAST);
 
 	IFFLAGSTR(flags, FI_READ);
 	IFFLAGSTR(flags, FI_WRITE);
@@ -122,6 +123,7 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_INJECT_COMPLETE);
 	IFFLAGSTR(flags, FI_TRANSMIT_COMPLETE);
 	IFFLAGSTR(flags, FI_DELIVERY_COMPLETE);
+	IFFLAGSTR(flags, FI_AFFINITY);
 
 	fi_remove_comma(buf);
 }
@@ -136,6 +138,9 @@ static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 	CASEENUMSTR(FI_SOCKADDR_IB);
 	CASEENUMSTR(FI_ADDR_PSMX);
 	CASEENUMSTR(FI_ADDR_GNI);
+	CASEENUMSTR(FI_ADDR_BGQ);
+	CASEENUMSTR(FI_ADDR_MLX);
+	CASEENUMSTR(FI_ADDR_STR);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");
@@ -192,6 +197,10 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 
 static void fi_tostr_caps(char *buf, uint64_t caps)
 {
+	IFFLAGSTR(caps, FI_SOURCE_ERR);
+	IFFLAGSTR(caps, FI_LOCAL_COMM);
+	IFFLAGSTR(caps, FI_REMOTE_COMM);
+	IFFLAGSTR(caps, FI_SHARED_AV);
 	IFFLAGSTR(caps, FI_NUMERICHOST);
 	IFFLAGSTR(caps, FI_RMA_EVENT);
 	IFFLAGSTR(caps, FI_SOURCE);

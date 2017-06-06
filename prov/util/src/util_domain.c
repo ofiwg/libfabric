@@ -37,6 +37,19 @@
 #include <fi_util.h>
 
 
+int ofi_domain_bind_eq(struct util_domain *domain, struct util_eq *eq)
+{
+	if (domain->eq) {
+		FI_WARN(domain->prov, FI_LOG_DOMAIN,
+			"duplicate EQ binding\n");
+		return -FI_EINVAL;
+	}
+
+	domain->eq = eq;
+	ofi_atomic_inc32(&eq->ref);
+	return 0;
+}
+
 int ofi_domain_close(struct util_domain *domain)
 {
 	if (ofi_atomic_get32(&domain->ref))

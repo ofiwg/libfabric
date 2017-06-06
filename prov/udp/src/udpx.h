@@ -40,6 +40,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -64,7 +65,7 @@
 
 
 #define UDPX_MAJOR_VERSION 1
-#define UDPX_MINOR_VERSION 0
+#define UDPX_MINOR_VERSION 1
 
 
 extern struct fi_provider udpx_prov;
@@ -105,6 +106,7 @@ struct udpx_ep {
 	struct udpx_rx_cirq	*rxq;    /* protected by rx_cq lock */
 	int			sock;
 	int			is_bound;
+	ofi_atomic32_t		ref;
 };
 
 int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -113,6 +115,15 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
+
+
+struct udpx_mc {
+	struct fid_mc		mc_fid;
+	union {
+		struct sockaddr_in	sin;
+	} addr;
+	struct udpx_ep		*ep;
+};
 
 
 #endif

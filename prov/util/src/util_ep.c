@@ -36,6 +36,17 @@
 #include <fi_enosys.h>
 #include <fi_util.h>
 
+
+int ofi_ep_bind_eq(struct util_ep *ep, struct util_eq *eq)
+{
+	if (ep->eq)
+		ofi_atomic_dec32(&ep->eq->ref);
+
+	ep->eq = eq;
+	ofi_atomic_inc32(&eq->ref);
+	return 0;
+}
+
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av)
 {
 	if (util_ep->av) {
@@ -72,9 +83,13 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 
 	ep->ep_fid.fid.fclass = FI_CLASS_EP;
 	ep->ep_fid.fid.context = context;
+	ep->caps = info->caps;
 	ep->domain = util_domain;
 	ep->progress = progress;
+	ep->caps = info->caps;
 	ofi_atomic_inc32(&util_domain->ref);
+	if (util_domain->eq)
+		ofi_ep_bind_eq(ep, util_domain->eq);
 	fastlock_init(&ep->lock);
 	return 0;
 }
@@ -90,6 +105,8 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 		ofi_atomic_dec32(&util_ep->av->ref);
 	}
 
+	if (util_ep->eq)
+		ofi_atomic_dec32(&util_ep->eq->ref);
 	ofi_atomic_dec32(&util_ep->domain->ref);
 	return 0;
 }

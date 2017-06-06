@@ -34,7 +34,7 @@
 
 
 struct fi_tx_attr udpx_tx_attr = {
-	.caps = FI_MSG | FI_SEND,
+	.caps = FI_MSG | FI_SEND | FI_MULTICAST,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = 1472,
 	.size = 1024,
@@ -42,7 +42,7 @@ struct fi_tx_attr udpx_tx_attr = {
 };
 
 struct fi_rx_attr udpx_rx_attr = {
-	.caps = FI_MSG | FI_RECV | FI_SOURCE,
+	.caps = FI_MSG | FI_RECV | FI_SOURCE | FI_MULTICAST,
 	.comp_order = FI_ORDER_STRICT,
 	.total_buffered_recv = (1 << 16),
 	.size = 1024,
@@ -80,7 +80,7 @@ struct fi_fabric_attr udpx_fabric_attr = {
 };
 
 struct fi_info udpx_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE, /* | FI_MULTI_RECV, */
+	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_MULTICAST,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &udpx_tx_attr,
 	.rx_attr = &udpx_rx_attr,
