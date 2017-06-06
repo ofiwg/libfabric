@@ -369,8 +369,9 @@ static uint64_t get_mr_key()
 {
 	static uint64_t user_key = FT_MR_KEY;
 
-	return fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
-		user_key++ : 0;
+	return ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
+		(fi->domain_attr->mr_mode & FI_MR_PROV_KEY)) ?
+		0 : user_key++;
 }
 
 static int alloc_ep_res(struct fi_info *fi)
