@@ -801,6 +801,21 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 	return 0;
 }
 
+static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
+			    uint64_t attr_caps)
+{
+	uint64_t caps;
+
+	if (!hint_caps) {
+		caps = (info_caps & attr_caps & FI_PRIMARY_CAPS) |
+		       (attr_caps & FI_SECONDARY_CAPS);
+	} else {
+		caps = (hint_caps & FI_PRIMARY_CAPS) |
+		       (attr_caps & FI_SECONDARY_CAPS);
+	}
+	return caps;
+}
+
 static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 			     const struct fi_domain_attr *hints,
 			     uint64_t info_caps, uint32_t api_version)
@@ -808,11 +823,9 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
 		attr->mr_mode = attr->mr_mode ? FI_MR_BASIC : FI_MR_SCALABLE;
 
-	if (!hints) {
-		attr->caps = (info_caps & attr->caps & FI_PRIMARY_CAPS) |
-			     (attr->caps & FI_SECONDARY_CAPS);
+	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
+	if (!hints)
 		return;
-	}
 
 	if (hints->threading)
 		attr->threading = hints->threading;
@@ -822,8 +835,6 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 		attr->data_progress = hints->data_progress;
 	if (hints->av_type)
 		attr->av_type = hints->av_type;
-	attr->caps = (hints->caps & FI_PRIMARY_CAPS) |
-		     (attr->caps & FI_SECONDARY_CAPS);
 }
 
 static void fi_alter_ep_attr(struct fi_ep_attr *attr,
@@ -842,15 +853,11 @@ static void fi_alter_rx_attr(struct fi_rx_attr *attr,
 			     const struct fi_rx_attr *hints,
 			     uint64_t info_caps)
 {
-	if (!hints) {
-		attr->caps = (info_caps & attr->caps & FI_PRIMARY_CAPS) |
-			     (attr->caps & FI_SECONDARY_CAPS);
+	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
+	if (!hints)
 		return;
-	}
 
 	attr->op_flags = hints->op_flags;
-	attr->caps = (hints->caps & FI_PRIMARY_CAPS) |
-		     (attr->caps & FI_SECONDARY_CAPS);
 	attr->total_buffered_recv = hints->total_buffered_recv;
 	if (hints->size)
 		attr->size = hints->size;
@@ -862,15 +869,11 @@ static void fi_alter_tx_attr(struct fi_tx_attr *attr,
 			     const struct fi_tx_attr *hints,
 			     uint64_t info_caps)
 {
-	if (!hints) {
-		attr->caps = (info_caps & attr->caps & FI_PRIMARY_CAPS) |
-			     (attr->caps & FI_SECONDARY_CAPS);
+	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
+	if (!hints)
 		return;
-	}
 
 	attr->op_flags = hints->op_flags;
-	attr->caps = (hints->caps & FI_PRIMARY_CAPS) |
-		     (attr->caps & FI_SECONDARY_CAPS);
 	if (hints->inject_size)
 		attr->inject_size = hints->inject_size;
 	if (hints->size)
@@ -893,8 +896,7 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		return;
 
 	for (; info; info = info->next) {
-		info->caps = (hints->caps & FI_PRIMARY_CAPS) |
-			     (info->caps & FI_SECONDARY_CAPS);
+		info->caps = ofi_get_caps(info->caps, hints->caps, info->caps);
 
 		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
 			if (info->domain_attr->mr_mode & FI_MR_LOCAL)
