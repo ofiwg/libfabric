@@ -79,7 +79,7 @@
 #include "gnix_auth_key.h"
 
 #define GNI_MAJOR_VERSION 1
-#define GNI_MINOR_VERSION 0
+#define GNI_MINOR_VERSION 1
 
 /*
  * useful macros
