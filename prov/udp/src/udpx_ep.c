@@ -70,12 +70,18 @@ static int udpx_mc_close(struct fid *fid)
 {
 	struct udpx_mc *mc;
 	struct ip_mreq mreq;
+	int ret;
 
 	mc = container_of(fid, struct udpx_mc, mc_fid.fid);
 	mreq.imr_multiaddr = mc->addr.sin.sin_addr;
 	mreq.imr_interface.s_addr = INADDR_ANY;
-	setsockopt(mc->ep->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-		   &mreq, sizeof(mreq));
+	ret = setsockopt(mc->ep->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
+			 &mreq, sizeof(mreq));
+	if (ret) {
+		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "leave failed %s\n",
+			strerror(errno));
+		return -errno;
+	}
 
 	ofi_atomic_dec32(&mc->ep->ref);
 	free(mc);
