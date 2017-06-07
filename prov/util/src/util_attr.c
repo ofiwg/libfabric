@@ -743,7 +743,8 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 	 * The provider is assumed only to set FI_MR_LOCAL correctly.
 	 */
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)) ||
-	    !(user_info->domain_attr->mr_mode & FI_MR_LOCAL)) {
+	    (user_info->domain_attr &&
+	     !(user_info->domain_attr->mr_mode & FI_MR_LOCAL))) {
 		prov_mode = (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
 			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
 	} else {
