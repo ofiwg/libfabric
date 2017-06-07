@@ -527,7 +527,7 @@ int _gnix_ep_init_vc(struct gnix_fid_ep *ep_priv)
 		GNIX_DEBUG(FI_LOG_EP_CTRL,
 			   "ep_priv->vc_table = %p, ep_priv->vc_table->vector = %p\n",
 			   ep_priv->vc_table, ep_priv->vc_table->vector);
-                if (ret != FI_SUCCESS) {
+		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL, "_gnix_vec_init returned %s\n",
 				  fi_strerror(ret));
 			goto err;
@@ -709,7 +709,6 @@ gnix_ep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return _gnix_send(gnix_ep, (uint64_t)buf, len, NULL, dest_addr,
 			  NULL, flags, data, 0);
 }
-
 
 /*******************************************************************************
  * EP RMA API function implementations.
@@ -1061,7 +1060,6 @@ DIRECT_FN STATIC ssize_t gnix_ep_tinjectdata(struct fid_ep *ep, const void *buf,
 	return _ep_inject(ep, buf, len, data, dest_addr,
 			  FI_TAGGED | FI_REMOTE_CQ_DATA, tag);
 }
-
 
 /*******************************************************************************
  * EP atomic API implementation.
@@ -1468,7 +1466,6 @@ DIRECT_FN STATIC ssize_t gnix_ep_atomic_compwritemsg(struct fid_ep *ep,
  * Base EP API function implementations.
  ******************************************************************************/
 
-
 DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 {
 	int ret = FI_SUCCESS;
@@ -1531,7 +1528,6 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 err:
 	return ret;
 }
-
 
 static int __destruct_tag_storages(struct gnix_fid_ep *ep)
 {
@@ -2245,12 +2241,10 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 
-#if 0 /* TODO: Enable after 1.5 version update */
 	if (FI_VERSION_LT(domain_priv->fabric->fab_fid.api_version,
 		FI_VERSION(1, 5)) &&
 		(info->ep_attr->auth_key || info->ep_attr->auth_key_size))
 		return -FI_EINVAL;
-#endif
 
 	if (info->ep_attr->auth_key_size) {
 		auth_key = GNIX_GET_AUTH_KEY(info->ep_attr->auth_key,

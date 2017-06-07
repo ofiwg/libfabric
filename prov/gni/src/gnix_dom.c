@@ -539,7 +539,6 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 	return FI_SUCCESS;
 }
 
-
 static struct fi_gni_ops_domain gnix_ops_domain = {
 	.set_val = __gnix_dom_ops_set_val,
 	.get_val = __gnix_dom_ops_get_val,
@@ -579,11 +578,9 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	fabric_priv = container_of(fabric, struct gnix_fid_fabric, fab_fid);
 
-#if 0 /* TODO: Enable after 1.5 version update */
 	if (FI_VERSION_LT(fabric->api_version, FI_VERSION(1, 5)) &&
 		(info->domain_attr->auth_key_size || info->domain_attr->auth_key))
 			return -FI_EINVAL;
-#endif
 
 	auth_key = GNIX_GET_AUTH_KEY(info->domain_attr->auth_key,
 			info->domain_attr->auth_key_size);

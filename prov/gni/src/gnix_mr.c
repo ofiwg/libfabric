@@ -289,7 +289,6 @@ DIRECT_FN int gnix_mr_regv(struct fid *fid, const struct iovec *iov,
 	return gnix_mr_regattr(fid, &attr, flags, mr);
 }
 
-
 DIRECT_FN int gnix_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	uint64_t flags, struct fid_mr **mr)
 {
@@ -305,13 +304,10 @@ DIRECT_FN int gnix_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (domain->mr_iov_limit < attr->iov_count)
 		return -FI_EOPNOTSUPP;
 
-#if 0 /* TODO: Enable after 1.5 version update */
 	if (FI_VERSION_LT(domain->fabric->fab_fid.api_version,
 		FI_VERSION(1, 5)) &&
 		(attr->auth_key || attr->auth_key_size))
 		return -FI_EINVAL;
-#endif
-
 
 	if (attr->auth_key_size) {
 		auth_key = GNIX_GET_AUTH_KEY(attr->auth_key, attr->auth_key_size);
@@ -419,7 +415,7 @@ static inline void *__gnix_generic_register(
 		}
 		_gnix_ref_get(nic);
 		pthread_mutex_unlock(&gnix_nic_list_lock);
-        }
+	    }
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	grc = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t) address,
@@ -522,7 +518,6 @@ static int __gnix_destruct_registration(void *context)
 	return GNI_RC_SUCCESS;
 }
 
-
 #ifdef HAVE_UDREG
 void *__udreg_register(void *addr, uint64_t length, void *context)
 {
@@ -547,7 +542,6 @@ void *__udreg_register(void *addr, uint64_t length, void *context)
 		GNI_MEM_READWRITE, -1, auth_key);
 }
 
-
 uint32_t __udreg_deregister(void *registration, void *context)
 {
 	gni_return_t grc;
@@ -559,11 +553,10 @@ uint32_t __udreg_deregister(void *registration, void *context)
 	return (grc == GNI_RC_SUCCESS) ? 0 : 1;
 }
 
-
 /* Called via dreg when a cache is destroyed. */
 void __udreg_cache_destructor(void *context)
 {
-    /*  Nothing needed here. */
+	/*  Nothing needed here. */
 }
 
 static int __udreg_init(struct gnix_fid_domain *domain,
@@ -882,7 +875,6 @@ struct gnix_mr_ops cache_mr_ops = {
 	.flush_cache = __cache_flush,
 };
 
-
 static int __basic_mr_init(struct gnix_fid_domain *domain,
 		struct gnix_auth_key *auth_key)
 {
@@ -948,7 +940,6 @@ struct gnix_mr_ops basic_mr_ops = {
 	.flush_cache = NULL, // unsupported since there is no caching here
 };
 
-
 int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
 {
 	if (type < 0 || type >= GNIX_MR_MAX_TYPE)
@@ -972,7 +963,6 @@ int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
 	domain->mr_cache_type = type;
 	return FI_SUCCESS;
 }
-
 
 int _gnix_flush_registration_cache(struct gnix_fid_domain *domain)
 {
