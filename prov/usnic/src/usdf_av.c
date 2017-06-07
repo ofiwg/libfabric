@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -311,9 +311,8 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 
 	USDF_TRACE_SYS(AV, "\n");
 
-	if ((flags & ~FI_MORE) != 0) {
+	if ((flags & ~(FI_MORE)) != 0)
 		return -FI_EBADFLAGS;
-	}
 
 	av = av_ftou(fav);
 	fp = av->av_domain->dom_fabric;
@@ -414,15 +413,28 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 	struct usdf_dest *dest;
 	int ret_count;
 	int ret;
+	int *errors;
+	uint32_t api_version;
 	size_t i;
 
 	USDF_TRACE_SYS(AV, "\n");
 
-	if ((flags & ~FI_MORE) != 0) {
-		return -FI_EBADFLAGS;
-	}
-
+	ret_count = 0;
 	av = av_ftou(fav);
+	api_version = av->av_domain->dom_fabric->fab_attr.fabric->api_version;
+	errors = context;
+
+	/* Screen out unsupported flags. */
+	if ((flags & ~(FI_MORE|FI_SYNC_ERR)) != 0)
+		return -FI_EBADFLAGS;
+
+	/* If user set FI_SYNC_ERR, we have to report back to user's buffer. */
+	if (flags & FI_SYNC_ERR) {
+		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
+			return -FI_EBADFLAGS;
+
+		memset(errors, 0, sizeof(int) * count);
+	}
 
 	ret_count = 0;
 	sin = addr;
@@ -448,6 +460,9 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 					 ds_addresses_entry);
 			++ret_count;
 		} else {
+			if (flags & FI_SYNC_ERR)
+				errors[i] = -ret;
+
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
 			free(dest);
 		}
