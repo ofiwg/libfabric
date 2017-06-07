@@ -484,6 +484,8 @@ int usdf_endpoint_open(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av_o, void *context);
+int usdf_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
 
 /* Domain name functionality */
 int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,

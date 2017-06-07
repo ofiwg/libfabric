@@ -125,6 +125,23 @@ static const struct fi_domain_attr rdm_dflt_domain_attr = {
 	.mr_iov_limit = USDF_RDM_MR_IOV_LIMIT,
 };
 
+static struct fi_ops_atomic usdf_rdm_atomic_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = fi_no_atomic_write,
+	.writev = fi_no_atomic_writev,
+	.writemsg = fi_no_atomic_writemsg,
+	.inject = fi_no_atomic_inject,
+	.readwrite = fi_no_atomic_readwrite,
+	.readwritev = fi_no_atomic_readwritev,
+	.readwritemsg = fi_no_atomic_readwritemsg,
+	.compwrite = fi_no_atomic_compwrite,
+	.compwritev = fi_no_atomic_compwritev,
+	.compwritemsg = fi_no_atomic_compwritemsg,
+	.writevalid = fi_no_atomic_writevalid,
+	.readwritevalid = fi_no_atomic_readwritevalid,
+	.compwritevalid = fi_no_atomic_compwritevalid,
+};
+
 /*******************************************************************************
  * Fill functions for attributes
  ******************************************************************************/
@@ -1006,6 +1023,7 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_fid.ops = &usdf_base_rdm_ops;
 	ep->ep_fid.cm = &usdf_cm_rdm_ops;
 	ep->ep_fid.msg = &usdf_rdm_ops;
+	ep->ep_fid.atomic = &usdf_rdm_atomic_ops;
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;

@@ -221,6 +221,7 @@ static struct fi_ops_domain usdf_domain_ops = {
 	.poll_open = usdf_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
+	.query_atomic = usdf_query_atomic,
 };
 
 int
@@ -430,4 +431,13 @@ bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
 		return usdf_domain_checkname(FI_VERSION(1, 4), dap, hint);
 
 	return usdf_domain_checkname(FI_VERSION(1, 3), dap, hint);
+}
+
+/* Query domain's atomic capability.
+ * We dont support atomic operations, just return EOPNOTSUPP.
+ */
+int usdf_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		      enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags)
+{
+	return -FI_EOPNOTSUPP;
 }

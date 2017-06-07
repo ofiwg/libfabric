@@ -376,6 +376,23 @@ static struct fi_ops_cm usdf_cm_dgram_ops = {
 	.join = fi_no_join,
 };
 
+static struct fi_ops_atomic usdf_dgram_atomic_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = fi_no_atomic_write,
+	.writev = fi_no_atomic_writev,
+	.writemsg = fi_no_atomic_writemsg,
+	.inject = fi_no_atomic_inject,
+	.readwrite = fi_no_atomic_readwrite,
+	.readwritev = fi_no_atomic_readwritev,
+	.readwritemsg = fi_no_atomic_readwritemsg,
+	.compwrite = fi_no_atomic_compwrite,
+	.compwritev = fi_no_atomic_compwritev,
+	.compwritemsg = fi_no_atomic_compwritemsg,
+	.writevalid = fi_no_atomic_writevalid,
+	.readwritevalid = fi_no_atomic_readwritevalid,
+	.compwritevalid = fi_no_atomic_compwritevalid,
+};
+
 /*******************************************************************************
  * Default values for dgram attributes
  ******************************************************************************/
@@ -823,6 +840,7 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_fid.fid.context = context;
 	ep->ep_fid.fid.ops = &usdf_ep_dgram_ops;
 	ep->ep_fid.cm = &usdf_cm_dgram_ops;
+	ep->ep_fid.atomic = &usdf_dgram_atomic_ops;
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
