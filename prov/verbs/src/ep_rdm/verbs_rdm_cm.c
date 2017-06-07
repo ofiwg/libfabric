@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -392,10 +392,10 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 				   FI_IBV_RDM_MEM_ALIGNMENT,
 				   sizeof(*conn));
 		if (ret) {
-			/* do NOT free av_entry here, it can be used by
-			 * previously allcoated conn entries */
+			free(av_entry);
 			return -ret;
 		}
+
 		memset(conn, 0, sizeof(*conn));
 		conn->av_entry = av_entry;
 		conn->ep = ep;
