@@ -74,6 +74,7 @@ libfabric API:
 - *FI_RMA_EVENT*
 - *FI_REMOTE_CQ_DATA*
 - *FABRIC_DIRECT* compilation mode
+- *FI_MORE* (For FI_RMA)
 
 # DATA TRANSFER OPERATIONS
 
