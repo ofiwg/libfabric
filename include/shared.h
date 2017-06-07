@@ -47,9 +47,8 @@
 extern "C" {
 #endif
 
-// TODO Update version to 1.5 before release
 #ifndef FT_FIVERSION
-#define FT_FIVERSION FI_VERSION(1,4)
+#define FT_FIVERSION FI_VERSION(1,5)
 #endif
 
 #include "ft_osd.h"
@@ -152,6 +151,7 @@ extern struct fid_cntr *txcntr, *rxcntr;
 extern struct fid_mr *mr, no_mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
+extern struct fid_mc *mc;
 
 extern fi_addr_t remote_fi_addr;
 extern char *buf, *tx_buf, *rx_buf;
@@ -179,7 +179,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
 int ft_parse_rma_opts(int op, char *optarg, struct ft_opts *opts);
 void ft_addr_usage();
 void ft_usage(char *name, char *desc);
+void ft_mcusage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
+
 void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
@@ -303,6 +305,7 @@ int ft_init_alias_ep(uint64_t flags);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
 		uint64_t flags, void *context);
 int ft_init_av(void);
+int ft_join_mc(void);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
@@ -350,7 +353,11 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter);
 void show_perf_mr(int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
-int send_recv_greeting(struct fid_ep *ep);
+
+int ft_send_recv_greeting(struct fid_ep *ep);
+int ft_send_greeting(struct fid_ep *ep);
+int ft_recv_greeting(struct fid_ep *ep);
+
 int check_recv_msg(const char *message);
 uint64_t ft_info_to_mr_access(struct fi_info *info);
 int ft_alloc_bit_combo(uint64_t fixed, uint64_t opt, uint64_t **combos, int *len);

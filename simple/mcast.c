@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -31,30 +30,43 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
-
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
+#include <shared.h>
+
+
+static int listener;
+
 
 static int run(void)
 {
 	int ret;
 
-	if (!opts.dst_addr) {
-		ret = ft_start_server();
-		if (ret)
-			return ret;
-	}
-
-	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
-	if (ret) {
+	ret = ft_getinfo(hints, &fi);
+	if (ret)
 		return ret;
-	}
 
-	ret = ft_send_recv_greeting(ep);
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
 
-	fi_shutdown(ep, 0);
-	return ret;
+	if (!listener)
+		fi->tx_attr->op_flags = FI_MULTICAST;
+
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
+
+	ret = ft_init_ep();
+	if (ret)
+		return ret;
+
+	ret = ft_join_mc();
+	if (ret)
+		return ret;
+
+	remote_fi_addr = fi_mc_addr(mc);
+	return listener ? ft_recv_greeting(ep) : ft_send_greeting(ep);
 }
 
 int main(int argc, char **argv)
@@ -68,28 +80,35 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "Mh" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
 			break;
+		case 'M':
+			listener = 1;
+			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A simple MSG client-sever example.");
-			return EXIT_FAILURE;
+			goto usage;
 		}
 	}
 
-	if (optind < argc)
-		opts.dst_addr = argv[optind];
+	if (optind == argc)
+		goto usage;
 
-	hints->ep_attr->type	= FI_EP_MSG;
-	hints->caps		= FI_MSG;
-	hints->mode		= FI_LOCAL_MR;
+	opts.dst_addr = argv[optind];
+
+	hints->ep_attr->type	= FI_EP_DGRAM;
+	hints->caps		= FI_MSG | FI_MULTICAST;
+	hints->mode		= FI_CONTEXT | FI_LOCAL_MR;
 
 	ret = run();
 
 	ft_free_res();
 	return ft_exit_code(ret);
+usage:
+	ft_mcusage(argv[0], "A simple multicast example.");
+	return EXIT_FAILURE;
 }
