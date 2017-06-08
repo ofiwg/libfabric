@@ -776,6 +776,8 @@ void do_write(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_err_entry cq_err;
+	int errors_to_read = (dgm_fail) ? 1 : 0;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0xab);
@@ -786,14 +788,24 @@ void do_write(int len)
 		      target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
-		pthread_yield();
-	}
+	do {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
 
-	if (dgm_fail) {
-		cr_assert_eq(ret, -FI_EAVAIL);
+		if (dgm_fail) {
+			cr_assert_eq(ret, -FI_EAVAIL);
+
+			ret = fi_cq_readerr(send_cq[0], &cq_err, 0);
+			cr_assert_eq(ret, 1);
+
+			errors_to_read--;
+		}
+	} while (errors_to_read > 0);
+
+	if (dgm_fail)
 		return;
-	}
+
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
@@ -2248,6 +2260,8 @@ void do_write_buf(void *s, void *t, int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					  (void *) -1, UINT_MAX, UINT_MAX };
+	struct fi_cq_err_entry cq_err;
+	int errors_to_read = (dgm_fail) ? 1 : 0;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(s, len, 0xab);
@@ -2256,14 +2270,23 @@ void do_write_buf(void *s, void *t, int len)
 		      t);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
-		pthread_yield();
-	}
+	do {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
 
-	if (dgm_fail) {
-		cr_assert_eq(ret, -FI_EAVAIL);
+		if (dgm_fail) {
+			cr_assert_eq(ret, -FI_EAVAIL);
+
+			ret = fi_cq_readerr(send_cq[0], &cq_err, 0);
+			cr_assert_eq(ret, 1);
+
+			errors_to_read--;
+		}
+	} while (errors_to_read > 0);
+
+	if (dgm_fail)
 		return;
-	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_WRITE, 0, ep[0]);
