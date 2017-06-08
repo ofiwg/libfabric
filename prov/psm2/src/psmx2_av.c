@@ -637,18 +637,7 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 static const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
 				    char *buf, size_t *len)
 {
-	int n;
-	const struct psmx2_ep_name *name = addr;
-
-	if (!buf || !len)
-		return NULL;
-
-	n = snprintf(buf, *len, "%lx-%x", name->epid, name->vlane);
-	if (n < 0)
-		return NULL;
-
-	*len = n + 1;
-	return buf;
+	return ofi_straddr(buf, len, FI_ADDR_PSMX2, addr);
 }
 
 static int psmx2_av_close(fid_t fid)
