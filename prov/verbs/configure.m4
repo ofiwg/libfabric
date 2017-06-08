@@ -44,6 +44,17 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[verbs_rdmacm_happy=0])
 	      ])
 
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+			   [
+			    #include <infiniband/verbs_exp.h>
+			   ],
+			   [
+			    return (IBV_EXP_DEVICE_ATTR_ODP | IBV_EXP_DEVICE_ODP);
+			   ])
+			  ],
+			  [verbs_ibverbs_exp_happy=1],
+			  [verbs_ibverbs_exp_happy=0])
+
 	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
 	       test $verbs_rdmacm_happy -eq 1], [$1], [$2])
 
