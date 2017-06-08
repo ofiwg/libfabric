@@ -421,10 +421,15 @@ struct fi_msg_atomic {
 	uint64_t            data;     /* optional data */
 };
 
+struct fi_ioc {
+	void		*addr;    /* local address */
+	size_t		count;    /* # target opearnds */
+};
+
 struct fi_rma_ioc {
-	uint64_t           addr;      /* target address */
-	size_t             count;     /* # target operands */
-	uint64_t           key;       /* access key */
+	uint64_t	addr;     /* target address */
+	size_t		count;    /* # target operands */
+	uint64_t	key;      /* access key */
 };
 ```
 
