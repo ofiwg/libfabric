@@ -58,7 +58,10 @@ static void _setup(uint32_t version)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+		hints->domain_attr->mr_mode = FI_MR_BASIC;
+	else
+		hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
