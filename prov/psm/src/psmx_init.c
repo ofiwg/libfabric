@@ -190,6 +190,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	*info = NULL;
 
+	if (FI_VERSION_GE(version, FI_VERSION(1,5)))
+		mr_mode = 0;
+
 	if (psmx_init_lib())
 		return -FI_ENODATA;
 
