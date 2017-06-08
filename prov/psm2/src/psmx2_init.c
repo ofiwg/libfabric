@@ -271,12 +271,12 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	if (hints) {
 		switch (hints->addr_format) {
 		case FI_FORMAT_UNSPEC:
-		case FI_ADDR_PSMX:
+		case FI_ADDR_PSMX2:
 			break;
 		default:
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"hints->addr_format=%d, supported=%d,%d.\n",
-				hints->addr_format, FI_FORMAT_UNSPEC, FI_ADDR_PSMX);
+				hints->addr_format, FI_FORMAT_UNSPEC, FI_ADDR_PSMX2);
 			goto err_out;
 		}
 
@@ -296,13 +296,13 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 
 			switch (hints->ep_attr->protocol) {
 			case FI_PROTO_UNSPEC:
-			case FI_PROTO_PSMX:
+			case FI_PROTO_PSMX2:
 				break;
 			default:
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->protocol=%d, supported=%d %d\n",
 					hints->ep_attr->protocol,
-					FI_PROTO_UNSPEC, FI_PROTO_PSMX);
+					FI_PROTO_UNSPEC, FI_PROTO_PSMX2);
 				goto err_out;
 			}
 
@@ -558,7 +558,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	}
 
 	psmx2_info->ep_attr->type = ep_type;
-	psmx2_info->ep_attr->protocol = FI_PROTO_PSMX;
+	psmx2_info->ep_attr->protocol = FI_PROTO_PSMX2;
 	psmx2_info->ep_attr->protocol_version = PSM2_VERNO;
 	psmx2_info->ep_attr->max_msg_size = PSMX2_MAX_MSG_SIZE;
 	psmx2_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
@@ -590,7 +590,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->next = NULL;
 	psmx2_info->caps = caps;
 	psmx2_info->mode = mode;
-	psmx2_info->addr_format = FI_ADDR_PSMX;
+	psmx2_info->addr_format = FI_ADDR_PSMX2;
 	psmx2_info->src_addr = src_addr;
 	psmx2_info->src_addrlen = sizeof(*src_addr);
 	psmx2_info->dest_addr = dest_addr;

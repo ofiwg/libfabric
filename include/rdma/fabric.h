@@ -177,6 +177,7 @@ enum {
 	FI_ADDR_BGQ,
 	FI_ADDR_MLX,
 	FI_ADDR_STR,		/* formatted char * */
+	FI_ADDR_PSMX2,		/* uint64_t[2] */
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -271,7 +272,8 @@ enum {
 	FI_PROTO_RXM,
 	FI_PROTO_RXD,
 	FI_PROTO_MLX,
-	FI_PROTO_NETWORKDIRECT
+	FI_PROTO_NETWORKDIRECT,
+	FI_PROTO_PSMX2,
 };
 
 /* Mode bits */
