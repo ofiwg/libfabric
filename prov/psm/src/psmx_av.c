@@ -323,17 +323,7 @@ static int psmx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 static const char *psmx_av_straddr(struct fid_av *av, const void *addr,
 				   char *buf, size_t *len)
 {
-	int n;
-
-	if (!buf || !len)
-		return NULL;
-
-	n = snprintf(buf, *len, "%lx", (uint64_t)(uintptr_t)addr);
-	if (n < 0)
-		return NULL;
-
-	*len = n + 1;
-	return buf;
+	return ofi_straddr(buf, len, FI_ADDR_PSMX, addr);
 }
 
 static int psmx_av_close(fid_t fid)
