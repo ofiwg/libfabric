@@ -514,6 +514,24 @@ struct ofi_mr_map {
 	enum fi_mr_mode		mode;
 };
 
+/* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
+ * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
+ * The provider is assumed only to set FI_MR_LOCAL correctly.
+ */
+static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
+					    const struct fi_info *user_info,
+					    const struct fi_info *prov_info)
+{
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5)) ||
+	    (user_info->domain_attr &&
+	     !(user_info->domain_attr->mr_mode & FI_MR_LOCAL))) {
+		return (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
+			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
+	} else {
+		return prov_info->mode;
+	}
+}
+
 int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,
 		    struct ofi_mr_map *map);
 void ofi_mr_map_close(struct ofi_mr_map *map);
