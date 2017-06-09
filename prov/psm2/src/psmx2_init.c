@@ -239,15 +239,16 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			"failed to allocate src addr.\n");
 		return -FI_ENODATA;
 	}
+	src_addr->signature = 0xFFFF;
 	src_addr->unit = PSMX2_DEFAULT_UNIT;
 	src_addr->port = PSMX2_DEFAULT_PORT;
 	src_addr->service = PSMX2_ANY_SERVICE;
 
 	if (flags & FI_SOURCE) {
 		if (node)
-			sscanf(node, "%*[^:]:%d:%d", &src_addr->unit, &src_addr->port);
+			sscanf(node, "%*[^:]:%" SCNi8 ":%" SCNu8, &src_addr->unit, &src_addr->port);
 		if (service)
-			sscanf(service, "%u", &src_addr->service);
+			sscanf(service, "%" SCNu32, &src_addr->service);
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"node '%s' service '%s' converted to <unit=%d, port=%d, service=%d>\n",
 			node, service, src_addr->unit, src_addr->port, src_addr->service);
