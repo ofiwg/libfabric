@@ -375,6 +375,8 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 
 	strcatf(buf, "%s%stx_ctx_cnt: %zd\n", prefix, TAB, attr->tx_ctx_cnt);
 	strcatf(buf, "%s%srx_ctx_cnt: %zd\n", prefix, TAB, attr->rx_ctx_cnt);
+
+	strcatf(buf, "%s%sauth_key_size: %zd\n", prefix, TAB, attr->auth_key_size);
 }
 
 static void fi_tostr_resource_mgmt(char *buf, enum fi_resource_mgmt rm)
