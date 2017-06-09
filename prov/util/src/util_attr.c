@@ -580,7 +580,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		} else {
 			FI_INFO(prov, FI_LOG_CORE,
 				"Requested tx_ctx_cnt exceeds supported."
-				" Expected:%d, supported%d\n",
+				" Expected:%d, Requested%d\n",
 				util_prov->info->domain_attr->max_ep_tx_ctx,
 				user_attr->tx_ctx_cnt);
 			return -FI_ENODATA;
@@ -599,6 +599,14 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 				"Requested rx_ctx_cnt exceeds supported\n");
 			return -FI_ENODATA;
 		}
+	}
+
+	if (user_attr->auth_key_size &&
+	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
+		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentification size. "
+			"Expected:%d, Requested%d\n",
+			prov_attr->auth_key_size, user_attr->auth_key_size);
+		return -FI_ENODATA;
 	}
 
 	return 0;
