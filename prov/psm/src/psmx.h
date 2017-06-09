@@ -48,6 +48,7 @@ extern "C" {
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -300,9 +301,10 @@ struct psmx_fid_domain {
 #define PSMX_ANY_SERVICE	0
 
 struct psmx_src_name {
-	int	unit;		/* start from 0. -1 means any */
-	int	port;		/* start from 1. 0 means any */
-	int	service;	/* 0 means any */
+	uint16_t	signature;	/* 0xFFFF, different from any valid epid */
+	int8_t		unit;		/* start from 0. -1 means any */
+	uint8_t		port;		/* start from 1. 0 means any */
+	uint32_t	service;	/* 0 means any */
 };
 
 struct psmx_cq_event {

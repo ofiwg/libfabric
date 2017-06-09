@@ -48,6 +48,7 @@ extern "C" {
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -430,9 +431,11 @@ struct psmx2_ep_name {
 #define PSMX2_ANY_SERVICE	0
 
 struct psmx2_src_name {
-	int	unit;		/* start from 0. -1 means any */
-	int	port;		/* start from 1. 0 means any */
-	int	service;	/* 0 means any */
+	uint16_t		signature;	/* 0xFFFF, different from any valid epid */
+	int8_t			unit;		/* start from 0. -1 means any */
+	uint8_t			port;		/* start from 1. 0 means any */
+	uint32_t		service;	/* 0 means any */
+	uint64_t		padding;	/* make it the same size as psmx2_ep_name */
 };
 
 struct psmx2_cq_event {
