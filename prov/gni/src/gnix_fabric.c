@@ -484,6 +484,9 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				goto err;
 			}
 			mode = hints->mode & ~GNIX_FAB_MODES_CLEAR;
+			if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+				mode = hints->mode & ~FI_NOTIFY_FLAGS_ONLY;
+			}
 		}
 
 		GNIX_DEBUG(FI_LOG_FABRIC, "Passed mode check\n");
