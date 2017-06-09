@@ -473,7 +473,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->util_domain.domain_fid.mr = &psmx2_mr_ops;
 	domain_priv->mr_mode = info->domain_attr->mr_mode;
 	domain_priv->mode = info->mode;
-	domain_priv->caps = info->caps;
+	domain_priv->caps = PSMX2_CAPS | PSMX2_DOM_CAPS;
 	domain_priv->fabric = fabric_priv;
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
