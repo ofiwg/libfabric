@@ -223,6 +223,14 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 		return -FI_ENODATA;
 	}
 
+	if (attr->auth_key_size &&
+	    (attr->auth_key_size != info->ep_attr->auth_key_size)) {
+		VERBS_INFO(FI_LOG_CORE, "Unsupported authentification size. "
+			   "Expected:%d, Requested%d\n",
+			   info->ep_attr->auth_key_size, attr->auth_key_size);
+		return -FI_ENODATA;
+	}
+
 	return 0;
 }
 
