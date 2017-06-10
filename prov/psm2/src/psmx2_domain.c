@@ -435,6 +435,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct psmx2_fid_fabric *fabric_priv;
 	struct psmx2_fid_domain *domain_priv;
+	int mr_mode = (info->domain_attr->mr_mode & FI_MR_BASIC) ? FI_MR_BASIC : 0;
 	int err;
 
 	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "\n");
@@ -446,6 +447,13 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 				   util_fabric.fabric_fid);
 
 	if (fabric_priv->active_domain) {
+		if (mr_mode != fabric_priv->active_domain->mr_mode) {
+			FI_INFO(&psmx2_prov, FI_LOG_DOMAIN,
+				"mr_mode mismatch: expecting %s\n",
+				mr_mode ? "FI_MR_SCALABLE" : "FI_MR_BASIC");
+			return -FI_EINVAL;
+		}
+
 		psmx2_domain_acquire(fabric_priv->active_domain);
 		*domain = &fabric_priv->active_domain->util_domain.domain_fid;
 		return 0;
@@ -471,9 +479,9 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->util_domain.domain_fid.fid.ops = &psmx2_fi_ops;
 	domain_priv->util_domain.domain_fid.ops = &psmx2_domain_ops;
 	domain_priv->util_domain.domain_fid.mr = &psmx2_mr_ops;
-	domain_priv->mr_mode = info->domain_attr->mr_mode;
+	domain_priv->mr_mode = mr_mode;
 	domain_priv->mode = info->mode;
-	domain_priv->caps = info->caps;
+	domain_priv->caps = PSMX2_CAPS | PSMX2_DOM_CAPS;
 	domain_priv->fabric = fabric_priv;
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
