@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  *
  * This software is waitailable to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
