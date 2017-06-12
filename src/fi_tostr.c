@@ -619,6 +619,11 @@ static void fi_tostr_cq_event_flags(char *buf, uint64_t flags)
 	fi_remove_comma(buf);
 }
 
+static void fi_tostr_size_t(char *buf, size_t value)
+{
+	strcatf(buf, "%zd", value);
+}
+
 __attribute__((visibility ("default")))
 char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 {
@@ -626,6 +631,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 	uint64_t val64;
 	uint32_t val32;
 	int enumval;
+	size_t valSizeT;
 
 	if (!data)
 		return NULL;
@@ -633,6 +639,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 	val64 = *(const uint64_t *) data;
 	val32 = *(const uint32_t *) data;
 	enumval = *(const int *) data;
+	valSizeT = *(const size_t *) data;
 
 	if (!buf) {
 		buf = calloc(FI_BUFSIZ, 1);
@@ -711,6 +718,9 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_OP_TYPE:
 		fi_tostr_op_type(buf, enumval);
+		break;
+	case FI_TYPE_SIZE_T:
+		fi_tostr_size_t(buf, valSizeT);
 		break;
 	default:
 		strcatf(buf, "Unknown type");

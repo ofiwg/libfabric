@@ -546,6 +546,7 @@ enum fi_type {
 	FI_TYPE_CQ_EVENT_FLAGS,
 	FI_TYPE_MR_MODE,
 	FI_TYPE_OP_TYPE,
+	FI_TYPE_SIZE_T,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
