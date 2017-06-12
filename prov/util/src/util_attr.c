@@ -502,6 +502,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if (user_attr->cq_data_size > prov_attr->cq_data_size) {
 		FI_INFO(prov, FI_LOG_CORE, "CQ data size too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, cq_data_size);
 		return -FI_ENODATA;
 	}
 
@@ -523,6 +524,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if (user_attr->mr_iov_limit > prov_attr->mr_iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "MR iov limit too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, mr_iov_limit);
 		return -FI_ENODATA;
 	}
 
@@ -567,6 +569,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_attr->max_msg_size > prov_attr->max_msg_size) {
 		FI_INFO(prov, FI_LOG_CORE, "Max message size too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_msg_size);
 		return -FI_ENODATA;
 	}
 
@@ -580,7 +583,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		} else {
 			FI_INFO(prov, FI_LOG_CORE,
 				"Requested tx_ctx_cnt exceeds supported."
-				" Expected:%d, Requested%d\n",
+				" Expected:%zd, Requested%zd\n",
 				util_prov->info->domain_attr->max_ep_tx_ctx,
 				user_attr->tx_ctx_cnt);
 			return -FI_ENODATA;
@@ -596,16 +599,18 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 			}
 		} else {
 			FI_INFO(prov, FI_LOG_CORE,
-				"Requested rx_ctx_cnt exceeds supported\n");
+				"Requested rx_ctx_cnt exceeds supported."
+				" Expected: %zd, Requested:%zd\n",
+				util_prov->info->domain_attr->max_ep_rx_ctx,
+				user_attr->rx_ctx_cnt);
 			return -FI_ENODATA;
 		}
 	}
 
 	if (user_attr->auth_key_size &&
 	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
-		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentification size. "
-			"Expected:%d, Requested%d\n",
-			prov_attr->auth_key_size, user_attr->auth_key_size);
+		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentification size.");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, auth_key_size);
 		return -FI_ENODATA;
 	}
 
@@ -652,16 +657,20 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 
 	if (user_attr->total_buffered_recv > prov_attr->total_buffered_recv) {
 		FI_INFO(prov, FI_LOG_CORE, "total_buffered_recv too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
+				  total_buffered_recv);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->size > prov_attr->size) {
 		FI_INFO(prov, FI_LOG_CORE, "size is greater than supported\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, size);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->iov_limit > prov_attr->iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "iov_limit too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, iov_limit);
 		return -FI_ENODATA;
 	}
 
@@ -708,21 +717,25 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 
 	if (user_attr->inject_size > prov_attr->inject_size) {
 		FI_INFO(prov, FI_LOG_CORE, "inject_size too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, inject_size);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->size > prov_attr->size) {
 		FI_INFO(prov, FI_LOG_CORE, "size is greater than supported\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, size);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->iov_limit > prov_attr->iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "iov_limit too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, iov_limit);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->rma_iov_limit > prov_attr->rma_iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "rma_iov_limit too large\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, rma_iov_limit);
 		return -FI_ENODATA;
 	}
 
