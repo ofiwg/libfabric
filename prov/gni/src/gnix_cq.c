@@ -539,6 +539,8 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 
 	_gnix_prog_progress(&cq_priv->pset);
 
+	COND_ACQUIRE(cq_priv->requires_lock, &cq_priv->lock);
+
 	entry = _gnix_queue_dequeue(cq_priv->errors);
 	if (!entry) {
 		read_count = -FI_EAGAIN;
