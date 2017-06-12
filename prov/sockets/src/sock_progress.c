@@ -1350,7 +1350,8 @@ sock_pe_process_rx_tatomic(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	}
 
 	rx_entry->rx_op = pe_entry->pe.rx.rx_op;
-	memcpy(&rx_entry->iov[0].ioc.addr, pe_entry->pe.rx.atomic_src, entry_len);
+	memcpy((void *) (uintptr_t) rx_entry->iov[0].ioc.addr,
+		pe_entry->pe.rx.atomic_src, entry_len);
 	rx_entry->addr = pe_entry->addr;
 	rx_entry->tag = pe_entry->tag;
 	rx_entry->data = pe_entry->data;
