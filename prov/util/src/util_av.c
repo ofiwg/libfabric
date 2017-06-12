@@ -1037,27 +1037,26 @@ static void util_cmap_set_key(struct util_cmap_handle *handle)
 static void util_cmap_clear_key(struct util_cmap_handle *handle)
 {
 	int index = ofi_key2idx(&handle->cmap->key_idx, handle->key);
-	if (index > handle->cmap->handles_idx.size) {
-		FI_WARN(handle->cmap->av->prov, FI_LOG_AV, "Invalid key\n");
-		return;
-	}
-	ofi_idx_remove(&handle->cmap->handles_idx, index);
+
+	if (!ofi_idx_is_valid(&handle->cmap->handles_idx, index))
+		FI_WARN(handle->cmap->av->prov, FI_LOG_AV, "Invalid key!\n");
+	else
+		ofi_idx_remove(&handle->cmap->handles_idx, index);
 }
 
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key)
 {
 	struct util_cmap_handle *handle;
 
-	int index = ofi_key2idx(&cmap->key_idx, key);
-	if (index > cmap->handles_idx.size) {
-		FI_WARN(cmap->av->prov, FI_LOG_AV, "Invalid key\n");
-		return NULL;
-	}
-	handle = ofi_idx_at(&cmap->handles_idx, index);
-	if (handle->key != key) {
-		FI_WARN(cmap->av->prov, FI_LOG_AV,
+	if (!(handle = ofi_idx_lookup(&cmap->handles_idx,
+				      ofi_key2idx(&cmap->key_idx, key)))) {
+		FI_WARN(cmap->av->prov, FI_LOG_AV, "Invalid key!\n");
+	} else {
+		if (handle->key != key) {
+			FI_WARN(cmap->av->prov, FI_LOG_AV,
 				"handle->key not matching given key\n");
-		return NULL;
+			return NULL;
+		}
 	}
 	return handle;
 }
