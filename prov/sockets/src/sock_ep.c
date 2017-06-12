@@ -1518,9 +1518,7 @@ struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
 	info->ep_attr->type = ep_type;
 	return info;
 err:
-	free(info->src_addr);
-	free(info->dest_addr);
-	free(info);
+	fi_freeinfo(info);
 	return NULL;
 }
 
