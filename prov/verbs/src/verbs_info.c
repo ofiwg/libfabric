@@ -189,37 +189,57 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 	if (attr->max_msg_size > info->ep_attr->max_msg_size) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Max message size too large\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->ep_attr, attr,
+				  max_msg_size);
 		return -FI_ENODATA;
 	}
 
 	if (attr->max_order_raw_size > info->ep_attr->max_order_raw_size) {
 		VERBS_INFO( FI_LOG_CORE,
 			   "max_order_raw_size exceeds supported size\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->ep_attr, attr,
+				  max_order_raw_size);
 		return -FI_ENODATA;
 	}
 
 	if (attr->max_order_war_size) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "max_order_war_size exceeds supported size\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->ep_attr, attr,
+				  max_order_war_size);
 		return -FI_ENODATA;
 	}
 
 	if (attr->max_order_waw_size > info->ep_attr->max_order_waw_size) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "max_order_waw_size exceeds supported size\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->ep_attr, attr,
+				  max_order_waw_size);
 		return -FI_ENODATA;
 	}
 
 	if (attr->tx_ctx_cnt > info->domain_attr->max_ep_tx_ctx) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "tx_ctx_cnt exceeds supported size\n");
+		VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
+			   info->domain_attr->max_ep_tx_ctx, attr->tx_ctx_cnt);
 		return -FI_ENODATA;
 	}
 
 	if ((attr->rx_ctx_cnt > info->domain_attr->max_ep_rx_ctx) &&
-			(attr->rx_ctx_cnt != FI_SHARED_CONTEXT)) {
+	    (attr->rx_ctx_cnt != FI_SHARED_CONTEXT)) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "rx_ctx_cnt exceeds supported size\n");
+		VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
+			   info->domain_attr->max_ep_rx_ctx, attr->rx_ctx_cnt);
+		return -FI_ENODATA;
+	}
+
+	if (attr->auth_key_size &&
+	    (attr->auth_key_size != info->ep_attr->auth_key_size)) {
+		VERBS_INFO(FI_LOG_CORE, "Unsupported authentification size.");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->ep_attr, attr,
+				  auth_key_size);
 		return -FI_ENODATA;
 	}
 
@@ -246,6 +266,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	if ((compare_mode & check_mode) != check_mode) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given rx_attr->mode not supported\n");
+		FI_INFO_MODE(&fi_ibv_prov, check_mode, compare_mode);
 		return -FI_ENODATA;
 	}
 
@@ -264,6 +285,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	if (attr->size > info->rx_attr->size) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given rx_attr->size is greater than supported\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->rx_attr, attr, size);
 		return -FI_ENODATA;
 	}
 
@@ -276,12 +298,16 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given rx_attr->total_buffered_recv "
 			   "exceeds supported size\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->rx_attr, attr,
+				  total_buffered_recv);
 		return -FI_ENODATA;
 	}
 
 	if (attr->iov_limit > info->rx_attr->iov_limit) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given rx_attr->iov_limit greater than supported\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->rx_attr, attr,
+				  iov_limit);
 		return -FI_ENODATA;
 	}
 
@@ -294,13 +320,16 @@ int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
 	if (attr->caps & ~(info->tx_attr->caps)) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given tx_attr->caps not supported\n");
+		FI_INFO_CHECK(&fi_ibv_prov, (info->tx_attr), attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
 	if (((attr->mode ? attr->mode : hints->mode) &
-				info->tx_attr->mode) != info->tx_attr->mode) {
+	     info->tx_attr->mode) != info->tx_attr->mode) {
+		size_t user_mode = (attr->mode ? attr->mode : hints->mode);
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given tx_attr->mode not supported\n");
+		FI_INFO_MODE(&fi_ibv_prov, info->tx_attr->mode, user_mode);
 		return -FI_ENODATA;
 	}
 
@@ -319,18 +348,23 @@ int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
 	if (attr->size > info->tx_attr->size) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given tx_attr->size is greater than supported\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, (info->tx_attr), attr, size);
 		return -FI_ENODATA;
 	}
 
 	if (attr->iov_limit > info->tx_attr->iov_limit) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given tx_attr->iov_limit greater than supported\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, (info->tx_attr), attr,
+				  iov_limit);
 		return -FI_ENODATA;
 	}
 
 	if (attr->rma_iov_limit > info->tx_attr->rma_iov_limit) {
 		VERBS_INFO(FI_LOG_CORE,
 			   "Given tx_attr->rma_iov_limit greater than supported\n");
+		FI_INFO_CHECK_VAL(&fi_ibv_prov, (info->tx_attr), attr,
+				  rma_iov_limit);
 		return -FI_ENODATA;
 	}
 

@@ -111,6 +111,12 @@
 	FI_INFO_FIELD(provider, prov->field, user->field, "Supported",	\
 		      "Requested", type)
 
+#define FI_INFO_CHECK_VAL(provider, prov, user, field)					\
+	do {										\
+		FI_INFO(provider, FI_LOG_CORE, "Supported: %zd\n", prov->field);	\
+		FI_INFO(provider, FI_LOG_CORE, "Requested: %zd\n", user->field);	\
+	} while (0)
+
 #define FI_INFO_MODE(provider, prov_mode, user_mode)				\
 	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
 		      FI_TYPE_MODE)

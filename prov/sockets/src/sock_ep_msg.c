@@ -190,6 +190,10 @@ int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr,
 		if ((ep_attr->rx_ctx_cnt > SOCK_EP_MAX_RX_CNT) &&
 		    ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
 			return -FI_ENODATA;
+
+		if (ep_attr->auth_key_size &&
+		    (ep_attr->auth_key_size != sock_msg_ep_attr.auth_key_size))
+			return -FI_ENODATA;
 	}
 
 	if (sock_msg_verify_tx_attr(tx_attr) || sock_msg_verify_rx_attr(rx_attr))
