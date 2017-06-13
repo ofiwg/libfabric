@@ -34,8 +34,13 @@ Endpoint capabilities
 
   *FI_MULTI_RECV* is supported for non-tagged message queue only.
 
+  Scalable endpoints are supported if the underlying PSM2 library supports
+  multiple endpoints. This condition must be satisfied both when the
+  provider is built and when the provider is used.
+
   Other supported capabilities include *FI_TRIGGER*, *FI_REMOTE_CQ_DATA*,
-  and *FI_SOURCE*.
+  and *FI_SOURCE*. Furthermore, *FI_NAMED_RX_CTX* is supported when scalable
+  endpoints are enabled.
 
 Modes
 : *FI_CONTEXT* is required for the *FI_TAGGED* and *FI_MSG*
@@ -57,7 +62,7 @@ Progress
 
 Unsupported features
 : These features are unsupported: connection management, 
-  scalable endpoint, passive endpoint, shared receive context,
+  passive endpoint, shared receive context,
   and send/inject with immediate data over tagged message queue.
 
 # RUNTIME PARAMETERS
