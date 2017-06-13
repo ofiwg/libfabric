@@ -54,6 +54,11 @@ see the man pages.
   been replaced by more refined registration mode bits.  This allows
   applications to make better use of provider hardware capabilities
   when dealing with registered memory regions.
+- New mode bit: FI_CONTEXT2
+  Some providers need more than the size provided by the FI_CONTEXT
+  mode bit setting.  To accomodate such providers, an FI_CONTEXT2
+  mode bit was added.  This mode bit doubles the amount of context
+  space that an application allocates on behalf of the provider.
 
 v1.4.2, Fri May 12, 2017
 ========================
