@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,6 +38,9 @@
 
 #include <stdbool.h>
 #include <sys/queue.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define USDF_MAX_CONN_DATA 256
 
@@ -75,6 +78,11 @@ int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen);
 int usdf_cm_dgram_getname(fid_t fid, void *addr, size_t *addrlen);
 int usdf_cm_msg_getname(fid_t fid, void *addr, size_t *addrlen);
 
-bool usdf_cm_addr_is_valid_sin(void *addr, size_t addrlen, uint32_t addr_format);
+bool usdf_cm_addr_is_valid_sin(void *addr, size_t addrlen,
+			       uint32_t addr_format);
+
+int usdf_str_toaddr(const char *str, struct sockaddr_in **outaddr);
+const char *usdf_addr_tostr(const struct sockaddr_in *sin,
+			    char *addr_str, size_t *size);
 
 #endif /* _USDF_CM_H_ */

@@ -63,6 +63,7 @@
 
 #include "usdf.h"
 #include "usdf_av.h"
+#include "usdf_cm.h"
 #include "usdf_timer.h"
 #include "usdf_rdm.h"
 
@@ -300,14 +301,18 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	const struct sockaddr_in *sin;
+	const char **addr_str;
+	struct sockaddr_in *cur_sin;
 	struct usd_device_attrs *dap;
 	struct usdf_av_insert *insert;
 	struct usdf_av_req *req;
 	struct usdf_av *av;
 	struct usdf_fabric *fp;
 	struct usd_dest *u_dest;
+	struct fi_info *info;
 	int ret;
 	size_t i;
+	bool addr_format_str;
 
 	USDF_TRACE_SYS(AV, "\n");
 
@@ -317,12 +322,15 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 	av = av_ftou(fav);
 	fp = av->av_domain->dom_fabric;
 	dap = fp->fab_dev_attrs;
+	info = av->av_domain->dom_info;
+	addr_format_str = (info->addr_format == FI_ADDR_STR);
 
 	if (av->av_eq == NULL) {
 		return -FI_ENOEQ;
 	}
 
 	sin = addr;
+	addr_str = (const char **)addr;
 
 	/* allocate an insert record and N requests */
 	insert = calloc(1, sizeof(*insert) + count * sizeof(*req));
@@ -352,6 +360,11 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 
 	for (i = 0; i < count; i++) {
 		req->avr_fi_addr = &fi_addr[i];
+
+		if (addr_format_str) {
+			usdf_str_toaddr(addr_str[i], &cur_sin);
+			sin = cur_sin;
+		}
 
 		/* find the address we actually need to look up */
 		ret = usnic_nl_rt_lookup(dap->uda_ipaddr_be,
@@ -384,7 +397,13 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 			TAILQ_INSERT_TAIL(&insert->avi_req_list, req, avr_link);
 		}
 
-		++sin;
+		if (addr_format_str) {
+			free(cur_sin);
+			cur_sin = NULL;
+		} else {
+			++sin;
+		}
+
 		++req;
 	}
 
@@ -408,20 +427,26 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	const struct sockaddr_in *sin;
+	const char **addr_str;
+	struct sockaddr_in *cur_sin;
 	struct usdf_av *av;
 	struct usd_dest *u_dest;
 	struct usdf_dest *dest;
+	struct fi_info *info;
 	int ret_count;
 	int ret;
 	int *errors;
 	uint32_t api_version;
 	size_t i;
+	bool addr_format_str;
 
 	USDF_TRACE_SYS(AV, "\n");
 
 	ret_count = 0;
 	av = av_ftou(fav);
 	api_version = av->av_domain->dom_fabric->fab_attr.fabric->api_version;
+	info = av->av_domain->dom_info;
+	addr_format_str = (info->addr_format == FI_ADDR_STR);
 	errors = context;
 
 	/* Screen out unsupported flags. */
@@ -436,11 +461,17 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 		memset(errors, 0, sizeof(int) * count);
 	}
 
-	ret_count = 0;
 	sin = addr;
+	addr_str = (const char **)addr;
 
 	/* XXX parallelize, this will also eliminate u_dest silliness */
 	for (i = 0; i < count; i++) {
+
+		if (addr_format_str) {
+			usdf_str_toaddr(addr_str[i], &cur_sin);
+			sin = cur_sin;
+		}
+
 		dest = NULL;
 		u_dest = NULL;
 		ret = usdf_av_alloc_dest(&dest);
@@ -467,7 +498,13 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 			free(dest);
 		}
 		free(u_dest);
-		++sin;
+
+		if (addr_format_str) {
+			free(cur_sin);
+			cur_sin = NULL;
+		} else {
+			++sin;
+		}
 	}
 
 	return ret_count;
@@ -505,28 +542,36 @@ static int usdf_av_insertsvc(struct fid_av *fav, const char *node,
 		const char *service, fi_addr_t *fi_addr, uint64_t flags,
 		void *context)
 {
-	struct sockaddr_in *addr;
+	struct sockaddr_in addr;
+	struct usdf_av *av;
+	struct fi_info *info;
 	int ret;
+	bool addr_format_str;
 
 	USDF_TRACE_SYS(AV, "\n");
+
+	av = av_ftou(fav);
+	info = av->av_domain->dom_info;
+	addr_format_str = (info->addr_format == FI_ADDR_STR);
 
 	if (!fav)
 		return -FI_EINVAL;
 
-	addr = calloc(1, sizeof(*addr));
-	if (!addr) {
-		USDF_DBG("address allocation failed\n");
-		return -FI_ENOMEM;
+	if (addr_format_str) {
+		/* string format should not come with service param. */
+		if (service)
+			return -FI_EINVAL;
+
+		ret = fav->ops->insert(fav, &node, 1, fi_addr, flags, context);
+	} else {
+		ret = usdf_resolve_addr(node, service, &addr);
+		if (ret)
+			goto fail;
+
+		ret = fav->ops->insert(fav, &addr, 1, fi_addr, flags, context);
 	}
 
-	ret = usdf_resolve_addr(node, service, addr);
-	if (ret)
-		goto fail;
-
-	ret = fav->ops->insert(fav, addr, 1, fi_addr, flags, context);
-
 fail:
-	free(addr);
 	return ret;
 }
 
@@ -553,14 +598,21 @@ usdf_am_remove(struct fid_av *fav, fi_addr_t *fi_addr, size_t count,
 }
 
 static int
-usdf_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+usdf_am_lookup(struct fid_av *fav, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
 	struct usdf_dest *dest;
+	struct usdf_av *av;
+	struct fi_info *info;
 	struct sockaddr_in sin = { 0 };
 	size_t copylen;
+	bool addr_format_str;
 
 	USDF_TRACE_SYS(AV, "\n");
+
+	av = av_ftou(fav);
+	info = av->av_domain->dom_info;
+	addr_format_str = (info->addr_format == FI_ADDR_STR);
 
 	if (fi_addr == FI_ADDR_NOTAVAIL) {
 		USDF_WARN_SYS(AV, "invalid address, can't lookup\n");
@@ -568,7 +620,6 @@ usdf_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	}
 
 	dest = (struct usdf_dest *)(uintptr_t)fi_addr;
-
 	if (*addrlen < sizeof(sin)) {
 		copylen = *addrlen;
 	} else {
@@ -577,26 +628,30 @@ usdf_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	sin.sin_family = AF_INET;
 	usd_expand_dest(&dest->ds_dest, &sin.sin_addr.s_addr, &sin.sin_port);
-	memcpy(addr, &sin, copylen);
 
-	*addrlen = sizeof(sin);
+	if (addr_format_str)
+		usdf_addr_tostr(&sin, addr, addrlen);
+	else {
+		memcpy(addr, &sin, copylen);
+		*addrlen = sizeof(sin);
+	}
 	return 0;
 }
 
 static const char *
-usdf_av_straddr(struct fid_av *av, const void *addr,
+usdf_av_straddr(struct fid_av *fav, const void *addr,
 				    char *buf, size_t *len)
 {
-	const struct sockaddr_in *sin;
-	char straddr[24];
-	int size;
+	struct fi_info *info;
+	struct usdf_av *av;
 
-	sin = addr;
-	size = snprintf(straddr, sizeof straddr, "%s:%d",
-			inet_ntoa(sin->sin_addr), ntohs(sin->sin_port));
-	snprintf(buf, *len, "%s", straddr);
-	*len = size + 1;
-	return buf;
+	if (!len || !addr || !buf)
+		return NULL;
+
+	av = av_fidtou(fav);
+	info = av->av_domain->dom_info;
+
+	return ofi_straddr(buf, len, info->addr_format, addr);
 }
 
 static int
@@ -764,4 +819,74 @@ fi_addr_t usdf_av_lookup_addr(struct usdf_av *av,
 			return (fi_addr_t)(uintptr_t)cur;
 	}
 	return FI_ADDR_NOTAVAIL;
+}
+
+/* Return sockaddr_in pointer. Must be used with usdf_free_sin_if_needed()
+ * to cleanup properly.
+ */
+struct sockaddr_in *usdf_format_to_sin(struct fi_info *info, const void *addr)
+{
+	struct sockaddr_in *sin;
+
+	if (!info)
+		return (struct sockaddr_in *)addr;
+
+	switch (info->addr_format) {
+	case FI_FORMAT_UNSPEC:
+	case FI_SOCKADDR:
+	case FI_SOCKADDR_IN:
+		return (struct sockaddr_in *)addr;
+	case FI_ADDR_STR:
+		usdf_str_toaddr(addr, &sin);
+		return sin;
+	default:
+		return NULL;
+	}
+}
+
+/* Utility function to free the sockaddr_in allocated from usdf_format_to_sin()
+ */
+void usdf_free_sin_if_needed(struct fi_info *info, struct sockaddr_in *sin)
+{
+	if (info && info->addr_format == FI_ADDR_STR)
+		free(sin);
+}
+
+/* Convert sockaddr_in pointer to appropriate format.
+ * If conversion happens, destroy the origin. (to minimize cleaning up code)
+ */
+void *usdf_sin_to_format(struct fi_info *info, void *addr, size_t *len)
+{
+	size_t addr_strlen;
+	char *addrstr;
+
+	if (!info)
+		return addr;
+
+	switch (info->addr_format) {
+	case FI_FORMAT_UNSPEC:
+	case FI_SOCKADDR:
+	case FI_SOCKADDR_IN:
+		if (len)
+			*len = sizeof(struct sockaddr_in);
+		return addr;
+	case FI_ADDR_STR:
+		addrstr = calloc(1, USDF_ADDR_STR_LEN);
+		if (addrstr == NULL) {
+			USDF_DBG_SYS(AV, "memory allocation failed\n");
+			return NULL;
+		}
+
+		addr_strlen = USDF_ADDR_STR_LEN;
+		usdf_addr_tostr(addr, addrstr, &addr_strlen);
+
+		if (len)
+			*len = addr_strlen;
+
+		free(addr);
+		return addrstr;
+	default:
+		return NULL;
+	}
+
 }
