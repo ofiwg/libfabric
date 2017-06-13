@@ -50,6 +50,7 @@ struct psmx2_env psmx2_env = {
 	.sep		= 0,
 	.max_trx_ctxt	= 1,
 	.num_devunits	= 1,
+	.inject_size	= PSMX2_INJECT_SIZE,
 };
 
 static void psmx2_init_env(void)
@@ -64,6 +65,7 @@ static void psmx2_init_env(void)
 	fi_param_get_int(&psmx2_prov, "timeout", &psmx2_env.timeout);
 	fi_param_get_int(&psmx2_prov, "prog_interval", &psmx2_env.prog_interval);
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
+	fi_param_get_int(&psmx2_prov, "inject_size", &psmx2_env.inject_size);
 }
 
 static int psmx2_check_sep_cap(void)
@@ -698,6 +700,9 @@ PROVIDER_INI
 			"of core_ids. Both <start> and <end> can be either the core_id "
 			"(when >=0) or core_id - num_cores (when <0). "
 			"(default: affinity not set)");
+
+	fi_param_define(&psmx2_prov, "inject_size", FI_PARAM_INT,
+			"Maximum message size for fi_inject and fi_tinject (default: 64).");
 
 	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;

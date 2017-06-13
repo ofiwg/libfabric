@@ -282,7 +282,7 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		no_completion = 1;
 
 	if (flags & FI_INJECT) {
-		if (len > PSMX2_INJECT_SIZE)
+		if (len > psmx2_env.inject_size)
 			return -FI_EMSGSIZE;
 
 		err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
@@ -459,7 +459,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 		no_completion = 1;
 
 	if (flags & FI_INJECT) {
-		if (len > PSMX2_INJECT_SIZE) {
+		if (len > psmx2_env.inject_size) {
 			free(req);
 			return -FI_EMSGSIZE;
 		}
