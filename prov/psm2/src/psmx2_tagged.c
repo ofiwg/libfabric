@@ -685,7 +685,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 		no_completion = 1;
 
 	if (flags & FI_INJECT) {
-		if (len > PSMX2_INJECT_SIZE)
+		if (len > psmx2_env.inject_size)
 			return -FI_EMSGSIZE;
 
 		err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
@@ -939,7 +939,7 @@ psmx2_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf,
 	uint32_t tag32;
 	int err;
 
-	if (len > PSMX2_INJECT_SIZE)
+	if (len > psmx2_env.inject_size)
 		return -FI_EMSGSIZE;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
@@ -982,7 +982,7 @@ psmx2_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	int err;
 	size_t idx;
 
-	if (len > PSMX2_INJECT_SIZE)
+	if (len > psmx2_env.inject_size)
 		return -FI_EMSGSIZE;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
@@ -1137,7 +1137,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 		no_completion = 1;
 
 	if (flags & FI_INJECT) {
-		if (len > PSMX2_INJECT_SIZE) {
+		if (len > psmx2_env.inject_size) {
 			free(req);
 			return -FI_EMSGSIZE;
 		}

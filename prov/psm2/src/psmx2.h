@@ -831,6 +831,7 @@ struct psmx2_env {
 	int sep;
 	int max_trx_ctxt;
 	int num_devunits;
+	int inject_size;
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
