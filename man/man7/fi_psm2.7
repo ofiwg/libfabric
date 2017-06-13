@@ -1,4 +1,4 @@
-.TH "fi_psm2" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2017\-06\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM2 Fabric Provider
@@ -146,6 +146,15 @@ Both \f[C]<start>\f[] and \f[C]<end>\f[] can be either the
 <0).
 .PP
 By default affinity is not set.
+.PP
+\f[I]FI_PSM2_INJECT_SIZE\f[] : Maximum message size allowed for
+fi_inject and fi_tinject calls.
+This is an experimental feature to allow some applications to override
+default inject size limitation.
+This is only effective for messages.
+Inject size for RMA operations is still limited to the default setting.
+.PP
+The default setting is 64.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_psm\f[](7),
