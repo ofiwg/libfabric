@@ -60,7 +60,7 @@ struct indexer
 {
 	union ofi_idx_entry *array[OFI_IDX_ARRAY_SIZE];
 	int		 free_list;
-	int		 size;
+	int		 size;	/* Array size (used): [0, OFI_IDX_ARRAY_SIZE) */
 };
 
 #define ofi_idx_array_index(index) (index >> OFI_IDX_ENTRY_BITS)
@@ -71,9 +71,19 @@ void *ofi_idx_remove(struct indexer *idx, int index);
 void ofi_idx_replace(struct indexer *idx, int index, void *item);
 void ofi_idx_reset(struct indexer *idx);
 
+static inline int ofi_idx_is_valid(struct indexer *idx, int index)
+{
+	return (index > 0) && (index < idx->size * OFI_IDX_ENTRY_SIZE);
+}
+
 static inline void *ofi_idx_at(struct indexer *idx, int index)
 {
 	return (idx->array[ofi_idx_array_index(index)] + ofi_idx_entry_index(index))->item;
+}
+
+static inline void *ofi_idx_lookup(struct indexer *idx, int index)
+{
+	return ofi_idx_is_valid(idx, index) ? ofi_idx_at(idx, index) : NULL;
 }
 
 /*
