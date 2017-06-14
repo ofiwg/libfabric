@@ -1417,6 +1417,15 @@ ssize_t ft_rx(struct fid_ep *ep, size_t size)
 	return ret;
 }
 
+static inline int ft_tag_is_valid(struct fid_cq * cq, struct fi_cq_err_entry *comp,
+				  uint64_t tag)
+{
+	if ((hints->caps & FI_TAGGED) && (cq == rxcq) && (comp->tag != tag)) {
+		FT_ERR("Tag mismatch!");
+		return 0;
+	}
+	return 1;
+}
 /*
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
@@ -1435,7 +1444,8 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
 		if (ret > 0) {
 			if (timeout >= 0)
 				clock_gettime(CLOCK_MONOTONIC, &a);
-
+			if (!ft_tag_is_valid(cq, &comp, rx_cq_cntr))
+				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			return ret;
@@ -1462,10 +1472,13 @@ static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
 
 	while (total - *cur > 0) {
 		ret = fi_cq_sread(cq, &comp, 1, NULL, timeout);
-		if (ret > 0)
+		if (ret > 0) {
+			if (!ft_tag_is_valid(cq, &comp, rx_cq_cntr))
+				return -FI_EOTHER;
 			(*cur)++;
-		else if (ret < 0 && ret != -FI_EAGAIN)
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			return ret;
+		}
 	}
 
 	return 0;
@@ -1494,6 +1507,8 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
+			if (!ft_tag_is_valid(cq, &comp, rx_cq_cntr))
+				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			return ret;
