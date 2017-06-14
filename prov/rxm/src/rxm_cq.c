@@ -113,6 +113,7 @@ int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t l
 	comp->len = len;
 	comp->buf = buf;
 	comp->data = data;
+	comp->tag = tag;
 	ofi_cirque_commit(util_cq->cirq);
 out:
 	fastlock_release(&util_cq->cq_lock);
@@ -182,7 +183,8 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 		assert(offset <= iov[i].iov_len);
 		match_iov->iov[i].iov_base = (char *)iov[i].iov_base + offset;
 		match_iov->iov[i].iov_len = MIN(iov[i].iov_len - offset, match_len);
-		match_iov->desc[i] = desc[i];
+		if (desc)
+			match_iov->desc[i] = desc[i];
 
 		match_len -= match_iov->iov[i].iov_len;
 		if (!match_len)
@@ -310,10 +312,8 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 
 			rx_buf->recv_entry->count = mr_match_iov.count;
 
-			for (i = 0; i < rx_buf->recv_entry->count; i++) {
-				assert(!rx_buf->recv_entry->desc[i]);
+			for (i = 0; i < rx_buf->recv_entry->count; i++)
 				rx_buf->recv_entry->desc[i] = rx_buf->mr[i];
-			}
 		}
 
 		for (i = 0; i < rx_buf->recv_entry->count; i++)
@@ -518,7 +518,8 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *com
 		if (ret < 0)
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to fi_cq_readerr on msg cq\n");
-		op_context = err_entry.op_context;
+		else
+			op_context = err_entry.op_context;
 	}
 	switch (*(enum rxm_proto_state *)op_context) {
 	case RXM_TX:

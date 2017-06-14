@@ -260,7 +260,6 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_RX;
 	rx_buf->ep = rxm_ep;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Re-posting rx buf\n");
 	ret = fi_recv(rx_buf->ep->srx_ctx, &rx_buf->pkt, RXM_BUF_SIZE,
 		      rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
 	if (ret)
@@ -394,16 +393,18 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	for (i = 0; i < count; i++) {
 		recv_entry->iov[i].iov_base = iov[i].iov_base;
 		recv_entry->iov[i].iov_len = iov[i].iov_len;
-		recv_entry->desc[i] = desc[i];
+		if (desc)
+			recv_entry->desc[i] = desc[i];
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "post recv: %u\n",
 			iov[i].iov_len);
 	}
-	recv_entry->count = count;
-	recv_entry->addr = (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) ?
-		src_addr : FI_ADDR_UNSPEC;
-	recv_entry->flags = flags;
-	recv_entry->tag = tag;
-	recv_entry->ignore = ignore;
+	recv_entry->count 	= count;
+	recv_entry->addr 	= (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) ?
+				  src_addr : FI_ADDR_UNSPEC;
+	recv_entry->context 	= context;
+	recv_entry->flags 	= flags;
+	recv_entry->tag 	= tag;
+	recv_entry->ignore 	= ignore;
 
 	ret = rxm_check_unexp_msg_list(rxm_ep, recv_queue, recv_entry);
 	if (ret == -FI_EAGAIN) {
