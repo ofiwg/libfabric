@@ -8,6 +8,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm \
 	simple/fi_rdm_rma_simple \
 	simple/fi_rdm_rma_trigger \
+	simple/fi_rdm_deferred_wq \
 	simple/fi_dgram \
 	simple/fi_mcast \
 	simple/fi_dgram_waitset \
@@ -116,6 +117,10 @@ simple_fi_rdm_rma_simple_LDADD = libfabtests.la
 simple_fi_rdm_rma_trigger_SOURCES = \
 	simple/rdm_rma_trigger.c
 simple_fi_rdm_rma_trigger_LDADD = libfabtests.la
+
+simple_fi_rdm_deferred_wq_SOURCES = \
+	simple/rdm_deferred_wq.c
+simple_fi_rdm_deferred_wq_LDADD = libfabtests.la
 
 simple_fi_dgram_SOURCES = \
 	simple/dgram.c
