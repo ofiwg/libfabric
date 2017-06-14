@@ -266,7 +266,7 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 	struct fi_info *core_hints = NULL;
 	int ret;
 
-	ret = ofi_check_info(util_prov, version, util_hints);
+	ret = ofi_prov_check_info(util_prov, version, util_hints);
 	if (ret)
 		return ret;
 
@@ -721,10 +721,75 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
-		   const struct fi_info *user_info)
+/* if there are multiple fi_info in the provider:
+ * check provider's info */
+int ofi_prov_check_info(const struct util_prov *util_prov,
+			uint32_t api_version,
+			const struct fi_info *user_info)
 {
 	const struct fi_info *prov_info = util_prov->info;
+	size_t success_info = 0;
+	int ret;
+
+	if (!user_info)
+		return FI_SUCCESS;
+
+	for ( ; prov_info; prov_info = prov_info->next) {
+		ret = ofi_check_info(util_prov, prov_info,
+				     api_version, user_info);
+		if (!ret)
+			success_info++;
+	}
+
+	return (!success_info ? -FI_ENODATA : FI_SUCCESS);
+}
+
+/* if there are multiple fi_info in the provider:
+ * check and duplicate provider's info */
+int ofi_prov_check_dup_info(const struct util_prov *util_prov,
+			    uint32_t api_version,
+			    const struct fi_info *user_info,
+			    struct fi_info **info)
+{
+	const struct fi_info *prov_info = util_prov->info;
+	const struct fi_provider *prov = util_prov->prov;
+	struct fi_info *fi, *tail;
+	int ret;
+
+	if (!info)
+		return -FI_EINVAL;
+
+	*info = tail = NULL;
+
+	for ( ; prov_info; prov_info = prov_info->next) {
+		ret = ofi_check_info(util_prov, prov_info,
+				     api_version, user_info);
+	    	if (ret)
+			continue;
+		if (!(fi = fi_dupinfo(prov_info))) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+		if (!*info)
+			*info = fi;
+		else
+			tail->next = fi;
+		tail = fi;
+	}
+
+	return (!*info ? -FI_ENODATA : FI_SUCCESS);
+err:
+	fi_freeinfo(*info);
+	FI_INFO(prov, FI_LOG_CORE,
+		"cannot copy info\n");
+	return ret;
+}
+
+/* if there is only single fi_info in the provider */
+int ofi_check_info(const struct util_prov *util_prov,
+		   const struct fi_info *prov_info, uint32_t api_version,
+		   const struct fi_info *user_info)
+{
 	const struct fi_provider *prov = util_prov->prov;
 	uint64_t prov_mode;
 	int ret;
@@ -787,7 +852,6 @@ int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
 		if (ret)
 			return ret;
 	}
-
 	return 0;
 }
 

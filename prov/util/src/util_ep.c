@@ -76,8 +76,9 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	if (!info || !info->ep_attr || !info->rx_attr || !info->tx_attr)
 		return -FI_EINVAL;
 
-	ret = ofi_check_info(util_prov,
-			     util_domain->fabric->fabric_fid.api_version, info);
+	ret = ofi_prov_check_info(util_prov,
+				  util_domain->fabric->fabric_fid.api_version,
+				  info);
 	if (ret)
 		return ret;
 
