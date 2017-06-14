@@ -30,8 +30,15 @@ direction of operations.
 .PP
 \f[I]FI_MULTI_RECV\f[] is supported for non\-tagged message queue only.
 .PP
+Scalable endpoints are supported if the underlying PSM2 library supports
+multiple endpoints.
+This condition must be satisfied both when the provider is built and
+when the provider is used.
+.PP
 Other supported capabilities include \f[I]FI_TRIGGER\f[],
 \f[I]FI_REMOTE_CQ_DATA\f[], and \f[I]FI_SOURCE\f[].
+Furthermore, \f[I]FI_NAMED_RX_CTX\f[] is supported when scalable
+endpoints are enabled.
 .PP
 Modes : \f[I]FI_CONTEXT\f[] is required for the \f[I]FI_TAGGED\f[] and
 \f[I]FI_MSG\f[] capabilities.
@@ -51,8 +58,8 @@ However, the performance can be significantly impacted if the
 application purely depends on the provider to make auto progress.
 .PP
 Unsupported features : These features are unsupported: connection
-management, scalable endpoint, passive endpoint, shared receive context,
-and send/inject with immediate data over tagged message queue.
+management, passive endpoint, shared receive context, and send/inject
+with immediate data over tagged message queue.
 .SH RUNTIME PARAMETERS
 .PP
 The \f[I]psm2\f[] provider checks for the following environment
