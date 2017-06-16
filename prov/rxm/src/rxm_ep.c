@@ -57,6 +57,14 @@ static int rxm_match_recv_entry_tagged(struct dlist_entry *item, const void *arg
 		rxm_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
 }
 
+static int rxm_match_recv_entry_context(struct dlist_entry *item, const void *context)
+{
+	struct rxm_recv_entry *recv_entry;
+
+	recv_entry = container_of(item, struct rxm_recv_entry, entry);
+	return recv_entry->context == context;
+}
+
 static int rxm_match_unexp_msg(struct dlist_entry *item, const void *arg)
 {
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
@@ -345,9 +353,55 @@ int rxm_setopt(fid_t fid, int level, int optname,
 	return -FI_ENOPROTOOPT;
 }
 
+static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
+			      struct rxm_recv_queue *recv_queue, void *context)
+{
+	struct fi_cq_err_entry err_entry;
+	struct rxm_recv_entry *recv_entry;
+	struct dlist_entry *entry;
+
+	fastlock_acquire(&recv_queue->lock);
+	entry = dlist_remove_first_match(&recv_queue->recv_list,
+					 rxm_match_recv_entry_context,
+					 context);
+	fastlock_release(&recv_queue->lock);
+	if (entry) {
+		recv_entry = container_of(entry, struct rxm_recv_entry, entry);
+		memset(&err_entry, 0, sizeof(err_entry));
+		err_entry.op_context = recv_entry->context;
+		if (recv_queue->type == RXM_RECV_QUEUE_TAGGED) {
+			err_entry.flags |= FI_TAGGED | FI_RECV;
+			err_entry.tag = recv_entry->tag;
+		} else {
+			err_entry.flags = FI_MSG | FI_RECV;
+		}
+		err_entry.err = FI_ECANCELED;
+		err_entry.prov_errno = -FI_ECANCELED;
+		rxm_recv_entry_release(recv_queue, recv_entry);
+		return ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+	}
+	return 0;
+}
+
+static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
+{
+	struct rxm_ep *rxm_ep = container_of(fid_ep, struct rxm_ep, util_ep.ep_fid);
+	int ret;
+
+	ret = rxm_ep_cancel_recv(rxm_ep, &rxm_ep->recv_queue, context);
+	if (ret)
+		return ret;
+
+	ret = rxm_ep_cancel_recv(rxm_ep, &rxm_ep->trecv_queue, context);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static struct fi_ops_ep rxm_ops_ep = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = rxm_ep_cancel,
 	.getopt = rxm_getopt,
 	.setopt = rxm_setopt,
 	.tx_ctx = fi_no_tx_ctx,
