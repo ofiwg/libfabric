@@ -46,11 +46,8 @@ static int rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	size_t i;
 	int ret;
 
-	if (freestack_isempty(rxm_ep->send_queue.fs)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted tx_entry freestack\n");
+	if (!(tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue)))
 		return -FI_EAGAIN;
-	}
-	tx_entry = freestack_pop(rxm_ep->send_queue.fs);
 
 	memset(tx_entry, 0, sizeof(*tx_entry));
 	tx_entry->state = RXM_TX_NOBUF;
@@ -78,7 +75,7 @@ static int rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	}
 	return rma_msg(msg_ep, &msg_rma, flags);
 err:
-	freestack_push(rxm_ep->send_queue.fs, tx_entry);
+	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
 	return ret;
 }
 
@@ -186,12 +183,10 @@ static int rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 		return -FI_EAGAIN;
 	}
 
-	if (freestack_isempty(rxm_ep->send_queue.fs)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted tx_entry freestack\n");
+	if (!(tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue))) {
 		ret = -FI_EAGAIN;
 		goto err1;
 	}
-	tx_entry = freestack_pop(rxm_ep->send_queue.fs);
 
 	memset(tx_entry, 0, sizeof(*tx_entry));
 	tx_entry->state = RXM_TX;
@@ -221,7 +216,7 @@ static int rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 		goto err2;
 	return 0;
 err2:
-	freestack_push(rxm_ep->send_queue.fs, tx_entry);
+	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
 err1:
 	rxm_buf_release(&rxm_ep->tx_pool, (struct rxm_buf *)tx_buf);
 	return ret;
