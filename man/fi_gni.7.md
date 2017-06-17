@@ -28,8 +28,8 @@ The GNI provider supports the following features defined for the
 libfabric API:
 
 *Endpoint types*
-: The provider supports the *FI_EP_RDM*, *FI_EP_DGRAM* and *FI_EP_MSG* endpoint
-  types.
+: The provider supports the *FI_EP_RDM*, *FI_EP_DGRAM*, *FI_EP_MSG* endpoint
+  types, including scalable endpoints.
 
 *Address vectors*
 : The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE*
