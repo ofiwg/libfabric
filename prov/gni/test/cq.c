@@ -50,6 +50,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 /* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
@@ -74,6 +75,7 @@ void setup()
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 

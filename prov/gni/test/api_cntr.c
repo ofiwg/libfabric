@@ -49,6 +49,7 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 #include "fi_ext_gni.h"
+#include "common.h"
 
 #if 1
 #define dbg_printf(...)
@@ -142,6 +143,7 @@ void api_cntr_setup(void)
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
 		hints[i]->mode = mode_bits;
 		hints[i]->fabric_attr->prov_name = strdup("gni");
+		hints[i]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	}
 
 	/* Get info about fabric services with the provided hints */

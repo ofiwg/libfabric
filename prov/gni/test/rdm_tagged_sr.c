@@ -52,6 +52,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 #if 1
 #define dbg_printf(...)
@@ -93,8 +94,8 @@ static void setup_dom(enum fi_progress pm)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->data_progress = pm;
-
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 

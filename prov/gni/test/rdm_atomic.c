@@ -113,6 +113,7 @@ void common_atomic_setup(void)
 	cq_attr.wait_obj = 0;
 
 	hints->ep_attr->type = FI_EP_RDM;
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 	hints->fabric_attr->prov_name = strdup("gni");

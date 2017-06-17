@@ -54,6 +54,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 #if 1
 #define dbg_printf(...)
@@ -144,6 +145,7 @@ int cm_server_start(void)
 	srv_hints = fi_allocinfo();
 	srv_hints->fabric_attr->name = strdup("gni");
 	srv_hints->ep_attr->type = FI_EP_MSG;
+	srv_hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 
 	ret = fi_getinfo(fi_version(), inet_ntoa(loc_sa.sin_addr),
 			 DEF_PORT, FI_SOURCE, srv_hints, &srv_fi);
@@ -273,6 +275,7 @@ int cm_client_start_connect(void)
 	cli_hints->fabric_attr->name = strdup("gni");
 	cli_hints->caps = GNIX_EP_PRIMARY_CAPS;
 	cli_hints->ep_attr->type = FI_EP_MSG;
+	cli_hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 
 	ret = fi_getinfo(fi_version(), inet_ntoa(loc_sa.sin_addr),
 			 DEF_PORT, 0, cli_hints, &cli_fi);

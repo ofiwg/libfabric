@@ -37,6 +37,7 @@
 #include "gnix_mr_notifier.h"
 
 #include <criterion/criterion.h>
+#include "common.h"
 
 static struct gnix_mr_notifier *mr_notifier;
 static void mr_notifier_setup(void)
@@ -238,6 +239,7 @@ static void mr_stressor_setup_common(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 

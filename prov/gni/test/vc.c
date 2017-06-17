@@ -41,7 +41,6 @@
 #include <string.h>
 #include <pthread.h>
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -54,6 +53,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 /* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
@@ -117,6 +117,7 @@ static void vc_setup_common(void)
 	size_t addrlen = 0;
 	struct gnix_fid_av *gnix_av;
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
@@ -238,6 +239,7 @@ static void vc_conn_ping_setup(void)
 	struct fi_av_attr attr = {0};
 	size_t addrlen = 0;
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->fabric_attr->name = strdup("gni");
 
 	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
@@ -398,7 +400,6 @@ static void vc_conn_ping_setup_manual(void)
 	hints->mode = mode_bits;
 	vc_conn_ping_setup();
 }
-
 
 void vc_conn_ping_teardown(void)
 {

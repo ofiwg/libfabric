@@ -38,12 +38,12 @@
 #include <time.h>
 #include <string.h>
 
-
 #include "gnix.h"
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 #include "fi_ext_gni.h"
+#include "common.h"
 
 static struct fid_fabric *fabric;
 static struct fi_info *fi;
@@ -56,6 +56,7 @@ static void setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
@@ -78,9 +79,6 @@ static void teardown(void)
 }
 
 TestSuite(fabric, .init = setup, .fini = teardown);
-
-
-
 
 Test(fabric, simple)
 {

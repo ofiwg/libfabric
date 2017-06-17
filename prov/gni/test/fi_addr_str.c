@@ -289,6 +289,7 @@ static void fas_setup_common(uint32_t version)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
@@ -574,6 +575,7 @@ static void fas_getinfo_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;

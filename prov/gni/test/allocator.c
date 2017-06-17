@@ -39,6 +39,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 #define ALLOCD_WITH_NIC 0
 
@@ -61,6 +62,7 @@ void allocator_setup(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 

@@ -52,6 +52,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 #define NUM_EPS 61
 const int num_msgs = 10;
@@ -96,6 +97,7 @@ static void setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = 4;
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 

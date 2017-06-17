@@ -43,6 +43,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 static struct fid_fabric *fabric;
 static struct fi_info *fi;
@@ -56,6 +57,7 @@ static void setup(void)
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->fabric_attr->prov_name = strdup("gni");
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 
 	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
 	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
