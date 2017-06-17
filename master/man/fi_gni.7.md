@@ -22,14 +22,19 @@ support for common atomic operations and optimized collectives.
 The GNI provider runs on Cray XC systems running CLE 5.2 UP04 or higher
 using gcc version 4.9 or higher.
 
+When using the fi_mr_regattr() and fi_mr_regv() functions to register
+multiple region, users must register the memory region with 4K
+page alignment. Any other page address alignment will result in a return
+value of -FI_EINVAL.
+
 # SUPPORTED FEATURES
 
 The GNI provider supports the following features defined for the
 libfabric API:
 
 *Endpoint types*
-: The provider supports the *FI_EP_RDM*, *FI_EP_DGRAM* and *FI_EP_MSG* endpoint
-  types.
+: The provider supports the *FI_EP_RDM*, *FI_EP_DGRAM*, *FI_EP_MSG* endpoint
+  types, including scalable endpoints.
 
 *Address vectors*
 : The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE*
@@ -74,6 +79,7 @@ libfabric API:
 - *FI_RMA_EVENT*
 - *FI_REMOTE_CQ_DATA*
 - *FABRIC_DIRECT* compilation mode
+- *FI_MORE* (For FI_RMA)
 
 # DATA TRANSFER OPERATIONS
 
