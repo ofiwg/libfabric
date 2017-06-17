@@ -76,3 +76,51 @@ Test(auth_key, failed_insert)
 	ret = _gnix_auth_key_create(NULL, 0);
 	cr_assert(ret == NULL, "unexpectedly created auth_key");
 }
+
+void *race_create_func(void *context)
+{
+	pthread_barrier_t *barrier = (pthread_barrier_t *) context;
+	struct gnix_auth_key *auth_key;
+	int ret;
+
+	/* -1 is the single thread return value for the
+		thread allowed to make modifications to the barrier.
+		For the version of the pthread header present on our
+		systems, the value does not have a define. */
+	ret = pthread_barrier_wait(barrier);
+	cr_assert(ret == 0 || ret == -1, "pthread_barrier, "
+		"ret=%d errno=%d strerror=%s", ret, errno, strerror(errno));
+
+	auth_key = GNIX_GET_AUTH_KEY(NULL, 0);
+	cr_assert_neq(auth_key, NULL, "failed to get authorization key");
+
+	return NULL;
+}
+
+Test(auth_key, race_create)
+{
+#define __AUTH_KEY_THREAD_COUNT 47
+	int i;
+	int thread_count = __AUTH_KEY_THREAD_COUNT;
+	int ret;
+	pthread_t threads[__AUTH_KEY_THREAD_COUNT];
+	pthread_barrier_t barrier;
+#undef __AUTH_KEY_THREAD_COUNT
+
+	ret = pthread_barrier_init(&barrier, NULL, thread_count);
+	cr_assert_eq(ret, 0, "failed to initialize barrier");
+
+	for (i = 0; i < thread_count; i++) {
+		ret = pthread_create(&threads[i], NULL,
+			race_create_func, &barrier);
+		cr_assert_eq(ret, 0, "failed to create pthread");
+	}
+
+	for (i = 0; i < thread_count; i++) {
+		ret = pthread_join(threads[i], NULL);
+		cr_assert_eq(ret, 0);
+	}
+
+	ret = pthread_barrier_destroy(&barrier);
+	cr_assert_eq(ret, 0);
+}
