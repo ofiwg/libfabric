@@ -265,6 +265,7 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 	struct gnix_cq_entry *event;
 	struct slist_entry *item;
 	uint64_t mask;
+	ssize_t ret = FI_SUCCESS;
 
 	if (ep) {
 		if (ep->info && ep->info->mode & FI_NOTIFY_FLAGS_ONLY) {
@@ -284,7 +285,8 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 	item = _gnix_queue_get_free(cq->events);
 	if (!item) {
 		GNIX_WARN(FI_LOG_CQ, "error creating cq_entry\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto err;
 	}
 
 	event = container_of(item, struct gnix_cq_entry, item);
@@ -301,9 +303,10 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 	if (cq->wait)
 		_gnix_signal_wait_obj(cq->wait);
 
+err:
 	COND_RELEASE(cq->requires_lock, &cq->lock);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
