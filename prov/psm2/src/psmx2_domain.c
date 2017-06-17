@@ -69,7 +69,7 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 }
 
 struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
-					    struct psmx2_src_name *src_addr,
+					    struct psmx2_ep_name *src_addr,
 					    int sep_ctxt_idx)
 {
 	struct psmx2_trx_ctxt *trx_ctxt;
@@ -88,12 +88,10 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
 		"uuid: %s\n", psmx2_uuid_to_string(domain->fabric->uuid));
 
-	if (src_addr) {
-		opts.unit = src_addr->unit;
-		opts.port = src_addr->port;
-		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"ep_open_opts: unit=%d port=%u\n", opts.unit, opts.port);
-	}
+	opts.unit = src_addr ? src_addr->unit : PSMX2_DEFAULT_UNIT;
+	opts.port = src_addr ? src_addr->port : PSMX2_DEFAULT_PORT;
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"ep_open_opts: unit=%d port=%u\n", opts.unit, opts.port);
 
 	if (opts.unit < 0 && sep_ctxt_idx >= 0) {
 		should_retry = 1;
@@ -355,7 +353,7 @@ static int psmx2_key_compare(void *key1, void *key2)
 }
 
 static int psmx2_domain_init(struct psmx2_fid_domain *domain,
-			     struct psmx2_src_name *src_addr)
+			     struct psmx2_ep_name *src_addr)
 {
 	int err;
 
@@ -435,6 +433,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct psmx2_fid_fabric *fabric_priv;
 	struct psmx2_fid_domain *domain_priv;
+	struct psmx2_ep_name *src_addr = info->src_addr;
 	int mr_mode = (info->domain_attr->mr_mode & FI_MR_BASIC) ? FI_MR_BASIC : 0;
 	int err;
 
@@ -485,8 +484,14 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->fabric = fabric_priv;
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
+	domain_priv->addr_format = info->addr_format;
 
-	err = psmx2_domain_init(domain_priv, info->src_addr);
+	if (info->addr_format == FI_ADDR_STR)
+		src_addr = psmx2_string_to_ep_name(info->src_addr);
+
+	err = psmx2_domain_init(domain_priv, src_addr);
+	if (info->addr_format == FI_ADDR_STR)
+		free(src_addr);
 	if (err)
 		goto err_out_close_domain;
 
