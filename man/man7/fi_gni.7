@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2017\-05\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2017\-06\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -14,13 +14,20 @@ and optimized collectives.
 .PP
 The GNI provider runs on Cray XC systems running CLE 5.2 UP04 or higher
 using gcc version 4.9 or higher.
+.PP
+When using the fi_mr_regattr() and fi_mr_regv() functions to register
+multiple region, users must register the memory region with 4K page
+alignment.
+Any other page address alignment will result in a return value of
+\-FI_EINVAL.
 .SH SUPPORTED FEATURES
 .PP
 The GNI provider supports the following features defined for the
 libfabric API:
 .PP
 \f[I]Endpoint types\f[] : The provider supports the \f[I]FI_EP_RDM\f[],
-\f[I]FI_EP_DGRAM\f[] and \f[I]FI_EP_MSG\f[] endpoint types.
+\f[I]FI_EP_DGRAM\f[], \f[I]FI_EP_MSG\f[] endpoint types, including
+scalable endpoints.
 .PP
 \f[I]Address vectors\f[] : The provider implements both the
 \f[I]FI_AV_MAP\f[] and \f[I]FI_AV_TABLE\f[] address vector types.
@@ -58,7 +65,7 @@ up when clients utilize the wait system (e.g., calling fi_wait).
 following capabilities and features: \- \f[I]FI_MULTI_RECV\f[] \-
 \f[I]FI_SOURCE\f[] \- \f[I]FI_FENCE\f[] \- \f[I]FI_RM_ENABLED\f[] \-
 \f[I]FI_RMA_EVENT\f[] \- \f[I]FI_REMOTE_CQ_DATA\f[] \-
-\f[I]FABRIC_DIRECT\f[] compilation mode
+\f[I]FABRIC_DIRECT\f[] compilation mode \- \f[I]FI_MORE\f[] (For FI_RMA)
 .SH DATA TRANSFER OPERATIONS
 .SS FI_ATOMIC
 .PP
