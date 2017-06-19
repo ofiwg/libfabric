@@ -17,7 +17,6 @@ _psm2_files = \
 	prov/psm2/src/psmx2_am.c \
 	prov/psm2/src/psmx2_mr.c \
 	prov/psm2/src/psmx2_wait.c \
-	prov/psm2/src/psmx2_ns.c \
 	prov/psm2/src/psmx2_util.c
 
 if HAVE_PSM2_DL
