@@ -246,6 +246,7 @@ struct psmx_fid_fabric {
 	struct psmx_fid_domain	*active_domain;
 	psm_uuid_t		uuid;
 	pthread_t		name_server_thread;
+	struct util_ns		name_server;
 };
 
 struct psmx_fid_domain {
@@ -619,6 +620,22 @@ void	psmx_ns_stop_server(struct psmx_fid_fabric *fabric);
 void	psmx_ns_add_local_name(int service, psm_epid_t name);
 void	psmx_ns_del_local_name(int service, psm_epid_t name);
 void	*psmx_ns_resolve_name(const char *server, int *service);
+
+static inline
+int	psmx_ns_service_cmp(void *svc1, void *svc2)
+{
+	int service1 = *(int *)svc1, service2 = *(int *)svc2;
+	if (service1 == PSMX_ANY_SERVICE ||
+	    service2 == PSMX_ANY_SERVICE)
+		return 0;
+	return (service1 < service2) ? -1 : (service1 > service2);
+}
+
+static inline
+int	psmx_ns_is_service_wildcard(void *svc)
+{
+	return (*(int *)svc == PSMX_ANY_SERVICE);
+}
 
 void	psmx_get_uuid(psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
