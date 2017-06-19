@@ -615,12 +615,6 @@ int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
 int	psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 void	psmx_domain_disable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 
-void	psmx_ns_start_server(struct psmx_fid_fabric *fabric);
-void	psmx_ns_stop_server(struct psmx_fid_fabric *fabric);
-void	psmx_ns_add_local_name(int service, psm_epid_t name);
-void	psmx_ns_del_local_name(int service, psm_epid_t name);
-void	*psmx_ns_resolve_name(const char *server, int *service);
-
 static inline
 int	psmx_ns_service_cmp(void *svc1, void *svc2)
 {
