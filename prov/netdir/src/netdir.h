@@ -61,6 +61,12 @@ extern "C" {
 	FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 #define OFI_ND_CAPS OFI_ND_PRIMARY_CAPS
 
+#define OFI_ND_TX_OP_FLAGS					\
+	FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE |	\
+	FI_INJECT_COMPLETE | FI_DELIVERY_COMPLETE |		\
+	FI_SELECTIVE_COMPLETION
+
+
 extern struct gl_data {
 	size_t	inline_thr;
 	int	prepost_cnt;
