@@ -213,11 +213,13 @@ ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	if (comparev) {
 		memcpy(&trigger->op.atomic.comparev[0], &comparev[0],
 		       compare_count * sizeof(struct fi_ioc));
+		trigger->op.atomic.compare_count = compare_count;
 	}
 
 	if (resultv) {
 		memcpy(&trigger->op.atomic.resultv[0], &resultv[0],
 		       result_count * sizeof(struct fi_ioc));
+		trigger->op.atomic.result_count = result_count;
 	}
 
 	trigger->op_type = op_type;
