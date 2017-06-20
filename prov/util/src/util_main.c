@@ -159,6 +159,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 	struct dlist_entry *item;
 	const struct fi_provider *prov = util_prov->prov;
 	struct util_fabric_info fabric_info;
+	struct fi_info *saved_info;
 	int ret, copy_dest;
 
 	FI_DBG(prov, FI_LOG_CORE, "checking info\n");
@@ -169,94 +170,101 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		return -FI_EINVAL;
 	}
 
-	ret = ofi_check_info(util_prov, version, hints);
+	ret = ofi_prov_check_dup_info(util_prov, version, hints, info);
 	if (ret)
 		return ret;
 
-	*info = fi_dupinfo(util_prov->info);
-	if (!*info) {
-		FI_INFO(prov, FI_LOG_CORE, "cannot copy info\n");
-		return -FI_ENOMEM;
-	}
-
 	ofi_alter_info(*info, hints, version);
 
-	fabric_info.name = (*info)->fabric_attr->name;
-	fabric_info.prov = util_prov->prov;
+	saved_info = *info;
 
-	fabric = ofi_fabric_find(&fabric_info);
-	if (fabric) {
-		FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
-		(*info)->fabric_attr->fabric = &fabric->fabric_fid;
+	for (; *info; *info = (*info)->next) {
 
-		fastlock_acquire(&fabric->lock);
-		item = dlist_find_first_match(&fabric->domain_list,
-					      util_find_domain, *info);
-		if (item) {
-			FI_DBG(prov, FI_LOG_CORE, "Found open domain\n");
-			domain = container_of(item, struct util_domain,
-					      list_entry);
-			(*info)->domain_attr->domain = &domain->domain_fid;
+		fabric_info.name = (*info)->fabric_attr->name;
+		fabric_info.prov = util_prov->prov;
+
+		fabric = ofi_fabric_find(&fabric_info);
+		if (fabric) {
+			FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
+			(*info)->fabric_attr->fabric = &fabric->fabric_fid;
+
+			fastlock_acquire(&fabric->lock);
+			item = dlist_find_first_match(&fabric->domain_list,
+						      util_find_domain, *info);
+			if (item) {
+				FI_DBG(prov, FI_LOG_CORE,
+				       "Found open domain\n");
+				domain = container_of(item, struct util_domain,
+						      list_entry);
+				(*info)->domain_attr->domain =
+						&domain->domain_fid;
+			}
+			fastlock_release(&fabric->lock);
+
 		}
-		fastlock_release(&fabric->lock);
 
-	}
-
-	if (flags & FI_SOURCE) {
-		ret = ofi_get_addr((*info)->addr_format, flags,
-				  node, service, &(*info)->src_addr,
-				  &(*info)->src_addrlen);
-		if (ret) {
-			FI_INFO(prov, FI_LOG_CORE,
-				"source address not available\n");
-			goto err;
-		}
-		copy_dest = (hints && hints->dest_addr);
-	} else {
-		if (node || service) {
-			copy_dest = 0;
+		if (flags & FI_SOURCE) {
 			ret = ofi_get_addr((*info)->addr_format, flags,
-					  node, service, &(*info)->dest_addr,
-					  &(*info)->dest_addrlen);
+					  node, service, &(*info)->src_addr,
+					  &(*info)->src_addrlen);
 			if (ret) {
 				FI_INFO(prov, FI_LOG_CORE,
-					"cannot resolve dest address\n");
+					"source address not available\n");
 				goto err;
 			}
-		} else {
 			copy_dest = (hints && hints->dest_addr);
+		} else {
+			if (node || service) {
+				copy_dest = 0;
+				ret = ofi_get_addr((*info)->addr_format,
+						   flags, node, service,
+						   &(*info)->dest_addr,
+						   &(*info)->dest_addrlen);
+				if (ret) {
+					FI_INFO(prov, FI_LOG_CORE,
+						"cannot resolve dest address\n");
+					goto err;
+				}
+			} else {
+				copy_dest = (hints && hints->dest_addr);
+			}
+
+			if (hints && hints->src_addr) {
+				(*info)->src_addr = mem_dup(hints->src_addr,
+						    hints->src_addrlen);
+				if (!(*info)->src_addr) {
+					ret = -FI_ENOMEM;
+					goto err;
+				}
+				(*info)->src_addrlen = hints->src_addrlen;
+			}
 		}
 
-		if (hints && hints->src_addr) {
-			(*info)->src_addr = mem_dup(hints->src_addr,
-						    hints->src_addrlen);
-			if (!(*info)->src_addr) {
+		if (copy_dest) {
+			(*info)->dest_addr = mem_dup(hints->dest_addr,
+						     hints->dest_addrlen);
+			if (!(*info)->dest_addr) {
 				ret = -FI_ENOMEM;
 				goto err;
 			}
-			(*info)->src_addrlen = hints->src_addrlen;
+			(*info)->dest_addrlen = hints->dest_addrlen;
+		}
+
+		if ((*info)->dest_addr && !(*info)->src_addr) {
+			ret = ofi_get_src_addr((*info)->addr_format,
+					       (*info)->dest_addr,
+					       (*info)->dest_addrlen,
+					       &(*info)->src_addr,
+					       &(*info)->src_addrlen);
+			if (ret) {
+				FI_INFO(prov, FI_LOG_CORE,
+					"cannot resolve source address\n");
+			}
 		}
 	}
 
-	if (copy_dest) {
-		(*info)->dest_addr = mem_dup(hints->dest_addr,
-					     hints->dest_addrlen);
-		if (!(*info)->dest_addr) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-		(*info)->dest_addrlen = hints->dest_addrlen;
-	}
+	*info = saved_info;
 
-	if ((*info)->dest_addr && !(*info)->src_addr) {
-		ret = ofi_get_src_addr((*info)->addr_format, (*info)->dest_addr,
-				      (*info)->dest_addrlen, &(*info)->src_addr,
-				      &(*info)->src_addrlen);
-		if (ret) {
-			FI_INFO(prov, FI_LOG_CORE,
-				"cannot resolve source address\n");
-		}
-	}
 	return 0;
 
 err:

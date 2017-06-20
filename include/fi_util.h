@@ -585,7 +585,15 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 int ofi_check_tx_attr(const struct fi_provider *prov,
 		      const struct fi_tx_attr *prov_attr,
 		      const struct fi_tx_attr *user_attr, uint64_t info_mode);
-int ofi_check_info(const struct util_prov *util_prov, uint32_t api_version,
+int ofi_prov_check_info(const struct util_prov *util_prov,
+			uint32_t api_version,
+			const struct fi_info *user_info);
+int ofi_prov_check_dup_info(const struct util_prov *util_prov,
+			    uint32_t api_version,
+			    const struct fi_info *user_info,
+			    struct fi_info **info);
+int ofi_check_info(const struct util_prov *util_prov,
+		   const struct fi_info *prov_info, uint32_t api_version,
 		   const struct fi_info *user_info);
 void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		    uint32_t api_version);

@@ -1723,15 +1723,19 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *dg_info;
 	struct rxd_ep *rxd_ep;
 	struct rxd_domain *rxd_domain;
+	uint32_t api_version;
 
-	rxd_domain = container_of(domain, struct rxd_domain, util_domain.domain_fid);
-	ret = ofi_check_info(&rxd_util_prov, rxd_domain->util_domain.fabric->
-			     fabric_fid.api_version, info);
+	rxd_domain = container_of(domain, struct rxd_domain,
+				  util_domain.domain_fid);
+
+	api_version = rxd_domain->util_domain.fabric->fabric_fid.api_version;
+
+	ret = ofi_prov_check_info(&rxd_util_prov, api_version, info);
 	if (ret)
 		return ret;
 
-	ret = ofi_get_core_info(rxd_domain->util_domain.fabric->fabric_fid.api_version,
-				NULL, NULL, 0, &rxd_util_prov, info,
+	ret = ofi_get_core_info(api_version, NULL, NULL, 0,
+				&rxd_util_prov, info,
 				rxd_info_to_core, &dg_info);
 	if (ret)
 		return ret;
@@ -1742,7 +1746,8 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 	}
 
-	rxd_ep->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
+	rxd_ep->addrlen = (info->src_addr) ? info->src_addrlen :
+					     info->dest_addrlen;
 	rxd_ep->do_local_mr = (rxd_domain->dg_mode & FI_LOCAL_MR) ? 1 : 0;
 	ret = fi_endpoint(rxd_domain->dg_domain, dg_info, ep, context);
 	if (ret)

@@ -83,7 +83,9 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	ofi_status = ofi_check_info(&mlx_util_prov, fabric->api_version, info);
+	ofi_status = ofi_prov_check_info(&mlx_util_prov,
+					 fabric->api_version,
+					 info);
 	if (ofi_status) {
 		return ofi_status;
 	}
@@ -93,7 +95,8 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return -ENOMEM;
 	}
 
-	ofi_status = ofi_domain_init(fabric, info, &(domain->u_domain), context);
+	ofi_status = ofi_domain_init(fabric, info,
+				     &(domain->u_domain), context);
 	if (ofi_status) {
 		goto domain_free;
 	}
