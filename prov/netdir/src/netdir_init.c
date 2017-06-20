@@ -91,6 +91,8 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	 * and use ND SGE to send/write iovecs */
 	info->tx_attr->iov_limit = ND_MSG_IOV_LIMIT;
 	info->tx_attr->rma_iov_limit = ND_MSG_IOV_LIMIT;
+	info->tx_attr->op_flags = OFI_ND_TX_OP_FLAGS;
+
 	info->rx_attr->caps = FI_MSG | FI_RECV;
 	info->rx_attr->comp_order = FI_ORDER_STRICT;
 	info->rx_attr->total_buffered_recv = 0;

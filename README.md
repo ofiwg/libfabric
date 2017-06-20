@@ -284,3 +284,32 @@ If specified, set the progress mode enabled in FABRIC_DIRECT (default is FI_PROG
 
 If specified, set the memory registration mode (default is FI_MR_BASIC).
 
+### Network Direct
+
+***
+
+The Network Direct provider enables applications using OFI to be run over
+any verbs hardware (Infiniband, iWarp and etc). It uses the Microsoft Network
+Direct SPI for network transport and provides a translation of OFI calls to
+appropriate Network Direct API calls.
+The Network Direct providers allows to OFI-based applications utilize
+zero-copy data transfers between applications, kernel-bypass I/O generation and
+one-sided data transfer operations on Microsoft Windows OS.
+An application is able to use OFI with Network Direct provider enabled on
+Windows OS to expose the capabilities of the networking devices if the hardware
+vendors of the devices implemented the Network Direct service provider interface
+(SPI) for their hardware.
+
+The Network Direct is an experimental provider. The full support of the Network
+Direct provider will be added to 1.6 release version of libfabric.
+
+See the `fi_netdir(7)` man page for more details.
+
+#### Dependencies
+
+- The Network Direct provider requires Network Direct SPI. If you are compiling
+  Libfabric from source and want to enable Network Direct support, you will also
+  need the matching header files for the Network Direct SPI.
+  If the libraries and header files are not in default paths (the default path is
+  root of provier directory, i.e. \prov\netdir\NetDirect, where NetDirect contains
+  the header files), specify them in the configuration properties of the VS project.
