@@ -276,7 +276,8 @@ number of addresses is specified through the count parameter.  The
 addr parameter references an array of addresses to insert into the AV.
 Addresses inserted into an address vector must be in the same format
 as specified in the addr_format field of the fi_info struct provided when
-opening the corresponding domain.
+opening the corresponding domain. When using the `FI_ADDR_STR` format,
+the `addr` parameter should reference an array of strings (char \*\*).
 
 For AV's of type FI_AV_MAP, once inserted addresses have been mapped,
 the mapped values are written into the buffer referenced by fi_addr.
@@ -342,8 +343,11 @@ application to specify the node and service names, similar to the
 fi_getinfo inputs, rather than an encoded address.  The node and service
 parameters are defined the same as fi_getinfo(3).  Node should be a string
 that corresponds to a hostname or network address.  The service string
-corresponds to a textual representation of a transport address.  Supported
-flags are the same as for fi_av_insert.
+corresponds to a textual representation of a transport address.
+Applications may also pass in an `FI_ADDR_STR` formatted address as the
+node parameter. In such cases, the service parameter must be NULL. See
+fi_getinfo.3 for details on using `FI_ADDR_STR`. Supported flags are the
+same as for fi_av_insert.
 
 ## fi_av_insertsym
 

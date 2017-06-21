@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
- * Copyright (c) 2006 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2006-2017 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013 Intel Corp., Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  *
@@ -254,7 +254,7 @@ sa_sin:
 			return NULL;
 
 		size = snprintf(buf, MIN(*len, sizeof(str)),
-				"inet://%s:%" PRIu16, str,
+				"fi_sockaddr_in://%s:%" PRIu16, str,
 				ntohs(sin->sin_port));
 		break;
 	case FI_SOCKADDR_IN6:
@@ -265,27 +265,30 @@ sa_sin6:
 			return NULL;
 
 		size = snprintf(buf, MIN(*len, sizeof(str)),
-				"inet6://[%s]:%" PRIu16, str,
+				"fi_sockaddr_in6://[%s]:%" PRIu16, str,
 				ntohs(sin6->sin6_port));
 		break;
 	case FI_SOCKADDR_IB:
-		size = snprintf(buf, *len, "ib://%p", addr);
+		size = snprintf(buf, *len, "fi_sockaddr_ib://%p", addr);
 		break;
 	case FI_ADDR_PSMX:
-		size = snprintf(buf, *len, "psmx://%" PRIx64, *(uint64_t *) addr);
+		size = snprintf(buf, *len, "fi_addr_psmx://%" PRIx64,
+				*(uint64_t *)addr);
 		break;
 	case FI_ADDR_PSMX2:
-		size = snprintf(buf, *len, "psmx2://%" PRIx64 ":%" PRIx64,
-				*(uint64_t *) addr, *((uint64_t *) addr + 1));
+		size =
+		    snprintf(buf, *len, "fi_addr_psmx2://%" PRIx64 ":%" PRIx64,
+			     *(uint64_t *)addr, *((uint64_t *)addr + 1));
 		break;
 	case FI_ADDR_GNI:
-		size = snprintf(buf, *len, "gni://%" PRIx64, *(uint64_t *) addr);
+		size = snprintf(buf, *len, "fi_addr_gni://%" PRIx64,
+				*(uint64_t *)addr);
 		break;
 	case FI_ADDR_BGQ:
-		size = snprintf(buf, *len, "bgq://%p", addr);
+		size = snprintf(buf, *len, "fi_addr_bgq://%p", addr);
 		break;
 	case FI_ADDR_MLX:
-		size = snprintf(buf, *len, "mlx://%p", addr);
+		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);
 		break;
 	case FI_ADDR_STR:
 		size = snprintf(buf, *len, "%s", (const char *) addr);
@@ -311,21 +314,21 @@ static uint32_t ofi_addr_format(const char *str)
 		return FI_FORMAT_UNSPEC;
 
 	fmt[sizeof(fmt) - 1] = '\0';
-	if (!strcmp(fmt, "inet"))
+	if (!strcasecmp(fmt, "fi_sockaddr_in"))
 		return FI_SOCKADDR_IN;
-	else if (!strcmp(fmt, "inet6"))
+	else if (!strcasecmp(fmt, "fi_sockaddr_in6"))
 		return FI_SOCKADDR_IN6;
-	else if (!strcmp(fmt, "ib"))
+	else if (!strcasecmp(fmt, "fi_sockaddr_ib"))
 		return FI_SOCKADDR_IB;
-	else if (!strcmp(fmt, "psmx"))
+	else if (!strcasecmp(fmt, "fi_addr_psmx"))
 		return FI_ADDR_PSMX;
-	else if (!strcmp(fmt, "psmx2"))
+	else if (!strcasecmp(fmt, "fi_addr_psmx2"))
 		return FI_ADDR_PSMX2;
-	else if (!strcmp(fmt, "gni"))
+	else if (!strcasecmp(fmt, "fi_addr_gni"))
 		return FI_ADDR_GNI;
-	else if (!strcmp(fmt, "bgq"))
+	else if (!strcasecmp(fmt, "fi_addr_bgq"))
 		return FI_ADDR_BGQ;
-	else if (!strcmp(fmt, "mlx"))
+	else if (!strcasecmp(fmt, "fi_addr_mlx"))
 		return FI_ADDR_MLX;
 
 	return FI_FORMAT_UNSPEC;
