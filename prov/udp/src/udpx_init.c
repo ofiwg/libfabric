@@ -41,10 +41,17 @@
 
 
 #if HAVE_GETIFADDRS
+static inline int udpx_is_loopback(struct sockaddr *addr)
+{
+	assert(addr);
+	return addr->sa_family == AF_INET &&
+		((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK);
+}
+
 static void udpx_getinfo_ifs(struct fi_info **info)
 {
 	struct ifaddrs *ifaddrs, *ifa;
-	struct fi_info *head, *tail, *cur;
+	struct fi_info *head, *tail, *cur, *loopback;
 	size_t addrlen;
 	uint32_t addr_format;
 	int ret;
@@ -53,7 +60,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 	if (ret)
 		return;
 
-	head = tail = NULL;
+	head = tail = loopback = NULL;
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP))
 			continue;
@@ -75,11 +82,16 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 		if (!cur)
 			break;
 
-		if (!head)
-			head = cur;
-		else
-			tail->next = cur;
-		tail = cur;
+		if(!udpx_is_loopback(ifa->ifa_addr)) {
+			if (!head)
+				head = cur;
+			else
+				tail->next = cur;
+			tail = cur;
+		} else {
+			cur->next = loopback;
+			loopback = cur;
+		}
 
 		if ((cur->src_addr = mem_dup(ifa->ifa_addr, addrlen))) {
 			cur->src_addrlen = addrlen;
@@ -88,7 +100,16 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 	}
 	freeifaddrs(ifaddrs);
 
-	if (head) {
+	if (head || loopback) {
+		if(!head) { /* loopback interface only? */
+			head = loopback;
+		} else {
+			/* append loopback interfaces to tail */
+			assert(tail);
+			assert(!tail->next);
+			tail->next = loopback;
+		}
+
 		fi_freeinfo(*info);
 		*info = head;
 	}
