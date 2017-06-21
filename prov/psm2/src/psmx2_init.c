@@ -171,7 +171,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	struct fi_info *psmx2_info;
 	uint32_t cnt = 0;
 	struct psmx2_ep_name *dest_addr = NULL;
-	struct psmx2_src_name *src_addr;
+	struct psmx2_ep_name *src_addr;
 	int ep_type = FI_EP_RDM;
 	int av_type = FI_AV_UNSPEC;
 	uint64_t mode = FI_CONTEXT;
@@ -186,6 +186,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	glob_t glob_buf;
 	int tx_ctx_cnt, rx_ctx_cnt;
 	int default_multi_ep = 0;
+	int addr_format = FI_ADDR_PSMX2;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
@@ -241,7 +242,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			"failed to allocate src addr.\n");
 		return -FI_ENODATA;
 	}
-	src_addr->signature = 0xFFFF;
+	src_addr->type = PSMX2_EP_SRC_ADDR;
+	src_addr->epid = PSMX2_RESERVED_EPID;
 	src_addr->unit = PSMX2_DEFAULT_UNIT;
 	src_addr->port = PSMX2_DEFAULT_PORT;
 	src_addr->service = PSMX2_ANY_SERVICE;
@@ -276,10 +278,13 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		case FI_FORMAT_UNSPEC:
 		case FI_ADDR_PSMX2:
 			break;
+		case FI_ADDR_STR:
+			addr_format = FI_ADDR_STR;
+			break;
 		default:
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->addr_format=%d, supported=%d,%d.\n",
-				hints->addr_format, FI_FORMAT_UNSPEC, FI_ADDR_PSMX2);
+				"hints->addr_format=%d, supported=%d,%d,%d.\n",
+				hints->addr_format, FI_FORMAT_UNSPEC, FI_ADDR_PSMX2, FI_ADDR_STR);
 			goto err_out;
 		}
 
@@ -593,11 +598,20 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->next = NULL;
 	psmx2_info->caps = caps;
 	psmx2_info->mode = mode;
-	psmx2_info->addr_format = FI_ADDR_PSMX2;
-	psmx2_info->src_addr = src_addr;
-	psmx2_info->src_addrlen = sizeof(*src_addr);
-	psmx2_info->dest_addr = dest_addr;
-	psmx2_info->dest_addrlen = sizeof(*dest_addr);
+	psmx2_info->addr_format = addr_format;
+	if (addr_format == FI_ADDR_STR) {
+		psmx2_info->src_addr = psmx2_ep_name_to_string(src_addr);
+		psmx2_info->src_addrlen = sizeof(struct psmx2_string_name);
+		free(src_addr);
+		psmx2_info->dest_addr = psmx2_ep_name_to_string(dest_addr);
+		psmx2_info->dest_addrlen = sizeof(struct psmx2_string_name);
+		free(dest_addr);
+	} else {
+		psmx2_info->src_addr = src_addr;
+		psmx2_info->src_addrlen = sizeof(*src_addr);
+		psmx2_info->dest_addr = dest_addr;
+		psmx2_info->dest_addrlen = sizeof(*dest_addr);
+	}
 	psmx2_info->fabric_attr->name = strdup(PSMX2_FABRIC_NAME);
 	psmx2_info->fabric_attr->prov_name = NULL;
 	psmx2_info->fabric_attr->prov_version = PSMX2_VERSION;

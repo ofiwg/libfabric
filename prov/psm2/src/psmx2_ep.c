@@ -611,6 +611,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_ep_name ep_name;
+	struct psmx2_ep_name *src_addr;
 	uint8_t vlane;
 	int err = -FI_EINVAL;
 
@@ -634,8 +635,17 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	ep_priv->type = PSMX2_EP_REGULAR;
 	ep_priv->service = PSMX2_ANY_SERVICE;
-	if (info && info->src_addr)
-		ep_priv->service = ((struct psmx2_src_name *)info->src_addr)->service;
+	if (info && info->src_addr) {
+		if (info->addr_format == FI_ADDR_STR) {
+			src_addr = psmx2_string_to_ep_name(info->src_addr);
+			if (src_addr) {
+				ep_priv->service = src_addr->service;
+				free(src_addr);
+			}
+		} else {
+			ep_priv->service = ((struct psmx2_ep_name *)info->src_addr)->service;
+		}
+	}
 
 	if (ep_priv->service == PSMX2_ANY_SERVICE)
 		ep_priv->service = ((getpid() & 0x7FFF) << 16) +
@@ -890,6 +900,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_sep *sep_priv;
 	struct psmx2_ep_name ep_name;
+	struct psmx2_ep_name *src_addr;
 	struct psmx2_trx_ctxt *trx_ctxt;
 	size_t ctxt_cnt = 1;
 	size_t ctxt_size;
@@ -941,10 +952,17 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	sep_priv->domain = domain_priv;
 	sep_priv->ctxt_cnt = ctxt_cnt;
 	ofi_atomic_initialize32(&sep_priv->ref, 0);
+ 
+	src_addr = NULL;
+	if (info && info->src_addr) {
+		if (info->addr_format == FI_ADDR_STR)
+			src_addr = psmx2_string_to_ep_name(info->src_addr);
+		else
+			src_addr = info->src_addr;
+	}
 
 	for (i = 0; i < ctxt_cnt; i++) {
-		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv,
-					        info ? info->src_addr : NULL, i);
+		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, i);
 		if (!trx_ctxt)
 			goto errout_free_ctxt;
 
@@ -964,8 +982,11 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	sep_priv->type = PSMX2_EP_SCALABLE;
 	sep_priv->service = PSMX2_ANY_SERVICE;
-	if (info && info->src_addr)
-		sep_priv->service = ((struct psmx2_src_name *)info->src_addr)->service;
+	if (src_addr) {
+		sep_priv->service = src_addr->service;
+		if (info->addr_format == FI_ADDR_STR)
+			free(src_addr);
+	}
 
 	if (sep_priv->service == PSMX2_ANY_SERVICE)
 		sep_priv->service = ((getpid() & 0x7FFF) << 16) +

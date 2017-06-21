@@ -90,6 +90,52 @@ char *psmx2_uuid_to_string(psm2_uuid_t uuid)
 	return s;
 }
 
+void *psmx2_ep_name_to_string(const struct psmx2_ep_name *name)
+{
+	struct psmx2_string_name *s;
+	size_t len;
+
+	if (!name)
+		return NULL;
+
+	s = calloc(1, sizeof(*s));
+	if (!s)
+		return NULL;
+
+	len = sizeof(*s);
+	if (!ofi_straddr((void *)s, &len, FI_ADDR_PSMX2, name)) {
+		free(s);
+		return NULL;
+	}
+
+	return s;
+}
+
+struct psmx2_ep_name *psmx2_string_to_ep_name(const void *s)
+{
+	void *name;
+	size_t len;
+	uint32_t fmt;
+
+	if (!s)
+		return NULL;
+
+	if (ofi_str_toaddr(s, &fmt, &name, &len)) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"invalid string address: %s.\n", s);
+		return NULL;
+	}
+
+	if (fmt != FI_ADDR_PSMX2) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"invalid string address format: %s.\n", s);
+		free(name);
+		return NULL;
+	}
+
+	return name;
+}
+
 static int psmx2_errno_table[PSM2_ERROR_LAST] = {
 	0,		/* PSM2_OK = 0 */
 	0,		/* PSM2_OK_NO_PROGRESS = 1 */

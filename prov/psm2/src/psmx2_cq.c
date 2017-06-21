@@ -331,7 +331,13 @@ out:
 					event->cqe.err.err = FI_EADDRNOTAVAIL;
 					event->cqe.err.err_data = &cq->error_data;
 					event->error = !!event->cqe.err.err;
-					psmx2_get_source_name(source, (void *)&cq->error_data);
+					if (av->addr_format == FI_ADDR_STR) {
+						psmx2_get_source_string_name(source, (void *)&cq->error_data);
+						event->cqe.err.err_data_size = sizeof(struct psmx2_string_name);
+					} else {
+						psmx2_get_source_name(source, (void *)&cq->error_data);
+						event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
+					}
 				}
 			}
 		} else {
@@ -679,7 +685,13 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 					source = psmx2_av_translate_source(event->source_av,
 									   event->source);
 					if (source == FI_ADDR_NOTAVAIL) {
-						psmx2_get_source_name(event->source, (void *)&cq_priv->error_data);
+						if (cq_priv->domain->addr_format == FI_ADDR_STR) {
+							psmx2_get_source_string_name(event->source, (void *)&cq_priv->error_data);
+							event->cqe.err.err_data_size = sizeof(struct psmx2_string_name);
+						} else {
+							psmx2_get_source_name(event->source, (void *)&cq_priv->error_data);
+							event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
+						}
 						event->cqe.err.err_data = &cq_priv->error_data;
 						event->cqe.err.err = FI_EADDRNOTAVAIL;
 						event->error = !!event->cqe.err.err;

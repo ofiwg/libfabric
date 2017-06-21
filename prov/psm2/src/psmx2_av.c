@@ -489,7 +489,9 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	psm2_epaddr_t *epaddrs;
 	psm2_error_t *errors;
 	int *mask;
+	struct psmx2_ep_name *ep_name;
 	const struct psmx2_ep_name *names = addr;
+	const struct psmx2_string_name *string_names = addr;
 	int error_count;
 	int i, ret;
 
@@ -514,9 +516,19 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	sepaddrs = av_priv->sepaddrs + av_priv->last;
 
 	for (i=0; i<count; i++) {
-		epids[i] = names[i].epid;
-		vlanes[i] = names[i].vlane;
-		types[i] = names[i].type;
+		if (av_priv->addr_format == FI_ADDR_STR) {
+			ep_name = psmx2_string_to_ep_name(string_names+i);
+			if (!ep_name)
+				return -FI_EINVAL;
+			epids[i] = ep_name->epid;
+			vlanes[i] = ep_name->vlane;
+			types[i] = ep_name->type;
+			free(ep_name);
+		} else {
+			epids[i] = names[i].epid;
+			vlanes[i] = names[i].vlane;
+			types[i] = names[i].type;
+		}
 		sepaddrs[i] = NULL;
 	}
 
@@ -580,6 +592,7 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct psmx2_epaddr_context *context;
 	struct psmx2_ep_name name;
 	int idx;
+	int err = 0;
 
 	if (!addr || !addrlen)
 		return -FI_EINVAL;
@@ -598,6 +611,16 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		context = psm2_epaddr_getctxt(PSMX2_ADDR_TO_EP(fi_addr));
 		name.epid = context->epid;
 		name.vlane = PSMX2_ADDR_TO_VL(fi_addr);
+	}
+
+	if (av_priv->addr_format == FI_ADDR_STR) {
+		if (*addrlen > sizeof(struct psmx2_string_name))
+			*addrlen = sizeof(struct psmx2_string_name);
+		memset(addr, 0, *addrlen);
+		if (ofi_straddr(addr, addrlen, FI_ADDR_PSMX2, &name))
+			err = -FI_EINVAL;
+		*addrlen = sizeof(struct psmx2_string_name);
+		return err;
 	}
 
 	if (*addrlen >= sizeof(name))
@@ -765,6 +788,7 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av_priv->count = count;
 	av_priv->flags = flags;
 	av_priv->rx_ctx_bits = rx_ctx_bits;
+	av_priv->addr_format = domain_priv->addr_format;
 
 	av_priv->av.fid.fclass = FI_CLASS_AV;
 	av_priv->av.fid.context = context;
