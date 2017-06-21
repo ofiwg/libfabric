@@ -53,17 +53,23 @@ struct iovec
 
 typedef int pid_t;
 
-static int clock_gettime(int which_clock, struct timespec* tp)
+/*
+ * The FILETIME structure records time in the form of
+ * 100-nanosecond intervals since January 1, 1601
+ */
+#define file2unix_time	10000000i64		/* 1E+7 */
+#define win2unix_epoch	116444736000000000i64	/* 1 Jan 1601 to 1 Jan 1970 */
+
+static inline
+int clock_gettime(int which_clock, struct timespec *spec)
 {
-	LARGE_INTEGER freq;
-	LARGE_INTEGER count;
+	__int64 wintime;
 
-	QueryPerformanceFrequency(&freq);
-	QueryPerformanceCounter(&count);
+	GetSystemTimeAsFileTime((FILETIME*)&wintime);
+	wintime -= win2unix_epoch;
 
-	tp->tv_sec = (time_t)((double)count.QuadPart / freq.QuadPart);
-	tp->tv_nsec = (long)((uint64_t)
-		((double)count.QuadPart * 1000000 / freq.QuadPart) % 1000000);
+	spec->tv_sec = wintime / file2unix_time;
+	spec->tv_nsec = wintime % file2unix_time * 100;
 
 	return 0;
 }
