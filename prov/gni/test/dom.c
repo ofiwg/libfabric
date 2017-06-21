@@ -38,7 +38,6 @@
 #include <time.h>
 #include <string.h>
 
-
 #include "gnix.h"
 
 #include <criterion/criterion.h>
@@ -48,7 +47,7 @@
 static struct fid_fabric *fabric;
 static struct fi_info *fi;
 
-static void setup(void)
+static void _setup(uint32_t version)
 {
 	int ret;
 	struct fi_info *hints;
@@ -59,13 +58,23 @@ static void setup(void)
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_fabric");
 
 	fi_freeinfo(hints);
+}
+
+static void setup(void)
+{
+	_setup(fi_version());
+}
+
+static void setup_1_0(void)
+{
+	_setup(FI_VERSION(1, 0));
 }
 
 static void teardown(void)
@@ -79,6 +88,60 @@ static void teardown(void)
 }
 
 TestSuite(domain, .init = setup, .fini = teardown);
+TestSuite(domain_1_0, .init = setup_1_0, .fini = teardown);
+
+Test(domain_1_0, no_dom_auth_key_support)
+{
+	int ret;
+	struct fid_domain *dom;
+	void *old_auth_key = fi->domain_attr->auth_key;
+	int old_auth_key_size = fi->domain_attr->auth_key_size;
+
+	fi->domain_attr->auth_key = (void *) 0xdeadbeef;
+	fi->domain_attr->auth_key_size = 47;
+
+	ret = fi_domain(fabric, fi, &dom, NULL);
+	cr_assert(ret == -FI_EINVAL, "fi_domain, ret=%d expected=%d",
+		ret, -FI_EINVAL);
+
+	fi->domain_attr->auth_key = old_auth_key;
+	fi->domain_attr->auth_key_size = old_auth_key_size;
+}
+
+Test(domain_1_0, no_mr_auth_key_support)
+{
+	int ret;
+	struct fid_mr *mr;
+	struct fid_domain *dom;
+
+	struct iovec iov = {
+		.iov_base = (void *) 0xabbaabba,
+		.iov_len = 1024,
+	};
+	struct fi_mr_attr mr_attr = {
+		.mr_iov = &iov,
+		.iov_count = 1,
+		.access = (FI_REMOTE_READ | FI_REMOTE_WRITE
+				| FI_READ | FI_WRITE),
+		.offset = 0,
+		.requested_key = 0,
+		.context = NULL,
+		.auth_key = (void *) 0xdeadbeef,
+		.auth_key_size = 47,
+	};
+
+	ret = fi_domain(fabric, fi, &dom, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_domain, ret=%d expected=%d",
+		ret, FI_SUCCESS);
+
+	ret = fi_mr_regattr(dom, &mr_attr, 0, &mr);
+	cr_assert(ret == -FI_EINVAL, "fi_mr_regattr, ret=%d expected=%d",
+		ret, -FI_EINVAL);
+
+	ret = fi_close(&dom->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close, ret=%d expected=%d",
+		ret, FI_SUCCESS);
+}
 
 Test(domain, many_domains)
 {
