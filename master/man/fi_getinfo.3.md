@@ -581,10 +581,16 @@ fabric.  See `fi_av`(3).
   the string is address and/or provider specific, but in general follows
   a URI model:
 
-  address_format[://[node][:[service][/[field3]...]]]
+  address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
 
-  Examples: inet://10.31.6.12:7471, inet6://[fe80::6:12]:7471,
-  name://hostname:7471
+  Examples:
+  - fi_sockaddr://10.31.6.12:7471
+  - fi_sockaddr_in6://[fe80::6:12]:7471
+  - fi_sockaddr://10.31.6.12:7471?qos=3
+
+  Since the string formatted address does not contain any provider
+  information, the prov_name field of the fabric attribute structure should
+  be used to filter by provider if necessary.
 
 # FLAGS
 
