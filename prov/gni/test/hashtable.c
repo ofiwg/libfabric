@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -614,7 +614,7 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 	test_elements = calloc(test_size, sizeof(gnix_test_element_t));
 	cr_assert(test_elements != NULL);
 
-	ret = _gnix_alloc_bitmap(&allocated, bitmap_size);
+	ret = _gnix_alloc_bitmap(&allocated, bitmap_size, NULL);
 	cr_assert(ret == 0);
 
 	srand(time(NULL));

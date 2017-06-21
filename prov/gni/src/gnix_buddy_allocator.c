@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All
  * rights reserved.
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -284,7 +284,7 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 	 * base. block.  The maximum number of bits used would be if max = len.
 	 */
 	if ((fi_errno = _gnix_alloc_bitmap(&alloc_handle[0]->bitmap,
-					   len / MIN_BLOCK_SIZE * 2))) {
+					   len / MIN_BLOCK_SIZE * 2, NULL))) {
 
 		free(&alloc_handle[0]->lists);
 		free(*alloc_handle);

@@ -1118,7 +1118,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		}
 
 		ret = _gnix_alloc_bitmap(&nic->vc_id_bitmap,
-					 nic->vc_id_table_capacity);
+					 nic->vc_id_table_capacity, NULL);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "alloc_bitmap returned %d\n", ret);

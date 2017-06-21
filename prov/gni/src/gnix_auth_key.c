@@ -106,11 +106,11 @@ int _gnix_auth_key_enable(struct gnix_auth_key *info)
 		info->enabled = 1;
 
 		ret = _gnix_alloc_bitmap(&info->prov,
-			info->attr.prov_key_limit);
+			info->attr.prov_key_limit, NULL);
 		assert(ret == FI_SUCCESS);
 
 		ret = _gnix_alloc_bitmap(&info->user,
-			info->attr.user_key_limit);
+			info->attr.user_key_limit, NULL);
 		assert(ret == FI_SUCCESS);
 
 		GNIX_INFO(FI_LOG_DOMAIN,

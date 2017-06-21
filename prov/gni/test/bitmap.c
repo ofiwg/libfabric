@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -112,7 +112,7 @@ static void __test_clean_bitmap_state(gnix_bitmap_t *bitmap,
 
 static void __test_initialize_bitmap(gnix_bitmap_t *bitmap, int bits)
 {
-	int ret = _gnix_alloc_bitmap(bitmap, bits);
+	int ret = _gnix_alloc_bitmap(bitmap, bits, NULL);
 
 	cr_assert(ret == 0);
 	__test_clean_bitmap_state(bitmap, bits, GNIX_BITMAP_STATE_READY);
@@ -185,7 +185,7 @@ Test(gnix_bitmap, initialize_0)
 {
 	int ret;
 
-	ret = _gnix_alloc_bitmap(test_bitmap, 0);
+	ret = _gnix_alloc_bitmap(test_bitmap, 0, NULL);
 	cr_assert(ret == -FI_EINVAL);
 
 	call_free_bitmap = 0;
@@ -197,7 +197,7 @@ Test(gnix_bitmap, already_initialized)
 
 	__test_initialize_bitmap(test_bitmap, 128);
 
-	ret = _gnix_alloc_bitmap(test_bitmap, 128);
+	ret = _gnix_alloc_bitmap(test_bitmap, 128, NULL);
 	cr_assert(ret == -FI_EINVAL);
 
 	call_free_bitmap = 0;
@@ -235,6 +235,45 @@ Test(gnix_bitmap, destroy_bitmap_already_freed)
 	cr_expect(test_bitmap->length == 0);
 	cr_expect(test_bitmap->state == GNIX_BITMAP_STATE_FREE);
 }
+
+Test(gnix_bitmap, provided_buffer)
+{
+	int ret;
+	void *buffer;
+	uint32_t size, elements = 128;
+
+	size = _gnix_bitmap_get_buffer_size(elements);
+	cr_assert(size > 0, "bad size returned, size=%d\n", size);
+
+	buffer = calloc(1, size);
+	cr_assert(buffer, "failed to allocate buffer, size=%d", size);
+
+	ret = _gnix_alloc_bitmap(test_bitmap, elements, buffer);
+	cr_assert(ret == FI_SUCCESS, "ret=%d\n", ret);
+
+	_gnix_fill_bitmap(test_bitmap, 1);
+
+	ret = _gnix_bitmap_full(test_bitmap);
+	cr_assert(ret == 1,
+		"bitmap was not full, ret=%d\n",
+		ret);
+
+	_gnix_fill_bitmap(test_bitmap, 0);
+
+	ret = _gnix_bitmap_empty(test_bitmap);
+	cr_assert(ret == 1,
+		"bitmap was not empty, ret=%d\n",
+		ret);
+
+	ret = _gnix_realloc_bitmap(test_bitmap, elements * 2);
+	cr_assert(ret == -FI_EINVAL, "succeeded unexpectedly");
+
+	ret = _gnix_free_bitmap(test_bitmap);
+	cr_assert(ret == FI_SUCCESS);
+
+	free(buffer);
+}
+
 
 Test(gnix_bitmap, realloc_63)
 {

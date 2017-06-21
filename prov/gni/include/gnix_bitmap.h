@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015,2017 Cray Inc. All rights reserved.
  *
  *  Created on: Apr 16, 2015
  *      Author: jswaro
@@ -43,10 +43,20 @@ typedef enum gnix_bitmap_state {
 	GNIX_BITMAP_STATE_FREE,
 } gnix_bitmap_state_e;
 
+/**
+ * @brief gnix bitmap structure
+ *
+ * @var state    state of the bitmap
+ * @var length   length of bitmap in bits
+ * @var arr      bitmap array
+ * @var internal_buffer_allocation   flag to denote use of an externally
+ *                                   allocated buffer
+ */
 typedef struct gnix_bitmap {
 	gnix_bitmap_state_e state;
 	uint32_t length;
 	gnix_bitmap_block_t *arr;
+	int internal_buffer_allocation;
 } gnix_bitmap_t;
 
 /**
@@ -98,13 +108,16 @@ int _gnix_test_and_clear_bit(gnix_bitmap_t *bitmap, uint32_t index);
  *
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @param   nbits   number of bits to request space for
+ * @param   addr    if provided, external memory allocation used for internal
+					array
  * @return  0       on success
  * @return  -FI_EINVAL if bitmap is already initialized, or 0 is given
  *          as nbits
  * @return  -FI_ENOMEM if there isn't sufficient memory available to
  *          create bitmap
+ * @note    If addr parameter is provided, realloc_bitmap will not work
  */
-int _gnix_alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
+int _gnix_alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits, void *addr);
 
 /**
  * Takes a gnix_bitmap and reallocates the internal structures to the requested
@@ -175,5 +188,16 @@ int _gnix_bitmap_full(gnix_bitmap_t *bitmap);
  * @return  0 if the bitmap has set bits, 1 if the bitmap is fully cleared
  */
 int _gnix_bitmap_empty(gnix_bitmap_t *bitmap);
+
+/**
+ * Helper function for determining the size of array needed to support
+ * 'x' number of bits for an externally provided buffer address 
+ * @param   nbits  number of bits requested for the bitmap
+ */
+__attribute__((unused))
+static inline uint32_t _gnix_bitmap_get_buffer_size(int nbits)
+{
+	return GNIX_BITMAP_BLOCKS(nbits) * sizeof(gnix_bitmap_block_t);
+}
 
 #endif /* BITMAP_H_ */

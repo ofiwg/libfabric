@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -332,7 +332,7 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 		goto err_mmap;
 	}
 
-	ret = _gnix_alloc_bitmap(slab->used, __mbox_count(handle));
+	ret = _gnix_alloc_bitmap(slab->used, __mbox_count(handle), NULL);
 	if (ret) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Error allocating bitmap.\n");
 		goto err_alloc_bitmap;
