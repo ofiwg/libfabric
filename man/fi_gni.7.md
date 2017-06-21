@@ -145,8 +145,44 @@ struct fi_gni_ops_ep {
 ```
 
 The `set_val` function sets the value of a given parameter; the
-`get_val` function returns the current value.  For
-*FI_GNI_DOMAIN_OPS_1*, the currently supported values are:
+`get_val` function returns the current value.
+
+For *FI_GNI_FABRIC_OPS_1*, the currently supported values are:
+
+*GNI_WAIT_THREAD_SLEEP*
+: Time in seconds for which the progress thread will sleep between
+periods of inactivity.
+
+*GNI_DEFAULT_USER_REGISTRATION_LIMIT*
+: The number of user registrations that an authorization key is limited
+to when using the scalable memory mode, if not specified by
+the user during init.
+
+*GNI_DEFAULT_PROV_REGISTRATION_LIMIT*
+: The number of provider registration that an authorization key is
+limited to when using the scalable memory mode, if not specified
+by the user during init.
+
+*GNI_WAIT_SHARED_MEMORY_TIMEOUT*
+: The number of seconds that the provider should wait when
+attempting to open mmap'd shared memory files for internal
+mappings.
+
+For *FI_GNI_FABRIC_OPS_2*, the currently supported values are:
+
+*GNIX_USER_KEY_LIMIT*
+: The number of user registrations that an authorization key is limited
+to when using the scalable memory mode. This may only be set prior
+to the first use of an authorization key in the initialization of a
+domain, endpoint, or memory registration.
+
+*GNIX_PROV_KEY_LIMIT*
+: The number of provider registrations that an authorization key is
+limited to when using the scalable memory mode. This may only be
+set prior to the first use of an authorization key in the initialization
+of a domain, endpoint, or memory registration.
+
+For *FI_GNI_DOMAIN_OPS_1*, the currently supported values are:
 
 *GNI_MSG_RENDEZVOUS_THRESHOLD*
 : Threshold message size at which a rendezvous protocol is used for

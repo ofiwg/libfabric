@@ -99,9 +99,11 @@ static int __gnix_auth_key_get_val(
 
 #define GNIX_DEFAULT_USER_REGISTRATION_LIMIT 192
 #define GNIX_DEFAULT_PROV_REGISTRATION_LIMIT 64
+#define GNIX_DEFAULT_SHARED_MEMORY_TIMEOUT 30
 
 int gnix_default_user_registration_limit = GNIX_DEFAULT_USER_REGISTRATION_LIMIT;
 int gnix_default_prov_registration_limit = GNIX_DEFAULT_PROV_REGISTRATION_LIMIT;
+uint32_t gnix_wait_shared_memory_timeout = GNIX_DEFAULT_SHARED_MEMORY_TIMEOUT;
 
 /* assume that the user will open additional fabrics later and that
    ptag information will need to be retained for the lifetime of the
@@ -747,6 +749,9 @@ __gnix_fab_ops_get_val(struct fid *fid, fab_ops_val_t t, void *val)
 	case GNI_DEFAULT_PROV_REGISTRATION_LIMIT:
 		*(uint32_t *)val = gnix_default_prov_registration_limit;
 		break;
+	case GNI_WAIT_SHARED_MEMORY_TIMEOUT:
+		*(uint32_t *)val = gnix_wait_shared_memory_timeout;
+		break;
 	default:
 		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
 	}
@@ -792,6 +797,10 @@ __gnix_fab_ops_set_val(struct fid *fid, fab_ops_val_t t, void *val)
 			return -FI_EINVAL;
 		}
 		gnix_default_prov_registration_limit = v;
+		break;
+	case GNI_WAIT_SHARED_MEMORY_TIMEOUT:
+		v = *(uint32_t *) val;
+		gnix_wait_shared_memory_timeout = v;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
