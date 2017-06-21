@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2017\-06\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2017\-06\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
@@ -606,10 +606,15 @@ with their GNI protocol.
 The length and content of the string is address and/or provider
 specific, but in general follows a URI model:
 .PP
-address_format[://[node][:[service][/[field3]...]]]
+address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
 .PP
-Examples: inet://10.31.6.12:7471, inet6://[fe80::6:12]:7471,
-name://hostname:7471
+Examples: \- fi_sockaddr://10.31.6.12:7471 \-
+fi_sockaddr_in6://[fe80::6:12]:7471 \-
+fi_sockaddr://10.31.6.12:7471?qos=3
+.PP
+Since the string formatted address does not contain any provider
+information, the prov_name field of the fabric attribute structure
+should be used to filter by provider if necessary.
 .SH FLAGS
 .PP
 The operation of the fi_getinfo call may be controlled through the use

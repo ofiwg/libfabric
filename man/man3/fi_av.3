@@ -1,4 +1,4 @@
-.TH "fi_av" "3" "2017\-02\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_av" "3" "2017\-06\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_av \- Address vector operations
@@ -263,6 +263,8 @@ AV.
 Addresses inserted into an address vector must be in the same format as
 specified in the addr_format field of the fi_info struct provided when
 opening the corresponding domain.
+When using the \f[C]FI_ADDR_STR\f[] format, the \f[C]addr\f[] parameter
+should reference an array of strings (char **).
 .PP
 For AV\[aq]s of type FI_AV_MAP, once inserted addresses have been
 mapped, the mapped values are written into the buffer referenced by
@@ -333,6 +335,10 @@ Node should be a string that corresponds to a hostname or network
 address.
 The service string corresponds to a textual representation of a
 transport address.
+Applications may also pass in an \f[C]FI_ADDR_STR\f[] formatted address
+as the node parameter.
+In such cases, the service parameter must be NULL.
+See fi_getinfo.3 for details on using \f[C]FI_ADDR_STR\f[].
 Supported flags are the same as for fi_av_insert.
 .SS fi_av_insertsym
 .PP
