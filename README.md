@@ -142,6 +142,8 @@ See the `fi_gni(7)` man page for more details.
 
 ### mxm
 
+***
+
 The MXM provider has been deprecated and was removed after the 1.4.0 release.
 
 ### psm
