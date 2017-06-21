@@ -565,24 +565,34 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 
 	if (gnix_cq_err->err_data != NULL) {
 		/*
-		 * TODO: check for api version once we figure out how to.
 		 * Note: If the api version is >= 1.5 then copy err_data into
 		 * buf->err_data and copy at most buf->err_data_size.
 		 * If buf->err_data_size is zero or the api version is < 1.5,
-		 * use the method implemented below.
+		 * use the old method of allocating space in provider.
 		 */
+		if (FI_VERSION_LT(cq_priv->domain->fabric->fab_fid.api_version,
+		    FI_VERSION(1, 5)) || buf->err_data_size == 0) {
+			err_data_cpylen = sizeof(*cq_priv->err_data);
 
-		err_data_cpylen = sizeof(*cq_priv->err_data);
+			memcpy(cq_priv->err_data, gnix_cq_err->err_data,
+				err_data_cpylen);
 
-		memcpy(cq_priv->err_data, gnix_cq_err->err_data,
-		       err_data_cpylen);
+			buf->err_data = cq_priv->err_data;
+		} else {
+			if (buf->err_data == NULL)
+				return -FI_EINVAL;
 
-		buf->err_data = cq_priv->err_data;
+			err_data_cpylen = MIN(buf->err_data_size, sizeof(*cq_priv->err_data));
+			memcpy(buf->err_data, gnix_cq_err->err_data, err_data_cpylen);
+		}
 		free(gnix_cq_err->err_data);
 		gnix_cq_err->err_data = NULL;
 		buf->err_data_size = err_data_cpylen;
 	} else {
-		buf->err_data = NULL;
+		if (FI_VERSION_LT(cq_priv->domain->fabric->fab_fid.api_version,
+		    FI_VERSION(1, 5)) || buf->err_data_size == 0) {
+			buf->err_data = NULL;
+		}
 		buf->err_data_size = 0;
 	}
 
