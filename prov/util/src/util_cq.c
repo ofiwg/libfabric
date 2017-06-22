@@ -38,6 +38,27 @@
 
 #define UTIL_DEF_CQ_SIZE (1024)
 
+int ofi_cq_write_error(struct util_cq *cq,
+		       const struct fi_cq_err_entry *err_entry)
+{
+	struct util_cq_err_entry *entry;
+	struct fi_cq_tagged_entry *comp;
+
+	if (!(entry = calloc(1, sizeof(*entry))))
+		return -FI_ENOMEM;
+
+	entry->err_entry = *err_entry;
+	fastlock_acquire(&cq->cq_lock);
+	slist_insert_tail(&entry->list_entry, &cq->err_list);
+	comp = ofi_cirque_tail(cq->cirq);
+	comp->flags = UTIL_FLAG_ERROR;
+	ofi_cirque_commit(cq->cirq);
+	fastlock_release(&cq->cq_lock);
+	if (cq->wait)
+		cq->wait->signal(cq->wait);
+	return 0;
+}
+
 int ofi_check_cq_attr(const struct fi_provider *prov,
 		      const struct fi_cq_attr *attr)
 {
