@@ -170,17 +170,22 @@ static int rxm_send_queue_init(struct rxm_send_queue *send_queue, size_t size)
 }
 
 static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
-			       dlist_func_t match_recv,
-			       dlist_func_t match_unexp)
+			       enum rxm_recv_queue_type type)
 {
+	recv_queue->type = type;
 	recv_queue->fs = rxm_recv_fs_create(size);
 	if (!recv_queue->fs)
 		return -FI_ENOMEM;
 
 	dlist_init(&recv_queue->recv_list);
 	dlist_init(&recv_queue->unexp_msg_list);
-	recv_queue->match_recv = match_recv;
-	recv_queue->match_unexp = match_unexp;
+	if (type == RXM_RECV_QUEUE_MSG) {
+		recv_queue->match_recv = rxm_match_recv_entry;
+		recv_queue->match_unexp = rxm_match_unexp_msg;
+	} else {
+		recv_queue->match_recv = rxm_match_recv_entry_tagged;
+		recv_queue->match_unexp = rxm_match_unexp_msg_tagged;
+	}
 	fastlock_init(&recv_queue->lock);
 	return 0;
 }
@@ -229,13 +234,12 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 		goto err2;
 
 	ret = rxm_recv_queue_init(&rxm_ep->recv_queue, rxm_ep->rxm_info->rx_attr->size,
-				  rxm_match_recv_entry, rxm_match_unexp_msg);
+				  RXM_RECV_QUEUE_MSG);
 	if (ret)
 		goto err3;
 
 	ret = rxm_recv_queue_init(&rxm_ep->trecv_queue, rxm_ep->rxm_info->rx_attr->size,
-				  rxm_match_recv_entry_tagged,
-				  rxm_match_unexp_msg_tagged);
+				  RXM_RECV_QUEUE_TAGGED);
 	if (ret)
 		goto err4;
 
@@ -367,7 +371,8 @@ static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 		return -FI_EAGAIN;
 
 	match_attr.addr = recv_entry->addr;
-	match_attr.tag = recv_entry->tag;
+	if (recv_queue->type == RXM_RECV_QUEUE_TAGGED)
+		match_attr.tag = recv_entry->tag;
 	match_attr.ignore = recv_entry->ignore;
 
 	entry = dlist_remove_first_match(&recv_queue->unexp_msg_list,
@@ -410,8 +415,9 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 				  src_addr : FI_ADDR_UNSPEC;
 	recv_entry->context 	= context;
 	recv_entry->flags 	= flags;
-	recv_entry->tag 	= tag;
 	recv_entry->ignore 	= ignore;
+	if (recv_queue->type == RXM_RECV_QUEUE_TAGGED)
+		recv_entry->tag = tag;
 
 	fastlock_acquire(&recv_queue->lock);
 	/* rxm_check_unexp_msg_list() would release the lock if successful */
