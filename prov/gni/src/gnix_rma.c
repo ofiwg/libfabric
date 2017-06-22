@@ -1351,12 +1351,6 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		return -FI_EINVAL;
 	}
 
-	/* Adding FI_FENCE to an FI_MORE list will break the FI_MORE Chain.
-	 * Remove FI_MORE flag when FI_FENCE flag is present. */
-	if (flags & FI_FENCE) {
-		flags &= ~FI_MORE;
-	}
-
 	/* setup fabric request */
 	req = _gnix_fr_alloc(ep);
 	if (!req) {
@@ -1451,15 +1445,29 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	}
 
 	req->vc = vc;
+	connected = (vc->conn_state == GNIX_VC_CONNECTED);
+
+	/* Adding FI_FENCE to an FI_MORE list will break the FI_MORE Chain.
+	 * Current FI_MORE implementation does not create remote CQ events.
+	 * Remove FI_MORE flag when FI_FENCE or REMOTE EP requirements are
+	 * present. We will also only allow FI_MORE if a prior connection has
+	 * been established, so that the peer capabilities can be determined.*/
+	if ((flags & FI_FENCE) || (flags & FI_REMOTE_CQ_DATA) ||
+	    !connected || (req->vc->peer_caps & FI_RMA_EVENT)) {
+		flags &= ~FI_MORE;
+	}
 
 	/* Add reads/writes to slist when FI_MORE is present, Or
 	 * if this is the first message in the chain without FI_MORE.
 	 * When FI_MORE is not present, if the slists are not empty
-	 * it is the first message without FI_MORE. Do not add fence
-	 * reqs to the fi_more list. */
-	if ((flags & FI_MORE) || (!(flags & FI_FENCE) &&
-	   (!(slist_empty(&ep->more_write)) ||
-	    !(slist_empty(&ep->more_read))))) {
+	 * it is the first message without FI_MORE.
+	 * Do not add reqs with FI_FENCE or REMOTE EP requirements requirements
+	 * to the fi_more list. */
+	if ((flags & FI_MORE) ||
+	    (!(flags & FI_MORE) && connected &&
+	    (!slist_empty(&ep->more_write) || !slist_empty(&ep->more_read)) &&
+	     !(flags & FI_FENCE || flags & FI_REMOTE_CQ_DATA ||
+	       req->vc->peer_caps & FI_RMA_EVENT))) {
 		if (fr_type == GNIX_FAB_RQ_RDMA_WRITE) {
 			slist_insert_tail(&req->rma.sle, &ep->more_write);
 			req->work_fn = _gnix_rma_more_post_req;
@@ -1497,9 +1505,10 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 			slist_init(&ep->more_read);
 		}
 
-		/* Requests with FI_FENCE are not added to the FI_MORE List.
-		 * They must be queued separately. */
-		if (flags & FI_FENCE) {
+		/* Requests with FI_FENCE or REMOTE EP requirements are not
+		 * added to the FI_MORE List. They must be queued separately. */
+		if ((flags & FI_FENCE) || (flags & FI_REMOTE_CQ_DATA) ||
+		    (req->vc->peer_caps & FI_RMA_EVENT)) {
 			rc = _gnix_vc_queue_tx_req(req);
 			COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 			return rc;
