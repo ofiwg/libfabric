@@ -36,50 +36,40 @@ static int psmx2_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct psmx2_fid_ep *ep;
 	struct psmx2_fid_sep *sep;
-	struct psmx2_ep_name *epname;
-	struct psmx2_ep_name tmp_epname;
+	struct psmx2_ep_name epname;
 	size_t	addr_size;
-	int addr_format;
+	int err = 0;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 	if (!ep->domain)
 		return -FI_EBADF;
 
-	addr_format = ep->domain->addr_format;
-	if (addr_format == FI_ADDR_STR) {
-		addr_size = sizeof(struct psmx2_string_name);
-		epname = &tmp_epname;
-	} else {
-		addr_size = sizeof(struct psmx2_ep_name);
-		epname = addr;
-	}
-
-	if (*addrlen < addr_size) {
-		*addrlen = addr_size;
-		return -FI_ETOOSMALL;
-	}
-
-	memset(epname, 0, sizeof(*epname));
+	memset(&epname, 0, sizeof(epname));
 
 	if (ep->type == PSMX2_EP_REGULAR) {
-		epname->epid = ep->trx_ctxt->psm2_epid;
-		epname->vlane = ep->vlane;
-		epname->type = ep->type;
+		epname.epid = ep->trx_ctxt->psm2_epid;
+		epname.vlane = ep->vlane;
+		epname.type = ep->type;
 	} else {
 		sep = (struct psmx2_fid_sep *)ep;
-		epname->epid = sep->domain->base_trx_ctxt->psm2_epid;
-		epname->sep_id = sep->id;
-		epname->type = sep->type;
+		epname.epid = sep->domain->base_trx_ctxt->psm2_epid;
+		epname.sep_id = sep->id;
+		epname.type = sep->type;
 	}
 
-	if (addr_format == FI_ADDR_STR) {
-		memset(addr, 0, addr_size);
-		ofi_straddr(addr, addrlen, FI_ADDR_PSMX2, epname);
+	if (ep->domain->addr_format == FI_ADDR_STR) {
+		addr_size = *addrlen;
+		ofi_straddr(addr, &addr_size, FI_ADDR_PSMX2, &epname);
+	} else {
+		addr_size = sizeof(epname);
+		memcpy(addr, &epname, MIN(*addrlen, addr_size));
 	}
+
+	if (*addrlen < addr_size)
+		err = -FI_ETOOSMALL;
 
 	*addrlen = addr_size;
-
-	return 0;
+	return err;
 }
 
 struct fi_ops_cm psmx2_cm_ops = {
