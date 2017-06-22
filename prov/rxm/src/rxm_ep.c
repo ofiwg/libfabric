@@ -663,11 +663,10 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 			goto done;
 		}
 		fastlock_acquire(&rxm_ep->send_queue.lock);
-		tx_entry->msg_id = ofi_idx2key(&rxm_ep->send_queue.tx_key_idx,
-					       rxm_txe_fs_index(rxm_ep->send_queue.fs,
-								tx_entry));
+		pkt->ctrl_hdr.msg_id = ofi_idx2key(&rxm_ep->send_queue.tx_key_idx,
+						   rxm_txe_fs_index(rxm_ep->send_queue.fs,
+								    tx_entry));
 		fastlock_release(&rxm_ep->send_queue.lock);
-		pkt->ctrl_hdr.msg_id = tx_entry->msg_id;
 		pkt->ctrl_hdr.type = ofi_ctrl_large_data;
 
 		if (!RXM_MR_LOCAL(rxm_ep->rxm_info)) {
@@ -688,10 +687,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		}
 
 		pkt_size = sizeof(*pkt) + size;
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-				"Sending large msg. msg_id: 0x%" PRIx64 "\n",
-				tx_entry->msg_id);
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "tx_entry->state -> RXM_LMT_START\n");
+		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_TX);
 		tx_entry->state = RXM_LMT_TX;
 	} else {
 		pkt->ctrl_hdr.type = ofi_ctrl_data;

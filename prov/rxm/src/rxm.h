@@ -92,9 +92,18 @@
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
-#define RXM_LOG_STATE(subsystem, prev_state, next_state) \
-		FI_DBG(&rxm_prov, subsystem, \
-		       "LMT: " #prev_state " -> " #next_state "\n");
+#define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
+	FI_DBG(&rxm_prov, subsystem, "[LMT] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
+	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
+	       rxm_proto_state_str[next_state])
+
+#define RXM_LOG_STATE_TX(subsystem, tx_entry, next_state)		\
+	RXM_LOG_STATE(subsystem, tx_entry->tx_buf->pkt, tx_entry->state,\
+		      next_state)
+
+#define RXM_LOG_STATE_RX(subsystem, rx_buf, next_state)			\
+	RXM_LOG_STATE(subsystem, rx_buf->pkt, rx_buf->hdr.state,	\
+		      next_state)
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
@@ -227,7 +236,6 @@ struct rxm_tx_entry {
 	struct rxm_tx_buf *tx_buf;
 
 	/* Used for large messages */
-	uint64_t msg_id;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 };
 DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
