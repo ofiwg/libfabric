@@ -83,8 +83,8 @@ static struct fid_stx *stx_ctx[2];
 static struct fid_stx *stx_ctx_too_late;
 
 #define BUF_SZ (64*1024)
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 char *uc_source;
 struct fid_mr *rem_mr[2], *loc_mr[2];
 uint64_t mr_key[2];
@@ -101,15 +101,16 @@ static uint64_t writes[2] = {0}, reads[2] = {0}, write_errs[2] = {0},
 #define MLOOPS 1000
 static int dgm_fail;
 
-static void common_setup_stx(void)
+static void common_setup_stx(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
-
+	int requested_key[2][2] = {{0, 0}, {0, 0} };
+	int i, j;
 	dgm_fail = 0;
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->domain_attr->cq_data_size = 4;
 	hints->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	hints->mode = mode_bits;
@@ -118,7 +119,7 @@ static void common_setup_stx(void)
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -248,24 +249,68 @@ static void common_setup_stx(void)
 	ret = fi_ep_bind(ep[1], &av[1]->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
-	target = malloc(BUF_SZ);
-	assert(target);
-	source = malloc(BUF_SZ);
-	assert(source);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	ret = fi_mr_reg(dom[0], target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[0], &target);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
+
+	if (USING_SCALABLE(fi)) {
+		for (i = 0; i < 2; i++)
+			for (j = 0; j < 2; j++)
+				requested_key[i][j] = (i * 2) + j;
+	}
+
+	ret = fi_mr_reg(dom[0],
+			  target,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[0][0],
+			  0,
+			  &rem_mr[0],
+			  &target);
 	cr_assert_eq(ret, 0);
-	ret = fi_mr_reg(dom[1], target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[1], &target);
+	ret = fi_mr_reg(dom[1],
+			  target,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[1][0],
+			  0,
+			  &rem_mr[1],
+			  &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom[0], source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[0], &source);
+	ret = fi_mr_reg(dom[0],
+			  source,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[0][1],
+			  0,
+			  &loc_mr[0],
+			  &source);
 	cr_assert_eq(ret, 0);
-	ret = fi_mr_reg(dom[1], source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[1], &source);
+	ret = fi_mr_reg(dom[1],
+			  source,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[1][1],
+			  0,
+			  &loc_mr[1],
+			  &source);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi)) {
+		for (i = 0; i < 2; i++) {
+			MR_ENABLE(rem_mr[i], target, BUF_SZ);
+			MR_ENABLE(loc_mr[i], source, BUF_SZ);
+		}
+	}
 
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
@@ -329,7 +374,7 @@ static void common_setup_stx(void)
 
 }
 
-static void common_setup_stx_1dom(void)
+static void common_setup_stx_1dom(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
@@ -337,7 +382,7 @@ static void common_setup_stx_1dom(void)
 
 	dgm_fail = 0;
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->domain_attr->cq_data_size = 4;
 	hints->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	hints->mode = mode_bits;
@@ -346,7 +391,7 @@ static void common_setup_stx_1dom(void)
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -450,18 +495,40 @@ static void common_setup_stx_1dom(void)
 	ret = fi_ep_bind(ep[1], &av[0]->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
-	target = malloc(BUF_SZ);
-	assert(target);
-	source = malloc(BUF_SZ);
-	assert(source);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	ret = fi_mr_reg(dom[0], target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[0], &target);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
+
+	ret = fi_mr_reg(dom[0],
+			  target,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  (USING_SCALABLE(fi) ? 1 : 0),
+			  0,
+			  &rem_mr[0],
+			  &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom[0], source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[0], &source);
+	ret = fi_mr_reg(dom[0],
+			  source,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  (USING_SCALABLE(fi) ? 2 : 0),
+			  0,
+			  &loc_mr[0],
+			  &source);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi)) {
+		MR_ENABLE(rem_mr[0], target, BUF_SZ);
+		MR_ENABLE(loc_mr[0], source, BUF_SZ);
+	}
 
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
@@ -515,31 +582,58 @@ static void common_setup_stx_1dom(void)
 
 }
 
-static void rdm_rma_setup(void)
+static void rdm_rma_basic_setup(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_RMA_EVENT;
-	common_setup_stx();
+	common_setup_stx(fi_version(), GNIX_MR_BASIC);
 }
 
-static void dgram_setup(void)
+static void dgram_basic_setup(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_DGRAM;
 	hints->caps = FI_RMA_EVENT;
-	common_setup_stx();
+	common_setup_stx(fi_version(), GNIX_MR_BASIC);
 }
 
-static void dgram_setup_1dom(void)
+static void dgram_basic_setup_1dom(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_DGRAM;
 	hints->caps = FI_RMA_EVENT;
-	common_setup_stx_1dom();
+	common_setup_stx_1dom(fi_version(), GNIX_MR_BASIC);
+}
+
+static void rdm_rma_scalable_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_RMA_EVENT;
+	common_setup_stx(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static void dgram_scalable_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_RMA_EVENT;
+	common_setup_stx(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static void dgram_scalable_setup_1dom(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_RMA_EVENT;
+	common_setup_stx_1dom(fi_version(), GNIX_MR_SCALABLE);
 }
 
 static void rdm_rma_stx_teardown(void)
@@ -592,8 +686,8 @@ static void rdm_rma_stx_teardown(void)
 		cr_assert(!ret, "failure in closing dom[1] stx_ctx.");
 	}
 
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	ret = fi_close(&ep[0]->fid);
 	cr_assert(!ret, "failure in closing ep[0].");
@@ -755,14 +849,33 @@ static void err_inject_enable(void)
 /*******************************************************************************
  * Test RMA functions
  ******************************************************************************/
-
-TestSuite(dgram_rma_stx, .init = dgram_setup, .fini = rdm_rma_stx_teardown,
+TestSuite(dgram_rma_stx_basic,
+	  .init = dgram_basic_setup,
+	  .fini = rdm_rma_stx_teardown,
 	  .disabled = false);
 
-TestSuite(rdm_rma_stx, .init = rdm_rma_setup, .fini = rdm_rma_stx_teardown,
+TestSuite(rdm_rma_stx_basic,
+	  .init = rdm_rma_basic_setup,
+	  .fini = rdm_rma_stx_teardown,
 	  .disabled = false);
 
-TestSuite(dgram_rma_1dom_stx, .init = dgram_setup_1dom,
+TestSuite(dgram_rma_1dom_stx_basic,
+	  .init = dgram_basic_setup_1dom,
+	  .fini = rdm_rma_stx_teardown,
+	  .disabled = false);
+
+TestSuite(dgram_rma_stx_scalable,
+	  .init = dgram_scalable_setup,
+	  .fini = rdm_rma_stx_teardown,
+	  .disabled = false);
+
+TestSuite(rdm_rma_stx_scalable,
+	  .init = rdm_rma_scalable_setup,
+	  .fini = rdm_rma_stx_teardown,
+	  .disabled = false);
+
+TestSuite(dgram_rma_1dom_stx_scalable,
+	  .init = dgram_scalable_setup_1dom,
 	  .fini = rdm_rma_stx_teardown,
 	  .disabled = false);
 
@@ -778,8 +891,9 @@ static void do_write(int len)
 	init_data(target, len, 0);
 
 	sz = fi_write(ep[0], source, len,
-		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  loc_mr[0], gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -801,35 +915,72 @@ static void do_write(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, write)
+Test(rdm_rma_stx_basic, write)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, write_retrans)
+Test(rdm_rma_stx_basic, write_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, write)
+Test(dgram_rma_stx_basic, write)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, write_retrans)
+Test(dgram_rma_stx_basic, write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, write)
+Test(dgram_rma_1dom_stx_basic, write)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, write_retrans)
+Test(dgram_rma_1dom_stx_basic, write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, write_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -852,8 +1003,9 @@ static void do_writev(int len)
 	init_data(target, len, 0);
 
 	sz = fi_writev(ep[0], &iov, (void **)loc_mr, 1,
-		       gni_addr[1], (uint64_t)target, mr_key[1],
-		       target);
+			   gni_addr[1],
+			   _REM_ADDR(fi, target, target), mr_key[1],
+			   target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -876,35 +1028,72 @@ static void do_writev(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, writev)
+Test(rdm_rma_stx_basic, writev)
 {
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, writev_retrans)
+Test(rdm_rma_stx_basic, writev_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, writev)
+Test(dgram_rma_stx_basic, writev)
 {
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, writev_retrans)
+Test(dgram_rma_stx_basic, writev_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, writev)
+Test(dgram_rma_1dom_stx_basic, writev)
 {
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, writev_retrans)
+Test(dgram_rma_1dom_stx_basic, writev_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, writev)
+{
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, writev_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, writev)
+{
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, writev_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, writev)
+{
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, writev_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -925,7 +1114,7 @@ static void do_writemsg(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -962,35 +1151,72 @@ static void do_writemsg(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, writemsg)
+Test(rdm_rma_stx_basic, writemsg)
 {
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, writemsg_retrans)
+Test(rdm_rma_stx_basic, writemsg_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, writemsg)
+Test(dgram_rma_stx_basic, writemsg)
 {
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, writemsg_retrans)
+Test(dgram_rma_stx_basic, writemsg_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, writemsg)
+Test(dgram_rma_1dom_stx_basic, writemsg)
 {
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, writemsg_retrans)
+Test(dgram_rma_1dom_stx_basic, writemsg_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, writemsg)
+{
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, writemsg_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, writemsg)
+{
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, writemsg_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, writemsg)
+{
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, writemsg_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1023,7 +1249,7 @@ static void do_write_fence(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = sizeof(target);
 	rma_iov.key = mr_key[1];
 
@@ -1080,35 +1306,72 @@ static void do_write_fence(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, write_fence)
+Test(rdm_rma_stx_basic, write_fence)
 {
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, write_fence_retrans)
+Test(rdm_rma_stx_basic, write_fence_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, write_fence)
+Test(dgram_rma_stx_basic, write_fence)
 {
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, write_fence_retrans)
+Test(dgram_rma_stx_basic, write_fence_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, write_fence)
+Test(dgram_rma_1dom_stx_basic, write_fence)
 {
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, write_fence_retrans)
+Test(dgram_rma_1dom_stx_basic, write_fence_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, write_fence)
+{
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, write_fence_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, write_fence)
+{
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, write_fence_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, write_fence)
+{
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, write_fence_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1125,7 +1388,8 @@ static void do_inject_write(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_inject_write(ep[0], source, len,
-			     gni_addr[1], (uint64_t)target, mr_key[1]);
+				 gni_addr[1],
+				 _REM_ADDR(fi, target, target), mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
@@ -1146,35 +1410,72 @@ static void do_inject_write(int len)
 	cr_assert(!dgm_fail || (dgm_fail && loops >= MLOOPS), "Should fail");
 }
 
-Test(rdm_rma_stx, inject_write)
+Test(rdm_rma_stx_basic, inject_write)
 {
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(rdm_rma_stx, inject_write_retrans)
+Test(rdm_rma_stx_basic, inject_write_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_stx, inject_write)
+Test(dgram_rma_stx_basic, inject_write)
 {
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_stx, inject_write_retrans)
+Test(dgram_rma_stx_basic, inject_write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom_stx, inject_write)
+Test(dgram_rma_1dom_stx_basic, inject_write)
 {
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom_stx, inject_write_retrans)
+Test(dgram_rma_1dom_stx_basic, inject_write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, inject_write)
+{
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(rdm_rma_stx_scalable, inject_write_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_stx_scalable, inject_write)
+{
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_stx_scalable, inject_write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_stx_scalable, inject_write)
+{
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_stx_scalable, inject_write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1196,7 +1497,8 @@ static void do_writedata(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_writedata(ep[0], source, len, loc_mr[0], WRITE_DATA,
-			  gni_addr[1], (uint64_t)target, mr_key[1],
+			  gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
 			  target);
 	cr_assert_eq(sz, 0);
 
@@ -1229,35 +1531,72 @@ static void do_writedata(int len)
 			   WRITE_DATA, ep[1]);
 }
 
-Test(rdm_rma_stx, writedata)
+Test(rdm_rma_stx_basic, writedata)
 {
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, writedata_retrans)
+Test(rdm_rma_stx_basic, writedata_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, writedata)
+Test(dgram_rma_stx_basic, writedata)
 {
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, writedata_retrans)
+Test(dgram_rma_stx_basic, writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, writedata)
+Test(dgram_rma_1dom_stx_basic, writedata)
 {
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, writedata_retrans)
+Test(dgram_rma_1dom_stx_basic, writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, writedata)
+{
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, writedata_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, writedata)
+{
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, writedata)
+{
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1277,7 +1616,8 @@ static void do_inject_writedata(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_inject_writedata(ep[0], source, len, INJECTWRITE_DATA,
-				 gni_addr[1], (uint64_t)target, mr_key[1]);
+				 gni_addr[1],
+				 _REM_ADDR(fi, target, target), mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
@@ -1310,35 +1650,72 @@ static void do_inject_writedata(int len)
 			   INJECTWRITE_DATA, ep[1]);
 }
 
-Test(rdm_rma_stx, inject_writedata)
+Test(rdm_rma_stx_basic, inject_writedata)
 {
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(rdm_rma_stx, inject_writedata_retrans)
+Test(rdm_rma_stx_basic, inject_writedata_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_stx, inject_writedata)
+Test(dgram_rma_stx_basic, inject_writedata)
 {
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_stx, inject_writedata_retrans)
+Test(dgram_rma_stx_basic, inject_writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom_stx, inject_writedata)
+Test(dgram_rma_1dom_stx_basic, inject_writedata)
 {
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom_stx, inject_writedata_retrans)
+Test(dgram_rma_1dom_stx_basic, inject_writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, inject_writedata)
+{
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(rdm_rma_stx_scalable, inject_writedata_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_stx_scalable, inject_writedata)
+{
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_stx_scalable, inject_writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_stx_scalable, inject_writedata)
+{
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_stx_scalable, inject_writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1359,8 +1736,9 @@ static void do_read(int len)
 
 	/* domain 0 from domain 1 */
 	sz = fi_read(ep[0], source, len,
-		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		     (void *)READ_CTX);
+			 loc_mr[0], gni_addr[1],
+			 _REM_ADDR(fi, target, target), mr_key[1],
+			 (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1378,23 +1756,46 @@ static void do_read(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, read)
+Test(rdm_rma_stx_basic, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, read_retrans)
+Test(rdm_rma_stx_basic, read_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, read)
+Test(dgram_rma_stx_basic, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, read)
+Test(dgram_rma_1dom_stx_basic, read)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, read)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, read_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, read)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
@@ -1414,8 +1815,9 @@ static void do_readv(int len)
 	init_data(target, len, 0x25);
 	init_data(source, len, 0);
 	sz = fi_readv(ep[0], &iov, (void **)loc_mr, 1,
-		      gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1433,23 +1835,46 @@ static void do_readv(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, readv)
+Test(rdm_rma_stx_basic, readv)
 {
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, readv_retrans)
+Test(rdm_rma_stx_basic, readv_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, readv)
+Test(dgram_rma_stx_basic, readv)
 {
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, readv)
+Test(dgram_rma_1dom_stx_basic, readv)
+{
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, readv)
+{
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, readv_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, readv)
+{
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, readv)
 {
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
@@ -1468,7 +1893,7 @@ static void do_readmsg(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -1517,23 +1942,46 @@ static void do_readmsg(int len)
 	msg.data = (uint64_t)target;
 }
 
-Test(rdm_rma_stx, readmsg)
+Test(rdm_rma_stx_basic, readmsg)
 {
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
-Test(rdm_rma_stx, readmsg_retrans)
+Test(rdm_rma_stx_basic, readmsg_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, readmsg)
+Test(dgram_rma_stx_basic, readmsg)
 {
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, readmsg)
+Test(dgram_rma_1dom_stx_basic, readmsg)
+{
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, readmsg)
+{
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, readmsg_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, readmsg)
+{
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, readmsg)
 {
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
@@ -1552,7 +2000,7 @@ static void inject_common(void)
 	iov.iov_base = source;
 	iov.iov_len = GNIX_INJECT_SIZE;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = GNIX_INJECT_SIZE;
 	rma_iov.key = mr_key[1];
 
@@ -1591,17 +2039,34 @@ static void inject_common(void)
 		  "Data mismatch");
 }
 
-Test(rdm_rma_stx, inject)
+Test(rdm_rma_stx_basic, inject)
 {
 	inject_common();
 }
 
-Test(dgram_rma_stx, inject)
+Test(dgram_rma_stx_basic, inject)
 {
 	inject_common();
 }
 
-Test(dgram_rma_1dom_stx, inject)
+Test(dgram_rma_1dom_stx_basic, inject)
+{
+	inject_common();
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, inject)
+{
+	inject_common();
+}
+
+Test(dgram_rma_stx_scalable, inject)
+{
+	inject_common();
+}
+
+Test(dgram_rma_1dom_stx_scalable, inject)
 {
 	inject_common();
 }
@@ -1617,8 +2082,9 @@ static void do_write_autoreg(int len)
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  NULL, gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1636,17 +2102,34 @@ static void do_write_autoreg(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, write_autoreg)
+Test(rdm_rma_stx_basic, write_autoreg)
 {
 	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, write_autoreg)
+Test(dgram_rma_stx_basic, write_autoreg)
 {
 	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, write_autoreg)
+Test(dgram_rma_1dom_stx_basic, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, write_autoreg)
 {
 	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
 }
@@ -1662,8 +2145,9 @@ static void do_write_autoreg_uncached(int len)
 	init_data(uc_source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], uc_source, len,
-		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  NULL, gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1681,17 +2165,34 @@ static void do_write_autoreg_uncached(int len)
 	cr_assert(check_data(uc_source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma_stx, write_autoreg_uncached)
+Test(rdm_rma_stx_basic, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, write_autoreg_uncached)
+Test(dgram_rma_stx_basic, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom_stx, write_autoreg_uncached)
+Test(dgram_rma_1dom_stx_basic, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}
+
+Test(dgram_rma_stx_scalable, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_stx_scalable, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
@@ -1709,8 +2210,9 @@ static void do_write_error(int len)
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  loc_mr[0], gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1739,7 +2241,7 @@ static void do_write_error(int len)
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 }
 
-Test(rdm_rma_stx, write_error)
+static inline void __write_error(void)
 {
 	int ret, max_retrans_val = 1;
 
@@ -1755,20 +2257,24 @@ Test(rdm_rma_stx, write_error)
 	xfer_for_each_size(do_write_error, 8, BUF_SZ);
 }
 
-Test(dgram_rma_stx, write_error)
+Test(rdm_rma_stx_basic, write_error)
 {
-	int ret, max_retrans_val = 1;
+	__write_error();
+}
 
-	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_MAX_RETRANSMITS,
-					 &max_retrans_val);
-	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+Test(rdm_rma_stx_scalable, write_error)
+{
+	__write_error();
+}
 
-	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_MAX_RETRANSMITS,
-					 &max_retrans_val);
-	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
-	err_inject_enable();
+Test(dgram_rma_stx_basic, write_error)
+{
+	__write_error();
+}
 
-	xfer_for_each_size(do_write_error, 8, BUF_SZ);
+Test(dgram_rma_stx_scalable, write_error)
+{
+	__write_error();
 }
 
 static void do_read_error(int len)
@@ -1784,8 +2290,9 @@ static void do_read_error(int len)
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
 	sz = fi_read(ep[0], source, len,
-		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		     (void *)READ_CTX);
+			 loc_mr[0], gni_addr[1],
+			 _REM_ADDR(fi, target, target), mr_key[1],
+			 (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1814,7 +2321,7 @@ static void do_read_error(int len)
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 }
 
-Test(rdm_rma_stx, read_error)
+static inline void __read_error(void)
 {
 	int ret, max_retrans_val = 1;
 
@@ -1830,6 +2337,16 @@ Test(rdm_rma_stx, read_error)
 	xfer_for_each_size(do_read_error, 8, BUF_SZ);
 }
 
+Test(rdm_rma_stx_basic, read_error)
+{
+	__read_error();
+}
+
+Test(rdm_rma_stx_scalable, read_error)
+{
+	__read_error();
+}
+
 static void do_read_buf(void *s, void *t, int len)
 {
 	int ret;
@@ -1841,8 +2358,9 @@ static void do_read_buf(void *s, void *t, int len)
 #define READ_CTX 0x4e3dda1aULL
 	init_data(s, len, 0);
 	init_data(t, len, 0xad);
-	sz = fi_read(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
-		     (void *)READ_CTX);
+	sz = fi_read(ep[0], s, len, NULL, gni_addr[1],
+			 _REM_ADDR(fi, target, t), mr_key[1],
+			 (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1868,30 +2386,53 @@ static void do_read_alignment(int len)
 		for (t_off = 0; t_off < 7; t_off++) {
 			for (l_off = 0; l_off < 7; l_off++) {
 				do_read_buf(source + s_off,
-					    target + t_off,
-					    len + l_off);
+						target + t_off,
+						len + l_off);
 			}
 		}
 	}
 }
 
-Test(rdm_rma_stx, read_alignment)
+Test(rdm_rma_stx_basic, read_alignment)
 {
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(rdm_rma_stx, read_alignment_retrans)
+Test(rdm_rma_stx_basic, read_alignment_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_stx, read_alignment)
+Test(dgram_rma_stx_basic, read_alignment)
 {
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_1dom_stx, read_alignment)
+Test(dgram_rma_1dom_stx_basic, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(rdm_rma_stx_scalable, read_alignment_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_stx_scalable, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_1dom_stx_scalable, read_alignment)
 {
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
@@ -1908,8 +2449,8 @@ static void do_write_buf(void *s, void *t, int len)
 
 	init_data(s, len, 0xab);
 	init_data(t, len, 0);
-	sz = fi_write(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
-		      t);
+	sz = fi_write(ep[0], s, len, NULL, gni_addr[1],
+			  _REM_ADDR(fi, target, t), mr_key[1], t);
 	cr_assert_eq(sz, 0);
 
 	do {
@@ -1949,42 +2490,79 @@ static void do_write_alignment(int len)
 		for (t_off = 0; t_off < 7; t_off++) {
 			for (l_off = 0; l_off < 7; l_off++) {
 				do_write_buf(source + s_off,
-					     target + t_off,
-					     len + l_off);
+						 target + t_off,
+						 len + l_off);
 			}
 		}
 	}
 }
 
-Test(rdm_rma_stx, write_alignment)
+Test(rdm_rma_stx_basic, write_alignment)
 {
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(rdm_rma_stx, write_alignment_retrans)
+Test(rdm_rma_stx_basic, write_alignment_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_stx, write_alignment)
+Test(dgram_rma_stx_basic, write_alignment)
 {
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_stx, write_alignment_retrans)
+Test(dgram_rma_stx_basic, write_alignment_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_1dom_stx, write_alignment)
+Test(dgram_rma_1dom_stx_basic, write_alignment)
 {
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_1dom_stx, write_alignment_retrans)
+Test(dgram_rma_1dom_stx_basic, write_alignment_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+/* scalable */
+
+Test(rdm_rma_stx_scalable, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(rdm_rma_stx_scalable, write_alignment_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_stx_scalable, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_stx_scalable, write_alignment_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_1dom_stx_scalable, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_1dom_stx_scalable, write_alignment_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -2005,7 +2583,7 @@ static void do_trigger(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -2055,7 +2633,12 @@ static void do_trigger(int len)
 	cr_assert_eq(sz, 0);
 }
 
-Test(rdm_rma_stx, trigger)
+Test(rdm_rma_stx_basic, trigger)
+{
+	xfer_for_each_size(do_trigger, 8, BUF_SZ);
+}
+
+Test(rdm_rma_stx_scalable, trigger)
 {
 	xfer_for_each_size(do_trigger, 8, BUF_SZ);
 }

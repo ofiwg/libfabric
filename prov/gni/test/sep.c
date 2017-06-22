@@ -72,10 +72,10 @@ struct fi_info *hints;
 static struct fi_info *fi[NUMEPS];
 static struct fid_ep *sep[TOTALEPS];
 
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 struct iovec *src_iov, *dest_iov;
-char *iov_src_buf, *iov_dest_buf;
+char *iov_src_buf, *iov_dest_buf, *iov_src_buf_base, *iov_dest_buf_base;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
 struct fid_mr *iov_dest_buf_mr[NUMEPS], *iov_src_buf_mr[NUMEPS];
 uint64_t mr_key[NUMEPS];
@@ -97,7 +97,7 @@ struct fi_rx_attr rx_attr;
 static uint64_t sends[NUMEPS] = {0}, recvs[NUMEPS] = {0},
 	send_errs[NUMEPS] = {0}, recv_errs[NUMEPS] = {0};
 
-void sep_setup_common(int av_type)
+void sep_setup_common(int av_type, uint32_t version, int mr_mode)
 {
 	int ret, i, j;
 	struct fi_av_attr av_attr = {0};
@@ -111,13 +111,13 @@ void sep_setup_common(int av_type)
 	hints->mode = FI_LOCAL_MR;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->ep_attr->tx_ctx_cnt = ctx_cnt;
 	hints->ep_attr->rx_ctx_cnt = ctx_cnt;
 
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[i]);
+		ret = fi_getinfo(version, NULL, 0, 0, hints, &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 
 		tx_cq[i] = calloc(ctx_cnt, sizeof(*tx_cq));
@@ -148,17 +148,25 @@ void sep_setup_common(int av_type)
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
 	rx_addr = calloc(ctx_cnt, sizeof(*rx_addr));
-	target = calloc(BUF_SZ, 1);
-	source = calloc(BUF_SZ, 1);
-	iov_src_buf = malloc(BUF_SZ * IOV_CNT);
-	iov_dest_buf = malloc(BUF_SZ * IOV_CNT);
+
+	target_base = calloc(GNIT_ALIGN_LEN(BUF_SZ), 1);
+	source_base = calloc(GNIT_ALIGN_LEN(BUF_SZ), 1);
+
+	iov_src_buf_base = malloc(GNIT_ALIGN_LEN(BUF_SZ) * IOV_CNT);
+	iov_dest_buf_base = malloc(GNIT_ALIGN_LEN(BUF_SZ) * IOV_CNT);
 	src_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	dest_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 
-	if (!rx_addr || !target || !source || !iov_src_buf || !iov_dest_buf ||
-	    !src_iov || !dest_iov) {
+	if (!rx_addr || !target_base || !source_base ||
+		!iov_src_buf_base || !iov_dest_buf_base ||
+		!src_iov || !dest_iov) {
 		cr_assert(0, "allocation");
 	}
+
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
+	iov_src_buf = GNIT_ALIGN_BUFFER(char *, iov_src_buf_base);
+	iov_dest_buf = GNIT_ALIGN_BUFFER(char *, iov_dest_buf_base);
 
 	for (i = 0; i < IOV_CNT; i++) {
 		src_iov[i].iov_base = malloc(BUF_SZ);
@@ -247,26 +255,65 @@ void sep_setup_common(int av_type)
 		ret = fi_getname(&sep[i]->fid, ep_name[i], &addrlen);
 		cr_assert(ret == FI_SUCCESS);
 
-		ret = fi_mr_reg(dom[i], target, BUF_SZ, FI_REMOTE_WRITE,
-				0, 0, 0, &rem_mr[i], &target);
+		ret = fi_mr_reg(dom[i],
+				target,
+				BUF_SZ,
+				FI_REMOTE_WRITE,
+				0,
+				(USING_SCALABLE(fi[i]) ? (i * 4) : 0),
+				0,
+				&rem_mr[i],
+				&target);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], source, BUF_SZ, FI_REMOTE_WRITE,
-				0, 0, 0, &loc_mr[i], &source);
+		ret = fi_mr_reg(dom[i],
+				source,
+				BUF_SZ,
+				FI_REMOTE_WRITE,
+				0,
+				(USING_SCALABLE(fi[i]) ? (i * 4) + 1 : 0),
+				0,
+				&loc_mr[i],
+				&source);
 		cr_assert_eq(ret, 0);
+
+		if (USING_SCALABLE(fi[i])) {
+			MR_ENABLE(rem_mr[i], target, BUF_SZ);
+			MR_ENABLE(loc_mr[i], source, BUF_SZ);
+		}
 
 		mr_key[i] = fi_mr_key(rem_mr[i]);
 
-		ret = fi_mr_reg(dom[i], iov_dest_buf, IOV_CNT * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, iov_dest_buf_mr + i,
+		ret = fi_mr_reg(dom[i],
+				iov_dest_buf,
+				IOV_CNT * BUF_SZ,
+				FI_REMOTE_WRITE,
+				0,
+				(USING_SCALABLE(fi[i]) ? (i * 4) + 2 : 0),
+				0,
+				iov_dest_buf_mr + i,
 				&iov_dest_buf);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], iov_src_buf, IOV_CNT * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, iov_src_buf_mr + i,
+		ret = fi_mr_reg(dom[i],
+				iov_src_buf,
+				IOV_CNT * BUF_SZ,
+				FI_REMOTE_WRITE,
+				0,
+				(USING_SCALABLE(fi[i]) ? (i * 4) + 3 : 0),
+				0,
+				iov_src_buf_mr + i,
 				&iov_src_buf);
 		cr_assert_eq(ret, 0);
 
+		if (USING_SCALABLE(fi[i])) {
+			MR_ENABLE(iov_dest_buf_mr[i],
+				iov_dest_buf,
+				IOV_CNT * BUF_SZ);
+			MR_ENABLE(iov_src_buf_mr[i],
+				iov_src_buf,
+				IOV_CNT * BUF_SZ);
+		}
 	}
 
 	for (i = 0; i < NUMEPS; i++) {
@@ -282,14 +329,34 @@ void sep_setup_common(int av_type)
 	}
 }
 
-void sep_setup_map(void)
+void sep_basic_setup_map(void)
 {
-	sep_setup_common(FI_AV_MAP);
+	sep_setup_common(FI_AV_MAP, fi_version(), GNIX_MR_BASIC);
 }
 
-void sep_setup_table(void)
+void sep_scalable_setup_map(void)
 {
-	sep_setup_common(FI_AV_TABLE);
+	sep_setup_common(FI_AV_MAP, fi_version(), GNIX_MR_SCALABLE);
+}
+
+void sep_default_setup_map(void)
+{
+	sep_setup_common(FI_AV_MAP, fi_version(), GNIX_DEFAULT_MR_MODE);
+}
+
+void sep_basic_setup_table(void)
+{
+	sep_setup_common(FI_AV_TABLE, fi_version(), GNIX_MR_BASIC);
+}
+
+void sep_scalable_setup_table(void)
+{
+	sep_setup_common(FI_AV_TABLE, fi_version(), GNIX_MR_SCALABLE);
+}
+
+void sep_default_setup_table(void)
+{
+	sep_setup_common(FI_AV_TABLE, fi_version(), GNIX_DEFAULT_MR_MODE);
 }
 
 static void sep_teardown(void)
@@ -339,12 +406,12 @@ static void sep_teardown(void)
 
 	free(src_iov);
 	free(dest_iov);
-	free(iov_src_buf);
-	free(iov_dest_buf);
+	free(iov_src_buf_base);
+	free(iov_dest_buf_base);
 
 	fi_freeinfo(hints);
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
@@ -1291,8 +1358,9 @@ void sep_read(int index, int len)
 	sep_init_data(target, len, 0xad);
 
 	sz = fi_read(tx_ep[0][index], source, len,
-		     loc_mr[0], rx_addr[index], (uint64_t)target, mr_key[1],
-		     (void *)READ_CTX);
+			loc_mr[0], rx_addr[index],
+			_REM_ADDR(fi[0], target, target),
+			mr_key[1], (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(tx_cq[0][index], &cqe, 1)) == -FI_EAGAIN) {
@@ -1322,8 +1390,9 @@ void sep_readv(int index, int len)
 	sep_init_data(target, len, 0x25);
 	sep_init_data(source, len, 0);
 	sz = fi_readv(tx_ep[0][index], &iov, (void **)loc_mr, 1,
-		      rx_addr[index], (uint64_t)target, mr_key[1],
-		      target);
+			  rx_addr[index],
+			  _REM_ADDR(fi[0], target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(tx_cq[0][index], &cqe, 1)) == -FI_EAGAIN) {
@@ -1353,7 +1422,7 @@ void sep_readmsg(int index, int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi[0], target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -1395,7 +1464,7 @@ void sep_write(int index, int len)
 	sep_init_data(target, len, 0);
 
 	sz = fi_write(tx_ep[0][index], source, len, loc_mr[0], rx_addr[index],
-		      (uint64_t)target, mr_key[1], target);
+			  _REM_ADDR(fi[0], target, target), mr_key[1], target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(tx_cq[0][index], &cqe, 1)) == -FI_EAGAIN) {
@@ -1426,8 +1495,9 @@ void sep_writev(int index, int len)
 	sep_init_data(target, len, 0);
 
 	sz = fi_writev(tx_ep[0][index], &iov, (void **)loc_mr, 1,
-		       gni_addr[1], (uint64_t)target, mr_key[1],
-		       target);
+			   gni_addr[1],
+			   _REM_ADDR(fi[0], target, target), mr_key[1],
+			   target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(tx_cq[0][index], &cqe, 1)) == -FI_EAGAIN) {
@@ -1456,7 +1526,7 @@ void sep_writemsg(int index, int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi[0], target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -1495,7 +1565,8 @@ void sep_inject_write(int index, int len)
 	sep_init_data(source, len, 0x33);
 	sep_init_data(target, len, 0);
 	sz = fi_inject_write(tx_ep[0][index], source, len,
-			     rx_addr[index], (uint64_t)target, mr_key[1]);
+				 rx_addr[index],
+				 _REM_ADDR(fi[0], target, target), mr_key[1]);
 	cr_assert_eq(sz, 0, "fi_inject_write returned %ld (%s)", sz,
 		     fi_strerror(-sz));
 
@@ -1526,7 +1597,8 @@ void sep_writedata(int index, int len)
 	sep_init_data(source, len, 0x43 + index);
 	sep_init_data(target, len, 0);
 	sz = fi_writedata(tx_ep[0][index], source, len, loc_mr[0], WRITE_DATA,
-			  rx_addr[index], (uint64_t)target, mr_key[1],
+			  rx_addr[index],
+			  _REM_ADDR(fi[0], target, target), mr_key[1],
 			  target);
 	cr_assert_eq(sz, 0);
 
@@ -1564,7 +1636,8 @@ void sep_inject_writedata(int index, int len)
 	sep_init_data(source, len, 0x53 + index);
 	sep_init_data(target, len, 0);
 	sz = fi_inject_writedata(tx_ep[0][index], source, len, INJECTWRITE_DATA,
-				 rx_addr[index], (uint64_t)target, mr_key[1]);
+				 rx_addr[index],
+				 _REM_ADDR(fi[0], target, target), mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
@@ -1604,8 +1677,9 @@ void sep_atomic(int index)
 	*((uint64_t *)source) = SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_atomic(tx_ep[0][index], source, 1,
-		       loc_mr[0], rx_addr[index], (uint64_t)target, mr_key[1],
-		       FI_UINT64, FI_ATOMIC_WRITE, target);
+			loc_mr[0], rx_addr[index],
+			_REM_ADDR(fi[0], target, target),
+			mr_key[1], FI_UINT64, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(tx_cq[0][index], &cqe, 1)) == -FI_EAGAIN) {
@@ -1640,7 +1714,8 @@ void sep_atomic_v(int index)
 	*((int64_t *)source) = SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
 	sz = fi_atomicv(tx_ep[0][index], &iov, (void **)loc_mr, 1,
-			rx_addr[index], (uint64_t)target, mr_key[1],
+			rx_addr[index],
+			_REM_ADDR(fi[0], target, target), mr_key[1],
 			FI_INT64, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
@@ -1679,7 +1754,7 @@ void sep_atomic_msg(int index)
 	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi[0], target, target);
 	rma_iov.count = 1;
 	rma_iov.key = mr_key[1];
 	msg.rma_iov = &rma_iov;
@@ -1723,8 +1798,9 @@ void sep_atomic_inject(int index)
 	*((int64_t *)source) = SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
 	sz = fi_inject_atomic(tx_ep[0][index], source, 1,
-			      gni_addr[1], (uint64_t)target, mr_key[1],
-			      FI_INT64, FI_MIN);
+				  gni_addr[1],
+				  _REM_ADDR(fi[0], target, target), mr_key[1],
+				  FI_INT64, FI_MIN);
 	cr_assert_eq(sz, 0);
 
 	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
@@ -1755,8 +1831,9 @@ void sep_atomic_rw(int index)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(tx_ep[0][index], &operand, 1, NULL, source,
-			     loc_mr[0], rx_addr[index], (uint64_t)target,
-			     mr_key[1], FI_UINT64, FI_SUM, target);
+				 loc_mr[0], rx_addr[index],
+				 _REM_ADDR(fi[0], target, target),
+				 mr_key[1], FI_UINT64, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(tx_cq[0][index], &cqe, 1)) == -FI_EAGAIN) {
@@ -1795,9 +1872,10 @@ void sep_atomic_rwv(int index)
 	iov.addr = &operand;
 	r_iov.addr = source;
 	sz = fi_fetch_atomicv(tx_ep[0][index], &iov, NULL, 1,
-			      &r_iov, (void **)loc_mr, 1,
-			      gni_addr[1], (uint64_t)target, mr_key[1],
-			      FI_INT64, FI_MIN, target);
+				  &r_iov, (void **)loc_mr, 1,
+				  gni_addr[1],
+				  _REM_ADDR(fi[0], target, target), mr_key[1],
+				  FI_INT64, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(tx_cq[0][index], &cqe, 1)) == -FI_EAGAIN) {
@@ -1836,7 +1914,7 @@ void sep_atomic_rwmsg(int index)
 	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi[0], target, target);
 	rma_iov.count = 1;
 	rma_iov.key = mr_key[1];
 	msg.rma_iov = &rma_iov;
@@ -1886,9 +1964,10 @@ void sep_atomic_compwrite(int index)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(tx_ep[0][index], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], rx_addr[index],
-			       (uint64_t)target, mr_key[1], FI_UINT64,
-			       FI_CSWAP, target);
+				   source, loc_mr[0], rx_addr[index],
+				   _REM_ADDR(fi[0], target, target),
+				   mr_key[1], FI_UINT64,
+				   FI_CSWAP, target);
 	cr_assert_eq(sz, 0, "fi_compare_atomic returned %ld (%s)", sz,
 		     fi_strerror(-sz));
 
@@ -1939,7 +2018,8 @@ void sep_atomic_compwritev(int index)
 				&iov, NULL, 1,
 				&c_iov, NULL, 1,
 				&r_iov, (void **)loc_mr, 1,
-				gni_addr[1], (uint64_t)target, mr_key[1],
+				gni_addr[1],
+				_REM_ADDR(fi[0], target, target), mr_key[1],
 				FI_DOUBLE, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
@@ -1979,7 +2059,7 @@ void sep_atomic_compwritemsg(int index)
 	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi[0], target, target);
 	rma_iov.count = 1;
 	rma_iov.key = mr_key[1];
 	msg.rma_iov = &rma_iov;
@@ -2046,10 +2126,15 @@ void sep_invalid_fetch_atomic(enum fi_datatype dt, enum fi_op op)
 	uint64_t operand;
 
 	if (!supported_fetch_atomic_ops[op][dt]) {
-		sz = fi_fetch_atomic(tx_ep[0][0], &operand, 1, NULL,
-				     source, loc_mr[0],
-				     rx_addr[0], (uint64_t)target, mr_key[1],
-				     dt, op, target);
+		sz = fi_fetch_atomic(tx_ep[0][0],
+				&operand,
+				1,
+				NULL,
+				source, loc_mr[0],
+				rx_addr[0],
+				_REM_ADDR(fi[0], target, target),
+				mr_key[1],
+				dt, op, target);
 		cr_assert(sz == -FI_EOPNOTSUPP);
 
 		sz = fi_fetch_atomicvalid(tx_ep[0][0], dt, op, &count);
@@ -2280,15 +2365,39 @@ void run_tests(void)
 	}
 }
 
-TestSuite(scalablea, .init = sep_setup_context, .fini = sep_teardown_context);
-TestSuite(scalablem, .init = sep_setup_map, .fini = sep_teardown);
-TestSuite(scalablet, .init = sep_setup_table, .fini = sep_teardown);
+TestSuite(scalablea,
+	.init = sep_setup_context,
+	.fini = sep_teardown_context);
+
+TestSuite(scalablem_default,
+	.init = sep_default_setup_map,
+	.fini = sep_teardown);
+
+TestSuite(scalablet_default,
+	.init = sep_default_setup_table,
+	.fini = sep_teardown);
+
+TestSuite(scalablem_basic,
+	.init = sep_basic_setup_map,
+	.fini = sep_teardown);
+
+TestSuite(scalablet_basic,
+	.init = sep_basic_setup_table,
+	.fini = sep_teardown);
+
+TestSuite(scalablem_scalable,
+	.init = sep_scalable_setup_map,
+	.fini = sep_teardown);
+
+TestSuite(scalablet_scalable,
+	.init = sep_scalable_setup_table,
+	.fini = sep_teardown);
 
 Test(scalablea, misc)
 {
 }
 
-Test(scalablem, misc)
+Test(scalablem_default, misc)
 {
 	int ret;
 	struct fi_av_attr av_attr = {0};
@@ -2319,15 +2428,27 @@ Test(scalablem, misc)
 	cr_assert_eq(ret, -FI_EBUSY, "close should have failed.");
 }
 
-Test(scalablem, all)
+Test(scalablem_basic, all)
 {
-	cr_log_info(BLUE "sep:FI_AV_MAP tests:\n" COLOR_RESET);
+	cr_log_info(BLUE "sep:basic:FI_AV_MAP tests:\n" COLOR_RESET);
 	run_tests();
 }
 
-Test(scalablet, all)
+Test(scalablet_basic, all)
 {
-	cr_log_info(BLUE "sep:FI_AV_TABLE tests:\n" COLOR_RESET);
+	cr_log_info(BLUE "sep:basic:FI_AV_TABLE tests:\n" COLOR_RESET);
+	run_tests();
+}
+
+Test(scalablem_scalable, all)
+{
+	cr_log_info(BLUE "sep:scalable:FI_AV_MAP tests:\n" COLOR_RESET);
+	run_tests();
+}
+
+Test(scalablet_scalable, all)
+{
+	cr_log_info(BLUE "sep:scalable:FI_AV_TABLE tests:\n" COLOR_RESET);
 	run_tests();
 }
 

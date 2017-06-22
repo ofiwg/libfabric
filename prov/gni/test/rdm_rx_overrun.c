@@ -85,7 +85,7 @@ static uint64_t mr_key[NUM_EPS];
 
 static int max_eps = NUM_EPS;
 
-static void setup(void)
+static void __setup(uint32_t version, int mr_mode)
 {
 	int i, j;
 	int ret = 0;
@@ -97,7 +97,7 @@ static void setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->domain_attr->cq_data_size = 4;
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
@@ -105,11 +105,29 @@ static void setup(void)
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
+
+	if (USING_SCALABLE(fi)) {
+		struct fi_gni_ops_fab *ops;
+		int in;
+
+		/* nic test opens many nics and exhausts reserved keys */
+		in = 256;
+
+		ret = fi_open_ops(&fab->fid,
+			FI_GNI_FAB_OPS_1, 0, (void **) &ops, NULL);
+		cr_assert_eq(ret, FI_SUCCESS);
+		cr_assert(ops);
+
+		ret = ops->set_val(&fab->fid,
+			GNI_DEFAULT_PROV_REGISTRATION_LIMIT,
+			&in);
+		cr_assert_eq(ret, FI_SUCCESS);
+	}
 
 	memset(&attr, 0, sizeof(attr));
 	attr.type = FI_AV_TABLE;
@@ -168,21 +186,53 @@ static void setup(void)
 	}
 
 	for (i = 0; i < max_eps; i++) {
+		int requested_rem_key = (USING_SCALABLE(fi)) ? (i * 2) : 0;
+		int requested_loc_key = (USING_SCALABLE(fi)) ? (i * 2) + 1 : 0;
+
 		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
 		cr_assert(!ret, "fi_ep_bind");
 		ret = fi_enable(ep[i]);
 		cr_assert(!ret, "fi_ep_enable");
 
-		ret = fi_mr_reg(dom[i], target, max_eps*sizeof(int),
-			FI_RECV, 0, 0, 0, &rem_mr[i], &target);
+		ret = fi_mr_reg(dom[i],
+				  target,
+				  max_eps*sizeof(int),
+				  FI_RECV,
+				  0,
+				  requested_rem_key,
+				  0,
+				  &rem_mr[i],
+				  &target);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], source, max_eps*sizeof(int),
-				FI_SEND, 0, 0, 0, &loc_mr[i], &source);
+		ret = fi_mr_reg(dom[i],
+				  source,
+				  max_eps*sizeof(int),
+				  FI_SEND,
+				  0,
+				  requested_loc_key,
+				  0,
+				  &loc_mr[i],
+				  &source);
 		cr_assert_eq(ret, 0);
+
+		if (USING_SCALABLE(fi)) {
+			MR_ENABLE(rem_mr[i], target, max_eps*sizeof(int));
+			MR_ENABLE(loc_mr[i], source, max_eps*sizeof(int));
+		}
 
 		mr_key[i] = fi_mr_key(rem_mr[i]);
 	}
+}
+
+static void setup_basic(void)
+{
+	__setup(fi_version(), GNIX_MR_BASIC);
+}
+
+static void setup_scalable(void)
+{
+	__setup(fi_version(), GNIX_MR_SCALABLE);
 }
 
 static void teardown(void)
@@ -220,10 +270,16 @@ static void teardown(void)
 	fi_freeinfo(hints);
 }
 
-TestSuite(rdm_rx_overrun, .init = setup, .fini = teardown, .disabled = false);
+TestSuite(rdm_rx_overrun_basic,
+	  .init = setup_basic,
+	  .fini = teardown,
+	  .disabled = false);
+TestSuite(rdm_rx_overrun_scalable,
+	  .init = setup_scalable,
+	  .fini = teardown,
+	  .disabled = false);
 
-
-Test(rdm_rx_overrun, all_to_one)
+static inline void __all_to_one(void)
 {
 	int i, j;
 	int source_done = 0, dest_done = 0;
@@ -296,3 +352,12 @@ Test(rdm_rx_overrun, all_to_one)
 
 }
 
+Test(rdm_rx_overrun_basic, all_to_one)
+{
+	__all_to_one();
+}
+
+Test(rdm_rx_overrun_scalable, all_to_one)
+{
+	__all_to_one();
+}

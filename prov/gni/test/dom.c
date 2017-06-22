@@ -44,6 +44,8 @@
 #include "gnix_rdma_headers.h"
 #include "common.h"
 
+#include "common.h"
+
 static struct fid_fabric *fabric;
 static struct fi_info *fi;
 
@@ -254,20 +256,34 @@ Test(domain, cache_flush_op)
 	struct fi_gni_ops_domain *gni_domain_ops;
 	struct fid_mr *mr;
 	char *buf = calloc(1024, sizeof(char));
+	int requested_key = 0;
 
 	cr_assert(buf);
 
 	memset(doms, 0, num_doms*sizeof(struct fid_domain *));
 
 	for (i = 0; i < num_doms; i++) {
+		requested_key = USING_SCALABLE(fi) ? i : 0;
+
 		ret = fi_domain(fabric, fi, &doms[i], NULL);
 		cr_assert(ret == FI_SUCCESS, "fi_domain");
 		ret = fi_open_ops(&doms[i]->fid, FI_GNI_DOMAIN_OPS_1,
 				  0, (void **) &gni_domain_ops, NULL);
 		cr_assert(ret == FI_SUCCESS, "fi_open_ops");
 
-		ret = fi_mr_reg(doms[i], buf, 1024, FI_READ, 0, 0, 0, &mr, NULL);
-		cr_assert(ret == FI_SUCCESS, "fi_reg_mr");
+		ret = fi_mr_reg(doms[i],
+				  buf,
+				  1024,
+				  FI_READ,
+				  0,
+				  requested_key,
+				  0,
+				  &mr,
+				  NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_reg_mr, ret=%d", ret);
+
+		if (USING_SCALABLE(fi))
+			MR_ENABLE(mr, buf, 1024);
 
 		ret = fi_close(&mr->fid);
 		cr_assert(ret == FI_SUCCESS, "fi_close mr");

@@ -81,10 +81,10 @@ static struct fid_cq *recv_cq[2];
 static struct fi_cq_attr cq_attr[2];
 
 #define BUF_SZ (64*1024)
-char *target;
-char *target2;
-char *source;
-char *source2;
+char *target, *target_base;
+char *target2, *target2_base;
+char *source, *source_base;
+char *source2, *source2_base;
 char *uc_source;
 struct fid_mr *rem_mr[2], *loc_mr[2], *rem_mr2[2], *loc_mr2[2];
 uint64_t mr_key[2], mr_key2[2];
@@ -102,23 +102,28 @@ static uint64_t writes[2] = {0}, reads[2] = {0}, write_errs[2] = {0},
 static int dgm_fail;
 static bool fi_more_set;
 
-void common_setup(void)
+static void __common_setup(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
+	uint64_t requested_key[2][4] = {
+		{0, 0, 0, 0},
+		{0, 0, 0, 0} };
+	int i, j;
 
 	dgm_fail = 0;
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
-		       FI_WRITE | FI_REMOTE_WRITE | FI_MSG | FI_SEND | FI_RECV;
+			   FI_WRITE | FI_REMOTE_WRITE | FI_MSG |
+			   FI_SEND | FI_RECV;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -226,42 +231,125 @@ void common_setup(void)
 	ret = fi_ep_bind(ep[1], &av[1]->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
-	target = malloc(BUF_SZ);
-	assert(target);
-	target2 = malloc(BUF_SZ);
-	assert(target2);
-	source = malloc(BUF_SZ);
-	assert(source);
-	source2 = malloc(BUF_SZ);
-	assert(source2);
+	if (USING_SCALABLE(fi)) {
+		for (i = 0; i < 2; i++)
+			for (j = 0; j < 4; j++)
+				requested_key[i][j] = (i * 4) + j;
+	}
 
-	ret = fi_mr_reg(dom[0], target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[0], &target);
-	cr_assert_eq(ret, 0);
-	ret = fi_mr_reg(dom[1], target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[1], &target);
+
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
+
+	target2_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target2_base);
+	target2 = GNIT_ALIGN_BUFFER(char *, target2_base);
+
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
+
+	source2_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source2_base);
+	source2 = GNIT_ALIGN_BUFFER(char *, source2_base);
+
+	ret = fi_mr_reg(dom[0],
+			  target,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[0][0],
+			  0,
+			  &rem_mr[0],
+			  &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom[0], target2, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr2[0], &target2);
-	cr_assert_eq(ret, 0);
-	ret = fi_mr_reg(dom[1], target2, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr2[1], &target2);
-	cr_assert_eq(ret, 0);
-
-	ret = fi_mr_reg(dom[0], source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[0], &source);
-	cr_assert_eq(ret, 0);
-	ret = fi_mr_reg(dom[1], source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[1], &source);
+	ret = fi_mr_reg(dom[1],
+			  target,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[1][0],
+			  0,
+			  &rem_mr[1],
+			  &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom[0], source2, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr2[0], &source2);
+	ret = fi_mr_reg(dom[0],
+			  target2,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[0][1],
+			  0,
+			  &rem_mr2[0],
+			  &target2);
 	cr_assert_eq(ret, 0);
-	ret = fi_mr_reg(dom[1], source2, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr2[1], &source2);
+
+	ret = fi_mr_reg(dom[1],
+			  target2,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[1][1],
+			  0,
+			  &rem_mr2[1],
+			  &target2);
 	cr_assert_eq(ret, 0);
+
+	ret = fi_mr_reg(dom[0],
+			  source,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[0][2],
+			  0,
+			  &loc_mr[0],
+			  &source);
+	cr_assert_eq(ret, 0);
+
+	ret = fi_mr_reg(dom[1],
+			  source,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[1][2],
+			  0,
+			  &loc_mr[1],
+			  &source);
+	cr_assert_eq(ret, 0);
+
+	ret = fi_mr_reg(dom[0],
+			  source2,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[0][3],
+			  0,
+			  &loc_mr2[0],
+			  &source2);
+	cr_assert_eq(ret, 0);
+
+	ret = fi_mr_reg(dom[1],
+			  source2,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  requested_key[1][3],
+			  0,
+			  &loc_mr2[1],
+			  &source2);
+	cr_assert_eq(ret, 0);
+
+	for (i = 0; i < 2; i++) {
+		if (USING_SCALABLE(fi)) {
+			MR_ENABLE(rem_mr[i], target, BUF_SZ);
+			MR_ENABLE(rem_mr2[i], target2, BUF_SZ);
+			MR_ENABLE(loc_mr[i], source, BUF_SZ);
+			MR_ENABLE(loc_mr2[i], source2, BUF_SZ);
+		}
+	}
 
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
@@ -317,7 +405,7 @@ void common_setup(void)
 
 }
 
-void common_setup_1dom(void)
+static void __common_setup_1dom(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
@@ -325,7 +413,7 @@ void common_setup_1dom(void)
 
 	dgm_fail = 0;
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 	hints->caps |= FI_RMA | FI_READ | FI_REMOTE_READ |
@@ -333,7 +421,7 @@ void common_setup_1dom(void)
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -425,18 +513,40 @@ void common_setup_1dom(void)
 	ret = fi_ep_bind(ep[1], &av[0]->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
-	target = malloc(BUF_SZ);
-	assert(target);
-	source = malloc(BUF_SZ);
-	assert(source);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	ret = fi_mr_reg(dom[0], target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[0], &target);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
+
+	ret = fi_mr_reg(dom[0],
+			  target,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  (USING_SCALABLE(fi) ? 1 : 0),
+			  0,
+			  &rem_mr[0],
+			  &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom[0], source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[0], &source);
+	ret = fi_mr_reg(dom[0],
+			  source,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  (USING_SCALABLE(fi) ? 2 : 0),
+			  0,
+			  &loc_mr[0],
+			  &source);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi)) {
+		MR_ENABLE(rem_mr[0], target, BUF_SZ);
+		MR_ENABLE(loc_mr[0], source, BUF_SZ);
+	}
 
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
@@ -490,48 +600,92 @@ void common_setup_1dom(void)
 
 }
 
-void rdm_rma_setup(void)
+void rdm_rma_setup_basic(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_RMA_EVENT;
-	common_setup();
+	__common_setup(fi_version(), GNIX_MR_BASIC);
 }
 
-void more_rdm_rma_setup(void)
+void more_rdm_rma_setup_basic(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_RDM;
-	common_setup();
+	__common_setup(fi_version(), GNIX_MR_BASIC);
 }
 
-void dgram_setup(void)
+void dgram_setup_basic(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_DGRAM;
 	hints->caps = FI_RMA_EVENT;
-	common_setup();
+	__common_setup(fi_version(), GNIX_MR_BASIC);
 }
 
-void dgram_setup_1dom(void)
+void dgram_setup_1dom_basic(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_DGRAM;
 	hints->caps = FI_RMA_EVENT;
-	common_setup_1dom();
+	__common_setup_1dom(fi_version(), GNIX_MR_BASIC);
 }
 
-void rdm_rma_rcntr_setup(void)
+void rdm_rma_rcntr_setup_basic(void)
 {
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_RMA_EVENT;
-	common_setup();
+	__common_setup(fi_version(), GNIX_MR_BASIC);
+}
+
+void rdm_rma_setup_scalable(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_RMA_EVENT;
+	__common_setup(fi_version(), GNIX_MR_SCALABLE);
+}
+
+void more_rdm_rma_setup_scalable(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	__common_setup(fi_version(), GNIX_MR_SCALABLE);
+}
+
+void dgram_setup_scalable(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_RMA_EVENT;
+	__common_setup(fi_version(), GNIX_MR_SCALABLE);
+}
+
+void dgram_setup_1dom_scalable(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_RMA_EVENT;
+	__common_setup_1dom(fi_version(), GNIX_MR_SCALABLE);
+}
+
+void rdm_rma_rcntr_setup_scalable(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_RMA_EVENT;
+	__common_setup(fi_version(), GNIX_MR_SCALABLE);
 }
 
 void rdm_rma_teardown(void)
@@ -596,10 +750,10 @@ void rdm_rma_teardown(void)
 		cr_assert(!ret, "failure in closing dom[1] remote mr.");
 	}
 
-	free(target);
-	free(target2);
-	free(source);
-	free(source2);
+	free(target_base);
+	free(target2_base);
+	free(source_base);
+	free(source2_base);
 
 	ret = fi_close(&ep[0]->fid);
 	cr_assert(!ret, "failure in closing ep[0].");
@@ -769,16 +923,44 @@ void err_inject_enable(void)
  * Test RMA functions
  ******************************************************************************/
 
-TestSuite(dgram_rma, .init = dgram_setup, .fini = rdm_rma_teardown,
+TestSuite(dgram_rma_basic,
+	  .init = dgram_setup_basic,
+	  .fini = rdm_rma_teardown,
 	  .disabled = false);
 
-TestSuite(rdm_rma, .init = rdm_rma_setup, .fini = rdm_rma_teardown,
+TestSuite(rdm_rma_basic,
+	  .init = rdm_rma_setup_basic,
+	  .fini = rdm_rma_teardown,
 	  .disabled = false);
 
-TestSuite(more_rdm_rma, .init = more_rdm_rma_setup, .fini = rdm_rma_teardown,
+TestSuite(more_rdm_rma_basic,
+	  .init = more_rdm_rma_setup_basic,
+	  .fini = rdm_rma_teardown,
 	  .disabled = false);
 
-TestSuite(dgram_rma_1dom, .init = dgram_setup_1dom, .fini = rdm_rma_teardown,
+TestSuite(dgram_rma_1dom_basic,
+	  .init = dgram_setup_1dom_basic,
+	  .fini = rdm_rma_teardown,
+	  .disabled = false);
+
+TestSuite(dgram_rma_scalable,
+	  .init = dgram_setup_scalable,
+	  .fini = rdm_rma_teardown,
+	  .disabled = false);
+
+TestSuite(rdm_rma_scalable,
+	  .init = rdm_rma_setup_scalable,
+	  .fini = rdm_rma_teardown,
+	  .disabled = false);
+
+TestSuite(more_rdm_rma_scalable,
+	  .init = more_rdm_rma_setup_scalable,
+	  .fini = rdm_rma_teardown,
+	  .disabled = false);
+
+TestSuite(dgram_rma_1dom_scalable,
+	  .init = dgram_setup_1dom_scalable,
+	  .fini = rdm_rma_teardown,
 	  .disabled = false);
 
 void do_write(int len)
@@ -795,8 +977,9 @@ void do_write(int len)
 	init_data(target, len, 0);
 
 	sz = fi_write(ep[0], source, len,
-		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  loc_mr[0], gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	do {
@@ -828,35 +1011,71 @@ void do_write(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, write)
+Test(rdm_rma_basic, write)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(rdm_rma, write_retrans)
+Test(rdm_rma_basic, write_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma, write)
+Test(dgram_rma_basic, write)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma, write_retrans)
+Test(dgram_rma_basic, write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, write)
+Test(dgram_rma_1dom_basic, write)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, write_retrans)
+Test(dgram_rma_1dom_basic, write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+/* scalable */
+Test(rdm_rma_scalable, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, write_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -879,8 +1098,9 @@ void do_writev(int len)
 	init_data(target, len, 0);
 
 	sz = fi_writev(ep[0], &iov, (void **)loc_mr, 1,
-		       gni_addr[1], (uint64_t)target, mr_key[1],
-		       target);
+			   gni_addr[1],
+			   _REM_ADDR(fi, target, target), mr_key[1],
+			   target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -903,35 +1123,71 @@ void do_writev(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, writev)
+Test(rdm_rma_basic, writev)
 {
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(rdm_rma, writev_retrans)
+Test(rdm_rma_basic, writev_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma, writev)
+Test(dgram_rma_basic, writev)
 {
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma, writev_retrans)
+Test(dgram_rma_basic, writev_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, writev)
+Test(dgram_rma_1dom_basic, writev)
 {
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, writev_retrans)
+Test(dgram_rma_1dom_basic, writev_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+/* scalable */
+Test(rdm_rma_scalable, writev)
+{
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, writev_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, writev)
+{
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, writev_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, writev)
+{
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, writev_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -952,7 +1208,7 @@ void do_writemsg(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -989,35 +1245,72 @@ void do_writemsg(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, writemsg)
+Test(rdm_rma_basic, writemsg)
 {
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(rdm_rma, writemsg_retrans)
+Test(rdm_rma_basic, writemsg_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma, writemsg)
+Test(dgram_rma_basic, writemsg)
 {
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma, writemsg_retrans)
+Test(dgram_rma_basic, writemsg_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, writemsg)
+Test(dgram_rma_1dom_basic, writemsg)
 {
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, writemsg_retrans)
+Test(dgram_rma_1dom_basic, writemsg_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, writemsg)
+{
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, writemsg_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, writemsg)
+{
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, writemsg_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, writemsg)
+{
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, writemsg_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1041,11 +1334,11 @@ void do_writemsg_more(int len)
 	iov2.iov_base = source2;
 	iov2.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
-	rma_iov2.addr = (uint64_t)target2;
+	rma_iov2.addr = _REM_ADDR(fi, target2, target2);
 	rma_iov2.len = len;
 	rma_iov2.key = mr_key2[1];  /* use different mr_key? */
 
@@ -1123,13 +1416,28 @@ void do_writemsg_more(int len)
 
 }
 
-Test(more_rdm_rma, writemsgmore)
+Test(more_rdm_rma_basic, writemsgmore)
 {
 	fi_more_set = true;
 	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
 	fi_more_set = false;
 }
-Test(rdm_rma, writemsgmore)
+
+Test(rdm_rma_basic, writemsgmore)
+{
+	fi_more_set = true;
+	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
+	fi_more_set = false;
+}
+
+Test(more_rdm_rma_scalable, writemsgmore)
+{
+	fi_more_set = true;
+	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
+	fi_more_set = false;
+}
+
+Test(rdm_rma_scalable, writemsgmore)
 {
 	fi_more_set = true;
 	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
@@ -1150,7 +1458,7 @@ void do_mixed_more(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -1207,11 +1515,20 @@ void do_mixed_more(int len)
 
 }
 
-Test(more_rdm_rma, mixedmore)
+Test(more_rdm_rma_basic, mixedmore)
 {
 	xfer_for_each_size(do_mixed_more, 8, BUF_SZ);
 }
-Test(rdm_rma, mixedmore)
+Test(rdm_rma_basic, mixedmore)
+{
+	xfer_for_each_size(do_mixed_more, 8, BUF_SZ);
+}
+
+Test(more_rdm_rma_scalable, mixedmore)
+{
+	xfer_for_each_size(do_mixed_more, 8, BUF_SZ);
+}
+Test(rdm_rma_scalable, mixedmore)
 {
 	xfer_for_each_size(do_mixed_more, 8, BUF_SZ);
 }
@@ -1242,7 +1559,7 @@ void do_write_fence(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = sizeof(target);
 	rma_iov.key = mr_key[1];
 
@@ -1299,35 +1616,71 @@ void do_write_fence(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, write_fence)
+Test(rdm_rma_basic, write_fence)
 {
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(rdm_rma, write_fence_retrans)
+Test(rdm_rma_basic, write_fence_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma, write_fence)
+Test(dgram_rma_basic, write_fence)
 {
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma, write_fence_retrans)
+Test(dgram_rma_basic, write_fence_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, write_fence)
+Test(dgram_rma_1dom_basic, write_fence)
 {
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, write_fence_retrans)
+Test(dgram_rma_1dom_basic, write_fence_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+/* scalable */
+Test(rdm_rma_scalable, write_fence)
+{
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, write_fence_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, write_fence)
+{
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, write_fence_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, write_fence)
+{
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, write_fence_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1348,19 +1701,25 @@ void do_inject_write(int len)
 	init_data(target, len, 0);
 
 	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
-	cache = GET_DOMAIN_RW_CACHE(ep_priv->domain);
-	cr_assert(cache != NULL);
+	if (!USING_SCALABLE(fi)) {
+		cache = GET_DOMAIN_RW_CACHE(ep_priv->domain);
+		cr_assert(cache != NULL);
 
-	already_registered = ofi_atomic_get32(&cache->inuse.elements);
+		already_registered = ofi_atomic_get32(&cache->inuse.elements);
+	}
+
 	sz = fi_inject_write(ep[0], source, len,
-			     gni_addr[1], (uint64_t)target, mr_key[1]);
+				 gni_addr[1],
+				 _REM_ADDR(fi, target, target), mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	/*
 	 * shouldn't have registeredd the source buffer, trust but verify
 	 */
-	cr_assert(ofi_atomic_get32(&cache->inuse.elements)
-			== already_registered);
+	if (!USING_SCALABLE(fi)) {
+		cr_assert(ofi_atomic_get32(&cache->inuse.elements)
+				== already_registered);
+	}
 
 	for (i = 0; i < len; i++) {
 		loops = 0;
@@ -1380,35 +1739,71 @@ void do_inject_write(int len)
 	cr_assert(!dgm_fail || (dgm_fail && loops >= MLOOPS), "Should fail");
 }
 
-Test(rdm_rma, inject_write)
+Test(rdm_rma_basic, inject_write)
 {
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(rdm_rma, inject_write_retrans)
+Test(rdm_rma_basic, inject_write_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma, inject_write)
+Test(dgram_rma_basic, inject_write)
 {
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma, inject_write_retrans)
+Test(dgram_rma_basic, inject_write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom, inject_write)
+Test(dgram_rma_1dom_basic, inject_write)
 {
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom, inject_write_retrans)
+Test(dgram_rma_1dom_basic, inject_write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+/* scalable */
+Test(rdm_rma_scalable, inject_write)
+{
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(rdm_rma_scalable, inject_write_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_scalable, inject_write)
+{
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_scalable, inject_write_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_scalable, inject_write)
+{
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_scalable, inject_write_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1430,7 +1825,8 @@ void do_writedata(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_writedata(ep[0], source, len, loc_mr[0], WRITE_DATA,
-			  gni_addr[1], (uint64_t)target, mr_key[1],
+			  gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
 			  target);
 	cr_assert_eq(sz, 0);
 
@@ -1463,35 +1859,72 @@ void do_writedata(int len)
 			   WRITE_DATA, ep[1]);
 }
 
-Test(rdm_rma, writedata)
+Test(rdm_rma_basic, writedata)
 {
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(rdm_rma, writedata_retrans)
+Test(rdm_rma_basic, writedata_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma, writedata)
+Test(dgram_rma_basic, writedata)
 {
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma, writedata_retrans)
+Test(dgram_rma_basic, writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, writedata)
+Test(dgram_rma_1dom_basic, writedata)
 {
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, writedata_retrans)
+Test(dgram_rma_1dom_basic, writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, writedata)
+{
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, writedata_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, writedata)
+{
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, writedata)
+{
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1511,7 +1944,8 @@ void do_inject_writedata(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_inject_writedata(ep[0], source, len, INJECTWRITE_DATA,
-				 gni_addr[1], (uint64_t)target, mr_key[1]);
+				 gni_addr[1],
+				 _REM_ADDR(fi, target, target), mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
@@ -1544,35 +1978,71 @@ void do_inject_writedata(int len)
 			   INJECTWRITE_DATA, ep[1]);
 }
 
-Test(rdm_rma, inject_writedata)
+Test(rdm_rma_basic, inject_writedata)
 {
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(rdm_rma, inject_writedata_retrans)
+Test(rdm_rma_basic, inject_writedata_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma, inject_writedata)
+Test(dgram_rma_basic, inject_writedata)
 {
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma, inject_writedata_retrans)
+Test(dgram_rma_basic, inject_writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom, inject_writedata)
+Test(dgram_rma_1dom_basic, inject_writedata)
 {
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
-Test(dgram_rma_1dom, inject_writedata_retrans)
+Test(dgram_rma_1dom_basic, inject_writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+/* scalable */
+Test(rdm_rma_scalable, inject_writedata)
+{
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(rdm_rma_scalable, inject_writedata_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_scalable, inject_writedata)
+{
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_scalable, inject_writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_scalable, inject_writedata)
+{
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma_1dom_scalable, inject_writedata_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -1593,8 +2063,9 @@ void do_read(int len)
 
 	/* domain 0 from domain 1 */
 	sz = fi_read(ep[0], source, len,
-		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		     (void *)READ_CTX);
+			 loc_mr[0], gni_addr[1],
+			 _REM_ADDR(fi, target, target), mr_key[1],
+			 (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1612,23 +2083,46 @@ void do_read(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, read)
+Test(rdm_rma_basic, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
-Test(rdm_rma, read_retrans)
+Test(rdm_rma_basic, read_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
-Test(dgram_rma, read)
+Test(dgram_rma_basic, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, read)
+Test(dgram_rma_1dom_basic, read)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, read)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, read_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, read)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
@@ -1648,8 +2142,9 @@ void do_readv(int len)
 	init_data(target, len, 0x25);
 	init_data(source, len, 0);
 	sz = fi_readv(ep[0], &iov, (void **)loc_mr, 1,
-		      gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1667,23 +2162,46 @@ void do_readv(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, readv)
+Test(rdm_rma_basic, readv)
 {
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
-Test(rdm_rma, readv_retrans)
+Test(rdm_rma_basic, readv_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
-Test(dgram_rma, readv)
+Test(dgram_rma_basic, readv)
 {
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, readv)
+Test(dgram_rma_1dom_basic, readv)
+{
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, readv)
+{
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, readv_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, readv)
+{
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, readv)
 {
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
@@ -1702,7 +2220,7 @@ void do_readmsg(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -1737,7 +2255,7 @@ void do_readmsg(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[0];
 
@@ -1751,23 +2269,46 @@ void do_readmsg(int len)
 	msg.data = (uint64_t)target;
 }
 
-Test(rdm_rma, readmsg)
+Test(rdm_rma_basic, readmsg)
 {
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
-Test(rdm_rma, readmsg_retrans)
+Test(rdm_rma_basic, readmsg_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma, readmsg)
+Test(dgram_rma_basic, readmsg)
 {
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, readmsg)
+Test(dgram_rma_1dom_basic, readmsg)
+{
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, readmsg)
+{
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+Test(rdm_rma_scalable, readmsg_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, readmsg)
+{
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, readmsg)
 {
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
@@ -1786,7 +2327,7 @@ void do_readmsg_more(int len, void *s, void *t, int len2, void *s2, void *t2)
 	iov.iov_base = s;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)t;
+	rma_iov.addr = _REM_ADDR(fi, target, t);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -1802,7 +2343,7 @@ void do_readmsg_more(int len, void *s, void *t, int len2, void *s2, void *t2)
 	iov2.iov_base = s2;
 	iov2.iov_len = len2;
 
-	rma_iov2.addr = (uint64_t)t2;
+	rma_iov2.addr = _REM_ADDR(fi, target2, t2);
 	rma_iov2.len = len2;
 	rma_iov2.key = mr_key2[1];
 
@@ -1946,13 +2487,30 @@ void do_read_alignment_more(void)
 
 }
 
-Test(more_rdm_rma, readmsgmore)
+Test(more_rdm_rma_basic, readmsgmore)
 {
 	fi_more_set = true;
 	do_read_alignment_more();
 	fi_more_set = false;
 }
-Test(rdm_rma, readmsgmore)
+
+Test(rdm_rma_basic, readmsgmore)
+{
+	fi_more_set = true;
+	do_read_alignment_more();
+	fi_more_set = false;
+}
+
+/* scalable */
+
+Test(more_rdm_rma_scalable, readmsgmore)
+{
+	fi_more_set = true;
+	do_read_alignment_more();
+	fi_more_set = false;
+}
+
+Test(rdm_rma_scalable, readmsgmore)
 {
 	fi_more_set = true;
 	do_read_alignment_more();
@@ -1973,7 +2531,7 @@ void inject_common(void)
 	iov.iov_base = source;
 	iov.iov_len = GNIX_INJECT_SIZE;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = GNIX_INJECT_SIZE;
 	rma_iov.key = mr_key[1];
 
@@ -2012,17 +2570,32 @@ void inject_common(void)
 		  "Data mismatch");
 }
 
-Test(rdm_rma, inject)
+Test(rdm_rma_basic, inject)
 {
 	inject_common();
 }
 
-Test(dgram_rma, inject)
+Test(dgram_rma_basic, inject)
 {
 	inject_common();
 }
 
-Test(dgram_rma_1dom, inject)
+Test(dgram_rma_1dom_basic, inject)
+{
+	inject_common();
+}
+
+Test(rdm_rma_scalable, inject)
+{
+	inject_common();
+}
+
+Test(dgram_rma_scalable, inject)
+{
+	inject_common();
+}
+
+Test(dgram_rma_1dom_scalable, inject)
 {
 	inject_common();
 }
@@ -2038,8 +2611,9 @@ void do_write_autoreg(int len)
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  NULL, gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2057,17 +2631,34 @@ void do_write_autoreg(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, write_autoreg)
+Test(rdm_rma_basic, write_autoreg)
 {
 	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
 }
 
-Test(dgram_rma, write_autoreg)
+Test(dgram_rma_basic, write_autoreg)
 {
 	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, write_autoreg)
+Test(dgram_rma_1dom_basic, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, write_autoreg)
 {
 	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
 }
@@ -2083,8 +2674,9 @@ void do_write_autoreg_uncached(int len)
 	init_data(uc_source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], uc_source, len,
-		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  NULL, gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2102,17 +2694,34 @@ void do_write_autoreg_uncached(int len)
 	cr_assert(check_data(uc_source, target, len), "Data mismatch");
 }
 
-Test(rdm_rma, write_autoreg_uncached)
+Test(rdm_rma_basic, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
 
-Test(dgram_rma, write_autoreg_uncached)
+Test(dgram_rma_basic, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
 
-Test(dgram_rma_1dom, write_autoreg_uncached)
+Test(dgram_rma_1dom_basic, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}
+
+Test(dgram_rma_scalable, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}
+
+Test(dgram_rma_1dom_scalable, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
@@ -2130,8 +2739,9 @@ void do_write_error(int len)
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  loc_mr[0], gni_addr[1],
+			  _REM_ADDR(fi, target, target), mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2160,7 +2770,7 @@ void do_write_error(int len)
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 }
 
-Test(rdm_rma, write_error)
+static inline void __write_error(void)
 {
 	int ret, max_retrans_val = 1;
 
@@ -2176,20 +2786,24 @@ Test(rdm_rma, write_error)
 	xfer_for_each_size(do_write_error, 8, BUF_SZ);
 }
 
-Test(dgram_rma, write_error)
+Test(rdm_rma_basic, write_error)
 {
-	int ret, max_retrans_val = 1;
+	__write_error();
+}
 
-	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_MAX_RETRANSMITS,
-					 &max_retrans_val);
-	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+Test(rdm_rma_scalable, write_error)
+{
+	__write_error();
+}
 
-	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_MAX_RETRANSMITS,
-					 &max_retrans_val);
-	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
-	err_inject_enable();
+Test(dgram_rma_basic, write_error)
+{
+	__write_error();
+}
 
-	xfer_for_each_size(do_write_error, 8, BUF_SZ);
+Test(dgram_rma_scalable, write_error)
+{
+	__write_error();
 }
 
 void do_read_error(int len)
@@ -2203,8 +2817,9 @@ void do_read_error(int len)
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
 	sz = fi_read(ep[0], source, len,
-		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		     (void *)READ_CTX);
+			 loc_mr[0], gni_addr[1],
+			 _REM_ADDR(fi, target, target), mr_key[1],
+			 (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2233,7 +2848,7 @@ void do_read_error(int len)
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 }
 
-Test(rdm_rma, read_error)
+static inline void __read_error(void)
 {
 	int ret, max_retrans_val = 1;
 
@@ -2249,6 +2864,16 @@ Test(rdm_rma, read_error)
 	xfer_for_each_size(do_read_error, 8, BUF_SZ);
 }
 
+Test(rdm_rma_basic, read_error)
+{
+	__read_error();
+}
+
+Test(rdm_rma_scalable, read_error)
+{
+	__read_error();
+}
+
 void do_read_buf(void *s, void *t, int len)
 {
 	int ret;
@@ -2260,8 +2885,9 @@ void do_read_buf(void *s, void *t, int len)
 #define READ_CTX 0x4e3dda1aULL
 	init_data(s, len, 0);
 	init_data(t, len, 0xad);
-	sz = fi_read(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
-		     (void *)READ_CTX);
+	sz = fi_read(ep[0], s, len, NULL, gni_addr[1],
+			 _REM_ADDR(fi, target, t), mr_key[1],
+			 (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2287,34 +2913,61 @@ void do_read_alignment(int len)
 		for (t_off = 0; t_off < 7; t_off++) {
 			for (l_off = 0; l_off < 7; l_off++) {
 				do_read_buf(source + s_off,
-					    target + t_off,
-					    len + l_off);
+						target + t_off,
+						len + l_off);
 			}
 		}
 	}
 }
 
-Test(rdm_rma, read_chained)
+Test(rdm_rma_basic, read_chained)
 {
 	do_read_buf(source, target, 60);
 }
-Test(rdm_rma, read_alignment)
+Test(rdm_rma_basic, read_alignment)
 {
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(rdm_rma, read_alignment_retrans)
+Test(rdm_rma_basic, read_alignment_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma, read_alignment)
+Test(dgram_rma_basic, read_alignment)
 {
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_1dom, read_alignment)
+Test(dgram_rma_1dom_basic, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+/* scalable */
+
+Test(rdm_rma_scalable, read_chained)
+{
+	do_read_buf(source, target, 60);
+}
+Test(rdm_rma_scalable, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(rdm_rma_scalable, read_alignment_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_scalable, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_1dom_scalable, read_alignment)
 {
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
@@ -2331,8 +2984,9 @@ void do_write_buf(void *s, void *t, int len)
 
 	init_data(s, len, 0xab);
 	init_data(t, len, 0);
-	sz = fi_write(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
-		      t);
+	sz = fi_write(ep[0], s, len, NULL, gni_addr[1],
+			  _REM_ADDR(fi, target, t), mr_key[1],
+			  t);
 	cr_assert_eq(sz, 0);
 
 	do {
@@ -2372,42 +3026,81 @@ void do_write_alignment(int len)
 		for (t_off = 0; t_off < 7; t_off++) {
 			for (l_off = 0; l_off < 7; l_off++) {
 				do_write_buf(source + s_off,
-					     target + t_off,
-					     len + l_off);
+						 target + t_off,
+						 len + l_off);
 			}
 		}
 	}
 }
 
-Test(rdm_rma, write_alignment)
+Test(rdm_rma_basic, write_alignment)
 {
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(rdm_rma, write_alignment_retrans)
+Test(rdm_rma_basic, write_alignment_retrans)
 {
 	err_inject_enable();
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma, write_alignment)
+Test(dgram_rma_basic, write_alignment)
 {
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma, write_alignment_retrans)
+Test(dgram_rma_basic, write_alignment_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_1dom, write_alignment)
+Test(dgram_rma_1dom_basic, write_alignment)
 {
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
 
-Test(dgram_rma_1dom, write_alignment_retrans)
+Test(dgram_rma_1dom_basic, write_alignment_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+
+
+/* scalable */
+
+Test(rdm_rma_scalable, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(rdm_rma_scalable, write_alignment_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_scalable, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_scalable, write_alignment_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_1dom_scalable, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma_1dom_scalable, write_alignment_retrans)
 {
 	dgm_fail = 1;
 	err_inject_enable();
@@ -2428,7 +3121,7 @@ void do_trigger(int len)
 	iov.iov_base = source;
 	iov.iov_len = len;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi, target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 
@@ -2478,20 +3171,42 @@ void do_trigger(int len)
 	cr_assert_eq(sz, 0);
 }
 
-Test(rdm_rma, trigger)
+Test(rdm_rma_basic, trigger)
 {
 	xfer_for_each_size(do_trigger, 8, BUF_SZ);
 }
 
-TestSuite(rdm_rma_rcntr, .init = rdm_rma_rcntr_setup, .fini = rdm_rma_teardown,
+Test(rdm_rma_scalable, trigger)
+{
+	xfer_for_each_size(do_trigger, 8, BUF_SZ);
+}
+
+TestSuite(rdm_rma_rcntr_basic,
+	  .init = rdm_rma_rcntr_setup_basic,
+	  .fini = rdm_rma_teardown,
 	  .disabled = false);
 
-Test(rdm_rma_rcntr, write_rcntr)
+Test(rdm_rma_rcntr_basic, write_rcntr)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
-Test(rdm_rma_rcntr, read_rcntr)
+Test(rdm_rma_rcntr_basic, read_rcntr)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+TestSuite(rdm_rma_rcntr_scalable,
+	  .init = rdm_rma_rcntr_setup_scalable,
+	  .fini = rdm_rma_teardown,
+	  .disabled = false);
+
+Test(rdm_rma_rcntr_scalable, write_rcntr)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(rdm_rma_rcntr_scalable, read_rcntr)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }

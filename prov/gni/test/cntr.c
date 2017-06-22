@@ -90,12 +90,14 @@ static struct fi_cntr_attr cntr_attr = {.events = FI_CNTR_EVENTS_COMP,
 					.flags = 0};
 
 #define BUF_SZ (64*1024)
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
 uint64_t mr_key[NUM_EPS];
 
-static inline void cntr_setup_eps(const uint64_t caps)
+static inline void cntr_setup_eps(const uint64_t caps,
+	uint32_t version,
+	int mr_mode)
 {
 	int i, ret;
 	struct fi_av_attr attr;
@@ -103,7 +105,7 @@ static inline void cntr_setup_eps(const uint64_t caps)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 
@@ -111,7 +113,7 @@ static inline void cntr_setup_eps(const uint64_t caps)
 
 	hints->caps = caps;
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -238,35 +240,61 @@ static inline void cntr_setup_enable_ep(void)
 static inline void cntr_setup_mr(void)
 {
 	int i, ret;
+	int source_key, target_key;
 
-	target = malloc(BUF_SZ);
-	assert(target);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	source = malloc(BUF_SZ);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
 	for (i = 0; i < NUM_EPS; i++) {
+		source_key = USING_SCALABLE(fi) ? (i * 2) + 1 : 0;
+		target_key = USING_SCALABLE(fi) ? (i * 2) + 2 : 0;
+
 		ret = fi_mr_reg(dom[i], target, BUF_SZ,
 				FI_REMOTE_READ | FI_REMOTE_WRITE,
-				0, 0, 0, &rem_mr[i], &target);
+				0, target_key, 0, &rem_mr[i], &target);
 		cr_assert_eq(ret, 0);
 
 		ret = fi_mr_reg(dom[i], source, BUF_SZ,	FI_READ | FI_WRITE,
-				0, 0, 0, &loc_mr[i], &source);
+				0, source_key, 0, &loc_mr[i], &source);
 		cr_assert_eq(ret, 0);
+
+		if (USING_SCALABLE(fi)) {
+			MR_ENABLE(rem_mr[i], target, BUF_SZ);
+			MR_ENABLE(loc_mr[i], source, BUF_SZ);
+		}
 
 		mr_key[i] = fi_mr_key(rem_mr[i]);
 	}
 }
 
-static void cntr_setup(void)
+static void __cntr_setup(uint32_t version, int mr_mode)
 {
-	cntr_setup_eps(GNIX_EP_PRIMARY_CAPS);
+	cntr_setup_eps(GNIX_EP_PRIMARY_CAPS, version, mr_mode);
 	cntr_setup_av();
 	cntr_setup_cqs();
 	cntr_setup_cntrs(FI_WRITE | FI_SEND, FI_READ, FI_RECV);
 	cntr_setup_enable_ep();
 	cntr_setup_mr();
+}
+
+static void cntr_setup_basic(void)
+{
+	__cntr_setup(fi_version(), GNIX_MR_BASIC);
+}
+
+static void cntr_setup_scalable(void)
+{
+	__cntr_setup(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static void cntr_setup_default(void)
+{
+	__cntr_setup(fi_version(), GNIX_DEFAULT_MR_MODE);
 }
 
 static inline void cntr_teardown_mr(void)
@@ -278,8 +306,8 @@ static inline void cntr_teardown_mr(void)
 		fi_close(&rem_mr[i]->fid);
 	}
 
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 }
 
 static inline void cntr_teardown_eps(void)
@@ -392,8 +420,11 @@ static void xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 /*******************************************************************************
  * Test RMA functions
  ******************************************************************************/
-
-TestSuite(cntr, .init = cntr_setup, .fini = cntr_teardown,
+TestSuite(cntr_default, .init = cntr_setup_default, .fini = cntr_teardown,
+	  .disabled = false);
+TestSuite(cntr_basic, .init = cntr_setup_basic, .fini = cntr_teardown,
+	  .disabled = false);
+TestSuite(cntr_scalable, .init = cntr_setup_scalable, .fini = cntr_teardown,
 	  .disabled = false);
 
 static void do_write(int len)
@@ -410,7 +441,7 @@ static void do_write(int len)
 	old_r_cnt = fi_cntr_read(read_cntrs[0]);
 
 	sz = fi_write(ep[0], source, len, loc_mr[0], gni_addr[0][1],
-		      (uint64_t)target, mr_key[1], target);
+			  _REM_ADDR(fi, target, target), mr_key[1], target);
 	cr_assert_eq(sz, 0);
 
 	do {
@@ -430,7 +461,12 @@ static void do_write(int len)
 	cr_assert(new_r_cnt == old_r_cnt);
 }
 
-Test(cntr, write)
+Test(cntr_basic, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(cntr_scalable, write)
 {
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
@@ -451,8 +487,9 @@ static void do_write_wait(int len)
 
 	for (i = 0; i < iters; i++) {
 		sz = fi_write(ep[0], source, len, loc_mr[0],
-			      gni_addr[0][1], (uint64_t)target, mr_key[1],
-			      target);
+				  gni_addr[0][1],
+				  _REM_ADDR(fi, target, target), mr_key[1],
+				  target);
 		cr_assert_eq(sz, 0);
 	}
 
@@ -470,7 +507,12 @@ static void do_write_wait(int len)
 	cr_assert(new_r_cnt == old_r_cnt);
 }
 
-Test(cntr, write_wait)
+Test(cntr_basic, write_wait)
+{
+	xfer_for_each_size(do_write_wait, 8, BUF_SZ);
+}
+
+Test(cntr_scalable, write_wait)
 {
 	xfer_for_each_size(do_write_wait, 8, BUF_SZ);
 }
@@ -489,7 +531,8 @@ static void do_read(int len)
 	old_r_cnt = fi_cntr_read(read_cntrs[0]);
 
 	sz = fi_read(ep[0], source, len, loc_mr[0],
-		     gni_addr[0][1], (uint64_t)target, mr_key[1],
+			gni_addr[0][1],
+			_REM_ADDR(fi, target, target), mr_key[1],
 			(void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
@@ -526,8 +569,9 @@ static void do_read_wait(int len)
 
 	for (i = 0; i < iters; i++) {
 		sz = fi_read(ep[0], source, len, loc_mr[0],
-			     gni_addr[0][1], (uint64_t)target,
-			     mr_key[1], (void *)READ_CTX);
+				 gni_addr[0][1],
+				 _REM_ADDR(fi, target, target),
+				 mr_key[1], (void *)READ_CTX);
 		cr_assert_eq(sz, 0);
 	}
 
@@ -543,18 +587,27 @@ static void do_read_wait(int len)
 	cr_assert(new_w_cnt == old_w_cnt);
 }
 
-Test(cntr, read)
+Test(cntr_basic, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
-Test(cntr, read_wait)
+Test(cntr_scalable, read)
+{
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(cntr_basic, read_wait)
 {
 	xfer_for_each_size(do_read_wait, 8, BUF_SZ);
 }
 
+Test(cntr_scalable, read_wait)
+{
+	xfer_for_each_size(do_read_wait, 8, BUF_SZ);
+}
 
-Test(cntr, send_recv)
+static inline void __send_recv(void)
 {
 	int ret, i, got_r = 0;
 	struct fi_context r_context, s_context;
@@ -625,6 +678,16 @@ Test(cntr, send_recv)
 
 }
 
+Test(cntr_basic, send_recv)
+{
+	__send_recv();
+}
+
+Test(cntr_scalable, send_recv)
+{
+	__send_recv();
+}
+
 /*
  * Multithreaded tests
  */
@@ -644,17 +707,32 @@ static __thread uint32_t cntr_test_tid = ~(uint32_t) 0;
 	 cntr_test_tid)
 
 
-static void cntr_setup_mt(void)
+static void __cntr_setup_mt(uint32_t version, int mr_mode)
 {
 	cr_assert(NUM_EPS >= NUM_THREADS);
 
-	cntr_setup_eps(GNIX_EP_PRIMARY_CAPS);
+	cntr_setup_eps(GNIX_EP_PRIMARY_CAPS, version, mr_mode);
 	cntr_setup_av();
 	cntr_setup_cntrs(FI_WRITE | FI_SEND, FI_READ, 0x0);
 	cntr_setup_enable_ep();
 	cntr_setup_mr();
 
 	ofi_atomic_initialize32(&cntr_test_next_tid, 0);
+}
+
+static void cntr_setup_mt_basic(void)
+{
+	__cntr_setup_mt(fi_version(), GNIX_MR_BASIC);
+}
+
+static void cntr_setup_mt_scalable(void)
+{
+	__cntr_setup_mt(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static void cntr_setup_mt_default(void)
+{
+	__cntr_setup_mt(fi_version(), GNIX_DEFAULT_MR_MODE);
 }
 
 static void cntr_teardown_mt(void)
@@ -665,7 +743,19 @@ static void cntr_teardown_mt(void)
 	cntr_teardown_fini();
 }
 
-TestSuite(cntr_mt, .init = cntr_setup_mt, .fini = cntr_teardown_mt,
+TestSuite(cntr_mt_default,
+	  .init = cntr_setup_mt_default,
+	  .fini = cntr_teardown_mt,
+	  .disabled = false);
+
+TestSuite(cntr_mt_basic,
+	  .init = cntr_setup_mt_basic,
+	  .fini = cntr_teardown_mt,
+	  .disabled = false);
+
+TestSuite(cntr_mt_scalable,
+	  .init = cntr_setup_mt_scalable,
+	  .fini = cntr_teardown_mt,
 	  .disabled = false);
 
 static void *do_thread_read_wait(void *data)
@@ -681,9 +771,9 @@ static void *do_thread_read_wait(void *data)
 	dbg_printf("%d: reading\n", tid);
 	for (i = 0; i < iters; i++) {
 		sz = fi_read(ep[tid], &source[tid*msg_size], msg_size,
-			     loc_mr[tid], gni_addr[tid][0],
-			     (uint64_t)&target[tid*msg_size],
-			     mr_key[0], (void *)(READ_CTX+i));
+				 loc_mr[tid], gni_addr[tid][0],
+				 _REM_ADDR(fi, target, &target[tid*msg_size]),
+				 mr_key[0], (void *)(READ_CTX+i));
 		cr_assert_eq(sz, 0);
 	}
 
@@ -695,7 +785,7 @@ static void *do_thread_read_wait(void *data)
 	return NULL;
 }
 
-Test(cntr_mt, read_wait)
+static inline void __read_wait(void)
 {
 	int i, j;
 	pthread_t threads[NUM_THREADS];
@@ -732,6 +822,16 @@ Test(cntr_mt, read_wait)
 
 }
 
+Test(cntr_mt_basic, read_wait)
+{
+	__read_wait();
+}
+
+Test(cntr_mt_scalable, read_wait)
+{
+	__read_wait();
+}
+
 static void *do_thread_write_wait(void *data)
 {
 	int i, tid, ret;
@@ -745,9 +845,9 @@ static void *do_thread_write_wait(void *data)
 	dbg_printf("%d: writing\n", tid);
 	for (i = 0; i < iters; i++) {
 		sz = fi_write(ep[tid], &source[tid*msg_size], msg_size,
-			      loc_mr[tid], gni_addr[tid][0],
-			      (uint64_t)&target[tid*msg_size],
-			      mr_key[0], (void *)(READ_CTX+i));
+				  loc_mr[tid], gni_addr[tid][0],
+				  _REM_ADDR(fi, target, &target[tid*msg_size]),
+				  mr_key[0], (void *)(READ_CTX+i));
 		cr_assert_eq(sz, 0);
 	}
 
@@ -759,7 +859,7 @@ static void *do_thread_write_wait(void *data)
 	return NULL;
 }
 
-Test(cntr_mt, write_wait)
+static inline void __write_wait(void)
 {
 	int i, j;
 	pthread_t threads[NUM_THREADS];
@@ -795,6 +895,16 @@ Test(cntr_mt, write_wait)
 	dbg_printf("done\n");
 }
 
+Test(cntr_mt_basic, write_wait)
+{
+	__write_wait();
+}
+
+Test(cntr_mt_scalable, write_wait)
+{
+	__write_wait();
+}
+
 void *do_add_cntr_mt(void *arg)
 {
 	int i = 0, ret, iters = ((int *)arg)[0];
@@ -819,7 +929,7 @@ void *do_add_err_cntr_mt(void *arg)
 	return NULL;
 }
 
-Test(cntr_mt, set_add_read_cntr)
+Test(cntr_mt_default, set_add_read_cntr)
 {
 	int iters = 128, nthreads = 4, i, ret;
 	uint64_t cntr_val;
@@ -849,7 +959,7 @@ Test(cntr_mt, set_add_read_cntr)
 		"is incorrect.");
 }
 
-Test(cntr_mt, set_add_read_err_cntr)
+Test(cntr_mt_default, set_add_read_err_cntr)
 {
 	int iters = 128, nthreads = 4, i, ret;
 	uint64_t err_cntr_val;
@@ -892,7 +1002,7 @@ static void *do_thread_adderr_wait(void *data)
 	return NULL;
 }
 
-Test(cntr_mt, adderr_wait)
+Test(cntr_mt_default, adderr_wait)
 {
 	int i, ret;
 	pthread_t threads[NUM_THREADS];
@@ -922,7 +1032,7 @@ Test(cntr_mt, adderr_wait)
 	dbg_printf("done\n");
 }
 
-Test(cntr, adderr_wait)
+Test(cntr_default, adderr_wait)
 {
 	int ret;
 
@@ -933,7 +1043,7 @@ Test(cntr, adderr_wait)
 	cr_assert(ret != FI_SUCCESS, "Bad return value from fi_cntr_wait");
 }
 
-Test(cntr, set_add_read_cntr)
+Test(cntr_default, set_add_read_cntr)
 {
 	int iters = 128, ret, i = 0, init_val = 0xabcdefab;
 	uint64_t cntr_val, prev_cntr_val;
@@ -958,7 +1068,7 @@ Test(cntr, set_add_read_cntr)
 	}
 }
 
-Test(cntr, set_add_read_err_cntr)
+Test(cntr_default, set_add_read_err_cntr)
 {
 	int iters = 128, ret, i = 0,  init_val = 0xabcdefab;
 	uint64_t cntr_val, prev_cntr_val;

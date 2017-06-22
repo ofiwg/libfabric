@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015-2017 Cray Inc.  All rights reserved
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -53,7 +53,7 @@ static struct fi_info *fi;
 static struct gnix_fid_ep *ep_priv;
 static struct gnix_mbox_alloc_handle *allocator;
 
-void allocator_setup(void)
+static void __allocator_setup(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 
@@ -62,11 +62,11 @@ void allocator_setup(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -79,6 +79,16 @@ void allocator_setup(void)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_endpoint");
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
+}
+
+static void allocator_setup_basic(void)
+{
+	__allocator_setup(fi_version(), GNIX_MR_BASIC);
+}
+
+static void allocator_setup_scalable(void)
+{
+	__allocator_setup(fi_version(), GNIX_MR_SCALABLE);
 }
 
 void allocator_teardown(void)
@@ -176,18 +186,24 @@ static void open_close_allocator(enum gnix_page_size page_size,
 	}
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed5.");
 	cr_expect_eq(verify_hugepages(), 2 + ALLOCD_WITH_NIC,
-		     "memory not found in /proc/self/maps.");
+			 "memory not found in /proc/self/maps.");
 
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_destroy failed.");
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
-		     "memory not released in /proc/self/maps.");
+			 "memory not released in /proc/self/maps.");
 }
 
 
-TestSuite(mbox_creation, .init = allocator_setup, .fini = allocator_teardown);
+TestSuite(mbox_creation_basic,
+	  .init = allocator_setup_basic,
+	  .fini = allocator_teardown);
 
-Test(mbox_creation, alloc_single_page)
+TestSuite(mbox_creation_scalable,
+	  .init = allocator_setup_scalable,
+	  .fini = allocator_teardown);
+
+static inline void __alloc_single_page(void)
 {
 	/*
 	 * Test creation of all predefined page sizes.
@@ -203,7 +219,18 @@ Test(mbox_creation, alloc_single_page)
 	open_close_allocator(GNIX_PAGE_512MB, 100, 100, true);
 }
 
-Test(mbox_creation, alloc_three_pages)
+Test(mbox_creation_basic, alloc_single_page)
+{
+	__alloc_single_page();
+}
+
+Test(mbox_creation_scalable, alloc_single_page)
+{
+	__alloc_single_page();
+}
+
+
+Test(mbox_creation_basic, alloc_three_pages)
 {
 	/*
 	 * This should allocate a single slab that's 3 pages in size.
@@ -211,7 +238,15 @@ Test(mbox_creation, alloc_three_pages)
 	open_close_allocator(GNIX_PAGE_4MB, 1000, 12000, false);
 }
 
-Test(mbox_creation, alloc_mbox)
+Test(mbox_creation_scalable, alloc_three_pages)
+{
+	/*
+	 * This should allocate a single slab that's 3 pages in size.
+	 */
+	open_close_allocator(GNIX_PAGE_4MB, 1000, 12000, false);
+}
+
+static inline void __alloc_mbox(void)
 {
 	int ret;
 
@@ -276,11 +311,21 @@ Test(mbox_creation, alloc_mbox)
 		     "memory not released in /proc/self/maps.");
 }
 
+Test(mbox_creation_basic, alloc_mbox)
+{
+	__alloc_mbox();
+}
+
+Test(mbox_creation_scalable, alloc_mbox)
+{
+	__alloc_mbox();
+}
+
 /*
  * Page size needs to be one of the predefined enums. 2200 is not a valid page
  * size. This actually gets expanded to 2200 * 1024 * 1024.
  */
-Test(mbox_creation, page_size_fail)
+static inline void __page_size_fail(void)
 {
 	int ret;
 
@@ -301,7 +346,17 @@ Test(mbox_creation, page_size_fail)
 		     "_gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
-Test(mbox_creation, mbox_size_fail)
+Test(mbox_creation_basic, page_size_fail)
+{
+	__page_size_fail();
+}
+
+Test(mbox_creation_scalable, page_size_fail)
+{
+	__page_size_fail();
+}
+
+static inline void __mbox_size_fail(void)
 {
 	int ret;
 
@@ -322,7 +377,17 @@ Test(mbox_creation, mbox_size_fail)
 		     "_gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
-Test(mbox_creation, mpmmap_size_fail)
+Test(mbox_creation_basic, mbox_size_fail)
+{
+	__mbox_size_fail();
+}
+
+Test(mbox_creation_scalable, mbox_size_fail)
+{
+	__mbox_size_fail();
+}
+
+static inline void __mpmmap_size_fail(void)
 {
 	int ret;
 
@@ -342,7 +407,17 @@ Test(mbox_creation, mpmmap_size_fail)
 		     "_gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
-Test(mbox_creation, null_allocator_fail)
+Test(mbox_creation_basic, mpmmap_size_fail)
+{
+	__mpmmap_size_fail();
+}
+
+Test(mbox_creation_scalable, mpmmap_size_fail)
+{
+	__mpmmap_size_fail();
+}
+
+static inline void __null_allocator_fail(void)
 {
 	int ret;
 
@@ -361,7 +436,17 @@ Test(mbox_creation, null_allocator_fail)
 		     "_gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
-Test(mbox_creation, multi_allocation)
+Test(mbox_creation_basic, null_allocator_fail)
+{
+	__null_allocator_fail();
+}
+
+Test(mbox_creation_scalable, null_allocator_fail)
+{
+	__null_allocator_fail();
+}
+
+static inline void __multi_allocation(void)
 {
 	int ret;
 
@@ -420,7 +505,17 @@ Test(mbox_creation, multi_allocation)
 		     "memory not released in /proc/self/maps.");
 }
 
-Test(mbox_creation, check_errors)
+Test(mbox_creation_basic, multi_allocation)
+{
+	__multi_allocation();
+}
+
+Test(mbox_creation_scalable, multi_allocation)
+{
+	__multi_allocation();
+}
+
+static inline void __check_errors(void)
 {
 	int ret;
 
@@ -474,11 +569,21 @@ Test(mbox_creation, check_errors)
 		     "memory not released in /proc/self/maps.");
 }
 
+Test(mbox_creation_basic, check_errors)
+{
+	__check_errors();
+}
+
+Test(mbox_creation_scalable, check_errors)
+{
+	__check_errors();
+}
+
 /*
  * Force the creation of two slabs by setting mpmmap to 1 and making a mailbox
  * the size of the entire page.
  */
-Test(mbox_creation, two_slabs)
+static inline void __two_slabs(void)
 {
 	int ret;
 
@@ -530,4 +635,14 @@ Test(mbox_creation, two_slabs)
 
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "memory not released in /proc/self/maps.");
+}
+
+Test(mbox_creation_basic, two_slabs)
+{
+	__two_slabs();
+}
+
+Test(mbox_creation_scalable, two_slabs)
+{
+	__two_slabs();
 }

@@ -82,8 +82,8 @@ const char *api_cdm_id[NUMEPS] = { "5000", "5001" };
 struct fi_info *hints[NUMEPS];
 
 #define BUF_SZ (1<<20)
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 char *uc_target;
 char *uc_source;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
@@ -97,7 +97,7 @@ static struct fi_cntr_attr cntr_attr = {
 static uint64_t sends[NUMEPS] = {0}, recvs[NUMEPS] = {0},
 	send_errs[NUMEPS] = {0}, recv_errs[NUMEPS] = {0};
 
-void rdm_api_setup_ep(void)
+static void rdm_api_setup_ep(uint32_t version, int mr_mode)
 {
 	int ret, i, j;
 	struct fi_av_attr attr;
@@ -105,8 +105,9 @@ void rdm_api_setup_ep(void)
 
 	/* Get info about fabric services with the provided hints */
 	for (i = 0; i < NUMEPS; i++) {
-		hints[i]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
-		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[i],
+		hints[i]->domain_attr->mr_mode = mr_mode;
+
+		ret = fi_getinfo(version, NULL, 0, 0, hints[i],
 				 &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 	}
@@ -119,11 +120,14 @@ void rdm_api_setup_ep(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
-	target = malloc(BUF_SZ * 3); /* 3x BUF_SZ for multi recv testing */
-	assert(target);
+	/* 3x BUF_SZ for multi recv testing */
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * 3));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	source = malloc(BUF_SZ);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
 	uc_target = malloc(BUF_SZ);
 	assert(uc_target);
@@ -196,21 +200,47 @@ void rdm_api_setup_ep(void)
 	}
 
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_mr_reg(dom[i], target, 3 * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
+		int target_requested_key =
+			USING_SCALABLE(fi[i]) ? (i * 2) : 0;
+		int source_requested_key =
+			USING_SCALABLE(fi[i]) ? (i * 2) + 1 : 0;
+
+		ret = fi_mr_reg(dom[i],
+				  target,
+				  3 * BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  target_requested_key,
+				  0,
+				  rem_mr + i,
+				  &target);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], source, BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, loc_mr + i, &source);
+		ret = fi_mr_reg(dom[i],
+				  source,
+				  BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  source_requested_key,
+				  0,
+				  loc_mr + i,
+				  &source);
 		cr_assert_eq(ret, 0);
+
+		if (USING_SCALABLE(fi[i])) {
+			MR_ENABLE(rem_mr[i], target, 3 * BUF_SZ);
+			MR_ENABLE(loc_mr[i], source, BUF_SZ);
+		}
 
 		mr_key[i] = fi_mr_key(rem_mr[i]);
 	}
 }
 
-void rdm_api_setup(void)
+void __rdm_api_setup(uint32_t version, int mr_mode)
 {
 	int i;
+
+	SKIP_IF_SCALABLE_LT_1_5(version, mr_mode);
 
 	for (i = 0; i < NUMEPS; i++) {
 		hints[i] = fi_allocinfo();
@@ -219,9 +249,18 @@ void rdm_api_setup(void)
 		hints[i]->domain_attr->cq_data_size = NUMEPS * 2;
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
 		hints[i]->mode = mode_bits;
-		hints[i]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 		hints[i]->fabric_attr->prov_name = strdup("gni");
 	}
+}
+
+static void rdm_api_setup_basic(void)
+{
+	__rdm_api_setup(fi_version(), GNIX_MR_BASIC);
+}
+
+static void rdm_api_setup_scalable(void)
+{
+	__rdm_api_setup(fi_version(), GNIX_MR_SCALABLE);
 }
 
 void api_setup(void)
@@ -264,8 +303,8 @@ static void rdm_api_teardown_common(bool unreg)
 
 	free(uc_source);
 	free(uc_target);
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
@@ -312,7 +351,8 @@ void rdm_api_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 		cr_assert(cqe->len == len, "CQE length mismatch");
 		cr_assert(cqe->buf == addr, "CQE address mismatch");
 
-	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
+	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check
+	 *       flags for FI_RMA_EVENT */
 	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps))
 			cr_assert(cqe->data == data, "CQE data mismatch");
 	} else {
@@ -409,8 +449,13 @@ static int read_allowed(uint64_t rma_amo, uint64_t caps, uint64_t rcaps)
 	return 0;
 }
 
-TestSuite(rdm_api, .init = rdm_api_setup, .fini = rdm_api_teardown,
-	  .disabled = false);
+TestSuite(rdm_api_basic,
+	  .init = rdm_api_setup_basic,
+	  .fini = rdm_api_teardown);
+
+TestSuite(rdm_api_scalable,
+	  .init = rdm_api_setup_scalable,
+	 .fini = rdm_api_teardown);
 
 /*
  * ssize_t fi_send(struct fid_ep *ep, void *buf, size_t len,
@@ -476,44 +521,94 @@ Test(api, dom_caps)
 	fi_freeinfo(fi[0]);
 }
 
-Test(rdm_api, msg_no_caps)
+static inline void __msg_no_caps(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = 0;
 	hints[1]->caps = 0;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_send_recv(BUF_SZ);
 }
 
-Test(rdm_api, msg_send_rcv)
+Test(rdm_api_basic, msg_no_caps)
+{
+	__msg_no_caps(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, msg_no_caps)
+{
+	__msg_no_caps(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __msg_send_rcv(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_MSG;
 	hints[1]->caps = FI_MSG;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_send_recv(BUF_SZ);
 }
 
-Test(rdm_api, msg_send_only)
+Test(rdm_api_basic, msg_send_rcv)
+{
+	__msg_send_rcv(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, msg_send_rcv)
+{
+	__msg_send_rcv(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __msg_send_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_MSG | FI_SEND;
 	hints[1]->caps = FI_MSG | FI_SEND;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_send_recv(BUF_SZ);
 }
 
-Test(rdm_api, msg_recv_only)
+Test(rdm_api_basic, msg_send_only)
+{
+	__msg_send_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, msg_send_only)
+{
+	__msg_send_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __msg_recv_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_MSG | FI_RECV;
 	hints[1]->caps = FI_MSG | FI_RECV;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_send_recv(BUF_SZ);
 }
 
-Test(rdm_api, msg_send_rcv_w_tagged)
+Test(rdm_api_basic, msg_recv_only)
+{
+	__msg_recv_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, msg_recv_only)
+{
+	__msg_recv_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __msg_send_rcv_w_tagged(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_TAGGED;
 	hints[1]->caps = FI_TAGGED;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_send_recv(BUF_SZ);
+}
+
+Test(rdm_api_basic, msg_send_rcv_w_tagged)
+{
+	__msg_send_rcv_w_tagged(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, msg_send_rcv_w_tagged)
+{
+	__msg_send_rcv_w_tagged(fi_version(), GNIX_MR_SCALABLE);
 }
 
 void api_tagged_send_recv(int len)
@@ -543,36 +638,76 @@ void api_tagged_send_recv(int len)
 	}
 }
 
-Test(rdm_api, tsend)
+static inline void __tsend(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_TAGGED;
 	hints[1]->caps = FI_TAGGED;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_tagged_send_recv(BUF_SZ);
 }
 
-Test(rdm_api, tsend_only)
+Test(rdm_api_basic, tsend)
+{
+	__tsend(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, tsend)
+{
+	__tsend(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __tsend_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_TAGGED | FI_SEND;
 	hints[1]->caps = FI_TAGGED | FI_SEND;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_tagged_send_recv(BUF_SZ);
 }
 
-Test(rdm_api, trecv_only)
+Test(rdm_api_basic, tsend_only)
+{
+	__tsend_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, tsend_only)
+{
+	__tsend_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __trecv_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_TAGGED | FI_RECV;
 	hints[1]->caps = FI_TAGGED | FI_RECV;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_tagged_send_recv(BUF_SZ);
 }
 
-Test(rdm_api, tsend_rcv_w_msg)
+Test(rdm_api_basic, trecv_only)
+{
+	__trecv_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, trecv_only)
+{
+	__trecv_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __tsend_rcv_w_msg(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_MSG;
 	hints[1]->caps = FI_MSG;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_tagged_send_recv(BUF_SZ);
+}
+
+Test(rdm_api_basic, tsend_rcv_w_msg)
+{
+	__tsend_rcv_w_msg(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, tsend_rcv_w_msg)
+{
+	__tsend_rcv_w_msg(fi_version(), GNIX_MR_SCALABLE);
 }
 
 #define READ_CTX 0x4e3dda1aULL
@@ -586,7 +721,8 @@ void api_write_read(int len)
 	rdm_api_init_data(target, len, 0);
 
 	fi_write(ep[0], source, len,
-		 loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		 loc_mr[0], gni_addr[1],
+		 _REM_ADDR(fi[0], target, target), mr_key[1],
 		 target);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN)
@@ -608,7 +744,8 @@ void api_write_read(int len)
 	}
 
 	fi_read(ep[0], source, len,
-		loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		loc_mr[0], gni_addr[1],
+		_REM_ADDR(fi[0], target, target), mr_key[1],
 		(void *)READ_CTX);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN)
@@ -630,54 +767,113 @@ void api_write_read(int len)
 	}
 }
 
-Test(rdm_api, rma_only)
+static inline void __rma_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA;
 	hints[1]->caps = FI_RMA;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api, rma_write_only)
+Test(rdm_api_basic, rma_only)
+{
+	__rma_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, rma_only)
+{
+	__rma_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __rma_write_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA | FI_WRITE;
 	hints[1]->caps = FI_RMA | FI_REMOTE_WRITE;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api, rma_write_no_remote)
+Test(rdm_api_basic, rma_write_only)
+{
+	__rma_write_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, rma_write_only)
+{
+	__rma_write_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __rma_write_no_remote(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA | FI_WRITE;
 	hints[1]->caps = FI_RMA | FI_WRITE;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api, rma_read_only)
+Test(rdm_api_basic, rma_write_no_remote)
+{
+	__rma_write_no_remote(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, rma_write_no_remote)
+{
+	__rma_write_no_remote(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __rma_read_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA | FI_READ;
 	hints[1]->caps = FI_RMA | FI_REMOTE_READ;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api, rma_read_no_remote)
+Test(rdm_api_basic, rma_read_only)
+{
+	__rma_read_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, rma_read_only)
+{
+	__rma_read_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __rma_read_no_remote(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA | FI_READ;
 	hints[1]->caps = FI_RMA | FI_READ;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api, rma_write_read_w_msg)
+Test(rdm_api_basic, rma_read_no_remote)
+{
+	__rma_read_no_remote(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, rma_read_no_remote)
+{
+	__rma_read_no_remote(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __rma_write_read_w_msg(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_MSG;
 	hints[1]->caps = FI_MSG;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_write_read(BUF_SZ);
 }
 
+Test(rdm_api_basic, rma_write_read_w_msg)
+{
+	__rma_write_read_w_msg(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, rma_write_read_w_msg)
+{
+	__rma_write_read_w_msg(fi_version(), GNIX_MR_SCALABLE);
+}
 
 void api_do_read_buf(void)
 {
@@ -692,8 +888,9 @@ void api_do_read_buf(void)
 
 	/* cause a chained transaction */
 	sz = fi_read(ep[0], source+6, len,
-		     loc_mr[0], gni_addr[1], (uint64_t)target+6, mr_key[1],
-		     (void *)READ_CTX);
+			 loc_mr[0], gni_addr[1],
+			 _REM_ADDR(fi[0], target, target+6), mr_key[1],
+			 (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN)
@@ -715,36 +912,76 @@ void api_do_read_buf(void)
 	}
 }
 
-Test(rdm_api, read_chained)
+static inline void __read_chained(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA;
 	hints[1]->caps = FI_RMA;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_do_read_buf();
 }
 
-Test(rdm_api, read_chained_remote)
+Test(rdm_api_basic, read_chained)
+{
+	__read_chained(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, read_chained)
+{
+	__read_chained(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __read_chained_remote(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA | FI_READ;
 	hints[1]->caps = FI_RMA | FI_REMOTE_READ;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_do_read_buf();
 }
 
-Test(rdm_api, read_chained_w_write)
+Test(rdm_api_basic, read_chained_remote)
+{
+	__read_chained_remote(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, read_chained_remote)
+{
+	__read_chained_remote(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __read_chained_w_write(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA | FI_WRITE;
 	hints[1]->caps = FI_RMA | FI_REMOTE_READ;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_do_read_buf();
 }
 
-Test(rdm_api, read_chained_no_remote)
+Test(rdm_api_basic, read_chained_w_write)
+{
+	__read_chained_w_write(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, read_chained_w_write)
+{
+	__read_chained_w_write(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __read_chained_no_remote(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_RMA | FI_READ;
 	hints[1]->caps = FI_RMA | FI_READ;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_do_read_buf();
+}
+
+Test(rdm_api_basic, read_chained_no_remote)
+{
+	__read_chained_no_remote(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, read_chained_no_remote)
+{
+	__read_chained_no_remote(fi_version(), GNIX_MR_SCALABLE);
 }
 
 #define SOURCE_DATA	0xBBBB0000CCCCULL
@@ -762,9 +999,11 @@ void do_atomic_write_fetch(void)
 	/* u64 */
 	*((uint64_t *)source) = SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
+
 	sz = fi_atomic(ep[0], source, 1,
-		       loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		       FI_UINT64, FI_ATOMIC_WRITE, target);
+			   loc_mr[0], gni_addr[1],
+			   _REM_ADDR(fi[0], target, target), mr_key[1],
+			   FI_UINT64, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN)
@@ -790,8 +1029,9 @@ void do_atomic_write_fetch(void)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
-			     mr_key[1], FI_UINT64, FI_ATOMIC_READ, target);
+				 source, loc_mr[0], gni_addr[1],
+				 _REM_ADDR(fi[0], target, target),
+				 mr_key[1], FI_UINT64, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN)
@@ -813,52 +1053,112 @@ void do_atomic_write_fetch(void)
 	}
 }
 
-Test(rdm_api, amo_write_read)
+static inline void __amo_write_read(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_ATOMIC;
 	hints[1]->caps = FI_ATOMIC;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	do_atomic_write_fetch();
 }
 
-Test(rdm_api, amo_write_only)
+Test(rdm_api_basic, amo_write_read)
+{
+	__amo_write_read(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, amo_write_read)
+{
+	__amo_write_read(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __amo_write_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_ATOMIC | FI_WRITE;
 	hints[1]->caps = FI_ATOMIC | FI_REMOTE_WRITE;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	do_atomic_write_fetch();
 }
 
-Test(rdm_api, amo_write_no_remote)
+Test(rdm_api_basic, amo_write_only)
+{
+	__amo_write_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, amo_write_only)
+{
+	__amo_write_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __amo_write_no_remote(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_ATOMIC | FI_WRITE;
 	hints[1]->caps = FI_ATOMIC | FI_WRITE;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	do_atomic_write_fetch();
 }
 
-Test(rdm_api, amo_read_only)
+Test(rdm_api_basic, amo_write_no_remote)
+{
+	__amo_write_no_remote(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, amo_write_no_remote)
+{
+	__amo_write_no_remote(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __amo_read_only(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_ATOMIC | FI_READ;
 	hints[1]->caps = FI_ATOMIC | FI_REMOTE_READ;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	do_atomic_write_fetch();
 }
 
-Test(rdm_api, amo_read_no_remote)
+Test(rdm_api_basic, amo_read_only)
+{
+	__amo_read_only(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, amo_read_only)
+{
+	__amo_read_only(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __amo_read_no_remote(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_ATOMIC | FI_READ;
 	hints[1]->caps = FI_ATOMIC | FI_READ;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	do_atomic_write_fetch();
 }
 
-Test(rdm_api, amo_write_read_w_msg)
+Test(rdm_api_basic, amo_read_no_remote)
+{
+	__amo_read_no_remote(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, amo_read_no_remote)
+{
+	__amo_read_no_remote(fi_version(), GNIX_MR_SCALABLE);
+}
+
+static inline void __amo_write_read_w_msg(uint32_t version, int mr_mode)
 {
 	hints[0]->caps = FI_MSG;
 	hints[1]->caps = FI_MSG;
-	rdm_api_setup_ep();
+	rdm_api_setup_ep(version, mr_mode);
 	api_write_read(BUF_SZ);
+}
+
+Test(rdm_api_basic, amo_write_read_w_msg)
+{
+	__amo_write_read_w_msg(fi_version(), GNIX_MR_BASIC);
+}
+
+Test(rdm_api_scalable, amo_write_read_w_msg)
+{
+	__amo_write_read_w_msg(fi_version(), GNIX_MR_SCALABLE);
 }
 
 TestSuite(api, .init = api_setup, .fini = api_teardown, .disabled = false);

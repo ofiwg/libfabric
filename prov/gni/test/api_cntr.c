@@ -76,8 +76,8 @@ static struct fi_info *fi[NUMEPS];
 struct fi_info *hints[NUMEPS];
 
 #define BUF_SZ (1<<20)
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 char *uc_target;
 char *uc_source;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
@@ -130,7 +130,7 @@ void api_cntr_bind(uint64_t flags)
 	}
 }
 
-void api_cntr_setup(void)
+static inline void __api_cntr_setup(uint32_t version, int mr_mode)
 {
 	int ret, i, j;
 	struct fi_av_attr attr = {0};
@@ -143,12 +143,12 @@ void api_cntr_setup(void)
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
 		hints[i]->mode = mode_bits;
 		hints[i]->fabric_attr->prov_name = strdup("gni");
-		hints[i]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+		hints[i]->domain_attr->mr_mode = mr_mode;
 	}
 
 	/* Get info about fabric services with the provided hints */
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[i],
+		ret = fi_getinfo(version, NULL, 0, 0, hints[i],
 				 &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 	}
@@ -156,11 +156,14 @@ void api_cntr_setup(void)
 	attr.type = FI_AV_MAP;
 	attr.count = NUMEPS;
 
-	target = malloc(BUF_SZ * 3); /* 3x BUF_SZ for multi recv testing */
-	assert(target);
+	/* 3x BUF_SZ for multi recv testing */
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * 3));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	source = malloc(BUF_SZ);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
 	uc_target = malloc(BUF_SZ);
 	assert(uc_target);
@@ -219,17 +222,50 @@ void api_cntr_setup(void)
 
 	}
 
-	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_mr_reg(dom[i], target, 3 * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
+	 for (i = 0; i < NUMEPS; i++) {
+		int target_requested_key =
+			USING_SCALABLE(fi[i]) ? (i * 2) : 0;
+		int source_requested_key =
+			USING_SCALABLE(fi[i]) ? (i * 2) + 1 : 0;
+
+		ret = fi_mr_reg(dom[i],
+				  target,
+				  3 * BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  target_requested_key,
+				  0,
+				  rem_mr + i,
+				  &target);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], source, BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, loc_mr + i, &source);
+		ret = fi_mr_reg(dom[i],
+				  source,
+				  BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  source_requested_key,
+				  0,
+				  loc_mr + i,
+				  &source);
 		cr_assert_eq(ret, 0);
 
+		if (USING_SCALABLE(fi[i])) {
+			MR_ENABLE(rem_mr[i], target, 3 * BUF_SZ);
+			MR_ENABLE(loc_mr[i], source, BUF_SZ);
+		}
 		mr_key[i] = fi_mr_key(rem_mr[i]);
 	}
+}
+
+static void api_cntr_setup_basic(void)
+{
+	__api_cntr_setup(fi_version(), GNIX_MR_BASIC);
+}
+
+static void api_cntr_setup_scalable(void)
+{
+	__api_cntr_setup(fi_version(), GNIX_MR_SCALABLE);
 }
 
 static void api_cntr_teardown_common(bool unreg)
@@ -263,8 +299,8 @@ static void api_cntr_teardown_common(bool unreg)
 
 	free(uc_source);
 	free(uc_target);
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
@@ -342,7 +378,14 @@ void api_cntr_recv_allowed(ssize_t sz, uint64_t flags, char *fn)
 	}
 }
 
-TestSuite(api_cntr, .init = api_cntr_setup, .fini = api_cntr_teardown,
+TestSuite(api_cntr_basic,
+	  .init = api_cntr_setup_basic,
+	  .fini = api_cntr_teardown,
+	  .disabled = false);
+
+TestSuite(api_cntr_scalable,
+	  .init = api_cntr_setup_scalable,
+	  .fini = api_cntr_teardown,
 	  .disabled = false);
 
 void api_cntr_send_recv(int len)
@@ -425,60 +468,101 @@ void api_cntr_write_read(int len)
 	cr_assert_eq(sz, 0);
 }
 
-Test(api_cntr, msg)
+static inline void __msg(void)
 {
 	cntr_bind_flags = FI_SEND | FI_RECV;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_send_recv(BUF_SZ);
 }
 
-Test(api_cntr, msg_send_only)
+Test(api_cntr_basic, msg)
+{
+	__msg();
+}
+
+static inline void __msg_send_only(void)
 {
 	cntr_bind_flags = FI_SEND;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_send_recv(BUF_SZ);
 }
 
-Test(api_cntr, msg_recv_only)
+Test(api_cntr_basic, msg_send_only)
+{
+	__msg_send_only();
+}
+
+static inline void __msg_recv_only(void)
 {
 	cntr_bind_flags = FI_RECV;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_send_recv(BUF_SZ);
 }
 
-Test(api_cntr, msg_no_cntr)
+Test(api_cntr_basic, msg_recv_only)
+{
+	__msg_recv_only();
+}
+
+static inline void __msg_no_cntr(void)
 {
 	cntr_bind_flags = 0;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_send_recv(BUF_SZ);
 }
 
-Test(api_cntr, rma)
+Test(api_cntr_basic, msg_no_cntr)
+{
+	__msg_no_cntr();
+}
+
+
+static inline void __rma(void)
 {
 	cntr_bind_flags = FI_WRITE | FI_READ;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_write_read(BUF_SZ);
 }
 
-Test(api_cntr, rma_write_only)
+Test(api_cntr_basic, rma)
+{
+	__rma();
+}
+
+static inline void __rma_write_only(void)
 {
 	cntr_bind_flags = FI_WRITE;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_write_read(BUF_SZ);
 }
 
-Test(api_cntr, rma_read_only)
+Test(api_cntr_basic, rma_write_only)
+{
+	__rma_write_only();
+}
+
+static inline void __rma_read_only(void)
 {
 	cntr_bind_flags = FI_READ;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_write_read(BUF_SZ);
 }
 
-Test(api_cntr, rma_no_cntr)
+Test(api_cntr_basic, rma_read_only)
+{
+	__rma_read_only();
+}
+
+static inline void __rma_no_cntr(void)
 {
 	cntr_bind_flags = 0;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_send_recv(BUF_SZ);
+}
+
+Test(api_cntr_basic, rma_no_cntr)
+{
+	__rma_no_cntr();
 }
 
 #define SOURCE_DATA	0xBBBB0000CCCCULL
@@ -511,23 +595,91 @@ void api_cntr_atomic(void)
 	cr_assert_eq(sz, 0);
 }
 
-Test(api_cntr, atomic)
+Test(api_cntr_basic, atomic)
 {
 	cntr_bind_flags = FI_WRITE | FI_READ;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_atomic();
 }
 
-Test(api_cntr, atomic_send_only)
+Test(api_cntr_basic, atomic_send_only)
 {
 	cntr_bind_flags = FI_WRITE;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_atomic();
 }
 
-Test(api_cntr, atomic_recv_only)
+Test(api_cntr_basic, atomic_recv_only)
 {
 	cntr_bind_flags = FI_READ;
 	api_cntr_bind(cntr_bind_flags);
 	api_cntr_atomic();
 }
+
+Test(api_cntr_scalable, msg)
+{
+	cntr_bind_flags = FI_SEND | FI_RECV;
+	api_cntr_bind(cntr_bind_flags);
+	api_cntr_send_recv(BUF_SZ);
+}
+
+Test(api_cntr_scalable, msg_send_only)
+{
+	cntr_bind_flags = FI_SEND;
+	api_cntr_bind(cntr_bind_flags);
+	api_cntr_send_recv(BUF_SZ);
+}
+
+Test(api_cntr_scalable, msg_recv_only)
+{
+	cntr_bind_flags = FI_RECV;
+	api_cntr_bind(cntr_bind_flags);
+	api_cntr_send_recv(BUF_SZ);
+}
+
+Test(api_cntr_scalable, msg_no_cntr)
+{
+	__msg_no_cntr();
+}
+
+Test(api_cntr_scalable, atomic)
+{
+	cntr_bind_flags = FI_WRITE | FI_READ;
+	api_cntr_bind(cntr_bind_flags);
+	api_cntr_atomic();
+}
+
+Test(api_cntr_scalable, atomic_send_only)
+{
+	cntr_bind_flags = FI_WRITE;
+	api_cntr_bind(cntr_bind_flags);
+	api_cntr_atomic();
+}
+
+Test(api_cntr_scalable, atomic_recv_only)
+{
+	cntr_bind_flags = FI_READ;
+	api_cntr_bind(cntr_bind_flags);
+	api_cntr_atomic();
+}
+
+Test(api_cntr_scalable, rma)
+{
+	__rma();
+}
+
+Test(api_cntr_scalable, rma_write_only)
+{
+	__rma_write_only();
+}
+
+Test(api_cntr_scalable, rma_read_only)
+{
+	__rma_read_only();
+}
+
+Test(api_cntr_scalable, rma_no_cntr)
+{
+	__rma_no_cntr();
+}
+
