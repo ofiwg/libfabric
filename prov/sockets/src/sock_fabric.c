@@ -623,7 +623,7 @@ static int sock_addr_matches_interface(struct slist *addr_list, struct sockaddr_
 	struct slist_entry *entry;
 
 	/* Always match if it's localhost */
-	if (src_addr->sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+	if (ofi_is_loopback_addr((struct sockaddr *)src_addr))
 		return 1;
 
 	entry = slist_find_first_match(addr_list, sock_match_src_addr,

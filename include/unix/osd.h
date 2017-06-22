@@ -40,6 +40,7 @@
 #include <errno.h>
 #include <complex.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 
 /* MSG_NOSIGNAL doesn't exist on OS X */
 #ifndef MSG_NOSIGNAL
@@ -126,6 +127,21 @@ static inline int ofi_sockerr(void)
 static inline int ofi_sysconf(int name)
 {
 	return sysconf(name);
+}
+
+/* OSX has no such definition. So, add it manually */
+#ifndef s6_addr32
+#define s6_addr32 __u6_addr.__u6_addr32
+#endif /* s6_addr32 */
+
+static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
+	return (addr->sa_family == AF_INET &&
+		((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK)) ||
+		(addr->sa_family == AF_INET6 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[0] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[1] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[2] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[3] == ntohl(1));
 }
 
 /* complex operations implementation */

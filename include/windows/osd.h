@@ -269,6 +269,20 @@ static inline int ofi_sysconf(int name)
 
 int ofi_shm_unmap(struct util_shm *shm);
 
+static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
+	return (addr->sa_family == AF_INET &&
+		((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK)) ||
+		(addr->sa_family == AF_INET6 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[0] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[1] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[2] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[3] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[4] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[5] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[6] == 0 &&
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[7] == ntohs(1));
+}
+
 /* complex operations implementation */
 #define OFI_COMPLEX(name) ofi_##name##_complex
 #define OFI_COMPLEX_BASE(name) OFI_COMPLEX(name)##_base
