@@ -119,6 +119,7 @@ struct _gnix_fi_reg_context {
 	uint64_t flags;
 	void *context;
 	struct gnix_auth_key *auth_key;
+	int reserved;
 };
 
 /**

@@ -633,7 +633,7 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	if (info->ep_attr->auth_key_size) {
 		auth_key = GNIX_GET_AUTH_KEY(info->ep_attr->auth_key,
-			info->ep_attr->auth_key_size);
+			info->ep_attr->auth_key_size, domain_priv->using_vmdh);
 		if (!auth_key)
 			return -FI_EINVAL;
 	} else {

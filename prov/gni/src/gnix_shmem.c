@@ -151,7 +151,7 @@ int _gnix_shmem_create(
 		}
 
 		GNIX_INFO(FI_LOG_FABRIC, "open() of shared memory segment.");
-		fd = open(path, O_RDWR, 0755);
+		fd = open(path, O_RDWR, GNIX_DEFAULT_ACCESS_PERMS);
 		if (fd < 0) {
 			GNIX_WARN(FI_LOG_FABRIC,
 				"open() of shared memory segment "
@@ -167,7 +167,7 @@ int _gnix_shmem_create(
 	close(fd);
 
 	if (region->addr == MAP_FAILED) {
-		GNIX_WARN(FI_LOG_FABRIC, "failed to map fd");
+		GNIX_WARN(FI_LOG_FABRIC, "failed to map fd\n");
 		return -ENOTBLK;
 	}
 

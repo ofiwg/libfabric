@@ -276,6 +276,8 @@ _gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
 
+	assert((fr->flags & FI_LOCAL_MR) == 0);
+
 	if (fr->int_tx_buf_e != NULL) {
 		_gnix_ep_release_int_tx_buf(ep, fr->int_tx_buf_e);
 		fr->int_tx_buf_e = NULL;

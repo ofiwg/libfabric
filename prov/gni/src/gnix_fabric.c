@@ -63,6 +63,32 @@
 #include "gnix_wait.h"
 #include "gnix_xpmem.h"
 
+/* check if only one bit of a set is enabled, when one is required */
+#define IS_EXCLUSIVE(x) \
+	((x) && !((x) & ((x)-1)))
+
+/* optional basic bits */
+#define GNIX_MR_BASIC_OPT \
+	(FI_MR_LOCAL)
+
+/* optional scalable bits */
+#define GNIX_MR_SCALABLE_OPT \
+	(FI_MR_LOCAL)
+
+/* required basic bits */
+#define GNIX_MR_BASIC_REQ \
+	(FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY)
+
+/* required scalable bits */
+#define GNIX_MR_SCALABLE_REQ \
+	(FI_MR_MMU_NOTIFY)
+
+#define GNIX_MR_BASIC_BITS \
+	(GNIX_MR_BASIC_OPT | GNIX_MR_BASIC_REQ)
+
+#define GNIX_MR_SCALABLE_BITS \
+	(GNIX_MR_SCALABLE_OPT | GNIX_MR_SCALABLE_REQ)
+
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
 const char gnix_prov_name[] = "gni";
@@ -110,8 +136,6 @@ uint32_t gnix_wait_shared_memory_timeout = GNIX_DEFAULT_SHARED_MEMORY_TIMEOUT;
    process. If the user sets this value, we can assume that they
    intend to be done with libfabric when the last fabric instance
    closes so that we can free the ptag information. */
-/* TODO: implement this such that the user give us more information
-	about teardown */
 int gnix_dealloc_aki_on_fabric_close = 0;
 
 const struct fi_fabric_attr gnix_fabric_attr = {
@@ -247,7 +271,7 @@ static struct fi_info *_gnix_allocinfo(void)
 
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
-	gnix_info->domain_attr->mr_mode = FI_MR_BASIC | OFI_MR_BASIC_MAP;
+	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
 	gnix_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	gnix_info->domain_attr->max_ep_tx_ctx = GNIX_SEP_MAX_CNT;
@@ -418,6 +442,37 @@ err:
 	return ret;
 }
 
+static inline int __gnix_check_mr_mode(int mr_mode)
+{
+	if (mr_mode & FI_MR_VIRT_ADDR) {
+		if ((mr_mode & ~GNIX_MR_BASIC_BITS) ||
+				((mr_mode & GNIX_MR_BASIC_REQ) !=
+					GNIX_MR_BASIC_REQ)) {
+			GNIX_DEBUG(FI_LOG_FABRIC,
+				"mr mode contains unsupported bits, "
+				"actual=%x supported=%x\n",
+				mr_mode, GNIX_MR_BASIC_BITS);
+		return 1;
+		}
+	} else if (mr_mode != FI_MR_BASIC &&
+			mr_mode != FI_MR_SCALABLE) {
+		/* FI_MR_SCALABLE for GNI */
+		if ((mr_mode & ~GNIX_MR_SCALABLE_BITS) ||
+				((mr_mode & GNIX_MR_SCALABLE_REQ) !=
+					GNIX_MR_SCALABLE_REQ)) {
+			GNIX_DEBUG(FI_LOG_FABRIC,
+				"mr mode contains unsupported bits, "
+				"actual=%x supported=%x\n",
+				mr_mode, GNIX_MR_SCALABLE_BITS);
+		return 1;
+		}
+	} else if (mr_mode == FI_MR_SCALABLE) {
+		GNIX_DEBUG(FI_LOG_FABRIC, "no support for the original enums");
+		return 1;
+	}
+	return 0;
+}
+
 static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			    const char *node, const char *service,
 			    uint64_t flags, struct fi_info *hints,
@@ -426,6 +481,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	uint64_t mode = GNIX_FAB_MODES;
 	struct fi_info *gnix_info = NULL;
 	int ret = -FI_ENODATA;
+	int mr_mode;
 
 	GNIX_TRACE(FI_LOG_FABRIC, "\n");
 
@@ -538,6 +594,8 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 		GNIX_DEBUG(FI_LOG_FABRIC, "Passed fabric name check\n");
 
 		if (hints->domain_attr) {
+			mr_mode = hints->domain_attr->mr_mode;
+
 			if (hints->domain_attr->name &&
 			    strncmp(hints->domain_attr->name, gnix_dom_name,
 				    strlen(gnix_dom_name))) {
@@ -557,16 +615,41 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			if (ofi_check_mr_mode(version,
 					gnix_info->domain_attr->mr_mode,
 					hints->domain_attr->mr_mode) != FI_SUCCESS) {
-				GNIX_DEBUG(FI_LOG_FABRIC,
-					"failed mr_mode check\n");
+				GNIX_DEBUG(FI_LOG_DOMAIN,
+					"failed ofi_check_mr_mode, "
+					"ret=%d\n", ret);
 				goto err;
 			}
 
-			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-				gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
-			else
-				gnix_info->domain_attr->mr_mode =
-					hints->domain_attr->mr_mode;
+			if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+				switch (mr_mode) {
+				case FI_MR_UNSPEC:
+				case FI_MR_BASIC:
+					mr_mode = FI_MR_BASIC;
+					break;
+				default:
+					GNIX_DEBUG(FI_LOG_FABRIC,
+						"unsupported mr_mode selected, "
+						"ret=%d\n", ret);
+					goto err;
+				}
+			} else {
+				if (__gnix_check_mr_mode(mr_mode))
+					goto err;
+
+				/* define the mode we return to the user
+				 * prefer basic until scalable
+				 * has more testing time */
+				if (mr_mode & FI_MR_BASIC)
+					mr_mode = OFI_MR_BASIC_MAP;
+				else if ((mr_mode & GNIX_MR_BASIC_REQ) ==
+							GNIX_MR_BASIC_REQ)
+					mr_mode &= GNIX_MR_BASIC_BITS;
+				else
+					mr_mode &= GNIX_MR_SCALABLE_BITS;
+			}
+
+			gnix_info->domain_attr->mr_mode = mr_mode;
 
 			switch (hints->domain_attr->threading) {
 			case FI_THREAD_COMPLETION:
@@ -611,7 +694,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	/* The provider may silently enable secondary
 	 * capabilities that do not introduce any overhead. */
 	if (hints && hints->caps)
-	    gnix_info->caps = hints->caps | GNIX_EP_SEC_CAPS;
+		gnix_info->caps = hints->caps | GNIX_EP_SEC_CAPS;
 	else
 		gnix_info->caps = GNIX_EP_CAPS_FULL | GNIX_EP_SEC_CAPS;
 

@@ -417,6 +417,7 @@ struct gnix_fid_domain {
 	int mr_iov_limit;
 	int udreg_reg_limit;
 	struct gnix_auth_key *auth_key;
+	int using_vmdh;
 #ifdef HAVE_UDREG
 	udreg_cache_handle_t udreg_cache;
 #endif

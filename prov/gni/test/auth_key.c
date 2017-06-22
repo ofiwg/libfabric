@@ -91,7 +91,7 @@ void *race_create_func(void *context)
 	cr_assert(ret == 0 || ret == -1, "pthread_barrier, "
 		"ret=%d errno=%d strerror=%s", ret, errno, strerror(errno));
 
-	auth_key = GNIX_GET_AUTH_KEY(NULL, 0);
+	auth_key = GNIX_GET_AUTH_KEY(NULL, 0, 0);
 	cr_assert_neq(auth_key, NULL, "failed to get authorization key");
 
 	return NULL;

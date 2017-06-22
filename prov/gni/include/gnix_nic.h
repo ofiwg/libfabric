@@ -162,6 +162,10 @@ struct gnix_nic_attr {
  *                           gni hw cq handle used for GNI_PostCqWrite
  * @var irq_mmap_addr        base address of mmap associated with irq_dma_hndl
  * @var irq_mmap_len         length of the mmap in bytes
+ * @var using_vmdh           denotes whether nic is associated with a domain
+ *                           that is utilizing VMDH
+ * @var mdd_resources_set    flag to indicate whether GNI_SetMDDResources has
+ *                           called yet to reserve MDD resources
  */
 struct gnix_nic {
 	struct dlist_entry gnix_nic_list; /* global NIC list */
@@ -207,6 +211,8 @@ struct gnix_nic {
 	void *irq_mmap_addr;
 	size_t irq_mmap_len;
 	int requires_lock;
+	int mdd_resources_set;
+	int using_vmdh;
 };
 
 

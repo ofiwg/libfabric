@@ -74,7 +74,7 @@ int _gnix_ep_int_tx_pool_grow(struct gnix_fid_ep *ep)
 	struct gnix_fid_mem_desc *md = NULL;
 	struct gnix_int_tx_buf *tx_buf_list;
 	struct gnix_int_tx_ptrs *tx_ptrs;
-
+	
 	assert(ep);
 
 	if (ep->int_tx_pool.nbufs >= GNIX_INT_TX_POOL_COUNT) {
@@ -101,9 +101,10 @@ int _gnix_ep_int_tx_pool_grow(struct gnix_fid_ep *ep)
 		goto tx_ptrs_err;
 	}
 
-	ret = gnix_mr_reg(&ep->domain->domain_fid.fid, tx_bufs,
+	ret = _gnix_mr_reg(&ep->domain->domain_fid.fid, tx_bufs,
 			GNIX_INT_TX_BUF_SZ * GNIX_INT_TX_POOL_SIZE,
-			FI_READ | FI_WRITE, 0, 0, 0, &auto_mr, NULL);
+			FI_READ | FI_WRITE, 0, 0, 0,
+			&auto_mr, NULL, ep->auth_key, GNIX_PROV_REG);
 
 	if (unlikely(ret != FI_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA, "gnix_mr_req returned: %s\n",
@@ -2306,7 +2307,8 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	if (info->ep_attr->auth_key_size) {
 		auth_key = GNIX_GET_AUTH_KEY(info->ep_attr->auth_key,
-				info->ep_attr->auth_key_size);
+				info->ep_attr->auth_key_size,
+				domain_priv->using_vmdh);
 		if (!auth_key)
 			return -FI_EINVAL;
 	} else {
@@ -2482,7 +2484,8 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 
 	if (info->ep_attr->auth_key_size) {
 		auth_key = GNIX_GET_AUTH_KEY(info->ep_attr->auth_key,
-				info->ep_attr->auth_key_size);
+				info->ep_attr->auth_key_size,
+				domain_priv->using_vmdh);
 		if (!auth_key)
 			return -FI_EINVAL;
 	} else {
@@ -2867,6 +2870,11 @@ DIRECT_FN STATIC ssize_t gnix_ep_cancel(fid_t fid, void *context)
 	if (err_cntr) {
 		/* signal increase in cntr errs */
 		_gnix_cntr_inc_err(err_cntr);
+	}
+
+	if (req->flags & FI_LOCAL_MR) {
+		fi_close(&req->amo.loc_md->mr_fid.fid);
+		req->flags &= ~FI_LOCAL_MR;
 	}
 
 	_gnix_fr_free(ep, req);

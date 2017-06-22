@@ -158,17 +158,25 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_fab_req *req)
 		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  tail_len, addr);
 		memcpy((void *)addr,
-		       (void *) ((uint8_t *) req->int_tx_buf + GNI_READ_ALIGN),
-		       tail_len);
+			   (void *) ((uint8_t *) req->int_tx_buf + GNI_READ_ALIGN),
+			   tail_len);
 	}
 }
 
 static void __gnix_rma_more_fr_complete(struct gnix_fab_req *req)
 {
+	int rc;
+
 	if (req->flags & FI_LOCAL_MR) {
 		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
 			  req->rma.loc_md);
-		fi_close(&req->rma.loc_md->mr_fid.fid);
+		rc = fi_close(&req->rma.loc_md->mr_fid.fid);
+		if (rc != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_DOMAIN,
+				"failed to close auto-registration, "
+				"rc=%d\n", rc);
+
+		req->flags &= ~FI_LOCAL_MR;
 	}
 
 	/* Schedule VC TX queue in case the VC is 'fenced'. */
@@ -179,10 +187,18 @@ static void __gnix_rma_more_fr_complete(struct gnix_fab_req *req)
 
 static void __gnix_rma_fr_complete(struct gnix_fab_req *req)
 {
+	int rc;
+
 	if (req->flags & FI_LOCAL_MR) {
 		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
 			  req->rma.loc_md);
-		fi_close(&req->rma.loc_md->mr_fid.fid);
+		rc = fi_close(&req->rma.loc_md->mr_fid.fid);
+		if (rc != FI_SUCCESS)
+			GNIX_FATAL(FI_LOG_DOMAIN,
+				"failed to close auto-registration, "
+				"rc=%d\n", rc);
+
+		req->flags &= ~FI_LOCAL_MR;
 	}
 
 	ofi_atomic_dec32(&req->vc->outstanding_tx_reqs);
@@ -1328,6 +1344,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	struct gnix_fab_req *more_req;
 	struct slist_entry *sle;
 	int connected;
+	struct gnix_auth_key *info;
 
 	if (!(flags & FI_INJECT) && !ep->send_cq &&
 	    (((fr_type == GNIX_FAB_RQ_RDMA_WRITE) && !ep->write_cntr) ||
@@ -1387,10 +1404,21 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 
 	if (!(flags & (GNIX_RMA_INDIRECT | FI_INJECT)) && !mdesc &&
 	    (rdma || fr_type == GNIX_FAB_RQ_RDMA_READ)) {
+		uint64_t requested_key;
+
+		info = ep->auth_key;
+		assert(info);
+
+		if (info->using_vmdh)
+			requested_key = _gnix_get_next_reserved_key(info);
+		else
+			requested_key = 0;
+
 		/* We need to auto-register the source buffer. */
-		rc = gnix_mr_reg(&ep->domain->domain_fid.fid, (void *)loc_addr,
-				 len, FI_READ | FI_WRITE, 0, 0, 0, &auto_mr,
-				 NULL);
+		rc = _gnix_mr_reg(&ep->domain->domain_fid.fid, (void *)loc_addr,
+				 len, FI_READ | FI_WRITE, 0, requested_key,
+				 0, &auto_mr, NULL, ep->auth_key,
+				 GNIX_PROV_REG);
 		if (rc != FI_SUCCESS) {
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Failed to auto-register local buffer: %d\n",
