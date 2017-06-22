@@ -507,7 +507,7 @@ static int run_test()
 	}
 	printf(" with counters..."); 
 
-	init_buf_vals(tested_op);
+	init_buf_vals();
 
 	//eat up first receive to make sure the triggered op doesn't go there instead
 	ret = ft_tx(ep, remote_fi_addr, strlen(welcome_text), &tx_ctx);
