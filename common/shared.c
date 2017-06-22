@@ -45,6 +45,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
+#include <rdma/fi_atomic.h>
 
 #include <shared.h>
 
@@ -1378,6 +1379,61 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t siz
 
 	tx_cq_cntr++;
 	return 0;
+}
+
+static int check_atomic_attr(enum fi_op op, enum fi_datatype datatype)
+{
+	struct fi_atomic_attr attr;
+	int ret;
+
+	ret = fi_query_atomic(domain, datatype, op, &attr, 0);
+	if (ret) {
+		FT_PRINTERR("fi_query_atomic", ret);
+		return ret;
+	}
+
+	if (attr.size != datatype_to_size(datatype)) {
+		fprintf(stderr, "Provider atomic size mismatch\n");
+		return -FI_ENOSYS;
+	}
+
+	return 0;
+}
+
+int check_base_atomic_op(struct fid_ep *endpoint, enum fi_op op,
+			 enum fi_datatype datatype, size_t *count)
+{
+	int ret;
+
+	ret = fi_atomicvalid(endpoint, datatype, op, count);
+	if (ret)
+		return ret;
+
+	return check_atomic_attr(op, datatype);
+}
+
+int check_fetch_atomic_op(struct fid_ep *endpoint, enum fi_op op,
+			  enum fi_datatype datatype, size_t *count)
+{
+	int ret;
+
+	ret = fi_fetch_atomicvalid(endpoint, datatype, op, count);
+	if (ret)
+		return ret;
+
+	return check_atomic_attr(op, datatype);
+}
+
+int check_compare_atomic_op(struct fid_ep *endpoint, enum fi_op op,
+			    enum fi_datatype datatype, size_t *count)
+{
+	int ret;
+
+	ret = fi_compare_atomicvalid(endpoint, datatype, op, count);
+	if (ret)
+		return ret;
+
+	return check_atomic_attr(op, datatype);
 }
 
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)

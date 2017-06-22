@@ -331,40 +331,32 @@ int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx)
 	return 0;
 }
 
-static int check_atomic_attr(size_t *count)
+static int check_atomic(size_t *count)
 {
-	struct fi_atomic_attr attr;
 	int ret;
-
-	ret = fi_query_atomic(domain, ft_atom_ctrl.datatype, ft_atom_ctrl.op, &attr, 0);
-	if (ret)
-		return ret;
-
-	if (datatype_to_size(ft_atom_ctrl.datatype) != attr.size)
-		return -FI_ENOSYS;
-
-	ft_atom_ctrl.datatype_size = attr.size;
 
 	switch (test_info.class_function) {
 	case FT_FUNC_ATOMIC:
 	case FT_FUNC_ATOMICV:
 	case FT_FUNC_ATOMICMSG:
 	case FT_FUNC_INJECT_ATOMIC:
-		ret = fi_atomicvalid(ft_tx_ctrl.ep, ft_atom_ctrl.datatype,
-			ft_atom_ctrl.op, count);
+		ret = check_base_atomic_op(ft_tx_ctrl.ep, ft_atom_ctrl.op,
+			ft_atom_ctrl.datatype, count);
 		break;
 	case FT_FUNC_FETCH_ATOMIC:
 	case FT_FUNC_FETCH_ATOMICV:
 	case FT_FUNC_FETCH_ATOMICMSG:
-		ret = fi_fetch_atomicvalid(ft_tx_ctrl.ep, ft_atom_ctrl.datatype,
-			ft_atom_ctrl.op, count);
+		ret = check_fetch_atomic_op(ft_tx_ctrl.ep, ft_atom_ctrl.op,
+			ft_atom_ctrl.datatype, count);
 		break;
 	case FT_FUNC_COMPARE_ATOMIC:
 	case FT_FUNC_COMPARE_ATOMICV:
 	default:
-		ret = fi_compare_atomicvalid(ft_tx_ctrl.ep, ft_atom_ctrl.datatype,
-			ft_atom_ctrl.op, count);
+		ret = check_compare_atomic_op(ft_tx_ctrl.ep, ft_atom_ctrl.op,
+			ft_atom_ctrl.datatype, count);
 	}
+
+	ft_atom_ctrl.datatype_size = datatype_to_size(ft_atom_ctrl.datatype);
 
 	return ret;
 }
@@ -442,7 +434,7 @@ static int ft_pingpong_atomic(void)
 	if (listen_sock < 0) {
 		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
 			ft_atom_ctrl.datatype = datatype;
-			ret = check_atomic_attr(&count);
+			ret = check_atomic(&count);
 
 			ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
 			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
@@ -470,7 +462,7 @@ static int ft_pingpong_atomic(void)
 	} else {
 		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
 			ft_atom_ctrl.datatype = datatype;
-			ret = check_atomic_attr(&count);
+			ret = check_atomic(&count);
 
 			ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
 			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
@@ -656,7 +648,7 @@ static int ft_bw_atomic(void)
 	if (listen_sock < 0) {
 		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
 			ft_atom_ctrl.datatype = datatype;
-			ret = check_atomic_attr(&count);
+			ret = check_atomic(&count);
 
 			ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
 			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
