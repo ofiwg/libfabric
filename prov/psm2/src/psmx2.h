@@ -439,7 +439,7 @@ struct psmx2_ep_name {
 };
 
 struct psmx2_string_name {
-	char			s[48];		/* "psmx2://<uint64_t>:<uint64_t>" */
+	char			s[64];		/* "fi_addr_psmx2://<uint64_t>:<uint64_t>" */
 };
 
 struct psmx2_cq_event {

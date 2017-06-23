@@ -491,7 +491,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	int *mask;
 	struct psmx2_ep_name *ep_name;
 	const struct psmx2_ep_name *names = addr;
-	const struct psmx2_string_name *string_names = addr;
+	const char **string_names = (void *)addr;
 	int error_count;
 	int i, ret;
 
@@ -517,7 +517,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 	for (i=0; i<count; i++) {
 		if (av_priv->addr_format == FI_ADDR_STR) {
-			ep_name = psmx2_string_to_ep_name(string_names+i);
+			ep_name = psmx2_string_to_ep_name(string_names[i]);
 			if (!ep_name)
 				return -FI_EINVAL;
 			epids[i] = ep_name->epid;
@@ -592,7 +592,6 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct psmx2_epaddr_context *context;
 	struct psmx2_ep_name name;
 	int idx;
-	int err = 0;
 
 	if (!addr || !addrlen)
 		return -FI_EINVAL;
@@ -614,20 +613,11 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	}
 
 	if (av_priv->addr_format == FI_ADDR_STR) {
-		if (*addrlen > sizeof(struct psmx2_string_name))
-			*addrlen = sizeof(struct psmx2_string_name);
-		memset(addr, 0, *addrlen);
-		if (ofi_straddr(addr, addrlen, FI_ADDR_PSMX2, &name))
-			err = -FI_EINVAL;
-		*addrlen = sizeof(struct psmx2_string_name);
-		return err;
+		ofi_straddr(addr, addrlen, FI_ADDR_PSMX2, &name);
+	} else {
+		memcpy(addr, &name, MIN(*addrlen, sizeof(name)));
+		*addrlen = sizeof(name);
 	}
-
-	if (*addrlen >= sizeof(name))
-		*(struct psmx2_ep_name *)addr = name;
-	else
-		memcpy(addr, &name, *addrlen);
-	*addrlen = sizeof(name);
 
 	return 0;
 }
