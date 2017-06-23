@@ -187,6 +187,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	int tx_ctx_cnt, rx_ctx_cnt;
 	int default_multi_ep = 0;
 	int addr_format = FI_ADDR_PSMX2;
+	size_t len;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
@@ -600,11 +601,11 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->mode = mode;
 	psmx2_info->addr_format = addr_format;
 	if (addr_format == FI_ADDR_STR) {
-		psmx2_info->src_addr = psmx2_ep_name_to_string(src_addr);
-		psmx2_info->src_addrlen = sizeof(struct psmx2_string_name);
+		psmx2_info->src_addr = psmx2_ep_name_to_string(src_addr, &len);
+		psmx2_info->src_addrlen = len;
 		free(src_addr);
-		psmx2_info->dest_addr = psmx2_ep_name_to_string(dest_addr);
-		psmx2_info->dest_addrlen = sizeof(struct psmx2_string_name);
+		psmx2_info->dest_addr = psmx2_ep_name_to_string(dest_addr, &len);
+		psmx2_info->dest_addrlen = len;
 		free(dest_addr);
 	} else {
 		psmx2_info->src_addr = src_addr;

@@ -90,20 +90,20 @@ char *psmx2_uuid_to_string(psm2_uuid_t uuid)
 	return s;
 }
 
-void *psmx2_ep_name_to_string(const struct psmx2_ep_name *name)
+void *psmx2_ep_name_to_string(const struct psmx2_ep_name *name, size_t *len)
 {
-	struct psmx2_string_name *s;
-	size_t len;
+	char *s;
 
 	if (!name)
 		return NULL;
 
-	s = calloc(1, sizeof(*s));
+	*len = PSMX2_MAX_STRING_NAME_LEN;
+
+	s = calloc(*len, 1);
 	if (!s)
 		return NULL;
 
-	len = sizeof(*s);
-	if (!ofi_straddr((void *)s, &len, FI_ADDR_PSMX2, name)) {
+	if (!ofi_straddr((void *)s, len, FI_ADDR_PSMX2, name)) {
 		free(s);
 		return NULL;
 	}
