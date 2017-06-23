@@ -164,6 +164,12 @@ static int ft_post_send(void)
 				ft_tx_ctrl.msg_size, ft_tx_ctrl.remote_cq_data,
 				ft_tx_ctrl.addr);
 		break;
+	case FT_FUNC_SENDDATA:
+		ft_send_retry(ret, fi_senddata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.memdesc,
+				ft_tx_ctrl.remote_cq_data, ft_tx_ctrl.addr, ctx);
+		ft_tx_ctrl.credits--;
+		break;
 	default:
 		ft_send_retry(ret, fi_send, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
 				ft_tx_ctrl.msg_size, ft_tx_ctrl.memdesc,
@@ -220,6 +226,13 @@ static int ft_post_tsend(void)
 		ft_send_retry(ret, fi_tinjectdata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
 				ft_tx_ctrl.msg_size, ft_tx_ctrl.remote_cq_data,
 				ft_tx_ctrl.addr, ft_tx_ctrl.tag);
+		break;
+	case FT_FUNC_SENDDATA:
+		ft_send_retry(ret, fi_tsenddata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.memdesc,
+				ft_tx_ctrl.remote_cq_data, ft_tx_ctrl.addr,
+				ft_tx_ctrl.tag, ctx);
+		ft_tx_ctrl.credits--;
 		break;
 	default:
 		ft_send_retry(ret, fi_tsend, ft_tx_ctrl.ep, ft_tx_ctrl.buf,

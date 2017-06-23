@@ -259,7 +259,8 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_SENDMSG, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_INJECT, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_INJECTDATA, enum ft_class_function, buf);
-		
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_SENDDATA, enum ft_class_function, buf);
+
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITE, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITEV, enum ft_class_function, buf);	
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITEMSG, enum ft_class_function, buf);

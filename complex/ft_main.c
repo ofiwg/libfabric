@@ -104,6 +104,8 @@ static char *ft_class_func_str(enum ft_class_function enum_str)
 		return "inject";
 	case FT_FUNC_INJECTDATA:
 		return "injectdata";
+	case FT_FUNC_SENDDATA:
+		return "senddata";
 	case FT_FUNC_READ:
 		return "read";
 	case FT_FUNC_READV:
