@@ -41,13 +41,6 @@
 
 
 #if HAVE_GETIFADDRS
-static inline int udpx_is_loopback(struct sockaddr *addr)
-{
-	assert(addr);
-	return addr->sa_family == AF_INET &&
-		((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK);
-}
-
 static void udpx_getinfo_ifs(struct fi_info **info)
 {
 	struct ifaddrs *ifaddrs, *ifa;
@@ -82,7 +75,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 		if (!cur)
 			break;
 
-		if(!udpx_is_loopback(ifa->ifa_addr)) {
+		if(!ofi_is_loopback_addr(ifa->ifa_addr)) {
 			if (!head)
 				head = cur;
 			else

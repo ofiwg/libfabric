@@ -117,8 +117,7 @@ int cm_local_ip(struct sockaddr_in *sa)
 		/* Return first non loopback interface. */
 		if (ifa->ifa_addr &&
 		    ifa->ifa_addr->sa_family == AF_INET &&
-		    ((struct sockaddr_in *)(ifa->ifa_addr))->sin_addr.s_addr !=
-		     inet_addr("127.0.0.1")) {
+		    !ofi_is_loopback_addr(ifa->ifa_addr)) {
 			ret = 0;
 			break;
 		}

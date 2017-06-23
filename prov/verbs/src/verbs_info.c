@@ -1009,13 +1009,6 @@ static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
 	}
 }
 
-static inline int fi_ibv_is_loopback(struct sockaddr *addr)
-{
-	assert(addr);
-	return addr->sa_family == AF_INET &&
-	       ((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK);
-}
-
 static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 		struct rdma_cm_id *id)
 {
@@ -1023,7 +1016,7 @@ static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	struct sockaddr *local_addr;
 	int ret;
 
-	if (rai->ai_src_addr && !fi_ibv_is_loopback(rai->ai_src_addr))
+	if (rai->ai_src_addr && !ofi_is_loopback_addr(rai->ai_src_addr))
 		goto rai_to_fi;
 
 	if (!id->verbs)
