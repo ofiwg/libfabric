@@ -771,9 +771,9 @@ static void fi_ibv_verbs_devs_free(struct dlist_entry *verbs_devs)
 	struct verbs_addr *addr;
 
 	while (!dlist_empty(verbs_devs)) {
-		dlist_pop_front_container(verbs_devs, dev, entry);
+		dlist_pop_front(verbs_devs, struct verbs_dev_info, dev, entry);
 		while (!dlist_empty(&dev->addrs)) {
-			dlist_pop_front_container(&dev->addrs, addr, entry);
+			dlist_pop_front(&dev->addrs, struct verbs_addr, addr, entry);
 			rdma_freeaddrinfo(addr->rai);
 			free(addr);
 		}
@@ -795,7 +795,7 @@ static int fi_ibv_add_rai(struct dlist_entry *verbs_devs, struct rdma_cm_id *id,
 	addr->rai = rai;
 
 	dev_name = ibv_get_device_name(id->verbs->device);
-	dlist_foreach_container(verbs_devs, dev, entry)
+	dlist_foreach_container(verbs_devs, struct verbs_dev_info, dev, entry)
 		if (!strcmp(dev_name, dev->name))
 			goto add_rai;
 
@@ -932,9 +932,9 @@ static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 	}
 
 	for (fi = *info; fi; fi = fi->next) {
-		dlist_foreach_container(&verbs_devs, dev, entry)
+		dlist_foreach_container(&verbs_devs, struct verbs_dev_info, dev, entry)
 			if (!strncmp(fi->domain_attr->name, dev->name, strlen(dev->name))) {
-				dlist_foreach_container(&dev->addrs, addr, entry) {
+				dlist_foreach_container(&dev->addrs, struct verbs_addr, addr, entry) {
 					/* When a device has multiple interfaces/addresses configured
 					 * duplicate fi_info and add the address info. fi->src_addr
 					 * would have been set in the previous iteration */

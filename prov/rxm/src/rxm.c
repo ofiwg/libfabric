@@ -32,6 +32,54 @@
 
 #include "rxm.h"
 
+#define rxm_entry_pop(queue, entry)			\
+	do {						\
+		fastlock_acquire(&queue->lock);		\
+		entry = freestack_isempty(queue->fs) ?	\
+			NULL : freestack_pop(queue->fs);\
+		fastlock_release(&queue->lock);		\
+	} while (0)
+
+#define rxm_entry_push(queue, entry)			\
+	do {						\
+		fastlock_acquire(&queue->lock);		\
+		freestack_push(queue->fs, entry);	\
+		fastlock_release(&queue->lock);		\
+	} while (0)
+
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(STR)
 };
+
+struct rxm_tx_entry *rxm_tx_entry_get(struct rxm_send_queue *queue)
+{
+	struct rxm_tx_entry *entry;
+	rxm_entry_pop(queue, entry);
+	if (!entry) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted tx_entry freestack\n");
+		return NULL;
+	}
+	entry->state = RXM_NONE;
+	return entry;
+}
+
+void rxm_tx_entry_release(struct rxm_send_queue *queue, struct rxm_tx_entry *entry)
+{
+	rxm_entry_push(queue, entry);
+}
+
+struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)
+{
+	struct rxm_recv_entry *entry;
+	rxm_entry_pop(queue, entry);
+	if (!entry) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted recv_entry freestack\n");
+		return NULL;
+	}
+	return entry;
+}
+
+void rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry)
+{
+	rxm_entry_push(queue, entry);
+}

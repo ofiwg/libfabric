@@ -96,8 +96,10 @@ static int rxm_mr_buf_reg(void *pool_ctx, void *addr, size_t len, void **context
 
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
+	fastlock_acquire(&pool->lock);
 	dlist_remove(&buf->entry);
 	util_buf_release(pool->pool, buf);
+	fastlock_release(&pool->lock);
 }
 
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
@@ -105,14 +107,20 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 	struct rxm_buf *buf;
 	struct fid_mr *mr = NULL;
 
+	fastlock_acquire(&pool->lock);
 	if (pool->local_mr)
 		buf = util_buf_alloc_ex(pool->pool, (void **)&mr);
 	else
 		buf = util_buf_alloc(pool->pool);
-	if (!buf)
+	if (!buf) {
+		fastlock_release(&pool->lock);
 		return NULL;
+	}
 	memset(buf, 0, sizeof(*buf));
+
 	dlist_insert_tail(&buf->entry, &pool->buf_list);
+	fastlock_release(&pool->lock);
+
 	if (pool->local_mr && mr)
 		buf->desc = fi_mr_desc(mr);
 	return buf;
@@ -130,7 +138,7 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 		(void)fi_cancel(&buf->msg_ep->fid, buf);
 		rxm_buf_release(pool, buf);
 	}
-
+	fastlock_destroy(&pool->lock);
 	util_buf_pool_destroy(pool->pool);
 }
 
@@ -146,6 +154,7 @@ static int rxm_buf_pool_create(int local_mr, size_t count, size_t size,
 	}
 	dlist_init(&pool->buf_list);
 	pool->local_mr = local_mr;
+	fastlock_init(&pool->lock);
 	return 0;
 }
 
@@ -156,6 +165,7 @@ static int rxm_send_queue_init(struct rxm_send_queue *send_queue, size_t size)
 		return -FI_ENOMEM;
 
 	ofi_key_idx_init(&send_queue->tx_key_idx, fi_size_bits(size));
+	fastlock_init(&send_queue->lock);
 	return 0;
 }
 
@@ -171,6 +181,7 @@ static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 	dlist_init(&recv_queue->unexp_msg_list);
 	recv_queue->match_recv = match_recv;
 	recv_queue->match_unexp = match_unexp;
+	fastlock_init(&recv_queue->lock);
 	return 0;
 }
 
@@ -178,12 +189,14 @@ static void rxm_send_queue_close(struct rxm_send_queue *send_queue)
 {
 	if (send_queue->fs)
 		rxm_txe_fs_free(send_queue->fs);
+	fastlock_destroy(&send_queue->lock);
 }
 
 static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 {
 	if (recv_queue->fs)
 		rxm_recv_fs_free(recv_queue->fs);
+	fastlock_destroy(&recv_queue->lock);
 	// TODO cleanup recv_list and unexp msg list
 }
 
@@ -339,6 +352,8 @@ static struct fi_ops_ep rxm_ops_ep = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+/* Caller must hold recv_queue->lock. The lock will be released if we find a
+ * matching message from the unexpected msg queue. */
 static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 				    struct rxm_recv_queue *recv_queue,
 				    struct rxm_recv_entry *recv_entry)
@@ -348,12 +363,8 @@ static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 	struct rxm_recv_match_attr match_attr;
 	struct rxm_rx_buf *rx_buf;
 
-	fastlock_acquire(&rxm_ep->util_ep.lock);
-
-	if (dlist_empty(&recv_queue->unexp_msg_list)) {
-		fastlock_release(&rxm_ep->util_ep.lock);
+	if (dlist_empty(&recv_queue->unexp_msg_list))
 		return -FI_EAGAIN;
-	}
 
 	match_attr.addr = recv_entry->addr;
 	match_attr.tag = recv_entry->tag;
@@ -361,11 +372,13 @@ static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 
 	entry = dlist_remove_first_match(&recv_queue->unexp_msg_list,
 					 recv_queue->match_unexp, &match_attr);
-	fastlock_release(&rxm_ep->util_ep.lock);
 	if (!entry)
 		return -FI_EAGAIN;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Match for posted recv found in unexp msg list\n");
+	fastlock_release(&recv_queue->lock);
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+	       "Match for posted recv found in unexp msg list\n");
 
 	unexp_msg = container_of(entry, struct rxm_unexp_msg, entry);
 	rx_buf = container_of(unexp_msg, struct rxm_rx_buf, unexp_msg);
@@ -383,20 +396,14 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	int ret;
 	size_t i;
 
-	if (freestack_isempty(recv_queue->fs)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted recv_entry freestack\n");
+	if (!(recv_entry = rxm_recv_entry_get(recv_queue)))
 		return -FI_EAGAIN;
-	}
-
-	recv_entry = freestack_pop(recv_queue->fs);
 
 	for (i = 0; i < count; i++) {
 		recv_entry->iov[i].iov_base = iov[i].iov_base;
 		recv_entry->iov[i].iov_len = iov[i].iov_len;
 		if (desc)
 			recv_entry->desc[i] = desc[i];
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "post recv: %u\n",
-			iov[i].iov_len);
 	}
 	recv_entry->count 	= count;
 	recv_entry->addr 	= (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) ?
@@ -406,18 +413,22 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	recv_entry->tag 	= tag;
 	recv_entry->ignore 	= ignore;
 
+	fastlock_acquire(&recv_queue->lock);
+	/* rxm_check_unexp_msg_list() would release the lock if successful */
 	ret = rxm_check_unexp_msg_list(rxm_ep, recv_queue, recv_entry);
-	if (ret == -FI_EAGAIN) {
-		fastlock_acquire(&rxm_ep->util_ep.lock);
-		dlist_insert_tail(&recv_entry->entry,
-				  &recv_queue->recv_list);
-		fastlock_release(&rxm_ep->util_ep.lock);
-	} else if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Unable to check unexp msg list\n");
-		return ret;
+	if (ret) {
+		if (ret == -FI_EAGAIN) {
+			dlist_insert_tail(&recv_entry->entry,
+					  &recv_queue->recv_list);
+			ret = 0;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Unable to check unexp msg list\n");
+			freestack_push(recv_queue->fs, recv_entry);
+		}
+		fastlock_release(&recv_queue->lock);
 	}
-	return 0;
+	return ret;
 }
 
 static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
@@ -560,12 +571,9 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		return -FI_EAGAIN;
 	}
 
-	if (freestack_isempty(rxm_ep->send_queue.fs)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted tx_entry freestack\n");
+	if (!(tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue)))
 		return -FI_EAGAIN;
-	}
 
-	tx_entry = freestack_pop(rxm_ep->send_queue.fs);
 	tx_entry->ep = rxm_ep;
 	tx_entry->count = count;
 	tx_entry->context = context;
@@ -598,9 +606,11 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 			ret = -FI_EMSGSIZE;
 			goto done;
 		}
+		fastlock_acquire(&rxm_ep->send_queue.lock);
 		tx_entry->msg_id = ofi_idx2key(&rxm_ep->send_queue.tx_key_idx,
 					       rxm_txe_fs_index(rxm_ep->send_queue.fs,
 								tx_entry));
+		fastlock_release(&rxm_ep->send_queue.lock);
 		pkt->ctrl_hdr.msg_id = tx_entry->msg_id;
 		pkt->ctrl_hdr.type = ofi_ctrl_large_data;
 
@@ -660,7 +670,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	return 0;
 done:
 	rxm_buf_release(&rxm_ep->tx_pool, (struct rxm_buf *)tx_buf);
-	freestack_push(rxm_ep->send_queue.fs, tx_entry);
+	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
 	return ret;
 }
 
