@@ -167,6 +167,9 @@
 /* Define to 1 if adapter info API is defined. */
 #define HAVE_MIB_IPADDRTABLE 1
 
+/* Define to 1 if you have the `getifaddrs' function. */
+#define HAVE_GETIFADDRS 1
+
 /* The size of `void *', as computed by sizeof. */
 #ifdef _WIN64
 #define SIZEOF_VOID_P 8

@@ -439,6 +439,7 @@
     <ClInclude Include="include\rdma\providers\fi_prov.h" />
     <ClInclude Include="include\windows\arpa\inet.h" />
     <ClInclude Include="include\windows\config.h" />
+    <ClInclude Include="include\windows\ifaddrs.h" />
     <ClInclude Include="include\windows\netinet\in.h" />
     <ClInclude Include="include\windows\netinet\ip.h" />
     <ClInclude Include="include\windows\netinet\tcp.h" />

@@ -36,6 +36,7 @@
 
 #include <winsock2.h>
 #include <iphlpapi.h>
+#include <ifaddrs.h>
 
 #include "fi.h"
 #include "fi_osd.h"
@@ -396,5 +397,77 @@ failed_get_addr:
 failed_no_mem:
 failed:
 	return;
+}
+
+int getifaddrs(struct ifaddrs **ifap)
+{
+	DWORD i;
+	MIB_IPADDRTABLE _iptbl;
+	MIB_IPADDRTABLE *iptbl = &_iptbl;
+	ULONG ips = 1;
+	ULONG res = GetIpAddrTable(iptbl, &ips, 0);
+	int ret = -1;
+	struct ifaddrs *head = NULL;
+
+	assert(ifap);
+
+	if (res == ERROR_INSUFFICIENT_BUFFER) {
+		iptbl = malloc(ips);
+		if (!iptbl)
+			goto failed_no_mem;
+		res = GetIpAddrTable(iptbl, &ips, 0);
+		if (res != NO_ERROR)
+			goto failed_get_addr;
+	} else if (res != NO_ERROR) {
+		goto failed;
+	}
+
+	for (i = 0; i < iptbl->dwNumEntries; i++) {
+		if (iptbl->table[i].dwAddr && iptbl->table[i].dwAddr != ntohl(INADDR_LOOPBACK)) {
+			struct ifaddrs *fa = calloc(sizeof(*fa), 1);
+			if (!fa)
+				goto failed_cant_allocate;
+			fa->ifa_flags = IFF_UP;
+			fa->ifa_addr = (struct sockaddr *)&fa->in_addr;
+			fa->ifa_netmask = (struct sockaddr *)&fa->in_netmask;
+			fa->ifa_name = fa->ad_name;
+
+			fa->in_addr.sin_family = fa->in_netmask.sin_family = AF_INET;
+			fa->in_addr.sin_addr.s_addr = iptbl->table[i].dwAddr;
+			fa->in_netmask.sin_addr.s_addr = iptbl->table[i].dwMask;
+			/* on Windows there is no Unix-like interface names,
+			   so, let's generate fake names */
+			sprintf_s(fa->ad_name, sizeof(fa->ad_name), "eth%d", i);
+
+			fa->ifa_next = head;
+			head = fa;
+		}
+	}
+
+	if (iptbl != &_iptbl)
+		free(iptbl);
+	ret = 0;
+	if (ifap)
+		*ifap = head;
+complete:
+	return ret;
+
+failed_cant_allocate:
+	if(head)
+		freeifaddrs(head);
+failed_get_addr:
+	free(iptbl);
+failed_no_mem:
+failed:
+	goto complete;
+}
+
+void freeifaddrs(struct ifaddrs *ifa)
+{
+	while (ifa) {
+		struct ifaddrs *next = ifa->ifa_next;
+		free(ifa);
+		ifa = next;
+	}
 }
 
