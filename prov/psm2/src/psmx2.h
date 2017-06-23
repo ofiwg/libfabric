@@ -438,9 +438,7 @@ struct psmx2_ep_name {
 	uint32_t		service;	/* for src addr. 0 means any */
 };
 
-struct psmx2_string_name {
-	char			s[64];		/* "fi_addr_psmx2://<uint64_t>:<uint64_t>" */
-};
+#define PSMX2_MAX_STRING_NAME_LEN	64	/* "fi_addr_psmx2://<uint64_t>:<uint64_t>"  */
 
 struct psmx2_cq_event {
 	union {
@@ -457,6 +455,8 @@ struct psmx2_cq_event {
 	struct slist_entry list_entry;
 };
 
+#define PSMX2_ERR_DATA_SIZE		64	/* large enough to hold a string address */
+
 struct psmx2_fid_cq {
 	struct fid_cq			cq;
 	struct psmx2_fid_domain		*domain;
@@ -471,7 +471,7 @@ struct psmx2_fid_cq {
 	struct util_wait		*wait;
 	int				wait_cond;
 	int				wait_is_local;
-	uint64_t			error_data[8];
+	uint8_t				error_data[PSMX2_ERR_DATA_SIZE];
 };
 
 enum psmx2_triggered_op {
@@ -963,7 +963,7 @@ void	*psmx2_ns_resolve_name(const char *server, int *service);
 void	psmx2_get_uuid(psm2_uuid_t uuid);
 int	psmx2_uuid_to_port(psm2_uuid_t uuid);
 char	*psmx2_uuid_to_string(psm2_uuid_t uuid);
-void	*psmx2_ep_name_to_string(const struct psmx2_ep_name *name);
+void	*psmx2_ep_name_to_string(const struct psmx2_ep_name *name, size_t *len);
 struct	psmx2_ep_name *psmx2_string_to_ep_name(const void *s);
 int	psmx2_errno(int err);
 void	psmx2_query_mpi(void);
@@ -1034,18 +1034,17 @@ static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name 
 	name->type = PSMX2_EP_REGULAR;
 }
 
-static inline void psmx2_get_source_string_name(fi_addr_t source, struct psmx2_string_name *name)
+static inline void psmx2_get_source_string_name(fi_addr_t source, char *name, size_t *len)
 {
 	struct psmx2_ep_name ep_name;
 	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
-	size_t len = sizeof(*name);
 
 	memset(&ep_name, 0, sizeof(ep_name));
 	ep_name.epid = psmx2_epaddr_to_epid(epaddr);
 	ep_name.vlane = PSMX2_ADDR_TO_VL(source);
 	ep_name.type = PSMX2_EP_REGULAR;
 
-	ofi_straddr((void *)name, &len, FI_ADDR_PSMX2, &ep_name);
+	ofi_straddr(name, len, FI_ADDR_PSMX2, &ep_name);
 }
 
 static inline void psmx2_progress(struct psmx2_trx_ctxt *trx_ctxt)

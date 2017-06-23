@@ -332,8 +332,9 @@ out:
 					event->cqe.err.err_data = &cq->error_data;
 					event->error = !!event->cqe.err.err;
 					if (av->addr_format == FI_ADDR_STR) {
-						psmx2_get_source_string_name(source, (void *)&cq->error_data);
-						event->cqe.err.err_data_size = sizeof(struct psmx2_string_name);
+						event->cqe.err.err_data_size = PSMX2_ERR_DATA_SIZE;
+						psmx2_get_source_string_name(source, (void *)&cq->error_data,
+									     &event->cqe.err.err_data_size);
 					} else {
 						psmx2_get_source_name(source, (void *)&cq->error_data);
 						event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
@@ -686,8 +687,10 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 									   event->source);
 					if (source == FI_ADDR_NOTAVAIL) {
 						if (cq_priv->domain->addr_format == FI_ADDR_STR) {
-							psmx2_get_source_string_name(event->source, (void *)&cq_priv->error_data);
-							event->cqe.err.err_data_size = sizeof(struct psmx2_string_name);
+							event->cqe.err.err_data_size = PSMX2_ERR_DATA_SIZE;
+							psmx2_get_source_string_name(event->source,
+										     (void *)&cq_priv->error_data,
+										     &event->cqe.err.err_data_size);
 						} else {
 							psmx2_get_source_name(event->source, (void *)&cq_priv->error_data);
 							event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
