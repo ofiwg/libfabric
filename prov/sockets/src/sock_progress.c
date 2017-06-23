@@ -953,6 +953,11 @@ out:
 		*_dst = *_dst && *_src;					\
 		break;							\
 									\
+	case FI_LXOR:							\
+		*_cmp = *_dst;						\
+		*_dst = ((*_dst && !*_src) || (!*_dst && *_src));	\
+		break;							\
+									\
 	case FI_ATOMIC_READ:						\
 		*_cmp = *_dst;						\
 		break;							\
