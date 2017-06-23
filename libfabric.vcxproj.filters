@@ -285,7 +285,7 @@
     <ClCompile Include="prov\rxm\src\rxm_init.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
-     <ClCompile Include="prov\rxm\src\rxm_rma.c">
+    <ClCompile Include="prov\rxm\src\rxm_rma.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
     <ClCompile Include="src\iov.c">
@@ -532,6 +532,9 @@
     </ClInclude>
     <ClInclude Include="include\windows\sys\wait.h">
       <Filter>Header Files\windows\sys</Filter>
+    </ClInclude>
+    <ClInclude Include="include\windows\ifaddrs.h">
+      <Filter>Header Files\windows</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
