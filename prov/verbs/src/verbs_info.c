@@ -44,23 +44,22 @@
 #define VERBS_ANY_FABRIC "Any RDMA fabric"
 
 #define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
-			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
+			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
+			FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 #define VERBS_RDM_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_READ | FI_WRITE |	\
 			FI_RECV | FI_MULTI_RECV | FI_SEND | FI_REMOTE_READ |	\
 			FI_REMOTE_WRITE )
 
-#define VERBS_MODE (FI_LOCAL_MR)
 #define VERBS_RDM_MODE (FI_CONTEXT)
 
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
 #define VERBS_TX_OP_FLAGS_IWARP_RDM (VERBS_TX_OP_FLAGS)
 
-#define VERBS_TX_MODE VERBS_MODE
 #define VERBS_TX_RDM_MODE VERBS_RDM_MODE
 
-#define VERBS_RX_MODE (FI_LOCAL_MR | FI_RX_CQ_DATA)
+#define VERBS_RX_MODE (FI_RX_CQ_DATA)
 
 #define VERBS_RX_RDM_OP_FLAGS (FI_COMPLETION)
 
@@ -112,7 +111,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 };
 
 const struct fi_rx_attr verbs_rdm_rx_attr = {
-	.mode			= VERBS_RX_MODE,
+	.mode			= VERBS_RDM_MODE | VERBS_RX_MODE,
 	.op_flags		= VERBS_RX_RDM_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.total_buffered_recv	= 0,
@@ -120,7 +119,7 @@ const struct fi_rx_attr verbs_rdm_rx_attr = {
 };
 
 const struct fi_tx_attr verbs_tx_attr = {
-	.mode			= VERBS_TX_MODE,
+	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.comp_order		= FI_ORDER_STRICT,
@@ -260,8 +259,8 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
 
-	check_mode = FI_IBV_EP_TYPE_IS_RDM(info) ? VERBS_RDM_MODE :
-		(hints->caps & FI_RMA) ? info->rx_attr->mode : VERBS_MODE;
+	check_mode = (hints->caps & FI_RMA) ? info->rx_attr->mode :
+		(info->rx_attr->mode & ~FI_RX_CQ_DATA);
 
 	if ((compare_mode & check_mode) != check_mode) {
 		VERBS_INFO(FI_LOG_CORE,
@@ -669,7 +668,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->mode	= VERBS_RDM_MODE;
 		*(fi->tx_attr)	= verbs_rdm_tx_attr;
 	} else {
-		fi->mode	= VERBS_MODE;
 		*(fi->tx_attr)	= verbs_tx_attr;
 	}
 
@@ -677,6 +675,10 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 				? verbs_rdm_rx_attr : verbs_rx_attr;
 	*(fi->ep_attr)		= verbs_ep_attr;
 	*(fi->domain_attr)	= verbs_domain_attr;
+
+	if (ep_dom->type == FI_EP_RDM)
+		fi->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+
 	*(fi->fabric_attr)	= verbs_fabric_attr;
 
 	fi->ep_attr->type	= ep_dom->type;
