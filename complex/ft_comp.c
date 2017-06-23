@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -119,7 +119,7 @@ int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
 }
 
 /* Read CQ until there are no more completions */
-#define ft_cq_read(cq_read, cq, buf, count, completions, str, ret, ...)	\
+#define ft_cq_read(cq_read, cq, buf, count, completions, str, ret, verify,...)	\
 	do {							\
 		ret = cq_read(cq, buf, count, ##__VA_ARGS__);	\
 		if (ret < 0) {					\
@@ -133,6 +133,8 @@ int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
 			return ret;				\
 		} else {					\
 			completions += ret;			\
+			if (verify)				\
+				ft_verify_comp(buf);		\
 		}						\
 	} while (ret == count)
 
@@ -142,7 +144,7 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 	uint8_t buf[FT_COMP_BUF_SIZE];
 	struct timespec s, e;
 	int poll_time = 0;
-	int ret;
+	int ret, verify = (test_info.test_type == FT_TEST_UNIT && cq == rxcq);
 
 	switch(test_info.cq_wait_obj) {
 	case FI_WAIT_NONE:
@@ -151,7 +153,7 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 				clock_gettime(CLOCK_MONOTONIC, &s);
 
 			ft_cq_read(fi_cq_read, cq, buf, comp_entry_cnt[ft_x->cq_format],
-					ft_x->credits, x_str, ret);
+					ft_x->credits, x_str, ret, verify);
 
 			clock_gettime(CLOCK_MONOTONIC, &e);
 			poll_time = get_elapsed(&s, &e, MILLI);
@@ -162,7 +164,7 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
 		ft_cq_read(fi_cq_sread, cq, buf, comp_entry_cnt[ft_x->cq_format],
-			ft_x->credits, x_str, ret, NULL, timeout);
+			ft_x->credits, x_str, ret, verify, NULL, timeout);
 		break;
 	case FI_WAIT_SET:
 		FT_ERR("fi_ubertest: Unsupported cq wait object");

@@ -165,3 +165,18 @@ int ft_verify_bufs()
 
 	return ft_check_buf(compare_buf, compare_size) ? -FI_EIO : 0;
 }
+
+void ft_verify_comp(void *buf)
+{
+	struct fi_cq_data_entry *comp;
+
+	if (ft_rx_ctrl.cq_format != FI_CQ_FORMAT_DATA)
+		return;
+
+	comp = (struct fi_cq_data_entry *) buf;
+
+	if (comp->flags & FI_REMOTE_CQ_DATA) {
+		if (comp->data == ft_tx_ctrl.remote_cq_data)
+			ft_ctrl.verify_cnt++;
+	}
+}

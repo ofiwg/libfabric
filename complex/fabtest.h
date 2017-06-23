@@ -123,6 +123,7 @@ struct ft_control {
 	int			iov_cnt;
 	int			inc_step;
 	int			xfer_iter;
+	int			verify_cnt;
 	int			error;
 };
 
@@ -206,12 +207,25 @@ enum ft_class_function {
 			    x == FT_FUNC_COMPARE_ATOMICV || \
 			    x == FT_FUNC_COMPARE_ATOMICMSG)
 
+#define is_data_func(x) (x == FT_FUNC_SENDDATA || \
+			 x == FT_FUNC_INJECTDATA || \
+			 x == FT_FUNC_WRITEDATA || \
+			 x == FT_FUNC_INJECT_WRITEDATA)
+
+#define is_msg_func(x)	(x == FT_FUNC_SENDMSG || \
+			 x == FT_FUNC_WRITEMSG || \
+			 x == FT_FUNC_READMSG || \
+			 x == FT_FUNC_ATOMICMSG || \
+			 x == FT_FUNC_FETCH_ATOMICMSG || \
+			 x == FT_FUNC_COMPARE_ATOMICMSG)
+
 struct ft_set {
 	char			node[FI_NAME_MAX];
 	char			service[FI_NAME_MAX];
 	char			prov_name[FI_NAME_MAX];
 	enum ft_test_type	test_type[FT_MAX_TEST];
 	enum ft_class_function	class_function[FT_MAX_FUNCTIONS];
+	uint64_t		msg_flags;
 	enum fi_op		op[FI_ATOMIC_OP_LAST];
 	enum fi_ep_type		ep_type[FT_MAX_EP_TYPES];
 	enum fi_av_type		av_type[FT_MAX_AV_TYPES];
@@ -246,6 +260,7 @@ struct ft_info {
 	int			test_index;
 	int			test_subindex;
 	enum ft_class_function	class_function;
+	uint64_t		msg_flags;
 	enum fi_op		op;
 	enum fi_datatype	datatype;
 	uint64_t		test_flags;
@@ -271,6 +286,7 @@ void fts_start(struct ft_series *series, int index);
 void fts_next(struct ft_series *series);
 int  fts_end(struct ft_series *series, int index);
 void fts_cur_info(struct ft_series *series, struct ft_info *info);
+int fts_info_is_valid(void);
 
 
 struct ft_msg {
@@ -300,6 +316,7 @@ void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx);
 
 int ft_send_sync_msg();
+int ft_recv_n_msg();
 int ft_recv_msg();
 int ft_send_msg();
 int ft_send_dgram();
@@ -316,6 +333,7 @@ void ft_record_error(int error);
 
 int ft_verify_bufs();
 int ft_sync_fill_bufs(size_t size);
+void ft_verify_comp(void *buf);
 
 #ifdef __cplusplus
 }

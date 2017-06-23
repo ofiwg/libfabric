@@ -67,7 +67,7 @@ static int ft_init_rx_control(void)
 	if (ret)
 		return ret;
 
-	ft_rx_ctrl.cq_format = FI_CQ_FORMAT_MSG;
+	ft_rx_ctrl.cq_format = FI_CQ_FORMAT_DATA;
 	ft_rx_ctrl.addr = FI_ADDR_UNSPEC;
 
 	ft_rx_ctrl.msg_size = med_size_array[med_size_cnt - 1];
@@ -370,6 +370,25 @@ static int ft_sync_test(int value)
 	return ft_sock_sync(value);
 }
 
+#define no_sync_needed(func,flag) (is_data_func(func) ||				\
+				(is_msg_func(func) && flag == FI_REMOTE_CQ_DATA))
+
+static int ft_sync_msg_needed()
+{
+	if (no_sync_needed(test_info.class_function, test_info.msg_flags))
+		return 0;
+
+	return ft_send_sync_msg();
+}
+
+static int ft_check_verify_cnt()
+{
+	if (test_info.msg_flags == FI_REMOTE_CQ_DATA &&
+	    ft_ctrl.verify_cnt != ft_ctrl.xfer_iter)
+		return -FI_EIO;
+	return 0;
+}
+
 static int ft_pingpong_rma(void)
 {
 	int ret, i;
@@ -386,7 +405,7 @@ static int ft_pingpong_rma(void)
 					return ret;
 			}
 
-			ret = ft_send_sync_msg();
+			ret = ft_sync_msg_needed();
 			if (ret)
 				return ret;
 
@@ -410,7 +429,7 @@ static int ft_pingpong_rma(void)
 					return ret;
 			}
 
-			ret = ft_send_sync_msg();
+			ret = ft_sync_msg_needed();
 			if (ret)
 				return ret;
 		}
@@ -450,7 +469,7 @@ static int ft_pingpong_atomic(void)
 						return ret;
 				}
 
-				ret = ft_send_sync_msg();
+				ret = ft_sync_msg_needed();
 				if (ret)
 					return ret;
 
@@ -488,7 +507,7 @@ static int ft_pingpong_atomic(void)
 						return ret;
 				}
 
-				ret = ft_send_sync_msg();
+				ret = ft_sync_msg_needed();
 				if (ret)
 					return ret;
 			}
@@ -621,11 +640,16 @@ static int ft_bw_rma(void)
 				return ret;
 		}
 
-		ret = ft_send_msg();
+		ret = ft_sync_msg_needed();
 		if (ret)
 			return ret;
 	} else {
-		ret = ft_recv_msg();
+		if (no_sync_needed(test_info.class_function, test_info.msg_flags))
+			i = ft_ctrl.xfer_iter;
+		else
+			i = 1;
+
+		ret = ft_recv_n_msg(i);
 		if (ret)
 			return ret;
 	}
@@ -659,11 +683,16 @@ static int ft_bw_atomic(void)
 					return ret;
 			}
 		}
-		ret = ft_send_msg();
+		ret = ft_sync_msg_needed();
 		if (ret)
 			return ret;
 	} else {
-		ret = ft_recv_msg();
+		if (no_sync_needed(test_info.class_function, test_info.msg_flags))
+			i = ft_ctrl.xfer_iter;
+		else
+			i = 1;
+
+		ret = ft_recv_n_msg(i);
 		if (ret)
 			return ret;
 	}
@@ -690,15 +719,9 @@ static int ft_bw(void)
 		if (ret)
 			return ret;
 	} else {
-		for (i = 0; i < ft_ctrl.xfer_iter; i += ft_rx_ctrl.credits) {
-			ret = ft_post_recv_bufs();
-			if (ret)
-				return ret;
-
-			ret = ft_comp_rx(0);
-			if (ret)
-				return ret;
-                }
+		ret = ft_recv_n_msg(ft_ctrl.xfer_iter);
+		if (ret)
+			return ret;
 
 		ret = ft_send_msg();
 		if (ret)
@@ -822,7 +845,7 @@ static int ft_unit_rma(void)
 				return ret;
 		}
 
-		ret = ft_send_sync_msg();
+		ret = ft_sync_msg_needed();
 		if (ret)
 			return ret;
 
@@ -834,6 +857,10 @@ static int ft_unit_rma(void)
 		if (ret)
 			fail = -FI_EIO;
 	}
+
+	ret = ft_check_verify_cnt();
+	if (ret)
+		return ret;
 
 	return fail;
 }
@@ -870,7 +897,7 @@ static int ft_unit_atomic(void)
 					return ret;
 			}
 
-			ret = ft_send_sync_msg();
+			ret = ft_sync_msg_needed();
 			if (ret)
 				return ret;
 
@@ -883,6 +910,9 @@ static int ft_unit_atomic(void)
 				fail = -FI_EIO;
 		}
 	}
+	ret = ft_check_verify_cnt();
+	if (ret)
+		return ret;
 	return fail;
 }
 
@@ -890,6 +920,7 @@ static int ft_unit(void)
 {
 	int ret, i, fail = 0;
 
+	ft_ctrl.verify_cnt = 0;
 	if (test_info.caps & FI_RMA)
 		return ft_unit_rma();
 	else if (test_info.caps & FI_ATOMIC)
@@ -910,6 +941,9 @@ static int ft_unit(void)
 		if (ret)
 			fail = -FI_EIO;
 	}
+	ret = ft_check_verify_cnt();
+	if (ret)
+		return ret;
 	return fail;
 }
 

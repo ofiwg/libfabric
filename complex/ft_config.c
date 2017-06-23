@@ -245,6 +245,12 @@ static struct key_t keys[] = {
 		.val_type = VAL_NUM,
 		.val_size = sizeof(((struct ft_set *)0)->test_flags),
 	},
+	{
+		.str = "msg_flags",
+		.offset = offsetof(struct ft_set, msg_flags),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->msg_flags),
+	}
 };
 
 static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
@@ -328,6 +334,8 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP_GT, enum fi_op, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MSWAP, enum fi_op, buf);
 		FT_ERR("Unknown op");
+	} else if (!strncmp(key->str, "msg_flags", strlen("msg_flags"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_REMOTE_CQ_DATA, uint64_t, buf);
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
@@ -595,6 +603,22 @@ void fts_start(struct ft_series *series, int index)
 	}
 }
 
+int fts_info_is_valid(void)
+{
+	if (test_info.msg_flags == FI_REMOTE_CQ_DATA) {
+		if (!is_data_func(test_info.class_function) &&
+		    test_info.class_function != FT_FUNC_SENDMSG &&
+		    test_info.class_function != FT_FUNC_WRITEMSG)
+			return 0;
+	}
+
+	if (test_info.test_type == FT_TEST_UNIT &&
+	    test_info.ep_type == FI_EP_DGRAM)
+		return 0;
+
+	return 1;
+}
+
 void fts_next(struct ft_series *series)
 {
 	struct ft_set *set;
@@ -669,6 +693,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->test_type = set->test_type[series->cur_type];
 	info->test_index = series->test_index;
 	info->class_function = set->class_function[series->cur_func];
+	info->msg_flags = set->msg_flags;
 	info->op = set->op[series->cur_op];
 	info->test_flags = set->test_flags;
 	info->caps = set->caps[series->cur_caps];
@@ -676,6 +701,10 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 		info->caps |= FT_CAP_MSG;
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
 			0 : set->mode[series->cur_mode];
+
+	if (set->msg_flags == FI_REMOTE_CQ_DATA)
+		info->mode |= FI_RX_CQ_DATA;
+
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
 	info->comp_type = set->comp_type[series->cur_comp];

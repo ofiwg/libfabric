@@ -175,11 +175,12 @@ static void ft_show_test_info(void)
 	printf("[%s,", test_info.prov_name);
 	printf(" %s,", ft_test_type_str(test_info.test_type));
 	if (test_info.class_function >= FT_FUNC_ATOMIC) {
-		printf(" %s (%s),", ft_class_func_str(test_info.class_function),
+		printf(" %s (%s)--", ft_class_func_str(test_info.class_function),
 			fi_tostr(&test_info.op, FI_TYPE_ATOMIC_OP));
 	} else {
-		printf(" %s,", ft_class_func_str(test_info.class_function));
+		printf(" %s--", ft_class_func_str(test_info.class_function));
 	}
+	printf("%s,", fi_tostr(&test_info.msg_flags, FI_TYPE_OP_FLAGS));
 	printf(" %s,", fi_tostr(&test_info.ep_type, FI_TYPE_EP_TYPE));
 	printf(" %s,", fi_tostr(&test_info.av_type, FI_TYPE_AV_TYPE));
 	printf(" eq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));
@@ -457,6 +458,11 @@ static int ft_fw_client(void)
 	     fts_next(series)) {
 
 		fts_cur_info(series, &test_info);
+		if (!fts_info_is_valid()) {
+			printf("Skipping test %d (invalid):\n", test_info.test_index);
+			ft_show_test_info();
+			continue;
+		}
 
 		ret = ft_sock_send(sock, &test_info, sizeof test_info);
 		if (ret) {
