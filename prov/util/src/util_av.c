@@ -327,7 +327,7 @@ static void util_av_hash_remove(struct util_av_hash *hash, int slot, int index)
 	hash->free_list = index;
 }
 
-static int fi_av_remove_addr(struct util_av *av, int slot, int index)
+int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 {
 	struct util_ep *ep;
 	struct dlist_entry *av_entry;
@@ -922,7 +922,7 @@ static int ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
 	for (i = count - 1; i >= 0; i--) {
 		index = (int) fi_addr[i];
 		slot = ip_av_slot(av, ip_av_get_addr(av, index));
-		ret = fi_av_remove_addr(av, slot, index);
+		ret = ofi_av_remove_addr(av, slot, index);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
 				"removal of fi_addr %d failed\n", index);

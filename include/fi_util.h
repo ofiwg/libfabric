@@ -341,6 +341,7 @@ int ofi_av_init(struct util_domain *domain,
 int ofi_av_close(struct util_av *av);
 
 int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index);
+int ofi_av_remove_addr(struct util_av *av, int slot, int index);
 int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot);
 int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
 void ofi_av_write_event(struct util_av *av, uint64_t data,
