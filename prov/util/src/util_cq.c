@@ -386,6 +386,27 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 }
 
+int ofi_check_bind_cq_flags(struct util_ep *ep, struct util_cq *cq,
+			    uint64_t flags)
+{
+	const struct fi_provider *prov = ep->domain->fabric->prov;
+
+	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)) {
+		FI_WARN(prov, FI_LOG_EP_CTRL,
+			"Unsupported flags\n");
+		return -FI_EBADFLAGS;
+	}
+
+	if (((flags & FI_TRANSMIT) && ep->tx_cq) ||
+	    ((flags & FI_RECV) && ep->rx_cq)) {
+		FI_WARN(prov, FI_LOG_EP_CTRL,
+			"Duplicate CQ binding\n");
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
 void ofi_cq_progress(struct util_cq *cq)
 {
 	struct util_ep *ep;
