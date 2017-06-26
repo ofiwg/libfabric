@@ -286,25 +286,31 @@ ssize_t recvmsg(int sd, struct msghdr *msg, int flags)
 	assert(msg);
 	assert(msg->msg_iov);
 
-	for(i = 0, len = 0; i < msg->msg_iovlen; i++)
-		len += msg->msg_iov[i].iov_len;
+	if (msg->msg_iovlen > 1) {
+		for (i = 0, len = 0; i < msg->msg_iovlen; i++)
+			len += msg->msg_iov[i].iov_len;
 
-	buffer = (char*)malloc(len);
-	if(!buffer)
-		goto fn_nomem;
+		buffer = (char*)malloc(len);
+		if (!buffer)
+			goto fn_nomem;
+	} else {
+		buffer = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
 
-	received = recvfrom(sd, buffer, len, flags,
+	received = recvfrom(sd, buffer, (int)len, flags,
 		(struct sockaddr *)msg->msg_name, &msg->msg_namelen);
 
 	for(i = 0, offset = 0; i < msg->msg_iovlen && offset < received; i++) {
-		ssize_t chunk_len = MIN(received - offset, msg->msg_iov[i].iov_len);
+		ssize_t chunk_len = MIN(received - offset, (ssize_t)msg->msg_iov[i].iov_len);
 		assert(msg->msg_iov[i].iov_base);
 		memcpy(msg->msg_iov[i].iov_base, buffer + offset, chunk_len);
 		offset += chunk_len;
 	}
 	read = received;
 
-	free(buffer);
+	if (msg->msg_iovlen > 1)
+		free(buffer);
 
 fn_complete:
 	return read;
@@ -325,14 +331,19 @@ ssize_t sendmsg(int sd, struct msghdr *msg, int flags)
 	assert(msg);
 	assert(msg->msg_iov);
 
-	/* calculate common length of data */
-	for(i = 0; i < msg->msg_iovlen; i++)
-		len += msg->msg_iov[i].iov_len;
+	if (msg->msg_iovlen > 1) {
+		/* calculate common length of data */
+		for (i = 0; i < msg->msg_iovlen; i++)
+			len += msg->msg_iov[i].iov_len;
 
-	/* allocate temp buffer */
-	buffer = (char*)malloc(len);
-	if(!buffer)
-		goto fn_nomem;
+		/* allocate temp buffer */
+		buffer = (char*)malloc(len);
+		if (!buffer)
+			goto fn_nomem;
+	} else {
+		buffer = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
 
 	/* copy data to temp buffer */
 	for(i = 0, offset = 0; i < msg->msg_iovlen; i++) {
@@ -344,10 +355,11 @@ ssize_t sendmsg(int sd, struct msghdr *msg, int flags)
 	}
 
 	/* send data */
-	sent = sendto(sd, buffer, len, flags,
+	sent = sendto(sd, buffer, (int)len, flags,
 		(struct sockaddr *)msg->msg_name, msg->msg_namelen);
 
-	free(buffer);
+	if (msg->msg_iovlen > 1)
+		free(buffer);
 
 fn_complete:
 	return sent;
