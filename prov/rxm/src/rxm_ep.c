@@ -421,12 +421,12 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 			dlist_insert_tail(&recv_entry->entry,
 					  &recv_queue->recv_list);
 			ret = 0;
+			fastlock_release(&recv_queue->lock);
 		} else {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 					"Unable to check unexp msg list\n");
 			freestack_push(recv_queue->fs, recv_entry);
 		}
-		fastlock_release(&recv_queue->lock);
 	}
 	return ret;
 }
