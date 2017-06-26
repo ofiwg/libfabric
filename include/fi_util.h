@@ -283,6 +283,8 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		fi_addr_t *src_addr, const void *cond, int timeout);
 int ofi_cq_signal(struct fid_cq *cq_fid);
+int ofi_cq_write_error(struct util_cq *cq,
+		       const struct fi_cq_err_entry *err_entry);
 
 /*
  * Counter

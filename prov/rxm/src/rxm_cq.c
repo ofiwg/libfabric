@@ -70,30 +70,6 @@ static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
-static int rxm_cq_report_error(struct util_cq *util_cq, struct fi_cq_err_entry *err_entry)
-{
-	struct util_cq_err_entry *entry;
-	struct fi_cq_tagged_entry *comp;
-
-	entry = calloc(1, sizeof(*entry));
-	if (!entry) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Unable to allocate util_cq_err_entry\n");
-		return -FI_ENOMEM;
-	}
-
-	entry->err_entry = *err_entry;
-	fastlock_acquire(&util_cq->cq_lock);
-	slist_insert_tail(&entry->list_entry, &util_cq->err_list);
-
-	comp = ofi_cirque_tail(util_cq->cirq);
-	comp->flags = UTIL_FLAG_ERROR;
-	ofi_cirque_commit(util_cq->cirq);
-	fastlock_release(&util_cq->cq_lock);
-
-	return 0;
-}
-
 int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
 		void *buf, uint64_t data, uint64_t tag)
 {
@@ -546,7 +522,7 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *com
 		assert(0);
 		return err_entry.err;
 	}
-	return rxm_cq_report_error(util_cq, &err_entry);
+	return ofi_cq_write_error(util_cq, &err_entry);
 }
 
 void rxm_cq_progress(struct rxm_ep *rxm_ep)

@@ -251,7 +251,13 @@ struct rxm_send_queue {
 	fastlock_t lock;
 };
 
+enum rxm_recv_queue_type {
+	RXM_RECV_QUEUE_MSG,
+	RXM_RECV_QUEUE_TAGGED,
+};
+
 struct rxm_recv_queue {
+	enum rxm_recv_queue_type type;
 	struct rxm_recv_fs *fs;
 	struct dlist_entry recv_list;
 	struct dlist_entry unexp_msg_list;
