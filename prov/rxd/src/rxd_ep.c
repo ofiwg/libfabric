@@ -1612,6 +1612,10 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!rxd_ep)
 		return -FI_ENOMEM;
 
+	memset(&cq_attr, 0, sizeof cq_attr);
+	cq_attr.format = FI_CQ_FORMAT_MSG;
+	cq_attr.wait_obj = FI_WAIT_FD;
+
 	rxd_domain = container_of(domain, struct rxd_domain, util_domain.domain_fid);
 	ret = ofi_endpoint_init(domain, &rxd_util_prov, info, &rxd_ep->util_ep,
 				context, rxd_ep_progress);
@@ -1627,14 +1631,11 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxd_ep->do_local_mr = (rxd_domain->mr_mode & FI_MR_LOCAL) ? 1 : 0;
 
 	ret = fi_endpoint(rxd_domain->dg_domain, dg_info, &rxd_ep->dg_ep, rxd_ep);
+	cq_attr.size = dg_info->tx_attr->size + dg_info->rx_attr->size;
 	fi_freeinfo(dg_info);
 	if (ret)
 		goto err2;
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_MSG;
-	cq_attr.size = dg_info->tx_attr->size + dg_info->rx_attr->size;
-	cq_attr.wait_obj = FI_WAIT_FD;
 	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr, &rxd_ep->dg_cq, rxd_ep);
 	if (ret)
 		goto err3;
