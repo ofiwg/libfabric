@@ -575,28 +575,21 @@ static int udpx_ep_close(struct fid *fid)
 	return 0;
 }
 
-static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flags)
+static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq,
+			   uint64_t flags)
 {
 	struct util_wait_fd *wait;
 	int ret;
 
-	if (flags & ~(FI_TRANSMIT | FI_RECV)) {
-		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
-			"unsupported flags\n");
-		return -FI_EBADFLAGS;
-	}
-
-	if (((flags & FI_TRANSMIT) && ep->util_ep.tx_cq) ||
-	    ((flags & FI_RECV) && ep->util_ep.rx_cq)) {
-		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
-			"duplicate CQ binding\n");
-		return -FI_EINVAL;
-	}
+	ret = ofi_check_bind_cq_flags(&ep->util_ep, cq, flags);
+	if (ret)
+		return ret;
 
 	if (flags & FI_TRANSMIT) {
 		ep->util_ep.tx_cq = cq;
 		ofi_atomic_inc32(&cq->ref);
-		ep->tx_comp = cq->wait ? udpx_tx_comp_signal : udpx_tx_comp;
+		ep->tx_comp = cq->wait ? udpx_tx_comp_signal :
+					 udpx_tx_comp;
 	}
 
 	if (flags & FI_RECV) {
@@ -604,9 +597,10 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flag
 		ofi_atomic_inc32(&cq->ref);
 
 		if (cq->wait) {
-			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?
-				      udpx_rx_src_comp_signal :
-				      udpx_rx_comp_signal;
+			ep->rx_comp =
+				(cq->domain->info_domain_caps & FI_SOURCE) ?
+				udpx_rx_src_comp_signal :
+				udpx_rx_comp_signal;
 
 			wait = container_of(cq->wait,
 					    struct util_wait_fd, util_wait);
@@ -615,8 +609,9 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flag
 			if (ret)
 				return ret;
 		} else {
-			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?
-				      udpx_rx_src_comp : udpx_rx_comp;
+			ep->rx_comp =
+				(cq->domain->info_domain_caps & FI_SOURCE) ?
+				udpx_rx_src_comp : udpx_rx_comp;
 		}
 
 		ret = fid_list_insert(&cq->ep_list,
