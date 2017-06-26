@@ -410,16 +410,14 @@ static struct fi_ops_ep rxm_ops_ep = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-/* Caller must hold recv_queue->lock. The lock will be released if we find a
- * matching message from the unexpected msg queue. */
+/* Caller must hold recv_queue->lock */
 static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 				    struct rxm_recv_queue *recv_queue,
-				    struct rxm_recv_entry *recv_entry)
+				    struct rxm_recv_entry *recv_entry,
+				    struct rxm_rx_buf **rx_buf)
 {
-	struct dlist_entry *entry;
-	struct rxm_unexp_msg *unexp_msg;
 	struct rxm_recv_match_attr match_attr;
-	struct rxm_rx_buf *rx_buf;
+	struct dlist_entry *entry;
 
 	if (dlist_empty(&recv_queue->unexp_msg_list))
 		return -FI_EAGAIN;
@@ -434,16 +432,10 @@ static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 	if (!entry)
 		return -FI_EAGAIN;
 
-	fastlock_release(&recv_queue->lock);
-
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Match for posted recv found in unexp msg list\n");
-
-	unexp_msg = container_of(entry, struct rxm_unexp_msg, entry);
-	rx_buf = container_of(unexp_msg, struct rxm_rx_buf, unexp_msg);
-	rx_buf->recv_entry = recv_entry;
-
-	return rxm_cq_handle_data(rx_buf);
+	*rx_buf = container_of(entry, struct rxm_rx_buf, unexp_msg.entry);
+	return 0;
 }
 
 static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
@@ -452,6 +444,7 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 			      uint64_t flags, struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_recv_entry *recv_entry;
+	struct rxm_rx_buf *rx_buf;
 	int ret;
 	size_t i;
 
@@ -474,8 +467,7 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		recv_entry->tag = tag;
 
 	fastlock_acquire(&recv_queue->lock);
-	/* rxm_check_unexp_msg_list() would release the lock if successful */
-	ret = rxm_check_unexp_msg_list(rxm_ep, recv_queue, recv_entry);
+	ret = rxm_check_unexp_msg_list(rxm_ep, recv_queue, recv_entry, &rx_buf);
 	if (ret) {
 		if (ret == -FI_EAGAIN) {
 			dlist_insert_tail(&recv_entry->entry,
@@ -487,6 +479,10 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 			freestack_push(recv_queue->fs, recv_entry);
 		}
 		fastlock_release(&recv_queue->lock);
+	} else {
+		fastlock_release(&recv_queue->lock);
+		rx_buf->recv_entry = recv_entry;
+		ret = rxm_cq_handle_data(rx_buf);
 	}
 	return ret;
 }
