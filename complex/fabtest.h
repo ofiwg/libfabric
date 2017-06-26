@@ -85,6 +85,7 @@ struct ft_xcontrol {
 	fi_addr_t		addr;
 	uint64_t		tag;
 	uint8_t			seqno;
+	uint64_t		total_comp;
 	enum fi_cq_format	cq_format;
 	enum fi_wait_obj	comp_wait;  /* must be NONE */
 	uint64_t		remote_cq_data;
@@ -146,7 +147,7 @@ enum {
 enum ft_comp_type {
 	FT_COMP_UNSPEC,
 	FT_COMP_QUEUE,
-//	FT_COMP_COUNTER,
+	FT_COMP_CNTR,
 	FT_MAX_COMP
 };
 
@@ -305,7 +306,7 @@ int ft_open_control();
 ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 		     uint32_t event_check, size_t len_check);
 int ft_open_comp();
-int ft_bind_comp(struct fid_ep *ep, uint64_t flags);
+int ft_bind_comp(struct fid_ep *ep);
 int ft_comp_rx(int timeout);
 int ft_comp_tx(int timeout);
 

@@ -24,6 +24,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -51,6 +52,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	eq_wait_obj: [
 		FI_WAIT_NONE,
@@ -88,6 +90,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	eq_wait_obj: [
 		FI_WAIT_NONE,
@@ -133,6 +136,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -180,6 +184,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -213,6 +218,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -252,6 +258,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,

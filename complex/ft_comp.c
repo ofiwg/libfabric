@@ -50,6 +50,24 @@ static size_t comp_entry_size[] = {
 };
 */
 
+static int ft_open_cntrs(void)
+{
+	int ret;
+
+	opts.comp_method = test_info.cq_wait_obj;
+
+	if (!txcntr) {
+		ret = ft_cntr_open(&txcntr);
+		if (ret)
+			return ret;
+	}
+	if (!rxcntr) {
+		ret = ft_cntr_open(&rxcntr);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
 
 static int ft_open_cqs(void)
 {
@@ -89,30 +107,41 @@ int ft_open_comp(void)
 {
 	int ret;
 
-	ret = (test_info.comp_type == FT_COMP_QUEUE) ?
-		ft_open_cqs() : -FI_ENOSYS;
+	switch (test_info.comp_type) {
+	case FT_COMP_QUEUE:
+		ret = ft_open_cqs();
+		break;
+	case FT_COMP_CNTR:
+		ret = ft_open_cntrs();
+		break;
+	default:
+		ret = -FI_ENOSYS; 
+	}
 
 	return ret;
 }
 
-int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
+int ft_bind_comp(struct fid_ep *ep)
 {
 	int ret;
+	uint64_t flags;
+	struct fid *txfid = (test_info.comp_type == FT_COMP_CNTR) ? &txcntr->fid : &txcq->fid;
+	struct fid *rxfid = (test_info.comp_type == FT_COMP_CNTR) ? &rxcntr->fid : &rxcq->fid;
 
-	if (flags & FI_SEND) {
-		ret = fi_ep_bind(ep, &txcq->fid, flags & ~FI_RECV);
-		if (ret) {
-			FT_PRINTERR("fi_ep_bind", ret);
-			return ret;
-		}
+	flags = FI_TRANSMIT;
+	if (test_info.comp_type == FT_COMP_CNTR)
+		flags |= FI_READ | FI_WRITE;
+	ret = fi_ep_bind(ep, txfid, flags);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		return ret;
 	}
 
-	if (flags & FI_RECV) {
-		ret = fi_ep_bind(ep, &rxcq->fid, flags & ~FI_SEND);
-		if (ret) {
-			FT_PRINTERR("fi_ep_bind", ret);
-			return ret;
-		}
+	flags = FI_RECV;
+	ret = fi_ep_bind(ep, rxfid, flags);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		return ret;
 	}
 
 	return 0;
@@ -177,13 +206,46 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 	return (ret == -FI_EAGAIN && timeout) ? ret : 0;
 }
 
+static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
+		     int timeout)
+{
+	uint64_t cntr_val;
+	struct timespec s, e;
+	int poll_time = clock_gettime(CLOCK_MONOTONIC, &s);
+
+	do {
+		cntr_val = fi_cntr_read(cntr);
+		clock_gettime(CLOCK_MONOTONIC, &e);
+		poll_time = get_elapsed(&s, &e, MILLI);
+	} while (cntr_val == ft_x->total_comp && poll_time < timeout);
+
+	ft_x->credits += (cntr_val - ft_x->total_comp);
+	ft_x->total_comp = cntr_val;
+
+	return 0;
+}
+
 int ft_comp_rx(int timeout)
 {
-	return ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
+	switch (test_info.comp_type) {
+	case FT_COMP_CNTR:
+		return ft_cntr_x(rxcntr, &ft_rx_ctrl, timeout);
+	case FT_COMP_QUEUE:
+		return ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
+	default:
+		return -FI_ENOSYS;
+	}
 }
 
 
 int ft_comp_tx(int timeout)
 {
-	return ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
+	switch (test_info.comp_type) {
+	case FT_COMP_CNTR:
+		return ft_cntr_x(txcntr, &ft_tx_ctrl, timeout);
+	case FT_COMP_QUEUE:
+		return ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
+	default:
+		return -FI_ENOSYS;
+	}
 }

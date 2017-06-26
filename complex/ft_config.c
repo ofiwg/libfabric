@@ -355,6 +355,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		FT_ERR("Unknown caps");
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_CNTR, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_NONE", FT_MODE_NONE, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
@@ -626,6 +627,8 @@ int fts_info_is_valid(void)
 		if (!is_data_func(test_info.class_function) &&
 		    test_info.class_function != FT_FUNC_SENDMSG &&
 		    test_info.class_function != FT_FUNC_WRITEMSG)
+			return 0;
+		if (test_info.comp_type == FT_COMP_CNTR)
 			return 0;
 	}
 

@@ -375,7 +375,9 @@ static int ft_sync_test(int value)
 
 static int ft_sync_msg_needed()
 {
-	if (no_sync_needed(test_info.class_function, test_info.msg_flags))
+	if (!(test_info.comp_type == FT_COMP_CNTR &&
+	    (test_info.test_class & (FI_RMA | FI_ATOMIC))) &&
+	    no_sync_needed(test_info.class_function, test_info.msg_flags))
 		return 0;
 
 	return ft_send_sync_msg();
@@ -644,7 +646,8 @@ static int ft_bw_rma(void)
 		if (ret)
 			return ret;
 	} else {
-		if (no_sync_needed(test_info.class_function, test_info.msg_flags))
+		if (no_sync_needed(test_info.class_function, test_info.msg_flags) &&
+		    test_info.comp_type != FT_COMP_CNTR)
 			i = ft_ctrl.xfer_iter;
 		else
 			i = 1;
@@ -687,7 +690,8 @@ static int ft_bw_atomic(void)
 		if (ret)
 			return ret;
 	} else {
-		if (no_sync_needed(test_info.class_function, test_info.msg_flags))
+		if (no_sync_needed(test_info.class_function, test_info.msg_flags) &&
+		    test_info.comp_type != FT_COMP_CNTR)
 			i = ft_ctrl.xfer_iter;
 		else
 			i = 1;
