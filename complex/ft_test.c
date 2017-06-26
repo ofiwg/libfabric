@@ -120,7 +120,7 @@ static int ft_init_control(void)
 	ft_ctrl.iov_array = sm_size_array;
 	ft_ctrl.iov_cnt = sm_size_cnt;
 
-	if (test_info.caps & FI_RMA) {
+	if (test_info.test_class & FI_RMA) {
 		ft_ctrl.size_array = lg_size_array;
 		ft_ctrl.size_cnt = lg_size_cnt;
 	} else {
@@ -520,9 +520,9 @@ static int ft_pingpong(void)
 {
 	int ret, i;
 
-	if (test_info.caps & FI_RMA)
+	if (test_info.test_class & FI_RMA)
 		return ft_pingpong_rma();
-	else if (test_info.caps & FI_ATOMIC)
+	else if (test_info.test_class & FI_ATOMIC)
 		return ft_pingpong_atomic();
 
 	// TODO: current flow will not handle manual progress mode
@@ -593,7 +593,7 @@ static int ft_run_latency(void)
 		if (ft_ctrl.size_array[i] > fabric_info->ep_attr->max_msg_size)
 			break;
 
-		if (test_info.caps & (FI_RMA | FI_ATOMIC)) {
+		if (test_info.test_class & (FI_RMA | FI_ATOMIC)) {
 			ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
 			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
 		} else {
@@ -703,9 +703,9 @@ static int ft_bw(void)
 {
 	int ret, i;
 
-	if (test_info.caps & FI_RMA)
+	if (test_info.test_class & FI_RMA)
 		return ft_bw_rma();
-	else if (test_info.caps & FI_ATOMIC)
+	else if (test_info.test_class & FI_ATOMIC)
 		return ft_bw_atomic();
 
 	if (listen_sock < 0) {
@@ -790,7 +790,7 @@ static int ft_run_bandwidth(void)
 		if (ft_ctrl.size_array[i] > fabric_info->ep_attr->max_msg_size)
 			break;
 
-		if (test_info.caps & FI_RMA) {
+		if (test_info.test_class & FI_RMA) {
 			ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
 			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
 		} else {
@@ -921,9 +921,9 @@ static int ft_unit(void)
 	int ret, i, fail = 0;
 
 	ft_ctrl.verify_cnt = 0;
-	if (test_info.caps & FI_RMA)
+	if (test_info.test_class & FI_RMA)
 		return ft_unit_rma();
-	else if (test_info.caps & FI_ATOMIC)
+	else if (test_info.test_class & FI_ATOMIC)
 		return ft_unit_atomic();
 
 	for (i = 0; i < ft_ctrl.xfer_iter; i++) {
@@ -957,7 +957,7 @@ static int ft_run_unit(void)
 		if (ft_ctrl.size_array[i] > fabric_info->ep_attr->max_msg_size)
 			break;
 
-		if (test_info.caps & (FI_RMA | FI_ATOMIC)) {
+		if (test_info.test_class & (FI_RMA | FI_ATOMIC)) {
 			ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
 			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
 		} else {

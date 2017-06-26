@@ -515,7 +515,7 @@ int ft_send_rma(void)
 			return ret;
 	}
 
-	if (test_info.caps & FI_ATOMIC)
+	if (test_info.test_class & FI_ATOMIC)
 		ret = ft_post_send_atomic();
 	else 	
 		ret = ft_post_send_rma();
@@ -539,7 +539,7 @@ int ft_post_recv_bufs(void)
 	int ret;
 
 	for (; ft_rx_ctrl.credits; ft_rx_ctrl.credits--) {
-		if (test_info.caps & FI_TAGGED) {
+		if (test_info.test_class & FI_TAGGED) {
 			ret = ft_post_trecv();
 			if (!ret)
 				ft_rx_ctrl.tag++;
@@ -589,6 +589,22 @@ int ft_recv_msg(void)
 	return ft_recv_n_msg(1);
 }
 
+static int ft_send_rma_sync(void)
+{
+	int ret;
+	struct fi_context *ctx;
+
+	ret = ft_get_ctx(&ft_tx_ctrl, &ctx);
+	if (ret)
+		return ret;
+
+	ft_send_retry(ret, fi_writedata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+		0, ft_mr_ctrl.memdesc, ft_tx_ctrl.remote_cq_data,
+		ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key, ctx);
+	ft_tx_ctrl.credits--;
+	return ret;
+}
+
 int ft_send_sync_msg(void)
 {
 	int ret;
@@ -599,7 +615,11 @@ int ft_send_sync_msg(void)
 			return ret;
 	}
 
-	ret = ft_post_send();
+	if (test_info.caps & FI_MSG)
+		ret = ft_post_send();
+	else
+		ret = ft_send_rma_sync();
+
 	if (ret)
 		return ret;
 
@@ -618,7 +638,7 @@ int ft_send_msg(void)
 			return ret;
 	}
 
-	if (test_info.caps & FI_TAGGED) {
+	if (test_info.test_class & FI_TAGGED) {
 		ret = ft_post_tsend();
 		if (!ret)
 			ft_tx_ctrl.tag++;
@@ -721,7 +741,7 @@ int ft_sendrecv_dgram(void)
 			break;
 
 		/* resend */
-		if (test_info.caps & FI_TAGGED)
+		if (test_info.test_class & FI_TAGGED)
 			ft_tx_ctrl.tag--;
 		ft_tx_ctrl.seqno--;
 	}

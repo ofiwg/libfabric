@@ -134,6 +134,7 @@ extern struct ft_atomic_control ft_atom_ctrl;
 
 enum {
 	FT_MAX_CAPS		= 64,
+	FT_MAX_CLASS		= 4,
 	FT_MAX_EP_TYPES		= 8,
 	FT_MAX_AV_TYPES		= 3,
 	FT_MAX_PROV_MODES	= 4,
@@ -233,7 +234,8 @@ struct ft_set {
 	enum fi_wait_obj	eq_wait_obj[FT_MAX_WAIT_OBJ];
 	enum fi_wait_obj	cq_wait_obj[FT_MAX_WAIT_OBJ];
 	uint64_t		mode[FT_MAX_PROV_MODES];
-	uint64_t		caps[FT_MAX_CAPS];
+	uint64_t		test_class[FT_MAX_CLASS];
+	uint64_t		constant_caps[FT_MAX_CAPS];
 	uint64_t		test_flags;
 };
 
@@ -252,7 +254,7 @@ struct ft_series {
 	int			cur_eq_wait_obj;
 	int			cur_cq_wait_obj;
 	int			cur_mode;
-	int			cur_caps;
+	int			cur_class;
 };
 
 struct ft_info {
@@ -264,6 +266,7 @@ struct ft_info {
 	enum fi_op		op;
 	enum fi_datatype	datatype;
 	uint64_t		test_flags;
+	uint64_t		test_class;
 	uint64_t		caps;
 	uint64_t		mode;
 	enum fi_av_type		av_type;

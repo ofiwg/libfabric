@@ -28,7 +28,7 @@
 	mode: [
 		FT_MODE_ALL,
 	],
-	caps: [
+	test_class: [
 		FT_CAP_MSG,
 	],
 	test_flags: FT_FLAG_QUICKTEST
@@ -64,7 +64,7 @@
 	mode: [
 		FT_MODE_ALL,
 	],
-	caps: [
+	test_class: [
 		FT_CAP_MSG,
 	],
 	test_flags: FT_FLAG_QUICKTEST
@@ -94,7 +94,7 @@
 	mode: [
 		FT_MODE_ALL,
 	],
-	caps: [
+	test_class: [
 		FT_CAP_MSG,
 	],
 	test_flags: FT_FLAG_QUICKTEST
@@ -125,7 +125,7 @@
 	mode: [
 		FT_MODE_ALL,
 	],
-	caps: [
+	test_class: [
 		FT_CAP_MSG,
 	],
 	test_flags: FT_FLAG_QUICKTEST
