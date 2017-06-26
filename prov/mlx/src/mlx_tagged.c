@@ -39,6 +39,7 @@ static ssize_t mlx_tagged_recvmsg(
 				uint64_t flags)
 {
 	ucs_status_ptr_t status = NULL;
+	ucs_recv_callback_t cbf;
 	struct mlx_ep* u_ep;
 	struct mlx_request *req;
 	struct util_cq* cq;
@@ -48,12 +49,15 @@ static ssize_t mlx_tagged_recvmsg(
 		return -FI_EBADFLAGS;
 	}
 
+	cbf = ((!(u_ep->ep.rx_op_flags & FI_SELECTIVE_COMPLETION)) 
+			|| (flags & FI_COMPLETION)) ? 
+				mlx_recv_callback : mlx_recv_callback_no_compl;
+
 	if (msg->iov_count == 1) {
 		status = ucp_tag_recv_nb(u_ep->worker, msg->msg_iov[0].iov_base,
 					msg->msg_iov[0].iov_len,
 					ucp_dt_make_contig(1),
-					msg->tag, (~(msg->ignore)),
-					mlx_recv_callback);
+					msg->tag, (~(msg->ignore)), cbf);
 	} else {
 		return -FI_EINVAL; /*Do not return IOV for a while*/
 	}
@@ -145,7 +149,7 @@ static ssize_t mlx_tagged_sendmsg(
 		return -FI_EBADFLAGS;
 	}
 
-	cbf = ((!(u_ep->ep.flags & FI_SELECTIVE_COMPLETION)) 
+	cbf = ((!(u_ep->ep.tx_op_flags & FI_SELECTIVE_COMPLETION)) 
 			|| (flags & FI_COMPLETION)) ? 
 				mlx_send_callback : mlx_send_callback_no_compl;
 	if (msg->iov_count == 1) {
@@ -183,7 +187,7 @@ static ssize_t mlx_tagged_sendmsg(
 		goto fence;
 	}
 
-	if((u_ep->ep.flags & FI_SELECTIVE_COMPLETION)
+	if((u_ep->ep.tx_op_flags & FI_SELECTIVE_COMPLETION)
 			&& !(flags & FI_COMPLETION)) {
 		goto fence;
 	}

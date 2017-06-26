@@ -82,6 +82,14 @@ void mlx_send_callback( void *request,
 	ucp_request_release(request);
 }
 
+/*Using for selective completions scenario*/
+void mlx_recv_callback_no_compl(void *request,
+				ucs_status_t status,
+				ucp_tag_recv_info_t *info)
+{
+	ucp_request_release(request);
+}
+
 void mlx_recv_callback (
 			void *request,
 			ucs_status_t status,
