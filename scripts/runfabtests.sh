@@ -101,6 +101,8 @@ simple_tests=(
 	"scalable_ep"
 	"cmatose"
 	"rdm_shared_av"
+	"multi_mr -e msg -V"
+	"multi_mr -e rdm -V"
 )
 
 short_tests=(

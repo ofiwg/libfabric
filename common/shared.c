@@ -70,6 +70,7 @@ uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 int ft_skip_mr = 0;
+int (*ft_mr_alloc_func)(void);
 int ft_parent_proc = 0;
 pid_t ft_child_pid = 0;
 int ft_socket_pair[2];
@@ -170,7 +171,7 @@ size_t ft_rx_prefix_size()
 		fi->ep_attr->msg_prefix_size : 0;
 }
 
-static int ft_check_opts(uint64_t flags)
+int ft_check_opts(uint64_t flags)
 {
 	return (opts.options & flags) == flags;
 }
@@ -385,7 +386,7 @@ int ft_alloc_msgs(void)
 
 	remote_cq_data = ft_init_cq_data(fi);
 
-	if (!ft_skip_mr && ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	if (!ft_mr_alloc_func && !ft_skip_mr && ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
 		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi),
 				0, FT_MR_KEY, 0, &mr, NULL);
@@ -394,6 +395,11 @@ int ft_alloc_msgs(void)
 			return ret;
 		}
 	} else {
+		if (ft_mr_alloc_func) {
+			ret = ft_mr_alloc_func();
+			if (ret)
+				return ret;
+		}
 		mr = &no_mr;
 	}
 
@@ -1935,6 +1941,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
 	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
 	FT_PRINT_OPTS_USAGE("", "fi_shared_ctx");
+	FT_PRINT_OPTS_USAGE("", "fi_multi_mr");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 

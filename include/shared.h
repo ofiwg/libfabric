@@ -186,6 +186,7 @@ void ft_csusage(char *name, char *desc);
 
 void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
+int ft_check_opts(uint64_t flags);
 uint64_t ft_init_cq_data(struct fi_info *info);
 int ft_sock_listen(char *service);
 int ft_sock_connect(char *node, char *service);
@@ -195,6 +196,7 @@ int ft_sock_recv(int fd, void *msg, size_t len);
 int ft_sock_sync(int value);
 void ft_sock_shutdown(int fd);
 extern int ft_skip_mr;
+extern int (*ft_mr_alloc_func)(void);
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;

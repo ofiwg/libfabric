@@ -20,6 +20,7 @@ bin_PROGRAMS = \
 	simple/fi_msg_epoll \
 	simple/fi_rdm_shared_av \
 	simple/fi_cm_data \
+	simple/fi_multi_mr \
 	streaming/fi_msg_rma \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
@@ -157,6 +158,10 @@ simple_fi_shared_ctx_LDADD = libfabtests.la
 simple_fi_poll_SOURCES = \
 	simple/poll.c
 simple_fi_poll_LDADD = libfabtests.la
+
+simple_fi_multi_mr_SOURCES = \
+	simple/multi_mr.c
+simple_fi_multi_mr_LDADD = libfabtests.la
 
 streaming_fi_msg_rma_SOURCES = \
 	streaming/msg_rma.c
