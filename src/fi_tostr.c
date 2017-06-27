@@ -482,6 +482,19 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s%smax_ep_stx_ctx: %zd\n", prefix, TAB, attr->max_ep_stx_ctx);
 	strcatf(buf, "%s%smax_ep_srx_ctx: %zd\n", prefix, TAB, attr->max_ep_srx_ctx);
 	strcatf(buf, "%s%scntr_cnt: %zd\n", prefix, TAB, attr->cntr_cnt);
+	strcatf(buf, "%s%smr_iov_limit: %zd\n", prefix, TAB, attr->mr_iov_limit);
+
+	strcatf(buf, "%scaps: [ ", TAB);
+	fi_tostr_caps(buf, attr->caps);
+	strcatf(buf, " ]\n");
+
+	strcatf(buf, "%smode: [ ", TAB);
+	fi_tostr_mode(buf, attr->mode);
+	strcatf(buf, " ]\n");
+
+	strcatf(buf, "%s%sauth_key_size: %zd\n", prefix, TAB, attr->auth_key_size);
+	strcatf(buf, "%s%smax_err_data: %zd\n", prefix, TAB, attr->max_err_data);
+	strcatf(buf, "%s%smr_cnt: %zd\n", prefix, TAB, attr->mr_cnt);
 }
 
 static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,

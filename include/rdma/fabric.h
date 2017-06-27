@@ -351,6 +351,7 @@ struct fi_domain_attr {
 	uint8_t			*auth_key;
 	size_t 			auth_key_size;
 	size_t			max_err_data;
+	size_t			mr_cnt;
 };
 
 struct fi_fabric_attr {
