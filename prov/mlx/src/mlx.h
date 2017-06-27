@@ -69,6 +69,7 @@ extern "C" {
 #define FI_MLX_FABRIC_NAME "mlx"
 #define FI_MLX_DEFAULT_INJECT_SIZE 1024
 #define FI_MLX_DEF_CQ_SIZE (1024)
+#define FI_MLX_DEF_MR_CNT (1 << 16)
 
 #define FI_MLX_VERSION_MINOR 4
 #define FI_MLX_VERSION_MAJOR 1

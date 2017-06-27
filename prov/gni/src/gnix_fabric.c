@@ -253,6 +253,7 @@ static struct fi_info *_gnix_allocinfo(void)
 	gnix_info->domain_attr->mr_iov_limit = 1;
 	gnix_info->domain_attr->caps = GNIX_DOM_CAPS;
 	gnix_info->domain_attr->mode = 0;
+	gnix_info->domain_attr->mr_cnt = 65535;
 
 	gnix_info->next = NULL;
 	gnix_info->addr_format = FI_ADDR_GNI;

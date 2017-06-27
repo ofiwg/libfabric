@@ -115,6 +115,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->domain_attr->mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL;
 	info->domain_attr->cq_cnt = (size_t)adapter->MaxCompletionQueueDepth;
 	info->domain_attr->mr_iov_limit = ND_MSG_IOV_LIMIT;
+	info->domain_attr->mr_cnt = OFI_ND_MAX_MR_CNT;
 
 	info->fabric_attr->name = strdup(ofi_nd_prov_name);
 	info->fabric_attr->prov_version = FI_VERSION(OFI_ND_MAJOR_VERSION, OFI_ND_MINOR_VERSION);

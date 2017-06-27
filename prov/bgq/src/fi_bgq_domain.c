@@ -275,6 +275,7 @@ int fi_bgq_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->max_ep_stx_ctx	= attr->max_ep_tx_ctx;
 	attr->max_ep_srx_ctx	= 0;	/* TODO - reserve some mu reception fifos for use as shared receive context ... how to address? */
 	attr->mr_iov_limit	= 1;
+	attr->mr_cnt		= 1 << (attr->mr_key_size << 3);
 
 	*domain_attr = attr;
 

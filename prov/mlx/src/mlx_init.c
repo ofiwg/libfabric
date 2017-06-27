@@ -83,6 +83,7 @@ struct fi_domain_attr mlx_domain_attrs = {
 	.rx_ctx_cnt = 1,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1,
+	.mr_cnt = FI_MLX_DEF_MR_CNT;
 };
 
 struct fi_rx_attr mlx_rx_attrs = {
