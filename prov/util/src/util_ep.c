@@ -36,6 +36,36 @@
 #include <fi_enosys.h>
 #include <fi_util.h>
 
+int ofi_ep_bind_cq(struct util_ep *ep, struct util_cq *cq, uint64_t flags)
+{
+	int ret;
+
+	ret = ofi_check_bind_cq_flags(ep, cq, flags);
+	if (ret)
+		return ret;
+
+	if (flags & FI_TRANSMIT) {
+		ep->tx_cq = cq;
+		if (!(flags & FI_SELECTIVE_COMPLETION))
+			ep->tx_op_flags |= FI_COMPLETION;
+		ofi_atomic_inc32(&cq->ref);
+	}
+
+	if (flags & FI_RECV) {
+		ep->rx_cq = cq;
+		if (!(flags & FI_SELECTIVE_COMPLETION))
+			ep->rx_op_flags |= FI_COMPLETION;
+		ofi_atomic_inc32(&cq->ref);
+	}
+
+	if (flags & (FI_TRANSMIT | FI_RECV)) {
+		return fid_list_insert(&cq->ep_list,
+				       &cq->ep_list_lock,
+				       &ep->ep_fid.fid);
+	}
+
+	return FI_SUCCESS;
+}
 
 int ofi_ep_bind_eq(struct util_ep *ep, struct util_eq *eq)
 {
@@ -87,7 +117,8 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->caps = info->caps;
 	ep->domain = util_domain;
 	ep->progress = progress;
-	ep->caps = info->caps;
+	ep->tx_op_flags = info->tx_attr->op_flags;
+	ep->rx_op_flags = info->rx_attr->op_flags;
 	ofi_atomic_inc32(&util_domain->ref);
 	if (util_domain->eq)
 		ofi_ep_bind_eq(ep, util_domain->eq);

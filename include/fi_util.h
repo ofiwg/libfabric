@@ -211,9 +211,11 @@ struct util_ep {
 
 	struct util_av		*av;
 	struct dlist_entry	av_entry;
-	struct util_cq		*rx_cq;
-	struct util_cq		*tx_cq;
 	struct util_eq		*eq;
+	struct util_cq		*rx_cq;
+	uint64_t		rx_op_flags;
+	struct util_cq		*tx_cq;
+	uint64_t		tx_op_flags;
 
 	uint64_t		caps;
 	uint64_t		flags;
@@ -224,6 +226,7 @@ struct util_ep {
 
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);
 int ofi_ep_bind_eq(struct util_ep *ep, struct util_eq *eq);
+int ofi_ep_bind_cq(struct util_ep *ep, struct util_cq *cq, uint64_t flags);
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		      struct fi_info *info, struct util_ep *ep, void *context,
 		      ofi_ep_progress_func progress);
@@ -273,6 +276,8 @@ struct util_cq {
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
 		 ofi_cq_progress_func progress, void *context);
+int ofi_check_bind_cq_flags(struct util_ep *ep, struct util_cq *cq,
+			    uint64_t flags);
 void ofi_cq_progress(struct util_cq *cq);
 int ofi_cq_cleanup(struct util_cq *cq);
 ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count);

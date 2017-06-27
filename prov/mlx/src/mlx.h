@@ -173,6 +173,8 @@ int mlx_av_open(
 /* Callbacks */
 void mlx_send_callback_no_compl( void *request, ucs_status_t status);
 void mlx_send_callback( void *request, ucs_status_t status);
+void mlx_recv_callback_no_compl(void *request, ucs_status_t status,
+				ucp_tag_recv_info_t *info);
 void mlx_recv_callback( void *request, ucs_status_t status,
 			ucp_tag_recv_info_t *info);
 #ifdef __cplusplus

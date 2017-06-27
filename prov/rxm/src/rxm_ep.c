@@ -983,48 +983,6 @@ static int rxm_ep_close(struct fid *fid)
 	return ret;
 }
 
-static int rxm_ep_bind_cq(struct rxm_ep *rxm_ep, struct util_cq *util_cq, uint64_t flags)
-{
-	int ret;
-
-	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unsupported flags\n");
-		return -FI_EBADFLAGS;
-	}
-
-	if (((flags & FI_TRANSMIT) && rxm_ep->util_ep.tx_cq) ||
-	    ((flags & FI_RECV) && rxm_ep->util_ep.rx_cq)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "duplicate CQ binding\n");
-		return -FI_EINVAL;
-	}
-
-	if (flags & FI_TRANSMIT) {
-		rxm_ep->util_ep.tx_cq = util_cq;
-
-		if (!(flags & FI_SELECTIVE_COMPLETION))
-			rxm_ep->rxm_info->tx_attr->op_flags |= FI_COMPLETION;
-
-		ofi_atomic_inc32(&util_cq->ref);
-	}
-
-	if (flags & FI_RECV) {
-		rxm_ep->util_ep.rx_cq = util_cq;
-
-		if (!(flags & FI_SELECTIVE_COMPLETION))
-			rxm_ep->rxm_info->rx_attr->op_flags |= FI_COMPLETION;
-
-		ofi_atomic_inc32(&util_cq->ref);
-	}
-	if (flags & (FI_TRANSMIT | FI_RECV)) {
-		ret = fid_list_insert(&util_cq->ep_list,
-				      &util_cq->ep_list_lock,
-				      &rxm_ep->util_ep.ep_fid.fid);
-		if (ret)
-			return ret;
-	}
-	return 0;
-}
-
 static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct rxm_ep *rxm_ep;
@@ -1043,8 +1001,10 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return -FI_ENOMEM;
 		break;
 	case FI_CLASS_CQ:
-		ret = rxm_ep_bind_cq(rxm_ep, container_of(bfid, struct util_cq,
-					cq_fid.fid), flags);
+		ret = ofi_ep_bind_cq(&rxm_ep->util_ep,
+				     container_of(bfid, struct util_cq,
+						  cq_fid.fid),
+				     flags);
 		break;
 	case FI_CLASS_EQ:
 		break;

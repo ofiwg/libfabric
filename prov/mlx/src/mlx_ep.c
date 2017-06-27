@@ -100,37 +100,7 @@ static int mlx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		/* TODO: check rest flags for send/recv ECs */
-		do {
-			cq = container_of(bfid, struct util_cq, cq_fid.fid);
-
-			if ( ((flags & FI_TRANSMIT) && ep->ep.tx_cq)||
-				((flags & FI_RECV) && ep->ep.rx_cq)) {
-				FI_WARN( &mlx_prov, FI_LOG_EP_CTRL,
-					"CQ already binded\n");
-				status = -FI_EINVAL;
-				break;
-			}
-
-			if (flags & FI_TRANSMIT) {
-				ep->ep.tx_cq = cq;
-				ofi_atomic_inc32(&(cq->ref));
-			}
-
-			if (flags & FI_RECV) {
-				ep->ep.rx_cq = cq;
-				ofi_atomic_inc32(&(cq->ref));
-				status = fid_list_insert( &cq->ep_list,
-							&cq->ep_list_lock,
-							&ep->ep.ep_fid.fid);
-				if (status) break;
-			}
-
-			if (flags & FI_SELECTIVE_COMPLETION) {
-				ep->ep.flags |= FI_SELECTIVE_COMPLETION;
-			}
-
-		} while (0);
+		status = ofi_ep_bind_cq(&ep->ep, cq, flags);
 		break;
 	case FI_CLASS_AV:
 		if (ep->av) {

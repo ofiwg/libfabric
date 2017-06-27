@@ -310,13 +310,15 @@ static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 }
 
 static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
-	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
-	return rxm_ep->rxm_info->tx_attr->op_flags;
+	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
+					       ep_fid);
+	return util_ep->tx_op_flags;
 }
 
 static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
-	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid);
-	return rxm_ep->rxm_info->rx_attr->op_flags;
+	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
+					       ep_fid);
+	return util_ep->rx_op_flags;
 }
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
