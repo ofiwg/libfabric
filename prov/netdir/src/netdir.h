@@ -51,10 +51,10 @@ extern "C" {
 #define OFI_ND_MAJOR_VERSION 1
 #define OFI_ND_MINOR_VERSION 5
 
-#define ND_MSG_IOV_LIMIT (256)
-#define ND_MSG_INTERNAL_IOV_LIMIT (512)
-
-#define ND_EP_MAX_CM_DATA_SIZE (256)
+#define ND_MSG_IOV_LIMIT		(256)
+#define ND_MSG_INTERNAL_IOV_LIMIT	(512)
+#define ND_EP_MAX_CM_DATA_SIZE		(256)
+#define OFI_ND_MAX_MR_CNT		(1 << 16)
 
 #define OFI_ND_PRIMARY_CAPS					\
 	FI_MSG | FI_RMA | FI_SEND | FI_RECV |			\

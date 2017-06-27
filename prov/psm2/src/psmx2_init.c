@@ -639,6 +639,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->domain_attr->mr_iov_limit = 65535;
 	psmx2_info->domain_attr->caps = PSMX2_DOM_CAPS;
 	psmx2_info->domain_attr->mode = 0;
+	psmx2_info->domain_attr->mr_cnt = 65535;
 
 	psmx2_info->next = NULL;
 	psmx2_info->caps = caps;

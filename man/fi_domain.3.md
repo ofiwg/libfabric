@@ -133,6 +133,7 @@ struct fi_domain_attr {
 	uint8_t               *auth_key;
 	size_t                auth_key_size;
 	size_t                max_err_data;
+	size_t                mr_cnt;
 };
 ```
 
@@ -637,6 +638,16 @@ opened with API version 1.5 or greater.
 : The maximum amount of error data, in bytes, that may be returned as part of
   a completion or event queue error.  This value corresponds to the
   err_data_size field in struct fi_cq_err_entry and struct fi_eq_err_entry.
+
+## Memory Regions Count (mr_cnt)
+
+The optimal number of memory regions supported by the domain.  The mr_cnt
+value may be a fixed value of the maximum number of MRs supported by the
+underlying hardware, or may be a dynamic value, based on the default
+attributes of the domain, such as the supported memory registration modes.
+Applications can set the mr_cnt on input to fi_getinfo, in order to
+indicate their memory registration requirements.  Doing so may allow the
+provider to optimize any memory registration cache or lookup tables.
 
 # RETURN VALUE
 

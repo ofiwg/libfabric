@@ -576,6 +576,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->mr_iov_limit = 65535;
 	psmx_info->domain_attr->caps = PSMX_DOM_CAPS;
 	psmx_info->domain_attr->mode = 0;
+	psmx_info->domain_attr->mr_cnt = 65535;
 
 	psmx_info->next = NULL;
 	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
