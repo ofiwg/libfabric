@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -11,7 +11,7 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *      - Redistributions of source code must retain the above
+ *      - Redistibutions of source code must retain the above
  *        copyright notice, this list of conditions and the following
  *        disclaimer.
  *
@@ -30,42 +30,38 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_OSD_H_
-#define _FI_OSD_H_
+#ifndef _OFI_ATOMIC_H_
+#define _OFI_ATOMIC_H_
 
+#include "config.h"
 
-/* We use macros to create atomic and complex function definitions,
- * and we can't have spaces in function names */
-typedef long double long_double;
+#include "fi.h"
 
-
-/* Complex data type support:
- *
- * Complex data types are operating system.  For portability, each osd.h file
- * must define the following datatypes and operations:
- *
- * Datatype:
- * ofi_complex_XXX
- *
- * Operations:
- * ofi_complex_eq_XXX, ofi_complex_sum_XXX, ofi_complex_prod_XXX,
- * ofi_complex_land_XXX, ofi_complex_lor_XXX, ofi_complex_lxor_XXX
- *
- * Where XXX = float, double, or long_double
- */
-
-
-#ifdef __APPLE__
-#include <osx/osd.h>
-#include <unix/osd.h>
-#elif defined __FreeBSD__
-#include <freebsd/osd.h>
-#include <unix/osd.h>
-#elif defined _WIN32
-#include <windows/osd.h>
-#else
-#include <linux/osd.h>
-#include <unix/osd.h>
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#endif /* _FI_OSD_H_ */
+size_t ofi_datatype_size(enum fi_datatype datatype);
+
+#define OFI_WRITE_OP_LAST	FI_CSWAP
+#define OFI_READWRITE_OP_LAST	FI_CSWAP
+#define OFI_SWAP_OP_START	FI_CSWAP
+#define OFI_SWAP_OP_LAST	(FI_MSWAP - FI_CSWAP + 1)
+
+extern void (*ofi_atomic_write_handlers[OFI_WRITE_OP_LAST][FI_DATATYPE_LAST])
+			(void *dst, const void *src, size_t cnt);
+extern void (*ofi_atomic_readwrite_handlers[OFI_READWRITE_OP_LAST][FI_DATATYPE_LAST])
+			(void *dst, const void *src, void *res, size_t cnt);
+extern void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_LAST][FI_DATATYPE_LAST])
+			(void *dst, const void *src, const void *cmp,
+			 void *res, size_t cnt);
+
+int ofi_atomic_valid(const struct fi_provider *prov,
+		     enum fi_datatype datatype, enum fi_op op, uint64_t flags);
+
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _OFI_ATOMIC_H_ */

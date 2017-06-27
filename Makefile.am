@@ -43,6 +43,7 @@ common_srcs = \
 	src/fasthash.c \
 	src/indexer.c \
 	src/iov.c \
+	prov/util/src/util_atomic.c \
 	prov/util/src/util_attr.c   \
 	prov/util/src/util_av.c     \
 	prov/util/src/util_cq.c     \
@@ -113,6 +114,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_rbuf.h \
 	include/fi_signal.h \
 	include/fi_util.h \
+	include/ofi_atomic.h \
 	include/fasthash.h \
 	include/rbtree.h \
 	include/prov.h \

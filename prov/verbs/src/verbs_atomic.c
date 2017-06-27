@@ -118,7 +118,7 @@ check_datatype:
 		return -FI_EINVAL;
 	}
 
-	attr->size = fi_datatype_size(datatype);
+	attr->size = ofi_datatype_size(datatype);
 	if (attr->size == 0)
 		return -FI_EINVAL;
 

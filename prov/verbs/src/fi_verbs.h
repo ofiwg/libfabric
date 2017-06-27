@@ -62,6 +62,7 @@
 #include <rdma/fi_errno.h>
 
 #include "fi.h"
+#include "ofi_atomic.h"
 #include "fi_enosys.h"
 #include "prov.h"
 #include "fi_list.h"

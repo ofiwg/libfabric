@@ -661,7 +661,7 @@ static int sock_pe_handle_atomic_complete(struct sock_pe *pe,
 	assert(waiting_entry->type == SOCK_PE_TX);
 
 	len = sizeof(struct sock_msg_response);
-	datatype_sz = fi_datatype_size(waiting_entry->pe.tx.tx_op.atomic.datatype);
+	datatype_sz = ofi_datatype_size(waiting_entry->pe.tx.tx_op.atomic.datatype);
 	for (i = 0; i < waiting_entry->pe.tx.tx_op.atomic.res_iov_len; i++) {
 		if (sock_pe_recv_field(
 			    pe_entry,
@@ -801,395 +801,27 @@ out:
 	return ret;
 }
 
-#define SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp) do {		\
-	switch (op) {							\
-	case FI_MIN:							\
-		*_cmp = *_dst;						\
-		if (*_src < *_dst)					\
-			*_dst = *_src;					\
-		break;							\
-									\
-	case FI_MAX:							\
-		*_cmp = *_dst;						\
-		if (*_src > *_dst)					\
-			*_dst = *_src;					\
-		break;							\
-									\
-	case FI_SUM:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst + *_src;					\
-		break;							\
-									\
-	case FI_PROD:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst * *_src;					\
-		break;							\
-									\
-	case FI_LOR:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst || *_src;					\
-		break;							\
-									\
-	case FI_LAND:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst && *_src;					\
-		break;							\
-									\
-	case FI_BOR:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst | *_src;					\
-		break;							\
-									\
-	case FI_BAND:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst & *_src;					\
-		break;							\
-									\
-	case FI_LXOR:							\
-		*_cmp = *_dst;						\
-									\
-		*_dst = ((*_dst && !*_src) || (!*_dst && *_src));	\
-		break;							\
-									\
-	case FI_BXOR:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst ^ *_src;					\
-		break;							\
-									\
-	case FI_ATOMIC_READ:						\
-		*_cmp = *_dst;						\
-		break;							\
-									\
-	case FI_ATOMIC_WRITE:						\
-		*_cmp = *_dst;						\
-		*_dst = *_src;						\
-		break;							\
-									\
-	case FI_CSWAP:							\
-		if (*_cmp == *_dst)					\
-			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
-		break;							\
-									\
-	case FI_CSWAP_NE:						\
-		_tmp = *_dst;						\
-		if (*_cmp != *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_LE:						\
-		_tmp = *_dst;						\
-		if (*_cmp <= *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_LT:						\
-		_tmp = *_dst;						\
-		if (*_cmp < *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_GE:						\
-		_tmp = *_dst;						\
-		if (*_cmp >= *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_GT:						\
-		_tmp = *_dst;						\
-		if (*_cmp > *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_MSWAP:							\
-		_tmp = *_dst;						\
-		*_dst = (*_src & *_cmp) | (*_dst & ~(*_cmp));		\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	default:							\
-		SOCK_LOG_ERROR("Atomic operation type not supported\n"); \
-		break;							\
-	}								\
-} while (0)
-
-#define SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst) do {			\
-	switch (op) {							\
-	case FI_MIN:							\
-		*_cmp = *_dst;						\
-		if (*_src < *_dst)					\
-			*_dst = *_src;					\
-		break;							\
-									\
-	case FI_MAX:							\
-		*_cmp = *_dst;						\
-		if (*_src > *_dst)					\
-			*_dst = *_src;					\
-		break;							\
-									\
-	case FI_SUM:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst + *_src;					\
-		break;							\
-									\
-	case FI_PROD:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst * *_src;					\
-		break;							\
-									\
-	case FI_LOR:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst || *_src;					\
-		break;							\
-									\
-	case FI_LAND:							\
-		*_cmp = *_dst;						\
-		*_dst = *_dst && *_src;					\
-		break;							\
-									\
-	case FI_LXOR:							\
-		*_cmp = *_dst;						\
-		*_dst = ((*_dst && !*_src) || (!*_dst && *_src));	\
-		break;							\
-									\
-	case FI_ATOMIC_READ:						\
-		*_cmp = *_dst;						\
-		break;							\
-									\
-	case FI_ATOMIC_WRITE:						\
-		*_cmp = *_dst;						\
-		*_dst = *_src;						\
-		break;							\
-									\
-	case FI_CSWAP:							\
-		if (*_cmp == *_dst)					\
-			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
-		break;							\
-									\
-	case FI_CSWAP_NE:						\
-		_tmp = *_dst;						\
-		if (*_cmp != *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_LE:						\
-		_tmp = *_dst;						\
-		if (*_cmp <= *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_LT:						\
-		_tmp = *_dst;						\
-		if (*_cmp < *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_GE:						\
-		_tmp = *_dst;						\
-		if (*_cmp >= *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	case FI_CSWAP_GT:						\
-		_tmp = *_dst;						\
-		if (*_cmp > *_dst)					\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	default:							\
-		SOCK_LOG_ERROR("Atomic operation type not supported\n"); \
-		break;							\
-	}								\
-} while (0)
-
-#define SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, _name) do {	\
-	switch (op) {							\
-	case FI_SUM:							\
-		*_cmp = *_dst;						\
-		*_dst = OFI_COMPLEX_OP(_name, sum)(*_dst, *_src);		\
-		break;							\
-									\
-	case FI_PROD:							\
-		*_cmp = *_dst;						\
-		*_dst = OFI_COMPLEX_OP(_name, mul)(*_dst, *_src);		\
-		break;							\
-									\
-	case FI_LOR:							\
-		*_cmp = *_dst;						\
-		*_dst = OFI_COMPLEX_OP(_name, lor)(*_dst, *_src);		\
-		break;							\
-									\
-	case FI_LAND:							\
-		*_cmp = *_dst;						\
-		*_dst = OFI_COMPLEX_OP(_name, land)(*_dst, *_src);		\
-		break;							\
-									\
-	case FI_ATOMIC_READ:						\
-		*_cmp = *_dst;						\
-		break;							\
-									\
-	case FI_ATOMIC_WRITE:						\
-		*_cmp = *_dst;						\
-		*_dst = *_src;						\
-		break;							\
-									\
-	case FI_CSWAP:							\
-		if (OFI_COMPLEX_OP(_name, equ)(*_dst, *_src))		\
-			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
-		break;							\
-									\
-	case FI_CSWAP_NE:						\
-		_tmp = *_dst;						\
-		if (!OFI_COMPLEX_OP(_name, equ)(*_dst, *_src))		\
-			*_dst = *_src;					\
-		*_cmp = _tmp;						\
-		break;							\
-									\
-	default:							\
-		SOCK_LOG_ERROR("Atomic operation type not supported\n");\
-		break;							\
-	}								\
-} while (0)
-
-
-static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
-				 enum fi_datatype datatype, enum fi_op op)
+/*
+ * Provider re-uses compare buffer to return result.  This can be optimized
+ * in the future to have a separate buffer.
+ */
+static void sock_pe_do_atomic(void *cmp, void *dst, void *src,
+			      enum fi_datatype datatype, enum fi_op op,
+			      size_t cnt, int fetch)
 {
-	switch (datatype) {
-	case FI_INT8:
-	{
-		int8_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
-	}
+	char tmp_result[SOCK_EP_MAX_ATOMIC_SZ];
 
-	case FI_UINT8:
-	{
-		uint8_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
+	if (op >= OFI_SWAP_OP_START) {
+		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
+			src, cmp, tmp_result, cnt);
+		memcpy(cmp, tmp_result, ofi_datatype_size(datatype) * cnt);
+	} else if (fetch) {
+		ofi_atomic_readwrite_handlers[op][datatype](dst, src,
+			cmp /*results*/, cnt);
+	} else {
+		ofi_atomic_write_handlers[op][datatype](dst, src, cnt);
 	}
-
-	case FI_INT16:
-	{
-		int16_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
-	}
-
-	case FI_UINT16:
-	{
-		uint16_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
-	}
-
-	case FI_INT32:
-	{
-		int32_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
-	}
-
-	case FI_UINT32:
-	{
-		uint32_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
-	}
-
-	case FI_INT64:
-	{
-		int64_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
-	}
-
-	case FI_UINT64:
-	{
-		uint64_t *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp);
-		break;
-	}
-
-	case FI_FLOAT:
-	{
-		float *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
-		break;
-	}
-
-	case FI_DOUBLE:
-	{
-		double *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
-		break;
-	}
-
-	case FI_LONG_DOUBLE:
-	{
-		long double *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
-		break;
-	}
-
-	case FI_DOUBLE_COMPLEX:
-	{
-		OFI_COMPLEX(double) *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, double);
-		break;
-	}
-
-	case FI_FLOAT_COMPLEX:
-	{
-		OFI_COMPLEX(float) *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, float);
-		break;
-	}
-
-	case FI_LONG_DOUBLE_COMPLEX:
-	{
-		OFI_COMPLEX(long_double) *_cmp, *_dst, *_src, _tmp;
-		_cmp = cmp, _src = src, _dst = dst;
-		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst, long_double);
-		break;
-	}
-
-	default:
-		SOCK_LOG_ERROR("Atomic datatype not supported\n");
-		break;
-	}
-	return 0;
 }
-
 
 static int sock_pe_recv_atomic_hdrs(struct sock_pe *pe,
 				    struct sock_pe_entry *pe_entry,
@@ -1226,7 +858,7 @@ static int sock_pe_recv_atomic_hdrs(struct sock_pe *pe,
 	len += *entry_len;
 
 	*entry_len = 0;
-	*datatype_sz = fi_datatype_size(pe_entry->pe.rx.rx_op.atomic.datatype);
+	*datatype_sz = ofi_datatype_size(pe_entry->pe.rx.rx_op.atomic.datatype);
 	for (i = 0; i < pe_entry->pe.rx.rx_op.dest_iov_len; i++) {
 		*entry_len += pe_entry->pe.rx.rx_iov[i].ioc.count;
 	}
@@ -1257,7 +889,6 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 				struct sock_pe_entry *pe_entry)
 {
 	int i, ret = 0;
-	size_t j;
 	size_t datatype_sz;
 	struct sock_mr *mr;
 	uint64_t offset, entry_len;
@@ -1295,15 +926,14 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 
 	offset = 0;
 	for (i = 0; i < pe_entry->pe.rx.rx_op.dest_iov_len; i++) {
-		for (j = 0; j < pe_entry->pe.rx.rx_iov[i].ioc.count; j++) {
-			sock_pe_update_atomic(pe_entry->pe.rx.atomic_cmp + offset,
-				(char *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].
-					ioc.addr + j * datatype_sz,
-				pe_entry->pe.rx.atomic_src + offset,
-				pe_entry->pe.rx.rx_op.atomic.datatype,
-				pe_entry->pe.rx.rx_op.atomic.op);
-			offset += datatype_sz;
-		}
+		sock_pe_do_atomic(pe_entry->pe.rx.atomic_cmp + offset,
+			(char *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].ioc.addr,
+			pe_entry->pe.rx.atomic_src + offset,
+			pe_entry->pe.rx.rx_op.atomic.datatype,
+			pe_entry->pe.rx.rx_op.atomic.op,
+			pe_entry->pe.rx.rx_iov[i].ioc.count,
+			pe_entry->pe.rx.rx_op.atomic.res_iov_len);
+		offset += datatype_sz * pe_entry->pe.rx.rx_iov[i].ioc.count;
 	}
 
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
@@ -1493,7 +1123,7 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry pe_entry;
 	struct sock_rx_entry *rx_buffered, *rx_posted;
-	size_t i, j, rem = 0, offset, len, used_len, dst_offset, datatype_sz;
+	size_t i, rem = 0, offset, len, used_len, dst_offset, datatype_sz;
 	char *src, *dst;
 
 	if (dlist_empty(&rx_ctx->rx_entry_list) ||
@@ -1521,7 +1151,7 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 			      rx_posted, rx_ctx);
 
 		datatype_sz = (rx_buffered->flags & FI_ATOMIC) ?
-			fi_datatype_size(rx_buffered->rx_op.atomic.datatype) : 0;
+			ofi_datatype_size(rx_buffered->rx_op.atomic.datatype) : 0;
 		offset = 0;
 		rem = rx_buffered->iov[0].iov.len;
 		rx_ctx->buffered_len -= rem;
@@ -1546,13 +1176,9 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 			if (datatype_sz) {
 				int cnt = len / datatype_sz;
 
-				for (j = 0; j < cnt; j++) {
-					sock_pe_update_atomic(NULL,
-						dst + j * datatype_sz,
-						src + j * datatype_sz,
-						rx_buffered->rx_op.atomic.datatype,
-						rx_buffered->rx_op.atomic.op);
-				}
+				sock_pe_do_atomic(NULL, dst, src,
+					rx_buffered->rx_op.atomic.datatype,
+					rx_buffered->rx_op.atomic.op, cnt, 0);
 			} else {
 				memcpy(dst, src, len);
 			}
@@ -1973,7 +1599,7 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 		return 0;
 	len += entry_len;
 
-	datatype_sz = fi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
+	datatype_sz = ofi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
 	if (pe_entry->flags & FI_INJECT) {
 		/* cmp data */
 		if (sock_pe_send_field(pe_entry,
@@ -2496,7 +2122,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		break;
 	case SOCK_OP_ATOMIC:
 		msg_hdr->msg_len += sizeof(struct sock_op);
-		datatype_sz = fi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
+		datatype_sz = ofi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
 		if (pe_entry->flags & FI_INJECT) {
 			ofi_rbread(&tx_ctx->rb, &pe_entry->pe.tx.inject[0],
 				 pe_entry->pe.tx.tx_op.src_iov_len);

@@ -381,6 +381,7 @@
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release - ICC|x64'">fi_osd.h</ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="prov\util\src\util_attr.c" />
+    <ClCompile Include="prov\util\src\util_atomic.c" />
     <ClCompile Include="prov\util\src\util_av.c" />
     <ClCompile Include="prov\util\src\util_buf.c" />
     <ClCompile Include="prov\util\src\util_cq.c" />
@@ -412,6 +413,7 @@
     <ClInclude Include="include\fi.h" />
     <ClInclude Include="include\fi_abi.h" />
     <ClInclude Include="include\fi_atom.h" />
+    <ClInclude Include="include\ofi_atomic.h" />
     <ClInclude Include="include\fi_enosys.h" />
     <ClInclude Include="include\fi_file.h" />
     <ClInclude Include="include\fi_indexer.h" />

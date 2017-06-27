@@ -397,7 +397,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		key = args[3].u64;
 		datatype = args[4].u32w0;
 		op = args[4].u32w1;
-		assert(len == fi_datatype_size(datatype) * count);
+		assert(len == ofi_datatype_size(datatype) * count);
 
 		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
@@ -435,9 +435,9 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		op = args[4].u32w1;
 
 		if (op == FI_ATOMIC_READ)
-			len = fi_datatype_size(datatype) * count;
+			len = ofi_datatype_size(datatype) * count;
 
-		assert(len == fi_datatype_size(datatype) * count);
+		assert(len == ofi_datatype_size(datatype) * count);
 
 		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
@@ -485,7 +485,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		datatype = args[4].u32w0;
 		op = args[4].u32w1;
 		len /= 2;
-		assert(len == fi_datatype_size(datatype) * count);
+		assert(len == ofi_datatype_size(datatype) * count);
 
 		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
@@ -616,7 +616,7 @@ static int psmx_atomic_self(int am_cmd,
 	else
 		access = FI_REMOTE_READ | FI_REMOTE_WRITE;
 
-	len = fi_datatype_size(datatype) * count;
+	len = ofi_datatype_size(datatype) * count;
 	mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 	op_error = mr ?  psmx_mr_validate(mr, addr, len, access) : -FI_EINVAL;
 
@@ -804,7 +804,7 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 					context, flags);
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
-	len = fi_datatype_size(datatype)* count;
+	len = ofi_datatype_size(datatype)* count;
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
@@ -991,7 +991,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 					context, flags);
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
-	len = fi_datatype_size(datatype) * count;
+	len = ofi_datatype_size(datatype) * count;
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
@@ -1197,7 +1197,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 					context, flags);
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
-	len = fi_datatype_size(datatype) * count;
+	len = ofi_datatype_size(datatype) * count;
 	if (len * 2 > chunk_size)
 		return -FI_EMSGSIZE;
 
@@ -1357,7 +1357,7 @@ static int psmx_atomic_writevalid(struct fid_ep *ep,
 	if (count) {
 		chunk_size = MIN(PSMX_AM_CHUNK_SIZE,
 				 psmx_am_param.max_request_short);
-		*count = chunk_size / fi_datatype_size(datatype);
+		*count = chunk_size / ofi_datatype_size(datatype);
 	}
 	return 0;
 }
@@ -1393,7 +1393,7 @@ static int psmx_atomic_readwritevalid(struct fid_ep *ep,
 	if (count) {
 		chunk_size = MIN(PSMX_AM_CHUNK_SIZE,
 				 psmx_am_param.max_request_short);
-		*count = chunk_size / fi_datatype_size(datatype);
+		*count = chunk_size / ofi_datatype_size(datatype);
 	}
 	return 0;
 }
@@ -1439,7 +1439,7 @@ static int psmx_atomic_compwritevalid(struct fid_ep *ep,
 	if (count) {
 		chunk_size = MIN(PSMX_AM_CHUNK_SIZE,
 				 psmx_am_param.max_request_short);
-		*count = chunk_size / (2 * fi_datatype_size(datatype));
+		*count = chunk_size / (2 * ofi_datatype_size(datatype));
 	}
 	return 0;
 }

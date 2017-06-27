@@ -542,7 +542,7 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		compare_operand = *(uint64_t *)comparev[0].addr;
 	}
 
-	dt_len = fi_datatype_size(msg->datatype);
+	dt_len = ofi_datatype_size(msg->datatype);
 	dt_align = dt_len - 1;
 	len = dt_len * msg->msg_iov->count;
 
