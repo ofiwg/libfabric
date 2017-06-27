@@ -864,20 +864,26 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 	return 0;
 }
 
-/* TODO: retry send for unreliable endpoints */
 int ft_init_av(void)
+{
+	return ft_init_av_dst_addr(av, ep, &remote_fi_addr);
+}
+
+/* TODO: retry send for unreliable endpoints */
+int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
+		fi_addr_t *remote_addr)
 {
 	size_t addrlen;
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
+		ret = ft_av_insert(av_ptr, fi->dest_addr, 1, remote_addr, 0, NULL);
 		if (ret)
 			return ret;
 
 		addrlen = FT_MAX_CTRL_MSG;
-		ret = fi_getname(&ep->fid, (char *) tx_buf + ft_tx_prefix_size(),
-				 &addrlen);
+		ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
+				&addrlen);
 		if (ret) {
 			FT_PRINTERR("fi_getname", ret);
 			return ret;
@@ -888,20 +894,79 @@ int ft_init_av(void)
 			return ret;
 
 		ret = ft_rx(ep, 1);
+		if (ret)
+			return ret;
 	} else {
 		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
 		if (ret)
 			return ret;
 
-		ret = ft_av_insert(av, (char *) rx_buf + ft_rx_prefix_size(),
-				   1, &remote_fi_addr, 0, NULL);
+		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
+				1, remote_addr, 0, NULL);
 		if (ret)
 			return ret;
 
 		ret = (int) ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+		if (ret)
+			return ret;
 	}
 
-	return ret;
+	return 0;
+}
+
+/* TODO: retry send for unreliable endpoints */
+int ft_init_av_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
+		fi_addr_t *remote_addr)
+{
+	size_t addrlen;
+	int ret;
+
+	if (opts.dst_addr) {
+		addrlen = FT_MAX_CTRL_MSG;
+		ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
+				 &addrlen);
+		if (ret) {
+			FT_PRINTERR("fi_getname", ret);
+			return ret;
+		}
+
+		ret = (int) ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
+		if (ret)
+			return ret;
+
+		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
+		if (ret)
+			return ret;
+
+		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
+				1, remote_addr, 0, NULL);
+		if (ret)
+			return ret;
+	} else {
+		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
+		if (ret)
+			return ret;
+
+		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
+				   1, remote_addr, 0, NULL);
+		if (ret)
+			return ret;
+
+		addrlen = FT_MAX_CTRL_MSG;
+		ret = fi_getname(&ep_ptr->fid,
+				(char *) tx_buf + ft_tx_prefix_size(),
+				&addrlen);
+		if (ret) {
+			FT_PRINTERR("fi_getname", ret);
+			return ret;
+		}
+
+		ret = (int) ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 int ft_exchange_keys(struct fi_rma_iov *peer_iov)

@@ -38,6 +38,7 @@
 #include <inttypes.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
+#include <stdbool.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_rma.h>
@@ -310,6 +311,10 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 		uint64_t flags, void *context);
 int ft_init_av(void);
 int ft_join_mc(void);
+int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
+		fi_addr_t *remote_addr);
+int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
+		fi_addr_t *addr);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);

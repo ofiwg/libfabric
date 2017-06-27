@@ -103,6 +103,7 @@ simple_tests=(
 	"rdm_shared_av"
 	"multi_mr -e msg -V"
 	"multi_mr -e rdm -V"
+	"rdm_multi_domain -V"
 )
 
 short_tests=(
