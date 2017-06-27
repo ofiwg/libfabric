@@ -245,7 +245,6 @@ struct psmx_fid_fabric {
 	struct util_fabric	util_fabric;
 	struct psmx_fid_domain	*active_domain;
 	psm_uuid_t		uuid;
-	pthread_t		name_server_thread;
 	struct util_ns		name_server;
 };
 
