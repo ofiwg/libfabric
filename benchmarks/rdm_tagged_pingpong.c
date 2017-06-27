@@ -96,7 +96,8 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_TAGGED;
-	hints->mode = FI_LOCAL_MR | FI_CONTEXT;
+	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
 

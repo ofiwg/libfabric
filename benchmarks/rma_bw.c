@@ -125,7 +125,8 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_MSG | FI_RMA;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA;
+	hints->mode = FI_CONTEXT | FI_RX_CQ_DATA;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
 

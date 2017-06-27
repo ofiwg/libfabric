@@ -672,7 +672,9 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
+
 	if (tx_shared_ctx)
 		hints->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	if (rx_shared_ctx)

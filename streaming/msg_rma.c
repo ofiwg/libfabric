@@ -137,7 +137,8 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_LOCAL_MR | FI_RX_CQ_DATA;
+	hints->mode = FI_RX_CQ_DATA;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
 

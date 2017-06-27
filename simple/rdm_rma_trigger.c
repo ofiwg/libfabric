@@ -143,7 +143,8 @@ int main(int argc, char **argv)
 	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA | FI_RMA_EVENT | FI_TRIGGER;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run_test();
 

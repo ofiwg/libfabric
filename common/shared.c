@@ -385,7 +385,7 @@ int ft_alloc_msgs(void)
 
 	remote_cq_data = ft_init_cq_data(fi);
 
-	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
+	if (!ft_skip_mr && ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
 		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi),
 				0, FT_MR_KEY, 0, &mr, NULL);

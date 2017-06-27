@@ -181,7 +181,8 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_DGRAM;
 	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
 

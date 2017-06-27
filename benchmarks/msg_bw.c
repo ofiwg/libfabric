@@ -109,7 +109,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
-	hints->mode = FI_LOCAL_MR;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
 
