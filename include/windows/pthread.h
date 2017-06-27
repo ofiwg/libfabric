@@ -1,5 +1,24 @@
 /*
-* Copyright (c) 2016 Intel Corporation.  All rights reserved.
+* Copyright (c) 2017 Intel Corporation. All rights reserved.
+*
+* This software is available to you under a choice of one of two
+* licenses.  You may choose to be licensed under the terms of the GNU
+* General Public License (GPL) Version 2, available from the file
+* COPYING in the main directory of this source tree, or the
+* BSD license below:
+*
+*     Redistribution and use in source and binary forms, with or
+*     without modification, are permitted provided that the following
+*     conditions are met:
+*
+*      - Redistributions of source code must retain the above
+*        copyright notice, this list of conditions and the following
+*        disclaimer.
+*
+*      - Redistributions in binary form must reproduce the above
+*        copyright notice, this list of conditions and the following
+*        disclaimer in the documentation and/or other materials
+*        provided with the distribution.
 *
 * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -79,7 +98,7 @@ static DWORD WINAPI ofi_thread_starter(void* arg)
 
 static inline int pthread_create(pthread_t* thread, void* attr, void *(*routine)(void*), void* arg)
 {
-	attr; /* suppress warning */
+	(void) attr;
 	fi_thread_arg* data = (fi_thread_arg*)malloc(sizeof(*data));
 	data->routine = routine;
 	data->arg = arg;
@@ -88,4 +107,72 @@ static inline int pthread_create(pthread_t* thread, void* attr, void *(*routine)
 	return *thread == 0;
 }
 
+static inline int pthread_equal(pthread_t t1, pthread_t t2)
+{
+	(void)t1;
+	(void)t2;
+	/*
+	 * TODO: temporary solution
+	 * Need to implement
+	 */
+	return ENOSYS;
+}
 
+static inline int pthread_cancel(pthread_t thread)
+{
+	(void)thread;
+	/*
+	 * TODO: temporary solution
+	 * Need to implement
+	 */
+	return ENOSYS;
+}
+
+static inline pthread_t pthread_self(void)
+{
+	/*
+	 * TODO: temporary solution
+	 * Need to implement
+	 */
+	return (pthread_t) ENOSYS;
+}
+
+/*
+ * TODO: temporary solution
+ * Need to re-implement
+ */
+typedef void(*pthread_cleanup_callback_t)(void *);
+typedef struct pthread_cleanup_t
+{
+	pthread_cleanup_callback_t routine;
+	void *arg;
+} pthread_cleanup_t;
+#ifndef __cplusplus 
+#define pthread_cleanup_push(_rout, _arg)				\
+{									\
+	pthread_cleanup_t _cleanup = {					\
+		.routine = (pthread_cleanup_callback_t) (_rout),	\
+		.arg = (_arg),						\
+	};								\
+
+#define pthread_cleanup_pop(_execute)					\
+	if (_execute)							\
+		(void) (*(_cleanup.routine))(_cleanup.arg);		\
+}
+#else
+#define pthread_cleanup_push(_rout, _arg)				\
+{									\
+	pthread_cleanup_t _cleanup;					\
+	_cleanup.routine = (pthread_cleanup_callback_t) _rout,		\
+	_cleanup.arg = (_arg);						\
+	__try								\
+	{								\
+
+#define pthread_cleanup_pop(_execute)					\
+	}								\
+	__finally {							\
+		if( _execute || AbnormalTermination())			\
+			(*(_cleanup.routine))(_cleanup.arg);		\
+	}								\
+}
+#endif

@@ -352,6 +352,7 @@ struct psmx2_fid_fabric {
 	struct psmx2_fid_domain	*active_domain;
 	psm2_uuid_t		uuid;
 	pthread_t		name_server_thread;
+	struct util_ns		name_server;
 };
 
 struct psmx2_trx_ctxt {
@@ -954,12 +955,22 @@ struct	psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 					     struct psmx2_ep_name *src_addr,
 					     int sep_ctxt_idx);
 
-void	psmx2_ns_start_server(struct psmx2_fid_fabric *fabric);
-void	psmx2_ns_stop_server(struct psmx2_fid_fabric *fabric);
-void	psmx2_ns_add_local_name(int service, struct psmx2_ep_name *name);
-void	psmx2_ns_del_local_name(int service, struct psmx2_ep_name *name);
-void	*psmx2_ns_resolve_name(const char *server, int *service);
 
+static inline
+int	psmx2_ns_service_cmp(void *svc1, void *svc2)
+{
+	int service1 = *(int *)svc1, service2 = *(int *)svc2;
+	if (service1 == PSMX2_ANY_SERVICE ||
+	    service2 == PSMX2_ANY_SERVICE)
+		return 0;
+	return (service1 < service2) ?
+		-1 : (service1 > service2);
+}
+static inline
+int	psmx2_ns_is_service_wildcard(void *svc)
+{
+	return (*(int *)svc == PSMX2_ANY_SERVICE);
+}
 void	psmx2_get_uuid(psm2_uuid_t uuid);
 int	psmx2_uuid_to_port(psm2_uuid_t uuid);
 char	*psmx2_uuid_to_string(psm2_uuid_t uuid);

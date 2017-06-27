@@ -348,6 +348,9 @@
     <ClCompile Include="prov\netdir\src\netdir_ndinit.c">
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\util\src\util_ns.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h">

@@ -58,6 +58,8 @@
 #include <fi_osd.h>
 #include <fi_indexer.h>
 
+#include "rbtree.h"
+
 #ifndef _FI_UTIL_H_
 #define _FI_UTIL_H_
 
@@ -653,5 +655,47 @@ const char *ofi_core_name(const char *prov_name, size_t *len);
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		int readonly, void **mapped);
 int ofi_shm_unmap(struct util_shm *shm);
+
+/*
+ * Name Server TODO: add support for Windows OS
+ * (osd/windows/pthread.h should be extended)
+ */
+
+typedef int(*ofi_ns_service_cmp_func_t)(void *svc1, void *svc2);
+typedef int(*ofi_ns_is_service_wildcard_func_t)(void *svc);
+
+struct util_ns {
+	RbtHandle	ns_map;
+	char		*ns_hostname;
+	int		ns_port;
+	pthread_t	ns_thread;
+
+	size_t	name_len;
+	size_t	service_len;
+
+	ofi_ns_service_cmp_func_t	service_cmp;
+
+	ofi_ns_is_service_wildcard_func_t is_service_wildcard;
+};
+
+struct util_ns_attr {
+	char	*ns_hostname;
+	int	ns_port;
+
+	size_t	name_len;
+	size_t	service_len;
+
+	ofi_ns_service_cmp_func_t	service_cmp;
+
+	ofi_ns_is_service_wildcard_func_t is_service_wildcard;
+};
+
+int ofi_ns_init(struct util_ns_attr *attr, struct util_ns *ns);
+void ofi_ns_start_server(struct util_ns *ns);
+void ofi_ns_stop_server(struct util_ns *ns);
+int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name);
+int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
+void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
+			  void *service);
 
 #endif

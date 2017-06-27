@@ -265,7 +265,9 @@ static int psmx2_ep_close(fid_t fid)
 
 	ep_name.epid = ep->trx_ctxt->psm2_epid;
 	ep_name.vlane = ep->vlane;
-	psmx2_ns_del_local_name(ep->service, &ep_name);
+
+	ofi_ns_del_local_name(&ep->domain->fabric->name_server,
+			      &ep->service, &ep_name);
 
 	ep->domain->eps[ep->vlane] = NULL;
 	psmx2_free_vlane(ep->domain, ep->vlane);
@@ -654,7 +656,9 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
 	ep_name.vlane = ep_priv->vlane;
 	ep_name.type = ep_priv->type;
-	psmx2_ns_add_local_name(ep_priv->service, &ep_name);
+
+	ofi_ns_add_local_name(&domain_priv->fabric->name_server,
+			      &ep_priv->service, &ep_name);
 
 	*ep = &ep_priv->ep;
 	return 0;
@@ -781,7 +785,9 @@ static int psmx2_sep_close(fid_t fid)
 	ep_name.epid = sep->domain->base_trx_ctxt->psm2_epid;
 	ep_name.sep_id = sep->id;
 	ep_name.type = sep->type;
-	psmx2_ns_del_local_name(sep->service, &ep_name);
+
+	ofi_ns_del_local_name(&sep->domain->fabric->name_server,
+			      &sep->service, &ep_name);
 
 	fastlock_acquire(&sep->domain->sep_lock);
 	dlist_remove(&sep->entry);
@@ -1008,7 +1014,9 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
 	ep_name.sep_id = sep_priv->id;
 	ep_name.type = sep_priv->type;
-	psmx2_ns_add_local_name(sep_priv->service, &ep_name);
+
+	ofi_ns_add_local_name(&domain_priv->fabric->name_server,
+			      &sep_priv->service, &ep_name);
 
 	*sep = &sep_priv->ep;
 	return 0;

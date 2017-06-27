@@ -44,13 +44,13 @@ static int psmx2_fabric_close(fid_t fid)
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "refcnt=%d\n",
 		ofi_atomic_get32(&fabric->util_fabric.ref));
 
+	if (psmx2_env.name_server)
+		ofi_ns_stop_server(&fabric->name_server);
+
 	psmx2_fabric_release(fabric);
 
 	if (ofi_fabric_close(&fabric->util_fabric))
 		return 0;
-
-	if (psmx2_env.name_server)
-		psmx2_ns_stop_server(fabric);
 
 	if (fabric->active_domain) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE, "forced closing of active_domain\n");
@@ -103,10 +103,33 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 	if (!fabric_priv)
 		return -FI_ENOMEM;
 
+	psmx2_get_uuid(fabric_priv->uuid);
+	if (psmx2_env.name_server) {
+		struct util_ns_attr ns_attr = {
+			.ns_port = psmx2_uuid_to_port(fabric_priv->uuid),
+			.name_len = sizeof(struct psmx2_ep_name),
+			.service_len = sizeof(int),
+			.service_cmp = psmx2_ns_service_cmp,
+			.is_service_wildcard = psmx2_ns_is_service_wildcard,
+		};
+		ret = ofi_ns_init(&ns_attr,
+				  &fabric_priv->name_server);
+		if (ret) {
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			        "ofi_ns_init returns %d\n", ret);
+			free(fabric_priv);
+			return ret;
+		}
+
+		ofi_ns_start_server(&fabric_priv->name_server);
+	}
+
 	ret = ofi_fabric_init(&psmx2_prov, &psmx2_fabric_attr, attr,
 			     &fabric_priv->util_fabric, context);
 	if (ret) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "ofi_fabric_init returns %d\n", ret);
+		if (psmx2_env.name_server)
+			ofi_ns_stop_server(&fabric_priv->name_server);
 		free(fabric_priv);
 		return ret;
 	}
@@ -114,11 +137,6 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 	/* fclass & context initialized in ofi_fabric_init */
 	fabric_priv->util_fabric.fabric_fid.fid.ops = &psmx2_fabric_fi_ops;
 	fabric_priv->util_fabric.fabric_fid.ops = &psmx2_fabric_ops;
-
-	psmx2_get_uuid(fabric_priv->uuid);
-
-	if (psmx2_env.name_server)
-		psmx2_ns_start_server(fabric_priv);
 
 	psmx2_query_mpi();
 
