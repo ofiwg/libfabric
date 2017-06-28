@@ -217,9 +217,9 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->ep_attr->type	= FI_EP_MSG;
-	hints->caps		= FI_MSG;
-	hints->mode		= FI_LOCAL_MR;
+	hints->ep_attr->type		= FI_EP_MSG;
+	hints->caps			= FI_MSG;
+	hints->domain_attr->mr_mode 	= FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
 

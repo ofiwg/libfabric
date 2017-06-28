@@ -523,7 +523,7 @@ int main(int argc, char *argv[])
 
 	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG;
-	hints->mode = FI_LOCAL_MR;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	rc = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (rc)

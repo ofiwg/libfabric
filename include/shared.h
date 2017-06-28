@@ -55,6 +55,8 @@ extern "C" {
 #define OFI_UTIL_PREFIX "ofi-"
 #define OFI_NAME_DELIM ';'
 
+#define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
+
 /* exit codes must be 0-255 */
 static inline int ft_exit_code(int ret)
 {

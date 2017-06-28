@@ -95,7 +95,7 @@ static int create_messages(struct cma_node *node)
 		return -1;
 	}
 
-	if (fi->mode & FI_LOCAL_MR) {
+	if (fi->domain_attr->mr_mode & FI_MR_LOCAL) {
 		ret = fi_mr_reg(node->domain, node->mem, hints->ep_attr->max_msg_size,
 				FI_SEND | FI_RECV, 0, 0, 0, &node->mr, NULL);
 		if (ret) {
@@ -509,9 +509,7 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_MSG;
 	hints->ep_attr->type = FI_EP_MSG;
-	hints->mode = FI_LOCAL_MR;
-	hints->tx_attr->mode = hints->mode;
-	hints->rx_attr->mode = hints->mode;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	hints->ep_attr->max_msg_size = 100;
 	hints->tx_attr->size = 10;
