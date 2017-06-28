@@ -452,12 +452,40 @@ int ft_alloc_ep_res(struct fi_info *fi)
 			cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	}
 
-	ft_cq_set_wait_attr();
-	cq_attr.size = fi->tx_attr->size;
-	ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
+	if (opts.options & FT_OPT_CQ_SHARED) {
+		ft_cq_set_wait_attr();
+		cq_attr.size = 0;
+
+		if (opts.tx_cq_size)
+			cq_attr.size += opts.tx_cq_size;
+		else
+			cq_attr.size += fi->tx_attr->size;
+
+		if (opts.rx_cq_size)
+			cq_attr.size += opts.rx_cq_size;
+		else
+			cq_attr.size += fi->rx_attr->size;
+
+		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
+		rxcq = txcq;
+	}
+
+	if (!(opts.options & FT_OPT_CQ_SHARED)) {
+		ft_cq_set_wait_attr();
+		if (opts.tx_cq_size)
+			cq_attr.size = opts.tx_cq_size;
+		else
+			cq_attr.size = fi->tx_attr->size;
+
+		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
 	}
 
 	if (opts.options & FT_OPT_TX_CNTR) {
@@ -469,12 +497,18 @@ int ft_alloc_ep_res(struct fi_info *fi)
 		}
 	}
 
-	ft_cq_set_wait_attr();
-	cq_attr.size = fi->rx_attr->size;
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
+	if (!(opts.options & FT_OPT_CQ_SHARED)) {
+		ft_cq_set_wait_attr();
+		if (opts.rx_cq_size)
+			cq_attr.size = opts.rx_cq_size;
+		else
+			cq_attr.size = fi->rx_attr->size;
+
+		ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
 	}
 
 	if (opts.options & FT_OPT_RX_CNTR) {
@@ -1096,8 +1130,12 @@ static void ft_close_fids(void)
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(pep);
 	FT_CLOSE_FID(pollset);
-	FT_CLOSE_FID(rxcq);
-	FT_CLOSE_FID(txcq);
+	if (opts.options & FT_OPT_CQ_SHARED) {
+		FT_CLOSE_FID(txcq);
+	} else {
+		FT_CLOSE_FID(rxcq);
+		FT_CLOSE_FID(txcq);
+	}
 	FT_CLOSE_FID(rxcntr);
 	FT_CLOSE_FID(txcntr);
 	FT_CLOSE_FID(av);
@@ -2083,6 +2121,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_multi_ep");
 	FT_PRINT_OPTS_USAGE("", "fi_recv_cancel");
 	FT_PRINT_OPTS_USAGE("", "fi_unexpected_msg");
+	FT_PRINT_OPTS_USAGE("", "fi_resmgmt_test");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 

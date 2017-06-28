@@ -25,6 +25,7 @@ bin_PROGRAMS = \
 	simple/fi_multi_ep \
 	simple/fi_recv_cancel \
 	simple/fi_unexpected_msg \
+	streaming/fi_resmgmt_test \
 	streaming/fi_msg_rma \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
@@ -183,6 +184,10 @@ simple_fi_rdm_multi_domain_LDADD = libfabtests.la
 simple_fi_recv_cancel_SOURCES = \
 	simple/recv_cancel.c
 simple_fi_recv_cancel_LDADD = libfabtests.la
+
+streaming_fi_resmgmt_test_SOURCES = \
+	streaming/resmgmt_test.c
+streaming_fi_resmgmt_test_LDADD = libfabtests.la
 
 streaming_fi_msg_rma_SOURCES = \
 	streaming/msg_rma.c
