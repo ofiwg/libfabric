@@ -60,8 +60,12 @@
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
 
+#ifndef OFI_MR_BASIC_MAP
+#define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
+#endif
+
 #ifndef PP_FIVERSION
-#define PP_FIVERSION FI_VERSION(1, 4)
+#define PP_FIVERSION FI_VERSION(1, 5)
 #endif
 
 enum precision {
@@ -1307,7 +1311,7 @@ int pp_alloc_msgs(struct ct_pingpong *ct)
 
 	ct->remote_cq_data = pp_init_cq_data(ct->fi);
 
-	if (ct->fi->mode & FI_LOCAL_MR) {
+	if (ct->fi->domain_attr->mr_mode & FI_MR_LOCAL) {
 		ret = fi_mr_reg(ct->domain, ct->buf, ct->buf_size,
 				FI_SEND | FI_RECV, 0, PP_MR_KEY, 0, &(ct->mr),
 				NULL);
@@ -2139,7 +2143,8 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	ct.hints->ep_attr->type = FI_EP_DGRAM;
 	ct.hints->caps = FI_MSG;
-	ct.hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	ct.hints->mode = FI_CONTEXT;
+	ct.hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ofi_osd_init();
 
