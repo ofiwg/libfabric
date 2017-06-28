@@ -366,6 +366,8 @@ void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 
 	peer = rxd_ep_getpeer_info(ep, tx_entry->peer);
 	peer->active_tx_cnt--;
+	/* reset ID to invalid state to avoid ID collision */
+	tx_entry->msg_id = UINT64_MAX;
 	dlist_remove(&tx_entry->entry);
 	freestack_push(ep->tx_entry_fs, tx_entry);
 }
