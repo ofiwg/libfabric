@@ -285,11 +285,12 @@ static void *util_ns_name_server_func(void *args)
 	}
 
 	for (p = res; p; p = p->ai_next) {
-		listenfd = ofi_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		listenfd = ofi_socket(p->ai_family, p->ai_socktype,
+				      p->ai_protocol);
 		if (listenfd != INVALID_SOCKET) {
 			n = 1;
-			setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
-				   &n, sizeof(n));
+			(void) setsockopt(listenfd, SOL_SOCKET,
+					  SO_REUSEADDR, &n, sizeof(n));
 			if (!bind(listenfd, p->ai_addr, p->ai_addrlen))
 				break;
 			ofi_close_socket(listenfd);
@@ -303,12 +304,12 @@ static void *util_ns_name_server_func(void *args)
 	if (listenfd == INVALID_SOCKET)
 		return NULL;
 
-	if (util_ns_map_init(ns)) {
-		ofi_close_socket(listenfd);
-		return NULL;
-	}
+	if (util_ns_map_init(ns))
+		goto done;
 
-	listen(listenfd, 256);
+	ret = listen(listenfd, 256);
+	if (ret)
+		goto done;
 
 	cleanup_args[0] = (void *)(uintptr_t)listenfd;
 	cleanup_args[1] = (void *)ns;
@@ -317,7 +318,7 @@ static void *util_ns_name_server_func(void *args)
 
 	while (1) {
 		connfd = accept(listenfd, NULL, 0);
-		if (connfd >= 0) {
+		if (connfd != INVALID_SOCKET) {
 			/* Read service data */
 			ret = ofi_read_socket(connfd, &cmd, cmd_len);
 			if (ret == cmd_len) {
@@ -330,6 +331,8 @@ static void *util_ns_name_server_func(void *args)
 
 	pthread_cleanup_pop(1);
 
+done:
+	ofi_close_socket(listenfd);
 	return NULL;
 }
 
