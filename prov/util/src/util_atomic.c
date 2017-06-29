@@ -421,7 +421,7 @@ int ofi_atomic_valid(const struct fi_provider *prov,
 	}
 
 	if (flags & FI_FETCH_ATOMIC) {
-		if (op > OFI_READWRITE_OP_LAST) {
+		if (op >= OFI_READWRITE_OP_LAST) {
 			FI_INFO(prov, FI_LOG_DOMAIN, "Invalid fetch operation\n");
 			return -FI_EOPNOTSUPP;
 		}
@@ -433,7 +433,7 @@ int ofi_atomic_valid(const struct fi_provider *prov,
 		}
 		have_func = ofi_atomic_swap_handlers[op - FI_CSWAP][datatype] != NULL;
 	} else {
-		if (op > OFI_WRITE_OP_LAST) {
+		if (op >= OFI_WRITE_OP_LAST) {
 			FI_INFO(prov, FI_LOG_DOMAIN, "Invalid write operation\n");
 			return -FI_EOPNOTSUPP;
 		}
