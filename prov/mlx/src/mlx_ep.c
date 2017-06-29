@@ -78,14 +78,8 @@ static int mlx_ep_close(fid_t fid)
 
 	ucp_worker_flush(fid_ep->worker);
 	ucp_worker_destroy(fid_ep->worker);
-	if (fid_ep->ep.tx_cq) {
-		ofi_atomic_dec32(&(fid_ep->ep.tx_cq->ref));
-	}
-	if (fid_ep->ep.rx_cq) {
-		ofi_atomic_dec32(&(fid_ep->ep.rx_cq->ref));
-	}
 
-	ofi_atomic_dec32(&(fid_ep->ep.domain->ref));
+	ofi_endpoint_close(&fid_ep->ep);
 	free(fid_ep);
 	return FI_SUCCESS;
 }

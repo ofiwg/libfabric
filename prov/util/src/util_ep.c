@@ -129,6 +129,21 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 int ofi_endpoint_close(struct util_ep *util_ep)
 {
 	fastlock_destroy(&util_ep->lock);
+
+	if (util_ep->tx_cq) {
+		fid_list_remove(&util_ep->tx_cq->ep_list,
+				&util_ep->tx_cq->ep_list_lock,
+				&util_ep->ep_fid.fid);
+		ofi_atomic_dec32(&util_ep->tx_cq->ref);
+	}
+
+	if (util_ep->rx_cq) {
+		fid_list_remove(&util_ep->rx_cq->ep_list,
+				&util_ep->rx_cq->ep_list_lock,
+				&util_ep->ep_fid.fid);
+		ofi_atomic_dec32(&util_ep->rx_cq->ref);
+	}
+
 	if (util_ep->av) {
 		fastlock_acquire(&util_ep->av->lock);
 		dlist_remove(&util_ep->av_entry);
