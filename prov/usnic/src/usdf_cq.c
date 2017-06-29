@@ -93,7 +93,7 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 	USDF_TRACE_SYS(CQ, "\n");
 
 	cq = container_of(fcq, struct usdf_cq, cq_fid);
-	api_version = cq->cq_domain->dom_fabric->fab_attr.api_version;
+	api_version = cq->cq_domain->dom_fabric->fab_attr.fabric->api_version;
 
 	// The return values are analogous to sockets cq_readerr
 	if (cq->cq_comp.uc_status == 0) {
@@ -372,11 +372,7 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t count,
 			sin.sin_addr.s_addr = hdr->uh_ip.saddr;
 			sin.sin_port = hdr->uh_udp.source;
 
-			ret = fi_av_insert(av_utof(ep->e.dg.ep_av), &sin, 1,
-					src_addr, 0, NULL);
-			if (ret != 1) {
-				*src_addr = FI_ADDR_NOTAVAIL;
-			}
+			*src_addr = usdf_av_lookup_addr(ep->e.dg.ep_av, &sin);
 			++src_addr;
 		}
 

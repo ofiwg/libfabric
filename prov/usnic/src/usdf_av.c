@@ -745,3 +745,23 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	*av_o = av_utof(av);
 	return 0;
 }
+
+/* Look up if the sin address has been already inserted.
+ * if match, return the address of the dest pointer. otherwise,
+ * returns FI_ADDR_NOTAVAIL.
+ */
+fi_addr_t usdf_av_lookup_addr(struct usdf_av *av,
+			      const struct sockaddr_in *sin)
+{
+	struct usdf_dest *cur;
+	struct usd_udp_hdr u_hdr;
+
+	for (cur = av->av_addresses.lh_first; cur;
+	     cur = cur->ds_addresses_entry.le_next) {
+		u_hdr = cur->ds_dest.ds_dest.ds_udp.u_hdr;
+		if (sin->sin_addr.s_addr == u_hdr.uh_ip.daddr &&
+		    sin->sin_port == u_hdr.uh_udp.dest)
+			return (fi_addr_t)(uintptr_t)cur;
+	}
+	return FI_ADDR_NOTAVAIL;
+}
