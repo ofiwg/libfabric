@@ -1800,6 +1800,120 @@ int ft_get_tx_comp(uint64_t total)
 	return ret;
 }
 
+int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
+		size_t size, struct fi_context *ctx, int flags)
+{
+	int ret;
+	struct fi_msg msg;
+	struct fi_msg_tagged tagged_msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = tx_buf;
+	msg_iov.iov_len = size;
+
+	if (hints->caps & FI_TAGGED) {
+		tagged_msg.msg_iov = &msg_iov;
+		tagged_msg.desc = mr ? fi_mr_desc(mr) : 0;
+		tagged_msg.iov_count = 1;
+		tagged_msg.addr = fi_addr;
+		tagged_msg.data = NO_CQ_DATA;
+		tagged_msg.context = ctx;
+		tagged_msg.tag = ft_tag ? ft_tag : tx_seq;
+		tagged_msg.ignore = 0;
+
+		ret = fi_tsendmsg(ep, &tagged_msg, flags);
+		if (ret) {
+			FT_PRINTERR("fi_tsendmsg", ret);
+			return ret;
+		}
+	} else {
+		msg.msg_iov = &msg_iov;
+		msg.desc = mr ? fi_mr_desc(mr) : 0;
+		msg.iov_count = 1;
+		msg.addr = fi_addr;
+		msg.data = NO_CQ_DATA;
+		msg.context = ctx;
+
+		ret = fi_sendmsg(ep, &msg, flags);
+		if (ret) {
+			FT_PRINTERR("fi_sendmsg", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
+		size_t size, struct fi_context *ctx, int flags)
+{
+	int ret;
+	struct fi_msg msg;
+	struct fi_msg_tagged tagged_msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = rx_buf;
+	msg_iov.iov_len = size;
+
+	if (hints->caps & FI_TAGGED) {
+		tagged_msg.msg_iov = &msg_iov;
+		tagged_msg.desc = mr ? fi_mr_desc(mr) : 0;
+		tagged_msg.iov_count = 1;
+		tagged_msg.addr = fi_addr;
+		tagged_msg.data = NO_CQ_DATA;
+		tagged_msg.context = ctx;
+		tagged_msg.tag = ft_tag ? ft_tag : tx_seq;
+		tagged_msg.ignore = 0;
+
+		ret = fi_trecvmsg(ep, &tagged_msg, flags);
+		if (ret) {
+			FT_PRINTERR("fi_trecvmsg", ret);
+			return ret;
+		}
+	} else {
+		msg.msg_iov = &msg_iov;
+		msg.desc = mr ? fi_mr_desc(mr) : 0;
+		msg.iov_count = 1;
+		msg.addr = fi_addr;
+		msg.data = NO_CQ_DATA;
+		msg.context = ctx;
+
+		ret = fi_recvmsg(ep, &msg, flags);
+		if (ret) {
+			FT_PRINTERR("fi_recvmsg", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+int ft_cq_read_verify(struct fid_cq *cq, void *op_context)
+{
+	int ret;
+	struct fi_cq_err_entry completion;
+
+	do {
+		/* read events from the completion queue */
+		ret = fi_cq_read(cq, (void *)&completion, 1);
+
+		if (ret > 0) {
+			if (op_context != completion.op_context) {
+				fprintf(stderr, "ERROR: send ctx=%p cq_ctx=%p\n",
+					op_context, completion.op_context);
+				return -FI_EOTHER;
+			}
+		} else if ((ret <= 0) && (ret != -FI_EAGAIN)) {
+			FT_PRINTERR("POLL: Error\n", ret);
+			if (ret == -FI_EAVAIL)
+				FT_PRINTERR("POLL: error available\n", ret);
+			return -FI_EOTHER;
+		}
+	} while (ret == -FI_EAGAIN);
+
+	return 0;
+}
+
 int ft_cq_readerr(struct fid_cq *cq)
 {
 	struct fi_cq_err_entry cq_err;
@@ -2104,6 +2218,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_recv_cancel");
 	FT_PRINT_OPTS_USAGE("", "fi_unexpected_msg");
 	FT_PRINT_OPTS_USAGE("", "fi_resmgmt_test");
+	FT_PRINT_OPTS_USAGE("", "fi_inj_complete");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
