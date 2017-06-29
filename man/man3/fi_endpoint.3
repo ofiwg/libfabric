@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2017\-05\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2017\-06\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -9,8 +9,9 @@ Allocate or close an endpoint.
 .RE
 .TP
 .B fi_ep_bind
-Associate an endpoint with an event queue, completion queue, counter, or
-address vector
+Associate an endpoint with hardware resources, such as event queues,
+completion queues, counters, address vectors, or shared transmit/receive
+contexts.
 .RS
 .RE
 .TP
@@ -393,6 +394,7 @@ Furthermore, providers may limit CQ and counter bindings to endpoints of
 the same endpoint type (DGRAM, MSG, RDM, etc.).
 .PP
 Connectionless endpoints must be bound to a single address vector.
+.PP
 If an endpoint is using a shared transmit and/or receive context, the
 shared contexts must be bound to the endpoint.
 CQs, counters, AV, and shared contexts must be bound to endpoints before
