@@ -284,62 +284,63 @@ static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 }
 
 /* complex operations implementation */
-#define OFI_COMPLEX(name) ofi_##name##_complex
-#define OFI_COMPLEX_BASE(name) OFI_COMPLEX(name)##_base
-#define OFI_COMPLEX_OP(name, op) ofi_complex_##name##_##op
-#define OFI_COMPLEX_TYPE_DECL(name, type)	\
-typedef type OFI_COMPLEX_BASE(name);		\
-typedef struct {				\
-	OFI_COMPLEX_BASE(name) re;		\
-	OFI_COMPLEX_BASE(name) im;		\
-} OFI_COMPLEX(name);
 
-OFI_COMPLEX_TYPE_DECL(float, float)
-OFI_COMPLEX_TYPE_DECL(double, double)
-OFI_COMPLEX_TYPE_DECL(long_double, long double)
-
-#define OFI_COMPLEX_OPS(name)								\
-static inline OFI_COMPLEX_BASE(name) OFI_COMPLEX_OP(name, real)(OFI_COMPLEX(name) v)	\
-{											\
-	return v.re;									\
-} 											\
-static inline OFI_COMPLEX_BASE(name) OFI_COMPLEX_OP(name, imag)(OFI_COMPLEX(name) v)	\
-{											\
-	return v.im;									\
-}											\
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, sum)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
-{											\
-	OFI_COMPLEX(name) ret = {.re = v1.re + v2.re, .im = v1.im + v2.im};		\
-	return ret;									\
-}											\
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, mul)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
-{											\
-	OFI_COMPLEX(name) ret = {.re = (v1.re * v2.re) - (v1.im * v2.im),		\
-			      .im = (v1.re * v2.im) + (v1.im * v2.re)};			\
-	return ret;									\
-}											\
-static inline int OFI_COMPLEX_OP(name, equ)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)	\
-{											\
-	return v1.re == v2.re && v1.im == v2.im;					\
-}											\
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, land)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
-{											\
-	OFI_COMPLEX(name) zero = {.re = 0, .im = 0};					\
-	int equ = !OFI_COMPLEX_OP(name, equ)(v1, zero) && !OFI_COMPLEX_OP(name, equ)(v2, zero); \
-	OFI_COMPLEX(name) ret = {.re = equ ? 1.f : 0, .im = 0};				\
-	return ret;									\
-}											\
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
-{											\
-	OFI_COMPLEX(name) zero = {.re = 0, .im = 0};					\
-	int equ = !OFI_COMPLEX_OP(name, equ)(v1, zero) || !OFI_COMPLEX_OP(name, equ)(v2, zero); \
-	OFI_COMPLEX(name) ret = {.re = equ ? 1.f : 0, .im = 0};				\
-	return ret;									\
+#define OFI_DEF_COMPLEX(type)					\
+typedef struct {						\
+	type real;						\
+	type imag;						\
+} ofi_complex_## type;						\
+static inline int ofi_complex_eq_## type			\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	return a.real == b.real && a.imag == b.imag;		\
+}								\
+static inline ofi_complex_## type ofi_complex_sum_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	ofi_complex_## type res;				\
+	res.real = a.real + b.real;				\
+	res.imag = a.imag + b.imag;				\
+	return res;						\
+}								\
+static inline ofi_complex_## type ofi_complex_prod_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	ofi_complex_## type res;				\
+	res.real = a.real * b.real - a.imag * b.imag;		\
+	res.imag = a.real * b.imag + a.imag * b.real;		\
+	return res;						\
+}								\
+static inline ofi_complex_## type ofi_complex_land_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	ofi_complex_## type res;				\
+	res.real = (a.real || a.imag) && (b.real || b.imag);	\
+	res.imag = 0;						\
+	return res;						\
+}								\
+static inline ofi_complex_## type ofi_complex_lor_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	ofi_complex_## type res;				\
+	res.real = (a.real || a.imag) || (b.real || b.imag);	\
+	res.imag = 0;						\
+	return res;						\
+}								\
+static inline ofi_complex_## type ofi_complex_lxor_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	ofi_complex_## type res;				\
+	res.real = ((a.real || a.imag) && !(b.real || b.imag)) || \
+		   (!(a.real || a.imag) && (b.real || b.imag));	\
+	res.imag = 0;						\
+	return res;						\
 }
 
-OFI_COMPLEX_OPS(float)
-OFI_COMPLEX_OPS(double)
-OFI_COMPLEX_OPS(long_double)
+OFI_DEF_COMPLEX(float)
+OFI_DEF_COMPLEX(double)
+OFI_DEF_COMPLEX(long_double)
+
 
 /* atomics primitives */
 #ifdef HAVE_BUILTIN_ATOMICS

@@ -121,7 +121,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	}
 
 	src_len = cmp_len = 0;
-	datatype_sz = fi_datatype_size(msg->datatype);
+	datatype_sz = ofi_datatype_size(msg->datatype);
 	for (i = 0; i < compare_count; i++)
 		cmp_len += (comparev[i].count * datatype_sz);
 	if (flags & FI_INJECT) {
@@ -565,36 +565,13 @@ int sock_query_atomic(struct fid_domain *domain,
 		      enum fi_datatype datatype, enum fi_op op,
 		      struct fi_atomic_attr *attr, uint64_t flags)
 {
-	if (flags & FI_TAGGED) {
-		if (flags & (FI_FETCH_ATOMIC | FI_COMPARE_ATOMIC))
-			return -FI_ENOSYS;
-	} else if (flags & ~(FI_FETCH_ATOMIC | FI_COMPARE_ATOMIC)) {
-		 return -FI_EBADFLAGS;
-	}
+	int ret;
 
-	switch (datatype) {
-	case FI_FLOAT:
-	case FI_DOUBLE:
-	case FI_LONG_DOUBLE:
-		if (op == FI_BOR || op == FI_BAND ||
-		    op == FI_BXOR || op == FI_MSWAP)
-			return -FI_EOPNOTSUPP;
-		break;
-	case FI_FLOAT_COMPLEX:
-	case FI_DOUBLE_COMPLEX:
-	case FI_LONG_DOUBLE_COMPLEX:
-		if (op == FI_BOR      || op == FI_BAND     ||
-		    op == FI_BXOR     || op == FI_MSWAP    ||
-		    op == FI_MIN      || op == FI_MAX      ||
-		    op == FI_CSWAP_LE || op == FI_CSWAP_LT ||
-		    op == FI_CSWAP_GE || op == FI_CSWAP_GT)
-			return -FI_EOPNOTSUPP;
-	break;
-	default:
-		break;
-	}
+	ret = ofi_atomic_valid(&sock_prov, datatype, op, flags);
+	if (ret)
+		return ret;
 
-	attr->size = fi_datatype_size(datatype);
+	attr->size = ofi_datatype_size(datatype);
 	if (attr->size == 0)
 		return -FI_EINVAL;
 

@@ -144,40 +144,49 @@ static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[3] == ntohl(1));
 }
 
+
 /* complex operations implementation */
-#define OFI_COMPLEX(name) ofi_##name##_complex
-#define OFI_COMPLEX_OP(name, op) ofi_complex_##name##_##op
-#define OFI_COMPLEX_TYPE_DECL(name, type) typedef type complex OFI_COMPLEX(name);
 
-OFI_COMPLEX_TYPE_DECL(float, float)
-OFI_COMPLEX_TYPE_DECL(double, double)
-OFI_COMPLEX_TYPE_DECL(long_double, long double)
+typedef float complex ofi_complex_float;
+typedef double complex ofi_complex_double;
+typedef long double complex ofi_complex_long_double;
 
-#define OFI_COMPLEX_OPS(name)									      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, sum)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
-{												      \
-	return v1 + v2;										      \
-}												      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, mul)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
-{												      \
-	return v1 * v2;										      \
-}												      \
-static inline int OFI_COMPLEX_OP(name, equ)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)		      \
-{												      \
-	return v1 == v2;                                                                	      \
-}												      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, land)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)\
-{												      \
-	return v1 && v2;      									      \
-}												      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
-{												      \
-	return v1 || v2;									      \
-}
+#define OFI_DEF_COMPLEX_OPS(type)				\
+static inline int ofi_complex_eq_## type			\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	return a == b;						\
+}								\
+static inline ofi_complex_## type ofi_complex_sum_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	return a + b;						\
+}								\
+static inline ofi_complex_## type ofi_complex_prod_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	return a * b;						\
+}								\
+static inline ofi_complex_## type ofi_complex_land_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	return a && b;      					\
+}								\
+static inline ofi_complex_## type ofi_complex_lor_## type	\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	return a || b;						\
+}								\
+static inline int ofi_complex_lxor_## type			\
+	(ofi_complex_## type a, ofi_complex_## type b)		\
+{								\
+	return (a && !b) || (!a && b);				\
+}								\
 
-OFI_COMPLEX_OPS(float)
-OFI_COMPLEX_OPS(double)
-OFI_COMPLEX_OPS(long_double)
+OFI_DEF_COMPLEX_OPS(float)
+OFI_DEF_COMPLEX_OPS(double)
+OFI_DEF_COMPLEX_OPS(long_double)
+
 
 /* atomics primitives */
 #ifdef HAVE_BUILTIN_ATOMICS

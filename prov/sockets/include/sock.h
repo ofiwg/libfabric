@@ -49,6 +49,7 @@
 #include <netinet/in.h>
 
 #include <fi.h>
+#include <ofi_atomic.h>
 #include <fi_enosys.h>
 #include <fi_indexer.h>
 #include <fi_rbuf.h>

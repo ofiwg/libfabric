@@ -65,6 +65,7 @@ extern "C" {
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include "fi.h"
+#include "ofi_atomic.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
 #include "fi_util.h"

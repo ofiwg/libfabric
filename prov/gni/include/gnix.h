@@ -57,6 +57,7 @@
 #include <rdma/fi_trigger.h>
 
 #include <fi.h>
+#include <ofi_atomic.h>
 #include <fi_enosys.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>

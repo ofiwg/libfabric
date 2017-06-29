@@ -89,32 +89,6 @@ int fi_size_bits(uint64_t num)
 	return size_bits;
 }
 
-static const size_t fi_datatype_size_table[] = {
-	[FI_INT8]   = sizeof(int8_t),
-	[FI_UINT8]  = sizeof(uint8_t),
-	[FI_INT16]  = sizeof(int16_t),
-	[FI_UINT16] = sizeof(uint16_t),
-	[FI_INT32]  = sizeof(int32_t),
-	[FI_UINT32] = sizeof(uint32_t),
-	[FI_INT64]  = sizeof(int64_t),
-	[FI_UINT64] = sizeof(uint64_t),
-	[FI_FLOAT]  = sizeof(float),
-	[FI_DOUBLE] = sizeof(double),
-	[FI_FLOAT_COMPLEX]  = sizeof(OFI_COMPLEX(float)),
-	[FI_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(double)),
-	[FI_LONG_DOUBLE]    = sizeof(long double),
-	[FI_LONG_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(long_double)),
-};
-
-size_t fi_datatype_size(enum fi_datatype datatype)
-{
-	if (datatype >= FI_DATATYPE_LAST) {
-		errno = FI_EINVAL;
-		return 0;
-	}
-	return fi_datatype_size_table[datatype];
-}
-
 int ofi_send_allowed(uint64_t caps)
 {
 	if (caps & FI_MSG ||
