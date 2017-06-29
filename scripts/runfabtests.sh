@@ -107,6 +107,7 @@ simple_tests=(
 	"multi_ep -e msg"
 	"multi_ep -e rdm"
 	"multi_ep -e dgram"
+	"recv_cancel -e rdm -V"
 )
 
 short_tests=(

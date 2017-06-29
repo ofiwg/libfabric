@@ -129,6 +129,7 @@ struct ft_opts {
 	int transfer_size;
 	int window_size;
 	int av_size;
+	int verbose;
 	char *src_port;
 	char *dst_port;
 	char *src_addr;
@@ -199,6 +200,7 @@ int ft_sock_sync(int value);
 void ft_sock_shutdown(int fd);
 extern int ft_skip_mr;
 extern int (*ft_mr_alloc_func)(void);
+extern uint64_t ft_tag;
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;
@@ -217,6 +219,7 @@ extern char default_port[8];
 		.transfer_size = 1024, \
 		.window_size = 64, \
 		.av_size = 1, \
+		.verbose = 0, \
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
 		.argc = argc, .argv = argv \

@@ -71,6 +71,7 @@ uint64_t remote_cq_data = 0;
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 int ft_skip_mr = 0;
 int (*ft_mr_alloc_func)(void);
+uint64_t ft_tag = 0;
 int ft_parent_proc = 0;
 pid_t ft_child_pid = 0;
 int ft_socket_pair[2];
@@ -1374,7 +1375,7 @@ ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_tsend, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf, size + ft_tx_prefix_size(), fi_mr_desc(mr),
-				fi_addr, tx_seq, ctx);
+				fi_addr, ft_tag ? ft_tag : tx_seq, ctx);
 	} else {
 		FT_POST(fi_send, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf,	size + ft_tx_prefix_size(), fi_mr_desc(mr),
@@ -1571,7 +1572,7 @@ ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
 				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
-				fi_mr_desc(mr), 0, rx_seq, 0, ctx);
+				fi_mr_desc(mr), 0, ft_tag ? ft_tag : rx_seq, 0, ctx);
 	} else {
 		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
 				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
@@ -2066,6 +2067,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_shared_ctx");
 	FT_PRINT_OPTS_USAGE("", "fi_multi_mr");
 	FT_PRINT_OPTS_USAGE("", "fi_multi_ep");
+	FT_PRINT_OPTS_USAGE("", "fi_recv_cancel");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
