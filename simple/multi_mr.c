@@ -259,20 +259,6 @@ static int mr_key_test()
 	return ret;
 }
 
-static int init_fabric_cm(void)
-{
-	int ret;
-	if (!opts.dst_addr) {
-		ret = ft_start_server();
-		if (ret)
-			return ret;
-	}
-
-	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
-
-	return ret;
-}
-
 static int run_test(void)
 {
 	int ret = 0;
@@ -280,7 +266,7 @@ static int run_test(void)
 	ft_mr_alloc_func = init_multi_mr_res;
 
 	if (hints->ep_attr->type == FI_EP_MSG)
-		ret = init_fabric_cm();
+		ret = ft_init_fabric_cm();
 	else
 		ret = ft_init_fabric();
 	if (ret)

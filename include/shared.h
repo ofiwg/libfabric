@@ -128,6 +128,7 @@ struct ft_opts {
 	int warmup_iterations;
 	int transfer_size;
 	int window_size;
+	int av_size;
 	char *src_port;
 	char *dst_port;
 	char *src_addr;
@@ -215,6 +216,7 @@ extern char default_port[8];
 		.warmup_iterations = 10, \
 		.transfer_size = 1024, \
 		.window_size = 64, \
+		.av_size = 1, \
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
 		.argc = argc, .argv = argv \
@@ -303,9 +305,19 @@ int ft_init_fabric();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();
+int ft_init_fabric_cm(void);
+int ft_complete_connect(struct fid_ep *ep, struct fid_eq *eq);
+int ft_retrieve_conn_req(struct fid_eq *eq, struct fi_info **fi);
+int ft_accept_connection(struct fid_ep *ep, struct fid_eq *eq);
+int ft_connect_ep(struct fid_ep *ep,
+		struct fid_eq *eq, fi_addr_t *remote_addr);
 int ft_alloc_ep_res(struct fi_info *fi);
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep(void);
+int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
+		struct fid_av *av, struct fid_cq *txcq,
+		struct fid_cq *rxcq, struct fid_cntr *txcntr,
+		struct fid_cntr *rxcntr, bool post_initial_recv);
 int ft_init_alias_ep(uint64_t flags);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
 		uint64_t flags, void *context);
