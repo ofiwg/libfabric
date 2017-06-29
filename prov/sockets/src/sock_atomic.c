@@ -561,6 +561,7 @@ static ssize_t sock_ep_atomic_compwritev(struct fid_ep *ep,
 					   SOCK_USE_OP_FLAGS);
 }
 
+/* Domain parameter is ignored, okay to pass in NULL */
 int sock_query_atomic(struct fid_domain *domain,
 		      enum fi_datatype datatype, enum fi_op op,
 		      struct fi_atomic_attr *attr, uint64_t flags)
@@ -579,14 +580,38 @@ int sock_query_atomic(struct fid_domain *domain,
 	return 0;
 }
 
-static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype,
-				enum fi_op op, size_t *count)
+static int sock_ep_atomic_valid(struct fid_ep *ep,
+		enum fi_datatype datatype, enum fi_op op, size_t *count)
+{
+	struct fi_atomic_attr attr;
+	int ret;
+
+	ret = sock_query_atomic(NULL, datatype, op, &attr, 0);
+	if (!ret)
+		*count = attr.count;
+	return ret;
+}
+
+static int sock_ep_atomic_fetch_valid(struct fid_ep *ep,
+		enum fi_datatype datatype, enum fi_op op, size_t *count)
+{
+	struct fi_atomic_attr attr;
+	int ret;
+
+	ret = sock_query_atomic(NULL, datatype, op, &attr, FI_FETCH_ATOMIC);
+	if (!ret)
+		*count = attr.count;
+	return ret;
+}
+
+static int sock_ep_atomic_cswap_valid(struct fid_ep *ep,
+		enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
 	struct fi_atomic_attr attr;
 	int ret;
 
 	/* domain parameter is ignored - okay to pass in NULL */
-	ret = sock_query_atomic(NULL, datatype, op, &attr, 0);
+	ret = sock_query_atomic(NULL, datatype, op, &attr, FI_COMPARE_ATOMIC);
 	if (!ret)
 		*count = attr.count;
 	return ret;
@@ -605,6 +630,6 @@ struct fi_ops_atomic sock_ep_atomic = {
 	.compwritev = sock_ep_atomic_compwritev,
 	.compwritemsg = sock_ep_atomic_compwritemsg,
 	.writevalid = sock_ep_atomic_valid,
-	.readwritevalid = sock_ep_atomic_valid,
-	.compwritevalid = sock_ep_atomic_valid,
+	.readwritevalid = sock_ep_atomic_fetch_valid,
+	.compwritevalid = sock_ep_atomic_cswap_valid,
 };
