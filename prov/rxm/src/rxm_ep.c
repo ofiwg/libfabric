@@ -964,20 +964,6 @@ static int rxm_ep_close(struct fid *fid)
 	rxm_ep_txrx_res_close(rxm_ep);
 	ret = rxm_ep_msg_res_close(rxm_ep);
 
-	if (rxm_ep->util_ep.tx_cq) {
-		fid_list_remove(&rxm_ep->util_ep.tx_cq->ep_list,
-				&rxm_ep->util_ep.tx_cq->ep_list_lock,
-				&rxm_ep->util_ep.ep_fid.fid);
-		ofi_atomic_dec32(&rxm_ep->util_ep.tx_cq->ref);
-	}
-
-	if (rxm_ep->util_ep.rx_cq) {
-		fid_list_remove(&rxm_ep->util_ep.rx_cq->ep_list,
-				&rxm_ep->util_ep.rx_cq->ep_list_lock,
-				&rxm_ep->util_ep.ep_fid.fid);
-		ofi_atomic_dec32(&rxm_ep->util_ep.rx_cq->ref);
-	}
-
 	ofi_endpoint_close(&rxm_ep->util_ep);
 	free(rxm_ep);
 	return ret;
