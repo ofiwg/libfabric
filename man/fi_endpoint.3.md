@@ -13,8 +13,9 @@ fi_endpoint / fi_scalable_ep / fi_passive_ep / fi_close
 :   Allocate or close an endpoint.
 
 fi_ep_bind
-:   Associate an endpoint with an event queue, completion queue,
-    counter, or address vector
+:   Associate an endpoint with hardware resources, such as event queues,
+    completion queues, counters, address vectors, or shared transmit/receive
+    contexts.
 
 fi_scalable_ep_bind
 :   Associate a scalable endpoint with an address vector
@@ -367,6 +368,7 @@ both using FI_WRITE.  Furthermore, providers may limit CQ and counter
 bindings to endpoints of the same endpoint type (DGRAM, MSG, RDM, etc.).
 
 Connectionless endpoints must be bound to a single address vector.
+
 If an endpoint is using a shared transmit and/or receive context, the
 shared contexts must be bound to the endpoint.  CQs, counters, AV, and
 shared contexts must be bound to endpoints before they are enabled.
