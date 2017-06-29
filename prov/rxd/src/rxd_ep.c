@@ -566,13 +566,16 @@ int rxd_ep_reply_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *in_ctrl,
 	ssize_t ret;
 	struct rxd_pkt_meta *pkt_meta;
 	struct rxd_pkt_data *pkt;
+	struct rxd_rx_entry *rx_entry;
 
 	pkt_meta = rxd_tx_pkt_alloc(ep);
 	if (!pkt_meta)
 		return -FI_ENOMEM;
 
+	rx_entry = &ep->rx_entry_fs->buf[rx_key];
+
 	pkt = (struct rxd_pkt_data *)pkt_meta->pkt_data;
-	rxd_init_ctrl_hdr(&pkt->ctrl, type, seg_size, in_ctrl->seg_no,
+	rxd_init_ctrl_hdr(&pkt->ctrl, type, seg_size, rx_entry->exp_seg_no,
 			   in_ctrl->msg_id, rx_key, source);
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sending ack [%p] - %d, %d\n",
@@ -687,7 +690,8 @@ ssize_t rxd_ep_start_xfer(struct rxd_ep *ep, struct rxd_peer *peer,
 		       pkt->ctrl.seg_no);
 	}
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "start msg %p\n", pkt->ctrl.msg_id);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "start msg %p, size: %ld\n",
+	       pkt->ctrl.msg_id, tx_entry->op_hdr.size);
 	rxd_set_timeout(tx_entry);
 	dlist_insert_tail(&pkt_meta->entry, &tx_entry->pkt_list);
 	dlist_insert_tail(&tx_entry->entry, &ep->tx_entry_list);
