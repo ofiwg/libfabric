@@ -24,6 +24,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm_multi_domain \
 	simple/fi_multi_ep \
 	simple/fi_recv_cancel \
+	simple/fi_unexpected_msg \
 	streaming/fi_msg_rma \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
@@ -169,6 +170,10 @@ simple_fi_multi_ep_LDADD = libfabtests.la
 simple_fi_multi_mr_SOURCES = \
 	simple/multi_mr.c
 simple_fi_multi_mr_LDADD = libfabtests.la
+
+simple_fi_unexpected_msg_SOURCES = \
+	simple/unexpected_msg.c
+simple_fi_unexpected_msg_LDADD = libfabtests.la
 
 simple_fi_rdm_multi_domain_SOURCES = \
 	simple/rdm_multi_domain.c

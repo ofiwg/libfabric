@@ -108,6 +108,12 @@ simple_tests=(
 	"multi_ep -e rdm"
 	"multi_ep -e dgram"
 	"recv_cancel -e rdm -V"
+	"unexpected_msg -e msg -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e dgram -i 10"
+	"unexpected_msg -e msg -S -i 10"
+	"unexpected_msg -e rdm -S -i 10"
+	"unexpected_msg -e dgram -S -i 10"
 )
 
 short_tests=(

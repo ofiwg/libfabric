@@ -2068,6 +2068,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_multi_mr");
 	FT_PRINT_OPTS_USAGE("", "fi_multi_ep");
 	FT_PRINT_OPTS_USAGE("", "fi_recv_cancel");
+	FT_PRINT_OPTS_USAGE("", "fi_unexpected_msg");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
