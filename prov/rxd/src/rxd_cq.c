@@ -258,8 +258,8 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *ctrl,
 	uint64_t idx;
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
-	       "ack- msg_id: %" PRIu64 ", segno: %d, buf: %p\n",
-	       ctrl->msg_id, ctrl->seg_no, rx_buf);
+	       "ack- msg_id: %" PRIu64 ", segno: %d, segsz: %d, buf: %p\n",
+	       ctrl->msg_id, ctrl->seg_no, ctrl->seg_size, rx_buf);
 
 	idx = ctrl->msg_id & RXD_TX_IDX_BITS;
 	tx_entry = &ep->tx_entry_fs->buf[idx];
@@ -277,7 +277,11 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *ctrl,
 		}
 	} else {
 		tx_entry->rx_key = ctrl->rx_key;
-		tx_entry->window = ctrl->seg_no + ctrl->seg_size;
+		/* do not allow reduce window size (on duplicate acks) */
+		tx_entry->window = MAX(tx_entry->window, ctrl->seg_no + ctrl->seg_size);
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
+		       "ack- msg_id: %" PRIu64 ", window: %d\n",
+		       ctrl->msg_id, tx_entry->window);
 	}
 out:
 	rxd_ep_repost_buff(rx_buf);
