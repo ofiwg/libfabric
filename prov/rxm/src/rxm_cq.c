@@ -222,7 +222,7 @@ static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 	struct rxm_tx_entry *tx_entry;
 	int ret, index;
 
-	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x" PRIx64 "\n",
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 			rx_buf->pkt.ctrl_hdr.msg_id);
 
 	fastlock_acquire(&rx_buf->ep->send_queue.lock);
@@ -231,10 +231,12 @@ static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 	tx_entry = &rx_buf->ep->send_queue.fs->buf[index];
 	fastlock_release(&rx_buf->ep->send_queue.lock);
 
-	assert(tx_entry->msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
-	assert(tx_entry->state == RXM_LMT_ACK_WAIT);
+	assert(tx_entry->tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
-	FI_DBG(&rxm_prov, FI_LOG_CQ, "tx_entry->state -> RXM_LMT_FINISH\n");
+	/* If we used fi_inject the state would be RXM_LMT_TX */
+	assert(tx_entry->state == RXM_LMT_ACK_WAIT || tx_entry->state == RXM_LMT_TX);
+
+	RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_FINISH);
 	tx_entry->state = RXM_LMT_FINISH;
 
 	if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info))
@@ -260,6 +262,10 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 			if (!rx_buf->conn)
 				return -FI_EOTHER;
 		}
+
+		FI_DBG(&rxm_prov, FI_LOG_CQ,
+		       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
+		       rx_buf->pkt.ctrl_hdr.msg_id);
 
 		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
 		rx_buf->index = 0;
@@ -302,7 +308,7 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 		if (ret)
 			return ret;
 
-		RXM_LOG_STATE(FI_LOG_CQ, RXM_LMT_ACK_SENT, RXM_LMT_FINISH);
+		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
 		rx_buf->hdr.state = RXM_LMT_READ;
 		return rxm_lmt_rma_read(rx_buf);
 	} else {
@@ -399,7 +405,7 @@ static int rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	msg.iov_count = 1;
 	msg.context = rx_buf;
 
-	RXM_LOG_STATE(FI_LOG_CQ, RXM_LMT_READ, RXM_LMT_ACK_SENT);
+	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_READ, RXM_LMT_ACK_SENT);
 	rx_buf->hdr.state = RXM_LMT_ACK_SENT;
 
 	ret = fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
@@ -434,6 +440,9 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 {
 	enum rxm_proto_state *state = comp->op_context;
 	struct rxm_rx_buf *rx_buf = comp->op_context;
+#if ENABLE_DEBUG
+	struct rxm_tx_entry *tx_entry = comp->op_context;
+#endif
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -453,7 +462,8 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		else
 			return rxm_handle_recv_comp(comp->op_context);
 	case RXM_LMT_TX:
-		RXM_LOG_STATE(FI_LOG_CQ, RXM_LMT_TX, RXM_LMT_ACK_WAIT);
+		assert(comp->flags & FI_SEND);
+		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_WAIT);
 		*state = RXM_LMT_ACK_WAIT;
 		return 0;
 	case RXM_LMT_READ:
@@ -462,7 +472,7 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		else
 			return rxm_lmt_send_ack(rx_buf);
 	case RXM_LMT_ACK_SENT:
-		RXM_LOG_STATE(FI_LOG_CQ, RXM_LMT_ACK_SENT, RXM_LMT_FINISH);
+		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
 		*state = RXM_LMT_FINISH;
 		if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info))
 			rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);

@@ -47,6 +47,7 @@ static struct fi_ops_domain rxm_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
+	.query_atomic = fi_no_query_atomic,
 };
 
 static int rxm_domain_close(fid_t fid)
