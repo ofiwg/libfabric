@@ -1,4 +1,4 @@
-.TH "fi_psm2" "7" "2017\-06\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2017\-06\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM2 Fabric Provider
@@ -83,7 +83,7 @@ The default UUID is 00FF00FF\-0000\-0000\-0000\-00FF0F0F00FF.
 built\-in name server that can be used to resolve an IP address or host
 name into a transport address needed by the \f[I]fi_av_insert\f[] call.
 The main purpose of this name server is to allow simple client\-server
-type applications (such as those in \f[I]fabtest\f[]) to be written
+type applications (such as those in \f[I]fabtests\f[]) to be written
 purely with libfabric, without using any out\-of\-band communication
 mechanism.
 For such applications, the server would run first, and the client would
@@ -116,7 +116,7 @@ However, the bandwidth is sub\-optimal by doing this way.
 .PP
 The \f[I]psm2\f[] provider use PSM tag\-matching message queue functions
 to achieve higher bandwidth for large size RMA.
-It takes avdantage of the extra tag bits available in PSM2 to separate
+It takes advantage of the extra tag bits available in PSM2 to separate
 the RMA traffic from the regular tagged message queue.
 .PP
 The option is on by default.
@@ -139,7 +139,7 @@ via the hints to \f[I]fi_getinfo\f[]), a progress thread is created to
 make progress calls from time to time.
 This option set the interval (microseconds) between progress calls.
 .PP
-The default setting is 1 if affininty is set, or 1000 if not.
+The default setting is 1 if affinity is set, or 1000 if not.
 See \f[I]FI_PSM2_PROG_AFFINITY\f[].
 .PP
 \f[I]FI_PSM2_PROG_AFFINITY\f[] : When set, specify the set of CPU cores
@@ -162,6 +162,20 @@ This is only effective for messages.
 Inject size for RMA operations is still limited to the default setting.
 .PP
 The default setting is 64.
+.PP
+\f[I]FI_PSM2_LOCK_LEVEL\f[] : When set, dictate the level of locking
+being used by the provider.
+Level 2 means all locks are enabled.
+Level 1 disables some locks and is suitable for runs that limit the
+access to each PSM2 context to a single thread.
+Level 0 disables all locks and thus is only suitable for single threaded
+runs.
+.PP
+To use level 0 or level 1, wait object and auto progress mode cannot be
+used because they introduce internal threads that may break the
+conditions needed for these levels.
+.PP
+The default setting is 2.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_psm\f[](7),
