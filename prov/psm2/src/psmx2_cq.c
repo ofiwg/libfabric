@@ -35,10 +35,10 @@
 void psmx2_cq_enqueue_event(struct psmx2_fid_cq *cq,
 			    struct psmx2_cq_event *event)
 {
-	fastlock_acquire(&cq->lock);
+	psmx2_lock(&cq->lock, 2);
 	slist_insert_tail(&event->list_entry, &cq->event_queue);
 	cq->event_count++;
-	fastlock_release(&cq->lock);
+	psmx2_unlock(&cq->lock, 2);
 
 	if (cq->wait)
 		cq->wait->signal(cq->wait);
@@ -51,10 +51,10 @@ static struct psmx2_cq_event *psmx2_cq_dequeue_event(struct psmx2_fid_cq *cq)
 	if (slist_empty(&cq->event_queue))
 		return NULL;
 
-	fastlock_acquire(&cq->lock);
+	psmx2_lock(&cq->lock, 2);
 	entry = slist_remove_head(&cq->event_queue);
 	cq->event_count--;
-	fastlock_release(&cq->lock);
+	psmx2_unlock(&cq->lock, 2);
 
 	return container_of(entry, struct psmx2_cq_event, list_entry);
 }
@@ -63,15 +63,15 @@ static struct psmx2_cq_event *psmx2_cq_alloc_event(struct psmx2_fid_cq *cq)
 {
 	struct psmx2_cq_event *event;
 
-	fastlock_acquire(&cq->lock);
+	psmx2_lock(&cq->lock, 2);
 	if (!slist_empty(&cq->free_list)) {
 		event = container_of(slist_remove_head(&cq->free_list),
 				     struct psmx2_cq_event, list_entry);
-		fastlock_release(&cq->lock);
+		psmx2_unlock(&cq->lock, 2);
 		return event;
 	}
 
-	fastlock_release(&cq->lock);
+	psmx2_unlock(&cq->lock, 2);
 	event = calloc(1, sizeof(*event));
 	if (!event)
 		FI_WARN(&psmx2_prov, FI_LOG_CQ, "out of memory.\n");
@@ -84,9 +84,9 @@ static void psmx2_cq_free_event(struct psmx2_fid_cq *cq,
 {
 	memset(event, 0, sizeof(*event));
 
-	fastlock_acquire(&cq->lock);
+	psmx2_lock(&cq->lock, 2);
 	slist_insert_tail(&event->list_entry, &cq->free_list);
-	fastlock_release(&cq->lock);
+	psmx2_unlock(&cq->lock, 2);
 }
 
 struct psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
@@ -378,14 +378,14 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 		 * freed because the two psm2_mq_ipeek calls may return the
 		 * same request. Use a lock to ensure that won't happen.
 		 */
-		if (fastlock_tryacquire(&trx_ctxt->poll_lock))
+		if (psmx2_trylock(&trx_ctxt->poll_lock, 2))
 			return read_count;
 
 		err = psm2_mq_ipeek(trx_ctxt->psm2_mq, &psm2_req, NULL);
 
 		if (err == PSM2_OK) {
 			err = psm2_mq_test2(&psm2_req, &psm2_status);
-			fastlock_release(&trx_ctxt->poll_lock);
+			psmx2_unlock(&trx_ctxt->poll_lock, 2);
 
 			fi_context = psm2_status.context;
 
@@ -636,10 +636,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			return read_count;
 		} else if (err == PSM2_MQ_NO_COMPLETIONS) {
-			fastlock_release(&trx_ctxt->poll_lock);
+			psmx2_unlock(&trx_ctxt->poll_lock, 2);
 			return read_count;
 		} else {
-			fastlock_release(&trx_ctxt->poll_lock);
+			psmx2_unlock(&trx_ctxt->poll_lock, 2);
 			return psmx2_errno(err);
 		}
 	}

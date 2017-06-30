@@ -67,9 +67,9 @@ static inline int bitmap_test(uint64_t *map, unsigned id)
 
 static void psmx2_free_vlane(struct psmx2_fid_domain *domain, uint8_t vl)
 {
-	fastlock_acquire(&domain->vl_lock);
+	psmx2_lock(&domain->vl_lock, 1);
 	bitmap_clear(domain->vl_map, vl);
-	fastlock_release(&domain->vl_lock);
+	psmx2_unlock(&domain->vl_lock, 1);
 }
 
 static int psmx2_alloc_vlane(struct psmx2_fid_domain *domain, uint8_t *vl)
@@ -77,7 +77,7 @@ static int psmx2_alloc_vlane(struct psmx2_fid_domain *domain, uint8_t *vl)
 	int i;
 	int id;
 
-	fastlock_acquire(&domain->vl_lock);
+	psmx2_lock(&domain->vl_lock, 1);
 	for (i = 0; i < BITMAP_SIZE; i++) {
 		id = (domain->vl_alloc + i) % BITMAP_SIZE;
 		if (bitmap_test(domain->vl_map, id) == 0) {
@@ -86,7 +86,7 @@ static int psmx2_alloc_vlane(struct psmx2_fid_domain *domain, uint8_t *vl)
 			break;
 		}
 	}
-	fastlock_release(&domain->vl_lock);
+	psmx2_unlock(&domain->vl_lock, 1);
 
 	if (i >= BITMAP_SIZE)
 		return -FI_ENOSPC;
@@ -721,14 +721,14 @@ struct fi_context *psmx2_ep_get_op_context(struct psmx2_fid_ep *ep)
 {
 	struct psmx2_context *context;
 
-	fastlock_acquire(&ep->context_lock);
+	psmx2_lock(&ep->context_lock, 2);
 	if (!slist_empty(&ep->free_context_list)) {
 		context = container_of(slist_remove_head(&ep->free_context_list),
 				       struct psmx2_context, list_entry);
-		fastlock_release(&ep->context_lock);
+		psmx2_unlock(&ep->context_lock, 2);
 		return &context->fi_context;
 	}
-	fastlock_release(&ep->context_lock);
+	psmx2_unlock(&ep->context_lock, 2);
 
 	context = malloc(sizeof(*context));
 	if (!context)
@@ -747,9 +747,9 @@ void psmx2_ep_put_op_context(struct psmx2_fid_ep *ep,
 
 	context = container_of(fi_context, struct psmx2_context, fi_context);
 	context->list_entry.next = NULL;
-	fastlock_acquire(&ep->context_lock);
+	psmx2_lock(&ep->context_lock, 2);
 	slist_insert_tail(&context->list_entry, &ep->free_context_list);
-	fastlock_release(&ep->context_lock);
+	psmx2_unlock(&ep->context_lock, 2);
 }
 
 /*
@@ -776,9 +776,9 @@ static int psmx2_sep_close(fid_t fid)
 		if (sep->ctxts[i].ep)
 			psmx2_ep_close_internal(sep->ctxts[i].ep);
 
-		fastlock_acquire(&sep->domain->trx_ctxt_lock);
+		psmx2_lock(&sep->domain->trx_ctxt_lock, 1);
 		dlist_remove(&sep->ctxts[i].trx_ctxt->entry);
-		fastlock_release(&sep->domain->trx_ctxt_lock);
+		psmx2_unlock(&sep->domain->trx_ctxt_lock, 1);
 		psmx2_trx_ctxt_free(sep->ctxts[i].trx_ctxt);
 	}
 
@@ -789,9 +789,9 @@ static int psmx2_sep_close(fid_t fid)
 	ofi_ns_del_local_name(&sep->domain->fabric->name_server,
 			      &sep->service, &ep_name);
 
-	fastlock_acquire(&sep->domain->sep_lock);
+	psmx2_lock(&sep->domain->sep_lock, 1);
 	dlist_remove(&sep->entry);
-	fastlock_release(&sep->domain->sep_lock);
+	psmx2_unlock(&sep->domain->sep_lock, 1);
 
 	psmx2_domain_release(sep->domain);
 	free(sep);
@@ -1000,16 +1000,16 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	sep_priv->id = ofi_atomic_inc32(&domain_priv->sep_cnt);
 
-	fastlock_acquire(&domain_priv->sep_lock);
+	psmx2_lock(&domain_priv->sep_lock, 1);
 	dlist_insert_before(&sep_priv->entry, &domain_priv->sep_list);
-	fastlock_release(&domain_priv->sep_lock);
+	psmx2_unlock(&domain_priv->sep_lock, 1);
 
-	fastlock_acquire(&domain_priv->trx_ctxt_lock);
+	psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
 	for (i = 0; i< ctxt_cnt; i++) {
 		dlist_insert_before(&sep_priv->ctxts[i].trx_ctxt->entry,
 				    &domain_priv->trx_ctxt_list);
 	}
-	fastlock_release(&domain_priv->trx_ctxt_lock);
+	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
 
 	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
 	ep_name.sep_id = sep_priv->id;

@@ -38,14 +38,14 @@ struct psmx2_fid_mr *psmx2_mr_get(struct psmx2_fid_domain *domain,
 	RbtIterator it;
 	struct psmx2_fid_mr *mr = NULL;
 
-	fastlock_acquire(&domain->mr_lock);
+	psmx2_lock(&domain->mr_lock, 1);
 	it = rbtFind(domain->mr_map, (void *)key);
 	if (!it)
 		goto exit;
 
 	rbtKeyValue(domain->mr_map, it, (void **)&key, (void **)&mr);
 exit:
-	fastlock_release(&domain->mr_lock);
+	psmx2_unlock(&domain->mr_lock, 1);
 	return mr;
 }
 
@@ -54,11 +54,11 @@ static inline void psmx2_mr_release_key(struct psmx2_fid_domain *domain,
 {
 	RbtIterator it;
 
-	fastlock_acquire(&domain->mr_lock);
+	psmx2_lock(&domain->mr_lock, 1);
 	it = rbtFind(domain->mr_map, (void *)key);
 	if (it)
 		rbtErase(domain->mr_map, it);
-	fastlock_release(&domain->mr_lock);
+	psmx2_unlock(&domain->mr_lock, 1);
 }
 
 static int psmx2_mr_reserve_key(struct psmx2_fid_domain *domain,
@@ -71,7 +71,7 @@ static int psmx2_mr_reserve_key(struct psmx2_fid_domain *domain,
 	int try_count;
 	int err = -FI_ENOKEY;
 
-	fastlock_acquire(&domain->mr_lock);
+	psmx2_lock(&domain->mr_lock, 1);
 
 	if (domain->mr_mode == FI_MR_BASIC) {
 		key = domain->mr_reserved_key;
@@ -93,7 +93,7 @@ static int psmx2_mr_reserve_key(struct psmx2_fid_domain *domain,
 		}
 	}
 
-	fastlock_release(&domain->mr_lock);
+	psmx2_unlock(&domain->mr_lock, 1);
 
 	return err;
 }

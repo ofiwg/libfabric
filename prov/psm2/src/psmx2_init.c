@@ -51,6 +51,7 @@ struct psmx2_env psmx2_env = {
 	.max_trx_ctxt	= 1,
 	.num_devunits	= 1,
 	.inject_size	= PSMX2_INJECT_SIZE,
+	.lock_level	= 2,
 };
 
 static void psmx2_init_env(void)
@@ -66,6 +67,7 @@ static void psmx2_init_env(void)
 	fi_param_get_int(&psmx2_prov, "prog_interval", &psmx2_env.prog_interval);
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
 	fi_param_get_int(&psmx2_prov, "inject_size", &psmx2_env.inject_size);
+	fi_param_get_bool(&psmx2_prov, "lock_level", &psmx2_env.lock_level);
 }
 
 static int psmx2_check_sep_cap(void)
@@ -763,6 +765,9 @@ PROVIDER_INI
 
 	fi_param_define(&psmx2_prov, "inject_size", FI_PARAM_INT,
 			"Maximum message size for fi_inject and fi_tinject (default: 64).");
+
+	fi_param_define(&psmx2_prov, "lock_level", FI_PARAM_INT,
+			"How internal locking is used. 0 means no locking. (default: 2).");
 
 	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;
