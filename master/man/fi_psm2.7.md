@@ -86,7 +86,7 @@ The *psm2* provider checks for the following environment variables:
 : The *psm2* provider has a simple built-in name server that can be used
   to resolve an IP address or host name into a transport address needed
   by the *fi_av_insert* call. The main purpose of this name server is to
-  allow simple client-server type applications (such as those in *fabtest*)
+  allow simple client-server type applications (such as those in *fabtests*)
   to be written purely with libfabric, without using any out-of-band
   communication mechanism. For such applications, the server would run first,
   and the client would call *fi_getinfo* with the *node* parameter set to
@@ -113,7 +113,7 @@ The *psm2* provider checks for the following environment variables:
   be pipe-lined. However, the bandwidth is sub-optimal by doing this way.
 
   The *psm2* provider use PSM tag-matching message queue functions to achieve
-  higher bandwidth for large size RMA. It takes avdantage of the extra tag bits
+  higher bandwidth for large size RMA. It takes advantage of the extra tag bits
   available in PSM2 to separate the RMA traffic from the regular tagged message
   queue.
    
@@ -136,7 +136,7 @@ The *psm2* provider checks for the following environment variables:
   a progress thread is created to make progress calls from time to time.
   This option set the interval (microseconds) between progress calls.
 
-  The default setting is 1 if affininty is set, or 1000 if not. See
+  The default setting is 1 if affinity is set, or 1000 if not. See
   *FI_PSM2_PROG_AFFINITY*.
 
 *FI_PSM2_PROG_AFFINITY*
@@ -156,6 +156,19 @@ The *psm2* provider checks for the following environment variables:
   for RMA operations is still limited to the default setting.
 
   The default setting is 64.
+
+*FI_PSM2_LOCK_LEVEL*
+: When set, dictate the level of locking being used by the provider. Level
+  2 means all locks are enabled. Level 1 disables some locks and is suitable
+  for runs that limit the access to each PSM2 context to a single thread.
+  Level 0 disables all locks and thus is only suitable for single threaded
+  runs.
+
+  To use level 0 or level 1, wait object and auto progress mode cannot be
+  used because they introduce internal threads that may break the conditions
+  needed for these levels.
+
+  The default setting is 2.
 
 # SEE ALSO
 
