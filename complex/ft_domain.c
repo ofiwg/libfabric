@@ -260,6 +260,9 @@ static int ft_setup_atomic_control(struct ft_atomic_control *ctrl)
 			ctrl->comp_memdesc = fi_mr_desc(ctrl->comp_mr);
 		}
 	}
+	ft_atom_ctrl.op = test_info.op;
+	ft_atom_ctrl.datatype = test_info.datatype;
+
 	return ret;
 }
 

@@ -229,6 +229,7 @@ struct ft_set {
 	enum ft_class_function	class_function[FT_MAX_FUNCTIONS];
 	uint64_t		msg_flags;
 	enum fi_op		op[FI_ATOMIC_OP_LAST];
+	enum fi_datatype	datatype[FI_DATATYPE_LAST];
 	enum fi_ep_type		ep_type[FT_MAX_EP_TYPES];
 	enum fi_av_type		av_type[FT_MAX_AV_TYPES];
 	enum ft_comp_type	comp_type[FT_MAX_COMP];
@@ -249,6 +250,7 @@ struct ft_series {
 	int			cur_type;
 	int			cur_func;
 	int			cur_op;
+	int			cur_datatype;
 	int			cur_ep;
 	int			cur_av;
 	int			cur_comp;

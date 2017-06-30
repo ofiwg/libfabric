@@ -443,76 +443,56 @@ static int ft_pingpong_rma(void)
 static int ft_pingpong_atomic(void)
 {
 	int ret, i;
-	enum fi_datatype datatype;
 	size_t count;
 
-	if (listen_sock < 0) {
-		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ft_atom_ctrl.datatype = datatype;
-			ret = check_atomic(&count);
+	ret = check_atomic(&count);
 
-			ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-				ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
-				ret = 0;
-				continue;
-			}
+	ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
+	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
+	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+		return 0;
+	}
+	if (ret)
+		return ret;
+
+	if (listen_sock < 0) {
+		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+			ret = ft_send_rma();
 			if (ret)
 				return ret;
 
-			for (i = 0; i < ft_ctrl.xfer_iter; i++) {
-				ret = ft_send_rma();
-				if (ret)
-					return ret;
-
-				if (!is_inject_func(test_info.class_function)) {
-					ret = ft_comp_tx(FT_COMP_TO);
-					if (ret)
-						return ret;
-				}
-
-				ret = ft_sync_msg_needed();
-				if (ret)
-					return ret;
-
-				ret = ft_recv_msg();
+			if (!is_inject_func(test_info.class_function)) {
+				ret = ft_comp_tx(FT_COMP_TO);
 				if (ret)
 					return ret;
 			}
+			ret = ft_sync_msg_needed();
+			if (ret)
+				return ret;
+
+			ret = ft_recv_msg();
+			if (ret)
+				return ret;
 		}
 	} else {
-		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ft_atom_ctrl.datatype = datatype;
-			ret = check_atomic(&count);
-
-			ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-				ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
-				ret = 0;
-				continue;
-			}
+		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+			ret = ft_recv_msg();
 			if (ret)
 				return ret;
 
-			for (i = 0; i < ft_ctrl.xfer_iter; i++) {
-				ret = ft_recv_msg();
-				if (ret)
-					return ret;
+			ret = ft_send_rma();
+			if (ret)
+				return ret;
 
-				ret = ft_send_rma();
-				if (ret)
-					return ret;
-
-				if (!is_inject_func(test_info.class_function)) {
-					ret = ft_comp_tx(FT_COMP_TO);
-					if (ret)
-						return ret;
-				}
-
-				ret = ft_sync_msg_needed();
+			if (!is_inject_func(test_info.class_function)) {
+				ret = ft_comp_tx(FT_COMP_TO);
 				if (ret)
 					return ret;
 			}
+
+			ret = ft_sync_msg_needed();
+			if (ret)
+				return ret;
 		}
 	}
 	return ret;
@@ -663,28 +643,23 @@ static int ft_bw_rma(void)
 static int ft_bw_atomic(void)
 {
 	int ret, i;
-	enum fi_datatype datatype;
 	size_t count;
 	
-	if (listen_sock < 0) {
-		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
-			ft_atom_ctrl.datatype = datatype;
-			ret = check_atomic(&count);
+	ret = check_atomic(&count);
 
-			ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-				ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
-				ret = 0;
-				continue;
-			}
+	ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
+	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
+	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+		return 0;
+	}
+	if (ret)
+		return ret;
+
+	if (listen_sock < 0) {
+		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+			ret = ft_send_rma();
 			if (ret)
 				return ret;
-
-			for (i = 0; i < ft_ctrl.xfer_iter; i++) {
-				ret = ft_send_rma();
-				if (ret)
-					return ret;
-			}
 		}
 		ret = ft_sync_msg_needed();
 		if (ret)
@@ -872,48 +847,43 @@ static int ft_unit_rma(void)
 static int ft_unit_atomic(void)
 {
 	int ret, i, fail = 0;
-	enum fi_datatype datatype;
 	size_t count;
 
-	for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-		ft_atom_ctrl.datatype = datatype;
-		ret = check_atomic(&count);
+	ret = check_atomic(&count);
 
-		ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
-		if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-			ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
-			ret = 0;
-			continue;
-		}
+	ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
+	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
+	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+		return 0;
+	}
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+		ft_sync_fill_bufs(ft_tx_ctrl.rma_msg_size);
+
+		ret = ft_send_rma();
 		if (ret)
 			return ret;
 
-		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
-			ft_sync_fill_bufs(ft_tx_ctrl.rma_msg_size);
-
-			ret = ft_send_rma();
+		if (!is_inject_func(test_info.class_function)) {
+			ret = ft_comp_tx(FT_COMP_TO);
 			if (ret)
 				return ret;
-
-			if (!is_inject_func(test_info.class_function)) {
-				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
-					return ret;
-			}
-
-			ret = ft_sync_msg_needed();
-			if (ret)
-				return ret;
-
-			ret = ft_recv_msg();
-			if (ret)
-				return ret;
-
-			ret = ft_verify_bufs();
-			if (ret)
-				fail = -FI_EIO;
 		}
+		ret = ft_sync_msg_needed();
+		if (ret)
+			return ret;
+
+		ret = ft_recv_msg();
+		if (ret)
+			return ret;
+
+		ret = ft_verify_bufs();
+		if (ret)
+			fail = -FI_EIO;
 	}
+
 	ret = ft_check_verify_cnt();
 	if (ret)
 		return ret;

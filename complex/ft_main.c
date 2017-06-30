@@ -186,9 +186,10 @@ static void ft_show_test_info(void)
 {
 	printf("[%s,", test_info.prov_name);
 	printf(" %s,", ft_test_type_str(test_info.test_type));
-	if (test_info.class_function >= FT_FUNC_ATOMIC) {
-		printf(" %s (%s)--", ft_class_func_str(test_info.class_function),
-			fi_tostr(&test_info.op, FI_TYPE_ATOMIC_OP));
+	if (test_info.test_class & FI_ATOMIC) {
+		printf(" %s ", ft_class_func_str(test_info.class_function));
+		printf("(%s, ", fi_tostr(&test_info.op, FI_TYPE_ATOMIC_OP));
+		printf("%s)--", fi_tostr(&test_info.datatype, FI_TYPE_ATOMIC_TYPE));
 	} else {
 		printf(" %s--", ft_class_func_str(test_info.class_function));
 	}

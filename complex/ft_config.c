@@ -228,6 +228,12 @@ static struct key_t keys[] = {
 		.val_size = sizeof(((struct ft_set *)0)->op) / FI_ATOMIC_OP_LAST,
 	},
 	{
+		.str = "datatype",
+		.offset = offsetof(struct ft_set, datatype),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->datatype) / FI_DATATYPE_LAST,
+	},
+	{
 		.str = "mode",
 		.offset = offsetof(struct ft_set, mode),
 		.val_type = VAL_NUM,
@@ -319,7 +325,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_FD, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_MUTEX_COND, enum fi_wait_obj, buf);
 		FT_ERR("Unknown (eq/cq)_wait_obj");
-	} else if (!strncmp(key->str, "op", strlen("atomic_op"))) {
+	} else if (!strncmp(key->str, "op", strlen("op"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MIN, enum fi_op, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MAX, enum fi_op, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_SUM, enum fi_op, buf);
@@ -340,6 +346,22 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_CSWAP_GT, enum fi_op, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MSWAP, enum fi_op, buf);
 		FT_ERR("Unknown op");
+	} else if (!strncmp(key->str, "datatype", strlen("datatype"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_INT8, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT8, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_INT16, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT16, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_INT32, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT32, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_INT64, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT64, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_FLOAT, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_DOUBLE, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_FLOAT_COMPLEX, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_DOUBLE_COMPLEX, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_LONG_DOUBLE, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_LONG_DOUBLE_COMPLEX, enum fi_datatype, buf);
+		FT_ERR("Unknown datatype");
 	} else if (!strncmp(key->str, "msg_flags", strlen("msg_flags"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_REMOTE_CQ_DATA, uint64_t, buf);
 	} else if (!strncmp(key->str, "constant_caps", strlen("constant_caps"))) {
@@ -665,6 +687,10 @@ void fts_next(struct ft_series *series)
 		return;
 	series->cur_op = 0;
 
+	if (set->datatype[++series->cur_datatype])
+		return;
+	series->cur_datatype = 0;
+
 	if (set->comp_type[++series->cur_comp])
 		return;
 	series->cur_comp = 0;
@@ -716,6 +742,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->class_function = set->class_function[series->cur_func];
 	info->msg_flags = set->msg_flags;
 	info->op = set->op[series->cur_op];
+	info->datatype = set->datatype[series->cur_datatype];
 	info->test_flags = set->test_flags;
 	info->test_class = set->test_class[series->cur_class];
 
