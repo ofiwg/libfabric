@@ -39,7 +39,6 @@
 struct fi_tx_attr rxm_tx_attr = {
 	.caps = RXM_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
-	.inject_size = RXM_TX_DATA_SIZE,
 	.size = SIZE_MAX,
 	.iov_limit = RXM_IOV_LIMIT,
 };
@@ -96,6 +95,5 @@ struct fi_info rxm_info = {
 
 struct util_prov rxm_util_prov = {
 	.prov = &rxm_prov,
-	.info = &rxm_info,
 	.flags = 0,
 };
