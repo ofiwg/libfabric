@@ -98,7 +98,7 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	switch (cmd) {
 	case PSMX2_AM_REQ_SEP_QUERY:
 		sep_id = args[0].u32w1;
-		fastlock_acquire(&domain->sep_lock);
+		psmx2_lock(&domain->sep_lock, 1);
 		entry = dlist_find_first_match(&domain->sep_list, psmx2_am_sep_match,
 					       (void *)(uintptr_t)sep_id);
 		if (!entry) {
@@ -120,7 +120,7 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 					buf[i] = sep->ctxts[i].trx_ctxt->psm2_epid;
 			}
 		}
-		fastlock_release(&domain->sep_lock);
+		psmx2_unlock(&domain->sep_lock, 1);
 
 		rep_args[0].u32w0 = PSMX2_AM_REP_SEP_QUERY;
 		rep_args[0].u32w1 = op_error;

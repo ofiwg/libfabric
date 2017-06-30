@@ -35,9 +35,9 @@
 static inline void psmx2_am_enqueue_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				        struct psmx2_am_request *req)
 {
-	fastlock_acquire(&trx_ctxt->rma_queue.lock);
+	psmx2_lock(&trx_ctxt->rma_queue.lock, 2);
 	slist_insert_tail(&req->list_entry, &trx_ctxt->rma_queue.list);
-	fastlock_release(&trx_ctxt->rma_queue.lock);
+	psmx2_unlock(&trx_ctxt->rma_queue.lock, 2);
 }
 
 static inline void psmx2_iov_copy(struct iovec *iov, size_t count,

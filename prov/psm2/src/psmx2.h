@@ -719,7 +719,7 @@ struct psmx2_fid_cntr {
 	struct util_wait	*wait;
 	int			wait_is_local;
 	struct psmx2_trigger	*trigger;
-	pthread_mutex_t		trigger_lock;
+	fastlock_t		trigger_lock;
 };
 
 struct psmx2_ctxt_addr {
@@ -838,6 +838,7 @@ struct psmx2_env {
 	int max_trx_ctxt;
 	int num_devunits;
 	int inject_size;
+	int lock_level;
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
@@ -857,6 +858,32 @@ extern struct fi_ops_rma	psmx2_rma_ops;
 extern struct fi_ops_atomic	psmx2_atomic_ops;
 extern struct psmx2_env		psmx2_env;
 extern struct psmx2_fid_fabric	*psmx2_active_fabric;
+
+/*
+ * Lock levels:
+ *     0 -- always lock
+ *     1 -- lock needed if there is more than one thread (including internal threads)
+ *     2 -- lock needed if more then one thread accesses the same psm2 ep
+ */
+static inline void psmx2_lock(fastlock_t *lock, int lock_level)
+{
+	if (psmx2_env.lock_level >= lock_level)
+		fastlock_acquire(lock);
+}
+
+static inline int psmx2_trylock(fastlock_t *lock, int lock_level)
+{
+	if (psmx2_env.lock_level >= lock_level)
+		return fastlock_tryacquire(lock);
+	else
+		return 0;
+}
+
+static inline void psmx2_unlock(fastlock_t *lock, int lock_level)
+{
+	if (psmx2_env.lock_level >= lock_level)
+		fastlock_release(lock);
+}
 
 #ifdef PSM2_MULTI_EP_CAP
 
@@ -1072,12 +1099,12 @@ static inline void psmx2_progress_all(struct psmx2_fid_domain *domain)
 	struct dlist_entry *item;
 	struct psmx2_trx_ctxt *trx_ctxt;
 
-	fastlock_acquire(&domain->trx_ctxt_lock);
+	psmx2_lock(&domain->trx_ctxt_lock, 1);
 	dlist_foreach(&domain->trx_ctxt_list, item) {
 		trx_ctxt = container_of(item, struct psmx2_trx_ctxt, entry);
 		psmx2_progress(trx_ctxt);
 	}
-	fastlock_release(&domain->trx_ctxt_lock);
+	psmx2_unlock(&domain->trx_ctxt_lock, 1);
 }
 
 /* The following functions are used by triggered operations */

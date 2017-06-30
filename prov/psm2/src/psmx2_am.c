@@ -243,26 +243,26 @@ int psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt)
 	struct psmx2_trigger *trigger;
 
 	if (psmx2_env.tagged_rma) {
-		fastlock_acquire(&trx_ctxt->rma_queue.lock);
+		psmx2_lock(&trx_ctxt->rma_queue.lock, 2);
 		while (!slist_empty(&trx_ctxt->rma_queue.list)) {
 			item = slist_remove_head(&trx_ctxt->rma_queue.list);
 			req = container_of(item, struct psmx2_am_request, list_entry);
-			fastlock_release(&trx_ctxt->rma_queue.lock);
+			psmx2_unlock(&trx_ctxt->rma_queue.lock, 2);
 			psmx2_am_process_rma(trx_ctxt, req);
-			fastlock_acquire(&trx_ctxt->rma_queue.lock);
+			psmx2_lock(&trx_ctxt->rma_queue.lock, 2);
 		}
-		fastlock_release(&trx_ctxt->rma_queue.lock);
+		psmx2_unlock(&trx_ctxt->rma_queue.lock, 2);
 	}
 
-	fastlock_acquire(&trx_ctxt->trigger_queue.lock);
+	psmx2_lock(&trx_ctxt->trigger_queue.lock, 2);
 	while (!slist_empty(&trx_ctxt->trigger_queue.list)) {
 		item = slist_remove_head(&trx_ctxt->trigger_queue.list);
 		trigger = container_of(item, struct psmx2_trigger, list_entry);
-		fastlock_release(&trx_ctxt->trigger_queue.lock);
+		psmx2_unlock(&trx_ctxt->trigger_queue.lock, 2);
 		psmx2_process_trigger(trx_ctxt, trigger);
-		fastlock_acquire(&trx_ctxt->trigger_queue.lock);
+		psmx2_lock(&trx_ctxt->trigger_queue.lock, 2);
 	}
-	fastlock_release(&trx_ctxt->trigger_queue.lock);
+	psmx2_unlock(&trx_ctxt->trigger_queue.lock, 2);
 
 	return 0;
 }
@@ -286,9 +286,9 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 		if (err)
 			return psmx2_errno(err);
 
-		fastlock_acquire(&psmx2_am_global.lock);
+		psmx2_lock(&psmx2_am_global.lock, 1);
 		if (psmx2_am_global.cnt >= PSMX2_AM_MAX_TRX_CTXT) {
-			fastlock_release(&psmx2_am_global.lock);
+			psmx2_unlock(&psmx2_am_global.lock, 1);
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
 				"number of PSM2 endpoints exceed limit %d.\n"
 				"at indecies %d, %d\n", PSMX2_AM_MAX_TRX_CTXT);
@@ -300,7 +300,7 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 		psmx2_am_handlers[1] = psmx2_am_global.atomic_handlers[idx];
 		psmx2_am_handlers[2] = psmx2_am_sep_handler;
 		psmx2_am_global.trx_ctxts[idx] = trx_ctxt;
-		fastlock_release(&psmx2_am_global.lock);
+		psmx2_unlock(&psmx2_am_global.lock, 1);
 
 		err = psm2_am_register_handlers(psm2_ep, psmx2_am_handlers,
 						num_handlers, psmx2_am_handlers_idx);

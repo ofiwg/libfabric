@@ -163,10 +163,10 @@ static inline size_t psmx2_ioc_size(const struct fi_ioc *ioc, size_t count,
 			int i; \
 			TYPE *d = (dst); \
 			TYPE *r = (res); \
-			fastlock_acquire(&psmx2_atomic_lock); \
+			psmx2_lock(&psmx2_atomic_lock, 1); \
 			for (i=0; i<(cnt); i++) \
 				r[i] = d[i]; \
-			fastlock_release(&psmx2_atomic_lock); \
+			psmx2_unlock(&psmx2_atomic_lock, 1); \
 		} while (0)
 
 #define PSMX2_ATOMIC_WRITE(dst,src,cnt,OP,TYPE) \
@@ -174,10 +174,10 @@ static inline size_t psmx2_ioc_size(const struct fi_ioc *ioc, size_t count,
 			int i; \
 			TYPE *d = (dst); \
 			TYPE *s = (src); \
-			fastlock_acquire(&psmx2_atomic_lock); \
+			psmx2_lock(&psmx2_atomic_lock, 1); \
 			for (i=0; i<cnt; i++) \
 				OP(d[i],s[i]); \
-			fastlock_release(&psmx2_atomic_lock); \
+			psmx2_unlock(&psmx2_atomic_lock, 1); \
 		} while (0)
 
 #define PSMX2_ATOMIC_READWRITE(dst,src,res,cnt,OP,TYPE) \
@@ -186,12 +186,12 @@ static inline size_t psmx2_ioc_size(const struct fi_ioc *ioc, size_t count,
 			TYPE *d = (dst); \
 			TYPE *s = (src); \
 			TYPE *r = (res); \
-			fastlock_acquire(&psmx2_atomic_lock); \
+			psmx2_lock(&psmx2_atomic_lock, 1); \
 			for (i=0; i<(cnt); i++) {\
 				r[i] = d[i]; \
 				OP(d[i],s[i]); \
 			} \
-			fastlock_release(&psmx2_atomic_lock); \
+			psmx2_unlock(&psmx2_atomic_lock, 1); \
 		} while (0)
 
 #define PSMX2_ATOMIC_CSWAP(dst,src,cmp,res,cnt,CMP_OP,TYPE) \
@@ -201,13 +201,13 @@ static inline size_t psmx2_ioc_size(const struct fi_ioc *ioc, size_t count,
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
-			fastlock_acquire(&psmx2_atomic_lock); \
+			psmx2_lock(&psmx2_atomic_lock, 1); \
 			for (i=0; i<(cnt); i++) { \
 				r[i] = d[i]; \
 				if (c[i] CMP_OP d[i]) \
 					d[i] = s[i]; \
 			} \
-			fastlock_release(&psmx2_atomic_lock); \
+			psmx2_unlock(&psmx2_atomic_lock, 1); \
 		} while (0)
 
 #define PSMX2_ATOMIC_MSWAP(dst,src,cmp,res,cnt,TYPE) \
@@ -217,12 +217,12 @@ static inline size_t psmx2_ioc_size(const struct fi_ioc *ioc, size_t count,
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
-			fastlock_acquire(&psmx2_atomic_lock); \
+			psmx2_lock(&psmx2_atomic_lock, 1); \
 			for (i=0; i<(cnt); i++) { \
 				r[i] = d[i]; \
 				d[i] = (s[i] & c[i]) | (d[i] & ~c[i]); \
 			} \
-			fastlock_release(&psmx2_atomic_lock); \
+			psmx2_unlock(&psmx2_atomic_lock, 1); \
 		} while (0)
 
 static int psmx2_atomic_do_write(void *dest, void *src,

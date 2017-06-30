@@ -216,7 +216,7 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 	if (!cntr->trigger)
 		return;
 
-	pthread_mutex_lock(&cntr->trigger_lock);
+	psmx2_lock(&cntr->trigger_lock, 2);
 
 	trigger = cntr->trigger;
 	while (trigger) {
@@ -226,10 +226,10 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 		cntr->trigger = trigger->next;
 
 		if (domain->base_trx_ctxt->am_initialized) {
-			fastlock_acquire(&domain->base_trx_ctxt->trigger_queue.lock);
+			psmx2_lock(&domain->base_trx_ctxt->trigger_queue.lock, 2);
 			slist_insert_tail(&trigger->list_entry,
 					  &domain->base_trx_ctxt->trigger_queue.list);
-			fastlock_release(&domain->base_trx_ctxt->trigger_queue.lock);
+			psmx2_unlock(&domain->base_trx_ctxt->trigger_queue.lock, 2);
 		} else {
 			psmx2_process_trigger(domain->base_trx_ctxt, trigger);
 		}
@@ -237,7 +237,7 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 		trigger = cntr->trigger;
 	}
 
-	pthread_mutex_unlock(&cntr->trigger_lock);
+	psmx2_unlock(&cntr->trigger_lock, 2);
 }
 
 void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
@@ -245,7 +245,7 @@ void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
 {
 	struct psmx2_trigger *p, *q;
 
-	pthread_mutex_lock(&cntr->trigger_lock);
+	psmx2_lock(&cntr->trigger_lock, 2);
 
 	q = NULL;
 	p = cntr->trigger;
@@ -259,7 +259,7 @@ void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
 		cntr->trigger = trigger;
 	trigger->next = p;
 
-	pthread_mutex_unlock(&cntr->trigger_lock);
+	psmx2_unlock(&cntr->trigger_lock, 2);
 
 	psmx2_cntr_check_trigger(cntr);
 }
@@ -407,7 +407,7 @@ static int psmx2_cntr_close(fid_t fid)
 			fi_close((fid_t)cntr->wait);
 	}
 
-	pthread_mutex_destroy(&cntr->trigger_lock);
+	fastlock_destroy(&cntr->trigger_lock);
 	psmx2_domain_release(cntr->domain);
 	free(cntr);
 
@@ -545,7 +545,7 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	ofi_atomic_initialize64(&cntr_priv->counter, 0);
 	ofi_atomic_initialize64(&cntr_priv->error_counter, 0);
 
-	pthread_mutex_init(&cntr_priv->trigger_lock, NULL);
+	fastlock_init(&cntr_priv->trigger_lock);
 
 	if (wait)
 		fi_poll_add(&cntr_priv->wait->pollset->poll_fid,
