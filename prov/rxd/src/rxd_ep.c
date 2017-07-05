@@ -646,6 +646,7 @@ static void rxd_ep_init_start_pkt(struct rxd_ep *ep, struct rxd_peer *peer,
 		pkt->op.remote_idx = tx_entry->read_rsp.peer_msg_id;
 		break;
 	default:
+		seg_size = 0;
 		assert(0);
 	}
 
