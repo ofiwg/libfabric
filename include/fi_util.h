@@ -648,7 +648,7 @@ int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
 
 
 #define OFI_NAME_DELIM	';'
-#define OFI_UTIL_PREFIX "ofi-"
+#define OFI_UTIL_PREFIX "ofi_"
 
 char *ofi_strdup_append(const char *head, const char *tail);
 // char *ofi_strdup_head(const char *str);
