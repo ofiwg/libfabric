@@ -36,7 +36,8 @@ Endpoint capabilities
 
   Scalable endpoints are supported if the underlying PSM2 library supports
   multiple endpoints. This condition must be satisfied both when the
-  provider is built and when the provider is used.
+  provider is built and when the provider is used. See the *Scalable
+  endpoints* section for more information.
 
   Other supported capabilities include *FI_TRIGGER*, *FI_REMOTE_CQ_DATA*,
   and *FI_SOURCE*. Furthermore, *FI_NAMED_RX_CTX* is supported when scalable
@@ -59,6 +60,36 @@ Progress
   auto progress mode. However, the performance can be significantly
   impacted if the application purely depends on the provider to
   make auto progress.
+
+Scalable endpoints
+: Scalable endpoints support depends on the multi-EP feature of the *PSM2*
+  library. If the *PSM2* library has this feature, the availability is
+  further controlled by an environment variable *PSM2_MULTI_EP*, which by
+  default is 0 (disabled). It is important to set the environment variable
+  to 1 before using the scalable endpoint with the *psm2* provider.
+
+  For convenience, the *psm2* provider has a mechanism for application
+  to turn on the *PSM2* multi-EP feature programmatically, thus avoid the
+  need of manually setting the environment variable. To use this feature,
+  when the application calls fi_getinfo() the first time, it should pass
+  a non-NULL "hints" parameter with non-NULL "ep_attr" field and with
+  "hints->ep_attr->tx_ctx_cnt" set to be greater than 1. The *psm2*
+  provider treats this as a request to use scalable endpoint and thus
+  sets the default value of *PSM2_MULTI_EP* to 1. This mechanism, however,
+  has no effect if *PSM2_MULTI_EP* has already been set.
+
+  When creating a scalable endpoint, the actual number of contexts needed
+  should be set in the "fi_info" structure passed to the *fi_scalable_ep*
+  function. This number should be set in "fi_info->ep_attr->tx_ctx_cnt" or
+  "fi_info->ep_attr->rx_ctx_cnt" or both, whichever greater is used. The
+  *psm2* provider allocates all asked contexts upfront when the scalable
+  endpoint is created. The same context is used for both Tx and Rx.
+
+  It is important to notice that each context requires a dedicated completion
+  queue or counter. Any attempt to bind to a context a completion queue or
+  counter that has already been bound to another context or endpoint will
+  fail. For optimal performance, it is also advised to avoid having multiple
+  threads accessing the same context.
 
 Unsupported features
 : These features are unsupported: connection management, 
