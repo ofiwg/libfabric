@@ -1,4 +1,4 @@
-.TH "fi_psm2" "7" "2017\-06\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2017\-07\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM2 Fabric Provider
@@ -34,6 +34,7 @@ Scalable endpoints are supported if the underlying PSM2 library supports
 multiple endpoints.
 This condition must be satisfied both when the provider is built and
 when the provider is used.
+See the \f[I]Scalable endpoints\f[] section for more information.
 .PP
 Other supported capabilities include \f[I]FI_TRIGGER\f[],
 \f[I]FI_REMOTE_CQ_DATA\f[], and \f[I]FI_SOURCE\f[].
@@ -56,6 +57,43 @@ function is called to ensure progress is made in a timely manner.
 The provider does support auto progress mode.
 However, the performance can be significantly impacted if the
 application purely depends on the provider to make auto progress.
+.PP
+Scalable endpoints : Scalable endpoints support depends on the multi\-EP
+feature of the \f[I]PSM2\f[] library.
+If the \f[I]PSM2\f[] library has this feature, the availability is
+further controlled by an environment variable \f[I]PSM2_MULTI_EP\f[],
+which by default is 0 (disabled).
+It is important to set the environment variable to 1 before using the
+scalable endpoint with the \f[I]psm2\f[] provider.
+.PP
+For convenience, the \f[I]psm2\f[] provider has a mechanism for
+application to turn on the \f[I]PSM2\f[] multi\-EP feature
+programmatically, thus avoid the need of manually setting the
+environment variable.
+To use this feature, when the application calls fi_getinfo() the first
+time, it should pass a non\-NULL "hints" parameter with non\-NULL
+"ep_attr" field and with "hints\->ep_attr\->tx_ctx_cnt" set to be
+greater than 1.
+The \f[I]psm2\f[] provider treats this as a request to use scalable
+endpoint and thus sets the default value of \f[I]PSM2_MULTI_EP\f[] to 1.
+This mechanism, however, has no effect if \f[I]PSM2_MULTI_EP\f[] has
+already been set.
+.PP
+When creating a scalable endpoint, the actual number of contexts needed
+should be set in the "fi_info" structure passed to the
+\f[I]fi_scalable_ep\f[] function.
+This number should be set in "fi_info\->ep_attr\->tx_ctx_cnt" or
+"fi_info\->ep_attr\->rx_ctx_cnt" or both, whichever greater is used.
+The \f[I]psm2\f[] provider allocates all asked contexts upfront when the
+scalable endpoint is created.
+The same context is used for both Tx and Rx.
+.PP
+It is important to notice that each context requires a dedicated
+completion queue or counter.
+Any attempt to bind to a context a completion queue or counter that has
+already been bound to another context or endpoint will fail.
+For optimal performance, it is also advised to avoid having multiple
+threads accessing the same context.
 .PP
 Unsupported features : These features are unsupported: connection
 management, passive endpoint, shared receive context, and send/inject
