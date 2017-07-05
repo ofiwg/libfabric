@@ -652,6 +652,8 @@ static void rxd_ep_init_start_pkt(struct rxd_ep *ep, struct rxd_peer *peer,
 	rxd_init_ctrl_hdr(&pkt->ctrl, ofi_ctrl_start_data, seg_size, 0,
 			   tx_entry->msg_id, peer->conn_data,
 			   peer->conn_data);
+	/* copy op header here because it is used in ep_copy_data call */
+	tx_entry->op_hdr = pkt->op;
 	tx_entry->bytes_sent = rxd_ep_copy_data(tx_entry, pkt->data,
 						seg_size);
 	tx_entry->seg_no++;
@@ -677,7 +679,6 @@ ssize_t rxd_ep_start_xfer(struct rxd_ep *ep, struct rxd_peer *peer,
 				     RXD_TX_ENTRY_ID(ep, tx_entry));
 
 	rxd_ep_init_start_pkt(ep, peer, op, tx_entry, pkt, flags);
-	tx_entry->op_hdr = pkt->op;
 
 	if (tx_entry->op_hdr.size == pkt->ctrl.seg_size)
 		pkt_meta->flags |= RXD_PKT_LAST;
