@@ -361,7 +361,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt) {
+			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt &&
+			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->ep_attr->tx_ctx_cnt=%d, max=%d\n",
 					hints->ep_attr->tx_ctx_cnt,

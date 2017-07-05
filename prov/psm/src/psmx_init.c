@@ -296,7 +296,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 				goto err_out;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > 1) {
+			if (hints->ep_attr->tx_ctx_cnt > 1 &&
+			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
 					"hints->ep_attr->tx_ctx_cnt=%d, supported=0,1\n",
 					hints->ep_attr->tx_ctx_cnt);
