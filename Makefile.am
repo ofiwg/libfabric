@@ -285,4 +285,4 @@ dist-hook: fabtests.spec
 test:
 	./scripts/runfabtests.sh -vvv
 	./scripts/runfabtests.sh -vvv udp
-	./scripts/runfabtests.sh -vvv ofi-rxm
+	./scripts/runfabtests.sh -vvv ofi_rxm
