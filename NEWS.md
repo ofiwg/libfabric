@@ -60,6 +60,25 @@ see the man pages.
   mode bit was added.  This mode bit doubles the amount of context
   space that an application allocates on behalf of the provider.
 
+## PSM provider notes
+
+- Improve the name server functionality and move to the utility code
+- Handle updated mr_mode definitions
+- Add support of 32 and 64 bit atomic values
+
+## PSM2 provider notes
+
+- Add option to adjust the locking level
+- Improve the name server functionality and move to the utility code
+- Add support for string address format
+- Add an environment vaiable for message inject size
+- Handle FI_DISCARD in tagged receive functions
+- Handle updated mr_mode definitions
+- Add support for scalable endpoint
+- Add support of 32 and 64 bit atomic values
+- Add FI_SOURCE_ERR to the supported caps
+- Improve the method of checking device existence
+
 v1.4.2, Fri May 12, 2017
 ========================
 
