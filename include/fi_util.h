@@ -380,6 +380,7 @@ int ofi_av_get_index(struct util_av *av, const void *addr);
 
 enum util_cmap_state {
 	CMAP_UNSPEC,
+	CMAP_IDLE = CMAP_UNSPEC, /* TODO: remove UNSPEC */
 	CMAP_CONNECTING,
 	CMAP_CONNECTED
 };
@@ -388,7 +389,7 @@ struct util_cmap_handle {
 	struct util_cmap *cmap;
 	enum util_cmap_state state;
 	/* Unique identifier for a connection. Can be exchanged with a peer
-	 * during connection setup and can later be used in a messsage header
+	 * during connection setup and can later be used in a message header
 	 * to identify the source of the message (Used for FI_SOURCE, RNDV
 	 * protocol, etc.) */
 	uint64_t key;

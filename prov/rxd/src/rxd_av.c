@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,151 +31,122 @@
  */
 
 #include "rxd.h"
+#include <inttypes.h>
 
-fi_addr_t rxd_av_get_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
+
+/*
+ * The RXD code is agnostic wrt the datagram address format, but we need
+ * to know the size of the address in order to iterate over them.  Because
+ * the datagram AV may be configured for asynchronous operation, open a
+ * temporary one to insert/lookup the address to get the size.  I agree it's
+ * goofy.
+ */
+static int rxd_av_set_addrlen(struct rxd_av *av, const void *addr)
+{
+	struct rxd_domain *domain;
+	struct fid_av *tmp_av;
+	struct fi_av_attr attr;
+	uint8_t tmp_addr[RXD_MAX_DGRAM_ADDR];
+	size_t len;
+	int ret;
+
+	FI_INFO(&rxd_prov, FI_LOG_AV, "determine dgram address len\n");
+	memset(&attr, 0, sizeof attr);
+	attr.type = FI_AV_TABLE;
+	attr.count = 1;
+
+	domain = container_of(av->util_av.domain, struct rxd_domain, util_domain);
+	ret = fi_av_open(domain->dg_domain, &attr, &tmp_av, NULL);
+	if (ret) {
+		FI_WARN(&rxd_prov, FI_LOG_AV, "failed to open av: %d (%s)\n",
+			-ret, fi_strerror(-ret));
+		return ret;
+	}
+
+	ret = fi_av_insert(tmp_av, addr, 1, NULL, 0, NULL);
+	if (ret != 1) {
+		FI_WARN(&rxd_prov, FI_LOG_AV, "addr insert failed: %d (%s)\n",
+			-ret, fi_strerror(-ret));
+		goto close;
+	}
+
+	len = sizeof tmp_addr;
+	ret = fi_av_lookup(tmp_av, 0, tmp_addr, &len);
+	if (ret) {
+		FI_WARN(&rxd_prov, FI_LOG_AV, "addr lookup failed: %d (%s)\n",
+			-ret, fi_strerror(-ret));
+		goto close;
+	}
+
+	FI_INFO(&rxd_prov, FI_LOG_AV, "set dgram address len: %d\n", len);
+	av->dg_addrlen = len;
+close:
+	fi_close(&tmp_av->fid);
+	return ret;
+}
+
+fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
 {
 	uint64_t *dg_idx;
+
 	dg_idx = ofi_av_get_addr(&av->util_av, (int) fi_addr);
 	return *dg_idx;
 }
 
-fi_addr_t rxd_av_get_fi_addr(struct rxd_av *av, fi_addr_t dg_addr)
-{
-	int ret = ofi_av_lookup_index(&av->util_av,
-				      &dg_addr, (int) dg_addr);
-	return (ret == -FI_ENODATA) ? FI_ADDR_UNSPEC : ret;
-}
-
-int rxd_av_insert_dg_av(struct rxd_av *av, const void *addr)
+fi_addr_t rxd_av_fi_addr(struct rxd_av *av, fi_addr_t dg_fiaddr)
 {
 	int ret;
-	fastlock_acquire(&av->lock);
-	ret = fi_av_insert(av->dg_av, addr, 1, NULL, 0, NULL);
-	if (ret != 1)
-		goto out;
-	av->dg_av_used++;
-out:
-	fastlock_release(&av->lock);
-	return ret;
+
+	ret = ofi_av_lookup_index(&av->util_av, &dg_fiaddr, (int) dg_fiaddr);
+	return (ret < 0) ? FI_ADDR_UNSPEC : ret;
 }
 
 int rxd_av_dg_reverse_lookup(struct rxd_av *av, uint64_t start_idx,
-			      const void *addr, size_t addrlen, uint64_t *idx)
+			      const void *addr, fi_addr_t *dg_fiaddr)
 {
-	int ret;
+	uint8_t curr_addr[RXD_MAX_DGRAM_ADDR];
 	size_t i, len;
-	void *curr_addr;
+	int ret;
 
-	curr_addr = calloc(1, addrlen);
-	if (!curr_addr)
-		return -FI_ENOMEM;
-
-	for (i = 0; i < (size_t)av->dg_av_used; i++) {
-		len = addrlen;
+	for (i = 0; i < (size_t) av->dg_av_used; i++) {
+		len = sizeof curr_addr;
 		ret = fi_av_lookup(av->dg_av, (i + start_idx) % av->dg_av_used,
 				   curr_addr, &len);
+		if (!ret) {
+			*dg_fiaddr = (i + start_idx) % av->dg_av_used;
+			FI_DBG(&rxd_prov, FI_LOG_AV, "found: %" PRIu64 "\n",
+				*dg_fiaddr);
+			return 0;
+		}
+	}
+	FI_DBG(&rxd_prov, FI_LOG_AV, "addr not found\n");
+	return -FI_ENODATA;
+}
+
+int rxd_av_insert_dg_addr(struct rxd_av *av, uint64_t hint_index,
+			  const void *addr, fi_addr_t *dg_fiaddr)
+{
+	int ret;
+
+	fastlock_acquire(&av->util_av.lock);
+	if (!av->dg_addrlen) {
+		ret = rxd_av_set_addrlen(av, addr);
 		if (ret)
-			continue;
-		if (len >= addrlen && memcmp(curr_addr, addr, addrlen) == 0) {
-			*idx = (i + start_idx) % av->dg_av_used;
 			goto out;
+		ret = -FI_ENODATA;
+	} else {
+		ret = rxd_av_dg_reverse_lookup(av, hint_index, addr, dg_fiaddr);
+	}
+
+	if (ret == -FI_ENODATA) {
+		ret = fi_av_insert(av->dg_av, addr, 1, dg_fiaddr, 0, NULL);
+		if (ret == 1) {
+			av->dg_av_used++;
+			ret = 0;
 		}
 	}
-	ret = -FI_ENODATA;
 out:
-	free(curr_addr);
-	return ret;
-}
-
-int rxd_av_insert_check(struct rxd_av *av, const void *addr, size_t count,
-			fi_addr_t *fi_addr, uint64_t flags, void *context)
-{
-	int success_cnt = 0;
-	size_t i;
-	int ret, index;
-	void *curr_addr;
-	uint64_t dg_av_idx;
-
-	for (i = 0; i < count; i++) {
-		curr_addr = (char *) addr + av->addrlen * i;
-		ret = rxd_av_dg_reverse_lookup(av, i, curr_addr, av->addrlen, &dg_av_idx);
-		if (ret == -FI_ENODATA) {
-			ret = fi_av_insert(av->dg_av, curr_addr, 1, &dg_av_idx,
-					   flags, context);
-			if (ret <= 0) {
-				if (av->util_av.eq)
-					ofi_av_write_event(&av->util_av, i,
-							   (ret == 0) ? FI_EINVAL : -ret,
-							   context);
-				if (fi_addr)
-					fi_addr[i] = FI_ADDR_NOTAVAIL;
-				continue;
-			}
-		}
-
-		ret = ofi_av_insert_addr(&av->util_av, &dg_av_idx, dg_av_idx, &index);
-		if (ret) {
-			if (av->util_av.eq)
-				ofi_av_write_event(&av->util_av, i, -ret, context);
-		} else {
-			success_cnt++;
-		}
-		
-		if (fi_addr)
-			fi_addr[i] = (ret == 0) ? index : FI_ADDR_NOTAVAIL;
-	}
-	av->dg_av_used += success_cnt;
-	if (av->util_av.eq) {
-		ofi_av_write_event(&av->util_av, success_cnt, 0, context);
-		ret = 0;
-	} else {
-		ret = success_cnt;
-	}
-	return ret;
-}
-
-int rxd_av_insert_fast(struct rxd_av *av, const void *addr, size_t count,
-		       fi_addr_t *fi_addr, uint64_t flags, void *context)
-{
-	int i, num, ret, success_cnt = 0;
-	int index;
-	fi_addr_t *fi_addrs;
-
-	fi_addrs = calloc(count, sizeof(fi_addr_t));
-	if (!fi_addrs)
-		return -FI_ENOMEM;
-
-	num = fi_av_insert(av->dg_av, addr, count, fi_addrs, flags, context);
-	if (num != count) {
-		free(fi_addrs);
-		return rxd_av_insert_check(av, addr, count, fi_addr,
-					    flags, context);
-	}
-
-	for (i = 0; i < num; i++) {
-		ret = ofi_av_insert_addr(&av->util_av, &fi_addrs[i],
-					 fi_addrs[i], &index);
-		if (ret) {
-			if (av->util_av.eq)
-				ofi_av_write_event(&av->util_av, i, -ret, context);
-		} else {
-			success_cnt++;
-		}
-
-		if (fi_addr)
-			fi_addr[i] = (ret == 0) ? index : FI_ADDR_NOTAVAIL;
-	}
-
-	free(fi_addrs);
-	av->dg_av_used += success_cnt;
-
-	if (av->util_av.eq) {
-		ofi_av_write_event(&av->util_av, success_cnt, 0, context);
-		ret = 0;
-	} else {
-		ret = success_cnt;
-	}
-
+	fastlock_release(&av->util_av.lock);
 	return ret;
 }
 
@@ -183,10 +154,65 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct rxd_av *av;
+	int i = 0, index, ret = 0, success_cnt = 0, lookup = 1;
+	uint64_t dg_fiaddr;
+
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
-	return av->dg_av_used ?
-		rxd_av_insert_check(av, addr, count, fi_addr, flags, context) :
-		rxd_av_insert_fast(av, addr, count, fi_addr, flags, context);
+	fastlock_acquire(&av->util_av.lock);
+	if (!av->dg_addrlen) {
+		ret = rxd_av_set_addrlen(av, addr);
+		if (ret)
+			goto out;
+		/* Skip lookups if this is the first insertion call.  */
+		lookup = 0;
+	}
+
+	for (; i < count; i++, addr = (uint8_t *) addr + av->dg_addrlen) {
+		ret = lookup ? rxd_av_dg_reverse_lookup(av, i, addr, &dg_fiaddr) :
+				-FI_ENODATA;
+		if (ret) {
+			ret = fi_av_insert(av->dg_av, addr, 1, &dg_fiaddr,
+					   flags, context);
+			if (ret != 1)
+				break;
+		}
+
+		ret = ofi_av_insert_addr(&av->util_av, &dg_fiaddr, dg_fiaddr, &index);
+		if (ret)
+			break;
+
+		success_cnt++;
+		if (fi_addr)
+			fi_addr[i] = index;
+	}
+
+	if (ret) {
+		FI_WARN(&rxd_prov, FI_LOG_AV,
+			"failed to insert address %d: %d (%s)\n",
+			i, -ret, fi_strerror(-ret));
+		if (av->util_av.eq)
+			ofi_av_write_event(&av->util_av, i, -ret, context);
+		if (fi_addr)
+			fi_addr[i] = FI_ADDR_NOTAVAIL;
+		i++;
+	}
+out:
+	av->dg_av_used += success_cnt;
+	fastlock_release(&av->util_av.lock);
+
+	for (; i < count; i++) {
+		if (av->util_av.eq)
+			ofi_av_write_event(&av->util_av, i, FI_ECANCELED, context);
+		if (fi_addr)
+			fi_addr[i] = FI_ADDR_NOTAVAIL;
+	}
+
+	if (av->util_av.eq) {
+		ofi_av_write_event(&av->util_av, success_cnt, 0, context);
+		return 0;
+	}
+
+	return success_cnt;
 }
 
 static int rxd_av_insertsvc(struct fid_av *av, const char *node,
@@ -208,33 +234,38 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 {
 	int ret = 0;
 	size_t i;
-	fi_addr_t dg_idx;
+	fi_addr_t dg_fiaddr;
 	struct rxd_av *av;
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
+	fastlock_acquire(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
-		dg_idx = rxd_av_get_dg_addr(av, fi_addr[i]);
-		ret = fi_av_remove(av->dg_av, &dg_idx, 1, flags);
+		dg_fiaddr = rxd_av_dg_addr(av, fi_addr[i]);
+		ret = fi_av_remove(av->dg_av, &dg_fiaddr, 1, flags);
 		if (ret)
 			break;
 		av->dg_av_used--;
 	}
+	fastlock_release(&av->util_av.lock);
 	return ret;
 }
 
-static const char * rxd_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
+static const char *rxd_av_straddr(struct fid_av *av, const void *addr,
+				  char *buf, size_t *len)
 {
 	struct rxd_av *rxd_av;
 	rxd_av = container_of(av, struct rxd_av, util_av.av_fid);
 	return rxd_av->dg_av->ops->straddr(rxd_av->dg_av, addr, buf, len);
 }
 
-int rxd_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, size_t *addrlen)
+static int rxd_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+			 size_t *addrlen)
 {
 	struct rxd_av *rxd_av;
 	fi_addr_t dg_addr;
+
 	rxd_av = container_of(av, struct rxd_av, util_av.av_fid);
-	dg_addr = rxd_av_get_dg_addr(rxd_av, fi_addr);
+	dg_addr = rxd_av_dg_addr(rxd_av, fi_addr);
 	return fi_av_lookup(rxd_av->dg_av, dg_addr, addr, addrlen);
 }
 
@@ -248,10 +279,11 @@ static struct fi_ops_av rxd_av_ops = {
 	.straddr = rxd_av_straddr,
 };
 
-int rxd_av_close(struct fid *fid)
+static int rxd_av_close(struct fid *fid)
 {
-	int ret;
 	struct rxd_av *av;
+	int ret;
+
 	av = container_of(fid, struct rxd_av, util_av.av_fid);
 	ret = fi_close(&av->dg_av->fid);
 	if (ret)
@@ -261,12 +293,11 @@ int rxd_av_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	fastlock_destroy(&av->lock);
 	free(av);
 	return 0;
 }
 
-int rxd_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int rxd_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return ofi_av_bind(fid, bfid, flags);
 }
@@ -302,7 +333,6 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	util_attr.addrlen = sizeof(fi_addr_t);
 	util_attr.overhead = attr->count;
 	util_attr.flags = FI_SOURCE;
-	av->size = attr->count ? attr->count : RXD_AV_DEF_COUNT;
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_TABLE;
 
@@ -311,7 +341,6 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err1;
 
-	av->size = av->util_av.count;
 	av_attr = *attr;
 	av_attr.type = FI_AV_TABLE;
 	av_attr.count = 0;
@@ -320,13 +349,9 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err2;
 
-	fastlock_init(&av->lock);
-	av->addrlen = domain->addrlen;
-
+	av->util_av.av_fid.fid.ops = &rxd_av_fi_ops;
+	av->util_av.av_fid.ops = &rxd_av_ops;
 	*av_fid = &av->util_av.av_fid;
-	(*av_fid)->fid.fclass = FI_CLASS_AV;
-	(*av_fid)->fid.ops = &rxd_av_fi_ops;
-	(*av_fid)->ops = &rxd_av_ops;
 	return 0;
 
 err2:
