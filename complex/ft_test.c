@@ -394,66 +394,19 @@ static int ft_check_verify_cnt()
 static int ft_pingpong_rma(void)
 {
 	int ret, i;
-
-	if (listen_sock < 0) {
-		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
-			ret = ft_send_rma();
-			if (ret)
-				return ret;
-
-			if (!is_inject_func(test_info.class_function)) {
-				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
-					return ret;
-			}
-
-			ret = ft_sync_msg_needed();
-			if (ret)
-				return ret;
-
-			ret = ft_recv_msg();
-			if (ret)
-				return ret;
-		}
-	} else {
-		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
-			ret = ft_recv_msg();
-			if (ret)
-				return ret;
-
-			ret = ft_send_rma();
-			if (ret)
-				return ret;
-
-			if (!is_inject_func(test_info.class_function)) {
-				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
-					return ret;
-			}
-
-			ret = ft_sync_msg_needed();
-			if (ret)
-				return ret;
-		}
-	}
-
-	return 0;
-}
-
-static int ft_pingpong_atomic(void)
-{
-	int ret, i;
 	size_t count;
 
-	ret = check_atomic(&count);
+	if (test_info.test_class & FI_ATOMIC) {
+		ret = check_atomic(&count);
 
-	ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
-	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
-		return 0;
+		ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
+		if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
+		    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+			return 0;
+		}
+		if (ret)
+			return ret;
 	}
-	if (ret)
-		return ret;
 
 	if (listen_sock < 0) {
 		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
@@ -502,10 +455,8 @@ static int ft_pingpong(void)
 {
 	int ret, i;
 
-	if (test_info.test_class & FI_RMA)
+	if (test_info.test_class & (FI_RMA | FI_ATOMIC))
 		return ft_pingpong_rma();
-	else if (test_info.test_class & FI_ATOMIC)
-		return ft_pingpong_atomic();
 
 	// TODO: current flow will not handle manual progress mode
 	// it can get stuck with both sides receiving
@@ -615,45 +566,19 @@ static int ft_run_latency(void)
 static int ft_bw_rma(void)
 {
 	int ret, i;
-	if (listen_sock < 0) {
-		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
-			ret = ft_send_rma();
-			if (ret)
-				return ret;
-		}
-
-		ret = ft_sync_msg_needed();
-		if (ret)
-			return ret;
-	} else {
-		if (no_sync_needed(test_info.class_function, test_info.msg_flags) &&
-		    test_info.comp_type != FT_COMP_CNTR)
-			i = ft_ctrl.xfer_iter;
-		else
-			i = 1;
-
-		ret = ft_recv_n_msg(i);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
-static int ft_bw_atomic(void)
-{
-	int ret, i;
 	size_t count;
-	
-	ret = check_atomic(&count);
 
-	ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
-	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
-		return 0;
+	if (test_info.test_class & FI_ATOMIC) {
+		ret = check_atomic(&count);
+
+		ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
+		if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
+		    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+			return 0;
+		}
+		if (ret)
+			return ret;
 	}
-	if (ret)
-		return ret;
 
 	if (listen_sock < 0) {
 		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
@@ -682,10 +607,8 @@ static int ft_bw(void)
 {
 	int ret, i;
 
-	if (test_info.test_class & FI_RMA)
+	if (test_info.test_class & (FI_RMA | FI_ATOMIC))
 		return ft_bw_rma();
-	else if (test_info.test_class & FI_ATOMIC)
-		return ft_bw_atomic();
 
 	if (listen_sock < 0) {
 		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
