@@ -155,7 +155,6 @@
 
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
 #define GNIX_MSG_GET_TAIL		(1ULL << 62)	/* MSG only flag */
-#define GNIX_MSG_MULTI_RECV_SUP		(1ULL << 63)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -719,6 +718,7 @@ enum gnix_fab_req_type {
 	GNIX_FAB_RQ_RECVV,
 	GNIX_FAB_RQ_TRECV,
 	GNIX_FAB_RQ_TRECVV,
+	GNIX_FAB_RQ_MRECV,
 	GNIX_FAB_RQ_AMO,
 	GNIX_FAB_RQ_FAMO,
 	GNIX_FAB_RQ_CAMO,
@@ -757,6 +757,9 @@ struct gnix_fab_req_msg {
 	size_t                       send_iov_cnt;
 	uint64_t                     send_flags;
 	size_t			     cum_send_len;
+	struct gnix_fab_req 	     *parent;
+	size_t                       mrecv_space_left;
+	uint64_t                     mrecv_buf_addr;
 
 	struct recv_info_t {
 		uint64_t	 recv_addr;
@@ -1002,6 +1005,9 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
  * @var work_fn	     the function called by the nic progress loop to initiate
  * the fabric request.
  * @var flags	      a set of bit patterns that apply to all message types
+ * @cb                optional call back to be invoked when ref cnt on this
+ *                    object drops to zero
+ * @ref_cnt           ref cnt for this object
  * @var iov_txds      A list of pending Rdma/CtFma GET txds.
  * @var iov_txd_cnt   The count of outstanding iov txds.
  * @var tx_failures   tx failure bits.
@@ -1018,6 +1024,8 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
+	void                      (*cb)(void *);
+	struct gnix_reference     ref_cnt;
 
 	struct slist_entry           *int_tx_buf_e;
 	uint8_t                      *int_tx_buf;
@@ -1033,9 +1041,9 @@ struct gnix_fab_req {
 
 	/* common to rma/amo/msg */
 	union {
-		struct gnix_fab_req_rma rma;
-		struct gnix_fab_req_msg msg;
-		struct gnix_fab_req_amo amo;
+		struct gnix_fab_req_rma   rma;
+		struct gnix_fab_req_msg   msg;
+		struct gnix_fab_req_amo   amo;
 	};
 	char inject_buf[GNIX_INJECT_SIZE];
 };

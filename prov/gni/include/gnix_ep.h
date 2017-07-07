@@ -236,11 +236,37 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 		fr->gnix_ep = ep;
 		dlist_init(&fr->dlist);
 		dlist_init(&fr->msg.tle.free);
+
+		/* reset common fields */
+		fr->tx_failures = 0;
+		_gnix_ref_get(ep);
 	}
 
-	/* reset common fields */
-	fr->tx_failures = 0;
-	_gnix_ref_get(ep);
+	return fr;
+}
+
+static inline struct gnix_fab_req *
+_gnix_fr_alloc_w_cb(struct gnix_fid_ep *ep, void (*cb)(void *))
+{
+	struct dlist_entry *de = NULL;
+	struct gnix_fab_req *fr = NULL;
+	int ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
+
+	while (unlikely(ret == -FI_EAGAIN))
+		ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
+
+	if (ret == FI_SUCCESS) {
+		fr = container_of(de, struct gnix_fab_req, dlist);
+		fr->gnix_ep = ep;
+		fr->cb = cb;
+		_gnix_ref_init(&fr->ref_cnt, 1, cb);
+		dlist_init(&fr->dlist);
+		dlist_init(&fr->msg.tle.free);
+
+		/* reset common fields */
+		fr->tx_failures = 0;
+		_gnix_ref_get(ep);
+	}
 
 	return fr;
 }
