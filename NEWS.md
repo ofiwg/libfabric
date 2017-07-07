@@ -5,7 +5,7 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.5.0alpha, Fri Jun 2, 2017
+v1.5.0rc1, Fri Jul 7, 2017
 ============================
 
 The 1.5 release includes updates to the libfabric API and ABI.  As a
