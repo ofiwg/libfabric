@@ -373,13 +373,17 @@ int ofi_av_get_index(struct util_av *av, const void *addr);
  * Connection Map
  */
 
+// TODO explore replacing this with a simple connection hash map that is common
+// for both AV and RX only connections.
 #define UTIL_CMAP_IDX_BITS 48
 
 enum util_cmap_state {
-	CMAP_UNSPEC,
-	CMAP_IDLE = CMAP_UNSPEC, /* TODO: remove UNSPEC */
-	CMAP_CONNECTING,
-	CMAP_CONNECTED
+	CMAP_IDLE,
+	CMAP_CONNREQ_SENT,
+	CMAP_CONNREQ_RECV,
+	CMAP_ACCEPT,
+	CMAP_CONNECTED,
+	CMAP_SHUTDOWN,
 };
 
 struct util_cmap_handle {
@@ -398,13 +402,29 @@ struct util_cmap_handle {
 struct util_cmap_peer {
 	struct util_cmap_handle *handle;
 	struct dlist_entry entry;
-	size_t addrlen;
 	uint8_t addr[];
 };
 
-typedef void (*ofi_cmap_free_handle_func)(void *arg);
+typedef struct util_cmap_handle* (*ofi_cmap_alloc_handle_func)(void);
+typedef void (*ofi_cmap_handle_func)(struct util_cmap_handle *handle);
+typedef int (*ofi_cmap_connect_func)(struct util_ep *cmap,
+				     struct util_cmap_handle *handle,
+				     fi_addr_t fi_addr);
+typedef void *(*ofi_cmap_event_handler_func)(void *arg);
+typedef int (*ofi_cmap_signal_func)(struct util_ep *ep);
+
+struct util_cmap_attr {
+	void 				*name;
+	ofi_cmap_alloc_handle_func 	alloc;
+	ofi_cmap_handle_func 		close;
+	ofi_cmap_handle_func 		free;
+	ofi_cmap_connect_func 		connect;
+	ofi_cmap_event_handler_func	event_handler;
+	ofi_cmap_signal_func		signal;
+};
 
 struct util_cmap {
+	struct util_ep *ep;
 	struct util_av *av;
 
 	/* cmap handles that correspond to addresses in AV */
@@ -417,22 +437,25 @@ struct util_cmap {
 	struct ofi_key_idx key_idx;
 
 	struct dlist_entry peer_list;
-	ofi_cmap_free_handle_func free_handle;
+	struct util_cmap_attr attr;
+	pthread_t event_handler_thread;
 	fastlock_t lock;
 };
 
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);
-void ofi_cmap_update_state(struct util_cmap_handle *handle,
-		enum util_cmap_state state);
-/* Either fi_addr or addr and addrlen args must be given. */
-int ofi_cmap_add_handle(struct util_cmap *cmap, struct util_cmap_handle *handle,
-		enum util_cmap_state state, fi_addr_t fi_addr, void *addr,
-		size_t addrlen);
-struct util_cmap_handle *ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr);
+int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
+			struct util_cmap_handle **handle);
+
+void ofi_cmap_process_connect(struct util_cmap *cmap, uint64_t local_key,
+			      uint64_t *remote_key);
+void ofi_cmap_process_reject(struct util_cmap *cmap, uint64_t local_key);
+int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
+			     struct util_cmap_handle **handle);
+void ofi_cmap_process_shutdown(struct util_cmap *cmap, uint64_t local_key);
 void ofi_cmap_del_handle(struct util_cmap_handle *handle);
 void ofi_cmap_free(struct util_cmap *cmap);
-struct util_cmap *ofi_cmap_alloc(struct util_av *av,
-		ofi_cmap_free_handle_func free_handle);
+struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
+				 struct util_cmap_attr *attr);
 
 /*
  * Poll set

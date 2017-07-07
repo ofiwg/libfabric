@@ -191,6 +191,8 @@ uint64_t fi_gettime_us(void);
 #define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
 #define ofi_sin6_port(addr) (((struct sockaddr_in6 *)(addr))->sin6_port)
 
+#define OFI_ADDRSTRLEN (INET6_ADDRSTRLEN + 50)
+
 static inline size_t ofi_sizeofaddr(const struct sockaddr *address)
 {
 	return (address->sa_family == AF_INET ?
