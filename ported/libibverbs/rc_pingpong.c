@@ -525,6 +525,9 @@ int main(int argc, char *argv[])
 	hints->caps = FI_MSG;
 	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
+	if (rx_depth)
+		hints->rx_attr->size = rx_depth;
+
 	rc = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (rc)
 		return -rc;
@@ -536,16 +539,12 @@ int main(int argc, char *argv[])
 	}
 	fi_freeinfo(hints);
 
-	if (rx_depth) {
-		if (rx_depth > fi->rx_attr->size) {
-			fprintf(stderr, "rx_depth requested: %d, "
-				"rx_depth supported: %zd\n", rx_depth, fi->rx_attr->size);
-			rc = 1;
-			goto err1;
+	if (!rx_depth) {
+		if (rx_depth_default < fi->rx_attr->size) {
+			fi->rx_attr->size = rx_depth = rx_depth_default;
+		} else {
+			rx_depth = fi->rx_attr->size;
 		}
-	} else {
-		rx_depth = (rx_depth_default > fi->rx_attr->size) ?
-			fi->rx_attr->size : rx_depth_default;
 	}
 
 	ctx = pp_init_ctx(fi, size, rx_depth, use_event);
