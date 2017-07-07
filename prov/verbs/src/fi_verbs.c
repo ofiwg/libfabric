@@ -41,6 +41,12 @@ static void fi_ibv_fini(void);
 
 static const char *local_node = "localhost";
 
+size_t verbs_default_tx_size 		= 384;
+size_t verbs_default_rx_size 		= 384;
+size_t verbs_default_tx_iov_limit 	= 4;
+size_t verbs_default_rx_iov_limit 	= 4;
+size_t verbs_default_inline_size 	= 64;
+
 struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
 	.version = VERBS_PROV_VERS,
@@ -391,6 +397,10 @@ VERBS_INI
 			"Only IBV_WR_SEND and IBV_WR_RDMA_WRITE_WITH_IMM are supported. "
 			"The last one is not applicable for iWarp. "
 			"(default: IBV_WR_SEND)");
+
+	fi_param_define(&fi_ibv_prov, "inline_size", FI_PARAM_INT,
+			"Default inline size to request when creating a queue pair "
+			"(default: " OFI_STR_INT(VERBS_DEFAULT_INLINE_SIZE) ")");
 
 	return &fi_ibv_prov;
 }
