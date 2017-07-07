@@ -54,6 +54,7 @@
 
 /* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
+static uint64_t old_mode_bits;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct gnix_fid_ep *ep;
@@ -194,7 +195,7 @@ void cq_wait_mutex_cond_setup(void)
 void cq_notify_setup(void)
 {
 	int ret;
-
+	old_mode_bits = mode_bits;
 	mode_bits = FI_NOTIFY_FLAGS_ONLY;
 	setup();
 
@@ -219,6 +220,7 @@ void cq_notify_teardown(void)
 	cr_assert(!fi_close(&rcq->fid), "failure in closing cq.");
 	cr_assert(!fi_close(&fid_ep->fid), "failure in closing ep.");
 	teardown();
+	mode_bits = old_mode_bits;
 
 }
 
@@ -342,6 +344,26 @@ Test(insertion, limit)
 
 	cr_assert(!cq_priv->events->item_list.head);
 	cr_assert(cq_priv->events->free_list.head);
+}
+
+TestSuite(mode_bits, .init = NULL, .fini = teardown);
+
+Test(mode_bits, fi_notify_flags_only_1_4)
+{
+	old_mode_bits = mode_bits;
+	mode_bits = ~0;
+	_setup(FI_VERSION(1, 4));
+	cr_assert_eq(fi->mode & FI_NOTIFY_FLAGS_ONLY, 0, "Did not clear notify flag for version 1.4");
+	mode_bits = old_mode_bits;
+}
+
+Test(mode_bits, fi_notify_flags_only)
+{
+	old_mode_bits = mode_bits;
+	mode_bits = ~0;
+	_setup(fi_version());
+	cr_assert(fi->mode & FI_NOTIFY_FLAGS_ONLY, "Cleared the notify flag when we shouldn't have\n");
+	mode_bits = old_mode_bits;
 }
 
 TestSuite(reading, .init = cq_setup, .fini = cq_teardown);
