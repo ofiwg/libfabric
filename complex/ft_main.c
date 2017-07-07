@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -60,6 +60,7 @@ enum {
 	FT_ENODATA,
 	FT_ENOSYS,
 	FT_ERROR,
+	FT_EIO,
 	FT_MAX_RESULT
 };
 
@@ -86,6 +87,8 @@ static char *ft_test_type_str(enum ft_test_type enum_str)
 		return "latency";
 	case FT_TEST_BANDWIDTH:
 		return "bandwidth";
+	case FT_TEST_UNIT:
+		return "unit";
 	default:
 		return "test_unspec";
 	}
@@ -251,6 +254,8 @@ static int ft_fw_result_index(int fi_errno)
 		return FT_ENODATA;
 	case FI_ENOSYS:
 		return FT_ENOSYS;
+	case FI_EIO:
+		return FT_EIO;
 	default:
 		return FT_ERROR;
 	}
@@ -280,7 +285,6 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 		ft_show_test_info();
 
 		result = ft_run_test();
-		results[ft_fw_result_index(-result)]++;
 
 		ret = ft_sock_send(sock, &result, sizeof result);
 		if (result) {
@@ -300,7 +304,7 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 	if (subindex == 1)
 		return -FI_ENODATA;
 
-	return 0;
+	return result;
 }
 
 static int ft_server_child()
@@ -325,7 +329,7 @@ static int ft_server_child()
 		if (ret != -FI_ENODATA)
 			fi_freeinfo(info);
 
-		if (ret) {
+		if (ret && ret != -FI_EIO) {
 			FT_PRINTERR("ft_fw_process_list", ret);
 			printf("Node: %s\nService: %s\n",
 				test_info.node, test_info.service);
@@ -369,9 +373,9 @@ static int ft_fw_server(void)
 
 		results[ft_fw_result_index(ret)]++;
 
-	} while (!ret || ret == FI_ENODATA);
+	} while (!ret || ret == FI_EIO || ret == FI_ENODATA);
 
-	return ret; 
+	return ret;
 }
 
 static int ft_client_child(void)
@@ -411,19 +415,20 @@ static int ft_client_child(void)
 		}
 
 		ret = ft_sock_recv(sock, &sresult, sizeof sresult);
-		if (result) {
+		if (result && result != -FI_EIO) {
 			FT_PRINTERR("ft_run_test", result);
 			fprintf(stderr, "Node: %s\nService: %s \n",
 				test_info.node, test_info.service);
 			fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
-			ret = result;
 			goto out;
 		} else if (ret) {
 			FT_PRINTERR("ft_sock_send", ret);
+			result = ret;
 			goto out;
 		} else if (sresult) {
-			ret = sresult;
-			goto out;
+			result = sresult;
+			if (sresult != -FI_EIO)
+				goto out;
 		}
 
 		ret = ft_sock_recv(sock, &test_info, sizeof test_info);
@@ -436,10 +441,9 @@ static int ft_client_child(void)
 
 	printf("Ending test %d / %d, result: %s\n", test_info.test_index,
 		series->test_count, fi_strerror(-result));
-	ret = result;
 out:
 	fi_freeinfo(hints);
-	return ret;
+	return result;
 }
 
 static int ft_fw_client(void)
@@ -485,6 +489,7 @@ static void ft_fw_show_results(void)
 	printf("Success: %d\n", results[FT_SUCCESS]);
 	printf("ENODATA: %d\n", results[FT_ENODATA]);
 	printf("ENOSYS : %d\n", results[FT_ENOSYS]);
+	printf("EIO    : %d\n", results[FT_EIO]);
 	printf("ERROR  : %d\n", results[FT_ERROR]);
 }
 

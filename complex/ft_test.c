@@ -63,7 +63,7 @@ static int ft_init_rx_control(void)
 {
 	int ret;
 
-	ret= ft_init_xcontrol(&ft_rx_ctrl);
+	ret = ft_init_xcontrol(&ft_rx_ctrl);
 	if (ret)
 		return ret;
 
@@ -153,6 +153,7 @@ static void ft_cleanup_atomic_control(struct ft_atomic_control *ctrl)
 	free(ctrl->ioc);
 	free(ctrl->res_ioc);
 	free(ctrl->comp_ioc);
+	free(ctrl->orig_buf);
 	memset(ctrl, 0, sizeof *ctrl);
 }
 
@@ -281,27 +282,24 @@ static void ft_iov_to_ioc(struct iovec *iov, struct fi_ioc *ioc, size_t cnt,
 	size_t offset = 0;
 	for (i = 0; i < cnt; i++) {
 		ioc[i].count = iov[i].iov_len;
-		offset += ioc[i].count * ft_atom_ctrl.datatype_size;
 		ioc[i].addr = buf + offset;
+		offset += ioc[i].count * ft_atom_ctrl.datatype_size;
 	}
 }
 
-void ft_format_iocs(struct iovec *iov)
+void ft_format_iocs(struct iovec *iov, size_t *iov_count)
 {
 	while(ft_ctrl.iov_array[ft_tx_ctrl.iov_iter] > ft_atom_ctrl.count)
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 
-	ft_format_iov(iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
-			ft_tx_ctrl.buf, ft_atom_ctrl.count);
-	ft_iov_to_ioc(iov, ft_atom_ctrl.ioc,
-			ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+	*iov_count = ft_ctrl.iov_array[ft_tx_ctrl.iov_iter];
+	ft_format_iov(iov, *iov_count, ft_tx_ctrl.buf, ft_atom_ctrl.count);
+	ft_iov_to_ioc(iov, ft_atom_ctrl.ioc, *iov_count,
 			ft_atom_ctrl.datatype, ft_tx_ctrl.buf);
-	ft_iov_to_ioc(iov, ft_atom_ctrl.res_ioc,
-			ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
-			ft_atom_ctrl.datatype, ft_tx_ctrl.buf);
-	ft_iov_to_ioc(iov, ft_atom_ctrl.comp_ioc,
-			ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
-			ft_atom_ctrl.datatype, ft_tx_ctrl.buf);
+	ft_iov_to_ioc(iov, ft_atom_ctrl.res_ioc, *iov_count,
+			ft_atom_ctrl.datatype, ft_atom_ctrl.res_buf);
+	ft_iov_to_ioc(iov, ft_atom_ctrl.comp_ioc, *iov_count,
+			ft_atom_ctrl.datatype, ft_atom_ctrl.comp_buf);
 }
 
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt)
@@ -382,22 +380,20 @@ static int ft_pingpong_rma(void)
 			if (ret)
 				return ret;
 
-			if (test_info.class_function == FT_FUNC_READ ||
-				test_info.class_function == FT_FUNC_READV ||
-				test_info.class_function == FT_FUNC_READMSG) {
+			if (!is_inject_func(test_info.class_function)) {
 				ret = ft_comp_tx(FT_COMP_TO);
 				if (ret)
 					return ret;
 			}
 
-			ret = ft_send_msg();
+			ret = ft_send_sync_msg();
 			if (ret)
 				return ret;
 
 			ret = ft_recv_msg();
 			if (ret)
 				return ret;
-		}	
+		}
 	} else {
 		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
 			ret = ft_recv_msg();
@@ -408,15 +404,13 @@ static int ft_pingpong_rma(void)
 			if (ret)
 				return ret;
 
-			if (test_info.class_function == FT_FUNC_READ ||
-				test_info.class_function == FT_FUNC_READV ||
-				test_info.class_function == FT_FUNC_READMSG) {
+			if (!is_inject_func(test_info.class_function)) {
 				ret = ft_comp_tx(FT_COMP_TO);
 				if (ret)
 					return ret;
 			}
 
-			ret = ft_send_msg();
+			ret = ft_send_sync_msg();
 			if (ret)
 				return ret;
 		}
@@ -432,7 +426,7 @@ static int ft_pingpong_atomic(void)
 	size_t count;
 
 	if (listen_sock < 0) {
-		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
+		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
 			ft_atom_ctrl.datatype = datatype;
 			ret = check_atomic(&count);
 
@@ -450,7 +444,13 @@ static int ft_pingpong_atomic(void)
 				if (ret)
 					return ret;
 
-				ret = ft_send_msg();
+				if (!is_inject_func(test_info.class_function)) {
+					ret = ft_comp_tx(FT_COMP_TO);
+					if (ret)
+						return ret;
+				}
+
+				ret = ft_send_sync_msg();
 				if (ret)
 					return ret;
 
@@ -460,7 +460,7 @@ static int ft_pingpong_atomic(void)
 			}
 		}
 	} else {
-		for (datatype = 0; datatype <= FI_LONG_DOUBLE_COMPLEX; datatype++) {
+		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
 			ft_atom_ctrl.datatype = datatype;
 			ret = check_atomic(&count);
 
@@ -482,7 +482,13 @@ static int ft_pingpong_atomic(void)
 				if (ret)
 					return ret;
 
-				ret = ft_send_msg();
+				if (!is_inject_func(test_info.class_function)) {
+					ret = ft_comp_tx(FT_COMP_TO);
+					if (ret)
+						return ret;
+				}
+
+				ret = ft_send_sync_msg();
 				if (ret)
 					return ret;
 			}
@@ -575,11 +581,7 @@ static int ft_run_latency(void)
 			ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
 		}
 
-		if (((test_info.class_function == FT_FUNC_INJECT) ||
-			(test_info.class_function == FT_FUNC_INJECTDATA) ||
-			(test_info.class_function == FT_FUNC_INJECT_WRITE) ||
-			(test_info.class_function == FT_FUNC_INJECT_WRITEDATA) ||
-			(test_info.class_function == FT_FUNC_INJECT_ATOMIC)) &&
+		if (is_inject_func(test_info.class_function) &&
 			(ft_ctrl.size_array[i] > fabric_info->tx_attr->inject_size))
 			break;
 
@@ -615,14 +617,6 @@ static int ft_bw_rma(void)
 	if (listen_sock < 0) {
 		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
 			ret = ft_send_rma();
-			if (ret)
-				return ret;
-		}
-
-		if (test_info.class_function == FT_FUNC_READ ||
-			test_info.class_function == FT_FUNC_READV ||
-			test_info.class_function == FT_FUNC_READMSG) {
-			ret = ft_comp_tx(FT_COMP_TO);
 			if (ret)
 				return ret;
 		}
@@ -778,13 +772,9 @@ static int ft_run_bandwidth(void)
 			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
 		} else {
 			ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
-		}		
+		}
 
-		if (((test_info.class_function == FT_FUNC_INJECT) ||
-			(test_info.class_function == FT_FUNC_INJECTDATA) ||
-			(test_info.class_function == FT_FUNC_INJECT_WRITE) ||
-			(test_info.class_function == FT_FUNC_INJECT_WRITEDATA) ||
-			(test_info.class_function == FT_FUNC_INJECT_ATOMIC)) &&
+		if (is_inject_func(test_info.class_function) &&
 			(ft_ctrl.size_array[i] > fabric_info->tx_attr->inject_size))
 			break;
 
@@ -813,6 +803,161 @@ static int ft_run_bandwidth(void)
 	}
 
 	return 0;
+}
+
+static int ft_unit_rma(void)
+{
+	int ret, i, fail = 0;
+
+	for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+		ft_sync_fill_bufs(ft_tx_ctrl.rma_msg_size);
+
+		ret = ft_send_rma();
+		if (ret)
+			return ret;
+
+		if (!is_inject_func(test_info.class_function)) {
+			ret = ft_comp_tx(FT_COMP_TO);
+			if (ret)
+				return ret;
+		}
+
+		ret = ft_send_sync_msg();
+		if (ret)
+			return ret;
+
+		ret = ft_recv_msg();
+		if (ret)
+			return ret;
+
+		ret = ft_verify_bufs();
+		if (ret)
+			fail = -FI_EIO;
+	}
+
+	return fail;
+}
+
+static int ft_unit_atomic(void)
+{
+	int ret, i, fail = 0;
+	enum fi_datatype datatype;
+	size_t count;
+
+	for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
+		ft_atom_ctrl.datatype = datatype;
+		ret = check_atomic(&count);
+
+		ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
+		if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
+			ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+			ret = 0;
+			continue;
+		}
+		if (ret)
+			return ret;
+
+		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+			ft_sync_fill_bufs(ft_tx_ctrl.rma_msg_size);
+
+			ret = ft_send_rma();
+			if (ret)
+				return ret;
+
+			if (!is_inject_func(test_info.class_function)) {
+				ret = ft_comp_tx(FT_COMP_TO);
+				if (ret)
+					return ret;
+			}
+
+			ret = ft_send_sync_msg();
+			if (ret)
+				return ret;
+
+			ret = ft_recv_msg();
+			if (ret)
+				return ret;
+
+			ret = ft_verify_bufs();
+			if (ret)
+				fail = -FI_EIO;
+		}
+	}
+	return fail;
+}
+
+static int ft_unit(void)
+{
+	int ret, i, fail = 0;
+
+	if (test_info.caps & FI_RMA)
+		return ft_unit_rma();
+	else if (test_info.caps & FI_ATOMIC)
+		return ft_unit_atomic();
+
+	for (i = 0; i < ft_ctrl.xfer_iter; i++) {
+		ft_sync_fill_bufs(ft_tx_ctrl.msg_size);
+
+		ret = ft_send_msg();
+		if (ret)
+			return ret;
+
+		ret = ft_recv_msg();
+		if (ret)
+			return ret;
+
+		ret = ft_verify_bufs();
+		if (ret)
+			fail = -FI_EIO;
+	}
+	return fail;
+}
+
+static int ft_run_unit(void)
+{
+	int i, ret, fail;
+
+	fail = ret = 0;
+
+	for (i = 0; i < ft_ctrl.size_cnt; i += ft_ctrl.inc_step) {
+		if (ft_ctrl.size_array[i] > fabric_info->ep_attr->max_msg_size)
+			break;
+
+		if (test_info.caps & (FI_RMA | FI_ATOMIC)) {
+			ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
+			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
+		} else {
+			ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
+		}
+
+		if (is_inject_func(test_info.class_function) &&
+			(ft_ctrl.size_array[i] > fabric_info->tx_attr->inject_size))
+			break;
+
+		ft_ctrl.xfer_iter = test_info.test_flags & FT_FLAG_QUICKTEST ?
+				5 : size_to_count(ft_ctrl.size_array[i]);
+
+		ret = ft_sync_test(0);
+		if (ret)
+			return ret;
+
+		ret = ft_post_recv_bufs();
+		if (ret)
+			return ret;
+
+		ret = ft_unit();
+		if (ret) {
+			if (ret != -FI_EIO)
+				return ret;
+			fail = -FI_EIO;
+		}
+	}
+	if (fail)
+		printf("unit test FAILED\n");
+	else
+		printf("unit test PASSED\n");
+
+	return fail;
 }
 
 static void ft_cleanup(void)
@@ -875,6 +1020,11 @@ int ft_run_test()
 	}
 
 	switch (test_info.test_type) {
+	case FT_TEST_UNIT:
+		ret = ft_run_unit();
+		if (ret)
+			FT_PRINTERR("ft_run_unit", ret);
+		break;
 	case FT_TEST_LATENCY:
 		ret = ft_run_latency();
 		if (ret)

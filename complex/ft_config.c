@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -252,6 +252,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 	if (!strncmp(key->str, "test_type", strlen("test_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_TEST_LATENCY, enum ft_test_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_TEST_BANDWIDTH, enum ft_test_type, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_TEST_UNIT, enum ft_test_type, buf);
 		FT_ERR("Unknown test_type");
 	} else if (!strncmp(key->str, "class_function", strlen("class_function"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_SEND, enum ft_class_function, buf);

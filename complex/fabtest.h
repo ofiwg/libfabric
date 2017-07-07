@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2015-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
@@ -93,6 +93,7 @@ struct ft_xcontrol {
 };
 
 struct ft_atomic_control {
+	void			*orig_buf;
 	void			*res_buf;
 	struct fid_mr		*res_mr;
 	void			*res_memdesc;
@@ -151,6 +152,7 @@ enum ft_test_type {
 	FT_TEST_UNSPEC,
 	FT_TEST_LATENCY,
 	FT_TEST_BANDWIDTH,
+	FT_TEST_UNIT,
 	FT_MAX_TEST
 };
 
@@ -185,6 +187,24 @@ enum ft_class_function {
 };
 
 #define FT_FLAG_QUICKTEST	(1ULL << 0)
+
+#define is_inject_func(x) (x == FT_FUNC_INJECT || \
+			   x == FT_FUNC_INJECTDATA || \
+			   x == FT_FUNC_INJECT_WRITE || \
+			   x == FT_FUNC_INJECT_WRITEDATA || \
+			   x == FT_FUNC_INJECT_ATOMIC)
+
+#define is_read_func(x) (x == FT_FUNC_READ || \
+			 x == FT_FUNC_READV || \
+			 x == FT_FUNC_READMSG)
+
+#define is_fetch_func(x) (x == FT_FUNC_FETCH_ATOMIC || \
+			  x == FT_FUNC_FETCH_ATOMICV || \
+			  x == FT_FUNC_FETCH_ATOMICMSG)
+
+#define is_compare_func(x) (x == FT_FUNC_COMPARE_ATOMIC || \
+			    x == FT_FUNC_COMPARE_ATOMICV || \
+			    x == FT_FUNC_COMPARE_ATOMICMSG)
 
 struct ft_set {
 	char			node[FI_NAME_MAX];
@@ -275,10 +295,11 @@ int ft_open_passive();
 int ft_enable_comm();
 int ft_post_recv_bufs();
 void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len);
-void ft_format_iocs(struct iovec *iov);
+void ft_format_iocs(struct iovec *iov, size_t *iov_count);
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx);
 
+int ft_send_sync_msg();
 int ft_recv_msg();
 int ft_send_msg();
 int ft_send_dgram();
@@ -293,6 +314,8 @@ int ft_run_test();
 int ft_reset_ep();
 void ft_record_error(int error);
 
+int ft_verify_bufs();
+int ft_sync_fill_bufs(size_t size);
 
 #ifdef __cplusplus
 }

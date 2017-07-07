@@ -356,7 +356,7 @@ int ft_post_send_atomic(void)
 	int ret, i;
 	struct fi_msg_atomic msg;
 	struct fi_rma_ioc rma_iov;
-	size_t iov_count = ft_ctrl.iov_array[ft_tx_ctrl.iov_iter];
+	size_t iov_count;
 	struct fi_context *ctx;
 
 	if (test_info.class_function != FT_FUNC_INJECT_ATOMIC) {
@@ -367,7 +367,7 @@ int ft_post_send_atomic(void)
 
 	switch (test_info.class_function) {
 	case FT_FUNC_ATOMICV:
-		ft_format_iocs(ft_tx_ctrl.iov);
+		ft_format_iocs(ft_tx_ctrl.iov, &iov_count);
 		ft_send_retry(ret, fi_atomicv, ft_tx_ctrl.ep, ft_atom_ctrl.ioc,
 			ft_tx_ctrl.iov_desc, iov_count, ft_tx_ctrl.addr,
 			0, ft_mr_ctrl.mr_key, ft_atom_ctrl.datatype,
@@ -376,7 +376,7 @@ int ft_post_send_atomic(void)
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_ATOMICMSG:
-		ft_format_iocs(ft_tx_ctrl.iov);
+		ft_format_iocs(ft_tx_ctrl.iov, &iov_count);
 		msg.msg_iov = ft_atom_ctrl.ioc;
 		msg.desc = ft_tx_ctrl.iov_desc;
 		msg.iov_count = iov_count;
@@ -407,7 +407,7 @@ int ft_post_send_atomic(void)
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_FETCH_ATOMICV:
-		ft_format_iocs(ft_tx_ctrl.iov);
+		ft_format_iocs(ft_tx_ctrl.iov, &iov_count);
 		ft_send_retry(ret, fi_fetch_atomicv, ft_tx_ctrl.ep,
 			ft_atom_ctrl.ioc, ft_tx_ctrl.iov_desc, iov_count,
 			ft_atom_ctrl.res_ioc, ft_atom_ctrl.res_memdesc, iov_count,
@@ -417,7 +417,7 @@ int ft_post_send_atomic(void)
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_FETCH_ATOMICMSG:
-		ft_format_iocs(ft_tx_ctrl.iov);
+		ft_format_iocs(ft_tx_ctrl.iov, &iov_count);
 		msg.msg_iov = ft_atom_ctrl.ioc;
 		msg.desc = ft_tx_ctrl.iov_desc;
 		msg.iov_count = iov_count;
@@ -452,7 +452,7 @@ int ft_post_send_atomic(void)
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_COMPARE_ATOMICV:
-		ft_format_iocs(ft_tx_ctrl.iov);
+		ft_format_iocs(ft_tx_ctrl.iov, &iov_count);
 		ft_send_retry(ret, fi_compare_atomicv, ft_tx_ctrl.ep,
 			ft_atom_ctrl.ioc, ft_tx_ctrl.iov_desc, iov_count,
 			ft_atom_ctrl.comp_ioc, ft_atom_ctrl.comp_memdesc, iov_count,
@@ -463,7 +463,7 @@ int ft_post_send_atomic(void)
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_COMPARE_ATOMICMSG:
-		ft_format_iocs(ft_tx_ctrl.iov);
+		ft_format_iocs(ft_tx_ctrl.iov, &iov_count);
 		msg.msg_iov = ft_atom_ctrl.ioc;
 		msg.desc = ft_tx_ctrl.iov_desc;
 		msg.iov_count = iov_count;
@@ -577,6 +577,25 @@ int ft_recv_msg(void)
 	} while (credits == ft_rx_ctrl.credits);
 
 	return 0;
+}
+
+int ft_send_sync_msg(void)
+{
+	int ret;
+
+	while (!ft_tx_ctrl.credits) {
+		ret = ft_comp_tx(FT_COMP_TO);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_post_send();
+	if (ret)
+		return ret;
+
+	ret = ft_comp_tx(FT_COMP_TO);
+
+	return ret;
 }
 
 int ft_send_msg(void)
