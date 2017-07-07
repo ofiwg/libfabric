@@ -60,6 +60,7 @@
 #define RXM_MAJOR_VERSION 1
 #define RXM_MINOR_VERSION 0
 
+#define RXM_BUF_SIZE 16384
 #define RXM_IOV_LIMIT 4
 
 /*
@@ -220,9 +221,6 @@ struct rxm_tx_buf {
 
 	struct rxm_pkt pkt;
 };
-
-#define RXM_BUF_SIZE 16384
-#define RXM_TX_DATA_SIZE (RXM_BUF_SIZE - sizeof(struct rxm_pkt))
 
 struct rxm_tx_entry {
 	/* Must stay at top */

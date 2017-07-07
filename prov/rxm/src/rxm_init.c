@@ -97,6 +97,26 @@ int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
 	return 0;
 }
 
+static int rxm_init_info(void)
+{
+	int param;
+
+	if (!fi_param_get_int(&rxm_prov, "buffer_size", &param)) {
+		if (param > sizeof(struct rxm_pkt)) {
+			rxm_info.tx_attr->inject_size = param;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CORE,
+				"Requested buffer size too small\n");
+			return -FI_EINVAL;
+		}
+	} else {
+		rxm_info.tx_attr->inject_size = RXM_BUF_SIZE;
+	}
+	rxm_info.tx_attr->inject_size -= sizeof(struct rxm_pkt);
+	rxm_util_prov.info = &rxm_info;
+	return 0;
+}
+
 static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
@@ -155,5 +175,15 @@ struct fi_provider rxm_prov = {
 
 RXM_INI
 {
+	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_INT,
+			"Defines the transmit buffer size. Transmit data would "
+			"be copied upto this size (default: ~16k). This would "
+			"also affect the supported inject size");
+
+	if (rxm_init_info()) {
+		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
+		return NULL;
+	}
+
 	return &rxm_prov;
 }

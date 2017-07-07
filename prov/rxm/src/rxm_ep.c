@@ -653,7 +653,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		tx_entry->comp_flags = FI_MSG;
 	}
 
-	if (pkt->hdr.size > RXM_TX_DATA_SIZE) {
+	if (pkt->hdr.size > rxm_ep->rxm_info->tx_attr->inject_size) {
 		if (flags & FI_INJECT) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 					"inject size supported: %d, msg size: %d\n",
