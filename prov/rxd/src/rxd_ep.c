@@ -745,7 +745,7 @@ ssize_t rxd_ep_connect(struct rxd_ep *ep, struct rxd_peer *peer, fi_addr_t addr)
 	dlist_insert_tail(&pkt_meta->entry, &tx_entry->pkt_list);
 	dlist_insert_tail(&tx_entry->entry, &ep->tx_entry_list);
 	peer->nxt_msg_id++;
-	peer->state = CMAP_CONNECTING;
+	peer->state = CMAP_CONNREQ_SENT;
 	return 0;
 err:
 	rxd_tx_entry_free(ep, tx_entry);

@@ -37,7 +37,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
@@ -113,8 +112,6 @@ extern struct fi_ops_rma rxm_ops_rma;
 struct rxm_fabric {
 	struct util_fabric util_fabric;
 	struct fid_fabric *msg_fabric;
-	struct fid_eq *msg_eq;
-	pthread_t msg_listener_thread;
 };
 
 struct rxm_conn {
@@ -284,6 +281,7 @@ struct rxm_ep {
 	struct fi_info *rxm_info;
 	struct fi_info *msg_info;
 	struct fid_pep *msg_pep;
+	struct fid_eq *msg_eq;
 	struct fid_cq *msg_cq;
 	struct fid_ep *srx_ctx;
 	size_t comp_per_progress;
@@ -345,13 +343,15 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
-void *rxm_msg_listener(void *arg);
-int rxm_msg_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
-		struct fi_info *msg_info);
-int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
+void *rxm_conn_event_handler(void *arg);
+int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
+		    fi_addr_t fi_addr);
+int rxm_conn_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		void *data);
-void rxm_conn_close(void *arg);
-int rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr, struct rxm_conn **rxm_conn);
+struct util_cmap_handle *rxm_conn_alloc(void);
+void rxm_conn_close(struct util_cmap_handle *handle);
+void rxm_conn_free(struct util_cmap_handle *handle);
+int rxm_conn_signal(struct util_ep *util_ep);
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
 int ofi_match_addr(fi_addr_t addr, fi_addr_t match_addr);

@@ -446,6 +446,30 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 	return 0;
 }
 
+int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
+		 const struct sockaddr *sa2)
+{
+	int cmp;
+
+	switch (sa1->sa_family) {
+	case AF_INET:
+		cmp = memcmp(&ofi_sin_addr(sa1), &ofi_sin_addr(sa2),
+			     sizeof(ofi_sin_addr(sa1)));
+		return cmp ? cmp : memcmp(&ofi_sin_port(sa1),
+					  &ofi_sin_port(sa2),
+					  sizeof(ofi_sin_port(sa1)));
+	case AF_INET6:
+		cmp = memcmp(&ofi_sin6_addr(sa1), &ofi_sin6_addr(sa2),
+			     sizeof(ofi_sin6_addr(sa1)));
+		return cmp ? cmp : memcmp(&ofi_sin6_port(sa1),
+					  &ofi_sin_port(sa2),
+					  sizeof(ofi_sin6_port(sa1)));
+	default:
+		FI_WARN(prov, FI_LOG_FABRIC, "Invalid address format!\n");
+		assert(0);
+		return 0;
+	}
+}
 
 #ifndef HAVE_EPOLL
 

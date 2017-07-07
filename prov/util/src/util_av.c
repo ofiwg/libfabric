@@ -357,12 +357,8 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 
 	dlist_foreach(&av->ep_list, av_entry) {
 		ep = container_of(av_entry, struct util_ep, av_entry);
-		if (ep->cmap) {
-			fastlock_acquire(&ep->cmap->lock);
-			ep->cmap->free_handle(ep->cmap->handles_av[index]);
-			ep->cmap->handles_av[index] = NULL;
-			fastlock_release(&ep->cmap->lock);
-		}
+		if (ep->cmap)
+			ofi_cmap_del_handle(ep->cmap->handles_av[index]);
 	}
 
 	fastlock_release(&av->lock);
@@ -1024,9 +1020,8 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	return 0;
 }
 
-
 /*
- * Connection Map
+ * Connection map
  */
 
 /* Note: Callers should serialize access */
@@ -1076,118 +1071,12 @@ static void ofi_cmap_init_handle(struct util_cmap_handle *handle,
 	handle->peer = peer;
 }
 
-void ofi_cmap_update_state(struct util_cmap_handle *handle,
-		enum util_cmap_state state)
-{
-	fastlock_acquire(&handle->cmap->lock);
-	handle->state = state;
-	fastlock_release(&handle->cmap->lock);
-}
-
 static int ofi_cmap_match_peer(struct dlist_entry *entry, const void *addr)
 {
 	struct util_cmap_peer *peer;
 
 	peer = container_of(entry, struct util_cmap_peer, entry);
-	return !memcmp(peer->addr, addr, peer->addrlen);
-}
-
-static int ofi_cmap_add_peer(struct util_cmap *cmap, struct util_cmap_handle *handle,
-		enum util_cmap_state state, void *addr, size_t addrlen)
-{
-	struct util_cmap_peer *peer;
-	int ret = 0;
-
-	fastlock_acquire(&cmap->lock);
-	if (dlist_find_first_match(&cmap->peer_list, ofi_cmap_match_peer, addr)) {
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Peer already present\n");
-		ret = -FI_EALREADY;
-		goto unlock;
-	}
-
-	// TODO Use util_buf_pool
-	peer = calloc(1, sizeof(*peer) + addrlen);
-	if (!peer) {
-		ret = -FI_ENOMEM;
-		goto unlock;
-	}
-
-	ofi_cmap_init_handle(handle, cmap, state, FI_ADDR_UNSPEC, peer);
-	peer->handle = handle;
-	peer->addrlen = addrlen;
-	memcpy(peer->addr, addr, addrlen);
-	dlist_insert_tail(&peer->entry, &cmap->peer_list);
-unlock:
-	fastlock_release(&cmap->lock);
-	return ret;
-}
-
-/* Either fi_addr or addr and addrlen args must be given. */
-int ofi_cmap_add_handle(struct util_cmap *cmap, struct util_cmap_handle *handle,
-		enum util_cmap_state state, fi_addr_t fi_addr, void *addr,
-		size_t addrlen)
-{
-	int index, ret = 0;
-	if (fi_addr == FI_ADDR_UNSPEC) {
-		index = ip_av_get_index(cmap->av, addr);
-		if (index < 0)
-			return ofi_cmap_add_peer(cmap, handle, state, addr, addrlen);
-		fi_addr = index;
-	}
-
-	if (cmap->handles_av[fi_addr]) {
-		FI_TRACE(cmap->av->prov, FI_LOG_EP_CTRL, "Handle already present\n");
-		return -FI_EALREADY;
-	}
-
-	fastlock_acquire(&cmap->lock);
-	if (cmap->handles_av[fi_addr]) {
-		FI_TRACE(cmap->av->prov, FI_LOG_EP_CTRL, "Handle already present\n");
-		ret = -FI_EALREADY;
-		goto unlock;
-	}
-
-	ofi_cmap_init_handle(handle, cmap, state, fi_addr, NULL);
-	cmap->handles_av[fi_addr] = handle;
-unlock:
-	fastlock_release(&cmap->lock);
-	return ret;
-}
-
-struct util_cmap_handle *ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr)
-{
-	struct util_cmap_peer *peer;
-	struct dlist_entry *entry;
-	struct util_cmap_handle *handle = NULL;
-
-	if (cmap->handles_av[fi_addr])
-		return cmap->handles_av[fi_addr];
-
-	// TODO Move this to av_insert
-	/* Search in peer list */
-	fastlock_acquire(&cmap->lock);
-	if (cmap->handles_av[fi_addr]) {
-		handle = cmap->handles_av[fi_addr];
-		goto unlock;
-	}
-
-	entry = dlist_remove_first_match(&cmap->peer_list, ofi_cmap_match_peer,
-			ip_av_get_addr(cmap->av, fi_addr));
-	if (!entry)
-		goto unlock;
-
-	peer = container_of(entry, struct util_cmap_peer, entry);
-	handle = peer->handle;
-
-	handle->peer = NULL;
-	handle->fi_addr = fi_addr;
-
-	cmap->handles_av[fi_addr] = handle;
-	free(peer);
-unlock:
-	fastlock_release(&cmap->lock);
-	return handle;
+	return !memcmp(peer->addr, addr, peer->handle->cmap->av->addrlen);
 }
 
 /* Caller must hold cmap->lock */
@@ -1195,24 +1084,315 @@ static void util_cmap_del_handle(struct util_cmap_handle *handle)
 {
 	struct util_cmap *cmap = handle->cmap;
 
+	if (handle->state == CMAP_SHUTDOWN)
+		goto free;
+
 	if (handle->peer) {
 		dlist_remove(&handle->peer->entry);
 		free(handle->peer);
+		handle->peer = NULL;
 	} else {
 		cmap->handles_av[handle->fi_addr] = 0;
 	}
+
+	/* TODO The following defers the handle deletion until we receive a
+	 * shutdown. Replace this with something better. Handle may not be freed
+	 * if we don't get a shutdown event */
+	if (handle->state == CMAP_CONNECTED) {
+		handle->state = CMAP_SHUTDOWN;
+		handle->cmap->attr.close(handle);
+		return;
+	}
+free:
 	util_cmap_clear_key(handle);
-	cmap->free_handle(handle);
+	cmap->attr.free(handle);
 }
 
 void ofi_cmap_del_handle(struct util_cmap_handle *handle)
 {
-	fastlock_acquire(&handle->cmap->lock);
+	struct util_cmap *cmap = handle->cmap;
+	fastlock_acquire(&cmap->lock);
 	util_cmap_del_handle(handle);
-	fastlock_release(&handle->cmap->lock);
+	fastlock_release(&cmap->lock);
 }
 
-void ofi_cmap_del_handles(struct util_cmap *cmap)
+/* Caller must hold cmap->lock */
+static int util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
+				  enum util_cmap_state state,
+				  struct util_cmap_handle **handle)
+{
+	*handle = cmap->attr.alloc();
+	if (!*handle)
+		return -FI_ENOMEM;
+	ofi_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
+	cmap->handles_av[fi_addr] = *handle;
+	return 0;
+}
+
+/* Caller must hold cmap->lock */
+static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
+				       enum util_cmap_state state,
+				       struct util_cmap_handle **handle)
+{
+	struct util_cmap_peer *peer;
+
+	peer = calloc(1, sizeof(*peer) + cmap->av->addrlen);
+	if (!peer)
+		return -FI_ENOMEM;
+	*handle = cmap->attr.alloc();
+	if (!*handle) {
+		free(peer);
+		return -FI_ENOMEM;
+	}
+	ofi_cmap_init_handle(*handle, cmap, state, FI_ADDR_UNSPEC, peer);
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
+	peer->handle = *handle;
+	memcpy(peer->addr, addr, cmap->av->addrlen);
+	dlist_insert_tail(&peer->entry, &cmap->peer_list);
+	return 0;
+}
+
+/* Caller must hold cmap->lock */
+static int util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
+				    void *addr, enum util_cmap_state state,
+				    struct util_cmap_handle **handle)
+{
+	struct util_cmap_peer *peer;
+	struct dlist_entry *entry;
+	int ret, index;
+
+	if (fi_addr == FI_ADDR_UNSPEC) {
+		index = ip_av_get_index(cmap->av, addr);
+		if (index < 0)
+			goto peer;
+		fi_addr = index;
+	} else if (fi_addr > cmap->av->count) {
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "Invalid fi_addr\n");
+		return -FI_EINVAL;
+	}
+	if (cmap->handles_av[fi_addr]) {
+		*handle = cmap->handles_av[fi_addr];
+		goto out;
+	}
+peer:
+	if (!addr)
+		addr = ip_av_get_addr(cmap->av, fi_addr);
+	entry = dlist_find_first_match(&cmap->peer_list, ofi_cmap_match_peer, addr);
+	if (!entry) {
+		if (fi_addr == FI_ADDR_UNSPEC)
+			ret = util_cmap_alloc_handle_peer(cmap, addr, state, handle);
+		else
+			ret = util_cmap_alloc_handle(cmap, fi_addr, state, handle);
+		if (ret)
+			return ret;
+	} else {
+		peer = container_of(entry, struct util_cmap_peer, entry);
+		*handle = peer->handle;
+
+		if (fi_addr != FI_ADDR_UNSPEC) {
+			dlist_remove(entry);
+			(*handle)->peer = NULL;
+			(*handle)->fi_addr = fi_addr;
+			cmap->handles_av[fi_addr] = *handle;
+			free(peer);
+		}
+	}
+out:
+	return 0;
+}
+
+void ofi_cmap_process_shutdown(struct util_cmap *cmap, uint64_t local_key)
+{
+	struct util_cmap_handle *handle;
+
+	fastlock_acquire(&cmap->lock);
+	handle = ofi_cmap_key2handle(cmap, local_key);
+	if (!handle) {
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Invalid context received in shutdown\n");
+		// TODO debug why we hit here when run on ofi-rxm over sockets
+		// assert(0);
+	} else {
+		util_cmap_del_handle(handle);
+	}
+	fastlock_release(&cmap->lock);
+}
+
+void ofi_cmap_process_connect(struct util_cmap *cmap, uint64_t local_key,
+			      uint64_t *remote_key)
+{
+	struct util_cmap_handle *handle;
+
+	fastlock_acquire(&cmap->lock);
+	handle = ofi_cmap_key2handle(cmap, local_key);
+	if (!handle) {
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Invalid context received in connect\n");
+		assert(0);
+	} else {
+		handle->state = CMAP_CONNECTED;
+		if (remote_key)
+			handle->remote_key = *remote_key;
+	}
+	fastlock_release(&cmap->lock);
+}
+
+void ofi_cmap_process_reject(struct util_cmap *cmap, uint64_t local_key)
+{
+	struct util_cmap_handle *handle;
+
+	fastlock_acquire(&cmap->lock);
+	handle = ofi_cmap_key2handle(cmap, local_key);
+	if (!handle) {
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Invalid context received in reject\n");
+		// TODO debug why we hit here when run on ofi-rxm over sockets
+		//assert(0);
+	} else {
+		switch (handle->state) {
+		case CMAP_CONNREQ_RECV:
+		case CMAP_CONNECTED:
+			/* Handle is being re-used for incoming connection request */
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Received connection reject, but handle is being re-used\n");
+			break;
+		case CMAP_CONNREQ_SENT:
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Received connection reject, deleting handle\n");
+			util_cmap_del_handle(handle);
+			break;
+		default:
+			FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Invalid cmap state when receiving connection reject\n");
+			assert(0);
+		}
+	}
+	fastlock_release(&cmap->lock);
+}
+
+int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
+			     struct util_cmap_handle **handle_ret)
+{
+	struct util_cmap_handle *handle;
+#if ENABLE_DEBUG
+	char buf[OFI_ADDRSTRLEN];
+	uint32_t addr_format;
+	size_t len;
+#endif
+	int ret;
+
+	fastlock_acquire(&cmap->lock);
+	ret = util_cmap_get_handle(cmap, FI_ADDR_UNSPEC, addr, CMAP_CONNREQ_RECV, &handle);
+	if (ret)
+		return ret;
+	switch (handle->state) {
+	case CMAP_CONNECTED:
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Connection already present.\n");
+		ret = -FI_EALREADY;
+		break;
+	case CMAP_CONNREQ_SENT:
+#if ENABLE_DEBUG
+		addr_format = ofi_translate_addr_format(((struct sockaddr *)addr)->sa_family);
+		len = sizeof(buf);
+		FI_DBG(cmap->av->prov, FI_LOG_FABRIC, "local_name: %s\n",
+		       ofi_straddr(buf, &len, addr_format, cmap->attr.name));
+		FI_DBG(cmap->av->prov, FI_LOG_FABRIC, "remote_name: %s\n",
+		       ofi_straddr(buf, &len, addr_format, addr));
+#endif
+		if (ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name) < 0) {
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Remote name lower than local name.\n");
+			ret = -FI_EALREADY;
+		} else {
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Closing our handle and re-using it to accept "
+				"remote connection: %p\n", handle);
+			/* Re-use handle. If it receives FI_REJECT the handle
+			 * would not be deleted in this state */
+			handle->cmap->attr.close(handle);
+			handle->state = CMAP_CONNREQ_RECV;
+			*handle_ret = handle;
+		}
+		break;
+	case CMAP_CONNREQ_RECV:
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+		       "Alloc'd new handle for incoming connection\n");
+		*handle_ret = handle;
+		break;
+	default:
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+		       "Invalid cmap state\n");
+		assert(0);
+		ret = -FI_EOPBADSTATE;
+	}
+	fastlock_release(&cmap->lock);
+	return ret;
+}
+
+int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
+			struct util_cmap_handle **handle_ret)
+{
+	struct util_cmap_handle *handle;
+	int ret;
+
+	fastlock_acquire(&cmap->lock);
+	ret = util_cmap_get_handle(cmap, fi_addr, NULL, CMAP_IDLE, &handle);
+	if (ret)
+		return ret;
+	switch (handle->state) {
+	case CMAP_IDLE:
+		ret = cmap->attr.connect(cmap->ep, handle, fi_addr);
+		if (ret) {
+			util_cmap_del_handle(handle);
+			return ret;
+		}
+		handle->state = CMAP_CONNREQ_SENT;
+		ret = -FI_EAGAIN;
+		break;
+	case CMAP_CONNREQ_SENT:
+	case CMAP_CONNREQ_RECV:
+	case CMAP_ACCEPT:
+	case CMAP_SHUTDOWN:
+		ret = -FI_EAGAIN;
+		break;
+	case CMAP_CONNECTED:
+		ret = 0;
+		*handle_ret = handle;
+		break;
+	default:
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Invalid cmap handle state\n");
+		assert(0);
+		ret = -FI_EOPBADSTATE;
+	}
+	fastlock_release(&cmap->lock);
+	return ret;
+}
+
+static int util_cmap_event_handler_close(struct util_cmap *cmap)
+{
+	int ret;
+
+	ret = cmap->attr.signal(cmap->ep);
+	if (ret) {
+		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
+			"Unable to signal event handler thread\n");
+		return ret;
+	}
+	/* Release lock so that event handler thread could process shutdown events */
+	fastlock_release(&cmap->lock);
+	ret = pthread_join(cmap->event_handler_thread, NULL);
+	fastlock_acquire(&cmap->lock);
+	if (ret) {
+		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
+			"Unable to join event handler thread\n");
+		return ret;
+	}
+	return 0;
+}
+
+void ofi_cmap_free(struct util_cmap *cmap)
 {
 	struct util_cmap_peer *peer;
 	struct dlist_entry *entry;
@@ -1228,20 +1408,16 @@ void ofi_cmap_del_handles(struct util_cmap *cmap)
 		peer = container_of(entry, struct util_cmap_peer, entry);
 		util_cmap_del_handle(peer->handle);
 	}
-	fastlock_release(&cmap->lock);
-}
-
-void ofi_cmap_free(struct util_cmap *cmap)
-{
-	ofi_cmap_del_handles(cmap);
-	fastlock_acquire(&cmap->lock);
+	util_cmap_event_handler_close(cmap);
 	free(cmap->handles_av);
+	free(cmap->attr.name);
 	fastlock_release(&cmap->lock);
+	fastlock_destroy(&cmap->lock);
 	free(cmap);
 }
 
-struct util_cmap *ofi_cmap_alloc(struct util_av *av,
-		ofi_cmap_free_handle_func free_handle)
+struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
+				 struct util_cmap_attr *attr)
 {
 	struct util_cmap *cmap;
 
@@ -1249,20 +1425,35 @@ struct util_cmap *ofi_cmap_alloc(struct util_av *av,
 	if (!cmap)
 		return NULL;
 
-	cmap->av = av;
+	cmap->ep = ep;
+	cmap->av = ep->av;
 
 	cmap->handles_av = calloc(cmap->av->count, sizeof(*cmap->handles_av));
 	if (!cmap->handles_av)
 		goto err1;
 
+	cmap->attr = *attr;
+	cmap->attr.name = mem_dup(attr->name, ep->av->addrlen);
+	if (!cmap->attr.name)
+		goto err2;
+
 	memset(&cmap->handles_idx, 0, sizeof(cmap->handles_idx));
 	ofi_key_idx_init(&cmap->key_idx, UTIL_CMAP_IDX_BITS);
 
 	dlist_init(&cmap->peer_list);
-	cmap->free_handle = free_handle;
 	fastlock_init(&cmap->lock);
 
+	if (pthread_create(&cmap->event_handler_thread, 0,
+			   cmap->attr.event_handler, ep)) {
+		FI_WARN(ep->av->prov, FI_LOG_FABRIC,
+			"Unable to create msg_cm_listener_thread\n");
+		goto err3;
+	}
 	return cmap;
+err3:
+	fastlock_destroy(&cmap->lock);
+err2:
+	free(cmap->handles_av);
 err1:
 	free(cmap);
 	return NULL;

@@ -82,15 +82,17 @@ err:
 ssize_t	rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		       uint64_t flags)
 {
+	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep;
 	int ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
+	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
 	if (ret)
 		return ret;
+	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	return rxm_ep_rma_common(rxm_conn->msg_ep, rxm_ep, msg, flags,
 				 fi_readmsg);
@@ -225,15 +227,17 @@ err1:
 ssize_t	rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
+	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep;
 	int ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
+	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
 	if (ret)
 		return ret;
+	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	if (flags & FI_INJECT)
 		return rxm_ep_rma_inject(rxm_conn->msg_ep, rxm_ep, msg, flags);

@@ -605,6 +605,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		void **desc, size_t count, fi_addr_t dest_addr, void *context,
 		uint64_t data, uint64_t tag, uint64_t flags, int op)
 {
+	struct util_cmap_handle *handle;
 	struct rxm_ep *rxm_ep;
 	struct rxm_conn *rxm_conn;
 	struct rxm_tx_entry *tx_entry;
@@ -617,9 +618,10 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
+	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, dest_addr, &handle);
 	if (ret)
 		return ret;
+	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->tx_pool);
 	if (!tx_buf) {
@@ -718,7 +720,6 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 				"fi_send for MSG provider failed\n");
 		goto done;
 	}
-
 	return 0;
 done:
 	rxm_buf_release(&rxm_ep->tx_pool, (struct rxm_buf *)tx_buf);
@@ -937,13 +938,28 @@ static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
 		retv = ret;
 	}
 
-	ret = fi_close(&rxm_ep->msg_pep->fid);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg passive EP\n");
-		retv = ret;
-	}
-
 	fi_freeinfo(rxm_ep->msg_info);
+	return retv;
+}
+
+static int rxm_listener_close(struct rxm_ep *rxm_ep)
+{
+	int ret, retv = 0;
+
+	if (rxm_ep->msg_pep) {
+		ret = fi_close(&rxm_ep->msg_pep->fid);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to close msg pep\n");
+			retv = ret;
+		}
+	}
+	if (rxm_ep->msg_eq) {
+		ret = fi_close(&rxm_ep->msg_eq->fid);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to close msg EQ\n");
+			retv = ret;
+		}
+	}
 	return retv;
 }
 
@@ -957,6 +973,10 @@ static int rxm_ep_close(struct fid *fid)
 	if (rxm_ep->util_ep.cmap)
 		ofi_cmap_free(rxm_ep->util_ep.cmap);
 
+	ret = rxm_listener_close(rxm_ep);
+	if (ret)
+		return ret;
+
 	rxm_ep_txrx_res_close(rxm_ep);
 	ret = rxm_ep_msg_res_close(rxm_ep);
 
@@ -967,8 +987,12 @@ static int rxm_ep_close(struct fid *fid)
 
 static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
+	struct util_cmap_attr attr;
 	struct rxm_ep *rxm_ep;
 	struct util_av *util_av;
+	char buf[OFI_ADDRSTRLEN];
+	void *name;
+	size_t len;
 	int ret = 0;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
@@ -978,7 +1002,30 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_av(&rxm_ep->util_ep, util_av);
 		if (ret)
 			return ret;
-		rxm_ep->util_ep.cmap = ofi_cmap_alloc(util_av, rxm_conn_close);
+		len = rxm_ep->msg_info->src_addrlen;
+		name = malloc(len);
+		/* Passive endpoint should already have fi_setname or fi_listen
+		 * called on it for this to work */
+		ret = fi_getname(&rxm_ep->msg_pep->fid, name, &len);
+		if (ret) {
+			free(name);
+			return ret;
+		}
+		len = sizeof(buf);
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "local_name: %s\n",
+		       ofi_straddr(buf, &len,
+				   ofi_translate_addr_format(((struct sockaddr *)name)->sa_family),
+				   name));
+		attr.name		= name;
+		attr.alloc 		= rxm_conn_alloc;
+		attr.close 		= rxm_conn_close;
+		attr.free 		= rxm_conn_free;
+		attr.connect 		= rxm_conn_connect;
+		attr.event_handler	= rxm_conn_event_handler;
+		attr.signal		= rxm_conn_signal;
+
+		rxm_ep->util_ep.cmap = ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
+		free(name);
 		if (!rxm_ep->util_ep.cmap)
 			return -FI_ENOMEM;
 		break;
@@ -1002,12 +1049,10 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct rxm_ep *rxm_ep;
-	struct rxm_fabric *rxm_fabric;
 	int ret;
 
 	rxm_ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
-	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
-			struct rxm_fabric, util_fabric);
+
 	switch (command) {
 	case FI_ENABLE:
 		if (!rxm_ep->util_ep.rx_cq || !rxm_ep->util_ep.tx_cq)
@@ -1019,18 +1064,6 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Unable to prepost recv bufs\n");
-			return ret;
-		}
-		ret = fi_pep_bind(rxm_ep->msg_pep, &rxm_fabric->msg_eq->fid, 0);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Unable to bind msg PEP to msg EQ\n");
-			return ret;
-		}
-		ret = fi_listen(rxm_ep->msg_pep);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Unable to set msg PEP to listen state\n");
 			return ret;
 		}
 		break;
@@ -1048,10 +1081,52 @@ static struct fi_ops rxm_ep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static int rxm_listener_open(struct rxm_ep *rxm_ep)
+{
+	struct rxm_fabric *rxm_fabric;
+	struct fi_eq_attr eq_attr;
+	eq_attr.wait_obj = FI_WAIT_UNSPEC;
+	eq_attr.flags = FI_WRITE;
+	int ret;
+
+	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
+				  struct rxm_fabric, util_fabric);
+
+	ret = fi_eq_open(rxm_fabric->msg_fabric, &eq_attr, &rxm_ep->msg_eq, NULL);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open msg EQ\n");
+		return ret;
+	}
+
+	ret = fi_passive_ep(rxm_fabric->msg_fabric, rxm_ep->msg_info,
+			    &rxm_ep->msg_pep, rxm_ep);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open msg PEP\n");
+		goto err;
+	}
+
+	ret = fi_pep_bind(rxm_ep->msg_pep, &rxm_ep->msg_eq->fid, 0);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to bind msg PEP to msg EQ\n");
+		goto err;
+	}
+
+	ret = fi_listen(rxm_ep->msg_pep);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to set msg PEP to listen state\n");
+		goto err;
+	}
+	return 0;
+err:
+	rxm_listener_close(rxm_ep);
+	return ret;
+}
+
 static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 		struct util_domain *util_domain, struct rxm_ep *rxm_ep)
 {
-	struct rxm_fabric *rxm_fabric;
 	struct rxm_domain *rxm_domain;
 	struct fi_cq_attr cq_attr;
 	int ret;
@@ -1066,13 +1141,6 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 					rxm_ep->msg_info->rx_attr->size) / 2;
 
 	rxm_domain = container_of(util_domain, struct rxm_domain, util_domain);
-	rxm_fabric = container_of(util_domain->fabric, struct rxm_fabric, util_fabric);
-
-	ret = fi_passive_ep(rxm_fabric->msg_fabric, rxm_ep->msg_info, &rxm_ep->msg_pep, rxm_ep);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open msg PEP\n");
-		goto err1;
-	}
 
 	memset(&cq_attr, 0, sizeof(cq_attr));
 	cq_attr.size = rxm_fi_info->tx_attr->size + rxm_fi_info->rx_attr->size;
@@ -1091,12 +1159,9 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 		goto err2;
 	}
 
-	/* We don't care what's in the dest_addr at this point. We go by AV. */
-	if (rxm_ep->msg_info->dest_addr) {
-		free(rxm_ep->msg_info->dest_addr);
-		rxm_ep->msg_info->dest_addr = NULL;
-		rxm_ep->msg_info->dest_addrlen = 0;
-	}
+	ret = rxm_listener_open(rxm_ep);
+	if (ret)
+		goto err3;
 
 	/* Zero out the port as we would be creating multiple MSG EPs for a single
 	 * RXM EP and we don't want address conflicts. */
@@ -1106,10 +1171,11 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 		else
 			((struct sockaddr_in6 *)(rxm_ep->msg_info->src_addr))->sin6_port = 0;
 	}
-
 	return 0;
+err3:
+	fi_close(&rxm_ep->srx_ctx->fid);
 err2:
-	fi_close(&rxm_ep->msg_pep->fid);
+	fi_close(&rxm_ep->msg_cq->fid);
 err1:
 	fi_freeinfo(rxm_ep->msg_info);
 	return ret;

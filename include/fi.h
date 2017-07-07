@@ -185,6 +185,14 @@ uint64_t fi_gettime_us(void);
 #define AF_IB 27
 #endif
 
+#define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
+#define ofi_sin_port(addr) (((struct sockaddr_in *)(addr))->sin_port)
+
+#define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
+#define ofi_sin6_port(addr) (((struct sockaddr_in6 *)(addr))->sin6_port)
+
+#define OFI_ADDRSTRLEN (INET6_ADDRSTRLEN + 50)
+
 static inline size_t ofi_sizeofaddr(const struct sockaddr *address)
 {
 	return (address->sa_family == AF_INET ?
@@ -226,6 +234,8 @@ const char *ofi_straddr(char *buf, size_t *len,
 int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 		   void **addr, size_t *len);
 
+int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
+		const struct sockaddr *sa2);
 /*
  * Key Index
  */
