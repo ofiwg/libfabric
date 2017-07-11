@@ -48,7 +48,7 @@
 	} while (0)
 
 char *rxm_proto_state_str[] = {
-	RXM_PROTO_STATES(STR)
+	RXM_PROTO_STATES(OFI_STR)
 };
 
 struct rxm_tx_entry *rxm_tx_entry_get(struct rxm_send_queue *queue)
