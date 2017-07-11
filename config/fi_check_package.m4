@@ -130,7 +130,7 @@ AC_DEFUN([_FI_CHECK_PACKAGE_LIB], [
                           unset fi_Lib])])])])
 
     AS_IF([test "$fi_check_package_lib_happy" = "yes"],
-          [$1_LIBS="-l$2 $4"
+          [$1_LIBS="-l$2 $4 $$1_LIBS"
            $7], [$8])
 
     AS_VAR_POPDEF([fi_Lib])dnl
