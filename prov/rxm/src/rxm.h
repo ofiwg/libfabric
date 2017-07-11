@@ -62,26 +62,6 @@
 #define RXM_BUF_SIZE 16384
 #define RXM_IOV_LIMIT 4
 
-/*
- * Macros to generate enums and associated string values
- * e.g.
- * #define RXM_STATES(FUNC)	\
- * 	FUNC(STATE1),		\
- * 	FUNC(STATE2),		\
- * 	...			\
- * 	FUNC(STATEn)
- *
- * enum rxm_state {
- * 	RXM_STATES(ENUM_VAL)
- * };
- *
- * char *rxm_state_str[] = {
- * 	RXM_STATES(STR)
- * };
- */
-#define ENUM(X) X
-#define STR(X) #X
-
 #define RXM_MR_LOCAL(info) \
 	((FI_VERSION_LT(info->fabric_attr->api_version, FI_VERSION(1, 5)) && \
 	  (info->mode & FI_LOCAL_MR)) || (info->domain_attr->mr_mode & FI_MR_LOCAL))
@@ -140,6 +120,24 @@ struct rxm_rma_iov {
 	struct ofi_rma_iov iov[];
 };
 
+/*
+ * Macros to generate enums and associated string values
+ * e.g.
+ * #define RXM_PROTO_STATES(FUNC)	\
+ * 	FUNC(STATE1),			\
+ * 	FUNC(STATE2),			\
+ * 	...				\
+ * 	FUNC(STATEn)
+ *
+ * enum rxm_state {
+ * 	RXM_PROTO_STATES(OFI_ENUM_VAL)
+ * };
+ *
+ * char *rxm_state_str[] = {
+ * 	RXM_PROTO_STATES(OFI_STR)
+ * };
+ */
+
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)	\
 	FUNC(RXM_NONE),		\
@@ -153,7 +151,7 @@ struct rxm_rma_iov {
 	FUNC(RXM_LMT_FINISH),
 
 enum rxm_proto_state {
-	RXM_PROTO_STATES(ENUM)
+	RXM_PROTO_STATES(OFI_ENUM_VAL)
 };
 
 extern char *rxm_proto_state_str[];

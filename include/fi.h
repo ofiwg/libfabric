@@ -193,6 +193,10 @@ uint64_t fi_gettime_us(void);
 
 #define OFI_ADDRSTRLEN (INET6_ADDRSTRLEN + 50)
 
+#define OFI_ENUM_VAL(X) X
+#define OFI_STR(X) #X
+#define OFI_STR_INT(X) OFI_STR(X)
+
 static inline size_t ofi_sizeofaddr(const struct sockaddr *address)
 {
 	return (address->sa_family == AF_INET ?
