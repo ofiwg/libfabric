@@ -1701,7 +1701,7 @@ static void do_write_error(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
-	struct fi_cq_err_entry err_cqe;
+	struct fi_cq_err_entry err_cqe = {0};
 
 	err_cqe.err_data_size = 0;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
@@ -1776,7 +1776,7 @@ static void do_read_error(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
-	struct fi_cq_err_entry err_cqe;
+	struct fi_cq_err_entry err_cqe = {0};
 
 	err_cqe.err_data_size = 0;
 	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
