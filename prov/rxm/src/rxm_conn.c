@@ -156,7 +156,7 @@ err1:
 void *rxm_conn_event_handler(void *arg)
 {
 	struct fi_eq_cm_entry *entry;
-	struct fi_eq_err_entry err_entry;
+	struct fi_eq_err_entry err_entry = {0};
 	size_t datalen = sizeof(struct rxm_cm_data);
 	size_t len = sizeof(*entry) + datalen;
 	struct rxm_ep *rxm_ep = container_of(arg, struct rxm_ep, util_ep);
