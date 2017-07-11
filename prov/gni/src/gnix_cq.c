@@ -71,7 +71,7 @@ static const struct fi_ops_cq gnix_cq_ops;
 /*******************************************************************************
  * Size array corresponding format type to format size.
  ******************************************************************************/
-static const size_t const format_sizes[] = {
+static const size_t format_sizes[] = {
 	[FI_CQ_FORMAT_UNSPEC]  = sizeof(GNIX_CQ_DEFAULT_FORMAT),
 	[FI_CQ_FORMAT_CONTEXT] = sizeof(struct fi_cq_entry),
 	[FI_CQ_FORMAT_MSG]     = sizeof(struct fi_cq_msg_entry),
@@ -79,7 +79,7 @@ static const size_t const format_sizes[] = {
 	[FI_CQ_FORMAT_TAGGED]  = sizeof(struct fi_cq_tagged_entry)
 };
 
-static const fill_entry const fill_function[] = {
+static const fill_entry fill_function[] = {
 	[FI_CQ_FORMAT_UNSPEC]  = fill_cq_entry,
 	[FI_CQ_FORMAT_CONTEXT] = fill_cq_entry,
 	[FI_CQ_FORMAT_MSG]     = fill_cq_msg,
