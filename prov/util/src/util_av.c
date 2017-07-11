@@ -1196,71 +1196,43 @@ util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr, void *addr)
 	return handle;
 }
 
-void ofi_cmap_process_shutdown(struct util_cmap *cmap, uint64_t local_key)
+void ofi_cmap_process_shutdown(struct util_cmap *cmap,
+			       struct util_cmap_handle *handle)
 {
-	struct util_cmap_handle *handle;
-
-	fastlock_acquire(&cmap->lock);
-	handle = ofi_cmap_key2handle(cmap, local_key);
-	if (!handle) {
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid context received in shutdown\n");
-		// TODO debug why we hit here when run on ofi-rxm over sockets
-		// assert(0);
-	} else {
-		util_cmap_del_handle(handle);
-	}
-	fastlock_release(&cmap->lock);
+	ofi_cmap_del_handle(handle);
 }
 
-void ofi_cmap_process_connect(struct util_cmap *cmap, uint64_t local_key,
+void ofi_cmap_process_connect(struct util_cmap *cmap,
+			      struct util_cmap_handle *handle,
 			      uint64_t *remote_key)
 {
-	struct util_cmap_handle *handle;
-
 	fastlock_acquire(&cmap->lock);
-	handle = ofi_cmap_key2handle(cmap, local_key);
-	if (!handle) {
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid context received in connect\n");
-		assert(0);
-	} else {
-		handle->state = CMAP_CONNECTED;
-		if (remote_key)
-			handle->remote_key = *remote_key;
-	}
+	handle->state = CMAP_CONNECTED;
+	if (remote_key)
+		handle->remote_key = *remote_key;
 	fastlock_release(&cmap->lock);
 }
 
-void ofi_cmap_process_reject(struct util_cmap *cmap, uint64_t local_key)
+void ofi_cmap_process_reject(struct util_cmap *cmap,
+			     struct util_cmap_handle *handle)
 {
-	struct util_cmap_handle *handle;
-
 	fastlock_acquire(&cmap->lock);
-	handle = ofi_cmap_key2handle(cmap, local_key);
-	if (!handle) {
+	switch (handle->state) {
+	case CMAP_CONNREQ_RECV:
+	case CMAP_CONNECTED:
+		/* Handle is being re-used for incoming connection request */
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Received connection reject, but handle is being re-used\n");
+		break;
+	case CMAP_CONNREQ_SENT:
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Received connection reject, deleting handle\n");
+		util_cmap_del_handle(handle);
+		break;
+	default:
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid context received in reject\n");
-		// TODO debug why we hit here when run on ofi-rxm over sockets
-		//assert(0);
-	} else {
-		switch (handle->state) {
-		case CMAP_CONNREQ_RECV:
-		case CMAP_CONNECTED:
-			/* Handle is being re-used for incoming connection request */
-			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Received connection reject, but handle is being re-used\n");
-			break;
-		case CMAP_CONNREQ_SENT:
-			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Received connection reject, deleting handle\n");
-			util_cmap_del_handle(handle);
-			break;
-		default:
-			FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Invalid cmap state when receiving connection reject\n");
-			assert(0);
-		}
+			"Invalid cmap state when receiving connection reject\n");
+		assert(0);
 	}
 	fastlock_release(&cmap->lock);
 }

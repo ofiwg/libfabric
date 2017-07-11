@@ -129,7 +129,7 @@ int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	rxm_conn->handle.remote_key = remote_cm_data->conn_id;
 
 	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn,
-			      (void *)rxm_conn->handle.key);
+			      &rxm_conn->handle);
 	if (ret)
 		goto err2;
 
@@ -185,7 +185,7 @@ void *rxm_conn_event_handler(void *arg)
 				FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 				       "Connection refused\n");
 				ofi_cmap_process_reject(rxm_ep->util_ep.cmap,
-							(uint64_t)err_entry.fid->context);
+							err_entry.fid->context);
 			}
 			continue;
 		}
@@ -210,7 +210,7 @@ void *rxm_conn_event_handler(void *arg)
 			       "Connection successful\n");
 			cm_data = (void *)entry->data;
 			ofi_cmap_process_connect(rxm_ep->util_ep.cmap,
-						 (uint64_t)entry->fid->context,
+						 entry->fid->context,
 						 (rd - sizeof(*entry)) ?
 						 &cm_data->conn_id : NULL);
 			break;
@@ -218,7 +218,7 @@ void *rxm_conn_event_handler(void *arg)
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 			       "Received connection shutdown\n");
 			ofi_cmap_process_shutdown(rxm_ep->util_ep.cmap,
-						  (uint64_t)entry->fid->context);
+						  entry->fid->context);
 			break;
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
@@ -282,7 +282,7 @@ int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 		return ret;
 
 	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn,
-			      (void *)rxm_conn->handle.key);
+			      &rxm_conn->handle);
 	if (ret)
 		goto err1;
 
