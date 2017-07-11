@@ -472,14 +472,14 @@ void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 	struct rxd_pkt_meta *pkt;
 	struct ofi_ctrl_hdr *ctrl;
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "freeing all [%p] pkts <= %d\n",
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "freeing all [%p] pkts < %d\n",
 		tx_entry->msg_id, last_acked);
 	while (!dlist_empty(&tx_entry->pkt_list)) {
 
 		pkt = container_of(tx_entry->pkt_list.next,
 				   struct rxd_pkt_meta, entry);
 		ctrl = (struct ofi_ctrl_hdr *) pkt->pkt_data;
-		if (ctrl->seg_no > last_acked)
+		if (ctrl->seg_no >= last_acked)
 			break;
 
 		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "freeing [%p] pkt:%d\n",

@@ -814,6 +814,11 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_peer *peer,
 				       ctrl->conn_id);
 			goto repost;
 		} else {
+			FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "invalid pkt: segno: %d "
+			       "expected:%d, rx-key:%d, ctrl_msg_id: %ld, "
+			       "rx_entry_msg_id: %ld\n",
+			       ctrl->seg_no, rx_entry->exp_seg_no, ctrl->rx_key,
+			       ctrl->msg_id, rx_entry->msg_id);
 			return;
 		}
 	}
