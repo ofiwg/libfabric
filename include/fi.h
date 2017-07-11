@@ -171,6 +171,9 @@ int ofi_ep_bind_valid(struct fi_provider *prov, struct fid *bfid, uint64_t flags
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
 
+#define OFI_STR(X) #X
+#define OFI_STR_INT(X) OFI_STR(X)
+
 /*
  * Address utility functions
  */
