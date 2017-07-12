@@ -1478,7 +1478,7 @@ static inline int ft_tag_is_valid(struct fid_cq * cq, struct fi_cq_err_entry *co
 				  uint64_t tag)
 {
 	if ((hints->caps & FI_TAGGED) && (cq == rxcq) && (comp->tag != tag)) {
-		FT_ERR("Tag mismatch!");
+		FT_ERR("Tag mismatch!. Expected: %ld, actual: %ld", tag, comp->tag);
 		return 0;
 	}
 	return 1;
