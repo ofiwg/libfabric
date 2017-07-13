@@ -104,7 +104,6 @@
 
 #define VERBS_DEF_CQ_SIZE 1024
 #define VERBS_MR_IOV_LIMIT 1
-#define VERBS_DEFAULT_INLINE_SIZE 64
 
 extern struct fi_provider fi_ibv_prov;
 extern struct fi_info *verbs_info;
@@ -113,6 +112,7 @@ extern size_t verbs_default_tx_size;
 extern size_t verbs_default_rx_size;
 extern size_t verbs_default_tx_iov_limit;
 extern size_t verbs_default_rx_iov_limit;
+extern size_t verbs_default_inline_size;
 
 struct verbs_addr {
 	struct dlist_entry entry;
