@@ -36,6 +36,8 @@
 #include <fi_iov.h>
 #include "rxd.h"
 
+int rxd_progress_spin_count = 1000;
+
 static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 {
 	struct rxd_ep *ep;
@@ -1473,11 +1475,14 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 	struct rxd_ep *ep;
 	uint64_t cur_time;
 	ssize_t ret;
+	int i;
 
 	ep = container_of(util_ep, struct rxd_ep, util_ep);
 
 	fastlock_acquire(&ep->lock);
-	do {
+	for(ret = 1, i = 0;
+	    ret > 0 && (!rxd_progress_spin_count || i < rxd_progress_spin_count);
+	    i++) {
 		ret = fi_cq_read(ep->dg_cq, &cq_entry, 1);
 		if (ret == -FI_EAGAIN)
 			break;
@@ -1488,7 +1493,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 			rxd_handle_recv_comp(ep, &cq_entry);
 		else
 			assert (0);
-	} while (ret > 0);
+	}
 
 	cur_time = fi_gettime_us();
 	dlist_foreach(&ep->tx_entry_list, tx_item) {

@@ -80,5 +80,8 @@ struct fi_provider rxd_prov = {
 
 RXD_INI
 {
+	fi_param_define(&rxd_prov, "spin_count", FI_PARAM_INT,
+			"Number of iterations to receive packets (0 - infinite)");
+
 	return &rxd_prov;
 }
