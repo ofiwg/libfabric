@@ -1000,7 +1000,8 @@ static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	struct sockaddr *local_addr;
 	int ret;
 
-	if (rai->ai_src_addr && !ofi_is_loopback_addr(rai->ai_src_addr))
+	if (rai->ai_src_addr && (((*info)->ep_attr->type == FI_EP_MSG) ||
+	    !ofi_is_loopback_addr(rai->ai_src_addr)))
 		goto rai_to_fi;
 
 	if (!id->verbs)
