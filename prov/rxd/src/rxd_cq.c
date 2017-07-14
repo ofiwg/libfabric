@@ -187,17 +187,25 @@ static void rxd_handle_dup_datastart(struct rxd_ep *ep, struct ofi_ctrl_hdr *ctr
 	struct rxd_rx_entry *rx_entry;
 	struct rxd_peer *peer;
 
+	peer = rxd_ep_getpeer_info(ep, ctrl->conn_id);
 	item = dlist_find_first_match(&ep->rx_entry_list,
 				      rxd_rx_entry_match, ctrl);
-	if (!item)
-		return;
+	if (!item) {
+	      /* for small (1-packet) messages we may have situation
+	       * when receiver completed operation and destroyed
+	       * rx_entry, but ack is lost (not delivered to sender).
+	       * in this case just send ack with zero window to
+	       * allow sender complete operation on sender side */
+	      rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, 0, UINT64_MAX,
+			       peer->conn_data, ctrl->conn_id);
+	      return;
+	}
 
 	FI_INFO(&rxd_prov, FI_LOG_EP_CTRL,
 		"duplicate start-data: msg_id: %" PRIu64 ", seg_no: %d\n",
 		ctrl->msg_id, ctrl->seg_no);
 
 	rx_entry = container_of(item, struct rxd_rx_entry, entry);
-	peer = rxd_ep_getpeer_info(ep, ctrl->conn_id);
 	rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, rx_entry->credits, rx_entry->key,
 		       peer->conn_data, ctrl->conn_id);
 	return;
@@ -819,6 +827,14 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_peer *peer,
 			       "rx_entry_msg_id: %ld\n",
 			       ctrl->seg_no, rx_entry->exp_seg_no, ctrl->rx_key,
 			       ctrl->msg_id, rx_entry->msg_id);
+			FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "invalid pkt: "
+			       "credits: %d, last win: %d\n",
+			       rx_entry->credits, rx_entry->last_win_seg);
+			credits = (rx_entry->msg_id == ctrl->msg_id) ?
+				  rx_entry->last_win_seg - rx_entry->exp_seg_no : 0;
+			rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, credits,
+				       ctrl->rx_key, peer->conn_data,
+				       ctrl->conn_id);
 			return;
 		}
 	}

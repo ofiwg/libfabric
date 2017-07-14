@@ -572,14 +572,15 @@ int rxd_ep_reply_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *in_ctrl,
 	if (!pkt_meta)
 		return -FI_ENOMEM;
 
-	rx_entry = &ep->rx_entry_fs->buf[rx_key];
+	rx_entry = (rx_key != UINT64_MAX) ? &ep->rx_entry_fs->buf[rx_key] : NULL;
 
 	pkt = (struct rxd_pkt_data *)pkt_meta->pkt_data;
-	rxd_init_ctrl_hdr(&pkt->ctrl, type, seg_size, rx_entry->exp_seg_no,
-			   in_ctrl->msg_id, rx_key, source);
+	rxd_init_ctrl_hdr(&pkt->ctrl, type, seg_size,
+			  rx_entry ? rx_entry->exp_seg_no : 0,
+			  in_ctrl->msg_id, rx_key, source);
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sending ack [%p] - %d, %d\n",
-		in_ctrl->msg_id, in_ctrl->seg_no, seg_size);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sending ack [%p] - segno: %d, window: %d\n",
+		pkt->ctrl.msg_id, pkt->ctrl.seg_no, pkt->ctrl.seg_size);
 
 	pkt_meta->flags = RXD_NOT_ACKED;
 	ret = fi_send(ep->dg_ep, pkt, sizeof(struct rxd_pkt_data),
