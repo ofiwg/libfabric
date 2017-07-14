@@ -377,6 +377,11 @@ int ofi_av_get_index(struct util_av *av, const void *addr);
 // for both AV and RX only connections.
 #define UTIL_CMAP_IDX_BITS 48
 
+enum ofi_cmap_signal {
+	OFI_CMAP_FREE,
+	OFI_CMAP_EXIT,
+};
+
 enum util_cmap_state {
 	CMAP_IDLE,
 	CMAP_CONNREQ_SENT,
@@ -411,7 +416,8 @@ typedef int (*ofi_cmap_connect_func)(struct util_ep *cmap,
 				     struct util_cmap_handle *handle,
 				     fi_addr_t fi_addr);
 typedef void *(*ofi_cmap_event_handler_func)(void *arg);
-typedef int (*ofi_cmap_signal_func)(struct util_ep *ep);
+typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
+				    enum ofi_cmap_signal signal);
 
 struct util_cmap_attr {
 	void 				*name;
