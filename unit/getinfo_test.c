@@ -283,8 +283,8 @@ int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 static int check_valid_rma_ordering_sizes(void *arg)
 {
 	struct fi_info *info = arg;
-	if ((info->tx_attr->msg_order && FI_ORDER_RAW) ||
-			(info->rx_attr->msg_order && FI_ORDER_RAW)) {
+	if ((info->tx_attr->msg_order & FI_ORDER_RAW) ||
+			(info->rx_attr->msg_order & FI_ORDER_RAW)) {
 		if (info->ep_attr->max_order_raw_size <= 0)
 			return EXIT_FAILURE;
 		if (hints->ep_attr->max_order_raw_size) {
@@ -292,8 +292,8 @@ static int check_valid_rma_ordering_sizes(void *arg)
 				return EXIT_FAILURE;
 		}
 	}
-	if ((info->tx_attr->msg_order && FI_ORDER_WAR) ||
-			(info->rx_attr->msg_order && FI_ORDER_WAR)) {
+	if ((info->tx_attr->msg_order & FI_ORDER_WAR) ||
+			(info->rx_attr->msg_order & FI_ORDER_WAR)) {
 		if (info->ep_attr->max_order_war_size <= 0)
 			return EXIT_FAILURE;
 		if (hints->ep_attr->max_order_war_size) {
@@ -301,8 +301,8 @@ static int check_valid_rma_ordering_sizes(void *arg)
 				return EXIT_FAILURE;
 		}
 	}
-	if ((info->tx_attr->msg_order && FI_ORDER_WAW) ||
-			(info->rx_attr->msg_order && FI_ORDER_WAW)) {
+	if ((info->tx_attr->msg_order & FI_ORDER_WAW) ||
+			(info->rx_attr->msg_order & FI_ORDER_WAW)) {
 		if (info->ep_attr->max_order_waw_size <= 0)
 			return EXIT_FAILURE;
 		if (hints->ep_attr->max_order_waw_size) {
@@ -504,26 +504,35 @@ getinfo_test(util, 1, "Test if we get utility provider when requested",
 		NULL, NULL, 0, hints, NULL, NULL, check_util_prov, 0)
 
 /* Message Ordering Tests */
-getinfo_test(ordering, 1, "Test msg ordering bits supported are set",
+getinfo_test(msg_ordering, 1, "Test msg ordering bits supported are set",
 		NULL, NULL, 0, hints, NULL, validate_msg_ordering_bits, NULL, 0)
-getinfo_test(ordering, 2, "Test rma RAW ordering size is set",
-		NULL, NULL, 0, hints, init_valid_rma_RAW_ordering_no_set_size, NULL, check_valid_rma_ordering_sizes, 0)
-getinfo_test(ordering, 3, "Test rma RAW ordering size is set to hints",
-		NULL, NULL, 0, hints, init_valid_rma_RAW_ordering_set_size, NULL, check_valid_rma_ordering_sizes, 0)
-getinfo_test(ordering, 4, "Test rma WAR ordering size is set",
-		NULL, NULL, 0, hints, init_valid_rma_WAR_ordering_no_set_size, NULL, check_valid_rma_ordering_sizes, 0)
-getinfo_test(ordering, 5, "Test rma WAR ordering size is set to hints",
-		NULL, NULL, 0, hints, init_valid_rma_WAR_ordering_set_size, NULL, check_valid_rma_ordering_sizes, 0)
-getinfo_test(ordering, 6, "Test rma WAW ordering size is set",
-		NULL, NULL, 0, hints, init_valid_rma_WAW_ordering_no_set_size, NULL, check_valid_rma_ordering_sizes, 0)
-getinfo_test(ordering, 7, "Test rma WAW ordering size is set to hints",
-		NULL, NULL, 0, hints, init_valid_rma_WAW_ordering_set_size, NULL, check_valid_rma_ordering_sizes, 0)
-getinfo_test(ordering, 8, "Test invalid rma RAW ordering size",
-		NULL, NULL, 0, hints, init_invalid_rma_RAW_ordering_size, NULL, NULL, -FI_ENODATA)
-getinfo_test(ordering, 9, "Test invalid rma WAR ordering size",
-		NULL, NULL, 0, hints, init_invalid_rma_WAR_ordering_size, NULL, NULL, -FI_ENODATA)
-getinfo_test(ordering, 10, "Test invalid rma WAW ordering size",
-		NULL, NULL, 0, hints, init_invalid_rma_WAW_ordering_size, NULL, NULL, -FI_ENODATA)
+getinfo_test(raw_ordering, 1, "Test rma RAW ordering size is set",
+		NULL, NULL, 0, hints, init_valid_rma_RAW_ordering_no_set_size,
+		NULL, check_valid_rma_ordering_sizes, 0)
+getinfo_test(raw_ordering, 2, "Test rma RAW ordering size is set to hints",
+		NULL, NULL, 0, hints, init_valid_rma_RAW_ordering_set_size,
+		NULL, check_valid_rma_ordering_sizes, 0)
+getinfo_test(war_ordering, 1, "Test rma WAR ordering size is set",
+		NULL, NULL, 0, hints, init_valid_rma_WAR_ordering_no_set_size,
+		NULL, check_valid_rma_ordering_sizes, 0)
+getinfo_test(war_ordering, 2, "Test rma WAR ordering size is set to hints",
+		NULL, NULL, 0, hints, init_valid_rma_WAR_ordering_set_size,
+		NULL, check_valid_rma_ordering_sizes, 0)
+getinfo_test(waw_ordering, 1, "Test rma WAW ordering size is set",
+		NULL, NULL, 0, hints, init_valid_rma_WAW_ordering_no_set_size,
+		NULL, check_valid_rma_ordering_sizes, 0)
+getinfo_test(waw_ordering, 2, "Test rma WAW ordering size is set to hints",
+		NULL, NULL, 0, hints, init_valid_rma_WAW_ordering_set_size,
+		NULL, check_valid_rma_ordering_sizes, 0)
+getinfo_test(bad_raw_ordering, 1, "Test invalid rma RAW ordering size",
+		NULL, NULL, 0, hints, init_invalid_rma_RAW_ordering_size,
+		NULL, NULL, -FI_ENODATA)
+getinfo_test(bad_war_ordering, 1, "Test invalid rma WAR ordering size",
+		NULL, NULL, 0, hints, init_invalid_rma_WAR_ordering_size,
+		NULL, NULL, -FI_ENODATA)
+getinfo_test(bad_waw_ordering, 1, "Test invalid rma WAW ordering size",
+		NULL, NULL, 0, hints, init_invalid_rma_WAW_ordering_size,
+		NULL, NULL, -FI_ENODATA)
 
 
 
@@ -583,16 +592,16 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(src4),
 		TEST_ENTRY_GETINFO(src_dest1),
 		TEST_ENTRY_GETINFO(src_dest2),
-		TEST_ENTRY_GETINFO(ordering1),
-		TEST_ENTRY_GETINFO(ordering2),
-		TEST_ENTRY_GETINFO(ordering3),
-		TEST_ENTRY_GETINFO(ordering4),
-		TEST_ENTRY_GETINFO(ordering5),
-		TEST_ENTRY_GETINFO(ordering6),
-		TEST_ENTRY_GETINFO(ordering7),
-		TEST_ENTRY_GETINFO(ordering8),
-		TEST_ENTRY_GETINFO(ordering9),
-		TEST_ENTRY_GETINFO(ordering10),
+		TEST_ENTRY_GETINFO(msg_ordering1),
+		TEST_ENTRY_GETINFO(raw_ordering1),
+		TEST_ENTRY_GETINFO(raw_ordering2),
+		TEST_ENTRY_GETINFO(war_ordering1),
+		TEST_ENTRY_GETINFO(war_ordering2),
+		TEST_ENTRY_GETINFO(waw_ordering1),
+		TEST_ENTRY_GETINFO(waw_ordering2),
+		TEST_ENTRY_GETINFO(bad_raw_ordering1),
+		TEST_ENTRY_GETINFO(bad_war_ordering1),
+		TEST_ENTRY_GETINFO(bad_waw_ordering1),
 		/* This test has to be last getinfo unit test to be run until we
 		 * find a way to reset hints->domain_attr->name*/
 		TEST_ENTRY_GETINFO(neg1),
