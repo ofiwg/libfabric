@@ -509,7 +509,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	struct ibv_cq *cq;
 	struct ibv_qp *qp;
 	struct ibv_qp_init_attr init_attr;
-	int ret = 0, param;
+	int ret = 0;
 
 	pd = ibv_alloc_pd(ctx);
 	if (!pd) {
@@ -531,10 +531,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	init_attr.cap.max_recv_wr = verbs_default_rx_size;
 	init_attr.cap.max_send_sge = verbs_default_tx_iov_limit;
 	init_attr.cap.max_recv_sge = verbs_default_rx_iov_limit;
-	if (!fi_param_get_int(&fi_ibv_prov, "inline_size", &param))
-		init_attr.cap.max_inline_data = param;
-	else
-		init_attr.cap.max_inline_data = VERBS_DEFAULT_INLINE_SIZE;
+	init_attr.cap.max_inline_data = verbs_default_inline_size;
 
 	init_attr.qp_type = IBV_QPT_RC;
 
@@ -572,8 +569,9 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	info->domain_attr->ep_cnt 		= device_attr.max_qp;
 	info->domain_attr->tx_ctx_cnt 		= MIN(info->domain_attr->tx_ctx_cnt, device_attr.max_qp);
 	info->domain_attr->rx_ctx_cnt 		= MIN(info->domain_attr->rx_ctx_cnt, device_attr.max_qp);
-	info->domain_attr->max_ep_tx_ctx 	= device_attr.max_qp;
-	info->domain_attr->max_ep_rx_ctx 	= device_attr.max_qp;
+	info->domain_attr->max_ep_tx_ctx 	= MIN(info->domain_attr->tx_ctx_cnt, device_attr.max_qp);
+	info->domain_attr->max_ep_rx_ctx 	= MIN(info->domain_attr->rx_ctx_cnt, device_attr.max_qp);
+	info->domain_attr->max_ep_srx_ctx	= device_attr.max_qp;
 	info->domain_attr->mr_cnt		= device_attr.max_mr;
 
 	if (info->ep_attr->type == FI_EP_RDM)
@@ -583,8 +581,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	info->tx_attr->iov_limit 		= device_attr.max_sge;
 	info->tx_attr->rma_iov_limit		= device_attr.max_sge;
 
-	info->rx_attr->size 			= device_attr.max_qp_wr;
-	info->rx_attr->iov_limit 		= device_attr.max_sge;
+	info->rx_attr->size 			= MIN(device_attr.max_qp_wr,
+						      device_attr.max_srq_wr);
+	info->rx_attr->iov_limit 		= MIN(device_attr.max_sge,
+						      device_attr.max_srq_sge);
 
 	ret = fi_ibv_get_qp_cap(ctx, info);
 	if (ret)
@@ -1000,7 +1000,8 @@ static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	struct sockaddr *local_addr;
 	int ret;
 
-	if (rai->ai_src_addr && !ofi_is_loopback_addr(rai->ai_src_addr))
+	if (rai->ai_src_addr && (((*info)->ep_attr->type == FI_EP_MSG) ||
+	    !ofi_is_loopback_addr(rai->ai_src_addr)))
 		goto rai_to_fi;
 
 	if (!id->verbs)
@@ -1114,6 +1115,59 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
 	return NULL;
 }
 
+static int fi_ibv_set_default_attr(struct fi_info *info, size_t *attr,
+				   size_t default_attr, char *attr_str)
+{
+	if (default_attr > *attr) {
+		VERBS_WARN(FI_LOG_FABRIC, "%s supported by domain: %s is less "
+			   "than provider's default\n", attr_str,
+			   info->domain_attr->name);
+		return -FI_EINVAL;
+	}
+	*attr = default_attr;
+	return 0;
+}
+
+/* Set default values for attributes. ofi_alter_info would change them if the
+ * user has asked for a different value in hints */
+static int fi_ibv_set_default_info(struct fi_info *info)
+{
+	int ret;
+
+	ret = fi_ibv_set_default_attr(info, &info->tx_attr->size,
+				      verbs_default_tx_size, "tx context size");
+	if (ret)
+		return ret;
+
+	ret = fi_ibv_set_default_attr(info, &info->rx_attr->size,
+				    verbs_default_rx_size, "rx context size");
+	if (ret)
+		return ret;
+
+	/* Don't set defaults for verb/RDM as it supports an iov limit of just 1 */
+	if (info->ep_attr->type != FI_EP_RDM) {
+		ret = fi_ibv_set_default_attr(info, &info->tx_attr->iov_limit,
+					      verbs_default_tx_iov_limit,
+					      "tx iov_limit");
+		if (ret)
+			return ret;
+
+		/* For verbs iov limit is same for both regular messages and RMA */
+		ret = fi_ibv_set_default_attr(info, &info->tx_attr->rma_iov_limit,
+					      verbs_default_tx_iov_limit,
+					      "tx rma_iov_limit");
+		if (ret)
+			return ret;
+
+		ret = fi_ibv_set_default_attr(info, &info->rx_attr->iov_limit,
+					      verbs_default_rx_iov_limit,
+					      "rx iov_limit");
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
 		struct fi_info *hints, struct fi_info **info)
 {
@@ -1138,6 +1192,12 @@ static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
 		if (!(fi = fi_dupinfo(check_info))) {
 			ret = -FI_ENOMEM;
 			goto err1;
+		}
+
+		ret = fi_ibv_set_default_info(fi);
+		if (ret) {
+			fi_freeinfo(fi);
+			continue;
 		}
 
 		if (!*info)

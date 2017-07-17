@@ -216,18 +216,8 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 
 	memset(&attr, 0, sizeof attr);
 	if (_ep->scq) {
-		/* Fallback to default values if user hasn't requested a specific value.
-		 * This is to avoid increased memory usage when using max values. */
-		if (_ep->info->tx_attr->size == verbs_info->tx_attr->size)
-			attr.cap.max_send_wr = verbs_default_tx_size;
-		else
-			attr.cap.max_send_wr = _ep->info->tx_attr->size;
-
-		if (_ep->info->tx_attr->iov_limit == verbs_info->tx_attr->iov_limit)
-			attr.cap.max_send_sge = verbs_default_tx_iov_limit;
-		else
-			attr.cap.max_send_sge = _ep->info->tx_attr->iov_limit;
-
+		attr.cap.max_send_wr = _ep->info->tx_attr->size;
+		attr.cap.max_send_sge = _ep->info->tx_attr->iov_limit;
 		attr.send_cq = _ep->scq->cq;
 		pd = _ep->scq->domain->pd;
 	} else {
@@ -236,18 +226,8 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 	}
 
 	if (_ep->rcq) {
-		/* Fallback to default values if user hasn't requested a specific value.
-		 * This is to avoid increased memory usage when using max values. */
-		if (_ep->info->rx_attr->size == verbs_info->rx_attr->size)
-			attr.cap.max_recv_wr = verbs_default_rx_size;
-		else
-			attr.cap.max_recv_wr = _ep->info->rx_attr->size;
-
-		if (_ep->info->rx_attr->iov_limit == verbs_info->rx_attr->iov_limit)
-			attr.cap.max_recv_sge = verbs_default_rx_iov_limit;
-		else
-			attr.cap.max_recv_sge = _ep->info->rx_attr->iov_limit;
-
+		attr.cap.max_recv_wr = _ep->info->rx_attr->size;
+		attr.cap.max_recv_sge = _ep->info->rx_attr->iov_limit;
 		attr.recv_cq = _ep->rcq->cq;
 	} else {
 		attr.recv_cq = _ep->scq->cq;
