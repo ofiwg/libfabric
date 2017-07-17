@@ -59,6 +59,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_tagged.h>
 
 #ifndef OFI_MR_BASIC_MAP
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
@@ -67,6 +68,8 @@
 #ifndef PP_FIVERSION
 #define PP_FIVERSION FI_VERSION(1, 5)
 #endif
+
+static const uint64_t TAG = 1234;
 
 enum precision {
 	NANO = 1,
@@ -1173,8 +1176,14 @@ int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 ssize_t pp_post_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
 		   struct fi_context *ctx)
 {
-	PP_POST(fi_send, pp_get_tx_comp, ct->tx_seq, "transmit", ep, ct->tx_buf,
-		size, fi_mr_desc(ct->mr), ct->remote_fi_addr, ctx);
+	if (!(ct->fi->caps & FI_TAGGED))
+		PP_POST(fi_send, pp_get_tx_comp, ct->tx_seq, "transmit", ep,
+			ct->tx_buf, size, fi_mr_desc(ct->mr),
+			ct->remote_fi_addr, ctx);
+	else
+		PP_POST(fi_tsend, pp_get_tx_comp, ct->tx_seq, "t-transmit", ep,
+			ct->tx_buf, size, fi_mr_desc(ct->mr),
+			ct->remote_fi_addr, TAG, ctx);
 	return 0;
 }
 
@@ -1196,8 +1205,12 @@ ssize_t pp_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 
 ssize_t pp_post_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 {
-	PP_POST(fi_inject, pp_get_tx_comp, ct->tx_seq, "inject", ep, ct->tx_buf,
-		size, ct->remote_fi_addr);
+	if (!(ct->fi->caps & FI_TAGGED))
+		PP_POST(fi_inject, pp_get_tx_comp, ct->tx_seq, "inject", ep,
+			ct->tx_buf, size, ct->remote_fi_addr);
+	else
+		PP_POST(fi_tinject, pp_get_tx_comp, ct->tx_seq, "tinject", ep,
+			ct->tx_buf, size, ct->remote_fi_addr, TAG);
 	ct->tx_cq_cntr++;
 	return 0;
 }
@@ -1219,8 +1232,14 @@ ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
 		   struct fi_context *ctx)
 {
-	PP_POST(fi_recv, pp_get_rx_comp, ct->rx_seq, "receive", ep, ct->rx_buf,
-		MAX(size, PP_MAX_CTRL_MSG), fi_mr_desc(ct->mr), 0, ctx);
+	if (!(ct->fi->caps & FI_TAGGED))
+		PP_POST(fi_recv, pp_get_rx_comp, ct->rx_seq, "receive", ep,
+			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG),
+			fi_mr_desc(ct->mr), 0, ctx);
+	else
+		PP_POST(fi_trecv, pp_get_rx_comp, ct->rx_seq, "t-receive", ep,
+			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG),
+			fi_mr_desc(ct->mr), 0, TAG, 0, ctx);
 	return 0;
 }
 
@@ -1882,6 +1901,9 @@ void pp_pingpong_usage(char *name, char *desc)
 
 	fprintf(stderr, " %-20s %s\n", "-c", "enables data_integrity checks");
 
+	fprintf(stderr, " %-20s %s\n", "-m <transmit mode>",
+		"transmit mode type: msg|tagged (msg)");
+
 	fprintf(stderr, " %-20s %s\n", "-h", "display this help output");
 	fprintf(stderr, " %-20s %s\n", "-v", "enable debugging output");
 }
@@ -1951,6 +1973,11 @@ void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 	/* Destination Port */
 	case 'P':
 		ct->opts.dst_port = parse_ulong(optarg, UINT16_MAX);
+		break;
+
+	case 'm':
+		if (strncasecmp("msg", optarg, 4))
+			ct->hints->caps |= FI_TAGGED;
 		break;
 
 	/* Debug */
@@ -2148,7 +2175,7 @@ int main(int argc, char **argv)
 
 	ofi_osd_init();
 
-	while ((op = getopt(argc, argv, "hvd:p:e:I:S:B:P:c")) != -1) {
+	while ((op = getopt(argc, argv, "hvd:p:e:I:S:B:P:cm:")) != -1) {
 		switch (op) {
 		default:
 			pp_parse_opts(&ct, op, optarg);
