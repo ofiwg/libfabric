@@ -283,8 +283,8 @@ int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 static int check_valid_rma_ordering_sizes(void *arg)
 {
 	struct fi_info *info = arg;
-	if ((info->tx_attr->msg_order && FI_ORDER_RAW) ||
-			(info->rx_attr->msg_order && FI_ORDER_RAW)) {
+	if ((info->tx_attr->msg_order & FI_ORDER_RAW) ||
+			(info->rx_attr->msg_order & FI_ORDER_RAW)) {
 		if (info->ep_attr->max_order_raw_size <= 0)
 			return EXIT_FAILURE;
 		if (hints->ep_attr->max_order_raw_size) {
@@ -292,8 +292,8 @@ static int check_valid_rma_ordering_sizes(void *arg)
 				return EXIT_FAILURE;
 		}
 	}
-	if ((info->tx_attr->msg_order && FI_ORDER_WAR) ||
-			(info->rx_attr->msg_order && FI_ORDER_WAR)) {
+	if ((info->tx_attr->msg_order & FI_ORDER_WAR) ||
+			(info->rx_attr->msg_order & FI_ORDER_WAR)) {
 		if (info->ep_attr->max_order_war_size <= 0)
 			return EXIT_FAILURE;
 		if (hints->ep_attr->max_order_war_size) {
@@ -301,8 +301,8 @@ static int check_valid_rma_ordering_sizes(void *arg)
 				return EXIT_FAILURE;
 		}
 	}
-	if ((info->tx_attr->msg_order && FI_ORDER_WAW) ||
-			(info->rx_attr->msg_order && FI_ORDER_WAW)) {
+	if ((info->tx_attr->msg_order & FI_ORDER_WAW) ||
+			(info->rx_attr->msg_order & FI_ORDER_WAW)) {
 		if (info->ep_attr->max_order_waw_size <= 0)
 			return EXIT_FAILURE;
 		if (hints->ep_attr->max_order_waw_size) {
