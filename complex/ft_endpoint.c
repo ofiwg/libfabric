@@ -96,7 +96,7 @@ int ft_open_active(void)
 		}
 	}
 
-	ret = ft_bind_comp(ep, FI_TRANSMIT | FI_RECV);
+	ret = ft_bind_comp(ep);
 	if (ret)
 		return ret;
 

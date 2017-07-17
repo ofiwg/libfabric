@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -230,6 +230,14 @@ static int ft_setup_atomic_control(struct ft_atomic_control *ctrl)
 		memset(ctrl->comp_buf, 0, size);
 	}
 
+	if (!ctrl->orig_buf) {
+		ctrl->orig_buf = calloc(1, size);
+		if (!ctrl->orig_buf)
+			return -FI_ENOMEM;
+	} else {
+		memset(ctrl->orig_buf, 0, size);
+	}
+
 	if (fabric_info->mode & FI_LOCAL_MR) {
 		access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
 		if (!ctrl->res_mr) {
@@ -252,6 +260,9 @@ static int ft_setup_atomic_control(struct ft_atomic_control *ctrl)
 			ctrl->comp_memdesc = fi_mr_desc(ctrl->comp_mr);
 		}
 	}
+	ft_atom_ctrl.op = test_info.op;
+	ft_atom_ctrl.datatype = test_info.datatype;
+
 	return ret;
 }
 

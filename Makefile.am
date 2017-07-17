@@ -264,6 +264,8 @@ ported_librdmacm_fi_cmatose_LDADD = libfabtests.la
 
 complex_fi_ubertest_SOURCES = \
 	complex/fabtest.h \
+	complex/ofi_atomic.h \
+	complex/ofi_atomic.c \
 	complex/ft_main.c \
 	complex/ft_comm.c \
 	complex/ft_comp.c \
@@ -271,6 +273,7 @@ complex_fi_ubertest_SOURCES = \
 	complex/ft_domain.c \
 	complex/ft_endpoint.c \
 	complex/ft_msg.c \
+	complex/ft_verify.c \
 	complex/ft_test.c
 complex_fi_ubertest_LDADD = libfabtests.la
 

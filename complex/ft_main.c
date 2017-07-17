@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -60,6 +60,7 @@ enum {
 	FT_ENODATA,
 	FT_ENOSYS,
 	FT_ERROR,
+	FT_EIO,
 	FT_MAX_RESULT
 };
 
@@ -86,6 +87,8 @@ static char *ft_test_type_str(enum ft_test_type enum_str)
 		return "latency";
 	case FT_TEST_BANDWIDTH:
 		return "bandwidth";
+	case FT_TEST_UNIT:
+		return "unit";
 	default:
 		return "test_unspec";
 	}
@@ -95,15 +98,17 @@ static char *ft_class_func_str(enum ft_class_function enum_str)
 {
 	switch (enum_str) {
 	case FT_FUNC_SEND:
-		return "send";
+		return (test_info.test_class & FI_MSG) ? "send" : "tsend";
 	case FT_FUNC_SENDV:
-		return "sendv";
+		return (test_info.test_class & FI_MSG) ? "sendv" : "tsendv";
 	case FT_FUNC_SENDMSG:
-		return "sendmsg";
+		return (test_info.test_class & FI_MSG) ? "sendmsg" : "tsendmsg";
 	case FT_FUNC_INJECT:
-		return "inject";
+		return (test_info.test_class & FI_MSG) ? "inject" : "tinject";
 	case FT_FUNC_INJECTDATA:
-		return "injectdata";
+		return (test_info.test_class & FI_MSG) ? "injectdata" : "tinjectdata";
+	case FT_FUNC_SENDDATA:
+		return (test_info.test_class & FI_MSG) ? "senddata" : "tsenddata";
 	case FT_FUNC_READ:
 		return "read";
 	case FT_FUNC_READV:
@@ -165,20 +170,35 @@ static char *ft_wait_obj_str(enum fi_wait_obj enum_str)
 	}
 }
 
+static char *ft_comp_type_str(enum ft_comp_type comp_type)
+{
+	switch (comp_type) {
+	case FT_COMP_QUEUE:
+		return "comp_queue";
+	case FT_COMP_CNTR:
+		return "comp_cntr";
+	default:
+		return "comp_unspec";
+	} 
+} 
+
 static void ft_show_test_info(void)
 {
 	printf("[%s,", test_info.prov_name);
 	printf(" %s,", ft_test_type_str(test_info.test_type));
-	if (test_info.class_function >= FT_FUNC_ATOMIC) {
-		printf(" %s (%s),", ft_class_func_str(test_info.class_function),
-			fi_tostr(&test_info.op, FI_TYPE_ATOMIC_OP));
+	if (test_info.test_class & FI_ATOMIC) {
+		printf(" %s ", ft_class_func_str(test_info.class_function));
+		printf("(%s, ", fi_tostr(&test_info.op, FI_TYPE_ATOMIC_OP));
+		printf("%s)--", fi_tostr(&test_info.datatype, FI_TYPE_ATOMIC_TYPE));
 	} else {
-		printf(" %s,", ft_class_func_str(test_info.class_function));
+		printf(" %s--", ft_class_func_str(test_info.class_function));
 	}
+	printf("%s,", fi_tostr(&test_info.msg_flags, FI_TYPE_OP_FLAGS));
 	printf(" %s,", fi_tostr(&test_info.ep_type, FI_TYPE_EP_TYPE));
 	printf(" %s,", fi_tostr(&test_info.av_type, FI_TYPE_AV_TYPE));
 	printf(" eq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));
 	printf(" cq_%s,", ft_wait_obj_str(test_info.cq_wait_obj));
+	printf(" %s,", ft_comp_type_str(test_info.comp_type));
 	printf(" [%s],", fi_tostr(&test_info.mode, FI_TYPE_MODE));
 	printf(" [%s]]\n", fi_tostr(&test_info.caps, FI_TYPE_CAPS));
 }
@@ -249,6 +269,8 @@ static int ft_fw_result_index(int fi_errno)
 		return FT_ENODATA;
 	case FI_ENOSYS:
 		return FT_ENOSYS;
+	case FI_EIO:
+		return FT_EIO;
 	default:
 		return FT_ERROR;
 	}
@@ -278,7 +300,6 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 		ft_show_test_info();
 
 		result = ft_run_test();
-		results[ft_fw_result_index(-result)]++;
 
 		ret = ft_sock_send(sock, &result, sizeof result);
 		if (result) {
@@ -298,7 +319,7 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 	if (subindex == 1)
 		return -FI_ENODATA;
 
-	return 0;
+	return result;
 }
 
 static int ft_server_child()
@@ -323,7 +344,7 @@ static int ft_server_child()
 		if (ret != -FI_ENODATA)
 			fi_freeinfo(info);
 
-		if (ret) {
+		if (ret && ret != -FI_EIO) {
 			FT_PRINTERR("ft_fw_process_list", ret);
 			printf("Node: %s\nService: %s\n",
 				test_info.node, test_info.service);
@@ -367,9 +388,9 @@ static int ft_fw_server(void)
 
 		results[ft_fw_result_index(ret)]++;
 
-	} while (!ret || ret == FI_ENODATA);
+	} while (!ret || ret == FI_EIO || ret == FI_ENODATA);
 
-	return ret; 
+	return ret;
 }
 
 static int ft_client_child(void)
@@ -409,19 +430,20 @@ static int ft_client_child(void)
 		}
 
 		ret = ft_sock_recv(sock, &sresult, sizeof sresult);
-		if (result) {
+		if (result && result != -FI_EIO) {
 			FT_PRINTERR("ft_run_test", result);
 			fprintf(stderr, "Node: %s\nService: %s \n",
 				test_info.node, test_info.service);
 			fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
-			ret = result;
 			goto out;
 		} else if (ret) {
 			FT_PRINTERR("ft_sock_send", ret);
+			result = ret;
 			goto out;
 		} else if (sresult) {
-			ret = sresult;
-			goto out;
+			result = sresult;
+			if (sresult != -FI_EIO)
+				goto out;
 		}
 
 		ret = ft_sock_recv(sock, &test_info, sizeof test_info);
@@ -434,10 +456,9 @@ static int ft_client_child(void)
 
 	printf("Ending test %d / %d, result: %s\n", test_info.test_index,
 		series->test_count, fi_strerror(-result));
-	ret = result;
 out:
 	fi_freeinfo(hints);
-	return ret;
+	return result;
 }
 
 static int ft_fw_client(void)
@@ -451,6 +472,11 @@ static int ft_fw_client(void)
 	     fts_next(series)) {
 
 		fts_cur_info(series, &test_info);
+		if (!fts_info_is_valid()) {
+			printf("Skipping test %d (invalid):\n", test_info.test_index);
+			ft_show_test_info();
+			continue;
+		}
 
 		ret = ft_sock_send(sock, &test_info, sizeof test_info);
 		if (ret) {
@@ -483,6 +509,7 @@ static void ft_fw_show_results(void)
 	printf("Success: %d\n", results[FT_SUCCESS]);
 	printf("ENODATA: %d\n", results[FT_ENODATA]);
 	printf("ENOSYS : %d\n", results[FT_ENOSYS]);
+	printf("EIO    : %d\n", results[FT_EIO]);
 	printf("ERROR  : %d\n", results[FT_ERROR]);
 }
 

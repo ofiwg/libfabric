@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2015-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
@@ -85,6 +85,7 @@ struct ft_xcontrol {
 	fi_addr_t		addr;
 	uint64_t		tag;
 	uint8_t			seqno;
+	uint64_t		total_comp;
 	enum fi_cq_format	cq_format;
 	enum fi_wait_obj	comp_wait;  /* must be NONE */
 	uint64_t		remote_cq_data;
@@ -93,6 +94,7 @@ struct ft_xcontrol {
 };
 
 struct ft_atomic_control {
+	void			*orig_buf;
 	void			*res_buf;
 	struct fid_mr		*res_mr;
 	void			*res_memdesc;
@@ -122,6 +124,7 @@ struct ft_control {
 	int			iov_cnt;
 	int			inc_step;
 	int			xfer_iter;
+	int			verify_cnt;
 	int			error;
 };
 
@@ -132,6 +135,7 @@ extern struct ft_atomic_control ft_atom_ctrl;
 
 enum {
 	FT_MAX_CAPS		= 64,
+	FT_MAX_CLASS		= 4,
 	FT_MAX_EP_TYPES		= 8,
 	FT_MAX_AV_TYPES		= 3,
 	FT_MAX_PROV_MODES	= 4,
@@ -143,7 +147,7 @@ enum {
 enum ft_comp_type {
 	FT_COMP_UNSPEC,
 	FT_COMP_QUEUE,
-//	FT_COMP_COUNTER,
+	FT_COMP_CNTR,
 	FT_MAX_COMP
 };
 
@@ -151,6 +155,7 @@ enum ft_test_type {
 	FT_TEST_UNSPEC,
 	FT_TEST_LATENCY,
 	FT_TEST_BANDWIDTH,
+	FT_TEST_UNIT,
 	FT_MAX_TEST
 };
 
@@ -161,6 +166,7 @@ enum ft_class_function {
 	FT_FUNC_SENDMSG,
 	FT_FUNC_INJECT,
 	FT_FUNC_INJECTDATA,
+	FT_FUNC_SENDDATA,
 	FT_FUNC_READ,
 	FT_FUNC_READV,
 	FT_FUNC_READMSG,
@@ -180,10 +186,40 @@ enum ft_class_function {
 	FT_FUNC_COMPARE_ATOMIC,
 	FT_FUNC_COMPARE_ATOMICV,
 	FT_FUNC_COMPARE_ATOMICMSG,
-	FT_MAX_FUNCTIONS	
+	FT_MAX_FUNCTIONS
 };
 
 #define FT_FLAG_QUICKTEST	(1ULL << 0)
+
+#define is_inject_func(x) (x == FT_FUNC_INJECT || \
+			   x == FT_FUNC_INJECTDATA || \
+			   x == FT_FUNC_INJECT_WRITE || \
+			   x == FT_FUNC_INJECT_WRITEDATA || \
+			   x == FT_FUNC_INJECT_ATOMIC)
+
+#define is_read_func(x) (x == FT_FUNC_READ || \
+			 x == FT_FUNC_READV || \
+			 x == FT_FUNC_READMSG)
+
+#define is_fetch_func(x) (x == FT_FUNC_FETCH_ATOMIC || \
+			  x == FT_FUNC_FETCH_ATOMICV || \
+			  x == FT_FUNC_FETCH_ATOMICMSG)
+
+#define is_compare_func(x) (x == FT_FUNC_COMPARE_ATOMIC || \
+			    x == FT_FUNC_COMPARE_ATOMICV || \
+			    x == FT_FUNC_COMPARE_ATOMICMSG)
+
+#define is_data_func(x) (x == FT_FUNC_SENDDATA || \
+			 x == FT_FUNC_INJECTDATA || \
+			 x == FT_FUNC_WRITEDATA || \
+			 x == FT_FUNC_INJECT_WRITEDATA)
+
+#define is_msg_func(x)	(x == FT_FUNC_SENDMSG || \
+			 x == FT_FUNC_WRITEMSG || \
+			 x == FT_FUNC_READMSG || \
+			 x == FT_FUNC_ATOMICMSG || \
+			 x == FT_FUNC_FETCH_ATOMICMSG || \
+			 x == FT_FUNC_COMPARE_ATOMICMSG)
 
 struct ft_set {
 	char			node[FI_NAME_MAX];
@@ -191,14 +227,17 @@ struct ft_set {
 	char			prov_name[FI_NAME_MAX];
 	enum ft_test_type	test_type[FT_MAX_TEST];
 	enum ft_class_function	class_function[FT_MAX_FUNCTIONS];
+	uint64_t		msg_flags;
 	enum fi_op		op[FI_ATOMIC_OP_LAST];
+	enum fi_datatype	datatype[FI_DATATYPE_LAST];
 	enum fi_ep_type		ep_type[FT_MAX_EP_TYPES];
 	enum fi_av_type		av_type[FT_MAX_AV_TYPES];
 	enum ft_comp_type	comp_type[FT_MAX_COMP];
 	enum fi_wait_obj	eq_wait_obj[FT_MAX_WAIT_OBJ];
 	enum fi_wait_obj	cq_wait_obj[FT_MAX_WAIT_OBJ];
 	uint64_t		mode[FT_MAX_PROV_MODES];
-	uint64_t		caps[FT_MAX_CAPS];
+	uint64_t		test_class[FT_MAX_CLASS];
+	uint64_t		constant_caps[FT_MAX_CAPS];
 	uint64_t		test_flags;
 };
 
@@ -211,13 +250,14 @@ struct ft_series {
 	int			cur_type;
 	int			cur_func;
 	int			cur_op;
+	int			cur_datatype;
 	int			cur_ep;
 	int			cur_av;
 	int			cur_comp;
 	int			cur_eq_wait_obj;
 	int			cur_cq_wait_obj;
 	int			cur_mode;
-	int			cur_caps;
+	int			cur_class;
 };
 
 struct ft_info {
@@ -225,9 +265,11 @@ struct ft_info {
 	int			test_index;
 	int			test_subindex;
 	enum ft_class_function	class_function;
+	uint64_t		msg_flags;
 	enum fi_op		op;
 	enum fi_datatype	datatype;
 	uint64_t		test_flags;
+	uint64_t		test_class;
 	uint64_t		caps;
 	uint64_t		mode;
 	enum fi_av_type		av_type;
@@ -250,6 +292,7 @@ void fts_start(struct ft_series *series, int index);
 void fts_next(struct ft_series *series);
 int  fts_end(struct ft_series *series, int index);
 void fts_cur_info(struct ft_series *series, struct ft_info *info);
+int fts_info_is_valid(void);
 
 
 struct ft_msg {
@@ -265,7 +308,7 @@ int ft_open_control();
 ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 		     uint32_t event_check, size_t len_check);
 int ft_open_comp();
-int ft_bind_comp(struct fid_ep *ep, uint64_t flags);
+int ft_bind_comp(struct fid_ep *ep);
 int ft_comp_rx(int timeout);
 int ft_comp_tx(int timeout);
 
@@ -274,10 +317,12 @@ int ft_open_passive();
 int ft_enable_comm();
 int ft_post_recv_bufs();
 void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len);
-void ft_format_iocs(struct iovec *iov);
+void ft_format_iocs(struct iovec *iov, size_t *iov_count);
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx);
 
+int ft_send_sync_msg();
+int ft_recv_n_msg();
 int ft_recv_msg();
 int ft_send_msg();
 int ft_send_dgram();
@@ -292,6 +337,9 @@ int ft_run_test();
 int ft_reset_ep();
 void ft_record_error(int error);
 
+int ft_verify_bufs();
+int ft_sync_fill_bufs(size_t size);
+void ft_verify_comp(void *buf);
 
 #ifdef __cplusplus
 }
