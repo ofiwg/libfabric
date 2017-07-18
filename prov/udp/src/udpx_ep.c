@@ -562,11 +562,7 @@ static int udpx_ep_close(struct fid *fid)
 		fid_list_remove(&ep->util_ep.rx_cq->ep_list,
 				&ep->util_ep.rx_cq->ep_list_lock,
 				&ep->util_ep.ep_fid.fid);
-		ofi_atomic_dec32(&ep->util_ep.rx_cq->ref);
 	}
-
-	if (ep->util_ep.tx_cq)
-		ofi_atomic_dec32(&ep->util_ep.tx_cq->ref);
 
 	udpx_rx_cirq_free(ep->rxq);
 	ofi_close_socket(ep->sock);
