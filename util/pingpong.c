@@ -1832,6 +1832,7 @@ int pp_finalize(struct ct_pingpong *ct)
 	int ret;
 	struct fi_context ctx;
 	struct fi_msg msg;
+	struct fi_msg_tagged tmsg;
 
 	PP_DEBUG("Terminating test\n");
 
@@ -1839,16 +1840,31 @@ int pp_finalize(struct ct_pingpong *ct)
 	iov.iov_base = ct->tx_buf;
 	iov.iov_len = 4;
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.iov_count = 1;
-	msg.addr = ct->remote_fi_addr;
-	msg.context = &ctx;
+	if (!(ct->fi->caps & FI_TAGGED)) {
+		memset(&msg, 0, sizeof(msg));
+		msg.msg_iov = &iov;
+		msg.iov_count = 1;
+		msg.addr = ct->remote_fi_addr;
+		msg.context = &ctx;
 
-	ret = fi_sendmsg(ct->ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
-	if (ret) {
-		PP_PRINTERR("transmit", ret);
-		return ret;
+		ret = fi_sendmsg(ct->ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
+		if (ret) {
+			PP_PRINTERR("transmit", ret);
+			return ret;
+		}
+	} else {
+		memset(&tmsg, 0, sizeof(tmsg));
+		tmsg.msg_iov = &iov;
+		tmsg.iov_count = 1;
+		tmsg.addr = ct->remote_fi_addr;
+		tmsg.context = &ctx;
+		tmsg.tag = TAG;
+
+		ret = fi_tsendmsg(ct->ep, &tmsg, FI_INJECT | FI_TRANSMIT_COMPLETE);
+		if (ret) {
+			PP_PRINTERR("t-transmit", ret);
+			return ret;
+		}
 	}
 
 	ret = pp_get_tx_comp(ct, ++ct->tx_seq);
@@ -1976,8 +1992,10 @@ void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 		break;
 
 	case 'm':
-		if (strncasecmp("msg", optarg, 4))
+		if (strncasecmp("msg", optarg, 4)) {
+			ct->hints->caps &= ~FI_MSG;
 			ct->hints->caps |= FI_TAGGED;
+		}
 		break;
 
 	/* Debug */
