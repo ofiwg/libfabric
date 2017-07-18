@@ -80,6 +80,7 @@ extern struct fi_provider usdf_ops;
 #define USDF_DOM_CAPS (FI_REMOTE_COMM)
 
 #define USDF_MR_IOV_LIMIT 1
+#define USDF_MR_CNT (65535)
 
 /*
  *  TAILQ stuff that should exist

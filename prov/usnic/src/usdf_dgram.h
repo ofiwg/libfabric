@@ -53,6 +53,7 @@
 #define USDF_DGRAM_RMA_IOV_LIMIT 0
 #define USDF_DGRAM_CNTR_CNT 0
 #define USDF_DGRAM_MR_IOV_LIMIT (USDF_MR_IOV_LIMIT)
+#define USDF_DGRAM_MR_CNT (USDF_MR_CNT)
 
 
 int usdf_dgram_fill_rx_attr(struct fi_info *hints,

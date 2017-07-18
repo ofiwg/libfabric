@@ -123,6 +123,7 @@ static const struct fi_domain_attr rdm_dflt_domain_attr = {
 	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL,
 	.cntr_cnt = USDF_RDM_CNTR_CNT,
 	.mr_iov_limit = USDF_RDM_MR_IOV_LIMIT,
+	.mr_cnt = USDF_RDM_MR_CNT,
 };
 
 static struct fi_ops_atomic usdf_rdm_atomic_ops = {
@@ -262,6 +263,13 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
 			return -FI_ENODATA;
 		defaults.mr_mode = hints->domain_attr->mr_mode;
+	}
+
+	if (hints->domain_attr->mr_cnt <= USDF_RDM_MR_CNT) {
+		defaults.mr_cnt = hints->domain_attr->mr_cnt;
+	} else {
+		USDF_DBG_SYS(DOMAIN, "mr_count exceeded provider limit\n");
+		return -FI_ENODATA;
 	}
 
 out:
