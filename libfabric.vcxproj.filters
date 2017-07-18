@@ -351,6 +351,12 @@
     <ClCompile Include="prov\util\src\util_ns.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\util\src\util_atomic.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\util\src\util_cntr.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h">
@@ -538,6 +544,9 @@
     </ClInclude>
     <ClInclude Include="include\windows\ifaddrs.h">
       <Filter>Header Files\windows</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_atomic.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
