@@ -278,7 +278,7 @@ static int ft_fw_result_index(int fi_errno)
 
 static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 {
-	int ret, subindex, result;
+	int ret, subindex, result = 0;
 	size_t len;
 
 	for (subindex = 1, fabric_info = info; fabric_info;
@@ -309,6 +309,7 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 			return ret;
 		}
 	}
+
 	test_info.prov_name[0] = '\0';
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
 	if (ret) {

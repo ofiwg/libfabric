@@ -393,7 +393,7 @@ static int ft_check_verify_cnt()
 
 static int ft_pingpong_rma(void)
 {
-	int ret, i;
+	int ret = 0, i;
 	size_t count;
 
 	if (test_info.test_class & FI_ATOMIC) {

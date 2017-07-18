@@ -54,8 +54,6 @@ static int ft_open_cntrs(void)
 {
 	int ret;
 
-	opts.comp_method = test_info.cq_wait_obj;
-
 	if (!txcntr) {
 		ret = ft_cntr_open(&txcntr);
 		if (ret)
