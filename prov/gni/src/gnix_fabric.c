@@ -555,10 +555,16 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			if (ofi_check_mr_mode(version,
 					gnix_info->domain_attr->mr_mode,
 					hints->domain_attr->mr_mode) != FI_SUCCESS) {
+				GNIX_DEBUG(FI_LOG_FABRIC,
+					"failed mr_mode check\n");
 				goto err;
 			}
 
-			gnix_info->domain_attr->mr_mode = hints->domain_attr->mr_mode;
+			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
+				gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
+			else
+				gnix_info->domain_attr->mr_mode =
+					hints->domain_attr->mr_mode;
 
 			switch (hints->domain_attr->threading) {
 			case FI_THREAD_COMPLETION:
