@@ -1695,7 +1695,7 @@ void do_send_err(int len)
 {
 	int ret;
 	struct fi_cq_tagged_entry s_cqe;
-	struct fi_cq_err_entry err_cqe;
+	struct fi_cq_err_entry err_cqe = {0};
 	ssize_t sz;
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
