@@ -384,37 +384,50 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 
 static int rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 {
-	struct iovec iov;
-	struct fi_msg msg;
-	struct rxm_pkt pkt;
+	struct rxm_tx_entry *tx_entry;
+	struct rxm_tx_buf *tx_buf;
 	int ret;
 
 	assert(rx_buf->conn);
 
-	rxm_pkt_init(&pkt);
-	pkt.ctrl_hdr.type = ofi_ctrl_ack;
-	pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
-	pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
-	pkt.hdr.op = rx_buf->pkt.hdr.op;
+	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rx_buf->ep->tx_pool);
+	if (!tx_buf) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
+		return -FI_EAGAIN;
+	}
 
-	iov.iov_base = &pkt;
-	iov.iov_len = sizeof(pkt);
-
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.iov_count = 1;
-	msg.context = rx_buf;
+	if (!(tx_entry = rxm_tx_entry_get(&rx_buf->ep->send_queue))) {
+		ret = -FI_EAGAIN;
+		goto err1;
+	}
 
 	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_READ, RXM_LMT_ACK_SENT);
 	rx_buf->hdr.state = RXM_LMT_ACK_SENT;
 
-	ret = fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
+	tx_entry->state 	= rx_buf->hdr.state;
+	tx_entry->ep 		= rx_buf->ep;
+	tx_entry->context 	= rx_buf;
+	tx_entry->tx_buf 	= tx_buf;
+
+	rxm_pkt_init(&tx_buf->pkt);
+	tx_buf->pkt.ctrl_hdr.type 	= ofi_ctrl_ack;
+	tx_buf->pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
+	tx_buf->pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
+	tx_buf->pkt.hdr.op 		= rx_buf->pkt.hdr.op;
+
+	ret = fi_send(rx_buf->conn->msg_ep, &tx_buf->pkt, sizeof(tx_buf->pkt),
+		      tx_buf->hdr.desc, 0, tx_entry);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
 		rx_buf->hdr.state = RXM_NONE;
-		return ret;
+		goto err2;
 	}
 	return 0;
+err2:
+	rxm_tx_entry_release(&rx_buf->ep->send_queue, tx_entry);
+err1:
+	rxm_buf_release(&rx_buf->ep->tx_pool, (struct rxm_buf *)tx_buf);
+	return ret;
 }
 
 static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
@@ -440,9 +453,7 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 {
 	enum rxm_proto_state *state = comp->op_context;
 	struct rxm_rx_buf *rx_buf = comp->op_context;
-#if ENABLE_DEBUG
 	struct rxm_tx_entry *tx_entry = comp->op_context;
-#endif
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -472,8 +483,12 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		else
 			return rxm_lmt_send_ack(rx_buf);
 	case RXM_LMT_ACK_SENT:
+		rx_buf = tx_entry->context;
+		rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
+		rxm_buf_release(&rx_buf->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
+
 		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
-		*state = RXM_LMT_FINISH;
+		rx_buf->hdr.state = RXM_LMT_FINISH;
 		if (!RXM_MR_LOCAL(rx_buf->ep->rxm_info))
 			rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
 		return rxm_finish_recv(rx_buf);
