@@ -306,7 +306,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 
 	SOCK_LOG_DBG("binding pep listener to %s\n", sa_port);
 	for (p = s_res; p; p = p->ai_next) {
-		pep->cm.sock = socket(p->ai_family, p->ai_socktype,
+		pep->cm.sock = ofi_socket(p->ai_family, p->ai_socktype,
 				     p->ai_protocol);
 		if (pep->cm.sock >= 0) {
 			sock_set_sockopts(pep->cm.sock);
@@ -495,7 +495,7 @@ static void *sock_ep_cm_connect_handler(void *data)
 	struct fi_eq_cm_entry *cm_entry = NULL;
 	int cm_data_sz, response_port;
 
-	sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+	sock_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
 		SOCK_LOG_ERROR("no socket\n");
 		sock_ep_cm_report_connect_fail(handle->ep, NULL, 0);
