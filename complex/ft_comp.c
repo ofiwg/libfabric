@@ -52,17 +52,26 @@ static size_t comp_entry_size[] = {
 
 static int ft_open_cntrs(void)
 {
+	struct fi_cntr_attr attr;
 	int ret;
 
 	if (!txcntr) {
-		ret = ft_cntr_open(&txcntr);
-		if (ret)
+		memset(&attr, 0, sizeof attr);
+		attr.wait_obj = test_info.cntr_wait_obj;
+		ret = fi_cntr_open(domain, &attr, &txcntr, &txcntr);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_open", ret);
 			return ret;
+		}
 	}
 	if (!rxcntr) {
-		ret = ft_cntr_open(&rxcntr);
-		if (ret)
+		memset(&attr, 0, sizeof attr);
+		attr.wait_obj = test_info.cntr_wait_obj;
+		ret = fi_cntr_open(domain, &attr, &rxcntr, &rxcntr);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_open", ret);
 			return ret;
+		}
 	}
 	return 0;
 }
@@ -75,7 +84,7 @@ static int ft_open_cqs(void)
 	if (!txcq) {
 		memset(&attr, 0, sizeof attr);
 		attr.format = ft_tx_ctrl.cq_format;
-		attr.wait_obj = ft_tx_ctrl.comp_wait;
+		attr.wait_obj = test_info.cq_wait_obj;
 		attr.size = ft_tx_ctrl.max_credits;
 
 		ret = fi_cq_open(domain, &attr, &txcq, NULL);
@@ -88,7 +97,7 @@ static int ft_open_cqs(void)
 	if (!rxcq) {
 		memset(&attr, 0, sizeof attr);
 		attr.format = ft_rx_ctrl.cq_format;
-		attr.wait_obj = ft_rx_ctrl.comp_wait;
+		attr.wait_obj = test_info.cq_wait_obj;
 		attr.size = ft_rx_ctrl.max_credits;
 
 		ret = fi_cq_open(domain, &attr, &rxcq, NULL);
