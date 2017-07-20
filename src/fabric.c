@@ -455,6 +455,16 @@ libdl_done:
 	 */
 	ofi_register_provider(RXM_INIT, NULL);
 
+	{
+		/* TODO: RXD is not stable for now. Disable it by default */
+		int enable_rxd = 0;
+		fi_param_define(NULL, "rxd_enable", FI_PARAM_BOOL,
+				"Enable RXD provider (default: no)");
+		fi_param_get_bool(NULL, "rxd_enable", &enable_rxd);
+		if (enable_rxd)
+			ofi_register_provider(RXD_INIT, NULL);
+	}
+
 	ofi_init = 1;
 
 unlock:
