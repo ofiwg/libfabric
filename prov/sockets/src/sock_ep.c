@@ -613,6 +613,34 @@ struct fi_ops_ep sock_ctx_ep_ops = {
 	.tx_size_left = sock_tx_size_left,
 };
 
+static int sock_eq_fid_match(struct dlist_entry *entry, const void *arg)
+{
+	struct sock_eq_entry *sock_eq_entry;
+	struct fi_eq_entry *eq_entry;
+	fid_t fid = (fid_t)arg;
+
+	sock_eq_entry = container_of(entry, struct sock_eq_entry, entry);
+	/* fi_eq_entry, fi_eq_cm_entry and fi_eq_err_entry all
+	 * have fid_t as first member */
+	eq_entry = (struct fi_eq_entry *)sock_eq_entry->event;
+	return (fid == eq_entry->fid);
+}
+
+static void sock_ep_clear_eq_list(struct dlistfd_head *list,
+				  struct fid_ep *ep_fid)
+{
+	struct dlist_entry *entry;
+
+	while (!dlistfd_empty(list)) {
+		entry = dlist_remove_first_match(&list->list, sock_eq_fid_match,
+						 ep_fid);
+		if (!entry)
+			break;
+		dlistfd_reset(list);
+		free(container_of(entry, struct sock_eq_entry, entry));
+	}
+}
+
 static int sock_ep_close(struct fid *fid)
 {
 	struct sock_ep *sock_ep;
@@ -689,6 +717,17 @@ static int sock_ep_close(struct fid *fid)
 	}
 
 	fastlock_destroy(&sock_ep->attr->cm.lock);
+
+	if (sock_ep->attr->eq) {
+		fastlock_acquire(&sock_ep->attr->eq->lock);
+		sock_ep_clear_eq_list(&sock_ep->attr->eq->list,
+				      &sock_ep->ep);
+		/* Any err_data if present would be freed by
+		 * sock_eq_clean_err_data_list when EQ is closed */
+		sock_ep_clear_eq_list(&sock_ep->attr->eq->err_list,
+				      &sock_ep->ep);
+		fastlock_release(&sock_ep->attr->eq->lock);
+	}
 
 	if (sock_ep->attr->fclass != FI_CLASS_SEP) {
 		if (!sock_ep->attr->tx_shared)

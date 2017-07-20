@@ -128,8 +128,7 @@ int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 
 	rxm_conn->handle.remote_key = remote_cm_data->conn_id;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn,
-			      (void *)rxm_conn->handle.key);
+	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
 	if (ret)
 		goto err2;
 
@@ -153,10 +152,41 @@ err1:
 	return ret;
 }
 
+static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
+{
+	switch((enum ofi_cmap_signal)eq_entry->data) {
+	case OFI_CMAP_FREE:
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Freeing handle\n");
+		rxm_conn_free((struct util_cmap_handle *)eq_entry->context);
+		return 0;
+	case OFI_CMAP_EXIT:
+		FI_TRACE(&rxm_prov, FI_LOG_FABRIC, "Closing event handler\n");
+		return 1;
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unknown cmap signal\n");
+		return 1;
+	}
+}
+
+static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
+{
+	struct fi_eq_err_entry err_entry = {0};
+
+	if (rd != -FI_EAVAIL) {
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to fi_eq_sread\n");
+		return;
+	}
+	OFI_EQ_READERR(&rxm_prov, FI_LOG_FABRIC, rxm_ep->msg_eq, rd, err_entry);
+	if (err_entry.err == ECONNREFUSED) {
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Connection refused\n");
+		ofi_cmap_process_reject(rxm_ep->util_ep.cmap,
+					err_entry.fid->context);
+	}
+}
+
 void *rxm_conn_event_handler(void *arg)
 {
 	struct fi_eq_cm_entry *entry;
-	struct fi_eq_err_entry err_entry = {0};
 	size_t datalen = sizeof(struct rxm_cm_data);
 	size_t len = sizeof(*entry) + datalen;
 	struct rxm_ep *rxm_ep = container_of(arg, struct rxm_ep, util_ep);
@@ -175,33 +205,23 @@ void *rxm_conn_event_handler(void *arg)
 		rd = fi_eq_sread(rxm_ep->msg_eq, &event, entry, len, -1, 0);
 		/* We would receive more bytes than sizeof *entry during CONNREQ */
 		if (rd < 0) {
-			if (rd == -FI_EAVAIL)
-				OFI_EQ_READERR(&rxm_prov, FI_LOG_FABRIC,
-						rxm_ep->msg_eq, rd, err_entry);
-			else
-				FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-						"msg: unable to fi_eq_sread\n");
-			if (err_entry.err == ECONNREFUSED) {
-				FI_DBG(&rxm_prov, FI_LOG_FABRIC,
-				       "Connection refused\n");
-				ofi_cmap_process_reject(rxm_ep->util_ep.cmap,
-							(uint64_t)err_entry.fid->context);
-			}
+			rxm_conn_handle_eq_err(rxm_ep, rd);
 			continue;
 		}
 
 		switch(event) {
 		case FI_NOTIFY:
-			FI_TRACE(&rxm_prov, FI_LOG_FABRIC,
-				 "Closing conn event handler");
-			free(entry);
-			return NULL;
+			if (rxm_conn_handle_notify((struct fi_eq_entry *)entry))
+				goto exit;
+			break;
 		case FI_CONNREQ:
-			if (rd != len)
+			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
+			if (rd != len) {
 				FI_WARN(&rxm_prov, FI_LOG_FABRIC,
 					"Received size (%d) not matching "
 					"expected (%d)\n", rd, len);
-			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
+				goto exit;
+			}
 			cm_data = (void *)entry->data;
 			rxm_msg_process_connreq(rxm_ep, entry->info, entry->data);
 			break;
@@ -210,7 +230,7 @@ void *rxm_conn_event_handler(void *arg)
 			       "Connection successful\n");
 			cm_data = (void *)entry->data;
 			ofi_cmap_process_connect(rxm_ep->util_ep.cmap,
-						 (uint64_t)entry->fid->context,
+						 entry->fid->context,
 						 (rd - sizeof(*entry)) ?
 						 &cm_data->conn_id : NULL);
 			break;
@@ -218,13 +238,17 @@ void *rxm_conn_event_handler(void *arg)
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 			       "Received connection shutdown\n");
 			ofi_cmap_process_shutdown(rxm_ep->util_ep.cmap,
-						  (uint64_t)entry->fid->context);
+						  entry->fid->context);
 			break;
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
 				"Unknown event: %u\n", event);
+			goto exit;
 		}
 	}
+exit:
+	free(entry);
+	return NULL;
 }
 
 static int rxm_prepare_cm_data(struct fid_pep *pep, struct util_cmap_handle *handle,
@@ -282,7 +306,7 @@ int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 		return ret;
 
 	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn,
-			      (void *)rxm_conn->handle.key);
+			      &rxm_conn->handle);
 	if (ret)
 		goto err1;
 
@@ -308,11 +332,15 @@ err1:
 	return ret;
 }
 
-int rxm_conn_signal(struct util_ep *util_ep)
+int rxm_conn_signal(struct util_ep *util_ep, void *context,
+		    enum ofi_cmap_signal signal)
 {
 	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
 	struct fi_eq_entry entry = {0};
 	ssize_t rd;
+
+	entry.context = context;
+	entry.data = (uint64_t)signal;
 
 	rd = fi_eq_write(rxm_ep->msg_eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 	if (rd != sizeof(entry)) {

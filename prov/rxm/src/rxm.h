@@ -349,7 +349,8 @@ int rxm_conn_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 struct util_cmap_handle *rxm_conn_alloc(void);
 void rxm_conn_close(struct util_cmap_handle *handle);
 void rxm_conn_free(struct util_cmap_handle *handle);
-int rxm_conn_signal(struct util_ep *util_ep);
+int rxm_conn_signal(struct util_ep *util_ep, void *context,
+		    enum ofi_cmap_signal signal);
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
 int ofi_match_addr(fi_addr_t addr, fi_addr_t match_addr);

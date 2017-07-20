@@ -377,6 +377,11 @@ int ofi_av_get_index(struct util_av *av, const void *addr);
 // for both AV and RX only connections.
 #define UTIL_CMAP_IDX_BITS 48
 
+enum ofi_cmap_signal {
+	OFI_CMAP_FREE,
+	OFI_CMAP_EXIT,
+};
+
 enum util_cmap_state {
 	CMAP_IDLE,
 	CMAP_CONNREQ_SENT,
@@ -411,7 +416,8 @@ typedef int (*ofi_cmap_connect_func)(struct util_ep *cmap,
 				     struct util_cmap_handle *handle,
 				     fi_addr_t fi_addr);
 typedef void *(*ofi_cmap_event_handler_func)(void *arg);
-typedef int (*ofi_cmap_signal_func)(struct util_ep *ep);
+typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
+				    enum ofi_cmap_signal signal);
 
 struct util_cmap_attr {
 	void 				*name;
@@ -446,12 +452,15 @@ struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t ke
 int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 			struct util_cmap_handle **handle);
 
-void ofi_cmap_process_connect(struct util_cmap *cmap, uint64_t local_key,
+void ofi_cmap_process_connect(struct util_cmap *cmap,
+			      struct util_cmap_handle *handle,
 			      uint64_t *remote_key);
-void ofi_cmap_process_reject(struct util_cmap *cmap, uint64_t local_key);
+void ofi_cmap_process_reject(struct util_cmap *cmap,
+			     struct util_cmap_handle *handle);
 int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 			     struct util_cmap_handle **handle);
-void ofi_cmap_process_shutdown(struct util_cmap *cmap, uint64_t local_key);
+void ofi_cmap_process_shutdown(struct util_cmap *cmap,
+			       struct util_cmap_handle *handle);
 void ofi_cmap_del_handle(struct util_cmap_handle *handle);
 void ofi_cmap_free(struct util_cmap *cmap);
 struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,

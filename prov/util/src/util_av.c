@@ -1080,13 +1080,12 @@ static int ofi_cmap_match_peer(struct dlist_entry *entry, const void *addr)
 }
 
 /* Caller must hold cmap->lock */
-static void util_cmap_del_handle(struct util_cmap_handle *handle)
+static int util_cmap_del_handle(struct util_cmap_handle *handle)
 {
 	struct util_cmap *cmap = handle->cmap;
+	int ret;
 
-	if (handle->state == CMAP_SHUTDOWN)
-		goto free;
-
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Deleting handle\n");
 	if (handle->peer) {
 		dlist_remove(&handle->peer->entry);
 		free(handle->peer);
@@ -1094,18 +1093,21 @@ static void util_cmap_del_handle(struct util_cmap_handle *handle)
 	} else {
 		cmap->handles_av[handle->fi_addr] = 0;
 	}
-
-	/* TODO The following defers the handle deletion until we receive a
-	 * shutdown. Replace this with something better. Handle may not be freed
-	 * if we don't get a shutdown event */
-	if (handle->state == CMAP_CONNECTED) {
-		handle->state = CMAP_SHUTDOWN;
-		handle->cmap->attr.close(handle);
-		return;
-	}
-free:
 	util_cmap_clear_key(handle);
-	cmap->attr.free(handle);
+
+	handle->state = CMAP_SHUTDOWN;
+	handle->cmap->attr.close(handle);
+	/* Signal event handler thread to delete the handle. This is required
+	 * so that the event handler thread handles any pending events for this
+	 * ep correctly. Handle would be freed finally after processing the
+	 * events */
+	ret = cmap->attr.signal(cmap->ep, handle, OFI_CMAP_FREE);
+	if (ret) {
+		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
+			"Unable to signal event handler thread\n");
+		return ret;
+	}
+	return 0;
 }
 
 void ofi_cmap_del_handle(struct util_cmap_handle *handle)
@@ -1121,11 +1123,11 @@ static int util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 				  enum util_cmap_state state,
 				  struct util_cmap_handle **handle)
 {
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "Allocating new handle for given fi_addr\n");
 	*handle = cmap->attr.alloc();
 	if (!*handle)
 		return -FI_ENOMEM;
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated new handle: %p for "
+	       "fi_addr: %" PRIu64 "\n", *handle, fi_addr);
 	ofi_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
 	cmap->handles_av[fi_addr] = *handle;
 	return 0;
@@ -1138,8 +1140,6 @@ static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
 {
 	struct util_cmap_peer *peer;
 
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "Allocating new handle for given addr\n");
 	peer = calloc(1, sizeof(*peer) + cmap->av->addrlen);
 	if (!peer)
 		return -FI_ENOMEM;
@@ -1148,6 +1148,8 @@ static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
 		free(peer);
 		return -FI_ENOMEM;
 	}
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+	       "Allocated new handle: %p for given addr\n", *handle);
 	ofi_cmap_init_handle(*handle, cmap, state, FI_ADDR_UNSPEC, peer);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
 	peer->handle = *handle;
@@ -1196,71 +1198,59 @@ util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr, void *addr)
 	return handle;
 }
 
-void ofi_cmap_process_shutdown(struct util_cmap *cmap, uint64_t local_key)
+void ofi_cmap_process_shutdown(struct util_cmap *cmap,
+			       struct util_cmap_handle *handle)
 {
-	struct util_cmap_handle *handle;
-
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+		"Processing shutdown for handle: %p\n", handle);
 	fastlock_acquire(&cmap->lock);
-	handle = ofi_cmap_key2handle(cmap, local_key);
-	if (!handle) {
+	if (handle->state > CMAP_SHUTDOWN) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid context received in shutdown\n");
-		// TODO debug why we hit here when run on ofi-rxm over sockets
-		// assert(0);
-	} else {
+			"Invalid handle on shutdown event\n");
+	} else if (handle->state != CMAP_SHUTDOWN) {
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Got remote shutdown\n");
 		util_cmap_del_handle(handle);
+	} else {
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Got local shutdown\n");
 	}
 	fastlock_release(&cmap->lock);
 }
 
-void ofi_cmap_process_connect(struct util_cmap *cmap, uint64_t local_key,
+void ofi_cmap_process_connect(struct util_cmap *cmap,
+			      struct util_cmap_handle *handle,
 			      uint64_t *remote_key)
 {
-	struct util_cmap_handle *handle;
-
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+		"Processing connect for handle: %p\n", handle);
 	fastlock_acquire(&cmap->lock);
-	handle = ofi_cmap_key2handle(cmap, local_key);
-	if (!handle) {
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid context received in connect\n");
-		assert(0);
-	} else {
-		handle->state = CMAP_CONNECTED;
-		if (remote_key)
-			handle->remote_key = *remote_key;
-	}
+	handle->state = CMAP_CONNECTED;
+	if (remote_key)
+		handle->remote_key = *remote_key;
 	fastlock_release(&cmap->lock);
 }
 
-void ofi_cmap_process_reject(struct util_cmap *cmap, uint64_t local_key)
+void ofi_cmap_process_reject(struct util_cmap *cmap,
+			     struct util_cmap_handle *handle)
 {
-	struct util_cmap_handle *handle;
-
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+		"Processing reject for handle: %p\n", handle);
 	fastlock_acquire(&cmap->lock);
-	handle = ofi_cmap_key2handle(cmap, local_key);
-	if (!handle) {
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid context received in reject\n");
-		// TODO debug why we hit here when run on ofi-rxm over sockets
-		//assert(0);
-	} else {
-		switch (handle->state) {
-		case CMAP_CONNREQ_RECV:
-		case CMAP_CONNECTED:
-			/* Handle is being re-used for incoming connection request */
-			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Received connection reject, but handle is being re-used\n");
-			break;
-		case CMAP_CONNREQ_SENT:
-			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Received connection reject, deleting handle\n");
-			util_cmap_del_handle(handle);
-			break;
-		default:
-			FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Invalid cmap state when receiving connection reject\n");
-			assert(0);
-		}
+	switch (handle->state) {
+	case CMAP_CONNREQ_RECV:
+	case CMAP_CONNECTED:
+		/* Handle is being re-used for incoming connection request */
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Received connection reject, but handle is being re-used\n");
+		break;
+	case CMAP_CONNREQ_SENT:
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Received connection reject, deleting handle\n");
+		util_cmap_del_handle(handle);
+		break;
+	default:
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "Invalid cmap state: "
+			"%d when receiving connection reject\n", handle->state);
+		assert(0);
 	}
 	fastlock_release(&cmap->lock);
 }
@@ -1290,6 +1280,10 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		if (ret)
 			goto unlock;
 	}
+
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+		"Processing connreq for handle: %p\n", handle);
+
 	switch (handle->state) {
 	case CMAP_CONNECTED:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
@@ -1311,8 +1305,8 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 			ret = -FI_EALREADY;
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Closing our handle and re-using it to accept "
-				"remote connection: %p\n", handle);
+				"Re-using handle: %p to accept remote "
+				"connection\n", handle);
 			/* Re-use handle. If it receives FI_REJECT the handle
 			 * would not be deleted in this state */
 			handle->cmap->attr.close(handle);
@@ -1393,7 +1387,7 @@ static int util_cmap_event_handler_close(struct util_cmap *cmap)
 {
 	int ret;
 
-	ret = cmap->attr.signal(cmap->ep);
+	ret = cmap->attr.signal(cmap->ep, NULL, OFI_CMAP_EXIT);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
 			"Unable to signal event handler thread\n");
@@ -1418,6 +1412,7 @@ void ofi_cmap_free(struct util_cmap *cmap)
 	size_t i;
 
 	fastlock_acquire(&cmap->lock);
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
 	for (i = 0; i < cmap->av->count; i++) {
 		if (cmap->handles_av[i])
 			util_cmap_del_handle(cmap->handles_av[i]);
