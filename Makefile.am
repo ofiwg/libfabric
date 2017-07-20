@@ -56,6 +56,7 @@ nobase_dist_config_DATA = \
         test_configs/lat_bw.test \
         test_configs/sockets/all.test \
         test_configs/sockets/quick.test \
+	test_configs/sockets/complete.test \
         test_configs/udp/all.test \
         test_configs/udp/lat_bw.test \
         test_configs/udp/quick.test \
