@@ -37,6 +37,7 @@
 #include "rxd.h"
 
 int rxd_progress_spin_count = 1000;
+int rxd_reposted_bufs = 0;
 
 static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 {
@@ -191,6 +192,8 @@ int rxd_ep_repost_buff(struct rxd_rx_buf *buf)
 		      FI_ADDR_UNSPEC, &buf->context);
 	if (ret)
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "failed to repost\n");
+	else
+		rxd_reposted_bufs++;
 	return ret;
 }
 
