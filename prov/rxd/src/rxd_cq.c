@@ -228,13 +228,13 @@ static void rxd_handle_conn_req(struct rxd_ep *ep, struct ofi_ctrl_hdr *ctrl,
 	addr = pkt_data->data;
 	if (ctrl->seg_size > RXD_MAX_DGRAM_ADDR) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_DATA, "addr too large\n");
-		return;
+		goto repost;
 	}
 
 	ret = rxd_av_insert_dg_addr(rxd_ep_av(ep), ctrl->rx_key, addr, &dg_fiaddr);
 	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_DATA, "failed to insert peer address\n");
-		return;
+		goto repost;
 	}
 
 	peer_info = rxd_ep_getpeer_info(ep, dg_fiaddr);
@@ -246,6 +246,7 @@ static void rxd_handle_conn_req(struct rxd_ep *ep, struct ofi_ctrl_hdr *ctrl,
 
 	rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_connresp, 0, ctrl->conn_id,
 			 dg_fiaddr, dg_fiaddr);
+repost:
 	rxd_ep_repost_buff(rx_buf);
 }
 
@@ -835,7 +836,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_peer *peer,
 			rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, credits,
 				       ctrl->rx_key, peer->conn_data,
 				       ctrl->conn_id);
-			return;
+			goto repost;
 		}
 	}
 
@@ -1024,7 +1025,7 @@ static void rxd_handle_start_data(struct rxd_ep *ep, struct rxd_peer *peer,
 		} else {
 			FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "unexpected pkt: %d\n",
 				ctrl->seg_no);
-			goto out;
+			goto repost;
 		}
 	}
 
@@ -1064,6 +1065,7 @@ static void rxd_handle_start_data(struct rxd_ep *ep, struct rxd_peer *peer,
 repost:
 	rxd_ep_repost_buff(rx_buf);
 out:
+	assert(rxd_reposted_bufs);
 	return;
 }
 
@@ -1074,6 +1076,9 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	struct rxd_peer *peer;
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "got recv completion\n");
+
+	assert(rxd_reposted_bufs);
+	rxd_reposted_bufs--;
 
 	rx_buf = container_of(comp->op_context, struct rxd_rx_buf, context);
 	ctrl = (struct ofi_ctrl_hdr *) rx_buf->buf;
@@ -1104,6 +1109,7 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 		rxd_handle_data(ep, peer, ctrl, comp, rx_buf);
 		break;
 	default:
+		rxd_ep_repost_buff(rx_buf);
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"invalid ctrl type \n", ctrl->type);
 	}

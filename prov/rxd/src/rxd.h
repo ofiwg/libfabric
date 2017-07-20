@@ -88,6 +88,7 @@
 #define RXD_MAX_PKT_RETRY	50
 
 extern int rxd_progress_spin_count;
+extern int rxd_reposted_bufs;
 
 extern struct fi_provider rxd_prov;
 extern struct fi_info rxd_info;
