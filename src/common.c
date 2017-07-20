@@ -149,7 +149,7 @@ int ofi_rma_target_allowed(uint64_t caps)
 	return 0;
 }
 
-int ofi_ep_bind_valid(struct fi_provider *prov, struct fid *bfid, uint64_t flags)
+int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid, uint64_t flags)
 {
 	if (!bfid) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "NULL bind fid\n");
