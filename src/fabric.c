@@ -73,10 +73,10 @@ static int ofi_find_name(char **names, const char *name)
 	return -1;
 }
 
-int ofi_is_util_prov(struct fi_provider *provider)
+static int ofi_is_util_prov(const struct fi_provider *provider)
 {
-	struct fi_prov_context *ctx;
-	ctx = (struct fi_prov_context *) &provider->context;
+	const struct fi_prov_context *ctx;
+	ctx = (const struct fi_prov_context *) &provider->context;
 	return ctx->is_util_prov;
 }
 
