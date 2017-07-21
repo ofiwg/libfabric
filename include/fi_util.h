@@ -209,10 +209,19 @@ struct util_ep {
 	struct util_av		*av;
 	struct dlist_entry	av_entry;
 	struct util_eq		*eq;
+	/* CQ entries */
 	struct util_cq		*rx_cq;
 	uint64_t		rx_op_flags;
 	struct util_cq		*tx_cq;
 	uint64_t		tx_op_flags;
+
+	/* CNTR entries */
+	struct util_cntr	*tx_cntr;     /* transmit/send */
+	struct util_cntr	*rx_cntr;     /* receive       */
+	struct util_cntr	*rd_cntr;     /* read          */
+	struct util_cntr	*wr_cntr;     /* write         */
+	struct util_cntr	*rem_rd_cntr; /* remote read   */
+	struct util_cntr	*rem_wr_cntr; /* remote write  */
 
 	uint64_t		caps;
 	uint64_t		flags;
@@ -224,6 +233,8 @@ struct util_ep {
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);
 int ofi_ep_bind_eq(struct util_ep *ep, struct util_eq *eq);
 int ofi_ep_bind_cq(struct util_ep *ep, struct util_cq *cq, uint64_t flags);
+int ofi_ep_bind_cntr(struct util_ep *ep, struct util_cntr *cntr, uint64_t flags);
+int ofi_ep_bind(struct util_ep *util_ep, struct fid *fid, uint64_t flags);
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		      struct fi_info *info, struct util_ep *ep, void *context,
 		      ofi_ep_progress_func progress);
@@ -293,15 +304,29 @@ int ofi_cq_write_error(struct util_cq *cq,
 /*
  * Counter
  */
+struct util_cntr;
+typedef void (*ofi_cntr_progress_func)(struct util_cntr *cntr);
+
 struct util_cntr {
 	struct fid_cntr		cntr_fid;
 	struct util_domain	*domain;
+	struct util_wait	*wait;
 	ofi_atomic32_t		ref;
+
+	ofi_atomic64_t		cnt;
+	ofi_atomic64_t		err;
+
 	uint64_t		checkpoint_cnt;
 	uint64_t		checkpoint_err;
+
+	struct dlist_entry	ep_list;
+	fastlock_t		ep_list_lock;
+
+	ofi_cntr_progress_func	progress;
 };
 
-
+int ofi_check_bind_cntr_flags(struct util_ep *ep, struct util_cntr *cntr,
+			      uint64_t flags);
 /*
  * AV / addressing
  */
