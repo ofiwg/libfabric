@@ -228,6 +228,14 @@ Test(endpoint, getsetopt)
 			(void *)&val, sizeof(size_t) - 1);
 	cr_assert(ret == -FI_EINVAL, "fi_setopt");
 
+	/*
+	 * see issue 1120
+	 */
+	val = 0UL;
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, sizeof(size_t));
+	cr_assert(ret == -FI_EINVAL, "fi_setopt");
+
 	/* Test update. */
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
 			(void *)&val, &len);
