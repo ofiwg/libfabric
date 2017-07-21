@@ -47,7 +47,6 @@ static int ft_init_xcontrol(struct ft_xcontrol *ctrl)
 	memset(ctrl, 0, sizeof *ctrl);
 	ctrl->credits = FT_DEFAULT_CREDITS;
 	ctrl->max_credits =  FT_DEFAULT_CREDITS;
-	ctrl->comp_wait = test_info.cq_wait_obj;
 
 	ctrl->iov = calloc(ft_ctrl.iov_array[ft_ctrl.iov_cnt - 1], sizeof *ctrl->iov);
 	ctrl->iov_desc = calloc(ft_ctrl.iov_array[ft_ctrl.iov_cnt - 1],

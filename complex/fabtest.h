@@ -87,7 +87,6 @@ struct ft_xcontrol {
 	uint8_t			seqno;
 	uint64_t		total_comp;
 	enum fi_cq_format	cq_format;
-	enum fi_wait_obj	comp_wait;  /* must be NONE */
 	uint64_t		remote_cq_data;
 	struct fi_context	*ctx;
 	int			curr_ctx;
@@ -235,6 +234,7 @@ struct ft_set {
 	enum ft_comp_type	comp_type[FT_MAX_COMP];
 	enum fi_wait_obj	eq_wait_obj[FT_MAX_WAIT_OBJ];
 	enum fi_wait_obj	cq_wait_obj[FT_MAX_WAIT_OBJ];
+	enum fi_wait_obj	cntr_wait_obj[FT_MAX_WAIT_OBJ];
 	uint64_t		mode[FT_MAX_PROV_MODES];
 	uint64_t		test_class[FT_MAX_CLASS];
 	uint64_t		constant_caps[FT_MAX_CAPS];
@@ -256,6 +256,7 @@ struct ft_series {
 	int			cur_comp;
 	int			cur_eq_wait_obj;
 	int			cur_cq_wait_obj;
+	int			cur_cntr_wait_obj;
 	int			cur_mode;
 	int			cur_class;
 };
@@ -277,6 +278,7 @@ struct ft_info {
 	enum ft_comp_type	comp_type;
 	enum fi_wait_obj	eq_wait_obj;
 	enum fi_wait_obj	cq_wait_obj;
+	enum fi_wait_obj	cntr_wait_obj;
 	uint32_t		protocol;
 	uint32_t		protocol_version;
 	char			node[FI_NAME_MAX];

@@ -222,6 +222,12 @@ static struct key_t keys[] = {
 		.val_size = sizeof(((struct ft_set *)0)->cq_wait_obj) / FT_MAX_WAIT_OBJ,
 	},
 	{
+		.str = "cntr_wait_obj",
+		.offset = offsetof(struct ft_set, cntr_wait_obj),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->cntr_wait_obj) / FT_MAX_WAIT_OBJ,
+	},
+	{
 		.str = "op",
 		.offset = offsetof(struct ft_set, op),
 		.val_type = VAL_NUM,
@@ -319,12 +325,13 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_SET_N_RETURN(str, len, "FT_CAP_ATOMIC", FT_CAP_ATOMIC, uint64_t, buf);
 		FT_ERR("Unknown test class");
 	} else if (!strncmp(key->str, "eq_wait_obj", strlen("eq_wait_obj")) ||
-		!strncmp(key->str, "cq_wait_obj", strlen("cq_wait_obj"))) {
+		!strncmp(key->str, "cq_wait_obj", strlen("cq_wait_obj")) ||
+		!strncmp(key->str, "cntr_wait_obj", strlen("cntr_wait_obj"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_NONE, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_UNSPEC, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_FD, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_MUTEX_COND, enum fi_wait_obj, buf);
-		FT_ERR("Unknown (eq/cq)_wait_obj");
+		FT_ERR("Unknown wait_obj");
 	} else if (!strncmp(key->str, "op", strlen("op"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MIN, enum fi_op, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MAX, enum fi_op, buf);
@@ -633,6 +640,7 @@ void fts_start(struct ft_series *series, int index)
 	series->cur_comp = 0;
 	series->cur_eq_wait_obj = 0;
 	series->cur_cq_wait_obj = 0;
+	series->cur_cntr_wait_obj = 0;
 	series->cur_mode = 0;
 	series->cur_class = 0;
 
@@ -703,6 +711,10 @@ void fts_next(struct ft_series *series)
 		return;
 	series->cur_cq_wait_obj = 0;
 
+	if (set->cntr_wait_obj[++series->cur_cntr_wait_obj])
+		return;
+	series->cur_cntr_wait_obj = 0;
+
 	if (set->ep_type[series->cur_ep] == FI_EP_RDM ||
 	    set->ep_type[series->cur_ep] == FI_EP_DGRAM) {
 		if (set->av_type[++series->cur_av])
@@ -765,7 +777,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->av_type = set->av_type[series->cur_av];
 	info->comp_type = set->comp_type[series->cur_comp];
 	info->eq_wait_obj = set->eq_wait_obj[series->cur_eq_wait_obj];
-	info->cq_wait_obj = set->cq_wait_obj[series->cur_cq_wait_obj];
+	info->cntr_wait_obj = set->cntr_wait_obj[series->cur_cntr_wait_obj];
 
 	if (set->node[0])
 		strncpy(info->node, set->node, sizeof(info->node) - 1);
