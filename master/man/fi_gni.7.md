@@ -38,7 +38,7 @@ libfabric API:
 
 *Address vectors*
 : The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE*
-  address vector types.
+  address vector types. FI_EVENT is unsupported.
 
 *Memory registration modes*
 : The provider implements the *FI_MR_BASIC* memory registration mode.
