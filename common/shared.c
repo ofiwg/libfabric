@@ -70,6 +70,8 @@ uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 int ft_skip_mr = 0;
+int (*ft_mr_alloc_func)(void);
+uint64_t ft_tag = 0;
 int ft_parent_proc = 0;
 pid_t ft_child_pid = 0;
 int ft_socket_pair[2];
@@ -170,7 +172,7 @@ size_t ft_rx_prefix_size()
 		fi->ep_attr->msg_prefix_size : 0;
 }
 
-static int ft_check_opts(uint64_t flags)
+int ft_check_opts(uint64_t flags)
 {
 	return (opts.options & flags) == flags;
 }
@@ -385,7 +387,7 @@ int ft_alloc_msgs(void)
 
 	remote_cq_data = ft_init_cq_data(fi);
 
-	if (!ft_skip_mr && ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	if (!ft_mr_alloc_func && !ft_skip_mr && ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
 				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
 		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi),
 				0, FT_MR_KEY, 0, &mr, NULL);
@@ -394,6 +396,11 @@ int ft_alloc_msgs(void)
 			return ret;
 		}
 	} else {
+		if (ft_mr_alloc_func) {
+			ret = ft_mr_alloc_func();
+			if (ret)
+				return ret;
+		}
 		mr = &no_mr;
 	}
 
@@ -490,6 +497,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 		if (opts.av_name) {
 			av_attr.name = opts.av_name;
 		}
+		av_attr.count = opts.av_size;
 		ret = fi_av_open(domain, &av_attr, &av, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_av_open", ret);
@@ -557,6 +565,20 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 	return 0;
 }
 
+int ft_init_fabric_cm(void)
+{
+	int ret;
+	if (!opts.dst_addr) {
+		ret = ft_start_server();
+		if (ret)
+			return ret;
+	}
+
+	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
+
+	return ret;
+}
+
 int ft_start_server(void)
 {
 	int ret;
@@ -598,25 +620,77 @@ int ft_start_server(void)
 	return 0;
 }
 
-int ft_server_connect(void)
+int ft_complete_connect(struct fid_ep *ep, struct fid_eq *eq)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0);
+	if (rd != sizeof(entry)) {
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
+		ret = (int) rd;
+		return ret;
+	}
+
+	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
+		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+			event, entry.fid, ep);
+		ret = -FI_EOTHER;
+		return ret;
+	}
+
+	return 0;
+}
+
+int ft_retrieve_conn_req(struct fid_eq *eq, struct fi_info **fi)
+{
+	struct fi_eq_cm_entry entry;
+	uint32_t event;
+	ssize_t rd;
+	int ret;
+
+	rd = fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0);
 	if (rd != sizeof entry) {
 		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
 		return (int) rd;
 	}
 
-	fi = entry.info;
+	*fi = entry.info;
 	if (event != FI_CONNREQ) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
-		goto err;
+		return ret;
 	}
+
+	return 0;
+}
+
+int ft_accept_connection(struct fid_ep *ep, struct fid_eq *eq)
+{
+	int ret;
+
+	ret = fi_accept(ep, NULL, 0);
+	if (ret) {
+		FT_PRINTERR("fi_accept", ret);
+		return ret;
+	}
+
+	ret = ft_complete_connect(ep, eq);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+int ft_server_connect(void)
+{
+	int ret;
+
+	ret = ft_retrieve_conn_req(eq, &fi);
+	if (ret)
+		goto err;
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
@@ -632,25 +706,9 @@ int ft_server_connect(void)
 	if (ret)
 		goto err;
 
-	ret = fi_accept(ep, NULL, 0);
-	if (ret) {
-		FT_PRINTERR("fi_accept", ret);
+	ret = ft_accept_connection(ep, eq);
+	if (ret)
 		goto err;
-	}
-
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
-		ret = (int) rd;
-		goto err;
-	}
-
-	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
-		ret = -FI_EOTHER;
-		goto err;
-	}
 
 	return 0;
 
@@ -659,11 +717,26 @@ err:
 	return ret;
 }
 
+int ft_connect_ep(struct fid_ep *ep,
+		struct fid_eq *eq, fi_addr_t *remote_addr)
+{
+	int ret;
+
+	ret = fi_connect(ep, remote_addr, NULL, 0);
+	if (ret) {
+		FT_PRINTERR("fi_connect", ret);
+		return ret;
+	}
+
+	ret = ft_complete_connect(ep, eq);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 int ft_client_connect(void)
 {
-	struct fi_eq_cm_entry entry;
-	uint32_t event;
-	ssize_t rd;
 	int ret;
 
 	ret = ft_getinfo(hints, &fi);
@@ -682,25 +755,9 @@ int ft_client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
-	if (ret) {
-		FT_PRINTERR("fi_connect", ret);
+	ret = ft_connect_ep(ep, eq, fi->dest_addr);
+	if (ret)
 		return ret;
-	}
-
-	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "connect");
-		ret = (int) rd;
-		return ret;
-	}
-
-	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
-		ret = -FI_EOTHER;
-		return ret;
-	}
 
 	return 0;
 }
@@ -764,6 +821,14 @@ int ft_init_alias_ep(uint64_t flags)
 
 int ft_init_ep(void)
 {
+	return ft_setup_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr, true);
+}
+
+int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
+		struct fid_av *av, struct fid_cq *txcq,
+		struct fid_cq *rxcq, struct fid_cntr *txcntr,
+		struct fid_cntr *rxcntr, bool post_initial_recv)
+{
 	int flags, ret;
 
 	if (fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST)
@@ -800,7 +865,7 @@ int ft_init_ep(void)
 		return ret;
 	}
 
-	if (fi->rx_attr->op_flags != FI_MULTI_RECV) {
+	if (fi->rx_attr->op_flags != FI_MULTI_RECV && post_initial_recv) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
@@ -858,20 +923,26 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 	return 0;
 }
 
-/* TODO: retry send for unreliable endpoints */
 int ft_init_av(void)
+{
+	return ft_init_av_dst_addr(av, ep, &remote_fi_addr);
+}
+
+/* TODO: retry send for unreliable endpoints */
+int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
+		fi_addr_t *remote_addr)
 {
 	size_t addrlen;
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
+		ret = ft_av_insert(av_ptr, fi->dest_addr, 1, remote_addr, 0, NULL);
 		if (ret)
 			return ret;
 
 		addrlen = FT_MAX_CTRL_MSG;
-		ret = fi_getname(&ep->fid, (char *) tx_buf + ft_tx_prefix_size(),
-				 &addrlen);
+		ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
+				&addrlen);
 		if (ret) {
 			FT_PRINTERR("fi_getname", ret);
 			return ret;
@@ -882,20 +953,79 @@ int ft_init_av(void)
 			return ret;
 
 		ret = ft_rx(ep, 1);
+		if (ret)
+			return ret;
 	} else {
 		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
 		if (ret)
 			return ret;
 
-		ret = ft_av_insert(av, (char *) rx_buf + ft_rx_prefix_size(),
-				   1, &remote_fi_addr, 0, NULL);
+		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
+				1, remote_addr, 0, NULL);
 		if (ret)
 			return ret;
 
 		ret = (int) ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+		if (ret)
+			return ret;
 	}
 
-	return ret;
+	return 0;
+}
+
+/* TODO: retry send for unreliable endpoints */
+int ft_init_av_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
+		fi_addr_t *remote_addr)
+{
+	size_t addrlen;
+	int ret;
+
+	if (opts.dst_addr) {
+		addrlen = FT_MAX_CTRL_MSG;
+		ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
+				 &addrlen);
+		if (ret) {
+			FT_PRINTERR("fi_getname", ret);
+			return ret;
+		}
+
+		ret = (int) ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
+		if (ret)
+			return ret;
+
+		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
+		if (ret)
+			return ret;
+
+		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
+				1, remote_addr, 0, NULL);
+		if (ret)
+			return ret;
+	} else {
+		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
+		if (ret)
+			return ret;
+
+		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
+				   1, remote_addr, 0, NULL);
+		if (ret)
+			return ret;
+
+		addrlen = FT_MAX_CTRL_MSG;
+		ret = fi_getname(&ep_ptr->fid,
+				(char *) tx_buf + ft_tx_prefix_size(),
+				&addrlen);
+		if (ret) {
+			FT_PRINTERR("fi_getname", ret);
+			return ret;
+		}
+
+		ret = (int) ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 int ft_exchange_keys(struct fi_rma_iov *peer_iov)
@@ -1245,7 +1375,7 @@ ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_tsend, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf, size + ft_tx_prefix_size(), fi_mr_desc(mr),
-				fi_addr, tx_seq, ctx);
+				fi_addr, ft_tag ? ft_tag : tx_seq, ctx);
 	} else {
 		FT_POST(fi_send, ft_get_tx_comp, tx_seq, "transmit", ep,
 				tx_buf,	size + ft_tx_prefix_size(), fi_mr_desc(mr),
@@ -1442,7 +1572,7 @@ ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
 				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
-				fi_mr_desc(mr), 0, rx_seq, 0, ctx);
+				fi_mr_desc(mr), 0, ft_tag ? ft_tag : rx_seq, 0, ctx);
 	} else {
 		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
 				MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
@@ -1935,6 +2065,10 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
 	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
 	FT_PRINT_OPTS_USAGE("", "fi_shared_ctx");
+	FT_PRINT_OPTS_USAGE("", "fi_multi_mr");
+	FT_PRINT_OPTS_USAGE("", "fi_multi_ep");
+	FT_PRINT_OPTS_USAGE("", "fi_recv_cancel");
+	FT_PRINT_OPTS_USAGE("", "fi_unexpected_msg");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 

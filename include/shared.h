@@ -38,6 +38,7 @@
 #include <inttypes.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
+#include <stdbool.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_rma.h>
@@ -127,6 +128,8 @@ struct ft_opts {
 	int warmup_iterations;
 	int transfer_size;
 	int window_size;
+	int av_size;
+	int verbose;
 	char *src_port;
 	char *dst_port;
 	char *src_addr;
@@ -186,6 +189,7 @@ void ft_csusage(char *name, char *desc);
 
 void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
+int ft_check_opts(uint64_t flags);
 uint64_t ft_init_cq_data(struct fi_info *info);
 int ft_sock_listen(char *service);
 int ft_sock_connect(char *node, char *service);
@@ -195,6 +199,8 @@ int ft_sock_recv(int fd, void *msg, size_t len);
 int ft_sock_sync(int value);
 void ft_sock_shutdown(int fd);
 extern int ft_skip_mr;
+extern int (*ft_mr_alloc_func)(void);
+extern uint64_t ft_tag;
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;
@@ -212,6 +218,8 @@ extern char default_port[8];
 		.warmup_iterations = 10, \
 		.transfer_size = 1024, \
 		.window_size = 64, \
+		.av_size = 1, \
+		.verbose = 0, \
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
 		.argc = argc, .argv = argv \
@@ -300,14 +308,28 @@ int ft_init_fabric();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();
+int ft_init_fabric_cm(void);
+int ft_complete_connect(struct fid_ep *ep, struct fid_eq *eq);
+int ft_retrieve_conn_req(struct fid_eq *eq, struct fi_info **fi);
+int ft_accept_connection(struct fid_ep *ep, struct fid_eq *eq);
+int ft_connect_ep(struct fid_ep *ep,
+		struct fid_eq *eq, fi_addr_t *remote_addr);
 int ft_alloc_ep_res(struct fi_info *fi);
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep(void);
+int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
+		struct fid_av *av, struct fid_cq *txcq,
+		struct fid_cq *rxcq, struct fid_cntr *txcntr,
+		struct fid_cntr *rxcntr, bool post_initial_recv);
 int ft_init_alias_ep(uint64_t flags);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
 		uint64_t flags, void *context);
 int ft_init_av(void);
 int ft_join_mc(void);
+int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
+		fi_addr_t *remote_addr);
+int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
+		fi_addr_t *addr);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);

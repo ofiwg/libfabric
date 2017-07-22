@@ -101,6 +101,19 @@ simple_tests=(
 	"scalable_ep"
 	"cmatose"
 	"rdm_shared_av"
+	"multi_mr -e msg -V"
+	"multi_mr -e rdm -V"
+	"rdm_multi_domain -V"
+	"multi_ep -e msg"
+	"multi_ep -e rdm"
+	"multi_ep -e dgram"
+	"recv_cancel -e rdm -V"
+	"unexpected_msg -e msg -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e dgram -i 10"
+	"unexpected_msg -e msg -S -i 10"
+	"unexpected_msg -e rdm -S -i 10"
+	"unexpected_msg -e dgram -S -i 10"
 )
 
 short_tests=(
