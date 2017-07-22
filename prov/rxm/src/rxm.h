@@ -148,6 +148,7 @@ struct rxm_rma_iov {
 	FUNC(RXM_LMT_ACK_WAIT),	\
 	FUNC(RXM_LMT_READ),	\
 	FUNC(RXM_LMT_ACK_SENT), \
+	FUNC(RXM_LMT_ACK_RECVD),\
 	FUNC(RXM_LMT_FINISH),
 
 enum rxm_proto_state {
@@ -230,6 +231,7 @@ struct rxm_tx_entry {
 
 	/* Used for large messages */
 	struct fid_mr *mr[RXM_IOV_LIMIT];
+	struct rxm_rx_buf *rx_buf;
 };
 DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
 

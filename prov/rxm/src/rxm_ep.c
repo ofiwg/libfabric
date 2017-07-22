@@ -700,6 +700,11 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 
 	if ((flags & FI_INJECT) && !(flags & FI_COMPLETION)) {
 		if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
+			if (tx_entry->state == RXM_LMT_TX) {
+				RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry,
+						 RXM_LMT_TX);
+				tx_entry->state = RXM_LMT_ACK_WAIT;
+			}
 			ret = fi_inject(rxm_conn->msg_ep, pkt, pkt_size, 0);
 			if (ret)
 				FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
