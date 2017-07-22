@@ -242,6 +242,25 @@ fail:
 	return ret;		// fi_freeinfo() in caller frees all
 }
 
+static int validate_hints_mode(struct fi_info *hints,
+				uint64_t supported,
+				uint64_t required,
+				uint64_t *mode_out)
+{
+	uint64_t mode;
+
+	if (hints) {
+		mode = hints->mode & supported;
+		if ((mode & required) != required)
+			return -FI_ENODATA;
+		*mode_out = mode;
+	} else {
+		*mode_out = supported;
+	}
+
+	return FI_SUCCESS;
+}
+
 static int usdf_fill_info_dgram(
 	uint32_t version,
 	struct fi_info *hints,
@@ -264,8 +283,23 @@ static int usdf_fill_info_dgram(
 
 	fi->caps = USDF_DGRAM_CAPS;
 
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		ret = validate_hints_mode(hints,
+					  USDF_DGRAM_14_SUPP_MODE,
+					  USDF_DGRAM_14_REQ_MODE,
+					  &fi->mode);
+	} else {
+		/* in >= 1.5, FI_LOCAL_MR is not required anymore. */
+		ret = validate_hints_mode(hints,
+					  USDF_DGRAM_15_SUPP_MODE,
+					  0,
+					  &fi->mode);
+	}
+
+	if (ret)
+		goto fail;
+
 	if (hints != NULL) {
-		fi->mode = hints->mode & USDF_DGRAM_SUPP_MODE;
 		addr_format = hints->addr_format;
 
 		/* check that we are capable of what's requested */
@@ -274,15 +308,8 @@ static int usdf_fill_info_dgram(
 			goto fail;
 		}
 
-		/* app must support these modes */
-		if ((hints->mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-
 		fi->handle = hints->handle;
 	} else {
-		fi->mode = USDF_DGRAM_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
 	}
 	fi->ep_attr->type = FI_EP_DGRAM;
@@ -315,11 +342,11 @@ static int usdf_fill_info_dgram(
 	if (ret)
 		goto fail;
 
-	ret = usdf_dgram_fill_tx_attr(hints, fi, dap);
+	ret = usdf_dgram_fill_tx_attr(version, hints, fi, dap);
 	if (ret)
 		goto fail;
 
-	ret = usdf_dgram_fill_rx_attr(hints, fi, dap);
+	ret = usdf_dgram_fill_rx_attr(version, hints, fi, dap);
 	if (ret)
 		goto fail;
 
@@ -362,8 +389,23 @@ static int usdf_fill_info_msg(
 
 	fi->caps = USDF_MSG_CAPS;
 
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		ret = validate_hints_mode(hints,
+					  USDF_MSG_14_SUPP_MODE,
+					  USDF_MSG_14_REQ_MODE,
+					  &fi->mode);
+	} else {
+		/* in >= 1.5, FI_LOCAL_MR is not required anymore. */
+		ret = validate_hints_mode(hints,
+					  FI_LOCAL_MR,
+					  0,
+					  &fi->mode);
+	}
+
+	if (ret)
+		goto fail;
+
 	if (hints != NULL) {
-		fi->mode = hints->mode & USDF_MSG_SUPP_MODE;
 		addr_format = hints->addr_format;
 
 		/* check that we are capable of what's requested */
@@ -372,19 +414,12 @@ static int usdf_fill_info_msg(
 			goto fail;
 		}
 
-		/* app must support these modes */
-		if ((hints->mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-
 		fi->handle = hints->handle;
 	} else {
-		fi->mode = USDF_MSG_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
 	}
-	fi->ep_attr->type = FI_EP_MSG;
 
+	fi->ep_attr->type = FI_EP_MSG;
 
 	ret = usdf_fill_addr_info(fi, addr_format, src, dest, dap);
 	if (ret != 0) {
@@ -407,11 +442,11 @@ static int usdf_fill_info_msg(
 	if (ret)
 		goto fail;
 
-	ret = usdf_msg_fill_tx_attr(hints, fi);
+	ret = usdf_msg_fill_tx_attr(version, hints, fi);
 	if (ret)
 		goto fail;
 
-	ret = usdf_msg_fill_rx_attr(hints, fi);
+	ret = usdf_msg_fill_rx_attr(version, hints, fi);
 	if (ret)
 		goto fail;
 
@@ -454,8 +489,23 @@ static int usdf_fill_info_rdm(
 
 	fi->caps = USDF_RDM_CAPS;
 
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		ret = validate_hints_mode(hints,
+					  USDF_RDM_14_SUPP_MODE,
+					  USDF_RDM_14_REQ_MODE,
+					  &fi->mode);
+	} else {
+		/* in >= 1.5, FI_LOCAL_MR is not required anymore. */
+		ret = validate_hints_mode(hints,
+					  FI_LOCAL_MR,
+					  0,
+					  &fi->mode);
+	}
+
+	if (ret)
+		goto fail;
+
 	if (hints != NULL) {
-		fi->mode = hints->mode & USDF_RDM_SUPP_MODE;
 		addr_format = hints->addr_format;
 		/* check that we are capable of what's requested */
 		if ((hints->caps & ~USDF_RDM_CAPS) != 0) {
@@ -463,15 +513,8 @@ static int usdf_fill_info_rdm(
 			goto fail;
 		}
 
-		/* app must support these modes */
-		if ((hints->mode & USDF_RDM_REQ_MODE) != USDF_RDM_REQ_MODE) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-
 		fi->handle = hints->handle;
 	} else {
-		fi->mode = USDF_RDM_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
 	}
 	fi->ep_attr->type = FI_EP_RDM;
@@ -497,11 +540,11 @@ static int usdf_fill_info_rdm(
 	if (ret)
 		goto fail;
 
-	ret = usdf_rdm_fill_tx_attr(hints, fi);
+	ret = usdf_rdm_fill_tx_attr(version, hints, fi);
 	if (ret)
 		goto fail;
 
-	ret = usdf_rdm_fill_rx_attr(hints, fi);
+	ret = usdf_rdm_fill_rx_attr(version, hints, fi);
 	if (ret)
 		goto fail;
 

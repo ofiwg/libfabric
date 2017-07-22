@@ -398,7 +398,7 @@ static struct fi_ops_atomic usdf_dgram_atomic_ops = {
  ******************************************************************************/
 static const struct fi_tx_attr dgram_dflt_tx_attr = {
 	.caps = USDF_DGRAM_CAPS,
-	.mode = USDF_DGRAM_SUPP_MODE,
+	.mode = USDF_DGRAM_14_REQ_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_DGRAM_MSG_ORDER,
 	.comp_order = USDF_DGRAM_COMP_ORDER,
@@ -409,7 +409,7 @@ static const struct fi_tx_attr dgram_dflt_tx_attr = {
 
 static const struct fi_rx_attr dgram_dflt_rx_attr = {
 	.caps = USDF_DGRAM_CAPS,
-	.mode = USDF_DGRAM_SUPP_MODE,
+	.mode = USDF_DGRAM_14_REQ_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_DGRAM_MSG_ORDER,
 	.comp_order = USDF_DGRAM_COMP_ORDER,
@@ -574,6 +574,8 @@ int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		* FI_MR_BASIC. */
 		if (FI_VERSION_LT(version, FI_VERSION(1,5)))
 			defaults.mr_mode = FI_MR_BASIC;
+		else
+			return -FI_ENODATA;
 		break;
 	default :
 		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
@@ -594,8 +596,9 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
-		struct usd_device_attrs *dap)
+int usdf_dgram_fill_tx_attr(uint32_t version, struct fi_info *hints,
+			    struct fi_info *fi,
+			    struct usd_device_attrs *dap)
 {
 	struct fi_tx_attr defaults;
 	size_t entries;
@@ -615,8 +618,11 @@ int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
 	defaults.mode &= (hints->mode | hints->tx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
-	if ((defaults.mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE)
-		return -FI_ENODATA;
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((defaults.mode & USDF_DGRAM_14_REQ_MODE)
+		     != USDF_DGRAM_14_REQ_MODE)
+			return -FI_ENODATA;
+	}
 
 	defaults.op_flags |= hints->tx_attr->op_flags;
 
@@ -669,8 +675,8 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_rx_attr(struct fi_info *hints, struct fi_info *fi,
-		struct usd_device_attrs *dap)
+int usdf_dgram_fill_rx_attr(uint32_t version, struct fi_info *hints,
+			    struct fi_info *fi, struct usd_device_attrs *dap)
 {
 	struct fi_rx_attr defaults;
 	size_t entries;
@@ -690,9 +696,11 @@ int usdf_dgram_fill_rx_attr(struct fi_info *hints, struct fi_info *fi,
 	defaults.mode &= (hints->mode | hints->rx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
-	if ((defaults.mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE)
-		return -FI_ENODATA;
-
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((defaults.mode & USDF_DGRAM_14_REQ_MODE)
+		    != USDF_DGRAM_14_REQ_MODE)
+			return -FI_ENODATA;
+	}
 	defaults.op_flags |= hints->rx_attr->op_flags;
 
 	if ((hints->rx_attr->msg_order | USDF_DGRAM_MSG_ORDER) !=

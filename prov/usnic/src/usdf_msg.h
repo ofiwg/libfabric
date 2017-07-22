@@ -38,8 +38,8 @@
 
 #define USDF_MSG_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
 
-#define USDF_MSG_SUPP_MODE (FI_LOCAL_MR)
-#define USDF_MSG_REQ_MODE (FI_LOCAL_MR)
+#define USDF_MSG_14_SUPP_MODE (FI_LOCAL_MR)
+#define USDF_MSG_14_REQ_MODE (FI_LOCAL_MR)
 
 #define USDF_MSG_SUPP_SENDMSG_FLAGS \
 	(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_INJECT | FI_COMPLETION)
@@ -93,8 +93,10 @@ struct usdf_msg_qe {
 
 int usdf_msg_post_recv(struct usdf_rx *rx, void *buf, size_t len);
 
-int usdf_msg_fill_tx_attr(struct fi_info *hints, struct fi_info *fi);
-int usdf_msg_fill_rx_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_msg_fill_tx_attr(uint32_t version, struct fi_info *hints,
+			  struct fi_info *fi);
+int usdf_msg_fill_rx_attr(uint32_t version, struct fi_info *hints,
+			  struct fi_info *fi);
 int usdf_msg_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap);
 int usdf_msg_fill_dom_attr(uint32_t version, struct fi_info *hints,

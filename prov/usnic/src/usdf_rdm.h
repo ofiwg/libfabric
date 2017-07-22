@@ -38,8 +38,8 @@
 
 #define USDF_RDM_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
 
-#define USDF_RDM_SUPP_MODE (FI_LOCAL_MR)
-#define USDF_RDM_REQ_MODE (FI_LOCAL_MR)
+#define USDF_RDM_14_SUPP_MODE (FI_LOCAL_MR)
+#define USDF_RDM_14_REQ_MODE (FI_LOCAL_MR)
 
 #define USDF_RDM_SUPP_SENDMSG_FLAGS \
 	(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_INJECT | FI_COMPLETION)
@@ -146,8 +146,10 @@ int usdf_rdm_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap);
 int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 			   struct fi_info *fi, struct usd_device_attrs *dap);
-int usdf_rdm_fill_tx_attr(struct fi_info *hints, struct fi_info *fi);
-int usdf_rdm_fill_rx_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_rdm_fill_tx_attr(uint32_t version, struct fi_info *hints,
+			   struct fi_info *fi);
+int usdf_rdm_fill_rx_attr(uint32_t version, struct fi_info *hints,
+			  struct fi_info *fi);
 
 int usdf_rdm_post_recv(struct usdf_rx *rx, void *buf, size_t len);
 int usdf_cq_rdm_poll(struct usd_cq *ucq, struct usd_completion *comp);

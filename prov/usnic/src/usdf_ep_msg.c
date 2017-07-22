@@ -73,7 +73,7 @@
  ******************************************************************************/
 static const struct fi_tx_attr msg_dflt_tx_attr = {
 	.caps = USDF_MSG_CAPS,
-	.mode = USDF_MSG_SUPP_MODE,
+	.mode = USDF_MSG_14_REQ_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_MSG_MSG_ORDER,
 	.comp_order = USDF_MSG_COMP_ORDER,
@@ -85,7 +85,7 @@ static const struct fi_tx_attr msg_dflt_tx_attr = {
 
 static const struct fi_rx_attr msg_dflt_rx_attr = {
 	.caps = USDF_MSG_CAPS,
-	.mode = USDF_MSG_SUPP_MODE,
+	.mode = USDF_MSG_14_REQ_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_MSG_MSG_ORDER,
 	.comp_order = USDF_MSG_COMP_ORDER,
@@ -255,6 +255,8 @@ int usdf_msg_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		* FI_MR_BASIC. */
 		if (FI_VERSION_LT(version, FI_VERSION(1,5)))
 			defaults.mr_mode = FI_MR_BASIC;
+		else
+			return -FI_ENODATA;
 		break;
 	default :
 		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
@@ -275,7 +277,8 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_msg_fill_tx_attr(struct fi_info *hints, struct fi_info *fi)
+int usdf_msg_fill_tx_attr(uint32_t version, struct fi_info *hints,
+			  struct fi_info *fi)
 {
 	struct fi_tx_attr defaults;
 
@@ -292,9 +295,11 @@ int usdf_msg_fill_tx_attr(struct fi_info *hints, struct fi_info *fi)
 	defaults.mode &= (hints->mode | hints->tx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
-	if ((defaults.mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE)
-		return -FI_ENODATA;
-
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((defaults.mode & USDF_MSG_14_REQ_MODE)
+		     != USDF_MSG_14_REQ_MODE)
+			return -FI_ENODATA;
+	}
 	defaults.op_flags |= hints->tx_attr->op_flags;
 
 	if ((hints->tx_attr->msg_order | USDF_MSG_MSG_ORDER) !=
@@ -323,7 +328,7 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_msg_fill_rx_attr(struct fi_info *hints, struct fi_info *fi)
+int usdf_msg_fill_rx_attr(uint32_t version, struct fi_info *hints, struct fi_info *fi)
 {
 	struct fi_rx_attr defaults;
 
@@ -340,8 +345,11 @@ int usdf_msg_fill_rx_attr(struct fi_info *hints, struct fi_info *fi)
 	defaults.mode &= (hints->mode | hints->rx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
-	if ((defaults.mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE)
-		return -FI_ENODATA;
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((defaults.mode & USDF_MSG_14_REQ_MODE)
+		    != USDF_MSG_14_REQ_MODE)
+			return -FI_ENODATA;
+	}
 
 	defaults.op_flags |= hints->rx_attr->op_flags;
 
@@ -976,6 +984,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 	struct usdf_connreq *connreq;
 	struct usdf_pep *parent_pep;
 	int is_bound;
+	uint32_t api_version;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
@@ -1006,6 +1015,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 
 	udp = dom_ftou(domain);
 	fp = udp->dom_fabric;
+	api_version = fp->fab_attr.fabric->api_version;
 
 	/* allocate peer table if not done */
 	if (udp->dom_peer_tab == NULL) {
@@ -1080,7 +1090,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 		ofi_atomic_inc32(&udp->dom_refcnt);
 
 		/* use info as the hints structure, and the output structure */
-		ret = usdf_msg_fill_tx_attr(info, info);
+		ret = usdf_msg_fill_tx_attr(api_version, info, info);
 		if (ret != 0)
 			goto fail;
 		tx->tx_attr = *info->tx_attr;
@@ -1108,7 +1118,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 		ofi_atomic_inc32(&udp->dom_refcnt);
 
 		/* info serves as both the hints and the output */
-		ret = usdf_msg_fill_rx_attr(info, info);
+		ret = usdf_msg_fill_rx_attr(api_version, info, info);
 		if (ret != 0)
 			goto fail;
 		rx->rx_attr = *info->rx_attr;
