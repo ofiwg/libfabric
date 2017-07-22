@@ -290,6 +290,9 @@ local operation.  That is, fi_shutdown() causes the local endpoint to be shut
 down, and a shutdown event to be generated on the local EQ.  However, a
 connected remote peer endpoint is not notified of a call to fi_shutdown().
 
+The GNI provider does not currently handle the case when FI_OPT_MULTI_RECV is set to 0
+and will return -FI_EINVAL if an application attempts to set this value to zero.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
