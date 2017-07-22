@@ -3040,6 +3040,11 @@ DIRECT_FN STATIC int gnix_ep_setopt(fid_t fid, int level, int optname,
 	case FI_OPT_MIN_MULTI_RECV:
 		if (optlen != sizeof(size_t))
 			return -FI_EINVAL;
+		/*
+		 * see issue 1120
+		 */
+		if (*(size_t *)optval == 0UL)
+			return -FI_EINVAL;
 		gnix_ep->min_multi_recv = *(size_t *)optval;
 		break;
 	default:
