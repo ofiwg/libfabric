@@ -580,7 +580,6 @@ int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
 	default :
 		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
 			return -FI_ENODATA;
-		defaults.mr_mode = hints->domain_attr->mr_mode;
 	}
 
 	if (hints->domain_attr->mr_cnt <= USDF_DGRAM_MR_CNT) {
