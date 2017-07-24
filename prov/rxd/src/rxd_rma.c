@@ -173,7 +173,7 @@ ssize_t	rxd_ep_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	memcpy(&tx_entry->write.src_iov[0], msg->msg_iov,
 	       sizeof(*msg->msg_iov) * msg->iov_count);
 	memcpy(&tx_entry->write.dst_iov[0], msg->rma_iov,
-	       sizeof(msg->rma_iov) * msg->rma_iov_count);
+	       sizeof(*msg->rma_iov) * msg->rma_iov_count);
 	ret = rxd_ep_start_xfer(rxd_ep, peer, ofi_op_write, tx_entry);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
