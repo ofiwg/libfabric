@@ -73,10 +73,10 @@ static int ofi_find_name(char **names, const char *name)
 	return -1;
 }
 
-int ofi_is_util_prov(struct fi_provider *provider)
+static int ofi_is_util_prov(const struct fi_provider *provider)
 {
-	struct fi_prov_context *ctx;
-	ctx = (struct fi_prov_context *) &provider->context;
+	const struct fi_prov_context *ctx;
+	ctx = (const struct fi_prov_context *) &provider->context;
 	return ctx->is_util_prov;
 }
 
@@ -439,20 +439,6 @@ libdl_done:
 	ofi_register_provider(GNI_INIT, NULL);
 	ofi_register_provider(BGQ_INIT, NULL);
 	ofi_register_provider(NETDIR_INIT, NULL);
-
-	/* Initialize the socket(s) provider last.  This will result in
-	 * it being the least preferred provider. */
-	ofi_register_provider(UDP_INIT, NULL);
-	ofi_register_provider(SOCKETS_INIT, NULL);
-	/* Before you add ANYTHING here, read the comment above!!! */
-
-	/* Seriously, read it! */
-
-	/* Yeah, I read the above. Until the utility providers are fully
-	 * completed, we want the socket provider to get picked up first.
-	 * Otherwise the user will end up with a provider with less
-	 * functionality than the socket provider has.
-	 */
 	ofi_register_provider(RXM_INIT, NULL);
 
 	{
@@ -464,6 +450,14 @@ libdl_done:
 		if (enable_rxd)
 			ofi_register_provider(RXD_INIT, NULL);
 	}
+
+	/* Initialize the socket(s) provider last.  This will result in
+	 * it being the least preferred provider. */
+	ofi_register_provider(UDP_INIT, NULL);
+	ofi_register_provider(SOCKETS_INIT, NULL);
+	/* Before you add ANYTHING here, read the comment above!!! */
+
+	/* Seriously, read it! */
 
 	ofi_init = 1;
 
@@ -583,6 +577,63 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
 	attr->prov_version = prov->version;
 }
 
+/*
+ * The layering of utility providers over core providers follows these rules.
+ * 1. If both are specified, then only return that layering
+ * 2. If a utility provider is specified, return it over any* core provider.
+ * 3. If a core provider is specified, return any utility provider that can
+ *    layer over it, plus the core provider itself, if possible.
+ * 4* A utility provider will not layer over the sockets provider unless the
+ *    user explicitly requests that combination.
+ *
+ * Utility providers use an internal flag, OFI_CORE_PROV_ONLY, to indicate
+ * that only core providers should respond to an fi_getinfo query.  This
+ * prevents utility providers from layering over other utility providers.
+ */
+static int ofi_layering_ok(const struct fi_provider *provider,
+			   const char *util_name, size_t util_len,
+			   const char *core_name, size_t core_len,
+			   uint64_t flags)
+{
+	if (flags & OFI_CORE_PROV_ONLY) {
+		if (ofi_is_util_prov(provider)) {
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Need core provider, skipping util %s\n",
+				provider->name);
+			return 0;
+		}
+
+		if ((!core_len || !core_name) &&
+		    !strcasecmp(provider->name, "sockets")) {
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Skipping util;sockets layering\n");
+			return 0;
+		}
+	}
+
+	if (util_len && util_name) {
+		assert(!(flags & OFI_CORE_PROV_ONLY));
+		if ((strlen(provider->name) != util_len) ||
+		    strncasecmp(util_name, provider->name, util_len))
+			return 0;
+
+	} else if (core_len && core_name) {
+		if (!strncasecmp(core_name, "sockets", core_len) &&
+		    ofi_is_util_prov(provider)) {
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Sockets requested, skipping util layering\n");
+			return 0;
+		}
+
+		if (!ofi_is_util_prov(provider) &&
+		    ((strlen(provider->name) != core_len) ||
+		     strncasecmp(core_name, provider->name, core_len)))
+			return 0;
+	}
+
+	return 1;
+}
+
 __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
@@ -616,25 +667,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (ofi_is_util_prov(prov->provider) &&
-		    (flags & OFI_CORE_PROV_ONLY)) {
-			FI_INFO(&core_prov, FI_LOG_CORE,
-			       "Need core provider, skipping util %s\n",
-			       prov->provider->name);
+		if (!ofi_layering_ok(prov->provider, util_name, util_len,
+				     core_name, core_len, flags))
 			continue;
-		}
-
-		if (util_len && util_name) {
-			assert(!(flags & OFI_CORE_PROV_ONLY));
-			if ((strlen(prov->provider->name) != util_len) ||
-			    strncasecmp(util_name, prov->provider->name, util_len))
-				continue;
-		} else if (core_len && core_name) {
-			if (!ofi_is_util_prov(prov->provider) &&
-			    ((strlen(prov->provider->name) != core_len) ||
-			     strncasecmp(core_name, prov->provider->name, core_len)))
-				continue;
-		}
 
 		if (FI_VERSION_LT(prov->provider->fi_version, version)) {
 			FI_WARN(&core_prov, FI_LOG_CORE,

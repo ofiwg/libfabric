@@ -125,7 +125,6 @@ struct fi_filter {
 extern struct fi_filter prov_log_filter;
 extern struct fi_provider core_prov;
 
-int ofi_is_util_prov(struct fi_provider *provider);
 void ofi_create_filter(struct fi_filter *filter, const char *env_name);
 void ofi_free_filter(struct fi_filter *filter);
 int ofi_apply_filter(struct fi_filter *filter, const char *name);
