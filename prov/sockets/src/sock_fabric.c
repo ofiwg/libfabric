@@ -383,7 +383,7 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	int sock, ret;
 	socklen_t len;
 
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	sock = ofi_socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
 		return -errno;
 

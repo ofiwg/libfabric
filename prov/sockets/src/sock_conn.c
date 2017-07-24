@@ -62,9 +62,8 @@ ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx
 {
 	int ret;
 	uint64_t total_len;
-	struct sock_op tx_op;
+	struct sock_op tx_op = { 0 };
 
-	memset(&tx_op, 0, sizeof(struct sock_op));
 	tx_op.op = SOCK_OP_CONN_MSG;
 	SOCK_LOG_DBG("New conn msg on TX: %p using conn: %p\n", tx_ctx, conn);
 
@@ -300,7 +299,7 @@ err:
 int sock_conn_listen(struct sock_ep_attr *ep_attr)
 {
 	struct addrinfo *s_res = NULL, *p;
-	struct addrinfo hints;
+	struct addrinfo hints = { 0 };
 	int listen_fd = 0, ret;
 	socklen_t addr_size;
 	struct sockaddr_in addr;
@@ -309,7 +308,6 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	char *port;
 	char ipaddr[24];
 
-	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
@@ -339,7 +337,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 	SOCK_LOG_DBG("Binding listener thread to port: %s\n", listener->service);
 	for (p = s_res; p; p = p->ai_next) {
-		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		listen_fd = ofi_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listen_fd >= 0) {
 			sock_set_sockopts(listen_fd);
 
@@ -431,7 +429,7 @@ do_connect:
 	if (conn != SOCK_CM_CONN_IN_PROGRESS)
 		return conn;
 
-	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
+	conn_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
 	if (conn_fd == -1) {
 		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
 		errno = FI_EOTHER;
