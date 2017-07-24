@@ -22,6 +22,8 @@ framework are referred to as fabric providers, or simply providers.
 This distribution of libfabric contains the following providers
 (although more may be available via run-time plug-ins):
 
+## Core providers
+
 *GNI*
 : A provider for the Aries interconnect in Cray XC(TM) systems
   utilizing the user-space *Generic Networking Interface*.  See
@@ -56,10 +58,16 @@ This distribution of libfabric contains the following providers
 *Blue Gene/Q*
 : See [`fi_bgq`(7)](fi_bgq.7.html) for more information.
 
+## Utility providers
+
+*RxM*
+: The RxM provider (ofi_rxm) is an utility provider that supports RDM
+  endpoints emulated over MSG endpoints of a core provider.
+  See [`fi_rxm`(7)](fi_rxm.7.html) for more information.
+
 # CORE VERSUS UTILITY PROVIDERS
 
-The providers listed above are referred to as core providers.  Core
-providers implement the libfabric interfaces directly over low-level
+Core providers implement the libfabric interfaces directly over low-level
 hardware and software interfaces.  They are designed to support a
 specific class of hardware, and may be limited to supporting a single
 NIC.  Core providers often only support libfabric features and interfaces
@@ -71,10 +79,11 @@ core providers to expand their features, and interact with core providers
 through libfabric interfaces internally.  Utility providers are often used
 to support a specific endpoint type over a simpler endpoint type.  For
 example, the RXD provider implements reliability over unreliable datagram
-endpoints.
+endpoints. The utility providers will not layer over the sockets provider
+unless it is explicitly requested.
 
 Utility providers show up as a component in the core provider's component
-list.  See [`fi_fabric`(3)`](fi_fabric.7.html).  Utility providers are
+list.  See [`fi_fabric`(3)](fi_fabric.3.html).  Utility providers are
 enabled automatically for core providers that do not support the feature
 set requested by an application.
 
