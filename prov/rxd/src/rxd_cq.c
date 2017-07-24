@@ -524,7 +524,7 @@ struct rxd_trecv_entry *rxd_get_trecv_entry(struct rxd_ep *ep,
 	return trecv_entry;
 }
 
-void rxd_report_rx_comp(struct rxd_cq *cq, struct rxd_rx_entry *rx_entry)
+void rxd_cq_report_rx_comp(struct rxd_cq *cq, struct rxd_rx_entry *rx_entry)
 {
 	struct fi_cq_tagged_entry cq_entry = {0};
 
@@ -679,7 +679,7 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 	}
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "reporting RX completion event\n");
-	rxd_report_rx_comp(rxd_ep_rx_cq(ep), rx_entry);
+	rxd_cq_report_rx_comp(rxd_ep_rx_cq(ep), rx_entry);
 
 	switch(rx_entry->op_hdr.op) {
 	case ofi_op_msg:
