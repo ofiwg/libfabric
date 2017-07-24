@@ -79,6 +79,23 @@ see the man pages.
 - Add FI_SOURCE_ERR to the supported caps
 - Improve the method of checking device existence
 
+## Verbs provider notes
+
+- Fix an issue where if the user requests higher values for tx, rx
+  context sizes than default it wasn't honored.
+- Introduce env variables for setting default tx, rx context sizes
+  and iov limits.
+- Report correct completion ordering supported by MSG endpoints.
+
+## RxM provider notes
+
+- Add OFI RxM provider. It is an utility provider that supports RDM
+  endpoints emulated over a base provider that supports only MSG end-
+  points.
+- The provider was earlier experimental. It's functional from this
+  release onwards.
+- Please refer to the man page of the provider for more info.
+
 v1.4.2, Fri May 12, 2017
 ========================
 
