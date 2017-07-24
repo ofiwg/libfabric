@@ -11,12 +11,12 @@ The RxM (RDM over MSG) Utility Provider
 
 # OVERVIEW
 
-The RxM provider is a utility provider that supports RDM endpoints
-emulated over a base MSG provider.
+The RxM provider (ofi_rxm) is an utility provider that supports RDM
+endpoint emulated over MSG endpoint of a core provider.
 
 # REQUIREMENTS
 
-RxM provider requires the base MSG provider to support the following features:
+RxM provider requires the core provider to support the following features:
 
   * MSG endpoints (FI_EP_MSG)
 
@@ -26,19 +26,15 @@ RxM provider requires the base MSG provider to support the following features:
 
   * FI_OPT_CM_DATA_SIZE of atleast 24 bytes
 
-RxM provider requires the app to support FI_LOCAL_MR mode (This requirement would
-be removed in the future).
-
 # SUPPORTED FEATURES
 
-The RxM provider currently supports *FI_MSG* and *FI_TAGGED*
-capabilities.
+The RxM provider currently supports *FI_MSG*, *FI_TAGGED* and *FI_RMA* capabilities.
 
 *Endpoint types*
 : The provider supports only *FI_EP_RDM*.
 
 *Endpoint capabilities*
-: The following data transfer interface is supported: *FI_MSG*, *FI_TAGGED*.
+: The following data transfer interface is supported: *FI_MSG*, *FI_TAGGED*, *FI_RMA*.
 
 *Progress*
 : The RxM provider supports only *FI_PROGRESS_MANUAL* for now.
@@ -51,15 +47,14 @@ capabilities.
 
 # LIMITATIONS
 
-The RxM provider has hard-coded maximums for supported queue sizes and
-data transfers. Some of these limits are set based on the selected
-base MSG provider.
+When using RxM provider, some limitations from the underlying MSG provider could also show
+up. Please refer to the corresponding MSG provider man pages to find about those limitations.
 
 ## Unsupported features
 
 RxM provider does not support the following features:
 
-  * op_flags: FI_INJECT, FI_CLAIM, FI_PEEK, FI_FENCE.
+  * op_flags: FI_CLAIM, FI_PEEK, FI_FENCE.
 
   * FI_ATOMIC
 
@@ -75,7 +70,22 @@ RxM provider does not support the following features:
 
   * FI_MR_SCALABLE
 
-  * Wait objects
+  * Authorization keys
+
+  * Application error data buffers
+
+  * Multicast
+
+  * FI_ADDR_STR, FI_SYNC_ERR
+
+  * Reporting unknown source addr data as part of completions
+
+  * Triggered operations
+
+## Usage limitations
+
+RxM provider should work fine for client - server programs like fabtests. Support for MPI, SHMEM
+and other applications is work in progress.
 
 # RUNTIME PARAMETERS
 

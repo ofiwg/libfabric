@@ -158,6 +158,11 @@ A fabric identifier.
 
 The name of the underlying fabric provider.
 
+To request an utility provider layered over a specific core provider, both
+the provider names have to be specified using ";" as delimiter.
+
+e.g. "ofi_rxm;verbs" or "verbs;ofi_rxm"
+
 For debugging and administrative purposes, environment variables can be used
 to control which fabric providers will be registered with libfabric.
 Specifying "FI_PROVIDER=foo,bar" will allow any providers with the names "foo"
@@ -170,7 +175,9 @@ environment variables in a production setting.
 
 ## prov_version - Provider Version
 
-Version information for the fabric provider.
+Version information for the fabric provider. In case of an utility provider
+layered over a core provider, the version would always refer to that of 
+the utility provider.
 
 ## api_version
 

@@ -136,6 +136,19 @@ The support for fork in the provider has the following limitations:
 
 The verbs provider checks for the following environment variables.
 
+### Variables specific to MSG endpoints
+*FI_VERBS_TX_SIZE*
+:  Default maximum tx context size (default: 384)
+
+*FI_VERBS_RX_SIZE*
+:  Default maximum rx context size (default: 384)
+
+*FI_VERBS_TX_IOV_LIMIT*
+: Default maximum tx iov_limit (default: 4)
+
+*FI_VERBS_RX_IOV_LIMIT*
+: Default maximum rx iov_limit (default: 4)
+
 ### Variables specific to RDM endpoints
 
 *FI_VERBS_IFACE*
