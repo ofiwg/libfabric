@@ -75,12 +75,11 @@ static struct fi_ops_atomic gnix_sep_atomic_ops;
 
 static void __trx_destruct(void *obj)
 {
-	int index;
+	int index, n_ids;
 	int __attribute__((unused)) ret;
 	struct gnix_fid_trx *trx = (struct gnix_fid_trx *) obj;
 	struct gnix_fid_ep *ep_priv;
 	struct gnix_fid_sep *sep_priv;
-	struct gnix_fid_av *av;
 	int refs_held;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -91,20 +90,20 @@ static void __trx_destruct(void *obj)
 	assert(sep_priv != NULL);
 
 	/* These assignments must be done before we free ep_priv */
-	av = ep_priv->av;
 	index = ep_priv->src_addr.gnix_addr.cdm_id -
 		sep_priv->cdm_id_base;
+
+	n_ids = MAX(sep_priv->info->ep_attr->tx_ctx_cnt,
+		    sep_priv->info->ep_attr->rx_ctx_cnt);
 
 	refs_held = _gnix_ref_put(ep_priv);
 
 	if (refs_held == 0) {
 		_gnix_ref_put(sep_priv->cm_nic);
 		/* Remove the context from the sep's list */
-		if ((index >= 0) &&
-		    (index < sep_priv->info->ep_attr->tx_ctx_cnt)) {
+		if ((index >= 0) && (index < n_ids)) {
 			if (sep_priv->ep_table[index]) {
 				sep_priv->ep_table[index] = NULL;
-				_gnix_ref_put(av);
 			} else {
 				GNIX_WARN(FI_LOG_EP_CTRL,
 					  "rx/tx context already freed\n");
@@ -194,6 +193,7 @@ static int gnix_sep_tx_ctx(struct fid_ep *sep, int index,
 				       struct gnix_fid_ep, ep_fid);
 		sep_priv->tx_ep_table[index] = sep_priv->ep_table[index];
 		_gnix_ref_get(ep_priv);
+
 	} else {
 
 		/*
@@ -220,6 +220,11 @@ static int gnix_sep_tx_ctx(struct fid_ep *sep, int index,
 		sep_priv->ep_table[index] = ep_ptr;
 		sep_priv->tx_ep_table[index] = ep_ptr;
 		ep_priv = container_of(ep_ptr, struct gnix_fid_ep, ep_fid);
+		if (sep_priv->av != NULL) {
+			ep_priv->av = sep_priv->av;
+			_gnix_ref_get(ep_priv->av);
+			_gnix_ep_init_vc(ep_priv);
+		}
 	}
 
 	_gnix_ref_init(&tx_priv->ref_cnt, 1, __trx_destruct);
@@ -341,6 +346,11 @@ static int gnix_sep_rx_ctx(struct fid_ep *sep, int index,
 		sep_priv->ep_table[index] = ep_ptr;
 		sep_priv->rx_ep_table[index] = ep_ptr;
 		ep_priv = container_of(ep_ptr, struct gnix_fid_ep, ep_fid);
+		if (sep_priv->av != NULL) {
+			ep_priv->av = sep_priv->av;
+			_gnix_ref_get(ep_priv->av);
+			_gnix_ep_init_vc(ep_priv);
+		}
 	}
 
 	_gnix_ref_init(&rx_priv->ref_cnt, 1, __trx_destruct);
@@ -365,11 +375,10 @@ err:
 
 DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
-	int i, ret;
+	int i, ret, n_ids;
 	struct gnix_fid_ep  *ep;
 	struct gnix_fid_av  *av;
 	struct gnix_fid_sep *sep;
-	struct gnix_fid_cntr *cntr;
 	struct gnix_fid_domain *domain_priv;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -394,154 +403,37 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
+
+		n_ids = MAX(sep->info->ep_attr->tx_ctx_cnt,
+			    sep->info->ep_attr->rx_ctx_cnt);
+
 		av = container_of(bfid, struct gnix_fid_av, av_fid.fid);
 		if (domain_priv != av->domain) {
 			return -FI_EINVAL;
 		}
 
-		for (i = 0; i < sep->info->ep_attr->tx_ctx_cnt; i++) {
-			ep = container_of(sep->tx_ep_table[i],
-					  struct gnix_fid_ep, ep_fid);
-			if (ep == NULL) {
-				return -FI_EINVAL;
-			}
-			ep->av = av;
-			_gnix_ep_init_vc(ep);
-			_gnix_ref_get(ep->av);
-		}
+		/*
+		 * can't bind more than one AV
+		 */
 
-		for (i = 0; i < sep->info->ep_attr->rx_ctx_cnt; i++) {
-			ep = container_of(sep->rx_ep_table[i],
-					  struct gnix_fid_ep, ep_fid);
-			if (ep == NULL) {
-				return -FI_EINVAL;
-			}
-			ep->av = av;
-			_gnix_ref_get(ep->av);
-		}
-
-		break;
-	case FI_CLASS_CNTR:
-		cntr = container_of(bfid, struct gnix_fid_cntr, cntr_fid.fid);
-		if (domain_priv != cntr->domain) {
+		if (sep->av != NULL)
 			return -FI_EINVAL;
-		}
 
-		for (i = 0; i < sep->info->ep_attr->tx_ctx_cnt; i++) {
-			ep = container_of(sep->tx_ep_table[i],
+		sep->av = av;
+		_gnix_ref_get(sep->av);
+
+		for (i = 0; i < n_ids; i++) {
+			ep = container_of(sep->ep_table[i],
 					  struct gnix_fid_ep, ep_fid);
-			if (ep == NULL) {
-				return -FI_EINVAL;
-			}
-
-			/* don't allow rebinding */
-			if (flags & FI_SEND) {
-				if (ep->send_cntr) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						  "rebind send counter (%p)\n",
-						  cntr);
-					ret = -FI_EINVAL;
-					break;
-				}
-				ep->send_cntr = cntr;
-				_gnix_cntr_poll_obj_add(cntr, ep->nic,
-							_gnix_nic_progress);
-				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
-							_gnix_cm_nic_progress);
-				_gnix_ref_get(cntr);
-			}
-
-			if (flags & FI_WRITE) {
-				if (ep->write_cntr) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						  "rebind write counter (%p)\n",
-						  cntr);
-					ret = -FI_EINVAL;
-					break;
-				}
-				ep->write_cntr = cntr;
-				_gnix_cntr_poll_obj_add(cntr, ep->nic,
-							_gnix_nic_progress);
-				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
-							_gnix_cm_nic_progress);
-				_gnix_ref_get(cntr);
-			}
-
-			if (flags & FI_REMOTE_WRITE) {
-				if (ep->rwrite_cntr) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						  "rebind rwrite counter (%p)\n",
-						  cntr);
-					ret = -FI_EINVAL;
-					break;
-				}
-				ep->rwrite_cntr = cntr;
-				_gnix_cntr_poll_obj_add(cntr, ep->nic,
-							_gnix_nic_progress);
-				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
-							_gnix_cm_nic_progress);
-				_gnix_ref_get(cntr);
-			}
-		}
-
-		for (i = 0; i < sep->info->ep_attr->rx_ctx_cnt; i++) {
-			ep = container_of(sep->rx_ep_table[i],
-					  struct gnix_fid_ep, ep_fid);
-			if (ep == NULL) {
-				return -FI_EINVAL;
-			}
-
-			/* don't allow rebinding */
-			if (flags & FI_RECV) {
-				if (ep->recv_cntr) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						  "rebind recv counter (%p)\n",
-						  cntr);
-					ret = -FI_EINVAL;
-					break;
-				}
-				ep->recv_cntr = cntr;
-				_gnix_cntr_poll_obj_add(cntr, ep->nic,
-							_gnix_nic_progress);
-				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
-							_gnix_cm_nic_progress);
-				_gnix_ref_get(cntr);
-			}
-
-			if (flags & FI_READ) {
-				if (ep->read_cntr) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						  "rebind read counter (%p)\n",
-						  cntr);
-					ret = -FI_EINVAL;
-					break;
-				}
-				ep->read_cntr = cntr;
-				_gnix_cntr_poll_obj_add(cntr, ep->nic,
-							_gnix_nic_progress);
-				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
-							_gnix_cm_nic_progress);
-				_gnix_ref_get(cntr);
-			}
-
-			if (flags & FI_REMOTE_READ) {
-				if (ep->rread_cntr) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						  "rebind rread counter (%p)\n",
-						  cntr);
-					ret = -FI_EINVAL;
-					break;
-				}
-				ep->rread_cntr = cntr;
-				_gnix_cntr_poll_obj_add(cntr, ep->nic,
-							_gnix_nic_progress);
-				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
-							_gnix_cm_nic_progress);
-				_gnix_ref_get(cntr);
+			if (ep != NULL && ep->av == NULL) {
+				ep->av = av;
+				_gnix_ep_init_vc(ep);
+				_gnix_ref_get(ep->av);
 			}
 		}
 
 		break;
+
 	default:
 		ret = -FI_ENOSYS;
 		break;
@@ -639,6 +531,15 @@ static void __sep_destruct(void *obj)
 
 	_gnix_ref_put(domain_priv);
 
+	/*
+	 * For now GNI provider doesn't require that an AV have been bound
+	 * to the SEP itself.
+	 */
+	if (sep->av != NULL) {
+		_gnix_ref_put(sep->av);
+		sep->av = NULL;
+	}
+
 	if (sep->ep_table) {
 		for (i = 0; i < sep->info->ep_attr->tx_ctx_cnt; i++) {
 			ep = container_of(sep->ep_table[i],
@@ -652,6 +553,7 @@ static void __sep_destruct(void *obj)
 			 * try to clean up a bit. */
 			if (ep->av) {
 				_gnix_ref_put(ep->av);
+				ep->av = NULL;
 			}
 		}
 
