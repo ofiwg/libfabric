@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2017\-05\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2017\-07\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -136,6 +136,19 @@ to be re\-mapped when the process is forked (MADV_DONTFORK).
 .SH RUNTIME PARAMETERS
 .PP
 The verbs provider checks for the following environment variables.
+.SS Variables specific to MSG endpoints
+.PP
+\f[I]FI_VERBS_TX_SIZE\f[] : Default maximum tx context size (default:
+384)
+.PP
+\f[I]FI_VERBS_RX_SIZE\f[] : Default maximum rx context size (default:
+384)
+.PP
+\f[I]FI_VERBS_TX_IOV_LIMIT\f[] : Default maximum tx iov_limit (default:
+4)
+.PP
+\f[I]FI_VERBS_RX_IOV_LIMIT\f[] : Default maximum rx iov_limit (default:
+4)
 .SS Variables specific to RDM endpoints
 .PP
 \f[I]FI_VERBS_IFACE\f[] : The prefix or the full name of the network

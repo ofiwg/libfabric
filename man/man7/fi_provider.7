@@ -1,4 +1,4 @@
-.TH "fi_provider" "7" "2016\-12\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_provider" "7" "2017\-07\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Fabric Interface Providers
@@ -15,6 +15,7 @@ referred to as fabric providers, or simply providers.
 .PP
 This distribution of libfabric contains the following providers
 (although more may be available via run\-time plug\-ins):
+.SS Core providers
 .PP
 \f[I]GNI\f[] : A provider for the Aries interconnect in Cray XC(TM)
 systems utilizing the user\-space \f[I]Generic Networking Interface\f[].
@@ -45,9 +46,13 @@ platforms that only have Linux Verbs\-based networking.
 See \f[C]fi_verbs\f[](7) for more information.
 .PP
 \f[I]Blue Gene/Q\f[] : See \f[C]fi_bgq\f[](7) for more information.
+.SS Utility providers
+.PP
+\f[I]RxM\f[] : The RxM provider (ofi_rxm) is an utility provider that
+supports RDM endpoints emulated over MSG endpoints of a core provider.
+See \f[C]fi_rxm\f[](7) for more information.
 .SH CORE VERSUS UTILITY PROVIDERS
 .PP
-The providers listed above are referred to as core providers.
 Core providers implement the libfabric interfaces directly over
 low\-level hardware and software interfaces.
 They are designed to support a specific class of hardware, and may be
@@ -63,10 +68,12 @@ Utility providers are often used to support a specific endpoint type
 over a simpler endpoint type.
 For example, the RXD provider implements reliability over unreliable
 datagram endpoints.
+The utility providers will not layer over the sockets provider unless it
+is explicitly requested.
 .PP
 Utility providers show up as a component in the core provider\[aq]s
 component list.
-See \f[C]fi_fabric\f[](3)`.
+See \f[C]fi_fabric\f[](3).
 Utility providers are enabled automatically for core providers that do
 not support the feature set requested by an application.
 .SH PROVIDER REQUIREMENTS

@@ -1,14 +1,14 @@
-.TH "fi_rxm" "7" "2017\-03\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rxm" "7" "2017\-07\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The RxM (RDM over MSG) Utility Provider
 .SH OVERVIEW
 .PP
-The RxM provider is a utility provider that supports RDM endpoints
-emulated over a base MSG provider.
+The RxM provider (ofi_rxm) is an utility provider that supports RDM
+endpoint emulated over MSG endpoint of a core provider.
 .SH REQUIREMENTS
 .PP
-RxM provider requires the base MSG provider to support the following
+RxM provider requires the core provider to support the following
 features:
 .IP \[bu] 2
 MSG endpoints (FI_EP_MSG)
@@ -18,18 +18,15 @@ Shared receive contexts (FI_SHARED_CONTEXT)
 RMA read/write (FI_RMA)
 .IP \[bu] 2
 FI_OPT_CM_DATA_SIZE of atleast 24 bytes
-.PP
-RxM provider requires the app to support FI_LOCAL_MR mode (This
-requirement would be removed in the future).
 .SH SUPPORTED FEATURES
 .PP
-The RxM provider currently supports \f[I]FI_MSG\f[] and
-\f[I]FI_TAGGED\f[] capabilities.
+The RxM provider currently supports \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[]
+and \f[I]FI_RMA\f[] capabilities.
 .PP
 \f[I]Endpoint types\f[] : The provider supports only \f[I]FI_EP_RDM\f[].
 .PP
 \f[I]Endpoint capabilities\f[] : The following data transfer interface
-is supported: \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[].
+is supported: \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[], \f[I]FI_RMA\f[].
 .PP
 \f[I]Progress\f[] : The RxM provider supports only
 \f[I]FI_PROGRESS_MANUAL\f[] for now.
@@ -39,14 +36,15 @@ is supported: \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[].
 \f[I]Memory Region\f[] : FI_MR_BASIC
 .SH LIMITATIONS
 .PP
-The RxM provider has hard\-coded maximums for supported queue sizes and
-data transfers.
-Some of these limits are set based on the selected base MSG provider.
+When using RxM provider, some limitations from the underlying MSG
+provider could also show up.
+Please refer to the corresponding MSG provider man pages to find about
+those limitations.
 .SS Unsupported features
 .PP
 RxM provider does not support the following features:
 .IP \[bu] 2
-op_flags: FI_INJECT, FI_CLAIM, FI_PEEK, FI_FENCE.
+op_flags: FI_CLAIM, FI_PEEK, FI_FENCE.
 .IP \[bu] 2
 FI_ATOMIC
 .IP \[bu] 2
@@ -62,7 +60,22 @@ Counters
 .IP \[bu] 2
 FI_MR_SCALABLE
 .IP \[bu] 2
-Wait objects
+Authorization keys
+.IP \[bu] 2
+Application error data buffers
+.IP \[bu] 2
+Multicast
+.IP \[bu] 2
+FI_ADDR_STR, FI_SYNC_ERR
+.IP \[bu] 2
+Reporting unknown source addr data as part of completions
+.IP \[bu] 2
+Triggered operations
+.SS Usage limitations
+.PP
+RxM provider should work fine for client \- server programs like
+fabtests.
+Support for MPI, SHMEM and other applications is work in progress.
 .SH RUNTIME PARAMETERS
 .PP
 No runtime parameters are currently defined.
