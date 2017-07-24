@@ -43,7 +43,7 @@ int ofi_check_cntr_attr(const struct fi_provider *prov,
 		return FI_SUCCESS;
 
         if (attr->flags) {
-		FI_WARN(prov, FI_LOG_CQ, "unsupported flags\n");
+		FI_WARN(prov, FI_LOG_CNTR, "unsupported flags\n");
 		return -FI_EINVAL;
 	}
 
