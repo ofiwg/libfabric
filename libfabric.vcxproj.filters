@@ -357,6 +357,9 @@
     <ClCompile Include="prov\util\src\util_cntr.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_cntr.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h">

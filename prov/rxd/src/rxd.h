@@ -360,6 +360,8 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 int rxd_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
+int rxd_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		  struct fid_cntr **cntr_fid, void *context);
 
 
 /* AV sub-functions */
@@ -414,5 +416,7 @@ void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry);
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
 void rxd_cq_report_tx_comp(struct rxd_cq *cq, struct rxd_tx_entry *tx_entry);
 void rxd_cq_report_rx_comp(struct rxd_cq *cq, struct rxd_rx_entry *rx_entry);
+void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry);
+void rxd_cntr_report_rx_comp(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry);
 
 #endif

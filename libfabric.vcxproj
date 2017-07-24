@@ -187,6 +187,7 @@
     <ClCompile Include="prov\netdir\src\netdir_unexp.c" />
     <ClCompile Include="prov\rxd\src\rxd_attr.c" />
     <ClCompile Include="prov\rxd\src\rxd_av.c" />
+    <ClCompile Include="prov\rxd\src\rxd_cntr.c" />
     <ClCompile Include="prov\rxd\src\rxd_cq.c" />
     <ClCompile Include="prov\rxd\src\rxd_domain.c" />
     <ClCompile Include="prov\rxd\src\rxd_ep.c" />
