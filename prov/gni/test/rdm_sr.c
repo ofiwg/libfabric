@@ -947,6 +947,26 @@ Test(rdm_sr, sendv_retrans)
 	rdm_sr_xfer_for_each_size(do_sendv, 1, BUF_SZ);
 }
 
+Test(rdm_sr, bug_1390)
+{
+	ssize_t sz;
+	int i, iov_cnt;
+	int len = 4096;
+	void *mr_descs[IOV_CNT] = {NULL};
+
+	for (iov_cnt = 1; iov_cnt <= IOV_CNT; iov_cnt++) {
+		for (i = 0; i < iov_cnt; i++) {
+			rdm_sr_init_data(src_iov[i].iov_base, len, 0x25);
+			src_iov[i].iov_len = len;
+		}
+		rdm_sr_init_data(iov_dest_buf, len * iov_cnt, 0);
+	}
+
+	sz = fi_sendv(ep[0], src_iov, (void **) &mr_descs,
+			4, gni_addr[1], iov_dest_buf);
+	cr_assert_eq(sz, -FI_EINVAL);
+}
+
 /*
 ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		   uint64_t flags);
