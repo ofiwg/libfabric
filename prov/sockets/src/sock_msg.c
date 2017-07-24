@@ -239,10 +239,9 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		for (i = 0; i < msg->iov_count; i++)
 			total_len += msg->msg_iov[i].iov_len;
 
-		if (total_len > SOCK_EP_MAX_INJECT_SZ) {
-			ret = -FI_EINVAL;
-			goto err;
-		}
+		if (total_len > SOCK_EP_MAX_INJECT_SZ)
+			return -FI_EINVAL;
+
 		tx_op.src_iov_len = total_len;
 	} else {
 		tx_op.src_iov_len = msg->iov_count;
@@ -578,10 +577,8 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 			total_len += msg->msg_iov[i].iov_len;
 
 		tx_op.src_iov_len = total_len;
-		if (total_len > SOCK_EP_MAX_INJECT_SZ) {
-			ret = -FI_EINVAL;
-			goto err;
-		}
+		if (total_len > SOCK_EP_MAX_INJECT_SZ)
+			return -FI_EINVAL;
 	} else {
 		total_len = msg->iov_count * sizeof(union sock_iov);
 		tx_op.src_iov_len = msg->iov_count;
