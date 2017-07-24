@@ -5,7 +5,7 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.5.0rc1, Fri Jul 7, 2017
+v1.5.0rc2, Thu Jul 27, 2017
 ============================
 
 The 1.5 release includes updates to the libfabric API and ABI.  As a
@@ -79,13 +79,9 @@ see the man pages.
 - Add FI_SOURCE_ERR to the supported caps
 - Improve the method of checking device existence
 
-## Verbs provider notes
+## UDP provider notes
 
-- Fix an issue where if the user requests higher values for tx, rx
-  context sizes than default it wasn't honored.
-- Introduce env variables for setting default tx, rx context sizes
-  and iov limits.
-- Report correct completion ordering supported by MSG endpoints.
+- Add support for multicast data transfers
 
 ## RxM provider notes
 
@@ -95,6 +91,15 @@ see the man pages.
 - The provider was earlier experimental. It's functional from this
   release onwards.
 - Please refer to the man page of the provider for more info.
+
+## Verbs provider notes
+
+- Fix an issue where if the user requests higher values for tx, rx
+  context sizes than default it wasn't honored.
+- Introduce env variables for setting default tx, rx context sizes
+  and iov limits.
+- Report correct completion ordering supported by MSG endpoints.
+
 
 v1.4.2, Fri May 12, 2017
 ========================

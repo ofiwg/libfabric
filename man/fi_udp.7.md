@@ -27,7 +27,9 @@ receiving datagram messages over an unreliable endpoint.
 : The provider supports only endpoint type *FI_EP_DGRAM*.
 
 *Endpoint capabilities*
-: The following data transfer interface is supported: *fi_msg*.
+: The following data transfer interface is supported: *fi_msg*.  The
+  provider supports standard unicast datagram transfers, as well as
+  multicast operations.
 
 *Modes*
 : The provider does not require the use of any mode bits.
