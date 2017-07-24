@@ -45,22 +45,40 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_cm.h>
 
-#define FT_FIVERSION FI_VERSION(1, 5)
 #include "shared.h"
 
-int num_eps;
 static struct fid_ep **eps;
+static char *data_bufs;
+static char **send_bufs;
+static char **recv_bufs;
+static struct fi_context *recv_ctx;
+static struct fi_context *send_ctx;
 static fi_addr_t *remote_addr;
+int num_eps = 3;
+
 
 static int alloc_multi_ep_res()
 {
+	char *rx_buf_ptr;
+	int i;
+
 	eps = calloc(num_eps, sizeof(*eps));
-	if (!eps)
+	remote_addr = calloc(num_eps, sizeof(*remote_addr));
+	send_bufs = calloc(num_eps, sizeof(*send_bufs));
+	recv_bufs = calloc(num_eps, sizeof(*recv_bufs));
+	send_ctx = calloc(num_eps, sizeof(*send_ctx));
+	recv_ctx = calloc(num_eps, sizeof(*recv_ctx));
+	data_bufs = calloc(num_eps * 2, opts.transfer_size);
+
+	if (!eps || !remote_addr || !send_bufs || !recv_bufs ||
+	    !send_ctx || !recv_ctx || !data_bufs)
 		return -FI_ENOMEM;
 
-	remote_addr = calloc(num_eps, sizeof(*remote_addr));
-	if (!remote_addr)
-		return -FI_ENOMEM;
+	rx_buf_ptr = data_bufs + opts.transfer_size * num_eps;
+	for (i = 0; i < num_eps; i++) {
+		send_bufs[i] = data_bufs + opts.transfer_size * i;
+		recv_bufs[i] = rx_buf_ptr + opts.transfer_size * i;
+	}
 
 	return 0;
 }
@@ -71,71 +89,54 @@ static void free_ep_res()
 
 	for (i = 0; i < num_eps; i++)
 		FT_CLOSE_FID(eps[i]);
-	free(eps);
+
+	free(data_bufs);
+	free(send_bufs);
+	free(recv_bufs);
+	free(send_ctx);
+	free(recv_ctx);
 	free(remote_addr);
+	free(eps);
 }
 
-static int multi_ep_pingpong(void)
+static int do_transfers(void)
 {
-	int i, ret = 0;
-	int *send_bufs[num_eps];
-	int *recv_bufs[num_eps];
-	struct fi_context recv_ctx[num_eps];
-	struct fi_context send_ctx[num_eps];
-	int *rx_buf_ptr;
-	int *buffers;
-
-	buffers = calloc(num_eps * 2, opts.transfer_size);
-	if (!buffers)
-		return -FI_ENOMEM;
-
-	rx_buf_ptr = buffers + (opts.transfer_size * num_eps);
-	for (i = 0; i < num_eps; i++) {
-		send_bufs[i] = (int *)((uintptr_t)buffers + opts.transfer_size * i);
-		recv_bufs[i] = (int *)((uintptr_t)rx_buf_ptr + opts.transfer_size * i);
-	}
+	int i, ret;
 
 	for (i = 0; i < num_eps; i++) {
-		rx_buf = (char *)recv_bufs[i];
+		rx_buf = recv_bufs[i];
 		ret = ft_post_rx(eps[i], opts.transfer_size, &recv_ctx[i]);
 		if (ret)
-			goto cleanup_and_close;
+			return ret;
 	}
 
 	for (i = 0; i < num_eps; i++) {
 		if (ft_check_opts(FT_OPT_VERIFY_DATA))
-			ft_fill_buf((char *)send_bufs[i], opts.transfer_size);
+			ft_fill_buf(send_bufs[i], opts.transfer_size);
 
-		tx_buf = (char *)send_bufs[i];
+		tx_buf = send_bufs[i];
 		ret = ft_post_tx(eps[i], remote_addr[i], opts.transfer_size, &send_ctx[i]);
 		if (ret)
-			goto cleanup_and_close;
+			return ret;
 	}
 
-	for (i = 0; i < num_eps; i++) {
-		tx_cq_cntr = 0;
-		ret = ft_get_tx_comp(1);
-		if (ret < 0)
-			goto cleanup_and_close;
-	}
+	ret = ft_get_tx_comp(num_eps);
+	if (ret < 0)
+		return ret;
 
-	for (i = 0; i < num_eps; i++) {
-		rx_cq_cntr = 0;
-		ret = ft_get_rx_comp(1);
-		if (ret < 0)
-			goto cleanup_and_close;
-		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-			ret = ft_check_buf((char *)recv_bufs[i], opts.transfer_size);
+	ret = ft_get_rx_comp(num_eps);
+	if (ret < 0)
+		return ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		for (i = 0; i < num_eps; i++) {
+			ret = ft_check_buf(recv_bufs[i], opts.transfer_size);
 			if (ret)
-				goto cleanup_and_close;
+				return ret;
 		}
 	}
-	printf("PASSED multi ep pingpong\n");
-
-cleanup_and_close:
-	free(buffers);
-
-	return ret;
+	printf("PASSED multi ep\n");
+	return 0;
 }
 
 static int setup_client_ep(struct fid_ep **ep)
@@ -148,10 +149,7 @@ static int setup_client_ep(struct fid_ep **ep)
 		return ret;
 	}
 
-	ret = ft_setup_ep(*ep, eq,
-			av, txcq,
-			rxcq, txcntr,
-			rxcntr, false);
+	ret = ft_setup_ep(*ep, eq, av, txcq, rxcq, txcntr, rxcntr, false);
 	if (ret)
 		return ret;
 
@@ -176,10 +174,7 @@ static int setup_server_ep(struct fid_ep **ep)
 		goto failed_accept;
 	}
 
-	ret = ft_setup_ep(*ep, eq,
-			av, txcq,
-			rxcq, txcntr,
-			rxcntr, false);
+	ret = ft_setup_ep(*ep, eq, av, txcq, rxcq, txcntr, rxcntr, false);
 	if (ret)
 		goto failed_accept;
 
@@ -213,15 +208,11 @@ static int setup_av_ep(struct fid_ep **ep, fi_addr_t *remote_addr)
 		return ret;
 	}
 
-	ret = ft_setup_ep(*ep, eq,
-			av, txcq,
-			rxcq, txcntr,
-			rxcntr, false);
+	ret = ft_setup_ep(*ep, eq, av, txcq, rxcq, txcntr, rxcntr, false);
 	if (ret)
 		return ret;
 
-	ret = ft_init_av_addr(av, *ep,
-			remote_addr);
+	ret = ft_init_av_addr(av, *ep, remote_addr);
 	if (ret)
 		return ret;
 
@@ -266,7 +257,8 @@ static int run_test(void)
 		}
 	}
 
-	ret = multi_ep_pingpong();
+	tx_cq_cntr = rx_cq_cntr = 0;
+	ret = do_transfers();
 	if (ret)
 		return ret;
 
@@ -280,7 +272,6 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.transfer_size = 256;
-	num_eps = 3;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -300,8 +291,9 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "Multi endpoint pingpong test");
-			FT_PRINT_OPTS_USAGE("-c <int>", "number of endpoints to create and test");
+			ft_usage(argv[0], "Multi endpoint test");
+			FT_PRINT_OPTS_USAGE("-c <int>",
+				"number of endpoints to create and test (def 3)");
 			FT_PRINT_OPTS_USAGE("-v", "Enable DataCheck testing");
 			return EXIT_FAILURE;
 		}
