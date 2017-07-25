@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2017\-06\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2017\-07\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
@@ -482,8 +482,9 @@ applications register memory for locally accessed data buffers.
 Data buffers used in send and receive operations and as the source
 buffer for RMA and atomic operations must be registered by the
 application for access domains opened with this capability.
-This flag is defined for compatibility and is ignored if the FI_MR_LOCAL
-domain mr_mode bit is set.
+This flag is defined for compatibility and is ignored if the application
+version is 1.5 or later and the domain mr_mode is set to anything other
+than FI_MR_BASIC or FI_MR_SCALABLE.
 See the domain attribute mr_mode \f[C]fi_domain\f[](3) and
 \f[C]fi_mr\f[](3).
 .PP
