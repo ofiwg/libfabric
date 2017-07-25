@@ -1398,6 +1398,8 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_EQ:
 		break;
+	case FI_CLASS_CNTR:
+		return ofi_ep_bind(&ep->util_ep, bfid, flags);
 	default:
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"invalid fid class\n");

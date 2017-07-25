@@ -282,6 +282,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *ctrl,
 			"reporting TX completion : %p\n", tx_entry);
 		if (tx_entry->op_type != RXD_TX_READ_REQ) {
 			rxd_cq_report_tx_comp(rxd_ep_tx_cq(ep), tx_entry);
+			rxd_cntr_report_tx_comp(ep, tx_entry);
 			rxd_tx_entry_free(ep, tx_entry);
 		}
 	} else {
@@ -318,6 +319,7 @@ static void rxd_handle_discard(struct rxd_ep *ep, struct ofi_ctrl_hdr *ctrl,
 	tx_entry = &ep->tx_entry_fs->buf[idx];
 	if (tx_entry->msg_id == ctrl->msg_id) {
 		rxd_cq_report_tx_comp(rxd_ep_tx_cq(ep), tx_entry);
+		rxd_cntr_report_tx_comp(ep, tx_entry);
 		rxd_tx_entry_done(ep, tx_entry);
 	}
 
@@ -680,6 +682,7 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "reporting RX completion event\n");
 	rxd_cq_report_rx_comp(rxd_ep_rx_cq(ep), rx_entry);
+	rxd_cntr_report_rx_comp(ep, rx_entry);
 
 	switch(rx_entry->op_hdr.op) {
 	case ofi_op_msg:
@@ -690,6 +693,7 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 		break;
 	case ofi_op_read_rsp:
 		rxd_cq_report_tx_comp(rxd_ep_tx_cq(ep), rx_entry->read_rsp.tx_entry);
+		rxd_cntr_report_tx_comp(ep, rx_entry->read_rsp.tx_entry);
 		rxd_tx_entry_done(ep, rx_entry->read_rsp.tx_entry);
 		break;
 	default:
