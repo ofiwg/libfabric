@@ -43,7 +43,8 @@ The RxM provider currently supports *FI_MSG*, *FI_TAGGED* and *FI_RMA* capabilit
 : FI_SOCKADDR, FI_SOCKADDR_IN
 
 *Memory Region*
-: FI_MR_BASIC
+: FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY MR mode bits would be
+  required from the app in case the core provider requires it.
 
 # LIMITATIONS
 
