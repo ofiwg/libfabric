@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,8 +40,11 @@
 #define USDF_DGRAM_DFLT_SGE 4
 
 #define USDF_DGRAM_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
-#define USDF_DGRAM_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
-#define USDF_DGRAM_REQ_MODE (FI_LOCAL_MR)
+
+#define USDF_DGRAM_14_SUPP_MODE (FI_LOCAL_MR |FI_MSG_PREFIX)
+#define USDF_DGRAM_14_REQ_MODE (FI_LOCAL_MR)
+#define USDF_DGRAM_15_SUPP_MODE (FI_MSG_PREFIX)
+
 #define USDF_DGRAM_MSG_ORDER (FI_ORDER_NONE)
 #define USDF_DGRAM_COMP_ORDER (FI_ORDER_NONE)
 #define USDF_DGRAM_INJECT_SIZE                                                 \
@@ -52,12 +55,14 @@
 #define USDF_DGRAM_IOV_LIMIT (USDF_DGRAM_DFLT_SGE)
 #define USDF_DGRAM_RMA_IOV_LIMIT 0
 #define USDF_DGRAM_CNTR_CNT 0
+#define USDF_DGRAM_MR_IOV_LIMIT (USDF_MR_IOV_LIMIT)
+#define USDF_DGRAM_MR_CNT (USDF_MR_CNT)
 
 
-int usdf_dgram_fill_rx_attr(struct fi_info *hints,
+int usdf_dgram_fill_rx_attr(uint32_t version, struct fi_info *hints,
 		struct fi_info *fi, struct usd_device_attrs *dap);
-int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
-		struct usd_device_attrs *dap);
+int usdf_dgram_fill_tx_attr(uint32_t version, struct fi_info *hints,
+		struct fi_info *fi, struct usd_device_attrs *dap);
 int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
 			     struct fi_info *fi, struct usd_device_attrs *dap);
 int usdf_dgram_fill_ep_attr(uint32_t version, struct fi_info *hints,

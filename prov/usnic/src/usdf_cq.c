@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -88,10 +88,12 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 	        uint64_t flags)
 {
 	struct usdf_cq *cq;
+	uint32_t api_version;
 
 	USDF_TRACE_SYS(CQ, "\n");
 
 	cq = container_of(fcq, struct usdf_cq, cq_fid);
+	api_version = cq->cq_domain->dom_fabric->fab_attr.fabric->api_version;
 
 	// The return values are analogous to sockets cq_readerr
 	if (cq->cq_comp.uc_status == 0) {
@@ -121,6 +123,10 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 	entry->err = entry->prov_errno;
 
 	cq->cq_comp.uc_status = 0;
+
+	/* We don't have err_data to give back to the user. */
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+		entry->err_data_size = 0;
 
 	return 1;
 }
@@ -366,11 +372,7 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t count,
 			sin.sin_addr.s_addr = hdr->uh_ip.saddr;
 			sin.sin_port = hdr->uh_udp.source;
 
-			ret = fi_av_insert(av_utof(ep->e.dg.ep_av), &sin, 1,
-					src_addr, 0, NULL);
-			if (ret != 1) {
-				*src_addr = FI_ADDR_NOTAVAIL;
-			}
+			*src_addr = usdf_av_lookup_addr(ep->e.dg.ep_av, &sin);
 			++src_addr;
 		}
 

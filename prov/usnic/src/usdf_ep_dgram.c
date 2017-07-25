@@ -376,12 +376,29 @@ static struct fi_ops_cm usdf_cm_dgram_ops = {
 	.join = fi_no_join,
 };
 
+static struct fi_ops_atomic usdf_dgram_atomic_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = fi_no_atomic_write,
+	.writev = fi_no_atomic_writev,
+	.writemsg = fi_no_atomic_writemsg,
+	.inject = fi_no_atomic_inject,
+	.readwrite = fi_no_atomic_readwrite,
+	.readwritev = fi_no_atomic_readwritev,
+	.readwritemsg = fi_no_atomic_readwritemsg,
+	.compwrite = fi_no_atomic_compwrite,
+	.compwritev = fi_no_atomic_compwritev,
+	.compwritemsg = fi_no_atomic_compwritemsg,
+	.writevalid = fi_no_atomic_writevalid,
+	.readwritevalid = fi_no_atomic_readwritevalid,
+	.compwritevalid = fi_no_atomic_compwritevalid,
+};
+
 /*******************************************************************************
  * Default values for dgram attributes
  ******************************************************************************/
 static const struct fi_tx_attr dgram_dflt_tx_attr = {
 	.caps = USDF_DGRAM_CAPS,
-	.mode = USDF_DGRAM_SUPP_MODE,
+	.mode = USDF_DGRAM_14_REQ_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_DGRAM_MSG_ORDER,
 	.comp_order = USDF_DGRAM_COMP_ORDER,
@@ -392,7 +409,7 @@ static const struct fi_tx_attr dgram_dflt_tx_attr = {
 
 static const struct fi_rx_attr dgram_dflt_rx_attr = {
 	.caps = USDF_DGRAM_CAPS,
-	.mode = USDF_DGRAM_SUPP_MODE,
+	.mode = USDF_DGRAM_14_REQ_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_DGRAM_MSG_ORDER,
 	.comp_order = USDF_DGRAM_COMP_ORDER,
@@ -419,7 +436,9 @@ static const struct fi_domain_attr dgram_dflt_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
 	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL,
-	.cntr_cnt = USDF_DGRAM_CNTR_CNT
+	.cntr_cnt = USDF_DGRAM_CNTR_CNT,
+	.mr_iov_limit = USDF_DGRAM_MR_IOV_LIMIT,
+	.mr_cnt = USDF_DGRAM_MR_CNT,
 };
 
 /*******************************************************************************
@@ -555,11 +574,19 @@ int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		* FI_MR_BASIC. */
 		if (FI_VERSION_LT(version, FI_VERSION(1,5)))
 			defaults.mr_mode = FI_MR_BASIC;
+		else
+			return -FI_ENODATA;
 		break;
 	default :
 		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
 			return -FI_ENODATA;
-		defaults.mr_mode = hints->domain_attr->mr_mode;
+	}
+
+	if (hints->domain_attr->mr_cnt <= USDF_DGRAM_MR_CNT) {
+		defaults.mr_cnt = hints->domain_attr->mr_cnt;
+	} else {
+		USDF_DBG_SYS(DOMAIN, "mr_count exceeded provider limit\n");
+		return -FI_ENODATA;
 	}
 
 out:
@@ -568,8 +595,9 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
-		struct usd_device_attrs *dap)
+int usdf_dgram_fill_tx_attr(uint32_t version, struct fi_info *hints,
+			    struct fi_info *fi,
+			    struct usd_device_attrs *dap)
 {
 	struct fi_tx_attr defaults;
 	size_t entries;
@@ -589,8 +617,11 @@ int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
 	defaults.mode &= (hints->mode | hints->tx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
-	if ((defaults.mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE)
-		return -FI_ENODATA;
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((defaults.mode & USDF_DGRAM_14_REQ_MODE)
+		     != USDF_DGRAM_14_REQ_MODE)
+			return -FI_ENODATA;
+	}
 
 	defaults.op_flags |= hints->tx_attr->op_flags;
 
@@ -643,8 +674,8 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_rx_attr(struct fi_info *hints, struct fi_info *fi,
-		struct usd_device_attrs *dap)
+int usdf_dgram_fill_rx_attr(uint32_t version, struct fi_info *hints,
+			    struct fi_info *fi, struct usd_device_attrs *dap)
 {
 	struct fi_rx_attr defaults;
 	size_t entries;
@@ -664,9 +695,11 @@ int usdf_dgram_fill_rx_attr(struct fi_info *hints, struct fi_info *fi,
 	defaults.mode &= (hints->mode | hints->rx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
-	if ((defaults.mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE)
-		return -FI_ENODATA;
-
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((defaults.mode & USDF_DGRAM_14_REQ_MODE)
+		    != USDF_DGRAM_14_REQ_MODE)
+			return -FI_ENODATA;
+	}
 	defaults.op_flags |= hints->rx_attr->op_flags;
 
 	if ((hints->rx_attr->msg_order | USDF_DGRAM_MSG_ORDER) !=
@@ -822,6 +855,7 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_fid.fid.context = context;
 	ep->ep_fid.fid.ops = &usdf_ep_dgram_ops;
 	ep->ep_fid.cm = &usdf_cm_dgram_ops;
+	ep->ep_fid.atomic = &usdf_dgram_atomic_ops;
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;

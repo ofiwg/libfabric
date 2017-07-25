@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,8 +38,8 @@
 
 #define USDF_MSG_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
 
-#define USDF_MSG_SUPP_MODE (FI_LOCAL_MR)
-#define USDF_MSG_REQ_MODE (FI_LOCAL_MR)
+#define USDF_MSG_14_SUPP_MODE (FI_LOCAL_MR)
+#define USDF_MSG_14_REQ_MODE (FI_LOCAL_MR)
 
 #define USDF_MSG_SUPP_SENDMSG_FLAGS \
 	(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_INJECT | FI_COMPLETION)
@@ -55,6 +55,8 @@
 
 #define USDF_MSG_IOV_LIMIT (USDF_MSG_DFLT_SGE)
 #define USDF_MSG_RMA_IOV_LIMIT 0
+#define USDF_MSG_MR_IOV_LIMIT (USDF_MR_IOV_LIMIT)
+#define USDF_MSG_MR_CNT (USDF_MR_CNT)
 
 #define USDF_MSG_CNTR_CNT 0
 
@@ -91,8 +93,10 @@ struct usdf_msg_qe {
 
 int usdf_msg_post_recv(struct usdf_rx *rx, void *buf, size_t len);
 
-int usdf_msg_fill_tx_attr(struct fi_info *hints, struct fi_info *fi);
-int usdf_msg_fill_rx_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_msg_fill_tx_attr(uint32_t version, struct fi_info *hints,
+			  struct fi_info *fi);
+int usdf_msg_fill_rx_attr(uint32_t version, struct fi_info *hints,
+			  struct fi_info *fi);
 int usdf_msg_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap);
 int usdf_msg_fill_dom_attr(uint32_t version, struct fi_info *hints,

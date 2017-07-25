@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -78,6 +78,9 @@ extern struct fi_provider usdf_ops;
 
 /* usdf domain capability: no loopback */
 #define USDF_DOM_CAPS (FI_REMOTE_COMM)
+
+#define USDF_MR_IOV_LIMIT 1
+#define USDF_MR_CNT (65535)
 
 /*
  *  TAILQ stuff that should exist
@@ -482,6 +485,8 @@ int usdf_endpoint_open(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av_o, void *context);
+int usdf_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
 
 /* Domain name functionality */
 int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
@@ -491,8 +496,14 @@ bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
 
 /* fi_ops_mr */
 int usdf_reg_mr(struct fid *fid, const void *buf, size_t len,
-	uint64_t access, uint64_t offset, uint64_t requested_key,
-	uint64_t flags, struct fid_mr **mr_o, void *context);
+		uint64_t access, uint64_t offset, uint64_t requested_key,
+		uint64_t flags, struct fid_mr **mr_o, void *context);
+int usdf_regv_mr(struct fid *fid, const struct iovec *iov,
+		 size_t count, uint64_t access,
+		 uint64_t offset, uint64_t requested_key,
+		 uint64_t flags, struct fid_mr **mr, void *context);
+int usdf_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		 uint64_t flags, struct fid_mr **mr);
 
 /* Fake IBV provider */
 void usdf_setup_fake_ibv_provider(void);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014,2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -122,4 +122,38 @@ usdf_reg_mr(struct fid *fid, const void *buf, size_t len,
 fail:
 	free(mr);
 	return ret;
+}
+
+/* We dont have proper support for regv and regattr. This is just
+ * a simple mapping to usdf_reg_mr. We can do this because we forced
+ * mr_iov_limit = 1 (made this mapping possible) by default.
+ */
+int usdf_regv_mr(struct fid *fid, const struct iovec *iov,
+		 size_t count, uint64_t access,
+		 uint64_t offset, uint64_t requested_key,
+		 uint64_t flags, struct fid_mr **mr, void *context)
+{
+	if (count > USDF_MR_IOV_LIMIT) {
+		USDF_DBG_SYS(DOMAIN, "usnic provider only support 1 iov.\n");
+		return -FI_EINVAL;
+	}
+
+	return usdf_reg_mr(fid, iov[0].iov_base, iov[0].iov_len, access,
+			offset, requested_key, flags, mr, context);
+}
+
+int usdf_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		 uint64_t flags, struct fid_mr **mr)
+{
+	if (attr->iov_count > USDF_MR_IOV_LIMIT) {
+		USDF_DBG_SYS(DOMAIN, "usnic provider only support 1 iov.\n");
+		return -FI_EINVAL;
+	}
+
+	return usdf_reg_mr(fid, attr->mr_iov[0].iov_base,
+			attr->mr_iov[0].iov_len,
+			attr->access,
+			attr->offset,
+			attr->requested_key,
+			flags, mr, attr->context);
 }
