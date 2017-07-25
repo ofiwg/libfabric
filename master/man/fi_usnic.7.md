@@ -67,6 +67,12 @@ low latency and other offload capabilities on Ethernet networks.
         * fi_control with FI_GETWAIT may only be used on CQs that have been
           bound to an endpoint. If fi_control is used on an unbound CQ, it will
           return -FI_EOPBADSTATE.
+        * There is limited support for data returned as part of an erroneous
+          asynchronous operation. EQs will return error data for CM operations,
+          CQs do not support returning error data.
+        * As of 1.5, usNIC supports fi_mr_regv, and fi_mr_regattr. Support is
+          limited to a single iov.
+        * Atomic operations are not supported.
     - Resource management is not supported. The application is responsible for
       resource protection.
     - The usnic libfabric provider supports extensions that provide
