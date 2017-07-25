@@ -3583,6 +3583,7 @@ ssize_t _gnix_sendv(struct gnix_fid_ep *ep, const struct iovec *iov,
 						  "invalid memory reg"
 						  "istration (%p).\n",
 						  mdesc[i]);
+					ret = -FI_EINVAL;
 					goto err_mr_reg;
 				}
 
