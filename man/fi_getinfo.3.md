@@ -459,7 +459,8 @@ supported set of modes will be returned in the info structure(s).
   receive operations and as the source buffer for RMA and atomic
   operations must be registered by the application for access domains
   opened with this capability.  This flag is defined for compatibility
-  and is ignored if the FI_MR_LOCAL domain mr_mode bit is set.
+  and is ignored if the application version is 1.5 or later and the
+  domain mr_mode is set to anything other than FI_MR_BASIC or FI_MR_SCALABLE.
   See the domain attribute mr_mode [`fi_domain`(3)](fi_domain.3.html)
   and [`fi_mr`(3)](fi_mr.3.html).
 
