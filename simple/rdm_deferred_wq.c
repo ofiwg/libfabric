@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -628,7 +629,9 @@ int main(int argc, char **argv)
 		 tested_op == FI_OP_COMPARE_ATOMIC)
 		hints->caps |= FI_ATOMIC;
 
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = (FI_MR_LOCAL | FI_MR_VIRT_ADDR |
+				       FI_MR_ALLOCATED);
 
 	ft_skip_mr = 1;
 	ret = ft_init_fabric();
