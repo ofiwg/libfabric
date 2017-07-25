@@ -1,4 +1,4 @@
-.TH "fi_usnic" "7" "2016\-10\-11" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_usnic" "7" "2017\-07\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -84,6 +84,16 @@ usage is limited to releases 1.1 and beyond.
 fi_control with FI_GETWAIT may only be used on CQs that have been bound
 to an endpoint.
 If fi_control is used on an unbound CQ, it will return \-FI_EOPBADSTATE.
+.IP \[bu] 2
+There is limited support for data returned as part of an erroneous
+asynchronous operation.
+EQs will return error data for CM operations, CQs do not support
+returning error data.
+.IP \[bu] 2
+As of 1.5, usNIC supports fi_mr_regv, and fi_mr_regattr.
+Support is limited to a single iov.
+.IP \[bu] 2
+Atomic operations are not supported.
 .RE
 .IP \[bu] 2
 Resource management is not supported.
