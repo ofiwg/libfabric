@@ -76,7 +76,7 @@
  ******************************************************************************/
 static const struct fi_tx_attr rdm_dflt_tx_attr = {
 	.caps = USDF_RDM_CAPS,
-	.mode = USDF_RDM_14_REQ_MODE,
+	.mode = USDF_RDM_SUPP_MODE,
 	.size = USDF_RDM_DFLT_CTX_SIZE,
 	.op_flags = 0,
 	.msg_order = USDF_RDM_MSG_ORDER,
@@ -88,7 +88,7 @@ static const struct fi_tx_attr rdm_dflt_tx_attr = {
 
 static const struct fi_rx_attr rdm_dflt_rx_attr = {
 	.caps = USDF_RDM_CAPS,
-	.mode = USDF_RDM_14_REQ_MODE,
+	.mode = USDF_RDM_SUPP_MODE,
 	.size = USDF_RDM_DFLT_CTX_SIZE,
 	.op_flags = 0,
 	.msg_order = USDF_RDM_MSG_ORDER,
@@ -200,8 +200,23 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 	if (ret < 0)
 		return -FI_ENODATA;
 
-	if (!hints || !hints->domain_attr)
+	if (!hints || !hints->domain_attr) {
+		/* In version < 1.5, if no domain_attr provided,
+		 * we have to provide backward compatibility in case of
+		 * application compiled with version >= 1.5 but still
+		 * request < 1.5 such as Open MPI
+		 */
+		if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+			/* The default for mr_mode should be FI_MR_BASIC. */
+			defaults.mr_mode = FI_MR_BASIC;
+
+			/* FI_REMOTE_COMM is introduced in 1.5, we have to
+			 * remove that from the default for older version.
+			 */
+			defaults.caps &= ~FI_REMOTE_COMM;
+		}
 		goto out;
+	}
 
 	/* how to handle fi_thread_fid, fi_thread_completion, etc?
 	 */
@@ -241,6 +256,9 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 
 	switch (hints->domain_attr->caps) {
 	case FI_REMOTE_COMM:
+		/* FI_REMOTE_COMM is introduced in 1.5, if the user give us
+		 * the flag, this must be a mistake. Fail.
+		 */
 		if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
 			return -FI_ENODATA;
 	case 0:
@@ -253,13 +271,20 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 
 	switch (hints->domain_attr->mr_mode) {
 	case FI_MR_UNSPEC:
-		/* mr_mode behavior changed in version 1.5 from a single flag to mode bits.
-		* Hence, if a version less than v1.5 was requested, return the prior default:
-		* FI_MR_BASIC. */
-		if (FI_VERSION_LT(version, FI_VERSION(1,5)))
+		/* We still have to check here, in case of the user
+		 * provided domain_attr but not mr_mode bit.
+		 */
+		if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
 			defaults.mr_mode = FI_MR_BASIC;
-		else
-			return -FI_ENODATA;
+		} else {
+			/* In >= 1.5, if mr_mode bit is unspecified, we will
+			 * look for FI_LOCAL_MR flag in fi_mode. If is not set,
+			 * we assume FI_MR_SCALABLE (which we don't support)
+			 * and fail.
+			 */
+			if ((hints->mode & FI_LOCAL_MR) == 0)
+				return -FI_ENODATA;
+		}
 		break;
 	default :
 		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
@@ -296,10 +321,9 @@ int usdf_rdm_fill_tx_attr(uint32_t version, struct fi_info *hints,
 	/* clear the mode bits the app doesn't support */
 	defaults.mode &= (hints->mode | hints->tx_attr->mode);
 
-	/* make sure the app supports our required mode bits */
+	/* In version < 1.5, FI_LOCAL_MR is required. */
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		if ((defaults.mode & USDF_RDM_14_REQ_MODE)
-		     != USDF_RDM_14_REQ_MODE)
+		if ((defaults.mode & FI_LOCAL_MR) == 0)
 			return -FI_ENODATA;
 	}
 	defaults.op_flags |= hints->tx_attr->op_flags;
@@ -347,10 +371,9 @@ int usdf_rdm_fill_rx_attr(uint32_t version, struct fi_info *hints,
 	/* clear the mode bits the app doesn't support */
 	defaults.mode &= (hints->mode | hints->rx_attr->mode);
 
-	/* make sure the app supports our required mode bits */
+	/* In version < 1.5, FI_LOCAL_MR is required. */
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		if ((defaults.mode & USDF_RDM_14_REQ_MODE)
-		     != USDF_RDM_14_REQ_MODE)
+		if ((defaults.mode & FI_LOCAL_MR) == 0)
 			return -FI_ENODATA;
 	}
 
