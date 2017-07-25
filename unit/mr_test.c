@@ -224,6 +224,10 @@ int main(int argc, char **argv)
 	}
 
 	hints->mode = ~0;
+	hints->domain_attr->mode = ~0;
+	/* This would prevent testing "Scalable MR" which this test is not doing
+	 * it as of this change anyway */
+	hints->domain_attr->mr_mode = ~0;
 
 	hints->caps |= FI_MSG | FI_RMA;
 
