@@ -39,6 +39,17 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 		     struct fi_info *core_info)
 {
 	core_info->caps = FI_MSG;
+
+	/* Support modes that ofi_rxm could handle */
+	if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
+		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
+	else
+		core_info->mode = FI_LOCAL_MR;
+
+	/* Disable modes that ofi_rxm can't handle */
+	core_info->mode &= ~(FI_RESTRICTED_COMP | FI_NOTIFY_FLAGS_ONLY |
+			     FI_ASYNC_IOV | FI_MSG_PREFIX);
+
 	if (hints) {
 		core_info->mode = hints->mode;
 
@@ -49,16 +60,21 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 			core_info->domain_attr->mr_mode =
 				hints->domain_attr->mr_mode;
 
-			if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
-				core_info->domain_attr->mr_mode |=
-					(FI_MR_LOCAL | OFI_MR_BASIC_MAP);
-
 			if (hints->domain_attr->caps)
 				core_info->domain_attr->caps =
 					hints->domain_attr->caps | FI_MSG;
 			if (hints->domain_attr->mode)
 				core_info->domain_attr->mode = hints->domain_attr->mode;
 		}
+	} else {
+		/* Since hints is NULL fake support for FI_MR_BASIC to allow
+		 * discovery of core providers like verbs which require it */
+		if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
+			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
+		else
+			/* Specify FI_MR_UNSPEC so that providers that support
+			 * FI_MR_SCALABLE aren't dropped */
+			core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
 	}
 	core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	core_info->ep_attr->type = FI_EP_MSG;
