@@ -1,4 +1,4 @@
-.TH "fi_rxm" "7" "2017\-07\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rxm" "7" "2017\-07\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The RxM (RDM over MSG) Utility Provider
@@ -33,7 +33,9 @@ is supported: \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[], \f[I]FI_RMA\f[].
 .PP
 \f[I]Addressing Formats\f[] : FI_SOCKADDR, FI_SOCKADDR_IN
 .PP
-\f[I]Memory Region\f[] : FI_MR_BASIC
+\f[I]Memory Region\f[] : FI_MR_VIRT_ADDR, FI_MR_ALLOCATED,
+FI_MR_PROV_KEY MR mode bits would be required from the app in case the
+core provider requires it.
 .SH LIMITATIONS
 .PP
 When using RxM provider, some limitations from the underlying MSG
