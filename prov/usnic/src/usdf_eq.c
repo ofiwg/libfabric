@@ -214,6 +214,7 @@ static ssize_t usdf_eq_readerr(struct fid_eq *feq,
 
 	/* make sure there is an error on top */
 	if (usdf_eq_empty(eq) || !usdf_eq_error(eq)) {
+		pthread_spin_unlock(&eq->eq_lock);
 		ret = -FI_EAGAIN;
 		goto done;
 	}
