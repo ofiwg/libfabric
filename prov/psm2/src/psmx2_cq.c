@@ -107,6 +107,7 @@ struct psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 		event->cqe.err.data = data;
 		event->cqe.err.tag = tag;
 		event->cqe.err.olen = olen;
+		event->cqe.err.flags = flags;
 		event->cqe.err.prov_errno = PSM2_INTERNAL_ERR;
 		goto out;
 	}
