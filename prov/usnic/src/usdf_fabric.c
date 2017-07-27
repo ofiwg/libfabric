@@ -242,21 +242,26 @@ fail:
 	return ret;		// fi_freeinfo() in caller frees all
 }
 
-static int validate_hints_mode(struct fi_info *hints,
-				uint64_t supported,
-				uint64_t required,
-				uint64_t *mode_out)
+static int validate_modebits(uint32_t version, struct fi_info *hints,
+			       uint64_t supported, uint64_t *mode_out)
 {
 	uint64_t mode;
 
-	if (hints) {
-		mode = hints->mode & supported;
-		if ((mode & required) != required)
-			return -FI_ENODATA;
-		*mode_out = mode;
-	} else {
+	/* If there is no hints, return everything we supported. */
+	if (!hints) {
 		*mode_out = supported;
+		return FI_SUCCESS;
 	}
+
+	mode = hints->mode & supported;
+
+	/* Before version 1.5, FI_LOCAL_MR is a requirement. */
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((mode & FI_LOCAL_MR) == 0)
+			return -FI_ENODATA;
+	}
+
+	*mode_out = mode;
 
 	return FI_SUCCESS;
 }
@@ -283,19 +288,8 @@ static int usdf_fill_info_dgram(
 
 	fi->caps = USDF_DGRAM_CAPS;
 
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		ret = validate_hints_mode(hints,
-					  USDF_DGRAM_14_SUPP_MODE,
-					  USDF_DGRAM_14_REQ_MODE,
-					  &fi->mode);
-	} else {
-		/* in >= 1.5, FI_LOCAL_MR is not required anymore. */
-		ret = validate_hints_mode(hints,
-					  USDF_DGRAM_15_SUPP_MODE,
-					  0,
-					  &fi->mode);
-	}
-
+	ret = validate_modebits(version, hints,
+				  USDF_DGRAM_SUPP_MODE, &fi->mode);
 	if (ret)
 		goto fail;
 
@@ -389,19 +383,8 @@ static int usdf_fill_info_msg(
 
 	fi->caps = USDF_MSG_CAPS;
 
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		ret = validate_hints_mode(hints,
-					  USDF_MSG_14_SUPP_MODE,
-					  USDF_MSG_14_REQ_MODE,
-					  &fi->mode);
-	} else {
-		/* in >= 1.5, FI_LOCAL_MR is not required anymore. */
-		ret = validate_hints_mode(hints,
-					  FI_LOCAL_MR,
-					  0,
-					  &fi->mode);
-	}
-
+	ret = validate_modebits(version, hints,
+				  USDF_MSG_SUPP_MODE, &fi->mode);
 	if (ret)
 		goto fail;
 
@@ -489,19 +472,8 @@ static int usdf_fill_info_rdm(
 
 	fi->caps = USDF_RDM_CAPS;
 
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		ret = validate_hints_mode(hints,
-					  USDF_RDM_14_SUPP_MODE,
-					  USDF_RDM_14_REQ_MODE,
-					  &fi->mode);
-	} else {
-		/* in >= 1.5, FI_LOCAL_MR is not required anymore. */
-		ret = validate_hints_mode(hints,
-					  FI_LOCAL_MR,
-					  0,
-					  &fi->mode);
-	}
-
+	ret = validate_modebits(version, hints,
+				  USDF_RDM_SUPP_MODE, &fi->mode);
 	if (ret)
 		goto fail;
 
