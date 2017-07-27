@@ -132,13 +132,6 @@ static int run_test_loop(void)
 			if (ret < 1)
 				goto cleanup_and_close;
 
-			/* Check Data */
-			if (status.buf != rbufs[j]) {
-				printf("ERROR bad completion buf %p rbuf %p\n", status.buf, rbufs[j]);
-				ret = -FI_EOTHER;
-				goto cleanup_and_close;
-			}
-
 			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 				ret = ft_check_buf(status.buf,
 						opts.transfer_size);
@@ -159,6 +152,7 @@ static int run_test_loop(void)
 					getpid(), i, num_iters);
 	}
 
+	ft_sock_sync(0);
 	printf("%d GOOD all done\n", getpid());
 
 cleanup_and_close:
