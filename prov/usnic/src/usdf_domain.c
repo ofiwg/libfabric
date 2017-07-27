@@ -441,3 +441,43 @@ int usdf_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 {
 	return -FI_EOPNOTSUPP;
 }
+
+int usdf_catch_dom_attr(uint32_t version, struct fi_domain_attr *dom_attr)
+{
+	/* version 1.5 introduced new bits. If the user asked for older
+	 * version, we can't return these new bits.
+	 */
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		/* We checked mr_mode compatibility before calling
+		 * this function. This means it is safe to return
+		 * 1.4 default mr_mode.
+		 */
+		dom_attr->mr_mode = FI_MR_BASIC;
+
+		dom_attr->caps &= ~FI_REMOTE_COMM;
+	}
+
+	return FI_SUCCESS;
+}
+
+int usdf_catch_tx_attr(uint32_t version, struct fi_tx_attr *tx_attr)
+{
+	/* In version < 1.5, FI_LOCAL_MR is required. */
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((tx_attr->mode & FI_LOCAL_MR) == 0)
+			return -FI_ENODATA;
+	}
+
+	return FI_SUCCESS;
+}
+
+int usdf_catch_rx_attr(uint32_t version, struct fi_rx_attr *rx_attr)
+{
+	/* In version < 1.5, FI_LOCAL_MR is required. */
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((rx_attr->mode & FI_LOCAL_MR) == 0)
+			return -FI_ENODATA;
+	}
+
+	return FI_SUCCESS;
+}

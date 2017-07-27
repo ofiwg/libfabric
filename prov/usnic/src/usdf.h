@@ -511,4 +511,9 @@ void usdf_setup_fake_ibv_provider(void);
 /* passive endpoint functions */
 int usdf_pep_steal_socket(struct usdf_pep *pep, int *is_bound, int *sock_o);
 
+/* Utility functions */
+int usdf_catch_dom_attr(uint32_t version, struct fi_domain_attr *dom_attr);
+int usdf_catch_tx_attr(uint32_t version, struct fi_tx_attr *tx_attr);
+int usdf_catch_rx_attr(uint32_t version, struct fi_rx_attr *rx_attr);
+
 #endif /* _USDF_H_ */
