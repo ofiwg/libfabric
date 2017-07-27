@@ -135,6 +135,8 @@ static int do_transfers(void)
 				return ret;
 		}
 	}
+
+	ft_finalize();
 	printf("PASSED multi ep\n");
 	return 0;
 }
@@ -258,6 +260,7 @@ static int run_test(void)
 	}
 
 	tx_cq_cntr = rx_cq_cntr = 0;
+	tx_seq = rx_seq = 0;
 	ret = do_transfers();
 	if (ret)
 		return ret;
