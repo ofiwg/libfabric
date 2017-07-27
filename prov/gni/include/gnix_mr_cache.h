@@ -110,6 +110,7 @@
 
 /* provider includes */
 #include "gnix_util.h"
+#include "gnix_smrn.h"
 
 /* struct declarations */
 struct _gnix_fi_reg_context {
@@ -150,7 +151,7 @@ typedef struct gnix_mr_cache_attr {
 	void *reg_context;
 	void *dereg_context;
 	void *destruct_context;
-	struct gnix_mr_notifier *notifier;
+	struct gnix_smrn *smrn;
 	void *(*reg_callback)(void *handle, void *address, size_t length,
 			struct _gnix_fi_reg_context *fi_reg_context,
 			void *context);
@@ -189,6 +190,7 @@ struct gnix_mrce_storage {
 typedef struct gnix_mr_cache {
 	gnix_mrc_state_e state;
 	gnix_mr_cache_attr_t attr;
+	struct gnix_smrn_rq rq;
 	struct dlist_entry lru_head;
 	struct gnix_mrce_storage inuse;
 	struct gnix_mrce_storage stale;

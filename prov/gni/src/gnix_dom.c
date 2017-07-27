@@ -45,6 +45,7 @@
 #include "gnix_xpmem.h"
 #include "gnix_hashtable.h"
 #include "gnix_auth_key.h"
+#include "gnix_smrn.h"
 
 #define GNIX_MR_MODE_DEFAULT FI_MR_BASIC
 #define GNIX_NUM_PTAGS 256
@@ -88,8 +89,7 @@ static void __domain_destruct(void *obj)
 					"registration cache\n");
 	}
 
-	/* TODO: known issue of multiple consumers of notifier notifications */
-	ret = _gnix_notifier_close(domain->mr_cache_attr.notifier);
+	ret = _gnix_smrn_close(domain->mr_cache_attr.smrn);
 	if (ret != FI_SUCCESS)
 		GNIX_FATAL(FI_LOG_MR, "failed to close MR notifier\n");
 
@@ -102,7 +102,6 @@ static void __domain_destruct(void *obj)
 
 	memset(domain, 0, sizeof *domain);
 	free(domain);
-
 }
 
 static void __stx_destruct(void *obj)
@@ -625,7 +624,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->mr_cache_attr.dereg_context = NULL;
 	domain->mr_cache_attr.destruct_context = NULL;
 
-	ret = _gnix_notifier_open(&domain->mr_cache_attr.notifier);
+	ret = _gnix_smrn_open(&domain->mr_cache_attr.smrn);
 	if (ret != FI_SUCCESS)
 		goto err;
 
