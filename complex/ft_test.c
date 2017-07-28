@@ -128,11 +128,14 @@ static int ft_init_control(void)
 	}
 
 	ret = ft_init_rx_control();
-	if (!ret)
-		ret = ft_init_tx_control();
+	if (ret)
+		return ret;
+
+	ret = ft_init_tx_control();
+	if (ret)
+		return ret;
 
 	ret = ft_init_atomic_control(&ft_atom_ctrl);
-
 	return ret;
 }
 
