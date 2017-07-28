@@ -142,8 +142,6 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 	while(!dlist_empty(&pool->buf_list)) {
 		entry = pool->buf_list.next;
 		buf = container_of(entry, struct rxm_buf, entry);
-		/* Cancel pre-posted context and release it */
-		(void)fi_cancel(&buf->msg_ep->fid, buf);
 		rxm_buf_release(pool, buf);
 	}
 	fastlock_destroy(&pool->lock);
@@ -654,6 +652,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	} else {
 		tx_entry->comp_flags = FI_MSG;
 	}
+	tx_entry->comp_flags |= FI_SEND;
 
 	if (pkt->hdr.size > rxm_ep->rxm_info->tx_attr->inject_size) {
 		if (flags & FI_INJECT) {

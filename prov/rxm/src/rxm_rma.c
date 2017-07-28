@@ -38,7 +38,7 @@ typedef ssize_t rxm_rma_msg_fn(struct fid_ep *ep_fid,
 
 static int rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 			     const struct fi_msg_rma *msg, uint64_t flags,
-			     rxm_rma_msg_fn rma_msg)
+			     rxm_rma_msg_fn rma_msg, uint64_t comp_flags)
 {
 	struct rxm_domain *rxm_domain;
 	struct rxm_tx_entry *tx_entry;
@@ -54,6 +54,7 @@ static int rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	tx_entry->ep = rxm_ep;
 	tx_entry->context = msg->context;
 	tx_entry->flags = flags;
+	tx_entry->comp_flags = FI_RMA | comp_flags;
 
 	msg_rma = *msg;
 	msg_rma.context = tx_entry;
@@ -95,7 +96,7 @@ ssize_t	rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	return rxm_ep_rma_common(rxm_conn->msg_ep, rxm_ep, msg, flags,
-				 fi_readmsg);
+				 fi_readmsg, FI_READ);
 }
 
 static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
@@ -194,6 +195,7 @@ static int rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	tx_entry->state = RXM_TX;
 	tx_entry->ep = rxm_ep;
 	tx_entry->flags = flags;
+	tx_entry->comp_flags = FI_RMA | FI_WRITE;
 	tx_entry->tx_buf = tx_buf;
 
 	tx_buf->hdr.msg_ep = msg_ep;
@@ -243,7 +245,7 @@ ssize_t	rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return rxm_ep_rma_inject(rxm_conn->msg_ep, rxm_ep, msg, flags);
 	else
 		return rxm_ep_rma_common(rxm_conn->msg_ep, rxm_ep, msg, flags,
-					 fi_writemsg);
+					 fi_writemsg, FI_WRITE);
 }
 
 static ssize_t rxm_ep_write(struct fid_ep *ep_fid, const void *buf,
