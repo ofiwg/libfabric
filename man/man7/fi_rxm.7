@@ -1,4 +1,4 @@
-.TH "fi_rxm" "7" "2017\-07\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rxm" "7" "2017\-07\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The RxM (RDM over MSG) Utility Provider
@@ -73,6 +73,8 @@ FI_ADDR_STR, FI_SYNC_ERR
 Reporting unknown source addr data as part of completions
 .IP \[bu] 2
 Triggered operations
+.IP \[bu] 2
+fi_cq_sread, fi_cq_sreadfrom and fi_cq_signal calls.
 .SS Usage limitations
 .PP
 RxM provider should work fine for client \- server programs like
