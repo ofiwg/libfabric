@@ -581,8 +581,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	info->tx_attr->iov_limit 		= device_attr.max_sge;
 	info->tx_attr->rma_iov_limit		= device_attr.max_sge;
 
-	info->rx_attr->size 			= MIN(device_attr.max_qp_wr,
-						      device_attr.max_srq_wr);
+	info->rx_attr->size 			= device_attr.max_srq_wr ?
+						  MIN(device_attr.max_qp_wr,
+						      device_attr.max_srq_wr) :
+						      device_attr.max_qp_wr;
 	info->rx_attr->iov_limit 		= MIN(device_attr.max_sge,
 						      device_attr.max_srq_sge);
 
