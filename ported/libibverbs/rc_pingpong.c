@@ -598,11 +598,13 @@ int main(int argc, char *argv[])
 		}
 
 		if (rd < 0) {
-			fi_cq_readerr(ctx->cq, &cq_err, 0);
-			fprintf(stderr, "cq fi_cq_readerr() %s (%d)\n", 
-				fi_cq_strerror(ctx->cq, cq_err.err, cq_err.err_data, NULL, 0),
-				cq_err.err);
 			rc = rd;
+			rd = fi_cq_readerr(ctx->cq, &cq_err, 0);
+			if (rd == 1) {
+				fprintf(stderr, "fi_cq_readerr() %s (%d)\n",
+					fi_cq_strerror(ctx->cq, cq_err.err,
+					cq_err.err_data, NULL, 0), cq_err.err);
+			}
 			goto err3;
 		}
 

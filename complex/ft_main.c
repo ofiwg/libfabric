@@ -361,23 +361,33 @@ static int ft_server_child()
 	return ret;
 }
 
+static int ft_recv_test_info(void)
+{
+	int ret;
+
+	ret = ft_sock_recv(sock, &test_info, sizeof test_info);
+	if (ret)
+		return ret;
+
+	test_info.node[sizeof(test_info.node) - 1] = '\0';
+	test_info.service[sizeof(test_info.service) - 1] = '\0';
+	test_info.prov_name[sizeof(test_info.prov_name) - 1] = '\0';
+	test_info.fabric_name[sizeof(test_info.fabric_name) - 1] = '\0';
+	return 0;
+}
+
 static int ft_fw_server(void)
 {
 	int ret;
 	pid_t pid;
 
 	do {
-		ret = ft_sock_recv(sock, &test_info, sizeof test_info);
+		ret = ft_recv_test_info();
 		if (ret) {
 			if (ret == -FI_ENOTCONN)
 				ret = 0;
 			break;
 		}
-
-		test_info.node[sizeof(test_info.node) - 1] = '\0';
-		test_info.service[sizeof(test_info.service) - 1] = '\0';
-		test_info.prov_name[sizeof(test_info.prov_name) - 1] = '\0';
-		test_info.fabric_name[sizeof(test_info.fabric_name) - 1] = '\0';
 
 		pid = fork();
 		if (!pid) {
@@ -423,8 +433,7 @@ static int ft_client_child(void)
 		if (result) {
 			FT_PRINTERR("fi_getinfo", result);
 		} else if (info->next) {
-			printf("fi_getinfo returned multiple matches\n");
-			ret = -FI_E2BIG;
+			printf("WARNING: fi_getinfo returned multiple matches!\n");
 		} else {
 			fabric_info = info;
 			result = ft_run_test();
@@ -448,9 +457,9 @@ static int ft_client_child(void)
 				goto out;
 		}
 
-		ret = ft_sock_recv(sock, &test_info, sizeof test_info);
+		ret = ft_recv_test_info();
 		if (ret) {
-			FT_PRINTERR("ft_sock_recv", ret);
+			FT_PRINTERR("ft_recv_test_info", ret);
 			goto out;
 		}
 		ft_fw_convert_info(hints, &test_info);
@@ -486,9 +495,9 @@ static int ft_fw_client(void)
 			return ret;
 		}
 
-		ret = ft_sock_recv(sock, &test_info, sizeof test_info);
+		ret = ft_recv_test_info();
 		if (ret) {
-			FT_PRINTERR("ft_sock_recv", ret);
+			FT_PRINTERR("ft_recv_test_info", ret);
 			return ret;
 		}
 
