@@ -70,6 +70,39 @@ static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
+#if ENABLE_DEBUG
+static void rxm_cq_log_comp(uint64_t flags)
+{
+	flags &= (FI_SEND | FI_WRITE | FI_READ | FI_REMOTE_READ |
+		  FI_REMOTE_WRITE);
+
+	switch(flags) {
+	case FI_SEND:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting send completion\n");
+		break;
+	case FI_WRITE:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting write completion\n");
+		break;
+	case FI_READ:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting read completion\n");
+		break;
+	case FI_REMOTE_READ:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote read completion\n");
+		break;
+	case FI_REMOTE_WRITE:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote write completion\n");
+		break;
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown completion\n");
+	}
+}
+#else
+static void rxm_cq_log_comp(uint64_t flags)
+{
+	// NOP
+}
+#endif
+
 int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
 		void *buf, uint64_t data, uint64_t tag)
 {
@@ -130,6 +163,7 @@ static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 					"Unable to report completion\n");
 			return ret;
 		}
+		rxm_cq_log_comp(tx_entry->comp_flags);
 	}
 	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
 	return 0;
@@ -624,9 +658,9 @@ static struct fi_ops_cq rxm_cq_ops = {
 	.read = ofi_cq_read,
 	.readfrom = ofi_cq_readfrom,
 	.readerr = ofi_cq_readerr,
-	.sread = ofi_cq_sread,
-	.sreadfrom = ofi_cq_sreadfrom,
-	.signal = ofi_cq_signal,
+	.sread = fi_no_cq_sread,
+	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
 	.strerror = rxm_cq_strerror,
 };
 
