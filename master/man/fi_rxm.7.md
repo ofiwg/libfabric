@@ -83,6 +83,8 @@ RxM provider does not support the following features:
 
   * Triggered operations
 
+  * fi_cq_sread, fi_cq_sreadfrom and fi_cq_signal calls.
+
 ## Usage limitations
 
 RxM provider should work fine for client - server programs like fabtests. Support for MPI, SHMEM
