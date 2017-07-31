@@ -1444,6 +1444,33 @@ static int psmx_atomic_compwritevalid(struct fid_ep *ep,
 	return 0;
 }
 
+int psmx_query_atomic(struct fid_domain *doamin, enum fi_datatype datatype,
+		      enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags)
+{
+	int ret;
+	size_t count;
+
+	if (flags & FI_TAGGED)
+		return -FI_EOPNOTSUPP;
+
+	if (flags & FI_COMPARE_ATOMIC) {
+		if (flags & FI_FETCH_ATOMIC)
+			return -FI_EINVAL;
+		ret = psmx_atomic_compwritevalid(NULL, datatype, op, &count);
+	} else if (flags & FI_FETCH_ATOMIC) {
+		ret = psmx_atomic_readwritevalid(NULL, datatype, op, &count);
+	} else {
+		ret = psmx_atomic_writevalid(NULL, datatype, op, &count);
+	}
+
+	if (attr && !ret) {
+		attr->size = ofi_datatype_size(datatype);
+		attr->count = count;
+	}
+
+	return ret;
+}
+
 struct fi_ops_atomic psmx_atomic_ops = {
 	.size = sizeof(struct fi_ops_atomic),
 	.write = psmx_atomic_write,

@@ -590,6 +590,9 @@ int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
+int	psmx_query_atomic(struct fid_domain *doamin, enum fi_datatype datatype,
+			  enum fi_op op, struct fi_atomic_attr *attr,
+			  uint64_t flags);
 
 static inline void psmx_fabric_acquire(struct psmx_fid_fabric *fabric)
 {
