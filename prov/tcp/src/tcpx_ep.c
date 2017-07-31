@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,58 +40,58 @@
 #include <net/if.h>
 #include <fi_util.h>
 
-ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-				fi_addr_t src_addr, void *context)
+static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+			 fi_addr_t src_addr, void *context)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-				 size_t count, fi_addr_t src_addr, void *context)
+static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+			  size_t count, fi_addr_t src_addr, void *context)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-				   uint64_t flags)
+static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
+			    uint64_t flags)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-				fi_addr_t dest_addr, void *context)
+static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+			 fi_addr_t dest_addr, void *context)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-				 size_t count, fi_addr_t dest_addr, void *context)
+static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+			  size_t count, fi_addr_t dest_addr, void *context)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-				   uint64_t flags)
+static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+			    uint64_t flags)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t	tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
-				  fi_addr_t dest_addr)
+static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
+			   fi_addr_t dest_addr)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-					uint64_t data, fi_addr_t dest_addr, void *context)
+static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+			     uint64_t data, fi_addr_t dest_addr, void *context)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
-ssize_t	tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-					  uint64_t data, fi_addr_t dest_addr)
+static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+			       uint64_t data, fi_addr_t dest_addr)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
 
@@ -104,8 +104,8 @@ static struct fi_ops_msg tcpx_msg_ops = {
 	.sendv = tcpx_sendv,
 	.sendmsg = tcpx_sendmsg,
 	.inject = tcpx_inject,
-	.senddata = fi_no_msg_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.senddata = tcpx_senddata,
+	.injectdata = tcpx_injectdata,
 };
 
 static struct fi_ops_cm tcpx_cm_ops = {
@@ -137,10 +137,9 @@ static int tcpx_ep_close(struct fid *fid)
 	return 0;
 }
 
-
-int	tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops tcpx_ep_fi_ops = {
@@ -162,13 +161,13 @@ static struct fi_ops_ep tcpx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-void tcpx_ep_progress(struct util_ep *util_ep)
+static void tcpx_ep_progress(struct util_ep *util_ep)
 {
 }
 
-int tcpx_ep_init(struct tcpx_ep *ep, struct fi_info *info)
+static int tcpx_ep_init(struct tcpx_ep *ep, struct fi_info *info)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -204,7 +203,7 @@ err:
 	return ret;
 }
 
-int	tcpx_pep_fi_close(struct fid *fid)
+static int tcpx_pep_fi_close(struct fid *fid)
 {
 	struct tcpx_pep *pep;
 
@@ -215,7 +214,7 @@ int	tcpx_pep_fi_close(struct fid *fid)
 
 }
 
-int	tcpx_pep_fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int tcpx_pep_fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct tcpx_pep *pep;
 	struct util_eq *eq;
@@ -243,9 +242,9 @@ static struct fi_ops tcpx_pep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int	tcpx_pep_listen(struct fid_pep *pep)
+static int tcpx_pep_listen(struct fid_pep *pep)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
@@ -263,9 +262,9 @@ static struct fi_ops_cm tcpx_pep_cm_ops = {
 };
 
 
-int tcpx_verify_info(uint32_t version, struct fi_info *info)
+static int tcpx_verify_info(uint32_t version, struct fi_info *info)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops_ep tcpx_pep_ops = {
@@ -280,22 +279,22 @@ static struct fi_ops_ep tcpx_pep_ops = {
 
 
 int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-			struct fid_pep **pep, void *context)
+		    struct fid_pep **pep, void *context)
 {
 	int ret;
 	struct tcpx_pep *_pep;
 
-	if(info) {
+	if (info) {
 		ret = tcpx_verify_info(fabric->api_version, info);
-		if(ret) {
+		if (ret) {
 			return ret;
 		}
 	}
 	_pep = calloc(1, sizeof(*_pep));
-	if(!_pep)
+	if (!_pep)
 		return -FI_ENOMEM;
 
-	if(info) {
+	if (info) {
 		_pep->info = *info;
 	} else {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"invalid info");

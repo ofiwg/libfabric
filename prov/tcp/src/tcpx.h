@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -62,8 +61,8 @@
 #ifndef _TCP_H_
 #define _TCP_H_
 
-#define TCPX_MAJOR_VERSION 1
-#define TCPX_MINOR_VERSION 0
+#define TCPX_MAJOR_VERSION 0
+#define TCPX_MINOR_VERSION 1
 
 
 extern struct fi_provider tcpx_prov;
@@ -74,24 +73,22 @@ extern struct fi_info tcpx_info;
 
 
 int tcpx_fabric(struct fi_fabric_attr *attr,
-				struct fid_fabric **fabric,
-				void *context);
-
-int tcpx_fabric_close(fid_t fid);
+		struct fid_fabric **fabric,
+		void *context);
 
 int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-					struct fid_pep **pep, void *context);
+		    struct fid_pep **pep, void *context);
 
 int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-					 struct fid_domain **domain, void *context);
+		     struct fid_domain **domain, void *context);
 
 
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
-				  struct fid_ep **ep_fid, void *context);
+		  struct fid_ep **ep_fid, void *context);
 
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-				 struct fid_cq **cq_fid, void *context);
+		 struct fid_cq **cq_fid, void *context);
 
 struct tcpx_pep {
 	struct fid_pep pep;

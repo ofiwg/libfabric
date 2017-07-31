@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,11 +41,11 @@
 #include <fi_util.h>
 
 static int tcpx_getinfo (uint32_t version, const char *node, const char *service,
-						uint64_t flags, struct fi_info *hints,
-						struct fi_info **info)
+			 uint64_t flags, struct fi_info *hints,
+			 struct fi_info **info)
 {
 	return util_getinfo(&tcpx_util_prov, version, node, service, flags,
-					   hints, info);
+			    hints, info);
 }
 
 static void fi_tcp_fini(void)

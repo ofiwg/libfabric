@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -69,7 +69,7 @@ static struct fi_ops tcpx_domain_fi_ops = {
 };
 
 int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-					 struct fid_domain **domain, void *context)
+		     struct fid_domain **domain, void *context)
 {
 	struct util_domain *util_domain;
 	int ret;

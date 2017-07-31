@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,16 +36,16 @@
 struct fi_tx_attr tcpx_tx_attr = {
 	.caps = FI_MSG | FI_SEND,
 	.comp_order = FI_ORDER_STRICT,
-	.inject_size = 1472,
-	.size = 1024,
+	.inject_size = 64,
+	.size = 256,
 	.iov_limit = TCPX_IOV_LIMIT
 };
 
 struct fi_rx_attr tcpx_rx_attr = {
-	.caps = FI_MSG | FI_RECV | FI_SOURCE,
+	.caps = FI_MSG | FI_RECV,
 	.comp_order = FI_ORDER_STRICT,
-	.total_buffered_recv = (1 << 16),
-	.size = 1024,
+	.total_buffered_recv = 0,
+	.size = 256,
 	.iov_limit = TCPX_IOV_LIMIT
 };
 
@@ -53,7 +53,7 @@ struct fi_ep_attr tcpx_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.protocol_version = 0,
-	.max_msg_size = 1472,
+	.max_msg_size = 256,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1
 };
@@ -67,7 +67,7 @@ struct fi_domain_attr tcpx_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = 0,
 	.cq_cnt = 256,
-	.ep_cnt = 256,
+	.ep_cnt = 1024,
 	.tx_ctx_cnt = 256,
 	.rx_ctx_cnt = 256,
 	.max_ep_tx_ctx = 1,
@@ -80,7 +80,7 @@ struct fi_fabric_attr tcpx_fabric_attr = {
 };
 
 struct fi_info tcpx_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE,
+	.caps = FI_MSG | FI_SEND | FI_RECV,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &tcpx_tx_attr,
 	.rx_attr = &tcpx_rx_attr,

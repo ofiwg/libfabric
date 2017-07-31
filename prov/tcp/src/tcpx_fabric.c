@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -49,7 +49,7 @@ struct fi_ops_fabric tcpx_fabric_ops = {
 	.trywait = ofi_trywait
 };
 
-int tcpx_fabric_close(fid_t fid)
+static int tcpx_fabric_close(fid_t fid)
 {
 	int ret;
 	struct util_fabric *fabric;
@@ -72,7 +72,7 @@ struct fi_ops tcpx_fabric_fi_ops = {
 };
 
 int tcpx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-					  void *context)
+		void *context)
 {
 	int ret;
 	struct util_fabric *util_fabric;
