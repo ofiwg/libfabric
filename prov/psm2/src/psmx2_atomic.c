@@ -2099,16 +2099,11 @@ static ssize_t psmx2_atomic_compwritev(struct fid_ep *ep,
 					      context, ep_priv->tx_flags);
 }
 
-static int psmx2_atomic_writevalid(struct fid_ep *ep,
-				   enum fi_datatype datatype,
-				   enum fi_op op, size_t *count)
+static int psmx2_atomic_writevalid_internal(size_t chunk_size,
+					    enum fi_datatype datatype,
+					    enum fi_op op, size_t *count)
 {
-	int chunk_size;
-	struct psmx2_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
-
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
@@ -2129,23 +2124,17 @@ static int psmx2_atomic_writevalid(struct fid_ep *ep,
 		return -FI_EOPNOTSUPP;
 	}
 
-	if (count) {
-		chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
+	if (count)
 		*count = chunk_size / ofi_datatype_size(datatype);
-	}
+
 	return 0;
 }
 
-static int psmx2_atomic_readwritevalid(struct fid_ep *ep,
-				       enum fi_datatype datatype,
-				       enum fi_op op, size_t *count)
+static int psmx2_atomic_readwritevalid_internal(size_t chunk_size,
+						enum fi_datatype datatype,
+						enum fi_op op, size_t *count)
 {
-	int chunk_size;
-	struct psmx2_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
-
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
@@ -2167,23 +2156,18 @@ static int psmx2_atomic_readwritevalid(struct fid_ep *ep,
 		return -FI_EOPNOTSUPP;
 	}
 
-	if (count) {
-		chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
+	if (count)
 		*count = chunk_size / ofi_datatype_size(datatype);
-	}
+
 	return 0;
 }
 
-static int psmx2_atomic_compwritevalid(struct fid_ep *ep,
-				       enum fi_datatype datatype,
-				       enum fi_op op, size_t *count)
+static int psmx2_atomic_compwritevalid_internal(size_t chunk_size,
+						enum fi_datatype datatype,
+						enum fi_op op, size_t *count)
 {
-	int chunk_size;
-	struct psmx2_fid_ep *ep_priv;
 
-	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
-
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
@@ -2215,11 +2199,81 @@ static int psmx2_atomic_compwritevalid(struct fid_ep *ep,
 		return -FI_EOPNOTSUPP;
 	}
 
-	if (count) {
-		chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
+	if (count)
 		*count = chunk_size / (2 * ofi_datatype_size(datatype));
-	}
+
 	return 0;
+}
+
+static int psmx2_atomic_writevalid(struct fid_ep *ep,
+				   enum fi_datatype datatype,
+				   enum fi_op op, size_t *count)
+{
+	struct psmx2_fid_ep *ep_priv;
+	size_t chunk_size;
+
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
+	return psmx2_atomic_writevalid_internal(chunk_size, datatype, op, count);
+}
+
+static int psmx2_atomic_readwritevalid(struct fid_ep *ep,
+				       enum fi_datatype datatype,
+				       enum fi_op op, size_t *count)
+{
+	struct psmx2_fid_ep *ep_priv;
+	size_t chunk_size;
+
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
+	return psmx2_atomic_readwritevalid_internal(chunk_size, datatype, op, count);
+}
+
+static int psmx2_atomic_compwritevalid(struct fid_ep *ep,
+				       enum fi_datatype datatype,
+				       enum fi_op op, size_t *count)
+{
+	struct psmx2_fid_ep *ep_priv;
+	size_t chunk_size;
+
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
+	return psmx2_atomic_compwritevalid_internal(chunk_size, datatype, op, count);
+}
+
+int psmx2_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		       enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags)
+{
+	struct psmx2_fid_domain *domain_priv;
+	size_t chunk_size;
+	size_t count;
+	int ret;
+
+	domain_priv = container_of(domain, struct psmx2_fid_domain, util_domain.domain_fid);
+	chunk_size = domain_priv->base_trx_ctxt->psm2_am_param.max_request_short;
+
+	if (flags & FI_TAGGED)
+		return -FI_EOPNOTSUPP;
+
+	if (flags & FI_COMPARE_ATOMIC) {
+		if (flags & FI_FETCH_ATOMIC)
+			return -FI_EINVAL;
+		ret = psmx2_atomic_compwritevalid_internal(chunk_size, datatype,
+							   op, &count);
+	} else if (flags & FI_FETCH_ATOMIC) {
+		ret = psmx2_atomic_readwritevalid_internal(chunk_size, datatype,
+							   op, &count);
+	} else {
+		ret = psmx2_atomic_writevalid_internal(chunk_size, datatype,
+						       op, &count);
+	}
+
+	if (attr && !ret) {
+		attr->size = ofi_datatype_size(datatype);
+		attr->count = count;
+	}
+
+	return ret;
 }
 
 struct fi_ops_atomic psmx2_atomic_ops = {

@@ -953,6 +953,9 @@ int	psmx2_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
 int	psmx2_wait_trywait(struct fid_fabric *fabric, struct fid **fids,
 			   int count);
+int	psmx2_query_atomic(struct fid_domain *doamin, enum fi_datatype datatype,
+			   enum fi_op op, struct fi_atomic_attr *attr,
+			   uint64_t flags);
 
 static inline void psmx2_fabric_acquire(struct psmx2_fid_fabric *fabric)
 {
