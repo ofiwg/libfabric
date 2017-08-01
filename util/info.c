@@ -114,6 +114,7 @@ static int str2cap(char *inputstr, uint64_t *value)
 	ORCASE(FI_RMA);
 	ORCASE(FI_TAGGED);
 	ORCASE(FI_ATOMIC);
+	ORCASE(FI_MULTICAST);
 
 	ORCASE(FI_READ);
 	ORCASE(FI_WRITE);
@@ -129,15 +130,13 @@ static int str2cap(char *inputstr, uint64_t *value)
 	ORCASE(FI_TRIGGER);
 	ORCASE(FI_FENCE);
 
-	ORCASE(FI_EVENT);
-	ORCASE(FI_INJECT);
-	ORCASE(FI_INJECT_COMPLETE);
-	ORCASE(FI_TRANSMIT_COMPLETE);
-	ORCASE(FI_DELIVERY_COMPLETE);
-
+	ORCASE(FI_SOURCE_ERR);
+	ORCASE(FI_LOCAL_COMM);
+	ORCASE(FI_REMOTE_COMM);
+	ORCASE(FI_SHARED_AV);
 	ORCASE(FI_RMA_EVENT);
-	ORCASE(FI_NAMED_RX_CTX);
 	ORCASE(FI_SOURCE);
+	ORCASE(FI_NAMED_RX_CTX);
 	ORCASE(FI_DIRECTED_RECV);
 
 	fprintf(stderr, "error: Unrecognized capability: %s\n", inputstr);
@@ -148,12 +147,13 @@ static int str2cap(char *inputstr, uint64_t *value)
 static int str2mode(char *inputstr, uint64_t *value)
 {
 	ORCASE(FI_CONTEXT);
-	ORCASE(FI_CONTEXT2);
-	ORCASE(FI_LOCAL_MR);
 	ORCASE(FI_MSG_PREFIX);
 	ORCASE(FI_ASYNC_IOV);
 	ORCASE(FI_RX_CQ_DATA);
+	ORCASE(FI_LOCAL_MR);
+	ORCASE(FI_NOTIFY_FLAGS_ONLY);
 	ORCASE(FI_RESTRICTED_COMP);
+	ORCASE(FI_CONTEXT2);
 
 	fprintf(stderr, "error: Unrecognized mode: %s\n", inputstr);
 
@@ -166,6 +166,8 @@ static int str2ep_type(char *inputstr, enum fi_ep_type *value)
 	ORCASE(FI_EP_MSG);
 	ORCASE(FI_EP_DGRAM);
 	ORCASE(FI_EP_RDM);
+	ORCASE(FI_EP_SOCK_STREAM);
+	ORCASE(FI_EP_SOCK_DGRAM);
 
 	fprintf(stderr, "error: Unrecognized endpoint type: %s\n", inputstr);
 
@@ -180,6 +182,11 @@ static int str2addr_format(char *inputstr, uint32_t *value)
 	ORCASE(FI_SOCKADDR_IN6);
 	ORCASE(FI_SOCKADDR_IB);
 	ORCASE(FI_ADDR_PSMX);
+	ORCASE(FI_ADDR_GNI);
+	ORCASE(FI_ADDR_BGQ);
+	ORCASE(FI_ADDR_MLX);
+	ORCASE(FI_ADDR_STR);
+	ORCASE(FI_ADDR_PSMX2);
 
 	fprintf(stderr, "error: Unrecognized address format: %s\n", inputstr);
 
