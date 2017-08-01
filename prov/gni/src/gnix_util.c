@@ -97,6 +97,7 @@ static int *gnix_app_totalPes;
 static int *gnix_app_nodePes;
 static int *gnix_app_peCpus;
 
+fastlock_t __gnix_alps_lock;
 
 int _gnix_get_cq_limit(void)
 {
@@ -246,12 +247,14 @@ static int __gnix_alps_init(void)
 	alpsAppLLIGni_t *rdmacred_rsp = NULL;
 	alpsAppGni_t *rdmacred_buf = NULL;
 
+	fastlock_acquire(&__gnix_alps_lock);
 	/* lli_lock doesn't return anything useful */
 	ret = alps_app_lli_lock();
 
 	if (alps_init) {
 		/* alps lli lock protects alps_init for now */
 		alps_app_lli_unlock();
+		fastlock_release(&__gnix_alps_lock);
 		return ret;
 	}
 
@@ -361,6 +364,7 @@ static int __gnix_alps_init(void)
 	ret = 0;
 err:
 	alps_app_lli_unlock();
+	fastlock_release(&__gnix_alps_lock);
 	if (rdmacred_rsp != NULL) {
 		free(rdmacred_rsp);
 	}
