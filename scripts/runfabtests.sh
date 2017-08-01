@@ -106,7 +106,6 @@ simple_tests=(
 	"rdm_multi_domain -V"
 	"multi_ep -e msg"
 	"multi_ep -e rdm"
-	"multi_ep -e dgram"
 	"recv_cancel -e rdm -V"
 	"unexpected_msg -e msg -i 10"
 	"unexpected_msg -e rdm -i 10"
