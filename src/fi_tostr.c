@@ -262,6 +262,8 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_RX_CQ_DATA);
 	IFFLAGSTR(mode, FI_LOCAL_MR);
 	IFFLAGSTR(mode, FI_NOTIFY_FLAGS_ONLY);
+	IFFLAGSTR(mode, FI_RESTRICTED_COMP);
+	IFFLAGSTR(mode, FI_CONTEXT2);
 
 	fi_remove_comma(buf);
 }
