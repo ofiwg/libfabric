@@ -441,3 +441,86 @@ int usdf_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 {
 	return -FI_EOPNOTSUPP;
 }
+
+/* Catch the version changes for domain_attr. */
+int usdf_catch_dom_attr(uint32_t version, struct fi_info *hints,
+			struct fi_domain_attr *dom_attr)
+{
+	/* version 1.5 introduced new bits. If the user asked for older
+	 * version, we can't return these new bits.
+	 */
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		/* We checked mr_mode compatibility before calling
+		 * this function. This means it is safe to return
+		 * 1.4 default mr_mode.
+		 */
+		dom_attr->mr_mode = FI_MR_BASIC;
+
+		/* FI_REMOTE_COMM is introduced in 1.5. So don't return it. */
+		dom_attr->caps &= ~FI_REMOTE_COMM;
+
+		/* If FI_REMOTE_COMM is given for version < 1.5, fail. */
+		if (hints && hints->domain_attr) {
+			if (hints->domain_attr->caps == FI_REMOTE_COMM)
+				return -FI_EBADFLAGS;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Catch the version changes for tx_attr. */
+int usdf_catch_tx_attr(uint32_t version, struct fi_tx_attr *tx_attr)
+{
+	/* In version < 1.5, FI_LOCAL_MR is required. */
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((tx_attr->mode & FI_LOCAL_MR) == 0)
+			return -FI_ENODATA;
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Catch the version changes for rx_attr. */
+int usdf_catch_rx_attr(uint32_t version, struct fi_rx_attr *rx_attr)
+{
+	/* In version < 1.5, FI_LOCAL_MR is required. */
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		if ((rx_attr->mode & FI_LOCAL_MR) == 0)
+			return -FI_ENODATA;
+	}
+
+	return FI_SUCCESS;
+}
+
+/* A wrapper function to core utility function to check mr_mode bits.
+ * We need to check some more things for backward compatibility.
+ */
+int usdf_check_mr_mode(uint32_t version, struct fi_info *hints,
+		       uint64_t prov_mode)
+{
+	int ret;
+
+	ret = ofi_check_mr_mode(version, prov_mode,
+				hints->domain_attr->mr_mode);
+
+	/* If ofi_check_mr_mode fails. */
+	if (ret) {
+		/* Is it because the user give 0 as mr_mode? */
+		if (hints->domain_attr->mr_mode == 0) {
+			if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+				/* If the version is < 1.5, it is ok.
+				 * We let this slide and catch it later on.
+				 */
+				return FI_SUCCESS;
+			} else if (hints->mode & FI_LOCAL_MR) {
+				/* If version is >= 1.5, we check fi_info mode
+				 * for FI_LOCAL_MR for backward compatibility.
+				 */
+				return FI_SUCCESS;
+			}
+		}
+	}
+
+	return ret;
+}

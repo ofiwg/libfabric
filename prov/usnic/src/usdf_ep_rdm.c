@@ -200,23 +200,8 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 	if (ret < 0)
 		return -FI_ENODATA;
 
-	if (!hints || !hints->domain_attr) {
-		/* In version < 1.5, if no domain_attr provided,
-		 * we have to provide backward compatibility in case of
-		 * application compiled with version >= 1.5 but still
-		 * request < 1.5 such as Open MPI
-		 */
-		if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-			/* The default for mr_mode should be FI_MR_BASIC. */
-			defaults.mr_mode = FI_MR_BASIC;
-
-			/* FI_REMOTE_COMM is introduced in 1.5, we have to
-			 * remove that from the default for older version.
-			 */
-			defaults.caps &= ~FI_REMOTE_COMM;
-		}
-		goto out;
-	}
+	if (!hints || !hints->domain_attr)
+		goto catch;
 
 	/* how to handle fi_thread_fid, fi_thread_completion, etc?
 	 */
@@ -255,13 +240,8 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 	}
 
 	switch (hints->domain_attr->caps) {
-	case FI_REMOTE_COMM:
-		/* FI_REMOTE_COMM is introduced in 1.5, if the user give us
-		 * the flag, this must be a mistake. Fail.
-		 */
-		if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-			return -FI_ENODATA;
 	case 0:
+	case FI_REMOTE_COMM:
 		break;
 	default:
 		USDF_WARN_SYS(DOMAIN,
@@ -269,27 +249,8 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-	switch (hints->domain_attr->mr_mode) {
-	case FI_MR_UNSPEC:
-		/* We still have to check here, in case of the user
-		 * provided domain_attr but not mr_mode bit.
-		 */
-		if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-			defaults.mr_mode = FI_MR_BASIC;
-		} else {
-			/* In >= 1.5, if mr_mode bit is unspecified, we will
-			 * look for FI_LOCAL_MR flag in fi_mode. If is not set,
-			 * we assume FI_MR_SCALABLE (which we don't support)
-			 * and fail.
-			 */
-			if ((hints->mode & FI_LOCAL_MR) == 0)
-				return -FI_ENODATA;
-		}
-		break;
-	default :
-		if (ofi_check_mr_mode(version, defaults.mr_mode, hints->domain_attr->mr_mode))
-			return -FI_ENODATA;
-	}
+	if (usdf_check_mr_mode(version, hints, defaults.mr_mode))
+		return -FI_ENODATA;
 
 	if (hints->domain_attr->mr_cnt <= USDF_RDM_MR_CNT) {
 		defaults.mr_cnt = hints->domain_attr->mr_cnt;
@@ -298,7 +259,12 @@ int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-out:
+catch:
+	/* catch the version changes here. */
+	ret = usdf_catch_dom_attr(version, hints, &defaults);
+	if (ret)
+		return ret;
+
 	*fi->domain_attr = defaults;
 
 	return FI_SUCCESS;
@@ -307,25 +273,22 @@ out:
 int usdf_rdm_fill_tx_attr(uint32_t version, struct fi_info *hints,
 			  struct fi_info *fi)
 {
+	int ret;
 	struct fi_tx_attr defaults;
 
 	defaults = rdm_dflt_tx_attr;
 
 	if (!hints || !hints->tx_attr)
-		goto out;
+		goto catch;
 
 	/* make sure we can support the caps that are requested*/
 	if (hints->tx_attr->caps & ~USDF_RDM_CAPS)
 		return -FI_ENODATA;
 
 	/* clear the mode bits the app doesn't support */
-	defaults.mode &= (hints->mode | hints->tx_attr->mode);
+	if (hints->mode || hints->tx_attr->mode)
+		defaults.mode &= (hints->mode | hints->tx_attr->mode);
 
-	/* In version < 1.5, FI_LOCAL_MR is required. */
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		if ((defaults.mode & FI_LOCAL_MR) == 0)
-			return -FI_ENODATA;
-	}
 	defaults.op_flags |= hints->tx_attr->op_flags;
 
 	if ((hints->tx_attr->msg_order | USDF_RDM_MSG_ORDER) !=
@@ -348,7 +311,12 @@ int usdf_rdm_fill_tx_attr(uint32_t version, struct fi_info *hints,
 	if (hints->tx_attr->size > defaults.size)
 		return -FI_ENODATA;
 
-out:
+catch:
+	/* catch version changes here. */
+	ret = usdf_catch_tx_attr(version, &defaults);
+	if (ret)
+		return ret;
+
 	*fi->tx_attr = defaults;
 
 	return FI_SUCCESS;
@@ -357,25 +325,21 @@ out:
 int usdf_rdm_fill_rx_attr(uint32_t version, struct fi_info *hints,
 			  struct fi_info *fi)
 {
+	int ret;
 	struct fi_rx_attr defaults;
 
 	defaults = rdm_dflt_rx_attr;
 
 	if (!hints || !hints->rx_attr)
-		goto out;
+		goto catch;
 
 	/* make sure we can support the capabilities that are requested */
 	if (hints->rx_attr->caps & ~USDF_RDM_CAPS)
 		return -FI_ENODATA;
 
 	/* clear the mode bits the app doesn't support */
-	defaults.mode &= (hints->mode | hints->rx_attr->mode);
-
-	/* In version < 1.5, FI_LOCAL_MR is required. */
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		if ((defaults.mode & FI_LOCAL_MR) == 0)
-			return -FI_ENODATA;
-	}
+	if (hints->mode || hints->rx_attr->mode)
+		defaults.mode &= (hints->mode | hints->rx_attr->mode);
 
 	defaults.op_flags |= hints->rx_attr->op_flags;
 
@@ -396,7 +360,12 @@ int usdf_rdm_fill_rx_attr(uint32_t version, struct fi_info *hints,
 	if (hints->rx_attr->size > defaults.size)
 		return -FI_ENODATA;
 
-out:
+catch:
+	/* catch version changes here. */
+	ret = usdf_catch_rx_attr(version, &defaults);
+	if (ret)
+		return ret;
+
 	*fi->rx_attr = defaults;
 
 	return FI_SUCCESS;
