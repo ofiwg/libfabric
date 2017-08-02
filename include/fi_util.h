@@ -543,10 +543,24 @@ struct util_wait_fd {
 	struct util_wait	util_wait;
 	struct fd_signal	signal;
 	fi_epoll_t		epoll_fd;
+	struct dlist_entry	fd_list;
+	fastlock_t		lock;
+};
+
+typedef int (*ofi_wait_fd_try_func)(void *arg);
+
+struct ofi_wait_fd_entry {
+	struct dlist_entry	entry;
+	int 			fd;
+	ofi_wait_fd_try_func	try;
+	void			*arg;
 };
 
 int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
+int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
+		    void *arg, void *context);
+int ofi_wait_fd_del(struct util_wait *wait, int fd);
 
 
 /*
