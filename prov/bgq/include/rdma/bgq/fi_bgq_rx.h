@@ -370,7 +370,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 			original_multi_recv_context->len -= bytes_consumed;
 			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
 #ifdef FI_BGQ_TRACE
-        fprintf(stderr,"complete_receive_operation - is_multi_receive\n");
+        fprintf(stderr,"complete_receive_operation - is_multi_receive - enqueue cq for child context %p of parent context %p\n",context,original_multi_recv_context);
 #endif
 
 
@@ -382,7 +382,7 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 #ifdef FI_BGQ_TRACE
         fprintf(stderr,"EAGER complete_receive_operation send_len %lu <= recv_len %lu calling fi_bgq_cq_enqueue_completed\n",send_len,recv_len);
 #endif
- 
+
 			context->buf = NULL;
 			context->len = send_len;
 			context->data = immediate_data;
@@ -438,10 +438,20 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 		uint64_t byte_counter_vaddr = 0;
 
 		if (is_multi_receive) {		/* branch should compile out */
+
+			/* This code functionaliy is unverified - exit with an error mesg for now
+ 			 * when we have an mpich case for this we will then verify.
+ 			 */
+
+			fprintf(stderr,"BGQ Provider does not support FI_MULTI_RECV and RENDEZVOUS protocol\n");
+			fflush(stderr);
+			exit(1);
+
+
 #ifdef FI_BGQ_TRACE
         fprintf(stderr,"rendezvous multirecv\n");
 #endif
- 
+
 			union fi_bgq_context * multi_recv_context =
 				(union fi_bgq_context *)((uintptr_t)recv_buf - sizeof(union fi_bgq_context));
 			assert((((uintptr_t)multi_recv_context) & 0x07) == 0);
@@ -729,6 +739,15 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 					send_len = pkt->hdr.pt2pt.send.message_length;
 				} else /* FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS */ {
+
+					/* This code functionaliy is unverified - exit with an error mesg for now
+				 	* when we have an mpich case for this we will then verify.
+				 	*/
+
+					fprintf(stderr,"BGQ Provider does not support FI_MULTI_RECV and RENDEZVOUS protocol\n");
+					fflush(stderr);
+					exit(1);
+
 					const uint64_t niov = pkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					send_len = pkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
@@ -737,11 +756,20 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 
 				if (send_len > recv_len) {
 
-					/* not enough space available in the multi-receive
-					 * buffer; continue as if "a match was not found"
-					 * and advance to the next match entry */
-					prev = context;
-					context = context->next;
+					/* To keep ordering need to complete this multirecv context now and remove
+					 * from match queue and the next multirecv context should have enough room.
+					 */
+
+					union fi_bgq_context * next = context->next;
+
+                                        /* remove the context from the match queue */
+                                        if (prev) prev->next = next;
+                                        else bgq_ep->rx.poll.rfifo[poll_msg].mq.head = next;
+
+                                        if (!next) bgq_ep->rx.poll.rfifo[poll_msg].mq.tail = prev;
+
+					context->byte_counter = 0;
+					fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);
 
 				} else {
 
@@ -766,6 +794,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 						/* post a completion event for the multi-receive */
 						context->byte_counter = 0;
 						fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
+
 					}
 				}
 				return;
@@ -1232,14 +1261,13 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		bgq_ep->rx.poll.rfifo[poll_msg].ue.free = claimed_pkt;
 
 	} else if (poll_msg && (rx_op_flags & FI_MULTI_RECV)) {		/* unlikely - branch should compile out for tagged receives */
-
 		/* search the unexpected packet queue */
 		struct fi_bgq_mu_packet * head = bgq_ep->rx.poll.rfifo[poll_msg].ue.head;
 		struct fi_bgq_mu_packet * tail = bgq_ep->rx.poll.rfifo[poll_msg].ue.tail;
 		struct fi_bgq_mu_packet * prev = NULL;
 		struct fi_bgq_mu_packet * uepkt = head;
 
-		unsigned found_match = 0;
+		unsigned full_multirecv_buffer = 0;
 		while (uepkt != NULL) {
 
 			if (is_match(uepkt, context, poll_msg)) {
@@ -1253,6 +1281,15 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 					send_len = uepkt->hdr.pt2pt.send.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
+
+					/* This code functionaliy is unverified - exit with an error mesg for now
+					 * when we have an mpich case for this we will then verify.
+				 	*/
+
+					fprintf(stderr,"BGQ Provider does not support FI_MULTI_RECV and RENDEZVOUS protocol\n");
+					fflush(stderr);
+					exit(1);
+
 					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					send_len = uepkt->payload.rendezvous.mu_iov[0].message_length;
 					uint64_t i;
@@ -1260,12 +1297,16 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				}
 
 				if (send_len > recv_len) {
+					/* There is not enough room for the next subcontext multirec.
+ 					 * to preserver the ordering just break off here with whatever
+ 					 * matches are in the buffer and hopefully the next multirecv
+ 					 * has space.
+ 					 */
 
-					/* not enough space available in the multi-receive
-					 * buffer; continue as if "a match was not found"
-					 * and advance to the next ue header */
-					prev = uepkt;
-					uepkt = uepkt->next;
+					uepkt = NULL;
+					full_multirecv_buffer = 1;
+					context->byte_counter = 0;
+					fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);
 
 				} else {
 					complete_receive_operation(bgq_ep, uepkt,
@@ -1284,6 +1325,8 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 						prev->next = uepkt->next;
 					}
 
+					struct fi_bgq_mu_packet *matched_uepkt_next = uepkt->next;
+
 					/* ... and prepend the uehdr to the ue free list. */
 					uepkt->next = bgq_ep->rx.poll.rfifo[poll_msg].ue.free;
 					bgq_ep->rx.poll.rfifo[poll_msg].ue.free = uepkt;
@@ -1295,12 +1338,16 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 						 * from the loop and post a 'FI_MULTI_RECV'
 						 * event to the completion queue. */
 						uepkt = NULL;
-						found_match = 1;
+						full_multirecv_buffer = 1;
 
 						/* post a completion event for the multi-receive */
 						context->byte_counter = 0;
 						fi_bgq_cq_enqueue_completed(bgq_ep->recv_cq, context, 0);	/* TODO - IS lock required? */
 					}
+					else {
+						uepkt = matched_uepkt_next;
+					}
+
 				}
 
 			} else {
@@ -1311,11 +1358,10 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 			}
 		}
 
-		if (!found_match) {
+		if (!full_multirecv_buffer) {
 
-			/*
-			 * no unexpected headers were matched; add this match
-			 * information to the appropriate match queue
+			/* The multirecv context has room in its buffer.
+			 * Post to match queue for further filling.
 			 */
 
 			union fi_bgq_context * tail = bgq_ep->rx.poll.rfifo[poll_msg].mq.tail;
