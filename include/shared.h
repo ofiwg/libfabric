@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -141,6 +141,9 @@ struct ft_opts {
 	int machr;
 	enum ft_rma_opcodes rma_op;
 	int argc;
+
+	/* Fail if the selected provider does not support FI_MSG_PREFIX.  */
+	int force_prefix;
 	char **argv;
 };
 
@@ -344,6 +347,32 @@ static inline void ft_stop(void)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 	opts.options &= ~FT_OPT_ACTIVE;
 }
+
+/* Set the FI_MSG_PREFIX mode bit in the given fi_info structure and also set
+ * the option bit in the given opts structure. If using ft_getinfo, it will
+ * return -ENODATA if the provider clears the application requested mdoe bit.
+ */
+static inline void ft_force_prefix(struct fi_info *info, struct ft_opts *opts)
+{
+	info->mode |= FI_MSG_PREFIX;
+	opts->force_prefix = 1;
+}
+
+/* If force_prefix was not requested, just continue. If it was requested,
+ * return true if it was respected by the provider.
+ */
+static inline bool ft_check_prefix_forced(struct fi_info *info,
+					 struct ft_opts *opts)
+{
+	if (opts->force_prefix) {
+		return (info->tx_attr->mode & FI_MSG_PREFIX) &&
+		       (info->rx_attr->mode & FI_MSG_PREFIX);
+	}
+
+	/* Continue if forced prefix wasn't requested. */
+	return true;
+}
+
 int ft_sync();
 int ft_sync_pair(int status);
 int ft_fork_and_pair();

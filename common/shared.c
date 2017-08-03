@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -562,6 +562,12 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
+
+	if (!ft_check_prefix_forced(*info, &opts)) {
+		FT_ERR("Provider disabled requested prefix mode.");
+		return -FI_ENODATA;
+	}
+
 	return 0;
 }
 
