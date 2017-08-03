@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2015-2017 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -46,7 +46,7 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 		opts.options |= FT_OPT_VERIFY_DATA;
 		break;
 	case 'k':
-		hints->mode |= FI_MSG_PREFIX;
+		ft_force_prefix(hints, &opts);
 		break;
 	case 'j':
 		hints->tx_attr->inject_size = atoi(optarg);
@@ -62,7 +62,7 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 void ft_benchmark_usage(void)
 {
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
-	FT_PRINT_OPTS_USAGE("-k", "enable prefix mode");
+	FT_PRINT_OPTS_USAGE("-k", "force prefix mode");
 	FT_PRINT_OPTS_USAGE("-j", "maximum inject message size");
 	FT_PRINT_OPTS_USAGE("-W", "window size* (for bandwidth tests)\n\n"
 			"* The following condition is required to have at least "
