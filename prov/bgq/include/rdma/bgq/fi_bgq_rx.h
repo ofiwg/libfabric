@@ -439,6 +439,15 @@ void complete_receive_operation (struct fi_bgq_ep * bgq_ep,
 
 		if (is_multi_receive) {		/* branch should compile out */
 
+			/* This code functionaliy is unverified - exit with an error mesg for now
+ 			 * when we have an mpich case for this we will then verify.
+ 			 */
+
+			fprintf(stderr,"BGQ Provider does not support FI_MULTI_RECV and RENDEZVOUS protocol\n");
+			fflush(stderr);
+			exit(1);
+
+
 #ifdef FI_BGQ_TRACE
         fprintf(stderr,"rendezvous multirecv\n");
 #endif
@@ -730,6 +739,14 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 					send_len = pkt->hdr.pt2pt.send.message_length;
 				} else /* FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS */ {
+
+					/* This code functionaliy is unverified - exit with an error mesg for now
+				 	* when we have an mpich case for this we will then verify.
+				 	*/
+
+					fprintf(stderr,"BGQ Provider does not support FI_MULTI_RECV and RENDEZVOUS protocol\n");
+					fflush(stderr);
+					exit(1);
 
 					const uint64_t niov = pkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					send_len = pkt->payload.rendezvous.mu_iov[0].message_length;
@@ -1264,6 +1281,14 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 				if (packet_type & FI_BGQ_MU_PACKET_TYPE_EAGER) {
 					send_len = uepkt->hdr.pt2pt.send.message_length;
 				} else if (packet_type & FI_BGQ_MU_PACKET_TYPE_RENDEZVOUS) {
+
+					/* This code functionaliy is unverified - exit with an error mesg for now
+					 * when we have an mpich case for this we will then verify.
+				 	*/
+
+					fprintf(stderr,"BGQ Provider does not support FI_MULTI_RECV and RENDEZVOUS protocol\n");
+					fflush(stderr);
+					exit(1);
 
 					const uint64_t niov = uepkt->hdr.pt2pt.rendezvous.niov_minus_1 + 1;
 					send_len = uepkt->payload.rendezvous.mu_iov[0].message_length;
