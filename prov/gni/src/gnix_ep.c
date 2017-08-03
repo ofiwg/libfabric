@@ -562,8 +562,10 @@ int _gnix_ep_init_vc(struct gnix_fid_ep *ep_priv)
 	gnix_hashtable_attr_t gnix_ht_attr;
 	gnix_vec_attr_t gnix_vec_attr;
 
-	GNIX_FATAL(FI_LOG_EP_CTRL,
+	if (ep_priv->av == NULL) {
+		GNIX_FATAL(FI_LOG_EP_CTRL,
 			   "_gnix_ep_init_vc av field NULL\n");
+	}
 
 	if (ep_priv->av->type == FI_AV_TABLE) {
 		/* Use array to store EP VCs when using FI_AV_TABLE. */
