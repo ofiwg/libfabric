@@ -87,6 +87,7 @@ struct usdf_av {
 	pthread_spinlock_t av_lock;
 	LIST_HEAD(, usdf_dest) av_addresses;
 };
+
 #define av_ftou(FAV) container_of(FAV, struct usdf_av, av_fid)
 #define av_fidtou(FID) container_of(FID, struct usdf_av, av_fid.fid)
 #define av_utof(AV) (&(AV)->av_fid)

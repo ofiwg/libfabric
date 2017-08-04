@@ -781,7 +781,7 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	struct usdf_ep *ep;
 	int ret;
 	struct usdf_pep *parent_pep;
-	struct sockaddr *src_addr;
+	void *src_addr;
 	int is_bound;
 	size_t tx_size;
 	size_t rx_size;
@@ -826,14 +826,8 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	if (!is_bound) {
-		if (info->src_addr != NULL) {
-			if (!usdf_cm_addr_is_valid_sin(info->src_addr,
-					info->src_addrlen, info->addr_format)) {
-				ret = -FI_EINVAL;
-				goto fail;
-			}
-			src_addr = info->src_addr;
-		}
+		if (info->src_addr != NULL)
+			src_addr = usdf_format_to_sin(info, info->src_addr);
 
 		if (src_addr != NULL) {
 			ret = bind(ep->e.dg.ep_sock, src_addr,
@@ -843,6 +837,8 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 				goto fail;
 			}
 		}
+
+		usdf_free_sin_if_needed(info, src_addr);
 	}
 
 	ep->ep_fid.fid.fclass = FI_CLASS_EP;

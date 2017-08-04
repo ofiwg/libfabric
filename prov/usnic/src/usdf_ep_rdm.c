@@ -852,11 +852,15 @@ usdf_rx_rdm_port_bind(struct usdf_rx *rx, struct fi_info *info)
 	int ret;
 
 	if (info->src_addr != NULL) {
-		if (info->addr_format != FI_SOCKADDR &&
-		    info->addr_format != FI_SOCKADDR_IN) {
+		switch (info->addr_format) {
+		case FI_SOCKADDR:
+		case FI_SOCKADDR_IN:
+		case FI_ADDR_STR:
+			sin = usdf_format_to_sin(info, info->src_addr);
+			break;
+		default:
 			return -FI_EINVAL;
 		}
-		sin = (struct sockaddr_in *)info->src_addr;
 	} else {
 		memset(&src, 0, sizeof(src));
 		sin = &src;
@@ -879,6 +883,14 @@ usdf_rx_rdm_port_bind(struct usdf_rx *rx, struct fi_info *info)
 	if (ret == -1) {
 		 return -errno;
 	}
+
+	/* This has to be here because usdf_sin_to_format will allocate
+	 * new piece of memory if the string conversion happens.
+	 */
+	if (info->addr_format == FI_ADDR_STR)
+		free(info->src_addr);
+
+	info->src_addr = usdf_sin_to_format(info, sin, &info->src_addrlen);
 
 	return 0;
 }

@@ -81,6 +81,7 @@ extern struct fi_provider usdf_ops;
 
 #define USDF_MR_IOV_LIMIT 1
 #define USDF_MR_CNT (65535)
+#define USDF_ADDR_STR_LEN (INET6_ADDRSTRLEN+8)
 
 /*
  *  TAILQ stuff that should exist
@@ -177,7 +178,10 @@ struct usdf_pep {
 	struct usdf_fabric *pep_fabric;
 	struct usdf_eq *pep_eq;
 	int pep_sock;
-	struct sockaddr_in pep_src_addr;
+	union {
+		struct sockaddr_in sin;
+		char addr_str[USDF_ADDR_STR_LEN];
+	} pep_src_addr;
 	enum usdf_pep_state pep_state;
 	struct usdf_poll_item pep_pollitem;
 	struct fi_info *pep_info;
@@ -518,5 +522,8 @@ int usdf_catch_tx_attr(uint32_t version, struct fi_tx_attr *tx_attr);
 int usdf_catch_rx_attr(uint32_t version, struct fi_rx_attr *rx_attr);
 int usdf_check_mr_mode(uint32_t version, struct fi_info *hints,
 		       uint64_t prov_mode);
+struct sockaddr_in *usdf_format_to_sin(struct fi_info *info, const void *addr);
+void *usdf_sin_to_format(struct fi_info *info, void *addr, size_t *len);
+void usdf_free_sin_if_needed(struct fi_info *info, struct sockaddr_in *sin);
 
 #endif /* _USDF_H_ */
