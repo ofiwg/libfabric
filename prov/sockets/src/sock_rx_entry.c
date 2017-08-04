@@ -72,7 +72,6 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 		entry = slist_remove_head(&rx_ctx->pool_list);
 		rx_entry = container_of(entry, struct sock_rx_entry, pool_entry);
 		rx_entry->rx_ctx = rx_ctx;
-		entry = slist_remove_head(&rx_ctx->pool_list);
 	} else {
 		rx_entry = calloc(1, sizeof(*rx_entry));
 		if (!rx_entry)
