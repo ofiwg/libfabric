@@ -640,16 +640,16 @@ __attribute__((visibility ("default")))
 char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 {
 	static char *buf = NULL;
-	uint64_t val64;
-	uint32_t val32;
-	int enumval;
+	const uint64_t *val64;
+	const uint32_t *val32;
+	const int *enumval;
 
 	if (!data)
 		return NULL;
 
-	val64 = *(const uint64_t *) data;
-	val32 = *(const uint32_t *) data;
-	enumval = *(const int *) data;
+	val64 = (const uint64_t *) data;
+	val32 = (const uint32_t *) data;
+	enumval = (const int *) data;
 
 	if (!buf) {
 		buf = calloc(FI_BUFSIZ, 1);
@@ -663,16 +663,16 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		fi_tostr_info(buf, data);
 		break;
 	case FI_TYPE_EP_TYPE:
-		fi_tostr_ep_type(buf, enumval);
+		fi_tostr_ep_type(buf, *enumval);
 		break;
 	case FI_TYPE_CAPS:
-		fi_tostr_caps(buf, val64);
+		fi_tostr_caps(buf, *val64);
 		break;
 	case FI_TYPE_OP_FLAGS:
-		fi_tostr_flags(buf, val64);
+		fi_tostr_flags(buf, *val64);
 		break;
 	case FI_TYPE_ADDR_FORMAT:
-		fi_tostr_addr_format(buf, val32);
+		fi_tostr_addr_format(buf, *val32);
 		break;
 	case FI_TYPE_TX_ATTR:
 		fi_tostr_tx_attr(buf, data, "");
@@ -690,44 +690,44 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		fi_tostr_fabric_attr(buf, data, "");
 		break;
 	case FI_TYPE_THREADING:
-		fi_tostr_threading(buf, enumval);
+		fi_tostr_threading(buf, *enumval);
 		break;
 	case FI_TYPE_PROGRESS:
-		fi_tostr_progress(buf, enumval);
+		fi_tostr_progress(buf, *enumval);
 		break;
 	case FI_TYPE_PROTOCOL:
-		fi_tostr_protocol(buf, val32);
+		fi_tostr_protocol(buf, *val32);
 		break;
 	case FI_TYPE_MSG_ORDER:
-		fi_tostr_order(buf, val64);
+		fi_tostr_order(buf, *val64);
 		break;
 	case FI_TYPE_MODE:
-		fi_tostr_mode(buf, val64);
+		fi_tostr_mode(buf, *val64);
 		break;
 	case FI_TYPE_AV_TYPE:
-		fi_tostr_av_type(buf, enumval);
+		fi_tostr_av_type(buf, *enumval);
 		break;
 	case FI_TYPE_ATOMIC_TYPE:
-		fi_tostr_atomic_type(buf, enumval);
+		fi_tostr_atomic_type(buf, *enumval);
 		break;
 	case FI_TYPE_ATOMIC_OP:
-		fi_tostr_atomic_op(buf, enumval);
+		fi_tostr_atomic_op(buf, *enumval);
 		break;
 	case FI_TYPE_VERSION:
 		fi_tostr_version(buf);
 		break;
 	case FI_TYPE_EQ_EVENT:
-		fi_tostr_eq_event(buf, enumval);
+		fi_tostr_eq_event(buf, *enumval);
 		break;
 	case FI_TYPE_CQ_EVENT_FLAGS:
-		fi_tostr_cq_event_flags(buf, val64);
+		fi_tostr_cq_event_flags(buf, *val64);
 		break;
 	case FI_TYPE_MR_MODE:
 		/* mr_mode was an enum converted to int flags */
-		fi_tostr_mr_mode(buf, enumval);
+		fi_tostr_mr_mode(buf, *enumval);
 		break;
 	case FI_TYPE_OP_TYPE:
-		fi_tostr_op_type(buf, enumval);
+		fi_tostr_op_type(buf, *enumval);
 		break;
 	default:
 		strcatf(buf, "Unknown type");
