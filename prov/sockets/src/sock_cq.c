@@ -114,6 +114,9 @@ int sock_cq_progress(struct sock_cq *cq)
 	for (entry = cq->tx_list.next; entry != &cq->tx_list;
 	     entry = entry->next) {
 		tx_ctx = container_of(entry, struct sock_tx_ctx, cq_entry);
+		if (!tx_ctx->enabled)
+			continue;
+
 		if (tx_ctx->use_shared)
 			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx->stx_ctx);
 		else
@@ -123,6 +126,9 @@ int sock_cq_progress(struct sock_cq *cq)
 	for (entry = cq->rx_list.next; entry != &cq->rx_list;
 	     entry = entry->next) {
 		rx_ctx = container_of(entry, struct sock_rx_ctx, cq_entry);
+		if (!rx_ctx->enabled)
+			continue;
+
 		if (rx_ctx->use_shared)
 			sock_pe_progress_rx_ctx(cq->domain->pe, rx_ctx->srx_ctx);
 		else
