@@ -124,6 +124,13 @@ static inline int ofi_rbinit(struct ofi_ringbuf *rb, size_t size)
 	return 0;
 }
 
+static inline void ofi_rbreset(struct ofi_ringbuf *rb)
+{
+	rb->rcnt = 0;
+	rb->wcnt = 0;
+	rb->wpos = 0;
+}
+
 static inline void ofi_rbfree(struct ofi_ringbuf *rb)
 {
 	free(rb->buf);
