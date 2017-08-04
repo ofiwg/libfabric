@@ -150,6 +150,8 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 static void sock_pe_release_entry(struct sock_pe *pe,
 				  struct sock_pe_entry *pe_entry)
 {
+	assert((pe_entry->type != SOCK_PE_RX) ||
+		ofi_rbempty(&pe_entry->comm_buf));
 	dlist_remove(&pe_entry->ctx_entry);
 
 	if (pe_entry->conn->tx_pe_entry == pe_entry)
@@ -168,6 +170,9 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 		util_buf_release(pe->pe_rx_pool, pe_entry);
 		return;
 	}
+
+	if (pe_entry->type == SOCK_PE_TX)
+		ofi_rbreset(&pe_entry->comm_buf);
 
 	pe->num_free_entries++;
 	pe_entry->conn = NULL;
@@ -213,6 +218,8 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 		pe->num_free_entries--;
 		entry = pe->free_list.next;
 		pe_entry = container_of(entry, struct sock_pe_entry, entry);
+
+		assert(ofi_rbempty(&pe_entry->comm_buf));
 		dlist_remove(&pe_entry->entry);
 		dlist_insert_tail(&pe_entry->entry, &pe->busy_list);
 		SOCK_LOG_DBG("progress entry %p acquired : %lu\n", pe_entry,
@@ -1873,6 +1880,8 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		}
 
 		sock_pe_report_tx_error(pe_entry, 0, FI_EIO);
+		pe_entry->is_complete = 1;
+
 		goto out;
 	}
 

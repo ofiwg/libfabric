@@ -103,6 +103,10 @@ static inline void dlist_remove(struct dlist_entry *item)
 		&(container->member) != (head);					\
 		container = container_of(container->member.next, type, member))
 
+#define dlist_foreach_safe(head, item, tmp) \
+    for ((item) = (head)->next, (tmp) = (item)->next; (item) != (head); \
+              (item) = (tmp), (tmp) = (item)->next)
+
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
 static inline struct dlist_entry *

@@ -287,24 +287,24 @@ static int sock_ctx_enable(struct fid_ep *ep)
 	switch (ep->fid.fclass) {
 	case FI_CLASS_RX_CTX:
 		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx.fid);
-		rx_ctx->enabled = 1;
 		sock_pe_add_rx_ctx(rx_ctx->domain->pe, rx_ctx);
 
 		if (!rx_ctx->ep_attr->listener.listener_thread &&
 		    sock_conn_listen(rx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
+		rx_ctx->enabled = 1;
 		return 0;
 
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx.fid);
-		tx_ctx->enabled = 1;
 		sock_pe_add_tx_ctx(tx_ctx->domain->pe, tx_ctx);
 
 		if (!tx_ctx->ep_attr->listener.listener_thread &&
 		    sock_conn_listen(tx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
+		tx_ctx->enabled = 1;
 		return 0;
 
 	default:
@@ -1160,6 +1160,8 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	tx_ctx->tx_id = index;
 	tx_ctx->ep_attr = sock_ep->attr;
 	tx_ctx->domain = sock_ep->attr->domain;
+	if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+		tx_ctx->rx_ctrl_ctx->domain = sock_ep->attr->domain;
 	tx_ctx->av = sock_ep->attr->av;
 	dlist_insert_tail(&sock_ep->attr->tx_ctx_entry, &tx_ctx->ep_list);
 
@@ -1264,6 +1266,9 @@ int sock_stx_ctx(struct fid_domain *domain,
 		return -FI_ENOMEM;
 
 	tx_ctx->domain = dom;
+	if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+		tx_ctx->rx_ctrl_ctx->domain = dom;
+
 	tx_ctx->fid.stx.fid.ops = &sock_ctx_ops;
 	tx_ctx->fid.stx.ops = &sock_ep_ops;
 	ofi_atomic_inc32(&dom->ref);
@@ -1743,6 +1748,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 		tx_ctx->ep_attr = sock_ep->attr;
 		tx_ctx->domain = sock_dom;
+		if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+			tx_ctx->rx_ctrl_ctx->domain = sock_dom;
 		tx_ctx->tx_id = 0;
 		dlist_insert_tail(&sock_ep->attr->tx_ctx_entry, &tx_ctx->ep_list);
 		sock_ep->attr->tx_array[0] = tx_ctx;

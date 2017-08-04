@@ -220,5 +220,10 @@ ssize_t sock_comm_discard(struct sock_pe_entry *pe_entry, size_t len)
 
 int sock_comm_is_disconnected(struct sock_pe_entry *pe_entry)
 {
-	return (ofi_rbempty(&pe_entry->comm_buf) && !pe_entry->conn->connected);
+	/* If the PE entry is TX, there is no need to check that the ring buffer is
+	 * empty */
+	if (pe_entry->type == SOCK_PE_TX)
+		return (!pe_entry->conn->connected);
+	else
+		return (ofi_rbempty(&pe_entry->comm_buf) && !pe_entry->conn->connected);
 }
