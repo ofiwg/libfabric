@@ -106,7 +106,6 @@
 #define VERBS_MR_IOV_LIMIT 1
 
 extern struct fi_provider fi_ibv_prov;
-extern struct fi_info *verbs_info;
 
 extern size_t verbs_default_tx_size;
 extern size_t verbs_default_rx_size;
@@ -127,6 +126,8 @@ struct verbs_dev_info {
 
 struct fi_ibv_fabric {
 	struct util_fabric	util_fabric;
+	struct fi_info		*info;
+	struct fi_info		*all_infos;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -334,10 +335,8 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr);
 
 
 int fi_ibv_init_info();
-void fi_ibv_free_info();
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
-struct fi_info *fi_ibv_get_verbs_info(const char *domain_name);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
 int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,

@@ -392,7 +392,6 @@ static int fi_ibv_get_param_int(char *param_name, char *param_str,
 
 static void fi_ibv_fini(void)
 {
-	fi_ibv_free_info();
 }
 
 VERBS_INI

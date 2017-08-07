@@ -35,6 +35,18 @@
 #include <fi_util.h>
 #include "fi_verbs.h"
 
+static struct fi_info *
+fi_ibv_get_verbs_info(struct fi_info *ilist, const char *domain_name)
+{
+	struct fi_info *fi;
+
+	for (fi = ilist; fi; fi = fi->next) {
+		if (!strcmp(fi->domain_attr->name, domain_name))
+			return fi;
+	}
+
+	return NULL;
+}
 
 static ssize_t
 fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
@@ -75,10 +87,15 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 {
 	struct fi_info *info, *fi;
 	struct fi_ibv_connreq *connreq;
+	const char *devname = ibv_get_device_name(event->id->verbs->device);
 
-	fi = fi_ibv_get_verbs_info(ibv_get_device_name(event->id->verbs->device));
-	if (!fi)
-		return NULL;
+	if (strcmp(devname, fab->info->domain_attr->name)) {
+		fi = fi_ibv_get_verbs_info(fab->all_infos, devname);
+		if (!fi)
+			return NULL;
+	} else {
+		fi = fab->info;
+	}
 
 	info = fi_dupinfo(fi);
 	if (!info)

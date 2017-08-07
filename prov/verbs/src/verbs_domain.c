@@ -316,17 +316,12 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct fi_ibv_domain *_domain;
 	struct fi_ibv_fabric *fab;
-	struct fi_info *fi;
 	int param = 0, ret;
-
-	fi = fi_ibv_get_verbs_info(info->domain_attr->name);
-	if (!fi)
-		return -FI_EINVAL;
 
 	fab = container_of(fabric, struct fi_ibv_fabric,
 			   util_fabric.fabric_fid);
 	ret = ofi_check_domain_attr(&fi_ibv_prov, fabric->api_version,
-				    fi->domain_attr, info->domain_attr);
+				    fab->info->domain_attr, info->domain_attr);
 	if (ret)
 		return ret;
 
@@ -473,6 +468,8 @@ static int fi_ibv_fabric_close(fid_t fid)
 	ret = ofi_fabric_close(&fab->util_fabric);
 	if (ret)
 		return ret;
+
+	fi_freeinfo(fab->all_infos);
 	free(fab);
 
 	return 0;
@@ -499,10 +496,10 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context)
 {
 	struct fi_ibv_fabric *fab;
-	struct fi_info *info;
+	struct fi_info *info, *cur;
 	int ret;
 
-	ret = fi_ibv_init_info();
+	ret = fi_ibv_init_info(&info);
 	if (ret)
 		return ret;
 
@@ -510,20 +507,25 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (!fab)
 		return -FI_ENOMEM;
 
-	for (info = verbs_info; info; info = info->next) {
-		ret = ofi_fabric_init(&fi_ibv_prov, info->fabric_attr, attr,
+	for (cur = info; cur; cur = info->next) {
+		ret = ofi_fabric_init(&fi_ibv_prov, cur->fabric_attr, attr,
 				      &fab->util_fabric, context);
 		if (ret != -FI_ENODATA)
 			break;
 	}
 	if (ret) {
 		free(fab);
+		fi_freeinfo(info);
 		return ret;
 	}
+
+	fab->info = cur;
 
 	*fabric = &fab->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &fi_ibv_fi_ops;
 	(*fabric)->ops = &fi_ibv_ops_fabric;
+
+	fab->all_infos = info;
 
 	return 0;
 }

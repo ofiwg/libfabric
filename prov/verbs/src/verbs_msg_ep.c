@@ -175,8 +175,7 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 {
-	struct ibv_qp_init_attr attr;
-	struct fi_info *verbs_info;
+	struct ibv_qp_init_attr attr = { 0 };
 	struct fi_ibv_msg_ep *_ep;
 	struct ibv_pd *pd;
 
@@ -208,13 +207,6 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 		return -FI_ENOCQ;
 	}
 
-	verbs_info = fi_ibv_get_verbs_info(_ep->info->domain_attr->name);
-	if (!verbs_info) {
-		VERBS_INFO(FI_LOG_EP_CTRL, "Unable to find matching verbs_info\n");
-		return -FI_EINVAL;
-	}
-
-	memset(&attr, 0, sizeof attr);
 	if (_ep->scq) {
 		attr.cap.max_send_wr = _ep->info->tx_attr->size;
 		attr.cap.max_send_sge = _ep->info->tx_attr->iov_limit;
@@ -296,11 +288,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	fi = fi_ibv_get_verbs_info(info->domain_attr->name);
-	if (!fi) {
-		VERBS_INFO(FI_LOG_DOMAIN, "Unable to find matching verbs_info\n");
-		return -FI_EINVAL;
-	}
+	fi = dom->info;
 
 	if (info->ep_attr) {
 		ret = fi_ibv_check_ep_attr(info->ep_attr, fi);
