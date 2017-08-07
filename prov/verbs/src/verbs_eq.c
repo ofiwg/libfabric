@@ -73,14 +73,10 @@ static struct fi_info *
 fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 		struct fi_info *pep_info)
 {
-	struct fi_info *info, *fi;
+	struct fi_info *info;
 	struct fi_ibv_connreq *connreq;
 
-	fi = fi_ibv_get_verbs_info(ibv_get_device_name(event->id->verbs->device));
-	if (!fi)
-		return NULL;
-
-	info = fi_dupinfo(fi);
+	info = fi_dupinfo(fab->info);
 	if (!info)
 		return NULL;
 

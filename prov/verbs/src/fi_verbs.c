@@ -325,9 +325,8 @@ ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			const void *buf, size_t len, void *desc, void *context)
 {
-	struct ibv_sge sge;
+	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
 
-	fi_ibv_set_sge(sge, buf, len, desc);
 	wr->sg_list = &sge;
 
 	return fi_ibv_send(ep, wr, len, 1, context);
@@ -336,9 +335,8 @@ ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			       const void *buf, size_t len)
 {
-	struct ibv_sge sge;
+	struct ibv_sge sge = fi_ibv_init_sge_inline(buf, len);
 
-	fi_ibv_set_sge_inline(sge, buf, len);
 	wr->sg_list = &sge;
 
 	return fi_ibv_send(ep, wr, len, 1, NULL);
@@ -394,7 +392,6 @@ static int fi_ibv_get_param_int(char *param_name, char *param_str,
 
 static void fi_ibv_fini(void)
 {
-	fi_ibv_free_info();
 }
 
 VERBS_INI

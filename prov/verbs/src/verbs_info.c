@@ -145,7 +145,6 @@ struct fi_ibv_rdm_sysaddr
 	int is_found;
 };
 
-struct fi_info *verbs_info = NULL;
 static pthread_mutex_t verbs_info_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
@@ -1038,18 +1037,14 @@ rai_to_fi:
 	return 0;
 }
 
-int fi_ibv_init_info(void)
+int fi_ibv_init_info(struct fi_info **raw_info)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
 	int ret = 0, i, num_devices, fork_unsafe = 0;
 
-	if (verbs_info)
-		return 0;
-
 	pthread_mutex_lock(&verbs_info_lock);
-	if (verbs_info)
-		goto unlock;
+	*raw_info = NULL;
 
 	fi_param_get_bool(NULL, "fork_unsafe", &fork_unsafe);
 
@@ -1082,8 +1077,8 @@ int fi_ibv_init_info(void)
 	for (i = 0; i < num_devices; i++) {
 		ret = fi_ibv_alloc_info(ctx_list[i], &fi, &verbs_msg_domain);
 		if (!ret) {
-			if (!verbs_info)
-				verbs_info = fi;
+			if (!*raw_info)
+				*raw_info = fi;
 			else
 				tail->next = fi;
 			tail = fi;
@@ -1097,24 +1092,13 @@ int fi_ibv_init_info(void)
 		}
 	}
 
-	ret = verbs_info ? 0 : ret;
+	// note we are possibly discarding ENOMEM
+	ret = *raw_info ? 0 : ret;
 
 	rdma_free_devices(ctx_list);
 unlock:
 	pthread_mutex_unlock(&verbs_info_lock);
 	return ret;
-}
-
-struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
-{
-	struct fi_info *fi;
-
-	for (fi = verbs_info; fi; fi = fi->next) {
-		if (!strcmp(fi->domain_attr->name, domain_name))
-			return fi;
-	}
-
-	return NULL;
 }
 
 static int fi_ibv_set_default_attr(struct fi_info *info, size_t *attr,
@@ -1171,7 +1155,7 @@ static int fi_ibv_set_default_info(struct fi_info *info)
 }
 
 static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
-		struct fi_info *hints, struct fi_info **info)
+		struct fi_info *hints, struct fi_info **info, struct fi_info *verbs_info)
 {
 	struct fi_info *check_info;
 	struct fi_info *fi, *tail;
@@ -1223,21 +1207,22 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
+	struct fi_info *raw_info;
 	const char *dev_name = NULL;
 	int ret;
 
-	ret = fi_ibv_init_info();
+	ret = fi_ibv_init_info(&raw_info);
 	if (ret)
 		goto out;
 
 	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
 	if (ret)
-		goto out;
+		goto err_info;
 
 	if (id->verbs)
 		dev_name = ibv_get_device_name(id->verbs->device);
 
-	ret = fi_ibv_get_matching_info(version, dev_name, hints, info);
+	ret = fi_ibv_get_matching_info(version, dev_name, hints, info, raw_info);
 	if (ret)
 		goto err;
 
@@ -1248,16 +1233,14 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	ofi_alter_info(*info, hints, version);
+
 err:
 	fi_ibv_destroy_ep(rai, &id);
+err_info:
+	fi_freeinfo(raw_info);
 out:
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
 		return ret;
 	else
 		return -FI_ENODATA;
-}
-
-void fi_ibv_free_info(void)
-{
-	fi_freeinfo(verbs_info);
 }
