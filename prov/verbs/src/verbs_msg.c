@@ -113,9 +113,8 @@ static ssize_t
 fi_ibv_msg_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr;
+	struct ibv_send_wr wr = { 0 };
 
-	memset(&wr, 0, sizeof(wr));
 	if (flags & FI_REMOTE_CQ_DATA) {
 		wr.opcode = IBV_WR_SEND_WITH_IMM;
 		wr.imm_data = htonl((uint32_t)msg->data);
@@ -132,9 +131,8 @@ fi_ibv_msg_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 		void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr;
+	struct ibv_send_wr wr = { 0 };
 
-	memset(&wr, 0, sizeof(wr));
 	wr.opcode = IBV_WR_SEND;
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
@@ -148,9 +146,8 @@ fi_ibv_msg_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		    void *desc, uint64_t data, fi_addr_t dest_addr, void *context)
 {
 	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr;
+	struct ibv_send_wr wr = { 0 };
 
-	memset(&wr, 0, sizeof(wr));
 	wr.opcode = IBV_WR_SEND_WITH_IMM;
 	wr.imm_data = htonl((uint32_t)data);
 
@@ -165,9 +162,8 @@ fi_ibv_msg_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t dest_addr, void *context)
 {
 	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr;
+	struct ibv_send_wr wr = { 0 };
 
-	memset(&wr, 0, sizeof(wr));
 	wr.opcode = IBV_WR_SEND;
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
@@ -178,9 +174,8 @@ static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size
 		fi_addr_t dest_addr)
 {
 	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr;
+	struct ibv_send_wr wr = { 0 };
 
-	memset(&wr, 0, sizeof(wr));
 	wr.opcode = IBV_WR_SEND;
 	wr.send_flags = IBV_SEND_INLINE;
 
@@ -193,9 +188,8 @@ static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, 
 		    uint64_t data, fi_addr_t dest_addr)
 {
 	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr;
+	struct ibv_send_wr wr = { 0 };
 
-	memset(&wr, 0, sizeof(wr));
 	wr.opcode = IBV_WR_SEND_WITH_IMM;
 	wr.imm_data = htonl((uint32_t)data);
 	wr.send_flags = IBV_SEND_INLINE;
