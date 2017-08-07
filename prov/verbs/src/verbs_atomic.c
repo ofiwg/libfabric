@@ -438,7 +438,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 			result_desc[0], msg->context);
 }
 
-static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
+struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.size		= sizeof(struct fi_ops_atomic),
 	.write		= fi_ibv_msg_ep_atomic_write,
 	.writev		= fi_ibv_msg_ep_atomic_writev,
@@ -454,8 +454,3 @@ static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.readwritevalid	= fi_ibv_msg_ep_atomic_readwritevalid,
 	.compwritevalid = fi_ibv_msg_ep_atomic_compwritevalid
 };
-
-struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep)
-{
-	return &fi_ibv_msg_ep_atomic_ops;
-}

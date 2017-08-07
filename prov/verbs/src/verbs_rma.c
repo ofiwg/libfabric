@@ -225,7 +225,7 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
-static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
+struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = fi_ibv_msg_ep_rma_read,
 	.readv = fi_ibv_msg_ep_rma_readv,
@@ -237,11 +237,6 @@ static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.writedata = fi_ibv_msg_ep_rma_writedata,
 	.injectdata = fi_ibv_msg_ep_rma_inject_writedata,
 };
-
-struct fi_ops_rma *fi_ibv_msg_ep_ops_rma(struct fi_ibv_msg_ep *ep)
-{
-	return &fi_ibv_msg_ep_rma_ops;
-}
 
 static inline ssize_t
 fi_ibv_rdm_ep_rma_preinit(void **desc, struct fi_ibv_rdm_buf **rdm_buf,

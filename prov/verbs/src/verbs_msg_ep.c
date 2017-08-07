@@ -242,15 +242,14 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 
 		/* Override the default ops to prevent the user from posting WRs to a
 		 * QP where a SRQ is attached to */
-		_ep->ep_fid.msg = fi_ibv_msg_srq_ep_ops_msg(_ep);
+		_ep->ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
 	}
 
 	attr.qp_type = IBV_QPT_RC;
 	attr.sq_sig_all = 0;
 	attr.qp_context = _ep;
 
-	return rdma_create_qp(_ep->id, pd, &attr) ?
-		-errno : 0;
+	return rdma_create_qp(_ep->id, pd, &attr) ? -errno : 0;
 }
 
 static int fi_ibv_msg_ep_control(struct fid *fid, int command, void *arg)
@@ -360,10 +359,10 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.fid.context = context;
 	_ep->ep_fid.fid.ops = &fi_ibv_msg_ep_ops;
 	_ep->ep_fid.ops = &fi_ibv_msg_ep_base_ops;
-	_ep->ep_fid.msg = fi_ibv_msg_ep_ops_msg(_ep);
-	_ep->ep_fid.cm = fi_ibv_msg_ep_ops_cm(_ep);
-	_ep->ep_fid.rma = fi_ibv_msg_ep_ops_rma(_ep);
-	_ep->ep_fid.atomic = fi_ibv_msg_ep_ops_atomic(_ep);
+	_ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+	_ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
+	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+	_ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 
 	ofi_atomic_initialize32(&_ep->unsignaled_send_cnt, 0);
 	ofi_atomic_initialize32(&_ep->comp_pending, 0);

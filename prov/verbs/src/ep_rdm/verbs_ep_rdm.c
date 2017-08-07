@@ -510,8 +510,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.fid.ops = &fi_ibv_rdm_ep_ops;
 	_ep->ep_fid.ops = &fi_ibv_rdm_ep_base_ops;
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
-	_ep->ep_fid.msg = fi_ibv_rdm_ep_ops_msg();
-	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma();
+	_ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
 	_ep->tx_selective_completion = 0;
 	_ep->rx_selective_completion = 0;
