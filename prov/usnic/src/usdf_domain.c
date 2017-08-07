@@ -290,8 +290,10 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto fail;
 	}
 
-	if (info->src_addrlen != addrlen)
-		return -FI_EINVAL;
+	if (info->src_addrlen != addrlen) {
+		ret =  -FI_EINVAL;
+		goto fail;
+	}
 
 skip_size_check:
 	if (sin->sin_family != AF_INET ||
