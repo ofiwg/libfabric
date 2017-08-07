@@ -188,7 +188,7 @@
 #define GNIX_EP_SEC_CAPS (FI_MULTI_RECV | FI_TRIGGER | FI_FENCE)
 
 /* Secondary capabilities that introduce overhead.  Must be requested. */
-#define GNIX_EP_SEC_CAPS_OH (FI_SOURCE | FI_RMA_EVENT)
+#define GNIX_EP_SEC_CAPS_OH (FI_SOURCE | FI_RMA_EVENT | FI_SOURCE_ERR)
 
 /* FULL set of capabilities for the provider.  */
 #define GNIX_EP_CAPS_FULL (GNIX_EP_PRIMARY_CAPS | \
