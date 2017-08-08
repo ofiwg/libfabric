@@ -471,6 +471,23 @@ int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 	}
 }
 
+void ofi_straddr_log_internal(const char *func, int line,
+			      const struct fi_provider *prov,
+			      enum fi_log_level level,
+			      enum fi_log_subsys subsys, char *log_str,
+			      const void *addr)
+{
+	char buf[OFI_ADDRSTRLEN];
+	uint32_t addr_format;
+	size_t len = sizeof(buf);
+
+	if (fi_log_enabled(prov, level, subsys)) {
+		addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
+		fi_log(prov, level, subsys, func, line, "%s: %s\n", log_str,
+		       ofi_straddr(buf, &len, addr_format, addr));
+	}
+}
+
 #ifndef HAVE_EPOLL
 
 int fi_epoll_create(struct fi_epoll **ep)
