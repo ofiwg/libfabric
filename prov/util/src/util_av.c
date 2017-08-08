@@ -1284,9 +1284,14 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		handle = util_cmap_get_handle(cmap, (fi_addr_t)index, addr);
 
 	if (!handle) {
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		       "No handle found for given addr\n");
-		ret = util_cmap_alloc_handle_peer(cmap, addr, CMAP_CONNREQ_RECV, &handle);
+		if (index < 0)
+			ret = util_cmap_alloc_handle_peer(cmap, addr,
+							  CMAP_CONNREQ_RECV,
+							  &handle);
+		else
+			ret = util_cmap_alloc_handle(cmap, (fi_addr_t)index,
+						     CMAP_CONNREQ_RECV,
+						     &handle);
 		if (ret)
 			goto unlock;
 	}
