@@ -117,6 +117,36 @@ extern size_t verbs_default_inline_size;
 
 extern size_t verbs_min_rnr_timer;
 
+extern struct fi_ibv_gl_data {
+	size_t	def_tx_size;
+	size_t	def_rx_size;
+	size_t	def_tx_iov_limit;
+	size_t	def_rx_iov_limit;
+	size_t	def_inline_size;
+	size_t	min_rnr_timer;
+	int	fork_unsafe;
+	int	use_odp;
+	int	cqread_bunch_size;
+	char	*iface;
+
+	struct {
+		int	buffer_num;
+		int	buffer_size;
+		int	rndv_seg_size;
+		int	thread_timeout;
+		char	*eager_send_opcode;
+	} rdm;
+
+	struct {
+		int	use_name_server;
+		int	name_server_port;
+		struct {
+			int	port_number;
+			char	*name;
+		} device;
+	} dgram;
+} fi_ibv_gl_data;
+
 struct verbs_addr {
 	struct dlist_entry entry;
 	struct rdma_addrinfo *rai;

@@ -72,7 +72,7 @@ struct fi_ibv_msg_ep;
 #define FI_IBV_RDM_DFLT_BUFFER_SIZE					\
 	(3 * FI_IBV_RDM_BUF_ALIGNMENT)
 
-#define FI_IBV_RDM_DFLT_BUFFERED_SSIZE					\
+#define FI_IBV_RDM_DFLT_BUFFERED_SIZE					\
 	(FI_IBV_RDM_DFLT_BUFFER_SIZE -					\
 	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
 	 sizeof(struct fi_ibv_rdm_header))

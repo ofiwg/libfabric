@@ -123,7 +123,7 @@ const struct fi_tx_attr verbs_rdm_tx_attr = {
 	.mode			= VERBS_TX_RDM_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
-	.inject_size		= FI_IBV_RDM_DFLT_BUFFERED_SSIZE,
+	.inject_size		= FI_IBV_RDM_DFLT_BUFFERED_SIZE,
 	.rma_iov_limit		= 1,
 };
 
@@ -523,7 +523,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		goto err;
 
 	if (ep_dom->type == FI_EP_RDM) {
-		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
+		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SIZE;
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
 		if (!fi_param_get_int(&fi_ibv_prov, "rdm_buffer_size", &param)) {

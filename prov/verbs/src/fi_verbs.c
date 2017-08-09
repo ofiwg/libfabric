@@ -51,6 +51,35 @@ size_t verbs_default_inline_size 	= 64;
 
 size_t verbs_min_rnr_timer = VERBS_DEFAULT_MIN_RNR_TIMER;
 
+struct fi_ibv_gl_data fi_ibv_gl_data = {
+	.def_tx_size		= 384,
+	.def_rx_size		= 384,
+	.def_tx_iov_limit	= 4,
+	.def_rx_iov_limit	= 4,
+	.min_rnr_timer          = VERBS_DEFAULT_MIN_RNR_TIMER,
+	.fork_unsafe		= 0,
+	.use_odp		= 1,
+	.cqread_bunch_size	= 8,
+	.iface			= "ib",
+
+	.rdm			= {
+		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
+		.buffer_size		= FI_IBV_RDM_DFLT_BUFFERED_SIZE,
+		.rndv_seg_size		= FI_IBV_RDM_SEG_MAXSIZE,
+		.thread_timeout		= FI_IBV_RDM_CM_THREAD_TIMEOUT,
+		.eager_send_opcode	= "IBV_WR_SEND",
+	},
+
+	.dgram			= {
+		.use_name_server	= 1,
+		.name_server_port	= 5678,
+		.device = {
+			.port_number	= 0, /* 0 - means all available ports */
+			.name		= NULL,
+		},
+	},
+};
+
 struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
 	.version = VERBS_PROV_VERS,
