@@ -60,6 +60,23 @@ see the man pages.
   mode bit was added.  This mode bit doubles the amount of context
   space that an application allocates on behalf of the provider.
 
+## BGQ provider notes
+
+- The OFI 1.5 BGQ provider officially supports the Open Fabrics Interfaces
+  utilized by the MPICH implementation of the MPI-3 standard.  In addition
+  to the MPICH test suite it has been tested by several scientific applications
+  running MPICH on BGQ at scale, and several bugs in the provider and MPICH
+  have been identified and fixed.  At least one INCITE project is attempting
+  to use it for production science.  Support of this provider is a high-
+  priority for ALCF, and MPICH users on BGQ are encouraged to utilize it to
+  compare function and performance against the PAMI-based default toolchain.
+  Any discovered bugs will be quickly addressed with high priority.  Results
+  so far have shown significant point-to-point and RMA latency improvements
+  over PAMI as well as RMA functional improvements at scale.  The only
+  potential drawback is collective performance degradation against the PAMI
+  optimizations, but at certain message and partition sizes, performance has
+  been observed to be comparable or even better.
+
 ## MLX provider notes
 
 - New provider to replace the deprecated mxm provider.
