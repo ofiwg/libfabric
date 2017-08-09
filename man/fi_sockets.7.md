@@ -51,6 +51,8 @@ performance numbers are lower compared to other providers implemented
 over high-speed fabric, and lower than what an application might see
 implementing to sockets directly.
 
+Does not support FI_ADDR_STR address format.
+
 # RUNTIME PARAMETERS
 
 The sockets provider checks for the following environment variables -
