@@ -367,11 +367,11 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
 	init_attr.recv_cq = cq;
-	init_attr.cap.max_send_wr = verbs_default_tx_size;
-	init_attr.cap.max_recv_wr = verbs_default_rx_size;
-	init_attr.cap.max_send_sge = verbs_default_tx_iov_limit;
-	init_attr.cap.max_recv_sge = verbs_default_rx_iov_limit;
-	init_attr.cap.max_inline_data = verbs_default_inline_size;
+	init_attr.cap.max_send_wr = fi_ibv_gl_data.def_tx_size;
+	init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
+	init_attr.cap.max_send_sge = fi_ibv_gl_data.def_tx_iov_limit;
+	init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
+	init_attr.cap.max_inline_data = fi_ibv_gl_data.def_inline_size;
 
 	init_attr.qp_type = IBV_QPT_RC;
 
@@ -490,7 +490,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	union ibv_gid gid;
 	size_t name_len;
 	int ret;
-	int param;
 
 	if (!(fi = fi_allocinfo()))
 		return -FI_ENOMEM;
@@ -523,21 +522,9 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		goto err;
 
 	if (ep_dom->type == FI_EP_RDM) {
-		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SIZE;
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
-		if (!fi_param_get_int(&fi_ibv_prov, "rdm_buffer_size", &param)) {
-			if (param > sizeof (struct fi_ibv_rdm_rndv_header)) {
-				fi->tx_attr->inject_size = param;
-			} else {
-				VERBS_INFO(FI_LOG_CORE,
-					   "rdm_buffer_size too small, "
-					   "should be greater than %zu\n",
-					   sizeof (struct fi_ibv_rdm_rndv_header));
-				ret = -FI_EINVAL;
-				goto err;
-			}
-		}
+		fi->tx_attr->inject_size = fi_ibv_gl_data.rdm.buffer_size;
 	}
 
 	switch (ctx->device->transport_type) {
@@ -661,9 +648,8 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	struct rdma_addrinfo *rai;
 	struct rdma_cm_id *id;
 	const char *ret_ptr;
+	char *iface = fi_ibv_gl_data.iface;
 	int ret, num_verbs_ifs = 0;
-
-	char *iface = NULL;
 	size_t iface_len = 0;
 	int exact_match = 0;
 
@@ -675,31 +661,27 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	}
 
 	/* select best iface name based on user's input */
-	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface) == FI_SUCCESS) {
-		iface_len = strlen(iface);
-		if (iface_len > IFNAMSIZ) {
-			VERBS_INFO(FI_LOG_EP_CTRL,
-				   "Too long iface name: %s, max: %d\n",
-				   iface, IFNAMSIZ);
-			return -FI_EINVAL;
-		}
-		for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
-			exact_match = !strcmp(ifa->ifa_name, iface);
+	iface_len = strlen(iface);
+	if (iface_len > IFNAMSIZ) {
+		VERBS_INFO(FI_LOG_EP_CTRL,
+			   "Too long iface name: %s, max: %d\n",
+			   iface, IFNAMSIZ);
+	
 	}
+	for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
+		exact_match = !strcmp(ifa->ifa_name, iface);
 
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
 				!strcmp(ifa->ifa_name, "lo"))
 			continue;
 
-		if(iface) {
-			if(exact_match) {
-				if(strcmp(ifa->ifa_name, iface))
-					continue;
-			} else {
-				if(strncmp(ifa->ifa_name, iface, iface_len))
-					continue;
-			}
+		if(exact_match) {
+			if (strcmp(ifa->ifa_name, iface))
+				continue;
+		} else {
+			if (strncmp(ifa->ifa_name, iface, iface_len))
+				continue;
 		}
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -896,13 +878,11 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
-	int ret = 0, i, num_devices, fork_unsafe = 0;
+	int ret = 0, i, num_devices;
 
 	*all_infos = NULL;
 
-	fi_param_get_bool(NULL, "fork_unsafe", &fork_unsafe);
-
-	if (!fork_unsafe) {
+	if (!fi_ibv_gl_data.fork_unsafe) {
 		VERBS_INFO(FI_LOG_CORE, "Enabling IB fork support\n");
 		ret = ibv_fork_init();
 		if (ret) {
@@ -974,35 +954,44 @@ static int fi_ibv_set_default_info(struct fi_info *info)
 	int ret;
 
 	ret = fi_ibv_set_default_attr(info, &info->tx_attr->size,
-				      verbs_default_tx_size, "tx context size");
+				      fi_ibv_gl_data.def_tx_size,
+				      "tx context size");
 	if (ret)
 		return ret;
 
 	ret = fi_ibv_set_default_attr(info, &info->rx_attr->size,
-				    verbs_default_rx_size, "rx context size");
+				      fi_ibv_gl_data.def_rx_size,
+				      "rx context size");
 	if (ret)
 		return ret;
 
-	/* Don't set defaults for verb/RDM as it supports an iov limit of just 1 */
+	/* Don't set defaults for verb/RDM as
+	 * it supports an iov limit of just 1 */
 	if (info->ep_attr->type != FI_EP_RDM) {
-		ret = fi_ibv_set_default_attr(info, &info->tx_attr->iov_limit,
-					      verbs_default_tx_iov_limit,
-					      "tx iov_limit");
+		ret = fi_ibv_set_default_attr(
+			info, &info->tx_attr->iov_limit,
+			fi_ibv_gl_data.def_tx_iov_limit,
+			"tx iov_limit");
 		if (ret)
 			return ret;
 
-		/* For verbs iov limit is same for both regular messages and RMA */
-		ret = fi_ibv_set_default_attr(info, &info->tx_attr->rma_iov_limit,
-					      verbs_default_tx_iov_limit,
-					      "tx rma_iov_limit");
+		ret = fi_ibv_set_default_attr(
+			info, &info->rx_attr->iov_limit,
+			fi_ibv_gl_data.def_rx_iov_limit,
+			"rx iov_limit");
 		if (ret)
 			return ret;
 
-		ret = fi_ibv_set_default_attr(info, &info->rx_attr->iov_limit,
-					      verbs_default_rx_iov_limit,
-					      "rx iov_limit");
-		if (ret)
-			return ret;
+		if (info->ep_attr->type != FI_EP_DGRAM) {
+			/* For verbs iov limit is same for
+			 * both regular messages and RMA */
+			ret = fi_ibv_set_default_attr(
+				info, &info->tx_attr->rma_iov_limit,
+				fi_ibv_gl_data.def_tx_iov_limit,
+				"tx rma_iov_limit");
+			if (ret)
+				return ret;
+		}
 	}
 	return 0;
 }

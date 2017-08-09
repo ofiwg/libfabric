@@ -69,6 +69,10 @@
 #include "fi_signal.h"
 #include "fi_util.h"
 
+#ifdef HAVE_VERBS_EXP_H
+#include <infiniband/verbs_exp.h>
+#endif /* HAVE_VERBS_EXP_H */
+
 #ifndef AF_IB
 #define AF_IB 27
 #endif
@@ -108,14 +112,6 @@
 
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
-
-extern size_t verbs_default_tx_size;
-extern size_t verbs_default_rx_size;
-extern size_t verbs_default_tx_iov_limit;
-extern size_t verbs_default_rx_iov_limit;
-extern size_t verbs_default_inline_size;
-
-extern size_t verbs_min_rnr_timer;
 
 extern struct fi_ibv_gl_data {
 	size_t	def_tx_size;
