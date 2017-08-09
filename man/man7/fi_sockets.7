@@ -1,4 +1,4 @@
-.TH "fi_sockets" "7" "2016\-03\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_sockets" "7" "2017\-08\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Sockets Fabric Provider
@@ -44,6 +44,8 @@ implemented over TCP sockets.
 As a result, the performance numbers are lower compared to other
 providers implemented over high\-speed fabric, and lower than what an
 application might see implementing to sockets directly.
+.PP
+Does not support FI_ADDR_STR address format.
 .SH RUNTIME PARAMETERS
 .PP
 The sockets provider checks for the following environment variables \-
