@@ -5,7 +5,7 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.5.0rc3, Mon Aug 7, 2017
+v1.5.0, Wed Aug 9, 2017
 ============================
 
 The 1.5 release includes updates to the libfabric API and ABI.  As a
@@ -60,6 +60,19 @@ see the man pages.
   mode bit was added.  This mode bit doubles the amount of context
   space that an application allocates on behalf of the provider.
 
+## MLX provider notes
+
+- New provider to replace the deprecated mxm provider.
+- Targets Mellanox InfiniBand fabrics, through the UCX library.
+- Supports RDM endpoints with the tagged interfaces.
+- Requires FI_CONTEXT mode support.
+- See fi_mlx.7 man page for more details.
+
+## NetDir provider nodes
+
+- New provider for Windows that runs over the NetworkDirect API.
+- Supports FI_EP_MSG endpoints, with FI_MSG and FI_RMA interfaces.
+
 ## PSM provider notes
 
 - Improve the name server functionality and move to the utility code
@@ -79,9 +92,15 @@ see the man pages.
 - Add FI_SOURCE_ERR to the supported caps
 - Improve the method of checking device existence
 
-## UDP provider notes
+## Sockets provider notes
 
-- Add support for multicast data transfers
+- Updated and enhanced atomic operation support.
+- Add support for experimental deferred work queue operations.
+- Fixed counter signaling when used with wait sets.
+- Improved support on Windows.
+- Cleaned up event reporting for destroyed endpoints.
+- Fixed several possible crash scenarios.
+- Fixed handling socket disconnect events which could hang the provider.
 
 ## RxM provider notes
 
@@ -91,6 +110,15 @@ see the man pages.
 - The provider was earlier experimental. It's functional from this
   release onwards.
 - Please refer to the man page of the provider for more info.
+
+## UDP provider notes
+
+- Add support for multicast data transfers
+
+## usNIC provider notes
+
+- Only requires libibverbs when necessary
+- Updated to handle 1.5 interface changes.
 
 ## Verbs provider notes
 
