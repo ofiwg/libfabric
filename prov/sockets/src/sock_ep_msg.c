@@ -502,6 +502,8 @@ static void *sock_ep_cm_connect_handler(void *data)
 		goto out;
 	}
 
+	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "Connecting to address",
+			&handle->dest_addr);
 	sock_set_sockopts_conn(sock_fd);
 	ret = connect(sock_fd, (struct sockaddr *)&handle->dest_addr,
 		      sizeof(handle->dest_addr));

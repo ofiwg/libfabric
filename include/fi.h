@@ -185,6 +185,7 @@ uint64_t fi_gettime_us(void);
 #define AF_IB 27
 #endif
 
+#define ofi_sa_family(addr) ((struct sockaddr *)(addr))->sa_family
 #define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
 #define ofi_sin_port(addr) (((struct sockaddr_in *)(addr))->sin_port)
 
@@ -240,6 +241,22 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 
 int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 		const struct sockaddr *sa2);
+void ofi_straddr_log_internal(const char *func, int line,
+			      const struct fi_provider *prov,
+			      enum fi_log_level level,
+			      enum fi_log_subsys subsys, char *log_str,
+			      const void *addr);
+
+#define ofi_straddr_log(...) \
+	ofi_straddr_log_internal(__func__, __LINE__, __VA_ARGS__)
+
+#if ENABLE_DEBUG
+#define ofi_straddr_dbg(prov, subsystem, ...) \
+	ofi_straddr_log(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
+#else
+#define ofi_straddr_dbg(prov, subsystem, ...) do {} while(0)
+#endif
+
 /*
  * Key Index
  */

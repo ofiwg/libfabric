@@ -661,6 +661,10 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 
 	if (fi_addr)
 		*fi_addr = !ret ? index : FI_ADDR_NOTAVAIL;
+
+	ofi_straddr_dbg(av->prov, FI_LOG_AV, "av_insert addr", addr);
+	FI_DBG(av->prov, FI_LOG_AV, "av_insert fi_addr: %" PRIu64 "\n", *fi_addr);
+
 	return ret;
 }
 
@@ -1259,13 +1263,10 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 			     struct util_cmap_handle **handle_ret)
 {
 	struct util_cmap_handle *handle;
-#if ENABLE_DEBUG
-	char buf[OFI_ADDRSTRLEN];
-	uint32_t addr_format;
-	size_t len;
-#endif
 	int ret = 0, index;
 
+	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Processing connreq for addr", addr);
 	index = ip_av_get_index(cmap->av, addr);
 	fastlock_acquire(&cmap->lock);
 	if (index < 0)
@@ -1274,9 +1275,14 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		handle = util_cmap_get_handle(cmap, (fi_addr_t)index, addr);
 
 	if (!handle) {
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		       "No handle found for given addr\n");
-		ret = util_cmap_alloc_handle_peer(cmap, addr, CMAP_CONNREQ_RECV, &handle);
+		if (index < 0)
+			ret = util_cmap_alloc_handle_peer(cmap, addr,
+							  CMAP_CONNREQ_RECV,
+							  &handle);
+		else
+			ret = util_cmap_alloc_handle(cmap, (fi_addr_t)index,
+						     CMAP_CONNREQ_RECV,
+						     &handle);
 		if (ret)
 			goto unlock;
 	}
@@ -1291,14 +1297,11 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		ret = -FI_EALREADY;
 		break;
 	case CMAP_CONNREQ_SENT:
-#if ENABLE_DEBUG
-		addr_format = ofi_translate_addr_format(((struct sockaddr *)addr)->sa_family);
-		len = sizeof(buf);
-		FI_DBG(cmap->av->prov, FI_LOG_FABRIC, "local_name: %s\n",
-		       ofi_straddr(buf, &len, addr_format, cmap->attr.name));
-		FI_DBG(cmap->av->prov, FI_LOG_FABRIC, "remote_name: %s\n",
-		       ofi_straddr(buf, &len, addr_format, addr));
-#endif
+		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "local_name",
+				cmap->attr.name);
+		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "remote_name",
+				addr);
+
 		if (ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name) < 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Remote name lower than local name.\n");

@@ -994,7 +994,6 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	struct util_cmap_attr attr;
 	struct rxm_ep *rxm_ep;
 	struct util_av *util_av;
-	char buf[OFI_ADDRSTRLEN];
 	void *name;
 	size_t len;
 	int ret = 0;
@@ -1015,11 +1014,8 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			free(name);
 			return ret;
 		}
-		len = sizeof(buf);
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "local_name: %s\n",
-		       ofi_straddr(buf, &len,
-				   ofi_translate_addr_format(((struct sockaddr *)name)->sa_family),
-				   name));
+		ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
+
 		attr.name		= name;
 		attr.alloc 		= rxm_conn_alloc;
 		attr.close 		= rxm_conn_close;

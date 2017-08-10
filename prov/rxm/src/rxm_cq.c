@@ -383,10 +383,8 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		}
 	}
 
-	if (rx_buf->ep->rxm_info->caps & FI_DIRECTED_RECV)
-		match_attr.addr = rx_buf->conn->handle.fi_addr;
-	else
-		match_attr.addr = FI_ADDR_UNSPEC;
+	/* fi_addr would be FI_ADDR_UNSPEC if there is no corresponding AV entry */
+	match_attr.addr = rx_buf->conn->handle.fi_addr;
 
 	if (rx_buf->ep->rxm_info->caps & FI_SOURCE)
 		util_cq->src[ofi_cirque_windex(util_cq->cirq)] = rx_buf->conn->handle.fi_addr;
