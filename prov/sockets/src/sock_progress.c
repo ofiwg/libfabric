@@ -2118,6 +2118,8 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		}
 
 		sock_pe_report_tx_error(pe_entry, 0, FI_EIO);
+		pe_entry->is_complete = 1;
+
 		goto out;
 	}
 
