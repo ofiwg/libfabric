@@ -80,7 +80,7 @@ static int rxm_match_unexp_msg_tagged(struct dlist_entry *item, const void *arg)
 	struct rxm_unexp_msg *unexp_msg;
 
 	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_addr(attr->tag, unexp_msg->addr) &&
+	return rxm_match_addr(attr->addr, unexp_msg->addr) &&
 		rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
 }
 
