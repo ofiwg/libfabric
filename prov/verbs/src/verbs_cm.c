@@ -217,7 +217,7 @@ static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	return rdma_disconnect(_ep->id) ? -errno : 0;
 }
 
-static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
+struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_ibv_msg_ep_setname,
 	.getname = fi_ibv_msg_ep_getname,
@@ -229,12 +229,6 @@ static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.shutdown = fi_ibv_msg_ep_shutdown,
 	.join = fi_no_join,
 };
-
-struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep)
-{
-	return &fi_ibv_msg_ep_cm_ops;
-}
-
 
 static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 {

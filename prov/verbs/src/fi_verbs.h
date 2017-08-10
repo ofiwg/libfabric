@@ -106,7 +106,6 @@
 #define VERBS_MR_IOV_LIMIT 1
 
 extern struct fi_provider fi_ibv_prov;
-extern struct fi_info *verbs_info;
 
 extern size_t verbs_default_tx_size;
 extern size_t verbs_default_rx_size;
@@ -127,6 +126,8 @@ struct verbs_dev_info {
 
 struct fi_ibv_fabric {
 	struct util_fabric	util_fabric;
+	struct fi_info		*info;
+	struct fi_info		*all_infos;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -318,15 +319,12 @@ int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
 int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av_fid, void *context);
-struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
-struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep);
-struct fi_ops_msg *fi_ibv_msg_ep_ops_msg(struct fi_ibv_msg_ep *ep);
-struct fi_ops_rma *fi_ibv_msg_ep_ops_rma(struct fi_ibv_msg_ep *ep);
 
-struct fi_ops_rma *fi_ibv_rdm_ep_ops_rma();
-struct fi_ops_msg *fi_ibv_rdm_ep_ops_msg();
-
-struct fi_ops_msg *fi_ibv_msg_srq_ep_ops_msg(struct fi_ibv_msg_ep *ep);
+struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
+struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
+struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
+struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
+struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops;
 
 struct fi_ibv_connreq {
 	struct fid		handle;
@@ -337,10 +335,8 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr);
 
 
 int fi_ibv_init_info();
-void fi_ibv_free_info();
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
-struct fi_info *fi_ibv_get_verbs_info(const char *domain_name);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
 int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
@@ -382,12 +378,10 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
 
-#define fi_ibv_set_sge(sge, buf, len, desc)				\
-	do {								\
-		sge.addr = (uintptr_t)buf;				\
-		sge.length = (uint32_t)len;				\
-		sge.lkey = (uint32_t)(uintptr_t)desc;			\
-	} while (0)
+#define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
+	{ .addr = (uintptr_t)buf,					\
+	  .length = (uint32_t)len,					\
+	  .lkey = (uint32_t)(uintptr_t)desc }
 
 #define fi_ibv_set_sge_iov(sg_list, iov, count, desc, len)		\
 	do {								\
@@ -395,7 +389,7 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 		if (count) {						\
 			sg_list = alloca(sizeof(*sg_list) * count);	\
 			for (i = 0; i < count; i++) {			\
-				fi_ibv_set_sge(sg_list[i],		\
+				sg_list[i] = fi_ibv_init_sge(		\
 						iov[i].iov_base,	\
 						iov[i].iov_len,		\
 						desc[i]);		\
@@ -404,11 +398,7 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 		}							\
 	} while (0)
 
-#define fi_ibv_set_sge_inline(sge, buf, len)				\
-	do {								\
-		sge.addr = (uintptr_t)buf;				\
-		sge.length = (uint32_t)len;				\
-	} while (0)
+#define fi_ibv_init_sge_inline(buf, len) fi_ibv_init_sge(buf, len, NULL)
 
 #define fi_ibv_set_sge_iov_inline(sg_list, iov, count, len)		\
 	do {								\
@@ -416,7 +406,7 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 		if (count) {						\
 			sg_list = alloca(sizeof(*sg_list) * count);	\
 			for (i = 0; i < count; i++) {			\
-				fi_ibv_set_sge_inline(sg_list[i],	\
+				sg_list[i] = fi_ibv_init_sge_inline(	\
 						iov[i].iov_base,	\
 						iov[i].iov_len);	\
 				len += iov[i].iov_len;			\
