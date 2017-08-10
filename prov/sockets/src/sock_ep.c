@@ -278,24 +278,24 @@ static int sock_ctx_enable(struct fid_ep *ep)
 	switch (ep->fid.fclass) {
 	case FI_CLASS_RX_CTX:
 		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx.fid);
-		rx_ctx->enabled = 1;
 		sock_pe_add_rx_ctx(rx_ctx->domain->pe, rx_ctx);
 
 		if (!rx_ctx->ep_attr->listener.listener_thread &&
 		    sock_conn_listen(rx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
+		rx_ctx->enabled = 1;
 		return 0;
 
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx.fid);
-		tx_ctx->enabled = 1;
 		sock_pe_add_tx_ctx(tx_ctx->domain->pe, tx_ctx);
 
 		if (!tx_ctx->ep_attr->listener.listener_thread &&
 		    sock_conn_listen(tx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
+		tx_ctx->enabled = 1;
 		return 0;
 
 	default:
@@ -604,6 +604,34 @@ struct fi_ops_ep sock_ctx_ep_ops = {
 	.tx_size_left = sock_tx_size_left,
 };
 
+static int sock_eq_fid_match(struct dlist_entry *entry, const void *arg)
+{
+	struct sock_eq_entry *sock_eq_entry;
+	struct fi_eq_entry *eq_entry;
+	fid_t fid = (fid_t)arg;
+
+	sock_eq_entry = container_of(entry, struct sock_eq_entry, entry);
+	/* fi_eq_entry, fi_eq_cm_entry and fi_eq_err_entry all
+	 * have fid_t as first member */
+	eq_entry = (struct fi_eq_entry *)sock_eq_entry->event;
+	return (fid == eq_entry->fid);
+}
+
+static void sock_ep_clear_eq_list(struct dlistfd_head *list,
+				  struct fid_ep *ep_fid)
+{
+	struct dlist_entry *entry;
+
+	while (!dlistfd_empty(list)) {
+		entry = dlist_remove_first_match(&list->list, sock_eq_fid_match,
+						 ep_fid);
+		if (!entry)
+			break;
+		dlistfd_reset(list);
+		free(container_of(entry, struct sock_eq_entry, entry));
+	}
+}
+
 static int sock_ep_close(struct fid *fid)
 {
 	struct sock_ep *sock_ep;
@@ -680,6 +708,17 @@ static int sock_ep_close(struct fid *fid)
 	}
 
 	fastlock_destroy(&sock_ep->attr->cm.lock);
+
+	if (sock_ep->attr->eq) {
+		fastlock_acquire(&sock_ep->attr->eq->lock);
+		sock_ep_clear_eq_list(&sock_ep->attr->eq->list,
+				      &sock_ep->ep);
+		/* Any err_data if present would be freed by
+		 * sock_eq_clean_err_data_list when EQ is closed */
+		sock_ep_clear_eq_list(&sock_ep->attr->eq->err_list,
+				      &sock_ep->ep);
+		fastlock_release(&sock_ep->attr->eq->lock);
+	}
 
 	if (sock_ep->attr->fclass != FI_CLASS_SEP) {
 		if (!sock_ep->attr->tx_shared)
@@ -1111,6 +1150,8 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	tx_ctx->tx_id = index;
 	tx_ctx->ep_attr = sock_ep->attr;
 	tx_ctx->domain = sock_ep->attr->domain;
+	if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+		tx_ctx->rx_ctrl_ctx->domain = sock_ep->attr->domain;
 	tx_ctx->av = sock_ep->attr->av;
 	dlist_insert_tail(&sock_ep->attr->tx_ctx_entry, &tx_ctx->ep_list);
 
@@ -1215,6 +1256,9 @@ int sock_stx_ctx(struct fid_domain *domain,
 		return -FI_ENOMEM;
 
 	tx_ctx->domain = dom;
+	if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+		tx_ctx->rx_ctrl_ctx->domain = dom;
+
 	tx_ctx->fid.stx.fid.ops = &sock_ctx_ops;
 	tx_ctx->fid.stx.ops = &sock_ep_ops;
 	atomic_inc(&dom->ref);
@@ -1491,9 +1535,7 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 	info->ep_attr->type = ep_type;
 	return info;
 err:
-	free(info->src_addr);
-	free(info->dest_addr);
-	free(info);
+	fi_freeinfo(info);
 	return NULL;
 }
 
@@ -1679,6 +1721,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 		tx_ctx->ep_attr = sock_ep->attr;
 		tx_ctx->domain = sock_dom;
+		if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+			tx_ctx->rx_ctrl_ctx->domain = sock_dom;
 		tx_ctx->tx_id = 0;
 		dlist_insert_tail(&sock_ep->attr->tx_ctx_entry, &tx_ctx->ep_list);
 		sock_ep->attr->tx_array[0] = tx_ctx;

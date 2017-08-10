@@ -123,6 +123,13 @@ static inline int rbinit(struct ringbuf *rb, size_t size)
 	return 0;
 }
 
+static inline void rbreset(struct ringbuf *rb)
+{
+	rb->rcnt = 0;
+	rb->wcnt = 0;
+	rb->wpos = 0;
+}
+
 static inline void rbfree(struct ringbuf *rb)
 {
 	free(rb->buf);
