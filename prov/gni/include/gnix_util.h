@@ -93,6 +93,7 @@ extern ofi_atomic32_t gnix_debug_next_tid;
 
 #endif
 
+#if ENABLE_GNI_LOGGING
 #define GNIX_WARN(subsystem, ...)                                              \
 	GNIX_LOG_INTERNAL(FI_WARN, FI_LOG_WARN, subsystem, __VA_ARGS__)
 #define GNIX_TRACE(subsystem, ...)                                             \
@@ -103,6 +104,13 @@ extern ofi_atomic32_t gnix_debug_next_tid;
 	GNIX_LOG_INTERNAL(FI_DBG, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
 #define GNIX_ERR(subsystem, ...)                                               \
 	GNIX_LOG_INTERNAL(GNIX_FI_PRINT, FI_LOG_WARN, subsystem, __VA_ARGS__)
+#else
+#define GNIX_WARN(subsystem, ...)
+#define GNIX_TRACE(subsystem, ...)
+#define GNIX_INFO(subsystem, ...)
+#define GNIX_DEBUG(subsystem, ...)
+#define GNIX_ERR(subsystem, ...)
+#endif
 #define GNIX_FATAL(subsystem, ...)                                             \
 	do { \
 		GNIX_LOG_INTERNAL(GNIX_FI_PRINT, FI_LOG_WARN, subsystem, __VA_ARGS__); \

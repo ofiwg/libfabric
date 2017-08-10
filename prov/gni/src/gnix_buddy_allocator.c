@@ -243,7 +243,8 @@ static inline uint32_t __gnix_buddy_coalesce(gnix_buddy_alloc_handle_t *alloc_ha
 int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 				 gnix_buddy_alloc_handle_t **alloc_handle)
 {
-	char err_buf[256] = {0}, *error = NULL;
+	char err_buf[256] = {0};
+	char *error  __attribute__ ((unused));
 	int fi_errno;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");

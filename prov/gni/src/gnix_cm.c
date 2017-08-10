@@ -547,7 +547,8 @@ static int __gnix_ep_connresp(struct gnix_fid_ep *ep,
 /* Check for a connection response on an FI_EP_MSG. */
 int _gnix_ep_progress(struct gnix_fid_ep *ep)
 {
-	int ret, bytes_read, errno_keep;
+	int ret, bytes_read;
+	int errno_keep __attribute__ ((unused));
 	struct gnix_pep_sock_connresp resp;
 
 	/* No lock, fast exit. */
@@ -593,7 +594,8 @@ int _gnix_ep_progress(struct gnix_fid_ep *ep)
 DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 				  const void *param, size_t paramlen)
 {
-	int ret, errno_keep;
+	int ret;
+	int errno_keep __attribute__ ((unused));
 	struct gnix_fid_ep *ep_priv;
 	struct sockaddr_in saddr;
 	struct gnix_pep_sock_connreq req;
@@ -745,7 +747,8 @@ err_unlock:
 DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 				 size_t paramlen)
 {
-	int ret, errno_keep;
+	int ret;
+	int errno_keep __attribute__ ((unused));
 	struct gnix_vc *vc;
 	struct gnix_fid_ep *ep_priv;
 	struct gnix_pep_sock_conn *conn;
@@ -1001,7 +1004,8 @@ static int __gnix_pep_connreq(struct gnix_fid_pep *pep, int fd)
 /* Process incoming connection requests on a listening PEP. */
 int _gnix_pep_progress(struct gnix_fid_pep *pep)
 {
-	int accept_fd, ret, errno_keep;
+	int accept_fd, ret;
+	int errno_keep __attribute__ ((unused));
 
 	fastlock_acquire(&pep->lock);
 
@@ -1107,7 +1111,8 @@ DIRECT_FN int gnix_pep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 DIRECT_FN int gnix_pep_listen(struct fid_pep *pep)
 {
-	int ret, errno_keep;
+	int ret;
+	int errno_keep __attribute__ ((unused));
 	struct gnix_fid_pep *pep_priv;
 	struct sockaddr_in saddr;
 	int sockopt = 1;
