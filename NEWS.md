@@ -89,6 +89,9 @@ see the man pages.
 
 - New provider for Windows that runs over the NetworkDirect API.
 - Supports FI_EP_MSG endpoints, with FI_MSG and FI_RMA interfaces.
+- Supports shared receive contexts
+- Supports FI_SOCKADDR, FI_SOCKADDR_IN, and FI_SOCKADDR_IN6 addressing
+- Asynchronous operations make forward progress automatically
 
 ## PSM provider notes
 
