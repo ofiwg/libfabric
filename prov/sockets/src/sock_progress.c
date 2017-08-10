@@ -2652,7 +2652,7 @@ static int sock_pe_wait_ok(struct sock_pe *pe)
 		return 0;
 
 	if (dlist_empty(&pe->tx_list) && dlist_empty(&pe->rx_list))
-		return 0;
+		return 1;
 
 	if (!dlist_empty(&pe->tx_list)) {
 		for (entry = pe->tx_list.next;
