@@ -367,24 +367,22 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 
 int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_recv_match_attr match_attr = {0};
+	struct rxm_recv_match_attr match_attr;
 	struct dlist_entry *entry;
 	struct rxm_recv_queue *recv_queue;
 	struct util_cq *util_cq;
 
 	util_cq = rx_buf->ep->util_ep.rx_cq;
 
-	if ((rx_buf->ep->rxm_info->caps & FI_SOURCE) ||
-			(rx_buf->ep->rxm_info->caps & FI_DIRECTED_RECV)) {
-		if (!rx_buf->conn) {
-			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
-			if (!rx_buf->conn)
-				return -FI_EOTHER;
-		}
+	if ((rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) &&
+	    !rx_buf->conn) {
+		rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
+		if (!rx_buf->conn)
+			return -FI_EOTHER;
+		match_attr.addr = rx_buf->conn->handle.fi_addr;
+	} else {
+		match_attr.addr = FI_ADDR_UNSPEC;
 	}
-
-	/* fi_addr would be FI_ADDR_UNSPEC if there is no corresponding AV entry */
-	match_attr.addr = rx_buf->conn->handle.fi_addr;
 
 	if (rx_buf->ep->rxm_info->caps & FI_SOURCE)
 		util_cq->src[ofi_cirque_windex(util_cq->cirq)] = rx_buf->conn->handle.fi_addr;
@@ -413,8 +411,11 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, &match_attr);
 	if (!entry) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-				"No matching recv found. Enqueueing msg to unexpected queue\n");
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "No matching recv found for "
+		       "incoming msg with fi_addr: %" PRIu64 " tag: %" PRIu64
+		       "\n", match_attr.addr, match_attr.tag);
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Enqueueing msg to unexpected msg"
+		       "queue\n");
 		rx_buf->unexp_msg.addr = match_attr.addr;
 		rx_buf->unexp_msg.tag = match_attr.tag;
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &recv_queue->unexp_msg_list);
