@@ -1583,7 +1583,7 @@ static ssize_t psmx2_atomic_readwritev(struct fid_ep *ep,
 					      dest_addr, addr, key, datatype, op,
 					      context, ep_priv->tx_flags);
 
-	if (FI_ATOMIC_READ) {
+	if (op == FI_ATOMIC_READ) {
 		buf = NULL;
 		count = resultv[0].count;
 		src_desc = result_desc ? result_desc[0] : NULL;
@@ -2010,7 +2010,7 @@ static ssize_t psmx2_atomic_compwritemsg(struct fid_ep *ep,
 					 size_t result_count,
 					 uint64_t flags)
 {
-	if (!msg || !msg->msg_iov || msg->iov_count != 1 ||
+	if (!msg || !msg->msg_iov || !msg->iov_count ||
 	    !msg->rma_iov || msg->rma_iov_count != 1 ||
 	    !comparev || !compare_count || !resultv || !result_count)
 		return -FI_EINVAL;
