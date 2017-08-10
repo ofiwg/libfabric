@@ -278,24 +278,24 @@ static int sock_ctx_enable(struct fid_ep *ep)
 	switch (ep->fid.fclass) {
 	case FI_CLASS_RX_CTX:
 		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx.fid);
-		rx_ctx->enabled = 1;
 		sock_pe_add_rx_ctx(rx_ctx->domain->pe, rx_ctx);
 
 		if (!rx_ctx->ep_attr->listener.listener_thread &&
 		    sock_conn_listen(rx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
+		rx_ctx->enabled = 1;
 		return 0;
 
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx.fid);
-		tx_ctx->enabled = 1;
 		sock_pe_add_tx_ctx(tx_ctx->domain->pe, tx_ctx);
 
 		if (!tx_ctx->ep_attr->listener.listener_thread &&
 		    sock_conn_listen(tx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
+		tx_ctx->enabled = 1;
 		return 0;
 
 	default:
