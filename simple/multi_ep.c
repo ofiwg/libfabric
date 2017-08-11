@@ -136,7 +136,9 @@ static int do_transfers(void)
 		}
 	}
 
-	ft_finalize();
+	for (i = 0; i < num_eps; i++)
+		ft_finalize_ep(eps[i]);
+
 	printf("PASSED multi ep\n");
 	return 0;
 }
