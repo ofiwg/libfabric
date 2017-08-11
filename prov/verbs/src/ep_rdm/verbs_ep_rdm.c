@@ -49,6 +49,8 @@ extern struct dlist_entry fi_ibv_rdm_posted_queue;
 extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 extern struct util_buf_pool* fi_ibv_rdm_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
+extern struct fi_ops_msg fi_ibv_rdm_ep_msg_ops;
+extern struct fi_ops_rma fi_ibv_rdm_ep_rma_ops;
 
 static int
 fi_ibv_rdm_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
@@ -510,8 +512,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.fid.ops = &fi_ibv_rdm_ep_ops;
 	_ep->ep_fid.ops = &fi_ibv_rdm_ep_base_ops;
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
-	_ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
-	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+	_ep->ep_fid.msg = &fi_ibv_rdm_ep_msg_ops;
+	_ep->ep_fid.rma = &fi_ibv_rdm_ep_rma_ops;
 	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
 	_ep->tx_selective_completion = 0;
 	_ep->rx_selective_completion = 0;

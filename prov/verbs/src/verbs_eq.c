@@ -35,7 +35,7 @@
 #include <fi_util.h>
 #include "fi_verbs.h"
 
-static struct fi_info *
+struct fi_info *
 fi_ibv_get_verbs_info(struct fi_info *ilist, const char *domain_name)
 {
 	struct fi_info *fi;

@@ -316,12 +316,18 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct fi_ibv_domain *_domain;
 	struct fi_ibv_fabric *fab;
+	struct fi_info *fi;
 	int param = 0, ret;
 
 	fab = container_of(fabric, struct fi_ibv_fabric,
 			   util_fabric.fabric_fid);
+
+	fi = fi_ibv_get_verbs_info(fab->all_infos, info->domain_attr->name);
+	if (!fi)
+		return -FI_EINVAL;
+
 	ret = ofi_check_domain_attr(&fi_ibv_prov, fabric->api_version,
-				    fab->info->domain_attr, info->domain_attr);
+				    fi->domain_attr, info->domain_attr);
 	if (ret)
 		return ret;
 
