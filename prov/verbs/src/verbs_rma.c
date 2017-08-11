@@ -521,7 +521,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	return ret;
 }
 
-static struct fi_ops_rma fi_ibv_rdm_ep_rma_ops = {
+struct fi_ops_rma fi_ibv_rdm_ep_rma_ops = {
 	.size		= sizeof(struct fi_ops_rma),
 	.read		= fi_ibv_rdm_ep_rma_read,
 	.readv		= fi_ibv_rdm_ep_rma_readv,

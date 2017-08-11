@@ -288,7 +288,7 @@ static ssize_t fi_ibv_rdm_injectdata(struct fid_ep *ep, const void *buf,
 	return -FI_ENOSYS;
 }
 
-static struct fi_ops_msg fi_ibv_rdm_ep_msg_ops = {
+struct fi_ops_msg fi_ibv_rdm_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_ibv_rdm_recv,
 	.recvv = fi_ibv_rdm_recvv,
