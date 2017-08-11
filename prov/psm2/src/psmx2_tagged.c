@@ -87,14 +87,8 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 	switch (err) {
 	case PSM2_OK:
 		if (ep_priv->recv_cq) {
-			if (flags & FI_CLAIM) {
-				if (context)
-					PSMX2_CTXT_REQ((struct fi_context *)context) = req;
-			} else if (flags & FI_DISCARD) {
-				if (!psm2_mq_imrecv(ep_priv->trx_ctxt->psm2_mq, 0,
-						    NULL, 0, req, &req))
-					psm2_mq_wait2(&req, NULL);
-			}
+			if ((flags & FI_CLAIM) && context)
+				PSMX2_CTXT_REQ((struct fi_context *)context) = req;
 
 			tag = PSMX2_GET_TAG64(psm2_status.msg_tag);
 			len = psm2_status.msg_length;
@@ -198,48 +192,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 		if (!context)
 			return -FI_EINVAL;
 
-		if (flags & FI_DISCARD) {
-			psm2_mq_status2_t psm2_status;
-			struct psmx2_cq_event *event;
-
-			fi_context = context;
-			psm2_req = PSMX2_CTXT_REQ(fi_context);
-			err = psm2_mq_imrecv(ep_priv->trx_ctxt->psm2_mq, 0,
-					     NULL, 0, context, &psm2_req);
-			if (err != PSM2_OK)
-				return psmx2_errno(err);
-
-			psm2_mq_wait2(&psm2_req, &psm2_status);
-
-			if (ep_priv->recv_cq &&
-			    (!ep_priv->recv_selective_completion || (flags & FI_COMPLETION))) {
-				tag = PSMX2_GET_TAG64(psm2_status.msg_tag);
-				event = psmx2_cq_create_event(
-						ep_priv->recv_cq,
-						context,		/* op_context */
-						NULL,			/* buf */
-						flags|FI_RECV|FI_TAGGED,/* flags */
-						0,			/* len */
-						0,			/* data */
-						tag,			/* tag */
-						0,			/* olen */
-						0);			/* err */
-
-				if (!event)
-					return -FI_ENOMEM;
-
-				vlane = PSMX2_TAG32_GET_SRC(psm2_status.msg_tag.tag2);
-				event->source_is_valid = 1;
-				event->source = PSMX2_EP_TO_ADDR(psm2_status.msg_peer, vlane);
-				event->source_av = ep_priv->av;
-				psmx2_cq_enqueue_event(ep_priv->recv_cq, event);
-			}
-
-			if (ep_priv->recv_cntr)
-				psmx2_cntr_inc(ep_priv->recv_cntr);
-
-			return 0;
-		}
+		/* TODO: handle FI_DISCARD */
 
 		fi_context = context;
 		psm2_req = PSMX2_CTXT_REQ(fi_context);
