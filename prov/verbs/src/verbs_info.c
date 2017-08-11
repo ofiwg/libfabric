@@ -66,13 +66,6 @@
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
-
-static char def_tx_ctx_size[16] = "384";
-static char def_rx_ctx_size[16] = "384";
-static char def_tx_iov_limit[16] = "4";
-static char def_rx_iov_limit[16] = "4";
-static char def_inject_size[16] = "64";
-
 const struct fi_fabric_attr verbs_fabric_attr = {
 	.prov_version		= VERBS_PROV_VERS,
 };
@@ -578,7 +571,6 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 }
 
 static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
-				    struct ibv_device_attr *device_attr,
 				    struct fi_info *info)
 {
 	struct ibv_pd *pd;
@@ -600,26 +592,15 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 		goto err1;
 	}
 
-	/* TODO: serialize access to string buffers */
-	fi_read_file(FI_CONF_DIR, "def_tx_ctx_size",
-			def_tx_ctx_size, sizeof def_tx_ctx_size);
-	fi_read_file(FI_CONF_DIR, "def_rx_ctx_size",
-			def_rx_ctx_size, sizeof def_rx_ctx_size);
-	fi_read_file(FI_CONF_DIR, "def_tx_iov_limit",
-			def_tx_iov_limit, sizeof def_tx_iov_limit);
-	fi_read_file(FI_CONF_DIR, "def_rx_iov_limit",
-			def_rx_iov_limit, sizeof def_rx_iov_limit);
-	fi_read_file(FI_CONF_DIR, "def_inject_size",
-			def_inject_size, sizeof def_inject_size);
-
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
 	init_attr.recv_cq = cq;
-	init_attr.cap.max_send_wr = MIN(atoi(def_tx_ctx_size), device_attr->max_qp_wr);
-	init_attr.cap.max_recv_wr = MIN(atoi(def_rx_ctx_size), device_attr->max_qp_wr);
-	init_attr.cap.max_send_sge = MIN(atoi(def_tx_iov_limit), device_attr->max_sge);
-	init_attr.cap.max_recv_sge = MIN(atoi(def_rx_iov_limit), device_attr->max_sge);
-	init_attr.cap.max_inline_data = atoi(def_inject_size);
+	init_attr.cap.max_send_wr = verbs_default_tx_size;
+	init_attr.cap.max_recv_wr = verbs_default_rx_size;
+	init_attr.cap.max_send_sge = verbs_default_tx_iov_limit;
+	init_attr.cap.max_recv_sge = verbs_default_rx_iov_limit;
+	init_attr.cap.max_inline_data = verbs_default_inline_size;
+
 	init_attr.qp_type = IBV_QPT_RC;
 
 	qp = ibv_create_qp(pd, &init_attr);
@@ -629,17 +610,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 		goto err2;
 	}
 
-	info->tx_attr->inject_size	= init_attr.cap.max_inline_data;
-	info->tx_attr->iov_limit 	= init_attr.cap.max_send_sge;
-	info->tx_attr->size	 	= init_attr.cap.max_send_wr;
-
-	info->rx_attr->iov_limit 	= init_attr.cap.max_recv_sge;
-	/*
-	 * On some HW ibv_create_qp can increase max_recv_wr value more than
-	 * it really supports. So, alignment with device capability is needed.
-	 */
-	info->rx_attr->size	 	= MIN(init_attr.cap.max_recv_wr,
-						device_attr->max_qp_wr);
+	info->tx_attr->inject_size = init_attr.cap.max_inline_data;
 
 	ibv_destroy_qp(qp);
 err2:
@@ -669,7 +640,14 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	info->domain_attr->max_ep_tx_ctx 	= device_attr.max_qp;
 	info->domain_attr->max_ep_rx_ctx 	= device_attr.max_qp;
 
-	ret = fi_ibv_get_qp_cap(ctx, &device_attr, info);
+	info->tx_attr->size 			= device_attr.max_qp_wr;
+	info->tx_attr->iov_limit 		= device_attr.max_sge;
+	info->tx_attr->rma_iov_limit		= device_attr.max_sge;
+
+	info->rx_attr->size 			= device_attr.max_qp_wr;
+	info->rx_attr->iov_limit 		= device_attr.max_sge;
+
+	ret = fi_ibv_get_qp_cap(ctx, info);
 	if (ret)
 		return ret;
 
@@ -1237,6 +1215,59 @@ struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
 	return NULL;
 }
 
+static int fi_ibv_set_default_attr(struct fi_info *info, size_t *attr,
+				   size_t default_attr, char *attr_str)
+{
+	if (default_attr > *attr) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "%s supported by domain: "
+			"%s is less than provider's default\n", attr_str,
+			info->domain_attr->name);
+		return -FI_EINVAL;
+	}
+	*attr = default_attr;
+	return 0;
+}
+
+/* Set default values for attributes. ofi_alter_info would change them if the
+ * user has asked for a different value in hints */
+static int fi_ibv_set_default_info(struct fi_info *info)
+{
+	int ret;
+
+	ret = fi_ibv_set_default_attr(info, &info->tx_attr->size,
+				      verbs_default_tx_size, "tx context size");
+	if (ret)
+		return ret;
+
+	ret = fi_ibv_set_default_attr(info, &info->rx_attr->size,
+				    verbs_default_rx_size, "rx context size");
+	if (ret)
+		return ret;
+
+	/* Don't set defaults for verb/RDM as it supports an iov limit of just 1 */
+	if (info->ep_attr->type != FI_EP_RDM) {
+		ret = fi_ibv_set_default_attr(info, &info->tx_attr->iov_limit,
+					      verbs_default_tx_iov_limit,
+					      "tx iov_limit");
+		if (ret)
+			return ret;
+
+		/* For verbs iov limit is same for both regular messages and RMA */
+		ret = fi_ibv_set_default_attr(info, &info->tx_attr->rma_iov_limit,
+					      verbs_default_tx_iov_limit,
+					      "tx rma_iov_limit");
+		if (ret)
+			return ret;
+
+		ret = fi_ibv_set_default_attr(info, &info->rx_attr->iov_limit,
+					      verbs_default_rx_iov_limit,
+					      "rx iov_limit");
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 		struct fi_info **info)
 {
@@ -1263,7 +1294,11 @@ static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 			goto err1;
 		}
 
-		fi_ibv_update_info(hints, fi);
+		ret = fi_ibv_set_default_info(fi);
+		if (ret) {
+			fi_freeinfo(fi);
+			continue;
+		}
 
 		if (!*info)
 			*info = fi;
