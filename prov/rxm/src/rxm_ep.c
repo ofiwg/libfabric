@@ -80,7 +80,7 @@ static int rxm_match_unexp_msg_tagged(struct dlist_entry *item, const void *arg)
 	struct rxm_unexp_msg *unexp_msg;
 
 	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_addr(attr->tag, unexp_msg->addr) &&
+	return rxm_match_addr(attr->addr, unexp_msg->addr) &&
 		rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
 }
 
@@ -414,7 +414,7 @@ static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 				    struct rxm_recv_entry *recv_entry,
 				    struct rxm_rx_buf **rx_buf)
 {
-	struct rxm_recv_match_attr match_attr;
+	struct rxm_recv_match_attr match_attr = {0};
 	struct dlist_entry *entry;
 
 	if (dlist_empty(&recv_queue->unexp_msg_list))
@@ -430,8 +430,9 @@ static int rxm_check_unexp_msg_list(struct rxm_ep *rxm_ep,
 	if (!entry)
 		return -FI_EAGAIN;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Match for posted recv found in unexp msg list\n");
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Match for posted recv with fi_addr: "
+	       "%" PRIu64 " tag: %" PRIu64 " found in unexp msg list\n",
+	       match_attr.addr, match_attr.tag);
 	*rx_buf = container_of(entry, struct rxm_rx_buf, unexp_msg.entry);
 	return 0;
 }
@@ -471,6 +472,9 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 			dlist_insert_tail(&recv_entry->entry,
 					  &recv_queue->recv_list);
 			ret = 0;
+			FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Enqueuing recv with "
+			       "fi_addr: %" PRIu64 " tag: %" PRIu64 "\n",
+			       recv_entry->addr, recv_entry->tag);
 		} else {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 					"Unable to check unexp msg list\n");
@@ -1060,6 +1064,13 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!rxm_ep->util_ep.av)
 			return -FI_EOPBADSTATE;
 
+		ret = fi_listen(rxm_ep->msg_pep);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to set msg PEP to listen state\n");
+			return ret;
+		}
+
 		ret = rxm_ep_prepost_buf(rxm_ep);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
@@ -1112,12 +1123,6 @@ static int rxm_listener_open(struct rxm_ep *rxm_ep)
 		goto err;
 	}
 
-	ret = fi_listen(rxm_ep->msg_pep);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to set msg PEP to listen state\n");
-		goto err;
-	}
 	return 0;
 err:
 	rxm_listener_close(rxm_ep);

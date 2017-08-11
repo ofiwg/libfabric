@@ -276,6 +276,8 @@ static int util_av_hash_insert(struct util_av_hash *hash, int slot, int index)
  */
 int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index)
 {
+	struct dlist_entry *av_entry;
+	struct util_ep *ep;
 	int ret;
 
 	if (av->free_list == UTIL_NO_ENTRY) {
@@ -295,6 +297,12 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 	*index = av->free_list;
 	av->free_list = *(int *) util_av_get_data(av, av->free_list);
 	util_av_set_data(av, *index, addr, av->addrlen);
+
+	dlist_foreach(&av->ep_list, av_entry) {
+		ep = container_of(av_entry, struct util_ep, av_entry);
+		if (ep->cmap)
+			ofi_cmap_update(ep->cmap, addr, (fi_addr_t)(*index));
+	}
 	return 0;
 }
 
@@ -1130,7 +1138,7 @@ static int util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 	*handle = cmap->attr.alloc();
 	if (!*handle)
 		return -FI_ENOMEM;
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated new handle: %p for "
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated handle: %p for "
 	       "fi_addr: %" PRIu64 "\n", *handle, fi_addr);
 	ofi_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
 	cmap->handles_av[fi_addr] = *handle;
@@ -1152,8 +1160,9 @@ static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
 		free(peer);
 		return -FI_ENOMEM;
 	}
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "Allocated new handle: %p for given addr\n", *handle);
+	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV, "Allocated handle for addr",
+			addr);
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "handle: %p\n", *handle);
 	ofi_cmap_init_handle(*handle, cmap, state, FI_ADDR_UNSPEC, peer);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
 	peer->handle = *handle;
@@ -1164,7 +1173,7 @@ static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
 
 /* Caller must hold cmap->lock */
 static struct util_cmap_handle *
-util_cmap_get_handle_peer(struct util_cmap *cmap, void *addr)
+util_cmap_get_handle_peer(struct util_cmap *cmap, const void *addr)
 {
 	struct util_cmap_peer *peer;
 	struct dlist_entry *entry;
@@ -1173,8 +1182,34 @@ util_cmap_get_handle_peer(struct util_cmap *cmap, void *addr)
 				       addr);
 	if (!entry)
 		return NULL;
+	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV, "handle found in peer list"
+			" for addr", addr);
 	peer = container_of(entry, struct util_cmap_peer, entry);
 	return peer->handle;
+}
+
+/* Caller must hold cmap->lock */
+static void util_cmap_move_handle(struct util_cmap_handle *handle,
+				  fi_addr_t fi_addr)
+{
+	dlist_remove(&handle->peer->entry);
+	free(handle->peer);
+	handle->peer = NULL;
+	handle->fi_addr = fi_addr;
+	handle->cmap->handles_av[fi_addr] = handle;
+}
+
+void ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr)
+{
+	struct util_cmap_handle *handle;
+
+	fastlock_acquire(&cmap->lock);
+	handle = util_cmap_get_handle_peer(cmap, addr);
+	if (!handle)
+		goto out;
+	util_cmap_move_handle(handle, fi_addr);
+out:
+	fastlock_release(&cmap->lock);
 }
 
 /* Caller must hold cmap->lock */
@@ -1188,16 +1223,14 @@ util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr, void *addr)
 		return NULL;
 	}
 	if (cmap->handles_av[fi_addr]) {
+		FI_DBG(cmap->av->prov, FI_LOG_AV, "handle found for fi_addr: %"
+				PRIu64 "\n", fi_addr);
 		handle = cmap->handles_av[fi_addr];
 	} else {
 		handle = util_cmap_get_handle_peer(cmap, addr);
 		if (!handle)
 			return NULL;
-		dlist_remove(&handle->peer->entry);
-		free(handle->peer);
-		handle->peer = NULL;
-		handle->fi_addr = fi_addr;
-		cmap->handles_av[fi_addr] = handle;
+		util_cmap_move_handle(handle, fi_addr);
 	}
 	return handle;
 }
@@ -1287,9 +1320,6 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 			goto unlock;
 	}
 
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		"Processing connreq for handle: %p\n", handle);
-
 	switch (handle->state) {
 	case CMAP_CONNECTED:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
@@ -1318,8 +1348,6 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		}
 		break;
 	case CMAP_CONNREQ_RECV:
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		       "Alloc'd new handle for incoming connection\n");
 		*handle_ret = handle;
 		break;
 	default:

@@ -482,6 +482,7 @@ struct util_cmap {
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);
 int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 			struct util_cmap_handle **handle);
+void ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr);
 
 void ofi_cmap_process_connect(struct util_cmap *cmap,
 			      struct util_cmap_handle *handle,
