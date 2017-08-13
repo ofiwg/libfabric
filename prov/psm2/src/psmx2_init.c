@@ -52,6 +52,7 @@ struct psmx2_env psmx2_env = {
 	.num_devunits	= 1,
 	.inject_size	= PSMX2_INJECT_SIZE,
 	.lock_level	= 2,
+	.lazy_conn	= 0,
 };
 
 static void psmx2_init_env(void)
@@ -68,6 +69,7 @@ static void psmx2_init_env(void)
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
 	fi_param_get_int(&psmx2_prov, "inject_size", &psmx2_env.inject_size);
 	fi_param_get_bool(&psmx2_prov, "lock_level", &psmx2_env.lock_level);
+	fi_param_get_bool(&psmx2_prov, "lazy_conn", &psmx2_env.lazy_conn);
 }
 
 static int psmx2_check_sep_cap(void)
@@ -446,8 +448,14 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			}
 
 			switch (hints->domain_attr->av_type) {
-			case FI_AV_UNSPEC:
 			case FI_AV_MAP:
+				if (psmx2_env.lazy_conn) {
+					FI_INFO(&psmx2_prov, FI_LOG_CORE,
+						"FI_AV_MAP is not supported when lazy connection is enabled.\n");
+					goto err_out;
+				}
+				/* fall through */
+			case FI_AV_UNSPEC:
 			case FI_AV_TABLE:
 				av_type = hints->domain_attr->av_type;
 				break;
@@ -621,6 +629,9 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->ep_attr->tx_ctx_cnt = tx_ctx_cnt;
 	psmx2_info->ep_attr->rx_ctx_cnt = rx_ctx_cnt;
 
+	if (psmx2_env.lazy_conn)
+		av_type = FI_AV_TABLE;
+
 	psmx2_info->domain_attr->threading = threading;
 	psmx2_info->domain_attr->control_progress = control_progress;
 	psmx2_info->domain_attr->data_progress = data_progress;
@@ -769,6 +780,9 @@ PROVIDER_INI
 
 	fi_param_define(&psmx2_prov, "lock_level", FI_PARAM_INT,
 			"How internal locking is used. 0 means no locking. (default: 2).");
+
+	fi_param_define(&psmx2_prov, "lazy_conn", FI_PARAM_BOOL,
+			"Whether to use lazy connection or not (default: no).");
 
 	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;

@@ -596,6 +596,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	uint32_t tag32;
 	size_t idx;
+	int err;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -634,8 +635,8 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 		vlane = 0;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = src_addr;
-		if (idx >= av->last)
-			return -FI_EINVAL;
+		if ((err = psmx2_av_check_table_idx(av, idx)))
+			return err;
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
@@ -745,6 +746,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	size_t total_len, long_len, short_len;
 	void *long_buf;
 	int i;
+	int err;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -780,8 +782,8 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 		vlane = 0;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = src_addr;
-		if (idx >= av->last)
-			return -FI_EINVAL;
+		if ((err = psmx2_av_check_table_idx(av, idx)))
+			return err;
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
@@ -969,6 +971,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	size_t idx;
 	void *psm2_context;
 	int no_event;
+	int err;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1008,8 +1011,8 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 		vlane = 0;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if (idx >= av->last)
-			return -FI_EINVAL;
+		if ((err = psmx2_av_check_table_idx(av, idx)))
+			return err;
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
@@ -1157,6 +1160,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	size_t total_len, len, len_sent;
 	uint8_t *buf, *p;
 	int i;
+	int err;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1193,8 +1197,8 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		vlane = 0;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if (idx >= av->last)
-			return -FI_EINVAL;
+		if ((err = psmx2_av_check_table_idx(av, idx)))
+			return err;
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];

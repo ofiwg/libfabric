@@ -839,6 +839,7 @@ struct psmx2_env {
 	int num_devunits;
 	int inject_size;
 	int lock_level;
+	int lazy_conn;
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
@@ -1020,8 +1021,39 @@ struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_trx_ctxt *trx_ctxt,
 			struct psmx2_cq_event *event, int count, fi_addr_t *src_addr);
 
+int	psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
+			     psm2_epid_t epid, psm2_epaddr_t *epaddr);
+
 psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 				     struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
+
+static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av, size_t idx)
+{
+	int err;
+
+	if (idx >= av->last) {
+		FI_WARN(&psmx2_prov, FI_LOG_AV,
+			"error: av index %ld out of range(max: %ld).\n", idx, av->last);
+		return -FI_EINVAL;
+	}
+
+	/*
+	 * NOTE: This is not thread safe! Race condition on "av->epaddrs[idx]".
+	 * Avoid connecting to the same destination from multiple threads.
+	 */
+	if (!av->epaddrs[idx]) {
+                err = psmx2_epid_to_epaddr(av->domain->base_trx_ctxt,
+                                           av->epids[idx], &av->epaddrs[idx]);
+                if (err) {
+                        FI_WARN(&psmx2_prov, FI_LOG_AV,
+                                "fatal error: unable to translate epid %lx to epaddr.\n",
+                                av->epids[idx]);
+                        return err;
+                }
+        }
+
+	return 0;
+}
 
 void	psmx2_am_global_init(void);
 void	psmx2_am_global_fini(void);
