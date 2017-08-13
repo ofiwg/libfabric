@@ -148,6 +148,53 @@ struct verbs_addr {
 	struct rdma_addrinfo *rai;
 };
 
+/*
+ * fields of Infiniband packet headers that are used to
+ * represent OFI EP address
+ * - LRH (Local Route Header) - Link Layer:
+ *   - LID - destination Local Identifier
+ *   - SL - Service Level
+ * - GRH (Global Route Header) - Network Layer:
+ *   - GID - destination Global Identifier
+ * - BTH (Base Transport Header) - Transport Layer:
+ *   - QPN - destination Queue Oair number
+ *   - P_key - Partition Key
+ *
+ * Note: DON'T change the placement of the fields in the structure.
+ *       The placement is to keep structure size = 256 bits (32 byte).
+ */
+struct ofi_ib_ud_ep_name {
+	union ibv_gid	gid;		/* 64-bit GUID + 64-bit EUI - GRH */
+
+	uint32_t	qpn;		/* BTH */
+
+	uint16_t	lid; 		/* LRH */
+	uint16_t	pkey;		/* BTH */
+	uint16_t	service;	/* for NS src addr, 0 means any */
+
+	uint8_t 	sl;		/* LRH */
+	uint8_t		padding[5];	/* forced padding to 256 bits (32 byte) */
+}; /* 256 bits */
+
+#define VERBS_IB_UD_NS_ANY_SERVICE	0
+
+static inline
+int fi_ibv_dgram_ns_is_service_wildcard(void *svc)
+{
+	return (*(int *)svc == VERBS_IB_UD_NS_ANY_SERVICE);
+}
+
+static inline
+int fi_ibv_dgram_ns_service_cmp(void *svc1, void *svc2)
+{
+	int service1 = *(int *)svc1, service2 = *(int *)svc2;
+
+	if (fi_ibv_dgram_ns_is_service_wildcard(svc1) ||
+	    fi_ibv_dgram_ns_is_service_wildcard(svc2))
+		return 0;
+	return (service1 < service2) ? -1 : (service1 > service2);
+}
+
 struct verbs_dev_info {
 	struct dlist_entry entry;
 	char *name;
