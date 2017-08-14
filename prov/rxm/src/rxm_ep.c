@@ -616,6 +616,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	struct fid_mr **mr_iov;
 	size_t pkt_size = 0;
 	ssize_t size;
+	uint8_t progress = 0;
 	int ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
@@ -715,6 +716,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 			/* release allocated buffer for further reuse */
 			goto done;
 		} else {
+			progress = 1;
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %d) is too "
 				"big for MSG provider (max inject size = %d) \n",
 				(int)pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
@@ -723,9 +725,13 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 
 	ret = fi_send(rxm_conn->msg_ep, pkt, pkt_size, tx_buf->hdr.desc, 0, tx_entry);
 	if (ret) {
-		if (ret != -FI_EAGAIN)
+		if ((ret == -FI_EAGAIN) && progress) {
+			progress = 0;
+			rxm_cq_progress(rxm_ep);
+		} else {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"fi_send for MSG provider failed\n");
+		}
 		goto done;
 	}
 	return 0;
