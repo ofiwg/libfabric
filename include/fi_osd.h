@@ -68,4 +68,12 @@ typedef long double long_double;
 #include <unix/osd.h>
 #endif
 
+#ifdef __GNUC__
+#define OFI_LIKELY(x)	__builtin_expect((x), 1)
+#define OFI_UNLIKELY(x)	__builtin_expect((x), 0)
+#else
+#define OFI_LIKELY(x)
+#define OFI_UNLIKELY(x)
+#endif
+
 #endif /* _FI_OSD_H_ */
