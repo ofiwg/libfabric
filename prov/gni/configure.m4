@@ -71,6 +71,11 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                       [Enable static linking with uGNI.  Recommended for KNL.])],
                      )
 
+        AC_ARG_ENABLE([gni-logging],
+                      [AS_HELP_STRING([--enable-gni-logging],
+                                      [Enable logging. Enabled by default.])],
+                     )
+
         AS_IF([test x"$enable_gni" != x"no"],
                [FI_PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
                                  [gni_header_happy=1
@@ -118,6 +123,10 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                       ],
                       [AC_DEFINE_UNQUOTED([HAVE_XPMEM], [0], [Define to 1 if xpmem available])
                       ])
+
+               AS_IF([test x"$enable_gni_logging" != x"no"],
+                      [AC_DEFINE_UNQUOTED([ENABLE_GNI_LOGGING], [1], [Define to 1 if disabling GNI logging])],
+                      [AC_DEFINE_UNQUOTED([ENABLE_GNI_LOGGING], [0], [Define to 1 if disabling GNI logging])])
 
                gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
 dnl looks like we need to get rid of some white space
