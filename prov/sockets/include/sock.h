@@ -814,6 +814,7 @@ struct sock_pe_entry {
 	uint8_t is_error;
 	uint8_t mr_checked;
 	uint8_t is_pool_entry;
+	uint8_t completion_reported;
 	uint8_t reserved[3];
 
 	uint64_t done_len;
