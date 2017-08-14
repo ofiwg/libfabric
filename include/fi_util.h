@@ -590,6 +590,8 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 #define OFI_CHECK_MR_SCALABLE(mode) (!(mode & OFI_MR_BASIC_MAP))
 
+#define OFI_CHECK_MR_LOCAL(mode) (mode & FI_MR_LOCAL)
+
 struct ofi_mr_map {
 	const struct fi_provider *prov;
 	void			*rbtree;
