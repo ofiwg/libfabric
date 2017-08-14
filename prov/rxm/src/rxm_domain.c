@@ -189,7 +189,8 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->mr = &rxm_domain_mr_ops;
 	(*domain)->ops = &rxm_domain_ops;
 
-	rxm_domain->mr_local = RXM_MR_LOCAL(msg_info) && !RXM_MR_LOCAL(info);
+	rxm_domain->mr_local = OFI_CHECK_MR_LOCAL(msg_info->domain_attr->mr_mode) &&
+				!OFI_CHECK_MR_LOCAL(info->domain_attr->mr_mode);
 
 	fi_freeinfo(msg_info);
 	return 0;

@@ -219,16 +219,16 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "MSG provider mr_mode & FI_MR_LOCAL: %d\n",
-			RXM_MR_LOCAL(rxm_ep->msg_info));
+			OFI_CHECK_MR_LOCAL(rxm_ep->msg_info->domain_attr->mr_mode));
 
-	ret = rxm_buf_pool_create(RXM_MR_LOCAL(rxm_ep->msg_info),
+	ret = rxm_buf_pool_create(OFI_CHECK_MR_LOCAL(rxm_ep->msg_info->domain_attr->mr_mode),
 				  rxm_ep->msg_info->tx_attr->size,
 				  sizeof(struct rxm_tx_buf), &rxm_ep->tx_pool,
 				  rxm_domain->msg_domain);
 	if (ret)
 	        return ret;
 
-	ret = rxm_buf_pool_create(RXM_MR_LOCAL(rxm_ep->msg_info),
+	ret = rxm_buf_pool_create(OFI_CHECK_MR_LOCAL(rxm_ep->msg_info->domain_attr->mr_mode),
 				  rxm_ep->msg_info->rx_attr->size,
 				  sizeof(struct rxm_rx_buf), &rxm_ep->rx_pool,
 				  rxm_domain->msg_domain);
@@ -674,7 +674,7 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 		fastlock_release(&rxm_ep->send_queue.lock);
 		pkt->ctrl_hdr.type = ofi_ctrl_large_data;
 
-		if (!RXM_MR_LOCAL(rxm_ep->rxm_info)) {
+		if (!OFI_CHECK_MR_LOCAL(rxm_ep->rxm_info->domain_attr->mr_mode)) {
 			ret = rxm_ep_msg_mr_regv(rxm_ep, iov, tx_entry->count,
 						 FI_REMOTE_READ, tx_entry->mr);
 			if (ret)
