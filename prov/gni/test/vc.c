@@ -78,49 +78,59 @@ void *ep_name3;
 fi_addr_t gni_addr3;
 
 /* Register a target buffer with both domains for pings. */
-void *target_buf;
+void *target_buf, *target_buf_base;
 int target_len = 64;
 struct fid_mr *rem_mr, *rem_mr3;
 uint64_t mr_key, mr_key3;
 
-static void vc_setup_common(void);
+static void vc_setup_common(uint32_t version, int mr_mode);
 
-static void vc_setup_auto(void)
+static inline void __vc_setup(uint32_t version,
+	int mr_mode,
+	int control_progress)
 {
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
-	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
+	hints->domain_attr->control_progress = control_progress;
 	hints->mode = mode_bits;
 
-	vc_setup_common();
+	vc_setup_common(version, mr_mode);
 }
 
-static void vc_setup_manual(void)
+static void vc_setup_manual_basic(void)
 {
-
-	hints = fi_allocinfo();
-	cr_assert(hints, "fi_allocinfo");
-
-	hints->domain_attr->cq_data_size = 4;
-	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-	hints->mode = mode_bits;
-	vc_setup_common();
+	__vc_setup(fi_version(), GNIX_MR_BASIC, FI_PROGRESS_MANUAL);
 }
 
-static void vc_setup_common(void)
+static void vc_setup_manual_scalable(void)
+{
+	__vc_setup(fi_version(), GNIX_MR_SCALABLE, FI_PROGRESS_MANUAL);
+}
+
+static void vc_setup_auto_basic(void)
+{
+	__vc_setup(fi_version(), GNIX_MR_BASIC, FI_PROGRESS_AUTO);
+}
+
+static void vc_setup_auto_scalable(void)
+{
+	__vc_setup(fi_version(), GNIX_MR_SCALABLE, FI_PROGRESS_AUTO);
+}
+
+static void vc_setup_common(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 	struct fi_av_attr attr = {0};
 	size_t addrlen = 0;
 	struct gnix_fid_av *gnix_av;
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -233,16 +243,16 @@ void vc_teardown(void)
 	free(ep_name[1]);
 }
 
-static void vc_conn_ping_setup(void)
+static void vc_conn_ping_setup(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 	struct fi_av_attr attr = {0};
 	size_t addrlen = 0;
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->fabric_attr->name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -360,45 +370,68 @@ static void vc_conn_ping_setup(void)
 	cr_assert(!ret, "fi_enable");
 
 	/* Register target buffer for pings. */
-	target_buf = malloc(target_len);
+	target_buf_base = malloc(GNIT_ALIGN_LEN(target_len));
+	assert(target_buf_base);
+	target_buf = GNIT_ALIGN_BUFFER(void *, target_buf_base);
 
 	ret = fi_mr_reg(dom, target_buf, sizeof(target_buf),
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target_buf);
+			FI_REMOTE_WRITE, 0, (USING_SCALABLE(fi) ? 1 : 0),
+			0, &rem_mr, &target_buf);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi))
+		MR_ENABLE(rem_mr, target_buf, sizeof(target_buf));
+
 	mr_key = fi_mr_key(rem_mr);
 
 	ret = fi_mr_reg(dom3, target_buf, sizeof(target_buf),
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr3, &target_buf);
+			FI_REMOTE_WRITE, 0, (USING_SCALABLE(fi) ? 2 : 0),
+			0, &rem_mr3, &target_buf);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi))
+		MR_ENABLE(rem_mr3, target_buf, sizeof(target_buf));
+
 	mr_key3 = fi_mr_key(rem_mr3);
 
 	ret = fi_av_insert(av, ep_name3, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 }
 
-static void vc_conn_ping_setup_auto(void)
+static void __vc_conn_ping_setup(uint32_t version,
+	int mr_mode,
+	int control_progress)
 {
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
-	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
+	hints->domain_attr->control_progress = control_progress;
 	hints->mode = mode_bits;
 
-	vc_conn_ping_setup();
+	vc_conn_ping_setup(version, mr_mode);
 }
 
-static void vc_conn_ping_setup_manual(void)
+static void vc_conn_ping_setup_manual_basic(void)
 {
+	__vc_conn_ping_setup(fi_version(), GNIX_MR_BASIC, FI_PROGRESS_MANUAL);
+}
 
-	hints = fi_allocinfo();
-	cr_assert(hints, "fi_allocinfo");
+static void vc_conn_ping_setup_manual_scalable(void)
+{
+	__vc_conn_ping_setup(fi_version(), GNIX_MR_SCALABLE,
+		FI_PROGRESS_MANUAL);
+}
 
-	hints->domain_attr->cq_data_size = 4;
-	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-	hints->mode = mode_bits;
-	vc_conn_ping_setup();
+static void vc_conn_ping_setup_auto_basic(void)
+{
+	__vc_conn_ping_setup(fi_version(), GNIX_MR_BASIC, FI_PROGRESS_AUTO);
+}
+
+static void vc_conn_ping_setup_auto_scalable(void)
+{
+	__vc_conn_ping_setup(fi_version(), GNIX_MR_SCALABLE, FI_PROGRESS_AUTO);
 }
 
 void vc_conn_ping_teardown(void)
@@ -411,7 +444,7 @@ void vc_conn_ping_teardown(void)
 	ret = fi_close(&rem_mr->fid);
 	cr_assert(!ret, "failure in closing mr.");
 
-	free(target_buf);
+	free(target_buf_base);
 
 	ret = fi_close(&cq3->fid);
 	cr_assert(!ret, "failure in closing cq3.");
@@ -456,13 +489,28 @@ void vc_conn_ping_teardown(void)
  * Test vc functions.
  ******************************************************************************/
 
-TestSuite(vc_management_auto, .init = vc_setup_auto, .fini = vc_teardown,
-	  .disabled = false);
+TestSuite(vc_management_auto_basic,
+		.init = vc_setup_auto_basic,
+		.fini = vc_teardown,
+		.disabled = false);
 
-TestSuite(vc_management_manual, .init = vc_setup_manual, .fini = vc_teardown,
-	  .disabled = false);
+TestSuite(vc_management_manual_basic,
+		.init = vc_setup_manual_basic,
+		.fini = vc_teardown,
+		.disabled = false);
 
-Test(vc_management_auto, vc_alloc_simple)
+TestSuite(vc_management_auto_scalable,
+		.init = vc_setup_auto_scalable,
+		.fini = vc_teardown,
+		.disabled = false);
+
+TestSuite(vc_management_manual_scalable,
+		.init = vc_setup_manual_scalable,
+		.fini = vc_teardown,
+		.disabled = false);
+
+
+static inline void __vc_alloc_simple(void)
 {
 	int ret;
 	struct gnix_vc *vc[2];
@@ -489,7 +537,17 @@ Test(vc_management_auto, vc_alloc_simple)
 	cr_assert_eq(ret, FI_SUCCESS);
 }
 
-Test(vc_management_auto, vc_lookup_by_id)
+Test(vc_management_auto_basic, vc_alloc_simple)
+{
+	__vc_alloc_simple();
+}
+
+Test(vc_management_auto_scalable, vc_alloc_simple)
+{
+	__vc_alloc_simple();
+}
+
+static inline void __vc_lookup_by_id(void)
 {
 	int ret;
 	struct gnix_vc *vc[2], *vc_chk;
@@ -514,10 +572,19 @@ Test(vc_management_auto, vc_lookup_by_id)
 
 	ret = _gnix_vc_destroy(vc[1]);
 	cr_assert_eq(ret, FI_SUCCESS);
-
 }
 
-Test(vc_management_auto, vc_connect)
+Test(vc_management_auto_basic, vc_lookup_by_id)
+{
+	__vc_lookup_by_id();
+}
+
+Test(vc_management_auto_scalable, vc_lookup_by_id)
+{
+	__vc_lookup_by_id();
+}
+
+static inline void __vc_connect(void)
 {
 	int ret;
 	struct gnix_vc *vc_conn;
@@ -561,7 +628,17 @@ Test(vc_management_auto, vc_connect)
 	/* VC is destroyed by the EP */
 }
 
-Test(vc_management_auto, vc_connect2)
+Test(vc_management_auto_basic, vc_connect)
+{
+	__vc_connect();
+}
+
+Test(vc_management_auto_scalable, vc_connect)
+{
+	__vc_connect();
+}
+
+static inline void __vc_connect2(void)
 {
 	int ret;
 	struct gnix_vc *vc_conn0, *vc_conn1;
@@ -629,6 +706,16 @@ Test(vc_management_auto, vc_connect2)
 	/* VC is destroyed by the EP */
 }
 
+Test(vc_management_auto_basic, vc_connect2)
+{
+	__vc_connect2();
+}
+
+Test(vc_management_auto_scalable, vc_connect2)
+{
+	__vc_connect2();
+}
+
 static void vc_conn_ping(struct fid_ep *send_ep, struct fid_cq *send_cq,
 			 fi_addr_t target_pe, void *target_addr,
 			 size_t target_len, uint64_t target_key)
@@ -639,7 +726,8 @@ static void vc_conn_ping(struct fid_ep *send_ep, struct fid_cq *send_cq,
 	void *context = (void *)0x65468;
 
 	sz = fi_write(send_ep, target_buf, target_len,
-		      NULL, target_pe, (uint64_t)target_addr, target_key, context);
+			NULL, target_pe, _REM_ADDR(fi, target_buf, target_addr),
+			target_key, context);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
@@ -734,50 +822,104 @@ static void vc_conn_pingpong(struct fid_ep *ep0, struct fid_cq *cq0,
 	}
 }
 
-TestSuite(vc_conn_ping_auto, .init = vc_conn_ping_setup_auto,
-	  .fini = vc_conn_ping_teardown, .disabled = false);
+TestSuite(vc_conn_ping_auto_basic,
+		.init = vc_conn_ping_setup_auto_basic,
+		.fini = vc_conn_ping_teardown,
+		.disabled = false);
 
-TestSuite(vc_conn_ping_manual, .init = vc_conn_ping_setup_manual,
-	  .fini = vc_conn_ping_teardown, .disabled = false);
+TestSuite(vc_conn_ping_manual_basic,
+		.init = vc_conn_ping_setup_manual_basic,
+		.fini = vc_conn_ping_teardown,
+		.disabled = false);
+
+TestSuite(vc_conn_ping_auto_scalable,
+		.init = vc_conn_ping_setup_auto_scalable,
+		.fini = vc_conn_ping_teardown,
+		.disabled = false);
+
+TestSuite(vc_conn_ping_manual_scalable,
+		.init = vc_conn_ping_setup_manual_scalable,
+		.fini = vc_conn_ping_teardown,
+		.disabled = false);
 
 /* Connect EP to itself. */
-Test(vc_conn_ping_manual, ep_connect_self)
+Test(vc_conn_ping_manual_basic, ep_connect_self)
 {
 	vc_conn_ping(ep[0], cq[0], 0, target_buf, sizeof(target_buf), mr_key);
 }
 
-Test(vc_conn_ping_auto, ep_connect_self)
+Test(vc_conn_ping_auto_basic, ep_connect_self)
 {
 	vc_conn_ping(ep[0], cq[0], 0, target_buf, sizeof(target_buf), mr_key);
 }
 
-Test(vc_conn_ping_manual, ep_connect_self_pp)
+Test(vc_conn_ping_manual_basic, ep_connect_self_pp)
 {
 	vc_conn_pingpong(ep[0], cq[0], 0, ep[0], cq[0], 0);
 }
 
-Test(vc_conn_ping_auto, ep_connect_self_pp)
+Test(vc_conn_ping_auto_basic, ep_connect_self_pp)
+{
+	vc_conn_pingpong(ep[0], cq[0], 0, ep[0], cq[0], 0);
+}
+
+Test(vc_conn_ping_manual_scalable, ep_connect_self)
+{
+	vc_conn_ping(ep[0], cq[0], 0, target_buf, sizeof(target_buf), mr_key);
+}
+
+Test(vc_conn_ping_auto_scalable, ep_connect_self)
+{
+	vc_conn_ping(ep[0], cq[0], 0, target_buf, sizeof(target_buf), mr_key);
+}
+
+Test(vc_conn_ping_manual_scalable, ep_connect_self_pp)
+{
+	vc_conn_pingpong(ep[0], cq[0], 0, ep[0], cq[0], 0);
+}
+
+Test(vc_conn_ping_auto_scalable, ep_connect_self_pp)
 {
 	vc_conn_pingpong(ep[0], cq[0], 0, ep[0], cq[0], 0);
 }
 
 /* Do intra-CM EP connect. */
-Test(vc_conn_ping_manual, ep_connect_intra_cm)
+Test(vc_conn_ping_manual_basic, ep_connect_intra_cm)
 {
 	vc_conn_ping(ep[0], cq[0], 1, target_buf, sizeof(target_buf), mr_key);
 }
 
-Test(vc_conn_ping_auto, ep_connect_intra_cm)
+Test(vc_conn_ping_auto_basic, ep_connect_intra_cm)
 {
 	vc_conn_ping(ep[0], cq[0], 1, target_buf, sizeof(target_buf), mr_key);
 }
 
-Test(vc_conn_ping_manual, ep_connect_intra_cm_pp)
+Test(vc_conn_ping_manual_basic, ep_connect_intra_cm_pp)
 {
 	vc_conn_pingpong(ep[0], cq[0], 1, ep[1], cq[1], 0);
 }
 
-Test(vc_conn_ping_auto, ep_connect_intra_cm_pp)
+Test(vc_conn_ping_auto_basic, ep_connect_intra_cm_pp)
+{
+	vc_conn_pingpong(ep[0], cq[0], 1, ep[1], cq[1], 0);
+}
+
+Test(vc_conn_ping_manual_scalable, ep_connect_intra_cm)
+{
+	vc_conn_ping(ep[0], cq[0], 1, target_buf, sizeof(target_buf), mr_key);
+}
+
+Test(vc_conn_ping_auto_scalable, ep_connect_intra_cm)
+{
+	vc_conn_ping(ep[0], cq[0], 1, target_buf, sizeof(target_buf), mr_key);
+}
+
+Test(vc_conn_ping_manual_scalable, ep_connect_intra_cm_pp)
+{
+	vc_conn_pingpong(ep[0], cq[0], 1, ep[1], cq[1], 0);
+}
+
+Test(vc_conn_ping_auto_scalable, ep_connect_intra_cm_pp)
 {
 	vc_conn_pingpong(ep[0], cq[0], 1, ep[1], cq[1], 0);
 }
@@ -790,17 +932,34 @@ Test(vc_conn_ping_manual, ep_connect_inter_cm)
 }
 #endif
 
-Test(vc_conn_ping_auto, ep_connect_inter_cm)
+Test(vc_conn_ping_auto_basic, ep_connect_inter_cm)
 {
 	vc_conn_ping(ep[0], cq[0], 2, target_buf, sizeof(target_buf), mr_key3);
 }
 
-Test(vc_conn_ping_manual, ep_connect_inter_cm_pp)
+Test(vc_conn_ping_manual_basic, ep_connect_inter_cm_pp)
 {
 	vc_conn_pingpong(ep[0], cq[0], 2, ep3, cq3, 0);
 }
 
-Test(vc_conn_ping_auto, ep_connect_inter_cm_pp)
+Test(vc_conn_ping_auto_basic, ep_connect_inter_cm_pp)
 {
 	vc_conn_pingpong(ep[0], cq[0], 2, ep3, cq3, 0);
 }
+
+Test(vc_conn_ping_auto_scalable, ep_connect_inter_cm)
+{
+	vc_conn_ping(ep[0], cq[0], 2, target_buf, sizeof(target_buf), mr_key3);
+}
+
+Test(vc_conn_ping_manual_scalable, ep_connect_inter_cm_pp)
+{
+	vc_conn_pingpong(ep[0], cq[0], 2, ep3, cq3, 0);
+}
+
+Test(vc_conn_ping_auto_scalable, ep_connect_inter_cm_pp)
+{
+	vc_conn_pingpong(ep[0], cq[0], 2, ep3, cq3, 0);
+}
+
+

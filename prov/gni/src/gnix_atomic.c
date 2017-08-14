@@ -125,10 +125,19 @@ static int __gnix_amo_send_completion(struct gnix_fid_ep *ep,
 
 static void __gnix_amo_fr_complete(struct gnix_fab_req *req)
 {
+	int rc;
+
 	if (req->flags & FI_LOCAL_MR) {
 		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
 			  req->amo.loc_md);
-		fi_close(&req->amo.loc_md->mr_fid.fid);
+		rc = fi_close(&req->amo.loc_md->mr_fid.fid);
+		if (rc != FI_SUCCESS) {
+			GNIX_ERR(FI_LOG_DOMAIN,
+				"failed to deregister auto-registered region, "
+				"rc=%d\n", rc);
+		}
+
+		req->flags &= ~FI_LOCAL_MR;
 	}
 
 	ofi_atomic_dec32(&req->vc->outstanding_tx_reqs);
@@ -515,7 +524,7 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	if (!ep || !msg || !msg->msg_iov ||
 	    msg->msg_iov[0].count != 1 ||
 	    msg->iov_count != GNIX_MAX_ATOMIC_IOV_LIMIT ||
-	    !msg->rma_iov || !msg->rma_iov[0].addr)
+	    !msg->rma_iov)
 		return -FI_EINVAL;
 
 	/*
@@ -571,9 +580,10 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		}
 
 		if (!result_desc || !result_desc[0]) {
-			rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
+			rc = _gnix_mr_reg(&ep->domain->domain_fid.fid,
 					 loc_addr, len, FI_READ | FI_WRITE,
-					 0, 0, 0, &auto_mr, NULL);
+					 0, 0, 0, &auto_mr,
+					 NULL, ep->auth_key, GNIX_PROV_REG);
 			if (rc != FI_SUCCESS) {
 				GNIX_INFO(FI_LOG_EP_DATA,
 					  "Failed to auto-register local buffer: %d\n",

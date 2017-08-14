@@ -77,6 +77,8 @@
 #define HOOK_ASSERT(cond, message, args...) do { } while (0)
 #endif
 
+#define GNIX_ASSUMED_ALIGNMENT 0xfff
+
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_mr *mr;
@@ -89,7 +91,6 @@ static int buf_len = __BUF_LEN * sizeof(unsigned char);
 static struct gnix_fid_domain *domain;
 static uint8_t ptag;
 static gnix_mr_cache_t *cache;
-static int regions;
 
 static uint64_t default_access = (FI_REMOTE_READ | FI_REMOTE_WRITE
 				  | FI_READ | FI_WRITE);
@@ -98,6 +99,8 @@ static uint64_t ro_access = (FI_REMOTE_READ | FI_WRITE);
 static uint64_t default_flags;
 static uint64_t default_req_key;
 static uint64_t default_offset;
+
+static int regions;
 
 struct timeval s1, s2;
 
@@ -112,6 +115,9 @@ struct _mr_test_hooks {
 
 #define HOOK_DECL struct _mr_test_hooks *hooks
 struct _mr_test_hooks empty_hooks = {NULL};
+
+#define DEFAULT_REGION_COUNT 1024
+#define DEFAULT_SCALABLE_REGION_COUNT 128
 
 /* this helper function doesn't work for string ops */
 static void _set_check_domain_op_value(int op, int value)
@@ -139,17 +145,17 @@ static void _set_lazy_deregistration(int val)
 	_set_check_domain_op_value(GNI_MR_CACHE_LAZY_DEREG, val);
 }
 
-static void _mr_setup(void)
+static void _mr_setup(uint32_t version, int mr_mode)
 {
 	int ret = 0;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -186,7 +192,7 @@ static void mr_teardown(void)
 
 static void udreg_setup(void)
 {
-	_mr_setup();
+	_mr_setup(fi_version(), GNIX_MR_BASIC);
 
 	_gnix_open_cache(domain, GNIX_MR_TYPE_UDREG);
 
@@ -195,7 +201,7 @@ static void udreg_setup(void)
 
 static void udreg_setup_nld(void)
 {
-	_mr_setup();
+	_mr_setup(fi_version(), GNIX_MR_BASIC);
 
 	_gnix_open_cache(domain, GNIX_MR_TYPE_UDREG);
 
@@ -204,7 +210,7 @@ static void udreg_setup_nld(void)
 
 static void internal_mr_setup(void)
 {
-	_mr_setup();
+	_mr_setup(fi_version(), GNIX_MR_BASIC);
 
 	_gnix_open_cache(domain, GNIX_MR_TYPE_INTERNAL);
 
@@ -213,55 +219,81 @@ static void internal_mr_setup(void)
 
 static void internal_mr_setup_nld(void)
 {
-	_mr_setup();
+	_mr_setup(fi_version(), GNIX_MR_BASIC);
 
 	_gnix_open_cache(domain, GNIX_MR_TYPE_INTERNAL);
 
 	_set_lazy_deregistration(0);
 }
 
-static void no_cache_setup(void)
+static void no_cache_scalable_setup(void)
 {
-	_mr_setup();
+	_mr_setup(fi_version(), GNIX_MR_SCALABLE);
 
 	_gnix_open_cache(domain, GNIX_MR_TYPE_NONE);
 }
 
-/* bare tests */
-TestSuite(mr_internal_bare, .init = internal_mr_setup, .fini = mr_teardown);
+static void no_cache_basic_setup(void)
+{
+	_mr_setup(fi_version(), GNIX_MR_BASIC);
 
+	_gnix_open_cache(domain, GNIX_MR_TYPE_NONE);
+}
+
+
+/* bare tests */
+TestSuite(mr_internal_bare,
+	  .init = internal_mr_setup,
+	  .fini = mr_teardown);
 
 /* simple tests with lazy deregistration */
-TestSuite(mr_internal_cache, .init = internal_mr_setup, .fini = mr_teardown);
+TestSuite(mr_internal_cache,
+	  .init = internal_mr_setup,
+	  .fini = mr_teardown);
 
 #ifdef HAVE_UDREG
-TestSuite(mr_udreg_cache, .init = udreg_setup, .fini = mr_teardown);
+TestSuite(mr_udreg_cache,
+	  .init = udreg_setup,
+	  .fini = mr_teardown);
 #endif
 
-TestSuite(mr_no_cache, .init = no_cache_setup, .fini = mr_teardown);
-
+TestSuite(mr_no_cache_basic,
+	  .init = no_cache_basic_setup,
+	  .fini = mr_teardown);
+TestSuite(mr_no_cache_scalable,
+	  .init = no_cache_scalable_setup,
+	  .fini = mr_teardown);
 
 /* simple tests without lazy deregistration */
-TestSuite(mr_internal_cache_nld, .init = internal_mr_setup_nld,
-		.fini = mr_teardown);
+TestSuite(mr_internal_cache_nld,
+	  .init = internal_mr_setup_nld,
+	  .fini = mr_teardown);
+
 
 #ifdef HAVE_UDREG
-TestSuite(mr_udreg_cache_nld, .init = udreg_setup_nld, .fini = mr_teardown);
+TestSuite(mr_udreg_cache_nld,
+	  .init = udreg_setup_nld,
+	  .fini = mr_teardown);
 #endif
 
 
 /* performance tests */
-TestSuite(perf_mr_internal, .init = internal_mr_setup, .fini = mr_teardown,
-		.disabled = true);
+TestSuite(perf_mr_internal,
+	  .init = internal_mr_setup,
+	  .fini = mr_teardown,
+	  .disabled = true);
 
 #ifdef HAVE_UDREG
-TestSuite(perf_mr_udreg, .init = udreg_setup, .fini = mr_teardown,
-		.disabled = true);
+TestSuite(perf_mr_udreg,
+	  .init = udreg_setup,
+	  .fini = mr_teardown,
+	  .disabled = true);
 #endif
 
-TestSuite(perf_mr_no_cache, .init = no_cache_setup, .fini = mr_teardown,
-		.disabled = true);
-
+TestSuite(perf_mr_no_cache,
+	  .init = no_cache_basic_setup,
+	  .fini = mr_teardown,
+	  .disabled = true);
 
 /* test hooks */
 
@@ -312,13 +344,63 @@ Test(mr_internal_bare, basic_init)
 {
 	int ret;
 
-	// ensure that the memory registration key is the right size
+	/* ensure that the memory registration key is the right size */
 	cr_assert_eq(sizeof(gnix_mr_key_t), 8);
 
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+/* Test simple init, register and deregister */
+Test(mr_no_cache_scalable, basic_init_update)
+{
+	int ret;
+	struct fi_gni_ops_domain *gni_domain_ops;
+	void *base, *addr;
+	int len;
+	uint64_t align_len = 0;
+	struct iovec iov;
+
+	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1,
+			0, (void **) &gni_domain_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
+
+	/* registrations must be made on aligned boundaries */
+	base = sbrk(0);
+	if ((uint64_t) base & GNIX_ASSUMED_ALIGNMENT) {
+		align_len = 0x1000 - ((uint64_t) base & GNIX_ASSUMED_ALIGNMENT);
+		sbrk(align_len);
+		base = (void *) ((uint64_t)base + align_len);
+	}
+
+	len = 1 << 16;
+
+	ret = fi_mr_reg(dom, base, len*4, FI_REMOTE_READ,
+			default_offset, default_req_key,
+			default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS, "actual=%d expected=%d", ret, FI_SUCCESS);
+
+	/* assume we'll get the memory */
+	ret = brk((void *)((uint64_t) base + (uint64_t) (len * 2)));
+	cr_assert(ret == 0);
+
+	addr = (void *) ((uint64_t) base + (uint64_t) len);
+
+	iov.iov_base = addr;
+	iov.iov_len = len;
+
+	ret = fi_mr_refresh(mr, &iov, 1, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "expected=%d actual=%d", FI_SUCCESS, ret);
+
+	/* retract memory and assume we didn't step on anyone */
+	addr = sbrk(-len);
+	addr = sbrk(align_len);
+	cr_assert(addr >= base);
 
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
@@ -519,6 +601,47 @@ Test(mr_internal_bare, invalid_fid_class)
 	dom->fid.fclass = old_class;
 }
 
+/* Test invalid access param to fi_mr_reg */
+Test(mr_internal_bare, invalid_requested_key)
+{
+	int ret;
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, 1000,
+			default_flags, &mr, NULL);
+	cr_assert(ret == -FI_EINVAL, "ret=%d\n", ret);
+}
+
+Test(mr_no_cache_scalable, invalid_user_requested_key)
+{
+	int ret;
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, 1000,
+			default_flags, &mr, NULL);
+	cr_assert(ret == -FI_EKEYREJECTED);
+}
+
+Test(mr_no_cache_scalable, invalid_key_already_assigned)
+{
+	int ret;
+	struct fid_mr *invalid;
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, 1,
+			default_flags, &mr, NULL);
+
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, 1,
+			default_flags, &invalid, NULL);
+	cr_assert(ret == -FI_ENOKEY);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
 /* more advanced test setups */
 static struct _mr_test_hooks __simple_test_hooks = {
 	.init_hook = __simple_init_hook,
@@ -534,6 +657,9 @@ static void __simple_init_test(HOOK_DECL)
 			default_offset, default_req_key,
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
+
+	if (USING_SCALABLE(fi))
+		MR_ENABLE(mr, buf, buf_len);
 
 	CHECK_HOOK(init_hook);
 
@@ -555,6 +681,9 @@ static void __simple_init_ro_test(HOOK_DECL)
 			default_offset, default_req_key,
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
+
+	if (USING_SCALABLE(fi))
+		MR_ENABLE(mr, buf, buf_len);
 
 	CHECK_HOOK(init_hook);
 
@@ -691,7 +820,7 @@ static struct _mr_test_hooks __simple_rdr_hooks = {
 /* Test registration of 1024 elements, all distinct. Cache element counts
  *   should meet expected values
  */
-static void __simple_register_1024_distinct_regions(HOOK_DECL)
+static void __simple_register_distinct_regions(HOOK_DECL, int regions)
 {
 	int ret;
 	uint64_t **buffers;
@@ -757,7 +886,7 @@ static struct _mr_test_hooks __simple_rnur_hooks = {
 /* Test registration of 1024 registrations backed by the same initial
  *   registration. There should only be a single registration in the cache
  */
-static void __simple_register_1024_non_unique_regions_test(HOOK_DECL)
+static void __simple_register_non_unique_regions_test(HOOK_DECL, int regions)
 {
 	int ret;
 	char *hugepage;
@@ -832,7 +961,7 @@ static struct _mr_test_hooks __simple_lazy_hooks = {
 /* Test registration of 128 regions that will be cycled in and out of the
  *   inuse and stale trees. inuse + stale should never exceed 128
  */
-static void __simple_cyclic_register_128_distinct_regions(HOOK_DECL)
+static void __simple_cyclic_register_distinct_regions(HOOK_DECL, int regions)
 {
 	int ret;
 	char **buffers;
@@ -842,7 +971,6 @@ static void __simple_cyclic_register_128_distinct_regions(HOOK_DECL)
 	int buf_size = __BUF_LEN * sizeof(char);
 	int lazy_limit = 0;
 
-	regions = 128;
 	mr_arr = calloc(regions, sizeof(struct fid_mr *));
 	cr_assert(mr_arr);
 
@@ -1007,7 +1135,8 @@ Test(mr_internal_cache, duplicate_registration)
  */
 Test(mr_internal_cache, register_1024_distinct_regions)
 {
-	__simple_register_1024_distinct_regions(&__simple_rdr_hooks);
+	__simple_register_distinct_regions(&__simple_rdr_hooks,
+		DEFAULT_REGION_COUNT);
 }
 
 /* Test registration of 1024 registrations backed by the same initial
@@ -1015,7 +1144,8 @@ Test(mr_internal_cache, register_1024_distinct_regions)
  */
 Test(mr_internal_cache, register_1024_non_unique_regions)
 {
-	__simple_register_1024_non_unique_regions_test(&__simple_rnur_hooks);
+	__simple_register_non_unique_regions_test(&__simple_rnur_hooks,
+		DEFAULT_REGION_COUNT);
 }
 
 /* Test registration of 128 regions that will be cycled in and out of the
@@ -1023,7 +1153,7 @@ Test(mr_internal_cache, register_1024_non_unique_regions)
  */
 Test(mr_internal_cache, cyclic_register_128_distinct_regions)
 {
-	__simple_cyclic_register_128_distinct_regions(&__simple_lazy_hooks);
+	__simple_cyclic_register_distinct_regions(&__simple_lazy_hooks, 128);
 }
 
 /* Test repeated registration of a memory region with the same base
@@ -1050,6 +1180,7 @@ Test(mr_internal_cache, lru_evict_first_entry)
 	struct fid_mr **mr_arr;
 	int i;
 	int buf_size = __BUF_LEN * sizeof(char);
+	int regions;
 
 	regions = domain->mr_cache_attr.hard_stale_limit << 1;
 	cr_assert(regions > 0);
@@ -1126,6 +1257,7 @@ Test(mr_internal_cache, lru_evict_middle_entry)
 	struct fid_mr **mr_arr;
 	int i, limit;
 	int buf_size = __BUF_LEN * sizeof(char);
+	int regions;
 
 	regions = domain->mr_cache_attr.hard_stale_limit << 1;
 	cr_assert(regions > 0);
@@ -1223,6 +1355,7 @@ static inline void _repeated_registration(const char *label)
 					region_len, default_access,
 					default_offset, default_req_key,
 					default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
 
 	cache = GET_DOMAIN_RW_CACHE(domain);
 
@@ -1346,7 +1479,6 @@ static inline void _random_analysis(const char *label)
 	ret = fi_close(&mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
-
 	gettimeofday(&s1, 0);
 	for (i = 0; i < registrations; i++) {
 		ptr = region + rand() % region_len;
@@ -1417,6 +1549,7 @@ Test(mr_internal_cache, regression_615)
 			default_access, default_offset, default_req_key,
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
+
 	ret = fi_close(&f_mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
@@ -1424,6 +1557,7 @@ Test(mr_internal_cache, regression_615)
 			default_access, default_offset, default_req_key,
 			default_flags, &f_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
+
 	ret = fi_close(&f_mr->fid);
 	cr_assert(ret == FI_SUCCESS);
 
@@ -1444,13 +1578,14 @@ Test(mr_internal_cache, regression_615)
 	free(buffer);
 }
 
-void simple_register_1024_distinct_regions(void)
+void simple_register_distinct_regions(int regions)
 {
 	int ret;
 	uint64_t **buffers;
 	char *buffer;
 	struct fid_mr **mr_arr;
 	int i;
+	int requested_key;
 
 	mr_arr = calloc(regions, sizeof(struct fid_mr *));
 	cr_assert(mr_arr);
@@ -1466,8 +1601,9 @@ void simple_register_1024_distinct_regions(void)
 	}
 
 	for (i = 0; i < regions; ++i) {
+		requested_key = USING_SCALABLE(fi) ? i : default_req_key;
 		ret = fi_mr_reg(dom, (void *) buffers[i], __BUF_LEN,
-				default_access,	default_offset, default_req_key,
+				default_access,	default_offset, requested_key,
 				default_flags, &mr_arr[i], NULL);
 		cr_assert(ret == FI_SUCCESS);
 	}
@@ -1487,7 +1623,7 @@ void simple_register_1024_distinct_regions(void)
 	buffer = NULL;
 }
 
-void simple_register_1024_non_unique_regions(void)
+void simple_register_non_unique_regions(int regions)
 {
 	int ret;
 		char *hugepage;
@@ -1495,6 +1631,7 @@ void simple_register_1024_non_unique_regions(void)
 		char **buffers;
 		struct fid_mr **mr_arr;
 		int i;
+		int requested_key;
 
 		mr_arr = calloc(regions, sizeof(struct fid_mr *));
 		cr_assert(mr_arr);
@@ -1517,8 +1654,11 @@ void simple_register_1024_non_unique_regions(void)
 		cr_assert(ret == FI_SUCCESS);
 
 		for (i = 0; i < regions; ++i) {
+			requested_key = USING_SCALABLE(fi) ?
+				i + 1 : default_req_key;
 			ret = fi_mr_reg(dom, (void *) buffers[i], regions,
-					default_access,	default_offset, default_req_key,
+					default_access,	default_offset,
+					requested_key,
 					default_flags, &mr_arr[i], NULL);
 			cr_assert(ret == FI_SUCCESS);
 		}
@@ -1547,7 +1687,7 @@ void simple_register_1024_non_unique_regions(void)
  */
 Test(mr_udreg_cache, register_1024_distinct_regions)
 {
-	simple_register_1024_distinct_regions();
+	simple_register_distinct_regions(DEFAULT_REGION_COUNT);
 }
 
 /* Test registration of 1024 registrations backed by the same initial
@@ -1555,7 +1695,7 @@ Test(mr_udreg_cache, register_1024_distinct_regions)
  */
 Test(mr_udreg_cache, register_1024_non_unique_regions)
 {
-	simple_register_1024_non_unique_regions();
+	simple_register_non_unique_regions(DEFAULT_REGION_COUNT);
 }
 
 /* performance tests */
@@ -1577,28 +1717,46 @@ Test(perf_mr_udreg, random_analysis)
 /* no lazy dereg tests */
 Test(mr_udreg_cache_nld, register_1024_distinct_regions)
 {
-	simple_register_1024_distinct_regions();
+	simple_register_distinct_regions(DEFAULT_REGION_COUNT);
 }
 
 Test(mr_udreg_cache_nld, register_1024_non_unique_regions)
 {
-	simple_register_1024_non_unique_regions();
+	simple_register_non_unique_regions(DEFAULT_REGION_COUNT);
 }
 
 #endif
 
 
-Test(mr_no_cache, register_1024_distinct_regions)
+Test(mr_no_cache_basic, register_1024_distinct_regions)
 {
-	simple_register_1024_distinct_regions();
+	int nbufs = DEFAULT_REGION_COUNT;
+
+	simple_register_distinct_regions(nbufs);
+}
+
+Test(mr_no_cache_scalable, register_1024_distinct_regions)
+{
+	int nbufs = DEFAULT_SCALABLE_REGION_COUNT;
+
+	simple_register_distinct_regions(nbufs);
 }
 
 /* Test registration of 1024 registrations backed by the same initial
  *   registration. There should only be a single registration in the cache
  */
-Test(mr_no_cache, register_1024_non_unique_regions)
+Test(mr_no_cache_basic, register_1024_non_unique_regions)
 {
-	simple_register_1024_non_unique_regions();
+	int nbufs = DEFAULT_REGION_COUNT;
+
+	simple_register_non_unique_regions(nbufs);
+}
+
+Test(mr_no_cache_scalable, register_1024_non_unique_regions)
+{
+	int nbufs = DEFAULT_SCALABLE_REGION_COUNT;
+
+	simple_register_non_unique_regions(nbufs);
 }
 
 Test(perf_mr_no_cache, repeated_registration)
@@ -1640,7 +1798,7 @@ Test(mr_internal_cache_nld, duplicate_registration)
  */
 Test(mr_internal_cache_nld, register_1024_distinct_regions)
 {
-	__simple_register_1024_distinct_regions(&empty_hooks);
+	__simple_register_distinct_regions(&empty_hooks, DEFAULT_REGION_COUNT);
 }
 
 /* Test registration of 1024 registrations backed by the same initial
@@ -1648,7 +1806,8 @@ Test(mr_internal_cache_nld, register_1024_distinct_regions)
  */
 Test(mr_internal_cache_nld, register_1024_non_unique_regions)
 {
-	__simple_register_1024_non_unique_regions_test(&empty_hooks);
+	__simple_register_non_unique_regions_test(&empty_hooks,
+		DEFAULT_REGION_COUNT);
 }
 
 /* Test registration of 128 regions that will be cycled in and out of the
@@ -1656,7 +1815,7 @@ Test(mr_internal_cache_nld, register_1024_non_unique_regions)
  */
 Test(mr_internal_cache_nld, cyclic_register_128_distinct_regions)
 {
-	__simple_cyclic_register_128_distinct_regions(&empty_hooks);
+	__simple_cyclic_register_distinct_regions(&empty_hooks, 128);
 }
 
 /* Test repeated registration of a memory region with the same base

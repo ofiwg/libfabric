@@ -51,25 +51,52 @@ static struct fi_info *fi;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 
-static void setup(void)
+static void __setup(uint32_t version, int mr_mode)
 {
 	int ret;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
+	if (USING_SCALABLE(fi)) {
+		struct fi_gni_ops_fab *ops;
+		int in;
+
+		/* nic test opens many nics and exhausts reserved keys */
+		in = 256;
+
+		ret = fi_open_ops(&fab->fid,
+			FI_GNI_FAB_OPS_1, 0, (void **) &ops, NULL);
+		cr_assert_eq(ret, FI_SUCCESS);
+		cr_assert(ops);
+
+		ret = ops->set_val(&fab->fid,
+			GNI_DEFAULT_PROV_REGISTRATION_LIMIT,
+			&in);
+		cr_assert_eq(ret, FI_SUCCESS);
+	}
+
 	ret = fi_domain(fab, fi, &dom, NULL);
 	cr_assert(!ret, "fi_domain");
+}
 
+static void setup_basic(void)
+{
+	__setup(fi_version(), GNIX_MR_BASIC);
+}
+
+static void setup_scalable(void)
+{
+	__setup(fi_version(), GNIX_MR_SCALABLE);
 }
 
 static void teardown(void)
@@ -86,9 +113,10 @@ static void teardown(void)
 	fi_freeinfo(hints);
 }
 
-TestSuite(nic, .init = setup, .fini = teardown);
+TestSuite(nic_basic, .init = setup_basic, .fini = teardown);
+TestSuite(nic_scalable, .init = setup_scalable, .fini = teardown);
 
-Test(nic, alloc_free)
+static inline void __alloc_free(void)
 {
 	int i, ret;
 	const int num_nics = 79;
@@ -97,7 +125,6 @@ Test(nic, alloc_free)
 		dom, struct gnix_fid_domain, domain_fid);
 	struct gnix_auth_key *auth_key = domain->auth_key;
 	struct gnix_nic_attr nic_attr = {0};
-
 
 	nic_attr.auth_key = auth_key;
 
@@ -115,3 +142,12 @@ Test(nic, alloc_free)
 	}
 }
 
+Test(nic_basic, alloc_free)
+{
+	__alloc_free();
+}
+
+Test(nic_scalable, alloc_free)
+{
+	__alloc_free();
+}

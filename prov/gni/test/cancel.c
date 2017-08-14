@@ -69,8 +69,8 @@ static struct fid_cq *msg_cq[2];
 static struct fi_cq_attr cq_attr;
 
 #define BUF_SZ (8*1024)
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 struct fid_mr *rem_mr, *loc_mr;
 uint64_t mr_key;
 
@@ -79,6 +79,7 @@ void cancel_setup(void)
 	int ret = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
+	int rem_requested_key, loc_requested_key;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
@@ -162,19 +163,43 @@ void cancel_setup(void)
 	ret = fi_enable(ep[1]);
 	cr_assert(!ret, "fi_ep_enable");
 
-	target = malloc(BUF_SZ);
-	assert(target);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	source = malloc(BUF_SZ);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
-	ret = fi_mr_reg(dom, target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
+	rem_requested_key = USING_SCALABLE(fi) ? 1 : 0;
+	loc_requested_key = USING_SCALABLE(fi) ? 2 : 0;
+
+	ret = fi_mr_reg(dom,
+			  target,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  rem_requested_key,
+			  0,
+			  &rem_mr,
+			  &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom, source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
+	ret = fi_mr_reg(dom,
+			  source,
+			  BUF_SZ,
+			  FI_REMOTE_WRITE,
+			  0,
+			  loc_requested_key,
+			  0,
+			  &loc_mr,
+			  &source);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi)) {
+		MR_ENABLE(rem_mr, target, BUF_SZ);
+		MR_ENABLE(loc_mr, source, BUF_SZ);
+	}
 
 	mr_key = fi_mr_key(rem_mr);
 }
@@ -186,8 +211,8 @@ void cancel_teardown(void)
 	fi_close(&loc_mr->fid);
 	fi_close(&rem_mr->fid);
 
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	ret = fi_close(&ep[0]->fid);
 	cr_assert(!ret, "failure in closing ep.");

@@ -80,28 +80,28 @@ static struct fi_cq_attr cq_attr;
 #define BUF_SZ (1<<16)
 #define IOV_CNT (1<<3)
 
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 struct iovec *src_iov, *dest_iov;
-char *iov_src_buf, *iov_dest_buf;
+char *iov_src_buf, *iov_dest_buf, *iov_src_buf_base, *iov_dest_buf_base;
 struct fid_mr *rem_mr, *loc_mr;
 uint64_t mr_key;
 
-static void setup_dom(enum fi_progress pm)
+static void setup_dom(enum fi_progress pm, uint32_t version, int mr_mode)
 {
 	int ret;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = mr_mode;
 	hints->domain_attr->data_progress = pm;
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = mode_bits;
 
 	hints->fabric_attr->prov_name = strdup("gni");
 
-	ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(version, NULL, 0, 0, hints, &fi);
 	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -190,11 +190,13 @@ static void setup_mr(void)
 	dest_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(dest_iov);
 
-	target = malloc(BUF_SZ);
-	assert(target);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	source = malloc(BUF_SZ);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
 	src_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(src_iov);
@@ -214,20 +216,35 @@ static void setup_mr(void)
 	assert(iov_src_buf != NULL);
 
 	ret = fi_mr_reg(dom, target, BUF_SZ,
-			FI_SEND | FI_RECV, 0, 0, 0, &rem_mr, &target);
+			FI_SEND | FI_RECV, 0, (USING_SCALABLE(fi) ? 1 : 0),
+			0, &rem_mr, &target);
 	cr_assert_eq(ret, 0);
 
 	ret = fi_mr_reg(dom, source, BUF_SZ,
-			FI_SEND | FI_RECV, 0, 0, 0, &loc_mr, &source);
+			FI_SEND | FI_RECV, 0, (USING_SCALABLE(fi) ? 2 : 0),
+			0, &loc_mr, &source);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi)) {
+		MR_ENABLE(rem_mr, target, BUF_SZ);
+		MR_ENABLE(loc_mr, source, BUF_SZ);
+	}
 
 	mr_key = fi_mr_key(rem_mr);
 }
 
-static void rdm_tagged_sr_setup(void)
+static void rdm_tagged_sr_basic_setup(void)
 {
 	/* Change this to FI_PROGRESS_AUTO when supported */
-	setup_dom(FI_PROGRESS_MANUAL);
+	setup_dom(FI_PROGRESS_MANUAL, fi_version(), GNIX_MR_BASIC);
+	setup_ep();
+	setup_mr();
+}
+
+static void rdm_tagged_sr_scalable_setup(void)
+{
+	/* Change this to FI_PROGRESS_AUTO when supported */
+	setup_dom(FI_PROGRESS_MANUAL, fi_version(), GNIX_MR_SCALABLE);
 	setup_ep();
 	setup_mr();
 }
@@ -239,8 +256,8 @@ static void rdm_tagged_sr_teardown(void)
 	fi_close(&loc_mr->fid);
 	fi_close(&rem_mr->fid);
 
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	for (i = 0; i < IOV_CNT; i++) {
 		free(src_iov[i].iov_base);
@@ -338,8 +355,13 @@ void rdm_tagged_sr_xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
  * Test MSG functions
  ******************************************************************************/
 
-TestSuite(rdm_tagged_sr,
-		.init = rdm_tagged_sr_setup,
+TestSuite(rdm_tagged_sr_basic,
+		.init = rdm_tagged_sr_basic_setup,
+		.fini = rdm_tagged_sr_teardown,
+		.disabled = false);
+
+TestSuite(rdm_tagged_sr_scalable,
+		.init = rdm_tagged_sr_scalable_setup,
 		.fini = rdm_tagged_sr_teardown,
 		.disabled = false);
 
@@ -385,7 +407,12 @@ void do_tsend(int len)
 	cr_assert(rdm_tagged_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_tagged_sr, tsend)
+Test(rdm_tagged_sr_basic, tsend)
+{
+	rdm_tagged_sr_xfer_for_each_size(do_tsend, 1, BUF_SZ);
+}
+
+Test(rdm_tagged_sr_scalable, tsend)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_tsend, 1, BUF_SZ);
 }
@@ -442,7 +469,12 @@ void do_tsendv(int len)
 	}
 }
 
-Test(rdm_tagged_sr, tsendv)
+Test(rdm_tagged_sr_basic, tsendv)
+{
+	rdm_tagged_sr_xfer_for_each_size(do_tsendv, 1, BUF_SZ);
+}
+
+Test(rdm_tagged_sr_scalable, tsendv)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_tsendv, 1, BUF_SZ);
 }
@@ -498,7 +530,12 @@ void do_tsendmsg(int len)
 	cr_assert(rdm_tagged_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_tagged_sr, tsendmsg)
+Test(rdm_tagged_sr_basic, tsendmsg)
+{
+	rdm_tagged_sr_xfer_for_each_size(do_tsendmsg, 1, BUF_SZ);
+}
+
+Test(rdm_tagged_sr_scalable, tsendmsg)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_tsendmsg, 1, BUF_SZ);
 }
@@ -536,10 +573,16 @@ void do_tinject(int len)
 	cr_assert(rdm_tagged_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_tagged_sr, tinject, .disabled = false)
+Test(rdm_tagged_sr_basic, tinject, .disabled = false)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_tinject, 1, INJECT_SIZE);
 }
+
+Test(rdm_tagged_sr_scalable, tinject, .disabled = false)
+{
+	rdm_tagged_sr_xfer_for_each_size(do_tinject, 1, INJECT_SIZE);
+}
+
 
 /*
 ssize_t fi_tsenddata(struct fid_ep *ep, void *buf, size_t len,
@@ -579,7 +622,12 @@ void do_tsenddata(int len)
 	cr_assert(rdm_tagged_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_tagged_sr, tsenddata)
+Test(rdm_tagged_sr_basic, tsenddata)
+{
+	rdm_tagged_sr_xfer_for_each_size(do_tsenddata, 1, BUF_SZ);
+}
+
+Test(rdm_tagged_sr_scalable, tsenddata)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_tsenddata, 1, BUF_SZ);
 }
@@ -639,7 +687,12 @@ void do_trecvv(int len)
 	}
 }
 
-Test(rdm_tagged_sr, trecvv)
+Test(rdm_tagged_sr_basic, trecvv)
+{
+	rdm_tagged_sr_xfer_for_each_size(do_trecvv, 1, BUF_SZ);
+}
+
+Test(rdm_tagged_sr_scalable, trecvv)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_trecvv, 1, BUF_SZ);
 }
@@ -695,13 +748,18 @@ void do_trecvmsg(int len)
 	cr_assert(rdm_tagged_sr_check_data(source, target, len), "Data mismatch");
 }
 
-Test(rdm_tagged_sr, trecvmsg)
+Test(rdm_tagged_sr_basic, trecvmsg)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_trecvmsg, 1, BUF_SZ);
 }
 
+Test(rdm_tagged_sr_scalable, trecvmsg)
+{
+	rdm_tagged_sr_xfer_for_each_size(do_trecvmsg, 1, BUF_SZ);
+}
 
-Test(rdm_tagged_sr, multi_tsend_trecv) {
+static inline void __multi_tsend_trecv(void)
+{
 	int i, it, ridx, ret;
 	const int iters = 37;
 	const int num_msgs = 17;
@@ -759,6 +817,16 @@ Test(rdm_tagged_sr, multi_tsend_trecv) {
 			cr_assert(tags[i] == 0);
 	}
 
+}
+
+Test(rdm_tagged_sr_basic, multi_tsend_trecv)
+{
+	__multi_tsend_trecv();
+}
+
+Test(rdm_tagged_sr_scalable, multi_tsend_trecv)
+{
+	__multi_tsend_trecv();
 }
 
 static void do_tagged_sr_pipelined(void)
@@ -848,7 +916,11 @@ static void do_tagged_sr_pipelined(void)
 }
 
 /* Add this test when FI_PROGRESS_AUTO is implemented */
-Test(rdm_tagged_sr, multi_tsend_trecv_pipelined, .disabled = true) {
+Test(rdm_tagged_sr_basic, multi_tsend_trecv_pipelined, .disabled = true) {
+	do_tagged_sr_pipelined();
+}
+
+Test(rdm_tagged_sr_scalable, multi_tsend_trecv_pipelined, .disabled = true) {
 	do_tagged_sr_pipelined();
 }
 
@@ -860,7 +932,7 @@ static void progress_manual_dom_ops_setup(const dom_ops_val_t op,
 	uint32_t val = opval;
 	struct fi_gni_ops_domain *gni_domain_ops;
 
-	setup_dom(FI_PROGRESS_MANUAL);
+	setup_dom(FI_PROGRESS_MANUAL, fi_version(), GNIX_MR_BASIC);
 	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1,
 			  0, (void **) &gni_domain_ops, NULL);
 	gni_domain_ops->set_val(&dom->fid, op, &val);

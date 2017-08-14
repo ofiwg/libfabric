@@ -54,12 +54,13 @@
 /**
  * GNIX authorization key construct
  *
- * @var lock      lock for data structure
- * @var attr      authorization key attributes
- * @var enabled   Is this authorization key live? If so, refuse changes to limits
- * @var mr_mode   mr_mode bits associated with the authorization key
- * @var prov      bitmap for detecting provider key usage
- * @var user      bitmap for detecting user key usage
+ * @var lock        lock for data structure
+ * @var attr        authorization key attributes
+ * @var enabled     Is this authorization key live? If so, refuse changes to limits
+ * @var using_vmdh  Is this authorization key associated with a domain using
+ *                  VMDH?
+ * @var prov        bitmap for detecting provider key usage
+ * @var user        bitmap for detecting user key usage
  */
 struct gnix_auth_key {
 	fastlock_t lock;
@@ -67,9 +68,9 @@ struct gnix_auth_key {
 	int enabled;
 	uint8_t ptag;
 	uint32_t cookie;
-	int mr_mode;
-	gnix_bitmap_t prov;
-	gnix_bitmap_t user;
+	int using_vmdh;
+	gnix_bitmap_t *prov;
+	gnix_bitmap_t *user;
 };
 
 /**
@@ -163,7 +164,7 @@ int _gnix_auth_key_insert(
 		size_t auth_key_size,
 		struct gnix_auth_key *to_insert);
 
-#define GNIX_GET_AUTH_KEY(auth_key, auth_key_size) \
+#define GNIX_GET_AUTH_KEY(auth_key, auth_key_size, requested_mode) \
 	({ \
 		struct gnix_auth_key *_tmp; \
 		_tmp  = _gnix_auth_key_lookup((auth_key), (auth_key_size)); \
@@ -184,6 +185,7 @@ int _gnix_auth_key_insert(
 					(auth_key_size)); \
 				assert(_tmp); \
 			} \
+			_tmp->using_vmdh = (requested_mode); \
 			_tmp_ret = _gnix_auth_key_enable(_tmp); \
 			if (_tmp_ret) { \
 				GNIX_WARN(FI_LOG_FABRIC, \

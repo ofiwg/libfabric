@@ -97,6 +97,34 @@ Test(fabric, open_ops_1)
 	cr_assert(ops);
 }
 
+Test(fabric, set_wait_timeout)
+{
+	int ret;
+	struct fi_gni_ops_fab *ops;
+	int old_val = 0, new_val, current_val;
+
+	ret = fi_open_ops(&fabric->fid,
+		FI_GNI_FAB_OPS_1, 0, (void **) &ops, NULL);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	cr_assert(ops);
+
+	ret = ops->get_val(&fabric->fid,
+		GNI_WAIT_SHARED_MEMORY_TIMEOUT, &old_val);
+	cr_assert_eq(ret, FI_SUCCESS);
+	cr_assert_neq(old_val, 0);
+
+	new_val = old_val * 2;
+	ret = ops->set_val(&fabric->fid,
+		GNI_WAIT_SHARED_MEMORY_TIMEOUT, &new_val);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	ret = ops->get_val(&fabric->fid,
+		GNI_WAIT_SHARED_MEMORY_TIMEOUT, &current_val);
+	cr_assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(current_val, new_val);
+}
+
 Test(fabric, open_ops_2)
 {
 	int ret;

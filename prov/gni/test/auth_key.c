@@ -49,6 +49,15 @@
 
 static void setup(void)
 {
+	struct fi_info *info = fi_allocinfo();
+	int ret;
+
+	cr_assert(info);
+
+	ret = fi_getinfo(fi_version(), NULL, 0, 0, NULL, &info);
+	cr_assert(ret == FI_SUCCESS);
+
+	fi_freeinfo(info);
 }
 
 static void teardown(void)
@@ -91,7 +100,7 @@ void *race_create_func(void *context)
 	cr_assert(ret == 0 || ret == -1, "pthread_barrier, "
 		"ret=%d errno=%d strerror=%s", ret, errno, strerror(errno));
 
-	auth_key = GNIX_GET_AUTH_KEY(NULL, 0);
+	auth_key = GNIX_GET_AUTH_KEY(NULL, 0, 0);
 	cr_assert_neq(auth_key, NULL, "failed to get authorization key");
 
 	return NULL;
@@ -123,4 +132,53 @@ Test(auth_key, race_create)
 
 	ret = pthread_barrier_destroy(&barrier);
 	cr_assert_eq(ret, 0);
+}
+
+Test(auth_key, limit_four_vmdh_entries)
+{
+	int i, ret;
+	struct gnix_auth_key *auth_key;
+	struct fi_gni_auth_key _ak;
+
+	for (i = 0; i < 4; i++) {
+		auth_key = _gnix_auth_key_alloc();
+		cr_assert(auth_key);
+
+		auth_key->attr.prov_key_limit = 128;
+		auth_key->attr.user_key_limit = 128;
+		auth_key->ptag = i * 16;
+		auth_key->cookie = i * 32;
+		auth_key->using_vmdh = 1;
+
+		_ak.type = GNIX_AKT_RAW;
+		_ak.raw.protection_key = auth_key->cookie;
+
+		ret = _gnix_auth_key_insert((uint8_t *) &_ak,
+			sizeof(struct fi_gni_auth_key), auth_key);
+		cr_assert(ret == FI_SUCCESS);
+
+		ret = _gnix_auth_key_enable(auth_key);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	auth_key = _gnix_auth_key_alloc();
+	cr_assert(auth_key);
+
+	auth_key->attr.prov_key_limit = 128;
+	auth_key->attr.user_key_limit = 128;
+	auth_key->ptag = i * 16;
+	auth_key->cookie = i * 32;
+	auth_key->using_vmdh = 1;
+
+	_ak.type = GNIX_AKT_RAW;
+	_ak.raw.protection_key = auth_key->cookie;
+
+	ret = _gnix_auth_key_insert((uint8_t *) &_ak,
+		sizeof(struct fi_gni_auth_key), auth_key);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = _gnix_auth_key_enable(auth_key);
+	cr_assert(ret == -FI_ENOSPC,
+		"ret is not correct, expected=%d actual=%d\n",
+		-FI_ENOSPC, ret);
 }

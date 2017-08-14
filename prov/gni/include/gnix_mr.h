@@ -45,11 +45,14 @@
 #include "gnix_priv.h"
 #include "gnix_mr_cache.h"
 
+#define GNIX_USER_REG 0
+#define GNIX_PROV_REG 1
+
 #define GNIX_MR_PAGE_SHIFT 12
 #define GNIX_MR_PFN_BITS 37
 #define GNIX_MR_MDD_BITS 12
 #define GNIX_MR_FMT_BITS 1
-#define GNIX_MR_FLAG_BITS 1
+#define GNIX_MR_FLAG_BITS 2
 #define GNIX_MR_VA_BITS (GNIX_MR_PFN_BITS + GNIX_MR_PAGE_SHIFT)
 #define GNIX_MR_KEY_BITS (GNIX_MR_PFN_BITS + GNIX_MR_MDD_BITS)
 #define GNIX_MR_RESERVED_BITS \
@@ -74,7 +77,8 @@ struct gnix_mr_cache_info {
 };
 
 enum {
-	GNIX_MR_FLAG_READONLY = 1 << 0
+	GNIX_MR_FLAG_READONLY = 1 << 0,
+	GNIX_MR_FLAG_BASIC_REG = 1 << 1,
 };
 
 enum {
@@ -190,6 +194,31 @@ int _gnix_close_cache(struct gnix_fid_domain *domain,
 /* flushes the memory registration cache for a given domain */
 int _gnix_flush_registration_cache(struct gnix_fid_domain *domain);
 
+
+/** 
+ * used for internal registrations,
+ *
+ * @param fid  endpoint fid
+ * @param buf            buffer to register
+ * @param len            length of buffer to register
+ * @param access         access permissions
+ * @param offset         registration offset 
+ * @param requested_key  key requested for new registration
+ * @param flags          registration flags
+ * @param mr_o           pointer to returned registration
+ * @param context        context to associate with registration
+ * @param auth_key       authorization key to associate with registration
+ * @param reserved       1 if provider registration, 0 otherwise
+ *
+ * @note  Set reserved to 0 for a user registration
+ * @note  Set reserved to 1 for a provider registration 
+ */
+int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
+			  uint64_t access, uint64_t offset,
+			  uint64_t requested_key, uint64_t flags,
+			  struct fid_mr **mr_o, void *context,
+			  struct gnix_auth_key *auth_key,
+			  int reserved);
 
 extern gnix_mr_cache_attr_t _gnix_default_mr_cache_attr;
 

@@ -67,5 +67,56 @@ static inline struct gnix_fid_ep *get_gnix_ep(struct fid_ep *fid_ep)
 	return container_of(fid_ep, struct gnix_fid_ep, ep_fid);
 }
 
-#define GNIX_DEFAULT_MR_MODE OFI_MR_BASIC_MAP
+#define GNIX_MR_BASIC (FI_MR_BASIC)
+#define GNIX_MR_SCALABLE (FI_MR_MMU_NOTIFY)
+#define GNIX_DEFAULT_MR_MODE GNIX_MR_BASIC
+
+#define LOC_ADDR(base, addr) (addr)
+#define REM_ADDR(base, addr) \
+	((gnit_use_scalable != 0) ? \
+		((uint64_t)(addr) - (uint64_t)(base)) : (uint64_t) (addr))
+
+#define GNIT_ALIGNMENT_ORDER 12
+#define GNIT_ALIGNMENT_PGSIZE (1 << GNIT_ALIGNMENT_ORDER)
+#define GNIT_ALIGNMENT_MASK ((uint64_t) (GNIT_ALIGNMENT_PGSIZE - 1))
+
+#define GNIT_ALIGN_LEN(len) (((uint64_t) len) + GNIT_ALIGNMENT_PGSIZE)
+#define GNIT_ALIGN_BUFFER(type, addr) \
+	((((uint64_t) (addr)) & GNIT_ALIGNMENT_MASK) ? \
+		(type)((((uint64_t) (addr)) + \
+			GNIT_ALIGNMENT_PGSIZE) & ~(GNIT_ALIGNMENT_MASK)) \
+			: (type)(addr))
+
+#define USING_SCALABLE(hints) \
+	(!(((hints)->domain_attr->mr_mode & FI_MR_VIRT_ADDR) || \
+		((hints->domain_attr->mr_mode == FI_MR_BASIC))))
+
+#define _REM_ADDR(info, base, addr) \
+	(USING_SCALABLE(info) ? \
+		((uint64_t)(addr) - (uint64_t)(base)) : (uint64_t) (addr))
+
+#define SKIP_IF(cond, message) \
+	do { \
+		if (cond) \
+			cr_skip_test(message); \
+	} while (0)
+
+#define SKIP_IF_SCALABLE_LT_1_5(version, mr_mode) \
+	SKIP_IF((FI_VERSION_LT((version), FI_VERSION(1, 5)) && \
+		!((mr_mode) & (FI_MR_BASIC | FI_MR_VIRT_ADDR))), \
+		"scalable is not supported for versions less than " \
+		"FI 1.5")
+
+#define MR_ENABLE(mr, addr, len) \
+	do { \
+		struct iovec __iov = { \
+			.iov_base = (void *) (addr),\
+			.iov_len = (len), \
+		}; \
+		int enable_ret; \
+	\
+		enable_ret = fi_mr_refresh((mr), &__iov, 1, 0); \
+		cr_assert_eq(enable_ret, FI_SUCCESS, "failed to enable mr"); \
+	} while (0)
+
 #endif /* PROV_GNI_TEST_COMMON_H_ */

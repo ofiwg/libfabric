@@ -39,6 +39,7 @@ _gni_files = \
 	prov/gni/src/gnix_queue.c \
 	prov/gni/src/gnix_rma.c \
 	prov/gni/src/gnix_sep.c \
+	prov/gni/src/gnix_shmem.c \
 	prov/gni/src/gnix_tags.c \
 	prov/gni/src/gnix_trigger.c \
 	prov/gni/src/gnix_util.c \
@@ -76,6 +77,7 @@ _gni_headers = \
 	prov/gni/include/gnix_priv.h \
 	prov/gni/include/gnix_queue.h \
 	prov/gni/include/gnix_rma.h \
+	prov/gni/include/gnix_shmem.h \
 	prov/gni/include/gnix_tags.h \
 	prov/gni/include/gnix_trigger.h \
 	prov/gni/include/gnix_util.h \
@@ -122,6 +124,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/api_cq.c \
 	prov/gni/test/api_cntr.c \
 	prov/gni/test/sep.c \
+	prov/gni/test/shmem.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
 	prov/gni/test/vc_lookup.c \

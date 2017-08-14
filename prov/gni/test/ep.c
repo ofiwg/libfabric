@@ -70,6 +70,24 @@ static void _setup(uint32_t version)
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
+	if (USING_SCALABLE(fi)) {
+		struct fi_gni_ops_fab *ops;
+		int in;
+
+		/* open_close test opens many nics and exhausts reserved keys */
+		in = 256;
+
+		ret = fi_open_ops(&fab->fid,
+			FI_GNI_FAB_OPS_1, 0, (void **) &ops, NULL);
+		cr_assert_eq(ret, FI_SUCCESS);
+		cr_assert(ops);
+
+		ret = ops->set_val(&fab->fid,
+			GNI_DEFAULT_PROV_REGISTRATION_LIMIT,
+			&in);
+		cr_assert_eq(ret, FI_SUCCESS);
+	}
+
 	ret = fi_domain(fab, fi, &dom, NULL);
 	cr_assert(!ret, "fi_domain");
 }
@@ -315,7 +333,7 @@ Test(endpoint, getsetopt_gni_ep)
 	cr_assert_eq(val, 0);
 	cr_assert_eq(ep_priv->use_tag_hlist, 0);
 
-	val = 1; // set the hash implementation
+	val = 1; /* set the hash implementation */
 	ret = ep_ops->set_val(&ep->fid, GNI_HASH_TAG_IMPL, &val);
 	cr_assert(!ret, "ep_ops set_val");
 	cr_assert_eq(ep_priv->use_tag_hlist, 1);
@@ -324,7 +342,7 @@ Test(endpoint, getsetopt_gni_ep)
 	cr_assert_eq(ep_priv->tagged_unexp_recv_queue.attr.type, GNIX_TAG_HLIST);
 	cr_assert_eq(ep_priv->tagged_posted_recv_queue.attr.type, GNIX_TAG_HLIST);
 
-	val = 0; // reset the value
+	val = 0; /* reset the value */
 	ret = ep_ops->get_val(&ep->fid, GNI_HASH_TAG_IMPL, &val);
 	cr_assert(!ret, "ep_ops get_val");
 	cr_assert_eq(val, 1);

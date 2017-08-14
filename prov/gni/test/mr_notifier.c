@@ -36,6 +36,7 @@
 #include <sys/mman.h>
 #include "gnix_mr_notifier.h"
 
+#include "common.h"
 #include <criterion/criterion.h>
 #include "common.h"
 
@@ -333,6 +334,8 @@ static void do_notifier_stressor(int num_allocs, int min_len, int max_len,
 				default_flags, &mr[i], NULL);
 		cr_assert_eq(ret, FI_SUCCESS);
 
+		MR_ENABLE(mr[i], r[i], len);
+
 		to_free_buf[loc] = free_imm ? r[i] : 0x0;
 
 		loc = next_head();
@@ -461,6 +464,8 @@ static void do_reuse(int num_allocs, int num_reuse,
 				default_offset, default_req_key,
 				default_flags, &buf_mr, NULL);
 		cr_assert_eq(ret, FI_SUCCESS);
+
+		MR_ENABLE(buf_mr, buf, len);
 
 		fi_close(&buf_mr->fid);
 

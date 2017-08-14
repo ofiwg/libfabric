@@ -53,6 +53,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 #if 1
 #define dbg_printf(...)
@@ -90,10 +91,12 @@ static int peer_src_known = 1;
 #define BUF_RNDZV (1<<14)
 #define IOV_CNT (1<<3)
 
-char *target, *target2;
-char *source, *source2;
+char *target, *target_base;
+char *target2, *target2_base;
+char *source, *source_base;
+char *source2, *source2_base;
 struct iovec *src_iov, *dest_iov, *s_iov, *d_iov;
-char *iov_src_buf, *iov_dest_buf;
+char *iov_src_buf, *iov_dest_buf, *iov_src_buf_base, *iov_dest_buf_base;
 char *uc_target;
 char *uc_source;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
@@ -124,22 +127,26 @@ void rdm_sr_setup_common_eps(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
-	target = malloc(BUF_SZ * NUM_MULTIRECVS);
-	assert(target);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * NUM_MULTIRECVS));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	target2 = malloc(BUF_SZ * NUM_MULTIRECVS);
-	assert(target2);
+	target2_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * NUM_MULTIRECVS));
+	assert(target2_base);
+	target2 = GNIT_ALIGN_BUFFER(char *, target2_base);
 
 	dest_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(dest_iov);
 	d_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(d_iov);
 
-	source = malloc(BUF_SZ);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
-	source2 = malloc(BUF_SZ);
-	assert(source2);
+	source2_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source2_base);
+	source2 = GNIT_ALIGN_BUFFER(char *, source2_base);
 
 	src_iov = malloc(sizeof(struct iovec) * IOV_CNT);
 	assert(src_iov);
@@ -154,11 +161,13 @@ void rdm_sr_setup_common_eps(void)
 		assert(dest_iov[i].iov_base != NULL);
 	}
 
-	iov_src_buf = malloc(BUF_SZ * IOV_CNT);
-	assert(iov_src_buf);
+	iov_src_buf_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * IOV_CNT));
+	assert(iov_src_buf_base);
+	iov_src_buf = GNIT_ALIGN_BUFFER(char *, iov_src_buf_base);
 
-	iov_dest_buf = malloc(BUF_SZ * IOV_CNT);
-	assert(iov_dest_buf);
+	iov_dest_buf_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * IOV_CNT));
+	assert(iov_dest_buf_base);
+	iov_dest_buf = GNIT_ALIGN_BUFFER(char *, iov_dest_buf_base);
 
 	uc_target = malloc(BUF_SZ);
 	assert(uc_target);
@@ -248,28 +257,73 @@ void rdm_sr_setup_common_eps(void)
 
 void rdm_sr_setup_common(void)
 {
-	int ret = 0, i = 0;
+	int ret = 0, i = 0, j = 0;
 
 	rdm_sr_setup_common_eps();
+	int req_key[4];
 
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_mr_reg(dom[i], target, NUM_MULTIRECVS * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
+		for (j = 0; j < 4; j++)
+			req_key[j] = (USING_SCALABLE(fi[i])) ? (i * 4) + j : 0;
+
+		ret = fi_mr_reg(dom[i],
+				  target,
+				  NUM_MULTIRECVS * BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  req_key[0],
+				  0,
+				  rem_mr + i,
+				  &target);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], source, BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, loc_mr + i, &source);
+		ret = fi_mr_reg(dom[i],
+				  source,
+				  BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  req_key[1],
+				  0,
+				  loc_mr + i,
+				  &source);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], iov_dest_buf, IOV_CNT * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, iov_dest_buf_mr + i,
-				&iov_dest_buf);
+		ret = fi_mr_reg(dom[i],
+				  iov_dest_buf,
+				  IOV_CNT * BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  req_key[2],
+				  0,
+				  iov_dest_buf_mr + i,
+				  &iov_dest_buf);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], iov_src_buf, IOV_CNT * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, iov_src_buf_mr + i,
-				&iov_src_buf);
+		ret = fi_mr_reg(dom[i],
+				  iov_src_buf,
+				  IOV_CNT * BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  req_key[3],
+				  0,
+				  iov_src_buf_mr + i,
+				  &iov_src_buf);
 		cr_assert_eq(ret, 0);
+
+		if (USING_SCALABLE(fi[i])) {
+			MR_ENABLE(rem_mr[i],
+				  target,
+				  NUM_MULTIRECVS * BUF_SZ);
+			MR_ENABLE(loc_mr[i],
+				  source,
+				  BUF_SZ);
+			MR_ENABLE(iov_dest_buf_mr[i],
+				  iov_dest_buf,
+				  IOV_CNT * BUF_SZ);
+			MR_ENABLE(iov_src_buf_mr[i],
+				  iov_src_buf,
+				  IOV_CNT * BUF_SZ);
+		}
 
 		mr_key[i] = fi_mr_key(rem_mr[i]);
 		iov_dest_buf_mr_key[i] = fi_mr_key(iov_dest_buf_mr[i]);
@@ -313,10 +367,7 @@ void dgram_sr_setup(uint32_t version, bool is_noreg, enum fi_progress pm)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-		hints->domain_attr->mr_mode = FI_MR_BASIC;
-	else
-		hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->control_progress = pm;
 	hints->domain_attr->data_progress = pm;
@@ -439,12 +490,10 @@ static void rdm_sr_teardown_common(bool unreg)
 	free(uc_source);
 	free(uc_target);
 
-	free(iov_src_buf);
-	free(iov_dest_buf);
-	free(target);
-	free(target2);
-	free(source);
-	free(source2);
+	free(iov_src_buf_base);
+	free(iov_dest_buf_base);
+	free(target_base);
+	free(source_base);
 
 	for (i = 0; i < IOV_CNT; i++) {
 		free(src_iov[i].iov_base);
@@ -718,12 +767,18 @@ static inline struct fi_cq_err_entry rdm_sr_check_canceled(struct fid_cq *cq)
  * Test MSG functions
  ******************************************************************************/
 
-TestSuite(rdm_sr_eager_auto, .init = rdm_sr_setup_reg_eager_auto, .fini = rdm_sr_teardown,
+TestSuite(rdm_sr_eager_auto,
+	  .init = rdm_sr_setup_reg_eager_auto,
+	  .fini = rdm_sr_teardown,
 	  .disabled = false);
-TestSuite(rdm_sr, .init = rdm_sr_setup_reg, .fini = rdm_sr_teardown,
+TestSuite(rdm_sr,
+	  .init = rdm_sr_setup_reg,
+	  .fini = rdm_sr_teardown,
 	  .disabled = false);
 
-TestSuite(dgram_sr, .init = dgram_sr_setup_reg, .fini = rdm_sr_teardown,
+TestSuite(dgram_sr,
+	  .init = dgram_sr_setup_reg,
+	  .fini = rdm_sr_teardown,
 	  .disabled = false);
 
 TestSuite(dgram_sr_src_unk_api_version_old,
@@ -735,16 +790,22 @@ TestSuite(dgram_sr_src_unk_api_version_cur,
 	  .init = dgram_sr_setup_reg_src_unk_api_version_cur,
 	  .fini = rdm_sr_teardown, .disabled = true);
 
-TestSuite(rdm_sr_noreg, .init = rdm_sr_setup_noreg,
-	  .fini = rdm_sr_teardown_nounreg, .disabled = false);
+TestSuite(rdm_sr_noreg,
+	  .init = rdm_sr_setup_noreg,
+	  .fini = rdm_sr_teardown_nounreg,
+	  .disabled = false);
 
-TestSuite(rdm_sr_bnd_ep, .init = rdm_sr_bnd_ep_setup, .fini = rdm_sr_teardown,
+TestSuite(rdm_sr_bnd_ep,
+	  .init = rdm_sr_bnd_ep_setup,
+	  .fini = rdm_sr_teardown,
 	  .disabled = false);
 
 /* This tests cases where the head and tail length is greater or equal to the
  * receive buffer length.
  */
-TestSuite(rdm_sr_alignment_edge, .init = rdm_sr_setup_reg, .fini = rdm_sr_teardown,
+TestSuite(rdm_sr_alignment_edge,
+	  .init = rdm_sr_setup_reg,
+	  .fini = rdm_sr_teardown,
 	  .disabled = true);
 
 /*
@@ -1134,19 +1195,24 @@ void do_inject(int len)
 	rdm_sr_init_data(source, len, 0x23);
 	rdm_sr_init_data(target, len, 0);
 
-	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
-	cache = GET_DOMAIN_RW_CACHE(ep_priv->domain);
-	cr_assert(cache != NULL);
-	already_registered = ofi_atomic_get32(&cache->inuse.elements);
+	if (!USING_SCALABLE(fi[0])) {
+		ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
+		cache = GET_DOMAIN_RW_CACHE(ep_priv->domain);
+		cr_assert(cache != NULL);
+		already_registered = ofi_atomic_get32(&cache->inuse.elements);
+	}
 
 	sz = fi_inject(ep[0], source, len, gni_addr[1]);
 	cr_assert_eq(sz, 0);
 
-	/*
-	 * shouldn't have registeredd the source buffer, trust but verify
-	 */
-	cr_assert(ofi_atomic_get32(&cache->inuse.elements)
-			== already_registered);
+	if (!USING_SCALABLE(fi[0])) {
+		/*
+		 * shouldn't have registered the source buffer,
+		 * trust but verify
+		 */
+		cr_assert(ofi_atomic_get32(&cache->inuse.elements)
+				== already_registered);
+	}
 
 	sz = fi_recv(ep[1], target, len, rem_mr[1], gni_addr[0], source);
 	cr_assert_eq(sz, 0);

@@ -262,8 +262,8 @@ static struct fid_cq *msg_cq[2];
 static struct fi_cq_attr cq_attr;
 
 #define BUF_SZ (64*1024)
-static char *target;
-static char *source;
+static char *target, *target_base;
+static char *source, *source_base;
 static struct fid_mr *rem_mr, *loc_mr;
 static uint64_t mr_key;
 static const int max_test_time = 10;
@@ -419,22 +419,43 @@ static void rdm_fi_pdc_setup(void)
 	ret = fi_enable(ep[1]);
 	cr_assert(!ret, "fi_ep_enable");
 
-	target = malloc(BUF_SZ*2);
-	assert(target);
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ*2));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	source = malloc(BUF_SZ*2);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ*2));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
 	peek_buffer = calloc(BUF_SZ, sizeof(char));
 	cr_assert(peek_buffer);
 
-	ret = fi_mr_reg(dom, target, BUF_SZ*2,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
+	ret = fi_mr_reg(dom,
+			  target,
+			  BUF_SZ*2,
+			  FI_REMOTE_WRITE,
+			  0,
+			  ((USING_SCALABLE(fi)) ? 1 : 0),
+			  0,
+			  &rem_mr,
+			  &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom, source, BUF_SZ*2,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
+	ret = fi_mr_reg(dom,
+			  source,
+			  BUF_SZ*2,
+			  FI_REMOTE_WRITE,
+			  0,
+			  ((USING_SCALABLE(fi)) ? 2 : 0),
+			  0,
+			  &loc_mr,
+			  &source);
 	cr_assert_eq(ret, 0);
+
+	if (USING_SCALABLE(fi)) {
+		MR_ENABLE(rem_mr, target, BUF_SZ*2);
+		MR_ENABLE(loc_mr, source, BUF_SZ*2);
+	}
 
 	mr_key = fi_mr_key(rem_mr);
 
@@ -448,8 +469,8 @@ static void rdm_fi_pdc_teardown(void)
 	fi_close(&loc_mr->fid);
 	fi_close(&rem_mr->fid);
 
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	ret = fi_close(&ep[0]->fid);
 	cr_assert(!ret, "failure in closing ep.");
@@ -568,7 +589,7 @@ TestSuite(rdm_fi_pdc,
 static void build_message(
 		struct fi_msg_tagged *msg,
 		struct iovec *iov,
-		void *target,
+		void *t,
 		int len,
 		void **rem_mr,
 		size_t gni_addr,
@@ -576,7 +597,7 @@ static void build_message(
 		uint64_t tag,
 		uint64_t ignore)
 {
-	iov->iov_base = target;
+	iov->iov_base = t;
 	iov->iov_len = len;
 
 	msg->msg_iov = iov;

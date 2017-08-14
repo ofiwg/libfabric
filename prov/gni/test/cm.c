@@ -56,6 +56,8 @@
 #include "gnix_rdma_headers.h"
 #include "common.h"
 
+#include "common.h"
+
 #if 1
 #define dbg_printf(...)
 #else

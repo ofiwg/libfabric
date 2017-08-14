@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015,2017 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -296,6 +296,9 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 	char *error;
 	size_t total_size;
 	int ret;
+	int vmdh_index = -1;
+	int flags = GNI_MEM_READWRITE;
+	struct gnix_auth_key *info;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -332,17 +335,46 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 		goto err_mmap;
 	}
 
-	ret = _gnix_alloc_bitmap(slab->used, __mbox_count(handle));
+	ret = _gnix_alloc_bitmap(slab->used, __mbox_count(handle), NULL);
 	if (ret) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Error allocating bitmap.\n");
 		goto err_alloc_bitmap;
 	}
 
 	COND_ACQUIRE(handle->nic_handle->requires_lock, &handle->nic_handle->lock);
+	if (handle->nic_handle->using_vmdh) {
+		info = _gnix_auth_key_lookup(GNIX_PROV_DEFAULT_AUTH_KEY,
+				GNIX_PROV_DEFAULT_AUTH_KEYLEN);
+		assert(info);
+
+		if (!handle->nic_handle->mdd_resources_set) {
+			/* check to see if the ptag registration limit was set
+			 * yet or not -- becomes read-only after success */
+			_gnix_auth_key_enable(info);
+
+			status = GNI_SetMddResources(
+				handle->nic_handle->gni_nic_hndl,
+				(info->attr.prov_key_limit +
+				 info->attr.user_key_limit));
+			assert(status == GNI_RC_SUCCESS);
+
+			handle->nic_handle->mdd_resources_set = 1;
+		}
+
+		vmdh_index = _gnix_get_next_reserved_key(info);
+		if (vmdh_index <= 0) {
+			GNIX_FATAL(FI_LOG_DOMAIN,
+				"failed to get reserved key for mbox "
+				"registration, rc=%d\n",
+				vmdh_index);
+		}
+		flags |= GNI_MEM_USE_VMDH;
+	}
+
 	status = GNI_MemRegister(handle->nic_handle->gni_nic_hndl,
 				 (uint64_t) slab->base, total_size,
 				 handle->cq_handle,
-				 GNI_MEM_READWRITE, -1,
+				 flags, vmdh_index,
 				 &slab->memory_handle);
 	COND_RELEASE(handle->nic_handle->requires_lock, &handle->nic_handle->lock);
 	if (status != GNI_RC_SUCCESS) {

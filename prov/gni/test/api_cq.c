@@ -79,8 +79,8 @@ static struct fi_cq_attr cq_attr;
 struct fi_info *hints[NUMEPS];
 
 #define BUF_SZ (1<<20)
-char *target;
-char *source;
+char *target, *target_base;
+char *source, *source_base;
 char *uc_target;
 char *uc_source;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
@@ -100,7 +100,7 @@ void api_cq_bind(uint64_t flags)
 	}
 }
 
-void api_cq_setup(void)
+static inline void __api_cq_setup(uint32_t version, int mr_mode)
 {
 	int ret, i, j;
 	struct fi_av_attr attr;
@@ -112,14 +112,14 @@ void api_cq_setup(void)
 
 		hints[i]->domain_attr->cq_data_size = NUMEPS * 2;
 		hints[i]->domain_attr->data_progress = FI_PROGRESS_AUTO;
-		hints[i]->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+		hints[i]->domain_attr->mr_mode = mr_mode;
 		hints[i]->mode = mode_bits;
 		hints[i]->fabric_attr->prov_name = strdup("gni");
 	}
 
 	/* Get info about fabric services with the provided hints */
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints[i],
+		ret = fi_getinfo(version, NULL, 0, 0, hints[i],
 				 &fi[i]);
 		cr_assert(!ret, "fi_getinfo");
 	}
@@ -132,11 +132,14 @@ void api_cq_setup(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
-	target = malloc(BUF_SZ * 3); /* 3x BUF_SZ for multi recv testing */
-	assert(target);
+	/* 3x BUF_SZ for multi recv testing */
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * 3));
+	assert(target_base);
+	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	source = malloc(BUF_SZ);
-	assert(source);
+	source_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
+	assert(source_base);
+	source = GNIT_ALIGN_BUFFER(char *, source_base);
 
 	uc_target = malloc(BUF_SZ);
 	assert(uc_target);
@@ -187,16 +190,50 @@ void api_cq_setup(void)
 	}
 
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_mr_reg(dom[i], target, 3 * BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
+		int target_requested_key =
+			USING_SCALABLE(fi[i]) ? (i * 2) : 0;
+		int source_requested_key =
+			USING_SCALABLE(fi[i]) ? (i * 2) + 1 : 0;
+
+		ret = fi_mr_reg(dom[i],
+				  target,
+				  3 * BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  target_requested_key,
+				  0,
+				  rem_mr + i,
+				  &target);
 		cr_assert_eq(ret, 0);
 
-		ret = fi_mr_reg(dom[i], source, BUF_SZ,
-				FI_REMOTE_WRITE, 0, 0, 0, loc_mr + i, &source);
+		ret = fi_mr_reg(dom[i],
+				  source,
+				  BUF_SZ,
+				  FI_REMOTE_WRITE,
+				  0,
+				  source_requested_key,
+				  0,
+				  loc_mr + i,
+				  &source);
 		cr_assert_eq(ret, 0);
+
+		if (USING_SCALABLE(fi[i])) {
+			MR_ENABLE(rem_mr[i], target, 3 * BUF_SZ);
+			MR_ENABLE(loc_mr[i], source, BUF_SZ);
+		}
 
 		mr_key[i] = fi_mr_key(rem_mr[i]);
 	}
+}
+
+static void api_cq_setup_basic(void)
+{
+	__api_cq_setup(fi_version(), GNIX_MR_BASIC);
+}
+
+static void api_cq_setup_scalable(void)
+{
+	__api_cq_setup(fi_version(), GNIX_MR_SCALABLE);
 }
 
 static void api_cq_teardown_common(bool unreg)
@@ -228,8 +265,8 @@ static void api_cq_teardown_common(bool unreg)
 
 	free(uc_source);
 	free(uc_target);
-	free(target);
-	free(source);
+	free(target_base);
+	free(source_base);
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
@@ -290,8 +327,16 @@ void api_cq_recv_allowed(ssize_t sz, uint64_t flags, char *fn)
 	}
 }
 
-TestSuite(api_cq, .init = api_cq_setup, .fini = api_cq_teardown,
+TestSuite(api_cq_basic,
+	  .init = api_cq_setup_basic,
+	  .fini = api_cq_teardown,
 	  .disabled = false);
+
+TestSuite(api_cq_scalable,
+	  .init = api_cq_setup_scalable,
+	  .fini = api_cq_teardown,
+	  .disabled = false);
+
 
 void api_cq_wait1(struct fid_cq *cq0, uint64_t cq_bind_flags)
 {
@@ -302,7 +347,7 @@ void api_cq_wait1(struct fid_cq *cq0, uint64_t cq_bind_flags)
 		return;
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN);
-	cr_assert(ret > 0);
+	cr_assert(ret > 0, "ret=%d", ret);
 }
 
 void api_cq_wait2(struct fid_cq *cq0, struct fid_cq *cq1,
@@ -356,15 +401,17 @@ void api_cq_send_recv(int len)
 		     (cq_bind_flags & FI_SEND) && (cq_bind_flags & FI_RECV));
 
 	sz = fi_write(ep[0], source, len,
-		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  loc_mr[0], gni_addr[1],
+			  _REM_ADDR(fi[0], target, target), mr_key[1],
+			  target);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_write");
 
 	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
 
 	sz = fi_writev(ep[0], &iov, (void **)loc_mr, 1,
-		       gni_addr[1], (uint64_t)target, mr_key[1],
-		       target);
+			   gni_addr[1],
+			   _REM_ADDR(fi[0], target, target), mr_key[1],
+			   target);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_writev");
 
 	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
@@ -372,7 +419,7 @@ void api_cq_send_recv(int len)
 	iov.iov_len = len;
 	iov.iov_base = source;
 
-	rma_iov.addr = (uint64_t)target;
+	rma_iov.addr = _REM_ADDR(fi[0], target, target);
 	rma_iov.len = len;
 	rma_iov.key = mr_key[1];
 	rma_msg.msg_iov = &iov;
@@ -391,57 +438,101 @@ void api_cq_send_recv(int len)
 
 #define WRITE_DATA 0x5123da1a145
 	sz = fi_writedata(ep[0], source, len, loc_mr[0], WRITE_DATA,
-			  gni_addr[1], (uint64_t)target, mr_key[1],
+			  gni_addr[1],
+			  _REM_ADDR(fi[0], target, target), mr_key[1],
 			  target);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_writedata");
 
 #define READ_CTX 0x4e3dda1aULL
 	sz = fi_read(ep[0], source, len,
-		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		     (void *)READ_CTX);
+			 loc_mr[0], gni_addr[1],
+			 _REM_ADDR(fi[0], target, target), mr_key[1],
+			 (void *)READ_CTX);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_read");
 
 	sz = fi_readv(ep[0], &iov, (void **)loc_mr, 1,
-		      gni_addr[1], (uint64_t)target, mr_key[1],
-		      target);
+			  gni_addr[1],
+			  _REM_ADDR(fi[0], target, target), mr_key[1],
+			  target);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_readv");
 
 	sz = fi_readmsg(ep[0], &rma_msg, 0);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_readmsg");
 
 	sz = fi_inject_write(ep[0], source, 64,
-			     gni_addr[1], (uint64_t)target, mr_key[1]);
+				 gni_addr[1],
+				 _REM_ADDR(fi[0], target, target), mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
 }
 
-Test(api_cq, msg)
+static inline void __msg(void)
 {
 	cq_bind_flags = FI_SEND | FI_RECV;
 	api_cq_bind(cq_bind_flags);
 	api_cq_send_recv(BUF_SZ);
 }
 
-Test(api_cq, msg_send_only)
+Test(api_cq_basic, msg)
+{
+	__msg();
+}
+
+Test(api_cq_scalable, msg)
+{
+	__msg();
+}
+
+static inline void __msg_send_only(void)
 {
 	cq_bind_flags = FI_SEND;
 	api_cq_bind(cq_bind_flags);
 	api_cq_send_recv(BUF_SZ);
 }
 
-Test(api_cq, msg_recv_only)
+Test(api_cq_basic, msg_send_only)
+{
+	__msg_send_only();
+}
+
+Test(api_cq_scalable, msg_send_only)
+{
+	__msg_send_only();
+}
+
+static inline void __msg_recv_only(void)
 {
 	cq_bind_flags = FI_RECV;
 	api_cq_bind(cq_bind_flags);
 	api_cq_send_recv(BUF_SZ);
 }
 
-Test(api_cq, msg_no_cq)
+Test(api_cq_basic, msg_recv_only)
+{
+	__msg_recv_only();
+}
+
+Test(api_cq_scalable, msg_recv_only)
+{
+	__msg_recv_only();
+}
+
+static inline void __msg_no_cq(void)
 {
 	cq_bind_flags = 0;
 	api_cq_bind(cq_bind_flags);
 	api_cq_send_recv(BUF_SZ);
+}
+
+Test(api_cq_basic, msg_no_cq)
+{
+	__msg_no_cq();
+}
+
+Test(api_cq_scalable, msg_no_cq)
+{
+	__msg_no_cq();
 }
 
 #define SOURCE_DATA	0xBBBB0000CCCCULL
@@ -456,35 +547,67 @@ void api_cq_atomic(void)
 	*((uint64_t *)source) = SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_atomic(ep[0], source, 1,
-		       loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		       FI_UINT64, FI_ATOMIC_WRITE, target);
+			   loc_mr[0], gni_addr[1],
+			   _REM_ADDR(fi[0], target, target), mr_key[1],
+			   FI_UINT64, FI_ATOMIC_WRITE, target);
 	api_cq_send_allowed(sz, cq_bind_flags, "fi_atomic");
 
 	sz = fi_inject_atomic(ep[0], source, 1,
-			      gni_addr[1], (uint64_t)target, mr_key[1],
-			      FI_INT64, FI_MIN);
+				  gni_addr[1],
+				  _REM_ADDR(fi[0], target, target), mr_key[1],
+				  FI_INT64, FI_MIN);
 	cr_assert_eq(sz, 0);
 
 	api_cq_wait1(msg_cq[0], cq_bind_flags & FI_SEND);
 }
 
-Test(api_cq, atomic)
+static inline void __atomic(void)
 {
 	cq_bind_flags = FI_SEND | FI_RECV;
 	api_cq_bind(cq_bind_flags);
 	api_cq_atomic();
 }
 
-Test(api_cq, atomic_send_only)
+Test(api_cq_basic, atomic)
+{
+	__atomic();
+}
+
+Test(api_cq_scalable, atomic)
+{
+	__atomic();
+}
+
+static inline void __atomic_send_only(void)
 {
 	cq_bind_flags = FI_SEND;
 	api_cq_bind(cq_bind_flags);
 	api_cq_atomic();
 }
 
-Test(api_cq, atomic_recv_only)
+Test(api_cq_basic, atomic_send_only)
+{
+	__atomic_send_only();
+}
+
+Test(api_cq_scalable, atomic_send_only)
+{
+	__atomic_send_only();
+}
+
+static inline void __atomic_recv_only(void)
 {
 	cq_bind_flags = FI_RECV;
 	api_cq_bind(cq_bind_flags);
 	api_cq_atomic();
+}
+
+Test(api_cq_basic, atomic_recv_only)
+{
+	__atomic_recv_only();
+}
+
+Test(api_cq_scalable, atomic_recv_only)
+{
+	__atomic_recv_only();
 }

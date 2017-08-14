@@ -1464,7 +1464,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	dlist_init(&vc_ptr->list);
 
 	ofi_atomic_initialize32(&vc_ptr->outstanding_tx_reqs, 0);
-	ret = _gnix_alloc_bitmap(&vc_ptr->flags, 1);
+	ret = _gnix_alloc_bitmap(&vc_ptr->flags, 1, NULL);
 	assert(!ret);
 
 	/*
