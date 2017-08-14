@@ -1910,7 +1910,7 @@ int ft_wait_child()
 	return 0;
 }
 
-int ft_finalize(void)
+int ft_finalize_ep(struct fid_ep *ep)
 {
 	struct iovec iov;
 	int ret;
@@ -1961,6 +1961,11 @@ int ft_finalize(void)
 		return ret;
 
 	return 0;
+}
+
+int ft_finalize(void)
+{
+	return ft_finalize_ep(ep);
 }
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,

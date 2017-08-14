@@ -378,6 +378,7 @@ int ft_sync_pair(int status);
 int ft_fork_and_pair();
 int ft_wait_child();
 int ft_finalize(void);
+int ft_finalize_ep(struct fid_ep *ep);
 
 size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
