@@ -41,6 +41,12 @@ static void fi_ibv_fini(void);
 
 static const char *local_node = "localhost";
 
+size_t verbs_default_tx_size 		= 384;
+size_t verbs_default_rx_size 		= 384;
+size_t verbs_default_tx_iov_limit 	= 4;
+size_t verbs_default_rx_iov_limit 	= 4;
+size_t verbs_default_inline_size 	= 64;
+
 struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
 	.version = VERBS_PROV_VERS,
@@ -354,6 +360,35 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	return fi_ibv_send(ep, wr, len, count, context);
 }
 
+static int fi_ibv_get_param_int(char *param_name, char *param_str,
+				size_t *param_default)
+{
+	char *param_help;
+	size_t len, ret;
+	int param;
+
+	len = strlen(param_str) + 50;
+	param_help = malloc(len);
+
+	ret = snprintf(param_help, len, "%s (default: %zu)", param_str,
+		       *param_default);
+	if (ret >= len) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,
+			"param_help string size insufficient!\n");
+		free(param_help);
+		assert(0);
+		return -FI_ETOOSMALL;
+	}
+
+	fi_param_define(&fi_ibv_prov, param_name, FI_PARAM_INT, param_help);
+
+	if (!fi_param_get_int(&fi_ibv_prov, param_name, &param))
+		*param_default = param;
+
+	free(param_help);
+	return 0;
+}
+
 static void fi_ibv_fini(void)
 {
 	fi_ibv_free_info();
@@ -385,6 +420,27 @@ VERBS_INI
 			"Only IBV_WR_SEND and IBV_WR_RDMA_WRITE_WITH_IMM are supported. "
 			"The last one is not applicable for iWarp. "
 			"(default: IBV_WR_SEND)");
+
+	if (fi_ibv_get_param_int("tx_size", "Default maximum tx context size",
+				 &verbs_default_tx_size))
+		return NULL;
+
+	if (fi_ibv_get_param_int("rx_size", "Default maximum rx context size",
+				 &verbs_default_rx_size))
+		return NULL;
+
+	if (fi_ibv_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
+				 &verbs_default_tx_iov_limit))
+		return NULL;
+
+	if (fi_ibv_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
+				 &verbs_default_rx_iov_limit))
+		return NULL;
+
+	if (fi_ibv_get_param_int("inline_size", "Default maximum inline size. "
+				 "Actual inject size returned in fi_info may be "
+				 "greater", &verbs_default_inline_size))
+		return NULL;
 
 	return &fi_ibv_prov;
 }
