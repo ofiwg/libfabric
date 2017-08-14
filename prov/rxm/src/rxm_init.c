@@ -161,9 +161,9 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 	/* If app supports FI_MR_LOCAL, prioritize requiring it for
 	 * better performance. */
 	if (hints && hints->domain_attr &&
-	    (RXM_MR_LOCAL(hints))) {
+	    (OFI_CHECK_MR_LOCAL(hints->domain_attr->mr_mode))) {
 		for (cur = *info; cur; cur = cur->next) {
-			if (!RXM_MR_LOCAL(cur))
+			if (!OFI_CHECK_MR_LOCAL(cur->domain_attr->mr_mode))
 				continue;
 			if (!(dup = fi_dupinfo(cur))) {
 				fi_freeinfo(*info);
