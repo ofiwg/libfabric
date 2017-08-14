@@ -128,7 +128,11 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
 	case FI_VERBS_CONN_REJECTED:
 		conn->state = FI_VERBS_CONN_CLOSED;
 		break;
+	case FI_VERBS_CONN_CLOSED:
+		break;
 	default:
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unknown connection state: %d\n",
+			  (int)conn->state);
 		ret = -FI_EOTHER;
 	}
 
