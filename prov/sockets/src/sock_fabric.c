@@ -638,6 +638,7 @@ static int sock_node_matches_interface(struct slist *addr_list, const char *node
 	struct sockaddr_in addr;
 	int ret;
 
+	memset(&addr, 0, sizeof(addr));
 	memset(&ai, 0, sizeof(ai));
 	ai.ai_family = AF_INET;
 	ai.ai_socktype = SOCK_STREAM;
