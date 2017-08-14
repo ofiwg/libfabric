@@ -223,7 +223,7 @@ int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	GNIX_INFO(FI_LOG_MR, "reg: buf=%p len=%llu\n", buf, len);
 
 	/* Flags are reserved for future use and must be 0. */
-	if (unlikely(flags))
+	if (OFI_UNLIKELY(flags))
 		return -FI_EBADFLAGS;
 
 	/* The offset parameter is reserved for future use and must be 0.
@@ -273,11 +273,11 @@ int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	/* call cache register op to retrieve the right entry */
 	fastlock_release(&domain->mr_cache_lock);
 	fastlock_acquire(&info->mr_cache_lock);
-	if (unlikely(!domain->mr_ops))
+	if (OFI_UNLIKELY(!domain->mr_ops))
 		_gnix_open_cache(domain, GNIX_DEFAULT_CACHE_TYPE);
 	fastlock_release(&domain->mr_cache_lock);
 
-	if (unlikely(!domain->mr_ops->is_init(domain, auth_key))) {
+	if (OFI_UNLIKELY(!domain->mr_ops->is_init(domain, auth_key))) {
 		rc = domain->mr_ops->init(domain, auth_key);
 		if (rc != FI_SUCCESS) {
 			fastlock_release(&info->mr_cache_lock);
@@ -291,7 +291,7 @@ int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	fastlock_release(&info->mr_cache_lock);
 
 	/* check retcode */
-	if (unlikely(rc != FI_SUCCESS))
+	if (OFI_UNLIKELY(rc != FI_SUCCESS))
 		goto err;
 
 	/* md.mr_fid */
@@ -522,7 +522,7 @@ static int fi_gnix_mr_close(fid_t fid)
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
-	if (unlikely(fid->fclass != FI_CLASS_MR))
+	if (OFI_UNLIKELY(fid->fclass != FI_CLASS_MR))
 		return -FI_EINVAL;
 
 	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
@@ -538,7 +538,7 @@ static int fi_gnix_mr_close(fid_t fid)
 	fastlock_release(&info->mr_cache_lock);
 
 	/* check retcode */
-	if (likely(ret == FI_SUCCESS)) {
+	if (OFI_LIKELY(ret == FI_SUCCESS)) {
 		/* release references to the domain and nic */
 		_gnix_ref_put(domain);
 		if (auth_key->using_vmdh) {
@@ -583,7 +583,7 @@ static inline void *__gnix_generic_register(
 	pthread_mutex_lock(&gnix_nic_list_lock);
 
 	/* If the nic list is empty, create a nic */
-	if (unlikely((dlist_empty(&gnix_nic_list_ptag[auth_key->ptag])))) {
+	if (OFI_UNLIKELY((dlist_empty(&gnix_nic_list_ptag[auth_key->ptag])))) {
 		/* release the lock because we are not checking the list after
 			this point. Additionally, gnix_nic_alloc takes the
 			lock to add the nic. */
@@ -600,7 +600,7 @@ static inline void *__gnix_generic_register(
 	} else {
 		nic = dlist_first_entry(&gnix_nic_list_ptag[auth_key->ptag],
 			struct gnix_nic, ptag_nic_list);
-		if (unlikely(nic == NULL)) {
+		if (OFI_UNLIKELY(nic == NULL)) {
 			GNIX_ERR(FI_LOG_MR, "Failed to find nic on "
 				"ptag list\n");
 			pthread_mutex_unlock(&gnix_nic_list_lock);
@@ -634,7 +634,7 @@ static inline void *__gnix_generic_register(
 				  vmdh_index, &md->mem_hndl);
 	COND_RELEASE(nic->requires_lock, &nic->lock);
 
-	if (unlikely(grc != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(grc != GNI_RC_SUCCESS)) {
 		GNIX_INFO(FI_LOG_MR, "failed to register memory with uGNI, "
 			  "ret=%s\n", gni_err_str[grc]);
 		_gnix_ref_put(nic);
@@ -850,7 +850,7 @@ static int __udreg_reg_mr(
 
 	urc = UDREG_Register(info->udreg_cache, (void *) address,
 			length, &udreg_entry);
-	if (unlikely(urc != UDREG_RC_SUCCESS))
+	if (OFI_UNLIKELY(urc != UDREG_RC_SUCCESS))
 		return -FI_EIO;
 
 	md = udreg_entry->device_data;
@@ -889,13 +889,13 @@ static int __udreg_close(struct gnix_fid_domain *domain,
 
 	if (info->udreg_cache) {
 		ret = UDREG_CacheRelease(info->udreg_cache);
-		if (unlikely(ret != UDREG_RC_SUCCESS))
+		if (OFI_UNLIKELY(ret != UDREG_RC_SUCCESS))
 			GNIX_FATAL(FI_LOG_DOMAIN, "failed to release from "
 					"mr cache during domain destruct, dom=%p rc=%d\n",
 					domain, ret);
 
 		ret = UDREG_CacheDestroy(info->udreg_cache);
-		if (unlikely(ret != UDREG_RC_SUCCESS))
+		if (OFI_UNLIKELY(ret != UDREG_RC_SUCCESS))
 			GNIX_FATAL(FI_LOG_DOMAIN, "failed to destroy mr "
 					"cache during domain destruct, dom=%p rc=%d\n",
 					domain, ret);

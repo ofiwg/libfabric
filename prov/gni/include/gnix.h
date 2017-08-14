@@ -85,13 +85,6 @@
 /*
  * useful macros
  */
-#ifndef likely
-#define likely(x) __builtin_expect((x), 1)
-#endif
-#ifndef unlikely
-#define unlikely(x) __builtin_expect((x), 0)
-#endif
-
 #ifndef FLOOR
 #define FLOOR(a, b) ((long long)(a) - (((long long)(a)) % (b)))
 #endif
@@ -894,7 +887,7 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
 		   ep->caps, fi_tostr(&ep->caps, FI_TYPE_CAPS));
 
 	if ((flags & FI_RMA) && (flags & FI_READ)) {
-		if (unlikely(!ep->ep_ops.rma_read_allowed)) {
+		if (OFI_UNLIKELY(!ep->ep_ops.rma_read_allowed)) {
 			/* check if read initiate capabilities are allowed */
 			if (caps & FI_RMA) {
 				if (caps & FI_READ) {
@@ -916,7 +909,7 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
 		}
 		return 1;
 	} else if ((flags & FI_RMA) && (flags & FI_WRITE)) {
-		if (unlikely(!ep->ep_ops.rma_write_allowed)) {
+		if (OFI_UNLIKELY(!ep->ep_ops.rma_write_allowed)) {
 			/* check if write initiate capabilities are allowed */
 			if (caps & FI_RMA) {
 				if (caps & FI_WRITE) {
@@ -938,7 +931,7 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
 		}
 		return 1;
 	} else if ((flags & FI_ATOMICS) && (flags & FI_READ)) {
-		if (unlikely(!ep->ep_ops.atomic_read_allowed)) {
+		if (OFI_UNLIKELY(!ep->ep_ops.atomic_read_allowed)) {
 			/* check if read initiate capabilities are allowed */
 			if (caps & FI_ATOMICS) {
 				if (caps & FI_READ) {
@@ -960,7 +953,7 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
 		}
 		return 1;
 	} else if ((flags & FI_ATOMICS) && (flags & FI_WRITE)) {
-		if (unlikely(!ep->ep_ops.atomic_write_allowed)) {
+		if (OFI_UNLIKELY(!ep->ep_ops.atomic_write_allowed)) {
 			/* check if write initiate capabilities are allowed */
 			if (caps & FI_ATOMICS) {
 				if (caps & FI_WRITE) {
@@ -1071,7 +1064,7 @@ static inline int _gnix_req_inject_err(struct gnix_fab_req *req)
 {
 	int err_cnt = req->gnix_ep->domain->params.err_inject_count;
 
-	if (likely(!err_cnt)) {
+	if (OFI_LIKELY(!err_cnt)) {
 		return 0;
 	} else if (err_cnt > 0) {
 		return req->tx_failures < err_cnt;
@@ -1085,7 +1078,7 @@ static inline int _gnix_req_inject_smsg_err(struct gnix_fab_req *req)
 	int err_cnt = req->gnix_ep->domain->params.err_inject_count;
 	int retrans_cnt = req->gnix_ep->domain->params.max_retransmits;
 
-	if (likely(!err_cnt)) {
+	if (OFI_LIKELY(!err_cnt)) {
 		return 0;
 	} else if (retrans_cnt <= err_cnt) {
 		return 1;

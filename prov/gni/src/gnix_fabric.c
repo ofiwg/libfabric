@@ -316,7 +316,7 @@ static int __gnix_getinfo_resolve_node(const char *node, const char *service,
 		is_fi_addr_str = true;
 	}
 
-	if (unlikely(is_fi_addr_str && node && service)) {
+	if (OFI_UNLIKELY(is_fi_addr_str && node && service)) {
 		GNIX_WARN(FI_LOG_FABRIC, "service parameter must be NULL when "
 			"node parameter is not and using FI_ADDR_STR.\n");
 		return -FI_EINVAL;

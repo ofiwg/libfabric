@@ -228,7 +228,7 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 	struct gnix_fab_req *fr = NULL;
 	int ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
-	while (unlikely(ret == -FI_EAGAIN))
+	while (OFI_UNLIKELY(ret == -FI_EAGAIN))
 		ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
 	if (ret == FI_SUCCESS) {
@@ -252,7 +252,7 @@ _gnix_fr_alloc_w_cb(struct gnix_fid_ep *ep, void (*cb)(void *))
 	struct gnix_fab_req *fr = NULL;
 	int ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
-	while (unlikely(ret == -FI_EAGAIN))
+	while (OFI_UNLIKELY(ret == -FI_EAGAIN))
 		ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
 	if (ret == FI_SUCCESS) {

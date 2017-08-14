@@ -100,7 +100,7 @@ void _gnix_trigger_check_cntr(struct gnix_fid_cntr *cntr)
 	struct gnix_fab_req *req, *req2;
 	size_t count;
 
-	if (likely(dlist_empty(&cntr->trigger_list))) {
+	if (OFI_LIKELY(dlist_empty(&cntr->trigger_list))) {
 		return;
 	}
 

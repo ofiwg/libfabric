@@ -483,10 +483,10 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 
 	len = MIN(req->msg.cum_send_len, req->msg.cum_recv_len);
 
-	if (unlikely(req->msg.recv_flags & FI_MULTI_RECV))
+	if (OFI_UNLIKELY(req->msg.recv_flags & FI_MULTI_RECV))
 		recv_addr = (void *)req->msg.recv_info[0].recv_addr;
 
-	if (likely(!(ep->caps & FI_SOURCE))) {
+	if (OFI_LIKELY(!(ep->caps & FI_SOURCE))) {
 		ret = __recv_completion(ep,
 					 req,
 					 flags,
@@ -1184,7 +1184,7 @@ static int __gnix_rndzv_req(void *arg)
 	}
 
 	if (req->msg.recv_flags & GNIX_MSG_GET_TAIL) {
-		if (unlikely(inject_err)) {
+		if (OFI_UNLIKELY(inject_err)) {
 			_gnix_nic_txd_err_inject(nic, tail_txd);
 			status = GNI_RC_SUCCESS;
 		} else {
@@ -1232,7 +1232,7 @@ static int __gnix_rndzv_iov_req_post(void *arg)
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
-	if (unlikely(iov_txd_cnt == 0))
+	if (OFI_UNLIKELY(iov_txd_cnt == 0))
 		return -FI_EAGAIN;
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
@@ -2020,7 +2020,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 		/* TODO: Buddy alloc */
 		req->msg.send_info[0].send_addr = (uint64_t)malloc(hdr->len);
-		if (unlikely(req->msg.send_info[0].send_addr == 0ULL)) {
+		if (OFI_UNLIKELY(req->msg.send_info[0].send_addr == 0ULL)) {
 			_gnix_fr_free(ep, req);
 			return -FI_ENOMEM;
 		}
@@ -2048,7 +2048,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	}
 
 	status = GNI_SmsgRelease(vc->gni_ep);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 				"GNI_SmsgRelease returned %s\n",
 				gni_err_str[status]);
@@ -2235,7 +2235,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	}
 
 	status = GNI_SmsgRelease(vc->gni_ep);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "GNI_SmsgRelease returned %s\n",
 			  gni_err_str[status]);
@@ -2325,7 +2325,7 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	 */
 	status = GNI_SmsgRelease(vc->gni_ep);
 
-	if (unlikely(status != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "GNI_SmsgRelease returned %s\n",
 			  gni_err_str[status]);
@@ -2412,7 +2412,7 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	}
 
 	status = GNI_SmsgRelease(vc->gni_ep);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 				"GNI_SmsgRelease returned %s\n",
 				gni_err_str[status]);
@@ -2631,7 +2631,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		 * hold the matched message, stop dequeuing and
 		 * return.
 		 */
-		if (unlikely(mrecv_req != NULL)) {
+		if (OFI_UNLIKELY(mrecv_req != NULL)) {
 
 			mrecv_req->msg.mrecv_space_left -=
 				req->msg.cum_send_len;
@@ -2685,7 +2685,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 			/*
 			 * this shouldn't happen
 			 */
-			if (unlikely(req->vc == NULL)) {
+			if (OFI_UNLIKELY(req->vc == NULL)) {
 				GNIX_ERR(FI_LOG_EP_DATA,
 					 "fab req vc field NULL");
 			}
@@ -2937,7 +2937,7 @@ static int _gnix_send_req(void *arg)
 	}
 	assert(rc == FI_SUCCESS);
 
-	if (unlikely(rendezvous)) {
+	if (OFI_UNLIKELY(rendezvous)) {
 		switch(req->type) {
 
 		case GNIX_FAB_RQ_SEND:
@@ -3051,7 +3051,7 @@ static int _gnix_send_req(void *arg)
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
-	if (unlikely(inject_err)) {
+	if (OFI_UNLIKELY(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, tdesc);
 		status = GNI_RC_SUCCESS;
 	} else {

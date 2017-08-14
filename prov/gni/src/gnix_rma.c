@@ -294,7 +294,7 @@ int __smsg_rma_data(void *data, void *msg)
 	}
 
 	status = GNI_SmsgRelease(vc->gni_ep);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "GNI_SmsgRelease returned %s\n",
 			  gni_err_str[status]);
@@ -702,7 +702,7 @@ int _gnix_rma_post_irq(struct gnix_vc *vc)
 
 	status = GNI_PostCqWrite(vc->gni_ep,
 				 &txd->gni_desc);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(status != GNI_RC_SUCCESS)) {
 		rc = gnixu_to_fi_errno(status);
 		_gnix_nic_tx_free(nic, txd);
 	}
@@ -837,7 +837,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	 * TODO: need work here too!
 	 */
 
-	if (unlikely(inject_err)) {
+	if (OFI_UNLIKELY(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, bte_txd);
 		status = GNI_RC_SUCCESS;
 	} else {
@@ -855,7 +855,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 		return gnixu_to_fi_errno(status);
 	}
 
-	if (unlikely(inject_err)) {
+	if (OFI_UNLIKELY(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, ct_txd);
 		status = GNI_RC_SUCCESS;
 	} else if (fma_chain) {
@@ -1251,9 +1251,9 @@ int _gnix_rma_post_req(void *data)
 	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT; /* check flags */
 	txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE; /* check flags */
 
-	if (unlikely(indirect)) {
+	if (OFI_UNLIKELY(indirect)) {
 		__gnix_rma_fill_pd_indirect_get(fab_req, txd);
-	} else if (unlikely(chained)) {
+	} else if (OFI_UNLIKELY(chained)) {
 		__gnix_rma_fill_pd_chained_get(fab_req, txd, &mdh);
 	} else {
 		txd->gni_desc.local_addr = (uint64_t)fab_req->rma.loc_addr;
@@ -1274,7 +1274,7 @@ int _gnix_rma_post_req(void *data)
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
-	if (unlikely(inject_err)) {
+	if (OFI_UNLIKELY(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, txd);
 		status = GNI_RC_SUCCESS;
 	} else if (chained) {

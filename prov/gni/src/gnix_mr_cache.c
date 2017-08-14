@@ -346,12 +346,12 @@ static inline void __remove_sibling_entries_from_tree(
 			   "removing key from tree, key=%llx:%llx\n",
 			   entry->key.address, entry->key.length);
 		iter = rbtFind(tree, &entry->key);
-		if (unlikely(!iter)) {
+		if (OFI_UNLIKELY(!iter)) {
 			GNIX_FATAL(FI_LOG_MR, "key not found\n");
 		}
 
 		rc = rbtErase(tree, iter);
-		if (unlikely(rc != RBT_STATUS_OK)) {
+		if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 			GNIX_FATAL(FI_LOG_MR,
 				   "could not remove entry from tree\n");
 		}
@@ -393,7 +393,7 @@ static inline int __mr_cache_lru_dequeue(
 
 	ret = dlist_first_entry(&cache->lru_head,
 			gnix_mr_cache_entry_t, lru_entry);
-	if (unlikely(!ret)) { /* we check list_empty before calling */
+	if (OFI_UNLIKELY(!ret)) { /* we check list_empty before calling */
 		*entry = NULL;
 		return -FI_ENOENT;
 	}
@@ -488,7 +488,7 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 				__entry_set_retired(entry);
 				iter = rbtFind(cache->inuse.rb_tree,
 					       &entry->key);
-				if (likely(iter != NULL)) {
+				if (OFI_LIKELY(iter != NULL)) {
 					ret = rbtErase(cache->inuse.rb_tree,
 						       iter);
 					if (ret != RBT_STATUS_OK) {
@@ -786,13 +786,13 @@ static inline void __resolve_stale_entry_collision(
 			   " key=%llx:%llx\n", c_entry,
 			   c_entry->key.address, c_entry->key.length);
 		iter = rbtFind(cache->stale.rb_tree, &c_entry->key);
-		if (unlikely(!iter)) {
+		if (OFI_UNLIKELY(!iter)) {
 			GNIX_FATAL(FI_LOG_MR, "key not found\n");
 		}
 
 		rc = rbtErase(cache->stale.rb_tree,
 						iter);
-		if (unlikely(rc != RBT_STATUS_OK)) {
+		if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 			GNIX_FATAL(FI_LOG_MR,
 				   "could not remove entry from tree\n");
 		}
@@ -806,7 +806,7 @@ static inline void __resolve_stale_entry_collision(
 		dlist_remove(&c_entry->siblings);
 		__mr_cache_entry_destroy(cache, c_entry);
 	}
-	if (unlikely(!dlist_empty(&to_destroy))) {
+	if (OFI_UNLIKELY(!dlist_empty(&to_destroy))) {
 		GNIX_FATAL(FI_LOG_MR, "to_destroy not empty\n");
 	}
 
@@ -891,7 +891,7 @@ static inline int __mr_cache_entry_put(
 			parent = container_of(next, gnix_mr_cache_entry_t,
 					children);
 			grc = __mr_cache_entry_put(cache, parent);
-			if (unlikely(grc != GNI_RC_SUCCESS)) {
+			if (OFI_UNLIKELY(grc != GNI_RC_SUCCESS)) {
 				GNIX_ERR(FI_LOG_MR,
 						"failed to release reference to parent, "
 						"parent=%p refs=%d\n",
@@ -904,12 +904,12 @@ static inline int __mr_cache_entry_put(
 
 		if (!__entry_is_retired(entry)) {
 			iter = rbtFind(cache->inuse.rb_tree, &entry->key);
-			if (unlikely(!iter)) {
+			if (OFI_UNLIKELY(!iter)) {
 				GNIX_ERR(FI_LOG_MR,
 						"failed to find entry in the inuse cache\n");
 			} else {
 				rc = rbtErase(cache->inuse.rb_tree, iter);
-				if (unlikely(rc != RBT_STATUS_OK)) {
+				if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 					GNIX_ERR(FI_LOG_MR,
 						 "failed to erase lru entry"
 						 " from stale tree\n");
@@ -947,7 +947,7 @@ static inline int __mr_cache_entry_put(
 			grc = __mr_cache_entry_destroy(cache, entry);
 		}
 
-		if (unlikely(grc != GNI_RC_SUCCESS)) {
+		if (OFI_UNLIKELY(grc != GNI_RC_SUCCESS)) {
 			GNIX_INFO(FI_LOG_MR, "dereg callback returned '%s'\n",
 				  gni_err_str[grc]);
 		}
@@ -1109,7 +1109,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 			break;
 
 		rc = __mr_cache_lru_dequeue(cache, &entry);
-		if (unlikely(rc != FI_SUCCESS)) {
+		if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
 			GNIX_ERR(FI_LOG_MR,
 					"list may be corrupt, no entries from lru pop\n");
 			break;
@@ -1118,7 +1118,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 		GNIX_DEBUG(FI_LOG_MR, "attempting to flush key %llx:%llx\n",
 			   entry->key.address, entry->key.length);
 		iter = rbtFind(cache->stale.rb_tree, &entry->key);
-		if (unlikely(!iter)) {
+		if (OFI_UNLIKELY(!iter)) {
 			GNIX_ERR(FI_LOG_MR,
 				 "lru entries MUST be present in the cache,"
 				 " could not find entry (%p) in stale tree"
@@ -1128,7 +1128,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 		}
 
 		rc = rbtErase(cache->stale.rb_tree, iter);
-		if (unlikely(rc != RBT_STATUS_OK)) {
+		if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 			GNIX_ERR(FI_LOG_MR,
 					"failed to erase lru entry from stale tree\n");
 			break;
@@ -1153,7 +1153,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 int _gnix_mr_cache_flush(gnix_mr_cache_t *cache)
 {
 
-	if (unlikely(cache->state != GNIX_MRC_STATE_READY))
+	if (OFI_UNLIKELY(cache->state != GNIX_MRC_STATE_READY))
 		return -FI_EINVAL;
 
 	__mr_cache_flush(cache, cache->attr.hard_reg_limit);
@@ -1355,7 +1355,7 @@ static int __mr_cache_search_stale(
 				   mr_key->address, mr_key->length);
 
 			rc = rbtErase(cache->stale.rb_tree, iter);
-			if (unlikely(rc != RBT_STATUS_OK)) {
+			if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 				GNIX_ERR(FI_LOG_MR,
 						"failed to erase entry from stale tree\n");
 			} else {
@@ -1377,7 +1377,7 @@ static int __mr_cache_search_stale(
 				   " migrating to inuse, key=%llx:%llx\n",
 				   mr_entry, mr_key->address, mr_key->length);
 			rc = rbtErase(cache->stale.rb_tree, iter);
-			if (unlikely(rc != RBT_STATUS_OK)) {
+			if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 				GNIX_FATAL(FI_LOG_MR,
 					   "failed to erase entry (%p) from "
 					   " stale tree\n", mr_entry);
@@ -1398,7 +1398,7 @@ static int __mr_cache_search_stale(
 			 */
 			rc = rbtInsert(cache->inuse.rb_tree,
 					&mr_entry->key, mr_entry);
-			if (unlikely(rc != RBT_STATUS_OK)) {
+			if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 				GNIX_FATAL(FI_LOG_MR,
 					   "failed to insert entry into"
 					   "inuse tree\n");
@@ -1446,7 +1446,7 @@ static int __mr_cache_create_registration(
 
 	handle = cache->attr.reg_callback(handle, (void *) address, length,
 			fi_reg_context, cache->attr.reg_context);
-	if (unlikely(!handle)) {
+	if (OFI_UNLIKELY(!handle)) {
 		GNIX_INFO(FI_LOG_MR,
 			  "failed to register memory with callback\n");
 		goto err;
@@ -1459,7 +1459,7 @@ static int __mr_cache_create_registration(
 	current_entry->key.length = length;
 
 	rc = __notifier_monitor(cache, current_entry);
-	if (unlikely(rc != FI_SUCCESS)) {
+	if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
 		GNIX_INFO(FI_LOG_MR,
 			  "failed to monitor memory with notifier\n");
 		goto err_dereg;
@@ -1467,7 +1467,7 @@ static int __mr_cache_create_registration(
 
 	rc = rbtInsert(cache->inuse.rb_tree, &current_entry->key,
 			current_entry);
-	if (unlikely(rc != RBT_STATUS_OK)) {
+	if (OFI_UNLIKELY(rc != RBT_STATUS_OK)) {
 		GNIX_ERR(FI_LOG_MR, "failed to insert registration "
 				"into cache, ret=%i\n", rc);
 
@@ -1488,7 +1488,7 @@ static int __mr_cache_create_registration(
 err_dereg:
 	rc = cache->attr.dereg_callback(current_entry->mr,
 					cache->attr.dereg_context);
-	if (unlikely(rc)) {
+	if (OFI_UNLIKELY(rc)) {
 		GNIX_INFO(FI_LOG_MR,
 			  "failed to deregister memory with "
 			  "callback, ret=%d\n", rc);
@@ -1533,9 +1533,9 @@ int _gnix_mr_cache_register(
 		goto success;
 
 	/* if we shouldn't introduce any new elements, return -FI_ENOSPC */
-	if (unlikely(cache->attr.hard_reg_limit > 0 &&
-			(ofi_atomic_get32(&cache->inuse.elements) >=
-			 cache->attr.hard_reg_limit))) {
+	if (OFI_UNLIKELY(cache->attr.hard_reg_limit > 0 &&
+			 (ofi_atomic_get32(&cache->inuse.elements) >=
+			  cache->attr.hard_reg_limit))) {
 		ret = -FI_ENOSPC;
 		goto err;
 	}
