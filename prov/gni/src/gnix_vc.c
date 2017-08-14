@@ -215,7 +215,7 @@ static int __gnix_vc_get_vc_by_fi_addr(struct gnix_fid_ep *ep, fi_addr_t dest_ad
 	struct gnix_av_addr_entry av_entry;
 	struct gnix_vc *vc;
 
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+	GNIX_DBG_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		   "ep->vc_table = %p, ep->vc_table->vector = %p\n",

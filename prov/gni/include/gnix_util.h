@@ -99,8 +99,18 @@ extern ofi_atomic32_t gnix_debug_next_tid;
 	GNIX_LOG_INTERNAL(FI_TRACE, FI_LOG_TRACE, subsystem, __VA_ARGS__)
 #define GNIX_INFO(subsystem, ...)                                              \
 	GNIX_LOG_INTERNAL(FI_INFO, FI_LOG_INFO, subsystem, __VA_ARGS__)
+#if ENABLE_DEBUG
 #define GNIX_DEBUG(subsystem, ...)                                             \
 	GNIX_LOG_INTERNAL(FI_DBG, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
+#define GNIX_DBG_TRACE(subsystem, ...)                                         \
+	GNIX_LOG_INTERNAL(FI_TRACE, FI_LOG_TRACE, subsystem, __VA_ARGS__)
+#else
+#define GNIX_DEBUG(subsystem, ...)                                             \
+	do {} while (0)
+#define GNIX_DBG_TRACE(subsystem, ...)                                         \
+	do {} while (0)
+#endif
+
 #define GNIX_ERR(subsystem, ...)                                               \
 	GNIX_LOG_INTERNAL(GNIX_FI_PRINT, FI_LOG_WARN, subsystem, __VA_ARGS__)
 #define GNIX_FATAL(subsystem, ...)                                             \
