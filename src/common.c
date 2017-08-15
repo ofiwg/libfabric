@@ -537,26 +537,31 @@ int fi_epoll_del(struct fi_epoll *ep, int fd)
 	return -FI_EINVAL;
 }
 
-void *fi_epoll_wait(struct fi_epoll *ep, int timeout)
+int fi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
+                  int timeout)
 {
 	int i, ret;
+	int found = 0;
 
 	ret = poll(ep->fds, ep->nfds, timeout);
-	if (ret <= 0)
-		return NULL;
+	if (ret == -1)
+		return -errno;
+	else if (ret == 0)
+		return 0;
 
-	for (i = ep->index; i < ep->nfds; i++) {
-		if (ep->fds[i].revents)
-			goto found;
+	for (i = ep->index; i < ep->nfds && found < max_contexts; i++) {
+		if (ep->fds[i].revents) {
+			contexts[found++] = ep->context[i];
+			ep->index = i;
+		}
 	}
-	for (i = 0; i < ep->index; i++) {
-		if (ep->fds[i].revents)
-			goto found;
+	for (i = 0; i < ep->index && found < max_contexts; i++) {
+		if (ep->fds[i].revents) {
+			contexts[found++] = ep->context[i];
+			ep->index = i;
+		}
 	}
-	return NULL;
-found:
-	ep->index = i;
-	return ep->context[i];
+	return found;
 }
 
 void fi_epoll_close(struct fi_epoll *ep)

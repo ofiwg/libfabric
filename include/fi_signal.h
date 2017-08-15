@@ -142,13 +142,20 @@ static inline int fi_epoll_del(int ep, int fd)
 	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -errno : 0;
 }
 
-static inline void *fi_epoll_wait(int ep, int timeout)
+static inline int fi_epoll_wait(int ep, void **contexts, int max_contexts,
+                                int timeout)
 {
-	struct epoll_event event;
+	struct epoll_event events[max_contexts];
 	int ret;
+	int i;
 
-	ret = epoll_wait(ep, &event, 1, timeout);
-	return ret == 1 ? event.data.ptr : NULL;
+	ret = epoll_wait(ep, events, max_contexts, timeout);
+	if (ret == -1)
+		return -errno;
+
+	for (i = 0; i < ret; i++)
+		contexts[i] = events[i].data.ptr;
+	return ret;
 }
 
 static inline void fi_epoll_close(int ep)
@@ -170,7 +177,8 @@ typedef struct fi_epoll {
 int fi_epoll_create(struct fi_epoll **ep);
 int fi_epoll_add(struct fi_epoll *ep, int fd, void *context);
 int fi_epoll_del(struct fi_epoll *ep, int fd);
-void *fi_epoll_wait(struct fi_epoll *ep, int timeout);
+int fi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
+                  int timeout);
 void fi_epoll_close(struct fi_epoll *ep);
 
 #endif /* HAVE_EPOLL */

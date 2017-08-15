@@ -243,6 +243,7 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 {
 	struct util_wait_fd *wait;
 	uint64_t start;
+	void *ep_context[1];
 	int ret;
 
 	wait = container_of(wait_fid, struct util_wait_fd, util_wait.wait_fid);
@@ -259,7 +260,7 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 				return -FI_ETIMEDOUT;
 		}
 
-		fi_epoll_wait(wait->epoll_fd, timeout);
+		fi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout);
 	}
 }
 
