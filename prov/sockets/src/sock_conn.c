@@ -96,11 +96,11 @@ int sock_conn_map_init(struct sock_ep *ep, int init_size)
 	if (!map->table)
 		return -FI_ENOMEM;
 
-	if (sock_epoll_create(&map->epoll_set, init_size) < 0) {
-                SOCK_LOG_ERROR("failed to create epoll set\n");
-                free(map->table);
-                return -FI_ENOMEM;
-        }
+	if (fi_epoll_create(&map->epoll_set) < 0) {
+		SOCK_LOG_ERROR("failed to create epoll set\n");
+		free(map->table);
+		return -FI_ENOMEM;
+	}
 
 	fastlock_init(&map->lock);
 	map->used = 0;
@@ -137,13 +137,13 @@ void sock_conn_map_destroy(struct sock_ep_attr *ep_attr)
 	free(cmap->table);
 	cmap->table = NULL;
 	cmap->used = cmap->size = 0;
-	sock_epoll_close(&cmap->epoll_set);
+	fi_epoll_close(cmap->epoll_set);
 	fastlock_destroy(&cmap->lock);
 }
 
 void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn)
 {
-	sock_epoll_del(&map->epoll_set, conn->sock_fd);
+	fi_epoll_del(map->epoll_set, conn->sock_fd);
 	ofi_close_socket(conn->sock_fd);
 
 	conn->address_published = 0;
@@ -188,11 +188,7 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 	map->table[index].ep_attr = ep_attr;
 	sock_set_sockopts(conn_fd);
 
-
-	if (ofi_idm_set(&ep_attr->conn_idm, conn_fd, &map->table[index]) < 0)
-		SOCK_LOG_ERROR("ofi_idm_set failed\n");
-
-	if (sock_epoll_add(&map->epoll_set, conn_fd))
+	if (fi_epoll_add(map->epoll_set, conn_fd, &map->table[index]))
 		SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
 
 	map->table[index].address_published = addr_published;
