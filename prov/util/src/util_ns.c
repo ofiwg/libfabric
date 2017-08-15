@@ -390,6 +390,9 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 		.status = 0,
 	};
 
+	if (!ns->is_initialized)
+		return -FI_EINVAL;
+
 	write_buf = calloc(cmd_len + ns->service_len + ns->name_len, 1);
 	if (!write_buf) {
 		ret = -FI_ENOMEM;
@@ -434,6 +437,9 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 		.status = 0,
 	};
 
+	if (!ns->is_initialized)
+		return -FI_EINVAL;
+
 	write_buf = calloc(cmd_len + ns->service_len + ns->name_len, 1);
 	if (!write_buf) {
 		ret = -FI_ENOMEM;
@@ -476,6 +482,9 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server_hostname,
 		.op = OFI_UTIL_NS_QUERY,
 		.status = 0,
 	};
+
+	if (!ns->is_initialized)
+		return NULL;
 
 	sockfd = util_ns_connect_server(ns, server_hostname);
 	if (sockfd == INVALID_SOCKET)
@@ -539,6 +548,9 @@ void ofi_ns_start_server(struct util_ns *ns)
 	char *server_hostname = (ns->ns_hostname ?
 		ns->ns_hostname : OFI_NS_DEFAULT_HOSTNAME);
 
+	if ((ofi_atomic_get32(&ns->ref) > 0) || (!ns->is_initialized))
+		return;
+
 	ofi_osd_init();
 
 	ret = pthread_create(&ns->ns_thread, NULL,
@@ -569,6 +581,10 @@ void ofi_ns_start_server(struct util_ns *ns)
 
 void ofi_ns_stop_server(struct util_ns *ns)
 {
+    if ((ofi_atomic_dec32(&ns->ref) > 0) || (!ns->is_initialized))
+		return;
+
+	ns->is_initialized = 0;
 	ofi_osd_fini();
 
 	if (pthread_equal(ns->ns_thread, pthread_self()))
@@ -583,6 +599,14 @@ int ofi_ns_init(struct util_ns_attr *attr, struct util_ns *ns)
 	if (!ns || !attr || !attr->name_len ||
 	    !attr->service_len || !attr->service_cmp)
 		return -FI_EINVAL;
+
+	if (ns->is_initialized) {
+		ofi_atomic_inc32(&ns->ref);
+		return FI_SUCCESS;
+	} else {
+		ofi_atomic_initialize32(&ns->ref, 1);
+		ns->is_initialized = 1;
+	}
 
 	ns->name_len = attr->name_len;
 	ns->service_len = attr->service_len;

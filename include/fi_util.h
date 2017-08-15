@@ -742,6 +742,9 @@ struct util_ns {
 	size_t	name_len;
 	size_t	service_len;
 
+	int			is_initialized;
+	ofi_atomic32_t		ref;
+
 	ofi_ns_service_cmp_func_t	service_cmp;
 
 	ofi_ns_is_service_wildcard_func_t is_service_wildcard;
