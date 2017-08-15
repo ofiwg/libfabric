@@ -142,6 +142,73 @@ int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 	return 0;
 }
 
+static int ofi_wait_fd_match(struct dlist_entry *item, const void *arg)
+{
+	struct ofi_wait_fd_entry *fd_entry;
+
+	fd_entry = container_of(item, struct ofi_wait_fd_entry, entry);
+	return fd_entry->fd == *(int *)arg;
+}
+
+int ofi_wait_fd_del(struct util_wait *wait, int fd)
+{
+	struct ofi_wait_fd_entry *fd_entry;
+	struct dlist_entry *entry;
+	struct util_wait_fd *wait_fd = container_of(wait, struct util_wait_fd,
+						    util_wait);
+
+	fastlock_acquire(&wait_fd->lock);
+	entry = dlist_remove_first_match(&wait_fd->fd_list, ofi_wait_fd_match,
+					 &fd);
+	fastlock_release(&wait_fd->lock);
+	if (!entry) {
+		FI_INFO(wait->prov, FI_LOG_FABRIC,
+			"Given fd not found in wait list\n");
+		return -FI_EINVAL;
+	}
+
+	fd_entry = container_of(entry, struct ofi_wait_fd_entry, entry);
+	fi_epoll_del(wait_fd->epoll_fd, fd_entry->fd);
+	free(fd_entry);
+	return 0;
+}
+
+int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
+		    void *arg, void *context)
+{
+	struct ofi_wait_fd_entry *fd_entry;
+	struct util_wait_fd *wait_fd = container_of(wait, struct util_wait_fd,
+						    util_wait);
+	int ret = 0;
+
+	fastlock_acquire(&wait_fd->lock);
+	if (dlist_find_first_match(&wait_fd->fd_list, ofi_wait_fd_match, &fd)) {
+		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
+			"wait_fd already added to util_wait fd_list \n");
+		goto out;
+	}
+
+	ret = fi_epoll_add(wait_fd->epoll_fd, fd, context);
+	if (ret) {
+		FI_WARN(wait->prov, FI_LOG_FABRIC, "Unable to add fd to epoll\n");
+		goto out;
+	}
+
+	if (!(fd_entry = calloc(1, sizeof *fd_entry))) {
+		ret = -FI_ENOMEM;
+		fi_epoll_del(wait_fd->epoll_fd, fd);
+		goto out;
+	}
+	fd_entry->fd = fd;
+	fd_entry->try = try;
+	fd_entry->arg = arg;
+
+	dlist_insert_tail(&fd_entry->entry, &wait_fd->fd_list);
+out:
+	fastlock_release(&wait_fd->lock);
+	return ret;
+}
+
 static void util_wait_fd_signal(struct util_wait *util_wait)
 {
 	struct util_wait_fd *wait;
@@ -151,12 +218,23 @@ static void util_wait_fd_signal(struct util_wait *util_wait)
 
 static int util_wait_fd_try(struct util_wait *wait)
 {
+	struct ofi_wait_fd_entry *fd_entry;
 	struct util_wait_fd *wait_fd;
 	void *context;
 	int ret;
 
 	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
 	fd_signal_reset(&wait_fd->signal);
+	fastlock_acquire(&wait_fd->lock);
+	dlist_foreach_container(&wait_fd->fd_list, struct ofi_wait_fd_entry,
+				fd_entry, entry) {
+		ret = fd_entry->try(fd_entry->arg);
+		if (ret != FI_SUCCESS) {
+			fastlock_release(&wait_fd->lock);
+			return ret;
+		}
+	}
+	fastlock_release(&wait_fd->lock);
 	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
 	return (ret > 0) ? -FI_EAGAIN : ret;
 }
@@ -218,6 +296,9 @@ static int util_wait_fd_close(struct fid *fid)
 	ret = fi_wait_cleanup(&wait->util_wait);
 	if (ret)
 		return ret;
+
+	assert(dlist_empty(&wait->fd_list));
+	fastlock_destroy(&wait->lock);
 
 	fi_epoll_del(wait->epoll_fd, wait->signal.fd[FI_READ_FD]);
 	fd_signal_free(&wait->signal);
@@ -297,6 +378,9 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 
 	wait->util_wait.wait_fid.fid.ops = &util_wait_fd_fi_ops;
 	wait->util_wait.wait_fid.ops = &util_wait_fd_ops;
+
+	dlist_init(&wait->fd_list);
+	fastlock_init(&wait->lock);
 
 	*waitset = &wait->util_wait.wait_fid;
 	return 0;
