@@ -182,7 +182,7 @@ static struct gnix_vc *__gnix_vc_lookup_unmapped(struct gnix_fid_ep *ep,
 			  vc, vc->peer_addr, vc->peer_fi_addr);
 
 		ret = _gnix_ep_vc_store(ep, vc, dest_addr);
-		if (unlikely(ret != FI_SUCCESS)) {
+		if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_ep_vc_store returned %s\n",
 				  fi_strerror(-ret));
@@ -268,7 +268,7 @@ static int __gnix_vc_get_vc_by_fi_addr(struct gnix_fid_ep *ep, fi_addr_t dest_ad
 
 	/* Map new VC through the EP connection table. */
 	ret = _gnix_ep_vc_store(ep, vc, dest_addr);
-	if (unlikely(ret != FI_SUCCESS)) {
+	if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_ep_vc_store returned %s\n",
 			  fi_strerror(-ret));
@@ -925,7 +925,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				 * address.  Store the new VC in our VC lookup
 				 * table. */
 				ret = _gnix_ep_vc_store(ep, vc, fi_addr);
-				if (unlikely(ret != FI_SUCCESS)) {
+				if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
 					_gnix_vc_destroy(vc);
 					GNIX_WARN(FI_LOG_EP_DATA,
 						  "_gnix_ep_vc_store returned %s\n",
@@ -1924,7 +1924,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 			  req);
 	}
 
-	if (unlikely(queue_tx)) {
+	if (OFI_UNLIKELY(queue_tx)) {
 		dlist_insert_tail(&req->dlist, &vc->tx_queue);
 		_gnix_vc_tx_schedule(vc);
 	}
@@ -2128,7 +2128,7 @@ int _gnix_vc_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 
 	if (GNIX_EP_RDM_DGM(ep->type)) {
 		ret = __gnix_vc_get_vc_by_fi_addr(ep, dest_addr, vc_ptr);
-		if (unlikely(ret != FI_SUCCESS)) {
+		if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "__gnix_vc_get_vc_by_fi_addr returned %s\n",
 				   fi_strerror(-ret));

@@ -194,7 +194,7 @@ static inline int _gnix_vec_resize(gnix_vector_t *vec, uint32_t size)
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!vec)) {
+	if (OFI_UNLIKELY(!vec)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_resize.\n");
 		return -FI_EINVAL;
@@ -219,7 +219,7 @@ static inline int _gnix_vec_at(gnix_vector_t *vec, void **element,
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!vec || !element)) {
+	if (OFI_UNLIKELY(!vec || !element)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_at\n");
 		return -FI_EINVAL;
@@ -242,7 +242,7 @@ static inline int _gnix_vec_last(gnix_vector_t *vec, void **element)
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!vec || !element)) {
+	if (OFI_UNLIKELY(!vec || !element)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_last\n");
 		return -FI_EINVAL;
@@ -283,7 +283,7 @@ static inline int _gnix_vec_remove_at(gnix_vector_t *vec,
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!vec)) {
+	if (OFI_UNLIKELY(!vec)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_remove_at\n");
 		return -FI_EINVAL;
@@ -307,7 +307,7 @@ static inline int _gnix_vec_remove_last(gnix_vector_t *vec)
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!vec)) {
+	if (OFI_UNLIKELY(!vec)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_remove_at\n");
 		return -FI_EINVAL;
@@ -353,7 +353,7 @@ static inline int _gnix_vec_insert_at(gnix_vector_t *vec,
 				      gnix_vec_entry_t *entry,
 				      gnix_vec_index_t index)
 {
-	if (unlikely(!vec || !entry)) {
+	if (OFI_UNLIKELY(!vec || !entry)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_insert_at\n");
 		return -FI_EINVAL;
@@ -378,7 +378,7 @@ static inline int _gnix_vec_insert_at(gnix_vector_t *vec,
 static inline int _gnix_vec_insert_last(gnix_vector_t *vec,
 					gnix_vec_entry_t *entry)
 {
-	if (unlikely(!vec || !entry)) {
+	if (OFI_UNLIKELY(!vec || !entry)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid parameter to "
 			  "_gnix_vec_insert_last\n");
 		return -FI_EINVAL;

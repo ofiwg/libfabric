@@ -340,7 +340,7 @@ int _gnix_xpmem_access_hndl_get(struct gnix_xpmem_handle *xp_hndl,
 	/*
 	 * okay need to create an mr_cache for this apid
 	 */
-	if (unlikely(entry == NULL)) {
+	if (OFI_UNLIKELY(entry == NULL)) {
 
 		entry = calloc(1, sizeof *entry);
 		if (entry == NULL) {

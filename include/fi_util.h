@@ -599,6 +599,8 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 #define OFI_CHECK_MR_SCALABLE(mode) (!(mode & OFI_MR_BASIC_MAP))
 
+#define OFI_CHECK_MR_LOCAL(mode) (mode & FI_MR_LOCAL)
+
 struct ofi_mr_map {
 	const struct fi_provider *prov;
 	void			*rbtree;
@@ -753,6 +755,9 @@ struct util_ns {
 
 	size_t	name_len;
 	size_t	service_len;
+
+	int			is_initialized;
+	ofi_atomic32_t		ref;
 
 	ofi_ns_service_cmp_func_t	service_cmp;
 

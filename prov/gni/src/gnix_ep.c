@@ -106,7 +106,7 @@ int _gnix_ep_int_tx_pool_grow(struct gnix_fid_ep *ep)
 			FI_READ | FI_WRITE, 0, 0, 0,
 			&auto_mr, NULL, ep->auth_key, GNIX_PROV_REG);
 
-	if (unlikely(ret != FI_SUCCESS)) {
+	if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA, "gnix_mr_req returned: %s\n",
 			   fi_strerror(-ret));
 		goto reg_err;

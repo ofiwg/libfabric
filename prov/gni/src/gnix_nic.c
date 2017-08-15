@@ -427,12 +427,12 @@ static int __nic_rx_progress(struct gnix_nic *nic)
 
 	do {
 		status = GNI_CqGetEvent(nic->rx_cq, &cqe);
-		if (unlikely(status == GNI_RC_NOT_DONE)) {
+		if (OFI_UNLIKELY(status == GNI_RC_NOT_DONE)) {
 			ret = FI_SUCCESS;
 			break;
 		}
 
-		if (likely(status == GNI_RC_SUCCESS)) {
+		if (OFI_LIKELY(status == GNI_RC_SUCCESS)) {
 			/* Find and schedule the associated VC. */
 			ret = __process_rx_cqe(nic, cqe);
 			if (ret != FI_SUCCESS) {
@@ -513,7 +513,7 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 	assert(status == GNI_RC_SUCCESS ||
 	       status == GNI_RC_TRANSACTION_ERROR);
 
-	if (unlikely(status == GNI_RC_TRANSACTION_ERROR)) {
+	if (OFI_UNLIKELY(status == GNI_RC_TRANSACTION_ERROR)) {
 		status = GNI_CqErrorRecoverable(cqe, &recov);
 		if (status == GNI_RC_SUCCESS) {
 			if (!recov) {
@@ -546,7 +546,7 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 		txd_p = __desc_lkup_by_id(nic, msg_id);
 	}
 
-	if (unlikely(txd_p == NULL))
+	if (OFI_UNLIKELY(txd_p == NULL))
 		GNIX_FATAL(FI_LOG_EP_DATA, "Unexpected CQE: 0x%lx", cqe);
 
 	/*
@@ -603,12 +603,12 @@ int _gnix_nic_progress(void *arg)
 	int ret = FI_SUCCESS;
 
 	ret =  __nic_tx_progress(nic, nic->tx_cq);
-	if (unlikely(ret != FI_SUCCESS))
+	if (OFI_UNLIKELY(ret != FI_SUCCESS))
 		return ret;
 
 	if (nic->tx_cq_blk && nic->tx_cq_blk != nic->tx_cq) {
 		ret =  __nic_tx_progress(nic, nic->tx_cq_blk);
-		if (unlikely(ret != FI_SUCCESS))
+		if (OFI_UNLIKELY(ret != FI_SUCCESS))
 			return ret;
 	}
 

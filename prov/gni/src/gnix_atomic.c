@@ -189,7 +189,7 @@ int __smsg_amo_cntr(void *data, void *msg)
 	}
 
 	status = GNI_SmsgRelease(vc->gni_ep);
-	if (unlikely(status != GNI_RC_SUCCESS)) {
+	if (OFI_UNLIKELY(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "GNI_SmsgRelease returned %s\n",
 			  gni_err_str[status]);
@@ -467,7 +467,7 @@ int _gnix_amo_post_req(void *data)
 
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
-	if (unlikely(inject_err)) {
+	if (OFI_UNLIKELY(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, txd);
 		status = GNI_RC_SUCCESS;
 	} else {

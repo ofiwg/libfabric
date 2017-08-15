@@ -62,10 +62,6 @@
 #define RXM_BUF_SIZE 16384
 #define RXM_IOV_LIMIT 4
 
-#define RXM_MR_LOCAL(info) \
-	((FI_VERSION_LT(info->fabric_attr->api_version, FI_VERSION(1, 5)) && \
-	  (info->mode & FI_LOCAL_MR)) || (info->domain_attr->mr_mode & FI_MR_LOCAL))
-
 #define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
 

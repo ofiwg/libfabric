@@ -23,6 +23,9 @@
 *.idb
 *.suo
 *.ipdb
+*.orig
+*.c~
+*.h~
 stamp-h?
 Makefile
 Makefile.in

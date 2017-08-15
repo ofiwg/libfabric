@@ -264,7 +264,7 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	struct gnix_ep_name *ep_name;
 	int ret;
 
-	if (unlikely(addrlen == NULL)) {
+	if (OFI_UNLIKELY(addrlen == NULL)) {
 		GNIX_INFO(FI_LOG_EP_CTRL, "parameter \"addrlen\" is NULL in "
 			"gnix_getname\n");
 		return -FI_EINVAL;
@@ -297,7 +297,7 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	is_fi_addr_str = info->addr_format == FI_ADDR_STR;
 
 	if (!addr) {
-		if (unlikely(is_fi_addr_str)) {
+		if (OFI_UNLIKELY(is_fi_addr_str)) {
 			*addrlen = GNIX_FI_ADDR_STR_LEN;
 		} else {
 			*addrlen = sizeof(struct gnix_ep_name);
@@ -306,7 +306,7 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 		return -FI_ETOOSMALL;
 	}
 
-	if (unlikely(is_fi_addr_str)) {
+	if (OFI_UNLIKELY(is_fi_addr_str)) {
 		ret = _gnix_ep_name_to_str(ep_name, (char **) &addr);
 
 		if (ret)
@@ -334,7 +334,7 @@ DIRECT_FN STATIC int gnix_setname(fid_t fid, void *addr, size_t addrlen)
 	size_t len;
 	int ret;
 
-	if (unlikely(addr == NULL)) {
+	if (OFI_UNLIKELY(addr == NULL)) {
 		GNIX_INFO(FI_LOG_EP_CTRL, "parameter \"addr\" is NULL in "
 			"gnix_setname\n");
 		return -FI_EINVAL;
@@ -366,7 +366,7 @@ DIRECT_FN STATIC int gnix_setname(fid_t fid, void *addr, size_t addrlen)
 		return -FI_EINVAL;
 	}
 
-	if (unlikely(info->addr_format == FI_ADDR_STR)) {
+	if (OFI_UNLIKELY(info->addr_format == FI_ADDR_STR)) {
 		len = GNIX_FI_ADDR_STR_LEN;
 
 		if (addrlen != len)
@@ -399,7 +399,7 @@ DIRECT_FN STATIC int gnix_getpeer(struct fid_ep *ep, void *addr,
 	struct fi_info *info = NULL;
 	int ret;
 
-	if (unlikely(addrlen == NULL || addr == NULL)) {
+	if (OFI_UNLIKELY(addrlen == NULL || addr == NULL)) {
 		GNIX_INFO(FI_LOG_EP_CTRL,
 			  "parameter is NULL in gnix_getpeer\n");
 		return -FI_EINVAL;

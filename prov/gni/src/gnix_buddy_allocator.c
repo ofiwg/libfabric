@@ -131,7 +131,7 @@ static inline int __gnix_buddy_create_lists(gnix_buddy_alloc_handle_t
 	alloc_handle->lists = calloc(1, sizeof(struct dlist_entry) *
 				     alloc_handle->nlists);
 
-	if (unlikely(!alloc_handle->lists)) {
+	if (OFI_UNLIKELY(!alloc_handle->lists)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Could not create buddy allocator lists.\n");
 		return -FI_ENOMEM;
@@ -249,9 +249,9 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/* Ensure parameters are valid */
-	if (unlikely(!base || !len || !max || max > len || !alloc_handle ||
-		     IS_NOT_POW_TWO(max) || (len % max) ||
-		     !(len / MIN_BLOCK_SIZE * 2))) {
+	if (OFI_UNLIKELY(!base || !len || !max || max > len || !alloc_handle ||
+			 IS_NOT_POW_TWO(max) || (len % max) ||
+			 !(len / MIN_BLOCK_SIZE * 2))) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Invalid parameter to _gnix_buddy_allocator_create."
@@ -261,7 +261,7 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 
 	*alloc_handle = calloc(1, sizeof(gnix_buddy_alloc_handle_t));
 
-	if (unlikely(!alloc_handle)) {
+	if (OFI_UNLIKELY(!alloc_handle)) {
 		error = strerror_r(errno, err_buf, sizeof(err_buf));
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Could not create buddy allocator handle.\n",
@@ -297,7 +297,7 @@ int _gnix_buddy_allocator_destroy(gnix_buddy_alloc_handle_t *alloc_handle)
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!alloc_handle)) {
+	if (OFI_UNLIKELY(!alloc_handle)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Invalid parameter to _gnix_buddy_allocator_destroy."
 			  "\n");
@@ -329,8 +329,8 @@ int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!alloc_handle || !ptr || !len ||
-		     len > alloc_handle->max)) {
+	if (OFI_UNLIKELY(!alloc_handle || !ptr || !len ||
+			 len > alloc_handle->max)) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Invalid parameter to _gnix_buddy_alloc.\n");
@@ -367,8 +367,8 @@ int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (unlikely(!alloc_handle || !len || len > alloc_handle->max ||
-		     ptr >= (void *) ((uint8_t *) alloc_handle->base +
+	if (OFI_UNLIEKLY(!alloc_handle || !len || len > alloc_handle->max ||
+			 ptr >= (void *) ((uint8_t *) alloc_handle->base +
 				      alloc_handle->len) ||
 		     ptr < alloc_handle->base)) {
 
