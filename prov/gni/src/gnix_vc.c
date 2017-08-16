@@ -222,7 +222,7 @@ static int __gnix_vc_get_vc_by_fi_addr(struct gnix_fid_ep *ep, fi_addr_t dest_ad
 		   ep->vc_table, ep->vc_table->vector);
 
 	av = ep->av;
-	if (unlikely(av == NULL)) {
+	if (OFI_UNLIKELY(av == NULL)) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "av field NULL for ep %p\n", ep);
 		return -FI_EINVAL;
 	}
