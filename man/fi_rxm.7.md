@@ -85,6 +85,12 @@ RxM provider does not support the following features:
 
   * fi_cq_sread, fi_cq_sreadfrom and fi_cq_signal calls.
 
+## Auto progress
+
+When sending large messages, an app doing an sread or waiting on the CQ file descriptor
+may not get a completion when reading the CQ after being woken up from the wait.
+The app has to do sread or wait on the file descriptor again.
+
 ## Usage limitations
 
 RxM provider should work fine for client - server programs like fabtests. Support for MPI, SHMEM

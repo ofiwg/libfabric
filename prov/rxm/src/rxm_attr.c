@@ -62,7 +62,7 @@ struct fi_ep_attr rxm_ep_attr = {
 struct fi_domain_attr rxm_domain_attr = {
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
-	.data_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
 	/* Advertise support for FI_MR_BASIC so that ofi_check_info call
