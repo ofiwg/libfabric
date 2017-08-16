@@ -376,10 +376,11 @@ int fi_check_domain_attr(const struct fi_provider *prov,
 }
 
 int fi_check_ep_attr(const struct util_prov *util_prov,
+		      const struct fi_info *prov_info,
 		     const struct fi_ep_attr *user_attr)
 {
+	const struct fi_ep_attr *prov_attr = prov_info->ep_attr;
 	const struct fi_provider *prov = util_prov->prov;
-	const struct fi_ep_attr *prov_attr = util_prov->info->ep_attr;
 
 	if (user_attr->type && (user_attr->type != prov_attr->type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported endpoint type\n");
@@ -404,7 +405,7 @@ int fi_check_ep_attr(const struct util_prov *util_prov,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->tx_ctx_cnt > util_prov->info->domain_attr->max_ep_tx_ctx) {
+	if (user_attr->tx_ctx_cnt > prov_info->domain_attr->max_ep_tx_ctx) {
 		if (user_attr->tx_ctx_cnt == FI_SHARED_CONTEXT) {
 			if (!(util_prov->flags & UTIL_TX_SHARED_CTX)) {
 				FI_INFO(prov, FI_LOG_CORE,
@@ -418,7 +419,7 @@ int fi_check_ep_attr(const struct util_prov *util_prov,
 		}
 	}
 
-	if (user_attr->rx_ctx_cnt > util_prov->info->domain_attr->max_ep_rx_ctx) {
+	if (user_attr->rx_ctx_cnt > prov_info->domain_attr->max_ep_rx_ctx) {
 		if (user_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 			if (!(util_prov->flags & UTIL_RX_SHARED_CTX)) {
 				FI_INFO(prov, FI_LOG_CORE,
@@ -590,7 +591,7 @@ int fi_check_info(const struct util_prov *util_prov,
 	}
 
 	if (user_info->ep_attr) {
-		ret = fi_check_ep_attr(util_prov, user_info->ep_attr);
+		ret = fi_check_ep_attr(util_prov, prov_info, user_info->ep_attr);
 		if (ret)
 			return ret;
 	}
