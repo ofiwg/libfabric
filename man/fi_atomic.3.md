@@ -563,9 +563,16 @@ with atomic message calls.
   be used with messages smaller than inject_size.
 
 *FI_FENCE*
-: Indicates that the requested operation, also
-  known as the fenced operation, be deferred until all previous operations
-  targeting the same target endpoint have completed.
+: Applies to transmits.  Indicates that the requested operation, also
+  known as the fenced operation, and any operation posted after the
+  fenced operation will be deferred until all previous operations
+  targeting the same peer endpoint have completed.  Operations posted
+  after the fencing will see and/or replace the results of any
+  operations initiated prior to the fenced operation.
+  
+  The ordering of operations starting at the posting of the fenced
+  operation (inclusive) to the posting of a subsequent fenced operation
+  (exclusive) is controlled by the endpoint's ordering semantics.
 
 *FI_TAGGED*
 : Specifies that the target of the atomic operation is a tagged receive
