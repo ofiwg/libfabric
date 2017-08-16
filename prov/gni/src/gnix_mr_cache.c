@@ -494,7 +494,7 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 			__entry_set_retired(entry);
 			iter = rbtFind(cache->inuse.rb_tree,
 				       &entry->key);
-			if (likely(iter != NULL)) {
+			if (OFI_LIKELY(iter != NULL)) {
 				ret = rbtErase(cache->inuse.rb_tree,
 					       iter);
 				if (ret != RBT_STATUS_OK) {
