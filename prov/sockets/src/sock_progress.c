@@ -1166,8 +1166,11 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		pe_entry.data_len = 0;
 		pe_entry.buf = 0L;
 		for (i = 0; i < rx_posted->rx_op.dest_iov_len && rem > 0; i++) {
-			if (used_len >= rx_posted->rx_op.dest_iov_len) {
-				used_len -= rx_posted->rx_op.dest_iov_len;
+			/* Try to find the first iovec entry where the data
+			 * has not been consumed. In the common case, there
+			 * is only one iovec, i.e. a single buffer */
+			if (used_len >= rx_posted->iov[i].iov.len) {
+				used_len -= rx_posted->iov[i].iov.len;
 				continue;
 			}
 
@@ -1225,6 +1228,11 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		} else {
 			sock_pe_report_recv_completion(&pe_entry);
 		}
+
+		/* Mark that we are done processing the posted recv buff.
+		 * This allows another thread to grab it when calling
+		 * sock_rx_get_entry() */
+		rx_posted->is_busy = 0;
 
 		dlist_remove(&rx_buffered->entry);
 		sock_rx_release_entry(rx_buffered);
