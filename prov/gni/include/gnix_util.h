@@ -44,6 +44,9 @@
 #include <fi.h>
 
 extern struct fi_provider gnix_prov;
+#if HAVE_CRITERION
+extern int gnix_first_pe_on_node; /* globally visible for  criterion */
+#endif
 
 /*
  * For debug logging (ENABLE_DEBUG)
@@ -245,6 +248,7 @@ void _gnix_app_cleanup(void);
 int _gnix_job_fma_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_job_cq_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_pes_on_node(uint32_t *num_pes);
+int _gnix_pe_node_rank(int *pe_node_rank);
 int _gnix_nics_per_rank(uint32_t *nics_per_rank);
 void _gnix_dump_gni_res(uint8_t ptag);
 int _gnix_get_num_corespec_cpus(uint32_t *num_core_spec_cpus);
