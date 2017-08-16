@@ -1,4 +1,4 @@
-.TH "fi_rma" "3" "2016\-11\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rma" "3" "2017\-08\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_rma \- Remote memory access operations
@@ -251,9 +251,17 @@ provider.
 Indicates that a completion should be generated when the operation has
 been processed by the destination.
 .PP
-\f[I]FI_FENCE\f[] : Indicates that the requested operation, also known
-as the fenced operation, be deferred until all previous operations
-targeting the same target endpoint have completed.
+\f[I]FI_FENCE\f[] : Applies to transmits.
+Indicates that the requested operation, also known as the fenced
+operation, and any operation posted after the fenced operation will be
+deferred until all previous operations targeting the same peer endpoint
+have completed.
+Operations posted after the fencing will see and/or replace the results
+of any operations initiated prior to the fenced operation.
+.PP
+The ordering of operations starting at the posting of the fenced
+operation (inclusive) to the posting of a subsequent fenced operation
+(exclusive) is controlled by the endpoint\[aq]s ordering semantics.
 .SH RETURN VALUE
 .PP
 Returns 0 on success.
