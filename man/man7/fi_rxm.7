@@ -1,4 +1,4 @@
-.TH "fi_rxm" "7" "2017\-07\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rxm" "7" "2017\-08\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The RxM (RDM over MSG) Utility Provider
@@ -75,6 +75,12 @@ Reporting unknown source addr data as part of completions
 Triggered operations
 .IP \[bu] 2
 fi_cq_sread, fi_cq_sreadfrom and fi_cq_signal calls.
+.SS Auto progress
+.PP
+When sending large messages, an app doing an sread or waiting on the CQ
+file descriptor may not get a completion when reading the CQ after being
+woken up from the wait.
+The app has to do sread or wait on the file descriptor again.
 .SS Usage limitations
 .PP
 RxM provider should work fine for client \- server programs like
