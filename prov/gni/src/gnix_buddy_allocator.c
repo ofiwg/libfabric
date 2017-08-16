@@ -367,7 +367,7 @@ int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (OFI_UNLIEKLY(!alloc_handle || !len || len > alloc_handle->max ||
+	if (OFI_UNLIKELY(!alloc_handle || !len || len > alloc_handle->max ||
 			 ptr >= (void *) ((uint8_t *) alloc_handle->base +
 				      alloc_handle->len) ||
 		     ptr < alloc_handle->base)) {
