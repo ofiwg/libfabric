@@ -556,10 +556,11 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 }
 
 int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
-		     const struct fi_ep_attr *user_attr)
+		      const struct fi_info *prov_info,
+		      const struct fi_ep_attr *user_attr)
 {
+	const struct fi_ep_attr *prov_attr = prov_info->ep_attr;
 	const struct fi_provider *prov = util_prov->prov;
-	const struct fi_ep_attr *prov_attr = util_prov->info->ep_attr;
 
 	if (user_attr->type && (user_attr->type != prov_attr->type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported endpoint type\n");
@@ -585,7 +586,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->tx_ctx_cnt > util_prov->info->domain_attr->max_ep_tx_ctx) {
+	if (user_attr->tx_ctx_cnt > prov_info->domain_attr->max_ep_tx_ctx) {
 		if (user_attr->tx_ctx_cnt == FI_SHARED_CONTEXT) {
 			if (!(util_prov->flags & UTIL_TX_SHARED_CTX)) {
 				FI_INFO(prov, FI_LOG_CORE,
@@ -596,13 +597,13 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 			FI_INFO(prov, FI_LOG_CORE,
 				"Requested tx_ctx_cnt exceeds supported."
 				" Expected:%zd, Requested%zd\n",
-				util_prov->info->domain_attr->max_ep_tx_ctx,
+				prov_info->domain_attr->max_ep_tx_ctx,
 				user_attr->tx_ctx_cnt);
 			return -FI_ENODATA;
 		}
 	}
 
-	if (user_attr->rx_ctx_cnt > util_prov->info->domain_attr->max_ep_rx_ctx) {
+	if (user_attr->rx_ctx_cnt > prov_info->domain_attr->max_ep_rx_ctx) {
 		if (user_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 			if (!(util_prov->flags & UTIL_RX_SHARED_CTX)) {
 				FI_INFO(prov, FI_LOG_CORE,
@@ -613,7 +614,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 			FI_INFO(prov, FI_LOG_CORE,
 				"Requested rx_ctx_cnt exceeds supported."
 				" Expected: %zd, Requested:%zd\n",
-				util_prov->info->domain_attr->max_ep_rx_ctx,
+				prov_info->domain_attr->max_ep_rx_ctx,
 				user_attr->rx_ctx_cnt);
 			return -FI_ENODATA;
 		}
@@ -867,6 +868,7 @@ int ofi_check_info(const struct util_prov *util_prov,
 
 	if (user_info->ep_attr) {
 		ret = ofi_check_ep_attr(util_prov, api_version,
+					prov_info,
 					user_info->ep_attr);
 		if (ret)
 			return ret;
