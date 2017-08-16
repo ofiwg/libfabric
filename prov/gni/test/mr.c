@@ -240,6 +240,11 @@ static void no_cache_basic_setup(void)
 	_gnix_open_cache(domain, GNIX_MR_TYPE_NONE);
 }
 
+#if HAVE_KDREG
+# define KDREG_CHECK true
+#else
+# define KDREG_CHECK false
+#endif
 
 /* bare tests */
 TestSuite(mr_internal_bare,
@@ -249,7 +254,8 @@ TestSuite(mr_internal_bare,
 /* simple tests with lazy deregistration */
 TestSuite(mr_internal_cache,
 	  .init = internal_mr_setup,
-	  .fini = mr_teardown);
+	  .fini = mr_teardown,
+	  .disabled = KDREG_CHECK);
 
 #ifdef HAVE_UDREG
 TestSuite(mr_udreg_cache,

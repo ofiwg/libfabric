@@ -770,6 +770,7 @@ GNI_INI
 	gni_return_t status;
 	gni_version_info_t lib_version;
 	int num_devices;
+	int ret;
 
 	/*
 	 * if no GNI devices available, don't register as provider
@@ -799,7 +800,10 @@ GNI_INI
 	}
 
 	/* Initialize global MR notifier. */
-	_gnix_notifier_init();
+	ret = _gnix_smrn_init();
+	if (ret != FI_SUCCESS)
+		GNIX_FATAL(FI_LOG_FABRIC,
+			"failed to initialize global mr notifier\n");
 
 	/* Initialize global NIC data. */
 	_gnix_nic_init();

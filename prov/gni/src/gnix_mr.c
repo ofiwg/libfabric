@@ -956,6 +956,10 @@ static int __cache_init(struct gnix_fid_domain *domain,
 	struct gnix_mr_cache_info *info =
 		GNIX_GET_MR_CACHE_INFO(domain, auth_key);
 
+#if !HAVE_KDREG
+	domain->mr_cache_attr.lazy_deregistration = 0;
+#endif
+
 	ret = _gnix_mr_cache_init(&info->mr_cache_ro,
 			&domain->mr_cache_attr);
 
@@ -1204,7 +1208,11 @@ gnix_mr_cache_attr_t _gnix_default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
+#if HAVE_KDREG
 		.lazy_deregistration = 1,
+#else
+		.lazy_deregistration = 0,
+#endif
 		.reg_callback        = __gnix_register_region,
 		.dereg_callback      = __gnix_deregister_region,
 		.destruct_callback   = __gnix_destruct_registration,

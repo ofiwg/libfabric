@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2016 Los Alamos National Security, LLC.
  *                    All rights reserved.
+ * Copyright (c) 2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -78,12 +79,16 @@ static gnix_mr_cache_attr_t _gnix_xpmem_default_mr_cache_attr = {
 		.soft_reg_limit      = 128,
 		.hard_reg_limit      = 16384,
 		.hard_stale_limit    = 128,
+#if HAVE_KDREG
 		.lazy_deregistration = 1,
+#else
+		.lazy_deregistration = 0,
+#endif
 		.reg_callback        = __gnix_xpmem_attach_seg,
 		.dereg_callback      = __gnix_xpmem_detach_seg,
 		.destruct_callback   = __gnix_xpmem_destroy_mr_cache,
 		.elem_size           = sizeof(struct gnix_xpmem_access_handle),
-		.notifier            = NULL,
+		.smrn                = NULL,
 };
 
 /*******************************************************************************

@@ -858,6 +858,8 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
 	int i, ret = FI_SUCCESS;
+	struct gnix_auth_key *info __attribute__ ((unused));
+	int rc;
 
 	GNIX_DBG_TRACE(FI_LOG_EP_DATA, "\n");
 
@@ -904,8 +906,6 @@ static int __gnix_rndzv_iov_req_complete(void *arg, gni_return_t tx_status)
 			}
 		} else {
 			if (req->msg.recv_flags & FI_LOCAL_MR) {
-				struct gnix_auth_key *info = NULL;
-				int rc;
 
 				if (req->gnix_ep->domain->using_vmdh) {
 					info = req->gnix_ep->auth_key;

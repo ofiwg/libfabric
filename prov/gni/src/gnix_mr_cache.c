@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,6 +31,7 @@
  */
 
 #include <gnix_mr_cache.h>
+#include <gnix_smrn.h>
 #include <gnix_mr_notifier.h>
 #include <gnix.h>
 
@@ -76,6 +77,7 @@ typedef struct gnix_mr_cache_key {
  * @var   children   list of subsumed child entries
  */
 typedef struct gnix_mr_cache_entry {
+	struct gnix_smrn_context context;
 	cache_entry_state_t state;
 	gnix_mr_cache_key_t key;
 	ofi_atomic32_t ref_cnt;
@@ -124,7 +126,11 @@ gnix_mr_cache_attr_t __default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
+#if HAVE_KDREG
 		.lazy_deregistration = 1,
+#else
+		.lazy_deregistration = 0,
+#endif
 };
 
 /* Functions for using and manipulating cache entry state */
@@ -438,10 +444,10 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 {
 	int ret;
 	gnix_mr_cache_entry_t *entry;
+	struct gnix_smrn_context *context;
 	RbtIterator iter;
-	uint64_t cookie;
 
-	if (!cache->attr.notifier) {
+	if (!cache->attr.smrn) {
 		return;
 	}
 
@@ -449,126 +455,120 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
 		return;
 	}
 
-	ret = _gnix_notifier_get_event(cache->attr.notifier,
-				       &cookie, sizeof(cookie));
-	while (ret > 0) {
-		if (ret == sizeof(cookie)) {
-			entry = (gnix_mr_cache_entry_t *) cookie;
-			switch (__entry_get_state(entry)) {
-			case GNIX_CES_INUSE:
-				/* First, warn that this might be a
-				 * problem.*/
-				if ((__notifier_warned == false) &&
-				    !__entry_is_merged(entry)) {
-					GNIX_WARN(FI_LOG_MR,
-						  "Registered memory region"
-						  " includes unmapped pages."
-						  "  Have you freed memory"
-						  " without closing the memory"
-						  " region?\n");
-					__notifier_warned = true;
-				}
+	ret = _gnix_smrn_get_event(cache->attr.smrn,
+				&cache->rq, &context);
+	while (ret == FI_SUCCESS) {
+		entry = container_of(context,
+					struct gnix_mr_cache_entry, context);
+		switch (__entry_get_state(entry)) {
+		case GNIX_CES_INUSE:
+			/* First, warn that this might be a
+			 * problem.*/
+			if ((__notifier_warned == false) &&
+			    !__entry_is_merged(entry)) {
+				GNIX_WARN(FI_LOG_MR,
+					  "Registered memory region"
+					  " includes unmapped pages."
+					  "  Have you freed memory"
+					  " without closing the memory"
+					  " region?\n");
+				__notifier_warned = true;
+			}
 
-				GNIX_DEBUG(FI_LOG_MR,
-					   "Marking unmapped entry (%p)"
-					   " as retired %llx:%llx\n", entry,
-					   entry->key.address,
-					   entry->key.length);
+			GNIX_DEBUG(FI_LOG_MR,
+				   "Marking unmapped entry (%p)"
+				   " as retired %llx:%llx\n", entry,
+				   entry->key.address,
+				   entry->key.length);
 
-				__entry_set_unmapped(entry);
+			__entry_set_unmapped(entry);
 
-				if (__entry_is_retired(entry)) {
-					/* Nothing to do */
-					break;
-				}
-
-				/* Retire this entry (remove from
-				 * inuse tree) */
-
-				__entry_set_retired(entry);
-				iter = rbtFind(cache->inuse.rb_tree,
-					       &entry->key);
-				if (OFI_LIKELY(iter != NULL)) {
-					ret = rbtErase(cache->inuse.rb_tree,
-						       iter);
-					if (ret != RBT_STATUS_OK) {
-						GNIX_FATAL(FI_LOG_MR,
-							   "Unmapped entry"
-							   " could not be"
-							   " removed from"
-							   " in usetree.\n");
-					}
-				} else {
-					/*  The only way we should get
-					 *  here is if we're in the
-					 *  middle of retiring this
-					 *  entry.  Not sure if this
-					 *  is worth a separate
-					 *  warning from the one
-					 *  above. */
-				}
-
+			if (__entry_is_retired(entry)) {
+				/* Nothing to do */
 				break;
-			case GNIX_CES_STALE:
-				__entry_set_unmapped(entry);
-				iter = rbtFind(cache->stale.rb_tree,
-					       &entry->key);
-				if (!iter) {
-					break;
-				}
+			}
 
-				ret = rbtErase(cache->stale.rb_tree, iter);
+			/* Retire this entry (remove from
+			 * inuse tree) */
+
+			__entry_set_retired(entry);
+			iter = rbtFind(cache->inuse.rb_tree,
+				       &entry->key);
+			if (OFI_LIKELY(iter != NULL)) {
+				ret = rbtErase(cache->inuse.rb_tree,
+					       iter);
 				if (ret != RBT_STATUS_OK) {
 					GNIX_FATAL(FI_LOG_MR,
-						   "Unmapped entry could"
-						   " not be removed "
-						   " from stale tree.\n");
+						   "Unmapped entry"
+						   " could not be"
+						   " removed from"
+						   " in usetree.\n");
 				}
+			} else {
+				/*  The only way we should get
+				 *  here is if we're in the
+				 *  middle of retiring this
+				 *  entry.  Not sure if this
+				 *  is worth a separate
+				 *  warning from the one
+				 *  above. */
+			}
 
-				GNIX_DEBUG(FI_LOG_MR, "Removed unmapped entry"
-					   " (%p) from stale tree %llx:%llx\n",
+			break;
+		case GNIX_CES_STALE:
+			__entry_set_unmapped(entry);
+			iter = rbtFind(cache->stale.rb_tree,
+				       &entry->key);
+			if (!iter) {
+				break;
+			}
+
+			ret = rbtErase(cache->stale.rb_tree, iter);
+			if (ret != RBT_STATUS_OK) {
+				GNIX_FATAL(FI_LOG_MR,
+					   "Unmapped entry could"
+					   " not be removed "
+					   " from stale tree.\n");
+			}
+
+			GNIX_DEBUG(FI_LOG_MR, "Removed unmapped entry"
+				   " (%p) from stale tree %llx:%llx\n",
+				   entry, entry->key.address,
+				   entry->key.length);
+
+			if (__mr_cache_lru_remove(cache, entry) == FI_SUCCESS) {
+				GNIX_DEBUG(FI_LOG_MR, "Removed"
+					   " unmapped entry (%p)"
+					   " from lru list %llx:%llx\n",
 					   entry, entry->key.address,
 					   entry->key.length);
 
-				if (__mr_cache_lru_remove(cache, entry)
-				    == FI_SUCCESS) {
-					GNIX_DEBUG(FI_LOG_MR, "Removed"
-						   " unmapped entry (%p)"
-						   " from lru list %llx:%llx\n",
-						   entry, entry->key.address,
-						   entry->key.length);
+				ofi_atomic_dec32(&cache->stale.elements);
 
-					ofi_atomic_dec32(&cache->stale.elements);
-
-				} else {
-					GNIX_WARN(FI_LOG_MR, "Failed to remove"
-						  " unmapped entry"
-						  " from lru list (%p) %p\n",
-						  entry, iter);
-				}
-				
-				__mr_cache_entry_destroy(cache, entry);
-
-				break;
-			default:
-				GNIX_FATAL(FI_LOG_MR,
-					   "Unmapped entry (%p) in incorrect"
-					   " state: %d\n",
-					   entry, entry->state);
+			} else {
+				GNIX_WARN(FI_LOG_MR, "Failed to remove"
+					  " unmapped entry"
+					  " from lru list (%p) %p\n",
+					  entry, iter);
 			}
 
-		} else {
-			/* Should we do something else here? */
+			__mr_cache_entry_destroy(cache, entry);
+
+			break;
+		default:
 			GNIX_FATAL(FI_LOG_MR,
-				   "_gnix_notifier_get_event returned incomplete event\n");
+				   "Unmapped entry (%p) in incorrect"
+				   " state: %d\n",
+				   entry, entry->state);
 		}
-		ret = _gnix_notifier_get_event(cache->attr.notifier,
-					       &cookie, sizeof(cookie));
+
+		ret = _gnix_smrn_get_event(cache->attr.smrn,
+					&cache->rq, &context);
 	}
 	if (ret != -FI_EAGAIN) {
 		/* Should we do something else here? */
 		GNIX_WARN(FI_LOG_MR,
-			  "_gnix_notifier_get_event returned error: %s\n",
+			  "_gnix_smrn_get_event returned error: %s\n",
 			  fi_strerror(-ret));
 	}
 
@@ -581,7 +581,7 @@ __clear_notifier_events(gnix_mr_cache_t *cache)
  * @param[in] cache  a memory registration cache
  * @param[in] entry  a memory registration entry
  *
- * @return           return code from _gnix_notifier_monitor
+ * @return           return code from _gnix_smrn_monitor
  */
 static int
 __notifier_monitor(gnix_mr_cache_t *cache,
@@ -592,17 +592,19 @@ __notifier_monitor(gnix_mr_cache_t *cache,
 		return FI_SUCCESS;
 	}
 
-	if (cache->attr.notifier == NULL) {
+	if (cache->attr.smrn == NULL) {
 		return FI_SUCCESS;
 	}
 
 	GNIX_DEBUG(FI_LOG_MR, "monitoring entry=%p %llx:%llx\n", entry,
 		   entry->key.address, entry->key.length);
 
-	return  _gnix_notifier_monitor(cache->attr.notifier,
+	return  _gnix_smrn_monitor(cache->attr.smrn,
+						  &cache->rq,
 					      (void *) entry->key.address,
 					      entry->key.length,
-					      (uint64_t) entry);
+					      (uint64_t) &entry->context,
+						  &entry->context);
 }
 
 /**
@@ -623,7 +625,7 @@ __notifier_unmonitor(gnix_mr_cache_t *cache,
 		return;
 	}
 
-	if (cache->attr.notifier == NULL) {
+	if (cache->attr.smrn == NULL) {
 		return;
 	}
 
@@ -632,8 +634,9 @@ __notifier_unmonitor(gnix_mr_cache_t *cache,
 	if (!__entry_is_unmapped(entry)) {
 		GNIX_DEBUG(FI_LOG_MR, "unmonitoring entry=%p (state=%d)\n",
 			   entry, entry->state);
-		rc = _gnix_notifier_unmonitor(cache->attr.notifier,
-					      (uint64_t) entry);
+		rc = _gnix_smrn_unmonitor(cache->attr.smrn,
+						  (uint64_t) &entry->context,
+					      &entry->context);
 		if (rc != FI_SUCCESS) {
 			/* This probably is okay (ESRCH), because the
 			 * memory could have been unmapped in the
@@ -1038,6 +1041,10 @@ int _gnix_mr_cache_init(
 	cache_p->misses = 0;
 
 	cache_p->state = GNIX_MRC_STATE_READY;
+
+	dlist_init(&cache_p->rq.list);
+	dlist_init(&cache_p->rq.entry);
+	fastlock_init(&cache_p->rq.lock);
 
 	*cache = cache_p;
 
