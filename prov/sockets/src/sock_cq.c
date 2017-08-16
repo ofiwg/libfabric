@@ -442,7 +442,7 @@ static ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			buf->err_data_size = MIN(entry.err_data_size, err_data_size);
 			memcpy(buf->err_data, entry.err_data, buf->err_data_size);
 		} else {
-			*buf = entry;
+			memcpy(buf, &entry, sizeof(struct fi_cq_err_entry_1_0));
 		}
 
 		ret = 1;
