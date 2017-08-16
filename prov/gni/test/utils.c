@@ -84,6 +84,8 @@ Test(utils, alps)
 	uint8_t ptag;
 	uint32_t cookie, fmas, cqs, npes, npr;
 	void *addr = NULL;
+	char *cptr = NULL;
+	int lrank, trank;
 
 	_gnix_app_cleanup();
 
@@ -101,6 +103,27 @@ Test(utils, alps)
 
 	rc = _gnix_nics_per_rank(&npr);
 	cr_expect(!rc);
+
+	/*
+	 * TODO: this will need more work for CCM,
+	 * where the env. variables checked below
+	 * aren't defined
+	 */
+	rc = _gnix_pe_node_rank(&lrank);
+	if (rc != -FI_EADDRNOTAVAIL) {
+		cr_expect(!rc);
+
+		cptr = getenv("PMI_FORK_RANK");
+		if (cptr == NULL)
+			cptr = getenv("ALPS_APP_PE");
+		if (cptr != NULL) {
+			trank = atoi(cptr);
+			trank -= gnix_first_pe_on_node;
+			cr_expect(trank == lrank);
+		} else
+			cr_expect(0);
+	}
+
 
 	cqs /= GNIX_CQS_PER_EP;
 	cr_expect(((fmas > cqs ? cqs : fmas) / npes) == npr);

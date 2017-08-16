@@ -69,6 +69,12 @@ static bool app_init;
 static uint8_t gnix_app_ptag;
 static uint32_t gnix_app_cookie;
 static uint32_t gnix_pes_on_node;
+static int gnix_pe_node_rank = -1;
+#if HAVE_CRITERION
+int gnix_first_pe_on_node; /* globally visible for  criterion */
+#else
+static int gnix_first_pe_on_node;
+#endif
 /* CCM/ccmlogin specific stuff */
 static bool ccm_init;
 /* This file provides ccm_alps_info */
@@ -241,7 +247,9 @@ static int __gnix_ccm_init(void)
 
 static int __gnix_alps_init(void)
 {
+	char *cptr = NULL;
 	int ret = FI_SUCCESS;
+	int my_pe = -1;
 	int alps_status = 0;
 	size_t alps_count;
 	alpsAppLLIGni_t *rdmacred_rsp = NULL;
@@ -358,6 +366,23 @@ static int __gnix_alps_init(void)
 	}
 
 	gnix_pes_on_node = gnix_appLayout.numPesHere;
+	gnix_first_pe_on_node = gnix_appLayout.firstPe;
+
+	if ((cptr = getenv("PMI_FORK_RANK")) != NULL) {
+		my_pe = atoi(cptr);
+	} else {
+		if ((cptr = getenv("ALPS_APP_PE")) != NULL) {
+			my_pe = atoi(cptr);
+		}
+	}
+
+	/*
+ 	 * compute local pe rank, assuming we got our global PE rank
+ 	 * via either an ALPS (or ALPS SLURM plugin) or Cray PMI,
+ 	 * otherwise set to -1.
+ 	 */
+	if (my_pe != -1)
+		gnix_pe_node_rank = my_pe - gnix_first_pe_on_node;
 
 	alps_init = true;
 
@@ -602,6 +627,33 @@ int _gnix_pes_on_node(uint32_t *num_pes)
 	GNIX_INFO(FI_LOG_FABRIC, "num_pes: %u\n", gnix_appLayout.numPesHere);
 
 	return FI_SUCCESS;
+}
+
+int _gnix_pe_node_rank(int *pe_node_rank)
+{
+	int rc;
+
+	if (!pe_node_rank) {
+		return -FI_EINVAL;
+	}
+
+	rc = __gnix_app_init();
+	if (rc) {
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "__gnix_app_init() failed, ret=%d(%s)\n",
+			  rc, strerror(errno));
+		return rc;
+	}
+
+	if (gnix_pe_node_rank != -1) {
+		*pe_node_rank = gnix_pe_node_rank;
+		rc = FI_SUCCESS;
+	} else
+		rc = -FI_EADDRNOTAVAIL;
+
+	GNIX_INFO(FI_LOG_FABRIC, "pe_node_rank: %u\n", gnix_pe_node_rank);
+
+	return rc;
 }
 
 int _gnix_nics_per_rank(uint32_t *nics_per_rank)
