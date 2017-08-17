@@ -446,7 +446,10 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 	assert(bgq_ep->tx.state == FI_BGQ_EP_UNINITIALIZED);
 
 	if (bgq_ep->tx.stx) {
-
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"fi_bgq_ep_tx_init - using tx shared on node not picking new fifos\n");
+		fflush(stderr);
+#endif
 		assert(bgq_domain == bgq_ep->tx.stx->domain);
 
 	} else {
@@ -455,7 +458,10 @@ static int fi_bgq_ep_tx_init (struct fi_bgq_ep *bgq_ep,
 		 * "exclusive" shared transmit context for use by only this
 		 * endpoint transmit context
 		 */
-
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"fi_bgq_ep_tx_init - picking new fifos for new tx\n");
+		fflush(stderr);
+#endif
 		if (fi_bgq_stx_init(bgq_domain, 0, &bgq_ep->tx.exclusive_stx, NULL)) {
 			return -1;
 		}
@@ -1383,6 +1389,11 @@ static int fi_bgq_open_command_queues(struct fi_bgq_ep *bgq_ep)
 
 	bgq_domain = bgq_ep->domain;
 
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_open_command_queues ofi_send_allowed(bgq_ep->tx.caps) is %016lx ofi_rma_initiate_allowed(bgq_ep->tx.caps) is %016lx ofi_recv_allowed(bgq_ep->rx.caps) is %016lx ofi_rma_target_allowed(bgq_ep->rx.caps) is %016lx\n",ofi_send_allowed(bgq_ep->tx.caps),ofi_rma_initiate_allowed(bgq_ep->tx.caps),ofi_recv_allowed(bgq_ep->rx.caps),ofi_rma_target_allowed(bgq_ep->rx.caps));
+	fflush(stderr);
+#endif
+
 	if (ofi_send_allowed(bgq_ep->tx.caps) || ofi_rma_initiate_allowed(bgq_ep->tx.caps)) {
 
 		/* verify there is a completion queue associated with the tx context */
@@ -1870,6 +1881,11 @@ err:
 int fi_bgq_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 		struct fid_ep **ep, void *context, const ssize_t rx_index, const ssize_t tx_index)
 {
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_endpoint_rx_tx called with rx_index %ld tx_index %ld\n",rx_index,tx_index);
+	fflush(stderr);
+#endif
+
 	int ret;
 	struct fi_bgq_ep *bgq_ep = NULL;
 	struct fi_bgq_domain *bgq_domain = NULL;
@@ -1927,19 +1943,33 @@ int fi_bgq_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 
 	bgq_ep->rx.index = rx_index;
 	bgq_ep->tx.index = tx_index;
-	bgq_ep->rx.caps = info->rx_attr ? info->rx_attr->caps : info->caps;
-	bgq_ep->rx.caps |= FI_RECV;
 
-	bgq_ep->tx.caps = info->tx_attr ? info->tx_attr->caps : info->caps;
-
-	bgq_ep->tx.mode = info->tx_attr ? info->tx_attr->mode : 0;
-	bgq_ep->rx.mode = info->rx_attr ? info->rx_attr->mode : 0;
-
-	bgq_ep->tx.op_flags = info->tx_attr ? info->tx_attr->op_flags : 0;
-	bgq_ep->rx.op_flags = info->rx_attr ? info->rx_attr->op_flags : 0;
-
-	bgq_ep->rx.total_buffered_recv = info->rx_attr ?
+	if (rx_index >= 0) {
+		bgq_ep->rx.caps = info->rx_attr ? info->rx_attr->caps : info->caps;
+		bgq_ep->rx.caps |= FI_RECV;
+		bgq_ep->rx.mode = info->rx_attr ? info->rx_attr->mode : 0;
+		bgq_ep->rx.op_flags = info->rx_attr ? info->rx_attr->op_flags : 0;
+		bgq_ep->rx.total_buffered_recv = info->rx_attr ?
 			info->rx_attr->total_buffered_recv : 0;
+	}
+	else {
+		bgq_ep->rx.caps = 0;
+		bgq_ep->rx.mode = 0;
+		bgq_ep->rx.op_flags = 0;
+		bgq_ep->rx.total_buffered_recv = 0;
+	}
+
+	if (tx_index >= 0) {
+		bgq_ep->tx.caps = info->tx_attr ? info->tx_attr->caps : info->caps;
+		bgq_ep->tx.mode = info->tx_attr ? info->tx_attr->mode : 0;
+		bgq_ep->tx.op_flags = info->tx_attr ? info->tx_attr->op_flags : 0;
+	}
+	else {
+		bgq_ep->tx.caps = 0;
+		bgq_ep->tx.mode = 0;
+		bgq_ep->tx.op_flags = 0;
+	}
+
 
 	bgq_domain = container_of(dom, struct fi_bgq_domain, domain_fid);
 	bgq_ep->domain = bgq_domain;
