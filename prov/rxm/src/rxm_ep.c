@@ -113,7 +113,7 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
 	struct rxm_buf *buf;
-	struct fid_mr *mr = NULL;
+	void *mr = NULL;
 
 	fastlock_acquire(&pool->lock);
 	if (pool->local_mr)
@@ -130,7 +130,7 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 	fastlock_release(&pool->lock);
 
 	if (pool->local_mr && mr)
-		buf->desc = fi_mr_desc(mr);
+		buf->desc = fi_mr_desc((struct fid_mr *)mr);
 	return buf;
 }
 
