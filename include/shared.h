@@ -212,6 +212,7 @@ extern int listen_sock;
 #define FAB_OPTS "f:d:p:"
 #define INFO_OPTS FAB_OPTS "e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
+#define NO_CQ_DATA 0
 
 extern char default_port[8];
 
@@ -384,7 +385,7 @@ size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
 ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
-		struct fi_context* ctx);
+		uint64_t data, struct fi_context* ctx);
 ssize_t ft_rx(struct fid_ep *ep, size_t size);
 ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx);
 ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size);
