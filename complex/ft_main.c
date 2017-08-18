@@ -221,6 +221,13 @@ static int ft_check_info(struct fi_info *hints, struct fi_info *info)
 static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 {
 	info->caps = test_info->caps;
+
+	if ((test_info->class_function == FT_FUNC_WRITEDATA) ||
+	    (test_info->class_function == FT_FUNC_INJECT_WRITEDATA) ||
+	    (test_info->class_function == FT_FUNC_INJECTDATA) ||
+	    (test_info->class_function == FT_FUNC_SENDDATA))
+		info->domain_attr->cq_data_size = 4;
+
 	info->mode = test_info->mode;
 
 	info->domain_attr->av_type = test_info->av_type;
