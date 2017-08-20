@@ -13,9 +13,10 @@ _rxd_files = \
 
 if HAVE_GTEST
 bin_PROGRAMS += prov/rxd/test/rxdtest
-bin_SCRIPTS += prov/rxd/test/run_rxdtest
-nodist_prov_rxd_test_rxdtest_SOURCES = \
-	prov/rxd/test/test.cc
+nodist_prov_rxd_test_rxdtest_SOURCES =		\
+	prov/rxd/test/rxd_mock.h		\
+	prov/rxd/test/rxd_mock.cc		\
+	prov/rxd/test/fi_getinfo.cc
 
 prov_rxd_test_rxdtest_LDFLAGS = $(rxdtest_LDFLAGS) -static
 prov_rxd_test_rxdtest_CPPFLAGS = $(AM_CPPFLAGS) $(rxdtest_CPPFLAGS)
