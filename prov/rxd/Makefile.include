@@ -11,6 +11,17 @@ _rxd_files = \
 	prov/rxd/src/rxd_rma.c		\
 	prov/rxd/src/rxd.h
 
+if HAVE_GTEST
+bin_PROGRAMS += prov/rxd/test/rxdtest
+bin_SCRIPTS += prov/rxd/test/run_rxdtest
+nodist_prov_rxd_test_rxdtest_SOURCES = \
+	prov/rxd/test/test.cc
+
+prov_rxd_test_rxdtest_LDFLAGS = $(rxdtest_LDFLAGS) -static
+prov_rxd_test_rxdtest_CPPFLAGS = $(AM_CPPFLAGS) $(rxdtest_CPPFLAGS)
+prov_rxd_test_rxdtest_LDADD =  $(rxdtest_LIBS) $(linkback)
+endif HAVE_GTEST
+
 if HAVE_RXD_DL
 pkglib_LTLIBRARIES += librxd-fi.la
 librxd_fi_la_SOURCES = $(_rxd_files) $(common_srcs)
