@@ -201,6 +201,23 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 2.
 
+*FI_PSM2_LAZY_CONN
+: Control when connections are established between PSM2 endpoints that OFI
+  endpoints are built on top of. When set to 0, connections are established
+  when addresses are inserted into the address vector. This is the eager
+  connection mode. When set to 1, connections are established when addresses
+  are used the first time in communication. This is the lazy connection mode.
+
+  Lazy connection mode may reduce the start-up time on large systems at the
+  expense of higher data path overhead.
+
+  When lazy connection mode is enabled, the address vector type is limited
+  to *FI_AV_TABLE*. This is handled differently by *fi_getinfo* and
+  *fi_av_open*. A call to *fi_getinfo* that asks for *FI_AV_MAP* would fail
+  but *fi_av_open* just forces *FI_AV_TABLE* silently.
+
+  The default setting is 0.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

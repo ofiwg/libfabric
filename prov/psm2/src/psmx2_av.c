@@ -152,7 +152,7 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 				p->ctxt_cnt = n;
 				for (j=0; j<n; j++) {
 					p->ctxt_addrs[j].epid = ((psm2_epid_t *)src)[j];
-					p->ctxt_addrs[j].epaddr = (psm2_epaddr_t)FI_ADDR_NOTAVAIL;
+					p->ctxt_addrs[j].epaddr = NULL;
 				}
 				av->sepaddrs[i] = p;
 			}
@@ -257,7 +257,7 @@ psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 	if (ctxt >= av->sepaddrs[idx]->ctxt_cnt)
 		return NULL;
 
-	if ((fi_addr_t)av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr == FI_ADDR_NOTAVAIL) {
+	if (!av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr) {
 		err = psmx2_epid_to_epaddr(trx_ctxt,
 					   av->sepaddrs[idx]->ctxt_addrs[ctxt].epid,
 					   &epaddr);
@@ -346,7 +346,7 @@ static void psmx2_av_post_completion(struct psmx2_fid_av *av, void *context,
 
 static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 			        psm2_epid_t *epids, int *mask,
-			        psm2_error_t *errors,
+				uint8_t *types, psm2_error_t *errors,
 			        psm2_epaddr_t *epaddrs,
 			        void *context)
 {
@@ -366,6 +366,11 @@ static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
 				mask[i] = 1;
 		} else {
 			mask[i] = 1;
+		}
+
+		if (mask[i] && psmx2_env.lazy_conn && types[i] != PSMX2_EP_SCALABLE) {
+			epaddrs[i] = NULL;
+			mask[i] = 0;
 		}
 	}
 
@@ -540,7 +545,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 		return -FI_ENOMEM;
 	}
 
-	error_count = psmx2_av_connect_eps(av_priv, count, epids, mask,
+	error_count = psmx2_av_connect_eps(av_priv, count, epids, mask, types,
 					   errors, epaddrs, context);
 
 	error_count += psmx2_av_query_seps(av_priv, count, epids, vlanes, types,
@@ -715,7 +720,7 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_av *av_priv;
-	int type = FI_AV_MAP;
+	int type;
 	size_t count = 64;
 	uint64_t flags = 0;
 	int rx_ctx_bits = PSMX2_MAX_RX_CTX_BITS;
@@ -723,12 +728,23 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
 
+	if (psmx2_env.lazy_conn)
+		type = FI_AV_TABLE;
+	else
+		type = FI_AV_MAP;
+
 	if (attr) {
 		switch (attr->type) {
 		case FI_AV_UNSPEC:
 			break;
 
 		case FI_AV_MAP:
+			if (psmx2_env.lazy_conn) {
+				FI_INFO(&psmx2_prov, FI_LOG_AV,
+					"Lazy connection is enabled, force FI_AV_TABLE\n");
+				break;
+			}
+			/* fall through */
 		case FI_AV_TABLE:
 			type = attr->type;
 			break;
@@ -788,6 +804,9 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	*av = &av_priv->av;
 	if (attr)
 		attr->type = type;
+
+	FI_INFO(&psmx2_prov, FI_LOG_AV,
+		"type = %s\n", fi_tostr(&type, FI_TYPE_AV_TYPE));
 
 	return 0;
 }

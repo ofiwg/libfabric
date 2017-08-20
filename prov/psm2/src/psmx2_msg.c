@@ -81,8 +81,8 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 			vlane = 0;
 		} else if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;
-			if (idx >= av->last)
-				return -FI_EINVAL;
+			if ((err = psmx2_av_check_table_idx(av,idx)))
+				return err;
 
 			psm2_epaddr = av->epaddrs[idx];
 			vlane = av->vlanes[idx];
@@ -262,8 +262,8 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		vlane = 0;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
-		if (idx >= av->last)
-			return -FI_EINVAL;
+		if ((err = psmx2_av_check_table_idx(av,idx)))
+			return err;
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
@@ -437,9 +437,9 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 		vlane = 0;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
-		if (idx >= av->last) {
+		if ((err = psmx2_av_check_table_idx(av,idx))) {
 			free(req);
-			return -FI_EINVAL;
+			return err;
 		}
 
 		psm2_epaddr = av->epaddrs[idx];
