@@ -105,7 +105,6 @@ fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
 ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
 {
 	ssize_t ret = FI_SUCCESS;
-	ssize_t err = FI_SUCCESS;
 
 	VERBS_INFO(FI_LOG_AV, "Closing connection %p, state %d\n",
 		   conn, conn->state);
@@ -118,16 +117,14 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
 	}
 
 	switch (conn->state) {
-	case FI_VERBS_CONN_ALLOCATED:
-	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		ret = (ret == FI_SUCCESS) ? err : ret;
-		break;
 	case FI_VERBS_CONN_ESTABLISHED:
 		conn->state = FI_VERBS_CONN_LOCAL_DISCONNECT;
 		break;
 	case FI_VERBS_CONN_REJECTED:
 		conn->state = FI_VERBS_CONN_CLOSED;
 		break;
+	case FI_VERBS_CONN_ALLOCATED:
+	case FI_VERBS_CONN_REMOTE_DISCONNECT:
 	case FI_VERBS_CONN_CLOSED:
 		break;
 	default:
