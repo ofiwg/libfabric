@@ -63,6 +63,10 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 			}
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
 		}
+		if (hints->tx_attr) {
+			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
+			core_info->tx_attr->comp_order = hints->tx_attr->comp_order;
+		}
 	} else {
 		/* Since hints is NULL fake support for FI_MR_BASIC to allow
 		 * discovery of core providers like verbs which require it */
@@ -73,6 +77,10 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 			 * FI_MR_SCALABLE aren't dropped */
 			core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
 	}
+
+	/* Remove caps that RxM can handle */
+	core_info->rx_attr->msg_order &= ~FI_ORDER_SAS;
+
 	core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	core_info->ep_attr->type = FI_EP_MSG;
 
@@ -87,6 +95,9 @@ int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
 
 	*info->tx_attr = *rxm_info.tx_attr;
 
+	info->tx_attr->msg_order = core_info->tx_attr->msg_order;
+	info->tx_attr->comp_order = core_info->tx_attr->comp_order;
+
 	/* Export TX queue size same as that of MSG provider as we post TX
 	 * operations directly */
 	info->tx_attr->size = core_info->tx_attr->size;
@@ -98,6 +109,9 @@ int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
 	*info->rx_attr = *rxm_info.rx_attr;
 	info->rx_attr->iov_limit = MIN(info->rx_attr->iov_limit,
 			core_info->rx_attr->iov_limit);
+	/* Only SAS recv ordering can be guaranteed as RMA ops are not handled
+	 * by RxM protocol */
+	info->rx_attr->msg_order |= FI_ORDER_SAS;
 
 	*info->ep_attr = *rxm_info.ep_attr;
 	info->ep_attr->max_msg_size = core_info->ep_attr->max_msg_size;
