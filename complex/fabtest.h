@@ -73,6 +73,7 @@ extern const unsigned int lg_size_cnt;
 struct ft_xcontrol {
 	struct fid_ep		*ep;
 	void			*buf;
+	void			*cpy_buf;
 	struct fid_mr		*mr;
 	void			*memdesc;
 	struct iovec		*iov;
