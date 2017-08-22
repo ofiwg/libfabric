@@ -201,7 +201,7 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 2.
 
-*FI_PSM2_LAZY_CONN
+*FI_PSM2_LAZY_CONN*
 : Control when connections are established between PSM2 endpoints that OFI
   endpoints are built on top of. When set to 0, connections are established
   when addresses are inserted into the address vector. This is the eager
