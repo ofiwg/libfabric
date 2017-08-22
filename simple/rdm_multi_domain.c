@@ -54,6 +54,8 @@ struct test_domain {
 	struct fid_cntr *tx_cntr;
 	struct fid_av *av;
 	struct fid_mr *mr;
+	struct fid_cq *tx_cq;
+	struct fi_context *rma_ctx;
 };
 
 struct test_domain *domain_res_array;
@@ -101,12 +103,24 @@ static int open_domain_res(struct test_domain *domain)
 		return ret;
 	}
 
+	cq_attr.size = domain_cnt;
+	ret = fi_cq_open(domain->dom,
+			&cq_attr, &domain->tx_cq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		return ret;
+	}
+
 	ret = fi_av_open(domain->dom,
 			&av_attr, &domain->av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
 		return ret;
 	}
+
+	domain->rma_ctx = calloc(domain_cnt, sizeof(*domain->rma_ctx));
+	if (!domain->rma_ctx)
+		return -FI_ENOMEM;
 
 	return 0;
 }
@@ -132,6 +146,13 @@ static int init_ep_mr_res(struct test_domain *domain, struct fi_info *info)
 
 	ret = fi_ep_bind(domain->ep,
 			&domain->tx_cntr->fid, FI_WRITE);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		return ret;
+	}
+
+	ret = fi_ep_bind(domain->ep,
+			&domain->tx_cq->fid, FI_TRANSMIT);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -231,7 +252,9 @@ static void free_domain_res()
 		FT_CLOSE_FID(domain_res_array[dom_idx].mr);
 		FT_CLOSE_FID(domain_res_array[dom_idx].tx_cntr);
 		FT_CLOSE_FID(domain_res_array[dom_idx].rx_cntr);
+		FT_CLOSE_FID(domain_res_array[dom_idx].tx_cq);
 		FT_CLOSE_FID(domain_res_array[dom_idx].dom);
+		free(domain_res_array[dom_idx].rma_ctx);
 	}
 	free(peer_addrs);
 	free(mr_buf_array);
@@ -239,21 +262,43 @@ static void free_domain_res()
 }
 
 static int write_data(void *buffer, size_t size, int dom_idx,
-		int remote_dom_idx)
+		int remote_dom_idx, struct fi_context *rma_ctx)
 {
-	struct fi_context rma_ctx;
 	int ret = -FI_EAGAIN;
 
 	while (ret == -FI_EAGAIN) {
 		ret = fi_write(domain_res_array[dom_idx].ep, buffer, size,
 				fi_mr_desc(domain_res_array[dom_idx].mr), peer_addrs[remote_dom_idx],
-				0, fi_mr_key(domain_res_array[dom_idx].mr), &rma_ctx);
+				0, fi_mr_key(domain_res_array[dom_idx].mr), rma_ctx);
 	}
 
 	if (ret)
 		return ret;
 
 	return 0;
+}
+
+static int wait_write_cq(struct fid_cq *cq, size_t rma_op_count)
+{
+	struct fi_cq_tagged_entry entry;
+	int ret;
+	int op_counter = 0;
+
+	do {
+		ret = fi_cq_read(cq, &entry, 1);
+		if (ret > 0)
+			op_counter++;
+	} while ((ret == -FI_EAGAIN) && (op_counter < rma_op_count));
+
+	if (ret < 0) {
+		if (ret == -FI_EAVAIL) {
+			ret = ft_cq_readerr(cq);
+		} else {
+			FT_PRINTERR("fi_cq_read", ret);
+		}
+	}
+
+	return ret;
 }
 
 static int multi_domain_test()
@@ -267,7 +312,8 @@ static int multi_domain_test()
 			if (verbose)
 				printf("write to host's domain idx %d, memory region\n", remote_dom_idx);
 
-			ret = write_data(tx_buf, opts.transfer_size, dom_idx, remote_dom_idx);
+			ret = write_data(tx_buf, opts.transfer_size, dom_idx,
+				remote_dom_idx, &domain_res_array[dom_idx].rma_ctx[remote_dom_idx]);
 			if (ret)
 				return ret;
 
@@ -279,6 +325,11 @@ static int multi_domain_test()
 		ret = fi_cntr_wait(domain_res_array[dom_idx].tx_cntr,
 				domain_res_array[dom_idx].rma_op_cnt, 30 * 1000);
 		if (ret < 0)
+			return ret;
+
+		ret = wait_write_cq(domain_res_array[dom_idx].tx_cq,
+				domain_res_array[dom_idx].rma_op_cnt);
+		if (ret < 1)
 			return ret;
 
 		if (verbose)
