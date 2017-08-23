@@ -41,11 +41,15 @@ static void fi_ibv_fini(void);
 
 static const char *local_node = "localhost";
 
+#define VERBS_DEFAULT_MIN_RNR_TIMER 12
+
 size_t verbs_default_tx_size 		= 384;
 size_t verbs_default_rx_size 		= 384;
 size_t verbs_default_tx_iov_limit 	= 4;
 size_t verbs_default_rx_iov_limit 	= 4;
 size_t verbs_default_inline_size 	= 64;
+
+size_t verbs_min_rnr_timer = VERBS_DEFAULT_MIN_RNR_TIMER;
 
 struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
@@ -390,6 +394,60 @@ static int fi_ibv_get_param_int(char *param_name, char *param_str,
 	return 0;
 }
 
+#if ENABLE_DEBUG
+static int fi_ibv_dbg_query_qp_attr(struct ibv_qp *qp)
+{
+	struct ibv_qp_init_attr attr = { 0 };
+	struct ibv_qp_attr qp_attr = { 0 };
+	int ret;
+
+	ret = ibv_query_qp(qp, &qp_attr, IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT |
+			   IBV_QP_RNR_RETRY | IBV_QP_MIN_RNR_TIMER, &attr);
+	if (ret) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to query QP\n");
+		return ret;
+	}
+	FI_DBG_TRACE(&fi_ibv_prov, FI_LOG_EP_CTRL, "QP attributes: "
+		     "min_rnr_timer"	": %" PRIu8 ", "
+		     "timeout"		": %" PRIu8 ", "
+		     "retry_cnt"	": %" PRIu8 ", "
+		     "rnr_retry"	": %" PRIu8 "\n",
+		     qp_attr.min_rnr_timer, qp_attr.timeout, qp_attr.retry_cnt,
+		     qp_attr.rnr_retry);
+	return 0;
+}
+#else
+static int fi_ibv_dbg_query_qp_attr(struct ibv_qp *qp)
+{
+	return 0;
+}
+#endif
+
+int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
+{
+	struct ibv_qp_attr attr = { 0 };
+	int ret;
+
+	if (verbs_min_rnr_timer > 31) {
+		VERBS_WARN(FI_LOG_EQ, "min_rnr_timer value out of valid range; "
+			   "using default value of %d\n",
+			   VERBS_DEFAULT_MIN_RNR_TIMER);
+		attr.min_rnr_timer = VERBS_DEFAULT_MIN_RNR_TIMER;
+	} else {
+		attr.min_rnr_timer = verbs_min_rnr_timer;
+	}
+
+	ret = ibv_modify_qp(qp, &attr, IBV_QP_MIN_RNR_TIMER);
+	if (ret) {
+		VERBS_WARN(FI_LOG_EQ, "Unable to modify QP attribute\n");
+		return ret;
+	}
+	ret = fi_ibv_dbg_query_qp_attr(qp);
+	if (ret)
+		return ret;
+	return 0;
+}
+
 static void fi_ibv_fini(void)
 {
 }
@@ -443,6 +501,10 @@ VERBS_INI
 	if (fi_ibv_get_param_int("inline_size", "Default maximum inline size. "
 				 "Actual inject size returned in fi_info may be "
 				 "greater", &verbs_default_inline_size))
+		return NULL;
+
+	if (fi_ibv_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
+				 "attribute (0 - 31)", &verbs_min_rnr_timer))
 		return NULL;
 
 	return &fi_ibv_prov;
