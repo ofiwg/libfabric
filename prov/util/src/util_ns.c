@@ -548,7 +548,7 @@ void ofi_ns_start_server(struct util_ns *ns)
 	char *server_hostname = (ns->ns_hostname ?
 		ns->ns_hostname : OFI_NS_DEFAULT_HOSTNAME);
 
-	if ((ofi_atomic_get32(&ns->ref) > 0) || (!ns->is_initialized))
+	if ((!ns->is_initialized) || (ofi_atomic_inc32(&ns->ref) > 1))
 		return;
 
 	ofi_osd_init();
@@ -581,17 +581,17 @@ void ofi_ns_start_server(struct util_ns *ns)
 
 void ofi_ns_stop_server(struct util_ns *ns)
 {
-    if ((ofi_atomic_dec32(&ns->ref) > 0) || (!ns->is_initialized))
-		return;
+	if (ns->is_initialized && !ofi_atomic_dec32(&ns->ref)) {
 
-	ns->is_initialized = 0;
-	ofi_osd_fini();
+		ns->is_initialized = 0;
+		ofi_osd_fini();
 
-	if (pthread_equal(ns->ns_thread, pthread_self()))
-		return;
+		if (pthread_equal(ns->ns_thread, pthread_self()))
+			return;
 
-	(void) pthread_cancel(ns->ns_thread);
-	(void) pthread_join(ns->ns_thread, NULL);
+		(void) pthread_cancel(ns->ns_thread);
+		(void) pthread_join(ns->ns_thread, NULL);
+	}
 }
 
 int ofi_ns_init(struct util_ns_attr *attr, struct util_ns *ns)
@@ -600,13 +600,12 @@ int ofi_ns_init(struct util_ns_attr *attr, struct util_ns *ns)
 	    !attr->service_len || !attr->service_cmp)
 		return -FI_EINVAL;
 
-	if (ns->is_initialized) {
-		ofi_atomic_inc32(&ns->ref);
+	if (ns->is_initialized)
 		return FI_SUCCESS;
-	} else {
-		ofi_atomic_initialize32(&ns->ref, 1);
-		ns->is_initialized = 1;
-	}
+	else
+		ofi_atomic_initialize32(&ns->ref, 0);
+
+	ns->is_initialized = 1;
 
 	ns->name_len = attr->name_len;
 	ns->service_len = attr->service_len;
