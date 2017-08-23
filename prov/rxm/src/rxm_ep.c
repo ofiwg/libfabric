@@ -603,9 +603,11 @@ static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
 }
 
 // TODO handle all flags
-static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov,
-		void **desc, size_t count, fi_addr_t dest_addr, void *context,
-		uint64_t data, uint64_t tag, uint64_t flags, int op)
+static ssize_t
+rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+		   size_t count, fi_addr_t dest_addr, void *context,
+		   uint64_t data, uint64_t flags, uint64_t tag, int op,
+		   uint64_t comp_flags)
 {
 	struct util_cmap_handle *handle;
 	struct rxm_ep *rxm_ep;
@@ -651,13 +653,8 @@ static ssize_t rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov
 	pkt->hdr.size = ofi_total_iov_len(iov, count);
 	rxm_op_hdr_process_flags(&pkt->hdr, flags, data);
 
-	if (op == ofi_op_tagged) {
-		pkt->hdr.tag = tag;
-		tx_entry->comp_flags = FI_TAGGED;
-	} else {
-		tx_entry->comp_flags = FI_MSG;
-	}
-	tx_entry->comp_flags |= FI_SEND;
+	pkt->hdr.tag = tag;
+	tx_entry->comp_flags |= comp_flags | FI_SEND;
 
 	if (pkt->hdr.size > rxm_ep->rxm_info->tx_attr->inject_size) {
 		if (flags & FI_INJECT) {
@@ -741,56 +738,70 @@ done:
 	return ret;
 }
 
+#define rxm_ep_tx_flags_inject(ep_fid) \
+	((rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) | FI_INJECT)
+
+#define rxm_send(...) \
+	rxm_ep_send_common(__VA_ARGS__, 0, ofi_op_msg, FI_MSG)
+
+#define rxm_tsend(...) \
+	rxm_ep_send_common(__VA_ARGS__, ofi_op_tagged, FI_TAGGED)
+
+#define rxm_sendmsg(ep_fid, msg, flags, ...) \
+	rxm_ep_send_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count, \
+			   msg->addr, msg->context, msg->data, \
+			   flags | (rxm_ep_tx_flags(ep_fid) & FI_COMPLETION), \
+			   __VA_ARGS__)
+
 static ssize_t rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
-			       uint64_t flags)
+			      uint64_t flags)
 {
 
-	return rxm_ep_send_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
-			msg->addr, msg->context, msg->data, 0,
-			flags | (rxm_ep_tx_flags(ep_fid) & FI_COMPLETION), ofi_op_msg);
+	return rxm_sendmsg(ep_fid, msg, flags, 0, ofi_op_msg, FI_MSG);
 }
 
 static ssize_t rxm_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
-		void *desc, fi_addr_t dest_addr, void *context)
+			   void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct iovec iov;
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, &desc, 1, dest_addr, context, 0,
-			0, rxm_ep_tx_flags(ep_fid), ofi_op_msg);
+	return rxm_send(ep_fid, &iov, &desc, 1, dest_addr, context, 0,
+			rxm_ep_tx_flags(ep_fid));
 }
 
 static ssize_t rxm_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
-		void **desc, size_t count, fi_addr_t dest_addr, void *context)
+			    void **desc, size_t count, fi_addr_t dest_addr,
+			    void *context)
 {
-	return rxm_ep_send_common(ep_fid, iov, desc, count, dest_addr, context,
-			0, 0, rxm_ep_tx_flags(ep_fid), ofi_op_msg);
+	return rxm_send(ep_fid, iov, desc, count, dest_addr, context, 0,
+			rxm_ep_tx_flags(ep_fid));
 }
 
-static ssize_t	rxm_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
-			       fi_addr_t dest_addr)
+static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
+			     fi_addr_t dest_addr)
 {
 	struct iovec iov;
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, NULL, 1, dest_addr, NULL, 0, 0,
-			(rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) | FI_INJECT,
-			ofi_op_msg);
+	return rxm_send(ep_fid, &iov, NULL, 1, dest_addr, NULL, 0,
+			rxm_ep_tx_flags_inject(ep_fid));
 }
 
-static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
-				uint64_t data, fi_addr_t dest_addr, void *context)
+static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
+			       void *desc, uint64_t data, fi_addr_t dest_addr,
+			       void *context)
 {
 	struct iovec iov;
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, desc, 1, dest_addr, context, data,
-			0, rxm_ep_tx_flags(ep_fid), ofi_op_msg);
+	return rxm_send(ep_fid, &iov, desc, 1, dest_addr, context, data,
+			rxm_ep_tx_flags(ep_fid));
 }
 
 static ssize_t	rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -801,9 +812,8 @@ static ssize_t	rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, NULL, 1, dest_addr, NULL, data, 0,
-			(rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) | FI_INJECT,
-			ofi_op_msg);
+	return rxm_send(ep_fid, &iov, NULL, 1, dest_addr, NULL, data,
+			rxm_ep_tx_flags_inject(ep_fid));
 }
 
 static struct fi_ops_msg rxm_ops_msg = {
@@ -859,68 +869,66 @@ ssize_t rxm_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **des
 }
 
 ssize_t rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
-			 uint64_t flags)
+			uint64_t flags)
 {
-	return rxm_ep_send_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
-			msg->addr, msg->context, msg->data, msg->tag,
-			flags | (rxm_ep_tx_flags(ep_fid) & FI_COMPLETION),
-			ofi_op_tagged);
+	return rxm_sendmsg(ep_fid, msg, flags, msg->tag, ofi_op_tagged, FI_TAGGED);
 }
 
-ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
-		      fi_addr_t dest_addr, uint64_t tag, void *context)
+ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
+		     void *desc, fi_addr_t dest_addr, uint64_t tag,
+		     void *context)
 {
 	struct iovec iov;
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, &desc, 1, dest_addr, context, 0,
-			tag, rxm_ep_tx_flags(ep_fid), ofi_op_tagged);
+	return rxm_tsend(ep_fid, &iov, &desc, 1, dest_addr, context, 0,
+			 rxm_ep_tx_flags(ep_fid), tag);
 }
 
-ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		       size_t count, fi_addr_t dest_addr, uint64_t tag, void *context)
+ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
+		      void **desc, size_t count, fi_addr_t dest_addr,
+		      uint64_t tag, void *context)
 {
-	return rxm_ep_send_common(ep_fid, iov, desc, count, dest_addr, context,
-			0, tag, rxm_ep_tx_flags(ep_fid), ofi_op_tagged);
+	return rxm_tsend(ep_fid, iov, desc, count, dest_addr, context, 0,
+			 rxm_ep_tx_flags(ep_fid), tag);
 }
 
 ssize_t	rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
-			fi_addr_t dest_addr, uint64_t tag)
+		       fi_addr_t dest_addr, uint64_t tag)
 {
 	struct iovec iov;
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, NULL, 1, dest_addr, NULL, 0, tag,
-			(rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) | FI_INJECT,
-			ofi_op_tagged);
+	return rxm_tsend(ep_fid, &iov, NULL, 1, dest_addr, NULL, 0,
+			rxm_ep_tx_flags_inject(ep_fid), tag);
 }
 
-ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
-			  uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context)
+ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
+			 void *desc, uint64_t data, fi_addr_t dest_addr,
+			 uint64_t tag, void *context)
 {
 	struct iovec iov;
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, desc, 1, dest_addr, context, data,
-			tag, rxm_ep_tx_flags(ep_fid), ofi_op_tagged);
+	return rxm_tsend(ep_fid, &iov, desc, 1, dest_addr, context, data,
+			 rxm_ep_tx_flags(ep_fid), tag);
 }
 
 ssize_t	rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
-			    uint64_t data, fi_addr_t dest_addr, uint64_t tag)
+			   uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	struct iovec iov;
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxm_ep_send_common(ep_fid, &iov, NULL, 1, dest_addr, NULL, data,
-			tag, (rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) | FI_INJECT,
-			ofi_op_tagged);
+	return rxm_tsend(ep_fid, &iov, NULL, 1, dest_addr, NULL, data,
+			 rxm_ep_tx_flags_inject(ep_fid), tag);
 }
 
 struct fi_ops_tagged rxm_ops_tagged = {

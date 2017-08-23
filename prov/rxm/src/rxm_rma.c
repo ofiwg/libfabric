@@ -67,13 +67,11 @@ static int rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 					 tx_entry->mr);
 		if (ret)
 			goto err;
-		for (i = 0; i < msg_rma.iov_count; i++)
-			msg_rma.desc[i] = fi_mr_desc(tx_entry->mr[i]);
-	} else {
-		/* msg_rma.desc is msg fid_mr * array */
-		for (i = 0; i < msg_rma.iov_count; i++)
-			msg_rma.desc[i] = fi_mr_desc(msg_rma.desc[i]);
+		msg_rma.desc = (void **)tx_entry->mr;
 	}
+	for (i = 0; i < msg_rma.iov_count; i++)
+		msg_rma.desc[i] = fi_mr_desc(msg_rma.desc[i]);
+
 	return rma_msg(msg_ep, &msg_rma, flags);
 err:
 	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
