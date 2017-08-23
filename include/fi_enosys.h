@@ -323,22 +323,27 @@ ssize_t fi_no_eq_sread(struct fid_eq *eq, uint32_t *event,
 /*
 static struct fi_ops_cq X = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = X,
+	.read = fi_no_cq_read,
 	.readfrom = fi_no_cq_readfrom,
-	.readerr = X,
+	.readerr = fi_no_cq_readerr,
 	.sread = fi_no_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
-	.strerror = X,
+	.strerror = fi_no_cq_strerror,
 };
 */
+ssize_t fi_no_cq_read(struct fid_cq *cq, void *buf, size_t count);
 ssize_t fi_no_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		fi_addr_t *src_addr);
+ssize_t fi_no_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+		                uint64_t flags);
 ssize_t fi_no_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 		const void *cond, int timeout);
 ssize_t fi_no_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		fi_addr_t *src_addr, const void *cond, int timeout);
 int fi_no_cq_signal(struct fid_cq *cq);
+const char * fi_no_cq_strerror(struct fid_cq *cq, int prov_errno,
+		const void *err_data, char *buf, size_t len);
 
 /*
 static struct fi_ops_cntr X = {
