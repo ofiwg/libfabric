@@ -64,7 +64,6 @@ int sock_cm_def_map_sz = SOCK_CMAP_DEF_SZ;
 int sock_av_def_sz = SOCK_AV_DEF_SZ;
 int sock_cq_def_sz = SOCK_CQ_DEF_SZ;
 int sock_eq_def_sz = SOCK_EQ_DEF_SZ;
-char *sock_pe_affinity_str = NULL;
 #if ENABLE_DEBUG
 int sock_dgram_drop_rate = 0;
 #endif
@@ -341,8 +340,6 @@ static void sock_read_default_params()
 		fi_param_get_int(&sock_prov, "def_av_sz", &sock_av_def_sz);
 		fi_param_get_int(&sock_prov, "def_cq_sz", &sock_cq_def_sz);
 		fi_param_get_int(&sock_prov, "def_eq_sz", &sock_eq_def_sz);
-		if (fi_param_get_str(&sock_prov, "pe_affinity", &sock_pe_affinity_str) != FI_SUCCESS)
-			sock_pe_affinity_str = NULL;
 #if ENABLE_DEBUG
 		fi_param_get_int(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
 #endif

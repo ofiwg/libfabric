@@ -90,6 +90,7 @@
 #define SOCK_CQ_DEF_SZ (1<<8)
 #define SOCK_AV_DEF_SZ (1<<8)
 #define SOCK_CMAP_DEF_SZ (1<<10)
+#define SOCK_EPOLL_WAIT_EVENTS 32
 
 #define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
@@ -153,7 +154,7 @@
 #define SOCK_PE_COMM_BUFF_SZ (1024)
 #define SOCK_PE_OVERFLOW_COMM_BUFF_SZ (128)
 
-/* it must be adjusted if error data size in CQ/EQ 
+/* it must be adjusted if error data size in CQ/EQ
  * will be larger than SOCK_EP_MAX_CM_DATA_SZ */
 #define SOCK_MAX_ERR_CQ_EQ_DATA_SZ SOCK_EP_MAX_CM_DATA_SZ
 
@@ -171,21 +172,6 @@ struct sock_service_entry {
 	int service;
 	struct dlist_entry entry;
 };
-
-#ifdef HAVE_EPOLL
-struct sock_epoll_set {
-	int fd;
-	int size;
-	int used;
-	struct epoll_event *events;
-};
-#else
-struct sock_epoll_set {
-	struct pollfd *pollfds;
-	int size;
-	int used;
-};
-#endif
 
 struct sock_fabric {
 	struct fid_fabric fab_fid;
@@ -212,7 +198,7 @@ struct sock_conn {
 
 struct sock_conn_map {
 	struct sock_conn *table;
-	struct sock_epoll_set epoll_set;
+	fi_epoll_t epoll_set;
 	int used;
 	int size;
 	fastlock_t lock;
@@ -564,7 +550,6 @@ struct sock_ep_attr {
 	struct sock_conn_listener listener;
 	fastlock_t lock;
 
-	struct index_map conn_idm;
 	struct index_map av_idm;
 	struct sock_conn_map cmap;
 };
@@ -814,6 +799,7 @@ struct sock_pe_entry {
 	uint8_t is_error;
 	uint8_t mr_checked;
 	uint8_t is_pool_entry;
+	uint8_t completion_reported;
 	uint8_t reserved[3];
 
 	uint64_t done_len;
@@ -854,7 +840,7 @@ struct sock_pe {
 	pthread_t progress_thread;
 	volatile int do_progress;
 	struct sock_pe_entry *pe_atomic;
-	struct sock_epoll_set epoll_set;
+	fi_epoll_t epoll_set;
 };
 
 typedef int (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,
@@ -1203,13 +1189,6 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 			  uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags);
 void sock_cntr_check_trigger_list(struct sock_cntr *cntr);
-
-int sock_epoll_create(struct sock_epoll_set *set, int size);
-int sock_epoll_add(struct sock_epoll_set *set, int fd);
-int sock_epoll_del(struct sock_epoll_set *set, int fd);
-int sock_epoll_wait(struct sock_epoll_set *set, int timeout);
-int sock_epoll_get_fd_at_index(struct sock_epoll_set *set, int index);
-void sock_epoll_close(struct sock_epoll_set *set);
 
 static inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
 {

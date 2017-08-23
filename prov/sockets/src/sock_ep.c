@@ -754,7 +754,6 @@ static int sock_ep_close(struct fid *fid)
 		free(sock_ep->attr->dest_addr);
 
 	fastlock_acquire(&sock_ep->attr->domain->pe->lock);
-	ofi_idm_reset(&sock_ep->attr->conn_idm);
 	ofi_idm_reset(&sock_ep->attr->av_idm);
 	sock_conn_map_destroy(sock_ep->attr);
 	fastlock_release(&sock_ep->attr->domain->pe->lock);
@@ -1813,7 +1812,6 @@ err1:
 void sock_ep_remove_conn(struct sock_ep_attr *attr, struct sock_conn *conn)
 {
 	sock_pe_poll_del(attr->domain->pe, conn->sock_fd);
-	ofi_idm_clear(&attr->conn_idm, conn->sock_fd);
 	sock_conn_release_entry(&attr->cmap, conn);
 }
 
