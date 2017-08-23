@@ -165,7 +165,7 @@ static int check_data()
 	case FI_OP_ATOMIC:
 		for (i = 0; i < strlen(welcome_text); i++) {
 			if (rx_buf[i] != c) {
-				printf("Data mismatch found at byte %d", i);
+				printf("Data mismatch found at byte %d...", i);
 				return 1;
 			}
 		}
@@ -332,13 +332,13 @@ static int compare_atomic_trigger()
 	struct fi_ioc compare_iov;
 	struct fi_rma_ioc rma_iov;
 
-	ret = check_compare_atomic_op(ep, FI_CSWAP, FI_UINT8, &count);
+	ret = check_compare_atomic_op(ep, FI_CSWAP_LE, FI_UINT8, &count);
 	if (ret)
 		return ret;
 
 	format_simple_msg_atomic(&msg, &iov, &rma_iov,
 				 tx_buf + strlen(welcome_text),
-				 strlen(welcome_text), &work.context, FI_UINT8, FI_CSWAP_LT);
+				 strlen(welcome_text), &work.context, FI_UINT8, FI_CSWAP_LE);
 	format_simple_msg_fetch(&fetch, &fetch_iov, result_buf, strlen(welcome_text));
 	format_simple_msg_compare(&compare, &compare_iov, compare_buf, strlen(welcome_text));
 
@@ -483,7 +483,7 @@ static void init_buf_vals()
 	case FI_OP_ATOMIC:
 	case FI_OP_FETCH_ATOMIC:
 	case FI_OP_COMPARE_ATOMIC:
-		memset(compare_buf, ~0, strlen(compare_buf));
+		memset(compare_buf, ~0, strlen(welcome_text) * 2);
 		sprintf(tx_buf, "%s", welcome_text);
 		memset(&tx_buf[strlen(welcome_text)], ~0, strlen(welcome_text));
 		if (opts.dst_addr)
