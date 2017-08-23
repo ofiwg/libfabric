@@ -42,7 +42,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_cm.h>
-#define FT_FIVERSION FI_VERSION(1, 5)
+
 #include "shared.h"
 
 struct test_domain {

@@ -137,7 +137,10 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_RX_CQ_DATA;
+	if (opts.rma_op == FT_RMA_WRITEDATA) {
+		hints->mode |= FI_RX_CQ_DATA;
+		hints->domain_attr->cq_data_size = 4;
+	}
 	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
