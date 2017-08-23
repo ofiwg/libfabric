@@ -1634,9 +1634,6 @@ ssize_t fi_ibv_rdm_req_hndls_init(void)
 	fi_ibv_rdm_req_hndl_arr[FI_IBV_STATE_EAGER_READY_TO_FREE]
 		[FI_IBV_STATE_RNDV_RECV_END][FI_IBV_EVENT_POST_LC] =
 			fi_ibv_rdm_rndv_recv_ack_lc;
-	fi_ibv_rdm_req_hndl_arr[FI_IBV_STATE_EAGER_RECV_END]
-		[FI_IBV_STATE_RNDV_RECV_WAIT4LC][FI_IBV_EVENT_POST_LC] =
-			fi_ibv_rdm_rndv_recv_read_lc;
 
 	// RMA read/write stuff
 	fi_ibv_rdm_req_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
