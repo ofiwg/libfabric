@@ -730,10 +730,12 @@ fi_ibv_rdm_process_err_send_wc(struct fi_ibv_rdm_ep *ep,
 			util_buf_release(fi_ibv_rdm_request_pool, req);
 		}
 		VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc.status = %d:%s, "
-			   "pend_send: %d, connection: %p\n",
+			   "pend_send: %d, connection: %p, request = %p (%s)\n",
 			   wc->status,
 			   ibv_wc_status_str(wc->status),
-			   ep->posted_sends, conn);
+			   ep->posted_sends, conn, (void *)wc->wr_id,
+			   FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id) ?
+				"service" : "not service");
 	}
 }
 
