@@ -193,12 +193,25 @@ static int init_ep_mr_res(struct test_domain *domain, struct fi_info *info)
 static int init_peer_addresses()
 {
 	int dom_idx, ret;
+	int ep_idx;
 
+	/*
+	Initializes the Address Vectors for each domain
+	with the addresses of the remote hosts' endpoints.
+	The fi_addr_t array peer_addrs gets rewritten
+	in this loop with the same set of addresses for each domain
+	init, but the peer addresses to the remote domains
+	are the same so this is not an issue.
+	The address vectors for each domain must be init even if
+	the peer addresses returned is the same after the first loop.
+	*/
 	for (dom_idx = 0; dom_idx < domain_cnt; dom_idx++) {
-		ret = ft_init_av_addr(domain_res_array[dom_idx].av,
-				domain_res_array[dom_idx].ep, &peer_addrs[dom_idx]);
-		if (ret)
-			return ret;
+		for (ep_idx = 0; ep_idx < domain_cnt; ep_idx++) {
+			ret = ft_init_av_addr(domain_res_array[dom_idx].av,
+					domain_res_array[ep_idx].ep, &peer_addrs[ep_idx]);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return 0;
@@ -269,7 +282,7 @@ static int write_data(void *buffer, size_t size, int dom_idx,
 	while (ret == -FI_EAGAIN) {
 		ret = fi_write(domain_res_array[dom_idx].ep, buffer, size,
 				fi_mr_desc(domain_res_array[dom_idx].mr), peer_addrs[remote_dom_idx],
-				0, fi_mr_key(domain_res_array[dom_idx].mr), rma_ctx);
+				0, fi_mr_key(domain_res_array[remote_dom_idx].mr), rma_ctx);
 	}
 
 	if (ret)
