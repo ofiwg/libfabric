@@ -146,9 +146,9 @@ static int sock_dgram_verify_tx_attr(const struct fi_tx_attr *attr)
 	return 0;
 }
 
-int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
-			    struct fi_tx_attr *tx_attr,
-			    struct fi_rx_attr *rx_attr)
+int sock_dgram_verify_ep_attr(const struct fi_ep_attr *ep_attr,
+			      const struct fi_tx_attr *tx_attr,
+			      const struct fi_rx_attr *rx_attr)
 {
 	if (ep_attr) {
 		switch (ep_attr->protocol) {
@@ -198,7 +198,7 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 }
 
 int sock_dgram_fi_info(uint32_t version, void *src_addr, void *dest_addr,
-		       struct fi_info *hints, struct fi_info **info)
+		       const struct fi_info *hints, struct fi_info **info)
 {
 	*info = sock_fi_info(version, FI_EP_DGRAM, hints, src_addr, dest_addr);
 	if (!*info)

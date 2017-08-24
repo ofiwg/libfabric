@@ -67,7 +67,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.mr_cnt = SOCK_DOMAIN_MR_CNT,
 };
 
-int sock_verify_domain_attr(uint32_t version, struct fi_domain_attr *attr)
+int sock_verify_domain_attr(uint32_t version, const struct fi_domain_attr *attr)
 {
 	if (!attr)
 		return 0;
