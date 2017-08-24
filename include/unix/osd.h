@@ -127,6 +127,11 @@ static inline int ofi_sockerr(void)
 	return errno;
 }
 
+static inline int ofi_syserr(void)
+{
+	return errno;
+}
+
 static inline int ofi_sysconf(int name)
 {
 	return sysconf(name);
