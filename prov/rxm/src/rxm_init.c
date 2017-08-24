@@ -35,7 +35,7 @@
 #include <prov.h>
 #include "rxm.h"
 
-int rxm_info_to_core(uint32_t version, struct fi_info *hints,
+int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
 	core_info->caps = FI_MSG;
@@ -79,7 +79,7 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 	return 0;
 }
 
-int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
+int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		    struct fi_info *info)
 {
 	info->caps = rxm_info.caps;

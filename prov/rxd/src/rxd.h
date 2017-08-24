@@ -345,9 +345,9 @@ struct rxd_pkt_meta {
 	char pkt_data[]; /* rxd_pkt_data*, followed by data */
 };
 
-int rxd_info_to_core(uint32_t version, struct fi_info *rxd_info,
+int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
 		     struct fi_info *core_info);
-int rxd_info_to_rxd(uint32_t version, struct fi_info *core_info,
+int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 		    struct fi_info *info);
 
 int rxd_fabric(struct fi_fabric_attr *attr,
