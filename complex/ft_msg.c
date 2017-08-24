@@ -525,6 +525,10 @@ int ft_send_rma(void)
 		return ret;
 	}
 
+	if (is_inject_func(test_info.class_function) &&
+	    test_info.test_type == FT_TEST_UNIT)
+		memset(ft_tx_ctrl.buf, 0, ft_tx_ctrl.rma_msg_size);
+
 	if (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(0);
 		if (ret)
@@ -650,6 +654,10 @@ int ft_send_msg(void)
 		FT_PRINTERR("send", ret);
 		return ret;
 	}
+
+	if (is_inject_func(test_info.class_function) &&
+	    test_info.test_type == FT_TEST_UNIT)
+		memset(ft_tx_ctrl.buf, 0, ft_tx_ctrl.msg_size);
 
 	if (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(0);

@@ -185,7 +185,8 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 	size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
 	if (!ctrl->buf) {
 		ctrl->buf = calloc(1, size);
-		if (!ctrl->buf)
+		ctrl->cpy_buf = calloc(1, size);
+		if (!ctrl->buf || !ctrl->cpy_buf)
 			return -FI_ENOMEM;
 	} else {
 		memset(ctrl->buf, 0, size);

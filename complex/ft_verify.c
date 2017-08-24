@@ -93,10 +93,12 @@ int ft_sync_fill_bufs(size_t size)
 		SWITCH_TYPES(ft_atom_ctrl.datatype, FT_FILL, ft_mr_ctrl.buf,
 			     ft_atom_ctrl.count);
 		memcpy(ft_atom_ctrl.orig_buf, ft_mr_ctrl.buf, size);
+		memcpy(ft_tx_ctrl.cpy_buf, ft_tx_ctrl.buf, size);
 	} else if (is_read_func(test_info.class_function)) {
 		ft_fill_buf(ft_mr_ctrl.buf, size);
 	} else {
 		ft_fill_buf(ft_tx_ctrl.buf, size);
+		memcpy(ft_tx_ctrl.cpy_buf, ft_tx_ctrl.buf, size);
 	}
 
 	ft_sock_sync(0);
@@ -113,7 +115,7 @@ static int verify_atomic(void)
 	size_t count;
 
 	dst = ft_atom_ctrl.orig_buf;
-	src = ft_tx_ctrl.buf;
+	src = ft_tx_ctrl.cpy_buf;
 	cmp = ft_atom_ctrl.comp_buf;
 	tmp = ft_rx_ctrl.buf;
 	res = ft_atom_ctrl.res_buf;
