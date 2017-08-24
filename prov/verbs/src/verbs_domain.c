@@ -255,16 +255,12 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 		return -errno;
 
 	for (i = 0; dev_list[i] && ret; i++) {
-		if (domain->rdm) {
-			ret = strncmp(name, ibv_get_device_name(dev_list[i]->device),
-				      strlen(name) - strlen(verbs_rdm_domain.suffix));
-
-		} else {
-			ret = strcmp(name, ibv_get_device_name(dev_list[i]->device));
-		}
-
-		if (!ret)
+		const char *rdma_name = ibv_get_device_name(dev_list[i]->device);
+		ret = strncmp(name, rdma_name, strlen(rdma_name));
+		if (!ret) {
 			domain->verbs = dev_list[i];
+			break;
+		}
 	}
 	rdma_free_devices(dev_list);
 	return ret;
