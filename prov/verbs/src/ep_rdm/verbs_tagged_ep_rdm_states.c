@@ -738,18 +738,21 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 
 		request->minfo.conn = p->conn;
 		request->minfo.tag = rbuf->header.tag;
-		request->minfo.is_tagged = FI_IBV_RDM_EAGER_PKT ? 1 : 0;
+		request->minfo.is_tagged =
+			((p->pkt_type == FI_IBV_RDM_EAGER_PKT) ? 1 : 0);
 		request->len = 
 			p->arrived_len - sizeof(struct fi_ibv_rdm_header);
 		request->comp_flags =
-			(request->minfo.is_tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
+			(request->minfo.is_tagged ? FI_TAGGED :
+						    FI_MSG) | FI_RECV;
 		
 		assert(request->len <= p->ep->rndv_threshold);
 
 		if (request->len > 0) {
 			request->unexp_rbuf =
 				util_buf_alloc(fi_ibv_rdm_extra_buffers_pool);
-			memcpy(request->unexp_rbuf, &rbuf->payload, request->len);
+			memcpy(request->unexp_rbuf, &rbuf->payload,
+			       request->len);
 		} else {
 			request->unexp_rbuf = NULL;
 		}
@@ -769,7 +772,8 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 		request->rndv.rkey = h->mem_key;
 		request->len = h->total_len;
 		request->rest_len = h->total_len;
-		request->comp_flags = (h->is_tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
+		request->comp_flags = (h->is_tagged ? FI_TAGGED :
+						      FI_MSG) | FI_RECV;
 		request->imm = p->imm_data;
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4RECV;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
@@ -814,7 +818,8 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 		if (request->len >= data_len) {
 			request->minfo.conn = p->conn;
 			request->minfo.tag = rbuf->header.tag;
-			request->minfo.is_tagged = FI_IBV_RDM_EAGER_PKT ? 1 : 0;
+			request->minfo.is_tagged =
+				((p->pkt_type == FI_IBV_RDM_EAGER_PKT) ? 1 : 0);
 
 			request->len = data_len;
 			request->exp_rbuf = &rbuf->payload;
@@ -845,13 +850,14 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 			}
 		} else {
 			VERBS_INFO(FI_LOG_EP_DATA,
-				"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
-				"conn %p, tag 0x%llx, tagmask %llx\n",
-				__FUNCTION__, __LINE__, data_len,
-				request->len,
-				request->minfo.conn,
-				request->minfo.tag,
-				request->minfo.tagmask);
+				   "%s: %d RECV TRUNCATE, data_len=%d, "
+				   "posted_len=%d, conn %p, tag 0x%llx, "
+				   "tagmask %llx\n",
+				   __FUNCTION__, __LINE__, data_len,
+				   request->len,
+				   request->minfo.conn,
+				   request->minfo.tag,
+				   request->minfo.tagmask);
 
 			if (request->parent) {
 				fi_ibv_rdm_repost_multi_recv(request, data_len,
@@ -874,7 +880,8 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 	}
 	case FI_IBV_RDM_RNDV_RTS_PKT:
 	{
-		struct fi_ibv_rdm_rndv_header *rndv_header = (void *)&rbuf->header;
+		struct fi_ibv_rdm_rndv_header *rndv_header = 
+			(void *)&rbuf->header;
 
 		assert(p->arrived_len == sizeof(*rndv_header));
 
@@ -1627,9 +1634,6 @@ ssize_t fi_ibv_rdm_req_hndls_init(void)
 	fi_ibv_rdm_req_hndl_arr[FI_IBV_STATE_EAGER_READY_TO_FREE]
 		[FI_IBV_STATE_RNDV_RECV_END][FI_IBV_EVENT_POST_LC] =
 			fi_ibv_rdm_rndv_recv_ack_lc;
-	fi_ibv_rdm_req_hndl_arr[FI_IBV_STATE_EAGER_RECV_END]
-		[FI_IBV_STATE_RNDV_RECV_WAIT4LC][FI_IBV_EVENT_POST_LC] =
-			fi_ibv_rdm_rndv_recv_read_lc;
 
 	// RMA read/write stuff
 	fi_ibv_rdm_req_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
