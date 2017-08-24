@@ -146,7 +146,7 @@ static struct fi_ops_atomic usdf_rdm_atomic_ops = {
 /*******************************************************************************
  * Fill functions for attributes
  ******************************************************************************/
-int usdf_rdm_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+int usdf_rdm_fill_ep_attr(const struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap)
 {
 	struct fi_ep_attr defaults;
@@ -189,7 +189,7 @@ out:
 
 }
 
-int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
+int usdf_rdm_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 			   struct fi_info *fi, struct usd_device_attrs *dap)
 {
 	int ret;
@@ -270,7 +270,7 @@ catch:
 	return FI_SUCCESS;
 }
 
-int usdf_rdm_fill_tx_attr(uint32_t version, struct fi_info *hints,
+int usdf_rdm_fill_tx_attr(uint32_t version, const struct fi_info *hints,
 			  struct fi_info *fi)
 {
 	int ret;
@@ -322,7 +322,7 @@ catch:
 	return FI_SUCCESS;
 }
 
-int usdf_rdm_fill_rx_attr(uint32_t version, struct fi_info *hints,
+int usdf_rdm_fill_rx_attr(uint32_t version, const struct fi_info *hints,
 			  struct fi_info *fi)
 {
 	int ret;

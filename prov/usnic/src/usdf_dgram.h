@@ -57,13 +57,13 @@
 #define USDF_DGRAM_MR_CNT (USDF_MR_CNT)
 
 
-int usdf_dgram_fill_rx_attr(uint32_t version, struct fi_info *hints,
+int usdf_dgram_fill_rx_attr(uint32_t version, const struct fi_info *hints,
 		struct fi_info *fi, struct usd_device_attrs *dap);
-int usdf_dgram_fill_tx_attr(uint32_t version, struct fi_info *hints,
+int usdf_dgram_fill_tx_attr(uint32_t version, const struct fi_info *hints,
 		struct fi_info *fi, struct usd_device_attrs *dap);
-int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
+int usdf_dgram_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 			     struct fi_info *fi, struct usd_device_attrs *dap);
-int usdf_dgram_fill_ep_attr(uint32_t version, struct fi_info *hints,
+int usdf_dgram_fill_ep_attr(uint32_t version, const struct fi_info *hints,
 		struct fi_info *fi, struct usd_device_attrs *dap);
 
 /* fi_ops_msg for DGRAM */

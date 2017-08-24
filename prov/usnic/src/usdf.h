@@ -496,7 +496,7 @@ int usdf_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
 			char **name);
 bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
-			char *hint);
+			const char *hint);
 
 /* fi_ops_mr */
 int usdf_reg_mr(struct fid *fid, const void *buf, size_t len,
@@ -516,14 +516,14 @@ void usdf_setup_fake_ibv_provider(void);
 int usdf_pep_steal_socket(struct usdf_pep *pep, int *is_bound, int *sock_o);
 
 /* Utility functions */
-int usdf_catch_dom_attr(uint32_t version, struct fi_info *hints,
+int usdf_catch_dom_attr(uint32_t version, const struct fi_info *hints,
 			struct fi_domain_attr *dom_attr);
-int usdf_catch_tx_attr(uint32_t version, struct fi_tx_attr *tx_attr);
-int usdf_catch_rx_attr(uint32_t version, struct fi_rx_attr *rx_attr);
-int usdf_check_mr_mode(uint32_t version, struct fi_info *hints,
+int usdf_catch_tx_attr(uint32_t version, const struct fi_tx_attr *tx_attr);
+int usdf_catch_rx_attr(uint32_t version, const struct fi_rx_attr *rx_attr);
+int usdf_check_mr_mode(uint32_t version, const struct fi_info *hints,
 		       uint64_t prov_mode);
-struct sockaddr_in *usdf_format_to_sin(struct fi_info *info, const void *addr);
-void *usdf_sin_to_format(struct fi_info *info, void *addr, size_t *len);
-void usdf_free_sin_if_needed(struct fi_info *info, struct sockaddr_in *sin);
+struct sockaddr_in *usdf_format_to_sin(const struct fi_info *info, const void *addr);
+void *usdf_sin_to_format(const struct fi_info *info, void *addr, size_t *len);
+void usdf_free_sin_if_needed(const struct fi_info *info, struct sockaddr_in *sin);
 
 #endif /* _USDF_H_ */
