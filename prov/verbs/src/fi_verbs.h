@@ -361,8 +361,7 @@ int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
 			 const struct fi_info *hints, const struct fi_info *info);
 
 
-ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len,
-		    int count, void *context);
+ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context);
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			const void *buf, size_t len, void *desc, void *context);
 ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
