@@ -184,7 +184,8 @@ static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
-static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+static ssize_t
+fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		    uint64_t data, fi_addr_t dest_addr)
 {
 	struct fi_ibv_msg_ep *ep;

@@ -361,8 +361,7 @@ int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
 			 const struct fi_info *hints, const struct fi_info *info);
 
 
-ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len,
-		    int count, void *context);
+ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context);
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			const void *buf, size_t len, void *desc, void *context);
 ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
@@ -385,36 +384,34 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 	  .length = (uint32_t)len,					\
 	  .lkey = (uint32_t)(uintptr_t)desc }
 
-#define fi_ibv_set_sge_iov(sg_list, iov, count, desc, len)		\
-	do {								\
-		int i;							\
-		if (count) {						\
-			sg_list = alloca(sizeof(*sg_list) * count);	\
-			for (i = 0; i < count; i++) {			\
-				sg_list[i] = fi_ibv_init_sge(		\
-						iov[i].iov_base,	\
-						iov[i].iov_len,		\
-						desc[i]);		\
-				len += iov[i].iov_len;			\
-			}						\
-		}							\
-	} while (0)
-
 #define fi_ibv_init_sge_inline(buf, len) fi_ibv_init_sge(buf, len, NULL)
 
-#define fi_ibv_set_sge_iov_inline(sg_list, iov, count, len)		\
-	do {								\
-		int i;							\
-		if (count) {						\
-			sg_list = alloca(sizeof(*sg_list) * count);	\
-			for (i = 0; i < count; i++) {			\
-				sg_list[i] = fi_ibv_init_sge_inline(	\
-						iov[i].iov_base,	\
-						iov[i].iov_len);	\
-				len += iov[i].iov_len;			\
-			}						\
-		}							\
-	} while (0)
+static inline size_t
+fi_ibv_iov_to_sgl(const struct iovec *iov, struct ibv_sge *sgl, int count, void **desc)
+{
+	size_t len = 0;
+	for (int i = 0; i < count; ++i) {
+		sgl[i] = fi_ibv_init_sge(
+				iov[i].iov_base,
+				iov[i].iov_len,
+				desc[i]);
+		len += iov[i].iov_len;
+	}
+	return len;
+}
+
+static inline size_t
+fi_ibv_iov_to_sgl_inline(const struct iovec *iov, struct ibv_sge *sgl, int count)
+{
+	size_t len = 0;
+	for (int i = 0; i < count; ++i) {
+		sgl[i] = fi_ibv_init_sge_inline(
+				iov[i].iov_base,
+				iov[i].iov_len);
+		len += iov[i].iov_len;
+	}
+	return len;
+}
 
 #define fi_ibv_send_iov(ep, wr, iov, desc, count, context)		\
 	fi_ibv_send_iov_flags(ep, wr, iov, desc, count, context,	\
