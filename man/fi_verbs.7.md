@@ -149,6 +149,9 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_RX_IOV_LIMIT*
 : Default maximum rx iov_limit (default: 4)
 
+*FI_VERBS_INLINE_SIZE*
+:  Default maximum inline size. Actual inject size returned in fi_info may be greater (default: 64)
+
 ### Variables specific to RDM endpoints
 
 *FI_VERBS_IFACE*
