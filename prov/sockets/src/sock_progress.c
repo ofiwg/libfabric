@@ -2729,8 +2729,10 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, pe->signal_fds) < 0)
 			goto err4;
 
-		fd_set_nonblock(pe->signal_fds[SOCK_SIGNAL_RD_FD]);
-		fi_epoll_add(pe->epoll_set, pe->signal_fds[SOCK_SIGNAL_RD_FD], NULL);
+		if (fd_set_nonblock(pe->signal_fds[SOCK_SIGNAL_RD_FD]) ||
+		    fi_epoll_add(pe->epoll_set,
+				 pe->signal_fds[SOCK_SIGNAL_RD_FD], NULL))
+			goto err5;
 
 		pe->do_progress = 1;
 		if (pthread_create(&pe->progress_thread, NULL,
