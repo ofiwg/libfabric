@@ -264,6 +264,19 @@ sa_sin6:
 	case FI_ADDR_MLX:
 		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);
 		break;
+	case FI_ADDR_IB_UD:
+		memset(str, 0, sizeof(str));
+		if (!inet_ntop(AF_INET6, addr, str, INET6_ADDRSTRLEN))
+			return NULL;
+		size = snprintf(buf, *len, "fi_addr_ib_ud://"
+				"%s" /* GID */ ":%" PRIx32 /* QPN */
+				"/%" PRIx16 /* LID */ "/%" PRIx16 /* P_Key */
+				"/%" PRIx8 /* SL */,
+				str, *((uint32_t *)addr + 4),
+				*((uint16_t *)addr + 10),
+				*((uint16_t *)addr + 11),
+				*((uint8_t *)addr + 26));
+		break;
 	case FI_ADDR_STR:
 		size = snprintf(buf, *len, "%s", (const char *) addr);
 		break;
@@ -304,6 +317,8 @@ static uint32_t ofi_addr_format(const char *str)
 		return FI_ADDR_BGQ;
 	else if (!strcasecmp(fmt, "fi_addr_mlx"))
 		return FI_ADDR_MLX;
+	else if (!strcasecmp(fmt, "fi_addr_ib_ud"))
+		return FI_ADDR_IB_UD;
 
 	return FI_FORMAT_UNSPEC;
 }
@@ -336,6 +351,32 @@ static int ofi_str_to_psmx2(const char *str, void **addr, size_t *len)
 		     (uint64_t *) *addr, (uint64_t *) *addr + 1);
 	if (ret == 2)
 		return 0;
+
+	free(*addr);
+	return -FI_EINVAL;
+}
+
+static int ofi_str_to_ib_ud(const char *str, void **addr, size_t *len)
+{
+	int ret;
+	char gid[INET6_ADDRSTRLEN];
+
+	memset(gid, 0, sizeof(gid));
+
+	*len = 32;
+	if (!(*addr = calloc(1, *len)))
+		return -FI_ENOMEM;
+
+	ret = sscanf(str, "%*[^:]://"
+		     "%s" /* GID */ ":%" SCNx32 /* QPN */
+		     ":%" SCNx16 /* LID */ ":%" SCNx16 /* P_Key */
+		     ":%" SCNx8 /* SL */,
+		     gid, (uint32_t *)*addr + 4,
+		     (uint16_t *)*addr + 10,
+		     (uint16_t *)*addr + 11,
+		     (uint8_t *)*addr + 26);
+	if ((ret == 5) && (inet_pton(AF_INET6, gid, *addr) > 0))
+		return FI_SUCCESS;
 
 	free(*addr);
 	return -FI_EINVAL;
@@ -435,6 +476,8 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 		return ofi_str_to_psmx(str, addr, len);
 	case FI_ADDR_PSMX2:
 		return ofi_str_to_psmx2(str, addr, len);
+	case FI_ADDR_IB_UD:
+		return ofi_str_to_ib_ud(str, addr, len);
 	case FI_SOCKADDR_IB:
 	case FI_ADDR_GNI:
 	case FI_ADDR_BGQ:

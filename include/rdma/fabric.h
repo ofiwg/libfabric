@@ -178,6 +178,7 @@ enum {
 	FI_ADDR_MLX,
 	FI_ADDR_STR,		/* formatted char * */
 	FI_ADDR_PSMX2,		/* uint64_t[2] */
+	FI_ADDR_IB_UD,		/* uint64_t[4] */
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
