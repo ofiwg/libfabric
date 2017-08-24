@@ -55,6 +55,9 @@
 #define INVALID_SOCKET (-1)
 #endif
 
+#ifndef SOCKET_ERROR
+#define SOCKET_ERROR (-1)
+#endif
 
 #define FI_DESTRUCTOR(func) static __attribute__((destructor)) void func
 
