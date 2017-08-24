@@ -838,7 +838,7 @@ usdf_handle_node_and_service(const char *node, const char *service,
 
 static int
 usdf_getinfo(uint32_t version, const char *node, const char *service,
-	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
+	       uint64_t flags, const struct fi_info *hints, struct fi_info **info)
 {
 	struct usdf_usnic_info *dp;
 	struct usdf_dev_entry *dep;

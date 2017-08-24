@@ -666,7 +666,7 @@ static void sock_free_addr_list(struct slist *addr_list)
 }
 
 static int sock_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, struct fi_info *hints,
+			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
 	int ret = 0;

@@ -267,7 +267,7 @@ struct fi_bgq_global_data fi_bgq_global;
 
 static int fi_bgq_getinfo(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
-		struct fi_info *hints, struct fi_info **info)
+		const struct fi_info *hints, struct fi_info **info)
 {
 
 	if (!((FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_MANUAL) || (FI_BGQ_FABRIC_DIRECT_PROGRESS == FI_PROGRESS_AUTO))){

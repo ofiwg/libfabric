@@ -58,7 +58,8 @@ int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 }
 
 static int rxd_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, struct fi_info *hints, struct fi_info **info)
+			uint64_t flags, const struct fi_info *hints,
+			struct fi_info **info)
 {
 	return ofix_getinfo(version, node, service, flags, &rxd_util_prov,
 			    hints, rxd_info_to_core, rxd_info_to_rxd, info);
