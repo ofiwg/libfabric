@@ -70,7 +70,7 @@ extern struct util_prov tcpx_util_prov;
 extern struct fi_info tcpx_info;
 
 #define TCPX_IOV_LIMIT 4
-
+#define TCPX_MAX_SOCK_REQS 1<<10
 
 int tcpx_fabric(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric,
@@ -90,18 +90,36 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
 
+
+struct tcpx_conn_handle {
+	struct fid handle;
+	struct sockaddr_in *serv_addr;
+	int conn_fd;
+};
+struct tcpx_cm_entry {
+	int sock;
+	int do_listen;
+	int signal_fds[2];
+	pthread_t listener_thread;
+};
+
 struct tcpx_pep {
 	struct fid_pep pep;
+	struct sockaddr_in src_addr;
 	struct fi_info info;
 	struct util_fabric *fabric;
 	struct util_eq *eq;
+	struct tcpx_cm_entry cm;
 };
 
 struct tcpx_ep {
 	struct util_ep util_ep;
 	struct fi_info info;
 	struct util_fabric *fabric;
+	struct util_eq *eq;
 	ofi_atomic32_t ref;
+	struct tcpx_conn_handle *handle;
+	pthread_t cm_thread;
 	int sock;
 };
 
