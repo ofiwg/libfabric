@@ -189,7 +189,7 @@ int mlx_av_open(
 		default:
 			return -EINVAL;
 		}
-		if (attr->flags && FI_EVENT){
+		if (attr->flags & FI_EVENT){
 			is_async = 1;
 		}
 		count = attr->count;
