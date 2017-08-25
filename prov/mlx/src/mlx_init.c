@@ -32,7 +32,7 @@
 #include "mlx.h"
 
 
-int mlx_errcode_translation_table[(-UCS_ERR_LAST)+2];
+int mlx_errcode_translation_table[(-UCS_ERR_LAST)+2] = { -FI_EOTHER };
 
 struct mlx_global_descriptor mlx_descriptor = {
 	.config = NULL,
@@ -40,7 +40,6 @@ struct mlx_global_descriptor mlx_descriptor = {
 
 static int mlx_init_errcodes()
 {
-	memset(mlx_errcode_translation_table, -FI_EOTHER, (-UCS_ERR_LAST)+2);
 	MLX_TRANSLATE_ERRCODE (UCS_OK)                  = -FI_SUCCESS;
 	MLX_TRANSLATE_ERRCODE (UCS_INPROGRESS)          = -FI_EINPROGRESS;
 	MLX_TRANSLATE_ERRCODE (UCS_ERR_NO_MESSAGE)      = -FI_ENOMSG;
@@ -83,7 +82,7 @@ struct fi_domain_attr mlx_domain_attrs = {
 	.rx_ctx_cnt = 1,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1,
-	.mr_cnt = FI_MLX_DEF_MR_CNT;
+	.mr_cnt = FI_MLX_DEF_MR_CNT,
 };
 
 struct fi_rx_attr mlx_rx_attrs = {
@@ -119,7 +118,13 @@ struct fi_fabric_attr mlx_fabric_attrs = {
 struct fi_ep_attr mlx_ep_attrs = {
 	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_MLX,
-	.protocol_version = UCP_API_RELEASE,
+#if defined(UCP_API_RELEASE) && (UCP_API_RELEASE <= 2947)
+#warning "HPCX 1.9.7 have an issue with UCP_API_VERSION macro"
+	.protocol_version = (((UCP_API_MAJOR) << UCP_VERSION_MAJOR_SHIFT)|
+        ((UCP_API_MINOR) << UCP_VERSION_MINOR_SHIFT)),
+#else
+	.protocol_version = (UCP_API_VERSION),
+#endif
 	.max_msg_size = 0xFFFFFFFF,
 	.mem_tag_format = 0x0,
 	.tx_ctx_cnt = 1,
