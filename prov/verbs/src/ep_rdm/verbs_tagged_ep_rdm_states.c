@@ -778,10 +778,10 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4RECV;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
 		break;
-	case FI_IBV_RDM_RNDV_ACK_PKT:
-		FI_IBV_RDM_DBG_REQUEST("Unexpected RNDV ack!!!", request,
-					FI_LOG_INFO);
 	default:
+		if (p->pkt_type == FI_IBV_RDM_RNDV_ACK_PKT)
+			FI_IBV_RDM_DBG_REQUEST("Unexpected RNDV ack!!!",
+					       request, FI_LOG_INFO);
 		VERBS_INFO(FI_LOG_EP_DATA,
 			"Got unknown unexpected pkt: %" PRIu64 "\n",
 			p->pkt_type);
