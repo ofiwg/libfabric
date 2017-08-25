@@ -17,6 +17,7 @@ addons:
             - libnl-3-dev
             - libnl-route-3-200
             - libnl-route-3-dev
+            - libnuma-dev
     ssh_known_hosts:
         - www.openfabrics.org
         - git.kernel.org
@@ -41,7 +42,9 @@ install:
     # Build verbs only in linux as OS X doesn't have verbs support
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
         LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic
-        --enable-verbs";
+        --enable-verbs --enable-mlx=$HOME/mlx";
+        UCX_BRANCH=v1.2.x;
+        git clone --depth 1 -b $UCX_BRANCH https://github.com/openucx/ucx.git && cd ucx && ./autogen.sh && ./configure --prefix=$HOME/mlx CFLAGS="-w" && make -j2 install && cd -;
       fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" && "`basename $CC`" == "clang" ]]; then
         ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS
@@ -50,11 +53,11 @@ install:
     # Test fabric direct
     - ./configure --prefix=$PREFIX --enable-direct=sockets --enable-udp=no
       --enable-psm=no --enable-gni=no --enable-psm2=no --enable-verbs=no
-      --enable-usnic=no --enable-rxm=no --enable-rxd=no
+      --enable-usnic=no --enable-rxm=no --enable-rxd=no --enable-mlx=no
     - make -j2
     # Test loadable library option
     - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-rxd
-      --disable-verbs --disable-usnic --prefix=$PREFIX
+      --disable-verbs --disable-usnic --disable-mlx --prefix=$PREFIX
     - make -j2
     - make install
     - make test
