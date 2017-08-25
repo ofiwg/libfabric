@@ -742,14 +742,16 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 		request->len = 
 			p->arrived_len - sizeof(struct fi_ibv_rdm_header);
 		request->comp_flags =
-			(request->minfo.is_tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
+			(request->minfo.is_tagged ? FI_TAGGED :
+						    FI_MSG) | FI_RECV;
 		
 		assert(request->len <= p->ep->rndv_threshold);
 
 		if (request->len > 0) {
 			request->unexp_rbuf =
 				util_buf_alloc(fi_ibv_rdm_extra_buffers_pool);
-			memcpy(request->unexp_rbuf, &rbuf->payload, request->len);
+			memcpy(request->unexp_rbuf, &rbuf->payload,
+			       request->len);
 		} else {
 			request->unexp_rbuf = NULL;
 		}
@@ -769,15 +771,16 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 		request->rndv.rkey = h->mem_key;
 		request->len = h->total_len;
 		request->rest_len = h->total_len;
-		request->comp_flags = (h->is_tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
+		request->comp_flags = (h->is_tagged ? FI_TAGGED :
+						      FI_MSG) | FI_RECV;
 		request->imm = p->imm_data;
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_WAIT4RECV;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
 		break;
-	case FI_IBV_RDM_RNDV_ACK_PKT:
-		FI_IBV_RDM_DBG_REQUEST("Unexpected RNDV ack!!!", request,
-					FI_LOG_INFO);
 	default:
+		if (p->pkt_type == FI_IBV_RDM_RNDV_ACK_PKT)
+			FI_IBV_RDM_DBG_REQUEST("Unexpected RNDV ack!!!",
+					       request, FI_LOG_INFO);
 		VERBS_INFO(FI_LOG_EP_DATA,
 			"Got unknown unexpected pkt: %" PRIu64 "\n",
 			p->pkt_type);

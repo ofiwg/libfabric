@@ -789,19 +789,23 @@ fi_ibv_rdm_process_event(struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
 		ret = FI_SUCCESS;
 		break;
-	/* All cases below fall to default case to print error message*/
 	case RDMA_CM_EVENT_ADDR_ERROR:
 		ret = -FI_EADDRNOTAVAIL;
+		goto print_err;
 	case RDMA_CM_EVENT_ROUTE_ERROR:
-		ret = (ret == FI_SUCCESS) ? -FI_EHOSTUNREACH : ret;
+		ret = -FI_EHOSTUNREACH;
+		goto print_err;
 	case RDMA_CM_EVENT_CONNECT_ERROR:
-		ret = (ret == FI_SUCCESS) ? -FI_ECONNREFUSED : ret;
+		ret = -FI_ECONNREFUSED;
+		goto print_err;
 	case RDMA_CM_EVENT_UNREACHABLE:
-		ret = (ret == FI_SUCCESS) ? -FI_EADDRNOTAVAIL : ret;
+		ret = -FI_EADDRNOTAVAIL;
+		goto print_err;
 	default:
+print_err:
 		VERBS_INFO(FI_LOG_AV, "got unexpected rdmacm event, %s\n",
 			   rdma_event_str(event->event));
-		ret = (ret == FI_SUCCESS) ? -FI_ECONNABORTED : ret;
+		ret = -FI_ECONNABORTED;
 		break;
 	}
 

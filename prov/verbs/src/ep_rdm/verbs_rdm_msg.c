@@ -154,6 +154,8 @@ static ssize_t fi_ibv_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	{
 	case 1:
 		sdata.buf.src_addr = msg->msg_iov[0].iov_base;
+		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
+		break;
 	case 0:
 		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
 		break;
