@@ -17,7 +17,13 @@
 
 static inline int poll(struct pollfd *fds, int nfds, int timeout)
 {
-
-	return (!nfds ? 0 : WSAPoll(fds, nfds, timeout));
+	/* if none of fds is passed, returns 0 instead of error
+	 * to allign Windows and Linux poll system call */
+	if (!nfds) {
+		Sleep(timeout);
+		return 0;
+	} else {
+		return WSAPoll(fds, nfds, timeout);
+	}
 }
 

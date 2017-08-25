@@ -69,7 +69,7 @@ int fi_poll_fd(int fd, int timeout)
 	fds.fd = fd;
 	fds.events = POLLIN;
 	ret = poll(&fds, 1, timeout);
-	return ret == SOCKET_ERROR ? -errno : ret;
+	return ret == SOCKET_ERROR ? -ofi_sockerr() : ret;
 }
 
 uint64_t fi_tag_bits(uint64_t mem_tag_format)
@@ -588,7 +588,7 @@ int fi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
 
 	ret = poll(ep->fds, ep->nfds, timeout);
 	if (ret == SOCKET_ERROR)
-		return -errno;
+		return -ofi_sockerr();
 	else if (ret == 0)
 		return 0;
 
