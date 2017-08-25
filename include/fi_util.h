@@ -590,7 +590,12 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 #define OFI_CHECK_MR_SCALABLE(mode) (!(mode & OFI_MR_BASIC_MAP))
 
-#define OFI_CHECK_MR_LOCAL(mode) (mode & FI_MR_LOCAL)
+/* FI_LOCAL_MR is valid in pre-libfaric-1.5 and can be valid in
+ * post-libfabric-1.5 */
+#define OFI_CHECK_MR_LOCAL(info) \
+	((info->domain_attr->mr_mode & FI_MR_LOCAL) || \
+	 (!(info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE)) && \
+	  (info->mode & FI_LOCAL_MR)))
 
 struct ofi_mr_map {
 	const struct fi_provider *prov;

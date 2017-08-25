@@ -268,7 +268,7 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_FINISH);
 	tx_entry->state = RXM_LMT_FINISH;
 
-	if (!OFI_CHECK_MR_LOCAL(tx_entry->ep->rxm_info->domain_attr->mr_mode))
+	if (!OFI_CHECK_MR_LOCAL(tx_entry->ep->rxm_info))
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 
 	tx_entry->comp_flags |= FI_SEND;
@@ -337,7 +337,7 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 			return -FI_ETRUNC; // TODO copy data and write to CQ error
 		}
 
-		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info->domain_attr->mr_mode)) {
+		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info)) {
 			ret = rxm_match_iov(rx_buf->recv_entry->iov,
 					    rx_buf->recv_entry->desc,
 					    rx_buf->recv_entry->count, 0,
@@ -555,7 +555,7 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 
 		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
 		rx_buf->hdr.state = RXM_LMT_FINISH;
-		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info->domain_attr->mr_mode))
+		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info))
 			rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
 		return rxm_finish_recv(rx_buf);
 	default:
