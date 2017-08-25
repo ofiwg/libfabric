@@ -145,6 +145,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	struct fi_ibv_pep *pep;
 	fid_t fid;
 	size_t datalen;
+	int ret;
 
 	fid = cma_event->id->context;
 	pep = container_of(fid, struct fi_ibv_pep, pep_fid);
@@ -164,6 +165,12 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	case RDMA_CM_EVENT_ESTABLISHED:
 		*event = FI_CONNECTED;
 		entry->info = NULL;
+		if (cma_event->id->qp->context->device->transport_type !=
+		    IBV_TRANSPORT_IWARP) {
+			ret = fi_ibv_set_rnr_timer(cma_event->id->qp);
+			if (ret)
+				return ret;
+		}
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		*event = FI_SHUTDOWN;
