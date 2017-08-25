@@ -663,7 +663,8 @@ static int sock_ep_close(struct fid *fid)
 		ofi_atomic_dec32(&sock_ep->attr->ref);
 		return 0;
 	}
-	if (ofi_atomic_get32(&sock_ep->attr->ref) || ofi_atomic_get32(&sock_ep->attr->num_rx_ctx) ||
+	if (ofi_atomic_get32(&sock_ep->attr->ref) ||
+	    ofi_atomic_get32(&sock_ep->attr->num_rx_ctx) ||
 	    ofi_atomic_get32(&sock_ep->attr->num_tx_ctx))
 		return -FI_EBUSY;
 
@@ -673,8 +674,9 @@ static int sock_ep_close(struct fid *fid)
 			SOCK_LOG_DBG("Failed to signal\n");
 
 		if (sock_ep->attr->cm.listener_thread &&
-		    pthread_join(sock_ep->attr->cm.listener_thread, NULL)) {
-			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
+			pthread_join(sock_ep->attr->cm.listener_thread, NULL)) {
+			SOCK_LOG_ERROR("pthread join failed (%d)\n",
+				       ofi_syserr());
 		}
 		ofi_close_socket(sock_ep->attr->cm.signal_fds[0]);
 		ofi_close_socket(sock_ep->attr->cm.signal_fds[1]);
@@ -684,7 +686,8 @@ static int sock_ep_close(struct fid *fid)
 	}
 	if (sock_ep->attr->av) {
 		fastlock_acquire(&sock_ep->attr->av->list_lock);
-		fid_list_remove(&sock_ep->attr->av->ep_list, &sock_ep->attr->lock, &sock_ep->ep.fid);
+		fid_list_remove(&sock_ep->attr->av->ep_list,
+				&sock_ep->attr->lock, &sock_ep->ep.fid);
 		fastlock_release(&sock_ep->attr->av->list_lock);
 	}
 
@@ -708,8 +711,8 @@ static int sock_ep_close(struct fid *fid)
 			SOCK_LOG_DBG("Failed to signal\n");
 
 		if (sock_ep->attr->listener.listener_thread &&
-		     pthread_join(sock_ep->attr->listener.listener_thread, NULL)) {
-			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
+			pthread_join(sock_ep->attr->listener.listener_thread, NULL)) {
+			SOCK_LOG_ERROR("pthread join failed (%d)\n", ofi_syserr());
 		}
 
 		ofi_close_socket(sock_ep->attr->listener.signal_fds[0]);
@@ -1790,7 +1793,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	if (sock_conn_map_init(sock_ep, sock_cm_def_map_sz)) {
-		SOCK_LOG_ERROR("failed to init connection map: %s\n", strerror(errno));
+		SOCK_LOG_ERROR("failed to init connection map\n");
 		ret = -FI_EINVAL;
 		goto err2;
 	}
@@ -1842,8 +1845,10 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 		     fi_addr_t index, struct sock_conn **pconn)
 {
 	struct sock_conn *conn;
-	uint64_t av_index = (attr->ep_type == FI_EP_MSG) ? 0 : (index & attr->av->mask);
+	uint64_t av_index = (attr->ep_type == FI_EP_MSG) ?
+			    0 : (index & attr->av->mask);
 	struct sockaddr_in *addr;
+	int ret = FI_SUCCESS;
 
 	if (attr->ep_type == FI_EP_MSG)
 		addr = attr->dest_addr;
@@ -1860,16 +1865,16 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 	fastlock_release(&attr->cmap.lock);
 
 	if (conn == SOCK_CM_CONN_IN_PROGRESS)
-		conn = sock_ep_connect(attr, av_index);
+		ret = sock_ep_connect(attr, av_index, &conn);
 
 	if (!conn) {
-		SOCK_LOG_ERROR("Error in connecting: %s\n", strerror(errno));
-		if (errno == EINPROGRESS)
-			return -FI_EAGAIN;
-		else
-			return -errno;
+		SOCK_LOG_ERROR("Error in connecting: %s\n",
+			       ret ? strerror(ret) :
+				     "No conn entry");
+		return ret ? ret : -FI_ENOENT;
 	}
 
 	*pconn = conn;
-	return conn->address_published ? 0 : sock_conn_send_src_addr(attr, tx_ctx, conn);
+	return conn->address_published ?
+	       0 : sock_conn_send_src_addr(attr, tx_ctx, conn);
 }

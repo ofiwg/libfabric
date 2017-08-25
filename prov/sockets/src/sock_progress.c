@@ -2337,8 +2337,9 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 	pthread_mutex_unlock(&rx_ctx->domain->pe->list_lock);
 }
 
-static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep_attr *ep_attr,
-					struct sock_rx_ctx *rx_ctx)
+static int sock_pe_progress_rx_ep(struct sock_pe *pe,
+				  struct sock_ep_attr *ep_attr,
+				  struct sock_rx_ctx *rx_ctx)
 {
 	int ret = 0, i, num_fds;
 	struct sock_conn *conn;
@@ -2355,7 +2356,8 @@ epoll_wait_retry:
 			SOCK_EPOLL_WAIT_EVENTS, 0);
 	if (num_fds < 0 || num_fds == 0) {
 		if (num_fds < 0)
-			SOCK_LOG_ERROR("poll failed: %s\n", strerror(errno));
+			SOCK_LOG_ERROR("poll failed: %d\n",
+				       num_fds);
 		return num_fds;
 	}
 
@@ -2534,7 +2536,7 @@ static void sock_pe_wait(struct sock_pe *pe)
 
 	ret = fi_epoll_wait(pe->epoll_set, ep_contexts, 1, -1);
 	if (ret < 0)
-		SOCK_LOG_ERROR("poll failed : %s\n", strerror(errno));
+		SOCK_LOG_ERROR("poll failed : %s\n", strerror(ofi_sockerr()));
 
 	fastlock_acquire(&pe->signal_lock);
 	if (pe->rcnt != pe->wcnt) {

@@ -88,7 +88,7 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 	switch (type) {
 	case FI_WAIT_FD:
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->wobj.fd))
-			return -errno;
+			return -ofi_sockerr();
 
 		ret = fd_set_nonblock(wait->wobj.fd[WAIT_READ_FD]);
 		if (ret) {

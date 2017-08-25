@@ -51,14 +51,17 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 
 	ret = ofi_send_socket(conn->sock_fd, buf, len, MSG_NOSIGNAL);
 	if (ret < 0) {
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()))
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr())) {
 			ret = 0;
-		else if (errno == EPIPE) {
+		} else if (ofi_sockerr() == EPIPE) {
 			conn->connected = 0;
-			SOCK_LOG_DBG("Disconnected: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
-                               ntohs(conn->addr.sin_port));
-		} else
-			SOCK_LOG_DBG("write error: %s\n", strerror(errno));
+			SOCK_LOG_DBG("Disconnected: %s:%d\n",
+				     inet_ntoa(conn->addr.sin_addr),
+				     ntohs(conn->addr.sin_port));
+		} else {
+			SOCK_LOG_DBG("write error: %s\n",
+				     strerror(ofi_sockerr()));
+		}
 	}
 	if (ret > 0)
 		SOCK_LOG_DBG("wrote to network: %lu\n", ret);
@@ -133,13 +136,14 @@ static ssize_t sock_comm_recv_socket(struct sock_conn *conn,
 	ret = ofi_recv_socket(conn->sock_fd, buf, len, 0);
 	if (ret == 0) {
 		conn->connected = 0;
-		SOCK_LOG_DBG("Disconnected: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
-                               ntohs(conn->addr.sin_port));
+		SOCK_LOG_DBG("Disconnected: %s:%d\n",
+			     inet_ntoa(conn->addr.sin_addr),
+			     ntohs(conn->addr.sin_port));
 		return ret;
 	}
 
 	if (ret < 0) {
-		SOCK_LOG_DBG("read %s\n", strerror(errno));
+		SOCK_LOG_DBG("read %s\n", strerror(ofi_sockerr()));
 		ret = 0;
 	}
 
@@ -195,7 +199,7 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
 	}
 
 	if (ret < 0) {
-		SOCK_LOG_DBG("peek %s\n", strerror(errno));
+		SOCK_LOG_DBG("peek %s\n", strerror(ofi_sockerr()));
 		ret = 0;
 	}
 
