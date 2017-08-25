@@ -94,6 +94,7 @@ static int mlx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
+		cq = container_of(bfid, struct util_cq, cq_fid.fid);
 		status = ofi_ep_bind_cq(&ep->ep, cq, flags);
 		break;
 	case FI_CLASS_AV:
