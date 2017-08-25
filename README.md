@@ -329,13 +329,13 @@ See the `fi_netdir(7)` man page for more details.
 
 The MLX provider enables applications using OFI to be run over UCX
 communication library. It uses libucp for connections control and data transfer operations.
-Supported UCP API version: 1.0
+Supported UCP API version: 1.2
 
 See the `fi_mlx(7)` man page for more details.
 
 #### Dependencies
 
-- The MLX provider requires UCP API 1.0 capable libucp and libucs (tested with hpcx v1.8.0).
+- The MLX provider requires UCP API 1.2 capable libucp and libucs (tested with hpcx v1.8.0, v1.9.7).
   If you are compiling Libfabric from source and want to enable MLX
   support, you will also need the matching header files for UCX.
   If the libraries and header files are not in default paths, specify them using:
