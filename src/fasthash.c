@@ -43,6 +43,7 @@ uint64_t fasthash64(const void *buf, size_t len, uint64_t seed)
 	const unsigned char *pos2;
 	uint64_t h = seed ^ (len * m);
 	uint64_t v;
+	int i;
 
 	while (pos != end) {
 		v  = *pos++;
@@ -53,17 +54,10 @@ uint64_t fasthash64(const void *buf, size_t len, uint64_t seed)
 	pos2 = (const unsigned char*)pos;
 	v = 0;
 
-	switch (len & 7) {
-	case 7: v ^= (uint64_t)pos2[6] << 48;
-	case 6: v ^= (uint64_t)pos2[5] << 40;
-	case 5: v ^= (uint64_t)pos2[4] << 32;
-	case 4: v ^= (uint64_t)pos2[3] << 24;
-	case 3: v ^= (uint64_t)pos2[2] << 16;
-	case 2: v ^= (uint64_t)pos2[1] << 8;
-	case 1: v ^= (uint64_t)pos2[0];
-		h ^= mix(v);
-		h *= m;
-	}
+	for (i = (len & 7) - 1; i >= 0; i--)
+		v ^= (uint64_t)pos2[i] << 8 * i;
+	h ^= mix(v);
+	h *= m;
 
 	return mix(h);
 } 
