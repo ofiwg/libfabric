@@ -383,9 +383,9 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, &match_attr);
 	if (!entry) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "No matching recv found for "
-		       "incoming msg with fi_addr: %" PRIu64 " tag: %" PRIu64
-		       "\n", match_attr.addr, match_attr.tag);
+		RXM_DBG_ADDR_TAG(FI_LOG_CQ, "No matching recv found for "
+				 "incoming msg", match_attr.addr,
+				 match_attr.tag);
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Enqueueing msg to unexpected msg"
 		       "queue\n");
 		rx_buf->unexp_msg.addr = match_attr.addr;

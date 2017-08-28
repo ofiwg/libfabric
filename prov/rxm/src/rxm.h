@@ -81,6 +81,11 @@
 	RXM_LOG_STATE(subsystem, rx_buf->pkt, rx_buf->hdr.state,	\
 		      next_state)
 
+#define RXM_DBG_ADDR_TAG(subsystem, log_str, addr, tag) 	\
+	FI_DBG(&rxm_prov, subsystem, log_str 			\
+	       " (fi_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 ")\n",\
+	       addr, tag)
+
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
