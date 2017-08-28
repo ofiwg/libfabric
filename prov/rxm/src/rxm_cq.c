@@ -236,7 +236,6 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	if (!OFI_CHECK_MR_LOCAL(tx_entry->ep->rxm_info))
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 
-	tx_entry->comp_flags |= FI_SEND;
 	ret = rxm_finish_send(tx_entry);
 	if (ret)
 		return ret;
@@ -366,11 +365,9 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	case ofi_op_msg:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got MSG op\n");
 		recv_queue = &rx_buf->ep->recv_queue;
-		rx_buf->comp_flags = FI_MSG;
 		break;
 	case ofi_op_tagged:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
-		rx_buf->comp_flags = FI_TAGGED;
 		match_attr.tag = rx_buf->pkt.hdr.tag;
 		recv_queue = &rx_buf->ep->trecv_queue;
 		break;

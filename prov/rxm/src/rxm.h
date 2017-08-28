@@ -241,6 +241,7 @@ struct rxm_recv_entry {
 	uint64_t flags;
 	uint64_t tag;
 	uint64_t ignore;
+	uint64_t comp_flags;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 

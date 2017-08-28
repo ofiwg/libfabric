@@ -462,8 +462,13 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	recv_entry->context 	= context;
 	recv_entry->flags 	= flags;
 	recv_entry->ignore 	= ignore;
-	if (recv_queue->type == RXM_RECV_QUEUE_TAGGED)
-		recv_entry->tag = tag;
+	if (recv_queue->type == RXM_RECV_QUEUE_TAGGED) {
+		recv_entry->tag 	= tag;
+		recv_entry->comp_flags 	= FI_TAGGED;
+	} else {
+		recv_entry->comp_flags 	= FI_MSG;
+	}
+	recv_entry->comp_flags |= FI_RECV;
 
 	fastlock_acquire(&recv_queue->lock);
 	ret = rxm_check_unexp_msg_list(rxm_ep, recv_queue, recv_entry, &rx_buf);
