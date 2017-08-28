@@ -333,8 +333,6 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
 void rxm_cq_progress(struct rxm_ep *rxm_ep);
-int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
-		void *buf, uint64_t data, uint64_t tag);
 int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,

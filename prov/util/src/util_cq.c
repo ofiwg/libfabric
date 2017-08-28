@@ -59,6 +59,44 @@ int ofi_cq_write_error(struct util_cq *cq,
 	return 0;
 }
 
+int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context)
+{
+	struct fi_cq_err_entry err_entry = {0};
+
+	err_entry.op_context    = context;
+	err_entry.flags         = FI_TAGGED | FI_RECV;
+	err_entry.tag		= tag;
+	err_entry.err           = FI_ENOMSG;
+	err_entry.prov_errno    = -FI_ENOMSG;
+	return ofi_cq_write_error(cq, &err_entry);
+}
+
+int ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+		 void *buf, uint64_t data, uint64_t tag)
+{
+	struct fi_cq_tagged_entry *comp;
+	int ret = 0;
+
+	fastlock_acquire(&cq->cq_lock);
+	if (ofi_cirque_isfull(cq->cirq)) {
+		FI_DBG(cq->domain->prov, FI_LOG_CQ, "util_cq cirq is full!\n");
+		ret = -FI_EAGAIN;
+		goto out;
+	}
+
+	comp = ofi_cirque_tail(cq->cirq);
+	comp->op_context = context;
+	comp->flags = flags;
+	comp->len = len;
+	comp->buf = buf;
+	comp->data = data;
+	comp->tag = tag;
+	ofi_cirque_commit(cq->cirq);
+out:
+	fastlock_release(&cq->cq_lock);
+	return ret;
+}
+
 int ofi_check_cq_attr(const struct fi_provider *prov,
 		      const struct fi_cq_attr *attr)
 {

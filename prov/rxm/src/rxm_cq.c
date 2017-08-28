@@ -103,43 +103,17 @@ static void rxm_cq_log_comp(uint64_t flags)
 }
 #endif
 
-int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
-		void *buf, uint64_t data, uint64_t tag)
-{
-	struct fi_cq_tagged_entry *comp;
-	int ret = 0;
-
-	fastlock_acquire(&util_cq->cq_lock);
-	if (ofi_cirque_isfull(util_cq->cirq)) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "util_cq cirq is full!\n");
-		ret = -FI_EAGAIN;
-		goto out;
-	}
-
-	comp = ofi_cirque_tail(util_cq->cirq);
-	comp->op_context = context;
-	comp->flags = flags;
-	comp->len = len;
-	comp->buf = buf;
-	comp->data = data;
-	comp->tag = tag;
-	ofi_cirque_commit(util_cq->cirq);
-out:
-	fastlock_release(&util_cq->cq_lock);
-	return ret;
-}
-
 int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 {
 	int ret;
 
 	if (rx_buf->recv_entry->flags & FI_COMPLETION) {
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
-		ret = rxm_cq_comp(rx_buf->ep->util_ep.rx_cq,
-				  rx_buf->recv_entry->context,
-				  rx_buf->comp_flags | FI_RECV,
-				  rx_buf->pkt.hdr.size, NULL,
-				  rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+		ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
+				   rx_buf->recv_entry->context,
+				   rx_buf->recv_entry->comp_flags,
+				   rx_buf->pkt.hdr.size, NULL,
+				   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write recv completion\n");
@@ -156,8 +130,9 @@ static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 	int ret;
 
 	if (tx_entry->flags & FI_COMPLETION) {
-		ret = rxm_cq_comp(tx_entry->ep->util_ep.tx_cq, tx_entry->context,
-				tx_entry->comp_flags, 0, NULL, 0, 0);
+		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
+				   tx_entry->context, tx_entry->comp_flags, 0,
+				   NULL, 0, 0);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to report completion\n");
@@ -482,8 +457,8 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	int ret;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing remote write completion\n");
-	ret = rxm_cq_comp(rxm_ep->util_ep.rx_cq, NULL,
-			  comp->flags, 0, NULL, comp->data, 0);
+	ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, NULL, comp->flags, 0, NULL,
+			   comp->data, 0);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"Unable to write remote write completion\n");
