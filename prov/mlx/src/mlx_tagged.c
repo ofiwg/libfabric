@@ -39,7 +39,7 @@ static ssize_t mlx_tagged_recvmsg(
 				uint64_t flags)
 {
 	ucs_status_ptr_t status = NULL;
-	ucs_recv_callback_t cbf;
+	ucp_tag_recv_callback_t cbf;
 	struct mlx_ep* u_ep;
 	struct mlx_request *req;
 	struct util_cq* cq;
