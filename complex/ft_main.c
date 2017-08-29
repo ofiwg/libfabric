@@ -284,35 +284,110 @@ static int ft_fw_result_index(int fi_errno)
 	}
 }
 
-static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
+static int ft_recv_test_info(void)
 {
-	int ret, subindex, result = 0;
+	int ret;
+
+	ret = ft_sock_recv(sock, &test_info, sizeof test_info);
+	if (ret)
+		return ret;
+
+	test_info.node[sizeof(test_info.node) - 1] = '\0';
+	test_info.service[sizeof(test_info.service) - 1] = '\0';
+	test_info.prov_name[sizeof(test_info.prov_name) - 1] = '\0';
+	test_info.fabric_name[sizeof(test_info.fabric_name) - 1] = '\0';
+	return 0;
+}
+
+static int ft_skip_info(struct fi_info *hints, struct fi_info *info)
+{
 	size_t len;
+
+	//check needed to skip utility providers, unless requested
+	if (!ft_util_name(hints->fabric_attr->prov_name, &len) &&
+		strcmp(hints->fabric_attr->prov_name,
+		info->fabric_attr->prov_name))
+		return 1;
+
+	return 0;
+}
+
+static int ft_transfer_subindex(int subindex, int *remote_idx)
+{
+	int ret;
+
+	ret = ft_sock_send(sock, &subindex, sizeof subindex);
+	if (ret) {
+		FT_PRINTERR("ft_sock_send", ret);
+		return ret;
+	}
+
+	ret = ft_sock_recv(sock, remote_idx, sizeof *remote_idx);
+	if (ret) {
+		FT_PRINTERR("ft_sock_recv", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info)
+{
+	int ret, subindex, remote_idx = 0, result = 0, end_test = 0;
+
+	ret = ft_sock_send(sock, &test_info, sizeof test_info);
+	if (ret) {
+		FT_PRINTERR("ft_sock_send", ret);
+		return ret;
+	}
 
 	for (subindex = 1, fabric_info = info; fabric_info;
 	     fabric_info = fabric_info->next, subindex++) {
 
-		//check needed to skip utility providers, unless requested
-		if (!ft_util_name(hints->fabric_attr->prov_name, &len) &&
-		    strcmp(hints->fabric_attr->prov_name,
-		    fabric_info->fabric_attr->prov_name))
+		if (ft_skip_info(hints, fabric_info))
 			continue;
 
 		ret = ft_check_info(hints, fabric_info);
 		if (ret)
 			return ret;
 
-		ft_fw_update_info(&test_info, fabric_info, subindex);
-		printf("Starting test %d-%d: ", test_info.test_index,
-			subindex);
-		ft_show_test_info();
+		while (1) {
+			ret = ft_sock_recv(sock, &end_test, sizeof end_test);
+			if (ret) {
+				FT_PRINTERR("ft_sock_recv", ret);
+				return ret;
+			}
+			if (end_test)
+				break;
 
-		result = ft_run_test();
+			ret = ft_transfer_subindex(subindex, &remote_idx);
+			if (ret)
+				return ret;
 
-		ret = ft_sock_send(sock, &result, sizeof result);
-		if (result) {
-			FT_PRINTERR("ft_run_test", result);
-		} else if (ret) {
+			ft_fw_update_info(&test_info, fabric_info, subindex);
+
+			printf("Starting test %d-%d-%d: ", test_info.test_index,
+				subindex, remote_idx);
+			ft_show_test_info();
+
+			result = ft_init_test();
+			if (result)
+				continue;
+
+			result = ft_run_test();
+
+			ret = ft_sock_send(sock, &result, sizeof result);
+			if (result) {
+				FT_PRINTERR("ft_run_test", result);
+			} else if (ret) {
+				FT_PRINTERR("ft_sock_send", ret);
+				return ret;
+			}
+		}
+
+		end_test = (fabric_info->next == NULL);
+		ret = ft_sock_send(sock, &end_test, sizeof end_test);
+		if (ret) {
 			FT_PRINTERR("ft_sock_send", ret);
 			return ret;
 		}
@@ -323,6 +398,80 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 	if (ret) {
 		FT_PRINTERR("ft_sock_send", ret);
 		return ret;
+	}
+
+	if (subindex == 1)
+		return -FI_ENODATA;
+
+	return result;
+}
+
+static int ft_fw_process_list_client(struct fi_info *hints, struct fi_info *info)
+{
+	int ret, subindex, remote_idx = 0, result = 0, sresult, end_test = 0;
+
+	while (!end_test) {
+		for (subindex = 1, fabric_info = info; fabric_info;
+			 fabric_info = fabric_info->next, subindex++) {
+
+			end_test = 0;
+			ret = ft_sock_send(sock, &end_test, sizeof end_test);
+			if (ret) {
+				FT_PRINTERR("ft_sock_send", ret);
+				return ret;
+			}
+
+			ret = ft_transfer_subindex(subindex, &remote_idx);
+			if (ret)
+				return ret;
+
+			if (ft_skip_info(hints, fabric_info))
+				continue;
+
+			ret = ft_check_info(hints, fabric_info);
+			if (ret)
+				return ret;
+
+			ft_fw_update_info(&test_info, fabric_info, subindex);
+			printf("Starting test %d-%d-%d: ", test_info.test_index,
+				subindex, remote_idx);
+			ft_show_test_info();
+
+			result = ft_init_test();
+			if (result)
+				continue;
+
+			result = ft_run_test();
+
+			ret = ft_sock_recv(sock, &sresult, sizeof sresult);
+			if (result && result != -FI_EIO) {
+				FT_PRINTERR("ft_run_test", result);
+				fprintf(stderr, "Node: %s\nService: %s \n",
+					test_info.node, test_info.service);
+				fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
+				return -FI_EOTHER;
+			} else if (ret) {
+				FT_PRINTERR("ft_sock_recv", ret);
+				result = ret;
+				return -FI_EOTHER;
+			} else if (sresult) {
+				result = sresult;
+				if (sresult != -FI_EIO)
+					return -FI_EOTHER;
+			}
+		}
+		end_test = 1;
+		ret = ft_sock_send(sock, &end_test, sizeof end_test);
+		if (ret) {
+			FT_PRINTERR("ft_sock_send", ret);
+			return ret;
+		}
+
+		ret = ft_sock_recv(sock, &end_test, sizeof end_test);
+		if (ret) {
+			FT_PRINTERR("ft_sock_recv", ret);
+			return ret;
+		}
 	}
 
 	if (subindex == 1)
@@ -349,7 +498,7 @@ static int ft_server_child()
 	if (ret && ret != -FI_ENODATA) {
 		FT_PRINTERR("fi_getinfo", ret);
 	} else {
-		ret = ft_fw_process_list(hints, info);
+		ret = ft_fw_process_list_server(hints, info);
 		if (ret != -FI_ENODATA)
 			fi_freeinfo(info);
 
@@ -366,21 +515,6 @@ static int ft_server_child()
 		fi_strerror(-ret));
 
 	return ret;
-}
-
-static int ft_recv_test_info(void)
-{
-	int ret;
-
-	ret = ft_sock_recv(sock, &test_info, sizeof test_info);
-	if (ret)
-		return ret;
-
-	test_info.node[sizeof(test_info.node) - 1] = '\0';
-	test_info.service[sizeof(test_info.service) - 1] = '\0';
-	test_info.prov_name[sizeof(test_info.prov_name) - 1] = '\0';
-	test_info.fabric_name[sizeof(test_info.fabric_name) - 1] = '\0';
-	return 0;
 }
 
 static int ft_fw_server(void)
@@ -415,7 +549,7 @@ static int ft_fw_server(void)
 static int ft_client_child(void)
 {
 	struct fi_info *hints, *info;
-	int ret, result, sresult;
+	int ret, result;
 
 	result = -FI_ENODATA;
 	hints = fi_allocinfo();
@@ -439,30 +573,13 @@ static int ft_client_child(void)
 				 ft_strptr(test_info.service), 0, hints, &info);
 		if (result) {
 			FT_PRINTERR("fi_getinfo", result);
-		} else if (info->next) {
-			printf("WARNING: fi_getinfo returned multiple matches!\n");
-		} else {
-			fabric_info = info;
-			result = ft_run_test();
-			fi_freeinfo(info);
 		}
 
-		ret = ft_sock_recv(sock, &sresult, sizeof sresult);
-		if (result && result != -FI_EIO) {
-			FT_PRINTERR("ft_run_test", result);
-			fprintf(stderr, "Node: %s\nService: %s \n",
-				test_info.node, test_info.service);
-			fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
+		ret = ft_fw_process_list_client(hints, info);
+		if (ret != -FI_ENODATA)
+			fi_freeinfo(info);
+		else
 			goto out;
-		} else if (ret) {
-			FT_PRINTERR("ft_sock_send", ret);
-			result = ret;
-			goto out;
-		} else if (sresult) {
-			result = sresult;
-			if (sresult != -FI_EIO)
-				goto out;
-		}
 
 		ret = ft_recv_test_info();
 		if (ret) {

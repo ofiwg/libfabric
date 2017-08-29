@@ -906,7 +906,7 @@ static void ft_cleanup(void)
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
 
-int ft_run_test()
+int ft_init_test()
 {
 	int ret;
 
@@ -936,14 +936,6 @@ int ft_run_test()
 		}
 	}
 
-	if (!opts.dst_addr) {
-		ret = ft_sock_send(sock, &test_info, sizeof test_info);
-		if (ret) {
-			FT_PRINTERR("ft_sock_send", ret);
-			return ret;
-		}
-	}
-
 	ft_sock_sync(0);
 
 	ret = ft_enable_comm();
@@ -951,6 +943,15 @@ int ft_run_test()
 		FT_PRINTERR("ft_enable_comm", ret);
 		goto cleanup;
 	}
+	return 0;
+cleanup:
+	ft_cleanup();
+	return ret;
+}
+
+int ft_run_test()
+{
+	int ret;
 
 	switch (test_info.test_type) {
 	case FT_TEST_UNIT:
@@ -974,7 +975,6 @@ int ft_run_test()
 	}
 
 	ft_sync_test(0);
-cleanup:
 	ft_cleanup();
 
 	return ret ? ret : -ft_ctrl.error;
