@@ -802,10 +802,10 @@ fi_ibv_rdm_process_event(struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
 		ret = -FI_EADDRNOTAVAIL;
 		goto print_err;
 	default:
+		ret = -FI_ECONNABORTED;
 print_err:
 		VERBS_INFO(FI_LOG_AV, "got unexpected rdmacm event, %s\n",
 			   rdma_event_str(event->event));
-		ret = -FI_ECONNABORTED;
 		break;
 	}
 
