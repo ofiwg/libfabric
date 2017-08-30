@@ -360,7 +360,7 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
 
 	if (flags & FI_FENCE)
-		wr->send_flags = IBV_SEND_FENCE;
+		wr->send_flags |= IBV_SEND_FENCE;
 
 	return fi_ibv_send(ep, wr, len, count, context);
 }
