@@ -235,9 +235,10 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 	if (found) {
 		assert(container_of(found, struct fi_ibv_rdm_request,
 				    queue_entry) == request);
+		request->context->internal[0] = NULL;
 		fi_ibv_rdm_remove_from_posted_queue(request, ep_rdm);
 		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %d\n",
-			ep_rdm->posted_recvs);
+ 			  ep_rdm->posted_recvs);
 		err = 0;
 	} else {
 		request = fi_ibv_rdm_take_first_match_from_postponed_queue

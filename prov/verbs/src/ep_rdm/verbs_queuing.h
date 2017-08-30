@@ -141,7 +141,7 @@ fi_ibv_rdm_take_first_from_unexp_queue()
 
 static inline void
 fi_ibv_rdm_move_to_posted_queue(struct fi_ibv_rdm_request *request,
-					struct fi_ibv_rdm_ep *ep)
+				struct fi_ibv_rdm_ep *ep)
 {
 	FI_IBV_RDM_DBG_REQUEST("move_to_posted_queue: ", request, FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry, &fi_ibv_rdm_posted_queue);
@@ -269,7 +269,6 @@ fi_ibv_rdm_take_first_match_from_postponed_queue(dlist_func_t *match, const void
 			struct fi_ibv_rdm_request *request =
 				container_of(j, struct fi_ibv_rdm_request,
 					     queue_entry);
-		
 			fi_ibv_rdm_remove_from_postponed_queue(request);
 			return request;
 		}
@@ -278,6 +277,6 @@ fi_ibv_rdm_take_first_match_from_postponed_queue(dlist_func_t *match, const void
 	return NULL;
 }
 
-void fi_ibv_rdm_clean_queues();
+void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep);
 
 #endif   // _VERBS_QUEING_H
