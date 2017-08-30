@@ -194,6 +194,10 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
+ 		/* Check `request->context->internal[0] == NULL` in fi_cancel
+		 * will handle the case that request was already canceled
+		 * internally by provider */
+		request->context->internal[0] = NULL;
 		if (request->iov_count > 0) {
 			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
 					request->unexp_rbuf);

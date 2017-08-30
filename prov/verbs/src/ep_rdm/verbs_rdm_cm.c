@@ -685,7 +685,6 @@ fi_ibv_rdm_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 				      struct rdma_cm_event *event)
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
-	struct fi_ibv_rdm_request *request = NULL;
 	int ret = 0;
 
 	ep->num_active_conns--;
@@ -695,13 +694,6 @@ fi_ibv_rdm_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 		   "Disconnected from conn %p, addr %s:%u\n",
 		   conn, inet_ntoa(conn->addr.sin_addr),
 		   ntohs(conn->addr.sin_port));
-
-	/* Cleanup posted queue */
-	while (NULL !=
-		(request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
-		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
-	}
 
 	/* Retrieve CQ entries from send Completion Queue if any  */
 	do {
@@ -762,6 +754,27 @@ fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 	}
 	return ret;
 }
+	       
+static inline void
+fi_ibv_rdm_process_timewait_exit_event(struct rdma_cm_event *event,
+				       struct fi_ibv_rdm_ep *ep)
+{
+	struct fi_ibv_rdm_conn *conn = event->id->context;
+	struct fi_ibv_rdm_request *request = NULL;
+
+	VERBS_INFO(FI_LOG_AV, "Handle TIMEWAIT Exit event "
+		   "from conn %p, addr %s:%u\n",
+		   conn, inet_ntoa(conn->addr.sin_addr),
+		   ntohs(conn->addr.sin_port));
+
+	/* Cleanup posted queue */
+	while (NULL !=
+		(request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
+		request->context->internal[0] = NULL;
+		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
+		util_buf_release(fi_ibv_rdm_request_pool, request);
+	}
+}
 
 static ssize_t
 fi_ibv_rdm_process_event(struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
@@ -787,6 +800,7 @@ fi_ibv_rdm_process_event(struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
 		ret = fi_ibv_rdm_process_event_rejected(ep, event);
 		break;
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
+		fi_ibv_rdm_process_timewait_exit_event(event, ep);
 		ret = FI_SUCCESS;
 		break;
 	case RDMA_CM_EVENT_ADDR_ERROR:
