@@ -335,6 +335,9 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	int err = FI_SUCCESS;
 	struct fi_ibv_rdm_ep *ep =
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
+	struct fi_ibv_rdm_av_entry *av_entry = NULL, *tmp = NULL;
+	struct slist_entry *item, *prev_item;
+	struct fi_ibv_rdm_conn *conn = NULL;
 
 	if (ep->fi_scq)
 		ep->fi_scq->ep = NULL;
@@ -370,11 +373,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	slist_remove_first_match(&ep->domain->ep_list,
 				 fi_ibv_rdm_ep_match, ep);
 
-	struct fi_ibv_rdm_av_entry *av_entry = NULL, *tmp = NULL;
-
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		struct fi_ibv_rdm_conn *conn = NULL;
-
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
@@ -404,8 +403,6 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
         /* ok, all connections are initiated to disconnect. now wait
 	 * till all connections are switch to state 'closed' */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		struct fi_ibv_rdm_conn *conn = NULL;
-
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
@@ -421,16 +418,32 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		}
 	}
 
-        /* now destroy all connections */
+        /* now destroy all connections that wasn't removed from HASH */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		struct fi_ibv_rdm_conn *conn = NULL;
-
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
 			HASH_DEL(av_entry->conn_hash, conn);
 			fi_ibv_rdm_conn_cleanup(conn);
 		}
+	}
+
+	/* now destroy all connection that was removed from HASH */
+	slist_foreach(&ep->domain->rdm_cm->av_removed_entry_head,
+		      item, prev_item) {
+		(void) prev_item; /* Compiler complains about unused variable */
+		av_entry = container_of(item,
+					struct fi_ibv_rdm_av_entry,
+					removed_next);
+		HASH_FIND(hh, av_entry->conn_hash, &ep,
+			  sizeof(struct fi_ibv_rdm_ep *), conn);
+		if (conn) {
+			HASH_DEL(av_entry->conn_hash, conn);
+			fi_ibv_rdm_conn_cleanup(conn);
+		}
+		/* do NOT free av_entry and do NOT remove from
+		 * the List of removed AV entries, becasue we need to
+		 * remove remaining connections during domain closure */
 	}
 
 	/* TODO: MUST be removed in DOMAIN_CLOSE */

@@ -96,7 +96,11 @@ fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
 				   "(%d) for %p\n", ret, conn);
 			err = ret;
 		}
-		HASH_DEL(av_entry->conn_hash, conn);
+		/*
+		 * do NOT remove entry of connection from HASH.
+		 * We will refer to the connection during
+		 * cleanup of the connections.
+		 */
 	}
 
 	return err;
