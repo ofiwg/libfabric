@@ -336,7 +336,7 @@ struct fi_ibv_connreq {
 int fi_ibv_sockaddr_len(struct sockaddr *addr);
 
 
-int fi_ibv_init_info();
+int fi_ibv_init_info(struct fi_info **all_infos);
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
 struct fi_info *fi_ibv_get_verbs_info(struct fi_info *ilist,

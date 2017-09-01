@@ -539,7 +539,7 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 static inline int 
 fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 {
-	struct fi_ibv_rdm_conn *conn = (void *) wc->wr_id;
+	struct fi_ibv_rdm_conn *conn = (void *)wc->wr_id;
 
 	struct fi_ibv_rdm_buf *rbuf = 
 		fi_ibv_rdm_get_rbuf(conn, ep, conn->recv_processed);
@@ -549,9 +549,8 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 	FI_IBV_DBG_OPCODE(wc->opcode, "RECV");
 
 	if (!FI_IBV_RDM_CHECK_RECV_WC(wc)) {
-
-		VERBS_INFO(FI_LOG_EP_DATA, "conn %p state %d, wc status %d\n",
-			conn, conn->state, wc->status);
+		VERBS_DBG(FI_LOG_EP_DATA, "conn %p state %d, wc status %d\n",
+			  conn, conn->state, wc->status);
 		/* on QP error initiate disconnection procedure:
 		 * flush as many as possible preposted (and failed)
 		 * entries and after this set connection to 'closed' state */
@@ -564,8 +563,7 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 
 		conn->recv_preposted--;
 		if (wc->status == IBV_WC_WR_FLUSH_ERR &&
-		    conn->state == FI_VERBS_CONN_ESTABLISHED)
-		{
+		    conn->state == FI_VERBS_CONN_ESTABLISHED) {
 			/*
 			 * It means that remote side initiated disconnection
 			 * and QP is flushed earlier then disconnect event was
@@ -666,11 +664,9 @@ int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 		if (wc[i].status != IBV_WC_SUCCESS) {
 			struct fi_ibv_rdm_conn *conn = (void *)wc[i].wr_id;
 
-			if (wc[i].status == IBV_WC_WR_FLUSH_ERR && conn &&
-				conn->state != FI_VERBS_CONN_ESTABLISHED)
-			{
+			if ((wc[i].status == IBV_WC_WR_FLUSH_ERR) && conn &&
+			    (conn->state != FI_VERBS_CONN_ESTABLISHED))
 				return FI_SUCCESS;
-			}
 
 			VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc[%d].status = %d:%s\n",
 				i, wc[i].status, ibv_wc_status_str(wc[i].status));
