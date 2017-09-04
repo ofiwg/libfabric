@@ -84,31 +84,6 @@ void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
-void rxd_cntr_report_rx_comp(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry)
-{
-	struct util_cntr *cntr;
-
-	switch (rx_entry->op_hdr.op) {
-	case ofi_op_msg:
-	case ofi_op_tagged:
-		cntr = ep->util_ep.rx_cntr;
-		break;
-	case ofi_op_atomic:
-	case ofi_op_write:
-		cntr = ep->util_ep.rem_wr_cntr;
-		break;
-	case ofi_op_read_rsp:
-		return;
-	default:
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid op type: %d\n",
-			rx_entry->op_hdr.op);
-		return;
-	}
-
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
-}
-
 void rxd_cntr_report_error(struct rxd_ep *ep, struct fi_cq_err_entry *err)
 {
         struct util_cntr *cntr;
