@@ -285,14 +285,14 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_RX;
 	rx_buf->ep = rxm_ep;
 
-	ret = fi_recv(rx_buf->ep->srx_ctx, &rx_buf->pkt, RXM_BUF_SIZE,
+	ret = fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt, RXM_BUF_SIZE,
 		      rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
 	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
 	return ret;
 }
 
-int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
+int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 {
 	struct rxm_rx_buf *rx_buf;
 	int ret;
@@ -300,8 +300,8 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep)
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
 		rx_buf = (struct rxm_rx_buf *)rxm_buf_get(&rxm_ep->rx_pool);
-		rx_buf->hdr.state = RXM_RX,
-		rx_buf->hdr.msg_ep = rxm_ep->srx_ctx;
+		rx_buf->hdr.state = RXM_RX;
+		rx_buf->hdr.msg_ep = msg_ep;
 		rx_buf->ep = rxm_ep;
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
@@ -1031,10 +1031,13 @@ static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
 		retv = ret;
 	}
 
-	ret = fi_close(&rxm_ep->srx_ctx->fid);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg shared ctx\n");
-		retv = ret;
+	if (rxm_ep->srx_ctx) {
+		ret = fi_close(&rxm_ep->srx_ctx->fid);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, \
+				"Unable to close msg shared ctx\n");
+			retv = ret;
+		}
 	}
 
 	fi_freeinfo(rxm_ep->msg_info);
@@ -1199,11 +1202,13 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 			return ret;
 		}
 
-		ret = rxm_ep_prepost_buf(rxm_ep);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+		if (rxm_ep->srx_ctx) {
+			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx);
+			if (ret) {
+				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Unable to prepost recv bufs\n");
-			return ret;
+				return ret;
+			}
 		}
 		break;
 	default:
@@ -1257,6 +1262,35 @@ err:
 	return ret;
 }
 
+static int rxm_info_to_core_srx_ctx(uint32_t version, struct fi_info *rxm_hints,
+				struct fi_info *core_hints)
+{
+	int ret;
+
+	ret = rxm_info_to_core(version, rxm_hints, core_hints);
+	if (ret)
+		return ret;
+	core_hints->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+	return 0;
+}
+
+static int rxm_ep_get_core_info(uint32_t version, struct fi_info *hints,
+				struct fi_info **info)
+{
+	int ret;
+
+	ret = ofi_get_core_info(version, NULL, NULL, 0, &rxm_util_prov, hints,
+				rxm_info_to_core_srx_ctx, info);
+	if (!ret)
+		return 0;
+
+	FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Shared receive context not "
+		"supported by MSG provider.\n");
+
+	return ofi_get_core_info(version, NULL, NULL, 0, &rxm_util_prov, hints,
+				 rxm_info_to_core, info);
+}
+
 static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 		struct util_domain *util_domain, struct rxm_ep *rxm_ep)
 {
@@ -1264,9 +1298,8 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 	struct fi_cq_attr cq_attr;
 	int ret;
 
-	ret = ofi_get_core_info(util_domain->fabric->fabric_fid.api_version,
-				NULL, NULL, 0, &rxm_util_prov, rxm_fi_info,
-				rxm_info_to_core, &rxm_ep->msg_info);
+	ret = rxm_ep_get_core_info(util_domain->fabric->fabric_fid.api_version,
+				   rxm_fi_info, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
 
@@ -1292,12 +1325,14 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 		goto err2;
 	}
 
-	ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,
-			     &rxm_ep->srx_ctx, NULL);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to open shared receive context\n");
-		goto err2;
+	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
+		ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,
+				     &rxm_ep->srx_ctx, NULL);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to open shared receive context\n");
+			goto err2;
+		}
 	}
 
 	ret = rxm_listener_open(rxm_ep);

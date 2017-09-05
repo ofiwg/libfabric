@@ -356,6 +356,8 @@ int rxm_conn_signal(struct util_ep *util_ep, void *context,
 		    enum ofi_cmap_signal signal);
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
+int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
+
 int ofi_match_addr(fi_addr_t addr, fi_addr_t match_addr);
 int ofi_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag);
 void rxm_pkt_init(struct rxm_pkt *pkt);

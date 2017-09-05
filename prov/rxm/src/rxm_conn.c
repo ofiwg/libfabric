@@ -58,10 +58,13 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err;
 	}
 
-	ret = fi_ep_bind(msg_ep, &rxm_ep->srx_ctx->fid, 0);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to bind msg EP to shared RX ctx\n");
-		goto err;
+	if (rxm_ep->srx_ctx) {
+		ret = fi_ep_bind(msg_ep, &rxm_ep->srx_ctx->fid, 0);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+				"Unable to bind msg EP to shared RX ctx\n");
+			goto err;
+		}
 	}
 
 	// TODO add other completion flags
@@ -77,6 +80,13 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to enable msg_ep\n");
 		goto err;
 	}
+
+	if (!rxm_ep->srx_ctx) {
+		ret = rxm_ep_prepost_buf(rxm_ep, msg_ep);
+		if (ret)
+			goto err;
+	}
+
 	rxm_conn->msg_ep = msg_ep;
 	return 0;
 err:
