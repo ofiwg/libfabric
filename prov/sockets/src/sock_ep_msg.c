@@ -397,7 +397,7 @@ static int sock_cm_send(int fd, const void *buf, int len)
 	while (done != len) {
 		ret = ofi_send_socket(fd, (const char*) buf + done, len - done, MSG_NOSIGNAL);
 		if (ret < 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()))
 				continue;
 			SOCK_LOG_ERROR("failed to write to fd: %s\n", strerror(errno));
 			return -FI_EIO;
@@ -411,7 +411,7 @@ static int sock_cm_recv(int fd, void *buf, int len)
 {
 	int ret, done = 0;
 	while (done != len) {
-		ret = recv(fd, (char*) buf + done, len - done, 0);
+		ret = ofi_recv_socket(fd, (char*) buf + done, len - done, 0);
 		if (ret <= 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				continue;

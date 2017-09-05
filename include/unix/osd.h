@@ -67,8 +67,12 @@
 #define OFI_UNUSED UNREFERENCED_PARAMETER
 #endif
 
-#define OFI_SOCK_TRY_RCV_AGAIN(err)			\
-	((err) == EAGAIN || (err) == EWOULDBLOCK)
+#define OFI_SOCK_TRY_SND_RCV_AGAIN(err)		\
+	(((err) == EAGAIN)	||		\
+	 ((err) == EWOULDBLOCK))
+
+#define OFI_SOCK_TRY_CONN_AGAIN(err)	\
+	((err) == EINPROGRESS)
 
 struct util_shm
 {
@@ -109,6 +113,12 @@ static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)
 static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
 {
 	return write(fd, buf, count);
+}
+
+static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
+				      int flags)
+{
+	return recv(fd, buf, count, flags);
 }
 
 static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,

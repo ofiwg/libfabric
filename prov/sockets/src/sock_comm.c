@@ -51,7 +51,7 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 
 	ret = ofi_send_socket(conn->sock_fd, buf, len, MSG_NOSIGNAL);
 	if (ret < 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()))
 			ret = 0;
 		else if (errno == EPIPE) {
 			conn->connected = 0;
@@ -130,7 +130,7 @@ static ssize_t sock_comm_recv_socket(struct sock_conn *conn,
 			      void *buf, size_t len)
 {
 	ssize_t ret;
-	ret = recv(conn->sock_fd, buf, len, 0);
+	ret = ofi_recv_socket(conn->sock_fd, buf, len, 0);
 	if (ret == 0) {
 		conn->connected = 0;
 		SOCK_LOG_DBG("Disconnected: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
@@ -187,7 +187,7 @@ ssize_t sock_comm_recv(struct sock_pe_entry *pe_entry, void *buf, size_t len)
 ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
 {
 	ssize_t ret;
-	ret = recv(conn->sock_fd, buf, len, MSG_PEEK);
+	ret = ofi_recv_socket(conn->sock_fd, buf, len, MSG_PEEK);
 	if (ret == 0) {
 		conn->connected = 0;
 		SOCK_LOG_DBG("Disconnected\n");

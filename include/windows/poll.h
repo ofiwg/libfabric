@@ -17,6 +17,7 @@
 
 static inline int poll(struct pollfd *fds, int nfds, int timeout)
 {
-	return WSAPoll(fds, nfds, timeout);
+
+	return (!nfds ? 0 : WSAPoll(fds, nfds, timeout));
 }
 

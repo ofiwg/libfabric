@@ -214,8 +214,14 @@ extern "C" {
 #define BIG_ENDIAN 8765
 #define BYTE_ORDER LITTLE_ENDIAN
 
-#define OFI_SOCK_TRY_RCV_AGAIN(err)				\
-	((err) == WSAETIMEDOUT || (err) == WSAEWOULDBLOCK)
+#define OFI_SOCK_TRY_SND_RCV_AGAIN(err)		\
+	(((err) == ETIMEDOUT)		||	\
+	 ((err) == EWOULDBLOCK)		||	\
+	 ((err) == EAGAIN))
+
+#define OFI_SOCK_TRY_CONN_AGAIN(err)		\
+	(((err) == EWOULDBLOCK)		||	\
+	 ((err) == EINPROGRESS))
 
 struct util_shm
 { /* this is dummy structure to provide compilation on Windows platform. */
@@ -693,7 +699,7 @@ static inline SOCKET ofi_socket(int domain, int type, int protocol)
 
 static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)
 {
-	return recv(fd, (char*)buf, (int)count, 0);
+	return recv(fd, (char *)buf, (int)count, 0);
 }
 
 static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
@@ -701,8 +707,14 @@ static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
 	return send(fd, (const char*)buf, (int)count, 0);
 }
 
+static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
+				      int flags)
+{
+	return recv(fd, (char *)buf, (int)count, flags);
+}
+
 static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
-        int flags)
+				      int flags)
 {
 	return send(fd, (const char*)buf, (int)count, flags);
 }

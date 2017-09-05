@@ -447,7 +447,7 @@ do_connect:
 
 	ret = connect(conn_fd, (struct sockaddr *) &addr, sizeof addr);
 	if (ret < 0) {
-		if (ofi_sockerr() == EINPROGRESS) {
+		if (OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
 			poll_fd.fd = conn_fd;
 			poll_fd.events = POLLOUT;
 
