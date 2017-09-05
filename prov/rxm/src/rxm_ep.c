@@ -148,14 +148,16 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 	util_buf_pool_destroy(pool->pool);
 }
 
-static int rxm_buf_pool_create(int local_mr, size_t count, size_t size,
+static int rxm_buf_pool_create(int local_mr, size_t chunk_count, size_t size,
 		struct rxm_buf_pool *pool, void *pool_ctx)
 {
-	pool->pool = local_mr ? util_buf_pool_create_ex(RXM_BUF_SIZE + size, 16, 0, count,
-				rxm_mr_buf_reg, rxm_mr_buf_close, pool_ctx) :
-		util_buf_pool_create(RXM_BUF_SIZE, 16, 0, count);
+	pool->pool = local_mr ?
+		util_buf_pool_create_ex(RXM_BUF_SIZE + size, 16, 0, chunk_count,
+					rxm_mr_buf_reg, rxm_mr_buf_close,
+					pool_ctx) :
+		util_buf_pool_create(RXM_BUF_SIZE, 16, 0, chunk_count);
 	if (!pool->pool) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "Unable to create buf pool\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
 		return -FI_ENOMEM;
 	}
 	dlist_init(&pool->buf_list);
@@ -705,7 +707,7 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->tx_pool);
 	if (!tx_buf) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX queue full!\n");
 		return -FI_EAGAIN;
 	}
 
@@ -765,7 +767,7 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		}
 
 		pkt_size = sizeof(*pkt) + size;
-		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_TX);
+		RXM_LOG_STATE_TX(FI_LOG_EP_DATA, tx_entry, RXM_LMT_TX);
 		tx_entry->state = RXM_LMT_TX;
 	} else {
 		pkt->ctrl_hdr.type = ofi_ctrl_data;
@@ -777,7 +779,7 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	if ((flags & FI_INJECT) && !(flags & FI_COMPLETION)) {
 		if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 			if (tx_entry->state == RXM_LMT_TX) {
-				RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry,
+				RXM_LOG_STATE_TX(FI_LOG_EP_DATA, tx_entry,
 						 RXM_LMT_TX);
 				tx_entry->state = RXM_LMT_ACK_WAIT;
 			}
@@ -1046,14 +1048,16 @@ static int rxm_listener_close(struct rxm_ep *rxm_ep)
 	if (rxm_ep->msg_pep) {
 		ret = fi_close(&rxm_ep->msg_pep->fid);
 		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to close msg pep\n");
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close msg pep\n");
 			retv = ret;
 		}
 	}
 	if (rxm_ep->msg_eq) {
 		ret = fi_close(&rxm_ep->msg_eq->fid);
 		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to close msg EQ\n");
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close msg EQ\n");
 			retv = ret;
 		}
 	}
@@ -1167,8 +1171,7 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_EQ:
 		break;
 	default:
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"invalid fid class\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "invalid fid class\n");
 		ret = -FI_EINVAL;
 		break;
 	}
@@ -1230,14 +1233,14 @@ static int rxm_listener_open(struct rxm_ep *rxm_ep)
 
 	ret = fi_eq_open(rxm_fabric->msg_fabric, &eq_attr, &rxm_ep->msg_eq, NULL);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open msg EQ\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open msg EQ\n");
 		return ret;
 	}
 
 	ret = fi_passive_ep(rxm_fabric->msg_fabric, rxm_ep->msg_info,
 			    &rxm_ep->msg_pep, rxm_ep);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open msg PEP\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open msg PEP\n");
 		goto err;
 	}
 
@@ -1279,20 +1282,21 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 
 	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to open MSG CQ\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open MSG CQ\n");
 		goto err1;
 	}
 
 	ret = fi_control(&rxm_ep->msg_cq->fid, FI_GETWAIT, &rxm_ep->msg_cq_fd);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to get MSG CQ fd\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get MSG CQ fd\n");
 		goto err2;
 	}
 
 	ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,
-			&rxm_ep->srx_ctx, NULL);
+			     &rxm_ep->srx_ctx, NULL);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to open shared receive context\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to open shared receive context\n");
 		goto err2;
 	}
 
