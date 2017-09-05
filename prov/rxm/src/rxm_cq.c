@@ -103,43 +103,17 @@ static void rxm_cq_log_comp(uint64_t flags)
 }
 #endif
 
-int rxm_cq_comp(struct util_cq *util_cq, void *context, uint64_t flags, size_t len,
-		void *buf, uint64_t data, uint64_t tag)
-{
-	struct fi_cq_tagged_entry *comp;
-	int ret = 0;
-
-	fastlock_acquire(&util_cq->cq_lock);
-	if (ofi_cirque_isfull(util_cq->cirq)) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "util_cq cirq is full!\n");
-		ret = -FI_EAGAIN;
-		goto out;
-	}
-
-	comp = ofi_cirque_tail(util_cq->cirq);
-	comp->op_context = context;
-	comp->flags = flags;
-	comp->len = len;
-	comp->buf = buf;
-	comp->data = data;
-	comp->tag = tag;
-	ofi_cirque_commit(util_cq->cirq);
-out:
-	fastlock_release(&util_cq->cq_lock);
-	return ret;
-}
-
 int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 {
 	int ret;
 
 	if (rx_buf->recv_entry->flags & FI_COMPLETION) {
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
-		ret = rxm_cq_comp(rx_buf->ep->util_ep.rx_cq,
-				  rx_buf->recv_entry->context,
-				  rx_buf->comp_flags | FI_RECV,
-				  rx_buf->pkt.hdr.size, NULL,
-				  rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+		ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
+				   rx_buf->recv_entry->context,
+				   rx_buf->recv_entry->comp_flags,
+				   rx_buf->pkt.hdr.size, NULL,
+				   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write recv completion\n");
@@ -156,8 +130,9 @@ static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 	int ret;
 
 	if (tx_entry->flags & FI_COMPLETION) {
-		ret = rxm_cq_comp(tx_entry->ep->util_ep.tx_cq, tx_entry->context,
-				tx_entry->comp_flags, 0, NULL, 0, 0);
+		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
+				   tx_entry->context, tx_entry->comp_flags, 0,
+				   NULL, 0, 0);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to report completion\n");
@@ -261,7 +236,6 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	if (!OFI_CHECK_MR_LOCAL(tx_entry->ep->rxm_info))
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 
-	tx_entry->comp_flags |= FI_SEND;
 	ret = rxm_finish_send(tx_entry);
 	if (ret)
 		return ret;
@@ -391,11 +365,9 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	case ofi_op_msg:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got MSG op\n");
 		recv_queue = &rx_buf->ep->recv_queue;
-		rx_buf->comp_flags = FI_MSG;
 		break;
 	case ofi_op_tagged:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
-		rx_buf->comp_flags = FI_TAGGED;
 		match_attr.tag = rx_buf->pkt.hdr.tag;
 		recv_queue = &rx_buf->ep->trecv_queue;
 		break;
@@ -411,9 +383,9 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, &match_attr);
 	if (!entry) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "No matching recv found for "
-		       "incoming msg with fi_addr: %" PRIu64 " tag: %" PRIu64
-		       "\n", match_attr.addr, match_attr.tag);
+		RXM_DBG_ADDR_TAG(FI_LOG_CQ, "No matching recv found for "
+				 "incoming msg", match_attr.addr,
+				 match_attr.tag);
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Enqueueing msg to unexpected msg"
 		       "queue\n");
 		rx_buf->unexp_msg.addr = match_attr.addr;
@@ -482,8 +454,8 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	int ret;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing remote write completion\n");
-	ret = rxm_cq_comp(rxm_ep->util_ep.rx_cq, NULL,
-			  comp->flags, 0, NULL, comp->data, 0);
+	ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, NULL, comp->flags, 0, NULL,
+			   comp->data, 0);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"Unable to write remote write completion\n");

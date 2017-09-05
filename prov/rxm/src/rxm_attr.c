@@ -36,16 +36,23 @@
 		     FI_READ | FI_WRITE | FI_RECV | FI_SEND |		\
 		     FI_REMOTE_READ | FI_REMOTE_WRITE | FI_SOURCE)
 
+/* Since we are a layering provider, the attributes for which we rely on the
+ * core provider are set to full capability. This ensures that ofix_getinfo
+ * check hints succeeds and the core provider can accept / reject any capability
+ * requested by the app. */
+
 struct fi_tx_attr rxm_tx_attr = {
 	.caps = RXM_EP_CAPS,
-	.comp_order = FI_ORDER_STRICT,
+	.msg_order = ~0x0,
+	.comp_order = ~0x0,
 	.size = SIZE_MAX,
 	.iov_limit = RXM_IOV_LIMIT,
 };
 
 struct fi_rx_attr rxm_rx_attr = {
 	.caps = RXM_EP_CAPS,
-	.comp_order = FI_ORDER_STRICT,
+	.msg_order = ~0x0,
+	.comp_order = FI_ORDER_STRICT | FI_ORDER_DATA,
 	.size = 1024,
 	.iov_limit= RXM_IOV_LIMIT,
 };
