@@ -250,6 +250,8 @@ static inline int __gnix_auth_key_enable_vmdh(struct gnix_auth_key *info)
 int _gnix_auth_key_enable(struct gnix_auth_key *info)
 {
 	int ret = -FI_EBUSY;
+	uint32_t pes_on_node;
+	int logical_rank;
 
 	if (!info) {
 		GNIX_WARN(FI_LOG_MR, "bad authorization key, key=%p\n",
@@ -324,9 +326,23 @@ int _gnix_auth_key_enable(struct gnix_auth_key *info)
 				fastlock_release(&info->lock);
 				return ret;
 			}
+
+			ret = _gnix_pes_on_node(&pes_on_node);
+			if (ret)
+				GNIX_FATAL(FI_LOG_DOMAIN,
+					"failed to get count of pes on node, rc=%d\n", ret);
+
+			ret = _gnix_pe_node_rank(&logical_rank);
+			if (ret)
+				GNIX_FATAL(FI_LOG_DOMAIN,
+					"failed to get logical node rank, rc=%d\n", ret);
+
+			info->key_partition_size = info->attr.user_key_limit / pes_on_node;
+			info->key_offset = logical_rank * info->key_partition_size;
 		}
-		GNIX_INFO(FI_LOG_DOMAIN, "pkey=%08x ptag=%d enabled\n",
-			info->cookie, info->ptag);
+		GNIX_INFO(FI_LOG_DOMAIN,
+			"pkey=%08x ptag=%d key_partition_size=%d key_offset=%d enabled\n",
+			info->cookie, info->ptag, info->key_partition_size, info->key_offset);
 		ret = FI_SUCCESS;
 	}
 	fastlock_release(&info->lock);

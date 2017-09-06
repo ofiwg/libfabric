@@ -999,6 +999,11 @@ static int __gnix_auth_key_set_val(
 		GNIX_WARN(FI_LOG_FABRIC,
 			"GNIX_TOTAL_KEYS_NEEDED is not a definable value.\n");
 		return -FI_EOPNOTSUPP;
+	case GNIX_USER_KEY_MAX_PER_RANK:
+		GNIX_WARN(FI_LOG_FABRIC,
+			"GNIX_USER_KEY_MAX_PER_RANK is not a definable "
+			"value.\n");
+		return -FI_EOPNOTSUPP;
 	default:
 		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
 		return -FI_EINVAL;
@@ -1014,6 +1019,8 @@ static int __gnix_auth_key_get_val(
 	void *val)
 {
 	struct gnix_auth_key *info;
+	uint32_t pes_on_node;
+	int ret;
 
 	if (!val)
 		return -FI_EINVAL;
@@ -1037,7 +1044,20 @@ static int __gnix_auth_key_get_val(
 			info->attr.prov_key_limit) :
 			(gnix_default_user_registration_limit +
 			 gnix_default_prov_registration_limit));
-	break;
+		break;
+	case GNIX_USER_KEY_MAX_PER_RANK:
+		ret = _gnix_pes_on_node(&pes_on_node);
+		if (ret) {
+			GNIX_WARN(FI_LOG_FABRIC,
+				"failed to get pes on node count\n");
+			return -FI_EINVAL;
+		}
+
+		*(int *)val = ((info) ?
+			info->attr.user_key_limit :
+			gnix_default_user_registration_limit) /
+			pes_on_node;
+		break;
 	default:
 		GNIX_WARN(FI_LOG_FABRIC, ("Invalid fab_ops_val\n"));
 		return -FI_EINVAL;

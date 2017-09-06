@@ -69,6 +69,8 @@ struct gnix_auth_key {
 	uint8_t ptag;
 	uint32_t cookie;
 	int using_vmdh;
+	uint32_t key_partition_size;
+	uint32_t key_offset;
 	gnix_bitmap_t *prov;
 	gnix_bitmap_t *user;
 };

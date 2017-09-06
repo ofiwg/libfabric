@@ -319,7 +319,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 				    uint64_t caps,
 				    xpmem_segid_t my_segid,
 				    uint8_t name_type,
-				    uint8_t rx_ctx_cnt)
+				    uint8_t rx_ctx_cnt,
+					uint32_t key_offset)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = sbuf;
@@ -339,7 +340,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	      sizeof(gni_mem_handle_t) +
 	      sizeof(xpmem_segid_t) +
 	      sizeof(name_type) +
-	      sizeof(rx_ctx_cnt);
+	      sizeof(rx_ctx_cnt) +
+		  sizeof(key_offset);
 
 	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
@@ -364,6 +366,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	memcpy(cptr, &name_type, sizeof(name_type));
 	cptr += sizeof(rx_ctx_cnt);
 	memcpy(cptr, &rx_ctx_cnt, sizeof(rx_ctx_cnt));
+	cptr += sizeof(key_offset);
+	memcpy(cptr, &key_offset, sizeof(key_offset));
 }
 
 /*
@@ -379,7 +383,8 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 				      uint64_t *caps,
 				      xpmem_segid_t *peer_segid,
 				      uint8_t *name_type,
-				      uint8_t *rx_ctx_cnt)
+				      uint8_t *rx_ctx_cnt,
+					  uint32_t *key_offset)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = rbuf;
@@ -410,7 +415,8 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 	memcpy(name_type, cptr, sizeof(*name_type));
 	cptr += sizeof(uint8_t);
 	memcpy(rx_ctx_cnt, cptr, sizeof(*rx_ctx_cnt));
-
+	cptr += sizeof(uint32_t);
+	memcpy(key_offset, cptr, sizeof(*key_offset));
 }
 
 /*
@@ -431,7 +437,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 				     gni_smsg_attr_t *resp_smsg_attr,
 				     gni_mem_handle_t *resp_irq_cq_mhndl,
 				     uint64_t caps,
-				     xpmem_segid_t my_segid)
+				     xpmem_segid_t my_segid,
+					 uint32_t key_offset)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = sbuf;
@@ -448,7 +455,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 	      sizeof(int) +
 	      sizeof(gni_smsg_attr_t) +
 	      sizeof(gni_mem_handle_t) +
-	      sizeof(xpmem_segid_t);
+	      sizeof(xpmem_segid_t) +
+		  sizeof(uint32_t);
 	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	memcpy(cptr, &rtype, sizeof(rtype));
@@ -466,6 +474,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 	memcpy(cptr, &caps, sizeof(uint64_t));
 	cptr += sizeof(uint64_t);
 	memcpy(cptr, &my_segid, sizeof(xpmem_segid_t));
+	cptr += sizeof(xpmem_segid_t);
+	memcpy(cptr, &key_offset, sizeof(uint32_t));
 }
 
 /*
@@ -478,7 +488,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 				  gni_smsg_attr_t *resp_smsg_attr,
 				  gni_mem_handle_t *resp_irq_cq_mhndl,
 				  uint64_t *caps,
-				  xpmem_segid_t *peer_segid)
+				  xpmem_segid_t *peer_segid,
+				  uint32_t *key_offset)
 {
 	char *cptr = rbuf;
 
@@ -497,6 +508,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 	memcpy(caps, cptr, sizeof(uint64_t));
 	cptr += sizeof(uint64_t);
 	memcpy(peer_segid, cptr, sizeof(xpmem_segid_t));
+	cptr += sizeof(xpmem_segid_t);
+	memcpy(key_offset, cptr, sizeof(uint32_t));
 }
 
 static void __gnix_vc_get_msg_type(char *rbuf,
@@ -680,6 +693,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 	vc->peer_id = vc->vc_id;
 	vc->peer_irq_mem_hndl = ep->nic->irq_mem_hndl;
 	vc->peer_caps = ep->caps;
+	vc->peer_key_offset = ep->auth_key->key_offset;
 	vc->conn_state = GNIX_VC_CONNECTED;
 
 	ret = _gnix_vc_sched_new_conn(vc);
@@ -716,6 +730,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	uint64_t peer_caps;
 	xpmem_segid_t peer_segid;
 	xpmem_apid_t peer_apid;
+	uint32_t peer_key_offset;
 	bool accessible;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -731,7 +746,8 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 			      &peer_smsg_attr,
 			      &tmp_mem_hndl,
 			      &peer_caps,
-			      &peer_segid);
+			      &peer_segid,
+				  &peer_key_offset);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		"resp rx: (From Aries 0x%x Id %d src vc %p peer vc addr 0x%lx)\n",
@@ -791,6 +807,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	 */
 
 	vc->peer_caps = peer_caps;
+	vc->peer_key_offset = peer_key_offset;
 	vc->peer_id = peer_id;
 	vc->conn_state = GNIX_VC_CONNECTED;
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
@@ -838,6 +855,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	bool accessible;
 	ssize_t __attribute__((unused)) len;
 	struct gnix_ep_name *error_data;
+	uint32_t key_offset;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -855,7 +873,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				  &peer_caps,
 				  &peer_segid,
 				  &name_type,
-				  &rx_ctx_cnt);
+				  &rx_ctx_cnt,
+				  &key_offset);
 
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
@@ -919,6 +938,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 			}
 
 			vc->conn_state = GNIX_VC_CONNECTING;
+			vc->peer_key_offset = key_offset;
 
 			if (src_mapped) {
 				/* We have an AV which maps the incoming
@@ -967,6 +987,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		}
 
 		vc->peer_caps = peer_caps;
+		vc->peer_key_offset = key_offset;
 		/*
 		 * prepare a work request to
 		 * initiate an request response
@@ -1043,6 +1064,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		}
 
 		vc->peer_caps = peer_caps;
+		vc->peer_key_offset = key_offset;
 		vc->peer_id = src_vc_id;
 		vc->conn_state = GNIX_VC_CONNECTED;
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
@@ -1198,7 +1220,8 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 				 &smsg_mbox_attr,
 				 &ep->nic->irq_mem_hndl,
 				 ep->caps,
-				 my_segid);
+				 my_segid,
+				 ep->auth_key->key_offset);
 
 	/*
 	 * try to send the message, if it succeeds,
@@ -1276,6 +1299,7 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 	struct gnix_cm_nic *cm_nic = NULL;
 	xpmem_segid_t my_segid;
 	char sbuf[GNIX_CM_NIC_MAX_MSG_SIZE] = {0};
+	struct gnix_auth_key *auth_key;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1290,6 +1314,12 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 	cm_nic = ep->cm_nic;
 	if (cm_nic == NULL)
 		return -FI_EINVAL;
+
+	auth_key = ep->auth_key;
+	if (auth_key == NULL)
+		return -FI_EINVAL;
+
+	assert(auth_key->enabled);
 
 	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
 
@@ -1357,7 +1387,8 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 				ep->caps,
 				my_segid,
 				ep->src_addr.name_type,
-				ep->src_addr.rx_ctx_cnt);
+				ep->src_addr.rx_ctx_cnt,
+				auth_key->key_offset);
 
 	/*
 	 * try to send the message, if -FI_EAGAIN is returned, okay,

@@ -761,9 +761,10 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 		return -FI_ENOSPC;
 	}
 
-	_gnix_convert_key_to_mhdl(
-			(gnix_mr_key_t *)&req->rma.rem_mr_key,
-			&mdh);
+	_GNIX_CONVERT_MR_KEY(ep->auth_key->using_vmdh,
+		req->vc->peer_key_offset,
+		_gnix_convert_key_to_mhdl,
+		&req->rma.rem_mr_key, &mdh);
 
 	/* BTE TXD */
 	bte_txd->completer_fn = __gnix_rma_txd_complete;
@@ -1068,9 +1069,10 @@ static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 			more_put[idx].local_addr = (uint64_t)more_req->
 								rma.loc_addr;
 
-			_gnix_convert_key_to_mhdl_no_crc(
-				(gnix_mr_key_t *)&more_req->rma.rem_mr_key,
-				&mdh);
+			_GNIX_CONVERT_MR_KEY(more_req->vc->ep->auth_key->using_vmdh,
+				more_req->vc->peer_key_offset,
+				_gnix_convert_key_to_mhdl_no_crc,
+				&more_req->rma.rem_mr_key, &mdh);
 			more_put[idx].remote_mem_hndl = mdh;
 
 			if (idx < entries - 1)
@@ -1080,9 +1082,10 @@ static void __gnix_rma_more_fill_pd(struct gnix_fab_req *req,
 			idx++;
 		} else {
 			assert(more_get);
-			_gnix_convert_key_to_mhdl_no_crc(
-				(gnix_mr_key_t *)&more_req->rma.rem_mr_key,
-				&mdh);
+			_GNIX_CONVERT_MR_KEY(more_req->vc->ep->auth_key->using_vmdh,
+				more_req->vc->peer_key_offset,
+				_gnix_convert_key_to_mhdl_no_crc,
+				&more_req->rma.rem_mr_key, &mdh);
 			more_get[idx].remote_mem_hndl = mdh;
 			more_get[idx].ep_hndl = more_req->vc->gni_ep;
 
@@ -1158,9 +1161,10 @@ int _gnix_rma_more_post_req(void *data)
 	txd->completer_fn = __gnix_rma_more_txd_complete;
 	txd->req = fab_req;
 
-	_gnix_convert_key_to_mhdl_no_crc(
-			(gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
-			&mdh);
+	_GNIX_CONVERT_MR_KEY(ep->auth_key->using_vmdh,
+		fab_req->vc->peer_key_offset,
+		_gnix_convert_key_to_mhdl_no_crc,
+		&fab_req->rma.rem_mr_key, &mdh);
 
 	txd->gni_desc.type = __gnix_fr_post_type(fab_req->type, 0);
 	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT; /* check flags */
@@ -1236,15 +1240,17 @@ int _gnix_rma_post_req(void *data)
 	txd->req = fab_req;
 
 	if (rdma) {
-		_gnix_convert_key_to_mhdl(
-				(gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
-				&mdh);
+		_GNIX_CONVERT_MR_KEY(ep->auth_key,
+			fab_req->vc->peer_key_offset,
+			_gnix_convert_key_to_mhdl,
+			&fab_req->rma.rem_mr_key, &mdh);
 	} else {
 		/* Mem handle CRC is not validated during FMA operations.  Skip
 		 * this costly calculation. */
-		_gnix_convert_key_to_mhdl_no_crc(
-				(gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
-				&mdh);
+		_GNIX_CONVERT_MR_KEY(ep->auth_key,
+			fab_req->vc->peer_key_offset,
+			_gnix_convert_key_to_mhdl_no_crc,
+			&fab_req->rma.rem_mr_key, &mdh);
 	}
 
 	txd->gni_desc.type = __gnix_fr_post_type(fab_req->type, rdma);

@@ -66,7 +66,8 @@ struct gnix_av_addr_entry {
 	};
 	struct {
 		uint32_t rx_ctx_cnt : 8;
-		uint32_t unused1 : 24;
+		uint32_t key_offset: 12;
+		uint32_t unused1 : 12;
 	};
 };
 

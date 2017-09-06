@@ -311,7 +311,8 @@ struct gnix_ep_name {
 	};
 	struct {
 		uint32_t rx_ctx_cnt : 8;
-		uint32_t unused1 : 24;
+		uint32_t key_offset : 12;
+		uint32_t unused1 : 12;
 		uint32_t unused2;
 	};
 	uint64_t reserved[3];

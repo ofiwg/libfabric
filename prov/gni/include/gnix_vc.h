@@ -140,6 +140,7 @@ struct gnix_vc {
 	gni_mem_handle_t peer_irq_mem_hndl;
 	xpmem_apid_t peer_apid;
 	uint64_t peer_caps;
+	uint32_t peer_key_offset;
 };
 
 /*
