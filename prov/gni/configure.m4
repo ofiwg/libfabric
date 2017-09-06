@@ -204,7 +204,8 @@ dnl Note kdreg only supplies an include file, no library
 
         AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
         AS_IF([test "x$have_criterion" = "xtrue"],
-              [AC_DEFINE_UNQUOTED([HAVE_CRITERION], [1], [Define to 1 if criterion requested and available])])
+              [AC_DEFINE_UNQUOTED([HAVE_CRITERION], [1], [Define to 1 if criterion requested and available])],
+              [AC_DEFINE_UNQUOTED([HAVE_CRITERION], [0], [Define to 1 if criterion requested and available])])
 
         AC_SUBST(gni_CPPFLAGS)
         AC_SUBST(gni_LDFLAGS)
