@@ -332,18 +332,24 @@ static inline fi_addr_t
 fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 {
 	/*
-	 * The 'rx_lsb' field in the uid, located in the upper 4 bytes of the
-	 * fi_addr_t, is 5 bits wide and, for scalable endpoints, represents
-	 * the 'base mu reception fifo id'. To specialize the rx field the
-	 * 'rx index' must be added to the 'rx base'.
+	 * The rx information for bgq is the rec fifo id, this is stored
+	 * across the bits in the 'rx_lsb' and 'rx_msb'
+	 * fields in the uid, these fields should be concatenated to determine
+	 * the rx base fifo id, then the rx_index should be added to this to identify
+	 * the correct rec fifo id for this rx and then restored in the 'rx_lsb'
+	 * and 'rx_msb' bits to support scalable endpoints.
 	 *
-	 * This can be done by shifting the 'rx index' 33 bits and adding it
-	 * to the fi_addr_t (which is typedef'd to uint64_t).
 	 */
 
-	assert(rx_ctx_bits <= 4);
+	union fi_bgq_addr bgq_addr = {.fi=fi_addr};
 
-	return fi_addr + ((uint64_t)rx_index << 33);
+	uint32_t rec_fifo_id = 0;
+	rec_fifo_id = (rec_fifo_id | (((bgq_addr.uid.fi & 0xF0000000u) >> 23) | ((bgq_addr.uid.fi & 0x0000003Eu) >> 1))) + rx_index;
+	bgq_addr.uid.fi = (bgq_addr.uid.fi & 0x0FFFFFC1u) |            /* clear rx_msb and rx_lsb */
+                ((rec_fifo_id << 23) & 0xF0000000u) |    /* set rx_msb */
+                ((rec_fifo_id << 1) & 0x0000003Eu);	/* set rx_lsb */
+
+	return bgq_addr.fi;
 }
 
 static inline int fi_wait_open(struct fid_fabric *fabric,

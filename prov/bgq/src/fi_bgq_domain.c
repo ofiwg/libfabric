@@ -145,7 +145,7 @@ static int fi_bgq_mu_init(struct fi_bgq_domain *bgq_domain,
 		bgq_domain->rx.rfifo[n] = NULL;
 	}
 
-	const uint32_t subgroups_to_allocate_per_process = ppn == 64 ? 1 : ppn == 32 ? 2 : 4;
+	const uint32_t subgroups_to_allocate_per_process = ppn == 64 ? 1 : ppn == 32 ? 2 : ppn == 16 ? 4 : ppn == 8 ? 8 : ppn == 4 ? 16 : ppn == 2 ? 32 : 64;
 	for (n = 0; n < subgroups_to_allocate_per_process; ++n) {
 
 		const uint32_t requested_subgroup = subgroup_offset + n;
@@ -571,7 +571,7 @@ int fi_bgq_domain(struct fid_fabric *fabric,
 
 	if (fi_bgq_node_lock_allocate(&bgq_fabric->node, &bgq_domain->lock)) goto err;
 
-	fi_bgq_ref_inc(&bgq_fabric->ref_cnt, "fabric");
+	fi_bgq_ref_inc(&bgq_domain->fabric->ref_cnt, "fabric");
 
 	*dom = &bgq_domain->domain_fid;
 
