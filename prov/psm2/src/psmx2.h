@@ -285,9 +285,10 @@ struct psmx2_am_request {
 	int error;
 	struct slist_entry list_entry;
 	union {
-		struct iovec iov[0];	/* for readv, must be the last field */
-		struct fi_ioc ioc[0];	/* for atomic read, must be the last field */
+		struct iovec *iov;	/* for readv */
+		struct fi_ioc *ioc;	/* for atomic read */
 	};
+	void *tmpbuf;
 };
 
 #define PSMX2_IOV_PROTO_PACK	0
