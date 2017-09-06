@@ -1134,6 +1134,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 		pe_entry.data = rx_buffered->data;
 		pe_entry.context = rx_buffered->context;
 		pe_entry.flags = (flags | FI_MSG | FI_RECV);
+		pe_entry.addr = rx_buffered->addr;
 		if (is_tagged)
 			pe_entry.flags |= FI_TAGGED;
 
