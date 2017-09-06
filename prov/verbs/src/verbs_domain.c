@@ -524,6 +524,7 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	fab->info = cur;
 
 	*fabric = &fab->util_fabric.fabric_fid;
+	(*fabric)->fid.fclass = FI_CLASS_FABRIC;
 	(*fabric)->fid.ops = &fi_ibv_fi_ops;
 	(*fabric)->ops = &fi_ibv_ops_fabric;
 
