@@ -989,10 +989,6 @@ static int fi_bgq_ep_rx_init(struct fi_bgq_ep *bgq_ep)
 
 	bgq_ep->rx.self.fi = fi_bgq_addr_create(destination, fifo_map, rx);
 
-#ifdef FI_BGQ_TRACE
-	fprintf(stderr,"fi_bgq_ep_rx_init created addr:\n");
-	FI_BGQ_ADDR_DUMP(&bgq_ep->rx.self.fi);
-#endif
 	/* assign the mu reception fifos - all potential
 	 * reception fifos were allocated at domain initialization */
 	if (NULL == bgq_domain->rx.rfifo[fi_bgq_uid_get_rx(bgq_ep->rx.self.uid.fi)]) {
@@ -1006,6 +1002,10 @@ static int fi_bgq_ep_rx_init(struct fi_bgq_ep *bgq_ep)
 	}
 
 	bgq_ep->rx.poll.muspi_recfifo = bgq_domain->rx.rfifo[fi_bgq_uid_get_rx(bgq_ep->rx.self.uid.fi)];
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"fi_bgq_ep_rx_init recfifo set to %u created addr:\n",fi_bgq_uid_get_rx(bgq_ep->rx.self.uid.fi));
+	FI_BGQ_ADDR_DUMP(&bgq_ep->rx.self.fi);
+#endif
 
 	bgq_ep->rx.poll.bat = bgq_domain->bat;
 
@@ -1921,7 +1921,7 @@ int fi_bgq_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	bgq_ep->ep_fid.fid.ops     = &fi_bgq_fi_ops;
 	bgq_ep->ep_fid.ops 	   = &fi_bgq_ep_ops;
 
-	ret = fi_bgq_init_cm_ops(bgq_ep, info);
+	ret = fi_bgq_init_cm_ops((struct fid_ep *)&(bgq_ep->ep_fid), info);
 	if (ret)
 		goto err;
 
