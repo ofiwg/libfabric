@@ -249,7 +249,7 @@ int fi_bgq_init_tagged_ops(struct fi_bgq_ep *bgq_ep, struct fi_info *info);
 int fi_bgq_enable_tagged_ops(struct fi_bgq_ep *bgq_ep);
 int fi_bgq_finalize_tagged_ops(struct fi_bgq_ep *bgq_ep);
 
-int fi_bgq_init_cm_ops(struct fi_bgq_ep *bgq_ep, struct fi_info *info);
+int fi_bgq_init_cm_ops(struct fid_ep *ep_fid, struct fi_info *info);
 int fi_bgq_finalize_cm_ops(struct fi_bgq_ep *bgq_ep);
 
 int fi_bgq_bind_ep_stx(struct fi_bgq_ep *ep,
