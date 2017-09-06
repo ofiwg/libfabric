@@ -203,7 +203,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 
 		rma_addr += mr->offset;
 
-		req = calloc(1, sizeof(*req));
+		req = psmx2_am_request_alloc(ep->trx_ctxt);
 		if (!req) {
 			err = -FI_ENOMEM;
 		} else {
@@ -277,7 +277,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 
 		rma_addr += mr->offset;
 
-		req = calloc(1, sizeof(*req));
+		req = psmx2_am_request_alloc(ep->trx_ctxt);
 		if (!req) {
 			err = -FI_ENOMEM;
 		} else {
@@ -324,7 +324,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 				psmx2_cntr_inc(req->ep->write_cntr);
 
 			free(req->tmpbuf);
-			free(req);
+			psmx2_am_request_free(req->ep->trx_ctxt, req);
 		}
 		break;
 
@@ -368,7 +368,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 				psmx2_cntr_inc(req->ep->read_cntr);
  
 			free(req->tmpbuf);
-			free(req);
+			psmx2_am_request_free(req->ep->trx_ctxt, req);
 		}
 		break;
 
@@ -656,7 +656,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 				      buf, len, desc, addr, key,
 				      context, flags, 0);
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
@@ -807,13 +807,13 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	for (i=0; i<count; i++)
 		total_len += iov[i].iov_len;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
 	req->tmpbuf = malloc(count * sizeof(struct iovec));
 	if (!req->tmpbuf) {
-		free(req);
+		psmx2_am_request_free(ep_priv->trx_ctxt, req);
 		return -FI_ENOMEM;
 	}
 
@@ -1042,19 +1042,19 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	no_event = (flags & PSMX2_NO_COMPLETION) ||
 		   (ep_priv->send_selective_completion && !(flags & FI_COMPLETION));
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
 	if (flags & FI_INJECT) {
 		if (len > PSMX2_INJECT_SIZE) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_EMSGSIZE;
 		}
 
 		req->tmpbuf = malloc(len);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 
@@ -1237,7 +1237,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
@@ -1245,7 +1245,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	if (total_len <= chunk_size) {
 		req->tmpbuf = malloc(total_len);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 
@@ -1294,7 +1294,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	if (flags & FI_INJECT) {
-		free(req);
+		psmx2_am_request_free(ep_priv->trx_ctxt, req);
 		return -FI_EMSGSIZE;
 	}
 

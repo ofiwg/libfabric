@@ -604,7 +604,7 @@ int psmx2_am_atomic_handler_ext(psm2_am_token_t token,
 			psmx2_cntr_inc(req->ep->write_cntr);
 
 		free(req->tmpbuf);
-		free(req);
+		psmx2_am_request_free(req->ep->trx_ctxt, req);
 		break;
 
 	case PSMX2_AM_REP_ATOMIC_READWRITE:
@@ -642,7 +642,7 @@ int psmx2_am_atomic_handler_ext(psm2_am_token_t token,
 			psmx2_cntr_inc(req->ep->read_cntr);
 
 		free(req->tmpbuf);
-		free(req);
+		psmx2_am_request_free(req->ep->trx_ctxt, req);
 		break;
 
 	default:
@@ -882,14 +882,14 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
 	if (flags & FI_INJECT) {
 		req->tmpbuf = malloc(len);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 
@@ -1033,14 +1033,14 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
 	if (count > 1) {
 		req->tmpbuf = malloc(len);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 
@@ -1257,14 +1257,14 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
 	if ((flags & FI_INJECT) && op != FI_ATOMIC_READ) {
 		req->tmpbuf = malloc(len);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 
@@ -1458,14 +1458,14 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 
 	iov_size = result_count > 1 ? result_count * sizeof(struct fi_ioc) : 0;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
 	if (((flags & FI_INJECT) || count > 1) && op != FI_ATOMIC_READ) {
 		req->tmpbuf = malloc(iov_size + len);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 
@@ -1474,7 +1474,7 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	} else {
 		req->tmpbuf = malloc(iov_size);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 	}
@@ -1727,7 +1727,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	if (len * 2 > chunk_size)
 		return -FI_EMSGSIZE;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
@@ -1735,7 +1735,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	    ((uintptr_t)compare != (uintptr_t)buf + len)) {
 		req->tmpbuf = malloc(len * 2);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 		memcpy(req->tmpbuf, buf, len);
@@ -1953,7 +1953,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 
 	iov_size = result_count > 1 ? result_count * sizeof(struct fi_ioc) : 0;
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
@@ -1961,7 +1961,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	    (uintptr_t)comparev[0].addr != (uintptr_t)iov[0].addr + len) {
 		req->tmpbuf = malloc(iov_size + len + len);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 		buf = (uint8_t *)req->tmpbuf + iov_size;
@@ -1970,7 +1970,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	} else {
 		req->tmpbuf = malloc(iov_size);
 		if (!req->tmpbuf) {
-			free(req);
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
 		}
 		buf = iov[0].addr;

@@ -364,7 +364,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	struct psmx2_fid_cq *tmp_cq;
 	struct psmx2_fid_cntr *tmp_cntr;
 	struct psmx2_cq_event *event;
-	struct psmx2_am_request *read_req;
+	struct psmx2_am_request *read_req, *write_req;
 	int multi_recv;
 	int err;
 	int read_more = 1;
@@ -433,11 +433,15 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				/* Fall through */
 			case PSMX2_NOCOMP_WRITE_CONTEXT:
 				tmp_cntr = tmp_ep->write_cntr;
+				write_req = container_of(fi_context, struct psmx2_am_request,
+							 fi_context);
+				free(write_req->tmpbuf);
+				psmx2_am_request_free(write_req->ep->trx_ctxt, write_req);
 				break;
 
 			case PSMX2_READ_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
-				/* Fall throigh */
+				/* Fall through */
 			case PSMX2_NOCOMP_READ_CONTEXT:
 				read_req = container_of(fi_context, struct psmx2_am_request,
 							fi_context);
@@ -449,8 +453,12 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 							"readv: long protocol finishes early\n");
 						tmp_cq = NULL;
 						tmp_cntr = NULL;
+						/* Request to be freed in AM handler */
+						break;
 					}
 				}
+				free(read_req->tmpbuf);
+				psmx2_am_request_free(read_req->ep->trx_ctxt, read_req);
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
@@ -506,6 +514,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				  if (mr->cntr && mr->cntr != req->ep->remote_write_cntr)
 					psmx2_cntr_inc(mr->cntr);
 
+				  /* NOTE: req->tmpbuf is unused here */
+				  psmx2_am_request_free(req->ep->trx_ctxt, req);
+
 				  if (read_more)
 					continue;
 
@@ -520,6 +531,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				  req = container_of(fi_context, struct psmx2_am_request, fi_context);
 				  if (req->ep->remote_read_cntr)
 					psmx2_cntr_inc(req->ep->remote_read_cntr);
+
+				  /* NOTE: req->tmpbuf is unused here */
+				  psmx2_am_request_free(req->ep->trx_ctxt, req);
 
 				  continue;
 				}
