@@ -64,6 +64,8 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 	if (err != PSM2_OK)
 		psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
 
+	util_buf_pool_destroy(trx_ctxt->am_req_pool);
+	fastlock_destroy(&trx_ctxt->am_req_pool_lock);
 	fastlock_destroy(&trx_ctxt->poll_lock);
 	free(trx_ctxt);
 }
@@ -82,6 +84,17 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"failed to allocate trx_ctxt.\n");
 		return NULL;
+	}
+
+	trx_ctxt->am_req_pool = util_buf_pool_create(
+					sizeof(struct psmx2_am_request),
+					sizeof(void *),
+					0, /* max_cnt: unlimited */
+					64); /* chunk_cnt */
+	if (!trx_ctxt->am_req_pool) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"failed to allocate am_req_pool.\n");
+		goto err_out;
 	}
 
 	psm2_ep_open_opts_get_defaults(&opts);
@@ -107,7 +120,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 			"psm2_ep_open returns %d, errno=%d\n", err, errno);
 		if (!should_retry) {
 			err = psmx2_errno(err);
-			goto err_out;
+			goto err_out_destroy_pool;
 		}
 
 		/* When round-robin fails, retry w/o explicit assignment */
@@ -118,7 +131,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
 				"psm2_ep_open returns %d, errno=%d\n", err, errno);
 			err = psmx2_errno(err);
-			goto err_out;
+			goto err_out_destroy_pool;
 		}
 	}
 
@@ -135,6 +148,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	}
 
 	fastlock_init(&trx_ctxt->poll_lock);
+	fastlock_init(&trx_ctxt->am_req_pool_lock);
 	fastlock_init(&trx_ctxt->rma_queue.lock);
 	fastlock_init(&trx_ctxt->trigger_queue.lock);
 	slist_init(&trx_ctxt->rma_queue.list);
@@ -146,6 +160,9 @@ err_out_close_ep:
 	if (psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
 			  (int64_t) psmx2_env.timeout * 1000000000LL) != PSM2_OK)
 		psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
+
+err_out_destroy_pool:
+	util_buf_pool_destroy(trx_ctxt->am_req_pool);
 
 err_out:
 	free(trx_ctxt);

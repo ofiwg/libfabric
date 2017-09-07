@@ -69,6 +69,7 @@ extern "C" {
 #include "fi_enosys.h"
 #include "fi_list.h"
 #include "fi_util.h"
+#include "fi_mem.h"
 #include "rbtree.h"
 #include "version.h"
 
@@ -285,9 +286,10 @@ struct psmx2_am_request {
 	int error;
 	struct slist_entry list_entry;
 	union {
-		struct iovec iov[0];	/* for readv, must be the last field */
-		struct fi_ioc ioc[0];	/* for atomic read, must be the last field */
+		struct iovec *iov;	/* for readv */
+		struct fi_ioc *ioc;	/* for atomic read */
 	};
+	void *tmpbuf;
 };
 
 #define PSMX2_IOV_PROTO_PACK	0
@@ -370,6 +372,10 @@ struct psmx2_trx_ctxt {
 
 	/* triggered operations that are ready to be processed */
 	struct psmx2_req_queue	trigger_queue;
+
+	/* request pool for RMA/atomic ops */
+	struct util_buf_pool	*am_req_pool;
+	fastlock_t		am_req_pool_lock;
 
 	/* lock to prevent the sequence of psm2_mq_ipeek and psm2_mq_test be
 	 * interleaved in a multithreaded environment.
@@ -1078,6 +1084,27 @@ void	psmx2_atomic_global_init(void);
 void	psmx2_atomic_global_fini(void);
 
 void	psmx2_am_ack_rma(struct psmx2_am_request *req);
+
+static inline
+struct psmx2_am_request *psmx2_am_request_alloc(struct psmx2_trx_ctxt *trx_ctxt)
+{
+	struct psmx2_am_request *req;
+
+	psmx2_lock(&trx_ctxt->am_req_pool_lock, 2);
+	req = util_buf_alloc(trx_ctxt->am_req_pool);
+	psmx2_unlock(&trx_ctxt->am_req_pool_lock, 2);
+
+	memset(req, 0, sizeof(*req));
+	return req;
+}
+
+static inline void psmx2_am_request_free(struct psmx2_trx_ctxt *trx_ctxt,
+					 struct psmx2_am_request *req)
+{
+	psmx2_lock(&trx_ctxt->am_req_pool_lock, 2);
+	util_buf_release(trx_ctxt->am_req_pool, req);
+	psmx2_unlock(&trx_ctxt->am_req_pool_lock, 2);
+}
 
 struct	psmx2_fid_mr *psmx2_mr_get(struct psmx2_fid_domain *domain, uint64_t key);
 int	psmx2_mr_validate(struct psmx2_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);

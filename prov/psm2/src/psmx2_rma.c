@@ -54,7 +54,6 @@ static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
 		}
 
 		copy_len = iov[i].iov_len - offset;
-		
 		if (copy_len > len)
 			copy_len = len;
 
@@ -204,7 +203,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 
 		rma_addr += mr->offset;
 
-		req = calloc(1, sizeof(*req));
+		req = psmx2_am_request_alloc(ep->trx_ctxt);
 		if (!req) {
 			err = -FI_ENOMEM;
 		} else {
@@ -278,7 +277,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 
 		rma_addr += mr->offset;
 
-		req = calloc(1, sizeof(*req));
+		req = psmx2_am_request_alloc(ep->trx_ctxt);
 		if (!req) {
 			err = -FI_ENOMEM;
 		} else {
@@ -324,7 +323,8 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 			if (req->ep->write_cntr)
 				psmx2_cntr_inc(req->ep->write_cntr);
 
-			free(req);
+			free(req->tmpbuf);
+			psmx2_am_request_free(req->ep->trx_ctxt, req);
 		}
 		break;
 
@@ -338,7 +338,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 		if (!op_error) {
 			if (req->op == PSMX2_AM_REQ_READ)
 				memcpy(req->read.buf + offset, src, len);
-			else 
+			else
 				psmx2_iov_copy(req->iov, req->read.iov_count, offset, src, len);
 
 			req->read.len_read += len;
@@ -366,8 +366,9 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 
 			if (req->ep->read_cntr)
 				psmx2_cntr_inc(req->ep->read_cntr);
-
-			free(req);
+ 
+			free(req->tmpbuf);
+			psmx2_am_request_free(req->ep->trx_ctxt, req);
 		}
 		break;
 
@@ -655,7 +656,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 				      buf, len, desc, addr, key,
 				      context, flags, 0);
 
-	req = calloc(1, sizeof(*req));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
@@ -806,10 +807,17 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	for (i=0; i<count; i++)
 		total_len += iov[i].iov_len;
 
-	req = calloc(1, sizeof(*req) + count * sizeof(struct iovec));
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
 	if (!req)
 		return -FI_ENOMEM;
 
+	req->tmpbuf = malloc(count * sizeof(struct iovec));
+	if (!req->tmpbuf) {
+		psmx2_am_request_free(ep_priv->trx_ctxt, req);
+		return -FI_ENOMEM;
+	}
+
+	req->iov = req->tmpbuf;
 	memcpy(req->iov, iov, count * sizeof(struct iovec));
 
 	req->op = PSMX2_AM_REQ_READV;
@@ -1034,22 +1042,25 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	no_event = (flags & PSMX2_NO_COMPLETION) ||
 		   (ep_priv->send_selective_completion && !(flags & FI_COMPLETION));
 
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
+	if (!req)
+		return -FI_ENOMEM;
+
 	if (flags & FI_INJECT) {
-		if (len > PSMX2_INJECT_SIZE)
+		if (len > PSMX2_INJECT_SIZE) {
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_EMSGSIZE;
+		}
 
-		req = malloc(sizeof(*req) + len);
-		if (!req)
+		req->tmpbuf = malloc(len);
+		if (!req->tmpbuf) {
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
+		}
 
-		memset(req, 0, sizeof(*req));
-		memcpy((uint8_t *)req + sizeof(*req), (void *)buf, len);
-		buf = (uint8_t *)req + sizeof(*req);
+		memcpy(req->tmpbuf, (void *)buf, len);
+		buf = req->tmpbuf;
 	} else {
-		req = calloc(1, sizeof(*req));
-		if (!req)
-			return -FI_ENOMEM;
-
 		PSMX2_CTXT_TYPE(&req->fi_context) = no_event ?
 						    PSMX2_NOCOMP_WRITE_CONTEXT :
 						    PSMX2_WRITE_CONTEXT;
@@ -1226,21 +1237,26 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
 
+	req = psmx2_am_request_alloc(ep_priv->trx_ctxt);
+	if (!req)
+		return -FI_ENOMEM;
+
 	/* Case 1: fit into a AM message, then pack and send */
 	if (total_len <= chunk_size) {
-		req = malloc(sizeof(*req) + total_len);
-		if (!req)
+		req->tmpbuf = malloc(total_len);
+		if (!req->tmpbuf) {
+			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_ENOMEM;
+		}
 
-		memset(req, 0, sizeof(*req));
-		p = (uint8_t *)req + sizeof(*req);
+		p = req->tmpbuf;
 		for (i=0; i<count; i++) {
 			if (iov[i].iov_len) {
 				memcpy(p, iov[i].iov_base, iov[i].iov_len);
 				p += iov[i].iov_len;
 			}
 		}
-		buf = (uint8_t *)req + sizeof(*req);
+		buf = req->tmpbuf;
 		len = total_len;
 
 		req->no_event = no_event;
@@ -1277,12 +1293,10 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		return 0;
 	}
 
-	if (flags & FI_INJECT)
+	if (flags & FI_INJECT) {
+		psmx2_am_request_free(ep_priv->trx_ctxt, req);
 		return -FI_EMSGSIZE;
-
-	req = calloc(1, sizeof(*req));
-	if (!req)
-		return -FI_ENOMEM;
+	}
 
 	PSMX2_CTXT_TYPE(&req->fi_context) = no_event ?
 					    PSMX2_NOCOMP_WRITE_CONTEXT :
