@@ -404,6 +404,10 @@ int fi_bgq_scalable_ep (struct fid_domain *domain,
 	bgq_sep->ep_fid.fid.ops		= &fi_bgq_fi_ops;
 	bgq_sep->ep_fid.ops		= &fi_bgq_sep_ops;
 
+        int ret = fi_bgq_init_cm_ops((struct fid_ep *)&(bgq_sep->ep_fid), info);
+        if (ret)
+                goto err;
+
 	bgq_sep->info = calloc(1, sizeof (struct fi_info));
 	if (!bgq_sep->info) {
 		errno = FI_ENOMEM;

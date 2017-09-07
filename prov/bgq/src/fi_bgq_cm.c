@@ -40,8 +40,6 @@ int fi_bgq_getname(fid_t fid, void *addr, size_t *addrlen)
 		return 0;
 	}
 
-	struct fi_bgq_ep *bgq_ep;
-
 	if (!fid || !addr || !addrlen) {
 		errno = FI_EINVAL;
 		return -errno;
@@ -51,10 +49,14 @@ int fi_bgq_getname(fid_t fid, void *addr, size_t *addrlen)
 		errno = FI_ETOOSMALL;
 		return -errno;
 	}
+
+	char * addr_str;
+	struct fi_bgq_ep *bgq_ep;
+	struct fi_bgq_sep *bgq_sep;
 	switch(fid->fclass) {
 	case FI_CLASS_EP:
 		bgq_ep = container_of(fid, struct fi_bgq_ep, ep_fid);
-		char * addr_str = (char *) addr;
+		addr_str = (char *) addr;
 		sprintf(addr_str, "%u.%u.%u.%u.%u.%u",
 			bgq_ep->domain->my_coords.a,
 			bgq_ep->domain->my_coords.b,
@@ -64,7 +66,17 @@ int fi_bgq_getname(fid_t fid, void *addr, size_t *addrlen)
 			bgq_ep->domain->my_coords.t);
 		break;
 	case FI_CLASS_SEP:
-		/* TODO: handle scalable endpoints */
+                bgq_sep = container_of(fid, struct fi_bgq_sep, ep_fid);
+                addr_str = (char *) addr;
+                sprintf(addr_str, "%u.%u.%u.%u.%u.%u",
+                        bgq_sep->domain->my_coords.a,
+                        bgq_sep->domain->my_coords.b,
+                        bgq_sep->domain->my_coords.c,
+                        bgq_sep->domain->my_coords.d,
+                        bgq_sep->domain->my_coords.e,
+                        bgq_sep->domain->my_coords.t);
+                break;
+
 	default:
 		errno = FI_EINVAL;
 		return -errno;
@@ -86,17 +98,11 @@ static struct fi_ops_cm fi_bgq_cm_ops = {
 	.shutdown 	= fi_no_shutdown,
 };
 
-int fi_bgq_init_cm_ops(struct fi_bgq_ep *bgq_ep, struct fi_info *info)
+int fi_bgq_init_cm_ops(struct fid_ep *ep_fid, struct fi_info *info)
 {
-	if (!bgq_ep || !info)
-		goto err;
-
-	bgq_ep->ep_fid.cm	   = &fi_bgq_cm_ops;
+	ep_fid->cm	   = &fi_bgq_cm_ops;
 
 	return 0;
-err:
-	errno = FI_EINVAL;
-	return -errno;
 }
 
 int fi_bgq_finalize_cm_ops(struct fi_bgq_ep *bgq_ep)

@@ -653,7 +653,8 @@ unsigned is_match(struct fi_bgq_mu_packet *pkt, union fi_bgq_context * context, 
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
 
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr, "%s:%s():%d origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %u returning %u\n", __FILE__, __func__, __LINE__, origin_uid, target_uid, origin_tag, target_tag, ignore, (context->src_addr == FI_ADDR_UNSPEC),((origin_tag_and_not_ignore == target_tag_and_not_ignore) && ((context->src_addr == FI_ADDR_UNSPEC) || (origin_uid == target_uid))));
+	fprintf(stderr, "%s:%s():%d context %p origin_uid=0x%08x target_uid=0x%08x origin_tag=0x%016lx target_tag=0x%016lx ignore=0x%016lx any_source is %u returning %u\n", __FILE__, __func__, __LINE__, context,origin_uid, target_uid, origin_tag, target_tag, ignore, (context->src_addr == FI_ADDR_UNSPEC),((origin_tag_and_not_ignore == target_tag_and_not_ignore) && ((context->src_addr == FI_ADDR_UNSPEC) || (origin_uid == target_uid))));
+	fflush(stderr);
 #endif
 
 	return ((origin_tag_and_not_ignore == target_tag_and_not_ignore) && ((context->src_addr == FI_ADDR_UNSPEC) || (origin_uid == target_uid)));
@@ -665,7 +666,7 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 	const uint64_t packet_type = fi_bgq_mu_packet_type_get(pkt);
 
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr, "process_rfifo_packet_optimized\n");
+	fprintf(stderr,"process_rfifo_packet_optimized - poll_msg is %u mq addr is %p\n",poll_msg,&(bgq_ep->rx.poll.rfifo[poll_msg].mq));
 	fflush(stderr);
 #endif
 	if (poll_msg) {
@@ -700,11 +701,16 @@ void process_rfifo_packet_optimized (struct fi_bgq_ep * bgq_ep, struct fi_bgq_mu
 	union fi_bgq_context * head = bgq_ep->rx.poll.rfifo[poll_msg].mq.head;
 	union fi_bgq_context * context = head;
 	union fi_bgq_context * prev = NULL;
-
+#ifdef FI_BGQ_TRACE
+	fprintf(stderr,"searching mq - head is %p\n",bgq_ep->rx.poll.rfifo[poll_msg].mq.head);
+#endif
 	while (context) {
 
 		const uint64_t rx_op_flags = context->flags;
-
+#ifdef FI_BGQ_TRACE
+		fprintf(stderr,"is_match calling with context %p prev is %p next is %p\n",context,p,context->next);
+		fflush(stderr);
+#endif
 		if (is_match(pkt, context, poll_msg)) {
 
 			if (!poll_msg || ((rx_op_flags | FI_MULTI_RECV) == 0)) {	/* branch should compile out for tagged receives */
@@ -1002,7 +1008,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		const uint64_t rx_op_flags, const uint64_t is_context_ext,
 		const unsigned is_manual_progress) {
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr,"process_mfifo_context starting\n");
+	fprintf(stderr,"process_mfifo_context starting - context->tag is %d\n",context->tag);
 	if (rx_op_flags & FI_PEEK)
 		fprintf(stderr,"just peeking\n");
 	fflush(stderr);
@@ -1101,7 +1107,7 @@ int process_mfifo_context (struct fi_bgq_ep * bgq_ep, const unsigned poll_msg,
 		if (!found_match) {
 
 #ifdef FI_BGQ_TRACE
-	fprintf(stderr,"process_mfifo_context -  nothing found on unexpected queue adding to match queue\n");
+	fprintf(stderr,"process_mfifo_context - nothing found on unexpected queue adding to match queue for poll_msg %u context->tag is %d context is %p mq addr is %p\n",poll_msg,context->tag,context,&(bgq_ep->rx.poll.rfifo[poll_msg].mq));
 	fflush(stderr);
 #endif
 			/*
