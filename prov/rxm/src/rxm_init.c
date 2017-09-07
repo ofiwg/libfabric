@@ -81,7 +81,6 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 	/* Remove caps that RxM can handle */
 	core_info->rx_attr->msg_order &= ~FI_ORDER_SAS;
 
-	core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	core_info->ep_attr->type = FI_EP_MSG;
 
 	return 0;
