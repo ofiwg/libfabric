@@ -1214,25 +1214,13 @@ out:
 
 /* Caller must hold cmap->lock */
 static struct util_cmap_handle *
-util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr, void *addr)
+util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr)
 {
-	struct util_cmap_handle *handle;
-
 	if (fi_addr > cmap->av->count) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "Invalid fi_addr\n");
 		return NULL;
 	}
-	if (cmap->handles_av[fi_addr]) {
-		FI_DBG(cmap->av->prov, FI_LOG_AV, "handle found for fi_addr: %"
-				PRIu64 "\n", fi_addr);
-		handle = cmap->handles_av[fi_addr];
-	} else {
-		handle = util_cmap_get_handle_peer(cmap, addr);
-		if (!handle)
-			return NULL;
-		util_cmap_move_handle(handle, fi_addr);
-	}
-	return handle;
+	return cmap->handles_av[fi_addr];
 }
 
 void ofi_cmap_process_shutdown(struct util_cmap *cmap,
@@ -1305,7 +1293,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 	if (index < 0)
 		handle = util_cmap_get_handle_peer(cmap, addr);
 	else
-		handle = util_cmap_get_handle(cmap, (fi_addr_t)index, addr);
+		handle = util_cmap_get_handle(cmap, (fi_addr_t)index);
 
 	if (!handle) {
 		if (index < 0)
@@ -1365,17 +1353,10 @@ int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 			struct util_cmap_handle **handle_ret)
 {
 	struct util_cmap_handle *handle;
-	void *addr;
 	int ret = 0;
 
-	addr = ip_av_get_addr(cmap->av, fi_addr);
-	if (!addr) {
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-		       "No valid addr for given fi_addr\n");
-		return -FI_EINVAL;
-	}
 	fastlock_acquire(&cmap->lock);
-	handle = util_cmap_get_handle(cmap, fi_addr, addr);
+	handle = util_cmap_get_handle(cmap, fi_addr);
 	if (!handle) {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		       "No handle found for given fi_addr\n");
