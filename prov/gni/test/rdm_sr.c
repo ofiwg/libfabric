@@ -62,11 +62,10 @@
 #endif
 
 /*
- * The multirecv tests fail when NUMEPS are > 2 (GitHub issue #1116).
- * Increase this number when the issues is fixed.
+ * be careful about API-1.1 setup in rdm_sr_setup_common_eps below
+ * if you increase NUMEPS beyond 2
  */
-#define NUMEPS 4
-#define NUM_MULTIRECVS 5
+#define NUMEPS 2
 
 /* Note: Set to ~FI_NOTIFY_FLAGS_ONLY since this was written before api 1.5 */
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
@@ -127,11 +126,11 @@ void rdm_sr_setup_common_eps(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
-	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * NUM_MULTIRECVS));
+	target_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
 	assert(target_base);
 	target = GNIT_ALIGN_BUFFER(char *, target_base);
 
-	target2_base = malloc(GNIT_ALIGN_LEN(BUF_SZ * NUM_MULTIRECVS));
+	target2_base = malloc(GNIT_ALIGN_LEN(BUF_SZ));
 	assert(target2_base);
 	target2 = GNIT_ALIGN_BUFFER(char *, target2_base);
 
@@ -268,7 +267,7 @@ void rdm_sr_setup_common(void)
 
 		ret = fi_mr_reg(dom[i],
 				  target,
-				  NUM_MULTIRECVS * BUF_SZ,
+				  BUF_SZ,
 				  FI_REMOTE_WRITE,
 				  0,
 				  req_key[0],
@@ -313,7 +312,7 @@ void rdm_sr_setup_common(void)
 		if (USING_SCALABLE(fi[i])) {
 			MR_ENABLE(rem_mr[i],
 				  target,
-				  NUM_MULTIRECVS * BUF_SZ);
+				  BUF_SZ);
 			MR_ENABLE(loc_mr[i],
 				  source,
 				  BUF_SZ);
@@ -373,6 +372,9 @@ void dgram_sr_setup(uint32_t version, bool is_noreg, enum fi_progress pm)
 	hints->domain_attr->data_progress = pm;
 	hints->mode = mode_bits;
 	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
+	if (FI_VERSION_GE(version, FI_VERSION(1, 5))) {
+		hints->caps |= FI_SOURCE_ERR;
+	}
 	hints->fabric_attr->prov_name = strdup("gni");
 	hints->ep_attr->type = FI_EP_DGRAM;
 
@@ -733,9 +735,12 @@ void rdm_sr_lazy_dereg_disable(void)
 
 static inline struct fi_cq_err_entry rdm_sr_check_canceled(struct fid_cq *cq)
 {
+	int ret;
 	struct fi_cq_err_entry ee;
-	struct gnix_ep_name err_ep_name;
+	struct gnix_ep_name err_ep_name, ep_name_test;
 	struct gnix_fid_cq *cq_priv;
+	size_t name_size;
+	fi_addr_t fi_addr;
 
 	/*application provided error_data buffer and length*/
 	ee.err_data_size = sizeof(struct gnix_ep_name);
@@ -749,16 +754,30 @@ static inline struct fi_cq_err_entry rdm_sr_check_canceled(struct fid_cq *cq)
 	 * when using api version >= 1.5.
 	 */
 	cq_priv = container_of(cq, struct gnix_fid_cq, cq_fid);
-	if (FI_VERSION_LT(cq_priv->domain->fabric->fab_fid.api_version, FI_VERSION(1, 5)))
+	if (FI_VERSION_LT(cq_priv->domain->fabric->fab_fid.api_version, FI_VERSION(1, 5))) {
 		cr_assert(ee.err_data != &err_ep_name, "Invalid err_data ptr");
-	else
+	} else {
 		cr_assert(ee.err_data == &err_ep_name, "Invalid err_data ptr");
+	}
 
 	/* To test API-1.1: Reporting of unknown source addresses */
 	if ((hints->caps & FI_SOURCE) && ee.err == FI_EADDRNOTAVAIL) {
-		int ret = fi_av_insert(av[1], ep_name[0], 1, ee.err_data, 0,
-				       NULL);
-		cr_assert(ret == 1);
+	        if (FI_VERSION_GE(cq_priv->domain->fabric->fab_fid.api_version,
+				FI_VERSION(1, 5))) {
+			cr_assert(ee.err_data_size == sizeof(struct gnix_ep_name),
+					"Invalid err_data_size returned");
+			ret = fi_av_insert(av[1], &err_ep_name, 1, &fi_addr,
+					   0, NULL);
+			cr_assert(ret == 1, "fi_av_insert failed");
+			name_size = sizeof(ep_name_test);
+			ret = fi_av_lookup(av[1], fi_addr,
+					   &ep_name_test, &name_size);
+			cr_assert(ret == FI_SUCCESS, "fi_av_lookup failed");
+			cr_assert(name_size == sizeof(ep_name_test));
+			cr_assert(strncmp((char *)&ep_name_test,
+					  (char *)&err_ep_name,
+					  sizeof(ep_name_test)) == 0);
+		}
 	}
 	return ee;
 }
@@ -785,10 +804,9 @@ TestSuite(dgram_sr_src_unk_api_version_old,
 	  .init = dgram_sr_setup_reg_src_unk_api_version_old,
 	  .fini = rdm_sr_teardown, .disabled = false);
 
-/* TODO: Enabled after 1.5 release */
 TestSuite(dgram_sr_src_unk_api_version_cur,
 	  .init = dgram_sr_setup_reg_src_unk_api_version_cur,
-	  .fini = rdm_sr_teardown, .disabled = true);
+	  .fini = rdm_sr_teardown, .disabled = false);
 
 TestSuite(rdm_sr_noreg,
 	  .init = rdm_sr_setup_noreg,
@@ -2279,471 +2297,3 @@ Test(rdm_sr_alignment_edge, iov_alignment_edge)
 	rdm_sr_xfer_for_each_size(do_iov_alignment_edge, 1, BUF_SZ);
 }
 
-void do_multirecv(int len)
-{
-	int i, j, ret;
-	ssize_t sz;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
-	struct iovec iov;
-	struct fi_msg msg = {0};
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
-	uint64_t r_e[NUMEPS] = {0};
-	uint64_t flags;
-	uint64_t min_multi_recv;
-	size_t optlen;
-	const int nrecvs = NUM_MULTIRECVS;
-	const int dest_ep = NUMEPS-1;
-	uint64_t *expected_addrs;
-	bool *addr_recvd, found, got_fi_multi_cqe = false;
-	int sends_done = 0;
-
-	rdm_sr_init_data(source, len, 0xab);
-	rdm_sr_init_data(target, len, 0);
-
-	ret = fi_getopt(&ep[dest_ep]->fid, FI_OPT_ENDPOINT,
-			FI_OPT_MIN_MULTI_RECV,
-			(void *)&min_multi_recv, &optlen);
-	cr_assert(ret == FI_SUCCESS, "fi_getopt");
-
-	/* Post receives first to force matching in SMSG callback. */
-	iov.iov_base = target;
-	iov.iov_len = len * nrecvs + (min_multi_recv-1);
-
-	msg.msg_iov = &iov;
-	msg.desc = (void **)rem_mr;
-	msg.iov_count = 1;
-	msg.addr = FI_ADDR_UNSPEC;
-	msg.context = source;
-	msg.data = (uint64_t)source;
-
-	addr_recvd = calloc(nrecvs, sizeof(bool));
-	cr_assert(addr_recvd);
-
-	expected_addrs = calloc(nrecvs, sizeof(uint64_t));
-	cr_assert(expected_addrs);
-
-	for (i = 0; i < nrecvs; i++) {
-		expected_addrs[i] = (uint64_t)target +
-				(uint64_t) (i * len);
-	}
-
-	sz = fi_recvmsg(ep[dest_ep], &msg, FI_MULTI_RECV);
-	cr_assert_eq(sz, 0);
-
-	for (i = nrecvs-1; i >= 0; i--) {
-		int iep = i%(NUMEPS-1);
-
-		sz = fi_send(ep[iep], source, len,
-			     loc_mr[iep], gni_addr[dest_ep], target);
-		cr_assert_eq(sz, 0);
-	}
-
-	/* need to progress both CQs simultaneously for rendezvous */
-	do {
-		for (i = 0; i < nrecvs; i++) {
-			int iep = i%(NUMEPS-1);
-
-			/* reset cqe */
-			s_cqe.op_context = s_cqe.buf = (void *) -1;
-			s_cqe.flags = s_cqe.len = UINT_MAX;
-			s_cqe.data = s_cqe.tag = UINT_MAX;
-			d_cqe.op_context = d_cqe.buf = (void *) -1;
-			d_cqe.flags = d_cqe.len = UINT_MAX;
-			d_cqe.data = d_cqe.tag = UINT_MAX;
-
-			ret = fi_cq_read(msg_cq[iep], &s_cqe, 1);
-			if (ret == 1) {
-				rdm_sr_check_cqe(&s_cqe, target,
-						 (FI_MSG|FI_SEND),
-						 0, 0, 0, false, ep[iep]);
-				s[iep]++;
-				sends_done++;
-			}
-		}
-
-		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		if (ret == 1) {
-			for (j = 0, found = false; j < nrecvs; j++) {
-				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
-					cr_assert(addr_recvd[j] == false,
-						  "address already received");
-					addr_recvd[j] = true;
-					found = true;
-					break;
-				}
-			}
-			cr_assert(found == true, "Address not found");
-			flags = FI_MSG | FI_RECV;
-			rdm_sr_check_cqe(&d_cqe, source,
-					 flags,
-					 (void *) expected_addrs[j],
-					 len, 0, true, ep[dest_ep]);
-			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
-				  "Data mismatch");
-			r[dest_ep]++;
-		}
-	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
-
-	/*
-	 * now check for final FI_MULTI_RECV CQE on dest CQ
-	 */
-
-	do {
-		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		if (d_cqe.flags & FI_MULTI_RECV) {
-			got_fi_multi_cqe = true;
-			r[dest_ep]++;
-		}
-	} while (got_fi_multi_cqe == false);
-
-	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
-
-	free(addr_recvd);
-	free(expected_addrs);
-
-	dbg_printf("got context events!\n");
-}
-
-Test(rdm_sr, multirecv, .disabled = false)
-{
-	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
-}
-
-Test(rdm_sr, multirecv_retrans, .disabled = false)
-{
-	rdm_sr_err_inject_enable();
-	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
-}
-
-void do_multirecv_send_first(int len)
-{
-	int i, j, ret;
-	ssize_t sz;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
-	struct iovec iov;
-	struct fi_msg msg;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
-	uint64_t r_e[NUMEPS] = {0};
-	uint64_t flags;
-	uint64_t min_multi_recv;
-	size_t optlen;
-	const int nrecvs = NUM_MULTIRECVS;
-	const int dest_ep = NUMEPS-1;
-	uint64_t *expected_addrs;
-	bool *addr_recvd, found;
-	int sends_done = 0;
-	bool got_fi_multi_cqe = false;
-
-	rdm_sr_init_data(source, len, 0xab);
-	rdm_sr_init_data(target, len, 0);
-
-	ret = fi_getopt(&ep[NUMEPS-1]->fid, FI_OPT_ENDPOINT,
-			FI_OPT_MIN_MULTI_RECV,
-			(void *)&min_multi_recv, &optlen);
-	cr_assert(ret == FI_SUCCESS, "fi_getopt");
-
-	addr_recvd = calloc(nrecvs, sizeof(bool));
-	cr_assert(addr_recvd);
-
-	expected_addrs = calloc(nrecvs, sizeof(uint64_t));
-	cr_assert(expected_addrs);
-
-	for (i = 0; i < nrecvs; i++) {
-		expected_addrs[i] = (uint64_t)target +
-				(uint64_t) (i * len);
-	}
-
-	/* Post sends first to force matching in the _gnix_recv() path. */
-	for (i = nrecvs-1; i >= 0; i--) {
-		sz = fi_send(ep[i%(NUMEPS-1)], source, len,
-			     loc_mr[i%(NUMEPS-1)], gni_addr[dest_ep], target);
-		cr_assert_eq(sz, 0);
-	}
-
-	/* Progress our sends. */
-	for (j = 0; j < 10000; j++) {
-		for (i = 0; i < nrecvs; i++) {
-			int iep = i%(NUMEPS-1);
-
-			/* reset cqe */
-			s_cqe.op_context = s_cqe.buf = (void *) -1;
-			s_cqe.flags = s_cqe.len = UINT_MAX;
-			s_cqe.data = s_cqe.tag = UINT_MAX;
-			d_cqe.op_context = d_cqe.buf = (void *) -1;
-			d_cqe.flags = d_cqe.len = UINT_MAX;
-			d_cqe.data = d_cqe.tag = UINT_MAX;
-
-			ret = fi_cq_read(msg_cq[iep], &s_cqe, 1);
-			if (ret == 1) {
-				rdm_sr_check_cqe(&s_cqe, target,
-						 (FI_MSG|FI_SEND),
-						 0, 0, 0, false, ep[iep]);
-				s[iep]++;
-				sends_done++;
-			}
-
-		}
-		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		cr_assert_eq(ret, -FI_EAGAIN);
-	}
-
-	iov.iov_base = target;
-	iov.iov_len = len * nrecvs + (min_multi_recv-1);
-
-	msg.msg_iov = &iov;
-	msg.desc = (void **)rem_mr;
-	msg.iov_count = 1;
-	msg.addr = FI_ADDR_UNSPEC;
-	msg.context = source;
-	msg.data = (uint64_t)source;
-
-	sz = fi_recvmsg(ep[dest_ep], &msg, FI_MULTI_RECV);
-	cr_assert_eq(sz, 0);
-
-	/* need to progress both CQs simultaneously for rendezvous */
-	do {
-		for (i = 0; i < nrecvs; i++) {
-			int iep = i%(NUMEPS-1);
-
-			/* reset cqe */
-			s_cqe.op_context = s_cqe.buf = (void *) -1;
-			s_cqe.flags = s_cqe.len = UINT_MAX;
-			s_cqe.data = s_cqe.tag = UINT_MAX;
-			d_cqe.op_context = d_cqe.buf = (void *) -1;
-			d_cqe.flags = d_cqe.len = UINT_MAX;
-			d_cqe.data = d_cqe.tag = UINT_MAX;
-
-			ret = fi_cq_read(msg_cq[iep], &s_cqe, 1);
-			if (ret == 1) {
-				rdm_sr_check_cqe(&s_cqe, target,
-						 (FI_MSG|FI_SEND),
-						 0, 0, 0, false, ep[iep]);
-				s[iep]++;
-				sends_done++;
-			}
-		}
-
-		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		if (ret == 1) {
-			for (j = 0, found = false; j < nrecvs; j++) {
-				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
-					cr_assert(addr_recvd[j] == false,
-						  "address already received");
-					addr_recvd[j] = true;
-					found = true;
-					break;
-				}
-			}
-			cr_assert(found == true, "Address not found");
-			flags = FI_MSG | FI_RECV;
-			rdm_sr_check_cqe(&d_cqe, source,
-					 flags,
-					 (void *)expected_addrs[j],
-					 len, 0, true, ep[dest_ep]);
-			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
-				  "Data mismatch");
-			r[dest_ep]++;
-		}
-	} while (sends_done < nrecvs || r[dest_ep] < nrecvs);
-
-	/*
-	 * now check for final FI_MULTI_RECV CQE on dest CQ
-	 */
-
-	do {
-		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		if (d_cqe.flags & FI_MULTI_RECV) {
-			got_fi_multi_cqe = true;
-			r[dest_ep]++;
-		}
-	} while (got_fi_multi_cqe == false);
-
-	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
-
-	free(addr_recvd);
-	free(expected_addrs);
-
-	dbg_printf("got context events!\n");
-}
-
-Test(rdm_sr, multirecv_send_first, .disabled = false)
-{
-	rdm_sr_xfer_for_each_size(do_multirecv_send_first, 1, BUF_SZ);
-}
-
-Test(rdm_sr, multirecv_send_first_retrans, .disabled = false)
-{
-	rdm_sr_err_inject_enable();
-	rdm_sr_xfer_for_each_size(do_multirecv_send_first, 1, BUF_SZ);
-}
-
-void do_multirecv_trunc_last(int len)
-{
-	int i, j, ret;
-	ssize_t sz;
-	struct fi_cq_tagged_entry s_cqe, d_cqe;
-	struct fi_cq_err_entry err_cqe;
-	struct iovec iov;
-	struct fi_msg msg = {0};
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
-	uint64_t r_e[NUMEPS] = {0};
-	uint64_t flags;
-	uint64_t min_multi_recv = len-1;
-	const int nrecvs = 2; /* first one will fit, second will overflow */
-	const int dest_ep = NUMEPS-1;
-	uint64_t *expected_addrs;
-	bool *addr_recvd, found;
-
-	rdm_sr_init_data(source, len, 0xab);
-	rdm_sr_init_data(target, len, 0);
-
-	/* set min multirecv length */
-	ret = fi_setopt(&ep[dest_ep]->fid, FI_OPT_ENDPOINT,
-			FI_OPT_MIN_MULTI_RECV,
-			(void *)&min_multi_recv, sizeof(size_t));
-	cr_assert(ret == FI_SUCCESS, "fi_setopt");
-
-	iov.iov_base = target;
-	iov.iov_len = len + min_multi_recv;
-
-	msg.msg_iov = &iov;
-	msg.desc = (void **)rem_mr;
-	msg.iov_count = 1;
-	msg.addr = FI_ADDR_UNSPEC;
-	msg.context = source;
-	msg.data = (uint64_t)source;
-
-	addr_recvd = calloc(nrecvs, sizeof(bool));
-	cr_assert(addr_recvd);
-
-	expected_addrs = calloc(nrecvs, sizeof(uint64_t));
-	cr_assert(expected_addrs);
-
-	for (i = 0; i < nrecvs; i++) {
-		expected_addrs[i] = (uint64_t)target +
-				(uint64_t) (i * len);
-	}
-
-	sz = fi_recvmsg(ep[dest_ep], &msg, FI_MULTI_RECV);
-	cr_assert_eq(sz, 0);
-
-	/* Send first one... */
-	sz = fi_send(ep[0], source, len, loc_mr[0],
-		     gni_addr[dest_ep], target);
-	cr_assert_eq(sz, 0);
-
-	/* need to progress both CQs simultaneously for rendezvous */
-	do {
-		/* reset cqe */
-		s_cqe.op_context = s_cqe.buf = (void *) -1;
-		s_cqe.flags = s_cqe.len = UINT_MAX;
-		s_cqe.data = s_cqe.tag = UINT_MAX;
-		d_cqe.op_context = d_cqe.buf = (void *) -1;
-		d_cqe.flags = d_cqe.len = UINT_MAX;
-		d_cqe.data = d_cqe.tag = UINT_MAX;
-
-		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
-		if (ret == 1) {
-			rdm_sr_check_cqe(&s_cqe, target,
-					 (FI_MSG|FI_SEND),
-					 0, 0, 0, false, ep[0]);
-			s[0]++;
-		}
-
-		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		if (ret == 1) {
-			for (j = 0, found = false; j < nrecvs; j++) {
-				if (expected_addrs[j] == (uint64_t)d_cqe.buf) {
-					cr_assert(addr_recvd[j] == false,
-						  "address already received");
-					addr_recvd[j] = true;
-					found = true;
-					break;
-				}
-			}
-			cr_assert(found == true, "Address not found");
-			flags = FI_MSG | FI_RECV; fflush(stdout);
-			rdm_sr_check_cqe(&d_cqe, source,
-					 flags,
-					 (void *) expected_addrs[j],
-					 len, 0, true, ep[dest_ep]);
-			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
-				  "Data mismatch");
-			r[dest_ep]++;
-		}
-	} while (s[0] != 1 || r[dest_ep] != 1);
-
-	/* ...second one will overflow */
-	sz = fi_send(ep[0], source, min_multi_recv+1, loc_mr[0],
-		     gni_addr[dest_ep], target);
-	cr_assert_eq(sz, 0);
-
-	/* need to progress both CQs simultaneously for rendezvous */
-	do {
-		/* reset cqe */
-		s_cqe.op_context = s_cqe.buf = (void *) -1;
-		s_cqe.flags = s_cqe.len = UINT_MAX;
-		s_cqe.data = s_cqe.tag = UINT_MAX;
-		d_cqe.op_context = d_cqe.buf = (void *) -1;
-		d_cqe.flags = d_cqe.len = UINT_MAX;
-		d_cqe.data = d_cqe.tag = UINT_MAX;
-
-		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
-		if (ret == 1) {
-			rdm_sr_check_cqe(&s_cqe, target,
-					 (FI_MSG|FI_SEND),
-					 0, 0, 0, false, ep[0]);
-			s[0]++;
-		}
-
-		/* Should not return a CQ event */
-		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		cr_assert_eq(ret, 0, "fi_cq_read should return 0");
-
-		ret = fi_cq_readerr(msg_cq[1], &err_cqe, 0);
-		if (ret == 1) {
-			cr_assert((uint64_t)err_cqe.op_context ==
-				  (uint64_t)target,
-				  "Bad error context");
-			cr_assert(err_cqe.flags ==
-				  (FI_MSG | FI_SEND | FI_MULTI_RECV));
-			cr_assert(err_cqe.len == min_multi_recv,
-				  "Bad error len");
-			cr_assert(err_cqe.buf == (void *) expected_addrs[1],
-				  "Bad error buf");
-			cr_assert(err_cqe.data == 0, "Bad error data");
-			cr_assert(err_cqe.tag == 0, "Bad error tag");
-			cr_assert(err_cqe.olen == 1, "Bad error olen");
-			cr_assert(err_cqe.err == FI_ETRUNC, "Bad error errno");
-			cr_assert(err_cqe.prov_errno == 0, "Bad prov errno");
-			cr_assert(err_cqe.err_data == NULL,
-				  "Bad error provider data");
-			s_e[0]++;
-		}
-
-	} while (s[0] != 2 || r_e[dest_ep] != 1);
-
-	rdm_sr_check_cntrs(s, r, s_e, r_e, false);
-
-	free(addr_recvd);
-	free(expected_addrs);
-
-	dbg_printf("got context events!\n");
-}
-
-/*
- * These two tests should be enabled when multirecv generates errors
- * for truncated message (GitHub issue #1119).  Also, the initial
- * message size of 1 below might change depending on whether 0 is a
- * valid value for FI_OPT_MIN_MULTI_RECV (Github issue #1120)
- */
-Test(rdm_sr, multirecv_trunc_last, .disabled = true)
-{
-	rdm_sr_xfer_for_each_size(do_multirecv_trunc_last, 1, BUF_SZ);
-}
-
-Test(rdm_sr, multirecv_trunc_last_retrans, .disabled = true)
-{
-	rdm_sr_err_inject_enable();
-	rdm_sr_xfer_for_each_size(do_multirecv_trunc_last, 1, BUF_SZ);
-}
