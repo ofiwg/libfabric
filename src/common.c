@@ -485,8 +485,6 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 	default:
 		return -FI_ENOSYS;
 	}
-
-	return 0;
 }
 
 int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
