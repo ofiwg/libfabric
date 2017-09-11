@@ -170,7 +170,7 @@ static void psmx2_update_sep_cap(void)
 
 static int psmx2_getinfo(uint32_t version, const char *node,
 			 const char *service, uint64_t flags,
-			 struct fi_info *hints, struct fi_info **info)
+			 const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *psmx2_info;
 	uint32_t cnt = 0;

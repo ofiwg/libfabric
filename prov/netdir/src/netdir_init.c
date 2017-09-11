@@ -53,7 +53,8 @@ struct gl_data gl_data = {
 };
 
 int ofi_nd_getinfo(uint32_t version, const char *node, const char *service,
-		   uint64_t flags, struct fi_info *hints, struct fi_info **info)
+		   uint64_t flags, const struct fi_info *hints,
+		   struct fi_info **info)
 {
 	if (ofi_nd_util_prov.info) {
 		return util_getinfo(&ofi_nd_util_prov, version, node, service, flags,

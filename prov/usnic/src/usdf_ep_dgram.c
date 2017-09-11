@@ -444,7 +444,7 @@ static const struct fi_domain_attr dgram_dflt_domain_attr = {
 /*******************************************************************************
  * Fill functions for attributes
  ******************************************************************************/
-int usdf_dgram_fill_ep_attr(uint32_t version, struct fi_info *hints, struct
+int usdf_dgram_fill_ep_attr(uint32_t version, const struct fi_info *hints, struct
 		fi_info *fi, struct usd_device_attrs *dap)
 {
 	struct fi_ep_attr defaults;
@@ -500,7 +500,7 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_dom_attr(uint32_t version, struct fi_info *hints,
+int usdf_dgram_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 			     struct fi_info *fi, struct usd_device_attrs *dap)
 {
 	int ret;
@@ -588,7 +588,7 @@ catch:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_tx_attr(uint32_t version, struct fi_info *hints,
+int usdf_dgram_fill_tx_attr(uint32_t version, const struct fi_info *hints,
 			    struct fi_info *fi,
 			    struct usd_device_attrs *dap)
 {
@@ -667,7 +667,7 @@ out:
 	return FI_SUCCESS;
 }
 
-int usdf_dgram_fill_rx_attr(uint32_t version, struct fi_info *hints,
+int usdf_dgram_fill_rx_attr(uint32_t version, const struct fi_info *hints,
 			    struct fi_info *fi, struct usd_device_attrs *dap)
 {
 	int ret;

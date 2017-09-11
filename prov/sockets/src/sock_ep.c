@@ -1503,7 +1503,7 @@ out:
 
 
 struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
-			     struct fi_info *hints, void *src_addr,
+			     const struct fi_info *hints, void *src_addr,
 			     void *dest_addr)
 {
 	struct fi_info *info;

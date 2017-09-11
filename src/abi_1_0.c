@@ -204,7 +204,7 @@ COMPAT_SYMVER(fi_dupinfo_1_0, fi_dupinfo, FABRIC_1.0);
 
 __attribute__((visibility ("default")))
 int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
-		    uint64_t flags, struct fi_info_1_0 *hints_1_0,
+		    uint64_t flags, const struct fi_info_1_0 *hints_1_0,
 		    struct fi_info_1_0 **info)
 {
 	struct fi_info *hints;

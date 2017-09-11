@@ -133,7 +133,7 @@ const char *ofi_core_name(const char *str, size_t *len)
 
 }
 
-static int ofi_dup_addr(struct fi_info *info, struct fi_info *dup)
+static int ofi_dup_addr(const struct fi_info *info, struct fi_info *dup)
 {
 	dup->addr_format = info->addr_format;
 	if (info->src_addr) {
@@ -155,7 +155,7 @@ static int ofi_dup_addr(struct fi_info *info, struct fi_info *dup)
 }
 
 static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
-			    struct fi_info *util_info,
+			    const struct fi_info *util_info,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
@@ -260,7 +260,7 @@ err:
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
-		      struct fi_info *util_hints, ofi_alter_info_t info_to_core,
+		      const struct fi_info *util_hints, ofi_alter_info_t info_to_core,
 		      struct fi_info **core_info)
 {
 	struct fi_info *core_hints = NULL;
@@ -283,7 +283,7 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
-		 struct fi_info *hints, ofi_alter_info_t info_to_core,
+		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
 		 ofi_alter_info_t info_to_util, struct fi_info **info)
 {
 	struct fi_info *core_info, *util_info, *cur, *tail;

@@ -181,21 +181,21 @@ struct fi_bgq_fabric {
 
 int fi_bgq_set_default_info(void);
 
-int fi_bgq_check_info(struct fi_info *info);
+int fi_bgq_check_info(const struct fi_info *info);
 
 int fi_bgq_fabric(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric, void *context);
 
-int fi_bgq_check_fabric_attr(struct fi_fabric_attr *attr);
+int fi_bgq_check_fabric_attr(const struct fi_fabric_attr *attr);
 
 int fi_bgq_domain(struct fid_fabric *fabric,
 		struct fi_info *info,
 		struct fid_domain **dom, void *context);
 
-int fi_bgq_check_domain_attr(struct fi_domain_attr *attr);
+int fi_bgq_check_domain_attr(const struct fi_domain_attr *attr);
 int fi_bgq_choose_domain(uint64_t caps,
 		struct fi_domain_attr *domain_attr,
-		struct fi_domain_attr *hints);
+		const struct fi_domain_attr *hints);
 
 int fi_bgq_alloc_default_domain_attr(struct fi_domain_attr **domain_attr);
 
@@ -215,13 +215,13 @@ int fi_bgq_endpoint(struct fid_domain *dom, struct fi_info *info,
 
 int fi_bgq_alloc_default_ep_attr(struct fi_ep_attr **ep_attr);
 
-int fi_bgq_check_ep_attr(struct fi_ep_attr *attr);
+int fi_bgq_check_ep_attr(const struct fi_ep_attr *attr);
 
 int fi_bgq_alloc_default_tx_attr(struct fi_tx_attr **tx_attr);
-int fi_bgq_check_tx_attr(struct fi_tx_attr *attr);
+int fi_bgq_check_tx_attr(const struct fi_tx_attr *attr);
 
 int fi_bgq_alloc_default_rx_attr(struct fi_rx_attr **rx_attr);
-int fi_bgq_check_rx_attr(struct fi_rx_attr *attr);
+int fi_bgq_check_rx_attr(const struct fi_rx_attr *attr);
 
 int fi_bgq_scalable_ep(struct fid_domain *dom, struct fi_info *info,
 		struct fid_ep **ep, void *context);

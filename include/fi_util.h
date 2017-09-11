@@ -698,7 +698,7 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
-		 struct fi_info *hints, struct fi_info **info);
+		 const struct fi_info *hints, struct fi_info **info);
 
 
 struct fid_list_entry {
@@ -719,16 +719,16 @@ void ofi_fabric_remove(struct util_fabric *fabric);
  * Utility Providers
  */
 
-typedef int (*ofi_alter_info_t)(uint32_t version, struct fi_info *src_info,
+typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
 				struct fi_info *dest_info);
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
-		      struct fi_info *util_hints, ofi_alter_info_t info_to_core,
+		      const struct fi_info *util_hints, ofi_alter_info_t info_to_core,
 		      struct fi_info **core_info);
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
-		 struct fi_info *hints, ofi_alter_info_t info_to_core,
+		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
 		 ofi_alter_info_t info_to_util, struct fi_info **info);
 int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
 			     struct fi_info **core_info);

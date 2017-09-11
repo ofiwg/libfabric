@@ -338,7 +338,8 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr);
 
 int fi_ibv_init_info(struct fi_info **all_infos);
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
-		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
+		   uint64_t flags, const struct fi_info *hints,
+		   struct fi_info **info);
 struct fi_info *fi_ibv_get_verbs_info(struct fi_info *ilist,
 				      const char *domain_name);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,

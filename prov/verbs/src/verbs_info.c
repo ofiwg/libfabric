@@ -1155,9 +1155,10 @@ static int fi_ibv_set_default_info(struct fi_info *info)
 }
 
 static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
-		struct fi_info *hints, struct fi_info **info, struct fi_info *verbs_info)
+		const struct fi_info *hints, struct fi_info **info,
+		const struct fi_info *verbs_info)
 {
-	struct fi_info *check_info;
+	const struct fi_info *check_info;
 	struct fi_info *fi, *tail;
 	int ret;
 
@@ -1203,7 +1204,8 @@ err1:
 }
 
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
-		   uint64_t flags, struct fi_info *hints, struct fi_info **info)
+		   uint64_t flags, const struct fi_info *hints,
+		   struct fi_info **info)
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;

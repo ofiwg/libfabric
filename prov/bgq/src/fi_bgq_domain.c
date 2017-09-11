@@ -286,7 +286,8 @@ err:
 	return -1;
 }
 
-int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints)
+int fi_bgq_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr,
+			 const struct fi_domain_attr *hints)
 {
 	if (!domain_attr) {
 		goto err;
@@ -360,7 +361,7 @@ err:
 	return -errno;
 }
 
-int fi_bgq_check_domain_attr(struct fi_domain_attr *attr)
+int fi_bgq_check_domain_attr(const struct fi_domain_attr *attr)
 {
 	switch(attr->threading) {
 	case FI_THREAD_UNSPEC:

@@ -155,7 +155,7 @@ struct util_prov mlx_util_prov = {
 static int mlx_getinfo (
 			uint32_t version, const char *node,
 			const char *service, uint64_t flags,
-			struct fi_info *hints, struct fi_info **info)
+			const struct fi_info *hints, struct fi_info **info)
 {
 	int status = -ENODATA;
 	FI_INFO(&mlx_prov, FI_LOG_CORE,"\n");

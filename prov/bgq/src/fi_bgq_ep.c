@@ -1709,7 +1709,7 @@ err:
 	return -errno;
 }
 
-int fi_bgq_check_rx_attr(struct fi_rx_attr *attr)
+int fi_bgq_check_rx_attr(const struct fi_rx_attr *attr)
 {
 	/* TODO: more error checking of rx_attr */
 #ifdef TODO
@@ -1760,7 +1760,7 @@ err:
 	return -errno;
 }
 
-int fi_bgq_check_tx_attr(struct fi_tx_attr *attr)
+int fi_bgq_check_tx_attr(const struct fi_tx_attr *attr)
 {
 	if (attr->inject_size > FI_BGQ_INJECT_SIZE) {
 		FI_LOG(fi_bgq_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
@@ -1827,7 +1827,7 @@ err:
 	return -errno;
 }
 
-int fi_bgq_check_ep_attr(struct fi_ep_attr *attr)
+int fi_bgq_check_ep_attr(const struct fi_ep_attr *attr)
 {
 	switch(attr->protocol) {
 		case FI_PROTO_UNSPEC:

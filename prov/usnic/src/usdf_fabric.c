@@ -108,7 +108,7 @@ static int usdf_fabric_getname(uint32_t version, struct usd_device_attrs *dap,
 }
 
 static bool usdf_fabric_checkname(uint32_t version,
-				  struct usd_device_attrs *dap, char *hint)
+				  struct usd_device_attrs *dap, const char *hint)
 {
 	int ret;
 	bool valid = false;
@@ -143,7 +143,7 @@ static bool usdf_fabric_checkname(uint32_t version,
 	return usdf_fabric_checkname(FI_VERSION(1, 3), dap, hint);
 }
 
-static int usdf_validate_hints(uint32_t version, struct fi_info *hints)
+static int usdf_validate_hints(uint32_t version, const struct fi_info *hints)
 {
 	struct fi_fabric_attr *fattrp;
 	size_t size;
@@ -309,7 +309,7 @@ fail:
 	return ret;		// fi_freeinfo() in caller frees all
 }
 
-static int validate_modebits(uint32_t version, struct fi_info *hints,
+static int validate_modebits(uint32_t version, const struct fi_info *hints,
 			       uint64_t supported, uint64_t *mode_out)
 {
 	uint64_t mode;
@@ -335,7 +335,7 @@ static int validate_modebits(uint32_t version, struct fi_info *hints,
 
 static int usdf_fill_info_dgram(
 	uint32_t version,
-	struct fi_info *hints,
+	const struct fi_info *hints,
 	void *src,
 	void *dest,
 	struct usd_device_attrs *dap,
@@ -430,7 +430,7 @@ fail:
 
 static int usdf_fill_info_msg(
 	uint32_t version,
-	struct fi_info *hints,
+	const struct fi_info *hints,
 	void *src,
 	void *dest,
 	struct usd_device_attrs *dap,
@@ -519,7 +519,7 @@ fail:
 
 static int usdf_fill_info_rdm(
 	uint32_t version,
-	struct fi_info *hints,
+	const struct fi_info *hints,
 	void *src,
 	void *dest,
 	struct usd_device_attrs *dap,
@@ -697,7 +697,7 @@ usdf_get_distance(
  * @return true on success, false on failure. For debug logging can be enabled
  *         to see why a device was disqualified.
  */
-static bool usdf_check_device(uint32_t version, struct fi_info *hints,
+static bool usdf_check_device(uint32_t version, const struct fi_info *hints,
 			      void *src, void *dest,
 			      struct usdf_dev_entry *dep)
 {
@@ -800,8 +800,8 @@ fail:
 
 static int
 usdf_handle_node_and_service(const char *node, const char *service,
-		uint64_t flags, void **src, void **dest, struct fi_info *hints,
-		struct addrinfo **ai)
+		uint64_t flags, void **src, void **dest,
+		const struct fi_info *hints, struct addrinfo **ai)
 {
 	int ret;
 	struct sockaddr_in *sin;
@@ -838,7 +838,7 @@ usdf_handle_node_and_service(const char *node, const char *service,
 
 static int
 usdf_getinfo(uint32_t version, const char *node, const char *service,
-	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
+	       uint64_t flags, const struct fi_info *hints, struct fi_info **info)
 {
 	struct usdf_usnic_info *dp;
 	struct usdf_dev_entry *dep;

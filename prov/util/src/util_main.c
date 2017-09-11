@@ -152,7 +152,7 @@ int util_find_domain(struct dlist_entry *item, const void *arg)
 
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
-		 struct fi_info *hints, struct fi_info **info)
+		 const struct fi_info *hints, struct fi_info **info)
 {
 	struct util_fabric *fabric;
 	struct util_domain *domain;

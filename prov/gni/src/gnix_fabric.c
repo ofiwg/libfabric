@@ -303,7 +303,7 @@ static struct fi_info *_gnix_allocinfo(void)
 }
 
 static int __gnix_getinfo_resolve_node(const char *node, const char *service,
-				       uint64_t flags, struct fi_info *hints,
+				       uint64_t flags, const struct fi_info *hints,
 				       struct fi_info *info)
 {
 	int ret;
@@ -475,7 +475,7 @@ static inline int __gnix_check_mr_mode(int mr_mode)
 
 static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			    const char *node, const char *service,
-			    uint64_t flags, struct fi_info *hints,
+			    uint64_t flags, const struct fi_info *hints,
 			    struct fi_info **info)
 {
 	uint64_t mode = GNIX_FAB_MODES;
@@ -716,7 +716,7 @@ err:
 }
 
 static int gnix_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, struct fi_info *hints,
+			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
 	int ret = 0;

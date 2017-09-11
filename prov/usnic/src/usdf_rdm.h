@@ -141,13 +141,13 @@ struct usdf_rdm_connection {
 	struct usdf_rdm_connection *dc_hash_next;
 };
 
-int usdf_rdm_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+int usdf_rdm_fill_ep_attr(const struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap);
-int usdf_rdm_fill_dom_attr(uint32_t version, struct fi_info *hints,
+int usdf_rdm_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 			   struct fi_info *fi, struct usd_device_attrs *dap);
-int usdf_rdm_fill_tx_attr(uint32_t version, struct fi_info *hints,
+int usdf_rdm_fill_tx_attr(uint32_t version, const struct fi_info *hints,
 			   struct fi_info *fi);
-int usdf_rdm_fill_rx_attr(uint32_t version, struct fi_info *hints,
+int usdf_rdm_fill_rx_attr(uint32_t version, const struct fi_info *hints,
 			  struct fi_info *fi);
 
 int usdf_rdm_post_recv(struct usdf_rx *rx, void *buf, size_t len);

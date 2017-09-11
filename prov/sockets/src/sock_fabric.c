@@ -201,7 +201,7 @@ struct sock_fabric *sock_fab_list_head(void)
 	return fabric;
 }
 
-int sock_verify_fabric_attr(struct fi_fabric_attr *attr)
+int sock_verify_fabric_attr(const struct fi_fabric_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -215,7 +215,7 @@ int sock_verify_fabric_attr(struct fi_fabric_attr *attr)
 	return 0;
 }
 
-int sock_verify_info(uint32_t version, struct fi_info *hints)
+int sock_verify_info(uint32_t version, const struct fi_info *hints)
 {
 	uint64_t caps;
 	enum fi_ep_type ep_type;
@@ -403,7 +403,8 @@ out:
 	return ret;
 }
 
-static int sock_fi_checkinfo(struct fi_info *info, struct fi_info *hints)
+static int sock_fi_checkinfo(const struct fi_info *info,
+			     const struct fi_info *hints)
 {
 	if (hints && hints->domain_attr && hints->domain_attr->name &&
              strcmp(info->domain_attr->name, hints->domain_attr->name))
@@ -418,7 +419,7 @@ static int sock_fi_checkinfo(struct fi_info *info, struct fi_info *hints)
 
 static int sock_ep_getinfo(uint32_t version, const char *node,
 			   const char *service, uint64_t flags,
-			   struct fi_info *hints, enum fi_ep_type ep_type,
+			   const struct fi_info *hints, enum fi_ep_type ep_type,
 			   struct fi_info **info)
 {
 	struct addrinfo ai, *rai = NULL;
@@ -547,7 +548,7 @@ void sock_get_list_of_addr(struct slist *addr_list)
 #endif
 
 int sock_node_getinfo(uint32_t version, const char *node, const char *service,
-		      uint64_t flags, struct fi_info *hints, struct fi_info **info,
+		      uint64_t flags, const struct fi_info *hints, struct fi_info **info,
 		      struct fi_info **tail)
 {
 	enum fi_ep_type ep_type;
@@ -665,7 +666,7 @@ static void sock_free_addr_list(struct slist *addr_list)
 }
 
 static int sock_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, struct fi_info *hints,
+			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
 	int ret = 0;

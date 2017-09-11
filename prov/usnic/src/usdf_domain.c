@@ -400,7 +400,7 @@ int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
  *    _valid_.
  */
 bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
-			   char *hint)
+			   const char *hint)
 {
 	char *reference;
 	bool valid;
@@ -458,7 +458,7 @@ int usdf_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 }
 
 /* Catch the version changes for domain_attr. */
-int usdf_catch_dom_attr(uint32_t version, struct fi_info *hints,
+int usdf_catch_dom_attr(uint32_t version, const struct fi_info *hints,
 			struct fi_domain_attr *dom_attr)
 {
 	/* version 1.5 introduced new bits. If the user asked for older
@@ -485,7 +485,7 @@ int usdf_catch_dom_attr(uint32_t version, struct fi_info *hints,
 }
 
 /* Catch the version changes for tx_attr. */
-int usdf_catch_tx_attr(uint32_t version, struct fi_tx_attr *tx_attr)
+int usdf_catch_tx_attr(uint32_t version, const struct fi_tx_attr *tx_attr)
 {
 	/* In version < 1.5, FI_LOCAL_MR is required. */
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
@@ -497,7 +497,7 @@ int usdf_catch_tx_attr(uint32_t version, struct fi_tx_attr *tx_attr)
 }
 
 /* Catch the version changes for rx_attr. */
-int usdf_catch_rx_attr(uint32_t version, struct fi_rx_attr *rx_attr)
+int usdf_catch_rx_attr(uint32_t version, const struct fi_rx_attr *rx_attr)
 {
 	/* In version < 1.5, FI_LOCAL_MR is required. */
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
@@ -511,7 +511,7 @@ int usdf_catch_rx_attr(uint32_t version, struct fi_rx_attr *rx_attr)
 /* A wrapper function to core utility function to check mr_mode bits.
  * We need to check some more things for backward compatibility.
  */
-int usdf_check_mr_mode(uint32_t version, struct fi_info *hints,
+int usdf_check_mr_mode(uint32_t version, const struct fi_info *hints,
 		       uint64_t prov_mode)
 {
 	int ret;

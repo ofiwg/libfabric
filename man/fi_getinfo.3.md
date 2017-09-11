@@ -17,7 +17,7 @@ fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
 #include <rdma/fabric.h>
 
 int fi_getinfo(int version, const char *node, const char *service,
-        uint64_t flags, struct fi_info *hints, struct fi_info **info);
+        uint64_t flags, const struct fi_info *hints, struct fi_info **info);
 
 void fi_freeinfo(struct fi_info *info);
 

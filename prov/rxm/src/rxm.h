@@ -330,9 +330,9 @@ static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
-int rxm_info_to_core(uint32_t version, struct fi_info *rxm_info,
+int rxm_info_to_core(uint32_t version, const struct fi_info *rxm_info,
 		     struct fi_info *core_info);
-int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
+int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		    struct fi_info *info);
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);

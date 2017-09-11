@@ -92,13 +92,13 @@ struct usdf_msg_qe {
 
 int usdf_msg_post_recv(struct usdf_rx *rx, void *buf, size_t len);
 
-int usdf_msg_fill_tx_attr(uint32_t version, struct fi_info *hints,
+int usdf_msg_fill_tx_attr(uint32_t version, const struct fi_info *hints,
 			  struct fi_info *fi);
-int usdf_msg_fill_rx_attr(uint32_t version, struct fi_info *hints,
+int usdf_msg_fill_rx_attr(uint32_t version, const struct fi_info *hints,
 			  struct fi_info *fi);
-int usdf_msg_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+int usdf_msg_fill_ep_attr(const struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap);
-int usdf_msg_fill_dom_attr(uint32_t version, struct fi_info *hints,
+int usdf_msg_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 			   struct fi_info *fi, struct usd_device_attrs *dap);
 
 void usdf_msg_ep_timeout(void *vep);

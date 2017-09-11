@@ -824,7 +824,7 @@ fi_addr_t usdf_av_lookup_addr(struct usdf_av *av,
 /* Return sockaddr_in pointer. Must be used with usdf_free_sin_if_needed()
  * to cleanup properly.
  */
-struct sockaddr_in *usdf_format_to_sin(struct fi_info *info, const void *addr)
+struct sockaddr_in *usdf_format_to_sin(const struct fi_info *info, const void *addr)
 {
 	struct sockaddr_in *sin;
 
@@ -846,7 +846,7 @@ struct sockaddr_in *usdf_format_to_sin(struct fi_info *info, const void *addr)
 
 /* Utility function to free the sockaddr_in allocated from usdf_format_to_sin()
  */
-void usdf_free_sin_if_needed(struct fi_info *info, struct sockaddr_in *sin)
+void usdf_free_sin_if_needed(const struct fi_info *info, struct sockaddr_in *sin)
 {
 	if (info && info->addr_format == FI_ADDR_STR)
 		free(sin);
@@ -855,7 +855,7 @@ void usdf_free_sin_if_needed(struct fi_info *info, struct sockaddr_in *sin)
 /* Convert sockaddr_in pointer to appropriate format.
  * If conversion happens, destroy the origin. (to minimize cleaning up code)
  */
-void *usdf_sin_to_format(struct fi_info *info, void *addr, size_t *len)
+void *usdf_sin_to_format(const struct fi_info *info, void *addr, size_t *len)
 {
 	size_t addr_strlen;
 	char *addrstr;
