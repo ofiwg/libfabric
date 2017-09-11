@@ -283,34 +283,38 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 	return ret;
 }
 
-ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len,
-		    int count, void *context)
+// WR must be filled out by now except for context
+ssize_t
+fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 {
 	struct ibv_send_wr *bad_wr;
 	int ret;
 
-	assert(ep->scq);
-	wr->num_sge = count;
 	wr->wr_id = (uintptr_t) context;
 
-	if (wr->send_flags & IBV_SEND_SIGNALED) {
-		assert((wr->wr_id & ep->scq->wr_id_mask) != ep->scq->send_signal_wr_id);
-		ofi_atomic_set32(&ep->unsignaled_send_cnt, 0);
-	} else {
-		if (VERBS_SIGNAL_SEND(ep)) {
-			ret = fi_ibv_signal_send(ep, wr);
-			if (ret)
-				return ret;
-		} else {
-			ofi_atomic_inc32(&ep->unsignaled_send_cnt);
+	if (ep->scq) {
 
-			if (ofi_atomic_get32(&ep->unsignaled_send_cnt) >=
-					VERBS_SEND_COMP_THRESH(ep)) {
-				ret = fi_ibv_reap_comp(ep);
+		if (wr->send_flags & IBV_SEND_SIGNALED) {
+			assert((wr->wr_id & ep->scq->wr_id_mask) !=
+				ep->scq->send_signal_wr_id);
+			ofi_atomic_set32(&ep->unsignaled_send_cnt, 0);
+		} else {
+			if (VERBS_SIGNAL_SEND(ep)) {
+				ret = fi_ibv_signal_send(ep, wr);
 				if (ret)
 					return ret;
+			} else {
+				ofi_atomic_inc32(&ep->unsignaled_send_cnt);
+
+				if (ofi_atomic_get32(&ep->unsignaled_send_cnt) >=
+						VERBS_SEND_COMP_THRESH(ep)) {
+					ret = fi_ibv_reap_comp(ep);
+					if (ret)
+						return ret;
+				}
 			}
 		}
+
 	}
 
 	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
@@ -332,8 +336,9 @@ ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
 
 	wr->sg_list = &sge;
+	wr->num_sge = 1;
 
-	return fi_ibv_send(ep, wr, len, 1, context);
+	return fi_ibv_send(ep, wr, context);
 }
 
 ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
@@ -342,8 +347,9 @@ ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	struct ibv_sge sge = fi_ibv_init_sge_inline(buf, len);
 
 	wr->sg_list = &sge;
+	wr->num_sge = 1;
 
-	return fi_ibv_send(ep, wr, len, 1, NULL);
+	return fi_ibv_send(ep, wr, NULL);
 }
 
 ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
@@ -357,12 +363,13 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	else
 		fi_ibv_set_sge_iov(wr->sg_list, iov, count, desc, len);
 
+	wr->num_sge = count;
 	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
 
 	if (flags & FI_FENCE)
-		wr->send_flags = IBV_SEND_FENCE;
+		wr->send_flags |= IBV_SEND_FENCE;
 
-	return fi_ibv_send(ep, wr, len, count, context);
+	return fi_ibv_send(ep, wr, context);
 }
 
 static int fi_ibv_get_param_int(char *param_name, char *param_str,
