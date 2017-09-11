@@ -526,54 +526,6 @@ struct rxd_trecv_entry *rxd_get_trecv_entry(struct rxd_ep *ep,
 	return trecv_entry;
 }
 
-void rxd_cq_report_rx_comp(struct rxd_cq *cq, struct rxd_rx_entry *rx_entry)
-{
-	struct fi_cq_tagged_entry cq_entry = {0};
-
-	/* todo: handle FI_COMPLETION */
-	if (rx_entry->op_hdr.flags & OFI_REMOTE_CQ_DATA)
-		cq_entry.flags |= FI_REMOTE_CQ_DATA;
-
-	switch(rx_entry->op_hdr.op) {
-	case ofi_op_msg:
-		cq_entry.flags |= FI_RECV;
-		cq_entry.op_context = rx_entry->recv->msg.context;
-		cq_entry.len = rx_entry->done;
-		cq_entry.buf = rx_entry->recv->iov[0].iov_base;
-		cq_entry.data = rx_entry->op_hdr.data;
-		break;
-	case ofi_op_tagged:
-		cq_entry.flags |= (FI_RECV | FI_TAGGED);
-		cq_entry.op_context = rx_entry->trecv->msg.context;
-		cq_entry.len = rx_entry->done;
-		cq_entry.buf = rx_entry->trecv->iov[0].iov_base;
-		cq_entry.data = rx_entry->op_hdr.data;
-		cq_entry.tag = rx_entry->trecv->msg.tag;
-		break;
-	case ofi_op_atomic:
-		cq_entry.flags |= FI_ATOMIC;
-		break;
-	case ofi_op_write:
-		if (!(rx_entry->op_hdr.flags & OFI_REMOTE_CQ_DATA))
-			return;
-
-		cq_entry.flags |= (FI_RMA | FI_REMOTE_WRITE);
-		cq_entry.op_context = rx_entry->trecv->msg.context;
-		cq_entry.len = rx_entry->done;
-		cq_entry.buf = rx_entry->write.iov[0].iov_base;
-		cq_entry.data = rx_entry->op_hdr.data;
-		break;
-	case ofi_op_read_rsp:
-		return;
-	default:
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid op type: %d\n",
-			rx_entry->op_hdr.op);
-		break;
-	}
-
-	cq->write_fn(cq, &cq_entry);
-}
-
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry)
 {
 	struct fi_cq_tagged_entry cq_entry = {0};
@@ -641,7 +593,10 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 			   struct ofi_ctrl_hdr *ctrl, void *data,
 			   struct rxd_rx_buf *rx_buf)
 {
+	struct fi_cq_tagged_entry cq_entry = {0};
+	struct util_cntr *cntr = NULL;
 	uint64_t done;
+	struct rxd_cq *rxd_rx_cq = rxd_ep_rx_cq(ep);
 
 	ep->credits++;
 	done = ofi_copy_to_iov(iov, iov_count, rx_entry->done, data,
@@ -680,16 +635,52 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 		return;
 	}
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "reporting RX completion event\n");
-	rxd_cq_report_rx_comp(rxd_ep_rx_cq(ep), rx_entry);
-	rxd_cntr_report_rx_comp(ep, rx_entry);
-
+	/* todo: handle FI_COMPLETION for RX CQ comp */
 	switch(rx_entry->op_hdr.op) {
 	case ofi_op_msg:
 		freestack_push(ep->recv_fs, rx_entry->recv);
+		/* Handle cntr */
+		cntr = ep->util_ep.rx_cntr;
+		/* Handle CQ comp */
+		cq_entry.flags |= FI_RECV;
+		cq_entry.op_context = rx_entry->recv->msg.context;
+		cq_entry.len = rx_entry->done;
+		cq_entry.buf = rx_entry->recv->iov[0].iov_base;
+		cq_entry.data = rx_entry->op_hdr.data;
+		rxd_rx_cq->write_fn(rxd_rx_cq, &cq_entry);
 		break;
 	case ofi_op_tagged:
 		freestack_push(ep->trecv_fs, rx_entry->trecv);
+		/* Handle cntr */
+		cntr = ep->util_ep.rx_cntr;
+		/* Handle CQ comp */
+		cq_entry.flags |= (FI_RECV | FI_TAGGED);
+		cq_entry.op_context = rx_entry->trecv->msg.context;
+		cq_entry.len = rx_entry->done;
+		cq_entry.buf = rx_entry->trecv->iov[0].iov_base;
+		cq_entry.data = rx_entry->op_hdr.data;
+		cq_entry.tag = rx_entry->trecv->msg.tag;\
+		rxd_rx_cq->write_fn(rxd_rx_cq, &cq_entry);
+		break;
+	case ofi_op_atomic:
+		/* Handle cntr */ 
+		cntr = ep->util_ep.rem_wr_cntr;
+		/* Handle CQ comp */
+		cq_entry.flags |= FI_ATOMIC;
+		rxd_rx_cq->write_fn(rxd_rx_cq, &cq_entry);
+		break;
+	case ofi_op_write:
+		/* Handle cntr */
+		cntr = ep->util_ep.rem_wr_cntr;
+		/* Handle CQ comp */
+		if (rx_entry->op_hdr.flags & OFI_REMOTE_CQ_DATA) {
+			cq_entry.flags |= (FI_RMA | FI_REMOTE_WRITE);
+			cq_entry.op_context = rx_entry->trecv->msg.context;
+			cq_entry.len = rx_entry->done;
+			cq_entry.buf = rx_entry->write.iov[0].iov_base;
+			cq_entry.data = rx_entry->op_hdr.data;
+			rxd_rx_cq->write_fn(rxd_rx_cq, &cq_entry);
+		}
 		break;
 	case ofi_op_read_rsp:
 		rxd_cq_report_tx_comp(rxd_ep_tx_cq(ep), rx_entry->read_rsp.tx_entry);
@@ -697,8 +688,14 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 		rxd_tx_entry_done(ep, rx_entry->read_rsp.tx_entry);
 		break;
 	default:
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid op type: %d\n",
+			rx_entry->op_hdr.op);
 		break;
 	}
+
+	if (cntr)
+		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+
 	rxd_rx_entry_free(ep, rx_entry);
 }
 

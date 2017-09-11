@@ -415,8 +415,6 @@ void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry);
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
 void rxd_cq_report_tx_comp(struct rxd_cq *cq, struct rxd_tx_entry *tx_entry);
-void rxd_cq_report_rx_comp(struct rxd_cq *cq, struct rxd_rx_entry *rx_entry);
 void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry);
-void rxd_cntr_report_rx_comp(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry);
 
 #endif
