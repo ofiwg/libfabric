@@ -43,6 +43,7 @@ common_srcs = \
 	src/fasthash.c \
 	src/indexer.c \
 	src/iov.c \
+	src/log.c \
 	prov/util/src/util_atomic.c \
 	prov/util/src/util_attr.c   \
 	prov/util/src/util_av.c     \
@@ -124,7 +125,6 @@ src_libfabric_la_SOURCES = \
 	include/rdma/providers/fi_prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
-	src/log.c \
 	src/var.c \
 	src/abi_1_0.c \
 	$(common_srcs)
