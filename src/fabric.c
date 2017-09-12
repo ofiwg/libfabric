@@ -387,7 +387,6 @@ void fi_ini(void)
 
 	fi_param_init();
 	fi_log_init();
-	fi_util_init();
 	ofi_osd_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
@@ -482,7 +481,6 @@ FI_DESTRUCTOR(fi_fini(void))
 	ofi_free_filter(&prov_filter);
 	fi_log_fini();
 	fi_param_fini();
-	fi_util_fini();
 	ofi_osd_fini();
 }
 
