@@ -1262,8 +1262,8 @@ err:
 	return ret;
 }
 
-static int rxm_info_to_core_srx_ctx(uint32_t version, struct fi_info *rxm_hints,
-				struct fi_info *core_hints)
+static int rxm_info_to_core_srx_ctx(uint32_t version,
+		const struct fi_info *rxm_hints, struct fi_info *core_hints)
 {
 	int ret;
 
@@ -1274,7 +1274,7 @@ static int rxm_info_to_core_srx_ctx(uint32_t version, struct fi_info *rxm_hints,
 	return 0;
 }
 
-static int rxm_ep_get_core_info(uint32_t version, struct fi_info *hints,
+static int rxm_ep_get_core_info(uint32_t version, const struct fi_info *hints,
 				struct fi_info **info)
 {
 	int ret;
