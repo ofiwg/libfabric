@@ -740,9 +740,6 @@ struct fi_provider psmx2_prov = {
 
 PROVIDER_INI
 {
-#ifdef HAVE_PSM2_DL
-	fi_util_init();
-#endif
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
 
 	fi_param_define(&psmx2_prov, "name_server", FI_PARAM_BOOL,
