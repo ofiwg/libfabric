@@ -151,10 +151,6 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	fid = cma_event->id->context;
 	pep = container_of(fid, struct fi_ibv_pep, pep_fid);
 	switch (cma_event->event) {
-//	case RDMA_CM_EVENT_ADDR_RESOLVED:
-//		return 0;
-//	case RDMA_CM_EVENT_ROUTE_RESOLVED:
-//		return 0;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
 		entry->info = fi_ibv_eq_cm_getinfo(eq->fab, cma_event, pep->info);

@@ -100,6 +100,7 @@
 #define VERBS_SEND_SIGNAL_THRESH(ep) ((ep->info->tx_attr->size * 4) / 5)
 #define VERBS_SEND_COMP_THRESH(ep) ((ep->info->tx_attr->size * 9) / 10)
 #define VERBS_WCE_CNT 1024
+#define VERBS_WRE_CNT 1024
 #define VERBS_EPE_CNT 1024
 
 #define VERBS_DEF_CQ_SIZE 1024
@@ -235,6 +236,25 @@ struct fi_ibv_wce {
 	struct ibv_wc		wc;
 };
 
+enum fi_ibv_wre_type {
+	IBV_SEND_WR,
+	IBV_RECV_WR,
+};
+
+struct fi_ibv_wre {
+	struct dlist_entry      entry;
+	void			*context;
+	struct fi_ibv_msg_ep	*ep;
+	struct fi_ibv_srq_ep	*srq;
+	struct {
+		enum fi_ibv_wre_type	type;
+		union {
+			struct ibv_send_wr      swr;
+			struct ibv_recv_wr	rwr;
+		}; 
+	} wr;
+};
+
 struct fi_ibv_cq {
 	struct fid_cq		cq_fid;
 	struct fi_ibv_domain	*domain;
@@ -282,10 +302,12 @@ struct fi_ibv_mem_desc {
 struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
+	struct util_buf_pool	*wre_pool;
+	struct dlist_entry	wre_list;
 };
 
 int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
-		struct fid_ep **rx_ep, void *context);
+		       struct fid_ep **rx_ep, void *context);
 
 struct fi_ibv_msg_ep {
 	struct fid_ep		ep_fid;
@@ -298,6 +320,8 @@ struct fi_ibv_msg_ep {
 	struct fi_info		*info;
 	ofi_atomic32_t		unsignaled_send_cnt;
 	ofi_atomic32_t		comp_pending;
+	struct util_buf_pool	*wre_pool;
+	struct dlist_entry	wre_list;
 	uint64_t		ep_id;
 	struct fi_ibv_domain	*domain;
 };
@@ -380,6 +404,10 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
 int fi_ibv_set_rnr_timer(struct ibv_qp *qp);
+void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
+			   struct dlist_entry *wre_list,
+			   enum fi_ibv_wre_type wre_type);
+void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *cur_ep);
 
 #define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
 	{ .addr = (uintptr_t)buf,					\
