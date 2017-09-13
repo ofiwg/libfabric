@@ -146,6 +146,25 @@ extern "C" {
 #endif /* HAVE_SYMVER_SUPPORT */
 
 
+/*
+ * The conversion from abi 1.0 requires being able to cast from a newer
+ * structure back to the older version.
+ */
+struct fi_cq_err_entry_1_0 {
+	void			*op_context;
+	uint64_t		flags;
+	size_t			len;
+	void			*buf;
+	uint64_t		data;
+	uint64_t		tag;
+	size_t			olen;
+	int			err;
+	int			prov_errno;
+	/* err_data is available until the next time the CQ is read */
+	void			*err_data;
+};
+
+
 #ifdef __cplusplus
 }
 #endif

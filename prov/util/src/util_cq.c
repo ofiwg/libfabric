@@ -250,7 +250,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 		buf->err_data = err_buf_save;
 		buf->err_data_size = err_data_size;
 	} else {
-		*buf = err->err_entry;
+		memcpy(buf, &err->err_entry, sizeof(struct fi_cq_err_entry_1_0));
 	}
 	ret = 1;
 	free(err);
