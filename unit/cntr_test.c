@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <sched.h>
 
 #include <rdma/fi_errno.h>
 
@@ -48,8 +49,9 @@ static char err_buf[512];
 static int cntr_loop()
 {
 	size_t i, opened, cntr_cnt;
-	uint64_t value;
-	int ret, testret = FAIL;
+	uint64_t value, expected;
+	struct timespec start, stop;
+	int ret, testret = FAIL, timeout = 5000;
 
 	cntr_cnt = MIN(fi->domain_attr->cntr_cnt, MAX_COUNTER_CHECK);
 	struct fid_cntr **cntrs = calloc(cntr_cnt, sizeof(struct fid_cntr *));
@@ -95,14 +97,28 @@ static int cntr_loop()
 	}
 
 	for (i = 0; i < opened; i++) {
-		value = fi_cntr_read(cntrs[i]);
-		if (value != i + i) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		expected = i + i;
+		do {
+			value = fi_cntr_read(cntrs[i]);
+			clock_gettime(CLOCK_MONOTONIC, &stop);
+			sched_yield();
+		} while ((value != expected) &&
+			((stop.tv_sec - start.tv_sec) > timeout));
+		if (value != expected) {
 			FT_PRINTERR("fi_cntr_read", value);
 			goto close;
 		}
 
-		value = fi_cntr_readerr(cntrs[i]);
-		if (value != (i << 1) + i) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		expected = (i << 1) + i;
+		do {
+			value = fi_cntr_readerr(cntrs[i]);
+			clock_gettime(CLOCK_MONOTONIC, &stop);
+			sched_yield();
+		} while ((value != expected) &&
+			((stop.tv_sec - start.tv_sec) > timeout));
+		if (value != expected) {
 			FT_PRINTERR("fi_cntr_readerr", value);
 			goto close;
 		}
