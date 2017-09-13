@@ -64,7 +64,7 @@ static inline int fd_signal_init(struct fd_signal *signal)
 
 	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, signal->fd);
 	if (ret < 0)
-		return -errno;
+		return -ofi_sockerr();
 
 	ret = fi_fd_nonblock(signal->fd[FI_READ_FD]);
 	if (ret)
@@ -75,7 +75,7 @@ static inline int fd_signal_init(struct fd_signal *signal)
 err:
 	ofi_close_socket(signal->fd[0]);
 	ofi_close_socket(signal->fd[1]);
-	return -errno;
+	return ret;
 }
 
 static inline void fd_signal_free(struct fd_signal *signal)
@@ -121,7 +121,7 @@ typedef int fi_epoll_t;
 static inline int fi_epoll_create(int *ep)
 {
 	*ep = epoll_create(4);
-	return *ep < 0 ? -errno : 0;
+	return *ep < 0 ? -ofi_syserr() : 0;
 }
 
 static inline int fi_epoll_add(int ep, int fd, void *context)
@@ -132,14 +132,14 @@ static inline int fi_epoll_add(int ep, int fd, void *context)
 	event.data.ptr = context;
 	event.events = EPOLLIN;
 	ret = epoll_ctl(ep, EPOLL_CTL_ADD, fd, &event);
-	if (ret == -1 && errno != EEXIST)
-		return -errno;
+	if ((ret == -1) && (ofi_syserr() != EEXIST))
+		return -ofi_syserr();
 	return 0;
 }
 
 static inline int fi_epoll_del(int ep, int fd)
 {
-	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -errno : 0;
+	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -ofi_syserr() : 0;
 }
 
 static inline int fi_epoll_wait(int ep, void **contexts, int max_contexts,
@@ -151,7 +151,7 @@ static inline int fi_epoll_wait(int ep, void **contexts, int max_contexts,
 
 	ret = epoll_wait(ep, events, max_contexts, timeout);
 	if (ret == -1)
-		return -errno;
+		return -ofi_syserr();
 
 	for (i = 0; i < ret; i++)
 		contexts[i] = events[i].data.ptr;

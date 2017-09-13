@@ -55,6 +55,9 @@
 #define INVALID_SOCKET (-1)
 #endif
 
+#ifndef SOCKET_ERROR
+#define SOCKET_ERROR (-1)
+#endif
 
 #define FI_DESTRUCTOR(func) static __attribute__((destructor)) void func
 
@@ -64,8 +67,12 @@
 #define OFI_UNUSED UNREFERENCED_PARAMETER
 #endif
 
-#define OFI_SOCK_TRY_RCV_AGAIN(err)			\
-	((err) == EAGAIN || (err) == EWOULDBLOCK)
+#define OFI_SOCK_TRY_SND_RCV_AGAIN(err)		\
+	(((err) == EAGAIN)	||		\
+	 ((err) == EWOULDBLOCK))
+
+#define OFI_SOCK_TRY_CONN_AGAIN(err)	\
+	((err) == EINPROGRESS)
 
 struct util_shm
 {
@@ -108,6 +115,12 @@ static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
 	return write(fd, buf, count);
 }
 
+static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
+				      int flags)
+{
+	return recv(fd, buf, count, flags);
+}
+
 static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
 				      int flags)
 {
@@ -120,6 +133,11 @@ static inline int ofi_close_socket(SOCKET socket)
 }
 
 static inline int ofi_sockerr(void)
+{
+	return errno;
+}
+
+static inline int ofi_syserr(void)
 {
 	return errno;
 }

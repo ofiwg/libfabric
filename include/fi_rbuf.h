@@ -232,8 +232,10 @@ static inline int ofi_rbfdinit(struct ofi_ringbuffd *rbfd, size_t size)
 		return ret;
 
 	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, rbfd->fd);
-	if (ret < 0)
+	if (ret < 0) {
+		ret = -ofi_sockerr();
 		goto err1;
+	}
 
 	ret = fi_fd_nonblock(rbfd->fd[OFI_RB_READ_FD]);
 	if (ret)
@@ -246,7 +248,7 @@ err2:
 	ofi_close_socket(rbfd->fd[1]);
 err1:
 	ofi_rbfree(&rbfd->rb);
-	return -errno;
+	return ret;
 }
 
 static inline void ofi_rbfdfree(struct ofi_ringbuffd *rbfd)

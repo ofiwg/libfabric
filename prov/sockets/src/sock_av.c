@@ -456,12 +456,13 @@ static int sock_av_close(struct fid *fid)
 	if (ofi_atomic_get32(&av->ref))
 		return -FI_EBUSY;
 
-	if (!av->shared)
+	if (!av->shared) {
 		free(av->table_hdr);
-	else {
+	} else {
 		ret = ofi_shm_unmap(&av->shm);
 		if (ret)
-			SOCK_LOG_ERROR("unmap failed: %s\n", strerror(errno));
+			SOCK_LOG_ERROR("unmap failed: %s\n",
+				       strerror(ofi_syserr()));
 	}
 
 	ofi_atomic_dec32(&av->domain->ref);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -56,36 +56,34 @@ void fi_fini(void);
 
 int socketpair(int af, int type, int protocol, int socks[2])
 {
-	protocol; /* suppress warning */
+	OFI_UNUSED(protocol);
+
 	struct sockaddr_in in_addr;
-	int lsock;
+	SOCKET lsock;
 	int len = sizeof(in_addr);
 
-	if(!socks)
-	{
+	if(!socks) {
 		WSASetLastError(WSAEINVAL);
 		return SOCKET_ERROR;
 	}
 
-	socks[0] = socks[1] = (int)INVALID_SOCKET;
-	if ((lsock = socket(af == AF_UNIX ? AF_INET : af, type, 0)) == INVALID_SOCKET)
-	{
+	socks[0] = socks[1] = INVALID_SOCKET;
+	if ((lsock = socket(af == AF_UNIX ? AF_INET : af,
+			    type, 0)) == INVALID_SOCKET)
 		return SOCKET_ERROR;
-	}
 
 	memset(&in_addr, 0, sizeof(in_addr));
 	in_addr.sin_family = AF_INET;
 	in_addr.sin_addr.s_addr = htonl(0x7f000001);
 
-	if(bind(lsock, (struct sockaddr*)&in_addr, sizeof(in_addr)))
-	{
+	if (bind(lsock, (struct sockaddr*)&in_addr, sizeof(in_addr))) {
 		int err = WSAGetLastError();
 		closesocket(lsock);
 		WSASetLastError(err);
 		return SOCKET_ERROR;
 	}
-	if(getsockname(lsock, (struct sockaddr*) &in_addr, &len))
-	{
+
+	if (getsockname(lsock, (struct sockaddr*) &in_addr, &len)) {
 		int err = WSAGetLastError();
 		closesocket(lsock);
 		WSASetLastError(err);
@@ -94,11 +92,14 @@ int socketpair(int af, int type, int protocol, int socks[2])
 
 	if (listen(lsock, 1))
 		goto err;
-	if ((socks[0] = WSASocketW(af == AF_UNIX ? AF_INET : af, type, 0, NULL, 0, 0)) == INVALID_SOCKET)
+
+	if ((socks[0] = (int)WSASocketW(af == AF_UNIX ? AF_INET : af,
+					type, 0, NULL, 0, 0)) == INVALID_SOCKET)
 		goto err;
-	if(connect(socks[0], (const struct sockaddr*) &in_addr, sizeof(in_addr)))
+	if (connect(socks[0], (const struct sockaddr*) &in_addr,
+		    sizeof(in_addr)))
 		goto err;
-	if ((socks[1] = accept(lsock, NULL, NULL)) == INVALID_SOCKET)
+	if ((socks[1] = (int)accept(lsock, NULL, NULL)) == INVALID_SOCKET)
 		goto err;
 
 	closesocket(lsock);
@@ -202,8 +203,7 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 	ZeroMemory(shm, sizeof(*shm));
 
 	fname = malloc(len);
-	if (!fname)
-	{
+	if (!fname) {
 		ret = -FI_ENOMEM;
 		goto fn_nomem;
 	}

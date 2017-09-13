@@ -382,7 +382,7 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 
 	sock = ofi_socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
-		return -errno;
+		return -ofi_sockerr();
 
 	len = sizeof(*dest_addr);
 	ret = connect(sock, (struct sockaddr *) dest_addr, len);
@@ -396,7 +396,7 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	src_addr->sin_port = 0;
 	if (ret) {
 		SOCK_LOG_DBG("getsockname failed\n");
-		ret = -errno;
+		ret = -ofi_sockerr();
 	}
 out:
 	ofi_close_socket(sock);

@@ -312,7 +312,8 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 			sock_set_sockopts(pep->cm.sock);
 			if (!bind(pep->cm.sock, s_res->ai_addr, s_res->ai_addrlen))
 				break;
-			SOCK_LOG_ERROR("failed to bind listener: %s\n", strerror(errno));
+			SOCK_LOG_ERROR("failed to bind listener: %s\n",
+				       strerror(ofi_sockerr()));
 			ofi_close_socket(pep->cm.sock);
 			pep->cm.sock = -1;
 		}
@@ -320,7 +321,8 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 
 	freeaddrinfo(s_res);
 	if (pep->cm.sock < 0) {
-		SOCK_LOG_ERROR("failed to create listener: %s\n", strerror(errno));
+		SOCK_LOG_ERROR("failed to create listener: %s\n",
+			       strerror(ofi_sockerr()));
 		return -FI_EIO;
 	}
 
@@ -340,8 +342,9 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 	}
 
 	if (listen(pep->cm.sock, sock_cm_def_map_sz)) {
-		SOCK_LOG_ERROR("failed to listen socket: %s\n", strerror(errno));
-		return -errno;
+		SOCK_LOG_ERROR("failed to listen socket: %s\n",
+			       strerror(ofi_sockerr()));
+		return -ofi_sockerr();
 	}
 
 	pep->name_set = 1;
@@ -395,11 +398,13 @@ static int sock_cm_send(int fd, const void *buf, int len)
 	int ret, done = 0;
 
 	while (done != len) {
-		ret = ofi_send_socket(fd, (const char*) buf + done, len - done, MSG_NOSIGNAL);
+		ret = ofi_send_socket(fd, (const char*) buf + done,
+				      len - done, MSG_NOSIGNAL);
 		if (ret < 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()))
 				continue;
-			SOCK_LOG_ERROR("failed to write to fd: %s\n", strerror(errno));
+			SOCK_LOG_ERROR("failed to write to fd: %s\n",
+				       strerror(ofi_sockerr()));
 			return -FI_EIO;
 		}
 		done += ret;
@@ -411,11 +416,12 @@ static int sock_cm_recv(int fd, void *buf, int len)
 {
 	int ret, done = 0;
 	while (done != len) {
-		ret = recv(fd, (char*) buf + done, len - done, 0);
+		ret = ofi_recv_socket(fd, (char*) buf + done, len - done, 0);
 		if (ret <= 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				continue;
-			SOCK_LOG_ERROR("failed to read from fd: %s\n", strerror(errno));
+			SOCK_LOG_ERROR("failed to read from fd: %s\n",
+				       strerror(ofi_sockerr()));
 			return -FI_EIO;
 		}
 		done += ret;
@@ -508,7 +514,8 @@ static void *sock_ep_cm_connect_handler(void *data)
 	ret = connect(sock_fd, (struct sockaddr *)&handle->dest_addr,
 		      sizeof(handle->dest_addr));
 	if (ret < 0) {
-		SOCK_LOG_ERROR("connect failed : %s\n", strerror(errno));
+		SOCK_LOG_ERROR("connect failed : %s\n",
+			       strerror(ofi_sockerr()));
 		goto err;
 	}
 
@@ -555,7 +562,7 @@ static void *sock_ep_cm_connect_handler(void *data)
 	}
 	goto out;
 err:
-	SOCK_LOG_ERROR("io failed : %s\n", strerror(errno));
+	SOCK_LOG_ERROR("io failed : %s\n", strerror(ofi_sockerr()));
 	sock_ep_cm_report_connect_fail(handle->ep, NULL, 0);
 	ofi_close_socket(sock_fd);
 out:
@@ -1023,7 +1030,7 @@ static void *sock_pep_listener_thread(void *data)
 
 		conn_fd = accept(pep->cm.sock, NULL, 0);
 		if (conn_fd < 0) {
-			SOCK_LOG_ERROR("failed to accept: %d\n", errno);
+			SOCK_LOG_ERROR("failed to accept: %d\n", ofi_sockerr());
 			continue;
 		}
 
@@ -1204,7 +1211,7 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, _pep->cm.signal_fds);
 	if (ret) {
-		ret = -errno;
+		ret = -ofi_sockerr();
 		goto err;
 	}
 

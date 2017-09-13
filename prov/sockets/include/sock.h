@@ -1111,7 +1111,8 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 int sock_ep_get_conn(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
 		     fi_addr_t index, struct sock_conn **pconn);
 void sock_ep_remove_conn(struct sock_ep_attr *ep_attr, struct sock_conn *conn);
-struct sock_conn *sock_ep_connect(struct sock_ep_attr *attr, fi_addr_t index);
+int sock_ep_connect(struct sock_ep_attr *attr, fi_addr_t index,
+		    struct sock_conn **conn);
 ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
 				struct sock_conn *conn);
 int sock_conn_listen(struct sock_ep_attr *ep_attr);

@@ -547,7 +547,7 @@ int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 	do {
 		PP_DEBUG("receiving\n");
 		ret = ofi_read_socket(ct->ctrl_connfd, buf, size);
-	} while (ret == -1 && OFI_SOCK_TRY_RCV_AGAIN(ofi_sockerr()));
+	} while (ret == -1 && OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()));
 	if (ret < 0) {
 		err = -ofi_sockerr();
 		PP_PRINTERR("ctrl/read", err);

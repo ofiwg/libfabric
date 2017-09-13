@@ -92,12 +92,16 @@ err:
 int sock_conn_map_init(struct sock_ep *ep, int init_size)
 {
 	struct sock_conn_map *map = &ep->attr->cmap;
+	int ret;
 	map->table = calloc(init_size, sizeof(*map->table));
 	if (!map->table)
 		return -FI_ENOMEM;
 
-	if (fi_epoll_create(&map->epoll_set) < 0) {
-		SOCK_LOG_ERROR("failed to create epoll set\n");
+	ret = fi_epoll_create(&map->epoll_set);
+	if (ret < 0) {
+		SOCK_LOG_ERROR("failed to create epoll set, "
+			       "error - %d (%s)\n", ret,
+			       strerror(ret));
 		free(map->table);
 		return -FI_ENOMEM;
 	}
@@ -201,9 +205,9 @@ int fd_set_nonblock(int fd)
 	int ret;
 
 	ret = fi_fd_nonblock(fd);
-	if (ret) {
-		SOCK_LOG_ERROR("fi_fd_nonblock failed\n");
-	}
+	if (ret)
+	    SOCK_LOG_ERROR("fi_fd_nonblock failed, errno: %d\n",
+			   ret);
 
 	return ret;
 }
@@ -257,7 +261,8 @@ static void *_sock_conn_listen(void *arg)
 	while (listener->do_listen) {
 		if (poll(poll_fds, 2, -1) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
-				ret = ofi_read_socket(listener->signal_fds[1], &tmp, 1);
+				ret = ofi_read_socket(listener->signal_fds[1],
+						      &tmp, 1);
 				if (ret != 1) {
 					SOCK_LOG_ERROR("Invalid signal\n");
 					goto err;
@@ -273,7 +278,8 @@ static void *_sock_conn_listen(void *arg)
 					&addr_size);
 		SOCK_LOG_DBG("CONN: accepted conn-req: %d\n", conn_fd);
 		if (conn_fd < 0) {
-			SOCK_LOG_ERROR("failed to accept: %s\n", strerror(errno));
+			SOCK_LOG_ERROR("failed to accept: %s\n",
+				       strerror(ofi_sockerr()));
 			goto err;
 		}
 
@@ -353,11 +359,13 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 	if (atoi(listener->service) == 0) {
 		addr_size = sizeof(addr);
-		if (getsockname(listen_fd, (struct sockaddr *) &addr, &addr_size))
+		if (getsockname(listen_fd, (struct sockaddr *) &addr,
+				&addr_size))
 			goto err;
 		snprintf(listener->service, sizeof listener->service, "%d",
 			 ntohs(addr.sin_port));
-		SOCK_LOG_DBG("Bound to port: %s - %d\n", listener->service, getpid());
+		SOCK_LOG_DBG("Bound to port: %s - %d\n",
+			     listener->service, getpid());
 		ep_attr->msg_src_port = ntohs(addr.sin_port);
 	}
 
@@ -369,7 +377,8 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	}
 
 	if (listen(listen_fd, sock_cm_def_map_sz)) {
-		SOCK_LOG_ERROR("failed to listen socket: %s\n", strerror(errno));
+		SOCK_LOG_ERROR("failed to listen socket: %s\n",
+			       strerror(ofi_sockerr()));
 		goto err;
 	}
 
@@ -397,11 +406,12 @@ err:
 	return -FI_EINVAL;
 }
 
-struct sock_conn *sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index)
+int sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index,
+		    struct sock_conn **conn)
 {
 	int conn_fd = -1, ret;
 	int do_retry = sock_conn_retry;
-	struct sock_conn *conn, *new_conn;
+	struct sock_conn *new_conn;
 	struct sockaddr_in addr;
 	socklen_t lon;
 	int valopt = 0;
@@ -419,35 +429,36 @@ struct sock_conn *sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index)
 
 do_connect:
 	fastlock_acquire(&ep_attr->cmap.lock);
-	conn = sock_ep_lookup_conn(ep_attr, index, &addr);
+	*conn = sock_ep_lookup_conn(ep_attr, index, &addr);
 	fastlock_release(&ep_attr->cmap.lock);
 
-	if (conn != SOCK_CM_CONN_IN_PROGRESS)
-		return conn;
+	if (*conn != SOCK_CM_CONN_IN_PROGRESS)
+		return FI_SUCCESS;
 
 	conn_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
 	if (conn_fd == -1) {
-		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
-		errno = FI_EOTHER;
-		return NULL;
+		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n",
+			       ofi_sockerr());
+		*conn = NULL;
+		return -FI_EOTHER;
 	}
 
 	ret = fd_set_nonblock(conn_fd);
 	if (ret) {
-		SOCK_LOG_ERROR("failed to set conn_fd nonblocking, errno: %d\n", errno);
-		errno = FI_EOTHER;
+		SOCK_LOG_ERROR("failed to set conn_fd nonblocking\n");
+		*conn = NULL;
 		ofi_close_socket(conn_fd);
-		return NULL;
+		return -FI_EOTHER;
 	}
 
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
-			ntohs(addr.sin_port));
+		     ntohs(addr.sin_port));
 	SOCK_LOG_DBG("Connecting using address:%s\n",
-			inet_ntoa(ep_attr->src_addr->sin_addr));
+		     inet_ntoa(ep_attr->src_addr->sin_addr));
 
 	ret = connect(conn_fd, (struct sockaddr *) &addr, sizeof addr);
 	if (ret < 0) {
-		if (ofi_sockerr() == EINPROGRESS) {
+		if (OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
 			poll_fd.fd = conn_fd;
 			poll_fd.events = POLLOUT;
 
@@ -458,27 +469,34 @@ do_connect:
 			}
 
 			lon = sizeof(int);
-			ret = getsockopt(conn_fd, SOL_SOCKET, SO_ERROR, (void*)(&valopt), &lon);
+			ret = getsockopt(conn_fd, SOL_SOCKET, SO_ERROR,
+					 (void*)(&valopt), &lon);
 			if (ret < 0) {
-				SOCK_LOG_DBG("getsockopt failed: %d, %d\n", ret, conn_fd);
+				SOCK_LOG_DBG("getsockopt failed: %d, %d\n",
+					     ret, conn_fd);
 				goto retry;
 			}
 
 			if (valopt) {
-				SOCK_LOG_DBG("Error in connection() %d - %s - %d\n", valopt, strerror(valopt), conn_fd);
-				SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
-						ntohs(addr.sin_port));
+				SOCK_LOG_DBG("Error in connection() "
+					     "%d - %s - %d\n",
+					     valopt, strerror(valopt), conn_fd);
+				SOCK_LOG_DBG("Connecting to: %s:%d\n",
+					     inet_ntoa(addr.sin_addr),
+					     ntohs(addr.sin_port));
 				SOCK_LOG_DBG("Connecting using address:%s\n",
 				inet_ntoa(ep_attr->src_addr->sin_addr));
 				goto retry;
 			}
 			goto out;
 		} else {
-			SOCK_LOG_DBG("Timeout or error() - %s: %d\n", strerror(errno), conn_fd);
-			SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
-					ntohs(addr.sin_port));
+			SOCK_LOG_DBG("Timeout or error() - %s: %d\n",
+				     strerror(ofi_sockerr()), conn_fd);
+			SOCK_LOG_DBG("Connecting to: %s:%d\n",
+				     inet_ntoa(addr.sin_addr),
+				     ntohs(addr.sin_port));
 			SOCK_LOG_DBG("Connecting using address:%s\n",
-					inet_ntoa(ep_attr->src_addr->sin_addr));
+				     inet_ntoa(ep_attr->src_addr->sin_addr));
 			goto retry;
 		}
 	} else {
@@ -496,7 +514,8 @@ retry:
 		conn_fd = -1;
 	}
 
-	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n", strerror(errno), conn_fd);
+	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n",
+		       strerror(ofi_sockerr()), conn_fd);
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr.sin_addr),
 			ntohs(addr.sin_port));
 	SOCK_LOG_DBG("Connecting using address:%s\n",
@@ -510,18 +529,20 @@ out:
 		fastlock_release(&ep_attr->cmap.lock);
 		goto err;
 	}
-	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ? FI_ADDR_NOTAVAIL : index;
-	conn = ofi_idm_lookup(&ep_attr->av_idm, index);
-	if (conn == SOCK_CM_CONN_IN_PROGRESS) {
+	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ?
+			     FI_ADDR_NOTAVAIL : index;
+	*conn = ofi_idm_lookup(&ep_attr->av_idm, index);
+	if (*conn == SOCK_CM_CONN_IN_PROGRESS) {
 		if (ofi_idm_set(&ep_attr->av_idm, index, new_conn) < 0)
 			SOCK_LOG_ERROR("ofi_idm_set failed\n");
-		conn = new_conn;
+		*conn = new_conn;
 	}
 	fastlock_release(&ep_attr->cmap.lock);
-	return conn;
+	return FI_SUCCESS;
 
 err:
 	ofi_close_socket(conn_fd);
-	return NULL;
+	*conn = NULL;
+	return (OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr()) ? -FI_EAGAIN :
+							 -ofi_sockerr());
 }
-
