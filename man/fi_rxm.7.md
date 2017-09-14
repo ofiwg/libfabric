@@ -20,8 +20,6 @@ RxM provider requires the core provider to support the following features:
 
   * MSG endpoints (FI_EP_MSG)
 
-  * Shared receive contexts (FI_SHARED_CONTEXT)
-
   * RMA read/write (FI_RMA)
 
   * FI_OPT_CM_DATA_SIZE of atleast 24 bytes
