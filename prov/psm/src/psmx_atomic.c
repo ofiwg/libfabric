@@ -526,7 +526,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		req = (struct psmx_am_request *)(uintptr_t)args[1].u64;
 		op_error = (int)args[0].u32w1;
 		assert(req->op == PSMX_AM_REQ_ATOMIC_WRITE);
-		if (req->ep->send_cq && !req->no_event) {
+		if (req->ep->send_cq && (!req->no_event || op_error)) {
 			event = psmx_cq_create_event(
 					req->ep->send_cq,
 					req->atomic.context,
@@ -558,7 +558,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (!op_error)
 			memcpy(req->atomic.result, src, len);
 
-		if (req->ep->send_cq && !req->no_event) {
+		if (req->ep->send_cq && (!req->no_event || op_error)) {
 			event = psmx_cq_create_event(
 					req->ep->send_cq,
 					req->atomic.context,
@@ -695,7 +695,7 @@ static int psmx_atomic_self(int am_cmd,
 gen_local_event:
 	no_event = ((flags & PSMX_NO_COMPLETION) ||
 		    (ep->send_selective_completion && !(flags & FI_COMPLETION)));
-	if (ep->send_cq && !no_event) {
+	if (ep->send_cq && (!no_event || op_error)) {
 		event = psmx_cq_create_event(
 				ep->send_cq,
 				context,
