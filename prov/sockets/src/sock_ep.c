@@ -1868,10 +1868,10 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 		ret = sock_ep_connect(attr, av_index, &conn);
 
 	if (!conn) {
-		SOCK_LOG_ERROR("Error in connecting: %s\n",
-			       ret ? strerror(ret) :
-				     "No conn entry");
-		return ret ? ret : -FI_ENOENT;
+		SOCK_LOG_ERROR("Undable to find connection entry. "
+			       "Error in connecting: %s\n",
+			       strerror(ret));
+		return -FI_ENOENT;
 	}
 
 	*pconn = conn;
