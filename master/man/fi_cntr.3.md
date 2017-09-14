@@ -253,6 +253,13 @@ Fabric errno values are defined in
 
 # NOTES
 
+In order to support a variety of counter implementations, updates made to
+counter values (e.g. fi_cntr_set or fi_cntr_add) may not be immediately
+visible to counter read operations (i.e. fi_cntr_read or fi_cntr_readerr).
+A small, but undefined, delay may occur between the counter changing and
+the reported value being updated.  However, a final updated value will
+eventually be reflected in the read counter value, with the order of the
+updates maintained.
 
 # SEE ALSO
 
