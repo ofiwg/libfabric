@@ -170,6 +170,11 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 	uint64_t flags;
 
 	switch((int)PSMX2_CTXT_TYPE(fi_context)) {
+	case PSMX2_NOCOMP_SEND_CONTEXT: /* error only */
+		op_context = NULL;
+		buf = NULL;
+		flags = FI_SEND | FI_MSG;
+		break;
 	case PSMX2_SEND_CONTEXT:
 		op_context = fi_context;
 		buf = PSMX2_CTXT_USER(fi_context);
@@ -187,6 +192,15 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		op_context = sendv_rep->user_context;
 		buf = sendv_rep->buf;
 		flags = FI_RECV | sendv_rep->comp_flag;
+		is_recv = 1;
+		break;
+	case PSMX2_NOCOMP_RECV_CONTEXT: /* error only */
+	case PSMX2_NOCOMP_RECV_CONTEXT_ALLOC: /* error only */
+		op_context = NULL;
+		buf = NULL;
+		flags = FI_RECV | FI_MSG;
+		if (psm2_status->msg_tag.tag2 & PSMX2_IMM_BIT)
+			flags |= FI_REMOTE_CQ_DATA;
 		is_recv = 1;
 		break;
 	case PSMX2_RECV_CONTEXT:
@@ -219,11 +233,13 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		flags = FI_RECV | FI_TAGGED;
 		is_recv = 1;
 		break;
+	case PSMX2_NOCOMP_READ_CONTEXT: /* error only */
 	case PSMX2_READ_CONTEXT:
 		op_context = PSMX2_CTXT_USER(fi_context);
 		buf = NULL;
 		flags = FI_READ | FI_RMA;
 		break;
+	case PSMX2_NOCOMP_WRITE_CONTEXT: /* error only */
 	case PSMX2_WRITE_CONTEXT:
 		op_context = PSMX2_CTXT_USER(fi_context);
 		buf = NULL;
@@ -370,6 +386,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	int read_more = 1;
 	int read_count = 0;
 	void *event_buffer = count ? event_in : NULL;
+	struct fi_context dummy_context;
 
 	while (1) {
 		/* psm2_mq_ipeek and psm2_mq_test is suposed to be called
@@ -402,8 +419,12 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			case PSMX2_SEND_CONTEXT:
 			case PSMX2_TSEND_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
-				/* Fall through */
+				tmp_cntr = tmp_ep->send_cntr;
+				break;
+
 			case PSMX2_NOCOMP_SEND_CONTEXT:
+				if (psm2_status.error_code)
+					tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
@@ -413,8 +434,12 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
 					continue;
 				tmp_cq = tmp_ep->recv_cq;
-				/* Fall through */
+				tmp_cntr = tmp_ep->recv_cntr;
+				break;
+
 			case PSMX2_NOCOMP_RECV_CONTEXT:
+				if (psm2_status.error_code)
+					tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
@@ -424,14 +449,27 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					psmx2_ep_put_op_context(tmp_ep, fi_context);
 					continue;
 				}
+				if (psm2_status.error_code) {
+					tmp_cq = tmp_ep->recv_cq;
+					PSMX2_CTXT_TYPE(&dummy_context) = PSMX2_NOCOMP_RECV_CONTEXT_ALLOC;
+					psm2_status.context = &dummy_context;
+				}
 				tmp_cntr = tmp_ep->recv_cntr;
 				psmx2_ep_put_op_context(tmp_ep, fi_context);
 				break;
 
 			case PSMX2_WRITE_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
-				/* Fall through */
+				tmp_cntr = tmp_ep->write_cntr;
+				write_req = container_of(fi_context, struct psmx2_am_request,
+							 fi_context);
+				free(write_req->tmpbuf);
+				psmx2_am_request_free(write_req->ep->trx_ctxt, write_req);
+				break;
+
 			case PSMX2_NOCOMP_WRITE_CONTEXT:
+				if (psm2_status.error_code)
+					tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->write_cntr;
 				write_req = container_of(fi_context, struct psmx2_am_request,
 							 fi_context);
@@ -441,11 +479,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			case PSMX2_READ_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
-				/* Fall through */
-			case PSMX2_NOCOMP_READ_CONTEXT:
+				tmp_cntr = tmp_ep->read_cntr;
 				read_req = container_of(fi_context, struct psmx2_am_request,
 							fi_context);
-				tmp_cntr = tmp_ep->read_cntr;
 				if (read_req->op == PSMX2_AM_REQ_READV) {
 					read_req->read.len_read += psm2_status.nbytes;
 					if (read_req->read.len_read < read_req->read.len) {
@@ -453,6 +489,31 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 							"readv: long protocol finishes early\n");
 						tmp_cq = NULL;
 						tmp_cntr = NULL;
+						if (psm2_status.error_code)
+							read_req->error = psmx2_errno(psm2_status.error_code);
+						/* Request to be freed in AM handler */
+						break;
+					}
+				}
+				free(read_req->tmpbuf);
+				psmx2_am_request_free(read_req->ep->trx_ctxt, read_req);
+				break;
+
+			case PSMX2_NOCOMP_READ_CONTEXT:
+				if (psm2_status.error_code)
+					tmp_cq = tmp_ep->send_cq;
+				tmp_cntr = tmp_ep->read_cntr;
+				read_req = container_of(fi_context, struct psmx2_am_request,
+							fi_context);
+				if (read_req->op == PSMX2_AM_REQ_READV) {
+					read_req->read.len_read += psm2_status.nbytes;
+					if (read_req->read.len_read < read_req->read.len) {
+						FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
+							"readv: long protocol finishes early\n");
+						tmp_cq = NULL;
+						tmp_cntr = NULL;
+						if (psm2_status.error_code)
+							read_req->error = psmx2_errno(psm2_status.error_code);
 						/* Request to be freed in AM handler */
 						break;
 					}

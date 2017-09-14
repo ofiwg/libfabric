@@ -252,7 +252,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (!req->error)
 			req->error = op_error;
 		if (eom) {
-			if (req->ep->send_cq && !req->no_event) {
+			if (req->ep->send_cq && (!req->no_event || req->error)) {
 				event = psmx_cq_create_event(
 						req->ep->send_cq,
 						req->write.context,
@@ -288,7 +288,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			req->read.len_read += len;
 		}
 		if (eom) {
-			if (req->ep->send_cq && !req->no_event) {
+			if (req->ep->send_cq && (!req->no_event || req->error)) {
 				event = psmx_cq_create_event(
 						req->ep->send_cq,
 						req->read.context,
@@ -398,7 +398,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 	no_event = (flags & PSMX_NO_COMPLETION) ||
 		   (ep->send_selective_completion && !(flags & FI_COMPLETION));
 
-	if (ep->send_cq && !no_event) {
+	if (ep->send_cq && (!no_event || op_error)) {
 		event = psmx_cq_create_event(
 				ep->send_cq,
 				context,
