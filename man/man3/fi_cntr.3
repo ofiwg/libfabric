@@ -1,4 +1,4 @@
-.TH "fi_cntr" "3" "2017\-03\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cntr" "3" "2017\-09\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cntr \- Completion and event counter operations
@@ -224,6 +224,16 @@ counter.
 .PP
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH NOTES
+.PP
+In order to support a variety of counter implementations, updates made
+to counter values (e.g.
+fi_cntr_set or fi_cntr_add) may not be immediately visible to counter
+read operations (i.e.
+fi_cntr_read or fi_cntr_readerr).
+A small, but undefined, delay may occur between the counter changing and
+the reported value being updated.
+However, a final updated value will eventually be reflected in the read
+counter value, with the order of the updates maintained.
 .SH SEE ALSO
 .PP
 \f[C]fi_getinfo\f[](3), \f[C]fi_endpoint\f[](3), \f[C]fi_domain\f[](3),
