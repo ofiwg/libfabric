@@ -86,6 +86,18 @@
 	       " (fi_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 ")\n",\
 	       addr, tag)
 
+#define RXM_GET_PROTO_STATE(comp)			\
+	(*(enum rxm_proto_state *)			\
+	  ((unsigned char *)(comp)->op_context +	\
+		offsetof(struct rxm_buf, state)))
+
+#define RXM_SET_PROTO_STATE(comp, new_state)				\
+do {									\
+	(*(enum rxm_proto_state *)					\
+	  ((unsigned char *)(comp)->op_context +			\
+		offsetof(struct rxm_buf, state))) = (new_state);	\
+} while (0)
+
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
@@ -184,6 +196,8 @@ struct rxm_iov {
 
 struct rxm_buf {
 	/* Must stay at top */
+	struct fi_context fi_context;
+
 	enum rxm_proto_state state;
 
 	struct dlist_entry entry;
@@ -221,6 +235,8 @@ struct rxm_tx_buf {
 
 struct rxm_tx_entry {
 	/* Must stay at top */
+	struct fi_context fi_context;	
+
 	enum rxm_proto_state state;
 
 	struct rxm_ep *ep;

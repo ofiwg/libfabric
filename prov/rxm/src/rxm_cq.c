@@ -469,7 +469,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 			      struct fi_cq_tagged_entry *comp)
 {
-	enum rxm_proto_state *state = comp->op_context;
+	enum rxm_proto_state state = RXM_GET_PROTO_STATE(comp);
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 	struct rxm_tx_entry *tx_entry = comp->op_context;
 
@@ -478,7 +478,7 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
-	switch (*state) {
+	switch (state) {
 	case RXM_TX_NOBUF:
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
 		return rxm_finish_send_nobuf(tx_entry);
@@ -495,7 +495,7 @@ static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_LMT_TX:
 		assert(comp->flags & FI_SEND);
 		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_WAIT);
-		*state = RXM_LMT_ACK_WAIT;
+		RXM_SET_PROTO_STATE(comp, RXM_LMT_ACK_WAIT);
 		return 0;
 	case RXM_LMT_ACK_RECVD:
 		assert(comp->flags & FI_SEND);
@@ -549,7 +549,8 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *com
 		else
 			op_context = err_entry.op_context;
 	}
-	switch (*(enum rxm_proto_state *)op_context) {
+
+	switch (RXM_GET_PROTO_STATE(comp)) {
 	case RXM_TX:
 	case RXM_LMT_TX:
 		tx_entry = (struct rxm_tx_entry *)op_context;
