@@ -446,6 +446,27 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 	return 0;
 }
 
+const char *ofi_hex_str(const uint8_t *data, size_t len)
+{
+	static char str[64];
+	const char hex[] = "0123456789abcdef";
+	size_t i, p;
+
+	if (len >= (sizeof(str) >> 1))
+		len = (sizeof(str) >> 1) - 1;
+
+	for (p = 0, i = 0; i < len; i++) {
+		str[p++] = hex[data[i] >> 4];
+		str[p++] = hex[data[i] & 0xF];
+	}
+
+	if (len == (sizeof(str) >> 1) - 1)
+		str[p++] = '~';
+
+	str[p] = '\0';
+	return str;
+}
+
 int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 		 const struct sockaddr *sa2)
 {

@@ -114,6 +114,8 @@ extern size_t verbs_default_tx_iov_limit;
 extern size_t verbs_default_rx_iov_limit;
 extern size_t verbs_default_inline_size;
 
+extern size_t verbs_min_rnr_timer;
+
 struct verbs_addr {
 	struct dlist_entry entry;
 	struct rdma_addrinfo *rai;
@@ -381,6 +383,7 @@ ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
+int fi_ibv_set_rnr_timer(struct ibv_qp *qp);
 
 #define fi_ibv_set_sge(sge, buf, len, desc)				\
 	do {								\

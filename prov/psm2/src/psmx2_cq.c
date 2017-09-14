@@ -746,11 +746,18 @@ static ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			        uint64_t flags)
 {
 	struct psmx2_fid_cq *cq_priv;
+	uint32_t api_version;
+	size_t size;
 
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 
 	if (cq_priv->pending_error) {
-		memcpy(buf, &cq_priv->pending_error->cqe, sizeof *buf);
+		api_version = cq_priv->domain->fabric->util_fabric.
+			      fabric_fid.api_version;
+		size = FI_VERSION_GE(api_version, FI_VERSION(1, 5)) ?
+			sizeof(*buf) : sizeof(struct fi_cq_err_entry_1_0);
+
+		memcpy(buf, &cq_priv->pending_error->cqe, size);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
 		return 1;
