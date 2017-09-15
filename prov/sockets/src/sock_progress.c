@@ -2054,6 +2054,8 @@ static void sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	struct sock_pe_entry *pe_entry;
 
 	pe_entry = sock_pe_acquire_entry(pe);
+	if (!pe_entry)
+		return;
 	memset(&pe_entry->pe.rx, 0, sizeof(pe_entry->pe.rx));
 
 	pe_entry->conn = conn;

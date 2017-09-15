@@ -285,8 +285,8 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 	struct sockaddr_in addr;
 	struct addrinfo *s_res = NULL, *p;
 	struct addrinfo hints;
-	char sa_ip[INET_ADDRSTRLEN] = {0};
-	char sa_port[NI_MAXSERV] = {0};
+	char sa_ip[INET_ADDRSTRLEN];
+	char sa_port[NI_MAXSERV];
 
 	pep->cm.do_listen = 1;
 	memset(&hints, 0, sizeof(hints));
@@ -296,6 +296,8 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 
 	memcpy(sa_ip, inet_ntoa(pep->src_addr.sin_addr), INET_ADDRSTRLEN);
 	sprintf(sa_port, "%d", ntohs(pep->src_addr.sin_port));
+	sa_ip[INET_ADDRSTRLEN - 1] = '\0';
+	sa_port[NI_MAXSERV - 1] = '\0';
 
 	ret = getaddrinfo(sa_ip, sa_port, &hints, &s_res);
 	if (ret) {

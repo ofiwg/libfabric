@@ -451,7 +451,7 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 				return -FI_ENODATA;
 			}
 			dest_addr = (struct sockaddr_in *) rai->ai_addr;
-		} else {
+		} else if (hints) {
 			dest_addr = hints->dest_addr;
 		}
 

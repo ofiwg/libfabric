@@ -109,7 +109,9 @@ void ofi_getnodename(char *buf, int buflen)
 	struct addrinfo ai, *rai = NULL;
 	struct ifaddrs *ifaddrs, *ifa;
 
+	assert(buf && buflen > 0);
 	ret = gethostname(buf, buflen);
+	buf[buflen - 1] = '\0';
 	if (ret == 0) {
 		memset(&ai, 0, sizeof(ai));
 		ai.ai_family = AF_INET;
@@ -130,6 +132,7 @@ void ofi_getnodename(char *buf, int buflen)
 
 			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
 				  	  buf, buflen, NULL, 0, NI_NUMERICHOST);
+			buf[buflen - 1] = '\0';
 			if (ret == 0) {
 				freeifaddrs(ifaddrs);
 				return;
@@ -140,6 +143,7 @@ void ofi_getnodename(char *buf, int buflen)
 #endif
 	/* no reasonable address found, try loopback */
 	strncpy(buf, "127.0.0.1", buflen);
+	buf[buflen - 1] = '\0';
 }
 
 int ofi_get_src_addr(uint32_t addr_format,
