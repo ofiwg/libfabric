@@ -72,7 +72,8 @@ static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	};
 	struct fi_ibv_rdm_request *request =
 		util_buf_alloc(fi_ibv_rdm_request_pool);
-
+	if (OFI_UNLIKELY(!request))
+		return -FI_EAGAIN;
 	fi_ibv_rdm_zero_request(request);
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
