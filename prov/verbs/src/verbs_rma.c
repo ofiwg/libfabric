@@ -269,9 +269,7 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 {
 	struct fi_ibv_rdm_ep *ep =
 		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
-
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, msg->addr);
-
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.ep_rdm = ep,
 		.conn = conn,
@@ -284,11 +282,11 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.lkey = (uint64_t)(uintptr_t)(msg->desc ? msg->desc[0] : NULL),
 		.op_code = IBV_WR_RDMA_READ
 	};
-
 	struct fi_ibv_rma_post_ready_data post_ready_data = { .ep_rdm = ep };
 
 	struct fi_ibv_rdm_buf *rdm_buf = NULL;
 	ssize_t ret = FI_SUCCESS;
+	struct fi_ibv_rdm_request *request;
 
 	if(msg->iov_count != 1 || msg->rma_iov_count != 1) {
 		assert(0);
@@ -302,8 +300,10 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return ret;
 	}
 
-	struct fi_ibv_rdm_request *request =
-		util_buf_alloc(fi_ibv_rdm_request_pool);
+	request = util_buf_alloc(fi_ibv_rdm_request_pool);
+	if (OFI_UNLIKELY(!request))
+		return -FI_EAGAIN;
+
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -405,15 +405,17 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	}
 
 	request = util_buf_alloc(fi_ibv_rdm_request_pool);
-	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+	if (OFI_UNLIKELY(!request))
+		return -FI_EAGAIN;
 
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err   = FI_SUCCESS;
-
 	request->minfo.is_tagged = 0;
 	request->rmabuf = rdm_buf;
+
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RMA_START, &start_data);
 
@@ -488,9 +490,12 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 		.rkey = (uint64_t)key,
 		.lkey = 0
 	};
+	ssize_t ret;
 	struct fi_ibv_rdm_request *request =
 		util_buf_alloc(fi_ibv_rdm_request_pool);
-	ssize_t ret;
+
+	if (OFI_UNLIKELY(!request))
+		return -FI_EAGAIN;
 
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 

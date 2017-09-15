@@ -90,7 +90,7 @@ static ssize_t
 fi_ibv_rdm_init_send_request(struct fi_ibv_rdm_request *request, void *data)
 {
 	FI_IBV_RDM_HNDL_REQ_LOG_IN();
-
+	ssize_t ret;
 	struct fi_ibv_rdm_send_start_data *p = data;
 	request->minfo.conn = p->conn;
 	request->minfo.tag = p->tag;
@@ -117,7 +117,9 @@ fi_ibv_rdm_init_send_request(struct fi_ibv_rdm_request *request, void *data)
 
 	FI_IBV_RDM_HNDL_REQ_LOG();
 
-	fi_ibv_rdm_move_to_postponed_queue(request);
+	ret = fi_ibv_rdm_move_to_postponed_queue(request);
+	if (ret)
+		return ret;
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_POSTPONED;
 	if (request->state.rndv == FI_IBV_STATE_RNDV_SEND_BEGIN) {
 		request->state.rndv = FI_IBV_STATE_RNDV_SEND_WAIT4SEND;
@@ -169,7 +171,7 @@ fi_ibv_rdm_eager_send_ready(struct fi_ibv_rdm_request *request, void *data)
 	wr.imm_data = 0;
 	wr.opcode = p->ep->eopcode;
 	struct fi_ibv_rdm_buf *sbuf = (struct fi_ibv_rdm_buf *)request->sbuf;
-	uint8_t *payload = &sbuf->payload;
+	uint64_t *payload = &sbuf->payload;
 
 	sbuf->header.service_tag = 0;
 	if (request->minfo.is_tagged) {
@@ -562,10 +564,10 @@ fi_ibv_rdm_try_unexp_recv(struct fi_ibv_rdm_request *request,
 			util_buf_release(fi_ibv_rdm_request_pool, found_request);
 
 			if (ret == FI_SUCCESS &&
-			    request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES)
-			{
+			    request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
 				request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
-				fi_ibv_rdm_move_to_postponed_queue(request);
+				ret = fi_ibv_rdm_move_to_postponed_queue(request);
+				/* Will fail `while` check and return the result */
 			}
 		}
 	/* 
@@ -588,6 +590,11 @@ fi_ibv_rdm_init_recv_request(struct fi_ibv_rdm_request *request, void *data)
 	if (p->peek_data.flags & FI_MULTI_RECV) {
 		/* TODO: optimization - replace allocation with a buffer pool */
 		request->parent = calloc(1, sizeof(*request->parent));
+		if (!request->parent) {
+			VERBS_WARN(FI_LOG_EP_DATA, "Unable to allocate memory "
+				   "for parent \n");
+			return -FI_ENOMEM;
+		}
 		request->parent->prepost = request;
 		request->parent->buf = p->dest_addr;
 		request->parent->len = p->data_len;
@@ -801,6 +808,7 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 	FI_IBV_RDM_HNDL_REQ_LOG_IN();
 	struct fi_ibv_recv_got_pkt_preprocess_data *p = data;
 	struct fi_ibv_rdm_buf *rbuf = p->rbuf;
+	ssize_t ret;
 	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4PKT);
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
 
@@ -908,7 +916,9 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 						     p->ep);
 		}
 
-		fi_ibv_rdm_move_to_postponed_queue(request);
+		ret = fi_ibv_rdm_move_to_postponed_queue(request);
+		if (ret)
+			return ret;
 
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4RES;
@@ -1053,7 +1063,7 @@ fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_sge sge;
-	ssize_t ret;
+	ssize_t ret = FI_SUCCESS;
 
 	fi_ibv_rdm_remove_from_postponed_queue(request);
 	VERBS_DBG(FI_LOG_EP_DATA,
@@ -1103,14 +1113,14 @@ fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 
 	if (request->rest_len && request->state.err == FI_SUCCESS) {
 		/* Move to postponed queue for the next iteration */
-		fi_ibv_rdm_move_to_postponed_queue(request);
+		ret = fi_ibv_rdm_move_to_postponed_queue(request);
 	} else {
 		request->state.eager = FI_IBV_STATE_EAGER_RECV_END;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_WAIT4LC;
 	}
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
-	return FI_SUCCESS;
+	return ret;
 }
 
 static ssize_t
@@ -1355,6 +1365,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 	struct ibv_sge sge = { 0 };
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
+
 	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
@@ -1395,7 +1406,9 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 
 	if (request->rest_len) {
-		fi_ibv_rdm_move_to_postponed_queue(request);
+		ret = fi_ibv_rdm_move_to_postponed_queue(request);
+		if (ret)
+			return ret;
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_POSTPONED;
 	}
 
