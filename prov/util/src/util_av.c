@@ -1370,7 +1370,9 @@ int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 	}
 	switch (handle->state) {
 	case CMAP_IDLE:
-		ret = cmap->attr.connect(cmap->ep, handle, fi_addr);
+		ret = cmap->attr.connect(cmap->ep, handle,
+					 ofi_av_get_addr(cmap->av, fi_addr),
+					 cmap->av->addrlen);
 		if (ret) {
 			util_cmap_del_handle(handle);
 			goto unlock;

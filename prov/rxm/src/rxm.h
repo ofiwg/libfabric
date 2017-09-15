@@ -362,7 +362,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 void *rxm_conn_event_handler(void *arg);
 int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
-		    fi_addr_t fi_addr);
+		     const void *addr, size_t addrlen);
 int rxm_conn_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		void *data);
 struct util_cmap_handle *rxm_conn_alloc(void);

@@ -292,7 +292,7 @@ static int rxm_prepare_cm_data(struct fid_pep *pep, struct util_cmap_handle *han
 }
 
 int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
-		    fi_addr_t fi_addr)
+		     const void *addr, size_t addrlen)
 {
 	struct rxm_ep *rxm_ep;
 	struct rxm_conn *rxm_conn;
@@ -305,18 +305,15 @@ int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	free(rxm_ep->msg_info->dest_addr);
-	rxm_ep->msg_info->dest_addrlen = rxm_ep->util_ep.av->addrlen;
-	rxm_ep->msg_info->dest_addr = mem_dup(ofi_av_get_addr(rxm_ep->util_ep.av,
-							      fi_addr),
-					      rxm_ep->util_ep.av->addrlen);
+	rxm_ep->msg_info->dest_addrlen = addrlen;
+	rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen);
 
 	ret = fi_getinfo(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
 			 NULL, NULL, 0, rxm_ep->msg_info, &msg_info);
 	if (ret)
 		return ret;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn,
-			      &rxm_conn->handle);
+	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, &rxm_conn->handle);
 	if (ret)
 		goto err1;
 
