@@ -303,7 +303,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 		if (!req->error)
 			req->error = op_error;
 		if (eom) {
-			if (req->ep->send_cq && !req->no_event) {
+			if (req->ep->send_cq && (!req->no_event || req->error)) {
 				event = psmx2_cq_create_event(
 						req->ep->send_cq,
 						req->write.context,
@@ -347,7 +347,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 			if (!eom)
 				FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
 					"readv: short protocol finishes after long protocol.\n");
-			if (req->ep->send_cq && !req->no_event) {
+			if (req->ep->send_cq && (!req->no_event || req->error)) {
 				event = psmx2_cq_create_event(
 						req->ep->send_cq,
 						req->read.context,
@@ -499,7 +499,7 @@ static ssize_t psmx2_rma_self(int am_cmd,
 	no_event = (flags & PSMX2_NO_COMPLETION) ||
 		   (ep->send_selective_completion && !(flags & FI_COMPLETION));
 
-	if (ep->send_cq && !no_event) {
+	if (ep->send_cq && (!no_event || op_error)) {
 		event = psmx2_cq_create_event(
 				ep->send_cq,
 				context,
