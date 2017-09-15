@@ -323,15 +323,16 @@ int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
 	size_t len;
 	int ret;
 
+	core_name = ofi_core_name(util_attr->prov_name, &len);
+	if (!core_name)
+		return -FI_ENODATA;
+
 	memset(&hints, 0, sizeof hints);
 	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr))))
 		return -FI_ENOMEM;
 
 	hints.fabric_attr->name = util_attr->name;
 	hints.fabric_attr->api_version = util_attr->api_version;
-
-	core_name = ofi_core_name(util_attr->prov_name, &len);
-
 	if (!(hints.fabric_attr->prov_name = strndup(core_name, len))) {
 		ret = -FI_ENOMEM;
 		goto out;
