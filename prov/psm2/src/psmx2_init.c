@@ -96,8 +96,8 @@ static int psmx2_init_lib(int default_multi_ep)
 	if (psmx2_lib_initialized)
 		goto out;
 
-	if (default_multi_ep && !getenv("PSM2_MULTI_EP"))
-		putenv("PSM2_MULTI_EP=1");
+	if (default_multi_ep)
+		setenv("PSM2_MULTI_EP", "1", 0);
 
 	psm2_error_register_handler(NULL, PSM2_ERRHANDLER_NO_HANDLER);
 
