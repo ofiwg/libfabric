@@ -1368,8 +1368,10 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	    !result_count)
 		return -FI_EINVAL;
 
-	while (count && !iov[count-1].count)
-		count--;
+	if (iov) {
+		while (count && !iov[count-1].count)
+			count--;
+	}
 
 	while (result_count && !resultv[result_count-1].count)
 		result_count--;
