@@ -1118,12 +1118,9 @@ int rxm_ep_trywait(void *arg)
 
 static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
-	struct util_cmap_attr attr;
 	struct util_cq *cq;
 	struct rxm_ep *rxm_ep;
 	struct util_av *util_av;
-	void *name;
-	size_t len;
 	int ret = 0;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
@@ -1133,28 +1130,8 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_av(&rxm_ep->util_ep, util_av);
 		if (ret)
 			return ret;
-		len = rxm_ep->msg_info->src_addrlen;
-		name = malloc(len);
-		/* Passive endpoint should already have fi_setname or fi_listen
-		 * called on it for this to work */
-		ret = fi_getname(&rxm_ep->msg_pep->fid, name, &len);
-		if (ret) {
-			free(name);
-			return ret;
-		}
-		ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
-		attr.name		= name;
-		attr.alloc 		= rxm_conn_alloc;
-		attr.close 		= rxm_conn_close;
-		attr.free 		= rxm_conn_free;
-		attr.connect 		= rxm_conn_connect;
-		attr.event_handler	= rxm_conn_event_handler;
-		attr.signal		= rxm_conn_signal;
-
-		rxm_ep->util_ep.cmap = ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
-		free(name);
-		if (!rxm_ep->util_ep.cmap)
+		if (!(rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep)))
 			return -FI_ENOMEM;
 		break;
 	case FI_CLASS_CQ:
