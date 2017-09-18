@@ -176,7 +176,7 @@ fi_ibv_rdm_take_first_from_posted_queue(struct fi_ibv_rdm_ep* ep)
 	return NULL;
 }
 
-static inline void
+static inline int
 fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 {
 	FI_IBV_RDM_DBG_REQUEST("move_to_postponed_queue: ", request, 
@@ -188,6 +188,10 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 	if (dlist_empty(&conn->postponed_requests_head)) {
 		struct fi_ibv_rdm_postponed_entry *entry =
 			util_buf_alloc(fi_ibv_rdm_postponed_pool);
+		if (OFI_UNLIKELY(!entry)) {
+			VERBS_WARN(FI_LOG_EP_DATA, "Unable to alloc buffer");
+			return -FI_ENOMEM;
+		}
 
 		entry->conn = conn;	
 		conn->postponed_entry = entry;
@@ -197,6 +201,8 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 	}
 	dlist_insert_tail(&request->queue_entry,
 			  &conn->postponed_requests_head);
+
+	return FI_SUCCESS;
 }
 
 static inline void
