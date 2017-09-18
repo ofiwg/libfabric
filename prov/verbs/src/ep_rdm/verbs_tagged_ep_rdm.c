@@ -146,7 +146,8 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 
 	struct fi_ibv_rdm_request *request =
 		util_buf_alloc(fi_ibv_rdm_request_pool);
-
+	if (OFI_UNLIKELY(!request))
+		return -FI_EAGAIN;
 	fi_ibv_rdm_zero_request(request);
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
@@ -492,6 +493,8 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 			request = found_request;
 		} else {
 			request = util_buf_alloc(fi_ibv_rdm_request_pool);
+			if (OFI_UNLIKELY(!request))
+				return;
 			fi_ibv_rdm_zero_request(request);
 
 			FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request,

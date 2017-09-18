@@ -249,6 +249,8 @@ fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata)
 {
 	struct fi_ibv_rdm_request *request =
 		util_buf_alloc(fi_ibv_rdm_request_pool);
+	if (OFI_UNLIKELY(!request))
+		return -FI_EAGAIN;
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */

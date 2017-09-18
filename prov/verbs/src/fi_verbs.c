@@ -376,20 +376,22 @@ static int fi_ibv_get_param_int(char *param_name, char *param_str,
 				size_t *param_default)
 {
 	char *param_help;
-	size_t len, ret;
-	int param;
+	size_t len, ret_len;
+	int param, ret = FI_SUCCESS;
 
 	len = strlen(param_str) + 50;
-	param_help = malloc(len);
+	param_help = calloc(1, len);
+	if (!param_help)
+		return -FI_ENOMEM;
 
-	ret = snprintf(param_help, len, "%s (default: %zu)", param_str,
-		       *param_default);
-	if (ret >= len) {
+	ret_len = snprintf(param_help, len, "%s (default: %zu)", param_str,
+			   *param_default);
+	if (ret_len >= len) {
 		VERBS_WARN(FI_LOG_EP_DATA,
 			   "param_help string size insufficient!\n");
-		free(param_help);
 		assert(0);
-		return -FI_ETOOSMALL;
+		ret = -FI_ETOOSMALL;
+		goto out;
 	}
 
 	fi_param_define(&fi_ibv_prov, param_name, FI_PARAM_INT, param_help);
@@ -397,8 +399,9 @@ static int fi_ibv_get_param_int(char *param_name, char *param_str,
 	if (!fi_param_get_int(&fi_ibv_prov, param_name, &param))
 		*param_default = param;
 
+out:
 	free(param_help);
-	return 0;
+	return ret;
 }
 
 #if ENABLE_DEBUG
