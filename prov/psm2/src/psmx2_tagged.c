@@ -52,7 +52,7 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (src_addr != FI_ADDR_UNSPEC) {
+	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
 			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
@@ -402,7 +402,8 @@ psmx2_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf, size_t len,
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
-		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+		assert(av != NULL);
+		if (PSMX2_SEP_ADDR_TEST(src_addr)) {
 			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
 			vlane = 0;
 		} else {
@@ -514,7 +515,8 @@ psmx2_tagged_recv_no_event_av_table(struct fid_ep *ep, void *buf, size_t len,
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
-		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+		assert(av != NULL);
+		if (PSMX2_SEP_ADDR_TEST(src_addr)) {
 			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
 			vlane = 0;
 		} else {
@@ -806,7 +808,8 @@ psmx2_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av != NULL);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
 	} else {
@@ -899,7 +902,8 @@ psmx2_tagged_send_no_event_av_table(struct fid_ep *ep, const void *buf,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av != NULL);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
 	} else {
@@ -988,7 +992,8 @@ psmx2_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av != NULL);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
 	} else {

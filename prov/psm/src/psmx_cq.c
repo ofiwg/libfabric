@@ -166,10 +166,21 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 	uint64_t flags;
 
 	switch((int)PSMX_CTXT_TYPE(fi_context)) {
+	case PSMX_NOCOMP_SEND_CONTEXT: /* error only */
+		op_context = NULL;
+		buf = NULL;
+		flags = FI_SEND | FI_MSG;
+		break;
 	case PSMX_SEND_CONTEXT:
 		op_context = fi_context;
 		buf = PSMX_CTXT_USER(fi_context);
 		flags = FI_SEND | FI_MSG;
+		break;
+	case PSMX_NOCOMP_RECV_CONTEXT: /* error only */
+		op_context = NULL;
+		buf = NULL;
+		flags = FI_RECV | FI_MSG;
+		is_recv = 1;
 		break;
 	case PSMX_RECV_CONTEXT:
 		op_context = fi_context;
@@ -197,11 +208,13 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		flags = FI_RECV | FI_TAGGED;
 		is_recv = 1;
 		break;
+	case PSMX_NOCOMP_READ_CONTEXT: /* error only */
 	case PSMX_READ_CONTEXT:
 		op_context = PSMX_CTXT_USER(fi_context);
 		buf = NULL;
 		flags = FI_READ | FI_RMA;
 		break;
+	case PSMX_NOCOMP_WRITE_CONTEXT: /* error only */
 	case PSMX_WRITE_CONTEXT:
 		op_context = PSMX_CTXT_USER(fi_context);
 		buf = NULL;
@@ -378,8 +391,12 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			case PSMX_SEND_CONTEXT:
 			case PSMX_TSEND_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
-				/* Fall through */
+				tmp_cntr = tmp_ep->send_cntr;
+				break;
+
 			case PSMX_NOCOMP_SEND_CONTEXT:
+				if (psm_status.error_code)
+					tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
@@ -389,22 +406,34 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			case PSMX_RECV_CONTEXT:
 			case PSMX_TRECV_CONTEXT:
 				tmp_cq = tmp_ep->recv_cq;
-				/* Fall through */
+				tmp_cntr = tmp_ep->recv_cntr;
+				break;
+
 			case PSMX_NOCOMP_RECV_CONTEXT:
+				if (psm_status.error_code)
+					tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_WRITE_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
-				/* Fall through */
+				tmp_cntr = tmp_ep->write_cntr;
+				break;
+
 			case PSMX_NOCOMP_WRITE_CONTEXT:
+				if (psm_status.error_code)
+					tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_READ_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;
-				/* Fall through */
+				tmp_cntr = tmp_ep->read_cntr;
+				break;
+
 			case PSMX_NOCOMP_READ_CONTEXT:
+				if (psm_status.error_code)
+					tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
