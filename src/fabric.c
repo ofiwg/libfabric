@@ -51,6 +51,7 @@
 
 struct ofi_prov {
 	struct ofi_prov		*next;
+	char			*prov_name;
 	struct fi_provider	*provider;
 	void			*dlhandle;
 };
@@ -96,8 +97,8 @@ static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 	struct ofi_prov *prov;
 
 	for (prov = prov_head; prov; prov = prov->next) {
-		if ((strlen(prov->provider->name) == len) &&
-		    !strncmp(prov->provider->name, prov_name, len))
+		if ((strlen(prov->prov_name) == len) &&
+		    !strncmp(prov->prov_name, prov_name, len))
 			return prov;
 	}
 
@@ -121,10 +122,59 @@ static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
 #endif
 }
 
+static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
+{
+	struct ofi_prov *prov = NULL;
+	prov = calloc(sizeof *prov, 1);
+	if (!prov) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Not enough memory to allocate provider registry\n");
+		return NULL;
+	}
+
+	prov->prov_name = strdup(prov_name);
+	if (!prov->prov_name) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to init pre-registered provider name\n");
+		free(prov);
+		return NULL;
+	}
+	if (prov_tail)
+		prov_tail->next = prov;
+	else
+		prov_head = prov;
+	prov_tail = prov;
+
+	return prov;
+}
+
+/* This is the default order that providers will be reported when a provider
+ * is availabe.  Initialize the socket(s) provider last.  This will result in
+ * it being the least preferred provider.
+ */
+static void ofi_ordered_provs_init()
+{
+	char *ordered_prov_names[] =
+			{"psm2", "psm", "usnic", "mlx", "verbs","gni",
+			 "bgq", "netdir", "ofi_rxm", "ofi_rxd",
+			/* Initialize the socket(s) provider last.  This will result in
+			 * it being the least preferred provider. */
+
+			/* Before you add ANYTHING here, read the comment above!!! */
+			"UDP", "sockets" /* NOTHING GOES HERE! */};
+			/* Seriously, read it! */
+	int num_provs = sizeof(ordered_prov_names)/sizeof(ordered_prov_names[0]), i;
+
+	for (i = 0; i < num_provs; i++) {
+		if (ofi_apply_filter(&prov_filter, ordered_prov_names[i]) == 0)
+			ofi_create_prov_entry(ordered_prov_names[i]);
+	}
+}
+
 static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov_context *ctx;
-	struct ofi_prov *prov;
+	struct ofi_prov *prov = NULL;
 	size_t len;
 	int ret;
 
@@ -183,6 +233,12 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
 	if (prov) {
+		/* If this provider has not been init yet, then we add the
+		 * provider and dlhandle to the struct and exit.
+		 */
+		if (prov->provider == NULL)
+			goto update_prov_registry;
+
 		/* If this provider is older than an already-loaded
 		 * provider of the same name, then discard this one.
 		 */
@@ -203,25 +259,17 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 			"keeping this one and ignoring the older one\n",
 			provider->name);
 		cleanup_provider(prov->provider, prov->dlhandle);
-
-		prov->dlhandle = dlhandle;
-		prov->provider = provider;
-		return 0;
+	} else {
+		prov = ofi_create_prov_entry(provider->name);
+		if (!prov) {
+			ret = -FI_EOTHER;
+			goto cleanup;
+		}
 	}
 
-	prov = calloc(sizeof *prov, 1);
-	if (!prov) {
-		ret = -FI_ENOMEM;
-		goto cleanup;
-	}
-
+update_prov_registry:
 	prov->dlhandle = dlhandle;
 	prov->provider = provider;
-	if (prov_tail)
-		prov_tail->next = prov;
-	else
-		prov_head = prov;
-	prov_tail = prov;
 	return 0;
 
 cleanup:
@@ -385,6 +433,7 @@ void fi_ini(void)
 	if (ofi_init)
 		goto unlock;
 
+	ofi_ordered_provs_init();
 	fi_param_init();
 	fi_log_init();
 	ofi_osd_init();
@@ -450,13 +499,8 @@ libdl_done:
 			ofi_register_provider(RXD_INIT, NULL);
 	}
 
-	/* Initialize the socket(s) provider last.  This will result in
-	 * it being the least preferred provider. */
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
-	/* Before you add ANYTHING here, read the comment above!!! */
-
-	/* Seriously, read it! */
 
 	ofi_init = 1;
 
@@ -528,6 +572,9 @@ static int ofi_getprovinfo(struct fi_info **info)
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
+		if (!prov->provider)
+			continue;
+
 		cur = fi_allocinfo();
 		if (!cur) {
 			ret = -FI_ENOMEM;
@@ -665,6 +712,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
+		if (!prov->provider)
+			continue;
+
 		if (!ofi_layering_ok(prov->provider, util_name, util_len,
 				     core_name, core_len, flags))
 			continue;
@@ -858,7 +908,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 		return -FI_EINVAL;
 
 	prov = ofi_getprov(top_name, len);
-	if (!prov || !prov->provider->fabric)
+	if (!prov || !prov->provider || !prov->provider->fabric)
 		return -FI_ENODEV;
 
 	ret = prov->provider->fabric(attr, fabric, context);
