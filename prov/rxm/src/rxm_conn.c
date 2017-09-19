@@ -131,6 +131,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	int ret;
 
 	ret = ofi_cmap_process_connreq(rxm_ep->util_ep.cmap,
+				       msg_info->dest_addr,
 				       &remote_cm_data->name, &handle);
 	if (ret)
 		goto err1;
@@ -359,6 +360,14 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 	return 0;
 }
 
+static int rxm_conn_getname(struct util_cmap_handle *handle, void *addr,
+			    size_t *len)
+{
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn,
+						 handle);
+	return fi_getname(&rxm_conn->msg_ep->fid, addr, len);
+}
+
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
 	struct util_cmap_attr attr;
@@ -380,11 +389,11 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	}
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
-	attr.name		= name;
 	attr.alloc 		= rxm_conn_alloc;
 	attr.close 		= rxm_conn_close;
 	attr.free 		= rxm_conn_free;
 	attr.connect 		= rxm_conn_connect;
+	attr.getname		= rxm_conn_getname;
 	attr.event_handler	= rxm_conn_event_handler;
 	attr.signal		= rxm_conn_signal;
 

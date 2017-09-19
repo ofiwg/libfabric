@@ -1284,24 +1284,27 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 	fastlock_release(&cmap->lock);
 }
 
-int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
+int ofi_cmap_process_connreq(struct util_cmap *cmap,
+			     void *remote_addr, void *remote_src_addr,
 			     struct util_cmap_handle **handle_ret)
 {
 	struct util_cmap_handle *handle;
+	void *local_src_addr;
+	size_t len = cmap->av->addrlen;
 	int ret = 0, index;
 
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Processing connreq for addr", addr);
-	index = ip_av_get_index(cmap->av, addr);
+			"Processing connreq for addr", remote_addr);
+	index = ip_av_get_index(cmap->av, remote_addr);
 	fastlock_acquire(&cmap->lock);
 	if (index < 0)
-		handle = util_cmap_get_handle_peer(cmap, addr);
+		handle = util_cmap_get_handle_peer(cmap, remote_addr);
 	else
 		handle = util_cmap_get_handle(cmap, (fi_addr_t)index);
 
 	if (!handle) {
 		if (index < 0)
-			ret = util_cmap_alloc_handle_peer(cmap, addr,
+			ret = util_cmap_alloc_handle_peer(cmap, remote_addr,
 							  CMAP_CONNREQ_RECV,
 							  &handle);
 		else
@@ -1319,12 +1322,24 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		ret = -FI_EALREADY;
 		break;
 	case CMAP_CONNREQ_SENT:
-		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "local_name",
-				cmap->attr.name);
-		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "remote_name",
-				addr);
+		/* Compare local src addr with that of remote. Local and remote
+		 * (listen) addresses would be same if an endpoint is trying to
+		 * talk to itself */
+		len = cmap->av->addrlen;
+		local_src_addr = malloc(len);
+		ret = cmap->attr.getname(handle, local_src_addr, &len);
+		if (ret) {
+			free(local_src_addr);
+			goto unlock;
+		}
 
-		if (ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name) < 0) {
+		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "local_src_addr",
+				local_src_addr);
+
+		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "remote_src_addr",
+				remote_src_addr);
+
+		if (ofi_addr_cmp(cmap->av->prov, remote_src_addr, local_src_addr) < 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Remote name lower than local name.\n");
 			ret = -FI_EALREADY;
@@ -1338,6 +1353,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 			handle->state = CMAP_CONNREQ_RECV;
 			*handle_ret = handle;
 		}
+		free(local_src_addr);
 		break;
 	case CMAP_CONNREQ_RECV:
 		*handle_ret = handle;
@@ -1442,7 +1458,6 @@ void ofi_cmap_free(struct util_cmap *cmap)
 	}
 	util_cmap_event_handler_close(cmap);
 	free(cmap->handles_av);
-	free(cmap->attr.name);
 	fastlock_release(&cmap->lock);
 	fastlock_destroy(&cmap->lock);
 	free(cmap);
@@ -1465,9 +1480,6 @@ struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
 		goto err1;
 
 	cmap->attr = *attr;
-	cmap->attr.name = mem_dup(attr->name, ep->av->addrlen);
-	if (!cmap->attr.name)
-		goto err2;
 
 	memset(&cmap->handles_idx, 0, sizeof(cmap->handles_idx));
 	ofi_key_idx_init(&cmap->key_idx, UTIL_CMAP_IDX_BITS);
@@ -1478,13 +1490,12 @@ struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
 	if (pthread_create(&cmap->event_handler_thread, 0,
 			   cmap->attr.event_handler, ep)) {
 		FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-			"Unable to create msg_cm_listener_thread\n");
-		goto err3;
+			"Unable to create cmap event handler thread\n");
+		goto err2;
 	}
 	return cmap;
-err3:
-	fastlock_destroy(&cmap->lock);
 err2:
+	fastlock_destroy(&cmap->lock);
 	free(cmap->handles_av);
 err1:
 	free(cmap);
