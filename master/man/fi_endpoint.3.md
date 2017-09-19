@@ -627,6 +627,37 @@ protocol value set to one.
 *FI_PROTO_SOCK_TCP*
 : The protocol is layered over TCP packets.
 
+*FI_PROTO_IWARP_RDM*
+: Reliable-datagram protocol implemented over iWarp reliable-connected
+  queue pairs.
+
+*FI_PROTO_IB_RDM*
+: Reliable-datagram protocol implemented over InfiniBand reliable-connected
+  queue pairs.
+
+*FI_PROTO_GNI*
+: Protocol runs over Cray GNI low-level interface.
+
+*FI_PROTO_RXM*
+: Reliable-datagram protocol implemented over message endpoints.  RXM is
+  a libfabric utility component that adds RDM endpoint semantics over
+  MSG endpoint semantics.
+
+*FI_PROTO_RXD*
+: Reliable-datagram protocol implemented over datagram endpoints.  RXD is
+  a libfabric utility component that adds RDM endpoint semantics over
+  DGRAM endpoint semantics.
+
+*FI_PROTO_NETWORKDIRECT*
+: Protocol runs over Microsoft NetworkDirect service provider interface.
+  This adds reliable-datagram semantics over the NetworkDirect connection-
+  oriented endpoint semantics.
+
+*FI_PROTO_PSMX2*
+: The protocol is based on an Intel proprietary protocol known as PSM2,
+  performance scaled messaging version 2.  PSMX2 is an extended version of the
+  PSM2 protocol to support the libfabric interfaces.
+
 ## protocol_version - Protocol Version
 
 Identifies which version of the protocol is employed by the provider.
