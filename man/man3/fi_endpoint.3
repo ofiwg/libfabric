@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2017\-06\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2017\-09\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -666,6 +666,35 @@ communicate with a remote peer that is using Berkeley
 \f[I]SOCK_DGRAM\f[] sockets using \f[I]IPPROTO_UDP\f[].
 .PP
 \f[I]FI_PROTO_SOCK_TCP\f[] : The protocol is layered over TCP packets.
+.PP
+\f[I]FI_PROTO_IWARP_RDM\f[] : Reliable\-datagram protocol implemented
+over iWarp reliable\-connected queue pairs.
+.PP
+\f[I]FI_PROTO_IB_RDM\f[] : Reliable\-datagram protocol implemented over
+InfiniBand reliable\-connected queue pairs.
+.PP
+\f[I]FI_PROTO_GNI\f[] : Protocol runs over Cray GNI low\-level
+interface.
+.PP
+\f[I]FI_PROTO_RXM\f[] : Reliable\-datagram protocol implemented over
+message endpoints.
+RXM is a libfabric utility component that adds RDM endpoint semantics
+over MSG endpoint semantics.
+.PP
+\f[I]FI_PROTO_RXD\f[] : Reliable\-datagram protocol implemented over
+datagram endpoints.
+RXD is a libfabric utility component that adds RDM endpoint semantics
+over DGRAM endpoint semantics.
+.PP
+\f[I]FI_PROTO_NETWORKDIRECT\f[] : Protocol runs over Microsoft
+NetworkDirect service provider interface.
+This adds reliable\-datagram semantics over the NetworkDirect
+connection\- oriented endpoint semantics.
+.PP
+\f[I]FI_PROTO_PSMX2\f[] : The protocol is based on an Intel proprietary
+protocol known as PSM2, performance scaled messaging version 2.
+PSMX2 is an extended version of the PSM2 protocol to support the
+libfabric interfaces.
 .SS protocol_version \- Protocol Version
 .PP
 Identifies which version of the protocol is employed by the provider.
