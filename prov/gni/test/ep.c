@@ -264,6 +264,11 @@ Test(endpoint, getsetopt)
 	cr_assert(!ret, "fi_close endpoint");
 }
 
+/*
+ * size left interfaces have been deprecated
+ */
+
+#if 0
 Test(endpoint, sizeleft)
 {
 	int ret;
@@ -293,6 +298,7 @@ Test(endpoint, sizeleft)
 	ret = fi_close(&ep->fid);
 	cr_assert(!ret, "fi_close endpoint");
 }
+#endif
 
 Test(endpoint, getsetopt_gni_ep)
 {
