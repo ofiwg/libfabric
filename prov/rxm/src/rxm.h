@@ -360,16 +360,7 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
-void *rxm_conn_event_handler(void *arg);
-int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
-		    fi_addr_t fi_addr);
-int rxm_conn_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
-		void *data);
-struct util_cmap_handle *rxm_conn_alloc(void);
-void rxm_conn_close(struct util_cmap_handle *handle);
-void rxm_conn_free(struct util_cmap_handle *handle);
-int rxm_conn_signal(struct util_ep *util_ep, void *context,
-		    enum ofi_cmap_signal signal);
+struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);

@@ -448,17 +448,19 @@ typedef struct util_cmap_handle* (*ofi_cmap_alloc_handle_func)(void);
 typedef void (*ofi_cmap_handle_func)(struct util_cmap_handle *handle);
 typedef int (*ofi_cmap_connect_func)(struct util_ep *cmap,
 				     struct util_cmap_handle *handle,
-				     fi_addr_t fi_addr);
+				     const void *addr, size_t addrlen);
 typedef void *(*ofi_cmap_event_handler_func)(void *arg);
 typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 				    enum ofi_cmap_signal signal);
+typedef int (*ofi_cmap_getname_func)(struct util_cmap_handle *handle,
+				     void *addr, size_t *len);
 
 struct util_cmap_attr {
-	void 				*name;
 	ofi_cmap_alloc_handle_func 	alloc;
 	ofi_cmap_handle_func 		close;
 	ofi_cmap_handle_func 		free;
 	ofi_cmap_connect_func 		connect;
+	ofi_cmap_getname_func		getname;
 	ofi_cmap_event_handler_func	event_handler;
 	ofi_cmap_signal_func		signal;
 };
@@ -492,7 +494,8 @@ void ofi_cmap_process_connect(struct util_cmap *cmap,
 			      uint64_t *remote_key);
 void ofi_cmap_process_reject(struct util_cmap *cmap,
 			     struct util_cmap_handle *handle);
-int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
+int ofi_cmap_process_connreq(struct util_cmap *cmap,
+			     void *local_addr, void *remote_addr,
 			     struct util_cmap_handle **handle);
 void ofi_cmap_process_shutdown(struct util_cmap *cmap,
 			       struct util_cmap_handle *handle);
