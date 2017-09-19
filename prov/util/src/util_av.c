@@ -1292,7 +1292,14 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Processing connreq for addr", addr);
-	index = ip_av_get_index(cmap->av, addr);
+
+	if (!ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name)) {
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Endpoint connects to itself. Not checking AV table\n");
+		index = -1;
+	} else {
+		index = ip_av_get_index(cmap->av, addr);
+	}
 	fastlock_acquire(&cmap->lock);
 	if (index < 0)
 		handle = util_cmap_get_handle_peer(cmap, addr);
