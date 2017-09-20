@@ -308,7 +308,8 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 
 	free(rxm_ep->msg_info->dest_addr);
 	rxm_ep->msg_info->dest_addrlen = addrlen;
-	rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen);
+	if (!(rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen)))
+		return -FI_ENOMEM;
 
 	ret = fi_getinfo(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
 			 NULL, NULL, 0, rxm_ep->msg_info, &msg_info);

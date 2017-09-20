@@ -1484,6 +1484,7 @@ struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
 	return cmap;
 err3:
 	fastlock_destroy(&cmap->lock);
+	free(cmap->attr.name);
 err2:
 	free(cmap->handles_av);
 err1:
