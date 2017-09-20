@@ -177,6 +177,8 @@ static char *ft_comp_type_str(enum ft_comp_type comp_type)
 		return "comp_queue";
 	case FT_COMP_CNTR:
 		return "comp_cntr";
+	case FT_COMP_ALL:
+		return "comp_all";
 	default:
 		return "comp_unspec";
 	} 

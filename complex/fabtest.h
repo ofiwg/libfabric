@@ -148,6 +148,7 @@ enum ft_comp_type {
 	FT_COMP_UNSPEC,
 	FT_COMP_QUEUE,
 	FT_COMP_CNTR,
+	FT_COMP_ALL,
 	FT_MAX_COMP
 };
 
@@ -314,6 +315,8 @@ int ft_open_comp();
 int ft_bind_comp(struct fid_ep *ep);
 int ft_comp_rx(int timeout);
 int ft_comp_tx(int timeout);
+int ft_use_comp_cntr(enum ft_comp_type comp_type);
+int ft_use_comp_cq(enum ft_comp_type comp_type);
 
 int ft_open_active();
 int ft_open_passive();

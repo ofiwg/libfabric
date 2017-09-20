@@ -377,7 +377,7 @@ static int ft_sync_test(int value)
 
 static int ft_sync_msg_needed()
 {
-	if (!(test_info.comp_type == FT_COMP_CNTR &&
+	if (!(ft_use_comp_cntr(test_info.comp_type) &&
 	    (test_info.test_class & (FI_RMA | FI_ATOMIC))) &&
 	    no_sync_needed(test_info.class_function, test_info.msg_flags))
 		return 0;
@@ -593,7 +593,7 @@ static int ft_bw_rma(void)
 			return ret;
 	} else {
 		if (no_sync_needed(test_info.class_function, test_info.msg_flags) &&
-		    test_info.comp_type != FT_COMP_CNTR)
+		    !(ft_use_comp_cntr(test_info.comp_type)))
 			i = ft_ctrl.xfer_iter;
 		else
 			i = 1;
