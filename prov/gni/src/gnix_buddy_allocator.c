@@ -245,13 +245,14 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 {
 	char err_buf[256] = {0}, *error = NULL;
 	int fi_errno;
+	uint32_t size_check = len / MIN_BLOCK_SIZE * 2;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/* Ensure parameters are valid */
-	if (unlikely(!base || !len || !max || max > len || !alloc_handle ||
-		     IS_NOT_POW_TWO(max) || (len % max) ||
-		     !(len / MIN_BLOCK_SIZE * 2))) {
+	if (OFI_UNLIKELY(!base || !len || !max || max > len || !alloc_handle ||
+			 IS_NOT_POW_TWO(max) || (len % max) ||
+			 !size_check)) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Invalid parameter to _gnix_buddy_allocator_create."
