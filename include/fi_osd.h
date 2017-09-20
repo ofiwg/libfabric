@@ -72,8 +72,8 @@ typedef long double long_double;
 #define OFI_LIKELY(x)	__builtin_expect((x), 1)
 #define OFI_UNLIKELY(x)	__builtin_expect((x), 0)
 #else
-#define OFI_LIKELY(x)
-#define OFI_UNLIKELY(x)
+#define OFI_LIKELY(x)	(x)
+#define OFI_UNLIKELY(x)	(x)
 #endif
 
 #endif /* _FI_OSD_H_ */
