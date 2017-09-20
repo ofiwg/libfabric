@@ -234,7 +234,7 @@ struct fi_ibv_rdm_buf_service_data {
 struct fi_ibv_rdm_buf {
 	struct fi_ibv_rdm_buf_service_data service_data;
 	struct fi_ibv_rdm_header header;
-	uint8_t payload;
+	uint64_t payload;
 };
 
 struct fi_ibv_rdm_cm {
