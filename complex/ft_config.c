@@ -776,6 +776,9 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
 	info->comp_type = set->comp_type[series->cur_comp];
+	if (info->caps & (FT_CAP_RMA | FT_CAP_ATOMIC) &&
+		(info->comp_type == FT_COMP_CNTR))
+		info->caps |= FI_RMA_EVENT;
 	info->eq_wait_obj = set->eq_wait_obj[series->cur_eq_wait_obj];
 	info->cntr_wait_obj = set->cntr_wait_obj[series->cur_cntr_wait_obj];
 
