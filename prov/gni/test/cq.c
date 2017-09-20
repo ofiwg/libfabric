@@ -997,3 +997,45 @@ Test(cq_notify_flags, not_fi_rma_event)
 {
 	do_cq_notify(~FI_RMA_EVENT);
 }
+
+
+struct test_err {
+	int padding_1;
+	struct fi_cq_err_entry_1_0 error;
+	int padding_2;
+};
+
+Test(reading_1_4, issue_ofiwg_3227)
+{
+	struct test_err error_entry;
+	int ret = 0;
+	char input_ctx = 'a';
+	uint64_t flags = 0xb;
+	size_t len = sizeof(input_ctx);
+	void *buf = &input_ctx;
+	uint64_t data = 20;
+	uint64_t tag = 40;
+	size_t olen = 20;
+	int err = 50;
+	int prov_errno = 80;
+
+	/*
+	 * By default CQ start out with no error entries and no entries
+	 * in the error entry free list.
+	 */
+	cr_assert(!cq_priv->errors->item_list.head);
+	cr_assert(!cq_priv->errors->free_list.head);
+
+	_gnix_cq_add_error(cq_priv, &input_ctx, flags, len, buf, data, tag,
+		olen, err, prov_errno, 0, 0);
+
+	error_entry.padding_1 = 0xcafebabe;
+	error_entry.padding_2 = 0xcafed00d;
+
+	ret = fi_cq_readerr((struct fid_cq *) cq_priv,
+		(struct fi_cq_err_entry *) &error_entry.error, 0);
+	cr_assert_eq(ret, 1);
+
+	cr_assert_eq(error_entry.padding_1, 0xcafebabe);
+	cr_assert_eq(error_entry.padding_2, 0xcafed00d);
+}
