@@ -114,15 +114,18 @@ int ft_open_comp(void)
 {
 	int ret;
 
+	ret = ft_open_cqs();
+	if (ret)
+		return ret;
+
 	switch (test_info.comp_type) {
 	case FT_COMP_QUEUE:
-		ret = ft_open_cqs();
 		break;
 	case FT_COMP_CNTR:
 		ret = ft_open_cntrs();
 		break;
 	default:
-		ret = -FI_ENOSYS; 
+		ret = -FI_ENOSYS;
 	}
 
 	return ret;
@@ -132,23 +135,36 @@ int ft_bind_comp(struct fid_ep *ep)
 {
 	int ret;
 	uint64_t flags;
-	struct fid *txfid = (test_info.comp_type == FT_COMP_CNTR) ? &txcntr->fid : &txcq->fid;
-	struct fid *rxfid = (test_info.comp_type == FT_COMP_CNTR) ? &rxcntr->fid : &rxcq->fid;
 
 	flags = FI_TRANSMIT;
-	if (test_info.comp_type == FT_COMP_CNTR)
-		flags |= FI_READ | FI_WRITE;
-	ret = fi_ep_bind(ep, txfid, flags);
+	ret = fi_ep_bind(ep, &txcq->fid, flags);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
+	if (test_info.comp_type == FT_COMP_CNTR) {
+		flags |= FI_READ | FI_WRITE;
+		ret = fi_ep_bind(ep, &txcntr->fid, flags);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
 	flags = FI_RECV;
-	ret = fi_ep_bind(ep, rxfid, flags);
+	ret = fi_ep_bind(ep, &rxcq->fid, flags);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
+	}
+
+	if (test_info.comp_type == FT_COMP_CNTR) {
+		ret = fi_ep_bind(ep, &rxcntr->fid, flags);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			return ret;
+		}
 	}
 
 	return 0;
