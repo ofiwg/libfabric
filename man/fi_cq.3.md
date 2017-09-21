@@ -410,11 +410,10 @@ struct fi_cq_err_entry {
 
 The general reason for the error is provided through the err field.
 Provider specific error information may also be available through the
-prov_errno and err_data fields.  The err_data field, if set, will
-reference an internal buffer owned by the provider.  The contents of
-the buffer will remain valid until a subsequent read call against the
-CQ.  Users may call fi_cq_strerror to convert provider specific error
-information into a printable string for debugging purposes.
+prov_errno and err_data fields.  Users may call fi_cq_strerror to
+convert provider specific error information into a printable string
+for debugging purposes.  See field details below for more information
+on the use of err_data and err_data_size.
 
 Notable completion error codes are given below.
 
@@ -513,7 +512,7 @@ of these fields are the same for all CQ entry structure formats.
   owned by the provider.  The contents of the buffer will remain valid until a
   subsequent read call against the CQ.  Applications must serialize access
   to the CQ when processing errors to ensure that the buffer referenced by
-  err_data does no change.
+  err_data does not change.
 
 # COMPLETION FLAGS
 
