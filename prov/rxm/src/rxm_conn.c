@@ -108,20 +108,21 @@ void rxm_conn_close(struct util_cmap_handle *handle)
 	rxm_conn->msg_ep = NULL;
 }
 
-void rxm_conn_free(struct util_cmap_handle *handle)
+static void rxm_conn_free(struct util_cmap_handle *handle)
 {
 	rxm_conn_close(handle);
 	free(container_of(handle, struct rxm_conn, handle));
 }
 
-struct util_cmap_handle *rxm_conn_alloc(void)
+static struct util_cmap_handle *rxm_conn_alloc(void)
 {
 	struct rxm_conn *rxm_conn = calloc(1, sizeof(*rxm_conn));
 	return rxm_conn ? &rxm_conn->handle : NULL;
 }
 
-int rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
-			    void *data)
+static int
+rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
+			void *data)
 {
 	struct rxm_conn *rxm_conn;
 	struct rxm_cm_data *remote_cm_data = data;
@@ -194,7 +195,7 @@ static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
 	}
 }
 
-void *rxm_conn_event_handler(void *arg)
+static void *rxm_conn_event_handler(void *arg)
 {
 	struct fi_eq_cm_entry *entry;
 	size_t datalen = sizeof(struct rxm_cm_data);
@@ -291,8 +292,9 @@ static int rxm_prepare_cm_data(struct fid_pep *pep, struct util_cmap_handle *han
 	return 0;
 }
 
-int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
-		    fi_addr_t fi_addr)
+static int
+rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
+		 const void *addr, size_t addrlen)
 {
 	struct rxm_ep *rxm_ep;
 	struct rxm_conn *rxm_conn;
@@ -305,18 +307,16 @@ int rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	free(rxm_ep->msg_info->dest_addr);
-	rxm_ep->msg_info->dest_addrlen = rxm_ep->util_ep.av->addrlen;
-	rxm_ep->msg_info->dest_addr = mem_dup(ofi_av_get_addr(rxm_ep->util_ep.av,
-							      fi_addr),
-					      rxm_ep->util_ep.av->addrlen);
+	rxm_ep->msg_info->dest_addrlen = addrlen;
+	if (!(rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen)))
+		return -FI_ENOMEM;
 
 	ret = fi_getinfo(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
 			 NULL, NULL, 0, rxm_ep->msg_info, &msg_info);
 	if (ret)
 		return ret;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn,
-			      &rxm_conn->handle);
+	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, &rxm_conn->handle);
 	if (ret)
 		goto err1;
 
@@ -342,8 +342,8 @@ err1:
 	return ret;
 }
 
-int rxm_conn_signal(struct util_ep *util_ep, void *context,
-		    enum ofi_cmap_signal signal)
+static int rxm_conn_signal(struct util_ep *util_ep, void *context,
+			   enum ofi_cmap_signal signal)
 {
 	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
 	struct fi_eq_entry entry = {0};
@@ -358,4 +358,36 @@ int rxm_conn_signal(struct util_ep *util_ep, void *context,
 		return (int)rd;
 	}
 	return 0;
+}
+
+struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
+{
+	struct util_cmap_attr attr;
+	void *name;
+	size_t len;
+	int ret;
+
+	len = rxm_ep->msg_info->src_addrlen;
+	name = malloc(len);
+
+	/* Passive endpoint should already have fi_setname or fi_listen
+	 * called on it for this to work */
+	ret = fi_getname(&rxm_ep->msg_pep->fid, name, &len);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to fi_getname on msg_ep\n");
+		free(name);
+		return NULL;
+	}
+	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
+
+	attr.name		= name;
+	attr.alloc 		= rxm_conn_alloc;
+	attr.close 		= rxm_conn_close;
+	attr.free 		= rxm_conn_free;
+	attr.connect 		= rxm_conn_connect;
+	attr.event_handler	= rxm_conn_event_handler;
+	attr.signal		= rxm_conn_signal;
+
+	return ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
 }

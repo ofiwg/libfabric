@@ -448,7 +448,7 @@ typedef struct util_cmap_handle* (*ofi_cmap_alloc_handle_func)(void);
 typedef void (*ofi_cmap_handle_func)(struct util_cmap_handle *handle);
 typedef int (*ofi_cmap_connect_func)(struct util_ep *cmap,
 				     struct util_cmap_handle *handle,
-				     fi_addr_t fi_addr);
+				     const void *addr, size_t addrlen);
 typedef void *(*ofi_cmap_event_handler_func)(void *arg);
 typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 				    enum ofi_cmap_signal signal);
