@@ -572,7 +572,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 		 */
 		if (FI_VERSION_LT(cq_priv->domain->fabric->fab_fid.api_version,
 		    FI_VERSION(1, 5)) || buf->err_data_size == 0) {
-			err_data_cpylen = sizeof(*cq_priv->err_data);
+			err_data_cpylen = sizeof(cq_priv->err_data);
 
 			memcpy(cq_priv->err_data, gnix_cq_err->err_data,
 				err_data_cpylen);
@@ -582,7 +582,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 			if (buf->err_data == NULL)
 				return -FI_EINVAL;
 
-			err_data_cpylen = MIN(buf->err_data_size, sizeof(*cq_priv->err_data));
+			err_data_cpylen = MIN(buf->err_data_size, sizeof(cq_priv->err_data));
 			memcpy(buf->err_data, gnix_cq_err->err_data, err_data_cpylen);
 		}
 		free(gnix_cq_err->err_data);
