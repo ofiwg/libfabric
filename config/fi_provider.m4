@@ -186,10 +186,10 @@ AC_DEFUN([FI_CHECK_PREFIX_DIR],[
 	       ])
 
 	# Check that base/lib or base/lib64 exists
-	 AS_IF([test -d "$1/lib"],
-	       [$2_LIBDIR="$1/lib"],
-	       [AS_IF([test -d "$1/lib64"],
-		      [$2_LIBDIR="$1/lib64"],
+	 AS_IF([test -d "$1/lib64"],
+	       [$2_LIBDIR="$1/lib64"],
+	       [AS_IF([test -d "$1/lib"],
+		      [$2_LIBDIR="$1/lib"],
 		      [AC_MSG_WARN([could not find "lib" or "lib64" subdirectories in supplied "$1" directory"])
 		       AC_MSG_ERROR([Cannot continue])
 		      ])
