@@ -102,7 +102,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 			wr[last].num_sge = 1;
 		}
 		for (i = num_to_post - 2; i >= 0; i--) {
-			sge[last].addr = (uint64_t)(uintptr_t)
+			sge[i].addr = (uint64_t)(uintptr_t)
 				fi_ibv_rdm_get_rbuf(conn, ep,
 						    i % ep->n_buffs);
 			sge[i].length = ep->buff_len;
