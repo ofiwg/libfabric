@@ -103,9 +103,9 @@ AC_DEFUN([_FI_CHECK_PACKAGE_LIB], [
 
            AS_IF([test "$fi_check_package_lib_happy" = "no"],
                [AS_IF([test "$fi_check_package_libdir" != ""],
-                    [$1_LDFLAGS="$$1_LDFLAGS -L$fi_check_package_libdir/lib"
-                     LDFLAGS="$LDFLAGS -L$fi_check_package_libdir/lib"
-                     AC_VERBOSE([looking for library in lib])
+                    [$1_LDFLAGS="$$1_LDFLAGS -L$fi_check_package_libdir/lib64"
+                     LDFLAGS="$LDFLAGS -L$fi_check_package_libdir/lib64"
+                     AC_VERBOSE([looking for library in lib64])
                      AC_CHECK_LIB([$2], [$3],
                                [fi_check_package_lib_happy="yes"],
                                [fi_check_package_lib_happy="no"], [$4])
@@ -117,9 +117,9 @@ AC_DEFUN([_FI_CHECK_PACKAGE_LIB], [
 
            AS_IF([test "$fi_check_package_lib_happy" = "no"],
                [AS_IF([test "$fi_check_package_libdir" != ""],
-                    [$1_LDFLAGS="$$1_LDFLAGS -L$fi_check_package_libdir/lib64"
-                     LDFLAGS="$LDFLAGS -L$fi_check_package_libdir/lib64"
-                     AC_VERBOSE([looking for library in lib64])
+                    [$1_LDFLAGS="$$1_LDFLAGS -L$fi_check_package_libdir/lib"
+                     LDFLAGS="$LDFLAGS -L$fi_check_package_libdir/lib"
+                     AC_VERBOSE([looking for library in lib])
                      AC_CHECK_LIB([$2], [$3],
                                [fi_check_package_lib_happy="yes"],
                                [fi_check_package_lib_happy="no"], [$4])
