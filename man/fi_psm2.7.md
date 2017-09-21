@@ -183,8 +183,8 @@ The *psm2* provider checks for the following environment variables:
 *FI_PSM2_INJECT_SIZE*
 : Maximum message size allowed for fi_inject and fi_tinject calls. This is
   an experimental feature to allow some applications to override default
-  inject size limitation. This is only effective for messages. Inject size
-  for RMA operations is still limited to the default setting.
+  inject size limitation. When the inject size is larger than the default
+  value, some inject calls might block.
 
   The default setting is 64.
 
