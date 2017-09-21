@@ -243,11 +243,22 @@ int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		requested_key >= auth_key->attr.user_key_limit)
 		return -FI_EKEYREJECTED;
 
+	if (!reserved && auth_key->using_vmdh) {
+		/* adjust requested key by rank offset */
+		fi_reg_context.requested_key += auth_key->key_offset;
+		GNIX_DEBUG(FI_LOG_DOMAIN,
+			"user requested key %d, but adjusting by "
+			"rank offset as key %d\n",
+			requested_key, fi_reg_context.requested_key);
+	}
+
 	if (auth_key->using_vmdh && !reserved &&
 		requested_key < auth_key->attr.user_key_limit) {
-		rc = _gnix_test_and_set_bit(auth_key->user, requested_key);
+		rc = _gnix_test_and_set_bit(auth_key->user,
+				fi_reg_context.requested_key);
 		if (rc) {
-			GNIX_WARN(FI_LOG_DOMAIN, "key already in use\n");
+			GNIX_WARN(FI_LOG_DOMAIN, "key already in use, key=%d\n",
+				fi_reg_context.requested_key);
 			return -FI_ENOKEY;
 		}
 	}
@@ -302,6 +313,11 @@ int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	/* setup internal key structure */
 	mr->mr_fid.key = _gnix_convert_mhdl_to_key(&mr->mem_hndl);
+	if (!reserved && auth_key->using_vmdh) {
+		/* When using scalable, the key is a virtual index to the
+		   vmdh table */
+		mr->mr_fid.key = requested_key;
+	}
 	mr->auth_key = auth_key;
 
 	if (reserved && auth_key->using_vmdh) {
@@ -946,7 +962,7 @@ struct gnix_mr_ops udreg_mr_ops = {
 	.reg_mr = __udreg_reg_mr,
 	.dereg_mr = __udreg_dereg_mr,
 	.destroy_cache = __udreg_close,
-	.flush_cache = NULL, // UDREG doesn't support cache flush
+	.flush_cache = NULL, /* UDREG doesn't support cache flush */
 };
 
 static int __cache_init(struct gnix_fid_domain *domain,
@@ -1157,7 +1173,7 @@ struct gnix_mr_ops basic_mr_ops = {
 	.is_init = __basic_mr_is_init,
 	.reg_mr = __basic_mr_reg_mr,
 	.dereg_mr = __basic_mr_dereg_mr,
-	.flush_cache = NULL, // unsupported since there is no caching here
+	.flush_cache = NULL, /* unsupported since there is no caching here */
 };
 
 int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
@@ -1189,7 +1205,7 @@ int _gnix_flush_registration_cache(struct gnix_fid_domain *domain)
 	if (domain->mr_ops && domain->mr_ops->flush_cache)
 		return domain->mr_ops->flush_cache(domain);
 
-	return FI_SUCCESS;  // if no flush was present, silently pass
+	return FI_SUCCESS;  /* if no flush was present, silently pass */
 }
 
 int _gnix_close_cache(struct gnix_fid_domain *domain,

@@ -473,6 +473,7 @@ static int __gnix_ep_connresp(struct gnix_fid_ep *ep,
 	switch (resp->cmd) {
 	case GNIX_PEP_SOCK_RESP_ACCEPT:
 		ep->vc->peer_caps = resp->peer_caps;
+		ep->vc->peer_key_offset = resp->key_offset;
 		ep->vc->peer_id = resp->vc_id;
 
 		/* Initialize the GNI connection. */
@@ -696,6 +697,7 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 	req.vc_mbox_attr.msg_maxsize = ep_priv->domain->params.mbox_msg_maxsize;
 	req.cq_irq_mdh = ep_priv->nic->irq_mem_hndl;
 	req.peer_caps = ep_priv->caps;
+	req.key_offset = ep_priv->auth_key->key_offset;
 
 	req.cm_data_len = paramlen;
 	if (paramlen) {
@@ -778,6 +780,7 @@ DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 	}
 	ep_priv->vc = vc;
 	ep_priv->vc->peer_caps = conn->req.peer_caps;
+	ep_priv->vc->peer_key_offset = conn->req.key_offset;
 	ep_priv->vc->peer_id = conn->req.vc_id;
 
 	ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl, &mbox);
@@ -816,6 +819,7 @@ DIRECT_FN STATIC int gnix_accept(struct fid_ep *ep, const void *param,
 			ep_priv->domain->params.mbox_msg_maxsize;
 	resp.cq_irq_mdh = ep_priv->nic->irq_mem_hndl;
 	resp.peer_caps = ep_priv->caps;
+	resp.key_offset = ep_priv->auth_key->key_offset;
 
 	resp.cm_data_len = paramlen;
 	if (paramlen) {

@@ -192,6 +192,7 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 		av_priv->table[index].rx_ctx_cnt = ep_name.rx_ctx_cnt;
 		av_priv->table[index].cm_nic_cdm_id =
 			ep_name.cm_nic_cdm_id;
+		av_priv->table[index].key_offset = ep_name.key_offset;
 		if (fi_addr)
 			fi_addr[i] = index;
 

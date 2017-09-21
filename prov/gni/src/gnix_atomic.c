@@ -435,9 +435,11 @@ int _gnix_amo_post_req(void *data)
 
 	/* Mem handle CRC is not validated during FMA operations.  Skip this
 	 * costly calculation. */
-	_gnix_convert_key_to_mhdl_no_crc(
-			(gnix_mr_key_t *)&fab_req->amo.rem_mr_key,
-			&mdh);
+	_GNIX_CONVERT_MR_KEY(ep->auth_key->using_vmdh,
+			fab_req->vc->peer_key_offset,
+			_gnix_convert_key_to_mhdl_no_crc,
+			&fab_req->amo.rem_mr_key, &mdh);
+
 	loc_md = (struct gnix_fid_mem_desc *)fab_req->amo.loc_md;
 
 	txd->gni_desc.type = GNI_POST_AMO;

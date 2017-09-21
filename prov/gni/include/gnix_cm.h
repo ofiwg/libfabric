@@ -55,6 +55,7 @@ struct gnix_pep_sock_connreq {
 	uint64_t peer_caps;
 	size_t cm_data_len;
 	char eqe_buf[GNIX_CM_EQE_BUF_SIZE];
+	uint32_t key_offset;
 };
 
 enum gnix_pep_sock_resp_cmd {
@@ -70,6 +71,7 @@ struct gnix_pep_sock_connresp {
 	uint64_t peer_caps;
 	size_t cm_data_len;
 	char eqe_buf[GNIX_CM_EQE_BUF_SIZE];
+	uint32_t key_offset;
 };
 
 struct gnix_pep_sock_conn {

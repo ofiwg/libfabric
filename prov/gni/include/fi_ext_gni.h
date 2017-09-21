@@ -141,6 +141,7 @@ typedef enum gnix_auth_key_opt {
 	GNIX_USER_KEY_LIMIT = 0,
 	GNIX_PROV_KEY_LIMIT,
 	GNIX_TOTAL_KEYS_NEEDED,
+	GNIX_USER_KEY_MAX_PER_RANK,
 	GNIX_MAX_AUTH_KEY_OPTS,
 } gnix_auth_key_opt_t;
 

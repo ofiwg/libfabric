@@ -176,6 +176,18 @@ void _gnix_convert_key_to_mhdl(
 		gnix_mr_key_t    *key,
 		gni_mem_handle_t *mhdl);
 
+#define _GNIX_CONVERT_MR_KEY(scalable, offset, convert_func, key, mhdl) \
+	do { \
+		if (scalable) { \
+			gnix_mr_key_t _gnix_mr_key = { \
+				.value = ((gnix_mr_key_t *) (key))->value + (offset), \
+			}; \
+			convert_func(&_gnix_mr_key, (mhdl)); \
+		} else { \
+			convert_func((gnix_mr_key_t *) (key), (mhdl)); \
+		} \
+	} while (0)
+
 /**
  * @brief Converts a gni memory handle to a libfabric key
  *
