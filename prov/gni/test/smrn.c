@@ -226,7 +226,7 @@ Test(smrn, threaded)
 
 	memory_regions = (void **) &addresses;
 
-	for (i = 0; i < regions; i++) {
+	for (i = 0; i < GNIX_DEFAULT_RQ_CNT; i++) {
 		thread_ids[i] = i;
 	}
 
