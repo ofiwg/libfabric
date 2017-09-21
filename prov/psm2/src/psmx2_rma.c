@@ -1047,7 +1047,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_ENOMEM;
 
 	if (flags & FI_INJECT) {
-		if (len > PSMX2_INJECT_SIZE) {
+		if (len > psmx2_env.inject_size) {
 			psmx2_am_request_free(ep_priv->trx_ctxt, req);
 			return -FI_EMSGSIZE;
 		}
