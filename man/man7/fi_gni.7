@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2017\-08\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2017\-09\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -316,7 +316,7 @@ FI_ADDR_STR is always parsed and converted to FI_ADDR_GNI for use within
 the GNI provider.
 .PP
 \f[I]FI_ADDR_STR\f[] is formatted as follows:
-gni;node;service;GNIX_AV_STR_ADDR_VERSION;device_addr;cdm_id;name_type;cm_nic_cdm_id;cookie;rx_ctx_cnt
+gni;node;service;GNIX_AV_STR_ADDR_VERSION;device_addr;cdm_id;name_type;cm_nic_cdm_id;cookie;rx_ctx_cnt;key_offset
 .PP
 The GNI provider sets the domain attribute \f[I]cntr_cnt\f[] to the the
 CQ limit divided by 2.
