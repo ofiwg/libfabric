@@ -97,7 +97,6 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_MAX_TRX_CTXT	(80)
 #define PSMX2_ALL_TRX_CTXT	((void *)-1)
 #define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
-#define PSMX2_INJECT_SIZE	(64)
 #define PSMX2_MSG_ORDER		FI_ORDER_SAS
 #define PSMX2_COMP_ORDER	FI_ORDER_NONE
 
@@ -295,7 +294,7 @@ struct psmx2_am_request {
 #define PSMX2_IOV_PROTO_PACK	0
 #define PSMX2_IOV_PROTO_MULTI	1
 #define PSMX2_IOV_MAX_SEQ_NUM	0x0FFF
-#define PSMX2_IOV_BUF_SIZE	PSMX2_INJECT_SIZE
+#define PSMX2_IOV_BUF_SIZE	64
 #define PSMX2_IOV_MAX_COUNT	(PSMX2_IOV_BUF_SIZE / sizeof(uint32_t) - 3)
 
 struct psmx2_iov_info {

@@ -50,7 +50,7 @@ struct psmx2_env psmx2_env = {
 	.sep		= 0,
 	.max_trx_ctxt	= 1,
 	.num_devunits	= 1,
-	.inject_size	= PSMX2_INJECT_SIZE,
+	.inject_size	= 64,
 	.lock_level	= 2,
 	.lazy_conn	= 0,
 };
@@ -400,12 +400,12 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 					PSMX2_OP_FLAGS);
 				goto err_out;
 			}
-			if (hints->tx_attr->inject_size > PSMX2_INJECT_SIZE) {
+			if (hints->tx_attr->inject_size > psmx2_env.inject_size) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->tx_attr->inject_size=%ld,"
 					"supported=%ld.\n",
 					hints->tx_attr->inject_size,
-					PSMX2_INJECT_SIZE);
+					psmx2_env.inject_size);
 				goto err_out;
 			}
 		}
@@ -556,12 +556,12 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 					PSMX2_COMP_ORDER);
 				goto err_out;
 			}
-			if (hints->tx_attr->inject_size > PSMX2_INJECT_SIZE) {
+			if (hints->tx_attr->inject_size > psmx2_env.inject_size) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->tx_attr->inject_size=%ld,"
 					"supported=%d.\n",
 					hints->tx_attr->inject_size,
-					PSMX2_INJECT_SIZE);
+					psmx2_env.inject_size);
 				goto err_out;
 			}
 			if (hints->tx_attr->iov_limit > PSMX2_IOV_MAX_COUNT) {
@@ -682,7 +682,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 					? hints->tx_attr->op_flags : 0;
 	psmx2_info->tx_attr->msg_order = PSMX2_MSG_ORDER;
 	psmx2_info->tx_attr->comp_order = PSMX2_COMP_ORDER;
-	psmx2_info->tx_attr->inject_size = PSMX2_INJECT_SIZE;
+	psmx2_info->tx_attr->inject_size = psmx2_env.inject_size;
 	psmx2_info->tx_attr->size = UINT64_MAX;
 	psmx2_info->tx_attr->iov_limit = PSMX2_IOV_MAX_COUNT;
 	psmx2_info->tx_attr->rma_iov_limit = 1;
