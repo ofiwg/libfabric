@@ -479,8 +479,14 @@ fi_ibv_rdm_repost_multi_recv(struct fi_ibv_rdm_request *request,
 			     size_t offset, struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_multi_request *parent;
-	struct fi_ibv_rdm_request *prepost =
-		util_buf_alloc(fi_ibv_rdm_request_pool);
+	struct fi_ibv_rdm_request *prepost;
+
+	if (!(prepost = util_buf_alloc(fi_ibv_rdm_request_pool))) {
+		VERBS_WARN(FI_LOG_EP_DATA, "Unable to allocate memory for "
+			   "multi recv prepost request\n");
+		return NULL;
+	}
+
 	fi_ibv_rdm_zero_request(prepost);
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", prepost, FI_LOG_DEBUG);
 	FI_IBV_RDM_DBG_REQUEST("repost from: ", request, FI_LOG_DEBUG);
@@ -547,6 +553,10 @@ fi_ibv_rdm_try_unexp_recv(struct fi_ibv_rdm_request *request,
 			if (request->parent) {
 				repost = fi_ibv_rdm_repost_multi_recv(request,
 					 found_request->len, rdata->ep);
+				if (!repost) {
+					ret = -FI_ENOMEM;
+					break;
+				}
 			}
 
 			ret = fi_ibv_rdm_copy_unexp_request(request, found_request);
@@ -820,7 +830,8 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 		assert(data_len <= p->ep->rndv_threshold);
 
 		if (request->parent) {
-			fi_ibv_rdm_repost_multi_recv(request, data_len, p->ep);
+			if (!fi_ibv_rdm_repost_multi_recv(request, data_len, p->ep))
+				return -FI_ENOMEM;
 		}
 
 		if (request->len >= data_len) {
@@ -840,8 +851,9 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 			}
 
 			if (request->parent) {
-				fi_ibv_rdm_repost_multi_recv(request, data_len,
-							     p->ep);
+				if (!fi_ibv_rdm_repost_multi_recv(request, data_len,
+							     p->ep))
+					return -FI_ENOMEM;
 			}
 
 			fi_ibv_rdm_cntr_inc(p->ep->recv_cntr);
@@ -868,8 +880,9 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 				   request->minfo.tagmask);
 
 			if (request->parent) {
-				fi_ibv_rdm_repost_multi_recv(request, data_len,
-							     p->ep);
+				if (!fi_ibv_rdm_repost_multi_recv(request, data_len,
+							     p->ep))
+					return -FI_ENOMEM;
 			}
 
 			request->state.eager =
@@ -911,9 +924,10 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 		request->rndv.id = rndv_header->id;
 
 		if (request->parent) {
-			fi_ibv_rdm_repost_multi_recv(request,
+			if (!fi_ibv_rdm_repost_multi_recv(request,
 						     rndv_header->total_len,
-						     p->ep);
+						     p->ep))
+				return -FI_ENOMEM;
 		}
 
 		ret = fi_ibv_rdm_move_to_postponed_queue(request);
