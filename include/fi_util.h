@@ -201,6 +201,21 @@ int ofi_domain_close(struct util_domain *domain);
 
 
 /*
+ * Passive Endpoint
+ */
+
+struct util_pep {
+	struct fid_pep		pep_fid;
+	struct util_fabric 	*fabric;
+	struct util_eq 		*eq;
+};
+
+int ofi_pep_bind_eq(struct util_pep *pep, struct util_eq *eq);
+int ofi_pep_init(struct fid_fabric *fabric,  struct fi_info *info,
+		 struct util_pep *pep, void *context);
+int ofi_pep_close(struct util_pep *pep);
+
+/*
  * Endpoint
  */
 
@@ -716,7 +731,8 @@ struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
 		 const struct fi_info *hints, struct fi_info **info);
-
+void util_set_fabric_domain(const struct fi_provider *prov,
+			    struct fi_info *info);
 
 struct fid_list_entry {
 	struct dlist_entry	entry;

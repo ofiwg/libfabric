@@ -46,36 +46,44 @@
 #include <string.h>
 #include <poll.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
+static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
+			uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
 
 static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			 fi_addr_t src_addr, void *context)
 {
-	return -FI_ENOSYS;
+	struct fi_msg msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = buf;
+	msg_iov.iov_len = len;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = src_addr;
+	msg.context = context;
+	msg.data = 0;
+
+	return tcpx_recvmsg(ep, &msg, 0);
 }
 
 static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			  size_t count, fi_addr_t src_addr, void *context)
 {
-	return -FI_ENOSYS;
-}
+	struct fi_msg msg;
 
-static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-			    uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
-static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-			 fi_addr_t dest_addr, void *context)
-{
-	return -FI_ENOSYS;
-}
-
-static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-			  size_t count, fi_addr_t dest_addr, void *context)
-{
-	return -FI_ENOSYS;
+	msg.msg_iov = iov;
+	msg.desc = desc;
+	msg.iov_count = count;
+	msg.addr = src_addr;
+	msg.context = context;
+	msg.data = 0;
+	return tcpx_recvmsg(ep, &msg, 0);
 }
 
 static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -84,10 +92,50 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	return -FI_ENOSYS;
 }
 
+static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+			 fi_addr_t dest_addr, void *context)
+{
+	struct fi_msg msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = (void *) buf;
+	msg_iov.iov_len = len;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.context = context;
+
+	return tcpx_sendmsg(ep, &msg, 0);
+}
+
+static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+			  size_t count, fi_addr_t dest_addr, void *context)
+{
+	struct fi_msg msg;
+
+	msg.msg_iov = iov;
+	msg.desc = desc;
+	msg.iov_count = count;
+	msg.addr = dest_addr;
+	msg.context = context;
+	return tcpx_sendmsg(ep, &msg, 0);
+}
+
+
 static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 			   fi_addr_t dest_addr)
 {
-	return -FI_ENOSYS;
+	struct fi_msg msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = (void *) buf;
+	msg_iov.iov_len = len;
+	msg.msg_iov = &msg_iov;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+
+	return tcpx_sendmsg(ep, &msg, FI_INJECT | TCPX_NO_COMPLETION);
 }
 
 static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
@@ -119,6 +167,7 @@ static struct fi_ops_msg tcpx_msg_ops = {
 static void tcpx_set_sockopts(int sock)
 {
 	int optval;
+
 	optval = 1;
 
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)))
@@ -126,96 +175,65 @@ static void tcpx_set_sockopts(int sock)
 
 	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt nodelay failed\n");
-
 }
 
-static void *tcpx_ep_connect_handler(void *data)
+static void tcpx_setup_socket(int sock)
 {
-	struct tcpx_conn_handle *handle;
-	struct fi_eq_cm_entry *eq_entry;
-	struct tcpx_ep *tcpx_ep = (struct tcpx_ep *) data;
-
-	handle = tcpx_ep->handle;
-
-	eq_entry  = calloc(1, sizeof(*eq_entry));
-	if (eq_entry) {
-	  FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-		  "cannot allocate memory\n");
-	  goto err;
-	}
-
-	eq_entry->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	eq_entry->info = &tcpx_ep->info;
-
-	tcpx_set_sockopts(handle->conn_fd);
-	if (connect(handle->conn_fd,
-		    (struct sockaddr *)handle->serv_addr,
-		    sizeof(*handle->serv_addr))) {
-
-	  FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-		  "connect failed : %s\n", strerror(errno));
-	  goto err1;
-	}
-
-	/* report success to eq with FI_CONNECTED */
-	fi_eq_write(&tcpx_ep->eq->eq_fid, FI_CONNECTED,
-		    eq_entry, sizeof(eq_entry), 0);
-
-	return NULL;
-err1:
-	free(eq_entry);
-err:
-	ofi_close_socket(handle->conn_fd);
-
-	/* report the error to eq */
-	fi_eq_write(&tcpx_ep->eq->eq_fid, FI_SHUTDOWN,
-		    eq_entry, sizeof(eq_entry), 0);
-
-	return NULL;
+	tcpx_set_sockopts(sock);
+	fi_fd_nonblock(sock);
 }
 
 static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 		    const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	struct sockaddr_in *serv_addr = (struct sockaddr_in *) addr;
-	struct tcpx_conn_handle *handle;
-	int ret = 0;
+	struct sockaddr *serv_addr = (struct sockaddr *) addr;
+	struct poll_fd_info *fd_info;
+	struct util_fabric *util_fabric;
+	struct tcpx_fabric *tcpx_fabric;
+	size_t addrlen;
+	int ret = FI_SUCCESS;
 
-	if (!addr || tcpx_ep->handle)
+	util_fabric = tcpx_ep->util_ep.domain->fabric;
+	tcpx_fabric = container_of(util_fabric, struct tcpx_fabric, util_fabric);
+
+	if (!addr || !tcpx_ep->conn_fd)
 		return -FI_EINVAL;
 
-
-	handle  = calloc(1, sizeof(*handle));
-	if (handle) {
+	switch (serv_addr->sa_family) {
+	case AF_INET:
+		addrlen = sizeof(struct sockaddr_in);
+		break;
+	case AF_INET6:
+		addrlen = sizeof(struct sockaddr_in6);
+		break;
+	default:
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"cannot allocate memory\n");
-		return -FI_ENOMEM;
+			"server address family invalid \n");
+		return -FI_EINVAL;
 	}
 
-	handle->conn_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (handle->conn_fd < 0) {
-		ret = handle->conn_fd;
-		goto out;
+	ret = connect(tcpx_ep->conn_fd, (struct sockaddr *) addr, addrlen);
+	if (ret == -1 && errno != FI_EINPROGRESS) {
+
+		/* alloc for fd_entry */
+		fd_info = calloc(1, sizeof(*fd_info));
+		if (!fd_info) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"cannot allocate memory \n");
+		}
+		fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
+		fd_info->info = &tcpx_ep->info;
+		fd_info->flags = 0;
+
+		/* Add to poll list in fabric thread */
+		fastlock_acquire(&tcpx_fabric->fd_list_lock);
+		dlist_insert_tail(&fd_info->entry,&tcpx_fabric->fd_list);
+		fastlock_release(&tcpx_fabric->fd_list_lock);
+		fd_signal_set(&tcpx_fabric->signal);
 	}
-	tcpx_ep->handle = handle;
-	tcpx_ep->handle->serv_addr = serv_addr;
 
-	if (pthread_create(&tcpx_ep->cm_thread, NULL,
-			   tcpx_ep_connect_handler, (void *) tcpx_ep)) {
-
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to create connect thread\n");
-		goto err;
-	}
-
-	return FI_SUCCESS;
-err:
-	ofi_close_socket(handle->conn_fd);
-out:
-	free(handle);
 	return ret;
-
 }
 
 static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
@@ -223,24 +241,26 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	struct fi_eq_cm_entry *eq_entry;
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 
-	if (tcpx_ep->handle != NULL && tcpx_ep->handle->conn_fd != 9) {
+	if (tcpx_ep->conn_fd == 0)
+		return -FI_EINVAL;
 
-		eq_entry  = calloc(1, sizeof(*eq_entry));
-		if (eq_entry) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"cannot allocate memory\n");
-			return -FI_ENOMEM;
-		}
 
-		eq_entry->fid = &ep->fid;
-		eq_entry->info = &tcpx_ep->info;
-
-		/* report FI_CONNECTED to eq  */
-		fi_eq_write(&tcpx_ep->eq->eq_fid, FI_CONNECTED, eq_entry,
-			    sizeof(eq_entry), 0);
-		return 0;
+	eq_entry  = calloc(1, sizeof(*eq_entry));
+	if (!eq_entry) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"cannot allocate memory\n");
+		return -FI_ENOMEM;
 	}
-	return -FI_EINVAL;
+
+	eq_entry->fid = &ep->fid;
+	eq_entry->info = &tcpx_ep->info;
+
+	/* report FI_CONNECTED to eq  */
+	if (fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_CONNECTED, eq_entry,
+			sizeof(*eq_entry), 0) < 0)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Eq write failed: %s \n", strerror(errno));
+	return 0;
 }
 
 static struct fi_ops_cm tcpx_cm_ops = {
@@ -261,48 +281,58 @@ static int tcpx_ep_close(struct fid *fid)
 	struct tcpx_ep *ep;
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
-	if (ofi_atomic_get32(&ep->ref)) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "EP busy\n");
-		return -FI_EBUSY;
-	}
-
-	ofi_close_socket(ep->sock);
+	ofi_close_socket(ep->conn_fd);
 	ofi_endpoint_close(&ep->util_ep);
+
 	free(ep);
 	return 0;
 }
 
+static int tcpx_ep_ctrl(struct fid *fid, int command, void *arg)
+{
+	struct tcpx_ep *ep;
+
+	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	switch (command) {
+	case FI_ENABLE:
+		if (!ep->util_ep.rx_cq || !ep->util_ep.tx_cq)
+			return -FI_ENOCQ;
+		break;
+	default:
+		return -FI_ENOSYS;
+	}
+	return 0;
+}
 static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct util_ep *util_ep;
+
+	util_ep = container_of(fid, struct util_ep, ep_fid.fid);
+	return ofi_ep_bind(util_ep, bfid, flags);
 }
 
 static struct fi_ops tcpx_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = tcpx_ep_close,
 	.bind = tcpx_ep_bind,
-	.control = fi_no_control,
+	.control = tcpx_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };
 
 static struct fi_ops_ep tcpx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = fi_no_cancel,
-	.getopt = fi_no_getopt, //tcpx_getopt,
-	.setopt = fi_no_setopt, //tcpx_setopt,
+	.getopt = fi_no_getopt,
+	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void tcpx_ep_progress(struct util_ep *util_ep)
+static void tcpx_manual_progress(struct util_ep *util_ep)
 {
-}
-
-static int tcpx_ep_init(struct tcpx_ep *ep, struct fi_info *info)
-{
-	return -FI_ENOSYS;
+	return;
 }
 
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -317,14 +347,24 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_endpoint_init(domain, &tcpx_util_prov, info, &ep->util_ep,
-				context, tcpx_ep_progress);
+				context, tcpx_manual_progress);
 	if (ret)
 		goto err;
 
-	ret = tcpx_ep_init(ep, info);
-	if (ret) {
-		free(ep);
-		return ret;
+	ep->info = *info;
+	if (info && info->handle) {
+		handle = container_of(info->handle,
+				      struct tcpx_conn_handle,
+				      handle);
+		ep->conn_fd = handle->conn_fd;
+		free(handle);
+	} else {
+		ep->conn_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
+		if (!ep->conn_fd) {
+		  ret = -errno;
+		  goto err;
+		}
+		tcpx_setup_socket(ep->conn_fd);
 	}
 
 	*ep_fid = &ep->util_ep.ep_fid;
@@ -333,14 +373,6 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->cm = &tcpx_cm_ops;
 	(*ep_fid)->msg = &tcpx_msg_ops;
 
-	if (info != NULL && info->handle != NULL){
-		handle = container_of(info->handle,struct tcpx_conn_handle,
-				      handle);
-		ep->handle = handle;
-	} else {
-		ret = -FI_EINVAL;
-		goto err;
-	}
 	return 0;
 err:
 	free(ep);
@@ -350,27 +382,36 @@ err:
 static int tcpx_pep_fi_close(struct fid *fid)
 {
 	struct tcpx_pep *pep;
-	int ret;
-	char c;
+	struct poll_fd_info *fd_info;
+	struct tcpx_fabric *tcpx_fabric;
 
-	pep = container_of(fid, struct tcpx_pep, pep.fid);
-	pep->cm.do_listen = 0;
+	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
 
-	ret = ofi_write_socket(pep->cm.signal_fds[0], &c, 1);
-	if (ret != 1)
-		FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL,"Failed to signal\n");
+	tcpx_fabric = container_of(pep->util_pep.fabric,
+				   struct tcpx_fabric,
+				   util_fabric);
 
-	if (pep->cm.listener_thread &&
-	    pthread_join(pep->cm.listener_thread, NULL)) {
-		FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL,"pthread join failed\n");
+	fd_info = calloc(1, sizeof(*fd_info));
+	if (!fd_info) {
+	  FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+		  "cannot allocate memory \n");
 	}
+	/* remove the pep socket from fabric thread */
+	fd_info->fid = &pep->util_pep.pep_fid.fid;
+	fd_info->info = &pep->info;
+	fd_info->flags = TCPX_SOCK_DEL;
 
-	ofi_close_socket(pep->cm.signal_fds[0]);
-	ofi_close_socket(pep->cm.signal_fds[1]);
+	/* Add to poll list in fabric thread */
+	fastlock_acquire(&tcpx_fabric->fd_list_lock);
+	dlist_insert_tail(&fd_info->entry,&tcpx_fabric->fd_list);
+	fastlock_release(&tcpx_fabric->fd_list_lock);
+	fd_signal_set(&tcpx_fabric->signal);
+
+	/* waiting for actual removal before freeing pep */
+	while (!pep->sock_fd_closed);
 
 	free(pep);
 	return 0;
-
 }
 
 static int tcpx_pep_fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
@@ -378,18 +419,18 @@ static int tcpx_pep_fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct tcpx_pep *pep;
 	struct util_eq *eq;
 
-	pep = container_of(fid, struct tcpx_pep, pep.fid);
+	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
 
 	if (bfid->fclass != FI_CLASS_EQ)
 		return -FI_EINVAL;
-
 	eq = container_of(bfid, struct util_eq, eq_fid.fid);
-	if (pep->fabric != eq->fabric) {
+
+	if(ofi_pep_bind_eq(&pep->util_pep, eq)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"Cannot bind Passive EP and EQ on different fabric\n");
+			"Cannot bind Passive EP and EQ on different fabrics\n");
 		return -FI_EINVAL;
 	}
-	pep->eq = eq;
+
 	return 0;
 }
 
@@ -401,151 +442,47 @@ static struct fi_ops tcpx_pep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static void *tcpx_cm_listener_thread(void *pep_data)
-{
-	struct tcpx_pep *pep = (struct tcpx_pep *) pep_data;
-	struct fi_eq_cm_entry *cm_entry = NULL;
-	struct tcpx_conn_handle *handle;
-	struct pollfd poll_fds[2];
-	int ret = 0, conn_fd, entry_sz;
-	char tmp = 0;
-
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL,
-	       "Starting listener thread for PEP: %p\n", pep);
-
-	poll_fds[0].fd = pep->cm.sock;
-	poll_fds[1].fd = pep->cm.signal_fds[1];
-	poll_fds[0].events = poll_fds[1].events = POLLIN;
-
-	while (*((volatile int *) &pep->cm.do_listen)) {
-		/* block on the listen fd until a req comes through */
-		ret = poll(poll_fds, 1, -1);
-		if (ret > 0) {
-			if (poll_fds[1].revents & POLLIN) {
-				ret = ofi_read_socket(pep->cm.signal_fds[1], &tmp, 1);
-				if (ret != 1)
-					FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL,
-					       "Invalid signal\n");
-				continue;
-			}
-
-		} else {
-			break;
-		}
-
-		conn_fd = accept(pep->cm.sock, NULL, 0);
-		if (conn_fd < 0) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"failed to accept: %d\n", errno);
-			continue;
-		}
-
-		handle = calloc(1, sizeof(*handle));
-		if (!handle) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"cannot allocate memory\n");
-
-			ofi_close_socket(conn_fd);
-			break;
-		}
-
-		entry_sz = sizeof(*cm_entry);
-		cm_entry = calloc(1, entry_sz);
-		if (!cm_entry) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"cannot allocate memory\n");
-			goto err;
-		}
-
-		cm_entry->fid = &pep->pep.fid;
-		cm_entry->info = &pep->info;
-		cm_entry->info->handle = &handle->handle;
-
-		/* report the conn req to the associated eq */
-		if (fi_eq_write(&pep->eq->eq_fid, FI_CONNREQ, cm_entry, entry_sz, 0))
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"Error in writing to EQ\n");
-		free(cm_entry);
-	}
-	return NULL;
-err:
-	ofi_close_socket(conn_fd);
-	free(cm_entry);
-	free(handle);
-	return NULL;
-}
-
 static int tcpx_pep_listen(struct fid_pep *pep)
 {
-	struct tcpx_pep *_pep;
-	/* struct fi_info *fi; */
-	struct addrinfo hints, *addr_result, *iter;
-	char sa_ip[INET_ADDRSTRLEN] = {0};
-	char sa_port[NI_MAXSERV] = {0};
-	int ret;
+	struct tcpx_pep *tcpx_pep;
+	struct poll_fd_info *fd_info;
+	struct util_fabric *util_fabric;
+	struct tcpx_fabric *tcpx_fabric;
+	int ret = FI_SUCCESS;
 
-	_pep = container_of(pep,struct tcpx_pep, pep);
+	tcpx_pep = container_of(pep,struct tcpx_pep, util_pep.pep_fid);
+	util_fabric = tcpx_pep->util_pep.fabric;
+	tcpx_fabric = container_of(util_fabric,
+				   struct tcpx_fabric,
+				   util_fabric);
 
-	/* fi = &_pep->info; */
-
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
-
-	memcpy(sa_ip, inet_ntoa(_pep->src_addr.sin_addr), INET_ADDRSTRLEN);
-	sprintf(sa_port, "%d", ntohs(_pep->src_addr.sin_port));
-
-	ret = getaddrinfo(sa_ip, sa_port, &hints, &addr_result);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"no available AF_INET address service:%s, %s\n",
-			sa_port, gai_strerror(ret));
-		return -FI_EINVAL;
-	}
-
-	for (iter = addr_result; iter; iter = iter->ai_next) {
-		_pep->cm.sock = socket(iter->ai_family, iter->ai_socktype,
-				      iter->ai_protocol);
-		if (_pep->cm.sock >= 0) {
-			tcpx_set_sockopts(_pep->cm.sock);
-			if (!bind(_pep->cm.sock, addr_result->ai_addr, addr_result->ai_addrlen))
-				break;
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"failed to bind listener: f%s\n", strerror(errno));
-			ofi_close_socket(_pep->cm.sock);
-			_pep->cm.sock = -1;
-		}
-	}
-
-	freeaddrinfo(addr_result);
-
-	if (_pep->cm.sock < 0) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to create listener: %s\n", strerror(errno));
-		return -FI_EIO;
-	}
-
-	if (listen(_pep->cm.sock, TCPX_MAX_SOCK_REQS)) {
+	if (listen(tcpx_pep->sock, SOMAXCONN) < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"socket listen failed\n");
+		ret = -errno;
 		goto out;
 	}
 
-	_pep->cm.do_listen = 1;
-
-	if (pthread_create(&_pep->cm.listener_thread, NULL,
-			   tcpx_cm_listener_thread, (void *)_pep)) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to create cm thread\n");
-		goto out;
+	/* alloc for fd_entry */
+	fd_info = calloc(1, sizeof(*fd_info));
+	if (!fd_info) {
+	  FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+		  "cannot allocate memory \n");
 	}
+	fd_info->fid = &tcpx_pep->util_pep.pep_fid.fid;
+	fd_info->info = &tcpx_pep->info;
+	fd_info->flags = TCPX_SOCK_ADD;
 
-	return FI_SUCCESS;
+	/* Add to poll list in fabric thread */
+	fastlock_acquire(&tcpx_fabric->fd_list_lock);
+	dlist_insert_tail(&fd_info->entry,&tcpx_fabric->fd_list);
+	fastlock_release(&tcpx_fabric->fd_list_lock);
+	fd_signal_set(&tcpx_fabric->signal);
+
+	return ret;
  out:
-	ofi_close_socket(_pep->cm.sock);
-	_pep->cm.sock = -1;
-	return -FI_ENOMEM;
+	tcpx_pep->sock = -1;
+	return ret;
 }
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
@@ -559,13 +496,12 @@ static struct fi_ops_cm tcpx_pep_cm_ops = {
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
 	.join = fi_no_join,
-
 };
 
 
 static int tcpx_verify_info(uint32_t version, struct fi_info *info)
 {
-	return -FI_ENOSYS;
+	return 0;
 }
 
 static struct fi_ops_ep tcpx_pep_ops = {
@@ -584,68 +520,102 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 {
 	int ret;
 	struct tcpx_pep *_pep;
-	struct addrinfo hints, *result;
+	struct addrinfo hints, *result, *iter;
+	char sa_ip[INET_ADDRSTRLEN] = {0};
+	char sa_port[NI_MAXSERV] = {0};
 
 	if (info) {
 		ret = tcpx_verify_info(fabric->api_version, info);
 		if (ret) {
 			return ret;
 		}
+	} else {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"invalid info\n");
+		return -FI_EINVAL;
+
 	}
+
 	_pep = calloc(1, sizeof(*_pep));
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	if (info) {
-		_pep->info = *info;
+	if (ofi_pep_init(fabric, info, &_pep->util_pep, context)) {
 
-		if (info->src_addr) {
-			memcpy(&_pep->src_addr, info->src_addr,
-			       info->src_addrlen);
-		} else {
-			memset(&hints, 0, sizeof(hints));
-			hints.ai_family = AF_INET;
-			hints.ai_socktype = SOCK_STREAM;
-
-			ret = getaddrinfo("localhost", NULL, &hints, &result);
-			if (ret) {
-				ret = -FI_EINVAL;
-				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"getaddrinfo failed");
-				goto err;
-			}
-			memcpy(&_pep->src_addr, result->ai_addr,
-			       result->ai_addrlen);
-			freeaddrinfo(result);
-		}
-
-	} else {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"invalid info");
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"pep initialization failed\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
 
-	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, _pep->cm.signal_fds);
+	_pep->info = *info;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+
+	if (info->src_addr) {
+
+		switch (info->addr_format) {
+		case FI_SOCKADDR:
+		case FI_SOCKADDR_IN:
+		case FI_SOCKADDR_IN6:
+			ret = getnameinfo((const struct sockaddr *) info->src_addr,
+				    info->src_addrlen,
+				    sa_ip, INET_ADDRSTRLEN,
+				    sa_port, NI_MAXSERV,0);
+			if (ret) {
+				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"pep initialization failed\n");
+				goto err;
+			}
+			break;
+		default:
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"invalid source address format\n");
+			ret = -FI_EINVAL;
+			goto err;
+		}
+		ret = getaddrinfo(sa_ip, sa_port, &hints, &result);
+	} else {
+		ret = getaddrinfo("localhost", NULL, &hints, &result);
+	}
+
 	if (ret) {
-		ret = -errno;
+		ret = -FI_EINVAL;
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"getaddrinfo failed");
 		goto err;
 	}
 
-	ret = fi_fd_nonblock(_pep->cm.signal_fds[1]);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"fi_fd_nonblock failed\n");
+	for (iter = result; iter; iter = iter->ai_next) {
+		_pep->sock = ofi_socket(iter->ai_family, iter->ai_socktype,
+				      iter->ai_protocol);
+		if (_pep->sock >= 0) {
+			tcpx_set_sockopts(_pep->sock);
+			if (!bind(_pep->sock, result->ai_addr, result->ai_addrlen))
+				break;
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"failed to bind listener: %s\n", strerror(errno));
+			ofi_close_socket(_pep->sock);
+			_pep->sock = -1;
+		}
 	}
 
-	_pep->pep.fid.fclass = FI_CLASS_PEP;
-	_pep->pep.fid.context = context;
-	_pep->pep.fid.ops = &tcpx_pep_fi_ops;
-	_pep->pep.cm = &tcpx_pep_cm_ops;
-	_pep->pep.ops = &tcpx_pep_ops;
+	if (_pep->sock < 0) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to create listener: %s\n", strerror(errno));
+		ret = -FI_EIO;
+		goto err;
+	}
+	freeaddrinfo(result);
 
-	_pep->fabric = container_of(fabric, struct util_fabric, fabric_fid);
+	_pep->util_pep.pep_fid.fid.fclass = FI_CLASS_PEP;
+	_pep->util_pep.pep_fid.fid.context = context;
+	_pep->util_pep.pep_fid.fid.ops = &tcpx_pep_fi_ops;
+	_pep->util_pep.pep_fid.cm = &tcpx_pep_cm_ops;
+	_pep->util_pep.pep_fid.ops = &tcpx_pep_ops;
 
-	*pep = &_pep->pep;
+	_pep->util_pep.fabric = container_of(fabric, struct util_fabric, fabric_fid);
+
+	*pep = &_pep->util_pep.pep_fid;
 	return 0;
-
 err:
 	free(_pep);
 	return ret;

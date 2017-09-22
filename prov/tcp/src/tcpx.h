@@ -70,9 +70,14 @@ extern struct util_prov tcpx_util_prov;
 extern struct fi_info tcpx_info;
 
 #define TCPX_IOV_LIMIT 4
-#define TCPX_MAX_SOCK_REQS 1<<10
+#define TCPX_MAX_SOCK_REQS (1<<10)
 
-int tcpx_fabric(struct fi_fabric_attr *attr,
+#define TCPX_NO_COMPLETION (1ULL << 30)
+
+#define TCPX_SOCK_ADD (1ULL << 0)
+#define TCPX_SOCK_DEL (1ULL << 1)
+
+int tcpx_create_fabric(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric,
 		void *context);
 
@@ -90,37 +95,45 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
 
+struct poll_fd_info {
+	fid_t fid;
+	int flags;
+	struct fi_info *info;
+	struct dlist_entry entry;
+};
+
+struct poll_fd_data {
+	struct pollfd *poll_fds;
+	struct poll_fd_info *fd_info;
+	int nfds;
+	int max_nfds;
+};
 
 struct tcpx_conn_handle {
 	struct fid handle;
-	struct sockaddr_in *serv_addr;
-	int conn_fd;
-};
-struct tcpx_cm_entry {
-	int sock;
-	int do_listen;
-	int signal_fds[2];
-	pthread_t listener_thread;
+	SOCKET conn_fd;
 };
 
 struct tcpx_pep {
-	struct fid_pep pep;
-	struct sockaddr_in src_addr;
+	struct util_pep util_pep;
 	struct fi_info info;
-	struct util_fabric *fabric;
-	struct util_eq *eq;
-	struct tcpx_cm_entry cm;
+	SOCKET sock;
+	int sock_fd_closed;
 };
 
 struct tcpx_ep {
 	struct util_ep util_ep;
 	struct fi_info info;
-	struct util_fabric *fabric;
-	struct util_eq *eq;
-	ofi_atomic32_t ref;
-	struct tcpx_conn_handle *handle;
-	pthread_t cm_thread;
-	int sock;
+	SOCKET conn_fd;
+};
+
+struct tcpx_fabric {
+	struct util_fabric util_fabric;
+	struct fd_signal signal;
+	struct dlist_entry fd_list;
+	fastlock_t fd_list_lock;
+	pthread_t conn_mgr_thread;
+	int run_cm_thread;
 };
 
 #endif //_TCP_H_

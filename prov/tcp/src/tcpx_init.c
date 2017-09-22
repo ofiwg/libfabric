@@ -40,12 +40,92 @@
 #include <net/if.h>
 #include <fi_util.h>
 
-static int tcpx_getinfo (uint32_t version, const char *node, const char *service,
-			 uint64_t flags, struct fi_info *hints,
+#if HAVE_GETIFADDRS
+static void tcpx_getinfo_ifs(struct fi_info **info)
+{
+	struct ifaddrs *ifaddrs, *ifa;
+	struct fi_info *head, *tail, *cur, *loopback;
+	size_t addrlen;
+	uint32_t addr_format;
+	int ret;
+
+	ret = getifaddrs(&ifaddrs);
+	if (ret)
+		return;
+
+	head = tail = loopback = NULL;
+	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP))
+			continue;
+
+		switch (ifa->ifa_addr->sa_family) {
+		case AF_INET:
+			addrlen = sizeof(struct sockaddr_in);
+			addr_format = FI_SOCKADDR_IN;
+			break;
+		case AF_INET6:
+			addrlen = sizeof(struct sockaddr_in6);
+			addr_format = FI_SOCKADDR_IN6;
+			break;
+		default:
+			continue;
+		}
+
+		cur = fi_dupinfo(*info);
+		if (!cur)
+			break;
+
+		if(!ofi_is_loopback_addr(ifa->ifa_addr)) {
+			if (!head)
+				head = cur;
+			else
+				tail->next = cur;
+			tail = cur;
+		} else {
+			cur->next = loopback;
+			loopback = cur;
+		}
+
+		if ((cur->src_addr = mem_dup(ifa->ifa_addr, addrlen))) {
+			cur->src_addrlen = addrlen;
+			cur->addr_format = addr_format;
+		}
+		util_set_fabric_domain(&tcpx_prov, cur);
+	}
+	freeifaddrs(ifaddrs);
+
+	if (head || loopback) {
+		if(!head) { /* loopback interface only? */
+			head = loopback;
+		} else {
+			/* append loopback interfaces to tail */
+			assert(tail);
+			assert(!tail->next);
+			tail->next = loopback;
+		}
+
+		fi_freeinfo(*info);
+		*info = head;
+	}
+}
+#else
+#define tcpx_getinfo_ifs(info) do{}while(0)
+#endif
+
+static int tcpx_getinfo(uint32_t version, const char *node, const char *service,
+			 uint64_t flags, const struct fi_info *hints,
 			 struct fi_info **info)
 {
-	return util_getinfo(&tcpx_util_prov, version, node, service, flags,
-			    hints, info);
+	int ret;
+	ret = util_getinfo(&tcpx_util_prov, version, node, service, flags,
+			   hints, info);
+	if (ret)
+		return ret;
+
+	if (!(*info)->src_addr && !(*info)->dest_addr)
+		tcpx_getinfo_ifs(info);
+
+	return 0;
 }
 
 static void fi_tcp_fini(void)
@@ -55,10 +135,10 @@ static void fi_tcp_fini(void)
 
 struct fi_provider tcpx_prov = {
 	.name = "tcp",
-	.version = FI_VERSION(1,0),
+	.version = FI_VERSION(TCPX_MAJOR_VERSION,TCPX_MINOR_VERSION),
 	.fi_version = FI_VERSION(1,5),
 	.getinfo = tcpx_getinfo,
-	.fabric = tcpx_fabric,
+	.fabric = tcpx_create_fabric,
 	.cleanup = fi_tcp_fini,
 };
 
