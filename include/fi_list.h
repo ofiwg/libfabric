@@ -99,20 +99,21 @@ static inline void dlist_remove(struct dlist_entry *item)
 	for ((item) = (head)->next; (item) != (head); (item) = (item)->next)
 
 #define dlist_foreach_container(head, type, container, member)			\
-	for (container = container_of((head)->next, type, member);		\
-		&(container->member) != (head);					\
-		container = container_of(container->member.next, type, member))
+	for ((container) = container_of((head)->next, type, member);		\
+	     &((container)->member) != (head);					\
+	     (container) = container_of((container)->member.next,		\
+					type, member))
 
-#define dlist_foreach_safe(head, item, tmp)				\
-    for ((item) = (head)->next, (tmp) = (item)->next; (item) != (head);	\
-              (item) = (tmp), (tmp) = (item)->next)
+#define dlist_foreach_safe(head, item, tmp)					\
+	for ((item) = (head)->next, (tmp) = (item)->next; (item) != (head);	\
+             (item) = (tmp), (tmp) = (item)->next)
 
-#define dlist_foreach_container_safe(head, container, member, tmp)			\
-	for (container = container_of((head)->next, typeof(*container), member),	\
-	     (tmp) = container->member.next; &(container->member) != (head);		\
-	     container = container_of((tmp),						\
-				      typeof(*container), member),			\
-	     (tmp) = container->member.next)
+#define dlist_foreach_container_safe(head, type, container, member, tmp)	\
+	for ((container) = container_of((head)->next, type, member),		\
+	     (tmp) = (container)->member.next;					\
+	     &((container)->member) != (head);					\
+	     (container) = container_of((tmp), type, member),			\
+	     (tmp) = (container)->member.next)
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
