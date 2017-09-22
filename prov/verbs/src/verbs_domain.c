@@ -308,17 +308,18 @@ static struct fi_ops_domain fi_ibv_rdm_domain_ops = {
 
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
-	   struct fid_domain **domain, void *context)
+	      struct fid_domain **domain, void *context)
 {
 	struct fi_ibv_domain *_domain;
 	struct fi_ibv_fabric *fab;
-	struct fi_info *fi;
+	const struct fi_info *fi;
 	int param = 0, ret;
 
 	fab = container_of(fabric, struct fi_ibv_fabric,
 			   util_fabric.fabric_fid);
 
-	fi = fi_ibv_get_verbs_info(fab->all_infos, info->domain_attr->name);
+	fi = fi_ibv_get_verbs_info(fi_ibv_util_prov.info,
+				   info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 
@@ -470,8 +471,6 @@ static int fi_ibv_fabric_close(fid_t fid)
 	ret = ofi_fabric_close(&fab->util_fabric);
 	if (ret)
 		return ret;
-
-	fi_freeinfo(fab->all_infos);
 	free(fab);
 
 	return 0;
@@ -498,12 +497,8 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context)
 {
 	struct fi_ibv_fabric *fab;
-	struct fi_info *info, *cur;
-	int ret;
-
-	ret = fi_ibv_init_info(&info);
-	if (ret)
-		return ret;
+	const struct fi_info *cur, *info = fi_ibv_util_prov.info;
+	int ret = FI_SUCCESS;
 
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
@@ -517,7 +512,6 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	}
 	if (ret) {
 		free(fab);
-		fi_freeinfo(info);
 		return ret;
 	}
 
@@ -527,8 +521,6 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	(*fabric)->fid.fclass = FI_CLASS_FABRIC;
 	(*fabric)->fid.ops = &fi_ibv_fi_ops;
 	(*fabric)->ops = &fi_ibv_ops_fabric;
-
-	fab->all_infos = info;
 
 	return 0;
 }

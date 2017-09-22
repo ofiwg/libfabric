@@ -106,6 +106,7 @@
 #define VERBS_MR_IOV_LIMIT 1
 
 extern struct fi_provider fi_ibv_prov;
+extern struct util_prov fi_ibv_util_prov;
 
 extern size_t verbs_default_tx_size;
 extern size_t verbs_default_rx_size;
@@ -128,8 +129,7 @@ struct verbs_dev_info {
 
 struct fi_ibv_fabric {
 	struct util_fabric	util_fabric;
-	struct fi_info		*info;
-	struct fi_info		*all_infos;
+	const struct fi_info	*info;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -336,12 +336,12 @@ struct fi_ibv_connreq {
 int fi_ibv_sockaddr_len(struct sockaddr *addr);
 
 
-int fi_ibv_init_info(struct fi_info **all_infos);
+int fi_ibv_init_info(const struct fi_info **all_infos);
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info);
-struct fi_info *fi_ibv_get_verbs_info(struct fi_info *ilist,
-				      const char *domain_name);
+const struct fi_info *fi_ibv_get_verbs_info(const struct fi_info *ilist,
+					    const char *domain_name);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
 int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
@@ -359,10 +359,8 @@ extern const struct verbs_ep_domain verbs_rdm_domain;
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 			 const struct fi_info *info);
 int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
-			 const struct fi_info *hints, const struct fi_info *info);
-int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
-			 const struct fi_info *hints, const struct fi_info *info);
-
+			 const struct fi_info *hints,
+			 const struct fi_info *info);
 
 ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context);
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
