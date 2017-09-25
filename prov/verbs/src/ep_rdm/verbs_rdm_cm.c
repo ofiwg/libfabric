@@ -416,11 +416,14 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		memset(av_entry, 0, sizeof(*av_entry));
 		memcpy(&av_entry->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
 
+		pthread_mutex_init(&av_entry->conn_lock, NULL);
+
 		ret = ofi_memalign((void**)&conn,
 				   FI_IBV_RDM_MEM_ALIGNMENT,
 				   sizeof(*conn));
 		if (ret) {
-			free(av_entry);
+			pthread_mutex_destroy(&av_entry->conn_lock);
+			ofi_freealign(av_entry);
 			return -ret;
 		}
 
@@ -442,14 +445,17 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		HASH_ADD(hh, ep->domain->rdm_cm->av_hash, addr,
 			 FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 	} else {
+		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
 			ret = ofi_memalign((void**)&conn,
 					   FI_IBV_RDM_MEM_ALIGNMENT,
 					   sizeof(*conn));
-			if (ret)
+			if (ret) {
+				pthread_mutex_unlock(&av_entry->conn_lock);
 				return -ret;
+			}
 			memset(conn, 0, sizeof(*conn));
 			conn->ep = ep;
 			conn->av_entry = av_entry;
@@ -459,6 +465,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}
+		pthread_mutex_unlock(&av_entry->conn_lock);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
 			/*
@@ -536,9 +543,8 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			ret = -errno;
 			goto err;
 		}
-		if (cm_params.private_data) {
+		if (cm_params.private_data)
 			free((void *) cm_params.private_data);
-		}
 	}
 
 	return ret;
@@ -618,6 +624,7 @@ ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
 
+	pthread_mutex_lock(&av_entry->conn_lock);
 	HASH_ITER(hh, av_entry->conn_hash, conn, tmp) {
 		ret = fi_ibv_rdm_conn_cleanup(conn);
 		if (ret) {
@@ -626,6 +633,7 @@ ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
 			err = ret;
 		}
 	}
+	pthread_mutex_unlock(&av_entry->conn_lock);
 
 	return err;
 }

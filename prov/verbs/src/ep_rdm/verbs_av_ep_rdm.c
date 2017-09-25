@@ -89,6 +89,7 @@ fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
 
+	pthread_mutex_lock(&av_entry->conn_lock);
 	HASH_ITER(hh, av_entry->conn_hash, conn, tmp) {
 		ret = fi_ibv_rdm_start_disconnection(conn);
 		if (ret) {
@@ -102,6 +103,7 @@ fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
 		 * cleanup of the connections.
 		 */
 	}
+	pthread_mutex_unlock(&av_entry->conn_lock);
 
 	return err;
 }
@@ -560,13 +562,14 @@ fi_ibv_rdm_av_map_addr_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 	struct fi_ibv_rdm_av_entry *av_entry =
 		fi_ibv_rdm_av_map_addr_to_av_entry(ep, addr);
 	if (av_entry) {
+		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
 			if (ofi_memalign((void**)&conn,
 					 FI_IBV_RDM_MEM_ALIGNMENT,
 					 sizeof(*conn)))
-				return NULL;
+				goto fn;
 			memset(conn, 0, sizeof(*conn));
 		    	memcpy(&conn->addr, &av_entry->addr,
 			       FI_IBV_RDM_DFLT_ADDRLEN);
@@ -577,9 +580,12 @@ fi_ibv_rdm_av_map_addr_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}
+fn:
+		pthread_mutex_unlock(&av_entry->conn_lock);
+		return conn;
 	}
 
-	return conn;
+	return NULL;
 }
 
 static inline struct fi_ibv_rdm_conn *
@@ -590,13 +596,14 @@ fi_ibv_rdm_av_tbl_idx_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 	struct fi_ibv_rdm_av_entry *av_entry =
 		fi_ibv_rdm_av_tbl_idx_to_av_entry(ep, addr);
 	if (av_entry) {
+		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
 			if (ofi_memalign((void**)&conn,
 					 FI_IBV_RDM_MEM_ALIGNMENT,
 					 sizeof(*conn)))
-				return NULL;
+				goto fn;
 			memset(conn, 0, sizeof(*conn));
 		    	memcpy(&conn->addr, &av_entry->addr,
 			       FI_IBV_RDM_DFLT_ADDRLEN);
@@ -607,9 +614,12 @@ fi_ibv_rdm_av_tbl_idx_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}
+fn:
+		pthread_mutex_unlock(&av_entry->conn_lock);
+		return conn;
 	}
 
-	return conn;
+	return NULL;
 }
 
 int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,

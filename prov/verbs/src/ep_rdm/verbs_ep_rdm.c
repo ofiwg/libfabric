@@ -374,6 +374,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				 fi_ibv_rdm_ep_match, ep);
 
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
+		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
@@ -396,16 +397,21 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				break;
 			default:
 				break;
+			}
 		}
-		}
+		pthread_mutex_unlock(&av_entry->conn_lock);
 	}
 
         /* ok, all connections are initiated to disconnect. now wait
 	 * till all connections are switch to state 'closed' */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
+		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
+		pthread_mutex_unlock(&av_entry->conn_lock);
 		if (conn) {
+			/* No need to hold conn_lock during
+			 * polling of receive CQ */
 			while(conn->state != FI_VERBS_CONN_CLOSED &&
 			      conn->state != FI_VERBS_CONN_ALLOCATED) {
 				fi_ibv_rdm_tagged_poll_recv(ep);
@@ -420,11 +426,17 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
         /* now destroy all connections that wasn't removed from HASH */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
+		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
 			HASH_DEL(av_entry->conn_hash, conn);
+			pthread_mutex_unlock(&av_entry->conn_lock);
+			/* No need to hold conn_lock during
+			 * connection cleanup */
 			fi_ibv_rdm_conn_cleanup(conn);
+		} else {
+			pthread_mutex_unlock(&av_entry->conn_lock);
 		}
 	}
 
@@ -435,11 +447,17 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		av_entry = container_of(item,
 					struct fi_ibv_rdm_av_entry,
 					removed_next);
+		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
 			HASH_DEL(av_entry->conn_hash, conn);
+			pthread_mutex_unlock(&av_entry->conn_lock);
+			/* No need to hold conn_lock during
+			 * connection cleanup */
 			fi_ibv_rdm_conn_cleanup(conn);
+		} else {
+			pthread_mutex_unlock(&av_entry->conn_lock);
 		}
 		/* do NOT free av_entry and do NOT remove from
 		 * the List of removed AV entries, becasue we need to
