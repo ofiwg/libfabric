@@ -423,7 +423,7 @@ struct fi_msg_atomic {
 
 struct fi_ioc {
 	void		*addr;    /* local address */
-	size_t		count;    /* # target opearnds */
+	size_t		count;    /* # target operands */
 };
 
 struct fi_rma_ioc {
