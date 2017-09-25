@@ -297,7 +297,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	if (info->tx_attr) {
-		ret = fi_ibv_check_tx_attr(info->tx_attr, info, fi);
+		ret = ofi_check_tx_attr(&fi_ibv_prov, fi->tx_attr,
+					info->tx_attr, info->mode);
 		if (ret)
 			return ret;
 	}

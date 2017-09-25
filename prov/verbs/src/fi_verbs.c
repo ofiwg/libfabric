@@ -60,6 +60,14 @@ struct fi_provider fi_ibv_prov = {
 	.cleanup = fi_ibv_fini
 };
 
+struct util_prov fi_ibv_util_prov = {
+	.prov = &fi_ibv_prov,
+	.info = NULL,
+	/* The support of the shared recieve contexts
+	 * is dynamically calculated */
+	.flags = 0,
+};
+
 int fi_ibv_sockaddr_len(struct sockaddr *addr)
 {
 	if (!addr)
@@ -460,6 +468,8 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 
 static void fi_ibv_fini(void)
 {
+	fi_freeinfo((void *)fi_ibv_util_prov.info);
+	fi_ibv_util_prov.info = NULL;
 }
 
 VERBS_INI
@@ -515,6 +525,9 @@ VERBS_INI
 
 	if (fi_ibv_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
 				 "attribute (0 - 31)", &verbs_min_rnr_timer))
+		return NULL;
+
+	if (fi_ibv_init_info(&fi_ibv_util_prov.info))
 		return NULL;
 
 	return &fi_ibv_prov;
