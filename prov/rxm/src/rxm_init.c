@@ -38,7 +38,8 @@
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
-	core_info->caps = FI_MSG;
+	/* FI_RMA bit is needed for LMT */
+	core_info->caps = FI_MSG | FI_RMA;
 
 	/* Support modes that ofi_rxm could handle */
 	if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
