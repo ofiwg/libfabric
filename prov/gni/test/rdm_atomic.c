@@ -2151,7 +2151,7 @@ static inline void __atomicinject(void)
 	double min_dp;
 	static gnix_mr_cache_t *cache;
 	struct gnix_fid_ep *ep_priv;
-	int already_registered;
+	int already_registered = 0;
 
 	/* i64 */
 	*((int64_t *)source) = SOURCE_DATA;

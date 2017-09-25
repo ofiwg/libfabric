@@ -1208,7 +1208,7 @@ void do_inject(int len)
 	uint64_t r_e[NUMEPS] = {0};
 	static gnix_mr_cache_t *cache;
 	struct gnix_fid_ep *ep_priv;
-	int already_registered;
+	int already_registered = 0;
 
 	rdm_sr_init_data(source, len, 0x23);
 	rdm_sr_init_data(target, len, 0);

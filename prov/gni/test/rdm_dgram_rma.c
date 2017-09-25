@@ -1695,7 +1695,7 @@ void do_inject_write(int len)
 	struct fi_cq_tagged_entry cqe;
 	static gnix_mr_cache_t *cache;
 	struct gnix_fid_ep *ep_priv;
-	int already_registered;
+	int already_registered = 0;
 
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
