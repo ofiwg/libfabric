@@ -292,6 +292,7 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_ibv_srq_context,
+	.query_atomic = fi_ibv_query_atomic,
 };
 
 static struct fi_ops_domain fi_ibv_rdm_domain_ops = {
