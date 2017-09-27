@@ -409,8 +409,7 @@ that the page table entries associated with the region may have been
 modified, and the provider should verify and update the registered
 region accordingly.  The iov parameter is optional and may be used
 to specify which portions of the registered region requires updating.
-If provider, providers are only guaranteed to update the specified
-address ranges.
+Providers are only guaranteed to update the specified address ranges.
 
 The refresh operation has the effect of disabling and re-enabling
 access to the registered region.  Any operations from peers that attempt
