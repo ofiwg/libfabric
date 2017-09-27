@@ -448,9 +448,6 @@ static int psmx2_av_query_seps(struct psmx2_fid_av *av, size_t count, psm2_epid_
 		if (errors[i] != PSM2_OK)
 			continue;
 
-		if (av->sepaddrs[i])
-			continue;
-
 		if (!req) {
 			errors[i] = PSM2_NO_MEMORY;
 			error_count++;
@@ -461,7 +458,7 @@ static int psmx2_av_query_seps(struct psmx2_fid_av *av, size_t count, psm2_epid_
 		args[0].u32w0 = PSMX2_AM_REQ_SEP_QUERY;
 		args[0].u32w1 = sep_ids[i];
 		args[1].u64 = (uint64_t)(uintptr_t)req;
-		args[2].u64 = i;
+		args[2].u64 = av->last + i;
 		psm2_am_request_short(epaddrs[i], PSMX2_AM_SEP_HANDLER,
 				      args, 3, NULL, 0, 0, NULL, NULL);
 	}
@@ -564,8 +561,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 		}
 	}
 
-	if (av_priv->type == FI_AV_TABLE)
-		av_priv->last += count;
+	av_priv->last += count;
 
 	if (av_priv->flags & FI_EVENT) {
 		psmx2_av_post_completion(av_priv, context, count - error_count, 0);
