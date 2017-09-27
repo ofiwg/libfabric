@@ -644,8 +644,7 @@ struct sock_tx_ctx {
 	size_t fclass;
 
 	struct ofi_ringbuf rb;
-	fastlock_t wlock;
-	fastlock_t rlock;
+	fastlock_t rb_lock;
 
 	uint16_t tx_id;
 	uint8_t enabled;

@@ -2476,11 +2476,11 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		}
 	}
 
-	fastlock_acquire(&tx_ctx->rlock);
+	fastlock_acquire(&tx_ctx->rb_lock);
 	if (!ofi_rbempty(&tx_ctx->rb) && !dlist_empty(&pe->free_list)) {
 		ret = sock_pe_new_tx_entry(pe, tx_ctx);
 	}
-	fastlock_release(&tx_ctx->rlock);
+	fastlock_release(&tx_ctx->rb_lock);
 	if (ret < 0)
 		goto out;
 
@@ -2804,4 +2804,3 @@ void sock_pe_finalize(struct sock_pe *pe)
 	free(pe);
 	SOCK_LOG_DBG("Progress engine finalize: OK\n");
 }
-
