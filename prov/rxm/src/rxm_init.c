@@ -45,7 +45,9 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 	if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
 		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
 	else
-		core_info->mode |= (FI_LOCAL_MR | FI_RX_CQ_DATA | FI_CONTEXT);
+		core_info->mode |= FI_LOCAL_MR;
+
+	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
 
 	if (hints) {
 		/* No fi_info modes apart from FI_LOCAL_MR, FI_RX_CQ_DATA
