@@ -47,9 +47,10 @@ static struct fi_context fi_ctx_atomic;
 
 static enum fi_datatype datatype;
 static size_t *count;
-static int run_all_ops = 1;
+static int run_all_ops = 1, run_all_datatypes = 1;
 
-static enum fi_op get_fi_op(char *op) {
+static enum fi_op get_fi_op(char *op)
+{
 	if (!strcmp(op, "min"))
 		return FI_MIN;
 	else if (!strcmp(op, "max"))
@@ -94,7 +95,134 @@ static enum fi_op get_fi_op(char *op) {
 	}
 }
 
-static int execute_base_atomic_op(enum fi_op op)
+static enum fi_datatype get_fi_datatype(char *op)
+{
+	if (!strcmp(op, "int8"))
+		return FI_INT8;
+	else if (!strcmp(op, "uint8"))
+		return FI_UINT8;
+	else if (!strcmp(op, "int16"))
+		return FI_INT16;
+	else if (!strcmp(op, "uint16"))
+		return FI_UINT16;
+	else if (!strcmp(op, "int32"))
+		return FI_INT32;
+	else if (!strcmp(op, "uint32"))
+		return FI_UINT32;
+	else if (!strcmp(op, "int64"))
+		return FI_INT64;
+	else if (!strcmp(op, "uint64"))
+		return FI_UINT64;
+	else if (!strcmp(op, "float"))
+		return FI_FLOAT;
+	else if (!strcmp(op, "double"))
+		return FI_DOUBLE;
+	else if (!strcmp(op, "float_complex"))
+		return FI_FLOAT_COMPLEX;
+	else if (!strcmp(op, "double_complex"))
+		return FI_DOUBLE_COMPLEX;
+	else if (!strcmp(op, "long_double"))
+		return FI_LONG_DOUBLE;
+	else if (!strcmp(op, "long_double_complex"))
+		return FI_LONG_DOUBLE_COMPLEX;
+	else {
+		fprintf(stderr, "Not a valid atomic operation\n");
+		return FI_DATATYPE_LAST;
+	}
+}
+
+static void print_opts_usage(char *name)
+{
+	ft_csusage(name, NULL);
+	/* Atomic op type */
+	FT_PRINT_OPTS_USAGE("-o <op>", "atomic op type: all|min|max|sum|prod|lor|");
+	FT_PRINT_OPTS_USAGE("", "land|bor|band|lxor|bxor|read|write|cswap|cswap_ne|"
+				"cswap_le|cswap_lt|");
+	FT_PRINT_OPTS_USAGE("", "cswap_ge|cswap_gt|mswap (default: all)");
+	/* Atomic datatype */
+	FT_PRINT_OPTS_USAGE("-z <datatype>", "atomic datatype: int8|uint8|int16|uint16|");
+	FT_PRINT_OPTS_USAGE("", "int32|uint32|int64|uint64|float|double|"
+				"float_complex|double_complex|");
+	FT_PRINT_OPTS_USAGE("", "long_double|long_double_complex (default: all)");
+}
+
+#define execute_atomic_op(type, test_name, opts, op_type, datatype)		\
+({										\
+	int ret, len, i;							\
+	len = snprintf((test_name), sizeof(test_name), "%s_",			\
+		       fi_tostr(&(datatype), FI_TYPE_ATOMIC_TYPE));		\
+	snprintf((test_name) + len, sizeof(test_name) - len, "%s_"#type"_lat", \
+		 fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));			\
+	(opts).transfer_size = datatype_to_size(datatype);			\
+										\
+	ft_start();								\
+	for (i = 0; i < (opts).iterations; i++) {				\
+		ret = execute_ ## type ## _atomic_op(op_type);			\
+		if (ret)							\
+			break;							\
+	}									\
+	ft_stop();								\
+	report_perf();								\
+	ret;									\
+})
+
+#define create_atomic_op_handler(type)						\
+static inline int handle_atomic_ ## type ## _op(int run_all_datatypes,		\
+						enum fi_op op_type,		\
+						size_t *count)			\
+{										\
+	int ret;								\
+										\
+	if (run_all_datatypes) {						\
+		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {	\
+			ret = check_ ## type ## _atomic_op(ep, op_type,		\
+							   datatype, count);	\
+			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {	\
+				fprintf(stderr,					\
+					"Provider doesn't support %s ",		\
+					fi_tostr(&op_type,			\
+						 FI_TYPE_ATOMIC_OP));		\
+				fprintf(stderr,					\
+					#type" atomic operation on %s\n",	\
+					fi_tostr(&datatype,			\
+						 FI_TYPE_ATOMIC_TYPE));		\
+				continue;					\
+			} else if (ret) {					\
+				goto fn;					\
+			}							\
+										\
+			ret = execute_atomic_op(type, test_name, opts,		\
+						op_type, datatype);		\
+			if (ret)						\
+				goto fn;					\
+		}								\
+	} else {								\
+		ret = check_ ## type ## _atomic_op(ep, op_type,			\
+						   datatype, count);		\
+		if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {		\
+			fprintf(stderr,						\
+				"Provider doesn't support %s ",			\
+				fi_tostr(&op_type,				\
+					 FI_TYPE_ATOMIC_OP));			\
+			fprintf(stderr,						\
+				#type" atomic operation on %s\n",		\
+				fi_tostr(&datatype,				\
+					 FI_TYPE_ATOMIC_TYPE));			\
+			goto fn;						\
+		} else if (ret) {						\
+			goto fn;						\
+		}								\
+										\
+		ret = execute_atomic_op(type, test_name, opts,			\
+					op_type, datatype);			\
+	}									\
+										\
+fn:										\
+	return ret;								\
+}
+
+
+static inline int execute_base_atomic_op(enum fi_op op)
 {
 	int ret;
 
@@ -109,7 +237,7 @@ static int execute_base_atomic_op(enum fi_op op)
 	return ret;
 }
 
-static int execute_fetch_atomic_op(enum fi_op op)
+static inline int execute_fetch_atomic_op(enum fi_op op)
 {
 	int ret;
 
@@ -125,7 +253,7 @@ static int execute_fetch_atomic_op(enum fi_op op)
 	return ret;
 }
 
-static int execute_compare_atomic_op(enum fi_op op)
+static inline int execute_compare_atomic_op(enum fi_op op)
 {
 	int ret;
 
@@ -142,7 +270,7 @@ static int execute_compare_atomic_op(enum fi_op op)
 	return ret;
 }
 
-static void report_perf()
+static void report_perf(void)
 {
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1, opts.argc,
@@ -151,9 +279,13 @@ static void report_perf()
 		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
 }
 
+create_atomic_op_handler(base)
+create_atomic_op_handler(fetch)
+create_atomic_op_handler(compare)
+
 static int run_op(void)
 {
-	int ret, i, len;
+	int ret;
 
 	count = (size_t *) malloc(sizeof(size_t));
 	ft_sync();
@@ -170,64 +302,12 @@ static int run_op(void)
 	case FI_LXOR:
 	case FI_BXOR:
 	case FI_ATOMIC_WRITE:
-		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ret = check_base_atomic_op(ep, op_type, datatype, count);
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {
-				fprintf(stderr, "Provider doesn't support %s ",
-					fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
-				fprintf(stderr, "base atomic operation on %s\n",
-					fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-				continue;
-			} else if (ret) {
-				break;
-			}
-
-			len = snprintf(test_name, sizeof(test_name), "%s_",
-				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-			snprintf(test_name + len, sizeof(test_name) - len, "%s_base_lat",
-				fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
-			opts.transfer_size = datatype_to_size(datatype);
-			init_test(&opts, test_name, sizeof(test_name));
-
-			ft_start();
-			for (i = 0; i < opts.iterations; i++) {
-				ret = execute_base_atomic_op(op_type);
-				if (ret)
-					break;
-			}
-			ft_stop();
-			report_perf();
-		}
+		ret = handle_atomic_base_op(run_all_datatypes,
+					    op_type, count);
 		break;
 	case FI_ATOMIC_READ:
-		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ret = check_fetch_atomic_op(ep, op_type, datatype, count);
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {
-				fprintf(stderr, "Provider doesn't support %s ",
-					fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
-				fprintf(stderr, "fetch atomic operation on %s\n",
-					fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-				continue;
-			} else if (ret) {
-				break;
-			}
-
-			len = snprintf(test_name, sizeof(test_name), "%s_",
-				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-			snprintf(test_name + len, sizeof(test_name) - len, "%s_fetch_lat",
-				fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
-			opts.transfer_size = datatype_to_size(datatype);
-			init_test(&opts, test_name, sizeof(test_name));
-
-			ft_start();
-			for (i = 0; i < opts.iterations; i++) {
-				ret = execute_fetch_atomic_op(op_type);
-				if (ret)
-					break;
-			}
-			ft_stop();
-			report_perf();
-		}
+		ret = handle_atomic_fetch_op(run_all_datatypes,
+					     op_type, count);
 		break;
 	case FI_CSWAP:
 	case FI_CSWAP_NE:
@@ -236,34 +316,8 @@ static int run_op(void)
 	case FI_CSWAP_GE:
 	case FI_CSWAP_GT:
 	case FI_MSWAP:
-		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {
-			ret = check_compare_atomic_op(ep, op_type, datatype, count);
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {
-				fprintf(stderr, "Provider doesn't support %s ",
-					fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
-				fprintf(stderr, "compare atomic operation on %s\n",
-					fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-				continue;
-			} else if (ret) {
-				break;
-			}
-
-			len = snprintf(test_name, sizeof(test_name), "%s_",
-				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-			snprintf(test_name + len, sizeof(test_name) - len, "%s_lat",
-				fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
-			opts.transfer_size = datatype_to_size(datatype);
-			init_test(&opts, test_name, sizeof(test_name));
-
-			ft_start();
-			for (i = 0; i < opts.iterations; i++) {
-				ret = execute_compare_atomic_op(op_type);
-				if(ret)
-					break;
-			}
-			ft_stop();
-			report_perf();
-		}
+		ret = handle_atomic_compare_op(run_all_datatypes,
+					       op_type, count);
 		break;
 	default:
 		ret = -EINVAL;
@@ -431,7 +485,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "ho:z:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'o':
 			if (!strncasecmp("all", optarg, 3)) {
@@ -440,11 +494,19 @@ int main(int argc, char **argv)
 				run_all_ops = 0;
 				op_type = get_fi_op(optarg);
 				if (op_type == FI_ATOMIC_OP_LAST) {
-					ft_csusage(argv[0], NULL);
-					FT_PRINT_OPTS_USAGE("-o <op>", "atomic op type: all|min|max|sum|prod|lor|");
-					FT_PRINT_OPTS_USAGE("", "land|bor|band|lxor|bxor|read|write|cswap|cswap_ne|"
-						"cswap_le|cswap_lt|");
-					FT_PRINT_OPTS_USAGE("", "cswap_ge|cswap_gt|mswap (default: all)]");
+					print_opts_usage(argv[0]);
+					return EXIT_FAILURE;
+				}
+			}
+			break;
+		case 'z':
+			if (!strncasecmp("all", optarg, 3)) {
+				run_all_datatypes = 1;
+			} else {
+				run_all_datatypes = 0;
+				datatype = get_fi_datatype(optarg);
+				if (datatype == FI_DATATYPE_LAST) {
+					print_opts_usage(argv[0]);
 					return EXIT_FAILURE;
 				}
 			}
@@ -455,11 +517,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Streaming RDM client-server using atomic operations.");
-			FT_PRINT_OPTS_USAGE("-o <op>", "atomic op type: all|min|max|sum|prod|lor|");
-			FT_PRINT_OPTS_USAGE("", "land|bor|band|lxor|bxor|read|write|cswap|cswap_ne|"
-					"cswap_le|cswap_lt|");
-			FT_PRINT_OPTS_USAGE("", "cswap_ge|cswap_gt|mswap (default: all)]");
+			print_opts_usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}
