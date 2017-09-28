@@ -380,7 +380,6 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		if (conn) {
 			switch (conn->state) {
 			case FI_VERBS_CONN_ALLOCATED:
-			case FI_VERBS_CONN_REMOTE_DISCONNECT:
 			case FI_VERBS_CONN_ESTABLISHED:
 				ret = fi_ibv_rdm_start_disconnection(conn);
 				break;
