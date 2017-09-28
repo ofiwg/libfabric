@@ -334,6 +334,7 @@ enum fi_rdm_cm_role {
 
 struct fi_ibv_rdm_av_entry {
 	/* association of conn and EPs */
+	pthread_mutex_t			conn_lock;
 	struct fi_ibv_rdm_conn		*conn_hash;
 	struct sockaddr_in		addr;
 	struct slist_entry		removed_next;
