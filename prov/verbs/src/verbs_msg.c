@@ -39,7 +39,8 @@ static ssize_t
 fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_msg_ep *_ep;
-	struct ibv_recv_wr wr, *bad;
+	struct ibv_recv_wr *bad;
+	struct fi_ibv_wre *wre;
 	struct ibv_sge *sge = NULL;
 	ssize_t ret;
 	size_t i;
@@ -47,32 +48,45 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	assert(_ep->rcq);
 
-	wr.wr_id = (uintptr_t) msg->context;
-	wr.next = NULL;
+	wre = util_buf_alloc(_ep->wre_pool);
+	if (OFI_UNLIKELY(!wre))
+		return -FI_EAGAIN;
+	memset(wre, 0, sizeof(*wre));
+	wre->ep = _ep;
+	wre->context = msg->context;
+	wre->wr.type = IBV_RECV_WR;
+	wre->wr.rwr.wr_id = (uintptr_t)wre;
+	wre->wr.rwr.next = NULL;
+
 	if (msg->iov_count) {
 		sge = alloca(sizeof(*sge) * msg->iov_count);
 		for (i = 0; i < msg->iov_count; i++) {
-			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
-			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
-			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
+			sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
+			sge[i].length = (uint32_t)msg->msg_iov[i].iov_len;
+			sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
 		}
-
 	}
-	wr.sg_list = sge;
-	wr.num_sge = msg->iov_count;
+	wre->wr.rwr.sg_list = sge;
+	wre->wr.rwr.num_sge = msg->iov_count;
 
-	ret = ibv_post_recv(_ep->id->qp, &wr, &bad);
-
-	switch (ret) {
-	case ENOMEM:
-		return -FI_EAGAIN;
-	case -1:
-		/* Deal with non-compliant libibverbs drivers which set errno
-		 * instead of directly returning the error value */
-		return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
-	default:
-		return -ret;
+	ret = ibv_post_recv(_ep->id->qp, &wre->wr.rwr, &bad);
+	if (ret) {
+		util_buf_release(_ep->wre_pool, wre);
+		switch (ret) {
+		case ENOMEM:
+			return -FI_EAGAIN;
+		case -1:
+			/* Deal with non-compliant libibverbs drivers
+			 * which set errno instead of directly returning
+			 * the error value */
+			return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
+		default:
+			return -ret;
+		}
 	}
+
+	dlist_insert_tail(&wre->entry, &_ep->wre_list);
+	return ret;
 }
 
 static ssize_t

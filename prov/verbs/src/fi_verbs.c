@@ -296,22 +296,34 @@ ssize_t
 fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 {
 	struct ibv_send_wr *bad_wr;
+	struct fi_ibv_wre *wre = NULL;
 	int ret;
 
-	wr->wr_id = (uintptr_t) context;
-
 	if (ep->scq) {
-
 		if (wr->send_flags & IBV_SEND_SIGNALED) {
+			wre = util_buf_alloc(ep->wre_pool);
+			if (OFI_UNLIKELY(!wre))
+				return -FI_EAGAIN;
+			memset(wre, 0, sizeof(*wre));
+			wre->context = context;
+			wr->wr_id = (uintptr_t)wre;
+			wre->ep = ep;
+			wre->context = context;
+			wre->wr.type = IBV_SEND_WR;
+			wre->wr.swr = *wr;
+
 			assert((wr->wr_id & ep->scq->wr_id_mask) !=
-				ep->scq->send_signal_wr_id);
+			       ep->scq->send_signal_wr_id);
 			ofi_atomic_set32(&ep->unsignaled_send_cnt, 0);
+
+			dlist_insert_tail(&wre->entry, &ep->wre_list);
 		} else {
 			if (VERBS_SIGNAL_SEND(ep)) {
 				ret = fi_ibv_signal_send(ep, wr);
 				if (ret)
 					return ret;
 			} else {
+				wr->wr_id = 0ULL;
 				ofi_atomic_inc32(&ep->unsignaled_send_cnt);
 
 				if (ofi_atomic_get32(&ep->unsignaled_send_cnt) >=
@@ -322,20 +334,28 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 				}
 			}
 		}
-
 	}
 
 	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
-	switch (ret) {
-	case ENOMEM:
-		return -FI_EAGAIN;
-	case -1:
-		/* Deal with non-compliant libibverbs drivers which set errno
-		 * instead of directly returning the error value */
-		return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
-	default:
-		return -ret;
+	if (ret) {
+		if (wre) {
+			dlist_remove(&wre->entry);
+			util_buf_release(ep->wre_pool, wre);
+		}
+		switch (ret) {
+		case ENOMEM:
+			return -FI_EAGAIN;
+		case -1:
+			/* Deal with non-compliant libibverbs drivers
+			 * which set errno instead of directly returning
+			 * the error value */
+			return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
+		default:
+			return -ret;
+		}
 	}
+
+	return ret;
 }
 
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,

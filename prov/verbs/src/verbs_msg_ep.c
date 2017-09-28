@@ -107,6 +107,7 @@ static void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep)
 {
 	if (ep->id)
 		rdma_destroy_ep(ep->id);
+
 	fi_freeinfo(ep->info);
 	free(ep);
 }
@@ -116,6 +117,10 @@ static int fi_ibv_msg_ep_close(fid_t fid)
 	struct fi_ibv_msg_ep *ep;
 
 	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
+	fi_ibv_cleanup_cq(ep);
+
+	VERBS_INFO(FI_LOG_DOMAIN, "EP %p was closed \n", ep);
+
 	fi_ibv_free_msg_ep(ep);
 
 	return 0;
@@ -341,6 +346,15 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		ret = -FI_ENOSYS;
 		goto err;
 	}
+
+	_ep->wre_pool = util_buf_pool_create(sizeof(struct fi_ibv_wre),
+					     16, 0, VERBS_WRE_CNT);
+	if (!_ep->wre_pool) {
+		VERBS_WARN(FI_LOG_CQ, "Failed to create wre_pool\n");
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+	dlist_init(&_ep->wre_list);
 
 	_ep->id->context = &_ep->ep_fid.fid;
 

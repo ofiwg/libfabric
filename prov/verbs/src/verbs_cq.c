@@ -97,7 +97,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
 
-	entry->op_context = (void *) (uintptr_t) wce->wc.wr_id;
+	entry->op_context = (void *)(uintptr_t)wce->wc.wr_id;
 	entry->flags = fi_ibv_comp_flags(&wce->wc);
 	entry->err = EIO;
 	entry->prov_errno = wce->wc.status;
@@ -204,14 +204,14 @@ static void fi_ibv_cq_read_context_entry(struct ibv_wc *wc, int i, void *buf)
 {
 	struct fi_cq_entry *entry = buf;
 
-	entry[i].op_context = (void *) (uintptr_t) wc->wr_id;
+	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
 }
 
 static void fi_ibv_cq_read_msg_entry(struct ibv_wc *wc, int i, void *buf)
 {
 	struct fi_cq_msg_entry *entry = buf;
 
-	entry[i].op_context = (void *) (uintptr_t) wc->wr_id;
+	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
 	entry[i].flags = fi_ibv_comp_flags(wc);
 	entry[i].len = (uint64_t) wc->byte_len;
 }
@@ -220,7 +220,7 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
 {
 	struct fi_cq_data_entry *entry = buf;
 
-	entry[i].op_context = (void *) (uintptr_t) wc->wr_id;
+	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
 	entry[i].flags = fi_ibv_comp_flags(wc);
 
 	entry[i].data = (wc->wc_flags & IBV_WC_WITH_IMM) ?
@@ -230,35 +230,24 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
 		wc->byte_len : 0;
 }
 
-static int fi_ibv_match_ep_id(struct slist_entry *entry, const void *ep_id)
+static int fi_ibv_match_ep_id(struct slist_entry *entry,
+			      const void *ep_id)
 {
-	struct fi_ibv_msg_epe *epe = container_of(entry, struct fi_ibv_msg_epe, entry);
+	struct fi_ibv_msg_epe *epe =
+		container_of(entry, struct fi_ibv_msg_epe, entry);
 
-	if (epe->ep->ep_id == (uint64_t) ep_id)
-		return 1;
-
-	return 0;
+	return (epe->ep->ep_id == (uint64_t)ep_id);
 }
 
-/* Must call with cq->lock held */
-ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+static inline int fi_ibv_handle_internal_signal_wc(struct fi_ibv_cq *cq,
+						   struct ibv_wc *wc)
 {
 	struct fi_ibv_msg_epe *epe;
 	struct slist_entry *entry;
-	ssize_t ret;
 
-	ret = ibv_poll_cq(cq->cq, 1, wc);
-	if (ret <= 0)
-		return ret;
-
-	if (wc->opcode == IBV_WC_RECV || wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM)
-		return ret;
-
-	/* TODO Handle the case when app posts a send with same wr_id */
-	if ((wc->wr_id & cq->wr_id_mask) != cq->send_signal_wr_id)
-		return ret;
-
-	entry = slist_remove_first_match(&cq->ep_list, fi_ibv_match_ep_id, (void *)wc->wr_id);
+	entry = slist_remove_first_match(&cq->ep_list,
+					 fi_ibv_match_ep_id,
+					 (void *)wc->wr_id);
 	if (!entry) {
 		VERBS_WARN(FI_LOG_CQ, "No matching EP for :"
 			   "given signaled send completion\n");
@@ -266,11 +255,175 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	}
 	epe = container_of(entry, struct fi_ibv_msg_epe, entry);
 	ofi_atomic_sub32(&epe->ep->unsignaled_send_cnt,
-			VERBS_SEND_SIGNAL_THRESH(epe->ep));
+			 VERBS_SEND_SIGNAL_THRESH(epe->ep));
 	ofi_atomic_dec32(&epe->ep->comp_pending);
 	util_buf_release(cq->epe_pool, epe);
 
-	return 0;
+	return FI_SUCCESS;
+}
+
+static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
+				  struct ibv_wc *wc,
+				  struct fi_ibv_wce **wce)
+
+{
+	struct fi_ibv_wre *wre =
+		(struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
+
+	*wce = util_buf_alloc(cq->wce_pool);
+	if (!*wce)
+		return -FI_ENOMEM;
+	memset(wce, 0, sizeof(*wce));
+	wc->wr_id = (uintptr_t)wre->context;
+	(*wce)->wc = *wc;
+
+	return FI_SUCCESS;
+}
+
+/* Must call with cq->lock held */
+static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_msg_ep *ep,
+					     struct fi_ibv_cq *cq)
+{
+	struct fi_ibv_wre *wre;
+	struct fi_ibv_wce *wce;
+	struct util_buf_pool *wre_pool;
+	struct ibv_wc wc;
+	ssize_t ret;
+
+	ret = ibv_poll_cq(cq->cq, 1, &wc);
+	if (ret <= 0)
+		return ret;
+
+	if ((wc.opcode == IBV_WC_RECV) ||
+	    (wc.opcode == IBV_WC_RECV_RDMA_WITH_IMM) ||
+	    ((wc.wr_id & cq->wr_id_mask) != cq->send_signal_wr_id)) {
+		wre = (struct fi_ibv_wre *)(uintptr_t)wc.wr_id;
+		if (wre->ep) {
+			wre_pool = wre->ep->wre_pool;
+			if ((wre->ep != ep) &&
+			    (wc.status != IBV_WC_WR_FLUSH_ERR)) {
+				ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
+				if (ret) {
+					wre->ep = NULL;
+					ret = -FI_EAGAIN;
+					goto fn;
+				}
+				slist_insert_tail(&wce->entry, &cq->wcq);
+			}
+			wre->ep = NULL;
+		} else {
+			/* WRE belongs to SRQ's wre pool and should be
+			 * handled or rejected if status == `IBV_WC_WR_FLUSH_ERR` */
+			assert(wre->srq);
+			wre_pool = wre->srq->wre_pool;
+			wre->srq = NULL;
+			if (wc.status != IBV_WC_WR_FLUSH_ERR) {
+				ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
+				if (ret) {
+					ret = -FI_EAGAIN;
+					goto fn;
+				}
+				slist_insert_tail(&wce->entry, &cq->wcq);
+			}
+		}
+fn:
+		dlist_remove(&wre->entry);
+		util_buf_release(wre_pool, wre);
+		return ret;
+	} else {
+		ret = fi_ibv_handle_internal_signal_wc(cq, &wc);
+		return ret ? ret : 1;
+	}
+}
+
+void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
+			   struct dlist_entry *wre_list,
+			   enum fi_ibv_wre_type wre_type)
+{
+	struct fi_ibv_wre *wre;
+	struct dlist_entry *tmp;
+
+	dlist_foreach_container_safe(wre_list, struct fi_ibv_wre,
+				     wre, entry, tmp) {
+		if (wre->wr.type == wre_type) {
+			dlist_remove(&wre->entry);
+			wre->ep = NULL;
+			wre->srq = NULL;
+			util_buf_release(wre_pool, wre);
+		}
+	}
+}
+
+void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
+{
+	int ret;
+
+	fastlock_acquire(&ep->rcq->lock);
+	do {
+		ret = fi_ibv_poll_outstanding_cq(ep, ep->rcq);
+	} while (ret > 0);
+
+	/* Handle WRs for which there were no appropriate WCs */
+	fi_ibv_empty_wre_list(ep->wre_pool, &ep->wre_list, IBV_RECV_WR);
+	fastlock_release(&ep->rcq->lock);
+
+	fastlock_acquire(&ep->scq->lock);
+	do {
+		ret = fi_ibv_poll_outstanding_cq(ep, ep->scq);
+	} while (ret > 0);
+	/* Handle WRs for which there were no appropriate WCs */
+
+	fi_ibv_empty_wre_list(ep->wre_pool, &ep->wre_list, IBV_SEND_WR);
+	fastlock_release(&ep->scq->lock);
+
+	util_buf_pool_destroy(ep->wre_pool);
+}
+
+/* Must call with cq->lock held */
+ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+{
+	struct fi_ibv_wre *wre;
+	struct util_buf_pool *wre_pool;
+	ssize_t ret;
+
+	ret = ibv_poll_cq(cq->cq, 1, wc);
+	if (ret <= 0)
+		return ret;
+
+	/* TODO Handle the case when app posts a send with same wr_id */
+	if ((wc->opcode == IBV_WC_RECV) ||
+	    (wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM) ||
+	    ((wc->wr_id & cq->wr_id_mask) != cq->send_signal_wr_id)) {
+		wre = (struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
+		assert(wre && (wre->ep || wre->srq));
+		if (wre->ep) {
+			wre_pool = wre->ep->wre_pool;
+			wre->ep = NULL;
+			if (wc->status == IBV_WC_WR_FLUSH_ERR)
+				/* Handles case where remote side destroys
+				 * the connection, but local side isn't aware
+				 * about that yet */
+				ret = 0;
+		} else if (wre->srq) {
+			wre_pool = wre->srq->wre_pool;
+			wre->srq = NULL;
+			if (wc->status == IBV_WC_WR_FLUSH_ERR)
+				/* Handles case where remote side destroys
+				 * the connection, but local side isn't aware
+				 * about that yet */
+				ret = 0;
+		} else {
+			assert(0);
+			return -FI_EAVAIL;
+		}
+		wc->wr_id = (uintptr_t)wre->context;
+		dlist_remove(&wre->entry);
+ 		util_buf_release(wre_pool, wre);
+	} else {
+		return fi_ibv_handle_internal_signal_wc(cq, wc);
+	}
+
+	return ret;
 }
 
 static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
@@ -628,7 +781,6 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	*cq = &_cq->cq_fid;
 	return 0;
-
 err6:
 	util_buf_pool_destroy(_cq->epe_pool);
 err5:
