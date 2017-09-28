@@ -199,7 +199,9 @@ function errcho {
 }
 
 function print_border {
-	echo "# --------------------------------------------------------------"
+	printf "# "
+	printf "%.0s-" {1..78}
+	printf "\n"
 }
 
 function print_results {
@@ -213,7 +215,7 @@ function print_results {
 
 	if [ $VERBOSE -eq 0 ] ; then
 		# print a simple, single-line format that is still valid YAML
-		printf "%-50s%10s\n" "$test_exe:" "$test_result"
+		printf "%-70s%10s\n" "$test_exe:" "$test_result"
 	else
 		# Print a more detailed YAML format that is not a superset of
 		# the non-verbose output.  See ofiwg/fabtests#259 for a
@@ -465,7 +467,7 @@ function main {
 	fi
 
 	if [ $VERBOSE -eq 0 ] ; then
-		printf "# %-50s%10s\n" "Test" "Result"
+		printf "# %-68s%10s\n" "Test" "Result"
 		print_border
 	fi
 
