@@ -146,27 +146,31 @@ static void print_opts_usage(char *name)
 	FT_PRINT_OPTS_USAGE("", "long_double|long_double_complex (default: all)");
 }
 
-#define execute_atomic_op(type, test_name, opts, op_type, datatype)		\
-({										\
+#define create_atomic_op_executor(type)						\
+static inline int execute_atomic_ ## type ## _op(enum fi_op op_type,		\
+						 enum fi_datatype datatype)	\
+{										\
 	int ret, len, i;							\
 	len = snprintf((test_name), sizeof(test_name), "%s_",			\
 		       fi_tostr(&(datatype), FI_TYPE_ATOMIC_TYPE));		\
-	snprintf((test_name) + len, sizeof(test_name) - len, "%s_"#type"_lat", \
+	snprintf((test_name) + len, sizeof(test_name) - len, "%s_"#type"_lat",	\
 		 fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));			\
-	(opts).transfer_size = datatype_to_size(datatype);			\
+	opts.transfer_size = datatype_to_size(datatype);			\
 										\
 	ft_start();								\
-	for (i = 0; i < (opts).iterations; i++) {				\
+	for (i = 0; i < opts.iterations; i++) {					\
 		ret = execute_ ## type ## _atomic_op(op_type);			\
 		if (ret)							\
 			break;							\
 	}									\
 	ft_stop();								\
 	report_perf();								\
-	ret;									\
-})
+										\
+	return ret;								\
+}
 
 #define create_atomic_op_handler(type)						\
+create_atomic_op_executor(type)							\
 static inline int handle_atomic_ ## type ## _op(int run_all_datatypes,		\
 						enum fi_op op_type,		\
 						size_t *count)			\
@@ -191,8 +195,7 @@ static inline int handle_atomic_ ## type ## _op(int run_all_datatypes,		\
 				goto fn;					\
 			}							\
 										\
-			ret = execute_atomic_op(type, test_name, opts,		\
-						op_type, datatype);		\
+			ret = execute_atomic_ ##type ## _op(op_type, datatype);	\
 			if (ret)						\
 				goto fn;					\
 		}								\
@@ -213,8 +216,7 @@ static inline int handle_atomic_ ## type ## _op(int run_all_datatypes,		\
 			goto fn;						\
 		}								\
 										\
-		ret = execute_atomic_op(type, test_name, opts,			\
-					op_type, datatype);			\
+		ret = execute_atomic_ ## type ##_op(op_type, datatype);		\
 	}									\
 										\
 fn:										\
@@ -285,9 +287,14 @@ create_atomic_op_handler(compare)
 
 static int run_op(void)
 {
-	int ret;
+	int ret = -FI_EINVAL;
 
-	count = (size_t *) malloc(sizeof(size_t));
+	count = (size_t *)malloc(sizeof(*count));
+	if (!count) {
+		ret = -FI_ENOMEM;
+		perror("malloc");
+		goto fn;
+	}
 	ft_sync();
 
 	switch (op_type) {
@@ -320,11 +327,11 @@ static int run_op(void)
 					       op_type, count);
 		break;
 	default:
-		ret = -EINVAL;
 		break;
 	}
 
 	free(count);
+fn:
 	return ret;
 }
 
