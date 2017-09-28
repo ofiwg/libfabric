@@ -422,6 +422,7 @@ static ssize_t psmx2_rma_self(int am_cmd,
 		len = 0;
 		for (i=0; i<iov_count; i++)
 			len += iov[i].iov_len;
+		break;
 	default:
 		return -FI_EINVAL;
 	}
