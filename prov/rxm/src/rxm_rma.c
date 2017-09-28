@@ -78,9 +78,8 @@ err:
 	return ret;
 }
 
-static inline
-ssize_t rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-		       uint64_t flags)
+static ssize_t rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+			      uint64_t flags)
 {
 	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
@@ -98,10 +97,9 @@ ssize_t rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 				 fi_readmsg, FI_READ);
 }
 
-static inline
-ssize_t rxm_ep_readv(struct fid_ep *ep_fid, const struct iovec *iov,
-		     void **desc, size_t count, fi_addr_t src_addr,
-		     uint64_t addr, uint64_t key, void *context)
+static ssize_t rxm_ep_readv(struct fid_ep *ep_fid, const struct iovec *iov,
+			    void **desc, size_t count, fi_addr_t src_addr,
+			    uint64_t addr, uint64_t key, void *context)
 {
 	struct fi_rma_iov rma_iov = {
 		.addr = addr,
@@ -231,9 +229,8 @@ err1:
 	return ret;
 }
 
-static inline
-ssize_t rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-			uint64_t flags)
+static ssize_t rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+			       uint64_t flags)
 {
 	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
@@ -254,10 +251,9 @@ ssize_t rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 					 fi_writemsg, FI_WRITE);
 }
 
-static inline
-ssize_t rxm_ep_writev(struct fid_ep *ep_fid, const struct iovec *iov,
-		      void **desc, size_t count, fi_addr_t dest_addr,
-		      uint64_t addr, uint64_t key, void *context)
+static ssize_t rxm_ep_writev(struct fid_ep *ep_fid, const struct iovec *iov,
+			     void **desc, size_t count, fi_addr_t dest_addr,
+			     uint64_t addr, uint64_t key, void *context)
 {
 	struct fi_rma_iov rma_iov = {
 		.addr = addr,
