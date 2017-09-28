@@ -341,18 +341,6 @@ static struct fi_ops_cm rxm_ops_cm = {
 	.join = fi_no_join,
 };
 
-int rxm_getopt(fid_t fid, int level, int optname,
-	       void *optval, size_t *optlen)		
-{
-	return -FI_ENOPROTOOPT;
-}
-		
-int rxm_setopt(fid_t fid, int level, int optname,
-	       const void *optval, size_t optlen)
-{
-	return -FI_ENOPROTOOPT;
-}
-
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 			      struct rxm_recv_queue *recv_queue, void *context)
 {
@@ -402,8 +390,8 @@ static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 static struct fi_ops_ep rxm_ops_ep = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = rxm_ep_cancel,
-	.getopt = rxm_getopt,
-	.setopt = rxm_setopt,
+	.getopt = fi_no_getopt,
+	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
