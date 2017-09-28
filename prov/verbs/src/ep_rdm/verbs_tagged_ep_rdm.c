@@ -694,7 +694,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	struct ibv_wc wc[wc_count];
 	int ret = 0, err = 0, i;
 
-	if (ep->posted_sends > 0) {
+	if (ofi_atomic_get32(&ep->posted_sends) > 0) {
 		do {
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
 			for (i = 0; i < ret && !err; ++i) {

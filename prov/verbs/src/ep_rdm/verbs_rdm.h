@@ -34,6 +34,7 @@
 #define _VERBS_RDM_H
 
 #include <rdma/rdma_cma.h>
+#include <rdma/fi_atomic.h>
 #include "../uthash.h"
 
 #include "../fi_verbs.h"
@@ -77,7 +78,7 @@
 #define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)	\
 do {                                                                	\
 	(_connection)->sends_outgoing++;                                \
-	(_ep)->posted_sends++;                                          \
+	ofi_atomic_inc32(&(_ep)->posted_sends);				\
 	(_send_flags) |= IBV_SEND_SIGNALED;                             \
 									\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
@@ -88,11 +89,12 @@ do {                                                                	\
 #define FI_IBV_RDM_DEC_SIG_POST_COUNTERS(_connection, _ep)		\
 do {									\
 	(_connection)->sends_outgoing--;				\
-	(_ep)->posted_sends--;						\
+	int32_t posted_sends = ofi_atomic_dec32(&(_ep)->posted_sends);	\
 									\
+	(void)posted_sends;						\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",	\
 			_connection, (_connection)->sends_outgoing);	\
-	assert((_ep)->posted_sends >= 0);				\
+	assert(posted_sends >= 0);		\
 	assert((_connection)->sends_outgoing >= 0);			\
 } while (0)
 
@@ -100,7 +102,7 @@ do {									\
 	((_connection)->sends_outgoing >= (_ep)->sq_wr_depth - 1)
 
 #define PEND_POST_LIMIT(_ep)						\
-	((_ep)->posted_sends > 0.5 * (_ep)->scq_depth)
+	(ofi_atomic_get32(&(_ep)->posted_sends) > 0.5 * (_ep)->scq_depth)
 
 #define TSEND_RESOURCES_IS_BUSY(_connection, _ep)			\
 	(OUTGOING_POST_LIMIT(_connection, _ep) || PEND_POST_LIMIT(_ep))
@@ -300,7 +302,7 @@ struct fi_ibv_rdm_ep {
 	int	n_buffs;
 	int	rq_wr_depth;    // RQ depth
 	int	sq_wr_depth;    // SQ depth
-	int	posted_sends;
+	ofi_atomic32_t	posted_sends;
 	int	posted_recvs;
 	int	num_active_conns;
 	int	max_inline_rc;
@@ -733,7 +735,8 @@ fi_ibv_rdm_process_err_send_wc(struct fi_ibv_rdm_ep *ep,
 			   "pend_send: %d, connection: %p, request = %p (%s)\n",
 			   wc->status,
 			   ibv_wc_status_str(wc->status),
-			   ep->posted_sends, conn, (void *)wc->wr_id,
+			   ofi_atomic_get32(&ep->posted_sends), conn,
+			   (void *)wc->wr_id,
 			   FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id) ?
 				"service" : "not service");
 	}
