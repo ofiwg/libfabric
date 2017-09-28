@@ -349,7 +349,7 @@ only available for those endpoints configured with FI_SOURCE
 capability.  If fi_cq_readfrom is called on an endpoint for which
 source addressing data is not available, the source address will be
 set to FI_ADDR_NOTAVAIL.  The number of input src_addr entries must
-the the same as the count parameter.
+be the same as the count parameter.
 
 Returned source addressing data is converted from the native address
 used by the underlying fabric into an fi_addr_t, which may be used in
@@ -426,7 +426,7 @@ Notable completion error codes are given below.
   The err_data field will be set to the source address data.  The
   source address will be in the same format as specified through
   the fi_info addr_format field for the opened domain. This may be
-  pass directly into an fi_av_insert call to add the source address
+  passed directly into an fi_av_insert call to add the source address
   to the address vector.
 
 ## fi_cq_signal
