@@ -1,4 +1,4 @@
-.TH "fi_mr" "3" "2017\-06\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2017\-09\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr \- Memory region operations
@@ -411,8 +411,7 @@ with the region may have been modified, and the provider should verify
 and update the registered region accordingly.
 The iov parameter is optional and may be used to specify which portions
 of the registered region requires updating.
-If provider, providers are only guaranteed to update the specified
-address ranges.
+Providers are only guaranteed to update the specified address ranges.
 .PP
 The refresh operation has the effect of disabling and re\-enabling
 access to the registered region.
