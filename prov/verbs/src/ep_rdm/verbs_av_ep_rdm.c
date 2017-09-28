@@ -575,6 +575,7 @@ fi_ibv_rdm_av_map_addr_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 			conn->ep = ep;
 			conn->av_entry = av_entry;
 			conn->state = FI_VERBS_CONN_ALLOCATED;
+			ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 			dlist_init(&conn->postponed_requests_head);
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
@@ -610,6 +611,7 @@ fi_ibv_rdm_av_tbl_idx_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 			conn->av_entry = av_entry;
 			conn->state = FI_VERBS_CONN_ALLOCATED;
 			dlist_init(&conn->postponed_requests_head);
+			ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}

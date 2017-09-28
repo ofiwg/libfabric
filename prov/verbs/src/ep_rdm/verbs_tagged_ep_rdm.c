@@ -447,7 +447,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 		assert(0);
 	};
 
-	if (conn->sends_outgoing > ep->n_buffs) {
+	if (ofi_atomic_get32(&conn->sends_outgoing) > ep->n_buffs) {
 		fi_ibv_rdm_tagged_poll_send(ep);
 	}
 }

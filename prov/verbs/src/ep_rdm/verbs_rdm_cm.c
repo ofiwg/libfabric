@@ -432,6 +432,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		conn->ep = ep;
 		conn->state = FI_VERBS_CONN_ALLOCATED;
 		dlist_init(&conn->postponed_requests_head);
+		ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		HASH_ADD(hh, av_entry->conn_hash, ep,
@@ -462,6 +463,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			dlist_init(&conn->postponed_requests_head);
 			conn->state = FI_VERBS_CONN_ALLOCATED;
 			memcpy(&conn->addr, &av_entry->addr, FI_IBV_RDM_DFLT_ADDRLEN);
+			ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}

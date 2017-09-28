@@ -77,29 +77,30 @@
 
 #define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)	\
 do {                                                                	\
-	(_connection)->sends_outgoing++;                                \
+	int32_t sends_outgoing = ofi_atomic_inc32(&(_connection)->sends_outgoing); \
 	ofi_atomic_inc32(&(_ep)->posted_sends);				\
 	(_send_flags) |= IBV_SEND_SIGNALED;                             \
 									\
+	(void)sends_outgoing;						\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
-		_connection,                                            \
-		(_connection)->sends_outgoing);                         \
+		  _connection, sends_outgoing);				\
 } while (0)
 
 #define FI_IBV_RDM_DEC_SIG_POST_COUNTERS(_connection, _ep)		\
 do {									\
-	(_connection)->sends_outgoing--;				\
+	int32_t sends_outgoing = ofi_atomic_dec32(&(_connection)->sends_outgoing); \
 	int32_t posted_sends = ofi_atomic_dec32(&(_ep)->posted_sends);	\
 									\
+	(void)sends_outgoing;						\
 	(void)posted_sends;						\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",	\
-			_connection, (_connection)->sends_outgoing);	\
-	assert(posted_sends >= 0);		\
-	assert((_connection)->sends_outgoing >= 0);			\
+		  _connection, sends_outgoing);				\
+	assert(posted_sends >= 0);					\
+	assert(sends_outgoing >= 0);					\
 } while (0)
 
 #define OUTGOING_POST_LIMIT(_connection, _ep)				\
-	((_connection)->sends_outgoing >= (_ep)->sq_wr_depth - 1)
+	(ofi_atomic_get32(&(_connection)->sends_outgoing) >= (_ep)->sq_wr_depth - 1)
 
 #define PEND_POST_LIMIT(_ep)						\
 	(ofi_atomic_get32(&(_ep)->posted_sends) > 0.5 * (_ep)->scq_depth)
@@ -381,7 +382,7 @@ struct fi_ibv_rdm_conn {
 	char *remote_rbuf_mem_reg;
 	struct fi_ibv_rdm_buf *remote_sbuf_head;
 
-	int sends_outgoing;
+	ofi_atomic32_t sends_outgoing;
 	int recv_preposted;
 	/* counter for eager buffer releasing */
 	uint16_t recv_completions;
