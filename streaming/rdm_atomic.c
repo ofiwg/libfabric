@@ -285,9 +285,14 @@ create_atomic_op_handler(compare)
 
 static int run_op(void)
 {
-	int ret;
+	int ret = -FI_EINVAL;
 
-	count = (size_t *) malloc(sizeof(size_t));
+	count = (size_t *)malloc(sizeof(*count));
+	if (!count) {
+		ret = -FI_ENOMEM;
+		perror("malloc");
+		goto fn;
+	}
 	ft_sync();
 
 	switch (op_type) {
@@ -320,11 +325,11 @@ static int run_op(void)
 					       op_type, count);
 		break;
 	default:
-		ret = -EINVAL;
 		break;
 	}
 
 	free(count);
+fn:
 	return ret;
 }
 
