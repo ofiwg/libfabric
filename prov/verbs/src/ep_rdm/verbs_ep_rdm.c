@@ -383,8 +383,12 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 			case FI_VERBS_CONN_REMOTE_DISCONNECT:
 			case FI_VERBS_CONN_ESTABLISHED:
 				ret = fi_ibv_rdm_start_disconnection(conn);
+				pthread_mutex_unlock(&av_entry->conn_lock);
 				break;
 			case FI_VERBS_CONN_STARTED:
+				pthread_mutex_unlock(&av_entry->conn_lock);
+				/* No need to hold conn_lock during
+				 * CM progressing of the EP */
 				while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
 				       conn->state != FI_VERBS_CONN_REJECTED) {
 					ret = fi_ibv_rdm_cm_progress(ep);
@@ -396,10 +400,12 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				}
 				break;
 			default:
+				pthread_mutex_unlock(&av_entry->conn_lock);
 				break;
 			}
+		} else {
+			pthread_mutex_unlock(&av_entry->conn_lock);
 		}
-		pthread_mutex_unlock(&av_entry->conn_lock);
 	}
 
         /* ok, all connections are initiated to disconnect. now wait
