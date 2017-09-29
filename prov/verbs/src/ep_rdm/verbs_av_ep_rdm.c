@@ -261,8 +261,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			   ntohs(av_entry->addr.sin_port), av_entry);
 
 		av->used++;
-		ret++;
 	}
+	ret = count - failed;
 
 	if (av->flags & FI_EVENT) {
 		struct fi_eq_entry entry = {
@@ -276,7 +276,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 
 out:
 	pthread_mutex_unlock(&av->domain->rdm_cm->cm_lock);
-	return (av->flags & FI_EVENT) ? FI_SUCCESS : (ret - failed);
+	return (av->flags & FI_EVENT) ? FI_SUCCESS : ret;
 }
 
 static int fi_ibv_rdm_av_insertsvc(struct fid_av *av_fid, const char *node,
