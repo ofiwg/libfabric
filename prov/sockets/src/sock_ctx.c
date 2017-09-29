@@ -96,8 +96,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	dlist_init(&tx_ctx->pe_entry_list);
 	dlist_init(&tx_ctx->ep_list);
 
-	fastlock_init(&tx_ctx->rlock);
-	fastlock_init(&tx_ctx->wlock);
+	fastlock_init(&tx_ctx->rb_lock);
 	fastlock_init(&tx_ctx->lock);
 
 	switch (fclass) {
@@ -146,8 +145,7 @@ struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr,
 
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 {
-	fastlock_destroy(&tx_ctx->rlock);
-	fastlock_destroy(&tx_ctx->wlock);
+	fastlock_destroy(&tx_ctx->rb_lock);
 	fastlock_destroy(&tx_ctx->lock);
 
 	if (!tx_ctx->use_shared) {
@@ -159,7 +157,7 @@ void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 
 void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx)
 {
-	fastlock_acquire(&tx_ctx->wlock);
+	fastlock_acquire(&tx_ctx->rb_lock);
 }
 
 void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len)
@@ -171,13 +169,13 @@ void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx)
 {
 	ofi_rbcommit(&tx_ctx->rb);
 	sock_pe_signal(tx_ctx->domain->pe);
-	fastlock_release(&tx_ctx->wlock);
+	fastlock_release(&tx_ctx->rb_lock);
 }
 
 void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx)
 {
 	ofi_rbabort(&tx_ctx->rb);
-	fastlock_release(&tx_ctx->wlock);
+	fastlock_release(&tx_ctx->rb_lock);
 }
 
 void sock_tx_ctx_write_op_send(struct sock_tx_ctx *tx_ctx,
