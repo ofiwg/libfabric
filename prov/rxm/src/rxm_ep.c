@@ -312,7 +312,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	return 0;
 }
 
-int rxm_setname(fid_t fid, void *addr, size_t addrlen)
+static int rxm_setname(fid_t fid, void *addr, size_t addrlen)
 {
 	struct rxm_ep *rxm_ep;
 
@@ -320,7 +320,7 @@ int rxm_setname(fid_t fid, void *addr, size_t addrlen)
 	return fi_setname(&rxm_ep->msg_pep->fid, addr, addrlen);
 }
 
-int rxm_getname(fid_t fid, void *addr, size_t *addrlen)
+static int rxm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct rxm_ep *rxm_ep;
 
@@ -340,18 +340,6 @@ static struct fi_ops_cm rxm_ops_cm = {
 	.shutdown = fi_no_shutdown,
 	.join = fi_no_join,
 };
-
-int rxm_getopt(fid_t fid, int level, int optname,
-		void *optval, size_t *optlen)
-{
-	return -FI_ENOPROTOOPT;
-}
-
-int rxm_setopt(fid_t fid, int level, int optname,
-		const void *optval, size_t optlen)
-{
-	return -FI_ENOPROTOOPT;
-}
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 			      struct rxm_recv_queue *recv_queue, void *context)
@@ -402,8 +390,8 @@ static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 static struct fi_ops_ep rxm_ops_ep = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = rxm_ep_cancel,
-	.getopt = rxm_getopt,
-	.setopt = rxm_setopt,
+	.getopt = fi_no_getopt,
+	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
@@ -833,16 +821,16 @@ done:
 static ssize_t rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 			      uint64_t flags)
 {
-
 	return rxm_sendmsg(ep_fid, msg, flags, 0, ofi_op_msg, FI_MSG);
 }
 
 static ssize_t rxm_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 			   void *desc, fi_addr_t dest_addr, void *context)
 {
-	struct iovec iov;
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_send(ep_fid, &iov, &desc, 1, dest_addr, context, 0,
 			rxm_ep_tx_flags(ep_fid));
@@ -859,10 +847,10 @@ static ssize_t rxm_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 			     fi_addr_t dest_addr)
 {
-	struct iovec iov;
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_send(ep_fid, &iov, NULL, 1, dest_addr, NULL, 0,
 			rxm_ep_tx_flags_inject(ep_fid));
@@ -872,22 +860,22 @@ static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 			       void *desc, uint64_t data, fi_addr_t dest_addr,
 			       void *context)
 {
-	struct iovec iov;
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_send(ep_fid, &iov, desc, 1, dest_addr, context, data,
 			rxm_ep_tx_flags(ep_fid));
 }
 
-static ssize_t	rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
-				   uint64_t data, fi_addr_t dest_addr)
+static ssize_t rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+				 uint64_t data, fi_addr_t dest_addr)
 {
-	struct iovec iov;
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_send(ep_fid, &iov, NULL, 1, dest_addr, NULL, data,
 			rxm_ep_tx_flags_inject(ep_fid));
@@ -906,8 +894,8 @@ static struct fi_ops_msg rxm_ops_msg = {
 	.injectdata = rxm_ep_injectdata,
 };
 
-ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
-			 uint64_t flags)
+static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+			       uint64_t flags)
 {
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
@@ -918,13 +906,14 @@ ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 				  &rxm_ep->trecv_queue);
 }
 
-static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
+static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
+			    void *desc, fi_addr_t src_addr, uint64_t tag,
+			    uint64_t ignore, void *context)
 {
-	struct iovec iov;
-	iov.iov_base = buf;
-	iov.iov_len = len;
-
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
 
@@ -933,9 +922,9 @@ static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *
 				  &rxm_ep->trecv_queue);
 }
 
-ssize_t rxm_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-		void *context)
+static ssize_t rxm_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
+			     void **desc, size_t count, fi_addr_t src_addr,
+			     uint64_t tag, uint64_t ignore, void *context)
 {
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
@@ -945,64 +934,65 @@ ssize_t rxm_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **des
 				  &rxm_ep->trecv_queue);
 }
 
-ssize_t rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
-			uint64_t flags)
+static ssize_t rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+			       uint64_t flags)
 {
 	return rxm_sendmsg(ep_fid, msg, flags, msg->tag, ofi_op_tagged, FI_TAGGED);
 }
 
-ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
-		     void *desc, fi_addr_t dest_addr, uint64_t tag,
-		     void *context)
+static ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
+			    void *desc, fi_addr_t dest_addr, uint64_t tag,
+			    void *context)
 {
-	struct iovec iov;
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_tsend(ep_fid, &iov, &desc, 1, dest_addr, context, 0,
 			 rxm_ep_tx_flags(ep_fid), tag);
 }
 
-ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
-		      void **desc, size_t count, fi_addr_t dest_addr,
-		      uint64_t tag, void *context)
+static ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
+			     void **desc, size_t count, fi_addr_t dest_addr,
+			     uint64_t tag, void *context)
 {
 	return rxm_tsend(ep_fid, iov, desc, count, dest_addr, context, 0,
 			 rxm_ep_tx_flags(ep_fid), tag);
 }
 
-ssize_t	rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
-		       fi_addr_t dest_addr, uint64_t tag)
+static ssize_t rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
+			      fi_addr_t dest_addr, uint64_t tag)
 {
-	struct iovec iov;
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_tsend(ep_fid, &iov, NULL, 1, dest_addr, NULL, 0,
 			rxm_ep_tx_flags_inject(ep_fid), tag);
 }
 
-ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
-			 void *desc, uint64_t data, fi_addr_t dest_addr,
-			 uint64_t tag, void *context)
+static ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
+				void *desc, uint64_t data, fi_addr_t dest_addr,
+				uint64_t tag, void *context)
 {
-	struct iovec iov;
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_tsend(ep_fid, &iov, desc, 1, dest_addr, context, data,
 			 rxm_ep_tx_flags(ep_fid), tag);
 }
 
-ssize_t	rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
-			   uint64_t data, fi_addr_t dest_addr, uint64_t tag)
+static ssize_t rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+				  uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
-	struct iovec iov;
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	return rxm_tsend(ep_fid, &iov, NULL, 1, dest_addr, NULL, data,
 			 rxm_ep_tx_flags_inject(ep_fid), tag);
@@ -1105,7 +1095,7 @@ static int rxm_ep_close(struct fid *fid)
 	return retv;
 }
 
-int rxm_ep_trywait(void *arg)
+static int rxm_ep_trywait(void *arg)
 {
 	struct rxm_fabric *rxm_fabric;
 	struct rxm_ep *rxm_ep = (struct rxm_ep *)arg;
@@ -1239,8 +1229,8 @@ err:
 	return ret;
 }
 
-static int rxm_info_to_core_srx_ctx(uint32_t version,
-		const struct fi_info *rxm_hints, struct fi_info *core_hints)
+static int rxm_info_to_core_srx_ctx(uint32_t version, const struct fi_info *rxm_hints,
+				    struct fi_info *core_hints)
 {
 	int ret;
 
@@ -1269,7 +1259,7 @@ static int rxm_ep_get_core_info(uint32_t version, const struct fi_info *hints,
 }
 
 static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
-		struct util_domain *util_domain, struct rxm_ep *rxm_ep)
+			       struct util_domain *util_domain, struct rxm_ep *rxm_ep)
 {
 	struct rxm_domain *rxm_domain;
 	struct fi_cq_attr cq_attr;
@@ -1334,7 +1324,7 @@ err1:
 	return ret;
 }
 
-void rxm_ep_progress(struct util_ep *util_ep)
+static void rxm_ep_progress(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep;
 
@@ -1343,7 +1333,7 @@ void rxm_ep_progress(struct util_ep *util_ep)
 }
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep_fid, void *context)
+		 struct fid_ep **ep_fid, void *context)
 {
 	struct util_domain *util_domain;
 	struct rxm_ep *rxm_ep;

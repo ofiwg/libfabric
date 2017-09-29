@@ -78,8 +78,8 @@ err:
 	return ret;
 }
 
-ssize_t	rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-		       uint64_t flags)
+static ssize_t rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+			      uint64_t flags)
 {
 	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
@@ -97,52 +97,52 @@ ssize_t	rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 				 fi_readmsg, FI_READ);
 }
 
-static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
-			   void *desc, fi_addr_t src_addr, uint64_t addr,
-			   uint64_t key, void *context)
-{
-	struct fi_msg_rma msg;
-	struct fi_rma_iov rma_iov;
-	struct iovec iov;
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
-
-	rma_iov.addr = addr;
-	rma_iov.len = len;
-	rma_iov.key = key;
-
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = src_addr;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = context;
-	msg.data = 0;
-
-	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
-}
-
 static ssize_t rxm_ep_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 			    void **desc, size_t count, fi_addr_t src_addr,
 			    uint64_t addr, uint64_t key, void *context)
 {
-	struct fi_msg_rma msg;
-	struct fi_rma_iov rma_iov;
+	struct fi_rma_iov rma_iov = {
+		.addr = addr,
+		.len = ofi_total_iov_len(iov, count),
+		.key = key,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = src_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0,
+	};
 
-	rma_iov.addr = addr;
-	rma_iov.len = ofi_total_iov_len(iov, count);
-	rma_iov.key = key;
+	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
+}
 
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	msg.addr = src_addr;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = context;
-	msg.data = 0;
+static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
+			   void *desc, fi_addr_t src_addr, uint64_t addr,
+			   uint64_t key, void *context)
+{
+	struct iovec iov = {
+		.iov_base = (void*)buf,
+		.iov_len = len,
+	};
+	struct fi_rma_iov rma_iov = {
+		.addr = addr,
+		.len = len,
+		.key = key,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = &iov,
+		.desc = &desc,
+		.iov_count = 1,
+		.addr = src_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0,
+	};
 
 	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
 }
@@ -229,8 +229,8 @@ err1:
 	return ret;
 }
 
-ssize_t	rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-			uint64_t flags)
+static ssize_t rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+			       uint64_t flags)
 {
 	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
@@ -251,52 +251,25 @@ ssize_t	rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 					 fi_writemsg, FI_WRITE);
 }
 
-static ssize_t rxm_ep_write(struct fid_ep *ep_fid, const void *buf,
-			    size_t len, void *desc, fi_addr_t dest_addr,
-			    uint64_t addr, uint64_t key, void *context)
-{
-	struct fi_msg_rma msg;
-	struct fi_rma_iov rma_iov;
-	struct iovec iov;
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
-
-	rma_iov.addr = addr;
-	rma_iov.len = len;
-	rma_iov.key = key;
-
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = context;
-	msg.data = 0;
-
-	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
-}
-
 static ssize_t rxm_ep_writev(struct fid_ep *ep_fid, const struct iovec *iov,
 			     void **desc, size_t count, fi_addr_t dest_addr,
 			     uint64_t addr, uint64_t key, void *context)
 {
-	struct fi_msg_rma msg;
-	struct fi_rma_iov rma_iov;
-
-	rma_iov.addr = addr;
-	rma_iov.len = ofi_total_iov_len(iov, count);
-	rma_iov.key = key;
-
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	msg.addr = dest_addr;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = context;
-	msg.data = 0;
+	struct fi_rma_iov rma_iov = {
+		.addr = addr,
+		.len = ofi_total_iov_len(iov, count),
+		.key = key,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = dest_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0,
+	};
 
 	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
 }
@@ -306,53 +279,80 @@ static ssize_t rxm_ep_writedata(struct fid_ep *ep_fid, const void *buf,
 				fi_addr_t dest_addr, uint64_t addr,
 				uint64_t key, void *context)
 {
-	struct fi_msg_rma msg;
-	struct fi_rma_iov rma_iov;
-	struct iovec iov;
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
-
-	rma_iov.addr = addr;
-	rma_iov.len = len;
-	rma_iov.key = key;
-
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = context;
-	msg.data = data;
+	struct fi_rma_iov rma_iov = {
+		.addr = addr,
+		.len = len,
+		.key = key,
+	};
+	struct iovec iov = {
+		.iov_base = (void*)buf,
+		.iov_len = len,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = &iov,
+		.desc = &desc,
+		.iov_count = 1,
+		.addr = dest_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = data,
+	};
 
 	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid) |
 			       FI_REMOTE_CQ_DATA);
+}
+
+static ssize_t rxm_ep_write(struct fid_ep *ep_fid, const void *buf,
+			    size_t len, void *desc, fi_addr_t dest_addr,
+			    uint64_t addr, uint64_t key, void *context)
+{
+	struct fi_rma_iov rma_iov = {
+		.addr = addr,
+		.len = len,
+		.key = key,
+	};
+	struct iovec iov = {
+		.iov_base = (void*)buf,
+		.iov_len = len,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = &iov,
+		.desc = &desc,
+		.iov_count = 1,
+		.addr = dest_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0,
+	};
+
+	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
 }
 
 static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 			     size_t len, fi_addr_t dest_addr, uint64_t addr,
 			     uint64_t key)
 {
-	struct fi_msg_rma msg;
-	struct fi_rma_iov rma_iov;
-	struct iovec iov;
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
-
-	rma_iov.addr = addr;
-	rma_iov.len = len;
-	rma_iov.key = key;
-
-	msg.msg_iov = &iov;
-	msg.desc = NULL;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = NULL;
-	msg.data = 0;
+	struct fi_rma_iov rma_iov = {
+		.addr = addr,
+		.len = len,
+		.key = key,
+	};
+	struct iovec iov = {
+		.iov_base = (void*)buf,
+		.iov_len = len,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = &iov,
+		.desc = NULL,
+		.iov_count = 1,
+		.addr = dest_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = NULL,
+		.data = 0,
+	};
 
 	return rxm_ep_writemsg(ep_fid, &msg,
 			       (rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) |
@@ -360,29 +360,29 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 }
 
 static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
-				 size_t len, uint64_t data,
-				 fi_addr_t dest_addr, uint64_t addr,
-					uint64_t key)
+				       size_t len, uint64_t data,
+				       fi_addr_t dest_addr, uint64_t addr,
+				       uint64_t key)
 {
-	struct fi_msg_rma msg;
-	struct fi_rma_iov rma_iov;
-	struct iovec iov;
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
-
-	rma_iov.addr = addr;
-	rma_iov.len = len;
-	rma_iov.key = key;
-
-	msg.msg_iov = &iov;
-	msg.desc = NULL;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = NULL;
-	msg.data = data;
+	struct fi_rma_iov rma_iov = {
+		.addr = addr,
+		.len = len,
+		.key = key,
+	};
+	struct iovec iov = {
+		.iov_base = (void*)buf,
+		.iov_len = len,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = &iov,
+		.desc = NULL,
+		.iov_count = 1,
+		.addr = dest_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = NULL,
+		.data = data,
+	};
 
 	return rxm_ep_writemsg(ep_fid, &msg,
 			       (rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) |
