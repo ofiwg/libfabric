@@ -150,7 +150,7 @@ static void print_opts_usage(char *name)
 static inline int execute_atomic_ ## type ## _op(enum fi_op op_type,		\
 						 enum fi_datatype datatype)	\
 {										\
-	int ret, len, i;							\
+	int ret = FI_SUCCESS, len, i;						\
 	len = snprintf((test_name), sizeof(test_name), "%s_",			\
 		       fi_tostr(&(datatype), FI_TYPE_ATOMIC_TYPE));		\
 	snprintf((test_name) + len, sizeof(test_name) - len, "%s_"#type"_lat",	\
@@ -175,7 +175,7 @@ static inline int handle_atomic_ ## type ## _op(int run_all_datatypes,		\
 						enum fi_op op_type,		\
 						size_t *count)			\
 {										\
-	int ret;								\
+	int ret = FI_SUCCESS;							\
 										\
 	if (run_all_datatypes) {						\
 		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {	\
@@ -327,6 +327,7 @@ static int run_op(void)
 					       op_type, count);
 		break;
 	default:
+		FT_WARN("Invalid atomic operation type %d\n", op_type);
 		break;
 	}
 
