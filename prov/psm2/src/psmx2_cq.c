@@ -387,6 +387,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	int read_count = 0;
 	void *event_buffer = count ? event_in : NULL;
 	struct fi_context dummy_context;
+	void *req_to_free;
 
 	while (1) {
 		/* psm2_mq_ipeek and psm2_mq_test is suposed to be called
@@ -409,6 +410,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			if (!fi_context)
 				continue;
+
+			req_to_free = NULL;
 
 			tmp_ep = PSMX2_CTXT_EP(fi_context);
 			tmp_cq = NULL;
@@ -463,7 +466,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				tmp_cntr = tmp_ep->write_cntr;
 				write_req = container_of(fi_context, struct psmx2_am_request,
 							 fi_context);
-				free(write_req);
+				req_to_free = write_req;
 				break;
 
 			case PSMX2_NOCOMP_WRITE_CONTEXT:
@@ -472,7 +475,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				tmp_cntr = tmp_ep->write_cntr;
 				write_req = container_of(fi_context, struct psmx2_am_request,
 							 fi_context);
-				free(write_req);
+				req_to_free = write_req;
 				break;
 
 			case PSMX2_READ_CONTEXT:
@@ -493,7 +496,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 						break;
 					}
 				}
-				free(read_req);
+				req_to_free = read_req;
 				break;
 
 			case PSMX2_NOCOMP_READ_CONTEXT:
@@ -515,7 +518,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 						break;
 					}
 				}
-				free(read_req);
+				req_to_free = read_req;
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
@@ -671,6 +674,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 						read_more = 0;
 				}
 			}
+
+			free(req_to_free);
 
 			if (tmp_cntr)
 				psmx2_cntr_inc(tmp_cntr);
