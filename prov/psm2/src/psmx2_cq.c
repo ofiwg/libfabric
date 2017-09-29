@@ -381,6 +381,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	struct psmx2_fid_cntr *tmp_cntr;
 	struct psmx2_cq_event *event;
 	struct psmx2_am_request *read_req, *write_req;
+	struct psmx2_am_request *req_to_free;
 	int multi_recv;
 	int err;
 	int read_more = 1;
@@ -410,6 +411,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			if (!fi_context)
 				continue;
 
+			req_to_free = NULL;
 			tmp_ep = PSMX2_CTXT_EP(fi_context);
 			tmp_cq = NULL;
 			tmp_cntr = NULL;
@@ -463,8 +465,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				tmp_cntr = tmp_ep->write_cntr;
 				write_req = container_of(fi_context, struct psmx2_am_request,
 							 fi_context);
-				free(write_req->tmpbuf);
-				psmx2_am_request_free(write_req->ep->trx_ctxt, write_req);
+				req_to_free = write_req;
 				break;
 
 			case PSMX2_NOCOMP_WRITE_CONTEXT:
@@ -473,8 +474,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				tmp_cntr = tmp_ep->write_cntr;
 				write_req = container_of(fi_context, struct psmx2_am_request,
 							 fi_context);
-				free(write_req->tmpbuf);
-				psmx2_am_request_free(write_req->ep->trx_ctxt, write_req);
+				req_to_free = write_req;
 				break;
 
 			case PSMX2_READ_CONTEXT:
@@ -495,8 +495,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 						break;
 					}
 				}
-				free(read_req->tmpbuf);
-				psmx2_am_request_free(read_req->ep->trx_ctxt, read_req);
+				req_to_free = read_req;
 				break;
 
 			case PSMX2_NOCOMP_READ_CONTEXT:
@@ -518,8 +517,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 						break;
 					}
 				}
-				free(read_req->tmpbuf);
-				psmx2_am_request_free(read_req->ep->trx_ctxt, read_req);
+				req_to_free = read_req;
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
@@ -676,6 +674,11 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					if (tmp_cq == cq)
 						read_more = 0;
 				}
+			}
+
+			if (req_to_free) {
+				free(req_to_free->tmpbuf);
+				psmx2_am_request_free(req_to_free->ep->trx_ctxt, req_to_free);
 			}
 
 			if (tmp_cntr)
