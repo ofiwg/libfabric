@@ -1871,7 +1871,7 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 	if (!conn) {
 		SOCK_LOG_ERROR("Undable to find connection entry. "
 			       "Error in connecting: %s\n",
-			       strerror(ret));
+			       fi_strerror(-ret));
 		return -FI_ENOENT;
 	}
 
