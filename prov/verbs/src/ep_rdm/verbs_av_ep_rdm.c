@@ -130,7 +130,6 @@ ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn)
 		conn->state = FI_VERBS_CONN_CLOSED;
 		break;
 	case FI_VERBS_CONN_ALLOCATED:
-	case FI_VERBS_CONN_REMOTE_DISCONNECT:
 	case FI_VERBS_CONN_CLOSED:
 		break;
 	default:
