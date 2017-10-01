@@ -435,7 +435,7 @@ static ssize_t sock_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 	};
 	struct fi_rma_ioc rma_iov = {
 		.addr = addr,
-		.count = ofi_total_ioc_cnt(&msg_iov, count),
+		.count = ofi_total_ioc_cnt(&msg_iov, 1),
 		.key = key,
 	};
 	struct fi_msg_atomic msg = {
@@ -535,7 +535,7 @@ static ssize_t sock_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 	};
 	struct fi_rma_ioc rma_iov = {
 		.addr = addr,
-		.count = ofi_total_ioc_cnt(&msg_iov, count),
+		.count = ofi_total_ioc_cnt(&msg_iov, 1),
 		.key = key,
 	};
 	struct fi_msg_atomic msg = {
