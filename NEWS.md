@@ -5,6 +5,52 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.5.1, Wed Oct 4, 2017
+=======================
+
+## Core
+
+- Fix initialization used by DL providers to avoid crash
+- Add checks for null hints and improperly terminated strings
+- Check for invalid core names passed to fabric open
+- Provide consistent provider ordering when using DL providers
+- Fix OFI_LIKELY definitions when GNUC is not present
+
+## GNI
+
+- Add ability to detect local PE rank
+- Fix compiler/config problems
+- Fix CQ read error corruption
+- Remove tests of deprecated interfaces
+
+## PSM
+
+- Fix CQ corruption reporting errors
+- Always generate a completion on error
+
+## PSM2
+
+- Fix CQ corruption reporting errors
+- Always generate a completion on error
+- Add checks to handle out of memory errors
+- Add NULL check for iov in atomic readv/writev calls
+- Fix FI_PEEK src address matching
+- Fix bug in scalable endpoint address resolution
+- Fix segfault bug in RMA completion generation
+
+## Sockets
+
+- Fix missing FI_CLAIM src address data on completion
+- Fix CQ corruption reporting errors
+- Fix serialization issue wrt out of order CPU writes to Tx ring buffer
+
+## Verbs
+
+- Allow modifying rnr retry timout to improve performance
+- Add checks to handle out of memory errors
+- Fix crash using atomic operations for MSG EPs
+
+
 v1.5.0, Wed Aug 9, 2017
 ============================
 
