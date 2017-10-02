@@ -50,6 +50,34 @@ static size_t comp_entry_size[] = {
 };
 */
 
+int ft_use_comp_cntr(enum ft_comp_type comp_type)
+{
+	if ((comp_type == FT_COMP_CNTR) ||
+		(comp_type == FT_COMP_ALL))
+		return 1;
+
+	return 0;
+}
+
+int ft_use_comp_cq(enum ft_comp_type comp_type)
+{
+	if ((comp_type == FT_COMP_QUEUE) ||
+		(comp_type == FT_COMP_ALL))
+		return 1;
+
+	return 0;
+}
+
+static int ft_check_valid_comp(enum ft_comp_type comp_type)
+{
+	if ((comp_type == FT_COMP_QUEUE) ||
+		(comp_type == FT_COMP_CNTR) ||
+		(comp_type == FT_COMP_ALL))
+		return 1;
+
+	return 0;
+}
+
 static int ft_open_cntrs(void)
 {
 	struct fi_cntr_attr attr;
@@ -114,15 +142,19 @@ int ft_open_comp(void)
 {
 	int ret;
 
+	ret = ft_open_cqs();
+	if (ret)
+		return ret;
+
 	switch (test_info.comp_type) {
 	case FT_COMP_QUEUE:
-		ret = ft_open_cqs();
 		break;
+	case FT_COMP_ALL:
 	case FT_COMP_CNTR:
 		ret = ft_open_cntrs();
 		break;
 	default:
-		ret = -FI_ENOSYS; 
+		ret = -FI_ENOSYS;
 	}
 
 	return ret;
@@ -132,23 +164,36 @@ int ft_bind_comp(struct fid_ep *ep)
 {
 	int ret;
 	uint64_t flags;
-	struct fid *txfid = (test_info.comp_type == FT_COMP_CNTR) ? &txcntr->fid : &txcq->fid;
-	struct fid *rxfid = (test_info.comp_type == FT_COMP_CNTR) ? &rxcntr->fid : &rxcq->fid;
 
 	flags = FI_TRANSMIT;
-	if (test_info.comp_type == FT_COMP_CNTR)
-		flags |= FI_READ | FI_WRITE;
-	ret = fi_ep_bind(ep, txfid, flags);
+	ret = fi_ep_bind(ep, &txcq->fid, flags);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
+	if (ft_use_comp_cntr(test_info.comp_type)) {
+		flags |= FI_READ | FI_WRITE;
+		ret = fi_ep_bind(ep, &txcntr->fid, flags);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
 	flags = FI_RECV;
-	ret = fi_ep_bind(ep, rxfid, flags);
+	ret = fi_ep_bind(ep, &rxcq->fid, flags);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
+	}
+
+	if (ft_use_comp_cntr(test_info.comp_type)) {
+		ret = fi_ep_bind(ep, &rxcntr->fid, flags);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind", ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -234,25 +279,41 @@ static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
 
 int ft_comp_rx(int timeout)
 {
-	switch (test_info.comp_type) {
-	case FT_COMP_CNTR:
-		return ft_cntr_x(rxcntr, &ft_rx_ctrl, timeout);
-	case FT_COMP_QUEUE:
-		return ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
-	default:
-		return -FI_ENOSYS;
+	int ret;
+	if (ft_use_comp_cntr(test_info.comp_type)) {
+		ret = ft_cntr_x(rxcntr, &ft_rx_ctrl, timeout);
+		if (ret)
+			return ret;
 	}
+	if (ft_use_comp_cq(test_info.comp_type)) {
+		ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
+		if (ret)
+			return ret;
+	}
+
+	if (!ft_check_valid_comp(test_info.comp_type))
+		return -FI_ENOSYS;
+
+	return 0;
 }
 
 
 int ft_comp_tx(int timeout)
 {
-	switch (test_info.comp_type) {
-	case FT_COMP_CNTR:
-		return ft_cntr_x(txcntr, &ft_tx_ctrl, timeout);
-	case FT_COMP_QUEUE:
-		return ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
-	default:
-		return -FI_ENOSYS;
+	int ret;
+	if (ft_use_comp_cntr(test_info.comp_type)) {
+		ret = ft_cntr_x(txcntr, &ft_tx_ctrl, timeout);
+		if (ret)
+			return ret;
 	}
+	if (ft_use_comp_cq(test_info.comp_type)) {
+		ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
+		if (ret)
+			return ret;
+	}
+
+	if (!ft_check_valid_comp(test_info.comp_type))
+		return -FI_ENOSYS;
+
+	return 0;
 }

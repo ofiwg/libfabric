@@ -385,6 +385,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_CNTR, enum ft_comp_type, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_ALL, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_NONE", FT_MODE_NONE, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
@@ -658,7 +659,7 @@ int fts_info_is_valid(void)
 		    test_info.class_function != FT_FUNC_SENDMSG &&
 		    test_info.class_function != FT_FUNC_WRITEMSG)
 			return 0;
-		if (test_info.comp_type == FT_COMP_CNTR)
+		if (ft_use_comp_cntr(test_info.comp_type))
 			return 0;
 	}
 
@@ -776,6 +777,9 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
 	info->comp_type = set->comp_type[series->cur_comp];
+	if (info->caps & (FT_CAP_RMA | FT_CAP_ATOMIC) &&
+		(ft_use_comp_cntr(info->comp_type)))
+		info->caps |= FI_RMA_EVENT;
 	info->eq_wait_obj = set->eq_wait_obj[series->cur_eq_wait_obj];
 	info->cntr_wait_obj = set->cntr_wait_obj[series->cur_cntr_wait_obj];
 
