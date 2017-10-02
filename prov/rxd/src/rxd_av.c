@@ -78,7 +78,7 @@ static int rxd_av_set_addrlen(struct rxd_av *av, const void *addr)
 		goto close;
 	}
 
-	FI_INFO(&rxd_prov, FI_LOG_AV, "set dgram address len: %d\n", len);
+	FI_INFO(&rxd_prov, FI_LOG_AV, "set dgram address len: %zu\n", len);
 	av->dg_addrlen = len;
 close:
 	fi_close(&tmp_av->fid);

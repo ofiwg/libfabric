@@ -229,8 +229,8 @@ static void *rxm_conn_event_handler(void *arg)
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
 			if (rd != len) {
 				FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-					"Received size (%d) not matching "
-					"expected (%d)\n", rd, len);
+					"Received size (%zd) not matching "
+					"expected (%zu)\n", rd, len);
 				goto exit;
 			}
 			cm_data = (void *)entry->data;

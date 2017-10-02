@@ -532,7 +532,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			} else {
 				VERBS_INFO(FI_LOG_CORE,
 					   "rdm_buffer_size too small, "
-					   "should be greater then %d\n",
+					   "should be greater than %zu\n",
 					   sizeof (struct fi_ibv_rdm_rndv_header));
 				ret = -FI_EINVAL;
 				goto err;

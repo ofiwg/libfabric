@@ -623,7 +623,7 @@ void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
 			ret = fi_close(&mr[i]->fid);
 			if (ret)
 				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-					"Unable to close msg mr: %d\n", i);
+					"Unable to close msg mr: %zu\n", i);
 		}
 	}
 }
@@ -724,9 +724,8 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	if (pkt->hdr.size > rxm_ep->rxm_info->tx_attr->inject_size) {
 		if (flags & FI_INJECT) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-					"inject size supported: %d, msg size: %d\n",
-					rxm_tx_attr.inject_size,
-					pkt->hdr.size);
+				"inject size supported: %zu, msg size: %" PRIu64 "\n",
+				rxm_tx_attr.inject_size, pkt->hdr.size);
 			ret = -FI_EMSGSIZE;
 			goto done;
 		}
@@ -779,9 +778,9 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			goto done;
 		} else {
 			progress = 1;
-			FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %d) is too "
-				"big for MSG provider (max inject size = %d) \n",
-				(int)pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
+			FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %zu) is too "
+			       "big for MSG provider (max inject size = %" PRIu64 ") \n",
+			       pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
 		}
 	}
 

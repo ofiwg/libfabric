@@ -434,11 +434,11 @@ fi_ibv_rdm_push_buff_pointer(char *area_start, size_t area_size,
 	char *buff = (char*)(*rdm_buff);
 	char *buff_tmp = buff + offset;
 
-	VERBS_DBG(FI_LOG_EP_DATA, "old_pointer: %p\n", *buff);
+	VERBS_DBG(FI_LOG_EP_DATA, "old_pointer: %p\n", buff);
 
 	buff = buff_tmp < (area_start + area_size) ? buff_tmp : area_start;
 	
-	VERBS_DBG(FI_LOG_EP_DATA, "new_pointer: %p\n", *buff);
+	VERBS_DBG(FI_LOG_EP_DATA, "new_pointer: %p\n", buff);
 
 	*rdm_buff = (struct fi_ibv_rdm_buf *)buff;
 }

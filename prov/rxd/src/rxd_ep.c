@@ -132,8 +132,8 @@ static ssize_t rxd_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	for (i = 0; i < msg->iov_count; i++) {
 		recv_entry->iov[i].iov_base = msg->msg_iov[i].iov_base;
 		recv_entry->iov[i].iov_len = msg->msg_iov[i].iov_len;
-		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "post recv: %u\n",
-			msg->msg_iov[i].iov_len);
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "post recv: %zu\n",
+		       msg->msg_iov[i].iov_len);
 	}
 
 	dlist_init(&recv_entry->entry);
@@ -464,8 +464,8 @@ static ssize_t rxd_ep_post_data_msg(struct rxd_ep *ep,
 		       pkt->ctrl.seg_no);
 	}
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "msg data %p, seg %d\n",
-		pkt->ctrl.msg_id, pkt->ctrl.seg_no);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "msg data %" PRIx64 ", seg %d\n",
+	       pkt->ctrl.msg_id, pkt->ctrl.seg_no);
 	dlist_insert_tail(&pkt_meta->entry, &tx_entry->pkt_list);
 
 	return ret;
@@ -477,8 +477,8 @@ void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 	struct rxd_pkt_meta *pkt;
 	struct ofi_ctrl_hdr *ctrl;
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "freeing all [%p] pkts < %d\n",
-		tx_entry->msg_id, last_acked);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "freeing all [%" PRIx64 "] pkts < %d\n",
+	       tx_entry->msg_id, last_acked);
 	while (!dlist_empty(&tx_entry->pkt_list)) {
 
 		pkt = container_of(tx_entry->pkt_list.next,
@@ -487,8 +487,8 @@ void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 		if (ctrl->seg_no >= last_acked)
 			break;
 
-		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "freeing [%p] pkt:%d\n",
-			tx_entry->msg_id, ctrl->seg_no);
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "freeing [%" PRIx64 "] pkt:%d\n",
+		       tx_entry->msg_id, ctrl->seg_no);
 		dlist_remove(&pkt->entry);
 		if (pkt->flags & RXD_LOCAL_COMP)
 			rxd_tx_pkt_free(pkt);
@@ -510,11 +510,11 @@ static int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 //		return -FI_EIO;
 //	}
 //
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "retry packet : %2d, size: %d, tx_id :%p\n",
-		ctrl->seg_no, ctrl->type == ofi_ctrl_start_data ?
-		ctrl->seg_size + sizeof(struct rxd_pkt_data_start) :
-		ctrl->seg_size + sizeof(struct rxd_pkt_data),
-		ctrl->msg_id);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "retry packet : %2d, size: %" PRIx64 ", tx_id :%" PRIx64 "\n",
+	       ctrl->seg_no, ctrl->type == ofi_ctrl_start_data ?
+	       ctrl->seg_size + sizeof(struct rxd_pkt_data_start) :
+	       ctrl->seg_size + sizeof(struct rxd_pkt_data),
+	       ctrl->msg_id);
 
 	ret = fi_send(ep->dg_ep, ctrl,
 		      ctrl->type == ofi_ctrl_start_data ?
@@ -553,7 +553,7 @@ static int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 
 void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 {
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "tx: %p [%p]\n",
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "tx: %p [%" PRIx64 "]\n",
 		tx_entry, tx_entry->msg_id);
 
 	while ((tx_entry->seg_no < tx_entry->window) &&
@@ -584,8 +584,8 @@ int rxd_ep_reply_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *in_ctrl,
 			  rx_entry ? rx_entry->exp_seg_no : 0,
 			  in_ctrl->msg_id, rx_key, source);
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sending ack [%p] - segno: %d, window: %d\n",
-		pkt->ctrl.msg_id, pkt->ctrl.seg_no, pkt->ctrl.seg_size);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sending ack [%" PRIx64 "] - segno: %d, window: %d\n",
+	       pkt->ctrl.msg_id, pkt->ctrl.seg_no, pkt->ctrl.seg_size);
 
 	pkt_meta->flags = RXD_NOT_ACKED;
 	ret = fi_send(ep->dg_ep, pkt, sizeof(struct rxd_pkt_data),
@@ -698,7 +698,7 @@ ssize_t rxd_ep_start_xfer(struct rxd_ep *ep, struct rxd_peer *peer,
 		       pkt->ctrl.seg_no);
 	}
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "start msg %p, size: %ld\n",
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "start msg %" PRIx64 ", size: %ld\n",
 	       pkt->ctrl.msg_id, tx_entry->op_hdr.size);
 	rxd_set_timeout(tx_entry);
 	dlist_insert_tail(&pkt_meta->entry, &tx_entry->pkt_list);
@@ -746,7 +746,8 @@ ssize_t rxd_ep_connect(struct rxd_ep *ep, struct rxd_peer *peer, fi_addr_t addr)
 	if (ret)
 		goto err;
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sent conn %p\n", pkt->ctrl.msg_id);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "sent conn %" PRIx64 "\n",
+	       pkt->ctrl.msg_id);
 	rxd_set_timeout(tx_entry);
 	dlist_insert_tail(&pkt_meta->entry, &tx_entry->pkt_list);
 	dlist_insert_tail(&tx_entry->entry, &ep->tx_entry_list);
@@ -1011,7 +1012,7 @@ static ssize_t rxd_trx_claim_recv(struct rxd_ep *ep,
 	for (i = 0; i < msg->iov_count; i++) {
 		trecv_entry->iov[i].iov_base = msg->msg_iov[i].iov_base;
 		trecv_entry->iov[i].iov_len = msg->msg_iov[i].iov_len;
-		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "post claim trecv: %u, tag: %p\n",
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "post claim trecv: %zu, tag: %" PRIx64 "\n",
 		       msg->msg_iov[i].iov_len, msg->tag);
 	}
 
@@ -1062,7 +1063,7 @@ static ssize_t rxd_ep_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *ms
 	for (i = 0; i < msg->iov_count; i++) {
 		trecv_entry->iov[i].iov_base = msg->msg_iov[i].iov_base;
 		trecv_entry->iov[i].iov_len = msg->msg_iov[i].iov_len;
-		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "post trecv: %u, tag: %p\n",
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "post trecv: %zu, tag: %" PRIx64 "\n",
 			msg->msg_iov[i].iov_len, msg->tag);
 	}
 	dlist_init(&trecv_entry->entry);
@@ -1502,7 +1503,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 		} else if ((tx_entry->retry_time > cur_time) /* &&
 			 dlist_empty(&tx_entry->pkt_list)*/ ) {
 
-			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "Progressing waiting entry [%p]\n",
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "Progressing waiting entry [%" PRIx64 "]\n",
 				tx_entry->msg_id);
 
 			rxd_tx_entry_progress(ep, tx_entry);

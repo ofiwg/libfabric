@@ -70,7 +70,7 @@ int fi_log_enabled(const struct fi_provider *prov, enum fi_log_level level,
 		   enum fi_log_subsys subsys);
 void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 	    enum fi_log_subsys subsys, const char *func, int line,
-	    const char *fmt, ...);
+	    const char *fmt, ...) __attribute__ ((__format__ (__printf__, 6, 7)));
 
 #define FI_LOG(prov, level, subsystem, ...)				\
 	do {								\

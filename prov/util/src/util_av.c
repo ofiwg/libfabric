@@ -483,7 +483,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 		av->hash.slots = av->count;
 		av->hash.total_count = av->count + util_attr->overhead;
 		FI_INFO(av->prov, FI_LOG_AV,
-		       "FI_SOURCE requested, hash size %zu\n", av->hash.total_count);
+		       "FI_SOURCE requested, hash size %u\n", av->hash.total_count);
 	}
 
 	av->data = malloc((av->count * util_attr->addrlen) +
@@ -695,7 +695,7 @@ static int ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 	addrlen = ((struct sockaddr *) addr)->sa_family == AF_INET ?
 		  sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-	FI_DBG(av->prov, FI_LOG_AV, "inserting %d addresses\n", count);
+	FI_DBG(av->prov, FI_LOG_AV, "inserting %zu addresses\n", count);
 	for (i = 0; i < count; i++) {
 		ret = ip_av_insert_addr(av, (const char *) addr + i * addrlen,
 					fi_addr ? &fi_addr[i] : NULL, context);

@@ -60,7 +60,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 	     cq_entry = (ret < count) ? fi_ibv_rdm_take_first_from_cq(_cq) : NULL)
 	{
 		VERBS_DBG(FI_LOG_CQ,
-			  "\t\t-> found in ready: %p op_ctx %p, len %lu, tag 0x%llx\n",
+			  "\t\t-> found in ready: %p op_ctx %p, len %lu, tag 0x%" PRIx64 "\n",
 			  cq_entry, cq_entry->context, cq_entry->len,
 			  cq_entry->minfo.tag);
 
