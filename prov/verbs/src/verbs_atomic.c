@@ -46,8 +46,8 @@ static int fi_ibv_msg_ep_atomic_ ## name(struct fid_ep *ep_fid,		\
 	struct fi_atomic_attr attr;                                     \
 	int ret;                                                        \
                                                                         \
-	ret = fi_ibv_query_atomic(&ep->domain->domain_fid, datatype,	\
-				  op, &attr, flags);                    \
+	ret = fi_ibv_query_atomic(&ep->domain->util_domain.domain_fid,	\
+				  datatype, op, &attr, flags);		\
 	if (!ret)                                                       \
 		*count = attr.count;                                    \
 	return ret;                                                     \
@@ -63,7 +63,7 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 {
 	struct fi_ibv_domain *domain = container_of(domain_fid,
 						    struct fi_ibv_domain,
-						    domain_fid);
+						    util_domain.domain_fid);
 	char *log_str_fetch = "fi_fetch_atomic with FI_SUM op";
 	char *log_str_comp = "fi_compare_atomic";
 	char *log_str;

@@ -204,7 +204,7 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 		entry->err = err_request->state.err;
 		entry->prov_errno = -err_request->state.err;
 
-		api_version = cq->domain->fab->util_fabric.fabric_fid.api_version;
+		api_version = cq->domain->util_domain.fabric->fabric_fid.api_version;
 
 		if (!entry->err_data_size)
 			entry->err_data = NULL;
@@ -271,8 +271,9 @@ int fi_ibv_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!_cq)
 		return -FI_ENOMEM;
 
-	_cq->domain = container_of(domain, struct fi_ibv_domain, domain_fid);
-	assert(_cq->domain->rdm);
+	_cq->domain = container_of(domain, struct fi_ibv_domain,
+				   util_domain.domain_fid);
+	assert(_cq->domain->ep_type == FI_EP_RDM);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:

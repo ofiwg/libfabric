@@ -110,6 +110,44 @@
 #define VERBS_DEF_CQ_SIZE 1024
 #define VERBS_MR_IOV_LIMIT 1
 
+#define FI_IBV_EP_TYPE(info)						\
+	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
+
+/* NOTE:
+ * When ibv_post_send/recv returns '-1' it means the following:
+ * Deal with non-compliant libibverbs drivers which set errno
+ * instead of directly returning the error value
+ */
+#define FI_IBV_INVOKE_POST(type, wr_type, obj, wr, fail_action)		\
+({									\
+	ssize_t ret;							\
+	struct ibv_ ## wr_type ## _wr *bad_wr;				\
+	ret = ibv_post_ ## type(obj, wr, &bad_wr);			\
+	if (OFI_UNLIKELY(ret)) {					\
+		switch (ret) {						\
+			case ENOMEM:					\
+				ret = -FI_EAGAIN;			\
+				break;					\
+			case -1:					\
+				ret = (errno == ENOMEM) ? -FI_EAGAIN :	\
+							  -errno;	\
+				break;					\
+			default:					\
+				ret = -ret;				\
+				break;					\
+		}							\
+		(void) fail_action;					\
+	}								\
+	ret;								\
+})
+
+#define FI_IBV_RELEASE_WRE(wre_pool, wre)		\
+({							\
+	if (wre) {					\
+		dlist_remove(&wre->entry);		\
+		util_buf_release(wre_pool, wre);	\
+	}						\
+})
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
 
@@ -204,6 +242,7 @@ struct verbs_dev_info {
 struct fi_ibv_fabric {
 	struct util_fabric	util_fabric;
 	const struct fi_info	*info;
+	struct util_ns		name_server;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -284,7 +323,7 @@ struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
 struct fi_ibv_rdm_cm;
 
 struct fi_ibv_domain {
-	struct fid_domain	domain_fid;
+	struct util_domain	util_domain;
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
 	/*
@@ -292,11 +331,11 @@ struct fi_ibv_domain {
 	 *	 CM logic should be separated from EP,
 	 *	 excluding naming/addressing
 	 */
-	int			rdm;
+	enum fi_ep_type		ep_type;
 	struct fi_ibv_rdm_cm	*rdm_cm;
 	struct slist		ep_list;
 	struct fi_info		*info;
-	struct fi_ibv_fabric	*fab;
+	/* This EQ is utilized by verbs/RDM and verbs/DGRAM */
 	struct fi_ibv_eq	*eq;
 	uint64_t		eq_flags;
 };
@@ -418,6 +457,15 @@ int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
 int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av_fid, void *context);
+int fi_ibv_dgram_endpoint_open(struct fid_domain *domain_fid,
+			       struct fi_info *info, struct fid_ep **ep_fid,
+			       void *context);
+int fi_ibv_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
+			 struct fid_cq **cq_fid, void *context);
+int fi_ibv_dgram_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+			   struct fid_cntr **cntr_fid, void *context);
+int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+			 struct fid_av **av_fid, void *context);
 
 struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
 struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
@@ -452,6 +500,7 @@ struct verbs_ep_domain {
 };
 
 extern const struct verbs_ep_domain verbs_rdm_domain;
+extern const struct verbs_ep_domain verbs_dgram_domain;
 
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 			 const struct fi_info *info);
