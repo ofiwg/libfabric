@@ -273,7 +273,7 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 	*wce = util_buf_alloc(cq->wce_pool);
 	if (!*wce)
 		return -FI_ENOMEM;
-	memset(wce, 0, sizeof(*wce));
+	memset(*wce, 0, sizeof(**wce));
 	wc->wr_id = (uintptr_t)wre->context;
 	(*wce)->wc = *wc;
 
