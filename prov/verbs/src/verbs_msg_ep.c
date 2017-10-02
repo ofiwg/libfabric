@@ -178,75 +178,75 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
+static int fi_ibv_msg_ep_enable(struct fid_ep *ep_fid)
 {
 	struct ibv_qp_init_attr attr = { 0 };
-	struct fi_ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *ep;
 	struct ibv_pd *pd;
 
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	if (!_ep->eq) {
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	if (!ep->eq) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Endpoint is not bound to an event queue\n");
 		return -FI_ENOEQ;
 	}
 
-	if (!_ep->scq && !_ep->rcq) {
+	if (!ep->scq && !ep->rcq) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a send or receive completion queue\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!_ep->scq && (ofi_send_allowed(_ep->info->caps) ||
-				ofi_rma_initiate_allowed(_ep->info->caps))) {
+	if (!ep->scq && (ofi_send_allowed(ep->info->caps) ||
+				ofi_rma_initiate_allowed(ep->info->caps))) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a send completion queue when it has transmit "
 			   "capabilities enabled (FI_SEND | FI_RMA).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!_ep->rcq && ofi_recv_allowed(_ep->info->caps)) {
+	if (!ep->rcq && ofi_recv_allowed(ep->info->caps)) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a receive completion queue when it has receive "
 			   "capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
 	}
 
-	if (_ep->scq) {
-		attr.cap.max_send_wr = _ep->info->tx_attr->size;
-		attr.cap.max_send_sge = _ep->info->tx_attr->iov_limit;
-		attr.send_cq = _ep->scq->cq;
-		pd = _ep->scq->domain->pd;
+	if (ep->scq) {
+		attr.cap.max_send_wr = ep->info->tx_attr->size;
+		attr.cap.max_send_sge = ep->info->tx_attr->iov_limit;
+		attr.send_cq = ep->scq->cq;
+		pd = ep->scq->domain->pd;
 	} else {
-		attr.send_cq = _ep->rcq->cq;
-		pd = _ep->rcq->domain->pd;
+		attr.send_cq = ep->rcq->cq;
+		pd = ep->rcq->domain->pd;
 	}
 
-	if (_ep->rcq) {
-		attr.cap.max_recv_wr = _ep->info->rx_attr->size;
-		attr.cap.max_recv_sge = _ep->info->rx_attr->iov_limit;
-		attr.recv_cq = _ep->rcq->cq;
+	if (ep->rcq) {
+		attr.cap.max_recv_wr = ep->info->rx_attr->size;
+		attr.cap.max_recv_sge = ep->info->rx_attr->iov_limit;
+		attr.recv_cq = ep->rcq->cq;
 	} else {
-		attr.recv_cq = _ep->scq->cq;
+		attr.recv_cq = ep->scq->cq;
 	}
 
-	attr.cap.max_inline_data = _ep->info->tx_attr->inject_size;
+	attr.cap.max_inline_data = ep->info->tx_attr->inject_size;
 
-	if (_ep->srq_ep) {
-		attr.srq =_ep->srq_ep->srq;
+	if (ep->srq_ep) {
+		attr.srq = ep->srq_ep->srq;
 		/* Use of SRQ, no need to allocate recv_wr entries in the QP */
 		attr.cap.max_recv_wr = 0;
 
 		/* Override the default ops to prevent the user from posting WRs to a
 		 * QP where a SRQ is attached to */
-		_ep->ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
+		ep->ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
 	}
 
 	attr.qp_type = IBV_QPT_RC;
 	attr.sq_sig_all = 0;
-	attr.qp_context = _ep;
+	attr.qp_context = ep;
 
-	return rdma_create_qp(_ep->id, pd, &attr) ? -errno : 0;
+	return rdma_create_qp(ep->id, pd, &attr) ? -errno : 0;
 }
 
 static int fi_ibv_msg_ep_control(struct fid *fid, int command, void *arg)
@@ -278,10 +278,10 @@ static struct fi_ops fi_ibv_msg_ep_ops = {
 };
 
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
-		   struct fid_ep **ep, void *context)
+		   struct fid_ep **ep_fid, void *context)
 {
 	struct fi_ibv_domain *dom;
-	struct fi_ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *ep;
 	struct fi_ibv_connreq *connreq;
 	struct fi_ibv_pep *pep;
 	struct fi_info *fi;
@@ -314,30 +314,30 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 			return ret;
 	}
 
-	_ep = fi_ibv_alloc_msg_ep(info);
-	if (!_ep)
+	ep = fi_ibv_alloc_msg_ep(info);
+	if (!ep)
 		return -FI_ENOMEM;
 
 	if (!info->handle) {
-		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &_ep->id);
+		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
 		if (ret)
 			goto err;
 	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
-		_ep->id = connreq->id;
+		ep->id = connreq->id;
         } else if (info->handle->fclass == FI_CLASS_PEP) {
 		pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
-		_ep->id = pep->id;
+		ep->id = pep->id;
 		pep->id = NULL;
 
-		if (rdma_resolve_addr(_ep->id, info->src_addr, info->dest_addr,
+		if (rdma_resolve_addr(ep->id, info->src_addr, info->dest_addr,
 				      VERBS_RESOLVE_TIMEOUT)) {
 			ret = -errno;
 			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
 			goto err;
 		}
 
-		if (rdma_resolve_route(_ep->id, VERBS_RESOLVE_TIMEOUT)) {
+		if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
 			ret = -errno;
 			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
 			goto err;
@@ -347,35 +347,35 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err;
 	}
 
-	_ep->wre_pool = util_buf_pool_create(sizeof(struct fi_ibv_wre),
-					     16, 0, VERBS_WRE_CNT);
-	if (!_ep->wre_pool) {
+	ep->wre_pool = util_buf_pool_create(sizeof(struct fi_ibv_wre),
+					    16, 0, VERBS_WRE_CNT);
+	if (!ep->wre_pool) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wre_pool\n");
 		ret = -FI_ENOMEM;
 		goto err;
 	}
-	dlist_init(&_ep->wre_list);
+	dlist_init(&ep->wre_list);
 
-	_ep->id->context = &_ep->ep_fid.fid;
+	ep->id->context = &ep->ep_fid.fid;
 
-	_ep->ep_fid.fid.fclass = FI_CLASS_EP;
-	_ep->ep_fid.fid.context = context;
-	_ep->ep_fid.fid.ops = &fi_ibv_msg_ep_ops;
-	_ep->ep_fid.ops = &fi_ibv_msg_ep_base_ops;
-	_ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
-	_ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
-	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
-	_ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
+	ep->ep_fid.fid.fclass = FI_CLASS_EP;
+	ep->ep_fid.fid.context = context;
+	ep->ep_fid.fid.ops = &fi_ibv_msg_ep_ops;
+	ep->ep_fid.ops = &fi_ibv_msg_ep_base_ops;
+	ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+	ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
+	ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+	ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 
-	ofi_atomic_initialize32(&_ep->unsignaled_send_cnt, 0);
-	ofi_atomic_initialize32(&_ep->comp_pending, 0);
+	ofi_atomic_initialize32(&ep->unsignaled_send_cnt, 0);
+	ofi_atomic_initialize32(&ep->comp_pending, 0);
 
-	_ep->domain = dom;
-	*ep = &_ep->ep_fid;
+	ep->domain = dom;
+	*ep_fid = &ep->ep_fid;
 
 	return 0;
 err:
-	fi_ibv_free_msg_ep(_ep);
+	fi_ibv_free_msg_ep(ep);
 	return ret;
 }
 

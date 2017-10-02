@@ -82,7 +82,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.rx_ctx_cnt		= 1024,
 	.max_ep_tx_ctx		= 1,
 	.max_ep_rx_ctx		= 1,
-	.mr_iov_limit		= 1,
+	.mr_iov_limit		= VERBS_MR_IOV_LIMIT,
 	/* max_err_data is size of ibv_wc::vendor_err for CQ, 0 - for EQ */
 	.max_err_data		= sizeof_field(struct ibv_wc, vendor_err),
 };
