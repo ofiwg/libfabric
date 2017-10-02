@@ -452,14 +452,12 @@ int ft_alloc_ep_res(struct fi_info *fi)
 			cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	}
 
-	if (opts.options & FT_OPT_TX_CQ) {
-		ft_cq_set_wait_attr();
-		cq_attr.size = fi->tx_attr->size;
-		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
-		if (ret) {
-			FT_PRINTERR("fi_cq_open", ret);
-			return ret;
-		}
+	ft_cq_set_wait_attr();
+	cq_attr.size = fi->tx_attr->size;
+	ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		return ret;
 	}
 
 	if (opts.options & FT_OPT_TX_CNTR) {
@@ -471,14 +469,12 @@ int ft_alloc_ep_res(struct fi_info *fi)
 		}
 	}
 
-	if (opts.options & FT_OPT_RX_CQ) {
-		ft_cq_set_wait_attr();
-		cq_attr.size = fi->rx_attr->size;
-		ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
-		if (ret) {
-			FT_PRINTERR("fi_cq_open", ret);
-			return ret;
-		}
+	ft_cq_set_wait_attr();
+	cq_attr.size = fi->rx_attr->size;
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		return ret;
 	}
 
 	if (opts.options & FT_OPT_RX_CNTR) {
@@ -852,13 +848,20 @@ int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
 		return ret;
 
 	/* TODO: use control structure to select counter bindings explicitly */
-	flags = !txcq ? FI_SEND : 0;
+	if (opts.options & FT_OPT_TX_CQ)
+		flags = 0;
+	else
+		flags = FI_SEND;
 	if (hints->caps & (FI_WRITE | FI_READ))
 		flags |= hints->caps & (FI_WRITE | FI_READ);
 	else if (hints->caps & FI_RMA)
 		flags |= FI_WRITE | FI_READ;
 	FT_EP_BIND(ep, txcntr, flags);
-	flags = !rxcq ? FI_RECV : 0;
+
+	if (opts.options & FT_OPT_RX_CQ)
+		flags = 0;
+	else
+		flags = FI_RECV;
 	if (hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ))
 		flags |= hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ);
 	else if (hints->caps & FI_RMA)
@@ -1320,7 +1323,7 @@ static int ft_inject_progress(uint64_t total)
 	struct fi_cq_err_entry comp;
 	int ret;
 
-	if (txcq) {
+	if (opts.options & FT_OPT_TX_CQ) {
 		if (opts.comp_method == FT_COMP_SREAD)
 			ret = fi_cq_sread(txcq, &comp, 1, NULL, 0);
 		else
@@ -1743,7 +1746,7 @@ int ft_get_rx_comp(uint64_t total)
 {
 	int ret = FI_SUCCESS;
 
-	if (rxcq) {
+	if (opts.options & FT_OPT_RX_CQ) {
 		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
 	} else if (rxcntr) {
 		while (fi_cntr_read(rxcntr) < total) {
@@ -1764,7 +1767,7 @@ int ft_get_tx_comp(uint64_t total)
 {
 	int ret;
 
-	if (txcq) {
+	if (opts.options & FT_OPT_TX_CQ) {
 		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1);
 	} else if (txcntr) {
 		ret = fi_cntr_wait(txcntr, total, -1);
