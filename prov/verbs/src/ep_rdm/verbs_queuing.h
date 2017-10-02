@@ -145,7 +145,7 @@ fi_ibv_rdm_move_to_posted_queue(struct fi_ibv_rdm_request *request,
 {
 	FI_IBV_RDM_DBG_REQUEST("move_to_posted_queue: ", request, FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry, &fi_ibv_rdm_posted_queue);
-	ep->posted_recvs++;
+	ofi_atomic_inc32(&ep->posted_recvs);
 #if ENABLE_DEBUG
 	if (request->minfo.conn) {
 		request->minfo.conn->exp_counter++;
@@ -153,14 +153,14 @@ fi_ibv_rdm_move_to_posted_queue(struct fi_ibv_rdm_request *request,
 #endif // ENABLE_DEBUG
 }
 
-static inline void
+static inline int32_t
 fi_ibv_rdm_remove_from_posted_queue(struct fi_ibv_rdm_request *request,
 				    struct fi_ibv_rdm_ep *ep)
 {
-	FI_IBV_RDM_DBG_REQUEST("remove_from_posted_queue: ", request, 
+	FI_IBV_RDM_DBG_REQUEST("remove_from_posted_queue: ", request,
 				FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
-	ep->posted_recvs--;
+	return ofi_atomic_dec32(&ep->posted_recvs);
 }
 
 static inline struct fi_ibv_rdm_request *

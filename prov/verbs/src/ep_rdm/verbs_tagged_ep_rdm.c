@@ -171,9 +171,8 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 
 		VERBS_DBG(FI_LOG_EP_DATA,
 			  "fi_recvfrom: conn %p, tag 0x%" PRIx64 ", len %zu, rbuf %p, fi_ctx %p, posted_recv %d\n",
-			  conn, msg->tag, recv_data.data_len,
-			  recv_data.dest_addr, msg->context,
-			  ep_rdm->posted_recvs);
+			  conn, msg->tag, recv_data.data_len, recv_data.dest_addr,
+			  msg->context, ofi_atomic_get32(&ep_rdm->posted_recvs));
 
 		if (!ret && !request->state.err) {
 			ret = rdm_trecv_second_event(request, ep_rdm);

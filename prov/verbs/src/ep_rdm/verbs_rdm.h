@@ -304,7 +304,7 @@ struct fi_ibv_rdm_ep {
 	int	rq_wr_depth;    // RQ depth
 	int	sq_wr_depth;    // SQ depth
 	ofi_atomic32_t	posted_sends;
-	int	posted_recvs;
+	ofi_atomic32_t	posted_recvs;
 	int	num_active_conns;
 	int	max_inline_rc;
 	int	rndv_threshold;

@@ -233,12 +233,15 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 		dlist_find_first_match(&fi_ibv_rdm_posted_queue,
 					fi_ibv_rdm_req_match, request);
 	if (found) {
+		int32_t posted_recvs;
+
 		assert(container_of(found, struct fi_ibv_rdm_request,
 				    queue_entry) == request);
 		request->context->internal[0] = NULL;
-		fi_ibv_rdm_remove_from_posted_queue(request, ep_rdm);
+		posted_recvs = fi_ibv_rdm_remove_from_posted_queue(request, ep_rdm);
+		(void)posted_recvs;
 		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %d\n",
- 			  ep_rdm->posted_recvs);
+			  posted_recvs);
 		err = 0;
 	} else {
 		request = fi_ibv_rdm_take_first_match_from_postponed_queue
@@ -638,7 +641,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	ofi_atomic_initialize32(&_ep->posted_sends, 0);
-	_ep->posted_recvs = 0;
+	ofi_atomic_initialize32(&_ep->posted_recvs, 0);
 	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, _ep->n_buffs);
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
