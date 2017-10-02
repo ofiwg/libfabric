@@ -213,11 +213,11 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 					.prov_errno = FI_EINVAL
 				};
 				av->eq->err = err;
-				failed++;
 			} else if (flags & FI_SYNC_ERR) {
 				fi_errors[i] = -FI_EADDRNOTAVAIL;
 			}
 
+			failed++;
 			continue;
 		}
 
