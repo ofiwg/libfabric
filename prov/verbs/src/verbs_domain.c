@@ -315,6 +315,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct fi_ibv_fabric *fab;
 	const struct fi_info *fi;
 	int param = 0, ret;
+	void *status = NULL;
 
 	fab = container_of(fabric, struct fi_ibv_fabric,
 			   util_fabric.fabric_fid);
@@ -376,12 +377,12 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	}
 	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
-		goto err2;
+		goto err3;
 
 	_domain->pd = ibv_alloc_pd(_domain->verbs);
 	if (!_domain->pd) {
 		ret = -errno;
-		goto err2;
+		goto err3;
 	}
 
 	_domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
@@ -394,26 +395,26 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->rdm_cm->ec = rdma_create_event_channel();
 
 		if (!_domain->rdm_cm->ec) {
-			VERBS_INFO(FI_LOG_EP_CTRL,
+			VERBS_INFO(FI_LOG_DOMAIN,
 				"Failed to create listener event channel: %s\n",
 				strerror(errno));
 			ret = -FI_EOTHER;
-			goto err2;
+			goto err4;
 		}
 
 		if (fi_fd_nonblock(_domain->rdm_cm->ec->fd) != 0) {
-			VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "fcntl", errno);
+			VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "fcntl", errno);
 			ret = -FI_EOTHER;
-			goto err3;
+			goto err5;
 		}
 
 		if (rdma_create_id(_domain->rdm_cm->ec,
 				   &_domain->rdm_cm->listener, NULL, RDMA_PS_TCP))
 		{
-			VERBS_INFO(FI_LOG_EP_CTRL, "Failed to create cm listener: %s\n",
+			VERBS_INFO(FI_LOG_DOMAIN, "Failed to create cm listener: %s\n",
 				   strerror(errno));
 			ret = -FI_EOTHER;
-			goto err3;
+			goto err5;
 		}
 		_domain->rdm_cm->is_bound = 0;
 	} else {
@@ -423,9 +424,17 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	*domain = &_domain->domain_fid;
 	return 0;
-err3:
+err5:
 	if (_domain->rdm)
 		rdma_destroy_event_channel(_domain->rdm_cm->ec);
+err4:
+	if (ibv_dealloc_pd(_domain->pd))
+		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd", errno);
+err3:
+	if (_domain->rdm) {
+		_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
+		pthread_join(_domain->rdm_cm->cm_progress_thread, &status);
+	}
 err2:
 	if (_domain->rdm)
 		free(_domain->rdm_cm);
