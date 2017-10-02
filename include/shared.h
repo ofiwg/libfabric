@@ -184,7 +184,8 @@ extern struct ft_opts opts;
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
 void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
-int ft_parse_rma_opts(int op, char *optarg, struct ft_opts *opts);
+int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
+		      struct ft_opts *opts);
 void ft_addr_usage();
 void ft_usage(char *name, char *desc);
 void ft_mcusage(char *name, char *desc);
@@ -305,7 +306,6 @@ size_t datatype_to_size(enum fi_datatype datatype);
 
 int ft_alloc_bufs();
 int ft_open_fabric_res();
-int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op);
 int ft_getinfo(struct fi_info *hints, struct fi_info **info);
 int ft_init_fabric();
 int ft_start_server();

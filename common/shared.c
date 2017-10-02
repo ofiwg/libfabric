@@ -435,11 +435,6 @@ int ft_open_fabric_res(void)
 int ft_alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
-	if (hints->caps & FI_RMA) {
-		ret = ft_set_rma_caps(fi, opts.rma_op);
-		if (ret)
-			return ret;
-	}
 
 	ret = ft_alloc_msgs();
 	if (ret)
@@ -516,27 +511,6 @@ int ft_alloc_active_res(struct fi_info *fi)
 		return ret;
 	}
 
-	return 0;
-}
-
-int ft_set_rma_caps(struct fi_info *fi, enum ft_rma_opcodes rma_op)
-{
-	switch (rma_op) {
-	case FT_RMA_READ:
-		fi->caps |= FI_REMOTE_READ;
-		if (fi->mode & FI_LOCAL_MR)
-			fi->caps |= FI_READ;
-		break;
-	case FT_RMA_WRITE:
-	case FT_RMA_WRITEDATA:
-		fi->caps |= FI_REMOTE_WRITE;
-		if (fi->mode & FI_LOCAL_MR)
-			fi->caps |= FI_WRITE;
-		break;
-	default:
-		FT_ERR("Invalid rma op type\n");
-		return -FI_EINVAL;
-	}
 	return 0;
 }
 
@@ -775,12 +749,6 @@ int ft_init_fabric(void)
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
-
-	if (hints->caps & FI_RMA) {
-		ret = ft_set_rma_caps(fi, opts.rma_op);
-		if (ret)
-			return ret;
-	}
 
 	ret = ft_alloc_active_res(fi);
 	if (ret)
@@ -2238,16 +2206,22 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 	}
 }
 
-int ft_parse_rma_opts(int op, char *optarg, struct ft_opts *opts)
+int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
+		      struct ft_opts *opts)
 {
 	switch (op) {
 	case 'o':
 		if (!strcmp(optarg, "read")) {
+			hints->caps |= FI_READ | FI_REMOTE_READ;
 			opts->rma_op = FT_RMA_READ;
 		} else if (!strcmp(optarg, "writedata")) {
+			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
+			hints->mode |= FI_RX_CQ_DATA;
+			hints->domain_attr->cq_data_size = 4;
 			opts->rma_op = FT_RMA_WRITEDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
 		} else if (!strcmp(optarg, "write")) {
+			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
 			opts->rma_op = FT_RMA_WRITE;
 		} else {
 			fprintf(stderr, "Invalid operation type: \"%s\". Usage:\n"
