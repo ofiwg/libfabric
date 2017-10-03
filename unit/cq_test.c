@@ -178,7 +178,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~0;
+	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 	if (ret) {
