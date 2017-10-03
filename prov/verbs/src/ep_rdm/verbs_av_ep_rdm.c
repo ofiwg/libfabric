@@ -94,7 +94,7 @@ fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
 		ret = fi_ibv_rdm_start_disconnection(conn);
 		if (ret) {
 			VERBS_INFO(FI_LOG_AV, "Disconnection failed "
-				   "(%d) for %p\n", ret, conn);
+				   "(%zd) for %p\n", ret, conn);
 			err = ret;
 		}
 		/*
@@ -197,7 +197,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
 
 			VERBS_INFO(FI_LOG_AV,
-				   "fi_av_insert: bad addr #%i\n", i);
+				   "fi_av_insert: bad addr #%zu\n", i);
 
 			if (av->flags & FI_EVENT) {
 				/* due to limited functionality of

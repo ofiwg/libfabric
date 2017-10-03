@@ -63,7 +63,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 
 	if (addrlen != ep->info->src_addrlen) {
-		VERBS_INFO(FI_LOG_EP_CTRL,"addrlen expected: %d, got: %d.\n",
+		VERBS_INFO(FI_LOG_EP_CTRL,"addrlen expected: %zu, got: %zu.\n",
 			   ep->info->src_addrlen, addrlen);
 		return -FI_EINVAL;
 	}
@@ -238,7 +238,7 @@ static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
 
 	if (pep->src_addrlen && (addrlen != pep->src_addrlen)) {
-		VERBS_INFO(FI_LOG_FABRIC, "addrlen expected: %d, got: %d.\n",
+		VERBS_INFO(FI_LOG_FABRIC, "addrlen expected: %zu, got: %zu.\n",
 			   pep->src_addrlen, addrlen);
 		return -FI_EINVAL;
 	}

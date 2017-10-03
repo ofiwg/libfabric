@@ -226,7 +226,7 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 	struct fi_ibv_rdm_request *request = context->internal[0];
 
 	VERBS_DBG(FI_LOG_EP_DATA,
-		  "ep_cancel, match %p, tag 0x%llx, len %d, ctx %p\n",
+		  "ep_cancel, match %p, tag 0x%" PRIx64 ", len %" PRIu64 ", ctx %p\n",
 		  request, request->minfo.tag, request->len, request->context);
 
 	struct dlist_entry *found =
@@ -565,7 +565,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err2;
 	}
 
-	VERBS_INFO(FI_LOG_EP_CTRL, "inject_size: %d\n",
+	VERBS_INFO(FI_LOG_EP_CTRL, "inject_size: %zu\n",
 		   info->tx_attr->inject_size);
 
 	_ep->rndv_threshold = info->tx_attr->inject_size;

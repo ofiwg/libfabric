@@ -534,7 +534,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		ret = fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
 		if (ret) {
 			VERBS_INFO(FI_LOG_AV, "Packing of CM parameters fails, "
-				   "ret = %d\n", ret);
+				   "ret = %zd\n", ret);
 			goto err;
 		}
 
@@ -565,7 +565,7 @@ fi_ibv_rdm_process_route_resolved(struct rdma_cm_event *event,
 	ret = fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
 	if (ret) {
 		VERBS_INFO(FI_LOG_AV, "Packing of CM parameters fails, "
-			   "ret = %d \n", ret);
+			   "ret = %zd\n", ret);
 		return ret;
 	}
 
@@ -628,7 +628,7 @@ ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
 	HASH_ITER(hh, av_entry->conn_hash, conn, tmp) {
 		ret = fi_ibv_rdm_conn_cleanup(conn);
 		if (ret) {
-			VERBS_INFO(FI_LOG_AV, "Conn cleanup failed (%d) "
+			VERBS_INFO(FI_LOG_AV, "Conn cleanup failed (%zd) "
 				   "for av_entry = %p", ret, av_entry);
 			err = ret;
 		}
@@ -643,7 +643,7 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
 
-	VERBS_DBG(FI_LOG_AV, "conn %p, exp = %lld unexp = %lld\n", conn,
+	VERBS_DBG(FI_LOG_AV, "conn %p, exp = %zu unexp = %zu\n", conn,
 		     conn->exp_counter, conn->unexp_counter);
 
 	errno = 0;

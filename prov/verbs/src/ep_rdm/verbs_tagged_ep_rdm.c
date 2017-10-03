@@ -92,7 +92,7 @@ static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 	if (fid->fclass == FI_CLASS_EP) {
  		ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
 	} else {
-		VERBS_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
+		VERBS_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %zd\n",
 			  fid->fclass);
 		return -FI_EINVAL;
 	}
@@ -170,9 +170,10 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 					  &recv_data);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
-			"fi_recvfrom: conn %p, tag 0x%llx, len %llu, rbuf %p, fi_ctx %p, posted_recv %d\n",
-			conn, msg->tag, recv_data.data_len, recv_data.dest_addr,
-			msg->context, ep_rdm->posted_recvs);
+			  "fi_recvfrom: conn %p, tag 0x%" PRIx64 ", len %zu, rbuf %p, fi_ctx %p, posted_recv %d\n",
+			  conn, msg->tag, recv_data.data_len,
+			  recv_data.dest_addr, msg->context,
+			  ep_rdm->posted_recvs);
 
 		if (!ret && !request->state.err) {
 			ret = rdm_trecv_second_event(request, ep_rdm);
@@ -271,8 +272,8 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 				return -errno;
 			} else {
 				VERBS_DBG(FI_LOG_EP_DATA,
-					"posted %d bytes, conn %p, len %d, tag 0x%llx\n",
-					sge.length, conn, len, tag);
+					  "posted %d bytes, conn %p, len %zu, tag 0x%" PRIx64 "\n",
+					  sge.length, conn, len, tag);
 				return FI_SUCCESS;
 			}
 		}
@@ -529,7 +530,7 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 		int to_post = ep->rq_wr_depth - conn->recv_preposted;
 		ssize_t res = fi_ibv_rdm_repost_receives(conn, ep, to_post);
 		if (res < 0) {
-			VERBS_INFO(FI_LOG_EP_DATA, "repost recv failed %d\n", res);
+			VERBS_INFO(FI_LOG_EP_DATA, "repost recv failed %zd\n", res);
 			/* TODO: err code propagation */
 			abort();
 		}
