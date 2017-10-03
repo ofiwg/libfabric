@@ -43,13 +43,34 @@ static const char *local_node = "localhost";
 
 #define VERBS_DEFAULT_MIN_RNR_TIMER 12
 
-size_t verbs_default_tx_size 		= 384;
-size_t verbs_default_rx_size 		= 384;
-size_t verbs_default_tx_iov_limit 	= 4;
-size_t verbs_default_rx_iov_limit 	= 4;
-size_t verbs_default_inline_size 	= 64;
+struct fi_ibv_gl_data fi_ibv_gl_data = {
+	.def_tx_size		= 384,
+	.def_rx_size		= 384,
+	.def_tx_iov_limit	= 4,
+	.def_rx_iov_limit	= 4,
+	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
+	.fork_unsafe		= 0,
+	.use_odp		= 1,
+	.cqread_bunch_size	= 8,
+	.iface			= "ib",
 
-size_t verbs_min_rnr_timer = VERBS_DEFAULT_MIN_RNR_TIMER;
+	.rdm			= {
+		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
+		.buffer_size		= FI_IBV_RDM_DFLT_BUFFERED_SIZE,
+		.rndv_seg_size		= FI_IBV_RDM_SEG_MAXSIZE,
+		.thread_timeout		= FI_IBV_RDM_CM_THREAD_TIMEOUT,
+		.eager_send_opcode	= "IBV_WR_SEND",
+	},
+
+	.dgram			= {
+		.use_name_server	= 1,
+		.name_server_port	= 5678,
+		.device = {
+			.port_number	= 0, /* 0 - means all available ports */
+			.name		= NULL,
+		},
+	},
+};
 
 struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
@@ -295,8 +316,8 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 ssize_t
 fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 {
-	struct ibv_send_wr *bad_wr;
 	struct fi_ibv_wre *wre = NULL;
+	struct ibv_send_wr *bad_wr;
 	int ret;
 
 	if (ep->scq) {
@@ -400,35 +421,57 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	return fi_ibv_send(ep, wr, context);
 }
 
-static int fi_ibv_get_param_int(char *param_name, char *param_str,
-				size_t *param_default)
+static int fi_ibv_param_define(const char *param_name, const char *param_str,
+			       enum fi_param_type type, void *param_default)
 {
-	char *param_help;
-	size_t len, ret_len;
-	int param, ret = FI_SUCCESS;
+	char *param_help, param_default_str[256] = { 0 };
+	char *begin_def_section = " (default: ", *end_def_section = ")";
+	int ret = FI_SUCCESS;
+	size_t len, param_default_sz = 0;
+	size_t param_str_sz = strlen(param_str);
+	size_t begin_def_section_sz = strlen(begin_def_section);
+	size_t end_def_section_sz = strlen(end_def_section);
 
-	len = strlen(param_str) + 50;
-	param_help = calloc(1, len);
-	if (!param_help)
-		return -FI_ENOMEM;
-
-	ret_len = snprintf(param_help, len, "%s (default: %zu)", param_str,
-			   *param_default);
-	if (ret_len >= len) {
-		VERBS_WARN(FI_LOG_EP_DATA,
-			   "param_help string size insufficient!\n");
-		assert(0);
-		ret = -FI_ETOOSMALL;
-		goto out;
+	if (param_default != NULL) {
+		switch (type) {
+		case FI_PARAM_STRING:
+			if (*(char **)param_default != NULL) {
+				strncpy(param_default_str, *(char **)param_default, 256);
+				param_default_sz = strlen((char *)param_default_str);
+			}
+			break;
+		case FI_PARAM_INT:
+		case FI_PARAM_BOOL:
+			snprintf(param_default_str, 256, "%d", *((int *)param_default));
+			param_default_sz = strlen(param_default_str);
+			break;
+		default:
+			assert(0);
+			ret = -FI_EINVAL;
+			goto fn;
+		}
 	}
 
-	fi_param_define(&fi_ibv_prov, param_name, FI_PARAM_INT, param_help);
+	len = param_str_sz + strlen(begin_def_section) +
+		param_default_sz + end_def_section_sz + 1;
+	param_help = calloc(1, len);
+	if (!param_help) {
+ 		assert(0);
+		ret = -FI_ENOMEM;
+		goto fn;
+	}
 
-	if (!fi_param_get_int(&fi_ibv_prov, param_name, &param))
-		*param_default = param;
+	strncat(param_help, param_str, param_str_sz);
+	strncat(param_help, begin_def_section, begin_def_section_sz);
+	strncat(param_help, param_default_str, param_default_sz);
+	strncat(param_help, end_def_section, end_def_section_sz);
 
-out:
+	param_help[len - 1] = '\0';
+
+	fi_param_define(&fi_ibv_prov, param_name, type, param_help);
+
 	free(param_help);
+fn:
 	return ret;
 }
 
@@ -466,13 +509,13 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 	struct ibv_qp_attr attr = { 0 };
 	int ret;
 
-	if (verbs_min_rnr_timer > 31) {
+	if (fi_ibv_gl_data.min_rnr_timer > 31) {
 		VERBS_WARN(FI_LOG_EQ, "min_rnr_timer value out of valid range; "
 			   "using default value of %d\n",
 			   VERBS_DEFAULT_MIN_RNR_TIMER);
 		attr.min_rnr_timer = VERBS_DEFAULT_MIN_RNR_TIMER;
 	} else {
-		attr.min_rnr_timer = verbs_min_rnr_timer;
+		attr.min_rnr_timer = fi_ibv_gl_data.min_rnr_timer;
 	}
 
 	ret = ibv_modify_qp(qp, &attr, IBV_QP_MIN_RNR_TIMER);
@@ -486,6 +529,191 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 	return 0;
 }
 
+
+static int fi_ibv_get_param_int(const char *param_name,
+				const char *param_str,
+				size_t *param_default)
+{
+	int param;
+	size_t ret;
+
+	ret = fi_ibv_param_define(param_name, param_str,
+				  FI_PARAM_INT,
+				  param_default);
+	if (ret)
+		return ret;
+
+	if (!fi_param_get_int(&fi_ibv_prov, param_name, &param))
+		*param_default = param;
+
+	return 0;
+}
+
+static int fi_ibv_get_param_bool(const char *param_name,
+				 const char *param_str,
+				 int *param_default)
+{
+	int param;
+	size_t ret;
+
+	ret = fi_ibv_param_define(param_name, param_str,
+				  FI_PARAM_BOOL,
+				  param_default);
+	if (ret)
+		return ret;
+
+	if (!fi_param_get_bool(&fi_ibv_prov, param_name, &param)) {
+		*param_default = param;
+		if ((*param_default != 1) && (*param_default != 0))
+			return -FI_EINVAL;
+	}
+
+	return 0;
+}
+
+static int fi_ibv_get_param_str(const char *param_name,
+				const char *param_str,
+				char **param_default)
+{
+	char *param;
+	size_t ret;
+
+	ret = fi_ibv_param_define(param_name, param_str,
+				  FI_PARAM_STRING,
+				  param_default);
+	if (ret)
+		return ret;
+
+	if (!fi_param_get_str(&fi_ibv_prov, param_name, &param))
+		*param_default = param;
+
+	return 0;
+}
+
+static int fi_ibv_read_params(void)
+{
+	/* Common parameters */
+	if (fi_ibv_get_param_int("tx_size", "Default maximum tx context size",
+				 &fi_ibv_gl_data.def_tx_size))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_int("rx_size", "Default maximum rx context size",
+				 &fi_ibv_gl_data.def_rx_size))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
+				 &fi_ibv_gl_data.def_tx_iov_limit))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
+				 &fi_ibv_gl_data.def_rx_iov_limit))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_int("inline_size", "Default maximum inline size. "
+				 "Actual inject size returned in fi_info may be "
+				 "greater", &fi_ibv_gl_data.def_inline_size))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
+				 "attribute (0 - 31)",
+				 &fi_ibv_gl_data.min_rnr_timer))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_bool("fork_unsafe", "Enable safety of fork() system call "
+				  "for verbs provider. If you're sure that fork() "
+				  "support isn't needed - No need to use this option, "
+				  "because extra memory will be consumed when enabling "
+				  "fork suppport.",
+				  &fi_ibv_gl_data.fork_unsafe))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging experimental feature",
+				  &fi_ibv_gl_data.use_odp))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_int("cqread_bunch_size", "The number of entries to "
+				 "be read from the verbs completion queue at a time",
+				 (size_t *)&fi_ibv_gl_data.cqread_bunch_size) ||
+	    (fi_ibv_gl_data.cqread_bunch_size <= 0)) {
+		VERBS_INFO(FI_LOG_CORE,
+			   "Invalid value of cqread_bunch_size\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_str("iface", "The prefix or the full name of the "
+				 "network interface associated with the IB device",
+				 &fi_ibv_gl_data.iface))
+		return -FI_EINVAL;
+
+	/* RDM-specific parameters */
+	if (fi_ibv_get_param_int("rdm_buffer_num", "The number of pre-registered "
+				 "buffers for buffered operations between "
+				 "the endpoints, must be a power of 2",
+				 (size_t *)&fi_ibv_gl_data.rdm.buffer_num) ||
+	    (fi_ibv_gl_data.rdm.buffer_num & (fi_ibv_gl_data.rdm.buffer_num - 1))) {
+		VERBS_INFO(FI_LOG_CORE,
+			   "Invalid value of rdm_buffer_num\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("rdm_buffer_size", "The maximum size of a "
+				 "buffered operation (bytes)",
+				 (size_t *)&fi_ibv_gl_data.rdm.buffer_size) ||
+	    (fi_ibv_gl_data.rdm.buffer_size < sizeof(struct fi_ibv_rdm_rndv_header))) {
+		VERBS_INFO(FI_LOG_CORE,
+			   "rdm_buffer_size should be greater than %"PRIu64"\n",
+			   sizeof(struct fi_ibv_rdm_rndv_header));
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("rdm_rndv_seg_size", "The segment size for "
+				 "zero copy protocols (bytes)",
+				 (size_t *)&fi_ibv_gl_data.rdm.rndv_seg_size) ||
+	    (fi_ibv_gl_data.rdm.rndv_seg_size <= 0)) {
+		VERBS_INFO(FI_LOG_CORE,
+			   "Invalid value of rdm_rndv_seg_size\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("rdm_thread_timeout", "The wake up timeout of "
+				 "the helper thread (usec)",
+				 (size_t *)&fi_ibv_gl_data.rdm.thread_timeout) ||
+	    (fi_ibv_gl_data.rdm.thread_timeout < 0)) {
+		VERBS_INFO(FI_LOG_CORE,
+			   "Invalid value of rdm_thread_timeout\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_str("rdm_eager_send_opcode", "The operation code that "
+				 "will be used for eager messaging. Only IBV_WR_SEND "
+				 "and IBV_WR_RDMA_WRITE_WITH_IMM are supported. "
+				 "The last one is not applicable for iWarp.",
+				 &fi_ibv_gl_data.rdm.eager_send_opcode))
+		return -FI_EINVAL;
+
+	/* DGRAM-specific parameters */
+	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
+		fi_ibv_gl_data.dgram.use_name_server = 0;
+	if (fi_ibv_get_param_bool("dgram_use_name_server", "The option that "
+				  "enables/disables OFI Name Server thread that is used "
+				  "to resolve IP-addresses to provider specific "
+				  "addresses. If MPI is used, the NS is disenabled "
+				  "by default.", &fi_ibv_gl_data.dgram.use_name_server))
+		return -FI_EINVAL;
+	if (fi_ibv_get_param_int("dgram_name_server_port", "The port on which Name Server "
+				 "thread listens incoming connection and requestes.",
+				 (size_t *)&fi_ibv_gl_data.dgram.name_server_port) ||
+	    (fi_ibv_gl_data.dgram.name_server_port < 0 ||
+	     fi_ibv_gl_data.dgram.name_server_port > 65535)) {
+		VERBS_INFO(FI_LOG_CORE,
+			   "Invalid value of dgram_name_server_port\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("dgram_device_port_number", "Port number of device to be "
+				 "only used for generating fi_info. The parameter is "
+				 "ignored if device name wasn't specified.",
+				 (size_t *)&fi_ibv_gl_data.dgram.device.port_number) ||
+	    (fi_ibv_gl_data.dgram.device.port_number < 0 ||
+	     fi_ibv_gl_data.dgram.device.port_number > 32)) {
+		VERBS_INFO(FI_LOG_CORE,
+			   "Invalid value of dgram_device_port_number\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_str("dgram_device_name", "The name of device to be "
+				 "only used for generating fi_info.",
+				 &fi_ibv_gl_data.dgram.device.name))
+		return -FI_EINVAL;
+
+	return FI_SUCCESS;
+}
+
 static void fi_ibv_fini(void)
 {
 	fi_freeinfo((void *)fi_ibv_util_prov.info);
@@ -494,61 +722,7 @@ static void fi_ibv_fini(void)
 
 VERBS_INI
 {
-	fi_param_define(&fi_ibv_prov, "iface", FI_PARAM_STRING,
-			"the prefix or the full name of the network interface "
-			"associated with the IB device (default: ib)");
-	fi_param_define(&fi_ibv_prov, "rdm_buffer_num", FI_PARAM_INT,
-			"the number of pre-registered buffers for buffered "
-			"operations between the endpoints, must be a power of 2 "
-			"(default: 8)");
-	fi_param_define(&fi_ibv_prov, "rdm_buffer_size", FI_PARAM_INT,
-			"the maximum size of a buffered operation (bytes) "
-			"(default: platform specific)");
-	fi_param_define(&fi_ibv_prov, "rdm_use_odp", FI_PARAM_BOOL,
-			"enable on-demand paging experimental feature"
-			"(default: platform specific)");
-	fi_param_define(&fi_ibv_prov, "rdm_rndv_seg_size", FI_PARAM_INT,
-			"the segment size for zero copy protocols (bytes)"
-			"(default: platform specific");
-	fi_param_define(&fi_ibv_prov, "rdm_cqread_bunch_size", FI_PARAM_INT,
-			"the number of entries to be read from the verbs "
-			"completion queue at a time (default: 8)");
-	fi_param_define(&fi_ibv_prov, "rdm_thread_timeout", FI_PARAM_INT,
-			"the wake up timeout of the helper thread (usec) "
-			"(default: 100)");
-	fi_param_define(&fi_ibv_prov, "rdm_eager_send_opcode", FI_PARAM_STRING,
-			"the operation code that will be used for eager messaging. "
-			"Only IBV_WR_SEND and IBV_WR_RDMA_WRITE_WITH_IMM are supported. "
-			"The last one is not applicable for iWarp. "
-			"(default: IBV_WR_SEND)");
-
-	if (fi_ibv_get_param_int("tx_size", "Default maximum tx context size",
-				 &verbs_default_tx_size))
+	if (fi_ibv_read_params()|| fi_ibv_init_info(&fi_ibv_util_prov.info))
 		return NULL;
-
-	if (fi_ibv_get_param_int("rx_size", "Default maximum rx context size",
-				 &verbs_default_rx_size))
-		return NULL;
-
-	if (fi_ibv_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
-				 &verbs_default_tx_iov_limit))
-		return NULL;
-
-	if (fi_ibv_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
-				 &verbs_default_rx_iov_limit))
-		return NULL;
-
-	if (fi_ibv_get_param_int("inline_size", "Default maximum inline size. "
-				 "Actual inject size returned in fi_info may be "
-				 "greater", &verbs_default_inline_size))
-		return NULL;
-
-	if (fi_ibv_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
-				 "attribute (0 - 31)", &verbs_min_rnr_timer))
-		return NULL;
-
-	if (fi_ibv_init_info(&fi_ibv_util_prov.info))
-		return NULL;
-
 	return &fi_ibv_prov;
 }

@@ -315,7 +315,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct fi_ibv_domain *_domain;
 	struct fi_ibv_fabric *fab;
 	const struct fi_info *fi;
-	int param = 0, ret;
+	int ret;
 	void *status = NULL;
 
 	fab = container_of(fabric, struct fi_ibv_fabric,
@@ -347,20 +347,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			goto err2;
 		}
 		_domain->rdm_cm->cm_progress_timeout =
-			FI_IBV_RDM_CM_THREAD_TIMEOUT;
-		if (!fi_param_get_int(&fi_ibv_prov,
-				      "rdm_thread_timeout",
-				      &param)) {
-			if (param < 0) {
-				VERBS_INFO(FI_LOG_CORE,
-				   	   "invalid value of "
-					   "rdm_thread_timeout\n");
-				ret = -FI_EINVAL;
-				goto err2;
-			} else {
-				_domain->rdm_cm->cm_progress_timeout = param;
-			}
-		}
+			fi_ibv_gl_data.rdm.thread_timeout;
 		slist_init(&_domain->rdm_cm->av_removed_entry_head);
 
 		pthread_mutex_init(&_domain->rdm_cm->cm_lock, NULL);

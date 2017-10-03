@@ -69,6 +69,10 @@
 #include "fi_signal.h"
 #include "fi_util.h"
 
+#ifdef HAVE_VERBS_EXP_H
+#include <infiniband/verbs_exp.h>
+#endif /* HAVE_VERBS_EXP_H */
+
 #ifndef AF_IB
 #define AF_IB 27
 #endif
@@ -109,18 +113,87 @@
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
 
-extern size_t verbs_default_tx_size;
-extern size_t verbs_default_rx_size;
-extern size_t verbs_default_tx_iov_limit;
-extern size_t verbs_default_rx_iov_limit;
-extern size_t verbs_default_inline_size;
+extern struct fi_ibv_gl_data {
+	size_t	def_tx_size;
+	size_t	def_rx_size;
+	size_t	def_tx_iov_limit;
+	size_t	def_rx_iov_limit;
+	size_t	def_inline_size;
+	size_t	min_rnr_timer;
+	int	fork_unsafe;
+	int	use_odp;
+	int	cqread_bunch_size;
+	char	*iface;
 
-extern size_t verbs_min_rnr_timer;
+	struct {
+		int	buffer_num;
+		int	buffer_size;
+		int	rndv_seg_size;
+		int	thread_timeout;
+		char	*eager_send_opcode;
+	} rdm;
+
+	struct {
+		int	use_name_server;
+		int	name_server_port;
+		struct {
+			int	port_number;
+			char	*name;
+		} device;
+	} dgram;
+} fi_ibv_gl_data;
 
 struct verbs_addr {
 	struct dlist_entry entry;
 	struct rdma_addrinfo *rai;
 };
+
+/*
+ * fields of Infiniband packet headers that are used to
+ * represent OFI EP address
+ * - LRH (Local Route Header) - Link Layer:
+ *   - LID - destination Local Identifier
+ *   - SL - Service Level
+ * - GRH (Global Route Header) - Network Layer:
+ *   - GID - destination Global Identifier
+ * - BTH (Base Transport Header) - Transport Layer:
+ *   - QPN - destination Queue Oair number
+ *   - P_key - Partition Key
+ *
+ * Note: DON'T change the placement of the fields in the structure.
+ *       The placement is to keep structure size = 256 bits (32 byte).
+ */
+struct ofi_ib_ud_ep_name {
+	union ibv_gid	gid;		/* 64-bit GUID + 64-bit EUI - GRH */
+
+	uint32_t	qpn;		/* BTH */
+
+	uint16_t	lid; 		/* LRH */
+	uint16_t	pkey;		/* BTH */
+	uint16_t	service;	/* for NS src addr, 0 means any */
+
+	uint8_t 	sl;		/* LRH */
+	uint8_t		padding[5];	/* forced padding to 256 bits (32 byte) */
+}; /* 256 bits */
+
+#define VERBS_IB_UD_NS_ANY_SERVICE	0
+
+static inline
+int fi_ibv_dgram_ns_is_service_wildcard(void *svc)
+{
+	return (*(int *)svc == VERBS_IB_UD_NS_ANY_SERVICE);
+}
+
+static inline
+int fi_ibv_dgram_ns_service_cmp(void *svc1, void *svc2)
+{
+	int service1 = *(int *)svc1, service2 = *(int *)svc2;
+
+	if (fi_ibv_dgram_ns_is_service_wildcard(svc1) ||
+	    fi_ibv_dgram_ns_is_service_wildcard(svc2))
+		return 0;
+	return (service1 < service2) ? -1 : (service1 > service2);
+}
 
 struct verbs_dev_info {
 	struct dlist_entry entry;

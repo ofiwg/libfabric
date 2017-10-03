@@ -33,10 +33,6 @@
 #include <inttypes.h>
 #include <stdlib.h>
 
-#ifdef HAVE_VERBS_EXP_H
-#include <infiniband/verbs_exp.h>
-#endif /* HAVE_VERBS_EXP_H */
-
 #include <fi_list.h>
 #include "../fi_verbs.h"
 #include "verbs_rdm.h"
@@ -1039,7 +1035,7 @@ fi_ibv_rdm_rndv_read_reg_mr(struct fi_ibv_rdm_ep *ep,
 	in.addr = request->dest_buf;
 	in.length = request->len;
 	in.exp_access = IBV_EXP_ACCESS_LOCAL_WRITE;
-	if (ep->use_odp) {
+	if (fi_ibv_gl_data.use_odp) {
 		in.exp_access |= IBV_EXP_ACCESS_RELAXED |
 				 IBV_EXP_ACCESS_ON_DEMAND;
 	}
@@ -1047,9 +1043,9 @@ fi_ibv_rdm_rndv_read_reg_mr(struct fi_ibv_rdm_ep *ep,
 	request->rndv.mr = ibv_exp_reg_mr(&in);
 #else /* HAVE_VERBS_EXP_H */
 	request->rndv.mr = ibv_reg_mr(ep->domain->pd, request->dest_buf,
-					request->len,
-					IBV_ACCESS_LOCAL_WRITE |
-					IBV_ACCESS_REMOTE_WRITE);
+				      request->len,
+				      IBV_ACCESS_LOCAL_WRITE |
+				      IBV_ACCESS_REMOTE_WRITE);
 #endif /* HAVE_VERBS_EXP_H */
 
 	if (!request->rndv.mr) {

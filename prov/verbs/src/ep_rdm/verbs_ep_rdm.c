@@ -523,8 +523,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 {
 	struct fi_ibv_domain *_domain = 
 		container_of(domain, struct fi_ibv_domain, domain_fid);
-	int ret = 0, param = 0;
-	char *str_param = NULL;
+	int ret = 0;
 
 	if (!info || !info->ep_attr || !info->domain_attr ||
 	    strncmp(_domain->verbs->device->name, info->domain_attr->name,
@@ -554,16 +553,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
 	_ep->tx_selective_completion = 0;
 	_ep->rx_selective_completion = 0;
-
-	_ep->n_buffs = fi_param_get_int(&fi_ibv_prov, "rdm_buffer_num", &param) ?
-		FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM : param;
-
-	if (_ep->n_buffs & (_ep->n_buffs - 1)) {
-		VERBS_INFO(FI_LOG_CORE,
-			   "invalid value of rdm_buffer_num\n");
-		ret = -FI_EINVAL;
-		goto err2;
-	}
+	_ep->n_buffs = fi_ibv_gl_data.rdm.buffer_num;
 
 	VERBS_INFO(FI_LOG_EP_CTRL, "inject_size: %zu\n",
 		   info->tx_attr->inject_size);
@@ -579,58 +569,39 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->rx_op_flags = info->rx_attr->op_flags;
 	_ep->min_multi_recv_size = (_ep->rx_op_flags & FI_MULTI_RECV) ?
 				   info->tx_attr->inject_size : 0;
-
-	_ep->rndv_seg_size = FI_IBV_RDM_SEG_MAXSIZE;
-	if (!fi_param_get_int(&fi_ibv_prov, "rdm_rndv_seg_size", &param)) {
-		if (param > 0) {
-			_ep->rndv_seg_size = param;
-		} else {
-			VERBS_INFO(FI_LOG_CORE,
-				   "invalid value of rdm_rndv_seg_size\n");
-			ret = -FI_EINVAL;
-			goto err2;
-		}
-	}
-
 #ifdef HAVE_VERBS_EXP_H
 	struct ibv_exp_device_attr exp_attr;
-	exp_attr.comp_mask = IBV_EXP_DEVICE_ATTR_ODP | IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
-	ret = ibv_exp_query_device(_ep->domain->verbs, &exp_attr);
-	if (!ret && exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP) {
-		_ep->use_odp = 1;
-	} else {
-		_ep->use_odp = 0;
-	}
+	exp_attr.comp_mask = IBV_EXP_DEVICE_ATTR_ODP |
+			     IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
+	_ep->use_odp = (!ibv_exp_query_device(_ep->domain->verbs, &exp_attr) &&
+			exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP);
 #else /* HAVE_VERBS_EXP_H */
 	_ep->use_odp = 0;
 #endif /* HAVE_VERBS_EXP_H */
-	if (!fi_param_get_bool(&fi_ibv_prov, "rdm_use_odp", &param)) {
-		if (!_ep->use_odp && param) {
-			VERBS_WARN(FI_LOG_CORE, "ODP is not supported on this "
-				   "configuration, ignore \n");
-		} else {
-			_ep->use_odp = param;
-		}
+	if (!_ep->use_odp && fi_ibv_gl_data.use_odp) {
+		VERBS_WARN(FI_LOG_CORE, "ODP is not supported on this "
+					"configuration, ignore \n");
+	} else {
+		_ep->use_odp = fi_ibv_gl_data.use_odp;
 	}
 
+	_ep->rndv_seg_size = fi_ibv_gl_data.rdm.rndv_seg_size;
 	_ep->rq_wr_depth = info->rx_attr->size;
 	/* one more outstanding slot for releasing eager buffers */
 	_ep->sq_wr_depth = _ep->n_buffs + 1;
-	if (!fi_param_get_str(&fi_ibv_prov, "rdm_eager_send_opcode", &str_param)) {
-		if (!strncmp(str_param, "IBV_WR_RDMA_WRITE_WITH_IMM",
-			     strlen("IBV_WR_RDMA_WRITE_WITH_IMM"))) {
-			_ep->eopcode = IBV_WR_RDMA_WRITE_WITH_IMM;
-		} else if (!strncmp(str_param, "IBV_WR_SEND",
-				    strlen("IBV_WR_SEND"))) {
-			_ep->eopcode = IBV_WR_SEND;
-		} else {
-			VERBS_INFO(FI_LOG_CORE,
-				   "invalid value of rdm_eager_send_opcode\n");
-			ret = -FI_EINVAL;
-			goto err2;
-		}
-	} else {
+	if (!strncmp(fi_ibv_gl_data.rdm.eager_send_opcode,
+		     "IBV_WR_RDMA_WRITE_WITH_IMM",
+		     strlen("IBV_WR_RDMA_WRITE_WITH_IMM"))) {
+		_ep->eopcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+	} else if (!strncmp(fi_ibv_gl_data.rdm.eager_send_opcode,
+			    "IBV_WR_SEND",
+			    strlen("IBV_WR_SEND"))) {
 		_ep->eopcode = IBV_WR_SEND;
+	} else {
+		VERBS_INFO(FI_LOG_CORE,
+			   "Invalid value of rdm_eager_send_opcode\n");
+		ret = -FI_EINVAL;
+		goto err2;
 	}
 
 	switch (info->ep_attr->protocol) {
