@@ -52,7 +52,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.fork_unsafe		= 0,
 	.use_odp		= 1,
 	.cqread_bunch_size	= 8,
-	.iface			= "ib",
+	.iface			= NULL,
 
 	.rdm			= {
 		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
