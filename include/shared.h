@@ -113,6 +113,7 @@ enum {
 	FT_OPT_VERIFY_DATA	= 1 << 7,
 	FT_OPT_ALIGN		= 1 << 8,
 	FT_OPT_BW		= 1 << 9,
+	FT_OPT_CQ_SHARED	= 1 << 10,
 };
 
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no
@@ -130,6 +131,8 @@ struct ft_opts {
 	int window_size;
 	int av_size;
 	int verbose;
+	int tx_cq_size;
+	int rx_cq_size;
 	char *src_port;
 	char *dst_port;
 	char *src_addr;
@@ -223,6 +226,8 @@ extern char default_port[8];
 		.transfer_size = 1024, \
 		.window_size = 64, \
 		.av_size = 1, \
+		.tx_cq_size = 0, \
+		.rx_cq_size = 0, \
 		.verbose = 0, \
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
