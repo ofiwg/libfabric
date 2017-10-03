@@ -1135,31 +1135,28 @@ static int fi_ibv_set_default_info(struct fi_info *info)
 	return 0;
 }
 
-static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
-		const struct fi_info *hints, struct fi_info **info,
-		const struct fi_info *verbs_info)
+static int fi_ibv_get_matching_info(uint32_t version,
+				    const struct fi_info *hints,
+				    struct fi_info **info,
+				    const struct fi_info *verbs_info)
 {
-	const struct fi_info *check_info;
+	const struct fi_info *check_info = verbs_info;
 	struct fi_info *fi, *tail;
 	int ret;
 
 	*info = tail = NULL;
 
-	for (check_info = verbs_info; check_info; check_info = check_info->next) {
-		/* Use strncmp since verbs RDM domain name would have "-rdm" suffix */
-		if (dev_name && strncmp(dev_name, check_info->domain_attr->name,
-					strlen(dev_name)))
-			continue;
-
+	for ( ; check_info; check_info = check_info->next) {
 		if (hints) {
-			ret = fi_ibv_check_hints(version, hints, check_info);
+			ret = fi_ibv_check_hints(version, hints,
+						 check_info);
 			if (ret)
 				continue;
 		}
 
 		if (!(fi = fi_dupinfo(check_info))) {
 			ret = -FI_ENOMEM;
-			goto err1;
+			goto err;
 		}
 
 		ret = fi_ibv_set_default_info(fi);
@@ -1178,10 +1175,46 @@ static int fi_ibv_get_matching_info(uint32_t version, const char *dev_name,
 	if (!*info)
 		return -FI_ENODATA;
 
-	return 0;
-err1:
+	return FI_SUCCESS;
+err:
 	fi_freeinfo(*info);
 	return ret;
+}
+
+static int fi_ibv_del_info_not_belong_to_dev(const char *dev_name, struct fi_info **info)
+{
+	struct fi_info *check_info = *info;
+	struct fi_info *cur, *prev = NULL;
+
+	*info = NULL;
+
+	while (check_info) {
+		/* Use strncmp since verbs RDM domain name
+		 * would have "-rdm" suffix */
+		if (dev_name && strncmp(dev_name, check_info->domain_attr->name,
+					strlen(dev_name))) {
+			/* This branch removing `check_info` entry from the list */
+			cur = check_info;
+			if (prev)
+				prev->next = check_info->next;
+			check_info = check_info->next;
+
+			cur->next = NULL;
+			fi_freeinfo(cur);
+		} else {
+			prev = check_info;
+			if (!*info)
+				/* if find the first matched `fi_info` entry,
+				 * then save this to original list */
+				*info = check_info;
+			check_info = check_info->next;
+		}
+	}
+
+	if (!*info)
+		return -FI_ENODATA;
+
+	return FI_SUCCESS;
 }
 
 static int fi_ibv_resolve_ib_ud_dest_addr(const char *node, const char *service,
@@ -1280,61 +1313,64 @@ fn2:
 	return ret;
 }
 
-static int fi_ibv_get_match_infos_on_device_name(uint32_t version, const char *node,
-						 const char *service, uint64_t flags,
-						 const struct fi_info *hints,
-						 const struct fi_info **raw_info,
-						 struct fi_info **info)
+static int fi_ibv_handle_sock_addr(const char *node, const char *service,
+				   uint64_t flags, const struct fi_info *hints,
+				   struct fi_info **info)
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
-	int ret, sock_addr_handled = 0, ib_ud_addr_handled = 0;
 	const char *dev_name = NULL;
+	int ret;
 
-	/* This is case when only IB UD addresses are passed */
-	if (hints && (hints->addr_format == FI_ADDR_IB_UD)) {
-		ret = fi_ibv_get_matching_info(version, dev_name, hints,
-					       info, *raw_info);
+	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
+	if (ret)
+		return ret;
+	if (id->verbs) {
+		dev_name = ibv_get_device_name(id->verbs->device);
+		ret = fi_ibv_del_info_not_belong_to_dev(dev_name, info);
 		if (ret)
-			goto ib_fn;
+			goto fn;
+	}
+
+	ret = fi_ibv_fill_addr(rai, info, id);
+	if (ret)
+		fi_freeinfo(*info);
+
+fn:
+	fi_ibv_destroy_ep(rai, &id);
+	return ret;
+}
+
+static int fi_ibv_get_match_infos(uint32_t version, const char *node,
+				  const char *service, uint64_t flags,
+				  const struct fi_info *hints,
+				  const struct fi_info **raw_info,
+				  struct fi_info **info)
+{
+	int ret;
+
+	ret = fi_ibv_get_matching_info(version, hints,
+				       info, *raw_info);
+	if (ret)
+		return ret;
+
+	if (hints && (hints->addr_format == FI_ADDR_IB_UD)) {
+		/* This is case when only IB UD addresses are passed */
 		ret = fi_ibv_handle_ib_ud_addr(node, service, flags, info);
 		if (ret)
 			fi_freeinfo(*info);
-ib_fn:
 		return ret;
 	}
 
-	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
-	if (!ret) {
-		if (id->verbs)
-			dev_name = ibv_get_device_name(id->verbs->device);
-	}
-
-	ret = fi_ibv_get_matching_info(version, dev_name, hints,
-				       info, *raw_info);
-	if (ret)
-		goto fn;
-
-	if (id && rai) {
-		ret = fi_ibv_fill_addr(rai, info, id);
-		if (!ret)
-			sock_addr_handled = 1;
-	}
-
-	ret = fi_ibv_handle_ib_ud_addr(node, service, flags, info);
-	if (!ret)
-		ib_ud_addr_handled = 1;
-
-	if (!sock_addr_handled && !ib_ud_addr_handled) {
-		ret = -FI_ENODATA;
+	if (fi_ibv_handle_sock_addr(node, service, flags, hints, info) &&
+	    fi_ibv_handle_ib_ud_addr(node, service, flags, info)) {
+		/* neither the sockaddr nor the ib_ud address wasn't
+		 * handled to satisfy the selection procedure */
 		fi_freeinfo(*info);
-	} else {
-		ret = -FI_SUCCESS;
+		return -FI_ENODATA;
 	}
-fn:
-	if (id && rai)
-		fi_ibv_destroy_ep(rai, &id);
-	return ret;
+
+	return FI_SUCCESS;
 }
 
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
@@ -1344,9 +1380,9 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 	const struct fi_info *cur;
 
-	ret = fi_ibv_get_match_infos_on_device_name(version, node, service,
-						    flags, hints,
-						    &fi_ibv_util_prov.info, info);
+	ret = fi_ibv_get_match_infos(version, node, service,
+				     flags, hints,
+				     &fi_ibv_util_prov.info, info);
 	if (ret)
 		goto out;
 
