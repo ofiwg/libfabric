@@ -47,10 +47,11 @@ static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_fid_cq *cq)
 {
 	struct slist_entry *entry;
 
-	if (slist_empty(&cq->event_queue))
-		return NULL;
-
 	fastlock_acquire(&cq->lock);
+	if (slist_empty(&cq->event_queue)) {
+		fastlock_release(&cq->lock);
+		return NULL;
+	}
 	entry = slist_remove_head(&cq->event_queue);
 	cq->event_count--;
 	fastlock_release(&cq->lock);
