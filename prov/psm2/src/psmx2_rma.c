@@ -560,6 +560,7 @@ int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 
 	if ((req->op & PSMX2_AM_OP_MASK) == PSMX2_AM_REQ_WRITE_LONG) {
 		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, req->write.peer_vl, req->write.vl);
+		PSMX2_TAG32_LONG_WRITE(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->write.context, tag32);
 		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
 		err = psm2_mq_irecv2(trx_ctxt->psm2_mq,
@@ -569,6 +570,7 @@ int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				     (void *)&req->fi_context, &psm2_req);
 	} else {
 		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, req->read.vl, req->read.peer_vl);
+		PSMX2_TAG32_LONG_READ(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->read.context, tag32);
 		err = psm2_mq_isend2(trx_ctxt->psm2_mq,
 				     (psm2_epaddr_t)req->read.peer_addr,
@@ -686,6 +688,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 
 	if (psmx2_env.tagged_rma && len > chunk_size) {
 		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, vlane, ep_priv->vlane);
+		PSMX2_TAG32_LONG_READ(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
 		psm2_mq_irecv2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
@@ -884,6 +887,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	/* Use the long protocol for the last segment */
 	if (long_len) {
 		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, vlane, ep_priv->vlane);
+		PSMX2_TAG32_LONG_READ(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
 		psm2_mq_irecv2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
@@ -1087,6 +1091,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 	if (psmx2_env.tagged_rma && len > chunk_size) {
 		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, ep_priv->vlane, vlane);
+		PSMX2_TAG32_LONG_WRITE(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 		PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_WRITE_LONG);
 		args[0].u32w1 = len;
@@ -1329,6 +1334,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		if (psmx2_env.tagged_rma && iov[i].iov_len > chunk_size &&
 		    len_sent + iov[i].iov_len == total_len) {
 			tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, ep_priv->vlane, vlane);
+			PSMX2_TAG32_LONG_WRITE(tag32);
 			PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 			PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_WRITE_LONG);
 			args[0].u32w1 = iov[i].iov_len;
