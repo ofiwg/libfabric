@@ -190,7 +190,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	uint64_t saved_prov_mode = info->rx_attr->mode;
 	int ret;
 
-	info->rx_attr->mode = (hints->caps & FI_RMA) ?
+	info->rx_attr->mode = hints->domain_attr->cq_data_size ?
 		info->rx_attr->mode :
 		(info->rx_attr->mode & ~FI_RX_CQ_DATA);
 
@@ -1062,7 +1062,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
-	const struct fi_info *raw_info = fi_ibv_util_prov.info;
+	const struct fi_info *raw_info = fi_ibv_util_prov.info, *cur;
 	const char *dev_name = NULL;
 	int ret;
 
@@ -1085,6 +1085,11 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	ofi_alter_info(*info, hints, version);
+
+	if (!(hints->mode & FI_RX_CQ_DATA)) {
+		for (cur = *info; cur; cur = cur->next)
+			cur->domain_attr->cq_data_size = 0;
+	}
 
 err:
 	fi_ibv_destroy_ep(rai, &id);
