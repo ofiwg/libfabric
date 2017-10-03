@@ -315,27 +315,27 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
  */
 static void util_av_hash_remove(struct util_av_hash *hash, int slot, int index)
 {
-	int i;
+	int i, slot_next;
 
 	if (slot < 0 || slot >= hash->slots)
 		return;
 
-	if (slot == index) {
+	if (hash->table[slot].index == index) {
 		if (hash->table[slot].next == UTIL_NO_ENTRY) {
 			hash->table[slot].index = UTIL_NO_ENTRY;
 			return;
-		} else {
-			index = hash->table[slot].next;
-			hash->table[slot] = hash->table[index];
 		}
 	} else {
-		for (i = slot; hash->table[i].next != index; )
+		for (i = slot; hash->table[i].index != index; )
 			i = hash->table[i].next;
-
-		hash->table[i].next = hash->table[index].next;
+		slot = i;
 	}
-	hash->table[index].next = hash->free_list;
-	hash->free_list = index;
+
+	slot_next = hash->table[slot].next;
+	hash->table[slot] = hash->table[slot_next];
+
+	hash->table[slot_next].next = hash->free_list;
+	hash->free_list = slot_next;
 }
 
 int ofi_av_remove_addr(struct util_av *av, int slot, int index)
@@ -369,7 +369,7 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 
 	dlist_foreach(&av->ep_list, av_entry) {
 		ep = container_of(av_entry, struct util_ep, av_entry);
-		if (ep->cmap)
+		if (ep->cmap && ep->cmap->handles_av[index])
 			ofi_cmap_del_handle(ep->cmap->handles_av[index]);
 	}
 
