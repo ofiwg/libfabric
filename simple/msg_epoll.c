@@ -95,7 +95,7 @@ static int send_recv()
 			fprintf(stderr, "Transmit buffer too small.\n");
 			return -FI_ETOOSMALL;
 		}
-		ret = ft_post_tx(ep, remote_fi_addr, message_len, &tx_ctx);
+		ret = ft_post_tx(ep, remote_fi_addr, message_len, NO_CQ_DATA, &tx_ctx);
 		if (ret)
 			return ret;
 

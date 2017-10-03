@@ -177,7 +177,7 @@ int bandwidth(void)
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
-						 &tx_ctx_arr[j]);
+						 NO_CQ_DATA, &tx_ctx_arr[j]);
 			if (ret)
 				return ret;
 

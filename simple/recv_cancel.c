@@ -47,7 +47,7 @@ static int recv_cancel_client(void)
 		return ret;
 
 	ft_tag = CANCEL_TAG;
-	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
+	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA, &tx_ctx);
 	if (ret)
 		return ret;
 
@@ -55,7 +55,7 @@ static int recv_cancel_client(void)
 		fprintf(stdout, "CANCEL msg posted to server\n");
 
 	ft_tag = STANDARD_TAG;
-	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
+	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA, &tx_ctx);
 	if (ret)
 		return ret;
 

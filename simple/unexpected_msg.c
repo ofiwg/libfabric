@@ -55,6 +55,7 @@ static size_t concurrent_msgs = 5;
 static size_t num_iters = 600;
 struct fi_context *tx_ctxs;
 struct fi_context *rx_ctxs;
+static bool send_data = false;
 char *tx_bufs, *rx_bufs;
 
 
@@ -96,6 +97,14 @@ static int wait_recvs()
 		} while (ret == -FI_EAGAIN);
 	}
 
+	if ((ret == 1) && send_data) {
+		if (entry.data != opts.transfer_size) {
+			printf("ERROR incorrect remote CQ data value. Got %lu, expected %d\n",
+					(unsigned long)entry.data, opts.transfer_size);
+			return -FI_EOTHER;
+		}
+	}
+
 	if (ret < 1)
 		printf("ERROR fi_cq_(s)read returned %d %s\n", ret, strerror(ret));
 	return ret;
@@ -113,7 +122,12 @@ static int run_test_loop(void)
 				ft_fill_buf(tx_buf, opts.transfer_size);
 
 			ft_tag = 0x1234;
-			ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctxs[j]);
+			if (send_data)
+				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
+					opts.transfer_size, &tx_ctxs[j]);
+			else
+				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
+					NO_CQ_DATA, &tx_ctxs[j]);
 			if (ret) {
 				printf("ERROR send_msg returned %d\n", ret);
 				return ret;
@@ -204,7 +218,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "m:i:c:vSh" ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "m:i:c:vdSh" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
@@ -225,6 +239,9 @@ int main(int argc, char **argv)
 		case 'm':
 			opts.transfer_size = strtoul(optarg, NULL, 0);
 			break;
+		case 'd':
+			send_data = true;
+			break;
 		case '?':
 		case 'h':
 			ft_usage(argv[0], "Unexpected message functional test");
@@ -236,6 +253,8 @@ int main(int argc, char **argv)
 				"Use fi_cq_sread instead of polling fi_cq_read");
 			FT_PRINT_OPTS_USAGE("-m <size>",
 				"Size of unexpected messages");
+			FT_PRINT_OPTS_USAGE("-d",
+				"Send remote CQ data");
 			return EXIT_FAILURE;
 		}
 	}

@@ -92,7 +92,7 @@ static int send_recv()
 	ft_sync();
 
 	fprintf(stdout, "Posting a send...\n");
-	ret = ft_post_tx(ep, remote_fi_addr, tx_size, &tx_ctx);
+	ret = ft_post_tx(ep, remote_fi_addr, tx_size, NO_CQ_DATA, &tx_ctx);
 	if (ret)
 		return ret;
 
