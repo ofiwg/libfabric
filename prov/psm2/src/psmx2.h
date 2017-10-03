@@ -124,6 +124,12 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
 
+/* When using the long RMA protocol, set a bit in the unused SEQ bits to
+ * indicate whether or not the operation is a read or a write. This prevents tag
+ * collisions. */
+#define PSMX2_TAG32_LONG_WRITE(tag32) PSMX2_TAG32_SET_SEQ(tag32, 0x1)
+#define PSMX2_TAG32_LONG_READ(tag32)  PSMX2_TAG32_SET_SEQ(tag32, 0x2)
+
 /*
  * Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
  * are sign extensions. We can put some extra information into the 16 bits.
