@@ -107,12 +107,16 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
+	hints->caps = FI_MSG | FI_RMA;
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
+
 	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
-			ret = ft_parse_rma_opts(op, optarg, &opts);
+			ret = ft_parse_rma_opts(op, optarg, hints, &opts);
 			if (ret)
 				return ret;
 			break;
@@ -126,14 +130,6 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-
-	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_RMA;
-	if (opts.rma_op == FT_RMA_WRITEDATA) {
-		hints->mode |= FI_RX_CQ_DATA;
-		hints->domain_attr->cq_data_size = 4;
-	}
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
 
