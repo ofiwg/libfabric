@@ -35,6 +35,7 @@
 #include <WinSock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 
