@@ -758,27 +758,31 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	}
 
 	/* select best iface name based on user's input */
-	iface_len = strlen(iface);
-	if (iface_len > IFNAMSIZ) {
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			   "Too long iface name: %s, max: %d\n",
-			   iface, IFNAMSIZ);
-	
+	if (iface) {
+		iface_len = strlen(iface);
+		if (iface_len > IFNAMSIZ) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				   "Too long iface name: %s, max: %d\n",
+				   iface, IFNAMSIZ);
+
+		}
+		for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
+			exact_match = !strcmp(ifa->ifa_name, iface);
 	}
-	for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
-		exact_match = !strcmp(ifa->ifa_name, iface);
 
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
 				!strcmp(ifa->ifa_name, "lo"))
 			continue;
 
-		if(exact_match) {
-			if (strcmp(ifa->ifa_name, iface))
-				continue;
-		} else {
-			if (strncmp(ifa->ifa_name, iface, iface_len))
-				continue;
+		if (iface) {
+			if (exact_match) {
+				if (strcmp(ifa->ifa_name, iface))
+					continue;
+			} else {
+				if (strncmp(ifa->ifa_name, iface, iface_len))
+					continue;
+			}
 		}
 
 		switch (ifa->ifa_addr->sa_family) {
