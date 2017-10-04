@@ -436,8 +436,12 @@ static int fi_ibv_param_define(const char *param_name, const char *param_str,
 		switch (type) {
 		case FI_PARAM_STRING:
 			if (*(char **)param_default != NULL) {
-				strncpy(param_default_str, *(char **)param_default, 256);
-				param_default_sz = strlen((char *)param_default_str);
+				param_default_sz =
+					MIN(strlen(*(char **)param_default),
+					    254);
+				strncpy(param_default_str, *(char **)param_default,
+					param_default_sz);
+				param_default_str[param_default_sz + 1] = '\0';
 			}
 			break;
 		case FI_PARAM_INT:
