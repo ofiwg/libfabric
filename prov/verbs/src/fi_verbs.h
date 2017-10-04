@@ -114,12 +114,12 @@ extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
 
 extern struct fi_ibv_gl_data {
-	size_t	def_tx_size;
-	size_t	def_rx_size;
-	size_t	def_tx_iov_limit;
-	size_t	def_rx_iov_limit;
-	size_t	def_inline_size;
-	size_t	min_rnr_timer;
+	int	def_tx_size;
+	int	def_rx_size;
+	int	def_tx_iov_limit;
+	int	def_rx_iov_limit;
+	int	def_inline_size;
+	int	min_rnr_timer;
 	int	fork_unsafe;
 	int	use_odp;
 	int	cqread_bunch_size;
