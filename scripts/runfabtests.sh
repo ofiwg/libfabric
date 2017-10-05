@@ -112,6 +112,12 @@ simple_tests=(
 	"unexpected_msg -e msg -S -i 10"
 	"unexpected_msg -e rdm -S -i 10"
 	"unexpected_msg -e dgram -S -i 10"
+	"inj_complete -e msg"
+	"inj_complete -e rdm"
+	"inj_complete -e dgram"
+	"inj_complete -e msg -SR"
+	"inj_complete -e rdm -SR"
+	"inj_complete -e dgram -SR"
 )
 
 short_tests=(
