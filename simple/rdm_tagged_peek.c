@@ -63,12 +63,14 @@ static int tag_queue_op(uint64_t tag, int recv, uint64_t flags)
 	struct fi_cq_err_entry cq_err;
 	struct iovec iov;
 	struct fi_context ctx;
+	void *desc;
 
 	if (recv) {
 		iov.iov_base = buf;
 		iov.iov_len = rx_size;
 		msg.msg_iov = &iov;
-		msg.desc = fi_mr_desc(mr);
+		desc = fi_mr_desc(mr);
+		msg.desc = &desc;
 		msg.iov_count = 1;
 		msg.addr = remote_fi_addr;
 	}
