@@ -149,7 +149,7 @@ The *psm* provider checks for the following environment variables:
   a progress thread is created to make progress calls from time to time.
   This option set the interval (microseconds) between progress calls.
 
-  The default setting is 1 if affininty is set, or 1000 if not. See
+  The default setting is 1 if affinity is set, or 1000 if not. See
   *FI_PSM_PROG_AFFINITY*.
 
 *FI_PSM_PROG_AFFINITY*

@@ -22,7 +22,7 @@ RxM provider requires the core provider to support the following features:
 
   * RMA read/write (FI_RMA)
 
-  * FI_OPT_CM_DATA_SIZE of atleast 24 bytes
+  * FI_OPT_CM_DATA_SIZE of at least 24 bytes
 
 # SUPPORTED FEATURES
 

@@ -251,7 +251,7 @@ The following apply to memory registration.
   1.4 or earlier).  The behavior of basic registration is equivalent
   to setting the following mr_mode bits to one: FI_MR_VIRT_ADDR,
   FI_MR_ALLOCATED, and FI_MR_PROV_KEY.  Additionally, providers that
-  support basic registation usually required FI_MR_LOCAL.  FI_MR_BASIC 
+  support basic registration usually required FI_MR_LOCAL.  FI_MR_BASIC 
   must either be set alone, or in conjunction with FI_MR_LOCAL.  Other
   mr_mode bit pairings are invalid.  Unlike other mr_mode bits, if
   FI_MR_BASIC is set on input to fi_getinfo(),  it will not be cleared

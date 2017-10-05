@@ -83,7 +83,7 @@ The sockets provider checks for the following environment variables -
 
 # LARGE SCALE JOBS
  
-For large scale runs one can use these environment variables to set the default parameters e.g. size of the address vector(AV), completion queue (CQ), connection map etc. that satisfies the requriment of the particular benchmark. The recommended parameters for large scale runs are *FI_SOCKETS_MAX_CONN_RETRY*, *FI_SOCKETS_DEF_CONN_MAP_SZ*, *FI_SOCKETS_DEF_AV_SZ*, *FI_SOCKETS_DEF_CQ_SZ*, *FI_SOCKETS_DEF_EQ_SZ*.
+For large scale runs one can use these environment variables to set the default parameters e.g. size of the address vector(AV), completion queue (CQ), connection map etc. that satisfies the requirement of the particular benchmark. The recommended parameters for large scale runs are *FI_SOCKETS_MAX_CONN_RETRY*, *FI_SOCKETS_DEF_CONN_MAP_SZ*, *FI_SOCKETS_DEF_AV_SZ*, *FI_SOCKETS_DEF_CQ_SZ*, *FI_SOCKETS_DEF_EQ_SZ*.
 
 # SEE ALSO
 
