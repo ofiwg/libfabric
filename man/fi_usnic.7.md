@@ -106,7 +106,7 @@ its use is discouraged, and it may not be available in future releases.
 
 ### Compatibility issues
 
-The addition of version 2 of the extension caused an alignmment issue that
+The addition of version 2 of the extension caused an alignment issue that
 could lead to invalid data in the v1 portion of the structure. This means that
 the alignment difference manifests when an application using v1 of the
 extension is compiled with Libfabric v1.1.x or v1.2.x, but then runs with

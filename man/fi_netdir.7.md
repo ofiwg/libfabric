@@ -69,7 +69,7 @@ Direct provider will be added to 1.6 release version of libfabric.
 
 *Memory Regions*
 : Only FI_MR_BASIC mode is supported. Adding regions via s/g list is
-  supported only upto s/g list size of 1. No support for binding memory
+  supported only up to a s/g list size of 1. No support for binding memory
   regions to a counter.
 
 *Wait objects*
@@ -96,7 +96,7 @@ The Network Direct provider checks for the following environment variables.
 
 *FI_NETDIR_INLINETHR*
 : The size of the (default: 8 Kbyte):
-  * Transmited data that can be inlined
+  * Transmitted data that can be inlined
   * Preposted data for the unexpected receive queue
 
 *FI_NETDIR_PREPOSTCNT*
