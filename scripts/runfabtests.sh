@@ -48,12 +48,14 @@ declare PROV="sockets"
 declare TEST_TYPE="quick"
 declare SERVER="127.0.0.1"
 declare CLIENT="127.0.0.1"
-declare EXCLUDE
+declare EXCLUDE=""
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 declare -i SKIP_NEG=0
 declare COMPLEX_CFG
 declare TIMEOUT_VAL="90"
+declare STRICT_MODE=0
+declare REGEX=0
 
 declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
 declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
@@ -225,7 +227,7 @@ function print_results {
 			Pass*)
 				[ $VERBOSE -ge 3 ] && emit_stdout=1
 				;;
-			Notrun)
+			Notrun|Excluded)
 				[ $VERBOSE -ge 2 ] && emit_stdout=1
 				;;
 			Fail*)
@@ -272,15 +274,42 @@ function compute_duration {
 	echo $(( $2 - $1))
 }
 
+function read_exclude_file {
+	exclude_file=$1
+
+	if [ ! -f $exclude_file ]; then
+		echo "Given exclusion file does not exist!"
+		exit 1
+	fi
+
+	while read -r pattern || [[ -n "$pattern" ]]; do
+		# Ignore patterns that are comments or just whitespaces
+		ignore_pattern="#.*|^[\t ]*$"
+		if [[ ! "$pattern" =~ $ignore_pattern ]]; then
+			if [ -z "$EXCLUDE" ]; then
+				EXCLUDE="$pattern"
+			else
+				EXCLUDE="${EXCLUDE},$pattern"
+			fi
+		fi
+	done < "$exclude_file"
+}
+
 function is_excluded {
-	for i in $(echo "$EXCLUDE" | tr -s "," " "); do
-		if [[ "$i" = "$1" ]]; then
-			echo 1
-			return
+	test_name=$1
+
+	[[ -z "$EXCLUDE" ]] && return 1
+
+	IFS="," read -ra exclude_array <<< "$EXCLUDE"
+	for pattern in "${exclude_array[@]}"; do
+		if [[ $REGEX -eq 1 && "$test_name" =~ $pattern ]] ||
+		   [[ "$test_name" == "$pattern" ]]; then
+			print_results "$test_exe" "Excluded" "0" "" ""
+			skip_count+=1
+			return 0
 		fi
 	done
-
-	echo 0
+	return 1
 }
 
 function unit_test {
@@ -293,12 +322,7 @@ function unit_test {
 	local end_time
 	local test_time
 
-	local e=$(is_excluded $(echo "fi_${test}" | cut -d " " -f 1))
-	if [ $e -eq 1 ]; then
-		print_results "$test_exe" "Notrun" "0" "" ""
-		skip_count+=1
-		return
-	fi
+	is_excluded "$test" && return
 
 	start_time=$(date '+%s')
 
@@ -319,7 +343,7 @@ function unit_test {
 		# negative test failed
 		ret=1
 	fi
-	if [[ $ret -eq $FI_ENODATA || $ret -eq $FI_ENOSYS ]]; then
+	if [[ $STRICT_MODE -eq 0 && $ret -eq $FI_ENODATA || $ret -eq $FI_ENOSYS ]]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$cmd"
 		skip_count+=1
 	elif [ $ret -ne 0 ]; then
@@ -343,12 +367,7 @@ function cs_test {
 	local end_time
 	local test_time
 
-	local e=$(is_excluded $(echo "fi_${test}" | cut -d " " -f 1))
-	if [ $e -eq 1 ]; then
-		print_results "$test_exe" "Notrun" "0" "" ""
-		skip_count+=1
-		return
-	fi
+	is_excluded "$test" && return
 
 	start_time=$(date '+%s')
 
@@ -370,8 +389,8 @@ function cs_test {
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [[ $ret1 -eq $FI_ENODATA && $ret2 -eq $FI_ENODATA ]] ||
-	   [[ $ret1 -eq $FI_ENOSYS && $ret2 -eq $FI_ENOSYS ]]; then
+	if [[ $STRICT_MODE -eq 0 && $ret1 -eq $FI_ENODATA && $ret2 -eq $FI_ENODATA ]] ||
+	   [[ $STRICT_MODE -eq 0 && $ret1 -eq $FI_ENOSYS && $ret2 -eq $FI_ENOSYS ]]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 		skip_count+=1
 	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
@@ -396,12 +415,7 @@ function complex_test {
 	local end_time
 	local test_time
 
-	local e=$(is_excluded $(echo "fi_${test}" | cut -d " " -f 1))
-	if [ $e -eq 1 ]; then
-		print_results "$test_exe" "Notrun" "0" "" ""
-		skip_count+=1
-		return
-	fi
+	is_excluded "$test" && return
 
 	start_time=$(date '+%s')
 
@@ -517,7 +531,7 @@ function main {
 	print_border
 
 	printf "# %-50s%10d\n" "Total Pass" $pass_count
-	printf "# %-50s%10d\n" "Total Notrun" $skip_count
+	printf "# %-50s%10d\n" "Total Notrun/Excluded" $skip_count
 	printf "# %-50s%10d\n" "Total Fail" $fail_count
 
 	if [[ "$total" > "0" ]]; then
@@ -543,17 +557,25 @@ function usage {
 	errcho -e " -vv\tprint output of failing/notrun"
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short,complex (default quick)"
-	errcho -e " -e\texclude tests: cq_data,dgram_dgram_waitset,..."
+	errcho -e " -e\texclude tests: comma delimited list of test names /
+			 regex patterns (with -R) e.g. \"dgram,rma.*write\""
+	errcho -e " -f\texclude tests file: File containing list of test names /
+			 regex patterns (with -R) to exclude (one per line)"
+	errcho -e " -R\tTreat test exclusions as regex patterns"
+	errcho -e "   \tNote: the test names / patterns for -e and -f options
+			would be matched with the list of test names defined
+			in this script. They don't have fi_ prefix"
 	errcho -e " -N\tskip negative unit tests"
 	errcho -e " -p\tpath to test bins (default PATH)"
 	errcho -e " -c\tclient interface"
 	errcho -e " -s\tserver/host interface"
 	errcho -e " -u\tconfigure option for complex tests"
 	errcho -e " -T\ttimeout value in seconds"
+	errcho -e " -S\tStrict mode: -FI_ENODATA, -FI_ENOSYS errors would be treated as failures instead of skipped/notrun"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:c:s:u:T:N" opt; do
+while getopts ":vt:p:g:e:f:c:s:u:T:NRS" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -563,7 +585,9 @@ case ${opt} in
 	;;
 	g) GOOD_ADDR=${OPTARG}
 	;;
-	e) EXCLUDE=${OPTARG}
+	f) read_exclude_file ${OPTARG}
+	;;
+	e) [[ -z "$EXCLUDE" ]] && EXCLUDE=${OPTARG} || EXCLUDE="${EXCLUDE},${OPTARG}"
 	;;
 	c) C_INTERFACE=${OPTARG}
 	;;
@@ -574,6 +598,10 @@ case ${opt} in
 	T) TIMEOUT_VAL=${OPTARG}
 	;;
 	N) SKIP_NEG+=1
+	;;
+	R) REGEX=1
+	;;
+	S) STRICT_MODE=1
 	;;
 	:|\?) usage
 	;;

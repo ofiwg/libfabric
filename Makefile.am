@@ -2,6 +2,10 @@ configdir = $(datarootdir)/${PACKAGE_NAME}
 AM_CFLAGS = -g -Wall -D_GNU_SOURCE -D 'CONFIG_PATH="${configdir}"' -I$(srcdir)/include
 ACLOCAL_AMFLAGS = -I config
 
+if MACOS
+os_excludes = -f ./test_configs/osx.exclude
+endif
+
 bin_PROGRAMS = \
 	simple/fi_msg \
 	simple/fi_msg_sockets \
@@ -58,6 +62,7 @@ dist_noinst_SCRIPTS = \
 	scripts/parseyaml.py
 
 nobase_dist_config_DATA = \
+	test_configs/osx.exclude \
         test_configs/eq_cq.test \
         test_configs/lat_bw.test \
         test_configs/sockets/all.test \
@@ -67,8 +72,10 @@ nobase_dist_config_DATA = \
         test_configs/udp/lat_bw.test \
         test_configs/udp/quick.test \
         test_configs/udp/simple.test \
+	test_configs/udp/udp.exclude \
         test_configs/verbs/all.test \
         test_configs/verbs/quick.test \
+	test_configs/verbs/verbs.exclude \
 	test_configs/usnic/all.test \
 	test_configs/usnic/quick.test \
 	test_configs/psm/all.test \
@@ -317,5 +324,5 @@ dist-hook: fabtests.spec
 	cp fabtests.spec $(distdir)
 
 test:
-	./scripts/runfabtests.sh -vvv
-	./scripts/runfabtests.sh -vvv udp
+	./scripts/runfabtests.sh -vvv -S $(os_excludes)
+	./scripts/runfabtests.sh -vvv -S $(os_excludes) -R -f ./test_configs/udp/udp.exclude udp
