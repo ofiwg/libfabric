@@ -319,7 +319,7 @@ fi_ibv_rdm_rndv_rts_send_ready(struct fi_ibv_rdm_request *request, void *data)
 		  "fi_senddatato: RNDV conn %p, tag 0x%" PRIx64 ", len %" PRIu64 ", src_addr %p,"
 		  "rkey 0x%x, fi_ctx %p, imm %d, post_send %d\n", conn,
 		  request->minfo.tag, request->len, request->src_addr, mr->rkey,
-		  request->context, (int)wr.imm_data, p->ep->posted_sends);
+		  request->context, (int)wr.imm_data, ofi_atomic_get32(&p->ep->posted_sends));
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep,
 		wr.send_flags);
@@ -1196,9 +1196,10 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 		assert(request->rndv.mr);
 		ibv_dereg_mr(request->rndv.mr);
 		VERBS_DBG(FI_LOG_EP_DATA,
-			"SENDING RNDV ACK: conn %p, sends_outgoing = %d, "
-			"post_send = %d\n", conn, conn->sends_outgoing,
-			p->ep->posted_sends);
+			  "SENDING RNDV ACK: conn %p, sends_outgoing = %d, "
+			  "post_send = %d\n",
+			  conn, ofi_atomic_get32(&conn->sends_outgoing),
+			  ofi_atomic_get32(&p->ep->posted_sends));
 	} else {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
