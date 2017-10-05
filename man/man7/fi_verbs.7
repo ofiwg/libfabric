@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2017\-08\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2017\-10\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -83,7 +83,8 @@ makes the use of fork unsafe.
 .SS Memory Regions
 .PP
 Only FI_MR_BASIC mode is supported.
-Adding regions via s/g list is supported only upto s/g list size of 1.
+Adding regions via s/g list is supported only up to a s/g list size of
+1.
 No support for binding memory regions to a counter.
 .SS Wait objects
 .PP
@@ -187,7 +188,7 @@ The fi_info utility would give the up\-to\-date information on
 environment variables: fi_info \-p verbs \-e
 .SH Troubleshooting / Known issues
 .PP
-When running an app over verbs provider with valgrind, there may be
+When running an app over verbs provider with Valgrind, there may be
 reports of memory leak in functions from dependent libraries (e.g.
 libibverbs, librdmacm).
 These leaks are safe to ignore.
