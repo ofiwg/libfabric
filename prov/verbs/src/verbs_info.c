@@ -203,9 +203,10 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	uint64_t saved_prov_mode = info->rx_attr->mode;
 	int ret;
 
-	info->rx_attr->mode = hints->domain_attr->cq_data_size ?
-		info->rx_attr->mode :
-		(info->rx_attr->mode & ~FI_RX_CQ_DATA);
+	info->rx_attr->mode = (hints->domain_attr &&
+			       hints->domain_attr->cq_data_size) ?
+			info->rx_attr->mode :
+			(info->rx_attr->mode & ~FI_RX_CQ_DATA);
 
 	ret = ofi_check_rx_attr(&fi_ibv_prov, info, attr, hints->mode);
 

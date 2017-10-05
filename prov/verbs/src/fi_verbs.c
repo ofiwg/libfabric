@@ -436,8 +436,12 @@ static int fi_ibv_param_define(const char *param_name, const char *param_str,
 		switch (type) {
 		case FI_PARAM_STRING:
 			if (*(char **)param_default != NULL) {
-				strncpy(param_default_str, *(char **)param_default, 256);
-				param_default_sz = strlen((char *)param_default_str);
+				param_default_sz =
+					MIN(strlen(*(char **)param_default),
+					    254);
+				strncpy(param_default_str, *(char **)param_default,
+					param_default_sz);
+				param_default_str[param_default_sz + 1] = '\0';
 			}
 			break;
 		case FI_PARAM_INT:
@@ -529,13 +533,11 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 	return 0;
 }
 
-
 static int fi_ibv_get_param_int(const char *param_name,
 				const char *param_str,
-				size_t *param_default)
+				int *param_default)
 {
-	int param;
-	size_t ret;
+	int param, ret;
 
 	ret = fi_ibv_param_define(param_name, param_str,
 				  FI_PARAM_INT,
@@ -553,8 +555,7 @@ static int fi_ibv_get_param_bool(const char *param_name,
 				 const char *param_str,
 				 int *param_default)
 {
-	int param;
-	size_t ret;
+	int param, ret;
 
 	ret = fi_ibv_param_define(param_name, param_str,
 				  FI_PARAM_BOOL,
@@ -576,7 +577,7 @@ static int fi_ibv_get_param_str(const char *param_name,
 				char **param_default)
 {
 	char *param;
-	size_t ret;
+	int ret;
 
 	ret = fi_ibv_param_define(param_name, param_str,
 				  FI_PARAM_STRING,
@@ -594,80 +595,114 @@ static int fi_ibv_read_params(void)
 {
 	/* Common parameters */
 	if (fi_ibv_get_param_int("tx_size", "Default maximum tx context size",
-				 &fi_ibv_gl_data.def_tx_size))
+				 &fi_ibv_gl_data.def_tx_size) ||
+	    (fi_ibv_gl_data.def_tx_size < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of tx_size\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_int("rx_size", "Default maximum rx context size",
-				 &fi_ibv_gl_data.def_rx_size))
+				 &fi_ibv_gl_data.def_rx_size) ||
+	    (fi_ibv_gl_data.def_rx_size < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of rx_size\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
-				 &fi_ibv_gl_data.def_tx_iov_limit))
+				 &fi_ibv_gl_data.def_tx_iov_limit) ||
+	    (fi_ibv_gl_data.def_tx_iov_limit < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of tx_iov_limit\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
-				 &fi_ibv_gl_data.def_rx_iov_limit))
+				 &fi_ibv_gl_data.def_rx_iov_limit) ||
+	    (fi_ibv_gl_data.def_rx_iov_limit < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of rx_iov_limit\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_int("inline_size", "Default maximum inline size. "
 				 "Actual inject size returned in fi_info may be "
-				 "greater", &fi_ibv_gl_data.def_inline_size))
+				 "greater", &fi_ibv_gl_data.def_inline_size) ||
+	    (fi_ibv_gl_data.def_inline_size < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of inline_size\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
 				 "attribute (0 - 31)",
-				 &fi_ibv_gl_data.min_rnr_timer))
+				 &fi_ibv_gl_data.min_rnr_timer) ||
+	    ((fi_ibv_gl_data.min_rnr_timer < 0) ||
+	     (fi_ibv_gl_data.min_rnr_timer > 31))) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of min_rnr_timer\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_bool("fork_unsafe", "Enable safety of fork() system call "
 				  "for verbs provider. If you're sure that fork() "
 				  "support isn't needed - No need to use this option, "
 				  "because extra memory will be consumed when enabling "
 				  "fork suppport.",
-				  &fi_ibv_gl_data.fork_unsafe))
+				  &fi_ibv_gl_data.fork_unsafe)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of fork_unsafe\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging experimental feature",
-				  &fi_ibv_gl_data.use_odp))
+				  &fi_ibv_gl_data.use_odp)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of use_odp\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_int("cqread_bunch_size", "The number of entries to "
 				 "be read from the verbs completion queue at a time",
-				 (size_t *)&fi_ibv_gl_data.cqread_bunch_size) ||
+				 &fi_ibv_gl_data.cqread_bunch_size) ||
 	    (fi_ibv_gl_data.cqread_bunch_size <= 0)) {
-		VERBS_INFO(FI_LOG_CORE,
+		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of cqread_bunch_size\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_str("iface", "The prefix or the full name of the "
 				 "network interface associated with the IB device",
-				 &fi_ibv_gl_data.iface))
+				 &fi_ibv_gl_data.iface)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of iface\n");
 		return -FI_EINVAL;
+	}
 
 	/* RDM-specific parameters */
 	if (fi_ibv_get_param_int("rdm_buffer_num", "The number of pre-registered "
 				 "buffers for buffered operations between "
 				 "the endpoints, must be a power of 2",
-				 (size_t *)&fi_ibv_gl_data.rdm.buffer_num) ||
+				 &fi_ibv_gl_data.rdm.buffer_num) ||
 	    (fi_ibv_gl_data.rdm.buffer_num & (fi_ibv_gl_data.rdm.buffer_num - 1))) {
-		VERBS_INFO(FI_LOG_CORE,
+		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of rdm_buffer_num\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_int("rdm_buffer_size", "The maximum size of a "
 				 "buffered operation (bytes)",
-				 (size_t *)&fi_ibv_gl_data.rdm.buffer_size) ||
+				 &fi_ibv_gl_data.rdm.buffer_size) ||
 	    (fi_ibv_gl_data.rdm.buffer_size < sizeof(struct fi_ibv_rdm_rndv_header))) {
-		VERBS_INFO(FI_LOG_CORE,
+		VERBS_WARN(FI_LOG_CORE,
 			   "rdm_buffer_size should be greater than %"PRIu64"\n",
 			   sizeof(struct fi_ibv_rdm_rndv_header));
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_int("rdm_rndv_seg_size", "The segment size for "
 				 "zero copy protocols (bytes)",
-				 (size_t *)&fi_ibv_gl_data.rdm.rndv_seg_size) ||
+				 &fi_ibv_gl_data.rdm.rndv_seg_size) ||
 	    (fi_ibv_gl_data.rdm.rndv_seg_size <= 0)) {
-		VERBS_INFO(FI_LOG_CORE,
+		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of rdm_rndv_seg_size\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_int("rdm_thread_timeout", "The wake up timeout of "
 				 "the helper thread (usec)",
-				 (size_t *)&fi_ibv_gl_data.rdm.thread_timeout) ||
+				 &fi_ibv_gl_data.rdm.thread_timeout) ||
 	    (fi_ibv_gl_data.rdm.thread_timeout < 0)) {
-		VERBS_INFO(FI_LOG_CORE,
+		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of rdm_thread_timeout\n");
 		return -FI_EINVAL;
 	}
@@ -675,8 +710,11 @@ static int fi_ibv_read_params(void)
 				 "will be used for eager messaging. Only IBV_WR_SEND "
 				 "and IBV_WR_RDMA_WRITE_WITH_IMM are supported. "
 				 "The last one is not applicable for iWarp.",
-				 &fi_ibv_gl_data.rdm.eager_send_opcode))
+				 &fi_ibv_gl_data.rdm.eager_send_opcode)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of rdm_eager_send_opcode\n");
 		return -FI_EINVAL;
+	}
 
 	/* DGRAM-specific parameters */
 	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
@@ -685,31 +723,37 @@ static int fi_ibv_read_params(void)
 				  "enables/disables OFI Name Server thread that is used "
 				  "to resolve IP-addresses to provider specific "
 				  "addresses. If MPI is used, the NS is disenabled "
-				  "by default.", &fi_ibv_gl_data.dgram.use_name_server))
+				  "by default.", &fi_ibv_gl_data.dgram.use_name_server)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of dgram_use_name_server\n");
 		return -FI_EINVAL;
+	}
 	if (fi_ibv_get_param_int("dgram_name_server_port", "The port on which Name Server "
 				 "thread listens incoming connection and requestes.",
-				 (size_t *)&fi_ibv_gl_data.dgram.name_server_port) ||
+				 &fi_ibv_gl_data.dgram.name_server_port) ||
 	    (fi_ibv_gl_data.dgram.name_server_port < 0 ||
 	     fi_ibv_gl_data.dgram.name_server_port > 65535)) {
-		VERBS_INFO(FI_LOG_CORE,
+		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_name_server_port\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_int("dgram_device_port_number", "Port number of device to be "
 				 "only used for generating fi_info. The parameter is "
 				 "ignored if device name wasn't specified.",
-				 (size_t *)&fi_ibv_gl_data.dgram.device.port_number) ||
+				 &fi_ibv_gl_data.dgram.device.port_number) ||
 	    (fi_ibv_gl_data.dgram.device.port_number < 0 ||
-	     fi_ibv_gl_data.dgram.device.port_number > 32)) {
-		VERBS_INFO(FI_LOG_CORE,
+	     fi_ibv_gl_data.dgram.device.port_number > 31)) {
+		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_device_port_number\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_str("dgram_device_name", "The name of device to be "
 				 "only used for generating fi_info.",
-				 &fi_ibv_gl_data.dgram.device.name))
+				 &fi_ibv_gl_data.dgram.device.name)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of dgram_device_name\n");
 		return -FI_EINVAL;
+	}
 
 	return FI_SUCCESS;
 }
