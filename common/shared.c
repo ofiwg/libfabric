@@ -1807,13 +1807,14 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
 	struct iovec msg_iov;
+	void *mr_desc = mr ? fi_mr_desc(mr) : 0;
 
 	msg_iov.iov_base = tx_buf;
 	msg_iov.iov_len = size;
 
 	if (hints->caps & FI_TAGGED) {
 		tagged_msg.msg_iov = &msg_iov;
-		tagged_msg.desc = mr ? fi_mr_desc(mr) : 0;
+		tagged_msg.desc = &mr_desc;
 		tagged_msg.iov_count = 1;
 		tagged_msg.addr = fi_addr;
 		tagged_msg.data = NO_CQ_DATA;
@@ -1828,7 +1829,7 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		}
 	} else {
 		msg.msg_iov = &msg_iov;
-		msg.desc = mr ? fi_mr_desc(mr) : 0;
+		msg.desc = &mr_desc;
 		msg.iov_count = 1;
 		msg.addr = fi_addr;
 		msg.data = NO_CQ_DATA;
@@ -1851,13 +1852,14 @@ int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
 	struct iovec msg_iov;
+	void *mr_desc = mr ? fi_mr_desc(mr) : 0;
 
 	msg_iov.iov_base = rx_buf;
 	msg_iov.iov_len = size;
 
 	if (hints->caps & FI_TAGGED) {
 		tagged_msg.msg_iov = &msg_iov;
-		tagged_msg.desc = mr ? fi_mr_desc(mr) : 0;
+		tagged_msg.desc = &mr_desc;
 		tagged_msg.iov_count = 1;
 		tagged_msg.addr = fi_addr;
 		tagged_msg.data = NO_CQ_DATA;
@@ -1872,7 +1874,7 @@ int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		}
 	} else {
 		msg.msg_iov = &msg_iov;
-		msg.desc = mr ? fi_mr_desc(mr) : 0;
+		msg.desc = &mr_desc;
 		msg.iov_count = 1;
 		msg.addr = fi_addr;
 		msg.data = NO_CQ_DATA;
