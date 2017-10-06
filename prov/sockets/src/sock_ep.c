@@ -1151,7 +1151,9 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 
 	if (attr) {
 		if (ofi_check_tx_attr(&sock_prov, sock_ep->attr->info.tx_attr,
-				      attr, 0))
+				      attr, 0) ||
+			ofi_check_attr_subset(&sock_prov,
+				sock_ep->attr->info.tx_attr->caps, attr->caps))
 			return -FI_ENODATA;
 		tx_ctx = sock_tx_ctx_alloc(attr, context, 0);
 	} else {
@@ -1194,7 +1196,9 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 		return -FI_EINVAL;
 
 	if (attr) {
-		if (ofi_check_rx_attr(&sock_prov, &sock_ep->attr->info, attr, 0))
+		if (ofi_check_rx_attr(&sock_prov, &sock_ep->attr->info, attr, 0) ||
+			ofi_check_attr_subset(&sock_prov, sock_ep->attr->info.rx_attr->caps,
+				attr->caps))
 			return -FI_ENODATA;
 		rx_ctx = sock_rx_ctx_alloc(attr, context, 0);
 	} else {

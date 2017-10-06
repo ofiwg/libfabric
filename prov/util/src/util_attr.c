@@ -729,6 +729,40 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
+static uint64_t ofi_expand_caps(uint64_t base_caps)
+{
+	uint64_t expanded_caps = base_caps;
+	uint64_t msg_caps = FI_SEND | FI_RECV;
+	uint64_t rma_caps = FI_WRITE | FI_READ | FI_REMOTE_WRITE | FI_REMOTE_READ;
+
+	if (base_caps & (FI_MSG | FI_TAGGED))
+		if (!(base_caps & msg_caps))
+			expanded_caps |= msg_caps;
+
+	if (base_caps & (FI_RMA | FI_ATOMIC))
+		if (!(base_caps & rma_caps))
+			expanded_caps |= rma_caps;
+
+	return expanded_caps;
+}
+
+int ofi_check_attr_subset(const struct fi_provider *prov,
+		uint64_t base_caps, uint64_t requested_caps)
+{
+	uint64_t expanded_base_caps;
+
+	expanded_base_caps = ofi_expand_caps(base_caps);
+
+	if (~expanded_base_caps & requested_caps) {
+		FI_INFO(prov, FI_LOG_CORE, "requested caps not subset of base endpoint caps\n");
+		FI_INFO_FIELD(prov, expanded_base_caps, requested_caps, "Supported",
+				"Requested", FI_TYPE_CAPS);
+		return -FI_ENODATA;
+	}
+
+	return 0;
+}
+
 int ofi_check_tx_attr(const struct fi_provider *prov,
 		      const struct fi_tx_attr *prov_attr,
 		      const struct fi_tx_attr *user_attr, uint64_t info_mode)
