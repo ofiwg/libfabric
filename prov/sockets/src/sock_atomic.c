@@ -271,8 +271,7 @@ static ssize_t sock_ep_atomic_writemsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 #endif
-	return sock_ep_tx_atomic(ep, msg, NULL, NULL, 0,
-				 NULL, NULL, 0, flags);
+	return sock_ep_tx_atomic(ep, msg, NULL, NULL, 0, NULL, NULL, 0, flags);
 }
 
 static ssize_t sock_ep_atomic_writev(struct fid_ep *ep,
@@ -307,28 +306,13 @@ static ssize_t sock_ep_atomic_write(struct fid_ep *ep, const void *buf,
 				    enum fi_datatype datatype, enum fi_op op,
 				    void *context)
 {
-	struct fi_ioc msg_iov = {
-		.addr = (void *)buf,
+	const struct fi_ioc iov = {
+		.addr = (void *) buf,
 		.count = count,
-	};
-	struct fi_rma_ioc rma_iov = {
-		.addr = addr,
-		.key = key,
-		.count = count,
-	};
-	struct fi_msg_atomic msg = {
-		.msg_iov = &msg_iov,
-		.desc = &desc,
-		.iov_count = 1,
-		.addr = dest_addr,
-		.rma_iov = &rma_iov,
-		.rma_iov_count = 1,
-		.datatype = datatype,
-		.op = op,
-		.data = 0,
 	};
 
-	return sock_ep_atomic_writemsg(ep, &msg, SOCK_USE_OP_FLAGS);
+	return sock_ep_atomic_writev(ep, &iov, &desc, 1, dest_addr, addr, key,
+				     datatype, op, context);
 }
 
 static ssize_t sock_ep_atomic_inject(struct fid_ep *ep, const void *buf,
@@ -342,8 +326,8 @@ static ssize_t sock_ep_atomic_inject(struct fid_ep *ep, const void *buf,
 	};
 	struct fi_rma_ioc rma_iov = {
 		.addr = addr,
-		.key = key,
 		.count = count,
+		.key = key,
 	};
 	struct fi_msg_atomic msg = {
 		.msg_iov = &msg_iov,
@@ -354,6 +338,7 @@ static ssize_t sock_ep_atomic_inject(struct fid_ep *ep, const void *buf,
 		.rma_iov_count = 1,
 		.datatype = datatype,
 		.op = op,
+		.context = NULL,
 		.data = 0,
 	};
 
@@ -411,6 +396,7 @@ static ssize_t sock_ep_atomic_readwritev(struct fid_ep *ep,
 		.datatype = datatype,
 		.op = op,
 		.context = context,
+		.data = 0
 	};
 
 	return sock_ep_atomic_readwritemsg(ep, &msg,
@@ -425,37 +411,22 @@ static ssize_t sock_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 					uint64_t key, enum fi_datatype datatype,
 					enum fi_op op, void *context)
 {
-	struct fi_ioc msg_iov = {
-		.addr = (op == FI_ATOMIC_READ) ? NULL : (void *)buf,
-		.count = count,
+	struct fi_ioc iov = {
+		.addr = (op == FI_ATOMIC_READ) ? NULL : (void *) buf,
+		.count = count
 	};
-	struct fi_ioc resultv = {
+	struct fi_ioc res_iov = {
 		.addr = result,
-		.count = count,
-	};
-	struct fi_rma_ioc rma_iov = {
-		.addr = addr,
-		.count = ofi_total_ioc_cnt(&msg_iov, 1),
-		.key = key,
-	};
-	struct fi_msg_atomic msg = {
-		.msg_iov = &msg_iov,
-		.desc = &desc,
-		.iov_count = 1,
-		.addr = dest_addr,
-		.rma_iov = &rma_iov,
-		.rma_iov_count = 1,
-		.datatype = datatype,
-		.op = op,
-		.context = context,
+		.count = count
 	};
 
 	if (!buf && op != FI_ATOMIC_READ)
 		return -FI_EINVAL;
 
-	return sock_ep_atomic_readwritemsg(ep, &msg,
-					   &resultv, &result_desc, 1,
-					   SOCK_USE_OP_FLAGS);
+	return sock_ep_atomic_readwritev(ep, &iov, &desc, 1,
+					 &res_iov, &result_desc, 1,
+					 dest_addr, addr, key,
+					 datatype, op, context);
 }
 
 static ssize_t sock_ep_atomic_compwritemsg(struct fid_ep *ep,
@@ -505,6 +476,7 @@ static ssize_t sock_ep_atomic_compwritev(struct fid_ep *ep,
 		.datatype = datatype,
 		.op = op,
 		.context = context,
+		.data = 0
 	};
 
 	return sock_ep_atomic_compwritemsg(ep, &msg,
@@ -521,8 +493,8 @@ static ssize_t sock_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 					uint64_t key, enum fi_datatype datatype,
 					enum fi_op op, void *context)
 {
-	struct fi_ioc msg_iov = {
-		.addr = (void *)buf,
+	struct fi_ioc iov = {
+		.addr = (void *) buf,
 		.count = count,
 	};
 	struct fi_ioc resultv = {
@@ -530,30 +502,15 @@ static ssize_t sock_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 		.count = count,
 	};
 	struct fi_ioc comparev = {
-		.addr = (void *)compare,
+		.addr = (void *) compare,
 		.count = count,
 	};
-	struct fi_rma_ioc rma_iov = {
-		.addr = addr,
-		.count = ofi_total_ioc_cnt(&msg_iov, 1),
-		.key = key,
-	};
-	struct fi_msg_atomic msg = {
-		.msg_iov = &msg_iov,
-		.desc = &desc,
-		.iov_count = 1,
-		.addr = dest_addr,
-		.rma_iov = &rma_iov,
-		.rma_iov_count = 1,
-		.datatype = datatype,
-		.op = op,
-		.context = context,
-	};
 
-	return sock_ep_atomic_compwritemsg(ep, &msg,
+	return sock_ep_atomic_compwritev(ep, &iov, &desc, 1,
 					   &comparev, &compare_desc, 1,
 					   &resultv, &result_desc, 1,
-					   SOCK_USE_OP_FLAGS);
+					   dest_addr, addr, key,
+					   datatype, op, context);
 }
 
 /* Domain parameter is ignored, okay to pass in NULL */
