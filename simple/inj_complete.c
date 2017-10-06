@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <getopt.h>
 #include <rdma/fi_tagged.h>
 #include "shared.h"
 
@@ -197,9 +198,10 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	ft_skip_mr = 1;
+	hints->mode = FI_CONTEXT;
 	hints->caps = FI_TAGGED;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run_test();
 
