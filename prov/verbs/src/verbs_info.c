@@ -165,8 +165,9 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 	struct util_prov tmp_util_prov = {
 		.prov = &fi_ibv_prov,
 		.info = NULL,
-		.flags = info->domain_attr->max_ep_srx_ctx ?
-			UTIL_RX_SHARED_CTX : 0,
+		.flags = (info->domain_attr->max_ep_srx_ctx &&
+			  info->ep_attr->type == FI_EP_MSG) ?
+			 UTIL_RX_SHARED_CTX : 0,
 	};
 
 	switch (attr->protocol) {
