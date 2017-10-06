@@ -1899,10 +1899,13 @@ int ft_cq_read_verify(struct fid_cq *cq, void *op_context)
 
 		if (ret > 0) {
 			if (op_context != completion.op_context) {
-				fprintf(stderr, "ERROR: send ctx=%p cq_ctx=%p\n",
+				fprintf(stderr, "ERROR: op ctx=%p cq_ctx=%p\n",
 					op_context, completion.op_context);
 				return -FI_EOTHER;
 			}
+			if (!ft_tag_is_valid(cq, &completion,
+					     ft_tag ? ft_tag : rx_cq_cntr))
+				return -FI_EOTHER;
 		} else if ((ret <= 0) && (ret != -FI_EAGAIN)) {
 			FT_PRINTERR("POLL: Error\n", ret);
 			if (ret == -FI_EAVAIL)
