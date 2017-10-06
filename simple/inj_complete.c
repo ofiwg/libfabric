@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <getopt.h>
 #include <rdma/fi_tagged.h>
 #include "shared.h"
 
