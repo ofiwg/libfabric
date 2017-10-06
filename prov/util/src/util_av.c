@@ -481,7 +481,10 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 
 	if (util_attr->flags & FI_SOURCE) {
 		av->hash.slots = av->count;
-		av->hash.total_count = av->count + util_attr->overhead;
+		if (util_attr->overhead)
+			av->hash.total_count = av->count + util_attr->overhead;
+		else
+			av->hash.total_count = av->count * 2;
 		FI_INFO(av->prov, FI_LOG_AV,
 		       "FI_SOURCE requested, hash size %u\n", av->hash.total_count);
 	}
