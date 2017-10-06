@@ -69,6 +69,7 @@ nobase_dist_config_DATA = \
         test_configs/sockets/all.test \
         test_configs/sockets/quick.test \
 	test_configs/sockets/complete.test \
+	test_configs/sockets/verify.test \
         test_configs/udp/all.test \
         test_configs/udp/lat_bw.test \
         test_configs/udp/quick.test \
@@ -80,7 +81,8 @@ nobase_dist_config_DATA = \
 	test_configs/usnic/all.test \
 	test_configs/usnic/quick.test \
 	test_configs/psm/all.test \
-	test_configs/psm2/all.test
+	test_configs/psm2/all.test \
+	test_configs/psm2/verify.test
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \

@@ -425,12 +425,12 @@ function complex_test {
 
 	start_time=$(date '+%s')
 
-	s_cmd="${BIN_PATH}${test_exe} -s $S_INTERFACE -x"
+	s_cmd="${BIN_PATH}${test_exe} -x"
 	FI_LOG_LEVEL=error ${SERVER_CMD} "$s_cmd" &> $s_outp &
 	p1=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE -p \"${PROV}\" -t $config $S_INTERFACE"
+	c_cmd="${BIN_PATH}${test_exe} -p \"${PROV}\" -t $config $S_INTERFACE"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "$c_cmd" &> $c_outp &
 	p2=$!
 
@@ -475,6 +475,9 @@ function main {
 
 	if [[ $1 == "quick" ]]; then
 		local -r tests="unit simple short"
+	elif [[ $1 == "verify" ]]; then
+		local -r tests="complex"
+		complex_cfg=$1
 	else
 		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard,complex/g' | tr ',' ' ')
 		if [[ $1 == "all" ]]; then
