@@ -105,9 +105,6 @@ err:
 
 static void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep)
 {
-	if (ep->id)
-		rdma_destroy_ep(ep->id);
-
 	fi_freeinfo(ep->info);
 	free(ep);
 }
@@ -117,6 +114,8 @@ static int fi_ibv_msg_ep_close(fid_t fid)
 	struct fi_ibv_msg_ep *ep;
 
 	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
+	rdma_destroy_ep(ep->id);
+
 	fi_ibv_cleanup_cq(ep);
 
 	VERBS_INFO(FI_LOG_DOMAIN, "EP %p was closed \n", ep);
@@ -375,6 +374,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	return 0;
 err:
+	if (ep->id)
+		rdma_destroy_ep(ep->id);
 	fi_ibv_free_msg_ep(ep);
 	return ret;
 }
