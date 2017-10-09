@@ -1,5 +1,5 @@
 .\"t
-.TH "fi_domain" "3" "2017\-07\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_domain" "3" "2017\-10\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain \- Open a fabric access domain
@@ -574,6 +574,9 @@ a registered memory region may have been updated.
 with completion counters must be explicitly enabled after being bound to
 any counter.
 .PP
+\f[I]FI_MR_ENDPOINT\f[] : Memory registration occurs at the endpoint
+level, rather than domain.
+.PP
 \f[I]FI_MR_UNSPEC\f[] : Defined for compatibility \-\- library versions
 1.4 and earlier.
 Setting mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are
@@ -747,7 +750,8 @@ This value corresponds to the err_data_size field in struct
 fi_cq_err_entry and struct fi_eq_err_entry.
 .SS Memory Regions Count (mr_cnt)
 .PP
-The optimal number of memory regions supported by the domain.
+The optimal number of memory regions supported by the domain, or
+endpoint if the mr_mode FI_MR_ENDPOINT bit has been set.
 The mr_cnt value may be a fixed value of the maximum number of MRs
 supported by the underlying hardware, or may be a dynamic value, based
 on the default attributes of the domain, such as the supported memory
