@@ -32,10 +32,12 @@
 
 #include "psmx.h"
 #include "prov.h"
+#include <glob.h>
 
 static int psmx_init_count = 0;
 static int psmx_lib_initialized = 0;
 static pthread_mutex_t psmx_lib_mutex; 
+static int psmx_compat_lib = 0;
 
 struct psmx_env psmx_env = {
 	.name_server	= 1,
@@ -101,6 +103,12 @@ static int psmx_init_lib(void)
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
 			"PSM AM compat mode enabled: appliation %d.%d, library %d.%d.\n",
 			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
+	}
+
+	if (major > 1) {
+		psmx_compat_lib = 1;
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"PSM is supported via the psm2-compat library over PSM2.\n");
 	}
 
 	psmx_lib_initialized = 1;
@@ -195,6 +203,32 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	if (psmx_init_lib())
 		return -FI_ENODATA;
+
+	if (psmx_compat_lib) {
+		/*
+		 * native PSM running over TrueScale doesn't have the issue handled
+		 * here. it's only present when PSM is supported via the psm2-compat
+		 * library, where the PSM functions are just wrappers around the PSM2
+		 * counterparts.
+		 *
+		 * psm2_ep_num_devunits() may wait for 15 seconds before return
+		 * when /dev/hfi1_0 is not present. Check the existence of any hfi1
+		 * device interface first to avoid this delay. Note that the devices
+		 * don't necessarily appear consecutively so we need to check all
+		 * possible device names before returning "no device found" error.
+		 * This also means if "/dev/hfi1_0" doesn't exist but other devices
+		 * exist, we are still going to see the delay; but that's a rare case.
+		 */
+		glob_t glob_buf;
+
+		if ((glob("/dev/hfi1_[0-9]", 0, NULL, &glob_buf) != 0) &&
+		    (glob("/dev/hfi1_[0-9][0-9]", GLOB_APPEND, NULL, &glob_buf) != 0)) {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"no hfi1 device is found.\n");
+			return -FI_ENODATA;
+		}
+		globfree(&glob_buf);
+	}
 
 	if (psm_ep_num_devunits(&cnt) || !cnt) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
