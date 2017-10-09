@@ -465,6 +465,9 @@ The following values may be specified.
 : Indicates that the memory regions associated with completion counters
   must be explicitly enabled after being bound to any counter.
 
+*FI_MR_ENDPOINT*
+: Memory registration occurs at the endpoint level, rather than domain.
+
 *FI_MR_UNSPEC*
 : Defined for compatibility -- library versions 1.4 and earlier.  Setting
   mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are requested
@@ -636,14 +639,14 @@ memory registration attributes. This field is ignored unless the fabric is
 opened with API version 1.5 or greater.
 
 ## Max Error Data Size (max_err_data)
-
 : The maximum amount of error data, in bytes, that may be returned as part of
   a completion or event queue error.  This value corresponds to the
   err_data_size field in struct fi_cq_err_entry and struct fi_eq_err_entry.
 
 ## Memory Regions Count (mr_cnt)
 
-The optimal number of memory regions supported by the domain.  The mr_cnt
+The optimal number of memory regions supported by the domain, or endpoint if
+the mr_mode FI_MR_ENDPOINT bit has been set.  The mr_cnt
 value may be a fixed value of the maximum number of MRs supported by the
 underlying hardware, or may be a dynamic value, based on the default
 attributes of the domain, such as the supported memory registration modes.
