@@ -465,6 +465,9 @@ The following values may be specified.
 : Indicates that the memory regions associated with completion counters
   must be explicitly enabled after being bound to any counter.
 
+*FI_MR_ENDPOINT*
+: Memory registration occurs at the endpoint level, rather than domain.
+
 *FI_MR_UNSPEC*
 : Defined for compatibility -- library versions 1.4 and earlier.  Setting
   mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are requested
@@ -642,7 +645,8 @@ opened with API version 1.5 or greater.
 
 ## Memory Regions Count (mr_cnt)
 
-The optimal number of memory regions supported by the domain.  The mr_cnt
+The optimal number of memory regions supported by the domain, or endpoint if
+the mr_mode FI_MR_ENDPOINT bit has been set.  The mr_cnt
 value may be a fixed value of the maximum number of MRs supported by the
 underlying hardware, or may be a dynamic value, based on the default
 attributes of the domain, such as the supported memory registration modes.
