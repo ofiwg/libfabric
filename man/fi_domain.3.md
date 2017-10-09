@@ -636,7 +636,6 @@ memory registration attributes. This field is ignored unless the fabric is
 opened with API version 1.5 or greater.
 
 ## Max Error Data Size (max_err_data)
-
 : The maximum amount of error data, in bytes, that may be returned as part of
   a completion or event queue error.  This value corresponds to the
   err_data_size field in struct fi_cq_err_entry and struct fi_eq_err_entry.
