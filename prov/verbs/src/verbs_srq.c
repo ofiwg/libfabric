@@ -180,6 +180,10 @@ int fi_ibv_srq_close(fid_t fid)
 	int ret;
 
 	srq_ep = container_of(fid, struct fi_ibv_srq_ep, ep_fid.fid);
+	ret = ibv_destroy_srq(srq_ep->srq);
+	if (ret)
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Cannot destroy SRQ rc=%d\n", ret);
 
 	/* All WCs from Receive CQ belongs to SRQ, no need to check EP. */
 	/* Assumes that all EP that associated with the SRQ have
@@ -189,11 +193,6 @@ int fi_ibv_srq_close(fid_t fid)
 	 * have `IBV_RECV_WR` type only */
 	fi_ibv_empty_wre_list(srq_ep->wre_pool, &srq_ep->wre_list, IBV_RECV_WR);
 	util_buf_pool_destroy(srq_ep->wre_pool);
-
-	ret = ibv_destroy_srq(srq_ep->srq);
-	if (ret)
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Cannot destroy SRQ rc=%d\n", ret);
 
 	free(srq_ep);
 

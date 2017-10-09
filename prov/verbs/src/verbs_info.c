@@ -1339,9 +1339,6 @@ static int fi_ibv_handle_sock_addr(const char *node, const char *service,
 	}
 
 	ret = fi_ibv_fill_addr(rai, info, id);
-	if (ret)
-		fi_freeinfo(*info);
-
 fn:
 	fi_ibv_destroy_ep(rai, &id);
 	return ret;
