@@ -838,7 +838,8 @@ static inline ofi_complex_## type ofi_complex_land_## type	\
 	(ofi_complex_## type a, ofi_complex_## type b)		\
 {								\
 	ofi_complex_## type res;				\
-	res.real = (a.real || a.imag) && (b.real || b.imag);	\
+	res.real = (type)(((a.real != 0) || (a.imag != 0)) &&	\
+		((b.real != 0) || (b.imag != 0)));		\
 	res.imag = 0;						\
 	return res;						\
 }								\
@@ -846,7 +847,8 @@ static inline ofi_complex_## type ofi_complex_lor_## type	\
 	(ofi_complex_## type a, ofi_complex_## type b)		\
 {								\
 	ofi_complex_## type res;				\
-	res.real = (a.real || a.imag) || (b.real || b.imag);	\
+	res.real = (type)(((a.real != 0) || (a.imag != 0)) &&	\
+		((b.real != 0) || (b.imag != 0)));		\
 	res.imag = 0;						\
 	return res;						\
 }								\
@@ -854,8 +856,10 @@ static inline ofi_complex_## type ofi_complex_lxor_## type	\
 	(ofi_complex_## type a, ofi_complex_## type b)		\
 {								\
 	ofi_complex_## type res;				\
-	res.real = ((a.real || a.imag) && !(b.real || b.imag)) || \
-		   (!(a.real || a.imag) && (b.real || b.imag));	\
+	res.real = (type)((((a.real != 0) || (a.imag != 0)) &&	\
+		    !((b.real != 0) || (b.imag != 0))) ||	\
+		   (!((a.real != 0) || (a.imag != 0)) &&	\
+		    ((b.real != 0) || (b.imag != 0))));		\
 	res.imag = 0;						\
 	return res;						\
 }
