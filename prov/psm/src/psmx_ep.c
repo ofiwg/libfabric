@@ -421,7 +421,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (info && info->ep_attr && info->ep_attr->auth_key) {
 		if (info->ep_attr->auth_key_size != sizeof(psm_uuid_t)) {
 			FI_WARN(&psmx_prov, FI_LOG_EP_CTRL,
-				"Invalid auth_key_len %d, should be %d.\n",
+				"Invalid auth_key_len %"PRIu64
+				", should be %"PRIu64".\n",
 				info->ep_attr->auth_key_size,
 				sizeof(psm_uuid_t));
 			return -FI_EINVAL;

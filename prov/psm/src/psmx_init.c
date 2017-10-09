@@ -248,7 +248,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		dest_addr = (psm_epid_t *)ofi_ns_resolve_name(&ns, node, &svc);
 		if (dest_addr) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"'%s:%u' resolved to <epid=0x%llx>:%u\n",
+				"'%s:%u' resolved to <epid=%"PRIu64">:%u\n",
 				node, svc0, *dest_addr, svc);
 		} else {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
@@ -299,14 +299,14 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			if (hints->ep_attr->tx_ctx_cnt > 1 &&
 			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->ep_attr->tx_ctx_cnt=%d, supported=0,1\n",
+					"hints->ep_attr->tx_ctx_cnt=%"PRIu64", supported=0,1\n",
 					hints->ep_attr->tx_ctx_cnt);
 				goto err_out;
 			}
 
 			if (hints->ep_attr->rx_ctx_cnt > 1) {
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->ep_attr->rx_ctx_cnt=%d, supported=0,1\n",
+					"hints->ep_attr->rx_ctx_cnt=%"PRIu64", supported=0,1\n",
 					hints->ep_attr->rx_ctx_cnt);
 				goto err_out;
 			}
@@ -314,26 +314,32 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 		if ((hints->caps & PSMX_CAPS) != hints->caps &&
 		    (hints->caps & PSMX_CAPS2) != hints->caps) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"hints->caps=0x%llx, supported=0x%llx,0x%llx\n",
-				hints->caps, PSMX_CAPS, PSMX_CAPS2);
+			uint64_t psmx_caps = PSMX_CAPS;
+			uint64_t psmx_caps2 = PSMX_CAPS2;
+			FI_INFO(&psmx_prov, FI_LOG_CORE, "hints->caps: %s,\n"
+				"supported = %s and %s.\n",
+				fi_tostr(&hints->caps, FI_TYPE_CAPS),
+				fi_tostr(&psmx_caps, FI_TYPE_CAPS),
+				fi_tostr(&psmx_caps2, FI_TYPE_CAPS));
 			goto err_out;
 		}
 
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->op_flags & PSMX_OP_FLAGS) !=
 			    hints->tx_attr->op_flags) {
-				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->tx->flags=0x%llx, "
-					"supported=0x%llx\n",
-					hints->tx_attr->op_flags,
-					PSMX_OP_FLAGS);
+				uint64_t psmx_op_flags = PSMX_OP_FLAGS;
+				FI_INFO(&psmx_prov, FI_LOG_CORE, "hints->tx->flags=%s,\n"
+					"supported=%s.\n",
+					fi_tostr(&hints->tx_attr->op_flags,
+						 FI_TYPE_OP_FLAGS),
+					fi_tostr(&psmx_op_flags,
+						 FI_TYPE_OP_FLAGS));
 				goto err_out;
 			}
 			if (hints->tx_attr->inject_size > PSMX_INJECT_SIZE) {
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->tx_attr->inject_size=%ld,"
-					"supported=%ld.\n",
+					"hints->tx_attr->inject_size=%"PRIu64","
+					"supported=%d.\n",
 					hints->tx_attr->inject_size,
 					PSMX_INJECT_SIZE);
 				goto err_out;
@@ -343,18 +349,24 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->rx_attr &&
 		    (hints->rx_attr->op_flags & PSMX_OP_FLAGS) !=
 		     hints->rx_attr->op_flags) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"hints->rx->flags=0x%llx, supported=0x%llx\n",
-				hints->rx_attr->op_flags, PSMX_OP_FLAGS);
+			uint64_t psmx_op_flags = PSMX_OP_FLAGS;
+			FI_INFO(&psmx_prov, FI_LOG_CORE, "hints->rx->flags=%s,\n"
+				"supported=%s.\n",
+				fi_tostr(&hints->rx_attr->op_flags,
+					 FI_TYPE_OP_FLAGS),
+				fi_tostr(&psmx_op_flags,
+					 FI_TYPE_OP_FLAGS));
 			goto err_out;
 		}
 
 		if ((hints->caps & FI_TAGGED) ||
 		    ((hints->caps & FI_MSG) && !psmx_env.am_msg)) {
 			if ((hints->mode & FI_CONTEXT) != FI_CONTEXT) {
+				uint64_t psmx_mode = FI_CONTEXT;
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->mode=0x%llx, required=0x%llx\n",
-					hints->mode, FI_CONTEXT);
+					"hints->mode=%s,\n required=%s.\n",
+					fi_tostr(&hints->mode, FI_TYPE_MODE),
+					fi_tostr(&psmx_mode, FI_TYPE_MODE));
 				goto err_out;
 			}
 		} else {
@@ -454,8 +466,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->ep_attr) {
 			if (hints->ep_attr->max_msg_size > PSMX_MAX_MSG_SIZE) {
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->ep_attr->max_msg_size=%ld,"
-					"supported=%ld.\n",
+					"hints->ep_attr->max_msg_size=%"PRIu64","
+					"supported=%llu.\n",
 					hints->ep_attr->max_msg_size,
 					PSMX_MAX_MSG_SIZE);
 				goto err_out;
@@ -466,20 +478,20 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->msg_order & PSMX_MSG_ORDER) !=
 			    hints->tx_attr->msg_order) {
+				uint64_t psmx_msg_order = PSMX_MSG_ORDER;
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->tx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->tx_attr->msg_order,
-					PSMX_MSG_ORDER);
+					"hints->tx_attr->msg_order=%s,\n supported=%s.\n",
+					fi_tostr(&hints->tx_attr->msg_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx_msg_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if ((hints->tx_attr->comp_order & PSMX_COMP_ORDER) !=
 			    hints->tx_attr->comp_order) {
+				uint64_t psmx_comp_order = PSMX_COMP_ORDER;
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->tx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->tx_attr->comp_order,
-					PSMX_COMP_ORDER);
+					"hints->tx_attr->comp_order=%s,\n supported=%s.\n",
+					fi_tostr(&hints->tx_attr->comp_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx_comp_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if (hints->tx_attr->inject_size > PSMX_INJECT_SIZE) {
@@ -509,20 +521,20 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->rx_attr) {
 			if ((hints->rx_attr->msg_order & PSMX_MSG_ORDER) !=
 			    hints->rx_attr->msg_order) {
+				uint64_t psmx_msg_order = PSMX_MSG_ORDER;
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->rx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->rx_attr->msg_order,
-					PSMX_MSG_ORDER);
+					"hints->rx_attr->msg_order=%s,\n supported=%s.\n",
+					fi_tostr(&hints->rx_attr->msg_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx_msg_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if ((hints->rx_attr->comp_order & PSMX_COMP_ORDER) !=
 			    hints->rx_attr->comp_order) {
+				uint64_t psmx_comp_order = PSMX_COMP_ORDER;
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->rx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->rx_attr->comp_order,
-					PSMX_COMP_ORDER);
+					"hints->rx_attr->comp_order=%s,\n supported=%s.\n",
+					fi_tostr(&hints->rx_attr->comp_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx_comp_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if (hints->rx_attr->iov_limit > 1) {
