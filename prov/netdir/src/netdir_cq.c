@@ -199,8 +199,6 @@ int ofi_nd_cq_open(struct fid_domain *pdomain, struct fi_cq_attr *attr,
 	assert(domain->adapter);
 	assert(domain->adapter_file);
 
-	ND2_ADAPTER_INFO *info = &domain->ainfo;
-
 	cq->iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 	if (!cq->iocp || cq->iocp == INVALID_HANDLE_VALUE) {
 		hr = -FI_EINVAL;
@@ -320,13 +318,12 @@ static ssize_t ofi_nd_cq_read(struct fid_cq *pcq, void *buf, size_t count)
 	ULONG dequeue = 0;
 	ssize_t res = 0;
 	OVERLAPPED_ENTRY _ov[256];
-	struct nd_cq_entry *ev = 0;
 
 	if (!cq->count)
 		return -FI_EAGAIN;
 
-	OVERLAPPED_ENTRY *ov = (count <= countof(_ov)) ?
-		_ov : malloc(count * sizeof(*ov));
+	OVERLAPPED_ENTRY *ov = (cnt <= countof(_ov)) ?
+		_ov : malloc(cnt * sizeof(*ov));
 
 	if (!ov) {
 		ND_LOG_WARN(FI_LOG_CQ, "failed to allocate OV\n");
@@ -334,7 +331,7 @@ static ssize_t ofi_nd_cq_read(struct fid_cq *pcq, void *buf, size_t count)
 	}
 
 	assert(cq->iocp && cq->iocp != INVALID_HANDLE_VALUE);
-	if (!GetQueuedCompletionStatusEx(cq->iocp, ov, count, &dequeue, 0, FALSE) ||
+	if (!GetQueuedCompletionStatusEx(cq->iocp, ov, cnt, &dequeue, 0, FALSE) ||
 	    !dequeue) {
 		res = cq->count ? -FI_EAVAIL : -FI_EAGAIN;
 		goto fn_complete;
@@ -422,10 +419,8 @@ static ssize_t ofi_nd_cq_sread(struct fid_cq *pcq, void *buf, size_t count,
 	ssize_t res = 0;
 	OVERLAPPED_ENTRY _ov[256];
 
-	struct nd_cq_entry *ev = 0;
-
-	OVERLAPPED_ENTRY *ov = (count <= countof(_ov)) ?
-		_ov : malloc(count * sizeof(*ov));
+	OVERLAPPED_ENTRY *ov = (cnt <= countof(_ov)) ?
+		_ov : malloc(cnt * sizeof(*ov));
 
 	if (!ov) {
 		ND_LOG_WARN(FI_LOG_CQ, "failed to allocate OV\n");
@@ -436,12 +431,6 @@ static ssize_t ofi_nd_cq_sread(struct fid_cq *pcq, void *buf, size_t count,
 	OFI_ND_TIMEOUT_INIT(timeout);
 
 	do {
-		HRESULT hr;
-		size_t i;
-		struct nd_queue_item *qentry = NULL;
-		nd_send_entry *send_entry = NULL;
-		struct nd_cq_entry *ev = 0;
-
 		do {
 			if (!WaitOnAddress(
 				&cq->count, &zero, sizeof(cq->count),
@@ -459,7 +448,7 @@ static ssize_t ofi_nd_cq_sread(struct fid_cq *pcq, void *buf, size_t count,
 
 
 		assert(cq->iocp && cq->iocp != INVALID_HANDLE_VALUE);
-		if (!GetQueuedCompletionStatusEx(cq->iocp, ov, count, &dequeue, 0, FALSE) ||
+		if (!GetQueuedCompletionStatusEx(cq->iocp, ov, cnt, &dequeue, 0, FALSE) ||
 		    !dequeue) {
 			if (cq->count) {
 				res = -FI_EAVAIL;
@@ -706,7 +695,7 @@ void ofi_nd_unexp_2_read(nd_cq_entry *entry, void *unexpected)
 		rma_entries[i]->rma_location.locations = locations;
 
 		void *tobuf = rma_entries[i]->iov[0].iov_base;
-		size_t tobuf_len = rma_entries[i]->iov[0].iov_len;
+		ULONG tobuf_len = (ULONG)rma_entries[i]->iov[0].iov_len;
 
 		hr = ep->domain->adapter->lpVtbl->CreateMemoryRegion(
 			ep->domain->adapter, &IID_IND2MemoryRegion,
@@ -880,7 +869,7 @@ void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res)
 		},
 		{
 			.Buffer = &ack_entry->notify_buf->location,
-			.BufferLength = (ULONG)sizeof(*ack_entry->notify_buf->location) * entry->rma_location.count,
+			.BufferLength = (ULONG)(sizeof(*ack_entry->notify_buf->location) * entry->rma_location.count),
 			.MemoryRegionToken = ack_entry->notify_buf->token
 		}
 	};
@@ -888,6 +877,7 @@ void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res)
 	nd_sge *sge_entry = ofi_nd_buf_alloc_nd_sge();
 	if (!sge_entry) {
 		ND_LOG_WARN(FI_LOG_EP_DATA, "SGE entry buffer can't be allocated");
+		hr = ND_NO_MEMORY;
 		goto fn_fail;
 	}
 	memset(sge_entry, 0, sizeof(*sge_entry));
@@ -899,6 +889,7 @@ void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res)
 	nd_send_entry *send_entry = ofi_nd_buf_alloc_nd_send_entry();
 	if (!send_entry) {
 		ND_LOG_WARN(FI_LOG_EP_DATA, "Send entry buffer can't be allocated");
+		hr = ND_NO_MEMORY;
 		goto fn_fail;
 	}
 	memset(send_entry, 0, sizeof(*send_entry));

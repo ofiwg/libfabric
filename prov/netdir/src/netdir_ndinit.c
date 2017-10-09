@@ -221,27 +221,27 @@ static inline wchar_t *ofi_nd_get_provider_path(const WSAPROTOCOL_INFOW *proto)
 
 	res = WSCGetProviderPath((GUID*)&proto->ProviderId, prov, &len, &err);
 	if (res)
-		goto fn_profail;
+		goto fn1;
 
 	lenex = ExpandEnvironmentStringsW(prov, NULL, 0);
 	if (!lenex)
-		goto fn_profail;
+		goto fn1;
 
 	provex = (wchar_t*)malloc(lenex * sizeof(*provex));
 	if (!provex)
-		goto fn_profail;
+		goto fn1;
 
 	lenex = ExpandEnvironmentStringsW(prov, provex, lenex);
 	if (!lenex)
-		goto fn_profail;
+		goto fn2;
 
 	free(prov);
 	return provex;
 
-fn_profail:
+fn2:
+	free(provex);
+fn1:
 	free(prov);
-
-fn_fail:
 	return NULL;
 }
 
@@ -373,7 +373,7 @@ static HRESULT ofi_nd_create_adapter()
 		struct factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
 		assert(factory->class_factory);
 
-		HRESULT hr = factory->class_factory->lpVtbl->CreateInstance(factory->class_factory,
+		hr = factory->class_factory->lpVtbl->CreateInstance(factory->class_factory,
 			NULL, &IID_IND2Provider, (void**)&factory->provider);
 		if (FAILED(hr))
 			return hr;
@@ -613,8 +613,6 @@ HRESULT ofi_nd_startup(ofi_nd_adapter_cb_t cb)
 
 HRESULT ofi_nd_shutdown()
 {
-	size_t i;
-
 	if (!ofi_nd_startup_done)
 		return S_OK;
 

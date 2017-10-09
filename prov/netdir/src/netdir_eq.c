@@ -77,8 +77,6 @@ int ofi_nd_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	assert(fabric);
 	assert(fabric->fid.fclass == FI_CLASS_FABRIC);
 
-	HRESULT hr;
-
 	if (attr) {
 		if (attr->wait_obj != FI_WAIT_NONE && attr->wait_obj != FI_WAIT_UNSPEC)
 			return -FI_EBADFLAGS;
@@ -105,14 +103,12 @@ int ofi_nd_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 	eq->iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 	if (!eq->iocp || eq->iocp == INVALID_HANDLE_VALUE) {
-		DWORD err = GetLastError();
 		ofi_nd_eq_close(&eq->fid.fid);
 		return H2F(HRESULT_FROM_WIN32(GetLastError()));
 	}
 
 	eq->err = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 	if (!eq->err || eq->err == INVALID_HANDLE_VALUE) {
-		DWORD err = GetLastError();
 		ofi_nd_eq_close(&eq->fid.fid);
 		return H2F(HRESULT_FROM_WIN32(GetLastError()));
 	}
@@ -143,8 +139,6 @@ static inline ssize_t ofi_nd_eq_ev2buf(struct nd_eq_event *ev,
 				       void *buf, size_t len)
 {
 	assert(ev);
-
-	ssize_t res;
 
 	size_t copylen = 0;
 	char* dst = (char *)buf;
@@ -261,7 +255,6 @@ static ssize_t ofi_nd_eq_readerr(struct fid_eq *peq,
 	DWORD bytes;
 	ULONG_PTR key;
 	OVERLAPPED *ov;
-	ULONG psize;
 
 	struct nd_eq_event *ev = NULL;
 

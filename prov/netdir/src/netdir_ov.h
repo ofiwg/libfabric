@@ -135,7 +135,7 @@ typedef struct nd_cq_entry {
 
 typedef struct nd_sge {
 	ND2_SGE	entries[256];
-	size_t	count;
+	ULONG	count;
 } nd_sge;
 
 struct nd_send_entry {
@@ -171,8 +171,8 @@ static inline void nd_buf_register_fini(void(*fini)(void))
 		do {
 			fin->next = nd_buf_fini_head;
 		} while (InterlockedCompareExchangePointer(
-			 (volatile PVOID*)&nd_buf_fini_head,
-			 fin, (volatile PVOID)fin->next) != fin->next);
+			 (PVOID *)&nd_buf_fini_head,
+			 fin, (PVOID)fin->next) != fin->next);
 	}
 	else {
 		ND_LOG_WARN(FI_LOG_CORE, "failed to allocate finalizer\n");

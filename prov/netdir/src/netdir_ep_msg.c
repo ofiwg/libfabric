@@ -161,12 +161,12 @@ static int ofi_nd_ep_sendmsg_inline(struct nd_ep *ep,
 			ND2_SGE sge_def = {
 				.Buffer = msg->msg_iov[i].iov_base,
 				.BufferLength = (ULONG)msg->msg_iov[i].iov_len,
-				.MemoryRegionToken = (UINT32)(msg->desc[i])
+				.MemoryRegionToken = (UINT32)(uintptr_t)msg->desc[i]
 			};
 			sge_entry->entries[i + 1] = sge_def;
 		}
 
-		sge_entry->count = msg->iov_count + 1;
+		sge_entry->count = (ULONG)msg->iov_count + 1;
 	}
 
 	nd_send_entry *send_entry = ofi_nd_buf_alloc_nd_send_entry();
@@ -308,7 +308,7 @@ static int ofi_nd_ep_sendmsg_large(struct nd_ep *ep,
 		},
 		{
 			.Buffer = entry->notify_buf->location,
-			.BufferLength = (ULONG)sizeof(*entry->notify_buf->location) * msg->iov_count,
+			.BufferLength = (ULONG)(sizeof(*entry->notify_buf->location) * msg->iov_count),
 			.MemoryRegionToken = entry->notify_buf->token
 		}
 	};
