@@ -682,6 +682,8 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 int ofi_check_tx_attr(const struct fi_provider *prov,
 		      const struct fi_tx_attr *prov_attr,
 		      const struct fi_tx_attr *user_attr, uint64_t info_mode);
+int ofi_check_attr_subset(const struct fi_provider *prov,
+			uint64_t base_caps, uint64_t requested_caps);
 int ofi_prov_check_info(const struct util_prov *util_prov,
 			uint32_t api_version,
 			const struct fi_info *user_info);
