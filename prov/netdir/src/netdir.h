@@ -68,7 +68,7 @@ extern "C" {
 
 
 extern struct gl_data {
-	size_t	inline_thr;
+	int	inline_thr;
 	int	prepost_cnt;
 	int	prepost_buf_cnt;
 	int	flow_control_cnt;
@@ -98,7 +98,7 @@ int ofi_nd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context);
 
 int ofi_nd_getinfo(uint32_t version, const char *node, const char *service,
-		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
+		   uint64_t flags, const struct fi_info *hints, struct fi_info **info);
 void ofi_nd_fini(void);
 
 int ofi_nd_mr_reg(struct fid *fid, const void *buf, size_t len,

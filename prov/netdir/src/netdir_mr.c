@@ -177,7 +177,7 @@ int ofi_nd_mr_reg(struct fid *fid, const void *buf, size_t len,
 		if (FAILED(hr))
 			goto fn_fail;
 		mr->fid.key = mr->mr->lpVtbl->GetRemoteToken(mr->mr);
-		mr->fid.mem_desc = (void*)mr->mr->lpVtbl->GetLocalToken(mr->mr);
+		mr->fid.mem_desc = (void *)(uintptr_t)mr->mr->lpVtbl->GetLocalToken(mr->mr);
 	}
 	else {
 		/* async memory registration */
@@ -285,7 +285,7 @@ static void ofi_nd_mr_ov_event(struct nd_event_base* base, DWORD bytes)
 	struct nd_mr *mr = container_of(ov->fid, struct nd_mr, fid.fid);
 	assert(mr->mr);
 	mr->fid.key = mr->mr->lpVtbl->GetRemoteToken(mr->mr);
-	mr->fid.mem_desc = (void*)mr->mr->lpVtbl->GetLocalToken(mr->mr);
+	mr->fid.mem_desc = (void *)(uintptr_t)mr->mr->lpVtbl->GetLocalToken(mr->mr);
 
 	struct fi_eq_entry entry = {.fid = ov->fid, .context = ov->context};
 	ofi_nd_mr_ov_free(base);
@@ -320,8 +320,6 @@ static void ofi_nd_mr_ov_err(struct nd_event_base* base, DWORD bytes,
 			     DWORD error)
 {
 	OFI_UNUSED(bytes);
-
-	HRESULT hr;
 
 	ofi_nd_mr_ov *ov = container_of(base, ofi_nd_mr_ov, base);
 

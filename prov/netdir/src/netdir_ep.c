@@ -222,7 +222,7 @@ int ofi_nd_endpoint(struct fid_domain *pdomain, struct fi_info *info,
 
 		hr = ep->connector->lpVtbl->Bind(ep->connector,
 						 &domain->addr.addr,
-						 ofi_sizeofaddr(&domain->addr.addr));
+						 (ULONG)ofi_sizeofaddr(&domain->addr.addr));
 		if (FAILED(hr))
 			goto fn_fail;
 
@@ -597,7 +597,7 @@ static int ofi_nd_ep_connect(struct fid_ep *pep, const void *addr,
 
 	hr = ep->connector->lpVtbl->Connect(
 		ep->connector, (IUnknown*)ep->qp,
-		(struct sockaddr*)addr, ofi_sizeofaddr((struct sockaddr*)addr),
+		(struct sockaddr*)addr, (ULONG)ofi_sizeofaddr((struct sockaddr*)addr),
 		ep->domain->ainfo.MaxInboundReadLimit,
 		ep->domain->ainfo.MaxOutboundReadLimit,
 		param, (ULONG)paramlen, &wait->base.ov);

@@ -249,8 +249,8 @@ ofi_nd_ep_readmsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 
 		ND2_SGE sge = {
 			.Buffer = (void *)remote_addr[i],
-			.BufferLength = rma_iovecs[i].len,
-			.MemoryRegionToken = (UINT32)msg->desc[to_split_map[i]]
+			.BufferLength = (ULONG)rma_iovecs[i].len,
+			.MemoryRegionToken = (UINT32)(uintptr_t)msg->desc[to_split_map[i]]
 		};
 
 		hr = ep->qp->lpVtbl->Read(ep->qp, entries[i], &sge, 1,
@@ -408,8 +408,8 @@ ofi_nd_ep_writemsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 
 			ND2_SGE sge = {
 				.Buffer = (void *)remote_addr[i],
-				.BufferLength = rma_iovecs[i].len,
-				.MemoryRegionToken = (UINT32)msg->desc[to_split_map[i]]
+				.BufferLength = (ULONG)rma_iovecs[i].len,
+				.MemoryRegionToken = (UINT32)(uintptr_t)msg->desc[to_split_map[i]]
 			};
 
 			hr = ep->qp->lpVtbl->Write(ep->qp, entries[i], &sge, 1,
@@ -450,7 +450,7 @@ ofi_nd_ep_writemsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 
 			ND2_SGE sge = {
 				.Buffer = (void *)(buf + msg->rma_iov[i].len),
-				.BufferLength = msg->rma_iov[i].len,
+				.BufferLength = (ULONG)msg->rma_iov[i].len,
 				.MemoryRegionToken = main_entry->inline_buf->token
 			};
 

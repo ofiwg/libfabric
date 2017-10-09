@@ -92,8 +92,6 @@ int ofi_nd_cntr_open(struct fid_domain *pdomain, struct fi_cntr_attr *attr,
 	assert(pdomain);
 	assert(pdomain->fid.fclass == FI_CLASS_DOMAIN);
 
-	HRESULT hr;
-
 	if (attr) {
 		if (attr->wait_obj != FI_WAIT_NONE &&
 		    attr->wait_obj != FI_WAIT_UNSPEC)

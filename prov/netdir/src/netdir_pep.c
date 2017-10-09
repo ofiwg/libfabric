@@ -454,15 +454,11 @@ static int ofi_nd_pep_reject(struct fid_pep *ppep, fid_t handle,
 {
 	assert(ppep);
 
-	int res = FI_SUCCESS;
-	HRESULT hr;
-
 	if (ppep->fid.fclass != FI_CLASS_PEP)
 		return -FI_EINVAL;
 	if (handle->fclass != FI_CLASS_CONNREQ)
 		return -FI_EINVAL;
 
-	struct nd_pep *pep = container_of(ppep, struct nd_pep, fid);
 	struct nd_connreq *connreq = container_of(handle, struct nd_connreq, handle);
 
 	assert(connreq->connector);

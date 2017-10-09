@@ -114,7 +114,7 @@ struct nd_domain {
 	struct nd_eq			*eq;
 	struct fi_info			*info;
 
-	int				eq_flags;
+	uint64_t			eq_flags;
 
 	IND2Adapter			*adapter;
 	IND2CompletionQueue		*cq;
@@ -240,13 +240,12 @@ struct nd_ep {
 	LONG				connected;
 
 	struct dlist_entry		entry;
-
-	struct nd_queue_queue		send_queue;
 	struct {
 		nd_flow_block_flags	flags;
 		size_t			used_counter;
 		CRITICAL_SECTION	send_lock;
 	} send_op;
+	struct nd_queue_queue		send_queue;
 };
 
 struct nd_srx {
@@ -254,9 +253,9 @@ struct nd_srx {
 	struct fi_rx_attr	attr;
 	IND2SharedReceiveQueue	*srx;
 	struct nd_domain	*domain;
-	struct nd_queue_queue	prepost;
 	struct dlist_entry	received;
 	CRITICAL_SECTION	prepost_lock;
+	struct nd_queue_queue	prepost;
 };
 
 struct nd_mr {

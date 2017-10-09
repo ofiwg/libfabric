@@ -121,8 +121,6 @@ HRESULT ofi_nd_unexp_fini(struct nd_ep *ep)
 	assert(ep);
 	assert(ep->fid.fid.fclass == FI_CLASS_EP);
 
-	int i;
-	HRESULT hr;
 	int total_count = (gl_data.prepost_cnt +
 		gl_data.flow_control_cnt) * gl_data.prepost_buf_cnt;
 
