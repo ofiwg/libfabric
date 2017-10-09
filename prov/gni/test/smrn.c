@@ -42,6 +42,12 @@
 
 #define GNIX_DEFAULT_RQ_CNT 4
 
+#if HAVE_KDREG
+# define KDREG_CHECK false
+#else
+# define KDREG_CHECK true
+#endif
+
 static struct gnix_smrn *smrn;
 static struct gnix_smrn_rq *rqs[GNIX_DEFAULT_RQ_CNT];
 static void **memory_regions;
@@ -89,7 +95,8 @@ static void smrn_teardown(void)
 
 TestSuite(smrn,
 	  .init = smrn_setup,
-	  .fini = smrn_teardown);
+	  .fini = smrn_teardown,
+	  .disabled = KDREG_CHECK);
 
 #define RQ_ENTRIES 21
 #define REGIONS (GNIX_DEFAULT_RQ_CNT * RQ_ENTRIES)
