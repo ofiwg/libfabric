@@ -92,10 +92,8 @@ static ssize_t
 fi_ibv_srq_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_srq_ep *_ep;
-	struct ibv_recv_wr *bad;
 	struct fi_ibv_wre *wre;
 	struct ibv_sge *sge = NULL;
-	ssize_t ret;
 	size_t i;
 
 	_ep = container_of(ep, struct fi_ibv_srq_ep, ep_fid);
@@ -122,24 +120,11 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	wre->wr.rwr.sg_list = sge;
 	wre->wr.rwr.num_sge = msg->iov_count;
 
-	ret = ibv_post_srq_recv(_ep->srq, &wre->wr.rwr, &bad);
-	if (ret) {
-		util_buf_release(_ep->wre_pool, wre);
-		switch (ret) {
-		case ENOMEM:
-			return -FI_EAGAIN;
-		case -1:
-			/* Deal with non-compliant libibverbs drivers
-			 * which set errno instead of directly returning
-			 * the error value */
-			return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
-		default:
-			return -ret;
-		}
-	}
-
 	dlist_insert_tail(&wre->entry, &_ep->wre_list);
-	return ret;
+
+	return FI_IBV_INVOKE_POST(srq_recv, recv, _ep->srq, &wre->wr.rwr,
+				  FI_IBV_RELEASE_WRE(_ep->wre_pool, wre));
+	
 }
 
 static ssize_t
@@ -227,7 +212,7 @@ static struct fi_ops fi_ibv_srq_ep_ops = {
 int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		       struct fid_ep **srq_ep_fid, void *context)
 {
-	struct ibv_srq_init_attr srq_init_attr = {};
+	struct ibv_srq_init_attr srq_init_attr = { 0 };
 	struct fi_ibv_domain *dom;
 	struct fi_ibv_srq_ep *srq_ep;
 	int ret;
@@ -241,7 +226,8 @@ int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		goto err1;
 	}
 
-	dom = container_of(domain, struct fi_ibv_domain, domain_fid);
+	dom = container_of(domain, struct fi_ibv_domain,
+			   util_domain.domain_fid);
 
 	srq_ep->ep_fid.fid.fclass = FI_CLASS_SRX_CTX;
 	srq_ep->ep_fid.fid.context = context;

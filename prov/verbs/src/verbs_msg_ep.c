@@ -287,7 +287,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *fi;
 	int ret;
 
-	dom = container_of(domain, struct fi_ibv_domain, domain_fid);
+	dom = container_of(domain, struct fi_ibv_domain,
+			   util_domain.domain_fid);
 	if (strcmp(dom->verbs->device->name, info->domain_attr->name)) {
 		VERBS_INFO(FI_LOG_DOMAIN, "Invalid info->domain_attr->name\n");
 		return -FI_EINVAL;

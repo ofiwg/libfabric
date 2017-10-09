@@ -525,7 +525,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context)
 {
 	struct fi_ibv_domain *_domain = 
-		container_of(domain, struct fi_ibv_domain, domain_fid);
+		container_of(domain, struct fi_ibv_domain, util_domain.domain_fid);
 	int ret = 0;
 
 	if (!info || !info->ep_attr || !info->domain_attr ||

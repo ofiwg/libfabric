@@ -630,7 +630,7 @@ int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct fi_ibv_av *av;
 	size_t count = 64;
 
-	fid_domain = container_of(domain, struct fi_ibv_domain, domain_fid);
+	fid_domain = container_of(domain, struct fi_ibv_domain, util_domain.domain_fid);
 
 	if (!attr)
 		return -FI_EINVAL;
@@ -658,7 +658,7 @@ int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!av)
 		return -ENOMEM;
 
-	assert(fid_domain->rdm);
+	assert(fid_domain->ep_type == FI_EP_RDM);
 	av->domain = fid_domain;
 	av->type = attr->type;
 	av->count = count;

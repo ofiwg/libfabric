@@ -90,7 +90,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	if (!wce->wc.status)
 		goto err;
 
-	api_version = cq->domain->fab->util_fabric.fabric_fid.api_version;
+	api_version = cq->domain->util_domain.fabric->fabric_fid.api_version;
 
 	slist_entry = slist_remove_head(&cq->wcq);
 	fastlock_release(&cq->lock);
@@ -667,11 +667,13 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!_cq)
 		return -FI_ENOMEM;
 
-	_cq->domain = container_of(domain, struct fi_ibv_domain, domain_fid);
+	_cq->domain = container_of(domain, struct fi_ibv_domain,
+				   util_domain.domain_fid);
 	/*
-	 * RDM functionality is moved to correspond separated functions
+	 * RDM and DGRAM CQ functionalities are moved to correspond
+	 * separated functions
 	 */
-	assert(!_cq->domain->rdm);
+	assert(_cq->domain->ep_type == FI_EP_MSG);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:

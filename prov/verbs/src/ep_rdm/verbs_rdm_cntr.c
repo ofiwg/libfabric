@@ -120,7 +120,7 @@ int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	struct fi_ibv_rdm_cntr *cntr;
 
 	struct fi_ibv_domain *dom =
-		container_of(domain, struct fi_ibv_domain, domain_fid);
+		container_of(domain, struct fi_ibv_domain, util_domain.domain_fid);
 
 	if (attr) {
 		switch (attr->events) {
