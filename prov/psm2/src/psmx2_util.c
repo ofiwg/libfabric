@@ -122,13 +122,15 @@ struct psmx2_ep_name *psmx2_string_to_ep_name(const void *s)
 
 	if (ofi_str_toaddr(s, &fmt, &name, &len)) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"invalid string address: %s.\n", s);
+			"invalid string address: %s.\n",
+			(const char *)s);
 		return NULL;
 	}
 
 	if (fmt != FI_ADDR_PSMX2) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"invalid string address format: %s.\n", s);
+			"invalid string address format: %s.\n",
+			(const char *)s);
 		free(name);
 		return NULL;
 	}

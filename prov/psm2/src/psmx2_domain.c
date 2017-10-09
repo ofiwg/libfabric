@@ -533,10 +533,12 @@ int psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap)
 {
 	if ((domain->caps & ep_cap & ~PSMX2_SUB_CAPS) !=
 	    (ep_cap & ~PSMX2_SUB_CAPS)) {
+		uint64_t mask = ~PSMX2_SUB_CAPS;
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"caps mismatch: domain->caps=%llx, "
-			"ep->caps=%llx, mask=%llx\n",
-			domain->caps, ep_cap, ~PSMX2_SUB_CAPS);
+			"caps mismatch: domain->caps=%s,\n ep->caps=%s,\n mask=%s\n",
+			fi_tostr(&domain->caps, FI_TYPE_CAPS),
+			fi_tostr(&ep_cap, FI_TYPE_CAPS),
+			fi_tostr(&mask, FI_TYPE_CAPS));
 		return -FI_EOPNOTSUPP;
 	}
 
@@ -553,10 +555,12 @@ int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 
 	if ((domain->caps & ep_cap & ~PSMX2_SUB_CAPS) !=
 	    (ep_cap & ~PSMX2_SUB_CAPS)) {
+		uint64_t mask = ~PSMX2_SUB_CAPS;
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"caps mismatch: domain->caps=%llx, "
-			"ep->caps=%llx, mask=%llx\n",
-			domain->caps, ep_cap, ~PSMX2_SUB_CAPS);
+			"caps mismatch: domain->caps=%s,\n ep->caps=%s,\n mask=%s\n",
+			fi_tostr(&domain->caps, FI_TYPE_CAPS),
+			fi_tostr(&ep_cap, FI_TYPE_CAPS),
+			fi_tostr(&mask, FI_TYPE_CAPS));
 		return -FI_EOPNOTSUPP;
 	}
 
