@@ -82,9 +82,9 @@ uint64_t fi_tag_format(uint64_t tag_bits)
 	return FI_TAG_GENERIC >> (ffsll(htonll(tag_bits)) - 1);
 }
 
-int fi_size_bits(uint64_t num)
+uint8_t fi_size_bits(uint64_t num)
 {
-	int size_bits = 0;
+	uint8_t size_bits = 0;
 	while (num >> ++size_bits);
 	return size_bits;
 }

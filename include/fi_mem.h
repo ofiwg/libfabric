@@ -56,9 +56,9 @@
 /* We implement memdup to avoid external library dependency */
 static inline void *mem_dup(const void *src, size_t size)
 {
-	void *dest;
+	void *dest = malloc(size);
 
-	if ((dest = malloc(size)))
+	if (dest)
 		memcpy(dest, src, size);
 	return dest;
 }

@@ -227,7 +227,7 @@ static void *rxm_conn_event_handler(void *arg)
 			break;
 		case FI_CONNREQ:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
-			if (rd != len) {
+			if ((size_t)rd != len) {
 				FI_WARN(&rxm_prov, FI_LOG_FABRIC,
 					"Received size (%zd) not matching "
 					"expected (%zu)\n", rd, len);
@@ -308,7 +308,9 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 
 	free(rxm_ep->msg_info->dest_addr);
 	rxm_ep->msg_info->dest_addrlen = addrlen;
-	if (!(rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen)))
+
+	rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen);
+	if (!rxm_ep->msg_info->dest_addr)
 		return -FI_ENOMEM;
 
 	ret = fi_getinfo(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
