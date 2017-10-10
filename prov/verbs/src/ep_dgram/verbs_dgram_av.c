@@ -372,7 +372,7 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (!attr || domain_fid->fid.fclass != FI_CLASS_DOMAIN)
 		return -FI_EINVAL;
 
-	av = (struct fi_ibv_dgram_av *)calloc(1, sizeof(*av));
+	av = calloc(1, sizeof(*av));
 	if (!av)
 		return -FI_ENOMEM;
 

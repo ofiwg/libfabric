@@ -336,17 +336,19 @@ int fi_ibv_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 {
 	struct fi_ibv_dgram_cq *cq;
 	struct fi_ibv_domain *domain;
-	int ret = FI_SUCCESS;
-	size_t cq_size = 0;
+	int ret;
+	size_t cq_size;
 
-	cq = (struct fi_ibv_dgram_cq *)calloc(1, sizeof(*cq));
+	cq = calloc(1, sizeof(*cq));
 	if (!cq)
 		return -FI_ENOMEM;
 
 	domain = container_of(domain_fid, struct fi_ibv_domain,
 			      util_domain.domain_fid);
-	if (!domain)
-		return -FI_EINVAL;
+	if (!domain || (domain->ep_type != FI_EP_DGRAM)) {
+		ret = -FI_EINVAL;
+		goto err1;
+	}
 
 	assert(domain->ep_type == FI_EP_DGRAM);
 
