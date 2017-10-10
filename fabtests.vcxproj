@@ -1,12 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|x64">
-      <Configuration>Debug</Configuration>
+    <ProjectConfiguration Include="Debug-v140|x64">
+      <Configuration>Debug-v140</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|x64">
-      <Configuration>Release</Configuration>
+    <ProjectConfiguration Include="Debug-v141|x64">
+      <Configuration>Debug-v141</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release-v140|x64">
+      <Configuration>Release-v140</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release-v141|x64">
+      <Configuration>Release-v141</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
@@ -15,17 +23,31 @@
     <Keyword>MakeFileProj</Keyword>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'" Label="Configuration">
     <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'" Label="Configuration">
     <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -34,30 +56,47 @@
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">
     <NMakePreprocessorDefinitions>WIN32;_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
     <ExecutablePath>$(ProjectDir)Include;$(ExecutablePath)</ExecutablePath>
     <NMakeBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) all</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean all</NMakeReBuildCommandLine>
     <NMakeCleanCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean</NMakeCleanCommandLine>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">
+    <NMakePreprocessorDefinitions>WIN32;_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <ExecutablePath>$(ProjectDir)Include;$(ExecutablePath)</ExecutablePath>
+    <NMakeBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) all</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean all</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean</NMakeCleanCommandLine>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'">
     <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
     <ExecutablePath>$(ProjectDir)Include;$(ExecutablePath)</ExecutablePath>
     <NMakeBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) all</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean all</NMakeReBuildCommandLine>
     <NMakeCleanCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean</NMakeCleanCommandLine>
   </PropertyGroup>
-  <ItemGroup>
-    <Text Include="readme.txt" />
-  </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">
+    <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <ExecutablePath>$(ProjectDir)Include;$(ExecutablePath)</ExecutablePath>
+    <NMakeBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) all</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean all</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>nmake /F Makefile.win config=$(Configuration) arch=x$(PlatformArchitecture) clean</NMakeCleanCommandLine>
+  </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="benchmarks\benchmark_shared.c" />
     <ClCompile Include="benchmarks\dgram_pingpong.c" />

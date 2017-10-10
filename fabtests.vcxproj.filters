@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -43,9 +43,6 @@
     <Filter Include="Source Files\benchmarks">
       <UniqueIdentifier>{f1716194-5311-4a40-a1f3-d4e96c93639f}</UniqueIdentifier>
     </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="readme.txt" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="common\jsmn.c">

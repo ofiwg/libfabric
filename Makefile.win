@@ -5,16 +5,25 @@ arch = x64
 !endif
 
 !if "$(config)" == ""
-config = Debug
+config = Debug-v140
 !endif
 
 output_root = .\\
 
-!if "$(config)" == "Debug"
-outdir = $(output_root)$(arch)\debug
+!if "$(config)" == "Debug-v140"
+outdir = $(output_root)$(arch)\debug-v140
 CFLAGS = $(CFLAGS) /Zi /Od /MTd
-!else
-outdir = $(output_root)$(arch)\release
+!endif
+!if "$(config)" == "Debug-v141"
+outdir = $(output_root)$(arch)\debug-v141
+CFLAGS = $(CFLAGS) /Zi /Od /MTd
+!endif
+!if "$(config)" == "Rlease-v140"
+outdir = $(output_root)$(arch)\release-v140
+CFLAGS = $(CFLAGS) /O2 /MT
+!endif
+!if "$(config)" == "Rlease-v141"
+outdir = $(output_root)$(arch)\release-v141
 CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
