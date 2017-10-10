@@ -612,7 +612,8 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				gnix_info->domain_attr->data_progress =
 					hints->domain_attr->data_progress;
 
-			if (ofi_check_mr_mode(version,
+			if (ofi_check_mr_mode(&gnix_prov,
+					version,
 					hints->caps,
 					gnix_info->domain_attr->mr_mode,
 					hints->domain_attr->mr_mode) != FI_SUCCESS) {

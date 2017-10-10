@@ -426,9 +426,13 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
 /* If a provider supports basic registration mode it should set the FI_MR_BASIC
  * mode bit in prov_mode. Support for FI_MR_SCALABLE is indicated by not setting
  * any of OFI_MR_BASIC_MAP bits. */
-int ofi_check_mr_mode(uint32_t api_version, uint64_t user_info_caps,
-		      uint32_t prov_mode, uint32_t user_mode)
+int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
+		      uint64_t user_info_caps, uint32_t prov_mode,
+		      uint32_t user_mode)
 {
+	uint64_t prov_mode_log;
+	int ret;
+
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
 		if (!ofi_rma_target_allowed(user_info_caps) &&
 		    !(prov_mode & FI_MR_LOCAL))
@@ -438,15 +442,19 @@ int ofi_check_mr_mode(uint32_t api_version, uint64_t user_info_caps,
 
 		switch (user_mode) {
 		case FI_MR_UNSPEC:
-			return OFI_CHECK_MR_SCALABLE(prov_mode) ||
+			ret = OFI_CHECK_MR_SCALABLE(prov_mode) ||
 				OFI_CHECK_MR_BASIC(prov_mode) ?
 				0 : -FI_ENODATA;
+			break;
 		case FI_MR_BASIC:
-			return OFI_CHECK_MR_BASIC(prov_mode) ? 0 : -FI_ENODATA;
+			ret = OFI_CHECK_MR_BASIC(prov_mode) ? 0 : -FI_ENODATA;
+			break;
 		case FI_MR_SCALABLE:
-			return OFI_CHECK_MR_SCALABLE(prov_mode) ? 0 : -FI_ENODATA;
+			ret = OFI_CHECK_MR_SCALABLE(prov_mode) ? 0 : -FI_ENODATA;
+			break;
 		default:
-			return -FI_ENODATA;
+			ret = -FI_ENODATA;
+			break;
 		}
 	} else {
 		if (!ofi_rma_target_allowed(user_info_caps)) {
@@ -457,16 +465,28 @@ int ofi_check_mr_mode(uint32_t api_version, uint64_t user_info_caps,
 
 		if (user_mode & FI_MR_BASIC) {
 			if (!OFI_CHECK_MR_BASIC(prov_mode))
-				return -FI_ENODATA;
-			if ((user_mode & prov_mode & ~OFI_MR_BASIC_MAP) ==
-			    (prov_mode & ~OFI_MR_BASIC_MAP))
-				return 0;
-			return -FI_ENODATA;
+				ret = -FI_ENODATA;
+			else if ((user_mode & prov_mode & ~OFI_MR_BASIC_MAP) ==
+				 (prov_mode & ~OFI_MR_BASIC_MAP))
+				ret = 0;
+			else
+				ret = -FI_ENODATA;
 		} else {
-			return (((user_mode | FI_MR_BASIC) & prov_mode) == prov_mode) ?
-				0 : -FI_ENODATA;
+			ret = (((user_mode | FI_MR_BASIC) & prov_mode) ==
+			       prov_mode) ? 0 : -FI_ENODATA;
 		}
 	}
+
+	if (ret) {
+		FI_INFO(prov, FI_LOG_CORE, "Invalid memory registration mode\n");
+		if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+			prov_mode_log = prov_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE);
+		else
+			prov_mode_log = prov_mode;
+		FI_INFO_MR_MODE(prov, prov_mode_log, user_mode);
+	}
+
+	return ret;
 }
 
 int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
@@ -519,12 +539,9 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if (ofi_check_mr_mode(api_version, user_info->caps, prov_attr->mr_mode,
-			       user_attr->mr_mode)) {
-		FI_INFO(prov, FI_LOG_CORE, "Invalid memory registration mode\n");
-		FI_INFO_MR_MODE(prov, prov_attr->mr_mode, user_attr->mr_mode);
+	if (ofi_check_mr_mode(prov, api_version, user_info->caps,
+			      prov_attr->mr_mode, user_attr->mr_mode))
 		return -FI_ENODATA;
-	}
 
 	/* following checks only apply to api 1.5 and beyond */
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
