@@ -186,9 +186,6 @@
     <ClCompile Include="prov\sockets\src\sock_ep_rdm.c">
       <Filter>Source Files\prov\sockets\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_epoll.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\sockets\src\sock_eq.c">
       <Filter>Source Files\prov\sockets\src</Filter>
     </ClCompile>
