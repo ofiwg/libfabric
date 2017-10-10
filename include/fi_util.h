@@ -795,4 +795,31 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 			  void *service);
 
+/*
+ * RDMA Translation Cache
+ */
+struct util_rtc {
+	struct fid_domain	*domain_fid;
+	RbtHandle		rb_tree;
+	struct util_buf_pool	*buf_pool;
+	size_t			total_num_entries_thr;
+	size_t			total_size_thr;
+};
+
+struct util_rtc_attr {
+	size_t	total_num_entries_thr;
+	size_t	total_size_thr;
+};
+
+struct util_rtc_entry {
+	void		*buf;
+	size_t		len;
+	struct fid_mr	*mr;
+	uint64_t	key;
+};
+
+int ofi_util_rtc_init(struct fid_domain *domain_fid, struct util_rtc_attr *attr,
+		      struct util_rtc **rtc);
+int ofi_util_rtc_close(struct util_rtc *rtc);
+
 #endif
