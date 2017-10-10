@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -47,6 +47,39 @@
 
 static struct fid_mr *mr_multi_recv;
 struct fi_context ctx_multi_recv[2];
+static int use_recvmsg;
+
+static int repost_recv(int iteration) {
+	struct fi_msg msg;
+	struct iovec msg_iov;
+	int ret;
+
+	if (use_recvmsg) {
+		msg_iov.iov_base = rx_buf + (rx_size / 2) * iteration;
+		msg_iov.iov_len = rx_size / 2;
+		msg.msg_iov = &msg_iov;
+		msg.desc = fi_mr_desc(mr_multi_recv);
+		msg.iov_count = 1;
+		msg.addr = 0;
+		msg.data = NO_CQ_DATA;
+		msg.context = &ctx_multi_recv[iteration];
+		ret = fi_recvmsg(ep, &msg, FI_MULTI_RECV);
+		if (ret) {
+			FT_PRINTERR("fi_recvmsg", ret);
+			return ret;
+		}
+	} else {
+		ret = fi_recv(ep, rx_buf + (rx_size / 2) * iteration,
+				rx_size / 2, fi_mr_desc(mr_multi_recv),
+				0, &ctx_multi_recv[iteration]);
+		if (ret) {
+			FT_PRINTERR("fi_recv", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
 
 
 int wait_for_recv_completion(int num_completions)
@@ -70,13 +103,9 @@ int wait_for_recv_completion(int num_completions)
 		if (comp.flags & FI_MULTI_RECV) {
 			i = (comp.op_context == &ctx_multi_recv[0]) ? 0 : 1;
 
-			ret = fi_recv(ep, rx_buf + (rx_size / 2) * i,
-					rx_size / 2, fi_mr_desc(mr_multi_recv),
-					0, &ctx_multi_recv[i]);
-			if (ret) {
-				FT_PRINTERR("fi_recv", ret);
+			ret = repost_recv(i);
+			if (ret)
 				return ret;
-			}
 		}
 	}
 	return 0;
@@ -103,13 +132,9 @@ static int post_multi_recv_buffer()
 	int ret, i;
 
 	for (i = 0; i < 2; i++) {
-		ret = fi_recv(ep, rx_buf + (rx_size / 2) * i,
-				rx_size / 2, fi_mr_desc(mr_multi_recv),
-				0, &ctx_multi_recv[i]);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
+		ret = repost_recv(i);
+		if (ret)
 			return ret;
-		}
 	}
 
 	return 0;
@@ -303,20 +328,25 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
+	use_recvmsg = 0;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "Mh" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
+		case 'M':
+			use_recvmsg = 1;
+			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Streaming RDM client-server using multi recv buffer.");
+			FT_PRINT_OPTS_USAGE("-M", "enable testing with fi_recvmsg");
 			return EXIT_FAILURE;
 		}
 	}
