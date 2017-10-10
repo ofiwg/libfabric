@@ -276,7 +276,7 @@ int sock_verify_info(uint32_t version, const struct fi_info *hints)
 			return -FI_ENODATA;
 		}
 	}
-	ret = sock_verify_domain_attr(version, hints->domain_attr);
+	ret = sock_verify_domain_attr(version, hints);
 	if (ret)
 		return ret;
 
