@@ -36,9 +36,9 @@
 typedef ssize_t rxm_rma_msg_fn(struct fid_ep *ep_fid,
 			       const struct fi_msg_rma *msg, uint64_t flags);
 
-static int rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
-			     const struct fi_msg_rma *msg, uint64_t flags,
-			     rxm_rma_msg_fn rma_msg, uint64_t comp_flags)
+static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
+				 const struct fi_msg_rma *msg, uint64_t flags,
+				 rxm_rma_msg_fn rma_msg, uint64_t comp_flags)
 {
 	struct rxm_domain *rxm_domain;
 	struct rxm_tx_entry *tx_entry;
@@ -46,7 +46,8 @@ static int rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	size_t i;
 	int ret;
 
-	if (!(tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue)))
+	tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue);
+	if (!tx_entry)
 		return -FI_EAGAIN;
 
 	memset(tx_entry, 0, sizeof(*tx_entry));
@@ -147,15 +148,15 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
 }
 
-static int rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
-			     const struct fi_msg_rma *msg, uint64_t flags)
+static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
+				 const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_buf *tx_buf;
 	struct fi_msg_rma msg_rma;
 	struct iovec iov;
 	size_t size;
-	int ret;
+	ssize_t ret;
 
 	size = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
@@ -185,7 +186,8 @@ static int rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 		return -FI_EAGAIN;
 	}
 
-	if (!(tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue))) {
+	tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue);
+	if (!tx_entry) {
 		rxm_cq_progress(rxm_ep);
 		ret = -FI_EAGAIN;
 		goto err1;

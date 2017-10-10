@@ -278,18 +278,18 @@ int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_buf hdr = rx_buf->hdr;
 	struct rxm_ep *rxm_ep = rx_buf->ep;
-	int ret;
 
 	memset(rx_buf, 0, sizeof(*rx_buf));
 	rx_buf->hdr = hdr;
 	rx_buf->hdr.state = RXM_RX;
 	rx_buf->ep = rxm_ep;
 
-	ret = fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt, RXM_BUF_SIZE,
-		      rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
-	if (ret)
+	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt, RXM_BUF_SIZE,
+		    rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
-	return ret;
+		return -FI_EAVAIL;
+	}
+	return FI_SUCCESS;
 }
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
@@ -478,10 +478,10 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
 
-static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
-			      void **desc, size_t count, fi_addr_t src_addr,
-			      uint64_t tag, uint64_t ignore, void *context,
-			      uint64_t flags, struct rxm_recv_queue *recv_queue)
+static ssize_t rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
+				  void **desc, size_t count, fi_addr_t src_addr,
+				  uint64_t tag, uint64_t ignore, void *context,
+				  uint64_t flags, struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_rx_buf *rx_buf;
@@ -518,7 +518,7 @@ static int rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
-	recv_entry->count 	= count;
+	recv_entry->count 	= (uint8_t)count;
 	recv_entry->addr 	= src_addr;
 	recv_entry->context 	= context;
 	recv_entry->flags 	= flags;
@@ -663,7 +663,7 @@ static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
 		rma_iov->iov[i].len = (uint64_t)iov->iov_len;
 		rma_iov->iov[i].key = fi_mr_key(mr[i]);
 	}
-	rma_iov->count = count;
+	rma_iov->count = (uint8_t)count;
 	return sizeof(*rma_iov) + sizeof(*rma_iov->iov) * count;
 }
 
@@ -671,7 +671,7 @@ static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
 static ssize_t
 rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		   size_t count, fi_addr_t dest_addr, void *context,
-		   uint64_t data, uint64_t flags, uint64_t tag, int op,
+		   uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
 		   uint64_t comp_flags)
 {
 	struct util_cmap_handle *handle;
@@ -684,7 +684,7 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	size_t pkt_size = 0;
 	ssize_t size;
 	uint8_t progress = 0;
-	int ret;
+	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
@@ -699,11 +699,12 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		return -FI_EAGAIN;
 	}
 
-	if (!(tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue)))
+	tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue);
+	if (!tx_entry)
 		return -FI_EAGAIN;
 
 	tx_entry->ep = rxm_ep;
-	tx_entry->count = count;
+	tx_entry->count = (uint8_t)count;
 	tx_entry->context = context;
 	tx_entry->flags = flags;
 	tx_entry->tx_buf = tx_buf;
@@ -1120,7 +1121,8 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		if (!(rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep)))
+		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
+		if (!rxm_ep->util_ep.cmap)
 			return -FI_ENOMEM;
 		break;
 	case FI_CLASS_CQ:
@@ -1342,7 +1344,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!rxm_ep)
 		return -FI_ENOMEM;
 
-	if (!(rxm_ep->rxm_info = fi_dupinfo(info))) {
+	rxm_ep->rxm_info = fi_dupinfo(info);
+	if (!rxm_ep->rxm_info) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}

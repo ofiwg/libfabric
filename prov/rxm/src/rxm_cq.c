@@ -155,7 +155,7 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 			 uint8_t count, uint64_t offset, size_t match_len,
 			 struct rxm_iov *match_iov)
 {
-	int i;
+	uint8_t i;
 
 	assert(count <= RXM_IOV_LIMIT);
 
@@ -178,7 +178,7 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 	}
 	assert(!match_len);
 	match_iov->count = i + 1;
-	return 0;
+	return FI_SUCCESS;
 }
 
 static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
@@ -212,10 +212,10 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 	return 0;
 }
 
-static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_iov *match_iov = &rx_buf->match_iov[rx_buf->index];
-	int ret;
+	ssize_t ret;
 
 	ret = fi_readv(rx_buf->conn->msg_ep, match_iov->iov, match_iov->desc,
 		       match_iov->count, 0, rx_buf->rma_iov->iov[0].addr,
@@ -246,7 +246,7 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_tx_entry *tx_entry;
-	int index;
+	uint64_t index;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 			rx_buf->pkt.ctrl_hdr.msg_id);
@@ -271,7 +271,7 @@ static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 	}
 }
 
-int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
+ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_iov mr_match_iov;
 	size_t i, rma_total_len = 0;
@@ -339,7 +339,7 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 	}
 }
 
-int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
+ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_recv_match_attr match_attr;
 	struct dlist_entry *entry;
@@ -400,11 +400,11 @@ int rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	return rxm_cq_handle_data(rx_buf);
 }
 
-static int rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_buf *tx_buf;
-	int ret;
+	ssize_t ret;
 
 	assert(rx_buf->conn);
 
@@ -414,7 +414,8 @@ static int rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 		return -FI_EAGAIN;
 	}
 
-	if (!(tx_entry = rxm_tx_entry_get(&rx_buf->ep->send_queue))) {
+	tx_entry = rxm_tx_entry_get(&rx_buf->ep->send_queue);
+	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto err1;
 	}
@@ -466,8 +467,8 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	return 0;
 }
 
-static int rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
-			      struct fi_cq_tagged_entry *comp)
+static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
+				  struct fi_cq_tagged_entry *comp)
 {
 	enum rxm_proto_state state = RXM_GET_PROTO_STATE(comp);
 	struct rxm_rx_buf *rx_buf = comp->op_context;
@@ -579,7 +580,8 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *com
 void rxm_cq_progress(struct rxm_ep *rxm_ep)
 {
 	struct fi_cq_tagged_entry comp;
-	ssize_t ret, comp_read = 0;
+	ssize_t ret;
+	size_t comp_read = 0;
 
 	do {
 		ret = rxm_cq_read(rxm_ep->msg_cq, &comp);
@@ -590,7 +592,7 @@ void rxm_cq_progress(struct rxm_ep *rxm_ep)
 			goto err;
 
 		if (ret) {
-			comp_read += ret;
+			comp_read += (size_t)ret;
 			ret = rxm_cq_handle_comp(rxm_ep, &comp);
 			if (ret)
 				goto err;

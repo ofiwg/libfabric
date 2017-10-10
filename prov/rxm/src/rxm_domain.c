@@ -109,7 +109,8 @@ static int rxm_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
 	rxm_domain = container_of(domain_fid, struct rxm_domain,
 			util_domain.domain_fid.fid);
 
-	if (!(rxm_mr = calloc(1, sizeof(*rxm_mr))))
+	rxm_mr = calloc(1, sizeof(*rxm_mr));
+	if (!rxm_mr)
 		return -FI_ENOMEM;
 
 	/* Additional flags to use RMA read for large message transfers */

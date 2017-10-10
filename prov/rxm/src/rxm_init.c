@@ -165,7 +165,8 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 		for (cur = *info; cur; cur = cur->next) {
 			if (!OFI_CHECK_MR_LOCAL(cur))
 				continue;
-			if (!(dup = fi_dupinfo(cur))) {
+			dup = fi_dupinfo(cur);
+			if (!dup) {
 				fi_freeinfo(*info);
 				return -FI_ENOMEM;
 			}
