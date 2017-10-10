@@ -413,7 +413,7 @@ int fi_ibv_dgram_endpoint_open(struct fid_domain *domain_fid,
 	    domain_fid->fid.fclass != FI_CLASS_DOMAIN)
 		return -FI_EINVAL;
 
-	ep = (struct fi_ibv_dgram_ep *)calloc(1, sizeof(*ep));
+	ep = calloc(1, sizeof(*ep));
 	if (!ep)
 		return -FI_ENOMEM;
 
