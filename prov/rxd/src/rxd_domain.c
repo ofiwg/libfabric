@@ -254,7 +254,9 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	fi_freeinfo(dg_info);
 	return 0;
 err4:
-	ofi_domain_close(&rxd_domain->util_domain);
+	if (ofi_domain_close(&rxd_domain->util_domain))
+		FI_WARN(&rxd_prov, FI_LOG_DOMAIN,
+			"ofi_domain_close failed");
 err3:
 	fi_close(&rxd_domain->dg_domain->fid);
 err2:
