@@ -227,6 +227,11 @@ static inline void *util_buf_get_ex(struct util_buf_pool *pool, void **context)
 	return buf;
 }
 
+static inline int util_buf_is_pool_full(struct util_buf_pool *pool)
+{
+	return (pool->max_cnt && pool->num_allocated >= pool->max_cnt);
+}
+
 static inline void *util_buf_alloc(struct util_buf_pool *pool)
 {
 	if (!util_buf_avail(pool)) {
