@@ -43,7 +43,7 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 
 	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
 	FI_DBG(&udpx_prov, FI_LOG_EP_CTRL, "%s\n", ofi_hex_str(addr, addrlen));
-	ret = bind(ep->sock, addr, addrlen);
+	ret = bind(ep->sock, addr, (socklen_t)addrlen);
 	if (ret) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "bind %d (%s)\n",
 			errno, strerror(errno));
@@ -56,13 +56,10 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 int udpx_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct udpx_ep *ep;
-	socklen_t len;
 	int ret;
 
 	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
-	len = *addrlen;
-	ret = getsockname(ep->sock, addr, &len);
-	*addrlen = len;
+	ret = getsockname(ep->sock, addr, (socklen_t *)addrlen);
 	return ret ? -errno : 0;
 }
 
@@ -76,7 +73,7 @@ static int udpx_mc_close(struct fid *fid)
 	mreq.imr_multiaddr = mc->addr.sin.sin_addr;
 	mreq.imr_interface.s_addr = INADDR_ANY;
 	ret = setsockopt(mc->ep->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-			 &mreq, sizeof(mreq));
+			 (const void *)&mreq, sizeof(mreq));
 	if (ret) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "leave failed %s\n",
 			strerror(errno));
@@ -131,7 +128,7 @@ static int udpx_join_ip(struct udpx_mc *mc, const struct sockaddr_in *sin,
 		mreq.imr_multiaddr = sin->sin_addr;
 		mreq.imr_interface.s_addr = INADDR_ANY;
 		ret = setsockopt(mc->ep->sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-				 &mreq, sizeof(mreq));
+				 (const void *)&mreq, sizeof(mreq));
 		if (ret) {
 			FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "join failed %s\n",
 				strerror(errno));
@@ -277,7 +274,7 @@ void udpx_ep_progress(struct util_ep *util_ep)
 	struct udpx_ep_entry *entry;
 	struct msghdr hdr;
 	struct sockaddr_in6 addr;
-	int ret;
+	ssize_t ret;
 
 	ep = container_of(util_ep, struct udpx_ep, util_ep);
 	hdr.msg_name = &addr;
@@ -375,7 +372,7 @@ static const void *
 udpx_dest_addr(struct udpx_ep *ep, fi_addr_t addr, uint64_t flags)
 {
 	return (flags & FI_MULTICAST) ? (const void *) (uintptr_t) addr :
-					ip_av_get_addr(ep->util_ep.av, addr);
+					ip_av_get_addr(ep->util_ep.av, (int)addr);
 }
 
 static size_t
@@ -397,8 +394,9 @@ static ssize_t udpx_sendto(struct udpx_ep *ep, const void *buf, size_t len,
 		goto out;
 	}
 
-	ret = sendto(ep->sock, buf, len, 0, addr, addrlen);
-	if (ret == len) {
+	ret = ofi_sendto_socket(ep->sock, buf, len, 0,
+				addr, (socklen_t)addrlen);
+	if (ret == (ssize_t)len) {
 		ep->tx_comp(ep, context);
 		ret = 0;
 	} else {
@@ -415,7 +413,7 @@ static ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct udpx_ep *ep;
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
-	return udpx_sendto(ep, buf, len, ip_av_get_addr(ep->util_ep.av, dest_addr),
+	return udpx_sendto(ep, buf, len, ip_av_get_addr(ep->util_ep.av, (int)dest_addr),
 			   ep->util_ep.av->addrlen, context);
 }
 
@@ -438,9 +436,9 @@ static ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
-	hdr.msg_name = (void *) udpx_dest_addr(ep, msg->addr, flags);
-	hdr.msg_namelen = udpx_dest_addrlen(ep, msg->addr, flags);
-	hdr.msg_iov = (struct iovec *) msg->msg_iov;
+	hdr.msg_name = (void *)udpx_dest_addr(ep, msg->addr, flags);
+	hdr.msg_namelen = (int)udpx_dest_addrlen(ep, msg->addr, flags);
+	hdr.msg_iov = (struct iovec *)msg->msg_iov;
 	hdr.msg_iovlen = msg->iov_count;
 	hdr.msg_control = NULL;
 	hdr.msg_controllen = 0;
@@ -498,10 +496,10 @@ static ssize_t udpx_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
-	ret = sendto(ep->sock, buf, len, 0,
-		     ip_av_get_addr(ep->util_ep.av, dest_addr),
-		     ep->util_ep.av->addrlen);
-	return ret == len ? 0 : -errno;
+	ret = ofi_sendto_socket(ep->sock, buf, len, 0,
+				ip_av_get_addr(ep->util_ep.av, (int)dest_addr),
+				(socklen_t)ep->util_ep.av->addrlen);
+	return ret == (ssize_t)len ? 0 : -errno;
 }
 
 static ssize_t udpx_inject_mc(struct fid_ep *ep_fid, const void *buf,
@@ -511,9 +509,10 @@ static ssize_t udpx_inject_mc(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
-	ret = sendto(ep->sock, buf, len, 0, (const void *) (uintptr_t) dest_addr,
-		     ofi_sizeofaddr((const void *) (uintptr_t) dest_addr));
-	return ret == len ? 0 : -errno;
+	ret = ofi_sendto_socket(ep->sock, buf, len, 0,
+				(const void *)(uintptr_t)dest_addr,
+				(socklen_t)ofi_sizeofaddr((const void *)(uintptr_t)dest_addr));
+	return ret == (ssize_t)len ? 0 : -errno;
 }
 
 static struct fi_ops_msg udpx_msg_ops = {
@@ -557,7 +556,7 @@ static int udpx_ep_close(struct fid *fid)
 		if (ep->util_ep.rx_cq->wait) {
 			wait = container_of(ep->util_ep.rx_cq->wait,
 					    struct util_wait_fd, util_wait);
-			fi_epoll_del(wait->epoll_fd, ep->sock);
+			fi_epoll_del(wait->epoll_fd, (int)ep->sock);
 		}
 		fid_list_remove(&ep->util_ep.rx_cq->ep_list,
 				&ep->util_ep.rx_cq->ep_list_lock,
@@ -600,7 +599,7 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq,
 
 			wait = container_of(cq->wait,
 					    struct util_wait_fd, util_wait);
-			ret = fi_epoll_add(wait->epoll_fd, ep->sock,
+			ret = fi_epoll_add(wait->epoll_fd, (int)ep->sock,
 					   &ep->util_ep.ep_fid.fid);
 			if (ret)
 				return ret;
@@ -735,7 +734,7 @@ static int udpx_ep_init(struct udpx_ep *ep, struct fi_info *info)
 			goto err1;
 	}
 
-	ret = fi_fd_nonblock(ep->sock);
+	ret = fi_fd_nonblock((int)ep->sock);
 	if (ret)
 		goto err2;
 

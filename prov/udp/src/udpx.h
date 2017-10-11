@@ -104,7 +104,7 @@ struct udpx_ep {
 	udpx_rx_comp_func	rx_comp;
 	udpx_tx_comp_func	tx_comp;
 	struct udpx_rx_cirq	*rxq;    /* protected by rx_cq lock */
-	int			sock;
+	SOCKET			sock;
 	int			is_bound;
 	ofi_atomic32_t		ref;
 };
