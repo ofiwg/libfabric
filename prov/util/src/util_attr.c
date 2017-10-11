@@ -275,8 +275,13 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
+	FI_DBG(util_prov->prov, FI_LOG_CORE, "--- Begin ofi_get_core_info ---\n");
+
 	ret = fi_getinfo(version, node, service, flags | OFI_CORE_PROV_ONLY,
 			 core_hints, core_info);
+
+	FI_DBG(util_prov->prov, FI_LOG_CORE, "--- End ofi_get_core_info ---\n");
+
 	fi_freeinfo(core_hints);
 	return ret;
 }
