@@ -808,6 +808,11 @@ struct util_rtc {
 	size_t			total_size_thr;
 };
 
+struct util_rtc_reg_entry {
+	struct fid_mr *reg_mr;
+	struct fid_mr **mr_storage;
+};
+
 struct util_rtc_attr {
 	size_t	total_num_entries_thr;
 	size_t	total_size_thr;
@@ -825,7 +830,7 @@ struct util_rtc_entry {
 int ofi_util_rtc_init(struct fid_domain *domain_fid, struct util_rtc_attr *attr,
 		      struct util_rtc **rtc);
 int ofi_rtc_reg_buffer(struct util_rtc *rtc, void *buf, size_t len,
-		       struct fid_mr **mr);
+		       struct util_rtc_reg_entry *reg_entry);
 int ofi_rtc_dereg_buffer(struct util_rtc *rtc, void *buf, size_t len);
 int ofi_util_rtc_close(struct util_rtc *rtc);
 
