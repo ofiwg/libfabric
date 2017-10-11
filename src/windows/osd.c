@@ -274,7 +274,7 @@ int fi_fd_nonblock(int fd)
 }
 
 /* emulate sendmsg/recvmsg calls using temporary buffer */
-ssize_t recvmsg(int sd, struct msghdr *msg, int flags)
+ssize_t recvmsg(SOCKET sd, struct msghdr *msg, int flags)
 {
 	size_t len;
 	ssize_t offset;
@@ -320,7 +320,7 @@ fn_nomem:
 	goto fn_complete;
 }
 
-ssize_t sendmsg(int sd, struct msghdr *msg, int flags)
+ssize_t sendmsg(SOCKET sd, struct msghdr *msg, int flags)
 {
 	size_t len = 0;
 	size_t offset;
