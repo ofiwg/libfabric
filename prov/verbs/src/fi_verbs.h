@@ -174,10 +174,6 @@ extern struct fi_ibv_gl_data {
 	struct {
 		int	use_name_server;
 		int	name_server_port;
-		struct {
-			int	port_number;
-			char	*name;
-		} device;
 	} dgram;
 } fi_ibv_gl_data;
 
