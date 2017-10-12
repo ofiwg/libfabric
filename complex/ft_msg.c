@@ -43,6 +43,9 @@ static int ft_post_recv(void)
 	if (ret)
 		return ret;
 
+	if (fabric_info->caps & FI_DIRECTED_RECV)
+		ft_rx_ctrl.addr = ft_tx_ctrl.addr;
+
 	switch (test_info.class_function) {
 	case FT_FUNC_SENDV:
 		ft_format_iov(ft_rx_ctrl.iov, ft_ctrl.iov_array[ft_rx_ctrl.iov_iter],
@@ -81,6 +84,9 @@ static int ft_post_trecv(void)
 	ret = ft_get_ctx(&ft_rx_ctrl, &ctx);
 	if (ret)
 		return ret;
+
+	if (fabric_info->caps & FI_DIRECTED_RECV)
+		ft_rx_ctrl.addr = ft_tx_ctrl.addr;
 
 	switch (test_info.class_function) {
 	case FT_FUNC_SENDV:
