@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2017\-09\-11" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2017\-10\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
@@ -452,7 +452,7 @@ set of modes will be returned in the info structure(s).
 .PP
 \f[I]FI_CONTEXT\f[] : Specifies that the provider requires that
 applications use struct fi_context as their per operation context
-parameter.
+parameter for operations that generated full completions.
 This structure should be treated as opaque to the application.
 For performance reasons, this structure must be allocated by the user,
 but may be used by the fabric provider to track the operation.
@@ -465,7 +465,11 @@ Doing so is likely to result in stack corruption that will be difficult
 to debug.
 Users should not update or interpret the fields in this structure, or
 reuse it until the original operation has completed.
-The structure is specified in rdma/fabric.h.
+If an operation does not generate a completion (i.e.
+the endpoint was configured with FI_SELECTIVE_COMPLETION and the
+operation was not initiated with the FI_COMPLETION flag) then the
+context parameter is ignored by the fabric provider.The structure is
+specified in rdma/fabric.h.
 .PP
 \f[I]FI_CONTEXT2\f[] : This bit is similar to FI_CONTEXT, but doubles
 the provider\[aq]s requirement on the size of the per context structure.
