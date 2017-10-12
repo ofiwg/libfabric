@@ -263,6 +263,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->rx_attr->total_buffered_recv = 0;
 	hints->caps = FI_TAGGED;
