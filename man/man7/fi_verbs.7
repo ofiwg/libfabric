@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2017\-10\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2017\-10\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -24,6 +24,9 @@ FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
 .SS RDM endpoints
 .PP
 FI_MSG, FI_TAGGED, FI_RMA
+.SS DGRAM endpoints
+.PP
+FI_MSG
 .SS Modes
 .PP
 Verbs provider requires applications to support the following modes:
@@ -38,8 +41,9 @@ FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
 capability.
 .SS Addressing Formats
 .PP
-Supported addressing formats include FI_SOCKADDR, FI_SOCKADDR_IN,
-FI_SOCKADDR_IN6, FI_SOCKADDR_IB
+Supported addressing formats include * MSG and RDM EPs support:
+FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6, FI_SOCKADDR_IB * DGRAM
+supports: FI_ADDR_IB_UD
 .SS Progress
 .PP
 Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make
@@ -98,13 +102,9 @@ detected by the provider.
 .SS Unsupported Features
 .PP
 The following features are not supported in verbs provider:
-.SS Unsupported Endpoint types
-.PP
-FI_EP_DGRAM
 .SS Unsupported Capabilities
 .PP
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_MULTI_RECV,
-FI_RMA_EVENT
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TRIGGER, FI_RMA_EVENT
 .SS Other unsupported features
 .PP
 Scalable endpoints, FABRIC_DIRECT
@@ -137,7 +137,7 @@ to be re\-mapped when the process is forked (MADV_DONTFORK).
 .SH RUNTIME PARAMETERS
 .PP
 The verbs provider checks for the following environment variables.
-.SS Variables specific to MSG endpoints
+.SS Common variables:
 .PP
 \f[I]FI_VERBS_TX_SIZE\f[] : Default maximum tx context size (default:
 384)
@@ -146,20 +146,36 @@ The verbs provider checks for the following environment variables.
 384)
 .PP
 \f[I]FI_VERBS_TX_IOV_LIMIT\f[] : Default maximum tx iov_limit (default:
-4)
+4).
+Note: RDM EP type supports only 1
 .PP
 \f[I]FI_VERBS_RX_IOV_LIMIT\f[] : Default maximum rx iov_limit (default:
-4)
+4).
+Note: RDM EP type supports only 1
 .PP
 \f[I]FI_VERBS_INLINE_SIZE\f[] : Default maximum inline size.
 Actual inject size returned in fi_info may be greater (default: 64)
 .PP
 \f[I]FI_VERBS_MIN_RNR_TIMER\f[] : Set min_rnr_timer QP attribute (0 \-
 31) (default: 12)
-.SS Variables specific to RDM endpoints
 .PP
-\f[I]FI_VERBS_IFACE\f[] : The prefix or the full name of the network
-interface associated with the IB device (default: ib)
+\f[I]FI_VERBS_FORK_UNSAFE\f[] : Enable safety of fork() system call for
+verbs provider.
+If you\[aq]re sure that fork() support isn\[aq]t needed \- No need to
+use this option, because extra memory will be when enabling fork
+suppport (default: 0, i.e.
+Safety support is enabled)
+.PP
+\f[I]FI_VERBS_USE_ODP\f[] : Enable On\-Demand\-Paging (ODP) experimental
+feature.
+The feature is supported only on Mellanox OFED (default: 1)
+.PP
+\f[I]FI_VERBS_CQREAD_BUNCH_SIZE\f[] : The number of entries to be read
+from the verbs completion queue at a time (default: 8).
+.PP
+\f[I]FI_VERBS_CQREAD_BUNCH_SIZE\f[] : The number of entries to be read
+from the verbs completion queue at a time (default: 8).
+.SS Variables specific to RDM endpoints
 .PP
 \f[I]FI_VERBS_RDM_BUFFER_NUM\f[] : The number of pre\-registered buffers
 for buffered operations between the endpoints, must be a power of 2
@@ -171,9 +187,6 @@ operation (bytes) (default: platform specific).
 \f[I]FI_VERBS_RDM_RNDV_SEG_SIZE\f[] : The segment size for zero copy
 protocols (bytes)(default: 1073741824).
 .PP
-\f[I]FI_VERBS_RDM_CQREAD_BUNCH_SIZE\f[] : The number of entries to be
-read from the verbs completion queue at a time (default: 8).
-.PP
 \f[I]FI_VERBS_RDM_THREAD_TIMEOUT\f[] : The wake up timeout of the helper
 thread (usec) (default: 100).
 .PP
@@ -182,6 +195,18 @@ be used for eager messaging.
 Only IBV_WR_SEND and IBV_WR_RDMA_WRITE_WITH_IMM are supported.
 The last one is not applicable for iWarp.
 (default: IBV_WR_SEND)
+.SS Variables specific to DGRAM endpoints
+.PP
+\f[I]FI_VERBS_DGRAM_USE_NAME_SERVER\f[] : The option that
+enables/disables OFI Name Server thread.
+The NS thread is used to resolve IP\-addresses to provider specific
+addresses (default: 1, if "OMPI_COMM_WORLD_RANK" and "PMI_RANK"
+environment variables aren\[aq]t defined)
+.PP
+\f[I]FI_VERBS_NAME_SERVVER_PORT\f[] : The port on which Name Server
+thread listens incoming connections and requests (default: 5678)
+.PP
+\f[I]FI_\f[] :
 .SS Environment variables notes
 .PP
 The fi_info utility would give the up\-to\-date information on
