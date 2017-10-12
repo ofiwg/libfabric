@@ -31,8 +31,8 @@ struct msghdr {
 	int msg_flags; /* flags on received message */
 };
 
-ssize_t sendmsg(int sd, struct msghdr *msg, int flags);
-ssize_t recvmsg(int sd, struct msghdr *msg, int flags);
+ssize_t sendmsg(SOCKET sd, struct msghdr *msg, int flags);
+ssize_t recvmsg(SOCKET sd, struct msghdr *msg, int flags);
 
 #ifdef __cplusplus
 extern }
