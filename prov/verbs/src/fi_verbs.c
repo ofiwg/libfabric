@@ -65,10 +65,6 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.dgram			= {
 		.use_name_server	= 1,
 		.name_server_port	= 5678,
-		.device = {
-			.port_number	= 0, /* 0 - means all available ports */
-			.name		= NULL,
-		},
 	},
 };
 
@@ -722,36 +718,19 @@ static int fi_ibv_read_params(void)
 	if (fi_ibv_get_param_bool("dgram_use_name_server", "The option that "
 				  "enables/disables OFI Name Server thread that is used "
 				  "to resolve IP-addresses to provider specific "
-				  "addresses. If MPI is used, the NS is disenabled "
+				  "addresses. If MPI is used, the NS is disabled "
 				  "by default.", &fi_ibv_gl_data.dgram.use_name_server)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_use_name_server\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_int("dgram_name_server_port", "The port on which Name Server "
-				 "thread listens incoming connection and requestes.",
+				 "thread listens incoming connections and requestes.",
 				 &fi_ibv_gl_data.dgram.name_server_port) ||
 	    (fi_ibv_gl_data.dgram.name_server_port < 0 ||
 	     fi_ibv_gl_data.dgram.name_server_port > 65535)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_name_server_port\n");
-		return -FI_EINVAL;
-	}
-	if (fi_ibv_get_param_int("dgram_device_port_number", "Port number of device to be "
-				 "only used for generating fi_info. The parameter is "
-				 "ignored if device name wasn't specified.",
-				 &fi_ibv_gl_data.dgram.device.port_number) ||
-	    (fi_ibv_gl_data.dgram.device.port_number < 0 ||
-	     fi_ibv_gl_data.dgram.device.port_number > 31)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of dgram_device_port_number\n");
-		return -FI_EINVAL;
-	}
-	if (fi_ibv_get_param_str("dgram_device_name", "The name of device to be "
-				 "only used for generating fi_info.",
-				 &fi_ibv_gl_data.dgram.device.name)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of dgram_device_name\n");
 		return -FI_EINVAL;
 	}
 
