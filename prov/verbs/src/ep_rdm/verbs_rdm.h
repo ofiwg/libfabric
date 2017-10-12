@@ -75,32 +75,34 @@
 
 // Send/Recv counters control
 
-#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)	\
-do {                                                                	\
-	int32_t sends_outgoing = ofi_atomic_inc32(&(_connection)->sends_outgoing); \
-	ofi_atomic_inc32(&(_ep)->posted_sends);				\
-	(_send_flags) |= IBV_SEND_SIGNALED;                             \
-									\
-	(void)sends_outgoing;						\
+#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)		\
+do {                                                                		\
+	int32_t sends_outgoing =						\
+		ofi_atomic_inc32(&(_connection)->av_entry->sends_outgoing);	\
+	ofi_atomic_inc32(&(_ep)->posted_sends);					\
+	(_send_flags) |= IBV_SEND_SIGNALED;                             	\
+										\
+	(void)sends_outgoing;							\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
-		  _connection, sends_outgoing);				\
+		  _connection, sends_outgoing);					\
 } while (0)
 
-#define FI_IBV_RDM_DEC_SIG_POST_COUNTERS(_connection, _ep)		\
-do {									\
-	int32_t sends_outgoing = ofi_atomic_dec32(&(_connection)->sends_outgoing); \
-	int32_t posted_sends = ofi_atomic_dec32(&(_ep)->posted_sends);	\
-									\
-	(void)sends_outgoing;						\
-	(void)posted_sends;						\
+#define FI_IBV_RDM_DEC_SIG_POST_COUNTERS(_connection, _ep)			\
+do {										\
+	int32_t sends_outgoing =						\
+		ofi_atomic_dec32(&(_connection)->av_entry->sends_outgoing);	\
+	int32_t posted_sends = ofi_atomic_dec32(&(_ep)->posted_sends);		\
+										\
+	(void)sends_outgoing;							\
+	(void)posted_sends;							\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",	\
-		  _connection, sends_outgoing);				\
-	assert(posted_sends >= 0);					\
-	assert(sends_outgoing >= 0);					\
+		  _connection, sends_outgoing);					\
+	assert(posted_sends >= 0);						\
+	assert(sends_outgoing >= 0);						\
 } while (0)
 
-#define OUTGOING_POST_LIMIT(_connection, _ep)				\
-	(ofi_atomic_get32(&(_connection)->sends_outgoing) >= (_ep)->sq_wr_depth - 1)
+#define OUTGOING_POST_LIMIT(_connection, _ep)							\
+	(ofi_atomic_get32(&(_connection)->av_entry->sends_outgoing) >= (_ep)->sq_wr_depth - 1)
 
 #define PEND_POST_LIMIT(_ep)						\
 	(ofi_atomic_get32(&(_ep)->posted_sends) > 0.5 * (_ep)->scq_depth)
@@ -336,11 +338,13 @@ enum fi_rdm_cm_role {
 
 struct fi_ibv_rdm_av_entry {
 	/* association of conn and EPs */
-	pthread_mutex_t			conn_lock;
-	struct fi_ibv_rdm_conn		*conn_hash;
-	struct sockaddr_in		addr;
-	struct slist_entry		removed_next;
-	UT_hash_handle			hh;
+	pthread_mutex_t		conn_lock;
+	struct fi_ibv_rdm_conn	*conn_hash;
+	struct sockaddr_in	addr;
+	ofi_atomic32_t		sends_outgoing;
+	ofi_atomic32_t		recv_preposted;
+	struct slist_entry	removed_next;
+	UT_hash_handle		hh;
 };
 
 struct fi_ibv_rdm_conn {
@@ -382,8 +386,6 @@ struct fi_ibv_rdm_conn {
 	char *remote_rbuf_mem_reg;
 	struct fi_ibv_rdm_buf *remote_sbuf_head;
 
-	ofi_atomic32_t sends_outgoing;
-	int recv_preposted;
 	/* counter for eager buffer releasing */
 	uint16_t recv_completions;
 	/* counter to control OOO behaviour, works in pair with recv_completions */
@@ -544,10 +546,13 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep);
 ssize_t
 fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry);
 ssize_t fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_conn *conn);
+int fi_ibv_av_entry_alloc(struct fi_ibv_domain *domain,
+			  struct fi_ibv_rdm_av_entry **av_entry,
+			  void *addr);
 ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry);
 ssize_t fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
-                                struct fi_ibv_rdm_conn *conn);
+				    struct fi_ibv_rdm_conn *conn);
 ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_conn *conn,
 				   struct fi_ibv_rdm_ep *ep,
 				   int num_to_post);
