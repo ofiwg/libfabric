@@ -430,7 +430,8 @@ supported set of modes will be returned in the info structure(s).
 
 *FI_CONTEXT*
 : Specifies that the provider requires that applications use struct
-  fi_context as their per operation context parameter.  This structure
+  fi_context as their per operation context parameter for operations
+  that generated full completions.  This structure
   should be treated as opaque to the application.  For performance
   reasons, this structure must be allocated by the user, but may be
   used by the fabric provider to track the operation.  Typically,
@@ -440,8 +441,12 @@ supported set of modes will be returned in the info structure(s).
   fi_context should NOT be allocated on the stack.  Doing so is likely
   to result in stack corruption that will be difficult to debug.
   Users should not update or interpret the fields in this structure,
-  or reuse it until the original operation has completed.  The
-  structure is specified in rdma/fabric.h.
+  or reuse it until the original operation has completed.  If an
+  operation does not generate a completion (i.e. the endpoint was
+  configured with FI_SELECTIVE_COMPLETION and the operation was not
+  initiated with the FI_COMPLETION flag) then the context parameter is
+  ignored by the fabric provider.The structure is specified in 
+  rdma/fabric.h.
 
 *FI_CONTEXT2*
 : This bit is similar to FI_CONTEXT, but doubles the provider's
