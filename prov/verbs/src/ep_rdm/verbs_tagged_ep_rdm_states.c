@@ -1198,7 +1198,7 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 		VERBS_DBG(FI_LOG_EP_DATA,
 			  "SENDING RNDV ACK: conn %p, sends_outgoing = %d, "
 			  "post_send = %d\n",
-			  conn, ofi_atomic_get32(&conn->sends_outgoing),
+			  conn, ofi_atomic_get32(&conn->av_entry->sends_outgoing),
 			  ofi_atomic_get32(&p->ep->posted_sends));
 	} else {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);

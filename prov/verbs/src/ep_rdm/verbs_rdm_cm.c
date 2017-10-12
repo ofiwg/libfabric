@@ -129,7 +129,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 	}
 
 	if (ibv_post_recv(conn->qp[idx], wr, &bad_wr) == 0) {
-		conn->recv_preposted += num_to_post;
+		ofi_atomic_add32(&conn->av_entry->recv_preposted, num_to_post);
 		return num_to_post;
 	}
 
@@ -408,15 +408,9 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		  FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 
 	if (!av_entry) {
-		ret = ofi_memalign((void**)&av_entry,
-				   FI_IBV_RDM_MEM_ALIGNMENT,
-				   sizeof(*av_entry));
+		ret = fi_ibv_av_entry_alloc(ep->domain,&av_entry, p);
 		if (ret)
-			return -ret;
-		memset(av_entry, 0, sizeof(*av_entry));
-		memcpy(&av_entry->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
-
-		pthread_mutex_init(&av_entry->conn_lock, NULL);
+			return ret;
 
 		ret = ofi_memalign((void**)&conn,
 				   FI_IBV_RDM_MEM_ALIGNMENT,
@@ -432,7 +426,6 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		conn->ep = ep;
 		conn->state = FI_VERBS_CONN_ALLOCATED;
 		dlist_init(&conn->postponed_requests_head);
-		ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		HASH_ADD(hh, av_entry->conn_hash, ep,
@@ -442,9 +435,6 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			   "new conn %p %d, addr %s:%u, HASH ADD\n",
 			   conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
 			   ntohs(conn->addr.sin_port));
-
-		HASH_ADD(hh, ep->domain->rdm_cm->av_hash, addr,
-			 FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 	} else {
 		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
@@ -463,7 +453,6 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 			dlist_init(&conn->postponed_requests_head);
 			conn->state = FI_VERBS_CONN_ALLOCATED;
 			memcpy(&conn->addr, &av_entry->addr, FI_IBV_RDM_DFLT_ADDRLEN);
-			ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}

@@ -446,7 +446,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 		assert(0);
 	};
 
-	if (ofi_atomic_get32(&conn->sends_outgoing) > ep->n_buffs) {
+	if (ofi_atomic_get32(&conn->av_entry->sends_outgoing) > ep->n_buffs) {
 		fi_ibv_rdm_tagged_poll_send(ep);
 	}
 }
@@ -523,10 +523,10 @@ static inline
 void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 				struct fi_ibv_rdm_conn *conn)
 {
-	conn->recv_preposted--;
-	VERBS_DBG(FI_LOG_EP_DATA, "conn %p remain prepost recvs %d\n", conn, conn->recv_preposted);
-	if (conn->recv_preposted < ep->recv_preposted_threshold) {
-		int to_post = ep->rq_wr_depth - conn->recv_preposted;
+	int32_t recv_preposted;
+	if ((recv_preposted = ofi_atomic_dec32(
+			&conn->av_entry->recv_preposted)) < ep->recv_preposted_threshold) {
+		int to_post = ep->rq_wr_depth - recv_preposted;
 		ssize_t res = fi_ibv_rdm_repost_receives(conn, ep, to_post);
 		if (res < 0) {
 			VERBS_INFO(FI_LOG_EP_DATA, "repost recv failed %zd\n", res);
@@ -535,8 +535,12 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"reposted_recvs, posted %d, local_credits %d\n",
-			to_post, conn->recv_preposted);
+			to_post, recv_preposted);
 	}
+	/* Since we want to print out here the remaining space for prepost,
+	 * we try to get up-to-date value of the `recv_preposted` */
+	VERBS_DBG(FI_LOG_EP_DATA, "conn %p remain prepost recvs %d\n",
+		  conn, ofi_atomic_get32(&conn->av_entry->recv_preposted));
 }
 
 static inline int 
@@ -557,14 +561,14 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 		/* on QP error initiate disconnection procedure:
 		 * flush as many as possible preposted (and failed)
 		 * entries and after this set connection to 'closed' state */
-		if (!conn->recv_preposted) {
+		if (!ofi_atomic_get32(&conn->av_entry->recv_preposted)) {
 			VERBS_DBG(FI_LOG_EP_DATA, "no more preposted entries: "
 				"conn %p state %d\n",
 				conn, conn->state);
 			return 0;
 		}
 
-		conn->recv_preposted--;
+		ofi_atomic_dec32(&conn->av_entry->recv_preposted);
 		if (wc->status == IBV_WC_WR_FLUSH_ERR &&
 		    conn->state == FI_VERBS_CONN_ESTABLISHED) {
 			/*

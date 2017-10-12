@@ -146,6 +146,24 @@ static inline int fi_ibv_rdm_av_is_valid_address(struct sockaddr_in *addr)
 	return addr->sin_family == AF_INET ? 1 : 0;
 }
 
+int fi_ibv_av_entry_alloc(struct fi_ibv_domain *domain,
+			  struct fi_ibv_rdm_av_entry **av_entry,
+			  void *addr)
+{
+	int ret = ofi_memalign((void**)av_entry,
+			       FI_IBV_RDM_MEM_ALIGNMENT,
+			       sizeof (**av_entry));
+	if (ret)
+		return -ret;
+	memset((*av_entry), 0, sizeof(**av_entry));
+	memcpy(&(*av_entry)->addr, addr, FI_IBV_RDM_DFLT_ADDRLEN);
+	HASH_ADD(hh, domain->rdm_cm->av_hash, addr,
+		 FI_IBV_RDM_DFLT_ADDRLEN, (*av_entry));
+	ofi_atomic_initialize32(&(*av_entry)->sends_outgoing, 0);
+	pthread_mutex_init(&(*av_entry)->conn_lock, NULL);
+
+	return ret;
+}
 
 static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
                                 size_t count, fi_addr_t * fi_addr,
@@ -228,15 +246,9 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av_fid, const void *addr,
 			 * It could be found if the connection was initiated
 			 * by the remote side.
 			 */
-			ret = -ofi_memalign((void**)&av_entry,
-					    FI_IBV_RDM_MEM_ALIGNMENT,
-					    sizeof *av_entry);
+			ret = fi_ibv_av_entry_alloc(av->domain, &av_entry, addr_i);
 			if (ret)
 				goto out;
-			memset(av_entry, 0, sizeof *av_entry);
-			memcpy(&av_entry->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
-			HASH_ADD(hh, av->domain->rdm_cm->av_hash, addr,
-				 FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 		}
 
 		switch (av->type) {
@@ -575,7 +587,6 @@ fi_ibv_rdm_av_map_addr_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 			conn->ep = ep;
 			conn->av_entry = av_entry;
 			conn->state = FI_VERBS_CONN_ALLOCATED;
-			ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 			dlist_init(&conn->postponed_requests_head);
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
@@ -611,7 +622,6 @@ fi_ibv_rdm_av_tbl_idx_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 			conn->av_entry = av_entry;
 			conn->state = FI_VERBS_CONN_ALLOCATED;
 			dlist_init(&conn->postponed_requests_head);
-			ofi_atomic_initialize32(&conn->sends_outgoing, 0);
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}
