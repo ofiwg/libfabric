@@ -510,7 +510,7 @@ void sock_get_list_of_addr(struct slist *addr_list)
 	struct sock_host_list_entry *addr_entry;
 	struct ifaddrs *ifaddrs, *ifa;
 
-	ret = getifaddrs(&ifaddrs);
+	ret = ofi_getifaddrs(&ifaddrs);
 	if (!ret) {
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||

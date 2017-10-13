@@ -635,3 +635,35 @@ void fi_epoll_close(struct fi_epoll *ep)
 }
 
 #endif
+
+#if HAVE_GETIFADDRS
+
+/* getifaddrs can fail when connecting the netlink socket. Try again
+ * as this is a temporary error. After the 2nd retry, sleep a bit as
+ * well in case the host is really busy. */
+#define MAX_GIA_RETRIES 10
+int ofi_getifaddrs(struct ifaddrs **ifaddr)
+{
+	unsigned int retries;
+	int ret;
+
+	for (retries = 0; retries < MAX_GIA_RETRIES; retries++) {
+		if (retries > 1) {
+			/* Exponentiation sleep after the 2nd try.
+			 * 1000 << 9 is 512000, which respects the 1s
+			 * constraint for usleep. */
+			usleep(1000 << retries);
+		}
+
+		ret = getifaddrs(ifaddr);
+		if (ret == 0 || errno != ECONNREFUSED)
+			break;
+	}
+
+	if (ret != 0)
+		return -errno;
+
+	return FI_SUCCESS;
+}
+
+#endif
