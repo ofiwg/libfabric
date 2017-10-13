@@ -282,11 +282,9 @@ int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 			1 << GNIX_MR_PAGE_SHIFT);
 
 	/* call cache register op to retrieve the right entry */
-	fastlock_release(&domain->mr_cache_lock);
 	fastlock_acquire(&info->mr_cache_lock);
 	if (OFI_UNLIKELY(!domain->mr_ops))
 		_gnix_open_cache(domain, GNIX_DEFAULT_CACHE_TYPE);
-	fastlock_release(&domain->mr_cache_lock);
 
 	if (OFI_UNLIKELY(!domain->mr_ops->is_init(domain, auth_key))) {
 		rc = domain->mr_ops->init(domain, auth_key);
