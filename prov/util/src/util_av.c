@@ -123,7 +123,7 @@ void ofi_getnodename(char *buf, int buflen)
 	}
 
 #if HAVE_GETIFADDRS
-	ret = getifaddrs(&ifaddrs);
+	ret = ofi_getifaddrs(&ifaddrs);
 	if (!ret) {
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||

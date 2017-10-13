@@ -106,7 +106,7 @@ int cm_local_ip(struct sockaddr_in *sa)
 	struct ifaddrs *ifa;
 	int ret = -1;
 
-	getifaddrs(&ifap);
+	ofi_getifaddrs(&ifap);
 
 	ifa = ifap;
 	while (ifa) {
@@ -436,4 +436,3 @@ Test(cm_basic, srv_setup, .disabled = false)
 	cm_stop_server();
 	cm_stop_client();
 }
-
