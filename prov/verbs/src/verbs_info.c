@@ -1350,7 +1350,7 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 				  const struct fi_info **raw_info,
 				  struct fi_info **info)
 {
-	int ret;
+	int ret, ret_sock_addr, ret_ib_ud_addr;
 
 	ret = fi_ibv_get_matching_info(version, hints,
 				       info, *raw_info);
@@ -1365,10 +1365,20 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 		return ret;
 	}
 
-	if (fi_ibv_handle_sock_addr(node, service, flags, hints, info) &&
-	    fi_ibv_handle_ib_ud_addr(node, service, flags, info)) {
+	ret_sock_addr = fi_ibv_handle_sock_addr(node, service, flags, hints, info);
+	if (ret_sock_addr)
+		VERBS_INFO(FI_LOG_CORE, "Handling of the socket address fails - %d\n",
+			   ret_sock_addr);
+	ret_ib_ud_addr = fi_ibv_handle_ib_ud_addr(node, service, flags, info);
+	if (ret_ib_ud_addr)
+		VERBS_INFO(FI_LOG_CORE, "Handling of the IB ID address fails - %d\n",
+			   ret_ib_ud_addr);
+
+	if (ret_sock_addr && ret_ib_ud_addr) {
 		/* neither the sockaddr nor the ib_ud address wasn't
 		 * handled to satisfy the selection procedure */
+		VERBS_INFO(FI_LOG_CORE, "Handling of the addresses fails, "
+			   "the getting infos is unsuccessful\n");
 		fi_freeinfo(*info);
 		return -FI_ENODATA;
 	}

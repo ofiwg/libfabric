@@ -160,6 +160,7 @@ int fi_ibv_av_entry_alloc(struct fi_ibv_domain *domain,
 	HASH_ADD(hh, domain->rdm_cm->av_hash, addr,
 		 FI_IBV_RDM_DFLT_ADDRLEN, (*av_entry));
 	ofi_atomic_initialize32(&(*av_entry)->sends_outgoing, 0);
+	ofi_atomic_initialize32(&(*av_entry)->recv_preposted, 0);
 	pthread_mutex_init(&(*av_entry)->conn_lock, NULL);
 
 	return ret;
