@@ -956,7 +956,7 @@ union sock_tx_op {
 
 int sock_verify_info(uint32_t version, const struct fi_info *hints);
 int sock_verify_fabric_attr(const struct fi_fabric_attr *attr);
-int sock_verify_domain_attr(uint32_t version, const struct fi_domain_attr *attr);
+int sock_verify_domain_attr(uint32_t version, const struct fi_info *info);
 
 size_t sock_get_tx_size(size_t size);
 int sock_rdm_verify_ep_attr(const struct fi_ep_attr *ep_attr,

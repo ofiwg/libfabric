@@ -67,8 +67,10 @@ const struct fi_domain_attr sock_domain_attr = {
 	.mr_cnt = SOCK_DOMAIN_MR_CNT,
 };
 
-int sock_verify_domain_attr(uint32_t version, const struct fi_domain_attr *attr)
+int sock_verify_domain_attr(uint32_t version, const struct fi_info *info)
 {
+	const struct fi_domain_attr *attr = info->domain_attr;
+
 	if (!attr)
 		return 0;
 
@@ -129,8 +131,8 @@ int sock_verify_domain_attr(uint32_t version, const struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	if (ofi_check_mr_mode(version, sock_domain_attr.mr_mode,
-			      attr->mr_mode)) {
+	if (ofi_check_mr_mode(&sock_prov, version, info->caps,
+			      sock_domain_attr.mr_mode, attr->mr_mode)) {
 		FI_INFO(&sock_prov, FI_LOG_CORE,
 			"Invalid memory registration mode\n");
 		return -FI_ENODATA;
@@ -451,7 +453,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	fab = container_of(fabric, struct sock_fabric, fab_fid);
 	if (info && info->domain_attr) {
-		ret = sock_verify_domain_attr(fabric->api_version, info->domain_attr);
+		ret = sock_verify_domain_attr(fabric->api_version, info);
 		if (ret)
 			return -FI_EINVAL;
 	}

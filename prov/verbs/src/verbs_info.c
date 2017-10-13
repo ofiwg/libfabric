@@ -246,7 +246,7 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 	if (hints->domain_attr) {
 		ret = ofi_check_domain_attr(&fi_ibv_prov, version,
 					    info->domain_attr,
-					    hints->domain_attr);
+					    hints);
 		if (ret)
 			return ret;
 	}

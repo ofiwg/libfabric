@@ -406,7 +406,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 
 	ret = ofi_check_domain_attr(&fi_ibv_prov, fabric->api_version,
-				    fi->domain_attr, info->domain_attr);
+				    fi->domain_attr, info);
 	if (ret)
 		return ret;
 

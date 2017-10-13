@@ -612,7 +612,9 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				gnix_info->domain_attr->data_progress =
 					hints->domain_attr->data_progress;
 
-			if (ofi_check_mr_mode(version,
+			if (ofi_check_mr_mode(&gnix_prov,
+					version,
+					hints->caps,
 					gnix_info->domain_attr->mr_mode,
 					hints->domain_attr->mr_mode) != FI_SUCCESS) {
 				GNIX_DEBUG(FI_LOG_DOMAIN,
@@ -673,7 +675,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 
 			ret = ofi_check_domain_attr(&gnix_prov, version,
 						    gnix_info->domain_attr,
-						    hints->domain_attr);
+						    hints);
 			if (ret) {
 				GNIX_WARN(FI_LOG_FABRIC,
 						  "GNI failed domain attributes check\n");

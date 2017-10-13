@@ -251,7 +251,9 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			return -FI_ENODATA;
 		}
 
-		if (ofi_check_mr_mode(fabric->api_version,
+		if (ofi_check_mr_mode(&usdf_ops,
+				      fabric->api_version,
+				      info->caps,
 				      OFI_MR_BASIC_MAP | FI_MR_LOCAL,
 				      info->domain_attr->mr_mode)) {
 			/* the caller ignored our fi_getinfo results */
@@ -516,7 +518,7 @@ int usdf_check_mr_mode(uint32_t version, const struct fi_info *hints,
 {
 	int ret;
 
-	ret = ofi_check_mr_mode(version, prov_mode,
+	ret = ofi_check_mr_mode(&usdf_ops, version, hints->caps, prov_mode,
 				hints->domain_attr->mr_mode);
 
 	/* If ofi_check_mr_mode fails. */
