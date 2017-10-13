@@ -56,18 +56,15 @@ static void util_rtc_tree_close(struct util_rtc *rtc)
 	rbtDelete(rtc->rb_tree);
 }
 
-int ofi_util_rtc_init(struct fid_domain *domain_fid, struct util_rtc_attr *attr,
-		      struct util_rtc **rtc)
+int ofi_util_rtc_init(struct util_rtc_attr *attr, struct util_rtc **rtc)
 {
 	int ret;
 	
-	*rtc = calloc(1, sizeof(*rtc));
+	*rtc = calloc(1, sizeof(**rtc));
 	if (!*rtc) {
 		ret = -FI_ENOMEM;
 		goto fn1;
 	}
-
-	(*rtc)->domain_fid = domain_fid;
 	(*rtc)->total_num_entries_thr = attr->total_num_entries_thr;
 	(*rtc)->total_size_thr = attr->total_size_thr;
 	fastlock_init(&(*rtc)->lock);
@@ -83,7 +80,31 @@ int ofi_util_rtc_init(struct fid_domain *domain_fid, struct util_rtc_attr *attr,
 	if (ret)
 		goto fn3;
 
+	(*rtc)->prov_reg_mr = attr->prov_reg_mr;
+	if (attr->reg_arg && attr->reg_arg_len) {
+		(*rtc)->reg_arg = mem_dup(attr->reg_arg,
+					  attr->reg_arg_len);
+		if (!(*rtc)->reg_arg) {
+			ret = -FI_ENOMEM;
+			goto fn4;
+		}
+	}
+
+	(*rtc)->prov_dereg_mr = attr->prov_dereg_mr;
+	if (attr->dereg_arg && attr->dereg_arg_len) {
+		(*rtc)->dereg_arg = mem_dup(attr->dereg_arg,
+					    attr->dereg_arg_len);
+		if (!(*rtc)->dereg_arg) {
+			ret = -FI_ENOMEM;
+			goto fn5;
+		}
+	}
+
 	return FI_SUCCESS;
+fn5:
+	free((*rtc)->reg_arg);
+fn4:
+	util_rtc_tree_close(*rtc);
 fn3:
 	util_buf_pool_destroy((*rtc)->buf_pool);
 fn2:
@@ -98,6 +119,8 @@ int ofi_util_rtc_close(struct util_rtc *rtc)
 	util_rtc_tree_close(rtc);
 	util_buf_pool_destroy(rtc->buf_pool);
 	fastlock_destroy(&rtc->lock);
+	free(rtc->reg_arg);
+	free(rtc->dereg_arg);
 	free(rtc);
 
 	return FI_SUCCESS;
@@ -111,14 +134,15 @@ static inline int util_rtc_insert(struct util_rtc *rtc, uint64_t *key,
 	if (OFI_UNLIKELY(!rtc_item))
 		return -FI_ENOMEM;
 
-	fastlock_acquire(&rtc->lock);
-	rbtInsert(rtc->rb_tree, key, item);
-	dlist_insert_tail(&rtc_item->list_entry, &rtc->queue_list);
-	fastlock_release(&rtc->lock);
 	rtc_item->buf = buf;
 	rtc_item->len = len;
 	rtc_item->key = *key;
-	ofi_atomic_initialize32(&rtc_item->in_use, 1);
+	rtc_item->in_use = 1;
+
+	fastlock_acquire(&rtc->lock);
+	rbtInsert(rtc->rb_tree, &rtc_item->key, rtc_item);
+	dlist_insert_tail(&rtc_item->list_entry, &rtc->queue_list);
+	fastlock_release(&rtc->lock);
 
 	return FI_SUCCESS;
 }
@@ -128,7 +152,7 @@ static inline void util_rtc_reinsert(struct util_rtc *rtc,
 {
 	fastlock_acquire(&rtc->lock);
 	dlist_remove(&item->list_entry);
-	ofi_atomic_set32(&item->in_use, 1);
+	item->in_use = 1;
 	dlist_insert_tail(&rtc->queue_list, &item->list_entry);
 	fastlock_release(&rtc->lock);
 }
@@ -137,14 +161,18 @@ static inline void util_rtc_reinsert(struct util_rtc *rtc,
 static inline int util_rtc_remove(struct util_rtc *rtc,
 				  struct util_rtc_entry *item)
 {
+	int ret;
 	void *key_ptr, *itr = rbtFind(rtc->rb_tree, &item->key);
 	if (!itr)
 		return -FI_ENOKEY;
 	rbtKeyValue(rtc->rb_tree, itr, &key_ptr, (void **)item);
+
+	ret = rtc->prov_dereg_mr(item->mr, item->buf, item->len,
+				 rtc->dereg_arg);
 	util_buf_release(rtc->buf_pool, item);
 	rbtErase(rtc->rb_tree, itr);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 static inline struct util_rtc_entry *
@@ -165,12 +193,12 @@ static inline int util_rtc_is_rtc_entry_in_use(struct dlist_entry *entry,
 	OFI_UNUSED(arg);
 	struct util_rtc_entry *item = container_of(entry, struct util_rtc_entry,
 						   list_entry);
-	return ofi_atomic_get32(&item->in_use);
+	return item->in_use;
 }
 
 static inline void util_rtc_make_avail_space(struct util_rtc *rtc)
 {
-	if (util_buf_is_pool_full(rtc->buf_pool)) {
+	if (!util_buf_avail(rtc->buf_pool)) {
 		struct util_rtc_entry *item;
 		struct dlist_entry *entry =
 			dlist_remove_first_match(
@@ -184,25 +212,50 @@ static inline void util_rtc_make_avail_space(struct util_rtc *rtc)
 	}
 }
 
-int ofi_rtc_reg_buffer(struct util_rtc *rtc, void *buf, size_t len,
-		       struct util_rtc_reg_entry *reg_entry)
+static int util_rtc_full_reg_buffer(struct util_rtc *rtc, void **prov_mr,
+				    uint64_t *key, void *buf, size_t len)
 {
 	int ret;
+	struct util_rtc_entry *item;
+
+	util_rtc_make_avail_space(rtc);
+	ret = util_rtc_insert(rtc, key, buf, len, &item);
+	if (ret) {
+		*prov_mr = NULL;
+		return ret;
+	}
+
+	ret = rtc->prov_reg_mr(&item->mr, buf, len, rtc->reg_arg);
+	if (ret) {
+		*prov_mr = NULL;
+		return ret;
+	}
+
+	*prov_mr = item->mr;
+
+	return ret;
+}
+
+static int util_rtc_light_reg_buffer(struct util_rtc *rtc, struct util_rtc_entry *item,
+				     void **prov_mr, void *buf, size_t len)
+{
+	util_rtc_reinsert(rtc, item);
+	*prov_mr = item->mr;
+
+	return FI_SUCCESS;
+}
+
+int ofi_rtc_reg_buffer(struct util_rtc *rtc, void *buf, size_t len,
+		       void **prov_mr)
+{
 	uint64_t key = (uint64_t)((uint64_t)(uintptr_t)buf + len);
 	struct util_rtc_entry *item = util_rtc_lookup(rtc, &key);
-	if (!item) {
-		reg_entry->reg_mr = NULL;
-		util_rtc_make_avail_space(rtc);
-		ret = util_rtc_insert(rtc, &key, buf, len, &item);
-		if (ret)
-			return ret;
-		reg_entry->mr_storage = &item->mr;
-	} else {
-		util_rtc_reinsert(rtc, item);
-		reg_entry->reg_mr = item->mr;
-		reg_entry->mr_storage = NULL;
-	}
-	return FI_SUCCESS;
+	if (!item)
+		return util_rtc_full_reg_buffer(rtc, prov_mr, &key,
+						buf, len);
+	else
+		return util_rtc_light_reg_buffer(rtc, item, prov_mr,
+						 buf, len);
 }
 
 int ofi_rtc_dereg_buffer(struct util_rtc *rtc, void *buf, size_t len)
@@ -210,7 +263,7 @@ int ofi_rtc_dereg_buffer(struct util_rtc *rtc, void *buf, size_t len)
 	uint64_t key = (uint64_t)((uint64_t)(uintptr_t)buf + len);
 	struct util_rtc_entry *item = util_rtc_lookup(rtc, &key);
 	if (item) {
-		ofi_atomic_set32(&item->in_use, 0);
+		item->in_use = 0;
 		return FI_SUCCESS;
 	} else {
 		return -FI_ENOENT;

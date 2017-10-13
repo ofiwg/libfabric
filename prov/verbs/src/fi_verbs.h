@@ -162,6 +162,7 @@ extern struct fi_ibv_gl_data {
 	int	use_odp;
 	int	cqread_bunch_size;
 	char	*iface;
+	int	use_rtc;
 
 	struct {
 		int	buffer_num;
@@ -334,6 +335,10 @@ struct fi_ibv_domain {
 	/* This EQ is utilized by verbs/RDM and verbs/DGRAM */
 	struct fi_ibv_eq	*eq;
 	uint64_t		eq_flags;
+	struct util_rtc		*rtc;
+
+	util_rtc_reg_mr_func_t		reg_mr;
+	util_rtc_dereg_mr_func_t	dereg_mr;
 };
 
 struct fi_ibv_cq;
@@ -405,6 +410,12 @@ struct fi_ibv_mem_desc {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
 	struct fi_ibv_domain	*domain;
+};
+
+struct fi_ibv_mr_reg_arg {
+	struct ibv_pd			*pd;
+	enum ibv_access_flags		access;
+	struct util_rtc			**rtc;
 };
 
 struct fi_ibv_srq_ep {

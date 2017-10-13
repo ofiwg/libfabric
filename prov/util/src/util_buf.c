@@ -56,7 +56,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 	union util_buf *util_buf;
 	struct util_buf_region *buf_region;
 
-	if (util_buf_is_pool_full(pool))
+	if (pool->max_cnt && pool->num_allocated >= pool->max_cnt)
 		return -1;
 
 	buf_region = calloc(1, sizeof(*buf_region));
