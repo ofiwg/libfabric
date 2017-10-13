@@ -887,6 +887,7 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 			VERBS_WARN(FI_LOG_FABRIC,
 				   "inet_ntop failed: %s(%d)\n",
 				   strerror(errno), errno);
+			ret = -errno;
 			goto err1;
 		}
 
