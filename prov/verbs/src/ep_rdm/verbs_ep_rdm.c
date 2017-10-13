@@ -259,6 +259,7 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 			fi_ibv_rdm_move_to_errcq(ep_rdm->fi_rcq, request,
 						 FI_ECANCELED);
 		}
+		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	}
 
 	return err;
