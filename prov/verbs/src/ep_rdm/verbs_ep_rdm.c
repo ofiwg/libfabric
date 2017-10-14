@@ -46,8 +46,6 @@
 extern struct fi_ops_tagged fi_ibv_rdm_tagged_ops;
 extern struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops;
 extern struct dlist_entry fi_ibv_rdm_posted_queue;
-extern struct util_buf_pool* fi_ibv_rdm_request_pool;
-extern struct util_buf_pool* fi_ibv_rdm_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
 extern struct fi_ops_msg fi_ibv_rdm_ep_msg_ops;
 extern struct fi_ops_rma fi_ibv_rdm_ep_rma_ops;
@@ -502,9 +500,9 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	/* TODO: move queues & related pools cleanup to close CQ*/
 	fi_ibv_rdm_clean_queues(ep);
 
-	util_buf_pool_destroy(fi_ibv_rdm_request_pool);
-	util_buf_pool_destroy(fi_ibv_rdm_extra_buffers_pool);
-	util_buf_pool_destroy(fi_ibv_rdm_postponed_pool);
+	util_buf_pool_destroy(ep->fi_ibv_rdm_request_pool);
+	util_buf_pool_destroy(ep->fi_ibv_rdm_extra_buffers_pool);
+	util_buf_pool_destroy(ep->fi_ibv_rdm_postponed_pool);
 
 	fi_freeinfo(ep->info);
 
@@ -646,15 +644,15 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
-	fi_ibv_rdm_request_pool = util_buf_pool_create(
+	_ep->fi_ibv_rdm_request_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_request),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_rdm_postponed_pool = util_buf_pool_create(
+	_ep->fi_ibv_rdm_postponed_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_postponed_entry),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
+	_ep->fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
 		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
 	_ep->max_inline_rc = 

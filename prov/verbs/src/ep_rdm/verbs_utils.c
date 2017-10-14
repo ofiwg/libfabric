@@ -40,10 +40,6 @@
 #include "verbs_rdm.h"
 #include "verbs_queuing.h"
 
-extern struct util_buf_pool *fi_ibv_rdm_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
-extern struct util_buf_pool *fi_ibv_rdm_postponed_pool;
-
 size_t rdm_buffer_size(size_t buf_send_size)
 {
 	size_t size = buf_send_size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
@@ -186,11 +182,11 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 
 	while ((request = fi_ibv_rdm_take_first_from_unexp_queue())) {
 		if (request->unexp_rbuf) {
-			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-					request->unexp_rbuf);
+			util_buf_release(ep->fi_ibv_rdm_extra_buffers_pool,
+					 request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
@@ -199,48 +195,48 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 		 * internally by provider */
 		request->context->internal[0] = NULL;
 		if (request->iov_count > 0) {
-			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-					request->unexp_rbuf);
+			util_buf_release(ep->fi_ibv_rdm_extra_buffers_pool,
+					 request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_postponed_queue())) {
 		if (request->iov_count > 0) {
-			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-					request->unexp_rbuf);
+			util_buf_release(ep->fi_ibv_rdm_extra_buffers_pool,
+					 request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_cq(ep->fi_scq))) {
 		if (request->iov_count > 0) {
-			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-					request->unexp_rbuf);
+			util_buf_release(ep->fi_ibv_rdm_extra_buffers_pool,
+					 request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_cq(ep->fi_rcq))) {
 		if (request->iov_count > 0) {
-			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-					request->unexp_rbuf);
+			util_buf_release(ep->fi_ibv_rdm_extra_buffers_pool,
+					 request->unexp_rbuf);
 		}
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_errcq(ep->fi_scq))) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 
 	while ((request = fi_ibv_rdm_take_first_from_errcq(ep->fi_rcq))) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 }
 
@@ -248,9 +244,10 @@ ssize_t
 fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata)
 {
 	struct fi_ibv_rdm_request *request =
-		util_buf_alloc(fi_ibv_rdm_request_pool);
+		util_buf_alloc(sdata->ep_rdm->fi_ibv_rdm_request_pool);
 	if (OFI_UNLIKELY(!request))
 		return -FI_EAGAIN;
+	request->ep = sdata->ep_rdm;
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */

@@ -35,9 +35,6 @@
 
 #include "verbs_rdm.h"
 
-extern struct util_buf_pool *fi_ibv_rdm_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
-
 static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				  uint64_t flags)
 {
@@ -71,12 +68,13 @@ static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		.ep = ep_rdm
 	};
 	struct fi_ibv_rdm_request *request =
-		util_buf_alloc(fi_ibv_rdm_request_pool);
+		util_buf_alloc(ep_rdm->fi_ibv_rdm_request_pool);
 	if (OFI_UNLIKELY(!request))
 		return -FI_EAGAIN;
-	fi_ibv_rdm_zero_request(request);
-	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
+	fi_ibv_rdm_zero_request(request);
+	request->ep = ep_rdm;
+	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 	ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_START,
 				  &recv_data);
 
@@ -166,7 +164,7 @@ static ssize_t fi_ibv_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		 * to send immediately
 		 */
 		sdata.buf.iovec_arr =
-			util_buf_alloc(fi_ibv_rdm_extra_buffers_pool);
+			util_buf_alloc(ep_rdm->fi_ibv_rdm_extra_buffers_pool);
 		for (i = 0; i < msg->iov_count; i++) {
 			sdata.buf.iovec_arr[i].iov_base = msg->msg_iov[i].iov_base;
 			sdata.buf.iovec_arr[i].iov_len = msg->msg_iov[i].iov_len;

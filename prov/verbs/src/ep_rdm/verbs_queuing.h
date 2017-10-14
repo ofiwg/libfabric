@@ -46,8 +46,6 @@ extern struct dlist_entry fi_ibv_rdm_unexp_queue;
 extern struct dlist_entry fi_ibv_rdm_posted_queue;
 extern struct dlist_entry fi_ibv_rdm_postponed_queue;
 
-extern struct util_buf_pool* fi_ibv_rdm_postponed_pool;
-
 static inline void
 fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_cq *cq,
 		      struct fi_ibv_rdm_request *request)
@@ -187,7 +185,7 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 
 	if (dlist_empty(&conn->postponed_requests_head)) {
 		struct fi_ibv_rdm_postponed_entry *entry =
-			util_buf_alloc(fi_ibv_rdm_postponed_pool);
+			util_buf_alloc(conn->ep->fi_ibv_rdm_postponed_pool);
 		if (OFI_UNLIKELY(!entry)) {
 			VERBS_WARN(FI_LOG_EP_DATA, "Unable to alloc buffer");
 			return -FI_ENOMEM;
@@ -231,7 +229,7 @@ fi_ibv_rdm_remove_from_postponed_queue(struct fi_ibv_rdm_request *request)
 		conn->postponed_entry->queue_entry.prev = NULL;
 		conn->postponed_entry->conn = NULL;
 
-		util_buf_release(fi_ibv_rdm_postponed_pool,
+		util_buf_release(conn->ep->fi_ibv_rdm_postponed_pool,
 				 conn->postponed_entry);
 		conn->postponed_entry = NULL;
 	}

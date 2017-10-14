@@ -39,10 +39,6 @@
 #include "verbs_queuing.h"
 #include "verbs_tagged_ep_rdm_states.h"
 
-extern struct dlist_entry fi_ibv_rdm_postponed_queue;
-extern struct util_buf_pool *fi_ibv_rdm_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
-
 typedef ssize_t (*fi_ep_rdm_request_handler_t)
 	(struct fi_ibv_rdm_request *request, void *data);
 
@@ -233,13 +229,15 @@ fi_ibv_rdm_eager_send_lc(struct fi_ibv_rdm_request *request,
 	FI_IBV_RDM_DEC_SIG_POST_COUNTERS(request->minfo.conn, p->ep);
 
 	if (request->iov_count) {
-		util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-				 request->iovec_arr);
+		util_buf_release(
+			request->ep->fi_ibv_rdm_extra_buffers_pool,
+			request->iovec_arr);
 	}
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(request->ep->fi_ibv_rdm_request_pool,
+				 request);
 	} else {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	}
@@ -366,7 +364,8 @@ fi_ibv_rdm_rndv_rts_lc(struct fi_ibv_rdm_request *request,
 		request->state.eager = FI_IBV_STATE_EAGER_SEND_END;
 	} else { /* (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) */
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(request->ep->fi_ibv_rdm_request_pool,
+				 request);
 	}
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
@@ -409,7 +408,9 @@ fi_ibv_rdm_rndv_end(struct fi_ibv_rdm_request *request,
 		fi_ibv_rdm_move_to_cq(p->ep->fi_scq, request);
 	} else if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(
+			request->ep->fi_ibv_rdm_request_pool,
+			request);
 	}
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
@@ -431,8 +432,9 @@ fi_ibv_rdm_copy_unexp_request(struct fi_ibv_rdm_request *request,
 			   unexp->len, request->len, request->minfo.conn,
 			   request->minfo.tag, request->minfo.tagmask);
 
-		util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-				 unexp->unexp_rbuf);
+		util_buf_release(
+			unexp->ep->fi_ibv_rdm_extra_buffers_pool,
+			unexp->unexp_rbuf);
 		ret = -FI_ETRUNC;
 		return ret;
 	}
@@ -477,13 +479,14 @@ fi_ibv_rdm_repost_multi_recv(struct fi_ibv_rdm_request *request,
 	struct fi_ibv_rdm_multi_request *parent;
 	struct fi_ibv_rdm_request *prepost;
 
-	if (!(prepost = util_buf_alloc(fi_ibv_rdm_request_pool))) {
+	if (!(prepost = util_buf_alloc(ep->fi_ibv_rdm_request_pool))) {
 		VERBS_WARN(FI_LOG_EP_DATA, "Unable to allocate memory for "
 			   "multi recv prepost request\n");
 		return NULL;
 	}
 
 	fi_ibv_rdm_zero_request(prepost);
+	prepost->ep = ep;
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", prepost, FI_LOG_DEBUG);
 	FI_IBV_RDM_DBG_REQUEST("repost from: ", request, FI_LOG_DEBUG);
 
@@ -568,7 +571,9 @@ fi_ibv_rdm_try_unexp_recv(struct fi_ibv_rdm_request *request,
 						FI_IBV_STATE_EAGER_RECV_WAIT4RECV)));
 
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", found_request, FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_request_pool, found_request);
+			util_buf_release(
+				found_request->ep->fi_ibv_rdm_request_pool,
+				found_request);
 
 			if (ret == FI_SUCCESS &&
 			    request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
@@ -706,7 +711,9 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_request *request, void *data)
 			fi_ibv_rdm_move_to_cq(p->ep->fi_rcq, request);
 		} else {
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_request_pool, request);
+			util_buf_release(
+				request->ep->fi_ibv_rdm_request_pool,
+				request);
 		}
 		
 		FI_IBV_RDM_HNDL_REQ_LOG_OUT();
@@ -764,7 +771,14 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 
 		if (request->len > 0) {
 			request->unexp_rbuf =
-				util_buf_alloc(fi_ibv_rdm_extra_buffers_pool);
+				util_buf_alloc(request->ep->fi_ibv_rdm_extra_buffers_pool);
+			if (!request->unexp_rbuf) {
+				ret = -FI_ENOMEM;
+				VERBS_WARN(FI_LOG_EP_DATA,
+					   "Unable allocate memory from the pool "
+					   "for uenxpected buffer");
+				goto fn;
+			}
 			memcpy(request->unexp_rbuf, &rbuf->payload,
 			       request->len);
 		} else {
@@ -804,7 +818,7 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 	}
 
 	fi_ibv_rdm_move_to_unexpected_queue(request);
-
+fn:
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
 	return ret;
 }
@@ -862,8 +876,9 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 			} else {
 				FI_IBV_RDM_DBG_REQUEST("to_pool: ", request,
 							FI_LOG_DEBUG);
-				util_buf_release(fi_ibv_rdm_request_pool,
-						request);
+				util_buf_release(
+					request->ep->fi_ibv_rdm_request_pool,
+					request);
 			}
 		} else {
 			VERBS_INFO(FI_LOG_EP_DATA,
@@ -964,8 +979,9 @@ fi_ibv_rdm_eager_recv_process_unexp_pkt(struct fi_ibv_rdm_request *request,
 	}
 
 	if (request->unexp_rbuf) {
-		util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-				request->unexp_rbuf);
+		util_buf_release(
+			request->ep->fi_ibv_rdm_extra_buffers_pool,
+			request->unexp_rbuf);
 		request->unexp_rbuf = NULL;
 	}
 
@@ -976,7 +992,8 @@ fi_ibv_rdm_eager_recv_process_unexp_pkt(struct fi_ibv_rdm_request *request,
 		fi_ibv_rdm_move_to_cq(p->ep->fi_rcq, request);
 	} else {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(request->ep->fi_ibv_rdm_request_pool,
+				 request);
 	}
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
@@ -1013,13 +1030,15 @@ fi_ibv_rdm_eager_recv_discard(struct fi_ibv_rdm_request *request, void *data)
 	fi_ibv_rdm_remove_from_unexp_queue(request);
 
 	if (request->unexp_rbuf) {
-		util_buf_release(fi_ibv_rdm_extra_buffers_pool,
-				request->unexp_rbuf);
+		util_buf_release(
+			request->ep->fi_ibv_rdm_extra_buffers_pool,
+			request->unexp_rbuf);
 		request->unexp_rbuf = NULL;
 	}
 
 	FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-	util_buf_release(fi_ibv_rdm_request_pool, request);
+	util_buf_release(request->ep->fi_ibv_rdm_request_pool,
+			 request);
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
 	return FI_SUCCESS;
@@ -1241,7 +1260,9 @@ fi_ibv_rdm_rndv_recv_ack_lc(struct fi_ibv_rdm_request *request, void *data)
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(
+			request->ep->fi_ibv_rdm_request_pool,
+			request);
 	} else {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		request->state.rndv = FI_IBV_STATE_RNDV_RECV_END;
@@ -1444,7 +1465,8 @@ fi_ibv_rdm_rma_inject_lc(struct fi_ibv_rdm_request *request, void *data)
 	FI_IBV_RDM_HNDL_REQ_LOG();
 
 	FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-	util_buf_release(fi_ibv_rdm_request_pool, request);
+	util_buf_release(request->ep->fi_ibv_rdm_request_pool,
+			 request);
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
 
@@ -1483,7 +1505,9 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_request *request, void *data)
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(
+			request->ep->fi_ibv_rdm_request_pool,
+			request);
 	} else {
 		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	}
@@ -1532,7 +1556,9 @@ fi_ibv_rdm_rma_zerocopy_lc(struct fi_ibv_rdm_request *request, void *data)
 			request->state.rndv = FI_IBV_STATE_ZEROCOPY_RMA_END;
 		} else {
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_request_pool, request);
+			util_buf_release(
+				request->ep->fi_ibv_rdm_request_pool,
+				request);
 		}
 	}
 

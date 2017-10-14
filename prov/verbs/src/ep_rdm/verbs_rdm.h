@@ -162,7 +162,8 @@ struct fi_ibv_rdm_request {
 		ssize_t err; /* filled in case of moving to errcq */
 	} state;
 
-	struct fi_ibv_rdm_minfo minfo;
+	struct fi_ibv_rdm_ep	*ep;
+	struct fi_ibv_rdm_minfo	minfo;
 
 	/* User data: buffers, lens, imm, context */
 
@@ -281,6 +282,15 @@ struct fi_ibv_rdm_ep {
 	struct fi_ibv_rdm_cntr*	write_cntr;
 
 	struct fi_info*	info;
+
+	struct util_buf_pool *fi_ibv_rdm_request_pool;
+	struct util_buf_pool *fi_ibv_rdm_postponed_pool;
+	/*
+	 * extra buffer size equal eager buffer size,
+	 * it is used for any intermediate needs like
+	 * unexpected recv, pack/unpack noncontig messages, etc
+	 */
+	struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
 
 	size_t			addrlen;
 	struct rdma_addrinfo*	rai;
@@ -404,8 +414,6 @@ struct fi_ibv_rdm_postponed_entry {
 
 	struct fi_ibv_rdm_conn *conn;
 };
-
-extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 
 static inline void
 fi_ibv_rdm_set_buffer_status(struct fi_ibv_rdm_buf *buff, uint16_t status)
@@ -735,7 +743,7 @@ fi_ibv_rdm_process_err_send_wc(struct fi_ibv_rdm_ep *ep,
 			conn = req->minfo.conn;
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", req,
 					       FI_LOG_DEBUG);
-			util_buf_release(fi_ibv_rdm_request_pool, req);
+			util_buf_release(ep->fi_ibv_rdm_request_pool, req);
 		}
 		VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc.status = %d:%s, "
 			   "pend_send: %d, connection: %p, request = %p (%s)\n",

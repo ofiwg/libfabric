@@ -43,9 +43,6 @@
 
 struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
 
-extern struct util_buf_pool *fi_ibv_rdm_request_pool;
-extern struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
-
 DEFINE_LIST(fi_ibv_rdm_posted_queue);
 DEFINE_LIST(fi_ibv_rdm_unexp_queue);
 DEFINE_LIST(fi_ibv_rdm_postponed_queue);
@@ -145,10 +142,11 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 	};
 
 	struct fi_ibv_rdm_request *request =
-		util_buf_alloc(fi_ibv_rdm_request_pool);
+		util_buf_alloc(ep_rdm->fi_ibv_rdm_request_pool);
 	if (OFI_UNLIKELY(!request))
 		return -FI_EAGAIN;
 	fi_ibv_rdm_zero_request(request);
+	request->ep = ep_rdm;
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	if (flags & FI_PEEK) {
@@ -323,7 +321,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
 
 	struct fi_ibv_rdm_send_start_data sdata = {
-		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
+		.ep_rdm = ep_rdm,
 		.conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr),
 		.data_len = 0,
 		.context = msg->context,
@@ -362,7 +360,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		 * to send immediately
 		 */
 		sdata.buf.iovec_arr =
-			util_buf_alloc(fi_ibv_rdm_extra_buffers_pool);
+			util_buf_alloc(ep_rdm->fi_ibv_rdm_extra_buffers_pool);
 		for (i = 0; i < msg->iov_count; i++) {
 			sdata.buf.iovec_arr[i].iov_base = msg->msg_iov[i].iov_base;
 			sdata.buf.iovec_arr[i].iov_len = msg->msg_iov[i].iov_len;
@@ -492,11 +490,11 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 
 			request = found_request;
 		} else {
-			request = util_buf_alloc(fi_ibv_rdm_request_pool);
+			request = util_buf_alloc(ep->fi_ibv_rdm_request_pool);
 			if (OFI_UNLIKELY(!request))
 				return;
 			fi_ibv_rdm_zero_request(request);
-
+			request->ep = ep;
 			FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request,
 						FI_LOG_DEBUG);
 		}
