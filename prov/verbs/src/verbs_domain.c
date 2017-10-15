@@ -41,11 +41,14 @@
 
 static int fi_ibv_mr_close(fid_t fid)
 {
-	struct fi_ibv_mem_desc *mr;
+	struct fi_ibv_mem_desc *mr =
+		container_of(fid, struct fi_ibv_mem_desc, mr_fid.fid);
 	int ret;
+	struct fi_ibv_mr_reg_arg mr_reg_arg = {
+		.rtc = &mr->domain->rtc,
+	};
 
-	mr = container_of(fid, struct fi_ibv_mem_desc, mr_fid.fid);
-	ret = -ibv_dereg_mr(mr->mr);
+	ret = mr->domain->dereg_mr(mr->mr, NULL, 0, &mr_reg_arg);
 	if (!ret)
 		free(mr);
 	return ret;
@@ -59,14 +62,50 @@ static struct fi_ops fi_ibv_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static int fi_ibv_reg_mr(void **prov_mr, void *buf,
+			 size_t len, void *arg)
+{
+    return (*prov_mr =
+		ibv_reg_mr(((struct fi_ibv_mr_reg_arg *)arg)->pd,
+			   buf, len, ((struct fi_ibv_mr_reg_arg *)arg)->access)) ?
+	    FI_SUCCESS : -errno;
+}
+
+static int fi_ibv_dereg_mr(void *prov_mr, void *buf,
+			   size_t len, void *arg)
+{
+	OFI_UNUSED(buf);
+	OFI_UNUSED(len);
+	OFI_UNUSED(arg);
+
+	return -ibv_dereg_mr((struct ibv_mr *)prov_mr);
+}
+
+static int fi_ibv_rtc_reg_mr(void **prov_mr, void *buf,
+			     size_t len, void *arg)
+{
+	return ofi_rtc_reg_buffer(*((struct fi_ibv_mr_reg_arg *)arg)->rtc,
+				  buf, len, prov_mr);
+}
+
+static int fi_ibv_rtc_dereg_mr(void *prov_mr, void *buf,
+			       size_t len, void *arg)
+{
+	OFI_UNUSED(prov_mr);
+
+	return ofi_rtc_dereg_buffer(*((struct fi_ibv_mr_reg_arg *)arg)->rtc,
+				    buf, len);
+}
+
 static int
 fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	   uint64_t access, uint64_t offset, uint64_t requested_key,
 	   uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct fi_ibv_mem_desc *md;
-	int fi_ibv_access = 0;
+	int fi_ibv_access = 0, ret;
 	struct fid_domain *domain;
+	struct fi_ibv_mr_reg_arg mr_reg_arg = { 0 };
 
 	if (flags)
 		return -FI_EBADFLAGS;
@@ -117,11 +156,15 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE |
 			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
 
-	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, fi_ibv_access);
-	if (!md->mr)
+	mr_reg_arg.pd = md->domain->pd;
+	mr_reg_arg.access = fi_ibv_access;
+	mr_reg_arg.rtc = &md->domain->rtc;
+
+	ret = md->domain->reg_mr((void **)&md->mr, (void *)buf, len, &mr_reg_arg);
+	if (ret)
 		goto err;
 
-	md->mr_fid.mem_desc = (void *) (uintptr_t) md->mr->lkey;
+	md->mr_fid.mem_desc = (void *)(uintptr_t)md->mr->lkey;
 	md->mr_fid.key = md->mr->rkey;
 	*mr = &md->mr_fid;
 	if (md->domain->eq_flags & FI_REG_MR) {
@@ -141,7 +184,7 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 err:
 	free(md);
-	return -errno;
+	return ret;
 }
 
 static int fi_ibv_mr_regv(struct fid *fid, const struct iovec * iov,
@@ -387,6 +430,42 @@ static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.query_atomic = fi_no_query_atomic,
 };
 
+static int fi_ibv_init_rtc(struct fi_ibv_domain *domain)
+{
+	struct fi_ibv_mr_reg_arg reg_arg = {
+		.pd	= domain->pd,
+		/* Can't be evaluated at this step */
+		.access	= IBV_ACCESS_LOCAL_WRITE |
+			  IBV_ACCESS_REMOTE_WRITE |
+			  IBV_ACCESS_REMOTE_READ |
+			  IBV_ACCESS_REMOTE_ATOMIC,
+		.rtc	= &domain->rtc,
+	};
+	struct util_rtc_attr attr = {
+		.total_num_entries_thr	= 1000,
+		.total_size_thr		= 0,
+		.prov_reg_mr		= fi_ibv_reg_mr,
+		.prov_dereg_mr		= fi_ibv_dereg_mr,
+		.reg_arg		= &reg_arg,
+		.reg_arg_len		= sizeof(reg_arg),
+		.dereg_arg		= NULL,
+		.dereg_arg_len		= 0,
+	};
+
+	if (!fi_ibv_gl_data.use_rtc) {
+		domain->reg_mr = fi_ibv_reg_mr;
+		domain->dereg_mr = fi_ibv_dereg_mr;
+		VERBS_INFO(FI_LOG_DOMAIN, "RTC feature wasn't enabled\n");
+		
+		return FI_SUCCESS;
+	}
+
+	domain->reg_mr = fi_ibv_rtc_reg_mr;
+	domain->dereg_mr = fi_ibv_rtc_dereg_mr;
+
+	return ofi_util_rtc_init(&attr, &domain->rtc);
+}
+
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
@@ -432,6 +511,10 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err3;
 	}
 
+	ret = fi_ibv_init_rtc(_domain);
+	if (ret)
+		goto err4;
+
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &fi_ibv_fid_ops;
@@ -442,7 +525,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->rdm_cm = calloc(1, sizeof(*_domain->rdm_cm));
 		if (!_domain->rdm_cm) {
 			ret = -FI_ENOMEM;
-			goto err4;
+			goto err5;
 		}
 		_domain->rdm_cm->cm_progress_timeout =
 			fi_ibv_gl_data.rdm.thread_timeout;
@@ -458,7 +541,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 				   "Failed to launch CM progress thread, "
 				   "err :%d\n", ret);
 			ret = -FI_EOTHER;
-			goto err5;
+			goto err6;
 		}
 		_domain->util_domain.domain_fid.ops = &fi_ibv_rdm_domain_ops;
 
@@ -468,13 +551,13 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 				   "Failed to create listener event channel: %s\n",
 				   strerror(errno));
 			ret = -FI_EOTHER;
-			goto err6;
+			goto err7;
 		}
 
 		if (fi_fd_nonblock(_domain->rdm_cm->ec->fd) != 0) {
 			VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "fcntl", errno);
 			ret = -FI_EOTHER;
-			goto err7;
+			goto err8;
 		}
 
 		if (rdma_create_id(_domain->rdm_cm->ec,
@@ -482,7 +565,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			VERBS_INFO(FI_LOG_DOMAIN, "Failed to create cm listener: %s\n",
 				   strerror(errno));
 			ret = -FI_EOTHER;
-			goto err7;
+			goto err8;
 		}
 		_domain->rdm_cm->is_bound = 0;
 		break;
@@ -505,7 +588,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			if (ret) {
 				VERBS_INFO(FI_LOG_DOMAIN,
 					   "ofi_ns_init returns %d\n", ret);
-				goto err4;
+				goto err5;
 			}
 			ofi_ns_start_server(&fab->name_server);
 		}
@@ -518,20 +601,23 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		VERBS_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "
 			   "EP type :%d\n", _domain->ep_type);
 		ret = -FI_EINVAL;
-		goto err4;
+		goto err5;
 	}
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
 /* Only verbs/RDM should be able to go through err[5-7] */
-err7:
+err8:
 	rdma_destroy_event_channel(_domain->rdm_cm->ec);
-err6:
+err7:
 	_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
 	pthread_join(_domain->rdm_cm->cm_progress_thread, &status);
-err5:
+err6:
 	pthread_mutex_destroy(&_domain->rdm_cm->cm_lock);
 	free(_domain->rdm_cm);
+err5:
+	if (ofi_util_rtc_close(_domain->rtc))
+		VERBS_INFO(FI_LOG_DOMAIN, "ofi_util_rtc_close fails");
 err4:
 	if (ibv_dealloc_pd(_domain->pd))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN,

@@ -53,6 +53,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.use_odp		= 1,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
+	.use_rtc		= 1,
 
 	.rdm			= {
 		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
@@ -664,6 +665,12 @@ static int fi_ibv_read_params(void)
 				 &fi_ibv_gl_data.iface)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of iface\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_bool("use_rtc", "Enable RDMA Translation Cache (RTC) feature",
+				  &fi_ibv_gl_data.use_rtc)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of use_rtc\n");
 		return -FI_EINVAL;
 	}
 

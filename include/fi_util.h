@@ -796,4 +796,56 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 			  void *service);
 
+/*
+ * RDMA Translation Cache
+ */
+
+typedef int(*util_rtc_reg_mr_func_t)(void **prov_mr, void *buf,	
+				     size_t len, void *arg);
+typedef int(*util_rtc_dereg_mr_func_t)(void *prov_mr, void *buf,
+				       size_t len, void *arg);
+
+struct util_rtc {
+	struct fid_domain	*domain_fid;
+	RbtHandle		rb_tree;
+	fastlock_t		lock;
+	struct dlist_entry	queue_list;
+	struct util_buf_pool	*buf_pool;
+	size_t			total_num_entries_thr;
+	size_t			total_size_thr;
+
+	util_rtc_reg_mr_func_t		prov_reg_mr;
+	util_rtc_dereg_mr_func_t	prov_dereg_mr;
+	void				*reg_arg;
+	void				*dereg_arg;
+};
+
+struct util_rtc_attr {
+	size_t	total_num_entries_thr;
+	size_t	total_size_thr;
+
+	util_rtc_reg_mr_func_t		prov_reg_mr;
+	util_rtc_dereg_mr_func_t	prov_dereg_mr;
+
+	void				*reg_arg;
+	size_t				reg_arg_len;
+	void				*dereg_arg;
+	size_t				dereg_arg_len;
+};
+
+struct util_rtc_entry {
+	struct dlist_entry	list_entry;
+	void			*buf;
+	size_t			len;
+	void			*mr;
+	uint64_t		key;
+	int			in_use;
+};
+
+int ofi_util_rtc_init(struct util_rtc_attr *attr, struct util_rtc **rtc);
+int ofi_rtc_reg_buffer(struct util_rtc *rtc, void *buf, size_t len,
+		       void **prov_mr);
+int ofi_rtc_dereg_buffer(struct util_rtc *rtc, void *buf, size_t len);
+int ofi_util_rtc_close(struct util_rtc *rtc);
+
 #endif
