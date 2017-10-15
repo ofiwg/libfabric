@@ -141,11 +141,13 @@ struct fi_ibv_rdm_rndv_header {
 
 struct fi_ibv_rdm_multi_request {
 	/* working request, will be renewed for every data arriving */
-	struct fi_ibv_rdm_request *prepost;
-	uint8_t *buf;
-	uint64_t len;
-	uint64_t offset;
-	uint64_t min_size;
+	struct dlist_entry		list_entry;
+	struct fi_ibv_rdm_request	*prepost;
+	struct fi_ibv_rdm_ep		*ep;
+	uint8_t				*buf;
+	uint64_t			len;
+	uint64_t			offset;
+	uint64_t			min_size;
 };
 
 struct fi_ibv_rdm_request {
@@ -271,32 +273,35 @@ struct fi_ibv_rdm_cntr {
 
 struct fi_ibv_rdm_ep {
 	struct fid_ep ep_fid;
-	struct fi_ibv_domain*	domain;
+	struct fi_ibv_domain	*domain;
 	struct slist_entry	list_entry;
-	struct fi_ibv_rdm_cq*	fi_scq;
-	struct fi_ibv_rdm_cq*	fi_rcq;
+	struct fi_ibv_rdm_cq	*fi_scq;
+	struct fi_ibv_rdm_cq	*fi_rcq;
 
-	struct fi_ibv_rdm_cntr*	send_cntr;
-	struct fi_ibv_rdm_cntr*	recv_cntr;
-	struct fi_ibv_rdm_cntr*	read_cntr;
-	struct fi_ibv_rdm_cntr*	write_cntr;
+	struct fi_ibv_rdm_cntr	*send_cntr;
+	struct fi_ibv_rdm_cntr	*recv_cntr;
+	struct fi_ibv_rdm_cntr	*read_cntr;
+	struct fi_ibv_rdm_cntr	*write_cntr;
 
-	struct fi_info*	info;
+	struct fi_info	*info;
 
-	struct util_buf_pool *fi_ibv_rdm_request_pool;
-	struct util_buf_pool *fi_ibv_rdm_postponed_pool;
+	struct util_buf_pool	*fi_ibv_rdm_request_pool;
+	struct util_buf_pool	*fi_ibv_rdm_multi_request_pool;
+	struct util_buf_pool	*fi_ibv_rdm_postponed_pool;
 	/*
 	 * extra buffer size equal eager buffer size,
 	 * it is used for any intermediate needs like
 	 * unexpected recv, pack/unpack noncontig messages, etc
 	 */
-	struct util_buf_pool *fi_ibv_rdm_extra_buffers_pool;
+	struct util_buf_pool	*fi_ibv_rdm_extra_buffers_pool;
+
+	struct dlist_entry	fi_ibv_rdm_multi_recv_list;
 
 	size_t			addrlen;
-	struct rdma_addrinfo*	rai;
+	struct rdma_addrinfo	*rai;
 	struct sockaddr_in	my_addr;
 
-	struct fi_ibv_av*	av;
+	struct fi_ibv_av	*av;
 	int		tx_selective_completion;
 	int 		rx_selective_completion;
 	size_t 		min_multi_recv_size;
@@ -308,8 +313,8 @@ struct fi_ibv_rdm_ep {
 	 * It must generate work completion in receive CQ
 	 */
 	enum ibv_wr_opcode	eopcode;
-	struct ibv_cq*		scq;
-	struct ibv_cq*		rcq;
+	struct ibv_cq		*scq;
+	struct ibv_cq		*rcq;
 
 	int	buff_len;
 	int	n_buffs;

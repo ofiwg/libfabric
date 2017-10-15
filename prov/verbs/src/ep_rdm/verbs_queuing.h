@@ -204,6 +204,34 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 }
 
 static inline void
+fi_ibv_rdm_remove_from_multi_recv_list(struct fi_ibv_rdm_multi_request *request,
+				       struct fi_ibv_rdm_ep *ep)
+{
+	dlist_remove(&request->list_entry);
+}
+
+static inline void
+fi_ibv_rdm_add_to_multi_recv_list(struct fi_ibv_rdm_multi_request *request,
+				  struct fi_ibv_rdm_ep *ep)
+{
+	dlist_insert_tail(&request->list_entry,
+			  &ep->fi_ibv_rdm_multi_recv_list);
+}
+
+static inline struct fi_ibv_rdm_multi_request *
+fi_ibv_rdm_take_first_from_multi_recv_list(struct fi_ibv_rdm_ep *ep)
+{
+	if (!dlist_empty(&ep->fi_ibv_rdm_multi_recv_list)) {
+		struct fi_ibv_rdm_multi_request *entry;
+		dlist_pop_front(&ep->fi_ibv_rdm_multi_recv_list,
+				struct fi_ibv_rdm_multi_request,
+				entry, list_entry);
+		return entry;
+	}
+	return NULL;
+}
+
+static inline void
 fi_ibv_rdm_remove_from_postponed_queue(struct fi_ibv_rdm_request *request)
 {
 	FI_IBV_RDM_DBG_REQUEST("remove_from_postponed_queue: ", request,

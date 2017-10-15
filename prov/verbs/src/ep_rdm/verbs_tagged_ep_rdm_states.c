@@ -496,7 +496,8 @@ fi_ibv_rdm_repost_multi_recv(struct fi_ibv_rdm_request *request,
 	parent->offset += offset;
 
 	VERBS_DBG(FI_LOG_EP_DATA,
-		  "multi_recv parent: prepost %p, buf %p, len %" PRIu64 ", offset %" PRIu64 " min_size %" PRIu64 "\n",
+		  "multi_recv parent: prepost %p, buf %p, len %" PRIu64
+		  ", offset %" PRIu64 " min_size %" PRIu64 "\n",
 		  parent->prepost, parent->buf, parent->len,
 		  parent->offset, parent->min_size);
 
@@ -509,7 +510,8 @@ fi_ibv_rdm_repost_multi_recv(struct fi_ibv_rdm_request *request,
 	if (prepost->len < parent->min_size) {
 		/* This is the last one, parent can be released */
 		prepost->comp_flags |= FI_MULTI_RECV;
-		free(prepost->parent);
+		util_buf_release(ep->fi_ibv_rdm_multi_request_pool, prepost->parent);
+		fi_ibv_rdm_remove_from_multi_recv_list(prepost->parent, ep);
 		prepost->parent = NULL;
 		FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", prepost, FI_LOG_DEBUG);
 	}
@@ -600,13 +602,14 @@ fi_ibv_rdm_init_recv_request(struct fi_ibv_rdm_request *request, void *data)
 	struct fi_ibv_rdm_tagged_recv_start_data *p = data;
 
 	if (p->peek_data.flags & FI_MULTI_RECV) {
-		/* TODO: optimization - replace allocation with a buffer pool */
-		request->parent = calloc(1, sizeof(*request->parent));
+		request->parent =
+			util_buf_alloc(request->ep->fi_ibv_rdm_multi_request_pool);
 		if (!request->parent) {
 			VERBS_WARN(FI_LOG_EP_DATA, "Unable to allocate memory "
 				   "for parent \n");
 			return -FI_ENOMEM;
 		}
+		fi_ibv_rdm_add_to_multi_recv_list(request->parent, request->ep);
 		request->parent->prepost = request;
 		request->parent->buf = p->dest_addr;
 		request->parent->len = p->data_len;
@@ -843,6 +846,7 @@ fi_ibv_rdm_eager_recv_got_pkt(struct fi_ibv_rdm_request *request, void *data)
 		if (request->parent) {
 			if (!fi_ibv_rdm_repost_multi_recv(request, data_len, p->ep))
 				return -FI_ENOMEM;
+			
 		}
 
 		if (request->len >= data_len) {

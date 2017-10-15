@@ -176,9 +176,10 @@ void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_conn *conn,
 	}
 }
 
-void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
+void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_request *request;
+	struct fi_ibv_rdm_multi_request *multi_request;
 
 	while ((request = fi_ibv_rdm_take_first_from_unexp_queue())) {
 		if (request->unexp_rbuf) {
@@ -188,6 +189,9 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
 		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
+
+	while ((multi_request = fi_ibv_rdm_take_first_from_multi_recv_list(ep)))
+		util_buf_release(ep->fi_ibv_rdm_multi_request_pool, multi_request);
 
 	while ((request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
  		/* Check `request->context->internal[0] == NULL` in fi_cancel
