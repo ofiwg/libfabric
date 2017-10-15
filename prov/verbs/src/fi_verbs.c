@@ -50,7 +50,10 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.def_rx_iov_limit	= 4,
 	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
 	.fork_unsafe		= 0,
-	.use_odp		= 1,
+	.odp			= {
+		.str			= "Explicit",
+		.type			= VERBS_ODP_EXPLICIT,
+	},
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
 
@@ -645,12 +648,25 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of fork_unsafe\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging experimental feature",
-				  &fi_ibv_gl_data.use_odp)) {
+	if (fi_ibv_get_param_str("odp", "Enable on-demand paging experimental feature. "
+				 "Possible values are `None`, `Explicit`, `Implicit`",
+				  &fi_ibv_gl_data.odp.str)) {
 		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of use_odp\n");
+			   "Invalid value of ODP\n");
 		return -FI_EINVAL;
+	} else {
+		if (!strcasecmp(fi_ibv_gl_data.odp.str, "None")) {
+			fi_ibv_gl_data.odp.type = VERBS_ODP_NONE;
+		} else if (!strcasecmp(fi_ibv_gl_data.odp.str, "Explicit")) {
+			fi_ibv_gl_data.odp.type = VERBS_ODP_EXPLICIT;
+		} else if (!strcasecmp(fi_ibv_gl_data.odp.str, "Implicit")) {
+			fi_ibv_gl_data.odp.type = VERBS_ODP_IMPLICIT;
+		} else {
+			VERBS_WARN(FI_LOG_CORE, "Invalid type of ODP support\n");
+			return -FI_EINVAL;
+		}
 	}
+
 	if (fi_ibv_get_param_int("cqread_bunch_size", "The number of entries to "
 				 "be read from the verbs completion queue at a time",
 				 &fi_ibv_gl_data.cqread_bunch_size) ||

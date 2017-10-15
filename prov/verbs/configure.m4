@@ -12,6 +12,8 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	verbs_ibverbs_happy=0
 	verbs_rdmacm_happy=0
 	verbs_ibverbs_exp_happy=0
+	verbs_ibverbs_exp_explicit_odp_happy=0
+	verbs_ibverbs_exp_implicit_odp_happy=0
 	AS_IF([test x"$enable_verbs" != x"no"],
 	      [FI_CHECK_PACKAGE([verbs_ibverbs],
 				[infiniband/verbs.h],
@@ -49,11 +51,33 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 			    #include <infiniband/verbs_exp.h>
 			   ],
 			   [
-			    return (IBV_EXP_DEVICE_ATTR_ODP | IBV_EXP_DEVICE_ODP);
+			    return 0;
 			   ])
 			  ],
 			  [verbs_ibverbs_exp_happy=1],
 			  [verbs_ibverbs_exp_happy=0])
+
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+			   [
+			    #include <infiniband/verbs_exp.h>
+			   ],
+			   [
+			    return (IBV_EXP_DEVICE_ATTR_ODP | IBV_EXP_DEVICE_ODP);
+			   ])
+			  ],
+			  [verbs_ibverbs_exp_explicit_odp_happy=1],
+			  [verbs_ibverbs_exp_explicit_odp_happy=0])
+
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+			   [
+			    #include <infiniband/verbs_exp.h>
+			   ],
+			   [
+			    return (IBV_EXP_ODP_SUPPORT_IMPLICIT);
+			   ])
+			  ],
+			  [verbs_ibverbs_exp_implicit_odp_happy=1],
+			  [verbs_ibverbs_exp_implicit_odp_happy=0])
 
 	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
 	       test $verbs_rdmacm_happy -eq 1], [$1], [$2])
@@ -62,8 +86,28 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	       test $verbs_rdmacm_happy -eq 1 && \
 	       test $verbs_ibverbs_exp_happy -eq 1],
 		[AC_DEFINE([HAVE_VERBS_EXP_H], [1],
-			   [Experimental verbs features support])],
-		[])
+			   [Experimental verbs features support])
+		 AC_VERBOSE([experimental verbs support... yes])],
+		[AC_VERBOSE([experimental verbs support... no])])
+
+	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
+	       test $verbs_rdmacm_happy -eq 1 && \
+	       test $verbs_ibverbs_exp_happy -eq 1 &&
+	       test $verbs_ibverbs_exp_explicit_odp_happy -eq 1],
+		[AC_DEFINE([HAVE_VERBS_EXP_EXPLICIT_ODP], [1],
+			   [Experimental Explicit ODP verbs feature support])
+		 AC_VERBOSE([experimental Explicit ODP support... yes])],
+		[AC_VERBOSE([experimental Explicit ODP support... no])])
+
+	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
+	       test $verbs_rdmacm_happy -eq 1 && \
+	       test $verbs_ibverbs_exp_happy -eq 1 &&
+	       test $verbs_ibverbs_exp_explicit_odp_happy -eq 1 &&
+	       test $verbs_ibverbs_exp_implicit_odp_happy -eq 1],
+		[AC_DEFINE([HAVE_VERBS_EXP_IMPLICIT_ODP], [1],
+			   [Experimental Implicit ODP verbs feature support])
+		 AC_VERBOSE([experimental Implicit ODP support... yes])],
+		[AC_VERBOSE([experimental Implicit ODP support... no])])
 
 	# Technically, verbs_ibverbs_CPPFLAGS and
 	# verbs_rdmacm_CPPFLAGS could be different, but it is highly

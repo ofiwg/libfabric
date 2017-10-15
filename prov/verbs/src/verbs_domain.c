@@ -86,38 +86,33 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	md->mr_fid.fid.context = context;
 	md->mr_fid.fid.ops = &fi_ibv_mr_ops;
 
+	/* NOTE: Local read access to an MR is enabled by default in verbs */
 	/* Enable local write access by default for FI_EP_RDM which hides local
 	 * registration requirements. This allows to avoid buffering or double
 	 * registration */
 	if (!(md->domain->info->caps & FI_LOCAL_MR) ||
-	    (md->domain->info->domain_attr->mr_mode & FI_MR_LOCAL))
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-
-	/* Local read access to an MR is enabled by default in verbs */
-
-	if (access & FI_RECV)
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+	    (md->domain->info->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	    (access & FI_RECV) || (access & FI_READ) || (access & FI_WRITE))
+		fi_ibv_access |= VERBS_ACCESS_LOCAL_WRITE;
 
 	/* iWARP spec requires Remote Write access for an MR that is used
 	 * as a data sink for a Remote Read */
-	if (access & FI_READ) {
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-		if (md->domain->verbs->device->transport_type == IBV_TRANSPORT_IWARP)
-			fi_ibv_access |= IBV_ACCESS_REMOTE_WRITE;
-	}
-
-	if (access & FI_WRITE)
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+	if ((md->domain->verbs->device->transport_type == IBV_TRANSPORT_IWARP) && 
+	    (access & FI_READ))
+		fi_ibv_access |= VERBS_ACCESS_REMOTE_WRITE;
 
 	if (access & FI_REMOTE_READ)
-		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
+		fi_ibv_access |= VERBS_ACCESS_REMOTE_READ;
 
 	/* Verbs requires Local Write access too for Remote Write access */
 	if (access & FI_REMOTE_WRITE)
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE |
-			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
+		fi_ibv_access |= VERBS_ACCESS_LOCAL_WRITE |
+				 VERBS_ACCESS_REMOTE_WRITE |
+				 VERBS_ACCESS_REMOTE_ATOMIC;
 
-	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, fi_ibv_access);
+	
+	md->mr = fi_ibv_reg_mr(md->domain, (void *)buf,
+			       len, fi_ibv_access);
 	if (!md->mr)
 		goto err;
 
@@ -387,6 +382,185 @@ static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.query_atomic = fi_no_query_atomic,
 };
 
+#ifdef HAVE_VERBS_EXP_H
+
+#ifdef HAVE_VERBS_EXP_EXPLICIT_ODP
+static inline void *fi_ibv_exp_reg_mr(struct fi_ibv_domain *domain, void *addr,
+				      size_t length, int fi_ibv_access)
+{
+	struct ibv_exp_reg_mr_in in = {
+		.pd		= domain->pd,
+		.addr		= addr,
+		.length		= length,
+		.exp_access	= fi_ibv_access,
+		.comp_mask	= 0,
+	};
+
+	return ibv_exp_reg_mr(&in);
+}
+static inline void *fi_ibv_exp_explicit_odp_reg_mr(struct fi_ibv_domain *domain, void *addr,
+						   size_t length, int fi_ibv_access)
+{
+    return fi_ibv_exp_reg_mr(domain, addr, length,
+			     fi_ibv_access | IBV_EXP_ACCESS_ON_DEMAND);
+}
+
+#ifdef HAVE_VERBS_EXP_IMPLICIT_ODP
+static inline void *fi_ibv_exp_implicit_odp_reg_mr(struct fi_ibv_domain *domain, void *addr,
+						   size_t length, int fi_ibv_access)
+{
+	(void) addr;
+	(void) length;
+	(void) fi_ibv_access;
+
+	return domain->implicit_odp_mr_key;
+}
+#endif /* HAVE_VERBS_EXP_IMPLICIT_ODP */
+
+#endif /* HAVE_VERBS_EXP_EXPLICIT_ODP */
+
+static void fi_ibv_handle_exp_reg_mr(struct fi_ibv_domain *domain)
+{
+	domain->implicit_odp_mr_key = NULL;
+	switch (domain->odp) {
+	case VERBS_ODP_IMPLICIT:
+#ifdef HAVE_VERBS_EXP_IMPLICIT_ODP
+		domain->implicit_odp_mr_key =
+			fi_ibv_exp_reg_mr(domain, 0, IBV_EXP_IMPLICIT_MR_SIZE,
+					  VERBS_ACCESS_LOCAL_WRITE |
+					  VERBS_ACCESS_REMOTE_WRITE |
+					  VERBS_ACCESS_REMOTE_READ |
+					  VERBS_ACCESS_REMOTE_ATOMIC);
+		if (!domain->implicit_odp_mr_key) {
+			VERBS_INFO(FI_LOG_DOMAIN, "Experimental MR registration "
+				   "w/ Implicit ODP support can't be enabled, "
+				   "because MR registation fails. Goto Explicit ODP\n");
+			domain->odp = VERBS_ODP_EXPLICIT;
+		} else {
+			domain->ibv_reg_mr_cb = fi_ibv_exp_implicit_odp_reg_mr;
+			VERBS_INFO(FI_LOG_DOMAIN, "Experimental MR registration "
+				   "w/ Implicit ODP support enabled\n");
+			break;
+		}
+#endif /* HAVE_VERBS_EXP_IMPLICIT_ODP */
+		/* FALL THROUGH  */
+	case VERBS_ODP_EXPLICIT:
+#ifdef HAVE_VERBS_EXP_EXPLICIT_ODP
+		domain->ibv_reg_mr_cb = fi_ibv_exp_explicit_odp_reg_mr;
+		VERBS_INFO(FI_LOG_DOMAIN, "Experimental MR registration "
+			   "w/ Explicit ODP support enabled\n");		
+		break;
+#else /* !HAVE_VERBS_EXP_EXPLICIT_ODP */
+		/* FALL THROUGH  */
+#endif /* HAVE_VERBS_EXP_EXPLICIT_ODP */
+	case VERBS_ODP_NONE:
+		domain->ibv_reg_mr_cb = fi_ibv_exp_reg_mr;
+		VERBS_INFO(FI_LOG_DOMAIN, "Experimental MR registration "
+			   "w/o ODP support enabled\n");
+		break;
+	}
+}
+
+#endif /* HAVE_VERBS_EXP_H */
+
+static inline void *fi_ibv_normal_reg_mr(struct fi_ibv_domain *domain, void *addr,
+					 size_t length, int fi_ibv_access)
+{
+	return ibv_reg_mr(domain->pd, addr, length, fi_ibv_access);
+}
+
+static void fi_ibv_mr_reg_init(struct fi_ibv_domain *domain)
+{
+	int odp_support = 0;
+	int implicit_odp_support = 0;
+#if defined(HAVE_VERBS_EXP_H) && defined(HAVE_VERBS_EXP_EXPLICIT_ODP)
+	struct ibv_exp_device_attr exp_attr = {
+		.comp_mask = IBV_EXP_DEVICE_ATTR_ODP |
+			     IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS,
+	};
+	int ret = ibv_exp_query_device(domain->verbs, &exp_attr);
+	if (!ret &&
+	    (exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP)) {
+#ifdef HAVE_VERBS_EXP_IMPLICIT_ODP
+		if (exp_attr.odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT_IMPLICIT)
+			implicit_odp_support = 1;
+#endif /* HAVE_VERBS_EXP_IMPLICIT_ODP */
+		switch (domain->ep_type) {
+		case FI_EP_MSG:
+		case FI_EP_RDM:
+			odp_support =
+				(exp_attr.odp_caps.per_transport_caps.rc_odp_caps &
+					(IBV_EXP_ODP_SUPPORT_SEND |
+					 IBV_EXP_ODP_SUPPORT_RECV |
+					 IBV_EXP_ODP_SUPPORT_WRITE |
+					 IBV_EXP_ODP_SUPPORT_READ |
+					 IBV_EXP_ODP_SUPPORT_READ));
+			if (domain->ep_type == FI_EP_MSG &&
+			    domain->info->domain_attr->max_ep_srx_ctx)
+				odp_support =
+					(exp_attr.odp_caps.per_transport_caps.rc_odp_caps &
+						IBV_EXP_ODP_SUPPORT_SRQ_RECV);
+			break;
+		case FI_EP_DGRAM:
+			odp_support =
+				(exp_attr.odp_caps.per_transport_caps.ud_odp_caps &
+					(IBV_EXP_ODP_SUPPORT_SEND |
+					 IBV_EXP_ODP_SUPPORT_RECV));			
+			break;
+		default:
+			odp_support = 0;
+			assert(0);
+			break;
+		}
+	}
+#endif /* HAVE_VERBS_EXP_H && HAVE_VERBS_EXP_EXPLICIT_ODP */
+	if (odp_support && (fi_ibv_gl_data.odp.type != VERBS_ODP_NONE)) {
+		VERBS_WARN(FI_LOG_CORE, "ODP is not supported on this "
+					"configuration, ignore\n");
+		domain->odp = VERBS_ODP_NONE;
+	} else {
+		switch (fi_ibv_gl_data.odp.type) {
+		case VERBS_ODP_IMPLICIT:
+			if (odp_support && implicit_odp_support) {
+				domain->odp = VERBS_ODP_IMPLICIT;
+			} else if (odp_support) {
+				domain->odp = VERBS_ODP_EXPLICIT;
+				VERBS_WARN(FI_LOG_CORE, "`Implicit` ODP is not "
+					   "supported on this configuration. "
+					   "Set to `Explicit`");
+			} else {
+				domain->odp = VERBS_ODP_NONE;
+				VERBS_WARN(FI_LOG_CORE, "Botn `Implicit` and "
+					   "`Explicit` ODP is not supported "
+					   "on this configuration. "
+					   "Set to `None`");
+			}
+			break;
+		case VERBS_ODP_EXPLICIT:
+			if (!odp_support) {
+				domain->odp = VERBS_ODP_NONE;
+				VERBS_WARN(FI_LOG_CORE,
+					   "`Explicit` ODP is not supported "
+					   "on this configuration. "
+					   "Set to `None`");
+			} else {
+				domain->odp = VERBS_ODP_EXPLICIT;
+			}
+			break;
+		case VERBS_ODP_NONE:
+			domain->odp = VERBS_ODP_NONE;
+			break;
+		}
+	}
+
+#if defined(HAVE_VERBS_EXP_H)
+	fi_ibv_handle_exp_reg_mr(domain);
+#else /* !HAVE_VERBS_EXP_H */
+	domain->ibv_reg_mr_cb = fi_ibv_normal_reg_mr;
+	VERBS_INFO(FI_LOG_DOMAIN, "Normal MR registration enabled\n");
+#endif /* HAVE_VERBS_EXP_H */
+}
+
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
@@ -431,6 +605,8 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		ret = -errno;
 		goto err3;
 	}
+
+	fi_ibv_mr_reg_init(_domain);
 
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;

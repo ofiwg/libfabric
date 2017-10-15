@@ -110,6 +110,18 @@
 #define VERBS_DEF_CQ_SIZE 1024
 #define VERBS_MR_IOV_LIMIT 1
 
+#ifdef HAVE_VERBS_EXP_H
+#define VERBS_ACCESS_LOCAL_WRITE	IBV_EXP_ACCESS_LOCAL_WRITE
+#define VERBS_ACCESS_REMOTE_WRITE	IBV_EXP_ACCESS_REMOTE_WRITE
+#define VERBS_ACCESS_REMOTE_READ	IBV_EXP_ACCESS_REMOTE_READ
+#define VERBS_ACCESS_REMOTE_ATOMIC	IBV_EXP_ACCESS_REMOTE_ATOMIC
+#else /* !HAVE_VERBS_EXP_H */
+#define VERBS_ACCESS_LOCAL_WRITE	IBV_ACCESS_LOCAL_WRITE
+#define VERBS_ACCESS_REMOTE_WRITE	IBV_ACCESS_REMOTE_WRITE
+#define VERBS_ACCESS_REMOTE_READ	IBV_ACCESS_REMOTE_READ
+#define VERBS_ACCESS_REMOTE_ATOMIC	IBV_ACCESS_REMOTE_ATOMIC
+#endif /* HAVE_VERBS_EXP_H */
+
 #define FI_IBV_EP_TYPE(info)						\
 	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
 
@@ -151,6 +163,12 @@
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
 
+enum fi_ibv_odp {
+	VERBS_ODP_NONE,
+	VERBS_ODP_EXPLICIT,
+	VERBS_ODP_IMPLICIT,
+};
+
 extern struct fi_ibv_gl_data {
 	int	def_tx_size;
 	int	def_rx_size;
@@ -159,7 +177,10 @@ extern struct fi_ibv_gl_data {
 	int	def_inline_size;
 	int	min_rnr_timer;
 	int	fork_unsafe;
-	int	use_odp;
+	struct {
+		char		*str;		
+		enum fi_ibv_odp type;
+	} odp;
 	int	cqread_bunch_size;
 	char	*iface;
 
@@ -317,11 +338,16 @@ struct fi_ibv_pep {
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
 struct fi_ibv_rdm_cm;
+struct fi_ibv_domain;
+
+typedef void *(*fi_ibv_reg_mr_t)(struct fi_ibv_domain *domain, void *addr,
+				 size_t length, int access);
 
 struct fi_ibv_domain {
 	struct util_domain	util_domain;
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
+
 	/*
 	 * TODO: Currently, only 1 rdm EP can be created per rdm domain!
 	 *	 CM logic should be separated from EP,
@@ -334,7 +360,18 @@ struct fi_ibv_domain {
 	/* This EQ is utilized by verbs/RDM and verbs/DGRAM */
 	struct fi_ibv_eq	*eq;
 	uint64_t		eq_flags;
+	enum fi_ibv_odp		odp;
+	fi_ibv_reg_mr_t		ibv_reg_mr_cb;
+	/* This key is used only in case of Implicit ODP support */
+	void			*implicit_odp_mr_key;
 };
+
+static inline
+struct ibv_mr *fi_ibv_reg_mr(struct fi_ibv_domain *domain, void *addr,
+			     size_t length, enum ibv_access_flags access)
+{	
+	return domain->ibv_reg_mr_cb(domain, addr, length, access);
+}
 
 struct fi_ibv_cq;
 typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, int index, void *buf);

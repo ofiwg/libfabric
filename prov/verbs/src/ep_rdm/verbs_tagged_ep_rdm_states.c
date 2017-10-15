@@ -301,8 +301,8 @@ fi_ibv_rdm_rndv_rts_send_ready(struct fi_ibv_rdm_request *request, void *data)
 	header->id = (uintptr_t)request;
 	request->rndv.id = (uintptr_t)request;
 
-	mr = ibv_reg_mr(p->ep->domain->pd, (void *)request->src_addr,
-			request->len, IBV_ACCESS_REMOTE_READ);
+	mr = fi_ibv_reg_mr(p->ep->domain, (void *)request->src_addr,
+			   request->len, VERBS_ACCESS_REMOTE_READ);
 	if (!mr) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_reg_mr", errno);
 		assert(0);
@@ -1029,25 +1029,9 @@ static inline ssize_t
 fi_ibv_rdm_rndv_read_reg_mr(struct fi_ibv_rdm_ep *ep,
 			    struct fi_ibv_rdm_request *request)
 {
-#if defined HAVE_VERBS_EXP_H
-	struct ibv_exp_reg_mr_in in;
-	in.pd = ep->domain->pd;
-	in.addr = request->dest_buf;
-	in.length = request->len;
-	in.exp_access = IBV_EXP_ACCESS_LOCAL_WRITE;
-	if (fi_ibv_gl_data.use_odp) {
-		in.exp_access |= IBV_EXP_ACCESS_RELAXED |
-				 IBV_EXP_ACCESS_ON_DEMAND;
-	}
-	in.comp_mask = 0;
-	request->rndv.mr = ibv_exp_reg_mr(&in);
-#else /* HAVE_VERBS_EXP_H */
-	request->rndv.mr = ibv_reg_mr(ep->domain->pd, request->dest_buf,
-				      request->len,
-				      IBV_ACCESS_LOCAL_WRITE |
-				      IBV_ACCESS_REMOTE_WRITE);
-#endif /* HAVE_VERBS_EXP_H */
-
+	request->rndv.mr = fi_ibv_reg_mr(ep->domain, request->dest_buf,
+					 request->len, VERBS_ACCESS_LOCAL_WRITE |
+						       VERBS_ACCESS_REMOTE_WRITE);
 	if (!request->rndv.mr) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "failed ibv_reg_mr",
 				 errno);
@@ -1278,7 +1262,7 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_request *request, void *data)
 	request->comp_flags = p->flags;
 	if (p->op_code == IBV_WR_RDMA_READ) {
 		request->dest_buf = (void*)p->lbuf;
-		lmr_access |= IBV_ACCESS_LOCAL_WRITE;
+		lmr_access |= VERBS_ACCESS_LOCAL_WRITE;
 	} else {
 		assert(p->op_code == IBV_WR_RDMA_WRITE);
 		request->src_addr = (void*)p->lbuf;
@@ -1288,9 +1272,9 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_request *request, void *data)
 		memcpy(&request->rmabuf->payload, request->src_addr,
 			request->len);
 	} else if (!request->rmabuf && !p->lkey) {
-		request->rma.mr = ibv_reg_mr(p->ep_rdm->domain->pd,
-					     (void *)p->lbuf, p->data_len,
-					     lmr_access);
+		request->rma.mr = fi_ibv_reg_mr(p->ep_rdm->domain,
+						(void *)p->lbuf, p->data_len,
+						lmr_access);
 		if (request->rma.mr) {
 			request->rma.lkey = request->rma.mr->lkey;
 		} else {
