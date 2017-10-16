@@ -42,6 +42,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <netinet/in.h>
+#include <ifaddrs.h>
 
 #include <fi_abi.h>
 #include <fi_file.h>
@@ -288,6 +289,8 @@ static inline uint64_t ofi_key2idx(struct ofi_key_idx *key_idx, uint64_t key)
 {
 	return key & ((1ULL << key_idx->idx_bits) - 1);
 }
+
+int ofi_getifaddrs(struct ifaddrs **ifap);
 
 #ifdef __cplusplus
 }

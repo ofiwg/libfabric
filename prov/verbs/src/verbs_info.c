@@ -752,10 +752,10 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	size_t iface_len = 0;
 	int exact_match = 0;
 
-	ret = getifaddrs(&ifaddr);
+	ret = ofi_getifaddrs(&ifaddr);
 	if (ret) {
-	       VERBS_WARN(FI_LOG_FABRIC,
-			  "Unable to get interface addresses\n");
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "Unable to get interface addresses\n");
 		return ret;
 	}
 
@@ -1400,7 +1400,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		goto out;
 
 	ofi_alter_info(*info, hints, version);
-	
+
 	if (!hints || !(hints->mode & FI_RX_CQ_DATA)) {
 		for (cur = *info; cur; cur = cur->next)
 			cur->domain_attr->cq_data_size = 0;
