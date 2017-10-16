@@ -22,3 +22,8 @@ unexpected_msg
 rma.+rdm.+writedata
 rdm.+atomic
 rdm.+cntr
+inj_complete.*-e msg
+inj_complete.*-e dgram
+
+# Remove this once ubertest supports setting MR modes
+ubertest

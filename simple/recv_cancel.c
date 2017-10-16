@@ -215,6 +215,7 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_TAGGED;
 	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED;
 
 	ret = run_test();
 
