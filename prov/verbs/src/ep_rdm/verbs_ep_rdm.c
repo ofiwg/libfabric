@@ -45,7 +45,6 @@
 
 extern struct fi_ops_tagged fi_ibv_rdm_tagged_ops;
 extern struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops;
-extern struct dlist_entry fi_ibv_rdm_posted_queue;
 extern struct fi_provider fi_ibv_prov;
 extern struct fi_ops_msg fi_ibv_rdm_ep_msg_ops;
 extern struct fi_ops_rma fi_ibv_rdm_ep_rma_ops;
@@ -228,7 +227,7 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 		  request, request->minfo.tag, request->len, request->context);
 
 	struct dlist_entry *found =
-		dlist_find_first_match(&fi_ibv_rdm_posted_queue,
+		dlist_find_first_match(&ep_rdm->fi_ibv_rdm_posted_queue,
 					fi_ibv_rdm_req_match, request);
 	if (found) {
 		int32_t posted_recvs;
@@ -243,7 +242,7 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 		err = 0;
 	} else {
 		request = fi_ibv_rdm_take_first_match_from_postponed_queue
-				(fi_ibv_rdm_req_match, request);
+		    (fi_ibv_rdm_req_match, request, ep_rdm);
 		if (request) {
 			fi_ibv_rdm_remove_from_postponed_queue(request);
 			err = 0;
@@ -660,6 +659,9 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
 		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
+	dlist_init(&_ep->fi_ibv_rdm_posted_queue);
+	dlist_init(&_ep->fi_ibv_rdm_postponed_queue);
+	dlist_init(&_ep->fi_ibv_rdm_unexp_queue);
 	dlist_init(&_ep->fi_ibv_rdm_multi_recv_list);
 
 	_ep->max_inline_rc = 

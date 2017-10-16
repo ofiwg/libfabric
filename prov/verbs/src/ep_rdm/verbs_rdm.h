@@ -295,6 +295,9 @@ struct fi_ibv_rdm_ep {
 	 */
 	struct util_buf_pool	*fi_ibv_rdm_extra_buffers_pool;
 
+	struct dlist_entry	fi_ibv_rdm_posted_queue;
+	struct dlist_entry	fi_ibv_rdm_postponed_queue;
+	struct dlist_entry	fi_ibv_rdm_unexp_queue;
 	struct dlist_entry	fi_ibv_rdm_multi_recv_list;
 
 	size_t			addrlen;

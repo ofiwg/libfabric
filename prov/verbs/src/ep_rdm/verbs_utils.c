@@ -181,7 +181,7 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep *ep)
 	struct fi_ibv_rdm_request *request;
 	struct fi_ibv_rdm_multi_request *multi_request;
 
-	while ((request = fi_ibv_rdm_take_first_from_unexp_queue())) {
+	while ((request = fi_ibv_rdm_take_first_from_unexp_queue(ep))) {
 		if (request->unexp_rbuf) {
 			util_buf_release(ep->fi_ibv_rdm_extra_buffers_pool,
 					 request->unexp_rbuf);
@@ -206,7 +206,7 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep *ep)
 		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 
-	while ((request = fi_ibv_rdm_take_first_from_postponed_queue())) {
+	while ((request = fi_ibv_rdm_take_first_from_postponed_queue(ep))) {
 		if (request->iov_count > 0) {
 			util_buf_release(ep->fi_ibv_rdm_extra_buffers_pool,
 					 request->unexp_rbuf);

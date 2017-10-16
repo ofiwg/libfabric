@@ -43,10 +43,6 @@
 
 struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
 
-DEFINE_LIST(fi_ibv_rdm_posted_queue);
-DEFINE_LIST(fi_ibv_rdm_unexp_queue);
-DEFINE_LIST(fi_ibv_rdm_postponed_queue);
-
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 
 int
@@ -476,7 +472,7 @@ fi_ibv_rdm_process_recv(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn,
 		}
 
 		struct dlist_entry *found_entry =
-			dlist_find_first_match(&fi_ibv_rdm_posted_queue,
+			dlist_find_first_match(&ep->fi_ibv_rdm_posted_queue,
 						fi_ibv_rdm_req_match_by_info,
 						&minfo);
 
@@ -710,7 +706,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 
 	struct fi_ibv_rdm_tagged_send_ready_data data = { .ep = ep };
 	struct dlist_entry *item;
-	dlist_foreach((&fi_ibv_rdm_postponed_queue), item) {
+	dlist_foreach((&ep->fi_ibv_rdm_postponed_queue), item) {
 		if (fi_ibv_rdm_postponed_process(item, &data)) {
 			/* we can't process all postponed items till foreach */
 			/* implementation is not safety for removing during  */

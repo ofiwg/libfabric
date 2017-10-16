@@ -539,10 +539,9 @@ fi_ibv_rdm_try_unexp_recv(struct fi_ibv_rdm_request *request,
 
 	do {
 		found_entry =
-			dlist_find_first_match(&fi_ibv_rdm_unexp_queue,
-						fi_ibv_rdm_req_match_by_info3,
-						&rdata->peek_data);
-
+			dlist_find_first_match(&rdata->ep->fi_ibv_rdm_unexp_queue,
+					       fi_ibv_rdm_req_match_by_info3,
+					       &rdata->peek_data);
 		if (found_entry) {
 			ret = FI_SUCCESS;
 			found_request =
@@ -665,9 +664,9 @@ fi_ibv_rdm_tagged_peek_request(struct fi_ibv_rdm_request *request, void *data)
 	struct fi_ibv_rdm_tagged_recv_start_data *p = data;
 	struct fi_ibv_rdm_tagged_peek_data *peek_data = &p->peek_data;
 	struct dlist_entry *found_entry =
-		dlist_find_first_match(&fi_ibv_rdm_unexp_queue,
-					fi_ibv_rdm_req_match_by_info2,
-					&peek_data->minfo);
+		dlist_find_first_match(&p->ep->fi_ibv_rdm_unexp_queue,
+				       fi_ibv_rdm_req_match_by_info2,
+				       &peek_data->minfo);
 
 	/* TODO: to check behaviour for multi recv */
 	assert(!(peek_data->flags & FI_MULTI_RECV));
@@ -820,7 +819,7 @@ fi_ibv_rdm_init_unexp_recv_request(struct fi_ibv_rdm_request *request, void *dat
 		ret = -FI_EOTHER;
 	}
 
-	fi_ibv_rdm_move_to_unexpected_queue(request);
+	fi_ibv_rdm_move_to_unexpected_queue(request, p->ep);
 fn:
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
 	return ret;
