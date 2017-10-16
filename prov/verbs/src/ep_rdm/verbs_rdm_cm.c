@@ -49,9 +49,9 @@ fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
 	if (!ofi_memalign((void**)buf,
 			  FI_IBV_RDM_BUF_ALIGNMENT, size)) {
 		memset(*buf, 0, size);
-		return ibv_reg_mr(ep->domain->pd, *buf, size,
-				  IBV_ACCESS_LOCAL_WRITE |
-				  IBV_ACCESS_REMOTE_WRITE);
+		return fi_ibv_reg_mr(ep->domain, *buf, size,
+				     VERBS_ACCESS_LOCAL_WRITE |
+				     VERBS_ACCESS_REMOTE_WRITE);
 	}
 	return NULL;
 }
@@ -185,10 +185,10 @@ fi_ibv_rdm_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 		goto r_err;
 	}
 
-	conn->ack_mr = ibv_reg_mr(ep->domain->pd, &conn->sbuf_ack_status,
-		sizeof(conn->sbuf_ack_status),
-		IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
-
+	conn->ack_mr = fi_ibv_reg_mr(ep->domain, &conn->sbuf_ack_status,
+				     sizeof(conn->sbuf_ack_status),
+				     VERBS_ACCESS_LOCAL_WRITE |
+				     VERBS_ACCESS_REMOTE_WRITE);
 	if (!conn->ack_mr) {
 		assert(conn->ack_mr);
 		goto ack_err;

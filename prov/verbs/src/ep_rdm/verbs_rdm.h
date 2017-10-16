@@ -311,7 +311,6 @@ struct fi_ibv_rdm_ep {
 	int	max_inline_rc;
 	int	rndv_threshold;
 	int	rndv_seg_size;
-	int	use_odp;
 	int	scq_depth;
 	int	rcq_depth;
 	int	cqread_bunch_size;
