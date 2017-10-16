@@ -40,7 +40,6 @@
 #include "verbs_queuing.h"
 
 extern struct fi_provider fi_ibv_prov;
-extern struct util_buf_pool* fi_ibv_rdm_request_pool;
 
 static struct ibv_mr *
 fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
@@ -809,7 +808,7 @@ fi_ibv_rdm_process_timewait_exit_event(struct rdma_cm_event *event,
 		(request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
 		request->context->internal[0] = NULL;
 		FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_request_pool, request);
+		util_buf_release(ep->fi_ibv_rdm_request_pool, request);
 	}
 }
 

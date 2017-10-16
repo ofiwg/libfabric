@@ -37,17 +37,6 @@
 #include <fi_list.h>
 #include "verbs_rdm.h"
 
-/*
- * managing of queues
- */
-
-extern struct dlist_entry fi_ibv_rdm_unexp_queue;
-/* TODO: implement posted recv queue per connection */
-extern struct dlist_entry fi_ibv_rdm_posted_queue;
-extern struct dlist_entry fi_ibv_rdm_postponed_queue;
-
-extern struct util_buf_pool* fi_ibv_rdm_postponed_pool;
-
 static inline void
 fi_ibv_rdm_move_to_cq(struct fi_ibv_rdm_cq *cq,
 		      struct fi_ibv_rdm_request *request)
@@ -108,11 +97,12 @@ fi_ibv_rdm_take_first_from_errcq(struct fi_ibv_rdm_cq *cq)
 }
 
 static inline void
-fi_ibv_rdm_move_to_unexpected_queue(struct fi_ibv_rdm_request *request)
+fi_ibv_rdm_move_to_unexpected_queue(struct fi_ibv_rdm_request *request,
+				    struct fi_ibv_rdm_ep *ep)
 {
 	FI_IBV_RDM_DBG_REQUEST("move_to_unexpected_queue: ", request,
 				FI_LOG_DEBUG);
-	dlist_insert_tail(&request->queue_entry, &fi_ibv_rdm_unexp_queue);
+	dlist_insert_tail(&request->queue_entry, &ep->fi_ibv_rdm_unexp_queue);
 #if ENABLE_DEBUG
 	request->minfo.conn->unexp_counter++;
 #endif // ENABLE_DEBUG
@@ -127,11 +117,11 @@ fi_ibv_rdm_remove_from_unexp_queue(struct fi_ibv_rdm_request *request)
 }
 
 static inline struct fi_ibv_rdm_request *
-fi_ibv_rdm_take_first_from_unexp_queue()
+fi_ibv_rdm_take_first_from_unexp_queue(struct fi_ibv_rdm_ep *ep)
 {
-	if (!dlist_empty(&fi_ibv_rdm_unexp_queue)) {
+	if (!dlist_empty(&ep->fi_ibv_rdm_unexp_queue)) {
 		struct fi_ibv_rdm_request *entry =
-			container_of(fi_ibv_rdm_unexp_queue.next,
+			container_of(ep->fi_ibv_rdm_unexp_queue.next,
 				     struct fi_ibv_rdm_request, queue_entry);
 		fi_ibv_rdm_remove_from_unexp_queue(entry);
 		return entry;
@@ -144,7 +134,7 @@ fi_ibv_rdm_move_to_posted_queue(struct fi_ibv_rdm_request *request,
 				struct fi_ibv_rdm_ep *ep)
 {
 	FI_IBV_RDM_DBG_REQUEST("move_to_posted_queue: ", request, FI_LOG_DEBUG);
-	dlist_insert_tail(&request->queue_entry, &fi_ibv_rdm_posted_queue);
+	dlist_insert_tail(&request->queue_entry, &ep->fi_ibv_rdm_posted_queue);
 	ofi_atomic_inc32(&ep->posted_recvs);
 #if ENABLE_DEBUG
 	if (request->minfo.conn) {
@@ -166,9 +156,9 @@ fi_ibv_rdm_remove_from_posted_queue(struct fi_ibv_rdm_request *request,
 static inline struct fi_ibv_rdm_request *
 fi_ibv_rdm_take_first_from_posted_queue(struct fi_ibv_rdm_ep* ep)
 {
-	if (!dlist_empty(&fi_ibv_rdm_posted_queue)) {
+	if (!dlist_empty(&ep->fi_ibv_rdm_posted_queue)) {
 		struct fi_ibv_rdm_request *entry =
-			container_of(fi_ibv_rdm_posted_queue.next,
+			container_of(ep->fi_ibv_rdm_posted_queue.next,
 				     struct fi_ibv_rdm_request, queue_entry);
 		fi_ibv_rdm_remove_from_posted_queue(entry, ep);
 		return entry;
@@ -187,7 +177,7 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 
 	if (dlist_empty(&conn->postponed_requests_head)) {
 		struct fi_ibv_rdm_postponed_entry *entry =
-			util_buf_alloc(fi_ibv_rdm_postponed_pool);
+			util_buf_alloc(conn->ep->fi_ibv_rdm_postponed_pool);
 		if (OFI_UNLIKELY(!entry)) {
 			VERBS_WARN(FI_LOG_EP_DATA, "Unable to alloc buffer");
 			return -FI_ENOMEM;
@@ -197,12 +187,40 @@ fi_ibv_rdm_move_to_postponed_queue(struct fi_ibv_rdm_request *request)
 		conn->postponed_entry = entry;
 
 		dlist_insert_tail(&entry->queue_entry,
-				  &fi_ibv_rdm_postponed_queue);
+				  &conn->ep->fi_ibv_rdm_postponed_queue);
 	}
 	dlist_insert_tail(&request->queue_entry,
 			  &conn->postponed_requests_head);
 
 	return FI_SUCCESS;
+}
+
+static inline void
+fi_ibv_rdm_remove_from_multi_recv_list(struct fi_ibv_rdm_multi_request *request,
+				       struct fi_ibv_rdm_ep *ep)
+{
+	dlist_remove(&request->list_entry);
+}
+
+static inline void
+fi_ibv_rdm_add_to_multi_recv_list(struct fi_ibv_rdm_multi_request *request,
+				  struct fi_ibv_rdm_ep *ep)
+{
+	dlist_insert_tail(&request->list_entry,
+			  &ep->fi_ibv_rdm_multi_recv_list);
+}
+
+static inline struct fi_ibv_rdm_multi_request *
+fi_ibv_rdm_take_first_from_multi_recv_list(struct fi_ibv_rdm_ep *ep)
+{
+	if (!dlist_empty(&ep->fi_ibv_rdm_multi_recv_list)) {
+		struct fi_ibv_rdm_multi_request *entry;
+		dlist_pop_front(&ep->fi_ibv_rdm_multi_recv_list,
+				struct fi_ibv_rdm_multi_request,
+				entry, list_entry);
+		return entry;
+	}
+	return NULL;
 }
 
 static inline void
@@ -231,18 +249,18 @@ fi_ibv_rdm_remove_from_postponed_queue(struct fi_ibv_rdm_request *request)
 		conn->postponed_entry->queue_entry.prev = NULL;
 		conn->postponed_entry->conn = NULL;
 
-		util_buf_release(fi_ibv_rdm_postponed_pool,
+		util_buf_release(conn->ep->fi_ibv_rdm_postponed_pool,
 				 conn->postponed_entry);
 		conn->postponed_entry = NULL;
 	}
 }
 
 static inline struct fi_ibv_rdm_request *
-fi_ibv_rdm_take_first_from_postponed_queue()
+fi_ibv_rdm_take_first_from_postponed_queue(struct fi_ibv_rdm_ep *ep)
 {
-	if (!dlist_empty(&fi_ibv_rdm_postponed_queue)) {
+	if (!dlist_empty(&ep->fi_ibv_rdm_postponed_queue)) {
 		struct fi_ibv_rdm_postponed_entry *entry = 
-			container_of(fi_ibv_rdm_postponed_queue.next,
+			container_of(ep->fi_ibv_rdm_postponed_queue.next,
 				struct fi_ibv_rdm_postponed_entry, queue_entry);
 
 		if (!dlist_empty(&entry->conn->postponed_requests_head)) {
@@ -261,10 +279,12 @@ fi_ibv_rdm_take_first_from_postponed_queue()
 }
 
 static inline struct fi_ibv_rdm_request *
-fi_ibv_rdm_take_first_match_from_postponed_queue(dlist_func_t *match, const void *arg)
+fi_ibv_rdm_take_first_match_from_postponed_queue(dlist_func_t *match,
+						 const void *arg,
+						 struct fi_ibv_rdm_ep *ep)
 {
 	struct dlist_entry *i, *j;
-	dlist_foreach((&fi_ibv_rdm_postponed_queue), i) {
+	dlist_foreach((&ep->fi_ibv_rdm_postponed_queue), i) {
 		 struct fi_ibv_rdm_postponed_entry *entry = 
 			container_of(i, struct fi_ibv_rdm_postponed_entry,
 				     queue_entry);

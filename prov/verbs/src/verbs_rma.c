@@ -45,8 +45,6 @@
 #define VERBS_COMP_READ(ep) \
 	VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
 
-extern struct util_buf_pool* fi_ibv_rdm_request_pool;
-
 static ssize_t
 fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		     void *desc, fi_addr_t dest_addr,
@@ -300,10 +298,12 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return ret;
 	}
 
-	request = util_buf_alloc(fi_ibv_rdm_request_pool);
+	request = util_buf_alloc(ep->fi_ibv_rdm_request_pool);
 	if (OFI_UNLIKELY(!request))
 		return -FI_EAGAIN;
 
+	fi_ibv_rdm_zero_request(request);
+	request->ep = ep;
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -404,10 +404,12 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return ret;
 	}
 
-	request = util_buf_alloc(fi_ibv_rdm_request_pool);
+	request = util_buf_alloc(ep->fi_ibv_rdm_request_pool);
 	if (OFI_UNLIKELY(!request))
 		return -FI_EAGAIN;
 
+	fi_ibv_rdm_zero_request(request);
+	request->ep = ep;
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
@@ -492,11 +494,13 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	};
 	ssize_t ret;
 	struct fi_ibv_rdm_request *request =
-		util_buf_alloc(fi_ibv_rdm_request_pool);
+		util_buf_alloc(ep_rdm->fi_ibv_rdm_request_pool);
 
 	if (OFI_UNLIKELY(!request))
 		return -FI_EAGAIN;
 
+	fi_ibv_rdm_zero_request(request);
+	request->ep = ep_rdm;
 	FI_IBV_RDM_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -519,7 +523,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 	}
 
 	FI_IBV_RDM_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-	util_buf_release(fi_ibv_rdm_request_pool, request);
+	util_buf_release(ep_rdm->fi_ibv_rdm_request_pool, request);
 
 	fi_ibv_rdm_tagged_poll(ep_rdm);
 
