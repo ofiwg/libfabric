@@ -41,8 +41,6 @@
 #include "verbs_queuing.h"
 #include "verbs_tagged_ep_rdm_states.h"
 
-struct fi_ibv_rdm_cq fi_ibv_rdm_comp_queue;
-
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 
 int
