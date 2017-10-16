@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -367,7 +368,7 @@ static int sock_ep_cm_setname(fid_t fid, void *addr, size_t addrlen)
 	case FI_CLASS_EP:
 	case FI_CLASS_SEP:
 		sock_ep = container_of(fid, struct sock_ep, ep.fid);
-		if (sock_ep->attr->listener.listener_thread)
+		if (sock_ep->attr->conn_handle.do_listen)
 			return -FI_EINVAL;
 		memcpy(sock_ep->attr->src_addr, addr, addrlen);
 		return sock_conn_listen(sock_ep->attr);
@@ -588,7 +589,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (!_eq || !addr || (paramlen > SOCK_EP_MAX_CM_DATA_SZ))
 		return -FI_EINVAL;
 
-	if (!_ep->attr->listener.listener_thread && sock_conn_listen(_ep->attr))
+	if (!_ep->attr->conn_handle.do_listen && sock_conn_listen(_ep->attr))
 		return -FI_EINVAL;
 
 	if (!_ep->attr->dest_addr) {
@@ -687,7 +688,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	if (!_ep->attr->eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ)
 		return -FI_EINVAL;
 
-	if (!_ep->attr->listener.listener_thread && sock_conn_listen(_ep->attr))
+	if (!_ep->attr->conn_handle.do_listen && sock_conn_listen(_ep->attr))
 		return -FI_EINVAL;
 
 	handle = container_of(_ep->attr->info.handle,

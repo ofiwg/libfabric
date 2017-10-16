@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -177,6 +178,8 @@ static int sock_dom_close(struct fid *fid)
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
 	if (ofi_atomic_get32(&dom->ref))
 		return -FI_EBUSY;
+
+	sock_conn_stop_listener_thread(&dom->conn_listener);
 
 	sock_pe_finalize(dom->pe);
 	fastlock_destroy(&dom->lock);
@@ -500,6 +503,10 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = ofi_mr_map_init(&sock_prov, sock_domain->attr.mr_mode,
 			      &sock_domain->mr_map);
+	if (ret)
+		goto err2;
+
+	ret = sock_conn_start_listener_thread(&sock_domain->conn_listener);
 	if (ret)
 		goto err2;
 
