@@ -220,6 +220,8 @@ fi_ibv_rdm_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 		}
 
 		ret++;
+	} else {
+		return -FI_EAGAIN;
 	}
 
 	return ret;
