@@ -207,7 +207,7 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 	                  (ep_attr->ep_type == FI_EP_MSG ?
 	                   SOCK_OPTS_KEEPALIVE : 0));
 
-	if (fi_epoll_add(map->epoll_set, conn_fd, &map->table[index]))
+	if (fi_epoll_add(map->epoll_set, conn_fd, FI_EPOLL_IN, &map->table[index]))
 		SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
 
 	map->table[index].address_published = addr_published;
@@ -380,7 +380,8 @@ int sock_conn_start_listener_thread(struct sock_conn_listener *conn_listener)
 	}
 
 	ret = fi_epoll_add(conn_listener->emap,
-	                   conn_listener->signal.fd[FI_READ_FD], NULL);
+	                   conn_listener->signal.fd[FI_READ_FD],
+	                   FI_EPOLL_IN, NULL);
 	if (ret != 0){
 		SOCK_LOG_ERROR("failed to add signal fd to epoll\n");
 		goto err3;
@@ -499,7 +500,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 	fastlock_acquire(&ep_attr->domain->conn_listener.signal_lock);
 	ret = fi_epoll_add(ep_attr->domain->conn_listener.emap,
-	                   conn_handle->sock, conn_handle);
+	                   conn_handle->sock, FI_EPOLL_IN, conn_handle);
 	fd_signal_set(&ep_attr->domain->conn_listener.signal);
 	fastlock_release(&ep_attr->domain->conn_listener.signal_lock);
 	if (ret) {

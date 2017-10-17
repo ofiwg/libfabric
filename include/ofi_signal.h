@@ -116,6 +116,9 @@ static inline int fd_signal_poll(struct fd_signal *signal, int timeout)
 #ifdef HAVE_EPOLL
 #include <sys/epoll.h>
 
+#define FI_EPOLL_IN  EPOLLIN
+#define FI_EPOLL_OUT EPOLLOUT
+
 typedef int fi_epoll_t;
 
 static inline int fi_epoll_create(int *ep)
@@ -124,13 +127,13 @@ static inline int fi_epoll_create(int *ep)
 	return *ep < 0 ? -ofi_syserr() : 0;
 }
 
-static inline int fi_epoll_add(int ep, int fd, void *context)
+static inline int fi_epoll_add(int ep, int fd, uint32_t events, void *context)
 {
 	struct epoll_event event;
 	int ret;
 
 	event.data.ptr = context;
-	event.events = EPOLLIN;
+	event.events = events;
 	ret = epoll_ctl(ep, EPOLL_CTL_ADD, fd, &event);
 	if ((ret == -1) && (ofi_syserr() != EEXIST))
 		return -ofi_syserr();
@@ -166,6 +169,9 @@ static inline void fi_epoll_close(int ep)
 #else
 #include <poll.h>
 
+#define FI_EPOLL_IN  POLLIN
+#define FI_EPOLL_OUT POLLOUT
+
 typedef struct fi_epoll {
 	int		size;
 	int		nfds;
@@ -175,7 +181,7 @@ typedef struct fi_epoll {
 } *fi_epoll_t;
 
 int fi_epoll_create(struct fi_epoll **ep);
-int fi_epoll_add(struct fi_epoll *ep, int fd, void *context);
+int fi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context);
 int fi_epoll_del(struct fi_epoll *ep, int fd);
 int fi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
                   int timeout);
