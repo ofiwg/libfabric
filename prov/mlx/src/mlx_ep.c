@@ -33,7 +33,7 @@
 
 static void mlx_ep_progress( struct util_ep *util_ep)
 {
-	struct mlx_ep* ep;
+	struct mlx_ep *ep;
 	ep = container_of(util_ep, struct mlx_ep, ep);
 	ucp_worker_progress(ep->worker);
 }
@@ -43,7 +43,7 @@ static ssize_t mlx_ep_cancel( fid_t fid, void *ctx)
 {
 	struct mlx_ep *ep;
 	void *req;
-	struct fi_context  *context = (struct fi_context*)ctx;
+	struct fi_context *context = (struct fi_context*)ctx;
 
 	ep = container_of( fid, struct mlx_ep, ep.ep_fid.fid);
 	if (!ep->ep.domain)
@@ -155,9 +155,9 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	struct mlx_domain *u_domain;
 	int ofi_status = FI_SUCCESS;
 	ucs_status_t status = UCS_OK;
-	ucp_worker_params_t worker_params;
+	ucp_worker_params_t worker_params = { };
 	worker_params.field_mask = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-	worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+	worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
 	u_domain = container_of( domain, struct mlx_domain, u_domain.domain_fid);
 
 	ep = (struct mlx_ep *) calloc(1, sizeof (struct mlx_ep));

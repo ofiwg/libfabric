@@ -76,7 +76,14 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	ucs_status_t status = UCS_OK;
 	int ofi_status;
 	struct mlx_domain* domain;
-	ucp_params_t params;
+	const ucp_params_t params = {
+		.features = UCP_FEATURE_TAG,
+		.request_size = sizeof(struct mlx_request),
+		.request_init = NULL,
+		.request_cleanup = NULL,
+		.field_mask = UCP_PARAM_FIELD_FEATURES |
+			      UCP_PARAM_FIELD_REQUEST_SIZE,
+	};
 
 	if (!info->domain_attr->name ||
 	    strcmp(info->domain_attr->name, FI_MLX_FABRIC_NAME)) {
@@ -101,15 +108,8 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto domain_free;
 	}
 
-	params.features = UCP_FEATURE_TAG;
-	params.request_size = sizeof(struct mlx_request);
-	params.request_init = NULL;
-	params.request_cleanup = NULL;
-
-	status = ucp_init(
-			(const ucp_params_t *)&params,
-			mlx_descriptor.config,
-			&(domain->context));
+	status = ucp_init(&params, mlx_descriptor.config,
+			  &(domain->context));
 	if (status != UCS_OK) {
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);
 		goto destroy_domain;

@@ -34,13 +34,13 @@
 
 /*using for fi_tinject path*/
 /*Using for selective completions scenario*/
-void mlx_send_callback_no_compl( void *request, ucs_status_t status)
+void mlx_send_callback_no_compl(void *request, ucs_status_t status)
 {
 	ucp_request_release(request);
 }
 
-void mlx_send_callback( void *request,
-			ucs_status_t status)
+void mlx_send_callback(void *request,
+		       ucs_status_t status)
 {
 	struct util_cq *cq;
 	struct mlx_request *mlx_req = request;
@@ -66,7 +66,7 @@ void mlx_send_callback( void *request,
 		if (!err) {
 			FI_WARN(&mlx_prov, FI_LOG_CQ,
 				"out of memory, cannot report CQ error\n");
-			return;
+			goto fn;
 		}
 
 		err->err_entry = (mlx_req->completion.error);
@@ -75,9 +75,8 @@ void mlx_send_callback( void *request,
 		err->err_entry.olen = 0;
 		slist_insert_tail(&err->list_entry, &cq->err_list);
 	}
-
+fn:
 	mlx_req->type = MLX_FI_REQ_UNINITIALIZED;
-
 	fastlock_release(&cq->cq_lock);
 	ucp_request_release(request);
 }
@@ -90,10 +89,9 @@ void mlx_recv_callback_no_compl(void *request,
 	ucp_request_release(request);
 }
 
-void mlx_recv_callback (
-			void *request,
-			ucs_status_t status,
-			ucp_tag_recv_info_t *info)
+void mlx_recv_callback(void *request,
+		       ucs_status_t status,
+		       ucp_tag_recv_info_t *info)
 {
 	struct util_cq *cq;
 	struct mlx_request *mlx_req;
@@ -122,6 +120,8 @@ void mlx_recv_callback (
 		} else {
 			mlx_req->type = MLX_FI_REQ_UNEXPECTED;
 		}
+		fastlock_release(&cq->cq_lock);
+		return;
 	} else {
 		if (status != UCS_OK) {
 			mlx_req->completion.error.olen = info->length -
@@ -140,7 +140,8 @@ void mlx_recv_callback (
 			if (!err) {
 				FI_WARN(&mlx_prov, FI_LOG_CQ,
 					"out of memory, cannot report CQ error\n");
-				return;
+				mlx_req->type = MLX_FI_REQ_UNINITIALIZED;
+				goto fn;
 			}
 
 			err->err_entry = (mlx_req->completion.error);
@@ -158,8 +159,9 @@ void mlx_recv_callback (
 
 		mlx_req->type = MLX_FI_REQ_UNINITIALIZED;
 		ofi_cirque_commit(cq->cirq);
-		ucp_request_release(request);
 	}
+fn:
 	fastlock_release(&cq->cq_lock);
+	ucp_request_release(request);
 }
 

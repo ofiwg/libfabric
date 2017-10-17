@@ -110,7 +110,6 @@ struct fi_tx_attr mlx_tx_attrs = {
 
 struct fi_fabric_attr mlx_fabric_attrs = {
 	.name = FI_MLX_FABRIC_NAME,
-	.prov_name = FI_MLX_FABRIC_NAME,
 	.prov_version = FI_MLX_VERSION,
 	.fabric = NULL
 };
@@ -158,18 +157,17 @@ static int mlx_getinfo (
 			const struct fi_info *hints, struct fi_info **info)
 {
 	int status = -ENODATA;
-	FI_INFO(&mlx_prov, FI_LOG_CORE,"\n");
-
 	char *configfile_name = NULL;
-	mlx_descriptor.config=NULL;
-	int inject_thresh =-1;
+	int inject_thresh = -1;
+
+	mlx_descriptor.config = NULL;
 
 	status = fi_param_get( &mlx_prov,
 				"mlx_tinject_limit",
 				&inject_thresh);
-	if (!status) {
+	if (!status)
 		inject_thresh = FI_MLX_DEFAULT_INJECT_SIZE;
-	}
+
 	FI_INFO( &mlx_prov, FI_LOG_CORE,
 		"used inlect size = %d \n", inject_thresh);
 
@@ -188,7 +186,7 @@ static int mlx_getinfo (
 	}
 
 	/*Setup some presets*/
-	status = ucm_config_modify("MLX_MEM_MALLOC_HOOKS", "no");
+	status = ucm_config_modify("MALLOC_HOOKS", "no");
 	if (status != UCS_OK) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"MLX error: failed to switch off UCM memory hooks:\t%d (%s)\n",
@@ -232,7 +230,7 @@ void mlx_cleanup(void)
 struct fi_provider mlx_prov = {
 	.name = FI_MLX_FABRIC_NAME,
 	.version = FI_MLX_VERSION,
-	.fi_version = FI_VERSION(1, 3),
+	.fi_version = FI_VERSION(1, 5),
 	.getinfo = mlx_getinfo,
 	.fabric = mlx_fabric_open,
 	.cleanup = mlx_cleanup,
