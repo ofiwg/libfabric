@@ -478,6 +478,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	struct ibv_port_attr port_attr;
 	size_t max_sup_size;
 	int ret = 0;
+	uint8_t port_num;
 
 	ret = ibv_query_device(ctx, &device_attr);
 	if (ret) {
@@ -518,11 +519,24 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	if (ret)
 		return ret;
 
-	ret = ibv_query_port(ctx, 1, &port_attr);
-	if (ret) {
-		VERBS_INFO_ERRNO(FI_LOG_FABRIC,
-				 "ibv_query_port", errno);
-		return -errno;
+	for (port_num = 1; port_num < device_attr.phys_port_cnt + 1; port_num++) {
+		ret = ibv_query_port(ctx, port_num, &port_attr);
+		if (ret) {
+			VERBS_INFO_ERRNO(FI_LOG_FABRIC,
+					 "ibv_query_port", errno);
+			return -errno;
+		}
+		if (port_attr.state == IBV_PORT_ACTIVE)
+			break;
+	}
+
+	if (port_num == device_attr.phys_port_cnt + 1) {
+		VERBS_WARN(FI_LOG_FABRIC, "There are no active ports\n");
+		return -FI_ENODATA;
+	} else {
+		VERBS_INFO(FI_LOG_FABRIC,
+			   "The first found active port is %"PRIu8"\n",
+			   port_num);
 	}
 
 	max_sup_size = (info->ep_attr->type == FI_EP_DGRAM) ?
