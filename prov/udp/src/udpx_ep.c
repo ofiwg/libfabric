@@ -55,12 +55,14 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 
 int udpx_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct udpx_ep *ep;
-	int ret;
+	struct udpx_ep *ep =
+		container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
+	size_t buflen = *addrlen;
 
-	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
-	ret = getsockname(ep->sock, addr, (socklen_t *)addrlen);
-	return ret ? -errno : 0;
+	if (ofi_getsockname(ep->sock, addr, (socklen_t *)addrlen))
+		return -ofi_sockerr();
+
+	return buflen < *addrlen ? -FI_ETOOSMALL : 0;
 }
 
 static int udpx_mc_close(struct fid *fid)
