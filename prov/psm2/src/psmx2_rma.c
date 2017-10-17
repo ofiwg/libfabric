@@ -746,8 +746,8 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	uint32_t tag32;
 	size_t idx;
-	size_t total_len, long_len, short_len;
-	void *long_buf;
+	size_t total_len, long_len = 0, short_len;
+	void *long_buf = NULL;
 	int i;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
@@ -833,7 +833,6 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_reply_short;
 
-	long_len = 0;
 	if (psmx2_env.tagged_rma) {
 		for (i=count-1; i>=0; i--) {
 			if (iov[i].iov_len > chunk_size) {

@@ -848,10 +848,10 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	if (!buf)
 		return -FI_EINVAL;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
@@ -986,10 +986,10 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 	while (count && !iov[count-1].count)
 		count--;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
@@ -1218,10 +1218,10 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	if (!buf && op != FI_ATOMIC_READ)
 		return -FI_EINVAL;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
@@ -1373,10 +1373,10 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	while (result_count && !resultv[result_count-1].count)
 		result_count--;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	result_len = psmx2_ioc_size(resultv, result_count, datatype);
@@ -1678,10 +1678,10 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	if (!buf)
 		return -FI_EINVAL;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	av = ep_priv->av;
@@ -1853,10 +1853,10 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	while (result_count && !resultv[result_count-1].count)
 		result_count--;
 
-	if (datatype < 0 || datatype >= FI_DATATYPE_LAST)
+	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
 		return -FI_EINVAL;
 
-	if (op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	len = psmx2_ioc_size(iov, count, datatype);
