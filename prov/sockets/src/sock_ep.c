@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -289,7 +290,7 @@ static int sock_ctx_enable(struct fid_ep *ep)
 		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx.fid);
 		sock_pe_add_rx_ctx(rx_ctx->domain->pe, rx_ctx);
 
-		if (!rx_ctx->ep_attr->listener.listener_thread &&
+		if (!rx_ctx->ep_attr->conn_handle.do_listen &&
 		    sock_conn_listen(rx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
@@ -300,7 +301,7 @@ static int sock_ctx_enable(struct fid_ep *ep)
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx.fid);
 		sock_pe_add_tx_ctx(tx_ctx->domain->pe, tx_ctx);
 
-		if (!tx_ctx->ep_attr->listener.listener_thread &&
+		if (!tx_ctx->ep_attr->conn_handle.do_listen &&
 		    sock_conn_listen(tx_ctx->ep_attr)) {
 			SOCK_LOG_ERROR("failed to create listener\n");
 		}
@@ -705,18 +706,13 @@ static int sock_ep_close(struct fid *fid)
 	}
 	pthread_mutex_unlock(&sock_ep->attr->domain->pe->list_lock);
 
-	if (sock_ep->attr->listener.do_listen) {
-		sock_ep->attr->listener.do_listen = 0;
-		if (ofi_write_socket(sock_ep->attr->listener.signal_fds[0], &c, 1) != 1)
-			SOCK_LOG_DBG("Failed to signal\n");
-
-		if (sock_ep->attr->listener.listener_thread &&
-			pthread_join(sock_ep->attr->listener.listener_thread, NULL)) {
-			SOCK_LOG_ERROR("pthread join failed (%d)\n", ofi_syserr());
-		}
-
-		ofi_close_socket(sock_ep->attr->listener.signal_fds[0]);
-		ofi_close_socket(sock_ep->attr->listener.signal_fds[1]);
+	if (sock_ep->attr->conn_handle.do_listen) {
+		fastlock_acquire(&sock_ep->attr->domain->conn_listener.signal_lock);
+		fi_epoll_del(sock_ep->attr->domain->conn_listener.emap,
+		             sock_ep->attr->conn_handle.sock);
+		fastlock_release(&sock_ep->attr->domain->conn_listener.signal_lock);
+		ofi_close_socket(sock_ep->attr->conn_handle.sock);
+		sock_ep->attr->conn_handle.do_listen = 0;
 	}
 
 	fastlock_destroy(&sock_ep->attr->cm.lock);
@@ -1044,7 +1040,8 @@ int sock_ep_enable(struct fid_ep *ep)
 	}
 
 	if (sock_ep->attr->ep_type != FI_EP_MSG &&
-	    !sock_ep->attr->listener.listener_thread && sock_conn_listen(sock_ep->attr))
+	    !sock_ep->attr->conn_handle.do_listen &&
+	    sock_conn_listen(sock_ep->attr))
 		SOCK_LOG_ERROR("cannot start connection thread\n");
 	sock_ep->attr->is_enabled = 1;
 	return 0;

@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -204,6 +205,14 @@ struct sock_conn_map {
 	fastlock_t lock;
 };
 
+struct sock_conn_listener {
+	fi_epoll_t emap;
+	struct fd_signal signal;
+	fastlock_t signal_lock; /* acquire before map lock */
+	pthread_t listener_thread;
+	int do_listen;
+};
+
 struct sock_domain {
 	struct fi_info		info;
 	struct fid_domain	dom_fid;
@@ -219,6 +228,7 @@ struct sock_domain {
 	struct sock_pe		*pe;
 	struct dlist_entry	dom_list_entry;
 	struct fi_domain_attr	attr;
+	struct sock_conn_listener conn_listener;
 };
 
 /* move to fi_trigger.h when removing experimental tag from work queues */
@@ -501,12 +511,9 @@ struct sock_cm_entry {
 	struct dlist_entry msg_list;
 };
 
-struct sock_conn_listener {
+struct sock_conn_handle {
 	int sock;
 	int do_listen;
-	int is_ready;
-	int signal_fds[2];
-	pthread_t listener_thread;
 	char service[NI_MAXSERV];
 };
 
@@ -547,7 +554,7 @@ struct sock_ep_attr {
 	uint16_t key;
 	int is_enabled;
 	struct sock_cm_entry cm;
-	struct sock_conn_listener listener;
+	struct sock_conn_handle conn_handle;
 	fastlock_t lock;
 
 	struct index_map av_idm;
@@ -1115,6 +1122,8 @@ int sock_ep_connect(struct sock_ep_attr *attr, fi_addr_t index,
 ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
 				struct sock_conn *conn);
 int sock_conn_listen(struct sock_ep_attr *ep_attr);
+int sock_conn_start_listener_thread(struct sock_conn_listener *conn_listener);
+int sock_conn_stop_listener_thread(struct sock_conn_listener *conn_listener);
 void sock_conn_map_destroy(struct sock_ep_attr *ep_attr);
 void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn);
 void sock_set_sockopts(int sock);
