@@ -1334,17 +1334,20 @@ int sock_srx_ctx(struct fid_domain *domain,
 	return 0;
 }
 
-int sock_get_prefix_len(uint32_t net_addr)
+#if HAVE_GETIFADDRS
+static int sock_get_prefix_len(uint32_t net_addr)
 {
+	uint32_t addr;
 	int count = 0;
-	while (net_addr > 0) {
-		net_addr = net_addr >> 1;
+
+	addr = ntohl(net_addr);
+	while (addr > 0) {
+		addr = addr << 1;
 		count++;
 	}
 	return count;
 }
 
-#if HAVE_GETIFADDRS
 char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 {
 	int ret;
