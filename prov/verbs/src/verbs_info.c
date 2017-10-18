@@ -626,6 +626,8 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
 		fi->tx_attr->inject_size = fi_ibv_gl_data.rdm.buffer_size;
+
+		fi->rx_attr->iov_limit = 1;
 	}
 
 	switch (ctx->device->transport_type) {
