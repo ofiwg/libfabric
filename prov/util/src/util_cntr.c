@@ -205,6 +205,7 @@ static int util_cntr_close(struct fid *fid)
 	ret = ofi_cntr_cleanup(cntr);
 	if (ret)
 		return ret;
+	free(cntr);
 	return 0;
 }
 
