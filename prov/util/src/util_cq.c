@@ -385,6 +385,8 @@ static int util_cq_close(struct fid *fid)
 	ret = ofi_cq_cleanup(cq);
 	if (ret)
 		return ret;
+
+	free(cq);
 	return 0;
 }
 
