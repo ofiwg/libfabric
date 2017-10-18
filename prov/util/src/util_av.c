@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
  * Copyright (c) 2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -205,6 +205,10 @@ int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 	case FI_SOCKADDR_IN6:
 		return fi_get_sockaddr(AF_INET6, flags, node, service,
 				       (struct sockaddr **) addr, addrlen);
+	case FI_ADDR_STR:
+		*(char **)addr = strdup(node);
+		*addrlen = strlen(node) + 1;
+		return 0;
 	default:
 		return -FI_ENOSYS;
 	}

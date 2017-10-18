@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -68,7 +68,7 @@ enum {
  * type
  * seg_size:
  *     Data packets - size of current message, in bytes.
- *     Large data packets - size of current messsage, 2 ^ seg_size, in bytes
+ *     Large data packets - size of current message, 2 ^ seg_size, in bytes
  *     Ctrl packets - number of segments in window allowed past seg_no.
  * seg_no:
  *     Data packets - position 0..(n-1) of segment in current message.
@@ -184,36 +184,6 @@ struct ofi_rma_ioc {
 
 #define OFI_CMD_SIZE		64	/* to align with 64-byte cache line */
 #define OFI_CMD_DATA_LEN	(OFI_CMD_SIZE - sizeof(struct ofi_ctrl_hdr))
-
-/*
- * Additional control information based on the operation being
- * performed.
- */
-enum {
-	shm_ctrl_inline,
-	shm_ctrl_inject,
-	shm_ctrl_iov,
-};
-
-struct shm_cmd {
-	struct ofi_ctrl_hdr	hdr;
-	uint32_t		cmd_id;
-	uint32_t		conn_id;
-	uint64_t		resv;
-	union {
-		uint8_t		data[OFI_CMD_DATA_LEN];
-		uint64_t	buf;
-		struct iovec	iov[OFI_CMD_DATA_LEN / sizeof(struct iovec)];
-	};
-};
-
-/* Align with sizeof struct shm_cmd */
-union shm_cmd_data {
-	uint8_t			msg[OFI_CMD_SIZE];
-	struct iovec		iov[OFI_CMD_SIZE / sizeof(struct iovec)];
-	struct ofi_rma_iov	rma_iov[OFI_CMD_SIZE / sizeof(struct ofi_rma_iov)];
-	struct ofi_rma_ioc	rma_ioc[OFI_CMD_SIZE / sizeof(struct ofi_rma_ioc)];
-};
 
 
 #ifdef __cplusplus
