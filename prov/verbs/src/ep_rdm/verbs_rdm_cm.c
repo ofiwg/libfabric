@@ -637,7 +637,8 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 		     conn->exp_counter, conn->unexp_counter);
 
 	if (conn->id[0]) {
-		rdma_destroy_qp(conn->id[0]);
+		if (conn->id[0]->qp)
+			rdma_destroy_qp(conn->id[0]);
 
 		if (rdma_destroy_id(conn->id[0])) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_id\n", errno);
@@ -649,7 +650,8 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 
 	if (conn->id[1]) {
 		assert(conn->cm_role == FI_VERBS_CM_SELF);
-		rdma_destroy_qp(conn->id[1]);
+		if (conn->id[1]->qp)
+			rdma_destroy_qp(conn->id[1]);
 
 		if (rdma_destroy_id(conn->id[1])) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_id\n", errno);
