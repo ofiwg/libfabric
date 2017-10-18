@@ -673,16 +673,6 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 					hints->domain_attr->caps;
 			}
 
-			ret = ofi_check_domain_attr(&gnix_prov, version,
-						    gnix_info->domain_attr,
-						    hints);
-			if (ret) {
-				GNIX_WARN(FI_LOG_FABRIC,
-						  "GNI failed domain attributes check\n");
-				goto err;
-			}
-
-			GNIX_DEBUG(FI_LOG_FABRIC, "Passed the domain attributes check\n");
 		}
 	}
 
@@ -692,6 +682,17 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 		goto err;
 
 	ofi_alter_info(gnix_info, hints, version);
+
+	ret = ofi_check_domain_attr(&gnix_prov, version,
+				    gnix_info->domain_attr,
+				    gnix_info);
+	if (ret) {
+		GNIX_WARN(FI_LOG_FABRIC,
+				  "GNI failed domain attributes check\n");
+		goto err;
+	}
+
+	GNIX_DEBUG(FI_LOG_FABRIC, "Passed the domain attributes check\n");
 
 	/* The provider may silently enable secondary
 	 * capabilities that do not introduce any overhead. */
