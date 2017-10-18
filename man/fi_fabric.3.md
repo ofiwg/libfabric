@@ -175,9 +175,12 @@ environment variables in a production setting.
 
 ## prov_version - Provider Version
 
-Version information for the fabric provider. In case of an utility provider
-layered over a core provider, the version would always refer to that of 
-the utility provider.
+Version information for the fabric provider, in a major.minor format.  The
+use of the FI_MAJOR() and FI_MINOR() version macros may be used to extract
+the major and minor version data.  See `fi_version(3)`.
+
+In case of an utility provider layered over a core provider, the version
+would always refer to that of the utility provider.
 
 ## api_version
 
