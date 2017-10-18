@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1014,8 +1015,6 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
 		attr->mr_mode = attr->mr_mode & OFI_MR_BASIC_MAP ?
 			FI_MR_BASIC : FI_MR_SCALABLE;
-	else
-		attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
 
 	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
 	if (!hints)
