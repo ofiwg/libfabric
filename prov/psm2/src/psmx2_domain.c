@@ -200,7 +200,6 @@ static int psmx2_domain_close(fid_t fid)
 	free(domain);
 
 	psmx2_atomic_global_fini();
-	psmx2_am_global_fini();
 	return 0;
 }
 
@@ -235,7 +234,6 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 {
 	int err;
 
-	psmx2_am_global_init();
 	psmx2_atomic_global_init();
 
 	err = fastlock_init(&domain->mr_lock);

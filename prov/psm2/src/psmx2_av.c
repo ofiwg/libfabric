@@ -72,7 +72,7 @@ static void psmx2_am_sep_completion(void *buf)
 }
 
 int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
-			 int nargs, void *src, uint32_t len)
+			 int nargs, void *src, uint32_t len, void *hctx)
 {
 	struct psmx2_fid_domain *domain;
 	psm2_amarg_t rep_args[8];

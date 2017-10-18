@@ -409,9 +409,9 @@ static int psmx2_atomic_do_compwrite(void *dest, void *src, void *compare,
 	return 0;
 }
 
-int psmx2_am_atomic_handler_ext(psm2_am_token_t token,
+int psmx2_am_atomic_handler(psm2_am_token_t token,
 				psm2_amarg_t *args, int nargs, void *src,
-				uint32_t len, struct psmx2_trx_ctxt *trx_ctxt)
+				uint32_t len, void *hctx)
 {
 	psm2_amarg_t rep_args[8];
 	int count;
@@ -430,6 +430,8 @@ int psmx2_am_atomic_handler_ext(psm2_am_token_t token,
 	void *tmp_buf;
 	psm2_epaddr_t epaddr;
 	int cmd;
+	struct psmx2_trx_ctxt *trx_ctxt;
+	trx_ctxt = (struct psmx2_trx_ctxt *)hctx;
 
 	psm2_am_get_source(token, &epaddr);
 
