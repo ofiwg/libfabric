@@ -488,13 +488,13 @@ static int fi_ibv_dbg_query_qp_attr(struct ibv_qp *qp)
 		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to query QP\n");
 		return ret;
 	}
-	FI_DBG_TRACE(&fi_ibv_prov, FI_LOG_EP_CTRL, "QP attributes: "
-		     "min_rnr_timer"	": %" PRIu8 ", "
-		     "timeout"		": %" PRIu8 ", "
-		     "retry_cnt"	": %" PRIu8 ", "
-		     "rnr_retry"	": %" PRIu8 "\n",
-		     qp_attr.min_rnr_timer, qp_attr.timeout, qp_attr.retry_cnt,
-		     qp_attr.rnr_retry);
+	FI_DBG(&fi_ibv_prov, FI_LOG_EP_CTRL, "QP attributes: "
+	       "min_rnr_timer"	": %" PRIu8 ", "
+	       "timeout"	": %" PRIu8 ", "
+	       "retry_cnt"	": %" PRIu8 ", "
+	       "rnr_retry"	": %" PRIu8 "\n",
+	       qp_attr.min_rnr_timer, qp_attr.timeout, qp_attr.retry_cnt,
+	       qp_attr.rnr_retry);
 	return 0;
 }
 #else

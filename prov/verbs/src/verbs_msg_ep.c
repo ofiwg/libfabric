@@ -182,6 +182,7 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep_fid)
 	struct ibv_qp_init_attr attr = { 0 };
 	struct fi_ibv_msg_ep *ep;
 	struct ibv_pd *pd;
+	int ret;
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 	if (!ep->eq) {
@@ -245,7 +246,14 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep_fid)
 	attr.sq_sig_all = 0;
 	attr.qp_context = ep;
 
-	return rdma_create_qp(ep->id, pd, &attr) ? -errno : 0;
+	ret = rdma_create_qp(ep->id, pd, &attr);
+	if (ret) {
+		ret = -errno;
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create rdma qp: %s (%d)\n",
+			   fi_strerror(-ret), -ret);
+		return ret;
+	}
+	return 0;
 }
 
 static int fi_ibv_msg_ep_control(struct fid *fid, int command, void *arg)

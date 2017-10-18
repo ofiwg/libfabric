@@ -1169,6 +1169,8 @@ static int fi_ibv_get_matching_info(uint32_t version,
 
 	for ( ; check_info; check_info = check_info->next) {
 		if (hints) {
+			VERBS_DBG(FI_LOG_FABRIC, "Checking domain: %s\n",
+				  check_info->domain_attr->name);
 			ret = fi_ibv_check_hints(version, hints,
 						 check_info);
 			if (ret)

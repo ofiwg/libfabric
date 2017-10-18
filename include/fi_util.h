@@ -616,6 +616,15 @@ struct ofi_mr_map {
 	enum fi_mr_mode		mode;
 };
 
+static inline void ofi_mr_mode_adjust(uint64_t info_caps, int *mr_mode)
+{
+	if (!ofi_rma_target_allowed(info_caps)) {
+		*mr_mode &= ~(FI_MR_PROV_KEY | FI_MR_VIRT_ADDR);
+		if (!(*mr_mode & FI_MR_LOCAL))
+			*mr_mode &= ~FI_MR_ALLOCATED;
+	}
+}
+
 /* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
  * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
  * The provider is assumed only to set FI_MR_LOCAL correctly.

@@ -38,21 +38,37 @@
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
-	/* FI_RMA bit is needed for LMT */
-	core_info->caps = FI_MSG | FI_RMA;
-
 	/* Support modes that ofi_rxm could handle */
 	if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
 		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
 	else
 		core_info->mode |= FI_LOCAL_MR;
 
+	/* The RxM FI_RMA implementation is pass-through but the provider
+	 * can handle FI_MR_PROV_KEY and FI_MR_VIRT_ADDR in its large message
+	 * transfer rendezvous protocol. */
+	if (!hints || !ofi_rma_target_allowed(hints->caps)) {
+		if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
+			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
+		else
+			/* specify FI_MR_UNSPEC (instead of FI_MR_BASIC) so that
+			 * providers that support FI_MR_SCALABLE aren't dropped */
+			core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
+	}
+
 	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
 
 	if (hints) {
-		/* No fi_info modes apart from FI_LOCAL_MR, FI_RX_CQ_DATA
-		 * can be passed along to the core provider */
-		// core_info->mode |= hints->mode;
+		if (hints->caps & FI_TAGGED)
+			core_info->caps |= FI_MSG;
+
+		/* FI_RMA cap is needed for large message transfer protocol */
+		if (hints->caps & (FI_MSG | FI_TAGGED))
+			core_info->caps |= FI_RMA;
+
+		/* No fi_info modes apart from those handled earlier in
+		 * this function can be passed along to the core provider */
+
 		if (hints->domain_attr) {
 			if (FI_VERSION_GE(version, FI_VERSION(1, 5))) {
 				/* Allow only those mr modes that can be
@@ -60,7 +76,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 				core_info->domain_attr->mr_mode |=
 					hints->domain_attr->mr_mode &
 					OFI_MR_BASIC_MAP;
-			} else {
+			} else if (ofi_rma_target_allowed(hints->caps)) {
 				core_info->domain_attr->mr_mode =
 					hints->domain_attr->mr_mode;
 			}
@@ -70,15 +86,6 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
 			core_info->tx_attr->comp_order = hints->tx_attr->comp_order;
 		}
-	} else {
-		/* Since hints is NULL fake support for FI_MR_BASIC to allow
-		 * discovery of core providers like verbs which require it */
-		if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
-			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-		else
-			/* Specify FI_MR_UNSPEC so that providers that support
-			 * FI_MR_SCALABLE aren't dropped */
-			core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
 	}
 
 	/* Remove caps that RxM can handle */

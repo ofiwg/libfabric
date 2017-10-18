@@ -275,8 +275,13 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
+	FI_DBG(util_prov->prov, FI_LOG_CORE, "--- Begin ofi_get_core_info ---\n");
+
 	ret = fi_getinfo(version, node, service, flags | OFI_CORE_PROV_ONLY,
 			 core_hints, core_info);
+
+	FI_DBG(util_prov->prov, FI_LOG_CORE, "--- End ofi_get_core_info ---\n");
+
 	fi_freeinfo(core_hints);
 	return ret;
 }
@@ -457,11 +462,7 @@ int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 			break;
 		}
 	} else {
-		if (!ofi_rma_target_allowed(user_info_caps)) {
-			prov_mode &= ~(FI_MR_PROV_KEY | FI_MR_VIRT_ADDR);
-			if (!(prov_mode & FI_MR_LOCAL))
-				prov_mode &= ~FI_MR_ALLOCATED;
-		}
+		ofi_mr_mode_adjust(user_info_caps, (int *)&prov_mode);
 
 		if (user_mode & FI_MR_BASIC) {
 			if (!OFI_CHECK_MR_BASIC(prov_mode))
@@ -1008,9 +1009,11 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 }
 
 static void fi_alter_domain_attr(struct fi_domain_attr *attr,
-			     const struct fi_domain_attr *hints,
-			     uint64_t info_caps, uint32_t api_version)
+				 const struct fi_domain_attr *hints,
+				 uint64_t info_caps, uint32_t api_version)
 {
+	ofi_mr_mode_adjust(info_caps, &attr->mr_mode);
+
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
 		attr->mr_mode = attr->mr_mode & OFI_MR_BASIC_MAP ?
 			FI_MR_BASIC : FI_MR_SCALABLE;
