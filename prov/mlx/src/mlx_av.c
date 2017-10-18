@@ -97,22 +97,21 @@ static int mlx_av_insert(
 	}
 
 	for ( i = 0; i < count ; ++i) {
-		ucp_ep_params_t ep_params;
-		ep_params.address = (const ucp_address_t*)
-					(&(((const char *)addr)[i*FI_MLX_MAX_NAME_LEN]));
+		ucp_ep_params_t ep_params = {};
+		ep_params.address = (const ucp_address_t *)
+					(&(((const char *)addr)[i * FI_MLX_MAX_NAME_LEN]));
 		ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"Try to insert address #%d, offset=%d (size=%d)"
 			" fi_addr=%p \naddr = %s",
-			i, i*FI_MLX_MAX_NAME_LEN, count,
-			fi_addr, &(((const char *)addr)[i*FI_MLX_MAX_NAME_LEN]));
+			i, i * FI_MLX_MAX_NAME_LEN, count,
+			fi_addr, &(((const char *)addr)[i * FI_MLX_MAX_NAME_LEN]));
 
 		status = ucp_ep_create( ep->worker,
 					&ep_params,
-					(ucp_ep_h*)(&(fi_addr[i])));
-
-		FI_WARN( &mlx_prov, FI_LOG_CORE, "address inserted\n");
+					(ucp_ep_h *)(&(fi_addr[i])));
 		if (status == UCS_OK) {
+			FI_WARN( &mlx_prov, FI_LOG_CORE, "address inserted\n");
 			added++;
 		} else {
 			if (av->eq) {
@@ -186,6 +185,10 @@ int mlx_av_open(
 		case FI_AV_MAP:
 			type = attr->type;
 			break;
+		case FI_AV_UNSPEC:
+			/* Set FI_AV_MAP by default */
+			type = FI_AV_MAP;
+			break;
 		default:
 			return -EINVAL;
 		}
@@ -195,10 +198,9 @@ int mlx_av_open(
 		count = attr->count;
 	}
 
-	av = (struct mlx_av *) calloc(1, sizeof(struct mlx_av));
-	if (!av) {
+	av = (struct mlx_av *)calloc(1, sizeof(struct mlx_av));
+	if (!av)
 		return -ENOMEM;
-	}
 
 	av->domain = domain;
 	av->async = is_async;

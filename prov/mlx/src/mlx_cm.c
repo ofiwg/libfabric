@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 #include "mlx.h"
+#include <inttypes.h>
 
 static int mlx_cm_getname(
 			fid_t fid,
@@ -37,7 +38,7 @@ static int mlx_cm_getname(
 			size_t *addrlen)
 {
 	ucs_status_t status = UCS_OK;
-	void* addr_local = NULL;
+	void *addr_local = NULL;
 	size_t addr_len_local;
 	struct mlx_ep* ep;
 	int ofi_status = FI_SUCCESS;
@@ -47,25 +48,31 @@ static int mlx_cm_getname(
 	status = ucp_worker_get_address( ep->worker,
 					(ucp_address_t **)&addr_local,
 					(size_t*) &addr_len_local );
-	if (status != UCS_OK) {
+	if (status != UCS_OK)
 		return MLX_TRANSLATE_ERRCODE(status);
+	if (addr_len_local > FI_MLX_MAX_NAME_LEN) {
+		FI_WARN( &mlx_prov, FI_LOG_CORE,
+			"Address returned by UCX is too long %"PRIu64"\n",
+			 addr_len_local);
+		return -FI_EINVAL;
 	}
 
-	if ((*addrlen) < addr_len_local) {
+	if ((*addrlen) < FI_MLX_MAX_NAME_LEN) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"Buffer storage for ep address is too small %d "
-			"instead of %d [%s]\n",
-			addrlen, addr_len_local, (char *)addr_local);
+			"Buffer storage for ep address is too small %"PRIu64
+			" instead of %d [%s]\n",
+			*addrlen, FI_MLX_MAX_NAME_LEN, (char *)addr_local);
 		ofi_status = -FI_ETOOSMALL;
 	}
-	FI_INFO( &mlx_prov, FI_LOG_CORE, 
-		"Loaded UCP adress: [%d]%s\n",
+	FI_INFO(&mlx_prov, FI_LOG_CORE, 
+		"Loaded UCP address: [%"PRIu64"]%s\n",
 		addr_len_local, (char *)addr_local);
 
-	memcpy( addr, addr_local,
-		(((*addrlen)<addr_len_local) ? (*addrlen):addr_len_local));
+	if (addr_local != NULL)
+		memcpy(addr, addr_local, (((*addrlen) < addr_len_local) ?
+					  (*addrlen) : addr_len_local));
 
-	*addrlen = addr_len_local;
+	*addrlen = FI_MLX_MAX_NAME_LEN;
 	ucp_worker_release_address(
 				ep->worker,
 				(ucp_address_t *)addr_local);
