@@ -1,4 +1,4 @@
-.TH "fi_fabric" "3" "2017\-07\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_fabric" "3" "2017\-10\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_fabric \- Fabric domain operations
@@ -153,7 +153,11 @@ their own filtering of fi_getinfo\[aq]s results rather than relying on
 these environment variables in a production setting.
 .SS prov_version \- Provider Version
 .PP
-Version information for the fabric provider.
+Version information for the fabric provider, in a major.minor format.
+The use of the FI_MAJOR() and FI_MINOR() version macros may be used to
+extract the major and minor version data.
+See \f[C]fi_version(3)\f[].
+.PP
 In case of an utility provider layered over a core provider, the version
 would always refer to that of the utility provider.
 .SS api_version
