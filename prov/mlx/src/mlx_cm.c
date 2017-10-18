@@ -59,13 +59,13 @@ static int mlx_cm_getname(
 
 	if ((*addrlen) < FI_MLX_MAX_NAME_LEN) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"Buffer storage for ep address is too small %d "
-			"instead of %d [%s]\n",
-			addrlen, addr_len_local, (char *)addr_local);
+			"Buffer storage for ep address is too small %"PRIu64
+			" instead of %d [%s]\n",
+			*addrlen, FI_MLX_MAX_NAME_LEN, (char *)addr_local);
 		ofi_status = -FI_ETOOSMALL;
 	}
 	FI_INFO(&mlx_prov, FI_LOG_CORE, 
-		"Loaded UCP address: [%d]%s\n",
+		"Loaded UCP address: [%"PRIu64"]%s\n",
 		addr_len_local, (char *)addr_local);
 
 	if (addr_local != NULL)
