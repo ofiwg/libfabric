@@ -600,12 +600,12 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	if (ep_dom->type == FI_EP_RDM) {
 		fi->mode	= VERBS_RDM_MODE;
 		*(fi->tx_attr)	= verbs_rdm_tx_attr;
+		*(fi->rx_attr)	= verbs_rdm_rx_attr;
 	} else {
 		*(fi->tx_attr)	= verbs_tx_attr;
+		*(fi->rx_attr)	= verbs_rx_attr;
 	}
 
-	*(fi->rx_attr)		= (ep_dom->type == FI_EP_RDM) ?
-				  verbs_rdm_rx_attr : verbs_rx_attr;
 	*(fi->ep_attr)		= verbs_ep_attr;
 	*(fi->domain_attr)	= verbs_domain_attr;
 
@@ -626,6 +626,8 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->tx_attr->iov_limit = 1;
 		fi->tx_attr->rma_iov_limit = 1;
 		fi->tx_attr->inject_size = fi_ibv_gl_data.rdm.buffer_size;
+
+		fi->rx_attr->iov_limit = 1;
 	}
 
 	switch (ctx->device->transport_type) {
