@@ -336,6 +336,7 @@ static int ft_transfer_subindex(int subindex, int *remote_idx)
 static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info)
 {
 	int ret, subindex, remote_idx = 0, result = 0, end_test = 0;
+	static int server_ready = 0;
 
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
 	if (ret) {
@@ -354,13 +355,30 @@ static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info
 			return ret;
 
 		while (1) {
+			ret = ft_open_res();
+			if (ret) {
+				FT_PRINTERR("ft_open_res", ret);
+				return ret;
+			}
+
+			if (!server_ready) {
+				server_ready = 1;
+				ret = ft_sock_send(sock, &server_ready, sizeof server_ready);
+				if (ret) {
+					FT_PRINTERR("ft_sock_send", ret);
+					return ret;
+				}
+			}
+
 			ret = ft_sock_recv(sock, &end_test, sizeof end_test);
 			if (ret) {
 				FT_PRINTERR("ft_sock_recv", ret);
 				return ret;
 			}
-			if (end_test)
+			if (end_test) {
+				ft_cleanup();
 				break;
+			}
 
 			ret = ft_transfer_subindex(subindex, &remote_idx);
 			if (ret)
@@ -438,6 +456,12 @@ static int ft_fw_process_list_client(struct fi_info *hints, struct fi_info *info
 			printf("Starting test %d-%d-%d: ", test_info.test_index,
 				subindex, remote_idx);
 			ft_show_test_info();
+
+			ret = ft_open_res();
+			if (ret) {
+				FT_PRINTERR("ft_open_res", ret);
+				return ret;
+			}
 
 			result = ft_init_test();
 			if (result)
@@ -551,7 +575,7 @@ static int ft_fw_server(void)
 static int ft_client_child(void)
 {
 	struct fi_info *hints, *info;
-	int ret, result;
+	int ret, result, server_ready = 0;
 
 	result = -FI_ENODATA;
 	hints = fi_allocinfo();
@@ -570,6 +594,13 @@ static int ft_client_child(void)
 		printf("Starting test %d-%d: ", test_info.test_index,
 			test_info.test_subindex);
 		ft_show_test_info();
+
+		ret = ft_sock_recv(sock, &server_ready, sizeof server_ready);
+		if (ret)
+			return ret;
+
+		if (!server_ready)
+			return -FI_EOTHER;
 
 		result = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
 				 ft_strptr(test_info.service), 0, hints, &info);

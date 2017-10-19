@@ -339,6 +339,8 @@ int ft_send_dgram_flood();
 int ft_sendrecv_dgram();
 int ft_send_rma();
 
+void ft_cleanup(void);
+int ft_open_res();
 int ft_init_test();
 int ft_run_test();
 int ft_reset_ep();

@@ -893,7 +893,7 @@ static int ft_run_unit(void)
 	return fail;
 }
 
-static void ft_cleanup(void)
+void ft_cleanup(void)
 {
 	FT_CLOSE_FID(ft_rx_ctrl.mr);
 	FT_CLOSE_FID(ft_tx_ctrl.mr);
@@ -906,7 +906,7 @@ static void ft_cleanup(void)
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
 
-int ft_init_test()
+int ft_open_res()
 {
 	int ret;
 
@@ -935,6 +935,16 @@ int ft_init_test()
 			goto cleanup;
 		}
 	}
+
+	return 0;
+cleanup:
+	ft_cleanup();
+	return ret;
+}
+
+int ft_init_test()
+{
+	int ret;
 
 	ft_sock_sync(0);
 
