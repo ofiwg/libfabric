@@ -1,0 +1,49 @@
+.TH "fi_shm" "7" "2017\-10\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.SH NAME
+.PP
+The SHM Fabric Provider
+.SH OVERVIEW
+.PP
+The SHM provider is a complete provider that can be used on Linux
+systems supporting shared memory and process_vm_readv/process_vm_writev
+calls.
+The provider is intended to provide high\-performance communication
+between processes on the same system.
+.SH SUPPORTED FEATURES
+.PP
+This release contains an initial implementation of the SHM provider.
+It supports a minimal set of features useful for sending and receiving
+datagram messages over an unreliable endpoint.
+.PP
+\f[I]Endpoint types\f[] : The provider supports only endpoint type
+\f[I]FI_EP_DGRAM\f[].
+.PP
+\f[I]Endpoint capabilities\f[] : The following data transfer interface
+is supported: \f[I]fi_msg\f[].
+.PP
+\f[I]Modes\f[] : The provider does not require the use of any mode bits.
+.PP
+\f[I]Progress\f[] : The UDP provider supports
+\f[I]FI_PROGRESS_MANUAL\f[].
+Receive side data buffers are not modified outside of completion
+processing routines, and transmit operations require the receiver to
+process requests before being completed.
+.SH LIMITATIONS
+.PP
+The SHM provider has hard\-coded maximums for supported queue sizes and
+data transfers.
+These values are reflected in the related fabric attribute structures
+.PP
+EPs must be bound to both RX and TX CQs.
+.PP
+No support for selective completions or multi\-recv.
+.PP
+No support for counters.
+.SH RUNTIME PARAMETERS
+.PP
+No runtime parameters are currently defined.
+.SH SEE ALSO
+.PP
+\f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3)
+.SH AUTHORS
+OpenFabrics.
