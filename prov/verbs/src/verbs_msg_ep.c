@@ -304,7 +304,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	fi = dom->info;
 
 	if (info->ep_attr) {
-		ret = fi_ibv_check_ep_attr(info->ep_attr, fi);
+		ret = fi_ibv_check_ep_attr(info, fi);
 		if (ret)
 			return ret;
 	}

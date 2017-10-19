@@ -498,7 +498,7 @@ struct verbs_ep_domain {
 extern const struct verbs_ep_domain verbs_rdm_domain;
 extern const struct verbs_ep_domain verbs_dgram_domain;
 
-int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
+int fi_ibv_check_ep_attr(const struct fi_info *hints,
 			 const struct fi_info *info);
 int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 			 const struct fi_info *hints,

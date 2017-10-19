@@ -158,10 +158,10 @@ struct fi_ibv_rdm_sysaddr
 	int is_found;
 };
 
-int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
+int fi_ibv_check_ep_attr(const struct fi_info *hints,
 			 const struct fi_info *info)
 {
-	struct fi_ep_attr user_attr = *attr;
+	struct fi_info *user_hints;
 	struct util_prov tmp_util_prov = {
 		.prov = &fi_ibv_prov,
 		.info = NULL,
@@ -169,8 +169,9 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 			  info->ep_attr->type == FI_EP_MSG) ?
 			 UTIL_RX_SHARED_CTX : 0,
 	};
+	int ret;
 
-	switch (attr->protocol) {
+	switch (hints->ep_attr->protocol) {
 	case FI_PROTO_UNSPEC:
 	case FI_PROTO_RDMA_CM_IB_RC:
 	case FI_PROTO_IWARP:
@@ -184,23 +185,29 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 		return -FI_ENODATA;
 	}
 
+	user_hints = fi_dupinfo(hints);
+	if (!user_hints)
+		return -FI_ENOMEM;
+
 	/*
 	 * verbs provider requires more complex verification of the
 	 * protocol in compare to verification that is presented in
 	 * the utility function. Change the protocol to FI_PROTO_UNSPEC
 	 * to avoid verification of protocol in the ofi_check_ep_attr
 	 */
-	user_attr.protocol = FI_PROTO_UNSPEC;
+	user_hints->ep_attr->protocol = FI_PROTO_UNSPEC;
 
-	return ofi_check_ep_attr(&tmp_util_prov,
-				 info->fabric_attr->api_version,
-				 info, &user_attr);
+	ret = ofi_check_ep_attr(&tmp_util_prov, info->fabric_attr->api_version,
+				info, user_hints);
+	fi_freeinfo(user_hints);
+	return ret;
 }
 
 int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 			 const struct fi_info *hints,
 			 const struct fi_info *info)
 {
+	/* WARNING: This is not thread safe */
 	uint64_t saved_prov_mode = info->rx_attr->mode;
 	int ret;
 
@@ -252,7 +259,7 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 	}
 
 	if (hints->ep_attr) {
-		ret = fi_ibv_check_ep_attr(hints->ep_attr, info);
+		ret = fi_ibv_check_ep_attr(hints, info);
 		if (ret)
 			return ret;
 	}
