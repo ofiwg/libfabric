@@ -81,6 +81,22 @@ do {								\
 } while (0)
 #define freestack_pop(fs) freestack_pop_impl(fs, (fs)->next)
 
+#define freestack_shm_push(fs, p_offset, offset) freestack_push(fs, \
+	freestack_to_address(fs, p_offset, offset))		\
+
+#define freestack_shm_pop(fs, offset) freestack_to_offset(fs,	\
+	freestack_pop_impl(fs, &(fs)->next), offset)		\
+
+static inline void *freestack_to_address(void *fs, size_t p_off, size_t fs_off)
+{
+	return (char **) fs + (p_off - fs_off);
+}
+
+static inline size_t freestack_to_offset(void *fs, void *p, size_t fs_off)
+{
+	return ((char **) p - (char **) fs) + fs_off;
+}
+
 static inline void* freestack_pop_impl(void *fs, void *fs_next)
 {
 	struct {

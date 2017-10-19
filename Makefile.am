@@ -57,7 +57,8 @@ common_srcs = \
 	prov/util/src/util_wait.c   \
 	prov/util/src/util_buf.c    \
 	prov/util/src/util_mr.c     \
-	prov/util/src/util_ns.c
+	prov/util/src/util_ns.c     \
+	prov/util/src/util_shm.c 
 
 if MACOS
 common_srcs += src/unix/osd.c
@@ -114,6 +115,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_osd.h \
 	include/fi_proto.h \
 	include/fi_rbuf.h \
+	include/fi_shm.h \
 	include/fi_signal.h \
 	include/fi_util.h \
 	include/ofi_atomic.h \
@@ -343,6 +345,7 @@ include prov/rxm/Makefile.include
 include prov/rxd/Makefile.include
 include prov/bgq/Makefile.include
 include prov/mlx/Makefile.include
+include prov/shm/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 

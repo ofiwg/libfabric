@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -183,5 +183,16 @@ NETDIR_INI ;
 #else /* _WIN32 */
 #  define NETDIR_INIT NULL
 #endif /* _WIN32 */
+
+#if (HAVE_SHM) && (HAVE_SHM_DL)
+#  define SHM_INI FI_EXT_INI
+#  define SHM_INIT NULL
+#elif (HAVE_SHM)
+#  define SHM_INI INI_SIG(fi_shm_ini)
+#  define SHM_INIT fi_shm_ini()
+SHM_INI ;
+#else
+#  define SHM_INIT NULL
+#endif
 
 #endif /* _PROV_H_ */

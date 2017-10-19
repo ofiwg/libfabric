@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 Intel Corp., Inc.  All rights reserved.
+ * Copyright (c) 2014-2017 Intel Corp., Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -245,6 +245,7 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_RXD);
 	CASEENUMSTR(FI_PROTO_MLX);
 	CASEENUMSTR(FI_PROTO_NETWORKDIRECT);
+	CASEENUMSTR(FI_PROTO_SHM);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");

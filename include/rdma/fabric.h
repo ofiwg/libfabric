@@ -275,6 +275,7 @@ enum {
 	FI_PROTO_MLX,
 	FI_PROTO_NETWORKDIRECT,
 	FI_PROTO_PSMX2,
+	FI_PROTO_SHM,
 };
 
 /* Mode bits */
