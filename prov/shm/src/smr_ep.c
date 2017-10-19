@@ -208,7 +208,7 @@ static int smr_progress_inject(struct smr_cmd *cmd, struct smr_ep_entry *entry,
 	} else {
 		ret = 0;
 	}
-	freestack_push(smr_inject_pool(ep->region), tx_buf);
+	smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 
 	return ret;
 }
@@ -384,7 +384,7 @@ static void smr_format_send(struct smr_cmd *cmd, const struct fi_msg *msg)
 }
 
 static void smr_format_inject(struct smr_cmd *cmd, const struct fi_msg *msg,
-			      struct smr_region *smr, size_t inj_offset)
+			      struct smr_region *smr, struct smr_inject_buf *tx_buf)
 {
 	cmd->hdr.op.version = OFI_OP_VERSION;
 	cmd->hdr.op.rx_index = 0;
@@ -394,9 +394,9 @@ static void smr_format_inject(struct smr_cmd *cmd, const struct fi_msg *msg,
 
 	cmd->hdr.op.size = 0;
 	cmd->hdr.op.resv = 0;
-	cmd->hdr.op.data = inj_offset;
+	cmd->hdr.op.data = (char **) tx_buf - (char **) smr;
 
-	cmd->hdr.op.size = ofi_copy_from_iov((char **) smr + inj_offset, SMR_INJECT_SIZE,
+	cmd->hdr.op.size = ofi_copy_from_iov(tx_buf->data, SMR_INJECT_SIZE,
 					     msg->msg_iov, msg->iov_count, 0);
 }
 
@@ -432,7 +432,7 @@ ssize_t smr_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 {
 	struct smr_ep *ep;
 	struct smr_region *peer_smr;
-	size_t inj_offset;
+	struct smr_inject_buf *tx_buf;
 	struct smr_resp *resp;
 	struct smr_cmd *cmd;
 	int peer_id;
@@ -474,9 +474,8 @@ ssize_t smr_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	if (total_len <= SMR_CMD_DATA_LEN) {
 		smr_format_send(cmd, msg);
 	} else if (total_len <= SMR_INJECT_SIZE) {
-		inj_offset = freestack_shm_pop(smr_inject_pool(peer_smr),
-					       peer_smr->inject_pool_offset);
-		smr_format_inject(cmd, msg, peer_smr, inj_offset);
+		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
+		smr_format_inject(cmd, msg, peer_smr, tx_buf);
 	} else {
 		assert(!ofi_cirque_isfull(smr_resp_queue(ep->region)));
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
@@ -530,7 +529,7 @@ ssize_t smr_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 {
 	struct smr_ep *ep;
 	struct smr_region *peer_smr;
-	size_t inj_offset;
+	struct smr_inject_buf *tx_buf;
 	struct smr_cmd *cmd;
 	int peer_id;
 	ssize_t ret = 0;
@@ -570,9 +569,8 @@ ssize_t smr_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (len <= SMR_CMD_DATA_LEN) {
 		smr_format_send(cmd, &msg);
 	} else {
-		inj_offset = freestack_shm_pop(smr_inject_pool(peer_smr),
-					       peer_smr->inject_pool_offset);
-		smr_format_inject(cmd, &msg, peer_smr, inj_offset);
+		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
+		smr_format_inject(cmd, &msg, peer_smr, tx_buf);
 	}
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
