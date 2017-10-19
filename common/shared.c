@@ -837,9 +837,18 @@ int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
 
 	if (fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST)
 		FT_EP_BIND(ep, eq, 0);
+
 	FT_EP_BIND(ep, av, 0);
-	FT_EP_BIND(ep, txcq, FI_TRANSMIT);
-	FT_EP_BIND(ep, rxcq, FI_RECV);
+
+	flags = FI_TRANSMIT;
+	if (!(opts.options & FT_OPT_TX_CQ))
+		flags |= FI_SELECTIVE_COMPLETION;
+	FT_EP_BIND(ep, txcq, flags);
+
+	flags = FI_RECV;
+	if (!(opts.options & FT_OPT_RX_CQ))
+		flags |= FI_SELECTIVE_COMPLETION;
+	FT_EP_BIND(ep, rxcq, flags);
 
 	ret = ft_get_cq_fd(txcq, &tx_fd);
 	if (ret)
