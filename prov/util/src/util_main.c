@@ -37,15 +37,14 @@
 #include <fi_util.h>
 #include <fi.h>
 
-
 static DEFINE_LIST(fabric_list);
-static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+extern struct ofi_common_locks common_locks;
 
 void ofi_fabric_insert(struct util_fabric *fabric)
 {
-	pthread_mutex_lock(&lock);
+	pthread_mutex_lock(&common_locks.util_fabric_lock);
 	dlist_insert_tail(&fabric->list_entry, &fabric_list);
-	pthread_mutex_unlock(&lock);
+	pthread_mutex_unlock(&common_locks.util_fabric_lock);
 }
 
 static int util_match_fabric(struct dlist_entry *item, const void *arg)
@@ -62,18 +61,18 @@ struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info)
 {
 	struct dlist_entry *item;
 
-	pthread_mutex_lock(&lock);
+	pthread_mutex_lock(&common_locks.util_fabric_lock);
 	item = dlist_find_first_match(&fabric_list, util_match_fabric, fabric_info);
-	pthread_mutex_unlock(&lock);
+	pthread_mutex_unlock(&common_locks.util_fabric_lock);
 
 	return item ? container_of(item, struct util_fabric, list_entry) : NULL;
 }
 
 void ofi_fabric_remove(struct util_fabric *fabric)
 {
-	pthread_mutex_lock(&lock);
+	pthread_mutex_lock(&common_locks.util_fabric_lock);
 	dlist_remove(&fabric->list_entry);
-	pthread_mutex_unlock(&lock);
+	pthread_mutex_unlock(&common_locks.util_fabric_lock);
 }
 
 
