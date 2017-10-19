@@ -270,14 +270,11 @@ do						\
 #define ntohll _byteswap_uint64
 #define strncasecmp _strnicmp
 
-//#define INET_ADDRSTRLEN  (16)
-//#define INET6_ADDRSTRLEN (48)
-
 int fd_set_nonblock(int fd);
 
 int socketpair(int af, int type, int protocol, int socks[2]);
 void sock_get_ip_addr_table(struct slist *addr_list);
-
+int ofi_getsockname(SOCKET fd, struct sockaddr *addr, socklen_t *len);
 
 /*
  * Win32 error code should be passed as a parameter.
