@@ -40,6 +40,30 @@
 #include <net/if.h>
 #include <fi_util.h>
 
+static void util_set_fabric_domain_names(const struct fi_provider *prov,
+				  struct fi_info *info)
+{
+	char *name = NULL;
+
+	name = util_get_subnet_name(prov,info);
+	if (name) {
+		if (info->fabric_attr->name)
+			free(info->fabric_attr->name);
+
+		info->fabric_attr->name = name;
+		name = NULL;
+	}
+
+	name = util_get_adapter_name(prov, info);
+	if (name) {
+		if (info->domain_attr->name)
+			free(info->domain_attr->name);
+
+		info->domain_attr->name = name;
+		name = NULL;
+	}
+}
+
 #if HAVE_GETIFADDRS
 static void tcpx_getinfo_ifs(struct fi_info **info)
 {
@@ -90,7 +114,8 @@ static void tcpx_getinfo_ifs(struct fi_info **info)
 			cur->src_addrlen = addrlen;
 			cur->addr_format = addr_format;
 		}
-		util_set_fabric_domain(&tcpx_prov, cur);
+		util_set_fabric_domain_names(&tcpx_prov, cur);
+		util_find_fabric_domain(&tcpx_prov, cur);
 	}
 	freeifaddrs(ifaddrs);
 
@@ -118,7 +143,7 @@ static int tcpx_getinfo(uint32_t version, const char *node, const char *service,
 {
 	int ret;
 	ret = util_getinfo(&tcpx_util_prov, version, node, service, flags,
-			   hints, info);
+			   hints, info, util_set_fabric_domain_names);
 	if (ret)
 		return ret;
 

@@ -119,7 +119,7 @@ static int udpx_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	ret = util_getinfo(&udpx_util_prov, version, node, service, flags,
-			   hints, info);
+			   hints, info, util_no_alter_names);
 	if (ret)
 		return ret;
 

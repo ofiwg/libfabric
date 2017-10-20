@@ -201,7 +201,7 @@ out:
 }
 
 static int util_equals_ipaddr(struct sockaddr *addr1,
-				struct sockaddr *addr2)
+			      struct sockaddr *addr2)
 {
 	struct sockaddr_in *in_addr1, *in_addr2;
 	struct sockaddr_in6 *in6_addr1, *in6_addr2;
@@ -226,13 +226,13 @@ static int util_equals_ipaddr(struct sockaddr *addr1,
 	return 0;
 }
 
-static char *util_get_domain_name(const struct fi_provider *prov,
-				  struct fi_info *info)
+char *util_get_adapter_name(const struct fi_provider *prov,
+			    struct fi_info *info)
 {
 	struct sockaddr *addr;
 	int ret;
 	struct ifaddrs *ifaddrs, *ifa;
-	char *domain_name = NULL;
+	char *adapter_name = NULL;
 
 	if (!info && !info->src_addr)
 		return NULL;
@@ -253,9 +253,9 @@ static char *util_get_domain_name(const struct fi_provider *prov,
 				continue;
 
 			if (util_equals_ipaddr((struct sockaddr *)ifa->ifa_addr, addr)) {
-				domain_name = strdup(ifa->ifa_name);
+				adapter_name = strdup(ifa->ifa_name);
 				freeifaddrs(ifaddrs);
-				return domain_name;
+				return adapter_name;
 			}
 		}
 		freeifaddrs(ifaddrs);
@@ -267,14 +267,14 @@ static char *util_get_domain_name(const struct fi_provider *prov,
 	return NULL;
 }
 
-static char *util_get_fabric_name(const struct fi_provider *prov,
+char *util_get_subnet_name(const struct fi_provider *prov,
 				  struct fi_info *info)
 {
 	struct sockaddr *addr;
 	int ret;
 
 	struct ifaddrs *ifaddrs, *ifa;
-	char *fabric_name = NULL;
+	char *subnet_name = NULL;
 	char netbuf[INET6_ADDRSTRLEN+4];
 	int prefix_len, idx;
 	struct sockaddr_in *host_addr, *net_mask;
@@ -327,9 +327,9 @@ static char *util_get_fabric_name(const struct fi_provider *prov,
 			}
 			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
 				 "%s%d", "/", prefix_len);
-			fabric_name = strdup(netbuf);
+			subnet_name = strdup(netbuf);
 			freeifaddrs(ifaddrs);
-			return fabric_name;
+			return subnet_name;
 		}
 	default:
 		FI_DBG(prov, FI_LOG_CORE,
@@ -339,45 +339,26 @@ static char *util_get_fabric_name(const struct fi_provider *prov,
 }
 
 #else //HAVE_GETIFADDRS
-static char *util_get_fabric_name(const struct fi_provider *prov,
+char *util_get_subnet_name(const struct fi_provider *prov,
 			   struct fi_info *info)
 {
 	return NULL;
 }
 
-static char *util_get_domain_name(const struct fi_provider *prov,
-			   struct fi_info *info)
+char *util_get_adapter_name(const struct fi_provider *prov,
+			    struct fi_info *info)
 {
 	return NULL;
 }
 #endif //HAVE_GETIFADDRS
 
-void util_set_fabric_domain(const struct fi_provider *prov,
-			    struct fi_info *info)
+void util_find_fabric_domain(const struct fi_provider *prov,
+			     struct fi_info *info)
 {
 	struct util_fabric *fabric;
 	struct util_domain *domain;
 	struct util_fabric_info fabric_info;
 	struct dlist_entry *item;
-	char *name = NULL;
-
-	name = util_get_fabric_name(prov,info);
-	if (name) {
-		if (info->fabric_attr->name)
-			free(info->fabric_attr->name);
-
-		info->fabric_attr->name = name;
-		name = NULL;
-	}
-
-	name = util_get_domain_name(prov, info);
-	if (name) {
-		if (info->domain_attr->name)
-			free(info->domain_attr->name);
-
-		info->domain_attr->name = name;
-		name = NULL;
-	}
 
 	fabric_info.name =info->fabric_attr->name;
 	fabric_info.prov = prov;
@@ -401,10 +382,16 @@ void util_set_fabric_domain(const struct fi_provider *prov,
 		fastlock_release(&fabric->lock);
 	}
 }
+void util_no_alter_names(const struct fi_provider *prov,
+			 struct fi_info *info)
+{
+	return;
+}
 
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
-		 const struct fi_info *hints, struct fi_info **info)
+		 const struct fi_info *hints, struct fi_info **info,
+		 alter_fabric_domain_names alter_names)
 {
 	const struct fi_provider *prov = util_prov->prov;
 	struct fi_info *saved_info;
@@ -485,7 +472,9 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 					"cannot resolve source address\n");
 			}
 		}
-		util_set_fabric_domain(prov, *info);
+		alter_names(prov, *info);
+		util_find_fabric_domain(prov, *info);
+
 	}
 
 	*info = saved_info;
