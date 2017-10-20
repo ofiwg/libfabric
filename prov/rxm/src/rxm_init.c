@@ -115,6 +115,9 @@ int rxm_info_to_rxm(uint32_t version, struct fi_info *core_info,
 
 	*info->ep_attr = *rxm_info.ep_attr;
 	info->ep_attr->max_msg_size = core_info->ep_attr->max_msg_size;
+	info->ep_attr->max_order_raw_size = core_info->ep_attr->max_order_raw_size;
+	info->ep_attr->max_order_war_size = core_info->ep_attr->max_order_war_size;
+	info->ep_attr->max_order_waw_size = core_info->ep_attr->max_order_waw_size;
 
 	*info->domain_attr = *rxm_info.domain_attr;
 	info->domain_attr->mr_mode = core_info->domain_attr->mr_mode;
