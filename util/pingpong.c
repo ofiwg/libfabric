@@ -195,7 +195,7 @@ struct ct_pingpong {
 
 	SOCKET ctrl_connfd;
 	char ctrl_buf[PP_CTRL_BUF_LEN + 1];
-	char rem_name[PP_MAX_CTRL_MSG];
+	void *rem_name;
 };
 
 static const char integ_alphabet[] =
@@ -564,35 +564,43 @@ int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 
 int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
 {
-	char local_name[64];
-	size_t addrlen;
+	void *local_name = NULL;
+	size_t addrlen = 0;
 	uint32_t len;
 	int ret;
 
 	PP_DEBUG("Fetching local address\n");
 
-	addrlen = sizeof(local_name);
+	ret = fi_getname(endpoint, local_name, &addrlen);
+	if ((ret != -FI_ETOOSMALL) || (addrlen <= 0)) {
+		PP_ERR("fi_getname didn't return length\n");
+		return -EMSGSIZE;
+	}
+
+	local_name = calloc(1, addrlen);
+	if (!local_name) {
+		PP_ERR("Failed to allocate memory for the address\n");
+		return -ENOMEM;
+	}
+
 	ret = fi_getname(endpoint, local_name, &addrlen);
 	if (ret) {
 		PP_PRINTERR("fi_getname", ret);
-		return ret;
-	}
-
-	if (addrlen > sizeof(local_name)) {
-		PP_DEBUG("Address exceeds control buffer length\n");
-		return -EMSGSIZE;
+		goto fn;
 	}
 
 	PP_DEBUG("Sending name length\n");
 	len = htonl(addrlen);
 	ret = pp_ctrl_send(ct, (char *) &len, sizeof(len));
 	if (ret < 0)
-		return ret;
+		goto fn;
 
 	PP_DEBUG("Sending name\n");
 	ret = pp_ctrl_send(ct, local_name, addrlen);
 	PP_DEBUG("Sent name\n");
 
+fn:
+	free(local_name);
 	return ret;
 }
 
@@ -608,9 +616,10 @@ int pp_recv_name(struct ct_pingpong *ct)
 
 	len = ntohl(len);
 
-	if (len > sizeof(ct->rem_name)) {
-		PP_DEBUG("Address length exceeds address storage\n");
-		return -EMSGSIZE;
+	ct->rem_name = calloc(1, len);
+	if (!ct->rem_name) {
+		PP_ERR("Failed to allocate memory for the address\n");
+		return -ENOMEM;
 	}
 
 	PP_DEBUG("Receiving name\n");
@@ -619,7 +628,7 @@ int pp_recv_name(struct ct_pingpong *ct)
 		return ret;
 	PP_DEBUG("Received name\n");
 
-	ct->hints->dest_addr = malloc(len);
+	ct->hints->dest_addr = calloc(1, len);
 	if (!ct->hints->dest_addr) {
 		PP_DEBUG("Failed to allocate memory for destination address\n");
 		return -ENOMEM;
@@ -1805,6 +1814,8 @@ void pp_free_res(struct ct_pingpong *ct)
 	PP_CLOSE_FID(ct->domain);
 	PP_CLOSE_FID(ct->fabric);
 
+	if (ct->buf)
+		free(ct->rem_name);
 	if (ct->buf) {
 		ofi_freealign(ct->buf);
 		ct->buf = ct->rx_buf = ct->tx_buf = NULL;

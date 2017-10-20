@@ -100,6 +100,11 @@ static inline void ofi_osd_fini(void)
 {
 }
 
+static inline int ofi_getsockname(SOCKET fd, struct sockaddr *addr, socklen_t *len)
+{
+	return getsockname(fd, addr, len);
+}
+
 static inline SOCKET ofi_socket(int domain, int type, int protocol)
 {
 	return socket(domain, type, protocol);
