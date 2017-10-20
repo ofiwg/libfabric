@@ -10,11 +10,16 @@ dnl
 AC_DEFUN([FI_SHM_CONFIGURE],[
 	# Determine if we can support the shm provider
 	shm_happy=0
+	cma_happy=0
 	AS_IF([test x"$enable_shm" != x"no"],
 	      [
-	       # check if shm_open and CMA support are present
-	       AC_CHECK_FUNCS(shm_open,
-			      process_vm_readv,
+	       # check if CMA support are present
+	       AC_CHECK_FUNC([process_vm_readv],
+			     [cma_happy=1],
+			     [cma_happy=0])
+
+	       # check if SHM support are present
+	       AC_CHECK_FUNC([shm_open],
 			     [shm_happy=1],
 			     [shm_happy=0])
 
@@ -31,5 +36,6 @@ AC_DEFUN([FI_SHM_CONFIGURE],[
 				[shm_happy=0])])
 	      ])
 
-	AS_IF([test $shm_happy -eq 1], [$1], [$2])
+	AS_IF([test $shm_happy -eq 1 && \
+	       test $cma_happy -eq 1], [$1], [$2])
 ])
