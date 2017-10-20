@@ -470,7 +470,6 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 				  struct fi_cq_tagged_entry *comp)
 {
-	enum rxm_proto_state state = RXM_GET_PROTO_STATE(comp);
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 	struct rxm_tx_entry *tx_entry = comp->op_context;
 
@@ -479,7 +478,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
-	switch (state) {
+	switch (RXM_GET_PROTO_STATE(comp)) {
 	case RXM_TX_NOBUF:
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
 		return rxm_finish_send_nobuf(tx_entry);
