@@ -1120,10 +1120,6 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_av(&rxm_ep->util_ep, util_av);
 		if (ret)
 			return ret;
-
-		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
-		if (!rxm_ep->util_ep.cmap)
-			return -FI_ENOMEM;
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
@@ -1170,9 +1166,14 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 			return ret;
 		}
 
+		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
+		if (!rxm_ep->util_ep.cmap)
+			return -FI_ENOMEM;
+
 		if (rxm_ep->srx_ctx) {
 			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx);
 			if (ret) {
+				ofi_cmap_free(rxm_ep->util_ep.cmap);
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Unable to prepost recv bufs\n");
 				return ret;
