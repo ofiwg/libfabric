@@ -1,4 +1,4 @@
-.TH "fi_tagged" "3" "2017\-08\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_tagged" "3" "2017\-10\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_tagged \- Tagged data transfer operations
@@ -21,7 +21,7 @@ Initiate an operation to send a message
 ssize_t\ fi_trecv(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,\ void\ *desc,
 \ \ \ \ fi_addr_t\ src_addr,\ uint64_t\ tag,\ uint64_t\ ignore,\ void\ *context);
 
-ssize_t\ fi_trecvv(struct\ fid_ep\ *ep,\ const\ struct\ iovec\ *iov,\ void\ *desc,
+ssize_t\ fi_trecvv(struct\ fid_ep\ *ep,\ const\ struct\ iovec\ *iov,\ void\ **desc,
 \ \ \ \ size_t\ count,\ fi_addr_t\ src_addr,\ uint64_t\ tag,\ uint64_t\ ignore,
 \ \ \ \ void\ *context);
 
@@ -32,7 +32,7 @@ ssize_t\ fi_tsend(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
 \ \ \ \ void\ *desc,\ fi_addr_t\ dest_addr,\ uint64_t\ tag,\ void\ *context);
 
 ssize_t\ fi_tsendv(struct\ fid_ep\ *ep,\ const\ struct\ iovec\ *iov,
-\ \ \ \ void\ *desc,\ size_t\ count,\ fi_addr_t\ dest_addr,\ uint64_t\ tag,
+\ \ \ \ void\ **desc,\ size_t\ count,\ fi_addr_t\ dest_addr,\ uint64_t\ tag,
 \ \ \ \ void\ *context);
 
 ssize_t\ fi_tsendmsg(struct\ fid_ep\ *ep,\ const\ struct\ fi_msg_tagged\ *msg,
