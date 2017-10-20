@@ -637,7 +637,7 @@ static void fi_tostr_cq_event_flags(char *buf, uint64_t flags)
 	fi_remove_comma(buf);
 }
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 {
 	static char *buf = NULL;

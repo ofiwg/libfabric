@@ -530,7 +530,7 @@ FI_DESTRUCTOR(fi_fini(void))
 	ofi_osd_fini();
 }
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 {
 	struct fi_info *next;
@@ -681,7 +681,7 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 	return 1;
 }
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
 		const struct fi_info *hints, struct fi_info **info)
@@ -788,7 +788,7 @@ err:
 }
 
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 {
 	struct fi_info *dup;
@@ -887,7 +887,7 @@ fail:
 }
 CURRENT_SYMVER(fi_dupinfo_, fi_dupinfo);
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric, void *context)
 {
@@ -920,7 +920,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 }
 CURRENT_SYMVER(fi_fabric_, fi_fabric);
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)
 {
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
@@ -943,7 +943,7 @@ static const char *const errstr[] = {
 	[FI_EOVERRUN - FI_ERRNO_OFFSET] = "Queue has been overrun",
 };
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 const char *DEFAULT_SYMVER_PRE(fi_strerror)(int errnum)
 {
 	if (errnum < FI_ERRNO_OFFSET)

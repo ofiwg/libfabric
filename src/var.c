@@ -78,7 +78,7 @@ fi_find_param(const struct fi_provider *provider, const char *param_name)
 	return NULL;
 }
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 {
 	struct fi_param *vhead = NULL;
@@ -125,7 +125,7 @@ out:
 }
 DEFAULT_SYMVER(fi_getparams_, fi_getparams, FABRIC_1.0);
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_freeparams)(struct fi_param *params)
 {
 	int i;
@@ -163,7 +163,7 @@ void fi_param_undefine(const struct fi_provider *provider)
 	}
 }
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 		const char *param_name, enum fi_param_type type,
 		const char *help_string)
@@ -243,7 +243,7 @@ static int fi_parse_bool(const char *str_value)
 	return -1;
 }
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 		const char *param_name, void *value)
 {

@@ -57,7 +57,8 @@ extern "C" {
  * is loaded.
  */
 #define FI_EXT_INI \
-	__attribute__((visibility ("default"))) struct fi_provider* fi_prov_ini(void)
+	__attribute__((visibility ("default"),EXTERNALLY_VISIBLE)) \
+	struct fi_provider* fi_prov_ini(void)
 
 struct fi_provider {
 	uint32_t version;
