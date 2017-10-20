@@ -143,7 +143,7 @@ struct smr_inject_buf {
 
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
-DECLARE_FREESTACK(struct smr_inject_buf, smr_inject_pool);
+DECLARE_SMR_FREESTACK(struct smr_inject_buf, smr_inject_pool);
 
 static inline struct smr_peer *smr_peer(struct smr_region *smr)
 {

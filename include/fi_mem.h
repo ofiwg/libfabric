@@ -81,22 +81,6 @@ do {								\
 } while (0)
 #define freestack_pop(fs) freestack_pop_impl(fs, (fs)->next)
 
-#define freestack_shm_push(fs, p_offset, offset) freestack_push(fs, \
-	freestack_to_address(fs, p_offset, offset))		\
-
-#define freestack_shm_pop(fs, offset) freestack_to_offset(fs,	\
-	freestack_pop_impl(fs, &(fs)->next), offset)		\
-
-static inline void *freestack_to_address(void *fs, size_t p_off, size_t fs_off)
-{
-	return (char **) fs + (p_off - fs_off);
-}
-
-static inline size_t freestack_to_offset(void *fs, void *p, size_t fs_off)
-{
-	return ((char **) p - (char **) fs) + fs_off;
-}
-
 static inline void* freestack_pop_impl(void *fs, void *fs_next)
 {
 	struct {
@@ -122,6 +106,76 @@ static inline void name ## _init(struct name *fs, size_t size)	\
 	fs->next = FREESTACK_EMPTY;				\
 	for (i = size - 1; i >= 0; i--)				\
 		freestack_push(fs, &fs->buf[i]);		\
+}								\
+								\
+static inline struct name * name ## _create(size_t size)	\
+{								\
+	struct name *fs;					\
+	fs = calloc(1, sizeof(*fs) + sizeof(entrytype) *	\
+		    (roundup_power_of_two(size)));		\
+	if (fs)							\
+		name ##_init(fs, roundup_power_of_two(size));	\
+	return fs;						\
+}								\
+								\
+static inline int name ## _index(struct name *fs,		\
+		entrytype *entry)				\
+{								\
+	return (int)(entry - fs->buf);				\
+}								\
+								\
+static inline void name ## _free(struct name *fs)		\
+{								\
+	free(fs);						\
+}
+
+/*
+ * Buffer pool (free stack) template for shared memory regions
+ */
+#define SMR_FREESTACK_EMPTY	NULL
+
+#define SMR_FREESTACK_HEADER 					\
+	void		*base_addr;				\
+	size_t		size;					\
+	void		*next;					\
+
+#define smr_freestack_isempty(fs)	((fs)->next == SMR_FREESTACK_EMPTY)
+#define smr_freestack_push(fs, local_p)				\
+do {								\
+	void *p = (char **) fs->base_addr + ((char **) local_p - (char **) fs); \
+	*(void **) local_p = (fs)->next;				\
+	(fs)->next = p;						\
+} while (0)
+#define smr_freestack_pop(fs) smr_freestack_pop_impl(fs,	\
+	(char **) fs + ((char **) (fs)->next - (char **) fs->base_addr))
+
+static inline void* smr_freestack_pop_impl(void *fs, void *fs_next)
+{
+	struct {
+		SMR_FREESTACK_HEADER
+	} *freestack = fs;
+	assert(!freestack_isempty(freestack));
+
+	freestack->next = *((void **)fs_next);
+	return fs_next;
+}
+
+#define DECLARE_SMR_FREESTACK(entrytype, name)			\
+struct name {							\
+	SMR_FREESTACK_HEADER					\
+	entrytype	buf[];					\
+};								\
+								\
+static inline void name ## _init(struct name *fs, size_t size)	\
+{								\
+	ssize_t i;						\
+	assert(size == roundup_power_of_two(size));		\
+	assert(sizeof(fs->buf[0]) >= sizeof(void *));		\
+	fs->size = size;					\
+	fs->next = SMR_FREESTACK_EMPTY;				\
+	fs->base_addr = fs;					\
+	for (i = size - 1; i >= 0; i--)				\
+		smr_freestack_push(fs, &fs->buf[i]);		\
 }								\
 								\
 static inline struct name * name ## _create(size_t size)	\
