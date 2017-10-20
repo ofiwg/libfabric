@@ -23,7 +23,7 @@ fi_tsend / fi_tsendv / fi_tsendmsg / fi_tinject / fi_tsenddata
 ssize_t fi_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context);
 
-ssize_t fi_trecvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+ssize_t fi_trecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 	void *context);
 
@@ -34,7 +34,7 @@ ssize_t fi_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, fi_addr_t dest_addr, uint64_t tag, void *context);
 
 ssize_t fi_tsendv(struct fid_ep *ep, const struct iovec *iov,
-	void *desc, size_t count, fi_addr_t dest_addr, uint64_t tag,
+	void **desc, size_t count, fi_addr_t dest_addr, uint64_t tag,
 	void *context);
 
 ssize_t fi_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
