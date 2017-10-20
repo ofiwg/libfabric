@@ -477,8 +477,7 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 		 * complete. */
 		req->rma.status |= tx_status;
 
-		ofi_atomic_dec32(&req->rma.outstanding_txds);
-		if (ofi_atomic_get32(&req->rma.outstanding_txds)) {
+		if (ofi_atomic_dec32(&req->rma.outstanding_txds) == 1) {
 			_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Received first RDMA chain TXD, req: %p\n",
