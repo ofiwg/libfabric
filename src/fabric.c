@@ -58,10 +58,9 @@ struct ofi_prov {
 
 static struct ofi_prov *prov_head, *prov_tail;
 int ofi_init = 0;
-pthread_mutex_t ofi_ini_lock = PTHREAD_MUTEX_INITIALIZER;
+extern struct ofi_common_locks common_locks;
 
 static struct fi_filter prov_filter;
-
 
 static int ofi_find_name(char **names, const char *name)
 {
@@ -413,8 +412,9 @@ static void ofi_ini_dir(const char *dir)
 		if (inif == NULL) {
 			FI_WARN(&core_prov, FI_LOG_CORE, "dlsym: %s\n", dlerror());
 			dlclose(dlhandle);
-		} else
+		} else {
 			ofi_register_provider((inif)(), dlhandle);
+		}
 	}
 
 libdl_done:
@@ -428,7 +428,7 @@ void fi_ini(void)
 {
 	char *param_val = NULL;
 
-	pthread_mutex_lock(&ofi_ini_lock);
+	pthread_mutex_lock(&common_locks.ini_lock);
 
 	if (ofi_init)
 		goto unlock;
@@ -506,7 +506,7 @@ libdl_done:
 	ofi_init = 1;
 
 unlock:
-	pthread_mutex_unlock(&ofi_ini_lock);
+	pthread_mutex_unlock(&common_locks.ini_lock);
 }
 
 FI_DESTRUCTOR(fi_fini(void))

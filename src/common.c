@@ -54,11 +54,17 @@
 #include <rdma/providers/fi_prov.h>
 #include <rdma/fi_errno.h>
 #include <fi.h>
+#include <fi_util.h>
 
 struct fi_provider core_prov = {
 	.name = "core",
 	.version = 1,
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
+};
+
+struct ofi_common_locks common_locks = {
+	.ini_lock = PTHREAD_MUTEX_INITIALIZER,
+	.util_fabric_lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
 int fi_poll_fd(int fd, int timeout)

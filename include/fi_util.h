@@ -133,6 +133,11 @@ enum {
 	UTIL_RX_SHARED_CTX = 1 << 1,
 };
 
+struct ofi_common_locks {
+	pthread_mutex_t ini_lock;
+	pthread_mutex_t util_fabric_lock;
+};
+
 /*
  * Provider details
  */
