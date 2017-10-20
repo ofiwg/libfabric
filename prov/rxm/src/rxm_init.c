@@ -124,6 +124,9 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 
 	*info->ep_attr = *rxm_info.ep_attr;
 	info->ep_attr->max_msg_size = core_info->ep_attr->max_msg_size;
+	info->ep_attr->max_order_raw_size = core_info->ep_attr->max_order_raw_size;
+	info->ep_attr->max_order_war_size = core_info->ep_attr->max_order_war_size;
+	info->ep_attr->max_order_waw_size = core_info->ep_attr->max_order_waw_size;
 
 	*info->domain_attr = *rxm_info.domain_attr;
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
