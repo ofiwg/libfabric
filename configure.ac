@@ -165,7 +165,11 @@ AC_TRY_LINK([#include <stdint.h>],
     [int32_t a;
      __sync_add_and_fetch(&a, 0);
      __sync_sub_and_fetch(&a, 0);
+     #if defined(__PPC__) && !defined(__PPC64__)
+       #error compiler built-in atomics are not supported on PowerPC 32-bit
+     #else
        return 0;
+     #endif
     ],
     [
 	AC_MSG_RESULT(yes)
