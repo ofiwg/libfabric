@@ -313,7 +313,6 @@ ssize_t
 fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 {
 	struct fi_ibv_wre *wre = NULL;
-	struct ibv_send_wr *bad_wr;
 	int ret;
 
 	if (ep->scq) {
@@ -353,26 +352,8 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 		}
 	}
 
-	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
-	if (ret) {
-		if (wre) {
-			dlist_remove(&wre->entry);
-			util_buf_release(ep->wre_pool, wre);
-		}
-		switch (ret) {
-		case ENOMEM:
-			return -FI_EAGAIN;
-		case -1:
-			/* Deal with non-compliant libibverbs drivers
-			 * which set errno instead of directly returning
-			 * the error value */
-			return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
-		default:
-			return -ret;
-		}
-	}
-
-	return ret;
+	return FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr,
+				  FI_IBV_RELEASE_WRE(ep->wre_pool, wre));
 }
 
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
