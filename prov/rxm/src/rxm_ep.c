@@ -1123,9 +1123,6 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
-		ret = ofi_ep_bind_cq(&rxm_ep->util_ep, cq, flags);
-		if (ret)
-			return ret;
 
 		if (cq->wait) {
 			ret = ofi_wait_fd_add(cq->wait, rxm_ep->msg_cq_fd,
@@ -1133,6 +1130,13 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 					      &rxm_ep->util_ep.ep_fid.fid);
 			if (ret)
 				return ret;
+		}
+		ret = ofi_ep_bind_cq(&rxm_ep->util_ep, cq, flags);
+		if (ret) {
+			if (cq->wait && ofi_wait_fd_del(cq->wait, rxm_ep->msg_cq_fd))
+				FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+					"Unable to delete wait fd from FD list");
+			return ret;
 		}
 		break;
 	case FI_CLASS_EQ:

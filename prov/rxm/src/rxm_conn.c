@@ -365,12 +365,18 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
 	struct util_cmap_attr attr;
+	struct util_cmap *cmap = NULL;
 	void *name;
 	size_t len;
 	int ret;
 
 	len = rxm_ep->msg_info->src_addrlen;
-	name = malloc(len);
+	name = calloc(1, len);
+	if (!name) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to allocate memory for EP name\n");
+		return NULL;
+	}
 
 	/* Passive endpoint should already have fi_setname or fi_listen
 	 * called on it for this to work */
@@ -378,8 +384,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to fi_getname on msg_ep\n");
-		free(name);
-		return NULL;
+		goto fn;
 	}
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
@@ -391,5 +396,11 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	attr.event_handler	= rxm_conn_event_handler;
 	attr.signal		= rxm_conn_signal;
 
-	return ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
+	cmap = ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
+	if (!cmap)
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to allocate CMAP\n");
+fn:
+	free(name);
+	return cmap;
 }
