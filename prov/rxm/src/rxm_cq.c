@@ -193,14 +193,15 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 	assert(rma_iov->count <= RXM_IOV_LIMIT);
 
 	for (i = 0, j = 0; i < rma_iov->count; i++) {
-		ret = rxm_match_iov(&recv_entry->iov[j],
-			      &recv_entry->desc[j], recv_entry->count,
-			      offset, rma_iov->iov[i].len, &match_iov[i]);
+		ret = rxm_match_iov(&recv_entry->iov[j], &recv_entry->desc[j],
+				    recv_entry->count, offset,
+				    rma_iov->iov[i].len, &match_iov[i]);
 		if (ret)
 			return ret;
 		count = match_iov[i].count;
-		offset = match_iov[i].iov[match_iov[i].count].iov_len;
+		offset = match_iov[i].iov[count - 1].iov_len;
 
+		assert((j + count - 1) < recv_entry->count);
 		if (offset == recv_entry->iov[j + count - 1].iov_len) {
 			/* This iov has been completely used */
 			j += count;
@@ -209,21 +210,21 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 			j += count - 1;
 		}
 	}
-	return 0;
+	return FI_SUCCESS;
 }
 
 static ssize_t rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_iov *match_iov = &rx_buf->match_iov[rx_buf->index];
+	struct ofi_rma_iov *rma_iov = &rx_buf->rma_iov->iov[rx_buf->index];
 	ssize_t ret;
 
 	ret = fi_readv(rx_buf->conn->msg_ep, match_iov->iov, match_iov->desc,
-		       match_iov->count, 0, rx_buf->rma_iov->iov[0].addr,
-		       rx_buf->rma_iov->iov[0].key, rx_buf);
+		       match_iov->count, 0, rma_iov->addr, rma_iov->key, rx_buf);
 	if (ret)
 		return ret;
 	rx_buf->index++;
-	return 0;
+	return FI_SUCCESS;
 }
 
 static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
@@ -273,8 +274,7 @@ static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 
 ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_iov mr_match_iov;
-	size_t i, rma_total_len = 0;
+	size_t i;
 	int ret;
 
 	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) {
@@ -291,10 +291,7 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
 		rx_buf->index = 0;
 
-		for (i = 0; i < rx_buf->rma_iov->count; i++)
-			rma_total_len += rx_buf->rma_iov->iov->len;
-
-		if (rma_total_len > ofi_total_iov_len(rx_buf->recv_entry->iov,
+		if (rx_buf->pkt.hdr.size > ofi_total_iov_len(rx_buf->recv_entry->iov,
 				      rx_buf->recv_entry->count)) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"Posted receive buffer size is not enough!\n");
@@ -302,30 +299,23 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 		}
 
 		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info)) {
-			ret = rxm_match_iov(rx_buf->recv_entry->iov,
-					    rx_buf->recv_entry->desc,
-					    rx_buf->recv_entry->count, 0,
-					    rma_total_len, &mr_match_iov);
+		    ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
+					     rx_buf->recv_entry->count, FI_WRITE,
+					     rx_buf->mr);
 			if (ret)
 				return ret;
-
-			ret = rxm_ep_msg_mr_regv(rx_buf->ep, mr_match_iov.iov,
-						 mr_match_iov.count, FI_WRITE,
-						 rx_buf->mr);
-			if (ret)
-				return ret;
-
-			rx_buf->recv_entry->count = mr_match_iov.count;
 
 			for (i = 0; i < rx_buf->recv_entry->count; i++)
-				rx_buf->recv_entry->desc[i] = rx_buf->mr[i];
+				rx_buf->recv_entry->desc[i] =
+					fi_mr_desc(rx_buf->mr[i]);
+		} else {
+			for (i = 0; i < rx_buf->recv_entry->count; i++)
+				rx_buf->recv_entry->desc[i] =
+					fi_mr_desc(rx_buf->recv_entry->desc[i]);
 		}
 
-		for (i = 0; i < rx_buf->recv_entry->count; i++)
-			rx_buf->recv_entry->desc[i] = fi_mr_desc(rx_buf->recv_entry->desc[i]);
-
 		ret = rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov,
-				    rx_buf->match_iov);
+					rx_buf->match_iov);
 		if (ret)
 			return ret;
 
@@ -470,6 +460,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 				  struct fi_cq_tagged_entry *comp)
 {
+	enum rxm_proto_state state = RXM_GET_PROTO_STATE(comp);
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 	struct rxm_tx_entry *tx_entry = comp->op_context;
 
@@ -478,7 +469,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
-	switch (RXM_GET_PROTO_STATE(comp)) {
+	switch (state) {
 	case RXM_TX_NOBUF:
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
 		return rxm_finish_send_nobuf(tx_entry);
