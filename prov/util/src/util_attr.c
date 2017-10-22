@@ -588,9 +588,10 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		      const struct fi_info *prov_info,
-		      const struct fi_ep_attr *user_attr)
+		      const struct fi_info *user_info)
 {
 	const struct fi_ep_attr *prov_attr = prov_info->ep_attr;
+	const struct fi_ep_attr *user_attr = user_info->ep_attr;
 	const struct fi_provider *prov = util_prov->prov;
 
 	if ((user_attr->type != FI_EP_UNSPEC) &&
@@ -653,28 +654,33 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		}
 	}
 
-	if (user_attr->max_order_raw_size > prov_attr->max_order_raw_size) {
-		FI_INFO(prov, FI_LOG_CORE,
-			"Max order RAW size exceeds supported size\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-				  max_order_raw_size);
-		return -FI_ENODATA;
-	}
+	if (user_info->caps & (FI_RMA | FI_ATOMIC)) {
+		if (user_attr->max_order_raw_size >
+		    prov_attr->max_order_raw_size) {
+			FI_INFO(prov, FI_LOG_CORE,
+				"Max order RAW size exceeds supported size\n");
+			FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
+					  max_order_raw_size);
+			return -FI_ENODATA;
+		}
 
-	if (user_attr->max_order_war_size > prov_attr->max_order_war_size) {
-		FI_INFO(prov, FI_LOG_CORE,
-			"Max order WAR size exceeds supported size\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-				  max_order_war_size);
-		return -FI_ENODATA;
-	}
+		if (user_attr->max_order_war_size >
+		    prov_attr->max_order_war_size) {
+			FI_INFO(prov, FI_LOG_CORE,
+				"Max order WAR size exceeds supported size\n");
+			FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
+					  max_order_war_size);
+			return -FI_ENODATA;
+		}
 
-	if (user_attr->max_order_waw_size > prov_attr->max_order_waw_size) {
-		FI_INFO(prov, FI_LOG_CORE,
-			"Max order WAW size exceeds supported size\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-				  max_order_waw_size);
-		return -FI_ENODATA;
+		if (user_attr->max_order_waw_size >
+		    prov_attr->max_order_waw_size) {
+			FI_INFO(prov, FI_LOG_CORE,
+				"Max order WAW size exceeds supported size\n");
+			FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
+					  max_order_waw_size);
+			return -FI_ENODATA;
+		}
 	}
 
 	if (user_attr->auth_key_size &&
@@ -971,8 +977,7 @@ int ofi_check_info(const struct util_prov *util_prov,
 
 	if (user_info->ep_attr) {
 		ret = ofi_check_ep_attr(util_prov, api_version,
-					prov_info,
-					user_info->ep_attr);
+					prov_info, user_info);
 		if (ret)
 			return ret;
 	}
@@ -1035,11 +1040,20 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 }
 
 static void fi_alter_ep_attr(struct fi_ep_attr *attr,
-			     const struct fi_ep_attr *hints)
+			     const struct fi_ep_attr *hints,
+			     uint64_t info_caps)
 {
 	if (!hints)
 		return;
 
+	if (info_caps & (FI_RMA | FI_ATOMIC)) {
+		if (hints->max_order_raw_size)
+			attr->max_order_raw_size = hints->max_order_raw_size;
+		if (hints->max_order_war_size)
+			attr->max_order_war_size = hints->max_order_war_size;
+		if (hints->max_order_waw_size)
+			attr->max_order_waw_size = hints->max_order_waw_size;
+	}
 	if (hints->tx_ctx_cnt)
 		attr->tx_ctx_cnt = hints->tx_ctx_cnt;
 	if (hints->rx_ctx_cnt)
@@ -1104,7 +1118,7 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 
 		fi_alter_domain_attr(info->domain_attr, hints->domain_attr,
 				     info->caps, api_version);
-		fi_alter_ep_attr(info->ep_attr, hints->ep_attr);
+		fi_alter_ep_attr(info->ep_attr, hints->ep_attr, info->caps);
 		fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
 		fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);
 	}

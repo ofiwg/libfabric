@@ -688,7 +688,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 			  const struct fi_info *user_info);
 int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		      const struct fi_info *prov_info,
-		      const struct fi_ep_attr *user_attr);
+		      const struct fi_info *user_info);
 int ofi_check_cq_attr(const struct fi_provider *prov,
 		      const struct fi_cq_attr *attr);
 int ofi_check_rx_attr(const struct fi_provider *prov,
