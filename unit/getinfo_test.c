@@ -387,6 +387,10 @@ static int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
+
+/*
+ * MR mode checks
+ */
 static int init_mr_basic(struct fi_info *hints)
 {
 	hints->caps |= FI_RMA;
@@ -433,6 +437,45 @@ static int check_mr_unspec(struct fi_info *info)
 		EXIT_FAILURE : 0;
 }
 
+static int test_mr_modes(char *node, char *service, uint64_t flags,
+			 struct fi_info *hints, struct fi_info **info)
+{
+	struct fi_info *fi;
+	uint64_t *mr_modes;
+	int i, cnt, ret;
+
+	ret = ft_alloc_bit_combo(0, FI_MR_LOCAL | FI_MR_RAW | FI_MR_VIRT_ADDR |
+			FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY |
+			FI_MR_RMA_EVENT | FI_MR_ENDPOINT, &mr_modes, &cnt);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < cnt; i++) {
+		hints->domain_attr->mr_mode = (uint32_t) mr_modes[i];
+		ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
+		if (ret && ret != -FI_ENODATA)
+			goto out;
+
+		ft_foreach_info(fi, *info) {
+			if (fi->domain_attr->mr_mode & ~hints->domain_attr->mr_mode) {
+				ret = -FI_EOTHER;
+				fi_freeinfo(*info);
+				goto out;
+			}
+		}
+		fi_freeinfo(*info);
+	}
+
+out:
+	*info = NULL;
+	ft_free_bit_combo(mr_modes);
+	return ret;
+}
+
+
+/*
+ * getinfo test
+ */
 static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 		struct fi_info *base_hints, ft_getinfo_init init, ft_getinfo_test test,
 		ft_getinfo_check check, int ret_exp)
@@ -600,6 +643,8 @@ getinfo_test(mr_mode, 4, "Test FI_MR_BASIC (v1.0)", NULL, NULL, 0,
 	     hints, init_mr_basic, test_mr_v1_0, check_mr_basic, -FI_ENODATA)
 getinfo_test(mr_mode, 5, "Test FI_MR_SCALABLE (v1.0)", NULL, NULL, 0,
      	     hints, init_mr_scalable, test_mr_v1_0, check_mr_scalable, -FI_ENODATA)
+getinfo_test(mr_mode, 6, "Test mr_mode bits", NULL, NULL, 0,
+	     hints, NULL, test_mr_modes, NULL, 0)
 
 
 static void usage(void)
@@ -674,6 +719,7 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(mr_mode3),
 		TEST_ENTRY_GETINFO(mr_mode4),
 		TEST_ENTRY_GETINFO(mr_mode5),
+		TEST_ENTRY_GETINFO(mr_mode6),
 		{ NULL, "" }
 	};
 
