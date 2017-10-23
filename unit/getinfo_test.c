@@ -104,7 +104,7 @@ static int check_api_version(void *arg)
 	return info->fabric_attr->api_version != FT_FIVERSION;
 }
 
-int invalid_dom(struct fi_info *hints)
+static int invalid_dom(struct fi_info *hints)
 {
 	if (hints->domain_attr->name)
 		free(hints->domain_attr->name);
@@ -114,7 +114,7 @@ int invalid_dom(struct fi_info *hints)
 	return 0;
 }
 
-int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
+static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 		struct fi_info *hints, struct fi_info **info)
 {
 	int i, ret;
@@ -187,7 +187,7 @@ failed_getinfo:
 	return ret;
 }
 
-int init_valid_rma_RAW_ordering_no_set_size(struct fi_info *hints)
+static int init_valid_rma_RAW_ordering_no_set_size(struct fi_info *hints)
 {
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_RAW;
@@ -197,7 +197,7 @@ int init_valid_rma_RAW_ordering_no_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
+static int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -205,6 +205,7 @@ int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_RAW;
 	hints->rx_attr->msg_order = FI_ORDER_RAW;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -218,7 +219,7 @@ int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAR_ordering_no_set_size(struct fi_info *hints)
+static int init_valid_rma_WAR_ordering_no_set_size(struct fi_info *hints)
 {
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_WAR;
@@ -228,7 +229,7 @@ int init_valid_rma_WAR_ordering_no_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
+static int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -236,6 +237,7 @@ int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_WAR;
 	hints->rx_attr->msg_order = FI_ORDER_WAR;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -249,7 +251,7 @@ int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAW_ordering_no_set_size(struct fi_info *hints)
+static int init_valid_rma_WAW_ordering_no_set_size(struct fi_info *hints)
 {
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_WAW;
@@ -259,7 +261,7 @@ int init_valid_rma_WAW_ordering_no_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
+static int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -314,7 +316,7 @@ static int check_valid_rma_ordering_sizes(void *arg)
 	return 0;
 }
 
-int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
+static int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -324,6 +326,7 @@ int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
 	hints->rx_attr->msg_order = FI_ORDER_RAW;
 	hints->ep_attr->max_order_war_size = 0;
 	hints->ep_attr->max_order_waw_size = 0;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -338,7 +341,7 @@ int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
+static int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -348,6 +351,7 @@ int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
 	hints->rx_attr->msg_order = FI_ORDER_WAR;
 	hints->ep_attr->max_order_raw_size = 0;
 	hints->ep_attr->max_order_waw_size = 0;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -362,7 +366,7 @@ int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
+static int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -372,6 +376,7 @@ int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 	hints->rx_attr->msg_order = FI_ORDER_WAW;
 	hints->ep_attr->max_order_raw_size = 0;
 	hints->ep_attr->max_order_war_size = 0;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
