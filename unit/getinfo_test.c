@@ -413,6 +413,26 @@ static int check_mr_scalable(struct fi_info *info)
 		EXIT_FAILURE : 0;
 }
 
+static int init_mr_unspec(struct fi_info *hints)
+{
+	hints->caps |= FI_RMA;
+	hints->domain_attr->mr_mode = FI_MR_UNSPEC;
+	return 0;
+}
+
+static int test_mr_v1_0(char *node, char *service, uint64_t flags,
+			struct fi_info *test_hints, struct fi_info **info)
+{
+	return fi_getinfo(FI_VERSION(1, 0), node, service, flags, test_hints, info);
+}
+
+static int check_mr_unspec(struct fi_info *info)
+{
+	return (info->domain_attr->mr_mode != FI_MR_BASIC &&
+		info->domain_attr->mr_mode != FI_MR_SCALABLE) ?
+		EXIT_FAILURE : 0;
+}
+
 static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 		struct fi_info *base_hints, ft_getinfo_init init, ft_getinfo_test test,
 		ft_getinfo_check check, int ret_exp)
@@ -574,6 +594,12 @@ getinfo_test(mr_mode, 1, "Test FI_MR_BASIC", NULL, NULL, 0,
 	     hints, init_mr_basic, NULL, check_mr_basic, -FI_ENODATA)
 getinfo_test(mr_mode, 2, "Test FI_MR_SCALABLE", NULL, NULL, 0,
 	     hints, init_mr_scalable, NULL, check_mr_scalable, -FI_ENODATA)
+getinfo_test(mr_mode, 3, "Test FI_MR_UNSPEC (v1.0)", NULL, NULL, 0,
+	     hints, init_mr_unspec, test_mr_v1_0, check_mr_unspec, -FI_ENODATA)
+getinfo_test(mr_mode, 4, "Test FI_MR_BASIC (v1.0)", NULL, NULL, 0,
+	     hints, init_mr_basic, test_mr_v1_0, check_mr_basic, -FI_ENODATA)
+getinfo_test(mr_mode, 5, "Test FI_MR_SCALABLE (v1.0)", NULL, NULL, 0,
+     	     hints, init_mr_scalable, test_mr_v1_0, check_mr_scalable, -FI_ENODATA)
 
 
 static void usage(void)
@@ -645,6 +671,9 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(neg1),
 		TEST_ENTRY_GETINFO(mr_mode1),
 		TEST_ENTRY_GETINFO(mr_mode2),
+		TEST_ENTRY_GETINFO(mr_mode3),
+		TEST_ENTRY_GETINFO(mr_mode4),
+		TEST_ENTRY_GETINFO(mr_mode5),
 		{ NULL, "" }
 	};
 
