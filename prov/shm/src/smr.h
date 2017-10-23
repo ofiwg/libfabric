@@ -63,7 +63,7 @@
 #define _SMR_H_
 
 
-#define SMR_MAJOR_VERSION 0 
+#define SMR_MAJOR_VERSION 0
 #define SMR_MINOR_VERSION 1
 
 extern struct fi_provider smr_prov;

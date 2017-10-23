@@ -417,7 +417,7 @@ static ssize_t smr_generic_recvmsg(struct fid_ep *ep_fid, const struct iovec *io
 	struct smr_ep_entry *entry;
 	ssize_t ret;
 
-	assert(iov_count < SMR_IOV_LIMIT);
+	assert(iov_count <= SMR_IOV_LIMIT);
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
@@ -548,7 +548,7 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 	ssize_t ret = 0;
 	size_t total_len;
 
-	assert(iov_count < SMR_IOV_LIMIT);
+	assert(iov_count <= SMR_IOV_LIMIT);
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	peer_id = *(int *)ofi_av_get_addr(ep->util_ep.av, addr);
@@ -642,7 +642,7 @@ ssize_t smr_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret = 0;
 	struct iovec msg_iov;
 
-	assert(len < SMR_INJECT_SIZE);
+	assert(len <= SMR_INJECT_SIZE);
 
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
@@ -763,7 +763,7 @@ ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret = 0;
 	struct iovec msg_iov;
 
-	assert(len < SMR_INJECT_SIZE);
+	assert(len <= SMR_INJECT_SIZE);
 
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
