@@ -46,7 +46,7 @@
 
 typedef int (*ft_getinfo_init)(struct fi_info *);
 typedef int (*ft_getinfo_test)(char *, char *, uint64_t, struct fi_info *, struct fi_info **);
-typedef int (*ft_getinfo_check)(void *);
+typedef int (*ft_getinfo_check)(struct fi_info *);
 
 static char err_buf[512];
 static char old_prov_var[128];
@@ -66,15 +66,13 @@ static int check_addr(void *addr, size_t addrlen, char *str)
 	return 0;
 }
 
-static int check_srcaddr(void *arg)
+static int check_srcaddr(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	return check_addr(info->src_addr, info->src_addrlen, "source");
 }
 
-static int check_src_dest_addr(void *arg)
+static int check_src_dest_addr(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	int ret;
 
 	ret = check_addr(info->src_addr, info->src_addrlen, "source");
@@ -84,9 +82,8 @@ static int check_src_dest_addr(void *arg)
 	return check_addr(info->dest_addr, info->dest_addrlen, "destination");
 }
 
-static int check_util_prov(void *arg)
+static int check_util_prov(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	const char *util_name;
 	size_t len;
 
@@ -99,9 +96,8 @@ static int check_util_prov(void *arg)
 	return 0;
 }
 
-static int check_api_version(void *arg)
+static int check_api_version(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	return info->fabric_attr->api_version != FT_FIVERSION;
 }
 
@@ -283,10 +279,8 @@ static int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 	return 0;
 }
 
-static int check_valid_rma_ordering_sizes(void *arg)
+static int check_valid_rma_ordering_sizes(struct fi_info *info)
 {
-	struct fi_info *info = arg;
-
 	if ((info->tx_attr->msg_order & FI_ORDER_RAW) ||
 			(info->rx_attr->msg_order & FI_ORDER_RAW)) {
 		if (info->ep_attr->max_order_raw_size <= 0)
