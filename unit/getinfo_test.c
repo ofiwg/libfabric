@@ -387,7 +387,18 @@ static int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
+static int init_mr_basic(struct fi_info *hints)
+{
+	hints->caps |= FI_RMA;
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	return 0;
+}
 
+static int check_mr_basic(struct fi_info *info)
+{
+	return (info->domain_attr->mr_mode != FI_MR_BASIC) ?
+		EXIT_FAILURE : 0;
+}
 
 static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 		struct fi_info *base_hints, ft_getinfo_init init, ft_getinfo_test test,
@@ -545,6 +556,9 @@ getinfo_test(bad_waw_ordering, 1, "Test invalid rma WAW ordering size",
 		NULL, NULL, 0, hints, init_invalid_rma_WAW_ordering_size,
 		NULL, NULL, -FI_ENODATA)
 
+/* MR mode tests */
+getinfo_test(mr_mode, 1, "Test FI_MR_BASIC", NULL, NULL, 0,
+	     hints, init_mr_basic, NULL, check_mr_basic, -FI_ENODATA)
 
 
 static void usage(void)
@@ -614,6 +628,7 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(bad_war_ordering1),
 		TEST_ENTRY_GETINFO(bad_waw_ordering1),
 		TEST_ENTRY_GETINFO(neg1),
+		TEST_ENTRY_GETINFO(mr_mode1),
 		{ NULL, "" }
 	};
 
