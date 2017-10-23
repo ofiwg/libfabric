@@ -52,6 +52,7 @@ static char err_buf[512];
 static char old_prov_var[128];
 static char new_prov_var[128];
 
+
 static int check_addr(void *addr, size_t addrlen, char *str)
 {
 	if (!addrlen) {
@@ -285,6 +286,7 @@ static int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 static int check_valid_rma_ordering_sizes(void *arg)
 {
 	struct fi_info *info = arg;
+
 	if ((info->tx_attr->msg_order & FI_ORDER_RAW) ||
 			(info->rx_attr->msg_order & FI_ORDER_RAW)) {
 		if (info->ep_attr->max_order_raw_size <= 0)
@@ -391,23 +393,33 @@ static int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
+
+
 static int getinfo_unit_test(char *node, char *service, uint64_t flags,
-		struct fi_info *hints, ft_getinfo_init init, ft_getinfo_test test,
+		struct fi_info *base_hints, ft_getinfo_init init, ft_getinfo_test test,
 		ft_getinfo_check check, int ret_exp)
 {
-	struct fi_info *info, *fi;
+	struct fi_info *info, *fi, *test_hints;
 	int ret;
 
+	if (base_hints) {
+		test_hints = fi_dupinfo(base_hints);
+		if (!test_hints)
+			return -FI_ENOMEM;
+	} else {
+		test_hints = NULL;
+	}
+
 	if (init) {
-		ret = init(hints);
+		ret = init(test_hints);
 		if (ret)
 			return ret;
 	}
 
 	if (test)
-		ret = test(node, service, flags, hints, &info);
+		ret = test(node, service, flags, test_hints, &info);
 	else
-		ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &info);
+		ret = fi_getinfo(FT_FIVERSION, node, service, flags, test_hints, &info);
 	if (ret) {
 		if (ret == ret_exp)
 			return 0;
@@ -607,8 +619,6 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(bad_raw_ordering1),
 		TEST_ENTRY_GETINFO(bad_war_ordering1),
 		TEST_ENTRY_GETINFO(bad_waw_ordering1),
-		/* This test has to be last getinfo unit test to be run until we
-		 * find a way to reset hints->domain_attr->name*/
 		TEST_ENTRY_GETINFO(neg1),
 		{ NULL, "" }
 	};
