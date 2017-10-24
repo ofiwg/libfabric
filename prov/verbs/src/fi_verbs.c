@@ -60,6 +60,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 		.rndv_seg_size		= FI_IBV_RDM_SEG_MAXSIZE,
 		.thread_timeout		= FI_IBV_RDM_CM_THREAD_TIMEOUT,
 		.eager_send_opcode	= "IBV_WR_SEND",
+		.resolve_addr_timeout	= FI_IBV_RDM_RESOLVE_ADDR_TIMEOUT,
 	},
 
 	.dgram			= {
@@ -690,6 +691,14 @@ static int fi_ibv_read_params(void)
 				 &fi_ibv_gl_data.rdm.eager_send_opcode)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of rdm_eager_send_opcode\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("rdm_resolve_addr_timeout", "Time (microseconds) to wait "
+				 "for address resolution to complete",
+				 &fi_ibv_gl_data.rdm.resolve_addr_timeout) ||
+	    (fi_ibv_gl_data.rdm.resolve_addr_timeout < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of rdm_resolve_addr_timeout\n");
 		return -FI_EINVAL;
 	}
 
