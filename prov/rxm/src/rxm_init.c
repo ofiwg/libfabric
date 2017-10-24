@@ -38,25 +38,22 @@
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
-	/* Support modes that ofi_rxm could handle */
-	if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
-		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
-	else
-		core_info->mode |= FI_LOCAL_MR;
-
-	/* The RxM FI_RMA implementation is pass-through but the provider
-	 * can handle FI_MR_PROV_KEY and FI_MR_VIRT_ADDR in its large message
-	 * transfer rendezvous protocol. */
-	if (!hints || !ofi_rma_target_allowed(hints->caps)) {
-		if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
-			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-		else
-			/* specify FI_MR_UNSPEC (instead of FI_MR_BASIC) so that
-			 * providers that support FI_MR_SCALABLE aren't dropped */
-			core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
-	}
-
 	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
+	core_info->ep_attr->type = FI_EP_MSG;
+
+	if (FI_VERSION_GE(version, FI_VERSION(1, 5))) {
+		core_info->domain_attr->mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL;
+
+		if (hints && hints->domain_attr &&
+		    (hints->domain_attr->mr_mode != FI_MR_BASIC) &&
+		    (hints->domain_attr->mr_mode != FI_MR_SCALABLE)) {
+			core_info->domain_attr->mr_mode |=
+					hints->domain_attr->mr_mode;
+		}
+	} else {
+		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
+		core_info->mode |= FI_LOCAL_MR;
+	}
 
 	if (hints) {
 		if (hints->caps & FI_TAGGED)
@@ -66,32 +63,16 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		if (hints->caps & (FI_MSG | FI_TAGGED))
 			core_info->caps |= FI_RMA;
 
-		/* No fi_info modes apart from those handled earlier in
-		 * this function can be passed along to the core provider */
-
-		if (hints->domain_attr) {
-			if (FI_VERSION_GE(version, FI_VERSION(1, 5))) {
-				/* Allow only those mr modes that can be
-				 * passed along to the core provider */
-				core_info->domain_attr->mr_mode |=
-					hints->domain_attr->mr_mode &
-					OFI_MR_BASIC_MAP;
-			} else if (ofi_rma_target_allowed(hints->caps)) {
-				core_info->domain_attr->mr_mode =
-					hints->domain_attr->mr_mode;
-			}
+		if (hints->domain_attr)
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
-		}
+
 		if (hints->tx_attr) {
 			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
 			core_info->tx_attr->comp_order = hints->tx_attr->comp_order;
 		}
 	}
 
-	/* Remove caps that RxM can handle */
 	core_info->rx_attr->msg_order &= ~FI_ORDER_SAS;
-
-	core_info->ep_attr->type = FI_EP_MSG;
 
 	return 0;
 }
@@ -129,13 +110,6 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->ep_attr->max_order_waw_size = core_info->ep_attr->max_order_waw_size;
 
 	*info->domain_attr = *rxm_info.domain_attr;
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		/* ofi_alter_info assumes version 1.5 or above mr_mode bits */
-		if (core_info->domain_attr->mr_mode == FI_MR_BASIC)
-			info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-	} else {
-		info->domain_attr->mr_mode |= core_info->domain_attr->mr_mode;
-	}
 	info->domain_attr->cq_data_size = MIN(core_info->domain_attr->cq_data_size,
 					      rxm_info.domain_attr->cq_data_size);
 
