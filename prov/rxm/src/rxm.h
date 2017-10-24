@@ -62,6 +62,7 @@
 #define RXM_BUF_SIZE 16384
 #define RXM_IOV_LIMIT 4
 
+#define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
 #define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
 

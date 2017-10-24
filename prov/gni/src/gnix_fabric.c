@@ -271,7 +271,8 @@ static struct fi_info *_gnix_allocinfo(void)
 
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
-	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
+	gnix_info->domain_attr->mr_mode = FI_MR_BASIC | FI_MR_SCALABLE |
+					  OFI_MR_BASIC_MAP;
 	gnix_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	gnix_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	gnix_info->domain_attr->max_ep_tx_ctx = GNIX_SEP_MAX_CNT;
@@ -612,11 +613,9 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				gnix_info->domain_attr->data_progress =
 					hints->domain_attr->data_progress;
 
-			if (ofi_check_mr_mode(&gnix_prov,
-					version,
-					hints->caps,
+			if (ofi_check_mr_mode(&gnix_prov, version,
 					gnix_info->domain_attr->mr_mode,
-					hints->domain_attr->mr_mode) != FI_SUCCESS) {
+					hints) != FI_SUCCESS) {
 				GNIX_DEBUG(FI_LOG_DOMAIN,
 					"failed ofi_check_mr_mode, "
 					"ret=%d\n", ret);
@@ -636,8 +635,10 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 					goto err;
 				}
 			} else {
+				/* FIXME: Check will not work with ofi_check_mr_mode
 				if (__gnix_check_mr_mode(mr_mode))
 					goto err;
+				*/
 
 				/* define the mode we return to the user
 				 * prefer basic until scalable
