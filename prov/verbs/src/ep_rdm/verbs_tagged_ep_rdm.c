@@ -224,18 +224,23 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 	const int in_order = (conn->postponed_entry) ? 0 : 1;
 
 	if (in_order) {
-		struct fi_ibv_rdm_buf *sbuf = 
+		struct fi_ibv_rdm_buf *sbuf =
 			fi_ibv_rdm_prepare_send_resources(conn, ep);
 		if (sbuf) {
 			struct ibv_sge sge = {0};
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
-
+			struct fi_ibv_rdm_service_request *sreq =
+				util_buf_alloc(ep->fi_ibv_rdm_service_request_pool);
+			if (OFI_UNLIKELY(!sreq)) {
+				assert(0);
+				return -FI_EAGAIN;
+			}
 			sge.addr = (uintptr_t)(void*)sbuf;
 			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 			sge.lkey = conn->s_mr->lkey;
 
-			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
+			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(sreq);
 			wr.sg_list = &sge;
 			wr.num_sge = 1;
 			wr.wr.rdma.remote_addr = (uintptr_t)
@@ -252,13 +257,19 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 
 			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 					       FI_IBV_RDM_EAGER_PKT);
-			if ((len > 0) && (buf)) {
+			if ((len > 0) && (buf))
 				memcpy(&sbuf->payload, buf, len);
-			}
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
 							 wr.send_flags);
+
+			sreq->conn = conn;
+			sreq->send_sge = sge;
+			sreq->send_wr = wr;
+
 			if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+				util_buf_release(ep->fi_ibv_rdm_service_request_pool,
+						 sreq);
 				assert(0);
 				return -errno;
 			} else {
@@ -411,15 +422,21 @@ static inline void
 fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 					struct fi_ibv_rdm_ep *ep)
 {
-	struct ibv_sge sge;
-	sge.addr = (uint64_t) & conn->sbuf_ack_status;
-	sge.length = sizeof(conn->sbuf_ack_status);
-	sge.lkey = conn->ack_mr->lkey;
-
+	struct ibv_sge sge = {
+		.addr = (uint64_t) & conn->sbuf_ack_status,
+		.length = sizeof(conn->sbuf_ack_status),
+		.lkey = conn->ack_mr->lkey,
+	};
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_send_wr wr = { 0 };
+	struct fi_ibv_rdm_service_request *sreq =
+		util_buf_alloc(ep->fi_ibv_rdm_service_request_pool);
+	if (OFI_UNLIKELY(!sreq)) {
+		assert(0);
+		return;
+	}
 
-	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
+	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(sreq);
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.wr.rdma.remote_addr = (uint64_t)
@@ -429,18 +446,22 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 	/* w/o imm - do not put it into recv completion queue */
 	wr.opcode = IBV_WR_RDMA_WRITE;
 
+	sreq->conn = conn;
+	sreq->send_sge = sge;
+	sreq->send_wr = wr;
+
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA,
 		"posted %d bytes, remote sbuff released\n", sge.length);
 	int ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret) {
+		util_buf_release(ep->fi_ibv_rdm_service_request_pool, sreq);
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
 	};
 
-	if (ofi_atomic_get32(&conn->av_entry->sends_outgoing) > ep->n_buffs) {
+	if (ofi_atomic_get32(&conn->av_entry->sends_outgoing) > ep->n_buffs)
 		fi_ibv_rdm_tagged_poll_send(ep);
-	}
 }
 
 static inline void
@@ -694,8 +715,17 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
 			for (i = 0; i < ret && !err; ++i) {
 				err = fi_ibv_rdm_process_send_wc(ep, &wc[i]);
+				if (err) {
+					if (wc[i].status != IBV_WC_RETRY_EXC_ERR) {
+						fi_ibv_rdm_process_err_send_wc(ep, &wc[i]);
+					} else {
+						fi_ibv_rdm_proccess_retry_counter_exc(ep, &wc[i],
+										      ret - i);
+						return FI_SUCCESS;
+					}
+				}
 			}
-		} while (!err && ret == wc_count);
+		} while (!err && (ret == wc_count));
 	}
 
 	if (err || ret < 0) {
@@ -720,9 +750,6 @@ wc_error:
 		VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n", ret);
 		assert(0);
 	}
-
-	for (i = 0; i < wc_count; i++)
-		fi_ibv_rdm_process_err_send_wc(ep, &wc[i]);
 
 	return -FI_EOTHER;
 }

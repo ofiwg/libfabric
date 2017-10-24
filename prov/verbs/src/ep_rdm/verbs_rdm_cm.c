@@ -710,8 +710,14 @@ static int fi_ibv_rdm_poll_cq(struct fi_ibv_rdm_ep *ep)
 
 	ret = ibv_poll_cq(ep->scq, wc_count, wc);
 	for (i = 0; i < ret; ++i)
-		if (fi_ibv_rdm_process_send_wc(ep, &wc[i]))
-			fi_ibv_rdm_process_err_send_wc(ep, &wc[i]);
+		if (fi_ibv_rdm_process_send_wc(ep, &wc[i])) {
+			if (wc[i].status != IBV_WC_RETRY_EXC_ERR) {
+				fi_ibv_rdm_process_err_send_wc(ep, &wc[i]);
+			} else {
+				fi_ibv_rdm_proccess_retry_counter_exc(ep, &wc[i],
+								      ret - i);
+			}
+		}
 
 	return ret;
 }
