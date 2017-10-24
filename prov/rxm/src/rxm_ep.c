@@ -487,6 +487,8 @@ static ssize_t rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov
 	struct rxm_rx_buf *rx_buf;
 	size_t i;
 
+	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
+
 	if (flags & (FI_PEEK | FI_CLAIM | FI_DISCARD))
 		assert(recv_queue->type == RXM_RECV_QUEUE_TAGGED);
 
@@ -639,8 +641,8 @@ int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 
 	// TODO do fi_mr_regv if provider supports it
 	for (i = 0; i < count; i++) {
-		ret = fi_mr_reg(rxm_domain->msg_domain, iov->iov_base,
-				iov->iov_len, access, 0, 0, 0, &mr[i], NULL);
+		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
+				iov[i].iov_len, access, 0, 0, 0, &mr[i], NULL);
 		if (ret)
 			goto err;
 	}
@@ -659,8 +661,8 @@ static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
 
 	for (i = 0; i < count; i++) {
 		rma_iov->iov[i].addr = RXM_MR_VIRT_ADDR(rxm_ep->msg_info) ?
-			(uintptr_t)iov->iov_base : 0;
-		rma_iov->iov[i].len = (uint64_t)iov->iov_len;
+			(uintptr_t)iov[i].iov_base : 0;
+		rma_iov->iov[i].len = (uint64_t)iov[i].iov_len;
 		rma_iov->iov[i].key = fi_mr_key(mr[i]);
 	}
 	rma_iov->count = (uint8_t)count;
@@ -687,6 +689,8 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+
+	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 
 	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, dest_addr, &handle);
 	if (ret)
