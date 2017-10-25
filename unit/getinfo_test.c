@@ -46,11 +46,12 @@
 
 typedef int (*ft_getinfo_init)(struct fi_info *);
 typedef int (*ft_getinfo_test)(char *, char *, uint64_t, struct fi_info *, struct fi_info **);
-typedef int (*ft_getinfo_check)(void *);
+typedef int (*ft_getinfo_check)(struct fi_info *);
 
 static char err_buf[512];
 static char old_prov_var[128];
 static char new_prov_var[128];
+
 
 static int check_addr(void *addr, size_t addrlen, char *str)
 {
@@ -65,15 +66,13 @@ static int check_addr(void *addr, size_t addrlen, char *str)
 	return 0;
 }
 
-static int check_srcaddr(void *arg)
+static int check_srcaddr(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	return check_addr(info->src_addr, info->src_addrlen, "source");
 }
 
-static int check_src_dest_addr(void *arg)
+static int check_src_dest_addr(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	int ret;
 
 	ret = check_addr(info->src_addr, info->src_addrlen, "source");
@@ -83,9 +82,8 @@ static int check_src_dest_addr(void *arg)
 	return check_addr(info->dest_addr, info->dest_addrlen, "destination");
 }
 
-static int check_util_prov(void *arg)
+static int check_util_prov(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	const char *util_name;
 	size_t len;
 
@@ -98,13 +96,12 @@ static int check_util_prov(void *arg)
 	return 0;
 }
 
-static int check_api_version(void *arg)
+static int check_api_version(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	return info->fabric_attr->api_version != FT_FIVERSION;
 }
 
-int invalid_dom(struct fi_info *hints)
+static int invalid_dom(struct fi_info *hints)
 {
 	if (hints->domain_attr->name)
 		free(hints->domain_attr->name);
@@ -114,7 +111,7 @@ int invalid_dom(struct fi_info *hints)
 	return 0;
 }
 
-int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
+static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 		struct fi_info *hints, struct fi_info **info)
 {
 	int i, ret;
@@ -187,7 +184,7 @@ failed_getinfo:
 	return ret;
 }
 
-int init_valid_rma_RAW_ordering_no_set_size(struct fi_info *hints)
+static int init_valid_rma_RAW_ordering_no_set_size(struct fi_info *hints)
 {
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_RAW;
@@ -197,7 +194,7 @@ int init_valid_rma_RAW_ordering_no_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
+static int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -205,6 +202,7 @@ int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_RAW;
 	hints->rx_attr->msg_order = FI_ORDER_RAW;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -218,7 +216,7 @@ int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAR_ordering_no_set_size(struct fi_info *hints)
+static int init_valid_rma_WAR_ordering_no_set_size(struct fi_info *hints)
 {
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_WAR;
@@ -228,7 +226,7 @@ int init_valid_rma_WAR_ordering_no_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
+static int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -236,6 +234,7 @@ int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_WAR;
 	hints->rx_attr->msg_order = FI_ORDER_WAR;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -249,7 +248,7 @@ int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAW_ordering_no_set_size(struct fi_info *hints)
+static int init_valid_rma_WAW_ordering_no_set_size(struct fi_info *hints)
 {
 	hints->caps = FI_RMA;
 	hints->tx_attr->msg_order = FI_ORDER_WAW;
@@ -259,7 +258,7 @@ int init_valid_rma_WAW_ordering_no_set_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
+static int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -280,9 +279,8 @@ int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 	return 0;
 }
 
-static int check_valid_rma_ordering_sizes(void *arg)
+static int check_valid_rma_ordering_sizes(struct fi_info *info)
 {
-	struct fi_info *info = arg;
 	if ((info->tx_attr->msg_order & FI_ORDER_RAW) ||
 			(info->rx_attr->msg_order & FI_ORDER_RAW)) {
 		if (info->ep_attr->max_order_raw_size <= 0)
@@ -314,7 +312,7 @@ static int check_valid_rma_ordering_sizes(void *arg)
 	return 0;
 }
 
-int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
+static int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -324,6 +322,7 @@ int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
 	hints->rx_attr->msg_order = FI_ORDER_RAW;
 	hints->ep_attr->max_order_war_size = 0;
 	hints->ep_attr->max_order_waw_size = 0;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -338,7 +337,7 @@ int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
+static int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -348,6 +347,7 @@ int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
 	hints->rx_attr->msg_order = FI_ORDER_WAR;
 	hints->ep_attr->max_order_raw_size = 0;
 	hints->ep_attr->max_order_waw_size = 0;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -362,7 +362,7 @@ int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
-int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
+static int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 {
 	int ret;
 	struct fi_info *fi;
@@ -372,6 +372,7 @@ int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 	hints->rx_attr->msg_order = FI_ORDER_WAW;
 	hints->ep_attr->max_order_raw_size = 0;
 	hints->ep_attr->max_order_war_size = 0;
+
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
@@ -386,23 +387,120 @@ int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 	return 0;
 }
 
+
+/*
+ * MR mode checks
+ */
+static int init_mr_basic(struct fi_info *hints)
+{
+	hints->caps |= FI_RMA;
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	return 0;
+}
+
+static int check_mr_basic(struct fi_info *info)
+{
+	return (info->domain_attr->mr_mode != FI_MR_BASIC) ?
+		EXIT_FAILURE : 0;
+}
+
+static int init_mr_scalable(struct fi_info *hints)
+{
+	hints->caps |= FI_RMA;
+	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
+	return 0;
+}
+
+static int check_mr_scalable(struct fi_info *info)
+{
+	return (info->domain_attr->mr_mode != FI_MR_SCALABLE) ?
+		EXIT_FAILURE : 0;
+}
+
+static int init_mr_unspec(struct fi_info *hints)
+{
+	hints->caps |= FI_RMA;
+	hints->domain_attr->mr_mode = FI_MR_UNSPEC;
+	return 0;
+}
+
+static int test_mr_v1_0(char *node, char *service, uint64_t flags,
+			struct fi_info *test_hints, struct fi_info **info)
+{
+	return fi_getinfo(FI_VERSION(1, 0), node, service, flags, test_hints, info);
+}
+
+static int check_mr_unspec(struct fi_info *info)
+{
+	return (info->domain_attr->mr_mode != FI_MR_BASIC &&
+		info->domain_attr->mr_mode != FI_MR_SCALABLE) ?
+		EXIT_FAILURE : 0;
+}
+
+static int test_mr_modes(char *node, char *service, uint64_t flags,
+			 struct fi_info *hints, struct fi_info **info)
+{
+	struct fi_info *fi;
+	uint64_t *mr_modes;
+	int i, cnt, ret;
+
+	ret = ft_alloc_bit_combo(0, FI_MR_LOCAL | FI_MR_RAW | FI_MR_VIRT_ADDR |
+			FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY |
+			FI_MR_RMA_EVENT | FI_MR_ENDPOINT, &mr_modes, &cnt);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < cnt; i++) {
+		hints->domain_attr->mr_mode = (uint32_t) mr_modes[i];
+		ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
+		if (ret && ret != -FI_ENODATA)
+			goto out;
+
+		ft_foreach_info(fi, *info) {
+			if (fi->domain_attr->mr_mode & ~hints->domain_attr->mr_mode) {
+				ret = -FI_EOTHER;
+				fi_freeinfo(*info);
+				goto out;
+			}
+		}
+		fi_freeinfo(*info);
+	}
+
+out:
+	*info = NULL;
+	ft_free_bit_combo(mr_modes);
+	return ret;
+}
+
+
+/*
+ * getinfo test
+ */
 static int getinfo_unit_test(char *node, char *service, uint64_t flags,
-		struct fi_info *hints, ft_getinfo_init init, ft_getinfo_test test,
+		struct fi_info *base_hints, ft_getinfo_init init, ft_getinfo_test test,
 		ft_getinfo_check check, int ret_exp)
 {
-	struct fi_info *info, *fi;
+	struct fi_info *info, *fi, *test_hints;
 	int ret;
 
+	if (base_hints) {
+		test_hints = fi_dupinfo(base_hints);
+		if (!test_hints)
+			return -FI_ENOMEM;
+	} else {
+		test_hints = NULL;
+	}
+
 	if (init) {
-		ret = init(hints);
+		ret = init(test_hints);
 		if (ret)
 			return ret;
 	}
 
 	if (test)
-		ret = test(node, service, flags, hints, &info);
+		ret = test(node, service, flags, test_hints, &info);
 	else
-		ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &info);
+		ret = fi_getinfo(FT_FIVERSION, node, service, flags, test_hints, &info);
 	if (ret) {
 		if (ret == ret_exp)
 			return 0;
@@ -534,6 +632,19 @@ getinfo_test(bad_waw_ordering, 1, "Test invalid rma WAW ordering size",
 		NULL, NULL, 0, hints, init_invalid_rma_WAW_ordering_size,
 		NULL, NULL, -FI_ENODATA)
 
+/* MR mode tests */
+getinfo_test(mr_mode, 1, "Test FI_MR_BASIC", NULL, NULL, 0,
+	     hints, init_mr_basic, NULL, check_mr_basic, -FI_ENODATA)
+getinfo_test(mr_mode, 2, "Test FI_MR_SCALABLE", NULL, NULL, 0,
+	     hints, init_mr_scalable, NULL, check_mr_scalable, -FI_ENODATA)
+getinfo_test(mr_mode, 3, "Test FI_MR_UNSPEC (v1.0)", NULL, NULL, 0,
+	     hints, init_mr_unspec, test_mr_v1_0, check_mr_unspec, -FI_ENODATA)
+getinfo_test(mr_mode, 4, "Test FI_MR_BASIC (v1.0)", NULL, NULL, 0,
+	     hints, init_mr_basic, test_mr_v1_0, check_mr_basic, -FI_ENODATA)
+getinfo_test(mr_mode, 5, "Test FI_MR_SCALABLE (v1.0)", NULL, NULL, 0,
+     	     hints, init_mr_scalable, test_mr_v1_0, check_mr_scalable, -FI_ENODATA)
+getinfo_test(mr_mode, 6, "Test mr_mode bits", NULL, NULL, 0,
+	     hints, NULL, test_mr_modes, NULL, 0)
 
 
 static void usage(void)
@@ -602,9 +713,13 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(bad_raw_ordering1),
 		TEST_ENTRY_GETINFO(bad_war_ordering1),
 		TEST_ENTRY_GETINFO(bad_waw_ordering1),
-		/* This test has to be last getinfo unit test to be run until we
-		 * find a way to reset hints->domain_attr->name*/
 		TEST_ENTRY_GETINFO(neg1),
+		TEST_ENTRY_GETINFO(mr_mode1),
+		TEST_ENTRY_GETINFO(mr_mode2),
+		TEST_ENTRY_GETINFO(mr_mode3),
+		TEST_ENTRY_GETINFO(mr_mode4),
+		TEST_ENTRY_GETINFO(mr_mode5),
+		TEST_ENTRY_GETINFO(mr_mode6),
 		{ NULL, "" }
 	};
 
