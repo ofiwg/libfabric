@@ -404,7 +404,15 @@ struct fi_ops_tagged fi_ibv_rdm_tagged_ops = {
 
 struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.getname = fi_ibv_rdm_tagged_getname,	/* TODO */
+	.getname = fi_ibv_rdm_tagged_getname,
+	.setname = fi_no_setname,
+	.getpeer = fi_no_getpeer,
+	.connect = fi_no_connect,
+	.listen = fi_no_listen,
+	.accept = fi_no_accept,
+	.reject = fi_no_reject,
+	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 static inline void

@@ -384,6 +384,7 @@ static struct fi_ops_cm fi_ibv_dgram_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 static struct fi_ops_ep fi_ibv_dgram_ep_ops = {
