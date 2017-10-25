@@ -884,7 +884,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~0;
+	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 	hints->addr_format = FI_SOCKADDR;
 
 	// TODO make this test accept endpoint type argument
