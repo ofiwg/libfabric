@@ -169,6 +169,7 @@ extern struct fi_ibv_gl_data {
 		int	rndv_seg_size;
 		int	thread_timeout;
 		char	*eager_send_opcode;
+		int	resolve_addr_timeout;
 	} rdm;
 
 	struct {

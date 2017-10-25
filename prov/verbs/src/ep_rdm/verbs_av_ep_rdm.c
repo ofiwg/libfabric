@@ -75,7 +75,8 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 		conn->id[0] = id;
 	}
 
-	if (rdma_resolve_addr(id, NULL, (struct sockaddr *)&conn->addr, 30000)) {
+	if (rdma_resolve_addr(id, NULL, (struct sockaddr *)&conn->addr,
+			      fi_ibv_gl_data.rdm.resolve_addr_timeout)) {
 		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_resolve_addr\n", errno);
 		return -errno;
 	}

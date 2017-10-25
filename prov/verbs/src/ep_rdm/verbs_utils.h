@@ -62,6 +62,7 @@ struct fi_ibv_msg_ep;
 
 #define FI_IBV_RDM_DFLT_ADDRLEN	(sizeof (struct sockaddr_in))
 
+#define FI_IBV_RDM_RESOLVE_ADDR_TIMEOUT (30000)
 #define FI_IBV_RDM_CM_THREAD_TIMEOUT (100)
 #define FI_IBV_RDM_MEM_ALIGNMENT (64)
 #define FI_IBV_RDM_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
