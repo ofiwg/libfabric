@@ -571,7 +571,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	info->domain_attr->rx_ctx_cnt 		= MIN(info->domain_attr->rx_ctx_cnt, device_attr.max_qp);
 	info->domain_attr->max_ep_tx_ctx 	= MIN(info->domain_attr->tx_ctx_cnt, device_attr.max_qp);
 	info->domain_attr->max_ep_rx_ctx 	= MIN(info->domain_attr->rx_ctx_cnt, device_attr.max_qp);
-	info->domain_attr->max_ep_srx_ctx	= device_attr.max_qp;
+	info->domain_attr->max_ep_srx_ctx	= device_attr.max_srq;
 	info->domain_attr->mr_cnt		= device_attr.max_mr;
 
 	if (info->ep_attr->type == FI_EP_RDM)
@@ -585,8 +585,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 						  MIN(device_attr.max_qp_wr,
 						      device_attr.max_srq_wr) :
 						      device_attr.max_qp_wr;
-	info->rx_attr->iov_limit 		= MIN(device_attr.max_sge,
-						      device_attr.max_srq_sge);
+	info->rx_attr->iov_limit 		= device_attr.max_srq_sge ?
+						  MIN(device_attr.max_sge,
+						      device_attr.max_srq_sge) :
+						  device_attr.max_sge;
 
 	ret = fi_ibv_get_qp_cap(ctx, info);
 	if (ret)
