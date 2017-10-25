@@ -793,12 +793,12 @@ static inline void __rma_write_only(uint32_t version, int mr_mode)
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api_basic, rma_write_only)
+Test(rdm_api_basic, rma_write_only, .disabled = true)
 {
 	__rma_write_only(fi_version(), GNIX_MR_BASIC);
 }
 
-Test(rdm_api_scalable, rma_write_only)
+Test(rdm_api_scalable, rma_write_only, .disabled = true)
 {
 	__rma_write_only(fi_version(), GNIX_MR_SCALABLE);
 }
@@ -829,7 +829,7 @@ static inline void __rma_read_only(uint32_t version, int mr_mode)
 	api_write_read(BUF_SZ);
 }
 
-Test(rdm_api_basic, rma_read_only)
+Test(rdm_api_basic, rma_read_only, .disabled = true)
 {
 	__rma_read_only(fi_version(), GNIX_MR_BASIC);
 }
@@ -938,12 +938,12 @@ static inline void __read_chained_remote(uint32_t version, int mr_mode)
 	api_do_read_buf();
 }
 
-Test(rdm_api_basic, read_chained_remote)
+Test(rdm_api_basic, read_chained_remote, .disabled = true)
 {
 	__read_chained_remote(fi_version(), GNIX_MR_BASIC);
 }
 
-Test(rdm_api_scalable, read_chained_remote)
+Test(rdm_api_scalable, read_chained_remote, .disabled = true)
 {
 	__read_chained_remote(fi_version(), GNIX_MR_SCALABLE);
 }
@@ -956,7 +956,7 @@ static inline void __read_chained_w_write(uint32_t version, int mr_mode)
 	api_do_read_buf();
 }
 
-Test(rdm_api_basic, read_chained_w_write)
+Test(rdm_api_basic, read_chained_w_write, .disabled = true)
 {
 	__read_chained_w_write(fi_version(), GNIX_MR_BASIC);
 }
@@ -1079,7 +1079,7 @@ static inline void __amo_write_only(uint32_t version, int mr_mode)
 	do_atomic_write_fetch();
 }
 
-Test(rdm_api_basic, amo_write_only)
+Test(rdm_api_basic, amo_write_only, .disabled = true)
 {
 	__amo_write_only(fi_version(), GNIX_MR_BASIC);
 }
@@ -1115,7 +1115,7 @@ static inline void __amo_read_only(uint32_t version, int mr_mode)
 	do_atomic_write_fetch();
 }
 
-Test(rdm_api_basic, amo_read_only)
+Test(rdm_api_basic, amo_read_only, .disabled = true)
 {
 	__amo_read_only(fi_version(), GNIX_MR_BASIC);
 }

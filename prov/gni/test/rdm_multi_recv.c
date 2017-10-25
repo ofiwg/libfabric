@@ -557,12 +557,12 @@ void do_multirecv(int len)
 	dbg_printf("got context events!\n");
 }
 
-Test(rdm_multi_r, multirecv, .disabled = false)
+Test(rdm_multi_r, multirecv, .disabled = true)
 {
 	xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
 
-Test(rdm_multi_r, multirecv_retrans, .disabled = false)
+Test(rdm_multi_r, multirecv_retrans, .disabled = true)
 {
 	inject_enable();
 	xfer_for_each_size(do_multirecv, 1, BUF_SZ);
