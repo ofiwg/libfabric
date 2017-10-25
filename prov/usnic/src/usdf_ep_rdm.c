@@ -974,6 +974,7 @@ static struct fi_ops_msg usdf_rdm_ops = {
 static int usdf_ep_rdm_control(struct fid *fid, int command, void *arg)
 {
 	struct fid_ep *ep;
+	int ret;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
@@ -982,15 +983,17 @@ static int usdf_ep_rdm_control(struct fid *fid, int command, void *arg)
 		ep = container_of(fid, struct fid_ep, fid);
 		switch (command) {
 		case FI_ENABLE:
-			return usdf_ep_rdm_enable(ep);
+			ret = usdf_ep_rdm_enable(ep);
 			break;
 		default:
-			return -FI_ENOSYS;
+			ret = -FI_ENOSYS;
 		}
 		break;
 	default:
-		return -FI_ENOSYS;
+		ret = -FI_ENOSYS;
 	}
+
+	return ret;
 }
 
 static struct fi_ops usdf_ep_rdm_ops = {
