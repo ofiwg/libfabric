@@ -602,11 +602,6 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
  */
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
-#define OFI_CHECK_MR_BASIC(mode) ((mode == FI_MR_BASIC) || \
-				  ((mode & OFI_MR_BASIC_MAP) == OFI_MR_BASIC_MAP))
-
-#define OFI_CHECK_MR_SCALABLE(mode) (!(mode & OFI_MR_BASIC_MAP))
-
 /* FI_LOCAL_MR is valid in pre-libfaric-1.5 and can be valid in
  * post-libfabric-1.5 */
 #define OFI_CHECK_MR_LOCAL(info) \
@@ -620,15 +615,6 @@ struct ofi_mr_map {
 	uint64_t		key;
 	enum fi_mr_mode		mode;
 };
-
-static inline void ofi_mr_mode_adjust(uint64_t info_caps, int *mr_mode)
-{
-	if (!ofi_rma_target_allowed(info_caps)) {
-		*mr_mode &= ~(FI_MR_PROV_KEY | FI_MR_VIRT_ADDR);
-		if (!(*mr_mode & FI_MR_LOCAL))
-			*mr_mode &= ~FI_MR_ALLOCATED;
-	}
-}
 
 /* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
  * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
@@ -676,8 +662,7 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 			   FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
-		      uint64_t user_info_caps, uint32_t prov_mode,
-		      uint32_t user_mode);
+		      int prov_mode, const struct fi_info *user_info);
 int ofi_check_fabric_attr(const struct fi_provider *prov,
 			  const struct fi_fabric_attr *prov_attr,
 			  const struct fi_fabric_attr *user_attr);

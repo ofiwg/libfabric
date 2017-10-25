@@ -253,9 +253,8 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 		if (ofi_check_mr_mode(&usdf_ops,
 				      fabric->api_version,
-				      info->caps,
-				      OFI_MR_BASIC_MAP | FI_MR_LOCAL,
-				      info->domain_attr->mr_mode)) {
+				      FI_MR_BASIC | OFI_MR_BASIC_MAP | FI_MR_LOCAL,
+				      info)) {
 			/* the caller ignored our fi_getinfo results */
 			USDF_WARN_SYS(DOMAIN, "MR mode (%d) not supported\n",
 				      info->domain_attr->mr_mode);
@@ -518,9 +517,9 @@ int usdf_check_mr_mode(uint32_t version, const struct fi_info *hints,
 {
 	int ret;
 
-	ret = ofi_check_mr_mode(&usdf_ops, version, hints->caps, prov_mode,
-				hints->domain_attr->mr_mode);
+	ret = ofi_check_mr_mode(&usdf_ops, version, prov_mode, hints);
 
+	/* TODO: Checks below may not be needed */
 	/* If ofi_check_mr_mode fails. */
 	if (ret) {
 		/* Is it because the user give 0 as mr_mode? */
