@@ -121,7 +121,6 @@ int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep)
 	VERBS_INFO(FI_LOG_EP_CTRL, "My IPoIB: %s\n", my_ipoib_addr_str);
 
 	if (!cm->is_bound) {
-		errno = 0;
 		if (rdma_bind_addr(cm->listener, (struct sockaddr *)&ep->my_addr)) {
 			VERBS_INFO(FI_LOG_EP_CTRL,
 				"Failed to bind cm listener to my IPoIB addr %s: %s\n",

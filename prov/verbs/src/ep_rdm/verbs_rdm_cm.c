@@ -870,7 +870,6 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 
 	if (rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 		if(errno == EAGAIN) {
-			errno = 0;
 			usleep(ep->domain->rdm_cm->cm_progress_timeout);
 			return FI_SUCCESS;
 		} else {
@@ -921,7 +920,6 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 
 		if(rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 			if(errno == EAGAIN) {
-				errno = 0;
 				usleep(ep->domain->rdm_cm->cm_progress_timeout);
 				break;
 			} else {
