@@ -337,6 +337,7 @@ static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info
 {
 	int ret, subindex, remote_idx = 0, result = 0, end_test = 0;
 	static int server_ready = 0;
+	struct fi_info *open_res_info;
 
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
 	if (ret) {
@@ -354,7 +355,12 @@ static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info
 		if (ret)
 			return ret;
 
+		/* Stores the fabric_info into a tmp variable, resolves an issue caused
+		*  by ft_accept with FI_EP_MSG which overwrites the fabric_info.
+		*/
+		open_res_info = fabric_info;
 		while (1) {
+			fabric_info = open_res_info;
 			ret = ft_open_res();
 			if (ret) {
 				FT_PRINTERR("ft_open_res", ret);
