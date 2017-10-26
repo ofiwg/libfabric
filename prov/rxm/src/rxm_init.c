@@ -73,7 +73,6 @@ int rxm_info_to_core(uint32_t version, struct fi_info *hints,
 			 * FI_MR_SCALABLE aren't dropped */
 			core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
 	}
-	core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	core_info->ep_attr->type = FI_EP_MSG;
 
 	return 0;
