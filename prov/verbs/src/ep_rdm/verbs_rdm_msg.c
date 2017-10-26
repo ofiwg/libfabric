@@ -225,13 +225,13 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 		struct fi_ibv_rdm_buf *sbuf = 
 			fi_ibv_rdm_prepare_send_resources(conn, ep);
 		if (sbuf) {
-			struct ibv_sge sge = {0};
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
-
-			sge.addr = (uintptr_t)(void*)sbuf;
-			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
-			sge.lkey = conn->s_mr->lkey;
+			struct ibv_sge sge = {
+				.addr = (uintptr_t)(void*)sbuf,
+				.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE,
+				.lkey = conn->s_mr->lkey,
+			};
 
 			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
 			wr.sg_list = &sge;

@@ -95,7 +95,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 			sge[last].length = ep->buff_len;
 			sge[last].lkey = conn->r_mr->lkey;
 
-			wr[last].wr_id = (uintptr_t) conn;
+			wr[last].wr_id = (uintptr_t)conn;
 			wr[last].next = NULL;
 			wr[last].sg_list = &sge[last];
 			wr[last].num_sge = 1;
@@ -114,7 +114,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 		}
 	} else {
 		if (last >= 0) {
-			wr[last].wr_id = (uintptr_t) conn;
+			wr[last].wr_id = (uintptr_t)conn;
 			wr[last].next = NULL;
 			wr[last].sg_list = &sge[last];
 			wr[last].num_sge = 1;

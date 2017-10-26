@@ -142,8 +142,9 @@ fi_ibv_rdm_eager_send_ready(struct fi_ibv_rdm_request *request, void *data)
 
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
-	wr.wr_id = (uintptr_t) request;
 
+	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
+	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.wr.rdma.remote_addr = fi_ibv_rdm_get_remote_addr(conn, request->sbuf);
@@ -262,16 +263,13 @@ fi_ibv_rdm_rndv_rts_send_ready(struct fi_ibv_rdm_request *request, void *data)
 	struct fi_ibv_rdm_tagged_send_ready_data *p = data;
 
 	struct ibv_sge sge;
-
 	struct fi_ibv_rdm_conn *conn = request->minfo.conn;
 	struct fi_ibv_rdm_rndv_header *header = (void *)&request->sbuf->header;
 	struct ibv_mr *mr = NULL;
+	struct ibv_send_wr wr = { 0 }, *bad_wr = NULL;
 
-	struct ibv_send_wr wr, *bad_wr = NULL;
-	memset(&wr, 0, sizeof(wr));
-	wr.wr_id = (uintptr_t) request;
+	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
 	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
-
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.wr.rdma.remote_addr = (uintptr_t)
@@ -1116,7 +1114,7 @@ fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 		request->post_counter = 0;
 	}
 
-	wr.wr_id = (uintptr_t) request;
+	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
 	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 	wr.opcode = IBV_WR_RDMA_READ;
 	wr.sg_list = &sge;
@@ -1192,9 +1190,8 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 
 	memcpy(&sbuf->payload, &request->rndv.id, sizeof(request->rndv.id));
 
-	wr.wr_id = ((uint64_t) (uintptr_t) (void *) request);
+	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
 	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
-
 	wr.opcode = p->ep->eopcode;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
@@ -1353,14 +1350,14 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_request *request, void *data)
 	wr.wr.rdma.rkey = p->rkey;
 	wr.send_flags = 0;
 	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
+	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 	wr.opcode = IBV_WR_RDMA_WRITE;
 	sge.length = request->len;
 	sge.addr = p->lbuf;
 
 	if ((request->len < p->ep_rdm->max_inline_rc) && 
 	    (!RMA_RESOURCES_IS_BUSY(request->minfo.conn, p->ep_rdm)) &&
-	    fi_ibv_rdm_check_connection(request->minfo.conn, p->ep_rdm))
-	{
+	    fi_ibv_rdm_check_connection(request->minfo.conn, p->ep_rdm)) {
 		wr.send_flags |= IBV_SEND_INLINE;
 	} else if (fi_ibv_rdm_prepare_rma_request(request, p->ep_rdm)) {
 		memcpy(&request->rmabuf->payload, (void*)p->lbuf, p->data_len);
@@ -1371,8 +1368,8 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_request *request, void *data)
 		return -FI_EAGAIN;
 	}
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm,
-		wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn,
+					 p->ep_rdm, wr.send_flags);
 
 	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INJECT_WAIT4LC;
@@ -1401,6 +1398,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 	struct ibv_send_wr *bad_wr = NULL;
 
 	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
+	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.wr.rdma.remote_addr = request->rma.remote_addr;
