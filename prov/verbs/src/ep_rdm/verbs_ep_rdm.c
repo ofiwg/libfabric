@@ -642,24 +642,40 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->fi_ibv_rdm_request_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_request),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+	if (!_ep->fi_ibv_rdm_request_pool) {
+		ret = -FI_ENOMEM;
+		goto err3;
+	}
 
 	_ep->fi_ibv_rdm_multi_request_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_multi_request),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+	if (!_ep->fi_ibv_rdm_multi_request_pool) {
+		ret = -FI_ENOMEM;
+		goto err3;
+	}
 
 	_ep->fi_ibv_rdm_postponed_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_postponed_entry),
 		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+	if (!_ep->fi_ibv_rdm_postponed_pool) {
+		ret = -FI_ENOMEM;
+		goto err3;
+	}
 
 	_ep->fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
 		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+	if (!_ep->fi_ibv_rdm_extra_buffers_pool) {
+		ret = -FI_ENOMEM;
+		goto err3;
+	}
 
 	dlist_init(&_ep->fi_ibv_rdm_posted_queue);
 	dlist_init(&_ep->fi_ibv_rdm_postponed_queue);
 	dlist_init(&_ep->fi_ibv_rdm_unexp_queue);
 	dlist_init(&_ep->fi_ibv_rdm_multi_recv_list);
 
-	_ep->max_inline_rc = 
+	_ep->max_inline_rc =
 		fi_ibv_rdm_find_max_inline(_ep->domain->pd, _ep->domain->verbs);
 
 	_ep->scq_depth = FI_IBV_RDM_TAGGED_DFLT_SCQ_SIZE;
@@ -670,7 +686,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (_ep->scq == NULL) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "ibv_create_cq", errno);
 		ret = -FI_EOTHER;
-		goto err2;
+		goto err3;
 	}
 
 	_ep->rcq =
@@ -678,7 +694,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (_ep->rcq == NULL) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "ibv_create_cq", errno);
 		ret = -FI_EOTHER;
-		goto err2;
+		goto err4;
 	}
 
 	*ep = &_ep->ep_fid;
@@ -689,6 +705,18 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	slist_insert_tail(&_ep->list_entry, &_domain->ep_list);
 
 	return ret;
+err4:
+	if (ibv_destroy_cq(_ep->scq))
+		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_cq", errno);
+err3:
+	if (_ep->fi_ibv_rdm_request_pool)
+		util_buf_pool_destroy(_ep->fi_ibv_rdm_request_pool);
+	if (_ep->fi_ibv_rdm_multi_request_pool)
+		util_buf_pool_destroy(_ep->fi_ibv_rdm_multi_request_pool);
+	if (_ep->fi_ibv_rdm_postponed_pool)
+		util_buf_pool_destroy(_ep->fi_ibv_rdm_postponed_pool);
+	if (_ep->fi_ibv_rdm_extra_buffers_pool)
+		util_buf_pool_destroy(_ep->fi_ibv_rdm_extra_buffers_pool);
 err2:
 	fi_freeinfo(_ep->info);
 err1:
