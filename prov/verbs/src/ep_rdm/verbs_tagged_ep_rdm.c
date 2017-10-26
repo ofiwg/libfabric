@@ -666,7 +666,7 @@ int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 
 	VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n", ret);
 
-	for(i = 0; i < wc_count; i++) {
+	for(i = 0; i < ret; i++) {
 
 		if (wc[i].status != IBV_WC_SUCCESS) {
 			struct fi_ibv_rdm_conn *conn = (void *)wc[i].wr_id;
@@ -729,7 +729,7 @@ wc_error:
 		assert(0);
 	}
 
-	for (i = 0; i < wc_count; i++)
+	for (i = 0; i < ret; i++)
 		fi_ibv_rdm_process_err_send_wc(ep, &wc[i]);
 
 	return -FI_EOTHER;
