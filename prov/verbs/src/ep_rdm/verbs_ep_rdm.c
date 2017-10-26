@@ -489,13 +489,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 		ret = (ret == FI_SUCCESS) ? -errno : ret;
 	}
 
-	errno = 0;
 	rdma_freeaddrinfo(ep->rai);
-	if (errno) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_freeaddrinfo failed",
-				 errno);
-		ret = (ret == FI_SUCCESS) ? -errno : ret;
-	}
 
 	/* TODO: move queues & related pools cleanup to close CQ*/
 	fi_ibv_rdm_clean_queues(ep);

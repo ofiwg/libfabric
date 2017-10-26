@@ -636,13 +636,8 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 	VERBS_DBG(FI_LOG_AV, "conn %p, exp = %zu unexp = %zu\n", conn,
 		     conn->exp_counter, conn->unexp_counter);
 
-	errno = 0;
 	if (conn->id[0]) {
 		rdma_destroy_qp(conn->id[0]);
-		if (errno) {
-			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_qp\n", errno);
-			ret = -errno;
-		}
 
 		if (rdma_destroy_id(conn->id[0])) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_id\n", errno);
@@ -655,11 +650,7 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 	if (conn->id[1]) {
 		assert(conn->cm_role == FI_VERBS_CM_SELF);
 		rdma_destroy_qp(conn->id[1]);
-		if (errno) {
-			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_qp\n", errno);
-			if (ret == FI_SUCCESS)
-				ret = -errno;
-		}
+
 		if (rdma_destroy_id(conn->id[1])) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_id\n", errno);
 			if (ret == FI_SUCCESS)
@@ -748,20 +739,15 @@ fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 	const int *pdata = event->param.conn.private_data;
 
 	if ((pdata && *pdata == 0xdeadbeef) ||
-	    /* 
+	    /*
 	     * TODO: this is a workaround of the case when private_data is not
 	     * arriving from rdma_reject call on iWarp devices
 	     */
 	    (conn->cm_role == FI_VERBS_CM_PASSIVE &&
 	     event->status == -ECONNREFUSED))
 	{
-		errno = 0;
 		rdma_destroy_qp(event->id);
-		if (errno) {
-			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_qp failed\n",
-					 errno);
-			ret = -errno;
-		}
+
 		if (rdma_destroy_id(event->id)) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_destroy_id failed\n",
 					 errno);
@@ -870,7 +856,6 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 
 	if (rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 		if(errno == EAGAIN) {
-			errno = 0;
 			usleep(ep->domain->rdm_cm->cm_progress_timeout);
 			return FI_SUCCESS;
 		} else {
@@ -921,7 +906,6 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 
 		if(rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
 			if(errno == EAGAIN) {
-				errno = 0;
 				usleep(ep->domain->rdm_cm->cm_progress_timeout);
 				break;
 			} else {
