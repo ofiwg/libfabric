@@ -233,7 +233,7 @@ fi_ibv_rdm_tagged_init_qp_attributes(struct ibv_qp_init_attr *qp_attr,
 	qp_attr->cap.max_send_sge = 1;
 	qp_attr->cap.max_recv_sge = 1;
 	qp_attr->cap.max_inline_data = ep->max_inline_rc;
-
+	qp_attr->sq_sig_all = 1;
 }
 
 static inline int

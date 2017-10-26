@@ -75,12 +75,11 @@
 
 // Send/Recv counters control
 
-#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)		\
+#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep)			\
 do {                                                                		\
 	int32_t sends_outgoing =						\
 		ofi_atomic_inc32(&(_connection)->av_entry->sends_outgoing);	\
 	ofi_atomic_inc32(&(_ep)->posted_sends);					\
-	(_send_flags) |= IBV_SEND_SIGNALED;                             	\
 										\
 	(void)sends_outgoing;							\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \

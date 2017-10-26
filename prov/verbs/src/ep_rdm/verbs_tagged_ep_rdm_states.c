@@ -187,8 +187,7 @@ fi_ibv_rdm_eager_send_ready(struct fi_ibv_rdm_request *request, void *data)
 		}
 	}
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn,
-					 p->ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%" PRIx64 "\n",
 		  sge.length, request->minfo.conn, request->minfo.tag);
 
@@ -317,8 +316,7 @@ fi_ibv_rdm_rndv_rts_send_ready(struct fi_ibv_rdm_request *request, void *data)
 		  request->minfo.tag, request->len, request->src_addr, mr->rkey,
 		  request->context, (int)wr.imm_data, ofi_atomic_get32(&p->ep->posted_sends));
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep,
-		wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%" PRIx64 "\n",
 		  sge.length, request->minfo.conn,
 		  request->minfo.tag);
@@ -1130,7 +1128,7 @@ fi_ibv_rdm_rndv_recv_post_read(struct fi_ibv_rdm_request *request, void *data)
 
 	request->rest_len -= seg_cursize;
 	request->post_counter++;
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%" PRIx64 "\n",
 		  sge.length, request->minfo.conn, request->minfo.tag);
 	ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
@@ -1206,7 +1204,7 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 	sge.lkey = conn->s_mr->lkey;
 	sbuf->service_data.pkt_len = ack_size;
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep);
 	VERBS_DBG(FI_LOG_EP_DATA,
 		  "posted %d bytes, conn %p, tag 0x%" PRIx64 ", request %p\n",
 		  sge.length, request->minfo.conn, request->minfo.tag, request);
@@ -1338,6 +1336,7 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_request *request, void *data)
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_send_wr *bad_wr = NULL;
 	struct fi_ibv_rdm_rma_start_data *p = data;
+	int ret;
 
 	request->minfo.conn = p->conn;
 	request->len = p->data_len;
@@ -1368,10 +1367,9 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_request *request, void *data)
 		return -FI_EAGAIN;
 	}
 
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn,
-					 p->ep_rdm, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm);
 
-	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
+	ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INJECT_WAIT4LC;
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
 
@@ -1434,7 +1432,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 
 	request->rest_len -= seg_cursize;
 	request->post_counter++;
-	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm);
 	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 
 	if (request->rest_len) {
