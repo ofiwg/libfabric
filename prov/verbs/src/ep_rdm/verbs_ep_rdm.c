@@ -67,6 +67,7 @@ fi_ibv_rdm_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
 	qp_attr.cap.max_recv_wr = 1;
 	qp_attr.cap.max_send_sge = 1;
 	qp_attr.cap.max_recv_sge = 1;
+	qp_attr.sq_sig_all = 1;
 
 	do {
 		if (qp)

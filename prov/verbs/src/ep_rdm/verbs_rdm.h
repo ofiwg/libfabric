@@ -61,26 +61,25 @@
 
 // WR - work request
 #define FI_IBV_RDM_SERVICE_WR_MASK              ((uint64_t)0x1)
-#define FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(value) \
+#define FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(value)	\
         (value & FI_IBV_RDM_SERVICE_WR_MASK)
 
-#define FI_IBV_RDM_PACK_WR(value)               ((uint64_t)value)
-#define FI_IBV_RDM_UNPACK_WR(value)             ((void*)(uintptr_t)value)
+#define FI_IBV_RDM_PACK_WR(value)               ((uint64_t)(uintptr_t)(void *)value)
+#define FI_IBV_RDM_UNPACK_WR(value)             ((void *)(uintptr_t)value)
 
-#define FI_IBV_RDM_PACK_SERVICE_WR(value)       \
-        (((uint64_t)(uintptr_t)(void*)value) | FI_IBV_RDM_SERVICE_WR_MASK)
+#define FI_IBV_RDM_PACK_SERVICE_WR(value)					\
+        (((uint64_t)(uintptr_t)(void *)value) | FI_IBV_RDM_SERVICE_WR_MASK)
 
-#define FI_IBV_RDM_UNPACK_SERVICE_WR(value)     \
-        ((void*)(uintptr_t)(value & (~(FI_IBV_RDM_SERVICE_WR_MASK))))
+#define FI_IBV_RDM_UNPACK_SERVICE_WR(value)				\
+        ((void *)(uintptr_t)(value & (~(FI_IBV_RDM_SERVICE_WR_MASK))))
 
 // Send/Recv counters control
 
-#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)		\
+#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep)			\
 do {                                                                		\
 	int32_t sends_outgoing =						\
 		ofi_atomic_inc32(&(_connection)->av_entry->sends_outgoing);	\
 	ofi_atomic_inc32(&(_ep)->posted_sends);					\
-	(_send_flags) |= IBV_SEND_SIGNALED;                             	\
 										\
 	(void)sends_outgoing;							\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
@@ -726,7 +725,7 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep,
 	} else {
 		FI_IBV_DBG_OPCODE(wc->opcode, "SEND");
 		struct fi_ibv_rdm_request *request =
-			(void *)FI_IBV_RDM_UNPACK_WR(wc->wr_id);
+			FI_IBV_RDM_UNPACK_WR(wc->wr_id);
 
 		struct fi_ibv_rdm_tagged_send_completed_data data =
 			{ .ep = ep };
@@ -743,11 +742,10 @@ fi_ibv_rdm_process_err_send_wc(struct fi_ibv_rdm_ep *ep,
 	if (wc->status != IBV_WC_SUCCESS) {
 		struct fi_ibv_rdm_conn *conn;
 		if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
-			conn = FI_IBV_RDM_UNPACK_SERVICE_WR(
-					wc->wr_id);
+			conn = FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
 		} else {
 			struct fi_ibv_rdm_request *req =
-					(void *)wc->wr_id;
+				FI_IBV_RDM_UNPACK_WR(wc->wr_id);
 			conn = req->minfo.conn;
 			FI_IBV_RDM_DBG_REQUEST("to_pool: ", req,
 					       FI_LOG_DEBUG);

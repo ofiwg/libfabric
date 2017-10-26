@@ -95,7 +95,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 			sge[last].length = ep->buff_len;
 			sge[last].lkey = conn->r_mr->lkey;
 
-			wr[last].wr_id = (uintptr_t) conn;
+			wr[last].wr_id = (uintptr_t)conn;
 			wr[last].next = NULL;
 			wr[last].sg_list = &sge[last];
 			wr[last].num_sge = 1;
@@ -114,7 +114,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 		}
 	} else {
 		if (last >= 0) {
-			wr[last].wr_id = (uintptr_t) conn;
+			wr[last].wr_id = (uintptr_t)conn;
 			wr[last].next = NULL;
 			wr[last].sg_list = &sge[last];
 			wr[last].num_sge = 1;
@@ -233,7 +233,7 @@ fi_ibv_rdm_tagged_init_qp_attributes(struct ibv_qp_init_attr *qp_attr,
 	qp_attr->cap.max_send_sge = 1;
 	qp_attr->cap.max_recv_sge = 1;
 	qp_attr->cap.max_inline_data = ep->max_inline_rc;
-
+	qp_attr->sq_sig_all = 1;
 }
 
 static inline int
@@ -335,15 +335,17 @@ fi_ibv_rdm_process_addr_resolved(struct rdma_cm_id *id,
 
 	assert(id->verbs == ep->domain->verbs);
 
+	/* Creates QP for passive EPs during
+	 * connection request processing */
+	if (conn->cm_role == FI_VERBS_CM_PASSIVE)
+		goto resolve_route;
+
 	fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
 	if (rdma_create_qp(id, ep->domain->pd, &qp_attr)) {
 		VERBS_INFO_ERRNO(FI_LOG_AV,
 				 "rdma_create_qp failed\n", errno);
 		return -errno;
 	}
-
-	if (conn->cm_role == FI_VERBS_CM_PASSIVE)
-		goto resolve_route;
 
 	conn->qp[0] = id->qp;
 	assert(conn->id[0] == id);
@@ -492,11 +494,9 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 		assert(conn->state == FI_VERBS_CONN_ALLOCATED ||
 		       conn->state == FI_VERBS_CONN_STARTED);
 
-		const size_t idx = 
-			(conn->cm_role == FI_VERBS_CM_PASSIVE) ? 0 : 1;
+		const size_t idx = (conn->cm_role == FI_VERBS_CM_SELF) ? 1 : 0;
 
 		conn->state = FI_VERBS_CONN_STARTED;
-
 		assert (conn->id[idx] == NULL);
 		conn->id[idx] = id;
 
