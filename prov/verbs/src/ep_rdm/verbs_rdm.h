@@ -150,6 +150,14 @@ struct fi_ibv_rdm_multi_request {
 	uint64_t			min_size;
 };
 
+struct fi_ibv_rdm_service_request {
+	struct fi_ibv_rdm_conn *conn;
+	/* It's used to resend in case of WC
+	 * with status == IBV_WC_RETRY_EXC_ERR  */
+	struct ibv_send_wr send_wr;
+	struct ibv_sge send_sge;
+};
+
 struct fi_ibv_rdm_request {
 
 	/* Accessors and match info */
@@ -216,6 +224,11 @@ struct fi_ibv_rdm_request {
 			enum ibv_wr_opcode opcode;
 		} rma;
 	};
+
+	/* It's used to resend in case of WC
+	 * with status == IBV_WC_RETRY_EXC_ERR  */
+	struct ibv_send_wr send_wr;
+	struct ibv_sge send_sge;
 };
 
 static inline void
@@ -286,6 +299,7 @@ struct fi_ibv_rdm_ep {
 	struct fi_info	*info;
 
 	struct util_buf_pool	*fi_ibv_rdm_request_pool;
+	struct util_buf_pool	*fi_ibv_rdm_service_request_pool;
 	struct util_buf_pool	*fi_ibv_rdm_multi_request_pool;
 	struct util_buf_pool	*fi_ibv_rdm_postponed_pool;
 	/*
@@ -717,11 +731,12 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep,
 
 	if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
 		VERBS_DBG(FI_LOG_EP_DATA, "CQ COMPL: SEND -> 0x1\n");
-		struct fi_ibv_rdm_conn *conn =
-			(struct fi_ibv_rdm_conn *)
-			FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
-		FI_IBV_RDM_DEC_SIG_POST_COUNTERS(conn, ep);
+		struct fi_ibv_rdm_service_request *req =
+			(struct fi_ibv_rdm_service_request *)
+				FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
+		FI_IBV_RDM_DEC_SIG_POST_COUNTERS(req->conn, ep);
 
+		util_buf_release(ep->fi_ibv_rdm_service_request_pool, req);
 		return 0;
 	} else {
 		FI_IBV_DBG_OPCODE(wc->opcode, "SEND");
@@ -736,15 +751,68 @@ fi_ibv_rdm_process_send_wc(struct fi_ibv_rdm_ep *ep,
 	}
 }
 
+static inline int fi_ibv_rdm_retransmit_wr(uint64_t wr_id)
+{
+	struct fi_ibv_rdm_request *req;
+	struct fi_ibv_rdm_service_request *s_req;
+	struct ibv_send_wr *bad_wr;
+	int ret;
+
+	if (!FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr_id)) {
+		req = (void *)wr_id;
+		req->send_wr.sg_list = &req->send_sge;
+		ret = ibv_post_send(req->minfo.conn->qp[0],
+				    &req->send_wr, &bad_wr);
+	} else {
+		s_req = FI_IBV_RDM_UNPACK_SERVICE_WR(wr_id);
+		s_req->send_wr.sg_list = &s_req->send_sge;
+		ret = ibv_post_send(s_req->conn->qp[0],
+				    &s_req->send_wr, &bad_wr);
+	}
+
+	return ret;
+}
+
+static inline
+int fi_ibv_rdm_proccess_retry_counter_exc(struct fi_ibv_rdm_ep *ep,
+					  struct ibv_wc *outstand_wcs,
+					  int num_outstand_wcs)
+{
+	int32_t num_of_posted = ofi_atomic_get32(&ep->posted_sends);
+	int ret, i = 0;
+	struct ibv_wc wc = { 0 };
+
+	for (i = 0; i < (num_outstand_wcs && !ret); i++)
+		ret = fi_ibv_rdm_retransmit_wr(outstand_wcs[i].wr_id);
+	num_of_posted -= num_outstand_wcs;
+
+	do {
+		ret = ibv_poll_cq(ep->scq, 1, &wc);
+		if (ret > 0) {
+			ret = fi_ibv_rdm_retransmit_wr(outstand_wcs[i].wr_id);
+			if (!ret)
+				num_of_posted -= 1;
+		}
+	} while (num_of_posted && (ret >= 0));
+
+	return ret;
+}
+
 static inline void
 fi_ibv_rdm_process_err_send_wc(struct fi_ibv_rdm_ep *ep,
 			       struct ibv_wc *wc)
 {
-	if (wc->status != IBV_WC_SUCCESS) {
+	if ((wc->status == IBV_WC_SUCCESS) ||
+	    (wc->status == IBV_WC_RETRY_EXC_ERR)) {
+		return;
+	} else {
 		struct fi_ibv_rdm_conn *conn;
 		if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id)) {
-			conn = FI_IBV_RDM_UNPACK_SERVICE_WR(
-					wc->wr_id);
+			struct fi_ibv_rdm_service_request *req =
+				(struct fi_ibv_rdm_service_request *)
+					FI_IBV_RDM_UNPACK_SERVICE_WR(wc->wr_id);
+			conn = req->conn;
+			util_buf_release(ep->fi_ibv_rdm_service_request_pool, req);
 		} else {
 			struct fi_ibv_rdm_request *req =
 					(void *)wc->wr_id;

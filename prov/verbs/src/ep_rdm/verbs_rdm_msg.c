@@ -228,12 +228,17 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 			struct ibv_sge sge = {0};
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
-
+			struct fi_ibv_rdm_service_request *sreq =
+				util_buf_alloc(ep->fi_ibv_rdm_service_request_pool);
+			if (OFI_UNLIKELY(!sreq)) {
+				assert(0);
+				return -FI_EAGAIN;
+			}
 			sge.addr = (uintptr_t)(void*)sbuf;
 			sge.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 			sge.lkey = conn->s_mr->lkey;
 
-			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
+			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(sreq);
 			wr.sg_list = &sge;
 			wr.num_sge = 1;
 			wr.wr.rdma.remote_addr = (uintptr_t)
@@ -250,13 +255,19 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 
 			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 					       FI_IBV_RDM_MSG_PKT);
-			if ((len > 0) && (buf)) {
+			if ((len > 0) && (buf))
 				memcpy(&sbuf->payload, buf, len);
-			}
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
 							 wr.send_flags);
+
+			sreq->conn = conn;
+			sreq->send_sge = sge;
+			sreq->send_wr = wr;
+
 			if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+				util_buf_release(ep->fi_ibv_rdm_service_request_pool,
+						 sreq);
 				assert(0);
 				return -errno;
 			} else {
