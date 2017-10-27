@@ -335,17 +335,15 @@ fi_ibv_rdm_process_addr_resolved(struct rdma_cm_id *id,
 
 	assert(id->verbs == ep->domain->verbs);
 
-	/* Creates QP for passive EPs during
-	 * connection request processing */
-	if (conn->cm_role == FI_VERBS_CM_PASSIVE)
-		goto resolve_route;
-
 	fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
 	if (rdma_create_qp(id, ep->domain->pd, &qp_attr)) {
 		VERBS_INFO_ERRNO(FI_LOG_AV,
 				 "rdma_create_qp failed\n", errno);
 		return -errno;
 	}
+
+	if (conn->cm_role == FI_VERBS_CM_PASSIVE)
+		goto resolve_route;
 
 	conn->qp[0] = id->qp;
 	assert(conn->id[0] == id);
