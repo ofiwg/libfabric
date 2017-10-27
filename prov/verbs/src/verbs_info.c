@@ -211,20 +211,32 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 	}
 
 	if (attr->tx_ctx_cnt > info->domain_attr->max_ep_tx_ctx) {
-		VERBS_INFO(FI_LOG_CORE,
-			   "tx_ctx_cnt exceeds supported size\n");
-		VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
-			   info->domain_attr->max_ep_tx_ctx, attr->tx_ctx_cnt);
-		return -FI_ENODATA;
+		if (attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "tx_ctx_cnt exceeds supported size\n");
+			VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
+				   info->domain_attr->max_ep_tx_ctx, attr->tx_ctx_cnt);
+			return -FI_ENODATA;
+		} else if (!info->domain_attr->max_ep_stx_ctx) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "Shared tx context not supported\n");
+			return -FI_ENODATA;
+		}
 	}
 
-	if ((attr->rx_ctx_cnt > info->domain_attr->max_ep_rx_ctx) &&
-	    (attr->rx_ctx_cnt != FI_SHARED_CONTEXT)) {
-		VERBS_INFO(FI_LOG_CORE,
-			   "rx_ctx_cnt exceeds supported size\n");
-		VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
-			   info->domain_attr->max_ep_rx_ctx, attr->rx_ctx_cnt);
-		return -FI_ENODATA;
+	if ((attr->rx_ctx_cnt > info->domain_attr->max_ep_rx_ctx)) {
+		if (attr->rx_ctx_cnt != FI_SHARED_CONTEXT) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "rx_ctx_cnt exceeds supported size\n");
+			VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
+				   info->domain_attr->max_ep_rx_ctx,
+				   attr->rx_ctx_cnt);
+			return -FI_ENODATA;
+		} else if (!info->domain_attr->max_ep_srx_ctx) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "Shared rx context not supported\n");
+			return -FI_ENODATA;
+		}
 	}
 
 	if (attr->auth_key_size &&
