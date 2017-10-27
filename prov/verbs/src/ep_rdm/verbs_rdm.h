@@ -422,6 +422,15 @@ struct fi_ibv_rdm_postponed_entry {
 	struct fi_ibv_rdm_conn *conn;
 };
 
+struct fi_conn_priv_params {
+	char addr[FI_IBV_RDM_DFLT_ADDRLEN];
+
+	uint32_t rbuf_rkey;
+	uint32_t sbuf_rkey;
+	char *rbuf_mem_reg;
+	char *sbuf_mem_reg;
+};
+
 static inline void
 fi_ibv_rdm_set_buffer_status(struct fi_ibv_rdm_buf *buff, uint16_t status)
 {

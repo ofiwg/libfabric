@@ -236,56 +236,38 @@ fi_ibv_rdm_tagged_init_qp_attributes(struct ibv_qp_init_attr *qp_attr,
 	qp_attr->sq_sig_all = 1;
 }
 
-static inline int
+static void
 fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
-			  struct fi_ibv_rdm_conn *conn,
-			  struct fi_ibv_rdm_ep *ep)
+			  struct fi_conn_priv_params *priv,
+			  const struct fi_ibv_rdm_conn *conn,
+			  const struct fi_ibv_rdm_ep *ep)
 {
-	char *p;
-
 	memset(cm_params, 0, sizeof(struct rdma_conn_param));
 	cm_params->responder_resources = 2;
 	cm_params->initiator_depth = 2;
+	cm_params->private_data = priv;
 
-	cm_params->private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
+	memcpy(priv->addr, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 
-	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
-		cm_params->private_data_len += sizeof(conn->r_mr->rkey);
-		cm_params->private_data_len += sizeof(conn->remote_rbuf_mem_reg);
-		cm_params->private_data_len += sizeof(conn->s_mr->rkey);
-		cm_params->private_data_len += sizeof(conn->remote_sbuf_mem_reg);
+	if ((conn->cm_role != FI_VERBS_CM_SELF) && conn->r_mr && conn->s_mr) {
+		cm_params->private_data_len = sizeof(*priv);
+
+		priv->rbuf_rkey = conn->r_mr->rkey;
+		priv->rbuf_mem_reg = conn->rbuf_mem_reg;
+		priv->sbuf_rkey = conn->s_mr->rkey;
+		priv->sbuf_mem_reg = conn->sbuf_mem_reg;
+	} else {
+		cm_params->private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
 	}
-
-	cm_params->private_data = calloc(1, cm_params->private_data_len);
-	if (!cm_params->private_data)
-		return -FI_ENOMEM;
-
-	p = (char *) cm_params->private_data;
-	memcpy(p, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
-	p += FI_IBV_RDM_DFLT_ADDRLEN;
-
-	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
-		memcpy(p, &conn->r_mr->rkey, sizeof(conn->r_mr->rkey));
-		p += sizeof(conn->r_mr->rkey);
-		memcpy(p, &conn->rbuf_mem_reg, sizeof(conn->rbuf_mem_reg));
-		p += sizeof(conn->rbuf_mem_reg);
-
-		memcpy(p, &conn->s_mr->rkey, sizeof(conn->s_mr->rkey));
-		p += sizeof(conn->s_mr->rkey);
-		memcpy(p, &conn->sbuf_mem_reg, sizeof(conn->sbuf_mem_reg));
-		p += sizeof(conn->sbuf_mem_reg);
-	}
-
-	return FI_SUCCESS;
 }
 
 
-static inline void
-fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
-			  struct fi_ibv_rdm_conn *conn,
-			  struct fi_ibv_rdm_ep *ep)
+static void
+fi_ibv_rdm_unpack_cm_params(const struct rdma_conn_param *cm_param,
+			    struct fi_ibv_rdm_conn *conn,
+			    struct fi_ibv_rdm_ep *ep)
 {
-	char *p = (char *)cm_param->private_data;
+	const struct fi_conn_priv_params *priv = cm_param->private_data;
 
 	if (conn->cm_role == FI_VERBS_CM_SELF) {
 		if (conn->r_mr && conn->s_mr) {
@@ -302,19 +284,13 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 		}
 	} else {
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
-			memcpy(&conn->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
+			memcpy(&conn->addr, priv->addr, FI_IBV_RDM_DFLT_ADDRLEN);
 		}
-		p += FI_IBV_RDM_DFLT_ADDRLEN;
 
-		conn->remote_rbuf_rkey = *(uint32_t *) (p);
-		p += sizeof(conn->r_mr->rkey);
-		conn->remote_rbuf_mem_reg = *(char **)(p);
-		p += sizeof(conn->remote_rbuf_mem_reg);
-
-		conn->remote_sbuf_rkey = *(uint32_t *) (p);
-		p += sizeof(conn->s_mr->rkey);
-		conn->remote_sbuf_mem_reg = *(char **)(p);
-		p += sizeof(conn->remote_sbuf_mem_reg);
+		conn->remote_rbuf_rkey = priv->rbuf_rkey;
+		conn->remote_rbuf_mem_reg = priv->rbuf_mem_reg;
+		conn->remote_sbuf_rkey = priv->sbuf_rkey;
+		conn->remote_sbuf_mem_reg = priv->sbuf_mem_reg;
 
 		conn->remote_sbuf_head = (struct fi_ibv_rdm_buf *)
 			conn->remote_sbuf_mem_reg;
@@ -381,6 +357,7 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 {
 	struct ibv_qp_init_attr qp_attr;
 	struct rdma_conn_param cm_params;
+	struct fi_conn_priv_params priv;
 	struct fi_ibv_rdm_av_entry *av_entry = NULL;
 	struct rdma_cm_id *id = event->id;
 	struct fi_ibv_rdm_conn *conn;
@@ -519,20 +496,13 @@ fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
 
 		id->context = conn;
 
-		ret = fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
-		if (ret) {
-			VERBS_INFO(FI_LOG_AV, "Packing of CM parameters fails, "
-				   "ret = %zd\n", ret);
-			goto err;
-		}
+		fi_ibv_rdm_pack_cm_params(&cm_params, &priv, conn, ep);
 
 		if (rdma_accept(id, &cm_params)) {
 			VERBS_INFO_ERRNO(FI_LOG_AV, "rdma_accept\n", errno);
 			ret = -errno;
 			goto err;
 		}
-		if (cm_params.private_data)
-			free((void *) cm_params.private_data);
 	}
 
 	return ret;
@@ -548,14 +518,10 @@ fi_ibv_rdm_process_route_resolved(struct rdma_cm_event *event,
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
 	ssize_t ret = FI_SUCCESS;
-
 	struct rdma_conn_param cm_params;
-	ret = fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
-	if (ret) {
-		VERBS_INFO(FI_LOG_AV, "Packing of CM parameters fails, "
-			   "ret = %zd\n", ret);
-		return ret;
-	}
+	struct fi_conn_priv_params priv;
+
+	fi_ibv_rdm_pack_cm_params(&cm_params, &priv, conn, ep);
 
 	VERBS_INFO(FI_LOG_AV,
 		"ROUTE RESOLVED, conn %p, addr %s:%u\n", conn,
@@ -566,7 +532,6 @@ fi_ibv_rdm_process_route_resolved(struct rdma_cm_event *event,
 				 "rdma_connect failed\n", errno);
 		ret = -errno;
 
-		free((void *)cm_params.private_data);
 		assert(0);
 	}
 
