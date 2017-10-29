@@ -572,6 +572,11 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		} else {
 			_ep->use_odp = param;
 		}
+	} else {
+		/* Disable by default. Because this feature may corrupt
+		 * data due to IBV_EXP_ACCESS_RELAXED flag. But usage
+		 * this feature w/o this flag leads to poor bandwidth */
+		_ep->use_odp = 0;
 	}
 
 	_ep->rq_wr_depth = info->rx_attr->size;
