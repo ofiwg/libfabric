@@ -245,11 +245,15 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 	memset(cm_params, 0, sizeof(struct rdma_conn_param));
 	cm_params->responder_resources = 2;
 	cm_params->initiator_depth = 2;
+
+	if (conn->cm_role == FI_VERBS_CM_SELF)
+		return;
+
 	cm_params->private_data = priv;
 
 	memcpy(priv->addr, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 
-	if ((conn->cm_role != FI_VERBS_CM_SELF) && conn->r_mr && conn->s_mr) {
+	if (conn->r_mr && conn->s_mr) {
 		cm_params->private_data_len = sizeof(*priv);
 
 		priv->rbuf_rkey = conn->r_mr->rkey;
@@ -261,14 +265,11 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 	}
 }
 
-
 static void
 fi_ibv_rdm_unpack_cm_params(const struct rdma_conn_param *cm_param,
 			    struct fi_ibv_rdm_conn *conn,
 			    struct fi_ibv_rdm_ep *ep)
 {
-	const struct fi_conn_priv_params *priv = cm_param->private_data;
-
 	if (conn->cm_role == FI_VERBS_CM_SELF) {
 		if (conn->r_mr && conn->s_mr) {
 			memcpy(&conn->addr, &ep->my_addr,
@@ -283,6 +284,8 @@ fi_ibv_rdm_unpack_cm_params(const struct rdma_conn_param *cm_param,
 				conn->remote_sbuf_mem_reg;
 		}
 	} else {
+		const struct fi_conn_priv_params *priv = cm_param->private_data;
+
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
 			memcpy(&conn->addr, priv->addr, FI_IBV_RDM_DFLT_ADDRLEN);
 		}
