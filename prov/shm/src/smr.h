@@ -63,7 +63,7 @@
 #define _SMR_H_
 
 
-#define SMR_MAJOR_VERSION 0 
+#define SMR_MAJOR_VERSION 0
 #define SMR_MINOR_VERSION 1
 
 extern struct fi_provider smr_prov;
@@ -91,35 +91,78 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 #define SMR_IOV_LIMIT		4
 
 struct smr_ep_entry {
+	struct dlist_entry	entry;
 	void			*context;
 	fi_addr_t		addr;
+	uint64_t		tag;
+	uint64_t		ignore;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	uint8_t			iov_count;
 	uint8_t			flags;
 	uint8_t			resv[sizeof(size_t) - 2];
 };
 
-OFI_DECLARE_CIRQUE(struct smr_ep_entry, smr_rx_cirq);
-
 struct smr_ep;
 typedef void (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, void *addr);
-typedef void (*smr_tx_comp_func)(struct smr_ep *ep, void *context);
+		uint64_t flags, size_t len, void *buf, void *addr,
+		uint64_t tag);
+typedef void (*smr_tx_comp_func)(struct smr_ep *ep, void *context,
+		uint64_t flags);
+
+
+struct smr_match_attr {
+	fi_addr_t	addr;
+	uint64_t	tag;
+	uint64_t	ignore;
+};
+
+static inline int smr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
+{
+	return (addr == FI_ADDR_UNSPEC) || (match_addr == FI_ADDR_UNSPEC) ||
+		(addr == match_addr);
+}
+
+static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
+{
+	return ((tag | ignore) == (match_tag | ignore));
+}
+
+struct smr_unexp_msg {
+	struct dlist_entry entry;
+	struct smr_cmd cmd;
+};
+
+DECLARE_FREESTACK(struct smr_ep_entry, smr_recv_fs);
+DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
+
+struct smr_recv_queue {
+	struct dlist_entry recv_list;
+	dlist_func_t *match_recv;
+};
+
+struct smr_unexp_queue {
+	struct dlist_entry msg_list;
+	dlist_func_t *match_msg;
+};
 
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;
 	smr_tx_comp_func	tx_comp;
 	size_t			tx_size;
-	struct smr_rx_cirq	*rxq; /* protected by rx_cq lock */
+	size_t			rx_size;
 	const char		*name;
 	struct smr_region	*region;
 	uint32_t		msg_id;
+	struct smr_recv_fs	*recv_fs; /* protected by rx_cq lock */
+	struct smr_recv_queue	recv_queue;
+	struct smr_recv_queue	trecv_queue;
+	struct smr_unexp_fs	*unexp_fs;
+	struct smr_unexp_queue	unexp_queue;
 };
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
-
 
 int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
