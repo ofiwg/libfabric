@@ -211,20 +211,32 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 	}
 
 	if (attr->tx_ctx_cnt > info->domain_attr->max_ep_tx_ctx) {
-		VERBS_INFO(FI_LOG_CORE,
-			   "tx_ctx_cnt exceeds supported size\n");
-		VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
-			   info->domain_attr->max_ep_tx_ctx, attr->tx_ctx_cnt);
-		return -FI_ENODATA;
+		if (attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "tx_ctx_cnt exceeds supported size\n");
+			VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
+				   info->domain_attr->max_ep_tx_ctx, attr->tx_ctx_cnt);
+			return -FI_ENODATA;
+		} else if (!info->domain_attr->max_ep_stx_ctx) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "Shared tx context not supported\n");
+			return -FI_ENODATA;
+		}
 	}
 
-	if ((attr->rx_ctx_cnt > info->domain_attr->max_ep_rx_ctx) &&
-	    (attr->rx_ctx_cnt != FI_SHARED_CONTEXT)) {
-		VERBS_INFO(FI_LOG_CORE,
-			   "rx_ctx_cnt exceeds supported size\n");
-		VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
-			   info->domain_attr->max_ep_rx_ctx, attr->rx_ctx_cnt);
-		return -FI_ENODATA;
+	if ((attr->rx_ctx_cnt > info->domain_attr->max_ep_rx_ctx)) {
+		if (attr->rx_ctx_cnt != FI_SHARED_CONTEXT) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "rx_ctx_cnt exceeds supported size\n");
+			VERBS_INFO(FI_LOG_CORE, "Supported: %zd\nRequested: %zd\n",
+				   info->domain_attr->max_ep_rx_ctx,
+				   attr->rx_ctx_cnt);
+			return -FI_ENODATA;
+		} else if (!info->domain_attr->max_ep_srx_ctx) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "Shared rx context not supported\n");
+			return -FI_ENODATA;
+		}
 	}
 
 	if (attr->auth_key_size &&
@@ -252,8 +264,8 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
 
-	check_mode = (hints->caps & FI_RMA) ? info->rx_attr->mode :
-		(info->rx_attr->mode & ~FI_RX_CQ_DATA);
+	check_mode = (hints->domain_attr && hints->domain_attr->cq_data_size) ?
+		info->rx_attr->mode : (info->rx_attr->mode & ~FI_RX_CQ_DATA);
 
 	if ((compare_mode & check_mode) != check_mode) {
 		VERBS_INFO(FI_LOG_CORE,
@@ -1226,6 +1238,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
 	const char *dev_name = NULL;
+	struct fi_info *cur;
 	int ret;
 
 	ret = fi_ibv_init_info();
@@ -1250,6 +1263,11 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	ofi_alter_info(*info, hints, version);
+
+	if (!hints || !(hints->mode & FI_RX_CQ_DATA)) {
+		for (cur = *info; cur; cur = cur->next)
+			cur->domain_attr->cq_data_size = 0;
+	}
 err:
 	fi_ibv_destroy_ep(rai, &id);
 out:
