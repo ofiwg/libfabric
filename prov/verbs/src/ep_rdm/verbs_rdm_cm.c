@@ -817,72 +817,51 @@ print_err:
 
 ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 {
-	struct rdma_cm_event *event = NULL;
-	void *data = NULL;
-	ssize_t ret = FI_SUCCESS;
+	ssize_t ret;
 
-	if (rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
-		if(errno == EAGAIN) {
-			usleep(ep->domain->rdm_cm->cm_progress_timeout);
-			return FI_SUCCESS;
-		} else {
+	do {
+		struct rdma_cm_event event_copy;
+		struct fi_conn_priv_params priv;
+		struct rdma_cm_event *event;
+
+		if (rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
+			if (errno == EAGAIN) {
+				usleep(ep->domain->rdm_cm->cm_progress_timeout);
+				ret = FI_SUCCESS;
+				break;
+			}
+
 			VERBS_INFO_ERRNO(FI_LOG_AV,
 					 "rdma_get_cm_event failed\n", errno);
 			ret = -errno;
+			break;
 		}
-	}
 
-	while (ret == FI_SUCCESS && event) {
-		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
-
-		struct rdma_cm_event event_copy;
 		memcpy(&event_copy, event, sizeof(*event));
 		if (event->param.conn.private_data_len) {
-			data = malloc(event->param.conn.private_data_len);
-			if (!data) {
-				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
-				ret = -FI_ENOMEM;
-				break;
-			}
-			memcpy(data, event->param.conn.private_data,
-				      event->param.conn.private_data_len);
-			event_copy.param.conn.private_data = data;
-			event_copy.param.conn.private_data_len =
-			    event->param.conn.private_data_len;
+			size_t len = MIN(event->param.conn.private_data_len,
+					 sizeof(struct fi_conn_priv_params));
+
+			memcpy(&priv, event->param.conn.private_data, len);
+
+			event_copy.param.conn.private_data = &priv;
+			event_copy.param.conn.private_data_len = len;
 		}
+
 		if (rdma_ack_cm_event(event)) {
 			VERBS_INFO_ERRNO(FI_LOG_AV,
 					 "rdma_get_cm_event failed\n", errno);
 			ret = -errno;
-		}
-
-		if (ret == FI_SUCCESS){
-			ret = fi_ibv_rdm_process_event(&event_copy, ep);
-		}
-
-		free(data);
-		data = NULL;
-
-		event = NULL;
-
-		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
-
-		if (ret != FI_SUCCESS) {
 			break;
 		}
 
-		if(rdma_get_cm_event(ep->domain->rdm_cm->ec, &event)) {
-			if(errno == EAGAIN) {
-				usleep(ep->domain->rdm_cm->cm_progress_timeout);
-				break;
-			} else {
-				VERBS_INFO_ERRNO(FI_LOG_AV,
-						 "rdma_get_cm_event failed\n",
-						 errno);
-				ret = -errno;
-			}
-		}
-	}
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
+
+		ret = fi_ibv_rdm_process_event(&event_copy, ep);
+
+		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+
+	} while (ret == FI_SUCCESS);
 
 	return ret;
 }
