@@ -244,6 +244,8 @@ static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	cntr->domain = container_of(domain, struct util_domain, domain_fid);
 	ofi_atomic_initialize32(&cntr->ref, 0);
+	ofi_atomic_initialize64(&cntr->cnt, 0);
+	ofi_atomic_initialize64(&cntr->err, 0);
 	dlist_init(&cntr->ep_list);
 	fastlock_init(&cntr->ep_list_lock);
 
