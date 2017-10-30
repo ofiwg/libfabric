@@ -298,12 +298,13 @@ fi_ibv_rdm_unpack_cm_params(const struct rdma_conn_param *cm_param,
 }
 
 static ssize_t
-fi_ibv_rdm_process_addr_resolved(struct rdma_cm_id *id,
+fi_ibv_rdm_process_addr_resolved(const struct rdma_cm_event *event,
 				 struct fi_ibv_rdm_ep *ep)
 {
 	ssize_t ret = FI_SUCCESS;
 	struct ibv_qp_init_attr qp_attr;
-	struct fi_ibv_rdm_conn *conn = id->context;
+	struct fi_ibv_rdm_conn *conn = event->id->context;
+	struct rdma_cm_id *id = event->id;
 
 	VERBS_INFO(FI_LOG_AV, "ADDR_RESOLVED conn %p, addr %s:%u\n",
 		   conn, inet_ntoa(conn->addr.sin_addr),
@@ -352,7 +353,7 @@ err:
 }
 
 static ssize_t
-fi_ibv_rdm_process_connect_request(struct rdma_cm_event *event,
+fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 				   struct fi_ibv_rdm_ep *ep)
 {
 	struct ibv_qp_init_attr qp_attr;
@@ -513,7 +514,7 @@ err:
 }
 
 static ssize_t
-fi_ibv_rdm_process_route_resolved(struct rdma_cm_event *event,
+fi_ibv_rdm_process_route_resolved(const struct rdma_cm_event *event,
 				  struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
@@ -539,7 +540,7 @@ fi_ibv_rdm_process_route_resolved(struct rdma_cm_event *event,
 }
 
 static ssize_t
-fi_ibv_rdm_process_event_established(struct rdma_cm_event *event,
+fi_ibv_rdm_process_event_established(const struct rdma_cm_event *event,
 				     struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_conn *conn =
@@ -673,8 +674,8 @@ static int fi_ibv_rdm_poll_cq(struct fi_ibv_rdm_ep *ep)
 }
 
 static ssize_t
-fi_ibv_rdm_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
-				      struct rdma_cm_event *event)
+fi_ibv_rdm_process_event_disconnected(const struct rdma_cm_event *event,
+				      struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
 	int ret = 0;
@@ -696,8 +697,9 @@ fi_ibv_rdm_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 }
 
 static ssize_t
-fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
-				  struct rdma_cm_event *event)
+fi_ibv_rdm_process_event_rejected(const struct rdma_cm_event *event,
+				  struct fi_ibv_rdm_ep *ep)
+
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
 	ssize_t ret = FI_SUCCESS;
@@ -743,7 +745,7 @@ fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 }
 
 static inline void
-fi_ibv_rdm_process_timewait_exit_event(struct rdma_cm_event *event,
+fi_ibv_rdm_process_timewait_exit_event(const struct rdma_cm_event *event,
 				       struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_conn *conn = event->id->context;
@@ -764,12 +766,12 @@ fi_ibv_rdm_process_timewait_exit_event(struct rdma_cm_event *event,
 }
 
 static ssize_t
-fi_ibv_rdm_process_event(struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
+fi_ibv_rdm_process_event(const struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
 {
 	ssize_t ret = FI_SUCCESS;
 	switch (event->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
-		ret = fi_ibv_rdm_process_addr_resolved(event->id, ep);
+		ret = fi_ibv_rdm_process_addr_resolved(event, ep);
 		break;
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 		ret = fi_ibv_rdm_process_route_resolved(event, ep);
@@ -778,13 +780,13 @@ fi_ibv_rdm_process_event(struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
 		ret = fi_ibv_rdm_process_event_established(event, ep);
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
-		ret = fi_ibv_rdm_process_event_disconnected(ep, event);
+		ret = fi_ibv_rdm_process_event_disconnected(event, ep);
 		break;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		ret = fi_ibv_rdm_process_connect_request(event, ep);
 		break;
 	case RDMA_CM_EVENT_REJECTED:
-		ret = fi_ibv_rdm_process_event_rejected(ep, event);
+		ret = fi_ibv_rdm_process_event_rejected(event, ep);
 		break;
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
 		fi_ibv_rdm_process_timewait_exit_event(event, ep);
