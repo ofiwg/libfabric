@@ -146,7 +146,7 @@ ssize_t fi_ibv_rdm_repost_receives(struct fi_ibv_rdm_conn *conn,
 	ssize_t count = 0;
 	while (rest) {
 		const ssize_t batch = MIN(rest, batch_size);
-		const ssize_t ret = 
+		const ssize_t ret =
 			fi_ibv_rdm_batch_repost_receives(conn, ep, batch);
 
 		if (ret < 0) {
@@ -207,7 +207,7 @@ fi_ibv_rdm_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 /* Error handling */
 rma_err:
 	free(conn->rmabuf_mem_reg);
-ack_err: /* 
+ack_err: /*
 	  * Ack buffer is a part of connection structure, freeing is not needed
 	  */
 r_err:
@@ -542,7 +542,7 @@ static ssize_t
 fi_ibv_rdm_process_event_established(struct rdma_cm_event *event,
 				     struct fi_ibv_rdm_ep *ep)
 {
-	struct fi_ibv_rdm_conn *conn = 
+	struct fi_ibv_rdm_conn *conn =
 		(struct fi_ibv_rdm_conn *)event->id->context;
 
 	if (conn->state != FI_VERBS_CONN_STARTED &&
@@ -562,7 +562,7 @@ fi_ibv_rdm_process_event_established(struct rdma_cm_event *event,
 	VERBS_INFO(FI_LOG_AV, "CONN ESTABLISHED, conn %p, addr %s:%u\n",
 		   conn, inet_ntoa(conn->addr.sin_addr),
 		   ntohs(conn->addr.sin_port));
-	
+
 	/* Do not count self twice */
 	if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
 		ep->num_active_conns++;
@@ -741,7 +741,7 @@ fi_ibv_rdm_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 	}
 	return ret;
 }
-	       
+
 static inline void
 fi_ibv_rdm_process_timewait_exit_event(struct rdma_cm_event *event,
 				       struct fi_ibv_rdm_ep *ep)
