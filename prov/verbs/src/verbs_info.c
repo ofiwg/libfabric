@@ -389,12 +389,12 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 		return -FI_EINVAL;
 	}
 
-	if (rai->ai_src_len) {
+	if (rai->ai_src_len) {		
 		free(fi->src_addr);
- 		if (!(fi->src_addr = malloc(rai->ai_src_len)))
- 			return -FI_ENOMEM;
- 		memcpy(fi->src_addr, rai->ai_src_addr, rai->ai_src_len);
- 		fi->src_addrlen = rai->ai_src_len;
+		if (!(fi->src_addr = malloc(rai->ai_src_len)))
+			return -FI_ENOMEM;
+		memcpy(fi->src_addr, rai->ai_src_addr, rai->ai_src_len);
+		fi->src_addrlen = rai->ai_src_len;
  	}
  	if (rai->ai_dst_len) {
 		free(fi->dest_addr);
@@ -857,7 +857,33 @@ err1:
 	return ret;
 }
 
-static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
+static void fi_ibv_set_info_src_port(struct fi_info *fi, uint16_t src_port)
+{
+	switch (fi->addr_format) {
+	case FI_SOCKADDR_IN:
+		ofi_sin_port(fi->src_addr) = htons(src_port);
+		break;
+	case FI_SOCKADDR_IN6:
+		ofi_sin6_port(fi->src_addr) = htons(src_port);
+		break;
+	case FI_SOCKADDR:
+		switch (ofi_sa_family(fi->src_addr)) {
+		case AF_INET:
+			ofi_sin_port(fi->src_addr) = htons(src_port);
+			break;
+		case AF_INET6:
+			ofi_sin6_port(fi->src_addr) = htons(src_port);
+			break;
+		default:
+			break;	
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+static int fi_ibv_get_srcaddr_devs(uint16_t service, struct fi_info **info)
 {
 	struct fi_info *fi, *add_info;
 	struct fi_info *fi_unconf = NULL, *fi_prev = NULL;
@@ -890,7 +916,7 @@ static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 							ret = -FI_ENOMEM;
 							goto out;
 						}
-
+						fi_ibv_set_info_src_port(add_info, service);
 						add_info->next = fi->next;
 						fi->next = add_info;
 						fi = add_info;
@@ -899,6 +925,9 @@ static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 					ret = fi_ibv_rai_to_fi(addr->rai, fi);
 					if (ret)
 						goto out;
+					else {
+						fi_ibv_set_info_src_port(fi, service);
+					}
 				}
 				break;
 			}
@@ -948,10 +977,10 @@ static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
 {
 	switch(sa->sa_family) {
 	case AF_INET:
-		((struct sockaddr_in *)sa)->sin_port = port;
+		((struct sockaddr_in *)sa)->sin_port = htons(port);
 		break;
 	case AF_INET6:
-		((struct sockaddr_in6 *)sa)->sin6_port = port;
+		((struct sockaddr_in6 *)sa)->sin6_port = htons(port);
 		break;
 	}
 }
@@ -995,11 +1024,11 @@ static int fi_ibv_set_info_addrs(struct fi_info *info,
 	return FI_SUCCESS;
 }
 
-static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
-			    struct rdma_cm_id *id)
+static int fi_ibv_fill_addr(const char *src_service, struct rdma_addrinfo *rai,
+			    struct fi_info **info, struct rdma_cm_id *id)
 {
 	struct sockaddr *local_addr;
-
+	uint16_t src_port = (src_service) ? atoi(src_service) : 0;
 	/*
 	 * TODO MPICH CH3 doesn't work with verbs provider without skipping the
 	 * loopback address. An alternative approach if there is one is needed
@@ -1009,7 +1038,7 @@ static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 		goto rai_to_fi;
 
 	if (!id->verbs)
-		return fi_ibv_get_srcaddr_devs(info);
+		return fi_ibv_get_srcaddr_devs(src_port, info);
 
 	/* Handle the case when rdma_cm doesn't fill src address even
 	 * though it fills the destination address (presence of id->verbs
@@ -1026,12 +1055,12 @@ static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 		return -FI_ENOMEM;
 
 	memcpy(rai->ai_src_addr, local_addr, rai->ai_src_len);
-	/* User didn't specify a port. Zero out the random port
-	 * assigned by rdmamcm so that this rai/fi_info can be
-	 * used multiple times to create rdma endpoints.*/
-	fi_ibv_sockaddr_set_port(rai->ai_src_addr, 0);
 
 rai_to_fi:
+	/* If user didn't specify a port. Zero out the random port
+	 * assigned by rdmamcm so that this rai/fi_info can be
+	 * used multiple times to create rdma endpoints.*/
+	fi_ibv_sockaddr_set_port(rai->ai_src_addr, src_port);
 	return fi_ibv_set_info_addrs(*info, rai, FI_FORMAT_UNSPEC,
 				     NULL, NULL);
 }
@@ -1364,7 +1393,8 @@ static int fi_ibv_handle_sock_addr(const char *node, const char *service,
 			goto fn;
 	}
 
-	ret = fi_ibv_fill_addr(rai, info, id);
+	ret = fi_ibv_fill_addr((flags & FI_SOURCE) ? service : NULL,
+			       rai, info, id);
 fn:
 	fi_ibv_destroy_ep(rai, &id);
 	return ret;
@@ -1427,10 +1457,10 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 
 	ofi_alter_info(*info, hints, version);
 
-	if (!hints || !(hints->mode & FI_RX_CQ_DATA)) {
+	
+	if (!hints || !(hints->mode & FI_RX_CQ_DATA))
 		for (cur = *info; cur; cur = cur->next)
 			cur->domain_attr->cq_data_size = 0;
-	}
 out:
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
 		return ret;
