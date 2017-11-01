@@ -391,7 +391,8 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				/* No need to hold conn_lock during
 				 * CM progressing of the EP */
 				while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
-				       conn->state != FI_VERBS_CONN_REJECTED) {
+				       conn->state != FI_VERBS_CONN_REJECTED &&
+				       conn->state != FI_VERBS_CONN_CLOSED) {
 					ret = fi_ibv_rdm_cm_progress(ep);
 					if (ret) {
 						VERBS_INFO(FI_LOG_AV, 
