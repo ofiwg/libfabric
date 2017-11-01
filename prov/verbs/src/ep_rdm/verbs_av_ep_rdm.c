@@ -54,8 +54,8 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 		return FI_SUCCESS;
 
 	if (ep->is_closing) {
-		VERBS_INFO(FI_LOG_AV, "Attempt to start connection with addr "
-			   "%s:%u when ep is closing\n",
+		VERBS_INFO(FI_LOG_AV,
+			   "Attempt start connection with %s:%u when ep is closing\n",
 			   inet_ntoa(conn->addr.sin_addr),
 			   ntohs(conn->addr.sin_port));
 		return -FI_EOTHER;

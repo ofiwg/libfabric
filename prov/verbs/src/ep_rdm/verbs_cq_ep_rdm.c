@@ -43,13 +43,12 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 	struct fi_ibv_rdm_cq *_cq = 
 		container_of(cq, struct fi_ibv_rdm_cq, cq_fid);
 	struct fi_cq_tagged_entry *entry = buf;
-	struct fi_ibv_rdm_request *cq_entry;
 	size_t ret = 0;
+	struct fi_ibv_rdm_request *cq_entry =
+		count ? fi_ibv_rdm_take_first_from_cq(_cq) : NULL;;
 
-	for (cq_entry = count ? fi_ibv_rdm_take_first_from_cq(_cq) : NULL;
-	     cq_entry;
-	     cq_entry = (ret < count) ? fi_ibv_rdm_take_first_from_cq(_cq) : NULL)
-	{
+	for ( ; cq_entry; cq_entry = (ret < count) ?
+				     fi_ibv_rdm_take_first_from_cq(_cq) : NULL) {
 		VERBS_DBG(FI_LOG_CQ,
 			  "\t\t-> found in ready: %p op_ctx %p, len %lu, tag 0x%" PRIx64 "\n",
 			  cq_entry, cq_entry->context, cq_entry->len,
@@ -75,15 +74,13 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 			cq_entry->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		}
 		ret++;
-	};
+	}
 
 	if (ret == 0) {
-		if (fi_ibv_rdm_tagged_poll(_cq->ep) < 0) {
+		if (fi_ibv_rdm_tagged_poll(_cq->ep) < 0)
 			VERBS_INFO(FI_LOG_CQ, "fi_ibv_rdm_tagged_poll failed\n");
-		}
-		if (!dlist_empty(&_cq->request_errcq)) {
+		if (!dlist_empty(&_cq->request_errcq))
 			ret = -FI_EAVAIL;
-		}
 	}
 
 	return !ret ? -FI_EAGAIN : ret;

@@ -242,8 +242,7 @@ fi_ibv_rdm_remove_from_postponed_queue(struct fi_ibv_rdm_request *request)
 	dlist_remove(&request->queue_entry);
 	request->queue_entry.next = request->queue_entry.prev = NULL;
 
-	if (dlist_empty(&conn->postponed_requests_head))
-	{
+	if (dlist_empty(&conn->postponed_requests_head)) {
 		dlist_remove(&conn->postponed_entry->queue_entry);
 		conn->postponed_entry->queue_entry.next = 
 		conn->postponed_entry->queue_entry.prev = NULL;

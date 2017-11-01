@@ -130,8 +130,7 @@ int fi_ibv_rdm_postponed_process(struct dlist_entry *postponed_item,
 
 		int res = 0;
 		if ((request->state.eager < FI_IBV_STATE_EAGER_RMA_INJECT) &&
-		    (request->sbuf == NULL))
-		{
+		    (request->sbuf == NULL)) {
 			res = fi_ibv_rdm_tagged_prepare_send_request(request,
 								 send_data->ep);
 		} else  {
