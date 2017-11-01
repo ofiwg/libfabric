@@ -544,6 +544,16 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 			      prov_attr->mr_mode, user_attr->mr_mode))
 		return -FI_ENODATA;
 
+	if (user_attr->max_ep_stx_ctx > prov_attr->max_ep_stx_ctx) {
+		FI_INFO(prov, FI_LOG_CORE, "max_ep_stx_ctx greater than supported\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_ep_stx_ctx);
+	}
+
+	if (user_attr->max_ep_srx_ctx > prov_attr->max_ep_srx_ctx) {
+		FI_INFO(prov, FI_LOG_CORE, "max_ep_srx_ctx greater than supported\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_ep_srx_ctx);
+	}
+
 	/* following checks only apply to api 1.5 and beyond */
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
 		return 0;
@@ -622,7 +632,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_attr->tx_ctx_cnt > prov_info->domain_attr->max_ep_tx_ctx) {
 		if (user_attr->tx_ctx_cnt == FI_SHARED_CONTEXT) {
-			if (!(util_prov->flags & UTIL_TX_SHARED_CTX)) {
+			if (!prov_info->domain_attr->max_ep_stx_ctx) {
 				FI_INFO(prov, FI_LOG_CORE,
 					"Shared tx context not supported\n");
 				return -FI_ENODATA;
@@ -639,7 +649,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_attr->rx_ctx_cnt > prov_info->domain_attr->max_ep_rx_ctx) {
 		if (user_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
-			if (!(util_prov->flags & UTIL_RX_SHARED_CTX)) {
+			if (!prov_info->domain_attr->max_ep_srx_ctx) {
 				FI_INFO(prov, FI_LOG_CORE,
 					"Shared rx context not supported\n");
 				return -FI_ENODATA;

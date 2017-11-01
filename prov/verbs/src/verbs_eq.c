@@ -288,15 +288,19 @@ fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		if (ret)
 			return -errno;
 
-		if (len < sizeof(struct fi_eq_cm_entry))
-			return -FI_ETOOSMALL;
+		if (len < sizeof(struct fi_eq_cm_entry)) {
+			ret = -FI_ETOOSMALL;
+			goto ack;
+		}
 
 		ret = fi_ibv_eq_cm_process_event(eq, cma_event, event,
 				(struct fi_eq_cm_entry *)buf, len);
+		if (ret < 0)
+			goto ack;
 
 		if (flags & FI_PEEK)
-			fi_ibv_eq_write_event(eq, *event, buf, len);
-
+			ret = fi_ibv_eq_write_event(eq, *event, buf, len);
+ack:
 		rdma_ack_cm_event(cma_event);
 		return ret;
 	}
