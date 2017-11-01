@@ -223,7 +223,7 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 
 	if (in_order) {
 		struct fi_ibv_rdm_buf *sbuf = 
-			fi_ibv_rdm_prepare_send_resources(conn, ep);
+			fi_ibv_rdm_prepare_send_resources(conn);
 		if (sbuf) {
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;

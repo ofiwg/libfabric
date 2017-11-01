@@ -1356,7 +1356,7 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_request *request, void *data)
 
 	if ((request->len < p->ep_rdm->max_inline_rc) && 
 	    (!RMA_RESOURCES_IS_BUSY(request->minfo.conn, p->ep_rdm)) &&
-	    fi_ibv_rdm_check_connection(request->minfo.conn, p->ep_rdm)) {
+	    fi_ibv_rdm_check_connection(request->minfo.conn)) {
 		wr.send_flags |= IBV_SEND_INLINE;
 	} else if (fi_ibv_rdm_prepare_rma_request(request, p->ep_rdm)) {
 		memcpy(&request->rmabuf->payload, (void*)p->lbuf, p->data_len);

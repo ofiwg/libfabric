@@ -63,7 +63,7 @@ fi_ibv_rdm_tagged_prepare_send_request(struct fi_ibv_rdm_request *request,
 		return !res;
 	}
 #endif // ENABLE_DEBUG
-	request->sbuf = fi_ibv_rdm_prepare_send_resources(request->minfo.conn, ep);
+	request->sbuf = fi_ibv_rdm_prepare_send_resources(request->minfo.conn);
 	return !!request->sbuf;
 }
 
@@ -72,7 +72,7 @@ fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_request *request,
 				struct fi_ibv_rdm_ep *ep)
 {
 	request->rmabuf =
-		fi_ibv_rdm_rma_prepare_resources(request->minfo.conn, ep);
+		fi_ibv_rdm_rma_prepare_resources(request->minfo.conn);
 	return !!request->rmabuf;
 }
 
@@ -225,7 +225,7 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 
 	if (in_order) {
 		struct fi_ibv_rdm_buf *sbuf = 
-			fi_ibv_rdm_prepare_send_resources(conn, ep);
+			fi_ibv_rdm_prepare_send_resources(conn);
 		if (sbuf) {
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
