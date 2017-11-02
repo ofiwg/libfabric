@@ -38,6 +38,8 @@
 
 #include <shared.h>
 
+static struct fi_context fi_context;
+
 static int wait_for_send_comp(int count)
 {
 	int ret, completions = 0;
@@ -62,7 +64,6 @@ static int tag_queue_op(uint64_t tag, int recv, uint64_t flags)
 	struct fi_msg_tagged msg = {0};
 	struct fi_cq_err_entry cq_err;
 	struct iovec iov;
-	struct fi_context ctx;
 	void *desc;
 
 	if (recv) {
@@ -75,7 +76,7 @@ static int tag_queue_op(uint64_t tag, int recv, uint64_t flags)
 		msg.addr = remote_fi_addr;
 	}
 	msg.tag = tag;
-	msg.context = &ctx;
+	msg.context = &fi_context;
 
 	ret = fi_trecvmsg(ep, &msg, flags);
 	if (ret) {
