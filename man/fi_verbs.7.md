@@ -166,13 +166,14 @@ The verbs provider checks for the following environment variables.
 
 *FI_VERBS_USE_ODP*
 : Enable On-Demand-Paging (ODP) experimental feature. The feature is supported only
-  on Mellanox OFED (default: 1)
+  on Mellanox OFED (default: 0)
 
 *FI_VERBS_CQREAD_BUNCH_SIZE*
 : The number of entries to be read from the verbs completion queue at a time (default: 8).
 
-*FI_VERBS_CQREAD_BUNCH_SIZE*
-: The number of entries to be read from the verbs completion queue at a time (default: 8).
+*FI_VERBS_IFACE*
+: The prefix or the full name of the network interface associated with the verbs
+  device (default: ib)
 
 
 ### Variables specific to RDM endpoints
@@ -204,9 +205,6 @@ The verbs provider checks for the following environment variables.
 
 *FI_VERBS_NAME_SERVVER_PORT*
 : The port on which Name Server thread listens incoming connections and requests (default: 5678)
-
-*FI_*
-: 
 
 ### Environment variables notes
 The fi_info utility would give the up-to-date information on environment variables:

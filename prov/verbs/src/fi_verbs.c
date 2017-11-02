@@ -645,7 +645,7 @@ static int fi_ibv_read_params(void)
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_str("iface", "The prefix or the full name of the "
-				 "network interface associated with the IB device",
+				 "network interface associated with the verbs device",
 				 &fi_ibv_gl_data.iface)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of iface\n");
