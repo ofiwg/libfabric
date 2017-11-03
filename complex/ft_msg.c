@@ -630,7 +630,7 @@ int ft_recv_n_msg(int n)
 		}
 
 		credits = ft_rx_ctrl.credits;
-		ret = ft_comp_rx(FT_COMP_TO);
+		ret = ft_comp_rx(0);
 		if (ret)
 			return ret;
 
@@ -672,8 +672,8 @@ int ft_send_sync_msg(void)
 {
 	int ret;
 
-	while (!ft_tx_ctrl.credits) {
-		ret = ft_comp_tx(FT_COMP_TO);
+	while (ft_tx_ctrl.credits != ft_tx_ctrl.max_credits) {
+		ret = ft_comp_tx(0);
 		if (ret)
 			return ret;
 	}
