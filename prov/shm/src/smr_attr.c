@@ -48,7 +48,7 @@ struct fi_rx_attr smr_rx_attr = {
 };
 
 struct fi_ep_attr smr_ep_attr = {
-	.type = FI_EP_DGRAM,
+	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_SHM,
 	.protocol_version = 1,
 	.max_msg_size = SIZE_MAX,
