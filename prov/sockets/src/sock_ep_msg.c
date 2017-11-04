@@ -512,7 +512,7 @@ static void *sock_ep_cm_connect_handler(void *data)
 
 	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "Connecting to address",
 			&handle->dest_addr);
-	sock_set_sockopts(sock_fd, 0);
+	sock_set_sockopts(sock_fd, SOCK_OPTS_KEEPALIVE);
 	ret = connect(sock_fd, (struct sockaddr *)&handle->dest_addr,
 		      sizeof(handle->dest_addr));
 	if (ret < 0) {
@@ -1036,7 +1036,7 @@ static void *sock_pep_listener_thread(void *data)
 			continue;
 		}
 
-		sock_set_sockopts(conn_fd, 0);
+		sock_set_sockopts(conn_fd, SOCK_OPTS_KEEPALIVE);
 		handle = calloc(1, sizeof(*handle));
 		if (!handle) {
 			SOCK_LOG_ERROR("cannot allocate memory\n");

@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -51,6 +52,10 @@ extern int sock_eq_def_sz;
 #if ENABLE_DEBUG
 extern int sock_dgram_drop_rate;
 #endif
+extern int sock_keepalive_enable;
+extern int sock_keepalive_time;
+extern int sock_keepalive_intvl;
+extern int sock_keepalive_probes;
 
 #define _SOCK_LOG_DBG(subsys, ...) FI_DBG(&sock_prov, subsys, __VA_ARGS__)
 #define _SOCK_LOG_ERROR(subsys, ...) FI_WARN(&sock_prov, subsys, __VA_ARGS__)

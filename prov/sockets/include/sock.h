@@ -165,7 +165,8 @@ enum {
 };
 
 enum {
-	SOCK_OPTS_NONBLOCK  = 1<<0
+	SOCK_OPTS_NONBLOCK  = 1<<0,
+	SOCK_OPTS_KEEPALIVE = 1<<1
 };
 
 #define SOCK_MAJOR_VERSION 2
