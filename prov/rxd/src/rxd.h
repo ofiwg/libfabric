@@ -217,7 +217,7 @@ struct rxd_rx_entry {
 	struct ofi_op_hdr op_hdr;
 	uint32_t exp_seg_no;
 	uint64_t msg_id;
-	uint64_t key;
+	ssize_t key;
 	uint64_t done;
 	uint64_t peer;
 	uint16_t credits;
@@ -375,8 +375,8 @@ int rxd_av_dg_reverse_lookup(struct rxd_av *av, uint64_t start_idx,
 /* EP sub-functions */
 void rxd_handle_send_comp(struct fi_cq_msg_entry *comp);
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
-int rxd_ep_repost_buff(struct rxd_rx_buf *rx_buf);
-int rxd_ep_reply_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *in_ctrl,
+ssize_t rxd_ep_repost_buff(struct rxd_rx_buf *rx_buf);
+ssize_t rxd_ep_reply_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *in_ctrl,
 		     uint8_t type, uint16_t seg_size, uint64_t rx_key,
 		     uint64_t source, fi_addr_t dest);
 struct rxd_peer *rxd_ep_getpeer_info(struct rxd_ep *rxd_ep, fi_addr_t addr);

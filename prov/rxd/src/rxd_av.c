@@ -155,7 +155,7 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 {
 	struct rxd_av *av;
 	int i = 0, index, ret = 0, success_cnt = 0, lookup = 1;
-	uint64_t dg_fiaddr;
+	fi_addr_t dg_fiaddr;
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
 	fastlock_acquire(&av->util_av.lock);
@@ -175,15 +175,15 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 					   flags, context);
 			if (ret != 1)
 				break;
+
+			ret = ofi_av_insert_addr(&av->util_av, &dg_fiaddr, (int)dg_fiaddr, &index);
+			if (ret)
+				break;
+
+			success_cnt++;
+			if (fi_addr)
+				fi_addr[i] = index;
 		}
-
-		ret = ofi_av_insert_addr(&av->util_av, &dg_fiaddr, dg_fiaddr, &index);
-		if (ret)
-			break;
-
-		success_cnt++;
-		if (fi_addr)
-			fi_addr[i] = index;
 	}
 
 	if (ret) {
