@@ -1372,7 +1372,7 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 			/* set fabric name to the network_adress in the format of a.b.c.d/e */
 			net_in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr &
 						(uint32_t) net_addr->sin_addr.s_addr);
-			inet_ntop(host_addr->sin_family, (void *)&(net_in_addr), netbuf,
+			inet_ntop(host_addr->sin_family, &(net_in_addr), netbuf,
 				   sizeof(netbuf));
 			prefix_len = sock_get_prefix_len(net_addr->sin_addr.s_addr);
 			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),

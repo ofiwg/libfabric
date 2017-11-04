@@ -426,7 +426,7 @@ static const char *sock_av_straddr(struct fid_av *av, const void *addr,
 	int size;
 
 	sin = addr;
-	inet_ntop(sin->sin_family, (void*)&sin->sin_addr, ipaddr, sizeof(ipaddr));
+	inet_ntop(sin->sin_family, &sin->sin_addr, ipaddr, sizeof(ipaddr));
 	size = snprintf(straddr, sizeof(straddr), "%s:%d",
 			ipaddr, ntohs(sin->sin_port));
 	snprintf(buf, *len, "%s", straddr);

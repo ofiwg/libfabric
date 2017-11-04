@@ -253,7 +253,7 @@ do						\
 #define strdup _strdup
 #define strcasecmp _stricmp
 #define snprintf _snprintf
-#define inet_ntop InetNtopA
+#define inet_ntop(af, src, dst, size) InetNtopA(af, (void *)src, dst, size)
 
 #define getpid (int)GetCurrentProcessId
 #define sleep(x) Sleep(x * 1000)
