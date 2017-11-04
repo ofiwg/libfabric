@@ -217,7 +217,7 @@ int sock_verify_fabric_attr(const struct fi_fabric_attr *attr)
 
 int sock_verify_info(uint32_t version, const struct fi_info *hints)
 {
-	uint64_t caps;
+	uint64_t caps = 0;
 	enum fi_ep_type ep_type;
 	int ret;
 	struct sock_domain *domain;
@@ -249,6 +249,7 @@ int sock_verify_info(uint32_t version, const struct fi_info *hints)
 		break;
 	default:
 		ret = -FI_ENODATA;
+		break;
 	}
 	if (ret)
 		return ret;
@@ -377,11 +378,12 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 int sock_get_src_addr(struct sockaddr_in *dest_addr,
 		      struct sockaddr_in *src_addr)
 {
-	int sock, ret;
+	int ret;
+	SOCKET sock;
 	socklen_t len;
 
 	sock = ofi_socket(AF_INET, SOCK_DGRAM, 0);
-	if (sock < 0)
+	if (sock == INVALID_SOCKET)
 		return -ofi_sockerr();
 
 	len = sizeof(*dest_addr);

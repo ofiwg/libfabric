@@ -270,9 +270,9 @@ do						\
 #define ntohll _byteswap_uint64
 #define strncasecmp _strnicmp
 
-int fd_set_nonblock(int fd);
+int fd_set_nonblock(SOCKET fd);
 
-int socketpair(int af, int type, int protocol, int socks[2]);
+int socketpair(int af, int type, int protocol, SOCKET socks[2]);
 void sock_get_ip_addr_table(struct slist *addr_list);
 int ofi_getsockname(SOCKET fd, struct sockaddr *addr, socklen_t *len);
 
@@ -692,6 +692,12 @@ static inline void ofi_osd_fini(void)
 static inline SOCKET ofi_socket(int domain, int type, int protocol)
 {
 	return socket(domain, type, protocol);
+}
+
+static inline int ofi_setsockopt(SOCKET fd, int level, int optname,
+				 const void *optval, socklen_t optlen)
+{
+	return setsockopt(fd, level, optname, optval, optlen);
 }
 
 static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)

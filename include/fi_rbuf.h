@@ -231,7 +231,7 @@ static inline int ofi_rbfdinit(struct ofi_ringbuffd *rbfd, size_t size)
 	if (ret)
 		return ret;
 
-	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, rbfd->fd);
+	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, (SOCKET *)rbfd->fd);
 	if (ret < 0) {
 		ret = -ofi_sockerr();
 		goto err1;

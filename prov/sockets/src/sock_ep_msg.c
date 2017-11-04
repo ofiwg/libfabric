@@ -313,17 +313,17 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 				     p->ai_protocol);
 		if (pep->cm.sock >= 0) {
 			sock_set_sockopts(pep->cm.sock);
-			if (!bind(pep->cm.sock, s_res->ai_addr, s_res->ai_addrlen))
+			if (!bind(pep->cm.sock, s_res->ai_addr, (socklen_t)s_res->ai_addrlen))
 				break;
 			SOCK_LOG_ERROR("failed to bind listener: %s\n",
 				       strerror(ofi_sockerr()));
 			ofi_close_socket(pep->cm.sock);
-			pep->cm.sock = -1;
+			pep->cm.sock = INVALID_SOCKET;
 		}
 	}
 
 	freeaddrinfo(s_res);
-	if (pep->cm.sock < 0) {
+	if (pep->cm.sock == INVALID_SOCKET) {
 		SOCK_LOG_ERROR("failed to create listener: %s\n",
 			       strerror(ofi_sockerr()));
 		return -FI_EIO;
@@ -396,9 +396,9 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	return (len == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
 }
 
-static int sock_cm_send(int fd, const void *buf, int len)
+static int sock_cm_send(SOCKET fd, const void *buf, int len)
 {
-	int ret, done = 0;
+	ssize_t ret, done = 0;
 
 	while (done != len) {
 		ret = ofi_send_socket(fd, (const char*) buf + done,
@@ -415,9 +415,9 @@ static int sock_cm_send(int fd, const void *buf, int len)
 	return 0;
 }
 
-static int sock_cm_recv(int fd, void *buf, int len)
+static int sock_cm_recv(SOCKET fd, void *buf, int len)
 {
-	int ret, done = 0;
+	ssize_t ret, done = 0;
 	while (done != len) {
 		ret = ofi_recv_socket(fd, (char*) buf + done, len - done, 0);
 		if (ret <= 0) {
@@ -434,7 +434,8 @@ static int sock_cm_recv(int fd, void *buf, int len)
 
 static void sock_ep_wait_shutdown(struct sock_ep *ep)
 {
-	int ret, do_report = 0;
+	int do_report = 0;
+	ssize_t ret;
 	char tmp = 0;
 	struct pollfd poll_fds[2];
 	struct sock_conn_hdr msg;
@@ -495,14 +496,16 @@ static void sock_ep_cm_report_connect_fail(struct sock_ep *ep,
 
 static void *sock_ep_cm_connect_handler(void *data)
 {
-	int sock_fd, ret;
+	int ret;
+	SOCKET sock_fd;
 	struct sock_conn_req_handle *handle = data;
 	struct sock_conn_req *req = handle->req;
 	struct sock_conn_hdr response;
 	struct sock_ep *ep = handle->ep;
 	void *param = NULL;
 	struct fi_eq_cm_entry *cm_entry = NULL;
-	int cm_data_sz, response_port;
+	int cm_data_sz;
+	uint16_t response_port;
 
 	sock_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
@@ -524,7 +527,8 @@ static void *sock_ep_cm_connect_handler(void *data)
 
 	if (sock_cm_send(sock_fd, req, sizeof(*req)))
 		goto err;
-	if (handle->paramlen && sock_cm_send(sock_fd, handle->cm_data, handle->paramlen))
+	if (handle->paramlen && sock_cm_send(sock_fd, handle->cm_data,
+					     (int)handle->paramlen))
 		goto err;
 
 	if (sock_cm_recv(sock_fd, &response, sizeof(response)))
@@ -609,7 +613,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 
 	req->hdr.type = SOCK_CONN_REQ;
 	req->hdr.port = htons(_ep->attr->msg_src_port);
-	req->hdr.cm_data_sz = htons(paramlen);
+	req->hdr.cm_data_sz = htons((uint16_t)paramlen);
 	req->caps = _ep->attr->info.caps;
 	memcpy(&req->src_addr, _ep->attr->src_addr, sizeof(req->src_addr));
 	memcpy(&handle->dest_addr, addr, sizeof(handle->dest_addr));
@@ -650,14 +654,14 @@ static void *sock_cm_accept_handler(void *data)
 
 	reply.type = SOCK_CONN_ACCEPT;
 	reply.port = htons(ep_attr->msg_src_port);
-	reply.cm_data_sz = htons(hreq->paramlen);
+	reply.cm_data_sz = htons((uint16_t)hreq->paramlen);
 	ret = sock_cm_send(hreq->sock_fd, &reply, sizeof(reply));
 	if (ret) {
 		SOCK_LOG_ERROR("failed to reply\n");
 		return NULL;
 	}
 
-	if (hreq->paramlen && sock_cm_send(hreq->sock_fd, hreq->cm_data, hreq->paramlen)) {
+	if (hreq->paramlen && sock_cm_send(hreq->sock_fd, hreq->cm_data, (int)hreq->paramlen)) {
 		SOCK_LOG_ERROR("failed to send userdata\n");
 		return NULL;
 	}
@@ -844,7 +848,7 @@ static int sock_pep_fi_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 
 static int sock_pep_fi_close(fid_t fid)
 {
-	int ret;
+	ssize_t ret;
 	char c = 0;
 	struct sock_pep *pep;
 
@@ -981,7 +985,7 @@ static void sock_pep_check_msg_list(struct sock_pep *pep)
 		hreq = container_of(entry, struct sock_conn_req_handle, entry);
 
 		reply.type = SOCK_CONN_REJECT;
-		reply.cm_data_sz = htons(hreq->paramlen);
+		reply.cm_data_sz = htons((uint16_t)hreq->paramlen);
 
 		SOCK_LOG_DBG("sending reject message\n");
 		if (sock_cm_send(hreq->sock_fd, &reply, sizeof(reply))) {
@@ -990,7 +994,7 @@ static void sock_pep_check_msg_list(struct sock_pep *pep)
 		}
 
 		if (hreq->paramlen && sock_cm_send(hreq->sock_fd, hreq->cm_data,
-						   hreq->paramlen)) {
+						   (int)hreq->paramlen)) {
 			SOCK_LOG_ERROR("failed to send userdata\n");
 			break;
 		}
@@ -1009,8 +1013,8 @@ static void *sock_pep_listener_thread(void *data)
 	struct sock_pep *pep = (struct sock_pep *) data;
 	struct sock_conn_req_handle *handle = NULL;
 	struct pollfd poll_fds[2];
-
-	int ret = 0, conn_fd;
+	SOCKET conn_fd;
+	ssize_t ret = 0;
 	char tmp = 0;
 
 	SOCK_LOG_DBG("Starting listener thread for PEP: %p\n", pep);
@@ -1032,7 +1036,7 @@ static void *sock_pep_listener_thread(void *data)
 		}
 
 		conn_fd = accept(pep->cm.sock, NULL, 0);
-		if (conn_fd < 0) {
+		if (conn_fd == INVALID_SOCKET) {
 			SOCK_LOG_ERROR("failed to accept: %d\n", ofi_sockerr());
 			continue;
 		}

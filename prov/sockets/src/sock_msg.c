@@ -60,7 +60,7 @@
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
@@ -177,7 +177,7 @@ static ssize_t sock_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	uint64_t total_len, op_flags;
 	struct sock_op tx_op;
@@ -400,7 +400,7 @@ struct fi_ops_msg sock_ep_msg_ops = {
 ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 			 const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
@@ -525,7 +525,7 @@ static ssize_t sock_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
 ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 			 const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	uint64_t total_len, op_flags;
 	struct sock_op tx_op;

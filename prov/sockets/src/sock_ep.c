@@ -709,7 +709,7 @@ static int sock_ep_close(struct fid *fid)
 	if (sock_ep->attr->conn_handle.do_listen) {
 		fastlock_acquire(&sock_ep->attr->domain->conn_listener.signal_lock);
 		fi_epoll_del(sock_ep->attr->domain->conn_listener.emap,
-		             sock_ep->attr->conn_handle.sock);
+		             (int)sock_ep->attr->conn_handle.sock);
 		fastlock_release(&sock_ep->attr->domain->conn_listener.signal_lock);
 		ofi_close_socket(sock_ep->attr->conn_handle.sock);
 		sock_ep->attr->conn_handle.do_listen = 0;
@@ -1159,7 +1159,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	if (!tx_ctx)
 		return -FI_ENOMEM;
 
-	tx_ctx->tx_id = index;
+	tx_ctx->tx_id = (uint16_t)index;
 	tx_ctx->ep_attr = sock_ep->attr;
 	tx_ctx->domain = sock_ep->attr->domain;
 	if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
@@ -1204,7 +1204,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	if (!rx_ctx)
 		return -FI_ENOMEM;
 
-	rx_ctx->rx_id = index;
+	rx_ctx->rx_id = (uint16_t)index;
 	rx_ctx->ep_attr = sock_ep->attr;
 	rx_ctx->domain = sock_ep->attr->domain;
 	rx_ctx->av = sock_ep->attr->av;
@@ -1793,7 +1793,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err2;
 		}
 
-		if (fi_fd_nonblock(sock_ep->attr->cm.signal_fds[1]))
+		if (fi_fd_nonblock((int)sock_ep->attr->cm.signal_fds[1]))
 			SOCK_LOG_ERROR("fi_fd_nonblock failed");
 	}
 
@@ -1827,12 +1827,12 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 					struct sockaddr_in *addr)
 {
 	int i;
-	uint16_t idx;
+	fi_addr_t idx;
 	struct sock_conn *conn;
 
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 
-	conn = ofi_idm_lookup(&attr->av_idm, idx);
+	conn = ofi_idm_lookup(&attr->av_idm, (int)idx);
 	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS)
 		return conn;
 
@@ -1846,14 +1846,14 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 	return conn;
 }
 
-int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
-		     fi_addr_t index, struct sock_conn **pconn)
+ssize_t sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
+			 fi_addr_t index, struct sock_conn **pconn)
 {
 	struct sock_conn *conn;
-	uint64_t av_index = (attr->ep_type == FI_EP_MSG) ?
+	fi_addr_t av_index = (attr->ep_type == FI_EP_MSG) ?
 			    0 : (index & attr->av->mask);
 	struct sockaddr_in *addr;
-	int ret = FI_SUCCESS;
+	ssize_t ret = FI_SUCCESS;
 
 	if (attr->ep_type == FI_EP_MSG)
 		addr = attr->dest_addr;
@@ -1864,7 +1864,7 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 	conn = sock_ep_lookup_conn(attr, av_index, addr);
 	if (!conn) {
 		conn = SOCK_CM_CONN_IN_PROGRESS;
-		if (ofi_idm_set(&attr->av_idm, av_index, conn) < 0)
+		if (ofi_idm_set(&attr->av_idm, (int)av_index, conn) < 0)
 			SOCK_LOG_ERROR("ofi_idm_set failed\n");
 	}
 	fastlock_release(&attr->cmap.lock);
@@ -1875,7 +1875,7 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 	if (!conn) {
 		SOCK_LOG_ERROR("Undable to find connection entry. "
 			       "Error in connecting: %s\n",
-			       fi_strerror(-ret));
+			       fi_strerror((int)-ret));
 		return -FI_ENOENT;
 	}
 

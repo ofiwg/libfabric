@@ -290,9 +290,9 @@ static void *util_ns_name_server_func(void *args)
 				      p->ai_protocol);
 		if (listenfd != INVALID_SOCKET) {
 			n = 1;
-			(void) setsockopt(listenfd, SOL_SOCKET,
-					  SO_REUSEADDR, (void *)&n,
-					  (socklen_t)sizeof(n));
+			(void) ofi_setsockopt(listenfd, SOL_SOCKET,
+					      SO_REUSEADDR, &n,
+					      (socklen_t)sizeof(n));
 			if (!bind(listenfd, p->ai_addr, (socklen_t)p->ai_addrlen))
 				break;
 			ofi_close_socket(listenfd);

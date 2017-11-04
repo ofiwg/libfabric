@@ -54,7 +54,7 @@ static char ofi_shm_prefix[] = "Local\\";
 
 void fi_fini(void);
 
-int socketpair(int af, int type, int protocol, int socks[2])
+int socketpair(int af, int type, int protocol, SOCKET socks[2])
 {
 	OFI_UNUSED(protocol);
 

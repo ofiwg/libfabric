@@ -59,7 +59,7 @@ ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 
 	work = &trigger_context->trigger.work;
 	cntr = container_of(work->triggering_cntr, struct sock_cntr, cntr_fid);
-	if (ofi_atomic_get32(&cntr->value) >= (int) work->threshold)
+	if (ofi_atomic_get64(&cntr->value) >= (int64_t)work->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -105,7 +105,7 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 
 	work = &trigger_context->trigger.work;
 	cntr = container_of(work->triggering_cntr, struct sock_cntr, cntr_fid);
-	if (ofi_atomic_get32(&cntr->value) >= (int) work->threshold)
+	if (ofi_atomic_get64(&cntr->value) >= (int64_t)work->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -147,7 +147,7 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 
 	work = &trigger_context->trigger.work;
 	cntr = container_of(work->triggering_cntr, struct sock_cntr, cntr_fid);
-	if (ofi_atomic_get32(&cntr->value) >= (int) work->threshold)
+	if (ofi_atomic_get64(&cntr->value) >= (int64_t)work->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -191,7 +191,7 @@ ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 
 	work = &trigger_context->trigger.work;
 	cntr = container_of(work->triggering_cntr, struct sock_cntr, cntr_fid);
-	if (ofi_atomic_get32(&cntr->value) >= (int) work->threshold)
+	if (ofi_atomic_get64(&cntr->value) >= (int64_t)work->threshold)
 		return 1;
 
 	trigger = calloc(1, sizeof(*trigger));
@@ -239,7 +239,7 @@ ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
 	struct sock_trigger *trigger;
 
 	cntr = container_of(work->triggering_cntr, struct sock_cntr, cntr_fid);
-	if (ofi_atomic_get32(&cntr->value) >= (int) work->threshold) {
+	if (ofi_atomic_get64(&cntr->value) >= (int64_t)work->threshold) {
 		if (work->op_type == FI_OP_CNTR_SET)
 			fi_cntr_set(work->op.cntr->cntr, work->op.cntr->value);
 		else
@@ -263,7 +263,7 @@ ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
 	return 0;
 }
 
-int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
+ssize_t sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
 {
 	struct sock_triggered_context *ctx;
 	uint64_t flags = SOCK_NO_COMPLETION | SOCK_TRIGGERED_OP | FI_TRIGGER;
