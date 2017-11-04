@@ -62,7 +62,8 @@ int ofi_fabric_init(const struct fi_provider *prov,
 	ofi_atomic_initialize32(&fabric->ref, 0);
 	dlist_init(&fabric->domain_list);
 	fastlock_init(&fabric->lock);
-	if (!(fabric->name = strdup(user_attr->name)))
+	fabric->name = strdup(user_attr->name);
+	if (!fabric->name)
 	    return -FI_ENOMEM;
 
 	fabric->fabric_fid.fid.fclass = FI_CLASS_FABRIC;

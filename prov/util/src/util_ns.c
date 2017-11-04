@@ -57,10 +57,11 @@
 static inline									\
 ssize_t util_ns_##op##_socket_op(SOCKET sock, void *buf, size_t len)		\
 {										\
-	ssize_t ret = 0, bytes = 0;						\
+	ssize_t ret = 0;							\
+	size_t bytes = 0;							\
 	while (bytes != (len) && ret >= 0) {					\
 		ret = ofi_##op##_socket((sock),					\
-					(void *)((char *) (buf) + bytes),	\
+					(void *)((char *)(buf) + bytes),	\
 					(len) - bytes);				\
 		bytes = ((ret < 0) ? -1 : bytes + ret);				\
 	}									\
@@ -181,12 +182,12 @@ static void util_ns_name_server_cleanup(void *args)
 	util_ns_map_fini((struct util_ns *)cleanup_args[1]);
 }
 
-static int util_ns_op_dispatcher(struct util_ns *ns,
-				 struct util_ns_cmd *cmd,
-				 SOCKET sock)
+static ssize_t util_ns_op_dispatcher(struct util_ns *ns,
+				     struct util_ns_cmd *cmd,
+				     SOCKET sock)
 {
-	int ret = FI_SUCCESS;
-	size_t io_len = 0;
+	ssize_t ret = FI_SUCCESS;
+	ssize_t io_len = 0;
 	void *io_buf = NULL, *service, *name;
 
 	switch (cmd->op) {
@@ -243,7 +244,7 @@ static int util_ns_op_dispatcher(struct util_ns *ns,
 		else
 			io_len = cmd_len;
 		ret = util_ns_write_socket_op(sock, io_buf, io_len);
-		ret = ((ret == cmd_len) ? FI_SUCCESS : -FI_ENODATA);
+		ret = ((ret == (ssize_t)cmd_len) ? FI_SUCCESS : -FI_ENODATA);
 		goto fn2;
 
 	default:
@@ -270,7 +271,7 @@ static void *util_ns_name_server_func(void *args)
 	void *cleanup_args[2];
 	char *service;
 	SOCKET listenfd = INVALID_SOCKET, connfd;
-	int n, ret;
+	ssize_t n, ret;
 	struct util_ns_cmd cmd = (const struct util_ns_cmd){ 0 };
 
 	ns = (struct util_ns *)args;
@@ -290,8 +291,9 @@ static void *util_ns_name_server_func(void *args)
 		if (listenfd != INVALID_SOCKET) {
 			n = 1;
 			(void) setsockopt(listenfd, SOL_SOCKET,
-					  SO_REUSEADDR, &n, sizeof(n));
-			if (!bind(listenfd, p->ai_addr, p->ai_addrlen))
+					  SO_REUSEADDR, (void *)&n,
+					  (socklen_t)sizeof(n));
+			if (!bind(listenfd, p->ai_addr, (socklen_t)p->ai_addrlen))
 				break;
 			ofi_close_socket(listenfd);
 			listenfd = INVALID_SOCKET;
@@ -321,7 +323,7 @@ static void *util_ns_name_server_func(void *args)
 		if (connfd != INVALID_SOCKET) {
 			/* Read service data */
 			ret = ofi_read_socket(connfd, &cmd, cmd_len);
-			if (ret == cmd_len) {
+			if (ret == (ssize_t)cmd_len) {
 				(void) util_ns_op_dispatcher(ns, &cmd,
 							     connfd);
 			}
@@ -364,7 +366,7 @@ static int util_ns_connect_server(struct util_ns *ns, const char *server)
 	for (p = res; p; p = p->ai_next) {
 		sockfd = ofi_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (sockfd != INVALID_SOCKET) {
-			if (!connect(sockfd, p->ai_addr, p->ai_addrlen))
+			if (!connect(sockfd, p->ai_addr, (socklen_t)p->ai_addrlen))
 				break;
 			ofi_close_socket(sockfd);
 			sockfd = INVALID_SOCKET;
@@ -374,17 +376,17 @@ static int util_ns_connect_server(struct util_ns *ns, const char *server)
 	freeaddrinfo(res);
 	free(service);
 
-	return sockfd;
+	return (int)sockfd;
 }
 
 int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 {
 	SOCKET sockfd;
-	int ret;
+	ssize_t ret;
 	char *server = (ns->ns_hostname ?
 		ns->ns_hostname : OFI_NS_DEFAULT_HOSTNAME);
 	void *write_buf;
-	size_t write_len = 0;
+	ssize_t write_len = 0;
 	struct util_ns_cmd cmd = {
 		.op = OFI_UTIL_NS_ADD,
 		.status = 0,
@@ -421,17 +423,17 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 err2:
 	free(write_buf);
 err1:
-	return ret;
+	return (int)ret;
 }
 
 int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 {
 	SOCKET sockfd;
-	int ret;
+	ssize_t ret;
 	const char *server_hostname = (ns->ns_hostname ?
 		ns->ns_hostname : OFI_NS_DEFAULT_HOSTNAME);
 	void *write_buf;
-	size_t write_len = 0;
+	ssize_t write_len = 0;
 	struct util_ns_cmd cmd = {
 		.op = OFI_UTIL_NS_DEL,
 		.status = 0,
@@ -468,14 +470,14 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 err2:
 	free(write_buf);
 err1:
-	return ret;
+	return (int)ret;
 }
 
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server_hostname,
 			  void *service)
 {
 	void *dest_addr = NULL, *io_buf;
-	size_t io_len = 0;
+	ssize_t io_len = 0;
 	SOCKET sockfd;
 	ssize_t ret = 0;
 	struct util_ns_cmd cmd = {
