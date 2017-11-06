@@ -49,35 +49,39 @@ static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 
 	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->lock);
-	for (entry = ep->recv_list.next; entry != &ep->recv_list; entry = next) {
-		next = entry->next;
-		recv_entry = container_of(entry, struct rxd_recv_entry, entry);
-		if (recv_entry->msg.context != context)
-			continue;
+	if (ep->util_ep.caps & FI_MSG) {
+		for (entry = ep->recv_list.next; entry != &ep->recv_list; entry = next) {
+			next = entry->next;
+			recv_entry = container_of(entry, struct rxd_recv_entry, entry);
+			if (recv_entry->msg.context != context)
+				continue;
 
-		dlist_remove(entry);
-		err_entry.op_context = recv_entry->msg.context;
-		err_entry.flags = (FI_MSG | FI_RECV);
-		err_entry.err = FI_ECANCELED;
-		err_entry.prov_errno = -FI_ECANCELED;
-		rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
-		goto out;
+			dlist_remove(entry);
+			err_entry.op_context = recv_entry->msg.context;
+			err_entry.flags = (FI_MSG | FI_RECV);
+			err_entry.err = FI_ECANCELED;
+			err_entry.prov_errno = -FI_ECANCELED;
+			rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
+			goto out;
+		}
 	}
 
-	for (entry = ep->trecv_list.next; entry != &ep->trecv_list; entry = next) {
-		next = entry->next;
-		trecv_entry = container_of(entry, struct rxd_trecv_entry, entry);
-		if (trecv_entry->msg.context != context)
-			continue;
+	if (ep->util_ep.caps & FI_TAGGED) {
+		for (entry = ep->trecv_list.next; entry != &ep->trecv_list; entry = next) {
+			next = entry->next;
+			trecv_entry = container_of(entry, struct rxd_trecv_entry, entry);
+			if (trecv_entry->msg.context != context)
+				continue;
 
-		dlist_remove(entry);
-		err_entry.op_context = trecv_entry->msg.context;
-		err_entry.flags = (FI_MSG | FI_RECV | FI_TAGGED);
-		err_entry.tag = trecv_entry->msg.tag;
-		err_entry.err = FI_ECANCELED;
-		err_entry.prov_errno = -FI_ECANCELED;
-		rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
-		goto out;
+			dlist_remove(entry);
+			err_entry.op_context = trecv_entry->msg.context;
+			err_entry.flags = (FI_MSG | FI_RECV | FI_TAGGED);
+			err_entry.tag = trecv_entry->msg.tag;
+			err_entry.err = FI_ECANCELED;
+			err_entry.prov_errno = -FI_ECANCELED;
+			rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
+			goto out;
+		}
 	}
 
 out:
@@ -1125,7 +1129,7 @@ static ssize_t rxd_ep_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *ms
 	struct rxd_ep *rxd_ep;
 	struct rxd_peer *peer;
 	struct rxd_tx_entry *tx_entry;
-	uint64_t peer_addr;
+	fi_addr_t peer_addr;
 	ssize_t ret;
 
 	rxd_ep = container_of(ep, struct rxd_ep, util_ep.ep_fid.fid);

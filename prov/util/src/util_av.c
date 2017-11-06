@@ -682,7 +682,9 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 		*fi_addr = !ret ? index : FI_ADDR_NOTAVAIL;
 
 	ofi_straddr_dbg(av->prov, FI_LOG_AV, "av_insert addr", addr);
-	FI_DBG(av->prov, FI_LOG_AV, "av_insert fi_addr: %" PRIu64 "\n", *fi_addr);
+	if (fi_addr)
+		FI_DBG(av->prov, FI_LOG_AV, "av_insert fi_addr: %" PRIu64 "\n",
+		       *fi_addr);
 
 	return ret;
 }
