@@ -557,6 +557,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   info->tx_attr->inject_size);
 
 	_ep->rndv_threshold = info->tx_attr->inject_size;
+	_ep->iov_per_rndv_thr =
+		(_ep->rndv_threshold / sizeof(struct iovec));
 	VERBS_INFO(FI_LOG_EP_CTRL, "rndv_threshold: %d\n",
 		   _ep->rndv_threshold);
 

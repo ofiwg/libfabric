@@ -328,6 +328,7 @@ struct fi_ibv_rdm_ep {
 	int	max_inline_rc;
 	int	rndv_threshold;
 	int	rndv_seg_size;
+	size_t	iov_per_rndv_thr;
 	int	use_odp;
 	int	scq_depth;
 	int	rcq_depth;
@@ -678,41 +679,25 @@ fi_ibv_rdm_rma_get_buf_head(struct fi_ibv_rdm_conn *conn,
 }
 
 static inline int
-fi_ibv_rdm_check_connection(struct fi_ibv_rdm_conn *conn,
-			    struct fi_ibv_rdm_ep *ep)
+fi_ibv_rdm_check_connection(struct fi_ibv_rdm_conn *conn)
 {
-	const int status = (conn->state == FI_VERBS_CONN_ESTABLISHED);
-	if (!status) {
-		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
-		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
-			fi_ibv_rdm_start_connection(ep, conn);
-		}
-		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
-	}
-
-	return status;
+	return (conn->state == FI_VERBS_CONN_ESTABLISHED);
 }
 
 static inline struct fi_ibv_rdm_buf *
-fi_ibv_rdm_prepare_send_resources(struct fi_ibv_rdm_conn *conn,
-				  struct fi_ibv_rdm_ep *ep)
+fi_ibv_rdm_prepare_send_resources(struct fi_ibv_rdm_conn *conn)
 {
-	if (fi_ibv_rdm_check_connection(conn, ep)) {
-		return (!TSEND_RESOURCES_IS_BUSY(conn, ep)) ?
-			fi_ibv_rdm_get_sbuf_head(conn, ep) : NULL;
-	}
-	return NULL;
+	return (fi_ibv_rdm_check_connection(conn) &&
+		!TSEND_RESOURCES_IS_BUSY(conn, conn->ep)) ?
+		fi_ibv_rdm_get_sbuf_head(conn, conn->ep) : NULL;
 }
 
 static inline void *
-fi_ibv_rdm_rma_prepare_resources(struct fi_ibv_rdm_conn *conn,
-				 struct fi_ibv_rdm_ep *ep)
+fi_ibv_rdm_rma_prepare_resources(struct fi_ibv_rdm_conn *conn)
 {
-	if (fi_ibv_rdm_check_connection(conn, ep)) {
-		return (!RMA_RESOURCES_IS_BUSY(conn, ep)) ?
-			fi_ibv_rdm_rma_get_buf_head(conn, ep) : NULL;
-	}
-	return NULL;
+	return (fi_ibv_rdm_check_connection(conn) &&
+		!TSEND_RESOURCES_IS_BUSY(conn, conn->ep)) ?
+		fi_ibv_rdm_rma_get_buf_head(conn, conn->ep) : NULL;
 }
 
 static inline int

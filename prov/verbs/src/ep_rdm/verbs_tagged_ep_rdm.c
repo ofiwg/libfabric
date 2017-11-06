@@ -36,6 +36,7 @@
 
 #include <fi_list.h>
 #include <fi_enosys.h>
+#include <fi_iov.h>
 #include <rdma/fi_tagged.h>
 
 #include "verbs_queuing.h"
@@ -63,7 +64,7 @@ fi_ibv_rdm_tagged_prepare_send_request(struct fi_ibv_rdm_request *request,
 		return !res;
 	}
 #endif // ENABLE_DEBUG
-	request->sbuf = fi_ibv_rdm_prepare_send_resources(request->minfo.conn, ep);
+	request->sbuf = fi_ibv_rdm_prepare_send_resources(request->minfo.conn);
 	return !!request->sbuf;
 }
 
@@ -72,7 +73,7 @@ fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_request *request,
 				struct fi_ibv_rdm_ep *ep)
 {
 	request->rmabuf =
-		fi_ibv_rdm_rma_prepare_resources(request->minfo.conn, ep);
+		fi_ibv_rdm_rma_prepare_resources(request->minfo.conn);
 	return !!request->rmabuf;
 }
 
@@ -108,13 +109,12 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 	ssize_t ret = FI_SUCCESS;
 	struct fi_ibv_rdm_ep *ep_rdm =
 		container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid);
+	struct fi_ibv_rdm_conn *conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr);
 
 	if (msg->iov_count > 1) {
 		assert(0);
 		return -FI_EMSGSIZE;
 	}
-
-	struct fi_ibv_rdm_conn *conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr);
 
 	struct fi_ibv_rdm_tagged_recv_start_data recv_data = {
 		.peek_data = {
@@ -147,16 +147,14 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 		recv_data.peek_data.flags |= FI_COMPLETION;
 		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_PEEK,
 					  &recv_data);
-		if (ret == -FI_ENOMSG) {
+		if (ret == -FI_ENOMSG)
 			fi_ibv_rdm_tagged_poll(ep_rdm);
-		}
 	} else if (flags & FI_CLAIM) {
 		recv_data.peek_data.flags |= FI_COMPLETION;
 		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_START,
 					  &recv_data);
-		if (!ret) {
+		if (!ret)
 			ret = rdm_trecv_second_event(request, ep_rdm);
-		}
 	} else {
 		ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_RECV_START,
 					  &recv_data);
@@ -166,9 +164,8 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 			  conn, msg->tag, recv_data.data_len, recv_data.dest_addr,
 			  msg->context, ofi_atomic_get32(&ep_rdm->posted_recvs));
 
-		if (!ret && !request->state.err) {
+		if (!ret && !request->state.err)
 			ret = rdm_trecv_second_event(request, ep_rdm);
-		}
 	}
 
 	return ret;
@@ -214,18 +211,14 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 	struct fi_ibv_rdm_ep *ep =
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
-
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (len > ep->rndv_threshold) {
+	if (len > ep->rndv_threshold)
 		return -FI_EMSGSIZE;
-	}
 
-	const int in_order = (conn->postponed_entry) ? 0 : 1;
-
-	if (in_order) {
+	if (!conn->postponed_entry) {
 		struct fi_ibv_rdm_buf *sbuf = 
-			fi_ibv_rdm_prepare_send_resources(conn, ep);
+			fi_ibv_rdm_prepare_send_resources(conn);
 		if (sbuf) {
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
@@ -310,13 +303,13 @@ static ssize_t fi_ibv_rdm_tagged_sendto(struct fid_ep *fid, const void *buf,
 static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 	const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	struct fi_ibv_rdm_ep *ep_rdm = 
+	struct fi_ibv_rdm_ep *ep_rdm =
 		container_of(ep, struct fi_ibv_rdm_ep, ep_fid);
-
+	size_t i;
 	struct fi_ibv_rdm_send_start_data sdata = {
 		.ep_rdm = ep_rdm,
 		.conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr),
-		.data_len = 0,
+		.data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 		.context = msg->context,
 		.flags = FI_TAGGED | FI_SEND | GET_TX_COMP_FLAG(ep_rdm, flags),
 		.tag = msg->tag,
@@ -324,34 +317,26 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
 		.imm = (uint32_t) 0,
-		.stype = IBV_RDM_SEND_TYPE_UND
+		.stype = IBV_RDM_SEND_TYPE_UND,
 	};
 
-	size_t i;
-	for (i = 0; i < msg->iov_count; i++) {
-		sdata.data_len += msg->msg_iov[i].iov_len;
-	}
-
-	if ((msg->iov_count > (sdata.ep_rdm->rndv_threshold / sizeof(struct iovec))) ||
-	    (msg->iov_count > 1 && (sdata.data_len > sdata.ep_rdm->rndv_threshold)))
-	{
-		return -FI_EMSGSIZE;
-	}
-
-	switch (msg->iov_count)
-	{
+	switch (msg->iov_count) {
 	case 1:
 		sdata.buf.src_addr = msg->msg_iov[0].iov_base;
 		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
-		break;
+		/* FALL THROUGH  */
 	case 0:
 		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
+		if (sdata.data_len > sdata.ep_rdm->rndv_threshold)
+			return -FI_EMSGSIZE;
 		break;
 	default:
 		/* TODO: 
 		 * extra allocation & memcpy can be optimized if it's possible
 		 * to send immediately
 		 */
+		if (msg->iov_count > sdata.ep_rdm->iov_per_rndv_thr)
+			return -FI_EMSGSIZE;
 		sdata.buf.iovec_arr =
 			util_buf_alloc(ep_rdm->fi_ibv_rdm_extra_buffers_pool);
 		for (i = 0; i < msg->iov_count; i++) {

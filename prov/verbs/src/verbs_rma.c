@@ -244,14 +244,14 @@ fi_ibv_rdm_ep_rma_preinit(void **desc, struct fi_ibv_rdm_buf **rdm_buf,
 	assert(desc && rdm_buf);
 
 	if (*desc == NULL && len < ep->rndv_threshold) {
-		*rdm_buf = fi_ibv_rdm_rma_prepare_resources(conn, ep);
-		if (*rdm_buf) {
+		*rdm_buf = fi_ibv_rdm_rma_prepare_resources(conn);
+		if (*rdm_buf)
 			*desc = (void*)(uintptr_t)conn->rma_mr->lkey;
-		} else {
+		else
 			goto again;
-		}
-	} else if (!fi_ibv_rdm_check_connection(conn, ep) ||
-		RMA_RESOURCES_IS_BUSY(conn, ep) || conn->postponed_entry) {
+	} else if (!fi_ibv_rdm_check_connection(conn) ||
+		   RMA_RESOURCES_IS_BUSY(conn, ep) ||
+		   conn->postponed_entry) {
 		goto again;
 	}
 
