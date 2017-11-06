@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2017\-10\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2017\-11\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -168,13 +168,13 @@ Safety support is enabled)
 .PP
 \f[I]FI_VERBS_USE_ODP\f[] : Enable On\-Demand\-Paging (ODP) experimental
 feature.
-The feature is supported only on Mellanox OFED (default: 1)
+The feature is supported only on Mellanox OFED (default: 0)
 .PP
 \f[I]FI_VERBS_CQREAD_BUNCH_SIZE\f[] : The number of entries to be read
 from the verbs completion queue at a time (default: 8).
 .PP
-\f[I]FI_VERBS_CQREAD_BUNCH_SIZE\f[] : The number of entries to be read
-from the verbs completion queue at a time (default: 8).
+\f[I]FI_VERBS_IFACE\f[] : The prefix or the full name of the network
+interface associated with the verbs device (default: ib)
 .SS Variables specific to RDM endpoints
 .PP
 \f[I]FI_VERBS_RDM_BUFFER_NUM\f[] : The number of pre\-registered buffers
@@ -205,8 +205,6 @@ environment variables aren\[aq]t defined)
 .PP
 \f[I]FI_VERBS_NAME_SERVVER_PORT\f[] : The port on which Name Server
 thread listens incoming connections and requests (default: 5678)
-.PP
-\f[I]FI_\f[] :
 .SS Environment variables notes
 .PP
 The fi_info utility would give the up\-to\-date information on
