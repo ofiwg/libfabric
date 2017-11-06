@@ -333,6 +333,7 @@ rpm: dist
 
 prov_install_man_pages=
 prov_dist_man_pages=
+EXTRA_DIST=
 
 include prov/sockets/Makefile.include
 include prov/udp/Makefile.include
@@ -349,7 +350,7 @@ include prov/shm/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 
-EXTRA_DIST = \
+EXTRA_DIST += \
         NEWS.md \
         libfabric.spec.in \
         config/distscript.pl \
