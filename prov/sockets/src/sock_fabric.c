@@ -78,6 +78,7 @@ const struct fi_fabric_attr sock_fabric_attr = {
 static struct dlist_entry sock_fab_list;
 static struct dlist_entry sock_dom_list;
 static fastlock_t sock_list_lock;
+static struct slist sock_addr_list;
 static int read_default_params;
 
 void sock_dom_add_to_list(struct sock_domain *domain)
@@ -499,6 +500,8 @@ void sock_insert_loopback_addr(struct slist *addr_list)
 	struct sock_host_list_entry *addr_entry;
 
 	addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
+	if (!addr_entry)
+		return;
 	strncpy(addr_entry->hostname, "127.0.0.1", sizeof(addr_entry->hostname));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 }
@@ -519,6 +522,8 @@ void sock_get_list_of_addr(struct slist *addr_list)
 				continue;
 
 			addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
+			if (!addr_entry)
+				continue;
 			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
 					  addr_entry->hostname, sizeof(addr_entry->hostname),
 					  NULL, 0, NI_NUMERICHOST);
@@ -572,8 +577,7 @@ int sock_node_getinfo(uint32_t version, const char *node, const char *service,
 				*info = cur;
 			else
 				(*tail)->next = cur;
-			for (*tail = cur; (*tail)->next; *tail = (*tail)->next)
-				;
+			(*tail) = cur;
 			return 0;
 		default:
 			break;
@@ -592,8 +596,7 @@ int sock_node_getinfo(uint32_t version, const char *node, const char *service,
 			*info = cur;
 		else
 			(*tail)->next = cur;
-		for (*tail = cur; (*tail)->next; *tail = (*tail)->next)
-			;
+		(*tail) = cur;
 	}
 	if (!*info) {
 		ret = -FI_ENODATA;
@@ -632,17 +635,13 @@ static int sock_addr_matches_interface(struct slist *addr_list, struct sockaddr_
 
 static int sock_node_matches_interface(struct slist *addr_list, const char *node)
 {
-	struct addrinfo ai, *rai = NULL;
-	struct sockaddr_in addr;
-	int ret;
+	struct sockaddr_in addr = { 0 };
+	struct addrinfo *rai = NULL, ai = {
+		.ai_family = AF_INET,
+		.ai_socktype = SOCK_STREAM,
+	};
 
-	memset(&addr, 0, sizeof(addr));
-	memset(&ai, 0, sizeof(ai));
-	ai.ai_family = AF_INET;
-	ai.ai_socktype = SOCK_STREAM;
-
-	ret = getaddrinfo(node, 0, &ai, &rai);
-	if (ret) {
+	if (getaddrinfo(node, 0, &ai, &rai)) {
 		SOCK_LOG_DBG("getaddrinfo failed!\n");
 		return -FI_EINVAL;
 	}
@@ -670,8 +669,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			struct fi_info **info)
 {
 	int ret = 0;
-	struct slist addr_list;
-	struct slist_entry *entry;
+	struct slist_entry *entry, *prev;
 	struct sock_host_list_entry *host_entry;
 	struct fi_info *tail;
 
@@ -688,16 +686,12 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	slist_init(&addr_list);
-	/* Returns loopback address if no other interfaces are available */
-	sock_get_list_of_addr(&addr_list);
-
 	ret = 1;
-	if (flags & FI_SOURCE) {
-		if (node)
-			ret = sock_node_matches_interface(&addr_list, node);
+	if ((flags & FI_SOURCE) && node) {
+		ret = sock_node_matches_interface(&sock_addr_list, node);
 	} else if (hints && hints->src_addr) {
-		ret = sock_addr_matches_interface(&addr_list, (struct sockaddr_in *)hints->src_addr);
+		ret = sock_addr_matches_interface(&sock_addr_list,
+						  (struct sockaddr_in *)hints->src_addr);
 	}
 	if (!ret) {
 		SOCK_LOG_ERROR("Couldn't find a match with local interfaces\n");
@@ -707,22 +701,19 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	*info = tail = NULL;
 	if (node ||
 	     (!(flags & FI_SOURCE) && hints && hints->src_addr) ||
-	     (!(flags & FI_SOURCE) && hints && hints->dest_addr)) {
-		sock_free_addr_list(&addr_list);
-		return sock_node_getinfo(version, node, service, flags, hints, info, &tail);
-	}
+	     (!(flags & FI_SOURCE) && hints && hints->dest_addr))
+		return sock_node_getinfo(version, node, service, flags,
+					 hints, info, &tail);
 
-	while (!slist_empty(&addr_list)) {
-		entry = slist_remove_head(&addr_list);
+	(void) prev; /* Makes compiler happy */
+	slist_foreach(&sock_addr_list, entry, prev) {
 		host_entry = container_of(entry, struct sock_host_list_entry, entry);
 		node = host_entry->hostname;
 		flags |= FI_SOURCE;
 		ret = sock_node_getinfo(version, node, service, flags, hints, info, &tail);
-		free(host_entry);
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;
-			sock_free_addr_list(&addr_list);
 			return ret;
 		}
 	}
@@ -732,6 +723,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 
 static void fi_sockets_fini(void)
 {
+	sock_free_addr_list(&sock_addr_list);
 	fastlock_destroy(&sock_list_lock);
 }
 
@@ -771,6 +763,9 @@ SOCKETS_INI
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
+	slist_init(&sock_addr_list);
+	/* Returns loopback address if no other interfaces are available */
+	sock_get_list_of_addr(&sock_addr_list);
 #if ENABLE_DEBUG
 	fi_param_define(&sock_prov, "dgram_drop_rate", FI_PARAM_INT,
 			"Drop every Nth dgram frame (debug only)");
