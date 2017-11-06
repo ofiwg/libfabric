@@ -107,6 +107,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
+	hints->mode = FI_CONTEXT;
 	hints->caps = FI_MSG | FI_RMA;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
