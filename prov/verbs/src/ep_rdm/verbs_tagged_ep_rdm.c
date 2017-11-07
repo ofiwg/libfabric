@@ -327,15 +327,14 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		sdata.buf.src_addr = msg->msg_iov[0].iov_base;
 		/* FALL THROUGH  */
 	case 0:
-		if (sdata.data_len > sdata.ep_rdm->rndv_threshold)
-			return -FI_EMSGSIZE;
 		break;
 	default:
 		/* TODO: 
 		 * extra allocation & memcpy can be optimized if it's possible
 		 * to send immediately
 		 */
-		if (msg->iov_count > sdata.ep_rdm->iov_per_rndv_thr)
+		if ((msg->iov_count > sdata.ep_rdm->iov_per_rndv_thr) ||
+		    (sdata.data_len > sdata.ep_rdm->rndv_threshold))
 			return -FI_EMSGSIZE;
 		sdata.buf.iovec_arr =
 			util_buf_alloc(ep_rdm->fi_ibv_rdm_extra_buffers_pool);
