@@ -213,8 +213,10 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (len > ep->rndv_threshold)
+	if (len > ep->rndv_threshold) {
+		abort();
 		return -FI_EMSGSIZE;
+	}
 
 	if (!conn->postponed_entry) {
 		struct fi_ibv_rdm_buf *sbuf = 
@@ -317,25 +319,22 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
 		.imm = (uint32_t) 0,
-		.stype = IBV_RDM_SEND_TYPE_UND,
+		.stype = IBV_RDM_SEND_TYPE_GEN,
 	};
 
 	switch (msg->iov_count) {
 	case 1:
 		sdata.buf.src_addr = msg->msg_iov[0].iov_base;
-		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
 		/* FALL THROUGH  */
 	case 0:
-		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
-		if (sdata.data_len > sdata.ep_rdm->rndv_threshold)
-			return -FI_EMSGSIZE;
 		break;
 	default:
 		/* TODO: 
 		 * extra allocation & memcpy can be optimized if it's possible
 		 * to send immediately
 		 */
-		if (msg->iov_count > sdata.ep_rdm->iov_per_rndv_thr)
+		if ((msg->iov_count > sdata.ep_rdm->iov_per_rndv_thr) ||
+		    (sdata.data_len > sdata.ep_rdm->rndv_threshold))
 			return -FI_EMSGSIZE;
 		sdata.buf.iovec_arr =
 			util_buf_alloc(ep_rdm->fi_ibv_rdm_extra_buffers_pool);
