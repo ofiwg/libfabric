@@ -564,6 +564,10 @@ fi_ibv_rdm_conn_to_av_map_addr(struct fi_ibv_rdm_ep *ep,
     return fi_ibv_rdm_av_entry_to_av_map_addr(ep, conn->av_entry);
 }
 
+/* Must call with `rdm_cm::cm_lock` and `av_entry::conn_lock` held
+ * - `rdm_cm::cm_lock` - to start a connections
+ * - `av_entry::conn_lock` - to add a connection entry to av_entry::hash
+ */
 static inline struct fi_ibv_rdm_conn *
 fi_ibv_rdm_conn_entry_alloc(struct fi_ibv_rdm_av_entry *av_entry,
 			    struct fi_ibv_rdm_ep *ep)
@@ -585,9 +589,7 @@ fi_ibv_rdm_conn_entry_alloc(struct fi_ibv_rdm_av_entry *av_entry,
 		 sizeof(struct fi_ibv_rdm_ep *), conn);
 
 	/* Initiates connection to the peer */
-	pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 	fi_ibv_rdm_start_connection(ep, conn);
-	pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 
 	return conn;
 }
@@ -600,12 +602,14 @@ fi_ibv_rdm_av_map_addr_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 	struct fi_ibv_rdm_av_entry *av_entry =
 		fi_ibv_rdm_av_map_addr_to_av_entry(ep, addr);
 	if (av_entry) {
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn)
 			conn = fi_ibv_rdm_conn_entry_alloc(av_entry, ep);
 		pthread_mutex_unlock(&av_entry->conn_lock);
+		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 	}
 
 	return conn;
@@ -619,12 +623,14 @@ fi_ibv_rdm_av_tbl_idx_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 	struct fi_ibv_rdm_av_entry *av_entry =
 		fi_ibv_rdm_av_tbl_idx_to_av_entry(ep, addr);
 	if (av_entry) {
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn)
 			conn = fi_ibv_rdm_conn_entry_alloc(av_entry, ep);
 		pthread_mutex_unlock(&av_entry->conn_lock);
+		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 	}
 
 	return conn;

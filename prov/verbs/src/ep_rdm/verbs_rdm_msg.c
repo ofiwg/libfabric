@@ -135,16 +135,14 @@ static ssize_t fi_ibv_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		.buf.src_addr = NULL,
 		.iov_count = 0,
 		.imm = (uint32_t) 0,
-		.stype = IBV_RDM_SEND_TYPE_UND,
+		.stype = IBV_RDM_SEND_TYPE_GEN,
 	};
 
 	switch (msg->iov_count) {
 	case 1:
 		sdata.buf.src_addr = msg->msg_iov[0].iov_base;
-		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
 		/* FALL THROUGH */
 	case 0:
-		sdata.stype = IBV_RDM_SEND_TYPE_GEN;
 		if (sdata.data_len > sdata.ep_rdm->rndv_threshold)
 			return -FI_EMSGSIZE;
 		break;
@@ -206,8 +204,10 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (len > ep->rndv_threshold)
+	if (len > ep->rndv_threshold) {
+	    abort();
 		return -FI_EMSGSIZE;
+	}
 
 	if (!conn->postponed_entry) {
 		struct fi_ibv_rdm_buf *sbuf = 
