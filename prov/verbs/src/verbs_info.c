@@ -685,6 +685,11 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			fi->ep_attr->protocol = FI_PROTO_IWARP_RDM;
 			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP_RDM;
 		}
+
+		/* TODO Some iWarp HW may support immediate data as per RFC 7306
+		 * (RDMA Protocol Extensions). Update this to figure out if the
+		 * hw supports immediate data dynamically */
+		fi->domain_attr->cq_data_size = 0;
 		break;
 	default:
 		VERBS_INFO(FI_LOG_CORE, "Unknown transport type\n");
