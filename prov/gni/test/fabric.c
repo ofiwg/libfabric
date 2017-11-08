@@ -77,7 +77,7 @@ static void teardown(void)
 
 	fi_freeinfo(fi);
 }
-
+TestSuite(fabric_bare);
 TestSuite(fabric, .init = setup, .fini = teardown);
 
 Test(fabric, simple)
@@ -260,4 +260,120 @@ Test(fabric, set_limits)
 		&actual_attr.prov_key_limit);
 	cr_assert_eq(ret, FI_SUCCESS);
 	cr_assert_eq(actual_attr.prov_key_limit, expected_attr.prov_key_limit);
+}
+
+Test(fabric_bare, fi_mr_basic_1_0)
+{
+	int ret;
+	struct fi_info *hints;
+	struct fi_info *info;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->fabric_attr->prov_name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &info);
+	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
+	cr_assert(info->domain_attr->mr_mode == FI_MR_BASIC);
+
+	fi_freeinfo(fi);
+	fi_freeinfo(hints);
+}
+
+Test(fabric_bare, fi_mr_scalable_1_0)
+{
+	int ret;
+	struct fi_info *hints;
+	struct fi_info *info;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
+	hints->fabric_attr->prov_name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &info);
+	cr_assert(ret == -FI_ENODATA, "fi_getinfo");
+
+	fi_freeinfo(hints);
+}
+
+Test(fabric_bare, fi_mr_basic_1_5)
+{
+	int ret;
+	struct fi_info *hints;
+	struct fi_info *info;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->fabric_attr->prov_name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 5), NULL, 0, 0, hints, &info);
+	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
+	cr_assert(info->domain_attr->mr_mode == FI_MR_BASIC);
+
+	fi_freeinfo(fi);
+	fi_freeinfo(hints);
+}
+
+Test(fabric_bare, fi_mr_scalable_1_5_fail)
+{
+	int ret;
+	struct fi_info *hints;
+	struct fi_info *info;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
+	hints->fabric_attr->prov_name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 5), NULL, 0, 0, hints, &info);
+	cr_assert(ret == -FI_ENODATA, "fi_getinfo");
+
+	fi_freeinfo(hints);
+}
+
+Test(fabric_bare, fi_mr_scalable_1_5_pass)
+{
+	int ret;
+	struct fi_info *hints;
+	struct fi_info *info;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->mr_mode = FI_MR_MMU_NOTIFY;
+	hints->fabric_attr->prov_name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 5), NULL, 0, 0, hints, &info);
+	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
+	cr_assert(info->domain_attr->mr_mode == FI_MR_MMU_NOTIFY);
+
+	fi_freeinfo(fi);
+	fi_freeinfo(hints);
+}
+
+Test(fabric_bare, fi_mr_basic_1_5_ofi_map)
+{
+	int ret;
+	struct fi_info *hints;
+	struct fi_info *info;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->mr_mode = OFI_MR_BASIC_MAP;
+	hints->fabric_attr->prov_name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 5), NULL, 0, 0, hints, &info);
+	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
+	cr_assert(info->domain_attr->mr_mode == OFI_MR_BASIC_MAP);
+
+	fi_freeinfo(fi);
+	fi_freeinfo(hints);
 }
