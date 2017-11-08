@@ -189,8 +189,8 @@ struct fi_ibv_rma_post_ready_data {
 
 // Interfaces
 
-ssize_t fi_ibv_rdm_req_hndls_init();
-ssize_t fi_ibv_rdm_req_hndls_clean();
+ssize_t fi_ibv_rdm_req_hndls_init(void);
+ssize_t fi_ibv_rdm_req_hndls_clean(void);
 ssize_t fi_ibv_rdm_req_hndl(struct fi_ibv_rdm_request *request,
 			    enum fi_ibv_rdm_request_event event,
 			    void *data);

@@ -97,9 +97,9 @@ static ssize_t fi_ibv_rdm_tagged_cq_read(struct fid_cq *cq, void *buf,
 	return fi_ibv_rdm_tagged_cq_readfrom(cq, buf, MIN(_count, count), addr);
 }
 
-ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
-				fi_addr_t *src_addr, const void *cond,
-				int timeout)
+static ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf,
+				       size_t count, fi_addr_t *src_addr,
+				       const void *cond, int timeout)
 {
 	size_t threshold = count;
 	uint64_t time_limit =
@@ -137,8 +137,8 @@ ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	return ret;
 }
 
-ssize_t fi_ibv_rdm_cq_sread(struct fid_cq *cq, void *buf, size_t count,
-			    const void *cond, int timeout)
+static ssize_t fi_ibv_rdm_cq_sread(struct fid_cq *cq, void *buf, size_t count,
+				   const void *cond, int timeout)
 {
 	struct fi_ibv_rdm_cq *_cq =
 		container_of(cq, struct fi_ibv_rdm_cq, cq_fid);

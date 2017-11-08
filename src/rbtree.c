@@ -253,7 +253,7 @@ RbtStatus rbtInsert(RbtHandle h, void *key, void *val) {
     return RBT_STATUS_OK;
 }
 
-void deleteFixup(RbtType *rbt, NodeType *x) {
+static void deleteFixup(RbtType *rbt, NodeType *x) {
 
     // maintain red-black tree balance after deleting node x
 
