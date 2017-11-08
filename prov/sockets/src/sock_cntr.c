@@ -512,7 +512,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		goto err;
 
 	if (attr == NULL)
-		memcpy(&_cntr->attr, &sock_cntr_add, sizeof(sock_cntr_attr));
+		memcpy(&_cntr->attr, &sock_cntr_attr, sizeof(sock_cntr_attr));
 	else
 		memcpy(&_cntr->attr, attr, sizeof(sock_cntr_attr));
 
