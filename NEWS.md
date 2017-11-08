@@ -5,6 +5,32 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.5.2, Wed Nov 8, 2017
+=======================
+
+## Core
+
+- Fix Power PC 32-bit build
+
+## RXM
+
+-- Remove dependency on shared receive contexts
+-- Switch to automatic data progress
+-- Fix removing addresses from AV
+
+## Sockets
+
+-- Fix incorrect reporting of counter attributes
+
+## Verbs
+
+-- Fix reporting attributes based on device limits
+-- Fix incorrect CQ size reported for iWarp NICs
+-- Update man page with known issues for specific NICs
+-- Fix FI_RX_CQ_DATA mode check
+-- Disable on-demand paging by default (can cause data corruption)
+-- Disable loopback (localhost) addressing (causing failures in MPI)
+
 v1.5.1, Wed Oct 4, 2017
 =======================
 
