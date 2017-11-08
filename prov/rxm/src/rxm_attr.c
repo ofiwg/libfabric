@@ -78,7 +78,7 @@ struct fi_domain_attr rxm_domain_attr = {
 	/* Advertise support for FI_MR_BASIC so that ofi_check_info call
 	 * doesn't fail at RxM level. If an app requires FI_MR_BASIC, it
 	 * would be passed down to core provider. */
-	.mr_mode = FI_MR_BASIC,
+	.mr_mode = FI_MR_BASIC | FI_MR_SCALABLE,
 	.cq_data_size = sizeof_field(struct ofi_op_hdr, data),
 	.cq_cnt = (1 << 16),
 	.ep_cnt = (1 << 15),

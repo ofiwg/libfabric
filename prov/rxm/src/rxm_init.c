@@ -129,13 +129,6 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->ep_attr->max_order_waw_size = core_info->ep_attr->max_order_waw_size;
 
 	*info->domain_attr = *rxm_info.domain_attr;
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		/* ofi_alter_info assumes version 1.5 or above mr_mode bits */
-		if (core_info->domain_attr->mr_mode == FI_MR_BASIC)
-			info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-	} else {
-		info->domain_attr->mr_mode |= core_info->domain_attr->mr_mode;
-	}
 	info->domain_attr->cq_data_size = MIN(core_info->domain_attr->cq_data_size,
 					      rxm_info.domain_attr->cq_data_size);
 

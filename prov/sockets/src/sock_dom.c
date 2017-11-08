@@ -51,7 +51,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
 	/* Provider supports basic memory registration mode */
-	.mr_mode = FI_MR_BASIC,
+	.mr_mode = FI_MR_BASIC | FI_MR_SCALABLE,
 	.mr_key_size = sizeof(uint64_t),
 	.cq_data_size = sizeof(uint64_t),
 	.cq_cnt = SOCK_EP_MAX_CQ_CNT,
@@ -132,8 +132,8 @@ int sock_verify_domain_attr(uint32_t version, const struct fi_info *info)
 		return -FI_ENODATA;
 	}
 
-	if (ofi_check_mr_mode(&sock_prov, version, info->caps,
-			      sock_domain_attr.mr_mode, attr->mr_mode)) {
+	if (ofi_check_mr_mode(&sock_prov, version,
+			      sock_domain_attr.mr_mode, info)) {
 		FI_INFO(&sock_prov, FI_LOG_CORE,
 			"Invalid memory registration mode\n");
 		return -FI_ENODATA;

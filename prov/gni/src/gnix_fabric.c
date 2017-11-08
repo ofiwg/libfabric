@@ -442,37 +442,6 @@ err:
 	return ret;
 }
 
-static inline int __gnix_check_mr_mode(int mr_mode)
-{
-	if (mr_mode & FI_MR_VIRT_ADDR) {
-		if ((mr_mode & ~GNIX_MR_BASIC_BITS) ||
-				((mr_mode & GNIX_MR_BASIC_REQ) !=
-					GNIX_MR_BASIC_REQ)) {
-			GNIX_DEBUG(FI_LOG_FABRIC,
-				"mr mode contains unsupported bits, "
-				"actual=%x supported=%x\n",
-				mr_mode, GNIX_MR_BASIC_BITS);
-		return 1;
-		}
-	} else if (mr_mode != FI_MR_BASIC &&
-			mr_mode != FI_MR_SCALABLE) {
-		/* FI_MR_SCALABLE for GNI */
-		if ((mr_mode & ~GNIX_MR_SCALABLE_BITS) ||
-				((mr_mode & GNIX_MR_SCALABLE_REQ) !=
-					GNIX_MR_SCALABLE_REQ)) {
-			GNIX_DEBUG(FI_LOG_FABRIC,
-				"mr mode contains unsupported bits, "
-				"actual=%x supported=%x\n",
-				mr_mode, GNIX_MR_SCALABLE_BITS);
-		return 1;
-		}
-	} else if (mr_mode == FI_MR_SCALABLE) {
-		GNIX_DEBUG(FI_LOG_FABRIC, "no support for the original enums");
-		return 1;
-	}
-	return 0;
-}
-
 static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			    const char *node, const char *service,
 			    uint64_t flags, const struct fi_info *hints,
@@ -612,12 +581,16 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				gnix_info->domain_attr->data_progress =
 					hints->domain_attr->data_progress;
 
-			if (ofi_check_mr_mode(&gnix_prov,
-					version,
-					hints->caps,
+			/* If basic registration isn't being requested,
+			   require FI_MR_MMU_NOTIFY */
+			if (!(hints->domain_attr->mr_mode &
+					(FI_MR_BASIC | FI_MR_ALLOCATED)))
+				gnix_info->domain_attr->mr_mode |= FI_MR_MMU_NOTIFY;
+
+			if (ofi_check_mr_mode(&gnix_prov, version,
 					gnix_info->domain_attr->mr_mode,
-					hints->domain_attr->mr_mode) != FI_SUCCESS) {
-				GNIX_DEBUG(FI_LOG_DOMAIN,
+					hints) != FI_SUCCESS) {
+				GNIX_INFO(FI_LOG_DOMAIN,
 					"failed ofi_check_mr_mode, "
 					"ret=%d\n", ret);
 				goto err;
@@ -636,9 +609,6 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 					goto err;
 				}
 			} else {
-				if (__gnix_check_mr_mode(mr_mode))
-					goto err;
-
 				/* define the mode we return to the user
 				 * prefer basic until scalable
 				 * has more testing time */
@@ -682,15 +652,6 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 		goto err;
 
 	ofi_alter_info(gnix_info, hints, version);
-
-	ret = ofi_check_domain_attr(&gnix_prov, version,
-				    gnix_info->domain_attr,
-				    gnix_info);
-	if (ret) {
-		GNIX_WARN(FI_LOG_FABRIC,
-				  "GNI failed domain attributes check\n");
-		goto err;
-	}
 
 	GNIX_DEBUG(FI_LOG_FABRIC, "Passed the domain attributes check\n");
 
