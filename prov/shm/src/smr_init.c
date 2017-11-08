@@ -60,7 +60,8 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	}
 #endif
 
-	return util_getinfo(&smr_util_prov, version, node, service, flags, hints, info);
+	return util_getinfo(&smr_util_prov, version, node, service,
+			    flags, hints, info, util_no_alter_names);
 }
 
 static void smr_fini(void)

@@ -212,7 +212,8 @@ static int mlx_getinfo (
 	}
 
 	status = util_getinfo( &mlx_util_prov, version,
-				NULL, NULL, 0, hints, info);
+			       NULL, NULL, 0, hints, info,
+			       util_no_alter_names);
 
 	return status;
 }

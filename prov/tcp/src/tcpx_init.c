@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -7,18 +7,18 @@
  * COPYING in the main directory of this source tree, or the
  * BSD license below:
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ *	   Redistribution and use in source and binary forms, with or
+ *	   without modification, are permitted provided that the following
+ *	   conditions are met:
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *		- Redistributions of source code must retain the above
+ *		  copyright notice, this list of conditions and the following
+ *		  disclaimer.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *		- Redistributions in binary form must reproduce the above
+ *		  copyright notice, this list of conditions and the following
+ *		  disclaimer in the documentation and/or other materials
+ *		  provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -33,15 +33,39 @@
 #include <rdma/fi_errno.h>
 
 #include <prov.h>
-#include "udpx.h"
+#include "tcpx.h"
 
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <fi_util.h>
 
+static void util_set_fabric_domain_names(const struct fi_provider *prov,
+				  struct fi_info *info)
+{
+	char *name = NULL;
+
+	name = util_get_subnet_name(prov,info);
+	if (name) {
+		if (info->fabric_attr->name)
+			free(info->fabric_attr->name);
+
+		info->fabric_attr->name = name;
+		name = NULL;
+	}
+
+	name = util_get_adapter_name(prov, info);
+	if (name) {
+		if (info->domain_attr->name)
+			free(info->domain_attr->name);
+
+		info->domain_attr->name = name;
+		name = NULL;
+	}
+}
 
 #if HAVE_GETIFADDRS
-static void udpx_getinfo_ifs(struct fi_info **info)
+static void tcpx_getinfo_ifs(struct fi_info **info)
 {
 	struct ifaddrs *ifaddrs, *ifa;
 	struct fi_info *head, *tail, *cur, *loopback;
@@ -49,7 +73,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 	uint32_t addr_format;
 	int ret;
 
-	ret = ofi_getifaddrs(&ifaddrs);
+	ret = getifaddrs(&ifaddrs);
 	if (ret)
 		return;
 
@@ -86,11 +110,12 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 			loopback = cur;
 		}
 
-		cur->src_addr = mem_dup(ifa->ifa_addr, addrlen);
-		if (cur->src_addr) {
+		if ((cur->src_addr = mem_dup(ifa->ifa_addr, addrlen))) {
 			cur->src_addrlen = addrlen;
 			cur->addr_format = addr_format;
 		}
+		util_set_fabric_domain_names(&tcpx_prov, cur);
+		util_find_fabric_domain(&tcpx_prov, cur);
 	}
 	freeifaddrs(ifaddrs);
 
@@ -109,41 +134,40 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 	}
 }
 #else
-#define udpx_getinfo_ifs(info) do{}while(0)
+#define tcpx_getinfo_ifs(info) do{}while(0)
 #endif
 
-static int udpx_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct fi_info *hints,
-			struct fi_info **info)
+static int tcpx_getinfo(uint32_t version, const char *node, const char *service,
+			 uint64_t flags, const struct fi_info *hints,
+			 struct fi_info **info)
 {
 	int ret;
-
-	ret = util_getinfo(&udpx_util_prov, version, node, service, flags,
-			   hints, info, util_no_alter_names);
+	ret = util_getinfo(&tcpx_util_prov, version, node, service, flags,
+			   hints, info, util_set_fabric_domain_names);
 	if (ret)
 		return ret;
 
 	if (!(*info)->src_addr && !(*info)->dest_addr)
-		udpx_getinfo_ifs(info);
+		tcpx_getinfo_ifs(info);
 
 	return 0;
 }
 
-static void udpx_fini(void)
+static void fi_tcp_fini(void)
 {
-	/* yawn */
+	/* empty as of now */
 }
 
-struct fi_provider udpx_prov = {
-	.name = "UDP",
-	.version = FI_VERSION(UDPX_MAJOR_VERSION, UDPX_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 5),
-	.getinfo = udpx_getinfo,
-	.fabric = udpx_fabric,
-	.cleanup = udpx_fini
+struct fi_provider tcpx_prov = {
+	.name = "tcp",
+	.version = FI_VERSION(TCPX_MAJOR_VERSION,TCPX_MINOR_VERSION),
+	.fi_version = FI_VERSION(1,5),
+	.getinfo = tcpx_getinfo,
+	.fabric = tcpx_create_fabric,
+	.cleanup = fi_tcp_fini,
 };
 
-UDP_INI
+TCP_INI
 {
-	return &udpx_prov;
+	return &tcpx_prov;
 }

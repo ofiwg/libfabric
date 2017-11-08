@@ -58,7 +58,7 @@ int ofi_nd_getinfo(uint32_t version, const char *node, const char *service,
 {
 	if (ofi_nd_util_prov.info) {
 		return util_getinfo(&ofi_nd_util_prov, version, node, service, flags,
-				    hints, info);
+				    hints, info, util_no_alter_names);
 	}
 	else {
 		*info = NULL;
@@ -161,4 +161,3 @@ NETDIR_INI
 
 
 #endif /* _WIN32 */
-

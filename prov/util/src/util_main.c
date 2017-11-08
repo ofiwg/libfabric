@@ -36,6 +36,12 @@
 
 #include <fi_util.h>
 #include <fi.h>
+#include <arpa/inet.h>
+
+#if HAVE_GETIFADDRS
+#include <net/if.h>
+#include <ifaddrs.h>
+#endif
 
 static DEFINE_LIST(fabric_list);
 extern struct ofi_common_locks common_locks;
@@ -137,16 +143,257 @@ int util_find_domain(struct dlist_entry *item, const void *arg)
 		   domain->info_domain_mode) == domain->info_domain_mode) &&
 		 ((info->domain_attr->mr_mode & domain->mr_mode) == domain->mr_mode);
 }
+#if HAVE_GETIFADDRS
+static int util_get_prefix_len(struct sockaddr *addr)
+{
+	struct sockaddr_in *in_addr;
+	struct sockaddr_in6 *in6_addr;
+	int prefix_len = 0, idx;
+	unsigned int ip_addr;
 
-int util_getinfo(const struct util_prov *util_prov, uint32_t version,
-		 const char *node, const char *service, uint64_t flags,
-		 const struct fi_info *hints, struct fi_info **info)
+	if (AF_INET == addr->sa_family) {
+		in_addr = (struct sockaddr_in *) addr;
+
+		ip_addr = ntohl(in_addr->sin_addr.s_addr);
+		while (ip_addr) {
+			ip_addr <<= 1;
+			prefix_len++;
+		}
+	} else if (AF_INET6 == addr->sa_family){
+
+		in6_addr = (struct sockaddr_in6 *) addr;
+		for (idx = 0 ; idx < 16 ; idx++) {
+			if (!in6_addr->sin6_addr.s6_addr[idx])
+				break;
+
+			switch (in6_addr->sin6_addr.s6_addr[idx]) {
+			case 0xff:
+				prefix_len += 8;
+				break;
+			case 0xfe:
+				prefix_len += 7;
+				break;
+			case 0xfc:
+				prefix_len += 6;
+				break;
+			case 0xf8:
+				prefix_len += 5;
+				break;
+			case 0xf0:
+				prefix_len += 4;
+				break;
+			case 0xe0:
+				prefix_len += 3;
+				break;
+			case 0xc0:
+				prefix_len += 2;
+				break;
+			case 0x80:
+				prefix_len += 1;
+				break;
+			default:
+				goto out;
+			}
+		}
+	}
+out:
+	return prefix_len;
+}
+
+static int util_equals_ipaddr(struct sockaddr *addr1,
+			      struct sockaddr *addr2)
+{
+	struct sockaddr_in *in_addr1, *in_addr2;
+	struct sockaddr_in6 *in6_addr1, *in6_addr2;
+
+	if (!addr1 || !addr2 ||
+	    (addr1->sa_family != addr2->sa_family))
+		return 0;
+
+	if (AF_INET == addr1->sa_family) {
+		in_addr1 = (struct sockaddr_in *)addr1;
+		in_addr2 = (struct sockaddr_in *)addr2;
+		return (!memcmp(&in_addr1->sin_addr,
+				&in_addr2->sin_addr,
+				sizeof(in_addr1->sin_addr)));
+	} else if (AF_INET6 == addr1->sa_family){
+		in6_addr1 = (struct sockaddr_in6 *)addr1;
+		in6_addr2 = (struct sockaddr_in6 *)addr2;
+		return (!memcmp(&in6_addr1->sin6_addr,
+				&in6_addr2->sin6_addr,
+				sizeof(in6_addr1->sin6_addr)));
+	}
+	return 0;
+}
+
+char *util_get_adapter_name(const struct fi_provider *prov,
+			    struct fi_info *info)
+{
+	struct sockaddr *addr;
+	int ret;
+	struct ifaddrs *ifaddrs, *ifa;
+	char *adapter_name = NULL;
+
+	if (!info && !info->src_addr)
+		return NULL;
+
+	switch (info->addr_format) {
+	case FI_SOCKADDR:
+	case FI_SOCKADDR_IN:
+	case FI_SOCKADDR_IN6:
+		addr = (struct sockaddr *) info->src_addr;
+		ret = getifaddrs(&ifaddrs);
+		if (ret)
+			return NULL;
+
+		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+			    ((ifa->ifa_addr->sa_family != AF_INET) &&
+			     (ifa->ifa_addr->sa_family != AF_INET6)))
+				continue;
+
+			if (util_equals_ipaddr((struct sockaddr *)ifa->ifa_addr, addr)) {
+				adapter_name = strdup(ifa->ifa_name);
+				freeifaddrs(ifaddrs);
+				return adapter_name;
+			}
+		}
+		freeifaddrs(ifaddrs);
+		break;
+	default:
+		FI_DBG(prov, FI_LOG_CORE,
+		       "unsupported address format for fabric name\n");
+	}
+	return NULL;
+}
+
+char *util_get_subnet_name(const struct fi_provider *prov,
+				  struct fi_info *info)
+{
+	struct sockaddr *addr;
+	int ret;
+
+	struct ifaddrs *ifaddrs, *ifa;
+	char *subnet_name = NULL;
+	char netbuf[INET6_ADDRSTRLEN+4];
+	int prefix_len, idx;
+	struct sockaddr_in *host_addr, *net_mask;
+	struct sockaddr_in6 *host6_addr, *net6_mask;
+	struct in_addr in_addr;
+	struct in6_addr in6_addr;
+
+	if (!info && !info->src_addr)
+		return NULL;
+
+	switch (info->addr_format) {
+	case FI_SOCKADDR:
+	case FI_SOCKADDR_IN:
+	case FI_SOCKADDR_IN6:
+		addr = (struct sockaddr *) info->src_addr;
+		ret = getifaddrs(&ifaddrs);
+		if (ret)
+			return NULL;
+
+		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+			    (ifa->ifa_addr->sa_family != AF_INET &&
+			     ifa->ifa_addr->sa_family != AF_INET6 ))
+				continue;
+
+			if (!util_equals_ipaddr((struct sockaddr *)ifa->ifa_addr, addr))
+				continue;
+
+			if (AF_INET == ifa->ifa_addr->sa_family) {
+				host_addr = (struct sockaddr_in *)ifa->ifa_addr;
+				net_mask = (struct sockaddr_in *)ifa->ifa_netmask;
+				in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr &
+							    (uint32_t) net_mask->sin_addr.s_addr);
+
+				inet_ntop(host_addr->sin_family, (void *)&(in_addr), netbuf,
+					  sizeof(netbuf));
+				prefix_len = util_get_prefix_len((struct sockaddr *)net_mask);
+			} else {
+				host6_addr = (struct sockaddr_in6 *)ifa->ifa_addr;
+				net6_mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
+
+				idx = sizeof(in6_addr.s6_addr);
+				while (idx--) {
+					in6_addr.s6_addr[idx] = host6_addr->sin6_addr.s6_addr[idx] &
+								net6_mask->sin6_addr.s6_addr[idx];
+				}
+				inet_ntop(host6_addr->sin6_family, (void *)&(in6_addr), netbuf,
+					  sizeof(netbuf));
+				prefix_len = util_get_prefix_len((struct sockaddr *)net6_mask);
+			}
+			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
+				 "%s%d", "/", prefix_len);
+			subnet_name = strdup(netbuf);
+			freeifaddrs(ifaddrs);
+			return subnet_name;
+		}
+	default:
+		FI_DBG(prov, FI_LOG_CORE,
+		       "unsupported address format for fabric name\n");
+	}
+	return NULL;
+}
+
+#else //HAVE_GETIFADDRS
+char *util_get_subnet_name(const struct fi_provider *prov,
+			   struct fi_info *info)
+{
+	return NULL;
+}
+
+char *util_get_adapter_name(const struct fi_provider *prov,
+			    struct fi_info *info)
+{
+	return NULL;
+}
+#endif //HAVE_GETIFADDRS
+
+void util_find_fabric_domain(const struct fi_provider *prov,
+			     struct fi_info *info)
 {
 	struct util_fabric *fabric;
 	struct util_domain *domain;
-	struct dlist_entry *item;
-	const struct fi_provider *prov = util_prov->prov;
 	struct util_fabric_info fabric_info;
+	struct dlist_entry *item;
+
+	fabric_info.name =info->fabric_attr->name;
+	fabric_info.prov = prov;
+
+	fabric = ofi_fabric_find(&fabric_info);
+	if (fabric) {
+		FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
+		info->fabric_attr->fabric = &fabric->fabric_fid;
+
+		fastlock_acquire(&fabric->lock);
+		item = dlist_find_first_match(&fabric->domain_list,
+					      util_find_domain, info);
+		if (item) {
+			FI_DBG(prov, FI_LOG_CORE,
+			       "Found open domain\n");
+			domain = container_of(item, struct util_domain,
+					      list_entry);
+			info->domain_attr->domain =
+				&domain->domain_fid;
+		}
+		fastlock_release(&fabric->lock);
+	}
+}
+void util_no_alter_names(const struct fi_provider *prov,
+			 struct fi_info *info)
+{
+	return;
+}
+
+int util_getinfo(const struct util_prov *util_prov, uint32_t version,
+		 const char *node, const char *service, uint64_t flags,
+		 const struct fi_info *hints, struct fi_info **info,
+		 alter_fabric_domain_names alter_names)
+{
+	const struct fi_provider *prov = util_prov->prov;
 	struct fi_info *saved_info;
 	int ret, copy_dest;
 
@@ -167,30 +414,6 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 	saved_info = *info;
 
 	for (; *info; *info = (*info)->next) {
-
-		fabric_info.name = (*info)->fabric_attr->name;
-		fabric_info.prov = util_prov->prov;
-
-		fabric = ofi_fabric_find(&fabric_info);
-		if (fabric) {
-			FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
-			(*info)->fabric_attr->fabric = &fabric->fabric_fid;
-
-			fastlock_acquire(&fabric->lock);
-			item = dlist_find_first_match(&fabric->domain_list,
-						      util_find_domain, *info);
-			if (item) {
-				FI_DBG(prov, FI_LOG_CORE,
-				       "Found open domain\n");
-				domain = container_of(item, struct util_domain,
-						      list_entry);
-				(*info)->domain_attr->domain =
-						&domain->domain_fid;
-			}
-			fastlock_release(&fabric->lock);
-
-		}
-
 		if (flags & FI_SOURCE) {
 			ret = ofi_get_addr((*info)->addr_format, flags,
 					  node, service, &(*info)->src_addr,
@@ -249,6 +472,9 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 					"cannot resolve source address\n");
 			}
 		}
+		alter_names(prov, *info);
+		util_find_fabric_domain(prov, *info);
+
 	}
 
 	*info = saved_info;
