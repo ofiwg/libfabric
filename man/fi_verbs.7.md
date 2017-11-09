@@ -191,6 +191,18 @@ When running an app over verbs provider with valgrind, there may be reports of
 memory leak in functions from dependent libraries (e.g. libibverbs, librdmacm).
 These leaks are safe to ignore.
 
+## Known failures in ofiwg/fabtests
+
+ * fi_rma_bw -o writedata -e rdm
+
+### HW Specific
+
+#### iWARP
+
+ * fi_cm_data
+ * fi_rma_bw -e rdm -o read
+ * fi_rdm_rma -o writedata
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

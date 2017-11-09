@@ -96,6 +96,17 @@ The app has to do sread or wait on the file descriptor again.
 RxM provider should work fine for client - server programs like fabtests. Support for MPI, SHMEM
 and other applications is work in progress.
 
+## Known failures in ofiwg/fabtests
+ * fi_rdm_tagged_peek
+
+### HW Specific
+
+#### iWARP
+ * fi_poll -t queue
+ * fi_rma_bw -e rdm -o write
+ * fi_rma_bw -e rdm -o writedata
+ * fi_rdm_rma -o writedata
+
 # RUNTIME PARAMETERS
 
 No runtime parameters are currently defined.
