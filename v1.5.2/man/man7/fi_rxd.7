@@ -1,0 +1,48 @@
+.TH "fi_rxd" "7" "2016\-09\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.SH NAME
+.PP
+The RxD (RDM over DGRAM) Utility Provider
+.SH OVERVIEW
+.PP
+The RxD provider is a utility provider that supports RDM endpoints
+emulated over a base DGRAM provider.
+.SH SUPPORTED FEATURES
+.PP
+The RxD provider currently supports \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[]
+and \f[I]FI_RMA\f[] capabilities.
+It requires the base DGRAM provider to support \f[I]FI_MSG\f[]
+capabilities.
+.PP
+\f[I]Endpoint types\f[] : The provider supports only endpoint type
+\f[I]FI_EP_RDM\f[].
+.PP
+\f[I]Endpoint capabilities\f[] : The following data transfer interface
+is supported: \f[I]fi_msg\f[], \f[I]fi_tagged\f[] and \f[I]fi_rma\f[].
+.PP
+\f[I]Modes\f[] : The provider does not require the use of any mode bits.
+.PP
+\f[I]Progress\f[] : The RxD provider supports both
+\f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[], with a
+default set to auto.
+However, receive side data buffers are not modified outside of
+completion processing routines.
+.SH LIMITATIONS
+.PP
+The RxD provider has hard\-coded maximums for supported queue sizes and
+data transfers.
+Some of these limits are set based on the selected base DGRAM provider.
+.PP
+No support for multi\-recv.
+.PP
+No support for counters.
+.PP
+The RxD provider is still under development and is not extensively
+tested.
+.SH RUNTIME PARAMETERS
+.PP
+No runtime parameters are currently defined.
+.SH SEE ALSO
+.PP
+\f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3)
+.SH AUTHORS
+OpenFabrics.
