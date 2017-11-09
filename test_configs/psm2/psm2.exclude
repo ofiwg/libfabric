@@ -1,0 +1,21 @@
+# Regex patterns of tests to exclude in runfabtests.sh
+
+# Exclude all prefix tests
+-k
+
+# av_test supports only FI_SOCKADDR
+av_test
+
+^msg|-e msg
+
+cm_data
+
+# psm2 supports only shared transmit context
+shared_ctx$|shared_ctx -e dgram$|shared_ctx.*--no-tx-shared-ctx
+
+scalable_ep
+cmatose
+shared_av
+rdm_cntr_pingpong
+rc_pingpong
+ubertest
