@@ -367,6 +367,7 @@ struct psmx2_trx_ctxt {
 	psm2_epid_t		psm2_epid;
 	psm2_mq_t		psm2_mq;
 	int			am_initialized;
+	int			id;
 	struct psm2_am_parameters psm2_am_param;
 
 	/* ep bound to this tx/rx context, NULL if multiplexed */
@@ -735,7 +736,7 @@ struct psmx2_fid_cntr {
 
 struct psmx2_ctxt_addr {
 	psm2_epid_t		epid;
-	psm2_epaddr_t		epaddr;
+	psm2_epaddr_t		*epaddrs;
 };
 
 struct psmx2_sep_addr {

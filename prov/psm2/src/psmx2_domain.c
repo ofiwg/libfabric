@@ -32,6 +32,8 @@
 
 #include "psmx2.h"
 
+static int psmx2_trx_ctxt_cnt = 0;
+
 void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	int err;
@@ -78,6 +80,13 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	struct psm2_ep_open_opts opts;
 	int should_retry = 0;
 	int err;
+
+	if (psmx2_trx_ctxt_cnt >= psmx2_env.max_trx_ctxt) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"number of Tx/Rx contexts exceeds limit (%d).\n",
+			psmx2_env.max_trx_ctxt);
+		return NULL;
+	}
 
 	trx_ctxt = calloc(1, sizeof(*trx_ctxt));
 	if (!trx_ctxt) {
@@ -153,6 +162,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	fastlock_init(&trx_ctxt->trigger_queue.lock);
 	slist_init(&trx_ctxt->rma_queue.list);
 	slist_init(&trx_ctxt->trigger_queue.list);
+	trx_ctxt->id = psmx2_trx_ctxt_cnt++;
 
 	return trx_ctxt;
 

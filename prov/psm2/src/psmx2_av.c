@@ -152,7 +152,14 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 				p->ctxt_cnt = n;
 				for (j=0; j<n; j++) {
 					p->ctxt_addrs[j].epid = ((psm2_epid_t *)src)[j];
-					p->ctxt_addrs[j].epaddr = NULL;
+					p->ctxt_addrs[j].epaddrs =
+						calloc(psmx2_env.max_trx_ctxt,
+						       sizeof(psm2_epaddr_t));
+					if (!p->ctxt_addrs[j].epaddrs) {
+						ofi_atomic_inc32(&req->error_count);
+						req->errors[i] = PSM2_NO_MEMORY;
+						break;
+					}
 				}
 				av->sepaddrs[i] = p;
 			}
@@ -257,7 +264,7 @@ psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 	if (ctxt >= av->sepaddrs[idx]->ctxt_cnt)
 		return NULL;
 
-	if (!av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr) {
+	if (!av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddrs[trx_ctxt->id]) {
 		err = psmx2_epid_to_epaddr(trx_ctxt,
 					   av->sepaddrs[idx]->ctxt_addrs[ctxt].epid,
 					   &epaddr);
@@ -268,10 +275,10 @@ psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 			return NULL;
 		}
 
-		av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr = epaddr;
+		av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddrs[trx_ctxt->id] = epaddr;
 	}
 
-	return av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddr;
+	return av->sepaddrs[idx]->ctxt_addrs[ctxt].epaddrs[trx_ctxt->id];
 }
 
 static int psmx2_av_check_table_size(struct psmx2_fid_av *av, size_t count)
@@ -657,7 +664,7 @@ static const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
 static int psmx2_av_close(fid_t fid)
 {
 	struct psmx2_fid_av *av;
-	int i;
+	int i, j;
 
 	av = container_of(fid, struct psmx2_fid_av, av.fid);
 	psmx2_domain_release(av->domain);
@@ -665,8 +672,13 @@ static int psmx2_av_close(fid_t fid)
 	free(av->epaddrs);
 	free(av->vlanes);
 	free(av->types);
-	for (i=0; i<av->last; i++)
+	for (i=0; i<av->last; i++) {
+		if (!av->sepaddrs[i])
+			continue;
+		for (j=0; j<av->sepaddrs[i]->ctxt_cnt; j++)
+			free(av->sepaddrs[i]->ctxt_addrs[j].epaddrs);
 		free(av->sepaddrs[i]);
+	}
 	free(av->sepaddrs);
 	free(av);
 	return 0;
