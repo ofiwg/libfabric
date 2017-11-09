@@ -47,14 +47,11 @@ static int run_test()
 		fprintf(stdout,
 			"Posting send with CQ data: 0x%" PRIx64 "\n",
 			remote_cq_data);
-		ret = fi_senddata(ep, buf, size, fi_mr_desc(mr), remote_cq_data,
-				0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_send", ret);
+		ret = ft_post_tx(ep, remote_fi_addr, size, remote_cq_data, &tx_ctx);
+		if (ret)
 			return ret;
-		}
 
-		ret = ft_get_tx_comp(++tx_seq);
+		ret = ft_get_tx_comp(tx_seq);
 		fprintf(stdout, "Done\n");
 	} else {
 		fprintf(stdout, "Waiting for CQ data from client\n");
@@ -91,16 +88,12 @@ static int run(void)
 {
 	int ret;
 
-	if (!opts.dst_addr) {
-		ret = ft_start_server();
-		if (ret)
-			return ret;
-	}
-
-	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
-	if (ret) {
+	if (hints->ep_attr->type == FI_EP_MSG)
+		ret = ft_init_fabric_cm();
+	else
+		ret = ft_init_fabric();
+	if (ret)
 		return ret;
-	}
 
 	ret = run_test();
 
@@ -137,9 +130,8 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->domain_attr->cq_data_size = 4;  /* required minimum */
-	hints->mode |= FI_RX_CQ_DATA;
+	hints->mode |= FI_CONTEXT | FI_RX_CQ_DATA;
 
-	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG;
 	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
