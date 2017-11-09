@@ -201,6 +201,21 @@ int ofi_domain_close(struct util_domain *domain);
 
 
 /*
+ * Passive Endpoint
+ */
+
+struct util_pep {
+	struct fid_pep		pep_fid;
+	struct util_fabric 	*fabric;
+	struct util_eq 		*eq;
+};
+
+int ofi_pep_init(struct fid_fabric *fabric,  struct fi_info *info,
+		 struct util_pep *pep, void *context);
+int ofi_pep_bind_eq(struct util_pep *pep, struct util_eq *eq, uint64_t flags);
+int ofi_pep_close(struct util_pep *pep);
+
+/*
  * Endpoint
  */
 
