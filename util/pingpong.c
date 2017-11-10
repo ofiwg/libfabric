@@ -242,45 +242,15 @@ long parse_ulong(char *str, long max)
 	return ret;
 }
 
-int size_to_count(int size)
-{
-	if (size >= (1 << 20))
-		return 100;
-	else if (size >= (1 << 16))
-		return 1000;
-	else
-		return 10000;
-}
-
 void pp_banner_fabric_info(struct ct_pingpong *ct)
 {
 	PP_DEBUG(
-	    "Running pingpong test with the %s endpoint trough a %s provider\n",
-	    fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE),
-	    ct->fi->fabric_attr->prov_name);
-	PP_DEBUG(" * Fabric Attributes:\n");
-	PP_DEBUG("  - %-20s: %s\n", "name", ct->fi->fabric_attr->name);
-	PP_DEBUG("  - %-20s: %s\n", "prov_name",
-		 ct->fi->fabric_attr->prov_name);
-	PP_DEBUG("  - %-20s: %" PRIu32 "\n", "prov_version",
-		 ct->fi->fabric_attr->prov_version);
-	PP_DEBUG(" * Domain Attributes:\n");
-	PP_DEBUG("  - %-20s: %s\n", "name", ct->fi->domain_attr->name);
-	PP_DEBUG("  - %-20s: %zu\n", "cq_cnt", ct->fi->domain_attr->cq_cnt);
-	PP_DEBUG("  - %-20s: %zu\n", "cq_data_size",
-		 ct->fi->domain_attr->cq_data_size);
-	PP_DEBUG("  - %-20s: %zu\n", "ep_cnt", ct->fi->domain_attr->ep_cnt);
-	PP_DEBUG(" * Endpoint Attributes:\n");
-	PP_DEBUG("  - %-20s: %s\n", "type",
-		 fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE));
-	PP_DEBUG("  - %-20s: %" PRIu32 "\n", "protocol",
-		 ct->fi->ep_attr->protocol);
-	PP_DEBUG("  - %-20s: %" PRIu32 "\n", "protocol_version",
-		 ct->fi->ep_attr->protocol_version);
-	PP_DEBUG("  - %-20s: %zu\n", "max_msg_size",
-		 ct->fi->ep_attr->max_msg_size);
-	PP_DEBUG("  - %-20s: %zu\n", "max_order_raw_size",
-		 ct->fi->ep_attr->max_order_raw_size);
+	    "Running pingpong test with the %s provider and %s endpoint type\n",
+	    ct->fi->fabric_attr->prov_name,
+	    fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE));
+	PP_DEBUG("%s", fi_tostr(ct->fi->fabric_attr, FI_TYPE_FABRIC_ATTR));
+	PP_DEBUG("%s", fi_tostr(ct->fi->domain_attr, FI_TYPE_DOMAIN_ATTR));
+	PP_DEBUG("%s", fi_tostr(ct->fi->ep_attr, FI_TYPE_EP_ATTR));
 }
 
 void pp_banner_options(struct ct_pingpong *ct)
@@ -305,7 +275,6 @@ void pp_banner_options(struct ct_pingpong *ct)
 		snprintf(iter_msg, 50, "selected iterations: %d",
 			 opts.iterations);
 	else {
-		opts.iterations = size_to_count(opts.transfer_size);
 		snprintf(iter_msg, 50, "default iterations: %d",
 			 opts.iterations);
 	}
@@ -1288,8 +1257,6 @@ void init_test(struct ct_pingpong *ct, struct pp_opts *opts)
 	char sstr[PP_STR_LEN];
 
 	size_str(sstr, opts->transfer_size);
-	if (!(opts->options & PP_OPT_ITER))
-		opts->iterations = size_to_count(opts->transfer_size);
 
 	ct->cnt_ack_msg = 0;
 }
@@ -1899,8 +1866,10 @@ int pp_finalize(struct ct_pingpong *ct)
  *                                CLI: Usage and Options parsing
  ******************************************************************************/
 
-void pp_pingpong_usage(char *name, char *desc)
+void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 {
+	char *str;
+
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
 	fprintf(stderr, "  %s [OPTIONS] <srv_addr>\tconnect to server\n", name);
@@ -1921,8 +1890,9 @@ void pp_pingpong_usage(char *name, char *desc)
 	fprintf(stderr, " %-20s %s\n", "-e <ep_type>",
 		"endpoint type: msg|rdm|dgram (dgram)");
 
-	fprintf(stderr, " %-20s %s\n", "-I <number>",
-		"number of iterations (1000)");
+	asprintf(&str, "number of iterations (%d)", ct->opts.iterations);
+	fprintf(stderr, " %-20s %s\n", "-I <number>", str);
+	free(str);
 	fprintf(stderr, " %-20s %s\n", "-S <size>",
 		"specific transfer size or 'all' (all)");
 
@@ -2187,8 +2157,8 @@ int main(int argc, char **argv)
 		.timeout_sec = -1,
 		.ctrl_connfd = -1,
 		.opts = {
-			.iterations = 1000,
-			.transfer_size = 1024,
+			.iterations = 10,
+			.transfer_size = 64,
 			.sizes_enabled = PP_DEFAULT_SIZE
 		},
 		.eq_attr.wait_obj = FI_WAIT_UNSPEC,
@@ -2211,7 +2181,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			pp_pingpong_usage(argv[0],
+			pp_pingpong_usage(&ct, argv[0],
 					  "Ping pong client and server");
 			return EXIT_FAILURE;
 		}
