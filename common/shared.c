@@ -833,7 +833,8 @@ int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
 		struct fid_cq *rxcq, struct fid_cntr *txcntr,
 		struct fid_cntr *rxcntr, bool post_initial_recv)
 {
-	int flags, ret;
+	uint64_t flags;
+	int ret;
 
 	if (fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST)
 		FT_EP_BIND(ep, eq, 0);
