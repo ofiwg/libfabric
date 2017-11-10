@@ -84,8 +84,10 @@ int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_domain_init(fabric, info, util_domain, context);
-	if (ret)
+	if (ret) {
+		free(util_domain);
 		return ret;
+	}
 
 	*domain = &util_domain->domain_fid;
 	(*domain)->fid.ops = &udpx_domain_fi_ops;
