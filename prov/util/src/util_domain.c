@@ -96,10 +96,8 @@ int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 	domain->fabric = fabric;
 	domain->prov = fabric->prov;
 	ret = util_domain_init(domain, info);
-	if (ret) {
-		free(domain);
+	if (ret)
 		return ret;
-	}
 
 	domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	domain->domain_fid.fid.context = context;
