@@ -111,7 +111,9 @@ int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
 		ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
 				   rx_buf->recv_entry->context,
-				   rx_buf->recv_entry->comp_flags,
+				   rx_buf->recv_entry->comp_flags |
+				   (rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
+				   FI_REMOTE_CQ_DATA : 0,
 				   rx_buf->pkt.hdr.size, NULL,
 				   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 		if (ret) {
