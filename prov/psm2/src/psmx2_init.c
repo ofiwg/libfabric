@@ -475,8 +475,16 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->domain_attr->mr_mode & FI_MR_BASIC)
+			if (hints->domain_attr->mr_mode == FI_MR_BASIC) {
 				mr_mode = FI_MR_BASIC;
+			} else if (hints->domain_attr->mr_mode == FI_MR_SCALABLE) {
+				mr_mode = FI_MR_SCALABLE;
+			} else if (hints->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
+				FI_INFO(&psmx2_prov, FI_LOG_CORE,
+					"hints->domain_attr->mr_mode has FI_MR_BASIC or FI_MR_SCALABLE "
+					"combined with other bits\n");
+				goto err_out;
+			}
 
 			switch (hints->domain_attr->threading) {
 			case FI_THREAD_UNSPEC:
