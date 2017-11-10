@@ -79,7 +79,9 @@ neg_unit_tests=(
 
 simple_tests=(
 	"cm_data"
-	"cq_data"
+	"cq_data -e msg"
+	"cq_data -e rdm"
+	"cq_data -e dgram"
 	"dgram"
 	"dgram_waitset"
 	"msg"
