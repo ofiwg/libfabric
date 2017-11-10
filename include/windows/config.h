@@ -74,6 +74,9 @@
 /* UDP provider is built */
 #define HAVE_UDP 1
 
+/* TCP provider is built */
+#define HAVE_TCP 1
+
 /* sockets provider is built as DSO */
 /* #undef HAVE_SOCKETS_DL */
 

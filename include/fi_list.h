@@ -89,6 +89,12 @@ static inline void dlist_remove(struct dlist_entry *item)
 	item->next->prev = item->prev;
 }
 
+static inline void dlist_remove_init(struct dlist_entry *item)
+{
+	dlist_remove(item);
+	dlist_init(item);
+}
+
 #define dlist_pop_front(head, type, container, member)			\
 	do {								\
 		container = container_of((head)->next, type, member);	\

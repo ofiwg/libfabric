@@ -50,6 +50,7 @@ common_srcs = \
 	prov/util/src/util_cntr.c   \
 	prov/util/src/util_domain.c \
 	prov/util/src/util_ep.c     \
+	prov/util/src/util_pep.c     \
 	prov/util/src/util_eq.c     \
 	prov/util/src/util_fabric.c \
 	prov/util/src/util_main.c   \
@@ -58,7 +59,7 @@ common_srcs = \
 	prov/util/src/util_buf.c    \
 	prov/util/src/util_mr.c     \
 	prov/util/src/util_ns.c     \
-	prov/util/src/util_shm.c 
+	prov/util/src/util_shm.c
 
 if MACOS
 common_srcs += src/unix/osd.c
@@ -347,6 +348,7 @@ include prov/rxd/Makefile.include
 include prov/bgq/Makefile.include
 include prov/mlx/Makefile.include
 include prov/shm/Makefile.include
+include prov/tcp/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 

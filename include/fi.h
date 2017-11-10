@@ -231,6 +231,20 @@ static inline int ofi_translate_addr_format(int family)
 	}
 }
 
+static inline int ofi_get_sa_family(uint32_t addr_format)
+{
+	switch (addr_format) {
+	case FI_SOCKADDR_IN:
+		return AF_INET;
+	case FI_SOCKADDR_IN6:
+		return AF_INET6;
+	case FI_SOCKADDR_IB:
+		return AF_IB;
+	default:
+		return 0;
+	}
+}
+
 const char *ofi_straddr(char *buf, size_t *len,
 			uint32_t addr_format, const void *addr);
 
