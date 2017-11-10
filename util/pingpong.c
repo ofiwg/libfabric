@@ -1868,8 +1868,6 @@ int pp_finalize(struct ct_pingpong *ct)
 
 void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 {
-	char *str;
-
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
 	fprintf(stderr, "  %s [OPTIONS] <srv_addr>\tconnect to server\n", name);
@@ -1890,9 +1888,8 @@ void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 	fprintf(stderr, " %-20s %s\n", "-e <ep_type>",
 		"endpoint type: msg|rdm|dgram (dgram)");
 
-	asprintf(&str, "number of iterations (%d)", ct->opts.iterations);
-	fprintf(stderr, " %-20s %s\n", "-I <number>", str);
-	free(str);
+	fprintf(stderr, " %-20s %s (%d)\n", "-I <number>",
+		"number of iterations", ct->opts.iterations);
 	fprintf(stderr, " %-20s %s\n", "-S <size>",
 		"specific transfer size or 'all' (all)");
 
