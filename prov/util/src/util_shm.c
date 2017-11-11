@@ -160,6 +160,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_region **peer_b
 
 	if (!peer->pid) {
 		FI_WARN(prov, FI_LOG_AV, "peer not initialized\n");
+		munmap(peer, sizeof(*peer));
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -187,6 +188,7 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 		peer_buf = freestack_pop(&map->peer);
 		*id = smr_peer_index(&map->peer, peer_buf);
 		strncpy(map->peer_addr[*id].name, name, SMR_NAME_SIZE);
+		map->peer_addr[*id].name[SMR_NAME_SIZE - 1] = '\0';
 		ret = smr_map_to_region(prov, peer_buf, map->peer_addr[*id].name);
 	} else {
 		FI_WARN(prov, FI_LOG_AV, "peer array is full\n");
