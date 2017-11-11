@@ -122,8 +122,10 @@ static int send_recv()
 	if (ret)
 		return ret;
 
-	while ((txcq && (tx_cq_cntr < tx_seq)) || (rxcq && (rx_cq_cntr < rx_seq)) ||
-	       (txcntr && !tx_cntr_done) || (rxcntr && !rx_cntr_done)) {
+	while (((opts.options & FT_OPT_TX_CQ) && (tx_cq_cntr < tx_seq)) ||
+	       ((opts.options & FT_OPT_TX_CNTR) && (!tx_cntr_done)) ||
+	       ((opts.options & FT_OPT_RX_CQ) && (rx_cq_cntr < rx_seq)) ||
+	       ((opts.options & FT_OPT_RX_CNTR) && (!rx_cntr_done))) {
 
 		/* Poll send and recv CQs/Cntrs */
 		do {
