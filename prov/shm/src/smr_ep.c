@@ -561,18 +561,11 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 		return -FI_EAGAIN;
 	}
 
-	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
-		ret = -FI_EAGAIN;
-		goto out;
-	}
-
 	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
 		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
 		if (ret) {
 			if (ret == -ENOENT)
-				ret = -FI_EAGAIN; 
-			goto out;
+				return -FI_EAGAIN; 
 		}
 	}
 
@@ -580,7 +573,13 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 	fastlock_acquire(&peer_smr->lock);
 	if (ofi_cirque_isfull(smr_cmd_queue(peer_smr))) {
 		ret = -FI_EAGAIN;
-		goto unlock;
+		goto unlock_region;
+	}
+
+	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
+		ret = -FI_EAGAIN;
+		goto unlock_cq;
 	}
 
 	total_len = ofi_total_iov_len(iov, iov_count);
@@ -607,10 +606,10 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 
 commit:
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
-unlock:
-	fastlock_release(&peer_smr->lock);
-out:
+unlock_cq:
 	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+unlock_region:
+	fastlock_release(&peer_smr->lock);
 	return ret;
 }
 

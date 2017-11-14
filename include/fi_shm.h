@@ -140,8 +140,8 @@ struct smr_region {
 	uint16_t	flags;
 	int		pid;
 	fastlock_t	lock; /* lock for shm access
-				 To process cmd, need to hold smr->lock (for cmd),
-				 then rx_cq->lock (lock for posted recvs) */
+				 Must hold smr->lock before tx/rx cq locks
+				 in order to progress or post recv */
 	struct smr_map	*map;
 
 	size_t		total_size;
