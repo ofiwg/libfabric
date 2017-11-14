@@ -336,6 +336,7 @@ fn:
 	}
 }
 
+/* Must call with `ep|srq::wre_lock` held */
 void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
 			   struct dlist_entry *wre_list,
 			   enum fi_ibv_wre_type wre_type)
@@ -364,7 +365,9 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 	} while (ret > 0);
 
 	/* Handle WRs for which there were no appropriate WCs */
+	fastlock_acquire(&ep->wre_lock);
 	fi_ibv_empty_wre_list(ep->wre_pool, &ep->wre_list, IBV_RECV_WR);
+	fastlock_release(&ep->wre_lock);
 	fastlock_release(&ep->rcq->lock);
 
 	fastlock_acquire(&ep->scq->lock);
@@ -372,10 +375,12 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->scq);
 	} while (ret > 0);
 	/* Handle WRs for which there were no appropriate WCs */
-
+	fastlock_acquire(&ep->wre_lock);
 	fi_ibv_empty_wre_list(ep->wre_pool, &ep->wre_list, IBV_SEND_WR);
+	fastlock_release(&ep->wre_lock);
 	fastlock_release(&ep->scq->lock);
 
+	fastlock_destroy(&ep->wre_lock);
 	util_buf_pool_destroy(ep->wre_pool);
 }
 
@@ -384,6 +389,7 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
 	struct fi_ibv_wre *wre;
 	struct util_buf_pool *wre_pool;
+	fastlock_t *wre_lock;
 	ssize_t ret;
 
 	ret = ibv_poll_cq(cq->cq, 1, wc);
@@ -398,6 +404,7 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 		assert(wre && (wre->ep || wre->srq));
 		if (wre->ep) {
 			wre_pool = wre->ep->wre_pool;
+			wre_lock = &wre->ep->wre_lock;
 			wre->ep = NULL;
 			if (wc->status == IBV_WC_WR_FLUSH_ERR)
 				/* Handles case where remote side destroys
@@ -406,6 +413,7 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 				ret = 0;
 		} else if (wre->srq) {
 			wre_pool = wre->srq->wre_pool;
+			wre_lock = &wre->srq->wre_lock;
 			wre->srq = NULL;
 			if (wc->status == IBV_WC_WR_FLUSH_ERR)
 				/* Handles case where remote side destroys
@@ -417,8 +425,11 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 			return -FI_EAVAIL;
 		}
 		wc->wr_id = (uintptr_t)wre->context;
+
+		fastlock_acquire(wre_lock);
 		dlist_remove(&wre->entry);
  		util_buf_release(wre_pool, wre);
+		fastlock_release(wre_lock);
 	} else {
 		return fi_ibv_handle_internal_signal_wc(cq, wc);
 	}

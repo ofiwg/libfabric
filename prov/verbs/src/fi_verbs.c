@@ -319,10 +319,16 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 
 	if (ep->scq) {
 		if (wr->send_flags & IBV_SEND_SIGNALED) {
+			fastlock_acquire(&ep->wre_lock);
 			wre = util_buf_alloc(ep->wre_pool);
-			if (OFI_UNLIKELY(!wre))
+			if (OFI_UNLIKELY(!wre)) {
+				fastlock_release(&ep->wre_lock);
 				return -FI_EAGAIN;
+			}
 			memset(wre, 0, sizeof(*wre));
+			dlist_insert_tail(&wre->entry, &ep->wre_list);
+			fastlock_release(&ep->wre_lock);
+
 			wre->context = context;
 			wr->wr_id = (uintptr_t)wre;
 			wre->ep = ep;
@@ -333,8 +339,6 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 			assert((wr->wr_id & ep->scq->wr_id_mask) !=
 			       ep->scq->send_signal_wr_id);
 			ofi_atomic_set32(&ep->unsignaled_send_cnt, 0);
-
-			dlist_insert_tail(&wre->entry, &ep->wre_list);
 		} else {
 			if (VERBS_SIGNAL_SEND(ep)) {
 				ret = fi_ibv_signal_send(ep, wr);
@@ -355,7 +359,7 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 	}
 
 	return FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr,
-				  FI_IBV_RELEASE_WRE(ep->wre_pool, wre));
+				  FI_IBV_RELEASE_WRE(ep, wre));
 }
 
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,

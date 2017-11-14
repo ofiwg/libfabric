@@ -329,7 +329,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!info->handle) {
 		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
 		if (ret)
-			goto err;
+			goto err1;
 	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
 		ep->id = connreq->id;
@@ -342,30 +342,30 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 				      VERBS_RESOLVE_TIMEOUT)) {
 			ret = -errno;
 			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
-			goto err;
+			goto err2;
 		}
 
 		if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
 			ret = -errno;
 			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
-			goto err;
+			goto err2;
 		}
 	} else {
 		ret = -FI_ENOSYS;
-		goto err;
+		goto err1;
 	}
 
+	fastlock_init(&ep->wre_lock);
 	ep->wre_pool = util_buf_pool_create(sizeof(struct fi_ibv_wre),
 					    16, 0, VERBS_WRE_CNT);
 	if (!ep->wre_pool) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wre_pool\n");
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err3;
 	}
 	dlist_init(&ep->wre_list);
 
 	ep->id->context = &ep->ep_fid.fid;
-
 	ep->ep_fid.fid.fclass = FI_CLASS_EP;
 	ep->ep_fid.fid.context = context;
 	ep->ep_fid.fid.ops = &fi_ibv_msg_ep_ops;
@@ -381,10 +381,12 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	ep->domain = dom;
 	*ep_fid = &ep->ep_fid;
 
-	return 0;
-err:
-	if (ep->id)
-		rdma_destroy_ep(ep->id);
+	return FI_SUCCESS;
+err3:
+	fastlock_destroy(&ep->wre_lock);
+err2:
+	rdma_destroy_ep(ep->id);
+err1:
 	fi_ibv_free_msg_ep(ep);
 	return ret;
 }

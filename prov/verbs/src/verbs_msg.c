@@ -46,10 +46,16 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	assert(_ep->rcq);
 
+	fastlock_acquire(&_ep->wre_lock);
 	wre = util_buf_alloc(_ep->wre_pool);
-	if (OFI_UNLIKELY(!wre))
+	if (OFI_UNLIKELY(!wre)) {
+		fastlock_release(&_ep->wre_lock);
 		return -FI_EAGAIN;
+	}
 	memset(wre, 0, sizeof(*wre));
+	dlist_insert_tail(&wre->entry, &_ep->wre_list);
+	fastlock_release(&_ep->wre_lock);
+
 	wre->ep = _ep;
 	wre->context = msg->context;
 	wre->wr.type = IBV_RECV_WR;
@@ -67,9 +73,8 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	wre->wr.rwr.sg_list = sge;
 	wre->wr.rwr.num_sge = msg->iov_count;
 
-	dlist_insert_tail(&wre->entry, &_ep->wre_list);
 	return FI_IBV_INVOKE_POST(recv, recv, _ep->id->qp, &wre->wr.rwr,
-				  FI_IBV_RELEASE_WRE(_ep->wre_pool, wre));
+				  FI_IBV_RELEASE_WRE(_ep, wre));
 }
 
 static ssize_t

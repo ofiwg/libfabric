@@ -141,11 +141,13 @@
 	ret;								\
 })
 
-#define FI_IBV_RELEASE_WRE(wre_pool, wre)		\
+#define FI_IBV_RELEASE_WRE(ep, wre)			\
 ({							\
 	if (wre) {					\
+		fastlock_acquire(&ep->wre_lock);	\
 		dlist_remove(&wre->entry);		\
-		util_buf_release(wre_pool, wre);	\
+		util_buf_release(ep->wre_pool, wre);	\
+		fastlock_release(&ep->wre_lock);	\
 	}						\
 })
 extern struct fi_provider fi_ibv_prov;
@@ -410,6 +412,7 @@ struct fi_ibv_mem_desc {
 struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
+	fastlock_t		wre_lock;
 	struct util_buf_pool	*wre_pool;
 	struct dlist_entry	wre_list;
 };
@@ -428,6 +431,7 @@ struct fi_ibv_msg_ep {
 	struct fi_info		*info;
 	ofi_atomic32_t		unsignaled_send_cnt;
 	ofi_atomic32_t		comp_pending;
+	fastlock_t		wre_lock;
 	struct util_buf_pool	*wre_pool;
 	struct dlist_entry	wre_list;
 	uint64_t		ep_id;
