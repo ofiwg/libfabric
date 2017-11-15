@@ -338,5 +338,6 @@ dist-hook: fabtests.spec
 	cp fabtests.spec $(distdir)
 
 test:
-	./scripts/runfabtests.sh -vvv -S $(os_excludes)
-	./scripts/runfabtests.sh -vvv -S $(os_excludes) -R -f ./test_configs/udp/udp.exclude udp
+	./scripts/runfabtests.sh -vvv -S -R $(os_excludes)
+	./scripts/runfabtests.sh -vvv -S -R $(os_excludes) -f ./test_configs/udp/udp.exclude udp
+	./scripts/runfabtests.sh -vvv -S -R $(os_excludes) -f ./test_configs/ofi_rxm/ofi_rxm.exclude "sockets;ofi_rxm"
