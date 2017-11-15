@@ -185,8 +185,9 @@ fi_ibv_rdm_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 	}
 
 	conn->ack_mr = ibv_reg_mr(ep->domain->pd, &conn->sbuf_ack_status,
-		sizeof(conn->sbuf_ack_status),
-		IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+				  sizeof(conn->sbuf_ack_status),
+				  IBV_ACCESS_LOCAL_WRITE |
+				  IBV_ACCESS_REMOTE_WRITE);
 
 	if (!conn->ack_mr) {
 		assert(conn->ack_mr);
