@@ -103,11 +103,11 @@ struct smr_ep_entry {
 };
 
 struct smr_ep;
-typedef void (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
+typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
 		uint64_t flags, size_t len, void *buf, void *addr,
-		uint64_t tag);
-typedef void (*smr_tx_comp_func)(struct smr_ep *ep, void *context,
-		uint64_t flags);
+		uint64_t tag, uint64_t err);
+typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context,
+		uint64_t flags, uint64_t err);
 
 
 struct smr_match_attr {
