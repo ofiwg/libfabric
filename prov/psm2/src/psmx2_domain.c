@@ -34,12 +34,112 @@
 
 static int psmx2_trx_ctxt_cnt = 0;
 
+/*
+ * Tx/Rx context disconnect protocol:
+ *
+ * TRX_CTXT disconnect REQ:
+ *	args[0].u32w0	cmd
+ *
+ * Before a PSM2 endpoint is closed, a TRX_CTXT disconnect REQ is sent to
+ * all connected peers. Each peer then calls psm2_ep_disconnet() to clean
+ * up the local connection state. This allows a future endpoint with the
+ * same epid to connect to the same peers.
+ */
+
+static psm2_error_t (*psmx2_disconnect_psm2_ep)(psm2_ep_t ep,
+						int epaddr_cnt,
+						psm2_epaddr_t *epaddrs,
+						const int *masks,
+						psm2_error_t *errors,
+						int64_t timeout);
+
+struct disconnect_args {
+	psm2_ep_t	ep;
+	psm2_epaddr_t	epaddr;
+};
+
+static void *disconnect_func(void *args)
+{
+	struct disconnect_args *disconn = args;
+	psm2_error_t errors;
+
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"psm2_ep: %p, epaddr: %p\n", disconn->ep, disconn->epaddr);
+
+	(*psmx2_disconnect_psm2_ep)(disconn->ep, 1, &disconn->epaddr, NULL,
+				    &errors, 5*1e9);
+	free(args);
+	return NULL;
+}
+
+int psmx2_am_trx_ctxt_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
+				  int nargs, void *src, uint32_t len,
+				  struct psmx2_trx_ctxt *trx_ctxt)
+{
+	psm2_epaddr_t epaddr;
+	int err = 0;
+	int cmd;
+	struct disconnect_args *disconn;
+	pthread_t disconnect_thread;
+
+	psm2_am_get_source(token, &epaddr);
+	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
+
+	switch(cmd) {
+	case PSMX2_AM_REQ_TRX_CTXT_DISCONNECT:
+		if (psmx2_disconnect_psm2_ep) {
+			/*
+			 * we can't call psm2_ep_disconnect from the AM
+			 * handler. instead, create a thread to do the work.
+			 * the performance of this operation is not important.
+			 */
+			disconn = malloc(sizeof(*disconn));
+			if (args) {
+				disconn->ep = trx_ctxt->psm2_ep;
+				disconn->epaddr = epaddr;
+				pthread_create(&disconnect_thread, NULL,
+					       disconnect_func, disconn);
+				pthread_detach(disconnect_thread);
+			}
+		}
+		break;
+
+	default:
+		err = -FI_EINVAL;
+		break;
+	}
+
+	return err;
+}
+
+void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
+{
+	struct dlist_entry *item, *tmp;
+	struct psmx2_epaddr_context *peer;
+        psm2_amarg_t arg;
+
+	arg.u32w0 = PSMX2_AM_REQ_TRX_CTXT_DISCONNECT;
+
+	psmx2_lock(&trx_ctxt->peer_lock, 2);
+	dlist_foreach_safe(&trx_ctxt->peer_list, item, tmp) {
+		dlist_remove(item);
+		peer = container_of(item, struct psmx2_epaddr_context, entry);
+		psm2_am_request_short(peer->epaddr, PSMX2_AM_TRX_CTXT_HANDLER,
+				      &arg, 1, NULL, 0, 0, NULL, NULL);
+		psm2_epaddr_setctxt(peer->epaddr, NULL);
+		free(peer);
+	}
+	psmx2_unlock(&trx_ctxt->peer_lock, 2);
+}
+
 void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	int err;
 
 	if (!trx_ctxt)
 		return;
+
+	psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
 
 	if (trx_ctxt->am_initialized)
 		psmx2_am_fini(trx_ctxt);
@@ -69,6 +169,7 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 	util_buf_pool_destroy(trx_ctxt->am_req_pool);
 	fastlock_destroy(&trx_ctxt->am_req_pool_lock);
 	fastlock_destroy(&trx_ctxt->poll_lock);
+	fastlock_destroy(&trx_ctxt->peer_lock);
 	free(trx_ctxt);
 }
 
@@ -156,10 +257,12 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 		goto err_out_close_ep;
 	}
 
+	fastlock_init(&trx_ctxt->peer_lock);
 	fastlock_init(&trx_ctxt->poll_lock);
 	fastlock_init(&trx_ctxt->am_req_pool_lock);
 	fastlock_init(&trx_ctxt->rma_queue.lock);
 	fastlock_init(&trx_ctxt->trigger_queue.lock);
+	dlist_init(&trx_ctxt->peer_list);
 	slist_init(&trx_ctxt->rma_queue.list);
 	slist_init(&trx_ctxt->trigger_queue.list);
 	trx_ctxt->id = psmx2_trx_ctxt_cnt++;
@@ -221,7 +324,7 @@ static int psmx2_progress_set_affinity(char *affinity)
 
 		if (n < 2)
 			end = start;
-	
+
 		if (stride < 1)
 			stride = 1;
 
@@ -384,6 +487,12 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 			     struct psmx2_ep_name *src_addr)
 {
 	int err;
+	void *dlsym(void *handle, const char *symbol);
+
+	psmx2_disconnect_psm2_ep = dlsym(NULL, "psm2_ep_disconnect");
+	if (!psmx2_disconnect_psm2_ep)
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"function psm2_ep_disconnect() is missing\n");
 
 	psmx2_am_global_init();
 	psmx2_atomic_global_init();
@@ -407,7 +516,7 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	}
 
 	domain->mr_reserved_key = 1;
-	
+
 	err = fastlock_init(&domain->vl_lock);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
@@ -501,7 +610,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	err = ofi_domain_init(fabric, info, &domain_priv->util_domain, context);
 	if (err)
 		goto err_out_free_domain;
-		
+
 	/* fclass & context are set in ofi_domain_init */
 	domain_priv->util_domain.domain_fid.fid.ops = &psmx2_fi_ops;
 	domain_priv->util_domain.domain_fid.ops = &psmx2_domain_ops;
