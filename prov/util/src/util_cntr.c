@@ -36,8 +36,8 @@
 #include <fi_enosys.h>
 #include <fi_util.h>
 
-int ofi_check_cntr_attr(const struct fi_provider *prov,
-			const struct fi_cntr_attr *attr)
+static int ofi_check_cntr_attr(const struct fi_provider *prov,
+			       const struct fi_cntr_attr *attr)
 {
 	if (!attr)
 		return FI_SUCCESS;

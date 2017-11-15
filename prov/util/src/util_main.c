@@ -124,7 +124,7 @@ void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
 	}
 }
 
-int util_find_domain(struct dlist_entry *item, const void *arg)
+static int util_find_domain(struct dlist_entry *item, const void *arg)
 {
 	const struct util_domain *domain;
 	const struct fi_info *info = arg;

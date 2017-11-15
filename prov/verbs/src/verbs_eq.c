@@ -224,8 +224,8 @@ ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 	return len;
 }
 
-ssize_t fi_ibv_eq_write(struct fid_eq *eq_fid, uint32_t event,
-		const void *buf, size_t len, uint64_t flags)
+static ssize_t fi_ibv_eq_write(struct fid_eq *eq_fid, uint32_t event,
+			       const void *buf, size_t len, uint64_t flags)
 {
 	struct fi_ibv_eq *eq;
 

@@ -44,7 +44,7 @@
 
 
 extern int ofi_init;
-extern void fi_ini();
+extern void fi_ini(void);
 
 struct fi_param_entry {
 	const struct fi_provider *provider;

@@ -174,7 +174,7 @@ static struct fi_ops_msg fi_ibv_srq_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-int fi_ibv_srq_close(fid_t fid)
+static int fi_ibv_srq_close(fid_t fid)
 {
 	struct fi_ibv_srq_ep *srq_ep;
 	int ret;

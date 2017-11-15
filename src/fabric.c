@@ -151,7 +151,7 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
  * is availabe.  Initialize the socket(s) provider last.  This will result in
  * it being the least preferred provider.
  */
-static void ofi_ordered_provs_init()
+static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] =
 			{"psm2", "psm", "usnic", "mlx", "verbs","gni",
