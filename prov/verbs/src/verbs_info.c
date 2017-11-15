@@ -69,8 +69,8 @@
 #define VERBS_INFO_NODE_2_UD_ADDR(sybsys, node, svc, ib_ud_addr)			\
 	VERBS_INFO(sybsys, "'%s:%u' resolved to <gid <interface_id=%"PRIu64		\
 			   ", subnet_prefix=%"PRIu64">, lid=%d, service = %u>\n",	\
-		   node, svc, (ib_ud_addr)->gid.global.interface_id,			\
-		   (ib_ud_addr)->gid.global.subnet_prefix,				\
+		   node, svc, be64toh((ib_ud_addr)->gid.global.interface_id),		\
+		   be64toh((ib_ud_addr)->gid.global.subnet_prefix),			\
 		   (ib_ud_addr)->lid, (ib_ud_addr)->service)
 
 const struct fi_fabric_attr verbs_fabric_attr = {
@@ -652,8 +652,8 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			goto err;
 		}
 
-		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%lx",
-			 gid.global.subnet_prefix);
+		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%" PRIu64,
+			 be64toh(gid.global.subnet_prefix));
 
 		switch (ep_dom->type) {
 		case FI_EP_MSG:
