@@ -214,6 +214,9 @@ static int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint64_t fla
 void smr_progress_resp(struct smr_ep *ep)
 {
 	struct smr_resp *resp;
+	struct dlist_entry *dlist_entry;
+	struct smr_pending_cmd *pending;
+	struct smr_match_attr match_attr;
 	int ret;
 
 	fastlock_acquire(&ep->region->lock);
@@ -223,13 +226,26 @@ void smr_progress_resp(struct smr_ep *ep)
 		resp = ofi_cirque_head(smr_resp_queue(ep->region));
 		if (resp->status == FI_EBUSY)
 			break;
-		ret = ep->tx_comp(ep, (void *) resp->msg_id, FI_SEND | resp->flags,
-				  resp->status);
+		match_attr.ctx = resp->msg_id;;
+		dlist_entry = dlist_remove_first_match(&ep->pend_queue.msg_list,
+						       ep->pend_queue.match_msg,
+						       &match_attr);
+		if (!dlist_entry) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"no outstanding commands for found response\n");
+			break;
+		}
+		pending = container_of(dlist_entry, struct smr_pending_cmd, entry);
+
+		ret = ep->tx_comp(ep, (void *) resp->msg_id,
+				 (pending->cmd.hdr.op.op == ofi_op_tagged) ?
+				  FI_SEND | FI_TAGGED : FI_SEND, resp->status);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unable to process tx completion\n");
 			break;
 		}
+		freestack_push(ep->pend_fs, pending);
 		ofi_cirque_discard(smr_resp_queue(ep->region));
 	}
 	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
@@ -297,7 +313,6 @@ static void smr_progress_iov(struct smr_cmd *cmd, struct smr_ep_entry *entry,
 	}
 
 	resp->msg_id = cmd->hdr.msg_id;
-	resp->flags = (cmd->hdr.op.op == ofi_op_tagged) ? FI_TAGGED : 0;
 	resp->status = entry->err; /* Must be set last */
 }
 
@@ -308,7 +323,7 @@ void smr_progress_cmd(struct smr_ep *ep)
 	struct dlist_entry *dlist_entry;
 	struct smr_ep_entry *entry;
 	struct smr_cmd *cmd;
-	struct smr_unexp_msg *unexp;
+	struct smr_pending_cmd *unexp;
 	fi_addr_t addr;
 	int ret = 0;
 
@@ -392,11 +407,20 @@ static int smr_match_tagged(struct dlist_entry *item, const void *args)
 static int smr_match_unexp(struct dlist_entry *item, const void *args)
 {
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
-	struct smr_unexp_msg *unexp_msg;
+	struct smr_pending_cmd *unexp_msg;
 
-	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
+	unexp_msg = container_of(item, struct smr_pending_cmd, entry);
 	return smr_match_addr(unexp_msg->cmd.hdr.op.addr, attr->addr) &&
 	       smr_match_tag(unexp_msg->cmd.hdr.op.tag, attr->ignore, attr->tag);
+}
+
+static int smr_match_ctx(struct dlist_entry *item, const void *args)
+{
+	struct smr_match_attr *attr = (struct smr_match_attr *)args;
+	struct smr_pending_cmd *pending_msg;
+
+	pending_msg = container_of(item, struct smr_pending_cmd, entry);
+	return pending_msg->cmd.hdr.msg_id == attr->ctx;
 }
 
 static void smr_init_recv_queue(struct smr_recv_queue *recv_queue,
@@ -406,11 +430,11 @@ static void smr_init_recv_queue(struct smr_recv_queue *recv_queue,
 	recv_queue->match_recv = match_func;
 }
 
-static void smr_init_unexp_queue(struct smr_unexp_queue *unexp_queue,
+static void smr_init_pending_queue(struct smr_pending_queue *queue,
 				   dlist_func_t *match_func)
 {
-	dlist_init(&unexp_queue->msg_list);
-	unexp_queue->match_msg = match_func;
+	dlist_init(&queue->msg_list);
+	queue->match_msg = match_func;
 }
 
 void smr_ep_progress(struct util_ep *util_ep)
@@ -426,7 +450,7 @@ void smr_ep_progress(struct util_ep *util_ep)
 static int smr_check_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 {
 	struct smr_match_attr match_attr;
-	struct smr_unexp_msg *unexp_msg;
+	struct smr_pending_cmd *unexp_msg;
 	struct dlist_entry *dlist_entry;
 	int ret = 0;
 
@@ -439,7 +463,7 @@ static int smr_check_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	if (!dlist_entry)
 		return 0;
 
-	unexp_msg = container_of(dlist_entry, struct smr_unexp_msg, entry);
+	unexp_msg = container_of(dlist_entry, struct smr_pending_cmd, entry);
 
 	switch (unexp_msg->cmd.hdr.op.op_src){
 	case smr_src_inline:
@@ -540,6 +564,16 @@ ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	msg_iov.iov_len = len;
 
 	return smr_generic_recvmsg(ep_fid, &msg_iov, 1, src_addr, 0, 0, context, 0);
+}
+
+static void smr_post_pending(struct smr_ep *ep, struct smr_cmd *cmd)
+{
+	struct smr_pending_cmd *pend_cmd;
+
+	pend_cmd = freestack_pop(ep->pend_fs);
+	pend_cmd->cmd = *cmd;
+
+	dlist_insert_tail(&pend_cmd->entry, &ep->pend_queue.msg_list);
 }
 
 static void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, void *context,
@@ -661,6 +695,7 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 			       iov_count, total_len, context, flags, tag,
 			       ep->region, resp);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
+		smr_post_pending(ep, cmd);
 		goto commit;
 	}
 	ret = ep->tx_comp(ep, context, FI_SEND | flags, 0);
@@ -1055,10 +1090,12 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err;
 
 	ep->recv_fs = smr_recv_fs_create(info->rx_attr->size);
-	ep->unexp_fs = smr_unexp_fs_create(info->tx_attr->size);
+	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size);
+	ep->pend_fs = smr_pend_fs_create(info->tx_attr->size);
 	smr_init_recv_queue(&ep->recv_queue, smr_match_msg);
 	smr_init_recv_queue(&ep->trecv_queue, smr_match_tagged);
-	smr_init_unexp_queue(&ep->unexp_queue, smr_match_unexp);
+	smr_init_pending_queue(&ep->unexp_queue, smr_match_unexp);
+	smr_init_pending_queue(&ep->pend_queue, smr_match_ctx);
 
 	ep->util_ep.ep_fid.fid.ops = &smr_ep_fi_ops;
 	ep->util_ep.ep_fid.ops = &smr_ep_ops;
