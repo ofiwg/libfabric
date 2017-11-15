@@ -97,9 +97,9 @@ struct smr_ep_entry {
 	uint64_t		tag;
 	uint64_t		ignore;
 	struct iovec		iov[SMR_IOV_LIMIT];
-	uint8_t			iov_count;
-	uint8_t			flags;
-	uint8_t			resv[sizeof(size_t) - 2];
+	uint32_t		iov_count;
+	uint32_t		flags;
+	uint64_t		err;
 };
 
 struct smr_ep;
@@ -153,7 +153,6 @@ struct smr_ep {
 	size_t			rx_size;
 	const char		*name;
 	struct smr_region	*region;
-	uint32_t		msg_id;
 	struct smr_recv_fs	*recv_fs; /* protected by rx_cq lock */
 	struct smr_recv_queue	recv_queue;
 	struct smr_recv_queue	trecv_queue;

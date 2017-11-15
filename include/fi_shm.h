@@ -65,17 +65,34 @@ extern "C" {
 #endif
 
 
-/* SMR op_data: Specifies data source location */
+/* SMR op_src: Specifies data source location */
 enum {
 	smr_src_inline,	/* command data */
 	smr_src_inject,	/* inject buffers */
 	smr_src_iov,	/* reference iovec via CMA */
 };
 
+struct smr_op_hdr {
+	fi_addr_t		addr;
+	uint32_t		op;
+	uint32_t		op_src;
+
+	uint64_t		size;
+	uint64_t		data;
+	union {
+		uint64_t	tag;
+		uint8_t		iov_count;
+		struct {
+			uint8_t	datatype;
+			uint8_t	op;
+			uint8_t ioc_count;
+		} atomic;
+	};
+};
+
 struct smr_cmd_hdr {
-	struct ofi_op_hdr	op;
-	uint32_t		msg_id;
-	uint32_t		rx_key;
+	struct smr_op_hdr	op;
+	uint64_t		msg_id;
 };
 
 #define SMR_CMD_SIZE		128	/* align with 64-byte cache line */
@@ -83,7 +100,8 @@ struct smr_cmd_hdr {
 
 #define SMR_NAME_SIZE	32
 struct smr_addr {
-	char	name[SMR_NAME_SIZE];
+	char		name[SMR_NAME_SIZE];
+	fi_addr_t	addr;
 };
 
 union smr_cmd_data {
@@ -103,14 +121,17 @@ enum {
 };
 
 struct smr_region;
-DECLARE_FREESTACK(struct smr_region *, smr_peer);
+
+struct smr_peer {
+	struct smr_addr		peer;
+	struct smr_region	*region;
+};
 
 #define SMR_MAX_PEERS	256
 
 struct smr_map {
 	fastlock_t	lock;
-	struct smr_addr	peer_addr[SMR_MAX_PEERS];
-	struct smr_peer	peer;	/* must be last */
+	struct smr_peer	peers[SMR_MAX_PEERS];
 };
 
 struct smr_region {
@@ -119,8 +140,8 @@ struct smr_region {
 	uint16_t	flags;
 	int		pid;
 	fastlock_t	lock; /* lock for shm access
-				 To process cmd, need to hold smr->lock (for cmd),
-				 then rx_cq->lock (lock for posted recvs) */
+				 Must hold smr->lock before tx/rx cq locks
+				 in order to progress or post recv */
 	struct smr_map	*map;
 
 	size_t		total_size;
@@ -129,12 +150,13 @@ struct smr_region {
 	size_t		cmd_queue_offset;
 	size_t		resp_queue_offset;
 	size_t		inject_pool_offset;
+	size_t		peer_addr_offset;
 	size_t		name_offset;
 };
 
 struct smr_resp {
-	uint32_t	msg_id;
-	uint32_t	status;
+	uint64_t	msg_id;
+	uint64_t	status;
 	uint64_t	flags;
 };
 
@@ -146,13 +168,9 @@ OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
 DECLARE_SMR_FREESTACK(struct smr_inject_buf, smr_inject_pool);
 
-static inline struct smr_peer *smr_peer(struct smr_region *smr)
-{
-	return &smr->map->peer;
-}
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {
-	return smr->map->peer.buf[i];
+	return smr->map->peers[i].region;
 }
 static inline struct smr_cmd_queue *smr_cmd_queue(struct smr_region *smr)
 {
@@ -165,6 +183,10 @@ static inline struct smr_resp_queue *smr_resp_queue(struct smr_region *smr)
 static inline struct smr_inject_pool *smr_inject_pool(struct smr_region *smr)
 {
 	return (struct smr_inject_pool *) ((char *) smr + smr->inject_pool_offset);
+}
+static inline struct smr_addr *smr_peer_addr(struct smr_region *smr)
+{
+	return (struct smr_addr *) ((char *) smr + smr->peer_addr_offset); 
 }
 static inline const char *smr_name(struct smr_region *smr)
 {
@@ -185,9 +207,11 @@ struct smr_attr {
 int	smr_map_create(const struct fi_provider *prov, int peer_count,
 		       struct smr_map **map);
 int	smr_map_to_region(const struct fi_provider *prov,
-			  struct smr_region **peer_buf, char *name);
+			  struct smr_peer *peer_buf);
+void	smr_map_to_endpoint(struct smr_region *region, int index);
+void	smr_exchange_all_peers(struct smr_region *region);
 int	smr_map_add(const struct fi_provider *prov,
-		    struct smr_map *map, const char *name, int *id);
+		    struct smr_map *map, const char *name, int id);
 void	smr_map_del(struct smr_map *map, int id);
 void	smr_map_free(struct smr_map *map);
 

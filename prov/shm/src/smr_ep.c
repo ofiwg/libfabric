@@ -125,7 +125,7 @@ static void smr_tx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags)
 }
 
 static void smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags,
-			 size_t len, void *buf, void *addr, uint64_t tag)
+			size_t len, void *buf, void *addr, uint64_t tag)
 {
 	struct fi_cq_tagged_entry *comp;
 
@@ -140,7 +140,7 @@ static void smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags,
 }
 
 static void smr_rx_src_comp(struct smr_ep *ep, void *context, uint64_t flags,
-			     size_t len, void *buf, void *addr, uint64_t tag)
+			    size_t len, void *buf, void *addr, uint64_t tag)
 {
 	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] =
 		(uint32_t) (uintptr_t) addr;
@@ -167,13 +167,16 @@ void smr_progress_resp(struct smr_ep *ep)
 	struct smr_resp *resp;
 
 	fastlock_acquire(&ep->region->lock);
-	while (!ofi_cirque_isempty(smr_resp_queue(ep->region))) {
+	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+	while (!ofi_cirque_isempty(smr_resp_queue(ep->region)) &&
+	       !ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		resp = ofi_cirque_head(smr_resp_queue(ep->region));
-		if (resp->status)
+		if (resp->status == FI_EBUSY)
 			break;
-		ep->tx_comp(ep, NULL, resp->flags);
+		ep->tx_comp(ep, (void *) resp->msg_id, FI_SEND | resp->flags);
 		ofi_cirque_discard(smr_resp_queue(ep->region));
 	}
+	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&ep->region->lock);
 }
 
@@ -185,9 +188,9 @@ static int smr_progress_inline(struct smr_cmd *cmd, struct smr_ep_entry *entry)
 	if (ret != cmd->hdr.op.size) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"recv truncated");
-		return -FI_EIO;
+		entry->err = FI_EIO;
 	}
-	return 0;
+	return ret;
 }
 
 static int smr_progress_inject(struct smr_cmd *cmd, struct smr_ep_entry *entry,
@@ -205,9 +208,7 @@ static int smr_progress_inject(struct smr_cmd *cmd, struct smr_ep_entry *entry,
 	if (ret != cmd->hdr.op.size) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"recv truncated");
-		ret = -FI_EIO;
-	} else {
-		ret = 0;
+		entry->err = FI_EIO;
 	}
 	smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 
@@ -215,19 +216,16 @@ static int smr_progress_inject(struct smr_cmd *cmd, struct smr_ep_entry *entry,
 }
 
 static int smr_progress_iov(struct smr_cmd *cmd, struct smr_ep_entry *entry,
-			    struct smr_ep *ep, uint64_t flags)
+			    struct smr_ep *ep)
 {
 	struct smr_region *peer_smr;
 	struct smr_resp *resp;
 	int peer_id, ret;
 
-	peer_id = *(int *)ofi_av_get_addr(ep->util_ep.av,
-					  entry->addr);
+	peer_id = (int) cmd->hdr.op.addr;
 	peer_smr = smr_peer_region(ep->region, peer_id);
 	resp = (struct smr_resp *) ((char **) peer_smr +
 				    (size_t) cmd->hdr.op.data);
-	resp->msg_id = cmd->hdr.msg_id;
-	resp->flags = flags;
 
 	ret = process_vm_readv(peer_smr->pid, entry->iov,
 			       entry->iov_count, cmd->data.iov,
@@ -237,17 +235,18 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct smr_ep_entry *entry,
 		if (ret < 0) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"CMA write error\n");
-			ret = -errno;
+			entry->err = errno;
 		} else { 
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"partial read occurred\n");
-			ret = -FI_EIO;
+			entry->err = FI_EIO;
 		}
-	} else {
-		ret = 0;
 	}
 
-	resp->status = ret;
+	resp->msg_id = cmd->hdr.msg_id;
+	resp->flags = (cmd->hdr.op.op == ofi_op_tagged) ? FI_TAGGED : 0;
+	resp->status = entry->err; /* Must be set last */
+
 	return ret;
 }
 
@@ -268,12 +267,13 @@ void smr_progress_cmd(struct smr_ep *ep)
 
 		cmd = ofi_cirque_head(smr_cmd_queue(ep->region));
 
-		recv_queue = (cmd->hdr.op.flags & FI_TAGGED) ?
+		recv_queue = (cmd->hdr.op.op == ofi_op_tagged) ?
 			      &ep->trecv_queue : &ep->recv_queue;
+
 		if (dlist_empty(&recv_queue->recv_list))
 			break;
 
-		match_attr.addr = FI_ADDR_UNSPEC;
+		match_attr.addr = cmd->hdr.op.addr;
 		match_attr.tag = cmd->hdr.op.tag;
 
 		dlist_entry = dlist_remove_first_match(&recv_queue->recv_list,
@@ -290,7 +290,7 @@ void smr_progress_cmd(struct smr_ep *ep)
 		}
 		entry = container_of(dlist_entry, struct smr_ep_entry, entry);
 
-		switch (cmd->hdr.op.op_data){
+		switch (cmd->hdr.op.op_src){
 		case smr_src_inline:
 			ret = smr_progress_inline(cmd, entry);
 			break;
@@ -298,15 +298,15 @@ void smr_progress_cmd(struct smr_ep *ep)
 			ret = smr_progress_inject(cmd, entry, ep);
 			break;
 		case smr_src_iov:
-			ret = smr_progress_iov(cmd, entry, ep, cmd->hdr.op.flags);
+			ret = smr_progress_iov(cmd, entry, ep);
 			break;
 		default:
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unidentified operation type\n");
-			ret = -FI_EINVAL;
+			entry->err = FI_EINVAL;
 		}
-		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr,
-			    cmd->hdr.op.tag);
+		ep->rx_comp(ep, entry->context, entry->flags,
+			    ret, entry->iov[0].iov_base, &addr, cmd->hdr.op.tag);
 		freestack_push(ep->recv_fs, entry);
 		ofi_cirque_discard(smr_cmd_queue(ep->region));
 	}
@@ -339,7 +339,7 @@ static int smr_match_unexp(struct dlist_entry *item, const void *args)
 	struct smr_unexp_msg *unexp_msg;
 
 	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
-	return smr_match_addr(FI_ADDR_UNSPEC, attr->addr) &&//TODO figure out addr
+	return smr_match_addr(unexp_msg->cmd.hdr.op.addr, attr->addr) &&
 	       smr_match_tag(unexp_msg->cmd.hdr.op.tag, attr->ignore, attr->tag);
 }
 
@@ -372,7 +372,7 @@ static int smr_check_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	struct smr_match_attr match_attr;
 	struct smr_unexp_msg *unexp_msg;
 	struct dlist_entry *dlist_entry;
-	int ret;
+	int ret = 0;
 
 	match_attr.addr = entry->addr;
 	match_attr.ignore = entry->ignore;
@@ -385,7 +385,7 @@ static int smr_check_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 
 	unexp_msg = container_of(dlist_entry, struct smr_unexp_msg, entry);
 
-	switch (unexp_msg->cmd.hdr.op.op_data){
+	switch (unexp_msg->cmd.hdr.op.op_src){
 	case smr_src_inline:
 		ret = smr_progress_inline(&unexp_msg->cmd, entry);
 		break;
@@ -393,16 +393,15 @@ static int smr_check_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 		ret = smr_progress_inject(&unexp_msg->cmd, entry, ep);
 		break;
 	case smr_src_iov:
-		ret = smr_progress_iov(&unexp_msg->cmd, entry, ep,
-				       unexp_msg->cmd.hdr.op.flags);
+		ret = smr_progress_iov(&unexp_msg->cmd, entry, ep);
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unidentified operation type\n");
-		ret = -FI_EINVAL;
+		entry->err = FI_EINVAL;
 	}
-	ep->rx_comp(ep, entry->context, 0, ret, NULL, &entry->addr,
-		    entry->tag);
+	ep->rx_comp(ep, entry->context, FI_TAGGED, ret,
+		    entry->iov[0].iov_base, &entry->addr, entry->tag);
 	freestack_push(ep->unexp_fs, unexp_msg);
 
 	return 1;
@@ -426,6 +425,7 @@ static ssize_t smr_generic_recvmsg(struct fid_ep *ep_fid, const struct iovec *io
 		goto out;
 	}
 	entry = freestack_pop(ep->recv_fs);
+	memset(entry, 0, sizeof(*entry));
 
 	for (entry->iov_count = 0; entry->iov_count < iov_count;
 	     entry->iov_count++) {
@@ -481,50 +481,55 @@ ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	return smr_generic_recvmsg(ep_fid, &msg_iov, 1, src_addr, 0, 0, context, 0);
 }
 
-static void smr_format_send(struct smr_cmd *cmd, const struct iovec *iov, size_t count)
+static void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, void *context,
+			       uint32_t flags, uint64_t tag)
 {
-	cmd->hdr.op.version = OFI_OP_VERSION;
-	cmd->hdr.op.rx_index = 0;
-	cmd->hdr.op.op = ofi_op_msg;
-	cmd->hdr.op.op_data = smr_src_inline;
+	if (flags & FI_TAGGED) {
+		cmd->hdr.op.op = ofi_op_tagged;
+		cmd->hdr.op.tag = tag;
+	} else {
+		cmd->hdr.op.op = ofi_op_msg;
+	}
+	cmd->hdr.msg_id = (uint64_t) context;
+	cmd->hdr.op.addr = peer_id;
+}
 
+static void smr_format_inline(struct smr_cmd *cmd, fi_addr_t peer_id,
+			      const struct iovec *iov, size_t count,
+			      void *context, uint32_t flags, uint64_t tag)
+{
+	smr_generic_format(cmd, peer_id, context, flags, tag);
+	cmd->hdr.op.op_src = smr_src_inline;
 	cmd->hdr.op.data = 0;
-
 	cmd->hdr.op.size = ofi_copy_from_iov(cmd->data.msg, SMR_CMD_DATA_LEN,
 					     iov, count, 0);
 }
 
-static void smr_format_inject(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+static void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
+			      const struct iovec *iov, size_t count,
+			      void *context, uint32_t flags, uint64_t tag,
 			      struct smr_region *smr, struct smr_inject_buf *tx_buf)
 {
-	cmd->hdr.op.version = OFI_OP_VERSION;
-	cmd->hdr.op.rx_index = 0;
-	cmd->hdr.op.op = ofi_op_msg;
-	cmd->hdr.op.op_data = smr_src_inject;
-
-	cmd->hdr.op.size = 0;
+	smr_generic_format(cmd, peer_id, context, flags, tag);
+	cmd->hdr.op.op_src = smr_src_inject;
 	cmd->hdr.op.data = (char **) tx_buf - (char **) smr;
-
 	cmd->hdr.op.size = ofi_copy_from_iov(tx_buf->data, SMR_INJECT_SIZE,
 					     iov, count, 0);
 }
 
-static void smr_format_cma(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
-			   size_t total_len, struct smr_region *smr,
-			   struct smr_resp *resp)
+static void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
+			   const struct iovec *iov, size_t count,
+			   size_t total_len, void *context, uint32_t flags, uint64_t tag,
+			   struct smr_region *smr, struct smr_resp *resp)
 {
 	int i;
 
-	cmd->hdr.op.version = OFI_OP_VERSION;
-	cmd->hdr.op.rx_index = 0;
-	cmd->hdr.op.op = ofi_op_msg;
-	cmd->hdr.op.op_data = smr_src_iov;
-
-	cmd->hdr.op.size = 0;
-	resp->status = -FI_EBUSY;
+	smr_generic_format(cmd, peer_id, context, flags, tag);
+	cmd->hdr.op.op_src = smr_src_iov;
+	resp->status = FI_EBUSY;
 	cmd->hdr.op.data = (uint64_t) ((char **) resp - (char **) smr);
 
-	for (i = 0; i < count; i++) {
+	for (cmd->hdr.op.size = i = 0; i < count; i++) {
 		cmd->data.iov[i].iov_base = iov[i].iov_base;
 		cmd->data.iov[i].iov_len = iov[i].iov_len;
 		cmd->hdr.op.size += iov[i].iov_len;
@@ -532,8 +537,6 @@ static void smr_format_cma(struct smr_cmd *cmd, const struct iovec *iov, size_t 
 	while (i < SMR_IOV_LIMIT)
 		cmd->data.iov[i++].iov_len = 0;
 }
-
-#define peer_is_mapped(addr) (addr.name[0] == '\0')
 
 static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *iov,
 				   size_t iov_count, fi_addr_t addr, uint64_t tag,
@@ -551,47 +554,51 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 	assert(iov_count <= SMR_IOV_LIMIT);
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
-	peer_id = *(int *)ofi_av_get_addr(ep->util_ep.av, addr);
-	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
-		ret = -FI_EAGAIN;
-		goto out;
+	peer_id = (int) addr;
+	if (smr_peer_addr(ep->region)[peer_id].addr == FI_ADDR_UNSPEC) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"peer not ready to receive messages\n");
+		return -FI_EAGAIN;
 	}
 
-	peer_smr = smr_peer_region(ep->region, peer_id);
-	if (!peer_is_mapped(ep->region->map->peer_addr[peer_id])) {
-		ret = smr_map_to_region(&smr_prov, &peer_smr,
-					ep->region->map->peer_addr[peer_id].name);
+	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
+		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
 		if (ret) {
 			if (ret == -ENOENT)
-				ret = -FI_EAGAIN; 
-			goto out;
+				return -FI_EAGAIN; 
 		}
 	}
 
+	peer_smr = smr_peer_region(ep->region, peer_id);
 	fastlock_acquire(&peer_smr->lock);
 	if (ofi_cirque_isfull(smr_cmd_queue(peer_smr))) {
 		ret = -FI_EAGAIN;
-		goto unlock;
+		goto unlock_region;
+	}
+
+	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
+		ret = -FI_EAGAIN;
+		goto unlock_cq;
 	}
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 
-	cmd->hdr.msg_id = (ep->msg_id)++;
-	cmd->hdr.op.flags = flags;
-	cmd->hdr.op.tag = tag;
-
 	if (total_len <= SMR_CMD_DATA_LEN) {
-		smr_format_send(cmd, iov, iov_count);
+		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr, iov,
+				  iov_count, context, flags, tag);
 	} else if (total_len <= SMR_INJECT_SIZE) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, iov, iov_count, peer_smr, tx_buf);
+		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr, iov,
+				  iov_count, context, flags, tag, peer_smr, tx_buf);
 	} else {
 		assert(!ofi_cirque_isfull(smr_resp_queue(ep->region)));
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
-		smr_format_cma(cmd, iov, iov_count, total_len, ep->region, resp);
+		smr_format_iov(cmd, smr_peer_addr(ep->region)[peer_id].addr, iov,
+			       iov_count, total_len, context, flags, tag,
+			       ep->region, resp);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		goto commit;
 	}
@@ -599,10 +606,10 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 
 commit:
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
-unlock:
-	fastlock_release(&peer_smr->lock);
-out:
+unlock_cq:
 	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+unlock_region:
+	fastlock_release(&peer_smr->lock);
 	return ret;
 }
 
@@ -648,12 +655,15 @@ ssize_t smr_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg_iov.iov_len = len;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
-	peer_id = *(int *)ofi_av_get_addr(ep->util_ep.av, dest_addr);
+	peer_id = (int) dest_addr;
+	if (smr_peer_addr(ep->region)[peer_id].addr == FI_ADDR_UNSPEC) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"peer not ready to receive messages\n");
+		return -FI_EAGAIN;
+	}
 
-	peer_smr = smr_peer_region(ep->region, peer_id);
-	if (!peer_is_mapped(ep->region->map->peer_addr[peer_id])) {
-		ret = smr_map_to_region(&smr_prov, &peer_smr,
-					ep->region->map->peer_addr[peer_id].name);
+	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
+		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
 		if (ret) {
 			if (ret == -ENOENT)
 				ret = -FI_EAGAIN; 
@@ -661,6 +671,7 @@ ssize_t smr_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 		}
 	}
 
+	peer_smr = smr_peer_region(ep->region, peer_id);
 	fastlock_acquire(&peer_smr->lock);
 	if (ofi_cirque_isfull(smr_cmd_queue(peer_smr))) {
 		ret = -FI_EAGAIN;
@@ -669,12 +680,13 @@ ssize_t smr_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 
-	cmd->hdr.msg_id = (ep->msg_id)++;
 	if (len <= SMR_CMD_DATA_LEN) {
-		smr_format_send(cmd, &msg_iov, 1);
+		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr,
+				  &msg_iov, 1, NULL, 0, 0);
 	} else {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, &msg_iov, 1, peer_smr, tx_buf);
+		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr,
+				  &msg_iov, 1, NULL, 0, 0, peer_smr, tx_buf);
 	}
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
@@ -769,12 +781,15 @@ ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg_iov.iov_len = len;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
-	peer_id = *(int *)ofi_av_get_addr(ep->util_ep.av, dest_addr);
+	peer_id = (int) dest_addr;
+	if (smr_peer_addr(ep->region)[peer_id].addr == FI_ADDR_UNSPEC) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"peer not ready to receive messages\n");
+		return -FI_EAGAIN;
+	}
 
-	peer_smr = smr_peer_region(ep->region, peer_id);
-	if (!peer_is_mapped(ep->region->map->peer_addr[peer_id])) {
-		ret = smr_map_to_region(&smr_prov, &peer_smr,
-					ep->region->map->peer_addr[peer_id].name);
+	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
+		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
 		if (ret) {
 			if (ret == -ENOENT)
 				ret = -FI_EAGAIN; 
@@ -782,6 +797,7 @@ ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 		}
 	}
 
+	peer_smr = smr_peer_region(ep->region, peer_id);
 	fastlock_acquire(&peer_smr->lock);
 	if (ofi_cirque_isfull(smr_cmd_queue(peer_smr))) {
 		ret = -FI_EAGAIN;
@@ -790,14 +806,13 @@ ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 
-	cmd->hdr.msg_id = (ep->msg_id)++;
-	cmd->hdr.op.tag = tag;
-	cmd->hdr.op.flags = FI_TAGGED;
 	if (len <= SMR_CMD_DATA_LEN) {
-		smr_format_send(cmd, &msg_iov, 1);
+		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr, &msg_iov,
+				  1, NULL, FI_TAGGED, tag);
 	} else {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, &msg_iov, 1, peer_smr, tx_buf);
+		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr, &msg_iov,
+				  1, NULL, FI_TAGGED, tag, peer_smr, tx_buf);
 	}
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
@@ -933,6 +948,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		attr.rx_count = ep->rx_size;
 		attr.tx_count = ep->tx_size;
 		ret = smr_create(&smr_prov, av->smr_map, &attr, &ep->region);
+		smr_exchange_all_peers(ep->region);
 		break;
 	default:
 		return -FI_ENOSYS;
