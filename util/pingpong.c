@@ -208,7 +208,7 @@ static const int integ_alphabet_length =
  *                                         Utils
  ******************************************************************************/
 
-uint64_t pp_gettime_us(void)
+static uint64_t pp_gettime_us(void)
 {
 	struct timeval now;
 
@@ -216,7 +216,7 @@ uint64_t pp_gettime_us(void)
 	return now.tv_sec * 1000000 + now.tv_usec;
 }
 
-long parse_ulong(char *str, long max)
+static long parse_ulong(char *str, long max)
 {
 	long ret;
 	char *end;
@@ -242,7 +242,7 @@ long parse_ulong(char *str, long max)
 	return ret;
 }
 
-void pp_banner_fabric_info(struct ct_pingpong *ct)
+static void pp_banner_fabric_info(struct ct_pingpong *ct)
 {
 	PP_DEBUG(
 	    "Running pingpong test with the %s provider and %s endpoint type\n",
@@ -253,7 +253,7 @@ void pp_banner_fabric_info(struct ct_pingpong *ct)
 	PP_DEBUG("%s", fi_tostr(ct->fi->ep_attr, FI_TYPE_EP_ATTR));
 }
 
-void pp_banner_options(struct ct_pingpong *ct)
+static void pp_banner_options(struct ct_pingpong *ct)
 {
 	char size_msg[50];
 	char iter_msg[50];
@@ -297,7 +297,7 @@ void pp_banner_options(struct ct_pingpong *ct)
  *                                         Control Messaging
  ******************************************************************************/
 
-int pp_getaddrinfo(char *name, uint16_t port, struct addrinfo **results)
+static int pp_getaddrinfo(char *name, uint16_t port, struct addrinfo **results)
 {
 	int ret;
 	const char *err_msg;
@@ -454,7 +454,7 @@ fail_close_socket:
 	return ret;
 }
 
-int pp_ctrl_init(struct ct_pingpong *ct)
+static int pp_ctrl_init(struct ct_pingpong *ct)
 {
 	const uint32_t default_ctrl = 47592;
 	struct timeval tv = {
@@ -490,7 +490,7 @@ int pp_ctrl_init(struct ct_pingpong *ct)
 	return ret;
 }
 
-int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
+static int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
 {
 	int ret, err;
 
@@ -509,7 +509,7 @@ int pp_ctrl_send(struct ct_pingpong *ct, char *buf, size_t size)
 	return ret;
 }
 
-int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
+static int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 {
 	int ret, err;
 
@@ -531,7 +531,7 @@ int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 	return ret;
 }
 
-int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
+static int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
 {
 	void *local_name = NULL;
 	size_t addrlen = 0;
@@ -573,7 +573,7 @@ fn:
 	return ret;
 }
 
-int pp_recv_name(struct ct_pingpong *ct)
+static int pp_recv_name(struct ct_pingpong *ct)
 {
 	uint32_t len;
 	int ret;
@@ -610,7 +610,7 @@ int pp_recv_name(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_ctrl_finish(struct ct_pingpong *ct)
+static int pp_ctrl_finish(struct ct_pingpong *ct)
 {
 	if (ct->ctrl_connfd != -1) {
 		ofi_close_socket(ct->ctrl_connfd);
@@ -620,7 +620,7 @@ int pp_ctrl_finish(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_ctrl_sync(struct ct_pingpong *ct)
+static int pp_ctrl_sync(struct ct_pingpong *ct)
 {
 	int ret;
 
@@ -689,7 +689,7 @@ int pp_ctrl_sync(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_ctrl_txrx_msg_count(struct ct_pingpong *ct)
+static int pp_ctrl_txrx_msg_count(struct ct_pingpong *ct)
 {
 	int ret;
 
@@ -796,7 +796,7 @@ static inline int pp_check_opts(struct ct_pingpong *ct, uint64_t flags)
  *                                         Data Verification
  ******************************************************************************/
 
-void pp_fill_buf(void *buf, int size)
+static void pp_fill_buf(void *buf, int size)
 {
 	char *msg_buf;
 	int msg_index;
@@ -813,7 +813,7 @@ void pp_fill_buf(void *buf, int size)
 	}
 }
 
-int pp_check_buf(void *buf, int size)
+static int pp_check_buf(void *buf, int size)
 {
 	char *recv_data;
 	char c;
@@ -853,7 +853,7 @@ int pp_check_buf(void *buf, int size)
  *                                         Error handling
  ******************************************************************************/
 
-void eq_readerr(struct fid_eq *eq)
+static void eq_readerr(struct fid_eq *eq)
 {
 	struct fi_eq_err_entry eq_err;
 	int rd;
@@ -868,7 +868,7 @@ void eq_readerr(struct fid_eq *eq)
 	}
 }
 
-void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
+static void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
 {
 	if (rd == -FI_EAVAIL)
 		eq_readerr(eq);
@@ -880,7 +880,7 @@ void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
  *                                         Test sizes
  ******************************************************************************/
 
-int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
+static int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
 {
 	int defaults[6] = {64, 256, 1024, 4096, 65536, 1048576};
 	int power_of_two;
@@ -940,7 +940,7 @@ int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
  ******************************************************************************/
 
 /* str must be an allocated buffer of PP_STR_LEN bytes */
-char *size_str(char *str, uint64_t size)
+static char *size_str(char *str, uint64_t size)
 {
 	uint64_t base, fraction = 0;
 	char mag;
@@ -974,7 +974,7 @@ char *size_str(char *str, uint64_t size)
 }
 
 /* str must be an allocated buffer of PP_STR_LEN bytes */
-char *cnt_str(char *str, size_t size, uint64_t cnt)
+static char *cnt_str(char *str, size_t size, uint64_t cnt)
 {
 	if (cnt >= 1000000000)
 		snprintf(str, size, "%" PRIu64 "b", cnt / 1000000000);
@@ -988,7 +988,7 @@ char *cnt_str(char *str, size_t size, uint64_t cnt)
 	return str;
 }
 
-void show_perf(char *name, int tsize, int sent, int acked,
+static void show_perf(char *name, int tsize, int sent, int acked,
 	       uint64_t start, uint64_t end, int xfers_per_iter)
 {
 	static int header = 1;
@@ -1039,7 +1039,7 @@ void show_perf(char *name, int tsize, int sent, int acked,
  *                                      Data Messaging
  ******************************************************************************/
 
-int pp_cq_readerr(struct fid_cq *cq)
+static int pp_cq_readerr(struct fid_cq *cq)
 {
 	struct fi_cq_err_entry cq_err;
 	int ret;
@@ -1095,7 +1095,7 @@ static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 	return 0;
 }
 
-int pp_get_rx_comp(struct ct_pingpong *ct, uint64_t total)
+static int pp_get_rx_comp(struct ct_pingpong *ct, uint64_t total)
 {
 	int ret = FI_SUCCESS;
 
@@ -1110,7 +1110,7 @@ int pp_get_rx_comp(struct ct_pingpong *ct, uint64_t total)
 	return ret;
 }
 
-int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
+static int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 {
 	int ret;
 
@@ -1151,7 +1151,7 @@ int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 		seq++;                                                         \
 	} while (0)
 
-ssize_t pp_post_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
+static ssize_t pp_post_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
 		   struct fi_context *ctx)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
@@ -1165,7 +1165,7 @@ ssize_t pp_post_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
 	return 0;
 }
 
-ssize_t pp_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
+static ssize_t pp_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 {
 	ssize_t ret;
 
@@ -1181,7 +1181,8 @@ ssize_t pp_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	return ret;
 }
 
-ssize_t pp_post_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
+static ssize_t pp_post_inject(struct ct_pingpong *ct, struct fid_ep *ep,
+			      size_t size)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_inject, pp_get_tx_comp, ct->tx_seq, "inject", ep,
@@ -1193,7 +1194,7 @@ ssize_t pp_post_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	return 0;
 }
 
-ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
+static ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 {
 	ssize_t ret;
 
@@ -1207,8 +1208,8 @@ ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	return ret;
 }
 
-ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
-		   struct fi_context *ctx)
+static ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep,
+			  size_t size, struct fi_context *ctx)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_recv, pp_get_rx_comp, ct->rx_seq, "receive", ep,
@@ -1221,7 +1222,7 @@ ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
 	return 0;
 }
 
-ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
+static ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 {
 	ssize_t ret;
 
@@ -1252,7 +1253,7 @@ ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
  *                                Initialization and allocations
  ******************************************************************************/
 
-void init_test(struct ct_pingpong *ct, struct pp_opts *opts)
+static void init_test(struct ct_pingpong *ct, struct pp_opts *opts)
 {
 	char sstr[PP_STR_LEN];
 
@@ -1261,7 +1262,7 @@ void init_test(struct ct_pingpong *ct, struct pp_opts *opts)
 	ct->cnt_ack_msg = 0;
 }
 
-uint64_t pp_init_cq_data(struct fi_info *info)
+static uint64_t pp_init_cq_data(struct fi_info *info)
 {
 	if (info->domain_attr->cq_data_size >= sizeof(uint64_t)) {
 		return 0x0123456789abcdefULL;
@@ -1271,7 +1272,7 @@ uint64_t pp_init_cq_data(struct fi_info *info)
 	}
 }
 
-int pp_alloc_msgs(struct ct_pingpong *ct)
+static int pp_alloc_msgs(struct ct_pingpong *ct)
 {
 	int ret;
 	long alignment = 1;
@@ -1321,7 +1322,7 @@ int pp_alloc_msgs(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_open_fabric_res(struct ct_pingpong *ct)
+static int pp_open_fabric_res(struct ct_pingpong *ct)
 {
 	int ret;
 
@@ -1350,7 +1351,7 @@ int pp_open_fabric_res(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
+static int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 {
 	int ret;
 
@@ -1398,8 +1399,8 @@ int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 	return 0;
 }
 
-int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
-	       struct fi_info **info)
+static int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
+		      struct fi_info **info)
 {
 	uint64_t flags = 0;
 	int ret;
@@ -1427,7 +1428,7 @@ int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
 		}                                                              \
 	} while (0)
 
-int pp_init_ep(struct ct_pingpong *ct)
+static int pp_init_ep(struct ct_pingpong *ct)
 {
 	int ret;
 
@@ -1455,8 +1456,8 @@ int pp_init_ep(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_av_insert(struct fid_av *av, void *addr, size_t count,
-		 fi_addr_t *fi_addr, uint64_t flags, void *context)
+static int pp_av_insert(struct fid_av *av, void *addr, size_t count,
+			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	int ret;
 
@@ -1478,7 +1479,7 @@ int pp_av_insert(struct fid_av *av, void *addr, size_t count,
 	return 0;
 }
 
-int pp_exchange_names_connected(struct ct_pingpong *ct)
+static int pp_exchange_names_connected(struct ct_pingpong *ct)
 {
 	int ret;
 
@@ -1505,7 +1506,7 @@ int pp_exchange_names_connected(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_start_server(struct ct_pingpong *ct)
+static int pp_start_server(struct ct_pingpong *ct)
 {
 	int ret;
 
@@ -1550,7 +1551,7 @@ int pp_start_server(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_server_connect(struct ct_pingpong *ct)
+static int pp_server_connect(struct ct_pingpong *ct)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
@@ -1630,7 +1631,7 @@ err:
 	return ret;
 }
 
-int pp_client_connect(struct ct_pingpong *ct)
+static int pp_client_connect(struct ct_pingpong *ct)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
@@ -1686,7 +1687,7 @@ int pp_client_connect(struct ct_pingpong *ct)
 	return 0;
 }
 
-int pp_init_fabric(struct ct_pingpong *ct)
+static int pp_init_fabric(struct ct_pingpong *ct)
 {
 	int ret;
 
@@ -1766,7 +1767,7 @@ int pp_init_fabric(struct ct_pingpong *ct)
  *                                Deallocations and Final
  ******************************************************************************/
 
-void pp_free_res(struct ct_pingpong *ct)
+static void pp_free_res(struct ct_pingpong *ct)
 {
 	PP_DEBUG("Freeing resources of test suite\n");
 
@@ -1804,7 +1805,7 @@ void pp_free_res(struct ct_pingpong *ct)
 	PP_DEBUG("Resources of test suite freed\n");
 }
 
-int pp_finalize(struct ct_pingpong *ct)
+static int pp_finalize(struct ct_pingpong *ct)
 {
 	struct iovec iov;
 	int ret;
@@ -1866,7 +1867,7 @@ int pp_finalize(struct ct_pingpong *ct)
  *                                CLI: Usage and Options parsing
  ******************************************************************************/
 
-void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
+static void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 {
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
@@ -1902,7 +1903,7 @@ void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 	fprintf(stderr, " %-20s %s\n", "-v", "enable debugging output");
 }
 
-void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
+static void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 {
 	switch (op) {
 
@@ -1990,7 +1991,7 @@ void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
  *      PingPong core and implemenations for endpoints
  ******************************************************************************/
 
-int pingpong(struct ct_pingpong *ct)
+static int pingpong(struct ct_pingpong *ct)
 {
 	int ret, i;
 
@@ -2045,7 +2046,7 @@ int pingpong(struct ct_pingpong *ct)
 	return 0;
 }
 
-int run_suite_pingpong(struct ct_pingpong *ct)
+static int run_suite_pingpong(struct ct_pingpong *ct)
 {
 	int i, sizes_cnt;
 	int ret = 0;
