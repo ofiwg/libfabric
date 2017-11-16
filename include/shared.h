@@ -160,6 +160,7 @@ extern struct fid_ep *ep, *alias_ep;
 extern struct fid_cq *txcq, *rxcq;
 extern struct fid_cntr *txcntr, *rxcntr;
 extern struct fid_mr *mr, no_mr;
+extern void *mr_desc;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
 extern struct fid_mc *mc;
@@ -379,15 +380,15 @@ static inline bool ft_check_prefix_forced(struct fi_info *info,
 	return true;
 }
 
-int ft_sync();
+int ft_sync(void);
 int ft_sync_pair(int status);
-int ft_fork_and_pair();
-int ft_wait_child();
+int ft_fork_and_pair(void);
+int ft_wait_child(void);
 int ft_finalize(void);
 int ft_finalize_ep(struct fid_ep *ep);
 
-size_t ft_rx_prefix_size();
-size_t ft_tx_prefix_size();
+size_t ft_rx_prefix_size(void);
+size_t ft_tx_prefix_size(void);
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
 ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 		uint64_t data, struct fi_context* ctx);
