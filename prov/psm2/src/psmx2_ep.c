@@ -1019,6 +1019,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	ofi_ns_add_local_name(&domain_priv->fabric->name_server,
 			      &sep_priv->service, &ep_name);
 
+	psmx2_domain_acquire(domain_priv);
 	*sep = &sep_priv->ep;
 	return 0;
 
