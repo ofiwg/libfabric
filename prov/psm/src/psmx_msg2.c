@@ -132,9 +132,9 @@ static struct psmx_unexp *psmx_am_search_and_dequeue_unexp(
 int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psm_amarg_t *args, int nargs, void *src, uint32_t len)
 {
-        psm_amarg_t rep_args[8];
-        struct psmx_am_request *req;
-        struct psmx_cq_event *event;
+	psm_amarg_t rep_args[8];
+	struct psmx_am_request *req;
+	struct psmx_cq_event *event;
 	struct psmx_epaddr_context *epaddr_context;
 	struct psmx_fid_domain *domain;
 	int copy_len;
@@ -159,7 +159,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	switch (cmd) {
 	case PSMX_AM_REQ_SEND:
 		assert(len == args[0].u32w1);
-                offset = args[3].u64;
+		offset = args[3].u64;
 		if (offset == 0) {
 			/* this is the first packet */
 			req = psmx_am_search_and_dequeue_recv(domain, (const void *)epaddr);
@@ -243,7 +243,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					rep_args, 3, NULL, 0, 0,
 					NULL, NULL );
 		}
-                break;
+		break;
 
 	case PSMX_AM_REP_SEND:
 		req = (struct psmx_am_request *)(uintptr_t)args[1].u64;
@@ -350,9 +350,9 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 	int err = 0;
 	size_t idx;
 
-        ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-        if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
+	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;
@@ -439,7 +439,7 @@ static ssize_t psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 {
 	struct psmx_fid_ep *ep_priv;
 
-        ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 	return _psmx_recv2(ep, buf, len, desc, src_addr, context, ep_priv->rx_flags);
 }
 
@@ -558,7 +558,7 @@ static ssize_t psmx_send2(struct fid_ep *ep, const void *buf,
 {
 	struct psmx_fid_ep *ep_priv;
 
-        ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 	return _psmx_send2(ep, buf, len, desc, dest_addr, context, ep_priv->tx_flags);
 }
 

@@ -279,7 +279,7 @@ struct psm_am_parameters {
  */
 psm_error_t
 psm_am_get_parameters(psm_ep_t ep, struct psm_am_parameters *parameters,
-                      size_t sizeof_parameters_in,
+		      size_t sizeof_parameters_in,
 		      size_t *sizeof_parameters_out);
 
 

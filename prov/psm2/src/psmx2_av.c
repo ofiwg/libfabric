@@ -226,8 +226,8 @@ static void psmx2_set_epaddr_context(struct psmx2_trx_ctxt *trx_ctxt,
 int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 			 psm2_epid_t epid, psm2_epaddr_t *epaddr)
 {
-        int err;
-        psm2_error_t errors;
+	int err;
+	psm2_error_t errors;
 	psm2_epconn_t epconn;
 	struct psmx2_epaddr_context *context;
 
@@ -240,18 +240,18 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 		}
 	}
 
-        err = psm2_ep_connect(trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
+	err = psm2_ep_connect(trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
 			      epaddr, psmx2_conn_timeout(1));
-        if (err != PSM2_OK) {
+	if (err != PSM2_OK) {
 		FI_WARN(&psmx2_prov, FI_LOG_AV,
 			"psm2_ep_connect retured error %s, remote epid=%lx.\n",
 			psm2_error_get_string(err), epid);
-                return psmx2_errno(err);
+		return psmx2_errno(err);
 	}
 
 	psmx2_set_epaddr_context(trx_ctxt,epid,*epaddr);
 
-        return 0;
+	return 0;
 }
 
 psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
@@ -357,10 +357,10 @@ static void psmx2_av_post_completion(struct psmx2_fid_av *av, void *context,
 }
 
 static int psmx2_av_connect_eps(struct psmx2_fid_av *av, size_t count,
-			        psm2_epid_t *epids, int *mask,
+				psm2_epid_t *epids, int *mask,
 				uint8_t *types, psm2_error_t *errors,
-			        psm2_epaddr_t *epaddrs,
-			        void *context)
+				psm2_epaddr_t *epaddrs,
+				void *context)
 {
 	int i;
 	psm2_epconn_t epconn;

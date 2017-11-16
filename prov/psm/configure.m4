@@ -39,7 +39,7 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 		     ])
 	       AS_IF([test $psm_happy -eq 1],
 		     [AC_CHECK_TYPE([psm_epconn_t],
-		                    [],
+				    [],
 				    [psm_happy=0],
 				    [[#include <psm.h>]])])
 	      ])

@@ -116,7 +116,7 @@ int psmx_fabric(struct fi_fabric_attr *attr,
 				  &fabric_priv->name_server);
 		if (ret) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
-			        "ofi_ns_init returns %d\n", ret);
+				"ofi_ns_init returns %d\n", ret);
 			free(fabric_priv);
 			return ret;
 		}

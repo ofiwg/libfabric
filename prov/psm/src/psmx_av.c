@@ -64,8 +64,8 @@ static void psmx_set_epaddr_context(struct psmx_fid_domain *domain,
 int psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 			psm_epid_t epid, psm_epaddr_t *epaddr)
 {
-        int err;
-        psm_error_t errors;
+	int err;
+	psm_error_t errors;
 	psm_epconn_t epconn;
 	struct psmx_epaddr_context *context;
 
@@ -78,13 +78,13 @@ int psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 		}
 	}
 
-        err = psm_ep_connect(domain->psm_ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
-        if (err != PSM_OK)
-                return psmx_errno(err);
+	err = psm_ep_connect(domain->psm_ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
+	if (err != PSM_OK)
+		return psmx_errno(err);
 
 	psmx_set_epaddr_context(domain,epid,*epaddr);
 
-        return 0;
+	return 0;
 }
 
 static int psmx_av_check_table_size(struct psmx_fid_av *av, size_t count)

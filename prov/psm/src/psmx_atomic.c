@@ -1273,7 +1273,7 @@ static ssize_t psmx_atomic_compwrite(struct fid_ep *ep,
 					compare, compare_desc,
 					result, result_desc,
 					dest_addr, addr, key,
-				        datatype, op, context, ep_priv->tx_flags);
+					datatype, op, context, ep_priv->tx_flags);
 }
 
 static ssize_t psmx_atomic_compwritemsg(struct fid_ep *ep,
