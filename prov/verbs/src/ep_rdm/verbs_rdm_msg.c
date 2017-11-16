@@ -287,8 +287,3 @@ struct fi_ops_msg fi_ibv_rdm_ep_msg_ops = {
 	.senddata = fi_ibv_rdm_senddata,
 	.injectdata = fi_ibv_rdm_injectdata
 };
-
-struct fi_ops_msg *fi_ibv_rdm_ep_ops_msg()
-{
-	return &fi_ibv_rdm_ep_msg_ops;
-}
