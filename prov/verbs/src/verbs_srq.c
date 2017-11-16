@@ -99,10 +99,16 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	_ep = container_of(ep, struct fi_ibv_srq_ep, ep_fid);
 	assert(_ep->srq);
 
+	fastlock_acquire(&_ep->wre_lock);
 	wre = util_buf_alloc(_ep->wre_pool);
-	if (!wre)
+	if (!wre) {
+		fastlock_release(&_ep->wre_lock);
 		return -FI_EAGAIN;
+	}
 	memset(wre, 0, sizeof(*wre));
+	dlist_insert_tail(&wre->entry, &_ep->wre_list);
+	fastlock_release(&_ep->wre_lock);
+
 	wre->srq = _ep;
 	wre->context = msg->context;
 
@@ -120,10 +126,8 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	wre->wr.rwr.sg_list = sge;
 	wre->wr.rwr.num_sge = msg->iov_count;
 
-	dlist_insert_tail(&wre->entry, &_ep->wre_list);
-
 	return FI_IBV_INVOKE_POST(srq_recv, recv, _ep->srq, &wre->wr.rwr,
-				  FI_IBV_RELEASE_WRE(_ep->wre_pool, wre));
+				  FI_IBV_RELEASE_WRE(_ep, wre));
 	
 }
 
@@ -193,6 +197,7 @@ static int fi_ibv_srq_close(fid_t fid)
 	 * have `IBV_RECV_WR` type only */
 	fi_ibv_empty_wre_list(srq_ep->wre_pool, &srq_ep->wre_list, IBV_RECV_WR);
 	util_buf_pool_destroy(srq_ep->wre_pool);
+	fastlock_destroy(&srq_ep->wre_lock);
 
 	free(srq_ep);
 
@@ -247,6 +252,7 @@ int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		goto err2;
 	}
 
+	fastlock_init(&srq_ep->wre_lock);
 	srq_ep->wre_pool = util_buf_pool_create(sizeof(struct fi_ibv_wre),
 						16, 0, VERBS_WRE_CNT);
 	if (!srq_ep->wre_pool) {
@@ -260,6 +266,7 @@ int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 
 	return FI_SUCCESS;
 err3:
+	fastlock_destroy(&srq_ep->wre_lock);
 	if (ibv_destroy_srq(srq_ep->srq))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_destroy_srq", errno);
 err2:
