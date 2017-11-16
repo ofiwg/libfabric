@@ -618,16 +618,9 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of min_rnr_timer\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_bool("fork_unsafe", "Enable safety of fork() system call "
-				  "for verbs provider. If you're sure that fork() "
-				  "support isn't needed - No need to use this option, "
-				  "because extra memory will be consumed when enabling "
-				  "fork suppport.",
-				  &fi_ibv_gl_data.fork_unsafe)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of fork_unsafe\n");
-		return -FI_EINVAL;
-	}
+
+	fi_param_get_bool(NULL, "fork_unsafe", &fi_ibv_gl_data.fork_unsafe);
+
 	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging experimental feature. "
 				  "Currently this feature may corrupt data. "
 				  "Use it on your own risk.",
