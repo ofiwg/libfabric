@@ -37,6 +37,7 @@ static struct {
 	struct psmx2_trx_ctxt *trx_ctxts[PSMX2_AM_MAX_TRX_CTXT];
 	psm2_am_handler_fn_t rma_handlers[PSMX2_AM_MAX_TRX_CTXT];
 	psm2_am_handler_fn_t atomic_handlers[PSMX2_AM_MAX_TRX_CTXT];
+	psm2_am_handler_fn_t trx_ctxt_handlers[PSMX2_AM_MAX_TRX_CTXT];
 	fastlock_t lock;
 	int cnt;
 } psmx2_am_global;
@@ -56,6 +57,14 @@ static struct {
 			int nargs, void *src, uint32_t len) \
 	{ \
 		return psmx2_am_atomic_handler_ext( \
+				token, args, nargs, src, len, \
+				psmx2_am_global.trx_ctxts[INDEX]); \
+	} \
+	static int psmx2_am_trx_ctxt_handler_##INDEX( \
+			psm2_am_token_t token, psm2_amarg_t *args, \
+			int nargs, void *src, uint32_t len) \
+	{ \
+		return psmx2_am_trx_ctxt_handler_ext( \
 				token, args, nargs, src, len, \
 				psmx2_am_global.trx_ctxts[INDEX]); \
 	}
@@ -143,7 +152,8 @@ DEFINE_AM_HANDLERS(79)
 
 #define ASSIGN_AM_HANDLERS(INDEX) \
 	psmx2_am_global.rma_handlers[INDEX] =  psmx2_am_rma_handler_##INDEX; \
-	psmx2_am_global.atomic_handlers[INDEX] =  psmx2_am_atomic_handler_##INDEX;
+	psmx2_am_global.atomic_handlers[INDEX] =  psmx2_am_atomic_handler_##INDEX; \
+	psmx2_am_global.trx_ctxt_handlers[INDEX] =  psmx2_am_trx_ctxt_handler_##INDEX;
 
 void psmx2_am_global_init(void)
 {
@@ -269,9 +279,9 @@ int psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt)
 
 int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 {
-	psm2_am_handler_fn_t psmx2_am_handlers[3];
-	int psmx2_am_handlers_idx[3];
-	int num_handlers = 3;
+	psm2_am_handler_fn_t psmx2_am_handlers[4];
+	int psmx2_am_handlers_idx[4];
+	int num_handlers = 4;
 	psm2_ep_t psm2_ep = trx_ctxt->psm2_ep;
 	size_t size;
 	int err = 0;
@@ -299,6 +309,7 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 		psmx2_am_handlers[0] = psmx2_am_global.rma_handlers[idx];
 		psmx2_am_handlers[1] = psmx2_am_global.atomic_handlers[idx];
 		psmx2_am_handlers[2] = psmx2_am_sep_handler;
+		psmx2_am_handlers[3] = psmx2_am_global.trx_ctxt_handlers[idx];
 		psmx2_am_global.trx_ctxts[idx] = trx_ctxt;
 		psmx2_unlock(&psmx2_am_global.lock, 1);
 
@@ -309,11 +320,13 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 
 		if ((psmx2_am_handlers_idx[0] != PSMX2_AM_RMA_HANDLER) ||
 		    (psmx2_am_handlers_idx[1] != PSMX2_AM_ATOMIC_HANDLER) ||
-		    (psmx2_am_handlers_idx[2] != PSMX2_AM_SEP_HANDLER)) {
+		    (psmx2_am_handlers_idx[2] != PSMX2_AM_SEP_HANDLER) ||
+		    (psmx2_am_handlers_idx[3] != PSMX2_AM_TRX_CTXT_HANDLER)) {
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
 				"failed to register one or more AM handlers "
-				"at indecies %d, %d, %d\n", PSMX2_AM_RMA_HANDLER,
-				PSMX2_AM_ATOMIC_HANDLER, PSMX2_AM_SEP_HANDLER);
+				"at indecies %d, %d, %d, %d\n", PSMX2_AM_RMA_HANDLER,
+				PSMX2_AM_ATOMIC_HANDLER, PSMX2_AM_SEP_HANDLER,
+				PSMX2_AM_TRX_CTXT_HANDLER);
 			return -FI_EBUSY;
 		}
 

@@ -215,7 +215,12 @@ static void psmx2_set_epaddr_context(struct psmx2_trx_ctxt *trx_ctxt,
 
 	context->trx_ctxt = trx_ctxt;
 	context->epid = epid;
+	context->epaddr = epaddr;
 	psm2_epaddr_setctxt(epaddr, context);
+
+	psmx2_lock(&trx_ctxt->peer_lock, 2);
+	dlist_insert_before(&context->entry, &trx_ctxt->peer_list);
+	psmx2_unlock(&trx_ctxt->peer_lock, 2);
 }
 
 int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
