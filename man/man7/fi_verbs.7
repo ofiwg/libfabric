@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2017\-11\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2017\-11\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -158,13 +158,6 @@ Actual inject size returned in fi_info may be greater (default: 64)
 .PP
 \f[I]FI_VERBS_MIN_RNR_TIMER\f[] : Set min_rnr_timer QP attribute (0 \-
 31) (default: 12)
-.PP
-\f[I]FI_VERBS_FORK_UNSAFE\f[] : Enable safety of fork() system call for
-verbs provider.
-If you\[aq]re sure that fork() support isn\[aq]t needed \- No need to
-use this option, because extra memory will be when enabling fork
-suppport (default: 0, i.e.
-Safety support is enabled)
 .PP
 \f[I]FI_VERBS_USE_ODP\f[] : Enable On\-Demand\-Paging (ODP) experimental
 feature.
