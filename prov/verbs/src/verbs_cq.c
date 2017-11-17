@@ -222,12 +222,10 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
 
 	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
 	entry[i].flags = fi_ibv_comp_flags(wc);
-
+	entry[i].len = (wc->opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM)) ?
+		wc->byte_len : 0;
 	entry[i].data = (wc->wc_flags & IBV_WC_WITH_IMM) ?
 		ntohl(wc->imm_data) : 0;
-
-	entry->len = (wc->opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM)) ?
-		wc->byte_len : 0;
 }
 
 static int fi_ibv_match_ep_id(struct slist_entry *entry,
