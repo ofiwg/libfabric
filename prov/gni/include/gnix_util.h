@@ -149,12 +149,6 @@ static inline void dlist_node_init(struct dlist_entry *e)
 	e->prev = e->next = NULL;
 }
 
-static inline void dlist_remove_init(struct dlist_entry *e)
-{
-	dlist_remove(e);
-	e->prev = e->next = e;
-}
-
 #define DLIST_IN_LIST(e) e.prev != e.next
 
 #define DLIST_HEAD(dlist)  struct dlist_entry dlist = { &(dlist), &(dlist) }
