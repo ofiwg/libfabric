@@ -520,8 +520,6 @@ int usdf_catch_dom_attr(uint32_t version, const struct fi_info *hints,
 			struct fi_domain_attr *dom_attr);
 int usdf_catch_tx_attr(uint32_t version, const struct fi_tx_attr *tx_attr);
 int usdf_catch_rx_attr(uint32_t version, const struct fi_rx_attr *rx_attr);
-int usdf_check_mr_mode(uint32_t version, const struct fi_info *hints,
-		       uint64_t prov_mode);
 struct sockaddr_in *usdf_format_to_sin(const struct fi_info *info, const void *addr);
 void *usdf_sin_to_format(const struct fi_info *info, void *addr, size_t *len);
 void usdf_free_sin_if_needed(const struct fi_info *info, struct sockaddr_in *sin);
