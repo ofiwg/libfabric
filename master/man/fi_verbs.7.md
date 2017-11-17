@@ -159,11 +159,6 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_MIN_RNR_TIMER*
 : Set min_rnr_timer QP attribute (0 - 31) (default: 12)
 
-*FI_VERBS_FORK_UNSAFE*
-: Enable safety of fork() system call for verbs provider. If you're sure that fork()
-  support isn't needed - No need to use this option, because extra memory will be
-  when enabling fork suppport (default: 0, i.e. Safety support is enabled)
-
 *FI_VERBS_USE_ODP*
 : Enable On-Demand-Paging (ODP) experimental feature. The feature is supported only
   on Mellanox OFED (default: 0)
