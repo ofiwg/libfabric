@@ -822,7 +822,7 @@ static ssize_t psmx2_cq_read(struct fid_cq *cq, void *buf, size_t count)
 }
 
 static ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-			        uint64_t flags)
+				uint64_t flags)
 {
 	struct psmx2_fid_cq *cq_priv;
 	uint32_t api_version;

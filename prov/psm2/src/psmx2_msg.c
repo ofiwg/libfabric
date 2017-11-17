@@ -725,7 +725,7 @@ static ssize_t psmx2_senddata(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-			        uint64_t data, fi_addr_t dest_addr)
+				uint64_t data, fi_addr_t dest_addr)
 {
 	struct psmx2_fid_ep *ep_priv;
 

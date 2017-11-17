@@ -560,7 +560,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t psmx_tagged_send_no_flag_av_map(struct fid_ep *ep, const void *buf,
 					size_t len, void *desc,
 					fi_addr_t dest_addr, uint64_t tag,
-				        void *context)
+					void *context)
 {
 	struct psmx_fid_ep *ep_priv;
 	psm_epaddr_t psm_epaddr;
@@ -631,7 +631,7 @@ ssize_t psmx_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
 ssize_t psmx_tagged_send_no_event_av_map(struct fid_ep *ep, const void *buf,
 					 size_t len, void *desc,
 					 fi_addr_t dest_addr, uint64_t tag,
-				         void *context)
+					 void *context)
 {
 	struct psmx_fid_ep *ep_priv;
 	psm_epaddr_t psm_epaddr;
@@ -859,8 +859,8 @@ static ssize_t psmx_tagged_sendv_no_flag_av_table(struct fid_ep *ep, const struc
 	}
 
 	return psmx_tagged_send_no_flag_av_table(ep, buf, len,
-					         desc ? desc[0] : NULL, dest_addr,
-					         tag, context);
+						 desc ? desc[0] : NULL, dest_addr,
+						 tag, context);
 }
 
 static ssize_t psmx_tagged_sendv_no_event_av_map(struct fid_ep *ep, const struct iovec *iov,
@@ -911,8 +911,8 @@ static ssize_t psmx_tagged_sendv_no_event_av_table(struct fid_ep *ep, const stru
 	}
 
 	return psmx_tagged_send_no_event_av_table(ep, buf, len,
-					         desc ? desc[0] : NULL,
-					         dest_addr, tag, context);
+						 desc ? desc[0] : NULL,
+						 dest_addr, tag, context);
 }
 
 static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,

@@ -116,7 +116,7 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	struct dlist_entry *item, *tmp;
 	struct psmx2_epaddr_context *peer;
-        psm2_amarg_t arg;
+	psm2_amarg_t arg;
 
 	arg.u32w0 = PSMX2_AM_REQ_TRX_CTXT_DISCONNECT;
 

@@ -84,8 +84,8 @@ extern int psmx_am_compat_mode;
 
 #define PSMX_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | \
 			 FI_RMA | FI_MULTI_RECV | \
-                         FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
-                         FI_REMOTE_READ | FI_REMOTE_WRITE | \
+			 FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
+			 FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_TRIGGER | FI_RMA_EVENT)
 
 #define PSMX_CAPS2	((PSMX_CAPS | FI_DIRECTED_RECV) & ~FI_TAGGED)

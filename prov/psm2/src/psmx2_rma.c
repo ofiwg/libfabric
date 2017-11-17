@@ -33,7 +33,7 @@
 #include "psmx2.h"
 
 static inline void psmx2_am_enqueue_rma(struct psmx2_trx_ctxt *trx_ctxt,
-				        struct psmx2_am_request *req)
+					struct psmx2_am_request *req)
 {
 	psmx2_lock(&trx_ctxt->rma_queue.lock, 2);
 	slist_insert_tail(&req->list_entry, &trx_ctxt->rma_queue.list);
@@ -943,8 +943,8 @@ static ssize_t psmx2_readmsg(struct fid_ep *ep,
 }
 
 static ssize_t psmx2_readv(struct fid_ep *ep, const struct iovec *iov,
-		           void **desc, size_t count, fi_addr_t src_addr,
-		           uint64_t addr, uint64_t key, void *context)
+			   void **desc, size_t count, fi_addr_t src_addr,
+			   uint64_t addr, uint64_t key, void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 
@@ -1153,8 +1153,8 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
-		             void **desc, size_t count, fi_addr_t dest_addr,
-		             uint64_t addr, uint64_t key, void *context,
+			     void **desc, size_t count, fi_addr_t dest_addr,
+			     uint64_t addr, uint64_t key, void *context,
 			     uint64_t flags, uint64_t data)
 {
 	struct psmx2_fid_ep *ep_priv;
@@ -1441,8 +1441,8 @@ static ssize_t psmx2_writemsg(struct fid_ep *ep,
 }
 
 static ssize_t psmx2_writev(struct fid_ep *ep, const struct iovec *iov,
-		            void **desc, size_t count, fi_addr_t dest_addr,
-		            uint64_t addr, uint64_t key, void *context)
+			    void **desc, size_t count, fi_addr_t dest_addr,
+			    uint64_t addr, uint64_t key, void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 
@@ -1486,8 +1486,8 @@ static ssize_t psmx2_writedata(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-			        uint64_t data, fi_addr_t dest_addr, uint64_t addr,
-			        uint64_t key)
+				uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+				uint64_t key)
 {
 	struct psmx2_fid_ep *ep_priv;
 

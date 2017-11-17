@@ -83,8 +83,8 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | \
 			 FI_RMA | FI_MULTI_RECV | \
-                         FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
-                         FI_REMOTE_READ | FI_REMOTE_WRITE | \
+			 FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
+			 FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_TRIGGER | FI_RMA_EVENT | FI_REMOTE_CQ_DATA | \
 			 FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV | \
 			 FI_NAMED_RX_CTX)
@@ -150,8 +150,8 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_ADDR_TO_VL(addr)		((uint8_t)((addr & PSMX2_VL_MASK) >> 56))
 #define PSMX2_ADDR_TO_EP(addr)		((psm2_epaddr_t) \
 						((addr & PSMX2_SIGN_MASK) ? \
-                                                 (addr | PSMX2_SIGN_EXT) : \
-                                                 (addr & PSMX2_EP_MASK)))
+						 (addr | PSMX2_SIGN_EXT) : \
+						 (addr & PSMX2_EP_MASK)))
 
 #define PSMX2_MAX_RX_CTX_BITS		(12)
 #define PSMX2_SEP_ADDR_FLAG		(0x000E000000000000UL)
@@ -1062,15 +1062,15 @@ static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av, size_t idx)
 	 * Avoid connecting to the same destination from multiple threads.
 	 */
 	if (!av->epaddrs[idx]) {
-                err = psmx2_epid_to_epaddr(av->domain->base_trx_ctxt,
-                                           av->epids[idx], &av->epaddrs[idx]);
-                if (err) {
-                        FI_WARN(&psmx2_prov, FI_LOG_AV,
-                                "fatal error: unable to translate epid %lx to epaddr.\n",
-                                av->epids[idx]);
-                        return err;
-                }
-        }
+		err = psmx2_epid_to_epaddr(av->domain->base_trx_ctxt,
+					   av->epids[idx], &av->epaddrs[idx]);
+		if (err) {
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"fatal error: unable to translate epid %lx to epaddr.\n",
+				av->epids[idx]);
+			return err;
+		}
+	}
 
 	return 0;
 }
