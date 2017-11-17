@@ -576,6 +576,8 @@ static int fi_ibv_get_param_str(const char *param_name,
 
 static int fi_ibv_read_params(void)
 {
+	int ret;
+
 	/* Common parameters */
 	if (fi_ibv_get_param_int("tx_size", "Default maximum tx context size",
 				 &fi_ibv_gl_data.def_tx_size) ||
@@ -622,16 +624,14 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of min_rnr_timer\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_bool("fork_unsafe", "Enable safety of fork() system call "
-				  "for verbs provider. If you're sure that fork() "
-				  "support isn't needed - No need to use this option, "
-				  "because extra memory will be consumed when enabling "
-				  "fork suppport.",
-				  &fi_ibv_gl_data.fork_unsafe)) {
+
+	ret = fi_param_get_bool(NULL, "fork_unsafe", &fi_ibv_gl_data.fork_unsafe);
+	if (ret && ret != -FI_ENODATA) {
 		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of fork_unsafe\n");
+			   "Invalid value of FI_FORK_UNSAFE\n");
 		return -FI_EINVAL;
 	}
+
 	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging experimental feature. "
 				  "Currently this feature may corrupt data. "
 				  "Use it on your own risk.",
