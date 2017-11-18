@@ -286,7 +286,7 @@ Test(fabric_bare, fi_mr_scalable_1_0)
 {
 	int ret;
 	struct fi_info *hints;
-	struct fi_info *info;
+	struct fi_info *info = NULL;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
@@ -295,7 +295,12 @@ Test(fabric_bare, fi_mr_scalable_1_0)
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &info);
-	cr_assert(ret == -FI_ENODATA, "fi_getinfo");
+	if (info) {
+		cr_assert(strcmp(info->fabric_attr->prov_name,hints->fabric_attr->prov_name),
+			  "fi_getinfo");
+	} else {
+		cr_assert(ret == -FI_ENODATA, "fi_getinfo");
+	}
 
 	fi_freeinfo(hints);
 }
@@ -324,7 +329,7 @@ Test(fabric_bare, fi_mr_scalable_1_5_fail)
 {
 	int ret;
 	struct fi_info *hints;
-	struct fi_info *info;
+	struct fi_info *info = NULL;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
@@ -333,7 +338,12 @@ Test(fabric_bare, fi_mr_scalable_1_5_fail)
 	hints->fabric_attr->prov_name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 5), NULL, 0, 0, hints, &info);
-	cr_assert(ret == -FI_ENODATA, "fi_getinfo");
+	if (info) {
+		cr_assert(strcmp(info->fabric_attr->prov_name,hints->fabric_attr->prov_name),
+			  "fi_getinfo");
+	} else {
+		cr_assert(ret == -FI_ENODATA, "fi_getinfo");
+	}
 
 	fi_freeinfo(hints);
 }
