@@ -48,6 +48,7 @@
 #include "fi.h"
 #include "fi_osd.h"
 #include "fi_file.h"
+#include "fi_util.h"
 
 #include "rdma/fi_errno.h"
 #include "rdma/providers/fi_log.h"

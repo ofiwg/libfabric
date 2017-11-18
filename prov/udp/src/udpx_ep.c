@@ -36,7 +36,7 @@
 #include "udpx.h"
 
 
-int udpx_setname(fid_t fid, void *addr, size_t addrlen)
+static int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 {
 	struct udpx_ep *ep;
 	int ret;
@@ -53,7 +53,7 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 	return 0;
 }
 
-int udpx_getname(fid_t fid, void *addr, size_t *addrlen)
+static int udpx_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct udpx_ep *ep =
 		container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
@@ -144,8 +144,8 @@ static int udpx_join_ip(struct udpx_mc *mc, const struct sockaddr_in *sin,
 	return bytes < 0 ? (int) bytes : 0;
 }
 
-int udpx_join(struct fid_ep *ep, const void *addr, uint64_t flags,
-	      struct fid_mc **mc, void *context)
+static int udpx_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+		     struct fid_mc **mc, void *context)
 {
 	struct udpx_ep *udp_ep;
 	struct udpx_mc *udp_mc;
@@ -191,14 +191,14 @@ static struct fi_ops_cm udpx_cm_ops = {
 };
 
 
-int udpx_getopt(fid_t fid, int level, int optname,
-		void *optval, size_t *optlen)
+static int udpx_getopt(fid_t fid, int level, int optname,
+		       void *optval, size_t *optlen)
 {
 	return -FI_ENOPROTOOPT;
 }
 
-int udpx_setopt(fid_t fid, int level, int optname,
-		const void *optval, size_t optlen)
+static int udpx_setopt(fid_t fid, int level, int optname,
+		       const void *optval, size_t optlen)
 {
 	return -FI_ENOPROTOOPT;
 }
@@ -270,7 +270,7 @@ static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 }
 
-void udpx_ep_progress(struct util_ep *util_ep)
+static void udpx_ep_progress(struct util_ep *util_ep)
 {
 	struct udpx_ep *ep;
 	struct udpx_ep_entry *entry;
@@ -302,8 +302,8 @@ out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 }
 
-ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
-		uint64_t flags)
+static ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
+			    uint64_t flags)
 {
 	struct udpx_ep *ep;
 	struct udpx_ep_entry *entry;
@@ -331,8 +331,9 @@ out:
 	return ret;
 }
 
-ssize_t udpx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, void *context)
+static ssize_t udpx_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
+			  void **desc, size_t count, fi_addr_t src_addr,
+			  void *context)
 {
 	struct fi_msg msg;
 
@@ -342,8 +343,8 @@ ssize_t udpx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	return udpx_recvmsg(ep_fid, &msg, 0);
 }
 
-ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, void *context)
+static ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len,
+			 void *desc, fi_addr_t src_addr, void *context)
 {
 	struct udpx_ep *ep;
 	struct udpx_ep_entry *entry;
@@ -464,8 +465,9 @@ out:
 	return ret;
 }
 
-ssize_t udpx_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		   size_t count, fi_addr_t dest_addr, void *context)
+static ssize_t udpx_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
+			  void **desc, size_t count, fi_addr_t dest_addr,
+			  void *context)
 {
 	struct fi_msg msg;
 
@@ -477,9 +479,9 @@ ssize_t udpx_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	return udpx_sendmsg(ep_fid, &msg, 0);
 }
 
-ssize_t udpx_sendv_mc(struct fid_ep *ep_fid, const struct iovec *iov,
-		      void **desc, size_t count, fi_addr_t dest_addr,
-		      void *context)
+static ssize_t udpx_sendv_mc(struct fid_ep *ep_fid, const struct iovec *iov,
+			     void **desc, size_t count, fi_addr_t dest_addr,
+			     void *context)
 {
 	struct fi_msg msg;
 
