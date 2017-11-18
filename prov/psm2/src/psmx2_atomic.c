@@ -814,6 +814,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size, len;
 	size_t idx;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -858,6 +859,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else  if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
@@ -876,7 +878,8 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
 		return psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_WRITE, ep_priv,
-					 ep_priv->domain->eps[vlane],
+					 (sep_target ? ep_priv :
+					   ep_priv->domain->eps[vlane]),
 					 buf, count, desc, NULL, NULL, NULL,
 					 NULL, addr, key, datatype, op,
 					 context, flags);
@@ -949,6 +952,7 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 	size_t len;
 	uint8_t *buf;
 	int err;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -996,6 +1000,7 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
@@ -1022,7 +1027,8 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 		psmx2_ioc_read(iov, count, datatype, buf, len);
 
 		err = psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_WRITE, ep_priv,
-					ep_priv->domain->eps[vlane],
+					(sep_target ? ep_priv :
+					  ep_priv->domain->eps[vlane]),
 					buf, len / ofi_datatype_size(datatype),
 					NULL, NULL, NULL, NULL, NULL, addr,
 					key, datatype, op, context, flags);
@@ -1182,6 +1188,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size, len;
 	size_t idx;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1228,6 +1235,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
@@ -1246,7 +1254,9 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
 		return psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_READWRITE,
-					 ep_priv, ep_priv->domain->eps[vlane],
+					 ep_priv,
+					 (sep_target ? ep_priv :
+					   ep_priv->domain->eps[vlane]),
 					 buf, count, desc, NULL, NULL, result,
 					 result_desc, addr, key, datatype, op,
 					 context, flags);
@@ -1327,6 +1337,7 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	uint8_t *buf, *result;
 	void *desc0, *result_desc0;
 	int err;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1398,6 +1409,7 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
@@ -1435,7 +1447,9 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 		}
 
 		err = psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_READWRITE,
-					ep_priv, ep_priv->domain->eps[vlane],
+					ep_priv,
+					(sep_target ? ep_priv :
+					  ep_priv->domain->eps[vlane]),
 					buf, len / ofi_datatype_size(datatype),
 					desc0, NULL, NULL, result, result_desc0,
 					addr, key, datatype, op, context, flags);
@@ -1640,6 +1654,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	int chunk_size, len;
 	void *tmp_buf = NULL;
 	size_t idx;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1688,6 +1703,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
@@ -1706,7 +1722,9 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
 		return psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_COMPWRITE,
-					 ep_priv, ep_priv->domain->eps[vlane],
+					 ep_priv,
+					 (sep_target ? ep_priv :
+					   ep_priv->domain->eps[vlane]),
 					 buf, count, desc, compare,
 					 compare_desc, result, result_desc,
 					 addr, key, datatype, op,
@@ -1803,6 +1821,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	uint8_t *buf, *compare, *result;
 	void *desc0, *compare_desc0, *result_desc0;
 	int err;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1870,6 +1889,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
@@ -1928,7 +1948,9 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 		}
 
 		err = psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_COMPWRITE,
-					ep_priv, ep_priv->domain->eps[vlane],
+					ep_priv,
+					(sep_target ? ep_priv :
+					  ep_priv->domain->eps[vlane]),
 					buf, len / ofi_datatype_size(datatype), desc0,
 					compare, compare_desc0, result, result_desc0,
 					addr, key, datatype, op, context, flags);
