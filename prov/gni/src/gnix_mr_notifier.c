@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2017 Los Alamos National Security, LLC.
+ *                    All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -81,11 +83,9 @@ _gnix_notifier_open(struct gnix_mr_notifier **mrn)
 		kdreg_fd = open(KDREG_DEV, O_RDWR | O_NONBLOCK);
 		if (kdreg_fd < 0) {
 			ret_errno = errno;
-			if (ret_errno != FI_EBUSY) {
-				GNIX_INFO(FI_LOG_MR,
-					  "kdreg device open failed: %s\n",
-					  strerror(ret_errno));
-			}
+			GNIX_WARN(FI_LOG_MR,
+				  "kdreg device open failed: %s\n",
+				  strerror(ret_errno));
 			/* Not all of these map to fi_errno values */
 			ret = -ret_errno;
 			goto err_exit;
@@ -95,7 +95,7 @@ _gnix_notifier_open(struct gnix_mr_notifier **mrn)
 		if (ioctl(kdreg_fd, KDREG_IOC_GET_USER_DELTA,
 			  &get_user_delta_args) < 0) {
 			ret_errno = errno;
-			GNIX_INFO(FI_LOG_MR,
+			GNIX_WARN(FI_LOG_MR,
 				  "kdreg get_user_delta failed: %s\n",
 				  strerror(ret_errno));
 			close(kdreg_fd);
@@ -105,7 +105,7 @@ _gnix_notifier_open(struct gnix_mr_notifier **mrn)
 		}
 
 		if (get_user_delta_args.user_delta == NULL) {
-			GNIX_INFO(FI_LOG_MR, "kdreg get_user_delta is NULL\n");
+			GNIX_WARN(FI_LOG_MR, "kdreg get_user_delta is NULL\n");
 			ret = -FI_ENODATA;
 			goto err_exit;
 		}
@@ -145,7 +145,7 @@ _gnix_notifier_close(struct gnix_mr_notifier *mrn)
 
 	if (close(mrn->fd) != 0) {
 		ret_errno = errno;
-		GNIX_INFO(FI_LOG_MR, "error closing kdreg device: %s\n",
+		GNIX_WARN(FI_LOG_MR, "error closing kdreg device: %s\n",
 			  strerror(ret_errno));
 		/* Not all of these map to fi_errno values */
 		ret = -ret_errno;
@@ -169,7 +169,7 @@ kdreg_write(struct gnix_mr_notifier *mrn, void *buf, size_t len)
 	if ((ret < 0) || (ret != len)) {
 		// Not all of these map to fi_errno values
 		ret = -errno;
-		GNIX_INFO(FI_LOG_MR, "kdreg_write failed: %s\n",
+		GNIX_WARN(FI_LOG_MR, "kdreg_write failed: %s\n",
 			  strerror(errno));
 		return ret;
 	}
