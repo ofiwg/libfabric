@@ -52,7 +52,7 @@ static int run(void)
 	/* Post an extra receive to avoid lacking a posted receive in the
 	 * finalize.
 	 */
-	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(), fi_mr_desc(mr),
+	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(), mr_desc,
 			0, &rx_ctx);
 
 	if (!(opts.options & FT_OPT_SIZE)) {

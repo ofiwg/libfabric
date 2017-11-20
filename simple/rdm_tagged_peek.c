@@ -70,7 +70,7 @@ static int tag_queue_op(uint64_t tag, int recv, uint64_t flags)
 		iov.iov_base = buf;
 		iov.iov_len = rx_size;
 		msg.msg_iov = &iov;
-		desc = fi_mr_desc(mr);
+		desc = mr_desc;
 		msg.desc = &desc;
 		msg.iov_count = 1;
 		msg.addr = remote_fi_addr;
@@ -191,8 +191,9 @@ static int run(void)
 		/* sync with sender before ft_finalize, since we sent
 		 * and received messages outside of the sequence numbers
 		 * maintained by common code */
-		ret = fi_tsend(ep, tx_buf, 1, fi_mr_desc(mr),
-				remote_fi_addr, 0xabc, &tx_ctx_arr[0]);
+		ret = fi_tsend(ep, tx_buf, 1, mr_desc,
+				remote_fi_addr, 0xabc,
+				&tx_ctx_arr[0]);
 		if (ret)
 			return ret;
 		ret = wait_for_send_comp(1);
@@ -201,8 +202,9 @@ static int run(void)
 	} else {
 		printf("Sending five tagged messages\n");
 		for(i = 0; i < 5; i++) {
-			ret = fi_tsend(ep, tx_buf, tx_size, fi_mr_desc(mr),
-					remote_fi_addr, 0x900d+i, &tx_ctx_arr[i]);
+			ret = fi_tsend(ep, tx_buf, tx_size, mr_desc,
+				       remote_fi_addr, 0x900d+i,
+				       &tx_ctx_arr[i]);
 			if (ret)
 				return ret;
 		}

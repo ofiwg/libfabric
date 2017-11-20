@@ -84,8 +84,8 @@ static int send_recv()
 	struct fi_cq_entry comp;
 	int ret;
 
-	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(), fi_mr_desc(mr),
-		      0, &rx_ctx);
+	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(),
+		      mr_desc, 0, &rx_ctx);
 	if (ret)
 		return ret;
 

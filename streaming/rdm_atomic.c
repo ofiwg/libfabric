@@ -228,7 +228,7 @@ static inline int execute_base_atomic_op(enum fi_op op)
 {
 	int ret;
 
-	ret = fi_atomic(ep, buf, 1, fi_mr_desc(mr), remote_fi_addr, remote.addr,
+	ret = fi_atomic(ep, buf, 1, mr_desc, remote_fi_addr, remote.addr,
 		       	remote.key, datatype, op, &fi_ctx_atomic);
 	if (ret) {
 		FT_PRINTERR("fi_atomic", ret);
@@ -243,7 +243,7 @@ static inline int execute_fetch_atomic_op(enum fi_op op)
 {
 	int ret;
 
-	ret = fi_fetch_atomic(ep, buf, 1, fi_mr_desc(mr), result,
+	ret = fi_fetch_atomic(ep, buf, 1, mr_desc, result,
 			fi_mr_desc(mr_result), remote_fi_addr, remote.addr,
 			remote.key, datatype, op, &fi_ctx_atomic);
 	if (ret) {
@@ -259,7 +259,7 @@ static inline int execute_compare_atomic_op(enum fi_op op)
 {
 	int ret;
 
-	ret = fi_compare_atomic(ep, buf, 1, fi_mr_desc(mr), compare,
+	ret = fi_compare_atomic(ep, buf, 1, mr_desc, compare,
 			fi_mr_desc(mr_compare), result, fi_mr_desc(mr_result),
 			remote_fi_addr, remote.addr, remote.key, datatype, op,
 			&fi_ctx_atomic);

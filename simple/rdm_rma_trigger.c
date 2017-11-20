@@ -49,8 +49,9 @@ static int rma_write_trigger(void *src, size_t size,
 	triggered_ctx.event_type = FI_TRIGGER_THRESHOLD;
 	triggered_ctx.trigger.threshold.cntr = cntr;
 	triggered_ctx.trigger.threshold.threshold = threshold;
-	ret = fi_write(alias_ep, src, size, fi_mr_desc(mr), remote_fi_addr, 0,
-			FT_MR_KEY, &triggered_ctx);
+	ret = fi_write(alias_ep, src, size, mr_desc,
+		       remote_fi_addr, 0,
+		       FT_MR_KEY, &triggered_ctx);
  	if (ret){
  		FT_PRINTERR("fi_write", ret);
  		return ret;
@@ -80,7 +81,7 @@ static int run_test(void)
 			goto out;
 
 		fprintf(stdout, "RMA write to server\n");
-		ret = fi_write(ep, tx_buf, strlen(welcome_text1), fi_mr_desc(mr),
+		ret = fi_write(ep, tx_buf, strlen(welcome_text1), mr_desc,
 				remote_fi_addr, 0, FT_MR_KEY, &tx_ctx);
  		if (ret){
  			FT_PRINTERR("fi_write", ret);

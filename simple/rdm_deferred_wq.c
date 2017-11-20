@@ -54,7 +54,7 @@ static void format_simple_msg(struct fi_msg *msg, struct iovec *iov, void *src,
 			      size_t size, void *ctx)
 {
 	msg->context = ctx;
-	msg->desc = fi_mr_desc(mr);
+	msg->desc = mr_desc;
 	msg->iov_count = 1;
 	msg->addr = remote_fi_addr;
 	msg->data = 0;
@@ -69,7 +69,7 @@ static void format_simple_msg_tagged(struct fi_msg_tagged *msg, struct iovec *io
 			      uint64_t tag)
 {
 	msg->context = ctx;
-	msg->desc = fi_mr_desc(mr);
+	msg->desc = mr_desc;
 	msg->iov_count = 1;
 	msg->addr = remote_fi_addr;
 	msg->data = 0;
@@ -85,7 +85,7 @@ static void format_simple_msg_rma(struct fi_msg_rma *msg, struct iovec *iov,
 			   size_t size, void *ctx)
 {
 	msg->context = ctx;
-	msg->desc = fi_mr_desc(mr);
+	msg->desc = mr_desc;
 	msg->iov_count = 1;
 	msg->addr = remote_fi_addr;
 	msg->rma_iov_count = 1;
@@ -106,7 +106,7 @@ static void format_simple_msg_atomic(struct fi_msg_atomic *msg, struct fi_ioc *i
 			      enum fi_op op)
 {
 	msg->context = ctx;
-	msg->desc = fi_mr_desc(mr);
+	msg->desc = mr_desc;
 	msg->iov_count = 1;
 	msg->rma_iov_count = 1;
 	msg->addr = remote_fi_addr;
@@ -197,7 +197,7 @@ static int send_wait_check()
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = fi_write(ep, tx_buf, strlen(welcome_text), fi_mr_desc(mr),
+		ret = fi_write(ep, tx_buf, strlen(welcome_text), mr_desc,
 				remote_fi_addr, 0, FT_MR_KEY, &tx_ctx);
  		if (ret) {
  			FT_PRINTERR("fi_write", ret);
