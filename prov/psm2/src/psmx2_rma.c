@@ -601,6 +601,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	uint32_t tag32;
 	size_t idx;
 	int err;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -637,6 +638,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = src_addr;
 		if ((err = psmx2_av_check_table_idx(av, idx)))
@@ -655,7 +657,8 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_READ, ep_priv,
-				      ep_priv->domain->eps[vlane],
+				      (sep_target ? ep_priv :
+					ep_priv->domain->eps[vlane]),
 				      buf, len, desc, addr, key,
 				      context, flags, 0);
 
@@ -752,6 +755,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	void *long_buf = NULL;
 	int i;
 	int err;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -785,6 +789,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = src_addr;
 		if ((err = psmx2_av_check_table_idx(av, idx)))
@@ -803,7 +808,8 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_READV, ep_priv,
-				      ep_priv->domain->eps[vlane],
+				      (sep_target ? ep_priv :
+					ep_priv->domain->eps[vlane]),
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, 0);
 
@@ -984,6 +990,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	void *psm2_context;
 	int no_event;
 	int err;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1021,6 +1028,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, idx)))
@@ -1039,7 +1047,8 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_WRITE, ep_priv,
-				      ep_priv->domain->eps[vlane],
+				      (sep_target ? ep_priv :
+					ep_priv->domain->eps[vlane]),
 				      (void *)buf, len, desc, addr,
 				      key, context, flags, data);
 
@@ -1177,6 +1186,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	uint8_t *buf, *p;
 	int i;
 	int err;
+	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1211,6 +1221,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 		vlane = 0;
+		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, idx)))
@@ -1229,7 +1240,8 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_WRITEV, ep_priv,
-				      ep_priv->domain->eps[vlane],
+				      (sep_target ? ep_priv :
+					ep_priv->domain->eps[vlane]),
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, data);
 
