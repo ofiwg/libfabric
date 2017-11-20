@@ -1050,22 +1050,26 @@ fi_ibv_rdm_rndv_read_reg_mr(struct fi_ibv_rdm_ep *ep,
 			    struct fi_ibv_rdm_request *request)
 {
 #if defined HAVE_VERBS_EXP_H
-	struct ibv_exp_reg_mr_in in;
-	in.pd = ep->domain->pd;
-	in.addr = request->dest_buf;
-	in.length = request->len;
-	in.exp_access = IBV_EXP_ACCESS_LOCAL_WRITE;
-	if (fi_ibv_gl_data.use_odp) {
+	struct ibv_exp_reg_mr_in in = {
+		.pd = ep->domain->pd,
+		.addr = request->dest_buf,
+		.length = request->len,
+		.exp_access = IBV_EXP_ACCESS_LOCAL_WRITE,
+		.comp_mask = 0,
+	};
+	if (fi_ibv_gl_data.use_odp)
 		in.exp_access |= IBV_EXP_ACCESS_RELAXED |
 				 IBV_EXP_ACCESS_ON_DEMAND;
-	}
-	in.comp_mask = 0;
 	request->rndv.mr = ibv_exp_reg_mr(&in);
 #else /* HAVE_VERBS_EXP_H */
+	/* iWARP spec requires Remote Write access for an MR
+	 * that is used as a data sink for a Remote Read */
+	int mr_access = (ep->domain->verbs->device->transport_type
+						== IBV_TRANSPORT_IWARP ?
+			 (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE) :
+			 IBV_ACCESS_LOCAL_WRITE);
 	request->rndv.mr = ibv_reg_mr(ep->domain->pd, request->dest_buf,
-				      request->len,
-				      IBV_ACCESS_LOCAL_WRITE |
-				      IBV_ACCESS_REMOTE_WRITE);
+				      request->len, mr_access);
 #endif /* HAVE_VERBS_EXP_H */
 
 	if (!request->rndv.mr) {
@@ -1300,6 +1304,11 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_request *request, void *data)
 	if (p->op_code == IBV_WR_RDMA_READ) {
 		request->dest_buf = (void*)p->lbuf;
 		lmr_access |= IBV_ACCESS_LOCAL_WRITE;
+		/* iWARP spec requires Remote Write access for an MR
+		 * that is used as a data sink for a Remote Read */
+		if (request->ep->domain->verbs->device->transport_type
+						== IBV_TRANSPORT_IWARP)
+			lmr_access |= IBV_ACCESS_REMOTE_WRITE;
 	} else {
 		assert(p->op_code == IBV_WR_RDMA_WRITE);
 		request->src_addr = (void*)p->lbuf;
@@ -1312,11 +1321,10 @@ fi_ibv_rdm_rma_init_request(struct fi_ibv_rdm_request *request, void *data)
 		request->rma.mr = ibv_reg_mr(p->ep_rdm->domain->pd,
 					     (void *)p->lbuf, p->data_len,
 					     lmr_access);
-		if (request->rma.mr) {
+		if (request->rma.mr)
 			request->rma.lkey = request->rma.mr->lkey;
-		} else {
+		else
 			ret = -FI_ENOMEM;
-		}
 	}
 
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INITIALIZED;
@@ -1387,6 +1395,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 	       (request->state.eager == FI_IBV_STATE_EAGER_RMA_POSTPONED &&
 		request->state.rndv == FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC));
 
+	int ret;
 	struct fi_ibv_rma_post_ready_data *p = data;
 	
 	const size_t offset = request->len - request->rest_len;
@@ -1435,9 +1444,9 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 	request->rest_len -= seg_cursize;
 	request->post_counter++;
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep_rdm);
-	int ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
 
-	if (request->rest_len) {
+	ret = ibv_post_send(request->minfo.conn->qp[0], &wr, &bad_wr);
+	if (request->rest_len && !ret) {
 		ret = fi_ibv_rdm_move_to_postponed_queue(request);
 		if (ret)
 			return ret;
@@ -1446,7 +1455,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_request *request, void *data)
 
 	FI_IBV_RDM_HNDL_REQ_LOG_OUT();
 
-	return (ret == 0) ? FI_SUCCESS : -errno;
+	return (!ret) ? FI_SUCCESS : -errno;
 }
 
 static ssize_t
