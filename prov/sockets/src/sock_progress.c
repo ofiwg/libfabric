@@ -1918,7 +1918,7 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 	int ret = 0;
 	struct sock_conn *conn = pe_entry->conn;
 
-	if (pe_entry->is_complete)
+	if (pe_entry->is_complete || !conn)
 		goto out;
 
 	if (sock_comm_is_disconnected(pe_entry)) {
@@ -1936,7 +1936,7 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		goto out;
 	}
 
-	if (!pe_entry->conn || pe_entry->pe.tx.send_done)
+	if (pe_entry->pe.tx.send_done)
 		goto out;
 
 	if (conn->tx_pe_entry != NULL && conn->tx_pe_entry != pe_entry) {
