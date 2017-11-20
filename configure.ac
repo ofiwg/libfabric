@@ -37,16 +37,20 @@ AM_CONDITIONAL([MACOS], [test "x$macos" = "x1"])
 AM_CONDITIONAL([LINUX], [test "x$linux" = "x1"])
 AM_CONDITIONAL([FREEBSD], [test "x$freebsd" = "x1"])
 
+debug_c_warn_flags="-Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers"
 base_c_warn_flags="-Wall -Wundef -Wpointer-arith"
 
 AC_ARG_ENABLE([debug],
 	      [AS_HELP_STRING([--enable-debug],
 			      [Enable debugging @<:@default=no@:>@])
 	      ],
-	      [CFLAGS="-g -O0 ${base_c_warn_flags} -Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers $CFLAGS"
-	       dbg=1],
-	      [enable_debug=no
-               dbg=0])
+	      [],
+	      [enable_debug=no])
+
+AS_IF([test x"$enable_debug" != x"no"],
+      [dbg=1
+       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} $CFLAGS"],
+      [dbg=0])
 
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
