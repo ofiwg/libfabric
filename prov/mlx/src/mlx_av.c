@@ -78,13 +78,46 @@ static int mlx_av_remove(
 }
 
 
+static inline int mlx_av_resolve_if_addr(
+		const struct sockaddr *saddr,
+		char **address)
+{
+	char peer_host[INET_ADDRSTRLEN] = {0};
+	char peer_serv[INET_ADDRSTRLEN] = {0};
+	int intserv, peer_host_len, peer_serv_len;
+	peer_host_len = peer_serv_len = INET_ADDRSTRLEN;
+	int rv;
+
+	rv = getnameinfo(saddr, sizeof(struct sockaddr_in),
+		peer_host, peer_host_len,
+		peer_serv, peer_serv_len,
+		NI_NUMERICSERV|NI_NUMERICHOST);
+	if (0 != rv) {
+		FI_WARN( &mlx_prov, FI_LOG_CORE,
+			"Unable to resolve address: %s \n",
+			 gai_strerror(rv));
+		return -FI_EINVAL;
+	}
+
+	intserv = atoi(peer_serv);
+	(*address) = ofi_ns_resolve_name(
+		&mlx_descriptor.name_serv,
+		peer_host, &intserv);
+	if (!(*address)) {
+		FI_WARN( &mlx_prov, FI_LOG_CORE,
+			"Unable to resolve address: %s:%s\n",
+			peer_host, peer_serv);
+		return -FI_EINVAL;
+	}
+	return FI_SUCCESS;
+}
+
 static int mlx_av_insert(
 			struct fid_av *fi_av, const void *addr, size_t count,
 			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct mlx_av *av;
 	struct mlx_ep *ep;
-
 	int i;
 	ucs_status_t status = UCS_OK;
 	int added = 0;
@@ -98,27 +131,41 @@ static int mlx_av_insert(
 
 	for ( i = 0; i < count ; ++i) {
 		ucp_ep_params_t ep_params = {};
-		ep_params.address = (const ucp_address_t *)
-					(&(((const char *)addr)[i * FI_MLX_MAX_NAME_LEN]));
+
+		if (mlx_descriptor.use_ns) {
+			if (mlx_av_resolve_if_addr(
+				(struct sockaddr*)
+				  (&(((struct sockaddr_in*)addr)[i])),
+				(char**)&ep_params.address) != FI_SUCCESS)
+				break;
+		} else {
+			ep_params.address = (const ucp_address_t *)
+				(&(((const char *)addr)[i * FI_MLX_MAX_NAME_LEN]));
+		}
+
 		ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"Try to insert address #%d, offset=%d (size=%d)"
-			" fi_addr=%p \naddr = %s",
+			"Try to insert address #%d, offset=%d (size=%ld)"
+			" fi_addr=%p \naddr = %s\n",
 			i, i * FI_MLX_MAX_NAME_LEN, count,
 			fi_addr, &(((const char *)addr)[i * FI_MLX_MAX_NAME_LEN]));
 
 		status = ucp_ep_create( ep->worker,
 					&ep_params,
 					(ucp_ep_h *)(&(fi_addr[i])));
+		if (mlx_descriptor.use_ns) {
+			free((void*)ep_params.address);
+		}
 		if (status == UCS_OK) {
 			FI_WARN( &mlx_prov, FI_LOG_CORE, "address inserted\n");
 			added++;
 		} else {
 			if (av->eq) {
 				mlx_av_write_event( av, i,
-						MLX_TRANSLATE_ERRCODE(status),
-						context);
+					MLX_TRANSLATE_ERRCODE(status),
+					context);
 			}
+			break;
 		}
 	}
 
@@ -206,7 +253,13 @@ int mlx_av_open(
 	av->async = is_async;
 	av->type = type;
 	av->eq = NULL;
-	av->addr_len = FI_MLX_MAX_NAME_LEN;
+
+	if (mlx_descriptor.use_ns) {
+		av->addr_len = sizeof(struct sockaddr_in);
+	} else {
+		av->addr_len = FI_MLX_MAX_NAME_LEN;
+	}
+
 	av->count = count;
 	av->av.fid.fclass = FI_CLASS_AV;
 	av->av.fid.context = context;

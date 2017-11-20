@@ -73,14 +73,33 @@ static int mlx_ep_setopt(fid_t fid, int level, int optname,
 
 static int mlx_ep_close(fid_t fid)
 {
-	struct mlx_ep *fid_ep;
-	fid_ep = container_of(fid, struct mlx_ep, ep.ep_fid.fid);
+	struct mlx_ep *ep;
+	ucs_status_t status = UCS_OK;
+	void *addr_local = NULL;
+	size_t addr_len_local;
 
-	ucp_worker_flush(fid_ep->worker);
-	ucp_worker_destroy(fid_ep->worker);
+	ep = container_of(fid, struct mlx_ep, ep.ep_fid.fid);
 
-	ofi_endpoint_close(&fid_ep->ep);
-	free(fid_ep);
+	if (mlx_descriptor.use_ns) {
+		status = ucp_worker_get_address( ep->worker,
+						(ucp_address_t **)&addr_local,
+						(size_t*) &addr_len_local );
+		if (status != UCS_OK)
+			return MLX_TRANSLATE_ERRCODE(status);
+
+		ofi_ns_del_local_name(&mlx_descriptor.name_serv,
+					  &ep->service, addr_local);
+
+		ucp_worker_release_address(
+					ep->worker,
+					(ucp_address_t *)addr_local);
+	}
+
+	ucp_worker_flush(ep->worker);
+	ucp_worker_destroy(ep->worker);
+
+	ofi_endpoint_close(&ep->ep);
+	free(ep);
 	return FI_SUCCESS;
 }
 
@@ -160,6 +179,10 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
 	u_domain = container_of( domain, struct mlx_domain, u_domain.domain_fid);
 
+	void *addr_local = NULL;
+	size_t addr_len_local;
+
+
 	ep = (struct mlx_ep *) calloc(1, sizeof (struct mlx_ep));
 	if (!ep) {
 		return -ENOMEM;
@@ -178,6 +201,26 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);
 		ofi_atomic_dec32(&(u_domain->u_domain.ref));
 		goto free_ep;
+	}
+
+	if (mlx_descriptor.use_ns) {
+		char tmpb [FI_MLX_MAX_NAME_LEN]={0};
+		status = ucp_worker_get_address( ep->worker,
+			(ucp_address_t **)&addr_local,
+			(size_t*) &addr_len_local );
+		if (status != UCS_OK)
+			return MLX_TRANSLATE_ERRCODE(status);
+		ep->service = (short)((getpid() & 0xFFFF ));
+		memcpy(tmpb,addr_local,addr_len_local);
+		FI_INFO(&mlx_prov, FI_LOG_CORE,
+			"PUBLISHED UCP address(size=%zd): [%hu] %s\n",
+			addr_len_local,ep->service,(char*)(addr_local));
+
+		ofi_ns_add_local_name(&mlx_descriptor.name_serv,
+			&ep->service, tmpb);
+
+		ucp_worker_release_address( ep->worker,
+			(ucp_address_t *)addr_local);
 	}
 
 	ep->ep.ep_fid.fid.ops = &mlx_fi_ops;

@@ -36,6 +36,9 @@ int mlx_errcode_translation_table[(-UCS_ERR_LAST)+2] = { -FI_EOTHER };
 
 struct mlx_global_descriptor mlx_descriptor = {
 	.config = NULL,
+	.use_ns = 0,
+	.ns_port = FI_MLX_DEFAULT_NS_PORT,
+	.localhost = NULL,
 };
 
 static int mlx_init_errcodes()
@@ -120,7 +123,7 @@ struct fi_ep_attr mlx_ep_attrs = {
 #if defined(UCP_API_RELEASE) && (UCP_API_RELEASE <= 2947)
 #warning "HPCX 1.9.7 have an issue with UCP_API_VERSION macro"
 	.protocol_version = (((UCP_API_MAJOR) << UCP_VERSION_MAJOR_SHIFT)|
-        ((UCP_API_MINOR) << UCP_VERSION_MINOR_SHIFT)),
+			((UCP_API_MINOR) << UCP_VERSION_MINOR_SHIFT)),
 #else
 	.protocol_version = (UCP_API_VERSION),
 #endif
@@ -147,7 +150,7 @@ struct fi_info mlx_info = {
 struct util_prov mlx_util_prov = {
 	.prov = &mlx_prov,
 	.info = &mlx_info,
-	.flags = 0
+	.flags = 0,
 };
 
 
@@ -176,9 +179,23 @@ static int mlx_getinfo (
 		configfile_name = NULL;
 	}
 
+	/* NS is disabled by default */
+	status = fi_param_get( &mlx_prov, "mlx_ns_enable",
+			&mlx_descriptor.use_ns);
+	if (!status) {
+		mlx_descriptor.use_ns = 0;
+	}
+	status = fi_param_get( &mlx_prov, "mlx_ns_port",
+			&mlx_descriptor.ns_port);
+	if (!status) {
+		mlx_descriptor.ns_port = FI_MLX_DEFAULT_NS_PORT;
+	}
+
+
+
 	status = ucp_config_read( NULL,
-				status? NULL: configfile_name,
-				&mlx_descriptor.config);
+			status? NULL: configfile_name,
+			&mlx_descriptor.config);
 	if (status != UCS_OK) {
 		FI_WARN( &mlx_prov, FI_LOG_CORE,
 			"MLX error: invalid config file\n\t%d (%s)\n",
@@ -201,18 +218,30 @@ static int mlx_getinfo (
 	if (mlx_descriptor.config &&
 			fi_log_enabled( &mlx_prov, FI_LOG_INFO, FI_LOG_CORE)) {
 		ucp_config_print( mlx_descriptor.config,
-				stderr, "Used MLX configuration", (1<<4)-1);
+			stderr, "Used MLX configuration", (1<<4)-1);
 	}
 #endif
 
 	*info = NULL;
 	if (node || service) {
 		FI_WARN(&mlx_prov, FI_LOG_CORE,
-		"fi_getinfo with \"node != NULL \" or \"service != NULL \" is not supported\n");
+		"fi_getinfo with \"node != NULL \" or \"service != NULL \" is temporary not supported\n");
+		node = service = NULL;
+		flags = 0;
+	}
+
+	/* Only Pure MLX address and IPv4 are supported */
+	if (hints->addr_format == FI_ADDR_MLX) {
+		mlx_info.addr_format = FI_ADDR_MLX;
+	}
+
+	if (hints->addr_format <= FI_SOCKADDR_IN) {
+		mlx_descriptor.use_ns = 1;
+		mlx_info.addr_format = FI_SOCKADDR_IN;
 	}
 
 	status = util_getinfo( &mlx_util_prov, version,
-				NULL, NULL, 0, hints, info);
+				service, node, flags, hints, info);
 
 	return status;
 }
@@ -248,6 +277,16 @@ MLX_INI
 			"mlx_tinject_limit", FI_PARAM_INT,
 			"Maximal tinject message size");
 
+	fi_param_define(&mlx_prov,
+			"mlx_ns_port", FI_PARAM_INT,
+			"MLX Name server port");
 
+	fi_param_define(&mlx_prov,
+			"mlx_ns_enable",FI_PARAM_BOOL,
+			"Enforce usage of name server for MLX provider");
+
+	fi_param_define(&mlx_prov,
+			"mlx_ns_iface",FI_PARAM_STRING,
+			"Specify IPv4 network interface for MLX provider's name server'");
 	return &mlx_prov;
 }
