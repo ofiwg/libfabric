@@ -157,7 +157,6 @@ struct smr_region {
 struct smr_resp {
 	uint64_t	msg_id;
 	uint64_t	status;
-	uint64_t	flags;
 };
 
 struct smr_inject_buf {

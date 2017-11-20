@@ -103,17 +103,18 @@ struct smr_ep_entry {
 };
 
 struct smr_ep;
-typedef void (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
+typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
 		uint64_t flags, size_t len, void *buf, void *addr,
-		uint64_t tag);
-typedef void (*smr_tx_comp_func)(struct smr_ep *ep, void *context,
-		uint64_t flags);
+		uint64_t tag, uint64_t err);
+typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context,
+		uint64_t flags, uint64_t err);
 
 
 struct smr_match_attr {
 	fi_addr_t	addr;
 	uint64_t	tag;
 	uint64_t	ignore;
+	uint64_t	ctx;
 };
 
 static inline int smr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
@@ -127,20 +128,21 @@ static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-struct smr_unexp_msg {
+struct smr_pending_cmd {
 	struct dlist_entry entry;
 	struct smr_cmd cmd;
 };
 
 DECLARE_FREESTACK(struct smr_ep_entry, smr_recv_fs);
-DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
+DECLARE_FREESTACK(struct smr_pending_cmd, smr_unexp_fs);
+DECLARE_FREESTACK(struct smr_pending_cmd, smr_pend_fs);
 
 struct smr_recv_queue {
 	struct dlist_entry recv_list;
 	dlist_func_t *match_recv;
 };
 
-struct smr_unexp_queue {
+struct smr_pending_queue {
 	struct dlist_entry msg_list;
 	dlist_func_t *match_msg;
 };
@@ -157,7 +159,9 @@ struct smr_ep {
 	struct smr_recv_queue	recv_queue;
 	struct smr_recv_queue	trecv_queue;
 	struct smr_unexp_fs	*unexp_fs;
-	struct smr_unexp_queue	unexp_queue;
+	struct smr_pend_fs	*pend_fs;
+	struct smr_pending_queue	unexp_queue;
+	struct smr_pending_queue	pend_queue;
 };
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,

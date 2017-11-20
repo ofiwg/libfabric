@@ -184,28 +184,29 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	util_attr.addrlen = sizeof(int);
 	util_attr.overhead = 0;
 	util_attr.flags = 0;
-	if (attr->count > SMR_MAX_PEERS)
-		return -FI_ENOSYS;
+	if (attr->count > SMR_MAX_PEERS) {
+		ret = -FI_ENOSYS;
+		goto out;
+	}
 
 	ret = ofi_av_init(util_domain, attr, &util_attr, &smr_av->util_av, context);
-	if (ret) {
-		free(&smr_av->util_av);
-		free(smr_av);
-		return ret;
-	}
+	if (ret)
+		goto out;
 
 	*av = &smr_av->util_av.av_fid;
 	(*av)->fid.ops = &smr_av_fi_ops;
 	(*av)->ops = &smr_av_ops;
 
 	ret = smr_map_create(&smr_prov, SMR_MAX_PEERS, &smr_av->smr_map);
-	if (ret) {
-		ofi_av_close(&smr_av->util_av);
-		free(&smr_av->util_av);
-		free(smr_av);
-		return ret;
-	}
+	if (ret)
+		goto close;
 
 	return 0;
+
+close:
+	ofi_av_close(&smr_av->util_av);
+out:
+	free(smr_av);
+	return ret;
 }
 
