@@ -64,6 +64,11 @@ extern "C" {
 	((type *) ((char *)ptr - offsetof(type, field)))
 #endif
 
+#ifndef count_of
+#define count_of(x) 	\
+	((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
+#endif
+
 /* API version (which is not necessarily the same as the
  * tarball/libfabric package version number).
  */

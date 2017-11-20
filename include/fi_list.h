@@ -150,6 +150,50 @@ dlist_remove_first_match(struct dlist_entry *head, dlist_func_t *match,
 	return item;
 }
 
+/* splices list at the front of the list 'head'
+ *
+ * BEFORE:
+ * head:      HEAD->a->b->c->HEAD
+ * to_splice: HEAD->d->e->HEAD
+ *
+ * AFTER:
+ * head:      HEAD->d->e->a->b->c->HEAD
+ * to_splice: HEAD->HEAD (empty list)
+ */
+static inline void dlist_splice_head(struct dlist_entry *head,
+				     struct dlist_entry *to_splice)
+{
+	if (dlist_empty(to_splice))
+		return;
+
+	/* hook first element of 'head' to last element of 'to_splice' */
+	head->next->prev = to_splice->prev;
+	to_splice->prev->next = head->next;
+
+	/* put first element of 'to_splice' as first element of 'head' */
+	head->next = to_splice->next;
+	head->next->prev = head;
+
+	/* set list to empty */
+	dlist_init(to_splice);
+}
+
+/* splices list at the back of the list 'head'
+ *
+ * BEFORE:
+ * head:      HEAD->a->b->c->HEAD
+ * to_splice: HEAD->d->e->HEAD
+ *
+ * AFTER:
+ * head:      HEAD->a->b->c->d->e->HEAD
+ * to_splice: HEAD->HEAD (empty list)
+ */
+static inline void dlist_splice_tail(struct dlist_entry *head,
+				     struct dlist_entry *to_splice)
+{
+	dlist_splice_head(head->prev, to_splice);
+}
+
 /*
  * Single-linked list
  */
