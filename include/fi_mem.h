@@ -312,6 +312,9 @@ static inline void *util_buf_alloc_ex(struct util_buf_pool *pool, void **context
 	struct util_buf_footer *buf_ftr;
 
 	buf = util_buf_alloc(pool);
+	if (OFI_UNLIKELY(!buf))
+		return NULL;
+
 	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
 	assert(context);
 	*context = buf_ftr->region->context;
