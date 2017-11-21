@@ -342,6 +342,10 @@ int rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 					    rx_buf->recv_entry->desc,
 					    rx_buf->recv_entry->count, 0,
 					    rma_total_len, &mr_match_iov);
+
+			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
+						 rx_buf->recv_entry->count, FI_READ,
+						 rx_buf->mr);
 			if (ret)
 				return ret;
 
