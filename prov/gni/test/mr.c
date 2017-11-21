@@ -615,7 +615,9 @@ Test(mr_internal_bare, invalid_requested_key)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, 1000,
 			default_flags, &mr, NULL);
-	cr_assert(ret == -FI_EINVAL, "ret=%d\n", ret);
+	cr_assert(ret == FI_SUCCESS, "ret=%d\n", ret);
+
+	cr_assert(fi_mr_key(mr) != 1000);
 }
 
 Test(mr_no_cache_scalable, invalid_user_requested_key)
