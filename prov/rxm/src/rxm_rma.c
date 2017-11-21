@@ -64,7 +64,8 @@ static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 			  util_domain);
 	if (rxm_domain->mr_local) {
 		ret = rxm_ep_msg_mr_regv(rxm_ep, msg->msg_iov,
-					 msg->iov_count, FI_WRITE,
+					 msg->iov_count,
+					 comp_flags & (FI_WRITE | FI_READ),
 					 tx_entry->mr);
 		if (ret)
 			goto err;
