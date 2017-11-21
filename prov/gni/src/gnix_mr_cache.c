@@ -209,8 +209,8 @@ static int __find_overlapping_addr(
 {
 	gnix_mr_cache_key_t *to_find  = (gnix_mr_cache_key_t *) x;
 	gnix_mr_cache_key_t *to_compare = (gnix_mr_cache_key_t *) y;
-	uint64_t to_find_end = to_find->address + to_find->length;
-	uint64_t to_compare_end = to_compare->address + to_compare->length;
+	uint64_t to_find_end = to_find->address + to_find->length - 1;
+	uint64_t to_compare_end = to_compare->address + to_compare->length - 1;
 
 	/* format: (x_addr,  x_len) - (y_addr,  y_len) truth_value
 	 *
@@ -854,6 +854,8 @@ static inline int __mr_cache_entry_get(
 {
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
+	GNIX_DEBUG(FI_LOG_MR,
+		   "Up ref cnt on entry %p\n", entry);
 	return ofi_atomic_inc32(&entry->ref_cnt);
 }
 
@@ -882,6 +884,8 @@ static inline int __mr_cache_entry_put(
 		__clear_notifier_events(cache);
 	}
 
+	GNIX_DEBUG(FI_LOG_MR,
+		   "Decrease ref cnt on entry %p\n", entry);
 	if (ofi_atomic_dec32(&entry->ref_cnt) == 0) {
 		next = entry->siblings.next;
 		dlist_remove(&entry->children);
@@ -1218,9 +1222,9 @@ static int __mr_cache_search_inuse(
 	if (__can_subsume(found_key, key)) {
 		GNIX_DEBUG(FI_LOG_MR,
 			   "found an entry that subsumes the request, "
-			   "existing=%llx:%llx key=%llx:%llx\n",
+			   "existing=%llx:%llx key=%llx:%llx entry %p\n",
 			   found_key->address, found_key->length,
-			   key->address, key->length);
+			   key->address, key->length, found_entry);
 		*entry = found_entry;
 		__mr_cache_entry_get(cache, found_entry);
 
@@ -1251,8 +1255,8 @@ static int __mr_cache_search_inuse(
 		found_end = found_key->address + found_key->length;
 
 		/* mark the entry as retired */
-		GNIX_DEBUG(FI_LOG_MR, "retiring entry, key=%llx:%llx\n",
-			   found_key->address, found_key->length);
+		GNIX_DEBUG(FI_LOG_MR, "retiring entry, key=%llx:%llx entry %p\n",
+			   found_key->address, found_key->length, found_entry);
 		__entry_set_retired(found_entry);
 		dlist_insert_tail(&found_entry->siblings, &retired_entries);
 
@@ -1292,6 +1296,9 @@ static int __mr_cache_search_inuse(
 			   new_key.address, new_key.length);
 		return ret;
 	}
+	GNIX_DEBUG(FI_LOG_MR,
+		   "created a new merged registration, key=%llx:%llx entry %p\n",
+		   new_key.address, new_key.length, *entry);
 
 	__entry_set_merged(*entry);
 
@@ -1481,8 +1488,8 @@ static int __mr_cache_create_registration(
 		goto err_dereg;
 	}
 
-	GNIX_DEBUG(FI_LOG_MR, "inserted key %llx:%llx into inuse\n",
-		   current_entry->key.address, current_entry->key.length);
+	GNIX_DEBUG(FI_LOG_MR, "inserted key %llx:%llx into inuse %p\n",
+		   current_entry->key.address, current_entry->key.length, current_entry);
 
 
 	ofi_atomic_inc32(&cache->inuse.elements);
@@ -1612,7 +1619,7 @@ int _gnix_mr_cache_deregister(
 
 	entry = container_of(handle, gnix_mr_cache_entry_t, mr);
 	if (__entry_get_state(entry) != GNIX_CES_INUSE) {
-		GNIX_INFO(FI_LOG_MR, "entry (%p) in incorrect state (%d)\n",
+		GNIX_WARN(FI_LOG_MR, "entry (%p) in incorrect state (%d)\n",
 			  entry, entry->state);
 		return -FI_EINVAL;
 	}
