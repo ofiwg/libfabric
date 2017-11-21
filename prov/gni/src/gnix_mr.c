@@ -263,9 +263,6 @@ int _gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		}
 	}
 
-	if (!auth_key->using_vmdh && requested_key)
-		return -FI_EINVAL;
-
 	/* if this is a provider registration using VMDH and 0 was provided
 	 * as the key, pick any available */
 	if (auth_key->using_vmdh && reserved && !requested_key) {
