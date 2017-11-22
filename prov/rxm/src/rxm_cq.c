@@ -299,9 +299,9 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 		}
 
 		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info)) {
-		    ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
-					     rx_buf->recv_entry->count, FI_WRITE,
-					     rx_buf->mr);
+			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
+						 rx_buf->recv_entry->count, FI_READ,
+						 rx_buf->mr);
 			if (ret)
 				return ret;
 
