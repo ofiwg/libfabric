@@ -437,8 +437,7 @@ static int ofi_cap_mr_mode(uint64_t info_caps, int mr_mode)
 		if (!(mr_mode & FI_MR_LOCAL))
 			return 0;
 
-		mr_mode &= ~(FI_MR_RAW | FI_MR_VIRT_ADDR |
-			     FI_MR_PROV_KEY | FI_MR_RMA_EVENT);
+		mr_mode &= ~OFI_MR_MODE_RMA_TARGET;
 	}
 
 	return mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE);
@@ -1122,6 +1121,37 @@ static void fi_alter_tx_attr(struct fi_tx_attr *attr,
 		attr->rma_iov_limit = hints->rma_iov_limit;
 }
 
+static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
+				  const struct fi_info *user_info,
+				  uint32_t api_version)
+{
+	int prov_mode, user_mode;
+	uint64_t caps;
+
+	caps = ofi_get_caps(prov_info->caps, user_info->caps, prov_info->caps);
+
+	prov_mode = prov_info->domain_attr->mr_mode;
+
+	if (!user_info || !ofi_rma_target_allowed(caps) ||
+	    !(prov_mode & OFI_MR_MODE_RMA_TARGET))
+		return caps;
+
+	if (!user_info->domain_attr)
+		goto trim_caps;
+
+	user_mode = user_info->domain_attr->mr_mode;
+
+	if ((FI_VERSION_LT(api_version, FI_VERSION(1,5)) &&
+	    (user_mode == FI_MR_UNSPEC)) ||
+	    (user_mode == FI_MR_BASIC) ||
+	    ((user_mode & OFI_MR_MODE_RMA_TARGET) ==
+	     (prov_mode & OFI_MR_MODE_RMA_TARGET)))
+		return caps;
+
+trim_caps:
+	return caps & ~(FI_REMOTE_WRITE | FI_REMOTE_READ);
+}
+
 /*
  * Alter the returned fi_info based on the user hints.  We assume that
  * the hints have been validated and the starting fi_info is properly
@@ -1134,7 +1164,9 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		return;
 
 	for (; info; info = info->next) {
-		info->caps = ofi_get_caps(info->caps, hints->caps, info->caps);
+		/* This should stay before call to fi_alter_domain_attr as
+		 * the checks depend on unmodified provider mr_mode attr */
+		info->caps = ofi_get_info_caps(info, hints, api_version);
 
 		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
 			if (info->domain_attr->mr_mode & FI_MR_LOCAL)

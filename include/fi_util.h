@@ -624,6 +624,9 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	 (!(info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE)) && \
 	  (info->mode & FI_LOCAL_MR)))
 
+#define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |\
+				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
+
 struct ofi_mr_map {
 	const struct fi_provider *prov;
 	void			*rbtree;
