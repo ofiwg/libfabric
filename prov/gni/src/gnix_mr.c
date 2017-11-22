@@ -471,13 +471,15 @@ static int __gnix_deregister_region(
 		void *context)
 {
 	struct gnix_fid_mem_desc *mr = (struct gnix_fid_mem_desc *) handle;
-	gni_return_t ret;
+	gni_return_t ret = GNI_RC_SUCCESS;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 
 	domain = mr->domain;
 	nic = mr->nic;
 
+	GNIX_DEBUG(FI_LOG_MR,
+		"Params: deregister md=%p\n", handle);
 	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	ret = GNI_MemDeregister(nic->gni_nic_hndl, &mr->mem_hndl);
 	COND_RELEASE(nic->requires_lock, &nic->lock);
