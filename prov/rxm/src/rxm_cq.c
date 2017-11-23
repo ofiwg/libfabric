@@ -111,7 +111,9 @@ int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
 		ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
 				   rx_buf->recv_entry->context,
-				   rx_buf->recv_entry->comp_flags,
+				   rx_buf->recv_entry->comp_flags |
+				   (rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
+				   FI_REMOTE_CQ_DATA : 0,
 				   rx_buf->pkt.hdr.size, NULL,
 				   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 		if (ret) {
@@ -159,13 +161,12 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 
 	assert(count <= RXM_IOV_LIMIT);
 
-	if (match_len > ofi_total_iov_len(iov, count)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "match_len > iov size!\n");
-		return -FI_EINVAL;
-	}
-
 	for (i = 0; i < count; i++) {
-		assert(offset <= iov[i].iov_len);
+		if (offset >= iov[i].iov_len) {
+			offset -= iov[i].iov_len;
+			continue;
+		}
+
 		match_iov->iov[i].iov_base = (char *)iov[i].iov_base + offset;
 		match_iov->iov[i].iov_len = MIN(iov[i].iov_len - offset, match_len);
 		if (desc)
@@ -176,7 +177,12 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 			break;
 		offset = 0;
 	}
-	assert(!match_len);
+
+	if (match_len) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Given iov size < match_len!\n");
+		return -FI_ETOOSMALL;
+	}
+
 	match_iov->count = i + 1;
 	return FI_SUCCESS;
 }
@@ -192,24 +198,29 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 
 	assert(rma_iov->count <= RXM_IOV_LIMIT);
 
-	for (i = 0, j = 0; i < rma_iov->count; i++) {
+	for (i = 0, j = 0; i < rma_iov->count; ) {
 		ret = rxm_match_iov(&recv_entry->iov[j], &recv_entry->desc[j],
-				    recv_entry->count, offset,
+				    recv_entry->count - j, offset,
 				    rma_iov->iov[i].len, &match_iov[i]);
 		if (ret)
 			return ret;
+
 		count = match_iov[i].count;
 		offset = match_iov[i].iov[count - 1].iov_len;
 
-		assert((j + count - 1) < recv_entry->count);
-		if (offset == recv_entry->iov[j + count - 1].iov_len) {
-			/* This iov has been completely used */
-			j += count;
-			offset = 0;
-		} else {
-			j += count - 1;
-		}
+		i++;
+		j += count - 1;
+
+		if (j >= recv_entry->count)
+			break;
 	}
+
+	if (i < rma_iov->count) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "posted recv_entry size < "
+			"rndv rma read size!\n");
+		return -FI_ETOOSMALL;
+	}
+
 	return FI_SUCCESS;
 }
 
@@ -460,7 +471,6 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 				  struct fi_cq_tagged_entry *comp)
 {
-	enum rxm_proto_state state = RXM_GET_PROTO_STATE(comp);
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 	struct rxm_tx_entry *tx_entry = comp->op_context;
 
@@ -469,7 +479,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
-	switch (state) {
+	switch (RXM_GET_PROTO_STATE(comp)) {
 	case RXM_TX_NOBUF:
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
 		return rxm_finish_send_nobuf(tx_entry);
