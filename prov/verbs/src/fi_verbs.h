@@ -179,6 +179,8 @@ extern struct fi_ibv_gl_data {
 	} dgram;
 } fi_ibv_gl_data;
 
+extern struct fi_ops_mr fi_ibv_domain_mr_ops;
+
 struct verbs_addr {
 	struct dlist_entry entry;
 	struct rdma_addrinfo *rai;
