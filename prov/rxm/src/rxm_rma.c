@@ -40,7 +40,6 @@ static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 				 const struct fi_msg_rma *msg, uint64_t flags,
 				 rxm_rma_msg_fn rma_msg, uint64_t comp_flags)
 {
-	struct rxm_domain *rxm_domain;
 	struct rxm_tx_entry *tx_entry;
 	struct fi_msg_rma msg_rma;
 	size_t i;
@@ -60,19 +59,19 @@ static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	msg_rma = *msg;
 	msg_rma.context = tx_entry;
 
-	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
-			  util_domain);
-	if (rxm_domain->mr_local) {
-		ret = rxm_ep_msg_mr_regv(rxm_ep, msg->msg_iov,
-					 msg->iov_count,
-					 comp_flags & (FI_WRITE | FI_READ),
-					 tx_entry->mr);
-		if (ret)
-			goto err;
-		msg_rma.desc = (void **)tx_entry->mr;
+	if (OFI_CHECK_MR_LOCAL(rxm_ep->msg_info)) {
+		if (!OFI_CHECK_MR_LOCAL(rxm_ep->rxm_info)) {
+			ret = rxm_ep_msg_mr_regv(rxm_ep, msg->msg_iov,
+						 msg->iov_count,
+						 comp_flags & (FI_WRITE | FI_READ),
+						 tx_entry->mr);
+			if (ret)
+				goto err;
+			msg_rma.desc = (void **)tx_entry->mr;
+		}
+		for (i = 0; i < msg_rma.iov_count; i++)
+			msg_rma.desc[i] = fi_mr_desc(msg_rma.desc[i]);
 	}
-	for (i = 0; i < msg_rma.iov_count; i++)
-		msg_rma.desc[i] = fi_mr_desc(msg_rma.desc[i]);
 
 	return rma_msg(msg_ep, &msg_rma, flags);
 err:
