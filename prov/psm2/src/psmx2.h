@@ -856,6 +856,7 @@ struct psmx2_env {
 	char *prog_affinity;
 	int sep;
 	int max_trx_ctxt;
+	int sep_trx_ctxt;
 	int num_devunits;
 	int inject_size;
 	int lock_level;

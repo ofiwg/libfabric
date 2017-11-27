@@ -49,6 +49,7 @@ struct psmx2_env psmx2_env = {
 	.prog_affinity	= NULL,
 	.sep		= 0,
 	.max_trx_ctxt	= 1,
+	.sep_trx_ctxt	= 0,
 	.num_devunits	= 1,
 	.inject_size	= 64,
 	.lock_level	= 2,
@@ -79,6 +80,7 @@ static int psmx2_check_sep_cap(void)
 
 	psmx2_env.sep = 1;
 	psmx2_env.max_trx_ctxt = PSMX2_MAX_TRX_CTXT;
+	psmx2_env.sep_trx_ctxt = PSMX2_MAX_TRX_CTXT - 1;
 
 	return 1;
 }
@@ -149,23 +151,38 @@ static int psmx2_read_sysfs_int(int unit, char *entry)
 
 static void psmx2_update_sep_cap(void)
 {
-	int i, n = 0;
+	int i;
+	int nctxts = 0;
+	int nfreectxts = 0;
 
-	for (i = 0; i < psmx2_env.num_devunits; i++)
-		n += psmx2_read_sysfs_int(i, "nfreectxts");
+	for (i = 0; i < psmx2_env.num_devunits; i++) {
+		nctxts += psmx2_read_sysfs_int(i, "nctxts");
+		nfreectxts += psmx2_read_sysfs_int(i, "nfreectxts");
+	}
 
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "Total free hfi1 contexts: %d\n", n);
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"hfi1 contexts: total %d, free %d\n",
+		nctxts, nfreectxts);
 
-	/* reserve one context for regular ep */
-	if (n > 0)
-		n--;
+	if (nctxts > PSMX2_MAX_TRX_CTXT)
+		nctxts = PSMX2_MAX_TRX_CTXT;
 
-	if (n > PSMX2_MAX_TRX_CTXT)
-		n = PSMX2_MAX_TRX_CTXT;
+	if (nfreectxts > PSMX2_MAX_TRX_CTXT)
+		nfreectxts = PSMX2_MAX_TRX_CTXT;
 
-	psmx2_env.max_trx_ctxt = n;
+	psmx2_env.max_trx_ctxt = nctxts;
+	psmx2_env.sep_trx_ctxt = nfreectxts;
+
+	/*
+	 * One context is reserved for regular endpoints. It is allocated
+	 * when the domain is opened.
+	 */
+	if ((!psmx2_active_fabric || !psmx2_active_fabric->active_domain) &&
+	    psmx2_env.sep_trx_ctxt)
+		--psmx2_env.sep_trx_ctxt;
+
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "SEP: %d Tx/Rx contexts allowed.\n",
-		psmx2_env.max_trx_ctxt);
+		psmx2_env.sep_trx_ctxt);
 }
 
 static int psmx2_getinfo(uint32_t version, const char *node,
@@ -240,8 +257,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_init_env();
 
 	psmx2_update_sep_cap();
-	tx_ctx_cnt = psmx2_env.max_trx_ctxt;
-	rx_ctx_cnt = psmx2_env.max_trx_ctxt;
+	tx_ctx_cnt = psmx2_env.sep_trx_ctxt;
+	rx_ctx_cnt = psmx2_env.sep_trx_ctxt;
 
 	if (node &&
 	    !ofi_str_toaddr(node, &fmt, &addr, &len) &&
@@ -363,21 +380,21 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt &&
+			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt &&
 			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->tx_ctx_cnt=%"PRIu64", max=%d\n",
+					"hints->ep_attr->tx_ctx_cnt=%"PRIu64", available=%d\n",
 					hints->ep_attr->tx_ctx_cnt,
-					psmx2_env.max_trx_ctxt);
+					psmx2_env.sep_trx_ctxt);
 				goto err_out;
 			}
 			tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
 
-			if (hints->ep_attr->rx_ctx_cnt > psmx2_env.max_trx_ctxt) {
+			if (hints->ep_attr->rx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->rx_ctx_cnt=%"PRIu64", max=%d\n",
+					"hints->ep_attr->rx_ctx_cnt=%"PRIu64", available=%d\n",
 					hints->ep_attr->rx_ctx_cnt,
-					psmx2_env.max_trx_ctxt);
+					psmx2_env.sep_trx_ctxt);
 				goto err_out;
 			}
 			rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
@@ -661,10 +678,10 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->domain_attr->cq_data_size = 4;
 	psmx2_info->domain_attr->cq_cnt = 65535;
 	psmx2_info->domain_attr->ep_cnt = 65535;
-	psmx2_info->domain_attr->tx_ctx_cnt = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->rx_ctx_cnt = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->max_ep_tx_ctx = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->max_ep_rx_ctx = psmx2_env.max_trx_ctxt;
+	psmx2_info->domain_attr->tx_ctx_cnt = psmx2_env.sep_trx_ctxt;
+	psmx2_info->domain_attr->rx_ctx_cnt = psmx2_env.sep_trx_ctxt;
+	psmx2_info->domain_attr->max_ep_tx_ctx = psmx2_env.sep_trx_ctxt;
+	psmx2_info->domain_attr->max_ep_rx_ctx = psmx2_env.sep_trx_ctxt;
 	psmx2_info->domain_attr->max_ep_stx_ctx = 65535;
 	psmx2_info->domain_attr->max_ep_srx_ctx = 0;
 	psmx2_info->domain_attr->cntr_cnt = 65535;
