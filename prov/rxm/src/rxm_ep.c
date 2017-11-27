@@ -303,6 +303,9 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
 		rx_buf = (struct rxm_rx_buf *)rxm_buf_get(&rxm_ep->rx_pool);
+		if (OFI_UNLIKELY(!rx_buf))
+			return -FI_ENOMEM;
+
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
 		rx_buf->ep = rxm_ep;
