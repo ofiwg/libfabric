@@ -827,7 +827,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_peer *peer,
 			goto repost;
 		} else {
 			FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "invalid pkt: segno: %d "
-			       "expected:%d, rx-key:%" PRId64 ", ctrl_msg_id: %ld, "
+			       "expected:%d, rx-key:%" PRId64 ", ctrl_msg_id: %" PRIu64 ", "
 			       "rx_entry_msg_id: %" PRIx64 "\n",
 			       ctrl->seg_no, rx_entry->exp_seg_no,
 			       ctrl->rx_key,

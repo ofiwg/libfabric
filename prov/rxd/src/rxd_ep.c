@@ -514,7 +514,7 @@ static int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 //		return -FI_EIO;
 //	}
 //
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "retry packet : %2d, size: %" PRIx64 ", tx_id :%" PRIx64 "\n",
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "retry packet : %2d, size: %zd, tx_id :%" PRIx64 "\n",
 	       ctrl->seg_no, ctrl->type == ofi_ctrl_start_data ?
 	       ctrl->seg_size + sizeof(struct rxd_pkt_data_start) :
 	       ctrl->seg_size + sizeof(struct rxd_pkt_data),
@@ -702,7 +702,7 @@ ssize_t rxd_ep_start_xfer(struct rxd_ep *ep, struct rxd_peer *peer,
 		       pkt->ctrl.seg_no);
 	}
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "start msg %" PRIx64 ", size: %ld\n",
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "start msg %" PRIx64 ", size: %" PRIu64 "\n",
 	       pkt->ctrl.msg_id, tx_entry->op_hdr.size);
 	rxd_set_timeout(tx_entry);
 	dlist_insert_tail(&pkt_meta->entry, &tx_entry->pkt_list);
