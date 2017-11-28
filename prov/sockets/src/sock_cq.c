@@ -211,8 +211,8 @@ out:
 	return ret;
 }
 
-static int sock_cq_report_context(struct sock_cq *cq, fi_addr_t addr,
-				  struct sock_pe_entry *pe_entry)
+static ssize_t sock_cq_report_context(struct sock_cq *cq, fi_addr_t addr,
+				      struct sock_pe_entry *pe_entry)
 {
 	struct fi_cq_entry cq_entry;
 	cq_entry.op_context = (void *) (uintptr_t) pe_entry->context;
@@ -228,8 +228,8 @@ static uint64_t sock_cq_sanitize_flags(uint64_t flags)
 				FI_REMOTE_CQ_DATA | FI_MULTI_RECV));
 }
 
-static int sock_cq_report_msg(struct sock_cq *cq, fi_addr_t addr,
-			      struct sock_pe_entry *pe_entry)
+static ssize_t sock_cq_report_msg(struct sock_cq *cq, fi_addr_t addr,
+				  struct sock_pe_entry *pe_entry)
 {
 	struct fi_cq_msg_entry cq_entry;
 	cq_entry.op_context = (void *) (uintptr_t) pe_entry->context;
@@ -238,8 +238,8 @@ static int sock_cq_report_msg(struct sock_cq *cq, fi_addr_t addr,
 	return _sock_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
-static int sock_cq_report_data(struct sock_cq *cq, fi_addr_t addr,
-			       struct sock_pe_entry *pe_entry)
+static ssize_t sock_cq_report_data(struct sock_cq *cq, fi_addr_t addr,
+				   struct sock_pe_entry *pe_entry)
 {
 	struct fi_cq_data_entry cq_entry;
 	cq_entry.op_context = (void *) (uintptr_t) pe_entry->context;
@@ -250,8 +250,8 @@ static int sock_cq_report_data(struct sock_cq *cq, fi_addr_t addr,
 	return _sock_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
-static int sock_cq_report_tagged(struct sock_cq *cq, fi_addr_t addr,
-				 struct sock_pe_entry *pe_entry)
+static ssize_t sock_cq_report_tagged(struct sock_cq *cq, fi_addr_t addr,
+				     struct sock_pe_entry *pe_entry)
 {
 	struct fi_cq_tagged_entry cq_entry;
 	cq_entry.op_context = (void *) (uintptr_t) pe_entry->context;
@@ -267,19 +267,19 @@ static void sock_cq_set_report_fn(struct sock_cq *sock_cq)
 {
 	switch (sock_cq->attr.format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		sock_cq->report_completion = &sock_cq_report_context;
+		sock_cq->report_completion = sock_cq_report_context;
 		break;
 
 	case FI_CQ_FORMAT_MSG:
-		sock_cq->report_completion = &sock_cq_report_msg;
+		sock_cq->report_completion = sock_cq_report_msg;
 		break;
 
 	case FI_CQ_FORMAT_DATA:
-		sock_cq->report_completion = &sock_cq_report_data;
+		sock_cq->report_completion = sock_cq_report_data;
 		break;
 
 	case FI_CQ_FORMAT_TAGGED:
-		sock_cq->report_completion = &sock_cq_report_tagged;
+		sock_cq->report_completion = sock_cq_report_tagged;
 		break;
 
 	case FI_CQ_FORMAT_UNSPEC:
@@ -332,7 +332,7 @@ static inline ssize_t sock_cq_rbuf_read(struct sock_cq *cq, void *buf,
 static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			fi_addr_t *src_addr, const void *cond, int timeout)
 {
-	int ret = 0;
+	ssize_t ret = 0;
 	size_t threshold;
 	struct sock_cq *sock_cq;
 	uint64_t start_ms = 0, end_ms = 0;
@@ -386,7 +386,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			fastlock_release(&sock_cq->lock);
 
 			if ((ret == -FI_EAGAIN || ret == 0) && timeout >= 0) {
-				timeout = end_ms - fi_gettime_ms();
+				timeout = (int)(end_ms - fi_gettime_ms());
 				if (timeout <= 0)
 					break;
 			}

@@ -393,7 +393,7 @@ static void rxd_set_rx_credits(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry)
 	num_pkts = (size_left + rxd_ep_domain(ep)->max_mtu_sz - 1) /
 		    rxd_ep_domain(ep)->max_mtu_sz;
 	avail = MIN(ep->credits, num_pkts);
-	rx_entry->credits = MIN(avail, RXD_MAX_RX_CREDITS);
+	rx_entry->credits = (uint16_t)MIN(avail, RXD_MAX_RX_CREDITS);
 	rx_entry->last_win_seg += rx_entry->credits;
 	ep->credits -= rx_entry->credits;
 }
@@ -499,7 +499,6 @@ static int rxd_match_trecv_entry(struct dlist_entry *item, const void *arg)
                 ((trecv_entry->msg.addr == FI_ADDR_UNSPEC) ||
 		 (rx_entry->source == FI_ADDR_UNSPEC) ||
                  (trecv_entry->msg.addr == rx_entry->source)));
-	return 0;
 }
 
 struct rxd_trecv_entry *rxd_get_trecv_entry(struct rxd_ep *ep,
@@ -800,7 +799,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_peer *peer,
 	struct rxd_rx_entry *rx_entry;
 	struct rxd_tx_entry *tx_entry;
 	struct rxd_pkt_data *pkt_data = (struct rxd_pkt_data *) ctrl;
-	uint16_t credits;
+	uint32_t credits;
 	int ret;
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
@@ -821,7 +820,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_peer *peer,
 			credits = ((rx_entry->msg_id == ctrl->msg_id) &&
 				  (rx_entry->last_win_seg == ctrl->seg_no)) ?
 				  rx_entry->credits : 0;
-			rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, credits,
+			rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, (uint16_t)credits,
 				       ctrl->rx_key, peer->conn_data,
 				       ctrl->conn_id);
 			goto repost;
@@ -837,7 +836,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_peer *peer,
 			       rx_entry->credits, rx_entry->last_win_seg);
 			credits = (rx_entry->msg_id == ctrl->msg_id) ?
 				  rx_entry->last_win_seg - rx_entry->exp_seg_no : 0;
-			rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, credits,
+			rxd_ep_reply_ack(ep, ctrl, ofi_ctrl_ack, (uint16_t)credits,
 				       ctrl->rx_key, peer->conn_data,
 				       ctrl->conn_id);
 			goto repost;
@@ -883,7 +882,8 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 			   struct rxd_rx_buf *rx_buf)
 {
 	uint64_t idx;
-	int i, offset, ret;
+	int i, offset;
+	ssize_t ret;
 	struct ofi_rma_iov *rma_iov;
 	struct rxd_pkt_data_start *pkt_start;
 	struct rxd_tx_entry *tx_entry;
@@ -944,7 +944,7 @@ int rxd_process_start_data(struct rxd_ep *ep, struct rxd_rx_entry *rx_entry,
 		}
 
 		offset = sizeof(struct ofi_rma_iov) * rx_entry->op_hdr.iov_count;
-		ctrl->seg_size -= offset;
+		ctrl->seg_size -= (uint16_t)offset;
 		rxd_ep_handle_data_msg(ep, peer, rx_entry, rx_entry->write.iov,
 				       rx_entry->op_hdr.iov_count, ctrl,
 				       pkt_start->data + offset, rx_buf);

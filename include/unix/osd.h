@@ -110,6 +110,12 @@ static inline SOCKET ofi_socket(int domain, int type, int protocol)
 	return socket(domain, type, protocol);
 }
 
+static inline int ofi_setsockopt(SOCKET fd, int level, int optname,
+				 const void *optval, socklen_t optlen)
+{
+	return setsockopt(fd, level, optname, optval, optlen);
+}
+
 static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)
 {
 	return read(fd, buf, count);

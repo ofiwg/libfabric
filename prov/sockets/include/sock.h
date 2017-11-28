@@ -186,7 +186,7 @@ struct sock_fabric {
 };
 
 struct sock_conn {
-	int sock_fd;
+	SOCKET sock_fd;
 	int connected;
 	int address_published;
 	struct sockaddr_in addr;
@@ -295,10 +295,10 @@ struct sock_trigger {
 struct sock_cntr {
 	struct fid_cntr		cntr_fid;
 	struct sock_domain	*domain;
-	ofi_atomic32_t		value;
+	ofi_atomic64_t		value;
 	ofi_atomic32_t		ref;
-	ofi_atomic32_t		err_cnt;
-	ofi_atomic32_t		last_read_val;
+	ofi_atomic64_t		err_cnt;
+	ofi_atomic64_t		last_read_val;
 	pthread_cond_t 		cond;
 	pthread_mutex_t		mut;
 	struct fi_cntr_attr	attr;
@@ -413,13 +413,13 @@ enum {
  */
 struct sock_op {
 	uint8_t op;
-	uint8_t src_iov_len;
-	uint8_t	dest_iov_len;
+	uint64_t src_iov_len;
+	uint64_t dest_iov_len;
 	struct {
-		uint8_t	op;
-		uint8_t	datatype;
-		uint8_t	res_iov_len;
-		uint8_t	cmp_iov_len;
+		uint8_t		op;
+		uint8_t		datatype;
+		uint64_t	res_iov_len;
+		uint64_t	cmp_iov_len;
 	} atomic;
 	uint8_t	reserved[1];
 };
@@ -499,9 +499,9 @@ struct sock_comp {
 };
 
 struct sock_cm_entry {
-	int sock;
+	SOCKET sock;
 	int do_listen;
-	int signal_fds[2];
+	SOCKET signal_fds[2];
 	uint64_t next_msg_id;
 	fastlock_t lock;
 	int is_connected;
@@ -510,7 +510,7 @@ struct sock_cm_entry {
 };
 
 struct sock_conn_handle {
-	int sock;
+	SOCKET sock;
 	int do_listen;
 	char service[NI_MAXSERV];
 };
@@ -680,7 +680,7 @@ struct sock_msg_hdr {
 	uint8_t version;
 	uint8_t op_type;
 	uint8_t rx_id;
-	uint8_t dest_iov_len;
+	uint64_t dest_iov_len;
 	uint16_t pe_entry_id;
 	uint8_t reserved[2];
 
@@ -847,8 +847,8 @@ struct sock_pe {
 	fi_epoll_t epoll_set;
 };
 
-typedef int (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,
-				  struct sock_pe_entry *pe_entry);
+typedef ssize_t (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,
+				      struct sock_pe_entry *pe_entry);
 
 struct sock_cq_overflow_entry_t {
 	size_t len;
@@ -906,7 +906,7 @@ enum {
 struct sock_conn_req_handle {
 	struct fid handle;
 	struct sock_conn_req *req;
-	int sock_fd;
+	SOCKET sock_fd;
 	int is_accepted;
 	struct sock_pep *pep;
 	struct sock_ep *ep;
@@ -1112,8 +1112,8 @@ int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr);
 
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index,
                                       struct sockaddr_in *addr);
-int sock_ep_get_conn(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
-		     fi_addr_t index, struct sock_conn **pconn);
+ssize_t sock_ep_get_conn(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
+			 fi_addr_t index, struct sock_conn **pconn);
 void sock_ep_remove_conn(struct sock_ep_attr *ep_attr, struct sock_conn *conn);
 int sock_ep_connect(struct sock_ep_attr *attr, fi_addr_t index,
 		    struct sock_conn **conn);
@@ -1124,18 +1124,18 @@ int sock_conn_start_listener_thread(struct sock_conn_listener *conn_listener);
 int sock_conn_stop_listener_thread(struct sock_conn_listener *conn_listener);
 void sock_conn_map_destroy(struct sock_ep_attr *ep_attr);
 void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn);
-void sock_set_sockopts(int sock);
-int fd_set_nonblock(int fd);
-void sock_set_sockopt_reuseaddr(int sock);
+void sock_set_sockopts(SOCKET sock);
+int fd_set_nonblock(SOCKET fd);
+void sock_set_sockopt_reuseaddr(SOCKET sock);
 int sock_conn_map_init(struct sock_ep *ep, int init_size);
-void sock_set_sockopts_conn(int sock);
+void sock_set_sockopts_conn(SOCKET sock);
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx);
 void sock_pe_signal(struct sock_pe *pe);
-void sock_pe_poll_add(struct sock_pe *pe, int fd);
-void sock_pe_poll_del(struct sock_pe *pe, int fd);
+void sock_pe_poll_add(struct sock_pe *pe, SOCKET fd);
+void sock_pe_poll_del(struct sock_pe *pe, SOCKET fd);
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx);
 int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx);
 void sock_pe_remove_tx_ctx(struct sock_tx_ctx *tx_ctx);
@@ -1187,7 +1187,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 			  size_t compare_count, struct fi_ioc *resultv,
 			  void **result_desc, size_t result_count, uint64_t flags);
 
-int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work);
+ssize_t sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work);
 ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			  uint64_t flags, enum fi_op_type op_type);
 ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,

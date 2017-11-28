@@ -148,26 +148,26 @@ void sock_conn_map_destroy(struct sock_ep_attr *ep_attr)
 
 void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn)
 {
-	fi_epoll_del(map->epoll_set, conn->sock_fd);
+	fi_epoll_del(map->epoll_set, (int)conn->sock_fd);
 	ofi_close_socket(conn->sock_fd);
 
 	conn->address_published = 0;
         conn->connected = 0;
-        conn->sock_fd = -1;
+        conn->sock_fd = INVALID_SOCKET;
 }
 
 static int sock_conn_get_next_index(struct sock_conn_map *map)
 {
 	int i;
 	for (i = 0; i < map->size; i++) {
-		if (map->table[i].sock_fd == -1)
+		if (map->table[i].sock_fd == INVALID_SOCKET)
 			return i;
 	}
 	return -1;
 }
 
 static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
-				struct sockaddr_in *addr, int conn_fd,
+				struct sockaddr_in *addr, SOCKET conn_fd,
 				int addr_published)
 {
 	int index;
@@ -193,19 +193,19 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 	map->table[index].ep_attr = ep_attr;
 	sock_set_sockopts(conn_fd);
 
-	if (fi_epoll_add(map->epoll_set, conn_fd, &map->table[index]))
+	if (fi_epoll_add(map->epoll_set, (int)conn_fd, &map->table[index]))
 		SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
 
 	map->table[index].address_published = addr_published;
-	sock_pe_poll_add(ep_attr->domain->pe, conn_fd);
+	sock_pe_poll_add(ep_attr->domain->pe, (int)conn_fd);
 	return &map->table[index];
 }
 
-int fd_set_nonblock(int fd)
+int fd_set_nonblock(SOCKET fd)
 {
 	int ret;
 
-	ret = fi_fd_nonblock(fd);
+	ret = fi_fd_nonblock((int)fd);
 	if (ret)
 	    SOCK_LOG_ERROR("fi_fd_nonblock failed, errno: %d\n",
 			   ret);
@@ -213,30 +213,31 @@ int fd_set_nonblock(int fd)
 	return ret;
 }
 
-void sock_set_sockopt_reuseaddr(int sock)
+void sock_set_sockopt_reuseaddr(SOCKET sock)
 {
 	int optval;
 	optval = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)))
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+		       (const void *)&optval, sizeof(optval)))
 		SOCK_LOG_ERROR("setsockopt reuseaddr failed\n");
 }
 
-void sock_set_sockopts_conn(int sock)
+void sock_set_sockopts_conn(SOCKET sock)
 {
 	int optval;
 	optval = 1;
 	sock_set_sockopt_reuseaddr(sock);
-	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
+	if (ofi_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
 		SOCK_LOG_ERROR("setsockopt nodelay failed\n");
 }
 
-void sock_set_sockopts(int sock)
+void sock_set_sockopts(SOCKET sock)
 {
 	int optval;
 	optval = 1;
 
 	sock_set_sockopt_reuseaddr(sock);
-	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
+	if (ofi_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
 		SOCK_LOG_ERROR("setsockopt nodelay failed\n");
 
 	fd_set_nonblock(sock);
@@ -268,7 +269,8 @@ static void *sock_conn_listener_thread(void *arg)
 	struct sock_conn_handle *conn_handle;
 	void *ep_contexts[SOCK_EPOLL_WAIT_EVENTS];
 	struct sock_ep_attr *ep_attr;
-	int num_fds, i, conn_fd;
+	int num_fds, i;
+	SOCKET conn_fd;
 	struct sockaddr_in remote;
 	socklen_t addr_size;
 
@@ -293,7 +295,7 @@ static void *sock_conn_listener_thread(void *arg)
 			conn_fd = accept(conn_handle->sock, (struct sockaddr *) &remote,
 			                 &addr_size);
 			SOCK_LOG_DBG("CONN: accepted conn-req: %d\n", conn_fd);
-			if (conn_fd < 0) {
+			if (conn_fd == INVALID_SOCKET) {
 				SOCK_LOG_ERROR("failed to accept: %s\n",
 				               strerror(ofi_sockerr()));
 				continue;
@@ -362,7 +364,8 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 {
 	struct addrinfo *s_res = NULL, *p;
 	struct addrinfo hints = { 0 };
-	int listen_fd = 0, ret;
+	int ret;
+	SOCKET listen_fd = INVALID_SOCKET;
 	socklen_t addr_size;
 	struct sockaddr_in addr;
 	struct sock_conn_handle *conn_handle = &ep_attr->conn_handle;
@@ -400,18 +403,18 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	SOCK_LOG_DBG("Binding listener thread to port: %s\n", conn_handle->service);
 	for (p = s_res; p; p = p->ai_next) {
 		listen_fd = ofi_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-		if (listen_fd >= 0) {
+		if (listen_fd != INVALID_SOCKET) {
 			sock_set_sockopts(listen_fd);
 
-			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
+			if (!bind(listen_fd, s_res->ai_addr, (socklen_t)s_res->ai_addrlen))
 				break;
 			ofi_close_socket(listen_fd);
-			listen_fd = -1;
+			listen_fd = INVALID_SOCKET;
 		}
 	}
 	freeaddrinfo(s_res);
 
-	if (listen_fd < 0) {
+	if (listen_fd == INVALID_SOCKET) {
 		SOCK_LOG_ERROR("failed to listen to port: %s\n",
 			       conn_handle->service);
 		goto err;
@@ -444,7 +447,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 	if (((struct sockaddr_in *) (ep_attr->src_addr))->sin_port == 0) {
 		((struct sockaddr_in *) (ep_attr->src_addr))->sin_port =
-			htons(atoi(conn_handle->service));
+			htons((uint16_t)atoi(conn_handle->service));
 	}
 
 	conn_handle->sock = listen_fd;
@@ -452,7 +455,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 	fastlock_acquire(&ep_attr->domain->conn_listener.signal_lock);
 	ret = fi_epoll_add(ep_attr->domain->conn_listener.emap,
-	                   conn_handle->sock, conn_handle);
+			   (int)conn_handle->sock, conn_handle);
 	fd_signal_set(&ep_attr->domain->conn_listener.signal);
 	fastlock_release(&ep_attr->domain->conn_listener.signal_lock);
 	if (ret) {
@@ -471,7 +474,8 @@ err:
 int sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index,
 		    struct sock_conn **conn)
 {
-	int conn_fd = -1, ret;
+	int ret;
+	SOCKET conn_fd;
 	int do_retry = sock_conn_retry;
 	struct sock_conn *new_conn;
 	struct sockaddr_in addr;
@@ -498,7 +502,7 @@ do_connect:
 		return FI_SUCCESS;
 
 	conn_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
-	if (conn_fd == -1) {
+	if (conn_fd == INVALID_SOCKET) {
 		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n",
 			       ofi_sockerr());
 		*conn = NULL;
@@ -573,7 +577,7 @@ retry:
 
 	if (conn_fd != -1) {
 		ofi_close_socket(conn_fd);
-		conn_fd = -1;
+		conn_fd = INVALID_SOCKET;
 	}
 
 	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n",
@@ -593,9 +597,9 @@ out:
 	}
 	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ?
 			     FI_ADDR_NOTAVAIL : index;
-	*conn = ofi_idm_lookup(&ep_attr->av_idm, index);
+	*conn = ofi_idm_lookup(&ep_attr->av_idm, (int)index);
 	if (*conn == SOCK_CM_CONN_IN_PROGRESS) {
-		if (ofi_idm_set(&ep_attr->av_idm, index, new_conn) < 0)
+		if (ofi_idm_set(&ep_attr->av_idm, (int)index, new_conn) < 0)
 			SOCK_LOG_ERROR("ofi_idm_set failed\n");
 		*conn = new_conn;
 	}

@@ -87,7 +87,8 @@ int rxd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto err1;
 
 	memset(&hints, 0, sizeof hints);
-	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr)))) {
+	hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr));
+	if (!hints.fabric_attr) {
 		ret = -FI_ENOMEM;
 		goto err2;
 	}

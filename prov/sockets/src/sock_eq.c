@@ -68,7 +68,7 @@ static void sock_eq_clean_err_data_list(struct sock_eq *eq, int free_all)
 static ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 				size_t len, int timeout, uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	struct sock_eq *sock_eq;
 	struct dlist_entry *list;
 	struct sock_eq_entry *entry;
@@ -125,7 +125,7 @@ static ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
 static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	struct sock_eq *sock_eq;
 	struct dlist_entry *list;
 	struct sock_eq_entry *entry;
@@ -254,7 +254,7 @@ static ssize_t sock_eq_write(struct fid_eq *eq, uint32_t event,
 			     const void *buf, size_t len, uint64_t flags)
 {
 	struct sock_eq *sock_eq;
-	int ret;
+	ssize_t ret;
 
 	sock_eq = container_of(eq, struct sock_eq, eq);
 	if (!(sock_eq->attr.flags & FI_WRITE))

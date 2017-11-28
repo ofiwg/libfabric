@@ -74,8 +74,8 @@ static int udpx_mc_close(struct fid *fid)
 	mc = container_of(fid, struct udpx_mc, mc_fid.fid);
 	mreq.imr_multiaddr = mc->addr.sin.sin_addr;
 	mreq.imr_interface.s_addr = INADDR_ANY;
-	ret = setsockopt(mc->ep->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-			 (const void *)&mreq, sizeof(mreq));
+	ret = ofi_setsockopt(mc->ep->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
+			     &mreq, sizeof(mreq));
 	if (ret) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "leave failed %s\n",
 			strerror(errno));
@@ -129,8 +129,8 @@ static int udpx_join_ip(struct udpx_mc *mc, const struct sockaddr_in *sin,
 	if (ofi_recv_allowed(mc->ep->util_ep.caps)) {
 		mreq.imr_multiaddr = sin->sin_addr;
 		mreq.imr_interface.s_addr = INADDR_ANY;
-		ret = setsockopt(mc->ep->sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-				 (const void *)&mreq, sizeof(mreq));
+		ret = ofi_setsockopt(mc->ep->sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+				     &mreq, sizeof(mreq));
 		if (ret) {
 			FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "join failed %s\n",
 				strerror(errno));

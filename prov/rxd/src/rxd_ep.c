@@ -188,9 +188,9 @@ static inline void *rxd_mr_desc(struct fid_mr *mr, struct rxd_ep *ep)
 	return (ep->do_local_mr) ? fi_mr_desc(mr) : NULL;
 }
 
-int rxd_ep_repost_buff(struct rxd_rx_buf *buf)
+ssize_t rxd_ep_repost_buff(struct rxd_rx_buf *buf)
 {
-	int ret;
+	ssize_t ret;
 	ret = fi_recv(buf->ep->dg_ep, buf->buf, rxd_ep_domain(buf->ep)->max_mtu_sz,
 		      rxd_mr_desc(buf->mr, buf->ep),
 		      FI_ADDR_UNSPEC, &buf->context);
@@ -234,7 +234,7 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 
 	ret = fi_enable(ep->dg_ep);
 	if (ret)
-		return ret;
+		return (int)ret;
 
 	fastlock_acquire(&ep->lock);
 	ep->credits = ep->rx_size;
@@ -257,7 +257,7 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 	}
 out:
 	fastlock_release(&ep->lock);
-	return ret;
+	return (int)ret;
 }
 
 struct rxd_peer *rxd_ep_getpeer_info(struct rxd_ep *ep, fi_addr_t addr)
@@ -428,12 +428,12 @@ static void rxd_ep_init_data_pkt(struct rxd_ep *ep, struct rxd_peer *peer,
 				 struct rxd_tx_entry *tx_entry,
 				 struct rxd_pkt_data *pkt)
 {
-	uint16_t seg_size;
+	uint64_t seg_size;
 
-	seg_size = rxd_ep_domain(ep)->max_mtu_sz - sizeof(struct rxd_pkt_data);
+	seg_size = (uint64_t)(rxd_ep_domain(ep)->max_mtu_sz - sizeof(struct rxd_pkt_data));
 	seg_size = MIN(seg_size, tx_entry->op_hdr.size - tx_entry->bytes_sent);
 
-	rxd_init_ctrl_hdr(&pkt->ctrl, ofi_ctrl_data, seg_size, tx_entry->seg_no,
+	rxd_init_ctrl_hdr(&pkt->ctrl, ofi_ctrl_data, (uint16_t)seg_size, tx_entry->seg_no,
 			   tx_entry->msg_id, tx_entry->rx_key, peer->conn_data);
 	tx_entry->bytes_sent += rxd_ep_copy_data(tx_entry, pkt->data, seg_size);
 	tx_entry->seg_no++;
@@ -445,7 +445,7 @@ static ssize_t rxd_ep_post_data_msg(struct rxd_ep *ep,
 	struct rxd_pkt_meta *pkt_meta;
 	struct rxd_pkt_data *pkt;
 	struct rxd_peer *peer;
-	int ret;
+	ssize_t ret;
 
 	peer = rxd_ep_getpeer_info(ep, tx_entry->peer);
 
@@ -501,10 +501,10 @@ void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 	};
 }
 
-static int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
+static ssize_t rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry,
 			    struct rxd_pkt_meta *pkt)
 {
-	int ret;
+	ssize_t ret;
 	struct ofi_ctrl_hdr *ctrl;
 
 	ctrl = (struct ofi_ctrl_hdr *)pkt->pkt_data;
@@ -568,7 +568,7 @@ void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
 	rxd_set_timeout(tx_entry);
 }
 
-int rxd_ep_reply_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *in_ctrl,
+ssize_t rxd_ep_reply_ack(struct rxd_ep *ep, struct ofi_ctrl_hdr *in_ctrl,
 		   uint8_t type, uint16_t seg_size, uint64_t rx_key,
 		   uint64_t source, fi_addr_t dest)
 {
@@ -608,7 +608,7 @@ static void rxd_ep_init_start_pkt(struct rxd_ep *ep, struct rxd_peer *peer,
 				  struct rxd_pkt_data_start *pkt, uint32_t flags)
 {
 	uint64_t msg_size, iov_size;
-	uint16_t seg_size;
+	uint64_t seg_size;
 
 	switch (op) {
 	case ofi_op_msg:
@@ -635,7 +635,7 @@ static void rxd_ep_init_start_pkt(struct rxd_ep *ep, struct rxd_peer *peer,
 			       sizeof(struct rxd_pkt_data_start) - iov_size, msg_size);
 		rxd_init_op_hdr(&pkt->op, tx_entry->write.msg.data, msg_size, 0,
 				op, 0, flags);
-		pkt->op.iov_count = tx_entry->write.msg.rma_iov_count;
+		pkt->op.iov_count = (uint8_t)tx_entry->write.msg.rma_iov_count;
 		break;
 	case ofi_op_read_req:
 		msg_size = ofi_total_iov_len(tx_entry->read_req.msg.msg_iov,
@@ -646,7 +646,7 @@ static void rxd_ep_init_start_pkt(struct rxd_ep *ep, struct rxd_peer *peer,
 		seg_size = 0;
 		rxd_init_op_hdr(&pkt->op, tx_entry->read_req.msg.data, msg_size,
 				0, op, 0, flags);
-		pkt->op.iov_count = tx_entry->read_req.msg.rma_iov_count;
+		pkt->op.iov_count = (uint8_t)tx_entry->read_req.msg.rma_iov_count;
 		break;
 	case ofi_op_read_rsp:
 		msg_size = ofi_total_iov_len(tx_entry->read_rsp.src_iov,
@@ -660,7 +660,7 @@ static void rxd_ep_init_start_pkt(struct rxd_ep *ep, struct rxd_peer *peer,
 		assert(0);
 	}
 
-	rxd_init_ctrl_hdr(&pkt->ctrl, ofi_ctrl_start_data, seg_size, 0,
+	rxd_init_ctrl_hdr(&pkt->ctrl, ofi_ctrl_start_data, (uint16_t)seg_size, 0,
 			   tx_entry->msg_id, peer->conn_data,
 			   peer->conn_data);
 	/* copy op header here because it is used in ep_copy_data call */

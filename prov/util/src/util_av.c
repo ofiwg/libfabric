@@ -61,13 +61,14 @@ static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_add
 			       struct sockaddr **src_addr, size_t *src_addrlen)
 {
 	socklen_t len; /* needed for OS compatability */
-	int sock, ret;
+	int ret;
+	SOCKET sock;
 
-	sock = socket(dest_addr->sa_family, SOCK_DGRAM, 0);
-	if (sock < 0)
-		return -errno;
+	sock = ofi_socket(dest_addr->sa_family, SOCK_DGRAM, 0);
+	if (sock == INVALID_SOCKET)
+		return -ofi_sockerr();
 
-	ret = connect(sock, dest_addr, dest_addrlen);
+	ret = connect(sock, dest_addr, (socklen_t)dest_addrlen);
 	if (ret)
 		goto out;
 
@@ -297,7 +298,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 	}
 
 	if (av->flags & FI_SOURCE) {
-		ret = util_av_hash_insert(&av->hash, slot, av->free_list);
+		ret = util_av_hash_insert(&av->hash, slot, (int)av->free_list);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
 				"failed to insert addr into hash table\n");
@@ -305,8 +306,8 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 		}
 	}
 
-	*index = av->free_list;
-	av->free_list = *(int *) util_av_get_data(av, av->free_list);
+	*index = (int)av->free_list;
+	av->free_list = *(ssize_t *)util_av_get_data(av, (int)av->free_list);
 	util_av_set_data(av, *index, addr, av->addrlen);
 
 	dlist_foreach(&av->ep_list, av_entry) {
@@ -362,10 +363,10 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 
 	entry = util_av_get_data(av, index);
 	if (av->free_list == UTIL_NO_ENTRY || index < av->free_list) {
-		*entry = av->free_list;
+		*entry = (int)av->free_list;
 		av->free_list = index;
 	} else {
-		i = av->free_list;
+		i = (int)av->free_list;
 		for (next = util_av_get_data(av, i); index > *next;) {
 			i = *next;
 			next = util_av_get_data(av, i);
@@ -487,11 +488,11 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	/* TODO: Handle mmap - shared AV */
 
 	if (util_attr->flags & FI_SOURCE) {
-		av->hash.slots = av->count;
+		av->hash.slots = (int)av->count;
 		if (util_attr->overhead)
-			av->hash.total_count = av->count + util_attr->overhead;
+			av->hash.total_count = (int)(av->count + util_attr->overhead);
 		else
-			av->hash.total_count = av->count * 2;
+			av->hash.total_count = (int)(av->count * 2);
 		FI_INFO(av->prov, FI_LOG_AV,
 		       "FI_SOURCE requested, hash size %u\n", av->hash.total_count);
 	}
@@ -505,11 +506,11 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 		entry = util_av_get_data(av, i);
 		*entry = i + 1;
 	}
-	entry = util_av_get_data(av, av->count - 1);
+	entry = util_av_get_data(av, (int)av->count - 1);
 	*entry = UTIL_NO_ENTRY;
 
 	if (util_attr->flags & FI_SOURCE) {
-		av->hash.table = util_av_get_data(av, av->count);
+		av->hash.table = util_av_get_data(av, (int)av->count);
 		util_av_hash_init(&av->hash);
 	}
 
@@ -587,7 +588,7 @@ int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
  *
  *************************************************************************/
 
-static int ip_av_slot(struct util_av *av, const struct sockaddr *sa)
+static ssize_t ip_av_slot(struct util_av *av, const struct sockaddr *sa)
 {
 	uint32_t host;
 	uint16_t port;
@@ -619,15 +620,14 @@ static int ip_av_slot(struct util_av *av, const struct sockaddr *sa)
 
 int ip_av_get_index(struct util_av *av, const void *addr)
 {
-	return ofi_av_lookup_index(av, addr, ip_av_slot(av, addr));
+	return ofi_av_lookup_index(av, addr, (int)ip_av_slot(av, addr));
 }
 
 void ofi_av_write_event(struct util_av *av, uint64_t data,
 			int err, void *context)
 {
 	struct fi_eq_err_entry entry;
-	size_t size;
-	ssize_t ret;
+	ssize_t ret, size;
 	uint64_t flags;
 
 	entry.fid = &av->av_fid.fid;
@@ -674,7 +674,8 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 
 	if (ip_av_valid_addr(av, addr)) {
 		fastlock_acquire(&av->lock);
-		ret = ofi_av_insert_addr(av, addr, ip_av_slot(av, addr), &index);
+		ret = ofi_av_insert_addr(av, addr, (int)ip_av_slot(av, addr),
+					 &index);
 		fastlock_release(&av->lock);
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
@@ -779,10 +780,9 @@ static int ip_av_insert_ip4sym(struct util_av *av,
 
 	for (i = 0, fi = 0; i < ipcnt; i++) {
 		/* TODO: should we skip addresses x.x.x.0 and x.x.x.255? */
-		sin.sin_addr.s_addr = htonl(ntohl(ip.s_addr) + i);
-
+		sin.sin_addr.s_addr = htonl(ntohl(ip.s_addr) + (uint16_t)i);
 		for (p = 0; p < portcnt; p++, fi++) {
-			sin.sin_port = htons(port + p);
+			sin.sin_port = htons(port + (uint16_t)p);
 			ret = ip_av_insert_addr(av, &sin, fi_addr ?
 						&fi_addr[fi] : NULL, context);
 			if (!ret)
@@ -810,7 +810,7 @@ static int ip_av_insert_ip6sym(struct util_av *av,
 
 	for (i = 0, fi = 0; i < ipcnt; i++) {
 		for (p = 0; p < portcnt; p++, fi++) {
-			sin6.sin6_port = htons(port + p);
+			sin6.sin6_port = htons(port + (uint16_t)p);
 			ret = ip_av_insert_addr(av, &sin6, fi_addr ?
 						&fi_addr[fi] : NULL, context);
 			if (!ret)
@@ -944,9 +944,9 @@ static int ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
 	 * added -- i.e. fi_addr passed in here was also passed into insert.
 	 * Thus, we walk through the array backwards.
 	 */
-	for (i = count - 1; i >= 0; i--) {
-		index = (int) fi_addr[i];
-		slot = ip_av_slot(av, ip_av_get_addr(av, index));
+	for (i = (int)count - 1; i >= 0; i--) {
+		index = (int)fi_addr[i];
+		slot = (int)ip_av_slot(av, ip_av_get_addr(av, index));
 		ret = ofi_av_remove_addr(av, slot, index);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
@@ -1061,7 +1061,7 @@ static void util_cmap_set_key(struct util_cmap_handle *handle)
 
 static void util_cmap_clear_key(struct util_cmap_handle *handle)
 {
-	int index = ofi_key2idx(&handle->cmap->key_idx, handle->key);
+	int index = (int)ofi_key2idx(&handle->cmap->key_idx, handle->key);
 
 	if (!ofi_idx_is_valid(&handle->cmap->handles_idx, index))
 		FI_WARN(handle->cmap->av->prov, FI_LOG_AV, "Invalid key!\n");
@@ -1071,10 +1071,10 @@ static void util_cmap_clear_key(struct util_cmap_handle *handle)
 
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key)
 {
-	struct util_cmap_handle *handle;
+	struct util_cmap_handle *handle = ofi_idx_lookup(&cmap->handles_idx,
+						(int)ofi_key2idx(&cmap->key_idx, key));
 
-	if (!(handle = ofi_idx_lookup(&cmap->handles_idx,
-				      ofi_key2idx(&cmap->key_idx, key)))) {
+	if (!handle) {
 		FI_WARN(cmap->av->prov, FI_LOG_AV, "Invalid key!\n");
 	} else {
 		if (handle->key != key) {
@@ -1390,7 +1390,7 @@ int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 	switch (handle->state) {
 	case CMAP_IDLE:
 		ret = cmap->attr.connect(cmap->ep, handle,
-					 ofi_av_get_addr(cmap->av, fi_addr),
+					 ofi_av_get_addr(cmap->av, (int)fi_addr),
 					 cmap->av->addrlen);
 		if (ret) {
 			util_cmap_del_handle(handle);

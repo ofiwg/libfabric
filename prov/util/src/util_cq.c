@@ -41,10 +41,10 @@
 int ofi_cq_write_error(struct util_cq *cq,
 		       const struct fi_cq_err_entry *err_entry)
 {
-	struct util_cq_err_entry *entry;
 	struct fi_cq_tagged_entry *comp;
+	struct util_cq_err_entry *entry = calloc(1, sizeof(*entry));
 
-	if (!(entry = calloc(1, sizeof(*entry))))
+	if (!entry)
 		return -FI_ENOMEM;
 
 	entry->err_entry = *err_entry;
@@ -177,7 +177,7 @@ ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	struct util_cq *cq;
 	struct fi_cq_tagged_entry *entry;
-	size_t i;
+	ssize_t i;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	fastlock_acquire(&cq->cq_lock);
@@ -194,7 +194,7 @@ ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 	if (count > ofi_cirque_usedcnt(cq->cirq))
 		count = ofi_cirque_usedcnt(cq->cirq);
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < (ssize_t)count; i++) {
 		entry = ofi_cirque_head(cq->cirq);
 		if (entry->flags & UTIL_FLAG_ERROR) {
 			if (!i)

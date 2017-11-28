@@ -54,7 +54,7 @@ static char ofi_shm_prefix[] = "Local\\";
 
 void fi_fini(void);
 
-int socketpair(int af, int type, int protocol, int socks[2])
+int socketpair(int af, int type, int protocol, SOCKET socks[2])
 {
 	OFI_UNUSED(protocol);
 
@@ -118,10 +118,11 @@ err:
 int ofi_getsockname(SOCKET fd, struct sockaddr *addr, socklen_t *len)
 {
 	struct sockaddr_storage sock_addr;
-	size_t sock_addr_len = sizeof(sock_addr);
+	socklen_t sock_addr_len =  (socklen_t)sizeof(sock_addr);
 	int ret;
 
-	ret = getsockname(fd, &sock_addr, (socklen_t *)&sock_addr_len);
+	ret = getsockname(fd, (struct sockaddr *)&sock_addr,
+			  &sock_addr_len);
 	if (ret)
 		return ret;
 
@@ -418,7 +419,8 @@ void sock_get_ip_addr_table(struct slist *addr_list)
 		if (iptbl->table[i].dwAddr && iptbl->table[i].dwAddr != ntohl(INADDR_LOOPBACK)) {
 			struct sock_host_list_entry *addr_entry;
 			addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
-			inet_ntop(AF_INET, &iptbl->table[i].dwAddr, addr_entry->hostname, sizeof(addr_entry->hostname));
+			inet_ntop(AF_INET, &iptbl->table[i].dwAddr, addr_entry->hostname,
+				  sizeof(addr_entry->hostname));
 			slist_insert_tail(&addr_entry->entry, addr_list);
 		}
 	}

@@ -318,8 +318,8 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (dom->mr_eq) {
 		eq_entry.fid = &domain->fid;
 		eq_entry.context = attr->context;
-		return sock_eq_report_event(dom->mr_eq, FI_MR_COMPLETE,
-					    &eq_entry, sizeof(eq_entry), 0);
+		return (int)sock_eq_report_event(dom->mr_eq, FI_MR_COMPLETE,
+						 &eq_entry, sizeof(eq_entry), 0);
 	}
 
 	return 0;
@@ -383,7 +383,7 @@ static int sock_dom_ctrl(struct fid *fid, int command, void *arg)
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
 	switch (command) {
 	case FI_QUEUE_WORK:
-		return sock_queue_work(dom, arg);
+		return (int)sock_queue_work(dom, arg);
 	default:
 		return -FI_ENOSYS;
 	}

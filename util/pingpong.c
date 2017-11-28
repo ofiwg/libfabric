@@ -400,8 +400,8 @@ static int pp_ctrl_init_server(struct ct_pingpong *ct)
 		return ret;
 	}
 
-	ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
-			 (const char *)&optval, sizeof(optval));
+	ret = ofi_setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
+			     &optval, sizeof(optval));
 	if (ret == -1) {
 		ret = -ofi_sockerr();
 		PP_PRINTERR("setsockopt(SO_REUSEADDR)", ret);
@@ -477,8 +477,8 @@ static int pp_ctrl_init(struct ct_pingpong *ct)
 	if (ret)
 		return ret;
 
-	ret = setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO,
-			 (const char *)&tv, sizeof(struct timeval));
+	ret = ofi_setsockopt(ct->ctrl_connfd, SOL_SOCKET, SO_RCVTIMEO,
+			     &tv, sizeof(struct timeval));
 	if (ret == -1) {
 		ret = -ofi_sockerr();
 		PP_PRINTERR("setsockopt(SO_RCVTIMEO)", ret);

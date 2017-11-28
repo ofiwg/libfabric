@@ -160,9 +160,9 @@ static int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 		timeout = timeout < 0 ? timeout : (int)(finish_ms - current_ms);
 		fi_wait(&cntr->wait->wait_fid, timeout);
 		cntr->progress(cntr);
-		if (threshold <= ofi_atomic_get64(&cntr->cnt))
+		if (threshold <= (uint64_t)ofi_atomic_get64(&cntr->cnt))
 			return FI_SUCCESS;
-		else if (err != ofi_atomic_get64(&cntr->err))
+		else if (err != (uint64_t)ofi_atomic_get64(&cntr->err))
 			return -FI_EAVAIL;
 	}
 

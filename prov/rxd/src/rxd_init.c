@@ -35,9 +35,10 @@
 #include <prov.h>
 #include "rxd.h"
 
-int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
+int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_prov_info,
 		     struct fi_info *core_info)
 {
+	OFI_UNUSED(rxd_prov_info);
 	core_info->caps = FI_MSG;
 	core_info->mode = FI_LOCAL_MR;
 	core_info->ep_attr->type = FI_EP_DGRAM;

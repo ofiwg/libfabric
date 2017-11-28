@@ -62,7 +62,7 @@ static inline int fd_signal_init(struct fd_signal *signal)
 {
 	int ret;
 
-	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, signal->fd);
+	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, (SOCKET *)signal->fd);
 	if (ret < 0)
 		return -ofi_sockerr();
 

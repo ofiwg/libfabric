@@ -162,7 +162,8 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 	const char *core_name;
 	size_t len;
 
-	if (!(*core_hints = fi_allocinfo()))
+	*core_hints = fi_allocinfo();
+	if (!*core_hints)
 		return -FI_ENOMEM;
 
 	if (info_to_core(version, util_info, *core_hints))
@@ -221,7 +222,8 @@ static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
 			    ofi_alter_info_t info_to_util,
 			    struct fi_info **util_info)
 {
-	if (!(*util_info = fi_allocinfo()))
+	*util_info = fi_allocinfo();
+	if (!*util_info)
 		return -FI_ENOMEM;
 
 	if (info_to_util(version, core_info, *util_info))
@@ -333,16 +335,18 @@ int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
 		return -FI_ENODATA;
 
 	memset(&hints, 0, sizeof hints);
-	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr))))
+	hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr));
+	if (!hints.fabric_attr)
 		return -FI_ENOMEM;
 
 	hints.fabric_attr->name = util_attr->name;
 	hints.fabric_attr->api_version = util_attr->api_version;
-	if (!(hints.fabric_attr->prov_name = strndup(core_name, len))) {
+	hints.fabric_attr->prov_name = strndup(core_name, len);
+	if (!hints.fabric_attr->prov_name) {
 		ret = -FI_ENOMEM;
 		goto out;
 	}
-	hints.mode = ~0;
+	hints.mode = ~0ULL;
 
 	ret = fi_getinfo(util_attr->api_version, NULL, NULL, 0, &hints, core_info);
 
@@ -929,7 +933,8 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 				     api_version, user_info);
 	    	if (ret)
 			continue;
-		if (!(fi = fi_dupinfo(prov_info))) {
+		fi = fi_dupinfo(prov_info);
+		if (!fi) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}

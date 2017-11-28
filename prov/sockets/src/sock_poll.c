@@ -142,10 +142,10 @@ static int sock_poll_poll(struct fid_poll *pollset, void **context, int count)
 						cntr_fid);
 			sock_cntr_progress(cntr);
 			pthread_mutex_lock(&cntr->mut);
-			if (ofi_atomic_get32(&cntr->value) !=
-			    ofi_atomic_get32(&cntr->last_read_val)) {
-				ofi_atomic_set32(&cntr->last_read_val,
-					   ofi_atomic_get32(&cntr->value));
+			if (ofi_atomic_get64(&cntr->value) !=
+			    ofi_atomic_get64(&cntr->last_read_val)) {
+				ofi_atomic_set64(&cntr->last_read_val,
+					   ofi_atomic_get64(&cntr->value));
 				*context++ = cntr->cntr_fid.fid.context;
 				ret_count++;
 			}

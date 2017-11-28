@@ -91,7 +91,7 @@ static int util_poll_run(struct fid_poll *poll_fid, void **context, int count)
 		case FI_CLASS_CQ:
 			cq = container_of(fid_entry->fid, struct util_cq,
 					  cq_fid.fid);
-			ret = fi_cq_read(&cq->cq_fid, NULL, 0);
+			ret = (int)fi_cq_read(&cq->cq_fid, NULL, 0);
 			if (ret == 0 || ret == -FI_EAVAIL)
 				ret = 1;
 			break;
@@ -99,18 +99,20 @@ static int util_poll_run(struct fid_poll *poll_fid, void **context, int count)
 			cntr = container_of(fid_entry->fid, struct util_cntr,
 					    cntr_fid.fid);
 			val = fi_cntr_read(&cntr->cntr_fid);
-			if ((ret = (val != cntr->checkpoint_cnt))) {
+			ret = (val != cntr->checkpoint_cnt);
+			if (ret) {
 				cntr->checkpoint_cnt = val;
 			} else {
 				val = fi_cntr_readerr(&cntr->cntr_fid);
-				if ((ret = (val != cntr->checkpoint_err)))
+				ret = (val != cntr->checkpoint_err);
+				if (ret)
 					cntr->checkpoint_err = val;
 			}
 			break;
 		case FI_CLASS_EQ:
 			eq = container_of(fid_entry->fid, struct util_eq,
 					  eq_fid.fid);
-			ret = fi_eq_read(&eq->eq_fid, NULL, NULL, 0, FI_PEEK);
+			ret = (int)fi_eq_read(&eq->eq_fid, NULL, NULL, 0, FI_PEEK);
 			if (ret == 0 || ret == -FI_EAVAIL)
 				ret = 1;
 			break;

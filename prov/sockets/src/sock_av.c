@@ -84,8 +84,8 @@ int sock_av_compare_addr(struct sock_av *av,
 	int index1, index2;
 	struct sock_av_addr *av_addr1, *av_addr2;
 
-	index1 = ((uint64_t)addr1 & av->mask);
-	index2 = ((uint64_t)addr2 & av->mask);
+	index1 = (int)((uint64_t)addr1 & av->mask);
+	index2 = (int)((uint64_t)addr2 & av->mask);
 
 	if (index1 >= (int)av->table_hdr->size || index1 < 0 ||
 	    index2 >= (int)av->table_hdr->size || index2 < 0) {
@@ -172,7 +172,7 @@ static int sock_av_get_next_index(struct sock_av *av)
 
 	for (i = 0; i < av->table_hdr->size; i++) {
 		if (!av->table[i].valid)
-			return i;
+			return (int)i;
 	}
 
 	return -1;
@@ -233,10 +233,10 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 					sock_av_report_error(_av, context, i, FI_ENOMEM);
 					continue;
 				}
-				index = _av->table_hdr->stored++;
+				index = (int)_av->table_hdr->stored++;
 			}
 		} else {
-			index = _av->table_hdr->stored++;
+			index = (int)_av->table_hdr->stored++;
 		}
 
 		av_addr = &_av->table[index];
@@ -262,7 +262,7 @@ static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
 	struct sock_av *_av;
 	_av = container_of(av, struct sock_av, av_fid);
 	return sock_check_table_in(_av, (struct sockaddr_in *)addr,
-				   fi_addr, count, flags, context);
+				   fi_addr, (int)count, flags, context);
 }
 
 static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
@@ -273,7 +273,7 @@ static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct sock_av_addr *av_addr;
 
 	_av = container_of(av, struct sock_av, av_fid);
-	index = ((uint64_t)fi_addr & _av->mask);
+	index = (int)((uint64_t)fi_addr & _av->mask);
 	if (index >= (int)_av->table_hdr->size || index < 0) {
 		SOCK_LOG_ERROR("requested address not inserted\n");
 		return -EINVAL;
@@ -343,7 +343,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		return -FI_EINVAL;
 	}
 
-	hostlen = strlen(node);
+	hostlen = (int)strlen(node);
 	while (isdigit(*(node + hostlen - (offset + 1))))
 		offset++;
 
@@ -398,9 +398,9 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 		sock_ep = container_of(fid_entry->fid, struct sock_ep, ep.fid);
 		fastlock_acquire(&sock_ep->attr->cmap.lock);
 		for (i = 0; i < count; i++) {
-        		idx = fi_addr[i] & sock_ep->attr->av->mask;
+        		idx = (uint16_t)(fi_addr[i] & sock_ep->attr->av->mask);
 			conn = ofi_idm_lookup(&sock_ep->attr->av_idm, idx);
-			if (conn && conn->sock_fd != -1) {
+			if (conn && conn->sock_fd != INVALID_SOCKET) {
 				sock_ep_remove_conn(sock_ep->attr, conn);
 				ofi_idm_clear(&sock_ep->attr->av_idm, idx);
 			}
@@ -426,7 +426,7 @@ static const char *sock_av_straddr(struct fid_av *av, const void *addr,
 	int size;
 
 	sin = addr;
-	inet_ntop(sin->sin_family, (void*)&sin->sin_addr, ipaddr, sizeof(ipaddr));
+	inet_ntop(sin->sin_family, &sin->sin_addr, ipaddr, sizeof(ipaddr));
 	size = snprintf(straddr, sizeof(straddr), "%s:%d",
 			ipaddr, ntohs(sin->sin_port));
 	snprintf(buf, *len, "%s", straddr);

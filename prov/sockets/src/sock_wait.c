@@ -75,8 +75,9 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 		SOCK_LOG_ERROR("Invalid wait obj type\n");
 		return -FI_EINVAL;
 	}
-
+#ifndef _WIN32
 	return 0;
+#endif
 }
 
 static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
@@ -87,7 +88,7 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 
 	switch (type) {
 	case FI_WAIT_FD:
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->wobj.fd))
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, (SOCKET *)wait->wobj.fd))
 			return -ofi_sockerr();
 
 		ret = fd_set_nonblock(wait->wobj.fd[WAIT_READ_FD]);
@@ -112,7 +113,8 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 
 static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 {
-	int err = 0, ret;
+	int err = 0;
+	ssize_t ret;
 	struct sock_cq *cq;
 	struct sock_cntr *cntr;
 	struct timeval now;
@@ -152,7 +154,7 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 		gettimeofday(&now, NULL);
 		end_ms = (double)now.tv_sec * 1000.0 +
 			(double)now.tv_usec / 1000.0;
-		timeout -=  (end_ms - start_ms);
+		timeout -=  (int)(end_ms - start_ms);
 		timeout = timeout < 0 ? 0 : timeout;
 	}
 
@@ -190,7 +192,7 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 {
 	struct sock_wait *wait;
 	static char c = 'a';
-	int ret;
+	ssize_t ret;
 
 	wait = container_of(wait_fid, struct sock_wait, wait_fid);
 
