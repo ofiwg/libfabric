@@ -132,7 +132,7 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 	if (!pe_entry->rem)
 		goto out;
 
-	SOCK_LOG_DBG("Remaining for %p: %ld\n", pe_entry, pe_entry->rem);
+	SOCK_LOG_DBG("Remaining for %p: %" PRId64 "\n", pe_entry, pe_entry->rem);
 	ret = sock_comm_discard(pe_entry, pe_entry->rem);
 	SOCK_LOG_DBG("Discarded %ld\n", ret);
 

@@ -790,7 +790,7 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		} else {
 			progress = 1;
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %zu) is too "
-			       "big for MSG provider (max inject size = %" PRIu64 ") \n",
+			       "big for MSG provider (max inject size = %zd)\n",
 			       pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
 		}
 	}
