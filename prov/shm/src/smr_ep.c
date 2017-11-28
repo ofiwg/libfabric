@@ -943,6 +943,8 @@ static int smr_ep_close(struct fid *fid)
 		smr_free(ep->region);
 
 	smr_recv_fs_free(ep->recv_fs);
+	smr_unexp_fs_free(ep->unexp_fs);
+	smr_pend_fs_free(ep->pend_fs);
 	free(ep);
 	return 0;
 }
