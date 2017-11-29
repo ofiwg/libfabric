@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug-ICC|x64">
@@ -527,6 +527,7 @@
     <ClCompile Include="prov\util\src\util_ns.c" />
     <ClCompile Include="prov\util\src\util_poll.c" />
     <ClCompile Include="prov\util\src\util_wait.c" />
+    <ClCompile Include="prov\util\src\util_mem_monitor.c" />
     <ClCompile Include="src\common.c" />
     <ClCompile Include="src\enosys.c">
       <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">4127;869</DisableSpecificWarnings>
@@ -548,6 +549,7 @@
     <ClInclude Include="include\fi_abi.h" />
     <ClInclude Include="include\fi_atom.h" />
     <ClInclude Include="include\ofi_atomic.h" />
+    <ClInclude Include="include\ofi_mr.h" />
     <ClInclude Include="include\fi_enosys.h" />
     <ClInclude Include="include\fi_file.h" />
     <ClInclude Include="include\fi_indexer.h" />
