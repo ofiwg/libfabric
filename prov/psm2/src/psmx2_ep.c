@@ -32,69 +32,6 @@
 
 #include "psmx2.h"
 
-#define BIT(i)		(1ULL << i)
-#define BITMAP_SIZE	(PSMX2_MAX_VL + 1)
-
-static inline void bitmap_set(uint64_t *map, unsigned id)
-{
-	int i, j;
-
-	i = id / sizeof(uint64_t);
-	j = id % sizeof(uint64_t);
-
-	map[i] |= BIT(j);
-}
-
-static inline void bitmap_clear(uint64_t *map, unsigned id)
-{
-	int i, j;
-
-	i = id / sizeof(uint64_t);
-	j = id % sizeof(uint64_t);
-
-	map[i] &= ~BIT(j);
-}
-
-static inline int bitmap_test(uint64_t *map, unsigned id)
-{
-	int i, j;
-
-	i = id / sizeof(uint64_t);
-	j = id % sizeof(uint64_t);
-
-	return !!(map[i] & BIT(j));
-}
-
-static void psmx2_free_vlane(struct psmx2_fid_domain *domain, uint8_t vl)
-{
-	psmx2_lock(&domain->vl_lock, 1);
-	bitmap_clear(domain->vl_map, vl);
-	psmx2_unlock(&domain->vl_lock, 1);
-}
-
-static int psmx2_alloc_vlane(struct psmx2_fid_domain *domain, uint8_t *vl)
-{
-	int i;
-	int id;
-
-	psmx2_lock(&domain->vl_lock, 1);
-	for (i = 0; i < BITMAP_SIZE; i++) {
-		id = (domain->vl_alloc + i) % BITMAP_SIZE;
-		if (bitmap_test(domain->vl_map, id) == 0) {
-			bitmap_set(domain->vl_map, id);
-			domain->vl_alloc = id + 1;
-			break;
-		}
-	}
-	psmx2_unlock(&domain->vl_lock, 1);
-
-	if (i >= BITMAP_SIZE)
-		return -FI_ENOSPC;
-
-	*vl = (uint8_t)id;
-	return 0;
-}
-
 static void psmx2_ep_optimize_ops(struct psmx2_fid_ep *ep)
 {
 	if (ep->ep.tagged) {
@@ -299,13 +236,9 @@ static int psmx2_ep_close(fid_t fid)
 		return -FI_EBUSY;
 
 	ep_name.epid = ep->trx_ctxt->psm2_epid;
-	ep_name.vlane = ep->vlane;
 
 	ofi_ns_del_local_name(&ep->domain->fabric->name_server,
 			      &ep->service, &ep_name);
-
-	ep->domain->eps[ep->vlane] = NULL;
-	psmx2_free_vlane(ep->domain, ep->vlane);
 
 	psmx2_ep_close_internal(ep);
 	return 0;
@@ -537,7 +470,7 @@ static struct fi_ops_ep psmx2_ep_ops = {
 int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 			   struct fi_info *info,
 			   struct psmx2_fid_ep **ep_out, void *context,
-			   struct psmx2_trx_ctxt *trx_ctxt, int vlane)
+			   struct psmx2_trx_ctxt *trx_ctxt)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_context *item;
@@ -585,7 +518,6 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 	ep_priv->ep.cm = &psmx2_cm_ops;
 	ep_priv->domain = domain_priv;
 	ep_priv->trx_ctxt = trx_ctxt;
-	ep_priv->vlane = vlane;
 	ofi_atomic_initialize32(&ep_priv->ref, 0);
 
 	PSMX2_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX2_NOCOMP_SEND_CONTEXT;
@@ -650,7 +582,6 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_ep_name ep_name;
 	struct psmx2_ep_name *src_addr;
-	uint8_t vlane;
 	int err = -FI_EINVAL;
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
@@ -658,19 +589,15 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!domain_priv)
 		goto errout;
 
-	err = psmx2_alloc_vlane(domain_priv, &vlane);
+	if (domain_priv->base_trx_ctxt->ep)
+		return -FI_ENOMEM;
+
+	err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
+				     domain_priv->base_trx_ctxt);
 	if (err)
 		goto errout;
 
-	err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
-				     domain_priv->base_trx_ctxt, vlane);
-	if (err) {
-		psmx2_free_vlane(domain_priv, vlane);
-		goto errout;
-	}
-
-	domain_priv->eps[ep_priv->vlane] = ep_priv;
-
+	domain_priv->base_trx_ctxt->ep = ep_priv;
 	ep_priv->type = PSMX2_EP_REGULAR;
 	ep_priv->service = PSMX2_ANY_SERVICE;
 	if (info && info->src_addr) {
@@ -690,7 +617,6 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 				   ((uintptr_t)ep_priv & 0xFFFF);
 
 	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
-	ep_name.vlane = ep_priv->vlane;
 	ep_name.type = ep_priv->type;
 
 	ofi_ns_add_local_name(&domain_priv->fabric->name_server,
@@ -1013,7 +939,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 		sep_priv->ctxts[i].trx_ctxt = trx_ctxt;
 
 		err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
-					     trx_ctxt, 0);
+					     trx_ctxt);
 		if (err)
 			goto errout_free_ctxt;
 

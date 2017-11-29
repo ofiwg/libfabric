@@ -271,8 +271,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		} else {
 			dest_addr = addr;
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"'%s' is taken as dest_addr: <epid=%"PRIu64", vl=%d>\n",
-				node, dest_addr->epid, dest_addr->vlane);
+				"'%s' is taken as dest_addr: <epid=%"PRIu64">\n",
+				node, dest_addr->epid);
 		}
 		node = NULL;
 	}
@@ -328,9 +328,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			ofi_ns_resolve_name(&ns, node, &svc);
 		if (dest_addr) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"'%s:%u' resolved to <epid=%"PRIu64", vl=%d>:%d\n",
-				node, svc0, dest_addr->epid,
-				dest_addr->vlane, svc);
+				"'%s:%u' resolved to <epid=%"PRIu64">:%d\n",
+				node, svc0, dest_addr->epid, svc);
 		} else {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"failed to resolve '%s:%u'.\n", node, svc);

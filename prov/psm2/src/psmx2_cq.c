@@ -335,8 +335,7 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 
 out:
 	if (is_recv) {
-		uint8_t vlane = PSMX2_TAG32_GET_SRC(psm2_status->msg_tag.tag2);
-		fi_addr_t source = PSMX2_EP_TO_ADDR(psm2_status->msg_peer, vlane);
+		fi_addr_t source = PSMX2_EP_TO_ADDR(psm2_status->msg_peer);
 		if (event == event_in) {
 			if (src_addr) {
 				*src_addr = psmx2_av_translate_source(av, source);

@@ -291,7 +291,7 @@ static int psmx2_av_check_table_size(struct psmx2_fid_av *av, size_t count)
 	size_t new_count;
 	psm2_epid_t *new_epids;
 	psm2_epaddr_t *new_epaddrs;
-	uint8_t *new_vlanes;
+	uint8_t *new_sepids;
 	uint8_t *new_types;
 	struct psmx2_sep_addr **new_sepaddrs;
 
@@ -312,11 +312,11 @@ static int psmx2_av_check_table_size(struct psmx2_fid_av *av, size_t count)
 		return -FI_ENOMEM;
 
 	av->epaddrs = new_epaddrs;
-	new_vlanes = realloc(av->vlanes, new_count * sizeof(*new_vlanes));
-	if (!new_vlanes)
+	new_sepids = realloc(av->sepids, new_count * sizeof(*new_sepids));
+	if (!new_sepids)
 		return -FI_ENOMEM;
 
-	av->vlanes = new_vlanes;
+	av->sepids = new_sepids;
 	new_types = realloc(av->types, new_count * sizeof(*new_types));
 	if (!new_types)
 		return -FI_ENOMEM;
@@ -497,7 +497,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 {
 	struct psmx2_fid_av *av_priv;
 	psm2_epid_t *epids;
-	uint8_t *vlanes;
+	uint8_t *sepids;
 	uint8_t *types;
 	struct psmx2_sep_addr **sepaddrs;
 	psm2_epaddr_t *epaddrs;
@@ -525,7 +525,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 	epids = av_priv->epids + av_priv->last;
 	epaddrs = av_priv->epaddrs + av_priv->last;
-	vlanes = av_priv->vlanes + av_priv->last;
+	sepids = av_priv->sepids + av_priv->last;
 	types = av_priv->types + av_priv->last;
 	sepaddrs = av_priv->sepaddrs + av_priv->last;
 
@@ -535,12 +535,12 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 			if (!ep_name)
 				return -FI_EINVAL;
 			epids[i] = ep_name->epid;
-			vlanes[i] = ep_name->vlane;
+			sepids[i] = ep_name->sep_id;
 			types[i] = ep_name->type;
 			free(ep_name);
 		} else {
 			epids[i] = names[i].epid;
-			vlanes[i] = names[i].vlane;
+			sepids[i] = names[i].sep_id;
 			types[i] = names[i].type;
 		}
 		sepaddrs[i] = NULL;
@@ -557,7 +557,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	error_count = psmx2_av_connect_eps(av_priv, count, epids, mask, types,
 					   errors, epaddrs, context);
 
-	error_count += psmx2_av_query_seps(av_priv, count, epids, vlanes, types,
+	error_count += psmx2_av_query_seps(av_priv, count, epids, sepids, types,
 					   errors, epaddrs, context);
 
 	if (fi_addr) {
@@ -569,7 +569,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 			else if (av_priv->type == FI_AV_TABLE)
 				fi_addr[i] = av_priv->last + i;
 			else
-				fi_addr[i] = PSMX2_EP_TO_ADDR(epaddrs[i], vlanes[i]);
+				fi_addr[i] = PSMX2_EP_TO_ADDR(epaddrs[i]);
 		}
 	}
 
@@ -618,11 +618,9 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			return -FI_EINVAL;
 
 		name.epid = av_priv->epids[idx];
-		name.vlane = av_priv->vlanes[idx];
 	} else {
 		context = psm2_epaddr_getctxt(PSMX2_ADDR_TO_EP(fi_addr));
 		name.epid = context->epid;
-		name.vlane = PSMX2_ADDR_TO_VL(fi_addr);
 	}
 
 	if (av_priv->addr_format == FI_ADDR_STR) {
@@ -639,11 +637,9 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 {
 	struct psmx2_epaddr_context *context;
 	psm2_epaddr_t epaddr;
-	int vlane;
 	int i;
 
 	epaddr = PSMX2_ADDR_TO_EP(source);
-	vlane = PSMX2_ADDR_TO_VL(source);
 
 	context = psm2_epaddr_getctxt(epaddr);
 	if (!context)
@@ -653,7 +649,7 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 		return source;
 
 	for (i = av->last - 1; i >= 0; i--) {
-		if (av->epaddrs[i] == epaddr && av->vlanes[i] == vlane)
+		if (av->epaddrs[i] == epaddr)
 			return (fi_addr_t)i;
 	}
 
@@ -675,7 +671,7 @@ static int psmx2_av_close(fid_t fid)
 	psmx2_domain_release(av->domain);
 	free(av->epids);
 	free(av->epaddrs);
-	free(av->vlanes);
+	free(av->sepids);
 	free(av->types);
 	for (i=0; i<av->last; i++) {
 		if (!av->sepaddrs[i])

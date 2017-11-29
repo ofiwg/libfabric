@@ -443,9 +443,6 @@ static int psmx2_domain_close(fid_t fid)
 		psmx2_domain_stop_progress(domain);
 
 	fastlock_destroy(&domain->sep_lock);
-
-	fastlock_destroy(&domain->vl_lock);
-	rbtDelete(domain->mr_map);
 	fastlock_destroy(&domain->mr_lock);
 
 	psmx2_trx_ctxt_free(domain->base_trx_ctxt);
@@ -517,15 +514,6 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 
 	domain->mr_reserved_key = 1;
 
-	err = fastlock_init(&domain->vl_lock);
-	if (err) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"fastlock_init(vl_lock) returns %d\n", err);
-		goto err_out_delete_mr_map;
-	}
-	memset(domain->vl_map, 0, sizeof(domain->vl_map));
-	domain->vl_alloc = 0;
-
 	ofi_atomic_initialize32(&domain->sep_cnt, 0);
 	fastlock_init(&domain->sep_lock);
 	dlist_init(&domain->sep_list);
@@ -535,7 +523,7 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 
 	/* Set active domain before psmx2_domain_enable_ep() installs the
 	 * AM handlers to ensure that psmx2_active_fabric->active_domain
-	 * is always non-NULL inside the handlers. Notice that the vlaue
+	 * is always non-NULL inside the handlers. Notice that the
 	 * active_domain becomes NULL again only when the domain is closed.
 	 * At that time the AM handlers are gone with the PSM endpoint.
 	 */
@@ -552,9 +540,6 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 
 err_out_reset_active_domain:
 	domain->fabric->active_domain = NULL;
-	fastlock_destroy(&domain->vl_lock);
-
-err_out_delete_mr_map:
 	rbtDelete(domain->mr_map);
 
 err_out_destroy_mr_lock:

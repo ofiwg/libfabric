@@ -105,12 +105,7 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_IOV_BIT	(0x20000000)
 #define PSMX2_IMM_BIT	(0x10000000)
 #define PSMX2_SEQ_BITS	(0x0FFF0000)
-#define PSMX2_SRC_BITS	(0x0000FF00)
-#define PSMX2_DST_BITS	(0x000000FF)
 
-#define PSMX2_TAG32(base, src, dst)	((base) | ((src)<<8) | (dst))
-#define PSMX2_TAG32_GET_SRC(tag32)	(((tag32) & PSMX2_SRC_BITS) >> 8)
-#define PSMX2_TAG32_GET_DST(tag32)	((tag32) & PSMX2_DST_BITS)
 #define PSMX2_TAG32_GET_SEQ(tag32)	(((tag32) & PSMX2_SEQ_BITS) >> 16)
 #define PSMX2_TAG32_SET_SEQ(tag32,seq)	do { \
 						tag32 |= ((seq << 16) & PSMX2_SEQ_BITS); \
@@ -137,17 +132,13 @@ extern struct fi_provider psmx2_prov;
  * Here is the layout:  AA-B-C-DDDDDDDDDDDD
  *
  * C == 0xE: scalable endpoint, AAB is context index, DDDDDDDDDDDD is the address
- * C != 0xE: regular endpoint, AA is vlane, BCDDDDDDDDDDDD is epaddr
+ * C != 0xE: regular endpoint, AA is 0, BCDDDDDDDDDDDD is epaddr
  */
-#define PSMX2_MAX_VL			(0xFF)
 #define PSMX2_EP_MASK			(0x00FFFFFFFFFFFFFFUL)
 #define PSMX2_SIGN_MASK  		(0x0080000000000000UL)
 #define PSMX2_SIGN_EXT			(0xFF00000000000000UL)
-#define PSMX2_VL_MASK			(0xFF00000000000000UL)
 
-#define PSMX2_EP_TO_ADDR(ep,vl)		((((uint64_t)vl) << 56) | \
-						((uint64_t)ep & PSMX2_EP_MASK))
-#define PSMX2_ADDR_TO_VL(addr)		((uint8_t)((addr & PSMX2_VL_MASK) >> 56))
+#define PSMX2_EP_TO_ADDR(ep)		((uint64_t)ep & PSMX2_EP_MASK)
 #define PSMX2_ADDR_TO_EP(addr)		((psm2_epaddr_t) \
 						((addr & PSMX2_SIGN_MASK) ? \
 						 (addr | PSMX2_SIGN_EXT) : \
@@ -209,20 +200,14 @@ union psmx2_pi {
 #define PSMX2_AM_TRX_CTXT_HANDLER	3
 
 #define PSMX2_AM_OP_MASK	0x000000FF
-#define PSMX2_AM_DST_MASK	0x0000FF00
-#define PSMX2_AM_SRC_MASK	0x00FF0000
 #define PSMX2_AM_FLAG_MASK	0xFF000000
 #define PSMX2_AM_EOM		0x40000000
 #define PSMX2_AM_DATA		0x20000000
 #define PSMX2_AM_FORCE_ACK	0x10000000
 
 #define PSMX2_AM_SET_OP(u32w0,op)	do {u32w0 &= ~PSMX2_AM_OP_MASK; u32w0 |= op;} while (0)
-#define PSMX2_AM_SET_DST(u32w0,vl)	do {u32w0 &= ~PSMX2_AM_DST_MASK; u32w0 |= ((uint32_t)vl << 8);} while (0)
-#define PSMX2_AM_SET_SRC(u32w0,vl)	do {u32w0 &= ~PSMX2_AM_SRC_MASK; u32w0 |= ((uint32_t)vl << 16);} while (0)
 #define PSMX2_AM_SET_FLAG(u32w0,flag)	do {u32w0 &= ~PSMX2_AM_FLAG_MASK; u32w0 |= flag;} while (0)
 #define PSMX2_AM_GET_OP(u32w0)		(u32w0 & PSMX2_AM_OP_MASK)
-#define PSMX2_AM_GET_DST(u32w0)		((uint8_t)((u32w0 & PSMX2_AM_DST_MASK) >> 8))
-#define PSMX2_AM_GET_SRC(u32w0)		((uint8_t)((u32w0 & PSMX2_AM_SRC_MASK) >> 16))
 #define PSMX2_AM_GET_FLAG(u32w0)	(u32w0 & PSMX2_AM_FLAG_MASK)
 
 enum {
@@ -255,8 +240,6 @@ struct psmx2_am_request {
 			uint64_t key;
 			void	*context;
 			void	*peer_addr;
-			uint8_t	vl;
-			uint8_t	peer_vl;
 			uint64_t data;
 		} write;
 		struct {
@@ -269,8 +252,6 @@ struct psmx2_am_request {
 			uint64_t key;
 			void	*context;
 			void	*peer_addr;
-			uint8_t	vl;
-			uint8_t	peer_vl;
 			size_t	len_read;
 		} read;
 		struct {
@@ -372,7 +353,7 @@ struct psmx2_trx_ctxt {
 	int			id;
 	struct psm2_am_parameters psm2_am_param;
 
-	/* ep bound to this tx/rx context, NULL if multiplexed */
+	/* ep bound to this tx/rx context */
 	struct psmx2_fid_ep	*ep;
 
 	/* incoming req queue for AM based RMA request. */
@@ -420,10 +401,6 @@ struct psmx2_fid_domain {
 	 * logical "virtual lanes".
 	 */
 	struct psmx2_trx_ctxt	*base_trx_ctxt;
-	fastlock_t		vl_lock;
-	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
-	int			vl_alloc;
-	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
 
 	ofi_atomic32_t		sep_cnt;
 	fastlock_t		sep_lock;
@@ -448,7 +425,6 @@ struct psmx2_ep_name {
 	psm2_epid_t		epid;
 	uint8_t			type;
 	union {
-		uint8_t		vlane;		/* for regular ep */
 		uint8_t		sep_id;		/* for scalable ep */
 		int8_t		unit;		/* for src addr. start from 0. -1 means any */
 	};
@@ -763,7 +739,7 @@ struct psmx2_fid_av {
 	size_t			last;
 	psm2_epid_t		*epids;
 	psm2_epaddr_t		*epaddrs;
-	uint8_t			*vlanes;
+	uint8_t			*sepids;
 	uint8_t			*types;
 	struct psmx2_sep_addr	**sepaddrs;
 };
@@ -785,7 +761,6 @@ struct psmx2_fid_ep {
 	struct psmx2_fid_cntr	*read_cntr;
 	struct psmx2_fid_cntr	*remote_write_cntr;
 	struct psmx2_fid_cntr	*remote_read_cntr;
-	uint8_t			vlane;
 	unsigned		send_selective_completion:1;
 	unsigned		recv_selective_completion:1;
 	unsigned		enabled:1;
@@ -1156,7 +1131,6 @@ static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name 
 
 	memset(name, 0, sizeof(*name));
 	name->epid = psmx2_epaddr_to_epid(epaddr);
-	name->vlane = PSMX2_ADDR_TO_VL(source);
 	name->type = PSMX2_EP_REGULAR;
 }
 
@@ -1167,7 +1141,6 @@ static inline void psmx2_get_source_string_name(fi_addr_t source, char *name, si
 
 	memset(&ep_name, 0, sizeof(ep_name));
 	ep_name.epid = psmx2_epaddr_to_epid(epaddr);
-	ep_name.vlane = PSMX2_ADDR_TO_VL(source);
 	ep_name.type = PSMX2_EP_REGULAR;
 
 	ofi_straddr(name, len, FI_ADDR_PSMX2, &ep_name);
