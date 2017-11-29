@@ -11,7 +11,7 @@ tagline: Libfabric Programmer's Manual
 fi_pingpong  \- Quick and simple pingpong test for libfabric
 
 
-# SYNOPSYS
+# SYNOPSIS
 ```
  fi_pingpong [OPTIONS]						start server
  fi_pingpong [OPTIONS] <server address>		connect to server
