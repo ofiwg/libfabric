@@ -520,6 +520,7 @@ FI_DESTRUCTOR(fi_fini(void))
 		prov = prov_head;
 		prov_head = prov->next;
 		cleanup_provider(prov->provider, prov->dlhandle);
+		free(prov->prov_name);
 		free(prov);
 	}
 
