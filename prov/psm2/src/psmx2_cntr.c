@@ -210,8 +210,9 @@ int psmx2_process_trigger(struct psmx2_trx_ctxt *trx_ctxt,
 
 void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 {
-	struct psmx2_fid_domain *domain = cntr->domain;
 	struct psmx2_trigger *trigger;
+	struct psmx2_trx_ctxt *trx_ctxt;
+	struct psmx2_fid_ep *ep;
 
 	if (!cntr->trigger)
 		return;
@@ -225,13 +226,16 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 
 		cntr->trigger = trigger->next;
 
-		if (domain->base_trx_ctxt->am_initialized) {
-			psmx2_lock(&domain->base_trx_ctxt->trigger_queue.lock, 2);
+		/* 'ep' is the first field of the union regardless of the op type */
+		ep = container_of(trigger->send.ep, struct psmx2_fid_ep, ep);
+		trx_ctxt = ep->trx_ctxt;
+		if (trx_ctxt->am_initialized) {
+			psmx2_lock(&trx_ctxt->trigger_queue.lock, 2);
 			slist_insert_tail(&trigger->list_entry,
-					  &domain->base_trx_ctxt->trigger_queue.list);
-			psmx2_unlock(&domain->base_trx_ctxt->trigger_queue.lock, 2);
+					  &trx_ctxt->trigger_queue.list);
+			psmx2_unlock(&trx_ctxt->trigger_queue.lock, 2);
 		} else {
-			psmx2_process_trigger(domain->base_trx_ctxt, trigger);
+			psmx2_process_trigger(trx_ctxt, trigger);
 		}
 
 		trigger = cntr->trigger;
