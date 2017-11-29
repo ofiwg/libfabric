@@ -50,10 +50,10 @@ static struct fi_ops_domain smr_domain_ops = {
 static int smr_domain_close(fid_t fid)
 {
 	int ret;
-	struct util_domain *domain;
+	struct smr_domain *domain;
 
-	domain = container_of(fid, struct util_domain, domain_fid);
-	ret = ofi_domain_close(domain);
+	domain = container_of(fid, struct smr_domain, util_domain.domain_fid.fid);
+	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
 		return ret;
 
@@ -73,23 +73,29 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
 	int ret;
-	struct util_domain *util_domain;
+	struct smr_domain *smr_domain;
+	struct smr_fabric *smr_fabric;
 
 	ret = smr_check_info(info);
 	if (ret)
 		return ret;
 
-	util_domain = calloc(1, sizeof(*util_domain));
-	if (!util_domain)
+	smr_domain = calloc(1, sizeof(*smr_domain));
+	if (!smr_domain)
 		return -FI_ENOMEM;
 
-	ret = ofi_domain_init(fabric, info, util_domain, context);
+	ret = ofi_domain_init(fabric, info, &smr_domain->util_domain, context);
 	if (ret) {
-		free(util_domain);
+		free(smr_domain);
 		return ret;
 	}
 
-	*domain = &util_domain->domain_fid;
+	smr_fabric = container_of(fabric, struct smr_fabric, util_fabric.fabric_fid);
+	fastlock_acquire(&smr_fabric->util_fabric.lock);
+	smr_domain->dom_idx = smr_fabric->dom_idx++;
+	fastlock_release(&smr_fabric->util_fabric.lock);
+
+	*domain = &smr_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &smr_domain_fi_ops;
 	(*domain)->ops = &smr_domain_ops;
 	return 0;

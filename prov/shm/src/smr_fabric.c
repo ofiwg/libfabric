@@ -69,18 +69,20 @@ int smr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context)
 {
 	int ret;
-	struct util_fabric *util_fabric;
+	struct smr_fabric *smr_fabric;
 
-	util_fabric = calloc(1, sizeof(*util_fabric));
-	if (!util_fabric)
+	smr_fabric = calloc(1, sizeof(*smr_fabric));
+	if (!smr_fabric)
 		return -FI_ENOMEM;
 
 	ret = ofi_fabric_init(&smr_prov, smr_info.fabric_attr, attr,
-			      util_fabric, context);
-	if (ret)
+			      &smr_fabric->util_fabric, context);
+	if (ret) {
+		free(smr_fabric);
 		return ret;
+	}
 
-	*fabric = &util_fabric->fabric_fid;
+	*fabric = &smr_fabric->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &smr_fabric_fi_ops;
 	(*fabric)->ops = &smr_fabric_ops;
 	return 0;
