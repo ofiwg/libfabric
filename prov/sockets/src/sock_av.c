@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2017  Los Alamos National Security, LLC.
+ *                     All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -400,8 +402,15 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 		for (i = 0; i < count; i++) {
         		idx = fi_addr[i] & sock_ep->attr->av->mask;
 			conn = ofi_idm_lookup(&sock_ep->attr->av_idm, idx);
-			if (conn && conn->sock_fd != -1) {
-				sock_ep_remove_conn(sock_ep->attr, conn);
+			if (conn) {
+				/*
+				 * check for conn either in connection progress or
+				 * already closed.
+				 */
+				if((conn != SOCK_CM_CONN_IN_PROGRESS)  &&
+					(conn->sock_fd != -1)) {
+					sock_ep_remove_conn(sock_ep->attr, conn);
+				}
 				ofi_idm_clear(&sock_ep->attr->av_idm, idx);
 			}
 		}
