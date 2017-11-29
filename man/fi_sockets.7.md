@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The Sockets Fabric Provider
+fi_sockets \- The Sockets Fabric Provider
 
 # OVERVIEW
 

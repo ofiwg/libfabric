@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The MLX Fabric Provider
+fi_mlx \- The MLX Fabric Provider
 
 # OVERVIEW
 

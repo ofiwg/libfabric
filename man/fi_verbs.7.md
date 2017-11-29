@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The Verbs Fabric Provider
+fi_verbs \- The Verbs Fabric Provider
 
 # OVERVIEW
 

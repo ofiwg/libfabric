@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The SHM Fabric Provider
+fi_shm \- The SHM Fabric Provider
 
 # OVERVIEW
 
