@@ -1086,11 +1086,12 @@ struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t ke
 	return handle;
 }
 
-static void ofi_cmap_init_handle(struct util_cmap_handle *handle,
-		struct util_cmap *cmap,
-		enum util_cmap_state state,
-		fi_addr_t fi_addr,
-		struct util_cmap_peer *peer)
+/* Caller must hold cmap->lock */
+static void util_cmap_init_handle(struct util_cmap_handle *handle,
+				  struct util_cmap *cmap,
+				  enum util_cmap_state state,
+				  fi_addr_t fi_addr,
+				  struct util_cmap_peer *peer)
 {
 	handle->cmap = cmap;
 	handle->state = state;
@@ -1099,7 +1100,7 @@ static void ofi_cmap_init_handle(struct util_cmap_handle *handle,
 	handle->peer = peer;
 }
 
-static int ofi_cmap_match_peer(struct dlist_entry *entry, const void *addr)
+static int util_cmap_match_peer(struct dlist_entry *entry, const void *addr)
 {
 	struct util_cmap_peer *peer;
 
@@ -1156,7 +1157,7 @@ static int util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 		return -FI_ENOMEM;
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated handle: %p for "
 	       "fi_addr: %" PRIu64 "\n", *handle, fi_addr);
-	ofi_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
+	util_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
 	cmap->handles_av[fi_addr] = *handle;
 	return 0;
 }
@@ -1179,7 +1180,7 @@ static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV, "Allocated handle for addr",
 			addr);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "handle: %p\n", *handle);
-	ofi_cmap_init_handle(*handle, cmap, state, FI_ADDR_UNSPEC, peer);
+	util_cmap_init_handle(*handle, cmap, state, FI_ADDR_UNSPEC, peer);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
 	peer->handle = *handle;
 	memcpy(peer->addr, addr, cmap->av->addrlen);
@@ -1194,7 +1195,7 @@ util_cmap_get_handle_peer(struct util_cmap *cmap, const void *addr)
 	struct util_cmap_peer *peer;
 	struct dlist_entry *entry;
 
-	entry = dlist_find_first_match(&cmap->peer_list, ofi_cmap_match_peer,
+	entry = dlist_find_first_match(&cmap->peer_list, util_cmap_match_peer,
 				       addr);
 	if (!entry)
 		return NULL;
