@@ -846,10 +846,10 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 	} else  if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		 if (!dest_addr)
 			return -FI_EINVAL;
@@ -980,10 +980,10 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		 if (!dest_addr)
 			return -FI_EINVAL;
@@ -1209,10 +1209,10 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
@@ -1376,10 +1376,10 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
@@ -1670,10 +1670,10 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
@@ -1837,10 +1837,10 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;

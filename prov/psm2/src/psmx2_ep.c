@@ -318,6 +318,7 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		ep->av = av;
 		psmx2_ep_optimize_ops(ep);
+		psmx2_av_add_trx_ctxt(av, ep->trx_ctxt, !psmx2_env.lazy_conn);
 		break;
 
 	case FI_CLASS_MR:

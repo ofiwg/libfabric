@@ -716,14 +716,17 @@ struct psmx2_fid_cntr {
 	fastlock_t		trigger_lock;
 };
 
-struct psmx2_ctxt_addr {
-	psm2_epid_t		epid;
-	psm2_epaddr_t		*epaddrs;
+struct psmx2_av_peer {
+	uint8_t			type;
+	uint8_t			sep_id;
+	int			sep_ctxt_cnt;
+	psm2_epid_t		*sep_ctxt_epids;
 };
 
-struct psmx2_sep_addr {
-	int			ctxt_cnt;
-	struct psmx2_ctxt_addr	ctxt_addrs[];
+struct psmx2_av_table {
+	struct psmx2_trx_ctxt	*trx_ctxt;
+	psm2_epaddr_t		*epaddrs;
+	psm2_epaddr_t		**sepaddrs;
 };
 
 struct psmx2_fid_av {
@@ -733,15 +736,14 @@ struct psmx2_fid_av {
 	int			type;
 	int			addr_format;
 	int			rx_ctx_bits;
+	int			max_trx_ctxt;
 	uint64_t		flags;
 	size_t			addrlen;
 	size_t			count;
 	size_t			last;
-	psm2_epid_t		*epids;
-	psm2_epaddr_t		*epaddrs;
-	uint8_t			*sepids;
-	uint8_t			*types;
-	struct psmx2_sep_addr	**sepaddrs;
+	psm2_epid_t		*epids;	 /* one entry per peer */
+	struct psmx2_av_peer	*peers;  /* one entry per peer */
+	struct psmx2_av_table	tables[];/* one entry per context */
 };
 
 struct psmx2_fid_ep {
@@ -1028,10 +1030,15 @@ int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_trx_ctxt *trx_ctxt,
 int	psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 			     psm2_epid_t epid, psm2_epaddr_t *epaddr);
 
+int	psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt,
+			      int connect_now);
+
 psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 				     struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
 
-static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av, size_t idx)
+static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av,
+					   struct psmx2_trx_ctxt *trx_ctxt,
+					   size_t idx)
 {
 	int err;
 
@@ -1041,13 +1048,9 @@ static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av, size_t idx)
 		return -FI_EINVAL;
 	}
 
-	/*
-	 * NOTE: This is not thread safe! Race condition on "av->epaddrs[idx]".
-	 * Avoid connecting to the same destination from multiple threads.
-	 */
-	if (!av->epaddrs[idx]) {
-		err = psmx2_epid_to_epaddr(av->domain->base_trx_ctxt,
-					   av->epids[idx], &av->epaddrs[idx]);
+	if (!av->tables[trx_ctxt->id].epaddrs[idx]) {
+		err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[idx],
+					   &av->tables[trx_ctxt->id].epaddrs[idx]);
 		if (err) {
 			FI_WARN(&psmx2_prov, FI_LOG_AV,
 				"fatal error: unable to translate epid %lx to epaddr.\n",
