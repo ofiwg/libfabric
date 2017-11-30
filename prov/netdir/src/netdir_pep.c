@@ -85,6 +85,7 @@ static struct fi_ops_cm ofi_nd_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = ofi_nd_pep_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 static struct fi_ops_ep ofi_nd_pep_ops = {
@@ -154,8 +155,7 @@ int ofi_nd_passive_endpoint(struct fid_fabric *fabric, struct fi_info *info,
 
 static int ofi_nd_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	assert(fid);
-	assert(fid->fclass == FI_CLASS_PEP);
+	assert(fid && fid->fclass == FI_CLASS_PEP);
 
 	if (fid->fclass != FI_CLASS_PEP)
 		return -FI_EINVAL;
@@ -168,9 +168,16 @@ static int ofi_nd_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 		return -FI_EOPBADSTATE;
 
 	hr = pep->listener->lpVtbl->GetLocalAddress(pep->listener,
-						    (struct sockaddr*) addr,
+						    (struct sockaddr *)addr,
 						    &len);
 
+	if (*addrlen < len) {
+		ND_LOG_INFO(FI_LOG_EP_CTRL,
+			"Provided buffer (size = %"PRIu64") is too small, required = %"PRIu64,
+			addrlen, len);
+		*addrlen = (size_t)len;
+		return -FI_ETOOSMALL;
+	}
 	*addrlen = (size_t)len;
 
 	return H2F(hr);
