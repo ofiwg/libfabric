@@ -253,7 +253,6 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct psmx2_fid_av *av;
 	struct psmx2_fid_cq *cq;
 	struct psmx2_fid_cntr *cntr;
-	struct psmx2_fid_stx *stx;
 	int err;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
@@ -330,13 +329,6 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		err = bfid->ops->bind(bfid, fid, flags);
 		if (err)
 			return err;
-		break;
-
-	case FI_CLASS_STX_CTX:
-		stx = container_of(bfid,
-				   struct psmx2_fid_stx, stx.fid);
-		if (ep->domain != stx->domain)
-			return -FI_EINVAL;
 		break;
 
 	default:
@@ -643,54 +635,6 @@ errout_free_ctxt:
 
 errout:
 	return err;
-}
-
-/* STX support is essentially no-op since PSM supports only one send/recv
- * context and thus always works in shared context mode.
- */
-
-static int psmx2_stx_close(fid_t fid)
-{
-	struct psmx2_fid_stx *stx;
-
-	stx = container_of(fid, struct psmx2_fid_stx, stx.fid);
-	psmx2_domain_release(stx->domain);
-	free(stx);
-
-	return 0;
-}
-
-static struct fi_ops psmx2_fi_ops_stx = {
-	.size = sizeof(struct fi_ops),
-	.close = psmx2_stx_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-};
-
-int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
-		 struct fid_stx **stx, void *context)
-{
-	struct psmx2_fid_domain *domain_priv;
-	struct psmx2_fid_stx *stx_priv;
-
-	FI_INFO(&psmx2_prov, FI_LOG_EP_DATA, "\n");
-
-	domain_priv = container_of(domain, struct psmx2_fid_domain,
-				   util_domain.domain_fid.fid);
-
-	stx_priv = (struct psmx2_fid_stx *) calloc(1, sizeof *stx_priv);
-	if (!stx_priv)
-		return -FI_ENOMEM;
-
-	psmx2_domain_acquire(domain_priv);
-
-	stx_priv->stx.fid.fclass = FI_CLASS_STX_CTX;
-	stx_priv->stx.fid.context = context;
-	stx_priv->stx.fid.ops = &psmx2_fi_ops_stx;
-	stx_priv->domain = domain_priv;
-
-	*stx = &stx_priv->stx;
-	return 0;
 }
 
 /* Private op context pool management */

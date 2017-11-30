@@ -379,8 +379,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt &&
-			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
+			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->ep_attr->tx_ctx_cnt=%"PRIu64", available=%d\n",
 					hints->ep_attr->tx_ctx_cnt,
