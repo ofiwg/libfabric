@@ -286,6 +286,7 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 	size_t size;
 	int err = 0;
 	int idx;
+	uint32_t max_atomic_size;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
 
@@ -295,6 +296,10 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 					     &size);
 		if (err)
 			return psmx2_errno(err);
+
+		max_atomic_size = trx_ctxt->psm2_am_param.max_request_short;
+		if (trx_ctxt->domain->max_atomic_size > max_atomic_size)
+			trx_ctxt->domain->max_atomic_size = max_atomic_size;
 
 		psmx2_lock(&psmx2_am_global.lock, 1);
 		if (psmx2_am_global.cnt >= PSMX2_AM_MAX_TRX_CTXT) {

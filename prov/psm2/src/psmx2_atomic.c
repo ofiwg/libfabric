@@ -2222,7 +2222,7 @@ int psmx2_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	int ret;
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain, util_domain.domain_fid);
-	chunk_size = domain_priv->base_trx_ctxt->psm2_am_param.max_request_short;
+	chunk_size = domain_priv->max_atomic_size;
 
 	if (flags & FI_TAGGED)
 		return -FI_EOPNOTSUPP;

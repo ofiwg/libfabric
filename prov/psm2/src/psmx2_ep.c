@@ -224,6 +224,7 @@ static int psmx2_ep_close(fid_t fid)
 {
 	struct psmx2_fid_ep *ep;
 	struct psmx2_ep_name ep_name;
+	struct psmx2_trx_ctxt *trx_ctxt;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
@@ -240,7 +241,9 @@ static int psmx2_ep_close(fid_t fid)
 	ofi_ns_del_local_name(&ep->domain->fabric->name_server,
 			      &ep->service, &ep_name);
 
+	trx_ctxt = ep->trx_ctxt;
 	psmx2_ep_close_internal(ep);
+	psmx2_trx_ctxt_free(trx_ctxt);
 	return 0;
 }
 
@@ -583,6 +586,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_ep_name ep_name;
 	struct psmx2_ep_name *src_addr;
+	struct psmx2_trx_ctxt *trx_ctxt;
 	int err = -FI_EINVAL;
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
@@ -590,34 +594,42 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!domain_priv)
 		goto errout;
 
-	if (domain_priv->base_trx_ctxt->ep)
-		return -FI_ENOMEM;
+	src_addr = NULL;
+	if (info && info->src_addr) {
+		if (info->addr_format == FI_ADDR_STR)
+			src_addr = psmx2_string_to_ep_name(info->src_addr);
+		else
+			src_addr = info->src_addr;
+	}
 
-	err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
-				     domain_priv->base_trx_ctxt);
-	if (err)
+	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, 0);
+	if (!trx_ctxt)
 		goto errout;
 
-	domain_priv->base_trx_ctxt->ep = ep_priv;
+	err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
+				     trx_ctxt);
+	if (err)
+		goto errout_free_ctxt;
+
+	trx_ctxt->ep = ep_priv;
 	ep_priv->type = PSMX2_EP_REGULAR;
 	ep_priv->service = PSMX2_ANY_SERVICE;
-	if (info && info->src_addr) {
-		if (info->addr_format == FI_ADDR_STR) {
-			src_addr = psmx2_string_to_ep_name(info->src_addr);
-			if (src_addr) {
-				ep_priv->service = src_addr->service;
-				free(src_addr);
-			}
-		} else {
-			ep_priv->service = ((struct psmx2_ep_name *)info->src_addr)->service;
-		}
+	if (src_addr) {
+		ep_priv->service = src_addr->service;
+		if (info->addr_format == FI_ADDR_STR)
+			free(src_addr);
 	}
 
 	if (ep_priv->service == PSMX2_ANY_SERVICE)
 		ep_priv->service = ((getpid() & 0x7FFF) << 16) +
 				   ((uintptr_t)ep_priv & 0xFFFF);
 
-	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
+	psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
+	dlist_insert_before(&ep_priv->trx_ctxt->entry,
+			    &domain_priv->trx_ctxt_list);
+	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
+
+	ep_name.epid = trx_ctxt->psm2_epid;
 	ep_name.type = ep_priv->type;
 
 	ofi_ns_add_local_name(&domain_priv->fabric->name_server,
@@ -625,6 +637,9 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	*ep = &ep_priv->ep;
 	return 0;
+
+errout_free_ctxt:
+	psmx2_trx_ctxt_free(trx_ctxt);
 
 errout:
 	return err;
@@ -735,6 +750,13 @@ static int psmx2_sep_close(fid_t fid)
 			return -FI_EBUSY;
 	}
 
+	ep_name.epid = sep->ctxts[0].trx_ctxt->psm2_epid;
+	ep_name.sep_id = sep->id;
+	ep_name.type = sep->type;
+
+	ofi_ns_del_local_name(&sep->domain->fabric->name_server,
+			      &sep->service, &ep_name);
+
 	for (i = 0; i < sep->ctxt_cnt; i++) {
 		if (sep->ctxts[i].ep)
 			psmx2_ep_close_internal(sep->ctxts[i].ep);
@@ -744,13 +766,6 @@ static int psmx2_sep_close(fid_t fid)
 		psmx2_unlock(&sep->domain->trx_ctxt_lock, 1);
 		psmx2_trx_ctxt_free(sep->ctxts[i].trx_ctxt);
 	}
-
-	ep_name.epid = sep->domain->base_trx_ctxt->psm2_epid;
-	ep_name.sep_id = sep->id;
-	ep_name.type = sep->type;
-
-	ofi_ns_del_local_name(&sep->domain->fabric->name_server,
-			      &sep->service, &ep_name);
 
 	psmx2_lock(&sep->domain->sep_lock, 1);
 	dlist_remove(&sep->entry);
@@ -976,7 +991,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	}
 	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
 
-	ep_name.epid = domain_priv->base_trx_ctxt->psm2_epid;
+	ep_name.epid = sep_priv->ctxts[0].trx_ctxt->psm2_epid;
 	ep_name.sep_id = sep_priv->id;
 	ep_name.type = sep_priv->type;
 
@@ -985,6 +1000,10 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	psmx2_domain_acquire(domain_priv);
 	*sep = &sep_priv->ep;
+
+	/* Make sure the AM handler is installed to answer SEP query */
+	psmx2_am_init(sep_priv->ctxts[0].trx_ctxt);
+
 	return 0;
 
 errout_free_ctxt:

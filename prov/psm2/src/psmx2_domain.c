@@ -266,6 +266,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	slist_init(&trx_ctxt->rma_queue.list);
 	slist_init(&trx_ctxt->trigger_queue.list);
 	trx_ctxt->id = psmx2_trx_ctxt_cnt++;
+	trx_ctxt->domain = domain;
 
 	return trx_ctxt;
 
@@ -445,7 +446,6 @@ static int psmx2_domain_close(fid_t fid)
 	fastlock_destroy(&domain->sep_lock);
 	fastlock_destroy(&domain->mr_lock);
 
-	psmx2_trx_ctxt_free(domain->base_trx_ctxt);
 	domain->fabric->active_domain = NULL;
 	free(domain);
 
@@ -494,15 +494,11 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	psmx2_am_global_init();
 	psmx2_atomic_global_init();
 
-	domain->base_trx_ctxt = psmx2_trx_ctxt_alloc(domain, src_addr, -1);
-	if (!domain->base_trx_ctxt)
-		return -FI_ENODEV;
-
 	err = fastlock_init(&domain->mr_lock);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"fastlock_init(mr_lock) returns %d\n", err);
-		goto err_out_free_trx_ctxt;
+		goto err_out;
 	}
 
 	domain->mr_map = rbtNew(&psmx2_key_compare);
@@ -513,13 +509,13 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	}
 
 	domain->mr_reserved_key = 1;
+	domain->max_atomic_size = INT_MAX;
 
 	ofi_atomic_initialize32(&domain->sep_cnt, 0);
 	fastlock_init(&domain->sep_lock);
 	dlist_init(&domain->sep_list);
 	dlist_init(&domain->trx_ctxt_list);
 	fastlock_init(&domain->trx_ctxt_lock);
-	dlist_insert_before(&domain->base_trx_ctxt->entry, &domain->trx_ctxt_list);
 
 	/* Set active domain before psmx2_domain_enable_ep() installs the
 	 * AM handlers to ensure that psmx2_active_fabric->active_domain
@@ -535,7 +531,6 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	if (domain->progress_thread_enabled)
 		psmx2_domain_start_progress(domain);
 
-	psmx2_am_init(domain->base_trx_ctxt);
 	return 0;
 
 err_out_reset_active_domain:
@@ -545,8 +540,7 @@ err_out_reset_active_domain:
 err_out_destroy_mr_lock:
 	fastlock_destroy(&domain->mr_lock);
 
-err_out_free_trx_ctxt:
-	psmx2_trx_ctxt_free(domain->base_trx_ctxt);
+err_out:
 	return err;
 }
 

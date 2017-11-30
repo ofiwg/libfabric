@@ -353,7 +353,7 @@ struct psmx2_trx_ctxt {
 	int			id;
 	struct psm2_am_parameters psm2_am_param;
 
-	/* ep bound to this tx/rx context */
+	struct psmx2_fid_domain	*domain;
 	struct psmx2_fid_ep	*ep;
 
 	/* incoming req queue for AM based RMA request. */
@@ -396,12 +396,6 @@ struct psmx2_fid_domain {
 	fastlock_t		trx_ctxt_lock;
 	struct dlist_entry	trx_ctxt_list;
 
-	/*
-	 * The base hw context is multiplexed for all regular endpoints via
-	 * logical "virtual lanes".
-	 */
-	struct psmx2_trx_ctxt	*base_trx_ctxt;
-
 	ofi_atomic32_t		sep_cnt;
 	fastlock_t		sep_lock;
 	struct dlist_entry	sep_list;
@@ -410,6 +404,7 @@ struct psmx2_fid_domain {
 	pthread_t		progress_thread;
 
 	int			addr_format;
+	uint32_t		max_atomic_size;
 };
 
 #define PSMX2_EP_REGULAR	0
