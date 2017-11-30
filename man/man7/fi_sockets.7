@@ -1,4 +1,4 @@
-.TH "fi_sockets" "7" "2017\-10\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_sockets" "7" "2017\-11\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Sockets Fabric Provider
@@ -77,6 +77,21 @@ This is for debugging purpose only.
 to the indicated range(s) of Linux virtual processor ID(s).
 This option is currently not supported on OS X.
 The usage is \- id_start[\-id_end[:stride]][,].
+.PP
+\f[I]FI_SOCKETS_KEEPALIVE_ENABLE\f[] : A boolean to enable the keepalive
+support.
+.PP
+\f[I]FI_SOCKETS_KEEPALIVE_TIME\f[] : An integer to specify the idle time
+in seconds before sending the first keepalive probe.
+Only relevant if \f[I]FI_SOCKETS_KEEPALIVE_ENABLE\f[] is enabled.
+.PP
+\f[I]FI_SOCKETS_KEEPALIVE_INTVL\f[] : An integer to specify the time in
+seconds between individual keepalive probes.
+Only relevant if \f[I]FI_SOCKETS_KEEPALIVE_ENABLE\f[] is enabled.
+.PP
+\f[I]FI_SOCKETS_KEEPALIVE_PROBES\f[] : An integer to specify the maximum
+number of keepalive probes sent before dropping the connection.
+Only relevant if \f[I]FI_SOCKETS_KEEPALIVE_ENABLE\f[] is enabled.
 .SH LARGE SCALE JOBS
 .PP
 For large scale runs one can use these environment variables to set the
