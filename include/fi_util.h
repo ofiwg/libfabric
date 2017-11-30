@@ -429,7 +429,8 @@ int ofi_av_get_index(struct util_av *av, const void *addr);
 
 // TODO explore replacing this with a simple connection hash map that is common
 // for both AV and RX only connections.
-#define UTIL_CMAP_IDX_BITS 48
+
+#define UTIL_CMAP_IDX_BITS OFI_IDX_INDEX_BITS
 
 enum ofi_cmap_signal {
 	OFI_CMAP_FREE,
