@@ -85,6 +85,7 @@ static struct fi_ops_cm ofi_nd_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = ofi_nd_pep_reject,
 	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 static struct fi_ops_ep ofi_nd_pep_ops = {
