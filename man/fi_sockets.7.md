@@ -81,8 +81,20 @@ The sockets provider checks for the following environment variables -
 *FI_SOCKETS_PE_AFFINITY*
 : If specified, progress thread is bound to the indicated range(s) of Linux virtual processor ID(s). This option is currently not supported on OS X. The usage is - id_start[-id_end[:stride]][,].
 
+*FI_SOCKETS_KEEPALIVE_ENABLE*
+: A boolean to enable the keepalive support.
+
+*FI_SOCKETS_KEEPALIVE_TIME*
+: An integer to specify the idle time in seconds before sending the first keepalive probe. Only relevant if *FI_SOCKETS_KEEPALIVE_ENABLE* is enabled.
+
+*FI_SOCKETS_KEEPALIVE_INTVL*
+: An integer to specify the time in seconds between individual keepalive probes. Only relevant if *FI_SOCKETS_KEEPALIVE_ENABLE* is enabled.
+
+*FI_SOCKETS_KEEPALIVE_PROBES*
+: An integer to specify the maximum number of keepalive probes sent before dropping the connection. Only relevant if *FI_SOCKETS_KEEPALIVE_ENABLE* is enabled.
+
 # LARGE SCALE JOBS
- 
+
 For large scale runs one can use these environment variables to set the default parameters e.g. size of the address vector(AV), completion queue (CQ), connection map etc. that satisfies the requirement of the particular benchmark. The recommended parameters for large scale runs are *FI_SOCKETS_MAX_CONN_RETRY*, *FI_SOCKETS_DEF_CONN_MAP_SZ*, *FI_SOCKETS_DEF_AV_SZ*, *FI_SOCKETS_DEF_CQ_SZ*, *FI_SOCKETS_DEF_EQ_SZ*.
 
 # SEE ALSO

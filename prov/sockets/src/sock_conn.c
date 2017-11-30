@@ -191,7 +191,9 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 	map->table[index].addr = *addr;
 	map->table[index].sock_fd = conn_fd;
 	map->table[index].ep_attr = ep_attr;
-	sock_set_sockopts(conn_fd);
+	sock_set_sockopts(conn_fd, SOCK_OPTS_NONBLOCK |
+	                  (ep_attr->ep_type == FI_EP_MSG ?
+	                   SOCK_OPTS_KEEPALIVE : 0));
 
 	if (fi_epoll_add(map->epoll_set, conn_fd, &map->table[index]))
 		SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
@@ -213,7 +215,46 @@ int fd_set_nonblock(int fd)
 	return ret;
 }
 
-void sock_set_sockopt_reuseaddr(int sock)
+#if !defined __APPLE__ && !defined _WIN32
+void sock_set_sockopt_keepalive(int sock)
+{
+	int optval;
+
+	/* Keepalive is disabled: now leave */
+	if (!sock_keepalive_enable)
+		return;
+
+	optval = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)))
+			SOCK_LOG_ERROR("setsockopt keepalive enable failed: %s\n",
+			               strerror(errno));
+
+	if (sock_keepalive_time != INT_MAX) {
+		optval = sock_keepalive_time;
+		if (setsockopt(sock, SOL_TCP, TCP_KEEPIDLE, &optval, sizeof(optval)))
+			SOCK_LOG_ERROR("setsockopt keepalive time failed: %s\n",
+			               strerror(errno));
+	}
+
+	if (sock_keepalive_intvl != INT_MAX) {
+		optval = sock_keepalive_intvl;
+		if (setsockopt(sock, SOL_TCP, TCP_KEEPINTVL, &optval, sizeof(optval)))
+			SOCK_LOG_ERROR("setsockopt keepalive intvl failed: %s\n",
+			               strerror(errno));
+	}
+
+	if (sock_keepalive_probes != INT_MAX) {
+		optval = sock_keepalive_probes;
+		if (setsockopt(sock, SOL_TCP, TCP_KEEPCNT, &optval, sizeof(optval)))
+			SOCK_LOG_ERROR("setsockopt keepalive intvl failed: %s\n",
+			               strerror(errno));
+	}
+}
+#else
+#define sock_set_sockopt_keepalive(sock) do {} while (0)
+#endif
+
+static void sock_set_sockopt_reuseaddr(int sock)
 {
 	int optval;
 	optval = 1;
@@ -221,25 +262,19 @@ void sock_set_sockopt_reuseaddr(int sock)
 		SOCK_LOG_ERROR("setsockopt reuseaddr failed\n");
 }
 
-void sock_set_sockopts_conn(int sock)
-{
-	int optval;
-	optval = 1;
-	sock_set_sockopt_reuseaddr(sock);
-	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
-		SOCK_LOG_ERROR("setsockopt nodelay failed\n");
-}
-
-void sock_set_sockopts(int sock)
+void sock_set_sockopts(int sock, int sock_opts)
 {
 	int optval;
 	optval = 1;
 
 	sock_set_sockopt_reuseaddr(sock);
+	if (sock_opts & SOCK_OPTS_KEEPALIVE)
+		sock_set_sockopt_keepalive(sock);
 	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
 		SOCK_LOG_ERROR("setsockopt nodelay failed\n");
 
-	fd_set_nonblock(sock);
+	if (sock_opts & SOCK_OPTS_NONBLOCK)
+		fd_set_nonblock(sock);
 }
 
 int sock_conn_stop_listener_thread(struct sock_conn_listener *conn_listener)
@@ -401,7 +436,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	for (p = s_res; p; p = p->ai_next) {
 		listen_fd = ofi_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listen_fd >= 0) {
-			sock_set_sockopts(listen_fd);
+			sock_set_sockopts(listen_fd, SOCK_OPTS_NONBLOCK);
 
 			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
 				break;

@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -67,6 +68,10 @@ int sock_eq_def_sz = SOCK_EQ_DEF_SZ;
 #if ENABLE_DEBUG
 int sock_dgram_drop_rate = 0;
 #endif
+int sock_keepalive_enable;
+int sock_keepalive_time = INT_MAX;
+int sock_keepalive_intvl = INT_MAX;
+int sock_keepalive_probes = INT_MAX;
 
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
@@ -344,6 +349,11 @@ static void sock_read_default_params()
 #if ENABLE_DEBUG
 		fi_param_get_int(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
 #endif
+		fi_param_get_bool(&sock_prov, "keepalive_enable", &sock_keepalive_enable);
+		fi_param_get_int(&sock_prov, "keepalive_time", &sock_keepalive_time);
+		fi_param_get_int(&sock_prov, "keepalive_intvl", &sock_keepalive_intvl);
+		fi_param_get_int(&sock_prov, "keepalive_probes", &sock_keepalive_probes);
+
 		read_default_params = 1;
 	}
 }
@@ -759,6 +769,18 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "pe_affinity", FI_PARAM_STRING,
 			"If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). "
 			"This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
+
+	fi_param_define(&sock_prov, "keepalive_enable", FI_PARAM_BOOL,
+			"Enable keepalive support");
+
+	fi_param_define(&sock_prov, "keepalive_time", FI_PARAM_INT,
+			"Idle time in seconds before sending the first keepalive probe");
+
+	fi_param_define(&sock_prov, "keepalive_intvl", FI_PARAM_INT,
+			"Time in seconds between individual keepalive probes");
+
+	fi_param_define(&sock_prov, "keepalive_probes", FI_PARAM_INT,
+			"Maximum number of keepalive probes sent before dropping the connection");
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);

@@ -164,6 +164,11 @@ enum {
 	SOCK_SIGNAL_WR_FD
 };
 
+enum {
+	SOCK_OPTS_NONBLOCK  = 1<<0,
+	SOCK_OPTS_KEEPALIVE = 1<<1
+};
+
 #define SOCK_MAJOR_VERSION 2
 #define SOCK_MINOR_VERSION 0
 
@@ -1124,11 +1129,9 @@ int sock_conn_start_listener_thread(struct sock_conn_listener *conn_listener);
 int sock_conn_stop_listener_thread(struct sock_conn_listener *conn_listener);
 void sock_conn_map_destroy(struct sock_ep_attr *ep_attr);
 void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn);
-void sock_set_sockopts(int sock);
+void sock_set_sockopts(int sock, int sock_opts);
 int fd_set_nonblock(int fd);
-void sock_set_sockopt_reuseaddr(int sock);
 int sock_conn_map_init(struct sock_ep *ep, int init_size);
-void sock_set_sockopts_conn(int sock);
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);

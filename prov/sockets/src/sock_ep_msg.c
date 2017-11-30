@@ -312,7 +312,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 		pep->cm.sock = ofi_socket(p->ai_family, p->ai_socktype,
 				     p->ai_protocol);
 		if (pep->cm.sock >= 0) {
-			sock_set_sockopts(pep->cm.sock);
+			sock_set_sockopts(pep->cm.sock, SOCK_OPTS_NONBLOCK);
 			if (!bind(pep->cm.sock, s_res->ai_addr, s_res->ai_addrlen))
 				break;
 			SOCK_LOG_ERROR("failed to bind listener: %s\n",
@@ -329,7 +329,6 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 		return -FI_EIO;
 	}
 
-	sock_set_sockopt_reuseaddr(pep->cm.sock);
 	if (pep->src_addr.sin_port == 0) {
 		addr_size = sizeof(addr);
 		if (getsockname(pep->cm.sock, (struct sockaddr *)&addr, &addr_size))
@@ -513,7 +512,7 @@ static void *sock_ep_cm_connect_handler(void *data)
 
 	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "Connecting to address",
 			&handle->dest_addr);
-	sock_set_sockopts_conn(sock_fd);
+	sock_set_sockopts(sock_fd, SOCK_OPTS_KEEPALIVE);
 	ret = connect(sock_fd, (struct sockaddr *)&handle->dest_addr,
 		      sizeof(handle->dest_addr));
 	if (ret < 0) {
@@ -1037,7 +1036,7 @@ static void *sock_pep_listener_thread(void *data)
 			continue;
 		}
 
-		sock_set_sockopts_conn(conn_fd);
+		sock_set_sockopts(conn_fd, SOCK_OPTS_KEEPALIVE);
 		handle = calloc(1, sizeof(*handle));
 		if (!handle) {
 			SOCK_LOG_ERROR("cannot allocate memory\n");
