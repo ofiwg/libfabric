@@ -123,7 +123,6 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 
 	info->caps = OFI_ND_CAPS;
 	info->addr_format = FI_SOCKADDR;
-	info->mode = FI_LOCAL_MR;
 
 	if (!ofi_nd_util_prov.info) {
 		ofi_nd_util_prov.info = info;
