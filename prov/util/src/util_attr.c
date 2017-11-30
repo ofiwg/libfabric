@@ -1128,11 +1128,13 @@ static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
 	int prov_mode, user_mode;
 	uint64_t caps;
 
+	assert(user_info);
+
 	caps = ofi_get_caps(prov_info->caps, user_info->caps, prov_info->caps);
 
 	prov_mode = prov_info->domain_attr->mr_mode;
 
-	if (!user_info || !ofi_rma_target_allowed(caps) ||
+	if (!ofi_rma_target_allowed(caps) ||
 	    !(prov_mode & OFI_MR_MODE_RMA_TARGET))
 		return caps;
 
