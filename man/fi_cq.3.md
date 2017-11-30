@@ -614,10 +614,12 @@ fi_cq_open / fi_cq_signal
 
 fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 fi_cq_sread / fi_cq_sreadfrom
-: On success, returns the number of completion events retrieved from
+: On success, returns a positive number of completion events retrieved from
   the completion queue.  On error, a negative value corresponding to
   fabric errno is returned.  If no completions are available to
-  return from the CQ, -FI_EAGAIN will be returned.
+  return from the CQ, -FI_EAGAIN will be returned.  Note that these
+  calls will either return a value > 0 on success, or < 0 on error
+  (including -FI_EAGAIN), with 0 being an invalid return value.
 
 fi_cq_strerror
 : Returns a character string interpretation of the provider specific
