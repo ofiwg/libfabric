@@ -184,13 +184,12 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 
 	assert(count <= RXM_IOV_LIMIT);
 
-	if (match_len > ofi_total_iov_len(iov, count)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "match_len > iov size!\n");
-		return -FI_EINVAL;
-	}
-
 	for (i = 0; i < count; i++) {
-		assert(offset <= iov[i].iov_len);
+		if (offset >= iov[i].iov_len) {
+			offset -= iov[i].iov_len;
+			continue;
+		}
+
 		match_iov->iov[i].iov_base = (char *)iov[i].iov_base + offset;
 		match_iov->iov[i].iov_len = MIN(iov[i].iov_len - offset, match_len);
 		if (desc)
@@ -201,7 +200,12 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 			break;
 		offset = 0;
 	}
-	assert(!match_len);
+
+	if (match_len) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Given iov size < match_len!\n");
+		return -FI_ETOOSMALL;
+	}
+
 	match_iov->count = i + 1;
 	return 0;
 }
@@ -217,24 +221,30 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 
 	assert(rma_iov->count <= RXM_IOV_LIMIT);
 
-	for (i = 0, j = 0; i < rma_iov->count; i++) {
-		ret = rxm_match_iov(&recv_entry->iov[j],
-			      &recv_entry->desc[j], recv_entry->count,
-			      offset, rma_iov->iov[i].len, &match_iov[i]);
+	for (i = 0, j = 0; i < rma_iov->count; ) {
+		ret = rxm_match_iov(&recv_entry->iov[j], &recv_entry->desc[j],
+				    recv_entry->count - j, offset,
+				    rma_iov->iov[i].len, &match_iov[i]);
 		if (ret)
 			return ret;
-		count = match_iov[i].count;
-		offset = match_iov[i].iov[match_iov[i].count].iov_len;
 
-		if (offset == recv_entry->iov[j + count - 1].iov_len) {
-			/* This iov has been completely used */
-			j += count;
-			offset = 0;
-		} else {
-			j += count - 1;
-		}
+		count = match_iov[i].count;
+		offset = match_iov[i].iov[count - 1].iov_len;
+
+		i++;
+		j += count - 1;
+
+		if (j >= recv_entry->count)
+			break;
 	}
-	return 0;
+
+	if (i < rma_iov->count) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "posted recv_entry size < "
+			"rndv rma read size!\n");
+		return -FI_ETOOSMALL;
+	}
+
+	return FI_SUCCESS;
 }
 
 static int rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
