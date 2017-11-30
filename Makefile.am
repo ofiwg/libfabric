@@ -1,3 +1,4 @@
+
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 # Copyright (c) 2017 Intel Corporation, Inc. All right reserved.
@@ -37,31 +38,32 @@ rdmaincludedir = $(includedir)/rdma
 rdmainclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
-common_srcs =				\
-	src/common.c			\
-	src/enosys.c			\
-	src/rbtree.c			\
-	src/fasthash.c			\
-	src/indexer.c			\
-	src/iov.c			\
-	prov/util/src/util_atomic.c	\
-	prov/util/src/util_attr.c	\
-	prov/util/src/util_av.c		\
-	prov/util/src/util_cq.c		\
-	prov/util/src/util_cntr.c	\
-	prov/util/src/util_domain.c	\
-	prov/util/src/util_ep.c		\
-	prov/util/src/util_pep.c	\
-	prov/util/src/util_eq.c		\
-	prov/util/src/util_fabric.c	\
-	prov/util/src/util_main.c	\
-	prov/util/src/util_poll.c	\
-	prov/util/src/util_wait.c	\
-	prov/util/src/util_buf.c	\
-	prov/util/src/util_mr_map.c	\
-	prov/util/src/util_ns.c		\
-	prov/util/src/util_shm.c	\
-	prov/util/src/util_mem_monitor.c
+common_srcs =					\
+	src/common.c				\
+	src/enosys.c				\
+	src/rbtree.c				\
+	src/fasthash.c				\
+	src/indexer.c				\
+	src/iov.c				\
+	prov/util/src/util_atomic.c		\
+	prov/util/src/util_attr.c		\
+	prov/util/src/util_av.c			\
+	prov/util/src/util_cq.c			\
+	prov/util/src/util_cntr.c		\
+	prov/util/src/util_domain.c		\
+	prov/util/src/util_ep.c			\
+	prov/util/src/util_pep.c		\
+	prov/util/src/util_eq.c			\
+	prov/util/src/util_fabric.c		\
+	prov/util/src/util_main.c		\
+	prov/util/src/util_poll.c		\
+	prov/util/src/util_wait.c		\
+	prov/util/src/util_buf.c		\
+	prov/util/src/util_mr_map.c		\
+	prov/util/src/util_mr_cache.c		\
+	prov/util/src/util_mem_monitor.c	\
+	prov/util/src/util_ns.c			\
+	prov/util/src/util_shm.c
 
 if MACOS
 common_srcs += src/unix/osd.c

@@ -43,6 +43,7 @@
 #include <fi_atom.h>
 #include <fi_lock.h>
 #include <fi_list.h>
+#include <rbtree.h>
 
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
@@ -140,5 +141,80 @@ void *ofi_mr_map_get(struct ofi_mr_map *map,  uint64_t key);
 int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 		      size_t len, uint64_t key, uint64_t access,
 		      void **context);
+
+/*
+ * MR cache
+ */
+
+struct ofi_mr_cache;
+
+struct ofi_mr_region {
+	uint64_t	address;
+	uint64_t	length;
+};
+
+struct ofi_mr_reg_attr {
+	uint64_t		access;
+	uint64_t		offset;
+	uint64_t		requested_key;
+	void			*context;
+	size_t			auth_key_size;
+	uint8_t			*auth_key;
+};
+
+struct ofi_mr_cache_entry {
+	struct ofi_subscription			subscription;
+	struct {
+		unsigned int is_retired : 1;	/* in use, but not to be reused */
+		unsigned int is_merged : 1;	/* merged entry, i.e., not an original
+						 * request from fi_mr_reg */
+		unsigned int is_unmapped : 1;	/* at least 1 page of the entry has been
+						 * unmapped by the OS */
+	} flags;
+	struct ofi_mr_region			region;
+	struct ofi_mr_reg_attr			reg_attr;
+	ofi_atomic32_t				ref_cnt;
+	struct dlist_entry			lru_entry;
+	struct dlist_entry			siblings;
+	struct dlist_entry			children;
+	char					data[0];
+};
+
+typedef int (*ofi_mr_reg_cb)(struct ofi_mr_cache *cache,
+			     struct ofi_mr_cache_entry *entry,
+			     void *address, size_t length);
+typedef int (*ofi_mr_dereg_cb)(struct ofi_mr_cache *cache,
+			       struct ofi_mr_cache_entry *entry);
+
+struct ofi_mr_cache {
+	struct ofi_notification_queue	mem_nq;
+	struct dlist_entry		lru_list;
+	RbtHandle			inuse_tree;
+	uint64_t			inuse_elem;
+	RbtHandle			stale_tree;
+	uint64_t			stale_elem;
+	int				reg_size;
+	int				stale_size;
+	int				elem_size;
+	struct util_domain		*domain;
+	ofi_mr_reg_cb			reg_callback;
+	ofi_mr_dereg_cb			dereg_callback;
+#if ENABLE_DEBUG
+	uint64_t			hits;
+	uint64_t			misses;
+#endif
+};
+
+void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
+void ofi_mr_cache_flush(struct ofi_mr_cache *cache);
+int ofi_mr_cache_init(struct ofi_mr_cache *cache,
+		      struct util_domain *domain,
+		      struct ofi_mem_monitor *monitor);
+int ofi_mr_cache_register(struct ofi_mr_cache *cache,
+			  uint64_t address, uint64_t length,
+			  struct ofi_mr_reg_attr *reg_attr,
+			  struct ofi_mr_cache_entry **entry);
+int ofi_mr_cache_deregister(struct ofi_mr_cache *cache,
+			    struct ofi_mr_cache_entry *entry);
 
 #endif /* _OFI_MR_H_ */
