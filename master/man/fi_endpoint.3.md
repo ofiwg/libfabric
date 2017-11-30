@@ -410,8 +410,13 @@ associated error queue with error code FI_ECANCELED. On the other hand,
 if the operation completed before the call to fi_cancel, then the
 completion status of that operation will be available in the associated
 completion queue.  No specific entry related to fi_cancel itself will be posted.
-If multiple outstanding operations match the context parameter, only one
-will be canceled. In this case, the operation which is canceled is provider specific.
+
+Cancel uses the context parameter associated with an operation to identify
+the request to cancel.  Operations posted without a valid context parameter --
+either no context parameter is specified or the context value was ignored
+by the provider -- cannot be canceled.  If multiple outstanding operations
+match the context parameter, only one will be canceled. In this case, the
+operation which is canceled is provider specific.
 The cancel operation is asynchronous, but will complete within a bounded
 period of time.
 
