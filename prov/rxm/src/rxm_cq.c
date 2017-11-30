@@ -43,16 +43,8 @@ static struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	struct util_cmap_handle *handle;
 	handle = ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
-	if (!handle) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Can't find handle!\n");
+	if (!handle)
 		return NULL;
-	}
-	if (handle->key != key) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"handle->key not matching with given key!\n");
-		return NULL;
-	}
-
 	return container_of(handle, struct rxm_conn, handle);
 }
 
