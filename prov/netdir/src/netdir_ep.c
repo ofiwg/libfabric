@@ -90,6 +90,7 @@ static struct fi_ops_cm ofi_nd_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = ofi_nd_ep_shutdown,
+	.join = fi_no_join,
 };
 
 extern struct fi_ops_msg ofi_nd_ep_msg;
