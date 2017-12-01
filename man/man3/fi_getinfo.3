@@ -1,9 +1,9 @@
-.TH "fi_getinfo" "3" "2017\-10\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
+fi_getinfo, fi_freeinfo \- Obtain / free fabric interface information
 .PP
-fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
+fi_allocinfo, fi_dupinfo \- Allocate / duplicate an fi_info structure
 .SH SYNOPSIS
 .IP
 .nf
@@ -610,8 +610,12 @@ with their GNI protocol.
 \f[I]FI_ADDR_STR\f[] : Address is a formatted character string.
 The length and content of the string is address and/or provider
 specific, but in general follows a URI model:
-.PP
+.IP
+.nf
+\f[C]
 address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
+\f[]
+.fi
 .PP
 Examples: \- fi_sockaddr://10.31.6.12:7471 \-
 fi_sockaddr_in6://[fe80::6:12]:7471 \-
