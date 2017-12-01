@@ -69,7 +69,7 @@ Direct provider will be added to 1.6 release version of libfabric.
 
 *Memory Regions*
 : Only FI_MR_BASIC mode is supported. Adding regions via s/g list is
-  supported only upto s/g list size of 1. No support for binding memory
+  supported only up to s/g list size of 1. No support for binding memory
   regions to a counter.
 
 *Wait objects*

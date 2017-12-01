@@ -203,7 +203,7 @@ RXM_INI
 {
 	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_INT,
 			"Defines the transmit buffer size. Transmit data would "
-			"be copied upto this size (default: ~16k). This would "
+			"be copied up to this size (default: ~16k). This would "
 			"also affect the supported inject size");
 
 	if (rxm_init_info()) {

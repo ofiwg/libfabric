@@ -622,7 +622,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_attr->auth_key_size &&
 	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
-		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentification size.");
+		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentication size.");
 		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, auth_key_size);
 		return -FI_ENODATA;
 	}
