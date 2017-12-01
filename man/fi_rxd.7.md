@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The RxD (RDM over DGRAM) Utility Provider
+fi_rxd \- The RxD (RDM over DGRAM) Utility Provider
 
 # OVERVIEW
 

@@ -7,9 +7,9 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
+fi_getinfo, fi_freeinfo \- Obtain / free fabric interface information
 
-fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
+fi_allocinfo, fi_dupinfo \- Allocate / duplicate an fi_info structure
 
 # SYNOPSIS
 
@@ -587,7 +587,9 @@ fabric.  See `fi_av`(3).
   the string is address and/or provider specific, but in general follows
   a URI model:
 
-  address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
+```
+address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
+```
 
   Examples:
   - fi_sockaddr://10.31.6.12:7471

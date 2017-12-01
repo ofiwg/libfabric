@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-Fabric Interface Providers
+fi_provider \- Fabric Interface Providers
 
 # OVERVIEW
 

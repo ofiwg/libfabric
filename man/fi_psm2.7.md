@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The PSM2 Fabric Provider
+fi_psm2 \- The PSM2 Fabric Provider
 
 # OVERVIEW
 

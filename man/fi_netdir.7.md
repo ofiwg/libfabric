@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The Network Direct Fabric Provider
+fi_netdir \- The Network Direct Fabric Provider
 
 # OVERVIEW
 
