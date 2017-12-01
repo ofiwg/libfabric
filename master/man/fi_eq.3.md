@@ -431,7 +431,7 @@ described below.
   reference the active endpoint.  FI_MR_COMPLETE and FI_AV_COMPLETE will
   refer to the MR or AV fabric descriptor, respectively.  FI_JOIN_COMPLETE
   will point to the multicast descriptor returned as part of the join
-  operation.  Applications can use fid->context value to retreive the
+  operation.  Applications can use fid->context value to retrieve the
   context associated with the fabric descriptor.
 
 *context*

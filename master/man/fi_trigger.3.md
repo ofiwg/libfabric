@@ -51,7 +51,7 @@ is described below.
 
 ```c
 struct fi_triggered_context {
-	enum fi_trigger_event               event_type;   /* trigger type */
+	enum fi_trigger_event         event_type;   /* trigger type */
 	union {
 		struct fi_trigger_threshold threshold;
 		void                        *internal[3]; /* reserved */
@@ -59,7 +59,7 @@ struct fi_triggered_context {
 };
 
 struct fi_triggered_context2 {
-	enum fi_trigger_event               event_type;   /* trigger type */
+	enum fi_trigger_event         event_type;   /* trigger type */
 	union {
 		struct fi_trigger_threshold threshold;
 		void                        *internal[7]; /* reserved */
@@ -81,12 +81,12 @@ The following trigger events are defined.
   value.  The threshold is specified using struct
   fi_trigger_threshold:
 
-  ```c
-  struct fi_trigger_threshold {
+```c
+struct fi_trigger_threshold {
 	struct fid_cntr *cntr; /* event counter to check */
 	size_t threshold;      /* threshold value */
-  };
-  ```
+};
+```
 
   Threshold operations are triggered in the order of the threshold
   values.  This is true even if the counter increments by a value
