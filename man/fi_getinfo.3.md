@@ -7,9 +7,9 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
+fi_getinfo, fi_freeinfo \- Obtain / free fabric interface information
 
-fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
+fi_allocinfo, fi_dupinfo \- Allocate / duplicate an fi_info structure
 
 # SYNOPSIS
 

@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The usNIC Fabric Provider
+fi_usnic \- The usNIC Fabric Provider
 
 # OVERVIEW
 

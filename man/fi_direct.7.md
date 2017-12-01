@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-Direct fabric provider access
+fi_direct \- Direct fabric provider access
 
 # SYNOPSIS
 

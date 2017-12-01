@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-Fabric Interface Library
+fabric \- Fabric Interface Library
 
 # SYNOPSIS
 
