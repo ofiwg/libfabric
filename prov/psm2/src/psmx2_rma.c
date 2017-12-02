@@ -70,7 +70,7 @@ static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
 /* RMA protocol:
  *
  * Write REQ:
- *	args[0].u32w0	cmd, src_vl, dst_vl, flag
+ *	args[0].u32w0	cmd, flag
  *	args[0].u32w1	len
  *	args[1].u64	req
  *	args[2].u64	addr
@@ -83,7 +83,7 @@ static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
  *	args[1].u64	req
  *
  * Read REQ:
- *	args[0].u32w0	cmd, src_vl, dst_vl, flag
+ *	args[0].u32w0	cmd, flag
  *	args[0].u32w1	len
  *	args[1].u64	req
  *	args[2].u64	addr
@@ -113,7 +113,6 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 	uint64_t offset;
 	struct psmx2_fid_mr *mr;
 	psm2_epaddr_t epaddr;
-	uint8_t dst_vl, src_vl;
 	struct psmx2_fid_domain *domain;
 	struct psmx2_fid_ep *ep;
 
@@ -121,14 +120,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
 	domain = psmx2_active_fabric->active_domain;
-
-	if (trx_ctxt->ep) {
-		dst_vl = 0;
-		ep = trx_ctxt->ep;
-	} else {
-		dst_vl = PSMX2_AM_GET_DST(args[0].u32w0);
-		ep = domain->eps[dst_vl];
-	}
+	ep = trx_ctxt->ep;
 
 	eom = args[0].u32w0 & PSMX2_AM_EOM;
 	has_data = args[0].u32w0 & PSMX2_AM_DATA;
@@ -183,7 +175,6 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 		break;
 
 	case PSMX2_AM_REQ_WRITE_LONG:
-		src_vl = PSMX2_AM_GET_SRC(args[0].u32w0);
 		rma_len = args[0].u32w1;
 		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
@@ -214,8 +205,6 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 			req->write.key = key;
 			req->write.context = (void *)args[1].u64;
 			req->write.peer_addr = (void *)epaddr;
-			req->write.vl = dst_vl;
-			req->write.peer_vl = src_vl;
 			req->write.data = has_data ? args[4].u64 : 0;
 			req->cq_flags = FI_REMOTE_WRITE | FI_RMA |
 					(has_data ? FI_REMOTE_CQ_DATA : 0),
@@ -256,7 +245,6 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 		break;
 
 	case PSMX2_AM_REQ_READ_LONG:
-		src_vl = PSMX2_AM_GET_SRC(args[0].u32w0);
 		rma_len = args[0].u32w1;
 		rma_addr = (uint8_t *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
@@ -288,8 +276,6 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 			req->read.key = key;
 			req->read.context = (void *)args[1].u64;
 			req->read.peer_addr = (void *)epaddr;
-			req->read.vl = dst_vl;
-			req->read.peer_vl = src_vl;
 			PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_REMOTE_READ_CONTEXT;
 			PSMX2_CTXT_USER(&req->fi_context) = mr;
 			psmx2_am_enqueue_rma(trx_ctxt, req);
@@ -559,7 +545,7 @@ int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 	uint32_t tag32;
 
 	if ((req->op & PSMX2_AM_OP_MASK) == PSMX2_AM_REQ_WRITE_LONG) {
-		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, req->write.peer_vl, req->write.vl);
+		tag32 = PSMX2_RMA_BIT;
 		PSMX2_TAG32_LONG_WRITE(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->write.context, tag32);
 		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
@@ -569,7 +555,7 @@ int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				     (void *)req->write.addr, req->write.len,
 				     (void *)&req->fi_context, &psm2_req);
 	} else {
-		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, req->read.vl, req->read.peer_vl);
+		tag32 = PSMX2_RMA_BIT;
 		PSMX2_TAG32_LONG_READ(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->read.context, tag32);
 		err = psm2_mq_isend2(trx_ctxt->psm2_mq,
@@ -595,13 +581,11 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	int chunk_size;
 	size_t offset = 0;
 	psm2_epaddr_t psm2_epaddr;
-	uint8_t vlane;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	uint32_t tag32;
 	size_t idx;
 	int err;
-	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -637,28 +621,22 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
-		vlane = 0;
-		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = src_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
-		vlane = av->vlanes[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!src_addr)
 			return -FI_EINVAL;
 
 		psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
-		vlane = PSMX2_ADDR_TO_VL(src_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_READ, ep_priv,
-				      (sep_target ? ep_priv :
-					ep_priv->domain->eps[vlane]),
+		return psmx2_rma_self(PSMX2_AM_REQ_READ, ep_priv, ep_priv,
 				      buf, len, desc, addr, key,
 				      context, flags, 0);
 
@@ -686,11 +664,9 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_reply_short;
 
 	args[0].u32w0 = 0;
-	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
-	PSMX2_AM_SET_DST(args[0].u32w0, vlane);
 
 	if (psmx2_env.tagged_rma && len > chunk_size) {
-		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, vlane, ep_priv->vlane);
+		tag32 = PSMX2_RMA_BIT;
 		PSMX2_TAG32_LONG_READ(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
@@ -746,7 +722,6 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	int chunk_size;
 	size_t offset = 0;
 	psm2_epaddr_t psm2_epaddr;
-	uint8_t vlane;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	uint32_t tag32;
@@ -755,7 +730,6 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	void *long_buf = NULL;
 	int i;
 	int err;
-	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -788,28 +762,22 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
-		vlane = 0;
-		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = src_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
-		vlane = av->vlanes[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!src_addr)
 			return -FI_EINVAL;
 
 		psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
-		vlane = PSMX2_ADDR_TO_VL(src_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_READV, ep_priv,
-				      (sep_target ? ep_priv :
-					ep_priv->domain->eps[vlane]),
+		return psmx2_rma_self(PSMX2_AM_REQ_READV, ep_priv, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, 0);
 
@@ -865,8 +833,6 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	/* Use short protocol for all but the last segment (long_len) */
 	args[0].u32w0 = 0;
-	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
-	PSMX2_AM_SET_DST(args[0].u32w0, vlane);
 	PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_READ);
 	args[1].u64 = (uint64_t)(uintptr_t)req;
 	args[3].u64 = key;
@@ -891,7 +857,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	/* Use the long protocol for the last segment */
 	if (long_len) {
-		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, vlane, ep_priv->vlane);
+		tag32 = PSMX2_RMA_BIT;
 		PSMX2_TAG32_LONG_READ(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
@@ -982,7 +948,6 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	psm2_epaddr_t psm2_epaddr;
-	uint8_t vlane;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag;
 	uint32_t tag32;
@@ -990,7 +955,6 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	void *psm2_context;
 	int no_event;
 	int err;
-	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1027,28 +991,22 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
-		vlane = 0;
-		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
-		vlane = av->vlanes[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
 
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
-		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_WRITE, ep_priv,
-				      (sep_target ? ep_priv :
-					ep_priv->domain->eps[vlane]),
+		return psmx2_rma_self(PSMX2_AM_REQ_WRITE, ep_priv, ep_priv,
 				      (void *)buf, len, desc, addr,
 				      key, context, flags, data);
 
@@ -1094,11 +1052,9 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	chunk_size = ep_priv->trx_ctxt->psm2_am_param.max_request_short;
 
 	args[0].u32w0 = 0;
-	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
-	PSMX2_AM_SET_DST(args[0].u32w0, vlane);
 
 	if (psmx2_env.tagged_rma && len > chunk_size) {
-		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, ep_priv->vlane, vlane);
+		tag32 = PSMX2_RMA_BIT;
 		PSMX2_TAG32_LONG_WRITE(tag32);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 		PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_WRITE_LONG);
@@ -1175,7 +1131,6 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	psm2_epaddr_t psm2_epaddr;
-	uint8_t vlane;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag;
 	uint32_t tag32;
@@ -1186,7 +1141,6 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	uint8_t *buf, *p;
 	int i;
 	int err;
-	int sep_target = 0;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -1220,28 +1174,22 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
-		vlane = 0;
-		sep_target = 1;
 	} else if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
 			return err;
 
-		psm2_epaddr = av->epaddrs[idx];
-		vlane = av->vlanes[idx];
+		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
 	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
 
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
-		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_WRITEV, ep_priv,
-				      (sep_target ? ep_priv :
-					ep_priv->domain->eps[vlane]),
+		return psmx2_rma_self(PSMX2_AM_REQ_WRITEV, ep_priv, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, data);
 
@@ -1289,8 +1237,6 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		PSMX2_CTXT_EP(&req->fi_context) = ep_priv;
 
 		args[0].u32w0 = 0;
-		PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
-		PSMX2_AM_SET_DST(args[0].u32w0, vlane);
 		PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_WRITE);
 		args[0].u32w1 = len;
 		args[1].u64 = (uint64_t)(uintptr_t)req;
@@ -1333,8 +1279,6 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	/* Case 2: send iov in sequence */
 	args[0].u32w0 = 0;
-	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
-	PSMX2_AM_SET_DST(args[0].u32w0, vlane);
 
 	len_sent = 0;
 	for (i=0; i<count; i++) {
@@ -1344,7 +1288,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		/* Case 2.1: use long protocol for the last segment if it is large */
 		if (psmx2_env.tagged_rma && iov[i].iov_len > chunk_size &&
 		    len_sent + iov[i].iov_len == total_len) {
-			tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, ep_priv->vlane, vlane);
+			tag32 = PSMX2_RMA_BIT;
 			PSMX2_TAG32_LONG_WRITE(tag32);
 			PSMX2_SET_TAG(psm2_tag, (uint64_t)req, tag32);
 			PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_WRITE_LONG);

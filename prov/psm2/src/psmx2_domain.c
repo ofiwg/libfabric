@@ -266,6 +266,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	slist_init(&trx_ctxt->rma_queue.list);
 	slist_init(&trx_ctxt->trigger_queue.list);
 	trx_ctxt->id = psmx2_trx_ctxt_cnt++;
+	trx_ctxt->domain = domain;
 
 	return trx_ctxt;
 
@@ -443,12 +444,8 @@ static int psmx2_domain_close(fid_t fid)
 		psmx2_domain_stop_progress(domain);
 
 	fastlock_destroy(&domain->sep_lock);
-
-	fastlock_destroy(&domain->vl_lock);
-	rbtDelete(domain->mr_map);
 	fastlock_destroy(&domain->mr_lock);
 
-	psmx2_trx_ctxt_free(domain->base_trx_ctxt);
 	domain->fabric->active_domain = NULL;
 	free(domain);
 
@@ -473,7 +470,7 @@ static struct fi_ops_domain psmx2_domain_ops = {
 	.scalable_ep = psmx2_sep_open,
 	.cntr_open = psmx2_cntr_open,
 	.poll_open = fi_poll_create,
-	.stx_ctx = psmx2_stx_ctx,
+	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = psmx2_query_atomic,
 };
@@ -497,15 +494,11 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	psmx2_am_global_init();
 	psmx2_atomic_global_init();
 
-	domain->base_trx_ctxt = psmx2_trx_ctxt_alloc(domain, src_addr, -1);
-	if (!domain->base_trx_ctxt)
-		return -FI_ENODEV;
-
 	err = fastlock_init(&domain->mr_lock);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"fastlock_init(mr_lock) returns %d\n", err);
-		goto err_out_free_trx_ctxt;
+		goto err_out;
 	}
 
 	domain->mr_map = rbtNew(&psmx2_key_compare);
@@ -516,26 +509,17 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	}
 
 	domain->mr_reserved_key = 1;
-
-	err = fastlock_init(&domain->vl_lock);
-	if (err) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"fastlock_init(vl_lock) returns %d\n", err);
-		goto err_out_delete_mr_map;
-	}
-	memset(domain->vl_map, 0, sizeof(domain->vl_map));
-	domain->vl_alloc = 0;
+	domain->max_atomic_size = INT_MAX;
 
 	ofi_atomic_initialize32(&domain->sep_cnt, 0);
 	fastlock_init(&domain->sep_lock);
 	dlist_init(&domain->sep_list);
 	dlist_init(&domain->trx_ctxt_list);
 	fastlock_init(&domain->trx_ctxt_lock);
-	dlist_insert_before(&domain->base_trx_ctxt->entry, &domain->trx_ctxt_list);
 
 	/* Set active domain before psmx2_domain_enable_ep() installs the
 	 * AM handlers to ensure that psmx2_active_fabric->active_domain
-	 * is always non-NULL inside the handlers. Notice that the vlaue
+	 * is always non-NULL inside the handlers. Notice that the
 	 * active_domain becomes NULL again only when the domain is closed.
 	 * At that time the AM handlers are gone with the PSM endpoint.
 	 */
@@ -547,21 +531,16 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	if (domain->progress_thread_enabled)
 		psmx2_domain_start_progress(domain);
 
-	psmx2_am_init(domain->base_trx_ctxt);
 	return 0;
 
 err_out_reset_active_domain:
 	domain->fabric->active_domain = NULL;
-	fastlock_destroy(&domain->vl_lock);
-
-err_out_delete_mr_map:
 	rbtDelete(domain->mr_map);
 
 err_out_destroy_mr_lock:
 	fastlock_destroy(&domain->mr_lock);
 
-err_out_free_trx_ctxt:
-	psmx2_trx_ctxt_free(domain->base_trx_ctxt);
+err_out:
 	return err;
 }
 
