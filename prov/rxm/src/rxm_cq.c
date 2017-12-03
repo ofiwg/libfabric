@@ -43,16 +43,8 @@ static struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	struct util_cmap_handle *handle;
 	handle = ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
-	if (!handle) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Can't find handle!\n");
+	if (!handle)
 		return NULL;
-	}
-	if (handle->key != key) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"handle->key not matching with given key!\n");
-		return NULL;
-	}
-
 	return container_of(handle, struct rxm_conn, handle);
 }
 
@@ -525,7 +517,9 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	}
 }
 
-static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *comp)
+static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
+				  struct fi_cq_tagged_entry *comp,
+				  int err)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rx_buf *rx_buf;
@@ -534,21 +528,21 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *com
 	void *op_context;
 	ssize_t ret;
 
-	ret = fi_cq_read(msg_cq, comp, 1);
-	if (ret >= 0 || ret == -FI_EAGAIN)
-		return ret;
-
 	op_context = comp->op_context;
 	memset(&err_entry, 0, sizeof(err_entry));
 
-	if (ret == -FI_EAVAIL) {
-		OFI_CQ_READERR(&rxm_prov, FI_LOG_CQ, msg_cq,
-				ret, err_entry);
-		if (ret < 0)
+	if (err == -FI_EAVAIL) {
+		OFI_CQ_READERR(&rxm_prov, FI_LOG_CQ, msg_cq, ret, err_entry);
+		if (ret < 0) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to fi_cq_readerr on msg cq\n");
-		else
+			err_entry.prov_errno = ret;
+			err = ret;
+		} else {
 			op_context = err_entry.op_context;
+		}
+	} else {
+		err_entry.prov_errno = err;
 	}
 
 	switch (RXM_GET_PROTO_STATE(comp)) {
@@ -568,11 +562,11 @@ static ssize_t rxm_cq_read(struct fid_cq *msg_cq, struct fi_cq_tagged_entry *com
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "msg cq readerr: %s\n",
+		if (err == -FI_EAVAIL)
+			FI_WARN(&rxm_prov, FI_LOG_CQ, "msg cq error info: %s\n",
 				fi_cq_strerror(msg_cq, err_entry.prov_errno,
-					err_entry.err_data, NULL, 0));
-		assert(0);
-		return err_entry.err;
+					       err_entry.err_data, NULL, 0));
+		return -FI_EOPBADSTATE;
 	}
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
@@ -584,7 +578,7 @@ void rxm_cq_progress(struct rxm_ep *rxm_ep)
 	size_t comp_read = 0;
 
 	do {
-		ret = rxm_cq_read(rxm_ep->msg_cq, &comp);
+		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
 		if (ret == -FI_EAGAIN)
 			break;
 
@@ -600,7 +594,8 @@ void rxm_cq_progress(struct rxm_ep *rxm_ep)
 	} while (comp_read < rxm_ep->comp_per_progress);
 	return;
 err:
-	// TODO report error on RXM EP/domain since EP/CQ is broken.
+	if (rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret))
+		assert(0);
 	return;
 }
 

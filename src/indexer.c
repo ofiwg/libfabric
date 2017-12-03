@@ -54,13 +54,13 @@
 
 static int ofi_idx_grow(struct indexer *idx)
 {
-	union ofi_idx_entry *entry;
+	struct ofi_idx_entry *entry;
 	int i, start_index;
 
 	if (idx->size >= OFI_IDX_ARRAY_SIZE)
 		goto nomem;
 
-	idx->array[idx->size] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(union ofi_idx_entry));
+	idx->array[idx->size] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(struct ofi_idx_entry));
 	if (!idx->array[idx->size])
 		goto nomem;
 
@@ -85,7 +85,7 @@ nomem:
 
 int ofi_idx_insert(struct indexer *idx, void *item)
 {
-	union ofi_idx_entry *entry;
+	struct ofi_idx_entry *entry;
 	int index;
 
 	if ((index = idx->free_list) == 0) {
@@ -101,19 +101,21 @@ int ofi_idx_insert(struct indexer *idx, void *item)
 
 void *ofi_idx_remove(struct indexer *idx, int index)
 {
-	union ofi_idx_entry *entry;
+	struct ofi_idx_entry *entry;
 	void *item;
+	int entry_index = ofi_idx_entry_index(index);
 
 	entry = idx->array[ofi_idx_array_index(index)];
-	item = entry[ofi_idx_entry_index(index)].item;
-	entry[ofi_idx_entry_index(index)].next = idx->free_list;
+	item = entry[entry_index].item;
+	entry[entry_index].item = NULL;
+	entry[entry_index].next = idx->free_list;
 	idx->free_list = index;
 	return item;
 }
 
 void ofi_idx_replace(struct indexer *idx, int index, void *item)
 {
-	union ofi_idx_entry *entry;
+	struct ofi_idx_entry *entry;
 
 	entry = idx->array[ofi_idx_array_index(index)];
 	entry[ofi_idx_entry_index(index)].item = item;

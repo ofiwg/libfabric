@@ -45,7 +45,7 @@
  * indexer by setting free_list and size to 0.
  */
 
-union ofi_idx_entry {
+struct ofi_idx_entry {
 	void *item;
 	int   next;
 };
@@ -58,9 +58,10 @@ union ofi_idx_entry {
 
 struct indexer
 {
-	union ofi_idx_entry *array[OFI_IDX_ARRAY_SIZE];
-	int		 free_list;
-	int		 size;	/* Array size (used): [0, OFI_IDX_ARRAY_SIZE) */
+	struct ofi_idx_entry 	*array[OFI_IDX_ARRAY_SIZE];
+	int		 	free_list;
+	/* Array size (used): [0, OFI_IDX_ARRAY_SIZE) */
+	int		 	size;
 };
 
 #define ofi_idx_array_index(index) (index >> OFI_IDX_ENTRY_BITS)
