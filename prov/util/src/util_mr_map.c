@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <fi_enosys.h>
 #include <fi_util.h>
+#include <ofi_mr.h>
 #include <assert.h>
 #include <rbtree.h>
 
@@ -55,8 +56,8 @@ dup_mr_attr(const struct fi_mr_attr *attr)
 	return dup_attr;
 }
 
-int ofi_mr_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
-		  uint64_t *key, void *context)
+int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
+		      uint64_t *key, void *context)
 {
 	struct fi_mr_attr *item;
 
@@ -83,7 +84,7 @@ int ofi_mr_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 	return 0;
 }
 
-void *ofi_mr_get(struct ofi_mr_map *map, uint64_t key)
+void *ofi_mr_map_get(struct ofi_mr_map *map, uint64_t key)
 {
 	struct fi_mr_attr *attr;
 	void *itr, *key_ptr;
@@ -96,9 +97,9 @@ void *ofi_mr_get(struct ofi_mr_map *map, uint64_t key)
 	return attr->context;
 }
 
-int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
-		  size_t len, uint64_t key, uint64_t access,
-		  void **context)
+int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
+		      size_t len, uint64_t key, uint64_t access,
+		      void **context)
 {
 	struct fi_mr_attr *attr;
 	void *itr, *key_ptr, *addr;
@@ -129,7 +130,7 @@ int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 	return 0;
 }
 
-int ofi_mr_remove(struct ofi_mr_map *map, uint64_t key)
+int ofi_mr_map_remove(struct ofi_mr_map *map, uint64_t key)
 {
 	struct fi_mr_attr *attr;
 	void *itr, *key_ptr;

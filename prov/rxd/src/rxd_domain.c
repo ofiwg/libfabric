@@ -94,7 +94,7 @@ static int rxd_mr_close(struct fid *fid)
 	dom = mr->domain;
 
 	fastlock_acquire(&dom->util_domain.lock);
-	err = ofi_mr_remove(&dom->mr_map, mr->key);
+	err = ofi_mr_map_remove(&dom->mr_map, mr->key);
 	fastlock_release(&dom->util_domain.lock);
 	if (err)
 		return err;
@@ -138,7 +138,7 @@ static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr->domain = dom;
 	_mr->flags = flags;
 
-	ret = ofi_mr_insert(&dom->mr_map, attr, &key, _mr);
+	ret = ofi_mr_map_insert(&dom->mr_map, attr, &key, _mr);
 	if (ret != 0) {
 		goto err;
 	}
@@ -198,8 +198,8 @@ int rxd_mr_verify(struct rxd_domain *rxd_domain, ssize_t len,
 	int ret;
 
 	fastlock_acquire(&rxd_domain->util_domain.lock);
-	ret = ofi_mr_verify(&rxd_domain->mr_map, io_addr, len,
-		    key, access, NULL);
+	ret = ofi_mr_map_verify(&rxd_domain->mr_map, io_addr, len,
+				key, access, NULL);
 	fastlock_release(&rxd_domain->util_domain.lock);
 	return ret;
 }

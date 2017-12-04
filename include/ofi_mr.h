@@ -44,6 +44,36 @@
 #include <fi_lock.h>
 #include <fi_list.h>
 
+#define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
+
+/* FI_LOCAL_MR is valid in pre-libfaric-1.5 and can be valid in
+ * post-libfabric-1.5 */
+#define OFI_CHECK_MR_LOCAL(info)						\
+	((info->domain_attr->mr_mode & FI_MR_LOCAL) ||				\
+	 (!(info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE)) &&	\
+	  (info->mode & FI_LOCAL_MR)))
+
+#define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |			\
+				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
+
+/* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
+ * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
+ * The provider is assumed only to set FI_MR_LOCAL correctly.
+ */
+static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
+					    const struct fi_info *user_info,
+					    const struct fi_info *prov_info)
+{
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5)) ||
+	    (user_info->domain_attr &&
+	     !(user_info->domain_attr->mr_mode & FI_MR_LOCAL))) {
+		return (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
+			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
+	} else {
+		return prov_info->mode;
+	}
+}
+
 /*
  * Memory notifier - Report memory mapping changes to address ranges
  */
@@ -85,5 +115,30 @@ int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 void ofi_monitor_unsubscribe(void *addr, size_t len,
 			      struct ofi_subscription *subscription);
 struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq);
+
+/*
+ * MR map
+ */
+
+struct ofi_mr_map {
+	const struct fi_provider *prov;
+	void			*rbtree;
+	uint64_t		key;
+	enum fi_mr_mode		mode;
+};
+
+int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,
+		    struct ofi_mr_map *map);
+void ofi_mr_map_close(struct ofi_mr_map *map);
+
+int ofi_mr_map_insert(struct ofi_mr_map *map,
+		      const struct fi_mr_attr *attr,
+		      uint64_t *key, void *context);
+int ofi_mr_map_remove(struct ofi_mr_map *map, uint64_t key);
+void *ofi_mr_map_get(struct ofi_mr_map *map,  uint64_t key);
+
+int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
+		      size_t len, uint64_t key, uint64_t access,
+		      void **context);
 
 #endif /* _OFI_MR_H_ */
