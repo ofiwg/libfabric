@@ -412,7 +412,7 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 		if (flags & (FI_READ | FI_SYMMETRIC)) {
 			FI_INFO(&psmx_prov, FI_LOG_AV,
-				"attr->flags=%x, supported=%x\n",
+				"attr->flags=%"PRIu64", supported=%llu\n",
 				attr->flags, FI_EVENT);
 			return -FI_ENOSYS;
 		}

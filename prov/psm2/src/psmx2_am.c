@@ -290,8 +290,8 @@ int psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt)
 		if (psmx2_am_global.cnt >= PSMX2_AM_MAX_TRX_CTXT) {
 			psmx2_unlock(&psmx2_am_global.lock, 1);
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
-				"number of PSM2 endpoints exceed limit %d.\n"
-				"at indecies %d, %d\n", PSMX2_AM_MAX_TRX_CTXT);
+				"number of PSM2 endpoints exceed limit %d.\n",
+				PSMX2_AM_MAX_TRX_CTXT);
 			return -FI_EBUSY;
 		}
 

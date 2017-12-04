@@ -518,7 +518,8 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 	if (info && info->ep_attr && info->ep_attr->auth_key) {
 		if (info->ep_attr->auth_key_size != sizeof(psm2_uuid_t)) {
 			FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL,
-				"Invalid auth_key_len %d, should be %d.\n",
+				"Invalid auth_key_len %"PRIu64
+				", should be %"PRIu64".\n",
 				info->ep_attr->auth_key_size,
 				sizeof(psm2_uuid_t));
 			goto errout;
@@ -919,18 +920,18 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 		goto errout;
 
 	if (info && info->ep_attr) {
-		if (info->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt) {
+		if (info->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
 			FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL,
-				"tx_ctx_cnt %d exceed limit %d.\n",
+				"tx_ctx_cnt %"PRIu64" exceed limit %d.\n",
 				info->ep_attr->tx_ctx_cnt,
-				psmx2_env.max_trx_ctxt);
+				psmx2_env.sep_trx_ctxt);
 			goto errout;
 		}
-		if (info->ep_attr->rx_ctx_cnt > psmx2_env.max_trx_ctxt) {
+		if (info->ep_attr->rx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
 			FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL,
-				"rx_ctx_cnt %d exceed limit %d.\n",
+				"rx_ctx_cnt %"PRIu64" exceed limit %d.\n",
 				info->ep_attr->rx_ctx_cnt,
-				psmx2_env.max_trx_ctxt);
+				psmx2_env.sep_trx_ctxt);
 			goto errout;
 		}
 		ctxt_cnt = info->ep_attr->tx_ctx_cnt;
@@ -969,8 +970,10 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	for (i = 0; i < ctxt_cnt; i++) {
 		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, i);
-		if (!trx_ctxt)
+		if (!trx_ctxt) {
+			err = -FI_ENOMEM;
 			goto errout_free_ctxt;
+		}
 
 		sep_priv->ctxts[i].trx_ctxt = trx_ctxt;
 
@@ -1018,6 +1021,7 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	ofi_ns_add_local_name(&domain_priv->fabric->name_server,
 			      &sep_priv->service, &ep_name);
 
+	psmx2_domain_acquire(domain_priv);
 	*sep = &sep_priv->ep;
 	return 0;
 

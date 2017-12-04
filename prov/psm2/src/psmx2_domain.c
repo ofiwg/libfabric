@@ -32,6 +32,8 @@
 
 #include "psmx2.h"
 
+static int psmx2_trx_ctxt_cnt = 0;
+
 void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	int err;
@@ -76,6 +78,13 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	struct psm2_ep_open_opts opts;
 	int should_retry = 0;
 	int err;
+
+	if (psmx2_trx_ctxt_cnt >= psmx2_env.max_trx_ctxt) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"number of Tx/Rx contexts exceeds limit (%d).\n",
+			psmx2_env.max_trx_ctxt);
+		return NULL;
+	}
 
 	trx_ctxt = calloc(1, sizeof(*trx_ctxt));
 	if (!trx_ctxt) {
@@ -139,6 +148,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	fastlock_init(&trx_ctxt->trigger_queue.lock);
 	slist_init(&trx_ctxt->rma_queue.list);
 	slist_init(&trx_ctxt->trigger_queue.list);
+	trx_ctxt->id = psmx2_trx_ctxt_cnt++;
 
 	return trx_ctxt;
 
@@ -516,10 +526,12 @@ int psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap)
 {
 	if ((domain->caps & ep_cap & ~PSMX2_SUB_CAPS) !=
 	    (ep_cap & ~PSMX2_SUB_CAPS)) {
+		uint64_t mask = ~PSMX2_SUB_CAPS;
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"caps mismatch: domain->caps=%llx, "
-			"ep->caps=%llx, mask=%llx\n",
-			domain->caps, ep_cap, ~PSMX2_SUB_CAPS);
+			"caps mismatch: domain->caps=%s,\n ep->caps=%s,\n mask=%s\n",
+			fi_tostr(&domain->caps, FI_TYPE_CAPS),
+			fi_tostr(&ep_cap, FI_TYPE_CAPS),
+			fi_tostr(&mask, FI_TYPE_CAPS));
 		return -FI_EOPNOTSUPP;
 	}
 
@@ -536,10 +548,12 @@ int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 
 	if ((domain->caps & ep_cap & ~PSMX2_SUB_CAPS) !=
 	    (ep_cap & ~PSMX2_SUB_CAPS)) {
+		uint64_t mask = ~PSMX2_SUB_CAPS;
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"caps mismatch: domain->caps=%llx, "
-			"ep->caps=%llx, mask=%llx\n",
-			domain->caps, ep_cap, ~PSMX2_SUB_CAPS);
+			"caps mismatch: domain->caps=%s,\n ep->caps=%s,\n mask=%s\n",
+			fi_tostr(&domain->caps, FI_TYPE_CAPS),
+			fi_tostr(&ep_cap, FI_TYPE_CAPS),
+			fi_tostr(&mask, FI_TYPE_CAPS));
 		return -FI_EOPNOTSUPP;
 	}
 

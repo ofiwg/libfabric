@@ -716,7 +716,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 		return 0;
 	}
 
-	if (no_completion && !context) {
+	if (no_completion) {
 		fi_context = &ep_priv->nocomp_send_context;
 	} else {
 		if (!context)

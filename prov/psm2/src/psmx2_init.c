@@ -49,6 +49,7 @@ struct psmx2_env psmx2_env = {
 	.prog_affinity	= NULL,
 	.sep		= 0,
 	.max_trx_ctxt	= 1,
+	.sep_trx_ctxt	= 0,
 	.num_devunits	= 1,
 	.inject_size	= PSMX2_INJECT_SIZE,
 	.lock_level	= 2,
@@ -77,6 +78,7 @@ static int psmx2_check_sep_cap(void)
 
 	psmx2_env.sep = 1;
 	psmx2_env.max_trx_ctxt = PSMX2_MAX_TRX_CTXT;
+	psmx2_env.sep_trx_ctxt = PSMX2_MAX_TRX_CTXT - 1;
 
 	return 1;
 }
@@ -147,23 +149,38 @@ static int psmx2_read_sysfs_int(int unit, char *entry)
 
 static void psmx2_update_sep_cap(void)
 {
-	int i, n = 0;
+	int i;
+	int nctxts = 0;
+	int nfreectxts = 0;
 
-	for (i = 0; i < psmx2_env.num_devunits; i++)
-		n += psmx2_read_sysfs_int(i, "nfreectxts");
+	for (i = 0; i < psmx2_env.num_devunits; i++) {
+		nctxts += psmx2_read_sysfs_int(i, "nctxts");
+		nfreectxts += psmx2_read_sysfs_int(i, "nfreectxts");
+	}
 
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "Total free hfi1 contexts: %d\n", n);
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"hfi1 contexts: total %d, free %d\n",
+		nctxts, nfreectxts);
 
-	/* reserve one context for regular ep */
-	if (n > 0)
-		n--;
+	if (nctxts > PSMX2_MAX_TRX_CTXT)
+		nctxts = PSMX2_MAX_TRX_CTXT;
 
-	if (n > PSMX2_MAX_TRX_CTXT)
-		n = PSMX2_MAX_TRX_CTXT;
+	if (nfreectxts > PSMX2_MAX_TRX_CTXT)
+		nfreectxts = PSMX2_MAX_TRX_CTXT;
 
-	psmx2_env.max_trx_ctxt = n;
+	psmx2_env.max_trx_ctxt = nctxts;
+	psmx2_env.sep_trx_ctxt = nfreectxts;
+
+	/*
+	 * One context is reserved for regular endpoints. It is allocated
+	 * when the domain is opened.
+	 */
+	if ((!psmx2_active_fabric || !psmx2_active_fabric->active_domain) &&
+	    psmx2_env.sep_trx_ctxt)
+		--psmx2_env.sep_trx_ctxt;
+
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "SEP: %d Tx/Rx contexts allowed.\n",
-		psmx2_env.max_trx_ctxt);
+		psmx2_env.sep_trx_ctxt);
 }
 
 static int psmx2_getinfo(uint32_t version, const char *node,
@@ -238,8 +255,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_init_env();
 
 	psmx2_update_sep_cap();
-	tx_ctx_cnt = psmx2_env.max_trx_ctxt;
-	rx_ctx_cnt = psmx2_env.max_trx_ctxt;
+	tx_ctx_cnt = psmx2_env.sep_trx_ctxt;
+	rx_ctx_cnt = psmx2_env.sep_trx_ctxt;
 
 	if (node &&
 	    !ofi_str_toaddr(node, &fmt, &addr, &len) &&
@@ -252,7 +269,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		} else {
 			dest_addr = addr;
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"'%s' is taken as dest_addr: <epid=0x%llx, vl=%d>\n",
+				"'%s' is taken as dest_addr: <epid=%"PRIu64", vl=%d>\n",
 				node, dest_addr->epid, dest_addr->vlane);
 		}
 		node = NULL;
@@ -309,7 +326,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			ofi_ns_resolve_name(&ns, node, &svc);
 		if (dest_addr) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"'%s:%u' resolved to <epid=0x%llx, vl=%d>:%d\n",
+				"'%s:%u' resolved to <epid=%"PRIu64", vl=%d>:%d\n",
 				node, svc0, dest_addr->epid,
 				dest_addr->vlane, svc);
 		} else {
@@ -361,47 +378,49 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt &&
+			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt &&
 			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->tx_ctx_cnt=%d, max=%d\n",
+					"hints->ep_attr->tx_ctx_cnt=%"PRIu64", available=%d\n",
 					hints->ep_attr->tx_ctx_cnt,
-					psmx2_env.max_trx_ctxt);
+					psmx2_env.sep_trx_ctxt);
 				goto err_out;
 			}
 			tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
 
-			if (hints->ep_attr->rx_ctx_cnt > psmx2_env.max_trx_ctxt) {
+			if (hints->ep_attr->rx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->rx_ctx_cnt=%d, max=%d\n",
+					"hints->ep_attr->rx_ctx_cnt=%"PRIu64", available=%d\n",
 					hints->ep_attr->rx_ctx_cnt,
-					psmx2_env.max_trx_ctxt);
+					psmx2_env.sep_trx_ctxt);
 				goto err_out;
 			}
 			rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
 		}
 
 		if ((hints->caps & PSMX2_CAPS) != hints->caps) {
+			uint64_t psmx2_caps = PSMX2_CAPS;
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->caps=0x%llx, supported=0x%llx\n",
-				hints->caps, PSMX2_CAPS);
+				"hints->caps=%s,\n supported=%s\n",
+				fi_tostr(&hints->caps, FI_TYPE_CAPS),
+				fi_tostr(&psmx2_caps, FI_TYPE_CAPS));
 			goto err_out;
 		}
 
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->op_flags & PSMX2_OP_FLAGS) !=
 			    hints->tx_attr->op_flags) {
+				uint64_t psmx2_op_flags = PSMX2_OP_FLAGS;
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx->flags=0x%llx, "
-					"supported=0x%llx\n",
-					hints->tx_attr->op_flags,
-					PSMX2_OP_FLAGS);
+					"hints->caps=%s,\n supported=%s\n",
+					fi_tostr(&hints->tx_attr->op_flags, FI_TYPE_OP_FLAGS),
+					fi_tostr(&psmx2_op_flags, FI_TYPE_OP_FLAGS));
 				goto err_out;
 			}
 			if (hints->tx_attr->inject_size > PSMX2_INJECT_SIZE) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->inject_size=%ld,"
-					"supported=%ld.\n",
+					"hints->tx_attr->inject_size=%"PRIu64
+					", supported=%d.\n",
 					hints->tx_attr->inject_size,
 					PSMX2_INJECT_SIZE);
 				goto err_out;
@@ -411,17 +430,23 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		if (hints->rx_attr &&
 		    (hints->rx_attr->op_flags & PSMX2_OP_FLAGS) !=
 		     hints->rx_attr->op_flags) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->rx->flags=0x%llx, supported=0x%llx\n",
-				hints->rx_attr->op_flags, PSMX2_OP_FLAGS);
+			uint64_t psmx2_op_flags = PSMX2_OP_FLAGS;
+			FI_INFO(&psmx2_prov, FI_LOG_CORE, "hints->rx->flags=%s,\n"
+				" supported=%s.\n",
+				fi_tostr(&hints->rx_attr->op_flags,
+					 FI_TYPE_OP_FLAGS),
+				fi_tostr(&psmx2_op_flags,
+					 FI_TYPE_OP_FLAGS));
 			goto err_out;
 		}
 
 		if ((hints->caps & FI_TAGGED) || (hints->caps & FI_MSG)) {
 			if ((hints->mode & FI_CONTEXT) != FI_CONTEXT) {
+				uint64_t psmx2_mode = FI_CONTEXT;
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->mode=0x%llx, required=0x%llx\n",
-					hints->mode, FI_CONTEXT);
+					"hints->mode=%s,\n required=%s.\n",
+					fi_tostr(&hints->mode, FI_TYPE_MODE),
+					fi_tostr(&psmx2_mode, FI_TYPE_MODE));
 				goto err_out;
 			}
 		} else {
@@ -459,8 +484,16 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->domain_attr->mr_mode & FI_MR_BASIC)
+			if (hints->domain_attr->mr_mode == FI_MR_BASIC) {
 				mr_mode = FI_MR_BASIC;
+			} else if (hints->domain_attr->mr_mode == FI_MR_SCALABLE) {
+				mr_mode = FI_MR_SCALABLE;
+			} else if (hints->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
+				FI_INFO(&psmx2_prov, FI_LOG_CORE,
+					"hints->domain_attr->mr_mode has FI_MR_BASIC or FI_MR_SCALABLE "
+					"combined with other bits\n");
+				goto err_out;
+			}
 
 			switch (hints->domain_attr->threading) {
 			case FI_THREAD_UNSPEC:
@@ -520,8 +553,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		if (hints->ep_attr) {
 			if (hints->ep_attr->max_msg_size > PSMX2_MAX_MSG_SIZE) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->max_msg_size=%ld,"
-					"supported=%ld.\n",
+					"hints->ep_attr->max_msg_size=%"PRIu64","
+					"supported=%llu.\n",
 					hints->ep_attr->max_msg_size,
 					PSMX2_MAX_MSG_SIZE);
 				goto err_out;
@@ -532,20 +565,22 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->msg_order & PSMX2_MSG_ORDER) !=
 			    hints->tx_attr->msg_order) {
+				uint64_t psmx2_msg_order = PSMX2_MSG_ORDER;
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->tx_attr->msg_order,
-					PSMX2_MSG_ORDER);
+					"hints->tx_attr->msg_order=%s,\n"
+					"supported=%s.\n",
+					fi_tostr(&hints->tx_attr->msg_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx2_msg_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if ((hints->tx_attr->comp_order & PSMX2_COMP_ORDER) !=
 			    hints->tx_attr->comp_order) {
+				uint64_t psmx2_comp_order = PSMX2_COMP_ORDER;
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->tx_attr->comp_order,
-					PSMX2_COMP_ORDER);
+					"hints->tx_attr->msg_order=%s,\n"
+					"supported=%s.\n",
+					fi_tostr(&hints->tx_attr->comp_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx2_comp_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if (hints->tx_attr->inject_size > PSMX2_INJECT_SIZE) {
@@ -558,8 +593,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			}
 			if (hints->tx_attr->iov_limit > PSMX2_IOV_MAX_COUNT) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->iov_limit=%ld,"
-					"supported=%d.\n",
+					"hints->tx_attr->iov_limit=%"PRIu64
+					", supported=%"PRIu64".\n",
 					hints->tx_attr->iov_limit,
 					PSMX2_IOV_MAX_COUNT);
 				goto err_out;
@@ -576,20 +611,20 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		if (hints->rx_attr) {
 			if ((hints->rx_attr->msg_order & PSMX2_MSG_ORDER) !=
 			    hints->rx_attr->msg_order) {
+				uint64_t psmx2_msg_order = PSMX2_MSG_ORDER;
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->rx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->rx_attr->msg_order,
-					PSMX2_MSG_ORDER);
+					"hints->rx_attr->msg_order=%s,\n supported=%s.\n",
+					fi_tostr(&hints->rx_attr->msg_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx2_msg_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if ((hints->rx_attr->comp_order & PSMX2_COMP_ORDER) !=
 			    hints->rx_attr->comp_order) {
+				uint64_t psmx2_comp_order = PSMX2_COMP_ORDER;
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->rx_attr->msg_order=%lx,"
-					"supported=%lx.\n",
-					hints->rx_attr->comp_order,
-					PSMX2_COMP_ORDER);
+					"hints->rx_attr->comp_order=%s,\n supported=%s.\n",
+					fi_tostr(&hints->rx_attr->comp_order, FI_TYPE_MSG_ORDER),
+					fi_tostr(&psmx2_comp_order, FI_TYPE_MSG_ORDER));
 				goto err_out;
 			}
 			if (hints->rx_attr->iov_limit > 1) {
@@ -632,10 +667,10 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->domain_attr->cq_data_size = 4;
 	psmx2_info->domain_attr->cq_cnt = 65535;
 	psmx2_info->domain_attr->ep_cnt = 65535;
-	psmx2_info->domain_attr->tx_ctx_cnt = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->rx_ctx_cnt = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->max_ep_tx_ctx = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->max_ep_rx_ctx = psmx2_env.max_trx_ctxt;
+	psmx2_info->domain_attr->tx_ctx_cnt = psmx2_env.sep_trx_ctxt;
+	psmx2_info->domain_attr->rx_ctx_cnt = psmx2_env.sep_trx_ctxt;
+	psmx2_info->domain_attr->max_ep_tx_ctx = psmx2_env.sep_trx_ctxt;
+	psmx2_info->domain_attr->max_ep_rx_ctx = psmx2_env.sep_trx_ctxt;
 	psmx2_info->domain_attr->max_ep_stx_ctx = 65535;
 	psmx2_info->domain_attr->max_ep_srx_ctx = 0;
 	psmx2_info->domain_attr->cntr_cnt = 65535;
