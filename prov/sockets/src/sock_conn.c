@@ -98,12 +98,19 @@ int sock_conn_map_init(struct sock_ep *ep, int init_size)
 	if (!map->table)
 		return -FI_ENOMEM;
 
+	map->epoll_ctxs = calloc(init_size, sizeof(*map->epoll_ctxs));
+	if (!map->epoll_ctxs) {
+		free(map->table);
+		return -FI_ENOMEM;
+	}
+
 	ret = fi_epoll_create(&map->epoll_set);
 	if (ret < 0) {
 		SOCK_LOG_ERROR("failed to create epoll set, "
 			       "error - %d (%s)\n", ret,
 			       strerror(ret));
 		free(map->table);
+		free(map->epoll_ctxs);
 		return -FI_ENOMEM;
 	}
 
@@ -141,6 +148,9 @@ void sock_conn_map_destroy(struct sock_ep_attr *ep_attr)
 	}
 	free(cmap->table);
 	cmap->table = NULL;
+	free(cmap->epoll_ctxs);
+	cmap->epoll_ctxs = NULL;
+	cmap->epoll_ctxs_sz = 0;
 	cmap->used = cmap->size = 0;
 	fi_epoll_close(cmap->epoll_set);
 	fastlock_destroy(&cmap->lock);

@@ -205,6 +205,8 @@ struct sock_conn {
 struct sock_conn_map {
 	struct sock_conn *table;
 	fi_epoll_t epoll_set;
+	void **epoll_ctxs;
+	int epoll_ctxs_sz;
 	int used;
 	int size;
 	fastlock_t lock;
