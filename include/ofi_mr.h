@@ -79,17 +79,24 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
  * Memory notifier - Report memory mapping changes to address ranges
  */
 
+struct ofi_mem_monitor;
 struct ofi_subscription;
 struct ofi_notification_queue;
 
+typedef
+int (*ofi_monitor_subscribe_cb)(struct ofi_mem_monitor *notifier, void *addr,
+				size_t len, struct ofi_subscription *subscription);
+typedef
+void (*ofi_monitor_unsubscribe_cb)(struct ofi_mem_monitor *notifier, void *addr,
+				   size_t len, struct ofi_subscription *subscription);
+typedef
+struct ofi_subscription *(*ofi_monitor_get_event_cb)(struct ofi_mem_monitor *notifier);
+
 struct ofi_mem_monitor {
 	ofi_atomic32_t			refcnt;
-
-	int (*subscribe)(struct ofi_mem_monitor *notifier, void *addr,
-			 size_t len, struct ofi_subscription *subscription);
-	void (*unsubscribe)(struct ofi_mem_monitor *notifier, void *addr,
-			    size_t len, struct ofi_subscription *subscription);
-	struct ofi_subscription *(*get_event)(struct ofi_mem_monitor *notifier);
+	ofi_monitor_subscribe_cb	subscribe;
+	ofi_monitor_unsubscribe_cb	unsubscribe;
+	ofi_monitor_get_event_cb	get_event;
 };
 
 struct ofi_notification_queue {
@@ -217,4 +224,40 @@ int ofi_mr_cache_register(struct ofi_mr_cache *cache,
 int ofi_mr_cache_deregister(struct ofi_mr_cache *cache,
 			    struct ofi_mr_cache_entry *entry);
 
+/*
+ * MR manager
+ */
+
+struct ofi_mr_mgr_attr {
+	struct util_domain	*domain;
+	struct {
+		int		reg_size;
+		int		stale_size;
+		int		elem_size;
+		ofi_mr_reg_cb	reg_callback;
+		ofi_mr_dereg_cb	dereg_callback;
+	} cache_attr;
+	struct {
+		ofi_monitor_subscribe_cb	subscribe;
+		ofi_monitor_unsubscribe_cb	unsubscribe;
+		ofi_monitor_get_event_cb	get_event;
+	} monitor_attr;
+};
+
+struct ofi_mr_mgr {
+	struct ofi_mr_cache	cache;
+	struct ofi_mem_monitor	monitor;
+	struct util_domain	*domain;
+};
+
+struct ofi_mr_mgr_entry {
+	struct ofi_mr_cache_entry	**cache_entry;
+	size_t				count;
+};
+
+int ofi_mr_mgr_init(struct ofi_mr_mgr *mgr, struct ofi_mr_mgr_attr *attr);
+void ofi_mr_mgr_cleanup(struct ofi_mr_mgr *mgr);
+struct ofi_mr_mgr_entry *
+ofi_mr_mgr_insert(struct ofi_mr_mgr *mgr, const struct fi_mr_attr *mr_attr);
+void ofi_mr_mgr_remove(struct ofi_mr_mgr *mgr, struct ofi_mr_mgr_entry *entry);
 #endif /* _OFI_MR_H_ */

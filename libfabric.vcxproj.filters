@@ -366,6 +366,9 @@
     <ClCompile Include="prov\util\src\util_mr_cache.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\util\src\util_mr_mgr.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h">
