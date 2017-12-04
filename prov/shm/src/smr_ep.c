@@ -650,11 +650,6 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	peer_id = (int) addr;
-	if (smr_peer_addr(ep->region)[peer_id].addr == FI_ADDR_UNSPEC) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"peer not ready to receive messages\n");
-		return -FI_EAGAIN;
-	}
 
 	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
 		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
@@ -948,6 +943,8 @@ static int smr_ep_close(struct fid *fid)
 		smr_free(ep->region);
 
 	smr_recv_fs_free(ep->recv_fs);
+	smr_unexp_fs_free(ep->unexp_fs);
+	smr_pend_fs_free(ep->pend_fs);
 	free(ep);
 	return 0;
 }
