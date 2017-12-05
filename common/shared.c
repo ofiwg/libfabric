@@ -82,6 +82,7 @@ char *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
+char default_oob_sock_port[8] = "3000";
 const char *greeting = "Hello from Client!";
 
 
@@ -91,6 +92,7 @@ struct timespec start, end;
 
 int listen_sock = -1;
 int sock = -1;
+int oob_sock = -1;
 
 struct fi_av_attr av_attr = {
 	.type = FI_AV_MAP,
@@ -556,6 +558,64 @@ int ft_alloc_active_res(struct fi_info *fi)
 	return 0;
 }
 
+int ft_init_oob()
+{
+	int ret, op;
+	struct addrinfo *ai;
+
+	if (!opts.oob_port)
+		opts.oob_port = default_oob_sock_port;
+
+	if (!opts.dst_addr) {
+		ret = ft_sock_listen(opts.oob_port);
+		if (ret)
+			return ret;
+
+		oob_sock = accept(listen_sock, NULL, 0);
+			if (oob_sock < 0) {
+			ret = oob_sock;
+			perror("accept");
+			return ret;
+		}
+
+		op = 1;
+		ret = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY,
+				  (void *) &op, sizeof(op));
+		if (ret)
+			perror("setsockopt");
+	} else {
+
+		ret = getaddrinfo(opts.dst_addr, opts.oob_port, NULL, &ai);
+		if (ret) {
+			perror("getaddrinfo");
+			return ret;
+		}
+
+		oob_sock = socket(ai->ai_family, SOCK_STREAM, 0);
+		if (oob_sock < 0) {
+			perror("socket");
+			ret = oob_sock;
+			goto free;
+		}
+
+		ret = 1;
+		ret = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY, (void *) &ret, sizeof(ret));
+		if (ret)
+			perror("setsockopt");
+
+		ret = connect(oob_sock, ai->ai_addr, ai->ai_addrlen);
+		if (ret) {
+			perror("connect");
+			close(oob_sock);
+		}
+	}
+	return 0;
+
+free:
+	freeaddrinfo(ai);
+	return ret;
+}
+
 int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 {
 	char *node, *service;
@@ -600,6 +660,12 @@ int ft_init_fabric_cm(void)
 int ft_start_server(void)
 {
 	int ret;
+
+	if (opts.oob_sync) {
+		ret = ft_init_oob();
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_getinfo(hints, &fi_pep);
 	if (ret)
@@ -757,6 +823,12 @@ int ft_client_connect(void)
 {
 	int ret;
 
+	if (opts.oob_sync) {
+		ret = ft_init_oob();
+		if (ret)
+			return ret;
+	}
+
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
 		return ret;
@@ -783,6 +855,12 @@ int ft_client_connect(void)
 int ft_init_fabric(void)
 {
 	int ret;
+
+	if (opts.oob_sync) {
+		ret = ft_init_oob();
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
@@ -894,7 +972,8 @@ int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
 		return ret;
 	}
 
-	if (fi->rx_attr->op_flags != FI_MULTI_RECV && post_initial_recv) {
+	if (fi->rx_attr->op_flags != FI_MULTI_RECV && post_initial_recv
+		&& (fi->caps & (FI_MSG | FI_TAGGED))) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
@@ -957,12 +1036,49 @@ int ft_init_av(void)
 	return ft_init_av_dst_addr(av, ep, &remote_fi_addr);
 }
 
+int ft_exchange_addresses_oob(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
+		fi_addr_t *remote_addr)
+{
+	int ret;
+	size_t addrlen = FT_MAX_CTRL_MSG;
+
+	ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
+			 &addrlen);
+	if (ret) {
+		FT_PRINTERR("fi_getname", ret);
+		return ret;
+	}
+
+	ret = ft_sock_send(oob_sock, (char *) tx_buf + ft_tx_prefix_size(),  FT_MAX_CTRL_MSG);
+	if (ret)
+		return ret;
+
+	ret = ft_sock_recv(oob_sock, (char *) rx_buf + ft_rx_prefix_size(), FT_MAX_CTRL_MSG);
+	if (ret)
+		return ret;
+
+	ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
+			1, remote_addr, 0, NULL);
+	if (ret)
+		return ret;	
+
+	return 0;
+}
+
 /* TODO: retry send for unreliable endpoints */
 int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr)
 {
 	size_t addrlen;
 	int ret;
+
+	if (opts.oob_sync) {
+		ret = ft_exchange_addresses_oob(av_ptr, ep_ptr, remote_addr);
+		if (ret)
+			return ret;
+		else
+			goto set_rx_seq_close;
+	}
 
 	if (opts.dst_addr) {
 		ret = ft_av_insert(av_ptr, fi->dest_addr, 1, remote_addr, 0, NULL);
@@ -999,6 +1115,17 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 			return ret;
 	}
 
+set_rx_seq_close:
+	/*
+	* For a test which does not have MSG or TAGGED
+	* capabilities, but has RMA/Atomics and uses the oob_sync.
+	* If no recv is going to be posted,
+	* then the rx_seq needs to be incremented to wait on the first RMA/Atomic
+	* completion.
+	*/
+	if (!(fi->caps & FI_MSG) && !(fi->caps & FI_TAGGED) && opts.oob_sync)
+		rx_seq++;
+
 	return 0;
 }
 
@@ -1008,6 +1135,9 @@ int ft_init_av_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 {
 	size_t addrlen;
 	int ret;
+
+	if (opts.oob_sync)
+		return ft_exchange_addresses_oob(av_ptr, ep_ptr, remote_addr);
 
 	if (opts.dst_addr) {
 		addrlen = FT_MAX_CTRL_MSG;
@@ -1963,22 +2093,43 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str)
 	}
 }
 
-int ft_sync(void)
+int ft_sync()
 {
 	int ret;
+	int result;
 
 	if (opts.dst_addr) {
-		ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
-		if (ret)
-			return ret;
+		if (!opts.oob_sync) {
+			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+			if (ret)
+				return ret;
 
-		ret = ft_rx(ep, 1);
+			ret = ft_rx(ep, 1);
+		} else {
+			ret = ft_sock_send(oob_sock, &tx_buf, 1);
+			if (ret)
+				return ret;
+
+			ret = ft_sock_recv(oob_sock, &result, 1);
+			if (ret)
+				return ret;
+		}
 	} else {
-		ret = ft_rx(ep, 1);
-		if (ret)
-			return ret;
+		if (!opts.oob_sync) {
+			ret = ft_rx(ep, 1);
+			if (ret)
+				return ret;
 
-		ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+		} else {
+			ret = ft_sock_recv(oob_sock, &result, 1);
+			if (ret)
+				return ret;
+
+			ret = ft_sock_send(oob_sock, &tx_buf, 1);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return ret;
@@ -2211,6 +2362,8 @@ void ft_addr_usage()
 	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
 	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
+	FT_PRINT_OPTS_USAGE("-b enable_oob", "enable out-of-band sync & av addr passing with sockets");
+	FT_PRINT_OPTS_USAGE("-b enable_oob=<port>", "enable out-of-band sync & av addr passing with sockets on a specified port");
 }
 
 void ft_usage(char *name, char *desc)
@@ -2339,6 +2492,18 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 	case 'P':
 		opts->dst_port = optarg;
 		break;
+	case 'b':
+		if (!strncasecmp("enable_oob", optarg, 10)) {
+			opts->oob_port = default_oob_sock_port;
+			opts->oob_sync = 1;
+		}
+		if (!strncasecmp("enable_oob=", optarg, 11)) {
+			if ((strlen(optarg) - 11) <= strlen(opts->oob_port))
+				strncpy(opts->oob_port, optarg + 11, strlen(optarg) - 11);
+			else
+				fprintf(stderr, "specified oob port is invalid, falling back to default oob port\n");
+			break;
+		}
 	default:
 		/* let getopt handle unknown opts*/
 		break;
