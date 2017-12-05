@@ -18,6 +18,11 @@ before_install:
       brew upgrade automake || true; brew upgrade libtool || true;
     fi
 install:
+    # Disable rvm override of cd
+    # see https://github.com/travis-ci/travis-ci/issues/8703
+    - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+        unset -f cd;
+      fi
     - set -e
     - git clone https://github.com/ofiwg/libfabric.git
     - cd libfabric
