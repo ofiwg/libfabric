@@ -49,7 +49,9 @@ void ofi_monitor_add_queue(struct ofi_mem_monitor *monitor,
 {
 	fastlock_init(&nq->lock);
 	dlist_init(&nq->list);
+	fastlock_acquire(&nq->lock);
 	nq->refcnt = 0;
+	fastlock_release(&nq->lock);
 
 	nq->monitor = monitor;
 	ofi_atomic_inc32(&monitor->refcnt);
