@@ -147,6 +147,17 @@ struct smr_pending_queue {
 	dlist_func_t *match_msg;
 };
 
+struct smr_fabric {
+	struct util_fabric	util_fabric;
+	int			dom_idx;
+};
+
+struct smr_domain {
+	struct util_domain	util_domain;
+	int			dom_idx;
+	int			ep_idx;
+};
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;

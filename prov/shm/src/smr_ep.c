@@ -1062,22 +1062,34 @@ static struct fi_ops smr_ep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static void smr_endpoint_name(char *name, int pid, int dom_idx, int ep_idx)
+{	
+	memset(name, 0, SMR_NAME_SIZE);
+	snprintf(name, SMR_NAME_SIZE, "%d:%d:%d", pid, dom_idx, ep_idx);
+}
+
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
 	struct smr_ep *ep;
-	int ret;
+	struct smr_domain *smr_domain;
+	int ret, ep_idx;
+	char name[SMR_NAME_SIZE];
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
 		return -FI_ENOMEM;
 
-	if (info->src_addr && info->src_addrlen) {
-		ret = smr_setname(&ep->util_ep.ep_fid.fid, info->src_addr,
-				  info->src_addrlen);
-		if (ret)
-			goto err;
-	}
+	smr_domain = container_of(domain, struct smr_domain, util_domain.domain_fid);
+
+	fastlock_acquire(&smr_domain->util_domain.lock);
+	ep_idx = smr_domain->ep_idx++;
+	fastlock_release(&smr_domain->util_domain.lock);
+	smr_endpoint_name(name, getpid(), smr_domain->dom_idx, ep_idx);
+
+	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_SIZE);
+	if (ret)
+		goto err;
 
 	ep->rx_size = info->rx_attr->size;
 	ep->tx_size = info->tx_attr->size;
