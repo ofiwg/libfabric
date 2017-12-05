@@ -82,7 +82,7 @@ char *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
-char default_oob_sock_port[8] = "3000";
+static char default_oob_port[8] = "3000";
 const char *greeting = "Hello from Client!";
 
 
@@ -563,9 +563,6 @@ int ft_init_oob()
 	int ret, op;
 	struct addrinfo *ai;
 
-	if (!opts.oob_port)
-		opts.oob_port = default_oob_sock_port;
-
 	if (!opts.dst_addr) {
 		ret = ft_sock_listen(opts.oob_port);
 		if (ret)
@@ -661,7 +658,7 @@ int ft_start_server(void)
 {
 	int ret;
 
-	if (opts.oob_sync) {
+	if (opts.oob_port) {
 		ret = ft_init_oob();
 		if (ret)
 			return ret;
@@ -823,7 +820,7 @@ int ft_client_connect(void)
 {
 	int ret;
 
-	if (opts.oob_sync) {
+	if (opts.oob_port) {
 		ret = ft_init_oob();
 		if (ret)
 			return ret;
@@ -856,7 +853,7 @@ int ft_init_fabric(void)
 {
 	int ret;
 
-	if (opts.oob_sync) {
+	if (opts.oob_port) {
 		ret = ft_init_oob();
 		if (ret)
 			return ret;
@@ -1072,7 +1069,7 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 	size_t addrlen;
 	int ret;
 
-	if (opts.oob_sync) {
+	if (opts.oob_port) {
 		ret = ft_exchange_addresses_oob(av_ptr, ep_ptr, remote_addr);
 		if (ret)
 			return ret;
@@ -1118,12 +1115,12 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 set_rx_seq_close:
 	/*
 	* For a test which does not have MSG or TAGGED
-	* capabilities, but has RMA/Atomics and uses the oob_sync.
+	* capabilities, but has RMA/Atomics and uses the OOB sync.
 	* If no recv is going to be posted,
 	* then the rx_seq needs to be incremented to wait on the first RMA/Atomic
 	* completion.
 	*/
-	if (!(fi->caps & FI_MSG) && !(fi->caps & FI_TAGGED) && opts.oob_sync)
+	if (!(fi->caps & FI_MSG) && !(fi->caps & FI_TAGGED) && opts.oob_port)
 		rx_seq++;
 
 	return 0;
@@ -1136,7 +1133,7 @@ int ft_init_av_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 	size_t addrlen;
 	int ret;
 
-	if (opts.oob_sync)
+	if (opts.oob_port)
 		return ft_exchange_addresses_oob(av_ptr, ep_ptr, remote_addr);
 
 	if (opts.dst_addr) {
@@ -2099,7 +2096,7 @@ int ft_sync()
 	int result;
 
 	if (opts.dst_addr) {
-		if (!opts.oob_sync) {
+		if (!opts.oob_port) {
 			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 			if (ret)
 				return ret;
@@ -2115,7 +2112,7 @@ int ft_sync()
 				return ret;
 		}
 	} else {
-		if (!opts.oob_sync) {
+		if (!opts.oob_port) {
 			ret = ft_rx(ep, 1);
 			if (ret)
 				return ret;
@@ -2362,8 +2359,8 @@ void ft_addr_usage()
 	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
 	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
-	FT_PRINT_OPTS_USAGE("-b enable_oob", "enable out-of-band sync & av addr passing with sockets");
-	FT_PRINT_OPTS_USAGE("-b enable_oob=<port>", "enable out-of-band sync & av addr passing with sockets on a specified port");
+	FT_PRINT_OPTS_USAGE("-b[=<oob_port>]", "enable out-of-band address exchange and "
+			"synchronization over the, optional, port");
 }
 
 void ft_usage(char *name, char *desc)
@@ -2493,17 +2490,10 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 		opts->dst_port = optarg;
 		break;
 	case 'b':
-		if (!strncasecmp("enable_oob", optarg, 10)) {
-			opts->oob_port = default_oob_sock_port;
-			opts->oob_sync = 1;
-		}
-		if (!strncasecmp("enable_oob=", optarg, 11)) {
-			if ((strlen(optarg) - 11) <= strlen(opts->oob_port))
-				strncpy(opts->oob_port, optarg + 11, strlen(optarg) - 11);
-			else
-				fprintf(stderr, "specified oob port is invalid, falling back to default oob port\n");
-			break;
-		}
+		if (optarg && strlen(optarg) > 1)
+			opts->oob_port = optarg + 1;
+		else
+			opts->oob_port = default_oob_port;
 	default:
 		/* let getopt handle unknown opts*/
 		break;

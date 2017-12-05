@@ -143,7 +143,6 @@ struct ft_opts {
 	enum ft_comp_method comp_method;
 	int machr;
 	enum ft_rma_opcodes rma_op;
-	int oob_sync;
 	char *oob_port;
 	int argc;
 
@@ -215,7 +214,7 @@ extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
-#define ADDR_OPTS "B:P:s:a:b:"
+#define ADDR_OPTS "B:P:s:a:b::"
 #define FAB_OPTS "f:d:p:"
 #define INFO_OPTS FAB_OPTS "e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
@@ -235,7 +234,7 @@ extern char default_port[8];
 		.verbose = 0, \
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
-		.oob_sync = 0, \
+		.oob_port = NULL, \
 		.argc = argc, .argv = argv \
 	}
 
