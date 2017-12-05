@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2017 Intel Corporation, Inc. All right reserved.
 #
 # Makefile.am for libfabric
 
@@ -36,30 +37,31 @@ rdmaincludedir = $(includedir)/rdma
 rdmainclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
-common_srcs = \
-	src/common.c \
-	src/enosys.c \
-	src/rbtree.c \
-	src/fasthash.c \
-	src/indexer.c \
-	src/iov.c \
-	prov/util/src/util_atomic.c \
-	prov/util/src/util_attr.c   \
-	prov/util/src/util_av.c     \
-	prov/util/src/util_cq.c     \
-	prov/util/src/util_cntr.c   \
-	prov/util/src/util_domain.c \
-	prov/util/src/util_ep.c     \
-	prov/util/src/util_pep.c     \
-	prov/util/src/util_eq.c     \
-	prov/util/src/util_fabric.c \
-	prov/util/src/util_main.c   \
-	prov/util/src/util_poll.c   \
-	prov/util/src/util_wait.c   \
-	prov/util/src/util_buf.c    \
-	prov/util/src/util_mr.c     \
-	prov/util/src/util_ns.c     \
-	prov/util/src/util_shm.c
+common_srcs =				\
+	src/common.c			\
+	src/enosys.c			\
+	src/rbtree.c			\
+	src/fasthash.c			\
+	src/indexer.c			\
+	src/iov.c			\
+	prov/util/src/util_atomic.c	\
+	prov/util/src/util_attr.c	\
+	prov/util/src/util_av.c		\
+	prov/util/src/util_cq.c		\
+	prov/util/src/util_cntr.c	\
+	prov/util/src/util_domain.c	\
+	prov/util/src/util_ep.c		\
+	prov/util/src/util_pep.c	\
+	prov/util/src/util_eq.c		\
+	prov/util/src/util_fabric.c	\
+	prov/util/src/util_main.c	\
+	prov/util/src/util_poll.c	\
+	prov/util/src/util_wait.c	\
+	prov/util/src/util_buf.c	\
+	prov/util/src/util_mr_map.c	\
+	prov/util/src/util_ns.c		\
+	prov/util/src/util_shm.c	\
+	prov/util/src/util_mem_monitor.c
 
 if MACOS
 common_srcs += src/unix/osd.c
@@ -102,34 +104,35 @@ util_fi_pingpong_SOURCES = \
 util_fi_pingpong_LDADD = $(linkback)
 
 nodist_src_libfabric_la_SOURCES =
-src_libfabric_la_SOURCES = \
-	include/fi.h \
-	include/fi_abi.h \
-	include/fi_atom.h \
-	include/fi_enosys.h \
-	include/fi_file.h \
-	include/fi_indexer.h \
-	include/fi_iov.h \
-	include/fi_list.h \
-	include/fi_lock.h \
-	include/fi_mem.h \
-	include/fi_osd.h \
-	include/fi_proto.h \
-	include/fi_rbuf.h \
-	include/fi_shm.h \
-	include/fi_signal.h \
-	include/fi_util.h \
-	include/ofi_atomic.h \
-	include/fasthash.h \
-	include/rbtree.h \
-	include/prov.h \
-	include/rdma/providers/fi_log.h \
-	include/rdma/providers/fi_prov.h \
-	src/fabric.c \
-	src/fi_tostr.c \
-	src/log.c \
-	src/var.c \
-	src/abi_1_0.c \
+src_libfabric_la_SOURCES =			\
+	include/fi.h				\
+	include/fi_abi.h			\
+	include/fi_atom.h			\
+	include/fi_enosys.h			\
+	include/fi_file.h			\
+	include/fi_indexer.h			\
+	include/fi_iov.h			\
+	include/fi_list.h			\
+	include/fi_lock.h			\
+	include/fi_mem.h			\
+	include/fi_osd.h			\
+	include/fi_proto.h			\
+	include/fi_rbuf.h			\
+	include/fi_shm.h			\
+	include/fi_signal.h			\
+	include/fi_util.h			\
+	include/ofi_atomic.h			\
+	include/ofi_mr.h			\
+	include/fasthash.h			\
+	include/rbtree.h			\
+	include/prov.h				\
+	include/rdma/providers/fi_log.h		\
+	include/rdma/providers/fi_prov.h	\
+	src/fabric.c				\
+	src/fi_tostr.c				\
+	src/log.c				\
+	src/var.c				\
+	src/abi_1_0.c				\
 	$(common_srcs)
 
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)

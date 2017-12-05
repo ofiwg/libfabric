@@ -147,6 +147,9 @@
     <ClCompile Include="prov\util\src\util_wait.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\util\src\util_mem_monitor.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
     <ClCompile Include="src\windows\osd.c">
       <Filter>Source Files\src\windows</Filter>
     </ClCompile>
@@ -214,9 +217,6 @@
       <Filter>Source Files\prov\sockets\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\util\src\util_ep.c">
-      <Filter>Source Files\prov\util</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\util\src\util_mr.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
     <ClCompile Include="prov\udp\src\udpx_attr.c">
@@ -348,14 +348,17 @@
     <ClCompile Include="prov\util\src\util_ns.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
-    <ClCompile Include="prov\util\src\util_atomic.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="prov\util\src\util_cntr.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
     <ClCompile Include="prov\rxd\src\rxd_cntr.c">
       <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\util\src\util_atomic.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\util\src\util_mr_map.c">
+      <Filter>Source Files\prov\util</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -546,6 +549,9 @@
       <Filter>Header Files\windows</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_atomic.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_mr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

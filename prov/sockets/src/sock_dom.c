@@ -199,7 +199,7 @@ static int sock_mr_close(struct fid *fid)
 	dom = mr->domain;
 
 	fastlock_acquire(&dom->lock);
-	err = ofi_mr_remove(&dom->mr_map, mr->key);
+	err = ofi_mr_map_remove(&dom->mr_map, mr->key);
 	if (err != 0)
 		SOCK_LOG_ERROR("MR Erase error %d \n", err);
 
@@ -257,7 +257,7 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
 
 	fastlock_acquire(&domain->lock);
 
-	err = ofi_mr_verify(&domain->mr_map, buf, len, key, access, (void **) &mr);
+	err = ofi_mr_map_verify(&domain->mr_map, buf, len, key, access, (void **) &mr);
 	if (err != 0) {
 		SOCK_LOG_ERROR("MR check failed\n");
 		mr = NULL;
@@ -304,7 +304,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr->domain = dom;
 	_mr->flags = flags;
 
-	ret = ofi_mr_insert(&dom->mr_map, attr, &key, _mr);
+	ret = ofi_mr_map_insert(&dom->mr_map, attr, &key, _mr);
 	if (ret != 0)
 		goto err;
 

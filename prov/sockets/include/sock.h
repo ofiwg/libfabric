@@ -51,13 +51,14 @@
 
 #include <fi.h>
 #include <ofi_atomic.h>
+#include <ofi_mr.h>
 #include <fi_enosys.h>
 #include <fi_indexer.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>
 #include <fi_file.h>
 #include <fi_osd.h>
-#include "fi_util.h"
+#include <fi_util.h>
 
 #ifndef _SOCK_H_
 #define _SOCK_H_

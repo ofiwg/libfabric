@@ -31,6 +31,9 @@
  * SOFTWARE.
  */
 
+#ifndef _FI_UTIL_H_
+#define _FI_UTIL_H_
+
 #if HAVE_CONFIG_H
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
@@ -50,6 +53,7 @@
 #include <rdma/fi_trigger.h>
 
 #include <fi.h>
+#include <ofi_mr.h>
 #include <fi_list.h>
 #include <fi_mem.h>
 #include <fi_rbuf.h>
@@ -59,10 +63,6 @@
 #include <fi_indexer.h>
 
 #include "rbtree.h"
-
-#ifndef _FI_UTIL_H_
-#define _FI_UTIL_H_
-
 
 #define UTIL_FLAG_ERROR	(1ULL << 60)
 
@@ -614,61 +614,9 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);
 
 /*
- * MR
- */
-#define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
-
-/* FI_LOCAL_MR is valid in pre-libfaric-1.5 and can be valid in
- * post-libfabric-1.5 */
-#define OFI_CHECK_MR_LOCAL(info) \
-	((info->domain_attr->mr_mode & FI_MR_LOCAL) || \
-	 (!(info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE)) && \
-	  (info->mode & FI_LOCAL_MR)))
 
 #define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |\
 				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
-
-struct ofi_mr_map {
-	const struct fi_provider *prov;
-	void			*rbtree;
-	uint64_t		key;
-	enum fi_mr_mode		mode;
-};
-
-/* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
- * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
- * The provider is assumed only to set FI_MR_LOCAL correctly.
- */
-static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
-					    const struct fi_info *user_info,
-					    const struct fi_info *prov_info)
-{
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5)) ||
-	    (user_info->domain_attr &&
-	     !(user_info->domain_attr->mr_mode & FI_MR_LOCAL))) {
-		return (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
-			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
-	} else {
-		return prov_info->mode;
-	}
-}
-
-int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,
-		    struct ofi_mr_map *map);
-void ofi_mr_map_close(struct ofi_mr_map *map);
-
-int ofi_mr_insert(struct ofi_mr_map *map,
-		  const struct fi_mr_attr *attr,
-		  uint64_t *key, void *context);
-int ofi_mr_remove(struct ofi_mr_map *map, uint64_t key);
-void *ofi_mr_get(struct ofi_mr_map *map,  uint64_t key);
-
-int ofi_mr_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
-		  size_t len, uint64_t key, uint64_t access,
-		  void **context);
-
-
-/*
  * Attributes and capabilities
  */
 #define FI_PRIMARY_CAPS	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_MULTICAST | \
