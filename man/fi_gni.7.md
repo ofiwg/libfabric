@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The GNI Fabric Provider
+fi_gni \- The GNI Fabric Provider
 
 # OVERVIEW
 

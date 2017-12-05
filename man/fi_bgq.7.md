@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The Blue Gene/Q Fabric Provider
+fi_bgq \- The Blue Gene/Q Fabric Provider
 
 # OVERVIEW
 

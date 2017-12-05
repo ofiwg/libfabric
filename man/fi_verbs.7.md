@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The Verbs Fabric Provider
+fi_verbs \- The Verbs Fabric Provider
 
 # OVERVIEW
 
@@ -86,7 +86,7 @@ also makes the use of fork unsafe.
 
 ### Memory Regions
 Only FI_MR_BASIC mode is supported. Adding regions via s/g list is supported only
-upto s/g list size of 1. No support for binding memory regions to a counter.
+up to s/g list size of 1. No support for binding memory regions to a counter.
 
 ### Wait objects
 Only FI_WAIT_FD wait object is supported only for FI_EP_MSG endpoint type.

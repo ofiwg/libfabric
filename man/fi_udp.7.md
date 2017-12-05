@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The UDP Fabric Provider
+fi_udp \- The UDP Fabric Provider
 
 # OVERVIEW
 

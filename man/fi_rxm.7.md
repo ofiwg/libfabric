@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-The RxM (RDM over MSG) Utility Provider
+fi_rxm \- The RxM (RDM over MSG) Utility Provider
 
 # OVERVIEW
 

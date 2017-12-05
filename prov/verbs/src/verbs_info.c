@@ -241,7 +241,7 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 
 	if (attr->auth_key_size &&
 	    (attr->auth_key_size != info->ep_attr->auth_key_size)) {
-		VERBS_INFO(FI_LOG_CORE, "Unsupported authentification size.");
+		VERBS_INFO(FI_LOG_CORE, "Unsupported authentication size.");
 		FI_INFO_CHECK_VAL(&fi_ibv_prov, info->ep_attr, attr,
 				  auth_key_size);
 		return -FI_ENODATA;

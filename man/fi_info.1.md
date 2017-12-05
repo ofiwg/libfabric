@@ -11,7 +11,7 @@ tagline: Libfabric Programmer's Manual
 fi_info  \- Simple utility to query for fabric interfaces
 
 
-# SYNOPSYS
+# SYNOPSIS
 ```
  fi_info [OPTIONS]
 ```
