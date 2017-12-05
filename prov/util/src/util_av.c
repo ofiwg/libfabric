@@ -1031,13 +1031,14 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
  * Connection map
  */
 
-/* Note: Callers should serialize access */
+/* Caller should hold cmap->lock */
 static void util_cmap_set_key(struct util_cmap_handle *handle)
 {
 	handle->key = ofi_idx2key(&handle->cmap->key_idx,
 		ofi_idx_insert(&handle->cmap->handles_idx, handle));
 }
 
+/* Caller should hold cmap->lock */
 static void util_cmap_clear_key(struct util_cmap_handle *handle)
 {
 	int index = ofi_key2idx(&handle->cmap->key_idx, handle->key);
@@ -1052,6 +1053,7 @@ struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t ke
 {
 	struct util_cmap_handle *handle;
 
+	fastlock_acquire(&cmap->lock);
 	if (!(handle = ofi_idx_lookup(&cmap->handles_idx,
 				      ofi_key2idx(&cmap->key_idx, key)))) {
 		FI_WARN(cmap->av->prov, FI_LOG_AV, "Invalid key!\n");
@@ -1059,9 +1061,10 @@ struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t ke
 		if (handle->key != key) {
 			FI_WARN(cmap->av->prov, FI_LOG_AV,
 				"handle->key not matching given key\n");
-			return NULL;
+			handle = NULL;
 		}
 	}
+	fastlock_release(&cmap->lock);
 	return handle;
 }
 
