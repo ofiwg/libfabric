@@ -607,6 +607,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->ep_attr->protocol = FI_PROTO_PSMX;
 	psmx_info->ep_attr->protocol_version = PSM_VERNO;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
+	psmx_info->ep_attr->max_order_raw_size = PSMX_RMA_ORDER_SIZE;
+	psmx_info->ep_attr->max_order_war_size = PSMX_RMA_ORDER_SIZE;
+	psmx_info->ep_attr->max_order_waw_size = PSMX_RMA_ORDER_SIZE;
 	psmx_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
 	psmx_info->ep_attr->tx_ctx_cnt = 1;
 	psmx_info->ep_attr->rx_ctx_cnt = 1;
