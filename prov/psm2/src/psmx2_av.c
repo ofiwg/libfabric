@@ -606,25 +606,26 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 		return -FI_ENOMEM;
 
 	/* save the peer address information */
-	for (i = av_priv->last; i < av_priv->last + count; i++) {
+	for (i = 0; i < count; i++) {
+		idx = av_priv->last + i;
 		if (av_priv->addr_format == FI_ADDR_STR) {
 			ep_name = psmx2_string_to_ep_name(string_names[i]);
 			if (!ep_name) {
 				ret = -FI_EINVAL;
 				goto out;
 			}
-			av_priv->epids[i] = ep_name->epid;
-			av_priv->peers[i].type = ep_name->type;
-			av_priv->peers[i].sep_id = ep_name->sep_id;
+			av_priv->epids[idx] = ep_name->epid;
+			av_priv->peers[idx].type = ep_name->type;
+			av_priv->peers[idx].sep_id = ep_name->sep_id;
 			free(ep_name);
 		} else {
-			av_priv->epids[i] = names[i].epid;
-			av_priv->peers[i].type = names[i].type;
-			av_priv->peers[i].sep_id = names[i].sep_id;
+			av_priv->epids[idx] = names[i].epid;
+			av_priv->peers[idx].type = names[i].type;
+			av_priv->peers[idx].sep_id = names[i].sep_id;
 		}
-		av_priv->peers[i].sep_ctxt_cnt = 1;
-		av_priv->peers[i].sep_ctxt_epids = NULL;
-		if (av_priv->peers[i].type == PSMX2_EP_SCALABLE)
+		av_priv->peers[idx].sep_ctxt_cnt = 1;
+		av_priv->peers[idx].sep_ctxt_epids = NULL;
+		if (av_priv->peers[idx].type == PSMX2_EP_SCALABLE)
 			sep_count++;
 	}
 
