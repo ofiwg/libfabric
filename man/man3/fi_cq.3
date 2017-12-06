@@ -1,4 +1,4 @@
-.TH "fi_cq" "3" "2017\-09\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cq" "3" "2017\-12\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq \- Completion queue operations
@@ -439,7 +439,14 @@ formats.
 .PP
 \f[I]op_context\f[] : The operation context is the application specified
 context value that was provided with an asynchronous operation.
-The op_context field is valid for all completions.
+The op_context field is valid for all completions that are associated
+with an asynchronous operation.
+.PP
+For completion events that are not associated with a posted operation,
+this field will be set to NULL.
+This includes completions generated at the target in response to RMA
+write operations that carry CQ data (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA
+flags set), when the FI_RX_CQ_DATA mode bit is not required.
 .PP
 \f[I]flags\f[] : This specifies flags associated with the completed
 operation.
