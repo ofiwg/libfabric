@@ -6,6 +6,8 @@
 dgram
 ^poll
 
+cq_data -e rdm
+
 # This test requires FI_RMA_EVENT
 rdm_rma_simple
 
