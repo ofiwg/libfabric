@@ -7,8 +7,7 @@
 ^dgram|-e dgram
 
 cm_data
-cq_data
-poll
+poll -t counter
 rdm_rma_simple
 trigger
 shared_ctx
