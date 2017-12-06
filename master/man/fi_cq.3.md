@@ -444,7 +444,14 @@ of these fields are the same for all CQ entry structure formats.
 *op_context*
 : The operation context is the application specified context value that
   was provided with an asynchronous operation.  The op_context field is
-  valid for all completions.
+  valid for all completions that are associated with an asynchronous
+  operation.
+  
+  For completion events that are not associated with a posted operation,
+  this field will be set to NULL.  This includes completions generated
+  at the target in response to RMA write operations that carry CQ data
+  (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA flags set), when the FI_RX_CQ_DATA
+  mode bit is not required.
 
 *flags*
 : This specifies flags associated with the completed operation.  The
