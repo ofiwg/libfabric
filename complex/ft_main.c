@@ -698,15 +698,16 @@ static void ft_fw_usage(char *program)
 	fprintf(stderr, "\nServer only options:\n");
 	FT_PRINT_OPTS_USAGE("-x", "exit after test run");
 	fprintf(stderr, "\nClient only options:\n");
-	FT_PRINT_OPTS_USAGE("-u <test_config_file>", "config file path (Either config file path or both provider and test config name are required)");
+	FT_PRINT_OPTS_USAGE("-u <test_config_file>", "test configuration file "
+		"(Either config file or both provider and test name are required)");
 	FT_PRINT_OPTS_USAGE("-p <provider_name>", " provider name");
-	FT_PRINT_OPTS_USAGE("-t <test_config_name>", "test config name");
+	FT_PRINT_OPTS_USAGE("-t <test_name>", "test name");
 	FT_PRINT_OPTS_USAGE("-y <start_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-z <end_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
 	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
-	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number"
-		       " (config file service parameter will override this)");
+	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number "
+		"(config file service parameter will override this)");
 }
 
 void ft_free()

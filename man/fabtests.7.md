@@ -109,6 +109,10 @@ The common options for most of the tests are listed below. Individual tests may 
 *-s <src_addr>*
 : The source address.
 
+*-b[=<oob_port>]
+: Enables out-of-band address exchange and synchronization over the optionally specified port.
+
+
 *-I <iter>*
 : Number of iterations of the test will run.
 
