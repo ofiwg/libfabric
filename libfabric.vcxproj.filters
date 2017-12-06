@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -216,6 +216,9 @@
     <ClCompile Include="prov\sockets\src\sock_wait.c">
       <Filter>Source Files\prov\sockets\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\sockets\src\sock_mr.c">
+      <Filter>Source Files\prov\sockets\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\util\src\util_ep.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
@@ -244,6 +247,9 @@
       <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\rxd\src\rxd_cq.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_cntr.c">
       <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\rxd\src\rxd_domain.c">
@@ -350,9 +356,6 @@
     </ClCompile>
     <ClCompile Include="prov\util\src\util_cntr.c">
       <Filter>Source Files\prov\util</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_cntr.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\util\src\util_atomic.c">
       <Filter>Source Files\prov\util</Filter>
