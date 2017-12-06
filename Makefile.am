@@ -83,7 +83,9 @@ nobase_dist_config_DATA = \
 	test_configs/usnic/quick.test \
 	test_configs/psm/all.test \
 	test_configs/psm2/all.test \
-	test_configs/psm2/verify.test
+	test_configs/psm2/verify.test \
+	test_configs/psm2/psm2.exclude \
+	test_configs/ofi_rxm/ofi_rxm.exclude
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
