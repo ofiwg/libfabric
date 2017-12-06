@@ -658,6 +658,9 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->ep_attr->protocol = FI_PROTO_PSMX2;
 	psmx2_info->ep_attr->protocol_version = PSM2_VERNO;
 	psmx2_info->ep_attr->max_msg_size = PSMX2_MAX_MSG_SIZE;
+	psmx2_info->ep_attr->max_order_raw_size = PSMX2_RMA_ORDER_SIZE;
+	psmx2_info->ep_attr->max_order_war_size = PSMX2_RMA_ORDER_SIZE;
+	psmx2_info->ep_attr->max_order_waw_size = PSMX2_RMA_ORDER_SIZE;
 	psmx2_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
 	psmx2_info->ep_attr->tx_ctx_cnt = tx_ctx_cnt;
 	psmx2_info->ep_attr->rx_ctx_cnt = rx_ctx_cnt;
