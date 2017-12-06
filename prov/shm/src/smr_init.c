@@ -44,22 +44,6 @@ int smr_check_info(struct fi_info *info)
 static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints, struct fi_info **info)
 {
-#if 0
-	/* A SHM address namespace is not yet defined.
-	 * We require FI_SOURCE with valid node and service parameters.
-	 * The proposed name space is:
-	 * process ID - unique for each process
-	 * &ep_cntr - handle case where app links against library more
-	 *            than once, e.g. libfabric is included by two libraries
-	 * cntr_val - unique value for each EP
-	 */
-	if (!(flags & FI_SOURCE) || !node | !service) {
-		FI_INFO(&smr_prov, FI_LOG_CORE,
-			"SHM requires FI_SOURCE + node + service\n");
-		return -FI_ENODATA;
-	}
-#endif
-
 	return util_getinfo(&smr_util_prov, version, node, service, flags, hints, info);
 }
 
