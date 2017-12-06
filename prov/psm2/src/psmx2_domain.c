@@ -445,6 +445,7 @@ static int psmx2_domain_close(fid_t fid)
 
 	fastlock_destroy(&domain->sep_lock);
 	fastlock_destroy(&domain->mr_lock);
+	rbtDelete(domain->mr_map);
 
 	domain->fabric->active_domain = NULL;
 	free(domain);

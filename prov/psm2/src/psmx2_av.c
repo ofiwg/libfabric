@@ -609,8 +609,10 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	for (i = av_priv->last; i < av_priv->last + count; i++) {
 		if (av_priv->addr_format == FI_ADDR_STR) {
 			ep_name = psmx2_string_to_ep_name(string_names[i]);
-			if (!ep_name)
-				return -FI_EINVAL;
+			if (!ep_name) {
+				ret = -FI_EINVAL;
+				goto out;
+			}
 			av_priv->epids[i] = ep_name->epid;
 			av_priv->peers[i].type = ep_name->type;
 			av_priv->peers[i].sep_id = ep_name->sep_id;
@@ -677,6 +679,8 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 		ret = count - error_count;
 	}
 
+out:
+	free(errors);
 	return ret;
 }
 
