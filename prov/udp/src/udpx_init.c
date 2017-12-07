@@ -49,7 +49,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 	uint32_t addr_format;
 	int ret;
 
-	ret = getifaddrs(&ifaddrs);
+	ret = ofi_getifaddrs(&ifaddrs);
 	if (ret)
 		return;
 

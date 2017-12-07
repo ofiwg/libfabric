@@ -836,10 +836,10 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	size_t iface_len = 0;
 	int exact_match = 0;
 
-	ret = getifaddrs(&ifaddr);
+	ret = ofi_getifaddrs(&ifaddr);
 	if (ret) {
-	       VERBS_WARN(FI_LOG_FABRIC,
-			  "Unable to get interface addresses\n");
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "Unable to get interface addresses\n");
 		return ret;
 	}
 
@@ -887,6 +887,7 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 			VERBS_WARN(FI_LOG_FABRIC,
 				   "inet_ntop failed: %s(%d)\n",
 				   strerror(errno), errno);
+			ret = -errno;
 			goto err1;
 		}
 

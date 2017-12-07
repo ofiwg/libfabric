@@ -1351,7 +1351,7 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 	char netbuf[SOCK_MAX_NETWORK_ADDR_SZ];
 	int prefix_len;
 
-	ret = getifaddrs(&ifaddrs);
+	ret = ofi_getifaddrs(&ifaddrs);
 	if (ret)
 		return NULL;
 
@@ -1385,7 +1385,7 @@ char *sock_get_domain_name(struct sockaddr_in *src_addr)
         struct ifaddrs *ifaddrs, *ifa;
 	char *domain_name = NULL;
 
-	ret = getifaddrs(&ifaddrs);
+	ret = ofi_getifaddrs(&ifaddrs);
 	if (ret)
 		return NULL;
 
