@@ -206,8 +206,8 @@ interfaces enables a provider to eliminate lower-level locks.
 : The completion threading model is intended for providers that make use
   of manual progress.  Applications must serialize access to all objects
   that are associated through the use of having a shared completion
-  structure.  This includes endpoint, completion queue, counter, wait set,
-  and poll set objects.
+  structure.  This includes endpoint, transmit context, receive context,
+  completion queue, counter, wait set, and poll set objects.
 
   For example, threads must serialize access to an endpoint and its
   bound completion queue(s) and/or counters.  Access to endpoints that
