@@ -173,14 +173,6 @@ static void psmx2_update_sep_cap(void)
 	psmx2_env.max_trx_ctxt = nctxts;
 	psmx2_env.sep_trx_ctxt = nfreectxts;
 
-	/*
-	 * One context is reserved for regular endpoints. It is allocated
-	 * when the domain is opened.
-	 */
-	if ((!psmx2_active_fabric || !psmx2_active_fabric->active_domain) &&
-	    psmx2_env.sep_trx_ctxt)
-		--psmx2_env.sep_trx_ctxt;
-
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "SEP: %d Tx/Rx contexts allowed.\n",
 		psmx2_env.sep_trx_ctxt);
 }
