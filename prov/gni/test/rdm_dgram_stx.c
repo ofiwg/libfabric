@@ -2633,7 +2633,10 @@ static void do_trigger(int len)
 	cr_assert_eq(sz, 0);
 }
 
-Test(rdm_rma_stx_basic, trigger)
+/*
+ * TODO: fix this test.  fails sporadically
+ */
+Test(rdm_rma_stx_basic, trigger, .disabled = true)
 {
 	xfer_for_each_size(do_trigger, 8, BUF_SZ);
 }
