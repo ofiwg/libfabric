@@ -119,7 +119,7 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 	psm2_am_get_source(token, &epaddr);
 
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
-	domain = psmx2_active_fabric->active_domain;
+	domain = trx_ctxt->domain;
 	ep = trx_ctxt->ep;
 
 	eom = args[0].u32w0 & PSMX2_AM_EOM;
@@ -366,7 +366,6 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 
 static ssize_t psmx2_rma_self(int am_cmd,
 			      struct psmx2_fid_ep *ep,
-			      struct psmx2_fid_ep *dst_ep,
 			      void *buf, size_t len, void *desc,
 			      uint64_t addr, uint64_t key,
 			      void *context, uint64_t flags, uint64_t data)
@@ -413,25 +412,25 @@ static ssize_t psmx2_rma_self(int am_cmd,
 		return -FI_EINVAL;
 	}
 
-	mr = psmx2_mr_get(psmx2_active_fabric->active_domain, key);
+	mr = psmx2_mr_get(ep->domain, key);
 	op_error = mr ? psmx2_mr_validate(mr, addr, len, access) : -FI_EINVAL;
 
 	if (!op_error) {
 		addr += mr->offset;
 		switch (am_cmd) {
 		case PSMX2_AM_REQ_WRITE:
-			cntr = dst_ep->remote_write_cntr;
+			cntr = ep->remote_write_cntr;
 			if (flags & FI_REMOTE_CQ_DATA)
-				cq = dst_ep->recv_cq;
+				cq = ep->recv_cq;
 			if (mr->cntr != cntr)
 				mr_cntr = mr->cntr;
 			memcpy((void *)addr, buf, len);
 			break;
 
 		case PSMX2_AM_REQ_WRITEV:
-			cntr = dst_ep->remote_write_cntr;
+			cntr = ep->remote_write_cntr;
 			if (flags & FI_REMOTE_CQ_DATA)
-				cq = dst_ep->recv_cq;
+				cq = ep->recv_cq;
 			if (mr->cntr != cntr)
 				mr_cntr = mr->cntr;
 			dst = (void *)addr;
@@ -443,12 +442,12 @@ static ssize_t psmx2_rma_self(int am_cmd,
 			break;
 
 		case PSMX2_AM_REQ_READ:
-			cntr = dst_ep->remote_read_cntr;
+			cntr = ep->remote_read_cntr;
 			memcpy(buf, (void *)addr, len);
 			break;
 
 		case PSMX2_AM_REQ_READV:
-			cntr = dst_ep->remote_read_cntr;
+			cntr = ep->remote_read_cntr;
 			src = (void *)addr;
 			for (i=0; i<iov_count; i++)
 				if (iov[i].iov_len) {
@@ -636,7 +635,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_READ, ep_priv, ep_priv,
+		return psmx2_rma_self(PSMX2_AM_REQ_READ, ep_priv,
 				      buf, len, desc, addr, key,
 				      context, flags, 0);
 
@@ -777,7 +776,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_READV, ep_priv, ep_priv,
+		return psmx2_rma_self(PSMX2_AM_REQ_READV, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, 0);
 
@@ -1006,7 +1005,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_WRITE, ep_priv, ep_priv,
+		return psmx2_rma_self(PSMX2_AM_REQ_WRITE, ep_priv,
 				      (void *)buf, len, desc, addr,
 				      key, context, flags, data);
 
@@ -1189,7 +1188,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
 	if (epaddr_context->epid == ep_priv->trx_ctxt->psm2_epid)
-		return psmx2_rma_self(PSMX2_AM_REQ_WRITEV, ep_priv, ep_priv,
+		return psmx2_rma_self(PSMX2_AM_REQ_WRITEV, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, data);
 
