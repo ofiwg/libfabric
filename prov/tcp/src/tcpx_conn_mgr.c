@@ -55,11 +55,11 @@ static int poll_fd_resize(struct poll_fd_mgr *poll_mgr, int size)
 
 	if (poll_mgr->max_nfds) {
 		memcpy(new_poll_fds, poll_mgr->poll_fds,
-			poll_mgr->max_nfds * sizeof(*new_poll_fds));
+		       poll_mgr->max_nfds * sizeof(*new_poll_fds));
 		free(poll_mgr->poll_fds);
 
 		memcpy(new_poll_info, poll_mgr->poll_info,
-			poll_mgr->max_nfds * sizeof(*new_poll_info));
+		       poll_mgr->max_nfds * sizeof(*new_poll_info));
 		free(poll_mgr->poll_info);
 	}
 
@@ -78,7 +78,7 @@ static void poll_fds_swap_del_last(struct poll_fd_mgr *poll_mgr, int index)
 }
 
 static int poll_fds_find_dup(struct poll_fd_mgr *poll_mgr,
-			      struct poll_fd_info *fd_info_entry)
+			     struct poll_fd_info *fd_info_entry)
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_pep *tcpx_pep;
@@ -106,7 +106,7 @@ static int poll_fds_find_dup(struct poll_fd_mgr *poll_mgr,
 }
 
 static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
-			      struct poll_fd_info *poll_info)
+			     struct poll_fd_info *poll_info)
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_pep *tcpx_pep;
@@ -121,16 +121,18 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 
 	poll_mgr->poll_info[poll_mgr->nfds] = *poll_info;
 
-	switch (poll_info->fid->fclass) {
-	case FI_CLASS_EP:
+	switch (poll_mgr->poll_info[poll_mgr->nfds].type) {
+	case CONNECT_SOCK:
+	case ACCEPT_SOCK:
 		tcpx_ep = container_of(poll_info->fid, struct tcpx_ep,
 				       util_ep.ep_fid.fid);
 		poll_mgr->poll_fds[poll_mgr->nfds].fd = tcpx_ep->conn_fd;
 		poll_mgr->poll_fds[poll_mgr->nfds].events = POLLOUT;
+
 		break;
-	case FI_CLASS_PEP:
+	case PASSIVE_SOCK:
 		tcpx_pep = container_of(poll_info->fid, struct tcpx_pep,
-				       util_pep.pep_fid.fid);
+					util_pep.pep_fid.fid);
 
 		poll_mgr->poll_fds[poll_mgr->nfds].fd = tcpx_pep->sock;
 		poll_mgr->poll_fds[poll_mgr->nfds].events = POLLIN;
@@ -140,7 +142,6 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 			"invalid fd\n");
 		return -FI_EINVAL;
 	}
-
 	poll_mgr->nfds++;
 	return 0;
 }
@@ -164,9 +165,10 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 		} else {
 			assert(poll_fds_find_dup(poll_mgr, poll_item) < 0);
 			ret = poll_fds_add_item(poll_mgr, poll_item);
-			if (ret)
+			if (ret) {
 				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 					"Failed to add fd to event polling\n");
+			}
 		}
 
 		if (poll_item->flags & POLL_MGR_FREE)
@@ -178,40 +180,160 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 	return ret;
 }
 
-static void handle_connect(struct poll_fd_mgr *poll_mgr,
-			   struct poll_fd_info *poll_info)
+static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
+			int type, struct poll_fd_info *poll_info)
 {
-	struct tcpx_ep *ep;
-	struct fi_eq_cm_entry cm_entry;
-	struct fi_eq_err_entry err_entry;
-	socklen_t len;
-	int ret, status;
+	int ret;
 
-	assert(poll_info->fid->fclass == FI_CLASS_EP);
-	ep = container_of(poll_info->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	ret = ofi_recv_socket(fd, hdr,
+			      sizeof(*hdr), MSG_WAITALL);
+	if (ret)
+		return ret;
+
+	if (hdr->type != type) {
+		return -FI_ECONNREFUSED;
+
+	}
+
+	if (hdr->version != OFI_CTRL_VERSION) {
+		return -FI_ENOPROTOOPT;
+	}
+
+	poll_info->cm_data_sz = ntohs(hdr->seg_size);
+	if (poll_info->cm_data_sz) {
+		if (poll_info->cm_data_sz > TCPX_MAX_CM_DATA_SIZE)
+			return -FI_EINVAL;
+
+		ret = ofi_recv_socket(fd, poll_info->cm_data,
+				      poll_info->cm_data_sz, MSG_WAITALL);
+		if (ret)
+			return ret;
+	}
+	return -FI_SUCCESS;
+}
+
+static int tx_cm_data(SOCKET fd, int type, struct poll_fd_info *poll_info)
+{
+	struct ofi_ctrl_hdr hdr;
+	int ret;
+
+	memset(&hdr, 0, sizeof(hdr));
+	hdr.version = OFI_CTRL_VERSION;
+	hdr.type = type;
+	hdr.seg_size = htons(poll_info->cm_data_sz);
+
+	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
+	if (ret)
+		return ret;
+
+	if (poll_info->cm_data_sz) {
+		ret = ofi_send_socket(fd, poll_info->cm_data,
+				      poll_info->cm_data_sz, MSG_NOSIGNAL);
+		if (ret)
+			return ret;
+	}
+	return FI_SUCCESS;
+}
+
+static int send_conn_req(struct poll_fd_mgr *poll_mgr,
+			 struct poll_fd_info *poll_info,
+			 struct tcpx_ep *ep,
+			 int index)
+{
+	socklen_t len;
+	int status, ret = FI_SUCCESS;
+
+	assert(poll_mgr->poll_fds[index].revents == POLLOUT);
 
 	len = sizeof(status);
 	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, &status, &len);
 	if (ret < 0 || status) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
-
-		memset(&err_entry, 0, sizeof err_entry);
-		err_entry.fid = poll_info->fid;
-		err_entry.context = poll_info->fid->context;
-		err_entry.err = status ? status : errno;
-
-		ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-				  &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
-	} else {
-		memset(&cm_entry, 0, sizeof cm_entry);
-		cm_entry.fid = poll_info->fid;
-
-		ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
-				  &cm_entry, sizeof(cm_entry), 0);
+		return (ret < 0)? -errno : status;
 	}
 
-	if (ret < 0)
+	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connreq, poll_info);
+	return ret;
+}
+
+static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
+			  struct poll_fd_info *poll_info,
+			  struct tcpx_ep *ep,
+			  int index)
+{
+	struct ofi_ctrl_hdr conn_resp;
+	struct fi_eq_cm_entry *cm_entry;
+	int ret = FI_SUCCESS;
+
+	assert(poll_mgr->poll_fds[index].revents == POLLIN);
+	ret = rx_cm_data(ep->conn_fd, &conn_resp, ofi_ctrl_connresp, poll_info);
+	if (ret)
+		return ret;
+
+	cm_entry = calloc(1, sizeof(*cm_entry) + poll_info->cm_data_sz);
+	if (!cm_entry) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "mem alloc failed\n");
+		return -FI_ENOMEM;
+	}
+
+	cm_entry->fid = poll_info->fid;
+	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
+
+	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
+			  sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
+	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+		goto err;
+
+	}
+	ret = fi_fd_nonblock(ep->conn_fd);
+err:
+	free(cm_entry);
+	return ret;
+}
+
+static void handle_connect(struct poll_fd_mgr *poll_mgr,
+			   int index)
+{
+	struct tcpx_ep *ep;
+	struct poll_fd_info *poll_info = &poll_mgr->poll_info[index];
+	struct fi_eq_err_entry err_entry;
+	int ret;
+
+	assert(poll_info->fid->fclass == FI_CLASS_EP);
+	ep = container_of(poll_info->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+
+	switch (poll_info->state) {
+	case ESTABLISH_CONN:
+		ret = send_conn_req(poll_mgr, poll_info, ep, index);
+		if (ret)
+			goto err;
+
+		poll_info->state = RCV_RESP;
+		poll_mgr->poll_fds[index].events = POLLIN;
+		break;
+	case RCV_RESP:
+		ret = proc_conn_resp(poll_mgr, poll_info, ep, index);
+		if (ret)
+			goto err;
+
+		poll_info->state = CONNECT_DONE;
+		break;
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Invalid connection state\n");
+		ret = -FI_EINVAL;
+		goto err;
+	}
+	return;
+err:
+	memset(&err_entry, 0, sizeof err_entry);
+	err_entry.fid = poll_info->fid;
+	err_entry.context = poll_info->fid->context;
+	err_entry.err = ret;
+
+	poll_info->state = CONNECT_DONE;
+	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
+		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
 static void handle_connreq(struct poll_fd_mgr *poll_mgr,
@@ -219,7 +341,8 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 {
 	struct tcpx_conn_handle *handle;
 	struct tcpx_pep *pep;
-	struct fi_eq_cm_entry cm_entry;
+	struct fi_eq_cm_entry *cm_entry;
+	struct ofi_ctrl_hdr conn_req;
 	SOCKET sock;
 	int ret;
 
@@ -232,33 +355,84 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 			ofi_sockerr());
 		return;
 	}
+	ret = rx_cm_data(sock, &conn_req, ofi_ctrl_connreq, poll_info);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "cm data recv failed \n");
+		return;
+	}
 
 	handle = calloc(1, sizeof(*handle));
 	if (!handle)
 		goto err1;
 
-	handle->conn_fd = sock;
-	cm_entry.fid = poll_info->fid;
-	cm_entry.info = fi_dupinfo(&pep->info);
-	if (!cm_entry.info)
+	cm_entry = calloc(1, sizeof(*cm_entry) + poll_info->cm_data_sz);
+	if (!cm_entry)
 		goto err2;
 
-	cm_entry.info->handle = &handle->handle;
+	handle->conn_fd = sock;
+	cm_entry->fid = poll_info->fid;
+	cm_entry->info = fi_dupinfo(&pep->info);
+	if (!cm_entry->info)
+		goto err3;
+
+	cm_entry->info->handle = &handle->handle;
+	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
 
 	ret = fi_eq_write(&pep->util_pep.eq->eq_fid, FI_CONNREQ,
-			  &cm_entry, sizeof(cm_entry), 0);
+			  cm_entry, sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
-		goto err3;
+		goto err4;
 	}
+
+	free(cm_entry);
 	return;
+err4:
+	fi_freeinfo(cm_entry->info);
 err3:
-	fi_freeinfo(cm_entry.info);
+	free(cm_entry);
 err2:
 	free(handle);
 err1:
 	ofi_close_socket(sock);
+}
 
+static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
+			       struct poll_fd_info *poll_info)
+{
+	struct fi_eq_cm_entry cm_entry;
+	struct fi_eq_err_entry err_entry;
+	struct tcpx_ep *ep;
+	int ret;
+
+	assert(poll_info->fid->fclass == FI_CLASS_EP);
+	ep = container_of(poll_info->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+
+	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connresp, poll_info);
+	if (ret)
+		goto err;
+
+	cm_entry.fid =  poll_info->fid;
+
+	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
+			  &cm_entry, sizeof(cm_entry), 0);
+	if (ret < 0) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+	}
+
+	ret = fi_fd_nonblock(ep->conn_fd);
+	if (ret)
+		goto err;
+
+	return;
+err:
+	memset(&err_entry, 0, sizeof err_entry);
+	err_entry.fid = poll_info->fid;
+	err_entry.context = poll_info->fid->context;
+	err_entry.err = ret;
+
+	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
+		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
 static void handle_fd_events(struct poll_fd_mgr *poll_mgr)
@@ -269,22 +443,26 @@ static void handle_fd_events(struct poll_fd_mgr *poll_mgr)
 	 * removing entries from the array.
 	 */
 	for (i = poll_mgr->nfds; i > 0; i--) {
-		switch (poll_mgr->poll_fds[i].revents) {
-		case POLLOUT:
-			handle_connect(poll_mgr, &poll_mgr->poll_info[i]);
-			poll_fds_swap_del_last(poll_mgr, i);
+		if (!poll_mgr->poll_fds[i].revents)
+			continue;
+
+		switch (poll_mgr->poll_info[i].type) {
+		case CONNECT_SOCK:
+			handle_connect(poll_mgr, i);
+
+			if (poll_mgr->poll_info[i].state == CONNECT_DONE)
+				poll_fds_swap_del_last(poll_mgr, i);
 			break;
-		case POLLIN:
+		case PASSIVE_SOCK:
 			handle_connreq(poll_mgr, &poll_mgr->poll_info[i]);
 			break;
-		case POLLERR:
-		case POLLHUP:
-		case POLLNVAL:
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"polling error on socket\n");
-			/* TODO: change state to error or handle somehow */
+		case ACCEPT_SOCK:
+			handle_accept_conn(poll_mgr, &poll_mgr->poll_info[i]);
 			poll_fds_swap_del_last(poll_mgr, i);
 			break;
+		default:
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"should never end up here\n");
 		}
 	}
 }
@@ -321,10 +499,8 @@ static void *tcpx_conn_mgr_thread(void *data)
 					"fd list add or remove failed\n");
 			}
 		}
-
 		handle_fd_events(poll_mgr);
 	}
-
 	return NULL;
 }
 
