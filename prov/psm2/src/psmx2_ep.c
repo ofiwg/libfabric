@@ -497,10 +497,6 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 		}
 	}
 
-	err = psmx2_domain_check_features(domain_priv, ep_cap);
-	if (err)
-		goto errout;
-
 	ep_priv = (struct psmx2_fid_ep *) calloc(1, sizeof *ep_priv);
 	if (!ep_priv) {
 		err = -FI_ENOMEM;
