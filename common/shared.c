@@ -560,8 +560,8 @@ int ft_alloc_active_res(struct fi_info *fi)
 
 int ft_init_oob()
 {
-	int ret, op;
-	struct addrinfo *ai;
+	int ret, op, err;
+	struct addrinfo *ai = NULL;
 
 	if (!opts.dst_addr) {
 		ret = ft_sock_listen(opts.oob_port);
@@ -569,17 +569,11 @@ int ft_init_oob()
 			return ret;
 
 		oob_sock = accept(listen_sock, NULL, 0);
-			if (oob_sock < 0) {
-			ret = oob_sock;
+		if (oob_sock < 0) {
 			perror("accept");
+			ret = oob_sock;
 			return ret;
 		}
-
-		op = 1;
-		ret = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY,
-				  (void *) &op, sizeof(op));
-		if (ret)
-			perror("setsockopt");
 	} else {
 
 		ret = getaddrinfo(opts.dst_addr, opts.oob_port, NULL, &ai);
@@ -595,21 +589,23 @@ int ft_init_oob()
 			goto free;
 		}
 
-		ret = 1;
-		ret = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY, (void *) &ret, sizeof(ret));
-		if (ret)
-			perror("setsockopt");
-
 		ret = connect(oob_sock, ai->ai_addr, ai->ai_addrlen);
 		if (ret) {
 			perror("connect");
 			close(oob_sock);
+			goto free;
 		}
 	}
-	return 0;
+
+	op = 1;
+	err = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY,
+			 &op, sizeof(op));
+	if (err)
+		perror("setsockopt"); /* non-fatal error */
 
 free:
-	freeaddrinfo(ai);
+	if (ai)
+		freeaddrinfo(ai);
 	return ret;
 }
 
