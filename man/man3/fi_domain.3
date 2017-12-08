@@ -1,5 +1,5 @@
 .\"t
-.TH "fi_domain" "3" "2017\-10\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_domain" "3" "2017\-12\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain \- Open a fabric access domain
@@ -194,8 +194,8 @@ different data flows.
 intended for providers that make use of manual progress.
 Applications must serialize access to all objects that are associated
 through the use of having a shared completion structure.
-This includes endpoint, completion queue, counter, wait set, and poll
-set objects.
+This includes endpoint, transmit context, receive context, completion
+queue, counter, wait set, and poll set objects.
 .PP
 For example, threads must serialize access to an endpoint and its bound
 completion queue(s) and/or counters.
