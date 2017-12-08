@@ -5,6 +5,69 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.5.3, Fri Dec 15, 2017
+========================
+
+## Core
+
+-- Handle malloc failures
+-- Ensure global lock is initialized on Windows
+-- Fix spelling and formatting errors in man pages
+
+## GNI
+
+-- Fix segfault when using FI_MULTI_RECV
+-- Fix rcache issue handling overlapping memory regions
+
+## NetDir
+
+-- Fix fi_getname
+-- Remove FI_LOCAL_MR mode bit, being reported erronously
+-- Avoid crashing in fi_join
+
+## PSM
+
+-- Fix print format mismatches
+-- Remove 15 second startup delay when no hardware is installed
+-- Preserve FI_MR_SCALABLE mode bit for backwards compatability
+
+## PSM2
+
+-- Fix print format mismatches
+-- Allow all to all communication between scalable endpoints
+-- Preserve FI_MR_SCALABLE mode bit for backwards compatability
+-- Fix reference counting issue with opened domains
+-- Fix segfault for RMA/atomic operations to local scalable endpoints
+-- Fix resource counting related issues for Tx/Rx contexts
+-- Allow completion suppression when fi_context is non-NULL
+-- Use correct queue for triggered operations with scalable endpoints
+
+## RXM
+
+-- Fix out of bounds access to receive IOVs
+-- Serialize access to connection map
+-- Fix CQ error handling
+-- Fix issue being unable to associate an fi_addr with a connection
+-- Fix bug matching unexpected tagged messages
+-- Indicate that FI_RMA is supported
+-- Return correct r/w ordering size limits
+
+## Sockets
+
+-- Fix check for invalid connection handle
+-- Fix crash in fi_av_remove
+
+## Util
+
+-- Fix number of bits used for connection index
+
+## Verbs
+
+-- Fix incorrect CQ entry data for MSG endpoints
+-- Properly check for errors from getifaddrs
+-- Retry getifaddr on failure because of busy netlink sockets
+-- Ack CM events on error paths
+
 v1.5.2, Wed Nov 8, 2017
 =======================
 
