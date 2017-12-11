@@ -531,25 +531,12 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	dlist_init(&domain->trx_ctxt_list);
 	fastlock_init(&domain->trx_ctxt_lock);
 
-	/* Set active domain before psmx2_domain_enable_ep() installs the
-	 * AM handlers to ensure that psmx2_active_fabric->active_domain
-	 * is always non-NULL inside the handlers. Notice that the
-	 * active_domain becomes NULL again only when the domain is closed.
-	 * At that time the AM handlers are gone with the PSM endpoint.
-	 */
 	domain->fabric->active_domain = domain;
-
-	if (psmx2_domain_enable_ep(domain, NULL) < 0)
-		goto err_out_reset_active_domain;
 
 	if (domain->progress_thread_enabled)
 		psmx2_domain_start_progress(domain);
 
 	return 0;
-
-err_out_reset_active_domain:
-	domain->fabric->active_domain = NULL;
-	rbtDelete(domain->mr_map);
 
 err_out_destroy_mr_lock:
 	fastlock_destroy(&domain->mr_lock);
@@ -641,7 +628,8 @@ err_out:
 	return err;
 }
 
-int psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap)
+static int psmx2_domain_check_features(struct psmx2_fid_domain *domain,
+				       uint64_t ep_cap)
 {
 	if ((domain->caps & ep_cap & ~PSMX2_SUB_CAPS) !=
 	    (ep_cap & ~PSMX2_SUB_CAPS)) {
@@ -660,23 +648,13 @@ int psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap)
 int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 			   struct psmx2_fid_ep *ep)
 {
-	uint64_t ep_cap = 0;
+	int err;
 
-	if (ep)
-		ep_cap = ep->caps;
+	err = psmx2_domain_check_features(domain, ep->caps);
+	if (err)
+		return err;
 
-	if ((domain->caps & ep_cap & ~PSMX2_SUB_CAPS) !=
-	    (ep_cap & ~PSMX2_SUB_CAPS)) {
-		uint64_t mask = ~PSMX2_SUB_CAPS;
-		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"caps mismatch: domain->caps=%s,\n ep->caps=%s,\n mask=%s\n",
-			fi_tostr(&domain->caps, FI_TYPE_CAPS),
-			fi_tostr(&ep_cap, FI_TYPE_CAPS),
-			fi_tostr(&mask, FI_TYPE_CAPS));
-		return -FI_EOPNOTSUPP;
-	}
-
-	if ((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS))
+	if ((ep->caps & FI_RMA) || (ep->caps & FI_ATOMICS))
 		return psmx2_am_init(ep->trx_ctxt);
 
 	return 0;

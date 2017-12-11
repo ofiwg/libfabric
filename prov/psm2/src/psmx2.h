@@ -981,7 +981,6 @@ static inline void psmx2_domain_release(struct psmx2_fid_domain *domain)
 	ofi_atomic_dec32(&domain->util_domain.ref);
 }
 
-int	psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap);
 int	psmx2_domain_enable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep *ep);
 
 void	psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt);
