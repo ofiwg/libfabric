@@ -362,7 +362,7 @@ been set by the provider; however, it is safe to use this call with any
 memory region.
 
 A raw key must be mapped by a peer before it can be used in data transfer
-operations.  See fi_mr_map_key below.
+operations.  See fi_mr_map_raw below.
 
 ## fi_mr_map_raw
 
