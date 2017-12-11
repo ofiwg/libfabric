@@ -113,6 +113,7 @@ struct ft_atomic_control {
 struct ft_mr_control {
 	void			*buf;
 	struct fid_mr		*mr;
+	uint64_t		peer_mr_addr;
 	void			*memdesc;
 	uint64_t		mr_key;
 };
@@ -140,6 +141,7 @@ enum {
 	FT_MAX_AV_TYPES		= 3,
 	FT_MAX_PROV_MODES	= 4,
 	FT_MAX_WAIT_OBJ		= 5,
+	FT_MAX_MR_MODES		= 11,
 	FT_DEFAULT_CREDITS	= 128,
 	FT_COMP_BUF_SIZE	= 256,
 };
@@ -241,6 +243,7 @@ struct ft_set {
 	uint64_t		test_class[FT_MAX_CLASS];
 	uint64_t		constant_caps[FT_MAX_CAPS];
 	uint64_t		test_flags;
+	uint64_t		mr_mode[FT_MAX_MR_MODES];
 };
 
 struct ft_series {
@@ -275,6 +278,7 @@ struct ft_info {
 	uint64_t		test_class;
 	uint64_t		caps;
 	uint64_t		mode;
+	uint64_t		mr_mode;
 	enum fi_av_type		av_type;
 	enum fi_ep_type		ep_type;
 	enum ft_comp_type	comp_type;

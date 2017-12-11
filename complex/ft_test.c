@@ -906,6 +906,30 @@ void ft_cleanup(void)
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
 
+static int ft_exchange_mr_address(void)
+{
+	uint64_t addr;
+	int ret;
+
+	if (test_info.mr_mode != FI_MR_VIRT_ADDR)
+		return 0;
+
+	addr = (uint64_t) ft_mr_ctrl.buf;
+	ret = ft_sock_send(sock, &addr, sizeof addr);
+	if (ret) {
+		FT_PRINTERR("ft_sock_send", ret);
+		return ret;
+	}
+
+	ret = ft_sock_recv(sock, &ft_mr_ctrl.peer_mr_addr, sizeof addr);
+	if (ret) {
+		FT_PRINTERR("ft_sock_recv", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 int ft_open_res()
 {
 	int ret;
@@ -957,6 +981,12 @@ int ft_init_test()
 	ret = ft_post_recv_bufs();
 	if (ret)
 		return ret;
+
+	ret = ft_exchange_mr_address();
+	if (ret) {
+		FT_PRINTERR("ft_exchange_mr_address", ret);
+		goto cleanup;
+	}
 
 	return 0;
 cleanup:

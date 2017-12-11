@@ -202,6 +202,7 @@ static void ft_show_test_info(void)
 	printf(" cq_%s,", ft_wait_obj_str(test_info.cq_wait_obj));
 	printf(" cntr_%s,", ft_wait_obj_str(test_info.cq_wait_obj));
 	printf(" %s,", ft_comp_type_str(test_info.comp_type));
+	printf(" [%s],", fi_tostr(&test_info.mr_mode, FI_TYPE_MR_MODE));
 	printf(" [%s],", fi_tostr(&test_info.mode, FI_TYPE_MODE));
 	printf(" [%s]]\n", fi_tostr(&test_info.caps, FI_TYPE_CAPS));
 }
@@ -232,6 +233,7 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 
 	info->mode = test_info->mode;
 
+	info->domain_attr->mr_mode = test_info->mr_mode;
 	info->domain_attr->av_type = test_info->av_type;
 
 	info->ep_attr->type = test_info->ep_type;
