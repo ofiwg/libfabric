@@ -953,6 +953,11 @@ int ft_init_test()
 		FT_PRINTERR("ft_enable_comm", ret);
 		goto cleanup;
 	}
+
+	ret = ft_post_recv_bufs();
+	if (ret)
+		return ret;
+
 	return 0;
 cleanup:
 	ft_cleanup();

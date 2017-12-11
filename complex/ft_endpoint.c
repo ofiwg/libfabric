@@ -114,10 +114,6 @@ int ft_open_active(void)
 		return ret;
 	}
 
-	ret = ft_post_recv_bufs();
-	if (ret)
-		return ret;
-
 	return 0;
 }
 

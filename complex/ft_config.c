@@ -381,6 +381,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_REMOTE_READ, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_REMOTE_WRITE, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_TAGGED, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_DIRECTED_RECV, uint64_t, buf);
 		FT_ERR("Unknown caps");
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
@@ -759,13 +760,15 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->test_flags = set->test_flags;
 	info->test_class = set->test_class[series->cur_class];
 
-	if (set->constant_caps[0]) {
-		while (set->constant_caps[i])
-			info->caps |= set->constant_caps[i++];
-	} else {
+	if (info->test_class) {
 		info->caps = set->test_class[series->cur_class];
 		if (info->caps & (FT_CAP_RMA | FT_CAP_ATOMIC))
 			info->caps |= FT_CAP_MSG;
+	}
+
+	if (set->constant_caps[0]) {
+		while (set->constant_caps[i])
+			info->caps |= set->constant_caps[i++];
 	}
 
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
