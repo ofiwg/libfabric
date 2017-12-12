@@ -152,7 +152,7 @@ out:
 	return event;
 }
 
-static struct psmx2_cq_event *
+static inline struct psmx2_cq_event *
 psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 				  struct psmx2_fid_av *av,
 				  psm2_mq_status2_t *psm2_status,
@@ -266,7 +266,7 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 	/* NOTE: "event_in" only has space for the CQE of the current CQ format.
 	 * Fields like "error_code" and "source" should not be filled in.
 	 */
-	if (event_in && count && !psm2_status->error_code) {
+	if (OFI_LIKELY(event_in && count && !psm2_status->error_code)) {
 		event = event_in;
 	} else {
 		event = psmx2_cq_alloc_event(cq);
@@ -276,7 +276,7 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		event->error = !!psm2_status->error_code;
 	}
 
-	if (psm2_status->error_code) {
+	if (OFI_UNLIKELY(psm2_status->error_code)) {
 		event->cqe.err.op_context = op_context;
 		event->cqe.err.flags = flags;
 		event->cqe.err.err = -psmx2_errno(psm2_status->error_code);
@@ -369,6 +369,7 @@ out:
 	return event;
 }
 
+__attribute__((always_inline)) inline
 int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 		     struct psmx2_trx_ctxt *trx_ctxt,
 		     struct psmx2_cq_event *event_in,
@@ -403,13 +404,13 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 		err = psm2_mq_ipeek(trx_ctxt->psm2_mq, &psm2_req, NULL);
 
-		if (err == PSM2_OK) {
+		if (OFI_LIKELY(err == PSM2_OK)) {
 			err = psm2_mq_test2(&psm2_req, &psm2_status);
 			psmx2_unlock(&trx_ctxt->poll_lock, 2);
 
 			fi_context = psm2_status.context;
 
-			if (!fi_context)
+			if (OFI_UNLIKELY(!fi_context))
 				continue;
 
 			req_to_free = NULL;
@@ -434,8 +435,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			case PSMX2_RECV_CONTEXT:
 			case PSMX2_TRECV_CONTEXT:
-				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
-				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
+				if (OFI_UNLIKELY((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+						 !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0)))
 					continue;
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
@@ -653,15 +654,15 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 			}
 
-			if (tmp_cq) {
+			if (OFI_LIKELY(tmp_cq != NULL)) {
 				event = psmx2_cq_create_event_from_status(
 						tmp_cq, tmp_ep->av, &psm2_status, 0,
 						(tmp_cq == cq) ? event_buffer : NULL, count,
 						src_addr);
-				if (!event)
+				if (OFI_UNLIKELY(!event))
 					return -FI_ENOMEM;
 
-				if (event == event_buffer) {
+				if (OFI_LIKELY(event == event_buffer)) {
 					read_count++;
 					read_more = --count;
 					event_buffer = count ?
@@ -676,12 +677,13 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				}
 			}
 
-			free(req_to_free);
+			if (OFI_UNLIKELY(req_to_free != NULL))
+				free(req_to_free);
 
 			if (tmp_cntr)
 				psmx2_cntr_inc(tmp_cntr);
 
-			if (multi_recv) {
+			if (OFI_UNLIKELY(multi_recv)) {
 				struct psmx2_multi_recv *req;
 				psm2_mq_req_t psm2_req;
 				size_t len_remaining;
