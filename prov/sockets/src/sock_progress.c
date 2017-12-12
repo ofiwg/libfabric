@@ -2558,59 +2558,6 @@ static void sock_pe_wait(struct sock_pe *pe)
 	pe->waittime = fi_gettime_ms();
 }
 
-#if !defined __APPLE__ && !defined _WIN32
-static void sock_thread_set_affinity(const char *s)
-{
-	char *saveptra = NULL, *saveptrb = NULL, *saveptrc = NULL;
-	char *dup_s, *a, *b, *c;
-	int j, first, last, stride;
-	cpu_set_t mycpuset;
-	pthread_t mythread;
-
-	mythread = pthread_self();
-	CPU_ZERO(&mycpuset);
-
-	dup_s = strdup(s);
-	if (dup_s == NULL) {
-		SOCK_LOG_ERROR("strdup cannot allocate memory\n");
-		return;
-	}
-
-	a = strtok_r(dup_s, ",", &saveptra);
-	while (a) {
-		first = last = -1;
-		stride = 1;
-		b = strtok_r(a, "-", &saveptrb);
-		assert(b);
-		first = atoi(b);
-		/* Check for range delimiter */
-		b = strtok_r(NULL, "-", &saveptrb);
-		if (b) {
-			c = strtok_r(b, ":", &saveptrc);
-			assert(c);
-			last = atoi(c);
-			/* Check for stride */
-			c = strtok_r(NULL, ":", &saveptrc);
-			if (c)
-				stride = atoi(c);
-		}
-
-		if (last == -1)
-			last = first;
-
-		for (j = first; j <= last; j += stride)
-			CPU_SET(j, &mycpuset);
-		a =  strtok_r(NULL, ",", &saveptra);
-	}
-
-	j = pthread_setaffinity_np(mythread, sizeof(cpu_set_t), &mycpuset);
-	if (j != 0)
-		SOCK_LOG_ERROR("pthread_setaffinity_np failed\n");
-
-	free(dup_s);
-}
-#endif
-
 static void sock_pe_set_affinity(void)
 {
 	char *sock_pe_affinity_str;
@@ -2620,11 +2567,8 @@ static void sock_pe_set_affinity(void)
 	if (sock_pe_affinity_str == NULL)
 		return;
 
-#if !defined __APPLE__ && !defined _WIN32
-	sock_thread_set_affinity(sock_pe_affinity_str);
-#else
-	SOCK_LOG_ERROR("*** FI_SOCKETS_PE_AFFINITY is not supported on OS X\n");
-#endif
+	if (ofi_set_thread_affinity(sock_pe_affinity_str) == -FI_ENOSYS)
+		SOCK_LOG_ERROR("FI_SOCKETS_PE_AFFINITY is not supported on OS X and Windows\n");
 }
 
 static void *sock_pe_progress_thread(void *data)
