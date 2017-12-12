@@ -74,11 +74,24 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static void fi_ibv_rdm_cm_set_thread_affinity(void)
+{
+	if (fi_ibv_gl_data.rdm.cm_thread_affinity == NULL)
+		return;
+
+	if (ofi_set_thread_affinity(fi_ibv_gl_data.rdm.cm_thread_affinity) == -FI_ENOSYS)
+		VERBS_WARN(FI_LOG_DOMAIN,
+			   "FI_VERBS_RDM_CM_THREAD_AFFINITY is not supported on OS X\n");
+}
+
 static void *fi_ibv_rdm_cm_progress_thread(void *dom)
 {
 	struct fi_ibv_domain *domain =
 		(struct fi_ibv_domain *)dom;
 	struct slist_entry *item, *prev;
+
+	fi_ibv_rdm_cm_set_thread_affinity();
+
 	while (domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running) {
 		struct fi_ibv_rdm_ep *ep = NULL;
 		slist_foreach(&domain->ep_list, item, prev) {
@@ -86,8 +99,8 @@ static void *fi_ibv_rdm_cm_progress_thread(void *dom)
 			ep = container_of(item, struct fi_ibv_rdm_ep,
 					  list_entry);
 			if (fi_ibv_rdm_cm_progress(ep)) {
-				VERBS_INFO (FI_LOG_EP_DATA,
-				            "fi_ibv_rdm_cm_progress error\n");
+				VERBS_INFO(FI_LOG_EP_DATA,
+					   "fi_ibv_rdm_cm_progress error\n");
 				abort();
 			}
 		}

@@ -63,6 +63,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 		.rndv_seg_size		= FI_IBV_RDM_SEG_MAXSIZE,
 		.thread_timeout		= FI_IBV_RDM_CM_THREAD_TIMEOUT,
 		.eager_send_opcode	= "IBV_WR_SEND",
+		.cm_thread_affinity	= NULL,
 	},
 
 	.dgram			= {
@@ -698,6 +699,16 @@ static int fi_ibv_read_params(void)
 				 &fi_ibv_gl_data.rdm.eager_send_opcode)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of rdm_eager_send_opcode\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_str("rdm_cm_thread_affinity",
+				 "If specified, bind the CM thread to the indicated "
+				 "range(s) of Linux virtual processor ID(s). "
+				 "This option is currently not supported on OS X. "
+				 "Usage: id_start[-id_end[:stride]][,]",
+				 &fi_ibv_gl_data.rdm.cm_thread_affinity)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid thread affinity range provided in the rdm_cm_thread_affinity\n");
 		return -FI_EINVAL;
 	}
 
