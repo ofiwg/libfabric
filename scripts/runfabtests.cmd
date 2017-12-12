@@ -12,8 +12,8 @@ set TEST_FAIL_TIMEOUT=90
 set unit_tests=^
 	"av_test -g 192.168.10.1 -n 1 -s 127.0.0.1"^
 	"eq_test"
-:: Disabling this test since it fails on windows (appveyor). Re-enable after root cause is identified and fixed
-:: "dom_test -n 2"^
+rem Disabling this test since it fails on windows (appveyor). Re-enable after root cause is identified and fixed
+rem "dom_test -n 2"
 
 set simple_tests=^
 	"cq_data"^
@@ -28,7 +28,7 @@ set simple_tests=^
 	"rdm_rma_trigger"^
 	"rdm_tagged_peek"^
 	"scalable_ep"
-::	"msg_epoll"
+rem	"msg_epoll"
 
 set short_tests=^
 	"msg_pingpong -I 5"^
@@ -38,28 +38,28 @@ set short_tests=^
 	"rdm_pingpong -I 5 -v"^
 	"rdm_tagged_pingpong -I 5"^
 	"rdm_tagged_pingpong -I 5 -v"
-::	"msg_bw -I 5"^
-::	"msg_bw -I 5 -v"^
-::	"rma_bw -e msg -o write -I 5"^
-::	"rma_bw -e msg -o read -I 5"^
-::	"rma_bw -e msg -o writedata -I 5"^
-::	"rma_bw -e rdm -o write -I 5"^
-::	"rma_bw -e rdm -o read -I 5"^
-::	"rma_bw -e rdm -o writedata -I 5"^
-::	"msg_rma -o write -I 5"^
-::	"msg_rma -o read -I 5"^
-::	"msg_rma -o writedata -I 5"^
-::	"msg_stream -I 5"^
-::	"rdm_atomic -I 5 -o all"^
-::	"rdm_multi_recv -I 5"^
-::	"rdm_rma -o write -I 5"^
-::	"rdm_rma -o read -I 5"^
-::	"rdm_rma -o writedata -I 5"^
-::	"rdm_tagged_bw -I 5"^
-::	"rdm_tagged_bw -I 5 -v"^
-::	"dgram_pingpong -I 5"^
-::	"rc_pingpong -n 5"^
-::	"rc_pingpong -n 5 -e"
+rem	"msg_bw -I 5"^
+rem	"msg_bw -I 5 -v"^
+rem	"rma_bw -e msg -o write -I 5"^
+rem	"rma_bw -e msg -o read -I 5"^
+rem	"rma_bw -e msg -o writedata -I 5"^
+rem	"rma_bw -e rdm -o write -I 5"^
+rem	"rma_bw -e rdm -o read -I 5"^
+rem	"rma_bw -e rdm -o writedata -I 5"^
+rem	"msg_rma -o write -I 5"^
+rem	"msg_rma -o read -I 5"^
+rem	"msg_rma -o writedata -I 5"^
+rem	"msg_stream -I 5"^
+rem	"rdm_atomic -I 5 -o all"^
+rem	"rdm_multi_recv -I 5"^
+rem	"rdm_rma -o write -I 5"^
+rem	"rdm_rma -o read -I 5"^
+rem	"rdm_rma -o writedata -I 5"^
+rem	"rdm_tagged_bw -I 5"^
+rem	"rdm_tagged_bw -I 5 -v"^
+rem	"dgram_pingpong -I 5"^
+rem	"rc_pingpong -n 5"^
+rem	"rc_pingpong -n 5 -e"
 
 
 set standard_tests=^
@@ -74,28 +74,28 @@ set standard_tests=^
 	"rdm_pingpong -k -v"^
 	"rdm_tagged_pingpong"^
 	"rdm_tagged_pingpong -v"
-::	"msg_bw"^
-::	"msg_bw -v"^
-::	"rma_bw -e msg -o write"^
-::	"rma_bw -e msg -o read"^
-::	"rma_bw -e msg -o writedata"^
-::	"rma_bw -e rdm -o write"^
-::	"rma_bw -e rdm -o read"^
-::	"rma_bw -e rdm -o writedata"^
-::	"msg_rma -o write"^
-::	"msg_rma -o read"^
-::	"msg_rma -o writedata"^
-::	"msg_stream"^
-::	"rdm_atomic -o all -I 1000"^
-::	"rdm_multi_recv"^
-::	"rdm_rma -o write"^
-::	"rdm_rma -o read"^
-::	"rdm_rma -o writedata"^
-::	"rdm_tagged_bw"^
-::	"rdm_tagged_bw -v"^
-::	"dgram_pingpong"^
-::	"dgram_pingpong -k"^
-::	"rc_pingpong"
+rem	"msg_bw"^
+rem	"msg_bw -v"^
+rem	"rma_bw -e msg -o write"^
+rem	"rma_bw -e msg -o read"^
+rem	"rma_bw -e msg -o writedata"^
+rem	"rma_bw -e rdm -o write"^
+rem	"rma_bw -e rdm -o read"^
+rem	"rma_bw -e rdm -o writedata"^
+rem	"msg_rma -o write"^
+rem	"msg_rma -o read"^
+rem	"msg_rma -o writedata"^
+rem	"msg_stream"^
+rem	"rdm_atomic -o all -I 1000"^
+rem	"rdm_multi_recv"^
+rem	"rdm_rma -o write"^
+rem	"rdm_rma -o read"^
+rem	"rdm_rma -o writedata"^
+rem	"rdm_tagged_bw"^
+rem	"rdm_tagged_bw -v"^
+rem	"dgram_pingpong"^
+rem	"dgram_pingpong -k"^
+rem	"rc_pingpong"
 
 
 set test_types=unit simple short
