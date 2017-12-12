@@ -888,6 +888,12 @@ typedef LONGLONG ofi_atomic_int_64_t;
 #define ofi_atomic_sub_and_fetch(radix, ptr, val) InterlockedAdd##radix((ofi_atomic_int_##radix##_t *)(ptr), -(ofi_atomic_int_##radix##_t)(val))
 #endif /* HAVE_BUILTIN_ATOMICS */
 
+static inline int ofi_set_thread_affinity(const char *s)
+{
+	OFI_UNUSED(s);
+	return -FI_ENOSYS;
+}
+
 #ifdef __cplusplus
 }
 #endif

@@ -40,6 +40,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#ifdef __FreeBSD__
+#include <pthread_np.h>
+#endif
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -52,6 +55,12 @@
 
 #include "rdma/fi_errno.h"
 #include "rdma/providers/fi_log.h"
+
+#ifdef __FreeBSD__
+typedef cpuset_t ofi_cpu_set_t;
+#elif defined __linux__
+typedef cpu_set_t ofi_cpu_set_t;
+#endif
 
 int fi_fd_nonblock(int fd)
 {
@@ -203,4 +212,57 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 	return len;
 }
 
+int ofi_set_thread_affinity(const char *s)
+{
+#ifndef __APPLE__
+	char *saveptra = NULL, *saveptrb = NULL, *saveptrc = NULL;
+	char *dup_s, *a, *b, *c;
+	int j, first, last, stride, ret = FI_SUCCESS;
+	ofi_cpu_set_t mycpuset;
+	pthread_t mythread;
 
+	mythread = pthread_self();
+	CPU_ZERO(&mycpuset);
+
+	dup_s = strdup(s);
+	if (dup_s == NULL)
+		return -FI_ENOMEM;
+
+	a = strtok_r(dup_s, ",", &saveptra);
+	while (a) {
+		first = last = -1;
+		stride = 1;
+		b = strtok_r(a, "-", &saveptrb);
+		assert(b);
+		first = atoi(b);
+		/* Check for range delimiter */
+		b = strtok_r(NULL, "-", &saveptrb);
+		if (b) {
+			c = strtok_r(b, ":", &saveptrc);
+			assert(c);
+			last = atoi(c);
+			/* Check for stride */
+			c = strtok_r(NULL, ":", &saveptrc);
+			if (c)
+				stride = atoi(c);
+		}
+
+		if (last == -1)
+			last = first;
+
+		for (j = first; j <= last; j += stride)
+			CPU_SET(j, &mycpuset);
+		a =  strtok_r(NULL, ",", &saveptra);
+	}
+
+	ret = pthread_setaffinity_np(mythread, sizeof(mycpuset), &mycpuset);
+	if (ret)
+		ret = -errno;
+
+	free(dup_s);
+	return ret;
+#else
+	OFI_UNUSED(s);
+	return -FI_ENOSYS;
+#endif
+}

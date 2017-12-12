@@ -45,7 +45,7 @@
 #include <pthread.h>
 
 #include "unix/osd.h"
-
+#include "rdma/fi_errno.h"
 #include "config.h"
 
 #define pthread_yield pthread_yield_np
