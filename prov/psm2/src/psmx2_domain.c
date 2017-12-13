@@ -128,13 +128,21 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	struct dlist_entry *item, *tmp;
 	struct psmx2_epaddr_context *peer;
+	struct dlist_entry peer_list;
 	psm2_amarg_t arg;
 
 	arg.u32w0 = PSMX2_AM_REQ_TRX_CTXT_DISCONNECT;
 
+	/* use local peer_list to avoid entering AM handler while holding the lock */
+	dlist_init(&peer_list);
 	psmx2_lock(&trx_ctxt->peer_lock, 2);
 	dlist_foreach_safe(&trx_ctxt->peer_list, item, tmp) {
 		dlist_remove(item);
+		dlist_insert_before(item, &peer_list);
+	}
+	psmx2_unlock(&trx_ctxt->peer_lock, 2);
+
+	dlist_foreach_safe(&peer_list, item, tmp) {
 		peer = container_of(item, struct psmx2_epaddr_context, entry);
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "epaddr: %p\n", peer->epaddr);
 		psm2_am_request_short(peer->epaddr, PSMX2_AM_TRX_CTXT_HANDLER,
@@ -142,7 +150,6 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 		psm2_epaddr_setctxt(peer->epaddr, NULL);
 		free(peer);
 	}
-	psmx2_unlock(&trx_ctxt->peer_lock, 2);
 }
 
 void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
