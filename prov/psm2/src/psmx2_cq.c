@@ -152,7 +152,7 @@ out:
 	return event;
 }
 
-static struct psmx2_cq_event *
+static inline struct psmx2_cq_event *
 psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 				  struct psmx2_fid_av *av,
 				  psm2_mq_status2_t *psm2_status,
@@ -266,7 +266,7 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 	/* NOTE: "event_in" only has space for the CQE of the current CQ format.
 	 * Fields like "error_code" and "source" should not be filled in.
 	 */
-	if (event_in && count && !psm2_status->error_code) {
+	if (OFI_LIKELY(event_in && count && !psm2_status->error_code)) {
 		event = event_in;
 	} else {
 		event = psmx2_cq_alloc_event(cq);
@@ -276,7 +276,7 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		event->error = !!psm2_status->error_code;
 	}
 
-	if (psm2_status->error_code) {
+	if (OFI_UNLIKELY(psm2_status->error_code)) {
 		event->cqe.err.op_context = op_context;
 		event->cqe.err.flags = flags;
 		event->cqe.err.err = -psmx2_errno(psm2_status->error_code);
@@ -369,6 +369,128 @@ out:
 	return event;
 }
 
+static inline struct psmx2_cq_event *
+psmx2_cq_create_event_from_status_inline(struct psmx2_fid_cq *cq,
+					 struct psmx2_fid_av *av,
+					 psm2_mq_status2_t *psm2_status,
+					 uint64_t data,
+					 struct psmx2_cq_event *event_in,
+					 int count,
+					 fi_addr_t *src_addr,
+					 void *op_context,
+					 void *buf,
+					 uint64_t flags,
+					 int is_recv)
+{
+	struct psmx2_cq_event *event;
+
+	/* NOTE: "event_in" only has space for the CQE of the current CQ format.
+	 * Fields like "error_code" and "source" should not be filled in.
+	 */
+	if (OFI_LIKELY(event_in && count && !psm2_status->error_code)) {
+		event = event_in;
+	} else {
+		event = psmx2_cq_alloc_event(cq);
+		if (!event)
+			return NULL;
+
+		event->error = !!psm2_status->error_code;
+	}
+
+	if (OFI_UNLIKELY(psm2_status->error_code)) {
+		event->cqe.err.op_context = op_context;
+		event->cqe.err.flags = flags;
+		event->cqe.err.err = -psmx2_errno(psm2_status->error_code);
+		event->cqe.err.prov_errno = psm2_status->error_code;
+		event->cqe.err.tag = psm2_status->msg_tag.tag0 |
+				     (((uint64_t)psm2_status->msg_tag.tag1) << 32);
+		event->cqe.err.olen = psm2_status->msg_length - psm2_status->nbytes;
+		if (data)
+			event->cqe.err.data = data;
+		goto out;
+	}
+
+	switch (cq->format) {
+	case FI_CQ_FORMAT_CONTEXT:
+		event->cqe.context.op_context = op_context;
+		break;
+
+	case FI_CQ_FORMAT_MSG:
+		event->cqe.msg.op_context = op_context;
+		event->cqe.msg.flags = flags;
+		event->cqe.msg.len = psm2_status->nbytes;
+		break;
+
+	case FI_CQ_FORMAT_DATA:
+		event->cqe.data.op_context = op_context;
+		event->cqe.data.buf = buf;
+		event->cqe.data.flags = flags;
+		event->cqe.data.len = psm2_status->nbytes;
+		event->cqe.data.data =
+			(psm2_status->msg_tag.tag2 & PSMX2_MSG_BIT) ?
+				PSMX2_GET_TAG64(psm2_status->msg_tag) : 0;
+		if (data)
+			event->cqe.data.data = data;
+		break;
+
+	case FI_CQ_FORMAT_TAGGED:
+		event->cqe.tagged.op_context = op_context;
+		event->cqe.tagged.buf = buf;
+		event->cqe.tagged.flags = flags;
+		event->cqe.tagged.len = psm2_status->nbytes;
+		event->cqe.tagged.data =
+			(psm2_status->msg_tag.tag2 & PSMX2_MSG_BIT) ?
+				PSMX2_GET_TAG64(psm2_status->msg_tag) : 0;
+		event->cqe.tagged.tag = PSMX2_GET_TAG64(psm2_status->msg_tag);
+		if (data)
+			event->cqe.tagged.data = data;
+		break;
+
+	default:
+		FI_WARN(&psmx2_prov, FI_LOG_CQ,
+			"unsupported CQ format %d\n", cq->format);
+		if (event != event_in)
+			psmx2_cq_free_event(cq, event);
+		return NULL;
+	}
+
+out:
+	if (is_recv) {
+		uint8_t vlane = PSMX2_TAG32_GET_SRC(psm2_status->msg_tag.tag2);
+		fi_addr_t source = PSMX2_EP_TO_ADDR(psm2_status->msg_peer, vlane);
+		if (event == event_in) {
+			if (src_addr) {
+				*src_addr = psmx2_av_translate_source(av, source);
+				if (*src_addr == FI_ADDR_NOTAVAIL) {
+					event = psmx2_cq_alloc_event(cq);
+					if (!event)
+						return NULL;
+
+					event->cqe = event_in->cqe;
+					event->cqe.err.err = FI_EADDRNOTAVAIL;
+					event->cqe.err.err_data = &cq->error_data;
+					event->error = !!event->cqe.err.err;
+					if (av->addr_format == FI_ADDR_STR) {
+						event->cqe.err.err_data_size = PSMX2_ERR_DATA_SIZE;
+						psmx2_get_source_string_name(source, (void *)&cq->error_data,
+									     &event->cqe.err.err_data_size);
+					} else {
+						psmx2_get_source_name(source, (void *)&cq->error_data);
+						event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
+					}
+				}
+			}
+		} else {
+			event->source_is_valid = 1;
+			event->source = source;
+			event->source_av = av;
+		}
+	}
+
+	return event;
+}
+
+__attribute__((always_inline)) inline
 int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 		     struct psmx2_trx_ctxt *trx_ctxt,
 		     struct psmx2_cq_event *event_in,
@@ -403,13 +525,13 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 		err = psm2_mq_ipeek(trx_ctxt->psm2_mq, &psm2_req, NULL);
 
-		if (err == PSM2_OK) {
+		if (OFI_LIKELY(err == PSM2_OK)) {
 			err = psm2_mq_test2(&psm2_req, &psm2_status);
 			psmx2_unlock(&trx_ctxt->poll_lock, 2);
 
 			fi_context = psm2_status.context;
 
-			if (!fi_context)
+			if (OFI_UNLIKELY(!fi_context))
 				continue;
 
 			req_to_free = NULL;
@@ -433,13 +555,58 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_RECV_CONTEXT:
-			case PSMX2_TRECV_CONTEXT:
-				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
-				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
+				if (OFI_UNLIKELY((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+						 !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0)))
 					continue;
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
+
+			case PSMX2_TRECV_CONTEXT:
+				if (OFI_UNLIKELY((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+						 !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0)))
+					continue;
+				tmp_cq = tmp_ep->recv_cq;
+				tmp_cntr = tmp_ep->recv_cntr;
+
+				/* specially optimized path for tagged receive */
+
+				if (tmp_cq != NULL) {
+					struct fi_context *fi_context = psm2_status.context;
+					event = psmx2_cq_create_event_from_status_inline(
+							tmp_cq, tmp_ep->av, &psm2_status, 0,
+							(tmp_cq == cq) ? event_buffer : NULL, count,
+							src_addr,
+							fi_context,
+							PSMX2_CTXT_USER(fi_context),
+							FI_RECV | FI_TAGGED,
+							1);
+
+					if (OFI_UNLIKELY(!event))
+						return -FI_ENOMEM;
+
+					if (OFI_LIKELY(event == event_buffer)) {
+						read_count++;
+						read_more = --count;
+						event_buffer = count ?
+							(uint8_t *)event_buffer + cq->entry_size :
+							NULL;
+						if (src_addr)
+							src_addr = count ? src_addr + 1 : NULL;
+					} else {
+						psmx2_cq_enqueue_event(tmp_cq, event);
+						if (tmp_cq == cq)
+							read_more = 0;
+					}
+				}
+
+				if (tmp_cntr)
+					psmx2_cntr_inc(tmp_cntr);
+
+				if (read_more)
+					continue;
+
+				return read_count;
 
 			case PSMX2_NOCOMP_RECV_CONTEXT:
 				if (psm2_status.error_code)
@@ -653,15 +820,15 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 			}
 
-			if (tmp_cq) {
+			if (OFI_LIKELY(tmp_cq != NULL)) {
 				event = psmx2_cq_create_event_from_status(
 						tmp_cq, tmp_ep->av, &psm2_status, 0,
 						(tmp_cq == cq) ? event_buffer : NULL, count,
 						src_addr);
-				if (!event)
+				if (OFI_UNLIKELY(!event))
 					return -FI_ENOMEM;
 
-				if (event == event_buffer) {
+				if (OFI_LIKELY(event == event_buffer)) {
 					read_count++;
 					read_more = --count;
 					event_buffer = count ?
@@ -676,12 +843,13 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				}
 			}
 
-			free(req_to_free);
+			if (OFI_UNLIKELY(req_to_free != NULL))
+				free(req_to_free);
 
 			if (tmp_cntr)
 				psmx2_cntr_inc(tmp_cntr);
 
-			if (multi_recv) {
+			if (OFI_UNLIKELY(multi_recv)) {
 				struct psmx2_multi_recv *req;
 				psm2_mq_req_t psm2_req;
 				size_t len_remaining;

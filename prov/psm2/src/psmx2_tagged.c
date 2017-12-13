@@ -943,8 +943,10 @@ psmx2_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf,
 	uint32_t tag32;
 	int err;
 
-	if (len > psmx2_env.inject_size)
+	if (OFI_UNLIKELY(len > psmx2_env.inject_size))
 		return -FI_EMSGSIZE;
+
+	PSMX2_SET_TAG_FIRST64(psm2_tag, tag);
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -957,7 +959,7 @@ psmx2_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf,
 		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
 	tag32 = PSMX2_TAG32(0, ep_priv->vlane, vlane);
-	PSMX2_SET_TAG(psm2_tag, tag, tag32);
+	PSMX2_SET_TAG_LAST32(psm2_tag, tag32);
 
 	err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr, 0,
 			    &psm2_tag, buf, len);
@@ -986,7 +988,7 @@ psmx2_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	int err;
 	size_t idx;
 
-	if (len > psmx2_env.inject_size)
+	if (OFI_UNLIKELY(len > psmx2_env.inject_size))
 		return -FI_EMSGSIZE;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);

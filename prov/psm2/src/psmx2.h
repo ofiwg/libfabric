@@ -121,8 +121,22 @@ extern struct fi_provider psmx2_prov;
 						tag96.tag1 = (uint32_t)(tag64>>32); \
 						tag96.tag2 = tag32; \
 					} while (0)
+#define PSMX2_SET_TAG_FIRST64(tag96,tag64) do { \
+						memcpy(&(tag96).tag0, &(tag64), sizeof(uint64_t)); \
+					} while (0)
+#define PSMX2_SET_TAG_LAST32(tag96,tag32) do { \
+						tag96.tag2 = tag32; \
+					} while (0)
 
-#define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
+#define PSMX2_GET_TAG64(tag96)		(psmx2_get_tag64(&(tag96)))
+
+static inline uint64_t psmx2_get_tag64(const psm2_mq_tag_t *tag96)
+{
+	uint64_t tag64;
+
+	memcpy(&tag64, &tag96->tag0, sizeof(tag64));
+	return tag64;
+}
 
 /* When using the long RMA protocol, set a bit in the unused SEQ bits to
  * indicate whether or not the operation is a read or a write. This prevents tag
@@ -166,7 +180,7 @@ extern struct fi_provider psmx2_prov;
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
 
-#define PSMX2_CTXT_ALLOC_FLAG		0x80000000
+
 enum psmx2_context_type {
 	PSMX2_NOCOMP_SEND_CONTEXT = 1,
 	PSMX2_NOCOMP_RECV_CONTEXT,
@@ -184,7 +198,7 @@ enum psmx2_context_type {
 	PSMX2_SENDV_CONTEXT,
 	PSMX2_IOV_SEND_CONTEXT,
 	PSMX2_IOV_RECV_CONTEXT,
-	PSMX2_NOCOMP_RECV_CONTEXT_ALLOC = PSMX2_NOCOMP_RECV_CONTEXT | PSMX2_CTXT_ALLOC_FLAG,
+	PSMX2_NOCOMP_RECV_CONTEXT_ALLOC
 };
 
 struct psmx2_context {
