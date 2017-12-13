@@ -49,6 +49,12 @@
 #define FI_DEPRECATED_FIELD
 #endif
 
+#if defined(__GNUC__) && !defined(__clang__)
+#define EXTERNALLY_VISIBLE externally_visible
+#else
+#define EXTERNALLY_VISIBLE
+#endif
+
 #if defined(_WIN32)
 #include <BaseTsd.h>
 #include <windows.h>

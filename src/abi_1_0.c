@@ -113,7 +113,7 @@ struct fi_info_1_0 {
 	} while (0);
 
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void fi_freeinfo_1_0(struct fi_info_1_0 *info)
 {
 	fi_freeinfo((struct fi_info *) info);
@@ -121,7 +121,7 @@ void fi_freeinfo_1_0(struct fi_info_1_0 *info)
 COMPAT_SYMVER(fi_freeinfo_1_0, fi_freeinfo, FABRIC_1.0);
 
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
 {
 	struct fi_info *dup;
@@ -202,7 +202,7 @@ fail:
 }
 COMPAT_SYMVER(fi_dupinfo_1_0, fi_dupinfo, FABRIC_1.0);
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
 		    uint64_t flags, const struct fi_info_1_0 *hints_1_0,
 		    struct fi_info_1_0 **info)
@@ -225,7 +225,7 @@ int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
 }
 COMPAT_SYMVER(fi_getinfo_1_0, fi_getinfo, FABRIC_1.0);
 
-__attribute__((visibility ("default")))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_fabric_1_0(struct fi_fabric_attr_1_0 *attr_1_0,
 		  struct fid_fabric **fabric, void *context)
 {

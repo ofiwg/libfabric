@@ -33,9 +33,15 @@
 #ifndef _FI_PSM_VERSION_H_
 #define _FI_PSM_VERSION_H_
 
+#if HAVE_PSM2_SRC
+#include "psm2/psm2.h"
+#include "psm2/psm2_mq.h"
+#include "psm2/psm2_am.h"
+#else
 #include <psm2.h>
 #include <psm2_mq.h>
 #include <psm2_am.h>
+#endif
 
 #define PSMX2_PROV_NAME		"psm2"
 #define PSMX2_DOMAIN_NAME	"psm2"
