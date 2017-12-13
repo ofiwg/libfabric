@@ -209,6 +209,18 @@ static int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint64_t fla
 		return ret;
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 	return 0;
+
+}
+static int smr_verify_peer(struct smr_ep *ep, int peer_id)
+{
+	int ret;
+
+	if (ep->region->map->peers[peer_id].peer.addr != FI_ADDR_UNSPEC)
+		return 0;
+
+	ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
+
+	return (ret == -ENOENT) ? -FI_EAGAIN : ret;
 }
 
 void smr_progress_resp(struct smr_ep *ep)
@@ -651,13 +663,9 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	peer_id = (int) addr;
 
-	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
-		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
-		if (ret) {
-			if (ret == -ENOENT)
-				return -FI_EAGAIN; 
-		}
-	}
+	ret = smr_verify_peer(ep, peer_id);
+	if (ret)
+		return ret;
 
 	peer_smr = smr_peer_region(ep->region, peer_id);
 	fastlock_acquire(&peer_smr->lock);
@@ -752,20 +760,10 @@ ssize_t smr_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	peer_id = (int) dest_addr;
-	if (smr_peer_addr(ep->region)[peer_id].addr == FI_ADDR_UNSPEC) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"peer not ready to receive messages\n");
-		return -FI_EAGAIN;
-	}
 
-	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
-		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
-		if (ret) {
-			if (ret == -ENOENT)
-				ret = -FI_EAGAIN; 
-			return ret;
-		}
-	}
+	ret = smr_verify_peer(ep, peer_id);
+	if (ret)
+		return ret;
 
 	peer_smr = smr_peer_region(ep->region, peer_id);
 	fastlock_acquire(&peer_smr->lock);
@@ -878,20 +876,10 @@ ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	peer_id = (int) dest_addr;
-	if (smr_peer_addr(ep->region)[peer_id].addr == FI_ADDR_UNSPEC) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"peer not ready to receive messages\n");
-		return -FI_EAGAIN;
-	}
 
-	if (ep->region->map->peers[peer_id].peer.addr == FI_ADDR_UNSPEC) {
-		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
-		if (ret) {
-			if (ret == -ENOENT)
-				ret = -FI_EAGAIN; 
-			return ret;
-		}
-	}
+	ret = smr_verify_peer(ep, peer_id);
+	if (ret)
+		return ret;
 
 	peer_smr = smr_peer_region(ep->region, peer_id);
 	fastlock_acquire(&peer_smr->lock);
