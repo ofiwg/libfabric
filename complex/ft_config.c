@@ -268,6 +268,12 @@ static struct key_t keys[] = {
 		.offset = offsetof(struct ft_set, msg_flags),
 		.val_type = VAL_NUM,
 		.val_size = sizeof(((struct ft_set *)0)->msg_flags),
+	},
+	{
+		.str = "mr_mode",
+		.offset = offsetof(struct ft_set, mr_mode),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->mr_mode) / FT_MAX_MR_MODES,
 	}
 };
 
@@ -371,6 +377,10 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		FT_ERR("Unknown datatype");
 	} else if (!strncmp(key->str, "msg_flags", strlen("msg_flags"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_REMOTE_CQ_DATA, uint64_t, buf);
+		FT_ERR("Unknown message flag");
+	} else if (!strncmp(key->str, "mr_mode", strlen("mr_mode"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_VIRT_ADDR, uint64_t, buf);
+		FT_ERR("Unknown MR mode");
 	} else if (!strncmp(key->str, "constant_caps", strlen("constant_caps"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_RMA, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MSG, uint64_t, buf);
@@ -769,6 +779,11 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	if (set->constant_caps[0]) {
 		while (set->constant_caps[i])
 			info->caps |= set->constant_caps[i++];
+	}
+	i = 0;
+	if (set->mr_mode[0]) {
+		while (set->mr_mode[i])
+			info->mr_mode |= set->mr_mode[i++];
 	}
 
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
