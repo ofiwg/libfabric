@@ -104,6 +104,7 @@ struct smr_addr {
 	fi_addr_t	addr;
 };
 
+#define SMR_RMA_IOV_LIMIT	3 //TODO find a way to avoid this?
 union smr_cmd_data {
 	uint8_t			msg[SMR_CMD_DATA_LEN];
 	struct iovec		iov[SMR_CMD_DATA_LEN / sizeof(struct iovec)];
