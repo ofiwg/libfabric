@@ -76,7 +76,7 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct smr_domain *smr_domain;
 	struct smr_fabric *smr_fabric;
 
-	ret = smr_check_info(info);
+	ret = ofi_prov_check_info(&smr_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 

@@ -1046,6 +1046,8 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		attr.rx_count = ep->rx_size;
 		attr.tx_count = ep->tx_size;
 		ret = smr_create(&smr_prov, av->smr_map, &attr, &ep->region);
+		if (ret)
+			return ret;
 		smr_exchange_all_peers(ep->region);
 		break;
 	default:
