@@ -563,9 +563,6 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "\n");
 
-	if (!psmx2_env.sep)
-		psmx2_domain_ops.scalable_ep = fi_no_scalable_ep;
-
 	fabric_priv = container_of(fabric, struct psmx2_fid_fabric,
 				   util_fabric.fabric_fid);
 

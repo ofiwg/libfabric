@@ -64,19 +64,9 @@ Progress
 Scalable endpoints
 : Scalable endpoints support depends on the multi-EP feature of the *PSM2*
   library. If the *PSM2* library has this feature, the availability is
-  further controlled by an environment variable *PSM2_MULTI_EP*, which by
-  default is 0 (disabled). It is important to set the environment variable
-  to 1 before using the scalable endpoint with the *psm2* provider.
-
-  For convenience, the *psm2* provider has a mechanism for application
-  to turn on the *PSM2* multi-EP feature programmatically, thus avoid the
-  need of manually setting the environment variable. To use this feature,
-  when the application calls fi_getinfo() the first time, it should pass
-  a non-NULL "hints" parameter with non-NULL "ep_attr" field and with
-  "hints->ep_attr->tx_ctx_cnt" set to be greater than 1. The *psm2*
-  provider treats this as a request to use scalable endpoint and thus
-  sets the default value of *PSM2_MULTI_EP* to 1. This mechanism, however,
-  has no effect if *PSM2_MULTI_EP* has already been set.
+  further controlled by an environment variable *PSM2_MULTI_EP*. The *psm2*
+  provider automatically sets this variable to 1 if it is not set. The
+  feature can be disabled explicitly by setting *PSM2_MULTI_EP* to 0.
 
   When creating a scalable endpoint, the actual number of contexts needed
   should be set in the "fi_info" structure passed to the *fi_scalable_ep*

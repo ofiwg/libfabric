@@ -828,7 +828,7 @@ struct psmx2_env {
 	int timeout;
 	int prog_interval;
 	char *prog_affinity;
-	int sep;
+	int multi_ep;
 	int max_trx_ctxt;
 	int sep_trx_ctxt;
 	int num_devunits;
@@ -891,7 +891,7 @@ static inline void psmx2_unlock(fastlock_t *lock, int lock_level)
 
 #ifdef PSM2_MULTI_EP_CAP
 
-static inline int psmx2_sep_ok(void)
+static inline int psmx2_multi_ep_ok(void)
 {
 	uint64_t caps = PSM2_MULTI_EP_CAP;
 	return (psm2_get_capability_mask(caps) == caps);
@@ -914,7 +914,7 @@ static inline psm2_epid_t psmx2_epaddr_to_epid(psm2_epaddr_t epaddr)
 
 #else
 
-static inline int psmx2_sep_ok(void)
+static inline int psmx2_multi_ep_ok(void)
 {
 	return 0;
 }
