@@ -248,6 +248,9 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 		info->fabric_attr->name = strndup(test_info->fabric_name,
 					sizeof test_info->fabric_name - 1);
 	}
+
+	info->tx_attr->op_flags = test_info->tx_op_flags;
+	info->rx_attr->op_flags = test_info->rx_op_flags;
 }
 
 static void

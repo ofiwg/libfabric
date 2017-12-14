@@ -144,6 +144,7 @@ enum {
 	FT_MAX_MR_MODES		= 11,
 	FT_DEFAULT_CREDITS	= 128,
 	FT_COMP_BUF_SIZE	= 256,
+	FT_MAX_FLAGS		= 64,
 };
 
 enum ft_comp_type {
@@ -244,6 +245,10 @@ struct ft_set {
 	uint64_t		constant_caps[FT_MAX_CAPS];
 	uint64_t		test_flags;
 	uint64_t		mr_mode[FT_MAX_MR_MODES];
+	uint64_t 		rx_cq_bind_flags[FT_MAX_FLAGS];
+	uint64_t 		tx_cq_bind_flags[FT_MAX_FLAGS];
+	uint64_t 		rx_op_flags[FT_MAX_FLAGS];
+	uint64_t 		tx_op_flags[FT_MAX_FLAGS];
 };
 
 struct ft_series {
@@ -291,6 +296,10 @@ struct ft_info {
 	char			service[FI_NAME_MAX];
 	char			prov_name[FI_NAME_MAX];
 	char			fabric_name[FI_NAME_MAX];
+	uint64_t 		rx_cq_bind_flags;
+	uint64_t 		tx_cq_bind_flags;
+	uint64_t 		rx_op_flags;
+	uint64_t 		tx_op_flags;
 };
 
 
@@ -330,6 +339,8 @@ void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len);
 void ft_format_iocs(struct iovec *iov, size_t *iov_count);
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx);
+int ft_check_cq_completion(uint64_t cq_bind_flags, uint64_t op_flags,
+		enum ft_class_function class_function, uint64_t msg_flags);
 
 int ft_send_sync_msg();
 int ft_recv_n_msg();
