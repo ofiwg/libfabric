@@ -38,11 +38,14 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 #include <fi.h>
 #include <fi_atom.h>
 #include <fi_lock.h>
 #include <fi_list.h>
+#include <rbtree.h>
+
 
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
@@ -73,6 +76,7 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 		return prov_info->mode;
 	}
 }
+
 
 /*
  * Memory notifier - Report memory mapping changes to address ranges
@@ -113,8 +117,9 @@ int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 			  void *addr, size_t len,
 			  struct ofi_subscription *subscription);
 void ofi_monitor_unsubscribe(void *addr, size_t len,
-			      struct ofi_subscription *subscription);
+			     struct ofi_subscription *subscription);
 struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq);
+
 
 /*
  * MR map
@@ -140,5 +145,51 @@ void *ofi_mr_map_get(struct ofi_mr_map *map,  uint64_t key);
 int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 		      size_t len, uint64_t key, uint64_t access,
 		      void **context);
+
+
+/*
+ * Memory registration cache
+ */
+
+struct ofi_mr_entry {
+	struct iovec			iov;
+	unsigned int			cached:1;
+	unsigned int			subscribed:1;
+	int				use_cnt;
+	struct dlist_entry		lru_entry;
+	struct ofi_subscription		subscription;
+	uint8_t				data[];
+};
+
+struct ofi_mr_cache {
+	struct util_domain		*domain;
+	struct ofi_notification_queue	nq;
+	size_t				size;
+	size_t				entry_data_size;
+
+	RbtHandle			mr_tree;
+	struct dlist_entry		lru_list;
+
+	uint64_t			cached_cnt;
+	uint64_t			search_cnt;
+	uint64_t			delete_cnt;
+	uint64_t			hit_cnt;
+
+	int				(*add_region)(struct ofi_mr_cache *cache,
+						      struct ofi_mr_entry *entry);
+	void				(*delete_region)(struct ofi_mr_cache *cache,
+							 struct ofi_mr_entry *entry);
+};
+
+int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monitor,
+		      struct ofi_mr_cache *cache);
+void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
+
+/* Caller must provide locking around calls */
+bool ofi_mr_cache_flush(struct ofi_mr_cache *cache);
+int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
+			struct ofi_mr_entry **entry);
+void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
+
 
 #endif /* _OFI_MR_H_ */

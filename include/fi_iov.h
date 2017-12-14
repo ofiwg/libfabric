@@ -36,6 +36,7 @@
 
 #include "config.h"
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
@@ -82,6 +83,30 @@ ofi_copy_from_iov(void *buf, uint64_t bufsize,
 				OFI_COPY_IOV_TO_BUF);
 }
 
+static inline void *
+ofi_iov_end(const struct iovec *iov)
+{
+	return ((char *) iov->iov_base) + iov->iov_len;
+}
+
+static inline bool
+ofi_iov_left(const struct iovec *iov1, const struct iovec *iov2)
+{
+	return ofi_iov_end(iov1) < iov2->iov_base;
+}
+
+static inline bool
+ofi_iov_right(const struct iovec *iov1, const struct iovec *iov2)
+{
+	return iov1->iov_base > ofi_iov_end(iov2);
+}
+
+static inline bool
+ofi_iov_within(const struct iovec *iov1, const struct iovec *iov2)
+{
+	return (iov1->iov_base >= iov2->iov_base) &&
+	       (ofi_iov_end(iov1) <= ofi_iov_end(iov2));
+}
 
 #endif /* IOV_H */
 
