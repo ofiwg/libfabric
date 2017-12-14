@@ -47,7 +47,7 @@ install:
         git clone --depth 1 -b $UCX_BRANCH https://github.com/openucx/ucx.git && cd ucx && ./autogen.sh && ./configure --prefix=$HOME/mlx CFLAGS="-w" && make -j2 install && cd -;
       fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" && "`basename $CC`" == "clang" ]]; then
-        ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS
+        ./configure CFLAGS="-Werror $CFLAGS -Wno-address-of-packed-member" $LIBFABRIC_CONFIGURE_ARGS
         --enable-debug && make -j2;
       fi
     # Test fabric direct
