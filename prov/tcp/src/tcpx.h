@@ -68,7 +68,7 @@
 extern struct fi_provider tcpx_prov;
 extern struct util_prov tcpx_util_prov;
 extern struct fi_info tcpx_info;
-
+struct tcpx_fabric;
 
 #define TCPX_NO_COMPLETION (1ULL << 63)
 
@@ -94,6 +94,10 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
+
+int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
+
+void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 
 struct poll_fd_info {
 	fid_t			fid;
