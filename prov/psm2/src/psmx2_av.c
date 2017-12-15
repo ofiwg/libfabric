@@ -303,17 +303,19 @@ static int psmx2_av_check_space(struct psmx2_fid_av *av, size_t count)
 			continue;
 
 		new_epaddrs = realloc(av->tables[i].epaddrs,
-				      new_count * sizeof(*av->tables[i].epaddrs));
+				      new_count * sizeof(*new_epaddrs));
 		if (!new_epaddrs)
 			return -FI_ENOMEM;
-
+		memset(new_epaddrs + av->last, 0,
+		       (new_count - av->last)  * sizeof(*new_epaddrs));
 		av->tables[i].epaddrs = new_epaddrs;
 
 		new_sepaddrs = realloc(av->tables[i].sepaddrs,
-				       new_count * sizeof(*av->tables[i].sepaddrs));
+				       new_count * sizeof(*new_sepaddrs));
 		if (!new_sepaddrs)
 			return -FI_ENOMEM;
-
+		memset(new_sepaddrs + av->last, 0,
+		       (new_count - av->last)  * sizeof(*new_sepaddrs));
 		av->tables[i].sepaddrs = new_sepaddrs;
 	}
 
