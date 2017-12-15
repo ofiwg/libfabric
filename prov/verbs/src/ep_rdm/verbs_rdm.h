@@ -35,7 +35,7 @@
 
 #include <rdma/rdma_cma.h>
 #include <rdma/fi_atomic.h>
-#include "../uthash.h"
+#include <uthash.h>
 
 #include "../fi_verbs.h"
 #include "verbs_utils.h"
