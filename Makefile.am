@@ -126,6 +126,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_mr.h			\
 	include/fasthash.h			\
 	include/rbtree.h			\
+	include/uthash.h			\
 	include/prov.h				\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\

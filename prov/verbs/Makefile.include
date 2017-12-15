@@ -38,6 +38,7 @@ if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
 libverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
 libverbs_fi_la_CPPFLAGS = 			\
+	-I$(top_srcdir)/include			\
 	-I$(top_srcdir)/prov/verbs/src/ep_rdm	\
 	-I$(top_srcdir)/prov/verbs/src/ep_dgram	\
 	$(AM_CPPFLAGS) $(verbs_CPPFLAGS)
