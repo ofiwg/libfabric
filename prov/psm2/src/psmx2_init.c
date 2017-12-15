@@ -47,9 +47,9 @@ struct psmx2_env psmx2_env = {
 	.timeout	= 5,
 	.prog_interval	= -1,
 	.prog_affinity	= NULL,
-	.sep		= 0,
+	.multi_ep	= 0,
 	.max_trx_ctxt	= 1,
-	.sep_trx_ctxt	= 0,
+	.sep_trx_ctxt	= 1,
 	.num_devunits	= 1,
 	.inject_size	= 64,
 	.lock_level	= 2,
@@ -73,19 +73,40 @@ static void psmx2_init_env(void)
 	fi_param_get_bool(&psmx2_prov, "lazy_conn", &psmx2_env.lazy_conn);
 }
 
-static int psmx2_check_sep_cap(void)
+static int psmx2_get_yes_no(char *s, int default_value)
 {
-	if (!psmx2_sep_ok())
+	unsigned long value;
+	char *end_ptr;
+
+	if (!s || s[0] == '\0')
+		return default_value;
+
+	if (s[0] == 'Y' || s[0] == 'y')
+		return 1;
+
+	if (s[0] == 'N' || s[0] == 'n')
 		return 0;
 
-	psmx2_env.sep = 1;
-	psmx2_env.max_trx_ctxt = PSMX2_MAX_TRX_CTXT;
-	psmx2_env.sep_trx_ctxt = PSMX2_MAX_TRX_CTXT - 1;
+	value = strtoul(s, &end_ptr, 0);
+	if (end_ptr == s)
+		return default_value;
 
-	return 1;
+	return value ? 1 : 0;
 }
 
-static int psmx2_init_lib(int default_multi_ep)
+static int psmx2_check_multi_ep_cap(void)
+{
+	char *s = getenv("PSM2_MULTI_EP");
+
+	if (psmx2_multi_ep_ok() && psmx2_get_yes_no(s, 0))
+		psmx2_env.multi_ep = 1;
+	else
+		psmx2_env.multi_ep = 0;
+
+	return psmx2_env.multi_ep;
+}
+
+static int psmx2_init_lib(void)
 {
 	int major, minor;
 	int ret = 0, err;
@@ -98,8 +119,8 @@ static int psmx2_init_lib(int default_multi_ep)
 	if (psmx2_lib_initialized)
 		goto out;
 
-	if (default_multi_ep)
-		setenv("PSM2_MULTI_EP", "1", 0);
+	/* turn on multi-ep feature, but don't overwrite existing setting */
+	setenv("PSM2_MULTI_EP", "1", 0);
 
 	psm2_error_register_handler(NULL, PSM2_ERRHANDLER_NO_HANDLER);
 
@@ -119,10 +140,10 @@ static int psmx2_init_lib(int default_multi_ep)
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
 		"PSM library version = (%d, %d)\n", major, minor);
 
-	if (psmx2_check_sep_cap())
-		FI_INFO(&psmx2_prov, FI_LOG_CORE, "Scalable EP enabled.\n");
+	if (psmx2_check_multi_ep_cap())
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "PSM2 multi-ep feature enabled.\n");
 	else
-		FI_INFO(&psmx2_prov, FI_LOG_CORE, "Scalable EP disabled.\n");
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "PSM2 multi-ep feature not available or disabled.\n");
 
 	psmx2_lib_initialized = 1;
 
@@ -170,8 +191,12 @@ static void psmx2_update_sep_cap(void)
 	if (nfreectxts > PSMX2_MAX_TRX_CTXT)
 		nfreectxts = PSMX2_MAX_TRX_CTXT;
 
-	psmx2_env.max_trx_ctxt = nctxts;
-	psmx2_env.sep_trx_ctxt = nfreectxts;
+	if (psmx2_env.multi_ep) {
+		psmx2_env.max_trx_ctxt = nctxts;
+		psmx2_env.sep_trx_ctxt = nfreectxts;
+	} else if (nfreectxts == 0) {
+		psmx2_env.sep_trx_ctxt = nfreectxts;
+	}
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "SEP: %d Tx/Rx contexts allowed.\n",
 		psmx2_env.sep_trx_ctxt);
@@ -198,7 +223,6 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	int svc0, svc = PSMX2_ANY_SERVICE;
 	glob_t glob_buf;
 	int tx_ctx_cnt, rx_ctx_cnt;
-	int default_multi_ep = 0;
 	int addr_format = FI_ADDR_PSMX2;
 	size_t len;
 	void *addr;
@@ -211,15 +235,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	if (FI_VERSION_GE(version, FI_VERSION(1,5)))
 		mr_mode = 0;
 
-	/*
-	 * Try to turn on PSM2 multi-EP support if the application asks for
-	 * more than one tx context per endpoint. This only works for the
-	 * very first fi_getinfo() call.
-	 */
-	if (hints && hints->ep_attr && hints->ep_attr->tx_ctx_cnt > 1)
-		default_multi_ep = 1;
-
-	if (psmx2_init_lib(default_multi_ep))
+	if (psmx2_init_lib())
 		return -FI_ENODATA;
 
 	/*
