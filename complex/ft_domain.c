@@ -192,8 +192,9 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 		memset(ctrl->buf, 0, size);
 	}
 
-	if ((fabric_info->mode & FI_LOCAL_MR) && !ctrl->mr) {
-		ret = fi_mr_reg(domain, ctrl->buf, size, FI_RECV | FI_SEND,
+	if ((fabric_info->domain_attr->mr_mode & FI_MR_LOCAL) && !ctrl->mr) {
+		ret = fi_mr_reg(domain, ctrl->buf, size,
+				ft_info_to_mr_access(fabric_info),
 				0, 0, 0, &ctrl->mr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_mr_reg", ret);
@@ -239,7 +240,7 @@ static int ft_setup_atomic_control(struct ft_atomic_control *ctrl)
 		memset(ctrl->orig_buf, 0, size);
 	}
 
-	if (fabric_info->mode & FI_LOCAL_MR) {
+	if (fabric_info->domain_attr->mr_mode & FI_MR_LOCAL) {
 		access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
 		if (!ctrl->res_mr) {
 			ret = fi_mr_reg(domain, ctrl->res_buf, size, access,
