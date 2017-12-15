@@ -49,7 +49,7 @@
 #include <netdb.h>
 
 static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-			uint64_t flags)
+			    uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
@@ -180,12 +180,11 @@ static int tcpx_setup_socket(SOCKET sock)
 		return ret;
 	}
 
-	ret = fi_fd_nonblock(sock);
 	return ret;
 }
 
 static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
-		    const void *param, size_t paramlen)
+			   const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	struct poll_fd_info *fd_info;
@@ -196,7 +195,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	util_fabric = tcpx_ep->util_ep.domain->fabric;
 	tcpx_fabric = container_of(util_fabric, struct tcpx_fabric, util_fabric);
 
-	if (!addr || !tcpx_ep->conn_fd)
+	if (!addr || !tcpx_ep->conn_fd || paramlen > TCPX_MAX_CM_DATA_SIZE)
 		return -FI_EINVAL;
 
 	fd_info = calloc(1, sizeof(*fd_info));
@@ -215,6 +214,13 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 
 	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
 	fd_info->flags = POLL_MGR_FREE;
+	fd_info->type = CONNECT_SOCK;
+	fd_info->state = ESTABLISH_CONN;
+
+	if (paramlen) {
+		fd_info->cm_data_sz = paramlen;
+		memcpy(fd_info->cm_data, param, paramlen);
+	}
 
 	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
 	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
@@ -227,21 +233,36 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	struct fi_eq_cm_entry cm_entry;
-	int ret;
+	struct poll_fd_info *fd_info;
+	struct util_fabric *util_fabric;
+	struct tcpx_fabric *tcpx_fabric;
+
+	util_fabric = tcpx_ep->util_ep.domain->fabric;
+	tcpx_fabric = container_of(util_fabric, struct tcpx_fabric, util_fabric);
 
 	if (tcpx_ep->conn_fd == INVALID_SOCKET)
 		return -FI_EINVAL;
 
-	cm_entry.fid = &ep->fid;
-
-	ret = fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_CONNECTED, &cm_entry,
-			  sizeof(cm_entry), 0);
-	if (ret) {
+	fd_info = calloc(1, sizeof(*fd_info));
+	if (!fd_info) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"EQ write failed: %s\n", fi_strerror(ret));
+			"cannot allocate memory \n");
+		return -FI_ENOMEM;
 	}
-	return ret;
+
+	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
+	fd_info->flags = POLL_MGR_FREE;
+	fd_info->type = ACCEPT_SOCK;
+	if (paramlen) {
+		fd_info->cm_data_sz = paramlen;
+		memcpy(fd_info->cm_data, param, paramlen);
+	}
+
+	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
+	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
+	fastlock_release(&tcpx_fabric->poll_mgr.lock);
+	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
+	return 0;
 }
 
 static struct fi_ops_cm tcpx_cm_ops = {
@@ -403,7 +424,8 @@ static int tcpx_pep_fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
 		return ofi_pep_bind_eq(&tcpx_pep->util_pep,
-			container_of(bfid, struct util_eq, eq_fid.fid), flags);
+				       container_of(bfid, struct util_eq,
+						    eq_fid.fid), flags);
 	default:
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"invalid FID class for binding\n");
@@ -503,6 +525,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	_pep->info = *info;
 	_pep->poll_info.fid = &_pep->util_pep.pep_fid.fid;
+	_pep->poll_info.type = PASSIVE_SOCK;
 	dlist_init(&_pep->poll_info.entry);
 	_pep->sock = INVALID_SOCKET;
 
@@ -544,7 +567,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	for (iter = result; iter; iter = iter->ai_next) {
 		_pep->sock = ofi_socket(iter->ai_family, iter->ai_socktype,
-				      iter->ai_protocol);
+					iter->ai_protocol);
 		if (_pep->sock == INVALID_SOCKET)
 			continue;
 

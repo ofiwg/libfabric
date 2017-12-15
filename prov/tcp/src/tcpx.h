@@ -57,6 +57,7 @@
 #include <fi_list.h>
 #include <fi_signal.h>
 #include <fi_util.h>
+#include <fi_proto.h>
 
 #ifndef _TCP_H_
 #define _TCP_H_
@@ -70,12 +71,13 @@ extern struct util_prov tcpx_util_prov;
 extern struct fi_info tcpx_info;
 struct tcpx_fabric;
 
-#define TCPX_NO_COMPLETION (1ULL << 63)
+#define TCPX_NO_COMPLETION	(1ULL << 63)
 
-#define POLL_MGR_FREE	(1 << 0)
-#define POLL_MGR_DEL	(1 << 1)
-#define POLL_MGR_ACK	(1 << 2)
+#define POLL_MGR_FREE		(1 << 0)
+#define POLL_MGR_DEL		(1 << 1)
+#define POLL_MGR_ACK		(1 << 2)
 
+#define TCPX_MAX_CM_DATA_SIZE	256
 
 int tcpx_create_fabric(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric,
@@ -99,10 +101,26 @@ int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
 
 void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 
+enum poll_fd_type {
+	CONNECT_SOCK,
+	PASSIVE_SOCK,
+	ACCEPT_SOCK,
+};
+
+enum poll_fd_state {
+	ESTABLISH_CONN,
+	RCV_RESP,
+	CONNECT_DONE,
+};
+
 struct poll_fd_info {
 	fid_t			fid;
 	struct dlist_entry	entry;
 	int			flags;
+	enum poll_fd_type	type;
+	enum poll_fd_state	state;
+	size_t			cm_data_sz;
+	char			cm_data[TCPX_MAX_CM_DATA_SIZE];
 };
 
 struct poll_fd_mgr {
