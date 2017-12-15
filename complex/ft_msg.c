@@ -301,7 +301,7 @@ static int ft_post_send_rma(void)
 	switch (test_info.class_function) {
 	case FT_FUNC_READ:
 		ft_send_retry(ret, fi_read, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.memdesc,
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
 			ft_mr_ctrl.mr_key, ctx);
 		ft_tx_ctrl.credits--;
@@ -378,7 +378,7 @@ static int ft_post_send_rma(void)
 		break;
 	case FT_FUNC_WRITEDATA:
 		ft_send_retry(ret, fi_writedata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.memdesc,
 			ft_tx_ctrl.remote_cq_data, ft_tx_ctrl.addr,
 			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.mr_key, ctx);
 		ft_tx_ctrl.credits--;
@@ -391,7 +391,7 @@ static int ft_post_send_rma(void)
 		break;
 	default:
 		ft_send_retry(ret, fi_write, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.memdesc,
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
 			ft_mr_ctrl.mr_key, ctx);
 		ft_tx_ctrl.credits--;
@@ -661,7 +661,7 @@ static int ft_send_rma_sync(void)
 		return ret;
 
 	ft_send_retry(ret, fi_writedata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-		0, ft_mr_ctrl.memdesc, ft_tx_ctrl.remote_cq_data,
+		0, ft_tx_ctrl.memdesc, ft_tx_ctrl.remote_cq_data,
 		ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key, ctx);
 	ft_tx_ctrl.credits--;
 	return ret;
