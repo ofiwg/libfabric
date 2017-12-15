@@ -906,26 +906,35 @@ void ft_cleanup(void)
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
 
-static int ft_exchange_mr_address(void)
+static int ft_exchange_mr_addr_key(void)
 {
-	uint64_t addr;
+	struct fi_rma_iov local_rma_iov = {0};
+	struct fi_rma_iov peer_rma_iov = {0};
 	int ret;
 
-	if (test_info.mr_mode != FI_MR_VIRT_ADDR)
+	if (!(test_info.mr_mode & (FI_MR_VIRT_ADDR | FI_MR_PROV_KEY)))
 		return 0;
 
-	addr = (uint64_t) ft_mr_ctrl.buf;
-	ret = ft_sock_send(sock, &addr, sizeof addr);
+	if (test_info.mr_mode & FI_MR_VIRT_ADDR)
+		local_rma_iov.addr = (uint64_t) ft_mr_ctrl.buf;
+
+	if (test_info.mr_mode & FI_MR_PROV_KEY)
+		local_rma_iov.key = ft_mr_ctrl.mr_key;
+
+	ret = ft_sock_send(sock, &local_rma_iov, sizeof local_rma_iov);
 	if (ret) {
 		FT_PRINTERR("ft_sock_send", ret);
 		return ret;
 	}
 
-	ret = ft_sock_recv(sock, &ft_mr_ctrl.peer_mr_addr, sizeof addr);
+	ret = ft_sock_recv(sock, &peer_rma_iov, sizeof peer_rma_iov);
 	if (ret) {
 		FT_PRINTERR("ft_sock_recv", ret);
 		return ret;
 	}
+
+	ft_mr_ctrl.peer_mr_addr = peer_rma_iov.addr;
+	ft_mr_ctrl.peer_mr_key = peer_rma_iov.key;
 
 	return 0;
 }
@@ -982,7 +991,7 @@ int ft_init_test()
 	if (ret)
 		return ret;
 
-	ret = ft_exchange_mr_address();
+	ret = ft_exchange_mr_addr_key();
 	if (ret) {
 		FT_PRINTERR("ft_exchange_mr_address", ret);
 		goto cleanup;

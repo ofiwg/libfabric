@@ -404,7 +404,10 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_COMPLETION, uint64_t, buf);
 		FT_ERR("Unknown message flag");
 	} else if (!strncmp(key->str, "mr_mode", strlen("mr_mode"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_LOCAL, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_VIRT_ADDR, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_ALLOCATED, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_PROV_KEY, uint64_t, buf);
 		FT_ERR("Unknown MR mode");
 	} else if (!strncmp(key->str, "constant_caps", strlen("constant_caps"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_RMA, uint64_t, buf);

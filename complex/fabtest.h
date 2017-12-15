@@ -113,9 +113,10 @@ struct ft_atomic_control {
 struct ft_mr_control {
 	void			*buf;
 	struct fid_mr		*mr;
-	uint64_t		peer_mr_addr;
 	void			*memdesc;
 	uint64_t		mr_key;
+	uint64_t		peer_mr_addr;
+	uint64_t		peer_mr_key;
 };
 
 struct ft_control {

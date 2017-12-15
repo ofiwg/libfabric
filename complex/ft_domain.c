@@ -292,7 +292,7 @@ static int ft_setup_mr_control(struct ft_mr_control *ctrl)
 			return ret;
 		}
 		ctrl->memdesc = fi_mr_desc(ctrl->mr);
-		ctrl->mr_key = fi_mr_key(ctrl->mr);
+		ctrl->peer_mr_key = ctrl->mr_key = fi_mr_key(ctrl->mr);
 	}
 	
 	return 0;
