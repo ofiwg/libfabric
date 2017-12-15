@@ -2,7 +2,6 @@ if HAVE_VERBS
 _verbs_files =							\
 	prov/verbs/src/fi_verbs.h				\
 	prov/verbs/src/fi_verbs.c				\
-	prov/verbs/src/uthash.h					\
 	prov/verbs/src/verbs_atomic.c				\
 	prov/verbs/src/verbs_cm.c				\
 	prov/verbs/src/verbs_cq.c				\
@@ -38,6 +37,7 @@ if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
 libverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
 libverbs_fi_la_CPPFLAGS = 			\
+	-I$(top_srcdir)/include			\
 	-I$(top_srcdir)/prov/verbs/src/ep_rdm	\
 	-I$(top_srcdir)/prov/verbs/src/ep_dgram	\
 	$(AM_CPPFLAGS) $(verbs_CPPFLAGS)

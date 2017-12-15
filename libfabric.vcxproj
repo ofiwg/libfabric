@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug-ICC|x64">
@@ -583,6 +583,7 @@
     <ClInclude Include="include\rdma\fi_trigger.h" />
     <ClInclude Include="include\rdma\providers\fi_log.h" />
     <ClInclude Include="include\rdma\providers\fi_prov.h" />
+    <ClInclude Include="include\uthash.h" />
     <ClInclude Include="include\windows\arpa\inet.h" />
     <ClInclude Include="include\windows\config.h" />
     <ClInclude Include="include\windows\ifaddrs.h" />
