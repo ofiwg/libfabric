@@ -142,7 +142,7 @@ usdf_rdm_rdc_hash_helper(uint16_t *ipaddr, uint16_t port)
 static inline uint16_t
 usdf_rdm_rdc_hash_hdr(struct usd_udp_hdr *hdr)
 {
-	return usdf_rdm_rdc_hash_helper((uint16_t *)&hdr->uh_ip.saddr,
+	return usdf_rdm_rdc_hash_helper((uint16_t *) (uint8_t *) &hdr->uh_ip.saddr,
 			hdr->uh_udp.source);
 }
 
@@ -217,7 +217,7 @@ usdf_rdm_rdc_insert(struct usdf_domain *udp, struct usdf_rdm_connection *rdc)
 	uint16_t hash_index;
 
 	hash_index = usdf_rdm_rdc_hash_helper(
-		(uint16_t *)&rdc->dc_hdr.uh_ip.daddr,
+		(uint16_t *) (uint8_t *) &rdc->dc_hdr.uh_ip.daddr,
 		rdc->dc_hdr.uh_udp.dest);
 	USDF_DBG_SYS(EP_DATA, "insert rdc %p at %u\n", rdc, hash_index);
 
@@ -232,7 +232,7 @@ usdf_rdm_rdc_remove(struct usdf_domain *udp, struct usdf_rdm_connection *rdc)
 	struct usdf_rdm_connection *prev;
 
 	hash_index = usdf_rdm_rdc_hash_helper(
-		(uint16_t *)&rdc->dc_hdr.uh_ip.daddr,
+		(uint16_t *) (uint8_t *) &rdc->dc_hdr.uh_ip.daddr,
 		rdc->dc_hdr.uh_udp.dest);
 	USDF_DBG_SYS(EP_DATA, "remove rdc %p from %u\n", rdc, hash_index);
 
@@ -292,7 +292,7 @@ usdf_rdm_rdc_tx_get(struct usdf_dest *dest, struct usdf_ep *ep)
 
 	udp = tx->tx_domain;
 	rdc = usdf_rdm_rdc_addr_lookup(udp,
-		(uint16_t *)&dest->ds_dest.ds_dest.ds_udp.u_hdr.uh_ip.daddr,
+		(uint16_t *) (uint8_t *) &dest->ds_dest.ds_dest.ds_udp.u_hdr.uh_ip.daddr,
 		dest->ds_dest.ds_dest.ds_udp.u_hdr.uh_udp.dest);
 
 	if (rdc == NULL) {
