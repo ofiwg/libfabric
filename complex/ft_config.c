@@ -258,6 +258,30 @@ static struct key_t keys[] = {
 		.val_size = sizeof(((struct ft_set *)0)->constant_caps) / FT_MAX_CAPS,
 	},
 	{
+		.str = "rx_cq_bind_flags",
+		.offset = offsetof(struct ft_set, rx_cq_bind_flags),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->rx_cq_bind_flags) / FT_MAX_FLAGS,
+	},
+	{
+		.str = "tx_cq_bind_flags",
+		.offset = offsetof(struct ft_set, tx_cq_bind_flags),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->tx_cq_bind_flags) / FT_MAX_FLAGS,
+	},
+	{
+		.str = "rx_op_flags",
+		.offset = offsetof(struct ft_set, rx_op_flags),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->rx_op_flags) / FT_MAX_FLAGS,
+	},
+	{
+		.str = "tx_op_flags",
+		.offset = offsetof(struct ft_set, tx_op_flags),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->tx_op_flags) / FT_MAX_FLAGS,
+	},
+	{
 		.str = "test_flags",
 		.offset = offsetof(struct ft_set, test_flags),
 		.val_type = VAL_NUM,
@@ -377,6 +401,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		FT_ERR("Unknown datatype");
 	} else if (!strncmp(key->str, "msg_flags", strlen("msg_flags"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_REMOTE_CQ_DATA, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_COMPLETION, uint64_t, buf);
 		FT_ERR("Unknown message flag");
 	} else if (!strncmp(key->str, "mr_mode", strlen("mr_mode"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_VIRT_ADDR, uint64_t, buf);
@@ -393,6 +418,18 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_TAGGED, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_DIRECTED_RECV, uint64_t, buf);
 		FT_ERR("Unknown caps");
+	} else if (!strncmp(key->str, "rx_cq_bind_flags", strlen("rx_cq_bind_flags"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_SELECTIVE_COMPLETION, uint64_t, buf);
+		FT_ERR("Unknown rx_cq_bind_flags");
+	} else if (!strncmp(key->str, "tx_cq_bind_flags", strlen("tx_cq_bind_flags"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_SELECTIVE_COMPLETION, uint64_t, buf);
+		FT_ERR("Unknown tx_cq_bind_flags");
+	} else if (!strncmp(key->str, "rx_op_flags", strlen("rx_op_flags"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_COMPLETION, uint64_t, buf);
+		FT_ERR("Unknown rx_op_flags");
+	} else if (!strncmp(key->str, "tx_op_flags", strlen("tx_op_flags"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_COMPLETION, uint64_t, buf);
+		FT_ERR("Unknown tx_op_flags");
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_CNTR, enum ft_comp_type, buf);
@@ -777,13 +814,34 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	}
 
 	if (set->constant_caps[0]) {
+		i = 0;
 		while (set->constant_caps[i])
 			info->caps |= set->constant_caps[i++];
 	}
-	i = 0;
 	if (set->mr_mode[0]) {
+		i = 0;
 		while (set->mr_mode[i])
 			info->mr_mode |= set->mr_mode[i++];
+	}
+	if (set->rx_cq_bind_flags[0]) {
+		i = 0;
+		while (set->rx_cq_bind_flags[i])
+			info->rx_cq_bind_flags |= set->rx_cq_bind_flags[i++];
+	}
+	if (set->tx_cq_bind_flags[0]) {
+		i = 0;
+		while (set->tx_cq_bind_flags[i])
+			info->tx_cq_bind_flags |= set->tx_cq_bind_flags[i++];
+	}
+	if (set->rx_op_flags[0]) {
+		i = 0;
+		while (set->rx_op_flags[i])
+			info->rx_op_flags |= set->rx_op_flags[i++];
+	}
+	if (set->tx_op_flags[0]) {
+		i = 0;
+		while (set->tx_op_flags[i])
+			info->tx_op_flags |= set->tx_op_flags[i++];
 	}
 
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?

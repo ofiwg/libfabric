@@ -78,6 +78,20 @@ static int ft_check_valid_comp(enum ft_comp_type comp_type)
 	return 0;
 }
 
+int ft_check_cq_completion(uint64_t cq_bind_flags, uint64_t op_flags,
+		enum ft_class_function class_function, uint64_t msg_flags)
+{
+	if (((cq_bind_flags & FI_SELECTIVE_COMPLETION) &&
+		!(op_flags & FI_COMPLETION) &&
+		!(is_msg_func(class_function))) ||
+		((cq_bind_flags & FI_SELECTIVE_COMPLETION) &&
+		is_msg_func(class_function) &&
+		!(msg_flags & FI_COMPLETION)))
+		return 0;
+	else
+		return 1;
+}
+
 static int ft_open_cntrs(void)
 {
 	struct fi_cntr_attr attr;
@@ -165,7 +179,7 @@ int ft_bind_comp(struct fid_ep *ep)
 	int ret;
 	uint64_t flags;
 
-	flags = FI_TRANSMIT;
+	flags = FI_TRANSMIT | test_info.tx_cq_bind_flags;
 	ret = fi_ep_bind(ep, &txcq->fid, flags);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
@@ -173,7 +187,7 @@ int ft_bind_comp(struct fid_ep *ep)
 	}
 
 	if (ft_use_comp_cntr(test_info.comp_type)) {
-		flags |= FI_READ | FI_WRITE;
+		flags = FI_TRANSMIT | FI_READ | FI_WRITE;
 		ret = fi_ep_bind(ep, &txcntr->fid, flags);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
@@ -181,7 +195,7 @@ int ft_bind_comp(struct fid_ep *ep)
 		}
 	}
 
-	flags = FI_RECV;
+	flags = FI_RECV | test_info.rx_cq_bind_flags;
 	ret = fi_ep_bind(ep, &rxcq->fid, flags);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
@@ -189,6 +203,7 @@ int ft_bind_comp(struct fid_ep *ep)
 	}
 
 	if (ft_use_comp_cntr(test_info.comp_type)) {
+		flags = FI_RECV;
 		ret = fi_ep_bind(ep, &rxcntr->fid, flags);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
@@ -286,9 +301,17 @@ int ft_comp_rx(int timeout)
 			return ret;
 	}
 	if (ft_use_comp_cq(test_info.comp_type)) {
-		ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
-		if (ret)
-			return ret;
+		if (ft_check_cq_completion(test_info.rx_cq_bind_flags,
+					test_info.rx_op_flags,
+					test_info.class_function,
+					test_info.msg_flags)) {
+			ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
+			if (ret)
+				return ret;
+		} else {
+			if (!ft_use_comp_cntr(test_info.comp_type))
+				ft_rx_ctrl.credits += comp_entry_cnt[ft_rx_ctrl.cq_format];
+		}
 	}
 
 	if (!ft_check_valid_comp(test_info.comp_type))
@@ -307,9 +330,17 @@ int ft_comp_tx(int timeout)
 			return ret;
 	}
 	if (ft_use_comp_cq(test_info.comp_type)) {
-		ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
-		if (ret)
-			return ret;
+		if (ft_check_cq_completion(test_info.tx_cq_bind_flags,
+					test_info.tx_op_flags,
+					test_info.class_function,
+					test_info.msg_flags)) {
+			ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
+			if (ret)
+				return ret;
+		} else {
+			if (!ft_use_comp_cntr(test_info.comp_type))
+				ft_tx_ctrl.credits += comp_entry_cnt[ft_tx_ctrl.cq_format];
+		}
 	}
 
 	if (!ft_check_valid_comp(test_info.comp_type))

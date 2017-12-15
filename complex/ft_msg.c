@@ -37,11 +37,20 @@ static int ft_post_recv(void)
 {
 	struct fi_msg msg;
 	int ret;
-	struct fi_context *ctx;
+	struct fi_context *ctx = NULL;
+	uint64_t flags = 0;
 
-	ret = ft_get_ctx(&ft_rx_ctrl, &ctx);
-	if (ret)
-		return ret;
+	if (test_info.msg_flags == FI_COMPLETION)
+		flags = test_info.msg_flags;
+
+	if (ft_check_cq_completion(test_info.rx_cq_bind_flags,
+				test_info.rx_op_flags,
+				test_info.class_function,
+				test_info.msg_flags)) {
+		ret = ft_get_ctx(&ft_rx_ctrl, &ctx);
+		if (ret)
+			return ret;
+	}
 
 	if (fabric_info->caps & FI_DIRECTED_RECV)
 		ft_rx_ctrl.addr = ft_tx_ctrl.addr;
@@ -63,7 +72,7 @@ static int ft_post_recv(void)
 		msg.addr = ft_rx_ctrl.addr;
 		msg.context = ctx;
 		msg.data = 0;
-		ret = fi_recvmsg(ft_rx_ctrl.ep, &msg, 0);
+		ret = fi_recvmsg(ft_rx_ctrl.ep, &msg, flags);
 		ft_next_iov_cnt(&ft_rx_ctrl, fabric_info->rx_attr->iov_limit);
 		break;
 	default:
@@ -79,11 +88,20 @@ static int ft_post_trecv(void)
 {
 	struct fi_msg_tagged msg;
 	int ret;
-	struct fi_context *ctx;
+	struct fi_context *ctx = NULL;
+	uint64_t flags = 0;
 
-	ret = ft_get_ctx(&ft_rx_ctrl, &ctx);
-	if (ret)
-		return ret;
+	if (test_info.msg_flags == FI_COMPLETION)
+		flags = test_info.msg_flags;
+
+	if (ft_check_cq_completion(test_info.rx_cq_bind_flags,
+				test_info.rx_op_flags,
+				test_info.class_function,
+				test_info.msg_flags)) {
+		ret = ft_get_ctx(&ft_rx_ctrl, &ctx);
+		if (ret)
+			return ret;
+	}
 
 	if (fabric_info->caps & FI_DIRECTED_RECV)
 		ft_rx_ctrl.addr = ft_tx_ctrl.addr;
@@ -107,7 +125,7 @@ static int ft_post_trecv(void)
 		msg.tag = ft_rx_ctrl.tag;
 		msg.ignore = 0;
 		msg.context = ctx;
-		ret = fi_trecvmsg(ft_rx_ctrl.ep, &msg, 0);
+		ret = fi_trecvmsg(ft_rx_ctrl.ep, &msg, flags);
 		ft_next_iov_cnt(&ft_rx_ctrl, fabric_info->rx_attr->iov_limit);
 		break;
 	default:
@@ -129,10 +147,14 @@ static int ft_post_send(void)
 {
 	struct fi_msg msg;
 	int ret;
-	struct fi_context *ctx;
+	struct fi_context *ctx = NULL;
 
-	if (test_info.class_function != FT_FUNC_INJECT &&
-	    test_info.class_function != FT_FUNC_INJECTDATA) {
+	if ((test_info.class_function != FT_FUNC_INJECT) &&
+		(test_info.class_function != FT_FUNC_INJECTDATA) &&
+		(ft_check_cq_completion(test_info.tx_cq_bind_flags,
+				test_info.tx_op_flags,
+				test_info.class_function,
+				test_info.msg_flags))) {
 		ret = ft_get_ctx(&ft_tx_ctrl, &ctx);
 		if (ret)
 			return ret;
@@ -191,10 +213,14 @@ static int ft_post_tsend(void)
 {
 	struct fi_msg_tagged msg;
 	int ret;
-	struct fi_context *ctx;
+	struct fi_context *ctx = NULL;
 
-	if (test_info.class_function != FT_FUNC_INJECT &&
-	    test_info.class_function != FT_FUNC_INJECTDATA) {
+	if ((test_info.class_function != FT_FUNC_INJECT) &&
+		(test_info.class_function != FT_FUNC_INJECTDATA) &&
+		(ft_check_cq_completion(test_info.tx_cq_bind_flags,
+				test_info.tx_op_flags,
+				test_info.class_function,
+				test_info.msg_flags))) {
 		ret = ft_get_ctx(&ft_tx_ctrl, &ctx);
 		if (ret)
 			return ret;
@@ -255,13 +281,21 @@ static int ft_post_send_rma(void)
 	int ret, i;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
-	struct fi_context *ctx;
+	struct fi_context *ctx = NULL;
+	uint64_t read_flags = 0;
 
-	if (test_info.class_function != FT_FUNC_INJECT_WRITE &&
-	    test_info.class_function != FT_FUNC_INJECT_WRITEDATA) {
-		ret = ft_get_ctx(&ft_tx_ctrl, &ctx);
-		if (ret)
-			return ret;
+	if (test_info.msg_flags == FI_COMPLETION)
+		read_flags = test_info.msg_flags;
+
+	if ((test_info.class_function != FT_FUNC_INJECT_WRITE) &&
+		(test_info.class_function != FT_FUNC_INJECT_WRITEDATA) &&
+		(ft_check_cq_completion(test_info.tx_cq_bind_flags,
+				test_info.tx_op_flags,
+				test_info.class_function,
+				test_info.msg_flags))) {
+ 		ret = ft_get_ctx(&ft_tx_ctrl, &ctx);
+ 		if (ret)
+ 			return ret;
 	}
 
 	switch (test_info.class_function) {
@@ -300,7 +334,7 @@ static int ft_post_send_rma(void)
 
 		msg.rma_iov = &rma_iov;
 		msg.rma_iov_count = 1;
-		ft_send_retry(ret, fi_readmsg, ft_tx_ctrl.ep, &msg, 0);
+		ft_send_retry(ret, fi_readmsg, ft_tx_ctrl.ep, &msg, read_flags);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		ft_tx_ctrl.credits--;
 		break;
@@ -372,12 +406,16 @@ int ft_post_send_atomic(void)
 	struct fi_msg_atomic msg;
 	struct fi_rma_ioc rma_iov;
 	size_t iov_count;
-	struct fi_context *ctx;
+	struct fi_context *ctx = NULL;
 
-	if (test_info.class_function != FT_FUNC_INJECT_ATOMIC) {
-		ret = ft_get_ctx(&ft_tx_ctrl, &ctx);
-		if (ret)
-			return ret;
+	if ((test_info.class_function != FT_FUNC_INJECT_ATOMIC) &&
+		(ft_check_cq_completion(test_info.tx_cq_bind_flags,
+				test_info.tx_op_flags,
+				test_info.class_function,
+				test_info.msg_flags))) {
+ 		ret = ft_get_ctx(&ft_tx_ctrl, &ctx);
+ 		if (ret)
+ 			return ret;
 	}
 
 	switch (test_info.class_function) {
