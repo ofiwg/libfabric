@@ -253,8 +253,6 @@ do						\
 #define strdup _strdup
 #define strcasecmp _stricmp
 #define snprintf _snprintf
-#define inet_ntop InetNtopA
-
 #define getpid (int)GetCurrentProcessId
 #define sleep(x) Sleep(x * 1000)
 
