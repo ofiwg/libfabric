@@ -263,6 +263,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 {
 	struct ofi_ctrl_hdr conn_resp;
 	struct fi_eq_cm_entry *cm_entry;
+	struct tcpx_domain *domain;
 	int ret = FI_SUCCESS;
 
 	assert(poll_mgr->poll_fds[index].revents == POLLIN);
@@ -287,6 +288,15 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 
 	}
 	ret = fi_fd_nonblock(ep->conn_fd);
+	if (ret)
+		goto err;
+
+	// TODO check add socket to the domain epollset
+	domain = container_of(ep->util_ep.domain,
+				struct tcpx_domain,
+				util_domain);
+
+	ret = fi_epoll_add(domain->progress->epoll_set, ep->conn_fd, ep);
 err:
 	free(cm_entry);
 	return ret;
@@ -402,6 +412,7 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 {
 	struct fi_eq_cm_entry cm_entry;
 	struct fi_eq_err_entry err_entry;
+	struct tcpx_domain *domain;
 	struct tcpx_ep *ep;
 	int ret;
 
@@ -421,6 +432,13 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 	}
 
 	ret = fi_fd_nonblock(ep->conn_fd);
+
+	// TODO check add socket to the domain epollset
+	domain = container_of(ep->util_ep.domain,
+				struct tcpx_domain,
+				util_domain);
+
+	ret = fi_epoll_add(domain->progress->epoll_set, ep->conn_fd, ep);
 	if (ret)
 		goto err;
 

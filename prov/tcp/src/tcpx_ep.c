@@ -49,9 +49,35 @@
 #include <netdb.h>
 
 static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-			    uint64_t flags)
+			uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct tcpx_rx_entry *rx_entry;
+	struct tcpx_domain *tcpx_domain;
+	struct tcpx_ep *tcpx_ep;
+	union tcpx_iov iov;
+	int i;
+
+	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
+	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
+				   struct tcpx_domain, util_domain);
+
+	rx_entry = util_buf_alloc(tcpx_domain->progress->rx_entry_pool);
+	if (!rx_entry)
+		return -FI_ENOMEM;
+
+	rx_entry->op = TCPX_OP_MSG_RECV;
+	rx_entry->ep = tcpx_ep;
+	rx_entry->flags = flags;
+	rx_entry->context = msg->context;
+
+	for (i = 0 ; i < msg->iov_count; i++) {
+		iov.iov.addr = (uintptr_t) msg->msg_iov[i].iov_base;
+		iov.iov.len = msg->msg_iov[i].iov_len;
+		memcpy(&rx_entry->iov[i], &iov, sizeof(iov));
+	}
+
+	dlist_insert_tail(&rx_entry->entry, &tcpx_ep->rx_entry_list);
+	return -FI_SUCCESS;
 }
 
 static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -89,7 +115,65 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct tcpx_ep *tcpx_ep;
+	int ret = FI_SUCCESS;
+	uint64_t total_len = 0;
+	uint8_t op_send;
+	struct tcpx_domain *tcpx_domain;
+	union tcpx_iov tx_iov;
+	int i;
+
+	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
+	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
+				   struct tcpx_domain, util_domain);
+
+	if (flags & FI_INJECT) {
+		for (i = 0; i < msg->iov_count; i++)
+			total_len += msg->msg_iov[i].iov_len;
+
+		if (total_len > TCPX_MAX_INJECT_SZ)
+			return -FI_EINVAL;
+	}
+
+	op_send = TCPX_OP_MSG_SEND;
+	total_len += sizeof(op_send);
+
+	if (flags & FI_REMOTE_CQ_DATA)
+		total_len += sizeof(uint64_t);
+
+	if (msg->iov_count > TCPX_IOV_LIMIT)
+		return -FI_EINVAL;
+
+	total_len += msg->iov_count * sizeof(union tcpx_iov);
+
+	fastlock_acquire(&tcpx_ep->rb_lock);
+	if (ofi_rbavail(&tcpx_ep->rb) < total_len) {
+		ret = -FI_EAGAIN;
+		goto err;
+	}
+
+	ofi_rbwrite(&tcpx_ep->rb, &op_send, sizeof(op_send));
+	ofi_rbwrite(&tcpx_ep->rb, &msg->iov_count,
+		    sizeof(msg->iov_count));
+	ofi_rbwrite(&tcpx_ep->rb, &flags, sizeof(flags));
+	ofi_rbwrite(&tcpx_ep->rb, &msg->context, sizeof(msg->context));
+	ofi_rbwrite(&tcpx_ep->rb, &msg->addr, sizeof(msg->addr));
+
+	if (flags & FI_REMOTE_CQ_DATA)
+		ofi_rbwrite(&tcpx_ep->rb, &msg->data, sizeof(msg->data));
+
+	ofi_rbwrite(&tcpx_ep->rb, &tcpx_ep, sizeof(tcpx_ep));
+
+	for (i = 0; i < msg->iov_count; i++) {
+		tx_iov.iov.addr = (uintptr_t) msg->msg_iov[i].iov_base;
+		tx_iov.iov.len = msg->msg_iov[i].iov_len;
+		ofi_rbwrite(&tcpx_ep->rb, &tx_iov, sizeof(tx_iov));
+	}
+	ofi_rbcommit(&tcpx_ep->rb);
+	tcpx_progress_signal(tcpx_domain->progress);
+err:
+	fastlock_release(&tcpx_ep->rb_lock);
+	return ret;
 }
 
 static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
@@ -141,15 +225,41 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			     uint64_t data, fi_addr_t dest_addr, void *context)
 {
-	return -FI_ENOSYS;
+	struct fi_msg msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = (void *) buf;
+	msg_iov.iov_len = len;
+
+	msg.msg_iov = &msg_iov;
+	msg.desc = NULL;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.context = NULL;
+	msg.data = data;
+
+	return tcpx_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA);
 }
 
 static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 			       uint64_t data, fi_addr_t dest_addr)
 {
-	return -FI_ENOSYS;
-}
+	struct fi_msg msg;
+	struct iovec msg_iov;
 
+	msg_iov.iov_base = (void *) buf;
+	msg_iov.iov_len = len;
+
+	msg.msg_iov = &msg_iov;
+	msg.desc = NULL;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.context = NULL;
+	msg.data = 0;
+
+	return tcpx_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT |
+			       TCPX_NO_COMPLETION);
+}
 
 static struct fi_ops_msg tcpx_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),

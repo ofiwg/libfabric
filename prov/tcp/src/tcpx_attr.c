@@ -33,9 +33,6 @@
 #include "tcpx.h"
 
 
-#define TCPX_IOV_LIMIT 4
-
-
 static struct fi_tx_attr tcpx_tx_attr = {
 	.caps = FI_MSG | FI_SEND,
 	.comp_order = FI_ORDER_STRICT,
