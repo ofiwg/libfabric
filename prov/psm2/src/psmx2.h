@@ -1058,6 +1058,7 @@ static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av,
 	return 0;
 }
 
+void	psmx2_init_disconnect_func(void);
 void	psmx2_am_global_init(void);
 void	psmx2_am_global_fini(void);
 int	psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt);

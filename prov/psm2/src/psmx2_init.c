@@ -145,6 +145,7 @@ static int psmx2_init_lib(void)
 	else
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "PSM2 multi-ep feature not available or disabled.\n");
 
+	psmx2_init_disconnect_func();
 	psmx2_lib_initialized = 1;
 
 out:

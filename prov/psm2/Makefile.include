@@ -5,6 +5,7 @@ _psm2_files = \
 	prov/psm2/src/psmx2_init.c \
 	prov/psm2/src/psmx2_fabric.c \
 	prov/psm2/src/psmx2_domain.c \
+	prov/psm2/src/psmx2_trx_ctxt.c \
 	prov/psm2/src/psmx2_cq.c \
 	prov/psm2/src/psmx2_cntr.c \
 	prov/psm2/src/psmx2_av.c \
