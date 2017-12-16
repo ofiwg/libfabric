@@ -207,26 +207,32 @@ usd_fill_udp_dest(
     uint32_t daddr_be,
     uint16_t dport_be)
 {
-    struct ether_header *eth;
-    struct iphdr *ip;
-    struct udphdr *udp;
+    struct ether_header eth = {
+        .ether_type = htons(0x0800)
+    };
 
-    eth = &dest->ds_dest.ds_udp.u_hdr.uh_eth;
-    memcpy(eth->ether_shost, dap->uda_mac_addr, ETH_ALEN);
-    eth->ether_type = htons(0x0800);
+    struct udphdr udp = {
+        .dest = dport_be
+    };
 
-    ip = &dest->ds_dest.ds_udp.u_hdr.uh_ip;
-    ip->ihl = 5;                       /* no options */
-    ip->version = 4;
-    ip->tos = 0;
-    ip->frag_off = 0;
-    ip->ttl = 8;
-    ip->protocol = IPPROTO_UDP;
-    ip->saddr = dap->uda_ipaddr_be;
-    ip->daddr = daddr_be;
+    struct iphdr ip = {
+        .saddr = dap->uda_ipaddr_be,
+        .daddr = daddr_be,
+        .protocol = IPPROTO_UDP,
+        .version = 4,
+        .frag_off = 0,
+        .ihl = 5, /* no options */
+        .tos = 0,
+        .ttl = 8
+    };
 
-    udp = &dest->ds_dest.ds_udp.u_hdr.uh_udp;
-    udp->dest = dport_be;
+    /* Workaround taking a pointer to an element of a packed structure due to
+     * warnings in Clang 4.0.1 and beyond.
+     */
+    memcpy(eth.ether_shost, dap->uda_mac_addr, ETH_ALEN);
+    dest->ds_dest.ds_udp.u_hdr.uh_eth = eth;
+    dest->ds_dest.ds_udp.u_hdr.uh_udp = udp;
+    dest->ds_dest.ds_udp.u_hdr.uh_ip = ip;
 }
 
 static int
@@ -353,14 +359,16 @@ usd_dest_set_udp_ports(
     struct usd_qp *src_uqp,
     uint16_t dest_port_be)
 {
-    struct usd_qp_impl *qp;
-    struct udphdr *udp;
+    struct usd_qp_impl *qp = to_qpi(src_uqp);
+    struct udphdr udp = {
+        .source = qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port,
+        .dest = dest_port_be
+    };
 
-    qp = to_qpi(src_uqp);
-    udp = &dest->ds_dest.ds_udp.u_hdr.uh_udp;
-    udp->source = qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
-    udp->dest = dest_port_be;
-
+    /* Workaround taking a pointer to an element of a packed structure due to
+     * warnings in Clang 4.0.1 and beyond.
+     */
+    dest->ds_dest.ds_udp.u_hdr.uh_udp = udp;
 }
 
 /*
