@@ -119,7 +119,7 @@ int main(int argc, char **argv)
 	if (opts.options & FT_OPT_SIZE)
 		hints->ep_attr->max_msg_size = opts.transfer_size;
 	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT;
+	hints->mode |= FI_CONTEXT;
 	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ret = run();
