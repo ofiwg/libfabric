@@ -109,7 +109,8 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 		vhead[i].type = param->type;
 		vhead[i].help_string = strdup(param->help_string);
 
-		if ((tmp = getenv(param->env_var_name)))
+		tmp = getenv(param->env_var_name);
+		if (tmp)
 			vhead[i].value = strdup(tmp);
 
 		if (!vhead[i].name || !vhead[i].help_string) {

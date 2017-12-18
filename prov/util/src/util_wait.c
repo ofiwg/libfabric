@@ -194,7 +194,8 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
 		goto out;
 	}
 
-	if (!(fd_entry = calloc(1, sizeof *fd_entry))) {
+	fd_entry = calloc(1, sizeof *fd_entry);
+	if (!fd_entry) {
 		ret = -FI_ENOMEM;
 		fi_epoll_del(wait_fd->epoll_fd, fd);
 		goto out;
