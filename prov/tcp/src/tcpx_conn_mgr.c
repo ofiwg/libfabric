@@ -358,7 +358,7 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 	ret = rx_cm_data(sock, &conn_req, ofi_ctrl_connreq, poll_info);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "cm data recv failed \n");
-		return;
+		goto err1;
 	}
 
 	handle = calloc(1, sizeof(*handle));
