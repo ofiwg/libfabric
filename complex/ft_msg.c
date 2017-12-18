@@ -301,9 +301,9 @@ static int ft_post_send_rma(void)
 	switch (test_info.class_function) {
 	case FT_FUNC_READ:
 		ft_send_retry(ret, fi_read, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.memdesc,
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-			ft_mr_ctrl.mr_key, ctx);
+			ft_mr_ctrl.peer_mr_key, ctx);
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_READV:
@@ -312,7 +312,7 @@ static int ft_post_send_rma(void)
 		ft_send_retry(ret, fi_readv, ft_tx_ctrl.ep, ft_tx_ctrl.iov,
 			ft_tx_ctrl.iov_desc, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-			ft_mr_ctrl.mr_key, ctx);
+			ft_mr_ctrl.peer_mr_key, ctx);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		ft_tx_ctrl.credits--;
 		break;
@@ -328,7 +328,7 @@ static int ft_post_send_rma(void)
 		msg.data = 0;
 
 		rma_iov.addr = ft_mr_ctrl.peer_mr_addr;
-		rma_iov.key = ft_mr_ctrl.mr_key;
+		rma_iov.key = ft_mr_ctrl.peer_mr_key;
 		for (i = 0, rma_iov.len = 0; i < msg.iov_count; i++)
 			rma_iov.len += ft_tx_ctrl.iov[i].iov_len;
 
@@ -344,7 +344,7 @@ static int ft_post_send_rma(void)
 		ft_send_retry(ret, fi_writev, ft_tx_ctrl.ep, ft_tx_ctrl.iov,
 			ft_tx_ctrl.iov_desc, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-			ft_mr_ctrl.mr_key, ctx);
+			ft_mr_ctrl.peer_mr_key, ctx);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		ft_tx_ctrl.credits--;
 		break;
@@ -360,7 +360,7 @@ static int ft_post_send_rma(void)
 		msg.data = ft_tx_ctrl.remote_cq_data;
 
 		rma_iov.addr = ft_mr_ctrl.peer_mr_addr;
-		rma_iov.key = ft_mr_ctrl.mr_key;
+		rma_iov.key = ft_mr_ctrl.peer_mr_key;
 		for (i = 0, rma_iov.len = 0; i < msg.iov_count; i++)
 			rma_iov.len += ft_tx_ctrl.iov[i].iov_len;
 
@@ -374,26 +374,26 @@ static int ft_post_send_rma(void)
 	case FT_FUNC_INJECT_WRITE:
 		ft_send_retry(ret, fi_inject_write, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
 			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.addr,
-			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.mr_key);
+			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.peer_mr_key);
 		break;
 	case FT_FUNC_WRITEDATA:
 		ft_send_retry(ret, fi_writedata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.memdesc,
 			ft_tx_ctrl.remote_cq_data, ft_tx_ctrl.addr,
-			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.mr_key, ctx);
+			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.peer_mr_key, ctx);
 		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_INJECT_WRITEDATA:
 		ft_send_retry(ret, fi_inject_writedata, ft_tx_ctrl.ep,
 			ft_tx_ctrl.buf, ft_tx_ctrl.rma_msg_size,
 			ft_tx_ctrl.remote_cq_data, ft_tx_ctrl.addr,
-			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.mr_key);
+			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.peer_mr_key);
 		break;
 	default:
 		ft_send_retry(ret, fi_write, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-			ft_tx_ctrl.rma_msg_size, ft_mr_ctrl.memdesc,
+			ft_tx_ctrl.rma_msg_size, ft_tx_ctrl.memdesc,
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-			ft_mr_ctrl.mr_key, ctx);
+			ft_mr_ctrl.peer_mr_key, ctx);
 		ft_tx_ctrl.credits--;
 		break;
 	}
@@ -423,7 +423,7 @@ int ft_post_send_atomic(void)
 		ft_format_iocs(ft_tx_ctrl.iov, &iov_count);
 		ft_send_retry(ret, fi_atomicv, ft_tx_ctrl.ep, ft_atom_ctrl.ioc,
 			ft_tx_ctrl.iov_desc, iov_count, ft_tx_ctrl.addr,
-			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.mr_key,
+			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.peer_mr_key,
 			ft_atom_ctrl.datatype, ft_atom_ctrl.op, ctx);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		ft_tx_ctrl.credits--;
@@ -440,7 +440,7 @@ int ft_post_send_atomic(void)
 		msg.datatype = ft_atom_ctrl.datatype;
 
 		rma_iov.addr = ft_mr_ctrl.peer_mr_addr;
-		rma_iov.key = ft_mr_ctrl.mr_key;
+		rma_iov.key = ft_mr_ctrl.peer_mr_key;
 
 		for (i = 0, rma_iov.count = 0; i < msg.iov_count; i++)
 			rma_iov.count += ft_atom_ctrl.ioc[i].count;
@@ -456,7 +456,7 @@ int ft_post_send_atomic(void)
 			ft_tx_ctrl.buf, ft_atom_ctrl.count, ft_tx_ctrl.memdesc,
 			ft_atom_ctrl.res_buf, ft_atom_ctrl.res_memdesc,
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-			ft_mr_ctrl.mr_key, ft_atom_ctrl.datatype,
+			ft_mr_ctrl.peer_mr_key, ft_atom_ctrl.datatype,
 			ft_atom_ctrl.op, ctx);
 		ft_tx_ctrl.credits--;
 		break;
@@ -466,7 +466,7 @@ int ft_post_send_atomic(void)
 			ft_atom_ctrl.ioc, ft_tx_ctrl.iov_desc, iov_count,
 			ft_atom_ctrl.res_ioc, ft_atom_ctrl.res_memdesc,
 			iov_count, ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-			ft_mr_ctrl.mr_key, ft_atom_ctrl.datatype,
+			ft_mr_ctrl.peer_mr_key, ft_atom_ctrl.datatype,
 			ft_atom_ctrl.op, ctx);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		ft_tx_ctrl.credits--;
@@ -483,7 +483,7 @@ int ft_post_send_atomic(void)
 		msg.datatype = ft_atom_ctrl.datatype;
 
 		rma_iov.addr = ft_mr_ctrl.peer_mr_addr;
-		rma_iov.key = ft_mr_ctrl.mr_key;
+		rma_iov.key = ft_mr_ctrl.peer_mr_key;
 
 		for (i = 0, rma_iov.count = 0; i < msg.iov_count; i++)
 			rma_iov.count += ft_atom_ctrl.ioc[i].count;
@@ -503,7 +503,7 @@ int ft_post_send_atomic(void)
 			ft_atom_ctrl.comp_buf, ft_atom_ctrl.comp_memdesc,
 			ft_atom_ctrl.res_buf, ft_atom_ctrl.res_memdesc,
 			ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-			ft_mr_ctrl.mr_key, ft_atom_ctrl.datatype,
+			ft_mr_ctrl.peer_mr_key, ft_atom_ctrl.datatype,
 			ft_atom_ctrl.op, ctx);
 		ft_tx_ctrl.credits--;
 		break;
@@ -514,7 +514,7 @@ int ft_post_send_atomic(void)
 			ft_atom_ctrl.comp_ioc, ft_atom_ctrl.comp_memdesc,
 			iov_count, ft_atom_ctrl.res_ioc,
 			ft_atom_ctrl.res_memdesc, iov_count, ft_tx_ctrl.addr,
-			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.mr_key,
+			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.peer_mr_key,
 			ft_atom_ctrl.datatype, ft_atom_ctrl.op, ctx);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		ft_tx_ctrl.credits--;
@@ -531,7 +531,7 @@ int ft_post_send_atomic(void)
 		msg.datatype = ft_atom_ctrl.datatype;
 
 		rma_iov.addr = ft_mr_ctrl.peer_mr_addr;
-		rma_iov.key = ft_mr_ctrl.mr_key;
+		rma_iov.key = ft_mr_ctrl.peer_mr_key;
 
 		for (i = 0, rma_iov.count = 0; i < msg.iov_count; i++)
 			rma_iov.count += ft_atom_ctrl.ioc[i].count;
@@ -549,14 +549,14 @@ int ft_post_send_atomic(void)
 	case FT_FUNC_INJECT_ATOMIC:
 		ft_send_retry(ret, fi_inject_atomic, ft_tx_ctrl.ep,
 			ft_tx_ctrl.buf, ft_atom_ctrl.count, ft_tx_ctrl.addr, 
-			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.mr_key,
+			ft_mr_ctrl.peer_mr_addr, ft_mr_ctrl.peer_mr_key,
 			ft_atom_ctrl.datatype, ft_atom_ctrl.op);
 		break;
 	default:
 		ft_send_retry(ret, fi_atomic, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
 				ft_atom_ctrl.count, ft_tx_ctrl.memdesc,
 				ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
-				ft_mr_ctrl.mr_key, ft_atom_ctrl.datatype,
+				ft_mr_ctrl.peer_mr_key, ft_atom_ctrl.datatype,
 				ft_atom_ctrl.op, ctx);
 		ft_tx_ctrl.credits--;
 	}
@@ -661,8 +661,9 @@ static int ft_send_rma_sync(void)
 		return ret;
 
 	ft_send_retry(ret, fi_writedata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
-		0, ft_mr_ctrl.memdesc, ft_tx_ctrl.remote_cq_data,
-		ft_tx_ctrl.addr, 0, ft_mr_ctrl.mr_key, ctx);
+		      0, ft_tx_ctrl.memdesc, ft_tx_ctrl.remote_cq_data,
+		      ft_tx_ctrl.addr, ft_mr_ctrl.peer_mr_addr,
+		      ft_mr_ctrl.peer_mr_key, ctx);
 	ft_tx_ctrl.credits--;
 	return ret;
 }
