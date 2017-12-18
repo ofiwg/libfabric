@@ -124,7 +124,11 @@ gnix_mr_cache_attr_t __default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
+#if HAVE_KDREG
 		.lazy_deregistration = 1,
+#else
+		.lazy_deregistration = 0,
+#endif
 };
 
 /* Functions for using and manipulating cache entry state */

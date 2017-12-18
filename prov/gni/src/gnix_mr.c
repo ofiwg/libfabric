@@ -488,7 +488,7 @@ static int __gnix_deregister_region(
 		/* release reference to nic */
 		_gnix_ref_put(nic);
 	} else {
-		GNIX_INFO(FI_LOG_MR, "failed to deregister memory"
+		GNIX_WARN(FI_LOG_MR, "failed to deregister memory"
 			  " region, entry=%p ret=%i\n", handle, ret);
 	}
 
@@ -988,7 +988,11 @@ gnix_mr_cache_attr_t _gnix_default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
+#if HAVE_KDREG
 		.lazy_deregistration = 1,
+#else
+		.lazy_deregistration = 0,
+#endif
 		.reg_callback        = __gnix_register_region,
 		.dereg_callback      = __gnix_deregister_region,
 		.destruct_callback   = __gnix_destruct_registration,
