@@ -204,11 +204,9 @@ static int __mr_reg(struct fid *fid, const void *buf, size_t len,
 			1 << GNIX_MR_PAGE_SHIFT);
 
 	/* call cache register op to retrieve the right entry */
-	fastlock_release(&domain->mr_cache_lock);
 	fastlock_acquire(&info->mr_cache_lock);
 	if (unlikely(!domain->mr_ops))
 		_gnix_open_cache(domain, GNIX_DEFAULT_CACHE_TYPE);
-	fastlock_release(&domain->mr_cache_lock);
 
 	if (unlikely(!domain->mr_ops->is_init(domain, auth_key))) {
 		rc = domain->mr_ops->init(domain, auth_key);
@@ -490,7 +488,7 @@ static int __gnix_deregister_region(
 		/* release reference to nic */
 		_gnix_ref_put(nic);
 	} else {
-		GNIX_INFO(FI_LOG_MR, "failed to deregister memory"
+		GNIX_WARN(FI_LOG_MR, "failed to deregister memory"
 			  " region, entry=%p ret=%i\n", handle, ret);
 	}
 
@@ -990,7 +988,11 @@ gnix_mr_cache_attr_t _gnix_default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
+#if HAVE_KDREG
 		.lazy_deregistration = 1,
+#else
+		.lazy_deregistration = 0,
+#endif
 		.reg_callback        = __gnix_register_region,
 		.dereg_callback      = __gnix_deregister_region,
 		.destruct_callback   = __gnix_destruct_registration,
