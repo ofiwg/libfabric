@@ -649,6 +649,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					psm2_status.error_code = rep->error_code;
 
 					multi_recv = rep->multi_recv;
+					fi_context = rep->user_context;
 				}
 				break;
 			}
