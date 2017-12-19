@@ -1129,7 +1129,6 @@ static int util_cmap_del_handle(struct util_cmap_handle *handle)
 	util_cmap_clear_key(handle);
 
 	handle->state = CMAP_SHUTDOWN;
-	handle->cmap->attr.close(handle);
 	/* Signal event handler thread to delete the handle. This is required
 	 * so that the event handler thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
@@ -1292,6 +1291,10 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Deleting connection handle\n");
 		util_cmap_del_handle(handle);
+		break;
+	case CMAP_SHUTDOWN:
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Connection handle already being deleted\n");
 		break;
 	default:
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "Invalid cmap state: "
