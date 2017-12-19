@@ -480,6 +480,8 @@ int usdf_catch_dom_attr(uint32_t version, const struct fi_info *hints,
 			if (hints->domain_attr->caps == FI_REMOTE_COMM)
 				return -FI_EBADFLAGS;
 		}
+        } else {
+            dom_attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
 	}
 
 	return FI_SUCCESS;
