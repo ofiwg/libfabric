@@ -505,4 +505,3 @@ void freeifaddrs(struct ifaddrs *ifa)
 		ifa = next;
 	}
 }
-

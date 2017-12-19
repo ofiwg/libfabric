@@ -768,7 +768,7 @@ SOCKETS_INI
 
 	fi_param_define(&sock_prov, "pe_affinity", FI_PARAM_STRING,
 			"If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). "
-			"This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
+			"This option is currently not supported on OS X and Windows. Usage: id_start[-id_end[:stride]][,]");
 
 	fi_param_define(&sock_prov, "keepalive_enable", FI_PARAM_BOOL,
 			"Enable keepalive support");
