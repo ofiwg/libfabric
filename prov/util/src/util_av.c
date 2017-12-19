@@ -1117,7 +1117,8 @@ static int util_cmap_del_handle(struct util_cmap_handle *handle)
 	struct util_cmap *cmap = handle->cmap;
 	int ret;
 
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Deleting handle\n");
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+	       "Deleting connection handle: %p\n", handle);
 	if (handle->peer) {
 		dlist_remove(&handle->peer->entry);
 		free(handle->peer);
@@ -1285,11 +1286,11 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 	case CMAP_CONNECTED:
 		/* Handle is being re-used for incoming connection request */
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Received connection reject, but handle is being re-used\n");
+			"Connection handle is being re-used. Ignoring reject\n");
 		break;
 	case CMAP_CONNREQ_SENT:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Received connection reject, deleting handle\n");
+			"Deleting connection handle\n");
 		util_cmap_del_handle(handle);
 		break;
 	default:
