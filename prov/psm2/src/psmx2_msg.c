@@ -610,6 +610,9 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 		}
 	}
 
+	if (multi_recv && recv_len < recv_req->min_buf_size)
+		rep->comp_flag |= FI_MULTI_RECV;
+
 	return 0;
 }
 
