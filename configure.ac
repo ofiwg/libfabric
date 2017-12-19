@@ -181,6 +181,21 @@ AC_TRY_LINK([#include <stdint.h>],
     ],
     [AC_MSG_RESULT(no)])
 
+dnl Check for glibc malloc hooks
+AC_MSG_CHECKING(compiler support for glibc malloc hooks)
+AC_TRY_LINK([#include <malloc.h>],
+    [
+     __malloc_hook = NULL;
+     __realloc_hook = NULL;
+     __memalign_hook = NULL;
+     __free_hook = NULL;
+    ],
+    [
+	AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_GLIBC_MALLOC_HOOKS, 1, [Set to 1 to use glibc malloc hooks])
+    ],
+    [AC_MSG_RESULT(no)])
+
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))
