@@ -295,6 +295,8 @@ static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
 int ft_comp_rx(int timeout)
 {
 	int ret;
+	size_t cur_credits = ft_rx_ctrl.credits;
+
 	if (ft_use_comp_cntr(test_info.comp_type)) {
 		ret = ft_cntr_x(rxcntr, &ft_rx_ctrl, timeout);
 		if (ret)
@@ -305,6 +307,8 @@ int ft_comp_rx(int timeout)
 					test_info.rx_op_flags,
 					test_info.class_function,
 					test_info.msg_flags)) {
+			if (test_info.comp_type == FT_COMP_ALL)
+				ft_rx_ctrl.credits = cur_credits;
 			ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
 			if (ret)
 				return ret;
@@ -324,6 +328,8 @@ int ft_comp_rx(int timeout)
 int ft_comp_tx(int timeout)
 {
 	int ret;
+	size_t cur_credits = ft_tx_ctrl.credits;
+
 	if (ft_use_comp_cntr(test_info.comp_type)) {
 		ret = ft_cntr_x(txcntr, &ft_tx_ctrl, timeout);
 		if (ret)
@@ -334,6 +340,8 @@ int ft_comp_tx(int timeout)
 					test_info.tx_op_flags,
 					test_info.class_function,
 					test_info.msg_flags)) {
+			if (test_info.comp_type == FT_COMP_ALL)
+				ft_tx_ctrl.credits = cur_credits;
 			ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
 			if (ret)
 				return ret;
