@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -230,11 +231,22 @@ static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
 	if (ofi_dup_addr(core_info, *util_info))
 		goto err;
 
-	(*util_info)->domain_attr->name = strdup(core_info->domain_attr->name);
-	if (!(*util_info)->domain_attr->name) {
-		FI_WARN(prov, FI_LOG_FABRIC,
-			"Unable to allocate domain name\n");
-		goto err;
+	/* Release 1.4 brought standardized domain names across IP based
+	 * providers. Before this release, the usNIC provider would return a
+	 * NULL domain name from fi_getinfo. For compatibility reasons, allow a
+	 * NULL domain name when apps are requesting version < 1.4.
+	 */
+	assert(FI_VERSION_LT(1, 4) || core_info->domain_attr->name);
+
+	if (core_info->domain_attr->name) {
+		(*util_info)->domain_attr->name =
+			strdup(core_info->domain_attr->name);
+
+		if (!(*util_info)->domain_attr->name) {
+			FI_WARN(prov, FI_LOG_FABRIC,
+				"Unable to allocate domain name\n");
+			goto err;
+		}
 	}
 
 	(*util_info)->fabric_attr->name = strdup(core_info->fabric_attr->name);
