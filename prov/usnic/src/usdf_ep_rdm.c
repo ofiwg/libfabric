@@ -120,7 +120,7 @@ static const struct fi_domain_attr rdm_dflt_domain_attr = {
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
-	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL,
+	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC,
 	.cntr_cnt = USDF_RDM_CNTR_CNT,
 	.mr_iov_limit = USDF_RDM_MR_IOV_LIMIT,
 	.mr_cnt = USDF_RDM_MR_CNT,
@@ -249,7 +249,7 @@ int usdf_rdm_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-	if (usdf_check_mr_mode(version, hints, defaults.mr_mode))
+	if (ofi_check_mr_mode(&usdf_ops, version, defaults.mr_mode, hints))
 		return -FI_ENODATA;
 
 	if (hints->domain_attr->mr_cnt <= USDF_RDM_MR_CNT) {
