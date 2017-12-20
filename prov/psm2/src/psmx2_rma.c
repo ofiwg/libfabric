@@ -97,9 +97,9 @@ static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
  *	args[2].u64	offset
  */
 
-int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
-			     int nargs, void *src, uint32_t len,
-			     struct psmx2_trx_ctxt *trx_ctxt)
+int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
+		int nargs, void *src, uint32_t len,
+		void *hctx)
 {
 	psm2_amarg_t rep_args[8];
 	uint8_t *rma_addr;
@@ -115,6 +115,8 @@ int psmx2_am_rma_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
 	psm2_epaddr_t epaddr;
 	struct psmx2_fid_domain *domain;
 	struct psmx2_fid_ep *ep;
+	struct psmx2_trx_ctxt *trx_ctxt;
+	trx_ctxt = (struct psmx2_trx_ctxt *)hctx;
 
 	psm2_am_get_source(token, &epaddr);
 

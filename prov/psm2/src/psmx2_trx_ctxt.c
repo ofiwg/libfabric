@@ -90,15 +90,17 @@ static int psmx2_peer_match(struct dlist_entry *item, const void *arg)
 	return  (peer->epaddr == arg);
 }
 
-int psmx2_am_trx_ctxt_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
+int psmx2_am_trx_ctxt_handler(psm2_am_token_t token, psm2_amarg_t *args,
 				  int nargs, void *src, uint32_t len,
-				  struct psmx2_trx_ctxt *trx_ctxt)
+				  void *hctx)
 {
 	psm2_epaddr_t epaddr;
 	int err = 0;
 	int cmd;
 	struct disconnect_args *disconn;
 	pthread_t disconnect_thread;
+	struct psmx2_trx_ctxt *trx_ctxt;
+	trx_ctxt = (struct psmx2_trx_ctxt *)hctx;
 
 	psm2_am_get_source(token, &epaddr);
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
