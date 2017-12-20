@@ -44,10 +44,10 @@ extern "C" {
 
 #define	FI_SUCCESS		0
 
-//#define	FI_EPERM		EPERM		/* Operation not permitted */
+#define	FI_EPERM		EPERM		/* Operation not permitted */
 #define	FI_ENOENT		ENOENT		/* No such file or directory */
 //#define	FI_ESRCH		ESRCH		/* No such process */
-//#define	FI_EINTR		EINTR		/* Interrupted system call */
+#define	FI_EINTR		EINTR		/* Interrupted system call */
 #define	FI_EIO		 	EIO		/* I/O error */
 //#define	FI_ENXIO		ENXIO		/* No such device or address */
 #define	FI_E2BIG		E2BIG		/* Argument list too long */
@@ -57,7 +57,7 @@ extern "C" {
 #define	FI_EAGAIN		EAGAIN		/* Try again */
 #define	FI_ENOMEM		ENOMEM		/* Out of memory */
 #define	FI_EACCES		EACCES		/* Permission denied */
-//#define	FI_EFAULT		EFAULT		/* Bad address */
+#define	FI_EFAULT		EFAULT		/* Bad address */
 //#define	FI_ENOTBLK		ENOTBLK		/* Block device required */
 #define	FI_EBUSY		EBUSY		/* Device or resource busy */
 //#define	FI_EEXIST		EEXIST		/* File exists */
@@ -84,7 +84,7 @@ extern "C" {
 #define	FI_ENOSYS		ENOSYS		/* Function not implemented */
 //#define	FI_ENOTEMPTY		ENOTEMPTY	/* Directory not empty */
 //#define	FI_ELOOP		ELOOP		/* Too many symbolic links encountered */
-//#define	FI_EWOULDBLOCK		EWOULDBLOCK	/* Operation would block */
+#define	FI_EWOULDBLOCK		EWOULDBLOCK	/* Operation would block */
 #define	FI_ENOMSG		ENOMSG		/* No message of desired type */
 //#define	FI_EIDRM		EIDRM		/* Identifier removed */
 //#define	FI_ECHRNG		ECHRNG		/* Channel number out of range */
@@ -148,14 +148,14 @@ extern "C" {
 //#define	FI_ENETRESET		ENETRESET	/* Network dropped connection because of reset */
 #define	FI_ECONNABORTED		ECONNABORTED	/* Software caused connection abort */
 #define	FI_ECONNRESET		ECONNRESET	/* Connection reset by peer */
-//#define	FI_ENOBUFS		ENOBUFS		/* No buffer space available */
+#define	FI_ENOBUFS		ENOBUFS		/* No buffer space available */
 #define	FI_EISCONN		EISCONN		/* Transport endpoint is already connected */
 #define	FI_ENOTCONN		ENOTCONN	/* Transport endpoint is not connected */
 #define	FI_ESHUTDOWN		ESHUTDOWN	/* Cannot send after transport endpoint shutdown */
 //#define	FI_ETOOMANYREFS		ETOOMANYREFS	/* Too many references: cannot splice */
 #define	FI_ETIMEDOUT		ETIMEDOUT	/* Connection timed out */
 #define	FI_ECONNREFUSED		ECONNREFUSED	/* Connection refused */
-//#define	FI_EHOSTDOWN		EHOSTDOWN	/* Host is down */
+#define	FI_EHOSTDOWN		EHOSTDOWN	/* Host is down */
 #define	FI_EHOSTUNREACH		EHOSTUNREACH	/* No route to host */
 #define	FI_EALREADY		EALREADY	/* Operation already in progress */
 #define	FI_EINPROGRESS		EINPROGRESS	/* Operation now in progress */
