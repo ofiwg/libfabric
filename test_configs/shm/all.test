@@ -1,0 +1,60 @@
+{
+	prov_name: shm,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SEND,
+	        FT_FUNC_SENDV,
+		FT_FUNC_SENDMSG,
+		FT_FUNC_INJECT,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+	mr_mode: [
+		FI_MR_VIRT_ADDR,
+	],
+},
+{
+	prov_name: shm,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_WRITE,
+		FT_FUNC_WRITEV,
+		FT_FUNC_WRITEMSG,
+		FT_FUNC_READ,
+		FT_FUNC_READV,
+		FT_FUNC_READMSG,
+		FT_FUNC_INJECT_WRITE,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_RMA,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+	mr_mode: [
+		FI_MR_VIRT_ADDR,
+	],
+},
