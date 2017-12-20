@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2014-2017 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -49,7 +49,6 @@ typedef int (*ft_getinfo_test)(char *, char *, uint64_t, struct fi_info *, struc
 typedef int (*ft_getinfo_check)(struct fi_info *);
 
 static char err_buf[512];
-static char old_prov_var[128];
 static char new_prov_var[128];
 
 
@@ -660,9 +659,6 @@ static void set_prov(char *prov_name)
 	const char *core_name;
 	size_t len;
 
-	snprintf(old_prov_var, sizeof(old_prov_var) - 1, "FI_PROVIDER=%s",
-		 getenv("FI_PROVIDER"));
-
 	util_name = ft_util_name(prov_name, &len);
 	core_name = ft_core_name(prov_name, &len);
 
@@ -673,11 +669,6 @@ static void set_prov(char *prov_name)
 		 core_name);
 
 	putenv(new_prov_var);
-}
-
-static void reset_prov(void)
-{
-	putenv(old_prov_var);
 }
 
 int main(int argc, char **argv)
@@ -768,10 +759,6 @@ int main(int argc, char **argv)
 	}
 
 	failed = run_tests(no_hint_tests, err_buf);
-
-	if (hints->fabric_attr->prov_name) {
-		reset_prov();
-	}
 
 	if (hints->fabric_attr->prov_name) {
 		util_name = ft_util_name(hints->fabric_attr->prov_name, &len);
