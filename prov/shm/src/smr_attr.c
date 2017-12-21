@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -64,6 +64,7 @@ struct fi_domain_attr smr_domain_attr = {
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_VIRT_ADDR,
+	.cq_data_size = sizeof_field(struct smr_op_hdr, data),
 	.cq_cnt = (1 << 10),
 	.ep_cnt = (1 << 10),
 	.tx_ctx_cnt = (1 << 10),
