@@ -48,11 +48,10 @@ enum {
 	WAIT_WRITE_FD,
 };
 
+#ifndef _WIN32 /* there is no support of wait objects on windows */
 int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 {
-#ifndef _WIN32 /* there is no support of wait objects on windows */
 	struct fi_mutex_cond mut_cond;
-#endif /* _WIN32 */
 	struct sock_wait *wait;
 
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
@@ -60,7 +59,6 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 		return -FI_ENOSYS;
 
 	switch (wait->type) {
-#ifndef _WIN32
 	case FI_WAIT_FD:
 		memcpy(arg, &wait->wobj.fd[WAIT_READ_FD], sizeof(int));
 		break;
@@ -70,7 +68,6 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 		mut_cond.cond  = &wait->wobj.mutex_cond.cond;
 		memcpy(arg, &mut_cond, sizeof(mut_cond));
 		break;
-#endif /* _WIN32 */
 	default:
 		SOCK_LOG_ERROR("Invalid wait obj type\n");
 		return -FI_EINVAL;
@@ -78,6 +75,12 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 
 	return 0;
 }
+#else /* _WIN32 */
+int sock_wait_get_obj(struct fid_wait *fid, void *arg)
+{
+    return -FI_ENOSYS;
+}
+#endif
 
 static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 {
@@ -112,22 +115,19 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 
 static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 {
-	int err = 0, ret;
 	struct sock_cq *cq;
 	struct sock_cntr *cntr;
-	struct timeval now;
 	struct sock_wait *wait;
-	double start_ms = 0.0, end_ms = 0.0;
+	uint64_t start_ms = 0, end_ms = 0;
 	struct dlist_entry *p, *head;
 	struct sock_fid_list *list_item;
+	int err = 0;
+	ssize_t ret;
 	char c;
 
 	wait = container_of(wait_fid, struct sock_wait, wait_fid);
-	if (timeout > 0) {
-		gettimeofday(&now, NULL);
-		start_ms = (double)now.tv_sec * 1000.0 +
-			(double)now.tv_usec / 1000.0;
-	}
+	if (timeout > 0)
+		start_ms = fi_gettime_ms();
 
 	head = &wait->fid_list;
 	for (p = head->next; p != head; p = p->next) {
@@ -149,10 +149,8 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 		}
 	}
 	if (timeout > 0) {
-		gettimeofday(&now, NULL);
-		end_ms = (double)now.tv_sec * 1000.0 +
-			(double)now.tv_usec / 1000.0;
-		timeout -=  (end_ms - start_ms);
+		end_ms = fi_gettime_ms();
+		timeout -=  (int) (end_ms - start_ms);
 		timeout = timeout < 0 ? 0 : timeout;
 	}
 
@@ -190,7 +188,7 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 {
 	struct sock_wait *wait;
 	static char c = 'a';
-	int ret;
+	ssize_t ret;
 
 	wait = container_of(wait_fid, struct sock_wait, wait_fid);
 

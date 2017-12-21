@@ -120,7 +120,7 @@ void fi_log_init(void)
 	ofi_create_filter(&subsys_filter, subsysstr);
 	for (i = 0; i < FI_LOG_SUBSYS_MAX; i++) {
 		if (!ofi_apply_filter(&subsys_filter, log_subsys[i]))
-			log_mask |= (1 << (i + FI_LOG_SUBSYS_OFFSET));
+			log_mask |= (1ULL << (i + FI_LOG_SUBSYS_OFFSET));
 	}
 	ofi_free_filter(&subsys_filter);
 }

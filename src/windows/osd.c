@@ -118,10 +118,10 @@ err:
 int ofi_getsockname(SOCKET fd, struct sockaddr *addr, socklen_t *len)
 {
 	struct sockaddr_storage sock_addr;
-	size_t sock_addr_len = sizeof(sock_addr);
+	socklen_t sock_addr_len = sizeof(sock_addr);
 	int ret;
 
-	ret = getsockname(fd, &sock_addr, (socklen_t *)&sock_addr_len);
+	ret = getsockname(fd, (struct sockaddr *) &sock_addr, &sock_addr_len);
 	if (ret)
 		return ret;
 

@@ -79,7 +79,8 @@ static int util_poll_run(struct fid_poll *poll_fid, void **context, int count)
 	struct util_cntr *cntr;
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
-	int ret, i = 0, err = 0;
+	int i = 0, err = 0;
+	ssize_t ret;
 	uint64_t val;
 
 	pollset = container_of(poll_fid, struct util_poll, poll_fid.fid);
@@ -99,11 +100,13 @@ static int util_poll_run(struct fid_poll *poll_fid, void **context, int count)
 			cntr = container_of(fid_entry->fid, struct util_cntr,
 					    cntr_fid.fid);
 			val = fi_cntr_read(&cntr->cntr_fid);
-			if ((ret = (val != cntr->checkpoint_cnt))) {
+			ret = (val != cntr->checkpoint_cnt);
+			if (ret) {
 				cntr->checkpoint_cnt = val;
 			} else {
 				val = fi_cntr_readerr(&cntr->cntr_fid);
-				if ((ret = (val != cntr->checkpoint_err)))
+				ret = (val != cntr->checkpoint_err);
+				if (ret)
 					cntr->checkpoint_err = val;
 			}
 			break;
@@ -122,7 +125,7 @@ static int util_poll_run(struct fid_poll *poll_fid, void **context, int count)
 		if (ret > 0 && i < count)
 			context[i++] = fid_entry->fid->context;
 		else if (ret < 0 && ret != -FI_EAGAIN)
-			err = ret;
+			err = (int) ret;
 	}
 	fastlock_release(&pollset->lock);
 	return i ? i : err;

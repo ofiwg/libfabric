@@ -334,7 +334,8 @@ static int ofi_str_to_psmx(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = sizeof(uint64_t);
-	if (!(*addr = calloc(1, *len)))
+	*addr = calloc(1, *len);
+	if (!(*addr))
 		return -FI_ENOMEM;
 
 	ret = sscanf(str, "%*[^:]://%" SCNx64, (uint64_t *) *addr);
@@ -350,7 +351,8 @@ static int ofi_str_to_psmx2(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = 2 * sizeof(uint64_t);
-	if (!(*addr = calloc(1, *len)))
+	*addr = calloc(1, *len);
+	if (!(*addr))
 		return -FI_ENOMEM;
 
 	ret = sscanf(str, "%*[^:]://%" SCNx64 ":%" SCNx64,
@@ -370,7 +372,8 @@ static int ofi_str_to_ib_ud(const char *str, void **addr, size_t *len)
 	memset(gid, 0, sizeof(gid));
 
 	*len = 32;
-	if (!(*addr = calloc(1, *len)))
+	*addr = calloc(1, *len);
+	if(!(*addr))
 		return -FI_ENOMEM;
 
 	ret = sscanf(str, "%*[^:]://"
@@ -395,7 +398,8 @@ static int ofi_str_to_sin(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = sizeof(*sin);
-	if (!(sin = calloc(1, *len)))
+	sin = calloc(1, *len);
+	if (!sin)
 		return -FI_ENOMEM;
 
 	sin->sin_family = AF_INET;
@@ -434,7 +438,8 @@ static int ofi_str_to_sin6(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = sizeof(*sin6);
-	if (!(sin6 = calloc(1, *len)))
+	sin6 = calloc(1, *len);
+	if (!sin6)
 		return -FI_ENOMEM;
 
 	sin6->sin6_family = AF_INET6;
