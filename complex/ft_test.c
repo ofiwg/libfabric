@@ -934,7 +934,8 @@ static int ft_exchange_mr_addr_key(void)
 	}
 
 	ft_mr_ctrl.peer_mr_addr = peer_rma_iov.addr;
-	ft_mr_ctrl.peer_mr_key = peer_rma_iov.key;
+	if (test_info.mr_mode & FI_MR_PROV_KEY)
+		ft_mr_ctrl.peer_mr_key = peer_rma_iov.key;
 
 	return 0;
 }
