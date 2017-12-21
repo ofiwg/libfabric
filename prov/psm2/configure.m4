@@ -24,7 +24,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 			FI_CHECK_PACKAGE([psm2],
 					 [psm2.h],
 					 [psm2],
-					 [psm2_init],
+					 [psm2_am_register_handlers_2],
 					 [],
 					 [$psm2_PREFIX],
 					 [$psm2_LIBDIR],
@@ -45,12 +45,20 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 					 [psm2_happy=0])
 			AS_IF([test x$psm2_happy = x1],
 			      AS_IF([test -f $with_psm2_src/libpsm2.spec.in],
-				    [
-					$as_echo "$as_me: creating links for PSM2 source code."
-					mkdir -p $srcdir/prov/psm2/src/psm2
-					cp -srf $with_psm2_src/* $srcdir/prov/psm2/src/psm2/
-					ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_ips/
-					ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_am/
+				    [AC_EGREP_HEADER(
+						psm2_am_register_handlers_2,
+						$with_psm2_src/psm2_am.h,
+						[
+							$as_echo "$as_me: creating links for PSM2 source code."
+							mkdir -p $srcdir/prov/psm2/src/psm2
+							cp -srf $with_psm2_src/* $srcdir/prov/psm2/src/psm2/
+							ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_ips/
+							ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_am/
+						],
+						[
+							$as_echo "$as_me: PSM2 source under <$with_psm2_src> is too old."
+							psm2_happy=0
+						])
 				   ],
 				   [
 					$as_echo "$as_me: no PSM2 source under <$with_psm2_src>."
