@@ -40,6 +40,7 @@ AM_CONDITIONAL([FREEBSD], [test "x$freebsd" = "x1"])
 
 base_c_warn_flags="-Wall -Wundef -Wpointer-arith"
 debug_c_warn_flags="-Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers"
+debug_c_other_flags="-fstack-protector-strong"
 picky_c_warn_flags="-Wno-long-long -Wmissing-prototypes -Wstrict-prototypes -Wcomment -pedantic"
 
 AC_ARG_ENABLE([debug],
@@ -51,7 +52,7 @@ AC_ARG_ENABLE([debug],
 
 AS_IF([test x"$enable_debug" != x"no"],
       [dbg=1
-       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} $CFLAGS"],
+       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} $CFLAGS"],
       [dbg=0])
 
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
@@ -117,7 +118,8 @@ AC_ARG_ENABLE([picky],
                     [Enable developer-level compiler pickyness when building @<:@default=no@:>@])])
 AS_IF([test x"$enable_picky" = x"yes" && test x"$GCC" = x"yes"],
       [AS_IF([test x"$enable_debug" = x"no"],
-             [CFLAGS="${base_c_warn_flags} ${debug_c_warn_flags} ${picky_c_warn_flags} $CFLAGS"],
+             [CFLAGS="${base_c_warn_flags} ${debug_c_warn_flags}
+		      ${debug_c_other_flags} ${picky_c_warn_flags} $CFLAGS"],
              [CFLAGS="${picky_c_warn_flags} $CFLAGS"])
       ])
 
