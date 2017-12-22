@@ -53,6 +53,45 @@ static struct fi_ops fi_ibv_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static inline int
+fi_ibv_mr_ofi2ibv_access(uint64_t ofi_access, struct fi_ibv_domain *domain)
+{
+	int ibv_access = 0;
+
+	/* Enable local write access by default for FI_EP_RDM which hides local
+	 * registration requirements. This allows to avoid buffering or double
+	 * registration */
+	if (!(domain->info->caps & FI_LOCAL_MR) &&
+	    !(domain->info->domain_attr->mr_mode & FI_MR_LOCAL))
+		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+
+	/* Local read access to an MR is enabled by default in verbs */
+	if (ofi_access & FI_RECV)
+		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+
+	/* iWARP spec requires Remote Write access for an MR that is used
+	 * as a data sink for a Remote Read */
+	if (ofi_access & FI_READ) {
+		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+		if (domain->verbs->device->transport_type == IBV_TRANSPORT_IWARP)
+			ibv_access |= IBV_ACCESS_REMOTE_WRITE;
+	}
+
+	if (ofi_access & FI_WRITE)
+		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+
+	if (ofi_access & FI_REMOTE_READ)
+		ibv_access |= IBV_ACCESS_REMOTE_READ;
+
+	/* Verbs requires Local Write access too for Remote Write access */
+	if (ofi_access & FI_REMOTE_WRITE)
+		ibv_access |= IBV_ACCESS_LOCAL_WRITE |
+			      IBV_ACCESS_REMOTE_WRITE |
+			      IBV_ACCESS_REMOTE_ATOMIC;
+
+	return ibv_access;
+}
+
 static int
 fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	   uint64_t access, uint64_t offset, uint64_t requested_key,
@@ -80,37 +119,9 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	md->mr_fid.fid.context = context;
 	md->mr_fid.fid.ops = &fi_ibv_mr_ops;
 
-	/* Enable local write access by default for FI_EP_RDM which hides local
-	 * registration requirements. This allows to avoid buffering or double
-	 * registration */
-	if (!(md->domain->info->caps & FI_LOCAL_MR) &&
-	    !(md->domain->info->domain_attr->mr_mode & FI_MR_LOCAL))
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-
-	/* Local read access to an MR is enabled by default in verbs */
-	if (access & FI_RECV)
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-
-	/* iWARP spec requires Remote Write access for an MR that is used
-	 * as a data sink for a Remote Read */
-	if (access & FI_READ) {
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-		if (md->domain->verbs->device->transport_type == IBV_TRANSPORT_IWARP)
-			fi_ibv_access |= IBV_ACCESS_REMOTE_WRITE;
-	}
-
-	if (access & FI_WRITE)
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-
-	if (access & FI_REMOTE_READ)
-		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
-
-	/* Verbs requires Local Write access too for Remote Write access */
-	if (access & FI_REMOTE_WRITE)
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE |
-			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
-
-	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, fi_ibv_access);
+	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len,
+			    fi_ibv_mr_ofi2ibv_access(access,
+						     md->domain));
 	if (!md->mr)
 		goto err;
 
