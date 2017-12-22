@@ -309,7 +309,6 @@ struct fi_ibv_rdm_ep {
 	int	use_odp;
 	int	scq_depth;
 	int	rcq_depth;
-	int	cqread_bunch_size;
 
 	int	is_closing;
 	int	recv_preposted_threshold;

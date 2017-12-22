@@ -257,16 +257,21 @@ struct fi_ibv_cq {
 	struct util_buf_pool	*wce_pool;
 };
 
+struct fi_ibv_rdm_request;
+typedef void (*fi_ibv_rdm_cq_read_entry)(struct fi_ibv_rdm_request *cq_entry,
+					 int index, void *buf);
+
 struct fi_ibv_rdm_cq {
-	struct fid_cq		cq_fid;
-	struct fi_ibv_domain	*domain;
-	struct fi_ibv_rdm_ep	*ep;
-	struct dlist_entry	request_cq;
-	struct dlist_entry	request_errcq;
-	uint64_t		flags;
-	size_t			entry_size;
-	int			read_bunch_size;
-	enum fi_cq_wait_cond	wait_cond;
+	struct fid_cq			cq_fid;
+	struct fi_ibv_domain		*domain;
+	struct fi_ibv_rdm_ep		*ep;
+	struct dlist_entry		request_cq;
+	struct dlist_entry		request_errcq;
+	uint64_t			flags;
+	size_t				entry_size;
+	fi_ibv_rdm_cq_read_entry	read_entry;
+	int				read_bunch_size;
+	enum fi_cq_wait_cond		wait_cond;
 };
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
