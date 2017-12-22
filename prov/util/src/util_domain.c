@@ -93,7 +93,7 @@ int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		   struct util_domain *domain, void *context)
 {
 	struct util_fabric *fabric;
-	int ret;
+	int ret, err;
 
 	fabric = container_of(fabric_fid, struct util_fabric, fabric_fid);
 	domain->fabric = fabric;
@@ -112,7 +112,8 @@ int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 	ret = ofi_mr_map_init(domain->prov, info->domain_attr->mr_mode,
 			      &domain->mr_map);
 	if (ret) {
-		ofi_domain_close(domain);
+		err = ofi_domain_close(domain);
+		assert(err == 0);
 		return ret;
 	}
 
