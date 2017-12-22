@@ -146,6 +146,25 @@ int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 		      size_t len, uint64_t key, uint64_t access,
 		      void **context);
 
+struct ofi_mr {
+	struct fid_mr mr_fid;
+	struct util_domain *domain;
+	uint64_t key;
+	uint64_t flags;
+};
+
+int ofi_mr_close(struct fid *fid);
+int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		   uint64_t flags, struct fid_mr **mr_fid);
+int ofi_mr_regv(struct fid *fid, const struct iovec *iov,
+	        size_t count, uint64_t access, uint64_t offset,
+		uint64_t requested_key, uint64_t flags,
+		struct fid_mr **mr_fid, void *context);
+int ofi_mr_reg(struct fid *fid, const void *buf, size_t len,
+	       uint64_t access, uint64_t offset, uint64_t requested_key,
+	       uint64_t flags, struct fid_mr **mr_fid, void *context);
+int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len,
+		  uintptr_t *addr, uint64_t key, uint64_t access);
 
 /*
  * Memory registration cache

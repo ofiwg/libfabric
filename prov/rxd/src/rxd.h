@@ -116,7 +116,7 @@ struct rxd_domain {
 
 	ssize_t max_mtu_sz;
 	int mr_mode;
-	struct ofi_mr_map mr_map;
+	struct ofi_mr_map mr_map;//TODO use util_domain mr_map instead
 };
 
 struct rxd_av {

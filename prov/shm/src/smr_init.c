@@ -36,11 +36,6 @@
 #include "smr.h"
 
 
-int smr_check_info(struct fi_info *info)
-{
-	return ofi_prov_check_info(&smr_util_prov, smr_util_prov.prov->version, info);
-}
-
 static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints, struct fi_info **info)
 {

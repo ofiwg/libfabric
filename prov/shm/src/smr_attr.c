@@ -33,7 +33,7 @@
 #include "smr.h"
 
 struct fi_tx_attr smr_tx_attr = {
-	.caps = FI_MSG | FI_SEND,
+	.caps = FI_MSG | FI_SEND | FI_READ | FI_WRITE,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = SMR_INJECT_SIZE,
 	.size = 1024,
@@ -48,7 +48,7 @@ struct fi_rx_attr smr_rx_attr = {
 };
 
 struct fi_ep_attr smr_ep_attr = {
-	.type = FI_EP_DGRAM,
+	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_SHM,
 	.protocol_version = 1,
 	.max_msg_size = SIZE_MAX,
@@ -63,7 +63,7 @@ struct fi_domain_attr smr_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_BASIC,
+	.mr_mode = FI_MR_VIRT_ADDR,
 	.cq_cnt = (1 << 10),
 	.ep_cnt = (1 << 10),
 	.tx_ctx_cnt = (1 << 10),
@@ -78,7 +78,8 @@ struct fi_fabric_attr smr_fabric_attr = {
 };
 
 struct fi_info smr_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_TAGGED,
+	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_TAGGED | FI_RMA |
+		FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE,
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &smr_tx_attr,
 	.rx_attr = &smr_rx_attr,
