@@ -381,8 +381,13 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				ret = sock_cq_rbuf_read(sock_cq, buf,
 					MIN(threshold, (size_t)(avail / cq_entry_len)),
 					src_addr, cq_entry_len);
-			else /* No CQ entry available, read the fd */
+			else {
+				/* No CQ entry available, read the fd */
 				ofi_rbfdreset(&sock_cq->cq_rbfd);
+				ret = -FI_EAGAIN;
+				fastlock_release(&sock_cq->lock);
+				break;
+			}
 			fastlock_release(&sock_cq->lock);
 
 			if ((ret == -FI_EAGAIN || ret == 0) && timeout >= 0) {
