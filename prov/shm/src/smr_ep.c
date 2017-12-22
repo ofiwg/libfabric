@@ -624,16 +624,18 @@ static int smr_check_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 
 	switch (unexp_msg->cmd.hdr.op.op_src){
 	case smr_src_inline:
-		ret = smr_progress_inline(&unexp_msg->cmd, entry->iov, entry->iov_count,
-					  &total_len, 0);
+		entry->err = smr_progress_inline(&unexp_msg->cmd, entry->iov,
+						 entry->iov_count, &total_len, 0);
 		break;
 	case smr_src_inject:
-		ret = smr_progress_inject(&unexp_msg->cmd, entry->iov, entry->iov_count,
-					  &total_len, ep, 0);
+		entry->err = smr_progress_inject(&unexp_msg->cmd, entry->iov,
+						 entry->iov_count, &total_len,
+						 ep, 0);
 		break;
 	case smr_src_iov:
-		ret = smr_progress_iov(&unexp_msg->cmd, entry->iov, entry->iov_count,
-				       &total_len, ep, 0);
+		entry->err = smr_progress_iov(&unexp_msg->cmd, entry->iov,
+					      entry->iov_count, &total_len,
+					      ep, 0);
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
