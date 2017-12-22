@@ -56,6 +56,9 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
+	.mr_cache_enable	= 0,
+	.mr_cache_size		= 4096,
+	.mr_cache_lazy_size	= 0,
 
 	.rdm			= {
 		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
@@ -656,6 +659,28 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of iface\n");
 		return -FI_EINVAL;
 	}
+	if (fi_ibv_get_param_bool("mr_cache_enable", "Enable Memory Region caching",
+				  &fi_ibv_gl_data.mr_cache_enable)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of mr_cache_enable\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("mr_cache_size", "Maximum number of cache entries",
+				 &fi_ibv_gl_data.mr_cache_size) ||
+	    (fi_ibv_gl_data.mr_cache_lazy_size < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of mr_cache_size\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("mr_cache_lazy_size",
+				 "Minimum size of lazy deregistration",
+				 &fi_ibv_gl_data.mr_cache_lazy_size)  ||
+	    (fi_ibv_gl_data.mr_cache_lazy_size < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of mr_cache_lazy_size\n");
+		return -FI_EINVAL;
+	}
+	
 
 	/* RDM-specific parameters */
 	if (fi_ibv_get_param_int("rdm_buffer_num", "The number of pre-registered "

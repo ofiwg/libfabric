@@ -160,6 +160,9 @@ static int fi_ibv_domain_close(fid_t fid)
 		return -FI_EINVAL;
 	}
 
+	if (fi_ibv_gl_data.mr_cache_enable)
+		ofi_mr_cache_cleanup(&domain->cache);
+
 	if (domain->pd) {
 		ret = ibv_dealloc_pd(domain->pd);
 		if (ret)
@@ -265,6 +268,26 @@ static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.query_atomic = fi_no_query_atomic,
 };
 
+static void fi_ibv_domain_process_exp(struct fi_ibv_domain *domain)
+{
+#ifdef HAVE_VERBS_EXP_H
+	struct ibv_exp_device_attr exp_attr= {
+		.comp_mask = IBV_EXP_DEVICE_ATTR_ODP |
+			     IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS,
+	};
+	domain->use_odp = (!ibv_exp_query_device(domain->verbs, &exp_attr) &&
+			   exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP);
+#else /* HAVE_VERBS_EXP_H */
+	domain->use_odp = 0;
+#endif /* HAVE_VERBS_EXP_H */
+	if (!domain->use_odp && fi_ibv_gl_data.use_odp) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "ODP is not supported on this configuration, ignore \n");
+		return;
+	}
+	domain->use_odp = fi_ibv_gl_data.use_odp;
+}
+
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
@@ -313,14 +336,44 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &fi_ibv_fid_ops;
-	_domain->util_domain.domain_fid.mr = &fi_ibv_domain_mr_ops;
+
+	fi_ibv_domain_process_exp(_domain);
+
+	if (fi_ibv_gl_data.mr_cache_enable) {
+		_domain->monitor.subscribe = fi_ibv_monitor_subscribe;
+		_domain->monitor.unsubscribe = fi_ibv_monitor_unsubscribe;
+		_domain->monitor.get_event = fi_ibv_monitor_get_event;
+		ofi_monitor_init(&_domain->monitor);
+
+		_domain->cache.size = fi_ibv_gl_data.mr_cache_size;
+		_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
+		_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
+		_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
+		ret = ofi_mr_cache_init(&_domain->util_domain, &_domain->monitor,
+					&_domain->cache);
+		if (ret)
+			goto err4;
+		if (fi_ibv_gl_data.mr_cache_lazy_size) {
+			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ex_ops.fi_ops;
+			_domain->internal_mr_reg = fi_ibv_mr_internal_ex_ops.internal_mr_reg;
+			_domain->internal_mr_dereg = fi_ibv_mr_internal_ex_ops.internal_mr_dereg;
+		} else {
+			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
+			_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
+			_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
+		}
+	} else {
+		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ops.fi_ops;
+		_domain->internal_mr_reg = fi_ibv_mr_internal_ops.internal_mr_reg;
+		_domain->internal_mr_dereg = fi_ibv_mr_internal_ops.internal_mr_dereg;
+	}
 
 	switch (_domain->ep_type) {
 	case FI_EP_RDM:
 		_domain->rdm_cm = calloc(1, sizeof(*_domain->rdm_cm));
 		if (!_domain->rdm_cm) {
 			ret = -FI_ENOMEM;
-			goto err4;
+			goto err5;
 		}
 		_domain->rdm_cm->cm_progress_timeout =
 			fi_ibv_gl_data.rdm.thread_timeout;
@@ -336,7 +389,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 				   "Failed to launch CM progress thread, "
 				   "err :%d\n", ret);
 			ret = -FI_EOTHER;
-			goto err5;
+			goto err6;
 		}
 		_domain->util_domain.domain_fid.ops = &fi_ibv_rdm_domain_ops;
 
@@ -346,13 +399,13 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 				   "Failed to create listener event channel: %s\n",
 				   strerror(errno));
 			ret = -FI_EOTHER;
-			goto err6;
+			goto err7;
 		}
 
 		if (fi_fd_nonblock(_domain->rdm_cm->ec->fd) != 0) {
 			VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "fcntl", errno);
 			ret = -FI_EOTHER;
-			goto err7;
+			goto err8;
 		}
 
 		if (rdma_create_id(_domain->rdm_cm->ec,
@@ -360,7 +413,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			VERBS_INFO(FI_LOG_DOMAIN, "Failed to create cm listener: %s\n",
 				   strerror(errno));
 			ret = -FI_EOTHER;
-			goto err7;
+			goto err8;
 		}
 		_domain->rdm_cm->is_bound = 0;
 		break;
@@ -383,7 +436,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			if (ret) {
 				VERBS_INFO(FI_LOG_DOMAIN,
 					   "ofi_ns_init returns %d\n", ret);
-				goto err4;
+				goto err5;
 			}
 			ofi_ns_start_server(&fab->name_server);
 		}
@@ -396,21 +449,26 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		VERBS_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "
 			   "EP type :%d\n", _domain->ep_type);
 		ret = -FI_EINVAL;
-		goto err4;
+		goto err5;
 	}
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
 /* Only verbs/RDM should be able to go through err[5-7] */
-err7:
+err8:
 	rdma_destroy_event_channel(_domain->rdm_cm->ec);
-err6:
+err7:
 	_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
 	pthread_join(_domain->rdm_cm->cm_progress_thread, &status);
-err5:
+err6:
 	pthread_mutex_destroy(&_domain->rdm_cm->cm_lock);
 	free(_domain->rdm_cm);
+err5:
+	if (fi_ibv_gl_data.mr_cache_enable)
+		ofi_mr_cache_cleanup(&_domain->cache);
 err4:
+	if (fi_ibv_gl_data.mr_cache_enable)
+		ofi_monitor_cleanup(&_domain->monitor);
 	if (ibv_dealloc_pd(_domain->pd))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN,
 				 "ibv_dealloc_pd", errno);

@@ -170,6 +170,7 @@ struct fi_ibv_recv_got_pkt_process_data {
 
 // rma service data types
 
+
 struct fi_ibv_rdm_rma_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
 	struct fi_ibv_rdm_conn *conn;
@@ -178,8 +179,8 @@ struct fi_ibv_rdm_rma_start_data {
 	uint64_t data_len;
 	uintptr_t rbuf;
 	uintptr_t lbuf;
-	uint64_t rkey;
-	uint64_t lkey;
+	uint64_t mr_rkey;
+	uint64_t mr_lkey;
 	enum ibv_wr_opcode op_code;
 };
 

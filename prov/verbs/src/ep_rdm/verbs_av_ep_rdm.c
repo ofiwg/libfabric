@@ -149,7 +149,7 @@ int fi_ibv_av_entry_alloc(struct fi_ibv_domain *domain,
 			  void *addr)
 {
 	int ret = ofi_memalign((void**)av_entry,
-			       FI_IBV_RDM_MEM_ALIGNMENT,
+			       FI_IBV_MEM_ALIGNMENT,
 			       sizeof (**av_entry));
 	if (ret)
 		return -ret;
@@ -575,7 +575,7 @@ fi_ibv_rdm_conn_entry_alloc(struct fi_ibv_rdm_av_entry *av_entry,
 	struct fi_ibv_rdm_conn *conn;
 
 	if (ofi_memalign((void**) &conn,
-			 FI_IBV_RDM_MEM_ALIGNMENT,
+			 FI_IBV_MEM_ALIGNMENT,
 			 sizeof(*conn)))
 		return NULL;
 	memset(conn, 0, sizeof(*conn));

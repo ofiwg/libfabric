@@ -113,6 +113,10 @@
 #define FI_IBV_EP_TYPE(info)						\
 	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
 
+#define FI_IBV_MEM_ALIGNMENT (64)
+#define FI_IBV_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
+#define FI_IBV_POOL_BUF_CNT (100)
+
 /* NOTE:
  * When ibv_post_send/recv returns '-1' it means the following:
  * Deal with non-compliant libibverbs drivers which set errno
@@ -164,6 +168,9 @@ extern struct fi_ibv_gl_data {
 	int	use_odp;
 	int	cqread_bunch_size;
 	char	*iface;
+	int	mr_cache_enable;
+	int	mr_cache_size;
+	int	mr_cache_lazy_size;
 
 	struct {
 		int	buffer_num;
@@ -179,8 +186,6 @@ extern struct fi_ibv_gl_data {
 		int	name_server_port;
 	} dgram;
 } fi_ibv_gl_data;
-
-extern struct fi_ops_mr fi_ibv_domain_mr_ops;
 
 struct verbs_addr {
 	struct dlist_entry entry;
@@ -323,6 +328,12 @@ struct fi_ibv_pep {
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
 struct fi_ibv_rdm_cm;
 
+struct fi_ibv_mem_desc;
+typedef int(*fi_ibv_mr_reg_cb)(struct fi_ibv_domain *domain, void *buf,
+			       size_t len, uint64_t access,
+			       struct fi_ibv_mem_desc *md);
+typedef int(*fi_ibv_mr_dereg_cb)(struct fi_ibv_mem_desc *md);
+
 struct fi_ibv_domain {
 	struct util_domain	util_domain;
 	struct ibv_context	*verbs;
@@ -339,6 +350,13 @@ struct fi_ibv_domain {
 	/* This EQ is utilized by verbs/RDM and verbs/DGRAM */
 	struct fi_ibv_eq	*eq;
 	uint64_t		eq_flags;
+
+	/* MR stuff */
+	int			use_odp;
+	struct ofi_mr_cache	cache;
+	struct ofi_mem_monitor	monitor;
+	fi_ibv_mr_reg_cb	internal_mr_reg;
+	fi_ibv_mr_dereg_cb	internal_mr_dereg;
 };
 
 struct fi_ibv_cq;
@@ -415,7 +433,48 @@ struct fi_ibv_mem_desc {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
 	struct fi_ibv_domain	*domain;
+	size_t			len;
+	/* this field is used only by MR cache operations */
+	struct ofi_mr_entry	*entry;
 };
+
+int fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
+			     void **buf, size_t size,
+			     struct fi_ibv_mem_desc *md);
+ssize_t fi_ibv_rdm_dereg_and_free(struct fi_ibv_mem_desc *md,
+				  char **buff);
+
+static inline uint64_t
+fi_ibv_mr_internal_rkey(struct fi_ibv_mem_desc *md)
+{
+	return md->mr->rkey;
+}
+
+static inline uint64_t
+fi_ibv_mr_internal_lkey(struct fi_ibv_mem_desc *md)
+{
+	return md->mr->lkey;
+}
+
+struct fi_ibv_mr_internal_ops {
+	struct fi_ops_mr	*fi_ops;
+	fi_ibv_mr_reg_cb	internal_mr_reg;
+	fi_ibv_mr_dereg_cb	internal_mr_dereg;
+};
+
+extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ops;
+extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_cache_ops;
+extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ex_ops;
+
+int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
+			      struct ofi_mr_entry *entry);
+void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
+				 struct ofi_mr_entry *entry);
+int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier, void *addr,
+			     size_t len, struct ofi_subscription *subscription);
+void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
+				size_t len, struct ofi_subscription *subscription);
+struct ofi_subscription *fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifier);
 
 struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;

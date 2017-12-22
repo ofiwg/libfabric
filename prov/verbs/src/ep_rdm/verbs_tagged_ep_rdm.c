@@ -225,9 +225,9 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
 			struct ibv_sge sge = {
-				.addr = (uintptr_t)(void*)sbuf,
+				.addr = (uintptr_t)(void *)sbuf,
 				.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE,
-				.lkey = conn->s_mr->lkey,
+				.lkey = fi_ibv_mr_internal_lkey(&conn->s_md),
 			};
 
 			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
@@ -405,9 +405,9 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_sge sge = {
-		.addr = (uint64_t) &conn->sbuf_ack_status,
+		.addr = (uint64_t)&conn->sbuf_ack_status,
 		.length = sizeof(conn->sbuf_ack_status),
-		.lkey = conn->ack_mr->lkey,
+		.lkey = fi_ibv_mr_internal_lkey(&conn->ack_md),
 	};
 
 	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
