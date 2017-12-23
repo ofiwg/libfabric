@@ -569,22 +569,6 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->rx_op_flags = info->rx_attr->op_flags;
 	_ep->min_multi_recv_size = (_ep->rx_op_flags & FI_MULTI_RECV) ?
 				   info->tx_attr->inject_size : 0;
-#ifdef HAVE_VERBS_EXP_H
-	struct ibv_exp_device_attr exp_attr;
-	exp_attr.comp_mask = IBV_EXP_DEVICE_ATTR_ODP |
-			     IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
-	_ep->use_odp = (!ibv_exp_query_device(_ep->domain->verbs, &exp_attr) &&
-			exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP);
-#else /* HAVE_VERBS_EXP_H */
-	_ep->use_odp = 0;
-#endif /* HAVE_VERBS_EXP_H */
-	if (!_ep->use_odp && fi_ibv_gl_data.use_odp) {
-		VERBS_WARN(FI_LOG_CORE, "ODP is not supported on this "
-					"configuration, ignore \n");
-	} else {
-		_ep->use_odp = fi_ibv_gl_data.use_odp;
-	}
-
 	_ep->rndv_seg_size = fi_ibv_gl_data.rdm.rndv_seg_size;
 	_ep->rq_wr_depth = info->rx_attr->size;
 	/* one more outstanding slot for releasing eager buffers */
@@ -645,7 +629,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->fi_ibv_rdm_request_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_request),
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_request_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;
@@ -653,7 +637,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->fi_ibv_rdm_multi_request_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_multi_request),
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_multi_request_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;
@@ -661,14 +645,15 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->fi_ibv_rdm_postponed_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_postponed_entry),
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_postponed_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;
 	}
 
 	_ep->fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
-		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		_ep->buff_len, FI_IBV_MEM_ALIGNMENT,
+		0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_extra_buffers_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;

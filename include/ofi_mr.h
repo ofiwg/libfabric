@@ -105,6 +105,8 @@ struct ofi_notification_queue {
 struct ofi_subscription {
 	struct ofi_notification_queue	*nq;
 	struct dlist_entry		entry;
+	void				*addr;
+	size_t				len;
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -116,8 +118,7 @@ void ofi_monitor_del_queue(struct ofi_notification_queue *nq);
 int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 			  void *addr, size_t len,
 			  struct ofi_subscription *subscription);
-void ofi_monitor_unsubscribe(void *addr, size_t len,
-			     struct ofi_subscription *subscription);
+void ofi_monitor_unsubscribe(struct ofi_subscription *subscription);
 struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq);
 
 

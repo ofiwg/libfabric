@@ -203,8 +203,8 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (len > ep->rndv_threshold) {
-	    abort();
+	if (OFI_UNLIKELY(len > ep->rndv_threshold)) {
+		assert(0);
 		return -FI_EMSGSIZE;
 	}
 
@@ -215,9 +215,9 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
 			struct ibv_sge sge = {
-				.addr = (uintptr_t)(void*)sbuf,
+				.addr = (uintptr_t)(void *)sbuf,
 				.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE,
-				.lkey = conn->s_mr->lkey,
+				.lkey = fi_ibv_mr_internal_lkey(&conn->s_md),
 			};
 
 			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);

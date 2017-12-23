@@ -134,7 +134,7 @@ struct fi_ibv_rdm_rndv_header {
 	uint64_t src_addr;
 	uint64_t id; /* pointer to request on sender side */
 	uint64_t total_len;
-	uint32_t mem_key;
+	uint64_t mem_rkey;
 	uint32_t is_tagged;
 };
 
@@ -202,16 +202,16 @@ struct fi_ibv_rdm_request {
 			/* registered buffer on sender side */
 			void* remote_addr;
 			/* registered mr of local src_addr */
-			struct ibv_mr *mr;
-			uint32_t rkey;
+			struct fi_ibv_mem_desc md;
+			uint64_t mr_rkey;
 		} rndv;
 		
 		/* RMA info */
 		struct {
-			struct ibv_mr* mr;
+			struct fi_ibv_mem_desc md;
+			uint64_t mr_rkey;
+			uint64_t mr_lkey;
 			uint64_t remote_addr;
-			uint32_t rkey;
-			uint32_t lkey;
 			enum ibv_wr_opcode opcode;
 		} rma;
 	};
@@ -329,7 +329,6 @@ struct fi_ibv_rdm_ep {
 	int	rndv_threshold;
 	int	rndv_seg_size;
 	size_t	iov_per_rndv_thr;
-	int	use_odp;
 	int	scq_depth;
 	int	rcq_depth;
 
@@ -391,10 +390,10 @@ struct fi_ibv_rdm_conn {
 	struct dlist_entry postponed_requests_head;
 	struct fi_ibv_rdm_postponed_entry *postponed_entry;
 
-	struct ibv_mr *s_mr;
-	struct ibv_mr *r_mr;
-	struct ibv_mr *ack_mr;
-	struct ibv_mr *rma_mr;
+	struct fi_ibv_mem_desc s_md;
+	struct fi_ibv_mem_desc r_md;
+	struct fi_ibv_mem_desc ack_md;
+	struct fi_ibv_mem_desc rma_md;
 
 	uint32_t remote_sbuf_rkey;
 	uint32_t remote_rbuf_rkey;

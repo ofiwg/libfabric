@@ -43,8 +43,8 @@
 size_t rdm_buffer_size(size_t buf_send_size)
 {
 	size_t size = buf_send_size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
-		sizeof(struct fi_ibv_rdm_header) + FI_IBV_RDM_BUF_ALIGNMENT;
-	size -= (size % FI_IBV_RDM_BUF_ALIGNMENT);
+		sizeof(struct fi_ibv_rdm_header) + FI_IBV_BUF_ALIGNMENT;
+	size -= (size % FI_IBV_BUF_ALIGNMENT);
 	return size;
 }
 

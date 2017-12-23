@@ -59,8 +59,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 
 	assert(!entry->cached);
 	if (entry->subscribed) {
-		ofi_monitor_unsubscribe(entry->iov.iov_base, entry->iov.iov_len,
-					&entry->subscription);
+		ofi_monitor_unsubscribe(&entry->subscription);
 	}
 	cache->delete_region(cache, entry);
 	free(entry);
@@ -92,7 +91,7 @@ util_mr_cache_process_events(struct ofi_mr_cache *cache)
 			util_mr_uncache_entry(cache, entry);
 
 		if (entry->use_cnt == 0) {
-			dlist_remove(&entry->lru_entry);
+			dlist_remove_init(&entry->lru_entry);
 			util_mr_free_entry(cache, entry);
 		}
 	}
@@ -107,6 +106,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 
 	dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
 			entry, lru_entry);
+	dlist_init(&entry->lru_entry);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %" PRIu64 ")\n",
 	       entry->iov.iov_base, entry->iov.iov_len);
 
@@ -140,6 +140,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %" PRIu64 ")\n",
 	       iov->iov_base, iov->iov_len);
+
+	util_mr_cache_process_events(cache);
 
 	*entry = calloc(1, sizeof(**entry) + cache->entry_data_size);
 	if (!*entry)
@@ -203,9 +205,15 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 
 		rbtErase(cache->mr_tree, iter);
 		old_entry->cached = 0;
+
 		if (old_entry->use_cnt == 0) {
-			dlist_remove(&old_entry->lru_entry);
-			util_mr_free_entry(cache, old_entry);
+			dlist_remove_init(&old_entry->lru_entry);
+			util_mr_free_entry(cache, old_entry); 
+		} else if (old_entry->subscribed) {
+			/* old entry will be removed as soon as `use_cnt == 0`.
+			 * unsubscribe from the entry */
+			ofi_monitor_unsubscribe(&old_entry->subscription);
+			old_entry->subscribed = 0;
 		}
 
 	} while ((iter = rbtFind(cache->mr_tree, &iov)));
@@ -242,7 +250,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 	cache->hit_cnt++;
 	if ((*entry)->use_cnt++ == 0)
-		dlist_remove(&(*entry)->lru_entry);
+		dlist_remove_init(&(*entry)->lru_entry);
 
 	return 0;
 }
@@ -256,11 +264,13 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		"searches %" PRIu64 ", deletes %" PRIu64 ", hits %" PRIu64 "\n",
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt);
 
+	util_mr_cache_process_events(cache);
+
 	dlist_foreach_container_safe(&cache->lru_list, struct ofi_mr_entry,
 				     entry, lru_entry, tmp) {
 		assert(entry->use_cnt == 0);
 		util_mr_uncache_entry(cache, entry);
-		dlist_remove(&entry->lru_entry);
+		dlist_remove_init(&entry->lru_entry);
 		util_mr_free_entry(cache, entry);
 	}
 	rbtDelete(cache->mr_tree);
