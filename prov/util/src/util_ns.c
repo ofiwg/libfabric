@@ -63,7 +63,7 @@ int util_ns_##op##_socket_op(SOCKET sock, void *buf, size_t len)		\
 		ret = ofi_##op##_socket((sock),					\
 					(void *)((char *) (buf) + bytes),	\
 					(len) - bytes);				\
-		if (ret < 0)							\
+		if (ret <= 0)							\
 			return -1;						\
 	}									\
 	return 0;								\
