@@ -381,8 +381,8 @@ void my_critical_path_function() {
 
 2. Runtime control variables (instruction count example):
 
-export FI_PERF_RDPMC_TYPE=4
-export FI_PERF_RDPMC_CONFIG=00C0
+export FI_PERF_EVENT_TYPE=4
+export FI_PERF_EVENT_CONFIG=00C0
 
 The env vars are controls for perf_event_attr structure initialization
 
