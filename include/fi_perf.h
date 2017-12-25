@@ -102,10 +102,6 @@ struct fi_perf_rdpmc_context {
 	uint32_t config;
 };
 
-#if defined(__ICC) || defined(__INTEL_COMPILER)
-#include "immintrin.h"
-#endif
-
 #define fi_perf_rdpmc_rmb() asm volatile("" ::: "memory")
 
 /* Default configuration */
@@ -121,7 +117,7 @@ static inline int fi_perf_init(struct fi_perf_handle ** handle_ptr)
 	int result = 0;
 
 	result = posix_memalign((void **)&handle, FI_PERF_RDPMC_ALIGNMENT,
-							sizeof(struct fi_perf_handle));
+				sizeof(struct fi_perf_handle));
 	if (result != 0) {
 		/* Error handling */
 		goto exit_err_0;
@@ -171,7 +167,7 @@ static inline int fi_perf_init(struct fi_perf_handle ** handle_ptr)
 	}
 
 	context->buf = mmap(NULL, sysconf(_SC_PAGESIZE),
-						PROT_READ, MAP_SHARED, context->fd, 0);
+			    PROT_READ, MAP_SHARED, context->fd, 0);
 	if (context->buf == MAP_FAILED) {
 		perror("mmap on perf fd");
 		/* Error handling */
@@ -196,44 +192,50 @@ static inline int fi_perf_init(struct fi_perf_handle ** handle_ptr)
 
 static inline void fi_perf_finalize(struct fi_perf_handle * handle)
 {
-	if (handle) {
-		struct fi_perf_rdpmc_context * context =
-			(struct fi_perf_rdpmc_context *)handle->private;
-		munmap(context->buf, sysconf(_SC_PAGESIZE));
-		close(context->fd);
-	}
+	assert(handle);
+
+	struct fi_perf_rdpmc_context * context =
+		(struct fi_perf_rdpmc_context *)handle->private;
+	munmap(context->buf, sysconf(_SC_PAGESIZE));
+	close(context->fd);
 }
 
 static inline void fi_perf_reset(struct fi_perf_handle * handle, int slot_id)
 {
-	if (handle && (slot_id < handle->count)) {
-		handle->slots[slot_id].begin = 0;
-		handle->slots[slot_id].sum   = 0;
-		handle->slots[slot_id].count = 0;
-	}
+	assert(handle);
+	assert(slot_id < handle->count);
+
+	handle->slots[slot_id].begin = 0;
+	handle->slots[slot_id].sum   = 0;
+	handle->slots[slot_id].count = 0;
 }
 
 static inline void fi_perf_reset_all(struct fi_perf_handle * handle)
 {
-	if (handle) {
-		int i;
-		for (i = 0; i < handle->count; i++) {
-			fi_perf_reset(handle, i);
-		}
+	assert(handle);
+
+	int i;
+	for (i = 0; i < handle->count; i++) {
+		fi_perf_reset(handle, i);
 	}
 }
 
 static inline void fi_perf_set_slot_name(struct fi_perf_handle * handle,
-										 int slot_id, char * slot_name)
+					 int slot_id, char * slot_name)
 {
-	if (handle && (slot_id < handle->count)) {
-		strncpy(handle->slot_names[slot_id], slot_name,
-				FI_PERF_SLOT_NAME_LENGTH_MAX - 1);
-		handle->slot_names[slot_id][FI_PERF_SLOT_NAME_LENGTH_MAX - 1] = '\0';
+	assert(handle);
+	assert(slot_id < handle->count);
 
-		handle->slots[slot_id].is_active = 1; /* set name activates the slot */
-	}
+	strncpy(handle->slot_names[slot_id], slot_name,
+		FI_PERF_SLOT_NAME_LENGTH_MAX - 1);
+	handle->slot_names[slot_id][FI_PERF_SLOT_NAME_LENGTH_MAX - 1] = '\0';
+
+	handle->slots[slot_id].is_active = 1; /* set name activates the slot */
 }
+
+#if defined(__ICC) || defined(__INTEL_COMPILER)
+#include "immintrin.h"
+#endif
 
 static inline uint64_t fi_perf_rdpmc_get_value(struct fi_perf_handle * handle)
 {
@@ -263,46 +265,52 @@ static inline uint64_t fi_perf_rdpmc_get_value(struct fi_perf_handle * handle)
 
 static inline void fi_perf_begin(struct fi_perf_handle * handle, int slot_id)
 {
-	/* There are no handle and any other checks on a critical path */
+	assert(handle);
+	assert(slot_id < handle->count);
+
 	handle->slots[slot_id].begin = fi_perf_rdpmc_get_value(handle);
 }
 
 static inline void fi_perf_end(struct fi_perf_handle * handle, int slot_id)
 {
-	/* There are no handle and any other checks on a critical path */
+	assert(handle);
+	assert(slot_id < handle->count);
+
 	/* There is no counter wrapping handling */
 	handle->slots[slot_id].sum +=
-		(fi_perf_rdpmc_get_value(handle) - handle->slots[slot_id].begin);
+	    (fi_perf_rdpmc_get_value(handle) - handle->slots[slot_id].begin);
 	handle->slots[slot_id].count++;
 }
 
 static inline void fi_perf_dump(struct fi_perf_handle * handle,
-								int slot_id, FILE * stream)
+				int slot_id, FILE * stream)
 {
-	 if (handle &&
-		 (slot_id < handle->count) &&
-		 handle->slots[slot_id].is_active) {
-		 struct fi_perf_rdpmc_context * context =
-			 (struct fi_perf_rdpmc_context *)handle->private;
-		 fprintf(stream, "FI_PERF_RDPMC [%s] (%x, %04x) average = %g"
-				 " (%" PRIu64 " times)\n",
-				 handle->slot_names[slot_id], context->type, context->config,
-				 ((double)handle->slots[slot_id].sum /
-				  handle->slots[slot_id].count),
-				 handle->slots[slot_id].count);
-		 fflush(stream);
-	 }
+	assert(handle);
+	assert(slot_id < handle->count);
+	assert(handle->slots[slot_id].is_active);
+
+	struct fi_perf_rdpmc_context * context =
+		(struct fi_perf_rdpmc_context *)handle->private;
+	fprintf(stream, "FI_PERF_RDPMC [%s] (%x, %04x) average = %g"
+		" (%" PRIu64 " times)\n",
+		handle->slot_names[slot_id], context->type, context->config,
+		((double)handle->slots[slot_id].sum /
+		 handle->slots[slot_id].count),
+		handle->slots[slot_id].count);
+	fflush(stream);
 }
 
 static inline void fi_perf_dump_all(struct fi_perf_handle * handle,
-									FILE * stream)
+				    FILE * stream)
 {
-	 if (handle) {
-		 int slot_id;
-		 for (slot_id = 0; slot_id < handle->count; slot_id++) {
-			 fi_perf_dump(handle, slot_id, stream);
-		 }
-	 }
+	assert(handle);
+
+	int slot_id;
+	for (slot_id = 0; slot_id < handle->count; slot_id++) {
+		if (handle->slots[slot_id].is_active) {
+			fi_perf_dump(handle, slot_id, stream);
+		}
+	}
 }
 
 #else /* FI_PERF_RDPMC */
@@ -321,15 +329,15 @@ static inline void fi_perf_reset(struct fi_perf_handle * handle, int slot_id) {}
 static inline void fi_perf_reset_all(struct fi_perf_handle * handle) {}
 
 static inline void fi_perf_set_slot_name(struct fi_perf_handle * handle,
-										 int slot_id, char * slot_name) {}
+					 int slot_id, char * slot_name) {}
 
 static inline void fi_perf_begin(struct fi_perf_handle * handle, int slot_id) {}
 static inline void fi_perf_end(struct fi_perf_handle * handle, int slot_id) {}
 
 static inline void fi_perf_dump(struct fi_perf_handle * handle,
-								int slot_id, FILE * stream) {}
+				int slot_id, FILE * stream) {}
 static inline void fi_perf_dump_all(struct fi_perf_handle * handle,
-									FILE * stream) {}
+				    FILE * stream) {}
 #endif /* FI_PERF_RDPMC */
 
 /*
