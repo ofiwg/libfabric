@@ -177,7 +177,7 @@ static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
 		util_buf_pool_destroy(fi_ibv_mem_notifier->mem_ptrs_ent_pool);
 		fi_ibv_mem_notifier->prev_free_hook = NULL;
 		fi_ibv_mem_notifier->prev_realloc_hook = NULL;
-		pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
+		pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
 		pthread_mutex_destroy(&fi_ibv_mem_notifier->lock);
 		free(fi_ibv_mem_notifier);
 		fi_ibv_mem_notifier = NULL;
