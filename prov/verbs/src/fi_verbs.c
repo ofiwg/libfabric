@@ -667,7 +667,7 @@ static int fi_ibv_read_params(void)
 	}
 	if (fi_ibv_get_param_int("mr_cache_size", "Maximum number of cache entries",
 				 &fi_ibv_gl_data.mr_cache_size) ||
-	    (fi_ibv_gl_data.mr_cache_lazy_size < 0)) {
+	    (fi_ibv_gl_data.mr_cache_size < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of mr_cache_size\n");
 		return -FI_EINVAL;
