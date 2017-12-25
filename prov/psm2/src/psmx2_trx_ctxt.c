@@ -188,7 +188,8 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 	/* workaround for:
 	 * Assertion failure at psm2_ep.c:1059: ep->mctxt_master == ep
 	 */
-	sleep(psmx2_env.delay);
+	if (psmx2_env.delay)
+		sleep(psmx2_env.delay);
 
 	if (psmx2_env.timeout)
 		err = psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
