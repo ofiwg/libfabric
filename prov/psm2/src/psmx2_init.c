@@ -54,6 +54,7 @@ struct psmx2_env psmx2_env = {
 	.inject_size	= 64,
 	.lock_level	= 2,
 	.lazy_conn	= 0,
+	.disconnect	= 0,
 };
 
 static void psmx2_init_env(void)
@@ -71,6 +72,7 @@ static void psmx2_init_env(void)
 	fi_param_get_int(&psmx2_prov, "inject_size", &psmx2_env.inject_size);
 	fi_param_get_bool(&psmx2_prov, "lock_level", &psmx2_env.lock_level);
 	fi_param_get_bool(&psmx2_prov, "lazy_conn", &psmx2_env.lazy_conn);
+	fi_param_get_bool(&psmx2_prov, "disconnect", &psmx2_env.disconnect);
 }
 
 static int psmx2_get_yes_no(char *s, int default_value)
@@ -825,6 +827,9 @@ PROVIDER_INI
 
 	fi_param_define(&psmx2_prov, "lazy_conn", FI_PARAM_BOOL,
 			"Whether to use lazy connection or not (default: no).");
+
+	fi_param_define(&psmx2_prov, "disconnect", FI_PARAM_BOOL,
+			"Whether to issue disconnect request when process ends (default: no).");
 
 	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;

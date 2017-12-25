@@ -835,6 +835,7 @@ struct psmx2_env {
 	int inject_size;
 	int lock_level;
 	int lazy_conn;
+	int disconnect;
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;

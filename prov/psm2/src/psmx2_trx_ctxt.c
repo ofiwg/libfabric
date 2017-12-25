@@ -171,7 +171,8 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 	if (!trx_ctxt)
 		return;
 
-	psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
+	if (psmx2_env.disconnect)
+		psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
 
 	if (trx_ctxt->am_initialized)
 		psmx2_am_fini(trx_ctxt);

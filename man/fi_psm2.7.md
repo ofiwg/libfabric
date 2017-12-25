@@ -208,6 +208,21 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 0.
 
+*FI_PSM2_DISCONNECT
+: The provider has a mechanism to automatically send disconnection notifications
+  to all connected peers before the local endpoint is closed. As the response,
+  the peers call *psm2_ep_disconnect* to clean up the connection state at their
+  side. This allows the same PSM2 epid be used by different dynamically started
+  processes (clients) to communicate with the same peer (server). This mechanism,
+  however, introduce extra overhead to the finalization phase. For applications
+  that never reuse epids within the same session such overhead is unnecessary.
+
+  This option controls whether the automatic disconnection notification mechanism
+  should be enabled. For client-server application mentioned above, the client
+  side should set this option to 1, but the server should set it to 0.
+
+  The default setting is 0.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
