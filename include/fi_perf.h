@@ -98,8 +98,8 @@ struct fi_perf_handle {
 struct fi_perf_rdpmc_context {
 	int fd;
 	struct perf_event_mmap_page *buf;
-	uint32_t type;
-	uint32_t config;
+	int32_t  type;
+	uint64_t config;
 };
 
 #define fi_perf_rdpmc_rmb() asm volatile("" ::: "memory")
@@ -129,27 +129,28 @@ static inline int fi_perf_init(struct fi_perf_handle ** handle_ptr)
 	struct fi_perf_rdpmc_context * context =
 		(struct fi_perf_rdpmc_context *)handle->private;
 
-	int env_result    = 1;
-	char * env_type   = NULL;
-	char * env_config = NULL;
+	char * param_config_str = NULL;
 
-	env_type = getenv("FI_PERF_RDPMC_TYPE");
-	if (env_type) {
-		context->type = (uint32_t)strtoll(env_type, NULL, 16);
-	} else {
-		env_result = 0;
-	}
+	fi_param_define(NULL, "perf_event_type", FI_PARAM_INT,
+			"Specify perf event type: "
+			"0 (HW), 1 (SW), 2 (TRACEPOINT), 3 (HW_CACHE), 4 (RAW) "
+			"(default: 0)");
+	fi_param_define(NULL, "perf_event_config", FI_PARAM_STRING,
+			"Specify perf event config in hex: "
+			"event type specific "
+			"(default: 0)");
 
-	env_config = getenv("FI_PERF_RDPMC_CONFIG");
-	if (env_config) {
-		context->config = (uint32_t)strtoll(env_config, NULL, 16);
-	} else {
-		env_result = 0;
-	}
+	context->type   = FI_PERF_RDPMC_DEFAULT_TYPE;
+	context->config = FI_PERF_RDPMC_DEFAULT_CONFIG;
 
-	if (!env_result) {
-		context->type   = FI_PERF_RDPMC_DEFAULT_TYPE;
-		context->config = FI_PERF_RDPMC_DEFAULT_CONFIG;
+	fi_param_get_int(NULL, "perf_event_type", &context->type);
+
+	if (fi_param_get_str(NULL,
+			     "perf_event_config",
+			     &param_config_str) == FI_SUCCESS) {
+		context->config = (uint64_t)strtoull(param_config_str,
+						     NULL,
+						     16);
 	}
 
 	struct perf_event_attr attr = {
@@ -291,7 +292,7 @@ static inline void fi_perf_dump(struct fi_perf_handle * handle,
 
 	struct fi_perf_rdpmc_context * context =
 		(struct fi_perf_rdpmc_context *)handle->private;
-	fprintf(stream, "FI_PERF_RDPMC [%s] (%x, %04x) average = %g"
+	fprintf(stream, "FI_PERF_RDPMC [%s] (%d, %04" PRIX64 ") average = %g"
 		" (%" PRIu64 " times)\n",
 		handle->slot_names[slot_id], context->type, context->config,
 		((double)handle->slots[slot_id].sum /
