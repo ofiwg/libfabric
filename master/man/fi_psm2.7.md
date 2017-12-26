@@ -144,7 +144,7 @@ The *psm2* provider checks for the following environment variables:
 : Time (seconds) to sleep before closing PSM endpoints. This is a workaround
   for a bug in some versions of PSM library.
 
-  The default setting is 1.
+  The default setting is 0.
 
 *FI_PSM2_TIMEOUT*
 : Timeout (seconds) for gracefully closing PSM endpoints. A forced closing
