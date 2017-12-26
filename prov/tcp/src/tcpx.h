@@ -66,9 +66,9 @@
 #define TCPX_MINOR_VERSION 1
 
 
-extern struct fi_provider tcpx_prov;
-extern struct util_prov tcpx_util_prov;
-extern struct fi_info tcpx_info;
+extern struct fi_provider	tcpx_prov;
+extern struct util_prov	tcpx_util_prov;
+extern struct fi_info		tcpx_info;
 struct tcpx_fabric;
 
 #define TCPX_NO_COMPLETION	(1ULL << 63)
@@ -80,8 +80,8 @@ struct tcpx_fabric;
 #define TCPX_MAX_CM_DATA_SIZE	256
 
 int tcpx_create_fabric(struct fi_fabric_attr *attr,
-		struct fid_fabric **fabric,
-		void *context);
+		       struct fid_fabric **fabric,
+		       void *context);
 
 int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_pep **pep, void *context);
@@ -136,21 +136,20 @@ struct poll_fd_mgr {
 };
 
 struct tcpx_conn_handle {
-	struct fid handle;
-	SOCKET conn_fd;
+	struct fid		handle;
+	SOCKET			conn_fd;
 };
 
 struct tcpx_pep {
-	struct util_pep util_pep;
-	struct fi_info info;
-	SOCKET sock;
-
-	struct poll_fd_info poll_info;
+	struct util_pep 	util_pep;
+	struct fi_info		info;
+	SOCKET			sock;
+	struct poll_fd_info	poll_info;
 };
 
 struct tcpx_ep {
-	struct util_ep util_ep;
-	SOCKET conn_fd;
+	struct util_ep		util_ep;
+	SOCKET			conn_fd;
 };
 
 struct tcpx_fabric {
