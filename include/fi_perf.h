@@ -40,16 +40,84 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-/* Generic logic */
+/*
+
+1. Usage example:
+
+#define FI_PERF_RDPMC
+#include <fi_perf.h>
+
+struct fi_perf_handle * perf_handle = NULL;
+
+...
+
+void my_init_function() {
+...
+	(void)fi_perf_init(&perf_handle);
+	fi_perf_set_slot_name(perf_handle, 0, "My important code block");
+...
+}
+
+void my_finalize_function() {
+...
+	int i;
+	for (i = 0; i < fi_perf_get_slot_count(perf_handle); i++) {
+		struct fi_perf_slot * slot =
+			fi_perf_get_slot_data(perf_handle, i);
+		if (slot->is_active) {
+			FI_INFO(&my_favorite_provider,
+				FI_LOG_CORE,
+				"FI_PERF [%s] (%s) avg = %g "
+				"(%" PRIu64 " times)\n",
+				fi_perf_get_slot_name(perf_handle, i),
+				fi_perf_get_private_str(perf_handle),
+				(double)slot->sum / slot->events,
+				slot->events);
+		}
+	}
+
+	fi_perf_finalize(perf_handle);
+...
+}
+
+void my_critical_path_function() {
+...
+	fi_perf_begin(perf_handle, 0);
+
+	my_important_code_line_0;
+	my_important code line_1;
+	...
+	my_important_code_line_n;
+
+	fi_perf_end(perf_handle, 0);
+...
+}
+
+2. Runtime control variables (instruction count example):
+
+export FI_PERF_EVENT_TYPE=4
+export FI_PERF_EVENT_CONFIG=00C0
+
+The env vars are controls for perf_event_attr structure initialization
+
+3. Output example:
+
+FI_PERF [My important code block] (RDPMC: 4, 00C0) avg = 630.222 (10080 times)
+
+*/
+
+/* Generic part */
 
 #define FI_PERF_SLOT_COUNT_MAX       (8)
 #define FI_PERF_SLOT_NAME_LENGTH_MAX (256)
-#define FI_PERF_PRIVATE_AREA_SIZE    (64)
+
+#define FI_PERF_PRIVATE_DATA_SIZE    (64)
+#define FI_PERF_PRIVATE_STR_LENGTH   (256)
 
 struct fi_perf_slot {
 	uint64_t begin;
 	uint64_t sum;
-	uint64_t count;
+	uint64_t events;
 	uint64_t is_active;
 };
 
@@ -57,10 +125,57 @@ struct fi_perf_handle {
 	struct fi_perf_slot slots[FI_PERF_SLOT_COUNT_MAX];
 	char slot_names[FI_PERF_SLOT_COUNT_MAX][FI_PERF_SLOT_NAME_LENGTH_MAX];
 	int count;
-	uint8_t private[FI_PERF_PRIVATE_AREA_SIZE];
+	/* Collector private area */
+	uint8_t private_data[FI_PERF_PRIVATE_DATA_SIZE];
+	char private_str[FI_PERF_PRIVATE_STR_LENGTH];
 };
 
-#ifdef FI_PERF_RDPMC
+#ifndef FI_PERF_RDPMC
+
+/* Generic code is a stub */
+
+static inline int fi_perf_init(struct fi_perf_handle ** handle)
+{
+	*handle = NULL;
+	return 0;
+}
+
+static inline void fi_perf_finalize(struct fi_perf_handle * handle) {}
+
+static inline void fi_perf_reset(struct fi_perf_handle * handle, int slot_id) {}
+static inline void fi_perf_reset_all(struct fi_perf_handle * handle) {}
+
+static inline void fi_perf_set_slot_name(struct fi_perf_handle * handle,
+					 int slot_id, char * slot_name) {}
+static inline char *
+fi_perf_get_slot_name(struct fi_perf_handle * handle, int slot_id)
+{
+	return NULL;
+}
+
+static inline char *
+fi_perf_get_private_str(struct fi_perf_handle * handle)
+{
+	return NULL;
+}
+
+static inline void fi_perf_begin(struct fi_perf_handle * handle, int slot_id) {}
+static inline void fi_perf_end(struct fi_perf_handle * handle, int slot_id) {}
+
+static inline int fi_perf_get_slot_count(struct fi_perf_handle * handle)
+{
+	return 0;
+}
+
+static inline struct fi_perf_slot *
+fi_perf_get_slot_data(struct fi_perf_handle * handle, int slot_id)
+{
+	return NULL;
+}
+
+#else /* FI_PERF_RDPMC */
+
+/* RDPMC specific logic */
 
 /*
  * The following is a modification/adaptation of a code from Andi Kleen
@@ -83,8 +198,6 @@ struct fi_perf_handle {
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
-
-/* RDPMC specific logic */
 
 #include <unistd.h>
 #include <stdio.h>
@@ -127,7 +240,7 @@ static inline int fi_perf_init(struct fi_perf_handle ** handle_ptr)
 	handle->count = FI_PERF_SLOT_COUNT_MAX;
 
 	struct fi_perf_rdpmc_context * context =
-		(struct fi_perf_rdpmc_context *)handle->private;
+		(struct fi_perf_rdpmc_context *)handle->private_data;
 
 	char * param_config_str = NULL;
 
@@ -152,6 +265,13 @@ static inline int fi_perf_init(struct fi_perf_handle ** handle_ptr)
 						     NULL,
 						     16);
 	}
+
+	/* Initialize private signature */
+	snprintf(handle->private_str,
+		 FI_PERF_PRIVATE_STR_LENGTH,
+		 "RDPMC: %d, %04" PRIX64 "",
+		 context->type, context->config);
+	handle->private_str[FI_PERF_PRIVATE_STR_LENGTH - 1] = '\0';
 
 	struct perf_event_attr attr = {
 		.type = context->type,
@@ -196,7 +316,7 @@ static inline void fi_perf_finalize(struct fi_perf_handle * handle)
 	assert(handle);
 
 	struct fi_perf_rdpmc_context * context =
-		(struct fi_perf_rdpmc_context *)handle->private;
+		(struct fi_perf_rdpmc_context *)handle->private_data;
 	munmap(context->buf, sysconf(_SC_PAGESIZE));
 	close(context->fd);
 }
@@ -206,9 +326,9 @@ static inline void fi_perf_reset(struct fi_perf_handle * handle, int slot_id)
 	assert(handle);
 	assert(slot_id < handle->count);
 
-	handle->slots[slot_id].begin = 0;
-	handle->slots[slot_id].sum   = 0;
-	handle->slots[slot_id].count = 0;
+	handle->slots[slot_id].begin  = 0;
+	handle->slots[slot_id].sum    = 0;
+	handle->slots[slot_id].events = 0;
 }
 
 static inline void fi_perf_reset_all(struct fi_perf_handle * handle)
@@ -234,19 +354,29 @@ static inline void fi_perf_set_slot_name(struct fi_perf_handle * handle,
 	handle->slots[slot_id].is_active = 1; /* set name activates the slot */
 }
 
+static inline char *
+fi_perf_get_slot_name(struct fi_perf_handle * handle, int slot_id)
+{
+	assert(handle);
+	assert(slot_id < handle->count);
+
+	return handle->slot_names[slot_id];
+}
+
 #if defined(__ICC) || defined(__INTEL_COMPILER)
 #include "immintrin.h"
 #endif
 
 static inline uint64_t fi_perf_rdpmc_get_value(struct fi_perf_handle * handle)
 {
-	/* There are no handle and any other checks on a critical path */
 	uint64_t value;
 	unsigned seq;
 	uint64_t offset;
 
+	assert(handle);
+
 	struct fi_perf_rdpmc_context * context =
-		(struct fi_perf_rdpmc_context *)handle->private;
+		(struct fi_perf_rdpmc_context *)handle->private_data;
 	struct perf_event_mmap_page * buf = context->buf;
 
 	do {
@@ -262,6 +392,14 @@ static inline uint64_t fi_perf_rdpmc_get_value(struct fi_perf_handle * handle)
 	} while (buf->lock != seq);
 
 	return value + offset;
+}
+
+static inline char *
+fi_perf_get_private_str(struct fi_perf_handle * handle)
+{
+	assert(handle);
+
+	return handle->private_str;
 }
 
 static inline void fi_perf_begin(struct fi_perf_handle * handle, int slot_id)
@@ -280,116 +418,25 @@ static inline void fi_perf_end(struct fi_perf_handle * handle, int slot_id)
 	/* There is no counter wrapping handling */
 	handle->slots[slot_id].sum +=
 	    (fi_perf_rdpmc_get_value(handle) - handle->slots[slot_id].begin);
-	handle->slots[slot_id].count++;
+	handle->slots[slot_id].events++;
 }
 
-static inline void fi_perf_dump(struct fi_perf_handle * handle,
-				int slot_id, FILE * stream)
+static inline int fi_perf_get_slot_count(struct fi_perf_handle * handle)
+{
+	assert(handle);
+
+	return handle->count;
+}
+
+static inline struct fi_perf_slot *
+fi_perf_get_slot_data(struct fi_perf_handle * handle, int slot_id)
 {
 	assert(handle);
 	assert(slot_id < handle->count);
-	assert(handle->slots[slot_id].is_active);
 
-	struct fi_perf_rdpmc_context * context =
-		(struct fi_perf_rdpmc_context *)handle->private;
-	fprintf(stream, "FI_PERF_RDPMC [%s] (%d, %04" PRIX64 ") average = %g"
-		" (%" PRIu64 " times)\n",
-		handle->slot_names[slot_id], context->type, context->config,
-		((double)handle->slots[slot_id].sum /
-		 handle->slots[slot_id].count),
-		handle->slots[slot_id].count);
-	fflush(stream);
+	return &handle->slots[slot_id];
 }
 
-static inline void fi_perf_dump_all(struct fi_perf_handle * handle,
-				    FILE * stream)
-{
-	assert(handle);
-
-	int slot_id;
-	for (slot_id = 0; slot_id < handle->count; slot_id++) {
-		if (handle->slots[slot_id].is_active) {
-			fi_perf_dump(handle, slot_id, stream);
-		}
-	}
-}
-
-#else /* FI_PERF_RDPMC */
-
-/* Generic code is a stub */
-
-static inline int fi_perf_init(struct fi_perf_handle ** handle)
-{
-	*handle = NULL;
-	return 0;
-}
-
-static inline void fi_perf_finalize(struct fi_perf_handle * handle) {}
-
-static inline void fi_perf_reset(struct fi_perf_handle * handle, int slot_id) {}
-static inline void fi_perf_reset_all(struct fi_perf_handle * handle) {}
-
-static inline void fi_perf_set_slot_name(struct fi_perf_handle * handle,
-					 int slot_id, char * slot_name) {}
-
-static inline void fi_perf_begin(struct fi_perf_handle * handle, int slot_id) {}
-static inline void fi_perf_end(struct fi_perf_handle * handle, int slot_id) {}
-
-static inline void fi_perf_dump(struct fi_perf_handle * handle,
-				int slot_id, FILE * stream) {}
-static inline void fi_perf_dump_all(struct fi_perf_handle * handle,
-				    FILE * stream) {}
 #endif /* FI_PERF_RDPMC */
-
-/*
-
-1. Usage example:
-
-#define FI_PERF_RDPMC
-#include <fi_perf.h>
-
-struct fi_perf_handle * perf_handle = NULL;
-
-...
-
-void my_init_function() {
-...
-	(void)fi_perf_init(&perf_handle);
-	fi_perf_set_slot_name(perf_handle, 0, "My important code block");
-...
-}
-
-void my_finalize_function() {
-...
-	fi_perf_dump_all(perf_handle, stderr);
-	fi_perf_finalize(perf_handle);
-...
-}
-
-void my_critical_path_function() {
-...
-	fi_perf_begin(perf_handle, 0);
-
-	my_important_code_line_0;
-	my_important code line_1;
-	...
-	my_important_code_line_n;
-
-	fi_perf_end(perf_handle, 0);
-...
-}
-
-2. Runtime control variables (instruction count example):
-
-export FI_PERF_EVENT_TYPE=4
-export FI_PERF_EVENT_CONFIG=00C0
-
-The env vars are controls for perf_event_attr structure initialization
-
-3. Output example:
-
-FI_PERF_RDPMC [My important code block] (4, 00c0) average = 86.2605 (2019 times)
-
-*/
 
 #endif /* _FI_PERF_H_ */
