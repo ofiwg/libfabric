@@ -214,8 +214,8 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (len > ep->rndv_threshold) {
-		abort();
+	if (OFI_UNLIKELY(len > ep->rndv_threshold)) {
+		assert(0);
 		return -FI_EMSGSIZE;
 	}
 
@@ -223,24 +223,23 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 		struct fi_ibv_rdm_buf *sbuf = 
 			fi_ibv_rdm_prepare_send_resources(conn);
 		if (sbuf) {
-			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
 			struct ibv_sge sge = {
 				.addr = (uintptr_t)(void *)sbuf,
 				.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE,
 				.lkey = fi_ibv_mr_internal_lkey(&conn->s_md),
 			};
-
-			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
-			wr.sg_list = &sge;
-			wr.num_sge = 1;
-			wr.wr.rdma.remote_addr = (uintptr_t)
-				fi_ibv_rdm_get_remote_addr(conn, sbuf);
-			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-			wr.send_flags = (sge.length < ep->max_inline_rc)
-				? IBV_SEND_INLINE : 0;
-			wr.imm_data = 0;
-			wr.opcode = ep->eopcode;
+			struct ibv_send_wr wr = {
+				.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn),
+				.sg_list = &sge,
+				.num_sge = 1,
+				.wr.rdma.remote_addr = (uintptr_t)
+					fi_ibv_rdm_get_remote_addr(conn, sbuf),
+				.wr.rdma.rkey = conn->remote_rbuf_rkey,
+				.send_flags = (sge.length < ep->max_inline_rc)
+					       ? IBV_SEND_INLINE : 0,
+				.opcode = ep->eopcode,
+			};
 
 			sbuf->service_data.pkt_len = size;
 			sbuf->header.tag = tag;
@@ -248,12 +247,10 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 
 			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 					       FI_IBV_RDM_EAGER_PKT);
-			if ((len > 0) && (buf)) {
-				memcpy(&sbuf->payload, buf, len);
-			}
+			memcpy(&sbuf->payload, buf, len);
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep);
-			if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+			if (OFI_UNLIKELY(ibv_post_send(conn->qp[0], &wr, &bad_wr))) {
 				assert(0);
 				return -errno;
 			} else {
@@ -404,22 +401,22 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 					struct fi_ibv_rdm_ep *ep)
 {
 	struct ibv_send_wr *bad_wr = NULL;
-	struct ibv_send_wr wr = { 0 };
 	struct ibv_sge sge = {
 		.addr = (uint64_t)&conn->sbuf_ack_status,
 		.length = sizeof(conn->sbuf_ack_status),
 		.lkey = fi_ibv_mr_internal_lkey(&conn->ack_md),
 	};
-
-	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.wr.rdma.remote_addr = (uint64_t)
-		&conn->remote_sbuf_head->service_data.status;
-	wr.wr.rdma.rkey = conn->remote_sbuf_rkey;
-	wr.send_flags = (sge.length < ep->max_inline_rc) ? IBV_SEND_INLINE : 0;
-	/* w/o imm - do not put it into recv completion queue */
-	wr.opcode = IBV_WR_RDMA_WRITE;
+	struct ibv_send_wr wr = {
+		.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn),
+		.sg_list = &sge,
+		.num_sge = 1,
+		.wr.rdma.remote_addr = (uint64_t)
+			&conn->remote_sbuf_head->service_data.status,
+		.wr.rdma.rkey = conn->remote_sbuf_rkey,
+		.send_flags =
+			(sge.length < ep->max_inline_rc) ? IBV_SEND_INLINE : 0,
+		.opcode = IBV_WR_RDMA_WRITE,
+	};
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep);
 	VERBS_DBG(FI_LOG_EP_DATA,
