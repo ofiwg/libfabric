@@ -70,6 +70,8 @@ extern struct fi_provider	tcpx_prov;
 extern struct util_prov	tcpx_util_prov;
 extern struct fi_info		tcpx_info;
 struct tcpx_fabric;
+struct tcpx_domain;
+struct tcpx_progress;
 
 #define TCPX_NO_COMPLETION	(1ULL << 63)
 
@@ -100,6 +102,10 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
 
 void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
+
+int tcpx_progress_init(struct tcpx_domain *domain, struct tcpx_progress *progress);
+
+int tcpx_progress_close(struct tcpx_domain *domain);
 
 enum poll_fd_type {
 	CONNECT_SOCK,
@@ -158,4 +164,12 @@ struct tcpx_fabric {
 	pthread_t		conn_mgr_thread;
 };
 
+struct tcpx_domain {
+	struct util_domain	util_domain;
+	struct tcpx_progress	*progress;
+};
+
+struct tcpx_progress {
+	struct tcpx_domain	*domain;
+};
 #endif //_TCP_H_
