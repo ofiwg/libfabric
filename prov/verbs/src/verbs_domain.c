@@ -263,7 +263,6 @@ static int fi_ibv_domain_close(fid_t fid)
 						struct fi_ibv_rdm_av_entry,
 						removed_next);
 			fi_ibv_rdm_overall_conn_cleanup(av_entry);
-			pthread_mutex_destroy(&av_entry->conn_lock);
 			ofi_freealign(av_entry);
 		}
 		rdma_destroy_ep(domain->rdm_cm->listener);
@@ -426,6 +425,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct fi_ibv_fabric *fab;
 	const struct fi_info *fi;
 	void *status = NULL;
+	pthread_mutexattr_t mutex_attr;
 	int ret;
 
 	fab = container_of(fabric, struct fi_ibv_fabric,
@@ -510,7 +510,10 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			fi_ibv_gl_data.rdm.thread_timeout;
 		slist_init(&_domain->rdm_cm->av_removed_entry_head);
 
-		pthread_mutex_init(&_domain->rdm_cm->cm_lock, NULL);
+		pthread_mutexattr_init(&mutex_attr);
+		pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+		pthread_mutex_init(&_domain->rdm_cm->cm_lock, &mutex_attr);
+		pthread_mutexattr_destroy(&mutex_attr);
 		_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 1;
 		ret = pthread_create(&_domain->rdm_cm->cm_progress_thread,
 				     NULL, &fi_ibv_rdm_cm_progress_thread,
