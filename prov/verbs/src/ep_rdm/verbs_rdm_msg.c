@@ -80,9 +80,9 @@ static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				  &recv_data);
 
 	VERBS_DBG(FI_LOG_EP_DATA,
-		  "conn %p, len %zu, rbuf %p, fi_ctx %p, posted_recv %d\n",
+		  "conn %p, len %zu, rbuf %p, fi_ctx %p, posted_recv %"PRIu32"\n",
 		  conn, recv_data.data_len, recv_data.dest_addr,
-		  msg->context, ofi_atomic_get32(&ep_rdm->posted_recvs));
+		  msg->context, ep_rdm->posted_recvs);
 
 	if (!ret && !request->state.err)
 		ret = rdm_trecv_second_event(request, ep_rdm);

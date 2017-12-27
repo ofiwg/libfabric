@@ -100,7 +100,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 	}
 
 	if (ibv_post_recv(conn->qp[idx], wr, &bad_wr) == 0) {
-		ofi_atomic_add32(&conn->av_entry->recv_preposted, num_to_post);
+		conn->av_entry->recv_preposted += num_to_post;
 		return num_to_post;
 	}
 
