@@ -106,6 +106,8 @@ void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 int tcpx_progress_init(struct tcpx_domain *domain, struct tcpx_progress *progress);
 
 int tcpx_progress_close(struct tcpx_domain *domain);
+void tcpx_progress_signal(struct tcpx_progress *progress);
+
 
 enum poll_fd_type {
 	CONNECT_SOCK,
@@ -171,5 +173,10 @@ struct tcpx_domain {
 
 struct tcpx_progress {
 	struct tcpx_domain	*domain;
+	fastlock_t		signal_lock;
+	struct fd_signal	signal;
+	fi_epoll_t		epoll_set;
+	pthread_t		progress_thread;
+	int			do_progress;
 };
 #endif //_TCP_H_
