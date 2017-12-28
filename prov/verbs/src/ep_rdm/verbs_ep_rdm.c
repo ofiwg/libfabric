@@ -49,80 +49,6 @@ extern struct fi_provider fi_ibv_prov;
 extern struct fi_ops_msg fi_ibv_rdm_ep_msg_ops;
 extern struct fi_ops_rma fi_ibv_rdm_ep_rma_ops;
 
-static int
-fi_ibv_rdm_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
-{
-	struct ibv_qp_init_attr qp_attr;
-	struct ibv_qp *qp = NULL;
-	struct ibv_cq *cq = ibv_create_cq(context, 1, NULL, NULL, 0);
-	assert(cq);
-	int max_inline = 2;
-	int rst = 0;
-
-	memset(&qp_attr, 0, sizeof(qp_attr));
-	qp_attr.send_cq = cq;
-	qp_attr.recv_cq = cq;
-	qp_attr.qp_type = IBV_QPT_RC;
-	qp_attr.cap.max_send_wr = 1;
-	qp_attr.cap.max_recv_wr = 1;
-	qp_attr.cap.max_send_sge = 1;
-	qp_attr.cap.max_recv_sge = 1;
-	qp_attr.sq_sig_all = 1;
-
-	do {
-		if (qp)
-			ibv_destroy_qp(qp);
-		qp_attr.cap.max_inline_data = max_inline;
-		qp = ibv_create_qp(pd, &qp_attr);
-		if (qp) {
-			/* 
-			 * truescale returns max_inline_data 0
-			 */
-			if (qp_attr.cap.max_inline_data == 0)
-				break;
-
-			/*
-			 * iWarp is able to create qp with unsupported
-			 * max_inline, lets take first returned value.
-			 */
-			if (context->device->transport_type == IBV_TRANSPORT_IWARP) {
-				max_inline = rst = qp_attr.cap.max_inline_data;
-				break;
-			}
-			rst = max_inline;
-		}
-	} while (qp && (max_inline < INT_MAX / 2) && (max_inline *= 2));
-
-	if (rst != 0) {
-		int pos = rst, neg = max_inline;
-		do {
-			max_inline = pos + (neg - pos) / 2;
-			if (qp)
-				ibv_destroy_qp(qp);
-
-			qp_attr.cap.max_inline_data = max_inline;
-			qp = ibv_create_qp(pd, &qp_attr);
-			if (qp)
-				pos = max_inline;
-			else
-				neg = max_inline;
-
-		} while (neg - pos > 2);
-
-		rst = pos;
-	}
-
-	if (qp) {
-		ibv_destroy_qp(qp);
-	}
-
-	if (cq) {
-		ibv_destroy_cq(cq);
-	}
-
-	return rst;
-}
-
 static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_rdm_ep *ep;
@@ -665,7 +591,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	dlist_init(&_ep->fi_ibv_rdm_multi_recv_list);
 
 	_ep->max_inline_rc =
-		fi_ibv_rdm_find_max_inline(_ep->domain->pd, _ep->domain->verbs);
+		fi_ibv_find_max_inline(_ep->domain->pd, _ep->domain->verbs);
 
 	_ep->scq_depth = FI_IBV_RDM_TAGGED_DFLT_SCQ_SIZE;
 	_ep->rcq_depth = FI_IBV_RDM_TAGGED_DFLT_RCQ_SIZE;

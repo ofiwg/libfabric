@@ -436,7 +436,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
 	init_attr.cap.max_send_sge = fi_ibv_gl_data.def_tx_iov_limit;
 	init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
-	init_attr.cap.max_inline_data = fi_ibv_gl_data.def_inline_size;
+	init_attr.cap.max_inline_data = fi_ibv_find_max_inline(pd, ctx);
 
 	init_attr.qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
 			    IBV_QPT_RC : IBV_QPT_UD;
@@ -1435,6 +1435,17 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (!hints || !(hints->mode & FI_RX_CQ_DATA)) {
 		for (cur = *info; cur; cur = cur->next)
 			cur->domain_attr->cq_data_size = 0;
+	}
+
+	if (!hints || !hints->tx_attr || !hints->tx_attr->inject_size) {
+		for (cur = *info; cur; cur = cur->next) {
+			if (cur->ep_attr->type != FI_EP_MSG)
+				continue;
+			/* The default inline size is usually smaller.
+			 * This is to avoid drop in throughput */
+			cur->tx_attr->inject_size = MIN(cur->tx_attr->inject_size,
+							fi_ibv_gl_data.def_inline_size);
+		}
 	}
 out:
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
