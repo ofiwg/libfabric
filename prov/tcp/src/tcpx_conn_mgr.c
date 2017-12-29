@@ -150,6 +150,7 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 {
 	struct poll_fd_info *poll_item;
 	int ret = FI_SUCCESS;
+	int id = 0;
 
 	fastlock_acquire(&poll_mgr->lock);
 	while (!dlist_empty(&poll_mgr->list)) {
@@ -158,9 +159,14 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 		dlist_remove_init(&poll_item->entry);
 
 		if (poll_item->flags & POLL_MGR_DEL) {
-			ret = poll_fds_find_dup(poll_mgr, poll_item);
-			assert(ret > 0);
-			poll_fds_swap_del_last(poll_mgr, ret);
+			id = poll_fds_find_dup(poll_mgr, poll_item);
+			assert(id > 0);
+			if (id <= 0) {
+				ret = -FI_EINVAL;
+				goto err;
+			}
+
+			poll_fds_swap_del_last(poll_mgr, id);
 			poll_item->flags |= POLL_MGR_ACK;
 		} else {
 			assert(poll_fds_find_dup(poll_mgr, poll_item) < 0);
@@ -176,19 +182,20 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 		else
 			poll_item->flags |= POLL_MGR_ACK;
 	}
+err:
 	fastlock_release(&poll_mgr->lock);
 	return ret;
 }
 
 static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
-			int type, struct poll_fd_info *poll_info)
+		      int type, struct poll_fd_info *poll_info)
 {
 	int ret;
 
 	ret = ofi_recv_socket(fd, hdr,
 			      sizeof(*hdr), MSG_WAITALL);
-	if (ret)
-		return ret;
+	if (ret != sizeof(*hdr))
+		return -FI_EIO;
 
 	if (hdr->type != type) {
 		return -FI_ECONNREFUSED;
@@ -206,10 +213,10 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 
 		ret = ofi_recv_socket(fd, poll_info->cm_data,
 				      poll_info->cm_data_sz, MSG_WAITALL);
-		if (ret)
-			return ret;
+		if (ret != poll_info->cm_data_sz)
+			return -FI_EIO;
 	}
-	return -FI_SUCCESS;
+	return FI_SUCCESS;
 }
 
 static int tx_cm_data(SOCKET fd, int type, struct poll_fd_info *poll_info)
@@ -223,14 +230,14 @@ static int tx_cm_data(SOCKET fd, int type, struct poll_fd_info *poll_info)
 	hdr.seg_size = htons(poll_info->cm_data_sz);
 
 	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
-	if (ret)
-		return ret;
+	if (ret != sizeof(hdr))
+		return -FI_EIO;
 
 	if (poll_info->cm_data_sz) {
 		ret = ofi_send_socket(fd, poll_info->cm_data,
 				      poll_info->cm_data_sz, MSG_NOSIGNAL);
-		if (ret)
-			return ret;
+		if (ret != poll_info->cm_data_sz)
+			return -FI_EIO;
 	}
 	return FI_SUCCESS;
 }
@@ -263,6 +270,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 {
 	struct ofi_ctrl_hdr conn_resp;
 	struct fi_eq_cm_entry *cm_entry;
+	struct tcpx_domain *domain;
 	int ret = FI_SUCCESS;
 
 	assert(poll_mgr->poll_fds[index].revents == POLLIN);
@@ -287,6 +295,14 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 
 	}
 	ret = fi_fd_nonblock(ep->conn_fd);
+	if (ret)
+		goto err;
+
+	domain = container_of(ep->util_ep.domain,
+			      struct tcpx_domain,
+			      util_domain);
+
+	ret = tcpx_progress_ep_add(ep, &domain->progress);
 err:
 	free(cm_entry);
 	return ret;
@@ -402,6 +418,7 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 {
 	struct fi_eq_cm_entry cm_entry;
 	struct fi_eq_err_entry err_entry;
+	struct tcpx_domain *domain;
 	struct tcpx_ep *ep;
 	int ret;
 
@@ -424,6 +441,14 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 	if (ret)
 		goto err;
 
+	domain = container_of(ep->util_ep.domain,
+			      struct tcpx_domain,
+			      util_domain);
+
+	ret = tcpx_progress_ep_add(ep, &domain->progress);
+	if (ret)
+		goto err;
+
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -440,9 +465,9 @@ static void handle_fd_events(struct poll_fd_mgr *poll_mgr)
 	int i;
 
 	/* Process the fd array from end to start.  This allows us to handle
-	 * removing entries from the array.
+	 * removing entries from the array. Also ignore the signal fd at index 0.
 	 */
-	for (i = poll_mgr->nfds; i > 0; i--) {
+	for (i = poll_mgr->nfds-1; i > 0; i--) {
 		if (!poll_mgr->poll_fds[i].revents)
 			continue;
 
@@ -527,9 +552,6 @@ void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric)
 
 	fastlock_destroy(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_free(&tcpx_fabric->poll_mgr.signal);
-
-	fd_signal_free(&tcpx_fabric->poll_mgr.signal);
-	fastlock_destroy(&tcpx_fabric->poll_mgr.lock);
 }
 
 int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric)
