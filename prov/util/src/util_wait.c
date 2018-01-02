@@ -237,7 +237,7 @@ static int util_wait_fd_try(struct util_wait *wait)
 	}
 	fastlock_release(&wait_fd->lock);
 	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
-	return (ret > 0) ? -FI_EAGAIN : ret;
+	return (ret > 0) ? -FI_EAGAIN : (ret == -FI_EAGAIN) ? FI_SUCCESS : ret;
 }
 
 static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)

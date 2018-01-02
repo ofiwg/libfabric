@@ -301,11 +301,28 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 		const void *cond, int timeout)
 {
 	struct util_cq *cq;
+	uint64_t start;
+	int ret;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);
-	fi_wait(&cq->wait->wait_fid, timeout);
-	return ofi_cq_read(cq_fid, buf, count);
+	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+
+	do {
+		ret = ofi_cq_read(cq_fid, buf, count);
+		if (ret != -FI_EAGAIN)
+			break;
+
+		if (timeout >= 0) {
+			timeout -= (int) (fi_gettime_ms() - start);
+			if (timeout <= 0)
+				return -FI_ETIMEDOUT;
+		}
+
+		ret = fi_wait(&cq->wait->wait_fid, timeout);
+	} while (!ret);
+
+	return ret;
 }
 
 ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
