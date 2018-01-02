@@ -57,12 +57,14 @@
 static inline									\
 ssize_t util_ns_##op##_socket_op(SOCKET sock, void *buf, size_t len)		\
 {										\
-	ssize_t ret = 0, bytes = 0;						\
-	while (bytes != (len) && ret >= 0) {					\
+	size_t bytes;								\
+	ssize_t ret;								\
+	for (bytes = 0; bytes < (len); bytes += ret) {				\
 		ret = ofi_##op##_socket((sock),					\
 					(void *)((char *) (buf) + bytes),	\
 					(len) - bytes);				\
-		bytes = ((ret < 0) ? -1 : bytes + ret);				\
+		if (ret <= 0)							\
+			return -1;						\
 	}									\
 	return bytes;								\
 }
