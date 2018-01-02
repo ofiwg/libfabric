@@ -62,7 +62,18 @@ common_srcs =				\
 	prov/util/src/util_ns.c		\
 	prov/util/src/util_shm.c	\
 	prov/util/src/util_mem_monitor.c\
-	prov/util/src/util_mr_cache.c
+	prov/util/src/util_mr_cache.c	\
+	prov/hook/src/hook.c		\
+	prov/hook/src/hook_av.c		\
+	prov/hook/src/hook_cm.c		\
+	prov/hook/src/hook_cntr.c	\
+	prov/hook/src/hook_cq.c		\
+	prov/hook/src/hook_domain.c	\
+	prov/hook/src/hook_ep.c		\
+	prov/hook/src/hook_eq.c		\
+	prov/hook/src/hook_wait.c	\
+	prov/hook/src/hook_xfer.c
+
 
 if MACOS
 common_srcs += src/unix/osd.c
@@ -128,6 +139,7 @@ src_libfabric_la_SOURCES =			\
 	include/rbtree.h			\
 	include/uthash.h			\
 	include/prov.h				\
+	prov/hook/src/hook.h			\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
