@@ -1794,7 +1794,7 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
 	if (timeout >= 0)
 		clock_gettime(CLOCK_MONOTONIC, &a);
 
-	while (total - *cur > 0) {
+	do {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			if (timeout >= 0)
@@ -1811,7 +1811,7 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
 				return -FI_ENODATA;
 			}
 		}
-	}
+	} while (total - *cur > 0);
 
 	return 0;
 }
