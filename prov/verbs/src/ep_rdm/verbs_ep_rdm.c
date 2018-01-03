@@ -164,10 +164,8 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct fi_ibv_av, av_fid.fid);
-		if (ep->domain != av->domain) {
+		if (ep->domain != av->domain)
 			return -FI_EINVAL;
-		}
-
 		ep->av = av;
 		break;
 	case FI_CLASS_CNTR:
@@ -231,14 +229,14 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 		dlist_find_first_match(&ep_rdm->fi_ibv_rdm_posted_queue,
 					fi_ibv_rdm_req_match, request);
 	if (found) {
-		int32_t posted_recvs;
+		uint32_t posted_recvs;
 
 		assert(container_of(found, struct fi_ibv_rdm_request,
 				    queue_entry) == request);
 		request->context->internal[0] = NULL;
 		posted_recvs = fi_ibv_rdm_remove_from_posted_queue(request, ep_rdm);
 		(void)posted_recvs;
-		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %d\n",
+		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %"PRIu32"\n",
 			  posted_recvs);
 		err = 0;
 	} else {
@@ -349,7 +347,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	ep->is_closing = 1;
 
 	/* All posted sends are waiting local completions */
-	while (ofi_atomic_get32(&ep->posted_sends) > 0 && ep->num_active_conns > 0)
+	while (ep->posted_sends > 0 && ep->num_active_conns > 0)
 		fi_ibv_rdm_tagged_poll(ep);
 
 	if (ep->send_cntr) {
@@ -376,7 +374,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				 fi_ibv_rdm_ep_match, ep);
 
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
@@ -384,11 +382,11 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 			case FI_VERBS_CONN_ALLOCATED:
 			case FI_VERBS_CONN_ESTABLISHED:
 				ret = fi_ibv_rdm_start_disconnection(conn);
-				pthread_mutex_unlock(&av_entry->conn_lock);
+				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 				break;
 			case FI_VERBS_CONN_STARTED:
-				pthread_mutex_unlock(&av_entry->conn_lock);
-				/* No need to hold conn_lock during
+				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+				/* No need to hold `rdm_cm::cm_lock` during
 				 * CM progressing of the EP */
 				while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
 				       conn->state != FI_VERBS_CONN_REJECTED &&
@@ -402,23 +400,23 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				}
 				break;
 			default:
-				pthread_mutex_unlock(&av_entry->conn_lock);
+				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 				break;
 			}
 		} else {
-			pthread_mutex_unlock(&av_entry->conn_lock);
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		}
 	}
 
         /* ok, all connections are initiated to disconnect. now wait
 	 * till all connections are switch to state 'closed' */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
-		pthread_mutex_unlock(&av_entry->conn_lock);
+		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		if (conn) {
-			/* No need to hold conn_lock during
+			/* No need to hold `rdm_cm::cm_lock` during
 			 * polling of receive CQ */
 			while(conn->state != FI_VERBS_CONN_CLOSED &&
 			      conn->state != FI_VERBS_CONN_ALLOCATED) {
@@ -434,38 +432,38 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
         /* now destroy all connections that wasn't removed from HASH */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
 			HASH_DEL(av_entry->conn_hash, conn);
-			pthread_mutex_unlock(&av_entry->conn_lock);
-			/* No need to hold conn_lock during
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+			/* No need to hold `rdm_cm::cm_lock` during
 			 * connection cleanup */
 			fi_ibv_rdm_conn_cleanup(conn);
 		} else {
-			pthread_mutex_unlock(&av_entry->conn_lock);
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		}
 	}
 
 	/* now destroy all connection that was removed from HASH */
 	slist_foreach(&ep->domain->rdm_cm->av_removed_entry_head,
 		      item, prev_item) {
-		(void) prev_item; /* Compiler complains about unused variable */
+		OFI_UNUSED(prev_item); /* Compiler complains about unused variable */
 		av_entry = container_of(item,
 					struct fi_ibv_rdm_av_entry,
 					removed_next);
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
 			HASH_DEL(av_entry->conn_hash, conn);
-			pthread_mutex_unlock(&av_entry->conn_lock);
-			/* No need to hold conn_lock during
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+			/* No need to hold `rdm_cm::cm_lock` during
 			 * connection cleanup */
 			fi_ibv_rdm_conn_cleanup(conn);
 		} else {
-			pthread_mutex_unlock(&av_entry->conn_lock);
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		}
 		/* do NOT free av_entry and do NOT remove from
 		 * the List of removed AV entries, becasue we need to
@@ -621,8 +619,8 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err2;
 	}
 
-	ofi_atomic_initialize32(&_ep->posted_sends, 0);
-	ofi_atomic_initialize32(&_ep->posted_recvs, 0);
+	_ep->posted_sends = 0;
+	_ep->posted_recvs = 0;
 	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, _ep->n_buffs);
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);

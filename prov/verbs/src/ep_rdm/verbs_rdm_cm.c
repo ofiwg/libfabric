@@ -100,7 +100,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 	}
 
 	if (ibv_post_recv(conn->qp[idx], wr, &bad_wr) == 0) {
-		ofi_atomic_add32(&conn->av_entry->recv_preposted, num_to_post);
+		conn->av_entry->recv_preposted += num_to_post;
 		return num_to_post;
 	}
 
@@ -364,7 +364,7 @@ fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 		  FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 
 	if (!av_entry) {
-		ret = fi_ibv_av_entry_alloc(ep->domain,&av_entry, p);
+		ret = fi_ibv_av_entry_alloc(ep->domain, &av_entry, p);
 		if (ret)
 			return ret;
 
@@ -372,7 +372,6 @@ fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 				   FI_IBV_MEM_ALIGNMENT,
 				   sizeof(*conn));
 		if (ret) {
-			pthread_mutex_destroy(&av_entry->conn_lock);
 			ofi_freealign(av_entry);
 			return -ret;
 		}
@@ -392,17 +391,14 @@ fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 			   conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
 			   ntohs(conn->addr.sin_port));
 	} else {
-		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
 			ret = ofi_memalign((void**)&conn,
 					   FI_IBV_MEM_ALIGNMENT,
 					   sizeof(*conn));
-			if (ret) {
-				pthread_mutex_unlock(&av_entry->conn_lock);
+			if (ret)
 				return -ret;
-			}
 			memset(conn, 0, sizeof(*conn));
 			conn->ep = ep;
 			conn->av_entry = av_entry;
@@ -412,7 +408,6 @@ fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}
-		pthread_mutex_unlock(&av_entry->conn_lock);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
 			/*
@@ -551,13 +546,15 @@ fi_ibv_rdm_process_event_established(const struct rdma_cm_event *event,
 	return FI_SUCCESS;
 }
 
+/* since the function is invoked only in the `fi_ibv_domain_close`
+ * after CM progress thread is closed, it's unnecessary to call this
+ * with `rdm_cm::cm_lock held` */
 ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
 {
 	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
 
-	pthread_mutex_lock(&av_entry->conn_lock);
 	HASH_ITER(hh, av_entry->conn_hash, conn, tmp) {
 		ret = fi_ibv_rdm_conn_cleanup(conn);
 		if (ret) {
@@ -566,7 +563,6 @@ ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
 			err = ret;
 		}
 	}
-	pthread_mutex_unlock(&av_entry->conn_lock);
 
 	return err;
 }
@@ -743,6 +739,7 @@ fi_ibv_rdm_process_timewait_exit_event(const struct rdma_cm_event *event,
 	}
 }
 
+/* Must call with `rdm_cm::cm_lock held` */
 static ssize_t
 fi_ibv_rdm_process_event(const struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
 {
@@ -834,11 +831,8 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 		}
 
 		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
-
 		ret = fi_ibv_rdm_process_event(&event_copy, ep);
-
 		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
-
 	} while (ret == FI_SUCCESS);
 
 	return ret;

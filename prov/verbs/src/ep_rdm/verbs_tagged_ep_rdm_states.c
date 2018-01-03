@@ -312,11 +312,11 @@ fi_ibv_rdm_rndv_rts_send_ready(struct fi_ibv_rdm_request *request, void *data)
 			       FI_IBV_RDM_RNDV_RTS_PKT);
 
 	VERBS_DBG(FI_LOG_EP_DATA,
-		  "fi_senddatato: RNDV conn %p, tag 0x%" PRIx64 ", len %" PRIu64
-		  ", src_addr %p, rkey 0x%"PRIx64", fi_ctx %p, imm %d, post_send %d\n",
+		  "fi_senddatato: RNDV conn %p, tag 0x%" PRIx64 ", len %"PRIu64", "
+		  "src_addr %p, rkey 0x%"PRIx64", fi_ctx %p, imm %d, post_sends %"PRIu32"\n",
 		  conn, request->minfo.tag, request->len, request->src_addr,
 		  header->mem_rkey, request->context, (int)wr.imm_data,
-		  ofi_atomic_get32(&p->ep->posted_sends));
+		  p->ep->posted_sends);
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%" PRIx64 "\n",
@@ -1140,19 +1140,35 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 
 	struct fi_ibv_rdm_tagged_send_completed_data *p = data;
 	struct fi_ibv_rdm_conn *conn = request->minfo.conn;
-	struct ibv_send_wr wr = { 0 };
-	struct ibv_sge sge = { 0 };
-	struct ibv_send_wr *bad_wr = NULL;
 	struct fi_ibv_rdm_buf *sbuf = request->sbuf;
-	ssize_t ret = FI_SUCCESS;
 	const int ack_size = 
 		sizeof(struct fi_ibv_rdm_header) + sizeof(request->rndv.id);
+	struct ibv_sge sge = {
+		.addr = (uintptr_t)sbuf,
+		.length = ack_size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE,
+		.lkey = fi_ibv_mr_internal_lkey(&conn->s_md),
+	};
+	struct ibv_send_wr wr = {
+		.wr_id = FI_IBV_RDM_PACK_WR(request),
+		.opcode = p->ep->eopcode,
+		.sg_list = &sge,
+		.num_sge = 1,
+		.wr.rdma.remote_addr = 
+			(uintptr_t)fi_ibv_rdm_get_remote_addr(conn,
+							      request->sbuf),
+		.wr.rdma.rkey = conn->remote_rbuf_rkey,
+		.send_flags = (sge.length < p->ep->max_inline_rc) ?
+			       IBV_SEND_INLINE : 0,
+	};
+	struct ibv_send_wr *bad_wr = NULL;
+	ssize_t ret = FI_SUCCESS;
 
 	assert(request->len > (p->ep->rndv_threshold
 			       - sizeof(struct fi_ibv_rdm_header)));
 	assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_END);
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4LC ||
 	       request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES);
+	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 
 	FI_IBV_RDM_DEC_SIG_POST_COUNTERS(conn, p->ep);
 	request->post_counter--;
@@ -1168,24 +1184,8 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 	sbuf->header.service_tag = 0;
 	FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 			       FI_IBV_RDM_RNDV_ACK_PKT);
-
-	memcpy(&sbuf->payload, &request->rndv.id, sizeof(request->rndv.id));
-
-	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
-	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
-	wr.opcode = p->ep->eopcode;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.wr.rdma.remote_addr = 
-		(uintptr_t) fi_ibv_rdm_get_remote_addr(conn, request->sbuf);
-	wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-	wr.imm_data = 0;
-
-	sge.addr = (uintptr_t) sbuf;
-	sge.length = ack_size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
-	wr.send_flags = (sge.length < p->ep->max_inline_rc) ? IBV_SEND_INLINE : 0;
-	sge.lkey = fi_ibv_mr_internal_lkey(&conn->s_md);
 	sbuf->service_data.pkt_len = ack_size;
+	memcpy(&sbuf->payload, &request->rndv.id, sizeof(request->rndv.id));
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->minfo.conn, p->ep);
 	VERBS_DBG(FI_LOG_EP_DATA,
@@ -1196,10 +1196,10 @@ fi_ibv_rdm_rndv_recv_read_lc(struct fi_ibv_rdm_request *request, void *data)
 		assert(request->rndv.md.mr);
 		p->ep->domain->internal_mr_dereg(&request->rndv.md);
 		VERBS_DBG(FI_LOG_EP_DATA,
-			  "SENDING RNDV ACK: conn %p, sends_outgoing = %d, "
-			  "post_send = %d\n",
-			  conn, ofi_atomic_get32(&conn->av_entry->sends_outgoing),
-			  ofi_atomic_get32(&p->ep->posted_sends));
+			  "SENDING RNDV ACK: conn %p, sends_outgoing = %"PRIu32", "
+			  "post_sends = %"PRIu32"\n",
+			  conn, conn->av_entry->sends_outgoing,
+			  p->ep->posted_sends);
 	} else {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
