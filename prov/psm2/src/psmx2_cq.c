@@ -373,9 +373,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 		     struct psmx2_cq_event *event_in,
 		     int count, fi_addr_t *src_addr)
 {
-	psm2_mq_req_t psm2_req;
-	psm2_mq_status2_t psm2_status;
-	PSMX2_STATUS_TYPE *status;
+	PSMX2_STATUS_DECL(status);
 	struct fi_context *fi_context;
 	struct psmx2_fid_ep *tmp_ep;
 	struct psmx2_fid_cq *tmp_cq;
@@ -391,7 +389,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	struct fi_context dummy_context;
 
 	while (1) {
-		PSMX2_POLL_COMPLETION(trx_ctxt, psm2_req, psm2_status, status, err);
+		PSMX2_POLL_COMPLETION(trx_ctxt, status, err);
 		if (err == PSM2_OK) {
 			fi_context = PSMX2_STATUS_CONTEXT(status);
 			if (!fi_context) {
