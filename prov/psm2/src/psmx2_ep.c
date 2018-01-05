@@ -242,6 +242,9 @@ static int psmx2_ep_close(fid_t fid)
 	if (ofi_atomic_get32(&ep->ref))
 		return -FI_EBUSY;
 
+	if (ep->stx)
+		ofi_atomic_dec32(&ep->stx->ref);
+
 	ep_name.epid = ep->rx->psm2_epid;
 
 	ofi_ns_del_local_name(&ep->domain->fabric->name_server,
@@ -259,6 +262,7 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct psmx2_fid_av *av;
 	struct psmx2_fid_cq *cq;
 	struct psmx2_fid_cntr *cntr;
+	struct psmx2_fid_stx *stx;
 	int err;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
@@ -352,6 +356,17 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		err = bfid->ops->bind(bfid, fid, flags);
 		if (err)
 			return err;
+		break;
+
+	case FI_CLASS_STX_CTX:
+		stx = container_of(bfid, struct psmx2_fid_stx, stx.fid);
+		if (ep->domain != stx->domain)
+			return -FI_EINVAL;
+		if (ep->tx || ep->stx)
+			return -FI_EINVAL;
+		ep->tx = stx->tx;
+		ep->stx = stx;
+		ofi_atomic_inc32(&stx->ref);
 		break;
 
 	default:
@@ -533,7 +548,8 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 	ep_priv->ep.cm = &psmx2_cm_ops;
 	ep_priv->domain = domain_priv;
 	ep_priv->rx = trx_ctxt;
-	ep_priv->tx = trx_ctxt;
+	if (!(info && info->ep_attr && info->ep_attr->tx_ctx_cnt == FI_SHARED_CONTEXT))
+		ep_priv->tx = trx_ctxt;
 	ofi_atomic_initialize32(&ep_priv->ref, 0);
 
 	PSMX2_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX2_NOCOMP_SEND_CONTEXT;
@@ -605,6 +621,9 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 				   util_domain.domain_fid.fid);
 	if (!domain_priv)
 		goto errout;
+
+	if (info && info->ep_attr && info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
+		return  -FI_ENOSYS;
 
 	src_addr = NULL;
 	if (info && info->src_addr) {
@@ -692,6 +711,88 @@ void psmx2_ep_put_op_context(struct psmx2_fid_ep *ep,
 	psmx2_lock(&ep->context_lock, 2);
 	slist_insert_tail(&context->list_entry, &ep->free_context_list);
 	psmx2_unlock(&ep->context_lock, 2);
+}
+
+/*
+ * Shared tx context
+ */
+
+static int psmx2_stx_close(fid_t fid)
+{
+	struct psmx2_fid_stx *stx;
+
+	stx = container_of(fid, struct psmx2_fid_stx, stx.fid);
+
+	if (ofi_atomic_get32(&stx->ref))
+		return -FI_EBUSY;
+
+	psmx2_trx_ctxt_free(stx->tx);
+	psmx2_domain_release(stx->domain);
+	free(stx);
+	return 0;
+}
+
+static struct fi_ops psmx2_fi_ops_stx = {
+	.size = sizeof(struct fi_ops),
+	.close = psmx2_stx_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static struct fi_ops_ep psmx2_stx_ops = {
+	.size = sizeof(struct fi_ops_ep),
+	.cancel = fi_no_cancel,
+	.getopt = fi_no_getopt,
+	.setopt = fi_no_setopt,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
+};
+
+int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
+		  struct fid_stx **stx, void *context)
+{
+	struct psmx2_fid_domain *domain_priv;
+	struct psmx2_trx_ctxt *trx_ctxt;
+	struct psmx2_fid_stx *stx_priv;
+	int err = -FI_EINVAL;
+
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid.fid);
+	if (!domain_priv)
+		goto errout;
+
+	stx_priv = (struct psmx2_fid_stx *) calloc(1, sizeof *stx_priv);
+	if (!stx_priv) {
+		err = -FI_ENOMEM;
+		goto errout;
+	}
+
+	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, NULL/*src_addr*/, 0);
+	if (!trx_ctxt) {
+		err = -FI_ENOMEM;
+		goto errout_free_stx;
+	}
+
+	psmx2_domain_acquire(domain_priv);
+	stx_priv->stx.fid.fclass = FI_CLASS_STX_CTX;
+	stx_priv->stx.fid.context = context;
+	stx_priv->stx.fid.ops = &psmx2_fi_ops_stx;
+	stx_priv->stx.ops = &psmx2_stx_ops;
+	stx_priv->domain = domain_priv;
+	stx_priv->tx = trx_ctxt;
+	ofi_atomic_initialize32(&stx_priv->ref, 0);
+
+	*stx = &stx_priv->stx;
+	return 0;
+
+errout_free_stx:
+	free(stx_priv);
+
+errout:
+	return err;
 }
 
 /*

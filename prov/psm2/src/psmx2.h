@@ -754,6 +754,7 @@ struct psmx2_fid_ep {
 	struct psmx2_trx_ctxt	*tx;
 	struct psmx2_trx_ctxt	*rx;
 	struct psmx2_fid_ep	*base_ep;
+	struct psmx2_fid_stx	*stx;
 	struct psmx2_fid_av	*av;
 	struct psmx2_fid_cq	*send_cq;
 	struct psmx2_fid_cq	*recv_cq;
@@ -803,6 +804,8 @@ struct psmx2_fid_sep {
 struct psmx2_fid_stx {
 	struct fid_stx		stx;
 	struct psmx2_fid_domain	*domain;
+	struct psmx2_trx_ctxt	*tx;
+	ofi_atomic32_t		ref;
 };
 
 struct psmx2_fid_mr {
