@@ -89,6 +89,8 @@ static void __domain_destruct(void *obj)
 					"registration cache\n");
 	}
 
+	free(domain->mr_cache_info);
+
 	ret = _gnix_smrn_close(domain->mr_cache_attr.smrn);
 	if (ret != FI_SUCCESS)
 		GNIX_FATAL(FI_LOG_MR, "failed to close MR notifier\n");
