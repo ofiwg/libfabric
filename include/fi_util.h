@@ -299,6 +299,7 @@ struct util_cq {
 	struct slist		err_list;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
+	ofi_atomic32_t		signaled;
 	ofi_cq_progress_func	progress;
 };
 
