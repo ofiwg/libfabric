@@ -173,42 +173,6 @@ static void util_cq_read_tagged(void **dst, void *src)
 	*(char **)dst += sizeof(struct fi_cq_tagged_entry);
 }
 
-ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
-{
-	struct util_cq *cq;
-	struct fi_cq_tagged_entry *entry;
-	size_t i;
-
-	cq = container_of(cq_fid, struct util_cq, cq_fid);
-	fastlock_acquire(&cq->cq_lock);
-	if (ofi_cirque_isempty(cq->cirq)) {
-		fastlock_release(&cq->cq_lock);
-		cq->progress(cq);
-		fastlock_acquire(&cq->cq_lock);
-		if (ofi_cirque_isempty(cq->cirq)) {
-			i = -FI_EAGAIN;
-			goto out;
-		}
-	}
-
-	if (count > ofi_cirque_usedcnt(cq->cirq))
-		count = ofi_cirque_usedcnt(cq->cirq);
-
-	for (i = 0; i < count; i++) {
-		entry = ofi_cirque_head(cq->cirq);
-		if (entry->flags & UTIL_FLAG_ERROR) {
-			if (!i)
-				i = -FI_EAVAIL;
-			break;
-		}
-		cq->read_entry(&buf, entry);
-		ofi_cirque_discard(cq->cirq);
-	}
-out:
-	fastlock_release(&cq->cq_lock);
-	return i;
-}
-
 ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		fi_addr_t *src_addr)
 {
@@ -247,13 +211,19 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				i = -FI_EAVAIL;
 			break;
 		}
-		src_addr[i] = cq->src[ofi_cirque_rindex(cq->cirq)];
+		if (src_addr && cq->src)
+			src_addr[i] = cq->src[ofi_cirque_rindex(cq->cirq)];
 		cq->read_entry(&buf, entry);
 		ofi_cirque_discard(cq->cirq);
 	}
 out:
 	fastlock_release(&cq->cq_lock);
 	return i;
+}
+
+ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
+{
+	return ofi_cq_readfrom(cq_fid, buf, count, NULL);
 }
 
 ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
