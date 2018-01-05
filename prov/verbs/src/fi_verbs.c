@@ -95,19 +95,10 @@ struct util_prov fi_ibv_util_prov = {
 
 int fi_ibv_sockaddr_len(struct sockaddr *addr)
 {
-	if (!addr)
-		return 0;
-
-	switch (addr->sa_family) {
-	case AF_INET:
-		return sizeof(struct sockaddr_in);
-	case AF_INET6:
-		return sizeof(struct sockaddr_in6);
-	case AF_IB:
+	if (addr->sa_family == AF_IB)
 		return sizeof(struct sockaddr_ib);
-	default:
-		return 0;
-	}
+	else
+		return ofi_sizeofaddr(addr);
 }
 
 int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep)
