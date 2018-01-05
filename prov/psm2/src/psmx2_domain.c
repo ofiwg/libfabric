@@ -379,8 +379,15 @@ int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 	if (err)
 		return err;
 
-	if ((ep->caps & FI_RMA) || (ep->caps & FI_ATOMICS))
-		return psmx2_am_init(ep->trx_ctxt);
+	if ((ep->caps & FI_RMA) || (ep->caps & FI_ATOMICS)) {
+		if (ep->tx) {
+			err = psmx2_am_init(ep->tx);
+			if (err)
+				return err;
+		}
+		if (ep->rx && ep->rx != ep->tx)
+			return psmx2_am_init(ep->rx);
+	}
 
 	return 0;
 }

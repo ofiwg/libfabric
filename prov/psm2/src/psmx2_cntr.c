@@ -228,7 +228,17 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 
 		/* 'ep' is the first field of the union regardless of the op type */
 		ep = container_of(trigger->send.ep, struct psmx2_fid_ep, ep);
-		trx_ctxt = ep->trx_ctxt;
+
+		switch (trigger->op) {
+		case PSMX2_TRIGGERED_RECV:
+		case PSMX2_TRIGGERED_TRECV:
+			trx_ctxt = ep->rx;
+			break;
+		default:
+			trx_ctxt = ep->tx;
+			break;
+		}
+
 		if (trx_ctxt->am_initialized) {
 			psmx2_lock(&trx_ctxt->trigger_queue.lock, 2);
 			slist_insert_tail(&trigger->list_entry,
@@ -277,10 +287,14 @@ static uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
 
 	if (poll_cnt++ >= PSMX2_CNTR_POLL_THRESHOLD) {
-		if (cntr_priv->trx_ctxt == PSMX2_ALL_TRX_CTXT)
+		if (cntr_priv->tx == PSMX2_ALL_TRX_CTXT ||
+		    cntr_priv->rx == PSMX2_ALL_TRX_CTXT) {
 			psmx2_progress_all(cntr_priv->domain);
-		else
-			psmx2_progress(cntr_priv->trx_ctxt);
+		} else {
+			psmx2_progress(cntr_priv->tx);
+			if (cntr_priv->rx != cntr_priv->tx)
+				psmx2_progress(cntr_priv->rx);
+		}
 		poll_cnt = 0;
 	}
 
@@ -374,10 +388,14 @@ static int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeou
 			if (ret == -FI_ETIMEDOUT)
 				break;
 		} else {
-			if (cntr_priv->trx_ctxt == PSMX2_ALL_TRX_CTXT)
+			if (cntr_priv->tx == PSMX2_ALL_TRX_CTXT ||
+			    cntr_priv->rx == PSMX2_ALL_TRX_CTXT) {
 				psmx2_progress_all(cntr_priv->domain);
-			else
-				psmx2_progress(cntr_priv->trx_ctxt);
+			} else {
+				psmx2_progress(cntr_priv->tx);
+				if (cntr_priv->rx != cntr_priv->tx)
+					psmx2_progress(cntr_priv->rx);
+			}
 		}
 
 		if (ofi_atomic_get64(&cntr_priv->counter) >= threshold)

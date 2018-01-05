@@ -47,7 +47,7 @@ static int psmx2_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	memset(&epname, 0, sizeof(epname));
 
 	if (ep->type == PSMX2_EP_REGULAR) {
-		epname.epid = ep->trx_ctxt->psm2_epid;
+		epname.epid = ep->rx->psm2_epid;
 		epname.type = ep->type;
 	} else {
 		sep = (struct psmx2_fid_sep *)ep;

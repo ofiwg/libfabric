@@ -567,7 +567,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					psmx2_cntr_inc(mr->cntr);
 
 				  /* NOTE: req->tmpbuf is unused here */
-				  psmx2_am_request_free(req->ep->trx_ctxt, req);
+				  psmx2_am_request_free(trx_ctxt, req);
 				  PSMX2_FREE_COMPLETION(trx_ctxt, status);
 
 				  if (read_more)
@@ -586,7 +586,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					psmx2_cntr_inc(req->ep->remote_read_cntr);
 
 				  /* NOTE: req->tmpbuf is unused here */
-				  psmx2_am_request_free(req->ep->trx_ctxt, req);
+				  psmx2_am_request_free(trx_ctxt, req);
 				  PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				  continue;
 				}
@@ -681,7 +681,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			if (req_to_free) {
 				free(req_to_free->tmpbuf);
-				psmx2_am_request_free(req_to_free->ep->trx_ctxt, req_to_free);
+				psmx2_am_request_free(trx_ctxt, req_to_free);
 			}
 
 			if (tmp_cntr)
@@ -698,7 +698,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (len_remaining >= req->min_buf_size) {
 					if (len_remaining > PSMX2_MAX_MSG_SIZE)
 						len_remaining = PSMX2_MAX_MSG_SIZE;
-					err = psm2_mq_irecv2(tmp_ep->trx_ctxt->psm2_mq,
+					err = psm2_mq_irecv2(tmp_ep->rx->psm2_mq,
 							    req->src_addr, &req->tag,
 							    &req->tagsel, req->flag,
 							    req->buf + req->offset, 
@@ -742,17 +742,28 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 
 	if (slist_empty(&cq_priv->event_queue) || !buf) {
-		if (cq_priv->trx_ctxt) {
-			ret = psmx2_cq_poll_mq(cq_priv, cq_priv->trx_ctxt,
+		if (cq_priv->tx) {
+			ret = psmx2_cq_poll_mq(cq_priv, cq_priv->tx,
 					       (struct psmx2_cq_event *)buf, count, src_addr);
 			if (ret > 0)
 				return ret;
 
-			if (cq_priv->trx_ctxt->am_initialized)
-				psmx2_am_progress(cq_priv->trx_ctxt);
-		} else {
-			psmx2_progress_all(cq_priv->domain);
+			if (cq_priv->tx->am_initialized)
+				psmx2_am_progress(cq_priv->tx);
 		}
+
+		if (cq_priv->rx && cq_priv->rx != cq_priv->tx) {
+			ret = psmx2_cq_poll_mq(cq_priv, cq_priv->rx,
+					       (struct psmx2_cq_event *)buf, count, src_addr);
+			if (ret > 0)
+				return ret;
+
+			if (cq_priv->rx->am_initialized)
+				psmx2_am_progress(cq_priv->rx);
+		}
+
+		if (!cq_priv->tx && !cq_priv->rx)
+			psmx2_progress_all(cq_priv->domain);
 	}
 
 	if (cq_priv->pending_error)
@@ -872,12 +883,18 @@ static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		} else {
 			clock_gettime(CLOCK_REALTIME, &ts0);
 			while (1) {
-				if (cq_priv->trx_ctxt) {
-					if (psmx2_cq_poll_mq(cq_priv, cq_priv->trx_ctxt, NULL, 0, NULL))
+				if (cq_priv->tx) {
+					if (psmx2_cq_poll_mq(cq_priv, cq_priv->tx, NULL, 0, NULL))
 						break;
-				} else {
-					psmx2_progress_all(cq_priv->domain);
 				}
+
+				if (cq_priv->rx && cq_priv->rx != cq_priv->tx) {
+					if (psmx2_cq_poll_mq(cq_priv, cq_priv->rx, NULL, 0, NULL))
+						break;
+				}
+
+				if (!cq_priv->tx && !cq_priv->rx)
+					psmx2_progress_all(cq_priv->domain);
 
 				/* CQ may be updated asynchronously by the AM handlers */
 				if (cq_priv->event_count > event_count)

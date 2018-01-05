@@ -53,13 +53,13 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
 		} else if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;
-			if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
+			if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
 				return err;
 
-			psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
+			psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
 		} else {
 			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 		}
@@ -71,11 +71,11 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 	PSMX2_SET_TAG(psm2_tagsel, ~ignore, -1);
 
 	if (flags & (FI_CLAIM | FI_DISCARD))
-		err = psm2_mq_improbe2(ep_priv->trx_ctxt->psm2_mq,
+		err = psm2_mq_improbe2(ep_priv->rx->psm2_mq,
 				       psm2_epaddr, &psm2_tag,
 				       &psm2_tagsel, &req, &psm2_status);
 	else
-		err = psm2_mq_iprobe2(ep_priv->trx_ctxt->psm2_mq,
+		err = psm2_mq_iprobe2(ep_priv->rx->psm2_mq,
 				      psm2_epaddr, &psm2_tag, &psm2_tagsel,
 				      &psm2_status);
 	switch (err) {
@@ -85,7 +85,7 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 				if (context)
 					PSMX2_CTXT_REQ((struct fi_context *)context) = req;
 			} else if (flags & FI_DISCARD) {
-				if (!psm2_mq_imrecv(ep_priv->trx_ctxt->psm2_mq, 0,
+				if (!psm2_mq_imrecv(ep_priv->rx->psm2_mq, 0,
 						    NULL, 0, req, &req))
 					psm2_mq_wait2(&req, NULL);
 			}
@@ -197,7 +197,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 
 			fi_context = context;
 			psm2_req = PSMX2_CTXT_REQ(fi_context);
-			err = psm2_mq_imrecv(ep_priv->trx_ctxt->psm2_mq, 0,
+			err = psm2_mq_imrecv(ep_priv->rx->psm2_mq, 0,
 					     NULL, 0, context, &psm2_req);
 			if (err != PSM2_OK)
 				return psmx2_errno(err);
@@ -239,7 +239,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 		PSMX2_CTXT_USER(fi_context) = buf;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 
-		err = psm2_mq_imrecv(ep_priv->trx_ctxt->psm2_mq, 0,
+		err = psm2_mq_imrecv(ep_priv->rx->psm2_mq, 0,
 				     buf, len, context, &psm2_req);
 		if (err != PSM2_OK)
 			return psmx2_errno(err);
@@ -268,13 +268,13 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
 		} else if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;
-			if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
+			if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
 				return err;
 
-			psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
+			psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
 		} else {
 			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 		}
@@ -285,7 +285,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 	PSMX2_SET_TAG(psm2_tag, tag, 0);
 	PSMX2_SET_TAG(psm2_tagsel, ~ignore, ~PSMX2_IOV_BIT);
 
-	err = psm2_mq_irecv2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
+	err = psm2_mq_irecv2(ep_priv->rx->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, 0, buf, len,
 			     (void *)fi_context, &psm2_req);
 
@@ -334,20 +334,20 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 		av = ep_priv->av;
 		if (av_type == FI_AV_MAP) {
 			if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
-				psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
+				psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
 			} else {
 				psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 			}
 		} else { /* FI_AV_TABLE */
 			assert(av != NULL);
 			if (PSMX2_SEP_ADDR_TEST(src_addr)) {
-				psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, src_addr);
+				psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
 			} else {
 				idx = (size_t)src_addr;
-				if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
+				if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
 					return err;
 
-				psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
+				psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
 			}
 		}
 	} else {
@@ -357,7 +357,7 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 	PSMX2_SET_TAG(psm2_tag, tag, 0);
 	PSMX2_SET_TAG(psm2_tagsel, ~ignore, ~PSMX2_IOV_BIT);
 
-	err = psm2_mq_irecv2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
+	err = psm2_mq_irecv2(ep_priv->rx->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, 0, buf, len,
 			     (void *)fi_context, &psm2_req);
 	if (enable_completion) {
@@ -584,13 +584,13 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
-		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
 	} else  if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 			return err;
 
-		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
@@ -605,7 +605,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 		if (len > psmx2_env.inject_size)
 			return -FI_EMSGSIZE;
 
-		err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
+		err = psm2_mq_send2(ep_priv->tx->psm2_mq, psm2_epaddr,
 				    0, &psm2_tag, buf, len);
 
 		if (err != PSM2_OK)
@@ -643,7 +643,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	}
 
-	err = psm2_mq_isend2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr, 0,
+	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
 			     &psm2_tag, buf, len, (void*)fi_context,
 			     &psm2_req);
 
@@ -679,18 +679,18 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 
 	if (av_type == FI_AV_MAP) {
 		if (av && PSMX2_SEP_ADDR_TEST(dest_addr))
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
 		else
 			psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	} else { /* FI_AV_TABLE */
 		if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
 		} else {
 			idx = (size_t)dest_addr;
-			if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
+			if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 				return err;
 
-			psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
+			psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 		}
 	}
 
@@ -705,7 +705,7 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 		fi_context = &ep_priv->nocomp_send_context;
 	}
 
-	err = psm2_mq_isend2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr, 0,
+	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
 			     &psm2_tag, buf, len, (void*)fi_context,
 			     &psm2_req);
 
@@ -786,24 +786,24 @@ psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 
 	if (av_type == FI_AV_MAP) {
 		if (av && PSMX2_SEP_ADDR_TEST(dest_addr))
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
 		else
 			psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	} else { /* FI_AV_TABLE */
 		if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
 		} else {
 			idx = (size_t)dest_addr;
-			if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx)))
+			if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 				return err;
 
-			psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
+			psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 		}
 	}
 
 	PSMX2_SET_TAG(psm2_tag, tag, 0);
 
-	err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr, 0,
+	err = psm2_mq_send2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
 			    &psm2_tag, buf, len);
 
 	if (err != PSM2_OK)
@@ -931,15 +931,15 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
-		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->trx_ctxt, dest_addr);
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
 	} else  if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
-		if ((err = psmx2_av_check_table_idx(av, ep_priv->trx_ctxt, idx))) {
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx))) {
 			free(req);
 			return err;
 		}
 
-		psm2_epaddr = av->tables[ep_priv->trx_ctxt->id].epaddrs[idx];
+		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else  {
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
@@ -956,7 +956,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 			return -FI_EMSGSIZE;
 		}
 
-		err = psm2_mq_send2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
+		err = psm2_mq_send2(ep_priv->tx->psm2_mq, psm2_epaddr,
 				    send_flag, &psm2_tag, req->buf, len);
 
 		free(req);
@@ -994,7 +994,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	PSMX2_CTXT_USER(fi_context) = req;
 	PSMX2_CTXT_EP(fi_context) = ep_priv;
 
-	err = psm2_mq_isend2(ep_priv->trx_ctxt->psm2_mq, psm2_epaddr,
+	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr,
 			     send_flag, &psm2_tag, req->buf, len,
 			     (void *)fi_context, &psm2_req);
 
@@ -1015,7 +1015,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 		PSMX2_SET_TAG(psm2_tag, tag, tag32);
 		for (i=0; i<count; i++) {
 			if (iov[i].iov_len) {
-				err = psm2_mq_isend2(ep_priv->trx_ctxt->psm2_mq,
+				err = psm2_mq_isend2(ep_priv->tx->psm2_mq,
 						     psm2_epaddr, send_flag, &psm2_tag,
 						     iov[i].iov_base, iov[i].iov_len,
 						     (void *)fi_context, &psm2_req);
