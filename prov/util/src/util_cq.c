@@ -267,8 +267,8 @@ unlock:
 	return ret;
 }
 
-ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
-		const void *cond, int timeout)
+ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+		fi_addr_t *src_addr, const void *cond, int timeout)
 {
 	struct util_cq *cq;
 	uint64_t start;
@@ -279,7 +279,7 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 	start = (timeout >= 0) ? fi_gettime_ms() : 0;
 
 	do {
-		ret = ofi_cq_read(cq_fid, buf, count);
+		ret = ofi_cq_readfrom(cq_fid, buf, count, src_addr);
 		if (ret != -FI_EAGAIN)
 			break;
 
@@ -295,15 +295,10 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 	return ret;
 }
 
-ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
-		fi_addr_t *src_addr, const void *cond, int timeout)
+ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+		const void *cond, int timeout)
 {
-	struct util_cq *cq;
-
-	cq = container_of(cq_fid, struct util_cq, cq_fid);
-	assert(cq->wait && cq->internal_wait);
-	fi_wait(&cq->wait->wait_fid, timeout);
-	return ofi_cq_readfrom(cq_fid, buf, count, src_addr);
+	return ofi_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
 }
 
 int ofi_cq_signal(struct fid_cq *cq_fid)
