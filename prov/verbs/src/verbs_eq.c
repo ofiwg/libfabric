@@ -118,13 +118,8 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 		goto err;
 	memcpy((*info)->dest_addr, rdma_get_peer_addr(event->id), (*info)->dest_addrlen);
 
-	VERBS_INFO(FI_LOG_CORE, "src_addr: %s:%d\n",
-		   inet_ntoa(((struct sockaddr_in *)(*info)->src_addr)->sin_addr),
-		   ntohs(((struct sockaddr_in *)(*info)->src_addr)->sin_port));
-
-	VERBS_INFO(FI_LOG_CORE, "dst_addr: %s:%d\n",
-		   inet_ntoa(((struct sockaddr_in *)(*info)->dest_addr)->sin_addr),
-		   ntohs(((struct sockaddr_in *)(*info)->dest_addr)->sin_port));
+	ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EQ, "src", (*info)->src_addr);
+	ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EQ, "dst", (*info)->dest_addr);
 
 	connreq = calloc(1, sizeof *connreq);
 	if (!connreq)
