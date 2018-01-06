@@ -734,6 +734,8 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 {
 	struct psmx2_fid_cq *cq_priv;
 	struct psmx2_cq_event *event;
+	struct psmx2_poll_ctxt *poll_ctxt;
+	struct slist_entry *item, *prev;
 	int ret;
 	ssize_t read_count;
 	fi_addr_t source;
@@ -742,28 +744,20 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 
 	if (slist_empty(&cq_priv->event_queue) || !buf) {
-		if (cq_priv->tx) {
-			ret = psmx2_cq_poll_mq(cq_priv, cq_priv->tx,
-					       (struct psmx2_cq_event *)buf, count, src_addr);
+		slist_foreach(&cq_priv->poll_list, item, prev) {
+			poll_ctxt = container_of(item, struct psmx2_poll_ctxt,
+						 list_entry);
+			ret = psmx2_cq_poll_mq(cq_priv, poll_ctxt->trx_ctxt,
+					       (struct psmx2_cq_event *)buf,
+					       count, src_addr);
 			if (ret > 0)
 				return ret;
 
-			if (cq_priv->tx->am_initialized)
-				psmx2_am_progress(cq_priv->tx);
+			if (poll_ctxt->trx_ctxt->am_initialized)
+				psmx2_am_progress(poll_ctxt->trx_ctxt);
+
+			(void) prev; /* suppress compiler warning */
 		}
-
-		if (cq_priv->rx && cq_priv->rx != cq_priv->tx) {
-			ret = psmx2_cq_poll_mq(cq_priv, cq_priv->rx,
-					       (struct psmx2_cq_event *)buf, count, src_addr);
-			if (ret > 0)
-				return ret;
-
-			if (cq_priv->rx->am_initialized)
-				psmx2_am_progress(cq_priv->rx);
-		}
-
-		if (!cq_priv->tx && !cq_priv->rx)
-			psmx2_progress_all(cq_priv->domain);
 	}
 
 	if (cq_priv->pending_error)
@@ -865,9 +859,12 @@ static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				  int timeout)
 {
 	struct psmx2_fid_cq *cq_priv;
+	struct psmx2_poll_ctxt *poll_ctxt;
+	struct slist_entry *item, *prev;
 	struct timespec ts0, ts;
 	size_t threshold, event_count;
 	int msec_passed = 0;
+	int sth_happened = 0;
 
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 	if (cq_priv->wait_cond == FI_CQ_COND_THRESHOLD)
@@ -882,19 +879,20 @@ static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			fi_wait((struct fid_wait *)cq_priv->wait, timeout);
 		} else {
 			clock_gettime(CLOCK_REALTIME, &ts0);
-			while (1) {
-				if (cq_priv->tx) {
-					if (psmx2_cq_poll_mq(cq_priv, cq_priv->tx, NULL, 0, NULL))
+			while (!sth_happened) {
+				slist_foreach(&cq_priv->poll_list, item, prev) {
+					poll_ctxt = container_of(item,
+								 struct psmx2_poll_ctxt,
+								 list_entry);
+					sth_happened =
+						psmx2_cq_poll_mq(cq_priv,
+								 poll_ctxt->trx_ctxt,
+								 NULL, 0, NULL);
+					if (sth_happened)
 						break;
-				}
 
-				if (cq_priv->rx && cq_priv->rx != cq_priv->tx) {
-					if (psmx2_cq_poll_mq(cq_priv, cq_priv->rx, NULL, 0, NULL))
-						break;
+					(void) prev; /* suppress compiler warning */
 				}
-
-				if (!cq_priv->tx && !cq_priv->rx)
-					psmx2_progress_all(cq_priv->domain);
 
 				/* CQ may be updated asynchronously by the AM handlers */
 				if (cq_priv->event_count > event_count)
@@ -944,8 +942,15 @@ static int psmx2_cq_close(fid_t fid)
 	struct psmx2_fid_cq *cq;
 	struct slist_entry *entry;
 	struct psmx2_cq_event *item;
+	struct psmx2_poll_ctxt *poll_item;
 
 	cq = container_of(fid, struct psmx2_fid_cq, cq.fid);
+
+	while (!slist_empty(&cq->poll_list)) {
+		entry = slist_remove_head(&cq->poll_list);
+		poll_item = container_of(entry, struct psmx2_poll_ctxt, list_entry);
+		free(poll_item);
+	}
 
 	while (!slist_empty(&cq->free_list)) {
 		entry = slist_remove_head(&cq->free_list);
@@ -1121,6 +1126,7 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq_priv->cq.fid.ops = &psmx2_fi_ops;
 	cq_priv->cq.ops = &psmx2_cq_ops;
 
+	slist_init(&cq_priv->poll_list);
 	slist_init(&cq_priv->event_queue);
 	slist_init(&cq_priv->free_list);
 	fastlock_init(&cq_priv->lock);

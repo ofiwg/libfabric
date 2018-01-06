@@ -256,6 +256,34 @@ static int psmx2_ep_close(fid_t fid)
 	return 0;
 }
 
+static int psmx2_poll_ctxt_match(struct slist_entry *entry, const void *arg)
+{
+	struct psmx2_poll_ctxt *poll_ctxt;
+
+	poll_ctxt = container_of(entry, struct psmx2_poll_ctxt, list_entry);
+	return (poll_ctxt->trx_ctxt == arg);
+}
+
+static int psmx2_add_poll_ctxt(struct slist *list, struct psmx2_trx_ctxt *trx_ctxt)
+{
+	struct psmx2_poll_ctxt *item;
+
+	if (!trx_ctxt)
+		return 0;
+
+	if (!slist_empty(list) &&
+	    slist_find_first_match(list, psmx2_poll_ctxt_match, trx_ctxt))
+		return 0;
+
+	item = calloc(1, sizeof(*item));
+	if (!item)
+		return -FI_ENOMEM;
+
+	item->trx_ctxt = trx_ctxt;
+	slist_insert_tail(&item->list_entry, list);
+	return 0;
+}
+
 static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx2_fid_ep *ep;
@@ -279,23 +307,17 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->domain != cq->domain)
 			return -FI_EINVAL;
 		if (flags & FI_SEND) {
-			if (cq->tx == PSMX2_ALL_TRX_CTXT)
-				; /* do nothing */
-			else if (!cq->tx)
-				cq->tx = ep->tx;
-			else if (cq->tx != ep->tx)
-				return -FI_EINVAL;
+			err = psmx2_add_poll_ctxt(&cq->poll_list, ep->tx);
+			if (err)
+				return err;
 			ep->send_cq = cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->send_selective_completion = 1;
 		}
 		if (flags & FI_RECV) {
-			if (cq->rx == PSMX2_ALL_TRX_CTXT)
-				; /* do nothing */
-			else if (!cq->rx)
-				cq->rx = ep->rx;
-			else if (cq->rx != ep->rx)
-				return -FI_EINVAL;
+			err = psmx2_add_poll_ctxt(&cq->poll_list, ep->rx);
+			if (err)
+				return err;
 			ep->recv_cq = cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->recv_selective_completion = 1;
@@ -308,20 +330,14 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->domain != cntr->domain)
 			return -FI_EINVAL;
 		if (flags & (FI_SEND | FI_WRITE | FI_READ)) {
-			if (cntr->tx == PSMX2_ALL_TRX_CTXT)
-				; /* do nothing */
-			else if (!cntr->tx)
-				cntr->tx = ep->tx;
-			else if (cntr->tx != ep->tx)
-				return -FI_EINVAL;
+			err = psmx2_add_poll_ctxt(&cntr->poll_list, ep->tx);
+			if (err)
+				return err;
 		}
 		if (flags & (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ)) {
-			if (cntr->rx == PSMX2_ALL_TRX_CTXT)
-				; /* do nothing */
-			else if (!cntr->rx)
-				cntr->rx = ep->rx;
-			else if (cntr->rx != ep->rx)
-				return -FI_EINVAL;
+			err = psmx2_add_poll_ctxt(&cntr->poll_list, ep->rx);
+			if (err)
+				return err;
 		}
 		if (flags & FI_SEND)
 			ep->send_cntr = cntr;
