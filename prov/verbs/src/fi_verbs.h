@@ -119,6 +119,9 @@
 #define FI_IBV_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
 #define FI_IBV_POOL_BUF_CNT (100)
 
+#define VERBS_ANY_DOMAIN "verbs_any_domain"
+#define VERBS_ANY_FABRIC "verbs_any_fabric"
+
 /* NOTE:
  * When ibv_post_send/recv returns '-1' it means the following:
  * Deal with non-compliant libibverbs drivers which set errno

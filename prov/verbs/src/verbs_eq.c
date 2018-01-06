@@ -85,37 +85,55 @@ static int
 fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 		     struct fi_info *pep_info, struct fi_info **info)
 {
-	const struct fi_info *fi;
+	struct fi_info *hints;
 	struct fi_ibv_connreq *connreq;
 	const char *devname = ibv_get_device_name(event->id->verbs->device);
 	int ret = -FI_ENOMEM;
 
-	if (strcmp(devname, fab->info->domain_attr->name)) {
-		fi = fi_ibv_get_verbs_info(fi_ibv_util_prov.info, devname);
-		if (!fi)
-			return -FI_ENODATA;
-	} else {
-		fi = fab->info;
-	}
-
-	*info = fi_dupinfo(fi);
-	if (!*info)
+	if (!(hints = fi_dupinfo(pep_info)))
 		return -FI_ENOMEM;
 
-	(*info)->fabric_attr->fabric = &fab->util_fabric.fabric_fid;
-	if (!((*info)->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
-		goto err;
+	/* Free src_addr info from pep to avoid addr reuse errors */
+	free(hints->src_addr);
+	hints->src_addr = NULL;
+	hints->src_addrlen = 0;
 
-	ofi_alter_info((*info), pep_info, fab->util_fabric.fabric_fid.api_version);
+	if (!strcmp(hints->domain_attr->name, VERBS_ANY_DOMAIN)) {
+		free(hints->domain_attr->name);
+		if (!(hints->domain_attr->name = strdup(devname)))
+			goto err1;
+	} else {
+		if (strcmp(hints->domain_attr->name, devname)) {
+			VERBS_WARN(FI_LOG_EQ, "Passive endpoint domain: %s does"
+				   " not match device: %s where we got a "
+				   "connection request\n",
+				   hints->domain_attr->name, devname);
+			ret = -FI_ENODATA;
+			goto err1;
+		}
+	}
+
+	if (!strcmp(hints->domain_attr->name, VERBS_ANY_FABRIC)) {
+		free(hints->fabric_attr->name);
+		hints->fabric_attr->name = NULL;
+	}
+
+	if (fi_ibv_getinfo(hints->fabric_attr->api_version, NULL, NULL, 0,
+			   hints, info))
+		goto err1;
+
+	assert(!(*info)->dest_addr);
+
+	free((*info)->src_addr);
 
 	(*info)->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!((*info)->src_addr = malloc((*info)->src_addrlen)))
-		goto err;
+		goto err2;
 	memcpy((*info)->src_addr, rdma_get_local_addr(event->id), (*info)->src_addrlen);
 
 	(*info)->dest_addrlen = fi_ibv_sockaddr_len(rdma_get_peer_addr(event->id));
 	if (!((*info)->dest_addr = malloc((*info)->dest_addrlen)))
-		goto err;
+		goto err2;
 	memcpy((*info)->dest_addr, rdma_get_peer_addr(event->id), (*info)->dest_addrlen);
 
 	ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EQ, "src", (*info)->src_addr);
@@ -123,14 +141,17 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 
 	connreq = calloc(1, sizeof *connreq);
 	if (!connreq)
-		goto err;
+		goto err2;
 
 	connreq->handle.fclass = FI_CLASS_CONNREQ;
 	connreq->id = event->id;
 	(*info)->handle = &connreq->handle;
+	fi_freeinfo(hints);
 	return 0;
-err:
+err2:
 	fi_freeinfo(*info);
+err1:
+	fi_freeinfo(hints);
 	return ret;
 }
 
