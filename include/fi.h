@@ -278,6 +278,8 @@ void ofi_straddr_log_internal(const char *func, int line,
 #define ofi_straddr_dbg(prov, subsystem, ...) do {} while(0)
 #endif
 
+int ofi_is_any_addr(struct sockaddr *sa);
+
 /*
  * Key Index
  */

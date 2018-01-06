@@ -572,6 +572,45 @@ void ofi_straddr_log_internal(const char *func, int line,
 	}
 }
 
+static int ofi_ipv4_is_any_addr(struct sockaddr *sa)
+{
+	struct in_addr ia_any = {
+		.s_addr = INADDR_ANY,
+	};
+
+	if (!sa)
+		return 0;
+
+	return !memcmp(&ofi_sin_addr(sa).s_addr, &ia_any, sizeof(ia_any));
+
+}
+
+static int ofi_ipv6_is_any_addr(struct sockaddr *sa)
+{
+	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
+
+	if (!sa)
+		return 0;
+
+	return !memcmp(&ofi_sin6_addr(sa), &ia6_any, sizeof(ia6_any));
+}
+
+int ofi_is_any_addr(struct sockaddr *sa)
+{
+	if (!sa)
+		return 0;
+
+	switch(sa->sa_family) {
+	case AF_INET:
+		return ofi_ipv4_is_any_addr(sa);
+	case AF_INET6:
+		return ofi_ipv6_is_any_addr(sa);
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format!\n");
+		return 0;
+	}
+}
+
 #ifndef HAVE_EPOLL
 
 int fi_epoll_create(struct fi_epoll **ep)
