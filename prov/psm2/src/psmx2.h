@@ -449,10 +449,15 @@ struct psmx2_cq_event {
 
 #define PSMX2_ERR_DATA_SIZE		64	/* large enough to hold a string address */
 
+struct psmx2_poll_ctxt {
+	struct psmx2_trx_ctxt		*trx_ctxt;
+	struct slist_entry		list_entry;
+};
+
 struct psmx2_fid_cq {
 	struct fid_cq			cq;
 	struct psmx2_fid_domain		*domain;
-	struct psmx2_trx_ctxt		*trx_ctxt;
+	struct slist			poll_list;
 	int 				format;
 	int				entry_size;
 	size_t				event_count;
@@ -702,7 +707,8 @@ struct psmx2_fid_cntr {
 		struct util_cntr	util_cntr; /* for util_poll_run */
 	};
 	struct psmx2_fid_domain	*domain;
-	struct psmx2_trx_ctxt	*trx_ctxt;
+	struct slist		poll_list;
+	int			poll_all;
 	int			events;
 	uint64_t		flags;
 	ofi_atomic64_t		counter;
@@ -749,8 +755,10 @@ struct psmx2_fid_ep {
 	struct psmx2_fid_domain	*domain;
 	/* above fields are common with sep */
 
-	struct psmx2_trx_ctxt	*trx_ctxt;
+	struct psmx2_trx_ctxt	*tx;
+	struct psmx2_trx_ctxt	*rx;
 	struct psmx2_fid_ep	*base_ep;
+	struct psmx2_fid_stx	*stx;
 	struct psmx2_fid_av	*av;
 	struct psmx2_fid_cq	*send_cq;
 	struct psmx2_fid_cq	*recv_cq;
@@ -800,6 +808,8 @@ struct psmx2_fid_sep {
 struct psmx2_fid_stx {
 	struct fid_stx		stx;
 	struct psmx2_fid_domain	*domain;
+	struct psmx2_trx_ctxt	*tx;
+	ofi_atomic32_t		ref;
 };
 
 struct psmx2_fid_mr {

@@ -242,14 +242,45 @@ static int psmx2_ep_close(fid_t fid)
 	if (ofi_atomic_get32(&ep->ref))
 		return -FI_EBUSY;
 
-	ep_name.epid = ep->trx_ctxt->psm2_epid;
+	if (ep->stx)
+		ofi_atomic_dec32(&ep->stx->ref);
+
+	ep_name.epid = ep->rx->psm2_epid;
 
 	ofi_ns_del_local_name(&ep->domain->fabric->name_server,
 			      &ep->service, &ep_name);
 
-	trx_ctxt = ep->trx_ctxt;
+	trx_ctxt = ep->rx;
 	psmx2_ep_close_internal(ep);
 	psmx2_trx_ctxt_free(trx_ctxt);
+	return 0;
+}
+
+static int psmx2_poll_ctxt_match(struct slist_entry *entry, const void *arg)
+{
+	struct psmx2_poll_ctxt *poll_ctxt;
+
+	poll_ctxt = container_of(entry, struct psmx2_poll_ctxt, list_entry);
+	return (poll_ctxt->trx_ctxt == arg);
+}
+
+static int psmx2_add_poll_ctxt(struct slist *list, struct psmx2_trx_ctxt *trx_ctxt)
+{
+	struct psmx2_poll_ctxt *item;
+
+	if (!trx_ctxt)
+		return 0;
+
+	if (!slist_empty(list) &&
+	    slist_find_first_match(list, psmx2_poll_ctxt_match, trx_ctxt))
+		return 0;
+
+	item = calloc(1, sizeof(*item));
+	if (!item)
+		return -FI_ENOMEM;
+
+	item->trx_ctxt = trx_ctxt;
+	slist_insert_tail(&item->list_entry, list);
 	return 0;
 }
 
@@ -259,6 +290,7 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct psmx2_fid_av *av;
 	struct psmx2_fid_cq *cq;
 	struct psmx2_fid_cntr *cntr;
+	struct psmx2_fid_stx *stx;
 	int err;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
@@ -274,19 +306,18 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cq = container_of(bfid, struct psmx2_fid_cq, cq.fid);
 		if (ep->domain != cq->domain)
 			return -FI_EINVAL;
-		if (cq->trx_ctxt == PSMX2_ALL_TRX_CTXT) {
-			/* do nothing */
-		} else if (!cq->trx_ctxt) {
-			cq->trx_ctxt = ep->trx_ctxt;
-		} else if (cq->trx_ctxt != ep->trx_ctxt) {
-			return -FI_EINVAL;
-		}
 		if (flags & FI_SEND) {
+			err = psmx2_add_poll_ctxt(&cq->poll_list, ep->tx);
+			if (err)
+				return err;
 			ep->send_cq = cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->send_selective_completion = 1;
 		}
 		if (flags & FI_RECV) {
+			err = psmx2_add_poll_ctxt(&cq->poll_list, ep->rx);
+			if (err)
+				return err;
 			ep->recv_cq = cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->recv_selective_completion = 1;
@@ -298,12 +329,15 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cntr = container_of(bfid, struct psmx2_fid_cntr, cntr.fid);
 		if (ep->domain != cntr->domain)
 			return -FI_EINVAL;
-		if (cntr->trx_ctxt == PSMX2_ALL_TRX_CTXT) {
-			/* do nothing */
-		} else if (!cntr->trx_ctxt) {
-			cntr->trx_ctxt = ep->trx_ctxt;
-		} else if (cntr->trx_ctxt != ep->trx_ctxt) {
-			return -FI_EINVAL;
+		if (flags & (FI_SEND | FI_WRITE | FI_READ)) {
+			err = psmx2_add_poll_ctxt(&cntr->poll_list, ep->tx);
+			if (err)
+				return err;
+		}
+		if (flags & (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ)) {
+			err = psmx2_add_poll_ctxt(&cntr->poll_list, ep->rx);
+			if (err)
+				return err;
 		}
 		if (flags & FI_SEND)
 			ep->send_cntr = cntr;
@@ -326,7 +360,10 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		ep->av = av;
 		psmx2_ep_optimize_ops(ep);
-		psmx2_av_add_trx_ctxt(av, ep->trx_ctxt, !psmx2_env.lazy_conn);
+		if (ep->tx)
+			psmx2_av_add_trx_ctxt(av, ep->tx, !psmx2_env.lazy_conn);
+		if (ep->rx && ep->rx != ep->tx)
+			psmx2_av_add_trx_ctxt(av, ep->rx, !psmx2_env.lazy_conn);
 		break;
 
 	case FI_CLASS_MR:
@@ -335,6 +372,17 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		err = bfid->ops->bind(bfid, fid, flags);
 		if (err)
 			return err;
+		break;
+
+	case FI_CLASS_STX_CTX:
+		stx = container_of(bfid, struct psmx2_fid_stx, stx.fid);
+		if (ep->domain != stx->domain)
+			return -FI_EINVAL;
+		if (ep->tx || ep->stx)
+			return -FI_EINVAL;
+		ep->tx = stx->tx;
+		ep->stx = stx;
+		ofi_atomic_inc32(&stx->ref);
 		break;
 
 	default:
@@ -515,7 +563,9 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 	ep_priv->ep.ops = &psmx2_ep_ops;
 	ep_priv->ep.cm = &psmx2_cm_ops;
 	ep_priv->domain = domain_priv;
-	ep_priv->trx_ctxt = trx_ctxt;
+	ep_priv->rx = trx_ctxt;
+	if (!(info && info->ep_attr && info->ep_attr->tx_ctx_cnt == FI_SHARED_CONTEXT))
+		ep_priv->tx = trx_ctxt;
 	ofi_atomic_initialize32(&ep_priv->ref, 0);
 
 	PSMX2_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX2_NOCOMP_SEND_CONTEXT;
@@ -588,6 +638,9 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!domain_priv)
 		goto errout;
 
+	if (info && info->ep_attr && info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
+		return  -FI_ENOSYS;
+
 	src_addr = NULL;
 	if (info && info->src_addr) {
 		if (info->addr_format == FI_ADDR_STR)
@@ -619,7 +672,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 				   ((uintptr_t)ep_priv & 0xFFFF);
 
 	psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
-	dlist_insert_before(&ep_priv->trx_ctxt->entry,
+	dlist_insert_before(&trx_ctxt->entry,
 			    &domain_priv->trx_ctxt_list);
 	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
 
@@ -674,6 +727,88 @@ void psmx2_ep_put_op_context(struct psmx2_fid_ep *ep,
 	psmx2_lock(&ep->context_lock, 2);
 	slist_insert_tail(&context->list_entry, &ep->free_context_list);
 	psmx2_unlock(&ep->context_lock, 2);
+}
+
+/*
+ * Shared tx context
+ */
+
+static int psmx2_stx_close(fid_t fid)
+{
+	struct psmx2_fid_stx *stx;
+
+	stx = container_of(fid, struct psmx2_fid_stx, stx.fid);
+
+	if (ofi_atomic_get32(&stx->ref))
+		return -FI_EBUSY;
+
+	psmx2_trx_ctxt_free(stx->tx);
+	psmx2_domain_release(stx->domain);
+	free(stx);
+	return 0;
+}
+
+static struct fi_ops psmx2_fi_ops_stx = {
+	.size = sizeof(struct fi_ops),
+	.close = psmx2_stx_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static struct fi_ops_ep psmx2_stx_ops = {
+	.size = sizeof(struct fi_ops_ep),
+	.cancel = fi_no_cancel,
+	.getopt = fi_no_getopt,
+	.setopt = fi_no_setopt,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
+};
+
+int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
+		  struct fid_stx **stx, void *context)
+{
+	struct psmx2_fid_domain *domain_priv;
+	struct psmx2_trx_ctxt *trx_ctxt;
+	struct psmx2_fid_stx *stx_priv;
+	int err = -FI_EINVAL;
+
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid.fid);
+	if (!domain_priv)
+		goto errout;
+
+	stx_priv = (struct psmx2_fid_stx *) calloc(1, sizeof *stx_priv);
+	if (!stx_priv) {
+		err = -FI_ENOMEM;
+		goto errout;
+	}
+
+	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, NULL/*src_addr*/, 0);
+	if (!trx_ctxt) {
+		err = -FI_ENOMEM;
+		goto errout_free_stx;
+	}
+
+	psmx2_domain_acquire(domain_priv);
+	stx_priv->stx.fid.fclass = FI_CLASS_STX_CTX;
+	stx_priv->stx.fid.context = context;
+	stx_priv->stx.fid.ops = &psmx2_fi_ops_stx;
+	stx_priv->stx.ops = &psmx2_stx_ops;
+	stx_priv->domain = domain_priv;
+	stx_priv->tx = trx_ctxt;
+	ofi_atomic_initialize32(&stx_priv->ref, 0);
+
+	*stx = &stx_priv->stx;
+	return 0;
+
+errout_free_stx:
+	free(stx_priv);
+
+errout:
+	return err;
 }
 
 /*

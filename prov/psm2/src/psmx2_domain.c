@@ -219,7 +219,7 @@ static struct fi_ops_domain psmx2_domain_ops = {
 	.scalable_ep = psmx2_sep_open,
 	.cntr_open = psmx2_cntr_open,
 	.poll_open = fi_poll_create,
-	.stx_ctx = fi_no_stx_context,
+	.stx_ctx = psmx2_stx_ctx,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = psmx2_query_atomic,
 };
@@ -379,8 +379,15 @@ int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 	if (err)
 		return err;
 
-	if ((ep->caps & FI_RMA) || (ep->caps & FI_ATOMICS))
-		return psmx2_am_init(ep->trx_ctxt);
+	if ((ep->caps & FI_RMA) || (ep->caps & FI_ATOMICS)) {
+		if (ep->tx) {
+			err = psmx2_am_init(ep->tx);
+			if (err)
+				return err;
+		}
+		if (ep->rx && ep->rx != ep->tx)
+			return psmx2_am_init(ep->rx);
+	}
 
 	return 0;
 }
