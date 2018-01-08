@@ -1432,7 +1432,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 
 	ofi_alter_info(*info, hints, version);
 
-	if (!hints || !(hints->mode & FI_RX_CQ_DATA)) {
+	if (!ofi_check_rx_mode(hints, FI_RX_CQ_DATA)) {
 		for (cur = *info; cur; cur = cur->next)
 			cur->domain_attr->cq_data_size = 0;
 	}
