@@ -12,7 +12,7 @@ except ImportError:
 	sys.exit(1)
 
 # diff two list-of dicts for perf numbers
-# this means just produce xfer_size, Gb/sec, usec/xfer
+# this means just produce xfer_size, MB/sec, usec/xfer
 def _diff(a,b):
 	r = []
 
@@ -21,7 +21,7 @@ def _diff(a,b):
 		for k in v2.keys():
 			if k == 'xfer_size':
 				d[k] = v2[k]
-			elif k == 'Gb/sec' or k == 'usec/xfer':
+			elif k == 'MB/sec' or k == 'usec/xfer':
 				d[k] = float((v2[k] - v1[k])) / float(v1[k]) * 100
 			else:
 				continue
@@ -58,7 +58,7 @@ def perfprint(d):
 		print k, ":"
 		for i in v:
 			print 'xfer_size: ', i['xfer_size'],
-			print ', Gb/sec: %.2f' % i['Gb/sec'] + '%',
+			print ', MB/sec: %.2f' % i['MB/sec'] + '%',
 			print ', usec/xfer: %.2f' % i['usec/xfer'] + '%'
 	
 
