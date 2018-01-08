@@ -97,19 +97,23 @@ struct smr_msg_hdr {
 		uint64_t	tag;
 		struct {
 			uint8_t	datatype;
-			uint8_t	op;
-			uint8_t ioc_count;
-		} atomic;
+			uint8_t	atomic_op;
+		};
 	};
 };
 
 #define SMR_MSG_DATA_LEN	(128 - sizeof(struct smr_msg_hdr))
+#define SMR_COMP_DATA_LEN	(SMR_MSG_DATA_LEN / 2)
 union smr_cmd_data {
 	uint8_t			msg[SMR_MSG_DATA_LEN];
 	struct {
 		uint8_t		iov_count;
 		struct iovec	iov[(SMR_MSG_DATA_LEN - 8) /
 				    sizeof(struct iovec)];
+	};
+	struct {
+		uint8_t		buf[SMR_COMP_DATA_LEN];
+		uint8_t		comp[SMR_COMP_DATA_LEN];
 	};
 };
 
@@ -121,8 +125,12 @@ struct smr_cmd_msg {
 #define SMR_RMA_DATA_LEN	(128 - sizeof(uint64_t))
 struct smr_cmd_rma {
 	uint64_t		rma_count;
-	struct fi_rma_iov	rma_iov[SMR_RMA_DATA_LEN /
-					sizeof(struct fi_rma_iov)];
+	union {
+		struct fi_rma_iov	rma_iov[SMR_RMA_DATA_LEN /
+						sizeof(struct fi_rma_iov)];
+		struct fi_rma_ioc	rma_ioc[SMR_RMA_DATA_LEN /
+						sizeof(struct fi_rma_ioc)];
+	};
 };
 
 struct smr_cmd {
@@ -132,9 +140,8 @@ struct smr_cmd {
 	};
 };
 
-enum {
-	SMR_INJECT_SIZE = 4096
-};
+#define SMR_INJECT_SIZE		4096
+#define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 
 #define SMR_NAME_SIZE	32
 struct smr_addr {
@@ -183,7 +190,13 @@ struct smr_resp {
 };
 
 struct smr_inject_buf {
-	uint8_t		data[SMR_INJECT_SIZE];
+	union {
+		uint8_t		data[SMR_INJECT_SIZE];
+		struct {
+			uint8_t	buf[SMR_COMP_INJECT_SIZE];
+			uint8_t comp[SMR_COMP_INJECT_SIZE];
+		};
+	};
 };
 
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);

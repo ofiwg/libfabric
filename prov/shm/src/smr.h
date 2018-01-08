@@ -58,6 +58,7 @@
 #include <fi_list.h>
 #include <fi_signal.h>
 #include <fi_util.h>
+#include <ofi_atomic.h>
 
 #ifndef _SMR_H_
 #define _SMR_H_
@@ -86,6 +87,9 @@ int smr_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
+
+int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
 
 #define SMR_IOV_LIMIT		4
 
