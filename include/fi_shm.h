@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -72,12 +72,23 @@ enum {
 	smr_src_iov,	/* reference iovec via CMA */
 };
 
+/* 
+ * Unique smr_op_hdr for smr message protocol:
+ * 	addr - local fi_addr of peer sending msg (for shm lookup)
+ * 	op - type of op (ex. ofi_op_msg, defined in fi_proto.h)
+ * 	op_src - msg src (ex. smr_src_inline, defined above)
+ * 	op_flags - operation flags (ex. OFI_REMOTE_CQ_DATA, in fi_proto.h)
+ * 	src_data - src of additional op data (inject offset / resp offset)
+ * 	data - remote CQ data
+ */
 struct smr_op_hdr {
 	fi_addr_t		addr;
 	uint32_t		op;
-	uint32_t		op_src;
+	uint16_t		op_src;
+	uint16_t		op_flags;
 
 	uint64_t		size;
+	uint64_t		src_data;
 	uint64_t		data;
 	union {
 		uint64_t	tag;

@@ -30,7 +30,7 @@ ssize_t fi_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 ssize_t fi_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	uint64_t flags);
 
-ssize_t fi_send(struct fid_ep *ep, void *buf, size_t len,
+ssize_t fi_send(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, fi_addr_t dest_addr, void *context);
 
 ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov,
@@ -39,13 +39,13 @@ ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov,
 ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	uint64_t flags);
 
-ssize_t fi_inject(struct fid_ep *ep, void *buf, size_t len,
+ssize_t fi_inject(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t dest_addr);
 
-ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len,
+ssize_t fi_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, void *context);
 
-ssize_t fi_injectdata(struct fid_ep *ep, void *buf, size_t len,
+ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr);
 ```
 
