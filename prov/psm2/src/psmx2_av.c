@@ -742,23 +742,25 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 {
-	struct psmx2_epaddr_context *context;
 	psm2_epaddr_t epaddr;
-	int i, id;
+	psm2_epid_t epid;
+	int i, j;
 
 	epaddr = PSMX2_ADDR_TO_EP(source);
+	epid = psmx2_epaddr_to_epid(epaddr);
 
-	context = psm2_epaddr_getctxt(epaddr);
-	if (!context)
-		return FI_ADDR_NOTAVAIL;
-
-	if (av->type == FI_AV_MAP)
-		return source;
-
-	id = context->trx_ctxt->id;
 	for (i = av->last - 1; i >= 0; i--) {
-		if (av->tables[id].epaddrs[i] == epaddr)
-			return (fi_addr_t)i;
+		if (av->peers[i].type == PSMX2_EP_REGULAR) {
+			if (av->epids[i] == epid)
+				return (av->type == FI_AV_MAP) ?
+					source : (fi_addr_t)i;
+		} else {
+			for (j=0; j<av->peers[i].sep_ctxt_cnt; j++) {
+				if (av->peers[i].sep_ctxt_epids[j] == epid)
+					return  fi_rx_addr((fi_addr_t)i, j,
+							   av->rx_ctx_bits);
+			}
+		}
 	}
 
 	return FI_ADDR_NOTAVAIL;
