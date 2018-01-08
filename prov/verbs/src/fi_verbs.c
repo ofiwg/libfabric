@@ -48,6 +48,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.def_rx_size		= 384,
 	.def_tx_iov_limit	= 4,
 	.def_rx_iov_limit	= 4,
+	.def_inline_size	= 256,
 	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
 	.fork_unsafe		= 0,
 	/* Disable by default. Because this feature may corrupt
@@ -518,6 +519,79 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 	if (ret)
 		return ret;
 	return 0;
+}
+
+int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
+{
+	struct ibv_qp_init_attr qp_attr;
+	struct ibv_qp *qp = NULL;
+	struct ibv_cq *cq = ibv_create_cq(context, 1, NULL, NULL, 0);
+	assert(cq);
+	int max_inline = 2;
+	int rst = 0;
+
+	memset(&qp_attr, 0, sizeof(qp_attr));
+	qp_attr.send_cq = cq;
+	qp_attr.recv_cq = cq;
+	qp_attr.qp_type = IBV_QPT_RC;
+	qp_attr.cap.max_send_wr = 1;
+	qp_attr.cap.max_recv_wr = 1;
+	qp_attr.cap.max_send_sge = 1;
+	qp_attr.cap.max_recv_sge = 1;
+	qp_attr.sq_sig_all = 1;
+
+	do {
+		if (qp)
+			ibv_destroy_qp(qp);
+		qp_attr.cap.max_inline_data = max_inline;
+		qp = ibv_create_qp(pd, &qp_attr);
+		if (qp) {
+			/*
+			 * truescale returns max_inline_data 0
+			 */
+			if (qp_attr.cap.max_inline_data == 0)
+				break;
+
+			/*
+			 * iWarp is able to create qp with unsupported
+			 * max_inline, lets take first returned value.
+			 */
+			if (context->device->transport_type == IBV_TRANSPORT_IWARP) {
+				max_inline = rst = qp_attr.cap.max_inline_data;
+				break;
+			}
+			rst = max_inline;
+		}
+	} while (qp && (max_inline < INT_MAX / 2) && (max_inline *= 2));
+
+	if (rst != 0) {
+		int pos = rst, neg = max_inline;
+		do {
+			max_inline = pos + (neg - pos) / 2;
+			if (qp)
+				ibv_destroy_qp(qp);
+
+			qp_attr.cap.max_inline_data = max_inline;
+			qp = ibv_create_qp(pd, &qp_attr);
+			if (qp)
+				pos = max_inline;
+			else
+				neg = max_inline;
+
+		} while (neg - pos > 2);
+
+		rst = pos;
+	}
+
+	if (qp) {
+		ibv_destroy_qp(qp);
+	}
+
+	if (cq) {
+		ibv_destroy_cq(cq);
+	}
+
+	return rst;
 }
 
 static int fi_ibv_get_param_int(const char *param_name,
