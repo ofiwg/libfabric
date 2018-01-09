@@ -108,15 +108,29 @@ int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 				   FI_REMOTE_CQ_DATA : 0,
 				   rx_buf->pkt.hdr.size, NULL,
 				   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
-		if (ret) {
+		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to write recv completion\n");
+				"Unable to write recv completion\n");
 			return ret;
 		}
 	}
 
-	rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
-	return rxm_ep_repost_buf(rx_buf);
+	if (++rx_buf->ep->rx_buf_cnt == rx_buf->ep->max_rx_buf_cnt) {
+		struct rxm_rx_buf *repost_rx_buf;
+		while(!dlist_empty(&rx_buf->ep->rx_buf_list)) {
+			dlist_pop_front(&rx_buf->ep->rx_buf_list, struct rxm_rx_buf,
+					repost_rx_buf, entry);
+			rxm_recv_entry_release(repost_rx_buf->recv_queue,
+					       repost_rx_buf->recv_entry);
+			(void)rxm_ep_repost_buf(repost_rx_buf);
+		}
+		rx_buf->ep->rx_buf_cnt = 0;
+		rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
+		return rxm_ep_repost_buf(rx_buf);
+	} else {
+		dlist_insert_tail(&rx_buf->entry, &rx_buf->ep->rx_buf_list);
+		return FI_SUCCESS;
+	}
 }
 
 static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)

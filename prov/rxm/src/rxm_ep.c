@@ -1180,6 +1180,10 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!rxm_ep->util_ep.cmap)
 			return -FI_ENOMEM;
 
+		rxm_ep->rx_buf_cnt = 0;
+		rxm_ep->max_rx_buf_cnt = rxm_ep_buffer_cnt;
+		dlist_init(&rxm_ep->rx_buf_list);
+
 		if (rxm_ep->srx_ctx) {
 			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx);
 			if (ret) {
