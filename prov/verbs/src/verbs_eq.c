@@ -81,50 +81,50 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	return sizeof(*entry);
 }
 
-static struct fi_info *
+static int
 fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
-		     struct fi_info *pep_info)
+		     struct fi_info *pep_info, struct fi_info **info)
 {
-	struct fi_info *info;
 	const struct fi_info *fi;
 	struct fi_ibv_connreq *connreq;
 	const char *devname = ibv_get_device_name(event->id->verbs->device);
+	int ret = -FI_ENOMEM;
 
 	if (strcmp(devname, fab->info->domain_attr->name)) {
 		fi = fi_ibv_get_verbs_info(fi_ibv_util_prov.info, devname);
 		if (!fi)
-			return NULL;
+			return -FI_ENODATA;
 	} else {
 		fi = fab->info;
 	}
 
-	info = fi_dupinfo(fi);
-	if (!info)
-		return NULL;
+	*info = fi_dupinfo(fi);
+	if (!*info)
+		return -FI_ENOMEM;
 
-	info->fabric_attr->fabric = &fab->util_fabric.fabric_fid;
-	if (!(info->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
+	(*info)->fabric_attr->fabric = &fab->util_fabric.fabric_fid;
+	if (!((*info)->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
 		goto err;
 
-	ofi_alter_info(info, pep_info, fab->util_fabric.fabric_fid.api_version);
+	ofi_alter_info((*info), pep_info, fab->util_fabric.fabric_fid.api_version);
 
-	info->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
-	if (!(info->src_addr = malloc(info->src_addrlen)))
+	(*info)->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
+	if (!((*info)->src_addr = malloc((*info)->src_addrlen)))
 		goto err;
-	memcpy(info->src_addr, rdma_get_local_addr(event->id), info->src_addrlen);
+	memcpy((*info)->src_addr, rdma_get_local_addr(event->id), (*info)->src_addrlen);
 
-	info->dest_addrlen = fi_ibv_sockaddr_len(rdma_get_peer_addr(event->id));
-	if (!(info->dest_addr = malloc(info->dest_addrlen)))
+	(*info)->dest_addrlen = fi_ibv_sockaddr_len(rdma_get_peer_addr(event->id));
+	if (!((*info)->dest_addr = malloc((*info)->dest_addrlen)))
 		goto err;
-	memcpy(info->dest_addr, rdma_get_peer_addr(event->id), info->dest_addrlen);
+	memcpy((*info)->dest_addr, rdma_get_peer_addr(event->id), (*info)->dest_addrlen);
 
 	VERBS_INFO(FI_LOG_CORE, "src_addr: %s:%d\n",
-		   inet_ntoa(((struct sockaddr_in *)info->src_addr)->sin_addr),
-		   ntohs(((struct sockaddr_in *)info->src_addr)->sin_port));
+		   inet_ntoa(((struct sockaddr_in *)(*info)->src_addr)->sin_addr),
+		   ntohs(((struct sockaddr_in *)(*info)->src_addr)->sin_port));
 
 	VERBS_INFO(FI_LOG_CORE, "dst_addr: %s:%d\n",
-		   inet_ntoa(((struct sockaddr_in *)info->dest_addr)->sin_addr),
-		   ntohs(((struct sockaddr_in *)info->dest_addr)->sin_port));
+		   inet_ntoa(((struct sockaddr_in *)(*info)->dest_addr)->sin_addr),
+		   ntohs(((struct sockaddr_in *)(*info)->dest_addr)->sin_port));
 
 	connreq = calloc(1, sizeof *connreq);
 	if (!connreq)
@@ -132,11 +132,11 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
 
 	connreq->handle.fclass = FI_CLASS_CONNREQ;
 	connreq->id = event->id;
-	info->handle = &connreq->handle;
-	return info;
+	(*info)->handle = &connreq->handle;
+	return 0;
 err:
-	fi_freeinfo(info);
-	return NULL;
+	fi_freeinfo(*info);
+	return ret;
 }
 
 static ssize_t
@@ -153,10 +153,14 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	switch (cma_event->event) {
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
-		entry->info = fi_ibv_eq_cm_getinfo(eq->fab, cma_event, pep->info);
-		if (!entry->info) {
+		ret = fi_ibv_eq_cm_getinfo(eq->fab, cma_event, pep->info, &entry->info);
+		if (ret) {
 			rdma_destroy_id(cma_event->id);
-			return 0;
+			if (ret == -FI_ENODATA)
+				return 0;
+			eq->err.err = -ret;
+			eq->err.prov_errno = ret;
+			goto err;
 		}
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
@@ -177,22 +181,18 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	case RDMA_CM_EVENT_ROUTE_ERROR:
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
-		eq->err.fid = fid;
 		eq->err.err = cma_event->status;
-		return -FI_EAVAIL;
+		goto err;
 	case RDMA_CM_EVENT_REJECTED:
-		eq->err.fid = fid;
 		eq->err.err = ECONNREFUSED;
-		eq->err.prov_errno = cma_event->status;
-		return -FI_EAVAIL;
+		eq->err.prov_errno = -cma_event->status;
+		goto err;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
-		eq->err.fid = fid;
 		eq->err.err = ENODEV;
-		return -FI_EAVAIL;
+		goto err;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
-		eq->err.fid = fid;
 		eq->err.err = EADDRNOTAVAIL;
-		return -FI_EAVAIL;
+		goto err;
 	default:
 		return 0;
 	}
@@ -202,6 +202,9 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	if (datalen)
 		memcpy(entry->data, cma_event->param.conn.private_data, datalen);
 	return sizeof(*entry) + datalen;
+err:
+	eq->err.fid = fid;
+	return -FI_EAVAIL;
 }
 
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
