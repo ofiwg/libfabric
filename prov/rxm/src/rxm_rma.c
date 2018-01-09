@@ -90,7 +90,7 @@ static ssize_t rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *ms
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
 	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
-	if (ret)
+	if (OFI_UNLIKELY(ret))
 		return ret;
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
@@ -242,7 +242,7 @@ static ssize_t rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *m
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
 	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
-	if (ret)
+	if (OFI_UNLIKELY(ret))
 		return ret;
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 

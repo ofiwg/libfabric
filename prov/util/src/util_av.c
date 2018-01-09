@@ -1383,28 +1383,27 @@ unlock:
 int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 			struct util_cmap_handle **handle_ret)
 {
-	struct util_cmap_handle *handle;
 	int ret = 0;
 
 	fastlock_acquire(&cmap->lock);
-	handle = util_cmap_get_handle(cmap, fi_addr);
-	if (!handle) {
+	*handle_ret = util_cmap_get_handle(cmap, fi_addr);
+	if (!*handle_ret) {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		       "No handle found for given fi_addr\n");
-		ret = util_cmap_alloc_handle(cmap, fi_addr, CMAP_IDLE, &handle);
+		ret = util_cmap_alloc_handle(cmap, fi_addr, CMAP_IDLE, handle_ret);
 		if (ret)
 			goto unlock;
 	}
-	switch (handle->state) {
+	switch ((*handle_ret)->state) {
 	case CMAP_IDLE:
-		ret = cmap->attr.connect(cmap->ep, handle,
+		ret = cmap->attr.connect(cmap->ep, *handle_ret,
 					 ofi_av_get_addr(cmap->av, fi_addr),
 					 cmap->av->addrlen);
 		if (ret) {
-			util_cmap_del_handle(handle);
+			util_cmap_del_handle(*handle_ret);
 			goto unlock;
 		}
-		handle->state = CMAP_CONNREQ_SENT;
+		(*handle_ret)->state = CMAP_CONNREQ_SENT;
 		ret = -FI_EAGAIN;
 		// TODO sleep on event fd instead of busy polling
 		break;
@@ -1415,7 +1414,6 @@ int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 		ret = -FI_EAGAIN;
 		break;
 	case CMAP_CONNECTED:
-		*handle_ret = handle;
 		break;
 	default:
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
