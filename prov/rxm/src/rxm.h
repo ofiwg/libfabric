@@ -60,6 +60,7 @@
 #define RXM_MINOR_VERSION 0
 
 #define RXM_BUF_SIZE 16384
+#define RXM_BUF_CNT 8
 #define RXM_IOV_LIMIT 4
 
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
@@ -211,6 +212,7 @@ struct rxm_rx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
+	struct dlist_entry entry;
 	struct rxm_ep *ep;
 	struct rxm_conn *conn;
 	struct rxm_recv_queue *recv_queue;
@@ -305,6 +307,9 @@ struct rxm_ep {
 	int			msg_cq_fd;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
+	int			rx_buf_cnt;
+	int			max_rx_buf_cnt;
+	struct dlist_entry	rx_buf_list;
 
 	struct rxm_buf_pool 	tx_pool;
 	struct rxm_buf_pool 	rx_pool;
@@ -320,6 +325,8 @@ extern struct fi_fabric_attr rxm_fabric_attr;
 extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
+
+extern int rxm_ep_buffer_cnt;
 
 // TODO move to common code?
 static inline int rxm_match_addr(fi_addr_t addr, fi_addr_t match_addr)

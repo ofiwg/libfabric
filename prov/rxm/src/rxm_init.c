@@ -35,6 +35,8 @@
 #include <prov.h>
 #include "rxm.h"
 
+int rxm_ep_buffer_cnt = RXM_BUF_CNT;
+
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
@@ -152,6 +154,17 @@ static int rxm_init_info(void)
 		rxm_info.tx_attr->inject_size = RXM_BUF_SIZE;
 	}
 	rxm_info.tx_attr->inject_size -= sizeof(struct rxm_pkt);
+
+	if (!fi_param_get_int(&rxm_prov, "buffer_cnt", &param)) {
+		if (!(param & (param - 1))) {
+			rxm_ep_buffer_cnt = param;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CORE,
+				"Requested buffer cnt must be a power of 2\n");
+			return -FI_EINVAL;
+		}
+	}
+
 	rxm_util_prov.info = &rxm_info;
 	return 0;
 }
@@ -220,6 +233,11 @@ RXM_INI
 			"Defines the transmit buffer size. Transmit data would "
 			"be copied up to this size (default: ~16k). This would "
 			"also affect the supported inject size");
+
+	fi_param_define(&rxm_prov, "buffer_cnt", FI_PARAM_INT,
+			"Defines the number of pre-registered buffers (default: 8) "
+			"for buffered operations between the endpints. This value "
+			"must be a power of 2");
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
