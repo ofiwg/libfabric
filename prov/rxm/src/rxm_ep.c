@@ -698,12 +698,12 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 
 	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, dest_addr, &handle);
-	if (ret)
+	if (OFI_UNLIKELY(ret))
 		return ret;
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->tx_pool);
-	if (!tx_buf) {
+	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX queue full!\n");
 		return -FI_EAGAIN;
 	}
