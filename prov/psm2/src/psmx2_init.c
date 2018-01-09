@@ -98,9 +98,10 @@ static int psmx2_get_yes_no(char *s, int default_value)
 
 static int psmx2_check_multi_ep_cap(void)
 {
+	uint64_t caps = PSM2_MULTI_EP_CAP;
 	char *s = getenv("PSM2_MULTI_EP");
 
-	if (psmx2_multi_ep_ok() && psmx2_get_yes_no(s, 0))
+	if (psm2_get_capability_mask(caps) == caps && psmx2_get_yes_no(s, 0))
 		psmx2_env.multi_ep = 1;
 	else
 		psmx2_env.multi_ep = 0;
@@ -147,7 +148,6 @@ static int psmx2_init_lib(void)
 	else
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "PSM2 multi-ep feature not available or disabled.\n");
 
-	psmx2_init_disconnect_func();
 	psmx2_lib_initialized = 1;
 
 out:

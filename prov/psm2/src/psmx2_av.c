@@ -217,7 +217,7 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 	psm2_epconn_t epconn;
 	struct psmx2_epaddr_context *context;
 
-	err = psmx2_ep_epid_lookup(trx_ctxt->psm2_ep, epid, &epconn);
+	err = psm2_ep_epid_lookup2(trx_ctxt->psm2_ep, epid, &epconn);
 	if (err == PSM2_OK) {
 		context = psm2_epaddr_getctxt(epconn.addr);
 		if (context && context->epid  == epid) {
@@ -388,7 +388,7 @@ static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 	for (i = 0; i < count; i++) {
 		errors[i] = PSM2_OK;
 
-		if (psmx2_ep_epid_lookup(ep, epids[i], &epconn) == PSM2_OK) {
+		if (psm2_ep_epid_lookup2(ep, epids[i], &epconn) == PSM2_OK) {
 			epaddr_context = psm2_epaddr_getctxt(epconn.addr);
 			if (epaddr_context && epaddr_context->epid == epids[i])
 				epaddrs[i] = epconn.addr;
@@ -437,7 +437,7 @@ static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 			 * be reached". This should be treated the same as
 			 * "Endpoint already connected".
 			 */
-			if (psmx2_ep_epid_lookup(ep, epids[i], &epconn) == PSM2_OK) {
+			if (psm2_ep_epid_lookup2(ep, epids[i], &epconn) == PSM2_OK) {
 				epaddr_context = psm2_epaddr_getctxt(epconn.addr);
 				if (epaddr_context &&
 				    epaddr_context->epid == epids[i]) {
@@ -747,7 +747,7 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 	int i, j;
 
 	epaddr = PSMX2_ADDR_TO_EP(source);
-	epid = psmx2_epaddr_to_epid(epaddr);
+	psm2_epaddr_to_epid(epaddr, &epid);
 
 	for (i = av->last - 1; i >= 0; i--) {
 		if (av->peers[i].type == PSMX2_EP_REGULAR) {
