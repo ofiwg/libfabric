@@ -478,7 +478,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	    ofi_cirque_isfull(ep->util_ep.rx_cq->cirq)) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"rx cq full\n");
-		ret = -FI_ENOSPC;
+		return -FI_ENOSPC;
 	}
 
 	for (iov_count = 0; iov_count < cmd->hdr.op.iov_count; iov_count++) {
@@ -497,6 +497,9 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
 	cmd = ofi_cirque_head(smr_cmd_queue(ep->region));
+	if (ret)
+		goto discard;
+
 	if (cmd->hdr.op.op != ofi_op_write &&
 	    cmd->hdr.op.op != ofi_op_read_req) {
 		ret = -FI_EINVAL;
@@ -521,7 +524,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	if (cmd->hdr.op.op_flags & OFI_REMOTE_CQ_DATA) {
 		ret = ep->rx_comp(ep, NULL, smr_rx_comp_flags(cmd->hdr.op.op,
 				  cmd->hdr.op.op_flags), total_len,
-				  iov[0].iov_base, &cmd->hdr.op.addr, 0,
+				  NULL, &cmd->hdr.op.addr, 0,
 				  cmd->hdr.op.data, err);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
