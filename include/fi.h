@@ -197,11 +197,18 @@ uint64_t fi_gettime_us(void);
 #define OFI_STR(X) #X
 #define OFI_STR_INT(X) OFI_STR(X)
 
-static inline size_t ofi_sizeofaddr(const struct sockaddr *address)
+static inline size_t ofi_sizeofaddr(const struct sockaddr *addr)
 {
-	return (address->sa_family == AF_INET ?
-		sizeof(struct sockaddr_in) :
-		sizeof(struct sockaddr_in6));
+	switch (addr->sa_family) {
+	case AF_INET:
+		return sizeof(struct sockaddr_in);
+	case AF_INET6:
+		return sizeof(struct sockaddr_in6);
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format");
+		assert(0);
+		return 0;
+	}
 }
 
 static inline int ofi_equals_ipaddr(const struct sockaddr_in *addr1,
