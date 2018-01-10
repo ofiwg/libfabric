@@ -144,9 +144,63 @@ fail:
 	return TEST_RET_VAL(ret, testret);
 }
 
+static int
+cq_signal()
+{
+	struct fid_cq *cq;
+	struct fi_cq_tagged_entry entry;
+	int64_t elapsed;
+	int testret;
+	int ret;
+
+	testret = FAIL;
+
+	ret = create_cq(&cq, 1, 0, FI_CQ_FORMAT_UNSPEC, FI_WAIT_UNSPEC);
+	if (ret) {
+		sprintf(err_buf, "fi_cq_open(1, 0, FI_CQ_FORMAT_UNSPEC, "
+				"FI_WAIT_UNSPEC) = %d, %s",
+				ret, fi_strerror(-ret));
+		goto fail;
+	}
+
+	ret = fi_cq_signal(cq);
+	if (ret) {
+		sprintf(err_buf, "fi_cq_signal = %d %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+
+	ft_start();
+	ret = fi_cq_sread(cq, &entry, 1, NULL, 2000);
+	ft_stop();
+	elapsed = get_elapsed(&start, &end, MILLI);
+	if (ret != -FI_EAGAIN && ret != -FI_ECANCELED) {
+		sprintf(err_buf, "fi_cq_sread = %d %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+
+	if (elapsed > 1000) {
+		sprintf(err_buf, "fi_cq_sread - signal ignored");
+		goto fail;
+	}
+
+	ret = fi_close(&cq->fid);
+	if (ret) {
+		sprintf(err_buf, "close(cq) = %d, %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+	cq = NULL;
+
+	testret = PASS;
+fail:
+	cq = NULL;
+	return TEST_RET_VAL(ret, testret);
+}
+
+
 struct test_entry test_array[] = {
 	TEST_ENTRY(cq_open_close_sizes, "Test open and close of CQ for various sizes"),
 	TEST_ENTRY(cq_open_close_simultaneous, "Test opening several CQs at a time"),
+	TEST_ENTRY(cq_signal, "Test fi_cq_signal"),
 	{ NULL, "" }
 };
 
