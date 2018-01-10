@@ -900,54 +900,6 @@ static inline void psmx2_unlock(fastlock_t *lock, int lock_level)
 		fastlock_release(lock);
 }
 
-#ifdef PSM2_MULTI_EP_CAP
-
-static inline int psmx2_multi_ep_ok(void)
-{
-	uint64_t caps = PSM2_MULTI_EP_CAP;
-	return (psm2_get_capability_mask(caps) == caps);
-}
-
-static inline psm2_error_t psmx2_ep_epid_lookup(psm2_ep_t ep, psm2_epid_t epid,
-						psm2_epconn_t *epconn)
-{
-	return psm2_ep_epid_lookup2(ep, epid, epconn);
-}
-
-static inline psm2_epid_t psmx2_epaddr_to_epid(psm2_epaddr_t epaddr)
-{
-	psm2_epid_t epid;
-
-	/* Caller ensures that epaddr is not NULL */
-	psm2_epaddr_to_epid(epaddr, &epid);
-	return epid;
-}
-
-#else
-
-static inline int psmx2_multi_ep_ok(void)
-{
-	return 0;
-}
-
-static inline psm2_error_t psmx2_ep_epid_lookup(psm2_ep_t ep, psm2_epid_t epid,
-						psm2_epconn_t *epconn)
-{
-	return psm2_ep_epid_lookup(epid, epconn);
-}
-
-static inline psm2_epid_t psmx2_epaddr_to_epid(psm2_epaddr_t epaddr)
-{
-	/*
-	 * This is a hack based on the fact that the internal representation of
-	 * epaddr has epid as the first field. This is a workaround before a PSM2
-	 * function is availale to retrieve this information.
-	 */
-	return *(psm2_epid_t *)epaddr;
-}
-
-#endif /* PSM2_MULTI_EP_CAP */
-
 int	psmx2_fabric(struct fi_fabric_attr *attr,
 		    struct fid_fabric **fabric, void *context);
 int	psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
@@ -1069,7 +1021,6 @@ static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av,
 	return 0;
 }
 
-void	psmx2_init_disconnect_func(void);
 void	psmx2_am_global_init(void);
 void	psmx2_am_global_fini(void);
 int	psmx2_am_init(struct psmx2_trx_ctxt *trx_ctxt);
@@ -1081,10 +1032,10 @@ int	psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_am_request *req);
 int	psmx2_process_trigger(struct psmx2_trx_ctxt *trx_ctxt,
 				struct psmx2_trigger *trigger);
-int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
+int	psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			     int nargs, void *src, uint32_t len,
 			     void *hctx);
-int psmx2_am_atomic_handler(psm2_am_token_t token,
+int	psmx2_am_atomic_handler(psm2_am_token_t token,
 				psm2_amarg_t *args, int nargs, void *src,
 				uint32_t len, void *hctx);
 int	psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args, int nargs,
@@ -1141,7 +1092,7 @@ static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name 
 	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
 
 	memset(name, 0, sizeof(*name));
-	name->epid = psmx2_epaddr_to_epid(epaddr);
+	psm2_epaddr_to_epid(epaddr, &name->epid);
 	name->type = PSMX2_EP_REGULAR;
 }
 
@@ -1151,7 +1102,7 @@ static inline void psmx2_get_source_string_name(fi_addr_t source, char *name, si
 	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
 
 	memset(&ep_name, 0, sizeof(ep_name));
-	ep_name.epid = psmx2_epaddr_to_epid(epaddr);
+	psm2_epaddr_to_epid(epaddr, &ep_name.epid);
 	ep_name.type = PSMX2_EP_REGULAR;
 
 	ofi_straddr(name, len, FI_ADDR_PSMX2, &ep_name);
