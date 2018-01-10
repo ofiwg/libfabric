@@ -43,6 +43,7 @@
 #include <sys/types.h>
 
 #include <fi_list.h>
+#include <fi.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -335,7 +336,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	int ret = 0;
 	size_t threshold;
 	struct sock_cq *sock_cq;
-	uint64_t start_ms = 0, end_ms = 0;
+	uint64_t start_ms;
 	ssize_t cq_entry_len, avail;
 
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
@@ -348,50 +349,63 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	else
 		threshold = count;
 
-	if (timeout >= 0) {
-		start_ms = fi_gettime_ms();
-		end_ms = start_ms + timeout;
-	}
+	start_ms = (timeout >= 0) ? fi_gettime_ms() : 0;
 
 	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
-		do {
+		while (1) {
 			sock_cq_progress(sock_cq);
 			fastlock_acquire(&sock_cq->lock);
 			avail = ofi_rbfdused(&sock_cq->cq_rbfd);
-			if (avail)
+			if (avail) {
 				ret = sock_cq_rbuf_read(sock_cq, buf,
 					MIN(threshold, (size_t)(avail / cq_entry_len)),
 					src_addr, cq_entry_len);
+			}
 			fastlock_release(&sock_cq->lock);
-			if (ret == 0 && timeout >= 0) {
-				if (fi_gettime_ms() >= end_ms)
+			if (ret)
+				return ret;
+
+			if (timeout >= 0) {
+				timeout -= (int) (fi_gettime_ms() - start_ms);
+				if (timeout <= 0)
 					return -FI_EAGAIN;
 			}
-		} while (ret == 0);
+
+			if (ofi_atomic_get32(&sock_cq->signaled)) {
+				ofi_atomic_set32(&sock_cq->signaled, 0);
+				return -FI_ECANCELED;
+			}
+		};
 	} else {
 		do {
-			ret = ofi_rbfdwait(&sock_cq->cq_rbfd, timeout);
-			if (ret <= 0)
-				break;
-
 			fastlock_acquire(&sock_cq->lock);
 			ret = 0;
 			avail = ofi_rbfdused(&sock_cq->cq_rbfd);
-			if (avail)
+			if (avail) {
 				ret = sock_cq_rbuf_read(sock_cq, buf,
 					MIN(threshold, (size_t)(avail / cq_entry_len)),
 					src_addr, cq_entry_len);
-			else /* No CQ entry available, read the fd */
+			} else {
 				ofi_rbfdreset(&sock_cq->cq_rbfd);
-			fastlock_release(&sock_cq->lock);
-
-			if ((ret == -FI_EAGAIN || ret == 0) && timeout >= 0) {
-				timeout = end_ms - fi_gettime_ms();
-				if (timeout <= 0)
-					break;
 			}
-		} while (ret == 0 || ret == -FI_EAGAIN);
+			fastlock_release(&sock_cq->lock);
+			if (ret && ret != -FI_EAGAIN)
+				return ret;
+
+			if (timeout >= 0) {
+				timeout -= (int) (fi_gettime_ms() - start_ms);
+				if (timeout <= 0)
+					return -FI_EAGAIN;
+			}
+
+			if (ofi_atomic_get32(&sock_cq->signaled)) {
+				ofi_atomic_set32(&sock_cq->signaled, 0);
+				return -FI_ECANCELED;
+			}
+			ret = ofi_rbfdwait(&sock_cq->cq_rbfd, timeout);
+		} while (ret > 0);
 	}
+
 	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
 }
 
@@ -489,6 +503,7 @@ static int sock_cq_signal(struct fid_cq *cq)
 	struct sock_cq *sock_cq;
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
 
+	ofi_atomic_set32(&sock_cq->signaled, 1);
 	fastlock_acquire(&sock_cq->lock);
 	ofi_rbfdsignal(&sock_cq->cq_rbfd);
 	fastlock_release(&sock_cq->lock);
@@ -615,6 +630,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 
 	ofi_atomic_initialize32(&sock_cq->ref, 0);
+	ofi_atomic_initialize32(&sock_cq->signaled, 0);
 	sock_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	sock_cq->cq_fid.fid.context = context;
 	sock_cq->cq_fid.fid.ops = &sock_cq_fi_ops;
