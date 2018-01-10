@@ -98,17 +98,17 @@ static char *ft_class_func_str(enum ft_class_function enum_str)
 {
 	switch (enum_str) {
 	case FT_FUNC_SEND:
-		return (test_info.test_class & FI_MSG) ? "send" : "tsend";
+		return (test_info.test_class & FI_TAGGED) ? "tsend" : "send";
 	case FT_FUNC_SENDV:
-		return (test_info.test_class & FI_MSG) ? "sendv" : "tsendv";
+		return (test_info.test_class & FI_TAGGED) ? "tsendv" : "sendv";
 	case FT_FUNC_SENDMSG:
-		return (test_info.test_class & FI_MSG) ? "sendmsg" : "tsendmsg";
+		return (test_info.test_class & FI_TAGGED) ? "tsendmsg" : "sendmsg";
 	case FT_FUNC_INJECT:
-		return (test_info.test_class & FI_MSG) ? "inject" : "tinject";
+		return (test_info.test_class & FI_TAGGED) ? "tinject" : "inject";
 	case FT_FUNC_INJECTDATA:
-		return (test_info.test_class & FI_MSG) ? "injectdata" : "tinjectdata";
+		return (test_info.test_class & FI_TAGGED) ? "tinjectdata" : "injectdata";
 	case FT_FUNC_SENDDATA:
-		return (test_info.test_class & FI_MSG) ? "senddata" : "tsenddata";
+		return (test_info.test_class & FI_TAGGED) ? "tsenddata" : "senddata";
 	case FT_FUNC_READ:
 		return "read";
 	case FT_FUNC_READV:

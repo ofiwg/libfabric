@@ -141,6 +141,7 @@ static int ft_init_control(void)
 
 static void ft_cleanup_xcontrol(struct ft_xcontrol *ctrl)
 {
+	FT_CLOSE_FID(ctrl->mr);
 	free(ctrl->buf);
 	free(ctrl->iov);
 	free(ctrl->iov_desc);
@@ -150,6 +151,8 @@ static void ft_cleanup_xcontrol(struct ft_xcontrol *ctrl)
 
 static void ft_cleanup_atomic_control(struct ft_atomic_control *ctrl)
 {
+	FT_CLOSE_FID(ctrl->res_mr);
+	FT_CLOSE_FID(ctrl->comp_mr);
 	free(ctrl->res_buf);
 	free(ctrl->comp_buf);
 	free(ctrl->ioc);
@@ -161,6 +164,7 @@ static void ft_cleanup_atomic_control(struct ft_atomic_control *ctrl)
 
 static void ft_cleanup_mr_control(struct ft_mr_control *ctrl)
 {
+	FT_CLOSE_FID(ctrl->mr);
 	free(ctrl->buf);
 	memset(ctrl, 0, sizeof *ctrl);
 }
@@ -895,14 +899,11 @@ static int ft_run_unit(void)
 
 void ft_cleanup(void)
 {
-	FT_CLOSE_FID(ft_rx_ctrl.mr);
-	FT_CLOSE_FID(ft_tx_ctrl.mr);
-	FT_CLOSE_FID(ft_mr_ctrl.mr);
-	ft_free_res();
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
 	ft_cleanup_mr_control(&ft_mr_ctrl);
 	ft_cleanup_atomic_control(&ft_atom_ctrl);
+	ft_free_res();
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
 
