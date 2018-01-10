@@ -37,7 +37,8 @@ struct fi_tx_attr smr_tx_attr = {
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = SMR_INJECT_SIZE,
 	.size = 1024,
-	.iov_limit = SMR_IOV_LIMIT
+	.iov_limit = SMR_IOV_LIMIT,
+	.rma_iov_limit = SMR_IOV_LIMIT
 };
 
 struct fi_rx_attr smr_rx_attr = {
@@ -64,7 +65,7 @@ struct fi_domain_attr smr_domain_attr = {
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_VIRT_ADDR,
-	.cq_data_size = sizeof_field(struct smr_op_hdr, data),
+	.cq_data_size = sizeof_field(struct smr_msg_hdr, data),
 	.cq_cnt = (1 << 10),
 	.ep_cnt = (1 << 10),
 	.tx_ctx_cnt = (1 << 10),
