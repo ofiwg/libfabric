@@ -61,9 +61,14 @@ enum {
 	OFI_UTIL_NS_ACK,
 };
 
+#define OFI_NS_VERSION 0
+
+/* Send and received in network-byte order */
 struct util_ns_cmd {
-	int	op;
-	int	status;
+	uint8_t		version;
+	uint8_t		op;
+	uint16_t	reserved; /* TODO: this should be the msg len */
+	uint32_t	status;
 };
 
 const size_t cmd_len = sizeof(struct util_ns_cmd);
@@ -148,13 +153,15 @@ static int util_ns_map_lookup(struct util_ns *ns, void *service_in,
 	return FI_SUCCESS;
 }
 
-static int util_ns_process_cmd(struct util_ns *ns,
-				 struct util_ns_cmd *cmd,
-				 SOCKET sock)
+static int util_ns_process_cmd(struct util_ns *ns, struct util_ns_cmd *cmd,
+			       SOCKET sock)
 {
 	int ret = FI_SUCCESS;
 	size_t io_len = 0;
 	void *io_buf, *service, *name;
+
+	if (cmd->version != OFI_NS_VERSION)
+		return -FI_ENOSYS;
 
 	switch (cmd->op) {
 	case OFI_UTIL_NS_ADD:
@@ -189,7 +196,7 @@ static int util_ns_process_cmd(struct util_ns *ns,
 		ret = ofi_recvall_socket(sock, service, io_len);
 		if (!ret) {
 			cmd->op = OFI_UTIL_NS_ACK;
-			cmd->status = util_ns_map_lookup(ns, service, name);
+			cmd->status = htonl(util_ns_map_lookup(ns, service, name));
 		} else {
 			ret = -FI_ENODATA;
 			break;
@@ -345,8 +352,8 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 	void *write_buf;
 	size_t write_len = 0;
 	struct util_ns_cmd cmd = {
+		.version = OFI_NS_VERSION,
 		.op = OFI_UTIL_NS_ADD,
-		.status = 0,
 	};
 
 	if (!ns->is_initialized)
@@ -390,8 +397,8 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 	void *write_buf;
 	size_t write_len = 0;
 	struct util_ns_cmd cmd = {
-		.op = OFI_UTIL_NS_DEL,
-		.status = 0,
+		.version = OFI_NS_VERSION,
+		.op = OFI_UTIL_NS_DEL
 	};
 
 	if (!ns->is_initialized)
@@ -435,8 +442,8 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server, void *service)
 	SOCKET sockfd;
 	ssize_t ret = 0;
 	struct util_ns_cmd cmd = {
-		.op = OFI_UTIL_NS_QUERY,
-		.status = 0,
+		.version = OFI_NS_VERSION,
+		.op = OFI_UTIL_NS_QUERY
 	};
 
 	if (!ns->is_initialized)
