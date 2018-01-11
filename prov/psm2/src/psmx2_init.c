@@ -318,7 +318,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 
 		psmx2_get_uuid(uuid);
 		struct util_ns ns = {
-			.ns_port = psmx2_uuid_to_port(uuid),
+			.port = psmx2_uuid_to_port(uuid),
 			.name_len = sizeof(*dest_addr),
 			.service_len = sizeof(svc),
 			.service_cmp = psmx2_ns_service_cmp,

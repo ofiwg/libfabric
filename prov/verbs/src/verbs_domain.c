@@ -556,7 +556,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			/* Even if it's invoked not for the first time
 			 * (e.g. multiple domains per fabric), it's safe
 			 */
-			fab->name_server.ns_port =
+			fab->name_server.port =
 					fi_ibv_gl_data.dgram.name_server_port;
 			fab->name_server.name_len = sizeof(struct ofi_ib_ud_ep_name);
 			fab->name_server.service_len = sizeof(int);

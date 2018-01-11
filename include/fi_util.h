@@ -728,11 +728,11 @@ typedef int(*ofi_ns_service_cmp_func_t)(void *svc1, void *svc2);
 typedef int(*ofi_ns_is_service_wildcard_func_t)(void *svc);
 
 struct util_ns {
-	pthread_t	ns_thread;
-	RbtHandle	ns_map;
+	pthread_t	thread;
+	RbtHandle	map;
 
-	char		*ns_hostname;
-	int		ns_port;
+	char		*hostname;
+	int		port;
 
 	size_t		name_len;
 	size_t		service_len;

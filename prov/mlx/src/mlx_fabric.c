@@ -149,8 +149,8 @@ int mlx_ns_start ()
 		return -FI_EINVAL;
 	}
 
-	mlx_descriptor.name_serv.ns_hostname = mlx_descriptor.localhost;
-	mlx_descriptor.name_serv.ns_port = (int) mlx_descriptor.ns_port;
+	mlx_descriptor.name_serv.hostname = mlx_descriptor.localhost;
+	mlx_descriptor.name_serv.port = (int) mlx_descriptor.ns_port;
 	mlx_descriptor.name_serv.name_len = FI_MLX_MAX_NAME_LEN;
 	mlx_descriptor.name_serv.service_len = sizeof(short);
 	mlx_descriptor.name_serv.service_cmp = mlx_ns_service_cmp;

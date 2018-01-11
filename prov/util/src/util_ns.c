@@ -88,13 +88,13 @@ const size_t cmd_len = sizeof(struct util_ns_cmd);
 
 static int util_ns_map_init(struct util_ns *ns)
 {
-	ns->ns_map = rbtNew(ns->service_cmp);
-	return ns->ns_map ? 0 : -FI_ENOMEM;
+	ns->map = rbtNew(ns->service_cmp);
+	return ns->map ? 0 : -FI_ENOMEM;
 }
 
 static void util_ns_map_fini(struct util_ns *ns)
 {
-	rbtDelete(ns->ns_map);
+	rbtDelete(ns->map);
 }
 
 static int util_ns_map_add(struct util_ns *ns, void *service_in,
@@ -117,12 +117,12 @@ static int util_ns_map_add(struct util_ns *ns, void *service_in,
 	}
 	memcpy(name, name_in, ns->name_len);
 
-	if (rbtFind(ns->ns_map, service)) {
+	if (rbtFind(ns->map, service)) {
 		ret = -FI_EADDRINUSE;
 		goto err3;
 	}
 
-	if (rbtInsert(ns->ns_map, service, name)) {
+	if (rbtInsert(ns->map, service, name)) {
 		ret = -FI_ENOMEM;
 		goto err3;
 	}
@@ -143,14 +143,14 @@ static int util_ns_map_del(struct util_ns *ns, void *service_in,
 	int ret = -FI_ENOENT;
 	void *service, *name;
 
-        it = rbtFind(ns->ns_map, service_in);
+        it = rbtFind(ns->map, service_in);
         if (it) {
-		rbtKeyValue(ns->ns_map, it, &service, &name);
+		rbtKeyValue(ns->map, it, &service, &name);
 		if (memcmp(name, name_in, ns->name_len))
 			return ret;
 		free(service);
 		free(name);
-		rbtErase(ns->ns_map, it);
+		rbtErase(ns->map, it);
 		ret = FI_SUCCESS;
 	}
 
@@ -163,11 +163,11 @@ static int util_ns_map_lookup(struct util_ns *ns, void *service_in,
 	RbtIterator it;
 	void *key, *name;
 
-        it = rbtFind(ns->ns_map, service_in);
+        it = rbtFind(ns->map, service_in);
 	if (!it)
 		return -FI_ENOENT;
 
-	rbtKeyValue(ns->ns_map, it, &key, (void **)&name);
+	rbtKeyValue(ns->map, it, &key, (void **)&name);
 	memcpy(name_out, name, ns->name_len);
 
 	if (ns->is_service_wildcard && ns->is_service_wildcard(service_in))
@@ -276,7 +276,7 @@ static void *util_ns_name_server_func(void *args)
 
 	ns = (struct util_ns *)args;
 
-	if (asprintf(&service, "%d", ns->ns_port) < 0)
+	if (asprintf(&service, "%d", ns->port) < 0)
 		return NULL;
 
 	n = getaddrinfo(NULL, service, &hints, &res);
@@ -352,7 +352,7 @@ static SOCKET util_ns_connect_server(struct util_ns *ns, const char *server)
 	SOCKET sockfd = INVALID_SOCKET;
 	int n;
 
-	if (asprintf(&service, "%d", ns->ns_port) < 0)
+	if (asprintf(&service, "%d", ns->port) < 0)
 		return INVALID_SOCKET;
 
 	n = getaddrinfo(server, service, &hints, &res);
@@ -381,8 +381,7 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 {
 	SOCKET sockfd;
 	int ret;
-	char *server = (ns->ns_hostname ?
-		ns->ns_hostname : OFI_NS_DEFAULT_HOSTNAME);
+	char *server = (ns->hostname ? ns->hostname : OFI_NS_DEFAULT_HOSTNAME);
 	void *write_buf;
 	size_t write_len = 0;
 	struct util_ns_cmd cmd = {
@@ -428,8 +427,8 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 {
 	SOCKET sockfd;
 	int ret;
-	const char *server_hostname = (ns->ns_hostname ?
-		ns->ns_hostname : OFI_NS_DEFAULT_HOSTNAME);
+	const char *server_hostname = (ns->hostname ? ns->hostname :
+					OFI_NS_DEFAULT_HOSTNAME);
 	void *write_buf;
 	size_t write_len = 0;
 	struct util_ns_cmd cmd = {
@@ -545,20 +544,20 @@ void ofi_ns_start_server(struct util_ns *ns)
 	int ret;
 	SOCKET sockfd;
 	int sleep_usec = 1000;
-	char *server_hostname = (ns->ns_hostname ?
-		ns->ns_hostname : OFI_NS_DEFAULT_HOSTNAME);
+	char *server_hostname = (ns->hostname ? ns->hostname :
+				 OFI_NS_DEFAULT_HOSTNAME);
 
 	if ((!ns->is_initialized) || (ofi_atomic_inc32(&ns->ref) > 1))
 		return;
 
-	ret = pthread_create(&ns->ns_thread, NULL,
+	ret = pthread_create(&ns->thread, NULL,
 			     util_ns_name_server_func, (void *)ns);
 	if (ret) {
 		/*
 		 * use the main thread's ID as invalid
 		 * value for the new thread
 		 */
-		ns->ns_thread = pthread_self();
+		ns->thread = pthread_self();
 	}
 
 	/*
@@ -583,11 +582,11 @@ void ofi_ns_stop_server(struct util_ns *ns)
 
 		ns->is_initialized = 0;
 
-		if (pthread_equal(ns->ns_thread, pthread_self()))
+		if (pthread_equal(ns->thread, pthread_self()))
 			return;
 
-		(void) pthread_cancel(ns->ns_thread);
-		(void) pthread_join(ns->ns_thread, NULL);
+		(void) pthread_cancel(ns->thread);
+		(void) pthread_join(ns->thread, NULL);
 	}
 }
 

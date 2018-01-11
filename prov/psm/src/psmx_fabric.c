@@ -105,7 +105,7 @@ int psmx_fabric(struct fi_fabric_attr *attr,
 
 	psmx_get_uuid(fabric_priv->uuid);
 	if (psmx_env.name_server) {
-		fabric_priv->name_server.ns_port = psmx_uuid_to_port(fabric_priv->uuid);
+		fabric_priv->name_server.port = psmx_uuid_to_port(fabric_priv->uuid);
 		fabric_priv->name_server.name_len = sizeof(psm_epid_t);
 		fabric_priv->name_server.service_len = sizeof(int);
 		fabric_priv->name_server.service_cmp = psmx_ns_service_cmp;
