@@ -738,6 +738,7 @@ struct util_ns {
 	size_t		name_len;
 	size_t		service_len;
 
+	int		run;
 	int		is_initialized;
 	ofi_atomic32_t	ref;
 
@@ -746,8 +747,9 @@ struct util_ns {
 };
 
 void ofi_ns_init(struct util_ns *ns);
-void ofi_ns_start_server(struct util_ns *ns);
+int ofi_ns_start_server(struct util_ns *ns);
 void ofi_ns_stop_server(struct util_ns *ns);
+
 int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name);
 int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,

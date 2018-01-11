@@ -86,16 +86,6 @@ struct util_ns_cmd {
 
 const size_t cmd_len = sizeof(struct util_ns_cmd);
 
-static int util_ns_map_init(struct util_ns *ns)
-{
-	ns->map = rbtNew(ns->service_cmp);
-	return ns->map ? 0 : -FI_ENOMEM;
-}
-
-static void util_ns_map_fini(struct util_ns *ns)
-{
-	rbtDelete(ns->map);
-}
 
 static int util_ns_map_add(struct util_ns *ns, void *service_in,
 			   void *name_in)
@@ -176,13 +166,6 @@ static int util_ns_map_lookup(struct util_ns *ns, void *service_in,
 	return FI_SUCCESS;
 }
 
-static void util_ns_name_server_cleanup(void *args)
-{
-	void **cleanup_args = (void **)args;
-	ofi_close_socket((uintptr_t)cleanup_args[0]);
-	util_ns_map_fini((struct util_ns *)cleanup_args[1]);
-}
-
 static int util_ns_op_dispatcher(struct util_ns *ns,
 				 struct util_ns_cmd *cmd,
 				 SOCKET sock)
@@ -259,84 +242,91 @@ fn1:
 	return ret;
 }
 
-static void *util_ns_name_server_func(void *args)
+static void util_ns_close_listen(struct util_ns *ns)
 {
-	struct util_ns *ns;
+	ofi_close_socket(ns->listen_sock);
+	ns->listen_sock = INVALID_SOCKET;
+}
+
+/*
+ * We only start one name server among all peer processes.  We rely
+ * on getting an ADDRINUSE error on either bind or listen if another
+ * process has started the name server.
+ */
+static int util_ns_listen(struct util_ns *ns)
+{
 	struct addrinfo hints = {
 		.ai_flags = AI_PASSIVE,
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = SOCK_STREAM
 	};
 	struct addrinfo *res, *p;
-	void *cleanup_args[2];
 	char *service;
-	SOCKET connfd;
-	int n, ret;
-	struct util_ns_cmd cmd = (const struct util_ns_cmd){ 0 };
-
-	ns = (struct util_ns *)args;
+	int n = 1, ret;
 
 	if (asprintf(&service, "%d", ns->port) < 0)
-		return NULL;
+		return -FI_ENOMEM;
 
-	n = getaddrinfo(NULL, service, &hints, &res);
-	if (n < 0) {
-		free(service);
-		return NULL;
-	}
+	ret = getaddrinfo(NULL, service, &hints, &res);
+	free(service);
+	if (ret)
+		return -FI_EADDRNOTAVAIL;
 
 	for (p = res; p; p = p->ai_next) {
 		ns->listen_sock = ofi_socket(p->ai_family, p->ai_socktype,
 					     p->ai_protocol);
-		if (ns->listen_sock != INVALID_SOCKET) {
-			n = 1;
-			(void) setsockopt(ns->listen_sock, SOL_SOCKET,
-					  SO_REUSEADDR, (void *) &n, sizeof(n));
-			if (!bind(ns->listen_sock, p->ai_addr,
-				  (socklen_t) p->ai_addrlen))
-				break;
-			ofi_close_socket(ns->listen_sock);
-			ns->listen_sock = INVALID_SOCKET;
+		if (ns->listen_sock == INVALID_SOCKET)
+			continue;
+
+		(void) setsockopt(ns->listen_sock, SOL_SOCKET, SO_REUSEADDR,
+				  (void *) &n, sizeof(n));
+		ret = bind(ns->listen_sock, p->ai_addr, (socklen_t) p->ai_addrlen);
+		if (!ret)
+			break;
+
+		ret = errno;
+		util_ns_close_listen(ns);
+		if (ret == EADDRINUSE) {
+			freeaddrinfo(res);
+			return -ret;
 		}
 	}
 
 	freeaddrinfo(res);
-	free(service);
 
 	if (ns->listen_sock == INVALID_SOCKET)
-		return NULL;
-
-	if (util_ns_map_init(ns))
-		goto done;
+		return -FI_EADDRNOTAVAIL;
 
 	ret = listen(ns->listen_sock, 256);
-	if (ret)
-		goto done;
-
-	cleanup_args[0] = (void *)(uintptr_t) ns->listen_sock;
-	cleanup_args[1] = (void *)ns;
-	pthread_cleanup_push(util_ns_name_server_cleanup,
-			     (void *)cleanup_args);
-
-	while (1) {
-		connfd = accept(ns->listen_sock, NULL, 0);
-		if (connfd != INVALID_SOCKET) {
-			/* Read service data */
-			ret = util_ns_read_socket_op(connfd, &cmd, cmd_len);
-			if (!ret) {
-				(void) util_ns_op_dispatcher(ns, &cmd, connfd);
-			}
-			ofi_close_socket(connfd);
-		}
+	if (ret) {
+		util_ns_close_listen(ns);
+		ret = -errno;
 	}
 
-	pthread_cleanup_pop(1);
-
-done:
-	ofi_close_socket(ns->listen_sock);
-	return NULL;
+	return ret;
 }
 
+static void *util_ns_accept_handler(void *args)
+{
+	struct util_ns *ns = args;
+	SOCKET conn_sock;
+	struct util_ns_cmd cmd = { 0 };
+	int ret;
+
+	while (ns->run) {
+		conn_sock = accept(ns->listen_sock, NULL, 0);
+		if (conn_sock == INVALID_SOCKET)
+			break;
+
+		ret = util_ns_read_socket_op(conn_sock, &cmd, cmd_len);
+		if (!ret)
+			util_ns_op_dispatcher(ns, &cmd, conn_sock);
+
+		ofi_close_socket(conn_sock);
+	}
+
+	return NULL;
+}
 
 /*
  * Name server API: client side
@@ -536,55 +526,69 @@ err1:
  * Name server API: server side
  */
 
-void ofi_ns_start_server(struct util_ns *ns)
+int ofi_ns_start_server(struct util_ns *ns)
 {
 	int ret;
-	SOCKET sockfd;
-	int sleep_usec = 1000;
 
-	if ((!ns->is_initialized) || (ofi_atomic_inc32(&ns->ref) > 1))
-		return;
+	assert(ns->is_initialized);
+	if (ofi_atomic_inc32(&ns->ref) > 1)
+		return 0;
 
-	ret = pthread_create(&ns->thread, NULL,
-			     util_ns_name_server_func, (void *)ns);
+	ns->map = rbtNew(ns->service_cmp);
+	if (!ns->map) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+
+	ret = util_ns_listen(ns);
 	if (ret) {
-		/*
-		 * use the main thread's ID as invalid
-		 * value for the new thread
-		 */
-		ns->thread = pthread_self();
+		/* EADDRINUSE likely indicates a peer is running the NS */
+		if (ret == -FI_EADDRINUSE) {
+			rbtDelete(ns->map);
+			return 0;
+		}
+		goto err2;
 	}
 
-	/*
-	 * Wait for the local name server to come up. It could be the thread
-	 * created above, or the thread created by another process on the same
-	 * node. The total wait time is about (1+2+4+...+8192)ms = 16 seconds.
-	 */
-	while (sleep_usec < 10000) {
-		sockfd = util_ns_connect_server(ns, ns->hostname);
-		if (sockfd != INVALID_SOCKET) {
-			ofi_close_socket(sockfd);
-			return;
-		}
-		usleep(sleep_usec);
-		sleep_usec *= 2;
-	}
+	ns->run = 1;
+	ret = -pthread_create(&ns->thread, NULL,
+			      util_ns_accept_handler, (void *) ns);
+	if (ret)
+		goto err3;
+
+	return 0;
+
+err3:
+	ns->run = 0;
+	util_ns_close_listen(ns);
+err2:
+	rbtDelete(ns->map);
+err1:
+	ofi_atomic_dec32(&ns->ref);
+	return ret;
 }
 
 void ofi_ns_stop_server(struct util_ns *ns)
 {
-	if (ns->is_initialized && !ofi_atomic_dec32(&ns->ref)) {
+	SOCKET sock;
 
-		ns->is_initialized = 0;
+	assert(ns->is_initialized);
 
-		if (pthread_equal(ns->thread, pthread_self()))
-			return;
+	if (ofi_atomic_dec32(&ns->ref))
+		return;
 
-		(void) pthread_cancel(ns->thread);
-		(void) pthread_join(ns->thread, NULL);
-	}
+	if (ns->listen_sock == INVALID_SOCKET)
+		return;
+
+	ns->run = 0;
+	sock = util_ns_connect_server(ns, ns->hostname);
+	ofi_close_socket(sock);
+	util_ns_close_listen(ns);
+	(void) pthread_join(ns->thread, NULL);
+	rbtDelete(ns->map);
 }
 
+/* TODO: This isn't thread safe -- neither are start/stop */
 void ofi_ns_init(struct util_ns *ns)
 {
 	assert(ns && ns->name_len && ns->service_len && ns->service_cmp);
