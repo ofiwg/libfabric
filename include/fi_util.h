@@ -728,35 +728,23 @@ typedef int(*ofi_ns_service_cmp_func_t)(void *svc1, void *svc2);
 typedef int(*ofi_ns_is_service_wildcard_func_t)(void *svc);
 
 struct util_ns {
+	pthread_t	ns_thread;
 	RbtHandle	ns_map;
+
 	char		*ns_hostname;
 	int		ns_port;
-	pthread_t	ns_thread;
 
-	size_t	name_len;
-	size_t	service_len;
+	size_t		name_len;
+	size_t		service_len;
 
-	int			is_initialized;
-	ofi_atomic32_t		ref;
+	int		is_initialized;
+	ofi_atomic32_t	ref;
 
 	ofi_ns_service_cmp_func_t	service_cmp;
-
 	ofi_ns_is_service_wildcard_func_t is_service_wildcard;
 };
 
-struct util_ns_attr {
-	char	*ns_hostname;
-	int	ns_port;
-
-	size_t	name_len;
-	size_t	service_len;
-
-	ofi_ns_service_cmp_func_t	service_cmp;
-
-	ofi_ns_is_service_wildcard_func_t is_service_wildcard;
-};
-
-int ofi_ns_init(struct util_ns_attr *attr, struct util_ns *ns);
+void ofi_ns_init(struct util_ns *ns);
 void ofi_ns_start_server(struct util_ns *ns);
 void ofi_ns_stop_server(struct util_ns *ns);
 int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name);

@@ -591,26 +591,12 @@ void ofi_ns_stop_server(struct util_ns *ns)
 	}
 }
 
-int ofi_ns_init(struct util_ns_attr *attr, struct util_ns *ns)
+void ofi_ns_init(struct util_ns *ns)
 {
-	if (!ns || !attr || !attr->name_len ||
-	    !attr->service_len || !attr->service_cmp)
-		return -FI_EINVAL;
+	assert(ns && ns->name_len && ns->service_len && ns->service_cmp);
 
-	if (ns->is_initialized)
-		return FI_SUCCESS;
-	else
+	if (!ns->is_initialized) {
 		ofi_atomic_initialize32(&ns->ref, 0);
-
-	ns->is_initialized = 1;
-
-	ns->name_len = attr->name_len;
-	ns->service_len = attr->service_len;
-	ns->service_cmp = attr->service_cmp;
-	ns->is_service_wildcard = attr->is_service_wildcard;
-	ns->ns_port = attr->ns_port;
-	if (attr->ns_hostname)
-		ns->ns_hostname = strdup(attr->ns_hostname);
-
-	return FI_SUCCESS;
+		ns->is_initialized = 1;
+	}
 }
