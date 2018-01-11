@@ -106,6 +106,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->inject_pool_offset = inject_pool_offset;
 	(*smr)->peer_addr_offset = peer_addr_offset;
 	(*smr)->name_offset = name_offset;
+	(*smr)->cmd_cnt = attr->rx_count;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), attr->rx_count);
 	smr_resp_queue_init(smr_resp_queue(*smr), attr->tx_count);
