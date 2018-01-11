@@ -557,6 +557,7 @@
     <ClInclude Include="include\fi_atom.h" />
     <ClInclude Include="include\ofi_atomic.h" />
     <ClInclude Include="include\ofi_mr.h" />
+    <ClInclude Include="include\ofi_net.h" />
     <ClInclude Include="include\fi_enosys.h" />
     <ClInclude Include="include\fi_file.h" />
     <ClInclude Include="include\fi_indexer.h" />

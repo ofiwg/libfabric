@@ -135,6 +135,7 @@ src_libfabric_la_SOURCES =			\
 	include/fi_util.h			\
 	include/ofi_atomic.h			\
 	include/ofi_mr.h			\
+	include/ofi_net.h			\
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -49,6 +49,7 @@
 #include <fi_lock.h>
 #include <fi_atom.h>
 #include <fi_mem.h>
+#include <ofi_net.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/providers/fi_log.h>
 
@@ -63,38 +64,6 @@ extern "C" {
 #endif
 
 #define OFI_CORE_PROV_ONLY	(1ULL << 59)
-
-/*
- * OS X doesn't have __BYTE_ORDER, Linux usually has BYTE_ORDER but not under
- * all features.h flags
- */
-#if !defined(BYTE_ORDER)
-#  if defined(__BYTE_ORDER) && \
-      defined(__LITTLE_ENDIAN) && \
-      defined(__BIG_ENDIAN)
-#    define BYTE_ORDER __BYTE_ORDER
-#    define LITTLE_ENDIAN __LITTLE_ENDIAN
-#    define BIG_ENDIAN __BIG_ENDIAN
-#  else
-#    error "cannot determine endianness!"
-#  endif
-#endif
-
-#if BYTE_ORDER == LITTLE_ENDIAN
-#ifndef htonll
-static inline uint64_t htonll(uint64_t x) { return bswap_64(x); }
-#endif
-#ifndef ntohll
-static inline uint64_t ntohll(uint64_t x) { return bswap_64(x); }
-#endif
-#else
-#ifndef htonll
-static inline uint64_t htonll(uint64_t x) { return x; }
-#endif
-#ifndef ntohll
-static inline uint64_t ntohll(uint64_t x) { return x; }
-#endif
-#endif
 
 #define sizeof_field(type, field) sizeof(((type *)0)->field)
 
@@ -177,108 +146,11 @@ int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
 
-/*
- * Address utility functions
- */
-
-#ifndef AF_IB
-#define AF_IB 27
-#endif
-
-#define ofi_sa_family(addr) ((struct sockaddr *)(addr))->sa_family
-#define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
-#define ofi_sin_port(addr) (((struct sockaddr_in *)(addr))->sin_port)
-
-#define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
-#define ofi_sin6_port(addr) (((struct sockaddr_in6 *)(addr))->sin6_port)
-
-#define OFI_ADDRSTRLEN (INET6_ADDRSTRLEN + 50)
 
 #define OFI_ENUM_VAL(X) X
 #define OFI_STR(X) #X
 #define OFI_STR_INT(X) OFI_STR(X)
 
-static inline size_t ofi_sizeofaddr(const struct sockaddr *addr)
-{
-	switch (addr->sa_family) {
-	case AF_INET:
-		return sizeof(struct sockaddr_in);
-	case AF_INET6:
-		return sizeof(struct sockaddr_in6);
-	default:
-		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format");
-		assert(0);
-		return 0;
-	}
-}
-
-static inline int ofi_equals_ipaddr(const struct sockaddr_in *addr1,
-				    const struct sockaddr_in *addr2)
-{
-        return (addr1->sin_addr.s_addr == addr2->sin_addr.s_addr);
-}
-
-static inline int ofi_equals_sockaddr(const struct sockaddr_in *addr1,
-				      const struct sockaddr_in *addr2)
-{
-        return (ofi_equals_ipaddr(addr1, addr2) &&
-        	(addr1->sin_port == addr2->sin_port));
-}
-
-static inline int ofi_translate_addr_format(int family)
-{
-	switch (family) {
-	case AF_INET:
-		return FI_SOCKADDR_IN;
-	case AF_INET6:
-		return FI_SOCKADDR_IN6;
-	case AF_IB:
-		return FI_SOCKADDR_IB;
-	default:
-		return FI_FORMAT_UNSPEC;
-	}
-}
-
-static inline int ofi_get_sa_family(uint32_t addr_format)
-{
-	switch (addr_format) {
-	case FI_SOCKADDR_IN:
-		return AF_INET;
-	case FI_SOCKADDR_IN6:
-		return AF_INET6;
-	case FI_SOCKADDR_IB:
-		return AF_IB;
-	default:
-		return 0;
-	}
-}
-
-const char *ofi_straddr(char *buf, size_t *len,
-			uint32_t addr_format, const void *addr);
-
-/* Returns allocated address to caller.  Caller must free.  */
-int ofi_str_toaddr(const char *str, uint32_t *addr_format,
-		   void **addr, size_t *len);
-
-int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
-		const struct sockaddr *sa2);
-void ofi_straddr_log_internal(const char *func, int line,
-			      const struct fi_provider *prov,
-			      enum fi_log_level level,
-			      enum fi_log_subsys subsys, char *log_str,
-			      const void *addr);
-
-#define ofi_straddr_log(...) \
-	ofi_straddr_log_internal(__func__, __LINE__, __VA_ARGS__)
-
-#if ENABLE_DEBUG
-#define ofi_straddr_dbg(prov, subsystem, ...) \
-	ofi_straddr_log(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
-#else
-#define ofi_straddr_dbg(prov, subsystem, ...) do {} while(0)
-#endif
-
-int ofi_is_any_addr(struct sockaddr *sa);
 
 /*
  * Key Index
@@ -314,7 +186,6 @@ static inline uint64_t ofi_key2idx(struct ofi_key_idx *key_idx, uint64_t key)
 	return key & ((1ULL << key_idx->idx_bits) - 1);
 }
 
-int ofi_getifaddrs(struct ifaddrs **ifap);
 
 #ifdef __cplusplus
 }
