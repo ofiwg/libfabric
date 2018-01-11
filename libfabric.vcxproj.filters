@@ -294,9 +294,6 @@
     <ClCompile Include="src\iov.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\rxm\src\rxm.c">
-      <Filter>Source Files\prov\rxm\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\netdir\src\netdir_addr.c">
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>

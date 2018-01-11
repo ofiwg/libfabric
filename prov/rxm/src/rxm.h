@@ -374,8 +374,41 @@ void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool);
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf);
 
-struct rxm_tx_entry *rxm_tx_entry_get(struct rxm_send_queue *queue);
-struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue);
+#define rxm_entry_pop(queue, entry)			\
+	do {						\
+		fastlock_acquire(&queue->lock);		\
+		entry = freestack_isempty(queue->fs) ?	\
+			NULL : freestack_pop(queue->fs);\
+		fastlock_release(&queue->lock);		\
+	} while (0)
 
-void rxm_tx_entry_release(struct rxm_send_queue *queue, struct rxm_tx_entry *entry);
-void rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry);
+#define rxm_entry_push(queue, entry)			\
+	do {						\
+		fastlock_acquire(&queue->lock);		\
+		freestack_push(queue->fs, entry);	\
+		fastlock_release(&queue->lock);		\
+	} while (0)
+
+#define RXM_DEFINE_QUEUE_ENTRY(type, queue_type)				\
+static inline struct rxm_ ## type ## _entry *					\
+rxm_ ## type ## _entry_get(struct rxm_ ## queue_type ## _queue *queue)		\
+{										\
+	struct rxm_ ## type ## _entry *entry;					\
+	rxm_entry_pop(queue, entry);						\
+	if (!entry) {								\
+		FI_WARN(&rxm_prov, FI_LOG_CQ,					\
+			"Exhausted " #type "_entry freestack\n");		\
+		return NULL;							\
+	}									\
+	return entry;								\
+}										\
+										\
+static inline void								\
+rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
+			       struct rxm_ ## type ## _entry *entry)		\
+{										\
+	rxm_entry_push(queue, entry);						\
+}
+
+RXM_DEFINE_QUEUE_ENTRY(tx, send);
+RXM_DEFINE_QUEUE_ENTRY(recv, recv);
