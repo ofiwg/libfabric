@@ -394,7 +394,6 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 		fastlock_release(&pool->lock);
 		return NULL;
 	}
-	memset(buf, 0, sizeof(*buf));
 	fastlock_release(&pool->lock);
 	return buf;
 }
@@ -411,7 +410,6 @@ struct rxm_buf *rxm_buf_get_ex(struct rxm_buf_pool *pool)
 		fastlock_release(&pool->lock);
 		return NULL;
 	}
-	memset(buf, 0, sizeof(*buf));
 	fastlock_release(&pool->lock);
 	buf->desc = fi_mr_desc((struct fid_mr *)mr);
 	return buf;
