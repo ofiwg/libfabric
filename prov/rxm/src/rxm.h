@@ -368,7 +368,6 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
 int ofi_match_addr(fi_addr_t addr, fi_addr_t match_addr);
 int ofi_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag);
-void rxm_pkt_init(struct rxm_pkt *pkt);
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);

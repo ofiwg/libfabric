@@ -419,10 +419,11 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	tx_entry->context 	= rx_buf;
 	tx_entry->tx_buf 	= tx_buf;
 
-	rxm_pkt_init(&tx_buf->pkt);
+	tx_buf->pkt.ctrl_hdr.version	= OFI_CTRL_VERSION;
 	tx_buf->pkt.ctrl_hdr.type 	= ofi_ctrl_ack;
 	tx_buf->pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	tx_buf->pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
+	tx_buf->pkt.hdr.version		= OFI_OP_VERSION;
 	tx_buf->pkt.hdr.op 		= rx_buf->pkt.hdr.op;
 
 	ret = fi_send(rx_buf->conn->msg_ep, &tx_buf->pkt, sizeof(tx_buf->pkt),

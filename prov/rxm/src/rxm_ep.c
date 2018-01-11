@@ -581,13 +581,6 @@ static void rxm_op_hdr_process_flags(struct ofi_op_hdr *hdr, uint64_t flags,
 		hdr->flags |= OFI_DELIVERY_COMPLETE;
 }
 
-void rxm_pkt_init(struct rxm_pkt *pkt)
-{
-	memset(pkt, 0, sizeof(*pkt));
-	pkt->ctrl_hdr.version = OFI_CTRL_VERSION;
-	pkt->hdr.version = OFI_OP_VERSION;
-}
-
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
 {
 	int ret;
@@ -689,8 +682,9 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	pkt = &tx_buf->pkt;
 
-	rxm_pkt_init(pkt);
+	pkt->ctrl_hdr.version = OFI_CTRL_VERSION;
 	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	pkt->hdr.version = OFI_OP_VERSION;
 	pkt->hdr.op = op;
 	pkt->hdr.size = ofi_total_iov_len(iov, count);
 	rxm_op_hdr_process_flags(&pkt->hdr, flags, data);
