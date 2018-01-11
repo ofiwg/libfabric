@@ -764,7 +764,7 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		}
 
 		pkt_size = sizeof(*pkt) + size;
-		RXM_LOG_STATE_TX(FI_LOG_EP_DATA, tx_entry, RXM_LMT_TX);
+		RXM_LOG_STATE(FI_LOG_EP_DATA, tx_entry->tx_buf->pkt, RXM_TX, RXM_LMT_TX);
 		tx_entry->state = RXM_LMT_TX;
 	} else {
 		pkt->ctrl_hdr.type = ofi_ctrl_data;

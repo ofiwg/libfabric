@@ -154,7 +154,6 @@ struct rxm_rma_iov {
 
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)	\
-	FUNC(RXM_NONE),		\
 	FUNC(RXM_TX_NOBUF),	\
 	FUNC(RXM_TX),		\
 	FUNC(RXM_RX),		\

@@ -429,7 +429,6 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 		      tx_buf->hdr.desc, 0, tx_entry);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
-		rx_buf->hdr.state = RXM_NONE;
 		goto err2;
 	}
 	return 0;

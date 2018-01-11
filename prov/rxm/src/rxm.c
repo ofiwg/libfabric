@@ -59,7 +59,6 @@ struct rxm_tx_entry *rxm_tx_entry_get(struct rxm_send_queue *queue)
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Exhausted tx_entry freestack\n");
 		return NULL;
 	}
-	entry->state = RXM_NONE;
 	return entry;
 }
 
