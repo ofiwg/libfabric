@@ -728,6 +728,7 @@ typedef int(*ofi_ns_service_cmp_func_t)(void *svc1, void *svc2);
 typedef int(*ofi_ns_is_service_wildcard_func_t)(void *svc);
 
 struct util_ns {
+	SOCKET		listen_sock;
 	pthread_t	thread;
 	RbtHandle	map;
 

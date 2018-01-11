@@ -270,7 +270,7 @@ static void *util_ns_name_server_func(void *args)
 	struct addrinfo *res, *p;
 	void *cleanup_args[2];
 	char *service;
-	SOCKET listenfd = INVALID_SOCKET, connfd;
+	SOCKET connfd;
 	int n, ret;
 	struct util_ns_cmd cmd = (const struct util_ns_cmd){ 0 };
 
@@ -286,39 +286,40 @@ static void *util_ns_name_server_func(void *args)
 	}
 
 	for (p = res; p; p = p->ai_next) {
-		listenfd = ofi_socket(p->ai_family, p->ai_socktype,
-				      p->ai_protocol);
-		if (listenfd != INVALID_SOCKET) {
+		ns->listen_sock = ofi_socket(p->ai_family, p->ai_socktype,
+					     p->ai_protocol);
+		if (ns->listen_sock != INVALID_SOCKET) {
 			n = 1;
-			(void) setsockopt(listenfd, SOL_SOCKET,
+			(void) setsockopt(ns->listen_sock, SOL_SOCKET,
 					  SO_REUSEADDR, (void *) &n, sizeof(n));
-			if (!bind(listenfd, p->ai_addr, (socklen_t) p->ai_addrlen))
+			if (!bind(ns->listen_sock, p->ai_addr,
+				  (socklen_t) p->ai_addrlen))
 				break;
-			ofi_close_socket(listenfd);
-			listenfd = INVALID_SOCKET;
+			ofi_close_socket(ns->listen_sock);
+			ns->listen_sock = INVALID_SOCKET;
 		}
 	}
 
 	freeaddrinfo(res);
 	free(service);
 
-	if (listenfd == INVALID_SOCKET)
+	if (ns->listen_sock == INVALID_SOCKET)
 		return NULL;
 
 	if (util_ns_map_init(ns))
 		goto done;
 
-	ret = listen(listenfd, 256);
+	ret = listen(ns->listen_sock, 256);
 	if (ret)
 		goto done;
 
-	cleanup_args[0] = (void *)(uintptr_t)listenfd;
+	cleanup_args[0] = (void *)(uintptr_t) ns->listen_sock;
 	cleanup_args[1] = (void *)ns;
 	pthread_cleanup_push(util_ns_name_server_cleanup,
 			     (void *)cleanup_args);
 
 	while (1) {
-		connfd = accept(listenfd, NULL, 0);
+		connfd = accept(ns->listen_sock, NULL, 0);
 		if (connfd != INVALID_SOCKET) {
 			/* Read service data */
 			ret = util_ns_read_socket_op(connfd, &cmd, cmd_len);
@@ -332,7 +333,7 @@ static void *util_ns_name_server_func(void *args)
 	pthread_cleanup_pop(1);
 
 done:
-	ofi_close_socket(listenfd);
+	ofi_close_socket(ns->listen_sock);
 	return NULL;
 }
 
@@ -596,6 +597,7 @@ void ofi_ns_init(struct util_ns *ns)
 
 	if (!ns->is_initialized) {
 		ofi_atomic_initialize32(&ns->ref, 0);
+		ns->listen_sock = INVALID_SOCKET;
 		ns->is_initialized = 1;
 	}
 }
