@@ -36,7 +36,7 @@
 
 static int hook_eq_std_event(uint32_t event)
 {
-	return ((event >= FI_NOTIFY) && (event <= FI_JOIN_COMPLETE));
+	return event <= FI_JOIN_COMPLETE;
 }
 
 /*
