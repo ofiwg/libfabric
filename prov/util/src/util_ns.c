@@ -53,24 +53,6 @@
 
 #define OFI_NS_DEFAULT_HOSTNAME	"localhost"
 
-#define OFI_NS_SOCKET_OP(op)							\
-static inline									\
-int util_ns_##op##_socket_op(SOCKET sock, void *buf, size_t len)		\
-{										\
-	size_t bytes;								\
-	ssize_t ret;								\
-	for (bytes = 0; bytes < (len); bytes += ret) {				\
-		ret = ofi_##op##_socket((sock),					\
-					(void *)((char *) (buf) + bytes),	\
-					(len) - bytes);				\
-		if (ret <= 0)							\
-			return -1;						\
-	}									\
-	return 0;								\
-}
-
-OFI_NS_SOCKET_OP(write)
-OFI_NS_SOCKET_OP(read)
 
 enum {
 	OFI_UTIL_NS_ADD,
@@ -166,79 +148,67 @@ static int util_ns_map_lookup(struct util_ns *ns, void *service_in,
 	return FI_SUCCESS;
 }
 
-static int util_ns_op_dispatcher(struct util_ns *ns,
+static int util_ns_process_cmd(struct util_ns *ns,
 				 struct util_ns_cmd *cmd,
 				 SOCKET sock)
 {
 	int ret = FI_SUCCESS;
 	size_t io_len = 0;
-	void *io_buf = NULL, *service, *name;
+	void *io_buf, *service, *name;
 
 	switch (cmd->op) {
 	case OFI_UTIL_NS_ADD:
 	case OFI_UTIL_NS_DEL:
 		io_len = ns->name_len + ns->service_len;
 		io_buf = calloc(io_len, 1);
-		if (!io_buf) {
-			ret = -FI_ENOMEM;
-			goto fn1;
-		}
+		if (!io_buf)
+			return -FI_ENOMEM;
 
-		ret = util_ns_read_socket_op(sock, io_buf, io_len);
+		ret = ofi_recvall_socket(sock, io_buf, io_len);
 		if (!ret) {
 			service = io_buf;
-			name = (void *)((char *)io_buf + ns->service_len);
+			name = (char *) io_buf + ns->service_len;
 			ret = (cmd->op == OFI_UTIL_NS_ADD) ?
 			      util_ns_map_add(ns, service, name) :
 			      util_ns_map_del(ns, service, name);
 		} else {
 			ret = -FI_ENODATA;
 		}
-		goto fn2;
-
+		break;
 	case OFI_UTIL_NS_QUERY:
 		io_len = ns->service_len;
-		/* allocate io_buf to be large enough */
-		io_buf = calloc(
-			cmd_len + ns->service_len + ns->name_len, 1
-		);
-		if (!io_buf) {
-			ret = -FI_ENOMEM;
-			goto fn1;
-		}
+		io_buf = calloc(cmd_len + ns->service_len + ns->name_len, 1);
+		if (!io_buf)
+			return -FI_ENOMEM;
 
 		memcpy(io_buf, cmd, cmd_len);
 		cmd = io_buf;
-		service = (char *)io_buf + cmd_len;
-		name = (char *)service + ns->service_len;
+		service = (char *) io_buf + cmd_len;
+		name = (char *) service + ns->service_len;
 
-		ret = util_ns_read_socket_op(sock, service, io_len);
+		ret = ofi_recvall_socket(sock, service, io_len);
 		if (!ret) {
 			cmd->op = OFI_UTIL_NS_ACK;
-			cmd->status = util_ns_map_lookup(
-				ns, service, name
-			);
+			cmd->status = util_ns_map_lookup(ns, service, name);
 		} else {
 			ret = -FI_ENODATA;
-			goto fn2;
+			break;
 		}
 
 		if (!cmd->status)
 			io_len = cmd_len + ns->service_len + ns->name_len;
 		else
 			io_len = cmd_len;
-		ret = !util_ns_write_socket_op(sock, io_buf, io_len) ? FI_SUCCESS : -FI_ENODATA;
-		goto fn2;
+		ret = ofi_sendall_socket(sock, io_buf, io_len) ?
+		      -FI_ENODATA : FI_SUCCESS;
+		break;
 
 	default:
-		ret = -FI_ENODATA;
 		assert(0);
-		goto fn1;
+		return -FI_ENODATA;
 	}
 
-fn2:
 	free(io_buf);
-fn1:
 	return ret;
 }
 
@@ -310,7 +280,7 @@ static void *util_ns_accept_handler(void *args)
 {
 	struct util_ns *ns = args;
 	SOCKET conn_sock;
-	struct util_ns_cmd cmd = { 0 };
+	struct util_ns_cmd cmd;
 	int ret;
 
 	while (ns->run) {
@@ -318,9 +288,9 @@ static void *util_ns_accept_handler(void *args)
 		if (conn_sock == INVALID_SOCKET)
 			break;
 
-		ret = util_ns_read_socket_op(conn_sock, &cmd, cmd_len);
+		ret = ofi_recvall_socket(conn_sock, &cmd, cmd_len);
 		if (!ret)
-			util_ns_op_dispatcher(ns, &cmd, conn_sock);
+			util_ns_process_cmd(ns, &cmd, conn_sock);
 
 		ofi_close_socket(conn_sock);
 	}
@@ -403,8 +373,8 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 		goto err2;
 	}
 
-	ret = !util_ns_write_socket_op(sockfd, write_buf, write_len) ?
-	      FI_SUCCESS : -FI_ENODATA;
+	ret = ofi_sendall_socket(sockfd, write_buf, write_len) ?
+	      -FI_ENODATA : FI_SUCCESS;
 
 	ofi_close_socket(sockfd);
 err2:
@@ -448,8 +418,8 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 		goto err2;
 	}
 
-	ret = !util_ns_write_socket_op(sockfd, write_buf, write_len) ?
-	      FI_SUCCESS : -FI_ENODATA;
+	ret = ofi_sendall_socket(sockfd, write_buf, write_len) ?
+	      -FI_ENODATA : FI_SUCCESS;
 
 	ofi_close_socket(sockfd);
 err2:
@@ -486,8 +456,8 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server, void *service)
 	       ns->service_len);
 	io_len += ns->service_len;
 
-	ret = util_ns_write_socket_op(sockfd, io_buf, io_len);
-	if (ret < 0)
+	ret = ofi_sendall_socket(sockfd, io_buf, io_len);
+	if (ret)
 		goto err3;
 
 	free(io_buf);
@@ -497,21 +467,19 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server, void *service)
 	if (!io_buf)
 		goto err2;
 
-	ret = util_ns_read_socket_op(sockfd, &cmd, cmd_len);
-	if (ret < 0 || cmd.status)
+	ret = ofi_recvall_socket(sockfd, &cmd, cmd_len);
+	if (ret || cmd.status)
 		goto err3;
 
-	ret = util_ns_read_socket_op(sockfd, io_buf, io_len);
+	ret = ofi_recvall_socket(sockfd, io_buf, io_len);
 	if (!ret) {
 		dest_addr = calloc(ns->name_len, 1);
 		if (!dest_addr)
 			goto err3;
 		io_len = 0;
-		memcpy(service, (void *)((char *)io_buf + io_len),
-		       ns->service_len);
+		memcpy(service, (char *) io_buf + io_len, ns->service_len);
 		io_len += ns->service_len;
-		memcpy(dest_addr, (void *)((char *)io_buf + io_len),
-		       ns->name_len);
+		memcpy(dest_addr, (char *) io_buf + io_len, ns->name_len);
 	}
 
 err3:

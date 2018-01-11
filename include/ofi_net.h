@@ -92,6 +92,25 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #endif
 
 
+static inline int ofi_recvall_socket(SOCKET sock, void *buf, size_t len)
+{
+	ssize_t ret;
+
+	ret = ofi_recv_socket(sock, buf, len, MSG_WAITALL);
+	return ret != len;
+}
+
+static inline int ofi_sendall_socket(SOCKET sock, const void *buf, size_t len)
+{
+	size_t sent;
+	ssize_t ret;
+
+	for (sent = 0, ret = 0; (sent < len) && (ret >= 0); sent += ret)
+		ret = ofi_send_socket(sock, ((char *) buf) + sent, len - sent, 0);
+
+	return ret != len;
+}
+
 /*
  * Address utility functions
  */
