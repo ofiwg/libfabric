@@ -179,7 +179,8 @@ static int util_ns_map_lookup(struct util_ns *ns, void *service_in,
 static void util_ns_name_server_cleanup(void *args)
 {
 	void **cleanup_args = (void **)args;
-	ofi_close_socket((uintptr_t)cleanup_args[0]);
+	ofi_close_socket(*((SOCKET *)cleanup_args[0]));
+	*((SOCKET *)cleanup_args[0]) = INVALID_SOCKET;
 	util_ns_map_fini((struct util_ns *)cleanup_args[1]);
 }
 
@@ -312,23 +313,21 @@ static void *util_ns_name_server_func(void *args)
 	if (ret)
 		goto done;
 
-	cleanup_args[0] = (void *)(uintptr_t)listenfd;
+	cleanup_args[0] = &listenfd;
 	cleanup_args[1] = (void *)ns;
 	pthread_cleanup_push(util_ns_name_server_cleanup,
 			     (void *)cleanup_args);
-
 	while (1) {
-		connfd = accept(listenfd, NULL, 0);
-		if (connfd != INVALID_SOCKET) {
-			/* Read service data */
-			ret = util_ns_read_socket_op(connfd, &cmd, cmd_len);
-			if (!ret) {
-				(void) util_ns_op_dispatcher(ns, &cmd, connfd);
-			}
-			ofi_close_socket(connfd);
-		}
+		if (listenfd != INVALID_SOCKET)
+			connfd = accept(listenfd, NULL, 0);
+		else
+			break;
+		/* Read service data */
+		ret = util_ns_read_socket_op(connfd, &cmd, cmd_len);
+		if (!ret)
+			(void) util_ns_op_dispatcher(ns, &cmd, connfd);
+		ofi_close_socket(connfd);
 	}
-
 	pthread_cleanup_pop(1);
 
 done:
