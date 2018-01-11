@@ -551,8 +551,6 @@ void ofi_ns_start_server(struct util_ns *ns)
 	if ((!ns->is_initialized) || (ofi_atomic_inc32(&ns->ref) > 1))
 		return;
 
-	ofi_osd_init();
-
 	ret = pthread_create(&ns->ns_thread, NULL,
 			     util_ns_name_server_func, (void *)ns);
 	if (ret) {
@@ -584,7 +582,6 @@ void ofi_ns_stop_server(struct util_ns *ns)
 	if (ns->is_initialized && !ofi_atomic_dec32(&ns->ref)) {
 
 		ns->is_initialized = 0;
-		ofi_osd_fini();
 
 		if (pthread_equal(ns->ns_thread, pthread_self()))
 			return;
