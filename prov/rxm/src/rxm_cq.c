@@ -237,7 +237,7 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_FINISH);
 	tx_entry->state = RXM_LMT_FINISH;
 
-	if (!OFI_CHECK_MR_LOCAL(tx_entry->ep->rxm_info))
+	if (!tx_entry->ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 
 	ret = rxm_finish_send(tx_entry);
@@ -301,7 +301,7 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 			return -FI_ETRUNC; // TODO copy data and write to CQ error
 		}
 
-		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info)) {
+		if (!rx_buf->ep->rxm_mr_local) {
 			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
 						 rx_buf->recv_entry->count, FI_READ,
 						 rx_buf->mr);
@@ -399,14 +399,14 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->conn);
 
-	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rx_buf->ep->tx_pool);
-	if (!tx_buf) {
+	tx_buf = RXM_TX_BUF_GET(rx_buf->ep);
+	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
 		return -FI_EAGAIN;
 	}
 
 	tx_entry = rxm_tx_entry_get(&rx_buf->ep->send_queue);
-	if (!tx_entry) {
+	if (OFI_UNLIKELY(!tx_entry)) {
 		ret = -FI_EAGAIN;
 		goto err1;
 	}
@@ -504,7 +504,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 
 		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
 		rx_buf->hdr.state = RXM_LMT_FINISH;
-		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info))
+		if (!rx_buf->ep->rxm_mr_local)
 			rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
 		return rxm_finish_recv(rx_buf);
 	default:

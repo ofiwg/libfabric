@@ -59,8 +59,8 @@ static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	msg_rma = *msg;
 	msg_rma.context = tx_entry;
 
-	if (OFI_CHECK_MR_LOCAL(rxm_ep->msg_info)) {
-		if (!OFI_CHECK_MR_LOCAL(rxm_ep->rxm_info)) {
+	if (rxm_ep->msg_mr_local) {
+		if (!rxm_ep->rxm_mr_local) {
 			ret = rxm_ep_msg_mr_regv(rxm_ep, msg->msg_iov,
 						 msg->iov_count,
 						 comp_flags & (FI_WRITE | FI_READ),
@@ -179,7 +179,7 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 					       msg->rma_iov->key);
 	}
 
-	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->tx_pool);
+	tx_buf = RXM_TX_BUF_GET(rxm_ep);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
 		rxm_cq_progress(rxm_ep);

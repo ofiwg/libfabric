@@ -290,7 +290,6 @@ struct rxm_recv_queue {
 struct rxm_buf_pool {
 	struct util_buf_pool *pool;
 	struct dlist_entry buf_list;
-	int local_mr;
 	fastlock_t lock;
 };
 
@@ -304,6 +303,8 @@ struct rxm_ep {
 	int			msg_cq_fd;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
+	int			msg_mr_local;
+	int			rxm_mr_local;
 
 	struct rxm_buf_pool 	tx_pool;
 	struct rxm_buf_pool 	rx_pool;
@@ -371,8 +372,62 @@ void rxm_pkt_init(struct rxm_pkt *pkt);
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
-struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool);
-void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf);
+
+#define RXM_BUF_GET(mr_local, pool)				\
+	(mr_local ? rxm_buf_get_ex(pool) : rxm_buf_get(pool))
+
+#define RXM_TX_BUF_GET(rxm_ep)						\
+	(struct rxm_tx_buf *)RXM_BUF_GET((rxm_ep)->msg_mr_local,	\
+					 &(rxm_ep)->tx_pool)
+
+#define RXM_RX_BUF_GET(rxm_ep)						\
+	(struct rxm_rx_buf *)RXM_BUF_GET((rxm_ep)->msg_mr_local,	\
+					 &(rxm_ep)->rx_pool)
+
+static inline
+struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
+{
+	struct rxm_buf *buf;
+
+	fastlock_acquire(&pool->lock);
+	buf = util_buf_alloc(pool->pool);
+	if (OFI_UNLIKELY(!buf)) {
+		fastlock_release(&pool->lock);
+		return NULL;
+	}
+	memset(buf, 0, sizeof(*buf));
+	dlist_insert_tail(&buf->entry, &pool->buf_list);
+	fastlock_release(&pool->lock);
+	return buf;
+}
+
+static inline
+struct rxm_buf *rxm_buf_get_ex(struct rxm_buf_pool *pool)
+{
+	struct rxm_buf *buf;
+	void *mr;
+
+	fastlock_acquire(&pool->lock);
+	buf = util_buf_alloc_ex(pool->pool, (void **)&mr);
+	if (OFI_UNLIKELY(!buf)) {
+		fastlock_release(&pool->lock);
+		return NULL;
+	}
+	memset(buf, 0, sizeof(*buf));
+	dlist_insert_tail(&buf->entry, &pool->buf_list);
+	fastlock_release(&pool->lock);
+	buf->desc = fi_mr_desc((struct fid_mr *)mr);
+	return buf;
+}
+
+static inline
+void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
+{
+	fastlock_acquire(&pool->lock);
+	dlist_remove(&buf->entry);
+	util_buf_release(pool->pool, buf);
+	fastlock_release(&pool->lock);
+}
 
 #define rxm_entry_pop(queue, entry)			\
 	do {						\
