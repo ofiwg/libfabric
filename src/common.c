@@ -186,6 +186,17 @@ int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid, uint64_t
 	return FI_SUCCESS;
 }
 
+int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags)
+{
+	if (!info)
+		return 0;
+
+	if (info->rx_attr && (info->rx_attr->mode & flags))
+		return 1;
+
+	return (info->mode & flags) ? 1 : 0;
+}
+
 uint64_t fi_gettime_ms(void)
 {
 	struct timeval now;
