@@ -172,6 +172,7 @@ int ofi_rma_initiate_allowed(uint64_t caps);
 int ofi_rma_target_allowed(uint64_t caps);
 int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid,
 		      uint64_t flags);
+int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
 
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
