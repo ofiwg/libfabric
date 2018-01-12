@@ -113,17 +113,40 @@ extern struct fi_provider psmx2_prov;
 						tag32 |= ((seq << 16) & PSMX2_SEQ_BITS); \
 					} while (0)
 
+/*
+ * psm2_mq_tag_t is a union type of 96 bits. These functions are used to
+ * access the first 64 bits without generating the warning "dereferencing
+ * type-punned pointer will break strict-aliasing rules".
+ *
+ * Notice:
+ * (1) *(uint64_t *)tag96 works, but *(uint64_t *)tag96->tag doesn't;
+ * (2) putting these statements directly inside the macros won't work.
+ */
+__attribute__((always_inline))
+static inline void psmx2_set_tag64(psm2_mq_tag_t *tag96, uint64_t tag64)
+{
+	*(uint64_t *)tag96 = tag64;
+}
+
+__attribute__((always_inline))
+static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
+{
+	return *(uint64_t *)tag96;
+}
+
 #define PSMX2_SET_TAG(tag96,tag64,tag32) do { \
-						tag96.tag0 = (uint32_t)tag64; \
-						tag96.tag1 = (uint32_t)(tag64>>32); \
+						psmx2_set_tag64(&(tag96),(tag64)); \
 						tag96.tag2 = tag32; \
 					} while (0)
 
-#define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
+#define PSMX2_SET_TAG64(tag96,tag64)	psmx2_set_tag64(&(tag96),(tag64))
+#define PSMX2_GET_TAG64(tag96)		psmx2_get_tag64(&(tag96))
 
-/* When using the long RMA protocol, set a bit in the unused SEQ bits to
+/*
+ * When using the long RMA protocol, set a bit in the unused SEQ bits to
  * indicate whether or not the operation is a read or a write. This prevents tag
- * collisions. */
+ * collisions.
+ */
 #define PSMX2_TAG32_LONG_WRITE(tag32) PSMX2_TAG32_SET_SEQ(tag32, 0x1)
 #define PSMX2_TAG32_LONG_READ(tag32)  PSMX2_TAG32_SET_SEQ(tag32, 0x2)
 

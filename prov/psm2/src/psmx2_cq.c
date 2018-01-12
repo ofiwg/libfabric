@@ -206,8 +206,7 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 		event->cqe.err.flags = flags;
 		event->cqe.err.err = -psmx2_errno(PSMX2_STATUS_ERROR(status));
 		event->cqe.err.prov_errno = PSMX2_STATUS_ERROR(status);
-		event->cqe.err.tag = PSMX2_STATUS_TAG(status).tag0 |
-				     (((uint64_t)PSMX2_STATUS_TAG(status).tag1) << 32);
+		event->cqe.err.tag = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
 		event->cqe.err.olen = PSMX2_STATUS_SNDLEN(status) - PSMX2_STATUS_RCVLEN(status);
 		event->cqe.err.data = data;
 
