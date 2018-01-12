@@ -569,7 +569,7 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 }
 
 static void rxm_op_hdr_process_flags(struct ofi_op_hdr *hdr, uint64_t flags,
-		uint64_t data)
+				     uint64_t data)
 {
 	if (flags & FI_REMOTE_CQ_DATA) {
 		hdr->flags = OFI_REMOTE_CQ_DATA;

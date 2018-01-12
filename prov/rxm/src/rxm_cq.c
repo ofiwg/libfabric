@@ -95,7 +95,7 @@ static void rxm_cq_log_comp(uint64_t flags)
 }
 #endif
 
-int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
+static int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 {
 	int ret;
 
@@ -138,7 +138,7 @@ static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 	return 0;
 }
 
-int rxm_finish_send(struct rxm_tx_entry *tx_entry)
+static int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 {
 	rxm_buf_release(&tx_entry->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
 	return rxm_finish_send_nobuf(tx_entry);
@@ -332,7 +332,7 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 	}
 }
 
-ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_recv_match_attr match_attr;
 	struct dlist_entry *entry;
@@ -419,11 +419,11 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	tx_entry->context 	= rx_buf;
 	tx_entry->tx_buf 	= tx_buf;
 
-	tx_buf->pkt.ctrl_hdr.version	= OFI_CTRL_VERSION;
+	tx_buf->pkt.ctrl_hdr.version    = OFI_CTRL_VERSION;
 	tx_buf->pkt.ctrl_hdr.type 	= ofi_ctrl_ack;
 	tx_buf->pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	tx_buf->pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
-	tx_buf->pkt.hdr.version		= OFI_OP_VERSION;
+	tx_buf->pkt.hdr.version         = OFI_OP_VERSION;
 	tx_buf->pkt.hdr.op 		= rx_buf->pkt.hdr.op;
 
 	ret = fi_send(rx_buf->conn->msg_ep, &tx_buf->pkt, sizeof(tx_buf->pkt),
