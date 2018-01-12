@@ -202,6 +202,7 @@ static int vnic_dev_discover_res(struct vnic_dev *vdev,
 				return -EINVAL;
 			}
 			break;
+		case RES_TYPE_DPKT:
 		case RES_TYPE_MEM:
 		case RES_TYPE_INTR_PBA_LEGACY:
 #ifdef CONFIG_MIPS
@@ -251,10 +252,6 @@ void vnic_dev_upd_res_vaddr(struct vnic_dev *vdev,
 			continue;
 		if (vdev->res[i].bus_addr >= map->bus_addr &&
 			vdev->res[i].bus_addr < map->bus_addr + map->len)
-			/*
-			 * ptr cast is a libfabric-local modification, port to
-			 * Cisco-internal repository is in progress
-			 */
 			vdev->res[i].vaddr = ((uint8_t *)map->vaddr) +
 					(vdev->res[i].bus_addr - map->bus_addr);
 	}
@@ -1764,17 +1761,18 @@ int vnic_dev_classifier(struct vnic_dev *vdev, u8 cmd, u16 *entry, struct filter
 
 	return ret;
 }
-#ifdef ENIC_VXLAN
+
 int vnic_dev_overlay_offload_ctrl(struct vnic_dev *vdev, u8 overlay,
 	u8 config)
 {
 	u64 a0, a1;
 	int wait = 1000;
 	int ret = -EINVAL;
+
 	a0 = overlay;
 	a1 = config;
-	ret = vnic_dev_cmd(vdev, CMD_OVERLAY_OFFLOAD_CTRL,
-		&a0, &a1, wait);
+
+	ret = vnic_dev_cmd(vdev, CMD_OVERLAY_OFFLOAD_CTRL, &a0, &a1, wait);
 
 	return ret;
 }
@@ -1785,8 +1783,10 @@ int vnic_dev_overlay_offload_cfg(struct vnic_dev *vdev, u8 overlay,
 	u64 a0, a1;
 	int wait = 1000;
 	int ret = -EINVAL;
+
 	a0 = overlay;
 	a1 = vxlan_udp_port_number;
+
 	ret = vnic_dev_cmd(vdev, CMD_OVERLAY_OFFLOAD_CFG, &a0, &a1, wait);
 
 	return ret;
@@ -1798,9 +1798,10 @@ int vnic_dev_get_supported_feature_ver(struct vnic_dev *vdev, u8 feature,
 	u64 a0 = feature, a1 = 0;
 	int wait = 1000;
 	int ret = -EINVAL;
+
 	ret = vnic_dev_cmd(vdev, CMD_GET_SUPP_FEATURE_VER, &a0, &a1, wait);
 	if (!ret)
 		*supported_versions = a0;
+
 	return ret;
 }
-#endif

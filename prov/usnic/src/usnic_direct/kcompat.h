@@ -158,6 +158,11 @@
 #define RHEL_RELEASE_VERSION(a, b) 0
 #endif
 
+#define RHEL_RELEASE_VERSION_RANGE(a1, a2, b1, b2)	\
+	(RHEL_RELEASE_CODE &&	\
+	 (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(a1, a2)) &&	\
+	 (RHEL_RELEASE_CODE <= RHEL_RELEASE_VERSION(b1, b2)))
+
 #define SLES_VERSION READ_SLE_VERSION
 #define SLES_PATCHLEVEL READ_SLE_PATCHLEVEL
 
@@ -178,6 +183,16 @@
 #define UBUNTU_PATCHLEVEL 0
 #endif
 
+#if (!RHEL_RELEASE_CODE && (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36))) || \
+    (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 4))
+#define skb_tx_timestamp(skb) do { } while(0)
+#endif /* rhel < 6.4 or kernel < 2.6.36 */
+
+#if !(RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE > RHEL_RELEASE_VERSION(6, 3)) && \
+      (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7, 0)))
+#define set_ethtool_ops_ext(netdev, ops) do { } while(0)
+#endif /* !(rhel > 6.3 && < 7)*/
+
 #define SLES_RELEASE_VERSION(a,b) (((a) << 8) + (b))
 #define SLES_RELEASE_CODE SLES_RELEASE_VERSION(SLES_VERSION, SLES_PATCHLEVEL)
 
@@ -190,11 +205,26 @@
 #define PORT_UUID_MAX  16
 #endif
 
-#if (RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 0)))
-#if IS_ENABLED(CONFIG_VXLAN)
-#define ENIC_VXLAN
-#endif
-#endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0))
+/* definition of from_timer was added in 686fef928bba6be13cabe639f154af7d72b63120
+ * ("timer: Prepare to change timer callback argument type"). At this point of
+ * time we have not moved to new timer api. Undef to prevent warning.
+ */
+#undef from_timer
+#define from_timer(e, t, rfs) ((struct enic *) (t))
+#define enic_timer_setup(timer, fn, enic, flags) setup_timer(timer, fn, (unsigned long)enic)
+#else
+#define enic_timer_setup(timer, fn, enic, flags) timer_setup(timer, fn, flags)
+#endif /* kernel < 4.15 */
+
+#ifndef setup_timer
+#define setup_timer(timer, fn, data)					\
+	do {								\
+		init_timer((timer));					\
+		(timer)->function = (fn);				\
+		(timer)->data = (data);					\
+	} while (0)
+#endif /* setup_timer */
 
 #if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34))
 #if !(RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE > RHEL_RELEASE_VERSION(6, 3)))
@@ -209,11 +239,32 @@
 #define netif_set_xps_queue(a, b, c) do { } while(0)
 #endif /* kernel < 3.9 */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0))
+#if (!RHEL_RELEASE_CODE || (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 6)) ||\
+	(RHEL_RELEASE_CODE == RHEL_RELEASE_VERSION(7, 0)))
+#if (!SLES_RELEASE_CODE || (SLES_RELEASE_CODE < SLES_RELEASE_VERSION(11, 4)) ||\
+	(SLES_RELEASE_CODE == SLES_RELEASE_VERSION(12, 0)))
+static inline int pci_enable_msix_range(struct pci_dev *dev,
+					struct msix_entry *entries, int minvec,
+					int maxvec)
+{
+	int rc;
+
+	rc = pci_enable_msix(dev, entries, maxvec);
+
+	return (rc == 0) ? maxvec : rc;
+}
+#endif
+#endif
+#endif /* kernel < 3.13 */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)) || \
+    (RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 4)))
 #include <net/flow_dissector.h>
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0))
 #include <net/flow_keys.h>
-#else
+#elif !RHEL_RELEASE_CODE ||	\
+      (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 8))
 #include <net/ip.h>
 #include <stdbool.h>
 
@@ -253,10 +304,12 @@ static inline bool skb_flow_dissect(const struct sk_buff *skb, struct flow_keys 
 #endif /*LINUX >= 3.3.0*/
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0))
-#if (!RHEL_RELEASE_CODE || (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7, 2)))
+#if (!RHEL_RELEASE_CODE ||	\
+     (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 8)) ||	\
+     (RHEL_RELEASE_VERSION_RANGE(7, 0, 7, 1)))
 #define skb_vlan_tag_get(skb) vlan_tx_tag_get(skb)
 #define skb_vlan_tag_present(skb) vlan_tx_tag_present(skb)
-#endif /* rhel < 7.2 */
+#endif /* rhel < 6.8 || 7.0 || 7.1 */
 #endif /* kernel < 4.0 */
 
 #if defined(__VMKLNX__)
@@ -320,17 +373,56 @@ enum pkt_hash_types {
 #define enic_hlist_for_each_entry(a, b, c, d) hlist_for_each_entry(a, c, d)
 #endif /*KERNEL_VERSION > 3.9.0 */
 
+#ifndef NETIF_F_GSO_UDP_TUNNEL_CSUM
+#define NETIF_F_GSO_UDP_TUNNEL_CSUM 0
+#endif
+
+#if defined(CONFIG_NET_RX_BUSY_POLL) && (LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 00))
+#define ENIC_BUSY_POLL
+#else
+#define napi_hash_add(napi) do {} while(0)
+#endif
+
 #ifndef CONFIG_NET_RX_BUSY_POLL
 #define napi_hash_del(napi) do {} while(0)
 #define napi_hash_add(napi) do {} while(0)
 #define skb_mark_napi_id(skb, napi) do {} while(0)
-#elif (RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(6, 6)) && (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7, 0)))
+#elif RHEL_RELEASE_VERSION_RANGE(6, 6, 6, 7)
 #define napi_gro_flush(a, b) napi_gro_flush(a)
 #endif /*CONFIG_NET_RX_BUSY_POLL*/
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 00))
 #define __vlan_hwaccel_put_tag(a, b, c) __vlan_hwaccel_put_tag(a, c);
 #endif /* KERNEL < 3.9.0 */
+
+#ifndef IS_ENABLED
+#define IS_ENABLED(x) 0
+#endif
+
+#ifndef BIT_ULL
+#define BIT_ULL(nr)		(1ULL << (nr))
+#endif
+
+/* offload was introduced in 3.12.
+ * Before that CONFIG_VXLAN was only used for
+ * vxlan tunnel code.
+ * For kernel < 3.12 disable CONFIG_VXLAN
+ * Rhel 7.x back ported vxlan offload code into their 3.10 kernel.
+ * exclude this undef for rhel 7.x
+ */
+#if ((LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0)) && \
+     !(RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 0))))
+#undef CONFIG_VXLAN_MODULE
+#define CONFIG_VXLAN_MODULE 0
+#undef CONFIG_VXLAN
+#define CONFIG_VXLAN 0
+#endif
+
+#ifndef NETIF_F_CSUM_MASK
+#define NETIF_F_CSUM_MASK (NETIF_F_HW_CSUM |	\
+			   NETIF_F_IPV6_CSUM |	\
+			   NETIF_F_IP_CSUM)
+#endif
 
 #ifndef __VMKLNX__
 #if ((LINUX_VERSION_CODE <= KERNEL_VERSION(3, 4, 0)) &&		\
@@ -737,6 +829,7 @@ static inline const char *netdev_name(const struct net_device *dev)
 #include <sys/types.h>
 #include <linux/types.h>
 #include <linux_types.h>
+#include <netinet/in.h>
 #include <kcompat_priv.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -755,8 +848,14 @@ static inline const char *netdev_name(const struct net_device *dev)
 #define readl ioread32
 #define writel iowrite32
 
+typedef int gfp_t;
+
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif
+
+#ifndef offsetof
+#define offsetof(t, m) ((size_t) &((t *)0)->m)
 #endif
 
 static inline uint32_t ioread32(const volatile void *addr)

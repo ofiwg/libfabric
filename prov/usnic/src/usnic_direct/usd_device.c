@@ -171,13 +171,18 @@ usd_devid_to_pid(uint32_t vendor_id, uint32_t device_id)
         // Kirkwood Lake
         pid = "UCSC-PCIE-C10T-02";
         break;
-    case 0x12c:
-        // Calistoga MLOM
-        pid = "UCSB-MLOM-40G-03";
-        break;
     case 0x12e:
         // Susanville MLOM
         pid = "UCSC-MLOM-CSC-02";
+        break;
+    case 0x139:
+        // Torrance MLOM
+        pid = "UCSC-MLOM-C10T-02";
+        break;
+
+    case 0x12c:
+        // Calistoga MLOM
+        pid = "UCSB-MLOM-40G-03";
         break;
     case 0x137:
         // Mountain View (Cruz mezz)
@@ -186,10 +191,6 @@ usd_devid_to_pid(uint32_t vendor_id, uint32_t device_id)
     case 0x138:
         // Walnut Creek
         pid = "UCSB-B3116S-LOM";
-        break;
-    case 0x139:
-        // Torrance MLOM
-        pid = "UCSC-MLOM-C10T-02";
         break;
     case 0x14b:
         // Mount Tian
@@ -207,6 +208,40 @@ usd_devid_to_pid(uint32_t vendor_id, uint32_t device_id)
         // Claremont MLOM
         pid = "UCSC-MLOM-C40Q-03";
         break;
+
+    case 0x0218:
+        // Bradbury
+        pid = "UCSC-MLOM-C25Q-04";
+        break;
+    case 0x0217:
+        // Brentwood
+        pid = "UCSC-PCIE-C25Q-04";
+        break;
+    case 0x021a:
+        // Burlingame
+        pid = "UCSC-MLOM-C40Q-04";
+        break;
+    case 0x0219:
+        // Bayside
+        pid = "UCSC-PCIE-C40Q-04";
+        break;
+    case 0x0215:
+        // Bakersfield
+        pid = "UCSB-MLOM-40G-04";
+        break;
+    case 0x0216:
+        // Boonville
+        pid = "UCSB-VIC-M84-4P";
+        break;
+    case 0x024a:
+        // Benicia
+        pid = "UCSC-PCIE-C100-04";
+        break;
+    case 0x024b:
+        // Beaumont
+        pid = "UCSC-MLOM-C100-04";
+        break;
+
     default:
         pid = "Unknown Cisco Device";
         break;
@@ -244,13 +279,18 @@ usd_devid_to_nicname(uint32_t vendor_id, uint32_t device_id)
         // Kirkwood Lake
         nicname = "VIC 1225T";
         break;
-    case 0x12c:
-        // Calistoga MLOM
-        nicname = "VIC 1340";
-        break;
     case 0x12e:
         // Susanville MLOM
         nicname = "VIC 1227";
+        break;
+    case 0x139:
+        // Torrance MLOM
+        nicname = "VIC 1227T";
+        break;
+
+    case 0x12c:
+        // Calistoga MLOM
+        nicname = "VIC 1340";
         break;
     case 0x137:
         // Mountain View (Cruz mezz)
@@ -259,10 +299,6 @@ usd_devid_to_nicname(uint32_t vendor_id, uint32_t device_id)
     case 0x138:
         // Walnut Creek
         nicname = "UCSB-B3116S";
-        break;
-    case 0x139:
-        // Torrance MLOM
-        nicname = "VIC 1227T";
         break;
     case 0x14b:
         // Mount Tian
@@ -280,6 +316,40 @@ usd_devid_to_nicname(uint32_t vendor_id, uint32_t device_id)
         // Claremont MLOM
         nicname = "VIC 1387";
         break;
+
+    case 0x0218:
+        // Bradbury
+        nicname = "VIC 1457";
+        break;
+    case 0x0217:
+        // Brentwood
+        nicname = "VIC 1455";
+        break;
+    case 0x021a:
+        // Burlingame
+        nicname = "VIC 1487";
+        break;
+    case 0x0219:
+        // Bayside
+        nicname = "VIC 1485";
+        break;
+    case 0x0215:
+        // Bakersfield
+        nicname = "VIC 1440";
+        break;
+    case 0x0216:
+        // Boonville
+        nicname = "VIC 1480";
+        break;
+    case 0x024a:
+        // Benicia
+        nicname = "VIC 1495";
+        break;
+    case 0x024b:
+        // Beaumont
+        nicname = "VIC 1497";
+        break;
+
     default:
         nicname = "Unknown Cisco Device";
         break;

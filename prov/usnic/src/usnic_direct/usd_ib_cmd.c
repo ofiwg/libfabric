@@ -623,8 +623,17 @@ usd_ib_cmd_create_qp(
     qfilt = &qp->uq_filter;
     if (qfilt->qf_type == USD_FTY_UDP ||
             qfilt->qf_type == USD_FTY_UDP_SOCK) {
-        ucp->spec.trans_type = USNIC_TRANSPORT_IPV4_UDP;
-        ucp->spec.udp.sock_fd = qfilt->qf_filter.qf_udp.u_sockfd;
+        /*
+         * Command versions 0,1,2 need to fill in the spec_v2 struct.
+         * Newer versions need to fill in the spec struct.
+         */
+        if (ucp->cmd_version <= 2) {
+            ucp->spec_v2.trans_type = USNIC_TRANSPORT_IPV4_UDP;
+            ucp->spec_v2.ip.sock_fd = qfilt->qf_filter.qf_udp.u_sockfd;
+        } else {
+            ucp->spec.trans_type = USNIC_TRANSPORT_IPV4_UDP;
+            ucp->spec.ip.sock_fd = qfilt->qf_filter.qf_udp.u_sockfd;
+        }
     } else {
         ret = -EINVAL;
         goto out;
@@ -871,6 +880,29 @@ usd_ib_cmd_query_port(
 }
 
 /*
+ * For code readability, copy these two enums from kernel
+ * /usr/include/rdma/ib_verbs.h (otherwise, we'd would have to
+ * hard-code the integer values below).
+ */
+enum ib_port_width {
+    IB_WIDTH_1X  = 1,
+    IB_WIDTH_4X  = 2,
+    IB_WIDTH_8X  = 4,
+    IB_WIDTH_12X = 8
+};
+
+enum ib_port_speed {
+    IB_SPEED_SDR   = 1,  // 2.5 Gbps
+    IB_SPEED_DDR   = 2,  // 5 Gbps
+    IB_SPEED_QDR   = 4,  // 10 Gbps
+    IB_SPEED_FDR10 = 8,  // 10.3125 Gbps
+    IB_SPEED_FDR   = 16, // 14.0625 Gbps
+    IB_SPEED_EDR   = 32, // 25.78125 Gbps
+    IB_SPEED_HDR   = 64  // 50 Gbps
+};
+
+
+/*
  * Issue query commands for device and port and interpret the resaults
  */
 int
@@ -898,7 +930,7 @@ usd_ib_query_dev(
         (presp.state == 4) ? USD_LINK_UP : USD_LINK_DOWN;
 
     /*
-     * If link it up derive bandwidth from speed and width.
+     * If link is up, derive bandwidth from speed and width.
      * If link is down, driver reports bad speed, try to deduce from the
      * NIC device ID.
      */
@@ -906,16 +938,30 @@ usd_ib_query_dev(
 #define MKSW(S,W) (((S)<<8)|(W))
         speed = MKSW(presp.active_speed, presp.active_width);
         switch (speed) {
-        case MKSW(2, 2):
-        case MKSW(8, 1):
+        case MKSW(IB_SPEED_FDR10, IB_WIDTH_1X):
+        case MKSW(IB_SPEED_DDR, IB_WIDTH_4X):
             dap->uda_bandwidth = 10000;
             break;
-        case MKSW(8, 2):
-        case MKSW(32, 2):
+        case MKSW(IB_SPEED_QDR, IB_WIDTH_4X):
+            dap->uda_bandwidth = 25000;
+            break;
+        case MKSW(IB_SPEED_FDR10, IB_WIDTH_4X):
             dap->uda_bandwidth = 40000;
             break;
+        case MKSW(IB_SPEED_HDR, IB_WIDTH_1X):
+            dap->uda_bandwidth = 50000;
+            break;
+        case MKSW(IB_SPEED_EDR, IB_WIDTH_4X):
+            dap->uda_bandwidth = 100000;
+            break;
+        case MKSW(IB_SPEED_HDR, IB_WIDTH_4X):
+            dap->uda_bandwidth = 200000;
+            break;
+        case MKSW(IB_SPEED_HDR, IB_WIDTH_8X):
+            dap->uda_bandwidth = 400000;
+            break;
         default:
-            printf("Warning: unrecognized speed/width %d/%d, assuming 10G\n",
+            printf("Warning: unrecognized speed/width %d/%d, defaulting to 10G\n",
                    presp.active_speed, presp.active_width);
             dap->uda_bandwidth = 10000;
             break;
