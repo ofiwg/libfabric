@@ -172,6 +172,7 @@ int ofi_rma_initiate_allowed(uint64_t caps);
 int ofi_rma_target_allowed(uint64_t caps);
 int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid,
 		      uint64_t flags);
+int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
 
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
@@ -197,11 +198,18 @@ uint64_t fi_gettime_us(void);
 #define OFI_STR(X) #X
 #define OFI_STR_INT(X) OFI_STR(X)
 
-static inline size_t ofi_sizeofaddr(const struct sockaddr *address)
+static inline size_t ofi_sizeofaddr(const struct sockaddr *addr)
 {
-	return (address->sa_family == AF_INET ?
-		sizeof(struct sockaddr_in) :
-		sizeof(struct sockaddr_in6));
+	switch (addr->sa_family) {
+	case AF_INET:
+		return sizeof(struct sockaddr_in);
+	case AF_INET6:
+		return sizeof(struct sockaddr_in6);
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format");
+		assert(0);
+		return 0;
+	}
 }
 
 static inline int ofi_equals_ipaddr(const struct sockaddr_in *addr1,
@@ -269,6 +277,8 @@ void ofi_straddr_log_internal(const char *func, int line,
 #else
 #define ofi_straddr_dbg(prov, subsystem, ...) do {} while(0)
 #endif
+
+int ofi_is_any_addr(struct sockaddr *sa);
 
 /*
  * Key Index

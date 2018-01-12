@@ -41,7 +41,6 @@
 
 #define VERBS_IB_PREFIX "IB-0x"
 #define VERBS_IWARP_FABRIC "Ethernet-iWARP"
-#define VERBS_ANY_FABRIC "Any RDMA fabric"
 
 #define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
@@ -1170,14 +1169,45 @@ static int fi_ibv_set_default_info(struct fi_info *info)
 	return 0;
 }
 
+static struct fi_info *fi_ibv_get_passive_info(const struct fi_info *prov_info,
+					       const struct fi_info *hints)
+{
+	struct fi_info *info;
+
+	if (!(info = fi_dupinfo(hints)))
+		return NULL;
+
+	info->mode = prov_info->mode;
+	info->tx_attr->mode = prov_info->tx_attr->mode;
+	info->rx_attr->mode = prov_info->rx_attr->mode;
+	info->ep_attr->type = prov_info->ep_attr->type;
+
+	info->domain_attr->domain 	= prov_info->domain_attr->domain;
+	if (!info->domain_attr->name)
+		info->domain_attr->name = strdup(VERBS_ANY_DOMAIN);
+	info->domain_attr->mr_mode 	= prov_info->domain_attr->mr_mode;
+	info->domain_attr->mode 	= prov_info->domain_attr->mode;
+
+	info->fabric_attr->fabric = prov_info->fabric_attr->fabric;
+	if (!info->fabric_attr->name)
+		info->fabric_attr->name = strdup(VERBS_ANY_FABRIC);
+
+	/* prov_name is set by libfabric core */
+	free(info->fabric_attr->prov_name);
+	info->fabric_attr->prov_name = NULL;
+	return info;
+}
+
 static int fi_ibv_get_matching_info(uint32_t version,
 				    const struct fi_info *hints,
 				    struct fi_info **info,
-				    const struct fi_info *verbs_info)
+				    const struct fi_info *verbs_info,
+				    uint8_t is_any_addr)
 {
 	const struct fi_info *check_info = verbs_info;
 	struct fi_info *fi, *tail;
 	int ret;
+	uint8_t got_passive_info = 0;
 
 	*info = tail = NULL;
 
@@ -1191,15 +1221,25 @@ static int fi_ibv_get_matching_info(uint32_t version,
 				continue;
 		}
 
-		if (!(fi = fi_dupinfo(check_info))) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
+		if ((check_info->ep_attr->type == FI_EP_MSG) && is_any_addr) {
+			if (got_passive_info)
+				continue;
 
-		ret = fi_ibv_set_default_info(fi);
-		if (ret) {
-			fi_freeinfo(fi);
-			continue;
+			if (!(fi = fi_ibv_get_passive_info(check_info, hints))) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
+			got_passive_info = 1;
+		} else {
+			if (!(fi = fi_dupinfo(check_info))) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
+			ret = fi_ibv_set_default_info(fi);
+			if (ret) {
+				fi_freeinfo(fi);
+				continue;
+			}
 		}
 
 		if (!*info)
@@ -1375,6 +1415,31 @@ fn:
 	return ret;
 }
 
+static int fi_ibv_port_is_set(void *addr)
+{
+	if (!addr)
+		return 0;
+
+	switch (ofi_sa_family(addr)) {
+	case AF_INET:
+		return ofi_sin_port(addr) ? 1 : 0;
+	case AF_INET6:
+		return ofi_sin6_port(addr) ? 1 : 0;
+	default:
+		VERBS_WARN(FI_LOG_FABRIC, "Unknown address format\n");
+		return 0;
+	}
+}
+
+/* TODO revisit this if and when getinfo is refactored */
+static int fi_ibv_is_any_addr(const char *node, const char *service, const struct fi_info *hints)
+{
+	return (!node && (!hints || !hints->dest_addr) &&
+		((hints && ofi_is_any_addr(hints->src_addr) &&
+		  fi_ibv_port_is_set(hints->src_addr)) || service));
+}
+
+
 static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 				  const char *service, uint64_t flags,
 				  const struct fi_info *hints,
@@ -1383,8 +1448,8 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 {
 	int ret, ret_sock_addr, ret_ib_ud_addr;
 
-	ret = fi_ibv_get_matching_info(version, hints,
-				       info, *raw_info);
+	ret = fi_ibv_get_matching_info(version, hints, info, *raw_info,
+				       fi_ibv_is_any_addr(node, service, hints));
 	if (ret)
 		return ret;
 
@@ -1432,7 +1497,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 
 	ofi_alter_info(*info, hints, version);
 
-	if (!hints || !(hints->mode & FI_RX_CQ_DATA)) {
+	if (!ofi_check_rx_mode(hints, FI_RX_CQ_DATA)) {
 		for (cur = *info; cur; cur = cur->next)
 			cur->domain_attr->cq_data_size = 0;
 	}
