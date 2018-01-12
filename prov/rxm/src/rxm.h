@@ -357,13 +357,15 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
-void rxm_cq_progress(struct rxm_ep *rxm_ep);
 ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
+
+void rxm_ep_progress_one(struct util_ep *util_ep);
+void rxm_ep_progress_multi(struct util_ep *util_ep);
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);

@@ -420,7 +420,7 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Peeking message", addr, tag);
 
-	rxm_cq_progress(rxm_ep);
+	rxm_ep_progress_multi(&rxm_ep->util_ep);
 
 	fastlock_acquire(&recv_queue->lock);
 
@@ -746,7 +746,7 @@ rxm_ep_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 			      tx_buf->hdr.desc, 0, tx_entry);
 		if (OFI_UNLIKELY(ret)) {
 	    		if (ret == -FI_EAGAIN)
-				rxm_cq_progress(rxm_ep);
+				rxm_ep_progress_multi(&rxm_ep->util_ep);
 			else
 				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 					"fi_send for MSG provider failed\n");
@@ -860,7 +860,7 @@ rxm_ep_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		      tx_buf->hdr.desc, 0, tx_entry);
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
-			rxm_cq_progress(rxm_ep);
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
 		else
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"fi_send for MSG provider failed\n");
@@ -1327,14 +1327,17 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 	struct rxm_domain *rxm_domain;
 	struct fi_cq_attr cq_attr = { 0 };
 	int ret;
+	size_t max_prog_val;
 
 	ret = rxm_ep_get_core_info(util_domain->fabric->fabric_fid.api_version,
 				   rxm_fi_info, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
 
-	rxm_ep->comp_per_progress = MIN(rxm_ep->msg_info->tx_attr->size,
-					rxm_ep->msg_info->rx_attr->size) / 2;
+	max_prog_val = MIN(rxm_ep->msg_info->tx_attr->size,
+			   rxm_ep->msg_info->rx_attr->size) / 2;
+	rxm_ep->comp_per_progress = (rxm_ep->comp_per_progress > max_prog_val) ?
+				    max_prog_val : rxm_ep->comp_per_progress;
 
 	rxm_domain = container_of(util_domain, struct rxm_domain, util_domain);
 
@@ -1386,14 +1389,6 @@ err1:
 	return ret;
 }
 
-static void rxm_ep_progress(struct util_ep *util_ep)
-{
-	struct rxm_ep *rxm_ep;
-
-	rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
-	rxm_cq_progress(rxm_ep);
-}
-
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep_fid, void *context)
 {
@@ -1411,10 +1406,22 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 	}
 
-	ret = ofi_endpoint_init(domain, &rxm_util_prov, info, &rxm_ep->util_ep,
-				context, &rxm_ep_progress);
+	if (!fi_param_get_int(&rxm_prov, "comp_per_progress",
+			     (int *)&rxm_ep->comp_per_progress)) {
+		ret = ofi_endpoint_init(domain, &rxm_util_prov,
+					info, &rxm_ep->util_ep,
+					context, &rxm_ep_progress_multi);
+	} else {
+		rxm_ep->comp_per_progress = 1;
+		ret = ofi_endpoint_init(domain, &rxm_util_prov,
+					info, &rxm_ep->util_ep,
+					context, &rxm_ep_progress_one);
+		if (ret)
+			goto err1;
+	}
 	if (ret)
 		goto err1;
+
 
 	util_domain = container_of(domain, struct util_domain, domain_fid);
 

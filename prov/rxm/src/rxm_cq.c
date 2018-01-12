@@ -183,7 +183,7 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 			     struct rxm_iov *match_iov)
 {
 	uint64_t offset = 0;
-	size_t i, j;
+	uint8_t i, j;
 	uint8_t count;
 	int ret;
 
@@ -516,7 +516,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 
 static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 				  struct fi_cq_tagged_entry *comp,
-				  int err)
+				  ssize_t err)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rx_buf *rx_buf;
@@ -533,13 +533,13 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 		if (ret < 0) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to fi_cq_readerr on msg cq\n");
-			err_entry.prov_errno = ret;
+			err_entry.prov_errno = (int)ret;
 			err = ret;
 		} else {
 			op_context = err_entry.op_context;
 		}
 	} else {
-		err_entry.prov_errno = err;
+		err_entry.prov_errno = (int)err;
 	}
 
 	switch (RXM_GET_PROTO_STATE(comp)) {
@@ -568,8 +568,33 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
 
-void rxm_cq_progress(struct rxm_ep *rxm_ep)
+void rxm_ep_progress_one(struct util_ep *util_ep)
 {
+	struct rxm_ep *rxm_ep =
+		container_of(util_ep, struct rxm_ep, util_ep);
+	struct fi_cq_tagged_entry comp;
+	ssize_t ret;
+
+	ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
+	if (ret == -FI_EAGAIN || !ret)
+		return;
+	if (OFI_UNLIKELY(ret < 0))
+		goto err;
+
+	ret = rxm_cq_handle_comp(rxm_ep, &comp);
+	if (OFI_UNLIKELY(ret))
+		goto err;
+
+	return;
+err:
+	if (rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret))
+		assert(0);
+}
+
+void rxm_ep_progress_multi(struct util_ep *util_ep)
+{
+	struct rxm_ep *rxm_ep =
+		container_of(util_ep, struct rxm_ep, util_ep);
 	struct fi_cq_tagged_entry comp;
 	ssize_t ret;
 	size_t comp_read = 0;
@@ -577,23 +602,21 @@ void rxm_cq_progress(struct rxm_ep *rxm_ep)
 	do {
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
 		if (ret == -FI_EAGAIN)
-			break;
-
-		if (ret < 0)
+			return;
+		if (OFI_UNLIKELY(ret < 0))
 			goto err;
-
 		if (ret) {
-			comp_read += (size_t)ret;
 			ret = rxm_cq_handle_comp(rxm_ep, &comp);
-			if (ret)
+			if (OFI_UNLIKELY(ret))
 				goto err;
+			comp_read++;
 		}
 	} while (comp_read < rxm_ep->comp_per_progress);
+
 	return;
 err:
 	if (rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret))
 		assert(0);
-	return;
 }
 
 static int rxm_cq_close(struct fid *fid)

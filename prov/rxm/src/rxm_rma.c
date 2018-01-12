@@ -181,13 +181,13 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	tx_buf = RXM_TX_BUF_GET(rxm_ep);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
-		rxm_cq_progress(rxm_ep);
+		rxm_ep_progress_multi(&rxm_ep->util_ep);
 		return -FI_EAGAIN;
 	}
 
 	tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue);
 	if (!tx_entry) {
-		rxm_cq_progress(rxm_ep);
+		rxm_ep_progress_multi(&rxm_ep->util_ep);
 		ret = -FI_EAGAIN;
 		goto err1;
 	}
@@ -218,7 +218,7 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	ret = fi_writemsg(msg_ep, &msg_rma, flags);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
-			rxm_cq_progress(rxm_ep);
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
 		goto err2;
 	}
 	return 0;
