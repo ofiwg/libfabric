@@ -353,6 +353,27 @@ static inline int psmx2_cq_rx_complete(struct psmx2_fid_cq *poll_cq,
 				     read_more, src_addr, 1);
 }
 
+static uint64_t psmx2_comp_flags[PSMX2_MAX_CONTEXT_TYPE] = {
+	[PSMX2_NOCOMP_SEND_CONTEXT]	= FI_SEND | FI_MSG,
+	[PSMX2_NOCOMP_RECV_CONTEXT]	= FI_RECV | FI_MSG,
+	[PSMX2_NOCOMP_TSEND_CONTEXT]	= FI_SEND | FI_TAGGED,
+	[PSMX2_NOCOMP_TRECV_CONTEXT]	= FI_RECV | FI_TAGGED,
+	[PSMX2_NOCOMP_WRITE_CONTEXT]	= FI_WRITE | FI_RMA,
+	[PSMX2_NOCOMP_READ_CONTEXT]	= FI_READ | FI_RMA,
+	[PSMX2_SEND_CONTEXT]		= FI_SEND | FI_MSG,
+	[PSMX2_RECV_CONTEXT]		= FI_RECV | FI_MSG,
+	[PSMX2_MULTI_RECV_CONTEXT]	= FI_RECV | FI_MSG,
+	[PSMX2_TSEND_CONTEXT]		= FI_SEND | FI_TAGGED,
+	[PSMX2_TRECV_CONTEXT]		= FI_RECV | FI_TAGGED,
+	[PSMX2_WRITE_CONTEXT]		= FI_WRITE | FI_RMA,
+	[PSMX2_READ_CONTEXT]		= FI_READ | FI_RMA,
+	[PSMX2_REMOTE_WRITE_CONTEXT]	= FI_REMOTE_WRITE | FI_RMA,
+	[PSMX2_REMOTE_READ_CONTEXT]	= FI_REMOTE_READ | FI_RMA,
+	[PSMX2_SENDV_CONTEXT]		= FI_SEND,
+	[PSMX2_IOV_SEND_CONTEXT]	= FI_SEND,
+	[PSMX2_IOV_RECV_CONTEXT]	= FI_RECV,
+};
+
 int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 		     struct psmx2_trx_ctxt *trx_ctxt,
 		     struct psmx2_cq_event *event_in,
@@ -375,6 +396,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	int read_count = 0;
 	int read_more = 1;
 	int err;
+	int context_type;
 
 	while (read_more) {
 
@@ -388,33 +410,15 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			}
 
 			ep = PSMX2_CTXT_EP(fi_context);
+			context_type = (int)PSMX2_CTXT_TYPE(fi_context);
 
-			switch ((int)PSMX2_CTXT_TYPE(fi_context)) {
+			switch (context_type) {
 			case PSMX2_SEND_CONTEXT:
-				if (ep->send_cq) {
-					op_context = fi_context;
-					buf = PSMX2_CTXT_USER(fi_context);
-					flags = FI_SEND | FI_MSG;
-					err = psmx2_cq_tx_complete(
-							cq, ep->send_cq, ep->av,
-							status, op_context, buf, flags, 0,
-							event_in, count, &read_count,
-							&read_more);
-					if (err) {
-						PSMX2_FREE_COMPLETION(trx_ctxt, status);
-						return err;
-					}
-				}
-				if (ep->send_cntr)
-					psmx2_cntr_inc(ep->send_cntr);
-				PSMX2_FREE_COMPLETION(trx_ctxt, status);
-				break;
-
 			case PSMX2_TSEND_CONTEXT:
 				if (ep->send_cq) {
 					op_context = fi_context;
 					buf = PSMX2_CTXT_USER(fi_context);
-					flags = FI_SEND | FI_TAGGED;
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -431,10 +435,11 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_NOCOMP_SEND_CONTEXT:
+			case PSMX2_NOCOMP_TSEND_CONTEXT:
 				if (ep->send_cq && PSMX2_STATUS_ERROR(status)) {
 					op_context = NULL;
 					buf = NULL;
-					flags = FI_SEND | FI_MSG;
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -459,7 +464,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (ep->recv_cq) {
 					op_context = fi_context;
 					buf = PSMX2_CTXT_USER(fi_context);
-					flags = FI_RECV | FI_MSG;
+					flags = psmx2_comp_flags[context_type];
 					if (PSMX2_STATUS_TAG(status).tag2 & PSMX2_IMM_BIT) {
 						flags |= FI_REMOTE_CQ_DATA;
 						data = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
@@ -490,7 +495,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (ep->recv_cq) {
 					op_context = fi_context;
 					buf = PSMX2_CTXT_USER(fi_context);
-					flags = FI_RECV | FI_TAGGED;
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_rx_complete(
 							cq, ep->recv_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -507,10 +512,17 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_NOCOMP_RECV_CONTEXT:
+				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
+						 !psmx2_handle_sendv_req(ep, status, 0))) {
+					psmx2_ep_put_op_context(ep, fi_context);
+					PSMX2_FREE_COMPLETION(trx_ctxt, status);
+					continue;
+				}
+				psmx2_ep_put_op_context(ep, fi_context);
 				if (OFI_UNLIKELY(ep->recv_cq && PSMX2_STATUS_ERROR(status))) {
 					op_context = NULL;
 					buf = NULL;
-					flags = FI_RECV | FI_MSG;
+					flags = psmx2_comp_flags[context_type];
 					if (PSMX2_STATUS_TAG(status).tag2 & PSMX2_IMM_BIT) {
 						flags |= FI_REMOTE_CQ_DATA;
 						data = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
@@ -532,7 +544,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
-			case PSMX2_NOCOMP_RECV_CONTEXT_ALLOC:
+			case PSMX2_NOCOMP_TRECV_CONTEXT:
 				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
 						 !psmx2_handle_sendv_req(ep, status, 0))) {
 					psmx2_ep_put_op_context(ep, fi_context);
@@ -543,16 +555,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (OFI_UNLIKELY(ep->recv_cq && PSMX2_STATUS_ERROR(status))) {
 					op_context = NULL;
 					buf = NULL;
-					flags = FI_RECV | FI_MSG;
-					if (PSMX2_STATUS_TAG(status).tag2 & PSMX2_IMM_BIT) {
-						flags |= FI_REMOTE_CQ_DATA;
-						data = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
-					} else {
-						data = 0;
-					}
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_rx_complete(
 							cq, ep->recv_cq, ep->av,
-							status, op_context, buf, flags, data,
+							status, op_context, buf, flags, 0,
 							event_in, count, &read_count,
 							&read_more, src_addr);
 					if (err) {
@@ -573,7 +579,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				psmx2_am_request_free(trx_ctxt, am_req);
 				if (ep->send_cq) {
 					buf = NULL;
-					flags = FI_WRITE | FI_RMA;
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -597,7 +603,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				psmx2_am_request_free(trx_ctxt, am_req);
 				if (OFI_UNLIKELY(ep->send_cq && PSMX2_STATUS_ERROR(status))) {
 					buf = NULL;
-					flags = FI_WRITE | FI_RMA;
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -633,7 +639,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				psmx2_am_request_free(trx_ctxt, am_req);
 				if (ep->send_cq) {
 					buf = NULL;
-					flags = FI_READ | FI_RMA;
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -669,7 +675,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				psmx2_am_request_free(trx_ctxt, am_req);
 				if (OFI_UNLIKELY(ep->send_cq && PSMX2_STATUS_ERROR(status))) {
 					buf = NULL;
-					flags = FI_READ | FI_RMA;
+					flags = psmx2_comp_flags[context_type];
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -695,7 +701,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (ep->recv_cq) {
 					op_context = fi_context;
 					buf = multi_recv_req->buf + multi_recv_req->offset;
-					flags = FI_RECV | FI_MSG;
+					flags = psmx2_comp_flags[context_type];
 					if (PSMX2_STATUS_TAG(status).tag2 & PSMX2_IMM_BIT) {
 						flags |= FI_REMOTE_CQ_DATA;
 						data = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
@@ -751,7 +757,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (am_req->ep->recv_cq && (am_req->cq_flags & FI_REMOTE_CQ_DATA)) {
 					op_context = NULL;
 					buf = NULL;
-					flags = FI_REMOTE_WRITE | FI_RMA | FI_REMOTE_CQ_DATA;
+					flags = psmx2_comp_flags[context_type] | FI_REMOTE_CQ_DATA;
 					err = psmx2_cq_rx_complete(
 							cq, am_req->ep->recv_cq, am_req->ep->av,
 							status, op_context, buf, flags, am_req->write.data,
@@ -796,7 +802,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (ep->send_cq && !sendv_req->no_completion) {
 					op_context = sendv_req->user_context;
 					buf = NULL;
-					flags = FI_SEND | sendv_req->comp_flag;
+					flags = psmx2_comp_flags[context_type] |
+						sendv_req->comp_flag;
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -824,7 +831,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (ep->send_cq && !sendv_req->no_completion) {
 					op_context = sendv_req->user_context;
 					buf = NULL;
-					flags = FI_SEND | sendv_req->comp_flag;
+					flags = psmx2_comp_flags[context_type] |
+						sendv_req->comp_flag;
 					err = psmx2_cq_tx_complete(
 							cq, ep->send_cq, ep->av,
 							status, op_context, buf, flags, 0,
@@ -861,7 +869,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				if (ep->recv_cq && !sendv_rep->no_completion) {
 					op_context = sendv_rep->user_context;
 					buf = sendv_rep->buf;
-					flags = FI_RECV | sendv_rep->comp_flag;
+					flags = psmx2_comp_flags[context_type] |
+						sendv_rep->comp_flag;
 					err = psmx2_cq_rx_complete(
 							cq, ep->recv_cq, ep->av,
 							status, op_context, buf, flags, 0,

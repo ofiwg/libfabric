@@ -250,7 +250,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 
 	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
 		fi_context = psmx2_ep_get_op_context(ep_priv);
-		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_RECV_CONTEXT_ALLOC;
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_TRECV_CONTEXT;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 		PSMX2_CTXT_USER(fi_context) = buf;
 		PSMX2_CTXT_SIZE(fi_context) = len;
@@ -325,7 +325,7 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 		PSMX2_CTXT_USER(fi_context) = buf;
 	} else {
 		fi_context = psmx2_ep_get_op_context(ep_priv);
-		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_RECV_CONTEXT_ALLOC;
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_TRECV_CONTEXT;
 	}
 	PSMX2_CTXT_EP(fi_context) = ep_priv;
 	PSMX2_CTXT_SIZE(fi_context) = len;
@@ -632,7 +632,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 	}
 
 	if (no_completion) {
-		fi_context = &ep_priv->nocomp_send_context;
+		fi_context = &ep_priv->nocomp_tsend_context;
 	} else {
 		if (!context)
 			return -FI_EINVAL;
@@ -702,7 +702,7 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 		PSMX2_CTXT_USER(fi_context) = (void *)buf;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	} else {
-		fi_context = &ep_priv->nocomp_send_context;
+		fi_context = &ep_priv->nocomp_tsend_context;
 	}
 
 	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
