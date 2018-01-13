@@ -210,9 +210,10 @@ struct rxm_buf {
 struct rxm_rx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-
 	struct dlist_entry entry;
+
 	struct rxm_ep *ep;
+	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;
 	struct rxm_recv_queue *recv_queue;
 	struct rxm_recv_entry *recv_entry;
@@ -310,6 +311,7 @@ struct rxm_ep {
 	struct rxm_buf_pool 	tx_pool;
 	struct rxm_buf_pool 	rx_pool;
 	struct dlist_entry	post_rx_list;
+	struct dlist_entry	repost_ready_list;
 
 	struct rxm_send_queue 	send_queue;
 	struct rxm_recv_queue 	recv_queue;
@@ -367,7 +369,6 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_ep_progress_one(struct util_ep *util_ep);
 void rxm_ep_progress_multi(struct util_ep *util_ep);
 
-int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,

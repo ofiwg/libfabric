@@ -207,6 +207,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	if (ret)
 		goto err1;
 	dlist_init(&rxm_ep->post_rx_list);
+	dlist_init(&rxm_ep->repost_ready_list);
 
 	ret = rxm_send_queue_init(&rxm_ep->send_queue, rxm_ep->rxm_info->tx_attr->size);
 	if (ret)
@@ -244,45 +245,6 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 	rxm_ep_cleanup_post_rx_list(rxm_ep);
 	rxm_buf_pool_destroy(&rxm_ep->rx_pool);
 	rxm_buf_pool_destroy(&rxm_ep->tx_pool);
-}
-
-int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
-{
-	memset(&rx_buf->conn, 0, sizeof(*rx_buf) - offsetof(struct rxm_rx_buf, conn));
-	rx_buf->hdr.state = RXM_RX;
-
-	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt,
-		    rx_buf->ep->rxm_info->tx_attr->inject_size +
-		    sizeof(struct rxm_pkt), rx_buf->hdr.desc,
-		    FI_ADDR_UNSPEC, rx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
-		return -FI_EAVAIL;
-	}
-	return FI_SUCCESS;
-}
-
-int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
-{
-	struct rxm_rx_buf *rx_buf;
-	int ret;
-	size_t i;
-
-	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = RXM_RX_BUF_GET(rxm_ep);
-		if (OFI_UNLIKELY(!rx_buf))
-			return -FI_ENOMEM;
-
-		rx_buf->hdr.state = RXM_RX;
-		rx_buf->hdr.msg_ep = msg_ep;
-		rx_buf->ep = rxm_ep;
-		ret = rxm_ep_repost_buf(rx_buf);
-		if (ret) {
-			rxm_buf_release(&rxm_ep->rx_pool, (struct rxm_buf *)rx_buf);
-			return ret;
-		}
-		dlist_insert_tail(&rx_buf->entry, &rxm_ep->post_rx_list);
-	}
-	return 0;
 }
 
 static int rxm_setname(fid_t fid, void *addr, size_t addrlen)
@@ -400,16 +362,13 @@ rxm_check_unexp_msg_list(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
 static int rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 			       void *context)
 {
-	int ret;
-
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Discarding message",
 			 rx_buf->unexp_msg.addr, rx_buf->unexp_msg.tag);
 
-	ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+	dlist_insert_tail(&rx_buf->repost_entry,
+			  &rx_buf->ep->repost_ready_list);
+	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
-	if (ret)
-		return ret;
-	return rxm_ep_repost_buf(rx_buf);
 }
 
 static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
