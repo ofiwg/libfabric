@@ -382,6 +382,9 @@ static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		ep->tx = stx->tx;
 		ep->stx = stx;
+		err = psmx2_domain_enable_ep(ep->domain, ep);
+		if (err)
+			return err;
 		ofi_atomic_inc32(&stx->ref);
 		break;
 
