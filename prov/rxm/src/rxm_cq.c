@@ -35,7 +35,6 @@
 #include <inttypes.h>
 
 #include "fi.h"
-#include <fi_iov.h>
 
 #include "rxm.h"
 

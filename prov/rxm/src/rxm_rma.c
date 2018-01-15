@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-#include <fi_iov.h>
 #include "rxm.h"
 
 typedef ssize_t rxm_rma_msg_fn(struct fid_ep *ep_fid,
@@ -201,8 +200,7 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	tx_entry->tx_buf = tx_buf;
 
 	tx_buf->hdr.msg_ep = msg_ep;
-	ofi_copy_from_iov(tx_buf->pkt.data, size, msg->msg_iov,
-			  msg->iov_count, 0);
+	ofi_copy_from_iov(tx_buf->pkt.data, size, msg->msg_iov, msg->iov_count, 0);
 
 	iov.iov_base = &tx_buf->pkt.data;
 	iov.iov_len = size;

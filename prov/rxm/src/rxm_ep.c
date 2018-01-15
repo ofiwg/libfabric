@@ -33,7 +33,6 @@
 #include <inttypes.h>
 
 #include "fi.h"
-#include <fi_iov.h>
 #include <fi_util.h>
 
 #include "rxm.h"
