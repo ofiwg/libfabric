@@ -103,16 +103,18 @@ static int rxm_mr_buf_reg(void *pool_ctx, void *addr, size_t len, void **context
 
 static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 {
-	struct dlist_entry *entry;
-	struct rxm_buf *buf;
-
-	while(!dlist_empty(&pool->buf_list)) {
-		entry = pool->buf_list.next;
-		buf = container_of(entry, struct rxm_buf, entry);
-		rxm_buf_release(pool, buf);
-	}
 	fastlock_destroy(&pool->lock);
 	util_buf_pool_destroy(pool->pool);
+}
+
+static void rxm_ep_cleanup_post_rx_list(struct rxm_ep *rxm_ep)
+{
+	struct rxm_rx_buf *buf;
+	while (!dlist_empty(&rxm_ep->post_rx_list)) {
+		dlist_pop_front(&rxm_ep->post_rx_list, struct rxm_rx_buf,
+				buf, entry);
+		rxm_buf_release(&rxm_ep->rx_pool, (struct rxm_buf *)buf);
+	}
 }
 
 static int rxm_buf_pool_create(int local_mr, size_t chunk_count, size_t size,
@@ -126,7 +128,6 @@ static int rxm_buf_pool_create(int local_mr, size_t chunk_count, size_t size,
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
 		return -FI_ENOMEM;
 	}
-	dlist_init(&pool->buf_list);
 	fastlock_init(&pool->lock);
 	return 0;
 }
@@ -203,6 +204,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 				  rxm_domain->msg_domain);
 	if (ret)
 		goto err1;
+	dlist_init(&rxm_ep->post_rx_list);
 
 	ret = rxm_send_queue_init(&rxm_ep->send_queue, rxm_ep->rxm_info->tx_attr->size);
 	if (ret)
@@ -237,22 +239,18 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
 	rxm_send_queue_close(&rxm_ep->send_queue);
 
+	rxm_ep_cleanup_post_rx_list(rxm_ep);
 	rxm_buf_pool_destroy(&rxm_ep->rx_pool);
 	rxm_buf_pool_destroy(&rxm_ep->tx_pool);
 }
 
 int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_buf hdr = rx_buf->hdr;
-	struct rxm_ep *rxm_ep = rx_buf->ep;
-
-	memset(rx_buf, 0, sizeof(*rx_buf));
-	rx_buf->hdr = hdr;
+	memset(&rx_buf->conn, 0, sizeof(*rx_buf) - offsetof(struct rxm_rx_buf, conn));
 	rx_buf->hdr.state = RXM_RX;
-	rx_buf->ep = rxm_ep;
 
 	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt,
-		    rxm_ep->rxm_info->tx_attr->inject_size +
+		    rx_buf->ep->rxm_info->tx_attr->inject_size +
 		    sizeof(struct rxm_pkt), rx_buf->hdr.desc,
 		    FI_ADDR_UNSPEC, rx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
@@ -280,6 +278,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 			rxm_buf_release(&rxm_ep->rx_pool, (struct rxm_buf *)rx_buf);
 			return ret;
 		}
+		dlist_insert_tail(&rx_buf->entry, &rxm_ep->post_rx_list);
 	}
 	return 0;
 }

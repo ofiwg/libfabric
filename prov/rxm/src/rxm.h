@@ -211,6 +211,7 @@ struct rxm_rx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
+	struct dlist_entry entry;
 	struct rxm_ep *ep;
 	struct rxm_conn *conn;
 	struct rxm_recv_queue *recv_queue;
@@ -290,7 +291,6 @@ struct rxm_recv_queue {
 
 struct rxm_buf_pool {
 	struct util_buf_pool *pool;
-	struct dlist_entry buf_list;
 	fastlock_t lock;
 };
 
@@ -309,6 +309,7 @@ struct rxm_ep {
 
 	struct rxm_buf_pool 	tx_pool;
 	struct rxm_buf_pool 	rx_pool;
+	struct dlist_entry	post_rx_list;
 
 	struct rxm_send_queue 	send_queue;
 	struct rxm_recv_queue 	recv_queue;
@@ -394,7 +395,6 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 		return NULL;
 	}
 	memset(buf, 0, sizeof(*buf));
-	dlist_insert_tail(&buf->entry, &pool->buf_list);
 	fastlock_release(&pool->lock);
 	return buf;
 }
@@ -412,7 +412,6 @@ struct rxm_buf *rxm_buf_get_ex(struct rxm_buf_pool *pool)
 		return NULL;
 	}
 	memset(buf, 0, sizeof(*buf));
-	dlist_insert_tail(&buf->entry, &pool->buf_list);
 	fastlock_release(&pool->lock);
 	buf->desc = fi_mr_desc((struct fid_mr *)mr);
 	return buf;
@@ -422,7 +421,6 @@ static inline
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
 	fastlock_acquire(&pool->lock);
-	dlist_remove(&buf->entry);
 	util_buf_release(pool->pool, buf);
 	fastlock_release(&pool->lock);
 }
