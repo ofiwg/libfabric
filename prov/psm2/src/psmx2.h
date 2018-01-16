@@ -182,10 +182,11 @@ static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
 
-#define PSMX2_CTXT_ALLOC_FLAG		0x80000000
 enum psmx2_context_type {
 	PSMX2_NOCOMP_SEND_CONTEXT = 1,
 	PSMX2_NOCOMP_RECV_CONTEXT,
+	PSMX2_NOCOMP_TSEND_CONTEXT,
+	PSMX2_NOCOMP_TRECV_CONTEXT,
 	PSMX2_NOCOMP_WRITE_CONTEXT,
 	PSMX2_NOCOMP_READ_CONTEXT,
 	PSMX2_SEND_CONTEXT,
@@ -200,7 +201,7 @@ enum psmx2_context_type {
 	PSMX2_SENDV_CONTEXT,
 	PSMX2_IOV_SEND_CONTEXT,
 	PSMX2_IOV_RECV_CONTEXT,
-	PSMX2_NOCOMP_RECV_CONTEXT_ALLOC = PSMX2_NOCOMP_RECV_CONTEXT | PSMX2_CTXT_ALLOC_FLAG,
+	PSMX2_MAX_CONTEXT_TYPE
 };
 
 struct psmx2_context {
@@ -800,7 +801,7 @@ struct psmx2_fid_ep {
 	uint64_t		caps;
 	ofi_atomic32_t		ref;
 	struct fi_context	nocomp_send_context;
-	struct fi_context	nocomp_recv_context;
+	struct fi_context	nocomp_tsend_context;
 	struct slist		free_context_list;
 	fastlock_t		context_lock;
 	size_t			min_multi_recv;

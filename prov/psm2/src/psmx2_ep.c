@@ -573,8 +573,8 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 
 	PSMX2_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX2_NOCOMP_SEND_CONTEXT;
 	PSMX2_CTXT_EP(&ep_priv->nocomp_send_context) = ep_priv;
-	PSMX2_CTXT_TYPE(&ep_priv->nocomp_recv_context) = PSMX2_NOCOMP_RECV_CONTEXT;
-	PSMX2_CTXT_EP(&ep_priv->nocomp_recv_context) = ep_priv;
+	PSMX2_CTXT_TYPE(&ep_priv->nocomp_tsend_context) = PSMX2_NOCOMP_TSEND_CONTEXT;
+	PSMX2_CTXT_EP(&ep_priv->nocomp_tsend_context) = ep_priv;
 
 	if (ep_cap & FI_TAGGED)
 		ep_priv->ep.tagged = &psmx2_tagged_ops;
@@ -721,9 +721,6 @@ void psmx2_ep_put_op_context(struct psmx2_fid_ep *ep,
 			     struct fi_context *fi_context)
 {
 	struct psmx2_context *context;
-
-	if (! (PSMX2_CTXT_TYPE(fi_context) & PSMX2_CTXT_ALLOC_FLAG))
-		return;
 
 	context = container_of(fi_context, struct psmx2_context, fi_context);
 	context->list_entry.next = NULL;
