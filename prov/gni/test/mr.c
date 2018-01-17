@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2018      Los Alamos National Security, LLC. All
+ *                         rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -241,9 +243,9 @@ static void no_cache_basic_setup(void)
 }
 
 #if HAVE_KDREG
-# define KDREG_CHECK true
-#else
 # define KDREG_CHECK false
+#else
+# define KDREG_CHECK true
 #endif
 
 /* bare tests */
