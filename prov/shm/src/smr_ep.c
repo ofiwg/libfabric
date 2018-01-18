@@ -301,7 +301,7 @@ static int smr_progress_inline(struct smr_cmd *cmd, struct iovec *iov,
 	if (err)
 		return err;
 
-	*total_len = ofi_copy_to_iov(iov, iov_count, 0, cmd->msg.msg,
+	*total_len = ofi_copy_to_iov(iov, iov_count, 0, cmd->msg.data.msg,
 				     cmd->msg.hdr.size);
 	if (*total_len != cmd->msg.hdr.size) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -357,10 +357,12 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 
 	if (cmd->msg.hdr.op == ofi_op_read_req) {
 		ret = process_vm_writev(peer_smr->pid, iov, iov_count,
-					cmd->msg.iov, SMR_IOV_LIMIT, 0);
+					cmd->msg.data.iov,
+					cmd->msg.data.iov_count, 0);
 	} else {
 		ret = process_vm_readv(peer_smr->pid, iov, iov_count,
-				       cmd->msg.iov, SMR_IOV_LIMIT, 0);
+				       cmd->msg.data.iov,
+				       cmd->msg.data.iov_count, 0);
 	}
 
 	if (ret != cmd->msg.hdr.size) {
@@ -810,8 +812,8 @@ static void smr_format_inline(struct smr_cmd *cmd, fi_addr_t peer_id,
 {
 	smr_generic_format(cmd, peer_id, context, op, tag, data, op_flags);
 	cmd->msg.hdr.op_src = smr_src_inline;
-	cmd->msg.hdr.size = ofi_copy_from_iov(cmd->msg.msg, SMR_MSG_DATA_LEN,
-					      iov, count, 0);
+	cmd->msg.hdr.size = ofi_copy_from_iov(cmd->msg.data.msg,
+					      SMR_MSG_DATA_LEN, iov, count, 0);
 }
 
 static void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
@@ -835,21 +837,15 @@ static void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
 			   struct smr_region *smr,
 			   struct smr_resp *resp)
 {
-	int i;
-
 	smr_generic_format(cmd, peer_id, context, op, tag, data, op_flags);
 	cmd->msg.hdr.op_src = smr_src_iov;
 	resp->status = FI_EBUSY;
 	resp->msg_id = (uint64_t) context;
 	cmd->msg.hdr.src_data = (uint64_t) ((char **) resp - (char **) smr);
+	cmd->msg.data.iov_count = count;
+	cmd->msg.hdr.size = total_len;
 
-	for (cmd->msg.hdr.size = i = 0; i < count; i++) {
-		cmd->msg.iov[i].iov_base = iov[i].iov_base;
-		cmd->msg.iov[i].iov_len = iov[i].iov_len;
-		cmd->msg.hdr.size += iov[i].iov_len;
-	}
-	while (i < SMR_IOV_LIMIT)
-		cmd->msg.iov[i++].iov_len = 0;
+	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 }
 
 static void smr_format_rma_resp(struct smr_cmd *cmd, fi_addr_t peer_id,
@@ -858,7 +854,6 @@ static void smr_format_rma_resp(struct smr_cmd *cmd, fi_addr_t peer_id,
 {
 	smr_generic_format(cmd, peer_id, NULL, op, 0, 0, 0);
 	cmd->msg.hdr.size = total_len;
-	cmd->msg.hdr.iov_count = count;
 }
 
 static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *iov,

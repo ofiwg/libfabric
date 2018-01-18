@@ -95,7 +95,6 @@ struct smr_msg_hdr {
 	uint64_t		data;
 	union {
 		uint64_t	tag;
-		uint8_t		iov_count;
 		struct {
 			uint8_t	datatype;
 			uint8_t	op;
@@ -107,15 +106,16 @@ struct smr_msg_hdr {
 #define SMR_MSG_DATA_LEN	(128 - sizeof(struct smr_msg_hdr))
 union smr_cmd_data {
 	uint8_t			msg[SMR_MSG_DATA_LEN];
-	struct iovec		iov[SMR_MSG_DATA_LEN / sizeof(struct iovec)];
+	struct {
+		uint8_t		iov_count;
+		struct iovec	iov[(SMR_MSG_DATA_LEN - 8) /
+				    sizeof(struct iovec)];
+	};
 };
 
 struct smr_cmd_msg {
 	struct smr_msg_hdr	hdr;
-	union {
-		uint8_t		msg[SMR_MSG_DATA_LEN];
-		struct iovec	iov[SMR_MSG_DATA_LEN / sizeof(struct iovec)];
-	};
+	union smr_cmd_data	data;
 };
 
 #define SMR_RMA_DATA_LEN	(128 - sizeof(uint64_t))
