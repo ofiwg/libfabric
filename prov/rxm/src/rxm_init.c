@@ -35,6 +35,10 @@
 #include <prov.h>
 #include "rxm.h"
 
+char *rxm_proto_state_str[] = {
+	RXM_PROTO_STATES(OFI_STR)
+};
+
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
