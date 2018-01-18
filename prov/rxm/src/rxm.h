@@ -337,11 +337,8 @@ static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
-	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
-					       ep_fid);
-	return util_ep->tx_op_flags;
-}
+#define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
+#define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
