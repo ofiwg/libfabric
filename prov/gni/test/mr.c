@@ -260,9 +260,18 @@ TestSuite(mr_internal_cache,
 	  .disabled = KDREG_CHECK);
 
 #ifdef HAVE_UDREG
+/*
+ * mr_udreg_cache doesn't work if KDREG is enabled
+ * since by the time this testsuite is run, the kdreg device
+ * has been opened as part of the criterion test suite
+ * run.
+ * /dev/kdreg should really be fixed, but that's probably
+ * not going to happen.
+ */
 TestSuite(mr_udreg_cache,
 	  .init = udreg_setup,
-	  .fini = mr_teardown);
+	  .fini = mr_teardown,
+	  .disabled = ~KDREG_CHECK);
 #endif
 
 TestSuite(mr_no_cache_basic,
