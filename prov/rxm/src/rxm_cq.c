@@ -35,7 +35,6 @@
 #include <inttypes.h>
 
 #include "fi.h"
-#include <fi_iov.h>
 
 #include "rxm.h"
 
@@ -95,7 +94,7 @@ static void rxm_cq_log_comp(uint64_t flags)
 }
 #endif
 
-int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
+static int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 {
 	int ret;
 
@@ -138,7 +137,7 @@ static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 	return 0;
 }
 
-int rxm_finish_send(struct rxm_tx_entry *tx_entry)
+static int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 {
 	rxm_buf_release(&tx_entry->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
 	return rxm_finish_send_nobuf(tx_entry);
@@ -237,7 +236,7 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_FINISH);
 	tx_entry->state = RXM_LMT_FINISH;
 
-	if (!OFI_CHECK_MR_LOCAL(tx_entry->ep->rxm_info))
+	if (!tx_entry->ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 
 	ret = rxm_finish_send(tx_entry);
@@ -301,7 +300,7 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 			return -FI_ETRUNC; // TODO copy data and write to CQ error
 		}
 
-		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info)) {
+		if (!rx_buf->ep->rxm_mr_local) {
 			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->iov,
 						 rx_buf->recv_entry->count, FI_READ,
 						 rx_buf->mr);
@@ -332,11 +331,10 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 	}
 }
 
-ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_recv_match_attr match_attr;
 	struct dlist_entry *entry;
-	struct rxm_recv_queue *recv_queue;
 	struct util_cq *util_cq;
 
 	util_cq = rx_buf->ep->util_ep.rx_cq;
@@ -357,12 +355,12 @@ ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	switch(rx_buf->pkt.hdr.op) {
 	case ofi_op_msg:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got MSG op\n");
-		recv_queue = &rx_buf->ep->recv_queue;
+		rx_buf->recv_queue = &rx_buf->ep->recv_queue;
 		break;
 	case ofi_op_tagged:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
 		match_attr.tag = rx_buf->pkt.hdr.tag;
-		recv_queue = &rx_buf->ep->trecv_queue;
+		rx_buf->recv_queue = &rx_buf->ep->trecv_queue;
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown op!\n");
@@ -370,11 +368,9 @@ ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		return -FI_EINVAL;
 	}
 
-	rx_buf->recv_queue = recv_queue;
-
-	fastlock_acquire(&recv_queue->lock);
-	entry = dlist_remove_first_match(&recv_queue->recv_list,
-					 recv_queue->match_recv, &match_attr);
+	fastlock_acquire(&rx_buf->recv_queue->lock);
+	entry = dlist_remove_first_match(&rx_buf->recv_queue->recv_list,
+					 rx_buf->recv_queue->match_recv, &match_attr);
 	if (!entry) {
 		RXM_DBG_ADDR_TAG(FI_LOG_CQ, "No matching recv found for "
 				 "incoming msg", match_attr.addr,
@@ -383,11 +379,12 @@ ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		       "queue\n");
 		rx_buf->unexp_msg.addr = match_attr.addr;
 		rx_buf->unexp_msg.tag = match_attr.tag;
-		dlist_insert_tail(&rx_buf->unexp_msg.entry, &recv_queue->unexp_msg_list);
-		fastlock_release(&recv_queue->lock);
+		dlist_insert_tail(&rx_buf->unexp_msg.entry,
+				  &rx_buf->recv_queue->unexp_msg_list);
+		fastlock_release(&rx_buf->recv_queue->lock);
 		return 0;
 	}
-	fastlock_release(&recv_queue->lock);
+	fastlock_release(&rx_buf->recv_queue->lock);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 	return rxm_cq_handle_data(rx_buf);
@@ -401,14 +398,14 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->conn);
 
-	tx_buf = (struct rxm_tx_buf *)rxm_buf_get(&rx_buf->ep->tx_pool);
-	if (!tx_buf) {
+	tx_buf = RXM_TX_BUF_GET(rx_buf->ep);
+	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
 		return -FI_EAGAIN;
 	}
 
 	tx_entry = rxm_tx_entry_get(&rx_buf->ep->send_queue);
-	if (!tx_entry) {
+	if (OFI_UNLIKELY(!tx_entry)) {
 		ret = -FI_EAGAIN;
 		goto err1;
 	}
@@ -421,17 +418,17 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	tx_entry->context 	= rx_buf;
 	tx_entry->tx_buf 	= tx_buf;
 
-	rxm_pkt_init(&tx_buf->pkt);
+	tx_buf->pkt.ctrl_hdr.version    = OFI_CTRL_VERSION;
 	tx_buf->pkt.ctrl_hdr.type 	= ofi_ctrl_ack;
 	tx_buf->pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	tx_buf->pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
+	tx_buf->pkt.hdr.version         = OFI_OP_VERSION;
 	tx_buf->pkt.hdr.op 		= rx_buf->pkt.hdr.op;
 
 	ret = fi_send(rx_buf->conn->msg_ep, &tx_buf->pkt, sizeof(tx_buf->pkt),
 		      tx_buf->hdr.desc, 0, tx_entry);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
-		rx_buf->hdr.state = RXM_NONE;
 		goto err2;
 	}
 	return 0;
@@ -507,7 +504,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 
 		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
 		rx_buf->hdr.state = RXM_LMT_FINISH;
-		if (!OFI_CHECK_MR_LOCAL(rx_buf->ep->rxm_info))
+		if (!rx_buf->ep->rxm_mr_local)
 			rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
 		return rxm_finish_recv(rx_buf);
 	default:
