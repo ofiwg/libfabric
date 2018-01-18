@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -128,22 +128,25 @@ usdf_rdm_rdc_ready(struct usdf_rdm_connection *rdc, struct usdf_tx *tx)
 }
 
 static inline uint16_t
-usdf_rdm_rdc_hash_helper(uint16_t *ipaddr, uint16_t port)
+usdf_rdm_rdc_hash_helper(uint32_t ipaddr, uint16_t port)
 {
 	uint16_t hash_index;
 
-	hash_index = ipaddr[0];
-	hash_index ^= ipaddr[1];
+	uint16_t lower = (ipaddr & 0xFFFF);
+	uint16_t upper = (ipaddr >> 16);
+
+	hash_index = lower;
+	hash_index ^= upper;
 	hash_index ^= port;
 
 	return hash_index & USDF_RDM_HASH_MASK;
 }
 
+
 static inline uint16_t
 usdf_rdm_rdc_hash_hdr(struct usd_udp_hdr *hdr)
 {
-	return usdf_rdm_rdc_hash_helper((uint16_t *)&hdr->uh_ip.saddr,
-			hdr->uh_udp.source);
+	return usdf_rdm_rdc_hash_helper(hdr->uh_ip.saddr, hdr->uh_udp.source);
 }
 
 static inline int
@@ -154,18 +157,18 @@ usdf_rdm_rdc_hdr_match(struct usdf_rdm_connection *rdc, struct usd_udp_hdr *hdr)
 }
 
 static inline int
-usdf_rdm_rdc_addr_match(struct usdf_rdm_connection *rdc, uint16_t *ipaddr,
+usdf_rdm_rdc_addr_match(struct usdf_rdm_connection *rdc, uint32_t ipaddr,
 		 uint16_t port)
 {
-	return *(uint32_t *)ipaddr == rdc->dc_hdr.uh_ip.daddr &&
-	    port == rdc->dc_hdr.uh_udp.dest;
+	return ipaddr == rdc->dc_hdr.uh_ip.daddr &&
+	       port == rdc->dc_hdr.uh_udp.dest;
 }
 
 /*
  * Find a matching RDM connection on this domain
  */
 static inline struct usdf_rdm_connection *
-usdf_rdm_rdc_addr_lookup(struct usdf_domain *udp, uint16_t *ipaddr,
+usdf_rdm_rdc_addr_lookup(struct usdf_domain *udp, uint32_t ipaddr,
 		uint16_t port)
 {
 	uint16_t hash_index;
@@ -216,8 +219,7 @@ usdf_rdm_rdc_insert(struct usdf_domain *udp, struct usdf_rdm_connection *rdc)
 {
 	uint16_t hash_index;
 
-	hash_index = usdf_rdm_rdc_hash_helper(
-		(uint16_t *)&rdc->dc_hdr.uh_ip.daddr,
+	hash_index = usdf_rdm_rdc_hash_helper(rdc->dc_hdr.uh_ip.daddr,
 		rdc->dc_hdr.uh_udp.dest);
 	USDF_DBG_SYS(EP_DATA, "insert rdc %p at %u\n", rdc, hash_index);
 
@@ -231,8 +233,7 @@ usdf_rdm_rdc_remove(struct usdf_domain *udp, struct usdf_rdm_connection *rdc)
 	uint16_t hash_index;
 	struct usdf_rdm_connection *prev;
 
-	hash_index = usdf_rdm_rdc_hash_helper(
-		(uint16_t *)&rdc->dc_hdr.uh_ip.daddr,
+	hash_index = usdf_rdm_rdc_hash_helper(rdc->dc_hdr.uh_ip.daddr,
 		rdc->dc_hdr.uh_udp.dest);
 	USDF_DBG_SYS(EP_DATA, "remove rdc %p from %u\n", rdc, hash_index);
 
@@ -292,7 +293,7 @@ usdf_rdm_rdc_tx_get(struct usdf_dest *dest, struct usdf_ep *ep)
 
 	udp = tx->tx_domain;
 	rdc = usdf_rdm_rdc_addr_lookup(udp,
-		(uint16_t *)&dest->ds_dest.ds_dest.ds_udp.u_hdr.uh_ip.daddr,
+		dest->ds_dest.ds_dest.ds_udp.u_hdr.uh_ip.daddr,
 		dest->ds_dest.ds_dest.ds_udp.u_hdr.uh_udp.dest);
 
 	if (rdc == NULL) {
