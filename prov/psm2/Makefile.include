@@ -21,8 +21,10 @@ _psm2_files = \
 	prov/psm2/src/psmx2_util.c
 
 if HAVE_PSM2_SRC
+_psm2_files += \
+	prov/psm2/src/psm2_revision.c
+
 _psm2_nodist_files = \
-	prov/psm2/src/psm2_revision.c \
 	prov/psm2/src/psm2/psm_am.c \
 	prov/psm2/src/psm2/psm2_am.h \
 	prov/psm2/src/psm2/psm_am_internal.h \
