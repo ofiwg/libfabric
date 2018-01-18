@@ -441,6 +441,9 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 		fastlock_release(&queue->lock);		\
 	} while (0)
 
+#define rxm_tx_entry_cleanup(entry)	(entry)->tx_buf = NULL
+#define rxm_recv_entry_cleanup(entry)
+
 #define RXM_DEFINE_QUEUE_ENTRY(type, queue_type)				\
 static inline struct rxm_ ## type ## _entry *					\
 rxm_ ## type ## _entry_get(struct rxm_ ## queue_type ## _queue *queue)		\
@@ -459,6 +462,7 @@ static inline void								\
 rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 			       struct rxm_ ## type ## _entry *entry)		\
 {										\
+	rxm_ ## type ## _entry_cleanup(entry);					\
 	rxm_entry_push(queue, entry);						\
 }
 

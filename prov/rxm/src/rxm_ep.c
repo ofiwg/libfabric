@@ -168,8 +168,20 @@ static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 
 static void rxm_send_queue_close(struct rxm_send_queue *send_queue)
 {
-	if (send_queue->fs)
+	if (send_queue->fs) {
+		struct rxm_tx_entry *tx_entry;
+		ssize_t i;
+
+		for (i = send_queue->fs->size - 1; i >= 0; i--) {
+			tx_entry = &send_queue->fs->buf[i];
+			if (tx_entry->tx_buf) {
+				rxm_buf_release(&tx_entry->ep->tx_pool,
+						(struct rxm_buf *)tx_entry->tx_buf);
+				tx_entry->tx_buf = NULL;
+			}
+		}
 		rxm_txe_fs_free(send_queue->fs);
+	}
 	fastlock_destroy(&send_queue->lock);
 }
 

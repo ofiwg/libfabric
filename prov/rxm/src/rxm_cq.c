@@ -503,8 +503,8 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_LMT_ACK_SENT:
 		assert(comp->flags & FI_SEND);
 		rx_buf = tx_entry->context;
-		rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
 		rxm_buf_release(&rx_buf->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
+		rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
 
 		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
 		rx_buf->hdr.state = RXM_LMT_FINISH;
