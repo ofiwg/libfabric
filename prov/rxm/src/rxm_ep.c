@@ -37,6 +37,10 @@
 
 #include "rxm.h"
 
+#define RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr)	\
+	((rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) ?	\
+	 src_addr : FI_ADDR_UNSPEC)
+
 const size_t rxm_pkt_size = sizeof(struct rxm_pkt);
 
 static int rxm_match_recv_entry(struct dlist_entry *item, const void *arg)
@@ -148,6 +152,9 @@ static int rxm_send_queue_init(struct rxm_send_queue *send_queue, size_t size)
 static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 			       enum rxm_recv_queue_type type)
 {
+	struct rxm_recv_entry *recv_entry;
+	ssize_t i;
+
 	recv_queue->type = type;
 	recv_queue->fs = rxm_recv_fs_create(size);
 	if (!recv_queue->fs)
@@ -158,9 +165,17 @@ static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 	if (type == RXM_RECV_QUEUE_MSG) {
 		recv_queue->match_recv = rxm_match_recv_entry;
 		recv_queue->match_unexp = rxm_match_unexp_msg;
+		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
+			recv_entry = &recv_queue->fs->buf[i];
+			recv_entry->comp_flags = FI_MSG | FI_RECV;
+		}
 	} else {
 		recv_queue->match_recv = rxm_match_recv_entry_tagged;
 		recv_queue->match_unexp = rxm_match_unexp_msg_tagged;
+		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
+			recv_entry = &recv_queue->fs->buf[i];
+			recv_entry->comp_flags = FI_TAGGED | FI_RECV;
+		}
 	}
 	fastlock_init(&recv_queue->lock);
 	return 0;
@@ -304,12 +319,8 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 		recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = recv_entry->context;
-		if (recv_queue->type == RXM_RECV_QUEUE_TAGGED) {
-			err_entry.flags |= FI_TAGGED | FI_RECV;
-			err_entry.tag = recv_entry->tag;
-		} else {
-			err_entry.flags = FI_MSG | FI_RECV;
-		}
+		err_entry.flags |= recv_entry->comp_flags;
+		err_entry.tag = recv_entry->tag;
 		err_entry.err = FI_ECANCELED;
 		err_entry.prov_errno = -FI_ECANCELED;
 		rxm_recv_entry_release(recv_queue, recv_entry);
@@ -422,82 +433,113 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
 
-static ssize_t rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
-				  void **desc, size_t count, fi_addr_t src_addr,
-				  uint64_t tag, uint64_t ignore, void *context,
-				  uint64_t flags, struct rxm_recv_queue *recv_queue)
+static inline ssize_t
+rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		     void **desc, size_t count, fi_addr_t src_addr,
+		     uint64_t tag, uint64_t ignore, void *context,
+		     uint64_t flags, struct rxm_recv_queue *recv_queue,
+		     struct rxm_recv_entry **recv_entry)
+{
+	size_t i;
+
+	*recv_entry = rxm_recv_entry_get(recv_queue);
+	if (OFI_UNLIKELY(!*recv_entry))
+		return -FI_EAGAIN;
+
+	(*recv_entry)->count 	= (uint8_t)count;
+	(*recv_entry)->addr 	= RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr);
+	(*recv_entry)->context 	= context;
+	(*recv_entry)->flags 	= flags;
+	(*recv_entry)->ignore 	= ignore;
+	(*recv_entry)->tag	= tag;
+
+	for (i = 0; i < count; i++) {
+		(*recv_entry)->iov[i].iov_base = iov[i].iov_base;
+		(*recv_entry)->iov[i].iov_len = iov[i].iov_len;
+		if (desc)
+			(*recv_entry)->desc[i] = desc[i];
+	}
+
+	return FI_SUCCESS;
+}
+
+static inline ssize_t
+rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t src_addr,
+		   uint64_t tag, uint64_t ignore, void *context,
+		   uint64_t op_flags, struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_rx_buf *rx_buf;
-	size_t i;
+	ssize_t ret;
 
 	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
 
-	if (flags & (FI_PEEK | FI_CLAIM | FI_DISCARD))
-		assert(recv_queue->type == RXM_RECV_QUEUE_TAGGED);
+	ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count, src_addr,
+				   tag, ignore, context, op_flags,
+				   recv_queue, &recv_entry);
+	if (OFI_UNLIKELY(ret))
+		return ret;
 
-	src_addr = (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) ?
-		src_addr : FI_ADDR_UNSPEC;
+	fastlock_acquire(&recv_queue->lock);
+	rx_buf = rxm_check_unexp_msg_list(recv_queue, src_addr, tag,
+					  ignore);
+	if (rx_buf) {
+		dlist_remove(&rx_buf->unexp_msg.entry);
+		rx_buf->recv_entry = recv_entry;
+		fastlock_release(&recv_queue->lock);
+		return rxm_cq_handle_data(rx_buf);
+	}
+
+	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
+			 recv_entry->tag);
+	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
+	fastlock_release(&recv_queue->lock);
+	return 0;
+}
+
+static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iovec *iov,
+					void **desc, size_t count, fi_addr_t src_addr,
+					uint64_t tag, uint64_t ignore, void *context,
+					uint64_t flags, uint64_t op_flags,
+					struct rxm_recv_queue *recv_queue)
+{
+	struct rxm_recv_entry *recv_entry;
+	struct rxm_rx_buf *rx_buf;
+
+	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
+	assert(!(flags & (FI_PEEK | FI_CLAIM | FI_DISCARD)) ||
+		(recv_queue->type == RXM_RECV_QUEUE_TAGGED));
 
 	if (flags & FI_PEEK)
-		return rxm_ep_peek_recv(rxm_ep, src_addr, tag, ignore, context,
+		return rxm_ep_peek_recv(rxm_ep,
+					RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr),
+					tag, ignore, context,
 					flags, recv_queue);
 
-
 	if (flags & FI_CLAIM) {
+		ssize_t ret;
+
 		rx_buf = ((struct fi_context *)context)->internal[0];
 		assert(rx_buf);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Claim message\n");
 
 		if (flags & FI_DISCARD)
 			return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
-	} else {
-		fastlock_acquire(&recv_queue->lock);
-		rx_buf = rxm_check_unexp_msg_list(recv_queue, src_addr, tag,
-						  ignore);
-		if (rx_buf)
-			dlist_remove(&rx_buf->unexp_msg.entry);
-		fastlock_release(&recv_queue->lock);
-	}
 
-	recv_entry = rxm_recv_entry_get(recv_queue);
-	if (!recv_entry)
-		return -FI_EAGAIN;
-
-	recv_entry->count 	= (uint8_t)count;
-	recv_entry->addr 	= src_addr;
-	recv_entry->context 	= context;
-	recv_entry->flags 	= flags;
-	recv_entry->ignore 	= ignore;
-
-	if (recv_queue->type == RXM_RECV_QUEUE_TAGGED) {
-		recv_entry->tag 	= tag;
-		recv_entry->comp_flags 	= FI_TAGGED;
-	} else {
-		recv_entry->tag 	= 0;
-		recv_entry->comp_flags 	= FI_MSG;
-	}
-	recv_entry->comp_flags |= FI_RECV;
-
-	for (i = 0; i < count; i++) {
-		recv_entry->iov[i].iov_base = iov[i].iov_base;
-		recv_entry->iov[i].iov_len = iov[i].iov_len;
-		if (desc)
-			recv_entry->desc[i] = desc[i];
-	}
-
-	if (rx_buf) {
+		ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count,
+					   RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr),
+					   tag, ignore, context,
+					   flags | op_flags,
+					   recv_queue, &recv_entry);
+		if (OFI_UNLIKELY(ret))
+			return ret;
 		rx_buf->recv_entry = recv_entry;
 		return rxm_cq_handle_data(rx_buf);
+	} else {
+		return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr,
+					  tag, ignore, context, op_flags, recv_queue);
 	}
-
-	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
-			 recv_entry->tag);
-
-	fastlock_acquire(&recv_queue->lock);
-	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
-	fastlock_release(&recv_queue->lock);
-	return 0;
 }
 
 static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
@@ -506,25 +548,24 @@ static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
 
-	return rxm_ep_recv_common(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
-				  msg->addr, 0, 0, msg->context,
-				  flags | (rxm_ep_rx_flags(ep_fid) & FI_COMPLETION),
-				  &rxm_ep->recv_queue);
+	return rxm_ep_recv_common_flags(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
+					msg->addr, 0, 0, msg->context,
+					flags, (rxm_ep->util_ep.rx_op_flags & FI_COMPLETION),
+					&rxm_ep->recv_queue);
 }
 
 static ssize_t rxm_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 			    fi_addr_t src_addr, void *context)
 {
-	struct rxm_ep *rxm_ep;
-	struct iovec iov;
-	memset(&iov, 0, sizeof(iov));
-	iov.iov_base = buf;
-	iov.iov_len = len;
-
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+	struct rxm_ep *rxm_ep =
+		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+	struct iovec iov = {
+		.iov_base	= buf,
+		.iov_len	= len,
+	};
 
 	return rxm_ep_recv_common(rxm_ep, &iov, &desc, 1, src_addr, 0, 0,
-				  context, rxm_ep_rx_flags(ep_fid),
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->recv_queue);
 }
 
@@ -535,7 +576,7 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr, 0, 0,
-				  context, rxm_ep_rx_flags(ep_fid),
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->recv_queue);
 }
 
@@ -930,25 +971,25 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
 
-	return rxm_ep_recv_common(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
-				  msg->addr, msg->tag, msg->ignore, msg->context,
-				  flags | (rxm_ep_rx_flags(ep_fid) & FI_COMPLETION),
-				  &rxm_ep->trecv_queue);
+	return rxm_ep_recv_common_flags(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
+					msg->addr, msg->tag, msg->ignore, msg->context,
+					flags, (rxm_ep->util_ep.rx_op_flags & FI_COMPLETION),
+					&rxm_ep->trecv_queue);
 }
 
 static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
 			    void *desc, fi_addr_t src_addr, uint64_t tag,
 			    uint64_t ignore, void *context)
 {
-	struct iovec iov = {
-		.iov_base = (void *)buf,
-		.iov_len = len,
-	};
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
+	struct iovec iov = {
+		.iov_base	= buf,
+		.iov_len	= len,
+	};
 
 	return rxm_ep_recv_common(rxm_ep, &iov, &desc, 1, src_addr, tag, ignore,
-				  context, rxm_ep_rx_flags(ep_fid),
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->trecv_queue);
 }
 
@@ -959,8 +1000,8 @@ static ssize_t rxm_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
 
-	return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr, tag,
-				  ignore, context, rxm_ep_rx_flags(ep_fid),
+	return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr, tag, ignore,
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->trecv_queue);
 }
 

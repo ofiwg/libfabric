@@ -343,12 +343,6 @@ static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
 	return util_ep->tx_op_flags;
 }
 
-static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
-	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
-					       ep_fid);
-	return util_ep->rx_op_flags;
-}
-
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 int rxm_info_to_core(uint32_t version, const struct fi_info *rxm_info,
