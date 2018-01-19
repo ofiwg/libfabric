@@ -46,23 +46,6 @@ static int psmx2_trx_ctxt_cnt = 0;
  * same epid to connect to the same peers.
  */
 
-static psm2_error_t (*psmx2_disconnect_psm2_ep)(psm2_ep_t ep,
-						int epaddr_cnt,
-						psm2_epaddr_t *epaddrs,
-						const int *masks,
-						psm2_error_t *errors,
-						int64_t timeout);
-
-void psmx2_init_disconnect_func(void)
-{
-	void *dlsym(void *handle, const char *symbol);
-
-	psmx2_disconnect_psm2_ep = dlsym(NULL, "psm2_ep_disconnect");
-	if (!psmx2_disconnect_psm2_ep)
-		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"function psm2_ep_disconnect() is missing\n");
-}
-
 struct disconnect_args {
 	psm2_ep_t	ep;
 	psm2_epaddr_t	epaddr;
@@ -76,8 +59,8 @@ static void *disconnect_func(void *args)
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
 		"psm2_ep: %p, epaddr: %p\n", disconn->ep, disconn->epaddr);
 
-	(*psmx2_disconnect_psm2_ep)(disconn->ep, 1, &disconn->epaddr, NULL,
-				    &errors, 5*1e9);
+	psm2_ep_disconnect(disconn->ep, 1, &disconn->epaddr, NULL,
+			   &errors, 5*1e9);
 	free(args);
 	return NULL;
 }
@@ -90,39 +73,39 @@ static int psmx2_peer_match(struct dlist_entry *item, const void *arg)
 	return  (peer->epaddr == arg);
 }
 
-int psmx2_am_trx_ctxt_handler_ext(psm2_am_token_t token, psm2_amarg_t *args,
+int psmx2_am_trx_ctxt_handler(psm2_am_token_t token, psm2_amarg_t *args,
 				  int nargs, void *src, uint32_t len,
-				  struct psmx2_trx_ctxt *trx_ctxt)
+				  void *hctx)
 {
 	psm2_epaddr_t epaddr;
 	int err = 0;
 	int cmd;
 	struct disconnect_args *disconn;
 	pthread_t disconnect_thread;
+	struct psmx2_trx_ctxt *trx_ctxt;
+	trx_ctxt = (struct psmx2_trx_ctxt *)hctx;
 
 	psm2_am_get_source(token, &epaddr);
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
 
 	switch(cmd) {
 	case PSMX2_AM_REQ_TRX_CTXT_DISCONNECT:
-		if (psmx2_disconnect_psm2_ep) {
-			/*
-			 * we can't call psm2_ep_disconnect from the AM
-			 * handler. instead, create a thread to do the work.
-			 * the performance of this operation is not important.
-			 */
-			disconn = malloc(sizeof(*disconn));
-			if (disconn) {
-				psmx2_lock(&trx_ctxt->peer_lock, 2);
-				dlist_remove_first_match(&trx_ctxt->peer_list,
-							 psmx2_peer_match, epaddr);
-				psmx2_unlock(&trx_ctxt->peer_lock, 2);
-				disconn->ep = trx_ctxt->psm2_ep;
-				disconn->epaddr = epaddr;
-				pthread_create(&disconnect_thread, NULL,
-					       disconnect_func, disconn);
-				pthread_detach(disconnect_thread);
-			}
+		/*
+		 * we can't call psm2_ep_disconnect from the AM
+		 * handler. instead, create a thread to do the work.
+		 * the performance of this operation is not important.
+		 */
+		disconn = malloc(sizeof(*disconn));
+		if (disconn) {
+			psmx2_lock(&trx_ctxt->peer_lock, 2);
+			dlist_remove_first_match(&trx_ctxt->peer_list,
+						 psmx2_peer_match, epaddr);
+			psmx2_unlock(&trx_ctxt->peer_lock, 2);
+			disconn->ep = trx_ctxt->psm2_ep;
+			disconn->epaddr = epaddr;
+			pthread_create(&disconnect_thread, NULL,
+				       disconnect_func, disconn);
+			pthread_detach(disconnect_thread);
 		}
 		break;
 
@@ -169,7 +152,8 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 	if (!trx_ctxt)
 		return;
 
-	psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
+	if (psmx2_env.disconnect)
+		psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
 
 	if (trx_ctxt->am_initialized)
 		psmx2_am_fini(trx_ctxt);
@@ -185,7 +169,8 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 	/* workaround for:
 	 * Assertion failure at psm2_ep.c:1059: ep->mctxt_master == ep
 	 */
-	sleep(psmx2_env.delay);
+	if (psmx2_env.delay)
+		sleep(psmx2_env.delay);
 
 	if (psmx2_env.timeout)
 		err = psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,

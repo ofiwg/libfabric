@@ -160,9 +160,10 @@ fi_ibv_rdm_tagged_recvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg
 					  &recv_data);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
-			  "fi_recvfrom: conn %p, tag 0x%" PRIx64 ", len %zu, rbuf %p, fi_ctx %p, posted_recv %d\n",
+			  "fi_recvfrom: conn %p, tag 0x%" PRIx64 ", len %zu, rbuf %p, "
+			  "fi_ctx %p, posted_recv %"PRIu32"\n",
 			  conn, msg->tag, recv_data.data_len, recv_data.dest_addr,
-			  msg->context, ofi_atomic_get32(&ep_rdm->posted_recvs));
+			  msg->context, ep_rdm->posted_recvs);
 
 		if (!ret && !request->state.err)
 			ret = rdm_trecv_second_event(request, ep_rdm);
@@ -213,8 +214,8 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (len > ep->rndv_threshold) {
-		abort();
+	if (OFI_UNLIKELY(len > ep->rndv_threshold)) {
+		assert(0);
 		return -FI_EMSGSIZE;
 	}
 
@@ -222,24 +223,23 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 		struct fi_ibv_rdm_buf *sbuf = 
 			fi_ibv_rdm_prepare_send_resources(conn);
 		if (sbuf) {
-			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
 			struct ibv_sge sge = {
-				.addr = (uintptr_t)(void*)sbuf,
+				.addr = (uintptr_t)(void *)sbuf,
 				.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE,
-				.lkey = conn->s_mr->lkey,
+				.lkey = fi_ibv_mr_internal_lkey(&conn->s_md),
 			};
-
-			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
-			wr.sg_list = &sge;
-			wr.num_sge = 1;
-			wr.wr.rdma.remote_addr = (uintptr_t)
-				fi_ibv_rdm_get_remote_addr(conn, sbuf);
-			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-			wr.send_flags = (sge.length < ep->max_inline_rc)
-				? IBV_SEND_INLINE : 0;
-			wr.imm_data = 0;
-			wr.opcode = ep->eopcode;
+			struct ibv_send_wr wr = {
+				.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn),
+				.sg_list = &sge,
+				.num_sge = 1,
+				.wr.rdma.remote_addr = (uintptr_t)
+					fi_ibv_rdm_get_remote_addr(conn, sbuf),
+				.wr.rdma.rkey = conn->remote_rbuf_rkey,
+				.send_flags = (sge.length < ep->max_inline_rc)
+					       ? IBV_SEND_INLINE : 0,
+				.opcode = ep->eopcode,
+			};
 
 			sbuf->service_data.pkt_len = size;
 			sbuf->header.tag = tag;
@@ -247,12 +247,10 @@ fi_ibv_rdm_tagged_inject(struct fid_ep *fid, const void *buf, size_t len,
 
 			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 					       FI_IBV_RDM_EAGER_PKT);
-			if ((len > 0) && (buf)) {
-				memcpy(&sbuf->payload, buf, len);
-			}
+			memcpy(&sbuf->payload, buf, len);
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep);
-			if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+			if (OFI_UNLIKELY(ibv_post_send(conn->qp[0], &wr, &bad_wr))) {
 				assert(0);
 				return -errno;
 			} else {
@@ -403,22 +401,22 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 					struct fi_ibv_rdm_ep *ep)
 {
 	struct ibv_send_wr *bad_wr = NULL;
-	struct ibv_send_wr wr = { 0 };
 	struct ibv_sge sge = {
-		.addr = (uint64_t) &conn->sbuf_ack_status,
+		.addr = (uint64_t)&conn->sbuf_ack_status,
 		.length = sizeof(conn->sbuf_ack_status),
-		.lkey = conn->ack_mr->lkey,
+		.lkey = fi_ibv_mr_internal_lkey(&conn->ack_md),
 	};
-
-	wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.wr.rdma.remote_addr = (uint64_t)
-		&conn->remote_sbuf_head->service_data.status;
-	wr.wr.rdma.rkey = conn->remote_sbuf_rkey;
-	wr.send_flags = (sge.length < ep->max_inline_rc) ? IBV_SEND_INLINE : 0;
-	/* w/o imm - do not put it into recv completion queue */
-	wr.opcode = IBV_WR_RDMA_WRITE;
+	struct ibv_send_wr wr = {
+		.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn),
+		.sg_list = &sge,
+		.num_sge = 1,
+		.wr.rdma.remote_addr = (uint64_t)
+			&conn->remote_sbuf_head->service_data.status,
+		.wr.rdma.rkey = conn->remote_sbuf_rkey,
+		.send_flags =
+			(sge.length < ep->max_inline_rc) ? IBV_SEND_INLINE : 0,
+		.opcode = IBV_WR_RDMA_WRITE,
+	};
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep);
 	VERBS_DBG(FI_LOG_EP_DATA,
@@ -429,7 +427,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_conn *conn,
 		assert(0);
 	};
 
-	if (ofi_atomic_get32(&conn->av_entry->sends_outgoing) > ep->n_buffs) {
+	if (conn->av_entry->sends_outgoing > ep->n_buffs) {
 		fi_ibv_rdm_tagged_poll_send(ep);
 	}
 }
@@ -506,10 +504,8 @@ static inline
 void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 				struct fi_ibv_rdm_conn *conn)
 {
-	int32_t recv_preposted;
-	if ((recv_preposted = ofi_atomic_dec32(
-			&conn->av_entry->recv_preposted)) < ep->recv_preposted_threshold) {
-		int to_post = ep->rq_wr_depth - recv_preposted;
+	if (conn->av_entry->recv_preposted-- < ep->recv_preposted_threshold) {
+		int to_post = ep->rq_wr_depth - conn->av_entry->recv_preposted;
 		ssize_t res = fi_ibv_rdm_repost_receives(conn, ep, to_post);
 		if (res < 0) {
 			VERBS_INFO(FI_LOG_EP_DATA, "repost recv failed %zd\n", res);
@@ -517,13 +513,13 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 			abort();
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,
-			"reposted_recvs, posted %d, local_credits %d\n",
-			to_post, recv_preposted);
+			  "reposted_recvs, posted %d, local_credits %"PRIu32"\n",
+			  to_post, conn->av_entry->recv_preposted);
 	}
 	/* Since we want to print out here the remaining space for prepost,
 	 * we try to get up-to-date value of the `recv_preposted` */
-	VERBS_DBG(FI_LOG_EP_DATA, "conn %p remain prepost recvs %d\n",
-		  conn, ofi_atomic_get32(&conn->av_entry->recv_preposted));
+	VERBS_DBG(FI_LOG_EP_DATA, "conn %p remain prepost recvs %"PRIu32"\n",
+		  conn, conn->av_entry->recv_preposted);
 }
 
 static inline int 
@@ -544,14 +540,14 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 		/* on QP error initiate disconnection procedure:
 		 * flush as many as possible preposted (and failed)
 		 * entries and after this set connection to 'closed' state */
-		if (!ofi_atomic_get32(&conn->av_entry->recv_preposted)) {
+		if (!conn->av_entry->recv_preposted) {
 			VERBS_DBG(FI_LOG_EP_DATA, "no more preposted entries: "
 				"conn %p state %d\n",
 				conn, conn->state);
 			return 0;
 		}
 
-		ofi_atomic_dec32(&conn->av_entry->recv_preposted);
+		conn->av_entry->recv_preposted--;
 		if (wc->status == IBV_WC_WR_FLUSH_ERR &&
 		    conn->state == FI_VERBS_CONN_ESTABLISHED) {
 			/*
@@ -680,7 +676,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	struct ibv_wc wc[wc_count];
 	int ret = 0, err = 0, i;
 
-	if (ofi_atomic_get32(&ep->posted_sends) > 0) {
+	if (ep->posted_sends > 0) {
 		do {
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
 			for (i = 0; i < ret && !err; ++i) {

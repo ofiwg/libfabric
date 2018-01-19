@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015-2018 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -70,7 +70,6 @@ extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
 extern struct util_prov smr_util_prov;
 
-int smr_check_info(struct fi_info *info);
 int smr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context);
 
@@ -105,7 +104,7 @@ struct smr_ep_entry {
 struct smr_ep;
 typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
 		uint64_t flags, size_t len, void *buf, void *addr,
-		uint64_t tag, uint64_t err);
+		uint64_t tag, uint64_t data, uint64_t err);
 typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context,
 		uint64_t flags, uint64_t err);
 

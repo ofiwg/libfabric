@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
@@ -88,6 +88,8 @@ static void __domain_destruct(void *obj)
 					"failed to close memory "
 					"registration cache\n");
 	}
+
+	free(domain->mr_cache_info);
 
 	ret = _gnix_smrn_close(domain->mr_cache_attr.smrn);
 	if (ret != FI_SUCCESS)
@@ -635,7 +637,11 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		fastlock_init(&domain->mr_cache_info[i].mr_cache_lock);
 	}
 
-	domain->udreg_reg_limit = 4096;
+	/*
+	 * we are likely sharing udreg entries with Craypich if we're using udreg
+	 * cache, so ask for only half the entries by default.
+	 */
+	domain->udreg_reg_limit = 2048;
 
 	dlist_init(&domain->nic_list);
 	dlist_init(&domain->list);

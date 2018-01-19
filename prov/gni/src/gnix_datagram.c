@@ -433,8 +433,6 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 	nic = cm_nic->nic;
 	assert(nic != NULL);
 
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
 	if (type == GNIX_DGRAM_BLOCK) {
 		if (hndl->timeout_needed &&
 			(hndl->timeout_needed(hndl->timeout_data) == true))

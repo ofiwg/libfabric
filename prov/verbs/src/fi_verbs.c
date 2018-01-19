@@ -48,6 +48,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.def_rx_size		= 384,
 	.def_tx_iov_limit	= 4,
 	.def_rx_iov_limit	= 4,
+	.def_inline_size	= 256,
 	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
 	.fork_unsafe		= 0,
 	/* Disable by default. Because this feature may corrupt
@@ -56,6 +57,9 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
+	.mr_cache_enable	= 0,
+	.mr_cache_size		= 4096,
+	.mr_cache_lazy_size	= 0,
 
 	.rdm			= {
 		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
@@ -63,6 +67,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 		.rndv_seg_size		= FI_IBV_RDM_SEG_MAXSIZE,
 		.thread_timeout		= FI_IBV_RDM_CM_THREAD_TIMEOUT,
 		.eager_send_opcode	= "IBV_WR_SEND",
+		.cm_thread_affinity	= NULL,
 	},
 
 	.dgram			= {
@@ -90,19 +95,10 @@ struct util_prov fi_ibv_util_prov = {
 
 int fi_ibv_sockaddr_len(struct sockaddr *addr)
 {
-	if (!addr)
-		return 0;
-
-	switch (addr->sa_family) {
-	case AF_INET:
-		return sizeof(struct sockaddr_in);
-	case AF_INET6:
-		return sizeof(struct sockaddr_in6);
-	case AF_IB:
+	if (addr->sa_family == AF_IB)
 		return sizeof(struct sockaddr_ib);
-	default:
-		return 0;
-	}
+	else
+		return ofi_sizeofaddr(addr);
 }
 
 int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep)
@@ -516,6 +512,79 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 	return 0;
 }
 
+int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
+{
+	struct ibv_qp_init_attr qp_attr;
+	struct ibv_qp *qp = NULL;
+	struct ibv_cq *cq = ibv_create_cq(context, 1, NULL, NULL, 0);
+	assert(cq);
+	int max_inline = 2;
+	int rst = 0;
+
+	memset(&qp_attr, 0, sizeof(qp_attr));
+	qp_attr.send_cq = cq;
+	qp_attr.recv_cq = cq;
+	qp_attr.qp_type = IBV_QPT_RC;
+	qp_attr.cap.max_send_wr = 1;
+	qp_attr.cap.max_recv_wr = 1;
+	qp_attr.cap.max_send_sge = 1;
+	qp_attr.cap.max_recv_sge = 1;
+	qp_attr.sq_sig_all = 1;
+
+	do {
+		if (qp)
+			ibv_destroy_qp(qp);
+		qp_attr.cap.max_inline_data = max_inline;
+		qp = ibv_create_qp(pd, &qp_attr);
+		if (qp) {
+			/*
+			 * truescale returns max_inline_data 0
+			 */
+			if (qp_attr.cap.max_inline_data == 0)
+				break;
+
+			/*
+			 * iWarp is able to create qp with unsupported
+			 * max_inline, lets take first returned value.
+			 */
+			if (context->device->transport_type == IBV_TRANSPORT_IWARP) {
+				max_inline = rst = qp_attr.cap.max_inline_data;
+				break;
+			}
+			rst = max_inline;
+		}
+	} while (qp && (max_inline < INT_MAX / 2) && (max_inline *= 2));
+
+	if (rst != 0) {
+		int pos = rst, neg = max_inline;
+		do {
+			max_inline = pos + (neg - pos) / 2;
+			if (qp)
+				ibv_destroy_qp(qp);
+
+			qp_attr.cap.max_inline_data = max_inline;
+			qp = ibv_create_qp(pd, &qp_attr);
+			if (qp)
+				pos = max_inline;
+			else
+				neg = max_inline;
+
+		} while (neg - pos > 2);
+
+		rst = pos;
+	}
+
+	if (qp) {
+		ibv_destroy_qp(qp);
+	}
+
+	if (cq) {
+		ibv_destroy_cq(cq);
+	}
+
+	return rst;
+}
+
 static int fi_ibv_get_param_int(const char *param_name,
 				const char *param_str,
 				int *param_default)
@@ -655,6 +724,28 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of iface\n");
 		return -FI_EINVAL;
 	}
+	if (fi_ibv_get_param_bool("mr_cache_enable", "Enable Memory Region caching",
+				  &fi_ibv_gl_data.mr_cache_enable)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of mr_cache_enable\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("mr_cache_size", "Maximum number of cache entries",
+				 &fi_ibv_gl_data.mr_cache_size) ||
+	    (fi_ibv_gl_data.mr_cache_size < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of mr_cache_size\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("mr_cache_lazy_size",
+				 "Minimum size of lazy deregistration",
+				 &fi_ibv_gl_data.mr_cache_lazy_size)  ||
+	    (fi_ibv_gl_data.mr_cache_lazy_size < 0)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of mr_cache_lazy_size\n");
+		return -FI_EINVAL;
+	}
+	
 
 	/* RDM-specific parameters */
 	if (fi_ibv_get_param_int("rdm_buffer_num", "The number of pre-registered "
@@ -700,6 +791,16 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of rdm_eager_send_opcode\n");
 		return -FI_EINVAL;
 	}
+	if (fi_ibv_get_param_str("rdm_cm_thread_affinity",
+				 "If specified, bind the CM thread to the indicated "
+				 "range(s) of Linux virtual processor ID(s). "
+				 "This option is currently not supported on OS X. "
+				 "Usage: id_start[-id_end[:stride]][,]",
+				 &fi_ibv_gl_data.rdm.cm_thread_affinity)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid thread affinity range provided in the rdm_cm_thread_affinity\n");
+		return -FI_EINVAL;
+	}
 
 	/* DGRAM-specific parameters */
 	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
@@ -728,6 +829,7 @@ static int fi_ibv_read_params(void)
 
 static void fi_ibv_fini(void)
 {
+	
 	fi_freeinfo((void *)fi_ibv_util_prov.info);
 	fi_ibv_util_prov.info = NULL;
 }

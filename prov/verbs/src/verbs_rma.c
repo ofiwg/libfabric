@@ -246,7 +246,8 @@ fi_ibv_rdm_ep_rma_preinit(void **desc, struct fi_ibv_rdm_buf **rdm_buf,
 	if (*desc == NULL && len < ep->rndv_threshold) {
 		*rdm_buf = fi_ibv_rdm_rma_prepare_resources(conn);
 		if (*rdm_buf)
-			*desc = (void*)(uintptr_t)conn->rma_mr->lkey;
+			*desc = (void *)(uintptr_t)
+				fi_ibv_mr_internal_lkey(&conn->rma_md);
 		else
 			goto again;
 	} else if (!fi_ibv_rdm_check_connection(conn) ||
@@ -276,8 +277,8 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
 		.rbuf = (uintptr_t)msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
-		.rkey = (uint64_t)(uintptr_t)(msg->rma_iov[0].key),
-		.lkey = (uint64_t)(uintptr_t)(msg->desc ? msg->desc[0] : NULL),
+		.mr_rkey = (uint64_t)(uintptr_t)(msg->rma_iov[0].key),
+		.mr_lkey = (uint64_t)(uintptr_t)(msg->desc ? msg->desc[0] : NULL),
 		.op_code = IBV_WR_RDMA_READ
 	};
 	struct fi_ibv_rma_post_ready_data post_ready_data = { .ep_rdm = ep };
@@ -291,7 +292,7 @@ fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return -FI_EMSGSIZE;
 	}
 
-	ret = fi_ibv_rdm_ep_rma_preinit((void**)&start_data.lkey, &rdm_buf,
+	ret = fi_ibv_rdm_ep_rma_preinit((void**)&start_data.mr_lkey, &rdm_buf,
 					msg->msg_iov[0].iov_len,
 					conn, ep);
 	if (ret) {
@@ -387,8 +388,8 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.data_len = (uint64_t)msg->msg_iov[0].iov_len,
 		.rbuf = msg->rma_iov[0].addr,
 		.lbuf = (uintptr_t)msg->msg_iov[0].iov_base,
-		.rkey = msg->rma_iov[0].key,
-		.lkey = (uint64_t)(uintptr_t)(msg->desc ? msg->desc[0] : NULL),
+		.mr_rkey = msg->rma_iov[0].key,
+		.mr_lkey = (uint64_t)(uintptr_t)(msg->desc ? msg->desc[0] : NULL),
 		.op_code = IBV_WR_RDMA_WRITE
 	};
 
@@ -397,7 +398,7 @@ fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		return -FI_EMSGSIZE;
 	}
 
-	ret = fi_ibv_rdm_ep_rma_preinit((void**)&start_data.lkey, &rdm_buf,
+	ret = fi_ibv_rdm_ep_rma_preinit((void**)&start_data.mr_lkey, &rdm_buf,
 					msg->msg_iov[0].iov_len,
 					conn, ep);
 	if (ret) {
@@ -489,8 +490,8 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 		.data_len = (uint64_t)len,
 		.rbuf = addr,
 		.lbuf = (uintptr_t)buf,
-		.rkey = (uint64_t)key,
-		.lkey = 0
+		.mr_rkey = (uint64_t)key,
+		.mr_lkey = 0
 	};
 	ssize_t ret;
 	struct fi_ibv_rdm_request *request =

@@ -186,6 +186,17 @@ int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid, uint64_t
 	return FI_SUCCESS;
 }
 
+int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags)
+{
+	if (!info)
+		return 0;
+
+	if (info->rx_attr && (info->rx_attr->mode & flags))
+		return 1;
+
+	return (info->mode & flags) ? 1 : 0;
+}
+
 uint64_t fi_gettime_ms(void)
 {
 	struct timeval now;
@@ -334,7 +345,8 @@ static int ofi_str_to_psmx(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = sizeof(uint64_t);
-	if (!(*addr = calloc(1, *len)))
+	*addr = calloc(1, *len);
+	if (!(*addr))
 		return -FI_ENOMEM;
 
 	ret = sscanf(str, "%*[^:]://%" SCNx64, (uint64_t *) *addr);
@@ -350,7 +362,8 @@ static int ofi_str_to_psmx2(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = 2 * sizeof(uint64_t);
-	if (!(*addr = calloc(1, *len)))
+	*addr = calloc(1, *len);
+	if (!(*addr))
 		return -FI_ENOMEM;
 
 	ret = sscanf(str, "%*[^:]://%" SCNx64 ":%" SCNx64,
@@ -370,7 +383,8 @@ static int ofi_str_to_ib_ud(const char *str, void **addr, size_t *len)
 	memset(gid, 0, sizeof(gid));
 
 	*len = 32;
-	if (!(*addr = calloc(1, *len)))
+	*addr = calloc(1, *len);
+	if(!(*addr))
 		return -FI_ENOMEM;
 
 	ret = sscanf(str, "%*[^:]://"
@@ -395,7 +409,8 @@ static int ofi_str_to_sin(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = sizeof(*sin);
-	if (!(sin = calloc(1, *len)))
+	sin = calloc(1, *len);
+	if (!sin)
 		return -FI_ENOMEM;
 
 	sin->sin_family = AF_INET;
@@ -434,7 +449,8 @@ static int ofi_str_to_sin6(const char *str, void **addr, size_t *len)
 	int ret;
 
 	*len = sizeof(*sin6);
-	if (!(sin6 = calloc(1, *len)))
+	sin6 = calloc(1, *len);
+	if (!sin6)
 		return -FI_ENOMEM;
 
 	sin6->sin6_family = AF_INET6;
@@ -553,6 +569,45 @@ void ofi_straddr_log_internal(const char *func, int line,
 		addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
 		fi_log(prov, level, subsys, func, line, "%s: %s\n", log_str,
 		       ofi_straddr(buf, &len, addr_format, addr));
+	}
+}
+
+static int ofi_ipv4_is_any_addr(struct sockaddr *sa)
+{
+	struct in_addr ia_any = {
+		.s_addr = INADDR_ANY,
+	};
+
+	if (!sa)
+		return 0;
+
+	return !memcmp(&ofi_sin_addr(sa).s_addr, &ia_any, sizeof(ia_any));
+
+}
+
+static int ofi_ipv6_is_any_addr(struct sockaddr *sa)
+{
+	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
+
+	if (!sa)
+		return 0;
+
+	return !memcmp(&ofi_sin6_addr(sa), &ia6_any, sizeof(ia6_any));
+}
+
+int ofi_is_any_addr(struct sockaddr *sa)
+{
+	if (!sa)
+		return 0;
+
+	switch(sa->sa_family) {
+	case AF_INET:
+		return ofi_ipv4_is_any_addr(sa);
+	case AF_INET6:
+		return ofi_ipv6_is_any_addr(sa);
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format!\n");
+		return 0;
 	}
 }
 

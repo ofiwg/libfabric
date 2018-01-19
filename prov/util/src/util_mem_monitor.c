@@ -76,7 +76,10 @@ int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 
 	/* Ensure the subscription is initialized before we can get events */
 	dlist_init(&subscription->entry);
+
 	subscription->nq = nq;
+	subscription->addr = addr;
+	subscription->len = len;
 	fastlock_acquire(&nq->lock);
 	nq->refcnt++;
 	fastlock_release(&nq->lock);
@@ -93,13 +96,17 @@ int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 	return ret;
 }
 
-void ofi_monitor_unsubscribe(void *addr, size_t len,
-			     struct ofi_subscription *subscription)
+void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
 {
+	FI_DBG(&core_prov, FI_LOG_MR,
+	       "unsubscribing addr=%p len=%zu subscription=%p\n",
+	       subscription->addr, subscription->len, subscription);
 	subscription->nq->monitor->unsubscribe(subscription->nq->monitor,
-						addr, len, subscription);
+					       subscription->addr,
+					       subscription->len,
+					       subscription);
 	fastlock_acquire(&subscription->nq->lock);
-	dlist_remove_init(&subscription->entry);
+	dlist_init(&subscription->entry);
 	subscription->nq->refcnt--;
 	fastlock_release(&subscription->nq->lock);
 }
@@ -117,13 +124,14 @@ static void util_monitor_read_events(struct ofi_mem_monitor *monitor)
 		}
 
 		FI_DBG(&core_prov, FI_LOG_MR,
-		       "found event, context=%p nq=%p\n",
-		       subscription, subscription->nq);
+		       "found event, context=%p, addr=%p, len=%"PRIu64" nq=%p\n",
+		       subscription, subscription->addr,
+		       subscription->len, subscription->nq);
 
 		fastlock_acquire(&subscription->nq->lock);
 		if (dlist_empty(&subscription->entry))
 			dlist_insert_tail(&subscription->entry,
-					  &subscription->nq->list);
+					   &subscription->nq->list);
 		fastlock_release(&subscription->nq->lock);
 	} while (1);
 }

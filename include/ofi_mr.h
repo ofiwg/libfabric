@@ -105,6 +105,8 @@ struct ofi_notification_queue {
 struct ofi_subscription {
 	struct ofi_notification_queue	*nq;
 	struct dlist_entry		entry;
+	void				*addr;
+	size_t				len;
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -116,8 +118,7 @@ void ofi_monitor_del_queue(struct ofi_notification_queue *nq);
 int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 			  void *addr, size_t len,
 			  struct ofi_subscription *subscription);
-void ofi_monitor_unsubscribe(void *addr, size_t len,
-			     struct ofi_subscription *subscription);
+void ofi_monitor_unsubscribe(struct ofi_subscription *subscription);
 struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq);
 
 
@@ -146,6 +147,25 @@ int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 		      size_t len, uint64_t key, uint64_t access,
 		      void **context);
 
+struct ofi_mr {
+	struct fid_mr mr_fid;
+	struct util_domain *domain;
+	uint64_t key;
+	uint64_t flags;
+};
+
+int ofi_mr_close(struct fid *fid);
+int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		   uint64_t flags, struct fid_mr **mr_fid);
+int ofi_mr_regv(struct fid *fid, const struct iovec *iov,
+	        size_t count, uint64_t access, uint64_t offset,
+		uint64_t requested_key, uint64_t flags,
+		struct fid_mr **mr_fid, void *context);
+int ofi_mr_reg(struct fid *fid, const void *buf, size_t len,
+	       uint64_t access, uint64_t offset, uint64_t requested_key,
+	       uint64_t flags, struct fid_mr **mr_fid, void *context);
+int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len,
+		  uintptr_t *addr, uint64_t key, uint64_t access);
 
 /*
  * Memory registration cache

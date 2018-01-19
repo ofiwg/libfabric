@@ -69,6 +69,13 @@ static struct fi_ops smr_domain_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static struct fi_ops_mr smr_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = ofi_mr_reg,
+	.regv = ofi_mr_regv,
+	.regattr = ofi_mr_regattr,
+};
+
 int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
@@ -76,7 +83,7 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct smr_domain *smr_domain;
 	struct smr_fabric *smr_fabric;
 
-	ret = smr_check_info(info);
+	ret = ofi_prov_check_info(&smr_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 
@@ -98,5 +105,7 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	*domain = &smr_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &smr_domain_fi_ops;
 	(*domain)->ops = &smr_domain_ops;
+	(*domain)->mr = &smr_mr_ops;
+
 	return 0;
 }

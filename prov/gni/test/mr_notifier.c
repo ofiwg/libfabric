@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2016-2018 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -166,7 +166,6 @@ Test(mr_notifier, multiple)
 	lens[8] = 42;
 	lens[9] = (1<<14)-1;
 	lens[10] = (1<<21)+1;
-	lens[11] = (1<<21)-1;
 
 	monitor_multiple(lens+5, 2);
 	monitor_multiple(lens, num_lens);

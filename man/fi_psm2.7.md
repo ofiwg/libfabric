@@ -144,7 +144,7 @@ The *psm2* provider checks for the following environment variables:
 : Time (seconds) to sleep before closing PSM endpoints. This is a workaround
   for a bug in some versions of PSM library.
 
-  The default setting is 1.
+  The default setting is 0.
 
 *FI_PSM2_TIMEOUT*
 : Timeout (seconds) for gracefully closing PSM endpoints. A forced closing
@@ -205,6 +205,21 @@ The *psm2* provider checks for the following environment variables:
   to *FI_AV_TABLE*. This is handled differently by *fi_getinfo* and
   *fi_av_open*. A call to *fi_getinfo* that asks for *FI_AV_MAP* would fail
   but *fi_av_open* just forces *FI_AV_TABLE* silently.
+
+  The default setting is 0.
+
+*FI_PSM2_DISCONNECT
+: The provider has a mechanism to automatically send disconnection notifications
+  to all connected peers before the local endpoint is closed. As the response,
+  the peers call *psm2_ep_disconnect* to clean up the connection state at their
+  side. This allows the same PSM2 epid be used by different dynamically started
+  processes (clients) to communicate with the same peer (server). This mechanism,
+  however, introduce extra overhead to the finalization phase. For applications
+  that never reuse epids within the same session such overhead is unnecessary.
+
+  This option controls whether the automatic disconnection notification mechanism
+  should be enabled. For client-server application mentioned above, the client
+  side should set this option to 1, but the server should set it to 0.
 
   The default setting is 0.
 

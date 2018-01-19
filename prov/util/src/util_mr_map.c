@@ -186,3 +186,111 @@ void ofi_mr_map_close(struct ofi_mr_map *map)
 {
 	rbtDelete(map->rbtree);
 }
+
+int ofi_mr_close(struct fid *fid)
+{
+	struct ofi_mr *mr;
+	int ret;
+
+	mr = container_of(fid, struct ofi_mr, mr_fid.fid);
+
+	fastlock_acquire(&mr->domain->lock);
+	ret = ofi_mr_map_remove(&mr->domain->mr_map, mr->key);
+	fastlock_release(&mr->domain->lock);
+	if (ret)
+		return ret;
+
+	ofi_atomic_dec32(&mr->domain->ref);
+	free(mr);
+	return 0;
+}
+
+static struct fi_ops ofi_mr_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = ofi_mr_close,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		   uint64_t flags, struct fid_mr **mr_fid)
+{
+	struct util_domain *domain;
+	struct ofi_mr *mr;
+	uint64_t key;
+	int ret = 0;
+
+	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
+		return -FI_EINVAL;
+
+	domain = container_of(fid, struct util_domain, domain_fid.fid);
+	mr = calloc(1, sizeof(*mr));
+	if (!mr)
+		return -FI_ENOMEM;
+
+	fastlock_acquire(&domain->lock);
+
+	mr->mr_fid.fid.fclass = FI_CLASS_MR;
+	mr->mr_fid.fid.context = attr->context;
+	mr->mr_fid.fid.ops = &ofi_mr_fi_ops;
+	mr->domain = domain;
+	mr->flags = flags;
+
+	ret = ofi_mr_map_insert(&domain->mr_map, attr, &key, mr);
+	if (ret) {
+		free(mr);
+		goto out;
+	}
+
+	mr->mr_fid.key = mr->key = key;
+	mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
+
+	*mr_fid = &mr->mr_fid;
+	ofi_atomic_inc32(&domain->ref);
+
+out:
+	fastlock_release(&domain->lock);
+	return ret;
+}
+
+int ofi_mr_regv(struct fid *fid, const struct iovec *iov,
+	        size_t count, uint64_t access, uint64_t offset,
+		uint64_t requested_key, uint64_t flags,
+		struct fid_mr **mr_fid, void *context)
+{
+	struct fi_mr_attr attr;
+
+	attr.mr_iov = iov;
+	attr.iov_count = count;
+	attr.access = access;
+	attr.offset = offset;
+	attr.requested_key = requested_key;
+	attr.context = context;
+	return ofi_mr_regattr(fid, &attr, flags, mr_fid);
+}
+
+int ofi_mr_reg(struct fid *fid, const void *buf, size_t len,
+	       uint64_t access, uint64_t offset, uint64_t requested_key,
+	       uint64_t flags, struct fid_mr **mr_fid, void *context)
+{
+	struct iovec iov;
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	return ofi_mr_regv(fid, &iov, 1, access, offset, requested_key, flags,
+			   mr_fid, context);
+}
+
+int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len,
+		  uintptr_t *addr, uint64_t key, uint64_t access)
+{
+	struct util_domain *domain;
+	int ret;
+
+	domain = container_of(map, struct util_domain, mr_map);
+	fastlock_acquire(&domain->lock);
+	ret = ofi_mr_map_verify(&domain->mr_map, addr, len,
+				key, access, NULL);
+	fastlock_release(&domain->lock);
+	return ret;
+}

@@ -43,7 +43,7 @@ struct psmx2_env psmx2_env = {
 	.name_server	= 1,
 	.tagged_rma	= 1,
 	.uuid		= PSMX2_DEFAULT_UUID,
-	.delay		= 1,
+	.delay		= 0,
 	.timeout	= 5,
 	.prog_interval	= -1,
 	.prog_affinity	= NULL,
@@ -54,6 +54,7 @@ struct psmx2_env psmx2_env = {
 	.inject_size	= 64,
 	.lock_level	= 2,
 	.lazy_conn	= 0,
+	.disconnect	= 0,
 };
 
 static void psmx2_init_env(void)
@@ -71,6 +72,7 @@ static void psmx2_init_env(void)
 	fi_param_get_int(&psmx2_prov, "inject_size", &psmx2_env.inject_size);
 	fi_param_get_bool(&psmx2_prov, "lock_level", &psmx2_env.lock_level);
 	fi_param_get_bool(&psmx2_prov, "lazy_conn", &psmx2_env.lazy_conn);
+	fi_param_get_bool(&psmx2_prov, "disconnect", &psmx2_env.disconnect);
 }
 
 static int psmx2_get_yes_no(char *s, int default_value)
@@ -96,9 +98,10 @@ static int psmx2_get_yes_no(char *s, int default_value)
 
 static int psmx2_check_multi_ep_cap(void)
 {
+	uint64_t caps = PSM2_MULTI_EP_CAP;
 	char *s = getenv("PSM2_MULTI_EP");
 
-	if (psmx2_multi_ep_ok() && psmx2_get_yes_no(s, 0))
+	if (psm2_get_capability_mask(caps) == caps && psmx2_get_yes_no(s, 0))
 		psmx2_env.multi_ep = 1;
 	else
 		psmx2_env.multi_ep = 0;
@@ -145,7 +148,6 @@ static int psmx2_init_lib(void)
 	else
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "PSM2 multi-ep feature not available or disabled.\n");
 
-	psmx2_init_disconnect_func();
 	psmx2_lib_initialized = 1;
 
 out:
@@ -388,7 +390,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 				goto err_out;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
+			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt &&
+			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->ep_attr->tx_ctx_cnt=%"PRIu64", available=%d\n",
 					hints->ep_attr->tx_ctx_cnt,
@@ -825,6 +828,9 @@ PROVIDER_INI
 
 	fi_param_define(&psmx2_prov, "lazy_conn", FI_PARAM_BOOL,
 			"Whether to use lazy connection or not (default: no).");
+
+	fi_param_define(&psmx2_prov, "disconnect", FI_PARAM_BOOL,
+			"Whether to issue disconnect request when process ends (default: no).");
 
 	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;

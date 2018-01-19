@@ -38,6 +38,8 @@
 #include <byteswap.h>
 #include <endian.h>
 #include <sys/mman.h>
+#include <string.h>
+#include <assert.h>
 
 #include "unix/osd.h"
 #include "rdma/fi_errno.h"

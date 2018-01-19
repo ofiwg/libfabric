@@ -36,6 +36,10 @@
 #include "ep_dgram/verbs_dgram.h"
 
 #include "fi_verbs.h"
+#include <malloc.h>
+
+/* This is the memory notifier for the entire verbs provider */
+static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier = NULL;
 
 static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
@@ -74,11 +78,24 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static void fi_ibv_rdm_cm_set_thread_affinity(void)
+{
+	if (fi_ibv_gl_data.rdm.cm_thread_affinity == NULL)
+		return;
+
+	if (ofi_set_thread_affinity(fi_ibv_gl_data.rdm.cm_thread_affinity) == -FI_ENOSYS)
+		VERBS_WARN(FI_LOG_DOMAIN,
+			   "FI_VERBS_RDM_CM_THREAD_AFFINITY is not supported on OS X\n");
+}
+
 static void *fi_ibv_rdm_cm_progress_thread(void *dom)
 {
 	struct fi_ibv_domain *domain =
 		(struct fi_ibv_domain *)dom;
 	struct slist_entry *item, *prev;
+
+	fi_ibv_rdm_cm_set_thread_affinity();
+
 	while (domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running) {
 		struct fi_ibv_rdm_ep *ep = NULL;
 		slist_foreach(&domain->ep_list, item, prev) {
@@ -86,14 +103,137 @@ static void *fi_ibv_rdm_cm_progress_thread(void *dom)
 			ep = container_of(item, struct fi_ibv_rdm_ep,
 					  list_entry);
 			if (fi_ibv_rdm_cm_progress(ep)) {
-				VERBS_INFO (FI_LOG_EP_DATA,
-				            "fi_ibv_rdm_cm_progress error\n");
+				VERBS_INFO(FI_LOG_EP_DATA,
+					   "fi_ibv_rdm_cm_progress error\n");
 				abort();
 			}
 		}
 		usleep(domain->rdm_cm->cm_progress_timeout);
 	}
 	return NULL;
+}
+
+void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller)
+{
+	struct fi_ibv_mem_ptr_entry *entry;
+	OFI_UNUSED(caller);
+
+	FI_IBV_MEMORY_HOOK_BEGIN(fi_ibv_mem_notifier)
+
+	free(ptr);
+
+	if (!ptr)
+		goto out;
+
+	HASH_FIND(hh, fi_ibv_mem_notifier->mem_ptrs_hash, &ptr, sizeof(void *), entry);
+	if (!entry)
+		goto out;
+	VERBS_DBG(FI_LOG_MR, "Catch free hook for %p, entry - %p\n", ptr, entry);
+
+	if (!dlist_empty(&entry->entry))
+		dlist_remove_init(&entry->entry);
+	dlist_insert_tail(&entry->entry,
+			  &fi_ibv_mem_notifier->event_list);
+out:
+	FI_IBV_MEMORY_HOOK_END(fi_ibv_mem_notifier)
+}
+
+void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller)
+{
+	struct fi_ibv_mem_ptr_entry *entry;
+	void *ret_ptr;
+	OFI_UNUSED(caller);
+
+	FI_IBV_MEMORY_HOOK_BEGIN(fi_ibv_mem_notifier)
+	
+	ret_ptr = realloc(ptr, size);
+
+	if (!ptr)
+		goto out;
+
+	HASH_FIND(hh, fi_ibv_mem_notifier->mem_ptrs_hash, &ptr, sizeof(void *), entry);
+	if (!entry)
+		goto out;
+	VERBS_DBG(FI_LOG_MR, "Catch realloc hook for %p, entry - %p\n", ptr, entry);
+
+	if (!dlist_empty(&entry->entry))
+		dlist_remove_init(&entry->entry);
+	dlist_insert_tail(&entry->entry,
+			  &fi_ibv_mem_notifier->event_list);
+out:
+	FI_IBV_MEMORY_HOOK_END(fi_ibv_mem_notifier)
+	return ret_ptr;
+}
+
+static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
+{
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+	OFI_UNUSED(notifier);
+	assert(fi_ibv_mem_notifier && (notifier == fi_ibv_mem_notifier));
+	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
+	if (--fi_ibv_mem_notifier->ref_cnt == 0) {
+		fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier->prev_free_hook);
+		fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier->prev_realloc_hook);
+		util_buf_pool_destroy(fi_ibv_mem_notifier->mem_ptrs_ent_pool);
+		fi_ibv_mem_notifier->prev_free_hook = NULL;
+		fi_ibv_mem_notifier->prev_realloc_hook = NULL;
+		pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
+		pthread_mutex_destroy(&fi_ibv_mem_notifier->lock);
+		free(fi_ibv_mem_notifier);
+		fi_ibv_mem_notifier = NULL;
+		return;
+	}
+	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
+#endif
+}
+
+static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
+{
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+	pthread_mutexattr_t mutex_attr;
+	if (fi_ibv_mem_notifier) {
+		/* already initialized */
+		fi_ibv_mem_notifier->ref_cnt++;
+		goto fn;
+	}
+	fi_ibv_mem_notifier = calloc(1, sizeof(*fi_ibv_mem_notifier));
+	if (!fi_ibv_mem_notifier)
+		goto fn;
+
+	fi_ibv_mem_notifier->mem_ptrs_ent_pool =
+		util_buf_pool_create(sizeof(struct fi_ibv_mem_ptr_entry),
+				     FI_IBV_MEM_ALIGNMENT, 0,
+				     fi_ibv_gl_data.mr_cache_size);
+	if (!fi_ibv_mem_notifier->mem_ptrs_ent_pool)
+		goto err1;
+
+	pthread_mutexattr_init(&mutex_attr);
+	pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+	if (pthread_mutex_init(&fi_ibv_mem_notifier->lock, &mutex_attr))
+		goto err2;
+	pthread_mutexattr_destroy(&mutex_attr);
+
+	dlist_init(&fi_ibv_mem_notifier->event_list);
+
+	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
+	fi_ibv_mem_notifier->prev_free_hook = fi_ibv_mem_notifier_get_free_hook();
+	fi_ibv_mem_notifier->prev_realloc_hook = fi_ibv_mem_notifier_get_realloc_hook();
+	fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier_free_hook);
+	fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
+	fi_ibv_mem_notifier->ref_cnt++;
+	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
+fn:
+	return fi_ibv_mem_notifier;
+
+err2:
+	util_buf_pool_destroy(fi_ibv_mem_notifier->mem_ptrs_ent_pool);
+err1:
+	free(fi_ibv_mem_notifier);
+	fi_ibv_mem_notifier = NULL;
+	return NULL;
+#else
+	return NULL;
+#endif
 }
 
 static int fi_ibv_domain_close(fid_t fid)
@@ -123,7 +263,6 @@ static int fi_ibv_domain_close(fid_t fid)
 						struct fi_ibv_rdm_av_entry,
 						removed_next);
 			fi_ibv_rdm_overall_conn_cleanup(av_entry);
-			pthread_mutex_destroy(&av_entry->conn_lock);
 			ofi_freealign(av_entry);
 		}
 		rdma_destroy_ep(domain->rdm_cm->listener);
@@ -145,6 +284,12 @@ static int fi_ibv_domain_close(fid_t fid)
 		/* Never should go here */
 		assert(0);
 		return -FI_EINVAL;
+	}
+
+	if (fi_ibv_gl_data.mr_cache_enable) {
+		ofi_mr_cache_cleanup(&domain->cache);
+		ofi_monitor_cleanup(&domain->monitor);
+		fi_ibv_mem_notifier_finalize(domain->notifier);
 	}
 
 	if (domain->pd) {
@@ -252,6 +397,26 @@ static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.query_atomic = fi_no_query_atomic,
 };
 
+static void fi_ibv_domain_process_exp(struct fi_ibv_domain *domain)
+{
+#ifdef HAVE_VERBS_EXP_H
+	struct ibv_exp_device_attr exp_attr= {
+		.comp_mask = IBV_EXP_DEVICE_ATTR_ODP |
+			     IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS,
+	};
+	domain->use_odp = (!ibv_exp_query_device(domain->verbs, &exp_attr) &&
+			   exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP);
+#else /* HAVE_VERBS_EXP_H */
+	domain->use_odp = 0;
+#endif /* HAVE_VERBS_EXP_H */
+	if (!domain->use_odp && fi_ibv_gl_data.use_odp) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "ODP is not supported on this configuration, ignore \n");
+		return;
+	}
+	domain->use_odp = fi_ibv_gl_data.use_odp;
+}
+
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
@@ -260,6 +425,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct fi_ibv_fabric *fab;
 	const struct fi_info *fi;
 	void *status = NULL;
+	pthread_mutexattr_t mutex_attr;
 	int ret;
 
 	fab = container_of(fabric, struct fi_ibv_fabric,
@@ -300,20 +466,54 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &fi_ibv_fid_ops;
-	_domain->util_domain.domain_fid.mr = &fi_ibv_domain_mr_ops;
+
+	fi_ibv_domain_process_exp(_domain);
+
+	if (fi_ibv_gl_data.mr_cache_enable) {
+		_domain->notifier = fi_ibv_mem_notifier_init();
+		_domain->monitor.subscribe = fi_ibv_monitor_subscribe;
+		_domain->monitor.unsubscribe = fi_ibv_monitor_unsubscribe;
+		_domain->monitor.get_event = fi_ibv_monitor_get_event;
+		ofi_monitor_init(&_domain->monitor);
+
+		_domain->cache.size = fi_ibv_gl_data.mr_cache_size;
+		_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
+		_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
+		_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
+		ret = ofi_mr_cache_init(&_domain->util_domain, &_domain->monitor,
+					&_domain->cache);
+		if (ret)
+			goto err4;
+		if (fi_ibv_gl_data.mr_cache_lazy_size) {
+			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ex_ops.fi_ops;
+			_domain->internal_mr_reg = fi_ibv_mr_internal_ex_ops.internal_mr_reg;
+			_domain->internal_mr_dereg = fi_ibv_mr_internal_ex_ops.internal_mr_dereg;
+		} else {
+			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
+			_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
+			_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
+		}
+	} else {
+		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ops.fi_ops;
+		_domain->internal_mr_reg = fi_ibv_mr_internal_ops.internal_mr_reg;
+		_domain->internal_mr_dereg = fi_ibv_mr_internal_ops.internal_mr_dereg;
+	}
 
 	switch (_domain->ep_type) {
 	case FI_EP_RDM:
 		_domain->rdm_cm = calloc(1, sizeof(*_domain->rdm_cm));
 		if (!_domain->rdm_cm) {
 			ret = -FI_ENOMEM;
-			goto err4;
+			goto err5;
 		}
 		_domain->rdm_cm->cm_progress_timeout =
 			fi_ibv_gl_data.rdm.thread_timeout;
 		slist_init(&_domain->rdm_cm->av_removed_entry_head);
 
-		pthread_mutex_init(&_domain->rdm_cm->cm_lock, NULL);
+		pthread_mutexattr_init(&mutex_attr);
+		pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+		pthread_mutex_init(&_domain->rdm_cm->cm_lock, &mutex_attr);
+		pthread_mutexattr_destroy(&mutex_attr);
 		_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 1;
 		ret = pthread_create(&_domain->rdm_cm->cm_progress_thread,
 				     NULL, &fi_ibv_rdm_cm_progress_thread,
@@ -323,7 +523,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 				   "Failed to launch CM progress thread, "
 				   "err :%d\n", ret);
 			ret = -FI_EOTHER;
-			goto err5;
+			goto err6;
 		}
 		_domain->util_domain.domain_fid.ops = &fi_ibv_rdm_domain_ops;
 
@@ -333,13 +533,13 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 				   "Failed to create listener event channel: %s\n",
 				   strerror(errno));
 			ret = -FI_EOTHER;
-			goto err6;
+			goto err7;
 		}
 
 		if (fi_fd_nonblock(_domain->rdm_cm->ec->fd) != 0) {
 			VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "fcntl", errno);
 			ret = -FI_EOTHER;
-			goto err7;
+			goto err8;
 		}
 
 		if (rdma_create_id(_domain->rdm_cm->ec,
@@ -347,7 +547,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			VERBS_INFO(FI_LOG_DOMAIN, "Failed to create cm listener: %s\n",
 				   strerror(errno));
 			ret = -FI_EOTHER;
-			goto err7;
+			goto err8;
 		}
 		_domain->rdm_cm->is_bound = 0;
 		break;
@@ -370,7 +570,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			if (ret) {
 				VERBS_INFO(FI_LOG_DOMAIN,
 					   "ofi_ns_init returns %d\n", ret);
-				goto err4;
+				goto err5;
 			}
 			ofi_ns_start_server(&fab->name_server);
 		}
@@ -383,21 +583,26 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		VERBS_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "
 			   "EP type :%d\n", _domain->ep_type);
 		ret = -FI_EINVAL;
-		goto err4;
+		goto err5;
 	}
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
 /* Only verbs/RDM should be able to go through err[5-7] */
-err7:
+err8:
 	rdma_destroy_event_channel(_domain->rdm_cm->ec);
-err6:
+err7:
 	_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
 	pthread_join(_domain->rdm_cm->cm_progress_thread, &status);
-err5:
+err6:
 	pthread_mutex_destroy(&_domain->rdm_cm->cm_lock);
 	free(_domain->rdm_cm);
+err5:
+	if (fi_ibv_gl_data.mr_cache_enable)
+		ofi_mr_cache_cleanup(&_domain->cache);
 err4:
+	if (fi_ibv_gl_data.mr_cache_enable)
+		ofi_monitor_cleanup(&_domain->monitor);
 	if (ibv_dealloc_pd(_domain->pd))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN,
 				 "ibv_dealloc_pd", errno);

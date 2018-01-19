@@ -194,7 +194,8 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
 		goto out;
 	}
 
-	if (!(fd_entry = calloc(1, sizeof *fd_entry))) {
+	fd_entry = calloc(1, sizeof *fd_entry);
+	if (!fd_entry) {
 		ret = -FI_ENOMEM;
 		fi_epoll_del(wait_fd->epoll_fd, fd);
 		goto out;
@@ -236,7 +237,7 @@ static int util_wait_fd_try(struct util_wait *wait)
 	}
 	fastlock_release(&wait_fd->lock);
 	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
-	return (ret > 0) ? -FI_EAGAIN : ret;
+	return (ret > 0) ? -FI_EAGAIN : (ret == -FI_EAGAIN) ? FI_SUCCESS : ret;
 }
 
 static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)

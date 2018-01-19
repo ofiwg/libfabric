@@ -1117,7 +1117,8 @@ static int util_cmap_del_handle(struct util_cmap_handle *handle)
 	struct util_cmap *cmap = handle->cmap;
 	int ret;
 
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Deleting handle\n");
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+	       "Deleting connection handle: %p\n", handle);
 	if (handle->peer) {
 		dlist_remove(&handle->peer->entry);
 		free(handle->peer);
@@ -1128,7 +1129,6 @@ static int util_cmap_del_handle(struct util_cmap_handle *handle)
 	util_cmap_clear_key(handle);
 
 	handle->state = CMAP_SHUTDOWN;
-	handle->cmap->attr.close(handle);
 	/* Signal event handler thread to delete the handle. This is required
 	 * so that the event handler thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
@@ -1285,12 +1285,16 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 	case CMAP_CONNECTED:
 		/* Handle is being re-used for incoming connection request */
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Received connection reject, but handle is being re-used\n");
+			"Connection handle is being re-used. Ignoring reject\n");
 		break;
 	case CMAP_CONNREQ_SENT:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Received connection reject, deleting handle\n");
+			"Deleting connection handle\n");
 		util_cmap_del_handle(handle);
+		break;
+	case CMAP_SHUTDOWN:
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Connection handle already being deleted\n");
 		break;
 	default:
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "Invalid cmap state: "
@@ -1379,45 +1383,43 @@ unlock:
 int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 			struct util_cmap_handle **handle_ret)
 {
-	struct util_cmap_handle *handle;
 	int ret = 0;
 
 	fastlock_acquire(&cmap->lock);
-	handle = util_cmap_get_handle(cmap, fi_addr);
-	if (!handle) {
+	*handle_ret = util_cmap_get_handle(cmap, fi_addr);
+	if (!*handle_ret) {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		       "No handle found for given fi_addr\n");
-		ret = util_cmap_alloc_handle(cmap, fi_addr, CMAP_IDLE, &handle);
+		ret = util_cmap_alloc_handle(cmap, fi_addr, CMAP_IDLE, handle_ret);
 		if (ret)
 			goto unlock;
 	}
-	switch (handle->state) {
-	case CMAP_IDLE:
-		ret = cmap->attr.connect(cmap->ep, handle,
-					 ofi_av_get_addr(cmap->av, fi_addr),
-					 cmap->av->addrlen);
-		if (ret) {
-			util_cmap_del_handle(handle);
-			goto unlock;
+	if ((*handle_ret)->state != CMAP_CONNECTED) {
+		switch ((*handle_ret)->state) {
+		case CMAP_IDLE:
+			ret = cmap->attr.connect(cmap->ep, *handle_ret,
+						 ofi_av_get_addr(cmap->av, fi_addr),
+						 cmap->av->addrlen);
+			if (ret) {
+				util_cmap_del_handle(*handle_ret);
+				goto unlock;
+			}
+			(*handle_ret)->state = CMAP_CONNREQ_SENT;
+			ret = -FI_EAGAIN;
+			// TODO sleep on event fd instead of busy polling
+			break;
+		case CMAP_CONNREQ_SENT:
+		case CMAP_CONNREQ_RECV:
+		case CMAP_ACCEPT:
+		case CMAP_SHUTDOWN:
+			ret = -FI_EAGAIN;
+			break;
+		default:
+			FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Invalid cmap handle state\n");
+			assert(0);
+			ret = -FI_EOPBADSTATE;
 		}
-		handle->state = CMAP_CONNREQ_SENT;
-		ret = -FI_EAGAIN;
-		// TODO sleep on event fd instead of busy polling
-		break;
-	case CMAP_CONNREQ_SENT:
-	case CMAP_CONNREQ_RECV:
-	case CMAP_ACCEPT:
-	case CMAP_SHUTDOWN:
-		ret = -FI_EAGAIN;
-		break;
-	case CMAP_CONNECTED:
-		*handle_ret = handle;
-		break;
-	default:
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid cmap handle state\n");
-		assert(0);
-		ret = -FI_EOPBADSTATE;
 	}
 unlock:
 	fastlock_release(&cmap->lock);

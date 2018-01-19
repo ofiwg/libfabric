@@ -41,36 +41,6 @@
 
 extern struct fi_provider fi_ibv_prov;
 
-static struct ibv_mr *
-fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
-			 void **buf, size_t size)
-{
-	if (!ofi_memalign((void**)buf,
-			  FI_IBV_RDM_BUF_ALIGNMENT, size)) {
-		memset(*buf, 0, size);
-		return ibv_reg_mr(ep->domain->pd, *buf, size,
-				  IBV_ACCESS_LOCAL_WRITE |
-				  IBV_ACCESS_REMOTE_WRITE);
-	}
-	return NULL;
-}
-
-static ssize_t
-fi_ibv_rdm_dereg_and_free(struct ibv_mr **mr, char **buff)
-{
-	ssize_t ret = FI_SUCCESS;
-	if (ibv_dereg_mr(*mr)) {
-		VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_dereg_mr failed\n", errno);
-		ret = -errno;
-	}
-
-	*mr = NULL;
-	free(*buff);
-	*buff = NULL;
-
-	return ret;
-}
-
 static inline ssize_t
 fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 				 struct fi_ibv_rdm_ep *ep, int num_to_post)
@@ -93,7 +63,8 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 				fi_ibv_rdm_get_rbuf(conn, ep,
 						    last % ep->n_buffs);
 			sge[last].length = ep->buff_len;
-			sge[last].lkey = conn->r_mr->lkey;
+			sge[last].lkey =
+				fi_ibv_mr_internal_lkey(&conn->r_md);
 
 			wr[last].wr_id = (uintptr_t)conn;
 			wr[last].next = NULL;
@@ -105,7 +76,8 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 				fi_ibv_rdm_get_rbuf(conn, ep,
 						    i % ep->n_buffs);
 			sge[i].length = ep->buff_len;
-			sge[i].lkey = conn->r_mr->lkey;
+			sge[i].lkey =
+				fi_ibv_mr_internal_lkey(&conn->r_md);
 
 			wr[i].wr_id = (uintptr_t)conn;
 			wr[i].next = &wr[i + 1];
@@ -128,7 +100,7 @@ fi_ibv_rdm_batch_repost_receives(struct fi_ibv_rdm_conn *conn,
 	}
 
 	if (ibv_post_recv(conn->qp[idx], wr, &bad_wr) == 0) {
-		ofi_atomic_add32(&conn->av_entry->recv_preposted, num_to_post);
+		conn->av_entry->recv_preposted += num_to_post;
 		return num_to_post;
 	}
 
@@ -166,38 +138,39 @@ static ssize_t
 fi_ibv_rdm_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 			       struct fi_ibv_rdm_conn *conn)
 {
-	assert(conn->s_mr == NULL);
-	assert(conn->r_mr == NULL);
+	assert(conn->s_md.mr == NULL);
+	assert(conn->r_md.mr == NULL);
 
 	const size_t size = ep->buff_len * ep->n_buffs;
-	conn->s_mr = fi_ibv_rdm_alloc_and_reg(ep,
-				(void **) &conn->sbuf_mem_reg, size);
-	if (!conn->s_mr) {
-		assert(conn->s_mr);
+	int ret;
+	void *ack_status = &conn->sbuf_ack_status;
+	
+	ret = fi_ibv_rdm_alloc_and_reg(ep, (void **)&conn->sbuf_mem_reg,
+				       size, &conn->s_md);
+	if (ret) {
+		assert(!ret);
 		goto s_err;
 	}
 
-	conn->r_mr = fi_ibv_rdm_alloc_and_reg(ep,
-				(void **) &conn->rbuf_mem_reg, size);
-	if (!conn->r_mr) {
-		assert(conn->r_mr);
+	ret = fi_ibv_rdm_alloc_and_reg(ep, (void **)&conn->rbuf_mem_reg,
+				       size, &conn->r_md);
+	if (ret) {
+		assert(!ret);
 		goto r_err;
 	}
 
-	conn->ack_mr = ibv_reg_mr(ep->domain->pd, &conn->sbuf_ack_status,
-				  sizeof(conn->sbuf_ack_status),
-				  IBV_ACCESS_LOCAL_WRITE |
-				  IBV_ACCESS_REMOTE_WRITE);
-
-	if (!conn->ack_mr) {
-		assert(conn->ack_mr);
+	ret = fi_ibv_rdm_alloc_and_reg(ep, &ack_status,
+				       sizeof(conn->sbuf_ack_status),
+				       &conn->ack_md);
+	if (ret) {
+		assert(conn->ack_md.mr);
 		goto ack_err;
 	}
 
-	conn->rma_mr = fi_ibv_rdm_alloc_and_reg(ep,
-				(void **) &conn->rmabuf_mem_reg, size);
-	if (!conn->rma_mr) {
-		assert(conn->rma_mr);
+	ret = fi_ibv_rdm_alloc_and_reg(ep, (void **)&conn->rmabuf_mem_reg,
+				       size, &conn->rma_md);
+	if (ret) {
+		assert(!ret);
 		goto rma_err;
 	}
 
@@ -250,12 +223,15 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 
 	memcpy(priv->addr, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 
-	if ((conn->cm_role != FI_VERBS_CM_SELF) && conn->r_mr && conn->s_mr) {
+	if ((conn->cm_role != FI_VERBS_CM_SELF) &&
+	    conn->r_md.mr && conn->s_md.mr) {
 		cm_params->private_data_len = sizeof(*priv);
 
-		priv->rbuf_rkey = conn->r_mr->rkey;
+		priv->rbuf_rkey = fi_ibv_mr_internal_rkey(
+			(struct fi_ibv_mem_desc *)&conn->r_md);
 		priv->rbuf_mem_reg = conn->rbuf_mem_reg;
-		priv->sbuf_rkey = conn->s_mr->rkey;
+		priv->sbuf_rkey = fi_ibv_mr_internal_rkey(
+			(struct fi_ibv_mem_desc *)&conn->s_md);
 		priv->sbuf_mem_reg = conn->sbuf_mem_reg;
 	} else {
 		cm_params->private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
@@ -271,14 +247,16 @@ fi_ibv_rdm_unpack_cm_params(const struct rdma_conn_param *cm_param,
 	const struct fi_conn_priv_params *priv = cm_param->private_data;
 
 	if (conn->cm_role == FI_VERBS_CM_SELF) {
-		if (conn->r_mr && conn->s_mr) {
+		if (conn->r_md.mr && conn->s_md.mr) {
 			memcpy(&conn->addr, &ep->my_addr,
 				FI_IBV_RDM_DFLT_ADDRLEN);
-			conn->remote_rbuf_rkey = conn->r_mr->rkey;
-			conn->remote_rbuf_mem_reg = conn->r_mr->addr;
+			conn->remote_rbuf_rkey =
+				fi_ibv_mr_internal_rkey(&conn->r_md);
+			conn->remote_rbuf_mem_reg = conn->r_md.mr->addr;
 
-			conn->remote_sbuf_rkey = conn->s_mr->rkey;
-			conn->remote_sbuf_mem_reg = conn->s_mr->addr;
+			conn->remote_sbuf_rkey =
+				fi_ibv_mr_internal_rkey(&conn->s_md);
+			conn->remote_sbuf_mem_reg = conn->s_md.mr->addr;
 
 			conn->remote_sbuf_head = (struct fi_ibv_rdm_buf *)
 				conn->remote_sbuf_mem_reg;
@@ -386,15 +364,14 @@ fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 		  FI_IBV_RDM_DFLT_ADDRLEN, av_entry);
 
 	if (!av_entry) {
-		ret = fi_ibv_av_entry_alloc(ep->domain,&av_entry, p);
+		ret = fi_ibv_av_entry_alloc(ep->domain, &av_entry, p);
 		if (ret)
 			return ret;
 
 		ret = ofi_memalign((void**)&conn,
-				   FI_IBV_RDM_MEM_ALIGNMENT,
+				   FI_IBV_MEM_ALIGNMENT,
 				   sizeof(*conn));
 		if (ret) {
-			pthread_mutex_destroy(&av_entry->conn_lock);
 			ofi_freealign(av_entry);
 			return -ret;
 		}
@@ -414,17 +391,14 @@ fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 			   conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
 			   ntohs(conn->addr.sin_port));
 	} else {
-		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (!conn) {
 			ret = ofi_memalign((void**)&conn,
-					   FI_IBV_RDM_MEM_ALIGNMENT,
+					   FI_IBV_MEM_ALIGNMENT,
 					   sizeof(*conn));
-			if (ret) {
-				pthread_mutex_unlock(&av_entry->conn_lock);
+			if (ret)
 				return -ret;
-			}
 			memset(conn, 0, sizeof(*conn));
 			conn->ep = ep;
 			conn->av_entry = av_entry;
@@ -434,7 +408,6 @@ fi_ibv_rdm_process_connect_request(const struct rdma_cm_event *event,
 			HASH_ADD(hh, av_entry->conn_hash, ep,
 				 sizeof(struct fi_ibv_rdm_ep *), conn);
 		}
-		pthread_mutex_unlock(&av_entry->conn_lock);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
 			/*
@@ -573,13 +546,15 @@ fi_ibv_rdm_process_event_established(const struct rdma_cm_event *event,
 	return FI_SUCCESS;
 }
 
+/* since the function is invoked only in the `fi_ibv_domain_close`
+ * after CM progress thread is closed, it's unnecessary to call this
+ * with `rdm_cm::cm_lock held` */
 ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
 {
 	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
 
-	pthread_mutex_lock(&av_entry->conn_lock);
 	HASH_ITER(hh, av_entry->conn_hash, conn, tmp) {
 		ret = fi_ibv_rdm_conn_cleanup(conn);
 		if (ret) {
@@ -588,7 +563,6 @@ ssize_t fi_ibv_rdm_overall_conn_cleanup(struct fi_ibv_rdm_av_entry *av_entry)
 			err = ret;
 		}
 	}
-	pthread_mutex_unlock(&av_entry->conn_lock);
 
 	return err;
 }
@@ -626,34 +600,30 @@ ssize_t fi_ibv_rdm_conn_cleanup(struct fi_ibv_rdm_conn *conn)
 		conn->id[1] = NULL;
 	}
 
-	if (conn->s_mr) {
-		err = fi_ibv_rdm_dereg_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
-		if ((err != FI_SUCCESS) && (ret == FI_SUCCESS)) {
+	if (conn->s_md.mr) {
+		err = fi_ibv_rdm_dereg_and_free(&conn->s_md, &conn->sbuf_mem_reg);
+		if ((err != FI_SUCCESS) && (ret == FI_SUCCESS))
 			ret = err;
-		}
 	}
-	if (conn->r_mr) {
-		err = fi_ibv_rdm_dereg_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
-		if ((err != FI_SUCCESS) && (ret == FI_SUCCESS)) {
+	if (conn->r_md.mr) {
+		err = fi_ibv_rdm_dereg_and_free(&conn->r_md, &conn->rbuf_mem_reg);
+		if ((err != FI_SUCCESS) && (ret == FI_SUCCESS))
 			ret = err;
-		}
 	}
-	if (conn->ack_mr) {
-		if (ibv_dereg_mr(conn->ack_mr)) {
-			VERBS_INFO_ERRNO(FI_LOG_AV, "ibv_dereg_mr failed\n",
-					 errno);
-			if (ret == FI_SUCCESS)
-				ret = -errno;
+	if (conn->ack_md.mr) {
+		ret = fi_ibv_rdm_dereg_and_free(&conn->ack_md, NULL);
+		if (ret) {
+			VERBS_WARN(FI_LOG_AV,
+				   "Unable to dereg MR, ret = %"PRId64"\n",
+				   ret);
 		}
-		conn->ack_mr = NULL;
 	}
 
-	if (conn->rma_mr) {
-		err = fi_ibv_rdm_dereg_and_free(&conn->rma_mr,
+	if (conn->rma_md.mr) {
+		err = fi_ibv_rdm_dereg_and_free(&conn->rma_md,
 						&conn->rmabuf_mem_reg);
-		if ((err != FI_SUCCESS) && (ret == FI_SUCCESS)) {
+		if ((err != FI_SUCCESS) && (ret == FI_SUCCESS))
 			ret = err;
-		}
 	}
 
 	ofi_freealign(conn);
@@ -769,6 +739,7 @@ fi_ibv_rdm_process_timewait_exit_event(const struct rdma_cm_event *event,
 	}
 }
 
+/* Must call with `rdm_cm::cm_lock held` */
 static ssize_t
 fi_ibv_rdm_process_event(const struct rdma_cm_event *event, struct fi_ibv_rdm_ep *ep)
 {
@@ -860,11 +831,8 @@ ssize_t fi_ibv_rdm_cm_progress(struct fi_ibv_rdm_ep *ep)
 		}
 
 		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
-
 		ret = fi_ibv_rdm_process_event(&event_copy, ep);
-
 		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
-
 	} while (ret == FI_SUCCESS);
 
 	return ret;

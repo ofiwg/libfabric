@@ -37,9 +37,8 @@
 #include <fi.h>
 #include <fi_iov.h>
 
-uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count,
-			uint64_t iov_offset, void *buf, uint64_t bufsize,
-			int dir)
+uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count, uint64_t iov_offset,
+			  void *buf, uint64_t bufsize, int dir)
 {
 	uint64_t done = 0, len;
 	char *iov_buf;

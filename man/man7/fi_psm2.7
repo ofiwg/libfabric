@@ -1,4 +1,4 @@
-.TH "fi_psm2" "7" "2017\-12\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2017\-12\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_psm2 \- The PSM2 Fabric Provider
@@ -152,7 +152,7 @@ To turn it off set the variable to 0.
 endpoints.
 This is a workaround for a bug in some versions of PSM library.
 .PP
-The default setting is 1.
+The default setting is 0.
 .PP
 \f[I]FI_PSM2_TIMEOUT\f[] : Timeout (seconds) for gracefully closing PSM
 endpoints.
@@ -221,6 +221,24 @@ This is handled differently by \f[I]fi_getinfo\f[] and
 \f[I]fi_av_open\f[].
 A call to \f[I]fi_getinfo\f[] that asks for \f[I]FI_AV_MAP\f[] would
 fail but \f[I]fi_av_open\f[] just forces \f[I]FI_AV_TABLE\f[] silently.
+.PP
+The default setting is 0.
+.PP
+\f[I]FI_PSM2_DISCONNECT : The provider has a mechanism to automatically
+send disconnection notifications to all connected peers before the local
+endpoint is closed. As the response, the peers call
+\f[]psm2_ep_disconnect* to clean up the connection state at their side.
+This allows the same PSM2 epid be used by different dynamically started
+processes (clients) to communicate with the same peer (server).
+This mechanism, however, introduce extra overhead to the finalization
+phase.
+For applications that never reuse epids within the same session such
+overhead is unnecessary.
+.PP
+This option controls whether the automatic disconnection notification
+mechanism should be enabled.
+For client\-server application mentioned above, the client side should
+set this option to 1, but the server should set it to 0.
 .PP
 The default setting is 0.
 .SH SEE ALSO

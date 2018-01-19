@@ -49,6 +49,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <sys/epoll.h>
+#include <malloc.h>
 
 #include <infiniband/ib.h>
 #include <infiniband/verbs.h>
@@ -64,6 +65,7 @@
 #include "fi.h"
 #include "ofi_atomic.h"
 #include "fi_enosys.h"
+#include <uthash.h>
 #include "prov.h"
 #include "fi_list.h"
 #include "fi_signal.h"
@@ -113,6 +115,13 @@
 #define FI_IBV_EP_TYPE(info)						\
 	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
 
+#define FI_IBV_MEM_ALIGNMENT (64)
+#define FI_IBV_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
+#define FI_IBV_POOL_BUF_CNT (100)
+
+#define VERBS_ANY_DOMAIN "verbs_any_domain"
+#define VERBS_ANY_FABRIC "verbs_any_fabric"
+
 /* NOTE:
  * When ibv_post_send/recv returns '-1' it means the following:
  * Deal with non-compliant libibverbs drivers which set errno
@@ -150,6 +159,21 @@
 		fastlock_release(&ep->wre_lock);	\
 	}						\
 })
+
+#define FI_IBV_MEMORY_HOOK_BEGIN(notifier)					\
+{										\
+	pthread_mutex_lock(&notifier->lock);					\
+	fi_ibv_mem_notifier_set_free_hook(notifier->prev_free_hook);		\
+	fi_ibv_mem_notifier_set_realloc_hook(notifier->prev_realloc_hook);	\
+
+#define FI_IBV_MEMORY_HOOK_END(notifier)					\
+	fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier_realloc_hook);	\
+	fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier_free_hook);	\
+	pthread_mutex_unlock(&notifier->lock);					\
+}
+	
+
+
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
 
@@ -164,6 +188,9 @@ extern struct fi_ibv_gl_data {
 	int	use_odp;
 	int	cqread_bunch_size;
 	char	*iface;
+	int	mr_cache_enable;
+	int	mr_cache_size;
+	int	mr_cache_lazy_size;
 
 	struct {
 		int	buffer_num;
@@ -171,6 +198,7 @@ extern struct fi_ibv_gl_data {
 		int	rndv_seg_size;
 		int	thread_timeout;
 		char	*eager_send_opcode;
+		char	*cm_thread_affinity;
 	} rdm;
 
 	struct {
@@ -178,8 +206,6 @@ extern struct fi_ibv_gl_data {
 		int	name_server_port;
 	} dgram;
 } fi_ibv_gl_data;
-
-extern struct fi_ops_mr fi_ibv_domain_mr_ops;
 
 struct verbs_addr {
 	struct dlist_entry entry;
@@ -322,22 +348,41 @@ struct fi_ibv_pep {
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
 struct fi_ibv_rdm_cm;
 
+struct fi_ibv_mem_desc;
+typedef int(*fi_ibv_mr_reg_cb)(struct fi_ibv_domain *domain, void *buf,
+			       size_t len, uint64_t access,
+			       struct fi_ibv_mem_desc *md);
+typedef int(*fi_ibv_mr_dereg_cb)(struct fi_ibv_mem_desc *md);
+
+void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller);
+void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller);
+
+struct fi_ibv_mem_notifier;
+
 struct fi_ibv_domain {
-	struct util_domain	util_domain;
-	struct ibv_context	*verbs;
-	struct ibv_pd		*pd;
+	struct util_domain		util_domain;
+	struct ibv_context		*verbs;
+	struct ibv_pd			*pd;
 	/*
 	 * TODO: Currently, only 1 rdm EP can be created per rdm domain!
 	 *	 CM logic should be separated from EP,
 	 *	 excluding naming/addressing
 	 */
-	enum fi_ep_type		ep_type;
-	struct fi_ibv_rdm_cm	*rdm_cm;
-	struct slist		ep_list;
-	struct fi_info		*info;
+	enum fi_ep_type			ep_type;
+	struct fi_ibv_rdm_cm		*rdm_cm;
+	struct slist			ep_list;
+	struct fi_info			*info;
 	/* This EQ is utilized by verbs/RDM and verbs/DGRAM */
-	struct fi_ibv_eq	*eq;
-	uint64_t		eq_flags;
+	struct fi_ibv_eq		*eq;
+	uint64_t			eq_flags;
+
+	/* MR stuff */
+	int				use_odp;
+	struct ofi_mr_cache		cache;
+	struct ofi_mem_monitor		monitor;
+	fi_ibv_mr_reg_cb		internal_mr_reg;
+	fi_ibv_mr_dereg_cb		internal_mr_dereg;
+	struct fi_ibv_mem_notifier	*notifier;
 };
 
 struct fi_ibv_cq;
@@ -414,7 +459,176 @@ struct fi_ibv_mem_desc {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
 	struct fi_ibv_domain	*domain;
+	size_t			len;
+	/* this field is used only by MR cache operations */
+	struct ofi_mr_entry	*entry;
 };
+
+int fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
+			     void **buf, size_t size,
+			     struct fi_ibv_mem_desc *md);
+ssize_t fi_ibv_rdm_dereg_and_free(struct fi_ibv_mem_desc *md,
+				  char **buff);
+
+static inline uint64_t
+fi_ibv_mr_internal_rkey(struct fi_ibv_mem_desc *md)
+{
+	return md->mr->rkey;
+}
+
+static inline uint64_t
+fi_ibv_mr_internal_lkey(struct fi_ibv_mem_desc *md)
+{
+	return md->mr->lkey;
+}
+
+typedef void (*fi_ibv_mem_free_hook)(void *, const void *);
+typedef void *(*fi_ibv_mem_realloc_hook)(void *, size_t, const void *);
+
+struct fi_ibv_mr_internal_ops {
+	struct fi_ops_mr	*fi_ops;
+	fi_ibv_mr_reg_cb	internal_mr_reg;
+	fi_ibv_mr_dereg_cb	internal_mr_dereg;
+};
+
+struct fi_ibv_mem_ptr_entry {
+	struct dlist_entry	entry;
+	void			*addr;
+	struct ofi_subscription *subscription;
+	UT_hash_handle		hh;
+};
+
+struct fi_ibv_mem_notifier {
+	struct fi_ibv_mem_ptr_entry	*mem_ptrs_hash;
+	struct util_buf_pool		*mem_ptrs_ent_pool;
+	struct dlist_entry		event_list;
+	fi_ibv_mem_free_hook		prev_free_hook;
+	fi_ibv_mem_realloc_hook		prev_realloc_hook;
+	int				ref_cnt;
+	pthread_mutex_t			lock;
+};
+
+extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ops;
+extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_cache_ops;
+extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ex_ops;
+
+int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
+			      struct ofi_mr_entry *entry);
+void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
+				 struct ofi_mr_entry *entry);
+int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier, void *addr,
+			     size_t len, struct ofi_subscription *subscription);
+void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
+				size_t len, struct ofi_subscription *subscription);
+struct ofi_subscription *fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifier);
+
+static inline void
+fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_free_hook free_hook)
+{
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+# ifdef __INTEL_COMPILER /* ICC */
+#  pragma warning push
+#  pragma warning disable 1478
+	__free_hook = free_hook;
+#  pragma warning pop
+# elif defined __clang__ /* Clang */
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	__free_hook = free_hook;
+#  pragma clang diagnostic pop
+# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+	__free_hook = free_hook;
+#  pragma GCC diagnostic pop
+# else /* others */
+	__free_hook = free_hook;
+# endif
+#else /* !HAVE_GLIBC_MALLOC_HOOKS */
+	OFI_UNUSED(free_hook);
+#endif /* HAVE_GLIBC_MALLOC_HOOKS */
+}
+
+static inline void
+fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_realloc_hook realloc_hook)
+{
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+# ifdef __INTEL_COMPILER /* ICC */
+#  pragma warning push
+#  pragma warning disable 1478
+	__realloc_hook = realloc_hook;
+#  pragma warning pop
+# elif defined __clang__ /* Clang */
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	__realloc_hook = realloc_hook;
+#  pragma clang diagnostic pop
+# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+	__realloc_hook = realloc_hook;
+#  pragma GCC diagnostic pop
+# else /* others */
+	__realloc_hook = realloc_hook;
+# endif
+#else /* !HAVE_GLIBC_MALLOC_HOOKS */
+	OFI_UNUSED(realloc_hook);
+#endif /* HAVE_GLIBC_MALLOC_HOOKS */
+}
+
+static inline fi_ibv_mem_free_hook
+fi_ibv_mem_notifier_get_free_hook(void)
+{
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+# ifdef __INTEL_COMPILER /* ICC */
+#  pragma warning push
+#  pragma warning disable 1478
+	return __free_hook;
+#  pragma warning pop
+# elif defined __clang__ /* Clang */
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	return __free_hook;
+#  pragma clang diagnostic pop
+# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+	return __free_hook;
+#  pragma GCC diagnostic pop
+# else /* others */
+	return __free_hook;
+# endif
+#else /* !HAVE_GLIBC_MALLOC_HOOKS */
+	return NULL;
+#endif /* HAVE_GLIBC_MALLOC_HOOKS */
+}
+
+static inline fi_ibv_mem_realloc_hook
+fi_ibv_mem_notifier_get_realloc_hook(void)
+{
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+# ifdef __INTEL_COMPILER /* ICC */
+#  pragma warning push
+#  pragma warning disable 1478
+	return __realloc_hook;
+#  pragma warning pop
+# elif defined __clang__ /* Clang */
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	return __realloc_hook;
+#  pragma clang diagnostic pop
+# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+	return __realloc_hook;
+#  pragma GCC diagnostic pop
+# else /* others */
+	return __realloc_hook;
+# endif
+#else /* !HAVE_GLIBC_MALLOC_HOOKS */
+	return NULL;
+#endif /* HAVE_GLIBC_MALLOC_HOOKS */
+}
 
 struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;
@@ -537,6 +751,7 @@ void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
 			   struct dlist_entry *wre_list,
 			   enum fi_ibv_wre_type wre_type);
 void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *cur_ep);
+int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context);
 
 #define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
 	{ .addr = (uintptr_t)buf,					\

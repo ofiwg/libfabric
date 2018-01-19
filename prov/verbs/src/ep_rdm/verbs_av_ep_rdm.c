@@ -80,14 +80,13 @@ fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	return FI_SUCCESS;
 }
 
-ssize_t
-fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
+/* Must call with `rdm_cm::cm_lock` held */
+ssize_t fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
 {
 	struct fi_ibv_rdm_conn *conn = NULL, *tmp = NULL;
 	ssize_t ret = FI_SUCCESS;
 	ssize_t err = FI_SUCCESS;
 
-	pthread_mutex_lock(&av_entry->conn_lock);
 	HASH_ITER(hh, av_entry->conn_hash, conn, tmp) {
 		ret = fi_ibv_rdm_start_disconnection(conn);
 		if (ret) {
@@ -101,7 +100,6 @@ fi_ibv_rdm_start_overall_disconnection(struct fi_ibv_rdm_av_entry *av_entry)
 		 * cleanup of the connections.
 		 */
 	}
-	pthread_mutex_unlock(&av_entry->conn_lock);
 
 	return err;
 }
@@ -149,7 +147,7 @@ int fi_ibv_av_entry_alloc(struct fi_ibv_domain *domain,
 			  void *addr)
 {
 	int ret = ofi_memalign((void**)av_entry,
-			       FI_IBV_RDM_MEM_ALIGNMENT,
+			       FI_IBV_MEM_ALIGNMENT,
 			       sizeof (**av_entry));
 	if (ret)
 		return -ret;
@@ -157,9 +155,8 @@ int fi_ibv_av_entry_alloc(struct fi_ibv_domain *domain,
 	memcpy(&(*av_entry)->addr, addr, FI_IBV_RDM_DFLT_ADDRLEN);
 	HASH_ADD(hh, domain->rdm_cm->av_hash, addr,
 		 FI_IBV_RDM_DFLT_ADDRLEN, (*av_entry));
-	ofi_atomic_initialize32(&(*av_entry)->sends_outgoing, 0);
-	ofi_atomic_initialize32(&(*av_entry)->recv_preposted, 0);
-	pthread_mutex_init(&(*av_entry)->conn_lock, NULL);
+	(*av_entry)->sends_outgoing = 0;
+	(*av_entry)->recv_preposted = 0;
 
 	return ret;
 }
@@ -446,7 +443,6 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		return -FI_EINVAL;
 
 	pthread_mutex_lock(&av->domain->rdm_cm->cm_lock);
-
 	for (i = 0; i < count; i++) {
 
 		if (fi_addr[i] == FI_ADDR_NOTAVAIL)
@@ -472,7 +468,6 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		slist_insert_tail(&av_entry->removed_next,
 				  &av->domain->rdm_cm->av_removed_entry_head);
 	}
-
 	pthread_mutex_unlock(&av->domain->rdm_cm->cm_lock);
 	return ret;
 }
@@ -564,10 +559,7 @@ fi_ibv_rdm_conn_to_av_map_addr(struct fi_ibv_rdm_ep *ep,
     return fi_ibv_rdm_av_entry_to_av_map_addr(ep, conn->av_entry);
 }
 
-/* Must call with `rdm_cm::cm_lock` and `av_entry::conn_lock` held
- * - `rdm_cm::cm_lock` - to start a connections
- * - `av_entry::conn_lock` - to add a connection entry to av_entry::hash
- */
+/* Must call with `rdm_cm::cm_lock` held */
 static inline struct fi_ibv_rdm_conn *
 fi_ibv_rdm_conn_entry_alloc(struct fi_ibv_rdm_av_entry *av_entry,
 			    struct fi_ibv_rdm_ep *ep)
@@ -575,7 +567,7 @@ fi_ibv_rdm_conn_entry_alloc(struct fi_ibv_rdm_av_entry *av_entry,
 	struct fi_ibv_rdm_conn *conn;
 
 	if (ofi_memalign((void**) &conn,
-			 FI_IBV_RDM_MEM_ALIGNMENT,
+			 FI_IBV_MEM_ALIGNMENT,
 			 sizeof(*conn)))
 		return NULL;
 	memset(conn, 0, sizeof(*conn));
@@ -598,42 +590,40 @@ static inline struct fi_ibv_rdm_conn *
 fi_ibv_rdm_av_map_addr_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 					    fi_addr_t addr)
 {
-	struct fi_ibv_rdm_conn *conn = NULL;
 	struct fi_ibv_rdm_av_entry *av_entry =
 		fi_ibv_rdm_av_map_addr_to_av_entry(ep, addr);
 	if (av_entry) {
+		struct fi_ibv_rdm_conn *conn;
 		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
-		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
-		if (!conn)
+		if (OFI_UNLIKELY(!conn))
 			conn = fi_ibv_rdm_conn_entry_alloc(av_entry, ep);
-		pthread_mutex_unlock(&av_entry->conn_lock);
 		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+		return conn;
 	}
 
-	return conn;
+	return NULL;
 }
 
 static inline struct fi_ibv_rdm_conn *
 fi_ibv_rdm_av_tbl_idx_to_conn_add_new_conn(struct fi_ibv_rdm_ep *ep,
 					   fi_addr_t addr)
 {
-	struct fi_ibv_rdm_conn *conn = NULL;
 	struct fi_ibv_rdm_av_entry *av_entry =
 		fi_ibv_rdm_av_tbl_idx_to_av_entry(ep, addr);
 	if (av_entry) {
+		struct fi_ibv_rdm_conn *conn;
 		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
-		pthread_mutex_lock(&av_entry->conn_lock);
 		HASH_FIND(hh, av_entry->conn_hash,
 			  &ep, sizeof(struct fi_ibv_rdm_ep *), conn);
-		if (!conn)
+		if (OFI_UNLIKELY(!conn))
 			conn = fi_ibv_rdm_conn_entry_alloc(av_entry, ep);
-		pthread_mutex_unlock(&av_entry->conn_lock);
 		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+		return conn;
 	}
 
-	return conn;
+	return NULL;
 }
 
 int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,

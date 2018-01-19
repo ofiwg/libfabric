@@ -119,6 +119,7 @@ enum {
 	ofi_op_read_req,
 	ofi_op_read_rsp,
 	ofi_op_write,
+	ofi_op_write_rsp,
 	ofi_op_atomic,
 };
 

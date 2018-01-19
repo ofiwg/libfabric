@@ -50,6 +50,7 @@
 #include <fi_util.h>
 #include <fi_list.h>
 #include <fi_proto.h>
+#include <fi_iov.h>
 
 #ifndef _RXM_H_
 #define _RXM_H_
@@ -154,7 +155,6 @@ struct rxm_rma_iov {
 
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)	\
-	FUNC(RXM_NONE),		\
 	FUNC(RXM_TX_NOBUF),	\
 	FUNC(RXM_TX),		\
 	FUNC(RXM_RX),		\
@@ -210,8 +210,10 @@ struct rxm_buf {
 struct rxm_rx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
+	struct dlist_entry entry;
 
 	struct rxm_ep *ep;
+	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;
 	struct rxm_recv_queue *recv_queue;
 	struct rxm_recv_entry *recv_entry;
@@ -290,8 +292,6 @@ struct rxm_recv_queue {
 
 struct rxm_buf_pool {
 	struct util_buf_pool *pool;
-	struct dlist_entry buf_list;
-	int local_mr;
 	fastlock_t lock;
 };
 
@@ -305,9 +305,13 @@ struct rxm_ep {
 	int			msg_cq_fd;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
+	int			msg_mr_local;
+	int			rxm_mr_local;
 
 	struct rxm_buf_pool 	tx_pool;
 	struct rxm_buf_pool 	rx_pool;
+	struct dlist_entry	post_rx_list;
+	struct dlist_entry	repost_ready_list;
 
 	struct rxm_send_queue 	send_queue;
 	struct rxm_recv_queue 	recv_queue;
@@ -333,17 +337,8 @@ static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
-	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
-					       ep_fid);
-	return util_ep->tx_op_flags;
-}
-
-static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
-	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
-					       ep_fid);
-	return util_ep->rx_op_flags;
-}
+#define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
+#define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
@@ -355,7 +350,6 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
-void rxm_cq_progress(struct rxm_ep *rxm_ep);
 ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -363,20 +357,105 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 
-int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
+void rxm_ep_progress_one(struct util_ep *util_ep);
+void rxm_ep_progress_multi(struct util_ep *util_ep);
+
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
-int ofi_match_addr(fi_addr_t addr, fi_addr_t match_addr);
-int ofi_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag);
-void rxm_pkt_init(struct rxm_pkt *pkt);
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
-struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool);
-void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf);
 
-struct rxm_tx_entry *rxm_tx_entry_get(struct rxm_send_queue *queue);
-struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue);
+#define RXM_BUF_GET(mr_local, pool)				\
+	(mr_local ? rxm_buf_get_ex(pool) : rxm_buf_get(pool))
 
-void rxm_tx_entry_release(struct rxm_send_queue *queue, struct rxm_tx_entry *entry);
-void rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry);
+#define RXM_TX_BUF_GET(rxm_ep)						\
+	(struct rxm_tx_buf *)RXM_BUF_GET((rxm_ep)->msg_mr_local,	\
+					 &(rxm_ep)->tx_pool)
+
+#define RXM_RX_BUF_GET(rxm_ep)						\
+	(struct rxm_rx_buf *)RXM_BUF_GET((rxm_ep)->msg_mr_local,	\
+					 &(rxm_ep)->rx_pool)
+
+static inline
+struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
+{
+	struct rxm_buf *buf;
+
+	fastlock_acquire(&pool->lock);
+	buf = util_buf_alloc(pool->pool);
+	if (OFI_UNLIKELY(!buf)) {
+		fastlock_release(&pool->lock);
+		return NULL;
+	}
+	fastlock_release(&pool->lock);
+	return buf;
+}
+
+static inline
+struct rxm_buf *rxm_buf_get_ex(struct rxm_buf_pool *pool)
+{
+	struct rxm_buf *buf;
+	void *mr;
+
+	fastlock_acquire(&pool->lock);
+	buf = util_buf_alloc_ex(pool->pool, (void **)&mr);
+	if (OFI_UNLIKELY(!buf)) {
+		fastlock_release(&pool->lock);
+		return NULL;
+	}
+	fastlock_release(&pool->lock);
+	buf->desc = fi_mr_desc((struct fid_mr *)mr);
+	return buf;
+}
+
+static inline
+void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
+{
+	fastlock_acquire(&pool->lock);
+	util_buf_release(pool->pool, buf);
+	fastlock_release(&pool->lock);
+}
+
+#define rxm_entry_pop(queue, entry)			\
+	do {						\
+		fastlock_acquire(&queue->lock);		\
+		entry = freestack_isempty(queue->fs) ?	\
+			NULL : freestack_pop(queue->fs);\
+		fastlock_release(&queue->lock);		\
+	} while (0)
+
+#define rxm_entry_push(queue, entry)			\
+	do {						\
+		fastlock_acquire(&queue->lock);		\
+		freestack_push(queue->fs, entry);	\
+		fastlock_release(&queue->lock);		\
+	} while (0)
+
+#define rxm_tx_entry_cleanup(entry)	(entry)->tx_buf = NULL
+#define rxm_recv_entry_cleanup(entry)
+
+#define RXM_DEFINE_QUEUE_ENTRY(type, queue_type)				\
+static inline struct rxm_ ## type ## _entry *					\
+rxm_ ## type ## _entry_get(struct rxm_ ## queue_type ## _queue *queue)		\
+{										\
+	struct rxm_ ## type ## _entry *entry;					\
+	rxm_entry_pop(queue, entry);						\
+	if (!entry) {								\
+		FI_WARN(&rxm_prov, FI_LOG_CQ,					\
+			"Exhausted " #type "_entry freestack\n");		\
+		return NULL;							\
+	}									\
+	return entry;								\
+}										\
+										\
+static inline void								\
+rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
+			       struct rxm_ ## type ## _entry *entry)		\
+{										\
+	rxm_ ## type ## _entry_cleanup(entry);					\
+	rxm_entry_push(queue, entry);						\
+}
+
+RXM_DEFINE_QUEUE_ENTRY(tx, send);
+RXM_DEFINE_QUEUE_ENTRY(recv, recv);

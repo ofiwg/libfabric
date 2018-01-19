@@ -290,7 +290,6 @@
       </ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="prov\rxd\src\rxd_rma.c" />
-    <ClCompile Include="prov\rxm\src\rxm.c" />
     <ClCompile Include="prov\rxm\src\rxm_attr.c" />
     <ClCompile Include="prov\rxm\src\rxm_conn.c" />
     <ClCompile Include="prov\rxm\src\rxm_rma.c" />

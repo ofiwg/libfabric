@@ -50,6 +50,7 @@
 #include <netinet/in.h>
 
 #include <fi.h>
+#include <fi_atom.h>
 #include <ofi_atomic.h>
 #include <ofi_mr.h>
 #include <fi_enosys.h>
@@ -881,6 +882,7 @@ struct sock_cq {
 
 	struct fid_wait *waitset;
 	int signal;
+	ofi_atomic32_t signaled;
 
 	struct dlist_entry ep_list;
 	struct dlist_entry rx_list;

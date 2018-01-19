@@ -36,6 +36,7 @@
 
 #include "config.h"
 
+#include <fi.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,24 +64,39 @@ static inline size_t ofi_total_ioc_cnt(const struct fi_ioc *ioc, size_t ioc_coun
 #define OFI_COPY_IOV_TO_BUF 0
 #define OFI_COPY_BUF_TO_IOV 1
 
-uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count,
-			uint64_t iov_offset, void *buf, uint64_t bufsize,
-			int dir);
+uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count, uint64_t iov_offset,
+			  void *buf, uint64_t bufsize, int dir);
 
 static inline uint64_t
-ofi_copy_to_iov(const struct iovec *iov, size_t iov_count,
-		uint64_t iov_offset, void *buf, uint64_t bufsize)
+ofi_copy_to_iov(const struct iovec *iov, size_t iov_count, uint64_t iov_offset,
+		void *buf, uint64_t bufsize)
 {
-	return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
-				OFI_COPY_BUF_TO_IOV);
+	if (iov_count > 1) {
+		return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
+					OFI_COPY_BUF_TO_IOV);
+	} else {
+		uint64_t size = ((iov_offset > iov[0].iov_len) ?
+				 0 : MIN(bufsize, iov[0].iov_len - iov_offset));
+
+		memcpy(iov[0].iov_base, buf, size);
+		return size;
+	}
 }
 
 static inline uint64_t
 ofi_copy_from_iov(void *buf, uint64_t bufsize,
 		  const struct iovec *iov, size_t iov_count, uint64_t iov_offset)
 {
-	return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
-				OFI_COPY_IOV_TO_BUF);
+	if (iov_count > 1) {
+		return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
+					OFI_COPY_IOV_TO_BUF);
+	} else {
+		uint64_t size = ((iov_offset > iov[0].iov_len) ?
+				 0 : MIN(bufsize, iov[0].iov_len - iov_offset));
+
+		memcpy(buf, iov[0].iov_base, iov[0].iov_len);
+		return size;
+	}
 }
 
 static inline void *

@@ -59,7 +59,7 @@
  *                                    IBV_RDM_ST_PKTYPE_MASK
  */
 
-// WR - work request
+/* WR - work request */
 #define FI_IBV_RDM_SERVICE_WR_MASK              ((uint64_t)0x1)
 #define FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(value)	\
         (value & FI_IBV_RDM_SERVICE_WR_MASK)
@@ -73,38 +73,28 @@
 #define FI_IBV_RDM_UNPACK_SERVICE_WR(value)				\
         ((void *)(uintptr_t)(value & (~(FI_IBV_RDM_SERVICE_WR_MASK))))
 
-// Send/Recv counters control
-
-#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep)			\
-do {                                                                		\
-	int32_t sends_outgoing =						\
-		ofi_atomic_inc32(&(_connection)->av_entry->sends_outgoing);	\
-	ofi_atomic_inc32(&(_ep)->posted_sends);					\
-										\
-	(void)sends_outgoing;							\
-	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
-		  _connection, sends_outgoing);					\
+/* Send/Recv counters control */
+#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep)				\
+do {                                                                			\
+	(_connection)->av_entry->sends_outgoing++;					\
+	(_ep)->posted_sends++;								\
+	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %"PRIu32"\n",	\
+		  _connection, (_connection)->av_entry->sends_outgoing);		\
 } while (0)
 
-#define FI_IBV_RDM_DEC_SIG_POST_COUNTERS(_connection, _ep)			\
-do {										\
-	int32_t sends_outgoing =						\
-		ofi_atomic_dec32(&(_connection)->av_entry->sends_outgoing);	\
-	int32_t posted_sends = ofi_atomic_dec32(&(_ep)->posted_sends);		\
-										\
-	(void)sends_outgoing;							\
-	(void)posted_sends;							\
-	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",	\
-		  _connection, sends_outgoing);					\
-	assert(posted_sends >= 0);						\
-	assert(sends_outgoing >= 0);						\
+#define FI_IBV_RDM_DEC_SIG_POST_COUNTERS(_connection, _ep)				\
+do {											\
+	(_connection)->av_entry->sends_outgoing--;					\
+	(_ep)->posted_sends--;								\
+	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %"PRIu32"\n",	\
+		  _connection, (_connection)->av_entry->sends_outgoing);		\
 } while (0)
 
-#define OUTGOING_POST_LIMIT(_connection, _ep)							\
-	(ofi_atomic_get32(&(_connection)->av_entry->sends_outgoing) >= (_ep)->sq_wr_depth - 1)
+#define OUTGOING_POST_LIMIT(_connection, _ep)					\
+	((_connection)->av_entry->sends_outgoing >= (_ep)->sq_wr_depth - 1)
 
 #define PEND_POST_LIMIT(_ep)						\
-	(ofi_atomic_get32(&(_ep)->posted_sends) > 0.5 * (_ep)->scq_depth)
+	((_ep)->posted_sends > 0.5 * (_ep)->scq_depth)
 
 #define TSEND_RESOURCES_IS_BUSY(_connection, _ep)			\
 	(OUTGOING_POST_LIMIT(_connection, _ep) || PEND_POST_LIMIT(_ep))
@@ -134,7 +124,7 @@ struct fi_ibv_rdm_rndv_header {
 	uint64_t src_addr;
 	uint64_t id; /* pointer to request on sender side */
 	uint64_t total_len;
-	uint32_t mem_key;
+	uint64_t mem_rkey;
 	uint32_t is_tagged;
 };
 
@@ -202,16 +192,16 @@ struct fi_ibv_rdm_request {
 			/* registered buffer on sender side */
 			void* remote_addr;
 			/* registered mr of local src_addr */
-			struct ibv_mr *mr;
-			uint32_t rkey;
+			struct fi_ibv_mem_desc md;
+			uint64_t mr_rkey;
 		} rndv;
 		
 		/* RMA info */
 		struct {
-			struct ibv_mr* mr;
+			struct fi_ibv_mem_desc md;
+			uint64_t mr_rkey;
+			uint64_t mr_lkey;
 			uint64_t remote_addr;
-			uint32_t rkey;
-			uint32_t lkey;
 			enum ibv_wr_opcode opcode;
 		} rma;
 	};
@@ -322,14 +312,13 @@ struct fi_ibv_rdm_ep {
 	int	n_buffs;
 	int	rq_wr_depth;    // RQ depth
 	int	sq_wr_depth;    // SQ depth
-	ofi_atomic32_t	posted_sends;
-	ofi_atomic32_t	posted_recvs;
+	uint32_t	posted_sends;
+	uint32_t	posted_recvs;
 	int	num_active_conns;
 	int	max_inline_rc;
 	int	rndv_threshold;
 	int	rndv_seg_size;
 	size_t	iov_per_rndv_thr;
-	int	use_odp;
 	int	scq_depth;
 	int	rcq_depth;
 
@@ -355,11 +344,10 @@ enum fi_rdm_cm_role {
 
 struct fi_ibv_rdm_av_entry {
 	/* association of conn and EPs */
-	pthread_mutex_t		conn_lock;
 	struct fi_ibv_rdm_conn	*conn_hash;
 	struct sockaddr_in	addr;
-	ofi_atomic32_t		sends_outgoing;
-	ofi_atomic32_t		recv_preposted;
+	uint32_t		sends_outgoing;
+	uint32_t		recv_preposted;
 	struct slist_entry	removed_next;
 	UT_hash_handle		hh;
 };
@@ -391,10 +379,10 @@ struct fi_ibv_rdm_conn {
 	struct dlist_entry postponed_requests_head;
 	struct fi_ibv_rdm_postponed_entry *postponed_entry;
 
-	struct ibv_mr *s_mr;
-	struct ibv_mr *r_mr;
-	struct ibv_mr *ack_mr;
-	struct ibv_mr *rma_mr;
+	struct fi_ibv_mem_desc s_md;
+	struct fi_ibv_mem_desc r_md;
+	struct fi_ibv_mem_desc ack_md;
+	struct fi_ibv_mem_desc rma_md;
 
 	uint32_t remote_sbuf_rkey;
 	uint32_t remote_rbuf_rkey;
@@ -745,10 +733,10 @@ fi_ibv_rdm_process_err_send_wc(struct fi_ibv_rdm_ep *ep,
 			util_buf_release(ep->fi_ibv_rdm_request_pool, req);
 		}
 		VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc.status = %d:%s, "
-			   "pend_send: %d, connection: %p, request = %p (%s)\n",
+			   "pend_send: %"PRIu32", connection: %p, request = %p (%s)\n",
 			   wc->status,
 			   ibv_wc_status_str(wc->status),
-			   ofi_atomic_get32(&ep->posted_sends), conn,
+			   ep->posted_sends, conn,
 			   (void *)wc->wr_id,
 			   FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc->wr_id) ?
 				"service" : "not service");

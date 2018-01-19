@@ -49,80 +49,6 @@ extern struct fi_provider fi_ibv_prov;
 extern struct fi_ops_msg fi_ibv_rdm_ep_msg_ops;
 extern struct fi_ops_rma fi_ibv_rdm_ep_rma_ops;
 
-static int
-fi_ibv_rdm_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
-{
-	struct ibv_qp_init_attr qp_attr;
-	struct ibv_qp *qp = NULL;
-	struct ibv_cq *cq = ibv_create_cq(context, 1, NULL, NULL, 0);
-	assert(cq);
-	int max_inline = 2;
-	int rst = 0;
-
-	memset(&qp_attr, 0, sizeof(qp_attr));
-	qp_attr.send_cq = cq;
-	qp_attr.recv_cq = cq;
-	qp_attr.qp_type = IBV_QPT_RC;
-	qp_attr.cap.max_send_wr = 1;
-	qp_attr.cap.max_recv_wr = 1;
-	qp_attr.cap.max_send_sge = 1;
-	qp_attr.cap.max_recv_sge = 1;
-	qp_attr.sq_sig_all = 1;
-
-	do {
-		if (qp)
-			ibv_destroy_qp(qp);
-		qp_attr.cap.max_inline_data = max_inline;
-		qp = ibv_create_qp(pd, &qp_attr);
-		if (qp) {
-			/* 
-			 * truescale returns max_inline_data 0
-			 */
-			if (qp_attr.cap.max_inline_data == 0)
-				break;
-
-			/*
-			 * iWarp is able to create qp with unsupported
-			 * max_inline, lets take first returned value.
-			 */
-			if (context->device->transport_type == IBV_TRANSPORT_IWARP) {
-				max_inline = rst = qp_attr.cap.max_inline_data;
-				break;
-			}
-			rst = max_inline;
-		}
-	} while (qp && (max_inline < INT_MAX / 2) && (max_inline *= 2));
-
-	if (rst != 0) {
-		int pos = rst, neg = max_inline;
-		do {
-			max_inline = pos + (neg - pos) / 2;
-			if (qp)
-				ibv_destroy_qp(qp);
-
-			qp_attr.cap.max_inline_data = max_inline;
-			qp = ibv_create_qp(pd, &qp_attr);
-			if (qp)
-				pos = max_inline;
-			else
-				neg = max_inline;
-
-		} while (neg - pos > 2);
-
-		rst = pos;
-	}
-
-	if (qp) {
-		ibv_destroy_qp(qp);
-	}
-
-	if (cq) {
-		ibv_destroy_cq(cq);
-	}
-
-	return rst;
-}
-
 static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_rdm_ep *ep;
@@ -164,10 +90,8 @@ static int fi_ibv_rdm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct fi_ibv_av, av_fid.fid);
-		if (ep->domain != av->domain) {
+		if (ep->domain != av->domain)
 			return -FI_EINVAL;
-		}
-
 		ep->av = av;
 		break;
 	case FI_CLASS_CNTR:
@@ -231,14 +155,14 @@ static ssize_t fi_ibv_rdm_cancel(fid_t fid, void *ctx)
 		dlist_find_first_match(&ep_rdm->fi_ibv_rdm_posted_queue,
 					fi_ibv_rdm_req_match, request);
 	if (found) {
-		int32_t posted_recvs;
+		uint32_t posted_recvs;
 
 		assert(container_of(found, struct fi_ibv_rdm_request,
 				    queue_entry) == request);
 		request->context->internal[0] = NULL;
 		posted_recvs = fi_ibv_rdm_remove_from_posted_queue(request, ep_rdm);
 		(void)posted_recvs;
-		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %d\n",
+		VERBS_DBG(FI_LOG_EP_DATA, "\t\t-> SUCCESS, post recv %"PRIu32"\n",
 			  posted_recvs);
 		err = 0;
 	} else {
@@ -349,7 +273,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 	ep->is_closing = 1;
 
 	/* All posted sends are waiting local completions */
-	while (ofi_atomic_get32(&ep->posted_sends) > 0 && ep->num_active_conns > 0)
+	while (ep->posted_sends > 0 && ep->num_active_conns > 0)
 		fi_ibv_rdm_tagged_poll(ep);
 
 	if (ep->send_cntr) {
@@ -376,7 +300,7 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				 fi_ibv_rdm_ep_match, ep);
 
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
@@ -384,11 +308,11 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 			case FI_VERBS_CONN_ALLOCATED:
 			case FI_VERBS_CONN_ESTABLISHED:
 				ret = fi_ibv_rdm_start_disconnection(conn);
-				pthread_mutex_unlock(&av_entry->conn_lock);
+				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 				break;
 			case FI_VERBS_CONN_STARTED:
-				pthread_mutex_unlock(&av_entry->conn_lock);
-				/* No need to hold conn_lock during
+				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+				/* No need to hold `rdm_cm::cm_lock` during
 				 * CM progressing of the EP */
 				while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
 				       conn->state != FI_VERBS_CONN_REJECTED &&
@@ -402,23 +326,23 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 				}
 				break;
 			default:
-				pthread_mutex_unlock(&av_entry->conn_lock);
+				pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 				break;
 			}
 		} else {
-			pthread_mutex_unlock(&av_entry->conn_lock);
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		}
 	}
 
         /* ok, all connections are initiated to disconnect. now wait
 	 * till all connections are switch to state 'closed' */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
-		pthread_mutex_unlock(&av_entry->conn_lock);
+		pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		if (conn) {
-			/* No need to hold conn_lock during
+			/* No need to hold `rdm_cm::cm_lock` during
 			 * polling of receive CQ */
 			while(conn->state != FI_VERBS_CONN_CLOSED &&
 			      conn->state != FI_VERBS_CONN_ALLOCATED) {
@@ -434,38 +358,38 @@ static int fi_ibv_rdm_ep_close(fid_t fid)
 
         /* now destroy all connections that wasn't removed from HASH */
 	HASH_ITER(hh, ep->domain->rdm_cm->av_hash, av_entry, tmp) {
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
 			HASH_DEL(av_entry->conn_hash, conn);
-			pthread_mutex_unlock(&av_entry->conn_lock);
-			/* No need to hold conn_lock during
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+			/* No need to hold `rdm_cm::cm_lock` during
 			 * connection cleanup */
 			fi_ibv_rdm_conn_cleanup(conn);
 		} else {
-			pthread_mutex_unlock(&av_entry->conn_lock);
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		}
 	}
 
 	/* now destroy all connection that was removed from HASH */
 	slist_foreach(&ep->domain->rdm_cm->av_removed_entry_head,
 		      item, prev_item) {
-		(void) prev_item; /* Compiler complains about unused variable */
+		OFI_UNUSED(prev_item); /* Compiler complains about unused variable */
 		av_entry = container_of(item,
 					struct fi_ibv_rdm_av_entry,
 					removed_next);
-		pthread_mutex_lock(&av_entry->conn_lock);
+		pthread_mutex_lock(&ep->domain->rdm_cm->cm_lock);
 		HASH_FIND(hh, av_entry->conn_hash, &ep,
 			  sizeof(struct fi_ibv_rdm_ep *), conn);
 		if (conn) {
 			HASH_DEL(av_entry->conn_hash, conn);
-			pthread_mutex_unlock(&av_entry->conn_lock);
-			/* No need to hold conn_lock during
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
+			/* No need to hold `rdm_cm::cm_lock` during
 			 * connection cleanup */
 			fi_ibv_rdm_conn_cleanup(conn);
 		} else {
-			pthread_mutex_unlock(&av_entry->conn_lock);
+			pthread_mutex_unlock(&ep->domain->rdm_cm->cm_lock);
 		}
 		/* do NOT free av_entry and do NOT remove from
 		 * the List of removed AV entries, becasue we need to
@@ -569,22 +493,6 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->rx_op_flags = info->rx_attr->op_flags;
 	_ep->min_multi_recv_size = (_ep->rx_op_flags & FI_MULTI_RECV) ?
 				   info->tx_attr->inject_size : 0;
-#ifdef HAVE_VERBS_EXP_H
-	struct ibv_exp_device_attr exp_attr;
-	exp_attr.comp_mask = IBV_EXP_DEVICE_ATTR_ODP |
-			     IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
-	_ep->use_odp = (!ibv_exp_query_device(_ep->domain->verbs, &exp_attr) &&
-			exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP);
-#else /* HAVE_VERBS_EXP_H */
-	_ep->use_odp = 0;
-#endif /* HAVE_VERBS_EXP_H */
-	if (!_ep->use_odp && fi_ibv_gl_data.use_odp) {
-		VERBS_WARN(FI_LOG_CORE, "ODP is not supported on this "
-					"configuration, ignore \n");
-	} else {
-		_ep->use_odp = fi_ibv_gl_data.use_odp;
-	}
-
 	_ep->rndv_seg_size = fi_ibv_gl_data.rdm.rndv_seg_size;
 	_ep->rq_wr_depth = info->rx_attr->size;
 	/* one more outstanding slot for releasing eager buffers */
@@ -637,15 +545,15 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err2;
 	}
 
-	ofi_atomic_initialize32(&_ep->posted_sends, 0);
-	ofi_atomic_initialize32(&_ep->posted_recvs, 0);
+	_ep->posted_sends = 0;
+	_ep->posted_recvs = 0;
 	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, _ep->n_buffs);
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
 	_ep->fi_ibv_rdm_request_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_request),
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_request_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;
@@ -653,7 +561,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->fi_ibv_rdm_multi_request_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_multi_request),
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_multi_request_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;
@@ -661,14 +569,15 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->fi_ibv_rdm_postponed_pool = util_buf_pool_create(
 		sizeof(struct fi_ibv_rdm_postponed_entry),
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_postponed_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;
 	}
 
 	_ep->fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
-		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
+		_ep->buff_len, FI_IBV_MEM_ALIGNMENT,
+		0, FI_IBV_POOL_BUF_CNT);
 	if (!_ep->fi_ibv_rdm_extra_buffers_pool) {
 		ret = -FI_ENOMEM;
 		goto err3;
@@ -680,7 +589,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	dlist_init(&_ep->fi_ibv_rdm_multi_recv_list);
 
 	_ep->max_inline_rc =
-		fi_ibv_rdm_find_max_inline(_ep->domain->pd, _ep->domain->verbs);
+		fi_ibv_find_max_inline(_ep->domain->pd, _ep->domain->verbs);
 
 	_ep->scq_depth = FI_IBV_RDM_TAGGED_DFLT_SCQ_SIZE;
 	_ep->rcq_depth = FI_IBV_RDM_TAGGED_DFLT_RCQ_SIZE;

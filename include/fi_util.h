@@ -192,6 +192,7 @@ struct util_domain {
 	int			mr_mode;
 	uint32_t		addr_format;
 	enum fi_av_type		av_type;
+	struct ofi_mr_map	mr_map;
 };
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
@@ -298,6 +299,7 @@ struct util_cq {
 	struct slist		err_list;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
+	ofi_atomic32_t		signaled;
 	ofi_cq_progress_func	progress;
 };
 

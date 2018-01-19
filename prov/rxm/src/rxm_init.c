@@ -35,6 +35,10 @@
 #include <prov.h>
 #include "rxm.h"
 
+char *rxm_proto_state_str[] = {
+	RXM_PROTO_STATES(OFI_STR)
+};
+
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
@@ -220,6 +224,10 @@ RXM_INI
 			"Defines the transmit buffer size. Transmit data would "
 			"be copied up to this size (default: ~16k). This would "
 			"also affect the supported inject size");
+
+	fi_param_define(&rxm_prov, "comp_per_progress", FI_PARAM_INT,
+			"Defines the maximum number of CQ entries (default: 1) "
+			"per progress.");
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");

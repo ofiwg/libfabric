@@ -480,6 +480,8 @@ int usdf_catch_dom_attr(uint32_t version, const struct fi_info *hints,
 			if (hints->domain_attr->caps == FI_REMOTE_COMM)
 				return -FI_EBADFLAGS;
 		}
+        } else {
+            dom_attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
 	}
 
 	return FI_SUCCESS;
@@ -507,36 +509,4 @@ int usdf_catch_rx_attr(uint32_t version, const struct fi_rx_attr *rx_attr)
 	}
 
 	return FI_SUCCESS;
-}
-
-/* A wrapper function to core utility function to check mr_mode bits.
- * We need to check some more things for backward compatibility.
- */
-int usdf_check_mr_mode(uint32_t version, const struct fi_info *hints,
-		       uint64_t prov_mode)
-{
-	int ret;
-
-	ret = ofi_check_mr_mode(&usdf_ops, version, prov_mode, hints);
-
-	/* TODO: Checks below may not be needed */
-	/* If ofi_check_mr_mode fails. */
-	if (ret) {
-		/* Is it because the user give 0 as mr_mode? */
-		if (hints->domain_attr->mr_mode == 0) {
-			if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-				/* If the version is < 1.5, it is ok.
-				 * We let this slide and catch it later on.
-				 */
-				return FI_SUCCESS;
-			} else if (hints->mode & FI_LOCAL_MR) {
-				/* If version is >= 1.5, we check fi_info mode
-				 * for FI_LOCAL_MR for backward compatibility.
-				 */
-				return FI_SUCCESS;
-			}
-		}
-	}
-
-	return ret;
 }

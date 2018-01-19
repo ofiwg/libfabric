@@ -156,7 +156,7 @@ static int psmx2_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (mr->domain != cntr->domain)
 			return -FI_EINVAL;
 		mr->cntr = cntr;
-		cntr->trx_ctxt = PSMX2_ALL_TRX_CTXT;
+		cntr->poll_all = 1;
 		break;
 
 	default:

@@ -229,4 +229,6 @@ OFI_DEF_COMPLEX_OPS(long_double)
 #define ofi_atomic_sub_and_fetch(radix, ptr, val) __sync_sub_and_fetch((ptr), (val))
 #endif /* HAVE_BUILTIN_ATOMICS */
 
+int ofi_set_thread_affinity(const char *s);
+
 #endif /* _FI_UNIX_OSD_H_ */

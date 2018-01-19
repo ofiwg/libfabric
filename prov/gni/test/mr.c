@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2018      Los Alamos National Security, LLC. All
+ *                         rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -241,9 +243,9 @@ static void no_cache_basic_setup(void)
 }
 
 #if HAVE_KDREG
-# define KDREG_CHECK true
-#else
 # define KDREG_CHECK false
+#else
+# define KDREG_CHECK true
 #endif
 
 /* bare tests */
@@ -258,9 +260,18 @@ TestSuite(mr_internal_cache,
 	  .disabled = KDREG_CHECK);
 
 #ifdef HAVE_UDREG
+/*
+ * mr_udreg_cache doesn't work if KDREG is enabled
+ * since by the time this testsuite is run, the kdreg device
+ * has been opened as part of the criterion test suite
+ * run.
+ * /dev/kdreg should really be fixed, but that's probably
+ * not going to happen.
+ */
 TestSuite(mr_udreg_cache,
 	  .init = udreg_setup,
-	  .fini = mr_teardown);
+	  .fini = mr_teardown,
+	  .disabled = ~KDREG_CHECK);
 #endif
 
 TestSuite(mr_no_cache_basic,

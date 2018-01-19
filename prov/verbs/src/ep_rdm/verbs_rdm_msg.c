@@ -80,9 +80,9 @@ static ssize_t fi_ibv_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				  &recv_data);
 
 	VERBS_DBG(FI_LOG_EP_DATA,
-		  "conn %p, len %zu, rbuf %p, fi_ctx %p, posted_recv %d\n",
+		  "conn %p, len %zu, rbuf %p, fi_ctx %p, posted_recv %"PRIu32"\n",
 		  conn, recv_data.data_len, recv_data.dest_addr,
-		  msg->context, ofi_atomic_get32(&ep_rdm->posted_recvs));
+		  msg->context, ep_rdm->posted_recvs);
 
 	if (!ret && !request->state.err)
 		ret = rdm_trecv_second_event(request, ep_rdm);
@@ -203,8 +203,8 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 	struct fi_ibv_rdm_conn *conn = ep->av->addr_to_conn(ep, dest_addr);
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (len > ep->rndv_threshold) {
-	    abort();
+	if (OFI_UNLIKELY(len > ep->rndv_threshold)) {
+		assert(0);
 		return -FI_EMSGSIZE;
 	}
 
@@ -212,24 +212,23 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 		struct fi_ibv_rdm_buf *sbuf = 
 			fi_ibv_rdm_prepare_send_resources(conn);
 		if (sbuf) {
-			struct ibv_send_wr wr = {0};
 			struct ibv_send_wr *bad_wr = NULL;
 			struct ibv_sge sge = {
-				.addr = (uintptr_t)(void*)sbuf,
+				.addr = (uintptr_t)(void *)sbuf,
 				.length = size + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE,
-				.lkey = conn->s_mr->lkey,
+				.lkey = fi_ibv_mr_internal_lkey(&conn->s_md),
 			};
-
-			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
-			wr.sg_list = &sge;
-			wr.num_sge = 1;
-			wr.wr.rdma.remote_addr = (uintptr_t)
-				fi_ibv_rdm_get_remote_addr(conn, sbuf);
-			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-			wr.send_flags = (sge.length < ep->max_inline_rc)
-				? IBV_SEND_INLINE : 0;
-			wr.imm_data = 0;
-			wr.opcode = ep->eopcode;
+			struct ibv_send_wr wr = {
+				.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn),
+				.sg_list = &sge,
+				.num_sge = 1,
+				.wr.rdma.remote_addr = (uintptr_t)
+					fi_ibv_rdm_get_remote_addr(conn, sbuf),
+				.wr.rdma.rkey = conn->remote_rbuf_rkey,
+				.send_flags = (sge.length < ep->max_inline_rc)
+					       ? IBV_SEND_INLINE : 0,
+				.opcode = ep->eopcode,
+			};
 
 			sbuf->service_data.pkt_len = size;
 			sbuf->header.tag = 0;
@@ -237,12 +236,10 @@ static ssize_t fi_ibv_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 
 			FI_IBV_RDM_SET_PKTTYPE(sbuf->header.service_tag,
 					       FI_IBV_RDM_MSG_PKT);
-			if ((len > 0) && (buf)) {
-				memcpy(&sbuf->payload, buf, len);
-			}
+			memcpy(&sbuf->payload, buf, len);
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep);
-			if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
+			if (OFI_UNLIKELY(ibv_post_send(conn->qp[0], &wr, &bad_wr))) {
 				assert(0);
 				return -errno;
 			} else {
