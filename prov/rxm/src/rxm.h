@@ -210,9 +210,10 @@ struct rxm_buf {
 struct rxm_rx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-
 	struct dlist_entry entry;
+
 	struct rxm_ep *ep;
+	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;
 	struct rxm_recv_queue *recv_queue;
 	struct rxm_recv_entry *recv_entry;
@@ -310,6 +311,7 @@ struct rxm_ep {
 	struct rxm_buf_pool 	tx_pool;
 	struct rxm_buf_pool 	rx_pool;
 	struct dlist_entry	post_rx_list;
+	struct dlist_entry	repost_ready_list;
 
 	struct rxm_send_queue 	send_queue;
 	struct rxm_recv_queue 	recv_queue;
@@ -335,17 +337,8 @@ static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-static inline uint64_t rxm_ep_tx_flags(struct fid_ep *ep_fid) {
-	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
-					       ep_fid);
-	return util_ep->tx_op_flags;
-}
-
-static inline uint64_t rxm_ep_rx_flags(struct fid_ep *ep_fid) {
-	struct util_ep *util_ep = container_of(ep_fid, struct util_ep,
-					       ep_fid);
-	return util_ep->rx_op_flags;
-}
+#define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
+#define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
@@ -357,7 +350,6 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
-void rxm_cq_progress(struct rxm_ep *rxm_ep);
 ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -365,7 +357,9 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 
-int rxm_ep_repost_buf(struct rxm_rx_buf *buf);
+void rxm_ep_progress_one(struct util_ep *util_ep);
+void rxm_ep_progress_multi(struct util_ep *util_ep);
+
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
@@ -394,7 +388,6 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 		fastlock_release(&pool->lock);
 		return NULL;
 	}
-	memset(buf, 0, sizeof(*buf));
 	fastlock_release(&pool->lock);
 	return buf;
 }
@@ -411,7 +404,6 @@ struct rxm_buf *rxm_buf_get_ex(struct rxm_buf_pool *pool)
 		fastlock_release(&pool->lock);
 		return NULL;
 	}
-	memset(buf, 0, sizeof(*buf));
 	fastlock_release(&pool->lock);
 	buf->desc = fi_mr_desc((struct fid_mr *)mr);
 	return buf;
@@ -440,6 +432,9 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 		fastlock_release(&queue->lock);		\
 	} while (0)
 
+#define rxm_tx_entry_cleanup(entry)	(entry)->tx_buf = NULL
+#define rxm_recv_entry_cleanup(entry)
+
 #define RXM_DEFINE_QUEUE_ENTRY(type, queue_type)				\
 static inline struct rxm_ ## type ## _entry *					\
 rxm_ ## type ## _entry_get(struct rxm_ ## queue_type ## _queue *queue)		\
@@ -458,6 +453,7 @@ static inline void								\
 rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 			       struct rxm_ ## type ## _entry *entry)		\
 {										\
+	rxm_ ## type ## _entry_cleanup(entry);					\
 	rxm_entry_push(queue, entry);						\
 }
 
