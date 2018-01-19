@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
+ *               All rights reserved.
  *
  *
  * This software is available to you under a choice of one of two
@@ -791,6 +792,7 @@ void __udreg_cache_destructor(void *context)
 static int __udreg_init(struct gnix_fid_domain *domain,
 		struct gnix_auth_key *auth_key)
 {
+	int ret = FI_SUCCESS;
 	udreg_return_t urc;
 	struct gnix_mr_cache_info *info =
 		GNIX_GET_MR_CACHE_INFO(domain, auth_key);
@@ -810,24 +812,56 @@ static int __udreg_init(struct gnix_fid_domain *domain,
 	};
 
 	if (domain->mr_cache_attr.lazy_deregistration)
-		udreg_cache_attr.modes |= UDREG_CC_MODE_USE_LAZY_DEREG;
+		udreg_cache_attr.modes |= (UDREG_CC_MODE_USE_LAZY_DEREG | UDREG_CC_MODE_USE_KERNEL_CACHE);
 
 	/*
 	 * Create a udreg cache for application memory registrations.
 	 */
 	urc = UDREG_CacheCreate(&udreg_cache_attr);
 	if (urc != UDREG_RC_SUCCESS) {
-		GNIX_FATAL(FI_LOG_MR,
+		GNIX_WARN(FI_LOG_MR,
 				"Could not initialize udreg application cache, urc=%d\n",
 				urc);
+		switch (urc) {
+		case UDREG_RC_INVALID_PARAM:
+			ret = -FI_EINVAL;
+			goto err;
+			break;
+		case UDREG_RC_ERROR_NO_DEVICE:
+			ret = -FI_ENODEV;
+			goto err;
+			break;
+		case UDREG_RC_NO_SPACE:
+			ret = -FI_ENOSPC;
+			goto err;
+			break;
+		default:
+			ret = -FI_EINVAL;
+			goto err;
+			break;
+		}
 	}
 
 	urc = UDREG_CacheAccess(udreg_cache_attr.cache_name,
 		&info->udreg_cache);
 	if (urc != UDREG_RC_SUCCESS) {
-		GNIX_FATAL(FI_LOG_MR,
+		GNIX_WARN(FI_LOG_MR,
 				"Could not access udreg application cache, urc=%d",
 				urc);
+		switch (urc) {
+		case UDREG_RC_INVALID_PARAM:
+			ret = -FI_EINVAL;
+			goto err;
+			break;
+		case UDREG_RC_NO_MATCH:
+			ret = -FI_ENODEV;
+			goto err;
+			break;
+		default:
+			ret = -FI_EINVAL;
+			goto err;
+			break;
+		}
 	}
 
 	info->inuse = 1;
@@ -835,7 +869,8 @@ static int __udreg_init(struct gnix_fid_domain *domain,
 	GNIX_INFO(FI_LOG_MR, "info=%p auth_key=%p ptag=%d\n",
 		info, info->auth_key, auth_key->ptag);
 
-	return FI_SUCCESS;
+err:
+	return ret;
 }
 
 static int __udreg_is_init(struct gnix_fid_domain *domain,
@@ -1194,6 +1229,7 @@ int _gnix_open_cache(struct gnix_fid_domain *domain, int type)
 	}
 
 	domain->mr_cache_type = type;
+
 	return FI_SUCCESS;
 }
 
