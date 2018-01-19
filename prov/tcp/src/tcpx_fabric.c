@@ -56,13 +56,13 @@ static int tcpx_fabric_close(fid_t fid)
 	struct tcpx_fabric *tcpx_fabric;
 
 	tcpx_fabric = container_of(fid, struct tcpx_fabric,
-			      util_fabric.fabric_fid.fid);
+				   util_fabric.fabric_fid.fid);
 
+	tcpx_conn_mgr_close(tcpx_fabric);
 	ret = ofi_fabric_close(&tcpx_fabric->util_fabric);
 	if (ret)
 		return ret;
 
-	tcpx_conn_mgr_close(tcpx_fabric);
 	free(tcpx_fabric);
 	return 0;
 }
@@ -76,7 +76,7 @@ struct fi_ops tcpx_fabric_fi_ops = {
 };
 
 int tcpx_create_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context)
+		       void *context)
 {
 	struct tcpx_fabric *tcpx_fabric;
 	int ret;
