@@ -170,7 +170,8 @@ libpsmx2_fi_la_SOURCES = $(_psm2_files) $(common_srcs)
 nodist_libpsmx2_fi_la_SOURCES = $(_psm2_nodist_files)
 libpsmx2_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(psm2_CPPFLAGS) $(_psm2_cppflags)
 libpsmx2_fi_la_LDFLAGS = \
-    -module -avoid-version -shared -export-dynamic $(psm2_LDFLAGS)
+    -module -avoid-version -shared -export-dynamic \
+    -export-symbols-regex ^fi_prov_ini $(psm2_LDFLAGS)
 libpsmx2_fi_la_LIBADD = $(linkback) $(psm2_LIBS)
 libpsmx2_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_PSM2_DL
