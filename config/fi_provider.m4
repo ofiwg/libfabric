@@ -60,12 +60,14 @@ dnl
                AC_MSG_NOTICE([*** Skipping $1 provider because $enable_direct direct requested])],
 	      [AC_MSG_NOTICE([*** Configuring $1 provider])
 	       AC_ARG_ENABLE([$1],
-			     [AS_HELP_STRING([--enable-$1@<:@=yes|no|auto|dl|PATH@:>@],
+			     [AS_HELP_STRING([--enable-$1@<:@=yes|no|auto|dl|PATH|dl:PATH@:>@],
 					[Enable $1 provider @<:@default=auto@:>@
 					(yes: enable $1 provider; no: disable $1 provider;
 					auto: enable $1 provider if possible;
 					dl: enable $1 provider and build as a loadable library;
-					PATH: enable $1 provider and use $1 installed under PATH)])
+					PATH: enable $1 provider and use $1 installed under PATH;
+					dl:PATH: enable $1 provider and build as a loadable library
+					and use $1 installed under PATH)])
 			     ],
 			     [],
 			     [enable_$1=auto])])
@@ -83,6 +85,8 @@ dnl
 	[yes|no], [],
 	[dl],     [enable_$1=yes $1_dl=1],
 	[auto],   [],
+	[dl:*],   [FI_CHECK_PREFIX_DIR([${enable_$1:3}], [$1])
+		   enable_$1=yes $1_dl=1],
 	[FI_CHECK_PREFIX_DIR([$enable_$1], [$1])
 	 enable_$1=yes]
 	)
