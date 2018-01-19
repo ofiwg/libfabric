@@ -116,8 +116,10 @@ static ssize_t rxm_ep_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 		.context = context,
 		.data = 0,
 	};
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
 
-	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
+	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(rxm_ep));
 }
 
 static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
@@ -143,8 +145,10 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 		.context = context,
 		.data = 0,
 	};
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
 
-	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
+	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(rxm_ep));
 }
 
 static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
@@ -181,13 +185,13 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	tx_buf = RXM_TX_BUF_GET(rxm_ep);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
-		rxm_cq_progress(rxm_ep);
+		rxm_ep_progress_multi(&rxm_ep->util_ep);
 		return -FI_EAGAIN;
 	}
 
 	tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue);
 	if (!tx_entry) {
-		rxm_cq_progress(rxm_ep);
+		rxm_ep_progress_multi(&rxm_ep->util_ep);
 		ret = -FI_EAGAIN;
 		goto err1;
 	}
@@ -218,7 +222,7 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	ret = fi_writemsg(msg_ep, &msg_rma, flags);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
-			rxm_cq_progress(rxm_ep);
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
 		goto err2;
 	}
 	return 0;
@@ -270,8 +274,10 @@ static ssize_t rxm_ep_writev(struct fid_ep *ep_fid, const struct iovec *iov,
 		.context = context,
 		.data = 0,
 	};
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
 
-	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
+	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(rxm_ep));
 }
 
 static ssize_t rxm_ep_writedata(struct fid_ep *ep_fid, const void *buf,
@@ -298,8 +304,10 @@ static ssize_t rxm_ep_writedata(struct fid_ep *ep_fid, const void *buf,
 		.context = context,
 		.data = data,
 	};
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
 
-	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid) |
+	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(rxm_ep) |
 			       FI_REMOTE_CQ_DATA);
 }
 
@@ -326,8 +334,10 @@ static ssize_t rxm_ep_write(struct fid_ep *ep_fid, const void *buf,
 		.context = context,
 		.data = 0,
 	};
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
 
-	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(ep_fid));
+	return rxm_ep_writemsg(ep_fid, &msg, rxm_ep_tx_flags(rxm_ep));
 }
 
 static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
@@ -353,9 +363,11 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 		.context = NULL,
 		.data = 0,
 	};
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
 
 	return rxm_ep_writemsg(ep_fid, &msg,
-			       (rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) |
+			       (rxm_ep_tx_flags(rxm_ep) & ~FI_COMPLETION) |
 			       FI_INJECT);
 }
 
@@ -383,9 +395,11 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 		.context = NULL,
 		.data = data,
 	};
+	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
+					     util_ep.ep_fid.fid);
 
 	return rxm_ep_writemsg(ep_fid, &msg,
-			       (rxm_ep_tx_flags(ep_fid) & ~FI_COMPLETION) |
+			       (rxm_ep_tx_flags(rxm_ep) & ~FI_COMPLETION) |
 			       FI_INJECT | FI_REMOTE_CQ_DATA);
 }
 
