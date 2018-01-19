@@ -633,8 +633,9 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_ep_name ep_name;
 	struct psmx2_ep_name *src_addr;
-	struct psmx2_trx_ctxt *trx_ctxt;
+	struct psmx2_trx_ctxt *trx_ctxt = NULL;
 	int err = -FI_EINVAL;
+	int alloc_trx_ctxt = 1;
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid.fid);
@@ -644,6 +645,12 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (info && info->ep_attr && info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
 		return  -FI_ENOSYS;
 
+	if (info && info->ep_attr && info->ep_attr->tx_ctx_cnt == FI_SHARED_CONTEXT &&
+	    !ofi_recv_allowed(info->caps) && !ofi_rma_target_allowed(info->caps)) {
+		alloc_trx_ctxt = 0;
+		FI_INFO(&psmx2_prov, FI_LOG_EP_CTRL, "Tx only endpoint with STX context.\n");
+	}
+
 	src_addr = NULL;
 	if (info && info->src_addr) {
 		if (info->addr_format == FI_ADDR_STR)
@@ -652,16 +659,17 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 			src_addr = info->src_addr;
 	}
 
-	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, 0);
-	if (!trx_ctxt)
-		goto errout;
+	if (alloc_trx_ctxt) {
+		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, 0);
+		if (!trx_ctxt)
+			goto errout;
+	}
 
 	err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
 				     trx_ctxt);
 	if (err)
 		goto errout_free_ctxt;
 
-	trx_ctxt->ep = ep_priv;
 	ep_priv->type = PSMX2_EP_REGULAR;
 	ep_priv->service = PSMX2_ANY_SERVICE;
 	if (src_addr) {
@@ -674,16 +682,20 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->service = ((getpid() & 0x7FFF) << 16) +
 				   ((uintptr_t)ep_priv & 0xFFFF);
 
-	psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
-	dlist_insert_before(&trx_ctxt->entry,
-			    &domain_priv->trx_ctxt_list);
-	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
+	if (alloc_trx_ctxt) {
+		trx_ctxt->ep = ep_priv;
 
-	ep_name.epid = trx_ctxt->psm2_epid;
-	ep_name.type = ep_priv->type;
+		psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
+		dlist_insert_before(&trx_ctxt->entry,
+				    &domain_priv->trx_ctxt_list);
+		psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
 
-	ofi_ns_add_local_name(&domain_priv->fabric->name_server,
-			      &ep_priv->service, &ep_name);
+		ep_name.epid = trx_ctxt->psm2_epid;
+		ep_name.type = ep_priv->type;
+
+		ofi_ns_add_local_name(&domain_priv->fabric->name_server,
+				      &ep_priv->service, &ep_name);
+	}
 
 	*ep = &ep_priv->ep;
 	return 0;
