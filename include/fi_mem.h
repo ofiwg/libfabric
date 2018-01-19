@@ -146,18 +146,21 @@ do {								\
 	*(void **) local_p = (fs)->next;				\
 	(fs)->next = p;						\
 } while (0)
-#define smr_freestack_pop(fs) smr_freestack_pop_impl(fs,	\
-	(char **) fs + ((char **) (fs)->next - (char **) fs->base_addr))
+#define smr_freestack_pop(fs) smr_freestack_pop_impl(fs, fs->next)
 
-static inline void* smr_freestack_pop_impl(void *fs, void *fs_next)
+static inline void* smr_freestack_pop_impl(void *fs, void *next)
 {
+	void *local;
+
 	struct {
 		SMR_FREESTACK_HEADER
 	} *freestack = fs;
-	assert(!freestack_isempty(freestack));
+	assert(next != NULL);
 
-	freestack->next = *((void **)fs_next);
-	return fs_next;
+	local = (char **) fs + ((char **) next -
+		(char **) freestack->base_addr);
+	next = *((void **) local);
+	return local;
 }
 
 #define DECLARE_SMR_FREESTACK(entrytype, name)			\

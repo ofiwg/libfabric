@@ -65,6 +65,8 @@ extern "C" {
 #endif
 
 
+#define SMR_CMD_SIZE		128	/* align with 64-byte cache line */
+
 /* SMR op_src: Specifies data source location */
 enum {
 	smr_src_inline,	/* command data */
@@ -81,7 +83,8 @@ enum {
  * 	src_data - src of additional op data (inject offset / resp offset)
  * 	data - remote CQ data
  */
-struct smr_op_hdr {
+struct smr_msg_hdr {
+	uint64_t		msg_id;
 	fi_addr_t		addr;
 	uint32_t		op;
 	uint16_t		op_src;
@@ -92,7 +95,6 @@ struct smr_op_hdr {
 	uint64_t		data;
 	union {
 		uint64_t	tag;
-		uint8_t		iov_count;
 		struct {
 			uint8_t	datatype;
 			uint8_t	op;
@@ -101,35 +103,43 @@ struct smr_op_hdr {
 	};
 };
 
-struct smr_cmd_hdr {
-	struct smr_op_hdr	op;
-	uint64_t		msg_id;
+#define SMR_MSG_DATA_LEN	(128 - sizeof(struct smr_msg_hdr))
+union smr_cmd_data {
+	uint8_t			msg[SMR_MSG_DATA_LEN];
+	struct {
+		uint8_t		iov_count;
+		struct iovec	iov[(SMR_MSG_DATA_LEN - 8) /
+				    sizeof(struct iovec)];
+	};
 };
 
-#define SMR_CMD_SIZE		128	/* align with 64-byte cache line */
-#define SMR_CMD_DATA_LEN	(128 - sizeof(struct smr_cmd_hdr))
+struct smr_cmd_msg {
+	struct smr_msg_hdr	hdr;
+	union smr_cmd_data	data;
+};
+
+#define SMR_RMA_DATA_LEN	(128 - sizeof(uint64_t))
+struct smr_cmd_rma {
+	uint64_t		rma_count;
+	struct fi_rma_iov	rma_iov[SMR_RMA_DATA_LEN /
+					sizeof(struct fi_rma_iov)];
+};
+
+struct smr_cmd {
+	union {
+		struct smr_cmd_msg	msg;
+		struct smr_cmd_rma	rma;
+	};
+};
+
+enum {
+	SMR_INJECT_SIZE = 4096
+};
 
 #define SMR_NAME_SIZE	32
 struct smr_addr {
 	char		name[SMR_NAME_SIZE];
 	fi_addr_t	addr;
-};
-
-#define SMR_RMA_IOV_LIMIT	3 //TODO find a way to avoid this?
-union smr_cmd_data {
-	uint8_t			msg[SMR_CMD_DATA_LEN];
-	struct iovec		iov[SMR_CMD_DATA_LEN / sizeof(struct iovec)];
-	struct ofi_rma_iov	rma_iov[SMR_CMD_DATA_LEN / sizeof(struct ofi_rma_iov)];
-	struct ofi_rma_ioc	rma_ioc[SMR_CMD_DATA_LEN / sizeof(struct ofi_rma_ioc)];
-};
-
-struct smr_cmd {
-	struct smr_cmd_hdr	hdr;
-	union smr_cmd_data	data;
-};
-
-enum {
-	SMR_INJECT_SIZE = 4096
 };
 
 struct smr_region;
@@ -157,6 +167,7 @@ struct smr_region {
 	struct smr_map	*map;
 
 	size_t		total_size;
+	size_t		cmd_cnt;
 
 	/* offsets from start of smr_region */
 	size_t		cmd_queue_offset;

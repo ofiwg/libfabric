@@ -64,7 +64,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
 			sizeof(struct smr_resp) * attr->tx_count;
 	peer_addr_offset = inject_pool_offset + sizeof(struct smr_inject_pool) +
-			sizeof(struct smr_inject_buf) * attr->tx_count;
+			sizeof(struct smr_inject_buf) * attr->rx_count;
 	name_offset = peer_addr_offset + sizeof(struct smr_addr) * SMR_MAX_PEERS;
 	total_size = name_offset + strlen(attr->name) + 1;
 	total_size = roundup_power_of_two(total_size);
@@ -106,10 +106,11 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->inject_pool_offset = inject_pool_offset;
 	(*smr)->peer_addr_offset = peer_addr_offset;
 	(*smr)->name_offset = name_offset;
+	(*smr)->cmd_cnt = attr->rx_count;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), attr->rx_count);
 	smr_resp_queue_init(smr_resp_queue(*smr), attr->tx_count);
-	smr_inject_pool_init(smr_inject_pool(*smr), attr->tx_count);
+	smr_inject_pool_init(smr_inject_pool(*smr), attr->rx_count);
 	for (i = 0; i < SMR_MAX_PEERS; i++)
 		smr_peer_addr_init(&smr_peer_addr(*smr)[i]);
 
