@@ -190,6 +190,7 @@ static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
 static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
 {
 #ifdef HAVE_GLIBC_MALLOC_HOOKS
+	int ret;
 	pthread_mutexattr_t mutex_attr;
 	if (fi_ibv_mem_notifier) {
 		/* already initialized */
@@ -200,11 +201,11 @@ static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
 	if (!fi_ibv_mem_notifier)
 		goto fn;
 
-	fi_ibv_mem_notifier->mem_ptrs_ent_pool =
-		util_buf_pool_create(sizeof(struct fi_ibv_mem_ptr_entry),
-				     FI_IBV_MEM_ALIGNMENT, 0,
-				     fi_ibv_gl_data.mr_cache_size);
-	if (!fi_ibv_mem_notifier->mem_ptrs_ent_pool)
+	ret = util_buf_pool_create(&fi_ibv_mem_notifier->mem_ptrs_ent_pool,
+				   sizeof(struct fi_ibv_mem_ptr_entry),
+				   FI_IBV_MEM_ALIGNMENT, 0,
+				   fi_ibv_gl_data.mr_cache_size);
+	if (ret)
 		goto err1;
 
 	pthread_mutexattr_init(&mutex_attr);

@@ -356,11 +356,10 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	fastlock_init(&ep->wre_lock);
-	ep->wre_pool = util_buf_pool_create(sizeof(struct fi_ibv_wre),
-					    16, 0, VERBS_WRE_CNT);
-	if (!ep->wre_pool) {
+	ret = util_buf_pool_create(&ep->wre_pool, sizeof(struct fi_ibv_wre),
+				   16, 0, VERBS_WRE_CNT);
+	if (ret) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wre_pool\n");
-		ret = -FI_ENOMEM;
 		goto err3;
 	}
 	dlist_init(&ep->wre_list);

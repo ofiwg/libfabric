@@ -736,17 +736,17 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		}
 	}
 
-	_cq->wce_pool = util_buf_pool_create(sizeof(struct fi_ibv_wce), 16, 0, VERBS_WCE_CNT);
-	if (!_cq->wce_pool) {
+	ret = util_buf_pool_create(&_cq->wce_pool, sizeof(struct fi_ibv_wce),
+				   16, 0, VERBS_WCE_CNT);
+	if (ret) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
-		ret = -FI_ENOMEM;
 		goto err4;
 	}
 
-	_cq->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0, VERBS_EPE_CNT);
-	if (!_cq->epe_pool) {
+	ret = util_buf_pool_create(&_cq->epe_pool, sizeof(struct fi_ibv_msg_epe),
+				   16, 0, VERBS_EPE_CNT);
+	if (ret) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create epe_pool\n");
-		ret = -FI_ENOMEM;
 		goto err5;
 	}
 

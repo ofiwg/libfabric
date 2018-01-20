@@ -211,12 +211,12 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 		return NULL;
 	}
 
-	trx_ctxt->am_req_pool = util_buf_pool_create(
-					sizeof(struct psmx2_am_request),
-					sizeof(void *),
-					0, /* max_cnt: unlimited */
-					64); /* chunk_cnt */
-	if (!trx_ctxt->am_req_pool) {
+	err = util_buf_pool_create(&trx_ctxt->am_req_pool
+				   sizeof(struct psmx2_am_request),
+				   sizeof(void *),
+				   0, /* max_cnt: unlimited */
+				   64); /* chunk_cnt */
+	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"failed to allocate am_req_pool.\n");
 		goto err_out;

@@ -551,37 +551,32 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
-	_ep->fi_ibv_rdm_request_pool = util_buf_pool_create(
-		sizeof(struct fi_ibv_rdm_request),
-		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
-	if (!_ep->fi_ibv_rdm_request_pool) {
-		ret = -FI_ENOMEM;
+	ret = util_buf_pool_create(&_ep->fi_ibv_rdm_request_pool,
+				   sizeof(struct fi_ibv_rdm_request),
+				   FI_IBV_MEM_ALIGNMENT, 0,
+				   FI_IBV_POOL_BUF_CNT);
+	if (ret)
 		goto err3;
-	}
 
-	_ep->fi_ibv_rdm_multi_request_pool = util_buf_pool_create(
-		sizeof(struct fi_ibv_rdm_multi_request),
-		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
-	if (!_ep->fi_ibv_rdm_multi_request_pool) {
-		ret = -FI_ENOMEM;
+	ret = util_buf_pool_create(&_ep->fi_ibv_rdm_multi_request_pool,
+				   sizeof(struct fi_ibv_rdm_multi_request),
+				   FI_IBV_MEM_ALIGNMENT, 0,
+				   FI_IBV_POOL_BUF_CNT);
+	if (ret)
 		goto err3;
-	}
 
-	_ep->fi_ibv_rdm_postponed_pool = util_buf_pool_create(
-		sizeof(struct fi_ibv_rdm_postponed_entry),
-		FI_IBV_MEM_ALIGNMENT, 0, FI_IBV_POOL_BUF_CNT);
-	if (!_ep->fi_ibv_rdm_postponed_pool) {
-		ret = -FI_ENOMEM;
+	ret = util_buf_pool_create(&_ep->fi_ibv_rdm_postponed_pool,
+				   sizeof(struct fi_ibv_rdm_postponed_entry),
+				   FI_IBV_MEM_ALIGNMENT, 0,
+				   FI_IBV_POOL_BUF_CNT);
+	if (ret)
 		goto err3;
-	}
 
-	_ep->fi_ibv_rdm_extra_buffers_pool = util_buf_pool_create(
-		_ep->buff_len, FI_IBV_MEM_ALIGNMENT,
-		0, FI_IBV_POOL_BUF_CNT);
-	if (!_ep->fi_ibv_rdm_extra_buffers_pool) {
-		ret = -FI_ENOMEM;
+	ret = util_buf_pool_create(&_ep->fi_ibv_rdm_extra_buffers_pool,
+				   _ep->buff_len, FI_IBV_MEM_ALIGNMENT,
+				   0, FI_IBV_POOL_BUF_CNT);
+	if (ret)
 		goto err3;
-	}
 
 	dlist_init(&_ep->fi_ibv_rdm_posted_queue);
 	dlist_init(&_ep->fi_ibv_rdm_postponed_queue);

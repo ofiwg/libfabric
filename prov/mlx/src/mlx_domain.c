@@ -116,13 +116,12 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 	fastlock_init(&(domain->fpp_lock));
 
-	domain->fast_path_pool = util_buf_pool_create(
-						sizeof(struct mlx_request),
-						16, 0, 1024 );
-	if (!domain->fast_path_pool) {
-		ofi_status = -ENOMEM;
+	ofi_status = util_buf_pool_create(
+			&domain->fast_path_pool,
+			sizeof(struct mlx_request),
+			16, 0, 1024 );
+	if (ofi_status)
 		goto cleanup_mlx;
-	}
 
 	domain->u_domain.domain_fid.fid.ops = &mlx_fi_ops;
 	domain->u_domain.domain_fid.ops = &mlx_domain_ops;
