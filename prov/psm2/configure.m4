@@ -17,6 +17,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 AM_CONDITIONAL([HAVE_PSM2_SRC], [test x$have_psm2_src = x1])
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_SRC], $have_psm2_src, [PSM2 source is built-in])
 	 psm2_happy=0
+	 have_psm2_am_register_handlers_2=1
 	 AS_IF([test x"$enable_psm2" != x"no"],
 	       [AS_IF([test x$have_psm2_src = x0],
 		      [
@@ -30,6 +31,20 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 					 [$psm2_LIBDIR],
 					 [psm2_happy=1],
 					 [psm2_happy=0])
+			AS_IF([test x$psm2_happy = x0],
+			      [
+				$as_echo "$as_me: recheck psm2 with reduced feature set."
+				have_psm2_am_register_handlers_2=0
+				FI_CHECK_PACKAGE([psm2],
+						 [psm2.h],
+						 [psm2],
+						 [psm2_ep_epid_lookup2],
+						 [],
+						 [$psm2_PREFIX],
+						 [$psm2_LIBDIR],
+						 [psm2_happy=1],
+						 [psm2_happy=0])
+			      ])
 		      ],
 		      [
 			dnl build with PSM2 source code included
@@ -65,6 +80,9 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 		      ])
 	       ])
 	 AS_IF([test $psm2_happy -eq 1], [$1], [$2])
+	 AC_DEFINE_UNQUOTED([HAVE_PSM2_AM_REGISTER_HANDLERS_2],
+			    $have_psm2_am_register_handlers_2,
+			    [psm2_am_register_handlers_2 function is present])
 ])
 
 AC_ARG_WITH([psm2-src],
