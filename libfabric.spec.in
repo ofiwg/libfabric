@@ -32,9 +32,11 @@ Development files for the libfabric library.
 
 %prep
 %setup -q -n %{name}-%{version}
+wget https://github.com/01org/opa-psm2/archive/PSM2_10.3-37.tar.gz
+gzip -dc PSM2_10.3-37.tar.gz | tar -xvvf -
 
 %build
-%configure %{configopts}
+%configure %{configopts} --with-psm2-src=$PWD/opa-psm2-PSM2_10.3-37
 make %{?_smp_mflags}
 
 %install
