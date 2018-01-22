@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012,2013 Intel Corporation
+ * Copyright (c) 2012,2013,2018 Intel Corporation
  * Author: Andi Kleen
  *
  * Redistribution and use in source and binary forms, with or without
@@ -21,6 +21,7 @@
 
 
 #include <linux/perf_event.h>
+#include <ofi_perf.h>
 
 
 struct rdpmc_ctx {
@@ -33,6 +34,11 @@ int rdpmc_open_attr(struct perf_event_attr *attr, struct rdpmc_ctx *ctx,
 		    struct rdpmc_ctx *leader_ctx);
 void rdpmc_close(struct rdpmc_ctx *ctx);
 unsigned long long rdpmc_read(struct rdpmc_ctx *ctx);
+
+
+struct ofi_perf_ctx {
+	struct rdpmc_ctx ctx;
+};
 
 
 #endif /* HAVE_LINUX_PERF_EVENT_H */

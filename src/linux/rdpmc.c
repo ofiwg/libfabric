@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012,2013 Intel Corporation
+ * Copyright (c) 2012,2013,2018 Intel Corporation
  * Author: Andi Kleen
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/syscall.h>
+
+#include <rdma/fi_errno.h>
 
 
 /**
@@ -152,6 +154,23 @@ unsigned long long rdpmc_read(struct rdpmc_ctx *ctx)
 		rmb();
 	} while (buf->lock != seq);
 	return val + offset;
+}
+
+
+int ofi_pmu_open(struct ofi_perf_ctx *ctx, enum ofi_perf_domain domain,
+		 uint32_t cntr_id, uint32_t flags)
+{
+	return -FI_ENOSYS;
+}
+
+inline uint64_t ofi_pmu_read(struct ofi_perf_ctx *ctx)
+{
+	return rdpmc_read(&ctx->ctx);
+}
+
+inline void ofi_pmu_close(struct ofi_perf_ctx *ctx)
+{
+	rdpmc_close(&ctx->ctx);
 }
 
 
