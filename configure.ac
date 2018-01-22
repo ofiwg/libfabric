@@ -148,6 +148,8 @@ if test "$ac_cv_func_epoll_create" = yes; then
   AC_DEFINE([HAVE_EPOLL], [1], [Define if you have epoll support.])
 fi
 
+AC_CHECK_HEADERS_ONCE([linux/perf_event.h])
+
 dnl Check for gcc atomic intrinsics
 AC_MSG_CHECKING(compiler support for c11 atomics)
 AC_TRY_LINK([#include <stdatomic.h>],

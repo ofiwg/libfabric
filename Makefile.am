@@ -89,7 +89,9 @@ endif
 
 if LINUX
 common_srcs += src/unix/osd.c
+common_srcs += src/linux/rdpmc.c
 common_srcs += include/linux/osd.h
+common_srcs += include/linux/rdpmc.h
 common_srcs += include/unix/osd.h
 endif
 
