@@ -382,7 +382,6 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 {
 	SOCKET sockfd;
 	int ret;
-	char *server = (ns->hostname ? ns->hostname : OFI_NS_DEFAULT_HOSTNAME);
 	void *write_buf;
 	size_t write_len = 0;
 	struct util_ns_cmd cmd = {
@@ -408,7 +407,7 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 	       ns->name_len);
 	write_len += ns->name_len;
 
-	sockfd = util_ns_connect_server(ns, server);
+	sockfd = util_ns_connect_server(ns, ns->hostname);
 	if (sockfd == INVALID_SOCKET) {
 		ret = -FI_ENODATA;
 		goto err2;
@@ -428,8 +427,6 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 {
 	SOCKET sockfd;
 	int ret;
-	const char *server_hostname = (ns->hostname ? ns->hostname :
-					OFI_NS_DEFAULT_HOSTNAME);
 	void *write_buf;
 	size_t write_len = 0;
 	struct util_ns_cmd cmd = {
@@ -455,7 +452,7 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 	       ns->name_len);
 	write_len += ns->name_len;
 
-	sockfd = util_ns_connect_server(ns, server_hostname);
+	sockfd = util_ns_connect_server(ns, ns->hostname);
 	if (sockfd == INVALID_SOCKET) {
 		ret = -FI_ENODATA;
 		goto err2;
@@ -471,8 +468,7 @@ err1:
 	return ret;
 }
 
-void *ofi_ns_resolve_name(struct util_ns *ns, const char *server_hostname,
-			  void *service)
+void *ofi_ns_resolve_name(struct util_ns *ns, const char *server, void *service)
 {
 	void *dest_addr = NULL, *io_buf;
 	size_t io_len = 0;
@@ -486,7 +482,7 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server_hostname,
 	if (!ns->is_initialized)
 		return NULL;
 
-	sockfd = util_ns_connect_server(ns, server_hostname);
+	sockfd = util_ns_connect_server(ns, server);
 	if (sockfd == INVALID_SOCKET)
 		goto err1;
 
@@ -545,8 +541,6 @@ void ofi_ns_start_server(struct util_ns *ns)
 	int ret;
 	SOCKET sockfd;
 	int sleep_usec = 1000;
-	char *server_hostname = (ns->hostname ? ns->hostname :
-				 OFI_NS_DEFAULT_HOSTNAME);
 
 	if ((!ns->is_initialized) || (ofi_atomic_inc32(&ns->ref) > 1))
 		return;
@@ -567,7 +561,7 @@ void ofi_ns_start_server(struct util_ns *ns)
 	 * node. The total wait time is about (1+2+4+...+8192)ms = 16 seconds.
 	 */
 	while (sleep_usec < 10000) {
-		sockfd = util_ns_connect_server(ns, server_hostname);
+		sockfd = util_ns_connect_server(ns, ns->hostname);
 		if (sockfd != INVALID_SOCKET) {
 			ofi_close_socket(sockfd);
 			return;
@@ -595,9 +589,12 @@ void ofi_ns_init(struct util_ns *ns)
 {
 	assert(ns && ns->name_len && ns->service_len && ns->service_cmp);
 
-	if (!ns->is_initialized) {
-		ofi_atomic_initialize32(&ns->ref, 0);
-		ns->listen_sock = INVALID_SOCKET;
-		ns->is_initialized = 1;
-	}
+	if (ns->is_initialized)
+		return;
+
+	ofi_atomic_initialize32(&ns->ref, 0);
+	ns->listen_sock = INVALID_SOCKET;
+	if (!ns->hostname)
+		ns->hostname = OFI_NS_DEFAULT_HOSTNAME;
+	ns->is_initialized = 1;
 }
