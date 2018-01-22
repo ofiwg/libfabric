@@ -98,6 +98,12 @@
 /* Network Direct provider is built as DSO */
 /* #undef HAVE_NETDIR_DL */
 
+/* TCP provider is built */
+#define HAVE_TCP 1
+
+/* TCP provider is built as DSO */
+/* #undef HAVE_TCP_DL */
+
 /* Define to 1 if you have the <stdint.h> header file. */
 /* #undef HAVE_STDINT_H */
 
