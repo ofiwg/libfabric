@@ -417,7 +417,6 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_LMT_ACK_SENT;
 
 	tx_entry->state 	= rx_buf->hdr.state;
-	tx_entry->ep 		= rx_buf->ep;
 	tx_entry->context 	= rx_buf;
 	tx_entry->tx_buf 	= tx_buf;
 

@@ -48,9 +48,7 @@ static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
-	memset(tx_entry, 0, sizeof(*tx_entry));
 	tx_entry->state = RXM_TX_NOBUF;
-	tx_entry->ep = rxm_ep;
 	tx_entry->context = msg->context;
 	tx_entry->flags = flags;
 	tx_entry->comp_flags = FI_RMA | comp_flags;
@@ -196,9 +194,7 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 		goto err1;
 	}
 
-	memset(tx_entry, 0, sizeof(*tx_entry));
 	tx_entry->state = RXM_TX;
-	tx_entry->ep = rxm_ep;
 	tx_entry->flags = flags;
 	tx_entry->comp_flags = FI_RMA | FI_WRITE;
 	tx_entry->tx_buf = tx_buf;

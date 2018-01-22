@@ -217,11 +217,20 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 	return 0;
 }
 
-static int rxm_send_queue_init(struct rxm_send_queue *send_queue, size_t size)
+static int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue *send_queue,
+			       size_t size)
 {
+	struct rxm_tx_entry *tx_entry;
+	ssize_t i;
+
 	send_queue->fs = rxm_txe_fs_create(size);
 	if (!send_queue->fs)
 		return -FI_ENOMEM;
+
+	for (i = send_queue->fs->size - 1; i >= 0; i--) {
+		tx_entry = &send_queue->fs->buf[i];
+		tx_entry->ep = rxm_ep;
+	}
 
 	ofi_key_idx_init(&send_queue->tx_key_idx, fi_size_bits(size));
 	fastlock_init(&send_queue->lock);
@@ -332,7 +341,8 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	dlist_init(&rxm_ep->post_rx_list);
 	dlist_init(&rxm_ep->repost_ready_list);
 
-	ret = rxm_send_queue_init(&rxm_ep->send_queue, rxm_ep->rxm_info->tx_attr->size);
+	ret = rxm_send_queue_init(rxm_ep, &rxm_ep->send_queue,
+				  rxm_ep->rxm_info->tx_attr->size);
 	if (ret)
 		goto err4;
 
@@ -793,7 +803,6 @@ rxm_ep_format_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		goto err;
 	}
 
-	(*tx_entry)->ep = rxm_ep;
 	(*tx_entry)->count = count;
 	(*tx_entry)->context = context;
 	(*tx_entry)->flags = flags;
