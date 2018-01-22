@@ -261,7 +261,12 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 				return -FI_ETIMEDOUT;
 		}
 
-		fi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout);
+		ret = fi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout);
+		if (ret < 0) {
+			FI_WARN(wait->util_wait.prov, FI_LOG_FABRIC,
+				"poll failed\n");
+			return ret;
+		}
 	}
 }
 
