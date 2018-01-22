@@ -245,10 +245,12 @@ static int psmx2_ep_close(fid_t fid)
 	if (ep->stx)
 		ofi_atomic_dec32(&ep->stx->ref);
 
-	ep_name.epid = ep->rx->psm2_epid;
+	if (ep->rx) {
+		ep_name.epid = ep->rx->psm2_epid;
 
-	ofi_ns_del_local_name(&ep->domain->fabric->name_server,
-			      &ep->service, &ep_name);
+		ofi_ns_del_local_name(&ep->domain->fabric->name_server,
+				      &ep->service, &ep_name);
+	}
 
 	trx_ctxt = ep->rx;
 	psmx2_ep_close_internal(ep);
