@@ -226,6 +226,8 @@ static inline int ofi_is_any_addr(struct sockaddr *sa)
 	}
 }
 
+int ofi_is_only_src_port_set(const char *node, const char *service,
+			     uint64_t flags, const struct fi_info *hints);
 
 /*
  * Address logging
