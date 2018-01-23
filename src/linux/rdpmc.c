@@ -157,10 +157,70 @@ unsigned long long rdpmc_read(struct rdpmc_ctx *ctx)
 }
 
 
+static uint64_t rdpmc_hw_id(uint32_t cntr_id)
+{
+	switch (cntr_id) {
+	case OFI_PMC_CPU_CYCLES:
+		return PERF_COUNT_HW_CPU_CYCLES;
+	case OFI_PMC_CPU_INSTR:
+		return PERF_COUNT_HW_INSTRUCTIONS;
+	default:
+		return ~0;
+	}
+}
+
+static uint64_t rdpmc_cache_id(uint32_t cntr_id, uint32_t flags)
+{
+	/* TODO */
+	return ~0;
+}
+
+static uint64_t rdpmc_sw_id(uint32_t cntr_id)
+{
+	switch (cntr_id) {
+	case OFI_PMC_OS_PAGE_FAULT:
+		return PERF_COUNT_SW_PAGE_FAULTS;
+	default:
+		return ~0;
+	}
+}
+
 int ofi_pmu_open(struct ofi_perf_ctx **ctx, enum ofi_perf_domain domain,
 		 uint32_t cntr_id, uint32_t flags)
 {
-	return -FI_ENOSYS;
+	struct perf_event_attr attr = {
+		.size = PERF_ATTR_SIZE_VER0,
+		.sample_type = PERF_SAMPLE_READ,
+		.exclude_kernel = 1,
+	};
+	int ret;
+
+	*ctx = calloc(1, sizeof **ctx);
+	if (!*ctx)
+		return -FI_ENOMEM;
+
+	switch(domain) {
+	case OFI_PMU_CPU:
+		attr.type = PERF_TYPE_HARDWARE;
+		attr.config = rdpmc_hw_id(cntr_id);
+		break;
+	case OFI_PMU_CACHE:
+		attr.type = PERF_TYPE_HW_CACHE;
+		attr.config = rdpmc_cache_id(cntr_id, flags);
+		break;
+	case OFI_PMU_OS:
+		attr.type = PERF_TYPE_SOFTWARE;
+		attr.config = rdpmc_sw_id(cntr_id);
+		break;
+	default:
+		return -FI_ENOSYS;
+	}
+
+	if (attr.config == ~0)
+		return -FI_ENOSYS;
+
+	ret = rdpmc_open_attr(&attr, &(*ctx)->ctx, NULL);
+	return ret ? -errno : 0;
 }
 
 inline uint64_t ofi_pmu_read(struct ofi_perf_ctx *ctx)
