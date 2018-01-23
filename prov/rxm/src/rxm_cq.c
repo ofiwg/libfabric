@@ -140,7 +140,7 @@ static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 
 static int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 {
-	rxm_buf_release(&tx_entry->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
+	rxm_tx_buf_release(tx_entry->ep, tx_entry->tx_buf);
 	return rxm_finish_send_nobuf(tx_entry);
 }
 
@@ -400,11 +400,12 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->conn);
 
-	tx_buf = RXM_TX_BUF_GET(rx_buf->ep);
+	tx_buf = rxm_tx_buf_get(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
 		return -FI_EAGAIN;
 	}
+	assert(tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack);
 
 	tx_entry = rxm_tx_entry_get(&rx_buf->ep->send_queue);
 	if (OFI_UNLIKELY(!tx_entry)) {
@@ -416,16 +417,11 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_LMT_ACK_SENT;
 
 	tx_entry->state 	= rx_buf->hdr.state;
-	tx_entry->ep 		= rx_buf->ep;
 	tx_entry->context 	= rx_buf;
 	tx_entry->tx_buf 	= tx_buf;
 
-	tx_buf->pkt.ctrl_hdr.version    = OFI_CTRL_VERSION;
-	tx_buf->pkt.ctrl_hdr.type 	= ofi_ctrl_ack;
 	tx_buf->pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	tx_buf->pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
-	tx_buf->pkt.hdr.version         = OFI_OP_VERSION;
-	tx_buf->pkt.hdr.op 		= rx_buf->pkt.hdr.op;
 
 	ret = fi_send(rx_buf->conn->msg_ep, &tx_buf->pkt, sizeof(tx_buf->pkt),
 		      tx_buf->hdr.desc, 0, tx_entry);
@@ -437,7 +433,7 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 err2:
 	rxm_tx_entry_release(&rx_buf->ep->send_queue, tx_entry);
 err1:
-	rxm_buf_release(&rx_buf->ep->tx_pool, (struct rxm_buf *)tx_buf);
+	rxm_tx_buf_release(rx_buf->ep, tx_buf);
 	return ret;
 }
 
@@ -481,15 +477,18 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		return rxm_finish_send(tx_entry);
 	case RXM_RX:
 		assert(!(comp->flags & FI_REMOTE_READ));
+		assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
+		       (rx_buf->pkt.ctrl_hdr.version = OFI_CTRL_VERSION));
 
 		if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack)
 			return rxm_lmt_handle_ack(rx_buf);
 		else
-			return rxm_handle_recv_comp(comp->op_context);
+			return rxm_handle_recv_comp(rx_buf);
 	case RXM_LMT_TX:
 		assert(comp->flags & FI_SEND);
 		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_WAIT);
 		RXM_SET_PROTO_STATE(comp, RXM_LMT_ACK_WAIT);
+		tx_entry->tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 		return 0;
 	case RXM_LMT_ACK_RECVD:
 		assert(comp->flags & FI_SEND);
@@ -503,7 +502,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_LMT_ACK_SENT:
 		assert(comp->flags & FI_SEND);
 		rx_buf = tx_entry->context;
-		rxm_buf_release(&rx_buf->ep->tx_pool, (struct rxm_buf *)tx_entry->tx_buf);
+		rxm_tx_buf_release(rx_buf->ep, tx_entry->tx_buf);
 		rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
 
 		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
@@ -594,16 +593,15 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = RXM_RX_BUF_GET(rxm_ep);
+		rx_buf = rxm_rx_buf_get(rxm_ep);
 		if (OFI_UNLIKELY(!rx_buf))
 			return -FI_ENOMEM;
 
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
-		rx_buf->ep = rxm_ep;
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
-			rxm_buf_release(&rxm_ep->rx_pool, (struct rxm_buf *)rx_buf);
+			rxm_rx_buf_release(rxm_ep, rx_buf);
 			return ret;
 		}
 		dlist_insert_tail(&rx_buf->entry, &rxm_ep->post_rx_list);

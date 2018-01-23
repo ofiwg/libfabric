@@ -2649,6 +2649,7 @@ static void sock_pe_init_table(struct sock_pe *pe)
 struct sock_pe *sock_pe_init(struct sock_domain *domain)
 {
 	struct sock_pe *pe;
+	int ret;
 
 	pe = calloc(1, sizeof(*pe));
 	if (!pe)
@@ -2662,15 +2663,19 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	pthread_mutex_init(&pe->list_lock, NULL);
 	pe->domain = domain;
 
-	pe->pe_rx_pool = util_buf_pool_create(sizeof(struct sock_pe_entry), 16, 0, 1024);
-	if (!pe->pe_rx_pool) {
+	
+	ret = util_buf_pool_create(&pe->pe_rx_pool,
+				   sizeof(struct sock_pe_entry),
+				   16, 0, 1024);
+	if (ret) {
 		SOCK_LOG_ERROR("failed to create buffer pool\n");
 		goto err1;
 	}
 
-	pe->atomic_rx_pool = util_buf_pool_create(SOCK_EP_MAX_ATOMIC_SZ,
-						  16, 0, 32);
-	if (!pe->atomic_rx_pool) {
+	ret = util_buf_pool_create(&pe->atomic_rx_pool,
+				   SOCK_EP_MAX_ATOMIC_SZ,
+				   16, 0, 32);
+	if (ret) {
 		SOCK_LOG_ERROR("failed to create atomic rx buffer pool\n");
 		goto err2;
 	}

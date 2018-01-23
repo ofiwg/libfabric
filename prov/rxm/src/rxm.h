@@ -195,6 +195,14 @@ struct rxm_iov {
 	uint8_t count;
 };
 
+enum rxm_buf_pool_type {
+	RXM_BUF_POOL_RX		= 0,
+	RXM_BUF_POOL_TX_MSG	= 1,
+	RXM_BUF_POOL_TX_TAGGED	= 2,
+	RXM_BUF_POOL_TX_ACK	= 3,
+	RXM_BUF_POOL_MAX_VAL	= 4,
+};
+
 struct rxm_buf {
 	/* Must stay at top */
 	struct fi_context fi_context;
@@ -226,6 +234,7 @@ struct rxm_rx_buf {
 	size_t index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
+	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
 
@@ -233,6 +242,9 @@ struct rxm_tx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
+	enum rxm_buf_pool_type type;
+
+	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
 
@@ -292,6 +304,8 @@ struct rxm_recv_queue {
 
 struct rxm_buf_pool {
 	struct util_buf_pool *pool;
+	enum rxm_buf_pool_type type;
+	struct rxm_ep *ep;
 	fastlock_t lock;
 };
 
@@ -308,8 +322,8 @@ struct rxm_ep {
 	int			msg_mr_local;
 	int			rxm_mr_local;
 
-	struct rxm_buf_pool 	tx_pool;
-	struct rxm_buf_pool 	rx_pool;
+	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX_VAL];
+	
 	struct dlist_entry	post_rx_list;
 	struct dlist_entry	repost_ready_list;
 
@@ -366,17 +380,6 @@ int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
 
-#define RXM_BUF_GET(mr_local, pool)				\
-	(mr_local ? rxm_buf_get_ex(pool) : rxm_buf_get(pool))
-
-#define RXM_TX_BUF_GET(rxm_ep)						\
-	(struct rxm_tx_buf *)RXM_BUF_GET((rxm_ep)->msg_mr_local,	\
-					 &(rxm_ep)->tx_pool)
-
-#define RXM_RX_BUF_GET(rxm_ep)						\
-	(struct rxm_rx_buf *)RXM_BUF_GET((rxm_ep)->msg_mr_local,	\
-					 &(rxm_ep)->rx_pool)
-
 static inline
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
@@ -393,28 +396,44 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 }
 
 static inline
-struct rxm_buf *rxm_buf_get_ex(struct rxm_buf_pool *pool)
-{
-	struct rxm_buf *buf;
-	void *mr;
-
-	fastlock_acquire(&pool->lock);
-	buf = util_buf_alloc_ex(pool->pool, (void **)&mr);
-	if (OFI_UNLIKELY(!buf)) {
-		fastlock_release(&pool->lock);
-		return NULL;
-	}
-	fastlock_release(&pool->lock);
-	buf->desc = fi_mr_desc((struct fid_mr *)mr);
-	return buf;
-}
-
-static inline
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
 	fastlock_acquire(&pool->lock);
 	util_buf_release(pool->pool, buf);
 	fastlock_release(&pool->lock);
+}
+
+static inline struct rxm_tx_buf *
+rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
+{
+	assert((type == RXM_BUF_POOL_TX_MSG) ||
+	       (type == RXM_BUF_POOL_TX_TAGGED) ||
+	       (type == RXM_BUF_POOL_TX_ACK));
+	return (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
+}
+
+static inline void
+rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
+{
+	assert((tx_buf->type == RXM_BUF_POOL_TX_MSG) ||
+	       (tx_buf->type == RXM_BUF_POOL_TX_TAGGED) ||
+	       (tx_buf->type == RXM_BUF_POOL_TX_ACK));
+	tx_buf->pkt.hdr.flags &= ~OFI_REMOTE_CQ_DATA;
+	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
+			(struct rxm_buf *)tx_buf);
+}
+
+static inline struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_ep *rxm_ep)
+{
+	return (struct rxm_rx_buf *)rxm_buf_get(
+			&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+}
+
+static inline void
+rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
+{
+	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
+			(struct rxm_buf *)rx_buf);
 }
 
 #define rxm_entry_pop(queue, entry)			\

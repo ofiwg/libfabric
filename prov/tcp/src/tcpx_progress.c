@@ -684,21 +684,21 @@ int tcpx_progress_init(struct tcpx_domain *domain,
 	dlist_init(&progress->ep_list);
 	pthread_mutex_init(&progress->ep_list_lock, NULL);
 
-	progress->pe_entry_pool = util_buf_pool_create(sizeof(struct tcpx_pe_entry),
-						 16, 0, 1024);
-	if (!progress->pe_entry_pool) {
+	ret = util_buf_pool_create(&progress->pe_entry_pool,
+				   sizeof(struct tcpx_pe_entry),
+				   16, 0, 1024);
+	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"failed to create buffer pool\n");
-	       	ret = -FI_ENOMEM;
 		goto err1;
 	}
 	fastlock_init(&progress->posted_rx_pool_lock);
-	progress->posted_rx_pool = util_buf_pool_create(sizeof(struct tcpx_posted_rx),
-						       16, 0, 1024);
-	if (!progress->posted_rx_pool) {
+	ret = util_buf_pool_create(&progress->posted_rx_pool,
+				   sizeof(struct tcpx_posted_rx),
+				   16, 0, 1024);
+	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"failed to create buffer pool\n");
-		ret = -FI_ENOMEM;
 		goto err2;
 	}
 

@@ -244,19 +244,20 @@ union util_buf {
 };
 
 /* create buffer pool with alloc/free handlers */
-struct util_buf_pool *util_buf_pool_create_ex(size_t size, size_t alignment,
-					      size_t max_cnt, size_t chunk_cnt,
-					      util_buf_region_alloc_hndlr alloc_hndlr,
-					      util_buf_region_free_hndlr free_hndlr,
-					      void *pool_ctx);
+int util_buf_pool_create_ex(struct util_buf_pool **pool,
+			    size_t size, size_t alignment,
+			    size_t max_cnt, size_t chunk_cnt,
+			    util_buf_region_alloc_hndlr alloc_hndlr,
+			    util_buf_region_free_hndlr free_hndlr,
+			    void *pool_ctx);
 
 /* create buffer pool */
-static inline struct util_buf_pool *util_buf_pool_create(size_t size,
-							 size_t alignment,
-							 size_t max_cnt,
-							 size_t chunk_cnt)
+static inline int util_buf_pool_create(struct util_buf_pool **pool,
+				       size_t size, size_t alignment,
+				       size_t max_cnt, size_t chunk_cnt)
 {
-	return util_buf_pool_create_ex(size, alignment, max_cnt, chunk_cnt,
+	return util_buf_pool_create_ex(pool, size, alignment,
+				       max_cnt, chunk_cnt,
 				       NULL, NULL, NULL);
 }
 

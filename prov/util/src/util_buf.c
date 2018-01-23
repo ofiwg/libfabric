@@ -92,39 +92,39 @@ err:
 	return -1;
 }
 
-struct util_buf_pool *util_buf_pool_create_ex(size_t size, size_t alignment,
-					      size_t max_cnt, size_t chunk_cnt,
-					      util_buf_region_alloc_hndlr alloc_hndlr,
-					      util_buf_region_free_hndlr free_hndlr,
-					      void *pool_ctx)
+int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
+			    size_t size, size_t alignment,
+			    size_t max_cnt, size_t chunk_cnt,
+			    util_buf_region_alloc_hndlr alloc_hndlr,
+			    util_buf_region_free_hndlr free_hndlr,
+			    void *pool_ctx)
 {
 	size_t entry_sz;
-	struct util_buf_pool *buf_pool;
 
-	buf_pool = calloc(1, sizeof(*buf_pool));
-	if (!buf_pool)
-		return NULL;
+	(*buf_pool) = calloc(1, sizeof(**buf_pool));
+	if (!*buf_pool)
+		return -FI_ENOMEM;
 
-	buf_pool->alloc_hndlr = alloc_hndlr;
-	buf_pool->free_hndlr = free_hndlr;
-	buf_pool->data_sz = size;
-	buf_pool->alignment = alignment;
-	buf_pool->max_cnt = max_cnt;
-	buf_pool->chunk_cnt = chunk_cnt;
-	buf_pool->ctx = pool_ctx;
+	(*buf_pool)->alloc_hndlr = alloc_hndlr;
+	(*buf_pool)->free_hndlr = free_hndlr;
+	(*buf_pool)->data_sz = size;
+	(*buf_pool)->alignment = alignment;
+	(*buf_pool)->max_cnt = max_cnt;
+	(*buf_pool)->chunk_cnt = chunk_cnt;
+	(*buf_pool)->ctx = pool_ctx;
 
-	entry_sz = util_buf_use_ftr(buf_pool) ?
+	entry_sz = util_buf_use_ftr(*buf_pool) ?
 		(size + sizeof(struct util_buf_footer)) : size;
-	buf_pool->entry_sz = fi_get_aligned_sz(entry_sz, alignment);
+	(*buf_pool)->entry_sz = fi_get_aligned_sz(entry_sz, alignment);
 
-	slist_init(&buf_pool->buf_list);
-	slist_init(&buf_pool->region_list);
+	slist_init(&(*buf_pool)->buf_list);
+	slist_init(&(*buf_pool)->region_list);
 
-	if (util_buf_grow(buf_pool)) {
-		free(buf_pool);
-		return NULL;
+	if (util_buf_grow(*buf_pool)) {
+		free(*buf_pool);
+		return -FI_ENOMEM;
 	}
-	return buf_pool;
+	return FI_SUCCESS;
 }
 
 #if ENABLE_DEBUG

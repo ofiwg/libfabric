@@ -173,14 +173,15 @@ static inline int
 fi_ibv_dgram_pool_create(struct fi_ibv_dgram_pool_attr *attr,
 			 struct fi_ibv_dgram_buf_pool *pool)
 {
-	pool->pool = util_buf_pool_create_ex(
-			attr->size, 16, 0, attr->count,
-			attr->alloc_hndlr, attr->free_hndlr,
-			attr->pool_ctx);
-	if (!pool->pool) {
+	int ret = util_buf_pool_create_ex(&pool->pool, attr->size,
+					  16, 0, attr->count,
+					  attr->alloc_hndlr,
+					  attr->free_hndlr,
+					  attr->pool_ctx);
+	if (ret) {
 		VERBS_WARN(FI_LOG_EP_DATA,
 			   "Unable to create buf pool\n");
-		return -FI_ENOMEM;
+		return ret;
 	}
 	pool->cancel_hndlr = attr->cancel_hndlr;
 	dlist_init(&pool->buf_list);
