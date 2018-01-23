@@ -78,16 +78,20 @@ static int free_mr_res()
 		return 0;
 
 	for (i = 0; i < mr_count; i++) {
-		ret = fi_close(&mr_res_array[i].mr->fid);
-		if (ret) {
-			FT_PRINTERR("fi_close", ret);
-			return ret;
+		if (mr_res_array[i].mr) {
+			ret = fi_close(&mr_res_array[i].mr->fid);
+			if (ret) {
+				FT_PRINTERR("fi_close", ret);
+				return ret;
+			}
 		}
 
-		ret = fi_close(&mr_res_array[i].rcntr->fid);
-		if (ret) {
-			FT_PRINTERR("fi_close", ret);
-			return ret;
+		if (mr_res_array[i].rcntr) {
+			ret = fi_close(&mr_res_array[i].rcntr->fid);
+			if (ret) {
+				FT_PRINTERR("fi_close", ret);
+				return ret;
+			}
 		}
 	}
 	free(mr_res_array);
