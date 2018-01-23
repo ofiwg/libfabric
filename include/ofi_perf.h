@@ -45,8 +45,35 @@ extern "C" {
 
 
 enum ofi_perf_domain {
-	OFI_PMU_NONE,
+	OFI_PMU_CPU,
+	OFI_PMU_CACHE,
+	OFI_PMU_OS,
+	OFI_PMU_NIC
 };
+
+enum {
+	OFI_PMC_FLAG_READ	= 1 << 0,
+	OFI_PMC_FLAG_WRITE	= 1 << 1,
+	OFI_PMC_FLAG_MISS	= 1 << 2,
+};
+
+enum {
+	OFI_PMC_CPU_CYCLES,
+	OFI_PMC_CPU_INSTR,
+};
+
+enum {
+	OFI_PMC_CACHE_L1_DATA,
+	OFI_PMC_CACHE_L1_INSTR,
+	OFI_PMC_CACHE_TLB_DATA,
+	OFI_PMC_CACHE_TLB_INSTR,
+};
+
+enum {
+	OFI_PMC_OS_PAGE_FAULT
+};
+
+/* NIC counters TBD */
 
 struct ofi_perf_data {
 	uint64_t	start;
@@ -96,7 +123,6 @@ static inline void ofi_pmu_close(struct ofi_perf_ctx *ctx)
 {
 }
 #endif /* HAVE_OFI_PERF */
-
 
 
 static inline void ofi_perf_reset(struct ofi_perf_data *data)

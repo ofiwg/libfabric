@@ -157,7 +157,7 @@ unsigned long long rdpmc_read(struct rdpmc_ctx *ctx)
 }
 
 
-int ofi_pmu_open(struct ofi_perf_ctx *ctx, enum ofi_perf_domain domain,
+int ofi_pmu_open(struct ofi_perf_ctx **ctx, enum ofi_perf_domain domain,
 		 uint32_t cntr_id, uint32_t flags)
 {
 	return -FI_ENOSYS;
@@ -171,6 +171,7 @@ inline uint64_t ofi_pmu_read(struct ofi_perf_ctx *ctx)
 inline void ofi_pmu_close(struct ofi_perf_ctx *ctx)
 {
 	rdpmc_close(&ctx->ctx);
+	free(ctx);
 }
 
 
