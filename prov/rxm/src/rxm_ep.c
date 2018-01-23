@@ -698,7 +698,7 @@ rxm_ep_format_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	(*tx_entry)->context = context;
 	(*tx_entry)->flags = flags;
 	(*tx_entry)->tx_buf = *tx_buf;
-	(*tx_entry)->comp_flags |= comp_flags | FI_SEND;
+	(*tx_entry)->comp_flags = comp_flags | FI_SEND;
 
 	return FI_SUCCESS;
 err:
