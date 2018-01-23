@@ -290,7 +290,7 @@ static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	}
 
 	if (pe_entry->state == TCPX_XFER_HDR_SENT) {
-		field_offset += sizeof(pe_entry->msg_hdr);
+		field_offset = sizeof(pe_entry->msg_hdr);
 		for (i = 0 ; i < pe_entry->iov_cnt ; i++) {
 			if (0 != tcpx_pe_send_field(pe_entry,
 						    (char *) (uintptr_t)pe_entry->iov[i].iov.addr,
@@ -373,7 +373,7 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 		}
 	}
 	if (pe_entry->state == TCPX_XFER_HDR_RECVD) {
-		field_offset += sizeof(pe_entry->msg_hdr);
+		field_offset = sizeof(pe_entry->msg_hdr);
 		for (i = 0 ; i < pe_entry->iov_cnt ; i++) {
 			if (0 != tcpx_pe_recv_field(pe_entry,
 						    (char *) (uintptr_t)pe_entry->iov[i].iov.addr,
@@ -492,7 +492,7 @@ static void process_ep_tx_requests(struct tcpx_progress *progress,
 		ofi_rbread(&ep->rb, &pe_entry->iov_cnt,
 			   sizeof(pe_entry->iov_cnt));
 		ofi_rbread(&ep->rb, &pe_entry->flags,
-			   sizeof(&pe_entry->flags));
+			   sizeof(pe_entry->flags));
 		ofi_rbread(&ep->rb, &pe_entry->context,
 			   sizeof(pe_entry->context));
 		ofi_rbread(&ep->rb, &pe_entry->data_len,
