@@ -314,23 +314,17 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	}
 
 	if (!dest_addr && node && !(flags & FI_SOURCE)) {
-		struct util_ns ns = (const struct util_ns){ 0 };
-		struct util_ns_attr ns_attr = (const struct util_ns_attr){ 0 };
 		psm2_uuid_t uuid;
 
 		psmx2_get_uuid(uuid);
-		ns_attr.ns_port = psmx2_uuid_to_port(uuid);
-		ns_attr.name_len = sizeof(*dest_addr);
-		ns_attr.service_len = sizeof(svc);
-		ns_attr.service_cmp = psmx2_ns_service_cmp;
-		ns_attr.is_service_wildcard = psmx2_ns_is_service_wildcard;
-		err = ofi_ns_init(&ns_attr, &ns);
-		if (err) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"ofi_ns_init returns %d\n", err);
-			err = -FI_ENODATA;
-			goto err_out;
-		}
+		struct util_ns ns = {
+			.port = psmx2_uuid_to_port(uuid),
+			.name_len = sizeof(*dest_addr),
+			.service_len = sizeof(svc),
+			.service_cmp = psmx2_ns_service_cmp,
+			.is_service_wildcard = psmx2_ns_is_service_wildcard,
+		};
+		ofi_ns_init(&ns);
 
 		if (service)
 			svc = atoi(service);

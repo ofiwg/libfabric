@@ -593,6 +593,9 @@
     <ClInclude Include="include\ofi_mr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\ofi_net.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\uthash.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -105,22 +105,13 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 
 	psmx2_get_uuid(fabric_priv->uuid);
 	if (psmx2_env.name_server) {
-		struct util_ns_attr ns_attr = {
-			.ns_port = psmx2_uuid_to_port(fabric_priv->uuid),
-			.name_len = sizeof(struct psmx2_ep_name),
-			.service_len = sizeof(int),
-			.service_cmp = psmx2_ns_service_cmp,
-			.is_service_wildcard = psmx2_ns_is_service_wildcard,
-		};
-		ret = ofi_ns_init(&ns_attr,
-				  &fabric_priv->name_server);
-		if (ret) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"ofi_ns_init returns %d\n", ret);
-			free(fabric_priv);
-			return ret;
-		}
+		fabric_priv->name_server.port = psmx2_uuid_to_port(fabric_priv->uuid);
+		fabric_priv->name_server.name_len = sizeof(struct psmx2_ep_name);
+		fabric_priv->name_server.service_len = sizeof(int);
+		fabric_priv->name_server.service_cmp = psmx2_ns_service_cmp;
+		fabric_priv->name_server.is_service_wildcard = psmx2_ns_is_service_wildcard;
 
+		ofi_ns_init(&fabric_priv->name_server);
 		ofi_ns_start_server(&fabric_priv->name_server);
 	}
 

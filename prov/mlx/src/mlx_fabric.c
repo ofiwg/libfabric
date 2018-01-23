@@ -138,7 +138,6 @@ static char* mlx_local_host_resolve()
 
 int mlx_ns_start ()
 {
-	int status;
 	if (!mlx_descriptor.localhost)
 		mlx_descriptor.localhost = mlx_local_host_resolve();
 
@@ -146,28 +145,20 @@ int mlx_ns_start ()
 		FI_INFO(&mlx_prov, FI_LOG_CORE,
 			"Unable to resolve local host address:\n"
 			"\t - unable to start NS\n"
-			"\t - Please try MLX-adress format");
+			"\t - Please try MLX-address format");
 		return -FI_EINVAL;
 	}
 
-	struct util_ns_attr ns_attr = {
-		.ns_hostname = mlx_descriptor.localhost,
-		.ns_port = (int)mlx_descriptor.ns_port,
-		.name_len = FI_MLX_MAX_NAME_LEN,
-		.service_len = sizeof(short),
-		.service_cmp = mlx_ns_service_cmp,
-		.is_service_wildcard = mlx_ns_is_service_wildcard,
-	};
+	mlx_descriptor.name_serv.hostname = mlx_descriptor.localhost;
+	mlx_descriptor.name_serv.port = (int) mlx_descriptor.ns_port;
+	mlx_descriptor.name_serv.name_len = FI_MLX_MAX_NAME_LEN;
+	mlx_descriptor.name_serv.service_len = sizeof(short);
+	mlx_descriptor.name_serv.service_cmp = mlx_ns_service_cmp;
+	mlx_descriptor.name_serv.is_service_wildcard = mlx_ns_is_service_wildcard;
 
-	status = ofi_ns_init(&ns_attr,
-			  &mlx_descriptor.name_serv);
-	if (status) {
-		FI_INFO(&mlx_prov, FI_LOG_CORE,
-			"ofi_ns_init returns %d\n", status);
-		return status;
-	}
-
+	ofi_ns_init(&mlx_descriptor.name_serv);
 	ofi_ns_start_server(&mlx_descriptor.name_serv);
+
 	return FI_SUCCESS;
 }
 

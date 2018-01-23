@@ -1297,22 +1297,16 @@ static int fi_ibv_del_info_not_belong_to_dev(const char *dev_name, struct fi_inf
 static int fi_ibv_resolve_ib_ud_dest_addr(const char *node, const char *service,
 					  struct ofi_ib_ud_ep_name **dest_addr)
 {
-	int ret, svc = VERBS_IB_UD_NS_ANY_SERVICE;
-	struct util_ns ns = { 0 };
-	struct util_ns_attr ns_attr = {
-		.ns_port = fi_ibv_gl_data.dgram.name_server_port,
+	int svc = VERBS_IB_UD_NS_ANY_SERVICE;
+	struct util_ns ns = {
+		.port = fi_ibv_gl_data.dgram.name_server_port,
 		.name_len = sizeof(**dest_addr),
 		.service_len = sizeof(svc),
 		.service_cmp = fi_ibv_dgram_ns_service_cmp,
 		.is_service_wildcard = fi_ibv_dgram_ns_is_service_wildcard,
 	};
 
-	ret = ofi_ns_init(&ns_attr, &ns);
-	if (ret) {
-		VERBS_INFO(FI_LOG_CORE,
-			   "ofi_ns_init returns %d\n", ret);
-		return -FI_ENODATA;
-	}
+	ofi_ns_init(&ns);
 
 	if (service)
 		svc = atoi(service);
@@ -1326,7 +1320,7 @@ static int fi_ibv_resolve_ib_ud_dest_addr(const char *node, const char *service,
 		return -FI_ENODATA;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int fi_ibv_handle_ib_ud_addr(const char *node, const char *service,

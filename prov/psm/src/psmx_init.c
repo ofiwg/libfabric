@@ -259,23 +259,17 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			"node '%s' service '%s' converted to <unit=%d, port=%d, service=%d>\n",
 			node, service, src_addr->unit, src_addr->port, src_addr->service);
 	} else if (node) {
-		struct util_ns ns = (const struct util_ns){ 0 };
-		struct util_ns_attr ns_attr = (const struct util_ns_attr){ 0 };
 		psm_uuid_t uuid;
-
 		psmx_get_uuid(uuid);
-		ns_attr.ns_port = psmx_uuid_to_port(uuid);
-		ns_attr.name_len = sizeof(*dest_addr);
-		ns_attr.service_len = sizeof(svc);
-		ns_attr.service_cmp = psmx_ns_service_cmp;
-		ns_attr.is_service_wildcard = psmx_ns_is_service_wildcard;
-		err = ofi_ns_init(&ns_attr, &ns);
-		if (err) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"ofi_ns_init returns %d\n", err);
-			err = -FI_ENODATA;
-			goto err_out;
-		}
+
+		struct util_ns ns = {
+			.port = psmx_uuid_to_port(uuid),
+			.name_len = sizeof(*dest_addr),
+			.service_len = sizeof(svc),
+			.service_cmp = psmx_ns_service_cmp,
+			.is_service_wildcard = psmx_ns_is_service_wildcard,
+		};
+		ofi_ns_init(&ns);
 
 		if (service)
 			svc = atoi(service);

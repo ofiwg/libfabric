@@ -556,22 +556,15 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			/* Even if it's invoked not for the first time
 			 * (e.g. multiple domains per fabric), it's safe
 			 */
-			struct util_ns_attr ns_attr = {
-				.ns_port =
-					fi_ibv_gl_data.dgram.name_server_port,
-				.name_len = sizeof(struct ofi_ib_ud_ep_name),
-				.service_len = sizeof(int),
-				.service_cmp = fi_ibv_dgram_ns_service_cmp,
-				.is_service_wildcard =
-					fi_ibv_dgram_ns_is_service_wildcard,
-			};
-			ret = ofi_ns_init(&ns_attr,
-					  &fab->name_server);
-			if (ret) {
-				VERBS_INFO(FI_LOG_DOMAIN,
-					   "ofi_ns_init returns %d\n", ret);
-				goto err5;
-			}
+			fab->name_server.port =
+					fi_ibv_gl_data.dgram.name_server_port;
+			fab->name_server.name_len = sizeof(struct ofi_ib_ud_ep_name);
+			fab->name_server.service_len = sizeof(int);
+			fab->name_server.service_cmp = fi_ibv_dgram_ns_service_cmp;
+			fab->name_server.is_service_wildcard =
+					fi_ibv_dgram_ns_is_service_wildcard;
+
+			ofi_ns_init(&fab->name_server);
 			ofi_ns_start_server(&fab->name_server);
 		}
 		_domain->util_domain.domain_fid.ops = &fi_ibv_dgram_domain_ops;
