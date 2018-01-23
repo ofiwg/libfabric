@@ -418,6 +418,7 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	assert((tx_buf->type == RXM_BUF_POOL_TX_MSG) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_TAGGED) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK));
+	tx_buf->pkt.hdr.flags &= ~OFI_REMOTE_CQ_DATA;
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
 			(struct rxm_buf *)tx_buf);
 }

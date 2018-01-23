@@ -127,44 +127,39 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 	mr_desc = (*context != NULL) ? fi_mr_desc((struct fid_mr *)*context) : NULL;
 
 	for (i = 0; i < pool->pool->chunk_cnt; i++) {
-		switch (pool->type) {
-		case RXM_BUF_POOL_RX:
+		if (pool->type == RXM_BUF_POOL_RX) {
 			rx_buf = (struct rxm_rx_buf *)((char *)addr + i * entry_sz);
 			rx_buf->ep = pool->ep;
 			rx_buf->hdr.desc = mr_desc;
-			break;
-		case RXM_BUF_POOL_TX_MSG:
+		} else {
 			tx_buf = (struct rxm_tx_buf *)((char *)addr + i * entry_sz);
-			tx_buf->type = RXM_BUF_POOL_TX_MSG;
-			tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
+			tx_buf->type = pool->type;
 			tx_buf->pkt.ctrl_hdr.version = OFI_CTRL_VERSION;
-			tx_buf->pkt.hdr.op = ofi_op_msg;
 			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
+			if (rxm_ep_tx_flags(pool->ep) & FI_TRANSMIT_COMPLETE)
+				tx_buf->pkt.hdr.flags |= OFI_TRANSMIT_COMPLETE;
+			if (rxm_ep_tx_flags(pool->ep) & FI_DELIVERY_COMPLETE)
+				tx_buf->pkt.hdr.flags |= OFI_DELIVERY_COMPLETE;
 			tx_buf->hdr.desc = mr_desc;
-			break;
-		case RXM_BUF_POOL_TX_TAGGED:
-			tx_buf = (struct rxm_tx_buf *)((char *)addr + i * entry_sz);
-			tx_buf->type = RXM_BUF_POOL_TX_TAGGED;
-			tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
-			tx_buf->pkt.ctrl_hdr.version = OFI_CTRL_VERSION;
-			tx_buf->pkt.hdr.op = ofi_op_tagged;
-			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			tx_buf->hdr.desc = mr_desc;
-			break;
-		case RXM_BUF_POOL_TX_ACK:
-			tx_buf = (struct rxm_tx_buf *)((char *)addr + i * entry_sz);
-			tx_buf->type = RXM_BUF_POOL_TX_ACK;
-			tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_ack;
-			tx_buf->pkt.ctrl_hdr.version = OFI_CTRL_VERSION;
-			tx_buf->pkt.hdr.op = ofi_op_msg;
-			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			tx_buf->hdr.desc = mr_desc;
-			break;
-		case RXM_BUF_POOL_MAX_VAL:
-			assert(0);
-			break;
+
+			switch (pool->type) {
+			case RXM_BUF_POOL_TX_MSG:
+				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
+				tx_buf->pkt.hdr.op = ofi_op_msg;
+				break;
+			case RXM_BUF_POOL_TX_TAGGED:
+				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
+				tx_buf->pkt.hdr.op = ofi_op_tagged;
+				break;
+			case RXM_BUF_POOL_TX_ACK:
+				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_ack;
+				tx_buf->pkt.hdr.op = ofi_op_msg;
+				break;
+			default:
+				assert(0);
+				break;
+			}
 		}
-		
 	}
 
 	return FI_SUCCESS;
@@ -692,19 +687,6 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  &rxm_ep->recv_queue);
 }
 
-static void rxm_op_hdr_process_flags(struct ofi_op_hdr *hdr, uint64_t flags,
-				     uint64_t data)
-{
-	if (flags & FI_REMOTE_CQ_DATA) {
-		hdr->flags = OFI_REMOTE_CQ_DATA;
-		hdr->data = data;
-	}
-	if (flags & FI_TRANSMIT_COMPLETE)
-		hdr->flags |= OFI_TRANSMIT_COMPLETE;
-	if (flags & FI_DELIVERY_COMPLETE)
-		hdr->flags |= OFI_DELIVERY_COMPLETE;
-}
-
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
 {
 	int ret;
@@ -777,8 +759,11 @@ rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 
 	(*tx_buf)->pkt.hdr.size = len;
 	(*tx_buf)->pkt.hdr.tag = tag;
-	(*tx_buf)->pkt.hdr.flags = 0;
-	rxm_op_hdr_process_flags(&(*tx_buf)->pkt.hdr, flags, data);
+
+	if (flags & FI_REMOTE_CQ_DATA) {
+		(*tx_buf)->pkt.hdr.flags = OFI_REMOTE_CQ_DATA;
+		(*tx_buf)->pkt.hdr.data = data;
+	}
 
 	return FI_SUCCESS;
 }
