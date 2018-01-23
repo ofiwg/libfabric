@@ -45,6 +45,7 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 	int recv_flag = 0;
 	size_t idx;
 	int err;
+	int enable_completion;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -92,14 +93,10 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 	PSMX2_SET_TAG(psm2_tag, 0ULL, PSMX2_MSG_BIT);
 	PSMX2_SET_TAG(psm2_tagsel, 0ULL, ~(PSMX2_IOV_BIT | PSMX2_IMM_BIT));
 
-	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
-		fi_context = psmx2_ep_get_op_context(ep_priv);
-		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_RECV_CONTEXT;
-		PSMX2_CTXT_EP(fi_context) = ep_priv;
-		PSMX2_CTXT_USER(fi_context) = buf;
-		PSMX2_CTXT_SIZE(fi_context) = len;
-	} else {
-		if (!context)
+	enable_completion = !ep_priv->recv_selective_completion ||
+			    (flags & FI_COMPLETION);
+	if (enable_completion) {
+		if (OFI_UNLIKELY(!context))
 			return -FI_EINVAL;
 
 		fi_context = context;
@@ -129,16 +126,33 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 		}
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 		PSMX2_CTXT_SIZE(fi_context) = len;
+	} else {
+		PSMX2_EP_GET_OP_CONTEXT(ep_priv, fi_context);
+		#if !PSMX2_USE_REQ_CONTEXT
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_RECV_CONTEXT;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
+		#endif
 	}
 
 	err = psm2_mq_irecv2(ep_priv->rx->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, recv_flag, buf, len,
 			     (void *)fi_context, &psm2_req);
-	if (err != PSM2_OK)
+	if (OFI_UNLIKELY(err != PSM2_OK))
 		return psmx2_errno(err);
 
-	if (fi_context == context)
+	if (enable_completion) {
 		PSMX2_CTXT_REQ(fi_context) = psm2_req;
+	} else {
+		#if PSMX2_USE_REQ_CONTEXT
+		PSMX2_REQ_GET_OP_CONTEXT(psm2_req, fi_context);
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_RECV_CONTEXT;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
+		#endif
+	}
 
 	return 0;
 }
