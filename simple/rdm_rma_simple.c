@@ -51,6 +51,10 @@ static int run_test(void)
 	if (ret)
 		return ret;
 
+	ret = ft_exchange_keys(&remote);
+	if (ret)
+		return ret;
+
 	if (opts.dst_addr) {
 		fprintf(stdout, "RMA write to server\n");
 		if (snprintf(tx_buf, tx_size, "%s", message) >= tx_size) {
@@ -58,7 +62,7 @@ static int run_test(void)
                         return -FI_ETOOSMALL;
                 }
 		ret = fi_write(ep, tx_buf, message_len, mr_desc,
-			       remote_fi_addr, 0, FT_MR_KEY,
+			       remote_fi_addr, remote.addr, remote.key,
 			       &fi_ctx_write);
 		if (ret)
 			return ret;
@@ -103,7 +107,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A simple RDM client-sever RMA example.");
+			ft_usage(argv[0], "A simple RDM client-server RMA example.");
 			return EXIT_FAILURE;
 		}
 	}
@@ -111,7 +115,6 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA | FI_RMA_EVENT;
 	hints->mode = FI_CONTEXT;

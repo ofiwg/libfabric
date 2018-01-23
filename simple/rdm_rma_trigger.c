@@ -37,6 +37,8 @@
 
 #include <shared.h>
 
+struct fi_rma_iov remote;
+
 struct fi_triggered_context triggered_ctx;
 
 static char *welcome_text1 = "Hello1 from Client!";
@@ -50,8 +52,8 @@ static int rma_write_trigger(void *src, size_t size,
 	triggered_ctx.trigger.threshold.cntr = cntr;
 	triggered_ctx.trigger.threshold.threshold = threshold;
 	ret = fi_write(alias_ep, src, size, mr_desc,
-		       remote_fi_addr, 0,
-		       FT_MR_KEY, &triggered_ctx);
+		       remote_fi_addr, remote.addr, remote.key,
+		       &triggered_ctx);
  	if (ret){
  		FT_PRINTERR("fi_write", ret);
  		return ret;
@@ -71,24 +73,30 @@ static int run_test(void)
 	if (ret)
 		return ret;
 
+	ret = ft_exchange_keys(&remote);
+	if (ret)
+		return ret;
+
 	if (opts.dst_addr) {
 		sprintf(tx_buf, "%s%s", welcome_text1, welcome_text2);
 
 		fprintf(stdout, "Triggered RMA write to server\n");
 		ret = rma_write_trigger((char *) tx_buf + strlen(welcome_text1),
-					strlen(welcome_text2), txcntr, 2);
+					strlen(welcome_text2), txcntr, 3);
 		if (ret)
 			goto out;
 
 		fprintf(stdout, "RMA write to server\n");
 		ret = fi_write(ep, tx_buf, strlen(welcome_text1), mr_desc,
-				remote_fi_addr, 0, FT_MR_KEY, &tx_ctx);
+			       remote_fi_addr, remote.addr, remote.key,
+			       &tx_ctx);
  		if (ret){
  			FT_PRINTERR("fi_write", ret);
  			goto out;
 		}
-		/* The value of the counter is 3 including a transfer during init_av */
-		ret = fi_cntr_wait(txcntr, 3, -1);
+		/* The value of the counter is 4 including a transfer during
+		 * init_av and ft_exchange_keys() */
+		ret = fi_cntr_wait(txcntr, 4, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			goto out;
@@ -96,8 +104,9 @@ static int run_test(void)
 
 		fprintf(stdout, "Received completion events for RMA write operations\n");
 	} else {
-		/* The value of the counter is 3 including a transfer during init_av */
-		ret = fi_cntr_wait(rxcntr, 3, -1);
+		/* The value of the counter is 4 including a transfer during
+		 * init_av and ft_exchange_keys() */
+		ret = fi_cntr_wait(rxcntr, 4, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			goto out;
@@ -133,7 +142,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A simple RDM client-sever triggered RMA example with alias ep.");
+			ft_usage(argv[0], "A simple RDM client-server triggered RMA example with alias ep.");
 			return EXIT_FAILURE;
 		}
 	}
@@ -141,7 +150,6 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA | FI_RMA_EVENT | FI_TRIGGER;
 	hints->mode = FI_CONTEXT;
