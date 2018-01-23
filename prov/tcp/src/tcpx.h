@@ -216,7 +216,6 @@ struct tcpx_pe_entry {
 	enum tcpx_xfer_states	state;
 	struct ofi_op_hdr	msg_hdr;
 	union tcpx_iov		iov[TCPX_IOV_LIMIT];
-	struct dlist_entry	entry;
 	struct dlist_entry	ctx_entry;
 	struct ofi_ringbuf	comm_buf;
 	struct tcpx_ep		*ep;
@@ -227,15 +226,9 @@ struct tcpx_pe_entry {
 	uint64_t		data_len;
 	uint64_t		done_len;
 	uint64_t		iov_cnt;
-	uint8_t			is_pool_entry;
 };
 
 struct tcpx_progress {
-	struct tcpx_domain	*domain;
-	struct tcpx_pe_entry	pe_entry_table[TCPX_PE_MAX_ENTRIES];
-	struct dlist_entry	free_list;
-	struct dlist_entry	busy_list;
-	struct dlist_entry	pool_list;
 	struct dlist_entry	ep_list;
 	pthread_mutex_t		ep_list_lock;
 	struct util_buf_pool	*pe_entry_pool;
