@@ -405,18 +405,18 @@ static int alloc_ep_res(struct fi_info *fi)
 	// registers local data buffer buff that specifies
 	// the first operand of the atomic operation
 	ret = fi_mr_reg(domain, buf, buf_size,
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
-		get_mr_key(), 0, &mr, NULL);
+			(FI_SEND | FI_RECV | FI_READ | FI_WRITE |
+			 FI_REMOTE_READ | FI_REMOTE_WRITE), 0,
+			get_mr_key(), 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
 
-	// registers local data buffer that stores initial value of
-	// the remote buffer
+	// registers local data buffer that stores results
 	ret = fi_mr_reg(domain, result, buf_size,
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
-		get_mr_key(), 0, &mr_result, NULL);
+			FI_READ | FI_REMOTE_WRITE, 0,
+			get_mr_key(), 0, &mr_result, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", -ret);
 		return ret;
@@ -424,8 +424,8 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	// registers local data buffer that contains comparison data
 	ret = fi_mr_reg(domain, compare, buf_size,
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
-		get_mr_key(), 0, &mr_compare, NULL);
+			FI_WRITE | FI_REMOTE_READ, 0,
+			get_mr_key(), 0, &mr_compare, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
