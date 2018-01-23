@@ -107,5 +107,45 @@
 
 #endif /* HAVE_PSM2_SRC */
 
+#if !HAVE_PSM2_AM_REGISTER_HANDLERS_2
+
+#define PSMX2_MAX_AM_HANDLERS 1000
+
+typedef int (*psm2_am_handler_2_fn_t) (
+			psm2_am_token_t token,
+			psm2_amarg_t *args, int nargs,
+			void *src, uint32_t len, void *hctx);
+
+extern psm2_am_handler_fn_t psmx2_am_handlers[];
+extern psm2_am_handler_2_fn_t psmx2_am_handlers_2[];
+extern void *psmx2_am_handler_ctxts[];
+extern int psmx2_am_handler_count;
+
+static inline
+psm2_error_t psm2_am_register_handlers_2(
+			psm2_ep_t ep,
+			const psm2_am_handler_2_fn_t * handlers,
+			int num_handlers, void **hctx,
+			int *handlers_idx)
+{
+	int i;
+	int start = psmx2_am_handler_count;
+
+	if (start + num_handlers > PSMX2_MAX_AM_HANDLERS)
+		return PSM2_EP_NO_RESOURCES;
+
+	psmx2_am_handler_count += num_handlers;
+
+	for (i = 0; i < num_handlers; i++) {
+		psmx2_am_handlers_2[start + i] = handlers[i];
+		psmx2_am_handler_ctxts[start + i] = hctx[i];
+	}
+
+	return psm2_am_register_handlers(ep, psmx2_am_handlers + start,
+					 num_handlers, handlers_idx);
+}
+
+#endif /* !HAVE_PSM2_AM_REGISTER_HANDLERS_2 */
+
 #endif
 

@@ -105,7 +105,9 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	return 0;
 err2:
-	ofi_domain_close(&tcpx_domain->util_domain);
+	if (ofi_domain_close(&tcpx_domain->util_domain))
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+			"ofi_domain_close failed\n");
 err1:
 	free(tcpx_domain);
 	return ret;

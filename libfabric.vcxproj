@@ -506,6 +506,15 @@
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <ClCompile Include="prov\tcp\src\tcpx_attr.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_comm.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_conn_mgr.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_cq.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_domain.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_ep.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_fabric.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_init.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_progress.c" />
     <ClCompile Include="prov\udp\src\udpx_attr.c" />
     <ClCompile Include="prov\udp\src\udpx_cq.c" />
     <ClCompile Include="prov\udp\src\udpx_domain.c" />
@@ -532,6 +541,7 @@
     <ClCompile Include="prov\util\src\util_main.c" />
     <ClCompile Include="prov\util\src\util_mr_map.c" />
     <ClCompile Include="prov\util\src\util_ns.c" />
+    <ClCompile Include="prov\util\src\util_pep.c" />
     <ClCompile Include="prov\util\src\util_poll.c" />
     <ClCompile Include="prov\util\src\util_wait.c" />
     <ClCompile Include="prov\util\src\util_mem_monitor.c" />
@@ -616,6 +626,7 @@
     <ClInclude Include="prov\netdir\src\netdir_ov.h" />
     <ClInclude Include="prov\sockets\include\sock.h" />
     <ClInclude Include="prov\sockets\include\sock_util.h" />
+    <ClInclude Include="prov\tcp\src\tcpx.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
   </ItemGroup>
   <ItemGroup>
