@@ -30,7 +30,10 @@
  * SOFTWARE.
  */
 
+#include <netdb.h>
+
 #include <rdma/fi_errno.h>
+#include <ofi_net.h>
 
 #include <prov.h>
 #include "rxm.h"
@@ -165,12 +168,37 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			struct fi_info **info)
 {
 	struct fi_info *cur, *dup;
+	struct addrinfo *ai;
+	uint16_t port_save = 0;
 	int ret;
+
+	/* Avoid getting wild card address from MSG provider */
+	if (ofi_is_only_src_port_set(node, service, flags, hints)) {
+		if (service) {
+			ret = getaddrinfo(NULL, service, NULL, &ai);
+			if (ret) {
+				FI_WARN(&rxm_prov, FI_LOG_CORE,
+					"Unable to getaddrinfo\n");
+				return ret;
+			}
+			port_save = ofi_addr_get_port(ai->ai_addr);
+			freeaddrinfo(ai);
+			service = NULL;
+		} else {
+			port_save = ofi_addr_get_port(hints->src_addr);
+			ofi_addr_set_port(hints->src_addr, 0);
+		}
+	}
 
 	ret = ofix_getinfo(version, node, service, flags, &rxm_util_prov, hints,
 			   rxm_info_to_core, rxm_info_to_rxm, info);
 	if (ret)
 		return ret;
+
+	if (port_save) {
+		for (cur = *info; cur; cur = cur->next)
+			ofi_addr_set_port(cur->src_addr, port_save);
+	}
 
 	/* If app supports FI_MR_LOCAL, prioritize requiring it for
 	 * better performance. */
