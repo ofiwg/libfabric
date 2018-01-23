@@ -148,6 +148,7 @@ src_libfabric_la_SOURCES =			\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
 	src/fi_tostr.c				\
+	src/perf.c				\
 	src/log.c				\
 	src/var.c				\
 	src/abi_1_0.c				\
