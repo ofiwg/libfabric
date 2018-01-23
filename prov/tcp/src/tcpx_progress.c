@@ -41,10 +41,8 @@
 #include <net/if.h>
 #include <fi_util.h>
 
-int tcpx_progress_close(struct tcpx_domain *domain)
+int tcpx_progress_close(struct tcpx_progress *progress)
 {
-	struct tcpx_progress *progress = &domain->progress;
-
 	if (!dlist_empty(&progress->ep_list)) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"All EPs are not removed from progress\n");
@@ -197,8 +195,9 @@ static void release_pe_entry(struct tcpx_pe_entry *pe_entry)
 	util_buf_release(domain->progress.pe_entry_pool, pe_entry);
 }
 
-void tcpx_progress_posted_rx_cleanup(struct tcpx_ep *ep,
-				    struct tcpx_progress *progress)
+static void tcpx_progress_posted_rx_cleanup(struct tcpx_progress *progress,
+				     struct tcpx_ep *ep)
+
 {
 	struct dlist_entry *entry;
 	struct tcpx_posted_rx *posted_rx;
@@ -213,8 +212,9 @@ void tcpx_progress_posted_rx_cleanup(struct tcpx_ep *ep,
 	pthread_mutex_unlock(&ep->posted_rx_list_lock);
 }
 
-void tcpx_progress_pe_entry_cleanup(struct tcpx_ep *ep,
-				    struct tcpx_progress *progress)
+static void tcpx_progress_pe_entry_cleanup(struct tcpx_progress *progress,
+				    struct tcpx_ep *ep)
+
 {
 	struct dlist_entry *entry;
 	struct tcpx_pe_entry *pe_entry;
@@ -572,7 +572,7 @@ void *tcpx_progress_thread(void *data)
 	}
 	return NULL;
 }
-int tcpx_progress_ep_remove(struct tcpx_ep *ep, struct tcpx_progress *progress)
+int tcpx_progress_ep_remove(struct tcpx_progress *progress, struct tcpx_ep *ep)
 {
 	int ret;
 
@@ -584,10 +584,13 @@ int tcpx_progress_ep_remove(struct tcpx_ep *ep, struct tcpx_progress *progress)
 	dlist_remove(&ep->ep_entry);
 	pthread_mutex_unlock(&progress->ep_list_lock);
 	tcpx_progress_signal(progress);
+
+	tcpx_progress_posted_rx_cleanup(progress, ep);
+	tcpx_progress_pe_entry_cleanup(progress, ep);
 	return FI_SUCCESS;
 }
 
-int tcpx_progress_ep_add(struct tcpx_ep *ep, struct tcpx_progress *progress)
+int tcpx_progress_ep_add(struct tcpx_progress *progress, struct tcpx_ep *ep)
 {
 	int ret;
 
@@ -603,8 +606,7 @@ int tcpx_progress_ep_add(struct tcpx_ep *ep, struct tcpx_progress *progress)
 	return FI_SUCCESS;
 }
 
-int tcpx_progress_init(struct tcpx_domain *domain,
-		       struct tcpx_progress *progress)
+int tcpx_progress_init(struct tcpx_progress *progress)
 {
 	int ret;
 

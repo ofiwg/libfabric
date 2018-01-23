@@ -116,13 +116,11 @@ ssize_t tcpx_comm_send(struct tcpx_pe_entry *pe_entry, const void *buf, size_t l
 ssize_t tcpx_comm_recv(struct tcpx_pe_entry *pe_entry, void *buf, size_t len);
 ssize_t tcpx_comm_flush(struct tcpx_pe_entry *pe_entry);
 
-int tcpx_progress_init(struct tcpx_domain *domain, struct tcpx_progress *progress);
-int tcpx_progress_close(struct tcpx_domain *domain);
+int tcpx_progress_init(struct tcpx_progress *progress);
+int tcpx_progress_close(struct tcpx_progress *progress);
 void tcpx_progress_signal(struct tcpx_progress *progress);
-int tcpx_progress_ep_add(struct tcpx_ep *ep, struct tcpx_progress *progress);
-int tcpx_progress_ep_remove(struct tcpx_ep *ep, struct tcpx_progress *progress);
-void tcpx_progress_posted_rx_cleanup(struct tcpx_ep *ep, struct tcpx_progress *progress);
-void tcpx_progress_pe_entry_cleanup(struct tcpx_ep *ep, struct tcpx_progress *progress);
+int tcpx_progress_ep_add(struct tcpx_progress *progress, struct tcpx_ep *ep);
+int tcpx_progress_ep_remove(struct tcpx_progress *progress, struct tcpx_ep *ep);
 
 enum tcpx_xfer_states {
 	TCPX_XFER_IDLE,
