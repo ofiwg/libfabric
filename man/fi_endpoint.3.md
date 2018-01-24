@@ -328,7 +328,7 @@ together when binding an endpoint to a completion domain CQ.
   fi_inject(ep, ...);                 // no completion!
 ```
 
-An endpoint may also, or instead, be bound to a fabric counter.  When
+An endpoint may also be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
 
 *FI_SEND*
