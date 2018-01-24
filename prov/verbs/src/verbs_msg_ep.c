@@ -376,6 +376,14 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	ofi_atomic_initialize32(&ep->unsignaled_send_cnt, 0);
 	ofi_atomic_initialize32(&ep->comp_pending, 0);
+	/* The `send_signal_thr` and `send_comp_thr` values are necessary to avoid
+	 * overrun the send queue size */
+	/* A signaled Send Request must be posted when the `send_signal_thr`
+	 * value is reached */
+	ep->send_signal_thr = (ep->info->tx_attr->size * 4) / 5;
+	/* Polling of CQ for internal signaled Send Requests must be initiated upon
+	 * reaching the `send_comp_thr` value */
+	ep->send_comp_thr = (ep->info->tx_attr->size * 9) / 10;
 
 	ep->domain = dom;
 	*ep_fid = &ep->ep_fid;
