@@ -549,6 +549,7 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 	case RXM_TX:
 	case RXM_LMT_TX:
 		tx_entry = (struct rxm_tx_entry *)op_context;
+		tx_entry->tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 		util_cq = tx_entry->ep->util_ep.tx_cq;
 		break;
 	case RXM_LMT_ACK_SENT:
