@@ -41,31 +41,8 @@
 #include <net/if.h>
 #include <fi_util.h>
 
-static int tcpx_progress_table_clean(struct tcpx_progress *progress)
+int tcpx_progress_close(struct tcpx_progress *progress)
 {
-	int i;
-	struct dlist_entry *entry;
-	struct tcpx_pe_entry *pe_entry;
-
-	for (i = 0; i < TCPX_PE_MAX_ENTRIES; i++) {
-		ofi_rbfree(&progress->pe_entry_table[i].comm_buf);
-	}
-
-	while(!dlist_empty(&progress->pool_list)) {
-		entry = progress->pool_list.next;
-		dlist_remove(entry);
-		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
-		ofi_rbfree(&pe_entry->comm_buf);
-		util_buf_release(progress->pe_entry_pool, pe_entry);
-	}
-
-	return FI_SUCCESS;
-}
-
-int tcpx_progress_close(struct tcpx_domain *domain)
-{
-	struct tcpx_progress *progress = &domain->progress;
-
 	if (!dlist_empty(&progress->ep_list)) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"All EPs are not removed from progress\n");
@@ -83,7 +60,6 @@ int tcpx_progress_close(struct tcpx_domain *domain)
 	fd_signal_free(&progress->signal);
 	fastlock_destroy(&progress->signal_lock);
 	fi_epoll_close(progress->epoll_set);
-	tcpx_progress_table_clean(progress);
 	util_buf_pool_destroy(progress->posted_rx_pool);
 	util_buf_pool_destroy(progress->pe_entry_pool);
 	pthread_mutex_destroy(&progress->ep_list_lock);
@@ -99,28 +75,18 @@ void tcpx_progress_signal(struct tcpx_progress *progress)
 
 static struct tcpx_pe_entry *get_new_pe_entry(struct tcpx_progress *progress)
 {
-	struct dlist_entry *entry;
 	struct tcpx_pe_entry *pe_entry;
 
-	if (dlist_empty(&progress->free_list)) {
-		pe_entry = util_buf_alloc(progress->pe_entry_pool);
-		if (!pe_entry) {
-			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
-			return NULL;
-		}
-		memset(pe_entry, 0, sizeof(*pe_entry));
-		pe_entry->is_pool_entry = 1;
-		if (ofi_rbinit(&pe_entry->comm_buf, TCPX_PE_COMM_BUFF_SZ))
-			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to init comm-cache\n");
-		pe_entry->cache_sz = TCPX_PE_COMM_BUFF_SZ;
-		dlist_insert_tail(&pe_entry->entry, &progress->pool_list);
-	} else {
-		entry = progress->free_list.next;
-		dlist_remove(entry);
-		dlist_insert_tail(entry, &progress->busy_list);
-		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
-		assert(ofi_rbempty(&pe_entry->comm_buf));
+	pe_entry = util_buf_alloc(progress->pe_entry_pool);
+	if (!pe_entry) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
+		return NULL;
 	}
+	memset(pe_entry, 0, sizeof(*pe_entry));
+	if (ofi_rbinit(&pe_entry->comm_buf, TCPX_PE_COMM_BUFF_SZ))
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to init comm-cache\n");
+
+	pe_entry->cache_sz = TCPX_PE_COMM_BUFF_SZ;
 	return pe_entry;
 }
 
@@ -225,18 +191,13 @@ static void release_pe_entry(struct tcpx_pe_entry *pe_entry)
 	pe_entry->done_len = 0;
 	pe_entry->iov_cnt = 0;
 
-	if (pe_entry->is_pool_entry) {
-		ofi_rbfree(&pe_entry->comm_buf);
-		dlist_remove(&pe_entry->entry);
-		util_buf_release(domain->progress.pe_entry_pool, pe_entry);
-		return;
-	}
-	dlist_remove(&pe_entry->entry);
-	dlist_insert_tail(&pe_entry->entry, &domain->progress.free_list);
+	ofi_rbfree(&pe_entry->comm_buf);
+	util_buf_release(domain->progress.pe_entry_pool, pe_entry);
 }
 
-void tcpx_progress_posted_rx_cleanup(struct tcpx_ep *ep,
-				    struct tcpx_progress *progress)
+static void tcpx_progress_posted_rx_cleanup(struct tcpx_progress *progress,
+				     struct tcpx_ep *ep)
+
 {
 	struct dlist_entry *entry;
 	struct tcpx_posted_rx *posted_rx;
@@ -251,8 +212,9 @@ void tcpx_progress_posted_rx_cleanup(struct tcpx_ep *ep,
 	pthread_mutex_unlock(&ep->posted_rx_list_lock);
 }
 
-void tcpx_progress_pe_entry_cleanup(struct tcpx_ep *ep,
-				    struct tcpx_progress *progress)
+static void tcpx_progress_pe_entry_cleanup(struct tcpx_progress *progress,
+				    struct tcpx_ep *ep)
+
 {
 	struct dlist_entry *entry;
 	struct tcpx_pe_entry *pe_entry;
@@ -610,7 +572,7 @@ void *tcpx_progress_thread(void *data)
 	}
 	return NULL;
 }
-int tcpx_progress_ep_remove(struct tcpx_ep *ep, struct tcpx_progress *progress)
+int tcpx_progress_ep_remove(struct tcpx_progress *progress, struct tcpx_ep *ep)
 {
 	int ret;
 
@@ -622,10 +584,13 @@ int tcpx_progress_ep_remove(struct tcpx_ep *ep, struct tcpx_progress *progress)
 	dlist_remove(&ep->ep_entry);
 	pthread_mutex_unlock(&progress->ep_list_lock);
 	tcpx_progress_signal(progress);
+
+	tcpx_progress_posted_rx_cleanup(progress, ep);
+	tcpx_progress_pe_entry_cleanup(progress, ep);
 	return FI_SUCCESS;
 }
 
-int tcpx_progress_ep_add(struct tcpx_ep *ep, struct tcpx_progress *progress)
+int tcpx_progress_ep_add(struct tcpx_progress *progress, struct tcpx_ep *ep)
 {
 	int ret;
 
@@ -641,45 +606,9 @@ int tcpx_progress_ep_add(struct tcpx_ep *ep, struct tcpx_progress *progress)
 	return FI_SUCCESS;
 }
 
-static int tcpx_progress_table_init(struct tcpx_progress *progress)
-{
-	int i;
-
-	memset(&progress->pe_entry_table, 0,
-	       sizeof(struct tcpx_pe_entry) * TCPX_PE_MAX_ENTRIES);
-
-	dlist_init(&progress->free_list);
-	dlist_init(&progress->busy_list);
-	dlist_init(&progress->pool_list);
-
-	for (i = 0; i < TCPX_PE_MAX_ENTRIES; i++) {
-		dlist_insert_head(&progress->pe_entry_table[i].entry, &progress->free_list);
-		progress->pe_entry_table[i].cache_sz = TCPX_PE_COMM_BUFF_SZ;
-		if (ofi_rbinit(&progress->pe_entry_table[i].comm_buf, TCPX_PE_COMM_BUFF_SZ)) {
-			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-				"failed to init comm-cache\n");
-			goto err;
-		}
-	}
-	FI_DBG(&tcpx_prov, FI_LOG_DOMAIN,
-	       "Progress entry table init: OK\n");
-	return FI_SUCCESS;
-err:
-	while(i--) {
-		ofi_rbfree(&progress->pe_entry_table[i].comm_buf);
-	}
-	return FI_ENOMEM;
-}
-
-int tcpx_progress_init(struct tcpx_domain *domain,
-		       struct tcpx_progress *progress)
+int tcpx_progress_init(struct tcpx_progress *progress)
 {
 	int ret;
-
-	progress->domain = domain;
-	ret = tcpx_progress_table_init(progress);
-	if (ret)
-		return ret;
 
 	dlist_init(&progress->ep_list);
 	pthread_mutex_init(&progress->ep_list_lock, NULL);
@@ -740,6 +669,5 @@ err2:
 	util_buf_pool_destroy(progress->pe_entry_pool);
 err1:
 	pthread_mutex_destroy(&progress->ep_list_lock);
-	tcpx_progress_table_clean(progress);
 	return ret;
 }

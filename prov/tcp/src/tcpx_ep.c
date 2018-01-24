@@ -414,10 +414,7 @@ static int tcpx_ep_close(struct fid *fid)
 	tcpx_domain = container_of(ep->util_ep.domain,
 				   struct tcpx_domain, util_domain);
 
-	tcpx_progress_ep_remove(ep, &tcpx_domain->progress);
-	tcpx_progress_posted_rx_cleanup(ep, &tcpx_domain->progress);
-	tcpx_progress_pe_entry_cleanup(ep, &tcpx_domain->progress);
-
+	tcpx_progress_ep_remove(&tcpx_domain->progress, ep);
 	pthread_mutex_destroy(&ep->posted_rx_list_lock);
 	fastlock_destroy(&ep->rb_lock);
 
