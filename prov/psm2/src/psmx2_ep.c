@@ -211,18 +211,8 @@ static int psmx2_ep_setopt(fid_t fid, int level, int optname,
 
 static void psmx2_ep_close_internal(struct psmx2_fid_ep *ep)
 {
-	struct slist_entry *entry;
-	struct psmx2_context *item;
-
 	psmx2_domain_release(ep->domain);
-
-	while (!slist_empty(&ep->free_context_list)) {
-		entry = slist_remove_head(&ep->free_context_list);
-		item = container_of(entry, struct psmx2_context, list_entry);
-		free(item);
-	}
-
-	fastlock_destroy(&ep->context_lock);
+	PSMX2_EP_FINI_OP_CONTEXT(ep);
 	free(ep);
 }
 
@@ -528,10 +518,8 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 			   struct psmx2_trx_ctxt *trx_ctxt)
 {
 	struct psmx2_fid_ep *ep_priv;
-	struct psmx2_context *item;
 	uint64_t ep_cap;
 	int err = -FI_EINVAL;
-	int i;
 
 	if (info)
 		ep_cap = info->caps;
@@ -604,19 +592,7 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 
 	psmx2_ep_optimize_ops(ep_priv);
 
-	slist_init(&ep_priv->free_context_list);
-	fastlock_init(&ep_priv->context_lock);
-
-#define PSMX2_FREE_CONTEXT_LIST_SIZE	64
-	for (i = 0; i < PSMX2_FREE_CONTEXT_LIST_SIZE; i++) {
-		item = calloc(1, sizeof(*item));
-		if (!item) {
-			FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL, "out of memory.\n");
-			exit(-1);
-		}
-		slist_insert_tail(&item->list_entry, &ep_priv->free_context_list);
-	}
-
+	PSMX2_EP_INIT_OP_CONTEXT(ep_priv);
 
 	*ep_out = ep_priv;
 	return 0;
@@ -707,40 +683,6 @@ errout_free_ctxt:
 
 errout:
 	return err;
-}
-
-/* Private op context pool management */
-
-struct fi_context *psmx2_ep_get_op_context(struct psmx2_fid_ep *ep)
-{
-	struct psmx2_context *context;
-
-	psmx2_lock(&ep->context_lock, 2);
-	if (!slist_empty(&ep->free_context_list)) {
-		context = container_of(slist_remove_head(&ep->free_context_list),
-				       struct psmx2_context, list_entry);
-		psmx2_unlock(&ep->context_lock, 2);
-		return &context->fi_context;
-	}
-	psmx2_unlock(&ep->context_lock, 2);
-
-	context = malloc(sizeof(*context));
-	if (!context)
-		FI_WARN(&psmx2_prov, FI_LOG_EP_DATA, "out of memory.\n");
-
-	return &context->fi_context;
-}
-
-void psmx2_ep_put_op_context(struct psmx2_fid_ep *ep,
-			     struct fi_context *fi_context)
-{
-	struct psmx2_context *context;
-
-	context = container_of(fi_context, struct psmx2_context, fi_context);
-	context->list_entry.next = NULL;
-	psmx2_lock(&ep->context_lock, 2);
-	slist_insert_tail(&context->list_entry, &ep->free_context_list);
-	psmx2_unlock(&ep->context_lock, 2);
 }
 
 /*

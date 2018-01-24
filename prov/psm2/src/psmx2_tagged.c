@@ -153,6 +153,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 	struct fi_context *fi_context;
 	size_t idx;
 	int err;
+	int enable_completion;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -248,21 +249,25 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 		return 0;
 	}
 
-	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
-		fi_context = psmx2_ep_get_op_context(ep_priv);
-		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_TRECV_CONTEXT;
-		PSMX2_CTXT_EP(fi_context) = ep_priv;
-		PSMX2_CTXT_USER(fi_context) = buf;
-		PSMX2_CTXT_SIZE(fi_context) = len;
-	} else {
-		if (!context)
+	enable_completion = !ep_priv->recv_selective_completion || (flags & FI_COMPLETION);
+
+	if (enable_completion) {
+		if (OFI_UNLIKELY(!context))
 			return -FI_EINVAL;
 
 		fi_context = context;
 		PSMX2_CTXT_TYPE(fi_context) = PSMX2_TRECV_CONTEXT;
-		PSMX2_CTXT_USER(fi_context) = buf;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
 		PSMX2_CTXT_SIZE(fi_context) = len;
+	} else {
+		PSMX2_EP_GET_OP_CONTEXT(ep_priv, fi_context);
+		#if !PSMX2_USE_REQ_CONTEXT
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_TRECV_CONTEXT;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
+		#endif
 	}
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
@@ -292,8 +297,17 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 	if (err != PSM2_OK)
 		return psmx2_errno(err);
 
-	if (fi_context == context)
+	if (enable_completion) {
 		PSMX2_CTXT_REQ(fi_context) = psm2_req;
+	} else {
+		#if PSMX2_USE_REQ_CONTEXT
+		PSMX2_REQ_GET_OP_CONTEXT(psm2_req, fi_context);
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_TRECV_CONTEXT;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
+		#endif
+	}
 
 	return 0;
 }
@@ -322,13 +336,18 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 	if (enable_completion) {
 		fi_context = context;
 		PSMX2_CTXT_TYPE(fi_context) = PSMX2_TRECV_CONTEXT;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
 		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
 	} else {
-		fi_context = psmx2_ep_get_op_context(ep_priv);
+		PSMX2_EP_GET_OP_CONTEXT(ep_priv, fi_context);
+		#if !PSMX2_USE_REQ_CONTEXT
 		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_TRECV_CONTEXT;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
+		#endif
 	}
-	PSMX2_CTXT_EP(fi_context) = ep_priv;
-	PSMX2_CTXT_SIZE(fi_context) = len;
 
 	if (directed_receive && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
@@ -360,15 +379,23 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 	err = psm2_mq_irecv2(ep_priv->rx->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, 0, buf, len,
 			     (void *)fi_context, &psm2_req);
-	if (enable_completion) {
-		if (err != PSM2_OK)
+
+	if (OFI_UNLIKELY((err != PSM2_OK)))
 			return psmx2_errno(err);
 
+	if (enable_completion) {
 		PSMX2_CTXT_REQ(fi_context) = psm2_req;
-		return 0;
 	} else {
-		return psmx2_errno(err);
+		#if PSMX2_USE_REQ_CONTEXT
+		PSMX2_REQ_GET_OP_CONTEXT(psm2_req, fi_context);
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_TRECV_CONTEXT;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
+		#endif
 	}
+
+	return 0;
 }
 
 

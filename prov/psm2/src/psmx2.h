@@ -204,11 +204,6 @@ enum psmx2_context_type {
 	PSMX2_MAX_CONTEXT_TYPE
 };
 
-struct psmx2_context {
-	struct fi_context fi_context;
-	struct slist_entry list_entry;
-};
-
 union psmx2_pi {
 	void	*p;
 	uint32_t i[2];
@@ -802,8 +797,9 @@ struct psmx2_fid_ep {
 	ofi_atomic32_t		ref;
 	struct fi_context	nocomp_send_context;
 	struct fi_context	nocomp_tsend_context;
-	struct slist		free_context_list;
-	fastlock_t		context_lock;
+
+	PSMX2_EP_DECL_OP_CONTEXT
+
 	size_t			min_multi_recv;
 	uint32_t		iov_seq_num;
 	int			service;
@@ -1000,8 +996,6 @@ struct	psmx2_ep_name *psmx2_string_to_ep_name(const void *s);
 int	psmx2_errno(int err);
 void	psmx2_query_mpi(void);
 
-struct	fi_context *psmx2_ep_get_op_context(struct psmx2_fid_ep *ep);
-void	psmx2_ep_put_op_context(struct psmx2_fid_ep *ep, struct fi_context *fi_context);
 void	psmx2_cq_enqueue_event(struct psmx2_fid_cq *cq, struct psmx2_cq_event *event);
 struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 					void *op_context, void *buf,
