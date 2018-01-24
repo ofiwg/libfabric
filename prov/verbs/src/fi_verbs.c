@@ -242,7 +242,7 @@ void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id)
 }
 
 #define VERBS_SIGNAL_SEND(ep) \
-	(ofi_atomic_get32(&ep->unsignaled_send_cnt) >= VERBS_SEND_SIGNAL_THRESH(ep) && \
+	(ofi_atomic_get32(&ep->unsignaled_send_cnt) >= (ep)->send_signal_thr && \
 	 !ofi_atomic_get32(&ep->comp_pending))
 
 static int fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
@@ -342,10 +342,8 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 					return ret;
 			} else {
 				wr->wr_id = 0ULL;
-				ofi_atomic_inc32(&ep->unsignaled_send_cnt);
-
-				if (ofi_atomic_get32(&ep->unsignaled_send_cnt) >=
-						VERBS_SEND_COMP_THRESH(ep)) {
+				if (ofi_atomic_inc32(&ep->unsignaled_send_cnt) >=
+								ep->send_comp_thr) {
 					ret = fi_ibv_reap_comp(ep);
 					if (ret)
 						return ret;

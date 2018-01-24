@@ -103,8 +103,6 @@
 		IBV_SEND_SIGNALED : 0)
 #define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
 
-#define VERBS_SEND_SIGNAL_THRESH(ep) ((ep->info->tx_attr->size * 4) / 5)
-#define VERBS_SEND_COMP_THRESH(ep) ((ep->info->tx_attr->size * 9) / 10)
 #define VERBS_WCE_CNT 1024
 #define VERBS_WRE_CNT 1024
 #define VERBS_EPE_CNT 1024
@@ -171,8 +169,6 @@
 	fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier_free_hook);	\
 	pthread_mutex_unlock(&notifier->lock);					\
 }
-	
-
 
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
@@ -651,6 +647,8 @@ struct fi_ibv_msg_ep {
 	uint64_t		ep_flags;
 	struct fi_info		*info;
 	ofi_atomic32_t		unsignaled_send_cnt;
+	int32_t			send_signal_thr;
+	int32_t			send_comp_thr;
 	ofi_atomic32_t		comp_pending;
 	fastlock_t		wre_lock;
 	struct util_buf_pool	*wre_pool;

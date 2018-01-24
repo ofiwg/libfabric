@@ -181,14 +181,6 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	ssize_t i;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
-	if (!cq->src) {
-		i = ofi_cq_read(cq_fid, buf, count);
-		if (i > 0) {
-			for (count = 0; count < (size_t)i; count++)
-				src_addr[i] = FI_ADDR_NOTAVAIL;
-		}
-		return i;
-	}
 
 	fastlock_acquire(&cq->cq_lock);
 	if (ofi_cirque_isempty(cq->cirq)) {

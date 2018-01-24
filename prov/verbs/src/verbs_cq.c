@@ -253,7 +253,7 @@ static inline int fi_ibv_handle_internal_signal_wc(struct fi_ibv_cq *cq,
 	}
 	epe = container_of(entry, struct fi_ibv_msg_epe, entry);
 	ofi_atomic_sub32(&epe->ep->unsignaled_send_cnt,
-			 VERBS_SEND_SIGNAL_THRESH(epe->ep));
+			 epe->ep->send_signal_thr);
 	ofi_atomic_dec32(&epe->ep->comp_pending);
 	util_buf_release(cq->epe_pool, epe);
 
