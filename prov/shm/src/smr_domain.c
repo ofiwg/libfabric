@@ -45,6 +45,7 @@ static struct fi_ops_domain smr_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
+	.query_atomic = smr_query_atomic,
 };
 
 static int smr_domain_close(fid_t fid)

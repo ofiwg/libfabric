@@ -58,6 +58,7 @@
 #include <fi_list.h>
 #include <fi_signal.h>
 #include <fi_util.h>
+#include <ofi_atomic.h>
 
 #ifndef _SMR_H_
 #define _SMR_H_
@@ -86,6 +87,9 @@ int smr_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
+
+int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
 
 #define SMR_IOV_LIMIT		4
 
@@ -180,5 +184,45 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 
+int smr_verify_peer(struct smr_ep *ep, int peer_id);
+
+void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, void *context,
+		uint32_t op, uint64_t tag, uint8_t datatype, uint8_t atomic_op,
+		uint64_t data, uint16_t op_flags);
+void smr_format_inline(struct smr_cmd *cmd, fi_addr_t peer_id,
+		const struct iovec *iov, size_t count, void *context,
+		uint32_t op, uint64_t tag, uint64_t data, uint16_t op_flags);
+void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
+		const struct iovec *iov, size_t count, void *context,
+		uint32_t op, uint64_t tag, uint64_t data, uint16_t op_flags,
+		struct smr_region *smr, struct smr_inject_buf *tx_buf);
+void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
+		const struct iovec *iov, size_t count, size_t total_len,
+		void *context, uint32_t op, uint64_t tag, uint64_t data,
+		uint16_t op_flags, struct smr_region *smr, struct smr_resp *resp);
+
+int smr_tx_comp(struct smr_ep *ep, void *context, uint64_t flags, uint64_t err);
+int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
+		       uint64_t err);
+int smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags, size_t len,
+		void *buf, void *addr, uint64_t tag, uint64_t data,
+		uint64_t err);
+int smr_rx_src_comp(struct smr_ep *ep, void *context, uint64_t flags,
+		    size_t len, void *buf, void *addr, uint64_t tag,
+		    uint64_t data, uint64_t err);
+int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
+		       size_t len, void *buf, void *addr, uint64_t tag,
+		       uint64_t data, uint64_t err);
+int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
+			   size_t len, void *buf, void *addr, uint64_t tag,
+			   uint64_t data, uint64_t err);
+
+uint64_t smr_tx_comp_flags(uint32_t op);
+uint64_t smr_rx_comp_flags(uint32_t op, uint16_t op_flags);
+uint64_t smr_mr_reg_flags(uint32_t op, uint16_t atomic_op);
+
+void smr_ep_progress(struct util_ep *util_ep);
+int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry);
+void smr_post_pending(struct smr_ep *ep, struct smr_cmd *cmd);
 
 #endif

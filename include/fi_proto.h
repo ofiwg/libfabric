@@ -121,6 +121,8 @@ enum {
 	ofi_op_write,
 	ofi_op_write_rsp,
 	ofi_op_atomic,
+	ofi_op_atomic_fetch,
+	ofi_op_atomic_compare,
 };
 
 #define OFI_REMOTE_CQ_DATA	(1 << 0)

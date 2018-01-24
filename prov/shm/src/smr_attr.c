@@ -81,7 +81,7 @@ struct fi_fabric_attr smr_fabric_attr = {
 
 struct fi_info smr_info = {
 	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_TAGGED | FI_RMA |
-		FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE,
+		FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_ATOMICS,
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &smr_tx_attr,
 	.rx_attr = &smr_rx_attr,
