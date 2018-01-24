@@ -478,7 +478,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_RX:
 		assert(!(comp->flags & FI_REMOTE_READ));
 		assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
-		       (rx_buf->pkt.ctrl_hdr.version = OFI_CTRL_VERSION));
+		       (rx_buf->pkt.ctrl_hdr.version == OFI_CTRL_VERSION));
 
 		if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack)
 			return rxm_lmt_handle_ack(rx_buf);

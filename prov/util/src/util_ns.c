@@ -557,7 +557,8 @@ void ofi_ns_stop_server(struct util_ns *ns)
 
 	ns->run = 0;
 	sock = util_ns_connect_server(ns, ns->hostname);
-	ofi_close_socket(sock);
+	if (sock != INVALID_SOCKET)
+		ofi_close_socket(sock);
 	util_ns_close_listen(ns);
 	(void) pthread_join(ns->thread, NULL);
 	rbtDelete(ns->map);
