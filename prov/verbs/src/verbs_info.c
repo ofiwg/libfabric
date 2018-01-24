@@ -1202,7 +1202,7 @@ static int fi_ibv_get_matching_info(uint32_t version,
 				    const struct fi_info *hints,
 				    struct fi_info **info,
 				    const struct fi_info *verbs_info,
-				    uint8_t is_any_addr)
+				    uint8_t only_srcport_set)
 {
 	const struct fi_info *check_info = verbs_info;
 	struct fi_info *fi, *tail;
@@ -1221,7 +1221,7 @@ static int fi_ibv_get_matching_info(uint32_t version,
 				continue;
 		}
 
-		if ((check_info->ep_attr->type == FI_EP_MSG) && is_any_addr) {
+		if ((check_info->ep_attr->type == FI_EP_MSG) && only_srcport_set) {
 			if (got_passive_info)
 				continue;
 
@@ -1409,30 +1409,6 @@ fn:
 	return ret;
 }
 
-static int fi_ibv_port_is_set(void *addr)
-{
-	if (!addr)
-		return 0;
-
-	switch (ofi_sa_family(addr)) {
-	case AF_INET:
-		return ofi_sin_port(addr) ? 1 : 0;
-	case AF_INET6:
-		return ofi_sin6_port(addr) ? 1 : 0;
-	default:
-		VERBS_WARN(FI_LOG_FABRIC, "Unknown address format\n");
-		return 0;
-	}
-}
-
-/* TODO revisit this if and when getinfo is refactored */
-static int fi_ibv_is_any_addr(const char *node, const char *service, const struct fi_info *hints)
-{
-	return (!node && (!hints || !hints->dest_addr) &&
-		((hints && ofi_is_any_addr(hints->src_addr) &&
-		  fi_ibv_port_is_set(hints->src_addr)) || service));
-}
-
 
 static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 				  const char *service, uint64_t flags,
@@ -1442,8 +1418,10 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 {
 	int ret, ret_sock_addr, ret_ib_ud_addr;
 
+	// TODO check for AF_IB addr
 	ret = fi_ibv_get_matching_info(version, hints, info, *raw_info,
-				       fi_ibv_is_any_addr(node, service, hints));
+				       ofi_is_only_src_port_set(node, service,
+								flags, hints));
 	if (ret)
 		return ret;
 

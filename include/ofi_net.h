@@ -187,8 +187,79 @@ static inline int ofi_get_sa_family(uint32_t addr_format)
 	}
 }
 
-int ofi_is_any_addr(struct sockaddr *sa);
+static inline int ofi_ipv4_is_any_addr(struct sockaddr *sa)
+{
+	struct in_addr ia_any = {
+		.s_addr = INADDR_ANY,
+	};
 
+	if (!sa)
+		return 0;
+
+	return !memcmp(&ofi_sin_addr(sa).s_addr, &ia_any, sizeof(ia_any));
+
+}
+
+static inline int ofi_ipv6_is_any_addr(struct sockaddr *sa)
+{
+	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
+
+	if (!sa)
+		return 0;
+
+	return !memcmp(&ofi_sin6_addr(sa), &ia6_any, sizeof(ia6_any));
+}
+
+static inline int ofi_is_any_addr(struct sockaddr *sa)
+{
+	if (!sa)
+		return 0;
+
+	switch(sa->sa_family) {
+	case AF_INET:
+		return ofi_ipv4_is_any_addr(sa);
+	case AF_INET6:
+		return ofi_ipv6_is_any_addr(sa);
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format!\n");
+		return 0;
+	}
+}
+
+static inline uint16_t ofi_addr_get_port(struct sockaddr *addr)
+{
+	if (!addr)
+		return 0;
+
+	switch (ofi_sa_family(addr)) {
+	case AF_INET:
+		return ntohs(ofi_sin_port(addr));
+	case AF_INET6:
+		return ntohs(ofi_sin6_port(addr));
+	default:
+		FI_WARN(&core_prov, FI_LOG_FABRIC, "Unknown address format\n");
+		assert(0);
+		return 0;
+	}
+}
+
+static inline void ofi_addr_set_port(struct sockaddr *addr, uint16_t port)
+{
+	switch (ofi_sa_family(addr)) {
+	case AF_INET:
+		ofi_sin_port(addr) = htons(port);
+		break;
+	case AF_INET6:
+		ofi_sin6_port(addr) = htons(port);
+		break;
+	default:
+		FI_WARN(&core_prov, FI_LOG_FABRIC, "Unknown address format\n");
+		assert(0);
+	}
+}
+
+int ofi_is_only_src_port_set(const char *node, const char *service,
+			     uint64_t flags, const struct fi_info *hints);
 
 /*
  * Address logging

@@ -555,6 +555,35 @@ int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 	}
 }
 
+int ofi_is_only_src_port_set(const char *node, const char *service,
+			     uint64_t flags, const struct fi_info *hints)
+{
+	if (node)
+		return 0;
+
+	if (hints) {
+		if (hints->dest_addr)
+			return 0;
+
+		if (!hints->src_addr)
+			goto out;
+
+		switch (ofi_sa_family(hints->src_addr)) {
+		case AF_INET:
+			return (ofi_ipv4_is_any_addr(hints->src_addr) &&
+				ofi_sin_port(hints->src_addr));
+		case AF_INET6:
+			return (ofi_ipv6_is_any_addr(hints->src_addr) &&
+				ofi_sin6_port(hints->src_addr));
+		default:
+			FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format\n");
+			return 0;
+		}
+	}
+out:
+	return ((flags & FI_SOURCE) && service) ? 1 : 0;
+}
+
 void ofi_straddr_log_internal(const char *func, int line,
 			      const struct fi_provider *prov,
 			      enum fi_log_level level,
@@ -569,45 +598,6 @@ void ofi_straddr_log_internal(const char *func, int line,
 		addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
 		fi_log(prov, level, subsys, func, line, "%s: %s\n", log_str,
 		       ofi_straddr(buf, &len, addr_format, addr));
-	}
-}
-
-static int ofi_ipv4_is_any_addr(struct sockaddr *sa)
-{
-	struct in_addr ia_any = {
-		.s_addr = INADDR_ANY,
-	};
-
-	if (!sa)
-		return 0;
-
-	return !memcmp(&ofi_sin_addr(sa).s_addr, &ia_any, sizeof(ia_any));
-
-}
-
-static int ofi_ipv6_is_any_addr(struct sockaddr *sa)
-{
-	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
-
-	if (!sa)
-		return 0;
-
-	return !memcmp(&ofi_sin6_addr(sa), &ia6_any, sizeof(ia6_any));
-}
-
-int ofi_is_any_addr(struct sockaddr *sa)
-{
-	if (!sa)
-		return 0;
-
-	switch(sa->sa_family) {
-	case AF_INET:
-		return ofi_ipv4_is_any_addr(sa);
-	case AF_INET6:
-		return ofi_ipv6_is_any_addr(sa);
-	default:
-		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format!\n");
-		return 0;
 	}
 }
 
