@@ -478,7 +478,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_RX:
 		assert(!(comp->flags & FI_REMOTE_READ));
 		assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
-		       (rx_buf->pkt.ctrl_hdr.version = OFI_CTRL_VERSION));
+		       (rx_buf->pkt.ctrl_hdr.version == OFI_CTRL_VERSION));
 
 		if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack)
 			return rxm_lmt_handle_ack(rx_buf);
@@ -549,6 +549,7 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 	case RXM_TX:
 	case RXM_LMT_TX:
 		tx_entry = (struct rxm_tx_entry *)op_context;
+		tx_entry->tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 		util_cq = tx_entry->ep->util_ep.tx_cq;
 		break;
 	case RXM_LMT_ACK_SENT:

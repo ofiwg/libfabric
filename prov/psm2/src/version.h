@@ -57,6 +57,10 @@
 
 #if HAVE_PSM2_SRC
 
+#ifndef PSMX2_USE_REQ_CONTEXT
+#define PSMX2_USE_REQ_CONTEXT	1
+#endif
+
 #define PSMX2_STATUS_TYPE	struct psm2_mq_req
 #define PSMX2_STATUS_DECL(s)	struct psm2_mq_req *s
 #define PSMX2_STATUS_ERROR(s)	((s)->error_code)
@@ -75,6 +79,11 @@
 	psm2_mq_req_free((trx_ctxt)->psm2_mq, status)
 
 #else /* !HAVE_PSM2_SRC */
+
+#ifdef PSMX2_USE_REQ_CONTEXT
+#undef PSMX2_USE_REQ_CONTEXT
+#endif
+#define PSMX2_USE_REQ_CONTEXT	0
 
 #define PSMX2_STATUS_TYPE	psm2_mq_status2_t
 #define PSMX2_STATUS_DECL(s)	psm2_mq_status2_t s##_priv, *s=&s##_priv
@@ -106,6 +115,11 @@
 #define PSMX2_FREE_COMPLETION(trx_ctxt, status)
 
 #endif /* HAVE_PSM2_SRC */
+
+/*
+ * Provide backward compatibility for older PSM2 libraries that lack the
+ * psm2_am_register_handlers_2 function.
+ */
 
 #if !HAVE_PSM2_AM_REGISTER_HANDLERS_2
 
@@ -146,6 +160,107 @@ psm2_error_t psm2_am_register_handlers_2(
 }
 
 #endif /* !HAVE_PSM2_AM_REGISTER_HANDLERS_2 */
+
+/*
+ * Use reserved space within psm2_mq_req for fi_context instead of
+ * allocating from a internal queue.
+ *
+ * Only work when compiled with PSM2 source. Can be turned off by
+ * passing "-DPSMX2_USE_REQ_CONTEXT=0" to the compiler.
+ */
+
+#if PSMX2_USE_REQ_CONTEXT
+
+#define PSMX2_EP_DECL_OP_CONTEXT
+
+#define PSMX2_EP_INIT_OP_CONTEXT(ep) \
+	do { \
+		FI_INFO(&psmx2_prov, FI_LOG_EP_CTRL, \
+			"skip initialization of op context list.\n"); \
+	} while (0)
+
+#define PSMX2_EP_FINI_OP_CONTEXT(ep)
+
+#define PSMX2_EP_GET_OP_CONTEXT(ep, ctx) \
+	do { \
+		(ctx) = NULL; \
+	} while (0)
+
+#define PSMX2_EP_PUT_OP_CONTEXT(ep, ctx)
+
+#define PSMX2_REQ_GET_OP_CONTEXT(req, ctx) \
+	do { \
+		(ctx) = (req)->context = (req)->user_reserved; \
+	} while (0)
+
+#else /* !PSMX2_USE_REQ_CONTEXT */
+
+struct psmx2_context {
+        struct fi_context fi_context;
+        struct slist_entry list_entry;
+};
+
+#define PSMX2_EP_DECL_OP_CONTEXT \
+	struct slist	free_context_list; \
+	fastlock_t	context_lock;
+
+#define PSMX2_EP_INIT_OP_CONTEXT(ep) \
+	do { \
+		struct psmx2_context *item; \
+		int i; \
+		slist_init(&(ep)->free_context_list); \
+		fastlock_init(&(ep)->context_lock); \
+		for (i = 0; i < 64; i++) { \
+			item = calloc(1, sizeof(*item)); \
+			if (!item) { \
+				FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL, "out of memory.\n"); \
+				break; \
+			} \
+			slist_insert_tail(&item->list_entry, &(ep)->free_context_list); \
+		} \
+	} while (0)
+
+#define PSMX2_EP_FINI_OP_CONTEXT(ep) \
+	do { \
+		struct slist_entry *entry; \
+		struct psmx2_context *item; \
+		while (!slist_empty(&(ep)->free_context_list)) { \
+			entry = slist_remove_head(&(ep)->free_context_list); \
+			item = container_of(entry, struct psmx2_context, list_entry); \
+			free(item); \
+		} \
+		fastlock_destroy(&(ep)->context_lock); \
+	} while (0)
+
+#define PSMX2_EP_GET_OP_CONTEXT(ep, ctx) \
+	do { \
+		struct psmx2_context *context; \
+		psmx2_lock(&(ep)->context_lock, 2); \
+		if (!slist_empty(&(ep)->free_context_list)) { \
+			context = container_of(slist_remove_head(&(ep)->free_context_list), \
+					       struct psmx2_context, list_entry); \
+			psmx2_unlock(&(ep)->context_lock, 2); \
+			(ctx) = &context->fi_context; \
+			break; \
+		} \
+		psmx2_unlock(&(ep)->context_lock, 2); \
+		context = malloc(sizeof(*context)); \
+		if (!context) \
+			FI_WARN(&psmx2_prov, FI_LOG_EP_DATA, "out of memory.\n"); \
+		(ctx) = &context->fi_context; \
+	} while (0)
+
+#define PSMX2_EP_PUT_OP_CONTEXT(ep, ctx) \
+	do { \
+		struct psmx2_context *context; \
+		context = container_of((ctx), struct psmx2_context, fi_context); \
+		context->list_entry.next = NULL; \
+		psmx2_lock(&(ep)->context_lock, 2); \
+		slist_insert_tail(&context->list_entry, &(ep)->free_context_list); \
+		psmx2_unlock(&(ep)->context_lock, 2); \
+	} while (0)
+
+#endif /* PSMX2_USE_REQ_CONTEXT */
 
 #endif
 

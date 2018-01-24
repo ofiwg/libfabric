@@ -57,7 +57,7 @@ static int tcpx_domain_close(fid_t fid)
 	tcpx_domain = container_of(fid, struct tcpx_domain,
 				   util_domain.domain_fid.fid);
 
-	ret = tcpx_progress_close(tcpx_domain);
+	ret = tcpx_progress_close(&tcpx_domain->progress);
 	if (ret)
 		return ret;
 
@@ -99,7 +99,7 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->fid.ops = &tcpx_domain_fi_ops;
 	(*domain)->ops = &tcpx_domain_ops;
 
-	ret = tcpx_progress_init(tcpx_domain, &tcpx_domain->progress);
+	ret = tcpx_progress_init(&tcpx_domain->progress);
 	if (ret)
 		goto err2;
 

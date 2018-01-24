@@ -514,11 +514,11 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			case PSMX2_NOCOMP_RECV_CONTEXT:
 				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
 						 !psmx2_handle_sendv_req(ep, status, 0))) {
-					psmx2_ep_put_op_context(ep, fi_context);
+					PSMX2_EP_PUT_OP_CONTEXT(ep, fi_context);
 					PSMX2_FREE_COMPLETION(trx_ctxt, status);
 					continue;
 				}
-				psmx2_ep_put_op_context(ep, fi_context);
+				PSMX2_EP_PUT_OP_CONTEXT(ep, fi_context);
 				if (OFI_UNLIKELY(ep->recv_cq && PSMX2_STATUS_ERROR(status))) {
 					op_context = NULL;
 					buf = NULL;
@@ -547,11 +547,11 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			case PSMX2_NOCOMP_TRECV_CONTEXT:
 				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
 						 !psmx2_handle_sendv_req(ep, status, 0))) {
-					psmx2_ep_put_op_context(ep, fi_context);
+					PSMX2_EP_PUT_OP_CONTEXT(ep, fi_context);
 					PSMX2_FREE_COMPLETION(trx_ctxt, status);
 					continue;
 				}
-				psmx2_ep_put_op_context(ep, fi_context);
+				PSMX2_EP_PUT_OP_CONTEXT(ep, fi_context);
 				if (OFI_UNLIKELY(ep->recv_cq && PSMX2_STATUS_ERROR(status))) {
 					op_context = NULL;
 					buf = NULL;

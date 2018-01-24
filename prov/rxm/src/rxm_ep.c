@@ -875,7 +875,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 {
 	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
-	struct rxm_tx_entry *tx_entry = NULL;
+	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_buf *tx_buf;
 	struct fid_mr **mr_iov;
 	size_t pkt_size = rxm_pkt_size;
@@ -957,6 +957,8 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 			return ret;
 		tx_entry->state = RXM_TX;
 		pkt_size += tx_buf->pkt.hdr.size;
+		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
+				  iov, count, 0);
 	}
 
 	ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size,
