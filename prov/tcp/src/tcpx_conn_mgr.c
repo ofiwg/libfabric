@@ -302,7 +302,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 			      struct tcpx_domain,
 			      util_domain);
 
-	ret = tcpx_progress_ep_add(ep, &domain->progress);
+	ret = tcpx_progress_ep_add(&domain->progress, ep);
 err:
 	free(cm_entry);
 	return ret;
@@ -445,7 +445,7 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 			      struct tcpx_domain,
 			      util_domain);
 
-	ret = tcpx_progress_ep_add(ep, &domain->progress);
+	ret = tcpx_progress_ep_add(&domain->progress, ep);
 	if (ret)
 		goto err;
 
