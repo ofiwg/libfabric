@@ -748,36 +748,32 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context);
 	  .length = (uint32_t)len,					\
 	  .lkey = (uint32_t)(uintptr_t)desc }
 
-#define fi_ibv_set_sge_iov(sg_list, iov, count, desc, len)		\
-	do {								\
-		int i;							\
-		if (count) {						\
-			sg_list = alloca(sizeof(*sg_list) * count);	\
-			for (i = 0; i < count; i++) {			\
-				sg_list[i] = fi_ibv_init_sge(		\
-						iov[i].iov_base,	\
-						iov[i].iov_len,		\
-						desc[i]);		\
-				len += iov[i].iov_len;			\
-			}						\
-		}							\
-	} while (0)
+#define fi_ibv_set_sge_iov(sg_list, iov, count, desc, len)	\
+({								\
+	size_t i;						\
+	sg_list = alloca(sizeof(*sg_list) * count);		\
+	for (i = 0; i < count; i++) {				\
+		sg_list[i] = fi_ibv_init_sge(			\
+				iov[i].iov_base,		\
+				iov[i].iov_len,			\
+				desc[i]);			\
+		len += iov[i].iov_len;				\
+	}							\
+})
 
 #define fi_ibv_init_sge_inline(buf, len) fi_ibv_init_sge(buf, len, NULL)
 
-#define fi_ibv_set_sge_iov_inline(sg_list, iov, count, len)		\
-	do {								\
-		int i;							\
-		if (count) {						\
-			sg_list = alloca(sizeof(*sg_list) * count);	\
-			for (i = 0; i < count; i++) {			\
-				sg_list[i] = fi_ibv_init_sge_inline(	\
-						iov[i].iov_base,	\
-						iov[i].iov_len);	\
-				len += iov[i].iov_len;			\
-			}						\
-		}							\
-	} while (0)
+#define fi_ibv_set_sge_iov_inline(sg_list, iov, count, len)	\
+({								\
+	size_t i;						\
+	sg_list = alloca(sizeof(*sg_list) * count);		\
+	for (i = 0; i < count; i++) {				\
+		sg_list[i] = fi_ibv_init_sge_inline(		\
+					iov[i].iov_base,	\
+					iov[i].iov_len);	\
+			len += iov[i].iov_len;			\
+	}							\
+})
 
 #define fi_ibv_send_iov(ep, wr, iov, desc, count, context)		\
 	fi_ibv_send_iov_flags(ep, wr, iov, desc, count, context,	\
