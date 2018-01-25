@@ -88,9 +88,10 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	psm2_epid_t *buf = NULL;
 	int buflen;
 	struct dlist_entry *entry;
+	struct psmx2_trx_ctxt *trx_ctxt = hctx;
 
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
-	domain = psmx2_active_fabric->active_domain;
+	domain = trx_ctxt->domain;
 
 	switch (cmd) {
 	case PSMX2_AM_REQ_SEP_QUERY:
