@@ -32,6 +32,7 @@
 
 #include <rdma/fi_errno.h>
 #include "rdma/fi_eq.h"
+#include "fi_iov.h"
 #include <prov.h>
 #include "tcpx.h"
 
@@ -54,8 +55,6 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct tcpx_posted_rx *posted_rx;
 	struct tcpx_domain *tcpx_domain;
 	struct tcpx_ep *tcpx_ep;
-	union tcpx_iov iov;
-	size_t len;
 	int i;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
@@ -68,22 +67,18 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!posted_rx)
 		return -FI_ENOMEM;
 
-	posted_rx->ep = tcpx_ep;
 	posted_rx->flags = flags;
 	posted_rx->context = msg->context;
-	posted_rx->iov_cnt = msg->iov_count;
-	len = 0;
+	posted_rx->msg_data.iov_cnt = msg->iov_count;
 
 	for (i = 0 ; i < msg->iov_count; i++) {
-		iov.iov.addr = (uintptr_t) msg->msg_iov[i].iov_base;
-		iov.iov.len = msg->msg_iov[i].iov_len;
-		len += msg->msg_iov[i].iov_len;
-		memcpy(&posted_rx->iov[i], &iov, sizeof(iov));
+		posted_rx->msg_data.iov[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
+		posted_rx->msg_data.iov[i].len = msg->msg_iov[i].iov_len;
 	}
-	posted_rx->data_len = len;
-	pthread_mutex_lock(&tcpx_ep->posted_rx_list_lock);
+
+	fastlock_acquire(&tcpx_ep->posted_rx_list_lock);
 	dlist_insert_tail(&posted_rx->entry, &tcpx_ep->posted_rx_list);
-	pthread_mutex_unlock(&tcpx_ep->posted_rx_list_lock);
+	fastlock_release(&tcpx_ep->posted_rx_list_lock);
 	return FI_SUCCESS;
 }
 
@@ -123,74 +118,68 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
-	int ret = FI_SUCCESS;
-	uint64_t total_len = 0;
-	uint64_t data_len = 0;
-	uint8_t op_data;
 	struct tcpx_domain *tcpx_domain;
-	union tcpx_iov tx_iov;
-	int i;
+	struct tcpx_pe_entry *send_entry;
+	int ret = FI_SUCCESS;
+	int i, data_len;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
 				   struct tcpx_domain, util_domain);
 
-	if (msg->iov_count > TCPX_IOV_LIMIT)
-		return -FI_EINVAL;
+	send_entry = pe_entry_alloc(&tcpx_domain->progress);
+	if (!send_entry)
+		return -FI_ENOMEM;
 
-	op_data = TCPX_OP_MSG_SEND;
-	total_len += sizeof(op_data);
-	total_len += sizeof(msg->iov_count);
-	total_len += sizeof(flags);
-	total_len += sizeof(msg->context);
-	total_len += sizeof(total_len);
+	if (msg->iov_count > TCPX_IOV_LIMIT) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
-	if (flags & FI_REMOTE_CQ_DATA)
-		total_len += sizeof(uint64_t);
-
-	for (i = 0; i < msg->iov_count; i++)
-		data_len += msg->msg_iov[i].iov_len;
+	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
 	if (flags & FI_INJECT) {
 		if (data_len > TCPX_MAX_INJECT_SZ)
 			return -FI_EINVAL;
+	}
+	send_entry->state = TCPX_XFER_STARTED;
+	send_entry->msg_hdr.version = OFI_CTRL_VERSION;
+	send_entry->msg_hdr.op = ofi_op_msg;
+	send_entry->msg_hdr.op_data = TCPX_OP_MSG_SEND;
+	send_entry->msg_hdr.size = htonll(data_len + sizeof(send_entry->msg_hdr));
+	if (flags & FI_REMOTE_CQ_DATA)
+		send_entry->msg_hdr.data = htonll(msg->data);
 
-		total_len += data_len;
+	send_entry->msg_data.iov_cnt = msg->iov_count;
+	if (flags & FI_INJECT) {
+		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
+				 send_entry->msg_data.inject,
+				 data_len,
+				 OFI_COPY_IOV_TO_BUF);
+
+		send_entry->msg_data.iov_cnt = 1;
+		send_entry->msg_data.iov[0].addr = (uintptr_t)send_entry->msg_data.inject;
+		send_entry->msg_data.iov[0].len = data_len;
 	} else {
-		total_len += msg->iov_count * sizeof(tx_iov);
+		for (i = 0; i < msg->iov_count; i++) {
+			send_entry->msg_data.iov[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
+			send_entry->msg_data.iov[i].len = msg->msg_iov[i].iov_len;
+		}
 	}
-
-	fastlock_acquire(&tcpx_ep->rb_lock);
-	if (ofi_rbavail(&tcpx_ep->rb) < total_len) {
-		ret = -FI_EAGAIN;
-		goto err;
-	}
-
-	ofi_rbwrite(&tcpx_ep->rb, &op_data, sizeof(op_data));
-	ofi_rbwrite(&tcpx_ep->rb, &msg->iov_count, sizeof(msg->iov_count));
-	ofi_rbwrite(&tcpx_ep->rb, &flags, sizeof(flags));
-	ofi_rbwrite(&tcpx_ep->rb, &msg->context, sizeof(msg->context));
-	ofi_rbwrite(&tcpx_ep->rb, &data_len, sizeof(data_len));
 
 	if (flags & FI_REMOTE_CQ_DATA)
-		ofi_rbwrite(&tcpx_ep->rb, &msg->data, sizeof(msg->data));
+		send_entry->msg_hdr.flags |= OFI_REMOTE_CQ_DATA;
 
-	if (flags & FI_INJECT) {
-		for (i = 0; i < msg->iov_count; i++) {
-			ofi_rbwrite(&tcpx_ep->rb, msg->msg_iov[i].iov_base,
-				    msg->msg_iov[i].iov_len);
-		}
-	}else {
-		for (i = 0; i < msg->iov_count; i++) {
-			tx_iov.iov.addr = (uintptr_t) msg->msg_iov[i].iov_base;
-			tx_iov.iov.len = msg->msg_iov[i].iov_len;
-			ofi_rbwrite(&tcpx_ep->rb, &tx_iov, sizeof(tx_iov));
-		}
-	}
-	ofi_rbcommit(&tcpx_ep->rb);
+	send_entry->msg_hdr.flags = htonl(send_entry->msg_hdr.flags);
+	send_entry->ep = tcpx_ep;
+	send_entry->context = msg->context;
+	send_entry->done_len = 0;
+
+	dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
 	tcpx_progress_signal(&tcpx_domain->progress);
+	return FI_SUCCESS;
 err:
-	fastlock_release(&tcpx_ep->rb_lock);
+	pe_entry_release(send_entry);
 	return ret;
 }
 
@@ -415,8 +404,7 @@ static int tcpx_ep_close(struct fid *fid)
 				   struct tcpx_domain, util_domain);
 
 	tcpx_progress_ep_remove(&tcpx_domain->progress, ep);
-	pthread_mutex_destroy(&ep->posted_rx_list_lock);
-	fastlock_destroy(&ep->rb_lock);
+	fastlock_destroy(&ep->posted_rx_list_lock);
 
 	ofi_close_socket(ep->conn_fd);
 	ofi_endpoint_close(&ep->util_ep);
@@ -504,27 +492,19 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		ep->conn_fd = ofi_socket(af, SOCK_STREAM, 0);
 		if (ep->conn_fd == INVALID_SOCKET) {
 			ret = -errno;
-			goto err1;
+			goto err2;
 		}
 	}
 	ret = tcpx_setup_socket(ep->conn_fd);
 	if (ret)
-		goto err2;
+		goto err3;
 
 	dlist_init(&ep->rx_queue);
 	dlist_init(&ep->tx_queue);
 	dlist_init(&ep->posted_rx_list);
-	ret = pthread_mutex_init(&ep->posted_rx_list_lock, NULL);
-	if (ret)
-		goto err2;
-
-	ret = fastlock_init(&ep->rb_lock);
+	ret = fastlock_init(&ep->posted_rx_list_lock);
 	if (ret)
 		goto err3;
-
-	ret = ofi_rbinit(&ep->rb, TCPX_MAX_EP_RB_SIZE);
-	if (ret)
-		goto err4;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;
@@ -533,12 +513,10 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &tcpx_msg_ops;
 
 	return 0;
-err4:
-	fastlock_destroy(&ep->rb_lock);
 err3:
-	pthread_mutex_destroy(&ep->posted_rx_list_lock);
-err2:
 	ofi_close_socket(ep->conn_fd);
+err2:
+	ofi_endpoint_close(&ep->util_ep);
 err1:
 	free(ep);
 	return ret;
