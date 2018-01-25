@@ -232,9 +232,11 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct fi_ioc *ioc,
 	case ofi_op_atomic_compare:
 		src = tx_buf->buf;
 		comp = tx_buf->comp;
+		break;
 	default:
 		src = tx_buf->data;
 		comp = NULL;
+		break;
 	}
 
 	for (i = *len = 0; i < ioc_count && *len < cmd->msg.hdr.size; i++) {
