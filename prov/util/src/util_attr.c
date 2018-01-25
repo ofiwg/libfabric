@@ -35,6 +35,9 @@
 
 #include <fi_util.h>
 
+#define OFI_MSG_CAPS	(FI_SEND | FI_RECV)
+#define OFI_RMA_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
+
 static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC)
@@ -1041,6 +1044,12 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 		caps = (hint_caps & FI_PRIMARY_CAPS) |
 		       (attr_caps & FI_SECONDARY_CAPS);
 	}
+
+	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_CAPS))
+		caps |= OFI_MSG_CAPS;
+	if (caps & (FI_RMA | FI_ATOMICS) && !(caps & OFI_RMA_CAPS))
+		caps |= OFI_RMA_CAPS;
+
 	return caps;
 }
 
@@ -1158,7 +1167,7 @@ static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
 	if ((FI_VERSION_LT(api_version, FI_VERSION(1,5)) &&
 	    (user_mode == FI_MR_UNSPEC)) ||
 	    (user_mode == FI_MR_BASIC) ||
-	    ((user_mode & OFI_MR_MODE_RMA_TARGET) ==
+	    ((user_mode & prov_mode & OFI_MR_MODE_RMA_TARGET) == 
 	     (prov_mode & OFI_MR_MODE_RMA_TARGET)))
 		return caps;
 
