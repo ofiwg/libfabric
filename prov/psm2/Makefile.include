@@ -122,6 +122,10 @@ _psm2_nodist_files = \
 	prov/psm2/src/psm2/ptl_self/ptl_fwd.h \
 	prov/psm2/src/psm2/libuuid/psm_uuid.c \
 	prov/psm2/src/psm2/libuuid/psm_uuid.h \
+	prov/psm2/src/psm2/libuuid/parse.c \
+	prov/psm2/src/psm2/libuuid/pack.c \
+	prov/psm2/src/psm2/libuuid/unpack.c \
+	prov/psm2/src/psm2/libuuid/unparse.c \
 	prov/psm2/src/psm2/opa/opa_debug.c \
 	prov/psm2/src/psm2/opa/opa_dwordcpy-@psm2_ARCH@.c \
 	prov/psm2/src/psm2/opa/opa_i2cflash.c \

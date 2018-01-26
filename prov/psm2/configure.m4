@@ -49,15 +49,32 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 		      [
 			dnl build with PSM2 source code included
 			psm2_CPPFLAGS="-msse4.2"
-			FI_CHECK_PACKAGE([psm2],
-					 [rdma/hfi/hfi1_user.h],
-					 [uuid],
-					 [uuid_generate],
-					 [-lnuma],
-					 [],
-					 [],
-					 [psm2_happy=1],
-					 [psm2_happy=0])
+			psm2_happy=1
+			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+						[[#include <rdma/hfi/hfi1_user.h>]],
+						[[
+							#if HFI1_USER_SWMAJOR != 6
+							#error "incorrect version of hfi1_user.h"
+							#endif
+						]])],
+				          [],
+				          [
+						$as_echo "$as_me: hfi1_user.h version 6.x not found"
+						psm2_happy=0
+					  ])
+			AS_IF([test x$psm2_happy = x1],
+			      [FI_CHECK_PACKAGE([psm2],
+						[numa.h],
+						[numa],
+						[numa_node_of_cpu],
+						[],
+						[$with_numa],
+						[],
+						[],
+						[
+							$as_echo "$as_me: numactl-devel or libnuma-devel not found"
+							psm2_happy=0
+						])])
 			AS_IF([test x$psm2_happy = x1],
 			      AS_IF([test -f $with_psm2_src/libpsm2.spec.in],
 				    [AS_IF([grep -q psm2_am_register_handlers_2 $with_psm2_src/psm2_am.h],
@@ -89,4 +106,9 @@ AC_ARG_WITH([psm2-src],
 	    AC_HELP_STRING([--with-psm2-src=DIR],
                            [Provide path to the source code of PSM2 library
 			    to be compiled into the provider]))
+
+AC_ARG_WITH([numa],
+	    AC_HELP_STRING([--with-numa=DIR],
+                           [Provide path to where the numactl-devel or libnuma-devel
+			    package is installed]))
 
