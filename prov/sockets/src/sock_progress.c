@@ -828,6 +828,12 @@ static int sock_pe_process_rx_write(struct sock_pe *pe,
 	pe_entry->data_len = 0;
 	for (i = 0; i < pe_entry->msg_hdr.dest_iov_len; i++) {
 		pe_entry->data_len += pe_entry->pe.rx.rx_iov[i].iov.len;
+		if ((pe_entry->msg_hdr.flags & FI_COMMIT_COMPLETE) &&
+		    ofi_pmem_commit) {
+			(*ofi_pmem_commit)((const void *) (uintptr_t)
+					   pe_entry->pe.rx.rx_iov[i].iov.addr,
+					   pe_entry->pe.rx.rx_iov[i].iov.len);
+		}
 	}
 
 	/* report error, if any */
