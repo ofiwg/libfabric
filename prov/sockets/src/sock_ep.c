@@ -1494,6 +1494,10 @@ static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
 		attr->max_ep_tx_ctx = sock_domain_attr.max_ep_tx_ctx;
 	if (attr->max_ep_rx_ctx == 0)
 		attr->max_ep_rx_ctx = sock_domain_attr.max_ep_rx_ctx;
+	if (attr->max_ep_stx_ctx == 0)
+		attr->max_ep_stx_ctx = sock_domain_attr.max_ep_stx_ctx;
+	if (attr->max_ep_srx_ctx == 0)
+		attr->max_ep_srx_ctx = sock_domain_attr.max_ep_srx_ctx;
 	if (attr->cntr_cnt == 0)
 		attr->cntr_cnt = sock_domain_attr.cntr_cnt;
 	if (attr->mr_iov_limit == 0)
