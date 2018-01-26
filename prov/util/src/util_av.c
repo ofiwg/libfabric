@@ -191,6 +191,16 @@ out:
 	return ret;
 }
 
+void ofi_get_str_addr(const char *node, const char *service,
+		      char **addr, size_t *addrlen)
+{
+	if (!node || !strstr(node, "://"))
+		return;
+
+	*addr = strdup(node);
+	*addrlen = strlen(node) + 1;
+}
+
 int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 		const char *node, const char *service,
 		void **addr, size_t *addrlen)
@@ -206,11 +216,7 @@ int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 		return fi_get_sockaddr(AF_INET6, flags, node, service,
 				       (struct sockaddr **) addr, addrlen);
 	case FI_ADDR_STR:
-		if (!node)
-			return -FI_EINVAL;
-
-		*(char **)addr = strdup(node);
-		*addrlen = strlen(node) + 1;
+		ofi_get_str_addr(node, service, (char **) addr, addrlen);
 		return 0;
 	default:
 		return -FI_ENOSYS;

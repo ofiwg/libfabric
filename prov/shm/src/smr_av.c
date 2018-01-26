@@ -63,6 +63,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	struct smr_av *smr_av;
 	struct smr_ep *smr_ep;
 	struct dlist_entry *av_entry;
+	const char *ep_name;
 	int index, i, ret;
 	int succ_count = 0;
 
@@ -70,13 +71,14 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
 	for (i = 0; i < count; i++) {
-		ret = ofi_av_insert_addr(util_av, &smr_names[i].name, 0, &index);
+		ep_name = smr_no_prefix((const char *) smr_names[i].name);
+		ret = ofi_av_insert_addr(util_av, ep_name, 0, &index);
 		if (ret) {
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
 		} else {
 			ret = smr_map_add(&smr_prov, smr_av->smr_map,
-					  smr_names[i].name, index);
+					  ep_name, index);
 			if (ret) {
 				if (util_av->eq)
 					ofi_av_write_event(util_av, i, -ret, context);

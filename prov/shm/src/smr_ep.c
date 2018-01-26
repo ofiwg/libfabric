@@ -383,16 +383,20 @@ static struct fi_ops smr_ep_fi_ops = {
 };
 
 static int smr_endpoint_name(char *name, char *addr, size_t addrlen,
-			     int pid, int dom_idx, int ep_idx)
+			     int dom_idx, int ep_idx)
 {
+	const char *start;
 	memset(name, 0, SMR_NAME_SIZE);
-	if (addr) {
-		if (addrlen > SMR_NAME_SIZE)
-			return -FI_EINVAL;
-		snprintf(name, addrlen, "%s", addr);
-	} else {
-		snprintf(name, SMR_NAME_SIZE, "%d:%d:%d", pid, dom_idx, ep_idx);
-	}
+	if (!addr || addrlen > SMR_NAME_SIZE)
+		return -FI_EINVAL;
+
+	start = smr_no_prefix((const char *) addr);
+	if (strstr(addr, SMR_PREFIX))
+		snprintf(name, SMR_NAME_SIZE, "%s:%d:%d", start, dom_idx,
+			 ep_idx);
+	else
+		snprintf(name, SMR_NAME_SIZE, "%s", start);
+
 	return 0;
 }
 
@@ -413,8 +417,8 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	fastlock_acquire(&smr_domain->util_domain.lock);
 	ep_idx = smr_domain->ep_idx++;
 	fastlock_release(&smr_domain->util_domain.lock);
-	ret = smr_endpoint_name(name, info->src_addr, info->src_addrlen, getpid(),
-				smr_domain->dom_idx, ep_idx);
+	ret = smr_endpoint_name(name, info->src_addr, info->src_addrlen,
+			        smr_domain->dom_idx, ep_idx);
 	if (ret)
 		goto err2;
 

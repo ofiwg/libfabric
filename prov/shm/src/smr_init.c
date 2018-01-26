@@ -36,10 +36,58 @@
 #include "smr.h"
 
 
-static int smr_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct fi_info *hints, struct fi_info **info)
+static void smr_resolve_addr(const char *node, const char *service,
+			     char **addr, size_t *addrlen)
 {
-	return util_getinfo(&smr_util_prov, version, node, service, flags, hints, info);
+	char temp_name[SMR_NAME_SIZE];
+
+	if (service) {
+		if (node)
+			snprintf(temp_name, SMR_NAME_SIZE, "%s%s:%s",
+				 SMR_PREFIX_NS, node, service);
+		else
+			snprintf(temp_name, SMR_NAME_SIZE, "%s%s",
+				 SMR_PREFIX_NS, service);
+	} else {
+		if (node)
+			snprintf(temp_name, SMR_NAME_SIZE, "%s%s",
+				 SMR_PREFIX, node);
+		else
+			snprintf(temp_name, SMR_NAME_SIZE, "%s%d",
+				 SMR_PREFIX, getpid());
+	}
+
+	*addr = strdup(temp_name);
+	*addrlen = strlen(*addr);
+}
+
+static int smr_getinfo(uint32_t version, const char *node, const char *service,
+		       uint64_t flags, const struct fi_info *hints,
+		       struct fi_info **info)
+{
+	struct fi_info *cur;
+	int ret;
+
+	ret = util_getinfo(&smr_util_prov, version, node, service, flags,
+			   hints, info);
+	if (ret)
+		return ret;
+
+	for (cur = *info; cur; cur = cur->next) {
+		if (!(flags & FI_SOURCE) && !cur->dest_addr)
+			smr_resolve_addr(node, service, (char **) &cur->dest_addr,
+					 &cur->dest_addrlen);
+
+		if (!cur->src_addr) {
+			if (flags & FI_SOURCE)
+				smr_resolve_addr(node, service, (char **) &cur->src_addr,
+						 &cur->src_addrlen);
+			else
+				smr_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
+						 &cur->src_addrlen);
+		}
+	}
+	return 0;
 }
 
 static void smr_fini(void)
