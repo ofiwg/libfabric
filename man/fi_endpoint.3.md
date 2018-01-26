@@ -1345,6 +1345,16 @@ value of transmit or receive context attributes of an endpoint.
   the source endpoint is also considered a destination endpoint.  This is the
   default completion mode for such operations.
 
+*FI_COMMIT_COMPLETE*
+: Indicates that a completion should not be generated (locally or at the
+  peer) until the result of an operation have been made persistent.
+  A completion guarantees that the result is both available and durable,
+  in the case of power failure.
+
+  This completion mode applies only to operations that target persistent
+  memory regions over reliable endpoints.  This completion mode is
+  experimental.
+
 *FI_MULTICAST*
 : Indicates that data transfers will target multicast addresses by default.
   Any fi_addr_t passed into a data transfer operation will be treated as a

@@ -552,6 +552,12 @@ The follow flag may be specified to any memory registration call.
   associated with a completion counter used to count RMA operations
   that access the MR.
 
+*FI_RMA_PMEM*
+: This flag indicates that the underlying memory region is backed by
+  persistent memory and will be used in RMA operations.  It must be
+  specified if persistent completion semantics or persistent data transfers
+  are required when accessing the registered region.
+
 # RETURN VALUES
 
 Returns 0 on success.  On error, a negative value corresponding to
