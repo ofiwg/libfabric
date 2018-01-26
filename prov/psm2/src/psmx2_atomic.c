@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,6 +31,7 @@
  */
 
 #include "psmx2.h"
+#include "psmx2_trigger.h"
 
 /* Atomics protocol:
  *
@@ -802,33 +803,11 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_ATOMIC_WRITE;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->atomic_write.ep = ep;
-		trigger->atomic_write.buf = buf;
-		trigger->atomic_write.count = count;
-		trigger->atomic_write.desc = desc;
-		trigger->atomic_write.dest_addr = dest_addr;
-		trigger->atomic_write.addr = addr;
-		trigger->atomic_write.key = key;
-		trigger->atomic_write.datatype = datatype;
-		trigger->atomic_write.atomic_op = op;
-		trigger->atomic_write.context = context;
-		trigger->atomic_write.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_atomic_write(ep, buf, count, desc,
+							dest_addr, addr, key,
+							datatype, op, context,
+							flags);
 
 	if (!buf)
 		return -FI_EINVAL;
@@ -933,33 +912,11 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_ATOMIC_WRITEV;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->atomic_writev.ep = ep;
-		trigger->atomic_writev.iov = iov;
-		trigger->atomic_writev.count = count;
-		trigger->atomic_writev.desc = desc;
-		trigger->atomic_writev.dest_addr = dest_addr;
-		trigger->atomic_writev.addr = addr;
-		trigger->atomic_writev.key = key;
-		trigger->atomic_writev.datatype = datatype;
-		trigger->atomic_writev.atomic_op = op;
-		trigger->atomic_writev.context = context;
-		trigger->atomic_writev.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_atomic_writev(ep, iov, desc, count,
+							 dest_addr, addr, key,
+							 datatype, op, context,
+							 flags);
 
 	if (!iov || !count)
 		return -FI_EINVAL;
@@ -1163,35 +1120,13 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_ATOMIC_READWRITE;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->atomic_readwrite.ep = ep;
-		trigger->atomic_readwrite.buf = buf;
-		trigger->atomic_readwrite.count = count;
-		trigger->atomic_readwrite.desc = desc;
-		trigger->atomic_readwrite.result = result;
-		trigger->atomic_readwrite.result_desc = result_desc;
-		trigger->atomic_readwrite.dest_addr = dest_addr;
-		trigger->atomic_readwrite.addr = addr;
-		trigger->atomic_readwrite.key = key;
-		trigger->atomic_readwrite.datatype = datatype;
-		trigger->atomic_readwrite.atomic_op = op;
-		trigger->atomic_readwrite.context = context;
-		trigger->atomic_readwrite.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_atomic_readwrite(ep, buf, count,
+							    desc, result,
+							    result_desc,
+							    dest_addr, addr,
+							    key, datatype, op,
+							    context, flags);
 
 	if (!buf && op != FI_ATOMIC_READ)
 		return -FI_EINVAL;
@@ -1304,36 +1239,14 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_ATOMIC_READWRITEV;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->atomic_readwritev.ep = ep;
-		trigger->atomic_readwritev.iov = iov;
-		trigger->atomic_readwritev.count = count;
-		trigger->atomic_readwritev.desc = desc;
-		trigger->atomic_readwritev.resultv = resultv;
-		trigger->atomic_readwritev.result_desc = result_desc;
-		trigger->atomic_readwritev.result_count = result_count;
-		trigger->atomic_readwritev.dest_addr = dest_addr;
-		trigger->atomic_readwritev.addr = addr;
-		trigger->atomic_readwritev.key = key;
-		trigger->atomic_readwritev.datatype = datatype;
-		trigger->atomic_readwritev.atomic_op = op;
-		trigger->atomic_readwritev.context = context;
-		trigger->atomic_readwritev.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_atomic_readwritev(ep, iov, desc,
+							     count, resultv,
+							     result_desc,
+							     result_count,
+							     dest_addr, addr,
+							     key, datatype, op,
+							     context, flags);
 
 	if (((!iov || !count) && op != FI_ATOMIC_READ) || !resultv ||
 	    !result_count)
@@ -1620,37 +1533,14 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_ATOMIC_COMPWRITE;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->atomic_compwrite.ep = ep;
-		trigger->atomic_compwrite.buf = buf;
-		trigger->atomic_compwrite.count = count;
-		trigger->atomic_compwrite.desc = desc;
-		trigger->atomic_compwrite.compare = compare;
-		trigger->atomic_compwrite.compare_desc = compare_desc;
-		trigger->atomic_compwrite.result = result;
-		trigger->atomic_compwrite.result_desc = result_desc;
-		trigger->atomic_compwrite.dest_addr = dest_addr;
-		trigger->atomic_compwrite.addr = addr;
-		trigger->atomic_compwrite.key = key;
-		trigger->atomic_compwrite.datatype = datatype;
-		trigger->atomic_compwrite.atomic_op = op;
-		trigger->atomic_compwrite.context = context;
-		trigger->atomic_compwrite.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_atomic_compwrite(ep, buf, count,
+							    desc, compare,
+							    compare_desc,
+							    result, result_desc,
+							    dest_addr, addr,
+							    key, datatype, op,
+							    context, flags);
 
 	if (!buf)
 		return -FI_EINVAL;
@@ -1767,39 +1657,17 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_ATOMIC_COMPWRITEV;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->atomic_compwritev.ep = ep;
-		trigger->atomic_compwritev.iov = iov;
-		trigger->atomic_compwritev.desc = desc;
-		trigger->atomic_compwritev.count = count;
-		trigger->atomic_compwritev.comparev = comparev;
-		trigger->atomic_compwritev.compare_desc = compare_desc;
-		trigger->atomic_compwritev.compare_count = compare_count;
-		trigger->atomic_compwritev.resultv = resultv;
-		trigger->atomic_compwritev.result_desc = result_desc;
-		trigger->atomic_compwritev.result_count = result_count;
-		trigger->atomic_compwritev.dest_addr = dest_addr;
-		trigger->atomic_compwritev.addr = addr;
-		trigger->atomic_compwritev.key = key;
-		trigger->atomic_compwritev.datatype = datatype;
-		trigger->atomic_compwritev.atomic_op = op;
-		trigger->atomic_compwritev.context = context;
-		trigger->atomic_compwritev.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_atomic_compwritev(ep, iov, desc,
+							     count, comparev,
+							     compare_desc,
+							     compare_count,
+							     resultv,
+							     result_desc,
+							     result_count,
+							     dest_addr, addr,
+							     key, datatype, op,
+							     context, flags);
 
 	if (!iov || !count || !comparev || !compare_count || !resultv ||
 	    !result_count)

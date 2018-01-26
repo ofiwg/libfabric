@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,6 +31,7 @@
  */
 
 #include "psmx2.h"
+#include "psmx2_trigger.h"
 
 ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 			   void *desc, fi_addr_t src_addr, void *context,
@@ -49,29 +50,9 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_RECV;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->recv.ep = ep;
-		trigger->recv.buf = buf;
-		trigger->recv.len = len;
-		trigger->recv.desc = desc;
-		trigger->recv.src_addr = src_addr;
-		trigger->recv.context = context;
-		trigger->recv.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_recv(ep, buf, len, desc, src_addr,
+						context, flags);
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
@@ -235,30 +216,9 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_SEND;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->send.ep = ep;
-		trigger->send.buf = buf;
-		trigger->send.len = len;
-		trigger->send.desc = desc;
-		trigger->send.dest_addr = dest_addr;
-		trigger->send.context = context;
-		trigger->send.flags = flags & ~FI_TRIGGER;
-		trigger->send.data = data;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_send(ep, buf, len, desc, dest_addr,
+						context, flags, data);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -363,30 +323,10 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_SENDV;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->sendv.ep = ep;
-		trigger->sendv.iov = iov;
-		trigger->sendv.desc = desc;
-		trigger->sendv.count = count;
-		trigger->sendv.dest_addr = dest_addr;
-		trigger->sendv.context = context;
-		trigger->sendv.flags = flags & ~FI_TRIGGER;
-		trigger->sendv.data = data;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_sendv(ep, iov, desc, count,
+						 dest_addr, context, flags,
+						 data);
 
 	total_len = 0;
 	real_count = 0;

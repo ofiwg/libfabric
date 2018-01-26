@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,6 +31,7 @@
  */
 
 #include "psmx2.h"
+#include "psmx2_trigger.h"
 
 static inline void psmx2_am_enqueue_rma(struct psmx2_trx_ctxt *trx_ctxt,
 					struct psmx2_am_request *req)
@@ -587,31 +588,9 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_READ;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->read.ep = ep;
-		trigger->read.buf = buf;
-		trigger->read.len = len;
-		trigger->read.desc = desc;
-		trigger->read.src_addr = src_addr;
-		trigger->read.addr = addr;
-		trigger->read.key = key;
-		trigger->read.context = context;
-		trigger->read.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_read(ep, buf, len, desc, src_addr,
+						addr, key, context, flags);
 
 	if (!buf)
 		return -FI_EINVAL;
@@ -731,31 +710,9 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_READV;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->readv.ep = ep;
-		trigger->readv.iov = iov;
-		trigger->readv.count = count;
-		trigger->readv.desc = desc;
-		trigger->readv.src_addr = src_addr;
-		trigger->readv.addr = addr;
-		trigger->readv.key = key;
-		trigger->readv.context = context;
-		trigger->readv.flags = flags & ~FI_TRIGGER;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_readv(ep, iov, desc, count, src_addr,
+						 addr, key, context, flags);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
@@ -956,32 +913,10 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_WRITE;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->write.ep = ep;
-		trigger->write.buf = buf;
-		trigger->write.len = len;
-		trigger->write.desc = desc;
-		trigger->write.dest_addr = dest_addr;
-		trigger->write.addr = addr;
-		trigger->write.key = key;
-		trigger->write.context = context;
-		trigger->write.flags = flags & ~FI_TRIGGER;
-		trigger->write.data = data;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_write(ep, buf, len, desc, dest_addr,
+						 addr, key, context, flags,
+						 data);
 
 	if (!buf)
 		return -FI_EINVAL;
@@ -1142,32 +1077,10 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (flags & FI_TRIGGER) {
-		struct psmx2_trigger *trigger;
-		struct fi_triggered_context *ctxt = context;
-
-		trigger = calloc(1, sizeof(*trigger));
-		if (!trigger)
-			return -FI_ENOMEM;
-
-		trigger->op = PSMX2_TRIGGERED_WRITEV;
-		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
-					     struct psmx2_fid_cntr, cntr);
-		trigger->threshold = ctxt->trigger.threshold.threshold;
-		trigger->writev.ep = ep;
-		trigger->writev.iov = iov;
-		trigger->writev.count = count;
-		trigger->writev.desc = desc;
-		trigger->writev.dest_addr = dest_addr;
-		trigger->writev.addr = addr;
-		trigger->writev.key = key;
-		trigger->writev.context = context;
-		trigger->writev.flags = flags & ~FI_TRIGGER;
-		trigger->writev.data = data;
-
-		psmx2_cntr_add_trigger(trigger->cntr, trigger);
-		return 0;
-	}
+	if (flags & FI_TRIGGER)
+		return psmx2_trigger_queue_writev(ep, iov, desc, count,
+						  dest_addr, addr, key,
+						  context, flags, data);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
