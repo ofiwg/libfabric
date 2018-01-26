@@ -556,6 +556,7 @@
     <ClCompile Include="src\indexer.c" />
     <ClCompile Include="src\iov.c" />
     <ClCompile Include="src\log.c" />
+    <ClCompile Include="src\perf.c" />
     <ClCompile Include="src\rbtree.c" />
     <ClCompile Include="src\var.c" />
     <ClCompile Include="src\windows\osd.c" />
@@ -575,6 +576,7 @@
     <ClInclude Include="include\fi_lock.h" />
     <ClInclude Include="include\fi_mem.h" />
     <ClInclude Include="include\fi_osd.h" />
+    <ClInclude Include="include\ofi_perf.h" />
     <ClInclude Include="include\fi_proto.h" />
     <ClInclude Include="include\fi_rbuf.h" />
     <ClInclude Include="include\fi_signal.h" />
