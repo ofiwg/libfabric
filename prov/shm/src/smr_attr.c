@@ -75,7 +75,8 @@ struct fi_domain_attr smr_domain_attr = {
 	.tx_ctx_cnt = (1 << 10),
 	.rx_ctx_cnt = (1 << 10),
 	.max_ep_tx_ctx = 1,
-	.max_ep_rx_ctx = 1
+	.max_ep_rx_ctx = 1,
+	.mr_iov_limit = SMR_IOV_LIMIT,
 };
 
 struct fi_fabric_attr smr_fabric_attr = {
@@ -85,6 +86,7 @@ struct fi_fabric_attr smr_fabric_attr = {
 
 struct fi_info smr_info = {
 	.caps = SMR_TX_CAPS | SMR_RX_CAPS,
+	.mode = FI_CONTEXT,
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &smr_tx_attr,
 	.rx_attr = &smr_rx_attr,
