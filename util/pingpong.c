@@ -181,7 +181,7 @@ struct ct_pingpong {
 
 	fi_addr_t remote_fi_addr;
 	void *buf, *tx_buf, *rx_buf;
-	size_t buf_size, tx_size, rx_size;
+	size_t buf_size, tx_size, rx_size, msg_prefix_size;
 
 	int timeout_sec;
 	uint64_t start, end;
@@ -882,7 +882,7 @@ static void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
 
 static int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
 {
-	int defaults[6] = {64, 256, 1024, 4096, 65536, 1048576};
+	int defaults[] = {64, 256, 1024, 4096, 65536, 1048576};
 	int power_of_two;
 	int half_up;
 	int n = 0;
@@ -1152,7 +1152,7 @@ static int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 	} while (0)
 
 static ssize_t pp_post_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
-		   struct fi_context *ctx)
+			  struct fi_context *ctx)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_send, pp_get_tx_comp, ct->tx_seq, "transmit", ep,
@@ -1170,9 +1170,9 @@ static ssize_t pp_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	ssize_t ret;
 
 	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE))
-		pp_fill_buf((char *)ct->tx_buf, size);
+		pp_fill_buf((char *)ct->tx_buf + ct->msg_prefix_size, size);
 
-	ret = pp_post_tx(ct, ep, size, &(ct->tx_ctx));
+	ret = pp_post_tx(ct, ep, size + ct->msg_prefix_size, &(ct->tx_ctx));
 	if (ret)
 		return ret;
 
@@ -1199,9 +1199,9 @@ static ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	ssize_t ret;
 
 	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE))
-		pp_fill_buf((char *)ct->tx_buf, size);
+		pp_fill_buf((char *)ct->tx_buf + ct->msg_prefix_size, size);
 
-	ret = pp_post_inject(ct, ep, size);
+	ret = pp_post_inject(ct, ep, size + ct->msg_prefix_size);
 	if (ret)
 		return ret;
 
@@ -1213,11 +1213,11 @@ static ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep,
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_recv, pp_get_rx_comp, ct->rx_seq, "receive", ep,
-			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG),
+			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG + ct->msg_prefix_size),
 			fi_mr_desc(ct->mr), 0, ctx);
 	else
 		PP_POST(fi_trecv, pp_get_rx_comp, ct->rx_seq, "t-receive", ep,
-			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG),
+			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG + ct->msg_prefix_size),
 			fi_mr_desc(ct->mr), 0, TAG, 0, ctx);
 	return 0;
 }
@@ -1231,7 +1231,8 @@ static ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 		return ret;
 
 	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE)) {
-		ret = pp_check_buf((char *)ct->rx_buf, size);
+		ret = pp_check_buf((char *)ct->rx_buf + ct->msg_prefix_size,
+				   size);
 		if (ret)
 			return ret;
 	}
@@ -1242,7 +1243,8 @@ static ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	 * before message size is updated. The recvs posted are always for the
 	 * next incoming message.
 	 */
-	ret = pp_post_rx(ct, ct->ep, ct->rx_size, &(ct->rx_ctx));
+	ret = pp_post_rx(ct, ct->ep, ct->rx_size + ct->msg_prefix_size,
+			 &(ct->rx_ctx));
 	if (!ret)
 		ct->cnt_ack_msg++;
 
@@ -1283,7 +1285,8 @@ static int pp_alloc_msgs(struct ct_pingpong *ct)
 		ct->tx_size = ct->fi->ep_attr->max_msg_size;
 	ct->rx_size = ct->tx_size;
 	ct->buf_size = MAX(ct->tx_size, PP_MAX_CTRL_MSG) +
-		       MAX(ct->rx_size, PP_MAX_CTRL_MSG);
+		       MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
+		       2 * ct->msg_prefix_size;
 
 	alignment = ofi_sysconf(_SC_PAGESIZE);
 	if (alignment < 0) {
@@ -1301,7 +1304,9 @@ static int pp_alloc_msgs(struct ct_pingpong *ct)
 	}
 	memset(ct->buf, 0, ct->buf_size);
 	ct->rx_buf = ct->buf;
-	ct->tx_buf = (char *)ct->buf + MAX(ct->rx_size, PP_MAX_CTRL_MSG);
+	ct->tx_buf = (char *)ct->buf +
+			MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
+			ct->msg_prefix_size;
 	ct->tx_buf = (void *)(((uintptr_t)ct->tx_buf + alignment - 1) &
 			      ~(alignment - 1));
 
@@ -1389,6 +1394,7 @@ static int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 			return ret;
 		}
 	}
+	ct->msg_prefix_size = fi->ep_attr->msg_prefix_size;
 
 	ret = fi_endpoint(ct->domain, fi, &(ct->ep), NULL);
 	if (ret) {
@@ -2167,7 +2173,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	ct.hints->ep_attr->type = FI_EP_DGRAM;
 	ct.hints->caps = FI_MSG;
-	ct.hints->mode = FI_CONTEXT;
+	ct.hints->mode = FI_CONTEXT | FI_MSG_PREFIX;
 	ct.hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ofi_osd_init();
