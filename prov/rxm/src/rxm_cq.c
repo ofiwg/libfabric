@@ -144,6 +144,15 @@ static int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 	return rxm_finish_send_nobuf(tx_entry);
 }
 
+static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
+{
+	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_ACK_SENT, RXM_LMT_FINISH);
+	rx_buf->hdr.state = RXM_LMT_FINISH;
+	if (!rx_buf->ep->rxm_mr_local)
+		rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
+	return rxm_finish_recv(rx_buf);
+}
+
 /* Get a match_iov derived from iov whose size matches given length */
 static int rxm_match_iov(const struct iovec *iov, void **desc,
 			 uint8_t count, uint64_t offset, size_t match_len,
@@ -425,7 +434,7 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 
 	ret = fi_send(rx_buf->conn->msg_ep, &tx_buf->pkt, sizeof(tx_buf->pkt),
 		      tx_buf->hdr.desc, 0, tx_entry);
-	if (ret) {
+	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
 		goto err2;
 	}
@@ -435,6 +444,30 @@ err2:
 err1:
 	rxm_tx_buf_release(rx_buf->ep, tx_buf);
 	return ret;
+}
+
+static ssize_t rxm_lmt_send_ack_fast(struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_pkt pkt;
+	ssize_t ret;
+
+	assert(rx_buf->conn);
+
+	pkt.hdr.op		= ofi_op_msg;
+	pkt.hdr.version		= OFI_OP_VERSION;
+	pkt.ctrl_hdr.version	= OFI_CTRL_VERSION;
+	pkt.ctrl_hdr.type	= ofi_ctrl_ack;
+	pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
+	pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
+
+	ret = fi_inject(rx_buf->conn->msg_ep, &pkt, sizeof(pkt), 0);
+	if (OFI_UNLIKELY(ret)) {
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+		       "fi_inject(ack pkt) for MSG provider failed\n");
+		return ret;
+	}
+
+	return rxm_finish_send_lmt_ack(rx_buf);
 }
 
 static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
@@ -497,19 +530,16 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		assert(comp->flags & FI_READ);
 		if (rx_buf->index < rx_buf->rma_iov->count)
 			return rxm_lmt_rma_read(rx_buf);
-		else
+		else if (sizeof(rx_buf->pkt) > rxm_ep->msg_info->tx_attr->inject_size)
 			return rxm_lmt_send_ack(rx_buf);
+		else
+			return rxm_lmt_send_ack_fast(rx_buf);
 	case RXM_LMT_ACK_SENT:
 		assert(comp->flags & FI_SEND);
 		rx_buf = tx_entry->context;
 		rxm_tx_buf_release(rx_buf->ep, tx_entry->tx_buf);
 		rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
-
-		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_FINISH);
-		rx_buf->hdr.state = RXM_LMT_FINISH;
-		if (!rx_buf->ep->rxm_mr_local)
-			rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
-		return rxm_finish_recv(rx_buf);
+		return rxm_finish_send_lmt_ack(rx_buf);
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
 		assert(0);

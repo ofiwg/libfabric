@@ -925,6 +925,22 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 			goto err_send_mr;
 
 		pkt_size += ret;
+		if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
+			RXM_LOG_STATE(FI_LOG_EP_DATA, tx_entry->tx_buf->pkt, RXM_TX, RXM_LMT_TX);
+			ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
+			if (OFI_UNLIKELY(ret)) {
+				FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+				       "fi_inject for MSG provider failed\n");
+				goto err_send_mr;
+			}
+
+			RXM_LOG_STATE(FI_LOG_CQ, tx_entry->tx_buf->pkt, RXM_LMT_TX, RXM_LMT_ACK_WAIT);
+			tx_entry->state =  RXM_LMT_ACK_WAIT;
+			tx_entry->tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
+
+			return FI_SUCCESS;
+		}
+
 		RXM_LOG_STATE(FI_LOG_EP_DATA, tx_entry->tx_buf->pkt, RXM_TX, RXM_LMT_TX);
 		tx_entry->state = RXM_LMT_TX;
 	} else {
