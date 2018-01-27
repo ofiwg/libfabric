@@ -68,7 +68,7 @@ static void tcpx_comm_recv_buffer(struct tcpx_pe_entry *pe_entry)
 		pe_entry->comm_buf.wcnt =
 		pe_entry->comm_buf.wpos = 0;
 
-	max_read = pe_entry->data_len - pe_entry->done_len;
+	max_read = pe_entry->msg_hdr.size - pe_entry->done_len;
 	ret = tcpx_comm_recv_socket(pe_entry->ep->conn_fd, (char *) pe_entry->comm_buf.buf,
 				    MIN(max_read, avail));
 	pe_entry->comm_buf.wpos += ret;
