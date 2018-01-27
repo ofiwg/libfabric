@@ -754,7 +754,6 @@ rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 
 	assert((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_data);
 
-	(*tx_buf)->hdr.msg_ep = rxm_conn->msg_ep;
 	(*tx_buf)->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 
 	(*tx_buf)->pkt.hdr.size = len;
