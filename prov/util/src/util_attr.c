@@ -1078,8 +1078,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 }
 
 static void fi_alter_ep_attr(struct fi_ep_attr *attr,
-			     const struct fi_ep_attr *hints,
-			     uint64_t info_caps)
+			     struct fi_ep_attr *hints,
+			     uint64_t info_caps, uint64_t user_modes)
 {
 	if (!hints)
 		return;
@@ -1096,6 +1096,8 @@ static void fi_alter_ep_attr(struct fi_ep_attr *attr,
 		attr->tx_ctx_cnt = hints->tx_ctx_cnt;
 	if (hints->rx_ctx_cnt)
 		attr->rx_ctx_cnt = hints->rx_ctx_cnt;
+	if (user_modes & FI_MSG_PREFIX)
+		hints->msg_prefix_size = attr->msg_prefix_size;
 }
 
 static void fi_alter_rx_attr(struct fi_rx_attr *attr,
@@ -1187,11 +1189,17 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 				info->mode |= FI_LOCAL_MR;
 		}
 
+		if ((hints->mode & FI_MSG_PREFIX) &&
+		    info->ep_attr->msg_prefix_size) {
+			info->mode |= FI_MSG_PREFIX;
+		}
+
 		info->handle = hints->handle;
 
 		fi_alter_domain_attr(info->domain_attr, hints->domain_attr,
 				     info->caps, api_version);
-		fi_alter_ep_attr(info->ep_attr, hints->ep_attr, info->caps);
+		fi_alter_ep_attr(info->ep_attr, hints->ep_attr,
+				 info->caps, hints->mode);
 		fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
 		fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);
 	}
