@@ -50,7 +50,7 @@ struct fi_tx_attr rxm_tx_attr = {
 };
 
 struct fi_rx_attr rxm_rx_attr = {
-	.caps = RXM_EP_CAPS,
+	.caps = RXM_EP_CAPS | FI_MULTI_RECV,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_STRICT | FI_ORDER_DATA,
 	.size = 1024,
@@ -94,7 +94,7 @@ struct fi_fabric_attr rxm_fabric_attr = {
 };
 
 struct fi_info rxm_info = {
-	.caps = RXM_EP_CAPS,
+	.caps = RXM_EP_CAPS | FI_MULTI_RECV,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
