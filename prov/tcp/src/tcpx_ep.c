@@ -147,8 +147,6 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	send_entry->msg_hdr.op = ofi_op_msg;
 	send_entry->msg_hdr.op_data = TCPX_OP_MSG_SEND;
 	send_entry->msg_hdr.size = htonll(data_len + sizeof(send_entry->msg_hdr));
-	if (flags & FI_REMOTE_CQ_DATA)
-		send_entry->msg_hdr.data = htonll(msg->data);
 
 	send_entry->msg_data.iov_cnt = msg->iov_count;
 	if (flags & FI_INJECT) {
@@ -167,8 +165,10 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		}
 	}
 
-	if (flags & FI_REMOTE_CQ_DATA)
+	if (flags & FI_REMOTE_CQ_DATA) {
 		send_entry->msg_hdr.flags |= OFI_REMOTE_CQ_DATA;
+		send_entry->msg_hdr.data = htonll(msg->data);
+	}
 
 	send_entry->msg_hdr.flags = htonl(send_entry->msg_hdr.flags);
 	send_entry->ep = tcpx_ep;
@@ -210,6 +210,7 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 	msg.iov_count = count;
 	msg.addr = dest_addr;
 	msg.context = context;
+
 	return tcpx_sendmsg(ep, &msg, 0);
 }
 
@@ -225,6 +226,7 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.msg_iov = &msg_iov;
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
+	msg.context = NULL;
 
 	return tcpx_sendmsg(ep, &msg, FI_INJECT | TCPX_NO_COMPLETION);
 }
