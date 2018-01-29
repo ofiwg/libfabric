@@ -521,7 +521,6 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		assert(comp->flags & FI_SEND);
 		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_WAIT);
 		RXM_SET_PROTO_STATE(comp, RXM_LMT_ACK_WAIT);
-		tx_entry->tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 		return 0;
 	case RXM_LMT_ACK_RECVD:
 		assert(comp->flags & FI_SEND);
@@ -579,7 +578,6 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 	case RXM_TX:
 	case RXM_LMT_TX:
 		tx_entry = (struct rxm_tx_entry *)op_context;
-		tx_entry->tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 		util_cq = tx_entry->ep->util_ep.tx_cq;
 		break;
 	case RXM_LMT_ACK_SENT:
