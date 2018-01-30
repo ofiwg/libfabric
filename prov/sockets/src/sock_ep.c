@@ -68,7 +68,7 @@ extern const struct fi_domain_attr sock_domain_attr;
 extern const struct fi_fabric_attr sock_fabric_attr;
 
 const struct fi_tx_attr sock_stx_attr = {
-	.caps = SOCK_EP_RDM_CAP,
+	.caps = SOCK_EP_RDM_CAP_BASE,
 	.mode = SOCK_MODE,
 	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -79,7 +79,7 @@ const struct fi_tx_attr sock_stx_attr = {
 };
 
 const struct fi_rx_attr sock_srx_attr = {
-	.caps = SOCK_EP_RDM_CAP,
+	.caps = SOCK_EP_RDM_CAP_BASE,
 	.mode = SOCK_MODE,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,

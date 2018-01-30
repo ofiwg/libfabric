@@ -394,6 +394,14 @@ additional optimizations.
   validate incoming source address data against addresses stored in
   the local address vector, which may adversely affect performance.
 
+*FI_RMA_PMEM*
+: Indicates that the provider is 'persistent memory aware' and supports
+  RMA operations to and from persistent memory.  Persistent memory aware
+  providers must support registration of memory that is backed by non-
+  volatile memory, RMA transfers to/from persistent memory, and enhanced
+  completion semantics.  This flag requires that FI_RMA be set.
+  This capability is experimental.
+
 Capabilities may be grouped into two general categories: primary and
 secondary.  Primary capabilities must explicitly be requested by an
 application, and a provider must enable support for only those primary
@@ -408,7 +416,7 @@ FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, and FI_REMOTE_WRITE.
 
 Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
-FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR.
+FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
 
 # MODE
 

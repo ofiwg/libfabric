@@ -892,6 +892,33 @@ static inline int ofi_set_thread_affinity(const char *s)
 	return -FI_ENOSYS;
 }
 
+
+#if defined(_M_X64) || defined(_M_AMD64)
+
+#include <intrin.h>
+
+static inline void
+ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
+{
+	__cpuidex(cpuinfo, func, subfunc);
+}
+
+#define ofi_clwb(addr) do { _mm_clflush(addr); _mm_sfence(); } while (0)
+#define ofi_clflushopt(addr) do { _mm_clflush(addr); _mm_sfence(); } while (0)
+#define ofi_clflush(addr) _mm_clflush(addr)
+#define ofi_sfence() _mm_sfence()
+
+#else /* defined(_M_X64) || defined(_M_AMD64) */
+
+#define ofi_cpuid(func, subfunc, cpuinfo)
+#define ofi_clwb(addr)
+#define ofi_clflushopt(addr)
+#define ofi_clflush(addr)
+#define ofi_sfence()
+
+#endif /* defined(_M_X64) || defined(_M_AMD64) */
+
+
 #ifdef __cplusplus
 }
 #endif
