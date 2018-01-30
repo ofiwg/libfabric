@@ -120,6 +120,9 @@
     <ClCompile Include="src\log.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
+    <ClCompile Include="src\perf.c">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
     <ClCompile Include="src\mem.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
@@ -480,6 +483,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\fi_mem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_perf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\fi_osd.h">

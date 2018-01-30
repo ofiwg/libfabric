@@ -89,7 +89,9 @@ endif
 
 if LINUX
 common_srcs += src/unix/osd.c
+common_srcs += src/linux/rdpmc.c
 common_srcs += include/linux/osd.h
+common_srcs += include/linux/rdpmc.h
 common_srcs += include/unix/osd.h
 endif
 
@@ -136,6 +138,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_atomic.h			\
 	include/ofi_mr.h			\
 	include/ofi_net.h			\
+	include/ofi_perf.h			\
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\
@@ -145,6 +148,7 @@ src_libfabric_la_SOURCES =			\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
 	src/fi_tostr.c				\
+	src/perf.c				\
 	src/mem.c				\
 	src/log.c				\
 	src/var.c				\
