@@ -91,12 +91,12 @@ static struct fi_ops_atomic fi_ibv_srq_atomic_ops = {
 static ssize_t
 fi_ibv_srq_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
-	struct fi_ibv_srq_ep *_ep;
+	struct fi_ibv_srq_ep *_ep =
+		container_of(ep, struct fi_ibv_srq_ep, ep_fid);
 	struct fi_ibv_wre *wre;
 	struct ibv_sge *sge = NULL;
 	size_t i;
 
-	_ep = container_of(ep, struct fi_ibv_srq_ep, ep_fid);
 	assert(_ep->srq);
 
 	fastlock_acquire(&_ep->wre_lock);
@@ -115,13 +115,11 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	wre->wr.type = IBV_RECV_WR;
 	wre->wr.rwr.wr_id = (uintptr_t)wre;
 	wre->wr.rwr.next = NULL;
-	if (msg->iov_count) {
-		sge = alloca(sizeof(*sge) * msg->iov_count);
-		for (i = 0; i < msg->iov_count; i++) {
-			sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
-			sge[i].length = (uint32_t)msg->msg_iov[i].iov_len;
-			sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
-		}
+	sge = alloca(sizeof(*sge) * msg->iov_count);
+	for (i = 0; i < msg->iov_count; i++) {
+		sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
+		sge[i].length = (uint32_t)msg->msg_iov[i].iov_len;
+		sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
 	}
 	wre->wr.rwr.sg_list = sge;
 	wre->wr.rwr.num_sge = msg->iov_count;
@@ -135,17 +133,17 @@ static ssize_t
 fi_ibv_srq_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 		void *desc, fi_addr_t src_addr, void *context)
 {
-	struct iovec iov;
-	struct fi_msg msg;
-
-	iov.iov_base = buf;
-	iov.iov_len = len;
-
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = src_addr;
-	msg.context = context;
+	struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = len,
+	};
+	struct fi_msg msg = {
+		.msg_iov = &iov,
+		.desc = &desc,
+		.iov_count = 1,
+		.addr = src_addr,
+		.context = context,
+	};
 
 	return fi_ibv_srq_ep_recvmsg(ep, &msg, 0);
 }
@@ -154,13 +152,13 @@ static ssize_t
 fi_ibv_srq_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t src_addr, void *context)
 {
-	struct fi_msg msg;
-
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	msg.addr = src_addr;
-	msg.context = context;
+	struct fi_msg msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = src_addr,
+		.context = context,
+	};
 
 	return fi_ibv_srq_ep_recvmsg(ep, &msg, 0);
 }

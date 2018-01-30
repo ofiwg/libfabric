@@ -718,3 +718,15 @@ int ofi_getifaddrs(struct ifaddrs **ifaddr)
 }
 
 #endif
+
+int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)
+{
+	unsigned cpuinfo[4] = { 0 };
+
+	ofi_cpuid(0, 0, cpuinfo);
+	if (cpuinfo[0] < func)
+		return 0;
+
+	ofi_cpuid(func, 0, cpuinfo);
+	return cpuinfo[reg] & bit;
+}

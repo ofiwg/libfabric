@@ -139,6 +139,7 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->domain_attr->mr_mode |= core_info->domain_attr->mr_mode;
 	info->domain_attr->cq_data_size = MIN(core_info->domain_attr->cq_data_size,
 					      rxm_info.domain_attr->cq_data_size);
+	info->domain_attr->mr_key_size = core_info->domain_attr->mr_key_size;
 
 	return 0;
 }

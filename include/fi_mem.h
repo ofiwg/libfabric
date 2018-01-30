@@ -348,4 +348,14 @@ static inline void *util_buf_get_ctx(struct util_buf_pool *pool, void *buf)
 
 void util_buf_pool_destroy(struct util_buf_pool *pool);
 
+
+/*
+ * Persistent memory support
+ */
+void ofi_pmem_init(void);
+
+extern uint64_t OFI_RMA_PMEM;
+extern void (*ofi_pmem_commit)(const void *addr, size_t len);
+
+
 #endif /* _FI_MEM_H_ */

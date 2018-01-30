@@ -557,6 +557,7 @@
     <ClCompile Include="src\iov.c" />
     <ClCompile Include="src\log.c" />
     <ClCompile Include="src\perf.c" />
+    <ClCompile Include="src\mem.c" />
     <ClCompile Include="src\rbtree.c" />
     <ClCompile Include="src\var.c" />
     <ClCompile Include="src\windows\osd.c" />

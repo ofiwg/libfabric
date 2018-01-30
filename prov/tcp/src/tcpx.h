@@ -121,6 +121,8 @@ int tcpx_progress_close(struct tcpx_progress *progress);
 void tcpx_progress_signal(struct tcpx_progress *progress);
 int tcpx_progress_ep_add(struct tcpx_progress *progress, struct tcpx_ep *ep);
 int tcpx_progress_ep_remove(struct tcpx_progress *progress, struct tcpx_ep *ep);
+struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress);
+void pe_entry_release(struct tcpx_pe_entry *pe_entry);
 
 enum tcpx_xfer_states {
 	TCPX_XFER_IDLE,
@@ -194,9 +196,7 @@ struct tcpx_ep {
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
 	struct dlist_entry	posted_rx_list;
-	pthread_mutex_t		posted_rx_list_lock;
-	fastlock_t		rb_lock;
-	struct ofi_ringbuf	rb;
+	fastlock_t		posted_rx_list_lock;
 };
 
 struct tcpx_fabric {
@@ -205,25 +205,26 @@ struct tcpx_fabric {
 	pthread_t		conn_mgr_thread;
 };
 
-union tcpx_iov {
-	struct fi_rma_iov	iov;
-	struct fi_rma_ioc	ioc;
+struct tcpx_msg_data {
+	uint64_t		iov_cnt;
+	union {
+		struct fi_rma_iov	iov[TCPX_IOV_LIMIT];
+		struct fi_rma_ioc	ioc[TCPX_IOV_LIMIT];
+		uint8_t			inject[TCPX_MAX_INJECT_SZ];
+	};
 };
 
 struct tcpx_pe_entry {
 	enum tcpx_xfer_states	state;
 	struct ofi_op_hdr	msg_hdr;
-	union tcpx_iov		iov[TCPX_IOV_LIMIT];
-	struct dlist_entry	ctx_entry;
+	struct tcpx_msg_data	msg_data;
+	struct dlist_entry	entry;
 	struct ofi_ringbuf	comm_buf;
-	struct tcpx_ep		*ep;
 	size_t			cache_sz;
+	struct tcpx_ep		*ep;
 	uint64_t		flags;
 	void			*context;
-	uint8_t			inject[TCPX_MAX_INJECT_SZ];
-	uint64_t		data_len;
 	uint64_t		done_len;
-	uint64_t		iov_cnt;
 };
 
 struct tcpx_progress {
@@ -245,23 +246,10 @@ struct tcpx_domain {
 };
 
 struct tcpx_posted_rx {
-	uint64_t		flags;
-	void			*context;
-	size_t			data_len;
-	uint64_t                iov_cnt;
-	union tcpx_iov		iov[TCPX_IOV_LIMIT];
+	struct tcpx_msg_data	msg_data;
 	struct dlist_entry	entry;
-	struct tcpx_ep		*ep;
-};
-
-struct tcpx_op_send {
-	uint8_t			op_data;
-	uint64_t		iov_count;
 	uint64_t		flags;
 	void			*context;
-	uint64_t		total_Len;
-	uint64_t		data;
-	uint8_t			inject[TCPX_MAX_INJECT_SZ];
 };
 
 #endif //_TCP_H_

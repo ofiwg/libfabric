@@ -81,6 +81,22 @@ extern "C" {
 		_a > _b ? _a : _b; })
 #endif
 
+
+/*
+ * CPU specific features
+ */
+enum {
+	OFI_CLWB_REG		= 2,
+	OFI_CLWB_BIT		= (1 << 24),
+	OFI_CLFLUSHOPT_REG	= 1,
+	OFI_CLFLUSHOPT_BIT	= (1 << 24),
+	OFI_CLFLUSH_REG		= 3,
+	OFI_CLFLUSH_BIT		= (1 << 23),
+};
+
+int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit);
+
+
 /* Restrict to size of struct fi_context */
 struct fi_prov_context {
 	int disable_logging;

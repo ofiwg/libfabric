@@ -268,6 +268,11 @@ fi_writemsg.
 : Applies to fi_writemsg.  Indicates that a completion should be
   generated when the operation has been processed by the destination.
 
+*FI_COMMIT_COMPLETE*
+: Applies to fi_writemsg when targeting persistent memory regions.
+  Indicates that a completion should be generated only after the result
+  of the operation has been made durable.
+
 *FI_FENCE*
 : Applies to transmits.  Indicates that the requested operation, also
   known as the fenced operation, and any operation posted after the

@@ -73,6 +73,12 @@ int sock_keepalive_time = INT_MAX;
 int sock_keepalive_intvl = INT_MAX;
 int sock_keepalive_probes = INT_MAX;
 
+uint64_t SOCK_EP_RDM_SEC_CAP = SOCK_EP_RDM_SEC_CAP_BASE;
+uint64_t SOCK_EP_RDM_CAP = SOCK_EP_RDM_CAP_BASE;
+uint64_t SOCK_EP_MSG_SEC_CAP = SOCK_EP_MSG_SEC_CAP_BASE;
+uint64_t SOCK_EP_MSG_CAP = SOCK_EP_MSG_CAP_BASE;
+
+
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
 	.name = NULL,
@@ -786,6 +792,10 @@ SOCKETS_INI
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
 	slist_init(&sock_addr_list);
+	SOCK_EP_RDM_SEC_CAP |= OFI_RMA_PMEM;
+	SOCK_EP_RDM_CAP |= OFI_RMA_PMEM;
+	SOCK_EP_MSG_SEC_CAP |= OFI_RMA_PMEM;
+	SOCK_EP_MSG_CAP |= OFI_RMA_PMEM;
 	/* Returns loopback address if no other interfaces are available */
 	sock_get_list_of_addr(&sock_addr_list);
 #if ENABLE_DEBUG

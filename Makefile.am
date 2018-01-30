@@ -149,6 +149,7 @@ src_libfabric_la_SOURCES =			\
 	src/fabric.c				\
 	src/fi_tostr.c				\
 	src/perf.c				\
+	src/mem.c				\
 	src/log.c				\
 	src/var.c				\
 	src/abi_1_0.c				\
