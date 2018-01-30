@@ -41,25 +41,23 @@ static int psmx2_fabric_close(fid_t fid)
 	fabric = container_of(fid, struct psmx2_fid_fabric,
 			      util_fabric.fabric_fid.fid);
 
+	psmx2_fabric_release(fabric);
+
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "refcnt=%d\n",
 		ofi_atomic_get32(&fabric->util_fabric.ref));
-
-	if (psmx2_env.name_server)
-		ofi_ns_stop_server(&fabric->name_server);
-
-	psmx2_fabric_release(fabric);
 
 	if (ofi_fabric_close(&fabric->util_fabric))
 		return 0;
 
-	if (fabric->active_domain) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE, "forced closing of active_domain\n");
-		fi_close(&fabric->active_domain->util_domain.domain_fid.fid);
-	}
+	if (psmx2_env.name_server)
+		ofi_ns_stop_server(&fabric->name_server);
+
+	fastlock_destroy(&fabric->domain_lock);
 	assert(fabric == psmx2_active_fabric);
 	psmx2_active_fabric = NULL;
 	free(fabric);
 
+	psmx2_atomic_global_fini();
 	return 0;
 }
 
@@ -103,6 +101,9 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 	if (!fabric_priv)
 		return -FI_ENOMEM;
 
+	fastlock_init(&fabric_priv->domain_lock);
+	dlist_init(&fabric_priv->domain_list);
+
 	psmx2_get_uuid(fabric_priv->uuid);
 	if (psmx2_env.name_server) {
 		fabric_priv->name_server.port = psmx2_uuid_to_port(fabric_priv->uuid);
@@ -129,6 +130,7 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 	fabric_priv->util_fabric.fabric_fid.fid.ops = &psmx2_fabric_fi_ops;
 	fabric_priv->util_fabric.fabric_fid.ops = &psmx2_fabric_ops;
 
+	psmx2_atomic_global_init();
 	psmx2_query_mpi();
 
 	/* take the reference to count for multiple fabric open calls */

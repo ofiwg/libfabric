@@ -361,9 +361,12 @@ struct psmx2_multi_recv {
 
 struct psmx2_fid_fabric {
 	struct util_fabric	util_fabric;
-	struct psmx2_fid_domain	*active_domain;
 	psm2_uuid_t		uuid;
 	struct util_ns		name_server;
+
+	/* list of all opened domains */
+	fastlock_t		domain_lock;
+	struct dlist_entry	domain_list;
 };
 
 struct psmx2_trx_ctxt {
@@ -410,10 +413,7 @@ struct psmx2_fid_domain {
 	uint64_t		mr_reserved_key;
 	RbtHandle		mr_map;
 
-	/*
-	 * A list of all opened hw contexts, including the base hw context.
-	 * The list is used for making progress.
-	 */
+	/* list of hw contexts opened for this domain */
 	fastlock_t		trx_ctxt_lock;
 	struct dlist_entry	trx_ctxt_list;
 
@@ -426,6 +426,8 @@ struct psmx2_fid_domain {
 
 	int			addr_format;
 	uint32_t		max_atomic_size;
+
+	struct dlist_entry	entry;
 };
 
 #define PSMX2_EP_REGULAR	0

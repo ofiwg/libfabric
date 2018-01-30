@@ -184,8 +184,6 @@ static int psmx2_domain_close(fid_t fid)
 	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "refcnt=%d\n",
 		ofi_atomic_get32(&domain->util_domain.ref));
 
-	psmx2_domain_release(domain);
-
 	if (ofi_domain_close(&domain->util_domain))
 		return 0;
 
@@ -196,10 +194,12 @@ static int psmx2_domain_close(fid_t fid)
 	fastlock_destroy(&domain->mr_lock);
 	rbtDelete(domain->mr_map);
 
-	domain->fabric->active_domain = NULL;
-	free(domain);
+	psmx2_lock(&domain->fabric->domain_lock, 1);
+	dlist_remove(&domain->entry);
+	psmx2_unlock(&domain->fabric->domain_lock, 1);
+	psmx2_fabric_release(domain->fabric);
 
-	psmx2_atomic_global_fini();
+	free(domain);
 	return 0;
 }
 
@@ -234,8 +234,6 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 {
 	int err;
 
-	psmx2_atomic_global_init();
-
 	err = fastlock_init(&domain->mr_lock);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
@@ -258,8 +256,6 @@ static int psmx2_domain_init(struct psmx2_fid_domain *domain,
 	dlist_init(&domain->sep_list);
 	dlist_init(&domain->trx_ctxt_list);
 	fastlock_init(&domain->trx_ctxt_lock);
-
-	domain->fabric->active_domain = domain;
 
 	if (domain->progress_thread_enabled)
 		psmx2_domain_start_progress(domain);
@@ -286,19 +282,6 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	fabric_priv = container_of(fabric, struct psmx2_fid_fabric,
 				   util_fabric.fabric_fid);
-
-	if (fabric_priv->active_domain) {
-		if (mr_mode != fabric_priv->active_domain->mr_mode) {
-			FI_INFO(&psmx2_prov, FI_LOG_DOMAIN,
-				"mr_mode mismatch: expecting %s\n",
-				mr_mode ? "FI_MR_SCALABLE" : "FI_MR_BASIC");
-			return -FI_EINVAL;
-		}
-
-		psmx2_domain_acquire(fabric_priv->active_domain);
-		*domain = &fabric_priv->active_domain->util_domain.domain_fid;
-		return 0;
-	}
 
 	if (!info->domain_attr->name ||
 	    strcmp(info->domain_attr->name, PSMX2_DOMAIN_NAME)) {
@@ -337,8 +320,10 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (err)
 		goto err_out_close_domain;
 
-	/* take the reference to count for multiple domain open calls */
-	psmx2_domain_acquire(fabric_priv->active_domain);
+	psmx2_fabric_acquire(fabric_priv);
+	psmx2_lock(&fabric_priv->domain_lock, 1);
+	dlist_insert_before(&domain_priv->entry, &fabric_priv->domain_list);
+	psmx2_unlock(&fabric_priv->domain_lock, 1);
 
 	*domain = &domain_priv->util_domain.domain_fid;
 	return 0;
