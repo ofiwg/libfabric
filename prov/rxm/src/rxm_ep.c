@@ -230,7 +230,6 @@ static int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue *sen
 		tx_entry->ep = rxm_ep;
 	}
 
-	ofi_key_idx_init(&send_queue->tx_key_idx, fi_size_bits(size));
 	fastlock_init(&send_queue->lock);
 	return 0;
 }
@@ -920,12 +919,8 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		if (OFI_UNLIKELY(ret))
 			return ret;
 		tx_buf->pkt.hdr.op = op;
-		fastlock_acquire(&rxm_ep->send_queue.lock);
-		tx_buf->pkt.ctrl_hdr.msg_id =
-			ofi_idx2key(&rxm_ep->send_queue.tx_key_idx,
-				    rxm_txe_fs_index(rxm_ep->send_queue.fs,
-						     tx_entry));
-		fastlock_release(&rxm_ep->send_queue.lock);
+		tx_buf->pkt.ctrl_hdr.msg_id = rxm_txe_fs_index(rxm_ep->send_queue.fs,
+							       tx_entry);
 
 		if (!rxm_ep->rxm_mr_local) {
 			ret = rxm_ep_msg_mr_regv(rxm_ep, iov, tx_entry->count,

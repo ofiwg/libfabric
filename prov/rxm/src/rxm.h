@@ -284,7 +284,6 @@ DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
 struct rxm_send_queue {
 	struct rxm_txe_fs *fs;
-	struct ofi_key_idx tx_key_idx;
 	fastlock_t lock;
 };
 

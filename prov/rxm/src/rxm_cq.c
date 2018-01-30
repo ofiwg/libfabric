@@ -260,16 +260,11 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_tx_entry *tx_entry;
-	uint64_t index;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
-			rx_buf->pkt.ctrl_hdr.msg_id);
+	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	fastlock_acquire(&rx_buf->ep->send_queue.lock);
-	index = ofi_key2idx(&rx_buf->ep->send_queue.tx_key_idx,
-			    rx_buf->pkt.ctrl_hdr.msg_id);
-	tx_entry = &rx_buf->ep->send_queue.fs->buf[index];
-	fastlock_release(&rx_buf->ep->send_queue.lock);
+	tx_entry = &rx_buf->ep->send_queue.fs->buf[rx_buf->pkt.ctrl_hdr.msg_id];
 
 	assert(tx_entry->tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
