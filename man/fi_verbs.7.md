@@ -100,6 +100,18 @@ for restrictions. It can be turned off by setting the FI_FORK_UNSAFE environment
 variable to "yes". This can improve the performance of memory registrations but it
 also makes the use of fork unsafe.
 
+### Memory Registration Cache
+The verbs provider features a memory registration cache. This speeds up memory
+registration calls from applications by caching registrations of frequently used
+memory regions. The user can control the maximum combined size of all cache entries
+and the maximum number of cache entries with the environment variables
+FI_VERBS_MR_MAX_CACHED_SIZE and FI_VERBS_MR_MAX_CACHED_CNT respectively. Look below
+in the environment variables section for details.
+
+Note:
+The memory registration cache framework hooks into alloc and free calls to monitor
+the memory regions. If this doesn't work as expected caching would not be optimal.
+
 # LIMITATIONS
 
 ### Memory Regions
@@ -182,6 +194,14 @@ The verbs provider checks for the following environment variables.
 : The prefix or the full name of the network interface associated with the verbs
   device (default: ib)
 
+*FI_VERBS_MR_CACHE_ENABLE*
+: Enable Memory Registration caching (default: 0)
+
+*FI_VERBS_MR_MAX_CACHED_CNT*
+: Maximum number of cache entries (default: 4096)
+
+*FI_VERBS_MR_MAX_CACHED_SIZE*
+: Maximum total size of cache entries (default: 4 GB)
 
 ### Variables specific to RDM (internal - deprecated) endpoints
 
@@ -203,6 +223,9 @@ The verbs provider checks for the following environment variables.
   IBV_WR_RDMA_WRITE_WITH_IMM are supported. The last one is not applicable for iWarp.
   (default: IBV_WR_SEND)
 
+*FI_VERBS_RDM_CM_THREAD_AFFINITY*
+: If specified, bind the CM thread to the indicated range(s) of Linux virtual processor ID(s). This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]
+
 ### Variables specific to DGRAM endpoints
 
 *FI_VERBS_DGRAM_USE_NAME_SERVER*
@@ -210,7 +233,7 @@ The verbs provider checks for the following environment variables.
   resolve IP-addresses to provider specific addresses (default: 1, if "OMPI_COMM_WORLD_RANK"
   and "PMI_RANK" environment variables aren't defined)
 
-*FI_VERBS_NAME_SERVVER_PORT*
+*FI_VERBS_NAME_SERVER_PORT*
 : The port on which Name Server thread listens incoming connections and requests (default: 5678)
 
 ### Environment variables notes
