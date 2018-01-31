@@ -221,7 +221,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	enum fi_progress control_progress = FI_PROGRESS_MANUAL;
 	enum fi_progress data_progress = FI_PROGRESS_MANUAL;
 	uint64_t caps = PSMX2_CAPS;
-	uint64_t max_tag_value = -1ULL;
+	uint64_t max_tag_value = PSMX2_MAX_TAG;
 	int err = -FI_ENODATA;
 	int svc0, svc = PSMX2_ANY_SERVICE;
 	glob_t glob_buf;
