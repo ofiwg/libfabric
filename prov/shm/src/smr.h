@@ -161,6 +161,16 @@ struct smr_domain {
 	int			ep_idx;
 };
 
+#define SMR_PREFIX	"fi_shm://"
+#define SMR_PREFIX_NS	"fi_ns://"
+
+static inline const char *smr_no_prefix(const char *addr)
+{
+	char *start;
+
+	return (start = strstr(addr, "://")) ? start + 3 : addr;
+}
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;

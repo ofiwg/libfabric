@@ -630,6 +630,11 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			   FI_SHARED_AV | FI_TRIGGER | FI_FENCE | \
 			   FI_LOCAL_COMM | FI_REMOTE_COMM)
 
+#define OFI_TX_MSG_CAPS (FI_MSG | FI_SEND)
+#define OFI_RX_MSG_CAPS (FI_MSG | FI_RECV)
+#define OFI_TX_RMA_CAPS (FI_RMA | FI_READ | FI_WRITE)
+#define OFI_RX_RMA_CAPS (FI_RMA | FI_REMOTE_READ | FI_REMOTE_WRITE)
+
 int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 		      int prov_mode, const struct fi_info *user_info);
 int ofi_check_fabric_attr(const struct fi_provider *prov,

@@ -32,8 +32,12 @@
 
 #include "smr.h"
 
+#define SMR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
+#define SMR_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | \
+		     OFI_RX_RMA_CAPS | FI_ATOMICS)
+
 struct fi_tx_attr smr_tx_attr = {
-	.caps = FI_MSG | FI_SEND | FI_READ | FI_WRITE,
+	.caps = SMR_TX_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = SMR_INJECT_SIZE,
 	.size = 1024,
@@ -42,7 +46,7 @@ struct fi_tx_attr smr_tx_attr = {
 };
 
 struct fi_rx_attr smr_rx_attr = {
-	.caps = FI_MSG | FI_RECV | FI_SOURCE,
+	.caps = SMR_RX_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.size = 1024,
 	.iov_limit = SMR_IOV_LIMIT
@@ -71,7 +75,8 @@ struct fi_domain_attr smr_domain_attr = {
 	.tx_ctx_cnt = (1 << 10),
 	.rx_ctx_cnt = (1 << 10),
 	.max_ep_tx_ctx = 1,
-	.max_ep_rx_ctx = 1
+	.max_ep_rx_ctx = 1,
+	.mr_iov_limit = SMR_IOV_LIMIT,
 };
 
 struct fi_fabric_attr smr_fabric_attr = {
@@ -80,8 +85,8 @@ struct fi_fabric_attr smr_fabric_attr = {
 };
 
 struct fi_info smr_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_TAGGED | FI_RMA |
-		FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_ATOMICS,
+	.caps = SMR_TX_CAPS | SMR_RX_CAPS,
+	.mode = FI_CONTEXT,
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &smr_tx_attr,
 	.rx_attr = &smr_rx_attr,
