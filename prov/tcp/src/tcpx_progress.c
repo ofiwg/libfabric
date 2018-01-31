@@ -49,15 +49,6 @@ int tcpx_progress_close(struct tcpx_progress *progress)
 			"All EPs are not removed from progress\n");
 		return -FI_EBUSY;
 	}
-
-	progress->do_progress = 0;
-	tcpx_progress_signal(progress);
-	if (progress->progress_thread &&
-	    pthread_join(progress->progress_thread, NULL)) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"progress thread failed to join\n");
-	}
-
 	fd_signal_free(&progress->signal);
 	fastlock_destroy(&progress->signal_lock);
 	fi_epoll_close(progress->epoll_set);
@@ -428,84 +419,21 @@ static void process_rx_requests(struct tcpx_progress *progress)
 	} while (num_fds == TCPX_MAX_EPOLL_EVENTS);
 }
 
-
-static int tcpx_progress_wait(struct tcpx_progress *progress)
-{
-	int ret;
-	void *ep_context[1];
-
-	ret = fi_epoll_wait(progress->epoll_set,
-			    ep_context,1,-1);
-	if (ret < 0) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"Poll failed\n");
-		return -errno;
-	}
-
-	fastlock_acquire(&progress->signal_lock);
-	fd_signal_reset(&progress->signal);
-	fastlock_release(&progress->signal_lock);
-
-	return FI_SUCCESS;
-}
-
-static int tcpx_progress_wait_ok(struct tcpx_progress *progress)
-{
-	struct dlist_entry *ep_entry;
-	struct tcpx_ep *ep;
-	int ret;
-
-	pthread_mutex_lock(&progress->ep_list_lock);
-	if (dlist_empty(&progress->ep_list)) {
-		ret = 1;
-		goto out;
-	}
-
-	dlist_foreach(&progress->ep_list, ep_entry) {
-		ep = container_of(ep_entry, struct tcpx_ep, ep_entry);
-		if (!dlist_empty(&ep->tx_queue) ||
-		    !dlist_empty(&ep->rx_queue)) {
-			ret = 0;
-			goto out;
-		}
-	}
-	ret = 1;
-out:
-	pthread_mutex_unlock(&progress->ep_list_lock);
-	return ret;
-}
-
-void *tcpx_progress_thread(void *data)
+void tcpx_progress(struct util_ep *util_ep)
 {
 	struct tcpx_progress *progress;
-	struct dlist_entry  *ep_entry;
+	struct tcpx_domain *domain;
 	struct tcpx_ep *ep;
 
-	progress = (struct tcpx_progress *) data;
-	while (progress->do_progress) {
-		if (tcpx_progress_wait_ok(progress)) {
-			tcpx_progress_wait(progress);
-		}
+	ep = container_of(util_ep, struct tcpx_ep, util_ep);
+	domain = container_of(util_ep->domain, struct tcpx_domain, util_domain);
+	progress = &domain->progress;
 
-		process_rx_requests(progress);
-
-		pthread_mutex_lock(&progress->ep_list_lock);
-
-		if (dlist_empty(&progress->ep_list)) {
-			pthread_mutex_unlock(&progress->ep_list_lock);
-			continue;
-		}
-
-		dlist_foreach(&progress->ep_list, ep_entry) {
-			ep = container_of(ep_entry, struct tcpx_ep,
-					  ep_entry);
-
-			process_pe_lists(ep);
-		}
-		pthread_mutex_unlock(&progress->ep_list_lock);
-	}
-	return NULL;
+	process_rx_requests(progress);
+	process_pe_lists(ep);
+	return;
 }
+
 int tcpx_progress_ep_remove(struct tcpx_progress *progress, struct tcpx_ep *ep)
 {
 	int ret;
@@ -585,11 +513,6 @@ int tcpx_progress_init(struct tcpx_progress *progress)
 	if (ret)
 		goto err5;
 
-	progress->do_progress = 1;
-	if (pthread_create(&progress->progress_thread, NULL,
-			   tcpx_progress_thread, (void *)progress)) {
-		goto err5;
-	}
 	return FI_SUCCESS;
 err5:
 	fi_epoll_close(progress->epoll_set);

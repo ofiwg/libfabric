@@ -123,6 +123,7 @@ int tcpx_progress_ep_add(struct tcpx_progress *progress, struct tcpx_ep *ep);
 int tcpx_progress_ep_remove(struct tcpx_progress *progress, struct tcpx_ep *ep);
 struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress);
 void pe_entry_release(struct tcpx_pe_entry *pe_entry);
+void tcpx_progress(struct util_ep *util_ep);
 
 enum tcpx_xfer_states {
 	TCPX_XFER_IDLE,
@@ -236,8 +237,6 @@ struct tcpx_progress {
 	struct fd_signal	signal;
 	fastlock_t		signal_lock;
 	fi_epoll_t		epoll_set;
-	pthread_t		progress_thread;
-	int			do_progress;
 };
 
 struct tcpx_domain {
