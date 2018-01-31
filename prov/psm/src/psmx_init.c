@@ -509,7 +509,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 					PSMX_MAX_MSG_SIZE);
 				goto err_out;
 			}
-			max_tag_value = fi_tag_bits(hints->ep_attr->mem_tag_format);
+			max_tag_value = ofi_max_tag(hints->ep_attr->mem_tag_format);
 		}
 
 		if (hints->tx_attr) {
@@ -604,7 +604,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->ep_attr->max_order_raw_size = PSMX_RMA_ORDER_SIZE;
 	psmx_info->ep_attr->max_order_war_size = PSMX_RMA_ORDER_SIZE;
 	psmx_info->ep_attr->max_order_waw_size = PSMX_RMA_ORDER_SIZE;
-	psmx_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
+	psmx_info->ep_attr->mem_tag_format = ofi_tag_format(max_tag_value);
 	psmx_info->ep_attr->tx_ctx_cnt = 1;
 	psmx_info->ep_attr->rx_ctx_cnt = 1;
 

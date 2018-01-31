@@ -78,21 +78,22 @@ int fi_poll_fd(int fd, int timeout)
 	return ret == SOCKET_ERROR ? -ofi_sockerr() : ret;
 }
 
-uint64_t fi_tag_bits(uint64_t mem_tag_format)
+uint64_t ofi_max_tag(uint64_t mem_tag_format)
 {
-	return UINT64_MAX >> (ffsll(htonll(mem_tag_format)) -1);
+	return UINT64_MAX >> (64 - ofi_msb(mem_tag_format));
 }
 
-uint64_t fi_tag_format(uint64_t tag_bits)
+uint64_t ofi_tag_format(uint64_t max_tag)
 {
-	return FI_TAG_GENERIC >> (ffsll(htonll(tag_bits)) - 1);
+	return FI_TAG_GENERIC >> (64 - ofi_msb(max_tag));
 }
 
-uint8_t fi_size_bits(uint64_t num)
+uint8_t ofi_msb(uint64_t num)
 {
-	uint8_t size_bits = 0;
-	while (num >> ++size_bits);
-	return size_bits;
+	uint8_t msb = 0;
+	while (num >> msb)
+		msb++;
+	return msb;
 }
 
 int ofi_send_allowed(uint64_t caps)
