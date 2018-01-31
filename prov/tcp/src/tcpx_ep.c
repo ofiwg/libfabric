@@ -457,11 +457,6 @@ static struct fi_ops_ep tcpx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void tcpx_manual_progress(struct util_ep *util_ep)
-{
-	return;
-}
-
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
@@ -474,7 +469,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_endpoint_init(domain, &tcpx_util_prov, info, &ep->util_ep,
-				context, tcpx_manual_progress);
+				context, tcpx_progress);
 	if (ret)
 		goto err1;
 
