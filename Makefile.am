@@ -43,6 +43,7 @@ common_srcs =				\
 	src/rbtree.c			\
 	src/fasthash.c			\
 	src/indexer.c			\
+	src/mem.c			\
 	src/iov.c			\
 	prov/util/src/util_atomic.c	\
 	prov/util/src/util_attr.c	\
@@ -149,7 +150,6 @@ src_libfabric_la_SOURCES =			\
 	src/fabric.c				\
 	src/fi_tostr.c				\
 	src/perf.c				\
-	src/mem.c				\
 	src/log.c				\
 	src/var.c				\
 	src/abi_1_0.c				\

@@ -754,6 +754,10 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
+#if HAVE_SOCKETS_DL
+	ofi_pmem_init();
+#endif
+
 	fi_param_define(&sock_prov, "pe_waittime", FI_PARAM_INT,
 			"How many milliseconds to spin while waiting for progress");
 
