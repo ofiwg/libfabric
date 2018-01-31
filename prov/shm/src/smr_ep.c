@@ -98,9 +98,56 @@ int smr_setopt(fid_t fid, int level, int optname,
 	return -FI_ENOPROTOOPT;
 }
 
+static int smr_match_recv_ctx(struct dlist_entry *item, const void *args)
+{
+	struct smr_ep_entry *pending_recv;
+
+	pending_recv = container_of(item, struct smr_ep_entry, entry);
+	return pending_recv->context == args;
+}
+
+static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_recv_queue *queue,
+			      void *context)
+{
+	struct smr_ep_entry *recv_entry;
+	struct dlist_entry *entry;
+	int ret = 0;
+
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	entry = dlist_remove_first_match(&queue->recv_list, smr_match_recv_ctx,
+					 context);
+	if (entry) {
+		recv_entry = container_of(entry, struct smr_ep_entry, entry);
+		ret = ep->rx_comp(ep, (void *) recv_entry->context,
+				  recv_entry->flags | FI_RECV, 0,
+				  NULL, (void *) recv_entry->addr,
+				  recv_entry->tag, 0, FI_ECANCELED);
+		freestack_push(ep->recv_fs, recv_entry);
+		ret = ret ? ret : 1;
+	}
+
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
+}
+
+static ssize_t smr_ep_cancel(fid_t ep_fid, void *context)
+{
+	struct smr_ep *ep;
+	int ret;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid);
+
+	ret = smr_ep_cancel_recv(ep, &ep->trecv_queue, context);
+	if (ret)
+		return (ret < 0) ? ret : 0;
+
+	ret = smr_ep_cancel_recv(ep, &ep->recv_queue, context);
+	return (ret < 0) ? ret : 0;
+}
+
 static struct fi_ops_ep smr_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = smr_ep_cancel,
 	.getopt = smr_getopt,
 	.setopt = smr_setopt,
 	.tx_ctx = fi_no_tx_ctx,
@@ -151,7 +198,7 @@ static int smr_match_unexp(struct dlist_entry *item, const void *args)
 			     attr->tag);
 }
 
-static int smr_match_ctx(struct dlist_entry *item, const void *args)
+static int smr_match_cmd_ctx(struct dlist_entry *item, const void *args)
 {
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
 	struct smr_pending_cmd *pending_msg;
@@ -439,7 +486,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	smr_init_recv_queue(&ep->recv_queue, smr_match_msg);
 	smr_init_recv_queue(&ep->trecv_queue, smr_match_tagged);
 	smr_init_pending_queue(&ep->unexp_queue, smr_match_unexp);
-	smr_init_pending_queue(&ep->pend_queue, smr_match_ctx);
+	smr_init_pending_queue(&ep->pend_queue, smr_match_cmd_ctx);
 
 	ep->util_ep.ep_fid.fid.ops = &smr_ep_fi_ops;
 	ep->util_ep.ep_fid.ops = &smr_ep_ops;
