@@ -1837,15 +1837,22 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 
 	conn = ofi_idm_lookup(&attr->av_idm, idx);
-	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS)
+	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
+		if (conn->av_index == FI_ADDR_NOTAVAIL)
+			conn->av_index = idx;
 		return conn;
+	}
 
 	for (i = 0; i < attr->cmap.used; i++) {
 		if (!attr->cmap.table[i].connected)
 			continue;
 
-		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr, addr))
-			return &attr->cmap.table[i];
+		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr, addr)) {
+			conn = &attr->cmap.table[i];
+			if (conn->av_index == FI_ADDR_NOTAVAIL)
+				conn->av_index = idx;
+			break;
+		}
 	}
 	return conn;
 }
