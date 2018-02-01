@@ -470,7 +470,7 @@
     <ClInclude Include="include\windows\config.h">
       <Filter>Header Files\windows</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_abi.h">
+    <ClInclude Include="include\ofi_abi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\fi_atom.h">

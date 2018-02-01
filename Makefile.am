@@ -121,7 +121,7 @@ util_fi_pingpong_LDADD = $(linkback)
 nodist_src_libfabric_la_SOURCES =
 src_libfabric_la_SOURCES =			\
 	include/fi.h				\
-	include/fi_abi.h			\
+	include/ofi_abi.h			\
 	include/fi_atom.h			\
 	include/fi_enosys.h			\
 	include/fi_file.h			\

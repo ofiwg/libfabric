@@ -44,7 +44,7 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
-#include <fi_abi.h>
+#include <ofi_abi.h>
 #include <fi_file.h>
 #include <fi_lock.h>
 #include <fi_atom.h>

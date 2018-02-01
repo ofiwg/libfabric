@@ -565,7 +565,7 @@
   <ItemGroup>
     <ClInclude Include="include\fasthash.h" />
     <ClInclude Include="include\fi.h" />
-    <ClInclude Include="include\fi_abi.h" />
+    <ClInclude Include="include\ofi_abi.h" />
     <ClInclude Include="include\fi_atom.h" />
     <ClInclude Include="include\ofi_atomic.h" />
     <ClInclude Include="include\ofi_mr.h" />
