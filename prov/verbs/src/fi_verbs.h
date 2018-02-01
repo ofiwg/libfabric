@@ -68,7 +68,7 @@
 #include <uthash.h>
 #include "prov.h"
 #include "fi_list.h"
-#include "fi_signal.h"
+#include "ofi_signal.h"
 #include "fi_util.h"
 
 #ifdef HAVE_VERBS_EXP_H

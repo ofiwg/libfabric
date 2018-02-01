@@ -40,7 +40,7 @@
 #include <sys/types.h>
 #include <stdlib.h>
 
-#include <fi_signal.h>
+#include <ofi_signal.h>
 
 
 /*
