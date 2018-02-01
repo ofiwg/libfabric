@@ -1325,16 +1325,17 @@ static int rxm_ep_trywait(void *arg)
 
 static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
+	struct rxm_ep *rxm_ep =
+		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	struct util_cq *cq;
-	struct rxm_ep *rxm_ep;
-	struct util_av *util_av;
+	struct util_av *av;
+	struct util_cntr *cntr;
 	int ret = 0;
 
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
-		util_av = container_of(bfid, struct util_av, av_fid.fid);
-		ret = ofi_ep_bind_av(&rxm_ep->util_ep, util_av);
+		av = container_of(bfid, struct util_av, av_fid.fid);
+		ret = ofi_ep_bind_av(&rxm_ep->util_ep, av);
 		if (ret)
 			return ret;
 		break;
@@ -1356,6 +1357,9 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		}
 		break;
+	case FI_CLASS_CNTR:
+		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
+		return ofi_ep_bind_cntr(&rxm_ep->util_ep, cntr, flags);
 	case FI_CLASS_EQ:
 		break;
 	default:

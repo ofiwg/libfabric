@@ -37,13 +37,36 @@
 #include <fi_util.h>
 #include "rxm.h"
 
+int rxm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		  struct fid_cntr **cntr_fid, void *context)
+{
+	int ret;
+	struct util_cntr *cntr;
+
+	cntr = calloc(1, sizeof(*cntr));
+	if (!cntr)
+		return -FI_ENOMEM;
+
+	ret = ofi_cntr_init(&rxm_prov, domain, attr, cntr,
+			    &ofi_cntr_progress, context);
+	if (ret)
+		goto free;
+
+	*cntr_fid = &cntr->cntr_fid;
+	return FI_SUCCESS;
+
+free:
+	free(cntr);
+	return ret;
+}
+
 static struct fi_ops_domain rxm_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = ip_av_create,
 	.cq_open = rxm_cq_open,
 	.endpoint = rxm_endpoint,
 	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = fi_no_cntr_open,
+	.cntr_open = rxm_cntr_open,
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
