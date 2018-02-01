@@ -91,8 +91,11 @@ uint64_t ofi_tag_format(uint64_t max_tag)
 uint8_t ofi_msb(uint64_t num)
 {
 	uint8_t msb = 0;
-	while (num >> msb)
+
+	while (num) {
 		msb++;
+		num >>= 1;
+	}
 	return msb;
 }
 
