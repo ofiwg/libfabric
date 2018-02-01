@@ -218,17 +218,14 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 static int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue *send_queue,
 			       size_t size)
 {
-	struct rxm_tx_entry *tx_entry;
 	ssize_t i;
 
 	send_queue->fs = rxm_txe_fs_create(size);
 	if (!send_queue->fs)
 		return -FI_ENOMEM;
 
-	for (i = send_queue->fs->size - 1; i >= 0; i--) {
-		tx_entry = &send_queue->fs->buf[i];
-		tx_entry->ep = rxm_ep;
-	}
+	for (i = send_queue->fs->size - 1; i >= 0; i--)
+		send_queue->fs->buf[i].ep = rxm_ep;
 
 	fastlock_init(&send_queue->lock);
 	return 0;
@@ -237,7 +234,6 @@ static int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue *sen
 static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 			       enum rxm_recv_queue_type type)
 {
-	struct rxm_recv_entry *recv_entry;
 	ssize_t i;
 
 	recv_queue->type = type;
@@ -250,17 +246,13 @@ static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
 	if (type == RXM_RECV_QUEUE_MSG) {
 		recv_queue->match_recv = rxm_match_recv_entry;
 		recv_queue->match_unexp = rxm_match_unexp_msg;
-		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
-			recv_entry = &recv_queue->fs->buf[i];
-			recv_entry->comp_flags = FI_MSG | FI_RECV;
-		}
+		for (i = recv_queue->fs->size - 1; i >= 0; i--)
+			recv_queue->fs->buf[i].comp_flags = FI_MSG | FI_RECV;
 	} else {
 		recv_queue->match_recv = rxm_match_recv_entry_tagged;
 		recv_queue->match_unexp = rxm_match_unexp_msg_tagged;
-		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
-			recv_entry = &recv_queue->fs->buf[i];
-			recv_entry->comp_flags = FI_TAGGED | FI_RECV;
-		}
+		for (i = recv_queue->fs->size - 1; i >= 0; i--)
+			recv_queue->fs->buf[i].comp_flags = FI_TAGGED | FI_RECV;
 	}
 	fastlock_init(&recv_queue->lock);
 	return 0;
