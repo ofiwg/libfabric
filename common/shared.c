@@ -1526,32 +1526,40 @@ static int ft_inject_progress(uint64_t total)
 		seq++;								\
 	} while (0)
 
-ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
-		uint64_t data, struct fi_context* ctx)
+ssize_t ft_post_tx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
+		       uint64_t data, struct fi_context* ctx,
+		       void *op_buf, void *op_mr_desc, uint64_t op_tag)
 {
-
+	size += ft_tx_prefix_size();
 	if (hints->caps & FI_TAGGED) {
+		op_tag = op_tag ? op_tag : tx_seq;
 		if (data != NO_CQ_DATA) {
 			FT_POST(fi_tsenddata, ft_get_tx_comp, tx_seq, "transmit", ep,
-				tx_buf, size + ft_tx_prefix_size(), mr_desc,
-				data, fi_addr, ft_tag ? ft_tag : tx_seq, ctx);
+				op_buf, size, op_mr_desc,
+				data, fi_addr, op_tag, ctx);
 		} else {
 			FT_POST(fi_tsend, ft_get_tx_comp, tx_seq, "transmit", ep,
-				tx_buf, size + ft_tx_prefix_size(), mr_desc,
-				fi_addr, ft_tag ? ft_tag : tx_seq, ctx);
+				op_buf, size, op_mr_desc,
+				fi_addr, op_tag, ctx);
 		}
 	} else {
 		if (data != NO_CQ_DATA) {
 			FT_POST(fi_senddata, ft_get_tx_comp, tx_seq, "transmit", ep,
-				tx_buf,	size + ft_tx_prefix_size(), mr_desc,
-				data, fi_addr, ctx);
+				op_buf,	size, op_mr_desc, data, fi_addr, ctx);
 
 		} else {
 			FT_POST(fi_send, ft_get_tx_comp, tx_seq, "transmit", ep,
-				tx_buf,	size + ft_tx_prefix_size(), mr_desc, fi_addr, ctx);
+				op_buf,	size, op_mr_desc, fi_addr, ctx);
 		}
 	}
 	return 0;
+}
+
+ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
+		   uint64_t data, struct fi_context* ctx)
+{
+	return ft_post_tx_buf(ep, fi_addr, size, data,
+			      ctx, tx_buf, mr_desc, ft_tag);
 }
 
 ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx)
@@ -1736,17 +1744,24 @@ int check_compare_atomic_op(struct fid_ep *endpoint, enum fi_op op,
 	return check_atomic_attr(op, datatype, FI_COMPARE_ATOMIC);
 }
 
-ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
+ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, struct fi_context* ctx,
+		       void *op_buf, void *op_mr_desc, uint64_t op_tag)
 {
+	size = MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size();
 	if (hints->caps & FI_TAGGED) {
-		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
-			MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(),
-			mr_desc, 0, ft_tag ? ft_tag : rx_seq, 0, ctx);
+		op_tag = op_tag ? op_tag : rx_seq;
+		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive", ep,
+			op_buf, size, op_mr_desc, 0, op_tag, 0, ctx);
 	} else {
-		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive", ep, rx_buf,
-			MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size(), mr_desc, 0, ctx);
+		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive", ep,
+			op_buf,	size, op_mr_desc, 0, ctx);
 	}
 	return 0;
+}
+
+ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
+{
+	return ft_post_rx_buf(ep, size, ctx, rx_buf, mr_desc, ft_tag);
 }
 
 ssize_t ft_rx(struct fid_ep *ep, size_t size)
