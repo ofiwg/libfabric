@@ -50,7 +50,7 @@
 #include <fi_util.h>
 #include <fi_list.h>
 #include <fi_proto.h>
-#include <fi_iov.h>
+#include <ofi_iov.h>
 
 #ifndef _RXM_H_
 #define _RXM_H_

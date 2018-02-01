@@ -32,7 +32,7 @@
 
 #include <rdma/fi_errno.h>
 #include "rdma/fi_eq.h"
-#include "fi_iov.h"
+#include "ofi_iov.h"
 #include <prov.h>
 #include "tcpx.h"
 

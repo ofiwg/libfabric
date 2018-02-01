@@ -40,7 +40,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <fi_util.h>
-#include <fi_iov.h>
+#include <ofi_iov.h>
 
 int tcpx_progress_close(struct tcpx_progress *progress)
 {

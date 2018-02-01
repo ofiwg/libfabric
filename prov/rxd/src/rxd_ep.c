@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fi_mem.h>
-#include <fi_iov.h>
+#include <ofi_iov.h>
 #include "rxd.h"
 
 int rxd_progress_spin_count = 1000;
