@@ -278,6 +278,7 @@ struct rxm_recv_entry {
 	uint64_t ignore;
 	uint64_t comp_flags;
 	size_t total_len;
+	void *multi_recv_buf;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
