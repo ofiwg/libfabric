@@ -256,6 +256,7 @@ static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 		wait = NULL;
+		cntr->cntr_fid.ops->wait = fi_no_cntr_wait;
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
