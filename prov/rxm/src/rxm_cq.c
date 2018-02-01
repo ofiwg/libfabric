@@ -67,7 +67,7 @@ static void rxm_cq_log_comp(uint64_t flags)
 	flags &= (FI_SEND | FI_WRITE | FI_READ | FI_REMOTE_READ |
 		  FI_REMOTE_WRITE);
 
-	switch(flags) {
+	switch (flags) {
 	case FI_SEND:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting send completion\n");
 		break;
@@ -189,6 +189,8 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 			return ret;
 		}
 	}
+	if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
+		rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
 
 	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
 	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
@@ -248,6 +250,14 @@ static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 			return ret;
 		}
 		rxm_cq_log_comp(tx_entry->comp_flags);
+	}
+	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		if (tx_entry->comp_flags & FI_SEND)
+			rxm_cntr_inc(tx_entry->ep->util_ep.tx_cntr);
+		else if (tx_entry->comp_flags & FI_WRITE)
+			rxm_cntr_inc(tx_entry->ep->util_ep.wr_cntr);
+		else
+			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
 	}
 	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
 	return 0;
@@ -520,6 +530,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 				"Unable to write remote write completion\n");
 		return ret;
 	}
+	rxm_cntr_inc(rxm_ep->util_ep.rem_wr_cntr);
 	if (comp->op_context)
 		dlist_insert_tail(&((struct rxm_rx_buf *)
 					comp->op_context)->repost_entry,
@@ -591,6 +602,7 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 	struct rxm_rx_buf *rx_buf;
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
+	struct util_cntr *util_cntr = NULL;
 	void *op_context;
 	ssize_t ret;
 
@@ -616,15 +628,25 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 	case RXM_LMT_TX:
 		tx_entry = (struct rxm_tx_entry *)op_context;
 		util_cq = tx_entry->ep->util_ep.tx_cq;
+		if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
+			if (tx_entry->comp_flags & FI_SEND)
+				util_cntr = tx_entry->ep->util_ep.tx_cntr;
+			else if (tx_entry->comp_flags & FI_WRITE)
+				util_cntr = tx_entry->ep->util_ep.wr_cntr;
+			else
+				util_cntr = tx_entry->ep->util_ep.rd_cntr;
+		}
 		break;
 	case RXM_LMT_ACK_SENT:
 		tx_entry = (struct rxm_tx_entry *)op_context;
 		util_cq = tx_entry->ep->util_ep.rx_cq;
+		util_cntr = tx_entry->ep->util_ep.rx_cntr;
 		break;
 	case RXM_RX:
 	case RXM_LMT_READ:
 		rx_buf = (struct rxm_rx_buf *)op_context;
 		util_cq = rx_buf->ep->util_ep.rx_cq;
+		util_cntr = rx_buf->ep->util_ep.rx_cntr;
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
@@ -634,6 +656,7 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 					       err_entry.err_data, NULL, 0));
 		return -FI_EOPBADSTATE;
 	}
+	rxm_cntr_incerr(util_cntr);
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
 

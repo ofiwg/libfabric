@@ -827,9 +827,13 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		memcpy(tx_buf->pkt.data, buf, tx_buf->pkt.hdr.size);
 
 		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
-		if (OFI_UNLIKELY(ret))
+		if (OFI_UNLIKELY(ret)) {
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 			       "fi_inject for MSG provider failed\n");
+			rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
+		} else {
+			rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+		}
 		/* release allocated buffer for further reuse */
 		goto done_inject;
 	} else {
@@ -951,9 +955,13 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 				ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 						  iov, count, 0);
 				ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, total_len, 0);
-				if (OFI_UNLIKELY(ret))
+				if (OFI_UNLIKELY(ret)) {
 					FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 					       "fi_inject for MSG provider failed\n");
+					rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
+				} else {
+					rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+				}
 				/* release allocated buffer for further reuse */
 				goto done_inject;
 			}
