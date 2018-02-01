@@ -41,7 +41,7 @@
 #include "ndspi.h"
 
 #include "rdma/fabric.h"
-#include "fi_mem.h"
+#include "ofi_mem.h"
 
 #include "netdir.h"
 #include "netdir_buf.h"

@@ -32,7 +32,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include <ofi_iov.h>
 #include "rxd.h"
 

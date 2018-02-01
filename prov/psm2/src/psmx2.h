@@ -69,7 +69,7 @@ extern "C" {
 #include "fi_enosys.h"
 #include "fi_list.h"
 #include "fi_util.h"
-#include "fi_mem.h"
+#include "ofi_mem.h"
 #include "rbtree.h"
 #include "version.h"
 

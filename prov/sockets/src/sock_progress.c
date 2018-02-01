@@ -56,7 +56,7 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include "sock.h"
 #include "sock_util.h"
 

@@ -60,7 +60,7 @@ extern "C" {
 #include <ofi_lock.h>
 #include <fi_list.h>
 #include "fi_enosys.h"
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include <ofi_atom.h>
 #include <fi_util.h>
 #include <prov.h>

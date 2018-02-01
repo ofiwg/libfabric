@@ -576,7 +576,7 @@
     <ClInclude Include="include\ofi_indexer.h" />
     <ClInclude Include="include\fi_list.h" />
     <ClInclude Include="include\ofi_lock.h" />
-    <ClInclude Include="include\fi_mem.h" />
+    <ClInclude Include="include\ofi_mem.h" />
     <ClInclude Include="include\fi_osd.h" />
     <ClInclude Include="include\ofi_perf.h" />
     <ClInclude Include="include\ofi_proto.h" />

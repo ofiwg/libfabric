@@ -40,7 +40,7 @@
 #include <fi_osd.h>
 #include <fi.h>
 #include <rdma/fi_errno.h>
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include <rdma/fabric.h>
 
 

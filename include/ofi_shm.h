@@ -40,7 +40,7 @@
 
 #include <ofi_atom.h>
 #include <ofi_proto.h>
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include <ofi_rbuf.h>
 
 #include <rdma/providers/fi_prov.h>

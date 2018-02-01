@@ -32,7 +32,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include "rxd.h"
 
 ssize_t	rxd_ep_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,

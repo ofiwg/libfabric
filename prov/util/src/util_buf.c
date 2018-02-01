@@ -34,7 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fi_enosys.h>
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include <fi.h>
 #include <fi_osd.h>
 
