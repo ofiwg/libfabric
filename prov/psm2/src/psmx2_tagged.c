@@ -68,8 +68,8 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 		psm2_epaddr = 0;
 	}
 
-	PSMX2_SET_TAG(psm2_tag, tag, 0, 0);
-	PSMX2_SET_IGNORE_MASK(psm2_tagsel, ignore);
+	PSMX2_SET_TAG(psm2_tag, tag, 0, PSMX2_TYPE_TAGGED);
+	PSMX2_SET_MASK(psm2_tagsel, ~ignore, PSMX2_TYPE_MASK);
 
 	if (flags & (FI_CLAIM | FI_DISCARD))
 		err = psm2_mq_improbe2(ep_priv->rx->psm2_mq,
@@ -267,8 +267,8 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 		psm2_epaddr = 0;
 	}
 
-	PSMX2_SET_TAG(psm2_tag, tag, 0, 0);
-	PSMX2_SET_IGNORE_MASK(psm2_tagsel, ignore);
+	PSMX2_SET_TAG(psm2_tag, tag, 0, PSMX2_TYPE_TAGGED);
+	PSMX2_SET_MASK(psm2_tagsel, ~ignore, PSMX2_TYPE_MASK);
 
 	err = psm2_mq_irecv2(ep_priv->rx->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, 0, buf, len,
@@ -353,8 +353,8 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 		psm2_epaddr = 0;
 	}
 
-	PSMX2_SET_TAG(psm2_tag, tag, 0, 0);
-	PSMX2_SET_IGNORE_MASK(psm2_tagsel, ignore);
+	PSMX2_SET_TAG(psm2_tag, tag, 0, PSMX2_TYPE_TAGGED);
+	PSMX2_SET_MASK(psm2_tagsel, ~ignore, PSMX2_TYPE_MASK);
 
 	err = psm2_mq_irecv2(ep_priv->rx->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, 0, buf, len,
@@ -588,7 +588,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 	}
 
 	PSMX2_SET_TAG(psm2_tag, tag, (uint32_t)data,
-			PSMX2_IMM_BIT_SET(have_data));
+		      PSMX2_TYPE_TAGGED | PSMX2_IMM_BIT_SET(have_data));
 
 	if ((flags & PSMX2_NO_COMPLETION) ||
 	    (ep_priv->send_selective_completion && !(flags & FI_COMPLETION)))
@@ -687,7 +687,7 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 		}
 	}
 
-	PSMX2_SET_TAG(psm2_tag, tag, 0, 0);
+	PSMX2_SET_TAG(psm2_tag, tag, 0, PSMX2_TYPE_TAGGED);
 
 	if (enable_completion) {
 		fi_context = context;
@@ -794,7 +794,7 @@ psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 		}
 	}
 
-	PSMX2_SET_TAG(psm2_tag, tag, 0, 0);
+	PSMX2_SET_TAG(psm2_tag, tag, 0, PSMX2_TYPE_TAGGED);
 
 
 	err = psm2_mq_send2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
@@ -850,7 +850,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	uint32_t *q;
 	int i;
 	struct psmx2_sendv_request *req;
-	int have_cqdata = (flags & FI_REMOTE_CQ_DATA) > 0;
+	int have_data = (flags & FI_REMOTE_CQ_DATA) > 0;
 	uint32_t msg_flags;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
@@ -883,7 +883,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 			}
 		}
 
-		msg_flags = 0;
+		msg_flags = PSMX2_TYPE_TAGGED;
 		len = total_len;
 	} else {
 		req->iov_protocol = PSMX2_IOV_PROTO_MULTI;
@@ -899,7 +899,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 				*q++ = (uint32_t)iov[i].iov_len;
 		}
 
-		msg_flags = PSMX2_IOV_BIT;
+		msg_flags = PSMX2_TYPE_TAGGED | PSMX2_IOV_BIT;
 		len = (3 + real_count) * sizeof(uint32_t);
 	}
 
@@ -919,7 +919,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	}
 
 	PSMX2_SET_TAG(psm2_tag, tag, (uint32_t)data,
-			msg_flags | PSMX2_IMM_BIT_SET(have_cqdata));
+		      msg_flags | PSMX2_IMM_BIT_SET(have_data));
 
 
 	if ((flags & PSMX2_NO_COMPLETION) ||
@@ -987,7 +987,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 		PSMX2_CTXT_USER(fi_context) = req;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 		PSMX2_SET_TAG(psm2_tag, req->iov_info.seq_num, 0,
-                        PSMX2_IOV_PAYLOAD_BITS);
+			      PSMX2_TYPE_IOV_PAYLOAD);
 		for (i=0; i<count; i++) {
 			if (iov[i].iov_len) {
 				err = psm2_mq_isend2(ep_priv->tx->psm2_mq,
@@ -1051,7 +1051,7 @@ ssize_t psmx2_tagged_senddata(struct fid_ep *ep, const void *buf, size_t len,
 		void *context)
 {
 	return psmx2_tagged_send_generic(ep, buf, len, desc, dest_addr,
-			tag, context, FI_REMOTE_CQ_DATA, data);
+					 tag, context, FI_REMOTE_CQ_DATA, data);
 }
 
 #define PSMX2_TAGGED_SENDV_FUNC(suffix)					\
