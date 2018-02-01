@@ -40,7 +40,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include <fi_shm.h>
+#include <ofi_shm.h>
 
 
 static void smr_peer_addr_init(struct smr_addr *peer)
