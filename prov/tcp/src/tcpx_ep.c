@@ -176,7 +176,6 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	send_entry->done_len = 0;
 
 	dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
-	tcpx_progress_signal(&tcpx_domain->progress);
 	return FI_SUCCESS;
 err:
 	pe_entry_release(send_entry);
@@ -396,6 +395,44 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.join = fi_no_join,
 };
 
+static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep,
+				     struct tcpx_progress *progress)
+{
+	struct dlist_entry *entry;
+	struct tcpx_pe_entry *pe_entry;
+
+	while (!dlist_empty(&ep->tx_queue)) {
+		entry = ep->tx_queue.next;
+		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
+		dlist_remove(entry);
+		pe_entry_release(pe_entry);
+	}
+
+	while (!dlist_empty(&ep->rx_queue)) {
+		entry = ep->rx_queue.next;
+		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
+		dlist_remove(entry);
+		pe_entry_release(pe_entry);
+	}
+}
+
+static void tcpx_ep_posted_rx_list_release(struct tcpx_ep *ep,
+				      struct tcpx_progress *progress)
+
+{
+	struct dlist_entry *entry;
+	struct tcpx_posted_rx *posted_rx;
+
+	fastlock_acquire(&ep->posted_rx_list_lock);
+	while (!dlist_empty(&ep->posted_rx_list)) {
+		entry =  ep->posted_rx_list.next;
+		posted_rx = container_of(entry, struct tcpx_posted_rx, entry);
+		dlist_remove(entry);
+		util_buf_release(progress->posted_rx_pool, posted_rx);
+	}
+	fastlock_release(&ep->posted_rx_list_lock);
+}
+
 static int tcpx_ep_close(struct fid *fid)
 {
 	struct tcpx_ep *ep;
@@ -405,7 +442,8 @@ static int tcpx_ep_close(struct fid *fid)
 	tcpx_domain = container_of(ep->util_ep.domain,
 				   struct tcpx_domain, util_domain);
 
-	tcpx_progress_ep_remove(&tcpx_domain->progress, ep);
+	tcpx_ep_posted_rx_list_release(ep, &tcpx_domain->progress);
+	tcpx_ep_tx_rx_queues_release(ep, &tcpx_domain->progress);
 	fastlock_destroy(&ep->posted_rx_list_lock);
 
 	ofi_close_socket(ep->conn_fd);
