@@ -382,6 +382,7 @@ static uint64_t get_mr_key()
 static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
+	int mr_local = !!(fi->domain_attr->mr_mode & FI_MR_LOCAL);
 
 	/* Prevent memory registration by ft_alloc_active_res() -> ft_alloc_msgs() */
 	ft_skip_mr = 1;
@@ -402,21 +403,25 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	// registers local data buffer buff that specifies
-	// the first operand of the atomic operation
+	// registers local data buffer buff that used for send/recv
+	// and local/remote RMA.
 	ret = fi_mr_reg(domain, buf, buf_size,
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
-		get_mr_key(), 0, &mr, NULL);
+			((mr_local ?
+			  FI_SEND | FI_RECV | FI_READ | FI_WRITE : 0) |
+			 FI_REMOTE_READ | FI_REMOTE_WRITE), 0,
+			get_mr_key(), 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
+	// Set global descriptor for FI_MR_LOCAL.
+	if (mr_local)
+		mr_desc = fi_mr_desc(mr);
 
-	// registers local data buffer that stores initial value of
-	// the remote buffer
+	// registers local data buffer that stores results
 	ret = fi_mr_reg(domain, result, buf_size,
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
-		get_mr_key(), 0, &mr_result, NULL);
+			(mr_local ? FI_READ : 0) | FI_REMOTE_WRITE, 0,
+			get_mr_key(), 0, &mr_result, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", -ret);
 		return ret;
@@ -424,8 +429,8 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	// registers local data buffer that contains comparison data
 	ret = fi_mr_reg(domain, compare, buf_size,
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
-		get_mr_key(), 0, &mr_compare, NULL);
+			(mr_local ? FI_WRITE : 0)  | FI_REMOTE_READ, 0,
+			get_mr_key(), 0, &mr_compare, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
