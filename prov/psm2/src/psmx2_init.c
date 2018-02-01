@@ -571,7 +571,6 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 					PSMX2_MAX_MSG_SIZE);
 				goto err_out;
 			}
-			max_tag_value = ofi_max_tag(hints->ep_attr->mem_tag_format);
 		}
 
 		if (hints->tx_attr) {
