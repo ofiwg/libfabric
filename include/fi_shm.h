@@ -38,7 +38,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include <fi_atom.h>
+#include <ofi_atom.h>
 #include <fi_proto.h>
 #include <fi_mem.h>
 #include <fi_rbuf.h>

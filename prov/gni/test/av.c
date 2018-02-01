@@ -577,7 +577,7 @@ Test(av_full_table, mt_simple)
 	simple_mt_test();
 }
 
-#include "fi_atom.h"
+#include "ofi_atom.h"
 /* add a compare-and-swap */
 static inline int atomic_cas_weak(ofi_atomic32_t *atomic, int *expected, int desired)
 {

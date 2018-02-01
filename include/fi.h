@@ -47,7 +47,7 @@
 #include <ofi_abi.h>
 #include <ofi_file.h>
 #include <fi_lock.h>
-#include <fi_atom.h>
+#include <ofi_atom.h>
 #include <fi_mem.h>
 #include <ofi_net.h>
 #include <rdma/providers/fi_prov.h>

@@ -50,7 +50,7 @@
 #include <netinet/in.h>
 
 #include <fi.h>
-#include <fi_atom.h>
+#include <ofi_atom.h>
 #include <ofi_atomic.h>
 #include <ofi_mr.h>
 #include <fi_enosys.h>

@@ -473,7 +473,7 @@
     <ClInclude Include="include\ofi_abi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_atom.h">
+    <ClInclude Include="include\ofi_atom.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_file.h">

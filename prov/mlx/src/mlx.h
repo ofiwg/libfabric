@@ -61,7 +61,7 @@ extern "C" {
 #include <fi_list.h>
 #include "fi_enosys.h"
 #include <fi_mem.h>
-#include <fi_atom.h>
+#include <ofi_atom.h>
 #include <fi_util.h>
 #include <prov.h>
 
