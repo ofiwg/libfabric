@@ -1191,10 +1191,11 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		 * the checks depend on unmodified provider mr_mode attr */
 		info->caps = ofi_get_info_caps(info, hints, api_version);
 
-		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
-			if (info->domain_attr->mr_mode & FI_MR_LOCAL)
-				info->mode |= FI_LOCAL_MR;
-		}
+		if ((info->domain_attr->mr_mode & FI_MR_LOCAL) &&
+		    (FI_VERSION_LT(api_version, FI_VERSION(1, 5)) ||
+		     (hints && hints->domain_attr &&
+		      (hints->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)))))
+			info->mode |= FI_LOCAL_MR;
 
 		info->handle = hints->handle;
 
