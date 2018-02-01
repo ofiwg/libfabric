@@ -579,7 +579,7 @@
     <ClInclude Include="include\fi_mem.h" />
     <ClInclude Include="include\fi_osd.h" />
     <ClInclude Include="include\ofi_perf.h" />
-    <ClInclude Include="include\fi_proto.h" />
+    <ClInclude Include="include\ofi_proto.h" />
     <ClInclude Include="include\ofi_rbuf.h" />
     <ClInclude Include="include\ofi_signal.h" />
     <ClInclude Include="include\fi_util.h" />

@@ -57,7 +57,7 @@
 #include <fi_list.h>
 #include <ofi_signal.h>
 #include <fi_util.h>
-#include <fi_proto.h>
+#include <ofi_proto.h>
 
 #ifndef _TCP_H_
 #define _TCP_H_

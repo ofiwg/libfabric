@@ -39,7 +39,7 @@
 #include <stddef.h>
 
 #include <ofi_atom.h>
-#include <fi_proto.h>
+#include <ofi_proto.h>
 #include <fi_mem.h>
 #include <ofi_rbuf.h>
 
