@@ -17,7 +17,6 @@ multi_mr
 atomic
 inj_complete
 rdm_cntr_pingpong
-rdm_multi_recv
 cmatose
 rc_pingpong
 
