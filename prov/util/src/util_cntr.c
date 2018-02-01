@@ -190,6 +190,7 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 	if (cntr->wait) {
 		fi_poll_del(&cntr->wait->pollset->poll_fid,
 			    &cntr->cntr_fid.fid, 0);
+		fi_close(&cntr->wait->wait_fid.fid);
 	}
 
 	ofi_atomic_dec32(&cntr->domain->ref);
@@ -214,7 +215,7 @@ int ofi_check_bind_cntr_flags(struct util_ep *ep, struct util_cntr *cntr,
 {
 	const struct fi_provider *prov = ep->domain->fabric->prov;
 
-	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_RECV  | FI_WRITE |
+	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_READ  | FI_WRITE |
 		      FI_REMOTE_READ | FI_REMOTE_WRITE)) {
 		FI_WARN(prov, FI_LOG_EP_CTRL,
 			"Unsupported flags\n");
@@ -255,6 +256,7 @@ static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 		wait = NULL;
+		cntr->cntr_fid.ops->wait = fi_no_cntr_wait;
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
