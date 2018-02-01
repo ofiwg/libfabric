@@ -147,9 +147,9 @@ static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
 
-uint64_t fi_tag_bits(uint64_t mem_tag_format);
-uint64_t fi_tag_format(uint64_t tag_bits);
-uint8_t fi_size_bits(uint64_t num);
+uint64_t ofi_max_tag(uint64_t mem_tag_format);
+uint64_t ofi_tag_format(uint64_t max_tag);
+uint8_t ofi_msb(uint64_t num);
 
 int ofi_send_allowed(uint64_t caps);
 int ofi_recv_allowed(uint64_t caps);
