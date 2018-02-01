@@ -42,6 +42,7 @@ int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	struct util_cq *cq;
 	struct util_eq *eq;
+	struct util_cntr *cntr;
 	struct util_wait *wait;
 	int i, ret;
 
@@ -56,7 +57,9 @@ int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 			wait = eq->wait;
 			break;
 		case FI_CLASS_CNTR:
-			return -FI_ENOSYS;
+			cntr = container_of(fids[i], struct util_cntr, cntr_fid.fid);
+			wait = cntr->wait;
+			break;
 		case FI_CLASS_WAIT:
 			wait = container_of(fids[i], struct util_wait, wait_fid.fid);
 			break;
