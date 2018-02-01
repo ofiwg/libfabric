@@ -56,7 +56,7 @@
 #include <ofi_mr.h>
 #include <fi_list.h>
 #include <fi_mem.h>
-#include <fi_rbuf.h>
+#include <ofi_rbuf.h>
 #include <ofi_signal.h>
 #include <fi_enosys.h>
 #include <fi_osd.h>

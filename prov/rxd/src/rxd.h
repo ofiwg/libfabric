@@ -49,7 +49,7 @@
 #include <fi.h>
 #include <fi_proto.h>
 #include <fi_enosys.h>
-#include <fi_rbuf.h>
+#include <ofi_rbuf.h>
 #include <fi_list.h>
 #include <fi_util.h>
 

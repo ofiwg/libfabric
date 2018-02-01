@@ -41,7 +41,7 @@
 #include <ofi_atom.h>
 #include <fi_proto.h>
 #include <fi_mem.h>
-#include <fi_rbuf.h>
+#include <ofi_rbuf.h>
 
 #include <rdma/providers/fi_prov.h>
 
