@@ -33,7 +33,7 @@
 #ifndef PROV_GNI_INCLUDE_GNIX_AUTH_KEY_H_
 #define PROV_GNI_INCLUDE_GNIX_AUTH_KEY_H_
 
-#include <fi_lock.h>
+#include <ofi_lock.h>
 
 #include "fi_ext_gni.h"
 #include "gnix_bitmap.h"

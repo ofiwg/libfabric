@@ -42,7 +42,7 @@
 
 #include <fi.h>
 #include <ofi_atom.h>
-#include <fi_lock.h>
+#include <ofi_lock.h>
 #include <fi_list.h>
 #include <rbtree.h>
 

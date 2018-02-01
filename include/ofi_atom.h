@@ -39,7 +39,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-#include <fi_lock.h>
+#include <ofi_lock.h>
 #include <fi_osd.h>
 
 #ifdef HAVE_ATOMICS

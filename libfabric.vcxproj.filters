@@ -482,7 +482,7 @@
     <ClInclude Include="include\ofi_iov.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_lock.h">
+    <ClInclude Include="include\ofi_lock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\fi_mem.h">

@@ -46,7 +46,7 @@
 
 #include <ofi_abi.h>
 #include <ofi_file.h>
-#include <fi_lock.h>
+#include <ofi_lock.h>
 #include <ofi_atom.h>
 #include <fi_mem.h>
 #include <ofi_net.h>
