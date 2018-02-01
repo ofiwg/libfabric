@@ -102,53 +102,103 @@ extern struct fi_provider psmx2_prov;
 				 FI_ORDER_WAR | FI_ORDER_WAW)
 #define PSMX2_COMP_ORDER	FI_ORDER_NONE
 
-#define PSMX2_MSG_BIT	(0x80000000)
-#define PSMX2_RMA_BIT	(0x40000000)
-#define PSMX2_IOV_BIT	(0x20000000)
-#define PSMX2_IMM_BIT	(0x10000000)
-#define PSMX2_SEQ_BITS	(0x0FFF0000)
-
-#define PSMX2_TAG32_GET_SEQ(tag32)	(((tag32) & PSMX2_SEQ_BITS) >> 16)
-#define PSMX2_TAG32_SET_SEQ(tag32,seq)	do { \
-						tag32 |= ((seq << 16) & PSMX2_SEQ_BITS); \
-					} while (0)
-
 /*
- * psm2_mq_tag_t is a union type of 96 bits. These functions are used to
- * access the first 64 bits without generating the warning "dereferencing
- * type-punned pointer will break strict-aliasing rules".
+ * To conserve tag bits, we use a couple otherwise invalid bit combinations
+ * to distinguish RMA long reads from long writes and distinguish iovec
+ * payloads from regular messages.
  *
- * Notice:
- * (1) *(uint64_t *)tag96 works, but *(uint64_t *)tag96->tag doesn't;
- * (2) putting these statements directly inside the macros won't work.
+ * We never match on the immediate bit.  Regular tagged and untagged messages
+ * do not match on the iov bit, but the iov and imm bits are checked when we
+ * process completions.
+ *
+ *                   MSG RMA IOV IMM
+ * tagged message    0   0   x   x
+ * untagged message  1   0   x   x
+ * rma long read     0   1   0   x
+ * rma long write    0   1   1   x
+ * iov payload       1   1   x   x
  */
-__attribute__((always_inline))
-static inline void psmx2_set_tag64(psm2_mq_tag_t *tag96, uint64_t tag64)
-{
-	*(uint64_t *)tag96 = tag64;
-}
 
-__attribute__((always_inline))
-static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
-{
-	return *(uint64_t *)tag96;
-}
+#define PSMX2_MSG_BIT		(0x80000000)
+#define PSMX2_RMA_BIT		(0x40000000)
+#define PSMX2_IOV_BIT		(0x20000000)
+#define PSMX2_IMM_BIT		(0x10000000)
+#define PSMX2_IOV_PAYLOAD_BITS	(PSMX2_MSG_BIT | PSMX2_RMA_BIT)
 
-#define PSMX2_SET_TAG(tag96,tag64,tag32) do { \
-						psmx2_set_tag64(&(tag96),(tag64)); \
-						tag96.tag2 = tag32; \
-					} while (0)
+/* Set which flag bits to match on for tagged/msg.  IMM and IOV bits are ignored. */
+#define PSMX2_FLAG_MATCH_MASK \
+		(PSMX2_MSG_BIT | PSMX2_RMA_BIT | PSMX2_IOV_PAYLOAD_BITS)
 
-#define PSMX2_SET_TAG64(tag96,tag64)	psmx2_set_tag64(&(tag96),(tag64))
-#define PSMX2_GET_TAG64(tag96)		psmx2_get_tag64(&(tag96))
+#define PSMX2_AM_FLAG_MATCH_MASK \
+		(PSMX2_MSG_BIT | PSMX2_RMA_BIT | PSMX2_IOV_BIT | PSMX2_LONG_READ_BIT | PSMX2_LONG_WRITE_BIT)
+
+#define PSMX2_IOV_PAYLOAD_FLAG_MATCH_MASK \
+		(PSMX2_MSG_BIT | PSMX2_RMA_BIT)
+
+#define PSMX2_IS_IOV_HEADER(flags) (((flags) & PSMX2_IOV_BIT) && !((flags) & PSMX2_RMA_BIT))
+#define PSMX2_IS_IOV_PAYLOAD(flags) (((flags) & PSMX2_IOV_PAYLOAD_FLAG_MATCH_MASK) == PSMX2_RMA_BIT | PSMX2_MSG_BIT)
+#define PSMX2_IS_RMA(flags) (((flags) & PSMX2_RMA_BIT) && !((flags) & PSMX2_MSG_BIT))
+#define PSMX2_IS_MSG(flags) ((flags) & PSMX2_FLAG_MATCH_MASK == PSMX2_MSG_BIT
+#define PSMX2_IS_TAGGED(flags) ((flags) & PSMX2_FLAG_MATCH_MASK == 0)
+#define PSMX2_HAS_IMM(flags) ((flags) & PSMX2_IMM_BIT)
 
 /*
- * When using the long RMA protocol, set a bit in the unused SEQ bits to
- * indicate whether or not the operation is a read or a write. This prevents tag
- * collisions.
+ * When using the long RMA protocol, set IOV to indicate the operation
+ * is a long write.  This prevents tag collisions with long reads.
+ * IOV isn't used with rma, so that bit is safe to reuse.
  */
-#define PSMX2_TAG32_LONG_WRITE(tag32) PSMX2_TAG32_SET_SEQ(tag32, 0x1)
-#define PSMX2_TAG32_LONG_READ(tag32)  PSMX2_TAG32_SET_SEQ(tag32, 0x2)
+#define PSMX2_LONG_READ_BIT	0
+#define PSMX2_LONG_WRITE_BIT	PSMX2_IOV_BIT
+
+/* Set a bit conditionally without branching.  Flag must be 1 or 0. */
+#define PSMX2_MSG_BIT_SET(flag) (-(uint32_t)flag & PSMX2_MSG_BIT)
+#define PSMX2_RMA_BIT_SET(flag) (-(uint32_t)flag & PSMX2_RMA_BIT)
+#define PSMX2_IOV_BIT_SET(flag) (-(uint32_t)flag & PSMX2_IOV_BIT)
+#define PSMX2_IMM_BIT_SET(flag) (-(uint32_t)flag & PSMX2_IMM_BIT)
+
+/* Top 32 bits of tag mask. */
+#define PSMX2_TAG_UPPER_MASK	((uint32_t)0x0fffffff)
+
+/* Whole 64 bits of tag mask. */
+#define PSMX2_TAG_FULL_MASK	((uint64_t)(((uint64_t)PSMX2_TAG_UPPER_MASK << 32) | 0xffffffff))
+
+#define PSMX2_MAX_TAG		PSMX2_TAG_FULL_MASK
+#define PSMX2_IGNORE_ALL	((~(uint64_t)PSMX2_FLAG_MATCH_MASK << 32) | 0xffffffff)
+
+#define PSMX2_PRINT_TAG(tag96) \
+	printf("%s %x %x %x\n", __func__, tag96.tag0, tag96.tag1, tag96.tag2)
+
+#define PSMX2_SET_TAG(tag96,tag,cq_data,flags) \
+	do { \
+		(tag96).tag0 = (uint32_t)(tag); \
+		(tag96).tag1 = (uint32_t) ( \
+				(((uint32_t)((uint64_t)(tag) >> 32)) & PSMX2_TAG_UPPER_MASK) | \
+				  ((flags) & ~PSMX2_TAG_UPPER_MASK) \
+		             ); \
+		(tag96).tag2 = (cq_data); \
+	} while (0)
+
+#define PSMX2_SET_IGNORE_MASK_INTERNAL(tag96,ignore,ignore_mask) \
+	do { \
+		(tag96).tag0 = (uint32_t)~(ignore); \
+		(tag96).tag1 = (uint32_t) (\
+				((~(uint64_t)(ignore) >> 32) & PSMX2_TAG_UPPER_MASK) | (ignore_mask) \
+		             );\
+		(tag96).tag2 = 0; \
+	} while (0)
+
+#define PSMX2_SET_IGNORE_MASK(tag96,ignore) \
+		PSMX2_SET_IGNORE_MASK_INTERNAL(tag96,ignore,PSMX2_FLAG_MATCH_MASK)
+
+#define PSMX2_AM_SET_IGNORE_MASK(tag96,ignore) \
+		PSMX2_SET_IGNORE_MASK_INTERNAL(tag96,ignore,PSMX2_AM_FLAG_MATCH_MASK)
+
+#define PSMX2_IOV_PAYLOAD_SET_IGNORE_MASK(tag96,ignore) \
+		PSMX2_SET_IGNORE_MASK_INTERNAL(tag96,ignore,PSMX2_IOV_PAYLOAD_FLAG_MATCH_MASK)
+
+#define PSMX2_GET_TAG64(tag96)		((tag96).tag0 | ((uint64_t)((tag96).tag1 & PSMX2_TAG_UPPER_MASK)<<32))
+#define PSMX2_GET_FLAGS(tag96)		((tag96).tag1 & ~PSMX2_TAG_UPPER_MASK)
+#define PSMX2_GET_CQDATA(tag96)		((tag96).tag2)
 
 /*
  * Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
@@ -303,7 +353,7 @@ struct psmx2_am_request {
 
 #define PSMX2_IOV_PROTO_PACK	0
 #define PSMX2_IOV_PROTO_MULTI	1
-#define PSMX2_IOV_MAX_SEQ_NUM	0x0FFF
+#define PSMX2_IOV_MAX_SEQ_NUM 	0x7fffffff
 #define PSMX2_IOV_BUF_SIZE	64
 #define PSMX2_IOV_MAX_COUNT	(PSMX2_IOV_BUF_SIZE / sizeof(uint32_t) - 3)
 

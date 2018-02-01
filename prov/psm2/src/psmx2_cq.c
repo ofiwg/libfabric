@@ -456,7 +456,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_RECV_CONTEXT:
-				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
+				if (OFI_UNLIKELY(PSMX2_IS_IOV_HEADER(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status))) &&
 						  !psmx2_handle_sendv_req(ep, status, 0))) {
 					PSMX2_FREE_COMPLETION(trx_ctxt, status);
 					continue;
@@ -465,9 +465,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					op_context = fi_context;
 					buf = PSMX2_CTXT_USER(fi_context);
 					flags = psmx2_comp_flags[context_type];
-					if (PSMX2_STATUS_TAG(status).tag2 & PSMX2_IMM_BIT) {
+					if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status)))) {
 						flags |= FI_REMOTE_CQ_DATA;
-						data = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
+						data = PSMX2_GET_CQDATA(PSMX2_STATUS_TAG(status));
 					} else {
 						data = 0;
 					}
@@ -487,7 +487,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_TRECV_CONTEXT:
-				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
+				if (OFI_UNLIKELY(PSMX2_IS_IOV_HEADER(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status))) &&
 						 !psmx2_handle_sendv_req(ep, status, 0))) {
 					PSMX2_FREE_COMPLETION(trx_ctxt, status);
 					continue;
@@ -496,9 +496,15 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					op_context = fi_context;
 					buf = PSMX2_CTXT_USER(fi_context);
 					flags = psmx2_comp_flags[context_type];
+					if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status)))) {
+						flags |= FI_REMOTE_CQ_DATA;
+						data = PSMX2_GET_CQDATA(PSMX2_STATUS_TAG(status));
+					} else {
+						data = 0;
+					}
 					err = psmx2_cq_rx_complete(
 							cq, ep->recv_cq, ep->av,
-							status, op_context, buf, flags, 0,
+							status, op_context, buf, flags, data,
 							event_in, count, &read_count,
 							&read_more, src_addr);
 					if (err) {
@@ -512,7 +518,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_NOCOMP_RECV_CONTEXT:
-				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
+				if (OFI_UNLIKELY(PSMX2_IS_IOV_HEADER(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status))) &&
 						 !psmx2_handle_sendv_req(ep, status, 0))) {
 					PSMX2_EP_PUT_OP_CONTEXT(ep, fi_context);
 					PSMX2_FREE_COMPLETION(trx_ctxt, status);
@@ -523,9 +529,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					op_context = NULL;
 					buf = NULL;
 					flags = psmx2_comp_flags[context_type];
-					if (PSMX2_STATUS_TAG(status).tag2 & PSMX2_IMM_BIT) {
+					if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status)))) {
 						flags |= FI_REMOTE_CQ_DATA;
-						data = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
+						data = PSMX2_GET_CQDATA(PSMX2_STATUS_TAG(status));
 					} else {
 						data = 0;
 					}
@@ -545,7 +551,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_NOCOMP_TRECV_CONTEXT:
-				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
+				if (OFI_UNLIKELY(PSMX2_IS_IOV_HEADER(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status))) &&
 						 !psmx2_handle_sendv_req(ep, status, 0))) {
 					PSMX2_EP_PUT_OP_CONTEXT(ep, fi_context);
 					PSMX2_FREE_COMPLETION(trx_ctxt, status);
@@ -692,7 +698,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
-				if (OFI_UNLIKELY((PSMX2_STATUS_TAG(status).tag2 & PSMX2_IOV_BIT) &&
+				if (OFI_UNLIKELY(PSMX2_IS_IOV_HEADER(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status))) &&
 				    !psmx2_handle_sendv_req(ep, status, 1))) {
 					PSMX2_FREE_COMPLETION(trx_ctxt, status);
 					continue;
@@ -702,9 +708,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					op_context = fi_context;
 					buf = multi_recv_req->buf + multi_recv_req->offset;
 					flags = psmx2_comp_flags[context_type];
-					if (PSMX2_STATUS_TAG(status).tag2 & PSMX2_IMM_BIT) {
+					if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(PSMX2_STATUS_TAG(status)))) {
 						flags |= FI_REMOTE_CQ_DATA;
-						data = PSMX2_GET_TAG64(PSMX2_STATUS_TAG(status));
+						data = PSMX2_GET_CQDATA(PSMX2_STATUS_TAG(status));
 					} else {
 						data = 0;
 					}
