@@ -178,7 +178,6 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 		ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
 				   rx_buf->recv_entry->context,
 				   rx_buf->recv_entry->comp_flags |
-				   (rx_buf->recv_entry->flags & FI_MULTI_RECV) |
 				   ((rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
 				    FI_REMOTE_CQ_DATA : 0),
 				   rx_buf->pkt.hdr.size,
@@ -198,6 +197,16 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
 		rx_buf->recv_entry->total_len -= rx_buf->pkt.hdr.size;
 
 		if (rx_buf->recv_entry->total_len <= rx_buf->ep->min_multi_recv_size) {
+			FI_DBG(&rxm_prov, FI_LOG_CQ,
+			       "Buffer %p has been completely consumed. "
+			       "Reporting Multi-Recv completion\n",
+			       rx_buf->recv_entry->multi_recv_buf);
+			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
+					   rx_buf->recv_entry->context,
+					   FI_MULTI_RECV, rx_buf->pkt.hdr.size,
+					   rx_buf->recv_entry->multi_recv_buf,
+					   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+			assert(!ret);
 			/* Since buffer is elapsed, release recv_entry */
 			rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
 			return FI_SUCCESS;
