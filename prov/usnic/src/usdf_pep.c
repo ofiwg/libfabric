@@ -57,7 +57,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "fi_enosys.h"
-#include "fi_file.h"
+#include "ofi_file.h"
 
 #include "fi_ext_usnic.h"
 #include "usnic_direct.h"

@@ -57,7 +57,7 @@
 #include <fi_indexer.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>
-#include <fi_file.h>
+#include <ofi_file.h>
 #include <fi_osd.h>
 #include <fi_util.h>
 

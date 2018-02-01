@@ -45,7 +45,7 @@
 #include <ifaddrs.h>
 
 #include <ofi_abi.h>
-#include <fi_file.h>
+#include <ofi_file.h>
 #include <fi_lock.h>
 #include <fi_atom.h>
 #include <fi_mem.h>

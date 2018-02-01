@@ -44,7 +44,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <fi.h>
-#include <fi_file.h>
+#include <ofi_file.h>
 #include <stdlib.h>
 
 

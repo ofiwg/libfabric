@@ -42,7 +42,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#include <fi_file.h>
+#include <ofi_file.h>
 #include <fi_osd.h>
 #include <rdma/fi_errno.h>
 

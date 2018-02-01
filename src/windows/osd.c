@@ -40,7 +40,7 @@
 
 #include "fi.h"
 #include "fi_osd.h"
-#include "fi_file.h"
+#include "ofi_file.h"
 #include "fi_list.h"
 
 #include "prov/sockets/include/sock.h"

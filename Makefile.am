@@ -124,7 +124,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_abi.h			\
 	include/fi_atom.h			\
 	include/fi_enosys.h			\
-	include/fi_file.h			\
+	include/ofi_file.h			\
 	include/fi_indexer.h			\
 	include/fi_iov.h			\
 	include/fi_list.h			\

@@ -68,7 +68,7 @@ extern "C" {
 #include "fi_enosys.h"
 #include "fi_list.h"
 #include "fi_util.h"
-#include "fi_file.h"
+#include "ofi_file.h"
 #include "rbtree.h"
 #include "version.h"
 
