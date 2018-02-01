@@ -214,7 +214,7 @@ int ofi_check_bind_cntr_flags(struct util_ep *ep, struct util_cntr *cntr,
 {
 	const struct fi_provider *prov = ep->domain->fabric->prov;
 
-	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_RECV  | FI_WRITE |
+	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_READ  | FI_WRITE |
 		      FI_REMOTE_READ | FI_REMOTE_WRITE)) {
 		FI_WARN(prov, FI_LOG_EP_CTRL,
 			"Unsupported flags\n");
