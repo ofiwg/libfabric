@@ -416,7 +416,7 @@
     <ClInclude Include="include\fi_enosys.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_indexer.h">
+    <ClInclude Include="include\ofi_indexer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\fi_list.h">
