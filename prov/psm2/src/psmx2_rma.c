@@ -544,8 +544,8 @@ int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 
 	if ((req->op & PSMX2_AM_OP_MASK) == PSMX2_AM_REQ_WRITE_LONG) {
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->write.context, 0,
-				PSMX2_LONG_WRITE_BIT | PSMX2_RMA_BIT);
-		PSMX2_AM_SET_IGNORE_MASK(psm2_tagsel, 0ULL);
+			      PSMX2_RMA_TYPE_WRITE);
+		PSMX2_SET_MASK(psm2_tagsel, PSMX2_MATCH_ALL, PSMX2_RMA_TYPE_MASK);
 		err = psm2_mq_irecv2(trx_ctxt->psm2_mq,
 				     (psm2_epaddr_t)req->write.peer_addr,
 				     &psm2_tag, &psm2_tagsel, 0,
@@ -553,7 +553,7 @@ int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 				     (void *)&req->fi_context, &psm2_req);
 	} else {
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->read.context, 0,
-				PSMX2_LONG_READ_BIT | PSMX2_RMA_BIT);
+			      PSMX2_RMA_TYPE_READ);
 		err = psm2_mq_isend2(trx_ctxt->psm2_mq,
 				     (psm2_epaddr_t)req->read.peer_addr,
 				     0, &psm2_tag,
@@ -639,8 +639,8 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	args[0].u32w0 = 0;
 
 	if (psmx2_env.tagged_rma && len > chunk_size) {
-		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_BIT | PSMX2_LONG_READ_BIT);
-		PSMX2_AM_SET_IGNORE_MASK(psm2_tagsel, 0ULL);
+		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_TYPE_READ);
+		PSMX2_SET_MASK(psm2_tagsel, PSMX2_MATCH_ALL, PSMX2_RMA_TYPE_MASK);
 		psm2_mq_irecv2(ep_priv->tx->psm2_mq, psm2_epaddr,
 			       &psm2_tag, &psm2_tagsel, 0, buf, len,
 			       (void *)&req->fi_context, &psm2_req);
@@ -805,8 +805,8 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	/* Use the long protocol for the last segment */
 	if (long_len) {
-		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_BIT | PSMX2_LONG_READ_BIT);
-		PSMX2_AM_SET_IGNORE_MASK(psm2_tagsel, 0ULL);
+		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_TYPE_READ);
+		PSMX2_SET_MASK(psm2_tagsel, PSMX2_MATCH_ALL, PSMX2_RMA_TYPE_MASK);
 		psm2_mq_irecv2(ep_priv->tx->psm2_mq, psm2_epaddr,
 			       &psm2_tag, &psm2_tagsel, 0,
 			       long_buf, long_len,
@@ -977,7 +977,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	args[0].u32w0 = 0;
 
 	if (psmx2_env.tagged_rma && len > chunk_size) {
-		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_BIT | PSMX2_LONG_WRITE_BIT);
+		PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_TYPE_WRITE);
 		PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_WRITE_LONG);
 		args[0].u32w1 = len;
 		args[1].u64 = (uint64_t)req;
@@ -1186,7 +1186,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		/* Case 2.1: use long protocol for the last segment if it is large */
 		if (psmx2_env.tagged_rma && iov[i].iov_len > chunk_size &&
 		    len_sent + iov[i].iov_len == total_len) {
-			PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_BIT | PSMX2_LONG_WRITE_BIT);
+			PSMX2_SET_TAG(psm2_tag, (uint64_t)req, 0, PSMX2_RMA_TYPE_WRITE);
 			PSMX2_AM_SET_OP(args[0].u32w0, PSMX2_AM_REQ_WRITE_LONG);
 			args[0].u32w1 = iov[i].iov_len;
 			args[1].u64 = (uint64_t)req;
