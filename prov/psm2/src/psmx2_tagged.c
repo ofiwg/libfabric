@@ -1106,6 +1106,21 @@ static ssize_t psmx2_tagged_inject(struct fid_ep *ep,
 					 0);
 }
 
+static ssize_t psmx2_tagged_injectdata(struct fid_ep *ep,
+				       const void *buf, size_t len, uint64_t data,
+				       fi_addr_t dest_addr, uint64_t tag)
+{
+	struct psmx2_fid_ep *ep_priv;
+
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+
+	return psmx2_tagged_send_generic(ep, buf, len, NULL, dest_addr,
+					 tag, NULL,
+					 ep_priv->tx_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
+						  PSMX2_NO_COMPLETION,
+					 data);
+}
+
 #define PSMX2_TAGGED_OPS(suffix,sendopt,recvopt,injopt)	\
 struct fi_ops_tagged psmx2_tagged_ops##suffix = {	\
 	.size = sizeof(struct fi_ops_tagged),		\
@@ -1117,7 +1132,7 @@ struct fi_ops_tagged psmx2_tagged_ops##suffix = {	\
 	.sendmsg = psmx2_tagged_sendmsg,		\
 	.inject = psmx2_tagged_inject##injopt,		\
 	.senddata = psmx2_tagged_senddata,		\
-	.injectdata = fi_no_tagged_injectdata,		\
+	.injectdata = psmx2_tagged_injectdata,		\
 };
 
 PSMX2_TAGGED_OPS(,,,)
