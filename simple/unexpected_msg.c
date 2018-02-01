@@ -57,31 +57,58 @@ struct fi_context *tx_ctxs;
 struct fi_context *rx_ctxs;
 static bool send_data = false;
 char *tx_bufs, *rx_bufs;
-
+static struct fid_mr *tx_mr, *rx_mr;
+static void *tx_mr_desc, *rx_mr_desc;
+static size_t tx_len, rx_len;
 
 static int alloc_bufs(void)
 {
-	tx_bufs = calloc(concurrent_msgs, opts.transfer_size);
-	rx_bufs = calloc(concurrent_msgs, opts.transfer_size);
+	int rc;
+
+	tx_len = opts.transfer_size + ft_tx_prefix_size();
+	rx_len = opts.transfer_size + ft_rx_prefix_size();
+	tx_bufs = calloc(concurrent_msgs, tx_len);
+	rx_bufs = calloc(concurrent_msgs, rx_len);
 	tx_ctxs = malloc(sizeof(*tx_ctxs) * concurrent_msgs);
 	rx_ctxs = malloc(sizeof(*rx_ctxs) * concurrent_msgs);
 	if (!tx_bufs || !rx_bufs || !tx_ctxs || !rx_ctxs)
 		return -FI_ENOMEM;
+
+	if (fi->domain_attr->mr_mode & FI_MR_LOCAL) {
+		rc = fi_mr_reg(domain, tx_bufs, concurrent_msgs * tx_len,
+			       FI_SEND, 0, FT_MR_KEY + 1, 0, &tx_mr, NULL);
+		if (rc)
+			return rc;
+		tx_mr_desc = fi_mr_desc(tx_mr);
+
+		rc = fi_mr_reg(domain, rx_bufs, concurrent_msgs * rx_len,
+			       FI_RECV, 0, FT_MR_KEY + 2, 0, &rx_mr, NULL);
+		if (rc)
+			return rc;
+		rx_mr_desc = fi_mr_desc(rx_mr);
+	}
 
 	return 0;
 }
 
 static void free_bufs(void)
 {
+	FT_CLOSE_FID(tx_mr);
+	FT_CLOSE_FID(rx_mr);
 	free(tx_bufs);
 	free(rx_bufs);
 	free(tx_ctxs);
 	free(rx_ctxs);
 }
 
-static char *get_buf(char *buf, int index)
+static char *get_tx_buf(int index)
 {
-	return buf + opts.transfer_size * index;
+	return tx_bufs + tx_len * index;
+}
+
+static char *get_rx_buf(int index)
+{
+	return rx_bufs + rx_len * index;
 }
 
 static int wait_recvs()
@@ -106,28 +133,29 @@ static int wait_recvs()
 	}
 
 	if (ret < 1)
-		printf("ERROR fi_cq_(s)read returned %d %s\n", ret, strerror(ret));
+		printf("ERROR fi_cq_(s)read returned %d %s\n", ret, fi_strerror(-ret));
 	return ret;
 }
 
 static int run_test_loop(void)
 {
 	int ret = 0;
+	uint64_t op_data = send_data ? opts.transfer_size : NO_CQ_DATA;
+	uint64_t op_tag = 0x1234;
+	char *op_buf;
 	int i, j;
 
 	for (i = 0; i < num_iters; i++) {
 		for (j = 0; j < concurrent_msgs; j++) {
-			tx_buf = get_buf(tx_bufs, j);
+			op_buf = get_tx_buf(j);
 			if (ft_check_opts(FT_OPT_VERIFY_DATA))
-				ft_fill_buf(tx_buf, opts.transfer_size);
+				ft_fill_buf(op_buf + ft_tx_prefix_size(),
+					    opts.transfer_size);
 
-			ft_tag = 0x1234;
-			if (send_data)
-				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
-					opts.transfer_size, &tx_ctxs[j]);
-			else
-				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
-					NO_CQ_DATA, &tx_ctxs[j]);
+			ret = ft_post_tx_buf(ep, remote_fi_addr,
+					     opts.transfer_size,
+					     op_data, &tx_ctxs[j],
+					     op_buf, tx_mr_desc, op_tag);
 			if (ret) {
 				printf("ERROR send_msg returned %d\n", ret);
 				return ret;
@@ -139,9 +167,10 @@ static int run_test_loop(void)
 			return ret;
 
 		for (j = 0; j < concurrent_msgs; j++) {
-			rx_buf = get_buf(rx_bufs, j);
-			ft_tag = 0x1234;
-			ret = ft_post_rx(ep, opts.transfer_size, &rx_ctxs[j]);
+			op_buf = get_rx_buf(j);
+			ret = ft_post_rx_buf(ep, opts.transfer_size,
+					     &rx_ctxs[j], op_buf,
+					     rx_mr_desc, op_tag);
 			if (ret) {
 				printf("ERROR recv_msg returned %d\n", ret);
 				return ret;
@@ -152,6 +181,15 @@ static int run_test_loop(void)
 			ret = wait_recvs();
 			if (ret < 1)
 				return ret;
+		}
+
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			for (j = 0; j < concurrent_msgs; j++) {
+				op_buf = get_rx_buf(j);
+				if (ft_check_buf(op_buf + ft_rx_prefix_size(),
+						 opts.transfer_size))
+					return -FI_EOTHER;
+			}
 		}
 
 		for (j = 0; j < concurrent_msgs; j++) {
@@ -203,7 +241,10 @@ static int run_test(void)
 			return ret;
 	}
 
+	alloc_bufs();
 	ret = run_test_loop();
+	free_bufs();
+
 	return ret;
 }
 
@@ -268,9 +309,7 @@ int main(int argc, char **argv)
 	hints->rx_attr->total_buffered_recv = 0;
 	hints->caps = FI_TAGGED;
 
-	alloc_bufs();
 	ret = run_test();
-	free_bufs();
 
 	ft_free_res();
 	ft_sock_shutdown(sock);
