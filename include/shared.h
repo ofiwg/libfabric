@@ -392,8 +392,13 @@ int ft_finalize_ep(struct fid_ep *ep);
 size_t ft_rx_prefix_size(void);
 size_t ft_tx_prefix_size(void);
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
+ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, struct fi_context* ctx,
+		       void *op_buf, void *op_mr_desc, uint64_t op_tag);
 ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 		uint64_t data, struct fi_context* ctx);
+ssize_t ft_post_tx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
+		       uint64_t data, struct fi_context* ctx,
+		       void *op_buf, void *op_mr_desc, uint64_t op_tag);
 ssize_t ft_rx(struct fid_ep *ep, size_t size);
 ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx);
 ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size);
