@@ -140,33 +140,33 @@ static int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
 
 static int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
-	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
-	uint64_t current_ms;
-	uint64_t finish_ms;
-	uint64_t err = ofi_cntr_readerr(cntr_fid);
+	struct util_cntr *cntr;
+	uint64_t start, errcnt;
+	int ret;
 
-	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
-
-	if (threshold <= ofi_cntr_read(cntr_fid))
-		return FI_SUCCESS;
-
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->wait);
+	errcnt = ofi_atomic_get64(&cntr->err);
+	start = (timeout >= 0) ? fi_gettime_ms() : 0;
 
-	current_ms = fi_gettime_ms();
-	finish_ms = (timeout < 0) ? UINT64_MAX : current_ms + timeout;
-	for (; timeout < 0 || current_ms < finish_ms;
-	     current_ms = fi_gettime_ms()) {
-		timeout = timeout < 0 ? timeout : (int)(finish_ms - current_ms);
-		fi_wait(&cntr->wait->wait_fid, timeout);
-
+	do {
 		cntr->progress(cntr);
 		if (threshold <= ofi_atomic_get64(&cntr->cnt))
 			return FI_SUCCESS;
-		else if (err != ofi_atomic_get64(&cntr->err))
-			return -FI_EAVAIL;
-	}
 
-	return -FI_ETIMEDOUT;
+		if (errcnt != ofi_atomic_get64(&cntr->err))
+			return -FI_EAVAIL;
+
+		if (timeout >= 0) {
+			timeout -= (int) (fi_gettime_ms() - start);
+			if (timeout <= 0)
+				return -FI_ETIMEDOUT;
+		}
+
+		ret = fi_wait(&cntr->wait->wait_fid, timeout);
+	} while (!ret);
+
+	return ret;
 }
 
 static struct fi_ops_cntr util_cntr_ops = {
