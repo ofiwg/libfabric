@@ -65,6 +65,8 @@
 #include "rbtree.h"
 
 #define UTIL_FLAG_ERROR	(1ULL << 60)
+	
+#define OFI_CNTR_ENABLED	(1ULL << 61)
 
 #define OFI_Q_STRERROR(prov, log, q, q_str, entry, strerror)			\
 	FI_WARN(prov, log, "fi_" q_str "_readerr: err: %d, prov_err: %s (%d)\n",\

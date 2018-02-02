@@ -381,6 +381,18 @@ int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
 
+static inline void rxm_cntr_inc(struct util_cntr *cntr)
+{
+	if (cntr)
+		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+}
+
+static inline void rxm_cntr_incerr(struct util_cntr *cntr)
+{
+	if (cntr)
+		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
+}
+
 /* Caller must hold recv_queue->lock */
 static inline struct rxm_rx_buf *
 rxm_check_unexp_msg_list(struct rxm_recv_queue *recv_queue, fi_addr_t addr,

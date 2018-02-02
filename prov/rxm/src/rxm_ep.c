@@ -827,9 +827,13 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		memcpy(tx_buf->pkt.data, buf, tx_buf->pkt.hdr.size);
 
 		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
-		if (OFI_UNLIKELY(ret))
+		if (OFI_UNLIKELY(ret)) {
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 			       "fi_inject for MSG provider failed\n");
+			rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
+		} else {
+			rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+		}
 		/* release allocated buffer for further reuse */
 		goto done_inject;
 	} else {
@@ -951,9 +955,13 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 				ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 						  iov, count, 0);
 				ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, total_len, 0);
-				if (OFI_UNLIKELY(ret))
+				if (OFI_UNLIKELY(ret)) {
 					FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 					       "fi_inject for MSG provider failed\n");
+					rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
+				} else {
+					rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+				}
 				/* release allocated buffer for further reuse */
 				goto done_inject;
 			}
@@ -1325,16 +1333,17 @@ static int rxm_ep_trywait(void *arg)
 
 static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
+	struct rxm_ep *rxm_ep =
+		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	struct util_cq *cq;
-	struct rxm_ep *rxm_ep;
-	struct util_av *util_av;
+	struct util_av *av;
+	struct util_cntr *cntr;
 	int ret = 0;
 
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
-		util_av = container_of(bfid, struct util_av, av_fid.fid);
-		ret = ofi_ep_bind_av(&rxm_ep->util_ep, util_av);
+		av = container_of(bfid, struct util_av, av_fid.fid);
+		ret = ofi_ep_bind_av(&rxm_ep->util_ep, av);
 		if (ret)
 			return ret;
 		break;
@@ -1356,6 +1365,9 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		}
 		break;
+	case FI_CLASS_CNTR:
+		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
+		return ofi_ep_bind_cntr(&rxm_ep->util_ep, cntr, flags);
 	case FI_CLASS_EQ:
 		break;
 	default:

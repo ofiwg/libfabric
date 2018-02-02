@@ -132,6 +132,8 @@ int ofi_ep_bind_cntr(struct util_ep *ep, struct util_cntr *cntr, uint64_t flags)
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
+	ep->flags |= OFI_CNTR_ENABLED;
+
 	return fid_list_insert(&cntr->ep_list,
 			       &cntr->ep_list_lock,
 			       &ep->ep_fid.fid);
@@ -189,6 +191,7 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->ep_fid.fid.context = context;
 	ep->domain = util_domain;
 	ep->caps = info->caps;
+	ep->flags = 0;
 	ep->progress = progress;
 	ep->tx_op_flags = info->tx_attr->op_flags;
 	ep->rx_op_flags = info->rx_attr->op_flags;
