@@ -120,22 +120,22 @@ util_fi_pingpong_LDADD = $(linkback)
 
 nodist_src_libfabric_la_SOURCES =
 src_libfabric_la_SOURCES =			\
-	include/fi.h				\
-	include/fi_abi.h			\
-	include/fi_atom.h			\
-	include/fi_enosys.h			\
-	include/fi_file.h			\
-	include/fi_indexer.h			\
-	include/fi_iov.h			\
-	include/fi_list.h			\
-	include/fi_lock.h			\
-	include/fi_mem.h			\
-	include/fi_osd.h			\
-	include/fi_proto.h			\
-	include/fi_rbuf.h			\
-	include/fi_shm.h			\
-	include/fi_signal.h			\
-	include/fi_util.h			\
+	include/ofi.h				\
+	include/ofi_abi.h			\
+	include/ofi_atom.h			\
+	include/ofi_enosys.h			\
+	include/ofi_file.h			\
+	include/ofi_indexer.h			\
+	include/ofi_iov.h			\
+	include/ofi_list.h			\
+	include/ofi_lock.h			\
+	include/ofi_mem.h			\
+	include/ofi_osd.h			\
+	include/ofi_proto.h			\
+	include/ofi_rbuf.h			\
+	include/ofi_shm.h			\
+	include/ofi_signal.h			\
+	include/ofi_util.h			\
 	include/ofi_atomic.h			\
 	include/ofi_mr.h			\
 	include/ofi_net.h			\
@@ -143,7 +143,7 @@ src_libfabric_la_SOURCES =			\
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\
-	include/prov.h				\
+	include/ofi_prov.h			\
 	prov/hook/src/hook.h			\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\

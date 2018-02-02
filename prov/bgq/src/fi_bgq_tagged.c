@@ -31,7 +31,7 @@
  */
 #include "rdma/bgq/fi_bgq.h"
 
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 
 ssize_t fi_bgq_trecvmsg(struct fid_ep *ep,
 		const struct fi_msg_tagged *msg, uint64_t flags)

@@ -42,7 +42,7 @@
 
 #include "rdma/fabric.h"
 #include "rdma/fi_errno.h"
-#include "fi.h"
+#include "ofi.h"
 
 #include "usnic_direct.h"
 

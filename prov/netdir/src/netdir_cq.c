@@ -39,7 +39,7 @@
 #include "netdir_unexp.h"
 
 #include "rdma/fabric.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 static int ofi_nd_cq_close(struct fid *fid);
 static ssize_t ofi_nd_cq_read(struct fid_cq *cq, void *buf, size_t count);

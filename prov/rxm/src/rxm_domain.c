@@ -34,7 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <fi_util.h>
+#include <ofi_util.h>
 #include "rxm.h"
 
 int rxm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,

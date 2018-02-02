@@ -32,7 +32,7 @@
 
 #include "config.h"
 
-#include <fi_util.h>
+#include <ofi_util.h>
 #include "fi_verbs.h"
 
 const struct fi_info *

@@ -40,7 +40,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netdb.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 
 #include "sock.h"
 #include "sock_util.h"

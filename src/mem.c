@@ -37,10 +37,10 @@
 #include <ctype.h>
 #include <inttypes.h>
 
-#include <fi_osd.h>
-#include <fi.h>
+#include <ofi_osd.h>
+#include <ofi.h>
 #include <rdma/fi_errno.h>
-#include <fi_mem.h>
+#include <ofi_mem.h>
 #include <rdma/fabric.h>
 
 

@@ -33,8 +33,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fi_enosys.h>
-#include <fi_util.h>
+#include <ofi_enosys.h>
+#include <ofi_util.h>
 
 
 static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,

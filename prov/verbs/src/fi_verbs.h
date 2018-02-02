@@ -62,14 +62,14 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_atomic.h"
-#include "fi_enosys.h"
+#include "ofi_enosys.h"
 #include <uthash.h>
-#include "prov.h"
-#include "fi_list.h"
-#include "fi_signal.h"
-#include "fi_util.h"
+#include "ofi_prov.h"
+#include "ofi_list.h"
+#include "ofi_signal.h"
+#include "ofi_util.h"
 
 #ifdef HAVE_VERBS_EXP_H
 #include <infiniband/verbs_exp.h>

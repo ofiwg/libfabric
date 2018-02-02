@@ -51,13 +51,13 @@
 #include <rdma/fi_trigger.h>
 #include <rdma/providers/fi_prov.h>
 
-#include <fi.h>
-#include <fi_enosys.h>
-#include <fi_shm.h>
-#include <fi_rbuf.h>
-#include <fi_list.h>
-#include <fi_signal.h>
-#include <fi_util.h>
+#include <ofi.h>
+#include <ofi_enosys.h>
+#include <ofi_shm.h>
+#include <ofi_rbuf.h>
+#include <ofi_list.h>
+#include <ofi_signal.h>
+#include <ofi_util.h>
 #include <ofi_atomic.h>
 
 #ifndef _SMR_H_

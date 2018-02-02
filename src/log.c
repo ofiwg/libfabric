@@ -38,7 +38,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include "fi.h"
+#include "ofi.h"
 
 
 static const char * const log_subsys[] = {

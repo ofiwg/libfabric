@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_H_
-#define _FI_H_
+#ifndef _OFI_H_
+#define _OFI_H_
 
 #include "config.h"
 
@@ -44,11 +44,11 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
-#include <fi_abi.h>
-#include <fi_file.h>
-#include <fi_lock.h>
-#include <fi_atom.h>
-#include <fi_mem.h>
+#include <ofi_abi.h>
+#include <ofi_file.h>
+#include <ofi_lock.h>
+#include <ofi_atom.h>
+#include <ofi_mem.h>
 #include <ofi_net.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/providers/fi_log.h>
@@ -56,7 +56,7 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 
 #ifdef __cplusplus
@@ -207,4 +207,4 @@ static inline uint64_t ofi_key2idx(struct ofi_key_idx *key_idx, uint64_t key)
 }
 #endif
 
-#endif /* _FI_H_ */
+#endif /* _OFI_H_ */

@@ -32,8 +32,8 @@
  *
  */
 
-#if !defined(INDEXER_H)
-#define INDEXER_H
+#ifndef _OFI_INDEXER_H_
+#define _OFI_INDEXER_H_
 
 #include "config.h"
 
@@ -116,4 +116,4 @@ static inline void *ofi_idm_lookup(struct index_map *idm, int index)
 		ofi_idm_at(idm, index) : NULL;
 }
 
-#endif /* INDEXER_H */
+#endif /* _OFI_INDEXER_H_ */

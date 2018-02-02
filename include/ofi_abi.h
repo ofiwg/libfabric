@@ -30,12 +30,12 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ABI_H_
-#define _FI_ABI_H_
+#ifndef _OFI_ABI_H_
+#define _OFI_ABI_H_
 
 #include "config.h"
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 
 #ifdef __cplusplus
@@ -169,4 +169,4 @@ struct fi_cq_err_entry_1_0 {
 }
 #endif
 
-#endif /* _FI_ABI_H_ */
+#endif /* _OFI_ABI_H_ */

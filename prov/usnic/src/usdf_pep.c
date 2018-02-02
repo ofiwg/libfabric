@@ -55,9 +55,9 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
-#include "fi.h"
-#include "fi_enosys.h"
-#include "fi_file.h"
+#include "ofi.h"
+#include "ofi_enosys.h"
+#include "ofi_file.h"
 
 #include "fi_ext_usnic.h"
 #include "usnic_direct.h"

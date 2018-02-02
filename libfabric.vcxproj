@@ -521,12 +521,12 @@
     <ClCompile Include="prov\udp\src\udpx_ep.c" />
     <ClCompile Include="prov\udp\src\udpx_fabric.c" />
     <ClCompile Include="prov\udp\src\udpx_init.c">
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">fi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">ofi_osd.h</ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="prov\util\src\util_attr.c" />
     <ClCompile Include="prov\util\src\util_atomic.c" />
@@ -564,25 +564,26 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h" />
-    <ClInclude Include="include\fi.h" />
-    <ClInclude Include="include\fi_abi.h" />
-    <ClInclude Include="include\fi_atom.h" />
+    <ClInclude Include="include\ofi.h" />
+    <ClInclude Include="include\ofi_abi.h" />
+    <ClInclude Include="include\ofi_atom.h" />
     <ClInclude Include="include\ofi_atomic.h" />
     <ClInclude Include="include\ofi_mr.h" />
     <ClInclude Include="include\ofi_net.h" />
-    <ClInclude Include="include\fi_enosys.h" />
-    <ClInclude Include="include\fi_file.h" />
-    <ClInclude Include="include\fi_indexer.h" />
-    <ClInclude Include="include\fi_list.h" />
-    <ClInclude Include="include\fi_lock.h" />
-    <ClInclude Include="include\fi_mem.h" />
-    <ClInclude Include="include\fi_osd.h" />
+    <ClInclude Include="include\ofi_enosys.h" />
+    <ClInclude Include="include\ofi_file.h" />
+    <ClInclude Include="include\ofi_iov.h" />
+    <ClInclude Include="include\ofi_indexer.h" />
+    <ClInclude Include="include\ofi_list.h" />
+    <ClInclude Include="include\ofi_lock.h" />
+    <ClInclude Include="include\ofi_mem.h" />
+    <ClInclude Include="include\ofi_osd.h" />
     <ClInclude Include="include\ofi_perf.h" />
-    <ClInclude Include="include\fi_proto.h" />
-    <ClInclude Include="include\fi_rbuf.h" />
-    <ClInclude Include="include\fi_signal.h" />
-    <ClInclude Include="include\fi_util.h" />
-    <ClInclude Include="include\prov.h" />
+    <ClInclude Include="include\ofi_proto.h" />
+    <ClInclude Include="include\ofi_rbuf.h" />
+    <ClInclude Include="include\ofi_signal.h" />
+    <ClInclude Include="include\ofi_util.h" />
+    <ClInclude Include="include\ofi_prov.h" />
     <ClInclude Include="include\rbtree.h" />
     <ClInclude Include="include\rdma\fabric.h" />
     <ClInclude Include="include\rdma\fi_atomic.h" />

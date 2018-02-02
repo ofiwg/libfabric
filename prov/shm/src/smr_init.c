@@ -32,7 +32,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include <prov.h>
+#include <ofi_prov.h>
 #include "smr.h"
 
 

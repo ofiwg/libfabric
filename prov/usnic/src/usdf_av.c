@@ -52,8 +52,8 @@
 #include <netdb.h>
 
 #include "rdma/fi_errno.h"
-#include "fi_enosys.h"
-#include "fi.h"
+#include "ofi_enosys.h"
+#include "ofi.h"
 
 #include "usnic_direct.h"
 #include "usnic_ip_utils.h"

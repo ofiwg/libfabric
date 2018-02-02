@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_FILE_H_
-#define _FI_FILE_H_
+#ifndef _OFI_FILE_H_
+#define _OFI_FILE_H_
 
 #include "config.h"
 
@@ -56,4 +56,4 @@ int fi_fd_nonblock(int fd);
 }
 #endif
 
-#endif /* _FI_FILE_H_ */
+#endif /* _OFI_FILE_H_ */

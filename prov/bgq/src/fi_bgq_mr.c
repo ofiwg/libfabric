@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 #include "rdma/bgq/fi_bgq.h"
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 
 static int fi_bgq_close_mr(fid_t fid)
 {

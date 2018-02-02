@@ -188,7 +188,7 @@ static uint64_t default_offset;
 static pthread_t freer;
 
 /* simple bounded buffer for 2 threads */
-#include "fi_atom.h"
+#include "ofi_atom.h"
 #define buflen 23
 static void *to_free_buf[buflen];
 static ofi_atomic32_t head, tail;

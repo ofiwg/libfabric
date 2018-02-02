@@ -32,8 +32,8 @@
 
 #include <rdma/fi_errno.h>
 #include "rdma/fi_eq.h"
-#include "fi_iov.h"
-#include <prov.h>
+#include "ofi_iov.h"
+#include <ofi_prov.h>
 #include "tcpx.h"
 
 #include <sys/types.h>
@@ -42,7 +42,7 @@
 #include <net/if.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <unistd.h>
 #include <string.h>
 #include <poll.h>

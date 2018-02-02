@@ -34,8 +34,8 @@
 #ifndef _GNIX_FREELIST_H_
 #define _GNIX_FREELIST_H_
 
-#include <fi.h>
-#include <fi_list.h>
+#include <ofi.h>
+#include <ofi_list.h>
 #include "include/gnix_util.h"
 
 /* Number of elements to seed the freelist with */

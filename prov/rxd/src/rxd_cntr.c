@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include "fi_util.h"
+#include "ofi_util.h"
 #include "rxd.h"
 
 #define RXD_FLAG(flag, mask) (((flag) & (mask)) == (mask))

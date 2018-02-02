@@ -34,7 +34,7 @@
 #define _VERBS_QUEING_H
 
 #include <stdlib.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 #include "verbs_rdm.h"
 
 static inline void

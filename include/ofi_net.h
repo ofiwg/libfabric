@@ -44,7 +44,7 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/providers/fi_prov.h>

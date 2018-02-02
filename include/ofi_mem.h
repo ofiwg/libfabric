@@ -30,16 +30,16 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_MEM_H_
-#define _FI_MEM_H_
+#ifndef _OFI_MEM_H_
+#define _OFI_MEM_H_
 
 #include <config.h>
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fi_list.h>
-#include <fi_osd.h>
+#include <ofi_list.h>
+#include <ofi_osd.h>
 
 
 #ifdef INCLUDE_VALGRIND
@@ -358,4 +358,4 @@ extern uint64_t OFI_RMA_PMEM;
 extern void (*ofi_pmem_commit)(const void *addr, size_t len);
 
 
-#endif /* _FI_MEM_H_ */
+#endif /* _OFI_MEM_H_ */

@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include <fi_util.h>
+#include <ofi_util.h>
 #include "fi_verbs.h"
 #include "verbs_rdm.h"
 

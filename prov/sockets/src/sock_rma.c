@@ -51,7 +51,7 @@
 #include <arpa/inet.h>
 #include <limits.h>
 
-#include <fi_iov.h>
+#include <ofi_iov.h>
 
 #include "sock.h"
 #include "sock_util.h"

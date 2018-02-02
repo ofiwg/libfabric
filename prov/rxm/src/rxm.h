@@ -45,12 +45,12 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 
-#include <fi.h>
-#include <fi_enosys.h>
-#include <fi_util.h>
-#include <fi_list.h>
-#include <fi_proto.h>
-#include <fi_iov.h>
+#include <ofi.h>
+#include <ofi_enosys.h>
+#include <ofi_util.h>
+#include <ofi_list.h>
+#include <ofi_proto.h>
+#include <ofi_iov.h>
 
 #ifndef _RXM_H_
 #define _RXM_H_

@@ -34,9 +34,9 @@
 
 #include "netdir.h"
 #include "netdir_buf.h"
-#include "prov.h"
-#include "fi_util.h"
-#include "fi_mem.h"
+#include "ofi_prov.h"
+#include "ofi_util.h"
+#include "ofi_mem.h"
 
 #include "netdir_ov.h"
 #include "netdir_iface.h"

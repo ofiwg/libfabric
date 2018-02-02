@@ -34,8 +34,8 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include <fi_enosys.h>
-#include <fi_util.h>
+#include <ofi_enosys.h>
+#include <ofi_util.h>
 
 
 int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)

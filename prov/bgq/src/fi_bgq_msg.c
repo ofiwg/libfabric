@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 #include "rdma/bgq/fi_bgq.h"
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 
 ssize_t fi_bgq_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags)

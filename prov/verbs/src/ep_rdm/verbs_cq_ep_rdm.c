@@ -32,8 +32,8 @@
 
 #include <stdlib.h>
 
-#include <fi_enosys.h>
-#include <fi_list.h>
+#include <ofi_enosys.h>
+#include <ofi_list.h>
 #include "../fi_verbs.h"
 #include "verbs_queuing.h"
 

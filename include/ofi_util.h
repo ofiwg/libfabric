@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_UTIL_H_
-#define _FI_UTIL_H_
+#ifndef _OFI_UTIL_H_
+#define _OFI_UTIL_H_
 
 #if HAVE_CONFIG_H
 #  include <config.h>
@@ -52,15 +52,15 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_mr.h>
-#include <fi_list.h>
-#include <fi_mem.h>
-#include <fi_rbuf.h>
-#include <fi_signal.h>
-#include <fi_enosys.h>
-#include <fi_osd.h>
-#include <fi_indexer.h>
+#include <ofi_list.h>
+#include <ofi_mem.h>
+#include <ofi_rbuf.h>
+#include <ofi_signal.h>
+#include <ofi_enosys.h>
+#include <ofi_osd.h>
+#include <ofi_indexer.h>
 
 #include "rbtree.h"
 
@@ -762,4 +762,4 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 			  void *service);
 
-#endif
+#endif /* _OFI_UTIL_H_ */

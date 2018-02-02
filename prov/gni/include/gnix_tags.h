@@ -150,8 +150,8 @@
 #define PROV_GNI_SRC_GNIX_TAGS_H_
 
 #include <stdlib.h>
-#include <fi.h>
-#include <fi_list.h>
+#include <ofi.h>
+#include <ofi_list.h>
 
 #include "gnix_util.h"
 

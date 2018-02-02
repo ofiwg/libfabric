@@ -34,7 +34,7 @@
 #ifndef _GNIX_QUEUE_H
 #define _GNIX_QUEUE_H
 
-#include <fi_list.h>
+#include <ofi_list.h>
 
 typedef struct slist_entry *(*alloc_func)(size_t entry_size);
 typedef void (*free_func)(struct slist_entry *item);

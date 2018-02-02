@@ -31,12 +31,12 @@
  *
  */
 
-#if !defined(IOV_H)
-#define IOV_H
+#ifndef _OFI_IOV_H_
+#define _OFI_IOV_H_
 
 #include "config.h"
 
-#include <fi.h>
+#include <ofi.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -126,5 +126,5 @@ ofi_iov_within(const struct iovec *iov1, const struct iovec *iov2)
 	       (ofi_iov_end(iov1) <= ofi_iov_end(iov2));
 }
 
-#endif /* IOV_H */
+#endif /* _OFI_IOV_H_ */
 

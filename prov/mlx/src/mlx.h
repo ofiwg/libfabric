@@ -56,14 +56,14 @@ extern "C" {
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <rdma/providers/fi_log.h>
-#include <fi.h>
-#include <fi_lock.h>
-#include <fi_list.h>
-#include "fi_enosys.h"
-#include <fi_mem.h>
-#include <fi_atom.h>
-#include <fi_util.h>
-#include <prov.h>
+#include <ofi.h>
+#include <ofi_lock.h>
+#include <ofi_list.h>
+#include "ofi_enosys.h"
+#include <ofi_mem.h>
+#include <ofi_atom.h>
+#include <ofi_util.h>
+#include <ofi_prov.h>
 
 #include <arpa/inet.h>
 #include <netdb.h>

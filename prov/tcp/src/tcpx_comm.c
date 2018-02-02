@@ -31,9 +31,9 @@
  */
 
 #include <rdma/fi_errno.h>
-#include <prov.h>
+#include <ofi_prov.h>
 #include <sys/types.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include "tcpx.h"
 
 static ssize_t tcpx_comm_recv_socket(SOCKET conn_fd, void *buf, size_t len)

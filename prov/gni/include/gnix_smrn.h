@@ -33,8 +33,8 @@
 #ifndef PROV_GNI_INCLUDE_GNIX_SMRN_H
 #define PROV_GNI_INCLUDE_GNIX_SMRN_H
 
-#include "include/fi_list.h"
-#include "include/fi_lock.h"
+#include "include/ofi_list.h"
+#include "include/ofi_lock.h"
 #include "config.h"
 
 #include "gnix_mr_notifier.h"

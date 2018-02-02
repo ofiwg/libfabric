@@ -47,7 +47,7 @@
 #include <ifaddrs.h>
 #endif
 
-#include "fi_util.h"
+#include "ofi_util.h"
 #include "sock.h"
 #include "sock_util.h"
 

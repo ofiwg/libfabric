@@ -31,7 +31,7 @@
  */
 
 #include "psmx.h"
-#include "prov.h"
+#include "ofi_prov.h"
 #include <glob.h>
 
 static int psmx_init_count = 0;

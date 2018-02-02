@@ -30,18 +30,18 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_SHM_H_
-#define _FI_SHM_H_
+#ifndef _OFI_SHM_H_
+#define _OFI_SHM_H_
 
 #include "config.h"
 
 #include <stdint.h>
 #include <stddef.h>
 
-#include <fi_atom.h>
-#include <fi_proto.h>
-#include <fi_mem.h>
-#include <fi_rbuf.h>
+#include <ofi_atom.h>
+#include <ofi_proto.h>
+#include <ofi_mem.h>
+#include <ofi_rbuf.h>
 
 #include <rdma/providers/fi_prov.h>
 
@@ -260,4 +260,4 @@ void	smr_free(struct smr_region *smr);
 }
 #endif
 
-#endif /* _FI_SHM_H_ */
+#endif /* _OFI_SHM_H_ */

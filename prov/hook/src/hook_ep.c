@@ -31,7 +31,7 @@
  */
 
 #include <stdlib.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include "hook.h"
 
 

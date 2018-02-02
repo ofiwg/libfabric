@@ -39,8 +39,8 @@
 
 #include <rdma/fi_errno.h>
 
-#include "fi.h"
-#include "fi_list.h"
+#include "ofi.h"
+#include "ofi_list.h"
 
 
 extern int ofi_init;

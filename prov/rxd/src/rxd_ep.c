@@ -32,8 +32,8 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <fi_mem.h>
-#include <fi_iov.h>
+#include <ofi_mem.h>
+#include <ofi_iov.h>
 #include "rxd.h"
 
 int rxd_progress_spin_count = 1000;
@@ -202,7 +202,7 @@ int rxd_ep_repost_buff(struct rxd_rx_buf *buf)
 }
 
 /*
- * See fi_proto.h for how conn_data is being used.
+ * See ofi_proto.h for how conn_data is being used.
  */
 static uint64_t rxd_ep_conn_data(struct rxd_ep *ep)
 {

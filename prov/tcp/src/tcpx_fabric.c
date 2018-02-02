@@ -32,14 +32,14 @@
 
 #include <rdma/fi_errno.h>
 
-#include <prov.h>
+#include <ofi_prov.h>
 #include "tcpx.h"
 #include <poll.h>
 
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <net/if.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 struct fi_ops_fabric tcpx_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),

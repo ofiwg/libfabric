@@ -38,7 +38,7 @@
 #define FABRIC_DIRECT
 #endif	/* FABRIC_DIRECT_ENABLED */
 
-#include <fi.h>
+#include <ofi.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>

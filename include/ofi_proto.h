@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_PROTO_H_
-#define _FI_PROTO_H_
+#ifndef _OFI_PROTO_H_
+#define _OFI_PROTO_H_
 
 #include "config.h"
 
@@ -193,4 +193,4 @@ struct ofi_rma_ioc {
 }
 #endif
 
-#endif /* _FI_PROTO_H_ */
+#endif /* _OFI_PROTO_H_ */

@@ -35,7 +35,7 @@
 #include <rdma/fi_errno.h>
 #include <ofi_net.h>
 
-#include <prov.h>
+#include <ofi_prov.h>
 #include "rxm.h"
 
 char *rxm_proto_state_str[] = {

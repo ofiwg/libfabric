@@ -32,7 +32,7 @@
 
 #include "config.h"
 
-#include <fi_mem.h>
+#include <ofi_mem.h>
 
 #include "fi_verbs.h"
 #include "ep_rdm/verbs_rdm.h"

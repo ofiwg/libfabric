@@ -33,7 +33,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 
-#include <fi_list.h>
+#include <ofi_list.h>
 #include "../fi_verbs.h"
 #include "verbs_rdm.h"
 #include "verbs_queuing.h"

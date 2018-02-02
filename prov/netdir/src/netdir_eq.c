@@ -38,7 +38,7 @@
 #include "netdir_log.h"
 #include "netdir_iface.h"
 
-#include "fi_util.h"
+#include "ofi_util.h"
 
 static int ofi_nd_eq_close(struct fid *fid);
 static ssize_t ofi_nd_eq_read(struct fid_eq *eq, uint32_t *event,

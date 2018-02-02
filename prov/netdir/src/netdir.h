@@ -42,7 +42,7 @@
 #include <assert.h>
 
 #include <ndspi.h>
-#include "fi_osd.h"
+#include "ofi_osd.h"
 
 #ifdef __cplusplus
 extern "C" {

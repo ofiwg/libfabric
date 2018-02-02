@@ -38,7 +38,7 @@
 #include "netdir_iface.h"
 
 #include "rdma/fabric.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 static int ofi_nd_cntr_close(struct fid *fid);
 static uint64_t ofi_nd_cntr_read(struct fid_cntr *cntr);

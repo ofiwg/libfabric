@@ -35,13 +35,13 @@
 #ifndef _GNIX_CQ_H_
 #define _GNIX_CQ_H_
 
-#include <fi.h>
+#include <ofi.h>
 
 #include "gnix_progress.h"
 #include "gnix_queue.h"
 #include "gnix_wait.h"
 #include "gnix_util.h"
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <stdbool.h>
 
 #define GNIX_CQ_DEFAULT_FORMAT struct fi_cq_entry

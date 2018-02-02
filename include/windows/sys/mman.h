@@ -14,7 +14,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "fi_osd.h"
+#include "ofi_osd.h"
 
 /* Unix specific macro */
 #define MAP_SHARED	0x01		/* Share changes.  */

@@ -34,7 +34,7 @@
 #include <string.h>
 #include <sys/uio.h>
 
-#include "fi_iov.h"
+#include "ofi_iov.h"
 #include "smr.h"
 
 

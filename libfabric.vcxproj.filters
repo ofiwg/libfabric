@@ -410,25 +410,25 @@
     <ClInclude Include="include\fasthash.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi.h">
+    <ClInclude Include="include\ofi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_enosys.h">
+    <ClInclude Include="include\ofi_enosys.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_indexer.h">
+    <ClInclude Include="include\ofi_indexer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_list.h">
+    <ClInclude Include="include\ofi_list.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_rbuf.h">
+    <ClInclude Include="include\ofi_rbuf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_signal.h">
+    <ClInclude Include="include\ofi_signal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\prov.h">
+    <ClInclude Include="include\ofi_prov.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\rbtree.h">
@@ -470,31 +470,34 @@
     <ClInclude Include="include\windows\config.h">
       <Filter>Header Files\windows</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_abi.h">
+    <ClInclude Include="include\ofi_abi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_atom.h">
+    <ClInclude Include="include\ofi_atom.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_file.h">
+    <ClInclude Include="include\ofi_file.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_lock.h">
+    <ClInclude Include="include\ofi_iov.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_mem.h">
+    <ClInclude Include="include\ofi_lock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_mem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_perf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_osd.h">
+    <ClInclude Include="include\ofi_osd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_proto.h">
+    <ClInclude Include="include\ofi_proto.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_util.h">
+    <ClInclude Include="include\ofi_util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\poll.h">

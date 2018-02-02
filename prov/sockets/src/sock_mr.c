@@ -35,7 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fi_util.h>
+#include <ofi_util.h>
 
 #include "sock.h"
 #include "sock_util.h"

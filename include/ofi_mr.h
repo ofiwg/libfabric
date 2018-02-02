@@ -40,10 +40,10 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
-#include <fi.h>
-#include <fi_atom.h>
-#include <fi_lock.h>
-#include <fi_list.h>
+#include <ofi.h>
+#include <ofi_atom.h>
+#include <ofi_lock.h>
+#include <ofi_list.h>
 #include <rbtree.h>
 
 

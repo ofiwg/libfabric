@@ -48,10 +48,10 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#include "fi.h"
-#include "fi_osd.h"
-#include "fi_file.h"
-#include "fi_util.h"
+#include "ofi.h"
+#include "ofi_osd.h"
+#include "ofi_file.h"
+#include "ofi_util.h"
 
 #include "rdma/fi_errno.h"
 #include "rdma/providers/fi_log.h"

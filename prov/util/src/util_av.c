@@ -48,7 +48,7 @@
 #include <ifaddrs.h>
 #endif
 
-#include <fi_util.h>
+#include <ofi_util.h>
 
 
 enum {

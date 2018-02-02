@@ -34,7 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include <fi_iov.h>
+#include <ofi_iov.h>
 #include "rxd.h"
 
 /*

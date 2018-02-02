@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 #include <pthread.h>
-#include <fi.h>
+#include <ofi.h>
 #include <rdma/fi_errno.h>
 
 #define GNIX_BITMAP_BUCKET_BITS 6

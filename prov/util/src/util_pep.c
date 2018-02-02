@@ -33,8 +33,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fi_enosys.h>
-#include <fi_util.h>
+#include <ofi_enosys.h>
+#include <ofi_util.h>
 
 int ofi_pep_bind_eq(struct util_pep *pep, struct util_eq *eq, uint64_t flags)
 {

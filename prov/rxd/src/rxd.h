@@ -46,12 +46,12 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 
-#include <fi.h>
-#include <fi_proto.h>
-#include <fi_enosys.h>
-#include <fi_rbuf.h>
-#include <fi_list.h>
-#include <fi_util.h>
+#include <ofi.h>
+#include <ofi_proto.h>
+#include <ofi_enosys.h>
+#include <ofi_rbuf.h>
+#include <ofi_list.h>
+#include <ofi_util.h>
 
 #ifndef _RXD_H_
 #define _RXD_H_

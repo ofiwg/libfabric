@@ -49,17 +49,17 @@
 #include <netdb.h>
 #include <netinet/in.h>
 
-#include <fi.h>
-#include <fi_atom.h>
+#include <ofi.h>
+#include <ofi_atom.h>
 #include <ofi_atomic.h>
 #include <ofi_mr.h>
-#include <fi_enosys.h>
-#include <fi_indexer.h>
-#include <fi_rbuf.h>
-#include <fi_list.h>
-#include <fi_file.h>
-#include <fi_osd.h>
-#include <fi_util.h>
+#include <ofi_enosys.h>
+#include <ofi_indexer.h>
+#include <ofi_rbuf.h>
+#include <ofi_list.h>
+#include <ofi_file.h>
+#include <ofi_osd.h>
+#include <ofi_util.h>
 
 #ifndef _SOCK_H_
 #define _SOCK_H_

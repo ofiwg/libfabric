@@ -30,10 +30,10 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ENOSYS_H_
-#define _FI_ENOSYS_H_
+#ifndef _OFI_ENOSYS_H_
+#define _OFI_ENOSYS_H_
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -458,4 +458,4 @@ int fi_no_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 }
 #endif
 
-#endif /* _FI_ENOSYS_H_ */
+#endif /* _OFI_ENOSYS_H_ */

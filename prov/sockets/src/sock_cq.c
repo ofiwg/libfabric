@@ -42,8 +42,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <fi_list.h>
-#include <fi.h>
+#include <ofi_list.h>
+#include <ofi.h>
 
 #include "sock.h"
 #include "sock_util.h"

@@ -50,11 +50,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include <fi_signal.h>
+#include <ofi_signal.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/fi_errno.h>
-#include <fi.h>
-#include <fi_util.h>
+#include <ofi.h>
+#include <ofi_util.h>
 
 struct fi_provider core_prov = {
 	.name = "core",

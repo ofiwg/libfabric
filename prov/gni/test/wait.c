@@ -33,7 +33,7 @@
 
 #include "gnix.h"
 #include "gnix_wait.h"
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <string.h>
 
 #include <criterion/criterion.h>
