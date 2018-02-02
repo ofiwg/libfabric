@@ -49,7 +49,7 @@
 #include <sys/time.h>
 
 #include "fi.h"
-#include "fi_osd.h"
+#include "ofi_osd.h"
 #include "ofi_file.h"
 #include "fi_util.h"
 

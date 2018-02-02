@@ -40,7 +40,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 
 #ifdef __cplusplus

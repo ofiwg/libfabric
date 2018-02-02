@@ -43,7 +43,7 @@
 #include <sys/socket.h>
 
 #include <ofi_file.h>
-#include <fi_osd.h>
+#include <ofi_osd.h>
 #include <rdma/fi_errno.h>
 
 

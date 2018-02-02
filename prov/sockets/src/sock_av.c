@@ -52,7 +52,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#include "fi_osd.h"
+#include "ofi_osd.h"
 #include "fi_util.h"
 
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_AV, __VA_ARGS__)

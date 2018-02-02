@@ -36,7 +36,7 @@
 #include <fi_enosys.h>
 #include <ofi_mem.h>
 #include <fi.h>
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 static inline void util_buf_set_region(union util_buf *buf,
 				       struct util_buf_region *region,

@@ -35,7 +35,7 @@
 
 #include "config.h"
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 
 #ifdef __cplusplus

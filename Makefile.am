@@ -130,7 +130,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_list.h			\
 	include/ofi_lock.h			\
 	include/ofi_mem.h			\
-	include/fi_osd.h			\
+	include/ofi_osd.h			\
 	include/ofi_proto.h			\
 	include/ofi_rbuf.h			\
 	include/ofi_shm.h			\

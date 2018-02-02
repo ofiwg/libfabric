@@ -491,7 +491,7 @@
     <ClInclude Include="include\ofi_perf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_osd.h">
+    <ClInclude Include="include\ofi_osd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_proto.h">

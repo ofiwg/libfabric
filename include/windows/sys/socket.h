@@ -14,7 +14,7 @@
 #ifndef _FI_WIN_SYS_SOCKET_H_
 #define _FI_WIN_SYS_SOCKET_H_
 
-#include "fi_osd.h"
+#include "ofi_osd.h"
 #include "rdma/fabric.h"
 
 #ifdef __cplusplus

@@ -39,7 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ofi_list.h>
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 
 #ifdef INCLUDE_VALGRIND

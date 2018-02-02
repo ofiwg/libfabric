@@ -40,7 +40,7 @@
 #include <stdlib.h>
 
 #include <ofi_lock.h>
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 #ifdef HAVE_ATOMICS
 #  include <stdatomic.h>

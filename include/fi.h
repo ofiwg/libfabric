@@ -56,7 +56,7 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 
 
 #ifdef __cplusplus

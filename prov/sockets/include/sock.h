@@ -58,7 +58,7 @@
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
 #include <ofi_file.h>
-#include <fi_osd.h>
+#include <ofi_osd.h>
 #include <fi_util.h>
 
 #ifndef _SOCK_H_

@@ -39,7 +39,7 @@
 #include <ifaddrs.h>
 
 #include "fi.h"
-#include "fi_osd.h"
+#include "ofi_osd.h"
 #include "ofi_file.h"
 #include "ofi_list.h"
 

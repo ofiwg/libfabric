@@ -59,7 +59,7 @@
 #include <ofi_rbuf.h>
 #include <ofi_signal.h>
 #include <fi_enosys.h>
-#include <fi_osd.h>
+#include <ofi_osd.h>
 #include <ofi_indexer.h>
 
 #include "rbtree.h"

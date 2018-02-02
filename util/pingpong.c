@@ -52,7 +52,7 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 
-#include <fi_osd.h>
+#include <ofi_osd.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>

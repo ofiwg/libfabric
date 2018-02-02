@@ -521,12 +521,12 @@
     <ClCompile Include="prov\udp\src\udpx_ep.c" />
     <ClCompile Include="prov\udp\src\udpx_fabric.c" />
     <ClCompile Include="prov\udp\src\udpx_init.c">
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">fi_osd.h</ForcedIncludeFiles>
-      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">fi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">ofi_osd.h</ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="prov\util\src\util_attr.c" />
     <ClCompile Include="prov\util\src\util_atomic.c" />
@@ -577,7 +577,7 @@
     <ClInclude Include="include\ofi_list.h" />
     <ClInclude Include="include\ofi_lock.h" />
     <ClInclude Include="include\ofi_mem.h" />
-    <ClInclude Include="include\fi_osd.h" />
+    <ClInclude Include="include\ofi_osd.h" />
     <ClInclude Include="include\ofi_perf.h" />
     <ClInclude Include="include\ofi_proto.h" />
     <ClInclude Include="include\ofi_rbuf.h" />

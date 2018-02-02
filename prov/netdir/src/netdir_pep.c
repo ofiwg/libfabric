@@ -39,7 +39,7 @@
 #include "netdir.h"
 
 #include "fi.h"
-#include "fi_osd.h"
+#include "ofi_osd.h"
 #include "fi_util.h"
 
 #include "netdir_ov.h"
