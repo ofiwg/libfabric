@@ -42,7 +42,7 @@
 #include "rdma/fabric.h"
 
 #include "ofi_mem.h"
-#include "fi_list.h"
+#include "ofi_list.h"
 #include "rdma/fi_eq.h"
 #include "rdma/fi_domain.h"
 #include "rdma/fi_endpoint.h"

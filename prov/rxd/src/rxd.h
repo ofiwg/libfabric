@@ -50,7 +50,7 @@
 #include <ofi_proto.h>
 #include <fi_enosys.h>
 #include <ofi_rbuf.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <fi_util.h>
 
 #ifndef _RXD_H_

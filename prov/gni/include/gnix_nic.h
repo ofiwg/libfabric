@@ -37,7 +37,7 @@
 #if HAVE_CONFIG_H
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <assert.h>
 
 #include "gnix.h"

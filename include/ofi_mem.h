@@ -38,7 +38,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <fi_osd.h>
 
 

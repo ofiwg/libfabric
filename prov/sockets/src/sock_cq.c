@@ -42,7 +42,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <fi.h>
 
 #include "sock.h"

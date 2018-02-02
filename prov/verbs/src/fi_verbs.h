@@ -67,7 +67,7 @@
 #include "fi_enosys.h"
 #include <uthash.h>
 #include "prov.h"
-#include "fi_list.h"
+#include "ofi_list.h"
 #include "ofi_signal.h"
 #include "fi_util.h"
 

@@ -54,7 +54,7 @@
 #include <fi.h>
 #include <fi_enosys.h>
 #include <ofi_rbuf.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <ofi_signal.h>
 #include <fi_util.h>
 #include <ofi_proto.h>

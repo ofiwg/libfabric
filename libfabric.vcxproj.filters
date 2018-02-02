@@ -419,7 +419,7 @@
     <ClInclude Include="include\ofi_indexer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_list.h">
+    <ClInclude Include="include\ofi_list.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_rbuf.h">

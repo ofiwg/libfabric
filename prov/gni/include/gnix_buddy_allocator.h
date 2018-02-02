@@ -36,7 +36,7 @@
 #define _GNIX_BUDDY_ALLOCATOR_H_
 
 #include <stdlib.h>
-#include "fi_list.h"
+#include "ofi_list.h"
 #include "gnix_bitmap.h"
 #include "gnix_util.h"
 #include "gnix.h"

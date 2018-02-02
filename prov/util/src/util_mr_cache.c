@@ -36,7 +36,7 @@
 #include <fi_util.h>
 #include <ofi_iov.h>
 #include <ofi_mr.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 
 
 static int util_mr_find_overlap(void *a, void *b)

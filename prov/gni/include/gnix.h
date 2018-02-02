@@ -60,7 +60,7 @@
 #include <ofi_atomic.h>
 #include <fi_enosys.h>
 #include <ofi_rbuf.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <ofi_file.h>
 
 #ifdef HAVE_UDREG

@@ -37,7 +37,7 @@
 #ifndef _USDF_POLL_H_
 #define _USDF_POLL_H_
 
-#include "fi_list.h"
+#include "ofi_list.h"
 
 struct usdf_poll {
 	struct fid_poll		poll_fid;

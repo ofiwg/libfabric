@@ -127,7 +127,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_file.h			\
 	include/ofi_indexer.h			\
 	include/ofi_iov.h			\
-	include/fi_list.h			\
+	include/ofi_list.h			\
 	include/ofi_lock.h			\
 	include/ofi_mem.h			\
 	include/fi_osd.h			\

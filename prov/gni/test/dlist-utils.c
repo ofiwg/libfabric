@@ -34,7 +34,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 
-#include <fi_list.h>
+#include <ofi_list.h>
 
 #include "gnix_util.h"
 

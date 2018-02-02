@@ -36,7 +36,7 @@
 
 #include <pthread.h>
 #include <rdma/fi_eq.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 
 #define WAIT_SUB (FI_LOG_CQ | FI_LOG_EQ)
 

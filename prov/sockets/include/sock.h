@@ -56,7 +56,7 @@
 #include <fi_enosys.h>
 #include <ofi_indexer.h>
 #include <ofi_rbuf.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 #include <ofi_file.h>
 #include <fi_osd.h>
 #include <fi_util.h>

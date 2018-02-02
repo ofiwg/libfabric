@@ -142,7 +142,7 @@ extern ofi_atomic32_t gnix_debug_next_tid;
 #endif
 
 /* slist and dlist utilities */
-#include "fi_list.h"
+#include "ofi_list.h"
 
 static inline void dlist_node_init(struct dlist_entry *e)
 {

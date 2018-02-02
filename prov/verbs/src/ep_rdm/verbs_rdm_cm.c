@@ -32,7 +32,7 @@
 
 #include <malloc.h>
 #include <rdma/rdma_cma.h>
-#include <fi_list.h>
+#include <ofi_list.h>
 
 #include "../fi_verbs.h"
 #include "verbs_utils.h"

@@ -37,7 +37,7 @@
 #ifndef _USDF_WAIT_H_
 #define _USDF_WAIT_H_
 
-#include "fi_list.h"
+#include "ofi_list.h"
 
 struct usdf_wait {
 	struct fid_wait		wait_fid;
