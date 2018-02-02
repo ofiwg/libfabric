@@ -410,7 +410,7 @@
     <ClInclude Include="include\fasthash.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi.h">
+    <ClInclude Include="include\ofi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_enosys.h">

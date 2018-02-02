@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_util.h>
 #include "rxm.h"
 

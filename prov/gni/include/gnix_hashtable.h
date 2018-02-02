@@ -36,7 +36,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_list.h>
 
 #include "gnix_util.h"

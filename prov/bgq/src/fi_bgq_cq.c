@@ -33,7 +33,7 @@
 #include <ofi_enosys.h>
 #include <stdlib.h>
 
-#include <fi.h>
+#include <ofi.h>
 
 #include "rdma/bgq/fi_bgq_spi.h"
 

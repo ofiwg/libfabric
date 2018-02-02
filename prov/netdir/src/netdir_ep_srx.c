@@ -43,7 +43,7 @@
 #include "rdma/fabric.h"
 #include "rdma/fi_endpoint.h"
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_util.h"
 
 static ssize_t ofi_nd_srx_recv(struct fid_ep *ep, void *buf, size_t len,

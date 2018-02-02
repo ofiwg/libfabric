@@ -49,7 +49,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_atom.h>
 #include <ofi_atomic.h>
 #include <ofi_mr.h>

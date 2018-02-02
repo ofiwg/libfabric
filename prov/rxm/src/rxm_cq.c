@@ -34,7 +34,7 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "fi.h"
+#include "ofi.h"
 
 #include "rxm.h"
 

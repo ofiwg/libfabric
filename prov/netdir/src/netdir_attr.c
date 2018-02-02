@@ -32,7 +32,7 @@
 
 #ifdef _WIN32
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_util.h"
 #include "rdma/fabric.h"
 

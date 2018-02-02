@@ -52,7 +52,7 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_mr.h>
 #include <ofi_list.h>
 #include <ofi_mem.h>

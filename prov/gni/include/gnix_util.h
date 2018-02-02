@@ -41,7 +41,7 @@
 #define _GNIX_UTIL_H_
 
 #include <stdio.h>
-#include <fi.h>
+#include <ofi.h>
 
 extern struct fi_provider gnix_prov;
 #if HAVE_CRITERION

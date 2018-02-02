@@ -45,7 +45,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_enosys.h>
 #include <ofi_util.h>
 #include <ofi_list.h>

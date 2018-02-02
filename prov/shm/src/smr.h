@@ -51,7 +51,7 @@
 #include <rdma/fi_trigger.h>
 #include <rdma/providers/fi_prov.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_enosys.h>
 #include <ofi_shm.h>
 #include <ofi_rbuf.h>

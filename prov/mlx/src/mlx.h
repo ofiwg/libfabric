@@ -56,7 +56,7 @@ extern "C" {
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <rdma/providers/fi_log.h>
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_lock.h>
 #include <ofi_list.h>
 #include "ofi_enosys.h"

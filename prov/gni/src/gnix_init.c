@@ -37,7 +37,7 @@
 #include "gnix.h"
 #include "gnix_auth_key.h"
 #include "gnix_util.h"
-#include "fi.h"
+#include "ofi.h"
 #include "prov.h"
 
 /**

@@ -43,7 +43,7 @@
 #include <sys/types.h>
 
 #include <ofi_list.h>
-#include <fi.h>
+#include <ofi.h>
 
 #include "sock.h"
 #include "sock_util.h"

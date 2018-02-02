@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 #include "rdma/bgq/fi_bgq.h"
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_enosys.h>
 #include <stdlib.h>
 

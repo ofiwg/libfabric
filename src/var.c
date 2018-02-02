@@ -39,7 +39,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_list.h"
 
 

@@ -37,7 +37,7 @@
 
 #include "rdma/fabric.h"
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_osd.h"
 
 #include "netdir.h"

@@ -56,7 +56,7 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_atomic.h>
 #include <ofi_enosys.h>
 #include <ofi_rbuf.h>

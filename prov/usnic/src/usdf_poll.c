@@ -34,7 +34,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_enosys.h>
 #include <ofi_util.h>
 

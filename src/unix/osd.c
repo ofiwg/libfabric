@@ -48,7 +48,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_osd.h"
 #include "ofi_file.h"
 #include "ofi_util.h"

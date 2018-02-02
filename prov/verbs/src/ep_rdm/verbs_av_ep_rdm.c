@@ -36,7 +36,7 @@
 #include <netdb.h>
 #include <ctype.h>
 
-#include "fi.h"
+#include "ofi.h"
 
 #include "verbs_rdm.h"
 

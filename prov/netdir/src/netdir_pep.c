@@ -38,7 +38,7 @@
 
 #include "netdir.h"
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_osd.h"
 #include "ofi_util.h"
 

@@ -35,7 +35,7 @@
 
 #include "config.h"
 
-#include "fi.h"
+#include "ofi.h"
 
 #ifdef __cplusplus
 extern "C" {

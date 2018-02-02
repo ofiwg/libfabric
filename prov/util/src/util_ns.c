@@ -47,7 +47,7 @@
 
 #include <ofi_util.h>
 #include <rdma/providers/fi_log.h>
-#include <fi.h>
+#include <ofi.h>
 
 #include "rbtree.h"
 

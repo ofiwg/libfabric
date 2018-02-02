@@ -37,7 +37,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-#include "fi.h"
+#include "ofi.h"
 #include "rdma/fi_domain.h"
 
 #include "gnix.h"

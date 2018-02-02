@@ -35,7 +35,7 @@
 #include <sys/time.h>
 
 #include <ofi_util.h>
-#include <fi.h>
+#include <ofi.h>
 
 static DEFINE_LIST(fabric_list);
 extern struct ofi_common_locks common_locks;

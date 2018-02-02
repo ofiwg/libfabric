@@ -43,7 +43,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_file.h>
 #include <stdlib.h>
 

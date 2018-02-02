@@ -44,7 +44,7 @@
 #include "netdir_unexp.h"
 #include "netdir_cq.h"
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_util.h"
 #include "ofi_enosys.h"
 #include "rdma/fabric.h"

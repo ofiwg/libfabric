@@ -34,7 +34,7 @@
 
 #include <string.h>
 
-#include <fi.h>
+#include <ofi.h>
 #include <ofi_iov.h>
 
 uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count, uint64_t iov_offset,

@@ -42,7 +42,7 @@
 
 #include <rdma/fi_errno.h>
 #include "ofi_util.h"
-#include "fi.h"
+#include "ofi.h"
 #include "prov.h"
 
 #ifdef HAVE_LIBDL

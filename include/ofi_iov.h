@@ -36,7 +36,7 @@
 
 #include "config.h"
 
-#include <fi.h>
+#include <ofi.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>

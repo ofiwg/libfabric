@@ -62,7 +62,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 
-#include "fi.h"
+#include "ofi.h"
 #include "ofi_atomic.h"
 #include "ofi_enosys.h"
 #include <uthash.h>

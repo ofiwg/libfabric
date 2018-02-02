@@ -35,7 +35,7 @@
 #ifndef _GNIX_CQ_H_
 #define _GNIX_CQ_H_
 
-#include <fi.h>
+#include <ofi.h>
 
 #include "gnix_progress.h"
 #include "gnix_queue.h"

@@ -34,7 +34,7 @@
 #ifndef _GNIX_CNTR_H_
 #define _GNIX_CNTR_H_
 
-#include <fi.h>
+#include <ofi.h>
 
 #include "gnix.h"
 #include "gnix_progress.h"
