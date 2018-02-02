@@ -40,8 +40,8 @@ Endpoint capabilities
   endpoints* section for more information.
 
   Other supported capabilities include *FI_TRIGGER*, *FI_REMOTE_CQ_DATA*,
-  and *FI_SOURCE*. Furthermore, *FI_NAMED_RX_CTX* is supported when scalable
-  endpoints are enabled.
+  *FI_RMA_EVENT*, *FI_SOURCE*, and *FI_SOURCE_ERR*. Furthermore,
+  *FI_NAMED_RX_CTX* is supported when scalable endpoints are enabled.
 
 Modes
 : *FI_CONTEXT* is required for the *FI_TAGGED* and *FI_MSG*
@@ -51,7 +51,7 @@ Modes
   referenced by the pointer must remain untouched until the request
   has completed. If none of *FI_TAGGED* and *FI_MSG* is asked for,
   the *FI_CONTEXT* mode is not required.
-  
+
 Progress
 : The *psm2* provider requires manual progress. The application is
   expected to call *fi_cq_read* or *fi_cntr_read* function from time
@@ -75,16 +75,13 @@ Scalable endpoints
   *psm2* provider allocates all asked contexts upfront when the scalable
   endpoint is created. The same context is used for both Tx and Rx.
 
-  It is important to notice that each context requires a dedicated completion
-  queue or counter. Any attempt to bind to a context a completion queue or
-  counter that has already been bound to another context or endpoint will
-  fail. For optimal performance, it is also advised to avoid having multiple
-  threads accessing the same context.
+  For optimal performance, it is advised to avoid having multiple threads
+  accessing the same context, either directly by posting send/recv/read/write
+  request, or indirectly by polling associated completion queues or counters.
 
 Unsupported features
-: These features are unsupported: connection management, 
-  passive endpoint, shared send context, shared receive context,
-  and send/inject with immediate data over tagged message queue.
+: These features are unsupported: connection management, passive endpoint,
+  and shared receive context.
 
 # RUNTIME PARAMETERS
 
@@ -95,7 +92,7 @@ The *psm2* provider checks for the following environment variables:
   in the same job need to use the same UUID in order to be able to
   talk to each other. The PSM reference manual advises to keep UUID
   unique to each job. In practice, it generally works fine to reuse
-  UUID as long as (1) no two jobs with the same UUID are running at 
+  UUID as long as (1) no two jobs with the same UUID are running at
   the same time; and (2) previous jobs with the same UUID have exited
   normally. If running into "resource busy" or "connection failure"
   issues with unknown reason, it is advisable to manually set the UUID
@@ -109,16 +106,14 @@ The *psm2* provider checks for the following environment variables:
   by the *fi_av_insert* call. The main purpose of this name server is to
   allow simple client-server type applications (such as those in *fabtests*)
   to be written purely with libfabric, without using any out-of-band
-  communication mechanism. For such applications, the server would run first,
-  and the client would call *fi_getinfo* with the *node* parameter set to
-  the IP address or host name of the server. The resulting *fi_info* structure
-  would have the transport address of the server in the *dest_addr* field.
-
-  The name server won't work properly if there are more than one processes
-  from the same job (i.e. with the same UUID) running on the same node and
-  acting as servers. For such scenario it is recommended to have each
-  process getting local transport address with *fi_getname* and exchanging
-  the addresses with out-of-band mechanism.
+  communication mechanism. For such applications, the server would run first
+  to allow endpoints be created and registered with the name server, and
+  then the client would call *fi_getinfo* with the *node* parameter set to
+  the IP address or host name of the server. The resulting *fi_info*
+  structure would have the transport address of the endpoint created by the
+  server in the *dest_addr* field. Optionally the *service* parameter can
+  be used in addition to *node*. Notice that the *service* number is
+  interpreted by the provider and is not a TCP/IP port number.
 
   The name server is on by default. It can be turned off by setting the
   variable to 0. This may save a small amount of resource since a separate
@@ -137,7 +132,7 @@ The *psm2* provider checks for the following environment variables:
   higher bandwidth for large size RMA. It takes advantage of the extra tag bits
   available in PSM2 to separate the RMA traffic from the regular tagged message
   queue.
-   
+
   The option is on by default. To turn it off set the variable to 0.
 
 *FI_PSM2_DELAY*
@@ -163,10 +158,10 @@ The *psm2* provider checks for the following environment variables:
 *FI_PSM2_PROG_AFFINITY*
 : When set, specify the set of CPU cores to set the progress thread
   affinity to. The format is
-  `<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*`, 
+  `<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*`,
   where each triplet `<start>:<end>:<stride>` defines a block of
   core_ids. Both `<start>` and `<end>` can be either the `core_id`
-  (when >=0) or `core_id - num_cores` (when <0). 
+  (when >=0) or `core_id - num_cores` (when <0).
 
   By default affinity is not set.
 
