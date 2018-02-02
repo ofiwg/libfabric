@@ -51,7 +51,7 @@
 #include "fi.h"
 #include "ofi_osd.h"
 #include "ofi_file.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 #include "rdma/fi_errno.h"
 #include "rdma/providers/fi_log.h"

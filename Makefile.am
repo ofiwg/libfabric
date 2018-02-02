@@ -135,7 +135,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_rbuf.h			\
 	include/ofi_shm.h			\
 	include/ofi_signal.h			\
-	include/fi_util.h			\
+	include/ofi_util.h			\
 	include/ofi_atomic.h			\
 	include/ofi_mr.h			\
 	include/ofi_net.h			\

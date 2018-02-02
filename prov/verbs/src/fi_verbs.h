@@ -69,7 +69,7 @@
 #include "prov.h"
 #include "ofi_list.h"
 #include "ofi_signal.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 #ifdef HAVE_VERBS_EXP_H
 #include <infiniband/verbs_exp.h>

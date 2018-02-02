@@ -47,7 +47,7 @@
 #include "rdma/fi_endpoint.h"
 
 #include "fi.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 static ssize_t ofi_nd_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 			      void *desc, fi_addr_t src_addr, void *context);

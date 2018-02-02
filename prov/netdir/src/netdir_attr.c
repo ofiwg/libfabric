@@ -33,7 +33,7 @@
 #ifdef _WIN32
 
 #include "fi.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 #include "rdma/fabric.h"
 
 #include "netdir.h"

@@ -62,7 +62,7 @@ extern "C" {
 #include "ofi_enosys.h"
 #include <ofi_mem.h>
 #include <ofi_atom.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <prov.h>
 
 #include <arpa/inet.h>

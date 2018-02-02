@@ -62,7 +62,7 @@
 #include "usd.h"
 #include "usdf.h"
 #include "usdf_wait.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 static inline int
 usdf_eq_empty(struct usdf_eq *eq)

@@ -41,7 +41,7 @@
 #include <criterion/logging.h>
 #include "gnix_rdma_headers.h"
 #include "gnix.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 #define BLUE "\x1b[34m"
 #define COLOR_RESET "\x1b[0m"

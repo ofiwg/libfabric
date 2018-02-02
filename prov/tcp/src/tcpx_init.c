@@ -38,7 +38,7 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <net/if.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 /* TODO: merge with sock_get_list_of_addr() - sock_fabric.c */
 #if HAVE_GETIFADDRS

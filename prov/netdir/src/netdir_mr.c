@@ -39,7 +39,7 @@
 #include "netdir_iface.h"
 
 #include "fi.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 static int ofi_nd_mr_close(struct fid *fid);
 

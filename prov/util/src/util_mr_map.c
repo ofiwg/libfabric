@@ -32,7 +32,7 @@
 #include <config.h>
 #include <stdlib.h>
 #include <ofi_enosys.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <ofi_mr.h>
 #include <assert.h>
 #include <rbtree.h>

@@ -33,7 +33,7 @@
 
 #include <config.h>
 #include <stdlib.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <ofi_iov.h>
 #include <ofi_mr.h>
 #include <ofi_list.h>

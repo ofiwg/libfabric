@@ -57,7 +57,7 @@
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
 #include <ofi_signal.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <ofi_atomic.h>
 
 #ifndef _SMR_H_

@@ -497,7 +497,7 @@
     <ClInclude Include="include\ofi_proto.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_util.h">
+    <ClInclude Include="include\ofi_util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\poll.h">

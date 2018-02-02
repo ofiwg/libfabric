@@ -33,7 +33,7 @@
 
 #include <stdio.h>
 
-#include <fi_util.h>
+#include <ofi_util.h>
 
 #define OFI_MSG_CAPS	(FI_SEND | FI_RECV)
 #define OFI_RMA_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)

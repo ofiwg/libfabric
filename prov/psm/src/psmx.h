@@ -67,7 +67,7 @@ extern "C" {
 #include "ofi_atomic.h"
 #include "ofi_enosys.h"
 #include "ofi_list.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 #include "ofi_file.h"
 #include "rbtree.h"
 #include "version.h"

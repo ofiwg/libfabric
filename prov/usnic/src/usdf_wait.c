@@ -37,7 +37,7 @@
 /* This needs to be included for usdf.h */
 #include "fi.h"
 #include "ofi_enosys.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 #include "usdf.h"
 #include "usdf_cq.h"

@@ -34,7 +34,7 @@
 #include <string.h>
 
 #include <ofi_enosys.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 
 int ofi_domain_bind_eq(struct util_domain *domain, struct util_eq *eq)

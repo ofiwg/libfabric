@@ -45,7 +45,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>

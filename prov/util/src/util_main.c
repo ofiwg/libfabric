@@ -34,7 +34,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <fi.h>
 
 static DEFINE_LIST(fabric_list);

@@ -41,7 +41,7 @@
 #include <dirent.h>
 
 #include <rdma/fi_errno.h>
-#include "fi_util.h"
+#include "ofi_util.h"
 #include "fi.h"
 #include "prov.h"
 

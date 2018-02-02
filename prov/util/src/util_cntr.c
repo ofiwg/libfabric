@@ -34,7 +34,7 @@
 #include <string.h>
 
 #include <ofi_enosys.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 static int ofi_check_cntr_attr(const struct fi_provider *prov,
 			       const struct fi_cntr_attr *attr)

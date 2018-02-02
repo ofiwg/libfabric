@@ -48,7 +48,7 @@
 #include "rdma/fi_endpoint.h"
 
 #include "fi.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 static int ofi_nd_ep_control(struct fid *fid, int command, void *arg);
 static int ofi_nd_ep_close(struct fid *fid);

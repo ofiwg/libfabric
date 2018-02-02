@@ -34,7 +34,7 @@
 #include <string.h>
 
 #include <ofi_enosys.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 #define UTIL_DEF_CQ_SIZE (1024)
 

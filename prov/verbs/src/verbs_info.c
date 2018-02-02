@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include <fi_util.h>
+#include <ofi_util.h>
 
 #include <ifaddrs.h>
 #include <net/if.h>

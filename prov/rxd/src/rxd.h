@@ -51,7 +51,7 @@
 #include <ofi_enosys.h>
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 #ifndef _RXD_H_
 #define _RXD_H_

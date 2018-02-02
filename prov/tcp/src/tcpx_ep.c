@@ -42,7 +42,7 @@
 #include <net/if.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <unistd.h>
 #include <string.h>
 #include <poll.h>

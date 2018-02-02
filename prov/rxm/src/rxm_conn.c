@@ -34,7 +34,7 @@
 #include <string.h>
 
 #include <fi.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include "rxm.h"
 
 static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,

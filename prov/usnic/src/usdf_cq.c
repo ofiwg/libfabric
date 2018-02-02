@@ -55,7 +55,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_eq.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include "fi.h"
 #include "ofi_enosys.h"
 

@@ -39,7 +39,7 @@
 
 #include <rdma/fabric.h>
 #include <ofi_abi.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 
 /*

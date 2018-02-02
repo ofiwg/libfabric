@@ -47,7 +47,7 @@
 
 #include <fi.h>
 #include <ofi_enosys.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 #include <ofi_list.h>
 #include <ofi_proto.h>
 #include <ofi_iov.h>

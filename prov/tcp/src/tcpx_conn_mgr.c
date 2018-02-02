@@ -36,7 +36,7 @@
 #include "tcpx.h"
 #include <poll.h>
 #include <sys/types.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 static int poll_fd_resize(struct poll_fd_mgr *poll_mgr, int size)
 {

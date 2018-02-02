@@ -40,7 +40,7 @@
 
 #include "fi.h"
 #include "ofi_osd.h"
-#include "fi_util.h"
+#include "ofi_util.h"
 
 #include "netdir_ov.h"
 #include "netdir_err.h"

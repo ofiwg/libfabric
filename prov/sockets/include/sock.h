@@ -59,7 +59,7 @@
 #include <ofi_list.h>
 #include <ofi_file.h>
 #include <ofi_osd.h>
-#include <fi_util.h>
+#include <ofi_util.h>
 
 #ifndef _SOCK_H_
 #define _SOCK_H_
