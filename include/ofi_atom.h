@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ATOM_H_
-#define _FI_ATOM_H_
+#ifndef _OFI_ATOM_H_
+#define _OFI_ATOM_H_
 
 #include "config.h"
 
@@ -266,4 +266,4 @@ OFI_ATOMIC_DEFINE(64)
 }
 #endif
 
-#endif /* _FI_ATOM_H_ */
+#endif /* _OFI_ATOM_H_ */

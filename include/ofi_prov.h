@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _PROV_H_
-#define _PROV_H_
+#ifndef _OFI_PROV_H_
+#define _OFI_PROV_H_
 
 #include "config.h"
 
@@ -206,4 +206,4 @@ SHM_INI ;
 #  define SHM_INIT NULL
 #endif
 
-#endif /* _PROV_H_ */
+#endif /* _OFI_PROV_H_ */

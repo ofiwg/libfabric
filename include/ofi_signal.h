@@ -31,8 +31,8 @@
  *
  */
 
-#ifndef _FI_SIGNAL_H_
-#define _FI_SIGNAL_H_
+#ifndef _OFI_SIGNAL_H_
+#define _OFI_SIGNAL_H_
 
 #include "config.h"
 
@@ -183,4 +183,4 @@ void fi_epoll_close(struct fi_epoll *ep);
 
 #endif /* HAVE_EPOLL */
 
-#endif /* _FI_SIGNAL_H_ */
+#endif /* _OFI_SIGNAL_H_ */

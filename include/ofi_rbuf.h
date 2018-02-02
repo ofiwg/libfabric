@@ -32,8 +32,8 @@
  *
  */
 
-#if !defined(FI_RBUF_H)
-#define FI_RBUF_H
+#ifndef _OFI_RBUF_H_
+#define _OFI_RBUF_H_
 
 #include "config.h"
 
@@ -352,4 +352,4 @@ static inline size_t ofi_rbfdwait(struct ofi_ringbuffd *rbfd, int timeout)
 }
 
 
-#endif /* FI_RBUF_H */
+#endif /* _OFI_RBUF_H_ */

@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_UTIL_H_
-#define _FI_UTIL_H_
+#ifndef _OFI_UTIL_H_
+#define _OFI_UTIL_H_
 
 #if HAVE_CONFIG_H
 #  include <config.h>
@@ -762,4 +762,4 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 			  void *service);
 
-#endif
+#endif /* _OFI_UTIL_H_ */

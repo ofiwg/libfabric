@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_OSD_H_
-#define _FI_OSD_H_
+#ifndef _OFI_OSD_H_
+#define _OFI_OSD_H_
 
 
 /* We use macros to create atomic and complex function definitions,
@@ -76,4 +76,4 @@ typedef long double long_double;
 #define OFI_UNLIKELY(x)	(x)
 #endif
 
-#endif /* _FI_OSD_H_ */
+#endif /* _OFI_OSD_H_ */

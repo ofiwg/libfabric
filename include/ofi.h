@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_H_
-#define _FI_H_
+#ifndef _OFI_H_
+#define _OFI_H_
 
 #include "config.h"
 
@@ -207,4 +207,4 @@ static inline uint64_t ofi_key2idx(struct ofi_key_idx *key_idx, uint64_t key)
 }
 #endif
 
-#endif /* _FI_H_ */
+#endif /* _OFI_H_ */

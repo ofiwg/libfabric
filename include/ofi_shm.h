@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_SHM_H_
-#define _FI_SHM_H_
+#ifndef _OFI_SHM_H_
+#define _OFI_SHM_H_
 
 #include "config.h"
 
@@ -260,4 +260,4 @@ void	smr_free(struct smr_region *smr);
 }
 #endif
 
-#endif /* _FI_SHM_H_ */
+#endif /* _OFI_SHM_H_ */

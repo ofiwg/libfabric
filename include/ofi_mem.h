@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_MEM_H_
-#define _FI_MEM_H_
+#ifndef _OFI_MEM_H_
+#define _OFI_MEM_H_
 
 #include <config.h>
 
@@ -358,4 +358,4 @@ extern uint64_t OFI_RMA_PMEM;
 extern void (*ofi_pmem_commit)(const void *addr, size_t len);
 
 
-#endif /* _FI_MEM_H_ */
+#endif /* _OFI_MEM_H_ */

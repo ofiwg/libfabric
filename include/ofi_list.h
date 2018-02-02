@@ -32,8 +32,8 @@
  *
  */
 
-#ifndef _FI_LIST_H_
-#define _FI_LIST_H_
+#ifndef _OFI_LIST_H_
+#define _OFI_LIST_H_
 
 #include "config.h"
 
@@ -367,4 +367,4 @@ static inline int dlistfd_wait_avail(struct dlistfd_head *head, int timeout)
 	return ret ? ret : !dlistfd_empty(head);
 }
 
-#endif /* _FI_LIST_H_ */
+#endif /* _OFI_LIST_H_ */

@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_LOCK_H_
-#define _FI_LOCK_H_
+#ifndef _OFI_LOCK_H_
+#define _OFI_LOCK_H_
 
 #include "config.h"
 
@@ -138,4 +138,4 @@ static inline void fastlock_release(fastlock_t *lock)
 }
 #endif
 
-#endif /* _FI_LOCK_H_ */
+#endif /* _OFI_LOCK_H_ */
