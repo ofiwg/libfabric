@@ -44,25 +44,10 @@
 
 int tcpx_progress_close(struct tcpx_progress *progress)
 {
-	if (!dlist_empty(&progress->ep_list)) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"All EPs are not removed from progress\n");
-		return -FI_EBUSY;
-	}
-	fd_signal_free(&progress->signal);
-	fastlock_destroy(&progress->signal_lock);
-	fi_epoll_close(progress->epoll_set);
 	util_buf_pool_destroy(progress->posted_rx_pool);
 	util_buf_pool_destroy(progress->pe_entry_pool);
-	pthread_mutex_destroy(&progress->ep_list_lock);
+	fastlock_destroy(&progress->posted_rx_pool_lock);
 	return FI_SUCCESS;
-}
-
-void tcpx_progress_signal(struct tcpx_progress *progress)
-{
-	fastlock_acquire(&progress->signal_lock);
-	fd_signal_set(&progress->signal);
-	fastlock_release(&progress->signal_lock);
 }
 
 struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress)
@@ -184,47 +169,6 @@ void pe_entry_release(struct tcpx_pe_entry *pe_entry)
 
 	ofi_rbfree(&pe_entry->comm_buf);
 	util_buf_release(domain->progress.pe_entry_pool, pe_entry);
-}
-
-static void tcpx_progress_posted_rx_cleanup(struct tcpx_progress *progress,
-				     struct tcpx_ep *ep)
-
-{
-	struct dlist_entry *entry;
-	struct tcpx_posted_rx *posted_rx;
-
-	fastlock_acquire(&ep->posted_rx_list_lock);
-	while (!dlist_empty(&ep->posted_rx_list)) {
-		entry =  ep->posted_rx_list.next;
-		posted_rx = container_of(entry, struct tcpx_posted_rx, entry);
-		dlist_remove(entry);
-		util_buf_release(progress->posted_rx_pool, posted_rx);
-	}
-	fastlock_release(&ep->posted_rx_list_lock);
-}
-
-static void tcpx_progress_pe_entry_cleanup(struct tcpx_progress *progress,
-				    struct tcpx_ep *ep)
-
-{
-	struct dlist_entry *entry;
-	struct tcpx_pe_entry *pe_entry;
-
-	pthread_mutex_lock(&progress->ep_list_lock);
-	while (!dlist_empty(&ep->rx_queue)) {
-		entry = ep->rx_queue.next;
-		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
-		dlist_remove(entry);
-		pe_entry_release(pe_entry);
-	}
-
-	while (!dlist_empty(&ep->rx_queue)) {
-		entry = ep->rx_queue.next;
-		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
-		dlist_remove(entry);
-		pe_entry_release(pe_entry);
-	}
-	pthread_mutex_unlock(&progress->ep_list_lock);
 }
 
 static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
@@ -374,106 +318,46 @@ tx_pe_list:
 	process_tx_pe_entry(pe_entry);
 }
 
+/* todo this function will be cleaned up with send/recv changes */
+static void process_rx_requests(struct tcpx_ep *ep)
 
-static void process_rx_requests(struct tcpx_progress *progress)
 {
 	struct tcpx_pe_entry *pe_entry;
-	struct tcpx_ep *ep;
-	void *ep_contexts[TCPX_MAX_EPOLL_EVENTS];
-	int i, num_fds;
+	struct tcpx_domain *domain;
 
-	do {
-		num_fds = fi_epoll_wait(progress->epoll_set,
-					ep_contexts,
-					TCPX_MAX_EPOLL_EVENTS,0);
-		if (num_fds < 0)
-			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-				"epoll failed: %d\n", num_fds);
-		if (num_fds < 1)
-			return;
+	domain = container_of(ep->util_ep.domain,
+			      struct tcpx_domain,
+			      util_domain);
 
-		for (i = 0 ; i < num_fds ; i++) {
+	if (!dlist_empty(&ep->rx_queue))
+		return;
 
-			/* ignore signal fd ; already handled */
-			if (!ep_contexts[i])
-				continue;
+	pe_entry = pe_entry_alloc(&domain->progress);
+	if (!pe_entry) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			"failed to allocate pe entry");
+		return ;
+	}
 
-			ep = (struct tcpx_ep *) ep_contexts[i];
+	pe_entry->state = TCPX_XFER_STARTED;
+	pe_entry->ep = ep;
 
-			/* skip if there is pending pe entry already */
-			if (!dlist_empty(&ep->rx_queue))
-				continue;
-
-			pe_entry = pe_entry_alloc(progress);
-			if (!pe_entry) {
-				FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-					"failed to allocate pe entry");
-				return ;
-			}
-
-			pe_entry->state = TCPX_XFER_STARTED;
-			pe_entry->ep = ep;
-
-			dlist_insert_tail(&pe_entry->entry, &ep->rx_queue);
-		}
-	} while (num_fds == TCPX_MAX_EPOLL_EVENTS);
+	dlist_insert_tail(&pe_entry->entry, &ep->rx_queue);
 }
 
 void tcpx_progress(struct util_ep *util_ep)
 {
-	struct tcpx_progress *progress;
-	struct tcpx_domain *domain;
 	struct tcpx_ep *ep;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	domain = container_of(util_ep->domain, struct tcpx_domain, util_domain);
-	progress = &domain->progress;
-
-	process_rx_requests(progress);
+	process_rx_requests(ep);
 	process_pe_lists(ep);
 	return;
-}
-
-int tcpx_progress_ep_remove(struct tcpx_progress *progress, struct tcpx_ep *ep)
-{
-	int ret;
-
-	ret = fi_epoll_del(progress->epoll_set, ep->conn_fd);
-	if (ret)
-		return ret;
-
-	pthread_mutex_lock(&progress->ep_list_lock);
-	dlist_remove(&ep->ep_entry);
-	pthread_mutex_unlock(&progress->ep_list_lock);
-	tcpx_progress_signal(progress);
-
-	tcpx_progress_posted_rx_cleanup(progress, ep);
-	tcpx_progress_pe_entry_cleanup(progress, ep);
-	return FI_SUCCESS;
-}
-
-int tcpx_progress_ep_add(struct tcpx_progress *progress, struct tcpx_ep *ep)
-{
-	int ret;
-
-	ret = fi_epoll_add(progress->epoll_set, ep->conn_fd, ep);
-	if (ret)
-		return ret;
-
-	pthread_mutex_lock(&progress->ep_list_lock);
-	dlist_insert_tail(&ep->ep_entry, &progress->ep_list);
-	pthread_mutex_unlock(&progress->ep_list_lock);
-
-	tcpx_progress_signal(progress);
-	return FI_SUCCESS;
 }
 
 int tcpx_progress_init(struct tcpx_progress *progress)
 {
 	int ret;
-
-	dlist_init(&progress->ep_list);
-	pthread_mutex_init(&progress->ep_list_lock, NULL);
 
 	ret = util_buf_pool_create(&progress->pe_entry_pool,
 				   sizeof(struct tcpx_pe_entry),
@@ -481,8 +365,9 @@ int tcpx_progress_init(struct tcpx_progress *progress)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"failed to create buffer pool\n");
-		goto err1;
+		return ret;
 	}
+
 	fastlock_init(&progress->posted_rx_pool_lock);
 	ret = util_buf_pool_create(&progress->posted_rx_pool,
 				   sizeof(struct tcpx_posted_rx),
@@ -490,41 +375,11 @@ int tcpx_progress_init(struct tcpx_progress *progress)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"failed to create buffer pool\n");
-		goto err2;
+		goto err1;
 	}
-
-	fastlock_init(&progress->signal_lock);
-	ret = fd_signal_init(&progress->signal);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"signal init failed\n");
-		goto err3;
-	}
-
-	ret = fi_epoll_create(&progress->epoll_set);
-	if (ret < 0)
-	{
-                FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to create epoll set\n");
-		ret = -errno;
-                goto err4;
-	}
-
-	ret = fi_epoll_add(progress->epoll_set,
-			   progress->signal.fd[FI_READ_FD], NULL);
-	if (ret)
-		goto err5;
-
 	return FI_SUCCESS;
-err5:
-	fi_epoll_close(progress->epoll_set);
-err4:
-	fd_signal_free(&progress->signal);
-	fastlock_destroy(&progress->signal_lock);
-err3:
-	util_buf_pool_destroy(progress->posted_rx_pool);
-	fastlock_destroy(&progress->posted_rx_pool_lock);
-err2:
-	util_buf_pool_destroy(progress->pe_entry_pool);
 err1:
-	pthread_mutex_destroy(&progress->ep_list_lock);
+	fastlock_destroy(&progress->posted_rx_pool_lock);
+	util_buf_pool_destroy(progress->pe_entry_pool);
 	return ret;
 }
