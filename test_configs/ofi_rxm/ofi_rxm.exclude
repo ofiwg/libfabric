@@ -16,7 +16,6 @@ shared_av
 multi_mr
 atomic
 inj_complete
-rdm_cntr_pingpong
 cmatose
 rc_pingpong
 
