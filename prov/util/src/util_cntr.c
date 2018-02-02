@@ -209,32 +209,6 @@ static int util_cntr_close(struct fid *fid)
 	return 0;
 }
 
-int ofi_check_bind_cntr_flags(struct util_ep *ep, struct util_cntr *cntr,
-			      uint64_t flags)
-{
-	const struct fi_provider *prov = ep->domain->fabric->prov;
-
-	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_READ  | FI_WRITE |
-		      FI_REMOTE_READ | FI_REMOTE_WRITE)) {
-		FI_WARN(prov, FI_LOG_EP_CTRL,
-			"Unsupported flags\n");
-		return -FI_EBADFLAGS;
-	}
-
-	if (((flags & FI_TRANSMIT) && ep->tx_cntr) ||
-	    ((flags & FI_RECV) && ep->rx_cntr) ||
-	    ((flags & FI_READ) && ep->rd_cntr) ||
-	    ((flags & FI_WRITE) && ep->wr_cntr) ||
-	    ((flags & FI_REMOTE_READ) && ep->rem_rd_cntr) ||
-	    ((flags & FI_REMOTE_WRITE) && ep->rem_wr_cntr)) {
-		FI_WARN(prov, FI_LOG_EP_CTRL,
-			"Duplicate CNTR binding\n");
-		return -FI_EINVAL;
-	}
-
-	return FI_SUCCESS;
-}
-
 static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct util_cntr *cntr, void *context)
 {
