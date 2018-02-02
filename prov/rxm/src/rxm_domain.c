@@ -192,7 +192,8 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err1;
 
 	/* Force core provider to supply MR key */
-	if (FI_VERSION_LT(fabric->api_version, FI_VERSION(1, 5)))
+	if (FI_VERSION_LT(fabric->api_version, FI_VERSION(1, 5)) ||
+	    (msg_info->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)))
 		msg_info->domain_attr->mr_mode = FI_MR_BASIC;
 	else
 		msg_info->domain_attr->mr_mode |= FI_MR_PROV_KEY;

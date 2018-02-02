@@ -42,26 +42,41 @@ char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
 };
 
+/*
+ * - Support FI_MR_LOCAL/FI_LOCAL_MR as ofi_rxm can handle it.
+ * - The RxM FI_RMA implementation is pass-through but the provider can handle
+ *   FI_MR_PROV_KEY and FI_MR_VIRT_ADDR in its large message transfer rendezvous
+ *   protocol.
+ * - fi_alter_domain_attr should correctly set the mr_mode in return fi_info
+ *   based on hints.
+ */
+void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
+			       struct fi_info *core_info)
+{
+	/* We handle FI_MR_BASIC and FI_MR_SCALABLE irrespective of version */
+	if (hints && hints->domain_attr &&
+	    (hints->domain_attr->mr_mode & (FI_MR_SCALABLE | FI_MR_BASIC))) {
+		core_info->mode = FI_LOCAL_MR;
+		core_info->domain_attr->mr_mode = hints->domain_attr->mr_mode;
+	} else if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		core_info->mode |= FI_LOCAL_MR;
+		/* Specify FI_MR_UNSPEC (instead of FI_MR_BASIC) so that
+		 * providers that support only FI_MR_SCALABLE aren't dropped */
+		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
+	} else {
+		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
+		if (!hints || !ofi_rma_target_allowed(hints->caps))
+			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
+		else if (hints->domain_attr)
+			core_info->domain_attr->mr_mode |=
+				hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
+	}
+}
+
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
-	/* Support modes that ofi_rxm could handle */
-	if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
-		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
-	else
-		core_info->mode |= FI_LOCAL_MR;
-
-	/* The RxM FI_RMA implementation is pass-through but the provider
-	 * can handle FI_MR_PROV_KEY and FI_MR_VIRT_ADDR in its large message
-	 * transfer rendezvous protocol. */
-	if (!hints || !ofi_rma_target_allowed(hints->caps)) {
-		if (FI_VERSION_GE(version, FI_VERSION(1, 5)))
-			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-		else
-			/* specify FI_MR_UNSPEC (instead of FI_MR_BASIC) so that
-			 * providers that support FI_MR_SCALABLE aren't dropped */
-			core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
-	}
+	rxm_info_to_core_mr_modes(version, hints, core_info);
 
 	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
 
@@ -73,20 +88,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		if (hints->caps & (FI_MSG | FI_TAGGED))
 			core_info->caps |= FI_RMA;
 
-		/* No fi_info modes apart from those handled earlier in
-		 * this function can be passed along to the core provider */
-
 		if (hints->domain_attr) {
-			if (FI_VERSION_GE(version, FI_VERSION(1, 5))) {
-				/* Allow only those mr modes that can be
-				 * passed along to the core provider */
-				core_info->domain_attr->mr_mode |=
-					hints->domain_attr->mr_mode &
-					OFI_MR_BASIC_MAP;
-			} else if (ofi_rma_target_allowed(hints->caps)) {
-				core_info->domain_attr->mr_mode =
-					hints->domain_attr->mr_mode;
-			}
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
 		}
 		if (hints->tx_attr) {
