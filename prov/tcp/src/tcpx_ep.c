@@ -483,11 +483,31 @@ static struct fi_ops tcpx_ep_fi_ops = {
 	.control = tcpx_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };
+static int tcpx_ep_getopt(fid_t fid, int level, int optname,
+			  void *optval, size_t *optlen)
+{
+	if (level != FI_OPT_ENDPOINT)
+		return -ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_CM_DATA_SIZE:
+		if (*optlen < sizeof(size_t)) {
+			*optlen = sizeof(size_t);
+			return -FI_ETOOSMALL;
+		}
+		*((size_t *) optval) = TCPX_MAX_CM_DATA_SIZE;
+		*optlen = sizeof(size_t);
+		break;
+	default:
+		return -FI_ENOPROTOOPT;
+	}
+	return FI_SUCCESS;
+}
 
 static struct fi_ops_ep tcpx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = fi_no_cancel,
-	.getopt = fi_no_getopt,
+	.getopt = tcpx_ep_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
@@ -653,9 +673,26 @@ static int tcpx_verify_info(uint32_t version, struct fi_info *info)
 	return 0;
 }
 
+static int  tcpx_pep_getopt(fid_t fid, int level, int optname,
+			    void *optval, size_t *optlen)
+{
+	if ( level != FI_OPT_ENDPOINT ||
+	     optname != FI_OPT_CM_DATA_SIZE)
+		return -FI_ENOPROTOOPT;
+
+	if (*optlen < sizeof(size_t)) {
+		*optlen = sizeof(size_t);
+		return -FI_ETOOSMALL;
+	}
+
+	*((size_t *) optval) = TCPX_MAX_CM_DATA_SIZE;
+	*optlen = sizeof(size_t);
+	return FI_SUCCESS;
+}
+
 static struct fi_ops_ep tcpx_pep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.getopt = fi_no_getopt,
+	.getopt = tcpx_pep_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
