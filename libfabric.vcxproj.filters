@@ -413,7 +413,7 @@
     <ClInclude Include="include\fi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\fi_enosys.h">
+    <ClInclude Include="include\ofi_enosys.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_indexer.h">

@@ -59,7 +59,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 #include "fi.h"
-#include "fi_enosys.h"
+#include "ofi_enosys.h"
 #include "prov.h"
 
 #include "usnic_direct.h"

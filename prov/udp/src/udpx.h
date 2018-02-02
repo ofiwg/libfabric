@@ -54,7 +54,7 @@
 #include <rdma/fi_trigger.h>
 
 #include <fi.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
 #include <ofi_signal.h>

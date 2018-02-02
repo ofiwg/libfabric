@@ -31,7 +31,7 @@
  */
 #include <config.h>
 #include <stdlib.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <fi_util.h>
 #include <ofi_mr.h>
 #include <assert.h>

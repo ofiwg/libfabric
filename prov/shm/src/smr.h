@@ -52,7 +52,7 @@
 #include <rdma/providers/fi_prov.h>
 
 #include <fi.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <ofi_shm.h>
 #include <ofi_rbuf.h>
 #include <ofi_list.h>

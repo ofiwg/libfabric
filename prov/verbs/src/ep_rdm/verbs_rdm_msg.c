@@ -32,7 +32,7 @@
  */
 
 #include "ofi_iov.h"
-#include "fi_enosys.h"
+#include "ofi_enosys.h"
 
 #include "verbs_rdm.h"
 

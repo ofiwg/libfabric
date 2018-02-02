@@ -57,7 +57,7 @@
 #include <rdma/fi_eq.h>
 #include <fi_util.h>
 #include "fi.h"
-#include "fi_enosys.h"
+#include "ofi_enosys.h"
 
 #include "usnic_direct.h"
 #include "usd.h"

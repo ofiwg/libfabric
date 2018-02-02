@@ -58,7 +58,7 @@
 #include <ofi_mem.h>
 #include <ofi_rbuf.h>
 #include <ofi_signal.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <ofi_osd.h>
 #include <ofi_indexer.h>
 

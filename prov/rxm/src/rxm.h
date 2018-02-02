@@ -46,7 +46,7 @@
 #include <rdma/fi_eq.h>
 
 #include <fi.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <fi_util.h>
 #include <ofi_list.h>
 #include <ofi_proto.h>

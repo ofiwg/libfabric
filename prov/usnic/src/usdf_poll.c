@@ -35,7 +35,7 @@
  */
 
 #include <fi.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <fi_util.h>
 
 #include "usdf.h"

@@ -46,7 +46,7 @@
 
 #include "fi.h"
 #include "fi_util.h"
-#include "fi_enosys.h"
+#include "ofi_enosys.h"
 #include "rdma/fabric.h"
 #include "rdma/fi_domain.h"
 

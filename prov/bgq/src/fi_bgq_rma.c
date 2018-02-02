@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 #include "rdma/bgq/fi_bgq.h"
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <errno.h>
 
 /* "FI_BGQ_RMA_SPECIALIZED_FUNC(0)" is already declared via FABRIC_DIRECT */

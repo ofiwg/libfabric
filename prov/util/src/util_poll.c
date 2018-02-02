@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <fi_util.h>
 
 

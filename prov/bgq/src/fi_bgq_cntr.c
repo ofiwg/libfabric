@@ -31,7 +31,7 @@
  */
 #include "rdma/bgq/fi_bgq.h"
 #include <fi.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <stdlib.h>
 
 static int fi_bgq_close_cntr(struct fid *fid)

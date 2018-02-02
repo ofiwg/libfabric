@@ -64,7 +64,7 @@
 
 #include "fi.h"
 #include "ofi_atomic.h"
-#include "fi_enosys.h"
+#include "ofi_enosys.h"
 #include <uthash.h>
 #include "prov.h"
 #include "ofi_list.h"

@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <ofi_mem.h>
 #include <fi.h>
 #include <ofi_osd.h>

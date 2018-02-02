@@ -37,7 +37,7 @@
 
 #include "netdir.h"
 #include "fi_util.h"
-#include "fi_enosys.h"
+#include "ofi_enosys.h"
 #include "rdma/fabric.h"
 
 #include "netdir_ov.h"

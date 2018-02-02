@@ -53,7 +53,7 @@
 #include <ofi_atom.h>
 #include <ofi_atomic.h>
 #include <ofi_mr.h>
-#include <fi_enosys.h>
+#include <ofi_enosys.h>
 #include <ofi_indexer.h>
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
