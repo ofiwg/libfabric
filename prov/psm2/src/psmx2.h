@@ -169,11 +169,32 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_PRINT_TAG(tag96) \
 	printf("%s: %08x %08x %08x\n", __func__, tag96.tag0, tag96.tag1, tag96.tag2)
 
+/*
+ * psm2_mq_tag_t is a union type of 96 bits. These functions are used to
+ * access the first 64 bits without generating the warning "dereferencing
+ * type-punned pointer will break strict-aliasing rules". This is faster
+ * than combining two 32-bit values with bit operations.
+ *
+ * Notice:
+ * (1) *(uint64_t *)tag96 works, but *(uint64_t *)tag96->tag doesn't;
+ * (2) putting these statements directly inside the macros won't work.
+ */
+__attribute__((always_inline))
+static inline void psmx2_set_tag64(psm2_mq_tag_t *tag96, uint64_t tag64)
+{
+	*(uint64_t *)tag96 = tag64;
+}
+
+__attribute__((always_inline))
+static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
+{
+	return *(uint64_t *)tag96;
+}
+
 #define PSMX2_SET_TAG_INTERNAL(tag96,tag,cq_data,flags) \
 	do { \
-		(tag96).tag0 = (uint32_t)(tag); \
-		(tag96).tag1 = (uint32_t)((((uint64_t)(tag) >> 32) & \
-					   PSMX2_TAG_UPPER_MASK) | (flags)); \
+		psmx2_set_tag64(&(tag96),(tag) & PSMX2_TAG_MASK); \
+		(tag96).tag1 |= (flags); \
 		(tag96).tag2 = (cq_data); \
 	} while (0)
 
@@ -183,9 +204,7 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_SET_MASK(tagsel96,tag_mask,flag_mask) \
 	PSMX2_SET_TAG_INTERNAL(tagsel96,tag_mask,0,flag_mask)
 
-#define PSMX2_GET_TAG64(tag96) \
-	((tag96).tag0 | ((uint64_t)((tag96).tag1 & PSMX2_TAG_UPPER_MASK)<<32))
-
+#define PSMX2_GET_TAG64(tag96)	(psmx2_get_tag64(&(tag96)) & PSMX2_TAG_MASK)
 #define PSMX2_GET_FLAGS(tag96)	((tag96).tag1 & ~PSMX2_TAG_UPPER_MASK)
 #define PSMX2_GET_CQDATA(tag96)	((tag96).tag2)
 
