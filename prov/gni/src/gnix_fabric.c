@@ -52,7 +52,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
-#include "prov.h"
+#include "ofi_prov.h"
 
 #include "gnix.h"
 #include "gnix_nic.h"

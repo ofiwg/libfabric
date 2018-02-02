@@ -66,7 +66,7 @@
 #include "ofi_atomic.h"
 #include "ofi_enosys.h"
 #include <uthash.h>
-#include "prov.h"
+#include "ofi_prov.h"
 #include "ofi_list.h"
 #include "ofi_signal.h"
 #include "ofi_util.h"

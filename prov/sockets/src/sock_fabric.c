@@ -47,7 +47,7 @@
 #include <ifaddrs.h>
 #endif
 
-#include "prov.h"
+#include "ofi_prov.h"
 #include "ofi_osd.h"
 
 #include "sock.h"

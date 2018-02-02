@@ -60,7 +60,7 @@
 #include <rdma/fi_errno.h>
 #include "ofi.h"
 #include "ofi_enosys.h"
-#include "prov.h"
+#include "ofi_prov.h"
 
 #include "usnic_direct.h"
 #include "libnl_utils.h"

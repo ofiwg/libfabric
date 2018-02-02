@@ -143,7 +143,7 @@ src_libfabric_la_SOURCES =			\
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\
-	include/prov.h				\
+	include/ofi_prov.h			\
 	prov/hook/src/hook.h			\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\

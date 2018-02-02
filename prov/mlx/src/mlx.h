@@ -63,7 +63,7 @@ extern "C" {
 #include <ofi_mem.h>
 #include <ofi_atom.h>
 #include <ofi_util.h>
-#include <prov.h>
+#include <ofi_prov.h>
 
 #include <arpa/inet.h>
 #include <netdb.h>

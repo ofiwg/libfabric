@@ -38,7 +38,7 @@
 #include "gnix_auth_key.h"
 #include "gnix_util.h"
 #include "ofi.h"
-#include "prov.h"
+#include "ofi_prov.h"
 
 /**
  * @note  To make sure that static linking will work, there must be at

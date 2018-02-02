@@ -31,7 +31,7 @@
  */
 
 #include "psmx2.h"
-#include "prov.h"
+#include "ofi_prov.h"
 #include <glob.h>
 #include <dlfcn.h>
 

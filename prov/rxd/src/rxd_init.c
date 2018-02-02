@@ -32,7 +32,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include <prov.h>
+#include <ofi_prov.h>
 #include "rxd.h"
 
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,

@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 #include "rdma/bgq/fi_bgq.h"
-#include "prov.h"
+#include "ofi_prov.h"
 
 #include <errno.h>
 #include <stdlib.h>

@@ -583,7 +583,7 @@
     <ClInclude Include="include\ofi_rbuf.h" />
     <ClInclude Include="include\ofi_signal.h" />
     <ClInclude Include="include\ofi_util.h" />
-    <ClInclude Include="include\prov.h" />
+    <ClInclude Include="include\ofi_prov.h" />
     <ClInclude Include="include\rbtree.h" />
     <ClInclude Include="include\rdma\fabric.h" />
     <ClInclude Include="include\rdma\fi_atomic.h" />
