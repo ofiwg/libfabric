@@ -185,8 +185,6 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 	if (ofi_atomic_get32(&cntr->ref))
 		return -FI_EBUSY;
 
-	fastlock_destroy(&cntr->ep_list_lock);
-
 	if (cntr->wait) {
 		fi_poll_del(&cntr->wait->pollset->poll_fid,
 			    &cntr->cntr_fid.fid, 0);
@@ -194,6 +192,7 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 	}
 
 	ofi_atomic_dec32(&cntr->domain->ref);
+	fastlock_destroy(&cntr->ep_list_lock);
 	return 0;
 }
 
