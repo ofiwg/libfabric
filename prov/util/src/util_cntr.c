@@ -119,8 +119,7 @@ static int ofi_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
 
 	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
-	ofi_atomic_initialize64(&cntr->cnt, value);
-
+	ofi_atomic_set64(&cntr->cnt, value);
 	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
 
@@ -132,8 +131,7 @@ static int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
-	ofi_atomic_initialize64(&cntr->err, value);
-
+	ofi_atomic_set64(&cntr->err, value);
 	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
 
