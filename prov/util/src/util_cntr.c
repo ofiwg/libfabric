@@ -70,8 +70,8 @@ static int ofi_check_cntr_attr(const struct fi_provider *prov,
 static uint64_t ofi_cntr_read(struct fid_cntr *cntr_fid)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
-	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
+	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 	cntr->progress(cntr);
 
 	return ofi_atomic_get64(&cntr->cnt);
@@ -80,8 +80,8 @@ static uint64_t ofi_cntr_read(struct fid_cntr *cntr_fid)
 static uint64_t ofi_cntr_readerr(struct fid_cntr *cntr_fid)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
-	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
+	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 	cntr->progress(cntr);
 
 	return ofi_atomic_get64(&cntr->err);
@@ -90,11 +90,11 @@ static uint64_t ofi_cntr_readerr(struct fid_cntr *cntr_fid)
 static int ofi_cntr_add(struct fid_cntr *cntr_fid, uint64_t value)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+
 	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
 	ofi_atomic_add64(&cntr->cnt, value);
-
-	if(cntr->wait)
+	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
 
 	return FI_SUCCESS;
@@ -103,11 +103,11 @@ static int ofi_cntr_add(struct fid_cntr *cntr_fid, uint64_t value)
 static int ofi_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+
 	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
 	ofi_atomic_add64(&cntr->err, value);
-
-	if(cntr->wait)
+	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
 
 	return FI_SUCCESS;
@@ -116,11 +116,11 @@ static int ofi_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
 static int ofi_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+
 	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
-	ofi_atomic_initialize64(&cntr->cnt, value);
-
-	if(cntr->wait)
+	ofi_atomic_set64(&cntr->cnt, value);
+	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
 
 	return FI_SUCCESS;
@@ -131,9 +131,8 @@ static int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
 
-	ofi_atomic_initialize64(&cntr->err, value);
-
-	if(cntr->wait)
+	ofi_atomic_set64(&cntr->err, value);
+	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
 
 	return FI_SUCCESS;
@@ -141,32 +140,33 @@ static int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
 
 static int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
-	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
-	uint64_t current_ms;
-	uint64_t finish_ms;
-	uint64_t err = ofi_cntr_readerr(cntr_fid);
+	struct util_cntr *cntr;
+	uint64_t start, errcnt;
+	int ret;
 
-	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
-
-	if (threshold <= ofi_cntr_read(cntr_fid))
-		return FI_SUCCESS;
-
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->wait);
+	errcnt = ofi_atomic_get64(&cntr->err);
+	start = (timeout >= 0) ? fi_gettime_ms() : 0;
 
-	current_ms = fi_gettime_ms();
-	finish_ms = (timeout < 0) ? UINT64_MAX : current_ms + timeout;
-	for (; timeout < 0 || current_ms < finish_ms;
-	    current_ms = fi_gettime_ms()) {
-		timeout = timeout < 0 ? timeout : (int)(finish_ms - current_ms);
-		fi_wait(&cntr->wait->wait_fid, timeout);
+	do {
 		cntr->progress(cntr);
 		if (threshold <= ofi_atomic_get64(&cntr->cnt))
 			return FI_SUCCESS;
-		else if (err != ofi_atomic_get64(&cntr->err))
-			return -FI_EAVAIL;
-	}
 
-	return -FI_ETIMEDOUT;
+		if (errcnt != ofi_atomic_get64(&cntr->err))
+			return -FI_EAVAIL;
+
+		if (timeout >= 0) {
+			timeout -= (int) (fi_gettime_ms() - start);
+			if (timeout <= 0)
+				return -FI_ETIMEDOUT;
+		}
+
+		ret = fi_wait(&cntr->wait->wait_fid, timeout);
+	} while (!ret);
+
+	return ret;
 }
 
 static struct fi_ops_cntr util_cntr_ops = {
@@ -185,8 +185,6 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 	if (ofi_atomic_get32(&cntr->ref))
 		return -FI_EBUSY;
 
-	fastlock_destroy(&cntr->ep_list_lock);
-
 	if (cntr->wait) {
 		fi_poll_del(&cntr->wait->pollset->poll_fid,
 			    &cntr->cntr_fid.fid, 0);
@@ -194,6 +192,7 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 	}
 
 	ofi_atomic_dec32(&cntr->domain->ref);
+	fastlock_destroy(&cntr->ep_list_lock);
 	return 0;
 }
 
@@ -208,32 +207,6 @@ static int util_cntr_close(struct fid *fid)
 		return ret;
 	free(cntr);
 	return 0;
-}
-
-int ofi_check_bind_cntr_flags(struct util_ep *ep, struct util_cntr *cntr,
-			      uint64_t flags)
-{
-	const struct fi_provider *prov = ep->domain->fabric->prov;
-
-	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_READ  | FI_WRITE |
-		      FI_REMOTE_READ | FI_REMOTE_WRITE)) {
-		FI_WARN(prov, FI_LOG_EP_CTRL,
-			"Unsupported flags\n");
-		return -FI_EBADFLAGS;
-	}
-
-	if (((flags & FI_TRANSMIT) && ep->tx_cntr) ||
-	    ((flags & FI_RECV) && ep->rx_cntr) ||
-	    ((flags & FI_READ) && ep->rd_cntr) ||
-	    ((flags & FI_WRITE) && ep->wr_cntr) ||
-	    ((flags & FI_REMOTE_READ) && ep->rem_rd_cntr) ||
-	    ((flags & FI_REMOTE_WRITE) && ep->rem_wr_cntr)) {
-		FI_WARN(prov, FI_LOG_EP_CTRL,
-			"Duplicate CNTR binding\n");
-		return -FI_EINVAL;
-	}
-
-	return FI_SUCCESS;
 }
 
 static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,

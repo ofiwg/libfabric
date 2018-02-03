@@ -352,14 +352,13 @@ struct util_cntr {
 	ofi_cntr_progress_func	progress;
 };
 
-int ofi_check_bind_cntr_flags(struct util_ep *ep, struct util_cntr *cntr,
-			      uint64_t flags);
-
 void ofi_cntr_progress(struct util_cntr *cntr);
 int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context);
 int ofi_cntr_cleanup(struct util_cntr *cntr);
+
+
 /*
  * AV / addressing
  */
