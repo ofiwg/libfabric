@@ -259,7 +259,7 @@ void mlx_cleanup(void)
 struct fi_provider mlx_prov = {
 	.name = FI_MLX_FABRIC_NAME,
 	.version = FI_MLX_VERSION,
-	.fi_version = FI_VERSION(1, 5),
+	.fi_version = FI_VERSION(1, 6),
 	.getinfo = mlx_getinfo,
 	.fabric = mlx_fabric_open,
 	.cleanup = mlx_cleanup,
