@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -332,7 +332,7 @@ __desc_lkup_by_id(struct gnix_nic *nic, int desc_id)
 {
 	struct gnix_tx_descriptor *tx_desc;
 
-	assert((desc_id >= 0) && (desc_id < nic->max_tx_desc_id));
+	assert((desc_id >= 0) && (desc_id <= nic->max_tx_desc_id));
 	tx_desc = &nic->tx_desc_base[desc_id];
 	return tx_desc;
 }
