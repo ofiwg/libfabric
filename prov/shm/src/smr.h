@@ -117,7 +117,6 @@ struct smr_match_attr {
 	fi_addr_t	addr;
 	uint64_t	tag;
 	uint64_t	ignore;
-	uint64_t	ctx;
 };
 
 static inline int smr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
@@ -131,23 +130,18 @@ static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-struct smr_pending_cmd {
+struct smr_unexp_msg {
 	struct dlist_entry entry;
 	struct smr_cmd cmd;
 };
 
 DECLARE_FREESTACK(struct smr_ep_entry, smr_recv_fs);
-DECLARE_FREESTACK(struct smr_pending_cmd, smr_unexp_fs);
-DECLARE_FREESTACK(struct smr_pending_cmd, smr_pend_fs);
+DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
+DECLARE_FREESTACK(struct smr_cmd, smr_pend_fs);
 
-struct smr_recv_queue {
-	struct dlist_entry recv_list;
-	dlist_func_t *match_recv;
-};
-
-struct smr_pending_queue {
-	struct dlist_entry msg_list;
-	dlist_func_t *match_msg;
+struct smr_queue {
+	struct dlist_entry list;
+	dlist_func_t *match_func;
 };
 
 struct smr_fabric {
@@ -180,12 +174,11 @@ struct smr_ep {
 	const char		*name;
 	struct smr_region	*region;
 	struct smr_recv_fs	*recv_fs; /* protected by rx_cq lock */
-	struct smr_recv_queue	recv_queue;
-	struct smr_recv_queue	trecv_queue;
+	struct smr_queue	recv_queue;
+	struct smr_queue	trecv_queue;
 	struct smr_unexp_fs	*unexp_fs;
 	struct smr_pend_fs	*pend_fs;
-	struct smr_pending_queue	unexp_queue;
-	struct smr_pending_queue	pend_queue;
+	struct smr_queue	unexp_queue;
 };
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -196,20 +189,21 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 int smr_verify_peer(struct smr_ep *ep, int peer_id);
 
-void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, void *context,
+void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id,
 		uint32_t op, uint64_t tag, uint8_t datatype, uint8_t atomic_op,
 		uint64_t data, uint16_t op_flags);
 void smr_format_inline(struct smr_cmd *cmd, fi_addr_t peer_id,
-		const struct iovec *iov, size_t count, void *context,
+		const struct iovec *iov, size_t count,
 		uint32_t op, uint64_t tag, uint64_t data, uint16_t op_flags);
 void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
-		const struct iovec *iov, size_t count, void *context,
+		const struct iovec *iov, size_t count,
 		uint32_t op, uint64_t tag, uint64_t data, uint16_t op_flags,
 		struct smr_region *smr, struct smr_inject_buf *tx_buf);
 void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
 		const struct iovec *iov, size_t count, size_t total_len,
-		void *context, uint32_t op, uint64_t tag, uint64_t data,
-		uint16_t op_flags, struct smr_region *smr, struct smr_resp *resp);
+		uint32_t op, uint64_t tag, uint64_t data, uint16_t op_flags,
+		struct smr_region *smr, struct smr_resp *resp,
+		struct smr_cmd *pend);
 
 int smr_tx_comp(struct smr_ep *ep, void *context, uint64_t flags, uint64_t err);
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
@@ -233,6 +227,5 @@ uint64_t smr_mr_reg_flags(uint32_t op, uint16_t atomic_op);
 
 void smr_ep_progress(struct util_ep *util_ep);
 int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry);
-void smr_post_pending(struct smr_ep *ep, struct smr_cmd *cmd);
 
 #endif

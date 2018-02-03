@@ -86,7 +86,6 @@ struct fi_fabric_attr smr_fabric_attr = {
 
 struct fi_info smr_info = {
 	.caps = SMR_TX_CAPS | SMR_RX_CAPS,
-	.mode = FI_CONTEXT,
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &smr_tx_attr,
 	.rx_attr = &smr_rx_attr,

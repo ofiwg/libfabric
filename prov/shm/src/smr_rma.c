@@ -49,7 +49,7 @@ static void smr_format_rma_resp(struct smr_cmd *cmd, fi_addr_t peer_id,
 				const struct fi_rma_iov *rma_iov, size_t count,
 				size_t total_len, uint32_t op)
 {
-	smr_generic_format(cmd, peer_id, NULL, op, 0, 0, 0, 0, 0);
+	smr_generic_format(cmd, peer_id, op, 0, 0, 0, 0, 0);
 	cmd->msg.hdr.size = total_len;
 }
 
@@ -130,7 +130,7 @@ ssize_t smr_generic_rma(struct fid_ep *ep_fid, const struct iovec *iov,
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	struct smr_resp *resp;
-	struct smr_cmd *cmd;
+	struct smr_cmd *cmd, *pend;
 	int peer_id, comp = 1;
 	ssize_t ret = 0;
 	size_t total_len;
@@ -167,20 +167,20 @@ ssize_t smr_generic_rma(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	if (total_len <= SMR_MSG_DATA_LEN && op == ofi_op_write) {
 		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr,
-				  iov, iov_count, context, op, 0, data, op_flags);
+				  iov, iov_count, op, 0, data, op_flags);
 	} else if (total_len <= SMR_INJECT_SIZE && op == ofi_op_write) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr, iov,
-				  iov_count, context, op, 0, data, op_flags,
+		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr,
+				  iov, iov_count, op, 0, data, op_flags,
 				  peer_smr, tx_buf);
 	} else {
 		assert(!ofi_cirque_isfull(smr_resp_queue(ep->region)));
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
-		smr_format_iov(cmd, smr_peer_addr(ep->region)[peer_id].addr, iov,
-			       iov_count, total_len, context, op, 0, data, op_flags,
-			       ep->region, resp);
+		pend = freestack_pop(ep->pend_fs);
+		smr_format_iov(cmd, smr_peer_addr(ep->region)[peer_id].addr,
+			       iov, iov_count, total_len, op, 0, data,
+			       op_flags, ep->region, resp, pend);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
-		smr_post_pending(ep, cmd);
 		comp = 0;
 	}
 
@@ -406,13 +406,13 @@ ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	if (len <= SMR_MSG_DATA_LEN) {
 		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr,
-				  &iov, 1, NULL, ofi_op_write, 0, data,
+				  &iov, 1, ofi_op_write, 0, data,
 				  OFI_REMOTE_CQ_DATA);
 	} else {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr, &iov,
-				  1, NULL, ofi_op_write, 0, data, OFI_REMOTE_CQ_DATA,
-				  peer_smr, tx_buf);
+		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr,
+				  &iov, 1, ofi_op_write, 0, data,
+				  OFI_REMOTE_CQ_DATA, peer_smr, tx_buf);
 	}
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));

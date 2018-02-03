@@ -41,9 +41,7 @@
 static void smr_progress_resp(struct smr_ep *ep)
 {
 	struct smr_resp *resp;
-	struct dlist_entry *dlist_entry;
-	struct smr_pending_cmd *pending;
-	struct smr_match_attr match_attr;
+	struct smr_cmd *pending;
 	int ret;
 
 	fastlock_acquire(&ep->region->lock);
@@ -53,19 +51,11 @@ static void smr_progress_resp(struct smr_ep *ep)
 		resp = ofi_cirque_head(smr_resp_queue(ep->region));
 		if (resp->status == FI_EBUSY)
 			break;
-		match_attr.ctx = resp->msg_id;
-		dlist_entry = dlist_remove_first_match(&ep->pend_queue.msg_list,
-						       ep->pend_queue.match_msg,
-						       &match_attr);
-		if (!dlist_entry) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"no outstanding commands for found response\n");
-			break;
-		}
-		pending = container_of(dlist_entry, struct smr_pending_cmd, entry);
 
-		ret = ep->tx_comp(ep, (void *) resp->msg_id,
-				  smr_tx_comp_flags(pending->cmd.msg.hdr.op),
+		pending = (struct smr_cmd *) resp->msg_id;
+
+		ret = ep->tx_comp(ep, NULL,
+				  smr_tx_comp_flags(pending->msg.hdr.op),
 				  -(resp->status));
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -259,11 +249,11 @@ out:
 
 static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 {
-	struct smr_recv_queue *recv_queue;
+	struct smr_queue *recv_queue;
 	struct smr_match_attr match_attr;
 	struct dlist_entry *dlist_entry;
 	struct smr_ep_entry *entry;
-	struct smr_pending_cmd *unexp;
+	struct smr_unexp_msg *unexp;
 	fi_addr_t addr;
 	size_t total_len = 0;
 	int err, ret = 0;
@@ -277,7 +267,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	recv_queue = (cmd->msg.hdr.op == ofi_op_tagged) ?
 		      &ep->trecv_queue : &ep->recv_queue;
 
-	if (dlist_empty(&recv_queue->recv_list)) {
+	if (dlist_empty(&recv_queue->list)) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"no recv entry available\n");
 		return -FI_ENOMSG;
@@ -286,8 +276,8 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	match_attr.addr = cmd->msg.hdr.addr;
 	match_attr.tag = cmd->msg.hdr.tag;
 
-	dlist_entry = dlist_remove_first_match(&recv_queue->recv_list,
-					       recv_queue->match_recv,
+	dlist_entry = dlist_remove_first_match(&recv_queue->list,
+					       recv_queue->match_func,
 					       &match_attr);
 	if (!dlist_entry) {
 		if (freestack_isempty(ep->unexp_fs))
@@ -295,7 +285,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		unexp = freestack_pop(ep->unexp_fs);
 		memcpy(&unexp->cmd, cmd, sizeof(*cmd));
 		ofi_cirque_discard(smr_cmd_queue(ep->region));
-		dlist_insert_tail(&unexp->entry, &ep->unexp_queue.msg_list);
+		dlist_insert_tail(&unexp->entry, &ep->unexp_queue.list);
 		return ret;
 	}
 	entry = container_of(dlist_entry, struct smr_ep_entry, entry);
@@ -519,7 +509,7 @@ void smr_ep_progress(struct util_ep *util_ep)
 int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 {
 	struct smr_match_attr match_attr;
-	struct smr_pending_cmd *unexp_msg;
+	struct smr_unexp_msg *unexp_msg;
 	struct dlist_entry *dlist_entry;
 	size_t total_len = 0;
 	int ret = 0;
@@ -534,13 +524,13 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	match_attr.addr = entry->addr;
 	match_attr.ignore = entry->ignore;
 	match_attr.tag = entry->tag;
-	dlist_entry = dlist_remove_first_match(&ep->unexp_queue.msg_list,
-					       ep->unexp_queue.match_msg,
+	dlist_entry = dlist_remove_first_match(&ep->unexp_queue.list,
+					       ep->unexp_queue.match_func,
 					       &match_attr);
 	if (!dlist_entry)
 		return -FI_ENOMSG;
 
-	unexp_msg = container_of(dlist_entry, struct smr_pending_cmd, entry);
+	unexp_msg = container_of(dlist_entry, struct smr_unexp_msg, entry);
 
 	switch (unexp_msg->cmd.msg.hdr.op_src) {
 	case smr_src_inline:

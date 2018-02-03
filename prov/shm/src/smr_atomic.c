@@ -48,13 +48,13 @@ static void smr_format_rma_ioc(struct smr_cmd *cmd, const struct fi_rma_ioc *rma
 static void smr_format_inline_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 				     const struct iovec *iov, size_t count,
 				     const struct iovec *compv,
-				     size_t comp_count, void *context,
-				     uint32_t op, enum fi_datatype datatype,
+				     size_t comp_count,  uint32_t op,
+				     enum fi_datatype datatype,
 				     enum fi_op atomic_op)
 {
 	size_t comp_size;
 
-	smr_generic_format(cmd, peer_id, context, op, 0, datatype,
+	smr_generic_format(cmd, peer_id, op, 0, datatype,
 			   atomic_op, 0, 0);
 	cmd->msg.hdr.op_src = smr_src_inline;
 	switch (op) {
@@ -81,7 +81,7 @@ static void smr_format_inline_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 static void smr_format_inject_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 				     const struct iovec *iov, size_t count,
 				     const struct iovec *compv,
-				     size_t comp_count,void *context,
+				     size_t comp_count,
 				     uint32_t op, enum fi_datatype datatype,
 				     enum fi_op atomic_op,
 				     struct smr_region *smr,
@@ -89,7 +89,7 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 {
 	size_t comp_size;
 
-	smr_generic_format(cmd, peer_id, context, op, 0, datatype,
+	smr_generic_format(cmd, peer_id, op, 0, datatype,
 			   atomic_op, 0, 0);
 	cmd->msg.hdr.op_src = smr_src_inject;
 	cmd->msg.hdr.src_data = (char **) tx_buf - (char **) smr;
@@ -241,12 +241,12 @@ static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		smr_format_inline_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 					 iov, count, compare_iov, compare_count,
-					 context, op, datatype, atomic_op);
+					 op, datatype, atomic_op);
 	} else if (total_len <= SMR_INJECT_SIZE) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 					 iov, count, compare_iov, compare_count,
-					 context, op, datatype, atomic_op,
+					 op, datatype, atomic_op,
 					 peer_smr, tx_buf);
 	} else {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -371,12 +371,12 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		smr_format_inline_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
-					 &iov, 1, NULL, 0, NULL, ofi_op_atomic,
+					 &iov, 1, NULL, 0, ofi_op_atomic,
 					 datatype, op);
 	} else if (total_len <= SMR_INJECT_SIZE) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
-					 &iov, 1, NULL, 0, NULL, ofi_op_atomic,
+					 &iov, 1, NULL, 0, ofi_op_atomic,
 					 datatype, op, peer_smr, tx_buf);
 	}
 
