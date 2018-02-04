@@ -662,7 +662,7 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 
 static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
-	memset(&rx_buf->conn, 0, sizeof(*rx_buf) - offsetof(struct rxm_rx_buf, conn));
+	rx_buf->conn = NULL;
 	rx_buf->hdr.state = RXM_RX;
 
 	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt,
