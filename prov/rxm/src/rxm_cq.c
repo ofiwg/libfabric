@@ -341,7 +341,7 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) {
 		if (!rx_buf->conn) {
 			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
-			if (!rx_buf->conn)
+			if (OFI_UNLIKELY(!rx_buf->conn))
 				return -FI_EOTHER;
 		}
 
@@ -400,7 +400,7 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	if ((rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) &&
 	    !rx_buf->conn) {
 		rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
-		if (!rx_buf->conn)
+		if (OFI_UNLIKELY(!rx_buf->conn))
 			return -FI_EOTHER;
 		match_attr.addr = rx_buf->conn->handle.fi_addr;
 	} else {
