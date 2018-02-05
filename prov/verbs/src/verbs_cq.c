@@ -402,29 +402,27 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	    ((wc->wr_id & cq->wr_id_mask) != cq->send_signal_wr_id)) {
 		wre = (struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
 		assert(wre && (wre->ep || wre->srq));
+		wc->wr_id = (uintptr_t)wre->context;
+
+		if (wc->status == IBV_WC_WR_FLUSH_ERR) {
+			/* Handles case where remote side destroys
+			 * the connection, but local side isn't aware
+			 * about that yet */
+			ret = 0;
+		}
+
 		if (wre->ep) {
 			wre_pool = wre->ep->wre_pool;
 			wre_lock = &wre->ep->wre_lock;
 			wre->ep = NULL;
-			if (wc->status == IBV_WC_WR_FLUSH_ERR)
-				/* Handles case where remote side destroys
-				 * the connection, but local side isn't aware
-				 * about that yet */
-				ret = 0;
 		} else if (wre->srq) {
 			wre_pool = wre->srq->wre_pool;
 			wre_lock = &wre->srq->wre_lock;
 			wre->srq = NULL;
-			if (wc->status == IBV_WC_WR_FLUSH_ERR)
-				/* Handles case where remote side destroys
-				 * the connection, but local side isn't aware
-				 * about that yet */
-				ret = 0;
 		} else {
 			assert(0);
 			return -FI_EAVAIL;
 		}
-		wc->wr_id = (uintptr_t)wre->context;
 
 		fastlock_acquire(wre_lock);
 		dlist_remove(&wre->entry);
