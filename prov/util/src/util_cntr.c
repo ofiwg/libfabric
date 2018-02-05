@@ -188,7 +188,8 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 	if (cntr->wait) {
 		fi_poll_del(&cntr->wait->pollset->poll_fid,
 			    &cntr->cntr_fid.fid, 0);
-		fi_close(&cntr->wait->wait_fid.fid);
+		if (cntr->internal_wait)
+			fi_close(&cntr->wait->wait_fid.fid);
 	}
 
 	ofi_atomic_dec32(&cntr->domain->ref);
@@ -236,6 +237,7 @@ static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	case FI_WAIT_MUTEX_COND:
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
+		cntr->internal_wait = 1;
 		ret = fi_wait_open(&cntr->domain->fabric->fabric_fid,
 				   &wait_attr, &wait);
 		if (ret)
