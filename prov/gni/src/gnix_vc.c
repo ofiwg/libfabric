@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -360,13 +360,13 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	memcpy(cptr, src_irq_cq_mhdl, sizeof(gni_mem_handle_t));
 	cptr += sizeof(gni_mem_handle_t);
 	memcpy(cptr, &caps, sizeof(uint64_t));
-	cptr += sizeof(xpmem_segid_t);
+	cptr += sizeof(uint64_t);
 	memcpy(cptr, &my_segid, sizeof(xpmem_segid_t));
-	cptr += sizeof(name_type);
+	cptr += sizeof(xpmem_segid_t);
 	memcpy(cptr, &name_type, sizeof(name_type));
-	cptr += sizeof(rx_ctx_cnt);
+	cptr += sizeof(name_type);
 	memcpy(cptr, &rx_ctx_cnt, sizeof(rx_ctx_cnt));
-	cptr += sizeof(key_offset);
+	cptr += sizeof(rx_ctx_cnt);
 	memcpy(cptr, &key_offset, sizeof(key_offset));
 }
 
@@ -411,11 +411,11 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 	memcpy(caps, cptr, sizeof(uint64_t));
 	cptr += sizeof(uint64_t);
 	memcpy(peer_segid, cptr, sizeof(xpmem_segid_t));
-	cptr += sizeof(uint8_t);
+	cptr += sizeof(xpmem_segid_t);
 	memcpy(name_type, cptr, sizeof(*name_type));
-	cptr += sizeof(uint8_t);
+	cptr += sizeof(*name_type);
 	memcpy(rx_ctx_cnt, cptr, sizeof(*rx_ctx_cnt));
-	cptr += sizeof(uint32_t);
+	cptr += sizeof(*rx_ctx_cnt);
 	memcpy(key_offset, cptr, sizeof(*key_offset));
 }
 
@@ -875,7 +875,6 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				  &name_type,
 				  &rx_ctx_cnt,
 				  &key_offset);
-
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		"conn req rx: (From Aries addr 0x%x Id %d to Aries 0x%x Id %d src vc 0x%lx )\n",
