@@ -214,21 +214,19 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			if (!dup) {
 				fi_freeinfo(*info);
 				return -FI_ENOMEM;
-			}
-			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-				dup->mode &= ~FI_LOCAL_MR;
-			else
-				dup->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+			} 
+
+			dup->mode &= ~FI_LOCAL_MR;
+			dup->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+
 			dup->next = cur->next;
 			cur->next = dup;
 			cur = dup;
 		}
 	} else {
 		for (cur = *info; cur; cur = cur->next) {
-			if (FI_VERSION_LT(version, FI_VERSION(1, 5)))
-				cur->mode &= ~FI_LOCAL_MR;
-			else
-				cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+			cur->mode &= ~FI_LOCAL_MR;
+			cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
 		}
 	}
 	return 0;
