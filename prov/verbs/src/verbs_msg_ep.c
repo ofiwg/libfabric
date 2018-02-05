@@ -560,19 +560,15 @@ fi_ibv_prepare_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 		fastlock_release(&ep->wre_lock);
 		return -FI_EAGAIN;
 	}
-	memset(*wre, 0, sizeof(**wre));
 	dlist_insert_tail(&(*wre)->entry, &ep->wre_list);
 	fastlock_release(&ep->wre_lock);
 
 	(*wre)->context = context;
 	(*wre)->ep = ep;
-	(*wre)->context = context;
-	(*wre)->wr.type = IBV_SEND_WR;
+	(*wre)->wr_type = IBV_SEND_WR;
 	wr->wr_id = (uintptr_t)*wre;
-	(*wre)->wr.swr = *wr;
 
-	assert((wr->wr_id & ep->scq->wr_id_mask) !=
-		       ep->scq->send_signal_wr_id);
+	assert((wr->wr_id & ep->scq->wr_id_mask) != ep->scq->send_signal_wr_id);
 	ofi_atomic_set32(&ep->unsignaled_send_cnt, 0);
 
 	return FI_SUCCESS;
@@ -694,43 +690,44 @@ fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 }
 
 static ssize_t
-fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
-	struct fi_ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *ep =
+		container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 	struct fi_ibv_wre *wre;
 	struct ibv_sge *sge = NULL;
+	struct ibv_recv_wr wr = {
+		.num_sge = msg->iov_count,
+		.next = NULL,
+	};
 	size_t i;
 
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	assert(_ep->rcq);
+	assert(ep->rcq);
 
-	fastlock_acquire(&_ep->wre_lock);
-	wre = util_buf_alloc(_ep->wre_pool);
+	fastlock_acquire(&ep->wre_lock);
+	wre = util_buf_alloc(ep->wre_pool);
 	if (OFI_UNLIKELY(!wre)) {
-		fastlock_release(&_ep->wre_lock);
+		fastlock_release(&ep->wre_lock);
 		return -FI_EAGAIN;
 	}
-	memset(wre, 0, sizeof(*wre));
-	dlist_insert_tail(&wre->entry, &_ep->wre_list);
-	fastlock_release(&_ep->wre_lock);
+	dlist_insert_tail(&wre->entry, &ep->wre_list);
+	fastlock_release(&ep->wre_lock);
 
-	wre->ep = _ep;
+	wre->ep = ep;
 	wre->context = msg->context;
-	wre->wr.type = IBV_RECV_WR;
-	wre->wr.rwr.wr_id = (uintptr_t)wre;
-	wre->wr.rwr.next = NULL;
+	wre->wr_type = IBV_RECV_WR;
 
+	wr.wr_id = (uintptr_t)wre;
 	sge = alloca(sizeof(*sge) * msg->iov_count);
 	for (i = 0; i < msg->iov_count; i++) {
 		sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
 		sge[i].length = (uint32_t)msg->msg_iov[i].iov_len;
 		sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
 	}
-	wre->wr.rwr.sg_list = sge;
-	wre->wr.rwr.num_sge = msg->iov_count;
+	wr.sg_list = sge;
 
-	return FI_IBV_INVOKE_POST(recv, recv, _ep->id->qp, &wre->wr.rwr,
-				  FI_IBV_RELEASE_WRE(_ep, wre));
+	return FI_IBV_INVOKE_POST(recv, recv, ep->id->qp, &wr,
+				  FI_IBV_RELEASE_WRE(ep, wre));
 }
 
 static ssize_t

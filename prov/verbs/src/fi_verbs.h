@@ -399,13 +399,7 @@ struct fi_ibv_wre {
 	void			*context;
 	struct fi_ibv_msg_ep	*ep;
 	struct fi_ibv_srq_ep	*srq;
-	struct {
-		enum fi_ibv_wre_type	type;
-		union {
-			struct ibv_send_wr      swr;
-			struct ibv_recv_wr	rwr;
-		}; 
-	} wr;
+	enum fi_ibv_wre_type	wr_type;
 };
 
 struct fi_ibv_cq {

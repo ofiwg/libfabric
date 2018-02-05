@@ -344,7 +344,7 @@ void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
 
 	dlist_foreach_container_safe(wre_list, struct fi_ibv_wre,
 				     wre, entry, tmp) {
-		if (wre->wr.type == wre_type) {
+		if (wre->wr_type == wre_type) {
 			dlist_remove(&wre->entry);
 			wre->ep = NULL;
 			wre->srq = NULL;
