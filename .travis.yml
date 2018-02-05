@@ -17,6 +17,7 @@ addons:
             - libnl-3-dev
             - libnl-route-3-200
             - libnl-route-3-dev
+            - libpsm-infinipath1-dev
             - libnuma-dev
     ssh_known_hosts:
         - www.openfabrics.org
@@ -41,14 +42,12 @@ install:
     - ./autogen.sh
     # Build verbs only in linux as OS X doesn't have verbs support
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-        LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic
-        --enable-verbs --enable-mlx=$HOME/mlx";
+        LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic --enable-verbs --enable-psm --enable-mlx=$HOME/mlx";
         UCX_BRANCH=v1.2.x;
-        git clone --depth 1 -b $UCX_BRANCH https://github.com/openucx/ucx.git && cd ucx && ./autogen.sh && ./configure --prefix=$HOME/mlx CFLAGS="-w" && make -j2 install && cd -;
+        git clone --depth 1 -b $UCX_BRANCH https://github.com/openucx/ucx.git && cd ucx && ./autogen.sh && ./configure --prefix=$HOME/mlx CFLAGS="-w" --enable-debug && make -j2 install && cd -;
       fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" && "`basename $CC`" == "clang" ]]; then
-        ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS
-        --enable-debug && make -j2;
+        ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS --enable-debug && make -j2;
       fi
     # Test fabric direct
     - ./configure --prefix=$PREFIX --enable-direct=sockets --enable-udp=no
