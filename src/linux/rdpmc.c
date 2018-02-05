@@ -25,7 +25,6 @@
 #include <sys/mman.h>
 #include <sys/fcntl.h>
 #include <linux/perf_event.h>
-#include <linux/hw_breakpoint.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/syscall.h>
