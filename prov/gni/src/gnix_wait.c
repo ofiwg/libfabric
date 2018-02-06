@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -118,9 +119,13 @@ static void *__gnix_wait_nic_prog_thread_fn(void *the_arg)
 
 		/* Wait until we're signaled to poll. */
 		pthread_mutex_lock(&gnix_wait_mutex);
-		if (!gnix_wait_thread_enabled)
+		pthread_cleanup_push((void (*)(void *))pthread_mutex_unlock,
+					(void *)&gnix_wait_mutex);
+		if (!gnix_wait_thread_enabled) {
 			pthread_cond_wait(&gnix_wait_cond, &gnix_wait_mutex);
-		pthread_mutex_unlock(&gnix_wait_mutex);
+		}
+
+		pthread_cleanup_pop(1);
 
 		/* Progress all EQs. */
 		pthread_mutex_lock(&gnix_eq_list_lock);
@@ -167,6 +172,8 @@ static void __gnix_wait_start_progress(void)
 {
 	int ret;
 
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	pthread_mutex_lock(&gnix_wait_mutex);
 	if (!gnix_wait_thread) {
 		GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -191,6 +198,8 @@ static void __gnix_wait_stop_progress(void)
 {
 	int ret;
 
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	pthread_mutex_lock(&gnix_wait_mutex);
 	if (gnix_wait_thread) {
 		if (ofi_atomic_dec32(&gnix_wait_refcnt) == 0) {
@@ -203,9 +212,6 @@ static void __gnix_wait_stop_progress(void)
 			gnix_wait_thread_enabled++;
 			pthread_cond_signal(&gnix_wait_cond);
 			pthread_mutex_unlock(&gnix_wait_mutex);
-
-			GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
 			ret = pthread_join(gnix_wait_thread, NULL);
 			if (ret)
 				GNIX_WARN(WAIT_SUB,
