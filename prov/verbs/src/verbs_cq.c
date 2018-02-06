@@ -36,39 +36,46 @@
 
 #include "fi_verbs.h"
 
-static uint64_t fi_ibv_comp_flags(struct ibv_wc *wc)
+static inline void fi_ibv_handle_wc(struct ibv_wc *wc, uint64_t *flags,
+				    size_t *len, uint64_t *data)
 {
-	uint64_t flags = 0;
-
-	if (wc->wc_flags & IBV_WC_WITH_IMM)
-		flags |= FI_REMOTE_CQ_DATA;
-
 	switch (wc->opcode) {
 	case IBV_WC_SEND:
-		flags |= FI_SEND | FI_MSG;
+		*flags = (FI_SEND | FI_MSG);
 		break;
 	case IBV_WC_RDMA_WRITE:
-		flags |= FI_RMA | FI_WRITE;
+		*flags = (FI_RMA | FI_WRITE);
 		break;
 	case IBV_WC_RDMA_READ:
-		flags |= FI_RMA | FI_READ;
+		*flags = (FI_RMA | FI_READ);
 		break;
 	case IBV_WC_COMP_SWAP:
-		flags |= FI_ATOMIC;
+		*flags = FI_ATOMIC;
 		break;
 	case IBV_WC_FETCH_ADD:
-		flags |= FI_ATOMIC;
+		*flags = FI_ATOMIC;
 		break;
 	case IBV_WC_RECV:
-		flags |= FI_RECV | FI_MSG;
+		*len = wc->byte_len;
+		*flags = (FI_RECV | FI_MSG);
+		if (wc->wc_flags & IBV_WC_WITH_IMM) {
+			if (data)
+				*data = ntohl(wc->imm_data);
+			*flags |= FI_REMOTE_CQ_DATA;
+		}
 		break;
 	case IBV_WC_RECV_RDMA_WITH_IMM:
-		flags |= FI_RMA | FI_REMOTE_WRITE;
+		*len = wc->byte_len;
+		*flags = (FI_RMA | FI_REMOTE_WRITE);
+		if (wc->wc_flags & IBV_WC_WITH_IMM) {
+			if (data)
+				*data = ntohl(wc->imm_data);
+			*flags |= FI_REMOTE_CQ_DATA;
+		}
 		break;
 	default:
 		break;
 	}
-	return flags;
 }
 
 static ssize_t
@@ -98,9 +105,9 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
 
 	entry->op_context = (void *)(uintptr_t)wce->wc.wr_id;
-	entry->flags = fi_ibv_comp_flags(&wce->wc);
 	entry->err = EIO;
 	entry->prov_errno = wce->wc.status;
+	fi_ibv_handle_wc(&wce->wc, &entry->flags, &entry->len, &entry->data);
 
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) &&
 		entry->err_data && entry->err_data_size) {
@@ -212,8 +219,7 @@ static void fi_ibv_cq_read_msg_entry(struct ibv_wc *wc, int i, void *buf)
 	struct fi_cq_msg_entry *entry = buf;
 
 	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
-	entry[i].flags = fi_ibv_comp_flags(wc);
-	entry[i].len = (uint64_t) wc->byte_len;
+	fi_ibv_handle_wc(wc, &entry[i].flags, &entry[i].len, NULL);
 }
 
 static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
@@ -221,11 +227,7 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
 	struct fi_cq_data_entry *entry = buf;
 
 	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
-	entry[i].flags = fi_ibv_comp_flags(wc);
-	entry[i].len = (wc->opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM)) ?
-		wc->byte_len : 0;
-	entry[i].data = (wc->wc_flags & IBV_WC_WITH_IMM) ?
-		ntohl(wc->imm_data) : 0;
+	fi_ibv_handle_wc(wc, &entry[i].flags, &entry[i].len, &entry[i].data);
 }
 
 static int fi_ibv_match_ep_id(struct slist_entry *entry,
@@ -344,7 +346,7 @@ void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
 
 	dlist_foreach_container_safe(wre_list, struct fi_ibv_wre,
 				     wre, entry, tmp) {
-		if (wre->wr.type == wre_type) {
+		if (wre->wr_type == wre_type) {
 			dlist_remove(&wre->entry);
 			wre->ep = NULL;
 			wre->srq = NULL;
@@ -400,29 +402,27 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	    ((wc->wr_id & cq->wr_id_mask) != cq->send_signal_wr_id)) {
 		wre = (struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
 		assert(wre && (wre->ep || wre->srq));
+		wc->wr_id = (uintptr_t)wre->context;
+
+		if (wc->status == IBV_WC_WR_FLUSH_ERR) {
+			/* Handles case where remote side destroys
+			 * the connection, but local side isn't aware
+			 * about that yet */
+			ret = 0;
+		}
+
 		if (wre->ep) {
 			wre_pool = wre->ep->wre_pool;
 			wre_lock = &wre->ep->wre_lock;
 			wre->ep = NULL;
-			if (wc->status == IBV_WC_WR_FLUSH_ERR)
-				/* Handles case where remote side destroys
-				 * the connection, but local side isn't aware
-				 * about that yet */
-				ret = 0;
 		} else if (wre->srq) {
 			wre_pool = wre->srq->wre_pool;
 			wre_lock = &wre->srq->wre_lock;
 			wre->srq = NULL;
-			if (wc->status == IBV_WC_WR_FLUSH_ERR)
-				/* Handles case where remote side destroys
-				 * the connection, but local side isn't aware
-				 * about that yet */
-				ret = 0;
 		} else {
 			assert(0);
 			return -FI_EAVAIL;
 		}
-		wc->wr_id = (uintptr_t)wre->context;
 
 		fastlock_acquire(wre_lock);
 		dlist_remove(&wre->entry);

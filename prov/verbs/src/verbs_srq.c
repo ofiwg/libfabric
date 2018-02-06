@@ -89,44 +89,44 @@ static struct fi_ops_atomic fi_ibv_srq_atomic_ops = {
 };
 
 static ssize_t
-fi_ibv_srq_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
-	struct fi_ibv_srq_ep *_ep =
-		container_of(ep, struct fi_ibv_srq_ep, ep_fid);
+	struct fi_ibv_srq_ep *ep =
+		container_of(ep_fid, struct fi_ibv_srq_ep, ep_fid);
 	struct fi_ibv_wre *wre;
 	struct ibv_sge *sge = NULL;
+	struct ibv_recv_wr wr = {
+		.num_sge = msg->iov_count,
+		.next = NULL,
+	};
 	size_t i;
 
-	assert(_ep->srq);
+	assert(ep->srq);
 
-	fastlock_acquire(&_ep->wre_lock);
-	wre = util_buf_alloc(_ep->wre_pool);
+	fastlock_acquire(&ep->wre_lock);
+	wre = util_buf_alloc(ep->wre_pool);
 	if (!wre) {
-		fastlock_release(&_ep->wre_lock);
+		fastlock_release(&ep->wre_lock);
 		return -FI_EAGAIN;
 	}
-	memset(wre, 0, sizeof(*wre));
-	dlist_insert_tail(&wre->entry, &_ep->wre_list);
-	fastlock_release(&_ep->wre_lock);
+	dlist_insert_tail(&wre->entry, &ep->wre_list);
+	fastlock_release(&ep->wre_lock);
 
-	wre->srq = _ep;
+	wre->srq = ep;
 	wre->context = msg->context;
+	wre->wr_type = IBV_RECV_WR;
 
-	wre->wr.type = IBV_RECV_WR;
-	wre->wr.rwr.wr_id = (uintptr_t)wre;
-	wre->wr.rwr.next = NULL;
+	wr.wr_id = (uintptr_t)wre;
 	sge = alloca(sizeof(*sge) * msg->iov_count);
 	for (i = 0; i < msg->iov_count; i++) {
 		sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
 		sge[i].length = (uint32_t)msg->msg_iov[i].iov_len;
 		sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
 	}
-	wre->wr.rwr.sg_list = sge;
-	wre->wr.rwr.num_sge = msg->iov_count;
+	wr.sg_list = sge;
 
-	return FI_IBV_INVOKE_POST(srq_recv, recv, _ep->srq, &wre->wr.rwr,
-				  FI_IBV_RELEASE_WRE(_ep, wre));
-	
+	return FI_IBV_INVOKE_POST(srq_recv, recv, ep->srq, &wr,
+				  FI_IBV_RELEASE_WRE(ep, wre));
 }
 
 static ssize_t
