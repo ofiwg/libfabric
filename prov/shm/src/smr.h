@@ -202,7 +202,7 @@ void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
 void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
 		const struct iovec *iov, size_t count, size_t total_len,
 		uint32_t op, uint64_t tag, uint64_t data, uint16_t op_flags,
-		struct smr_region *smr, struct smr_resp *resp,
+		void *context, struct smr_region *smr, struct smr_resp *resp,
 		struct smr_cmd *pend);
 
 int smr_tx_comp(struct smr_ep *ep, void *context, uint64_t flags, uint64_t err);

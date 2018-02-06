@@ -251,20 +251,20 @@ void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
 void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    uint32_t op, uint64_t tag, uint64_t data, uint16_t op_flags,
-		    struct smr_region *smr, struct smr_resp *resp,
-		    struct smr_cmd *pend_cmd)
+		    void *context, struct smr_region *smr,
+		    struct smr_resp *resp, struct smr_cmd *pend_cmd)
 {
 	smr_generic_format(cmd, peer_id, op, tag, 0, 0, data, op_flags);
 	cmd->msg.hdr.op_src = smr_src_iov;
 	cmd->msg.hdr.src_data = (uint64_t) ((char **) resp - (char **) smr);
 	cmd->msg.data.iov_count = count;
 	cmd->msg.hdr.size = total_len;
-	cmd->msg.hdr.msg_id = (uint64_t) (uintptr_t) pend_cmd;
+	cmd->msg.hdr.msg_id = (uint64_t) (uintptr_t) context;
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 
 	*pend_cmd = *cmd;
 
-	resp->msg_id = cmd->msg.hdr.msg_id;
+	resp->msg_id = (uint64_t) (uintptr_t) pend_cmd;
 	resp->status = FI_EBUSY;
 
 }
