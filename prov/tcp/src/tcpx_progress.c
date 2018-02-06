@@ -73,7 +73,7 @@ static inline ssize_t tcpx_pe_send_field(struct tcpx_pe_entry *pe_entry,
 {
 	size_t field_rem_len, field_done_len;
 	uint8_t *buf;
-	int ret;
+	ssize_t ret;
 
 	if (pe_entry->done_len >= (field_offset + field_len))
 		return 0;
@@ -96,7 +96,7 @@ static inline ssize_t tcpx_pe_recv_field(struct tcpx_pe_entry *pe_entry,
 {
 	size_t field_rem_len, field_done_len;
 	uint8_t *buf;
-	int ret;
+	ssize_t ret;
 
 	if (pe_entry->done_len >= (field_offset + field_len))
 		return 0;
@@ -175,7 +175,7 @@ static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
 
 	size_t field_offset;
-	int total_len = ntohll(pe_entry->msg_hdr.size);
+	uint64_t total_len = ntohll(pe_entry->msg_hdr.size);
 	int i;
 
 	if (pe_entry->state == TCPX_XFER_STARTED) {
@@ -223,7 +223,7 @@ static void posted_rx_find(struct tcpx_ep *ep,
 	struct dlist_entry *entry;
 	struct tcpx_posted_rx *posted_rx;
 	struct tcpx_domain *domain;
-	int data_len = 0, i;
+	size_t data_len = 0, i;
 
 	domain = container_of(ep->util_ep.domain,
 			      struct tcpx_domain,

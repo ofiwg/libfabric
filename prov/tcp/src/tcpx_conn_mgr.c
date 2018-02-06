@@ -190,7 +190,7 @@ err:
 static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 		      int type, struct poll_fd_info *poll_info)
 {
-	int ret;
+	ssize_t ret;
 
 	ret = ofi_recv_socket(fd, hdr,
 			      sizeof(*hdr), MSG_WAITALL);
@@ -219,15 +219,15 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 	return FI_SUCCESS;
 }
 
-static int tx_cm_data(SOCKET fd, int type, struct poll_fd_info *poll_info)
+static int tx_cm_data(SOCKET fd, uint8_t type, struct poll_fd_info *poll_info)
 {
 	struct ofi_ctrl_hdr hdr;
-	int ret;
+	ssize_t ret;
 
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.version = OFI_CTRL_VERSION;
 	hdr.type = type;
-	hdr.seg_size = htons(poll_info->cm_data_sz);
+	hdr.seg_size = (uint16_t) htons(poll_info->cm_data_sz);
 
 	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
 	if (ret != sizeof(hdr))
@@ -253,7 +253,7 @@ static int send_conn_req(struct poll_fd_mgr *poll_mgr,
 	assert(poll_mgr->poll_fds[index].revents == POLLOUT);
 
 	len = sizeof(status);
-	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, &status, &len);
+	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, (void *) &status, &len);
 	if (ret < 0 || status) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		return (ret < 0)? -errno : status;
@@ -270,7 +270,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 {
 	struct ofi_ctrl_hdr conn_resp;
 	struct fi_eq_cm_entry *cm_entry;
-	int ret = FI_SUCCESS;
+	ssize_t ret = FI_SUCCESS;
 
 	assert(poll_mgr->poll_fds[index].revents == POLLIN);
 	ret = rx_cm_data(ep->conn_fd, &conn_resp, ofi_ctrl_connresp, poll_info);
@@ -351,7 +351,7 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 	struct fi_eq_cm_entry *cm_entry;
 	struct ofi_ctrl_hdr conn_req;
 	SOCKET sock;
-	int ret;
+	ssize_t ret;
 
 	assert(poll_info->fid->fclass == FI_CLASS_PEP);
 	pep = container_of(poll_info->fid, struct tcpx_pep, util_pep.pep_fid.fid);

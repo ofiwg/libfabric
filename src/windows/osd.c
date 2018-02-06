@@ -290,7 +290,7 @@ int ofi_shm_unmap(struct util_shm *shm)
 	return FI_SUCCESS;
 }
 
-int fi_fd_nonblock(int fd)
+int fi_fd_nonblock(SOCKET fd)
 {
 	u_long argp = 1;
 	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
