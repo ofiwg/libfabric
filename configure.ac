@@ -148,7 +148,15 @@ if test "$ac_cv_func_epoll_create" = yes; then
   AC_DEFINE([HAVE_EPOLL], [1], [Define if you have epoll support.])
 fi
 
-AC_CHECK_HEADERS_ONCE([linux/perf_event.h])
+AC_CHECK_HEADER([linux/perf_event.h],
+    [AC_CHECK_DECL([__builtin_ia32_rdpmc],
+        [linux_perf_rdpmc=1],
+        [linux_perf_rdpmc=0],
+        [#include <linux/perf_event.h>])],
+    [linux_perf_rdpmc=0])
+AC_DEFINE_UNQUOTED(HAVE_LINUX_PERF_RDPMC, [$linux_perf_rdpmc],
+    [Whether we have __builtin_ia32_rdpmc() and linux/perf_event.h file or not])
+AM_CONDITIONAL([HAVE_LINUX_PERF_RDPMC], [test "x$linux_perf_rdpmc" = "x1"])
 
 dnl Check for gcc atomic intrinsics
 AC_MSG_CHECKING(compiler support for c11 atomics)

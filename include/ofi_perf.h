@@ -87,12 +87,12 @@ struct ofi_perf_data {
  * Performance management unit:
  *
  * Access to a PMU is platform specific.  If an osd.h file provides methods
- * to access a PMU, it should define HAVE_OFI_PERF and provide implementations
- * for the following functions.  Platforms that do not support PMUs will
- * default to no-op definitions.
+ * to access a PMU, it should define HAVE_LINUX_PERF_RDPMC and provide
+ * implementations for the following functions.  Platforms that do not
+ * support PMUs will default to no-op definitions.
  */
 
-#ifdef HAVE_OFI_PERF
+#if HAVE_LINUX_PERF_RDPMC
 
 struct ofi_perf_ctx;
 
@@ -101,7 +101,7 @@ int ofi_pmu_open(struct ofi_perf_ctx **ctx,
 uint64_t ofi_pmu_read(struct ofi_perf_ctx *ctx);
 void ofi_pmu_close(struct ofi_perf_ctx *ctx);
 
-#else /* HAVE_OFI_PERF */
+#else /* HAVE_LINUX_PERF_RDPMC */
 
 struct ofi_perf_ctx {
 	int dummy;
@@ -123,7 +123,7 @@ static inline uint64_t ofi_pmu_read(struct ofi_perf_ctx *ctx)
 static inline void ofi_pmu_close(struct ofi_perf_ctx *ctx)
 {
 }
-#endif /* HAVE_OFI_PERF */
+#endif /* HAVE_LINUX_PERF_RDPMC */
 
 
 static inline void ofi_perf_reset(struct ofi_perf_data *data)
