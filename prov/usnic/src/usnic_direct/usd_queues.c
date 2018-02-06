@@ -586,7 +586,6 @@ usd_vnic_rq_init(
     iowrite32(rq->urq_cq->ucq_index, &vrq->ctrl->cq_index);
     iowrite32(0, &vrq->ctrl->error_interrupt_enable);
     iowrite32(0, &vrq->ctrl->error_interrupt_offset);
-    iowrite32(0, &vrq->ctrl->dropped_packet_count);
     iowrite32(0, &vrq->ctrl->error_status);
 
     rq->urq_state |= USD_QS_VNIC_INITIALIZED;

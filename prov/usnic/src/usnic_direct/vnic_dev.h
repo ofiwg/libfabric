@@ -212,13 +212,10 @@ int vnic_dev_deinit_done(struct vnic_dev *vdev, int *status);
 int vnic_dev_set_mac_addr(struct vnic_dev *vdev, u8 *mac_addr);
 int vnic_dev_classifier(struct vnic_dev *vdev, u8 cmd, u16 *entry,
 	struct filter *data);
-#ifdef ENIC_VXLAN
-int vnic_dev_overlay_offload_ctrl(struct vnic_dev *vdev,
-	u8 overlay, u8 config);
+int vnic_dev_overlay_offload_ctrl(struct vnic_dev *vdev, u8 overlay, u8 config);
 int vnic_dev_overlay_offload_cfg(struct vnic_dev *vdev, u8 overlay,
-	u16 vxlan_udp_port_number);
-int vnic_dev_get_supported_feature_ver(struct vnic_dev *vdev,
-	u8 feature, u64 *supported_versions);
-#endif
+				 u16 vxlan_udp_port_number);
+int vnic_dev_get_supported_feature_ver(struct vnic_dev *vdev, u8 feature,
+				       u64 *supported_versions);
 int vnic_dev_init_devcmd1(struct vnic_dev *vdev);
 #endif /* _VNIC_DEV_H_ */

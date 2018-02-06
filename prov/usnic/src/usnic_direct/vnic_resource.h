@@ -90,7 +90,7 @@ enum vnic_res_type {
 	RES_TYPE_RDMA_QP_STATS_TABLE,	/* RDMA per QP stats table */
 	RES_TYPE_WQ_MREGS,		/* XXX snic proto only */
 	RES_TYPE_GRPMBR_INTR,		/* Group member interrupt control */
-	RES_TYPE_BOD1,			/* reserved for bodega-dev */
+	RES_TYPE_DPKT,			/* Direct Packet memory region */
 
 	RES_TYPE_MAX,			/* Count of resource types */
 };

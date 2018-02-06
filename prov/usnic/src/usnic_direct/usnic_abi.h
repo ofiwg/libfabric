@@ -87,8 +87,12 @@ enum usnic_transport_type {
 	USNIC_TRANSPORT_UNKNOWN		= 0,
 	USNIC_TRANSPORT_ROCE_CUSTOM	= 1,
 	USNIC_TRANSPORT_IPV4_UDP	= 2,
-	USNIC_TRANSPORT_MAX		= 3,
+	USNIC_TRANSPORT_IPV4_TCP_3T	= 3,
+	USNIC_TRANSPORT_ROCEV2	  	= 4,
+	USNIC_TRANSPORT_MAX		= 5,
 };
+
+#define ROCEV2_PORT 4791
 
 enum usnic_ucmd_type {
 	USNIC_USER_CMD_DEVCMD,
@@ -117,6 +121,26 @@ struct usnic_udevcmd_resp {
 	u64			args[USNIC_UDEVCMD_NARGS];
 };
 
+/*
+ * This is the version of the transport_spec structure that is used
+ * in CREATE_QP versions 0..2
+ */
+struct usnic_transport_spec_v2 {
+	enum usnic_transport_type	trans_type;
+	union {
+		struct {
+			uint16_t	port_num;
+		} usnic_roce;
+		struct {
+			uint32_t	sock_fd;
+		} ip;
+	};
+};
+
+/*
+ * This is the version of the transport_spec structure that is used
+ * in CREATE_QP versions 3..
+ */
 struct usnic_transport_spec {
 	enum usnic_transport_type	trans_type;
 	union {
@@ -125,7 +149,12 @@ struct usnic_transport_spec {
 		} usnic_roce;
 		struct {
 			uint32_t	sock_fd;
-		} udp;
+		} ip;
+		struct {
+			uint32_t	qpn;
+			uint32_t	ipaddr_be;
+		} rocev2;
+		u_int8_t pad[256];
 	};
 };
 
@@ -147,14 +176,14 @@ struct usnic_ib_alloc_pd_resp {
 	};
 };
 
-#define USNIC_IB_CREATE_QP_VERSION 2
+#define USNIC_IB_CREATE_QP_VERSION 3
 
 struct usnic_ib_create_qp_cmd_v0 {
-	struct usnic_transport_spec	spec;
+	struct usnic_transport_spec_v2	spec_v2;
 };
 
-struct usnic_ib_create_qp_cmd {
-	struct usnic_transport_spec	spec;
+struct usnic_ib_create_qp_cmd_v2 {
+	struct usnic_transport_spec_v2 spec_v2;
 	u32				cmd_version;
 	union {
 		struct {
@@ -165,6 +194,30 @@ struct usnic_ib_create_qp_cmd {
 			u64		resources;
 		} cur; /* v1 and v2 cmd */
 	} u;
+};
+
+struct usnic_ib_create_qp_cmd {
+	/*
+	 * This is the old transport spec struct that must stay as the
+	 * first member of this struct for backwards compatibility/ABI
+	 * reasons..  It is "v2" because it is used with CREATE_QP
+	 * versions 0, 1, and 2.
+	 */
+	struct usnic_transport_spec_v2 spec_v2;
+	u32				cmd_version;
+	union {
+		struct {
+			/* length in bytes of resources array */
+			u32		resources_len;
+
+			/* ptr to array of struct usnic_vnic_barres_info */
+			u64		resources;
+		} cur; /* v1 and v2 cmd */
+	} u;
+	/*
+	 * This is the current version of the transport spec struct.
+	 */
+	struct usnic_transport_spec	spec;
 };
 
 
@@ -254,8 +307,9 @@ enum usnic_capability {
 	USNIC_CAP_CQ_SHARING,	/* CQ sharing version */
 	USNIC_CAP_MAP_PER_RES,	/* Map individual RES */
 	USNIC_CAP_PIO,		/* PIO send */
-	USNIC_CAP_CQ_INTR,	/* CQ interrupts (via comp channels) */
-	USNIC_CAP_GRP_INTR,	/* Group interrupt */
+	USNIC_CAP_CQ_INTR,  /* CQ interrupts (via comp channels) */
+	USNIC_CAP_GRP_INTR, /* Group interrupt */
+	USNIC_CAP_DPKT,  	/* Direct Packet Interface */
 	USNIC_CAP_CNT
 };
 
