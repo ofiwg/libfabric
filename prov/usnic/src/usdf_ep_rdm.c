@@ -857,6 +857,9 @@ usdf_rx_rdm_port_bind(struct usdf_rx *rx, struct fi_info *info)
 		case FI_SOCKADDR_IN:
 		case FI_ADDR_STR:
 			sin = usdf_format_to_sin(info, info->src_addr);
+			if (NULL == sin) {
+				return -FI_ENOMEM;
+			}
 			break;
 		default:
 			return -FI_EINVAL;

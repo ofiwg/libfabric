@@ -228,6 +228,10 @@ usdf_fill_sockaddr_info(struct fi_info *fi,
 	/* copy in dest if specified */
 	if (dest != NULL) {
 		sin = calloc(1, sizeof(*sin));
+		if (NULL == sin) {
+			free(fi->src_addr);
+			return -FI_ENOMEM;
+		}
 		*sin = *dest;
 		fi->dest_addr = sin;
 		fi->dest_addrlen = sizeof(*sin);
@@ -247,6 +251,8 @@ usdf_fill_straddr_info(struct fi_info *fi,
 	 */
 	if (src == NULL) {
 		sin = calloc(1, sizeof(*sin));
+		if (NULL == sin)
+			return -FI_ENOMEM;
 		sin->sin_family = AF_INET;
 		sin->sin_addr.s_addr = dap->uda_ipaddr_be;
 
@@ -261,6 +267,8 @@ usdf_fill_straddr_info(struct fi_info *fi,
 	 * Just copy it.
 	 */
 		address_string = strdup(src);
+		if (NULL == address_string)
+			return -FI_ENOMEM;
 		fi->src_addr = address_string;
 		fi->src_addrlen = strlen(address_string);
 	}
