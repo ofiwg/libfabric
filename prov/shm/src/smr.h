@@ -153,6 +153,7 @@ struct smr_domain {
 	struct util_domain	util_domain;
 	int			dom_idx;
 	int			ep_idx;
+	int			fast_rma;
 };
 
 #define SMR_PREFIX	"fi_shm://"
@@ -164,6 +165,12 @@ static inline const char *smr_no_prefix(const char *addr)
 
 	return (start = strstr(addr, "://")) ? start + 3 : addr;
 }
+
+#define SMR_RMA_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS |	\
+		       FI_ORDER_WAR | FI_ORDER_WAW | FI_ORDER_WAS |	\
+		       FI_ORDER_SAR | FI_ORDER_SAW)
+#define smr_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
+			!(order & SMR_RMA_ORDER))
 
 struct smr_ep {
 	struct util_ep		util_ep;

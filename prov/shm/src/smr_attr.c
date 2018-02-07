@@ -38,7 +38,8 @@
 
 struct fi_tx_attr smr_tx_attr = {
 	.caps = SMR_TX_CAPS,
-	.comp_order = FI_ORDER_STRICT,
+	.comp_order = FI_ORDER_NONE,
+	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
 	.inject_size = SMR_INJECT_SIZE,
 	.size = 1024,
 	.iov_limit = SMR_IOV_LIMIT,
@@ -48,6 +49,7 @@ struct fi_tx_attr smr_tx_attr = {
 struct fi_rx_attr smr_rx_attr = {
 	.caps = SMR_RX_CAPS,
 	.comp_order = FI_ORDER_STRICT,
+	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
 	.size = 1024,
 	.iov_limit = SMR_IOV_LIMIT
 };
