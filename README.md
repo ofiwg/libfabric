@@ -344,3 +344,16 @@ See the `fi_mlx(7)` man page for more details.
 --with-mlx=<path to local UCX installation>
 ```
 
+### shm
+
+***
+
+The shm provider enables applications using OFI to be run over shared memory.
+
+See the `fi_shm(7)` man page for more details.
+
+#### Dependencies
+
+- The shared memory provider only works on Linux platforms and makes use of
+  kernel support for 'cross-memory attach' (CMA) data copies for large
+  transfers.
