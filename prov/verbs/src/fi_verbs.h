@@ -735,7 +735,8 @@ void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
 			   struct dlist_entry *wre_list,
 			   enum fi_ibv_wre_type wre_type);
 void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *cur_ep);
-int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context);
+int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
+                           enum ibv_qp_type qp_type);
 
 #define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
 	{ .addr = (uintptr_t)buf,					\
