@@ -69,6 +69,23 @@ v1.6.0, Wed Mar 14, 2018
 
 ## RXM
 
+-- Add support for completion counters
+-- Fix MR mode handling
+-- Add support for FI_MULTI_RECV
+-- Considerable performance optimizations
+-- Report correct MR key size based on core provider's size
+-- Fixes to endpoint address reporting to avoid wildcard addresses
+-- Ensure progress after core provider returns EAGAIN on transfers
+-- Fix crash when running of sockets provider
+-- Bug fixes handling large message transfers
+-- Report data ordering and limits based on core provider's
+-- Set mode bits and capabilities correctly
+-- General code restructuring and cleanups
+-- Various additional bug fixes
+-- Handle different API versions correctly
+-- Expand support for tagged message transfers
+-- Add support for auto progress on data transfers
+
 ## SHM
 
 -- Initial release of shared memory provider

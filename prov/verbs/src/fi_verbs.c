@@ -588,7 +588,6 @@ static int fi_ibv_read_params(void)
 		return -FI_EINVAL;
 	}
 
-
 	/* RDM-specific parameters */
 	if (fi_ibv_get_param_int("rdm_buffer_num", "The number of pre-registered "
 				 "buffers for buffered operations between "
@@ -671,7 +670,6 @@ static int fi_ibv_read_params(void)
 
 static void fi_ibv_fini(void)
 {
-
 	fi_freeinfo((void *)fi_ibv_util_prov.info);
 	fi_ibv_util_prov.info = NULL;
 }
