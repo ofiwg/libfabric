@@ -285,6 +285,10 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		break;
 	case FI_ADDR_STR:
 		sin = usdf_format_to_sin(info, info->src_addr);
+		if (NULL == sin) {
+			ret = -FI_ENOMEM;
+			goto fail;
+		}
 		goto skip_size_check;
 	default:
 		ret = -FI_EINVAL;
