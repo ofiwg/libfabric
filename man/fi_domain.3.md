@@ -242,6 +242,10 @@ progress on data transfer operations.  This includes message queue,
 RMA, tagged messaging, and atomic operations, along with their
 completion processing.
 
+Progress frequently requires action being taken at both the transmitting
+and receiving sides of an operation.  This is often a requirement for
+reliable transfers, as a result of retry and acknowledgement processing.
+
 To balance between performance and ease of use, two progress models
 are defined.
 
@@ -275,6 +279,14 @@ are defined.
   Only wait operations defined by the fabric interface will result in
   an operation progressing.  Operating system or external wait
   functions, such as select, poll, or pthread routines, cannot.
+
+  Manual progress requirements not only apply to endpoints that initiate
+  transmit operations, but also to endpoints that may be the target of
+  such operations.  This holds true even if the target endpoint will not
+  generate completion events for the operations.  For example, an endpoint
+  that acts purely as the target of RMA or atomic operations that uses
+  manual progress may still need application assistance to process
+  received operations.
 
 ## Resource Management (resource_mgmt)
 
