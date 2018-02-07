@@ -242,6 +242,12 @@ static int psmx2_ep_close(fid_t fid)
 				      &ep->service, &ep_name);
 	}
 
+	if (ep->rx) {
+		psmx2_lock(&ep->domain->trx_ctxt_lock, 1);
+		dlist_remove(&ep->rx->entry);
+		psmx2_unlock(&ep->domain->trx_ctxt_lock, 1);
+	}
+
 	trx_ctxt = ep->rx;
 	psmx2_ep_close_internal(ep);
 	psmx2_trx_ctxt_free(trx_ctxt);
@@ -698,6 +704,10 @@ static int psmx2_stx_close(fid_t fid)
 	if (ofi_atomic_get32(&stx->ref))
 		return -FI_EBUSY;
 
+	psmx2_lock(&stx->domain->trx_ctxt_lock, 1);
+	dlist_remove(&stx->tx->entry);
+	psmx2_unlock(&stx->domain->trx_ctxt_lock, 1);
+
 	psmx2_trx_ctxt_free(stx->tx);
 	psmx2_domain_release(stx->domain);
 	free(stx);
@@ -757,6 +767,11 @@ int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 	stx_priv->tx = trx_ctxt;
 	ofi_atomic_initialize32(&stx_priv->ref, 0);
 
+	psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
+	dlist_insert_before(&trx_ctxt->entry,
+			    &domain_priv->trx_ctxt_list);
+	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
+
 	*stx = &stx_priv->stx;
 	return 0;
 
@@ -795,12 +810,13 @@ static int psmx2_sep_close(fid_t fid)
 			      &sep->service, &ep_name);
 
 	for (i = 0; i < sep->ctxt_cnt; i++) {
-		if (sep->ctxts[i].ep)
-			psmx2_ep_close_internal(sep->ctxts[i].ep);
-
 		psmx2_lock(&sep->domain->trx_ctxt_lock, 1);
 		dlist_remove(&sep->ctxts[i].trx_ctxt->entry);
 		psmx2_unlock(&sep->domain->trx_ctxt_lock, 1);
+
+		if (sep->ctxts[i].ep)
+			psmx2_ep_close_internal(sep->ctxts[i].ep);
+
 		psmx2_trx_ctxt_free(sep->ctxts[i].trx_ctxt);
 	}
 
