@@ -413,6 +413,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	struct ibv_cq *cq;
 	struct ibv_qp *qp;
 	struct ibv_qp_init_attr init_attr;
+	enum ibv_qp_type qp_type;
 	int ret = 0;
 
 	pd = ibv_alloc_pd(ctx);
@@ -428,6 +429,9 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 		goto err1;
 	}
 
+	qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
+			    IBV_QPT_RC : IBV_QPT_UD;
+
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
 	init_attr.recv_cq = cq;
@@ -435,10 +439,8 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
 	init_attr.cap.max_send_sge = fi_ibv_gl_data.def_tx_iov_limit;
 	init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
-	init_attr.cap.max_inline_data = fi_ibv_find_max_inline(pd, ctx);
-
-	init_attr.qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
-			    IBV_QPT_RC : IBV_QPT_UD;
+	init_attr.cap.max_inline_data = fi_ibv_find_max_inline(pd, ctx, qp_type);
+	init_attr.qp_type = qp_type;
 
 	qp = ibv_create_qp(pd, &init_attr);
 	if (!qp) {
