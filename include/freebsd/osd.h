@@ -42,6 +42,7 @@
 
 #define ENODATA ENOMSG
 #define HOST_NAME_MAX  128
+#define SOL_TCP IPPROTO_TCP
 
 typedef cpuset_t cpu_set_t;
 
