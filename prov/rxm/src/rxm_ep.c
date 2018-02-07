@@ -1303,6 +1303,48 @@ static int rxm_ep_close(struct fid *fid)
 			retv = ret;
 	}
 
+	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait) {
+		ret = ofi_wait_fd_del(rxm_ep->util_ep.tx_cntr->wait,
+				      rxm_ep->msg_cq_fd);
+		if (ret)
+			retv = ret;
+	}
+
+	if (rxm_ep->util_ep.rx_cntr && rxm_ep->util_ep.rx_cntr->wait) {
+		ret = ofi_wait_fd_del(rxm_ep->util_ep.rx_cntr->wait,
+				      rxm_ep->msg_cq_fd);
+		if (ret)
+			retv = ret;
+	}
+
+	if (rxm_ep->util_ep.rd_cntr && rxm_ep->util_ep.rd_cntr->wait) {
+		ret = ofi_wait_fd_del(rxm_ep->util_ep.rd_cntr->wait,
+				      rxm_ep->msg_cq_fd);
+		if (ret)
+			retv = ret;
+	}
+
+	if (rxm_ep->util_ep.wr_cntr && rxm_ep->util_ep.wr_cntr->wait) {
+		ret = ofi_wait_fd_del(rxm_ep->util_ep.wr_cntr->wait,
+				      rxm_ep->msg_cq_fd);
+		if (ret)
+			retv = ret;
+	}
+
+	if (rxm_ep->util_ep.rem_rd_cntr && rxm_ep->util_ep.rem_rd_cntr->wait) {
+		ret = ofi_wait_fd_del(rxm_ep->util_ep.rem_rd_cntr->wait,
+				      rxm_ep->msg_cq_fd);
+		if (ret)
+			retv = ret;
+	}
+
+	if (rxm_ep->util_ep.rem_wr_cntr && rxm_ep->util_ep.rem_wr_cntr->wait) {
+		ret = ofi_wait_fd_del(rxm_ep->util_ep.rem_wr_cntr->wait,
+				      rxm_ep->msg_cq_fd);
+		if (ret)
+			retv = ret;
+	}
+
 	if (rxm_ep->util_ep.cmap)
 		ofi_cmap_free(rxm_ep->util_ep.cmap);
 
@@ -1367,7 +1409,15 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
-		return ofi_ep_bind_cntr(&rxm_ep->util_ep, cntr, flags);
+		ret = ofi_ep_bind_cntr(&rxm_ep->util_ep, cntr, flags);
+		if (cntr->wait) {
+			ret = ofi_wait_fd_add(cntr->wait, rxm_ep->msg_cq_fd,
+					      rxm_ep_trywait, rxm_ep,
+					      &rxm_ep->util_ep.ep_fid.fid);
+			if (ret)
+				return ret;
+		}
+		break;
 	case FI_CLASS_EQ:
 		break;
 	default:

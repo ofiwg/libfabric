@@ -349,6 +349,7 @@ struct util_cntr {
 	struct dlist_entry	ep_list;
 	fastlock_t		ep_list_lock;
 
+	int			internal_wait;
 	ofi_cntr_progress_func	progress;
 };
 
