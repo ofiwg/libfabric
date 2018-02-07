@@ -16,9 +16,6 @@
 
 #include "config.h"
 
-#ifdef HAVE_LINUX_PERF_EVENT_H
-
-
 /* Ring 3 RDPMC support */
 #include <unistd.h>
 #include <stdio.h>
@@ -232,6 +229,3 @@ inline void ofi_pmu_close(struct ofi_perf_ctx *ctx)
 	rdpmc_close(&ctx->ctx);
 	free(ctx);
 }
-
-
-#endif /* HAVE_LINUX_PERF_EVENT_H */

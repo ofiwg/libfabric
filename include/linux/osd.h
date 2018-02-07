@@ -53,11 +53,4 @@ static inline int ofi_shm_remap(struct util_shm *shm,
 	return shm->ptr == MAP_FAILED ? -FI_EINVAL : FI_SUCCESS;
 }
 
-
-#ifdef HAVE_LINUX_PERF_EVENT_H
-#define HAVE_OFI_PERF
-#endif /* HAVE_LINUX_PERF_EVENT_H */
-
-
 #endif /* _LINUX_OSD_H_ */
-

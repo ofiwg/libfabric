@@ -17,8 +17,7 @@
 #ifndef RDPMC_H
 #define RDPMC_H
 
-#ifdef HAVE_LINUX_PERF_EVENT_H
-
+#if HAVE_LINUX_PERF_RDPMC
 
 #include <linux/perf_event.h>
 #include <ofi_perf.h>
@@ -41,6 +40,6 @@ struct ofi_perf_ctx {
 };
 
 
-#endif /* HAVE_LINUX_PERF_EVENT_H */
+#endif /* HAVE_LINUX_PERF_RDPMC */
 
 #endif
