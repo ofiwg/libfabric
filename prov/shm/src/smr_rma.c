@@ -145,10 +145,6 @@ ssize_t smr_generic_rma(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (ret)
 		return ret;
 
-	if (rma_count == 1 && !(op_flags & OFI_REMOTE_CQ_DATA))
-		return smr_rma_fast(ep, iov, iov_count, rma_iov, rma_count,
-				    desc, peer_id, context, op);
-
 	peer_smr = smr_peer_region(ep->region, peer_id);
 	fastlock_acquire(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < 2) {
@@ -288,89 +284,9 @@ ssize_t smr_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			       OFI_REMOTE_CQ_DATA : 0);
 }
 
-ssize_t smr_rma_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
-	fi_addr_t dest_addr, uint64_t addr, uint64_t key)
-{
-	struct smr_ep *ep;
-	struct smr_region *peer_smr;
-	struct smr_cmd *cmd;
-	struct iovec iov, rma_iovec;
-	struct fi_rma_iov rma_iov;
-	int peer_id;
-	ssize_t ret = 0;
-
-	assert(len <= SMR_INJECT_SIZE);
-
-	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
-
-	peer_id = (int) dest_addr;
-	ret = smr_verify_peer(ep, peer_id);
-	if (ret)
-		return ret;
-
-	peer_smr = smr_peer_region(ep->region, peer_id);
-	fastlock_acquire(&peer_smr->lock);
-	if (!peer_smr->cmd_cnt) {
-		ret = -FI_EAGAIN;
-		goto unlock_region;
-	}
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
-	rma_iovec.iov_base = (void *) addr;
-	rma_iovec.iov_len = len;
-
-	ret = process_vm_writev(peer_smr->pid, &iov, 1,
-				&rma_iovec, 1, 0);
-
-	if (ret != len) {
-		if (ret < 0) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"CMA write error\n");
-			ret = -errno;
-		} else {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"unable to process tx completion\n");
-			ret = -FI_EIO;
-		}
-		goto unlock_region;
-	}
-	ret = 0;
-
-	rma_iov.addr = addr;
-	rma_iov.len = len;
-
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
-	smr_format_rma_resp(cmd, peer_id, &rma_iov, 1, len,
-			    ofi_op_read_rsp);
-	ofi_cirque_commit(smr_cmd_queue(peer_smr));
-	peer_smr->cmd_cnt--;
-
-unlock_region:
-	fastlock_release(&peer_smr->lock);
-	return ret;
-}
-
-ssize_t smr_writedata(struct fid_ep *ep, const void *buf, size_t len,
-		      void *desc, uint64_t data, fi_addr_t dest_addr,
-		      uint64_t addr, uint64_t key, void *context)
-{
-	struct iovec iov;
-	struct fi_rma_iov rma_iov;
-
-	iov.iov_base = (void *) buf;
-	iov.iov_len = len;
-	rma_iov.addr = addr;
-	rma_iov.len = len;
-	rma_iov.key = key;
-
-	return smr_generic_rma(ep, &iov, 1, &rma_iov, 1, &desc, dest_addr, context,
-			       ofi_op_write, data, OFI_REMOTE_CQ_DATA);
-}
-
-ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
-			     uint64_t data, fi_addr_t dest_addr, uint64_t addr,
-			     uint64_t key)
+ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
+	size_t len, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+	uint64_t data, uint64_t flags)
 {
 	struct smr_ep *ep;
 	struct smr_region *peer_smr;
@@ -407,12 +323,12 @@ ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (len <= SMR_MSG_DATA_LEN) {
 		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 				  &iov, 1, ofi_op_write, 0, data,
-				  OFI_REMOTE_CQ_DATA);
+				  flags);
 	} else {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 				  &iov, 1, ofi_op_write, 0, data,
-				  OFI_REMOTE_CQ_DATA, peer_smr, tx_buf);
+				  flags, peer_smr, tx_buf);
 	}
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
@@ -425,6 +341,38 @@ ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 unlock_region:
 	fastlock_release(&peer_smr->lock);
 	return ret;
+}
+
+ssize_t smr_writedata(struct fid_ep *ep, const void *buf, size_t len,
+		      void *desc, uint64_t data, fi_addr_t dest_addr,
+		      uint64_t addr, uint64_t key, void *context)
+{
+	struct iovec iov;
+	struct fi_rma_iov rma_iov;
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	rma_iov.addr = addr;
+	rma_iov.len = len;
+	rma_iov.key = key;
+
+	return smr_generic_rma(ep, &iov, 1, &rma_iov, 1, &desc, dest_addr, context,
+			       ofi_op_write, data, OFI_REMOTE_CQ_DATA);
+}
+
+ssize_t smr_rma_inject(struct fid_ep *ep_fid, const void *buf,
+	size_t len, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+{
+	return smr_generic_rma_inject(ep_fid, buf, len, dest_addr, addr, key,
+				      0, 0);
+}
+
+ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
+			     uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+			     uint64_t key)
+{
+	return smr_generic_rma_inject(ep_fid, buf, len, dest_addr, addr, key,
+				      data, OFI_REMOTE_CQ_DATA);
 }
 
 struct fi_ops_rma smr_rma_ops = {
