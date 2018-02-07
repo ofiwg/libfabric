@@ -139,9 +139,9 @@ static int psmx2_init_lib(void)
 	}
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"PSM header version = (%d, %d)\n", PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
+		"PSM2 header version = (%d, %d)\n", PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"PSM library version = (%d, %d)\n", major, minor);
+		"PSM2 library version = (%d, %d)\n", major, minor);
 
 	if (psmx2_check_multi_ep_cap())
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "PSM2 multi-ep feature enabled.\n");
@@ -734,7 +734,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 					? hints->rx_attr->op_flags : 0;
 	psmx2_info->rx_attr->msg_order = PSMX2_MSG_ORDER;
 	psmx2_info->rx_attr->comp_order = PSMX2_COMP_ORDER;
-	psmx2_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
+	psmx2_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM2 handles it internally! */
 	psmx2_info->rx_attr->size = UINT64_MAX;
 	psmx2_info->rx_attr->iov_limit = 1;
 
@@ -756,9 +756,9 @@ static void psmx2_fini(void)
 		/* This function is called from a library destructor, which is called
 		 * automatically when exit() is called. The call to psm2_finalize()
 		 * might cause deadlock if the applicaiton is terminated with Ctrl-C
-		 * -- the application could be inside a PSM call, holding a lock that
+		 * -- the application could be inside a PSM2 call, holding a lock that
 		 * psm2_finalize() tries to acquire. This can be avoided by only
-		 * calling psm2_finalize() when PSM is guaranteed to be unused.
+		 * calling psm2_finalize() when PSM2 is guaranteed to be unused.
 		 */
 		if (psmx2_active_fabric) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
@@ -781,7 +781,10 @@ struct fi_provider psmx2_prov = {
 
 PROVIDER_INI
 {
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
+	FI_INFO(&psmx2_prov, FI_LOG_CORE, "build options: HAVE_PSM2_SRC=%d, "
+			"HAVE_PSM2_AM_REGISTER_HANDLERS_2=%d, "
+			"PSMX2_USE_REQ_CONTEXT=%d\n", HAVE_PSM2_SRC,
+			HAVE_PSM2_AM_REGISTER_HANDLERS_2, PSMX2_USE_REQ_CONTEXT);
 
 	fi_param_define(&psmx2_prov, "name_server", FI_PARAM_BOOL,
 			"Whether to turn on the name server or not "
@@ -798,7 +801,7 @@ PROVIDER_INI
 			"Delay (seconds) before finalization (for debugging)");
 
 	fi_param_define(&psmx2_prov, "timeout", FI_PARAM_INT,
-			"Timeout (seconds) for gracefully closing the PSM endpoint");
+			"Timeout (seconds) for gracefully closing the PSM2 endpoint");
 
 	fi_param_define(&psmx2_prov, "prog_interval", FI_PARAM_INT,
 			"Interval (microseconds) between progress calls made in the "
