@@ -1240,12 +1240,6 @@ static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
 {
 	int ret, retv = 0;
 
-	ret = fi_close(&rxm_ep->msg_cq->fid);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
-		retv = ret;
-	}
-
 	if (rxm_ep->srx_ctx) {
 		ret = fi_close(&rxm_ep->srx_ctx->fid);
 		if (ret) {
@@ -1353,6 +1347,14 @@ static int rxm_ep_close(struct fid *fid)
 		retv = ret;
 
 	rxm_ep_txrx_res_close(rxm_ep);
+
+	ret = fi_close(&rxm_ep->msg_cq->fid);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
+		retv = ret;
+	}
+
+
 	ret = rxm_ep_msg_res_close(rxm_ep);
 	if (ret)
 		retv = ret;
@@ -1360,6 +1362,42 @@ static int rxm_ep_close(struct fid *fid)
 	ofi_endpoint_close(&rxm_ep->util_ep);
 	free(rxm_ep);
 	return retv;
+}
+
+static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep, enum fi_wait_obj wait_obj)
+{
+	struct rxm_domain *rxm_domain;
+	struct fi_cq_attr cq_attr = { 0 };
+	int ret;
+
+	assert((wait_obj == FI_WAIT_NONE) || (wait_obj == FI_WAIT_FD));
+
+	cq_attr.size = (rxm_ep->rxm_info->tx_attr->size +
+			rxm_ep->rxm_info->rx_attr->size);
+	cq_attr.format = FI_CQ_FORMAT_DATA;
+	cq_attr.wait_obj = wait_obj;
+
+	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
+
+	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open MSG CQ\n");
+		return ret;;
+	}
+
+	if (wait_obj != FI_WAIT_NONE) {
+		ret = fi_control(&rxm_ep->msg_cq->fid, FI_GETWAIT, &rxm_ep->msg_cq_fd);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get MSG CQ fd\n");
+			goto err;
+		}
+	}
+	return 0;
+err:
+	ret = fi_close(&rxm_ep->msg_cq->fid);
+	if (ret)
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
+	return ret;
 }
 
 static int rxm_ep_trywait(void *arg)
@@ -1396,12 +1434,19 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
+		if (!rxm_ep->msg_cq) {
+			ret = rxm_ep_msg_cq_open(rxm_ep, cq->wait ?
+						 FI_WAIT_FD : FI_WAIT_NONE);
+			if (ret)
+				return ret;
+		}
+
 		if (cq->wait) {
 			ret = ofi_wait_fd_add(cq->wait, rxm_ep->msg_cq_fd,
 					      rxm_ep_trywait, rxm_ep,
 					      &rxm_ep->util_ep.ep_fid.fid);
 			if (ret)
-				return ret;
+				goto err;
 		}
 		break;
 	case FI_CLASS_CNTR:
@@ -1411,12 +1456,19 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
+		if (!rxm_ep->msg_cq) {
+			ret = rxm_ep_msg_cq_open(rxm_ep, cntr->wait ?
+						 FI_WAIT_FD : FI_WAIT_NONE);
+			if (ret)
+				return ret;
+		}
+
 		if (cntr->wait) {
 			ret = ofi_wait_fd_add(cntr->wait, rxm_ep->msg_cq_fd,
 					      rxm_ep_trywait, rxm_ep,
 					      &rxm_ep->util_ep.ep_fid.fid);
 			if (ret)
-				return ret;
+				goto err;
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -1426,6 +1478,11 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = -FI_EINVAL;
 		break;
 	}
+	return ret;
+err:
+	ret = fi_close(&rxm_ep->msg_cq->fid);
+	if (ret)
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
 	return ret;
 }
 
@@ -1548,7 +1605,6 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 			       struct rxm_ep *rxm_ep)
 {
 	struct rxm_domain *rxm_domain;
-	struct fi_cq_attr cq_attr = { 0 };
 	int ret;
 	size_t max_prog_val;
 
@@ -1564,36 +1620,19 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 
 	rxm_domain = container_of(util_domain, struct rxm_domain, util_domain);
 
-	cq_attr.size = (rxm_ep->rxm_info->tx_attr->size +
-			rxm_ep->rxm_info->rx_attr->size);
-	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = FI_WAIT_FD;
-
-	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open MSG CQ\n");
-		goto err1;
-	}
-
-	ret = fi_control(&rxm_ep->msg_cq->fid, FI_GETWAIT, &rxm_ep->msg_cq_fd);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get MSG CQ fd\n");
-		goto err2;
-	}
-
 	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 		ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,
 				     &rxm_ep->srx_ctx, NULL);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to open shared receive context\n");
-			goto err2;
+			goto err1;
 		}
 	}
 
 	ret = rxm_listener_open(rxm_ep);
 	if (ret)
-		goto err3;
+		goto err2;
 
 	/* Zero out the port as we would be creating multiple MSG EPs for a single
 	 * RXM EP and we don't want address conflicts. */
@@ -1604,10 +1643,8 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 			((struct sockaddr_in6 *)(rxm_ep->msg_info->src_addr))->sin6_port = 0;
 	}
 	return 0;
-err3:
-	fi_close(&rxm_ep->srx_ctx->fid);
 err2:
-	fi_close(&rxm_ep->msg_cq->fid);
+	fi_close(&rxm_ep->srx_ctx->fid);
 err1:
 	fi_freeinfo(rxm_ep->msg_info);
 	return ret;
