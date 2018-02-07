@@ -1543,8 +1543,8 @@ static int rxm_ep_get_core_info(uint32_t version, const struct fi_info *hints,
 				 rxm_info_to_core, info);
 }
 
-static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
-			       struct util_domain *util_domain, struct rxm_ep *rxm_ep)
+static int rxm_ep_msg_res_open(struct util_domain *util_domain,
+			       struct rxm_ep *rxm_ep)
 {
 	struct rxm_domain *rxm_domain;
 	struct fi_cq_attr cq_attr = { 0 };
@@ -1552,7 +1552,7 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 	size_t max_prog_val;
 
 	ret = rxm_ep_get_core_info(util_domain->fabric->fabric_fid.api_version,
-				   rxm_fi_info, &rxm_ep->msg_info);
+				   rxm_ep->rxm_info, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
 
@@ -1563,7 +1563,8 @@ static int rxm_ep_msg_res_open(struct fi_info *rxm_fi_info,
 
 	rxm_domain = container_of(util_domain, struct rxm_domain, util_domain);
 
-	cq_attr.size = rxm_fi_info->tx_attr->size + rxm_fi_info->rx_attr->size;
+	cq_attr.size = (rxm_ep->rxm_info->tx_attr->size +
+			rxm_ep->rxm_info->rx_attr->size);
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_FD;
 
@@ -1647,7 +1648,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	util_domain = container_of(domain, struct util_domain, domain_fid);
 
-	ret = rxm_ep_msg_res_open(info, util_domain, rxm_ep);
+	ret = rxm_ep_msg_res_open(util_domain, rxm_ep);
 	if (ret)
 		goto err2;
 
