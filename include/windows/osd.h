@@ -726,6 +726,9 @@ static inline ssize_t ofi_sendto_socket(SOCKET fd, const void *buf, size_t count
 	return sendto(fd, (const char*)buf, (int)count, flags, to, tolen);
 }
 
+ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
+ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
+
 static inline int ofi_close_socket(SOCKET socket)
 {
 	return closesocket(socket);

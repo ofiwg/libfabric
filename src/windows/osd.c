@@ -505,3 +505,45 @@ void freeifaddrs(struct ifaddrs *ifa)
 		ifa = next;
 	}
 }
+
+ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
+{
+	ssize_t size;
+	int ret, i;
+	WSABUF *wsa_buf;
+	DWORD flags = 0;
+
+	wsa_buf = (WSABUF *)alloca(iov_cnt * sizeof(WSABUF));
+
+	for (i = 0; i < iov_cnt; i++) {
+		wsa_buf[i].buf = (char *)iovec[i].iov_base;
+		wsa_buf[i].len = iovec[i].iov_len;
+	}
+
+	ret = WSASend(fd, wsa_buf, iov_cnt, &size, &flags, NULL, NULL);
+	if (ret)
+		size = (ssize_t)ret;
+
+	return size;
+}
+
+ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
+{
+	ssize_t size;
+	int ret,i;
+	WSABUF *wsa_buf;
+	DWORD flags = 0;
+
+	wsa_buf = (WSABUF *)alloca(iov_cnt *sizeof(WSABUF));
+
+	for (i = 0; i <iov_cnt; i++) {
+		wsa_buf[i].buf = (char *)iovec[i].iov_base;
+		wsa_buf[i].len = iovec[i].iov_len;
+	}
+
+	ret = WSARecv(fd, wsa_buf, iov_cnt, &size, &flags, NULL, NULL);
+	if (ret)
+		size = (ssize_t)ret;
+
+	return size;
+}
