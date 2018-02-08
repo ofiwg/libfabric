@@ -187,7 +187,12 @@ bound to one or more fabric resources.  An endpoint that will generate
 asynchronous completions, either through data transfer operations or
 communication establishment events, must be bound to the appropriate
 completion queues or event queues, respectively, before being enabled.
-Unconnected endpoints must be bound to an address vector.
+Additionally, endpoints that use manual progress must be associated
+with relevant completion queues or event queues in order to drive
+progress.  For endpoints that are only used as the target of RMA or
+atomic operations, this means binding the endpoint to a completion
+queue associated with receive processing.  Unconnected endpoints must
+be bound to an address vector.
 
 Once an endpoint has been activated, it may be associated with an address
 vector.  Receive buffers may be posted to it and

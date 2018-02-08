@@ -353,7 +353,8 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 	return 0;
 }
 
-int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
+int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
+                           enum ibv_qp_type qp_type)
 {
 	struct ibv_qp_init_attr qp_attr;
 	struct ibv_qp *qp = NULL;
@@ -365,7 +366,7 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context)
 	memset(&qp_attr, 0, sizeof(qp_attr));
 	qp_attr.send_cq = cq;
 	qp_attr.recv_cq = cq;
-	qp_attr.qp_type = IBV_QPT_RC;
+	qp_attr.qp_type = qp_type;
 	qp_attr.cap.max_send_wr = 1;
 	qp_attr.cap.max_recv_wr = 1;
 	qp_attr.cap.max_send_sge = 1;
@@ -586,7 +587,6 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of mr_cache_lazy_size\n");
 		return -FI_EINVAL;
 	}
-	
 
 	/* RDM-specific parameters */
 	if (fi_ibv_get_param_int("rdm_buffer_num", "The number of pre-registered "
@@ -670,7 +670,6 @@ static int fi_ibv_read_params(void)
 
 static void fi_ibv_fini(void)
 {
-	
 	fi_freeinfo((void *)fi_ibv_util_prov.info);
 	fi_ibv_util_prov.info = NULL;
 }

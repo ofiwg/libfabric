@@ -420,7 +420,7 @@ static int sock_cm_recv(int fd, void *buf, int len)
 	while (done != len) {
 		ret = ofi_recv_socket(fd, (char*) buf + done, len - done, 0);
 		if (ret <= 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 				continue;
 			SOCK_LOG_ERROR("failed to read from fd: %s\n",
 				       strerror(ofi_sockerr()));

@@ -125,6 +125,8 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_DELIVERY_COMPLETE);
 	IFFLAGSTR(flags, FI_AFFINITY);
 
+	IFFLAGSTR(flags, FI_RMA_PMEM);
+
 	fi_remove_comma(buf);
 }
 
@@ -198,6 +200,7 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 
 static void fi_tostr_caps(char *buf, uint64_t caps)
 {
+	IFFLAGSTR(caps, FI_RMA_PMEM);
 	IFFLAGSTR(caps, FI_SOURCE_ERR);
 	IFFLAGSTR(caps, FI_LOCAL_COMM);
 	IFFLAGSTR(caps, FI_REMOTE_COMM);

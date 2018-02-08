@@ -584,7 +584,7 @@ int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
 	dlist_init(&_ep->fi_ibv_rdm_multi_recv_list);
 
 	_ep->max_inline_rc =
-		fi_ibv_find_max_inline(_ep->domain->pd, _ep->domain->verbs);
+		fi_ibv_find_max_inline(_ep->domain->pd, _ep->domain->verbs, IBV_QPT_RC);
 
 	_ep->scq_depth = FI_IBV_RDM_TAGGED_DFLT_SCQ_SIZE;
 	_ep->rcq_depth = FI_IBV_RDM_TAGGED_DFLT_RCQ_SIZE;
