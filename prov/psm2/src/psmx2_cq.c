@@ -868,6 +868,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					continue;
 				}
 
+				PSMX2_STATUS_TAG(status) = sendv_rep->tag;
 				PSMX2_STATUS_RCVLEN(status) = sendv_rep->bytes_received;
 				PSMX2_STATUS_SNDLEN(status) = sendv_rep->msg_length;
 				PSMX2_STATUS_ERROR(status) = sendv_rep->error_code;

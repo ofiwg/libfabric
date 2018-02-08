@@ -390,6 +390,7 @@ struct psmx2_sendv_reply {
 	struct fi_context fi_context;
 	int no_completion;
 	int multi_recv;
+	psm2_mq_tag_t tag;
 	uint8_t *buf;
 	void *user_context;
 	size_t iov_done;

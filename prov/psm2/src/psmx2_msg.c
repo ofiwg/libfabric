@@ -508,6 +508,7 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	memcpy(&rep->iov_info, recv_buf, PSMX2_STATUS_RCVLEN(status));
 
 	rep->user_context = PSMX2_STATUS_CONTEXT(status);
+	rep->tag = PSMX2_STATUS_TAG(status);
 	rep->buf = recv_buf;
 	rep->no_completion = 0;
 	rep->iov_done = 0;
