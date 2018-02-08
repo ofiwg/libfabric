@@ -113,6 +113,7 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 	fastlock_release(&ep->wre_lock);
 
 	wre->srq = ep;
+	wre->ep = NULL;
 	wre->context = msg->context;
 	wre->wr_type = IBV_RECV_WR;
 
