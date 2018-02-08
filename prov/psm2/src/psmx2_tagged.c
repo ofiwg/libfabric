@@ -562,12 +562,9 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 	struct psmx2_cq_event *event;
 	int have_data = (flags & FI_REMOTE_CQ_DATA) > 0;
 
-	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+	assert((tag & ~PSMX2_TAG_MASK) == 0);
 
-#if ENABLE_DEBUG
-	if (data & 0xffffffff00000000 || tag & ~PSMX2_TAG_MASK)
-		return -FI_EINVAL;
-#endif
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	if (flags & FI_TRIGGER)
 		return psmx2_trigger_queue_tsend(ep, buf, len, desc,
@@ -667,6 +664,8 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 	struct fi_context *fi_context;
 	size_t idx;
 	int err;
+
+	assert((tag & ~PSMX2_TAG_MASK) == 0);
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 	av = ep_priv->av;
@@ -818,6 +817,8 @@ psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 	size_t idx;
 	int err;
 
+	assert((tag & ~PSMX2_TAG_MASK) == 0);
+
 	if (len > psmx2_env.inject_size)
 		return -FI_EMSGSIZE;
 
@@ -924,6 +925,8 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	struct psmx2_sendv_request *req;
 	int have_data = (flags & FI_REMOTE_CQ_DATA) > 0;
 	uint32_t msg_flags;
+
+	assert((tag & ~PSMX2_TAG_MASK) == 0);
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
