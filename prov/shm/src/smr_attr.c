@@ -47,7 +47,7 @@ struct fi_tx_attr smr_tx_attr = {
 };
 
 struct fi_rx_attr smr_rx_attr = {
-	.caps = SMR_RX_CAPS,
+	.caps = SMR_RX_CAPS | FI_MULTI_RECV,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
 	.size = 1024,
@@ -87,7 +87,7 @@ struct fi_fabric_attr smr_fabric_attr = {
 };
 
 struct fi_info smr_info = {
-	.caps = SMR_TX_CAPS | SMR_RX_CAPS,
+	.caps = SMR_TX_CAPS | SMR_RX_CAPS | FI_MULTI_RECV,
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &smr_tx_attr,
 	.rx_attr = &smr_rx_attr,
