@@ -117,7 +117,11 @@ static void rxm_conn_free(struct util_cmap_handle *handle)
 static struct util_cmap_handle *rxm_conn_alloc(void)
 {
 	struct rxm_conn *rxm_conn = calloc(1, sizeof(*rxm_conn));
-	return rxm_conn ? &rxm_conn->handle : NULL;
+	if (OFI_UNLIKELY(!rxm_conn))
+		return NULL;
+
+	dlist_init(&rxm_conn->postponed_tx_list);
+	return &rxm_conn->handle;
 }
 
 static int
@@ -239,11 +243,14 @@ static void *rxm_conn_event_handler(void *arg)
 		case FI_CONNECTED:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 			       "Connection successful\n");
+			fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 			cm_data = (void *)entry->data;
 			ofi_cmap_process_connect(rxm_ep->util_ep.cmap,
 						 entry->fid->context,
-						 (rd - sizeof(*entry)) ?
-						 &cm_data->conn_id : NULL);
+						 ((rd - sizeof(*entry)) ?
+						  &cm_data->conn_id : NULL));
+			rxm_conn_handle_postponed_tx_op(rxm_ep, entry->fid->context);
+			fastlock_release(&rxm_ep->util_ep.cmap->lock);
 			break;
 		case FI_SHUTDOWN:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC,

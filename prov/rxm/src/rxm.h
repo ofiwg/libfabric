@@ -111,6 +111,7 @@ struct rxm_fabric {
 
 struct rxm_conn {
 	struct fid_ep *msg_ep;
+	struct dlist_entry postponed_tx_list;
 	struct util_cmap_handle handle;
 };
 
@@ -251,7 +252,10 @@ struct rxm_tx_buf {
 
 struct rxm_tx_entry {
 	/* Must stay at top */
-	struct fi_context fi_context;	
+	union {
+		struct fi_context fi_context;
+		struct dlist_entry postponed_entry;
+	};
 
 	enum rxm_proto_state state;
 
@@ -324,7 +328,7 @@ struct rxm_ep {
 	size_t			min_multi_recv_size;
 
 	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX_VAL];
-	
+
 	struct dlist_entry	post_rx_list;
 	struct dlist_entry	repost_ready_list;
 
@@ -380,6 +384,8 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
+
+void rxm_conn_handle_postponed_tx_op(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {
