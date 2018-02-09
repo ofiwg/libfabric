@@ -328,6 +328,13 @@ int ofi_cq_write_error(struct util_cq *cq,
 		       const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context);
 
+static inline int ofi_need_completion(uint64_t cq_flags, uint64_t op_flags)
+{
+	return (!(cq_flags & FI_SELECTIVE_COMPLETION) ||
+		(op_flags & (FI_COMPLETION | FI_INJECT_COMPLETE |
+			     FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)));
+}
+
 /*
  * Counter
  */

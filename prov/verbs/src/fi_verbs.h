@@ -98,9 +98,8 @@
 #define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->info->tx_attr->op_flags)
 
 #define VERBS_SELECTIVE_COMP(ep) (ep->ep_flags & FI_SELECTIVE_COMPLETION)
-#define VERBS_COMP_FLAGS(ep, flags) ((!VERBS_SELECTIVE_COMP(ep) || \
-		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE))) ? \
-		IBV_SEND_SIGNALED : 0)
+#define VERBS_COMP_FLAGS(ep, flags) (ofi_need_completion(ep->ep_flags, flags) ?	\
+				     IBV_SEND_SIGNALED : 0)
 #define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
 
 #define VERBS_WCE_CNT 1024
