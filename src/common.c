@@ -80,12 +80,12 @@ int fi_poll_fd(int fd, int timeout)
 
 uint64_t ofi_max_tag(uint64_t mem_tag_format)
 {
-	return UINT64_MAX >> (64 - ofi_msb(mem_tag_format));
+	return mem_tag_format ? UINT64_MAX >> (64 - ofi_msb(mem_tag_format)) : 0;
 }
 
 uint64_t ofi_tag_format(uint64_t max_tag)
 {
-	return FI_TAG_GENERIC >> (64 - ofi_msb(max_tag));
+	return max_tag ? FI_TAG_GENERIC >> (64 - ofi_msb(max_tag)) : 0;
 }
 
 uint8_t ofi_msb(uint64_t num)
