@@ -545,7 +545,8 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 	fastlock_release(&recv_queue->lock);
 
 	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
-			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+			    rx_buf->pkt.hdr.size, NULL,
+			    rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
 
 static inline ssize_t
