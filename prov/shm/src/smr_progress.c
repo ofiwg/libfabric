@@ -54,7 +54,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 
 		pending = (struct smr_cmd *) resp->msg_id;
 
-		ret = ep->tx_comp(ep, NULL,
+		ret = ep->tx_comp(ep, (void *) (uintptr_t) pending->msg.hdr.msg_id,
 				  smr_tx_comp_flags(pending->msg.hdr.op),
 				  -(resp->status));
 		if (ret) {

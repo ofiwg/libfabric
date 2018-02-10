@@ -165,7 +165,7 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 		pend = freestack_pop(ep->pend_fs);
 		smr_format_iov(cmd, smr_peer_addr(ep->region)[peer_id].addr, iov,
 			       iov_count, total_len, op, tag, data, op_flags,
-			       ep->region, resp, pend);
+			       context, ep->region, resp, pend);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		goto commit;
 	}

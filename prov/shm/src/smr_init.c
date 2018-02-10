@@ -66,7 +66,11 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		       struct fi_info **info)
 {
 	struct fi_info *cur;
+	int fast_rma;
 	int ret;
+
+	fast_rma = hints ? smr_fast_rma_enabled(hints->domain_attr->mr_mode,
+						hints->tx_attr->msg_order) : 0;
 
 	ret = util_getinfo(&smr_util_prov, version, node, service, flags,
 			   hints, info);
@@ -85,6 +89,10 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			else
 				smr_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
 						 &cur->src_addrlen);
+		}
+		if (fast_rma) {
+			cur->domain_attr->mr_mode = FI_MR_VIRT_ADDR;
+			cur->tx_attr->msg_order = FI_ORDER_SAS;
 		}
 	}
 	return 0;
