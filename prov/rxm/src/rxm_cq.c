@@ -552,6 +552,8 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	switch (RXM_GET_PROTO_STATE(comp)) {
 	case RXM_TX_NOBUF:
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
+		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
+			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_TX:
 		assert(comp->flags & (FI_SEND | FI_WRITE));

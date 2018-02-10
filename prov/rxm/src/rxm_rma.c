@@ -52,22 +52,29 @@ static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	tx_entry->context = msg->context;
 	tx_entry->flags = flags;
 	tx_entry->comp_flags = FI_RMA | comp_flags;
+	tx_entry->count = msg->iov_count;
 
 	msg_rma = *msg;
 	msg_rma.context = tx_entry;
 
 	if (rxm_ep->msg_mr_local) {
 		if (!rxm_ep->rxm_mr_local) {
+			void *mr[RXM_IOV_LIMIT] = { 0 };
+
 			ret = rxm_ep_msg_mr_regv(rxm_ep, msg->msg_iov,
 						 msg->iov_count,
 						 comp_flags & (FI_WRITE | FI_READ),
 						 tx_entry->mr);
 			if (ret)
 				goto err;
-			msg_rma.desc = (void **)tx_entry->mr;
+
+			msg_rma.desc = (void **)&mr;
+			for (i = 0; i < msg_rma.iov_count; i++)
+				msg_rma.desc[i] = fi_mr_desc(tx_entry->mr[i]);
+		} else {
+			for (i = 0; i < msg_rma.iov_count; i++)
+				msg_rma.desc[i] = fi_mr_desc(msg_rma.desc[i]);
 		}
-		for (i = 0; i < msg_rma.iov_count; i++)
-			msg_rma.desc[i] = fi_mr_desc(msg_rma.desc[i]);
 	}
 
 	return rma_msg(msg_ep, &msg_rma, flags);
