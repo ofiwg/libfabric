@@ -59,7 +59,7 @@ static ssize_t tcpx_comm_recv_socket(SOCKET conn_fd, void *buf, size_t len)
 
 static void tcpx_comm_recv_buffer(struct tcpx_pe_entry *pe_entry)
 {
-	int ret;
+	ssize_t ret;
 	size_t max_read, avail;
 
 	avail = ofi_rbavail(&pe_entry->comm_buf);
@@ -128,7 +128,7 @@ ssize_t tcpx_comm_flush(struct tcpx_pe_entry *pe_entry)
 	if (ret1 > 0)
 		pe_entry->comm_buf.rcnt += ret1;
 
-	if (ret1 == xfer_len && xfer_len < len) {
+	if ((size_t)ret1 == xfer_len && xfer_len < len) {
 		ret2 = tcpx_comm_send_socket(pe_entry->ep->conn_fd, (char*)pe_entry->comm_buf.buf +
 					     (pe_entry->comm_buf.rcnt & pe_entry->comm_buf.size_mask),
 					     len - xfer_len);

@@ -120,8 +120,9 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_domain *tcpx_domain;
 	struct tcpx_pe_entry *send_entry;
+	size_t data_len;
 	int ret = FI_SUCCESS;
-	int i, data_len;
+	int i;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
@@ -286,13 +287,13 @@ static int tcpx_setup_socket(SOCKET sock)
 {
 	int ret, optval = 1;
 
-	ret = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+	ret = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&optval, sizeof(optval));
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt reuseaddr failed\n");
 		return ret;
 	}
 
-	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval));
+	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (const char *)&optval, sizeof(optval));
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt nodelay failed\n");
 		return ret;
@@ -324,7 +325,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	}
 
 	ret = connect(tcpx_ep->conn_fd, (struct sockaddr *) addr,
-		      ofi_sizeofaddr(addr));
+		      (socklen_t)ofi_sizeofaddr(addr));
 	if (ret && errno != FI_EINPROGRESS) {
 		free(fd_info);
 		return -errno;
@@ -746,7 +747,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		case FI_SOCKADDR:
 		case FI_SOCKADDR_IN:
 		case FI_SOCKADDR_IN6:
-			ret = getnameinfo(info->src_addr, info->src_addrlen,
+			ret = getnameinfo(info->src_addr, (socklen_t)info->src_addrlen,
 					  sa_ip, INET_ADDRSTRLEN,
 					  sa_port, NI_MAXSERV, 0);
 			if (ret) {
