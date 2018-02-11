@@ -10,7 +10,6 @@ AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects parallel-tests tar-ustar])
-AM_PROG_AS()
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_CANONICAL_HOST
@@ -61,6 +60,10 @@ AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
 # Fix autoconf's habit of setting CFLAGS="-g -O2" by default while still
 # allowing the user to explicitly set CFLAGS=""
 : ${CFLAGS="-fvisibility=hidden -O2 -DNDEBUG ${base_c_warn_flags}"}
+
+# AM_PROG_AS would set CFLAGS="-g -O2" by default if not set already so it
+# should not be called earlier
+AM_PROG_AS()
 
 # AM PROG_AR did not exist pre AM 1.11.x (where x is somewhere >0 and
 # <3), but it is necessary in AM 1.12.x.
