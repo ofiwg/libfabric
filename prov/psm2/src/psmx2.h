@@ -160,8 +160,66 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_IOV_BIT_SET(flag) (-(uint32_t)flag & PSMX2_IOV_BIT)
 #define PSMX2_IMM_BIT_SET(flag) (-(uint32_t)flag & PSMX2_IMM_BIT)
 
-#define PSMX2_TAG_UPPER_MASK	((uint32_t)0x0FFFFFFF)
-#define PSMX2_TAG_MASK		(0x0FFFFFFFFFFFFFFFULL)
+/*
+ * Different ways to use the 96 bit tag:
+ * 	TAG60: 32/4/60 for data/flags/tag
+ * 	TAG64: 4/28/64 for flags/data/tag
+ * 	RUNTIME:  make the choice at runtime
+ */
+#define PSMX2_TAG_LAYOUT_RUNTIME	0
+#define PSMX2_TAG_LAYOUT_TAG60		1
+#define PSMX2_TAG_LAYOUT_TAG64		2
+
+#ifndef PSMX2_TAG_LAYOUT
+#define PSMX2_TAG_LAYOUT	PSMX2_TAG_LAYOUT_RUNTIME
+#elif (PSMX2_TAG_LAYOUT < 0 || PSMX2_TAG_LAYOUT > 2)
+#warning "Invalid PSMX2_TAG_LAYOUT definition, using default."
+#undef PSMX2_TAG_LAYOUT
+#define PSMX2_TAG_LAYOUT	PSMX2_TAG_LAYOUT_RUNTIME
+#endif
+
+#define PSMX2_TAG_MASK_60	(0x0FFFFFFFFFFFFFFFULL)
+#define PSMX2_TAG_UPPER_MASK_60	((uint32_t)0x0FFFFFFF)
+#define PSMX2_DATA_MASK_60	((uint32_t)0xFFFFFFFF)
+#define PSMX2_FLAGS_IDX_60	(1)
+
+#define PSMX2_TAG_MASK_64	(0xFFFFFFFFFFFFFFFFULL)
+#define PSMX2_TAG_UPPER_MASK_64	((uint32_t)0xFFFFFFFF)
+#define PSMX2_DATA_MASK_64	((uint32_t)0x0FFFFFFF)
+#define PSMX2_FLAGS_IDX_64	(2)
+
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_TAG60)
+#define PSMX2_TAG_MASK		PSMX2_TAG_MASK_60
+#define PSMX2_TAG_UPPER_MASK	PSMX2_TAG_UPPER_MASK_60
+#define PSMX2_DATA_MASK		PSMX2_DATA_MASK_60
+#define PSMX2_FLAGS_IDX		PSMX2_FLAGS_IDX_60
+#endif
+
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_TAG64)
+#define PSMX2_TAG_MASK		PSMX2_TAG_MASK_64
+#define PSMX2_TAG_UPPER_MASK	PSMX2_TAG_UPPER_MASK_64
+#define PSMX2_DATA_MASK		PSMX2_DATA_MASK_64
+#define PSMX2_FLAGS_IDX		PSMX2_FLAGS_IDX_64
+#endif
+
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+#define PSMX2_TAG_MASK		psmx2_tag_mask
+#define PSMX2_TAG_UPPER_MASK	psmx2_tag_upper_mask
+#define PSMX2_DATA_MASK		psmx2_data_mask
+#define PSMX2_FLAGS_IDX		psmx2_flags_idx
+#define PSMX2_DEFAULT_TAG_LAYOUT	"tag60"
+#define PSMX2_DEFAULT_TAG_MASK		PSMX2_TAG_MASK_60
+#define PSMX2_DEFAULT_TAG_UPPER_MASK	PSMX2_TAG_UPPER_MASK_60
+#define PSMX2_DEFAULT_DATA_MASK		PSMX2_DATA_MASK_60
+#define PSMX2_DEFAULT_FLAGS_IDX		PSMX2_FLAGS_IDX_60
+extern uint64_t	psmx2_tag_mask;
+extern uint32_t	psmx2_tag_upper_mask;
+extern uint32_t	psmx2_data_mask;
+extern int	psmx2_flags_idx;
+#endif
+
+#define PSMX2_FLAGS_MASK	((uint32_t)0xF0000000)
+
 #define PSMX2_MAX_TAG		PSMX2_TAG_MASK
 #define PSMX2_MATCH_ALL		(-1ULL)
 #define PSMX2_MATCH_NONE	(0ULL)
@@ -191,11 +249,11 @@ static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
 	return *(uint64_t *)tag96;
 }
 
-#define PSMX2_SET_TAG_INTERNAL(tag96,tag,cq_data,flags) \
+#define PSMX2_SET_TAG_INTERNAL(tag96,_tag_,cq_data,flags) \
 	do { \
-		psmx2_set_tag64(&(tag96),(tag) & PSMX2_TAG_MASK); \
-		(tag96).tag1 |= (flags); \
-		(tag96).tag2 = (cq_data); \
+		psmx2_set_tag64(&(tag96),(_tag_) & PSMX2_TAG_MASK); \
+		(tag96).tag2 = ((cq_data) & PSMX2_DATA_MASK); \
+		(tag96).tag[PSMX2_FLAGS_IDX] |= (flags); \
 	} while (0)
 
 #define PSMX2_SET_TAG(tag96,tag,cq_data,flags) \
@@ -205,8 +263,8 @@ static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
 	PSMX2_SET_TAG_INTERNAL(tagsel96,tag_mask,0,flag_mask)
 
 #define PSMX2_GET_TAG64(tag96)	(psmx2_get_tag64(&(tag96)) & PSMX2_TAG_MASK)
-#define PSMX2_GET_FLAGS(tag96)	((tag96).tag1 & ~PSMX2_TAG_UPPER_MASK)
-#define PSMX2_GET_CQDATA(tag96)	((tag96).tag2)
+#define PSMX2_GET_FLAGS(tag96)	((tag96).tag[PSMX2_FLAGS_IDX] & PSMX2_FLAGS_MASK)
+#define PSMX2_GET_CQDATA(tag96)	((tag96).tag2 & PSMX2_DATA_MASK)
 
 /*
  * Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
@@ -700,6 +758,9 @@ struct psmx2_env {
 	int lock_level;
 	int lazy_conn;
 	int disconnect;
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+	char *tag_layout;
+#endif
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
