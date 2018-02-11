@@ -61,13 +61,31 @@ int ofi_cq_write_error(struct util_cq *cq,
 
 int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context)
 {
-	struct fi_cq_err_entry err_entry = {0};
+	struct fi_cq_err_entry err_entry = {
+		.op_context	= context,
+		.flags		= FI_TAGGED | FI_RECV,
+		.tag		= tag,
+		.err		= FI_ENOMSG,
+		.prov_errno	= -FI_ENOMSG,
+	};
+	return ofi_cq_write_error(cq, &err_entry);
+}
 
-	err_entry.op_context    = context;
-	err_entry.flags         = FI_TAGGED | FI_RECV;
-	err_entry.tag		= tag;
-	err_entry.err           = FI_ENOMSG;
-	err_entry.prov_errno    = -FI_ENOMSG;
+int ofi_cq_write_error_trunc(struct util_cq *cq, void *context, uint64_t flags,
+			     size_t len, void *buf, uint64_t data, uint64_t tag,
+			     size_t olen)
+{
+	struct fi_cq_err_entry err_entry = {
+		.op_context	= context,
+		.flags		= flags,
+		.len		= len,
+		.buf		= buf,
+		.data		= data,
+		.tag		= tag,
+		.olen		= olen,
+		.err		= FI_ETRUNC,
+		.prov_errno	= -FI_ETRUNC,
+	};
 	return ofi_cq_write_error(cq, &err_entry);
 }
 
