@@ -66,11 +66,14 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		       struct fi_info **info)
 {
 	struct fi_info *cur;
+	uint64_t mr_mode, msg_order;
 	int fast_rma;
 	int ret;
 
-	fast_rma = hints ? smr_fast_rma_enabled(hints->domain_attr->mr_mode,
-						hints->tx_attr->msg_order) : 0;
+	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
+						FI_MR_VIRT_ADDR;
+	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
+	fast_rma = smr_fast_rma_enabled(mr_mode, msg_order);
 
 	ret = util_getinfo(&smr_util_prov, version, node, service, flags,
 			   hints, info);
