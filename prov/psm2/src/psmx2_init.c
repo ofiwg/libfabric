@@ -55,7 +55,17 @@ struct psmx2_env psmx2_env = {
 	.lock_level	= 2,
 	.lazy_conn	= 0,
 	.disconnect	= 0,
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+	.tag_layout	= PSMX2_DEFAULT_TAG_LAYOUT,
+#endif
 };
+
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+uint64_t psmx2_tag_mask		= PSMX2_DEFAULT_TAG_MASK;
+uint32_t psmx2_tag_upper_mask	= PSMX2_DEFAULT_TAG_UPPER_MASK;
+uint32_t psmx2_data_mask	= PSMX2_DEFAULT_DATA_MASK;
+int	 psmx2_flags_idx	= PSMX2_DEFAULT_FLAGS_IDX;
+#endif
 
 static void psmx2_init_env(void)
 {
@@ -73,6 +83,25 @@ static void psmx2_init_env(void)
 	fi_param_get_bool(&psmx2_prov, "lock_level", &psmx2_env.lock_level);
 	fi_param_get_bool(&psmx2_prov, "lazy_conn", &psmx2_env.lazy_conn);
 	fi_param_get_bool(&psmx2_prov, "disconnect", &psmx2_env.disconnect);
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+	fi_param_get_str(&psmx2_prov, "tag_layout", &psmx2_env.tag_layout);
+
+	if (strcasecmp(psmx2_env.tag_layout, "tag60") == 0) {
+		psmx2_tag_upper_mask = PSMX2_TAG_UPPER_MASK_60;
+		psmx2_tag_mask = PSMX2_TAG_MASK_60;
+		psmx2_data_mask = PSMX2_DATA_MASK_60;
+		psmx2_flags_idx = PSMX2_FLAGS_IDX_60;
+	} else if (strcasecmp(psmx2_env.tag_layout, "tag64") == 0) {
+		psmx2_tag_upper_mask = PSMX2_TAG_UPPER_MASK_64;
+		psmx2_tag_mask = PSMX2_TAG_MASK_64;
+		psmx2_data_mask = PSMX2_DATA_MASK_64;
+		psmx2_flags_idx = PSMX2_FLAGS_IDX_64;
+	} else {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"Invalid tag layout '%s', using default value '%s'.\n",
+			psmx2_env.tag_layout, PSMX2_DEFAULT_TAG_LAYOUT);
+	}
+#endif
 }
 
 static int psmx2_get_yes_no(char *s, int default_value)
@@ -827,6 +856,13 @@ PROVIDER_INI
 
 	fi_param_define(&psmx2_prov, "disconnect", FI_PARAM_BOOL,
 			"Whether to issue disconnect request when process ends (default: no).");
+
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+	fi_param_define(&psmx2_prov, "tag_layout", FI_PARAM_STRING,
+			"How the 96 bit PSM2 tag is organized: "
+			"tag60 means 32/4/60 for data/flags/tag;"
+			"tag64 means 4/28/64 for flags/data/tag (default: tag60).");
+#endif
 
 	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;
