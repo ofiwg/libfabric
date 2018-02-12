@@ -169,28 +169,44 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 	return FI_SUCCESS;
 }
 
-static int rxm_finish_recv(struct rxm_rx_buf *rx_buf)
+static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
 
-	if (rx_buf->recv_entry->flags & FI_COMPLETION) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
-		ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
-				   rx_buf->recv_entry->context,
-				   rx_buf->recv_entry->comp_flags |
-				   ((rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
-				    FI_REMOTE_CQ_DATA : 0),
-				   rx_buf->pkt.hdr.size,
-				   rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
-				   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Unable to write recv completion\n");
-			return ret;
+	if (OFI_UNLIKELY(done_len < rx_buf->pkt.hdr.size)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Message truncated\n");
+		ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
+					       rx_buf->recv_entry->context,
+					       rx_buf->recv_entry->comp_flags |
+					       ((rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
+					        FI_REMOTE_CQ_DATA : 0),
+					       rx_buf->pkt.hdr.size,
+					       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
+					       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
+					       rx_buf->pkt.hdr.size - done_len);
+		assert(!ret);
+		if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
+			rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
+	} else {
+		if (rx_buf->recv_entry->flags & FI_COMPLETION) {
+			FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
+			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
+					   rx_buf->recv_entry->context,
+					   rx_buf->recv_entry->comp_flags |
+					   ((rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
+					    FI_REMOTE_CQ_DATA : 0),
+					   rx_buf->pkt.hdr.size,
+					   rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
+					   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+			if (ret) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Unable to write recv completion\n");
+				return ret;
+			}
 		}
+		if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
+			rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
 	}
-	if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
-		rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
 
 	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
 	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
@@ -275,7 +291,7 @@ static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_LMT_FINISH;
 	if (!rx_buf->ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
-	return rxm_finish_recv(rx_buf);
+	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
 
 static ssize_t rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
@@ -352,12 +368,6 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
 		rx_buf->index = 0;
 
-		if (rx_buf->pkt.hdr.size > rx_buf->recv_entry->total_len) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Posted receive buffer size is not enough!\n");
-			return -FI_ETRUNC; // TODO copy data and write to CQ error
-		}
-
 		if (!rx_buf->ep->rxm_mr_local) {
 			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
 						 rx_buf->recv_entry->rxm_iov.count, FI_READ,
@@ -374,18 +384,18 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 					fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
 		}
 
-		ret = rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov,
-					rx_buf->match_iov);
-		if (ret)
-			return ret;
-
+		/* Ignore the case when the posted recv buffer is not large enough,
+		 * FI_TRUNC error will be generated to user at the end */
+		rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov, rx_buf->match_iov);
 		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
 		rx_buf->hdr.state = RXM_LMT_READ;
 		return rxm_lmt_rma_read(rx_buf);
 	} else {
-		ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov, rx_buf->recv_entry->rxm_iov.count, 0,
-				rx_buf->pkt.data, rx_buf->pkt.hdr.size);
-		return rxm_finish_recv(rx_buf);
+		uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
+						    rx_buf->recv_entry->rxm_iov.count,
+						    0, rx_buf->pkt.data,
+						    rx_buf->pkt.hdr.size);
+		return rxm_finish_recv(rx_buf, done_len);
 	}
 }
 

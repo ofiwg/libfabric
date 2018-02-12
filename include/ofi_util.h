@@ -327,6 +327,9 @@ int ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 int ofi_cq_write_error(struct util_cq *cq,
 		       const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context);
+int ofi_cq_write_error_trunc(struct util_cq *cq, void *context, uint64_t flags,
+			     size_t len, void *buf, uint64_t data, uint64_t tag,
+			     size_t olen);
 
 static inline int ofi_need_completion(uint64_t cq_flags, uint64_t op_flags)
 {
