@@ -295,11 +295,20 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 {
 	struct dlist_entry *av_entry;
 	struct util_ep *ep;
-	int ret;
+	int ret, i;
 
-	if (av->free_list == UTIL_NO_ENTRY) {
+	 if (av->free_list == UTIL_NO_ENTRY) {
 		FI_WARN(av->prov, FI_LOG_AV, "AV is full\n");
 		return -FI_ENOSPC;
+	}
+
+	for (i = 0; i < av->free_list; i++) {
+		if (!memcmp(util_av_get_data(av, i), addr, av->addrlen)) {
+			*index = i;
+			FI_DBG(av->prov, FI_LOG_AV,
+			       "AV contains the addr (index - %d)\n", *index);
+			return 0;
+		}
 	}
 
 	if (av->flags & FI_SOURCE) {
