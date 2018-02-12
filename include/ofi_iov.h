@@ -71,16 +71,15 @@ static inline uint64_t
 ofi_copy_to_iov(const struct iovec *iov, size_t iov_count, uint64_t iov_offset,
 		void *buf, uint64_t bufsize)
 {
-	if (iov_count > 1) {
-		return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
-					OFI_COPY_BUF_TO_IOV);
-	} else {
-		assert(iov_count == 1);
+	if (iov_count == 1) {
 		uint64_t size = ((iov_offset > iov[0].iov_len) ?
 				 0 : MIN(bufsize, iov[0].iov_len - iov_offset));
 
 		memcpy((char *)iov[0].iov_base + iov_offset, buf, size);
 		return size;
+	} else {
+		return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
+					OFI_COPY_BUF_TO_IOV);
 	}
 }
 
@@ -88,16 +87,15 @@ static inline uint64_t
 ofi_copy_from_iov(void *buf, uint64_t bufsize,
 		  const struct iovec *iov, size_t iov_count, uint64_t iov_offset)
 {
-	if (iov_count > 1) {
-		return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
-					OFI_COPY_IOV_TO_BUF);
-	} else {
-		assert(iov_count == 1);
+	if (iov_count == 1) {
 		uint64_t size = ((iov_offset > iov[0].iov_len) ?
 				 0 : MIN(bufsize, iov[0].iov_len - iov_offset));
 
 		memcpy(buf, (char *)iov[0].iov_base + iov_offset, size);
 		return size;
+	} else {
+		return ofi_copy_iov_buf(iov, iov_count, iov_offset, buf, bufsize,
+					OFI_COPY_IOV_TO_BUF);
 	}
 }
 
