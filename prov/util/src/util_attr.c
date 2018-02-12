@@ -359,7 +359,8 @@ int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
 	}
 	hints.mode = ~0;
 
-	ret = fi_getinfo(util_attr->api_version, NULL, NULL, 0, &hints, core_info);
+	ret = fi_getinfo(util_attr->api_version, NULL, NULL, OFI_CORE_PROV_ONLY,
+	                 &hints, core_info);
 
 	free(hints.fabric_attr->prov_name);
 out:
