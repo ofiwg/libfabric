@@ -219,12 +219,14 @@ The *psm2* provider checks for the following environment variables:
   The default setting is 0.
 
 *FI_PSM2_TAG_LAYOUT
-: Select how the 96-bit PSM2 tag bits are organized. Currently two choices are
+: Select how the 96-bit PSM2 tag bits are organized. Currently three choices are
   available: *tag60* means starting from the most significant bit 32/4/60 bits
   are used for CQ data, internal protocol flags, and application tag. *tag64*
-  means 4/28/64 division for flags/data/tag.
+  means 4/28/64 division for flags/data/tag. *auto* means to choose either
+  *tag60* or *tag64* based on the the hints passed to fi_getinfo: use *tag64* if
+  *hints->domain_attr->cq_data_size* is 0, and *tag60* otherwise.
 
-  The default setting is *tag60*.
+  The default setting is *auto*.
 
   Notice that if the provider is compiled with *PSMX2_TAG_LAYOUT* defined to
   1(means *tag60*) or 2(means *tag64*), the choice is fixed at compile time
