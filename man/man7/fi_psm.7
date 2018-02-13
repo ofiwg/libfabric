@@ -1,4 +1,4 @@
-.TH "fi_psm" "7" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm" "7" "2018\-02\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_psm \- The PSM Fabric Provider
@@ -90,21 +90,20 @@ The default UUID is 0FFF0FFF\-0000\-0000\-0000\-0FFF0FFF0FFF.
 built\-in name server that can be used to resolve an IP address or host
 name into a transport address needed by the \f[I]fi_av_insert\f[] call.
 The main purpose of this name server is to allow simple client\-server
-type applications (such as those in \f[I]fabtest\f[]) to be written
+type applications (such as those in \f[I]fabtests\f[]) to be written
 purely with libfabric, without using any out\-of\-band communication
 mechanism.
-For such applications, the server would run first, and the client would
+For such applications, the server would run first to allow endpoints be
+created and registered with the name server, and then the client would
 call \f[I]fi_getinfo\f[] with the \f[I]node\f[] parameter set to the IP
 address or host name of the server.
 The resulting \f[I]fi_info\f[] structure would have the transport
-address of the server in the \f[I]dest_addr\f[] field.
-.PP
-The name server won\[aq]t work properly if there are more than one
-processes from the same job (i.e.
-with the same UUID) running on the same node and acting as servers.
-For such scenario it is recommended to have each process getting local
-transport address with \f[I]fi_getname\f[] and exchanging the addresses
-with out\-of\-band mechanism.
+address of the endpoint created by the server in the \f[I]dest_addr\f[]
+field.
+Optionally the \f[I]service\f[] parameter can be used in addition to
+\f[I]node\f[].
+Notice that the \f[I]service\f[] number is interpreted by the provider
+and is not a TCP/IP port number.
 .PP
 The name server is on by default.
 It can be turned off by setting the variable to 0.

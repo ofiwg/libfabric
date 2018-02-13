@@ -1,4 +1,4 @@
-.TH "fi_rma" "3" "2017\-08\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rma" "3" "2018\-02\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_rma \- Remote memory access operations
@@ -250,6 +250,11 @@ provider.
 \f[I]FI_DELIVERY_COMPLETE\f[] : Applies to fi_writemsg.
 Indicates that a completion should be generated when the operation has
 been processed by the destination.
+.PP
+\f[I]FI_COMMIT_COMPLETE\f[] : Applies to fi_writemsg when targeting
+persistent memory regions.
+Indicates that a completion should be generated only after the result of
+the operation has been made durable.
 .PP
 \f[I]FI_FENCE\f[] : Applies to transmits.
 Indicates that the requested operation, also known as the fenced

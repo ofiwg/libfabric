@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2018\-02\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo, fi_freeinfo \- Obtain / free fabric interface information
@@ -412,6 +412,15 @@ Use of this capability may require the provider to validate incoming
 source address data against addresses stored in the local address
 vector, which may adversely affect performance.
 .PP
+\f[I]FI_RMA_PMEM\f[] : Indicates that the provider is \[aq]persistent
+memory aware\[aq] and supports RMA operations to and from persistent
+memory.
+Persistent memory aware providers must support registration of memory
+that is backed by non\- volatile memory, RMA transfers to/from
+persistent memory, and enhanced completion semantics.
+This flag requires that FI_RMA be set.
+This capability is experimental.
+.PP
 Capabilities may be grouped into two general categories: primary and
 secondary.
 Primary capabilities must explicitly be requested by an application, and
@@ -429,7 +438,7 @@ FI_RECV, FI_SEND, FI_REMOTE_READ, and FI_REMOTE_WRITE.
 .PP
 Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT,
 FI_SHARED_AV, FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM,
-FI_SOURCE_ERR.
+FI_SOURCE_ERR, FI_RMA_PMEM.
 .SH MODE
 .PP
 The operational mode bits are used to convey requirements that an

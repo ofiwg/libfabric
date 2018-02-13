@@ -1,4 +1,4 @@
-.TH "fi_psm2" "7" "2017\-12\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2018\-02\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_psm2 \- The PSM2 Fabric Provider
@@ -37,7 +37,8 @@ when the provider is used.
 See the \f[I]Scalable endpoints\f[] section for more information.
 .PP
 Other supported capabilities include \f[I]FI_TRIGGER\f[],
-\f[I]FI_REMOTE_CQ_DATA\f[], and \f[I]FI_SOURCE\f[].
+\f[I]FI_REMOTE_CQ_DATA\f[], \f[I]FI_RMA_EVENT\f[], \f[I]FI_SOURCE\f[],
+and \f[I]FI_SOURCE_ERR\f[].
 Furthermore, \f[I]FI_NAMED_RX_CTX\f[] is supported when scalable
 endpoints are enabled.
 .PP
@@ -76,16 +77,13 @@ The \f[I]psm2\f[] provider allocates all asked contexts upfront when the
 scalable endpoint is created.
 The same context is used for both Tx and Rx.
 .PP
-It is important to notice that each context requires a dedicated
-completion queue or counter.
-Any attempt to bind to a context a completion queue or counter that has
-already been bound to another context or endpoint will fail.
-For optimal performance, it is also advised to avoid having multiple
-threads accessing the same context.
+For optimal performance, it is advised to avoid having multiple threads
+accessing the same context, either directly by posting
+send/recv/read/write request, or indirectly by polling associated
+completion queues or counters.
 .PP
 Unsupported features : These features are unsupported: connection
-management, passive endpoint, shared send context, shared receive
-context, and send/inject with immediate data over tagged message queue.
+management, passive endpoint, and shared receive context.
 .SH RUNTIME PARAMETERS
 .PP
 The \f[I]psm2\f[] provider checks for the following environment
@@ -112,18 +110,17 @@ The main purpose of this name server is to allow simple client\-server
 type applications (such as those in \f[I]fabtests\f[]) to be written
 purely with libfabric, without using any out\-of\-band communication
 mechanism.
-For such applications, the server would run first, and the client would
+For such applications, the server would run first to allow endpoints be
+created and registered with the name server, and then the client would
 call \f[I]fi_getinfo\f[] with the \f[I]node\f[] parameter set to the IP
 address or host name of the server.
 The resulting \f[I]fi_info\f[] structure would have the transport
-address of the server in the \f[I]dest_addr\f[] field.
-.PP
-The name server won\[aq]t work properly if there are more than one
-processes from the same job (i.e.
-with the same UUID) running on the same node and acting as servers.
-For such scenario it is recommended to have each process getting local
-transport address with \f[I]fi_getname\f[] and exchanging the addresses
-with out\-of\-band mechanism.
+address of the endpoint created by the server in the \f[I]dest_addr\f[]
+field.
+Optionally the \f[I]service\f[] parameter can be used in addition to
+\f[I]node\f[].
+Notice that the \f[I]service\f[] number is interpreted by the provider
+and is not a TCP/IP port number.
 .PP
 The name server is on by default.
 It can be turned off by setting the variable to 0.
@@ -241,6 +238,18 @@ For client\-server application mentioned above, the client side should
 set this option to 1, but the server should set it to 0.
 .PP
 The default setting is 0.
+.PP
+\f[I]FI_PSM2_TAG_LAYOUT : Select how the 96\-bit PSM2 tag bits are
+organized. Currently two choices are available: \f[]tag60* means
+starting from the most significant bit 32/4/60 bits are used for CQ
+data, internal protocol flags, and application tag.
+\f[I]tag64\f[] means 4/28/64 division for flags/data/tag.
+.PP
+The default setting is \f[I]tag60\f[].
+.PP
+Notice that if the provider is compiled with \f[I]PSMX2_TAG_LAYOUT\f[]
+defined to 1(means \f[I]tag60\f[]) or 2(means \f[I]tag64\f[]), the
+choice is fixed at compile time and this runtime option is disabled.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_psm\f[](7),

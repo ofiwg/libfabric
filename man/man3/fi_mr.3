@@ -1,4 +1,4 @@
-.TH "fi_mr" "3" "2017\-12\-11" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2018\-02\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr \- Memory region operations
@@ -551,6 +551,12 @@ The follow flag may be specified to any memory registration call.
 \f[I]FI_RMA_EVENT\f[] : This flag indicates that the specified memory
 region will be associated with a completion counter used to count RMA
 operations that access the MR.
+.PP
+\f[I]FI_RMA_PMEM\f[] : This flag indicates that the underlying memory
+region is backed by persistent memory and will be used in RMA
+operations.
+It must be specified if persistent completion semantics or persistent
+data transfers are required when accessing the registered region.
 .SH RETURN VALUES
 .PP
 Returns 0 on success.
