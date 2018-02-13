@@ -207,11 +207,6 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_TAG_UPPER_MASK	psmx2_tag_upper_mask
 #define PSMX2_DATA_MASK		psmx2_data_mask
 #define PSMX2_FLAGS_IDX		psmx2_flags_idx
-#define PSMX2_DEFAULT_TAG_LAYOUT	"tag60"
-#define PSMX2_DEFAULT_TAG_MASK		PSMX2_TAG_MASK_60
-#define PSMX2_DEFAULT_TAG_UPPER_MASK	PSMX2_TAG_UPPER_MASK_60
-#define PSMX2_DEFAULT_DATA_MASK		PSMX2_DATA_MASK_60
-#define PSMX2_DEFAULT_FLAGS_IDX		PSMX2_FLAGS_IDX_60
 extern uint64_t	psmx2_tag_mask;
 extern uint32_t	psmx2_tag_upper_mask;
 extern uint32_t	psmx2_data_mask;
