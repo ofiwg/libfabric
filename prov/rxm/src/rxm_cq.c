@@ -793,7 +793,7 @@ static struct fi_ops_cq rxm_cq_ops = {
 	.readerr = ofi_cq_readerr,
 	.sread = ofi_cq_sread,
 	.sreadfrom = ofi_cq_sreadfrom,
-	.signal = fi_no_cq_signal,
+	.signal = ofi_cq_signal,
 	.strerror = rxm_cq_strerror,
 };
 
