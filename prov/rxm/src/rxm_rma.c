@@ -35,14 +35,49 @@
 typedef ssize_t rxm_rma_msg_fn(struct fid_ep *ep_fid,
 			       const struct fi_msg_rma *msg, uint64_t flags);
 
-static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
-				 const struct fi_msg_rma *msg, uint64_t flags,
-				 rxm_rma_msg_fn rma_msg, uint64_t comp_flags)
+static inline ssize_t
+rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
+		   void **desc, void **mr_storage,
+		   size_t iov_count, uint64_t comp_flags,
+		   struct rxm_tx_entry *tx_entry)
+{
+	size_t i;
+
+	if (rxm_ep->msg_mr_local) {
+		if (!rxm_ep->rxm_mr_local) {
+			ssize_t ret =
+				rxm_ep_msg_mr_regv(rxm_ep, msg_iov, iov_count,
+						   comp_flags & (FI_WRITE | FI_READ),
+						   tx_entry->mr);
+			if (OFI_UNLIKELY(ret))
+				return ret;
+
+			desc = (void **)mr_storage;
+			for (i = 0; i < iov_count; i++)
+				desc[i] = fi_mr_desc(tx_entry->mr[i]);
+		} else {
+			for (i = 0; i < iov_count; i++)
+				desc[i] = fi_mr_desc(desc[i]);
+		}
+	}
+	return FI_SUCCESS;
+}
+
+static ssize_t
+rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags,
+		  rxm_rma_msg_fn rma_msg, uint64_t comp_flags)
 {
 	struct rxm_tx_entry *tx_entry;
-	struct fi_msg_rma msg_rma;
-	size_t i;
+	struct fi_msg_rma msg_rma = *msg;
+	struct util_cmap_handle *handle;
+	struct rxm_conn *rxm_conn;
+	void *mr[RXM_IOV_LIMIT] = { 0 };
 	int ret;
+
+	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue);
 	if (!tx_entry)
@@ -54,30 +89,14 @@ static ssize_t rxm_ep_rma_common(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	tx_entry->comp_flags = FI_RMA | comp_flags;
 	tx_entry->count = msg->iov_count;
 
-	msg_rma = *msg;
 	msg_rma.context = tx_entry;
 
-	if (rxm_ep->msg_mr_local) {
-		if (!rxm_ep->rxm_mr_local) {
-			void *mr[RXM_IOV_LIMIT] = { 0 };
+	ret = rxm_ep_rma_reg_iov(rxm_ep, msg->msg_iov, msg_rma.desc, mr, msg->iov_count,
+				 comp_flags & (FI_WRITE | FI_READ), tx_entry);
+	if (OFI_UNLIKELY(ret))
+		goto err;
 
-			ret = rxm_ep_msg_mr_regv(rxm_ep, msg->msg_iov,
-						 msg->iov_count,
-						 comp_flags & (FI_WRITE | FI_READ),
-						 tx_entry->mr);
-			if (ret)
-				goto err;
-
-			msg_rma.desc = (void **)&mr;
-			for (i = 0; i < msg_rma.iov_count; i++)
-				msg_rma.desc[i] = fi_mr_desc(tx_entry->mr[i]);
-		} else {
-			for (i = 0; i < msg_rma.iov_count; i++)
-				msg_rma.desc[i] = fi_mr_desc(msg_rma.desc[i]);
-		}
-	}
-
-	return rma_msg(msg_ep, &msg_rma, flags);
+	return rma_msg(rxm_conn->msg_ep, &msg_rma, flags);
 err:
 	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
 	return ret;
@@ -86,20 +105,10 @@ err:
 static ssize_t rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			      uint64_t flags)
 {
-	struct util_cmap_handle *handle;
-	struct rxm_conn *rxm_conn;
-	struct rxm_ep *rxm_ep;
-	int ret;
+	struct rxm_ep *rxm_ep =
+		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-
-	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-	rxm_conn = container_of(handle, struct rxm_conn, handle);
-
-	return rxm_ep_rma_common(rxm_conn->msg_ep, rxm_ep, msg, flags,
-				 fi_readmsg, FI_READ);
+	return rxm_ep_rma_common(rxm_ep, msg, flags, fi_readmsg, FI_READ);
 }
 
 static ssize_t rxm_ep_readv(struct fid_ep *ep_fid, const struct iovec *iov,
@@ -156,15 +165,22 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(rxm_ep));
 }
 
-static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
-				 const struct fi_msg_rma *msg, uint64_t flags)
+static ssize_t
+rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_buf *tx_buf;
 	struct fi_msg_rma msg_rma;
+	struct util_cmap_handle *handle;
+	struct rxm_conn *rxm_conn;
 	struct iovec iov;
 	size_t size;
 	ssize_t ret;
+
+	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	size = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
@@ -176,12 +192,12 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	if (size <= rxm_ep->msg_info->tx_attr->inject_size &&
 	    !(flags & FI_COMPLETION)) {
 		if (flags & FI_REMOTE_CQ_DATA)
-			return fi_inject_writedata(msg_ep, msg->msg_iov->iov_base,
-					       msg->msg_iov->iov_len, msg->data,
-					       msg->addr, msg->rma_iov->addr,
-					       msg->rma_iov->key);
+			return fi_inject_writedata(rxm_conn->msg_ep, msg->msg_iov->iov_base,
+						   msg->msg_iov->iov_len, msg->data,
+						   msg->addr, msg->rma_iov->addr,
+						   msg->rma_iov->key);
 		else
-			return fi_inject_write(msg_ep, msg->msg_iov->iov_base,
+			return fi_inject_write(rxm_conn->msg_ep, msg->msg_iov->iov_base,
 					       msg->msg_iov->iov_len, msg->addr,
 					       msg->rma_iov->addr,
 					       msg->rma_iov->key);
@@ -221,7 +237,7 @@ static ssize_t rxm_ep_rma_inject(struct fid_ep *msg_ep, struct rxm_ep *rxm_ep,
 	msg_rma.data = msg->data;
 	flags = (flags & ~FI_INJECT) | FI_COMPLETION;
 
-	ret = fi_writemsg(msg_ep, &msg_rma, flags);
+	ret = fi_writemsg(rxm_conn->msg_ep, &msg_rma, flags);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_progress_multi(&rxm_ep->util_ep);
@@ -238,22 +254,13 @@ err1:
 static ssize_t rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			       uint64_t flags)
 {
-	struct util_cmap_handle *handle;
-	struct rxm_conn *rxm_conn;
-	struct rxm_ep *rxm_ep;
-	int ret;
-
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-
-	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, msg->addr, &handle);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-	rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_ep *rxm_ep =
+		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
 	if (flags & FI_INJECT)
-		return rxm_ep_rma_inject(rxm_conn->msg_ep, rxm_ep, msg, flags);
+		return rxm_ep_rma_inject(rxm_ep, msg, flags);
 	else
-		return rxm_ep_rma_common(rxm_conn->msg_ep, rxm_ep, msg, flags,
+		return rxm_ep_rma_common(rxm_ep, msg, flags,
 					 fi_writemsg, FI_WRITE);
 }
 
