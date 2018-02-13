@@ -148,7 +148,7 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
 }
 
 /* This is the default order that providers will be reported when a provider
- * is availabe.  Initialize the socket(s) provider last.  This will result in
+ * is available.  Initialize the socket(s) provider last.  This will result in
  * it being the least preferred provider.
  */
 static void ofi_ordered_provs_init(void)
@@ -160,7 +160,7 @@ static void ofi_ordered_provs_init(void)
 			 * it being the least preferred provider. */
 
 			/* Before you add ANYTHING here, read the comment above!!! */
-			"UDP", "sockets" /* NOTHING GOES HERE! */};
+			"UDP", "sockets", "tcp" /* NOTHING GOES HERE! */};
 			/* Seriously, read it! */
 	int num_provs = sizeof(ordered_prov_names)/sizeof(ordered_prov_names[0]), i;
 
