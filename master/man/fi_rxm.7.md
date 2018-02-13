@@ -35,7 +35,7 @@ The RxM provider currently supports *FI_MSG*, *FI_TAGGED* and *FI_RMA* capabilit
 : The following data transfer interface is supported: *FI_MSG*, *FI_TAGGED*, *FI_RMA*.
 
 *Progress*
-: The RxM provider supports only *FI_PROGRESS_MANUAL* for now.
+: The RxM provider supports *FI_PROGRESS_AUTO*.
 
 *Addressing Formats*
 : FI_SOCKADDR, FI_SOCKADDR_IN
@@ -53,7 +53,7 @@ up. Please refer to the corresponding MSG provider man pages to find about those
 
 RxM provider does not support the following features:
 
-  * op_flags: FI_CLAIM, FI_PEEK, FI_FENCE.
+  * op_flags: FI_FENCE.
 
   * FI_ATOMIC
 
@@ -62,10 +62,6 @@ RxM provider does not support the following features:
   * Shared contexts
 
   * FABRIC_DIRECT
-
-  * Multi recv
-
-  * Counters
 
   * FI_MR_SCALABLE
 
@@ -81,22 +77,26 @@ RxM provider does not support the following features:
 
   * Triggered operations
 
-  * fi_cq_sread, fi_cq_sreadfrom and fi_cq_signal calls.
-
 ## Auto progress
 
 When sending large messages, an app doing an sread or waiting on the CQ file descriptor
 may not get a completion when reading the CQ after being woken up from the wait.
 The app has to do sread or wait on the file descriptor again.
 
-## Usage limitations
-
-RxM provider should work fine for client - server programs like fabtests. Support for MPI, SHMEM
-and other applications is work in progress.
-
 # RUNTIME PARAMETERS
 
-No runtime parameters are currently defined.
+The ofi_rxm provider checks for the following environment variables.
+
+*FI_OFI_RXM_BUFFER_SIZE*
+: Defines the transmit buffer size / inject size. Messages of size less than this
+  would be transmitted via an eager protocol and those above would be transmitted
+  via a rendezvous protocol. Transmit data would be copied up to this size
+  (default: ~16k).
+
+*FI_OFI_RXM_COMP_PER_PROGRESS*
+: Defines the maximum number of MSG provider CQ entries (default: 1) that would
+  be read per progress (RxM CQ read).
+
 
 # SEE ALSO
 
