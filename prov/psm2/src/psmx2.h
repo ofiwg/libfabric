@@ -94,7 +94,6 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
 
-#define PSMX2_MAX_TRX_CTXT	(80)
 #define PSMX2_ALL_TRX_CTXT	((void *)-1)
 #define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX2_RMA_ORDER_SIZE	(4096)
@@ -747,7 +746,7 @@ struct psmx2_env {
 	char *prog_affinity;
 	int multi_ep;
 	int max_trx_ctxt;
-	int sep_trx_ctxt;
+	int free_trx_ctxt;
 	int num_devunits;
 	int inject_size;
 	int lock_level;

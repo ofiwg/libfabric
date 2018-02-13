@@ -950,18 +950,18 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 		goto errout;
 
 	if (info && info->ep_attr) {
-		if (info->ep_attr->tx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
+		if (info->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt) {
 			FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL,
 				"tx_ctx_cnt %"PRIu64" exceed limit %d.\n",
 				info->ep_attr->tx_ctx_cnt,
-				psmx2_env.sep_trx_ctxt);
+				psmx2_env.max_trx_ctxt);
 			goto errout;
 		}
-		if (info->ep_attr->rx_ctx_cnt > psmx2_env.sep_trx_ctxt) {
+		if (info->ep_attr->rx_ctx_cnt > psmx2_env.max_trx_ctxt) {
 			FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL,
 				"rx_ctx_cnt %"PRIu64" exceed limit %d.\n",
 				info->ep_attr->rx_ctx_cnt,
-				psmx2_env.sep_trx_ctxt);
+				psmx2_env.max_trx_ctxt);
 			goto errout;
 		}
 		ctxt_cnt = info->ep_attr->tx_ctx_cnt;
