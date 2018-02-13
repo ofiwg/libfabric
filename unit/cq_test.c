@@ -160,13 +160,13 @@ cq_signal()
 		sprintf(err_buf, "fi_cq_open(1, 0, FI_CQ_FORMAT_UNSPEC, "
 				"FI_WAIT_UNSPEC) = %d, %s",
 				ret, fi_strerror(-ret));
-		goto fail;
+		goto fail1;
 	}
 
 	ret = fi_cq_signal(cq);
 	if (ret) {
 		sprintf(err_buf, "fi_cq_signal = %d %s", ret, fi_strerror(-ret));
-		goto fail;
+		goto fail2;
 	}
 
 	ft_start();
@@ -175,23 +175,25 @@ cq_signal()
 	elapsed = get_elapsed(&start, &end, MILLI);
 	if (ret != -FI_EAGAIN && ret != -FI_ECANCELED) {
 		sprintf(err_buf, "fi_cq_sread = %d %s", ret, fi_strerror(-ret));
-		goto fail;
+		goto fail2;
 	}
 
 	if (elapsed > 1000) {
 		sprintf(err_buf, "fi_cq_sread - signal ignored");
-		goto fail;
+		goto fail2;
 	}
 
 	ret = fi_close(&cq->fid);
 	if (ret) {
 		sprintf(err_buf, "close(cq) = %d, %s", ret, fi_strerror(-ret));
-		goto fail;
+		goto fail1;
 	}
 	cq = NULL;
 
 	testret = PASS;
-fail:
+fail2:
+	FT_CLOSE_FID(cq);
+fail1:
 	cq = NULL;
 	return TEST_RET_VAL(ret, testret);
 }
