@@ -614,6 +614,15 @@
     <ClInclude Include="prov\tcp\src\tcpx.h">
       <Filter>Source Files\prov\tcp\include</Filter>
     </ClInclude>
+    <ClInclude Include="include\windows\sys\uio.h">
+      <Filter>Header Files\windows\sys</Filter>
+    </ClInclude>
+    <ClInclude Include="include\windows\dirent.h">
+      <Filter>Header Files\windows</Filter>
+    </ClInclude>
+    <ClInclude Include="include\windows\netdb.h">
+      <Filter>Header Files\windows</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="libfabric.def">
