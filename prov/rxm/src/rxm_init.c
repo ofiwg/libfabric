@@ -250,13 +250,16 @@ struct fi_provider rxm_prov = {
 RXM_INI
 {
 	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_INT,
-			"Defines the transmit buffer size. Transmit data would "
-			"be copied up to this size (default: ~16k). This would "
-			"also affect the supported inject size");
+			"Defines the transmit buffer size / inject size. Messages"
+			" of size less than this would be transmitted via an "
+			"eager protocol and those above would be transmitted "
+			"via a rendezvous protocol. Transmit data would be copied"
+			" up to this size (default: ~16k).");
 
 	fi_param_define(&rxm_prov, "comp_per_progress", FI_PARAM_INT,
-			"Defines the maximum number of CQ entries (default: 1) "
-			"per progress.");
+			"Defines the maximum number of MSG provider CQ entries "
+			"(default: 1) that would be read per progress "
+			"(RxM CQ read).");
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
