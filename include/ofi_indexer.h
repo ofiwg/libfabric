@@ -40,9 +40,19 @@
 #include <sys/types.h>
 
 /*
- * Indexer - to find a structure given an index.  Synchronization
- * must be provided by the caller.  Caller must initialize the
- * indexer by setting free_list and size to 0.
+ * Indexer:
+ * The indexer is used to associate a pointer with an integer value.
+ * This allows passing the integer to other users, including remote
+ * peers or processes.  The integer can be used by the owner of the
+ * indexer to retrieve the stored pointer.  The integer value is selected
+ * by the indexer by selecting the first available unused value.
+ *
+ * The pointers are stored using a double-lookup array, which grows
+ * dynamically.  This helps conserve memory when only a few objects are
+ * stored in the indexer.
+ *
+ * Synchronization must be provided by the caller.  Caller must
+ * initialize the indexer by setting free_list and size to 0.
  */
 
 struct ofi_idx_entry {
@@ -88,9 +98,18 @@ static inline void *ofi_idx_lookup(struct indexer *idx, int index)
 }
 
 /*
- * Index map - associates a structure with an index.  Synchronization
- * must be provided by the caller.  Caller must initialize the
- * index map by setting it to 0.
+ * Index map:
+ * The index map is similar in concept to the indexer.  It allows the user
+ * to associate an integer with a pointer.  The difference between the index
+ * map and indexer, is that the user of the index map selects the index.  This
+ * results in the index map behaving the same as a standard array.
+ *
+ * The index map stores pointers using a double-lookup table.  This minimizes
+ * the memory footprint relative to using a standard array when the selected
+ * integer values are sparse.
+ *
+ * Synchronization must be provided by the caller.  Caller must initialize
+ * the index map by setting it to 0.
  */
 
 struct index_map
