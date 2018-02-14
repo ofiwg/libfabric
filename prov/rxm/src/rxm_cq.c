@@ -184,7 +184,11 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 					       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 					       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
 					       rx_buf->pkt.hdr.size - done_len);
-		assert(!ret);
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unable to write recv error CQ\n");
+			return ret;
+		}
 		if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
 			rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 	} else {
@@ -198,7 +202,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 					   rx_buf->pkt.hdr.size,
 					   rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 					   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
-			if (ret) {
+			if (OFI_UNLIKELY(ret)) {
 				FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write recv completion\n");
 				return ret;
@@ -224,10 +228,14 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 					   FI_MULTI_RECV, rx_buf->pkt.hdr.size,
 					   rx_buf->recv_entry->multi_recv_buf,
 					   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
-			assert(!ret);
+			if (OFI_UNLIKELY(ret)) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Unable to write FI_MULTI_RECV completion\n");
+				return ret;
+			}
 			/* Since buffer is elapsed, release recv_entry */
 			rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
-			return FI_SUCCESS;
+			return ret;
 		}
 
 		FI_DBG(&rxm_prov, FI_LOG_CQ,
