@@ -55,7 +55,6 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct tcpx_posted_rx *posted_rx;
 	struct tcpx_domain *tcpx_domain;
 	struct tcpx_ep *tcpx_ep;
-	int i;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
@@ -71,10 +70,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	posted_rx->context = msg->context;
 	posted_rx->msg_data.iov_cnt = msg->iov_count;
 
-	for (i = 0 ; i < msg->iov_count; i++) {
-		posted_rx->msg_data.iov[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
-		posted_rx->msg_data.iov[i].len = msg->msg_iov[i].iov_len;
-	}
+	memcpy(&posted_rx->msg_data.iov[0], &msg->msg_iov[0],
+	       msg->iov_count * sizeof(struct iovec));
 
 	fastlock_acquire(&tcpx_ep->posted_rx_list_lock);
 	dlist_insert_tail(&posted_rx->entry, &tcpx_ep->posted_rx_list);
@@ -120,8 +117,8 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_domain *tcpx_domain;
 	struct tcpx_pe_entry *send_entry;
+	uint64_t data_len;
 	int ret = FI_SUCCESS;
-	int i, data_len;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
@@ -142,27 +139,28 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		if (data_len > TCPX_MAX_INJECT_SZ)
 			return -FI_EINVAL;
 	}
-	send_entry->state = TCPX_XFER_STARTED;
 	send_entry->msg_hdr.version = OFI_CTRL_VERSION;
 	send_entry->msg_hdr.op = ofi_op_msg;
 	send_entry->msg_hdr.op_data = TCPX_OP_MSG_SEND;
 	send_entry->msg_hdr.size = htonll(data_len + sizeof(send_entry->msg_hdr));
 
-	send_entry->msg_data.iov_cnt = msg->iov_count;
+	send_entry->msg_data.iov[0].iov_base = (void *) &send_entry->msg_hdr;
+	send_entry->msg_data.iov[0].iov_len = sizeof(send_entry->msg_hdr);
+	send_entry->msg_data.iov_cnt = msg->iov_count + 1;
+
 	if (flags & FI_INJECT) {
 		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
 				 send_entry->msg_data.inject,
 				 data_len,
 				 OFI_COPY_IOV_TO_BUF);
 
-		send_entry->msg_data.iov_cnt = 1;
-		send_entry->msg_data.iov[0].addr = (uintptr_t)send_entry->msg_data.inject;
-		send_entry->msg_data.iov[0].len = data_len;
+		send_entry->msg_data.iov[1].iov_base = (void *)send_entry->msg_data.inject;
+		send_entry->msg_data.iov[1].iov_len = data_len;
+		send_entry->msg_data.iov_cnt = 2;
 	} else {
-		for (i = 0; i < msg->iov_count; i++) {
-			send_entry->msg_data.iov[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
-			send_entry->msg_data.iov[i].len = msg->msg_iov[i].iov_len;
-		}
+		memcpy(&send_entry->msg_data.iov[1], &msg->msg_iov[0],
+		       msg->iov_count * sizeof(struct iovec));
+
 	}
 
 	if (flags & FI_REMOTE_CQ_DATA) {
@@ -396,7 +394,7 @@ static struct fi_ops_cm tcpx_cm_ops = {
 };
 
 static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep,
-				     struct tcpx_progress *progress)
+					 struct tcpx_progress *progress)
 {
 	struct dlist_entry *entry;
 	struct tcpx_pe_entry *pe_entry;
@@ -417,7 +415,7 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep,
 }
 
 static void tcpx_ep_posted_rx_list_release(struct tcpx_ep *ep,
-				      struct tcpx_progress *progress)
+					   struct tcpx_progress *progress)
 
 {
 	struct dlist_entry *entry;

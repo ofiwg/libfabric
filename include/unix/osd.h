@@ -41,6 +41,7 @@
 #include <complex.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/uio.h>
 
 /* MSG_NOSIGNAL doesn't exist on OS X */
 #ifndef MSG_NOSIGNAL
@@ -142,6 +143,16 @@ static inline ssize_t ofi_sendto_socket(SOCKET fd, const void *buf, size_t count
 					const struct sockaddr *to, socklen_t tolen)
 {
 	return sendto(fd, buf, count, flags, to, tolen);
+}
+
+static inline ssize_t ofi_writev_socket(SOCKET fd, struct iovec *iov, size_t iov_cnt)
+{
+	return writev(fd, iov, iov_cnt);
+}
+
+static inline ssize_t ofi_readv_socket(SOCKET fd, struct iovec *iov, int iov_cnt)
+{
+	return readv(fd, iov, iov_cnt);
 }
 
 static inline int ofi_close_socket(SOCKET socket)

@@ -60,62 +60,15 @@ struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress)
 		return NULL;
 	}
 	memset(pe_entry, 0, sizeof(*pe_entry));
-	if (ofi_rbinit(&pe_entry->comm_buf, TCPX_PE_COMM_BUFF_SZ))
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to init comm-cache\n");
-
-	pe_entry->cache_sz = TCPX_PE_COMM_BUFF_SZ;
 	return pe_entry;
 }
 
-static inline ssize_t tcpx_pe_send_field(struct tcpx_pe_entry *pe_entry,
-					 void *field, size_t field_len,
-					 size_t field_offset)
+static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry, int err)
 {
-	size_t field_rem_len, field_done_len;
-	uint8_t *buf;
-	int ret;
-
-	if (pe_entry->done_len >= (field_offset + field_len))
-		return 0;
-
-	field_done_len = pe_entry->done_len - field_offset;
-	field_rem_len = field_len - field_done_len;
-	buf = (uint8_t *) field + field_done_len;
-
-	ret = tcpx_comm_send(pe_entry, buf, field_rem_len);
-	if (ret <= 0)
-		return -1;
-
-	pe_entry->done_len += ret;
-	return (ret == field_rem_len) ? 0 : -1;
-}
-
-static inline ssize_t tcpx_pe_recv_field(struct tcpx_pe_entry *pe_entry,
-					 void *field, size_t field_len,
-					 size_t field_offset)
-{
-	size_t field_rem_len, field_done_len;
-	uint8_t *buf;
-	int ret;
-
-	if (pe_entry->done_len >= (field_offset + field_len))
-		return 0;
-
-	field_done_len = pe_entry->done_len - field_offset;
-	field_rem_len = field_len - field_done_len;
-	buf = (uint8_t *) field + field_done_len;
-
-	ret = tcpx_comm_recv(pe_entry, buf, field_rem_len);
-	if (ret <= 0)
-		return -1;
-
-	pe_entry->done_len += ret;
-	return (ret == field_rem_len) ? 0 : -1;
-}
-
-static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry)
-{
+	struct fi_cq_err_entry err_entry;
 	struct tcpx_ep *ep = pe_entry->ep;
+	struct util_cq *cq = NULL;
+	struct util_cntr *cntr = NULL;
 
 	if (pe_entry->flags & TCPX_NO_COMPLETION) {
 		return;
@@ -123,27 +76,42 @@ static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry)
 
 	switch (pe_entry->msg_hdr.op_data) {
 	case TCPX_OP_MSG_SEND:
-		if (ep->util_ep.tx_cq) {
-			ofi_cq_write(ep->util_ep.tx_cq, pe_entry->context,
-				     pe_entry->flags, 0, NULL,
-				     pe_entry->msg_hdr.data, 0);
-		}
-
-		if (ep->util_ep.tx_cntr) {
-			ep->util_ep.tx_cntr->cntr_fid.ops->add(&ep->util_ep.tx_cntr->cntr_fid, 1);
-		}
+		cq = ep->util_ep.tx_cq;
+		cntr = ep->util_ep.tx_cntr;
 		break;
 	case TCPX_OP_MSG_RECV:
-		if (ep->util_ep.rx_cq) {
-			ofi_cq_write(ep->util_ep.rx_cq, pe_entry->context,
-				     pe_entry->flags, 0, NULL,
-				     pe_entry->msg_hdr.data, 0);
-		}
-
-		if (ep->util_ep.rx_cntr) {
-			ep->util_ep.rx_cntr->cntr_fid.ops->add(&ep->util_ep.rx_cntr->cntr_fid, 1);
-		}
+		cq = ep->util_ep.rx_cq;
+		cntr = ep->util_ep.rx_cntr;
 		break;
+	default:
+
+		return;
+	}
+
+	if (cq && err) {
+		err_entry.op_context = pe_entry->context;
+		err_entry.flags = pe_entry->flags;
+		err_entry.len = 0;
+		err_entry.buf = NULL;
+		err_entry.data = pe_entry->msg_hdr.data;
+		err_entry.tag = 0;
+		err_entry.olen = 0;
+		err_entry.err = err;
+		err_entry.prov_errno = errno;
+		err_entry.err_data = NULL;
+		err_entry.err_data_size = 0;
+
+		ofi_cq_write_error(cq, &err_entry);
+	} else if (cq) {
+		ofi_cq_write(cq, pe_entry->context,
+			     pe_entry->flags, 0, NULL,
+			     pe_entry->msg_hdr.data, 0);
+	}
+
+	if (cntr && err) {
+		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
+	}else if (cntr) {
+		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 	}
 }
 
@@ -153,88 +121,53 @@ void pe_entry_release(struct tcpx_pe_entry *pe_entry)
 
 	domain = container_of(pe_entry->ep->util_ep.domain,
 			      struct tcpx_domain, util_domain);
-	assert(ofi_rbempty(&pe_entry->comm_buf));
 
-	pe_entry->state = TCPX_XFER_IDLE;
 	memset(&pe_entry->msg_hdr, 0, sizeof(pe_entry->msg_hdr));
 	dlist_remove(&pe_entry->entry);
-	ofi_rbreset(&pe_entry->comm_buf);
-	pe_entry->ep = NULL;
-	pe_entry->flags = 0;
-	pe_entry->context = NULL;
-	memset(pe_entry->msg_data.inject, 0, sizeof(TCPX_MAX_INJECT_SZ));
-	pe_entry->msg_hdr.size = 0;
-	pe_entry->done_len = 0;
-	pe_entry->msg_data.iov_cnt = 0;
-
-	ofi_rbfree(&pe_entry->comm_buf);
+	memset(pe_entry, 0, sizeof(*pe_entry));
 	util_buf_release(domain->progress.pe_entry_pool, pe_entry);
 }
 
 static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
-
-	size_t field_offset;
 	int total_len = ntohll(pe_entry->msg_hdr.size);
-	int i;
+	int ret;
 
-	if (pe_entry->state == TCPX_XFER_STARTED) {
-		field_offset = 0;
-		if (0 == tcpx_pe_send_field(pe_entry, &pe_entry->msg_hdr,
-					    sizeof(pe_entry->msg_hdr),
-					    field_offset)) {
-			pe_entry->state = TCPX_XFER_HDR_SENT;
-		}
+	ret = tcpx_send_msg(pe_entry);
+	if (ret && OFI_SOCK_TRY_SND_RCV_AGAIN(ret))
+		return;
+
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
+		report_pe_entry_completion(pe_entry, ret);
+		pe_entry_release(pe_entry);
+		return;
 	}
 
-	if (pe_entry->state == TCPX_XFER_HDR_SENT) {
-		field_offset = sizeof(pe_entry->msg_hdr);
-		for (i = 0 ; i < pe_entry->msg_data.iov_cnt ; i++) {
-			if (0 != tcpx_pe_send_field(pe_entry,
-						    (char *) (uintptr_t)pe_entry->msg_data.iov[i].addr,
-						    pe_entry->msg_data.iov[i].len,
-						    field_offset)) {
-				break;
-			}
-			field_offset += pe_entry->msg_data.iov[i].len;
-		}
-
-		if (pe_entry->done_len == total_len)
-			pe_entry->state = TCPX_XFER_FLUSH_COMM_BUF;
-	}
-
-	if (pe_entry->state == TCPX_XFER_FLUSH_COMM_BUF) {
-		if (!ofi_rbempty(&pe_entry->comm_buf)) {
-			tcpx_comm_flush(pe_entry);
-		} else {
-			pe_entry->state = TCPX_XFER_COMPLETE;
-		}
-	}
-
-	if (pe_entry->state == TCPX_XFER_COMPLETE) {
-		report_pe_entry_completion(pe_entry);
+	if (pe_entry->done_len == total_len) {
+		report_pe_entry_completion(pe_entry, 0);
 		pe_entry_release(pe_entry);
 	}
 }
 
-static void posted_rx_find(struct tcpx_ep *ep,
-				   struct tcpx_pe_entry *pe_entry)
+void posted_rx_find(struct tcpx_pe_entry *pe_entry)
 {
 	struct dlist_entry *entry;
 	struct tcpx_posted_rx *posted_rx;
 	struct tcpx_domain *domain;
-	int data_len = 0, i;
+	struct tcpx_ep *ep;
+	int data_len = 0;
 
+	ep = pe_entry->ep;
 	domain = container_of(ep->util_ep.domain,
 			      struct tcpx_domain,
 			      util_domain);
 	fastlock_acquire(&ep->posted_rx_list_lock);
 	dlist_foreach(&ep->posted_rx_list, entry) {
 		posted_rx = container_of(entry, struct tcpx_posted_rx, entry);
-		for (i = 0 ; i < posted_rx->msg_data.iov_cnt ; i++) {
-			data_len += posted_rx->msg_data.iov[i].len;
-		}
-		if (data_len >= (pe_entry->msg_hdr.size-sizeof(pe_entry->msg_hdr))) {
+		data_len = ofi_total_iov_len(posted_rx->msg_data.iov,
+					     posted_rx->msg_data.iov_cnt);
+		if (data_len >= ntohll(pe_entry->msg_hdr.size)-sizeof(pe_entry->msg_hdr)) {
 			dlist_remove(entry);
 			goto copy_to_pe_entry;
 		}
@@ -254,43 +187,22 @@ copy_to_pe_entry:
 
 static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
-	size_t field_offset;
-	int i;
+	int ret;
 
-	if (pe_entry->state == TCPX_XFER_STARTED) {
-		field_offset = 0;
-		pe_entry->msg_hdr.size = sizeof(pe_entry->msg_hdr);
-		if (0 == tcpx_pe_recv_field(pe_entry, &pe_entry->msg_hdr,
-					    sizeof(pe_entry->msg_hdr),
-					    field_offset)) {
-			pe_entry->msg_hdr.op_data = TCPX_OP_MSG_RECV;
-			pe_entry->msg_hdr.flags = ntohl(pe_entry->msg_hdr.flags);
-			pe_entry->msg_hdr.size = ntohll(pe_entry->msg_hdr.size);
-			pe_entry->msg_hdr.data = ntohll(pe_entry->msg_hdr.data);
-			pe_entry->msg_hdr.remote_idx = ntohll(pe_entry->msg_hdr.remote_idx);
-			posted_rx_find(pe_entry->ep, pe_entry);
-			pe_entry->state = TCPX_XFER_HDR_RECVD;
-		}
-	}
-	if (pe_entry->state == TCPX_XFER_HDR_RECVD) {
-		field_offset = sizeof(pe_entry->msg_hdr);
-		for (i = 0 ; i < pe_entry->msg_data.iov_cnt ; i++) {
-			if (0 != tcpx_pe_recv_field(pe_entry,
-						    (char *) (uintptr_t)pe_entry->msg_data.iov[i].addr,
-						    pe_entry->msg_data.iov[i].len, field_offset)) {
-				break;
-			}
-			field_offset += pe_entry->msg_data.iov[i].len;
-		}
+	ret = tcpx_recv_msg(pe_entry);
+	if (ret && OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+		return;
 
-		if (pe_entry->done_len == pe_entry->msg_hdr.size) {
-			pe_entry->state = TCPX_XFER_COMPLETE;
-		}
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
+		report_pe_entry_completion(pe_entry, ret);
+		pe_entry_release(pe_entry);
+		return;
 	}
 
-	if (pe_entry->state == TCPX_XFER_COMPLETE) {
-		report_pe_entry_completion(pe_entry);
-		ofi_rbreset(&pe_entry->comm_buf);
+	if (pe_entry->done_len &&
+	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.size)) {
+		report_pe_entry_completion(pe_entry, 0);
 		pe_entry_release(pe_entry);
 	}
 }
@@ -318,7 +230,6 @@ tx_pe_list:
 	process_tx_pe_entry(pe_entry);
 }
 
-/* todo this function will be cleaned up with send/recv changes */
 static void process_rx_requests(struct tcpx_ep *ep)
 
 {
@@ -338,10 +249,7 @@ static void process_rx_requests(struct tcpx_ep *ep)
 			"failed to allocate pe entry");
 		return ;
 	}
-
-	pe_entry->state = TCPX_XFER_STARTED;
 	pe_entry->ep = ep;
-
 	dlist_insert_tail(&pe_entry->entry, &ep->rx_queue);
 }
 

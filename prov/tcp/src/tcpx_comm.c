@@ -36,135 +36,102 @@
 #include <ofi_util.h>
 #include "tcpx.h"
 
-static ssize_t tcpx_comm_recv_socket(SOCKET conn_fd, void *buf, size_t len)
+static void tcpx_adjust_iovec(struct tcpx_pe_entry *pe_entry,
+			      size_t offset)
 {
-	ssize_t ret;
+	struct iovec *iovec = pe_entry->msg_data.iov;
+	uint64_t buf_offset = offset;
+	int new_iov = 0, i;
+	size_t len = 0;
 
-	ret = ofi_recv_socket(conn_fd, buf, len, 0);
-	if (ret > 0) {
-		FI_DBG(&tcpx_prov, FI_LOG_EP_DATA,
-		       "read from network: %lu\n", ret);
-	} else {
-		if (ret < 0) {
-			FI_DBG(&tcpx_prov, FI_LOG_EP_DATA,
-			       "read %s\n", strerror(ofi_sockerr()));
-			ret = 0;
-		} else {
-			FI_DBG(&tcpx_prov, FI_LOG_EP_DATA," socket closed\n");
-			return ret;
-		}
+	for (i = 0 ; i < pe_entry->msg_data.iov_cnt+1 ; i++) {
+		len += iovec[i].iov_len;
+
+		if (offset < len)
+			continue;
+
+		new_iov = i+1;
+		buf_offset = offset - len;
 	}
-	return ret;
+
+	iovec[new_iov].iov_base = ((uint8_t *)(iovec[new_iov].iov_base) +
+				   buf_offset);
+	iovec[new_iov].iov_len -= buf_offset;
+	pe_entry->msg_data.iov_cnt -= new_iov;
 }
 
-static void tcpx_comm_recv_buffer(struct tcpx_pe_entry *pe_entry)
+int tcpx_send_msg(struct tcpx_pe_entry *pe_entry)
 {
+	ssize_t bytes_sent;
+
+	bytes_sent = ofi_writev_socket(pe_entry->ep->conn_fd,
+				       pe_entry->msg_data.iov,
+				       pe_entry->msg_data.iov_cnt);
+	if (bytes_sent < 0)
+		return -errno;
+
+	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.size)) {
+		tcpx_adjust_iovec(pe_entry, bytes_sent);
+	}
+
+	pe_entry->done_len += bytes_sent;
+	return FI_SUCCESS;
+}
+
+static int tcpx_recv_msg_hdr(struct tcpx_pe_entry *pe_entry)
+
+{
+	ssize_t bytes_recvd;
+	void *rem_hdr_buf;
+	size_t rem_hdr_len;
+
+	rem_hdr_buf = (uint8_t *)&pe_entry->msg_hdr + pe_entry->done_len;
+	rem_hdr_len = sizeof(pe_entry->msg_hdr) - pe_entry->done_len;
+
+	bytes_recvd = ofi_recv_socket(pe_entry->ep->conn_fd,
+				      rem_hdr_buf, rem_hdr_len, 0);
+	if (bytes_recvd == 0) {
+		return -FI_ENOTCONN;
+	}
+	if (bytes_recvd < 0) {
+		return -errno;
+	}
+
+	pe_entry->done_len += bytes_recvd;
+
+	if (pe_entry->done_len < sizeof(pe_entry->msg_hdr))
+		return -FI_EAGAIN;
+
+	pe_entry->msg_hdr.op_data = TCPX_OP_MSG_RECV;
+	posted_rx_find(pe_entry);
+	return FI_SUCCESS;
+}
+
+int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry)
+{
+	ssize_t bytes_recvd;
 	int ret;
-	size_t max_read, avail;
 
-	avail = ofi_rbavail(&pe_entry->comm_buf);
-	assert(avail == pe_entry->comm_buf.size);
-	pe_entry->comm_buf.rcnt =
-		pe_entry->comm_buf.wcnt =
-		pe_entry->comm_buf.wpos = 0;
-
-	max_read = pe_entry->msg_hdr.size - pe_entry->done_len;
-	ret = tcpx_comm_recv_socket(pe_entry->ep->conn_fd, (char *) pe_entry->comm_buf.buf,
-				    MIN(max_read, avail));
-	pe_entry->comm_buf.wpos += ret;
-	ofi_rbcommit(&pe_entry->comm_buf);
-}
-
-ssize_t tcpx_comm_recv(struct tcpx_pe_entry *pe_entry, void *buf, size_t len)
-{
-	ssize_t read_len;
-	if (ofi_rbempty(&pe_entry->comm_buf)) {
-		if (len <= pe_entry->cache_sz) {
-			tcpx_comm_recv_buffer(pe_entry);
-		} else {
-			return tcpx_comm_recv_socket(pe_entry->ep->conn_fd, buf, len);
-		}
+	if (pe_entry->done_len < sizeof(pe_entry->msg_hdr)) {
+		ret = tcpx_recv_msg_hdr(pe_entry);
+		if (ret)
+			return ret;
 	}
 
-	read_len = MIN(len, ofi_rbused(&pe_entry->comm_buf));
-	ofi_rbread(&pe_entry->comm_buf, buf, read_len);
-	FI_DBG(&tcpx_prov, FI_LOG_EP_DATA, "read from buffer: %lu\n", read_len);
-	return read_len;
-}
-
-static ssize_t tcpx_comm_send_socket(SOCKET conn_fd, const void *buf, size_t len)
-{
-	ssize_t ret;
-
-	ret = ofi_send_socket(conn_fd, buf, len, MSG_NOSIGNAL);
-	if (ret >= 0) {
-		FI_DBG(&tcpx_prov, FI_LOG_EP_DATA, "wrote to network: %lu\n", ret);
-		return ret;
+	bytes_recvd = ofi_readv_socket(pe_entry->ep->conn_fd,
+				       pe_entry->msg_data.iov,
+				       pe_entry->msg_data.iov_cnt);
+	if (bytes_recvd == 0) {
+		return -FI_ENOTCONN;
+	}
+	if (bytes_recvd < 0) {
+		return -errno;
 	}
 
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr())) {
-		ret = 0;
-	} else {
-		FI_DBG(&tcpx_prov, FI_LOG_EP_DATA,
-		       "write error: %s\n", strerror(ofi_sockerr()));
-	}
-	return ret;
-}
-
-
-ssize_t tcpx_comm_flush(struct tcpx_pe_entry *pe_entry)
-{
-	ssize_t ret1, ret2 = 0;
-	size_t endlen, len, xfer_len;
-
-	len = ofi_rbused(&pe_entry->comm_buf);
-	endlen = pe_entry->comm_buf.size -
-		(pe_entry->comm_buf.rcnt & pe_entry->comm_buf.size_mask);
-
-	xfer_len = MIN(len, endlen);
-	ret1 = tcpx_comm_send_socket(pe_entry->ep->conn_fd, (char*)pe_entry->comm_buf.buf +
-				     (pe_entry->comm_buf.rcnt & pe_entry->comm_buf.size_mask),
-				     xfer_len);
-	if (ret1 > 0)
-		pe_entry->comm_buf.rcnt += ret1;
-
-	if (ret1 == xfer_len && xfer_len < len) {
-		ret2 = tcpx_comm_send_socket(pe_entry->ep->conn_fd, (char*)pe_entry->comm_buf.buf +
-					     (pe_entry->comm_buf.rcnt & pe_entry->comm_buf.size_mask),
-					     len - xfer_len);
-		if (ret2 > 0)
-			pe_entry->comm_buf.rcnt += ret2;
-		else
-			ret2 = 0;
+	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.size)) {
+		tcpx_adjust_iovec(pe_entry, bytes_recvd);
 	}
 
-	return (ret1 > 0) ? ret1 + ret2 : 0;
-}
-
-ssize_t tcpx_comm_send(struct tcpx_pe_entry *pe_entry,
-		       const void *buf, size_t len)
-{
-	ssize_t ret, used;
-
-	if (len > pe_entry->cache_sz) {
-		used = ofi_rbused(&pe_entry->comm_buf);
-		if (used == tcpx_comm_flush(pe_entry)) {
-			return tcpx_comm_send_socket(pe_entry->ep->conn_fd,
-						     buf, len);
-		} else {
-			return 0;
-		}
-	}
-
-	if (ofi_rbavail(&pe_entry->comm_buf) < len) {
-		ret = tcpx_comm_flush(pe_entry);
-		if (ret <= 0)
-			return 0;
-	}
-
-	ret = MIN(ofi_rbavail(&pe_entry->comm_buf), len);
-	ofi_rbwrite(&pe_entry->comm_buf, buf, ret);
-	ofi_rbcommit(&pe_entry->comm_buf);
-	FI_DBG(&tcpx_prov, FI_LOG_EP_DATA, "buffered %lu\n", ret);
-	return ret;
+	pe_entry->done_len += bytes_recvd;
+	return FI_SUCCESS;
 }
