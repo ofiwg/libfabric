@@ -63,21 +63,29 @@ Progress
 
 Scalable endpoints
 : Scalable endpoints support depends on the multi-EP feature of the *PSM2*
-  library. If the *PSM2* library has this feature, the availability is
+  library. If the *PSM2* library supports this feature, the availability is
   further controlled by an environment variable *PSM2_MULTI_EP*. The *psm2*
   provider automatically sets this variable to 1 if it is not set. The
   feature can be disabled explicitly by setting *PSM2_MULTI_EP* to 0.
 
-  When creating a scalable endpoint, the actual number of contexts needed
+  When creating a scalable endpoint, the exact number of contexts requested
   should be set in the "fi_info" structure passed to the *fi_scalable_ep*
   function. This number should be set in "fi_info->ep_attr->tx_ctx_cnt" or
   "fi_info->ep_attr->rx_ctx_cnt" or both, whichever greater is used. The
-  *psm2* provider allocates all asked contexts upfront when the scalable
+  *psm2* provider allocates all requested contexts upfront when the scalable
   endpoint is created. The same context is used for both Tx and Rx.
 
   For optimal performance, it is advised to avoid having multiple threads
   accessing the same context, either directly by posting send/recv/read/write
   request, or indirectly by polling associated completion queues or counters.
+
+Shared Tx contexts
+: In order to achieve the purpose of saving PSM context by using shared Tx
+  context, the endpoints bound to the shared Tx contexts need to be Tx only.
+  The reason is that Rx capability always requires a PSM context, which can
+  also be automatically used for Tx. As the result, allocating a shared Tx
+  context for Rx capable endpoints actually consumes one extra context
+  instead of saving some.
 
 Unsupported features
 : These features are unsupported: connection management, passive endpoint,
@@ -194,7 +202,8 @@ The *psm2* provider checks for the following environment variables:
   are used the first time in communication. This is the lazy connection mode.
 
   Lazy connection mode may reduce the start-up time on large systems at the
-  expense of higher data path overhead.
+  expense of higher data path overhead. Endpoints also close faster in lazy
+  connection mode when multiple endpoints are opened.
 
   When lazy connection mode is enabled, the address vector type is limited
   to *FI_AV_TABLE*. This is handled differently by *fi_getinfo* and
@@ -203,7 +212,7 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 0.
 
-*FI_PSM2_DISCONNECT
+*FI_PSM2_DISCONNECT*
 : The provider has a mechanism to automatically send disconnection notifications
   to all connected peers before the local endpoint is closed. As the response,
   the peers call *psm2_ep_disconnect* to clean up the connection state at their
@@ -218,7 +227,7 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 0.
 
-*FI_PSM2_TAG_LAYOUT
+*FI_PSM2_TAG_LAYOUT*
 : Select how the 96-bit PSM2 tag bits are organized. Currently three choices are
   available: *tag60* means starting from the most significant bit 32/4/60 bits
   are used for CQ data, internal protocol flags, and application tag. *tag64*
