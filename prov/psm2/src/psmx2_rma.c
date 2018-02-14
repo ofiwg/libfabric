@@ -33,6 +33,7 @@
 #include "psmx2.h"
 #include "psmx2_trigger.h"
 
+#if !HAVE_PSM2_MQ_FP_MSG
 static inline void psmx2_am_enqueue_rma(struct psmx2_trx_ctxt *trx_ctxt,
 					struct psmx2_am_request *req)
 {
@@ -40,6 +41,7 @@ static inline void psmx2_am_enqueue_rma(struct psmx2_trx_ctxt *trx_ctxt,
 	slist_insert_tail(&req->list_entry, &trx_ctxt->rma_queue.list);
 	psmx2_unlock(&trx_ctxt->rma_queue.lock, 2);
 }
+#endif
 
 static inline void psmx2_iov_copy(struct iovec *iov, size_t count,
 				  size_t offset, const void *src,
@@ -115,6 +117,11 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	struct psmx2_fid_mr *mr;
 	psm2_epaddr_t epaddr;
 	struct psmx2_trx_ctxt *rx;
+
+#if HAVE_PSM2_MQ_FP_MSG
+	psm2_mq_req_t psm2_req;
+	psm2_mq_tag_t psm2_tag, psm2_tagsel;
+#endif
 
 	psm2_am_get_source(token, &epaddr);
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
@@ -210,7 +217,28 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 					(has_data ? FI_REMOTE_CQ_DATA : 0),
 			PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_REMOTE_WRITE_CONTEXT;
 			PSMX2_CTXT_USER(&req->fi_context) = mr;
+#if HAVE_PSM2_MQ_FP_MSG
+			PSMX2_SET_TAG(psm2_tag, (uint64_t)req->write.context, 0,
+					PSMX2_RMA_TYPE_WRITE);
+			PSMX2_SET_MASK(psm2_tagsel, PSMX2_MATCH_ALL, PSMX2_RMA_TYPE_MASK);
+			op_error = psm2_mq_fp_msg(rx->psm2_ep, rx->psm2_mq,
+						 (psm2_epaddr_t)epaddr,
+						 &psm2_tag, &psm2_tagsel, 0,
+						 (void *)rma_addr, rma_len,
+						 (void *)&req->fi_context, PSM2_MQ_IRECV_FP, &psm2_req);
+			if (op_error) {
+				rep_args[0].u32w0 = PSMX2_AM_REP_WRITE | eom;
+				rep_args[0].u32w1 = op_error;
+				rep_args[1].u64 = args[1].u64;
+				err = psm2_am_reply_short(token, PSMX2_AM_RMA_HANDLER,
+							  rep_args, 2, NULL, 0, 0,
+							  NULL, NULL );
+				psmx2_am_request_free(rx, req);
+				break;
+			}
+#else
 			psmx2_am_enqueue_rma(rx, req);
+#endif
 		}
 		break;
 
@@ -282,7 +310,28 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			req->read.peer_addr = (void *)epaddr;
 			PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_REMOTE_READ_CONTEXT;
 			PSMX2_CTXT_USER(&req->fi_context) = mr;
+#if HAVE_PSM2_MQ_FP_MSG
+			PSMX2_SET_TAG(psm2_tag, (uint64_t)req->read.context, 0,
+			PSMX2_RMA_TYPE_READ);
+			op_error = psm2_mq_fp_msg(rx->psm2_ep, rx->psm2_mq,
+				  (psm2_epaddr_t)req->read.peer_addr,
+				 &psm2_tag, 0, 0,
+				 (void *)req->read.addr, req->read.len,
+				 (void *)&req->fi_context, PSM2_MQ_ISEND_FP, &psm2_req);
+			if (op_error) {
+				rep_args[0].u32w0 = PSMX2_AM_REP_READ | eom;
+				rep_args[0].u32w1 = op_error;
+				rep_args[1].u64 = args[1].u64;
+				rep_args[2].u64 = 0;
+				err = psm2_am_reply_short(token, PSMX2_AM_RMA_HANDLER,
+						rep_args, 3, NULL, 0, 0,
+						NULL, NULL );
+				psmx2_am_request_free(rx, req);
+				break;
+			}
+#else
 			psmx2_am_enqueue_rma(rx, req);
+#endif
 		}
 		break;
 
@@ -541,6 +590,7 @@ void psmx2_am_ack_rma(struct psmx2_am_request *req)
 			      PSM2_AM_FLAG_NOREPLY, NULL, NULL);
 }
 
+#if !HAVE_PSM2_MQ_FP_MSG
 int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 			 struct psmx2_am_request *req)
 {
@@ -569,6 +619,7 @@ int psmx2_am_process_rma(struct psmx2_trx_ctxt *trx_ctxt,
 
 	return psmx2_errno(err);
 }
+#endif
 
 ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 			   void *desc, fi_addr_t src_addr,

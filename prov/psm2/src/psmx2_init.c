@@ -506,8 +506,9 @@ PROVIDER_INI
 {
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "build options: HAVE_PSM2_SRC=%d, "
 			"HAVE_PSM2_AM_REGISTER_HANDLERS_2=%d, "
+			"HAVE_PSM2_MQ_FP_MSG=%d, "
 			"PSMX2_USE_REQ_CONTEXT=%d\n", HAVE_PSM2_SRC,
-			HAVE_PSM2_AM_REGISTER_HANDLERS_2, PSMX2_USE_REQ_CONTEXT);
+			HAVE_PSM2_AM_REGISTER_HANDLERS_2, HAVE_PSM2_MQ_FP_MSG, PSMX2_USE_REQ_CONTEXT);
 
 	fi_param_define(&psmx2_prov, "name_server", FI_PARAM_BOOL,
 			"Whether to turn on the name server or not "

@@ -71,9 +71,10 @@ int psmx2_am_handler_count = 0;
 int psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	struct slist_entry *item;
-	struct psmx2_am_request *req;
 	struct psmx2_trigger *trigger;
 
+#if !HAVE_PSM2_MQ_FP_MSG
+	struct psmx2_am_request *req;
 	if (psmx2_env.tagged_rma) {
 		psmx2_lock(&trx_ctxt->rma_queue.lock, 2);
 		while (!slist_empty(&trx_ctxt->rma_queue.list)) {
@@ -85,6 +86,7 @@ int psmx2_am_progress(struct psmx2_trx_ctxt *trx_ctxt)
 		}
 		psmx2_unlock(&trx_ctxt->rma_queue.lock, 2);
 	}
+#endif
 
 	psmx2_lock(&trx_ctxt->trigger_queue.lock, 2);
 	while (!slist_empty(&trx_ctxt->trigger_queue.list)) {
