@@ -1272,17 +1272,16 @@ void ofi_cmap_process_shutdown(struct util_cmap *cmap,
 	fastlock_release(&cmap->lock);
 }
 
+/* Caller must hold cmap->lock */
 void ofi_cmap_process_connect(struct util_cmap *cmap,
 			      struct util_cmap_handle *handle,
 			      uint64_t *remote_key)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing connect for handle: %p\n", handle);
-	fastlock_acquire(&cmap->lock);
 	handle->state = CMAP_CONNECTED;
 	if (remote_key)
 		handle->remote_key = *remote_key;
-	fastlock_release(&cmap->lock);
 }
 
 void ofi_cmap_process_reject(struct util_cmap *cmap,
