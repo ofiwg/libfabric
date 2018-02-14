@@ -1816,8 +1816,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxm_ep->msg_mr_local = OFI_CHECK_MR_LOCAL(rxm_ep->msg_info);
 	rxm_ep->rxm_mr_local = OFI_CHECK_MR_LOCAL(rxm_ep->rxm_info);
 
-	rxm_ep->min_multi_recv_size = ((rxm_ep->util_ep.rx_op_flags & FI_MULTI_RECV) ?
-				       rxm_ep->rxm_info->tx_attr->inject_size : 0);
+	rxm_ep->min_multi_recv_size = rxm_ep->rxm_info->tx_attr->inject_size;
 
 	ret = rxm_ep_txrx_res_open(rxm_ep);
 	if (ret)
