@@ -46,7 +46,6 @@ extern "C" {
 
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 int fi_poll_fd(int fd, int timeout);
-int fi_fd_nonblock(int fd);
 
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"

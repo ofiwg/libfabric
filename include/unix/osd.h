@@ -160,6 +160,8 @@ static inline int ofi_close_socket(SOCKET socket)
 	return close(socket);
 }
 
+int fi_fd_nonblock(int fd);
+
 static inline int ofi_sockerr(void)
 {
 	return errno;

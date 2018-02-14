@@ -87,7 +87,8 @@ static void tcpx_getinfo_ifs(struct fi_info **info)
 			loopback = cur;
 		}
 
-		if ((cur->src_addr = mem_dup(ifa->ifa_addr, addrlen))) {
+		cur->src_addr = mem_dup(ifa->ifa_addr, addrlen);
+		if (cur->src_addr) {
 			cur->src_addrlen = addrlen;
 			cur->addr_format = addr_format;
 		}

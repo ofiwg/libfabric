@@ -600,7 +600,9 @@
     <ClInclude Include="include\uthash.h" />
     <ClInclude Include="include\windows\arpa\inet.h" />
     <ClInclude Include="include\windows\config.h" />
+    <ClInclude Include="include\windows\dirent.h" />
     <ClInclude Include="include\windows\ifaddrs.h" />
+    <ClInclude Include="include\windows\netdb.h" />
     <ClInclude Include="include\windows\netinet\in.h" />
     <ClInclude Include="include\windows\netinet\ip.h" />
     <ClInclude Include="include\windows\netinet\tcp.h" />
@@ -614,6 +616,7 @@
     <ClInclude Include="include\windows\sys\select.h" />
     <ClInclude Include="include\windows\sys\socket.h" />
     <ClInclude Include="include\windows\sys\time.h" />
+    <ClInclude Include="include\windows\sys\uio.h" />
     <ClInclude Include="include\windows\sys\wait.h" />
     <ClInclude Include="include\windows\unistd.h" />
     <ClInclude Include="prov\netdir\src\netdir_buf.h" />
