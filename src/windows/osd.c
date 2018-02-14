@@ -290,12 +290,6 @@ int ofi_shm_unmap(struct util_shm *shm)
 	return FI_SUCCESS;
 }
 
-int fi_fd_nonblock(int fd)
-{
-	u_long argp = 1;
-	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
-}
-
 /* emulate sendmsg/recvmsg calls using temporary buffer */
 ssize_t recvmsg(SOCKET sd, struct msghdr *msg, int flags)
 {

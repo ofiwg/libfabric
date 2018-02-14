@@ -130,7 +130,7 @@ void pe_entry_release(struct tcpx_pe_entry *pe_entry)
 
 static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
-	int total_len = ntohll(pe_entry->msg_hdr.size);
+	uint64_t total_len = ntohll(pe_entry->msg_hdr.size);
 	int ret;
 
 	ret = tcpx_send_msg(pe_entry);
@@ -156,7 +156,7 @@ void posted_rx_find(struct tcpx_pe_entry *pe_entry)
 	struct tcpx_posted_rx *posted_rx;
 	struct tcpx_domain *domain;
 	struct tcpx_ep *ep;
-	int data_len = 0;
+	size_t data_len = 0;
 
 	ep = pe_entry->ep;
 	domain = container_of(ep->util_ep.domain,

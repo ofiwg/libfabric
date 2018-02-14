@@ -190,21 +190,18 @@ err:
 static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 		      int type, struct poll_fd_info *poll_info)
 {
-	int ret;
+	ssize_t ret;
 
 	ret = ofi_recv_socket(fd, hdr,
 			      sizeof(*hdr), MSG_WAITALL);
 	if (ret != sizeof(*hdr))
 		return -FI_EIO;
 
-	if (hdr->type != type) {
+	if (hdr->type != type)
 		return -FI_ECONNREFUSED;
 
-	}
-
-	if (hdr->version != OFI_CTRL_VERSION) {
+	if (hdr->version != OFI_CTRL_VERSION)
 		return -FI_ENOPROTOOPT;
-	}
 
 	poll_info->cm_data_sz = ntohs(hdr->seg_size);
 	if (poll_info->cm_data_sz) {
@@ -213,21 +210,21 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 
 		ret = ofi_recv_socket(fd, poll_info->cm_data,
 				      poll_info->cm_data_sz, MSG_WAITALL);
-		if (ret != poll_info->cm_data_sz)
+		if ((size_t) ret != poll_info->cm_data_sz)
 			return -FI_EIO;
 	}
 	return FI_SUCCESS;
 }
 
-static int tx_cm_data(SOCKET fd, int type, struct poll_fd_info *poll_info)
+static int tx_cm_data(SOCKET fd, uint8_t type, struct poll_fd_info *poll_info)
 {
 	struct ofi_ctrl_hdr hdr;
-	int ret;
+	ssize_t ret;
 
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.version = OFI_CTRL_VERSION;
 	hdr.type = type;
-	hdr.seg_size = htons(poll_info->cm_data_sz);
+	hdr.seg_size = htons((uint16_t) poll_info->cm_data_sz);
 
 	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
 	if (ret != sizeof(hdr))
@@ -236,7 +233,7 @@ static int tx_cm_data(SOCKET fd, int type, struct poll_fd_info *poll_info)
 	if (poll_info->cm_data_sz) {
 		ret = ofi_send_socket(fd, poll_info->cm_data,
 				      poll_info->cm_data_sz, MSG_NOSIGNAL);
-		if (ret != poll_info->cm_data_sz)
+		if ((size_t) ret != poll_info->cm_data_sz)
 			return -FI_EIO;
 	}
 	return FI_SUCCESS;
@@ -253,7 +250,7 @@ static int send_conn_req(struct poll_fd_mgr *poll_mgr,
 	assert(poll_mgr->poll_fds[index].revents == POLLOUT);
 
 	len = sizeof(status);
-	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, &status, &len);
+	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
 	if (ret < 0 || status) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		return (ret < 0)? -errno : status;
@@ -286,12 +283,11 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 	cm_entry->fid = poll_info->fid;
 	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
 
-	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
-			  sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
+	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
+				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err;
-
 	}
 	ret = fi_fd_nonblock(ep->conn_fd);
 err:
@@ -385,8 +381,8 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 	cm_entry->info->handle = &handle->handle;
 	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
 
-	ret = fi_eq_write(&pep->util_pep.eq->eq_fid, FI_CONNREQ,
-			  cm_entry, sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
+	ret = (int) fi_eq_write(&pep->util_pep.eq->eq_fid, FI_CONNREQ, cm_entry,
+				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err4;
@@ -421,8 +417,8 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 
 	cm_entry.fid =  poll_info->fid;
 
-	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
-			  &cm_entry, sizeof(cm_entry), 0);
+	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
+				&cm_entry, sizeof(cm_entry), 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
