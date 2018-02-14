@@ -616,7 +616,7 @@ static inline void psmx_domain_release(struct psmx_fid_domain *domain)
 	ofi_atomic_dec32(&domain->util_domain.ref);
 }
 
-int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
+int	psmx_domain_check_features(struct psmx_fid_domain *domain, uint64_t ep_caps);
 int	psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 void	psmx_domain_disable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 

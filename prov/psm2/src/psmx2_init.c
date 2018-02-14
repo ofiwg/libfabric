@@ -253,6 +253,14 @@ static void psmx2_update_sep_cap(void)
 		psmx2_env.max_trx_ctxt, psmx2_env.free_trx_ctxt);
 }
 
+#define PSMX2_INFO_DIFF(description, requested, supported, type) \
+	do { \
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "%s: requested=%s\n", \
+			(description), fi_tostr(&(requested), (type))); \
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "%s: supported=%s\n", \
+			(description), fi_tostr(&(supported), (type))); \
+	} while (0)
+
 static int psmx2_getinfo(uint32_t version, const char *node,
 			 const char *service, uint64_t flags,
 			 const struct fi_info *hints, struct fi_info **info)
@@ -282,6 +290,46 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
 	*info = NULL;
+
+	/* Perform some quick check first to avoid unnecessary operations */
+	if (hints) {
+		if (hints->fabric_attr && hints->fabric_attr->name &&
+		    strcasecmp(hints->fabric_attr->name, PSMX2_FABRIC_NAME)) {
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"hints->fabric_name=%s, supported=%s\n",
+				hints->fabric_attr->name, PSMX2_FABRIC_NAME);
+			goto err_out;
+		}
+
+		if (hints->domain_attr && hints->domain_attr->name &&
+		    strcasecmp(hints->domain_attr->name, PSMX2_DOMAIN_NAME)) {
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"hints->domain_name=%s, supported=%s\n",
+				hints->domain_attr->name, PSMX2_DOMAIN_NAME);
+			goto err_out;
+		}
+
+		if (hints->ep_attr) {
+			switch (hints->ep_attr->type) {
+			case FI_EP_UNSPEC:
+			case FI_EP_DGRAM:
+			case FI_EP_RDM:
+				break;
+			default:
+				FI_INFO(&psmx2_prov, FI_LOG_CORE,
+					"hints->ep_attr->type=%d, supported=%d,%d,%d.\n",
+					hints->ep_attr->type, FI_EP_UNSPEC,
+					FI_EP_DGRAM, FI_EP_RDM);
+				goto err_out;
+			}
+		}
+
+		if ((hints->caps & PSMX2_CAPS) != hints->caps) {
+			uint64_t psmx2_caps = PSMX2_CAPS;
+			PSMX2_INFO_DIFF("hints->caps", hints->caps, psmx2_caps, FI_TYPE_CAPS);
+			goto err_out;
+		}
+	}
 
 	if (FI_VERSION_GE(version, FI_VERSION(1,5)))
 		mr_mode = 0;
@@ -407,19 +455,6 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		}
 
 		if (hints->ep_attr) {
-			switch (hints->ep_attr->type) {
-			case FI_EP_UNSPEC:
-			case FI_EP_DGRAM:
-			case FI_EP_RDM:
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->type=%d, supported=%d,%d,%d.\n",
-					hints->ep_attr->type, FI_EP_UNSPEC,
-					FI_EP_DGRAM, FI_EP_RDM);
-				goto err_out;
-			}
-
 			switch (hints->ep_attr->protocol) {
 			case FI_PROTO_UNSPEC:
 			case FI_PROTO_PSMX2:
@@ -452,23 +487,13 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
 		}
 
-		if ((hints->caps & PSMX2_CAPS) != hints->caps) {
-			uint64_t psmx2_caps = PSMX2_CAPS;
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->caps=%s,\n supported=%s\n",
-				fi_tostr(&hints->caps, FI_TYPE_CAPS),
-				fi_tostr(&psmx2_caps, FI_TYPE_CAPS));
-			goto err_out;
-		}
-
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->op_flags & PSMX2_OP_FLAGS) !=
 			    hints->tx_attr->op_flags) {
 				uint64_t psmx2_op_flags = PSMX2_OP_FLAGS;
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->caps=%s,\n supported=%s\n",
-					fi_tostr(&hints->tx_attr->op_flags, FI_TYPE_OP_FLAGS),
-					fi_tostr(&psmx2_op_flags, FI_TYPE_OP_FLAGS));
+				PSMX2_INFO_DIFF("hints->tx_attr->op_flags",
+						hints->tx_attr->op_flags, psmx2_op_flags,
+						FI_TYPE_OP_FLAGS);
 				goto err_out;
 			}
 			if (hints->tx_attr->inject_size > psmx2_env.inject_size) {
@@ -485,45 +510,25 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		    (hints->rx_attr->op_flags & PSMX2_OP_FLAGS) !=
 		     hints->rx_attr->op_flags) {
 			uint64_t psmx2_op_flags = PSMX2_OP_FLAGS;
-			FI_INFO(&psmx2_prov, FI_LOG_CORE, "hints->rx->flags=%s,\n"
-				" supported=%s.\n",
-				fi_tostr(&hints->rx_attr->op_flags,
-					 FI_TYPE_OP_FLAGS),
-				fi_tostr(&psmx2_op_flags,
-					 FI_TYPE_OP_FLAGS));
+			PSMX2_INFO_DIFF("hints->rx_attr->op_flags",
+					hints->rx_attr->op_flags, psmx2_op_flags,
+					FI_TYPE_OP_FLAGS);
 			goto err_out;
 		}
 
 		if ((hints->caps & FI_TAGGED) || (hints->caps & FI_MSG)) {
 			if ((hints->mode & FI_CONTEXT) != FI_CONTEXT) {
 				uint64_t psmx2_mode = FI_CONTEXT;
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->mode=%s,\n required=%s.\n",
-					fi_tostr(&hints->mode, FI_TYPE_MODE),
-					fi_tostr(&psmx2_mode, FI_TYPE_MODE));
+				PSMX2_INFO_DIFF("hints->mode", hints->mode,
+						psmx2_mode, FI_TYPE_MODE);
 				goto err_out;
 			}
 		} else {
 			mode = 0;
 		}
 
-		if (hints->fabric_attr && hints->fabric_attr->name &&
-		    strcmp(hints->fabric_attr->name, PSMX2_FABRIC_NAME)) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->fabric_name=%s, supported=psm\n",
-				hints->fabric_attr->name);
-			goto err_out;
-		}
 
 		if (hints->domain_attr) {
-			if (hints->domain_attr->name &&
-			    strcmp(hints->domain_attr->name, PSMX2_DOMAIN_NAME)) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_name=%s, supported=psm\n",
-					hints->domain_attr->name);
-				goto err_out;
-			}
-
 			switch (hints->domain_attr->av_type) {
 			case FI_AV_MAP:
 				if (psmx2_env.lazy_conn) {
@@ -627,21 +632,17 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			if ((hints->tx_attr->msg_order & PSMX2_MSG_ORDER) !=
 			    hints->tx_attr->msg_order) {
 				uint64_t psmx2_msg_order = PSMX2_MSG_ORDER;
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->msg_order=%s,\n"
-					"supported=%s.\n",
-					fi_tostr(&hints->tx_attr->msg_order, FI_TYPE_MSG_ORDER),
-					fi_tostr(&psmx2_msg_order, FI_TYPE_MSG_ORDER));
+				PSMX2_INFO_DIFF("hints->tx_attr->msg_order",
+						hints->tx_attr->msg_order,
+						psmx2_msg_order, FI_TYPE_MSG_ORDER);
 				goto err_out;
 			}
 			if ((hints->tx_attr->comp_order & PSMX2_COMP_ORDER) !=
 			    hints->tx_attr->comp_order) {
 				uint64_t psmx2_comp_order = PSMX2_COMP_ORDER;
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->msg_order=%s,\n"
-					"supported=%s.\n",
-					fi_tostr(&hints->tx_attr->comp_order, FI_TYPE_MSG_ORDER),
-					fi_tostr(&psmx2_comp_order, FI_TYPE_MSG_ORDER));
+				PSMX2_INFO_DIFF("hints->tx_attr->comp_order",
+						hints->tx_attr->comp_order,
+						psmx2_comp_order, FI_TYPE_MSG_ORDER);
 				goto err_out;
 			}
 			if (hints->tx_attr->inject_size > psmx2_env.inject_size) {
@@ -673,19 +674,17 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			if ((hints->rx_attr->msg_order & PSMX2_MSG_ORDER) !=
 			    hints->rx_attr->msg_order) {
 				uint64_t psmx2_msg_order = PSMX2_MSG_ORDER;
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->rx_attr->msg_order=%s,\n supported=%s.\n",
-					fi_tostr(&hints->rx_attr->msg_order, FI_TYPE_MSG_ORDER),
-					fi_tostr(&psmx2_msg_order, FI_TYPE_MSG_ORDER));
+				PSMX2_INFO_DIFF("hints->rx_attr->msg_order",
+						hints->rx_attr->msg_order,
+						psmx2_msg_order, FI_TYPE_MSG_ORDER);
 				goto err_out;
 			}
 			if ((hints->rx_attr->comp_order & PSMX2_COMP_ORDER) !=
 			    hints->rx_attr->comp_order) {
 				uint64_t psmx2_comp_order = PSMX2_COMP_ORDER;
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->rx_attr->comp_order=%s,\n supported=%s.\n",
-					fi_tostr(&hints->rx_attr->comp_order, FI_TYPE_MSG_ORDER),
-					fi_tostr(&psmx2_comp_order, FI_TYPE_MSG_ORDER));
+				PSMX2_INFO_DIFF("hints->rx_attr->comp_order",
+						hints->rx_attr->comp_order,
+						psmx2_comp_order, FI_TYPE_MSG_ORDER);
 				goto err_out;
 			}
 			if (hints->rx_attr->iov_limit > 1) {
