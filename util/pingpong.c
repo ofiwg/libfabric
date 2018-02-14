@@ -174,7 +174,7 @@ struct ct_pingpong {
 	struct fid_eq *eq;
 
 	struct fid_mr no_mr;
-	struct fi_context tx_ctx, rx_ctx;
+	struct fi_context2 tx_ctx, rx_ctx;
 	uint64_t remote_cq_data;
 
 	uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -1152,7 +1152,7 @@ static int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 	} while (0)
 
 static ssize_t pp_post_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
-		   struct fi_context *ctx)
+		   struct fi_context2 *ctx)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_send, pp_get_tx_comp, ct->tx_seq, "transmit", ep,
@@ -1209,7 +1209,7 @@ static ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 }
 
 static ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep,
-			  size_t size, struct fi_context *ctx)
+			  size_t size, struct fi_context2 *ctx)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_recv, pp_get_rx_comp, ct->rx_seq, "receive", ep,
@@ -2167,7 +2167,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	ct.hints->ep_attr->type = FI_EP_DGRAM;
 	ct.hints->caps = FI_MSG;
-	ct.hints->mode = FI_CONTEXT;
+	ct.hints->mode = FI_CONTEXT2;
 	ct.hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ofi_osd_init();
