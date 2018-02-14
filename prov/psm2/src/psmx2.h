@@ -514,8 +514,10 @@ struct psmx2_trx_ctxt {
 	struct psmx2_fid_domain	*domain;
 	struct psmx2_fid_ep	*ep;
 
+#if !HAVE_PSM2_MQ_FP_MSG
 	/* incoming req queue for AM based RMA request. */
 	struct psmx2_req_queue	rma_queue;
+#endif
 
 	/* triggered operations that are ready to be processed */
 	struct psmx2_req_queue	trigger_queue;

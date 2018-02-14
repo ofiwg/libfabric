@@ -323,13 +323,15 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 		goto err_out_close_ep;
 	}
 
+#if !HAVE_PSM2_MQ_FP_MSG
+	fastlock_init(&trx_ctxt->rma_queue.lock);
+	slist_init(&trx_ctxt->rma_queue.list);
+#endif
 	fastlock_init(&trx_ctxt->peer_lock);
 	fastlock_init(&trx_ctxt->poll_lock);
 	fastlock_init(&trx_ctxt->am_req_pool_lock);
-	fastlock_init(&trx_ctxt->rma_queue.lock);
 	fastlock_init(&trx_ctxt->trigger_queue.lock);
 	dlist_init(&trx_ctxt->peer_list);
-	slist_init(&trx_ctxt->rma_queue.list);
 	slist_init(&trx_ctxt->trigger_queue.list);
 	trx_ctxt->id = psmx2_trx_ctxt_cnt++;
 	trx_ctxt->domain = domain;

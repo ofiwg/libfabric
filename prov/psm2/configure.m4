@@ -18,6 +18,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_SRC], $have_psm2_src, [PSM2 source is built-in])
 	 psm2_happy=0
 	 have_psm2_am_register_handlers_2=1
+	 have_psm2_mq_fp_msg=1
 	 AS_IF([test x"$enable_psm2" != x"no"],
 	       [AS_IF([test x$have_psm2_src = x0],
 		      [
@@ -25,7 +26,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 			FI_CHECK_PACKAGE([psm2],
 					 [psm2.h],
 					 [psm2],
-					 [psm2_am_register_handlers_2],
+					 [psm2_mq_fp_msg],
 					 [],
 					 [$psm2_PREFIX],
 					 [$psm2_LIBDIR],
@@ -33,7 +34,21 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 					 [psm2_happy=0])
 			AS_IF([test x$psm2_happy = x0],
 			      [
-				$as_echo "$as_me: recheck psm2 with reduced feature set."
+				$as_echo "$as_me: recheck psm2 without psm2_mq_fp_msg."
+				have_psm2_mq_fp_msg=0
+				FI_CHECK_PACKAGE([psm2],
+						 [psm2.h],
+						 [psm2],
+						 [psm2_am_register_handlers_2],
+						 [],
+						 [$psm2_PREFIX],
+						 [$psm2_LIBDIR],
+						 [psm2_happy=1],
+						 [psm2_happy=0])
+			      ])
+			AS_IF([test x$psm2_happy = x0],
+			      [
+				$as_echo "$as_me: recheck psm2 without psm2_am_register_handlers_2."
 				have_psm2_am_register_handlers_2=0
 				FI_CHECK_PACKAGE([psm2],
 						 [psm2.h],
@@ -107,6 +122,9 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_AM_REGISTER_HANDLERS_2],
 			    $have_psm2_am_register_handlers_2,
 			    [psm2_am_register_handlers_2 function is present])
+	 AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_FP_MSG],
+			    $have_psm2_mq_fp_msg,
+			    [psm2_mq_fp_msg function is present])
 ])
 
 AC_ARG_WITH([psm2-src],
