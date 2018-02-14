@@ -38,18 +38,17 @@
 #include "smr.h"
 
 
-static ssize_t smr_generic_recvmsg(struct fid_ep *ep_fid, const struct iovec *iov,
+static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 				   size_t iov_count, fi_addr_t addr, uint64_t tag,
 				   uint64_t ignore, void *context, uint64_t flags)
 {
-	struct smr_ep *ep;
 	struct smr_queue *recv_queue;
 	struct smr_ep_entry *entry;
 	ssize_t ret;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
+	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
 
-	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	if (freestack_isempty(ep->recv_fs)) {
 		ret = -FI_EAGAIN;
@@ -89,34 +88,45 @@ out:
 ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		    uint64_t flags)
 {
-	return smr_generic_recvmsg(ep_fid, msg->msg_iov, msg->iov_count,
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_recvmsg(ep, msg->msg_iov, msg->iov_count,
 				   msg->addr, 0, 0, msg->context, flags);
 }
 
 ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		size_t count, fi_addr_t src_addr, void *context)
 {
-	return smr_generic_recvmsg(ep_fid, iov, count, src_addr,
-				   0, 0, context, 0);
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_recvmsg(ep, iov, count, src_addr,
+				   0, 0, context, smr_ep_rx_flags(ep));
 }
 
 ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, void *context)
 {
+	struct smr_ep *ep;
 	struct iovec msg_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_recvmsg(ep_fid, &msg_iov, 1, src_addr, 0, 0, context, 0);
+	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, 0, context,
+				   smr_ep_rx_flags(ep));
 }
 
-static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *iov,
+static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 				   size_t iov_count, fi_addr_t addr, uint64_t tag,
 				   uint64_t data, void *context, uint32_t op,
-				   uint16_t op_flags)
+				   uint64_t op_flags)
 {
-	struct smr_ep *ep;
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	struct smr_resp *resp;
@@ -127,7 +137,6 @@ static ssize_t smr_generic_sendmsg(struct fid_ep *ep_fid, const struct iovec *io
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 
-	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	peer_id = (int) addr;
 
 	ret = smr_verify_peer(ep, peer_id);
@@ -189,35 +198,45 @@ unlock_region:
 ssize_t smr_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, void *context)
 {
+	struct smr_ep *ep;
 	struct iovec msg_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep_fid, &msg_iov, 1, dest_addr, 0,
-				   0, context, ofi_op_msg, 0);
+	return smr_generic_sendmsg(ep, &msg_iov, 1, dest_addr, 0,
+				   0, context, ofi_op_msg, smr_ep_tx_flags(ep));
 }
 
 
 ssize_t smr_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		size_t count, fi_addr_t dest_addr, void *context)
 {
-	return smr_generic_sendmsg(ep_fid, iov, count, dest_addr, 0,
-				   0, context, ofi_op_msg, 0);
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_sendmsg(ep, iov, count, dest_addr, 0,
+				   0, context, ofi_op_msg, smr_ep_tx_flags(ep));
 }
 
 ssize_t smr_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		    uint64_t flags)
 {
-	return smr_generic_sendmsg(ep_fid, msg->msg_iov, msg->iov_count,
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				   msg->addr, 0, msg->data, msg->context,
-				   ofi_op_msg, (flags & FI_REMOTE_CQ_DATA) ?
-				   OFI_REMOTE_CQ_DATA : 0);
+				   ofi_op_msg, flags);
 }
 
 static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 				  size_t len, fi_addr_t dest_addr, uint64_t tag,
-				  uint64_t data, uint32_t op, uint16_t op_flags)
+				  uint64_t data, uint32_t op, uint64_t op_flags)
 {
 	struct smr_ep *ep;
 	struct smr_region *peer_smr;
@@ -277,20 +296,23 @@ ssize_t smr_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		     void *desc, uint64_t data, fi_addr_t dest_addr,
 		     void *context)
 {
+	struct smr_ep *ep;
 	struct iovec iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep_fid, &iov, 1, dest_addr, 0, data, context,
-				   ofi_op_msg, OFI_REMOTE_CQ_DATA);
+	return smr_generic_sendmsg(ep, &iov, 1, dest_addr, 0, data, context,
+				   ofi_op_msg, FI_REMOTE_CQ_DATA);
 }
 
 ssize_t smr_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		       uint64_t data, fi_addr_t dest_addr)
 {
 	return smr_generic_inject(ep_fid, buf, len, dest_addr, 0, data,
-				  ofi_op_msg, OFI_REMOTE_CQ_DATA);
+				  ofi_op_msg, FI_REMOTE_CQ_DATA);
 }
 
 struct fi_ops_msg smr_msg_ops = {
@@ -309,27 +331,38 @@ struct fi_ops_msg smr_msg_ops = {
 ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
+	struct smr_ep *ep;
 	struct iovec msg_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_recvmsg(ep_fid, &msg_iov, 1, src_addr, tag, ignore,
-				   context, FI_TAGGED);
+	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, tag, ignore,
+				   context, FI_TAGGED | smr_ep_tx_flags(ep));
 }
 
 ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 	void *context)
 {
-	return smr_generic_recvmsg(ep_fid, iov, count, src_addr, tag, ignore,
-				   context, FI_TAGGED);
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_recvmsg(ep, iov, count, src_addr, tag, ignore,
+				   context, FI_TAGGED | smr_ep_tx_flags(ep));
 }
 
 ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	uint64_t flags)
 {
-	return smr_generic_recvmsg(ep_fid, msg->msg_iov, msg->iov_count, msg->addr,
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_recvmsg(ep, msg->msg_iov, msg->iov_count, msg->addr,
 				   msg->tag, msg->ignore, msg->context,
 				   flags | FI_TAGGED);
 }
@@ -337,30 +370,42 @@ ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 ssize_t smr_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	void *desc, fi_addr_t dest_addr, uint64_t tag, void *context)
 {
+	struct smr_ep *ep;
 	struct iovec msg_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep_fid, &msg_iov, 1, dest_addr, tag,
-				   0, context, ofi_op_tagged, 0);
+	return smr_generic_sendmsg(ep, &msg_iov, 1, dest_addr, tag,
+				   0, context, ofi_op_tagged,
+				   smr_ep_tx_flags(ep));
 }
 
 ssize_t smr_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	void **desc, size_t count, fi_addr_t dest_addr, uint64_t tag,
 	void *context)
 {
-	return smr_generic_sendmsg(ep_fid, iov, count, dest_addr, tag,
-				   0, context, ofi_op_tagged, 0);
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_sendmsg(ep, iov, count, dest_addr, tag,
+				   0, context, ofi_op_tagged,
+				   smr_ep_tx_flags(ep));
 }
 
 ssize_t smr_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	uint64_t flags)
 {
-	return smr_generic_sendmsg(ep_fid, msg->msg_iov, msg->iov_count,
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	return smr_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				   msg->addr, msg->tag, msg->data, msg->context,
-				   ofi_op_tagged, (flags & FI_REMOTE_CQ_DATA) ?
-				   OFI_REMOTE_CQ_DATA : 0);
+				   ofi_op_tagged, flags);
 }
 
 ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -374,20 +419,23 @@ ssize_t smr_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		      void *desc, uint64_t data, fi_addr_t dest_addr,
 		      uint64_t tag, void *context)
 {
+	struct smr_ep *ep;
 	struct iovec iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep_fid, &iov, 1, dest_addr, tag, data, context,
-				   ofi_op_tagged, OFI_REMOTE_CQ_DATA);
+	return smr_generic_sendmsg(ep, &iov, 1, dest_addr, tag, data, context,
+				   ofi_op_tagged, FI_REMOTE_CQ_DATA);
 }
 
 ssize_t smr_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	return smr_generic_inject(ep_fid, buf, len, dest_addr, tag, data,
-				  ofi_op_tagged, OFI_REMOTE_CQ_DATA);
+				  ofi_op_tagged, FI_REMOTE_CQ_DATA);
 }
 
 struct fi_ops_tagged smr_tagged_ops = {

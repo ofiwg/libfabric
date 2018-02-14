@@ -158,6 +158,30 @@ out:
 	return -ret;
 }
 
+static int smr_progress_multi_recv(struct smr_ep *ep, struct smr_queue *queue,
+				   struct smr_ep_entry *entry, size_t len)
+{
+	size_t left;
+	void *new_base;
+	int ret;
+
+	left = entry->iov[0].iov_len - len;
+	if (left < ep->min_multi_recv_size) {
+		ret = ep->rx_comp(ep, entry->context, FI_MULTI_RECV, 0, 0,
+				  &entry->addr, 0, 0, 0);
+		freestack_push(ep->recv_fs, entry);
+		return ret;
+	}
+
+	new_base = (void *) ((uintptr_t) entry->iov[0].iov_base + len);
+	entry->iov[0].iov_len = left;
+	entry->iov[0].iov_base = new_base;
+
+	dlist_insert_head(&entry->entry, &queue->list);
+
+	return 0;
+}
+
 static void smr_do_atomic(void *src, void *dst, void *cmp, enum fi_datatype datatype,
 			  enum fi_op op, size_t cnt)
 {
@@ -316,9 +340,15 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process rx completion\n");
 	}
-	freestack_push(ep->recv_fs, entry);
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
 	ep->region->cmd_cnt++;
+
+	if (entry->flags & FI_MULTI_RECV) {
+		ret = smr_progress_multi_recv(ep, recv_queue, entry, total_len);
+		return ret;
+	}
+
+	freestack_push(ep->recv_fs, entry);
 
 	return ret;
 }
@@ -564,6 +594,13 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 
 	ep->region->cmd_cnt++;
 	freestack_push(ep->unexp_fs, unexp_msg);
+
+	if (entry->flags & FI_MULTI_RECV) {
+		ret = smr_progress_multi_recv(ep, &ep->trecv_queue, entry,
+					      total_len);
+		return ret ? ret : -FI_ENOMSG;
+	}
+
 push_entry:
 	freestack_push(ep->recv_fs, entry);
 	return ret;
