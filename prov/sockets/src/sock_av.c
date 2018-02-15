@@ -403,14 +403,11 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
         		idx = fi_addr[i] & sock_ep->attr->av->mask;
 			conn = ofi_idm_lookup(&sock_ep->attr->av_idm, idx);
 			if (conn) {
-				/*
-				 * check for conn either in connection progress or
-				 * already closed.
+				/* A peer may be using the connection, so leave
+				 * it operational, just dissociate it from AV.
 				 */
-				if((conn != SOCK_CM_CONN_IN_PROGRESS)  &&
-					(conn->sock_fd != -1)) {
-					sock_ep_remove_conn(sock_ep->attr, conn);
-				}
+				if (conn->av_index == idx)
+					conn->av_index = FI_ADDR_NOTAVAIL;
 				ofi_idm_clear(&sock_ep->attr->av_idm, idx);
 			}
 		}
