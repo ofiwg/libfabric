@@ -69,12 +69,8 @@ static int tcpx_recv_msg_hdr(struct tcpx_pe_entry *pe_entry)
 
 	bytes_recvd = ofi_recv_socket(pe_entry->ep->conn_fd,
 				      rem_hdr_buf, rem_hdr_len, 0);
-	if (bytes_recvd == 0) {
-		return -FI_ENOTCONN;
-	}
-	if (bytes_recvd < 0) {
-		return -errno;
-	}
+	if (bytes_recvd <= 0)
+		return (bytes_recvd)? -errno: -FI_ENOTCONN;
 
 	pe_entry->done_len += bytes_recvd;
 
@@ -100,12 +96,9 @@ int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry)
 	bytes_recvd = ofi_readv_socket(pe_entry->ep->conn_fd,
 				       pe_entry->msg_data.iov,
 				       pe_entry->msg_data.iov_cnt);
-	if (bytes_recvd == 0) {
-		return -FI_ENOTCONN;
-	}
-	if (bytes_recvd < 0) {
-		return -errno;
-	}
+	if (bytes_recvd <= 0)
+		return (bytes_recvd)? -errno: -FI_ENOTCONN;
+
 
 	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.size)) {
 		ofi_consume_iov(pe_entry->msg_data.iov,
