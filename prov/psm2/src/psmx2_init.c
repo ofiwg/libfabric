@@ -65,6 +65,7 @@ uint64_t psmx2_tag_mask;
 uint32_t psmx2_tag_upper_mask;
 uint32_t psmx2_data_mask;
 int	 psmx2_flags_idx;
+int	 psmx2_tag_layout_locked = 0;
 #endif
 
 static void psmx2_init_env(void)
@@ -88,8 +89,14 @@ static void psmx2_init_env(void)
 #endif
 }
 
-static void psmx2_init_tag_layout(int *cq_data_size)
+void psmx2_init_tag_layout(int *cq_data_size, int to_lock)
 {
+	if (psmx2_tag_layout_locked) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"tag layout locked by opened domain.\n");
+		goto out;
+	}
+
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	if (strcasecmp(psmx2_env.tag_layout, "tag60") == 0) {
 		psmx2_tag_upper_mask = PSMX2_TAG_UPPER_MASK_60;
@@ -121,6 +128,12 @@ static void psmx2_init_tag_layout(int *cq_data_size)
 		}
 	}
 #endif
+
+out:
+	if (to_lock) {
+		psmx2_tag_layout_locked = 1;
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "lock tag layout settings.\n");
+	}
 	*cq_data_size = (PSMX2_DATA_MASK == 0xFFFFFFFFU) ? 4 : 0;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "tag_mask: %016" PRIX64
@@ -258,6 +271,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			 const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *psmx2_info;
+	struct fi_info *psmx2_info_2;
 	uint32_t cnt = 0;
 	struct psmx2_ep_name *dest_addr = NULL;
 	struct psmx2_ep_name *src_addr = NULL;
@@ -703,7 +717,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		/* TODO: check other fields of hints */
 	}
 
-	psmx2_init_tag_layout(&cq_data_size);
+	psmx2_init_tag_layout(&cq_data_size, 0);
 
 	psmx2_info = fi_allocinfo();
 	if (!psmx2_info) {
@@ -789,6 +803,25 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM2 handles it internally! */
 	psmx2_info->rx_attr->size = UINT64_MAX;
 	psmx2_info->rx_attr->iov_limit = 1;
+
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+	/*
+	 * When the tag64 layout is selected automatically, return an extra
+	 * instance of the provider that uses the tag60 layout. We don't want
+	 * to return an extra tag64 provider when tag60 is selected because
+	 * in that case remote CQ data support is a user requirement.
+	 */
+	if (!cq_data_size && !strcasecmp(psmx2_env.tag_layout, "auto") &&
+	    !psmx2_tag_layout_locked) {
+		psmx2_info_2 = fi_dupinfo(psmx2_info);
+		if (psmx2_info_2) {
+			psmx2_info_2->ep_attr->mem_tag_format =
+					ofi_tag_format(PSMX2_TAG_MASK_60);
+			psmx2_info_2->domain_attr->cq_data_size = 4;
+			psmx2_info->next = psmx2_info_2;
+		}
+	}
+#endif
 
 	*info = psmx2_info;
 	return 0;
