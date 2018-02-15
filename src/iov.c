@@ -67,3 +67,22 @@ uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count, uint64_t io
 	}
 	return done;
 }
+
+void ofi_consume_iov(struct iovec *iov, size_t *iov_count, size_t consumed)
+{
+	size_t i;
+
+	if (*iov_count == 1)
+		goto out;
+
+	for (i = 0; i < *iov_count; i++) {
+		if (consumed < iov[i].iov_len)
+			break;
+		consumed -= iov[i].iov_len;
+	}
+	memmove(iov, &iov[i], sizeof(*iov) * (*iov_count - i));
+	*iov_count -= i;
+out:
+	iov[0].iov_base = (uint8_t *)iov[0].iov_base + consumed;
+	iov[0].iov_len -= consumed;
+}

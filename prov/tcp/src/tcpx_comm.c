@@ -34,31 +34,8 @@
 #include <ofi_prov.h>
 #include <sys/types.h>
 #include <ofi_util.h>
+#include <ofi_iov.h>
 #include "tcpx.h"
-
-static void tcpx_adjust_iovec(struct tcpx_pe_entry *pe_entry,
-			      size_t offset)
-{
-	struct iovec *iovec = pe_entry->msg_data.iov;
-	uint64_t buf_offset = offset;
-	int new_iov = 0, i;
-	size_t len = 0;
-
-	for (i = 0 ; i < pe_entry->msg_data.iov_cnt+1 ; i++) {
-		len += iovec[i].iov_len;
-
-		if (offset < len)
-			continue;
-
-		new_iov = i+1;
-		buf_offset = offset - len;
-	}
-
-	iovec[new_iov].iov_base = ((uint8_t *)(iovec[new_iov].iov_base) +
-				   buf_offset);
-	iovec[new_iov].iov_len -= buf_offset;
-	pe_entry->msg_data.iov_cnt -= new_iov;
-}
 
 int tcpx_send_msg(struct tcpx_pe_entry *pe_entry)
 {
@@ -71,7 +48,9 @@ int tcpx_send_msg(struct tcpx_pe_entry *pe_entry)
 		return -errno;
 
 	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.size)) {
-		tcpx_adjust_iovec(pe_entry, bytes_sent);
+		ofi_consume_iov(pe_entry->msg_data.iov,
+				&pe_entry->msg_data.iov_cnt,
+				bytes_sent);
 	}
 
 	pe_entry->done_len += bytes_sent;
@@ -129,7 +108,9 @@ int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry)
 	}
 
 	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.size)) {
-		tcpx_adjust_iovec(pe_entry, bytes_recvd);
+		ofi_consume_iov(pe_entry->msg_data.iov,
+				&pe_entry->msg_data.iov_cnt,
+				bytes_recvd);
 	}
 
 	pe_entry->done_len += bytes_recvd;
