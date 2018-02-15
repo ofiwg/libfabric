@@ -73,7 +73,7 @@ static int psmx_progress_set_affinity(char *affinity)
 
 		if (n < 2)
 			end = start;
-	
+
 		if (stride < 1)
 			stride = 1;
 
@@ -308,7 +308,7 @@ static int psmx_domain_init(struct psmx_fid_domain *domain,
 	}
 
 	domain->mr_reserved_key = 1;
-	
+
 	err = fastlock_init(&domain->poll_lock);
 	if (err) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
@@ -419,17 +419,30 @@ err_out:
 	return err;
 }
 
-int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
+static int psmx_domain_check_ep_caps(uint64_t domain_caps, uint64_t ep_caps)
 {
-	if ((domain->caps & ep_cap & ~PSMX_SUB_CAPS) != (ep_cap & ~PSMX_SUB_CAPS)) {
-		uint64_t mask = ~PSMX_SUB_CAPS;
+	domain_caps &= ~PSMX_SUB_CAPS;
+	ep_caps &= ~PSMX_SUB_CAPS;
+
+	if ((domain_caps & ep_caps) != ep_caps) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
-			"caps mismatch: domain->caps=%s,\n ep->caps=%s,\n mask=%s\n",
-			fi_tostr(&domain->caps, FI_TYPE_CAPS),
-			fi_tostr(&ep_cap, FI_TYPE_CAPS),
-			fi_tostr(&mask, FI_TYPE_CAPS));
+			"caps mismatch: domain_caps=%s\n",
+			fi_tostr(&domain_caps, FI_TYPE_CAPS));
+
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"caps mismatch: ep_caps=%s\n",
+			fi_tostr(&ep_caps, FI_TYPE_CAPS));
+
 		return -FI_EOPNOTSUPP;
 	}
+
+	return 0;
+}
+
+int psmx_domain_check_features(struct psmx_fid_domain *domain, uint64_t ep_cap)
+{
+	if (psmx_domain_check_ep_caps(domain->caps, ep_cap))
+		return -FI_EOPNOTSUPP;
 
 	if ((ep_cap & FI_TAGGED) && domain->tagged_ep &&
 	    ofi_recv_allowed(ep_cap))
@@ -457,15 +470,8 @@ int psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep
 	if (ep)
 		ep_cap = ep->caps;
 
-	if ((domain->caps & ep_cap & ~PSMX_SUB_CAPS) != (ep_cap & ~PSMX_SUB_CAPS)) {
-		uint64_t mask = ~PSMX_SUB_CAPS;
-		FI_INFO(&psmx_prov, FI_LOG_CORE,
-			"caps mismatch: domain->caps=%s,\n ep->caps=%s,\n mask=%s\n",
-			fi_tostr(&domain->caps, FI_TYPE_CAPS),
-			fi_tostr(&ep_cap, FI_TYPE_CAPS),
-			fi_tostr(&mask, FI_TYPE_CAPS));
+	if (psmx_domain_check_ep_caps(domain->caps, ep_cap))
 		return -FI_EOPNOTSUPP;
-	}
 
 	if (ep_cap & FI_MSG)
 		domain->reserved_tag_bits |= PSMX_MSG_BIT;
