@@ -210,6 +210,7 @@ extern uint64_t	psmx2_tag_mask;
 extern uint32_t	psmx2_tag_upper_mask;
 extern uint32_t	psmx2_data_mask;
 extern int	psmx2_flags_idx;
+extern int	psmx2_tag_layout_locked;
 #endif
 
 #define PSMX2_FLAGS_MASK	((uint32_t)0xF0000000)
@@ -809,6 +810,7 @@ static inline void psmx2_unlock(fastlock_t *lock, int lock_level)
 		fastlock_release(lock);
 }
 
+void	psmx2_init_tag_layout(int *cq_data_size, int to_lock);
 int	psmx2_fabric(struct fi_fabric_attr *attr,
 		     struct fid_fabric **fabric, void *context);
 int	psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
