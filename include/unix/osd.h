@@ -155,6 +155,11 @@ static inline ssize_t ofi_readv_socket(SOCKET fd, struct iovec *iov, int iov_cnt
 	return readv(fd, iov, iov_cnt);
 }
 
+static inline int ofi_shutdown(SOCKET socket, int how)
+{
+	return shutdown(socket, how);
+}
+
 static inline int ofi_close_socket(SOCKET socket)
 {
 	return close(socket);

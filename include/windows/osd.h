@@ -204,6 +204,10 @@ extern "C" {
 #define MSG_NOSIGNAL	0
 #endif
 
+#ifndef SHUT_RDWR
+#define SHUT_RDWR	SD_BOTH
+#endif
+
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE	0
 #endif
@@ -728,6 +732,11 @@ static inline ssize_t ofi_sendto_socket(SOCKET fd, const void *buf, size_t count
 
 ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
 ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
+
+static inline int ofi_shutdown(SOCKET socket, int how)
+{
+	return shutdown(socket, how);
+}
 
 static inline int ofi_close_socket(SOCKET socket)
 {
