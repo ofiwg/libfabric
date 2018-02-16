@@ -566,12 +566,12 @@ static void ft_init(void)
 	rx_cq_cntr = 0;
 }
 
-int ft_init_oob()
+static int ft_init_oob(void)
 {
 	int ret, op, err;
 	struct addrinfo *ai = NULL;
 
-	if (!(opts.options & FT_OPT_OOB_SYNC))
+	if (!(opts.options & FT_OPT_OOB_SYNC) || oob_sock != -1)
 		return 0;
 
 	if (!opts.oob_port)
@@ -588,6 +588,8 @@ int ft_init_oob()
 			ret = oob_sock;
 			return ret;
 		}
+
+		close(listen_sock);
 	} else {
 
 		ret = getaddrinfo(opts.dst_addr, opts.oob_port, NULL, &ai);
