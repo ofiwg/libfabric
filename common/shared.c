@@ -558,6 +558,14 @@ int ft_alloc_active_res(struct fi_info *fi)
 	return 0;
 }
 
+static void ft_init(void)
+{
+	tx_seq = 0;
+	rx_seq = 0;
+	tx_cq_cntr = 0;
+	rx_cq_cntr = 0;
+}
+
 int ft_init_oob()
 {
 	int ret, op, err;
@@ -660,6 +668,7 @@ int ft_start_server(void)
 {
 	int ret;
 
+	ft_init();
 	ret = ft_init_oob();
 	if (ret)
 		return ret;
@@ -820,6 +829,7 @@ int ft_client_connect(void)
 {
 	int ret;
 
+	ft_init();
 	ret = ft_init_oob();
 	if (ret)
 		return ret;
@@ -851,6 +861,7 @@ int ft_init_fabric(void)
 {
 	int ret;
 
+	ft_init();
 	ret = ft_init_oob();
 	if (ret)
 		return ret;
