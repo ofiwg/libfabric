@@ -56,6 +56,7 @@ enum {
 	UTIL_DEFAULT_AV_SIZE = 1024,
 };
 
+static int ofi_cmap_move_handle_to_peer_list(struct util_cmap *cmap, int index);
 
 static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_addrlen,
 			       struct sockaddr **src_addr, size_t *src_addrlen)
@@ -354,8 +355,8 @@ static void util_av_hash_remove(struct util_av_hash *hash, int slot, int index)
 int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 {
 	struct util_ep *ep;
-	struct dlist_entry *av_entry;
 	int *entry, *next, i;
+	int ret = 0;
 
 	if (index < 0 || (size_t)index > av->count) {
 		FI_WARN(av->prov, FI_LOG_AV, "index out of range\n");
@@ -363,6 +364,24 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 	}
 
 	fastlock_acquire(&av->lock);
+
+	/* This should stay at top */
+	dlist_foreach_container(&av->ep_list, struct util_ep, ep, av_entry) {
+		if (ep->cmap && ep->cmap->handles_av[index]) {
+			/* TODO this is not optimal. Replace this with something
+			 * more deterministic: delete handle if we know that peer
+			 * isn't actively communicating with us
+			 */
+			ret = ofi_cmap_move_handle_to_peer_list(ep->cmap, index);
+			if (ret) {
+				FI_WARN(av->prov, FI_LOG_DOMAIN, "Unable to move"
+					" handle to peer list. Deleting it.\n");
+				ofi_cmap_del_handle(ep->cmap->handles_av[index]);
+				goto unlock;
+			}
+		}
+	}
+
 	if (av->flags & FI_SOURCE)
 		util_av_hash_remove(&av->hash, slot, index);
 
@@ -379,15 +398,9 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 		util_av_set_data(av, index, next, sizeof index);
 		*next = index;
 	}
-
-	dlist_foreach(&av->ep_list, av_entry) {
-		ep = container_of(av_entry, struct util_ep, av_entry);
-		if (ep->cmap && ep->cmap->handles_av[index])
-			ofi_cmap_del_handle(ep->cmap->handles_av[index]);
-	}
-
+unlock:
 	fastlock_release(&av->lock);
-	return 0;
+	return ret;
 }
 
 int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot)
@@ -1217,6 +1230,29 @@ util_cmap_get_handle_peer(struct util_cmap *cmap, const void *addr)
 			" for addr", addr);
 	peer = container_of(entry, struct util_cmap_peer, entry);
 	return peer->handle;
+}
+
+static int ofi_cmap_move_handle_to_peer_list(struct util_cmap *cmap, int index)
+{
+	struct util_cmap_handle *handle = cmap->handles_av[index];
+	int ret = 0;
+
+	fastlock_acquire(&cmap->lock);
+	if (!handle)
+		goto unlock;
+
+	handle->peer = calloc(1, sizeof(*handle->peer) + cmap->av->addrlen);
+	if (!handle->peer) {
+		ret = -FI_ENOMEM;
+		goto unlock;
+	}
+	handle->peer->handle = handle;
+	memcpy(handle->peer->addr, ofi_av_get_addr(cmap->av, index),
+	       cmap->av->addrlen);
+	dlist_insert_tail(&handle->peer->entry, &cmap->peer_list);
+unlock:
+	fastlock_release(&cmap->lock);
+	return ret;
 }
 
 /* Caller must hold cmap->lock */
