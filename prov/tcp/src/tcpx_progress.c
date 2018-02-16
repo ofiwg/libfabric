@@ -134,7 +134,7 @@ static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	int ret;
 
 	ret = tcpx_send_msg(pe_entry);
-	if (ret && OFI_SOCK_TRY_SND_RCV_AGAIN(ret))
+	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
 	if (ret) {
@@ -190,7 +190,7 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	int ret;
 
 	ret = tcpx_recv_msg(pe_entry);
-	if (ret && OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
 	if (ret) {

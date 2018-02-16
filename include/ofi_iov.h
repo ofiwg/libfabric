@@ -124,5 +124,6 @@ ofi_iov_within(const struct iovec *iov1, const struct iovec *iov2)
 	       (ofi_iov_end(iov1) <= ofi_iov_end(iov2));
 }
 
-#endif /* _OFI_IOV_H_ */
+void ofi_consume_iov(struct iovec *iovec, size_t *iovec_count, size_t offset);
 
+#endif /* _OFI_IOV_H_ */

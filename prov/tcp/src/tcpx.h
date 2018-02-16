@@ -202,7 +202,7 @@ struct tcpx_fabric {
 };
 
 struct tcpx_msg_data {
-	uint64_t		iov_cnt;
+	size_t		iov_cnt;
 	union {
 		struct iovec		iov[TCPX_IOV_LIMIT+1];
 		struct fi_rma_iov	rma_iov[TCPX_IOV_LIMIT+1];
