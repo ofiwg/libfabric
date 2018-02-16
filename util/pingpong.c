@@ -174,7 +174,8 @@ struct ct_pingpong {
 	struct fid_eq *eq;
 
 	struct fid_mr no_mr;
-	struct fi_context tx_ctx, rx_ctx;
+	void *tx_ctx_ptr, *rx_ctx_ptr;
+	struct fi_context tx_ctx[2], rx_ctx[2];
 	uint64_t remote_cq_data;
 
 	uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -1152,7 +1153,7 @@ static int pp_get_tx_comp(struct ct_pingpong *ct, uint64_t total)
 	} while (0)
 
 static ssize_t pp_post_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size,
-		   struct fi_context *ctx)
+		   void *ctx)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_send, pp_get_tx_comp, ct->tx_seq, "transmit", ep,
@@ -1172,7 +1173,7 @@ static ssize_t pp_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE))
 		pp_fill_buf((char *)ct->tx_buf, size);
 
-	ret = pp_post_tx(ct, ep, size, &(ct->tx_ctx));
+	ret = pp_post_tx(ct, ep, size, ct->tx_ctx_ptr);
 	if (ret)
 		return ret;
 
@@ -1209,7 +1210,7 @@ static ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 }
 
 static ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep,
-			  size_t size, struct fi_context *ctx)
+			  size_t size, void *ctx)
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_recv, pp_get_rx_comp, ct->rx_seq, "receive", ep,
@@ -1242,7 +1243,7 @@ static ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	 * before message size is updated. The recvs posted are always for the
 	 * next incoming message.
 	 */
-	ret = pp_post_rx(ct, ct->ep, ct->rx_size, &(ct->rx_ctx));
+	ret = pp_post_rx(ct, ct->ep, ct->rx_size, ct->rx_ctx_ptr);
 	if (!ret)
 		ct->cnt_ack_msg++;
 
@@ -1413,6 +1414,31 @@ static int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
 		PP_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
+
+	if (((*info)->tx_attr->mode & FI_CONTEXT2) != 0) {
+		ct->tx_ctx_ptr = &(ct->tx_ctx[0]);
+	} else if (((*info)->tx_attr->mode & FI_CONTEXT) != 0) {
+		ct->tx_ctx_ptr = &(ct->tx_ctx[1]);
+	} else if (((*info)->mode & FI_CONTEXT2) != 0) {
+		ct->tx_ctx_ptr = &(ct->tx_ctx[0]);
+	} else if (((*info)->mode & FI_CONTEXT) != 0) {
+		ct->tx_ctx_ptr = &(ct->tx_ctx[1]);
+	} else {
+		ct->tx_ctx_ptr = NULL;
+	}
+
+	if (((*info)->rx_attr->mode & FI_CONTEXT2) != 0) {
+		ct->rx_ctx_ptr = &(ct->rx_ctx[0]);
+	} else if (((*info)->rx_attr->mode & FI_CONTEXT) != 0) {
+		ct->rx_ctx_ptr = &(ct->rx_ctx[1]);
+	} else if (((*info)->mode & FI_CONTEXT2) != 0) {
+		ct->rx_ctx_ptr = &(ct->rx_ctx[0]);
+	} else if (((*info)->mode & FI_CONTEXT) != 0) {
+		ct->rx_ctx_ptr = &(ct->rx_ctx[1]);
+	} else {
+		ct->rx_ctx_ptr = NULL;
+	}
+
 	return 0;
 }
 
@@ -1447,7 +1473,7 @@ static int pp_init_ep(struct ct_pingpong *ct)
 	}
 
 	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size, PP_MAX_CTRL_MSG),
-			 &(ct->rx_ctx));
+			 ct->rx_ctx_ptr);
 	if (ret)
 		return ret;
 
@@ -2085,7 +2111,7 @@ static int run_pingpong_dgram(struct ct_pingpong *ct)
 	 * finalize.
 	 */
 	ret = fi_recv(ct->ep, ct->rx_buf, ct->rx_size, fi_mr_desc(ct->mr), 0,
-		      &ct->rx_ctx);
+		      ct->rx_ctx_ptr);
 
 	ret = run_suite_pingpong(ct);
 	if (ret)
@@ -2167,7 +2193,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	ct.hints->ep_attr->type = FI_EP_DGRAM;
 	ct.hints->caps = FI_MSG;
-	ct.hints->mode = FI_CONTEXT;
+	ct.hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	ct.hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	ofi_osd_init();
