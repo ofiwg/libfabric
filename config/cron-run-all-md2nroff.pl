@@ -45,14 +45,14 @@ sub doit {
     my $cmd = shift;
     my $stdout_file = shift;
 
-    # Put a prefix on the logfiles so that we know that they belong to
-    # this script, and put a counter so that we know the sequence of
-    # logfiles
-    $stdout_file = "runall-md2nroff-$logfile_counter-$stdout_file";
-    ++$logfile_counter;
-
     # Redirect stdout if requested
     if (defined $stdout_file) {
+        # Put a prefix on the logfiles so that we know that they
+        # belong to this script, and put a counter so that we know the
+        # sequence of logfiles
+        $stdout_file = "runall-md2nroff-$logfile_counter-$stdout_file";
+        ++$logfile_counter;
+
         $stdout_file = "$logfile_dir/$stdout_file.log";
         unlink($stdout_file);
         $cmd .= " >$stdout_file";
