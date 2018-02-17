@@ -103,12 +103,12 @@ chdir($tmpdir);
 
 # First, git clone the source branch of the repo
 verbose("*** Cloning repo: $repo_arg / $source_branch_arg...\n");
-doit(0, "git clone --single-branch --branch $source_branch_arg $repo_arg source", "git-clone");
+doit(0, "git clone --single-branch --branch $source_branch_arg $repo_arg source", "git-clone-source");
 
 # Next, git clone the pages branch of repo
 if (defined($pages_branch_arg)) {
     verbose("*** Cloning repo: $repo_arg / $pages_branch_arg...\n");
-    doit(0, "git clone --single-branch --branch $pages_branch_arg $repo_arg pages", "git-clone2");
+    doit(0, "git clone --single-branch --branch $pages_branch_arg $repo_arg pages", "git-clone-pages");
 }
 
 #####################################################################
@@ -169,8 +169,8 @@ if (defined($pages_branch_arg)) {
     # and push will be no-ops.
     chdir("..");
     doit(1, "git commit --no-verify -a -m \"Updated Markdown man pages from $source_branch_arg\"",
-         "git-commit-first");
-    doit(1, "git push", "git-push-first");
+         "git-commit-pages");
+    doit(1, "git push", "git-push-pages");
 }
 
 #####################################################################
