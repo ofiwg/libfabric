@@ -63,10 +63,7 @@ sub doit {
 
     my $rc = system($cmd);
     if (0 != $rc && !$allowed_to_fail) {
-        # If we die/fail, ensure to change out of the temp tree so
-        # that it can be removed upon exit.
-        chdir("/");
-        die "Command $cmd failed: exit status $rc";
+        my_die("Command $cmd failed: exit status $rc");
     }
 
     system("cat $stdout_file")
@@ -76,6 +73,14 @@ sub doit {
 sub verbose {
     print @_
         if ($verbose_arg);
+}
+
+sub my_die {
+    # Move out of our current cwd so that temp directories can be
+    # automatically cleaned up at close.
+    chdir("/");
+
+    die @_;
 }
 
 #####################################################################
@@ -89,8 +94,7 @@ $logfile_dir =
             $hour, $min);
 my $rc = system("mkdir $logfile_dir");
 if ($rc != 0 || ! -d $logfile_dir || ! -w $logfile_dir) {
-    chdir("/");
-    die "mkdir of $logfile_dir failed, or can't write to it";
+    my_die "mkdir of $logfile_dir failed, or can't write to it";
 }
 
 my $tmpdir = File::Temp->newdir();
@@ -132,20 +136,16 @@ if (defined($pages_branch_arg)) {
 
     # Generate a new index.md with all the files that we just
     # published.  First, read in the header stub.
-    if (!open(IN, "man/index-head.txt")) {
-        chdir("/");
-        die("failed to open index-head.txt");
-    }
+    open(IN, "man/index-head.txt") ||
+        my_die("failed to open index-head.txt");
     my $str;
     $str .= $_
         while (<IN>);
     close(IN);
 
     # Write out the header stub into index.md itself
-    if (!open(OUT, ">man/index.md")) {
-        chdir("/");
-        die("failed to write to new index.md file");
-    }
+    open(OUT, ">man/index.md") ||
+        my_die("failed to write to new index.md file");
     print OUT $str;
 
     # Now write out all the pages
