@@ -606,6 +606,7 @@ static void fi_tostr_atomic_op(char *buf, enum fi_op op)
 static void fi_tostr_version(char *buf)
 {
 	strcatf(buf, VERSION);
+	strcatf(buf, BUILD_ID);
 }
 
 static void fi_tostr_eq_event(char *buf, int type)

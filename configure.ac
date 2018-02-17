@@ -42,6 +42,14 @@ debug_c_warn_flags="-Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-missing
 debug_c_other_flags="-fstack-protector-strong"
 picky_c_warn_flags="-Wno-long-long -Wmissing-prototypes -Wstrict-prototypes -Wcomment -pedantic"
 
+AC_ARG_WITH([build_id],
+	    [AC_HELP_STRING([--with-build_id],
+			    [Enable build_id annotation @<:@default=no@:>@])],
+	    [], [with_build_id=no])
+AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
+AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
+                   [adds build_id to version if it was defined])
+
 AC_ARG_ENABLE([debug],
 	      [AS_HELP_STRING([--enable-debug],
 			      [Enable debugging @<:@default=no@:>@])
