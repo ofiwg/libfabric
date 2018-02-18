@@ -1125,8 +1125,14 @@ ssize_t psmx2_tagged_senddata(struct fid_ep *ep, const void *buf, size_t len,
 			      void *desc, uint64_t data, fi_addr_t dest_addr,
 			      uint64_t tag, void *context)
 {
+	struct psmx2_fid_ep *ep_priv;
+
+	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
+
 	return psmx2_tagged_send_generic(ep, buf, len, desc, dest_addr,
-					 tag, context, FI_REMOTE_CQ_DATA, data);
+					 tag, context,
+					 ep_priv->tx_flags | FI_REMOTE_CQ_DATA,
+					 data);
 }
 
 #define PSMX2_TAGGED_SENDV_FUNC(suffix)					\

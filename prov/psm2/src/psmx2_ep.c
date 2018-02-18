@@ -36,9 +36,13 @@ static void psmx2_ep_optimize_ops(struct psmx2_fid_ep *ep)
 {
 	int send_completion;
 	int recv_completion;
+	uint64_t mask;
+
+	mask = PSMX2_OP_FLAGS &
+	       ~(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE);
 
 	if (ep->ep.tagged) {
-		if (ep->tx_flags & ~FI_COMPLETION || ep->rx_flags & ~FI_COMPLETION) {
+		if (ep->tx_flags & mask & ~FI_COMPLETION || ep->rx_flags & mask & ~FI_COMPLETION) {
 			ep->ep.tagged = &psmx2_tagged_ops;
 			FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
 				"generic tagged ops.\n");

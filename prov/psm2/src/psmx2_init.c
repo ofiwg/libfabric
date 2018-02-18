@@ -716,7 +716,13 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		/* TODO: check other fields of hints */
 	}
 
+	if (hints && (hints->caps & FI_REMOTE_CQ_DATA))
+		cq_data_size = 4;
+
 	psmx2_init_tag_layout(&cq_data_size, 0);
+
+	if (!cq_data_size)
+		caps &= ~FI_REMOTE_CQ_DATA;
 
 	psmx2_info = fi_allocinfo();
 	if (!psmx2_info) {
@@ -814,6 +820,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	    !psmx2_tag_layout_locked) {
 		psmx2_info_2 = fi_dupinfo(psmx2_info);
 		if (psmx2_info_2) {
+			psmx2_info_2->caps |= FI_REMOTE_CQ_DATA;
 			psmx2_info_2->ep_attr->mem_tag_format =
 					ofi_tag_format(PSMX2_TAG_MASK_60);
 			psmx2_info_2->domain_attr->cq_data_size = 4;
