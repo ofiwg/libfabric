@@ -1,4 +1,4 @@
-.TH "fi_rxm" "7" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rxm" "7" "2018\-02\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_rxm \- The RxM (RDM over MSG) Utility Provider
@@ -26,8 +26,7 @@ and \f[I]FI_RMA\f[] capabilities.
 \f[I]Endpoint capabilities\f[] : The following data transfer interface
 is supported: \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[], \f[I]FI_RMA\f[].
 .PP
-\f[I]Progress\f[] : The RxM provider supports only
-\f[I]FI_PROGRESS_MANUAL\f[] for now.
+\f[I]Progress\f[] : The RxM provider supports \f[I]FI_PROGRESS_AUTO\f[].
 .PP
 \f[I]Addressing Formats\f[] : FI_SOCKADDR, FI_SOCKADDR_IN
 .PP
@@ -44,7 +43,7 @@ those limitations.
 .PP
 RxM provider does not support the following features:
 .IP \[bu] 2
-op_flags: FI_CLAIM, FI_PEEK, FI_FENCE.
+op_flags: FI_FENCE.
 .IP \[bu] 2
 FI_ATOMIC
 .IP \[bu] 2
@@ -53,10 +52,6 @@ Scalable endpoints
 Shared contexts
 .IP \[bu] 2
 FABRIC_DIRECT
-.IP \[bu] 2
-Multi recv
-.IP \[bu] 2
-Counters
 .IP \[bu] 2
 FI_MR_SCALABLE
 .IP \[bu] 2
@@ -71,22 +66,25 @@ FI_ADDR_STR, FI_SYNC_ERR
 Reporting unknown source addr data as part of completions
 .IP \[bu] 2
 Triggered operations
-.IP \[bu] 2
-fi_cq_sread, fi_cq_sreadfrom and fi_cq_signal calls.
 .SS Auto progress
 .PP
 When sending large messages, an app doing an sread or waiting on the CQ
 file descriptor may not get a completion when reading the CQ after being
 woken up from the wait.
 The app has to do sread or wait on the file descriptor again.
-.SS Usage limitations
-.PP
-RxM provider should work fine for client \- server programs like
-fabtests.
-Support for MPI, SHMEM and other applications is work in progress.
 .SH RUNTIME PARAMETERS
 .PP
-No runtime parameters are currently defined.
+The ofi_rxm provider checks for the following environment variables.
+.PP
+\f[I]FI_OFI_RXM_BUFFER_SIZE\f[] : Defines the transmit buffer size /
+inject size.
+Messages of size less than this would be transmitted via an eager
+protocol and those above would be transmitted via a rendezvous protocol.
+Transmit data would be copied up to this size (default: ~16k).
+.PP
+\f[I]FI_OFI_RXM_COMP_PER_PROGRESS\f[] : Defines the maximum number of
+MSG provider CQ entries (default: 1) that would be read per progress
+(RxM CQ read).
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3)
