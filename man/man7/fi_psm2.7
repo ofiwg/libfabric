@@ -1,4 +1,4 @@
-.TH "fi_psm2" "7" "2018\-02\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2018\-02\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_psm2 \- The PSM2 Fabric Provider
@@ -61,26 +61,34 @@ application purely depends on the provider to make auto progress.
 .PP
 Scalable endpoints : Scalable endpoints support depends on the multi\-EP
 feature of the \f[I]PSM2\f[] library.
-If the \f[I]PSM2\f[] library has this feature, the availability is
+If the \f[I]PSM2\f[] library supports this feature, the availability is
 further controlled by an environment variable \f[I]PSM2_MULTI_EP\f[].
 The \f[I]psm2\f[] provider automatically sets this variable to 1 if it
 is not set.
 The feature can be disabled explicitly by setting \f[I]PSM2_MULTI_EP\f[]
 to 0.
 .PP
-When creating a scalable endpoint, the actual number of contexts needed
-should be set in the "fi_info" structure passed to the
+When creating a scalable endpoint, the exact number of contexts
+requested should be set in the "fi_info" structure passed to the
 \f[I]fi_scalable_ep\f[] function.
 This number should be set in "fi_info\->ep_attr\->tx_ctx_cnt" or
 "fi_info\->ep_attr\->rx_ctx_cnt" or both, whichever greater is used.
-The \f[I]psm2\f[] provider allocates all asked contexts upfront when the
-scalable endpoint is created.
+The \f[I]psm2\f[] provider allocates all requested contexts upfront when
+the scalable endpoint is created.
 The same context is used for both Tx and Rx.
 .PP
 For optimal performance, it is advised to avoid having multiple threads
 accessing the same context, either directly by posting
 send/recv/read/write request, or indirectly by polling associated
 completion queues or counters.
+.PP
+Shared Tx contexts : In order to achieve the purpose of saving PSM
+context by using shared Tx context, the endpoints bound to the shared Tx
+contexts need to be Tx only.
+The reason is that Rx capability always requires a PSM context, which
+can also be automatically used for Tx.
+As the result, allocating a shared Tx context for Rx capable endpoints
+actually consumes one extra context instead of saving some.
 .PP
 Unsupported features : These features are unsupported: connection
 management, passive endpoint, and shared receive context.
@@ -211,6 +219,8 @@ This is the lazy connection mode.
 .PP
 Lazy connection mode may reduce the start\-up time on large systems at
 the expense of higher data path overhead.
+Endpoints also close faster in lazy connection mode when multiple
+endpoints are opened.
 .PP
 When lazy connection mode is enabled, the address vector type is limited
 to \f[I]FI_AV_TABLE\f[].
@@ -221,10 +231,11 @@ fail but \f[I]fi_av_open\f[] just forces \f[I]FI_AV_TABLE\f[] silently.
 .PP
 The default setting is 0.
 .PP
-\f[I]FI_PSM2_DISCONNECT : The provider has a mechanism to automatically
-send disconnection notifications to all connected peers before the local
-endpoint is closed. As the response, the peers call
-\f[]psm2_ep_disconnect* to clean up the connection state at their side.
+\f[I]FI_PSM2_DISCONNECT\f[] : The provider has a mechanism to
+automatically send disconnection notifications to all connected peers
+before the local endpoint is closed.
+As the response, the peers call \f[I]psm2_ep_disconnect\f[] to clean up
+the connection state at their side.
 This allows the same PSM2 epid be used by different dynamically started
 processes (clients) to communicate with the same peer (server).
 This mechanism, however, introduce extra overhead to the finalization
@@ -239,13 +250,18 @@ set this option to 1, but the server should set it to 0.
 .PP
 The default setting is 0.
 .PP
-\f[I]FI_PSM2_TAG_LAYOUT : Select how the 96\-bit PSM2 tag bits are
-organized. Currently two choices are available: \f[]tag60* means
-starting from the most significant bit 32/4/60 bits are used for CQ
-data, internal protocol flags, and application tag.
+\f[I]FI_PSM2_TAG_LAYOUT\f[] : Select how the 96\-bit PSM2 tag bits are
+organized.
+Currently three choices are available: \f[I]tag60\f[] means starting
+from the most significant bit 32/4/60 bits are used for CQ data,
+internal protocol flags, and application tag.
 \f[I]tag64\f[] means 4/28/64 division for flags/data/tag.
+\f[I]auto\f[] means to choose either \f[I]tag60\f[] or \f[I]tag64\f[]
+based on the the hints passed to fi_getinfo: use \f[I]tag64\f[] if
+\f[I]hints\->domain_attr\->cq_data_size\f[] is 0, and \f[I]tag60\f[]
+otherwise.
 .PP
-The default setting is \f[I]tag60\f[].
+The default setting is \f[I]auto\f[].
 .PP
 Notice that if the provider is compiled with \f[I]PSMX2_TAG_LAYOUT\f[]
 defined to 1(means \f[I]tag60\f[]) or 2(means \f[I]tag64\f[]), the
