@@ -204,9 +204,9 @@ if (defined($pages_branch_arg)) {
     # upstream repo so that they go live.  If nothing changed, the commit
     # and push will be no-ops.
     chdir("..");
-    doit(0, "git commit -s --no-verify -a -m \"Updated Markdown man pages from $source_branch_arg\"",
+    doit(1, "git commit -s --no-verify -a -m \"Updated Markdown man pages from $source_branch_arg\"",
          "git-commit-pages");
-    doit(0, "git push", "git-push-pages");
+    doit(1, "git push", "git-push-pages");
 }
 
 #####################################################################
