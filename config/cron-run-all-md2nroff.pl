@@ -249,7 +249,7 @@ doit(0, "git checkout -b $pr_branch_name");
 # can tell if the "git commit" command actually resulted in a new
 # commit.
 my $old_head=`git rev-parse HEAD`;
-doit(0, "git commit -s --no-verify -a -m \"Updated nroff-generated man pages\"",
+doit(1, "git commit -s --no-verify -a -m \"Updated nroff-generated man pages\"",
      "git-commit-source-generated-man-pages");
 my $new_head=`git rev-parse HEAD`;
 
