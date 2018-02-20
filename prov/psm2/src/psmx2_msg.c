@@ -296,7 +296,7 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
-			    void *desc, size_t count, fi_addr_t dest_addr,
+			    void **desc, size_t count, fi_addr_t dest_addr,
 			    void *context, uint64_t flags, uint64_t data)
 {
 	struct psmx2_fid_ep *ep_priv;
@@ -315,7 +315,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 	size_t len, total_len;
 	char *p;
 	uint32_t *q;
-	int i;
+	int i, j;
 	struct psmx2_sendv_request *req;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
@@ -331,8 +331,14 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 		if (iov[i].iov_len) {
 			total_len += iov[i].iov_len;
 			real_count++;
+			j = i;
 		}
 	}
+
+	if (real_count == 1)
+		return psmx2_send_generic(ep, iov[j].iov_base, iov[j].iov_len,
+					  desc ? desc[j] : NULL, dest_addr,
+					  context, flags, data);
 
 	req = malloc(sizeof(*req));
 	if (!req)
@@ -521,8 +527,8 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	PSMX2_CTXT_USER(fi_context) = rep;
 	PSMX2_CTXT_EP(fi_context) = ep;
 
-	rep->comp_flag = PSMX2_IS_MSG(PSMX2_GET_FLAGS(psm2_tag)) ? FI_MSG : FI_TAGGED;
-	if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(psm2_tag)))
+	rep->comp_flag = PSMX2_IS_MSG(PSMX2_GET_FLAGS(rep->tag)) ? FI_MSG : FI_TAGGED;
+	if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(rep->tag)))
 		rep->comp_flag |= FI_REMOTE_CQ_DATA;
 
 	/* IOV payload uses a sequence number in place of a tag. */

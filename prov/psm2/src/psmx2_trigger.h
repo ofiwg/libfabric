@@ -276,7 +276,7 @@ ssize_t psmx2_send_generic(
 
 ssize_t psmx2_sendv_generic(
 			struct fid_ep *ep,
-			const struct iovec *iov, void *desc,
+			const struct iovec *iov, void **desc,
 			size_t count, fi_addr_t dest_addr,
 			void *context, uint64_t flags,
 			uint64_t data);
@@ -296,7 +296,7 @@ ssize_t psmx2_tagged_send_generic(
 
 ssize_t psmx2_tagged_sendv_generic(
 			struct fid_ep *ep,
-			const struct iovec *iov, void *desc,
+			const struct iovec *iov, void **desc,
 			size_t count, fi_addr_t dest_addr,
 			uint64_t tag, void *context,
 			uint64_t flags, uint64_t data);

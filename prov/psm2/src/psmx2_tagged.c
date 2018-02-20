@@ -901,7 +901,7 @@ psmx2_tagged_injectdata_no_flag_av_table(struct fid_ep *ep, const void *buf,
 }
 
 ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
-				   const struct iovec *iov, void *desc,
+				   const struct iovec *iov, void **desc,
 				   size_t count, fi_addr_t dest_addr,
 				   uint64_t tag, void *context,
 				   uint64_t flags, uint64_t data)
@@ -921,7 +921,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	size_t len, total_len;
 	char *p;
 	uint32_t *q;
-	int i;
+	int i, j;
 	struct psmx2_sendv_request *req;
 	int have_data = (flags & FI_REMOTE_CQ_DATA) > 0;
 	uint32_t msg_flags;
@@ -941,8 +941,14 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 		if (iov[i].iov_len) {
 			total_len += iov[i].iov_len;
 			real_count++;
+			j = i;
 		}
 	}
+
+	if (real_count == 1)
+		return psmx2_tagged_send_generic(ep, iov[j].iov_base, iov[j].iov_len,
+						 desc ? desc[j] : NULL, dest_addr,
+						 tag, context, flags, data);
 
 	req = malloc(sizeof(*req));
 	if (!req)
