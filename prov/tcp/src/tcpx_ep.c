@@ -650,7 +650,30 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
 
 	return 0;
+}
 
+static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
+		    const void *param, size_t paramlen)
+{
+	struct ofi_ctrl_hdr hdr;
+	struct tcpx_conn_handle *tcpx_handle;
+
+	tcpx_handle = container_of(handle, struct tcpx_conn_handle, handle);
+
+	memset(&hdr, 0, sizeof(hdr));
+	hdr.version = OFI_CTRL_VERSION;
+	hdr.type = ofi_ctrl_nack;
+	hdr.seg_size = paramlen;
+
+	ofi_send_socket(tcpx_handle->conn_fd, &hdr,
+			sizeof(hdr), 0);
+
+	if (paramlen)
+		ofi_send_socket(tcpx_handle->conn_fd, param,
+				paramlen, 0);
+
+	ofi_shutdown(tcpx_handle->conn_fd, SHUT_RDWR);
+	return ofi_close_socket(tcpx_handle->conn_fd);
 }
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
@@ -661,11 +684,10 @@ static struct fi_ops_cm tcpx_pep_cm_ops = {
 	.connect = fi_no_connect,
 	.listen = tcpx_pep_listen,
 	.accept = fi_no_accept,
-	.reject = fi_no_reject,
+	.reject = tcpx_pep_reject,
 	.shutdown = fi_no_shutdown,
 	.join = fi_no_join,
 };
-
 
 static int tcpx_verify_info(uint32_t version, struct fi_info *info)
 {

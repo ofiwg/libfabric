@@ -120,6 +120,7 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 	}
 
 	poll_mgr->poll_info[poll_mgr->nfds] = *poll_info;
+	poll_mgr->poll_fds[poll_mgr->nfds].revents = 0;
 
 	switch (poll_mgr->poll_info[poll_mgr->nfds].type) {
 	case CONNECT_SOCK:
@@ -128,7 +129,6 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 				       util_ep.ep_fid.fid);
 		poll_mgr->poll_fds[poll_mgr->nfds].fd = tcpx_ep->conn_fd;
 		poll_mgr->poll_fds[poll_mgr->nfds].events = POLLOUT;
-
 		break;
 	case PASSIVE_SOCK:
 		tcpx_pep = container_of(poll_info->fid, struct tcpx_pep,
@@ -332,7 +332,7 @@ err:
 	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = poll_info->fid;
 	err_entry.context = poll_info->fid->context;
-	err_entry.err = ret;
+	err_entry.err = -ret;
 
 	poll_info->state = CONNECT_DONE;
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
