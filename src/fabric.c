@@ -214,21 +214,18 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	ctx = (struct fi_prov_context *) &provider->context;
 	ctx->is_util_prov = (ofi_util_name(provider->name, &len) != NULL);
 
-	/* Util providers are never filtered, as they cannot be used
-	 * by themselves.
-	 */
-	if (!ctx->is_util_prov) {
-		if (ofi_apply_filter(&prov_filter, provider->name)) {
-			FI_INFO(&core_prov, FI_LOG_CORE,
-				"\"%s\" filtered by provider include/exclude "
-				"list, skipping\n", provider->name);
-			ret = -FI_ENODEV;
-			goto cleanup;
-		}
-
-		if (ofi_apply_filter(&prov_log_filter, provider->name))
-			ctx->disable_logging = 1;
+	/* This would allow util provider filtering as well. User should take
+	 * care to provide a core provider when filtering util provider */
+	if (ofi_apply_filter(&prov_filter, provider->name)) {
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"\"%s\" filtered by provider include/exclude "
+			"list, skipping\n", provider->name);
+		ret = -FI_ENODEV;
+		goto cleanup;
 	}
+
+	if (ofi_apply_filter(&prov_log_filter, provider->name))
+		ctx->disable_logging = 1;
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
 	if (prov) {
