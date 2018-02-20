@@ -47,6 +47,7 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 	psm2_mq_status2_t psm2_status;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	size_t idx;
+	uint64_t data;
 	int err;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
@@ -92,6 +93,12 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 			}
 
 			tag = PSMX2_GET_TAG64(psm2_status.msg_tag);
+			if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(psm2_status.msg_tag))) {
+				data = PSMX2_GET_CQDATA(psm2_status.msg_tag);
+				flags |= FI_REMOTE_CQ_DATA;
+			} else {
+				data = 0;
+			}
 			len = psm2_status.msg_length;
 			event = psmx2_cq_create_event(
 					ep_priv->recv_cq,
@@ -99,7 +106,7 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 					NULL,			/* buf */
 					flags|FI_RECV|FI_TAGGED,/* flags */
 					len,			/* len */
-					0,			/* data */
+					data,			/* data */
 					tag,			/* tag */
 					len,			/* olen */
 					0);			/* err */
