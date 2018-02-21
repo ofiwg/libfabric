@@ -290,8 +290,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		return -FI_ENODATA;
 	}
 
-	psmx_init_env();
-
 	src_addr = calloc(1, sizeof(*src_addr));
 	if (!src_addr) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
@@ -746,6 +744,8 @@ PROVIDER_INI
 			"of core_ids. Both <start> and <end> can be either the core_id "
 			"(when >=0) or core_id - num_cores (when <0). "
 			"(default: affinity not set)");
+
+	psmx_init_env();
 
 	pthread_mutex_init(&psmx_lib_mutex, NULL);
 	psmx_init_count++;
