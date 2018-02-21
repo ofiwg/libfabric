@@ -73,6 +73,8 @@ int sock_keepalive_time = INT_MAX;
 int sock_keepalive_intvl = INT_MAX;
 int sock_keepalive_probes = INT_MAX;
 
+char *sock_interface_name = NULL;
+
 uint64_t SOCK_EP_RDM_SEC_CAP = SOCK_EP_RDM_SEC_CAP_BASE;
 uint64_t SOCK_EP_RDM_CAP = SOCK_EP_RDM_CAP_BASE;
 uint64_t SOCK_EP_MSG_SEC_CAP = SOCK_EP_MSG_SEC_CAP_BASE;
@@ -529,14 +531,35 @@ void sock_get_list_of_addr(struct slist *addr_list)
 	struct sock_host_list_entry *addr_entry;
 	struct ifaddrs *ifaddrs, *ifa;
 
+	fi_param_get_str(&sock_prov, "interface_name", &sock_interface_name);
+
 	ret = ofi_getifaddrs(&ifaddrs);
 	if (!ret) {
+		if (sock_interface_name) {
+			for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+				if (strncmp(sock_interface_name, ifa->ifa_name,
+					    strlen(sock_interface_name)) == 0) {
+					break;
+				}
+			}
+			if (ifa == NULL) {
+				FI_INFO(&sock_prov, FI_LOG_CORE,
+					"Can't set filter to unknown interface: (%s)\n",
+					sock_interface_name);
+				sock_interface_name = NULL;
+			}
+		}
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
 			     (ifa->ifa_addr->sa_family != AF_INET) ||
 			     !strcmp(ifa->ifa_name, "lo"))
 				continue;
-
+			if (sock_interface_name &&
+			    strncmp(sock_interface_name, ifa->ifa_name,
+				    strlen(sock_interface_name)) != 0) {
+				SOCK_LOG_DBG("Skip (%s) interface\n", ifa->ifa_name);
+				continue;
+			}
 			addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
 			if (!addr_entry)
 				continue;
@@ -791,6 +814,9 @@ SOCKETS_INI
 
 	fi_param_define(&sock_prov, "keepalive_probes", FI_PARAM_INT,
 			"Maximum number of keepalive probes sent before dropping the connection");
+
+	fi_param_define(&sock_prov, "interface_name", FI_PARAM_STRING,
+			"Specify interface name");
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
