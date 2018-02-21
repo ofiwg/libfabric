@@ -91,6 +91,19 @@ int ofi_apply_filter(struct fi_filter *filter, const char *name)
 	return 0;
 }
 
+/*
+ * Utility providers may be disabled, but do not need to be explicitly
+ * enabled.  This allows them to always be available when only a core
+ * provider is enabled.
+ */
+static int ofi_getinfo_filter(const struct fi_provider *provider)
+{
+	if (!prov_filter.negated && ofi_is_util_prov(provider))
+		return 0;
+
+	return ofi_apply_filter(&prov_filter, provider->name);
+}
+
 static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 {
 	struct ofi_prov *prov;
@@ -164,10 +177,8 @@ static void ofi_ordered_provs_init(void)
 			/* Seriously, read it! */
 	int num_provs = sizeof(ordered_prov_names)/sizeof(ordered_prov_names[0]), i;
 
-	for (i = 0; i < num_provs; i++) {
-		if (ofi_apply_filter(&prov_filter, ordered_prov_names[i]) == 0)
-			ofi_create_prov_entry(ordered_prov_names[i]);
-	}
+	for (i = 0; i < num_provs; i++)
+		ofi_create_prov_entry(ordered_prov_names[i]);
 }
 
 static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
@@ -214,21 +225,16 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	ctx = (struct fi_prov_context *) &provider->context;
 	ctx->is_util_prov = (ofi_util_name(provider->name, &len) != NULL);
 
-	/* Util providers are never filtered, as they cannot be used
-	 * by themselves.
-	 */
-	if (!ctx->is_util_prov) {
-		if (ofi_apply_filter(&prov_filter, provider->name)) {
-			FI_INFO(&core_prov, FI_LOG_CORE,
-				"\"%s\" filtered by provider include/exclude "
-				"list, skipping\n", provider->name);
-			ret = -FI_ENODEV;
-			goto cleanup;
-		}
-
-		if (ofi_apply_filter(&prov_log_filter, provider->name))
-			ctx->disable_logging = 1;
+	if (ofi_getinfo_filter(provider)) {
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"\"%s\" filtered by provider include/exclude "
+			"list, skipping\n", provider->name);
+		ret = -FI_ENODEV;
+		goto cleanup;
 	}
+
+	if (ofi_apply_filter(&prov_log_filter, provider->name))
+		ctx->disable_logging = 1;
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
 	if (prov) {
