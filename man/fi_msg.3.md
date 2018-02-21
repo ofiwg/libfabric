@@ -288,6 +288,83 @@ fi_sendmsg.
   be used in all multicast transfers, in conjunction with a multicast
   fi_addr_t.
 
+# Variable Length Messages
+
+Variable length messages, or simply variable messages, are transfers
+where the size of the message is unknown to the receiver prior to the
+message being sent.  It indicates that the recipient of a message does
+not know the amount of data to expect prior to the message arriving.
+It is most commonly used when the size of message transfers varies
+greatly, with very large messages interspersed with much smaller
+messages.  Variable messages are not subject to max message length
+restrictions (i.e. struct fi_ep_attr::max_msg_size limits), and may
+be up to the maximum value of size_t (e.g. SIZE_MAX) in length.
+
+Variable messages are associated with a variable message threshold.
+The variable threshold indicates the size above which a transfer
+becomes a variable message.  The completion mechanism of variable
+messages differ from standard receive completions; however,
+completions at the sender remain unchanged.  Messages smaller than the
+threshold are treated as standard messages (or tagged messages if
+using the fi_tagged.3 operations).  That is, they consume posted
+application receive buffers and generate standard completions, including
+generating any possible errors that may arise.  The variable message
+threshold is configurable per endpoint, subject to provider limitations.
+Under most conditions, the threshold limit must be the same at both the
+sending and receiving endpoints, and must be configured prior to
+enabling the endpoint.
+
+When a variable message is ready to be received, a notification is
+generated on the associated receive completion queue.  Such
+completions will have the FI_VARIABLE_MSG flag set as part of the CQ
+entry.  The entry will report the length of the message to the receiver.
+Since variable message notifications are not directly associated with
+an application's posted receive operation, the CQ entry's op_context
+field will point to a struct fi_var_context.
+
+{% highlight c %}
+struct fi_var_context {
+	void *op_context;
+};
+{% endhighlight %}
+
+After being notified that a variable message is ready to be received,
+applications should either claim or discard the message.  To claim a
+message, an application must post a receive operation with the
+FI_CLAIM flag set.  The struct fi_var_context returned as part of the
+notification must be provided as the receive operation's context.  The
+struct fi_var_context contains an op_context field.  Applications may
+modify this field prior to claiming the message.  When the claim
+operation completes, a standard receive completion entry will be
+generated on the completion queue.  The op_context of the associated
+CQ entry will be set to the op_context value passed in through
+the fi_var_context structure.
+
+Applications that do not wish to receive a variable message that they
+were notified of may discard it.  To discard a message, an application
+must post a receive operation with the FI_DISCARD flag set.  The
+receive context should be the struct fi_var_context from the
+notification.  When the FI_DISCARD flag is set, the receive input
+buffer(s) and length parameters are ignored.
+
+The use of the FI_CLAIM and FI_DISCARD operation flags is also
+described with respect to tagged message transfers in fi_tagged.3.
+Variable length tagged messages will include the message tag as part
+of the message notification.
+
+Support for variable messages is indicated through the FI_VARIABLE_MSG
+capability bit.  Additionally, the variable length message threshold
+may be obtained and/or adjusted using an endpoint's
+fi_getopt/fi_setopt operations.
+
+The handling of variable message headers follows all message ordering
+restrictions assigned to and endpoint.  For example, completions
+may indicate the order in which variable messages arrived at the
+receiver.  However, the transfer of variable message data should be
+treated as conceptually occurring out of band.  No ordering within or
+between the data of variable messages is implied.
+
+
 # NOTES
 
 If an endpoint has been configured with FI_MSG_PREFIX, the application
