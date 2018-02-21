@@ -958,11 +958,11 @@ void rxm_conn_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 }
 
 static inline ssize_t
-rxm_ep_postponed_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		      void *context, uint8_t count, const struct iovec *iov,
-		      void **desc, size_t len, uint64_t data, uint64_t flags,
-		      uint64_t tag, uint64_t comp_flags,
-		      struct rxm_buf_pool *pool, uint8_t op)
+rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		     void *context, uint8_t count, const struct iovec *iov,
+		     void **desc, size_t len, uint64_t data, uint64_t flags,
+		     uint64_t tag, uint64_t comp_flags,
+		     struct rxm_buf_pool *pool, uint8_t op)
 {
 	ssize_t ret;
 	struct rxm_tx_entry *tx_entry;
@@ -974,6 +974,8 @@ rxm_ep_postponed_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, count,
 				   len, data, flags, tag, comp_flags,
 				   &tx_buf, &tx_entry, pool);
+	if (OFI_UNLIKELY(ret))
+		return ret;
 
 	if (len > rxm_ep->rxm_info->tx_attr->inject_size) {
 		ret = (rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context, count, iov,
@@ -1020,11 +1022,11 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 			.iov_base = (void *)buf,
 			.iov_len = len,
 		};
-		ret = rxm_ep_postponed_send(rxm_ep, rxm_conn, NULL, 1,
-					     &iov, NULL, len, data, flags,
-					     tag, comp_flags, pool,
-					     /* it doesn't matter what will be passed here */
-					     0);
+		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
+					   &iov, NULL, len, data, flags,
+					   tag, comp_flags, pool,
+					   /* it doesn't matter what will be passed here */
+					   0);
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
@@ -1077,11 +1079,11 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 			return ret;
 		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
-		ret = rxm_ep_postponed_send(rxm_ep, rxm_conn, context, count, iov, desc,
-					     data_len, data, flags, tag, comp_flags,
-					     (data_len <= rxm_ep->rxm_info->tx_attr->inject_size ?
-					      pool : &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]),
-					     op);
+		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, context, count, iov, desc,
+					   data_len, data, flags, tag, comp_flags,
+					   (data_len <= rxm_ep->rxm_info->tx_attr->inject_size ?
+					    pool : &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]),
+					   op);
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
