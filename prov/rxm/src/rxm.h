@@ -198,11 +198,14 @@ struct rxm_iov {
 
 enum rxm_buf_pool_type {
 	RXM_BUF_POOL_RX		= 0,
-	RXM_BUF_POOL_TX_MSG	= 1,
-	RXM_BUF_POOL_TX_TAGGED	= 2,
-	RXM_BUF_POOL_TX_ACK	= 3,
-	RXM_BUF_POOL_TX_LMT	= 4,
-	RXM_BUF_POOL_MAX_VAL	= 5,
+	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
+	RXM_BUF_POOL_TX_MSG,
+	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX_MSG,
+	RXM_BUF_POOL_TX_TAGGED,
+	RXM_BUF_POOL_TX_ACK,
+	RXM_BUF_POOL_TX_LMT,
+	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_LMT,
+	RXM_BUF_POOL_END,
 };
 
 struct rxm_buf {
@@ -327,7 +330,7 @@ struct rxm_ep {
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
 
-	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX_VAL];
+	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_END];
 
 	struct dlist_entry	post_rx_list;
 	struct dlist_entry	repost_ready_list;

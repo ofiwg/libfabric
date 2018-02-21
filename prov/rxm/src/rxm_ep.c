@@ -284,49 +284,10 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 	// TODO cleanup recv_list and unexp msg list
 }
 
-static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
+static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 {
+	size_t i;
 	int ret;
-
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-	       "MSG provider mr_mode & FI_MR_LOCAL: %d\n",
-	       rxm_ep->msg_mr_local);
-
-	ret = rxm_buf_pool_create(rxm_ep,
-				  rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_MSG],
-				  RXM_BUF_POOL_TX_MSG);
-	if (ret)
-	        return ret;
-
-	ret = rxm_buf_pool_create(rxm_ep,
-				  rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_TAGGED],
-				  RXM_BUF_POOL_TX_TAGGED);
-	if (ret)
-	        goto err1;
-
-	ret = rxm_buf_pool_create(rxm_ep,
-				  rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_ACK],
-				  RXM_BUF_POOL_TX_ACK);
-	if (ret)
-	        goto err2;
-
-	ret = rxm_buf_pool_create(rxm_ep,
-				  rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT],
-				  RXM_BUF_POOL_TX_LMT);
-	if (ret)
-	        goto err3;
 
 	ret = rxm_buf_pool_create(rxm_ep,
 				  rxm_ep->msg_info->rx_attr->size,
@@ -335,55 +296,101 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 				  &rxm_ep->buf_pools[RXM_BUF_POOL_RX],
 				  RXM_BUF_POOL_RX);
 	if (ret)
-		goto err4;
+		return ret;
 	dlist_init(&rxm_ep->post_rx_list);
 	dlist_init(&rxm_ep->repost_ready_list);
+
+	/* Allocates resources for TX pools */
+	for (i = RXM_BUF_POOL_TX_START; i <= RXM_BUF_POOL_TX_END; i++) {
+		ret = rxm_buf_pool_create(rxm_ep,
+					  rxm_ep->msg_info->tx_attr->size,
+					  rxm_ep->rxm_info->tx_attr->inject_size +
+					  sizeof(struct rxm_tx_buf),
+					  &rxm_ep->buf_pools[i], i);
+		if (ret)
+			goto err;
+	}
+
+	return FI_SUCCESS;
+err:
+	while (--i >= RXM_BUF_POOL_TX_MSG)
+		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
+	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	return ret;
+}
+
+static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
+{
+	size_t i;
+
+	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_END; i++)
+		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
+}
+
+static int rxm_ep_txrx_queue_init(struct rxm_ep *rxm_ep)
+{
+	int ret;
 
 	ret = rxm_send_queue_init(rxm_ep, &rxm_ep->send_queue,
 				  rxm_ep->rxm_info->tx_attr->size);
 	if (ret)
-		goto err5;
+		return ret;
 
-	ret = rxm_recv_queue_init(&rxm_ep->recv_queue, rxm_ep->rxm_info->rx_attr->size,
+	ret = rxm_recv_queue_init(&rxm_ep->recv_queue,
+				  rxm_ep->rxm_info->rx_attr->size,
 				  RXM_RECV_QUEUE_MSG);
 	if (ret)
-		goto err6;
+		goto err_recv_msg;
 
-	ret = rxm_recv_queue_init(&rxm_ep->trecv_queue, rxm_ep->rxm_info->rx_attr->size,
+	ret = rxm_recv_queue_init(&rxm_ep->trecv_queue,
+				  rxm_ep->rxm_info->rx_attr->size,
 				  RXM_RECV_QUEUE_TAGGED);
 	if (ret)
-		goto err7;
+		goto err_recv_tag;
 
-	return 0;
-err7:
+	return FI_SUCCESS;
+err_recv_tag:
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
-err6:
+err_recv_msg:
 	rxm_send_queue_close(&rxm_ep->send_queue);
-err5:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
-err4:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]);
-err3:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_ACK]);
-err2:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_TAGGED]);
-err1:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_MSG]);
+	return ret;
+}
+
+static void rxm_ep_txrx_queue_close(struct rxm_ep *rxm_ep)
+{
+	rxm_recv_queue_close(&rxm_ep->trecv_queue);
+	rxm_recv_queue_close(&rxm_ep->recv_queue);
+	rxm_send_queue_close(&rxm_ep->send_queue);
+}
+
+static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
+{
+	int ret;
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+	       "MSG provider mr_mode & FI_MR_LOCAL: %d\n",
+	       rxm_ep->msg_mr_local);
+
+	ret = rxm_ep_txrx_pool_create(rxm_ep);
+	if (ret)
+		return ret;
+
+	ret = rxm_ep_txrx_queue_init(rxm_ep);
+	if (ret)
+		goto err;
+
+	return FI_SUCCESS;
+err:
+	rxm_ep_txrx_pool_destroy(rxm_ep);
 	return ret;
 }
 
 static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 {
-	rxm_recv_queue_close(&rxm_ep->trecv_queue);
-	rxm_recv_queue_close(&rxm_ep->recv_queue);
-	rxm_send_queue_close(&rxm_ep->send_queue);
+	rxm_ep_txrx_queue_close(rxm_ep);
 
 	rxm_ep_cleanup_post_rx_list(rxm_ep);
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]);
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_ACK]);
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_TAGGED]);
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_MSG]);
+	rxm_ep_txrx_pool_destroy(rxm_ep);
 }
 
 static int rxm_setname(fid_t fid, void *addr, size_t addrlen)
