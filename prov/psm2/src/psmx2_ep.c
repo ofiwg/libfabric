@@ -78,7 +78,7 @@ static void psmx2_ep_optimize_ops(struct psmx2_fid_ep *ep)
 					else
 						ep->ep.tagged = &psmx2_tagged_ops_no_flag_av_map_directed;
 					FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
-						"tagged ops optimized for op_flags=0\n");
+						"tagged ops optimized for op_flags=0 and directed receive\n");
 				}
 			} else {
 				if (!send_completion && !recv_completion) {

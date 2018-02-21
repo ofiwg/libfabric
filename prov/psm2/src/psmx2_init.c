@@ -544,14 +544,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 
 		if (hints->domain_attr) {
 			switch (hints->domain_attr->av_type) {
-			case FI_AV_MAP:
-				if (psmx2_env.lazy_conn) {
-					FI_INFO(&psmx2_prov, FI_LOG_CORE,
-						"FI_AV_MAP is not supported when lazy connection is enabled.\n");
-					goto err_out;
-				}
-				/* fall through */
 			case FI_AV_UNSPEC:
+			case FI_AV_MAP:
 			case FI_AV_TABLE:
 				av_type = hints->domain_attr->av_type;
 				break;
@@ -740,9 +734,6 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->ep_attr->mem_tag_format = ofi_tag_format(PSMX2_MAX_TAG);
 	psmx2_info->ep_attr->tx_ctx_cnt = tx_ctx_cnt;
 	psmx2_info->ep_attr->rx_ctx_cnt = rx_ctx_cnt;
-
-	if (psmx2_env.lazy_conn)
-		av_type = FI_AV_TABLE;
 
 	psmx2_info->domain_attr->threading = threading;
 	psmx2_info->domain_attr->control_progress = control_progress;

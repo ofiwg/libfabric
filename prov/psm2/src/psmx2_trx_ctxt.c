@@ -152,6 +152,8 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt)
 	if (!trx_ctxt)
 		return;
 
+	FI_INFO(&psmx2_prov, FI_LOG_CORE, "epid: %016lx\n", trx_ctxt->psm2_epid);
+
 	if (psmx2_env.disconnect)
 		psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
 
@@ -254,7 +256,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 				   &trx_ctxt->psm2_ep, &trx_ctxt->psm2_epid);
 		if (err != PSM2_OK) {
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
-				"psm2_ep_open returns %d, errno=%d\n", err, errno);
+				"psm2_ep_open retry returns %d, errno=%d\n", err, errno);
 			err = psmx2_errno(err);
 			goto err_out_destroy_pool;
 		}

@@ -449,16 +449,11 @@ static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 				}
 			}
 
-			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"%d: psm2_ep_connect returned %s. remote epid=%lx.\n",
-				i, psm2_error_get_string(errors[i]), epids[i]);
-			if (epids[i] == 0)
-				FI_INFO(&psmx2_prov, FI_LOG_AV,
-					"does the application depend on the provider"
-					"to resolve IP address into endpoint id? if so"
-					"check if the name server has started correctly"
-					"at the other side.\n");
-			epaddrs[i] = (void *)FI_ADDR_NOTAVAIL;
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"%d: psm2_ep_connect (%lx --> %lx): %s\n",
+				i, trx_ctxt->psm2_epid, epids[i],
+				psm2_error_get_string(errors[i]));
+			epaddrs[i] = NULL;
 			error_count++;
 		}
 	}
@@ -535,7 +530,7 @@ int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
 	int id = trx_ctxt->id;
 
 	if (id >= av->max_trx_ctxt) {
-		FI_INFO(&psmx2_prov, FI_LOG_AV,
+		FI_WARN(&psmx2_prov, FI_LOG_AV,
 			"trx_ctxt->id(%d) exceeds av->max_trx_ctxt(%d).\n",
 			id, av->max_trx_ctxt);
 		return -FI_EINVAL;
@@ -592,7 +587,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	int sep_count = 0;
 
 	if (count && !addr) {
-		FI_INFO(&psmx2_prov, FI_LOG_AV,
+		FI_WARN(&psmx2_prov, FI_LOG_AV,
 			"the input address array is NULL.\n");
 		return -FI_EINVAL;
 	}
