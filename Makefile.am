@@ -7,6 +7,7 @@ os_excludes = -f ./test_configs/osx.exclude
 endif
 
 bin_PROGRAMS = \
+	simple/fi_av_xfer \
 	simple/fi_msg \
 	simple/fi_msg_sockets \
 	simple/fi_rdm \
@@ -110,6 +111,10 @@ if !HAVE_CLOCK_GETTIME
 libfabtests_la_SOURCES += common/osx/osd.c
 endif
 endif
+
+simple_fi_av_xfer_SOURCES = \
+	simple/av_xfer.c
+simple_fi_av_xfer_LDADD = libfabtests.la
 
 simple_fi_msg_sockets_SOURCES = \
 	simple/msg_sockets.c

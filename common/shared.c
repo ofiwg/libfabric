@@ -558,10 +558,24 @@ int ft_alloc_active_res(struct fi_info *fi)
 	return 0;
 }
 
-int ft_init_oob()
+static void ft_init(void)
+{
+	tx_seq = 0;
+	rx_seq = 0;
+	tx_cq_cntr = 0;
+	rx_cq_cntr = 0;
+}
+
+static int ft_init_oob(void)
 {
 	int ret, op, err;
 	struct addrinfo *ai = NULL;
+
+	if (!(opts.options & FT_OPT_OOB_SYNC) || oob_sock != -1)
+		return 0;
+
+	if (!opts.oob_port)
+		opts.oob_port = default_oob_port;
 
 	if (!opts.dst_addr) {
 		ret = ft_sock_listen(opts.oob_port);
@@ -574,6 +588,8 @@ int ft_init_oob()
 			ret = oob_sock;
 			return ret;
 		}
+
+		close(listen_sock);
 	} else {
 
 		ret = getaddrinfo(opts.dst_addr, opts.oob_port, NULL, &ai);
@@ -654,11 +670,10 @@ int ft_start_server(void)
 {
 	int ret;
 
-	if (opts.oob_port) {
-		ret = ft_init_oob();
-		if (ret)
-			return ret;
-	}
+	ft_init();
+	ret = ft_init_oob();
+	if (ret)
+		return ret;
 
 	ret = ft_getinfo(hints, &fi_pep);
 	if (ret)
@@ -816,11 +831,10 @@ int ft_client_connect(void)
 {
 	int ret;
 
-	if (opts.oob_port) {
-		ret = ft_init_oob();
-		if (ret)
-			return ret;
-	}
+	ft_init();
+	ret = ft_init_oob();
+	if (ret)
+		return ret;
 
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
@@ -849,11 +863,10 @@ int ft_init_fabric(void)
 {
 	int ret;
 
-	if (opts.oob_port) {
-		ret = ft_init_oob();
-		if (ret)
-			return ret;
-	}
+	ft_init();
+	ret = ft_init_oob();
+	if (ret)
+		return ret;
 
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
@@ -2501,10 +2514,12 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 		opts->dst_port = optarg;
 		break;
 	case 'b':
+		opts->options |= FT_OPT_OOB_SYNC;
 		if (optarg && strlen(optarg) > 1)
 			opts->oob_port = optarg + 1;
 		else
 			opts->oob_port = default_oob_port;
+		break;
 	default:
 		/* let getopt handle unknown opts*/
 		break;
