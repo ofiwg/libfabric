@@ -115,12 +115,11 @@ out:
 	return ret;
 }
 
-static int av_duplicate_test(void)
+static int av_reinsert_test(void)
 {
-	fi_addr_t dup_addr;
 	int ret;
 
-	fprintf(stdout, "AV duplicate address: ");
+	fprintf(stdout, "AV re-insertion address: ");
 	hints = fi_dupinfo(base_hints);
 	if (!hints)
 		return -FI_ENOMEM;
@@ -129,7 +128,31 @@ static int av_duplicate_test(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_av_addr(av, ep, &dup_addr);
+	if (opts.dst_addr) {
+		ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("ft_tx", -ret);
+			goto out;
+		}
+	} else {
+		ret = ft_rx(ep, opts.transfer_size);
+		if (ret) {
+			FT_PRINTERR("ft_rx", -ret);
+			goto out;
+		}
+	}
+
+	ret = fi_av_remove(av, &remote_fi_addr, 1, 0);
+	if (ret) {
+		FT_PRINTERR("fi_av_remove", ret);
+		goto out;
+	}
+
+	ret = ft_sync();
+	if (ret)
+		goto out;
+
+	ret = ft_init_av();
 	if (ret)
 		goto out;
 
@@ -139,78 +162,10 @@ static int av_duplicate_test(void)
 			FT_PRINTERR("ft_tx", -ret);
 			goto out;
 		}
-
-		ret = ft_tx(ep, dup_addr, opts.transfer_size, &tx_ctx);
-		if (ret) {
-			FT_PRINTERR("ft_tx", -ret);
-			goto out;
-		}
-
-		ret = fi_av_remove(av, &remote_fi_addr, 1, 0);
-		if (ret) {
-			FT_PRINTERR("fi_av_remove", ret);
-			goto out;
-		}
-
-		ret = ft_tx(ep, dup_addr, opts.transfer_size, &tx_ctx);
-		if (ret) {
-			FT_PRINTERR("ft_tx", -ret);
-			goto out;
-		}
-
-		ret = ft_sync();
-		if (ret)
-			goto out;
-
-		ret = ft_init_av();
-		if (ret) {
-			FT_PRINTERR("ft_init_av", -ret);
-			goto out;
-		}
-
-		ret = ft_rx(ep, opts.transfer_size);
-		if (ret) {
-			FT_PRINTERR("ft_rx", -ret);
-			goto out;
-		}
 	} else {
 		ret = ft_rx(ep, opts.transfer_size);
 		if (ret) {
 			FT_PRINTERR("ft_rx", -ret);
-			goto out;
-		}
-
-		ret = ft_rx(ep, opts.transfer_size);
-		if (ret) {
-			FT_PRINTERR("ft_rx", -ret);
-			goto out;
-		}
-
-		ret = fi_av_remove(av, &remote_fi_addr, 1, 0);
-		if (ret) {
-			FT_PRINTERR("fi_av_remove", ret);
-			goto out;
-		}
-
-		ret = ft_rx(ep, opts.transfer_size);
-		if (ret) {
-			FT_PRINTERR("ft_rx", -ret);
-			goto out;
-		}
-
-		ret = ft_sync();
-		if (ret)
-			goto out;
-
-		ret = ft_init_av();
-		if (ret) {
-			FT_PRINTERR("ft_init_av", -ret);
-			goto out;
-		}
-
-		ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
-		if (ret) {
-			FT_PRINTERR("ft_tx", -ret);
 			goto out;
 		}
 	}
@@ -275,7 +230,7 @@ int main(int argc, char **argv)
 	if (ret && ret != -FI_ENODATA)
 		goto out;
 
-	ret = av_duplicate_test();
+	ret = av_reinsert_test();
 	if (ret && ret != -FI_ENODATA)
 		goto out;
 
