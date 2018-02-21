@@ -202,13 +202,10 @@ The *psm2* provider checks for the following environment variables:
   are used the first time in communication. This is the lazy connection mode.
 
   Lazy connection mode may reduce the start-up time on large systems at the
-  expense of higher data path overhead. Endpoints also close faster in lazy
-  connection mode when multiple endpoints are opened.
-
-  When lazy connection mode is enabled, the address vector type is limited
-  to *FI_AV_TABLE*. This is handled differently by *fi_getinfo* and
-  *fi_av_open*. A call to *fi_getinfo* that asks for *FI_AV_MAP* would fail
-  but *fi_av_open* just forces *FI_AV_TABLE* silently.
+  expense of slightly higher data path overhead. For applications that use
+  multiple endpoints, lazy connection mode can be especially helpful with
+  the potential of greatly reduce the time to set up address vectors and to
+  close endpoints.
 
   The default setting is 0.
 
@@ -229,17 +226,21 @@ The *psm2* provider checks for the following environment variables:
 
 *FI_PSM2_TAG_LAYOUT*
 : Select how the 96-bit PSM2 tag bits are organized. Currently three choices are
-  available: *tag60* means starting from the most significant bit 32/4/60 bits
-  are used for CQ data, internal protocol flags, and application tag. *tag64*
-  means 4/28/64 division for flags/data/tag. *auto* means to choose either
-  *tag60* or *tag64* based on the the hints passed to fi_getinfo: use *tag64* if
-  *hints->domain_attr->cq_data_size* is 0, and *tag60* otherwise.
+  available: *tag60* means 32-4-60 partitioning for CQ data, internal protocol
+  flags, and application tag. *tag64* means 4-28-64 partitioning for internal
+  protocol flags, CQ data, and application tag. *auto* means to choose either
+  *tag60* or *tag64* based on the the hints passed to fi_getinfo -- *tag60* is used
+  if remote CQ data support is requested explicitly, either by passing non-zero value
+  via *hints->domain_attr->cq_data_size* or by including *FI_REMOTE_CQ_DATA* in
+  *hints->caps*, otherwise *tag64* is used. If *tag64* is the result of automatic
+  selection, *fi_getinfo* also returns a second instance of the provider with
+  *tag60* layout.
 
   The default setting is *auto*.
 
-  Notice that if the provider is compiled with *PSMX2_TAG_LAYOUT* defined to
-  1(means *tag60*) or 2(means *tag64*), the choice is fixed at compile time
-  and this runtime option is disabled.
+  Notice that if the provider is compiled with macro *PSMX2_TAG_LAYOUT* defined
+  to 1 (means *tag60*) or 2 (means *tag64*), the choice is fixed at compile time
+  and this runtime option will be disabled.
 
 # SEE ALSO
 
