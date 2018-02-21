@@ -399,14 +399,15 @@ static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 			mask[i] = 1;
 		}
 
+		if (peers[i].type == PSMX2_EP_SCALABLE)
+			sep_count++;
+
 		if (mask[i]) {
 			if (peers[i].type == PSMX2_EP_SCALABLE) {
-				if (peers[i].sep_ctxt_epids) {
+				if (peers[i].sep_ctxt_epids)
 					mask[i] = 0;
-				} else {
+				 else
 					to_connect++;
-					sep_count++;
-				}
 			} else if (psmx2_env.lazy_conn) {
 				epaddrs[i] = NULL;
 				mask[i] = 0;
@@ -700,7 +701,7 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct psmx2_fid_av *av_priv;
 	struct psmx2_epaddr_context *context;
 	struct psmx2_ep_name name;
-	int idx, sep_id;
+	int idx;
 
 	if (!addr || !addrlen)
 		return -FI_EINVAL;
@@ -711,13 +712,12 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	if (PSMX2_SEP_ADDR_TEST(fi_addr)) {
 		idx = PSMX2_SEP_ADDR_IDX(fi_addr);
-		sep_id = PSMX2_SEP_ADDR_CTXT(fi_addr, av_priv->rx_ctx_bits);
 		if (idx >= av_priv->last)
 			return -FI_EINVAL;
 
 		name.type = PSMX2_EP_SCALABLE;
 		name.epid = av_priv->epids[idx];
-		name.sep_id = sep_id;
+		name.sep_id = av_priv->peers[idx].sep_id;
 	} else if (av_priv->type == FI_AV_TABLE) {
 		idx = (int)(int64_t)fi_addr;
 		if (idx >= av_priv->last)
