@@ -1,4 +1,4 @@
-.TH "fi_psm2" "7" "2018\-02\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2018\-02\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_psm2 \- The PSM2 Fabric Provider
@@ -218,16 +218,10 @@ first time in communication.
 This is the lazy connection mode.
 .PP
 Lazy connection mode may reduce the start\-up time on large systems at
-the expense of higher data path overhead.
-Endpoints also close faster in lazy connection mode when multiple
-endpoints are opened.
-.PP
-When lazy connection mode is enabled, the address vector type is limited
-to \f[I]FI_AV_TABLE\f[].
-This is handled differently by \f[I]fi_getinfo\f[] and
-\f[I]fi_av_open\f[].
-A call to \f[I]fi_getinfo\f[] that asks for \f[I]FI_AV_MAP\f[] would
-fail but \f[I]fi_av_open\f[] just forces \f[I]FI_AV_TABLE\f[] silently.
+the expense of slightly higher data path overhead.
+For applications that use multiple endpoints, lazy connection mode can
+be especially helpful with the potential of greatly reduce the time to
+set up address vectors and to close endpoints.
 .PP
 The default setting is 0.
 .PP
@@ -252,20 +246,26 @@ The default setting is 0.
 .PP
 \f[I]FI_PSM2_TAG_LAYOUT\f[] : Select how the 96\-bit PSM2 tag bits are
 organized.
-Currently three choices are available: \f[I]tag60\f[] means starting
-from the most significant bit 32/4/60 bits are used for CQ data,
-internal protocol flags, and application tag.
-\f[I]tag64\f[] means 4/28/64 division for flags/data/tag.
+Currently three choices are available: \f[I]tag60\f[] means 32\-4\-60
+partitioning for CQ data, internal protocol flags, and application tag.
+\f[I]tag64\f[] means 4\-28\-64 partitioning for internal protocol flags,
+CQ data, and application tag.
 \f[I]auto\f[] means to choose either \f[I]tag60\f[] or \f[I]tag64\f[]
-based on the the hints passed to fi_getinfo: use \f[I]tag64\f[] if
-\f[I]hints\->domain_attr\->cq_data_size\f[] is 0, and \f[I]tag60\f[]
-otherwise.
+based on the the hints passed to fi_getinfo \-\- \f[I]tag60\f[] is used
+if remote CQ data support is requested explicitly, either by passing
+non\-zero value via \f[I]hints\->domain_attr\->cq_data_size\f[] or by
+including \f[I]FI_REMOTE_CQ_DATA\f[] in \f[I]hints\->caps\f[], otherwise
+\f[I]tag64\f[] is used.
+If \f[I]tag64\f[] is the result of automatic selection,
+\f[I]fi_getinfo\f[] also returns a second instance of the provider with
+\f[I]tag60\f[] layout.
 .PP
 The default setting is \f[I]auto\f[].
 .PP
-Notice that if the provider is compiled with \f[I]PSMX2_TAG_LAYOUT\f[]
-defined to 1(means \f[I]tag60\f[]) or 2(means \f[I]tag64\f[]), the
-choice is fixed at compile time and this runtime option is disabled.
+Notice that if the provider is compiled with macro
+\f[I]PSMX2_TAG_LAYOUT\f[] defined to 1 (means \f[I]tag60\f[]) or 2
+(means \f[I]tag64\f[]), the choice is fixed at compile time and this
+runtime option will be disabled.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_psm\f[](7),
