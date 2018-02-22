@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2018\-02\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_verbs \- The Verbs Fabric Provider
@@ -15,13 +15,22 @@ control and data transfer operations.
 The verbs provider supports a subset of OFI features.
 .SS Endpoint types
 .PP
-FI_EP_MSG, FI_EP_RDM (Experimental support FI_MSG, FI_TAGGED, FI_RMA
-interfaces).
+FI_EP_MSG, FI_EP_RDM
+.PP
+New change in libfabric v1.6: FI_EP_RDM is supported through the OFI RxM
+utility provider.
+This is done automatically when the app requests FI_EP_RDM endpoint.
+Please refer the man page for RxM provider to learn more.
+The provider\[aq]s internal support for RDM endpoints is deprecated and
+would be removed from libfabric v1.7 onwards.
+Till then apps can explicitly request the internal RDM support by
+disabling ofi_rxm provider through FI_PROVIDER env variable
+(FI_PROVIDER=^ofi_rxm).
 .SS Endpoint capabilities and features
 .SS MSG endpoints
 .PP
 FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
-.SS RDM endpoints
+.SS RDM endpoints (internal \- deprecated)
 .PP
 FI_MSG, FI_TAGGED, FI_RMA
 .SS DGRAM endpoints
@@ -30,20 +39,21 @@ FI_MSG
 .SS Modes
 .PP
 Verbs provider requires applications to support the following modes:
+.SS FI_EP_MSG endpoint type
 .IP \[bu] 2
-FI_LOCAL_MR for all applications.
+FI_LOCAL_MR / FI_MR_LOCAL mr mode.
 .IP \[bu] 2
 FI_RX_CQ_DATA for applications that want to use RMA.
 Applications must take responsibility of posting receives for any
 incoming CQ data.
+.SS FI_EP_RDM endpoint type (internal \- deprecated)
 .IP \[bu] 2
-FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
-capability.
+FI_CONTEXT
 .SS Addressing Formats
 .PP
-Supported addressing formats include * MSG and RDM EPs support:
-FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6, FI_SOCKADDR_IB * DGRAM
-supports: FI_ADDR_IB_UD
+Supported addressing formats include * MSG and RDM (internal \-
+deprecated) EPs support: FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6,
+FI_SOCKADDR_IB * DGRAM supports: FI_ADDR_IB_UD
 .SS Progress
 .PP
 Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make
@@ -115,7 +125,8 @@ fi_ep_alias, shared TX context, cq_readfrom operations.
 .IP \[bu] 2
 Completion flags are not reported if a request posted to an endpoint
 completes in error.
-.SS Unsupported features specific to RDM endpoints
+.SS Unsupported features specific to RDM (internal \- deprecated)
+endpoints
 .PP
 The RDM support for verbs have the following limitations:
 .IP \[bu] 2
@@ -147,11 +158,11 @@ The verbs provider checks for the following environment variables.
 .PP
 \f[I]FI_VERBS_TX_IOV_LIMIT\f[] : Default maximum tx iov_limit (default:
 4).
-Note: RDM EP type supports only 1
+Note: RDM (internal \- deprecated) EP type supports only 1
 .PP
 \f[I]FI_VERBS_RX_IOV_LIMIT\f[] : Default maximum rx iov_limit (default:
 4).
-Note: RDM EP type supports only 1
+Note: RDM (internal \- deprecated) EP type supports only 1
 .PP
 \f[I]FI_VERBS_INLINE_SIZE\f[] : Default maximum inline size.
 Actual inject size returned in fi_info may be greater (default: 64)
@@ -168,7 +179,7 @@ from the verbs completion queue at a time (default: 8).
 .PP
 \f[I]FI_VERBS_IFACE\f[] : The prefix or the full name of the network
 interface associated with the verbs device (default: ib)
-.SS Variables specific to RDM endpoints
+.SS Variables specific to RDM (internal \- deprecated) endpoints
 .PP
 \f[I]FI_VERBS_RDM_BUFFER_NUM\f[] : The number of pre\-registered buffers
 for buffered operations between the endpoints, must be a power of 2
