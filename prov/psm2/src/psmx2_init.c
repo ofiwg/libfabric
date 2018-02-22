@@ -375,7 +375,6 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	}
 
 	psmx2_env.num_devunits = cnt;
-	psmx2_init_env();
 
 	psmx2_update_sep_cap();
 	tx_ctx_cnt = psmx2_env.free_trx_ctxt;
@@ -916,6 +915,8 @@ PROVIDER_INI
 			"tag60 means 32/4/60 for data/flags/tag;"
 			"tag64 means 4/28/64 for flags/data/tag (default: tag60).");
 #endif
+
+	psmx2_init_env();
 
 	pthread_mutex_init(&psmx2_lib_mutex, NULL);
 	psmx2_init_count++;
