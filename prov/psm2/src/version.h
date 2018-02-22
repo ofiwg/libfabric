@@ -245,8 +245,10 @@ struct psmx2_context {
 		} \
 		psmx2_unlock(&(ep)->context_lock, 2); \
 		context = malloc(sizeof(*context)); \
-		if (!context) \
+		if (!context) { \
 			FI_WARN(&psmx2_prov, FI_LOG_EP_DATA, "out of memory.\n"); \
+			return -FI_ENOMEM; \
+		} \
 		(ctx) = &context->fi_context; \
 	} while (0)
 
