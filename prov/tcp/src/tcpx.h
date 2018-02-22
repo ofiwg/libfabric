@@ -207,8 +207,8 @@ struct tcpx_msg_data {
 		struct iovec		iov[TCPX_IOV_LIMIT+1];
 		struct fi_rma_iov	rma_iov[TCPX_IOV_LIMIT+1];
 		struct fi_rma_ioc	ram_ioc[TCPX_IOV_LIMIT+1];
-		uint8_t			inject[TCPX_MAX_INJECT_SZ];
 	};
+	uint8_t			inject[TCPX_MAX_INJECT_SZ];
 };
 
 struct tcpx_pe_entry {
