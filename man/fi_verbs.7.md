@@ -22,14 +22,22 @@ and data transfer operations.
 The verbs provider supports a subset of OFI features.
 
 ### Endpoint types
-FI_EP_MSG, FI_EP_RDM (Experimental support FI_MSG, FI_TAGGED, FI_RMA interfaces).
+FI_EP_MSG, FI_EP_RDM
+
+New change in libfabric v1.6:
+FI_EP_RDM is supported through the OFI RxM utility provider. This is done
+automatically when the app requests FI_EP_RDM endpoint. Please refer the
+man page for RxM provider to learn more. The provider's internal support
+for RDM endpoints is deprecated and would be removed from libfabric v1.7
+onwards. Till then apps can explicitly request the internal RDM support by
+disabling ofi_rxm provider through FI_PROVIDER env variable (FI_PROVIDER=^ofi_rxm).
 
 ### Endpoint capabilities and features
 
 #### MSG endpoints
 FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
 
-#### RDM endpoints
+#### RDM endpoints (internal - deprecated)
 FI_MSG, FI_TAGGED, FI_RMA
 
 #### DGRAM endpoints
@@ -38,16 +46,20 @@ FI_MSG
 ### Modes
 Verbs provider requires applications to support the following modes:
 
-  * FI_LOCAL_MR for all applications.
+#### FI_EP_MSG endpoint type
+
+  * FI_LOCAL_MR / FI_MR_LOCAL mr mode.
 
   * FI_RX_CQ_DATA for applications that want to use RMA. Applications must
     take responsibility of posting receives for any incoming CQ data.
 
-  * FI_CONTEXT for applications making uses of the experimental FI_EP_RDM capability.
+#### FI_EP_RDM endpoint type (internal - deprecated)
+
+  * FI_CONTEXT
 
 ### Addressing Formats
 Supported addressing formats include
-  * MSG and RDM EPs support:
+  * MSG and RDM (internal - deprecated) EPs support:
     FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6, FI_SOCKADDR_IB
   * DGRAM supports:
     FI_ADDR_IB_UD
@@ -117,7 +129,7 @@ Scalable endpoints, FABRIC_DIRECT
   * Completion flags are not reported if a request posted to an endpoint completes
     in error.
 
-#### Unsupported features specific to RDM endpoints
+#### Unsupported features specific to RDM (internal - deprecated) endpoints
 The RDM support for verbs have the following limitations:
 
   * Supports iovs of only size 1.
@@ -148,10 +160,10 @@ The verbs provider checks for the following environment variables.
 :  Default maximum rx context size (default: 384)
 
 *FI_VERBS_TX_IOV_LIMIT*
-: Default maximum tx iov_limit (default: 4). Note: RDM EP type supports only 1
+: Default maximum tx iov_limit (default: 4). Note: RDM (internal - deprecated) EP type supports only 1
 
 *FI_VERBS_RX_IOV_LIMIT*
-: Default maximum rx iov_limit (default: 4). Note: RDM EP type supports only 1
+: Default maximum rx iov_limit (default: 4). Note: RDM (internal - deprecated) EP type supports only 1
 
 *FI_VERBS_INLINE_SIZE*
 :  Default maximum inline size. Actual inject size returned in fi_info may be greater (default: 64)
@@ -171,7 +183,7 @@ The verbs provider checks for the following environment variables.
   device (default: ib)
 
 
-### Variables specific to RDM endpoints
+### Variables specific to RDM (internal - deprecated) endpoints
 
 *FI_VERBS_RDM_BUFFER_NUM*
 : The number of pre-registered buffers for buffered operations between the endpoints,
