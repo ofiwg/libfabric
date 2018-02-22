@@ -39,8 +39,25 @@ int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
 		     struct fi_info *core_info)
 {
 	core_info->caps = FI_MSG;
-	core_info->mode = FI_LOCAL_MR;
 	core_info->ep_attr->type = FI_EP_DGRAM;
+
+	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
+		core_info->mode |= FI_LOCAL_MR;
+		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
+	} else {
+		core_info->domain_attr->mr_mode |= (FI_MR_LOCAL | OFI_MR_BASIC_MAP);
+	}
+
+	if (rxd_info) {
+		if (rxd_info->domain_attr) {
+			core_info->domain_attr->caps |= rxd_info->domain_attr->caps;
+		}
+		if (rxd_info->tx_attr) {
+			core_info->tx_attr->msg_order = rxd_info->tx_attr->msg_order;
+			core_info->tx_attr->comp_order = rxd_info->tx_attr->comp_order;
+		}
+	}
+
 	return 0;
 }
 
