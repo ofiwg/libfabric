@@ -1702,6 +1702,39 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t siz
 	return 0;
 }
 
+ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
+		       void *compare, void *compare_desc, void *result,
+		       void *result_desc, struct fi_rma_iov *remote,
+		       enum fi_datatype datatype, enum fi_op atomic_op,
+		       void *context)
+{
+	size_t count = opts.transfer_size / datatype_to_size(datatype);
+	switch (opcode) {
+	case FT_ATOMIC_BASE:
+		FT_POST(fi_atomic, ft_get_tx_comp, tx_seq, "fi_atomic", ep,
+			buf, count, mr_desc, remote_fi_addr, remote->addr,
+			remote->key, datatype, atomic_op, context);
+		break;
+	case FT_ATOMIC_FETCH:
+		FT_POST(fi_fetch_atomic, ft_get_tx_comp, tx_seq,
+			"fi_fetch_atomic", ep, buf, count, mr_desc, result,
+			result_desc, remote_fi_addr, remote->addr, remote->key,
+			datatype, atomic_op, context);
+		break;
+	case FT_ATOMIC_COMPARE:
+		FT_POST(fi_compare_atomic, ft_get_tx_comp, tx_seq,
+			"fi_compare_atomic", ep, buf, count, mr_desc, compare,
+			compare_desc, result, result_desc, remote_fi_addr,
+			remote->addr, remote->key, datatype, atomic_op, context);
+		break;
+	default:
+		FT_ERR("Unknown atomic opcode\n");
+		return EXIT_FAILURE;
+	}
+
+	return 0;
+}
+
 static int check_atomic_attr(enum fi_op op, enum fi_datatype datatype,
 			     uint64_t flags)
 {
