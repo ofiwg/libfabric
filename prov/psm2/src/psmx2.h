@@ -964,7 +964,9 @@ struct psmx2_am_request *psmx2_am_request_alloc(struct psmx2_trx_ctxt *trx_ctxt)
 	req = util_buf_alloc(trx_ctxt->am_req_pool);
 	psmx2_unlock(&trx_ctxt->am_req_pool_lock, 2);
 
-	memset(req, 0, sizeof(*req));
+	if (req)
+		memset(req, 0, sizeof(*req));
+
 	return req;
 }
 
