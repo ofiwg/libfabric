@@ -298,7 +298,7 @@ static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
 	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_ACK_SENT, RXM_LMT_FINISH);
 	rx_buf->hdr.state = RXM_LMT_FINISH;
 	if (!rx_buf->ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(rx_buf->mr, RXM_IOV_LIMIT);
+		rxm_ep_msg_mr_closev(rx_buf->mr, rx_buf->recv_entry->rxm_iov.count);
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
 
