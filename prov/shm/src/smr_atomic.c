@@ -205,34 +205,23 @@ static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
 	
 	switch (op) {
 	case ofi_op_atomic_compare:
-		if (!compare_ioc) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"no compare buffer given\n");
-			ret = -FI_EINVAL;
-			goto unlock_cq;
-		}
+		assert(compare_ioc);
 		smr_ioc_to_iov(compare_ioc, compare_iov, compare_count,
 			       ofi_datatype_size(datatype));
 		total_len *= 2;
 		/* fall through */
 	case ofi_op_atomic_fetch:
-		if (!result_ioc) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"no result buffer given\n");
-			ret = -FI_EINVAL;
-			goto unlock_cq;
-		}
+		assert(result_ioc);
 		smr_ioc_to_iov(result_ioc, result_iov, result_count,
 			       ofi_datatype_size(datatype));
 		/* fall through */
 	case ofi_op_atomic:
-		if (!ioc && atomic_op != FI_ATOMIC_READ) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"no atomic buffer given\n");
-			ret = -FI_EINVAL;
-			goto unlock_cq;
+		if (atomic_op != FI_ATOMIC_READ) {
+			assert(ioc);
+			smr_ioc_to_iov(ioc, iov, count, ofi_datatype_size(datatype));
+		} else {
+			count = 0;
 		}
-		smr_ioc_to_iov(ioc, iov, count, ofi_datatype_size(datatype));
 		break;
 	default:
 		break;
