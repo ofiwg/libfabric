@@ -241,38 +241,6 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 	return 0;
 }
 
-psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
-				     struct psmx2_trx_ctxt *trx_ctxt,
-				     fi_addr_t addr)
-{
-	int idx = PSMX2_SEP_ADDR_IDX(addr);
-	int ctxt = PSMX2_SEP_ADDR_CTXT(addr, av->rx_ctx_bits);
-	psm2_epaddr_t epaddr;
-	int err;
-
-	if (av->peers[idx].type != PSMX2_EP_SCALABLE)
-		return NULL;
-
-	if (ctxt >= av->peers[idx].sep_ctxt_cnt)
-		return NULL;
-
-	if (!av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]) {
-		err = psmx2_epid_to_epaddr(trx_ctxt,
-					   av->peers[idx].sep_ctxt_epids[ctxt],
-					   &epaddr);
-		if (err) {
-			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"fatal error: unable to translate epid %lx to epaddr.\n",
-				av->peers[idx].sep_ctxt_epids[ctxt]);
-			return NULL;
-		}
-
-		av->tables[trx_ctxt->id].sepaddrs[idx][ctxt] = epaddr;
-	}
-
-	return av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
-}
-
 static int psmx2_av_check_space(struct psmx2_fid_av *av, size_t count)
 {
 	psm2_epid_t *new_epids;
@@ -734,6 +702,45 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	}
 
 	return 0;
+}
+
+psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
+				     struct psmx2_trx_ctxt *trx_ctxt,
+				     fi_addr_t addr)
+{
+	int idx = PSMX2_SEP_ADDR_IDX(addr);
+	int ctxt = PSMX2_SEP_ADDR_CTXT(addr, av->rx_ctx_bits);
+	psm2_epaddr_t epaddr;
+	psm2_error_t errors;
+	int err;
+
+	if (av->peers[idx].type != PSMX2_EP_SCALABLE)
+		return NULL;
+
+	if (ctxt >= av->peers[idx].sep_ctxt_cnt)
+		return NULL;
+
+	/* this can be NULL when lazy connection is enabled */
+	if (!av->tables[trx_ctxt->id].sepaddrs[idx]) {
+		psmx2_av_connect_trx_ctxt(av, trx_ctxt->id, idx, 1, &errors);
+		assert(av->tables[trx_ctxt->id].sepaddrs[idx]);
+	}
+
+	if (!av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]) {
+		err = psmx2_epid_to_epaddr(trx_ctxt,
+					   av->peers[idx].sep_ctxt_epids[ctxt],
+					   &epaddr);
+		if (err) {
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"fatal error: unable to translate epid %lx to epaddr.\n",
+				av->peers[idx].sep_ctxt_epids[ctxt]);
+			return NULL;
+		}
+
+		av->tables[trx_ctxt->id].sepaddrs[idx][ctxt] = epaddr;
+	}
+
+	return av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
 }
 
 fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
