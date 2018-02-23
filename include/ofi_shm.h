@@ -75,6 +75,7 @@ enum {
 };
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
+#define SMR_RMA_REQ		(1 << 1)
 
 /* 
  * Unique smr_op_hdr for smr message protocol:
