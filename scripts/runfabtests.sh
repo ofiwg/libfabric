@@ -78,6 +78,8 @@ neg_unit_tests=(
 )
 
 simple_tests=(
+	"av_xfer -e rdm"
+	"av_xfer -e dgram"
 	"cm_data"
 	"cq_data -e msg"
 	"cq_data -e rdm"
