@@ -611,6 +611,7 @@ static int ft_init_oob(void)
 			close(oob_sock);
 			goto free;
 		}
+		sleep(1);
 	}
 
 	op = 1;
