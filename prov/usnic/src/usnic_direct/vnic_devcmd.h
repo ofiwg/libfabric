@@ -786,12 +786,14 @@ struct vnic_devcmd_fw_info {
 	u16 asic_rev;
 };
 
+#ifndef FOR_UPSTREAM_KERNEL
 enum fwinfo_asic_type {
 	FWINFO_ASIC_TYPE_UNKNOWN,
 	FWINFO_ASIC_TYPE_PALO,
 	FWINFO_ASIC_TYPE_SERENO,
 	FWINFO_ASIC_TYPE_CRUZ,
 };
+#endif
 
 struct vnic_devcmd_notify {
 	u32 csum;		/* checksum over following words */

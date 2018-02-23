@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
+ * Copyright 2008-2018 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
  *
  * LICENSE_BEGIN
@@ -73,9 +73,6 @@ struct vnic_intr {
 	unsigned int index;
 	struct vnic_dev *vdev;
 	struct vnic_intr_ctrl __iomem *ctrl;		/* memory-mapped */
-#if defined(__VMKLNX__) && defined(ENIC_UPT)
-	int masked;
-#endif
 };
 
 static inline void vnic_intr_unmask(struct vnic_intr *intr)
@@ -134,9 +131,6 @@ void vnic_intr_init(struct vnic_intr *intr, u32 coalescing_timer,
 void vnic_intr_coalescing_timer_set(struct vnic_intr *intr,
 	u32 coalescing_timer);
 void vnic_intr_clean(struct vnic_intr *intr);
-#ifdef ENIC_UPT
-void vnic_intr_raise(struct vnic_intr *intr);
-#endif
 
 void vnic_grpmbrintr_free(struct vnic_intr *intr);
 int vnic_grpmbrintr_alloc(struct vnic_dev *vdev, struct vnic_intr *intr,

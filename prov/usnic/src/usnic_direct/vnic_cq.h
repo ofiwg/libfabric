@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
+ * Copyright 2008-2018 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
  *
  * LICENSE_BEGIN
@@ -43,7 +43,6 @@
 
 #ifndef _VNIC_CQ_H_
 #define _VNIC_CQ_H_
-
 
 #include "cq_desc.h"
 #include "vnic_dev.h"
@@ -115,7 +114,6 @@ static inline unsigned int vnic_cq_service(struct vnic_cq *cq,
 		&q_number, &completed_index);
 
 	while (color != cq->last_color) {
-
 		if ((*q_service)(cq->vdev, cq_desc, type,
 			q_number, completed_index, opaque))
 			break;

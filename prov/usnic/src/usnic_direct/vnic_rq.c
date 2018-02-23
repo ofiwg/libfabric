@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
+ * Copyright 2008-2018 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
  *
  * LICENSE_BEGIN
@@ -152,7 +152,7 @@ int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 	return 0;
 }
 
-void vnic_rq_init_start(struct vnic_rq *rq, unsigned int cq_index,
+static void vnic_rq_init_start(struct vnic_rq *rq, unsigned int cq_index,
 	unsigned int fetch_index, unsigned int posted_index,
 	unsigned int error_interrupt_enable,
 	unsigned int error_interrupt_offset)
@@ -195,6 +195,7 @@ unsigned int vnic_rq_error_status(struct vnic_rq *rq)
 	return vnic_rq_ctrl_error_status(rq->ctrl);
 }
 
+EXPORT_SYMBOL(vnic_rq_ctrl_error_status);
 unsigned int vnic_rq_ctrl_error_status(struct vnic_rq_ctrl *ctrl)
 {
 	return ioread32(&ctrl->error_status);
