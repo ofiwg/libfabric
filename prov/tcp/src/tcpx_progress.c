@@ -156,7 +156,9 @@ void posted_rx_find(struct tcpx_pe_entry *pe_entry)
 	struct tcpx_posted_rx *posted_rx;
 	struct tcpx_domain *domain;
 	struct tcpx_ep *ep;
-	size_t data_len = 0;
+	size_t posted_buf_size = 0, xfer_size;
+
+	xfer_size = ntohll(pe_entry->msg_hdr.size)-sizeof(pe_entry->msg_hdr);
 
 	ep = pe_entry->ep;
 	domain = container_of(ep->util_ep.domain,
@@ -165,9 +167,9 @@ void posted_rx_find(struct tcpx_pe_entry *pe_entry)
 	fastlock_acquire(&ep->posted_rx_list_lock);
 	dlist_foreach(&ep->posted_rx_list, entry) {
 		posted_rx = container_of(entry, struct tcpx_posted_rx, entry);
-		data_len = ofi_total_iov_len(posted_rx->msg_data.iov,
+		posted_buf_size = ofi_total_iov_len(posted_rx->msg_data.iov,
 					     posted_rx->msg_data.iov_cnt);
-		if (data_len >= ntohll(pe_entry->msg_hdr.size)-sizeof(pe_entry->msg_hdr)) {
+		if (posted_buf_size >= xfer_size) {
 			dlist_remove(entry);
 			goto copy_to_pe_entry;
 		}
@@ -181,6 +183,9 @@ copy_to_pe_entry:
 	pe_entry->msg_data.iov_cnt = posted_rx->msg_data.iov_cnt;
 	memcpy(pe_entry->msg_data.iov, posted_rx->msg_data.iov,
 	       TCPX_IOV_LIMIT*sizeof(pe_entry->msg_data.iov[0]));
+	ofi_truncate_iov(pe_entry->msg_data.iov,
+			 &pe_entry->msg_data.iov_cnt,
+			 xfer_size);
 	util_buf_release(domain->progress.posted_rx_pool, posted_rx);
 	fastlock_release(&ep->posted_rx_list_lock);
 }
