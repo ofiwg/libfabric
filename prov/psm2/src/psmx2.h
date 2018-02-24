@@ -650,6 +650,7 @@ struct psmx2_fid_av {
 	size_t			addrlen;
 	size_t			count;
 	size_t			last;
+	fastlock_t		lock;
 	psm2_epid_t		*epids;	 /* one entry per peer */
 	struct psmx2_av_peer	*peers;  /* one entry per peer */
 	struct psmx2_av_table	tables[];/* one entry per context */
@@ -908,26 +909,29 @@ static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av,
 					   struct psmx2_trx_ctxt *trx_ctxt,
 					   size_t idx)
 {
-	int err;
+	int err = 0;
 
-	if (idx >= av->last) {
+	psmx2_lock(&av->lock, 1);
+
+	if (OFI_UNLIKELY(idx >= av->last)) {
 		FI_WARN(&psmx2_prov, FI_LOG_AV,
 			"error: av index %ld out of range(max: %ld).\n", idx, av->last);
-		return -FI_EINVAL;
+		err = -FI_EINVAL;
+		goto out;
 	}
 
 	if (!av->tables[trx_ctxt->id].epaddrs[idx]) {
 		err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[idx],
 					   &av->tables[trx_ctxt->id].epaddrs[idx]);
-		if (err) {
+		if (err)
 			FI_WARN(&psmx2_prov, FI_LOG_AV,
 				"fatal error: unable to translate epid %lx to epaddr.\n",
 				av->epids[idx]);
-			return err;
-		}
 	}
 
-	return 0;
+out:
+	psmx2_unlock(&av->lock, 1);
+	return err;
 }
 
 void	psmx2_am_global_init(void);

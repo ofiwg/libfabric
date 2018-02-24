@@ -574,14 +574,15 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			case FI_THREAD_ENDPOINT:
 			case FI_THREAD_COMPLETION:
 			case FI_THREAD_DOMAIN:
+			case FI_THREAD_SAFE:
 				threading = hints->domain_attr->threading;
 				break;
 			default:
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->threading=%d, supported=%d %d %d %d %d\n",
+					"hints->domain_attr->threading=%d, supported=%d %d %d %d %d %d\n",
 					hints->domain_attr->threading, FI_THREAD_UNSPEC,
 					FI_THREAD_FID, FI_THREAD_ENDPOINT, FI_THREAD_COMPLETION,
-					FI_THREAD_DOMAIN);
+					FI_THREAD_DOMAIN, FI_THREAD_SAFE);
 				goto err_out;
 			}
 
