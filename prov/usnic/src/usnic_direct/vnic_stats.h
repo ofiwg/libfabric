@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
+ * Copyright 2008-2018 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
  *
  * LICENSE_BEGIN
@@ -86,12 +86,10 @@ struct vnic_rx_stats {
 	u64 rsvd[16];
 };
 
-#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 /* Generic statistics */
 struct vnic_gen_stats {
 	u64 dma_map_error;
 };
-#endif
 
 struct vnic_stats {
 	struct vnic_tx_stats tx;

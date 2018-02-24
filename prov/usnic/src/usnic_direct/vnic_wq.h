@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
+ * Copyright 2008-2018 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
  *
  * LICENSE_BEGIN
@@ -86,9 +86,7 @@ struct vnic_wq_buf {
 	uint8_t cq_entry; /* Gets completion event from hw */
 	uint8_t desc_skip_cnt; /* Num descs to occupy */
 	uint8_t compressed_send; /* Both hdr and payload in one desc */
-#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 	struct vnic_wq_buf *prev;
-#endif
 };
 
 /* Break the vnic_wq_buf allocations into blocks of 32/64 entries */
@@ -112,12 +110,6 @@ struct vnic_wq {
 	struct vnic_wq_buf *to_use;
 	struct vnic_wq_buf *to_clean;
 	unsigned int pkts_outstanding;
-#if defined(ENIC_NETQ)
-	unsigned int state;
-#endif
-#if defined(__VMKLNX__) && defined(ENIC_UPT)
-	int enabled;
-#endif
 #if defined(__LIBUSNIC__)
 	uint32_t qp_num;
 #endif
@@ -286,10 +278,12 @@ int vnic_wq_alloc(struct vnic_dev *vdev, struct vnic_wq *wq, unsigned int index,
 	unsigned int desc_count, unsigned int desc_size);
 int vnic_wq_devcmd2_alloc(struct vnic_dev *vdev, struct vnic_wq *wq,
 	unsigned int desc_count, unsigned int desc_size);
+#ifndef FOR_UPSTREAM_KERNEL
 void vnic_wq_init_start(struct vnic_wq *wq, unsigned int cq_index,
 	unsigned int fetch_index, unsigned int posted_index,
 	unsigned int error_interrupt_enable,
 	unsigned int error_interrupt_offset);
+#endif
 void vnic_wq_init(struct vnic_wq *wq, unsigned int cq_index,
 	unsigned int error_interrupt_enable,
 	unsigned int error_interrupt_offset);

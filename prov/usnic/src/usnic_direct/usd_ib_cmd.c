@@ -611,7 +611,7 @@ usd_ib_cmd_create_qp(
     ucp = &cmd.usnic_cmd;
 
     if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR]) {
-        ucp->cmd_version = USNIC_IB_CREATE_QP_VERSION;
+        ucp->cmd_version = 2;
     } else {
             /*
              * Allow compatibility with old kernel module when

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
+ * Copyright 2008-2018 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
  *
  * LICENSE_BEGIN
@@ -89,20 +89,14 @@ static int vnic_wq_alloc_bufs(struct vnic_wq *wq)
 				wq->ring.desc_size * buf->index;
 			if (buf->index + 1 == count) {
 				buf->next = wq->bufs[0];
-#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 				buf->next->prev = buf;
-#endif
 				break;
 			} else if (j + 1 == VNIC_WQ_BUF_BLK_ENTRIES(count)) {
 				buf->next = wq->bufs[i + 1];
-#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 				buf->next->prev = buf;
-#endif
 			} else {
 				buf->next = buf + 1;
-#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 				buf->next->prev = buf;
-#endif
 				buf++;
 			}
 		}
@@ -197,6 +191,7 @@ int vnic_wq_devcmd2_alloc(struct vnic_dev *vdev, struct vnic_wq *wq,
 		return err;
 	return 0;
 }
+
 void vnic_wq_init_start(struct vnic_wq *wq, unsigned int cq_index,
 	unsigned int fetch_index, unsigned int posted_index,
 	unsigned int error_interrupt_enable,
@@ -239,6 +234,7 @@ unsigned int vnic_wq_error_status(struct vnic_wq *wq)
         return vnic_wq_ctrl_error_status(wq->ctrl);
 }
 
+EXPORT_SYMBOL(vnic_wq_ctrl_error_status);
 unsigned int vnic_wq_ctrl_error_status(struct vnic_wq_ctrl *ctrl)
 {
 	return ioread32(&ctrl->error_status);
