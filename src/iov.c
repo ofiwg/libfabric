@@ -86,3 +86,17 @@ out:
 	iov[0].iov_base = (uint8_t *)iov[0].iov_base + consumed;
 	iov[0].iov_len -= consumed;
 }
+
+void ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size)
+{
+	size_t i;
+
+	for (i = 0; i < *iov_count; i++) {
+		if (trim_size <= iov[i].iov_len) {
+			iov[i].iov_len = trim_size;
+			*iov_count = i + 1;
+			return;
+		}
+		trim_size -= iov[i].iov_len;
+	}
+}
