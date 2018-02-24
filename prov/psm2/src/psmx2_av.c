@@ -147,6 +147,11 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			} else {
 				for (j=0; j<n; j++)
 					epids[j] = ((psm2_epid_t *)src)[j];
+				/*
+				 * the sender of the SEP query request should
+				 * have acquired the lock and is waiting for
+				 * the response. see psmx2_av_connect_trx_ctxt.
+				 */
 				av->peers[i].sep_ctxt_cnt = n;
 				av->peers[i].sep_ctxt_epids = epids;
 			}
@@ -241,6 +246,9 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 	return 0;
 }
 
+/*
+ * Must be called with av->lock held
+ */
 static int psmx2_av_check_space(struct psmx2_fid_av *av, size_t count)
 {
 	psm2_epid_t *new_epids;
@@ -315,6 +323,9 @@ static void psmx2_av_post_completion(struct psmx2_fid_av *av, void *context,
 	}
 }
 
+/*
+ * Must be called with av->lock held
+ */
 static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 				     int trx_ctxt_id,
 				     size_t av_idx_start,
@@ -465,14 +476,19 @@ static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 
 		/*
 		 * make it synchronous for now to:
-		 * (1) ensure array "req->errors" is valid;
-		 * (2) to simplify the logic of generating the final
-		 *     completion event.
+		 * (1) ensure the array "req->errors" is valid;
+		 * (2) simplify the logic of generating the final completion.
 		 */
 
 		if (req) {
+			/*
+			 * make sure AM is progressed promptly. don't call
+			 * psmx2_progress() which may call functions that
+			 * need to access the address vector.
+			 */
 			while (ofi_atomic_get32(&req->pending))
-				psmx2_progress(trx_ctxt);
+				psm2_poll(trx_ctxt->psm2_ep);
+
 			error_count += ofi_atomic_get32(&req->error_count);
 			free(req);
 		}
@@ -496,12 +512,16 @@ int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
 {
 	psm2_error_t *errors;
 	int id = trx_ctxt->id;
+	int err = 0;
+
+	psmx2_lock(&av->lock, 1);
 
 	if (id >= av->max_trx_ctxt) {
 		FI_WARN(&psmx2_prov, FI_LOG_AV,
 			"trx_ctxt->id(%d) exceeds av->max_trx_ctxt(%d).\n",
 			id, av->max_trx_ctxt);
-		return -FI_EINVAL;
+		err = -FI_EINVAL;
+		goto out;
 	}
 
 	if (av->tables[id].trx_ctxt) {
@@ -509,24 +529,29 @@ int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
 				"trx_ctxt(%p) with id(%d) already added.\n",
 				trx_ctxt, id);
-			return 0;
+			goto out;
 		} else {
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
 				"different trx_ctxt(%p) with same id(%d) already added.\n",
 				trx_ctxt, id);
-			return -FI_EINVAL;
+			err = -FI_EINVAL;
+			goto out;
 		}
 	}
 
 	av->tables[id].epaddrs = (psm2_epaddr_t *) calloc(av->count,
 							  sizeof(psm2_epaddr_t));
-	if (!av->tables[id].epaddrs)
-		return -FI_ENOMEM;
+	if (!av->tables[id].epaddrs) {
+		err = -FI_ENOMEM;
+		goto out;
+	}
 
 	av->tables[id].sepaddrs = (psm2_epaddr_t **)calloc(av->count,
 							   sizeof(psm2_epaddr_t *));
-	if (!av->tables[id].sepaddrs)
-		return -FI_ENOMEM;
+	if (!av->tables[id].sepaddrs) {
+		err = -FI_ENOMEM;
+		goto out;
+	}
 
 	av->tables[id].trx_ctxt = trx_ctxt;
 
@@ -538,7 +563,9 @@ int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
 		}
 	}
 
-	return 0;
+out:
+	psmx2_unlock(&av->lock, 1);
+	return err;
 }
 
 static int psmx2_av_insert(struct fid_av *av, const void *addr,
@@ -549,7 +576,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	struct psmx2_ep_name *ep_name;
 	const struct psmx2_ep_name *names = addr;
 	const char **string_names = (void *)addr;
-	psm2_error_t *errors;
+	psm2_error_t *errors = NULL;
 	int error_count = 0;
 	int i, idx, ret;
 	int sep_count = 0;
@@ -562,15 +589,23 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 	av_priv = container_of(av, struct psmx2_fid_av, av);
 
-	if ((av_priv->flags & FI_EVENT) && !av_priv->eq)
-		return -FI_ENOEQ;
+	psmx2_lock(&av_priv->lock, 1);
 
-	if (psmx2_av_check_space(av_priv, count))
-		return -FI_ENOMEM;
+	if ((av_priv->flags & FI_EVENT) && !av_priv->eq) {
+		ret = -FI_ENOEQ;
+		goto out;
+	}
+
+	if (psmx2_av_check_space(av_priv, count)) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
 
 	errors = calloc(count, sizeof(*errors));
-	if (!errors)
-		return -FI_ENOMEM;
+	if (!errors) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
 
 	/* save the peer address information */
 	for (i = 0; i < count; i++) {
@@ -649,6 +684,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 out:
 	free(errors);
+	psmx2_unlock(&av_priv->lock, 1);
 	return ret;
 }
 
@@ -665,6 +701,7 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct psmx2_epaddr_context *context;
 	struct psmx2_ep_name name;
 	int idx;
+	int err = 0;
 
 	if (!addr || !addrlen)
 		return -FI_EINVAL;
@@ -673,19 +710,23 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	memset(&name, 0, sizeof(name));
 
+	psmx2_lock(&av_priv->lock, 1);
+
 	if (PSMX2_SEP_ADDR_TEST(fi_addr)) {
 		idx = PSMX2_SEP_ADDR_IDX(fi_addr);
-		if (idx >= av_priv->last)
-			return -FI_EINVAL;
-
+		if (idx >= av_priv->last) {
+			err = -FI_EINVAL;
+			goto out;
+		}
 		name.type = PSMX2_EP_SCALABLE;
 		name.epid = av_priv->epids[idx];
 		name.sep_id = av_priv->peers[idx].sep_id;
 	} else if (av_priv->type == FI_AV_TABLE) {
 		idx = (int)(int64_t)fi_addr;
-		if (idx >= av_priv->last)
-			return -FI_EINVAL;
-
+		if (idx >= av_priv->last) {
+			err = -FI_EINVAL;
+			goto out;
+		}
 		name.type = PSMX2_EP_REGULAR;
 		name.epid = av_priv->epids[idx];
 	} else {
@@ -701,7 +742,9 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		*addrlen = sizeof(name);
 	}
 
-	return 0;
+out:
+	psmx2_unlock(&av_priv->lock, 1);
+	return err;
 }
 
 psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
@@ -710,15 +753,15 @@ psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 {
 	int idx = PSMX2_SEP_ADDR_IDX(addr);
 	int ctxt = PSMX2_SEP_ADDR_CTXT(addr, av->rx_ctx_bits);
-	psm2_epaddr_t epaddr;
+	psm2_epaddr_t epaddr = NULL;
 	psm2_error_t errors;
 	int err;
 
-	if (av->peers[idx].type != PSMX2_EP_SCALABLE)
-		return NULL;
+	psmx2_lock(&av->lock, 1);
 
-	if (ctxt >= av->peers[idx].sep_ctxt_cnt)
-		return NULL;
+	if (av->peers[idx].type != PSMX2_EP_SCALABLE ||
+	    ctxt >= av->peers[idx].sep_ctxt_cnt)
+		goto out;
 
 	/* this can be NULL when lazy connection is enabled */
 	if (!av->tables[trx_ctxt->id].sepaddrs[idx]) {
@@ -734,39 +777,52 @@ psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 			FI_WARN(&psmx2_prov, FI_LOG_AV,
 				"fatal error: unable to translate epid %lx to epaddr.\n",
 				av->peers[idx].sep_ctxt_epids[ctxt]);
-			return NULL;
+			goto out;
 		}
 
 		av->tables[trx_ctxt->id].sepaddrs[idx][ctxt] = epaddr;
 	}
 
-	return av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
+	epaddr = av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
+
+out:
+	psmx2_unlock(&av->lock, 1);
+	return epaddr;
 }
 
 fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 {
 	psm2_epaddr_t epaddr;
 	psm2_epid_t epid;
-	int i, j;
+	fi_addr_t ret = FI_ADDR_NOTAVAIL;
+	int i, j, found = 0;
 
 	epaddr = PSMX2_ADDR_TO_EP(source);
 	psm2_epaddr_to_epid(epaddr, &epid);
 
-	for (i = av->last - 1; i >= 0; i--) {
+	psmx2_lock(&av->lock, 1);
+
+	for (i = av->last - 1; i >= 0 && !found; i--) {
 		if (av->peers[i].type == PSMX2_EP_REGULAR) {
-			if (av->epids[i] == epid)
-				return (av->type == FI_AV_MAP) ?
-					source : (fi_addr_t)i;
+			if (av->epids[i] == epid) {
+				ret = (av->type == FI_AV_MAP) ?
+				      source : (fi_addr_t)i;
+				found = 1;
+			}
 		} else {
 			for (j=0; j<av->peers[i].sep_ctxt_cnt; j++) {
-				if (av->peers[i].sep_ctxt_epids[j] == epid)
-					return  fi_rx_addr((fi_addr_t)i, j,
-							   av->rx_ctx_bits);
+				if (av->peers[i].sep_ctxt_epids[j] == epid) {
+					ret = fi_rx_addr((fi_addr_t)i, j,
+							 av->rx_ctx_bits);
+					found = 1;
+					break;
+				}
 			}
 		}
 	}
 
-	return FI_ADDR_NOTAVAIL;
+	psmx2_unlock(&av->lock, 1);
+	return ret;
 }
 
 static const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
@@ -782,6 +838,7 @@ static int psmx2_av_close(fid_t fid)
 
 	av = container_of(fid, struct psmx2_fid_av, av.fid);
 	psmx2_domain_release(av->domain);
+	fastlock_destroy(&av->lock);
 	for (i = 0; i < av->max_trx_ctxt; i++) {
 		if (!av->tables[i].trx_ctxt)
 			continue;
@@ -914,6 +971,8 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av_priv = (struct psmx2_fid_av *) calloc(1, sizeof(*av_priv) + table_size);
 	if (!av_priv)
 		return -FI_ENOMEM;
+
+	fastlock_init(&av_priv->lock);
 
 	psmx2_domain_acquire(domain_priv);
 
