@@ -3,6 +3,7 @@ _psm2_files = \
 	prov/psm2/src/version.h \
 	prov/psm2/src/psmx2.h \
 	prov/psm2/src/psmx2_trigger.h \
+	prov/psm2/src/psmx2_attr.c \
 	prov/psm2/src/psmx2_init.c \
 	prov/psm2/src/psmx2_fabric.c \
 	prov/psm2/src/psmx2_domain.c \

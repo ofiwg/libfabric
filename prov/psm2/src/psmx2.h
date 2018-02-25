@@ -81,16 +81,22 @@ extern struct fi_provider psmx2_prov;
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 
-#define PSMX2_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | \
-			 FI_RMA | FI_MULTI_RECV | \
-			 FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
-			 FI_REMOTE_READ | FI_REMOTE_WRITE | \
-			 FI_TRIGGER | FI_RMA_EVENT | FI_REMOTE_CQ_DATA | \
-			 FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV | \
-			 FI_NAMED_RX_CTX)
+#define PSMX2_PRI_CAPS	(FI_TAGGED | FI_MSG | FI_RMA | FI_ATOMICS | \
+			 FI_NAMED_RX_CTX | FI_DIRECTED_RECV | \
+			 FI_SEND | FI_RECV | FI_READ | FI_WRITE | \
+			 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
-#define PSMX2_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-			 FI_SEND | FI_RECV)
+#define PSMX2_SEC_CAPS	(FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
+			 FI_TRIGGER | FI_LOCAL_COMM | FI_REMOTE_COMM | \
+			 FI_SOURCE_ERR)
+
+#define PSMX2_CAPS	(PSMX2_PRI_CAPS | PSMX2_SEC_CAPS | FI_REMOTE_CQ_DATA)
+
+#define PSMX2_RMA_CAPS	(PSMX2_CAPS & ~(FI_TAGGED | FI_MSG | FI_SEND | \
+			 FI_RECV | FI_DIRECTED_RECV | FI_MULTI_RECV))
+
+#define PSMX2_SUB_CAPS	(FI_SEND | FI_RECV | FI_READ | FI_WRITE | \
+			 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 #define PSMX2_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
 
@@ -811,7 +817,16 @@ static inline void psmx2_unlock(fastlock_t *lock, int lock_level)
 		fastlock_release(lock);
 }
 
-void	psmx2_init_tag_layout(int *cq_data_size, int to_lock);
+int	psmx2_init_prov_info(const struct fi_info *hints, struct fi_info **info);
+void	psmx2_update_prov_info(struct fi_info *info,
+			       struct psmx2_ep_name *src_addr,
+			       struct psmx2_ep_name *dest_addr);
+int	psmx2_check_prov_info(uint32_t api_version, const struct fi_info *hints,
+			      struct fi_info **info);
+void	psmx2_alter_prov_info(uint32_t api_version, const struct fi_info *hints,
+			      struct fi_info *info);
+
+void	psmx2_init_tag_layout(struct fi_info *info);
 int	psmx2_fabric(struct fi_fabric_attr *attr,
 		     struct fid_fabric **fabric, void *context);
 int	psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
