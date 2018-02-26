@@ -278,6 +278,7 @@ alloc_info:
 			/* 64 bit tag, no CQ data */
 			info_new->addr_format = addr_format;
 			info_new->ep_attr->type = ep_type;
+			info_new->caps &= ~FI_REMOTE_CQ_DATA;
 			info_new->next = info_out;
 			info_out = info_new;
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
@@ -386,7 +387,7 @@ void psmx2_alter_prov_info(uint32_t api_version,
 		 * follow-up fi_getinfo() calls to pick the same tag
 		 * layout by copying caps from this instance without
 		 * setting the cq_data_size field. Notice that the flag
-		 * is cleared by ofi_alter_info().
+		 * may be cleared by ofi_alter_info().
 		 */
 		if (info->domain_attr->cq_data_size) {
 			info->caps |= FI_REMOTE_CQ_DATA;
