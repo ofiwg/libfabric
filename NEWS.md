@@ -23,11 +23,21 @@ v1.6.0, Wed Mar 14, 2018
 
 ## PSM
 
+-- Move environment variable reading out from fi_getinfo()
+-- Shortcut obviously unsuccessful fi_getinfo() calls
 -- Remove excessive name sever implementation
 -- Enable ordering of RMA operations
 
 ## PSM2
 
+-- Use utility functions to check provider attributes
+-- Turn on FI_THREAD_SAFE support
+-- Make address vector operations thread-safe
+-- Move environment variable reading out from fi_getinfo()
+-- Reduce noise when optimizing tagged message functions
+-- Shortcut obviously unsuccessful fi_getinfo() calls
+-- Improve how Tx/Rx context limits are handled
+-- Support auto selection from two different tag layout schemes
 -- Add provider build options to debug output
 -- Support remote CQ data for tagged messages, add specialization.
 -- Support opening multiple domains
