@@ -158,6 +158,7 @@ struct rxm_rma_iov {
 #define RXM_PROTO_STATES(FUNC)	\
 	FUNC(RXM_TX_NOBUF),	\
 	FUNC(RXM_TX),		\
+	FUNC(RXM_TX_RMA),	\
 	FUNC(RXM_RX),		\
 	FUNC(RXM_LMT_TX),	\
 	FUNC(RXM_LMT_ACK_WAIT),	\
@@ -284,7 +285,7 @@ struct rxm_tx_entry {
 		struct rxm_rma_buf *rma_buf;
 	};
 
-	/* Used for large messages */
+	/* Used for large messages and RMA */
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	struct rxm_rx_buf *rx_buf;
 };
@@ -406,6 +407,9 @@ void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
 void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 				   struct rxm_conn *rxm_conn,
 				   struct rxm_tx_entry *tx_entry);
+void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
+				    struct rxm_conn *rxm_conn,
+				    struct rxm_tx_entry *tx_entry);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {

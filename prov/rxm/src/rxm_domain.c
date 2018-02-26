@@ -154,7 +154,7 @@ static int rxm_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
 	rxm_mr->mr_fid.fid.ops = &rxm_mr_ops;
 	/* Store msg_mr as rxm_mr descriptor so that we can get its key when
 	 * the app passes msg_mr as the descriptor in fi_send and friends.
-	 * The key would be used in large message transfer protocol. */
+	 * The key would be used in large message transfer protocol and RMA. */
 	rxm_mr->mr_fid.mem_desc = rxm_mr->msg_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
 	*mr = &rxm_mr->mr_fid;
