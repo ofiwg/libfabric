@@ -199,6 +199,20 @@ static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
 	}
 }
 
+static void rxm_conn_handle_postponed_op(struct rxm_ep *rxm_ep,
+					 struct util_cmap_handle *handle)
+{
+	struct rxm_tx_entry *tx_entry;
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+
+	while (!dlist_empty(&rxm_conn->postponed_tx_list)) {
+		dlist_pop_front(&rxm_conn->postponed_tx_list, struct rxm_tx_entry,
+				tx_entry, postponed_entry);
+		if (!(tx_entry->comp_flags & FI_RMA))
+			 rxm_ep_handle_postponed_tx_op(rxm_ep, rxm_conn, tx_entry);
+	}
+}
+
 static void *rxm_conn_event_handler(void *arg)
 {
 	struct fi_eq_cm_entry *entry;
@@ -237,7 +251,6 @@ static void *rxm_conn_event_handler(void *arg)
 					"expected (%zu)\n", rd, len);
 				goto exit;
 			}
-			cm_data = (void *)entry->data;
 			rxm_msg_process_connreq(rxm_ep, entry->info, entry->data);
 			break;
 		case FI_CONNECTED:
@@ -249,7 +262,7 @@ static void *rxm_conn_event_handler(void *arg)
 						 entry->fid->context,
 						 ((rd - sizeof(*entry)) ?
 						  &cm_data->conn_id : NULL));
-			rxm_conn_handle_postponed_tx_op(rxm_ep, entry->fid->context);
+			rxm_conn_handle_postponed_op(rxm_ep, entry->fid->context);
 			fastlock_release(&rxm_ep->util_ep.cmap->lock);
 			break;
 		case FI_SHUTDOWN:
