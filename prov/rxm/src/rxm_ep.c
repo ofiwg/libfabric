@@ -313,7 +313,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 
 	return FI_SUCCESS;
 err:
-	while (--i >= RXM_BUF_POOL_TX_MSG)
+	while (--i >= RXM_BUF_POOL_TX_START)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
 	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 	return ret;
