@@ -518,6 +518,8 @@ static ssize_t rxm_lmt_send_ack_fast(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->conn);
 
+	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_READ, RXM_LMT_ACK_SENT);
+
 	pkt.hdr.op		= ofi_op_msg;
 	pkt.hdr.version		= OFI_OP_VERSION;
 	pkt.ctrl_hdr.version	= OFI_CTRL_VERSION;
