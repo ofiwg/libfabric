@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <unistd.h>
 
 #include <shared.h>
 
@@ -230,6 +231,8 @@ int main(int argc, char **argv)
 	if (ret && ret != -FI_ENODATA)
 		goto out;
 
+	if (opts.dst_addr)
+		sleep(1);
 	ret = av_reinsert_test();
 	if (ret && ret != -FI_ENODATA)
 		goto out;
