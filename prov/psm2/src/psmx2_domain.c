@@ -276,7 +276,6 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_ep_name *src_addr = info->src_addr;
 	int mr_mode = (info->domain_attr->mr_mode & FI_MR_BASIC) ? FI_MR_BASIC : 0;
-	int cq_data_size = info->domain_attr->cq_data_size;
 	int err;
 
 	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "\n");
@@ -306,7 +305,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->util_domain.domain_fid.mr = &psmx2_mr_ops;
 	domain_priv->mr_mode = mr_mode;
 	domain_priv->mode = info->mode;
-	domain_priv->caps = PSMX2_CAPS | PSMX2_DOM_CAPS;
+	domain_priv->caps = info->caps;
 	domain_priv->fabric = fabric_priv;
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
@@ -326,11 +325,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	dlist_insert_before(&domain_priv->entry, &fabric_priv->domain_list);
 	psmx2_unlock(&fabric_priv->domain_lock, 1);
 
-	psmx2_init_tag_layout(&cq_data_size, 1);
-	if (cq_data_size != info->domain_attr->cq_data_size)
-		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"cq_data_size: asked %ld, got %d\n",
-			info->domain_attr->cq_data_size, cq_data_size);
+	psmx2_init_tag_layout(info);
 
 	*domain = &domain_priv->util_domain.domain_fid;
 	return 0;

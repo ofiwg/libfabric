@@ -89,11 +89,13 @@ static void psmx2_init_env(void)
 #endif
 }
 
-void psmx2_init_tag_layout(int *cq_data_size, int to_lock)
+void psmx2_init_tag_layout(struct fi_info *info)
 {
+	int use_tag64;
+
 	if (psmx2_tag_layout_locked) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"tag layout locked by opened domain.\n");
+			"tag layout already set opened domain.\n");
 		goto out;
 	}
 
@@ -103,11 +105,13 @@ void psmx2_init_tag_layout(int *cq_data_size, int to_lock)
 		psmx2_tag_mask = PSMX2_TAG_MASK_60;
 		psmx2_data_mask = PSMX2_DATA_MASK_60;
 		psmx2_flags_idx = PSMX2_FLAGS_IDX_60;
+		use_tag64 = 0;
 	} else if (strcasecmp(psmx2_env.tag_layout, "tag64") == 0) {
 		psmx2_tag_upper_mask = PSMX2_TAG_UPPER_MASK_64;
 		psmx2_tag_mask = PSMX2_TAG_MASK_64;
 		psmx2_data_mask = PSMX2_DATA_MASK_64;
 		psmx2_flags_idx = PSMX2_FLAGS_IDX_64;
+		use_tag64 = 1;
 	} else {
 		if (strcasecmp(psmx2_env.tag_layout, "auto") != 0) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
@@ -115,30 +119,28 @@ void psmx2_init_tag_layout(int *cq_data_size, int to_lock)
 				psmx2_env.tag_layout);
 			psmx2_env.tag_layout = "auto";
 		}
-		if (*cq_data_size) {
+		if ((info->caps & (FI_TAGGED | FI_MSG)) &&
+		    info->domain_attr->cq_data_size) {
 			psmx2_tag_upper_mask = PSMX2_TAG_UPPER_MASK_60;
 			psmx2_tag_mask = PSMX2_TAG_MASK_60;
 			psmx2_data_mask = PSMX2_DATA_MASK_60;
 			psmx2_flags_idx = PSMX2_FLAGS_IDX_60;
+			use_tag64 = 0;
 		} else {
 			psmx2_tag_upper_mask = PSMX2_TAG_UPPER_MASK_64;
 			psmx2_tag_mask = PSMX2_TAG_MASK_64;
 			psmx2_data_mask = PSMX2_DATA_MASK_64;
 			psmx2_flags_idx = PSMX2_FLAGS_IDX_64;
+			use_tag64 = 1;
 		}
 	}
 #endif
 
 out:
-	if (to_lock) {
-		psmx2_tag_layout_locked = 1;
-		FI_INFO(&psmx2_prov, FI_LOG_CORE, "lock tag layout settings.\n");
-	}
-	*cq_data_size = (PSMX2_DATA_MASK == 0xFFFFFFFFU) ? 4 : 0;
-
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "tag_mask: %016" PRIX64
-		", data_mask: %08" PRIX32 ", cq_data_size: %d\n",
-		PSMX2_TAG_MASK, PSMX2_DATA_MASK, *cq_data_size);
+	psmx2_tag_layout_locked = 1;
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"use %s: tag_mask: %016" PRIX64 ", data_mask: %08" PRIX32 "\n",
+		use_tag64 ? "tag64" : "tag60", PSMX2_TAG_MASK, PSMX2_DATA_MASK);
 }
 
 static int psmx2_get_yes_no(char *s, int default_value)
@@ -266,90 +268,27 @@ static void psmx2_update_sep_cap(void)
 		psmx2_env.max_trx_ctxt, psmx2_env.free_trx_ctxt);
 }
 
-#define PSMX2_INFO_DIFF(description, requested, supported, type) \
-	do { \
-		FI_INFO(&psmx2_prov, FI_LOG_CORE, "%s: requested=%s\n", \
-			(description), fi_tostr(&(requested), (type))); \
-		FI_INFO(&psmx2_prov, FI_LOG_CORE, "%s: supported=%s\n", \
-			(description), fi_tostr(&(supported), (type))); \
-	} while (0)
-
-static int psmx2_getinfo(uint32_t version, const char *node,
+static int psmx2_getinfo(uint32_t api_version, const char *node,
 			 const char *service, uint64_t flags,
 			 const struct fi_info *hints, struct fi_info **info)
 {
-	struct fi_info *psmx2_info;
-	struct fi_info *psmx2_info_2;
-	uint32_t cnt = 0;
+	struct fi_info *prov_info = NULL;
 	struct psmx2_ep_name *dest_addr = NULL;
 	struct psmx2_ep_name *src_addr = NULL;
-	int ep_type = FI_EP_RDM;
-	int av_type = FI_AV_UNSPEC;
-	uint64_t mode = FI_CONTEXT;
-	enum fi_mr_mode mr_mode = FI_MR_SCALABLE;
-	enum fi_threading threading = FI_THREAD_COMPLETION;
-	enum fi_progress control_progress = FI_PROGRESS_MANUAL;
-	enum fi_progress data_progress = FI_PROGRESS_MANUAL;
-	uint64_t caps = PSMX2_CAPS;
-	int cq_data_size = 0;
-	int err = -FI_ENODATA;
 	int svc0, svc = PSMX2_ANY_SERVICE;
-	glob_t glob_buf;
-	int tx_ctx_cnt, rx_ctx_cnt;
-	int addr_format = FI_ADDR_PSMX2;
 	size_t len;
 	void *addr;
 	uint32_t fmt;
+	glob_t glob_buf;
+	uint32_t cnt = 0;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
 
-	*info = NULL;
-
-	/* Perform some quick check first to avoid unnecessary operations */
-	if (hints) {
-		if (hints->fabric_attr && hints->fabric_attr->name &&
-		    strcasecmp(hints->fabric_attr->name, PSMX2_FABRIC_NAME)) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->fabric_name=%s, supported=%s\n",
-				hints->fabric_attr->name, PSMX2_FABRIC_NAME);
-			goto err_out;
-		}
-
-		if (hints->domain_attr && hints->domain_attr->name &&
-		    strcasecmp(hints->domain_attr->name, PSMX2_DOMAIN_NAME)) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->domain_name=%s, supported=%s\n",
-				hints->domain_attr->name, PSMX2_DOMAIN_NAME);
-			goto err_out;
-		}
-
-		if (hints->ep_attr) {
-			switch (hints->ep_attr->type) {
-			case FI_EP_UNSPEC:
-			case FI_EP_DGRAM:
-			case FI_EP_RDM:
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->type=%d, supported=%d,%d,%d.\n",
-					hints->ep_attr->type, FI_EP_UNSPEC,
-					FI_EP_DGRAM, FI_EP_RDM);
-				goto err_out;
-			}
-		}
-
-		if ((hints->caps & PSMX2_CAPS) != hints->caps) {
-			uint64_t psmx2_caps = PSMX2_CAPS;
-			PSMX2_INFO_DIFF("hints->caps", hints->caps, psmx2_caps, FI_TYPE_CAPS);
-			goto err_out;
-		}
-	}
-
-	if (FI_VERSION_GE(version, FI_VERSION(1,5)))
-		mr_mode = 0;
+	if (psmx2_init_prov_info(hints, &prov_info))
+		goto err_out;
 
 	if (psmx2_init_lib())
-		return -FI_ENODATA;
+		goto err_out;
 
 	/*
 	 * psm2_ep_num_devunits() may wait for 15 seconds before return
@@ -364,22 +303,19 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	    (glob("/dev/hfi1_[0-9][0-9]", GLOB_APPEND, NULL, &glob_buf) != 0)) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"no hfi1 device is found.\n");
-		return -FI_ENODATA;
+		goto err_out;
 	}
 	globfree(&glob_buf);
 
 	if (psm2_ep_num_devunits(&cnt) || !cnt) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"no PSM2 device is found.\n");
-		return -FI_ENODATA;
+		goto err_out;
 	}
-
 	psmx2_env.num_devunits = cnt;
-
 	psmx2_update_sep_cap();
-	tx_ctx_cnt = psmx2_env.free_trx_ctxt;
-	rx_ctx_cnt = psmx2_env.free_trx_ctxt;
 
+	/* Set src or dest to used supplied address in native format */
 	if (node &&
 	    !ofi_str_toaddr(node, &fmt, &addr, &len) &&
 	    fmt == FI_ADDR_PSMX2) {
@@ -397,12 +333,13 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		node = NULL;
 	}
 
+	/* Initialize src address based on the "host:unit:port" format */
 	if (!src_addr) {
 		src_addr = calloc(1, sizeof(*src_addr));
 		if (!src_addr) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"failed to allocate src addr.\n");
-			return -FI_ENODATA;
+			goto err_out;
 		}
 		src_addr->type = PSMX2_EP_SRC_ADDR;
 		src_addr->epid = PSMX2_RESERVED_EPID;
@@ -422,6 +359,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		}
 	}
 
+	/* Resovle dest address using "node", "service" pair */
 	if (!dest_addr && node && !(flags & FI_SOURCE)) {
 		psm2_uuid_t uuid;
 
@@ -447,387 +385,28 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 		} else {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"failed to resolve '%s:%u'.\n", node, svc);
-			err = -FI_ENODATA;
 			goto err_out;
 		}
 	}
 
-	if (hints) {
-		switch (hints->addr_format) {
-		case FI_FORMAT_UNSPEC:
-		case FI_ADDR_PSMX2:
-			break;
-		case FI_ADDR_STR:
-			addr_format = FI_ADDR_STR;
-			break;
-		default:
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"hints->addr_format=%d, supported=%d,%d,%d.\n",
-				hints->addr_format, FI_FORMAT_UNSPEC, FI_ADDR_PSMX2, FI_ADDR_STR);
-			goto err_out;
-		}
+	/* Update prov info with resovled addresses and environment settings */
+	psmx2_update_prov_info(prov_info, src_addr, dest_addr);
 
-		if (hints->ep_attr) {
-			switch (hints->ep_attr->protocol) {
-			case FI_PROTO_UNSPEC:
-			case FI_PROTO_PSMX2:
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->protocol=%d, supported=%d %d\n",
-					hints->ep_attr->protocol,
-					FI_PROTO_UNSPEC, FI_PROTO_PSMX2);
-				goto err_out;
-			}
-
-			if (hints->ep_attr->tx_ctx_cnt > psmx2_env.max_trx_ctxt &&
-			    hints->ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->tx_ctx_cnt=%"PRIu64", max=%d\n",
-					hints->ep_attr->tx_ctx_cnt,
-					psmx2_env.max_trx_ctxt);
-				goto err_out;
-			}
-			tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
-
-			if (hints->ep_attr->rx_ctx_cnt > psmx2_env.max_trx_ctxt) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->rx_ctx_cnt=%"PRIu64", max=%d\n",
-					hints->ep_attr->rx_ctx_cnt,
-					psmx2_env.max_trx_ctxt);
-				goto err_out;
-			}
-			rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
-		}
-
-		if (hints->tx_attr) {
-			if ((hints->tx_attr->op_flags & PSMX2_OP_FLAGS) !=
-			    hints->tx_attr->op_flags) {
-				uint64_t psmx2_op_flags = PSMX2_OP_FLAGS;
-				PSMX2_INFO_DIFF("hints->tx_attr->op_flags",
-						hints->tx_attr->op_flags, psmx2_op_flags,
-						FI_TYPE_OP_FLAGS);
-				goto err_out;
-			}
-			if (hints->tx_attr->inject_size > psmx2_env.inject_size) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->inject_size=%"PRIu64
-					", supported=%d.\n",
-					hints->tx_attr->inject_size,
-					psmx2_env.inject_size);
-				goto err_out;
-			}
-		}
-
-		if (hints->rx_attr &&
-		    (hints->rx_attr->op_flags & PSMX2_OP_FLAGS) !=
-		     hints->rx_attr->op_flags) {
-			uint64_t psmx2_op_flags = PSMX2_OP_FLAGS;
-			PSMX2_INFO_DIFF("hints->rx_attr->op_flags",
-					hints->rx_attr->op_flags, psmx2_op_flags,
-					FI_TYPE_OP_FLAGS);
-			goto err_out;
-		}
-
-		if ((hints->caps & FI_TAGGED) || (hints->caps & FI_MSG)) {
-			if ((hints->mode & FI_CONTEXT) != FI_CONTEXT) {
-				uint64_t psmx2_mode = FI_CONTEXT;
-				PSMX2_INFO_DIFF("hints->mode", hints->mode,
-						psmx2_mode, FI_TYPE_MODE);
-				goto err_out;
-			}
-		} else {
-			mode = 0;
-		}
-
-
-		if (hints->domain_attr) {
-			switch (hints->domain_attr->av_type) {
-			case FI_AV_UNSPEC:
-			case FI_AV_MAP:
-			case FI_AV_TABLE:
-				av_type = hints->domain_attr->av_type;
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->av_type=%d, supported=%d %d %d\n",
-					hints->domain_attr->av_type, FI_AV_UNSPEC, FI_AV_MAP,
-					FI_AV_TABLE);
-				goto err_out;
-			}
-
-			if (hints->domain_attr->mr_mode == FI_MR_BASIC) {
-				mr_mode = FI_MR_BASIC;
-			} else if (hints->domain_attr->mr_mode == FI_MR_SCALABLE) {
-				mr_mode = FI_MR_SCALABLE;
-			} else if (hints->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->mr_mode has FI_MR_BASIC or FI_MR_SCALABLE "
-					"combined with other bits\n");
-				goto err_out;
-			}
-
-			switch (hints->domain_attr->threading) {
-			case FI_THREAD_UNSPEC:
-				break;
-			case FI_THREAD_FID:
-			case FI_THREAD_ENDPOINT:
-			case FI_THREAD_COMPLETION:
-			case FI_THREAD_DOMAIN:
-			case FI_THREAD_SAFE:
-				threading = hints->domain_attr->threading;
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->threading=%d, supported=%d %d %d %d %d %d\n",
-					hints->domain_attr->threading, FI_THREAD_UNSPEC,
-					FI_THREAD_FID, FI_THREAD_ENDPOINT, FI_THREAD_COMPLETION,
-					FI_THREAD_DOMAIN, FI_THREAD_SAFE);
-				goto err_out;
-			}
-
-			switch (hints->domain_attr->control_progress) {
-			case FI_PROGRESS_UNSPEC:
-				break;
-			case FI_PROGRESS_MANUAL:
-			case FI_PROGRESS_AUTO:
-				control_progress = hints->domain_attr->control_progress;
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->control_progress=%d, supported=%d %d %d\n",
-					hints->domain_attr->control_progress, FI_PROGRESS_UNSPEC,
-					FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO);
-				goto err_out;
-			}
-
-			switch (hints->domain_attr->data_progress) {
-			case FI_PROGRESS_UNSPEC:
-				break;
-			case FI_PROGRESS_MANUAL:
-			case FI_PROGRESS_AUTO:
-				data_progress = hints->domain_attr->data_progress;
-				break;
-			default:
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->data_progress=%d, supported=%d %d %d\n",
-					hints->domain_attr->data_progress, FI_PROGRESS_UNSPEC,
-					FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO);
-				goto err_out;
-			}
-
-			if (hints->domain_attr->caps & FI_SHARED_AV) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->domain_attr->caps=%lx, shared AV is unsupported\n",
-					hints->domain_attr->caps);
-			}
-
-			cq_data_size = hints->domain_attr->cq_data_size;
-		}
-
-		if (hints->ep_attr) {
-			if (hints->ep_attr->max_msg_size > PSMX2_MAX_MSG_SIZE) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->ep_attr->max_msg_size=%"PRIu64","
-					"supported=%llu.\n",
-					hints->ep_attr->max_msg_size,
-					PSMX2_MAX_MSG_SIZE);
-				goto err_out;
-			}
-		}
-
-		if (hints->tx_attr) {
-			if ((hints->tx_attr->msg_order & PSMX2_MSG_ORDER) !=
-			    hints->tx_attr->msg_order) {
-				uint64_t psmx2_msg_order = PSMX2_MSG_ORDER;
-				PSMX2_INFO_DIFF("hints->tx_attr->msg_order",
-						hints->tx_attr->msg_order,
-						psmx2_msg_order, FI_TYPE_MSG_ORDER);
-				goto err_out;
-			}
-			if ((hints->tx_attr->comp_order & PSMX2_COMP_ORDER) !=
-			    hints->tx_attr->comp_order) {
-				uint64_t psmx2_comp_order = PSMX2_COMP_ORDER;
-				PSMX2_INFO_DIFF("hints->tx_attr->comp_order",
-						hints->tx_attr->comp_order,
-						psmx2_comp_order, FI_TYPE_MSG_ORDER);
-				goto err_out;
-			}
-			if (hints->tx_attr->inject_size > psmx2_env.inject_size) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->inject_size=%ld,"
-					"supported=%d.\n",
-					hints->tx_attr->inject_size,
-					psmx2_env.inject_size);
-				goto err_out;
-			}
-			if (hints->tx_attr->iov_limit > PSMX2_IOV_MAX_COUNT) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->iov_limit=%"PRIu64
-					", supported=%"PRIu64".\n",
-					hints->tx_attr->iov_limit,
-					PSMX2_IOV_MAX_COUNT);
-				goto err_out;
-			}
-			if (hints->tx_attr->rma_iov_limit > 1) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->tx_attr->rma_iov_limit=%ld,"
-					"supported=1.\n",
-					hints->tx_attr->rma_iov_limit);
-				goto err_out;
-			}
-		}
-
-		if (hints->rx_attr) {
-			if ((hints->rx_attr->msg_order & PSMX2_MSG_ORDER) !=
-			    hints->rx_attr->msg_order) {
-				uint64_t psmx2_msg_order = PSMX2_MSG_ORDER;
-				PSMX2_INFO_DIFF("hints->rx_attr->msg_order",
-						hints->rx_attr->msg_order,
-						psmx2_msg_order, FI_TYPE_MSG_ORDER);
-				goto err_out;
-			}
-			if ((hints->rx_attr->comp_order & PSMX2_COMP_ORDER) !=
-			    hints->rx_attr->comp_order) {
-				uint64_t psmx2_comp_order = PSMX2_COMP_ORDER;
-				PSMX2_INFO_DIFF("hints->rx_attr->comp_order",
-						hints->rx_attr->comp_order,
-						psmx2_comp_order, FI_TYPE_MSG_ORDER);
-				goto err_out;
-			}
-			if (hints->rx_attr->iov_limit > 1) {
-				FI_INFO(&psmx2_prov, FI_LOG_CORE,
-					"hints->rx_attr->iov_limit=%ld,"
-					"supported=1.\n",
-					hints->rx_attr->iov_limit);
-				goto err_out;
-			}
-		}
-
-		if (hints->caps)
-			caps = hints->caps;
-
-		/* TODO: check other fields of hints */
-	}
-
-	if (hints && (hints->caps & FI_REMOTE_CQ_DATA))
-		cq_data_size = 4;
-
-	psmx2_init_tag_layout(&cq_data_size, 0);
-
-	if (!cq_data_size)
-		caps &= ~FI_REMOTE_CQ_DATA;
-
-	psmx2_info = fi_allocinfo();
-	if (!psmx2_info) {
-		err = -FI_ENOMEM;
+	/* Remove prov info that don't match the hints */
+	if (psmx2_check_prov_info(api_version, hints, &prov_info))
 		goto err_out;
-	}
 
-	psmx2_info->ep_attr->type = ep_type;
-	psmx2_info->ep_attr->protocol = FI_PROTO_PSMX2;
-	psmx2_info->ep_attr->protocol_version = PSM2_VERNO;
-	psmx2_info->ep_attr->max_msg_size = PSMX2_MAX_MSG_SIZE;
-	psmx2_info->ep_attr->max_order_raw_size = PSMX2_RMA_ORDER_SIZE;
-	psmx2_info->ep_attr->max_order_war_size = PSMX2_RMA_ORDER_SIZE;
-	psmx2_info->ep_attr->max_order_waw_size = PSMX2_RMA_ORDER_SIZE;
-	psmx2_info->ep_attr->mem_tag_format = ofi_tag_format(PSMX2_MAX_TAG);
-	psmx2_info->ep_attr->tx_ctx_cnt = tx_ctx_cnt;
-	psmx2_info->ep_attr->rx_ctx_cnt = rx_ctx_cnt;
-
-	psmx2_info->domain_attr->threading = threading;
-	psmx2_info->domain_attr->control_progress = control_progress;
-	psmx2_info->domain_attr->data_progress = data_progress;
-	psmx2_info->domain_attr->name = strdup(PSMX2_DOMAIN_NAME);
-	psmx2_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
-	psmx2_info->domain_attr->av_type = av_type;
-	psmx2_info->domain_attr->mr_mode = mr_mode;
-	psmx2_info->domain_attr->mr_key_size = sizeof(uint64_t);
-	psmx2_info->domain_attr->cq_data_size = cq_data_size;
-	psmx2_info->domain_attr->cq_cnt = 65535;
-	psmx2_info->domain_attr->ep_cnt = 65535;
-	psmx2_info->domain_attr->tx_ctx_cnt = psmx2_env.free_trx_ctxt;
-	psmx2_info->domain_attr->rx_ctx_cnt = psmx2_env.free_trx_ctxt;
-	psmx2_info->domain_attr->max_ep_tx_ctx = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->max_ep_rx_ctx = psmx2_env.max_trx_ctxt;
-	psmx2_info->domain_attr->max_ep_stx_ctx = 65535;
-	psmx2_info->domain_attr->max_ep_srx_ctx = 0;
-	psmx2_info->domain_attr->cntr_cnt = 65535;
-	psmx2_info->domain_attr->mr_iov_limit = 65535;
-	psmx2_info->domain_attr->caps = PSMX2_DOM_CAPS;
-	psmx2_info->domain_attr->mode = 0;
-	psmx2_info->domain_attr->mr_cnt = 65535;
-
-	psmx2_info->next = NULL;
-	psmx2_info->caps = caps;
-	psmx2_info->mode = mode;
-	psmx2_info->addr_format = addr_format;
-	if (addr_format == FI_ADDR_STR) {
-		psmx2_info->src_addr = psmx2_ep_name_to_string(src_addr, &len);
-		psmx2_info->src_addrlen = len;
-		free(src_addr);
-		psmx2_info->dest_addr = psmx2_ep_name_to_string(dest_addr, &len);
-		psmx2_info->dest_addrlen = len;
-		free(dest_addr);
-	} else {
-		psmx2_info->src_addr = src_addr;
-		psmx2_info->src_addrlen = sizeof(*src_addr);
-		psmx2_info->dest_addr = dest_addr;
-		psmx2_info->dest_addrlen = sizeof(*dest_addr);
-	}
-	psmx2_info->fabric_attr->name = strdup(PSMX2_FABRIC_NAME);
-	psmx2_info->fabric_attr->prov_name = NULL;
-	psmx2_info->fabric_attr->prov_version = PSMX2_VERSION;
-
-	psmx2_info->tx_attr->caps = psmx2_info->caps;
-	psmx2_info->tx_attr->mode = psmx2_info->mode;
-	psmx2_info->tx_attr->op_flags = (hints && hints->tx_attr && hints->tx_attr->op_flags)
-					? hints->tx_attr->op_flags : 0;
-	psmx2_info->tx_attr->msg_order = PSMX2_MSG_ORDER;
-	psmx2_info->tx_attr->comp_order = PSMX2_COMP_ORDER;
-	psmx2_info->tx_attr->inject_size = psmx2_env.inject_size;
-	psmx2_info->tx_attr->size = UINT64_MAX;
-	psmx2_info->tx_attr->iov_limit = PSMX2_IOV_MAX_COUNT;
-	psmx2_info->tx_attr->rma_iov_limit = 1;
-
-	psmx2_info->rx_attr->caps = psmx2_info->caps;
-	psmx2_info->rx_attr->mode = psmx2_info->mode;
-	psmx2_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->rx_attr->op_flags)
-					? hints->rx_attr->op_flags : 0;
-	psmx2_info->rx_attr->msg_order = PSMX2_MSG_ORDER;
-	psmx2_info->rx_attr->comp_order = PSMX2_COMP_ORDER;
-	psmx2_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM2 handles it internally! */
-	psmx2_info->rx_attr->size = UINT64_MAX;
-	psmx2_info->rx_attr->iov_limit = 1;
-
-#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
-	/*
-	 * When the tag64 layout is selected automatically, return an extra
-	 * instance of the provider that uses the tag60 layout. We don't want
-	 * to return an extra tag64 provider when tag60 is selected because
-	 * in that case remote CQ data support is a user requirement.
-	 */
-	if (!cq_data_size && !strcasecmp(psmx2_env.tag_layout, "auto") &&
-	    !psmx2_tag_layout_locked) {
-		psmx2_info_2 = fi_dupinfo(psmx2_info);
-		if (psmx2_info_2) {
-			psmx2_info_2->caps |= FI_REMOTE_CQ_DATA;
-			psmx2_info_2->ep_attr->mem_tag_format =
-					ofi_tag_format(PSMX2_TAG_MASK_60);
-			psmx2_info_2->domain_attr->cq_data_size = 4;
-			psmx2_info->next = psmx2_info_2;
-		}
-	}
-#endif
-
-	*info = psmx2_info;
+	/* Apply hints to the prov info */
+	psmx2_alter_prov_info(api_version, hints, prov_info);
+	*info = prov_info;
 	return 0;
 
 err_out:
-	free(dest_addr);
 	free(src_addr);
-
-	return err;
+	free(dest_addr);
+	fi_freeinfo(prov_info);
+	*info = NULL;
+	return -FI_ENODATA;
 }
 
 static void psmx2_fini(void)
