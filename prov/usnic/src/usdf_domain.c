@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2018, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -251,10 +251,9 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			return -FI_ENODATA;
 		}
 
-		if (ofi_check_mr_mode(&usdf_ops,
-				      fabric->api_version,
-				      FI_MR_BASIC | OFI_MR_BASIC_MAP | FI_MR_LOCAL,
-				      info)) {
+		if (ofi_check_mr_mode(
+			&usdf_ops, fabric->api_version,
+			FI_MR_BASIC | FI_MR_ALLOCATED | FI_MR_LOCAL, info)) {
 			/* the caller ignored our fi_getinfo results */
 			USDF_WARN_SYS(DOMAIN, "MR mode (%d) not supported\n",
 				      info->domain_attr->mr_mode);
