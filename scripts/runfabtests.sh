@@ -2,7 +2,7 @@
 
 #
 # Copyright (c) 2017, Intel Corporation.  All rights reserved.
-# Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
+# Copyright (c) 2016-2018, Cisco Systems, Inc. All rights reserved.
 # Copyright (c) 2016, Cray, Inc. All rights reserved.
 #
 # This software is available to you under a choice of one of two
@@ -191,7 +191,7 @@ standard_tests=(
 )
 
 unit_tests=(
-	"getinfo_test"
+	"getinfo_test -s SERVER_ADDR GOOD_ADDR"
 	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR"
 	"dom_test -n 2"
 	"eq_test"
