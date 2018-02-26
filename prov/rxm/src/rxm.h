@@ -205,7 +205,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_LMT,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_LMT,
-	RXM_BUF_POOL_END,
+	RXM_BUF_POOL_MAX,
 };
 
 struct rxm_buf {
@@ -330,7 +330,7 @@ struct rxm_ep {
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
 
-	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_END];
+	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
 
 	struct dlist_entry	post_rx_list;
 	struct dlist_entry	repost_ready_list;

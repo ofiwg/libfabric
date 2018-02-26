@@ -323,7 +323,7 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 {
 	size_t i;
 
-	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_END; i++)
+	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_MAX; i++)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
 }
 
