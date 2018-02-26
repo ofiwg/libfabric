@@ -144,6 +144,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 
 			switch (pool->type) {
 			case RXM_BUF_POOL_TX_MSG:
+			case RXM_BUF_POOL_RMA:
 				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 				tx_buf->pkt.hdr.op = ofi_op_msg;
 				break;
@@ -310,6 +311,15 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		if (ret)
 			goto err;
 	}
+
+	ret = rxm_buf_pool_create(rxm_ep,
+				  rxm_ep->msg_info->tx_attr->size,
+				  rxm_ep->rxm_info->tx_attr->inject_size +
+				  sizeof(struct rxm_rma_buf),
+				  &rxm_ep->buf_pools[RXM_BUF_POOL_RMA],
+				  RXM_BUF_POOL_RMA);
+	if (ret)
+		goto err;
 
 	return FI_SUCCESS;
 err:

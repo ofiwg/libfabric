@@ -205,6 +205,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_LMT,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_LMT,
+	RXM_BUF_POOL_RMA,
 	RXM_BUF_POOL_MAX,
 };
 
@@ -253,6 +254,17 @@ struct rxm_tx_buf {
 	struct rxm_pkt pkt;
 };
 
+struct rxm_rma_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	struct fi_msg_rma msg;
+	struct rxm_iov rxm_iov;
+
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
 struct rxm_tx_entry {
 	/* Must stay at top */
 	union {
@@ -267,7 +279,10 @@ struct rxm_tx_entry {
 	void *context;
 	uint64_t flags;
 	uint64_t comp_flags;
-	struct rxm_tx_buf *tx_buf;
+	union {
+		struct rxm_tx_buf *tx_buf;
+		struct rxm_rma_buf *rma_buf;
+	};
 
 	/* Used for large messages */
 	struct fid_mr *mr[RXM_IOV_LIMIT];
@@ -482,7 +497,8 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX_MSG) ||
 	       (type == RXM_BUF_POOL_TX_TAGGED) ||
-	       (type == RXM_BUF_POOL_TX_ACK));
+	       (type == RXM_BUF_POOL_TX_ACK) ||
+	       (type == RXM_BUF_POOL_TX_LMT));
 	return (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
 
@@ -508,6 +524,19 @@ static inline void
 rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
 	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
+			(struct rxm_buf *)rx_buf);
+}
+
+static inline struct rxm_rma_buf *rxm_rma_buf_get(struct rxm_ep *rxm_ep)
+{
+	return (struct rxm_rma_buf *)rxm_buf_get(
+			&rxm_ep->buf_pools[RXM_BUF_POOL_RMA]);
+}
+
+static inline void
+rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
+{
+	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RMA],
 			(struct rxm_buf *)rx_buf);
 }
 
