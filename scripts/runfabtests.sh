@@ -49,7 +49,7 @@ declare TEST_TYPE="quick"
 declare SERVER="127.0.0.1"
 declare CLIENT="127.0.0.1"
 declare EXCLUDE=""
-declare GOOD_ADDR="192.168.10.1"
+declare GOOD_ADDR=""
 declare -i VERBOSE=0
 declare -i SKIP_NEG=0
 declare COMPLEX_CFG
@@ -655,5 +655,6 @@ fi
 
 [ -z $C_INTERFACE ] && C_INTERFACE=$CLIENT
 [ -z $S_INTERFACE ] && S_INTERFACE=$SERVER
+[ -z $GOOD_ADDR ] && GOOD_ADDR=$S_INTERFACE
 
 main ${TEST_TYPE}
