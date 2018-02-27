@@ -156,7 +156,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		return ret;
 	}
 
-	if (++cache->cached_cnt > cache->size) {
+	if (++cache->cached_cnt > cache->max_cached_cnt) {
 		(*entry)->cached = 0;
 	} else {
 		ret = ofi_monitor_subscribe(&cache->nq, iov->iov_base, iov->iov_len,
@@ -234,7 +234,8 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 	cache->search_cnt++;
 
-	while ((cache->cached_cnt >= cache->size) && ofi_mr_cache_flush(cache))
+	while ((cache->cached_cnt >= cache->max_cached_cnt) &&
+	       ofi_mr_cache_flush(cache))
 		;
 
 	iter = rbtFind(cache->mr_tree, (void *) attr->mr_iov);

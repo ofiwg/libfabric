@@ -184,7 +184,7 @@ struct ofi_mr_entry {
 struct ofi_mr_cache {
 	struct util_domain		*domain;
 	struct ofi_notification_queue	nq;
-	size_t				size;
+	size_t				max_cached_cnt;
 	size_t				entry_data_size;
 
 	RbtHandle			mr_tree;
