@@ -58,7 +58,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
 	.mr_cache_enable	= 0,
-	.mr_cache_size		= 4096,
+	.mr_max_cached_cnt	= 4096,
 	.mr_cache_lazy_size	= 0,
 
 	.rdm			= {
@@ -572,11 +572,11 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of mr_cache_enable\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("mr_cache_size", "Maximum number of cache entries",
-				 &fi_ibv_gl_data.mr_cache_size) ||
-	    (fi_ibv_gl_data.mr_cache_size < 0)) {
+	if (fi_ibv_get_param_int("mr_max_cached_cnt", "Maximum number of cache entries",
+				 &fi_ibv_gl_data.mr_max_cached_cnt) ||
+	    (fi_ibv_gl_data.mr_max_cached_cnt < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of mr_cache_size\n");
+			   "Invalid value of mr_max_cached_cnt\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_int("mr_cache_lazy_size",
