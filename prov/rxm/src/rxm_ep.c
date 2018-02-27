@@ -313,7 +313,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 
 	return FI_SUCCESS;
 err:
-	while (--i >= RXM_BUF_POOL_TX_MSG)
+	while (--i >= RXM_BUF_POOL_TX_START)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
 	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 	return ret;
@@ -323,7 +323,7 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 {
 	size_t i;
 
-	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_END; i++)
+	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_MAX; i++)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
 }
 
@@ -881,31 +881,30 @@ rxm_ep_lmt_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	ssize_t ret;
 
+	RXM_LOG_STATE(FI_LOG_EP_DATA, tx_entry->tx_buf->pkt,
+		      RXM_TX, RXM_LMT_TX);
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
-		RXM_LOG_STATE(FI_LOG_EP_DATA, tx_entry->tx_buf->pkt, RXM_TX, RXM_LMT_TX);
-		RXM_LOG_STATE(FI_LOG_CQ, tx_entry->tx_buf->pkt, RXM_LMT_TX, RXM_LMT_ACK_WAIT);
+		RXM_LOG_STATE(FI_LOG_CQ, tx_entry->tx_buf->pkt,
+			      RXM_LMT_TX, RXM_LMT_ACK_WAIT);
 		tx_entry->state = RXM_LMT_ACK_WAIT;
 
 		ret = fi_inject(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size, 0);
-		if (OFI_UNLIKELY(ret)) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-			       "fi_inject for MSG provider failed\n");
-			if (!rxm_ep->rxm_mr_local)
-				rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
-			rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
-			rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
-		}
-		return ret;
 	} else {
-		RXM_LOG_STATE(FI_LOG_EP_DATA, tx_entry->tx_buf->pkt, RXM_TX, RXM_LMT_TX);
 		tx_entry->state = RXM_LMT_TX;
+
 		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
-		if (OFI_UNLIKELY(ret)) {
-			if (!rxm_ep->rxm_mr_local)
-				rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
-		}
-		return ret;
 	}
+	if (OFI_UNLIKELY(ret))
+		goto err;
+	return FI_SUCCESS;
+err:
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+	       "Transmit for MSG provider failed\n");
+	if (!rxm_ep->rxm_mr_local)
+		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
+	rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
+	return ret;
 }
 
 static inline ssize_t
@@ -925,42 +924,32 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
-void rxm_conn_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
-				     struct util_cmap_handle *handle)
+void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
+				   struct rxm_conn *rxm_conn,
+				   struct rxm_tx_entry *tx_entry)
 {
-	struct rxm_tx_entry *tx_entry;
-	struct rxm_tx_buf *tx_buf;
-	size_t tx_size;
-	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	size_t tx_size = rxm_pkt_size + tx_entry->tx_buf->pkt.hdr.size;
 
-	while (!dlist_empty(&rxm_conn->postponed_tx_list)) {
-		dlist_pop_front(&rxm_conn->postponed_tx_list, struct rxm_tx_entry,
-				tx_entry, postponed_entry);
+	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+	       "Send deffered TX request (len - %zx) for %p conn\n",
+	       tx_entry->tx_buf->pkt.hdr.size, rxm_conn);
 
-		tx_size = rxm_pkt_size + tx_entry->tx_buf->pkt.hdr.size;
-		tx_buf = tx_entry->tx_buf;
-		tx_buf->pkt.ctrl_hdr.conn_id = handle->remote_key;
-
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "Send deffered TX request (len - %zx) for %p conn\n",
-		       tx_entry->tx_buf->pkt.hdr.size, rxm_conn);
-
-		if ((tx_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
-		    (tx_entry->flags & FI_INJECT) && !(tx_entry->flags & FI_COMPLETION))  {
-			(void) rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, tx_size);
-			/* Release TX entry for futher reuse */
-			rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
-		} else if (tx_entry->tx_buf->pkt.hdr.size >
-				rxm_ep->rxm_info->tx_attr->inject_size) {
-			struct rxm_rma_iov *rma_iov =
-				(struct rxm_rma_iov *)&tx_entry->tx_buf->pkt.data;
-
-			(void) rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
-						  rxm_pkt_size + sizeof(*rma_iov) +
-						  sizeof(*rma_iov->iov) * tx_entry->count);
-		} else {
-			(void) rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
-		}
+	if ((tx_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
+	    (tx_entry->flags & FI_INJECT) && !(tx_entry->flags & FI_COMPLETION))  {
+		(void) rxm_ep_inject_send(rxm_ep, rxm_conn,
+					  tx_entry->tx_buf, tx_size);
+		/* Release TX entry for futher reuse */
+		rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
+	} else if (tx_entry->tx_buf->pkt.hdr.size >
+			rxm_ep->rxm_info->tx_attr->inject_size) {
+		struct rxm_rma_iov *rma_iov =
+			(struct rxm_rma_iov *)&tx_entry->tx_buf->pkt.data;
+		(void) rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
+					  rxm_pkt_size + sizeof(*rma_iov) +
+					  sizeof(*rma_iov->iov) * tx_entry->count);
+	} else {
+		(void) rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
 	}
 }
 
@@ -1024,18 +1013,20 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			return ret;
 		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-		rxm_conn = container_of(handle, struct rxm_conn, handle);
-		struct iovec iov = {
-			.iov_base = (void *)buf,
-			.iov_len = len,
-		};
-		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
-					   &iov, NULL, len, data, flags,
-					   tag, comp_flags, pool,
-					   /* it doesn't matter what will be passed here */
-					   0);
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);
-		return ret;
+		if (handle->state != CMAP_CONNECTED) {
+			struct iovec iov = {
+				.iov_base = (void *)buf,
+				.iov_len = len,
+			};
+			rxm_conn = container_of(handle, struct rxm_conn, handle);
+			ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
+						   &iov, NULL, len, data, flags,
+						   tag, comp_flags, pool, 0);
+			fastlock_release(&rxm_ep->util_ep.cmap->lock);
+			return ret;
+		}
+		/* The connection was established while the mutex was waiting */
+		fastlock_release(&rxm_ep->util_ep.cmap->lock);	
 	}
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
@@ -1085,14 +1076,20 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			return ret;
 		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-		rxm_conn = container_of(handle, struct rxm_conn, handle);
-		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, context, count, iov, desc,
-					   data_len, data, flags, tag, comp_flags,
-					   (data_len <= rxm_ep->rxm_info->tx_attr->inject_size ?
-					    pool : &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]),
-					   op);
+		if (handle->state != CMAP_CONNECTED) {
+			rxm_conn = container_of(handle, struct rxm_conn, handle);
+			ret = rxm_ep_postpone_send(
+					rxm_ep, rxm_conn, context, count, iov,
+					desc, data_len, data, flags, tag, comp_flags,
+					(data_len <=
+						rxm_ep->rxm_info->tx_attr->inject_size ?
+					 pool :
+					 &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]), op);
+			fastlock_release(&rxm_ep->util_ep.cmap->lock);
+			return ret;
+		}
+		/* The connection was established while the mutex was waiting */
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
-		return ret;
 	}
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 

@@ -205,7 +205,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_LMT,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_LMT,
-	RXM_BUF_POOL_END,
+	RXM_BUF_POOL_MAX,
 };
 
 struct rxm_buf {
@@ -330,7 +330,7 @@ struct rxm_ep {
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
 
-	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_END];
+	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
 
 	struct dlist_entry	post_rx_list;
 	struct dlist_entry	repost_ready_list;
@@ -388,7 +388,9 @@ int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
 
-void rxm_conn_handle_postponed_tx_op(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle);
+void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
+				   struct rxm_conn *rxm_conn,
+				   struct rxm_tx_entry *tx_entry);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {
