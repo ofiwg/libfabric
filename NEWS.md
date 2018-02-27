@@ -20,6 +20,11 @@ v1.6.0, Wed Mar 14, 2018
 -- Fixes to generic name service
 
 ## GNI
+-- Fix a problem with the GNI waitset implementation
+-- Enable use of XPMEM for intra node data transfers
+-- Fix a problem with usage of Crays UDREG registration cache
+-- Fix a problem with an assert statement
+-- Fix several memory leaks
 
 ## PSM
 
