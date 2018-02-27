@@ -262,7 +262,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	struct dlist_entry *tmp;
 
 	FI_INFO(cache->domain->prov, FI_LOG_MR, "MR cache stats: "
-		"searches %" PRIu64 ", deletes %" PRIu64 ", hits %" PRIu64 "\n",
+		"searches %zu, deletes %zu, hits %zu\n",
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt);
 
 	util_mr_cache_process_events(cache);

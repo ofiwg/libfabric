@@ -190,10 +190,10 @@ struct ofi_mr_cache {
 	RbtHandle			mr_tree;
 	struct dlist_entry		lru_list;
 
-	uint64_t			cached_cnt;
-	uint64_t			search_cnt;
-	uint64_t			delete_cnt;
-	uint64_t			hit_cnt;
+	size_t				cached_cnt;
+	size_t				search_cnt;
+	size_t				delete_cnt;
+	size_t				hit_cnt;
 
 	int				(*add_region)(struct ofi_mr_cache *cache,
 						      struct ofi_mr_entry *entry);
