@@ -1,8 +1,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_SEND,
@@ -32,8 +31,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_WRITE,
@@ -65,8 +63,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_WRITE,
@@ -95,8 +92,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_ATOMIC,
@@ -156,8 +152,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_FETCH_ATOMIC,
@@ -203,8 +198,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_COMPARE_ATOMIC,
@@ -256,8 +250,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_ATOMIC,
@@ -314,8 +307,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_FETCH_ATOMIC,
@@ -358,8 +350,7 @@
 {
 	prov_name: shm,
 	test_type: [
-		FT_TEST_LATENCY,
-		FT_TEST_BANDWIDTH,
+		FT_TEST_UNIT,
 	],
 	class_function: [
 		FT_FUNC_COMPARE_ATOMIC,

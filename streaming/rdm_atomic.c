@@ -228,13 +228,12 @@ static inline int execute_base_atomic_op(enum fi_op op)
 {
 	int ret;
 
-	ret = fi_atomic(ep, buf, 1, mr_desc, remote_fi_addr, remote.addr,
-		       	remote.key, datatype, op, &fi_ctx_atomic);
-	if (ret) {
-		FT_PRINTERR("fi_atomic", ret);
-	} else {
-		ret = ft_get_tx_comp(++tx_seq);
-	}
+	ret = ft_post_atomic(FT_ATOMIC_BASE, ep, NULL, NULL, NULL, NULL,
+			     &remote, datatype, op, &fi_ctx_atomic);
+	if (ret)
+		return ret;
+
+	ret = ft_get_tx_comp(tx_seq);
 
 	return ret;
 }
@@ -243,14 +242,13 @@ static inline int execute_fetch_atomic_op(enum fi_op op)
 {
 	int ret;
 
-	ret = fi_fetch_atomic(ep, buf, 1, mr_desc, result,
-			fi_mr_desc(mr_result), remote_fi_addr, remote.addr,
-			remote.key, datatype, op, &fi_ctx_atomic);
-	if (ret) {
-		FT_PRINTERR("fi_fetch_atomic", ret);
-	} else {
-		ret = ft_get_tx_comp(++tx_seq);
-	}
+	ret = ft_post_atomic(FT_ATOMIC_FETCH, ep, NULL, NULL, result,
+			     fi_mr_desc(mr_result), &remote, datatype,
+			     op, &fi_ctx_atomic);
+	if (ret)
+		return ret;
+
+	ret = ft_get_tx_comp(tx_seq);
 
 	return ret;
 }
@@ -259,15 +257,13 @@ static inline int execute_compare_atomic_op(enum fi_op op)
 {
 	int ret;
 
-	ret = fi_compare_atomic(ep, buf, 1, mr_desc, compare,
-			fi_mr_desc(mr_compare), result, fi_mr_desc(mr_result),
-			remote_fi_addr, remote.addr, remote.key, datatype, op,
-			&fi_ctx_atomic);
-	if (ret) {
-		FT_PRINTERR("fi_compare_atomic", ret);
-	} else {
-		ret = ft_get_tx_comp(++tx_seq);
-	}
+	ret = ft_post_atomic(FT_ATOMIC_COMPARE, ep, compare, fi_mr_desc(mr_compare),
+			     result, fi_mr_desc(mr_result), &remote, datatype,
+			     op, &fi_ctx_atomic);
+	if (ret)
+		return ret;
+
+	ret = ft_get_tx_comp(tx_seq);
 
 	return ret;
 }

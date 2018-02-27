@@ -125,6 +125,12 @@ enum ft_rma_opcodes {
 	FT_RMA_WRITEDATA,
 };
 
+enum ft_atomic_opcodes {
+	FT_ATOMIC_BASE,
+	FT_ATOMIC_FETCH,
+	FT_ATOMIC_COMPARE,
+};
+
 struct ft_opts {
 	int iterations;
 	int warmup_iterations;
@@ -410,6 +416,12 @@ ssize_t ft_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 		struct fi_rma_iov *remote);
 
+
+ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
+		       void *compare, void *compare_desc, void *result,
+		       void *result_desc, struct fi_rma_iov *remote,
+		       enum fi_datatype datatype, enum fi_op atomic_op,
+		       void *context);
 int check_base_atomic_op(struct fid_ep *endpoint, enum fi_op op,
 			 enum fi_datatype datatype, size_t *count);
 int check_fetch_atomic_op(struct fid_ep *endpoint, enum fi_op op,
