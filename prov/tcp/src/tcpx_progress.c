@@ -44,9 +44,7 @@
 
 int tcpx_progress_close(struct tcpx_progress *progress)
 {
-	util_buf_pool_destroy(progress->posted_rx_pool);
 	util_buf_pool_destroy(progress->pe_entry_pool);
-	fastlock_destroy(&progress->posted_rx_pool_lock);
 	return FI_SUCCESS;
 }
 
@@ -150,46 +148,6 @@ static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	}
 }
 
-void posted_rx_find(struct tcpx_pe_entry *pe_entry)
-{
-	struct dlist_entry *entry;
-	struct tcpx_posted_rx *posted_rx;
-	struct tcpx_domain *domain;
-	struct tcpx_ep *ep;
-	size_t posted_buf_size = 0, xfer_size;
-
-	xfer_size = ntohll(pe_entry->msg_hdr.size)-sizeof(pe_entry->msg_hdr);
-
-	ep = pe_entry->ep;
-	domain = container_of(ep->util_ep.domain,
-			      struct tcpx_domain,
-			      util_domain);
-	fastlock_acquire(&ep->posted_rx_list_lock);
-	dlist_foreach(&ep->posted_rx_list, entry) {
-		posted_rx = container_of(entry, struct tcpx_posted_rx, entry);
-		posted_buf_size = ofi_total_iov_len(posted_rx->msg_data.iov,
-					     posted_rx->msg_data.iov_cnt);
-		if (posted_buf_size >= xfer_size) {
-			dlist_remove(entry);
-			goto copy_to_pe_entry;
-		}
-	}
-	fastlock_release(&ep->posted_rx_list_lock);
-	return;
-
-copy_to_pe_entry:
-	pe_entry->flags = posted_rx->flags;
-	pe_entry->context = posted_rx->context;
-	pe_entry->msg_data.iov_cnt = posted_rx->msg_data.iov_cnt;
-	memcpy(pe_entry->msg_data.iov, posted_rx->msg_data.iov,
-	       TCPX_IOV_LIMIT*sizeof(pe_entry->msg_data.iov[0]));
-	ofi_truncate_iov(pe_entry->msg_data.iov,
-			 &pe_entry->msg_data.iov_cnt,
-			 xfer_size);
-	util_buf_release(domain->progress.posted_rx_pool, posted_rx);
-	fastlock_release(&ep->posted_rx_list_lock);
-}
-
 static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
 	int ret;
@@ -235,64 +193,18 @@ tx_pe_list:
 	process_tx_pe_entry(pe_entry);
 }
 
-static void process_rx_requests(struct tcpx_ep *ep)
-
-{
-	struct tcpx_pe_entry *pe_entry;
-	struct tcpx_domain *domain;
-
-	domain = container_of(ep->util_ep.domain,
-			      struct tcpx_domain,
-			      util_domain);
-
-	if (!dlist_empty(&ep->rx_queue))
-		return;
-
-	pe_entry = pe_entry_alloc(&domain->progress);
-	if (!pe_entry) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			"failed to allocate pe entry");
-		return ;
-	}
-	pe_entry->ep = ep;
-	dlist_insert_tail(&pe_entry->entry, &ep->rx_queue);
-}
-
 void tcpx_progress(struct util_ep *util_ep)
 {
 	struct tcpx_ep *ep;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	process_rx_requests(ep);
 	process_pe_lists(ep);
 	return;
 }
 
 int tcpx_progress_init(struct tcpx_progress *progress)
 {
-	int ret;
-
-	ret = util_buf_pool_create(&progress->pe_entry_pool,
-				   sizeof(struct tcpx_pe_entry),
-				   16, 0, 1024);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"failed to create buffer pool\n");
-		return ret;
-	}
-
-	fastlock_init(&progress->posted_rx_pool_lock);
-	ret = util_buf_pool_create(&progress->posted_rx_pool,
-				   sizeof(struct tcpx_posted_rx),
-				   16, 0, 1024);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"failed to create buffer pool\n");
-		goto err1;
-	}
-	return FI_SUCCESS;
-err1:
-	fastlock_destroy(&progress->posted_rx_pool_lock);
-	util_buf_pool_destroy(progress->pe_entry_pool);
-	return ret;
+	return util_buf_pool_create(&progress->pe_entry_pool,
+				    sizeof(struct tcpx_pe_entry),
+				    16, 0, 1024);
 }

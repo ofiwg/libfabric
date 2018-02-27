@@ -87,7 +87,7 @@ out:
 	iov[0].iov_len -= consumed;
 }
 
-void ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size)
+int ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size)
 {
 	size_t i;
 
@@ -95,8 +95,9 @@ void ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size)
 		if (trim_size <= iov[i].iov_len) {
 			iov[i].iov_len = trim_size;
 			*iov_count = i + 1;
-			return;
+			return FI_SUCCESS;
 		}
 		trim_size -= iov[i].iov_len;
 	}
+	return -FI_ETRUNC;
 }
