@@ -59,7 +59,6 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.iface			= NULL,
 	.mr_cache_enable	= 0,
 	.mr_max_cached_cnt	= 4096,
-	.mr_cache_lazy_size	= 0,
 
 	.rdm			= {
 		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
@@ -577,14 +576,6 @@ static int fi_ibv_read_params(void)
 	    (fi_ibv_gl_data.mr_max_cached_cnt < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of mr_max_cached_cnt\n");
-		return -FI_EINVAL;
-	}
-	if (fi_ibv_get_param_int("mr_cache_lazy_size",
-				 "Minimum size of lazy deregistration",
-				 &fi_ibv_gl_data.mr_cache_lazy_size)  ||
-	    (fi_ibv_gl_data.mr_cache_lazy_size < 0)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of mr_cache_lazy_size\n");
 		return -FI_EINVAL;
 	}
 

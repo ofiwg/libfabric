@@ -485,15 +485,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 					&_domain->cache);
 		if (ret)
 			goto err4;
-		if (fi_ibv_gl_data.mr_cache_lazy_size) {
-			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ex_ops.fi_ops;
-			_domain->internal_mr_reg = fi_ibv_mr_internal_ex_ops.internal_mr_reg;
-			_domain->internal_mr_dereg = fi_ibv_mr_internal_ex_ops.internal_mr_dereg;
-		} else {
-			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
-			_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
-			_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
-		}
+		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
+		_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
+		_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
 	} else {
 		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ops.fi_ops;
 		_domain->internal_mr_reg = fi_ibv_mr_internal_ops.internal_mr_reg;

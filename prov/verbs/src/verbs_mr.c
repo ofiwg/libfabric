@@ -324,24 +324,6 @@ int fi_ibv_mr_internal_cache_dereg(struct fi_ibv_mem_desc *md)
 	return FI_SUCCESS;
 }
 
-static inline
-int fi_ibv_mr_internal_ex_reg(struct fi_ibv_domain *domain, void *buf,
-			      size_t len, uint64_t access,
-			      struct fi_ibv_mem_desc *md)
-{
-	return ((len >= fi_ibv_gl_data.mr_cache_lazy_size) ?
-		fi_ibv_mr_internal_cache_reg(domain, buf, len, access, md) :
-		fi_ibv_mr_internal_reg(domain, buf, len, access, md));
-}
-
-static inline
-int fi_ibv_mr_internal_ex_dereg(struct fi_ibv_mem_desc *md)
-{
-	return ((md->len >= fi_ibv_gl_data.mr_cache_lazy_size) ?
-		fi_ibv_mr_internal_cache_dereg(md) :
-		fi_ibv_mr_internal_dereg(md));
-}
-
 static int fi_ibv_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			     uint64_t flags, struct fid_mr **mr)
 {
@@ -519,13 +501,3 @@ static int fi_ibv_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *att
 }
 
 FI_IBV_DEFINE_MR_REG_OPS(_cache_)
-
-static int fi_ibv_mr_ex_regattr(struct fid *fid, const struct fi_mr_attr *attr,
-				  uint64_t flags, struct fid_mr **mr)
-{
-	return ((attr->mr_iov[0].iov_len >= fi_ibv_gl_data.mr_cache_lazy_size) ?
-		fi_ibv_mr_cache_regattr(fid, attr, flags, mr) :
-		fi_ibv_mr_regattr(fid, attr, flags, mr));
-}
-
-FI_IBV_DEFINE_MR_REG_OPS(_ex_)
