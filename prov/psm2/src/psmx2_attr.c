@@ -78,8 +78,8 @@ static struct fi_ep_attr psmx2_ep_attr = {
 	.max_order_war_size	= PSMX2_RMA_ORDER_SIZE,
 	.max_order_waw_size	= PSMX2_RMA_ORDER_SIZE,
 	.mem_tag_format		= FI_TAG_GENERIC, /* >>= 4 */
-	.tx_ctx_cnt		= 1, /* psmx2_env.free_trx_ctxt */
-	.rx_ctx_cnt		= 1, /* psmx2_env.free_trx_ctxt */
+	.tx_ctx_cnt		= 1,
+	.rx_ctx_cnt		= 1,
 	.auth_key_size		= sizeof(psm2_uuid_t),
 	.auth_key		= NULL,
 };
@@ -319,8 +319,6 @@ void psmx2_update_prov_info(struct fi_info *info,
 		info->domain_attr->max_ep_tx_ctx = psmx2_env.max_trx_ctxt;
 		info->domain_attr->max_ep_rx_ctx = psmx2_env.max_trx_ctxt;
 		info->domain_attr->max_ep_stx_ctx = psmx2_env.max_trx_ctxt;
-		info->ep_attr->tx_ctx_cnt = psmx2_env.free_trx_ctxt;
-		info->ep_attr->rx_ctx_cnt = psmx2_env.free_trx_ctxt;
 		info->tx_attr->inject_size = psmx2_env.inject_size;
 	}
 }
