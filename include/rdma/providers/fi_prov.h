@@ -130,6 +130,11 @@ fi_param_get_bool(struct fi_provider *provider, const char *param_name, int *val
 	return fi_param_get(provider, param_name, value);
 }
 
+static inline int
+fi_param_get_size_t(struct fi_provider *provider, const char *param_name, size_t *value)
+{
+	return fi_param_get(provider, param_name, value);
+}
 
 #ifdef __cplusplus
 }
