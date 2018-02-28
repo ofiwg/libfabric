@@ -175,7 +175,7 @@ uint64_t smr_rx_comp_flags(uint32_t op, uint16_t op_flags)
 
 	flags = smr_rx_flags[op];
 
-	if (op_flags & OFI_REMOTE_CQ_DATA)
+	if (op_flags & SMR_REMOTE_CQ_DATA)
 		flags |= FI_REMOTE_CQ_DATA;
 
 	return flags;

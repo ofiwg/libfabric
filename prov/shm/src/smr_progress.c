@@ -365,7 +365,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
 
-	if (cmd->msg.hdr.op_flags & OFI_REMOTE_CQ_DATA &&
+	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA &&
 	    ofi_cirque_isfull(ep->util_ep.rx_cq->cirq)) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"rx cq full\n");
@@ -408,7 +408,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 			"unidentified operation type\n");
 		err = -FI_EINVAL;
 	}
-	if (cmd->msg.hdr.op_flags & OFI_REMOTE_CQ_DATA) {
+	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA) {
 		ret = ep->rx_comp(ep, (void *) cmd->msg.hdr.msg_id,
 				  smr_rx_comp_flags(cmd->msg.hdr.op,
 				  cmd->msg.hdr.op_flags), total_len,

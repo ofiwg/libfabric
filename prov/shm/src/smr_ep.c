@@ -230,7 +230,7 @@ void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id,
 {
 	cmd->msg.hdr.op = op;
 	cmd->msg.hdr.op_flags = op_flags & FI_REMOTE_CQ_DATA ?
-				OFI_REMOTE_CQ_DATA : 0;
+				SMR_REMOTE_CQ_DATA : 0;
 	if (op == ofi_op_tagged) {
 		cmd->msg.hdr.tag = tag;
 	} else if (op == ofi_op_atomic ||
