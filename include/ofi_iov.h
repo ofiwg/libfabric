@@ -126,6 +126,6 @@ ofi_iov_within(const struct iovec *iov1, const struct iovec *iov2)
 
 void ofi_consume_iov(struct iovec *iovec, size_t *iovec_count, size_t offset);
 
-void ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size);
+int ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size);
 
 #endif /* _OFI_IOV_H_ */

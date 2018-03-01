@@ -191,8 +191,6 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
-	struct dlist_entry	posted_rx_list;
-	fastlock_t		posted_rx_list_lock;
 };
 
 struct tcpx_fabric {
@@ -223,20 +221,11 @@ struct tcpx_pe_entry {
 
 struct tcpx_progress {
 	struct util_buf_pool	*pe_entry_pool;
-	struct util_buf_pool	*posted_rx_pool;
-	fastlock_t		posted_rx_pool_lock;
 };
 
 struct tcpx_domain {
 	struct util_domain	util_domain;
 	struct tcpx_progress	progress;
-};
-
-struct tcpx_posted_rx {
-	struct tcpx_msg_data	msg_data;
-	struct dlist_entry	entry;
-	uint64_t		flags;
-	void			*context;
 };
 
 #endif //_TCP_H_

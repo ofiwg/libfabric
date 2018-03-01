@@ -58,7 +58,6 @@ int tcpx_send_msg(struct tcpx_pe_entry *pe_entry)
 }
 
 static int tcpx_recv_msg_hdr(struct tcpx_pe_entry *pe_entry)
-
 {
 	ssize_t bytes_recvd;
 	void *rem_hdr_buf;
@@ -78,8 +77,10 @@ static int tcpx_recv_msg_hdr(struct tcpx_pe_entry *pe_entry)
 		return -FI_EAGAIN;
 
 	pe_entry->msg_hdr.op_data = TCPX_OP_MSG_RECV;
-	posted_rx_find(pe_entry);
-	return FI_SUCCESS;
+	return ofi_truncate_iov(pe_entry->msg_data.iov,
+				&pe_entry->msg_data.iov_cnt,
+				(ntohll(pe_entry->msg_hdr.size) -
+				 sizeof(pe_entry->msg_hdr)));
 }
 
 int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry)
