@@ -62,8 +62,11 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 		ofi_monitor_unsubscribe(&entry->subscription);
 	}
 	cache->delete_region(cache, entry);
-	free(entry);
+	assert((cache->cached_cnt != 0) &&
+	       (((ssize_t)cache->cached_size - (ssize_t)entry->iov.iov_len) >= 0));
 	cache->cached_cnt--;
+	cache->cached_size -= entry->iov.iov_len;
+	free(entry);
 }
 
 static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
@@ -156,7 +159,9 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		return ret;
 	}
 
-	if (++cache->cached_cnt > cache->size) {
+	cache->cached_size += iov->iov_len;
+	if ((++cache->cached_cnt > cache->max_cached_cnt) ||
+	    (cache->cached_size > cache->max_cached_size)) {
 		(*entry)->cached = 0;
 	} else {
 		ret = ofi_monitor_subscribe(&cache->nq, iov->iov_base, iov->iov_len,
@@ -234,7 +239,9 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 	cache->search_cnt++;
 
-	while ((cache->cached_cnt >= cache->size) && ofi_mr_cache_flush(cache))
+	while (((cache->cached_cnt >= cache->max_cached_cnt) ||
+		(cache->cached_size >= cache->max_cached_size)) &&
+	       ofi_mr_cache_flush(cache))
 		;
 
 	iter = rbtFind(cache->mr_tree, (void *) attr->mr_iov);
@@ -261,7 +268,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	struct dlist_entry *tmp;
 
 	FI_INFO(cache->domain->prov, FI_LOG_MR, "MR cache stats: "
-		"searches %" PRIu64 ", deletes %" PRIu64 ", hits %" PRIu64 "\n",
+		"searches %zu, deletes %zu, hits %zu\n",
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt);
 
 	util_mr_cache_process_events(cache);
@@ -277,6 +284,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	ofi_monitor_del_queue(&cache->nq);
 	ofi_atomic_dec32(&cache->domain->ref);
 	assert(cache->cached_cnt == 0);
+	assert(cache->cached_size == 0);
 }
 
 int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monitor,
@@ -293,6 +301,9 @@ int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monito
 
 	dlist_init(&cache->lru_list);
 	cache->cached_cnt = 0;
+	cache->cached_size = 0;
+	if (!cache->max_cached_size)
+		cache->max_cached_size = SIZE_MAX;
 	cache->search_cnt = 0;
 	cache->delete_cnt = 0;
 	cache->hit_cnt = 0;

@@ -184,16 +184,18 @@ struct ofi_mr_entry {
 struct ofi_mr_cache {
 	struct util_domain		*domain;
 	struct ofi_notification_queue	nq;
-	size_t				size;
+	size_t				max_cached_cnt;
+	size_t				max_cached_size;
 	size_t				entry_data_size;
 
 	RbtHandle			mr_tree;
 	struct dlist_entry		lru_list;
 
-	uint64_t			cached_cnt;
-	uint64_t			search_cnt;
-	uint64_t			delete_cnt;
-	uint64_t			hit_cnt;
+	size_t				cached_cnt;
+	size_t				cached_size;
+	size_t				search_cnt;
+	size_t				delete_cnt;
+	size_t				hit_cnt;
 
 	int				(*add_region)(struct ofi_mr_cache *cache,
 						      struct ofi_mr_entry *entry);

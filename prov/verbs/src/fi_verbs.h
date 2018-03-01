@@ -184,8 +184,8 @@ extern struct fi_ibv_gl_data {
 	int	cqread_bunch_size;
 	char	*iface;
 	int	mr_cache_enable;
-	int	mr_cache_size;
-	int	mr_cache_lazy_size;
+	int	mr_max_cached_cnt;
+	size_t	mr_max_cached_size;
 
 	struct {
 		int	buffer_num;

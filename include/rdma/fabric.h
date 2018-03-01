@@ -570,7 +570,8 @@ char *fi_tostr(const void *data, enum fi_type datatype);
 enum fi_param_type {
 	FI_PARAM_STRING,
 	FI_PARAM_INT,
-	FI_PARAM_BOOL
+	FI_PARAM_BOOL,
+	FI_PARAM_SIZE_T,
 };
 
 struct fi_param {

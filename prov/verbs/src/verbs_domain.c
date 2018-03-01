@@ -204,7 +204,7 @@ static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
 	ret = util_buf_pool_create(&fi_ibv_mem_notifier->mem_ptrs_ent_pool,
 				   sizeof(struct fi_ibv_mem_ptr_entry),
 				   FI_IBV_MEM_ALIGNMENT, 0,
-				   fi_ibv_gl_data.mr_cache_size);
+				   fi_ibv_gl_data.mr_max_cached_cnt);
 	if (ret)
 		goto err1;
 
@@ -477,7 +477,8 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->monitor.get_event = fi_ibv_monitor_get_event;
 		ofi_monitor_init(&_domain->monitor);
 
-		_domain->cache.size = fi_ibv_gl_data.mr_cache_size;
+		_domain->cache.max_cached_cnt = fi_ibv_gl_data.mr_max_cached_cnt;
+		_domain->cache.max_cached_size = fi_ibv_gl_data.mr_max_cached_size;
 		_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
 		_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
 		_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
@@ -485,15 +486,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 					&_domain->cache);
 		if (ret)
 			goto err4;
-		if (fi_ibv_gl_data.mr_cache_lazy_size) {
-			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ex_ops.fi_ops;
-			_domain->internal_mr_reg = fi_ibv_mr_internal_ex_ops.internal_mr_reg;
-			_domain->internal_mr_dereg = fi_ibv_mr_internal_ex_ops.internal_mr_dereg;
-		} else {
-			_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
-			_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
-			_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
-		}
+		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
+		_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
+		_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
 	} else {
 		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ops.fi_ops;
 		_domain->internal_mr_reg = fi_ibv_mr_internal_ops.internal_mr_reg;
