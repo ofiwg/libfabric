@@ -281,7 +281,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 
 	if (opts.unit < 0 && sep_ctxt_idx >= 0) {
 		should_retry = 1;
-		opts.unit = sep_ctxt_idx % psmx2_env.num_devunits;
+		opts.unit = psmx2_get_round_robin_unit(sep_ctxt_idx);
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"sep %d: ep_open_opts: unit=%d\n", sep_ctxt_idx, opts.unit);
 	}
