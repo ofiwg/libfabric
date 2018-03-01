@@ -657,7 +657,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	if (usage_flags) {
-		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, 0,
+		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, -1,
 						usage_flags);
 		if (!trx_ctxt)
 			goto errout;
@@ -758,7 +758,7 @@ int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		goto errout;
 	}
 
-	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, NULL, 0, PSMX2_TX);
+	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, NULL, -1, PSMX2_TX);
 	if (!trx_ctxt) {
 		err = -FI_ENOMEM;
 		goto errout_free_stx;
@@ -996,7 +996,8 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	for (i = 0; i < ctxt_cnt; i++) {
-		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, i,
+		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr,
+						(ctxt_cnt > 1) ? i : -1,
 						PSMX2_TX_RX);
 		if (!trx_ctxt) {
 			err = -FI_ENOMEM;
