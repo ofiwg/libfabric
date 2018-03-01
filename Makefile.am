@@ -41,6 +41,7 @@ common_srcs =				\
 	src/common.c			\
 	src/enosys.c			\
 	src/rbtree.c			\
+	src/tree.c			\
 	src/fasthash.c			\
 	src/indexer.c			\
 	src/mem.c			\
@@ -137,6 +138,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_rbuf.h			\
 	include/ofi_shm.h			\
 	include/ofi_signal.h			\
+	include/ofi_tree.h			\
 	include/ofi_util.h			\
 	include/ofi_atomic.h			\
 	include/ofi_mr.h			\
