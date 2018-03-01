@@ -1008,26 +1008,29 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, dest_addr, &handle);
-	if (OFI_UNLIKELY(ret)) {
+	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
+	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, dest_addr);
+	if (OFI_UNLIKELY(!handle)) {
+		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+		return -FI_EAGAIN;
+	} else if (OFI_UNLIKELY(handle->state != CMAP_CONNECTED)) {
+		struct iovec iov = {
+			.iov_base = (void *)buf,
+			.iov_len = len,
+		};
+		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
+					      dest_addr, handle);
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-			return ret;
-		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-		if (handle->state != CMAP_CONNECTED) {
-			struct iovec iov = {
-				.iov_base = (void *)buf,
-				.iov_len = len,
-			};
-			rxm_conn = container_of(handle, struct rxm_conn, handle);
-			ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
-						   &iov, NULL, len, data, flags,
-						   tag, comp_flags, pool, 0);
-			fastlock_release(&rxm_ep->util_ep.cmap->lock);
-			return ret;
-		}
-		/* The connection was established while the mutex was waiting */
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);	
+			goto cmap_err;
+		rxm_conn = container_of(handle, struct rxm_conn, handle);
+		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
+					   &iov, NULL, len, data, flags,
+					   tag, comp_flags, pool, 0);
+cmap_err:
+		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+		return ret;
 	}
+	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	assert(dlist_empty(&rxm_conn->postponed_tx_list));
@@ -1071,26 +1074,29 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 
-	ret = ofi_cmap_get_handle(rxm_ep->util_ep.cmap, dest_addr, &handle);
-	if (OFI_UNLIKELY(ret)) {
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-			return ret;
-		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-		if (handle->state != CMAP_CONNECTED) {
-			rxm_conn = container_of(handle, struct rxm_conn, handle);
-			ret = rxm_ep_postpone_send(
-					rxm_ep, rxm_conn, context, count, iov,
-					desc, data_len, data, flags, tag, comp_flags,
-					(data_len <=
-						rxm_ep->rxm_info->tx_attr->inject_size ?
-					 pool :
-					 &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]), op);
-			fastlock_release(&rxm_ep->util_ep.cmap->lock);
-			return ret;
-		}
-		/* The connection was established while the mutex was waiting */
+	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
+	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, dest_addr);
+	if (OFI_UNLIKELY(!handle)) {
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+		return -FI_EAGAIN;
+	} else if (OFI_UNLIKELY(handle->state != CMAP_CONNECTED)) {
+		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
+					      dest_addr, handle);
+		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+			goto cmap_err;
+		rxm_conn = container_of(handle, struct rxm_conn, handle);
+		ret = rxm_ep_postpone_send(
+				rxm_ep, rxm_conn, context, count, iov,
+				desc, data_len, data, flags, tag, comp_flags,
+				(data_len <=
+					rxm_ep->rxm_info->tx_attr->inject_size ?
+				 pool :
+				 &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]), op);
+cmap_err:
+		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+		return ret;
 	}
+	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	assert(dlist_empty(&rxm_conn->postponed_tx_list));
