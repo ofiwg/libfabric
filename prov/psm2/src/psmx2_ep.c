@@ -224,7 +224,7 @@ static int psmx2_ep_close(fid_t fid)
 {
 	struct psmx2_fid_ep *ep;
 	struct psmx2_ep_name ep_name;
-	struct psmx2_trx_ctxt *trx_ctxt;
+	int usage_flags = 0;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
@@ -239,22 +239,19 @@ static int psmx2_ep_close(fid_t fid)
 	if (ep->stx)
 		ofi_atomic_dec32(&ep->stx->ref);
 
+	if (ep->tx && !ep->stx)
+		usage_flags |= PSMX2_TX;
+
 	if (ep->rx) {
+		usage_flags |= PSMX2_RX;
 		ep_name.epid = ep->rx->psm2_epid;
 
 		ofi_ns_del_local_name(&ep->domain->fabric->name_server,
 				      &ep->service, &ep_name);
 	}
 
-	if (ep->rx) {
-		psmx2_lock(&ep->domain->trx_ctxt_lock, 1);
-		dlist_remove(&ep->rx->entry);
-		psmx2_unlock(&ep->domain->trx_ctxt_lock, 1);
-	}
-
-	trx_ctxt = ep->rx;
+	psmx2_trx_ctxt_free(ep->rx, usage_flags);
 	psmx2_ep_close_internal(ep);
-	psmx2_trx_ctxt_free(trx_ctxt);
 	return 0;
 }
 
@@ -525,7 +522,8 @@ static struct fi_ops_ep psmx2_ep_ops = {
 int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 			   struct fi_info *info,
 			   struct psmx2_fid_ep **ep_out, void *context,
-			   struct psmx2_trx_ctxt *trx_ctxt)
+			   struct psmx2_trx_ctxt *trx_ctxt,
+			   int usage_flags)
 {
 	struct psmx2_fid_ep *ep_priv;
 	uint64_t ep_cap;
@@ -566,8 +564,12 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 	ep_priv->ep.ops = &psmx2_ep_ops;
 	ep_priv->ep.cm = &psmx2_cm_ops;
 	ep_priv->domain = domain_priv;
-	ep_priv->rx = trx_ctxt;
-	if (!(info && info->ep_attr && info->ep_attr->tx_ctx_cnt == FI_SHARED_CONTEXT))
+	if (usage_flags & PSMX2_RX) {
+		ep_priv->rx = trx_ctxt;
+		if (trx_ctxt)
+			trx_ctxt->ep = ep_priv; /* only used by RMA target */
+	}
+	if (usage_flags & PSMX2_TX)
 		ep_priv->tx = trx_ctxt;
 	ofi_atomic_initialize32(&ep_priv->ref, 0);
 
@@ -623,21 +625,28 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx2_ep_name *src_addr;
 	struct psmx2_trx_ctxt *trx_ctxt = NULL;
 	int err = -FI_EINVAL;
-	int alloc_trx_ctxt = 1;
+	int usage_flags = PSMX2_TX_RX;
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid.fid);
 	if (!domain_priv)
 		goto errout;
 
-	if (info && info->ep_attr && info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
+	if (info && info->ep_attr &&
+	    info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
 		return  -FI_ENOSYS;
 
-	if (info && info->ep_attr && info->ep_attr->tx_ctx_cnt == FI_SHARED_CONTEXT &&
-	    !ofi_recv_allowed(info->caps) && !ofi_rma_target_allowed(info->caps)) {
-		alloc_trx_ctxt = 0;
-		FI_INFO(&psmx2_prov, FI_LOG_EP_CTRL, "Tx only endpoint with STX context.\n");
-	}
+	if (info && info->ep_attr &&
+	    info->ep_attr->tx_ctx_cnt == FI_SHARED_CONTEXT)
+		usage_flags &= ~PSMX2_TX;
+
+	if (info && !ofi_send_allowed(info->caps) &&
+	    !ofi_rma_initiate_allowed(info->caps))
+		usage_flags &= ~PSMX2_TX;
+
+	if (info && !ofi_recv_allowed(info->caps) &&
+	    !ofi_rma_target_allowed(info->caps))
+		usage_flags &= ~PSMX2_RX;
 
 	src_addr = NULL;
 	if (info && info->src_addr) {
@@ -647,14 +656,18 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 			src_addr = info->src_addr;
 	}
 
-	if (alloc_trx_ctxt) {
-		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, 0);
+	if (usage_flags) {
+		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, 0,
+						usage_flags);
 		if (!trx_ctxt)
 			goto errout;
+	} else {
+		FI_INFO(&psmx2_prov, FI_LOG_EP_CTRL,
+			"Tx only endpoint with STX context.\n");
 	}
 
 	err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
-				     trx_ctxt);
+				     trx_ctxt, usage_flags);
 	if (err)
 		goto errout_free_ctxt;
 
@@ -670,14 +683,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->service = ((getpid() & 0x7FFF) << 16) +
 				   ((uintptr_t)ep_priv & 0xFFFF);
 
-	if (alloc_trx_ctxt) {
-		trx_ctxt->ep = ep_priv;
-
-		psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
-		dlist_insert_before(&trx_ctxt->entry,
-				    &domain_priv->trx_ctxt_list);
-		psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
-
+	if (usage_flags) {
 		ep_name.epid = trx_ctxt->psm2_epid;
 		ep_name.type = ep_priv->type;
 
@@ -689,7 +695,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	return 0;
 
 errout_free_ctxt:
-	psmx2_trx_ctxt_free(trx_ctxt);
+	psmx2_trx_ctxt_free(trx_ctxt, usage_flags);
 
 errout:
 	return err;
@@ -708,11 +714,7 @@ static int psmx2_stx_close(fid_t fid)
 	if (ofi_atomic_get32(&stx->ref))
 		return -FI_EBUSY;
 
-	psmx2_lock(&stx->domain->trx_ctxt_lock, 1);
-	dlist_remove(&stx->tx->entry);
-	psmx2_unlock(&stx->domain->trx_ctxt_lock, 1);
-
-	psmx2_trx_ctxt_free(stx->tx);
+	psmx2_trx_ctxt_free(stx->tx, PSMX2_TX);
 	psmx2_domain_release(stx->domain);
 	free(stx);
 	return 0;
@@ -756,7 +758,7 @@ int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		goto errout;
 	}
 
-	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, NULL/*src_addr*/, 0);
+	trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, NULL, 0, PSMX2_TX);
 	if (!trx_ctxt) {
 		err = -FI_ENOMEM;
 		goto errout_free_stx;
@@ -770,11 +772,6 @@ int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 	stx_priv->domain = domain_priv;
 	stx_priv->tx = trx_ctxt;
 	ofi_atomic_initialize32(&stx_priv->ref, 0);
-
-	psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
-	dlist_insert_before(&trx_ctxt->entry,
-			    &domain_priv->trx_ctxt_list);
-	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
 
 	*stx = &stx_priv->stx;
 	return 0;
@@ -814,14 +811,10 @@ static int psmx2_sep_close(fid_t fid)
 			      &sep->service, &ep_name);
 
 	for (i = 0; i < sep->ctxt_cnt; i++) {
-		psmx2_lock(&sep->domain->trx_ctxt_lock, 1);
-		dlist_remove(&sep->ctxts[i].trx_ctxt->entry);
-		psmx2_unlock(&sep->domain->trx_ctxt_lock, 1);
+		psmx2_trx_ctxt_free(sep->ctxts[i].trx_ctxt, PSMX2_TX_RX);
 
 		if (sep->ctxts[i].ep)
 			psmx2_ep_close_internal(sep->ctxts[i].ep);
-
-		psmx2_trx_ctxt_free(sep->ctxts[i].trx_ctxt);
 	}
 
 	psmx2_lock(&sep->domain->sep_lock, 1);
@@ -1003,7 +996,8 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	for (i = 0; i < ctxt_cnt; i++) {
-		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, i);
+		trx_ctxt = psmx2_trx_ctxt_alloc(domain_priv, src_addr, i,
+						PSMX2_TX_RX);
 		if (!trx_ctxt) {
 			err = -FI_ENOMEM;
 			goto errout_free_ctxt;
@@ -1012,14 +1006,13 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 		sep_priv->ctxts[i].trx_ctxt = trx_ctxt;
 
 		err = psmx2_ep_open_internal(domain_priv, info, &ep_priv, context,
-					     trx_ctxt);
+					     trx_ctxt, PSMX2_TX_RX);
 		if (err)
 			goto errout_free_ctxt;
 
 		/* override the ops so the fid can't be closed individually */
 		ep_priv->ep.fid.ops = &psmx2_fi_ops_sep_ctxt;
 
-		trx_ctxt->ep = ep_priv;
 		sep_priv->ctxts[i].ep = ep_priv;
 	}
 
@@ -1041,13 +1034,6 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 	dlist_insert_before(&sep_priv->entry, &domain_priv->sep_list);
 	psmx2_unlock(&domain_priv->sep_lock, 1);
 
-	psmx2_lock(&domain_priv->trx_ctxt_lock, 1);
-	for (i = 0; i< ctxt_cnt; i++) {
-		dlist_insert_before(&sep_priv->ctxts[i].trx_ctxt->entry,
-				    &domain_priv->trx_ctxt_list);
-	}
-	psmx2_unlock(&domain_priv->trx_ctxt_lock, 1);
-
 	ep_name.epid = sep_priv->ctxts[0].trx_ctxt->psm2_epid;
 	ep_name.sep_id = sep_priv->id;
 	ep_name.type = sep_priv->type;
@@ -1065,11 +1051,12 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 errout_free_ctxt:
 	while (i) {
+		if (sep_priv->ctxts[i].trx_ctxt)
+			psmx2_trx_ctxt_free(sep_priv->ctxts[i].trx_ctxt,
+					    PSMX2_TX_RX);
+
 		if (sep_priv->ctxts[i].ep)
 			psmx2_ep_close_internal(sep_priv->ctxts[i].ep);
-
-		if (sep_priv->ctxts[i].trx_ctxt)
-			psmx2_trx_ctxt_free(sep_priv->ctxts[i].trx_ctxt);
 
 		i--;
 	}
