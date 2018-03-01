@@ -576,8 +576,12 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_TX:
-		assert(comp->flags & (FI_SEND | FI_WRITE));
+		assert(comp->flags & FI_SEND);
 		return rxm_finish_send(tx_entry);
+	case RXM_TX_RMA:
+		assert(comp->flags & (FI_WRITE | FI_READ));
+		rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
+		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_RX:
 		assert(!(comp->flags & FI_REMOTE_READ));
 		assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
