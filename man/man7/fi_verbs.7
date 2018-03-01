@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2018\-02\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2018\-03\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_verbs \- The Verbs Fabric Provider
@@ -93,6 +93,19 @@ It can be turned off by setting the FI_FORK_UNSAFE environment variable
 to "yes".
 This can improve the performance of memory registrations but it also
 makes the use of fork unsafe.
+.SS Memory Registration Cache
+.PP
+The verbs provider features a memory registration cache.
+This speeds up memory registration calls from applications by caching
+registrations of frequently used memory regions.
+The user can control the maximum combined size of all cache entries and
+the maximum number of cache entries with the environment variables
+FI_VERBS_MR_MAX_CACHED_SIZE and FI_VERBS_MR_MAX_CACHED_CNT respectively.
+Look below in the environment variables section for details.
+.PP
+Note: The memory registration cache framework hooks into alloc and free
+calls to monitor the memory regions.
+If this doesn\[aq]t work as expected caching would not be optimal.
 .SH LIMITATIONS
 .SS Memory Regions
 .PP
@@ -179,6 +192,15 @@ from the verbs completion queue at a time (default: 8).
 .PP
 \f[I]FI_VERBS_IFACE\f[] : The prefix or the full name of the network
 interface associated with the verbs device (default: ib)
+.PP
+\f[I]FI_VERBS_MR_CACHE_ENABLE\f[] : Enable Memory Registration caching
+(default: 0)
+.PP
+\f[I]FI_VERBS_MR_MAX_CACHED_CNT\f[] : Maximum number of cache entries
+(default: 4096)
+.PP
+\f[I]FI_VERBS_MR_MAX_CACHED_SIZE\f[] : Maximum total size of cache
+entries (default: 4 GB)
 .SS Variables specific to RDM (internal \- deprecated) endpoints
 .PP
 \f[I]FI_VERBS_RDM_BUFFER_NUM\f[] : The number of pre\-registered buffers
@@ -199,6 +221,11 @@ be used for eager messaging.
 Only IBV_WR_SEND and IBV_WR_RDMA_WRITE_WITH_IMM are supported.
 The last one is not applicable for iWarp.
 (default: IBV_WR_SEND)
+.PP
+\f[I]FI_VERBS_RDM_CM_THREAD_AFFINITY\f[] : If specified, bind the CM
+thread to the indicated range(s) of Linux virtual processor ID(s).
+This option is currently not supported on OS X.
+Usage: id_start[\-id_end[:stride]][,]
 .SS Variables specific to DGRAM endpoints
 .PP
 \f[I]FI_VERBS_DGRAM_USE_NAME_SERVER\f[] : The option that
@@ -207,7 +234,7 @@ The NS thread is used to resolve IP\-addresses to provider specific
 addresses (default: 1, if "OMPI_COMM_WORLD_RANK" and "PMI_RANK"
 environment variables aren\[aq]t defined)
 .PP
-\f[I]FI_VERBS_NAME_SERVVER_PORT\f[] : The port on which Name Server
+\f[I]FI_VERBS_NAME_SERVER_PORT\f[] : The port on which Name Server
 thread listens incoming connections and requests (default: 5678)
 .SS Environment variables notes
 .PP
