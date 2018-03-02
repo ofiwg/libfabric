@@ -42,13 +42,15 @@
 #define VERBS_IB_PREFIX "IB-0x"
 #define VERBS_IWARP_FABRIC "Ethernet-iWARP"
 
-#define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
-			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-			FI_LOCAL_COMM | FI_REMOTE_COMM)
+#define VERBS_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+
+#define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE |	\
+			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |	\
+			VERBS_DOMAIN_CAPS)
 #define VERBS_RDM_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_READ | FI_WRITE |	\
 			FI_RECV | FI_MULTI_RECV | FI_SEND | FI_REMOTE_READ |	\
-			FI_REMOTE_WRITE)
-#define VERBS_DGRAM_CAPS (FI_MSG | FI_RECV | FI_SEND)
+			FI_REMOTE_WRITE | VERBS_DOMAIN_CAPS)
+#define VERBS_DGRAM_CAPS (FI_MSG | FI_RECV | FI_SEND | VERBS_DOMAIN_CAPS)
 
 #define VERBS_RDM_MODE (FI_CONTEXT)
 
@@ -77,6 +79,7 @@ const struct fi_fabric_attr verbs_fabric_attr = {
 };
 
 const struct fi_domain_attr verbs_domain_attr = {
+	.caps			= VERBS_DOMAIN_CAPS,
 	.threading		= FI_THREAD_SAFE,
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
