@@ -607,13 +607,13 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	}
 
 	if (user_attr->max_err_data > prov_attr->max_err_data) {
-		FI_INFO(prov, FI_LOG_CORE, "Max err data too large");
+		FI_INFO(prov, FI_LOG_CORE, "Max err data too large\n");
 		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_err_data);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->mr_cnt > prov_attr->mr_cnt) {
-		FI_INFO(prov, FI_LOG_CORE, "MR count too large");
+		FI_INFO(prov, FI_LOG_CORE, "MR count too large\n");
 		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, mr_cnt);
 		return -FI_ENODATA;
 	}
