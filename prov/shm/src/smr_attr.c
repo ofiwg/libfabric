@@ -59,6 +59,9 @@ struct fi_ep_attr smr_ep_attr = {
 	.protocol = FI_PROTO_SHM,
 	.protocol_version = 1,
 	.max_msg_size = SIZE_MAX,
+	.max_order_raw_size = SIZE_MAX,
+	.max_order_waw_size = SIZE_MAX,
+	.max_order_war_size = SIZE_MAX,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1
 };
