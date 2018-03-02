@@ -35,6 +35,8 @@ v1.6.0, Wed Mar 14, 2018
 
 ## PSM2
 
+-- Skip inactive units in round-robin context allocation
+-- Allow contexts be shared by Tx-only and Rx-only endpoints
 -- Use utility functions to check provider attributes
 -- Turn on FI_THREAD_SAFE support
 -- Make address vector operations thread-safe
