@@ -159,7 +159,7 @@ rxm_ep_format_rma_res(struct rxm_ep *rxm_ep, size_t total_size,
 
 	ret = rxm_ep_format_rma_buf(rxm_ep, total_size,
 				    rma_buf, *tx_entry);
-	if (OFI_UNLIKELY(!ret))
+	if (OFI_UNLIKELY(ret))
 		goto err;
 
 	return FI_SUCCESS;
