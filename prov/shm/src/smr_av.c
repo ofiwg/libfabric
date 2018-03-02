@@ -107,7 +107,35 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
 			 uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct util_av *util_av;
+	struct util_ep *util_ep;
+	struct smr_av *smr_av;
+	struct smr_ep *smr_ep;
+	struct dlist_entry *av_entry;
+	int i, ret = 0;
+
+	util_av = container_of(av_fid, struct util_av, av_fid);
+	smr_av = container_of(util_av, struct smr_av, util_av);
+
+	fastlock_acquire(&util_av->lock);
+	for (i = 0; i < count; i++) {
+		ret = ofi_av_remove_addr(util_av, 0, fi_addr[i]);
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_AV,
+				"Unable to remove address from AV\n");
+			break;
+		}
+
+		smr_map_del(smr_av->smr_map, fi_addr[i]);
+		dlist_foreach(&util_av->ep_list, av_entry) {
+			util_ep = container_of(av_entry, struct util_ep, av_entry);
+			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
+			smr_unmap_from_endpoint(smr_ep->region, fi_addr[i]);
+		}
+	}
+
+	fastlock_release(&util_av->lock);
+	return ret;
 }
 
 static int smr_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,

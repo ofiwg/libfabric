@@ -247,6 +247,7 @@ int	smr_map_create(const struct fi_provider *prov, int peer_count,
 int	smr_map_to_region(const struct fi_provider *prov,
 			  struct smr_peer *peer_buf);
 void	smr_map_to_endpoint(struct smr_region *region, int index);
+void	smr_unmap_from_endpoint(struct smr_region *region, int index);
 void	smr_exchange_all_peers(struct smr_region *region);
 int	smr_map_add(const struct fi_provider *prov,
 		    struct smr_map *map, const char *name, int id);
