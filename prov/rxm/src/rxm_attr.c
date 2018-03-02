@@ -36,6 +36,8 @@
 		     FI_READ | FI_WRITE | FI_RECV | FI_SEND |		\
 		     FI_REMOTE_READ | FI_REMOTE_WRITE | FI_SOURCE)
 
+#define RXM_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+
 /* Since we are a layering provider, the attributes for which we rely on the
  * core provider are set to full capability. This ensures that ofix_getinfo
  * check hints succeeds and the core provider can accept / reject any capability
@@ -70,6 +72,7 @@ struct fi_ep_attr rxm_ep_attr = {
 };
 
 struct fi_domain_attr rxm_domain_attr = {
+	.caps = RXM_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
@@ -94,7 +97,7 @@ struct fi_fabric_attr rxm_fabric_attr = {
 };
 
 struct fi_info rxm_info = {
-	.caps = RXM_EP_CAPS | FI_MULTI_RECV,
+	.caps = RXM_EP_CAPS | RXM_DOMAIN_CAPS | FI_MULTI_RECV,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
