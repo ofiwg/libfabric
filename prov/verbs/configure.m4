@@ -34,7 +34,7 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[verbs_ibverbs_exp_happy=0])
 
 	       FI_CHECK_PACKAGE([verbs_rdmacm],
-				[rdma/rsocket.h],
+				[rdma/rdma_cma.h],
 				[rdmacm],
 				[rdma_create_qp],
 				[],
