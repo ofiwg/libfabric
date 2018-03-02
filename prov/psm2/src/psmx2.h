@@ -832,6 +832,8 @@ void	psmx2_alter_prov_info(uint32_t api_version, const struct fi_info *hints,
 			      struct fi_info *info);
 
 void	psmx2_init_tag_layout(struct fi_info *info);
+int	psmx2_get_round_robin_unit(int idx);
+
 int	psmx2_fabric(struct fi_fabric_attr *attr,
 		     struct fid_fabric **fabric, void *context);
 int	psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,

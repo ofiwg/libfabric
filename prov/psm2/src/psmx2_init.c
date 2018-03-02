@@ -241,19 +241,36 @@ static int psmx2_read_sysfs_int(int unit, char *entry)
 	return ret;
 }
 
-static void psmx2_update_sep_cap(void)
+static int psmx2_unit_active(int unit)
+{
+	return (4 == psmx2_read_sysfs_int(unit, "ports/1/state"));
+}
+
+#define PSMX2_MAX_UNITS	4
+static int psmx2_active_units[PSMX2_MAX_UNITS];
+static int psmx2_num_active_units;
+
+static void psmx2_update_hfi_info(void)
 {
 	int i;
 	int nctxts = 0;
 	int nfreectxts = 0;
 
+	assert(psmx2_env.num_devunits <= PSMX2_MAX_UNITS);
+
+	psmx2_num_active_units = 0;
 	for (i = 0; i < psmx2_env.num_devunits; i++) {
+		if (!psmx2_unit_active(i))
+			continue;
 		nctxts += psmx2_read_sysfs_int(i, "nctxts");
 		nfreectxts += psmx2_read_sysfs_int(i, "nfreectxts");
+		psmx2_active_units[psmx2_num_active_units++] = i;
 	}
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"hfi1 units: total %d, active %d; "
 		"hfi1 contexts: total %d, free %d\n",
+		psmx2_env.num_devunits, psmx2_num_active_units,
 		nctxts, nfreectxts);
 
 	if (psmx2_env.multi_ep) {
@@ -266,6 +283,13 @@ static void psmx2_update_sep_cap(void)
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
 		"Tx/Rx contexts: %d in total, %d available.\n",
 		psmx2_env.max_trx_ctxt, psmx2_env.free_trx_ctxt);
+}
+
+int psmx2_get_round_robin_unit(int idx)
+{
+	return psmx2_num_active_units ?
+			psmx2_active_units[idx % psmx2_num_active_units] :
+			-1;
 }
 
 static int psmx2_getinfo(uint32_t api_version, const char *node,
@@ -313,7 +337,13 @@ static int psmx2_getinfo(uint32_t api_version, const char *node,
 		goto err_out;
 	}
 	psmx2_env.num_devunits = cnt;
-	psmx2_update_sep_cap();
+	psmx2_update_hfi_info();
+
+	if (!psmx2_num_active_units) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"no PSM2 device is active.\n");
+		goto err_out;
+	}
 
 	/* Set src or dest to used supplied address in native format */
 	if (node &&
