@@ -223,6 +223,14 @@ static void smr_init_queue(struct smr_queue *queue,
 	queue->match_func = match_func;
 }
 
+void smr_post_pend_resp(struct smr_cmd *cmd, struct smr_cmd *pend,
+			struct smr_resp *resp)
+{
+	*pend = *cmd;
+	resp->msg_id = (uint64_t) (uintptr_t) pend;
+	resp->status = FI_EBUSY;
+}
+
 void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id,
 			uint32_t op, uint64_t tag, uint8_t datatype,
 			uint8_t atomic_op, uint64_t data,
@@ -230,7 +238,7 @@ void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id,
 {
 	cmd->msg.hdr.op = op;
 	cmd->msg.hdr.op_flags = op_flags & FI_REMOTE_CQ_DATA ?
-				OFI_REMOTE_CQ_DATA : 0;
+				SMR_REMOTE_CQ_DATA : 0;
 	if (op == ofi_op_tagged) {
 		cmd->msg.hdr.tag = tag;
 	} else if (op == ofi_op_atomic ||
@@ -281,11 +289,7 @@ void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
 	cmd->msg.hdr.msg_id = (uint64_t) (uintptr_t) context;
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 
-	*pend_cmd = *cmd;
-
-	resp->msg_id = (uint64_t) (uintptr_t) pend_cmd;
-	resp->status = FI_EBUSY;
-
+	smr_post_pend_resp(cmd, pend_cmd, resp);
 }
 
 static int smr_ep_close(struct fid *fid)

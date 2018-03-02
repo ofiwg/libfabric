@@ -96,6 +96,9 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		if (fast_rma) {
 			cur->domain_attr->mr_mode = FI_MR_VIRT_ADDR;
 			cur->tx_attr->msg_order = FI_ORDER_SAS;
+			cur->ep_attr->max_order_raw_size = 0;
+			cur->ep_attr->max_order_waw_size = 0;
+			cur->ep_attr->max_order_war_size = 0;
 		}
 	}
 	return 0;

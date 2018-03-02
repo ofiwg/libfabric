@@ -74,12 +74,15 @@ enum {
 	smr_src_iov,	/* reference iovec via CMA */
 };
 
+#define SMR_REMOTE_CQ_DATA	(1 << 0)
+#define SMR_RMA_REQ		(1 << 1)
+
 /* 
  * Unique smr_op_hdr for smr message protocol:
  * 	addr - local fi_addr of peer sending msg (for shm lookup)
- * 	op - type of op (ex. ofi_op_msg, defined in fi_proto.h)
+ * 	op - type of op (ex. ofi_op_msg, defined in ofi_proto.h)
  * 	op_src - msg src (ex. smr_src_inline, defined above)
- * 	op_flags - operation flags (ex. OFI_REMOTE_CQ_DATA, in fi_proto.h)
+ * 	op_flags - operation flags (ex. SMR_REMOTE_CQ_DATA, defined above)
  * 	src_data - src of additional op data (inject offset / resp offset)
  * 	data - remote CQ data
  */

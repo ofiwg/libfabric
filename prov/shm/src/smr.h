@@ -200,6 +200,8 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 int smr_verify_peer(struct smr_ep *ep, int peer_id);
 
+void smr_post_pend_resp(struct smr_cmd *cmd, struct smr_cmd *pend,
+			struct smr_resp *resp);
 void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id,
 		uint32_t op, uint64_t tag, uint8_t datatype, uint8_t atomic_op,
 		uint64_t data, uint64_t op_flags);
