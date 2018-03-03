@@ -215,6 +215,25 @@ void smr_map_to_endpoint(struct smr_region *region, int index)
 	}
 }
 
+void smr_unmap_from_endpoint(struct smr_region *region, int index)
+{
+	struct smr_region *peer_smr;
+	struct smr_addr *local_peers, *peer_peers;
+	int peer_index;
+
+	local_peers = smr_peer_addr(region);
+
+	memset(local_peers[index].name, 0, SMR_NAME_SIZE);
+	peer_index = region->map->peers[index].peer.addr;
+	if (peer_index == FI_ADDR_UNSPEC)
+		return;
+
+	peer_smr = smr_peer_region(region, index);
+	peer_peers = smr_peer_addr(peer_smr);
+
+	peer_peers[peer_index].addr = FI_ADDR_UNSPEC;
+}
+
 void smr_exchange_all_peers(struct smr_region *region)
 {
 	int i;

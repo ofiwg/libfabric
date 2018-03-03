@@ -258,7 +258,9 @@ static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 				   "with status - %d\n", index, ret);
 			
 		slot = fi_ibv_dgram_av_slot(av_entry);
+		fastlock_acquire(&av->util_av.lock);
 		ret = ofi_av_remove_addr(&av->util_av, slot, index);
+		fastlock_release(&av->util_av.lock);
 		if (ret)
 			VERBS_WARN(FI_LOG_AV,
 				   "Removal of fi_addr %d failed\n",

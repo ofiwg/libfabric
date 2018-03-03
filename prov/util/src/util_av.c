@@ -352,6 +352,9 @@ static void util_av_hash_remove(struct util_av_hash *hash, int slot, int index)
 	hash->free_list = slot_next;
 }
 
+/*
+ * Must hold AV lock
+ */
 int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 {
 	struct util_ep *ep;
@@ -362,8 +365,6 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 		FI_WARN(av->prov, FI_LOG_AV, "index out of range\n");
 		return -FI_EINVAL;
 	}
-
-	fastlock_acquire(&av->lock);
 
 	/* This should stay at top */
 	dlist_foreach_container(&av->ep_list, struct util_ep, ep, av_entry) {
@@ -377,7 +378,7 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 				FI_WARN(av->prov, FI_LOG_DOMAIN, "Unable to move"
 					" handle to peer list. Deleting it.\n");
 				ofi_cmap_del_handle(ep->cmap->handles_av[index]);
-				goto unlock;
+				return ret;
 			}
 		}
 	}
@@ -398,8 +399,7 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 		util_av_set_data(av, index, next, sizeof index);
 		*next = index;
 	}
-unlock:
-	fastlock_release(&av->lock);
+
 	return ret;
 }
 
@@ -971,7 +971,9 @@ static int ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
 	for (i = count - 1; i >= 0; i--) {
 		index = (int) fi_addr[i];
 		slot = ip_av_slot(av, ip_av_get_addr(av, index));
+		fastlock_acquire(&av->lock);
 		ret = ofi_av_remove_addr(av, slot, index);
+		fastlock_release(&av->lock);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
 				"removal of fi_addr %d failed\n", index);
