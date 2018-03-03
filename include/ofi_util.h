@@ -618,6 +618,7 @@ struct ofi_wait_fd_entry {
 	int 			fd;
 	ofi_wait_fd_try_func	try;
 	void			*arg;
+	ofi_atomic32_t		ref;
 };
 
 int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
