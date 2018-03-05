@@ -116,6 +116,7 @@ rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, uint64_t flags,
 	if (OFI_UNLIKELY(!*tx_entry)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to allocate TX entry for RMA!\n");
+		rxm_ep_progress_multi(&rxm_ep->util_ep);
 		return -FI_EAGAIN;
 	}
 

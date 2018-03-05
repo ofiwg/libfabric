@@ -172,6 +172,7 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd)
 	fd_entry = container_of(entry, struct ofi_wait_fd_entry, entry);
 	if (ofi_atomic_dec32(&fd_entry->ref))
 		goto out;
+	dlist_remove(&fd_entry->entry);
 	fi_epoll_del(wait_fd->epoll_fd, fd_entry->fd);
 	free(fd_entry);
 out:
