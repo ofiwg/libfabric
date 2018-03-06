@@ -1499,7 +1499,6 @@ static int rxm_ep_close(struct fid *fid)
 		retv = ret;
 	}
 
-
 	ret = rxm_ep_msg_res_close(rxm_ep);
 	if (ret)
 		retv = ret;
@@ -1527,7 +1526,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep, enum fi_wait_obj wait_obj)
 	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open MSG CQ\n");
-		return ret;;
+		return ret;
 	}
 
 	if (wait_obj != FI_WAIT_NONE) {
