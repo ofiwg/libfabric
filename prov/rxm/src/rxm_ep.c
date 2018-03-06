@@ -1508,6 +1508,20 @@ static int rxm_ep_close(struct fid *fid)
 	return retv;
 }
 
+static int rxm_ep_msg_get_wait_cq_fd(struct rxm_ep *rxm_ep,
+				     enum fi_wait_obj wait_obj)
+{
+	int ret = FI_SUCCESS;
+
+	if ((wait_obj != FI_WAIT_NONE) && (!rxm_ep->msg_cq_fd)) {
+		ret = fi_control(&rxm_ep->msg_cq->fid, FI_GETWAIT, &rxm_ep->msg_cq_fd);
+		if (ret)
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to get MSG CQ fd\n");
+	}
+	return ret;
+}
+
 static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep, enum fi_wait_obj wait_obj)
 {
 	struct rxm_domain *rxm_domain;
@@ -1529,13 +1543,10 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep, enum fi_wait_obj wait_obj)
 		return ret;
 	}
 
-	if (wait_obj != FI_WAIT_NONE) {
-		ret = fi_control(&rxm_ep->msg_cq->fid, FI_GETWAIT, &rxm_ep->msg_cq_fd);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get MSG CQ fd\n");
-			goto err;
-		}
-	}
+	ret = rxm_ep_msg_get_wait_cq_fd(rxm_ep, wait_obj);
+	if (ret)
+		goto err;
+
 	return 0;
 err:
 	ret = fi_close(&rxm_ep->msg_cq->fid);
@@ -1603,6 +1614,15 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (!rxm_ep->msg_cq) {
 			ret = rxm_ep_msg_cq_open(rxm_ep, cntr->wait ?
 						 FI_WAIT_FD : FI_WAIT_NONE);
+			if (ret)
+				return ret;
+		} else if (!rxm_ep->msg_cq_fd && cntr->wait) {
+			/* Reopen CQ with WAIT fd set */
+			ret = fi_close(&rxm_ep->msg_cq->fid);
+			if (ret)
+				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+					"Unable to close msg CQ\n");
+			ret = rxm_ep_msg_cq_open(rxm_ep, FI_WAIT_FD);
 			if (ret)
 				return ret;
 		}
