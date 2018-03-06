@@ -121,7 +121,7 @@ int sock_cq_progress(struct sock_cq *cq)
 		if (tx_ctx->use_shared)
 			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx->stx_ctx);
 		else
-			sock_pe_progress_tx_ctx(cq->domain->pe, tx_ctx);
+			sock_pe_progress_ep_tx(cq->domain->pe, tx_ctx->ep_attr);
 	}
 
 	for (entry = cq->rx_list.next; entry != &cq->rx_list;
@@ -133,7 +133,7 @@ int sock_cq_progress(struct sock_cq *cq)
 		if (rx_ctx->use_shared)
 			sock_pe_progress_rx_ctx(cq->domain->pe, rx_ctx->srx_ctx);
 		else
-			sock_pe_progress_rx_ctx(cq->domain->pe, rx_ctx);
+			sock_pe_progress_ep_rx(cq->domain->pe, rx_ctx->ep_attr);
 	}
 	fastlock_release(&cq->list_lock);
 
