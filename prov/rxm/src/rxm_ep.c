@@ -1423,65 +1423,20 @@ static int rxm_listener_close(struct rxm_ep *rxm_ep)
 
 static int rxm_ep_close(struct fid *fid)
 {
-	struct rxm_ep *rxm_ep;
 	int ret, retv = 0;
+	struct rxm_ep *rxm_ep =
+		container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
+	struct rxm_ep_wait_ref *wait_ref;
 
-	rxm_ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
-
-	if (rxm_ep->util_ep.tx_cq->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.tx_cq->wait,
+	dlist_foreach_container(&rxm_ep->msg_cq_fd_ref_list,
+				struct rxm_ep_wait_ref,
+				wait_ref, entry) {
+		ret = ofi_wait_fd_del(wait_ref->wait,
 				      rxm_ep->msg_cq_fd);
 		if (ret)
 			retv = ret;
-	}
-
-	if (rxm_ep->util_ep.rx_cq->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.rx_cq->wait,
-				      rxm_ep->msg_cq_fd);
-		if (ret)
-			retv = ret;
-	}
-
-	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.tx_cntr->wait,
-				      rxm_ep->msg_cq_fd);
-		if (ret)
-			retv = ret;
-	}
-
-	if (rxm_ep->util_ep.rx_cntr && rxm_ep->util_ep.rx_cntr->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.rx_cntr->wait,
-				      rxm_ep->msg_cq_fd);
-		if (ret)
-			retv = ret;
-	}
-
-	if (rxm_ep->util_ep.rd_cntr && rxm_ep->util_ep.rd_cntr->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.rd_cntr->wait,
-				      rxm_ep->msg_cq_fd);
-		if (ret)
-			retv = ret;
-	}
-
-	if (rxm_ep->util_ep.wr_cntr && rxm_ep->util_ep.wr_cntr->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.wr_cntr->wait,
-				      rxm_ep->msg_cq_fd);
-		if (ret)
-			retv = ret;
-	}
-
-	if (rxm_ep->util_ep.rem_rd_cntr && rxm_ep->util_ep.rem_rd_cntr->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.rem_rd_cntr->wait,
-				      rxm_ep->msg_cq_fd);
-		if (ret)
-			retv = ret;
-	}
-
-	if (rxm_ep->util_ep.rem_wr_cntr && rxm_ep->util_ep.rem_wr_cntr->wait) {
-		ret = ofi_wait_fd_del(rxm_ep->util_ep.rem_wr_cntr->wait,
-				      rxm_ep->msg_cq_fd);
-		if (ret)
-			retv = ret;
+		dlist_remove(&wait_ref->entry);
+		free(wait_ref);
 	}
 
 	if (rxm_ep->util_ep.cmap)
@@ -1573,6 +1528,7 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	struct util_cq *cq;
 	struct util_av *av;
 	struct util_cntr *cntr;
+	struct rxm_ep_wait_ref *wait_ref = NULL;
 	int ret = 0;
 
 	switch (bfid->fclass) {
@@ -1597,11 +1553,19 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 
 		if (cq->wait) {
+			wait_ref = calloc(1, sizeof(struct rxm_ep_wait_ref));
+			if (!wait_ref) {
+				ret = -FI_ENOMEM;
+				goto err1;
+			}
+			wait_ref->wait = cq->wait;
+			dlist_insert_tail(&wait_ref->entry,
+					  &rxm_ep->msg_cq_fd_ref_list);
 			ret = ofi_wait_fd_add(cq->wait, rxm_ep->msg_cq_fd,
 					      rxm_ep_trywait, rxm_ep,
 					      &rxm_ep->util_ep.ep_fid.fid);
 			if (ret)
-				goto err;
+				goto err2;
 		}
 		break;
 	case FI_CLASS_CNTR:
@@ -1628,11 +1592,19 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 
 		if (cntr->wait) {
+			wait_ref = calloc(1, sizeof(struct rxm_ep_wait_ref));
+			if (!wait_ref) {
+				ret = -FI_ENOMEM;
+				goto err1;
+			}
+			wait_ref->wait = cntr->wait;
+			dlist_insert_tail(&wait_ref->entry,
+					  &rxm_ep->msg_cq_fd_ref_list);
 			ret = ofi_wait_fd_add(cntr->wait, rxm_ep->msg_cq_fd,
 					      rxm_ep_trywait, rxm_ep,
 					      &rxm_ep->util_ep.ep_fid.fid);
 			if (ret)
-				goto err;
+				goto err2;
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -1643,9 +1615,10 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		break;
 	}
 	return ret;
-err:
-	ret = fi_close(&rxm_ep->msg_cq->fid);
-	if (ret)
+err2:
+	free(wait_ref);
+err1:
+	if (fi_close(&rxm_ep->msg_cq->fid))
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
 	return ret;
 }
@@ -1768,9 +1741,10 @@ static int rxm_ep_get_core_info(uint32_t version, const struct fi_info *hints,
 static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 			       struct rxm_ep *rxm_ep)
 {
-	struct rxm_domain *rxm_domain;
 	int ret;
 	size_t max_prog_val;
+	struct rxm_domain *rxm_domain =
+		container_of(util_domain, struct rxm_domain, util_domain);
 
 	ret = rxm_ep_get_core_info(util_domain->fabric->fabric_fid.api_version,
 				   rxm_ep->rxm_info, &rxm_ep->msg_info);
@@ -1782,7 +1756,7 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 	rxm_ep->comp_per_progress = (rxm_ep->comp_per_progress > max_prog_val) ?
 				    max_prog_val : rxm_ep->comp_per_progress;
 
-	rxm_domain = container_of(util_domain, struct rxm_domain, util_domain);
+	dlist_init(&rxm_ep->msg_cq_fd_ref_list);
 
 	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 		ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,

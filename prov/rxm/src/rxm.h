@@ -340,6 +340,7 @@ struct rxm_ep {
 	struct fid_eq 		*msg_eq;
 	struct fid_cq 		*msg_cq;
 	int			msg_cq_fd;
+	struct dlist_entry	msg_cq_fd_ref_list;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
 	int			msg_mr_local;
@@ -354,6 +355,11 @@ struct rxm_ep {
 	struct rxm_send_queue	send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+};
+
+struct rxm_ep_wait_ref {
+	struct util_wait	*wait;
+	struct dlist_entry	entry;
 };
 
 extern struct fi_provider rxm_prov;
