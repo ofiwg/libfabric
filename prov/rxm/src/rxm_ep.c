@@ -942,7 +942,7 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 
 	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Send deffered TX request (len - %zx) for %p conn\n",
+	       "Send deffered TX request (len - %zd) for %p conn\n",
 	       tx_entry->tx_buf->pkt.hdr.size, rxm_conn);
 
 	if ((tx_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
@@ -975,7 +975,7 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_tx_buf *tx_buf;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Buffer TX request (len - %zx) for %p conn\n", len, rxm_conn);
+	       "Buffer TX request (len - %zd) for %p conn\n", len, rxm_conn);
 
 	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, count,
 				   len, data, flags, tag, comp_flags,
