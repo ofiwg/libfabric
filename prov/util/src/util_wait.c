@@ -165,7 +165,8 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd)
 	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_fd_match, &fd);
 	if (!entry) {
 		FI_INFO(wait->prov, FI_LOG_FABRIC,
-			"Given fd not found in wait list - %p\n", wait_fd);
+			"Given fd (%d) not found in wait list - %p\n",
+			fd, wait_fd);
 		ret = -FI_EINVAL;
 		goto out;
 	}
@@ -193,7 +194,8 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
 	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_fd_match, &fd);
 	if (entry) {
 		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
-			"wait_fd already added to util_wait fd_list \n");
+		       "Given fd (%d) already added to wait list - %p \n",
+		       fd, wait_fd);
 		fd_entry = container_of(entry, struct ofi_wait_fd_entry, entry);
 		ofi_atomic_inc32(&fd_entry->ref);
 		goto out;
