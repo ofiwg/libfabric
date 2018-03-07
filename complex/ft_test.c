@@ -698,7 +698,7 @@ static int ft_run_bandwidth(void)
 		if (ft_ctrl.size_array[i] > fabric_info->ep_attr->max_msg_size)
 			break;
 
-		if (test_info.test_class & FI_RMA) {
+		if (test_info.test_class & (FI_RMA | FI_ATOMIC)) {
 			ft_tx_ctrl.msg_size = ft_ctrl.size_array[0];
 			ft_tx_ctrl.rma_msg_size = ft_ctrl.size_array[i];
 		} else {
