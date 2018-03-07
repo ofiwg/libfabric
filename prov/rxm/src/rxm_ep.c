@@ -1140,8 +1140,10 @@ cmap_err:
 
 		ret = rxm_ep_format_tx_entry(rxm_ep, context, (uint8_t)count,
 					     flags, comp_flags, tx_buf, &tx_entry);
-		if (OFI_UNLIKELY(ret))
+		if (OFI_UNLIKELY(ret)) {
+			rxm_tx_buf_release(rxm_ep, tx_buf);
 			return ret;
+		}
 		tx_entry->state = RXM_TX;
 		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len);
 	}
