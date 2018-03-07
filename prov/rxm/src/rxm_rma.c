@@ -180,7 +180,7 @@ void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
 	struct fi_cq_err_entry err_entry;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Perform deffered RMA operation (len - %zx) for %p conn\n",
+	       "Perform deffered RMA operation (len - %zd) for %p conn\n",
 	       tx_entry->rma_buf->pkt.hdr.size, rxm_conn);
 
 	if (tx_entry->comp_flags & FI_WRITE) {
