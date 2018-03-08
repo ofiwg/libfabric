@@ -513,6 +513,25 @@ The following option levels and option names and parameters are defined.
   the maximum size of the data that may be present as part of a connection
   request event. This option is read only.
 
+- *FI_OPT_VARIABLE_THRESHOLD - size_t*
+: Defines the minimum size for variable length messages.  Transfers
+  equal to FI_OPT_VARIABLE_THRESHOLD size or smaller are handled as
+  standard message transfers.  Message transfers larger than the
+  threshold are handled by the provider as variable length transfers.
+
+  fi_getopt() will return the currently configured threshold, or the
+  provider's default threshold if one has not be set by the application.
+  fi_setopt() allows an application to configure the threshold.  If the
+  provider cannot support the requested threshold, it will fail the
+  fi_setopt() call with FI_EMSGSIZE.  Calling fi_setopt() with the
+  threshold set to SIZE_MAX will set the threshold to the maximum
+  supported by the provider.  fi_getopt() can then be used to retrieve
+  the set size.
+
+  In most cases, the sending and receiving endpoints must be
+  configured to use the same threshold value, and the threshold must be
+  set prior to enabling the endpoint.
+
 ## fi_rx_size_left (DEPRECATED)
 
 This function has been deprecated and will be removed in a future version
