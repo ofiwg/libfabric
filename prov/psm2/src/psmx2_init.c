@@ -93,13 +93,15 @@ void psmx2_init_tag_layout(struct fi_info *info)
 {
 	int use_tag64;
 
+#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
+	use_tag64 = (psmx2_tag_mask == PSMX2_TAG_MASK_64);
+
 	if (psmx2_tag_layout_locked) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"tag layout already set opened domain.\n");
 		goto out;
 	}
 
-#if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	if (strcasecmp(psmx2_env.tag_layout, "tag60") == 0) {
 		psmx2_tag_upper_mask = PSMX2_TAG_UPPER_MASK_60;
 		psmx2_tag_mask = PSMX2_TAG_MASK_60;
@@ -134,13 +136,18 @@ void psmx2_init_tag_layout(struct fi_info *info)
 			use_tag64 = 1;
 		}
 	}
-#endif
 
-out:
 	psmx2_tag_layout_locked = 1;
+out:
+#elif (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_TAG64)
+	use_tag64 = 1;
+#else
+	use_tag64 = 0;
+#endif
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
 		"use %s: tag_mask: %016" PRIX64 ", data_mask: %08" PRIX32 "\n",
-		use_tag64 ? "tag64" : "tag60", PSMX2_TAG_MASK, PSMX2_DATA_MASK);
+		use_tag64 ? "tag64" : "tag60", (uint64_t)PSMX2_TAG_MASK,
+		PSMX2_DATA_MASK);
 }
 
 static int psmx2_get_yes_no(char *s, int default_value)
