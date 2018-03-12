@@ -110,6 +110,9 @@ int ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	comp->data = data;
 	comp->tag = tag;
 	ofi_cirque_commit(cq->cirq);
+
+	if (cq->wait)
+		cq->wait->signal(cq->wait);
 out:
 	fastlock_release(&cq->cq_lock);
 	return ret;
