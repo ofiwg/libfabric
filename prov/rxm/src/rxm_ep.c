@@ -977,16 +977,10 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Buffer TX request (len - %zd) for %p conn\n", len, rxm_conn);
 
-	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, count,
-				   len, data, flags, tag, comp_flags,
-				   &tx_buf, &tx_entry, pool);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-
 	if (len > rxm_ep->rxm_info->tx_attr->inject_size) {
 		ret = (rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context, count, iov,
 					       desc, len, data, flags, tag, comp_flags, op,
-					       &tx_entry) < 0) ? ret : FI_SUCCESS;
+					       &tx_entry) < 0) ? -FI_EAGAIN : FI_SUCCESS;
 	} else {
 		ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, count,
 					   len, data, flags, tag, comp_flags,
