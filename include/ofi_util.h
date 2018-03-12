@@ -403,10 +403,12 @@ struct util_av {
 	struct dlist_entry	ep_list;
 };
 
+#define OFI_AV_HASH	(1 << 0)
+
 struct util_av_attr {
 	size_t			addrlen;
 	size_t			overhead;
-	uint64_t		flags;
+	int			flags;
 };
 
 int ofi_av_init(struct util_domain *domain,
@@ -423,6 +425,8 @@ void ofi_av_write_event(struct util_av *av, uint64_t data,
 
 int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
+int ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		       struct fid_av **av, void *context, int flags);
 
 void *ofi_av_get_addr(struct util_av *av, int index);
 #define ip_av_get_addr ofi_av_get_addr
