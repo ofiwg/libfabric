@@ -237,7 +237,7 @@ int ft_bind_comp(struct fid_ep *ep)
 static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 		const char *x_str, int timeout)
 {
-	uint8_t buf[FT_COMP_BUF_SIZE];
+	uint8_t buf[FT_COMP_BUF_SIZE], start = 0;
 	struct timespec s, e;
 	int poll_time = 0;
 	int ret, verify = (test_info.test_type == FT_TEST_UNIT && cq == rxcq);
@@ -245,8 +245,10 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 	switch(test_info.cq_wait_obj) {
 	case FI_WAIT_NONE:
 		do {
-			if (!poll_time)
+			if (!start) {
 				clock_gettime(CLOCK_MONOTONIC, &s);
+				start = 1;
+			}
 
 			ft_cq_read(fi_cq_read, cq, buf, comp_entry_cnt[ft_x->cq_format],
 					ft_x->credits, x_str, ret, verify);
