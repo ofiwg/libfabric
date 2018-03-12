@@ -166,6 +166,24 @@ static int rxm_init_info(void)
 	return 0;
 }
 
+static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
+{
+	struct fi_info *cur;
+
+	for (cur = info; cur; cur = cur->next) {
+		/* Remove the following caps if they are not requested as they
+		 * may affect performance in fast-path */
+		if (!hints) {
+			cur->caps &= ~(FI_DIRECTED_RECV | FI_SOURCE);
+		} else {
+			if (!(hints->caps & FI_DIRECTED_RECV))
+				cur->caps &= ~FI_DIRECTED_RECV;
+			if (!(hints->caps & FI_SOURCE))
+				cur->caps &= ~FI_SOURCE;
+		}
+	}
+}
+
 static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
@@ -202,6 +220,8 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 		for (cur = *info; cur; cur = cur->next)
 			ofi_addr_set_port(cur->src_addr, port_save);
 	}
+
+	rxm_alter_info(hints, *info);
 
 	/* If app supports FI_MR_LOCAL, prioritize requiring it for
 	 * better performance. */
