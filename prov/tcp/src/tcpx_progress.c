@@ -104,6 +104,9 @@ static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry, int err)
 		ofi_cq_write(cq, pe_entry->context,
 			     pe_entry->flags, 0, NULL,
 			     pe_entry->msg_hdr.data, 0);
+
+		if (cq->wait)
+			ofi_cq_signal(&cq->cq_fid);
 	}
 
 	if (cntr && err) {
