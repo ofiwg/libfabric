@@ -270,9 +270,9 @@ err:
 }
 
 static inline int
-rxm_ep_postponed_rma(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		     size_t total_size, uint64_t flags,
-		     uint64_t comp_flags, const struct fi_msg_rma *orig_msg)
+rxm_ep_postpone_rma(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		    size_t total_size, uint64_t flags,
+		    uint64_t comp_flags, const struct fi_msg_rma *orig_msg)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rma_buf *rma_buf;
@@ -319,10 +319,10 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
-		ret = rxm_ep_postponed_rma(rxm_ep, rxm_conn,
-					   ofi_total_iov_len(msg->msg_iov,
-							     msg->iov_count),
-					   flags, comp_flags, msg);
+		ret = rxm_ep_postpone_rma(rxm_ep, rxm_conn,
+					  ofi_total_iov_len(msg->msg_iov,
+							    msg->iov_count),
+					  flags, comp_flags, msg);
 cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
@@ -439,8 +439,8 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
-		ret = rxm_ep_postponed_rma(rxm_ep, rxm_conn, total_size,
-					   flags, FI_WRITE, msg);
+		ret = rxm_ep_postpone_rma(rxm_ep, rxm_conn, total_size,
+					  flags, FI_WRITE, msg);
 cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
