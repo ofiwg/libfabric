@@ -483,10 +483,72 @@ static int tcpx_pep_create_listen_socket(struct tcpx_pep *pep, void *src_addr,
 	return FI_SUCCESS;
 }
 
+static int tcpx_ep_setname(fid_t fid, void *addr, size_t addrlen)
+{
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_pep *tcpx_pep;
+	uint32_t addr_format;
+
+	switch (addrlen) {
+	case FI_SOCKADDR_IN:
+		addr_format = FI_SOCKADDR_IN;
+		break;
+	case FI_SOCKADDR_IN6:
+		addr_format = FI_SOCKADDR_IN6;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid);
+		return (bind(tcpx_ep->conn_fd,
+			     addr, addrlen))?-errno : FI_SUCCESS;
+
+	case FI_CLASS_PEP:
+		tcpx_pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid);
+		if (tcpx_pep->sock != INVALID_SOCKET)
+			return -FI_EINVAL;
+
+		return tcpx_pep_create_listen_socket(tcpx_pep, addr,
+						     addr_format, addrlen);
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,"Invalid argument\n");
+		return -FI_EINVAL;
+	}
+	return -FI_EINVAL;
+}
+
+static int tcpx_ep_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_pep *tcpx_pep;
+	size_t addrlen_in = *addrlen;
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid);
+		if (getsockname(tcpx_ep->conn_fd, addr,(socklen_t *) addrlen))
+			return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+
+		return FI_SUCCESS;
+	case FI_CLASS_PEP:
+		tcpx_pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid);
+		if (getsockname(tcpx_pep->sock, addr, (socklen_t *)addrlen))
+			return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+
+		return FI_SUCCESS;
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,"Invalid argument\n");
+		return -FI_EINVAL;
+	}
+}
+
 static struct fi_ops_cm tcpx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.setname = tcpx_ep_setname,
+	.getname = tcpx_ep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = tcpx_ep_connect,
 	.listen = fi_no_listen,
@@ -763,8 +825,8 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.setname = tcpx_ep_setname,
+	.getname = tcpx_ep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = tcpx_pep_listen,
