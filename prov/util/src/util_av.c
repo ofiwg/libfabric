@@ -303,7 +303,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 		return -FI_ENOSPC;
 	}
 
-	if (av->flags & FI_SOURCE) {
+	if (av->flags & OFI_AV_HASH) {
 		ret = util_av_hash_insert(&av->hash, slot, av->free_list);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
@@ -383,7 +383,7 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 		}
 	}
 
-	if (av->flags & FI_SOURCE)
+	if (av->flags & OFI_AV_HASH)
 		util_av_hash_remove(&av->hash, slot, index);
 
 	entry = util_av_get_data(av, index);
@@ -505,14 +505,14 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	/* TODO: Handle FI_READ */
 	/* TODO: Handle mmap - shared AV */
 
-	if (util_attr->flags & FI_SOURCE) {
+	if (util_attr->flags & OFI_AV_HASH) {
 		av->hash.slots = av->count;
 		if (util_attr->overhead)
 			av->hash.total_count = av->count + util_attr->overhead;
 		else
 			av->hash.total_count = av->count * 2;
 		FI_INFO(av->prov, FI_LOG_AV,
-		       "FI_SOURCE requested, hash size %u\n", av->hash.total_count);
+		       "OFI_AV_HASH requested, hash size %u\n", av->hash.total_count);
 	}
 
 	av->data = malloc((av->count * util_attr->addrlen) +
@@ -527,7 +527,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	entry = util_av_get_data(av, av->count - 1);
 	*entry = UTIL_NO_ENTRY;
 
-	if (util_attr->flags & FI_SOURCE) {
+	if (util_attr->flags & OFI_AV_HASH) {
 		av->hash.table = util_av_get_data(av, av->count);
 		util_av_hash_init(&av->hash);
 	}
@@ -563,7 +563,7 @@ static int util_verify_av_attr(struct util_domain *domain,
 		return -FI_EINVAL;
 	}
 
-	if (util_attr->flags & ~(FI_SOURCE)) {
+	if (util_attr->flags & ~(OFI_AV_HASH)) {
 		FI_WARN(domain->prov, FI_LOG_AV, "invalid internal flags\n");
 		return -FI_EINVAL;
 	}
@@ -1038,8 +1038,8 @@ static struct fi_ops ip_av_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		 struct fid_av **av, void *context)
+int ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		       struct fid_av **av, void *context, int flags)
 {
 	struct util_domain *domain;
 	struct util_av_attr util_attr;
@@ -1053,7 +1053,7 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		util_attr.addrlen = sizeof(struct sockaddr_in6);
 
 	util_attr.overhead = attr->count >> 1;
-	util_attr.flags = domain->info_domain_caps & FI_SOURCE ? FI_SOURCE : 0;
+	util_attr.flags = flags;
 
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_MAP;
@@ -1072,6 +1072,17 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	(*av)->fid.ops = &ip_av_fi_ops;
 	(*av)->ops = &ip_av_ops;
 	return 0;
+}
+
+int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		 struct fid_av **av, void *context)
+{
+	struct util_domain *domain = container_of(domain_fid, struct util_domain,
+						  domain_fid);
+
+	return ip_av_create_flags(domain_fid, attr, av, context,
+				  (domain->info_domain_caps & FI_SOURCE) ?
+				  OFI_AV_HASH : 0);
 }
 
 /*

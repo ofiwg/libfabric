@@ -390,7 +390,7 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct util_av_attr util_attr = {
 		.overhead = attr->count >> 1,
 		.flags = ((domain->util_domain.info_domain_caps & FI_SOURCE) ?
-			  FI_SOURCE : 0),
+			  OFI_AV_HASH : 0),
 		.addrlen = sizeof(struct ofi_ib_ud_ep_name),
 	};
 
