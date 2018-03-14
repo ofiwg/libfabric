@@ -53,7 +53,7 @@ extern "C" {
 #endif
 
 #include "ft_osd.h"
-#define OFI_UTIL_PREFIX "ofi-"
+#define OFI_UTIL_PREFIX "ofi_"
 #define OFI_NAME_DELIM ';'
 
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
