@@ -226,6 +226,15 @@ struct sock_conn_listener {
 	int do_listen;
 };
 
+struct sock_ep_cm_head {
+	fi_epoll_t emap;
+	struct fd_signal signal;
+	fastlock_t signal_lock;
+	pthread_t listener_thread;
+	struct dlist_entry msg_list;
+	int do_listen;
+};
+
 struct sock_domain {
 	struct fi_info		info;
 	struct fid_domain	dom_fid;
@@ -242,6 +251,7 @@ struct sock_domain {
 	struct dlist_entry	dom_list_entry;
 	struct fi_domain_attr	attr;
 	struct sock_conn_listener conn_listener;
+	struct sock_ep_cm_head cm_head;
 };
 
 /* move to fi_trigger.h when removing experimental tag from work queues */
@@ -511,15 +521,23 @@ struct sock_comp {
 	struct sock_eq *eq;
 };
 
-struct sock_cm_entry {
+enum sock_cm_state {
+	SOCK_CM_STATE_DISCONNECTED = 0,
+	SOCK_CM_STATE_REQUESTED,
+	SOCK_CM_STATE_CONNECTED,
+};
+
+struct sock_pep_cm_entry {
 	int sock;
 	int do_listen;
 	int signal_fds[2];
-	uint64_t next_msg_id;
-	fastlock_t lock;
-	int is_connected;
 	pthread_t listener_thread;
-	struct dlist_entry msg_list;
+};
+
+struct sock_ep_cm_entry {
+	int sock;
+	fastlock_t lock;
+	enum sock_cm_state state;
 };
 
 struct sock_conn_handle {
@@ -564,7 +582,7 @@ struct sock_ep_attr {
 	uint64_t peer_fid;
 	uint16_t key;
 	int is_enabled;
-	struct sock_cm_entry cm;
+	struct sock_ep_cm_entry cm;
 	struct sock_conn_handle conn_handle;
 	fastlock_t lock;
 
@@ -584,7 +602,8 @@ struct sock_pep {
 	struct fid_pep	pep;
 	struct sock_fabric *sock_fab;
 
-	struct sock_cm_entry cm;
+	struct sock_ep_cm_head cm_head;
+	struct sock_pep_cm_entry cm;
 	struct sockaddr_in src_addr;
 	struct fi_info info;
 	struct sock_eq *eq;
@@ -917,15 +936,26 @@ enum {
 	SOCK_CONN_SHUTDOWN,
 };
 
+enum sock_conn_handle_state {
+	SOCK_CONN_HANDLE_ACTIVE,
+	SOCK_CONN_HANDLE_ACCEPTED,
+	SOCK_CONN_HANDLE_REJECTED,
+	SOCK_CONN_HANDLE_DELETED,
+	SOCK_CONN_HANDLE_FINALIZING,
+	SOCK_CONN_HANDLE_FINALIZED,
+};
+
 struct sock_conn_req_handle {
 	struct fid handle;
 	struct sock_conn_req *req;
 	int sock_fd;
-	int is_accepted;
+	uint8_t monitored;
+	enum sock_conn_handle_state state;
+	pthread_mutex_t	finalized_mutex;
+	pthread_cond_t	finalized_cond;
 	struct sock_pep *pep;
 	struct sock_ep *ep;
 	size_t paramlen;
-	pthread_t req_handler;
 	struct sockaddr_in dest_addr;
 	struct dlist_entry entry;
 	char cm_data[SOCK_EP_MAX_CM_DATA_SZ];
@@ -1220,5 +1250,12 @@ static inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
 {
 	return rx_entry->total_len - rx_entry->used;
 }
+
+int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head);
+void sock_ep_cm_signal(struct sock_ep_cm_head *cm_head);
+void sock_ep_cm_signal_locked(struct sock_ep_cm_head *cm_head);
+void sock_ep_cm_stop_thread(struct sock_ep_cm_head *cm_head);
+void sock_ep_cm_wait_handle_finalized(struct sock_ep_cm_head *cm_head,
+                                      struct sock_conn_req_handle *handle);
 
 #endif

@@ -2283,7 +2283,7 @@ void sock_pe_signal(struct sock_pe *pe)
 void sock_pe_poll_add(struct sock_pe *pe, int fd)
 {
         fastlock_acquire(&pe->signal_lock);
-        if (fi_epoll_add(pe->epoll_set, fd, NULL))
+        if (fi_epoll_add(pe->epoll_set, fd, FI_EPOLL_IN, NULL))
 			SOCK_LOG_ERROR("failed to add to epoll set: %d\n", fd);
         fastlock_release(&pe->signal_lock);
 }
@@ -2731,7 +2731,8 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 
 		if (fd_set_nonblock(pe->signal_fds[SOCK_SIGNAL_RD_FD]) ||
 		    fi_epoll_add(pe->epoll_set,
-				 pe->signal_fds[SOCK_SIGNAL_RD_FD], NULL))
+				 pe->signal_fds[SOCK_SIGNAL_RD_FD],
+				 FI_EPOLL_IN, NULL))
 			goto err5;
 
 		pe->do_progress = 1;

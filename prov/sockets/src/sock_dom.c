@@ -182,6 +182,7 @@ static int sock_dom_close(struct fid *fid)
 		return -FI_EBUSY;
 
 	sock_conn_stop_listener_thread(&dom->conn_listener);
+	sock_ep_cm_stop_thread(&dom->cm_head);
 
 	sock_pe_finalize(dom->pe);
 	fastlock_destroy(&dom->lock);
@@ -336,9 +337,15 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err2;
 
+	ret = sock_ep_cm_start_thread(&sock_domain->cm_head);
+	if (ret)
+		goto err3;
+
 	sock_dom_add_to_list(sock_domain);
 	return 0;
 
+err3:
+	sock_conn_stop_listener_thread(&sock_domain->conn_listener);
 err2:
 	sock_pe_finalize(sock_domain->pe);
 err1:

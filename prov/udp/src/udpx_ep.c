@@ -604,7 +604,7 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq,
 			wait = container_of(cq->wait,
 					    struct util_wait_fd, util_wait);
 			ret = fi_epoll_add(wait->epoll_fd, (int)ep->sock,
-					   &ep->util_ep.ep_fid.fid);
+					   FI_EPOLL_IN, &ep->util_ep.ep_fid.fid);
 			if (ret)
 				return ret;
 		} else {

@@ -613,7 +613,7 @@ int fi_epoll_create(struct fi_epoll **ep)
 	return *ep ? 0 : -FI_ENOMEM;
 }
 
-int fi_epoll_add(struct fi_epoll *ep, int fd, void *context)
+int fi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context)
 {
 	struct pollfd *fds;
 	void *contexts;
@@ -635,7 +635,7 @@ int fi_epoll_add(struct fi_epoll *ep, int fd, void *context)
 	}
 
 	ep->fds[ep->nfds].fd = fd;
-	ep->fds[ep->nfds].events = POLLIN;
+	ep->fds[ep->nfds].events = events;
 	ep->context[ep->nfds++] = context;
 	return 0;
 }
