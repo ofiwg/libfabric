@@ -166,7 +166,7 @@ static int mlx_getinfo (
 	mlx_descriptor.config = NULL;
 
 	status = fi_param_get( &mlx_prov,
-				"mlx_tinject_limit",
+				"tinject_limit",
 				&inject_thresh);
 	if (!status)
 		inject_thresh = FI_MLX_DEFAULT_INJECT_SIZE;
@@ -174,18 +174,18 @@ static int mlx_getinfo (
 	FI_INFO( &mlx_prov, FI_LOG_CORE,
 		"used inlect size = %d \n", inject_thresh);
 
-	status = fi_param_get( &mlx_prov, "mlx_config", &configfile_name);
+	status = fi_param_get( &mlx_prov, "config", &configfile_name);
 	if (!status) {
 		configfile_name = NULL;
 	}
 
 	/* NS is disabled by default */
-	status = fi_param_get( &mlx_prov, "mlx_ns_enable",
+	status = fi_param_get( &mlx_prov, "ns_enable",
 			&mlx_descriptor.use_ns);
 	if (!status) {
 		mlx_descriptor.use_ns = 0;
 	}
-	status = fi_param_get( &mlx_prov, "mlx_ns_port",
+	status = fi_param_get( &mlx_prov, "ns_port",
 			&mlx_descriptor.ns_port);
 	if (!status) {
 		mlx_descriptor.ns_port = FI_MLX_DEFAULT_NS_PORT;
@@ -270,23 +270,23 @@ MLX_INI
 {
 	mlx_init_errcodes();
 	fi_param_define( &mlx_prov,
-			"mlx_config", FI_PARAM_STRING,
+			"config", FI_PARAM_STRING,
 			"MLX configuration file name");
 
 	fi_param_define(&mlx_prov,
-			"mlx_tinject_limit", FI_PARAM_INT,
+			"tinject_limit", FI_PARAM_INT,
 			"Maximal tinject message size");
 
 	fi_param_define(&mlx_prov,
-			"mlx_ns_port", FI_PARAM_INT,
+			"ns_port", FI_PARAM_INT,
 			"MLX Name server port");
 
 	fi_param_define(&mlx_prov,
-			"mlx_ns_enable",FI_PARAM_BOOL,
+			"ns_enable",FI_PARAM_BOOL,
 			"Enforce usage of name server for MLX provider");
 
 	fi_param_define(&mlx_prov,
-			"mlx_ns_iface",FI_PARAM_STRING,
+			"ns_iface",FI_PARAM_STRING,
 			"Specify IPv4 network interface for MLX provider's name server'");
 	return &mlx_prov;
 }
