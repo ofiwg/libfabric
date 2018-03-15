@@ -35,6 +35,7 @@ v1.6.0, Wed Mar 14, 2018
 
 ## PSM2
 
+-- Requires psm2 library version 10.2.235 or later
 -- Skip inactive units in round-robin context allocation
 -- Allow contexts be shared by Tx-only and Rx-only endpoints
 -- Use utility functions to check provider attributes
