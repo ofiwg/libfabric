@@ -104,7 +104,8 @@ void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
 }
 
 #define PSMX2_CNTR_POLL_THRESHOLD 100
-static uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
+DIRECT_FN
+STATIC uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 	struct psmx2_poll_ctxt *poll_ctxt;
@@ -131,7 +132,8 @@ static uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
 	return ofi_atomic_get64(&cntr_priv->counter);
 }
 
-static uint64_t psmx2_cntr_readerr(struct fid_cntr *cntr)
+DIRECT_FN
+STATIC uint64_t psmx2_cntr_readerr(struct fid_cntr *cntr)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 
@@ -140,7 +142,8 @@ static uint64_t psmx2_cntr_readerr(struct fid_cntr *cntr)
 	return ofi_atomic_get64(&cntr_priv->error_counter);
 }
 
-static int psmx2_cntr_add(struct fid_cntr *cntr, uint64_t value)
+DIRECT_FN
+STATIC int psmx2_cntr_add(struct fid_cntr *cntr, uint64_t value)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 
@@ -155,7 +158,8 @@ static int psmx2_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
-static int psmx2_cntr_set(struct fid_cntr *cntr, uint64_t value)
+DIRECT_FN
+STATIC int psmx2_cntr_set(struct fid_cntr *cntr, uint64_t value)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 
@@ -170,7 +174,8 @@ static int psmx2_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
-static int psmx2_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
+DIRECT_FN
+STATIC int psmx2_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 
@@ -185,7 +190,8 @@ static int psmx2_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
-static int psmx2_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
+DIRECT_FN
+STATIC int psmx2_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 
@@ -200,7 +206,8 @@ static int psmx2_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
-static int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
+DIRECT_FN
+STATIC int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 	struct psmx2_poll_ctxt *poll_ctxt;
@@ -327,6 +334,7 @@ static struct fi_ops_cntr psmx2_cntr_ops = {
 	.seterr = psmx2_cntr_seterr,
 };
 
+DIRECT_FN
 int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context)
 {

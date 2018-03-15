@@ -138,7 +138,8 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 	return 0;
 }
 
-static ssize_t psmx2_recv(struct fid_ep *ep, void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_recv(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr, void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
@@ -149,7 +150,8 @@ static ssize_t psmx2_recv(struct fid_ep *ep, void *buf, size_t len,
 				  ep_priv->rx_flags);
 }
 
-static ssize_t psmx2_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
+DIRECT_FN
+STATIC ssize_t psmx2_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t flags)
 {
 	void *buf;
@@ -173,7 +175,8 @@ static ssize_t psmx2_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				  msg->addr, msg->context, flags);
 }
 
-static ssize_t psmx2_recvv(struct fid_ep *ep, const struct iovec *iov,
+DIRECT_FN
+STATIC ssize_t psmx2_recvv(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t src_addr,
 			   void *context)
 {
@@ -569,7 +572,8 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	return 0;
 }
 
-static ssize_t psmx2_send(struct fid_ep *ep, const void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_send(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
@@ -580,7 +584,8 @@ static ssize_t psmx2_send(struct fid_ep *ep, const void *buf, size_t len,
 				  ep_priv->tx_flags, 0);
 }
 
-static ssize_t psmx2_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+DIRECT_FN
+STATIC ssize_t psmx2_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t flags)
 {
 	void *buf;
@@ -608,7 +613,8 @@ static ssize_t psmx2_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				  msg->data);
 }
 
-static ssize_t psmx2_sendv(struct fid_ep *ep, const struct iovec *iov,
+DIRECT_FN
+STATIC ssize_t psmx2_sendv(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t dest_addr,
 			   void *context)
 {
@@ -638,7 +644,8 @@ static ssize_t psmx2_sendv(struct fid_ep *ep, const struct iovec *iov,
 			  dest_addr, context);
 }
 
-static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
 			    fi_addr_t dest_addr)
 {
 	struct psmx2_fid_ep *ep_priv;
@@ -650,7 +657,8 @@ static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
 				  0);
 }
 
-static ssize_t psmx2_senddata(struct fid_ep *ep, const void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_senddata(struct fid_ep *ep, const void *buf, size_t len,
 			      void *desc, uint64_t data, fi_addr_t dest_addr,
 			      void *context)
 {
@@ -662,7 +670,8 @@ static ssize_t psmx2_senddata(struct fid_ep *ep, const void *buf, size_t len,
 				  ep_priv->tx_flags | FI_REMOTE_CQ_DATA, data);
 }
 
-static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 				uint64_t data, fi_addr_t dest_addr)
 {
 	struct psmx2_fid_ep *ep_priv;

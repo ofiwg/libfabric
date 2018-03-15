@@ -824,7 +824,8 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	return 0;
 }
 
-static ssize_t psmx2_read(struct fid_ep *ep, void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_read(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr,
 			  uint64_t addr, uint64_t key, void *context)
 {
@@ -836,7 +837,8 @@ static ssize_t psmx2_read(struct fid_ep *ep, void *buf, size_t len,
 				  key, context, ep_priv->tx_flags);
 }
 
-static ssize_t psmx2_readmsg(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_readmsg(struct fid_ep *ep,
 			     const struct fi_msg_rma *msg,
 			     uint64_t flags)
 {
@@ -860,7 +862,8 @@ static ssize_t psmx2_readmsg(struct fid_ep *ep,
 				  flags);
 }
 
-static ssize_t psmx2_readv(struct fid_ep *ep, const struct iovec *iov,
+DIRECT_FN
+STATIC ssize_t psmx2_readv(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t src_addr,
 			   uint64_t addr, uint64_t key, void *context)
 {
@@ -1258,7 +1261,8 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	return 0;
 }
 
-static ssize_t psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
 			   void *desc, fi_addr_t dest_addr, uint64_t addr,
 			   uint64_t key, void *context)
 {
@@ -1270,7 +1274,8 @@ static ssize_t psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
 				   key, context, ep_priv->tx_flags, 0);
 }
 
-static ssize_t psmx2_writemsg(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_writemsg(struct fid_ep *ep,
 			      const struct fi_msg_rma *msg,
 			      uint64_t flags)
 {
@@ -1292,7 +1297,8 @@ static ssize_t psmx2_writemsg(struct fid_ep *ep,
 				   msg->context, flags, msg->data);
 }
 
-static ssize_t psmx2_writev(struct fid_ep *ep, const struct iovec *iov,
+DIRECT_FN
+STATIC ssize_t psmx2_writev(struct fid_ep *ep, const struct iovec *iov,
 			    void **desc, size_t count, fi_addr_t dest_addr,
 			    uint64_t addr, uint64_t key, void *context)
 {
@@ -1312,8 +1318,9 @@ static ssize_t psmx2_writev(struct fid_ep *ep, const struct iovec *iov,
 				   context, ep_priv->tx_flags, 0);
 }
 
-static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
-			    fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+DIRECT_FN
+STATIC ssize_t psmx2_inject_write(struct fid_ep *ep, const void *buf, size_t len,
+			          fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct psmx2_fid_ep *ep_priv;
 
@@ -1324,7 +1331,8 @@ static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
 				   0);
 }
 
-static ssize_t psmx2_writedata(struct fid_ep *ep, const void *buf, size_t len,
+DIRECT_FN
+STATIC ssize_t psmx2_writedata(struct fid_ep *ep, const void *buf, size_t len,
 			       void *desc, uint64_t data, fi_addr_t dest_addr,
 			       uint64_t addr, uint64_t key, void *context)
 {
@@ -1337,9 +1345,10 @@ static ssize_t psmx2_writedata(struct fid_ep *ep, const void *buf, size_t len,
 				   data);
 }
 
-static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-				uint64_t data, fi_addr_t dest_addr, uint64_t addr,
-				uint64_t key)
+DIRECT_FN
+STATIC ssize_t psmx2_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
+				      uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+				      uint64_t key)
 {
 	struct psmx2_fid_ep *ep_priv;
 
@@ -1358,8 +1367,8 @@ struct fi_ops_rma psmx2_rma_ops = {
 	.write = psmx2_write,
 	.writev = psmx2_writev,
 	.writemsg = psmx2_writemsg,
-	.inject = psmx2_inject,
+	.inject = psmx2_inject_write,
 	.writedata = psmx2_writedata,
-	.injectdata = psmx2_injectdata,
+	.injectdata = psmx2_inject_writedata,
 };
 

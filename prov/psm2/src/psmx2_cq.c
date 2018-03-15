@@ -932,7 +932,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	return read_count;
 }
 
-static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
+DIRECT_FN
+STATIC ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				 fi_addr_t *src_addr)
 {
 	struct psmx2_fid_cq *cq_priv;
@@ -1028,12 +1029,14 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	return read_count;
 }
 
-static ssize_t psmx2_cq_read(struct fid_cq *cq, void *buf, size_t count)
+DIRECT_FN
+STATIC ssize_t psmx2_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
 	return psmx2_cq_readfrom(cq, buf, count, NULL);
 }
 
-static ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+DIRECT_FN
+STATIC ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 				uint64_t flags)
 {
 	struct psmx2_fid_cq *cq_priv;
@@ -1057,7 +1060,8 @@ static ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	return -FI_EAGAIN;
 }
 
-static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
+DIRECT_FN
+STATIC ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				  fi_addr_t *src_addr, const void *cond,
 				  int timeout)
 {
@@ -1126,13 +1130,15 @@ static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	return psmx2_cq_readfrom(cq, buf, count, src_addr);
 }
 
-static ssize_t psmx2_cq_sread(struct fid_cq *cq, void *buf, size_t count,
+DIRECT_FN
+STATIC ssize_t psmx2_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 			      const void *cond, int timeout)
 {
 	return psmx2_cq_sreadfrom(cq, buf, count, NULL, cond, timeout);
 }
 
-static int psmx2_cq_signal(struct fid_cq *cq)
+DIRECT_FN
+STATIC int psmx2_cq_signal(struct fid_cq *cq)
 {
 	struct psmx2_fid_cq *cq_priv;
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
@@ -1144,7 +1150,8 @@ static int psmx2_cq_signal(struct fid_cq *cq)
 	return 0;
 }
 
-static const char *psmx2_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
+DIRECT_FN
+STATIC const char *psmx2_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
 				     char *buf, size_t len)
 {
 	return psm2_error_get_string(prov_errno);
@@ -1226,6 +1233,7 @@ static struct fi_ops_cq psmx2_cq_ops = {
 	.strerror = psmx2_cq_strerror,
 };
 
+DIRECT_FN
 int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context)
 {

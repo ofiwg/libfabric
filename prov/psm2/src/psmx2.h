@@ -73,6 +73,14 @@ extern "C" {
 #include "rbtree.h"
 #include "version.h"
 
+#ifdef FABRIC_DIRECT_ENABLED
+#define DIRECT_FN __attribute__((visibility ("default")))
+#define STATIC
+#else
+#define DIRECT_FN
+#define STATIC static
+#endif
+
 extern struct fi_provider psmx2_prov;
 
 #define PSMX2_VERSION	(FI_VERSION(1, 6))
