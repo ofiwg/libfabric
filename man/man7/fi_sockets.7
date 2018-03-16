@@ -1,4 +1,4 @@
-.TH "fi_sockets" "7" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_sockets" "7" "2018\-03\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_sockets \- The Sockets Fabric Provider
@@ -92,6 +92,9 @@ Only relevant if \f[I]FI_SOCKETS_KEEPALIVE_ENABLE\f[] is enabled.
 \f[I]FI_SOCKETS_KEEPALIVE_PROBES\f[] : An integer to specify the maximum
 number of keepalive probes sent before dropping the connection.
 Only relevant if \f[I]FI_SOCKETS_KEEPALIVE_ENABLE\f[] is enabled.
+.PP
+\f[I]FI_SOCKETS_IFACE\f[] : The prefix or the name of the network
+interface (default: any)
 .SH LARGE SCALE JOBS
 .PP
 For large scale runs one can use these environment variables to set the
