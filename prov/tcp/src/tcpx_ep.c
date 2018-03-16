@@ -181,6 +181,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
 	fastlock_release(&tcpx_ep->queue_lock);
+	tcpx_progress_signal(&tcpx_domain->progress);
 	return FI_SUCCESS;
 err:
 	send_entry->ep = tcpx_ep;
@@ -457,10 +458,15 @@ static int tcpx_ep_close(struct fid *fid)
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 	tcpx_domain = container_of(ep->util_ep.domain,
-				   struct tcpx_domain, util_domain);
+				   struct tcpx_domain,
+				   util_domain);
 
+	if (tcpx_domain->progress.mode == FI_PROGRESS_AUTO) {
+		tcpx_progress_ep_del(&tcpx_domain->progress, ep);
+	}
 	tcpx_ep_tx_rx_queues_release(ep, &tcpx_domain->progress);
 	fastlock_destroy(&ep->queue_lock);
+
 	ofi_close_socket(ep->conn_fd);
 	ofi_endpoint_close(&ep->util_ep);
 
@@ -530,12 +536,21 @@ static struct fi_ops_ep tcpx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+static void tcpx_no_manual_progress(struct util_ep *ep)
+{
+	/* intentionally left blank */
+}
+
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
 	struct tcpx_ep *ep;
 	struct tcpx_conn_handle *handle;
+	struct tcpx_domain *tcpx_domain;
 	int af, ret;
+
+	tcpx_domain = container_of(domain, struct tcpx_domain,
+				   util_domain.domain_fid);
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
@@ -543,7 +558,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ret = ofi_endpoint_init(domain, &tcpx_util_prov, info,
 				&ep->util_ep, context,
-				tcpx_manual_progress);
+				(tcpx_domain->progress.mode == FI_PROGRESS_AUTO)?
+				tcpx_no_manual_progress: tcpx_manual_progress);
 	if (ret)
 		goto err1;
 
