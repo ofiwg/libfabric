@@ -191,7 +191,8 @@
 
 /* Version number of package */
 #define _FI_EXP(s) #s
-#define VERSION _FI_EXP(FI_MAJOR_VERSION) "." _FI_EXP(FI_MINOR_VERSION) ".0"
+#define _FI_TO_STRING(s) _FI_EXP(s)
+#define VERSION _FI_TO_STRING(FI_MAJOR_VERSION) "." _FI_TO_STRING(FI_MINOR_VERSION) ".1a1"
 
 #ifndef BUILD_ID
 #define BUILD_ID ""
