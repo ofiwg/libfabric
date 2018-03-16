@@ -120,7 +120,7 @@ static int mlx_cm_getname_ai_format(
 		}
 		FI_INFO(&mlx_prov, FI_LOG_CORE,
 			"Loaded IPv4 address: [%"PRIu64"]%s:%d\n",
-			res->ai_addrlen, hostname, service);
+			(uint64_t)res->ai_addrlen, hostname, service);
 
 		memcpy(addr,res->ai_addr,res->ai_addrlen);
 		((struct sockaddr_in*)addr)->sin_port = htons((short)service);

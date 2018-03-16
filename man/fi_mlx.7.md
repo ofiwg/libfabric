@@ -49,8 +49,8 @@ Unsupported features
 
 # RUNTIME PARAMETERS
 
-*FI_MLX_CONFI*
-: The path to the MLX configuration file(default: none).
+*FI_MLX_CONFIG*
+: The path to the MLX configuration file (default: none).
 
 *FI_MLX_TINJECT_LIMIT*
 : Maximal tinject message size (default: 1024).
