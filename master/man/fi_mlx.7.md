@@ -49,6 +49,22 @@ Unsupported features
 
 # RUNTIME PARAMETERS
 
+*FI_MLX_CONFI*
+: The path to the MLX configuration file(default: none).
+
+*FI_MLX_TINJECT_LIMIT*
+: Maximal tinject message size (default: 1024).
+
+*FI_MLX_NS_ENABLE*
+: Enforce usage of name server functionality for MLX provider
+  (default: disabled).
+
+*FI_MLX_NS_PORT*
+: MLX provider's name server port (default: 12345).
+
+*FI_MLX_NS_IFACE*
+: IPv4 network interface for MLX provider's name server
+  (default: any).
 
 # SEE ALSO
 
