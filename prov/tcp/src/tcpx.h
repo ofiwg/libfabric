@@ -118,7 +118,7 @@ int tcpx_progress_init(struct tcpx_progress *progress);
 int tcpx_progress_close(struct tcpx_progress *progress);
 struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress);
 void pe_entry_release(struct tcpx_pe_entry *pe_entry);
-void tcpx_progress(struct util_ep *util_ep);
+void tcpx_manual_progress(struct util_ep *util_ep);
 
 enum tcpx_xfer_states {
 	TCPX_XFER_IDLE,
@@ -188,9 +188,10 @@ struct tcpx_pep {
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
-	struct dlist_entry	ep_entry;
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
+	/* lock for accessing rx & tx queues */
+	fastlock_t		queue_lock;
 };
 
 struct tcpx_fabric {

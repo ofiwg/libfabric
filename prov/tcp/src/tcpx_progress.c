@@ -173,35 +173,50 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	}
 }
 
-static void process_pe_lists(struct tcpx_ep *ep)
+static void progress_rx_queue(struct tcpx_ep *ep)
 {
 	struct tcpx_pe_entry *pe_entry;
 	struct dlist_entry *entry;
 
-	if (dlist_empty(&ep->rx_queue))
-		goto tx_pe_list;
+	fastlock_acquire(&ep->queue_lock);
+	if (dlist_empty(&ep->rx_queue)) {
+		fastlock_release(&ep->queue_lock);
+		return;
+	}
 
 	entry = ep->rx_queue.next;
 	pe_entry = container_of(entry, struct tcpx_pe_entry,
 				entry);
 	process_rx_pe_entry(pe_entry);
+	fastlock_release(&ep->queue_lock);
+}
 
-tx_pe_list:
-	if (dlist_empty(&ep->tx_queue))
-		return ;
+static void progress_tx_queue(struct tcpx_ep *ep)
+{
+	struct tcpx_pe_entry *pe_entry;
+	struct dlist_entry *entry;
+
+	fastlock_acquire(&ep->queue_lock);
+	if (dlist_empty(&ep->tx_queue)) {
+		fastlock_release(&ep->queue_lock);
+		return;
+	}
 
 	entry = ep->tx_queue.next;
 	pe_entry = container_of(entry, struct tcpx_pe_entry,
 				entry);
 	process_tx_pe_entry(pe_entry);
+	fastlock_release(&ep->queue_lock);
 }
 
-void tcpx_progress(struct util_ep *util_ep)
+void tcpx_manual_progress(struct util_ep *util_ep)
 {
 	struct tcpx_ep *ep;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	process_pe_lists(ep);
+
+	progress_tx_queue(ep);
+	progress_rx_queue(ep);
 	return;
 }
 
