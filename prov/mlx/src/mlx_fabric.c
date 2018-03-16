@@ -85,7 +85,7 @@ static char* mlx_local_host_resolve()
 	char *iface = NULL;
 	char *result = NULL;
 
-	status = fi_param_get( &mlx_prov, "mlx_ns_iface",
+	status = fi_param_get( &mlx_prov, "ns_iface",
 		&iface);
 	if (!status) {
 		iface = NULL;
