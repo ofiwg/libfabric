@@ -531,7 +531,7 @@ void sock_get_list_of_addr(struct slist *addr_list)
 	struct sock_host_list_entry *addr_entry;
 	struct ifaddrs *ifaddrs, *ifa;
 
-	fi_param_get_str(&sock_prov, "interface_name", &sock_interface_name);
+	fi_param_get_str(&sock_prov, "iface", &sock_interface_name);
 
 	ret = ofi_getifaddrs(&ifaddrs);
 	if (!ret) {
@@ -815,7 +815,7 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "keepalive_probes", FI_PARAM_INT,
 			"Maximum number of keepalive probes sent before dropping the connection");
 
-	fi_param_define(&sock_prov, "interface_name", FI_PARAM_STRING,
+	fi_param_define(&sock_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
 
 	fastlock_init(&sock_list_lock);
