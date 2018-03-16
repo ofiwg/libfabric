@@ -112,8 +112,6 @@ int rxd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	free(hints.fabric_attr);
 	fi_freeinfo(dg_info);
 
-	fi_param_get_int(&rxd_prov, "spin_count", &rxd_progress_spin_count);
-
 	return 0;
 err4:
 	fi_freeinfo(dg_info);

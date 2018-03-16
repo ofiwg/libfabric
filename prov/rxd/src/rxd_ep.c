@@ -36,8 +36,6 @@
 #include <ofi_iov.h>
 #include "rxd.h"
 
-int rxd_progress_spin_count = 1000;
-
 static uint32_t rxd_flags(uint64_t fi_flags)
 {
 	uint32_t rxd_flags = 0;
@@ -930,7 +928,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 
 	fastlock_acquire(&ep->util_ep.lock);
 	for(ret = 1, i = 0;
-	    ret > 0 && (!rxd_progress_spin_count || i < rxd_progress_spin_count);
+	    ret > 0 && (!rxd_env.spin_count || i < rxd_env.spin_count);
 	    i++) {
 		ret = fi_cq_read(ep->dg_cq, &cq_entry, 1);
 		if (ret == -FI_EAGAIN)
