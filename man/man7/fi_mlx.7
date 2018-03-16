@@ -1,4 +1,4 @@
-.TH "fi_mlx" "7" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mlx" "7" "2018\-03\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mlx \- The MLX Fabric Provider
@@ -34,6 +34,21 @@ Unsupported features : These features are unsupported: connection
 management, event queue, scalable endpoint, passive endpoint, shared
 receive context, rma, atomics.
 .SH RUNTIME PARAMETERS
+.PP
+\f[I]FI_MLX_CONFI\f[] : The path to the MLX configuration file(default:
+none).
+.PP
+\f[I]FI_MLX_TINJECT_LIMIT\f[] : Maximal tinject message size (default:
+1024).
+.PP
+\f[I]FI_MLX_NS_ENABLE\f[] : Enforce usage of name server functionality
+for MLX provider (default: disabled).
+.PP
+\f[I]FI_MLX_NS_PORT\f[] : MLX provider\[aq]s name server port (default:
+12345).
+.PP
+\f[I]FI_MLX_NS_IFACE\f[] : IPv4 network interface for MLX provider\[aq]s
+name server (default: any).
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
