@@ -48,11 +48,34 @@ static int tcpx_cq_close(struct fid *fid)
 	return 0;
 }
 
+static int tcpx_cq_control(struct fid *fid, int command, void *arg)
+{
+	struct util_cq *cq;
+	int ret;
+
+	cq = container_of(fid, struct util_cq, cq_fid.fid);
+
+	switch(command) {
+	case FI_GETWAIT:
+		if (!cq->wait)
+			return -FI_ENOSYS;
+
+		ret = fi_control(&cq->wait->wait_fid.fid,
+				 command, arg);
+		if (ret)
+			return ret;
+
+		return FI_SUCCESS;
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
 static struct fi_ops tcpx_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = tcpx_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = tcpx_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
