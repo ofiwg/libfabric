@@ -1423,10 +1423,11 @@ static int rxm_ep_close(struct fid *fid)
 	struct rxm_ep *rxm_ep =
 		container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 	struct rxm_ep_wait_ref *wait_ref;
+	struct dlist_entry *tmp_list_entry;
 
-	dlist_foreach_container(&rxm_ep->msg_cq_fd_ref_list,
-				struct rxm_ep_wait_ref,
-				wait_ref, entry) {
+	dlist_foreach_container_safe(&rxm_ep->msg_cq_fd_ref_list,
+				     struct rxm_ep_wait_ref,
+				     wait_ref, entry, tmp_list_entry) {
 		ret = ofi_wait_fd_del(wait_ref->wait,
 				      rxm_ep->msg_cq_fd);
 		if (ret)
@@ -1434,6 +1435,7 @@ static int rxm_ep_close(struct fid *fid)
 		dlist_remove(&wait_ref->entry);
 		free(wait_ref);
 	}
+	OFI_UNUSED(tmp_list_entry); /* to avoid "set, but not used" warning*/
 
 	if (rxm_ep->util_ep.cmap)
 		ofi_cmap_free(rxm_ep->util_ep.cmap);
