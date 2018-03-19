@@ -405,10 +405,150 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	return FI_SUCCESS;
 }
 
+/* when src_addr is NULL, addr_format and addrlen are ignored */
+static int tcpx_pep_create_listen_socket(struct tcpx_pep *pep, void *src_addr,
+					 uint32_t addr_format, size_t addrlen)
+{
+	struct addrinfo hints, *result, *iter;
+	char sa_ip[INET_ADDRSTRLEN] = {0};
+	char sa_port[NI_MAXSERV] = {0};
+	int ret;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+
+	if (src_addr) {
+		switch (addr_format) {
+		case FI_SOCKADDR:
+		case FI_SOCKADDR_IN:
+		case FI_SOCKADDR_IN6:
+			ret = getnameinfo(src_addr,
+					  (socklen_t) addrlen,
+					  sa_ip, INET_ADDRSTRLEN,
+					  sa_port, NI_MAXSERV, 0);
+			if (ret) {
+				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+					"pep initialization failed\n");
+				return ret;
+			}
+			break;
+		default:
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"invalid source address format\n");
+			return -FI_EINVAL;
+
+		}
+		ret = getaddrinfo(sa_ip, sa_port, &hints, &result);
+	} else {
+		ret = getaddrinfo("localhost", NULL, &hints, &result);
+	}
+
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"getaddrinfo failed");
+		return -FI_EINVAL;
+	}
+
+	for (iter = result; iter; iter = iter->ai_next) {
+		pep->sock = ofi_socket(iter->ai_family, iter->ai_socktype,
+				       iter->ai_protocol);
+		if (pep->sock == INVALID_SOCKET)
+			continue;
+
+		ret = tcpx_setup_socket(pep->sock);
+		if (ret) {
+			ofi_close_socket(pep->sock);
+			pep->sock = INVALID_SOCKET;
+			continue;
+		}
+
+		if (bind(pep->sock, result->ai_addr,
+			 (socklen_t) result->ai_addrlen)) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"failed to bind listener: %s\n", strerror(errno));
+			ofi_close_socket(pep->sock);
+			pep->sock = INVALID_SOCKET;
+		} else {
+			break;
+		}
+	}
+	freeaddrinfo(result);
+
+	if (pep->sock == INVALID_SOCKET) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to create listener: %s\n", strerror(errno));
+		return -FI_EIO;
+	}
+	return FI_SUCCESS;
+}
+
+static int tcpx_ep_setname(fid_t fid, void *addr, size_t addrlen)
+{
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_pep *tcpx_pep;
+	uint32_t addr_format;
+
+	switch (addrlen) {
+	case FI_SOCKADDR_IN:
+		addr_format = FI_SOCKADDR_IN;
+		break;
+	case FI_SOCKADDR_IN6:
+		addr_format = FI_SOCKADDR_IN6;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid);
+		return (bind(tcpx_ep->conn_fd,
+			     addr, addrlen))?-errno : FI_SUCCESS;
+
+	case FI_CLASS_PEP:
+		tcpx_pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid);
+		if (tcpx_pep->sock != INVALID_SOCKET)
+			return -FI_EINVAL;
+
+		return tcpx_pep_create_listen_socket(tcpx_pep, addr,
+						     addr_format, addrlen);
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,"Invalid argument\n");
+		return -FI_EINVAL;
+	}
+	return -FI_EINVAL;
+}
+
+static int tcpx_ep_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_pep *tcpx_pep;
+	size_t addrlen_in = *addrlen;
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid);
+		if (getsockname(tcpx_ep->conn_fd, addr,(socklen_t *) addrlen))
+			return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+
+		return FI_SUCCESS;
+	case FI_CLASS_PEP:
+		tcpx_pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid);
+		if (getsockname(tcpx_pep->sock, addr, (socklen_t *)addrlen))
+			return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+
+		return FI_SUCCESS;
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,"Invalid argument\n");
+		return -FI_EINVAL;
+	}
+}
+
 static struct fi_ops_cm tcpx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.setname = tcpx_ep_setname,
+	.getname = tcpx_ep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = tcpx_ep_connect,
 	.listen = fi_no_listen,
@@ -632,10 +772,18 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 {
 	struct tcpx_pep *tcpx_pep;
 	struct tcpx_fabric *tcpx_fabric;
+	int ret;
 
 	tcpx_pep = container_of(pep,struct tcpx_pep, util_pep.pep_fid);
 	tcpx_fabric = container_of(tcpx_pep->util_pep.fabric,
 				   struct tcpx_fabric, util_fabric);
+
+	if (tcpx_pep->sock == INVALID_SOCKET) {
+		ret = tcpx_pep_create_listen_socket(tcpx_pep, NULL,
+						    FI_FORMAT_UNSPEC, 0);
+		if (ret)
+			return ret;
+	}
 
 	if (listen(tcpx_pep->sock, SOMAXCONN)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -652,7 +800,7 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 }
 
 static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
-		    const void *param, size_t paramlen)
+			   const void *param, size_t paramlen)
 {
 	struct ofi_ctrl_hdr hdr;
 	struct tcpx_conn_handle *tcpx_handle;
@@ -677,8 +825,8 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.setname = tcpx_ep_setname,
+	.getname = tcpx_ep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = tcpx_pep_listen,
@@ -726,15 +874,11 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_pep **pep, void *context)
 {
 	struct tcpx_pep *_pep;
-	struct addrinfo hints, *result, *iter;
-	char sa_ip[INET_ADDRSTRLEN] = {0};
-	char sa_port[NI_MAXSERV] = {0};
 	int ret;
 
 	if (!info) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"invalid info\n");
 		return -FI_EINVAL;
-
 	}
 
 	ret = tcpx_verify_info(fabric->api_version, info);
@@ -749,6 +893,11 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err1;
 
+	_pep->util_pep.pep_fid.fid.ops = &tcpx_pep_fi_ops;
+	_pep->util_pep.pep_fid.cm = &tcpx_pep_cm_ops;
+	_pep->util_pep.pep_fid.ops = &tcpx_pep_ops;
+
+
 	_pep->info = *info;
 	_pep->poll_info.fid = &_pep->util_pep.pep_fid.fid;
 	_pep->poll_info.type = PASSIVE_SOCK;
@@ -757,81 +906,23 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	dlist_init(&_pep->poll_info.entry);
 	_pep->sock = INVALID_SOCKET;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+	*pep = &_pep->util_pep.pep_fid;
 
 	if (info->src_addr) {
-		switch (info->addr_format) {
-		case FI_SOCKADDR:
-		case FI_SOCKADDR_IN:
-		case FI_SOCKADDR_IN6:
-			ret = getnameinfo(info->src_addr,
-					  (socklen_t) info->src_addrlen,
-					  sa_ip, INET_ADDRSTRLEN,
-					  sa_port, NI_MAXSERV, 0);
-			if (ret) {
-				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-					"pep initialization failed\n");
-				goto err2;
-			}
-			break;
-		default:
+		ret = tcpx_pep_create_listen_socket(_pep, info->src_addr,
+						    info->addr_format,
+						    info->src_addrlen);
+		if (ret)
+			goto err2;
+
+		if (_pep->sock == INVALID_SOCKET) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"invalid source address format\n");
-			ret = -FI_EINVAL;
+				"failed to create listener: %s\n", strerror(errno));
+			ret = -FI_EIO;
 			goto err2;
 		}
-		ret = getaddrinfo(sa_ip, sa_port, &hints, &result);
-	} else {
-		ret = getaddrinfo("localhost", NULL, &hints, &result);
 	}
-
-	if (ret) {
-		ret = -FI_EINVAL;
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"getaddrinfo failed");
-		goto err2;
-	}
-
-	for (iter = result; iter; iter = iter->ai_next) {
-		_pep->sock = ofi_socket(iter->ai_family, iter->ai_socktype,
-					iter->ai_protocol);
-		if (_pep->sock == INVALID_SOCKET)
-			continue;
-
-		ret = tcpx_setup_socket(_pep->sock);
-		if (ret) {
-			ofi_close_socket(_pep->sock);
-			_pep->sock = INVALID_SOCKET;
-			continue;
-		}
-
-		if (bind(_pep->sock, result->ai_addr,
-			 (socklen_t) result->ai_addrlen)) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"failed to bind listener: %s\n", strerror(errno));
-			ofi_close_socket(_pep->sock);
-			_pep->sock = INVALID_SOCKET;
-		} else {
-			break;
-		}
-	}
-	freeaddrinfo(result);
-
-	if (_pep->sock == INVALID_SOCKET) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to create listener: %s\n", strerror(errno));
-		ret = -FI_EIO;
-		goto err2;
-	}
-
-	_pep->util_pep.pep_fid.fid.ops = &tcpx_pep_fi_ops;
-	_pep->util_pep.pep_fid.cm = &tcpx_pep_cm_ops;
-	_pep->util_pep.pep_fid.ops = &tcpx_pep_ops;
-
-	*pep = &_pep->util_pep.pep_fid;
-	return 0;
+	return FI_SUCCESS;
 err2:
 	ofi_pep_close(&_pep->util_pep);
 err1:
