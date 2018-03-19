@@ -1445,7 +1445,7 @@ static int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
 		ct->rx_ctx_ptr = NULL;
 	}
 
-	if (hints && ((hints->caps & FI_DIRECTED_RECV) == 0)) {
+	if ((hints->caps & FI_DIRECTED_RECV) == 0) {
 		(*info)->caps &= ~FI_DIRECTED_RECV;
 		(*info)->rx_attr->caps &= ~FI_DIRECTED_RECV;
 	}
