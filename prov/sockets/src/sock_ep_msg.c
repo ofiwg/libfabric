@@ -577,13 +577,12 @@ static void sock_ep_cm_report_connect_fail(struct sock_ep *ep,
 	}
 }
 
+/* Caller must hold `cm_head::signal_lock` */
 static void sock_ep_cm_add_to_msg_list(struct sock_ep_cm_head *cm_head,
-			                           struct sock_conn_req_handle *handle)
+				       struct sock_conn_req_handle *handle)
 {
-	fastlock_acquire(&cm_head->signal_lock);
 	dlist_insert_tail(&handle->entry, &cm_head->msg_list);
 	fd_signal_set(&cm_head->signal);
-	fastlock_release(&cm_head->signal_lock);
 }
 
 static void sock_ep_cm_connect_handler(struct sock_ep_cm_head *cm_head,
@@ -638,7 +637,9 @@ err:
 	handle->ep->attr->info.handle = NULL;
 	/* Register handle for later deletion */
 	handle->state = SOCK_CONN_HANDLE_DELETED;
+	fastlock_acquire(&cm_head->signal_lock);
 	sock_ep_cm_add_to_msg_list(cm_head, handle);
+	fastlock_release(&cm_head->signal_lock);
 out:
 	free(param);
 	free(cm_entry);
@@ -1099,9 +1100,11 @@ static void sock_pep_req_handler(struct sock_ep_cm_head *cm_head,
 	}
 
 	info = sock_ep_msg_get_info(handle->pep, conn_req);
-	if (info == NULL) {
+	if (!info) {
 		handle->paramlen = 0;
 		handle->state = SOCK_CONN_HANDLE_REJECTED;
+		/* `cm_head::signal_lock` has already been held
+		 * in `sock_ep_cm_thread` function */
 		sock_ep_cm_add_to_msg_list(cm_head, handle);
 
 		free(conn_req);
@@ -1243,8 +1246,9 @@ static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 
 	cm_head = &_pep->cm_head;
 	hreq->state = SOCK_CONN_HANDLE_REJECTED;
+	fastlock_acquire(&cm_head->signal_lock);
 	sock_ep_cm_add_to_msg_list(cm_head, hreq);
-
+	fastlock_release(&cm_head->signal_lock);
 	return 0;
 }
 
@@ -1372,7 +1376,7 @@ static void sock_ep_cm_handle_rx(struct sock_ep_cm_head *cm_head,
 {
 	struct sock_conn_hdr hdr;
 
-	if(sock_cm_recv(handle->sock_fd, &hdr, sizeof(hdr))) {
+	if (sock_cm_recv(handle->sock_fd, &hdr, sizeof(hdr))) {
 		SOCK_LOG_ERROR("io failed for fd %d\n", handle->sock_fd);
 		if (handle->ep) {
 			sock_ep_cm_shutdown_report(handle->ep, 0);
@@ -1494,7 +1498,9 @@ void sock_ep_cm_wait_handle_finalized(struct sock_ep_cm_head *cm_head,
                                       struct sock_conn_req_handle *handle)
 {
 	handle->state = SOCK_CONN_HANDLE_FINALIZING;
+	fastlock_acquire(&cm_head->signal_lock);
 	sock_ep_cm_add_to_msg_list(cm_head, handle);
+	fastlock_release(&cm_head->signal_lock);
 
 	pthread_mutex_lock(&handle->finalized_mutex);
 	while (handle->state != SOCK_CONN_HANDLE_FINALIZED)
