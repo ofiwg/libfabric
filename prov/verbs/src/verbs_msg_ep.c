@@ -243,7 +243,7 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep_fid)
 	}
 
 	attr.qp_type = IBV_QPT_RC;
-	attr.sq_sig_all = 0;
+	attr.sq_sig_all = 1;
 	attr.qp_context = ep;
 
 	ret = rdma_create_qp(ep->id, pd, &attr);
