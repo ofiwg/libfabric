@@ -157,6 +157,25 @@ static inline size_t unique(void *base, size_t num, size_t width,
 	return n;
 }
 
+#define H2F(x) ofi_nd_hresult_2_fierror(x)
+
+static inline int ofi_nd_hresult_2_fierror(HRESULT hr)
+{
+	switch (hr) {
+	case S_OK:
+	case ND_PENDING:
+		return FI_SUCCESS;
+	case ND_BUFFER_OVERFLOW:
+		return -FI_EOVERFLOW;
+	case ND_CONNECTION_REFUSED:
+		return -FI_ECONNREFUSED;
+	case ND_TIMEOUT:
+		return -FI_ETIMEDOUT;
+	default:
+		return -FI_EOTHER;
+	}
+}
+
 #define OFI_ND_TIMEOUT_INIT(timeout)				\
 	uint64_t sfinish = ((timeout) >= 0) ?			\
 		(fi_gettime_ms() + (timeout) * 10000) : -1;

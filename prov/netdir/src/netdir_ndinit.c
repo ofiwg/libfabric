@@ -41,7 +41,6 @@
 
 #include "netdir.h"
 #include "netdir_log.h"
-#include "netdir_err.h"
 
 #ifndef ofi_sizeofaddr
 #define ofi_sizeofaddr(address)			\

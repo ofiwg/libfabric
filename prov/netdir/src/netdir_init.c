@@ -43,6 +43,23 @@
 
 #include "netdir_queue.h"
 
+const char ofi_nd_prov_name[] = "netdir";
+
+struct fi_provider ofi_nd_prov = {
+	.name = ofi_nd_prov_name,
+	.version = FI_VERSION(OFI_ND_MAJOR_VERSION, OFI_ND_MINOR_VERSION),
+	.fi_version = FI_VERSION(1, 6),
+	.getinfo = ofi_nd_getinfo,
+	.fabric = ofi_nd_fabric,
+	.cleanup = ofi_nd_fini
+};
+
+struct util_prov ofi_nd_util_prov = {
+	.prov = &ofi_nd_prov,
+	.info = 0,
+	.flags = UTIL_RX_SHARED_CTX,
+};
+
 struct gl_data gl_data = {
 	/* 8 KByte */
 	.inline_thr = 8192,

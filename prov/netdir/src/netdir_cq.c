@@ -34,7 +34,6 @@
 
 #include "netdir.h"
 #include "netdir_cq.h"
-#include "netdir_err.h"
 #include "netdir_iface.h"
 #include "netdir_unexp.h"
 

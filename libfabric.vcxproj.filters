@@ -312,9 +312,6 @@
     <ClCompile Include="prov\netdir\src\netdir_addr.c">
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_attr.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\netdir\src\netdir_cq.c">
       <Filter>Source Files\prov\netdir\src</Filter>
     </ClCompile>
@@ -570,9 +567,6 @@
       <Filter>Source Files\prov\netdir\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\netdir\src\netdir_iface.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_err.h">
       <Filter>Source Files\prov\netdir\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\netdir\src\netdir_ov.h">
