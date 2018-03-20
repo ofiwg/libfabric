@@ -59,8 +59,7 @@ int ofi_nd_getinfo(uint32_t version, const char *node, const char *service,
 	if (ofi_nd_util_prov.info) {
 		return util_getinfo(&ofi_nd_util_prov, version, node, service, flags,
 				    hints, info);
-	}
-	else {
+	} else {
 		*info = NULL;
 		return -FI_EINVAL;
 	}
@@ -107,6 +106,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->ep_attr->protocol_version = 0;
 	info->ep_attr->max_msg_size = (size_t)adapter->MaxTransferLength;
 
+	info->domain_attr->caps = OFI_ND_DOMAIN_CAPS;
 	info->domain_attr->name = strdup(name);
 	info->domain_attr->threading = FI_THREAD_SAFE;
 	info->domain_attr->control_progress = FI_PROGRESS_AUTO;
@@ -121,13 +121,12 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->fabric_attr->name = strdup(ofi_nd_prov_name);
 	info->fabric_attr->prov_version = FI_VERSION(OFI_ND_MAJOR_VERSION, OFI_ND_MINOR_VERSION);
 
-	info->caps = OFI_ND_CAPS;
+	info->caps = OFI_ND_EP_CAPS | OFI_ND_DOMAIN_CAPS;
 	info->addr_format = FI_SOCKADDR;
 
 	if (!ofi_nd_util_prov.info) {
 		ofi_nd_util_prov.info = info;
-	}
-	else {
+	} else {
 		struct fi_info *finfo = (struct fi_info *) ofi_nd_util_prov.info;
 
 		while (finfo->next)
@@ -150,9 +149,6 @@ NETDIR_INI
 	fi_param_define(&ofi_nd_prov, "prepostbufcnt", FI_PARAM_INT,
 		"Count of Entries in Array of Preposted Buffers: number of set of buffer "
 		"in each entry array of buffers to be preposted per EP");
-
-	//fi_param_define(&ofi_nd_prov, "presize", FI_PARAM_INT,
-	//	"Pre-post vector size, number of elements in pre-post vector");
 
 	ofi_nd_startup(ofi_nd_adapter_cb);
 	return &ofi_nd_prov;
