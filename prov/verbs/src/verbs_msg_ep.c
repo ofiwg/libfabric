@@ -815,12 +815,12 @@ static ssize_t
 fi_ibv_msg_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t dest_addr, void *context)
 {
-	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr = { 0 };
+	struct fi_ibv_msg_ep *ep =
+		container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	struct ibv_send_wr wr = {
+		.opcode = IBV_WR_SEND,
+	};
 
-	wr.opcode = IBV_WR_SEND;
-
-	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 	return fi_ibv_send_iov(ep, &wr, iov, desc, count, context);
 }
 
