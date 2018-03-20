@@ -104,7 +104,6 @@
 
 #define VERBS_WCE_CNT 1024
 #define VERBS_WRE_CNT 1024
-#define VERBS_EPE_CNT 1024
 
 #define VERBS_DEF_CQ_SIZE 1024
 #define VERBS_MR_IOV_LIMIT 1
@@ -414,13 +413,8 @@ struct fi_ibv_cq {
 	fi_ibv_cq_read_entry	read_entry;
 	struct slist		wcq;
 	fastlock_t		lock;
-	struct slist		ep_list;
-	uint64_t		ep_cnt;
-	uint64_t		send_signal_wr_id;
-	uint64_t		wr_id_mask;
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
-	struct util_buf_pool	*epe_pool;
 	struct util_buf_pool	*wce_pool;
 };
 
@@ -639,20 +633,10 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_srq_ep	*srq_ep;
 	uint64_t		ep_flags;
 	struct fi_info		*info;
-	ofi_atomic32_t		unsignaled_send_cnt;
-	int32_t			send_signal_thr;
-	int32_t			send_comp_thr;
-	ofi_atomic32_t		comp_pending;
 	fastlock_t		wre_lock;
 	struct util_buf_pool	*wre_pool;
 	struct dlist_entry	wre_list;
-	uint64_t		ep_id;
 	struct fi_ibv_domain	*domain;
-};
-
-struct fi_ibv_msg_epe {
-	struct slist_entry	entry;
-	struct fi_ibv_msg_ep 	*ep;
 };
 
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
