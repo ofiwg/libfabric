@@ -72,19 +72,19 @@ extern struct fi_provider ofi_nd_prov;
 */
 static inline char *ofi_nd_strerror(DWORD err, HMODULE module)
 {
-	static char *message = 0;
+	static char *message = NULL;
+	size_t size;
 
 	/* if message is allocated - free it */
 	if (message)
 		LocalFree(message);
 
-	size_t size = FormatMessageA(
-		FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		FORMAT_MESSAGE_FROM_SYSTEM |
-		FORMAT_MESSAGE_IGNORE_INSERTS |
-		(module ? FORMAT_MESSAGE_FROM_HMODULE : 0),
-		module, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		(LPSTR)&message, 0, NULL);
+	size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+			      FORMAT_MESSAGE_FROM_SYSTEM |
+			      FORMAT_MESSAGE_IGNORE_INSERTS |
+			      (module ? FORMAT_MESSAGE_FROM_HMODULE : 0),
+			      module, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			      (LPSTR)&message, 0, NULL);
 
 	return size ? message : (char*)"";
 }
@@ -122,8 +122,7 @@ ofi_nd_get_last_error_str(HRESULT hr, char *errmsg, SIZE_T max_msg_len)
 #define ND_FLUSHED 0x10000L	/* undocumented ND error code */
 #define ND_DISCONNECTED 0xc000020C 
 
-static char *
-ofi_nd_error_str(HRESULT hr)
+static char *ofi_nd_error_str(HRESULT hr)
 {
 	static char lerr[128];
 	char *err_str = NULL;
