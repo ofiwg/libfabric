@@ -226,9 +226,8 @@ void sock_cntr_inc(struct sock_cntr *cntr)
 		pthread_cond_broadcast(&cntr->cond);
 	if (cntr->signal)
 		sock_wait_signal(cntr->waitset);
-	pthread_mutex_unlock(&cntr->mut);
-
 	sock_cntr_check_trigger_list(cntr);
+	pthread_mutex_unlock(&cntr->mut);
 }
 
 static int sock_cntr_add(struct fid_cntr *fid_cntr, uint64_t value)
@@ -244,9 +243,9 @@ static int sock_cntr_add(struct fid_cntr *fid_cntr, uint64_t value)
 		pthread_cond_broadcast(&cntr->cond);
 	if (cntr->signal)
 		sock_wait_signal(cntr->waitset);
-	pthread_mutex_unlock(&cntr->mut);
 
 	sock_cntr_check_trigger_list(cntr);
+	pthread_mutex_unlock(&cntr->mut);
 	return 0;
 }
 
@@ -263,9 +262,9 @@ static int sock_cntr_set(struct fid_cntr *fid_cntr, uint64_t value)
 		pthread_cond_broadcast(&cntr->cond);
 	if (cntr->signal)
 		sock_wait_signal(cntr->waitset);
-	pthread_mutex_unlock(&cntr->mut);
 
 	sock_cntr_check_trigger_list(cntr);
+	pthread_mutex_unlock(&cntr->mut);
 	return 0;
 }
 
@@ -357,10 +356,12 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 
 	ofi_atomic_set32(&cntr->last_read_val, last_read);
 	ofi_atomic_dec32(&cntr->num_waiting);
-	pthread_mutex_unlock(&cntr->mut);
 
 	sock_cntr_check_trigger_list(cntr);
-	return (cntr->err_flag) ? -FI_EAVAIL : ret;
+	if (cntr->err_flag)
+		ret = -FI_EAVAIL;
+	pthread_mutex_unlock(&cntr->mut);
+	return ret;
 
 out:
 	pthread_mutex_unlock(&cntr->mut);
@@ -424,6 +425,16 @@ static int sock_cntr_close(struct fid *fid)
 
 	if (cntr->signal && cntr->attr.wait_obj == FI_WAIT_FD)
 		sock_wait_close(&cntr->waitset->fid);
+
+	/* An app could attempt to close the counter after a triggered op
+	 * has updated it.  In this case, a progress thread may be actively
+	 * using the counter (e.g. calling fi_cntr_add).  The thread will
+	 * be accessing the counter while holding the mutex.  So, we wait
+	 * until we can acquire the mutex before proceeding.  This ensures
+	 * that the progress thread is no longer touching the counter.
+	 */
+	pthread_mutex_lock(&cntr->mut);
+	pthread_mutex_unlock(&cntr->mut);
 
 	pthread_mutex_destroy(&cntr->mut);
 	fastlock_destroy(&cntr->list_lock);
