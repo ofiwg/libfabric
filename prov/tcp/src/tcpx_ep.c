@@ -405,6 +405,48 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	return FI_SUCCESS;
 }
 
+static int tcpx_pep_sock_create(struct tcpx_pep *pep)
+{
+	int ret, af;
+
+	switch (pep->info.addr_format) {
+	case FI_SOCKADDR:
+	case FI_SOCKADDR_IN:
+	case FI_SOCKADDR_IN6:
+		af = ((struct sockaddr *)pep->info.src_addr)->sa_family;
+		break;
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"invalid source address format\n");
+		return -FI_EINVAL;
+	}
+
+	pep->sock = ofi_socket(af, SOCK_STREAM, 0);
+	if (pep->sock == INVALID_SOCKET) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to create listener: %s\n", strerror(errno));
+		return -FI_EIO;
+	}
+
+	ret = tcpx_setup_socket(pep->sock);
+	if (ret) {
+		goto err;
+	}
+
+	ret = bind(pep->sock, pep->info.src_addr,
+		   (socklen_t) pep->info.src_addrlen);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to bind listener: %s\n", strerror(errno));
+		goto err;
+	}
+	return FI_SUCCESS;
+err:
+	ofi_close_socket(pep->sock);
+	pep->sock = INVALID_SOCKET;
+	return ret;
+}
+
 static struct fi_ops_cm tcpx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
@@ -628,6 +670,48 @@ static struct fi_ops tcpx_pep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static int tcpx_pep_setname(fid_t fid, void *addr, size_t addrlen)
+{
+	struct tcpx_pep *tcpx_pep;
+
+	if ((addrlen != sizeof(struct sockaddr_in)) &&
+	    (addrlen != sizeof(struct sockaddr_in6)))
+		return -FI_EINVAL;
+
+	tcpx_pep = container_of(fid, struct tcpx_pep,
+				util_pep.pep_fid);
+
+	if (tcpx_pep->sock != INVALID_SOCKET) {
+		ofi_close_socket(tcpx_pep->sock);
+		tcpx_pep->sock = INVALID_SOCKET;
+	}
+
+	if (tcpx_pep->info.src_addr) {
+		free(tcpx_pep->info.src_addr);
+		tcpx_pep->info.src_addrlen = 0;
+	}
+
+
+	tcpx_pep->info.src_addr = mem_dup(addr, addrlen);
+	if (!tcpx_pep->info.src_addr)
+		return -FI_ENOMEM;
+	tcpx_pep->info.src_addrlen = addrlen;
+
+	return tcpx_pep_sock_create(tcpx_pep);
+}
+
+static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct tcpx_pep *tcpx_pep;
+	size_t addrlen_in = *addrlen;
+
+	tcpx_pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid);
+	if (getsockname(tcpx_pep->sock, addr, (socklen_t *)addrlen))
+		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+
+	return FI_SUCCESS;
+}
+
 static int tcpx_pep_listen(struct fid_pep *pep)
 {
 	struct tcpx_pep *tcpx_pep;
@@ -652,7 +736,7 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 }
 
 static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
-		    const void *param, size_t paramlen)
+			   const void *param, size_t paramlen)
 {
 	struct ofi_ctrl_hdr hdr;
 	struct tcpx_conn_handle *tcpx_handle;
@@ -677,8 +761,8 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.setname = tcpx_pep_setname,
+	.getname = tcpx_pep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = tcpx_pep_listen,
@@ -726,15 +810,11 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_pep **pep, void *context)
 {
 	struct tcpx_pep *_pep;
-	struct addrinfo hints, *result, *iter;
-	char sa_ip[INET_ADDRSTRLEN] = {0};
-	char sa_port[NI_MAXSERV] = {0};
 	int ret;
 
 	if (!info) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"invalid info\n");
 		return -FI_EINVAL;
-
 	}
 
 	ret = tcpx_verify_info(fabric->api_version, info);
@@ -749,6 +829,11 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err1;
 
+	_pep->util_pep.pep_fid.fid.ops = &tcpx_pep_fi_ops;
+	_pep->util_pep.pep_fid.cm = &tcpx_pep_cm_ops;
+	_pep->util_pep.pep_fid.ops = &tcpx_pep_ops;
+
+
 	_pep->info = *info;
 	_pep->poll_info.fid = &_pep->util_pep.pep_fid.fid;
 	_pep->poll_info.type = PASSIVE_SOCK;
@@ -757,81 +842,14 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	dlist_init(&_pep->poll_info.entry);
 	_pep->sock = INVALID_SOCKET;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+	*pep = &_pep->util_pep.pep_fid;
 
 	if (info->src_addr) {
-		switch (info->addr_format) {
-		case FI_SOCKADDR:
-		case FI_SOCKADDR_IN:
-		case FI_SOCKADDR_IN6:
-			ret = getnameinfo(info->src_addr,
-					  (socklen_t) info->src_addrlen,
-					  sa_ip, INET_ADDRSTRLEN,
-					  sa_port, NI_MAXSERV, 0);
-			if (ret) {
-				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-					"pep initialization failed\n");
-				goto err2;
-			}
-			break;
-		default:
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"invalid source address format\n");
-			ret = -FI_EINVAL;
+		ret = tcpx_pep_sock_create(_pep);
+		if (ret)
 			goto err2;
-		}
-		ret = getaddrinfo(sa_ip, sa_port, &hints, &result);
-	} else {
-		ret = getaddrinfo("localhost", NULL, &hints, &result);
 	}
-
-	if (ret) {
-		ret = -FI_EINVAL;
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"getaddrinfo failed");
-		goto err2;
-	}
-
-	for (iter = result; iter; iter = iter->ai_next) {
-		_pep->sock = ofi_socket(iter->ai_family, iter->ai_socktype,
-					iter->ai_protocol);
-		if (_pep->sock == INVALID_SOCKET)
-			continue;
-
-		ret = tcpx_setup_socket(_pep->sock);
-		if (ret) {
-			ofi_close_socket(_pep->sock);
-			_pep->sock = INVALID_SOCKET;
-			continue;
-		}
-
-		if (bind(_pep->sock, result->ai_addr,
-			 (socklen_t) result->ai_addrlen)) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"failed to bind listener: %s\n", strerror(errno));
-			ofi_close_socket(_pep->sock);
-			_pep->sock = INVALID_SOCKET;
-		} else {
-			break;
-		}
-	}
-	freeaddrinfo(result);
-
-	if (_pep->sock == INVALID_SOCKET) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to create listener: %s\n", strerror(errno));
-		ret = -FI_EIO;
-		goto err2;
-	}
-
-	_pep->util_pep.pep_fid.fid.ops = &tcpx_pep_fi_ops;
-	_pep->util_pep.pep_fid.cm = &tcpx_pep_cm_ops;
-	_pep->util_pep.pep_fid.ops = &tcpx_pep_ops;
-
-	*pep = &_pep->util_pep.pep_fid;
-	return 0;
+	return FI_SUCCESS;
 err2:
 	ofi_pep_close(&_pep->util_pep);
 err1:
