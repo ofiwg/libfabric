@@ -118,7 +118,7 @@ extern "C" {
 //#define	FI_EMULTIHOP		EMULTIHOP	/* Multihop attempted */
 //#define	FI_EDOTDOT		EDOTDOT		/* RFS specific error */
 //#define	FI_EBADMSG		EBADMSG		/* Not a data message */
-//#define	FI_EOVERFLOW		EOVERFLOW	/* Value too large for defined data type */
+#define	FI_EOVERFLOW		EOVERFLOW	/* Value too large for defined data type */
 //#define	FI_ENOTUNIQ		ENOTUNIQ	/* Name not unique on network */
 //#define	FI_EBADFD		EBADFD		/* File descriptor in bad state */
 //#define	FI_EREMCHG		EREMCHG		/* Remote address changed */
