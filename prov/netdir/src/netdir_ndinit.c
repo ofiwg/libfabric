@@ -41,7 +41,6 @@
 
 #include "netdir.h"
 #include "netdir_log.h"
-#include "netdir_err.h"
 
 #ifndef ofi_sizeofaddr
 #define ofi_sizeofaddr(address)			\
@@ -203,13 +202,8 @@ static inline wchar_t *ofi_nd_get_provider_path(const WSAPROTOCOL_INFOW *proto)
 {
 	assert(proto);
 
-	int len;
-	int lenex;
-	int err;
-	int res;
-
-	wchar_t *prov;
-	wchar_t *provex;
+	int len, lenex, err, res;
+	wchar_t *prov, *provex;
 
 	res = WSCGetProviderPath((GUID*)&proto->ProviderId, NULL, &len, &err);
 	if (err != WSAEFAULT || !len)
@@ -268,6 +262,7 @@ static inline struct module_t *ofi_nd_search_module(const wchar_t* path)
 {
 	size_t i;
 	size_t j;
+
 	for (i = 0; i < ofi_nd_infra.providers.count; i++) {
 		if (path && ofi_nd_file_exists(path) &&
 		    !ofi_nd_is_directory(path)) {
@@ -283,15 +278,20 @@ static inline struct module_t *ofi_nd_search_module(const wchar_t* path)
 
 static inline struct module_t *ofi_nd_create_module(const wchar_t* path)
 {
+	struct module_t *module;
+	HMODULE hmodule;
+	can_unload_now_t unload;
+	get_class_object_t getclass;
+
 	assert(ofi_nd_infra.providers.modules);
 
-	struct module_t *module = ofi_nd_search_module(path);
+	module = ofi_nd_search_module(path);
 	if (module)
 		return module;
 
 	/* ok, this is not duplicate. try to
 	load it and get class factory*/
-	HMODULE hmodule = LoadLibraryW(path);
+	hmodule = LoadLibraryW(path);
 	if (!hmodule) {
 		ND_LOG_WARN(FI_LOG_CORE,
 			   "ofi_nd_create_module: provider : %S, failed to load: %s\n",
@@ -299,8 +299,8 @@ static inline struct module_t *ofi_nd_create_module(const wchar_t* path)
 		return NULL;
 	}
 
-	can_unload_now_t unload = (can_unload_now_t)GetProcAddress(hmodule, "DllCanUnloadNow");
-	get_class_object_t getclass = (get_class_object_t)GetProcAddress(hmodule, "DllGetClassObject");
+	unload = (can_unload_now_t)GetProcAddress(hmodule, "DllCanUnloadNow");
+	getclass = (get_class_object_t)GetProcAddress(hmodule, "DllGetClassObject");
 	if (!unload || !getclass) {
 		ND_LOG_WARN(FI_LOG_CORE,
 			   "ofi_nd_create_module: provider: %S, failed to import interface\n",
@@ -325,31 +325,36 @@ fn_noiface:
 
 static inline HRESULT ofi_nd_create_factory(const WSAPROTOCOL_INFOW* proto)
 {
+	wchar_t *path;
+	struct module_t *module;
+	IClassFactory* factory;
+	HRESULT hr;
+	struct factory_t *ftr;
+
 	assert(proto);
 	assert(ofi_nd_is_valid_proto(proto));
 	assert(ofi_nd_infra.class_factories.factory);
 
-	wchar_t *path = ofi_nd_get_provider_path(proto);
+	path = ofi_nd_get_provider_path(proto);
 	if (path)
 		ND_LOG_INFO(FI_LOG_CORE,
-			   "ofi_nd_create_factory: provider " FI_ND_GUID_FORMAT " path: %S \n",
-			   FI_ND_GUID_ARG(proto->ProviderId), path);
+			    "ofi_nd_create_factory: provider " FI_ND_GUID_FORMAT " path: %S \n",
+			    FI_ND_GUID_ARG(proto->ProviderId), path);
 	else /* can't get provider path. just return */
 		return S_OK;
 
-	struct module_t *module = ofi_nd_create_module(path);
+	module = ofi_nd_create_module(path);
 	free(path);
 	if (!module)
-		return S_OK;;
+		return S_OK;
 
 	assert(module->get_class_object);
-	IClassFactory* factory;
-	HRESULT hr = module->get_class_object(&proto->ProviderId, &IID_IClassFactory,
-					      (void**)&factory);
+	hr = module->get_class_object(&proto->ProviderId, &IID_IClassFactory,
+				      (void**)&factory);
 	if (FAILED(hr))
 		return hr;
 
-	struct factory_t *ftr = &ofi_nd_infra.class_factories.factory[ofi_nd_infra.class_factories.count];
+	ftr = &ofi_nd_infra.class_factories.factory[ofi_nd_infra.class_factories.count];
 	ofi_nd_infra.class_factories.count++;
 	ftr->class_factory = factory;
 	ftr->module = module;
@@ -364,21 +369,21 @@ static int ofi_nd_adapter_cmp(const void *adapter1, const void *adapter2)
 			       &((struct adapter_t*)adapter2)->address);
 }
 
-static HRESULT ofi_nd_create_adapter()
+static HRESULT ofi_nd_create_adapter(void)
 {
 	size_t addr_count = 0;
 	HRESULT hr;
 
 	for (size_t i = 0; i < ofi_nd_infra.class_factories.count; i++) {
 		struct factory_t *factory = &ofi_nd_infra.class_factories.factory[i];
+		ULONG listsize = 0;
+
 		assert(factory->class_factory);
 
 		hr = factory->class_factory->lpVtbl->CreateInstance(factory->class_factory,
 			NULL, &IID_IND2Provider, (void**)&factory->provider);
 		if (FAILED(hr))
 			return hr;
-
-		ULONG listsize = 0;
 		hr = factory->provider->lpVtbl->QueryAddressList(factory->provider, NULL, &listsize);
 		if (hr != ND_BUFFER_OVERFLOW)
 			return hr;
@@ -438,13 +443,16 @@ static HRESULT ofi_nd_create_adapter()
 	for (size_t i = 0; i < ofi_nd_infra.adapters.count; i++) {
 		struct adapter_t *adapter = &ofi_nd_infra.adapters.adapter[i];
 		struct factory_t *factory = adapter->factory;
+		wchar_t *saddr;
+		DWORD addrlen = 0;
+		UINT64 id;
+		int res;
+
 		assert(factory);
 		assert(factory->provider);
 
 		assert(adapter->address.addr.sa_family == AF_INET ||
 		       adapter->address.addr.sa_family == AF_INET6);
-
-		UINT64 id;
 
 		hr = factory->provider->lpVtbl->ResolveAddress(factory->provider,
 			&adapter->address.addr,
@@ -471,17 +479,12 @@ static HRESULT ofi_nd_create_adapter()
 				return hr;
 			adapter->info = *info;
 			free(info);
-		}
-		else if (FAILED(hr)) {
+		} else if (FAILED(hr)) {
 			return hr;
 		}
 
 		/* generate adapter's name */
-		wchar_t *saddr;
-
-		DWORD addrlen = 0;
-
-		int res = WSAAddressToStringW(&adapter->address.addr,
+		res = WSAAddressToStringW(&adapter->address.addr,
 					     ofi_sizeofaddr(&adapter->address.addr),
 					     NULL, NULL, &addrlen);
 		if (res == SOCKET_ERROR && WSAGetLastError() == WSAEFAULT && addrlen) {
@@ -507,27 +510,22 @@ static HRESULT ofi_nd_init(ofi_nd_adapter_cb_t cb)
 {
 	DWORD proto_len = 0;
 	HRESULT hr = ND_INTERNAL_ERROR;
-	int i;
-	int protonum;
-	size_t j;
+	int i, protonum, err;
+	size_t j, prov_count = 0;
 	WSAPROTOCOL_INFOW *proto = 0;
 
-	size_t prov_count = 0;
-
-	int err;
-
-	memset(&ofi_nd_infra, 0, sizeof(*(&ofi_nd_infra)));
+	memset(&ofi_nd_infra, 0, sizeof(ofi_nd_infra));
 
 	int ret = WSCEnumProtocols(NULL, NULL, &proto_len, &err);
 	if (ret != SOCKET_ERROR || err != WSAENOBUFS) {
 		hr = ND_NO_MEMORY;
-		goto fn_failed;
+		goto fn_exit;
 	}
 
 	proto = (WSAPROTOCOL_INFOW*)(malloc(proto_len));
 	if (!proto) {
 		hr = ND_NO_MEMORY;
-		goto fn_failed;
+		goto fn_exit;
 	}
 
 	protonum = WSCEnumProtocols(NULL, proto, &proto_len, &err);
@@ -540,9 +538,7 @@ static HRESULT ofi_nd_init(ofi_nd_adapter_cb_t cb)
 	   as maximum of existing providers and class factories */
 	for (i = 0; i < protonum; i++) {
 		if (ofi_nd_is_valid_proto(&proto[i]))
-		{
 			prov_count++;
-		}
 	}
 
 	if (!prov_count) {
@@ -555,9 +551,8 @@ static HRESULT ofi_nd_init(ofi_nd_adapter_cb_t cb)
 		goto fn_protofail;
 
 	for (i = 0; i < protonum; i++) {
-		if (ofi_nd_is_valid_proto(&proto[i])) {
+		if (ofi_nd_is_valid_proto(&proto[i]))
 			ofi_nd_create_factory(&proto[i]);
-		}
 	}
 
 	free(proto);
@@ -565,7 +560,6 @@ static HRESULT ofi_nd_init(ofi_nd_adapter_cb_t cb)
 	/* ok, factories are created, now list all available addresses, try to
 	   create adapters & collect adapter's info */
 	hr = ofi_nd_create_adapter();
-
 	if (FAILED(hr))
 		return hr;
 
@@ -577,18 +571,20 @@ static HRESULT ofi_nd_init(ofi_nd_adapter_cb_t cb)
 		cb(&ofi_nd_infra.adapters.adapter[j].info,
 		   ofi_nd_infra.adapters.adapter[j].name);
 
-fn_exit:
-	return hr;
-
 fn_protofail:
 	free(proto);
-fn_failed:
-	goto fn_exit;
+fn_exit:
+	return hr;
 }
 
+/* we don't need here exclusive execution because this function
+ * is called from OFI init routine which is single thread */
 HRESULT ofi_nd_startup(ofi_nd_adapter_cb_t cb)
-{ /* we don't need here exclusive execution because this function
-     is called from OFI init routine which is single thread */
+{ 
+	WSADATA data;
+	HRESULT hr;
+	int ret;
+
 	assert(cb);
 
 	if (ofi_nd_startup_done)
@@ -596,22 +592,20 @@ HRESULT ofi_nd_startup(ofi_nd_adapter_cb_t cb)
 
 	ND_LOG_INFO(FI_LOG_CORE, "ofi_nd_startup: starting initialization\n");
 
-	WSADATA data;
-
-	int ret = WSAStartup(MAKEWORD(2, 2), &data);
+	ret = WSAStartup(MAKEWORD(2, 2), &data);
 	if (ret)
 		return HRESULT_FROM_WIN32(ret);
 
 	ND_LOG_DEBUG(FI_LOG_CORE, "ofi_nd_startup: WSAStartup complete\n");
 
-	HRESULT hr = ofi_nd_init(cb);
+	hr = ofi_nd_init(cb);
 
 	ofi_nd_startup_done = 1;
 
 	return hr;
 }
 
-HRESULT ofi_nd_shutdown()
+HRESULT ofi_nd_shutdown(void)
 {
 	if (!ofi_nd_startup_done)
 		return S_OK;
@@ -619,25 +613,29 @@ HRESULT ofi_nd_shutdown()
 	ND_LOG_INFO(FI_LOG_CORE, "ofi_nd_shutdown: shutdown WSA\n");
 
 	ofi_nd_free_infra();
-
-	int ret = WSACleanup();
-
 	ofi_nd_startup_done = 0;
-	return HRESULT_FROM_WIN32(ret);
+
+	return HRESULT_FROM_WIN32(WSACleanup());
 }
 
 int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, struct sockaddr** addr)
 {
+	size_t i;
+
 	assert(name);
 	assert(adapter);
 
 	if (!ofi_nd_startup_done)
 		return -FI_EOPBADSTATE;
 
-	size_t i;
 	for (i = 0; i < ofi_nd_infra.adapters.count; i++) {
 		struct adapter_t *ada = &ofi_nd_infra.adapters.adapter[i];
 		if (ada->name && !strcmp(ada->name, name)) {
+			HRESULT hr;
+			UINT64 adapter_id;
+			IClassFactory* factory = NULL;
+			IND2Provider *provider = NULL;
+
 			/* ok, we found good adapter. try to initialize it */
 			if (ada->adapter) {
 				*adapter = ada->adapter;
@@ -650,8 +648,7 @@ int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, struct sockad
 			assert(ada->factory->module);
 			assert(ada->factory->module->get_class_object);
 
-			IClassFactory* factory = NULL;
-			HRESULT hr = ada->factory->module->get_class_object(
+			hr = ada->factory->module->get_class_object(
 				&ada->factory->protocol.ProviderId,
 				&IID_IClassFactory,
 				(void**)&factory);
@@ -659,26 +656,24 @@ int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, struct sockad
 				return H2F(hr);
 			assert(factory);
 
-			IND2Provider *provider = NULL;
-			hr = factory->lpVtbl->CreateInstance(factory, NULL, &IID_IND2Provider,
-				(void**)&provider);
+			hr = factory->lpVtbl->CreateInstance(factory, NULL,
+							     &IID_IND2Provider,
+							     (void**)&provider);
 			factory->lpVtbl->Release(factory);
 			if (FAILED(hr))
 				return H2F(hr);
 			assert(provider);
 
-			UINT64 adapter_id;
-
 			hr = provider->lpVtbl->ResolveAddress(provider, &ada->address.addr,
-				ofi_sizeofaddr(&ada->address.addr),
-				&adapter_id);
+							      ofi_sizeofaddr(&ada->address.addr),
+							      &adapter_id);
 			if (FAILED(hr)) {
 				provider->lpVtbl->Release(provider);
 				return H2F(hr);
 			}
 
 			hr = provider->lpVtbl->OpenAdapter(provider, &IID_IND2Adapter, adapter_id,
-				(void**)&ada->adapter);
+							   (void**)&ada->adapter);
 			provider->lpVtbl->Release(provider);
 			if (FAILED(hr))
 				return H2F(hr);

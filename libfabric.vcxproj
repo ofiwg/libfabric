@@ -312,14 +312,6 @@
       </ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="prov\netdir\src\netdir_addr.c" />
-    <ClCompile Include="prov\netdir\src\netdir_attr.c">
-      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">false</UseMSVC>
-      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">false</UseMSVC>
-      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">false</UseMSVC>
-      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'">false</UseMSVC>
-      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">false</UseMSVC>
-      <UseMSVC Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">false</UseMSVC>
-    </ClCompile>
     <ClCompile Include="prov\netdir\src\netdir_ov.c" />
     <ClCompile Include="prov\netdir\src\netdir_cq.c" />
     <ClCompile Include="prov\netdir\src\netdir_domain.c" />
@@ -627,7 +619,6 @@
     <ClInclude Include="prov\rxd\src\rxd.h" />
     <ClInclude Include="prov\rxm\src\rxm.h" />
     <ClInclude Include="prov\netdir\src\netdir.h" />
-    <ClInclude Include="prov\netdir\src\netdir_err.h" />
     <ClInclude Include="prov\netdir\src\netdir_iface.h" />
     <ClInclude Include="prov\netdir\src\netdir_log.h" />
     <ClInclude Include="prov\netdir\src\netdir_ov.h" />

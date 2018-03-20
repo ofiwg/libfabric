@@ -43,7 +43,6 @@
 #include "ofi_util.h"
 
 #include "netdir_ov.h"
-#include "netdir_err.h"
 #include "netdir_log.h"
 #include "netdir_iface.h"
 
