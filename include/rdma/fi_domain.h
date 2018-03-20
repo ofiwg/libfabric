@@ -305,12 +305,11 @@ static inline int
 fi_mr_raw_attr(struct fid_mr *mr, uint64_t *base_addr,
 	       uint8_t *raw_key, size_t *key_size, uint64_t flags)
 {
-	struct fi_mr_raw_attr attr = {
-		.flags = flags,
-		.base_addr = base_addr,
-		.raw_key = raw_key,
-		.key_size = key_size
-	};
+	struct fi_mr_raw_attr attr;
+	attr.flags = flags;
+	attr.base_addr = base_addr;
+	attr.raw_key = raw_key;
+	attr.key_size = key_size;
 	return mr->fid.ops->control(&mr->fid, FI_GET_RAW_MR, &attr);
 }
 
@@ -318,13 +317,12 @@ static inline int
 fi_mr_map_raw(struct fid_domain *domain, uint64_t base_addr,
 	      uint8_t *raw_key, size_t key_size, uint64_t *key, uint64_t flags)
 {
-	struct fi_mr_map_raw map = {
-		.flags = flags,
-		.base_addr = base_addr,
-		.raw_key = raw_key,
-		.key_size = key_size,
-		.key = key
-	};
+	struct fi_mr_map_raw map;
+	map.flags = flags;
+	map.base_addr = base_addr;
+	map.raw_key = raw_key;
+	map.key_size = key_size;
+	map.key = key;
 	return domain->fid.ops->control(&domain->fid, FI_MAP_RAW_MR, &map);
 }
 
