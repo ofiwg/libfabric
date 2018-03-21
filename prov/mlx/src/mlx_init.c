@@ -172,7 +172,7 @@ static int mlx_getinfo (
 		inject_thresh = FI_MLX_DEFAULT_INJECT_SIZE;
 
 	FI_INFO( &mlx_prov, FI_LOG_CORE,
-		"used inlect size = %d \n", inject_thresh);
+		"used inject size = %d \n", inject_thresh);
 
 	status = fi_param_get( &mlx_prov, "config", &configfile_name);
 	if (!status) {
