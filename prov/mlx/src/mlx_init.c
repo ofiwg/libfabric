@@ -79,7 +79,7 @@ struct fi_domain_attr mlx_domain_attrs = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = OFI_MR_BASIC_MAP,
+	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_BASIC,
 	.mr_key_size = -1, /*Should be setup after init*/
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,
@@ -172,7 +172,7 @@ static int mlx_getinfo (
 		inject_thresh = FI_MLX_DEFAULT_INJECT_SIZE;
 
 	FI_INFO( &mlx_prov, FI_LOG_CORE,
-		"used inlect size = %d \n", inject_thresh);
+		"used inject size = %d \n", inject_thresh);
 
 	status = fi_param_get( &mlx_prov, "config", &configfile_name);
 	if (!status) {
@@ -231,14 +231,15 @@ static int mlx_getinfo (
 	}
 
 	/* Only Pure MLX address and IPv4 are supported */
-	if (hints->addr_format == FI_ADDR_MLX) {
-		mlx_info.addr_format = FI_ADDR_MLX;
+	if (hints) {
+		if (hints->addr_format <= FI_SOCKADDR_IN) {
+			mlx_descriptor.use_ns = 1;
+			mlx_info.addr_format = FI_SOCKADDR_IN;
+		} else {
+			mlx_info.addr_format = FI_ADDR_MLX;
+		}
 	}
-
-	if (hints->addr_format <= FI_SOCKADDR_IN) {
-		mlx_descriptor.use_ns = 1;
-		mlx_info.addr_format = FI_SOCKADDR_IN;
-	}
+	
 
 	status = util_getinfo( &mlx_util_prov, version,
 				service, node, flags, hints, info);
