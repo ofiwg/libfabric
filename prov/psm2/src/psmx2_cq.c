@@ -957,7 +957,7 @@ STATIC ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 			if (ret > 0)
 				return ret;
 
-			if (poll_ctxt->trx_ctxt->am_initialized)
+			if (poll_ctxt->trx_ctxt->am_progress)
 				psmx2_am_progress(poll_ctxt->trx_ctxt);
 
 			(void) prev; /* suppress compiler warning */
