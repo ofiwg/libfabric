@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2018 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,58 +30,68 @@
  * SOFTWARE.
  */
 
-#include "psmx2.h"
+#ifndef FI_DIRECT_CM_H
+#define FI_DIRECT_CM_H
 
-DIRECT_FN
-STATIC int psmx2_cm_getname(fid_t fid, void *addr, size_t *addrlen)
+#define FABRIC_DIRECT_CM
+
+int psmx2_cm_getname(fid_t fid, void *addr, size_t *addrlen);
+
+
+static inline int fi_setname(fid_t fid, void *addr, size_t addrlen)
 {
-	struct psmx2_fid_ep *ep;
-	struct psmx2_fid_sep *sep;
-	struct psmx2_ep_name epname;
-	size_t	addr_size;
-	int err = 0;
-
-	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
-	if (!ep->domain)
-		return -FI_EBADF;
-
-	memset(&epname, 0, sizeof(epname));
-
-	if (ep->type == PSMX2_EP_REGULAR) {
-		epname.epid = ep->rx ? ep->rx->psm2_epid : 0;
-		epname.type = ep->type;
-	} else {
-		sep = (struct psmx2_fid_sep *)ep;
-		epname.epid = sep->ctxts[0].trx_ctxt->psm2_epid;
-		epname.sep_id = sep->id;
-		epname.type = sep->type;
-	}
-
-	if (ep->domain->addr_format == FI_ADDR_STR) {
-		addr_size = *addrlen;
-		ofi_straddr(addr, &addr_size, FI_ADDR_PSMX2, &epname);
-	} else {
-		addr_size = sizeof(epname);
-		memcpy(addr, &epname, MIN(*addrlen, addr_size));
-	}
-
-	if (*addrlen < addr_size)
-		err = -FI_ETOOSMALL;
-
-	*addrlen = addr_size;
-	return err;
+	return -FI_ENOSYS;
 }
 
-struct fi_ops_cm psmx2_cm_ops = {
-	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = psmx2_cm_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
-};
+static inline int fi_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	return psmx2_cm_getname(fid, addr, addrlen);
+}
 
+static inline int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int fi_listen(struct fid_pep *pep)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int
+fi_connect(struct fid_ep *ep, const void *addr,
+	   const void *param, size_t paramlen)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int
+fi_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int
+fi_reject(struct fid_pep *pep, fid_t handle,
+	  const void *param, size_t paramlen)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int fi_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+			  struct fid_mc **mc, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static inline fi_addr_t fi_mc_addr(struct fid_mc *mc)
+{
+	return -FI_ENOSYS;
+}
+
+#endif /* FI_DIRECT_CM_H */

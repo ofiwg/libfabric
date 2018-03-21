@@ -140,7 +140,8 @@ static void psmx2_wait_stop_progress(void)
 static struct fi_ops_wait *psmx2_wait_ops_save;
 static struct fi_ops_wait psmx2_wait_ops;
 
-static int psmx2_wait_wait(struct fid_wait *wait, int timeout)
+DIRECT_FN
+STATIC int psmx2_wait_wait(struct fid_wait *wait, int timeout)
 {
 	struct util_wait *wait_priv;
 	struct psmx2_fid_fabric *fabric;
@@ -158,6 +159,7 @@ static int psmx2_wait_wait(struct fid_wait *wait, int timeout)
 	return err;
 }
 
+DIRECT_FN
 int psmx2_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset)
 {
@@ -177,6 +179,7 @@ int psmx2_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	return 0;
 }
 
+DIRECT_FN
 int psmx2_wait_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	struct psmx2_fid_cq *cq_priv;

@@ -269,6 +269,7 @@ err_out:
 	return err;
 }
 
+DIRECT_FN
 int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_domain **domain, void *context)
 {

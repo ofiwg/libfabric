@@ -1013,7 +1013,8 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 	return 0;
 }
 
-static ssize_t psmx2_atomic_write(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_write(struct fid_ep *ep,
 				  const void *buf,
 				  size_t count, void *desc,
 				  fi_addr_t dest_addr,
@@ -1029,7 +1030,8 @@ static ssize_t psmx2_atomic_write(struct fid_ep *ep,
 					  ep_priv->tx_flags);
 }
 
-static ssize_t psmx2_atomic_writemsg(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_writemsg(struct fid_ep *ep,
 				const struct fi_msg_atomic *msg,
 				uint64_t flags)
 {
@@ -1053,7 +1055,8 @@ static ssize_t psmx2_atomic_writemsg(struct fid_ep *ep,
 					  msg->op, msg->context, flags);
 }
 
-static ssize_t psmx2_atomic_writev(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_writev(struct fid_ep *ep,
 				   const struct fi_ioc *iov,
 				   void **desc, size_t count,
 				   fi_addr_t dest_addr,
@@ -1080,7 +1083,8 @@ static ssize_t psmx2_atomic_writev(struct fid_ep *ep,
 					  ep_priv->tx_flags);
 }
 
-static ssize_t psmx2_atomic_inject(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_inject(struct fid_ep *ep,
 				   const void *buf,
 				   size_t count, /*void *desc,*/
 				   fi_addr_t dest_addr,
@@ -1401,7 +1405,8 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	return 0;
 }
 
-static ssize_t psmx2_atomic_readwrite(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_readwrite(struct fid_ep *ep,
 				      const void *buf,
 				      size_t count, void *desc,
 				      void *result, void *result_desc,
@@ -1419,7 +1424,8 @@ static ssize_t psmx2_atomic_readwrite(struct fid_ep *ep,
 					      context, ep_priv->tx_flags);
 }
 
-static ssize_t psmx2_atomic_readwritemsg(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_readwritemsg(struct fid_ep *ep,
 					 const struct fi_msg_atomic *msg,
 					 struct fi_ioc *resultv,
 					 void **result_desc,
@@ -1465,7 +1471,8 @@ static ssize_t psmx2_atomic_readwritemsg(struct fid_ep *ep,
 					      msg->op, msg->context, flags);
 }
 
-static ssize_t psmx2_atomic_readwritev(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_readwritev(struct fid_ep *ep,
 				       const struct fi_ioc *iov,
 				       void **desc, size_t count,
 				       struct fi_ioc *resultv,
@@ -1837,7 +1844,8 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	return 0;
 }
 
-static ssize_t psmx2_atomic_compwrite(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_compwrite(struct fid_ep *ep,
 				      const void *buf,
 				      size_t count, void *desc,
 				      const void *compare, void *compare_desc,
@@ -1857,7 +1865,8 @@ static ssize_t psmx2_atomic_compwrite(struct fid_ep *ep,
 					      datatype, op, context, ep_priv->tx_flags);
 }
 
-static ssize_t psmx2_atomic_compwritemsg(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_compwritemsg(struct fid_ep *ep,
 					 const struct fi_msg_atomic *msg,
 					 const struct fi_ioc *comparev,
 					 void **compare_desc,
@@ -1893,7 +1902,8 @@ static ssize_t psmx2_atomic_compwritemsg(struct fid_ep *ep,
 					      msg->op, msg->context, flags);
 }
 
-static ssize_t psmx2_atomic_compwritev(struct fid_ep *ep,
+DIRECT_FN
+STATIC ssize_t psmx2_atomic_compwritev(struct fid_ep *ep,
 				       const struct fi_ioc *iov,
 				       void **desc, size_t count,
 				       const struct fi_ioc *comparev,
@@ -2039,7 +2049,8 @@ static int psmx2_atomic_compwritevalid_internal(size_t chunk_size,
 	return 0;
 }
 
-static int psmx2_atomic_writevalid(struct fid_ep *ep,
+DIRECT_FN
+STATIC int psmx2_atomic_writevalid(struct fid_ep *ep,
 				   enum fi_datatype datatype,
 				   enum fi_op op, size_t *count)
 {
@@ -2051,7 +2062,8 @@ static int psmx2_atomic_writevalid(struct fid_ep *ep,
 	return psmx2_atomic_writevalid_internal(chunk_size, datatype, op, count);
 }
 
-static int psmx2_atomic_readwritevalid(struct fid_ep *ep,
+DIRECT_FN
+STATIC int psmx2_atomic_readwritevalid(struct fid_ep *ep,
 				       enum fi_datatype datatype,
 				       enum fi_op op, size_t *count)
 {
@@ -2063,7 +2075,8 @@ static int psmx2_atomic_readwritevalid(struct fid_ep *ep,
 	return psmx2_atomic_readwritevalid_internal(chunk_size, datatype, op, count);
 }
 
-static int psmx2_atomic_compwritevalid(struct fid_ep *ep,
+DIRECT_FN
+STATIC int psmx2_atomic_compwritevalid(struct fid_ep *ep,
 				       enum fi_datatype datatype,
 				       enum fi_op op, size_t *count)
 {
@@ -2075,6 +2088,7 @@ static int psmx2_atomic_compwritevalid(struct fid_ep *ep,
 	return psmx2_atomic_compwritevalid_internal(chunk_size, datatype, op, count);
 }
 
+DIRECT_FN
 int psmx2_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		       enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags)
 {

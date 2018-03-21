@@ -132,7 +132,8 @@ static int psmx2_mr_close(fid_t fid)
 	return 0;
 }
 
-static int psmx2_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+DIRECT_FN
+STATIC int psmx2_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx2_fid_mr *mr;
 	struct psmx2_fid_ep *ep;
@@ -236,7 +237,8 @@ static void psmx2_mr_normalize_iov(struct iovec *iov, size_t *count)
 	*count = i;
 }
 
-static int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
+DIRECT_FN
+STATIC int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
 			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context)
 {
@@ -283,7 +285,8 @@ static int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
 	return 0;
 }
 
-static int psmx2_mr_regv(struct fid *fid,
+DIRECT_FN
+STATIC int psmx2_mr_regv(struct fid *fid,
 			 const struct iovec *iov, size_t count,
 			 uint64_t access, uint64_t offset,
 			 uint64_t requested_key, uint64_t flags,
@@ -338,7 +341,8 @@ static int psmx2_mr_regv(struct fid *fid,
 	return 0;
 }
 
-static int psmx2_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+DIRECT_FN
+STATIC int psmx2_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr)
 {
 	struct fid_domain *domain;

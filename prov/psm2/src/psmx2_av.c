@@ -568,7 +568,8 @@ out:
 	return err;
 }
 
-static int psmx2_av_insert(struct fid_av *av, const void *addr,
+DIRECT_FN
+STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 			   size_t count, fi_addr_t *fi_addr,
 			   uint64_t flags, void *context)
 {
@@ -688,13 +689,15 @@ out:
 	return ret;
 }
 
-static int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
+DIRECT_FN
+STATIC int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			   uint64_t flags)
 {
 	return 0;
 }
 
-static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+DIRECT_FN
+STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			   size_t *addrlen)
 {
 	struct psmx2_fid_av *av_priv;
@@ -825,7 +828,8 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 	return ret;
 }
 
-static const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
+DIRECT_FN
+STATIC const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
 				    char *buf, size_t *len)
 {
 	return ofi_straddr(buf, len, FI_ADDR_PSMX2, addr);
@@ -855,7 +859,8 @@ static int psmx2_av_close(fid_t fid)
 	return 0;
 }
 
-static int psmx2_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+DIRECT_FN
+STATIC int psmx2_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx2_fid_av *av;
 
@@ -894,6 +899,7 @@ static struct fi_ops_av psmx2_av_ops = {
 	.straddr = psmx2_av_straddr,
 };
 
+DIRECT_FN
 int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		  struct fid_av **av, void *context)
 {

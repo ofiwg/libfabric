@@ -116,7 +116,8 @@ static void psmx2_ep_optimize_ops(struct psmx2_fid_ep *ep)
 	}
 }
 
-static ssize_t psmx2_ep_cancel(fid_t fid, void *context)
+DIRECT_FN
+STATIC ssize_t psmx2_ep_cancel(fid_t fid, void *context)
 {
 	struct psmx2_fid_ep *ep;
 	psm2_mq_status2_t status;
@@ -168,7 +169,8 @@ static ssize_t psmx2_ep_cancel(fid_t fid, void *context)
 	return psmx2_errno(err);
 }
 
-static int psmx2_ep_getopt(fid_t fid, int level, int optname,
+DIRECT_FN
+STATIC int psmx2_ep_getopt(fid_t fid, int level, int optname,
 			   void *optval, size_t *optlen)
 {
 	struct psmx2_fid_ep *ep;
@@ -191,7 +193,8 @@ static int psmx2_ep_getopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int psmx2_ep_setopt(fid_t fid, int level, int optname,
+DIRECT_FN
+STATIC int psmx2_ep_setopt(fid_t fid, int level, int optname,
 			   const void *optval, size_t optlen)
 {
 	struct psmx2_fid_ep *ep;
@@ -283,7 +286,8 @@ static int psmx2_add_poll_ctxt(struct slist *list, struct psmx2_trx_ctxt *trx_ct
 	return 0;
 }
 
-static int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+DIRECT_FN
+STATIC int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx2_fid_ep *ep;
 	struct psmx2_fid_av *av;
@@ -426,7 +430,8 @@ static inline int psmx2_ep_get_flags(struct psmx2_fid_ep *ep, uint64_t *flags)
 	return 0;
 }
 
-static int psmx2_ep_control(fid_t fid, int command, void *arg)
+DIRECT_FN
+STATIC int psmx2_ep_control(fid_t fid, int command, void *arg)
 {
 	struct fi_alias *alias;
 	struct psmx2_fid_ep *ep, *new_ep;
@@ -478,7 +483,8 @@ static int psmx2_ep_control(fid_t fid, int command, void *arg)
 	return 0;
 }
 
-static ssize_t psmx2_rx_size_left(struct fid_ep *ep)
+DIRECT_FN
+STATIC ssize_t psmx2_rx_size_left(struct fid_ep *ep)
 {
 	struct psmx2_fid_ep *ep_priv;
 
@@ -489,7 +495,8 @@ static ssize_t psmx2_rx_size_left(struct fid_ep *ep)
 		return -FI_EOPBADSTATE;
 }
 
-static ssize_t psmx2_tx_size_left(struct fid_ep *ep)
+DIRECT_FN
+STATIC ssize_t psmx2_tx_size_left(struct fid_ep *ep)
 {
 	struct psmx2_fid_ep *ep_priv;
 
@@ -616,6 +623,7 @@ errout:
 	return err;
 }
 
+DIRECT_FN
 int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context)
 {
@@ -739,6 +747,7 @@ static struct fi_ops_ep psmx2_stx_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+DIRECT_FN
 int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		  struct fid_stx **stx, void *context)
 {
@@ -844,7 +853,8 @@ static int psmx2_sep_control(fid_t fid, int command, void *arg)
 	return 0;
 }
 
-static int psmx2_sep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+DIRECT_FN
+STATIC int psmx2_sep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx2_fid_sep *sep;
 	int i, err = 0;
@@ -860,7 +870,8 @@ static int psmx2_sep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return err;
 }
 
-static int psmx2_tx_context(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
+DIRECT_FN
+STATIC int psmx2_tx_context(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 			    struct fid_ep **tx_ep, void *context)
 {
 	struct psmx2_fid_sep *sep;
@@ -874,7 +885,8 @@ static int psmx2_tx_context(struct fid_ep *ep, int index, struct fi_tx_attr *att
 	return 0;
 }
 
-static int psmx2_rx_context(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
+DIRECT_FN
+STATIC int psmx2_rx_context(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 			    struct fid_ep **rx_ep, void *context)
 {
 	struct psmx2_fid_sep *sep;
@@ -927,6 +939,7 @@ static struct fi_ops_ep psmx2_sep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+DIRECT_FN
 int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **sep, void *context)
 {
