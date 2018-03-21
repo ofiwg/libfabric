@@ -289,6 +289,30 @@ static int util_av_hash_insert(struct util_av_hash *hash, int slot, int index)
 	return 0;
 }
 
+/* Caller must hold `av::lock` */
+static inline
+int util_av_lookup_index(struct util_av *av, const void *addr, int slot)
+{
+	int i, ret = -FI_ENODATA;
+
+	if (av->hash.table[slot].index == UTIL_NO_ENTRY) {
+		FI_DBG(av->prov, FI_LOG_AV, "no entry at slot (%d)\n", slot);
+		goto out;
+	}
+
+	for (i = slot; i != UTIL_NO_ENTRY; i = av->hash.table[i].next) {
+		if (!memcmp(ofi_av_get_addr(av, av->hash.table[i].index), addr,
+			    av->addrlen)) {
+			ret = av->hash.table[i].index;
+			FI_DBG(av->prov, FI_LOG_AV, "entry at index (%d)\n", ret);
+			break;
+		}
+	}
+out:
+	FI_DBG(av->prov, FI_LOG_AV, "%d\n", ret);
+	return ret;
+}
+
 /*
  * Must hold AV lock
  */
@@ -304,6 +328,11 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 	}
 
 	if (av->flags & OFI_AV_HASH) {
+		ret = util_av_lookup_index(av, addr, slot);
+		if (ret != -FI_ENODATA) {
+			*index = ret;
+			return 0;
+		}
 		ret = util_av_hash_insert(&av->hash, slot, av->free_list);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
@@ -405,7 +434,7 @@ int ofi_av_remove_addr(struct util_av *av, int slot, int index)
 
 int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot)
 {
-	int i, ret = -FI_ENODATA;
+	int ret;
 
 	if (slot < 0 || slot >= av->hash.slots) {
 		FI_WARN(av->prov, FI_LOG_AV, "invalid slot (%d)\n", slot);
@@ -413,21 +442,7 @@ int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot)
 	}
 
 	fastlock_acquire(&av->lock);
-	if (av->hash.table[slot].index == UTIL_NO_ENTRY) {
-		FI_DBG(av->prov, FI_LOG_AV, "no entry at slot (%d)\n", slot);
-		goto out;
-	}
-
-	for (i = slot; i != UTIL_NO_ENTRY; i = av->hash.table[i].next) {
-		if (!memcmp(ofi_av_get_addr(av, av->hash.table[i].index), addr,
-			    av->addrlen)) {
-			ret = av->hash.table[i].index;
-			FI_DBG(av->prov, FI_LOG_AV, "entry at index (%d)\n", ret);
-			break;
-		}
-	}
-out:
-	FI_DBG(av->prov, FI_LOG_AV, "%d\n", ret);
+	ret = util_av_lookup_index(av, addr, slot);
 	fastlock_release(&av->lock);
 	return ret;
 }
