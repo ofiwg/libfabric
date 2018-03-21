@@ -158,6 +158,7 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
 				ep->info->tx_attr->op_flags |= FI_COMPLETION;
+			ofi_atomic_initialize32(&ep->scq->sends_outstanding, 0);
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -532,16 +533,54 @@ fi_ibv_prepare_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	return FI_SUCCESS;
 }
 
+static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_msg_ep *ep)
+{
+	struct fi_ibv_wce *wce;
+	struct ibv_wc wc[10];
+	int ret, i;
+
+	fastlock_acquire(&ep->scq->lock);
+	/* TODO: retrieve WCs as much as possbile in a single
+	 * ibv_poll_cq call */
+	while (1) {
+		ret = ibv_poll_cq(ep->scq->cq, 10, wc);
+		if (ret <= 0) {
+			fastlock_release(&ep->scq->lock);
+			return ret;
+		}
+
+		for (i = 0; i < ret; i++) {
+			if (!fi_ibv_process_wc(ep->scq, &wc[i]))
+				continue;
+			if (OFI_LIKELY(!fi_ibv_wc_2_wce(ep->scq, &wc[i], &wce)))
+				slist_insert_tail(&wce->entry, &ep->scq->wcq);
+		}
+	}
+
+	fastlock_release(&ep->scq->lock);
+	return FI_SUCCESS;
+}
+
 /* WR must be filled out by now except for context */
 static inline ssize_t
 fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 {
 	struct fi_ibv_wre *wre = NULL;
+	int ret;
 
 	if (wr->send_flags & IBV_SEND_SIGNALED) {
-		int ret = fi_ibv_prepare_signal_send(ep, wr, &wre, context);
+		ret = fi_ibv_prepare_signal_send(ep, wr, &wre, context);
 		if (OFI_UNLIKELY(ret))
 			return ret;
+	} else {
+		if (ofi_atomic_inc32(&ep->scq->sends_outstanding) >=
+						ep->info->tx_attr->size) {
+			ret = fi_ibv_poll_reap_unsig_cq(ep);
+			if (OFI_UNLIKELY(ret)) {
+				ofi_atomic_dec32(&ep->scq->sends_outstanding);
+				return -FI_EAGAIN;
+			}
+		}
 	}
 
 	return FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr,

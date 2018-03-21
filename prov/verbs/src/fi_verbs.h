@@ -149,10 +149,8 @@
 #define FI_IBV_RELEASE_WRE(ep, wre)			\
 ({							\
 	if (wre) {					\
-		fastlock_acquire(&ep->wre_lock);	\
-		dlist_remove(&wre->entry);		\
-		util_buf_release(ep->wre_pool, wre);	\
-		fastlock_release(&ep->wre_lock);	\
+		fi_ibv_release_wre(ep->wre_pool,	\
+				   &ep->wre_lock, wre);	\
 	}						\
 })
 
@@ -416,6 +414,7 @@ struct fi_ibv_cq {
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
 	struct util_buf_pool	*wce_pool;
+	ofi_atomic32_t		sends_outstanding;
 };
 
 struct fi_ibv_rdm_request;
@@ -720,6 +719,71 @@ void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
 void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *cur_ep);
 int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
                            enum ibv_qp_type qp_type);
+
+static inline void fi_ibv_release_wre(struct util_buf_pool *wre_pool,
+				      fastlock_t *wre_lock,
+				      struct fi_ibv_wre *wre)
+{
+	fastlock_acquire(wre_lock);
+	dlist_remove(&wre->entry);
+	wre->srq = NULL;
+	wre->ep = NULL;
+	util_buf_release(wre_pool, wre);
+	fastlock_release(wre_lock);
+}
+
+static inline int
+fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+{
+	struct fi_ibv_wre *wre;
+	int ret = 1;
+
+	/* Handle WR entry when user doesn't request the completion */
+	if (!wc->wr_id) {
+		ofi_atomic_dec32(&cq->sends_outstanding);
+		return 0;
+	}
+
+	/* Handle compeltions that should be provided to user */
+	wre = (struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
+	assert(wre && (wre->ep || wre->srq));
+	wc->wr_id = (uintptr_t)wre->context;
+
+	if (OFI_UNLIKELY(wc->status == IBV_WC_WR_FLUSH_ERR)) {
+		/* Handle case where remote side destroys
+		 * the connection, but local side isn't aware
+		 * about that yet */
+		ret = 0;
+	}
+
+	if (wre->ep) {
+		fi_ibv_release_wre(wre->ep->wre_pool,
+				   &wre->ep->wre_lock, wre);
+	} else if (wre->srq) {
+		fi_ibv_release_wre(wre->srq->wre_pool,
+				   &wre->srq->wre_lock, wre);
+	} else {
+		/* Shouldn't go here */
+		assert(0);
+		return -FI_EINVAL;
+	}
+
+	return ret;
+}
+
+static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
+				  struct ibv_wc *wc,
+				  struct fi_ibv_wce **wce)
+
+{
+	*wce = util_buf_alloc(cq->wce_pool);
+	if (OFI_UNLIKELY(!*wce))
+		return -FI_ENOMEM;
+	memset(*wce, 0, sizeof(**wce));
+	(*wce)->wc = *wc;
+
+	return FI_SUCCESS;
+}
 
 #define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
 	{ .addr = (uintptr_t)buf,					\

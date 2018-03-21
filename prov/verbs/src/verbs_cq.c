@@ -230,31 +230,14 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
 	fi_ibv_handle_wc(wc, &entry[i].flags, &entry[i].len, &entry[i].data);
 }
 
-static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
-				  struct ibv_wc *wc,
-				  struct fi_ibv_wce **wce)
-
-{
-	struct fi_ibv_wre *wre =
-		(struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
-
-	*wce = util_buf_alloc(cq->wce_pool);
-	if (!*wce)
-		return -FI_ENOMEM;
-	memset(*wce, 0, sizeof(**wce));
-	wc->wr_id = (uintptr_t)wre->context;
-	(*wce)->wc = *wc;
-
-	return FI_SUCCESS;
-}
-
 /* Must call with cq->lock held */
 static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_msg_ep *ep,
 					     struct fi_ibv_cq *cq)
 {
-	struct fi_ibv_wre *wre;
 	struct fi_ibv_wce *wce;
+	struct fi_ibv_wre *wre;
 	struct util_buf_pool *wre_pool;
+	fastlock_t *wre_lock;
 	struct ibv_wc wc;
 	ssize_t ret;
 
@@ -263,41 +246,48 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_msg_ep *ep,
 		return ret;
 
 	/* Handle WR entry when user doesn't request the completion */
-	if (!wc.wr_id)
-		return 0;
+	if (!wc.wr_id) {
+		ofi_atomic_dec32(&cq->sends_outstanding);
+		/* To ensure the new iteration */
+		return 1;
+	}
 
 	wre = (struct fi_ibv_wre *)(uintptr_t)wc.wr_id;
+	assert(wre && (wre->ep || wre->srq));
+	wc.wr_id = (uintptr_t)wre->context;
+
 	if (wre->ep) {
 		wre_pool = wre->ep->wre_pool;
+		wre_lock = &wre->ep->wre_lock;
 		if ((wre->ep != ep) &&
 		    (wc.status != IBV_WC_WR_FLUSH_ERR)) {
 			ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
-			if (ret) {
+			if (OFI_UNLIKELY(ret)) {
 				wre->ep = NULL;
 				ret = -FI_EAGAIN;
 				goto fn;
 			}
 			slist_insert_tail(&wce->entry, &cq->wcq);
 		}
-		wre->ep = NULL;
 	} else {
 		/* WRE belongs to SRQ's wre pool and should be
 		 * handled or rejected if status == `IBV_WC_WR_FLUSH_ERR` */
 		assert(wre->srq);
 		wre_pool = wre->srq->wre_pool;
-		wre->srq = NULL;
+		wre_lock = &wre->srq->wre_lock;
 		if (wc.status != IBV_WC_WR_FLUSH_ERR) {
 			ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
-			if (ret) {
+			if (OFI_UNLIKELY(ret)) {
 				ret = -FI_EAGAIN;
 				goto fn;
 			}
 			slist_insert_tail(&wce->entry, &cq->wcq);
 		}
 	}
+	ret = 1;
 fn:
-	dlist_remove(&wre->entry);
-	util_buf_release(wre_pool, wre);
+	fi_ibv_release_wre(wre_pool, wre_lock, wre);
+
 	return ret;
 }
 
@@ -352,49 +342,13 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 /* Must call with cq->lock held */
 ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	struct fi_ibv_wre *wre;
-	struct util_buf_pool *wre_pool;
-	fastlock_t *wre_lock;
 	ssize_t ret;
 
 	ret = ibv_poll_cq(cq->cq, 1, wc);
 	if (ret <= 0)
 		return ret;
 
-	/* Handle WR entry when user doesn't request the completion */
-	if (!wc->wr_id)
-		return 0;
-
-	wre = (struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
-	assert(wre && (wre->ep || wre->srq));
-	wc->wr_id = (uintptr_t)wre->context;
-
-	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
-		/* Handles case where remote side destroys
-		 * the connection, but local side isn't aware
-		 * about that yet */
-		ret = 0;
-	}
-
-	if (wre->ep) {
-		wre_pool = wre->ep->wre_pool;
-		wre_lock = &wre->ep->wre_lock;
-		wre->ep = NULL;
-	} else if (wre->srq) {
-		wre_pool = wre->srq->wre_pool;
-		wre_lock = &wre->srq->wre_lock;
-		wre->srq = NULL;
-	} else {
-		assert(0);
-		return -FI_EAVAIL;
-	}
-
-	fastlock_acquire(wre_lock);
-	dlist_remove(&wre->entry);
-	util_buf_release(wre_pool, wre);
-	fastlock_release(wre_lock);
-
-	return ret;
+	return fi_ibv_process_wc(cq, wc);
 }
 
 static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
