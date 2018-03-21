@@ -231,14 +231,15 @@ static int mlx_getinfo (
 	}
 
 	/* Only Pure MLX address and IPv4 are supported */
-	if (hints->addr_format == FI_ADDR_MLX) {
-		mlx_info.addr_format = FI_ADDR_MLX;
+	if (hints) {
+		if (hints->addr_format <= FI_SOCKADDR_IN) {
+			mlx_descriptor.use_ns = 1;
+			mlx_info.addr_format = FI_SOCKADDR_IN;
+		} else {
+			mlx_info.addr_format = FI_ADDR_MLX;
+		}
 	}
-
-	if (hints->addr_format <= FI_SOCKADDR_IN) {
-		mlx_descriptor.use_ns = 1;
-		mlx_info.addr_format = FI_SOCKADDR_IN;
-	}
+	
 
 	status = util_getinfo( &mlx_util_prov, version,
 				service, node, flags, hints, info);
