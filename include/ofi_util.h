@@ -545,26 +545,16 @@ extern int
 util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 		       enum util_cmap_state state,
 		       struct util_cmap_handle **handle);
-/* Caller must hold `cmap::lock` */
+int ofi_cmap_handle_connect(struct util_cmap *cmap, fi_addr_t fi_addr,
+			    struct util_cmap_handle *handle);
+/* Caller must hold cmap->lock */
 static inline struct util_cmap_handle *
 ofi_cmap_acquire_handle(struct util_cmap *cmap, fi_addr_t fi_addr)
 
 {
-	struct util_cmap_handle *handle =
-		util_cmap_get_handle(cmap, fi_addr);
-	if (!handle) {
-		int ret;
-
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		       "No handle found for given fi_addr\n");
-		ret = util_cmap_alloc_handle(cmap, fi_addr, CMAP_IDLE, &handle);
-		if (OFI_UNLIKELY(ret))
-			return NULL;
-	}
-	return handle;
+	assert(fi_addr <= cmap->av->count);
+	return cmap->handles_av[fi_addr];
 }
-int ofi_cmap_handle_connect(struct util_cmap *cmap, fi_addr_t fi_addr,
-			    struct util_cmap_handle *handle);
 
 /*
  * Poll set

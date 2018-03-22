@@ -1213,7 +1213,7 @@ int util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 			   struct util_cmap_handle **handle)
 {
 	*handle = cmap->attr.alloc();
-	if (!*handle)
+	if (OFI_UNLIKELY(!*handle))
 		return -FI_ENOMEM;
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated handle: %p for "
 	       "fi_addr: %" PRIu64 "\n", *handle, fi_addr);
@@ -1313,15 +1313,6 @@ out:
 }
 
 /* Caller must hold cmap->lock */
-struct util_cmap_handle *
-util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr)
-{
-	if (fi_addr > cmap->av->count) {
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "Invalid fi_addr\n");
-		return NULL;
-	}
-	return cmap->handles_av[fi_addr];
-}
 
 void ofi_cmap_process_shutdown(struct util_cmap *cmap,
 			       struct util_cmap_handle *handle)
@@ -1403,7 +1394,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 	if (index < 0)
 		handle = util_cmap_get_handle_peer(cmap, addr);
 	else
-		handle = util_cmap_get_handle(cmap, (fi_addr_t)index);
+		handle = ofi_cmap_acquire_handle(cmap, (fi_addr_t)index);
 
 	if (!handle) {
 		if (index < 0)
