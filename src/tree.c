@@ -236,7 +236,7 @@ static void ofi_delete_rebalance(struct ofi_rbmap *map, struct ofi_rbnode *node)
 				w->color = node->parent->color;
 				node->parent->color = BLACK;
 				w->right->color = BLACK;
-				ofi_rotate_right(map, node->parent);
+				ofi_rotate_left(map, node->parent);
 				node = map->root;
 			}
 		} else {
