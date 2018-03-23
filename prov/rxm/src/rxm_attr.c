@@ -69,6 +69,7 @@ struct fi_ep_attr rxm_ep_attr = {
 	.max_order_raw_size = SIZE_MAX,
 	.max_order_war_size = SIZE_MAX,
 	.max_order_waw_size = SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC,
 };
 
 struct fi_domain_attr rxm_domain_attr = {
