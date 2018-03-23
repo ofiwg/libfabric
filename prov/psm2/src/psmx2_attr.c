@@ -380,6 +380,13 @@ void psmx2_alter_prov_info(uint32_t api_version,
 			info->domain_attr->mr_mode = FI_MR_SCALABLE;
 
 		/*
+		 * Avoid automatically adding secondary caps that may negatively
+		 * impact performance.
+		 */
+		if (hints && hints->caps && !(hints->caps & FI_TRIGGER))
+			info->caps &= ~FI_TRIGGER;
+
+		/*
 		 * Special arrangement for auto tag layout selection.
 		 * See psmx2_init_prov_info(). Set this flag to allow
 		 * follow-up fi_getinfo() calls to pick the same tag
