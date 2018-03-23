@@ -772,7 +772,9 @@ For example, a mem_tag_format of 0x30FF indicates support for 14
 tagged bits, separated into 3 fields.  The first field consists of
 2-bits, the second field 4-bits, and the final field 8-bits.  Valid
 masks for such a tagged field would be a bitwise OR'ing of zero or
-more of the following values: 0x3000, 0x0F00, and 0x00FF.
+more of the following values: 0x3000, 0x0F00, and 0x00FF. The provider
+may not validate the mask provided by the application for performance
+reasons.
 
 By identifying fields within a tag, a provider may be able to optimize
 their search routines.  An application which requests tag fields must
@@ -782,8 +784,9 @@ can request a specific number of fields of a given size.  A provider
 must return a tag format that supports the requested number of fields,
 with each field being at least the size requested, or fail the
 request.  A provider may increase the size of the fields. When reporting
-completions (see FI_CQ_FORMAT_TAGGED), the provider must provide the 
-exact value of the received tag, clearing out any unsupported tag bits.
+completions (see FI_CQ_FORMAT_TAGGED), it is not guaranteed that the
+provider would clear out any unsupported tag bits in the tag field of
+the completion entry.
 
 It is recommended that field sizes be ordered from smallest to
 largest.  A generic, unstructured tag and mask can be achieved by
