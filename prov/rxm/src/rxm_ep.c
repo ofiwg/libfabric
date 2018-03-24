@@ -970,7 +970,6 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		     uint64_t tag, uint64_t comp_flags,
 		     struct rxm_buf_pool *pool, uint8_t op)
 {
-	ssize_t ret;
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_buf *tx_buf;
 
@@ -978,13 +977,15 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       "Buffer TX request (len - %zd) for %p conn\n", len, rxm_conn);
 
 	if (len > rxm_ep->rxm_info->tx_attr->inject_size) {
-		ret = (rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context, count, iov,
-					       desc, len, data, flags, tag, comp_flags, op,
-					       &tx_entry) < 0) ? -FI_EAGAIN : FI_SUCCESS;
+		if (rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context,
+					    count, iov, desc, len, data,
+					    flags, tag, comp_flags,
+					    op, &tx_entry) < 0)
+			return -FI_EAGAIN;
 	} else {
-		ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, count,
-					   len, data, flags, tag, comp_flags,
-					   &tx_buf, &tx_entry, pool);
+		ssize_t ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, count,
+						   len, data, flags, tag, comp_flags,
+						   &tx_buf, &tx_entry, pool);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
@@ -994,7 +995,7 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	dlist_insert_tail(&tx_entry->postponed_entry, &rxm_conn->postponed_tx_list);
 
-	return ret;
+	return FI_SUCCESS;
 }
 
 static inline ssize_t
