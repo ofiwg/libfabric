@@ -504,6 +504,7 @@ struct psmx2_trx_ctxt {
 	psm2_epid_t		psm2_epid;
 	psm2_mq_t		psm2_mq;
 	int			am_initialized;
+	int			am_progress;
 	int			id;
 	int			usage_flags;
 	struct psm2_am_parameters psm2_am_param;
@@ -1054,7 +1055,7 @@ static inline void psmx2_progress(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	if (trx_ctxt) {
 		psmx2_cq_poll_mq(NULL, trx_ctxt, NULL, 0, NULL);
-		if (trx_ctxt->am_initialized)
+		if (trx_ctxt->am_progress)
 			psmx2_am_progress(trx_ctxt);
 	}
 }
