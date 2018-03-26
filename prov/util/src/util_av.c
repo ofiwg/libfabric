@@ -322,17 +322,16 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 	struct util_ep *ep;
 	int ret;
 
-	if (OFI_UNLIKELY(slot < 0 || slot >= av->hash.slots)) {
-		FI_WARN(av->prov, FI_LOG_AV, "invalid slot (%d)\n", slot);
-		return -FI_EINVAL;
-	}
-
 	if (OFI_UNLIKELY(av->free_list == UTIL_NO_ENTRY)) {
 		FI_WARN(av->prov, FI_LOG_AV, "AV is full\n");
 		return -FI_ENOSPC;
 	}
 
 	if (av->flags & OFI_AV_HASH) {
+		if (OFI_UNLIKELY(slot < 0 || slot >= av->hash.slots)) {
+			FI_WARN(av->prov, FI_LOG_AV, "invalid slot (%d)\n", slot);
+			return -FI_EINVAL;
+		}
 		ret = util_av_lookup_index(av, addr, slot);
 		if (ret != -FI_ENODATA) {
 			*index = ret;
@@ -441,7 +440,7 @@ int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot)
 {
 	int ret;
 
-	if (slot < 0 || slot >= av->hash.slots) {
+	if (OFI_UNLIKELY(slot < 0 || slot >= av->hash.slots)) {
 		FI_WARN(av->prov, FI_LOG_AV, "invalid slot (%d)\n", slot);
 		return -FI_EINVAL;
 	}
