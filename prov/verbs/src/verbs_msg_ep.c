@@ -158,7 +158,7 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
 				ep->info->tx_attr->op_flags |= FI_COMPLETION;
-			ep->ep_id = ep->scq->send_signal_wr_id | ep->scq->ep_cnt++;
+			ofi_atomic_initialize32(&ep->scq->sends_outstanding, 0);
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -243,7 +243,7 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep_fid)
 	}
 
 	attr.qp_type = IBV_QPT_RC;
-	attr.sq_sig_all = 0;
+	attr.sq_sig_all = 1;
 	attr.qp_context = ep;
 
 	ret = rdma_create_qp(ep->id, pd, &attr);
@@ -373,17 +373,6 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
 	ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 	ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
-
-	ofi_atomic_initialize32(&ep->unsignaled_send_cnt, 0);
-	ofi_atomic_initialize32(&ep->comp_pending, 0);
-	/* The `send_signal_thr` and `send_comp_thr` values are necessary to avoid
-	 * overrun the send queue size */
-	/* A signaled Send Request must be posted when the `send_signal_thr`
-	 * value is reached */
-	ep->send_signal_thr = (ep->info->tx_attr->size * 4) / 5;
-	/* Polling of CQ for internal signaled Send Requests must be initiated upon
-	 * reaching the `send_comp_thr` value */
-	ep->send_comp_thr = (ep->info->tx_attr->size * 9) / 10;
 
 	ep->domain = dom;
 	*ep_fid = &ep->ep_fid;
@@ -523,33 +512,6 @@ err1:
 	return ret;
 }
 
-#define VERBS_SIGNAL_SEND(ep) \
-	(ofi_atomic_get32(&ep->unsignaled_send_cnt) >= (ep)->send_signal_thr && \
-	 !ofi_atomic_get32(&ep->comp_pending))
-
-static inline int
-fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
-{
-	struct fi_ibv_msg_epe *epe;
-
-	fastlock_acquire(&ep->scq->lock);
-	if (VERBS_SIGNAL_SEND(ep)) {
-		epe = util_buf_alloc(ep->scq->epe_pool);
-		if (!epe) {
-			fastlock_release(&ep->scq->lock);
-			return -FI_ENOMEM;
-		}
-		memset(epe, 0, sizeof(*epe));
-		wr->send_flags |= IBV_SEND_SIGNALED;
-		wr->wr_id = ep->ep_id;
-		epe->ep = ep;
-		slist_insert_tail(&epe->entry, &ep->scq->ep_list);
-		ofi_atomic_inc32(&ep->comp_pending);
-	}
-	fastlock_release(&ep->scq->lock);
-	return 0;
-}
-
 static inline int
 fi_ibv_prepare_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			   struct fi_ibv_wre **wre, void *context)
@@ -568,49 +530,35 @@ fi_ibv_prepare_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	(*wre)->wr_type = IBV_SEND_WR;
 	wr->wr_id = (uintptr_t)*wre;
 
-	assert((wr->wr_id & ep->scq->wr_id_mask) != ep->scq->send_signal_wr_id);
-	ofi_atomic_set32(&ep->unsignaled_send_cnt, 0);
-
 	return FI_SUCCESS;
 }
 
-static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
+static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_msg_ep *ep)
 {
-	struct fi_ibv_wce *wce = NULL;
-	int got_wc = 0;
-	int ret = 0;
+	struct fi_ibv_wce *wce;
+	struct ibv_wc wc[10];
+	int ret, i;
 
 	fastlock_acquire(&ep->scq->lock);
-	while (ofi_atomic_get32(&ep->comp_pending) > 0) {
-		if (!wce) {
-			wce = util_buf_alloc(ep->scq->wce_pool);
-			if (!wce) {
-				fastlock_release(&ep->scq->lock);
-				return -FI_ENOMEM;
-			}
-			memset(wce, 0, sizeof(*wce));
-		}
-		ret = fi_ibv_poll_cq(ep->scq, &wce->wc);
-		if (ret < 0) {
-			VERBS_WARN(FI_LOG_EP_DATA,
-				   "Failed to read completion for signaled send\n");
-			util_buf_release(ep->scq->wce_pool, wce);
+	/* TODO: retrieve WCs as much as possbile in a single
+	 * ibv_poll_cq call */
+	while (1) {
+		ret = ibv_poll_cq(ep->scq->cq, 10, wc);
+		if (ret <= 0) {
 			fastlock_release(&ep->scq->lock);
 			return ret;
-		} else if (ret > 0) {
-			slist_insert_tail(&wce->entry, &ep->scq->wcq);
-			got_wc = 1;
-			wce = NULL;
+		}
+
+		for (i = 0; i < ret; i++) {
+			if (!fi_ibv_process_wc(ep->scq, &wc[i]))
+				continue;
+			if (OFI_LIKELY(!fi_ibv_wc_2_wce(ep->scq, &wc[i], &wce)))
+				slist_insert_tail(&wce->entry, &ep->scq->wcq);
 		}
 	}
-	if (wce)
-		util_buf_release(ep->scq->wce_pool, wce);
-
-	if (got_wc && ep->scq->channel)
-		ret = fi_ibv_cq_signal(&ep->scq->cq_fid);
 
 	fastlock_release(&ep->scq->lock);
-	return ret;
+	return FI_SUCCESS;
 }
 
 /* WR must be filled out by now except for context */
@@ -625,17 +573,12 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 		if (OFI_UNLIKELY(ret))
 			return ret;
 	} else {
-		if (VERBS_SIGNAL_SEND(ep)) {
-			ret = fi_ibv_signal_send(ep, wr);
-			if (ret)
-				return ret;
-		} else {
-			wr->wr_id = 0ULL;
-			if (ofi_atomic_inc32(&ep->unsignaled_send_cnt) >=
-							ep->send_comp_thr) {
-				ret = fi_ibv_reap_comp(ep);
-				if (ret)
-					return ret;
+		if (ofi_atomic_inc32(&ep->scq->sends_outstanding) >=
+						ep->info->tx_attr->size) {
+			ret = fi_ibv_poll_reap_unsig_cq(ep);
+			if (OFI_UNLIKELY(ret)) {
+				ofi_atomic_dec32(&ep->scq->sends_outstanding);
+				return -FI_EAGAIN;
 			}
 		}
 	}
@@ -815,12 +758,12 @@ static ssize_t
 fi_ibv_msg_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t dest_addr, void *context)
 {
-	struct fi_ibv_msg_ep *ep;
-	struct ibv_send_wr wr = { 0 };
+	struct fi_ibv_msg_ep *ep =
+		container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	struct ibv_send_wr wr = {
+		.opcode = IBV_WR_SEND,
+	};
 
-	wr.opcode = IBV_WR_SEND;
-
-	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 	return fi_ibv_send_iov(ep, &wr, iov, desc, count, context);
 }
 
