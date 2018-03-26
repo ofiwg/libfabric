@@ -95,8 +95,14 @@ AC_ARG_ENABLE([debug],
 
 AS_IF([test x"$enable_debug" != x"no"],
       [dbg=1
+       CFLAGS_save=
+       # Remove -DNDEBUG flag if set
+       for flag in $CFLAGS; do
+           if test "$flag" != "-DNDEBUG"; then
+               CFLAGS_save="$CFLAGS_save $flag"
+           fi
+       done
        # See if all the flags in $debug_c_other_flags work
-       CFLAGS_save=$CFLAGS
        good_flags=
        for flag in $debug_c_other_flags; do
            AC_MSG_CHECKING([to see if compiler supports $flag])
