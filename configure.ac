@@ -50,21 +50,6 @@ AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
 AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
                    [adds build_id to version if it was defined])
 
-AC_ARG_ENABLE([debug],
-	      [AS_HELP_STRING([--enable-debug],
-			      [Enable debugging @<:@default=no@:>@])
-	      ],
-	      [],
-	      [enable_debug=no])
-
-AS_IF([test x"$enable_debug" != x"no"],
-      [dbg=1
-       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} $CFLAGS"],
-      [dbg=0])
-
-AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
-                   [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
-
 # Fix autoconf's habit of setting CFLAGS="-g -O2" by default while still
 # allowing the user to explicitly set CFLAGS=""
 : ${CFLAGS="-fvisibility=hidden -O2 -DNDEBUG ${base_c_warn_flags}"}
@@ -100,6 +85,37 @@ dnl Checks for programs
 AC_PROG_CC_C99
 AM_PROG_CC_C_O
 AC_PROG_CPP
+
+AC_ARG_ENABLE([debug],
+	      [AS_HELP_STRING([--enable-debug],
+			      [Enable debugging @<:@default=no@:>@])
+	      ],
+	      [],
+	      [enable_debug=no])
+
+AS_IF([test x"$enable_debug" != x"no"],
+      [dbg=1
+       # See if all the flags in $debug_c_other_flags work
+       CFLAGS_save=$CFLAGS
+       good_flags=
+       for flag in $debug_c_other_flags; do
+           AC_MSG_CHECKING([to see if compiler supports $flag])
+           CFLAGS="$flag $CFLAGS_save"
+           AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[int i = 3;]])],
+	                     [AC_MSG_RESULT([yes])
+			      good_flags="$flag $good_flags"],
+			     [AC_MSG_RESULT([no])])
+       done
+       debug_c_other_flags=$good_flags
+       CFLAGS=$CFLAGS_save
+       unset good_flags
+       unset CFLAGS_save
+
+       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} $CFLAGS"],
+      [dbg=0])
+
+AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
+                   [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
 
 dnl Checks for header files.
 AC_HEADER_STDC
