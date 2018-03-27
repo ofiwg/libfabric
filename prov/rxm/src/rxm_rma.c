@@ -317,7 +317,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 			ret = util_cmap_alloc_handle(rxm_ep->util_ep.cmap,
 						     msg->addr, CMAP_IDLE,
 						     &handle);
-			if (OFI_UNLIKELY(!handle)) {
+			if (OFI_UNLIKELY(ret)) {
 				fastlock_release(&rxm_ep->util_ep.cmap->lock);
 				return -FI_EAGAIN;
 			}
