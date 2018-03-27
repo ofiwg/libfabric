@@ -11,7 +11,7 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *      - Redistibutions of source code must retain the above
+ *      - Redistributions of source code must retain the above
  *        copyright notice, this list of conditions and the following
  *        disclaimer.
  *

@@ -14,7 +14,7 @@
  *     conditions are met:
  *
  *      - Redistributions of source code must retain the above
- *        opyright notice, this list of conditions and the following
+ *        copyright notice, this list of conditions and the following
  *        disclaimer.
  *
  *      - Redistributions in binary form must reproduce the above
