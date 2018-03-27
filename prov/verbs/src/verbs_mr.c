@@ -385,8 +385,8 @@ int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier, void *addr,
 	int ret = FI_SUCCESS;
 
 	pthread_mutex_lock(&domain->notifier->lock);
-	fi_ibv_mem_notifier_set_free_hook(domain->notifier->prev_free_hook);
-	fi_ibv_mem_notifier_set_realloc_hook(domain->notifier->prev_realloc_hook);
+	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
+	ofi_set_mem_realloc_hook(domain->notifier->prev_realloc_hook);
 
 	entry = util_buf_alloc(domain->notifier->mem_ptrs_ent_pool);
 	if (OFI_UNLIKELY(!entry)) {
@@ -400,8 +400,8 @@ int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier, void *addr,
 	HASH_ADD(hh, domain->notifier->mem_ptrs_hash, addr, sizeof(void *), entry);
 
 fn:
-	fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier_free_hook);
-	fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
+	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
+	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
 	pthread_mutex_unlock(&domain->notifier->lock);
 	return ret;
 }
@@ -414,8 +414,8 @@ void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
 	struct fi_ibv_mem_ptr_entry *entry;
 
 	pthread_mutex_lock(&domain->notifier->lock);
-	fi_ibv_mem_notifier_set_free_hook(domain->notifier->prev_free_hook);
-	fi_ibv_mem_notifier_set_realloc_hook(domain->notifier->prev_realloc_hook);
+	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
+	ofi_set_mem_realloc_hook(domain->notifier->prev_realloc_hook);
 
 	HASH_FIND(hh, domain->notifier->mem_ptrs_hash, &addr, sizeof(void *), entry);
 	assert(entry);
@@ -427,8 +427,8 @@ void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
 
 	util_buf_release(domain->notifier->mem_ptrs_ent_pool, entry);
 
-	fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
-	fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier_free_hook);
+	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
+	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
 	pthread_mutex_unlock(&domain->notifier->lock);
 }
 

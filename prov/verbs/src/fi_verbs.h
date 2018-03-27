@@ -49,7 +49,6 @@
 #include <assert.h>
 #include <pthread.h>
 #include <sys/epoll.h>
-#include <malloc.h>
 
 #include <infiniband/ib.h>
 #include <infiniband/verbs.h>
@@ -154,16 +153,16 @@
 	}						\
 })
 
-#define FI_IBV_MEMORY_HOOK_BEGIN(notifier)					\
-{										\
-	pthread_mutex_lock(&notifier->lock);					\
-	fi_ibv_mem_notifier_set_free_hook(notifier->prev_free_hook);		\
-	fi_ibv_mem_notifier_set_realloc_hook(notifier->prev_realloc_hook);	\
+#define FI_IBV_MEMORY_HOOK_BEGIN(notifier)			\
+{								\
+	pthread_mutex_lock(&notifier->lock);			\
+	ofi_set_mem_free_hook(notifier->prev_free_hook);	\
+	ofi_set_mem_realloc_hook(notifier->prev_realloc_hook);	\
 
-#define FI_IBV_MEMORY_HOOK_END(notifier)					\
-	fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier_realloc_hook);	\
-	fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier_free_hook);	\
-	pthread_mutex_unlock(&notifier->lock);					\
+#define FI_IBV_MEMORY_HOOK_END(notifier)				\
+	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);	\
+	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);		\
+	pthread_mutex_unlock(&notifier->lock);				\
 }
 
 extern struct fi_provider fi_ibv_prov;
@@ -346,9 +345,6 @@ typedef int(*fi_ibv_mr_reg_cb)(struct fi_ibv_domain *domain, void *buf,
 			       struct fi_ibv_mem_desc *md);
 typedef int(*fi_ibv_mr_dereg_cb)(struct fi_ibv_mem_desc *md);
 
-void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller);
-void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller);
-
 struct fi_ibv_mem_notifier;
 
 struct fi_ibv_domain {
@@ -464,9 +460,6 @@ fi_ibv_mr_internal_lkey(struct fi_ibv_mem_desc *md)
 	return md->mr->lkey;
 }
 
-typedef void (*fi_ibv_mem_free_hook)(void *, const void *);
-typedef void *(*fi_ibv_mem_realloc_hook)(void *, size_t, const void *);
-
 struct fi_ibv_mr_internal_ops {
 	struct fi_ops_mr	*fi_ops;
 	fi_ibv_mr_reg_cb	internal_mr_reg;
@@ -484,11 +477,14 @@ struct fi_ibv_mem_notifier {
 	struct fi_ibv_mem_ptr_entry	*mem_ptrs_hash;
 	struct util_buf_pool		*mem_ptrs_ent_pool;
 	struct dlist_entry		event_list;
-	fi_ibv_mem_free_hook		prev_free_hook;
-	fi_ibv_mem_realloc_hook		prev_realloc_hook;
+	ofi_mem_free_hook		prev_free_hook;
+	ofi_mem_realloc_hook		prev_realloc_hook;
 	int				ref_cnt;
 	pthread_mutex_t			lock;
 };
+
+void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller);
+void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller);
 
 extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ops;
 extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_cache_ops;
@@ -503,114 +499,6 @@ int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier, void *addr,
 void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
 				size_t len, struct ofi_subscription *subscription);
 struct ofi_subscription *fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifier);
-
-static inline void
-fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_free_hook free_hook)
-{
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-# ifdef __INTEL_COMPILER /* ICC */
-#  pragma warning push
-#  pragma warning disable 1478
-	__free_hook = free_hook;
-#  pragma warning pop
-# elif defined __clang__ /* Clang */
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	__free_hook = free_hook;
-#  pragma clang diagnostic pop
-# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	__free_hook = free_hook;
-#  pragma GCC diagnostic pop
-# else /* others */
-	__free_hook = free_hook;
-# endif
-#else /* !HAVE_GLIBC_MALLOC_HOOKS */
-	OFI_UNUSED(free_hook);
-#endif /* HAVE_GLIBC_MALLOC_HOOKS */
-}
-
-static inline void
-fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_realloc_hook realloc_hook)
-{
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-# ifdef __INTEL_COMPILER /* ICC */
-#  pragma warning push
-#  pragma warning disable 1478
-	__realloc_hook = realloc_hook;
-#  pragma warning pop
-# elif defined __clang__ /* Clang */
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	__realloc_hook = realloc_hook;
-#  pragma clang diagnostic pop
-# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	__realloc_hook = realloc_hook;
-#  pragma GCC diagnostic pop
-# else /* others */
-	__realloc_hook = realloc_hook;
-# endif
-#else /* !HAVE_GLIBC_MALLOC_HOOKS */
-	OFI_UNUSED(realloc_hook);
-#endif /* HAVE_GLIBC_MALLOC_HOOKS */
-}
-
-static inline fi_ibv_mem_free_hook
-fi_ibv_mem_notifier_get_free_hook(void)
-{
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-# ifdef __INTEL_COMPILER /* ICC */
-#  pragma warning push
-#  pragma warning disable 1478
-	return __free_hook;
-#  pragma warning pop
-# elif defined __clang__ /* Clang */
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	return __free_hook;
-#  pragma clang diagnostic pop
-# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	return __free_hook;
-#  pragma GCC diagnostic pop
-# else /* others */
-	return __free_hook;
-# endif
-#else /* !HAVE_GLIBC_MALLOC_HOOKS */
-	return NULL;
-#endif /* HAVE_GLIBC_MALLOC_HOOKS */
-}
-
-static inline fi_ibv_mem_realloc_hook
-fi_ibv_mem_notifier_get_realloc_hook(void)
-{
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-# ifdef __INTEL_COMPILER /* ICC */
-#  pragma warning push
-#  pragma warning disable 1478
-	return __realloc_hook;
-#  pragma warning pop
-# elif defined __clang__ /* Clang */
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	return __realloc_hook;
-#  pragma clang diagnostic pop
-# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	return __realloc_hook;
-#  pragma GCC diagnostic pop
-# else /* others */
-	return __realloc_hook;
-# endif
-#else /* !HAVE_GLIBC_MALLOC_HOOKS */
-	return NULL;
-#endif /* HAVE_GLIBC_MALLOC_HOOKS */
-}
 
 struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;
