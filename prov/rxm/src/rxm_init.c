@@ -291,6 +291,18 @@ RXM_INI
 			"(default: 1) that would be read per progress "
 			"(RxM CQ read).");
 
+	fi_param_define(&rxm_prov, "mr_cache_enable", FI_PARAM_BOOL,
+			"Enables Memory Region caching for Rendevouz protocol"
+			"(default: 0).");
+
+	fi_param_define(&rxm_prov, "mr_max_cached_cnt", FI_PARAM_INT,
+			"Maximum number of cache entrie"
+			"(default: 4096).");
+
+	fi_param_define(&rxm_prov, "mr_max_cached_size", FI_PARAM_SIZE_T,
+			"Maximum total size of cache entries"
+			"(default: 4 Gb).");
+
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
 		return NULL;

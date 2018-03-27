@@ -702,7 +702,7 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  &rxm_ep->recv_queue);
 }
 
-void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
+void rxm_ep_msg_mr_closev(struct rxm_ep *rxm_ep, struct fid_mr **mr, size_t count)
 {
 	int ret;
 	size_t i;
@@ -735,7 +735,53 @@ int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	}
 	return 0;
 err:
-	rxm_ep_msg_mr_closev(mr, count);
+	rxm_ep_msg_mr_closev(rxm_ep, mr, count);
+	return ret;
+}
+
+void rxm_ep_msg_mr_cache_closev(struct rxm_ep *rxm_ep, struct fid_mr **mr, size_t count)
+{
+	size_t i;
+	struct rxm_domain *rxm_domain =
+		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
+
+	for (i = 0; i < count; i++) {
+		if (mr[i]) {
+			struct rxm_mr_cache_desc *mr_desc =
+				container_of(&mr[i]->fid, struct rxm_mr_cache_desc, user_mr);
+			struct ofi_mr_entry *entry = mr_desc->entry;
+			ofi_mr_cache_delete(&rxm_domain->cache, entry);
+		}
+	}
+}
+
+int rxm_ep_msg_mr_cache_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
+			     size_t count, uint64_t access, struct fid_mr **mr)
+{
+	struct rxm_domain *rxm_domain =
+		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
+	int ret;
+	size_t i;
+	struct ofi_mr_entry *entry;
+
+	for (i = 0; i < count; i++) {
+		struct fi_mr_attr attr = {
+			.mr_iov = &iov[i],
+			.iov_count = 1,
+			.access = access,
+		};
+		struct rxm_mr_cache_desc *mr_desc;
+
+		ret = ofi_mr_cache_search(&rxm_domain->cache, &attr, &entry);
+		if (ret)
+			goto err;
+		mr_desc = (struct rxm_mr_cache_desc *)entry->data;
+		mr_desc->user_mr = *mr_desc->mr;
+		mr[i] = &mr_desc->user_mr;
+	}
+	return 0;
+err:
+	rxm_ep_msg_mr_cache_closev(rxm_ep, mr, count);
 	return ret;
 }
 
@@ -867,8 +913,8 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->pkt.ctrl_hdr.msg_id = rxm_txe_fs_index(rxm_ep->send_queue.fs,
 						       (*tx_entry));
 	if (!rxm_ep->rxm_mr_local) {
-		ret = rxm_ep_msg_mr_regv(rxm_ep, iov, (*tx_entry)->count,
-					 FI_REMOTE_READ, (*tx_entry)->mr);
+		ret = rxm_ep->mr_regv(rxm_ep, iov, (*tx_entry)->count,
+				      FI_REMOTE_READ, (*tx_entry)->mr);
 		if (ret)
 			goto err;
 		mr_iov = (*tx_entry)->mr;
@@ -911,7 +957,7 @@ err:
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
+		rxm_ep->mr_closev(rxm_ep, tx_entry->mr, tx_entry->count);
 	rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
 	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
 	return ret;
@@ -1806,7 +1852,10 @@ err1:
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep_fid, void *context)
 {
-	struct util_domain *util_domain;
+	struct util_domain *util_domain =
+		container_of(domain, struct util_domain, domain_fid);
+	struct rxm_domain *rxm_domain =
+		container_of(util_domain, struct rxm_domain, util_domain);;
 	struct rxm_ep *rxm_ep;
 	int ret;
 
@@ -1836,12 +1885,17 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
-
-	util_domain = container_of(domain, struct util_domain, domain_fid);
-
 	ret = rxm_ep_msg_res_open(util_domain, rxm_ep);
 	if (ret)
 		goto err2;
+
+	if (rxm_domain->mr_cache_enable) {
+		rxm_ep->mr_regv = rxm_ep_msg_mr_cache_regv;
+		rxm_ep->mr_closev = rxm_ep_msg_mr_cache_closev;
+	} else {
+		rxm_ep->mr_regv = rxm_ep_msg_mr_regv;
+		rxm_ep->mr_closev = rxm_ep_msg_mr_closev;
+	}
 
 	rxm_ep->msg_mr_local = OFI_CHECK_MR_LOCAL(rxm_ep->msg_info);
 	rxm_ep->rxm_mr_local = OFI_CHECK_MR_LOCAL(rxm_ep->rxm_info);

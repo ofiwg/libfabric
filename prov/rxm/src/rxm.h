@@ -51,6 +51,7 @@
 #include <ofi_list.h>
 #include <ofi_proto.h>
 #include <ofi_iov.h>
+#include <uthash.h>
 
 #ifndef _RXM_H_
 #define _RXM_H_
@@ -115,11 +116,44 @@ struct rxm_conn {
 	struct util_cmap_handle handle;
 };
 
+struct rxm_mem_ptr_entry {
+	struct dlist_entry entry;
+	void *addr;
+	struct ofi_subscription *subscription;
+	UT_hash_handle hh;
+};
+
+struct rxm_mem_notifier {
+	struct rxm_mem_ptr_entry *mem_ptrs_hash;
+	struct util_buf_pool *mem_ptrs_ent_pool;
+	struct dlist_entry event_list;
+	ofi_mem_free_hook prev_free_hook;
+	ofi_mem_realloc_hook prev_realloc_hook;
+	int ref_cnt;
+	pthread_mutex_t lock;
+};
+
+struct rxm_mr_cache_desc {
+	struct rxm_domain *domain;
+	struct ofi_mr_entry *entry;
+	struct fid_mr *mr;
+	struct fid_mr user_mr;
+};
+
 struct rxm_domain {
 	struct util_domain util_domain;
 	struct fid_domain *msg_domain;
 	uint8_t mr_local;
+	int mr_cache_enable;
+	int mr_max_cached_cnt;
+	size_t mr_max_cached_size;
+	struct ofi_mr_cache cache;
+	struct ofi_mem_monitor monitor;
+	struct rxm_mem_notifier *notifier;
 };
+
+void rxm_mem_notifier_free_hook(void *ptr, const void *caller);
+void *rxm_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller);
 
 struct rxm_mr {
 	struct fid_mr mr_fid;
@@ -332,6 +366,11 @@ struct rxm_buf_pool {
 	fastlock_t lock;
 };
 
+typedef void (*rxm_mr_closev_func)(struct rxm_ep *rxm_ep,
+				   struct fid_mr **mr, size_t count);
+typedef int (*rxm_mr_regv_func)(struct rxm_ep *rxm_ep, const struct iovec *iov,
+				size_t count, uint64_t access, struct fid_mr **mr);
+
 struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
@@ -355,6 +394,9 @@ struct rxm_ep {
 	struct rxm_send_queue	send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+
+	rxm_mr_regv_func	mr_regv;
+	rxm_mr_closev_func	mr_closev;
 };
 
 struct rxm_ep_wait_ref {
@@ -408,7 +450,10 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		       size_t count, uint64_t access, struct fid_mr **mr);
-void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
+void rxm_ep_msg_mr_closev(struct rxm_ep *rxm_ep, struct fid_mr **mr, size_t count);
+int rxm_ep_msg_mr_cache_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
+			     size_t count, uint64_t access, struct fid_mr **mr);
+void rxm_ep_msg_mr_cache_closev(struct rxm_ep *rxm_ep, struct fid_mr **mr, size_t count);
 
 void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 				   struct rxm_conn *rxm_conn,
