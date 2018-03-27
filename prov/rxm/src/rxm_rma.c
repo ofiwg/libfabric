@@ -46,9 +46,9 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 	if (rxm_ep->msg_mr_local) {
 		if (!rxm_ep->rxm_mr_local) {
 			ssize_t ret =
-				rxm_ep_msg_mr_regv(rxm_ep, msg_iov, iov_count,
-						   comp_flags & (FI_WRITE | FI_READ),
-						   tx_entry->mr);
+				rxm_ep->mr_regv(rxm_ep, msg_iov, iov_count,
+						comp_flags & (FI_WRITE | FI_READ),
+						tx_entry->mr);
 			if (OFI_UNLIKELY(ret))
 				return ret;
 
@@ -357,7 +357,7 @@ cmap_err:
 		return ret;
 
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
-		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
+		rxm_ep->mr_closev(rxm_ep, tx_entry->mr, tx_entry->count);
 err:
 	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
 	return ret;

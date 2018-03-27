@@ -37,6 +37,25 @@
 #include <ofi_util.h>
 #include "rxm.h"
 
+#define rxm_memory_hook_push(notifier)				\
+{								\
+	pthread_mutex_lock(&notifier->lock);			\
+	ofi_set_mem_free_hook(notifier->prev_free_hook);	\
+	ofi_set_mem_realloc_hook(notifier->prev_realloc_hook);	\
+
+#define rxm_memory_hook_pop(notifier)					\
+	ofi_set_mem_realloc_hook(rxm_mem_notifier_realloc_hook);	\
+	ofi_set_mem_free_hook(rxm_mem_notifier_free_hook);		\
+	pthread_mutex_unlock(&notifier->lock);				\
+}
+
+const uint64_t rxm_access_flags = FI_SEND | FI_RECV |
+				  FI_READ | FI_WRITE |
+				  FI_REMOTE_READ | FI_REMOTE_WRITE;
+
+/* This is the memory notifier (singleton) for the RxM provider */
+static struct rxm_mem_notifier *rxm_mem_notifier = NULL;
+
 int rxm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context)
 {
@@ -79,12 +98,250 @@ static struct fi_ops_domain rxm_domain_ops = {
 	.query_atomic = fi_no_query_atomic,
 };
 
+void rxm_mem_notifier_free_hook(void *ptr, const void *caller)
+{
+	struct rxm_mem_ptr_entry *entry;
+	OFI_UNUSED(caller);
+
+	rxm_memory_hook_push(rxm_mem_notifier)
+
+	free(ptr);
+
+	if (!ptr)
+		goto out;
+
+	HASH_FIND(hh, rxm_mem_notifier->mem_ptrs_hash,
+		  &ptr, sizeof(void *), entry);
+	if (!entry)
+		goto out;
+	FI_DBG(&rxm_prov, FI_LOG_MR,
+	       "Catch free hook for %p, entry - %p\n",
+	       ptr, entry);
+
+	if (!dlist_empty(&entry->entry))
+		dlist_remove_init(&entry->entry);
+	dlist_insert_tail(&entry->entry,
+			  &rxm_mem_notifier->event_list);
+out:
+	rxm_memory_hook_pop(rxm_mem_notifier)
+}
+
+void *rxm_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller)
+{
+	struct rxm_mem_ptr_entry *entry;
+	void *ret_ptr;
+	OFI_UNUSED(caller);
+
+	rxm_memory_hook_push(rxm_mem_notifier)
+	
+	ret_ptr = realloc(ptr, size);
+
+	if (!ptr)
+		goto out;
+
+	HASH_FIND(hh, rxm_mem_notifier->mem_ptrs_hash,
+		  &ptr, sizeof(void *), entry);
+	if (!entry)
+		goto out;
+	FI_DBG(&rxm_prov, FI_LOG_MR,
+	       "Catch realloc hook for %p, entry - %p\n",
+	       ptr, entry);
+
+	if (!dlist_empty(&entry->entry))
+		dlist_remove_init(&entry->entry);
+	dlist_insert_tail(&entry->entry,
+			  &rxm_mem_notifier->event_list);
+out:
+	rxm_memory_hook_pop(rxm_mem_notifier)
+	return ret_ptr;
+}
+
+static int rxm_mr_cache_entry_reg(struct ofi_mr_cache *cache,
+				  struct ofi_mr_entry *entry)
+{
+	struct rxm_mr_cache_desc *mr_desc =
+		(struct rxm_mr_cache_desc *)entry->data;
+	struct rxm_domain *domain = mr_desc->domain =
+		container_of(cache->domain, struct rxm_domain, util_domain);
+	mr_desc->entry = entry;
+	return fi_mr_reg(domain->msg_domain, entry->iov.iov_base,
+			 entry->iov.iov_len, rxm_access_flags,
+			 0, 0, 0, &mr_desc->mr, NULL);
+}
+
+static void rxm_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
+				     struct ofi_mr_entry *entry)
+{
+	struct rxm_mr_cache_desc *mr_desc =
+		(struct rxm_mr_cache_desc *)entry->data;
+	if (fi_close(&mr_desc->mr->fid))
+		FI_WARN(&rxm_prov, FI_LOG_MR,
+			"Unable to close msg mr");
+}
+
+int rxm_monitor_subscribe(struct ofi_mem_monitor *notifier, void *addr,
+			  size_t len, struct ofi_subscription *subscription)
+{
+	struct rxm_domain *domain =
+		container_of(notifier, struct rxm_domain, monitor);
+	struct rxm_mem_ptr_entry *entry;
+	int ret = FI_SUCCESS;
+
+	pthread_mutex_lock(&domain->notifier->lock);
+	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
+	ofi_set_mem_realloc_hook(domain->notifier->prev_realloc_hook);
+
+	entry = util_buf_alloc(domain->notifier->mem_ptrs_ent_pool);
+	if (OFI_UNLIKELY(!entry)) {
+		ret = -FI_ENOMEM;
+		goto fn;
+	}
+
+	entry->addr = addr;
+	entry->subscription = subscription;
+	dlist_init(&entry->entry);
+	HASH_ADD(hh, domain->notifier->mem_ptrs_hash, addr, sizeof(void *), entry);
+
+fn:
+	ofi_set_mem_free_hook(rxm_mem_notifier_free_hook);
+	ofi_set_mem_realloc_hook(rxm_mem_notifier_realloc_hook);
+	pthread_mutex_unlock(&domain->notifier->lock);
+	return ret;
+}
+
+void rxm_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
+			     size_t len, struct ofi_subscription *subscription)
+{
+	struct rxm_domain *domain =
+		container_of(notifier, struct rxm_domain, monitor);
+	struct rxm_mem_ptr_entry *entry;
+
+	pthread_mutex_lock(&domain->notifier->lock);
+	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
+	ofi_set_mem_realloc_hook(domain->notifier->prev_realloc_hook);
+
+	HASH_FIND(hh, domain->notifier->mem_ptrs_hash, &addr, sizeof(void *), entry);
+	assert(entry);
+
+	HASH_DEL(domain->notifier->mem_ptrs_hash, entry);
+
+	if (!dlist_empty(&entry->entry))
+		dlist_remove_init(&entry->entry);
+
+	util_buf_release(domain->notifier->mem_ptrs_ent_pool, entry);
+
+	ofi_set_mem_realloc_hook(rxm_mem_notifier_realloc_hook);
+	ofi_set_mem_free_hook(rxm_mem_notifier_free_hook);
+	pthread_mutex_unlock(&domain->notifier->lock);
+}
+
+struct ofi_subscription *rxm_monitor_get_event(struct ofi_mem_monitor *notifier)
+{
+	struct rxm_domain *domain =
+		container_of(notifier, struct rxm_domain, monitor);
+	struct rxm_mem_ptr_entry *entry;
+
+	pthread_mutex_lock(&domain->notifier->lock);
+	if (!dlist_empty(&domain->notifier->event_list)) {
+		dlist_pop_front(&domain->notifier->event_list,
+				struct rxm_mem_ptr_entry,
+				entry, entry);
+		FI_DBG(&rxm_prov, FI_LOG_MR,
+		       "Retrieve %p (entry %p) from event list\n",
+		       entry->addr, entry);
+		/* this is needed to protect against double insertions */
+		dlist_init(&entry->entry);
+
+		pthread_mutex_unlock(&domain->notifier->lock);
+		return entry->subscription;
+	} else {
+		pthread_mutex_unlock(&domain->notifier->lock);
+		return NULL;
+	}
+}
+
+static void rxm_mem_notifier_finalize(struct rxm_mem_notifier *notifier)
+{
+	OFI_UNUSED(notifier);
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+	assert(rxm_mem_notifier && (notifier == rxm_mem_notifier));
+	pthread_mutex_lock(&rxm_mem_notifier->lock);
+	if (--rxm_mem_notifier->ref_cnt == 0) {
+		ofi_set_mem_free_hook(rxm_mem_notifier->prev_free_hook);
+		ofi_set_mem_realloc_hook(rxm_mem_notifier->prev_realloc_hook);
+		util_buf_pool_destroy(rxm_mem_notifier->mem_ptrs_ent_pool);
+		rxm_mem_notifier->prev_free_hook = NULL;
+		rxm_mem_notifier->prev_realloc_hook = NULL;
+		pthread_mutex_unlock(&rxm_mem_notifier->lock);
+		pthread_mutex_destroy(&rxm_mem_notifier->lock);
+		free(rxm_mem_notifier);
+		rxm_mem_notifier = NULL;
+		return;
+	}
+	pthread_mutex_unlock(&rxm_mem_notifier->lock);
+#endif
+}
+
+static struct rxm_mem_notifier *rxm_mem_notifier_init(size_t mr_max_cached_cnt)
+{
+#ifdef HAVE_GLIBC_MALLOC_HOOKS
+	int ret;
+	pthread_mutexattr_t mutex_attr;
+	if (rxm_mem_notifier) {
+		/* already initialized */
+		rxm_mem_notifier->ref_cnt++;
+		goto fn;
+	}
+	rxm_mem_notifier = calloc(1, sizeof(*rxm_mem_notifier));
+	if (!rxm_mem_notifier)
+		goto fn;
+
+	ret = util_buf_pool_create(&rxm_mem_notifier->mem_ptrs_ent_pool,
+				   sizeof(struct rxm_mem_ptr_entry),
+				   16, 0, mr_max_cached_cnt);
+	if (ret)
+		goto err1;
+
+	pthread_mutexattr_init(&mutex_attr);
+	pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+	if (pthread_mutex_init(&rxm_mem_notifier->lock, &mutex_attr))
+		goto err2;
+	pthread_mutexattr_destroy(&mutex_attr);
+
+	dlist_init(&rxm_mem_notifier->event_list);
+
+	pthread_mutex_lock(&rxm_mem_notifier->lock);
+	rxm_mem_notifier->prev_free_hook = ofi_get_mem_free_hook();
+	rxm_mem_notifier->prev_realloc_hook = ofi_get_mem_realloc_hook();
+	ofi_set_mem_free_hook(rxm_mem_notifier_free_hook);
+	ofi_set_mem_realloc_hook(rxm_mem_notifier_realloc_hook);
+	rxm_mem_notifier->ref_cnt++;
+	pthread_mutex_unlock(&rxm_mem_notifier->lock);
+fn:
+	return rxm_mem_notifier;
+
+err2:
+	util_buf_pool_destroy(rxm_mem_notifier->mem_ptrs_ent_pool);
+err1:
+	free(rxm_mem_notifier);
+	rxm_mem_notifier = NULL;
+#endif
+	OFI_UNUSED(mr_max_cached_cnt);
+	return NULL;
+}
+
 static int rxm_domain_close(fid_t fid)
 {
 	struct rxm_domain *rxm_domain;
 	int ret;
 
 	rxm_domain = container_of(fid, struct rxm_domain, util_domain.domain_fid.fid);
+	
+	if (rxm_domain->mr_cache_enable) {
+		ofi_mr_cache_cleanup(&rxm_domain->cache);
+		ofi_monitor_cleanup(&rxm_domain->monitor);
+		rxm_mem_notifier_finalize(rxm_domain->notifier);
+	}
 
 	ret = fi_close(&rxm_domain->msg_domain->fid);
 	if (ret)
@@ -223,8 +480,41 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxm_domain->mr_local = OFI_CHECK_MR_LOCAL(msg_info) &&
 				!OFI_CHECK_MR_LOCAL(info);
 
+	if (fi_param_get_int(&rxm_prov, "mr_max_cached_cnt",
+			     &rxm_domain->mr_max_cached_cnt))
+		rxm_domain->mr_max_cached_cnt = 4096;
+
+	if (fi_param_get_size_t(&rxm_prov, "mr_max_cached_size",
+				&rxm_domain->mr_max_cached_size))
+		rxm_domain->mr_max_cached_size = ULONG_MAX;
+
+	if (!fi_param_get_int(&rxm_prov, "mr_cache_enable",
+			     (int *)&rxm_domain->mr_cache_enable) &&
+	    rxm_domain->mr_cache_enable) {
+		rxm_domain->notifier =
+			rxm_mem_notifier_init(rxm_domain->mr_max_cached_cnt);
+		rxm_domain->monitor.subscribe = rxm_monitor_subscribe;
+		rxm_domain->monitor.unsubscribe = rxm_monitor_unsubscribe;
+		rxm_domain->monitor.get_event = rxm_monitor_get_event;
+		ofi_monitor_init(&rxm_domain->monitor);
+
+		rxm_domain->cache.max_cached_cnt = rxm_domain->mr_max_cached_cnt;
+		rxm_domain->cache.max_cached_size = rxm_domain->mr_max_cached_size;
+		rxm_domain->cache.entry_data_size = sizeof(struct rxm_mr_cache_desc);
+		rxm_domain->cache.add_region = rxm_mr_cache_entry_reg;
+		rxm_domain->cache.delete_region = rxm_mr_cache_entry_dereg;
+		ret = ofi_mr_cache_init(&rxm_domain->util_domain, &rxm_domain->monitor,
+					&rxm_domain->cache);
+		if (ret)
+			goto err4;
+	} else {
+		rxm_domain->mr_cache_enable = 0;
+	}
+
 	fi_freeinfo(msg_info);
 	return 0;
+err4:
+	(void) ofi_domain_close(&rxm_domain->util_domain);
 err3:
 	fi_close(&rxm_domain->msg_domain->fid);
 err2:

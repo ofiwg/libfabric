@@ -298,7 +298,7 @@ static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
 	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_ACK_SENT, RXM_LMT_FINISH);
 	rx_buf->hdr.state = RXM_LMT_FINISH;
 	if (!rx_buf->ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(rx_buf->mr, rx_buf->recv_entry->rxm_iov.count);
+		rx_buf->ep->mr_closev(rx_buf->ep, rx_buf->mr, rx_buf->recv_entry->rxm_iov.count);
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
 
@@ -324,7 +324,7 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	tx_entry->state = RXM_LMT_FINISH;
 
 	if (!tx_entry->ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
+		tx_entry->ep->mr_closev(tx_entry->ep, tx_entry->mr, tx_entry->count);
 
 	ret = rxm_finish_send(tx_entry);
 	if (ret)
@@ -377,9 +377,9 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 		rx_buf->index = 0;
 
 		if (!rx_buf->ep->rxm_mr_local) {
-			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
-						 rx_buf->recv_entry->rxm_iov.count, FI_READ,
-						 rx_buf->mr);
+			ret = rx_buf->ep->mr_regv(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
+						  rx_buf->recv_entry->rxm_iov.count, FI_READ,
+						  rx_buf->mr);
 			if (ret)
 				return ret;
 
@@ -573,7 +573,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_TX_NOBUF:
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
 		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
-			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
+			tx_entry->ep->mr_closev(rxm_ep, tx_entry->mr, tx_entry->count);
 		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_TX:
 		assert(comp->flags & FI_SEND);
