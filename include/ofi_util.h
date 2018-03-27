@@ -375,6 +375,7 @@ int ofi_cntr_cleanup(struct util_cntr *cntr);
  */
 struct util_av_hash_entry {
 	int			index;
+	ofi_atomic32_t		use_cnt;
 	int			next;
 };
 
