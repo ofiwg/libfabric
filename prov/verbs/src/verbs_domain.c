@@ -172,8 +172,8 @@ static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
 	assert(fi_ibv_mem_notifier && (notifier == fi_ibv_mem_notifier));
 	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
 	if (--fi_ibv_mem_notifier->ref_cnt == 0) {
-		fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier->prev_free_hook);
-		fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier->prev_realloc_hook);
+		ofi_set_mem_free_hook(fi_ibv_mem_notifier->prev_free_hook);
+		ofi_set_mem_realloc_hook(fi_ibv_mem_notifier->prev_realloc_hook);
 		util_buf_pool_destroy(fi_ibv_mem_notifier->mem_ptrs_ent_pool);
 		fi_ibv_mem_notifier->prev_free_hook = NULL;
 		fi_ibv_mem_notifier->prev_realloc_hook = NULL;
@@ -217,10 +217,10 @@ static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
 	dlist_init(&fi_ibv_mem_notifier->event_list);
 
 	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
-	fi_ibv_mem_notifier->prev_free_hook = fi_ibv_mem_notifier_get_free_hook();
-	fi_ibv_mem_notifier->prev_realloc_hook = fi_ibv_mem_notifier_get_realloc_hook();
-	fi_ibv_mem_notifier_set_free_hook(fi_ibv_mem_notifier_free_hook);
-	fi_ibv_mem_notifier_set_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
+	fi_ibv_mem_notifier->prev_free_hook = ofi_get_mem_free_hook();
+	fi_ibv_mem_notifier->prev_realloc_hook = ofi_get_mem_realloc_hook();
+	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
+	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
 	fi_ibv_mem_notifier->ref_cnt++;
 	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
 fn:
