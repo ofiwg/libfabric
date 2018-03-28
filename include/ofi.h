@@ -162,6 +162,8 @@ int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
 
+char **ofi_split_and_alloc(const char *s, const char *delim);
+void ofi_free_string_array(char **s);
 
 #define OFI_ENUM_VAL(X) X
 #define OFI_STR(X) #X

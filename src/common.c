@@ -734,3 +734,69 @@ int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)
 	ofi_cpuid(func, 0, cpuinfo);
 	return cpuinfo[reg] & bit;
 }
+
+/* split the given string "s" using the specified delimiter(s) in the string
+ * "delim" and return an array of strings.  The array is terminated with a NULL
+ * pointer.  You can clean this array up with a call to free_string_array().
+ *
+ * Returns NULL on failure.
+ */
+char **ofi_split_and_alloc(const char *s, const char *delim)
+{
+	int i, n;
+	char *tmp;
+	char *dup = NULL;
+	char **arr = NULL;
+
+	if (!s || !delim)
+		return NULL;
+
+	dup = strdup(s);
+	if (!dup) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "failed to allocate memory\n");
+		return NULL;
+	}
+
+	/* compute the array size */
+	n = 1;
+	for (tmp = dup; *tmp != '\0'; ++tmp) {
+		for (i = 0; delim[i] != '\0'; ++i) {
+			if (*tmp == delim[i]) {
+				++n;
+				break;
+			}
+		}
+	}
+
+	/* +1 to leave space for NULL terminating pointer */
+	arr = calloc(n + 1, sizeof(*arr));
+	if (!arr) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "failed to allocate memory\n");
+		goto cleanup;
+	}
+
+	/* set array elts to point inside the dup'ed string */
+	for (tmp = dup, i = 0; tmp != NULL; ++i) {
+		arr[i] = strsep(&tmp, delim);
+	}
+	assert(i == n);
+
+	return arr;
+
+cleanup:
+	free(dup);
+	free(arr);
+	return NULL;
+}
+
+/* see ofi_split_and_alloc() */
+void ofi_free_string_array(char **s)
+{
+	/* all strings are allocated from the same strdup'ed slab, so just free
+	 * the first element */
+	if (s != NULL)
+		free(s[0]);
+
+	/* and then the actual array of pointers */
+	free(s);
+}
