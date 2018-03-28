@@ -226,6 +226,21 @@ AC_TRY_LINK([#include <stdint.h>],
     ],
     [AC_MSG_RESULT(no)])
 
+dnl Check for gcc cpuid intrinsics
+AC_MSG_CHECKING(compiler support for cpuid)
+AC_TRY_LINK([
+     #include <stddef.h>
+     #include <cpuid.h>],
+    [
+     int a, b, c, d;
+     __cpuid_count(0, 0, a, b, c, d);
+    ],
+    [
+	AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_CPUID, 1, [Set to 1 to to use cpuid])
+    ],
+    [AC_MSG_RESULT(no)])
+
 dnl Check for glibc malloc hooks
 AC_MSG_CHECKING(compiler support for glibc malloc hooks)
 AC_TRY_LINK([#include <malloc.h>],

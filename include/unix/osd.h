@@ -254,7 +254,7 @@ OFI_DEF_COMPLEX_OPS(long_double)
 int ofi_set_thread_affinity(const char *s);
 
 
-#if defined(__x86_64__) || defined(__amd64__)
+#if defined(HAVE_CPUID) && (defined(__x86_64__) || defined(__amd64__))
 
 #include <cpuid.h>
 
