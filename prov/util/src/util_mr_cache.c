@@ -66,7 +66,8 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	       (((ssize_t)cache->cached_size - (ssize_t)entry->iov.iov_len) >= 0));
 	cache->cached_cnt--;
 	cache->cached_size -= entry->iov.iov_len;
-	free(entry);
+	
+	util_buf_release(cache->entry_pool, entry);
 }
 
 static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
@@ -146,8 +147,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 
 	util_mr_cache_process_events(cache);
 
-	*entry = calloc(1, sizeof(**entry) + cache->entry_data_size);
-	if (!*entry)
+	*entry = util_buf_alloc(cache->entry_pool);
+	if (OFI_UNLIKELY(!*entry))
 		return -FI_ENOMEM;
 
 	(*entry)->iov = *iov;
@@ -155,8 +156,14 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 
 	ret = cache->add_region(cache, *entry);
 	if (ret) {
-		free(*entry);
-		return ret;
+		while (ret && ofi_mr_cache_flush(cache)) {
+			ret = cache->add_region(cache, *entry);
+		}
+		if (ret) {
+			assert(!ofi_mr_cache_flush(cache));
+			util_buf_release(cache->entry_pool, *entry);
+			return ret;
+		}
 	}
 
 	cache->cached_size += iov->iov_len;
@@ -283,6 +290,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	rbtDelete(cache->mr_tree);
 	ofi_monitor_del_queue(&cache->nq);
 	ofi_atomic_dec32(&cache->domain->ref);
+	util_buf_pool_destroy(cache->entry_pool);
 	assert(cache->cached_cnt == 0);
 	assert(cache->cached_size == 0);
 }
@@ -290,6 +298,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monitor,
 		      struct ofi_mr_cache *cache)
 {
+	int ret;
 	assert(cache->add_region && cache->delete_region);
 
 	cache->mr_tree = rbtNew(util_mr_find_overlap);
@@ -309,5 +318,17 @@ int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monito
 	cache->hit_cnt = 0;
 	ofi_monitor_add_queue(monitor, &cache->nq);
 
+	ret = util_buf_pool_create(&cache->entry_pool,
+				   sizeof(struct ofi_mr_entry) +
+				   cache->entry_data_size,
+				   16, 0, cache->max_cached_cnt);
+	if (ret)
+		goto err;
+
 	return 0;
+err:
+	ofi_atomic_dec32(&cache->domain->ref);
+	ofi_monitor_del_queue(&cache->nq);
+	rbtDelete(cache->mr_tree);
+	return ret;
 }

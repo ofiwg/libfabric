@@ -196,6 +196,7 @@ struct ofi_mr_cache {
 	size_t				search_cnt;
 	size_t				delete_cnt;
 	size_t				hit_cnt;
+	struct util_buf_pool		*entry_pool;
 
 	int				(*add_region)(struct ofi_mr_cache *cache,
 						      struct ofi_mr_entry *entry);
