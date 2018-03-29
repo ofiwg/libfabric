@@ -67,6 +67,7 @@ struct fi_domain_attr rxd_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP,
 	.mr_key_size = sizeof(uint64_t),
 	.cq_cnt = 128,
 	.ep_cnt = 128,

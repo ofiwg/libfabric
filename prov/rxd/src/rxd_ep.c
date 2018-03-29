@@ -185,7 +185,7 @@ static ssize_t rxd_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **d
 
 static inline void *rxd_mr_desc(struct fid_mr *mr, struct rxd_ep *ep)
 {
-	return (ep->do_local_mr) ? fi_mr_desc(mr) : NULL;
+	return (ep->do_local_mr && mr) ? fi_mr_desc(mr) : NULL;
 }
 
 int rxd_ep_repost_buff(struct rxd_rx_buf *buf)
