@@ -182,6 +182,7 @@ extern struct fi_ibv_gl_data {
 	int	mr_cache_enable;
 	int	mr_max_cached_cnt;
 	size_t	mr_max_cached_size;
+	int	mr_cache_merge_regions;
 
 	struct {
 		int	buffer_num;
