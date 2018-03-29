@@ -118,6 +118,20 @@ ofi_iov_right(const struct iovec *iov1, const struct iovec *iov2)
 }
 
 static inline bool
+ofi_iov_shifted_left(const struct iovec *iov1, const struct iovec *iov2)
+{
+	return ((iov1->iov_base < iov2->iov_base) &&
+		(ofi_iov_end(iov1) < ofi_iov_end(iov2)));
+}
+
+static inline bool
+ofi_iov_shifted_right(const struct iovec *iov1, const struct iovec *iov2)
+{
+	return ((iov1->iov_base > iov2->iov_base) &&
+		(ofi_iov_end(iov1) > ofi_iov_end(iov2)));
+}
+
+static inline bool
 ofi_iov_within(const struct iovec *iov1, const struct iovec *iov2)
 {
 	return (iov1->iov_base >= iov2->iov_base) &&
