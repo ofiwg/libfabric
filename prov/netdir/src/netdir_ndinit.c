@@ -571,6 +571,7 @@ static HRESULT ofi_nd_init(ofi_nd_adapter_cb_t cb)
 		cb(&ofi_nd_infra.adapters.adapter[j].info,
 		   ofi_nd_infra.adapters.adapter[j].name);
 
+	return hr;
 fn_protofail:
 	free(proto);
 fn_exit:
