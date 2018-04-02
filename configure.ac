@@ -208,6 +208,21 @@ AC_TRY_LINK([#include <stdatomic.h>],
     ],
     [AC_MSG_RESULT(no)])
 
+
+AC_MSG_CHECKING(compiler support for c11 atomic `least` types)
+AC_TRY_LINK([#include <stdatomic.h>],
+    [atomic_int_least32_t a;
+     atomic_int_least64_t b;
+    ],
+    [
+        AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_ATOMICS_LEAST_TYPES, 1,
+                  [Set to 1 to use c11 atomic `least` types])
+    ],
+    [
+        AC_MSG_RESULT(no)
+    ])
+
 dnl Check for gcc built-in atomics
 AC_MSG_CHECKING(compiler support for built-in atomics)
 AC_TRY_LINK([#include <stdint.h>],
