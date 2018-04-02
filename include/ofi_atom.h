@@ -63,8 +63,13 @@ extern "C" {
 #endif
 
 #ifdef HAVE_ATOMICS
-	typedef atomic_int_least32_t	ofi_atomic_int32_t;
-	typedef atomic_int_least64_t	ofi_atomic_int64_t;
+#ifdef HAVE_ATOMICS_LEAST_TYPES
+typedef atomic_int_least32_t	ofi_atomic_int32_t;
+typedef atomic_int_least64_t	ofi_atomic_int64_t;
+#else
+typedef atomic_int	ofi_atomic_int32_t;
+typedef atomic_long	ofi_atomic_int64_t;
+#endif
 
 #define OFI_ATOMIC_DEFINE(radix)									\
 	typedef struct {										\
