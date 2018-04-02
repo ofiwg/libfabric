@@ -186,6 +186,7 @@ struct ofi_mr_cache {
 	struct ofi_notification_queue	nq;
 	size_t				max_cached_cnt;
 	size_t				max_cached_size;
+	int				merge_regions;
 	size_t				entry_data_size;
 
 	RbtHandle			mr_tree;

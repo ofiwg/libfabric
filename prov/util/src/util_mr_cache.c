@@ -38,6 +38,17 @@
 #include <ofi_mr.h>
 #include <ofi_list.h>
 
+static int util_mr_find_within(void *a, void *b)
+{
+	struct iovec *iov1 = a, *iov2 = b;
+
+	if (ofi_iov_shifted_left(iov1, iov2))
+		return -1;
+	else if (ofi_iov_shifted_right(iov1, iov2))
+		return 1;
+	else
+		return 0;
+}
 
 static int util_mr_find_overlap(void *a, void *b)
 {
@@ -259,6 +270,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 	rbtKeyValue(cache->mr_tree, iter, (void **) &iov, (void **) entry);
 
+	/* This branch is always false if the merging entries wasn't requested */
 	if (!ofi_iov_within(attr->mr_iov, iov))
 		return util_mr_cache_merge(cache, attr, iter, entry);
 
@@ -301,7 +313,9 @@ int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monito
 	int ret;
 	assert(cache->add_region && cache->delete_region);
 
-	cache->mr_tree = rbtNew(util_mr_find_overlap);
+	cache->mr_tree = rbtNew(cache->merge_regions ?
+				util_mr_find_overlap :
+				util_mr_find_within);
 	if (!cache->mr_tree)
 		return -FI_ENOMEM;
 

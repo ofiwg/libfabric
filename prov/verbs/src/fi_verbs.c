@@ -60,6 +60,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.mr_cache_enable	= 0,
 	.mr_max_cached_cnt	= 4096,
 	.mr_max_cached_size	= ULONG_MAX,
+	.mr_cache_merge_regions	= 0,
 
 	.rdm			= {
 		.buffer_num		= FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM,
@@ -589,13 +590,15 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of iface\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_bool("mr_cache_enable", "Enable Memory Region caching",
+	if (fi_ibv_get_param_bool("mr_cache_enable",
+				  "Enable Memory Region caching",
 				  &fi_ibv_gl_data.mr_cache_enable)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of mr_cache_enable\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("mr_max_cached_cnt", "Maximum number of cache entries",
+	if (fi_ibv_get_param_int("mr_max_cached_cnt",
+				 "Maximum number of cache entries",
 				 &fi_ibv_gl_data.mr_max_cached_cnt) ||
 	    (fi_ibv_gl_data.mr_max_cached_cnt < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
@@ -607,6 +610,14 @@ static int fi_ibv_read_params(void)
 				    &fi_ibv_gl_data.mr_max_cached_size)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of mr_max_cached_size\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_bool("mr_cache_merge_regionss",
+				  "Enable the merging of MR regions for MR "
+				  "caching functionality",
+				  &fi_ibv_gl_data.mr_cache_merge_regions)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of mr_cache_enable\n");
 		return -FI_EINVAL;
 	}
 
