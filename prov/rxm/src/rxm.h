@@ -406,9 +406,43 @@ void rxm_ep_progress_multi(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
+static inline
+void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
+{
+	int ret;
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		if (mr[i]) {
+			ret = fi_close(&mr[i]->fid);
+			if (ret)
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Unable to close msg mr: %zu\n", i);
+		}
+	}
+}
+
+static inline
 int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		       size_t count, uint64_t access, struct fid_mr **mr);
-void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count);
+		       size_t count, uint64_t access, struct fid_mr **mr)
+{
+	int ret;
+	size_t i;
+	struct rxm_domain *rxm_domain =
+		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
+
+	// TODO do fi_mr_regv if provider supports it
+	for (i = 0; i < count; i++) {
+		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
+				iov[i].iov_len, access, 0, 0, 0, &mr[i], NULL);
+		if (ret)
+			goto err;
+	}
+	return 0;
+err:
+	rxm_ep_msg_mr_closev(mr, count);
+	return ret;
+}
 
 void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 				   struct rxm_conn *rxm_conn,
