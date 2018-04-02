@@ -1961,6 +1961,65 @@ static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 	return ret;
 }
 
+static int ft_spin_for_cntr(struct fid_cntr *cntr, uint64_t total, int timeout)
+{
+	struct timespec a, b;
+	uint64_t cur;
+
+	if (timeout >= 0)
+		clock_gettime(CLOCK_MONOTONIC, &a);
+
+	for (;;) {
+		cur = fi_cntr_read(cntr);
+		if (cur >= total)
+			return 0;
+
+		if (timeout >= 0) {
+			clock_gettime(CLOCK_MONOTONIC, &b);
+			if ((b.tv_sec - a.tv_sec) > timeout)
+				break;
+		}
+	}
+
+	fprintf(stderr, "%ds timeout expired\n", timeout);
+	return -FI_ENODATA;
+}
+
+static int ft_wait_for_cntr(struct fid_cntr *cntr, uint64_t total, int timeout)
+{
+	int ret;
+
+	while (fi_cntr_read(cntr) < total) {
+		ret = fi_cntr_wait(cntr, total, timeout);
+		if (ret)
+			FT_PRINTERR("fi_cntr_wait", ret);
+		else
+			break;
+	}
+	return 0;
+}
+
+static int ft_get_cntr_comp(struct fid_cntr *cntr, uint64_t total, int timeout)
+{
+	int ret = 0;
+
+	switch (opts.comp_method) {
+	case FT_COMP_SREAD:
+	case FT_COMP_WAITSET:
+	case FT_COMP_WAIT_FD:
+		ret = ft_wait_for_cntr(cntr, total, timeout);
+		break;
+	default:
+		ret = ft_spin_for_cntr(cntr, total, timeout);
+		break;
+	}
+
+	if (ret)
+		FT_PRINTERR("fs_get_cntr_comp", ret);
+
+	return ret;
+}
+
 int ft_get_rx_comp(uint64_t total)
 {
 	int ret = FI_SUCCESS;
@@ -1968,13 +2027,7 @@ int ft_get_rx_comp(uint64_t total)
 	if (opts.options & FT_OPT_RX_CQ) {
 		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
 	} else if (rxcntr) {
-		while (fi_cntr_read(rxcntr) < total) {
-			ret = fi_cntr_wait(rxcntr, total, timeout);
-			if (ret)
-				FT_PRINTERR("fi_cntr_wait", ret);
-			else
-				break;
-		}
+		ret = ft_get_cntr_comp(rxcntr, total, timeout);
 	} else {
 		FT_ERR("Trying to get a RX completion when no RX CQ or counter were opened");
 		ret = -FI_EOTHER;
@@ -1989,9 +2042,7 @@ int ft_get_tx_comp(uint64_t total)
 	if (opts.options & FT_OPT_TX_CQ) {
 		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1);
 	} else if (txcntr) {
-		ret = fi_cntr_wait(txcntr, total, -1);
-		if (ret)
-			FT_PRINTERR("fi_cntr_wait", ret);
+		ret = ft_get_cntr_comp(txcntr, total, -1);
 	} else {
 		FT_ERR("Trying to get a TX completion when no TX CQ or counter were opened");
 		ret = -FI_EOTHER;
