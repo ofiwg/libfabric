@@ -580,6 +580,8 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		return rxm_finish_send(tx_entry);
 	case RXM_TX_RMA:
 		assert(comp->flags & (FI_WRITE | FI_READ));
+		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
+			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 		rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
 		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_RX:

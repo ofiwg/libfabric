@@ -131,8 +131,11 @@ rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, uint64_t flags,
 
 static inline ssize_t
 rxm_ep_format_rma_buf(struct rxm_ep *rxm_ep, size_t total_size,
+		      const struct fi_msg_rma *orig_msg,
 		      struct rxm_rma_buf **rma_buf, struct rxm_tx_entry *tx_entry)
 {
+	size_t i;
+
 	*rma_buf = rxm_rma_buf_get(rxm_ep);
 	if (OFI_UNLIKELY(!*rma_buf))
 		return -FI_EAGAIN;
@@ -140,6 +143,9 @@ rxm_ep_format_rma_buf(struct rxm_ep *rxm_ep, size_t total_size,
 	tx_entry->state = RXM_TX_RMA;
 	tx_entry->rma_buf = *rma_buf;
 	(*rma_buf)->pkt.hdr.size = total_size;
+	(*rma_buf)->rxm_iov.count = orig_msg->iov_count;
+	for (i = 0; i < orig_msg->iov_count; i++)
+		(*rma_buf)->rxm_iov.iov[i] = orig_msg->msg_iov[i];
 
 	return FI_SUCCESS;
 }
@@ -158,7 +164,7 @@ rxm_ep_format_rma_res(struct rxm_ep *rxm_ep, size_t total_size,
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	ret = rxm_ep_format_rma_buf(rxm_ep, total_size,
+	ret = rxm_ep_format_rma_buf(rxm_ep, total_size, orig_msg,
 				    rma_buf, *tx_entry);
 	if (OFI_UNLIKELY(ret))
 		goto err;
