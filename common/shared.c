@@ -494,8 +494,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_TX_CNTR) {
-		ft_cntr_set_wait_attr();
-		ret = fi_cntr_open(domain, &cntr_attr, &txcntr, &txcntr);
+		ret = ft_cntr_open(&txcntr);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
 			return ret;
@@ -517,8 +516,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_RX_CNTR) {
-		ft_cntr_set_wait_attr();
-		ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, &rxcntr);
+		ret = ft_cntr_open(&rxcntr);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
 			return ret;
