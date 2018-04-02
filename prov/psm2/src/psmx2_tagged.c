@@ -1114,7 +1114,9 @@ static ssize_t psmx2_tagged_sendmsg(struct fid_ep *ep,
 	if (!msg || (msg->iov_count && !msg->msg_iov))
 		return -FI_EINVAL;
 
-	if (msg->iov_count > 1) {
+	if (msg->iov_count > PSMX2_IOV_MAX_COUNT) {
+		return -FI_EINVAL;
+	} else if (msg->iov_count > 1) {
 		return psmx2_tagged_sendv_generic(ep, msg->msg_iov,
 						  msg->desc, msg->iov_count,
 						  msg->addr, msg->tag,
