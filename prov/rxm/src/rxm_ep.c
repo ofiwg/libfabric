@@ -702,43 +702,6 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  &rxm_ep->recv_queue);
 }
 
-void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
-{
-	int ret;
-	size_t i;
-
-	for (i = 0; i < count; i++) {
-		if (mr[i]) {
-			ret = fi_close(&mr[i]->fid);
-			if (ret)
-				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-					"Unable to close msg mr: %zu\n", i);
-		}
-	}
-}
-
-int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		       size_t count, uint64_t access, struct fid_mr **mr)
-{
-	struct rxm_domain *rxm_domain;
-	int ret;
-	size_t i;
-
-	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
-
-	// TODO do fi_mr_regv if provider supports it
-	for (i = 0; i < count; i++) {
-		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
-				iov[i].iov_len, access, 0, 0, 0, &mr[i], NULL);
-		if (ret)
-			goto err;
-	}
-	return 0;
-err:
-	rxm_ep_msg_mr_closev(mr, count);
-	return ret;
-}
-
 static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
 				const struct iovec *iov, size_t count,
 				struct fid_mr **mr)
