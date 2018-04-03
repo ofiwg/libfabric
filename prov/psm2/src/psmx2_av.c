@@ -582,11 +582,7 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 	int i, idx, ret;
 	int sep_count = 0;
 
-	if (count && !addr) {
-		FI_WARN(&psmx2_prov, FI_LOG_AV,
-			"the input address array is NULL.\n");
-		return -FI_EINVAL;
-	}
+	assert(addr || !count);
 
 	av_priv = container_of(av, struct psmx2_fid_av, av);
 
@@ -706,8 +702,8 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	int idx;
 	int err = 0;
 
-	if (!addr || !addrlen)
-		return -FI_EINVAL;
+	assert(addr);
+	assert(addrlen);
 
 	av_priv = container_of(av, struct psmx2_fid_av, av);
 
@@ -866,8 +862,7 @@ STATIC int psmx2_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	av = container_of(fid, struct psmx2_fid_av, av.fid);
 
-	if (!bfid)
-		return -FI_EINVAL;
+	assert(bfid);
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:

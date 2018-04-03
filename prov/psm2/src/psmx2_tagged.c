@@ -176,9 +176,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 						 context, flags);
  
 	if (flags & FI_CLAIM) {
-		if (!context)
-			return -FI_EINVAL;
-
+		assert(context);
 		if (flags & FI_DISCARD) {
 			psm2_mq_status2_t psm2_status;
 			struct psmx2_cq_event *event;
@@ -239,9 +237,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 	enable_completion = !ep_priv->recv_selective_completion || (flags & FI_COMPLETION);
 
 	if (enable_completion) {
-		if (OFI_UNLIKELY(!context))
-			return -FI_EINVAL;
-
+		assert(context);
 		fi_context = context;
 		PSMX2_CTXT_TYPE(fi_context) = PSMX2_TRECV_CONTEXT;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
@@ -494,12 +490,11 @@ static ssize_t psmx2_tagged_recvmsg(struct fid_ep *ep,
 	void *buf;
 	size_t len;
 
-	if (!msg || (msg->iov_count && !msg->msg_iov))
-		return -FI_EINVAL;
+	assert(msg);
+	assert(!msg->iov_count || msg->msg_iov);
+	assert(msg->iov_count <= 1);
 
-	if (msg->iov_count > 1) {
-		return -FI_ENOSYS;
-	} else if (msg->iov_count) {
+	if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
 	} else {
@@ -522,10 +517,8 @@ psmx2_tagged_recvv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
 {									\
 	void *buf;							\
 	size_t len;							\
-	if (count && !iov)						\
-		return -FI_EINVAL;					\
-	if (count > 1)							\
-		return -FI_ENOSYS;					\
+	assert(!count || iov);						\
+	assert(count <= 1);						\
 	if (count) {							\
 		buf = iov[0].iov_base;					\
 		len = iov[0].iov_len;					\
@@ -631,9 +624,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 	if (no_completion) {
 		fi_context = &ep_priv->nocomp_tsend_context;
 	} else {
-		if (!context)
-			return -FI_EINVAL;
-
+		assert(context);
 		fi_context = context;
 		PSMX2_CTXT_TYPE(fi_context) = PSMX2_TSEND_CONTEXT;
 		PSMX2_CTXT_USER(fi_context) = (void *)buf;
@@ -1111,12 +1102,11 @@ static ssize_t psmx2_tagged_sendmsg(struct fid_ep *ep,
 	void *buf;
 	size_t len;
 
-	if (!msg || (msg->iov_count && !msg->msg_iov))
-		return -FI_EINVAL;
+	assert(msg);
+	assert(!msg->iov_count || msg->msg_iov);
+	assert(msg->iov_count <= PSMX2_IOV_MAX_COUNT);
 
-	if (msg->iov_count > PSMX2_IOV_MAX_COUNT) {
-		return -FI_EINVAL;
-	} else if (msg->iov_count > 1) {
+	if (msg->iov_count > 1) {
 		return psmx2_tagged_sendv_generic(ep, msg->msg_iov,
 						  msg->desc, msg->iov_count,
 						  msg->addr, msg->tag,
@@ -1159,11 +1149,9 @@ psmx2_tagged_sendv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
 {									\
 	void *buf;							\
 	size_t len;							\
-	if (count && !iov)						\
-		return -FI_EINVAL;					\
-	if (count > PSMX2_IOV_MAX_COUNT) {				\
-		return -FI_EINVAL;					\
-	} else if (count > 1) {						\
+	assert(!count || iov);						\
+	assert(count <= PSMX2_IOV_MAX_COUNT); 				\
+	if (count > 1) {						\
 		struct psmx2_fid_ep *ep_priv;				\
 		ep_priv = container_of(ep, struct psmx2_fid_ep, ep);	\
 		return psmx2_tagged_sendv_generic(ep, iov, desc, count, \

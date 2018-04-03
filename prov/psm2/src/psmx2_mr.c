@@ -141,8 +141,8 @@ STATIC int psmx2_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	mr = container_of(fid, struct psmx2_fid_mr, mr.fid);
 
-	if (!bfid)
-		return -FI_EINVAL;
+	assert(bfid);
+
 	switch (bfid->fclass) {
 	case FI_CLASS_EP:
 		ep = container_of(bfid, struct psmx2_fid_ep, ep.fid);
@@ -248,9 +248,8 @@ STATIC int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
 	uint64_t key;
 	int err;
 
-	if (fid->fclass != FI_CLASS_DOMAIN) {
-		return -FI_EINVAL;
-	}
+	assert(fid->fclass == FI_CLASS_DOMAIN);
+
 	domain = container_of(fid, struct fid_domain, fid);
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
@@ -298,15 +297,14 @@ STATIC int psmx2_mr_regv(struct fid *fid,
 	int i, err;
 	uint64_t key;
 
-	if (fid->fclass != FI_CLASS_DOMAIN) {
-		return -FI_EINVAL;
-	}
+	assert(fid->fclass == FI_CLASS_DOMAIN);
+
 	domain = container_of(fid, struct fid_domain, fid);
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
 
-	if (count == 0 || iov == NULL)
-		return -FI_EINVAL;
+	assert(count);
+	assert(iov);
 
 	mr_priv = (struct psmx2_fid_mr *)
 			calloc(1, sizeof(*mr_priv) +
@@ -351,18 +349,15 @@ STATIC int psmx2_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	int i, err;
 	uint64_t key;
 
-	if (fid->fclass != FI_CLASS_DOMAIN) {
-		return -FI_EINVAL;
-	}
+	assert(fid->fclass == FI_CLASS_DOMAIN);
+
 	domain = container_of(fid, struct fid_domain, fid);
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
 
-	if (!attr)
-		return -FI_EINVAL;
-
-	if (attr->iov_count == 0 || attr->mr_iov == NULL)
-		return -FI_EINVAL;
+	assert(attr);
+	assert(attr->iov_count);
+	assert(attr->mr_iov);
 
 	mr_priv = (struct psmx2_fid_mr *)
 			calloc(1, sizeof(*mr_priv) +

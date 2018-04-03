@@ -588,8 +588,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 		return psmx2_trigger_queue_read(ep, buf, len, desc, src_addr,
 						addr, key, context, flags);
 
-	if (!buf)
-		return -FI_EINVAL;
+	assert(buf);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
@@ -601,9 +600,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!src_addr)
-			return -FI_EINVAL;
-
+		assert(src_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 	}
 
@@ -717,9 +714,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!src_addr)
-			return -FI_EINVAL;
-
+		assert(src_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 	}
 
@@ -842,9 +837,11 @@ STATIC ssize_t psmx2_readmsg(struct fid_ep *ep,
 			     const struct fi_msg_rma *msg,
 			     uint64_t flags)
 {
-	if (!msg || !msg->iov_count || !msg->msg_iov ||
-	    !msg->rma_iov || msg->rma_iov_count != 1)
-		return -FI_EINVAL;
+	assert(msg);
+	assert(msg->iov_count);
+	assert(msg->msg_iov);
+	assert(msg->rma_iov);
+	assert(msg->rma_iov_count == 1);
 
 	if (msg->iov_count > 1)
 		return psmx2_readv_generic(ep, msg->msg_iov,
@@ -871,8 +868,8 @@ STATIC ssize_t psmx2_readv(struct fid_ep *ep, const struct iovec *iov,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (!iov || !count)
-		return -FI_EINVAL;
+	assert(iov);
+	assert(count);
 
 	if (count > 1)
 		return psmx2_readv_generic(ep, iov, desc ? desc[0] : NULL,
@@ -911,8 +908,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 						 addr, key, context, flags,
 						 data);
 
-	if (!buf)
-		return -FI_EINVAL;
+	assert(buf);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -924,9 +920,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -1082,9 +1076,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -1279,9 +1271,11 @@ STATIC ssize_t psmx2_writemsg(struct fid_ep *ep,
 			      const struct fi_msg_rma *msg,
 			      uint64_t flags)
 {
-	if (!msg || !msg->msg_iov || !msg->iov_count ||
-	    !msg->rma_iov || msg->rma_iov_count != 1)
-		return -FI_EINVAL;
+	assert(msg);
+	assert(msg->msg_iov);
+	assert(msg->iov_count);
+	assert(msg->rma_iov);
+	assert(msg->rma_iov_count == 1);
 
 	if (msg->iov_count > 1)
 		return psmx2_writev_generic(ep, msg->msg_iov, msg->desc,
@@ -1306,8 +1300,8 @@ STATIC ssize_t psmx2_writev(struct fid_ep *ep, const struct iovec *iov,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (!iov || !count)
-		return -FI_EINVAL;
+	assert(iov);
+	assert(count);
 
 	if (count > 1)
 		return psmx2_writev_generic(ep, iov, desc, count, dest_addr,
