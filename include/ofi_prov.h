@@ -206,4 +206,15 @@ SHM_INI ;
 #  define SHM_INIT NULL
 #endif
 
+#if (HAVE_MRAIL) && (HAVE_MRAIL_DL)
+#  define MRAIL_INI FI_EXT_INI
+#  define MRAIL_INIT NULL
+#elif (HAVE_MRAIL)
+#  define MRAIL_INI INI_SIG(fi_mrail_ini)
+#  define MRAIL_INIT fi_mrail_ini()
+MRAIL_INI ;
+#else
+#  define MRAIL_INIT NULL
+#endif
+
 #endif /* _OFI_PROV_H_ */
