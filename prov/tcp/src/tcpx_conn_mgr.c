@@ -267,6 +267,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 {
 	struct ofi_ctrl_hdr conn_resp;
 	struct fi_eq_cm_entry *cm_entry;
+	struct tcpx_domain *domain;
 	int ret = FI_SUCCESS;
 
 	assert(poll_mgr->poll_fds[index].revents == POLLIN);
@@ -290,6 +291,13 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 		goto err;
 	}
 	ret = fi_fd_nonblock(ep->conn_fd);
+
+	domain = container_of(ep->util_ep.domain,
+			      struct tcpx_domain,
+			      util_domain);
+
+	if (domain->progress.mode == FI_PROGRESS_AUTO)
+		tcpx_progress_ep_add(&domain->progress, ep);
 err:
 	free(cm_entry);
 	return ret;
@@ -406,6 +414,7 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 	struct fi_eq_cm_entry cm_entry;
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
+	struct tcpx_domain *domain;
 	int ret;
 
 	assert(poll_info->fid->fclass == FI_CLASS_EP);
@@ -424,6 +433,12 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 	}
 
 	ret = fi_fd_nonblock(ep->conn_fd);
+	domain = container_of(ep->util_ep.domain,
+			      struct tcpx_domain,
+			      util_domain);
+
+	if (domain->progress.mode == FI_PROGRESS_AUTO)
+		tcpx_progress_ep_add(&domain->progress, ep);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);

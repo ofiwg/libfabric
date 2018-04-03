@@ -99,6 +99,11 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->fid.ops = &tcpx_domain_fi_ops;
 	(*domain)->ops = &tcpx_domain_ops;
 
+	if (info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
+		tcpx_domain->progress.mode = FI_PROGRESS_AUTO;
+	else
+		tcpx_domain->progress.mode = info->domain_attr->data_progress;
+
 	ret = tcpx_progress_init(&tcpx_domain->progress);
 	if (ret)
 		goto err2;

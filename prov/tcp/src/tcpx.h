@@ -118,7 +118,10 @@ int tcpx_progress_init(struct tcpx_progress *progress);
 int tcpx_progress_close(struct tcpx_progress *progress);
 struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress);
 void pe_entry_release(struct tcpx_pe_entry *pe_entry);
-void tcpx_progress(struct util_ep *util_ep);
+void tcpx_manual_progress(struct util_ep *util_ep);
+int tcpx_progress_ep_add(struct tcpx_progress *progress, struct tcpx_ep *ep);
+void tcpx_progress_ep_del(struct tcpx_progress *progress, struct tcpx_ep *ep);
+void tcpx_progress_signal(struct tcpx_progress *progress);
 
 enum tcpx_xfer_states {
 	TCPX_XFER_IDLE,
@@ -188,9 +191,10 @@ struct tcpx_pep {
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
-	struct dlist_entry	ep_entry;
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
+	/* lock for accessing rx & tx queues */
+	fastlock_t		queue_lock;
 };
 
 struct tcpx_fabric {
@@ -200,7 +204,7 @@ struct tcpx_fabric {
 };
 
 struct tcpx_msg_data {
-	size_t		iov_cnt;
+	size_t			iov_cnt;
 	union {
 		struct iovec		iov[TCPX_IOV_LIMIT+1];
 		struct fi_rma_iov	rma_iov[TCPX_IOV_LIMIT+1];
@@ -219,8 +223,23 @@ struct tcpx_pe_entry {
 	uint64_t		done_len;
 };
 
+struct auto_prog_mgr {
+	fi_epoll_t		epoll_fd;
+	struct fd_signal	signal;
+	struct dlist_entry	ep_list;
+	pthread_t		thread;
+	int			run;
+	/* lock for the auto_prog_mgr access */
+	fastlock_t		lock;
+	void **			ctxs;
+	int			ctxs_sz;
+	int			used;
+};
+
 struct tcpx_progress {
 	struct util_buf_pool	*pe_entry_pool;
+	struct auto_prog_mgr	auto_prog_mgr;
+	enum fi_progress	mode;
 };
 
 struct tcpx_domain {

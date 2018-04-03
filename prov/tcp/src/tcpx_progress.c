@@ -42,8 +42,32 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
+void tcpx_auto_prog_mgr_close(struct auto_prog_mgr *mgr)
+{
+	struct tcpx_progress *progress;
+
+	progress = container_of(mgr, struct tcpx_progress, auto_prog_mgr);
+	mgr->run = 0;
+	tcpx_progress_signal(progress);
+	if (mgr->thread &&
+	    pthread_join(mgr->thread, NULL)) {
+		FI_DBG(&tcpx_prov, FI_LOG_DOMAIN,
+		       "auto progress thread failed to join\n");
+	}
+
+	free(mgr->ctxs);
+	fi_epoll_del(mgr->epoll_fd,mgr->signal.fd[FI_READ_FD]);
+	fd_signal_free(&mgr->signal);
+	fi_epoll_close(mgr->epoll_fd);
+	fastlock_destroy(&mgr->lock);
+}
+
 int tcpx_progress_close(struct tcpx_progress *progress)
 {
+	if (progress->mode == FI_PROGRESS_AUTO) {
+		tcpx_auto_prog_mgr_close(&progress->auto_prog_mgr);
+	}
+
 	util_buf_pool_destroy(progress->pe_entry_pool);
 	return FI_SUCCESS;
 }
@@ -173,40 +197,261 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	}
 }
 
-static void process_pe_lists(struct tcpx_ep *ep)
+static void progress_rx_queue(struct tcpx_ep *ep)
 {
 	struct tcpx_pe_entry *pe_entry;
 	struct dlist_entry *entry;
 
-	if (dlist_empty(&ep->rx_queue))
-		goto tx_pe_list;
+	fastlock_acquire(&ep->queue_lock);
+	if (dlist_empty(&ep->rx_queue)) {
+		fastlock_release(&ep->queue_lock);
+		return;
+	}
 
 	entry = ep->rx_queue.next;
 	pe_entry = container_of(entry, struct tcpx_pe_entry,
 				entry);
 	process_rx_pe_entry(pe_entry);
+	fastlock_release(&ep->queue_lock);
+}
 
-tx_pe_list:
-	if (dlist_empty(&ep->tx_queue))
-		return ;
+static void progress_tx_queue(struct tcpx_ep *ep)
+{
+	struct tcpx_pe_entry *pe_entry;
+	struct dlist_entry *entry;
+
+	fastlock_acquire(&ep->queue_lock);
+	if (dlist_empty(&ep->tx_queue)) {
+		fastlock_release(&ep->queue_lock);
+		return;
+	}
 
 	entry = ep->tx_queue.next;
 	pe_entry = container_of(entry, struct tcpx_pe_entry,
 				entry);
 	process_tx_pe_entry(pe_entry);
+	fastlock_release(&ep->queue_lock);
 }
 
-void tcpx_progress(struct util_ep *util_ep)
+void tcpx_manual_progress(struct util_ep *util_ep)
 {
 	struct tcpx_ep *ep;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	process_pe_lists(ep);
+
+	progress_tx_queue(ep);
+	progress_rx_queue(ep);
 	return;
+}
+
+int tcpx_progress_ep_add(struct tcpx_progress *progress,
+			 struct tcpx_ep *ep)
+{
+	void *new_ctxs;
+	uint64_t new_size;
+	int ret;
+
+
+	ret = fid_list_insert(&progress->auto_prog_mgr.ep_list,
+			      &progress->auto_prog_mgr.lock,
+			      &ep->util_ep.ep_fid.fid);
+	if (ret)
+		return ret;
+
+	fastlock_acquire(&progress->auto_prog_mgr.lock);
+	ret = fi_epoll_add(progress->auto_prog_mgr.epoll_fd,
+			   ep->conn_fd, FI_EPOLL_IN, ep);
+	if (ret) {
+		fastlock_release(&progress->auto_prog_mgr.lock);
+		return ret;
+	}
+
+	progress->auto_prog_mgr.used++;
+	if (progress->auto_prog_mgr.used > progress->auto_prog_mgr.ctxs_sz) {
+		new_size = 2 * progress->auto_prog_mgr.ctxs_sz;
+		new_ctxs = realloc(progress->auto_prog_mgr.ctxs, new_size *
+				   sizeof(*progress->auto_prog_mgr.ctxs));
+		if (!new_ctxs) {
+			progress->auto_prog_mgr.ctxs = new_ctxs;
+			progress->auto_prog_mgr.ctxs_sz = new_size;
+		}
+	}
+	fastlock_release(&progress->auto_prog_mgr.lock);
+	tcpx_progress_signal(progress);
+	return FI_SUCCESS;
+}
+
+void tcpx_progress_ep_del(struct tcpx_progress *progress,
+			 struct tcpx_ep *ep)
+{
+	fid_list_remove(&progress->auto_prog_mgr.ep_list,
+			&progress->auto_prog_mgr.lock,
+			&ep->util_ep.ep_fid.fid);
+
+	fastlock_acquire(&progress->auto_prog_mgr.lock);
+	fi_epoll_del(progress->auto_prog_mgr.epoll_fd, ep->conn_fd);
+	progress->auto_prog_mgr.used--;
+	fastlock_release(&progress->auto_prog_mgr.lock);
+	tcpx_progress_signal(progress);
+}
+
+void tcpx_progress_signal(struct tcpx_progress *progress)
+{
+	if (progress->mode != FI_PROGRESS_AUTO)
+		return;
+
+	fd_signal_set(&progress->auto_prog_mgr.signal);
+}
+
+static int tcpx_auto_prog_wait_ok(struct auto_prog_mgr *mgr)
+{
+	struct dlist_entry *entry;
+	struct tcpx_ep *ep;
+	struct fid_list_entry *item;
+
+	dlist_foreach(&mgr->ep_list,entry) {
+		item = container_of(entry, struct fid_list_entry, entry);
+		ep = container_of(item->fid, struct tcpx_ep,
+				  util_ep.ep_fid.fid);
+
+		if (!dlist_empty(&ep->tx_queue))
+			return 0;
+	}
+	return 1;
+}
+
+static int tcpx_auto_prog_rx_queues(struct auto_prog_mgr *mgr)
+{
+	struct tcpx_ep *ep;
+	int ret, i;
+
+	ret = fi_epoll_wait(mgr->epoll_fd, mgr->ctxs,
+			    MIN(mgr->used, mgr->ctxs_sz), 0);
+
+	if (ret < 0) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+			"fi_epoll_wait failed\n");
+		return -errno;
+	}
+
+	for (i = 0; i < ret ; i++) {
+		if (mgr->ctxs[i] == NULL) {
+			fd_signal_reset(&mgr->signal);
+			continue;
+		}
+		ep = (struct tcpx_ep *) mgr->ctxs[i];
+		progress_rx_queue(ep);
+	}
+	return FI_SUCCESS;
+}
+
+static void tcpx_auto_prog_tx_queues(struct auto_prog_mgr *mgr)
+{
+	struct dlist_entry *entry;
+	struct tcpx_ep *ep;
+	struct fid_list_entry *item;
+
+	dlist_foreach(&mgr->ep_list,entry) {
+		item = container_of(entry, struct fid_list_entry, entry);
+		ep = container_of(item->fid, struct tcpx_ep,
+				  util_ep.ep_fid.fid);
+		progress_tx_queue(ep);
+	}
+}
+
+static void *tcpx_auto_progress_thread(void *arg)
+{
+	struct auto_prog_mgr *mgr = (struct auto_prog_mgr *)arg;
+	int ret;
+
+	while(mgr->run) {
+		fastlock_acquire(&mgr->lock);
+		if (tcpx_auto_prog_wait_ok(mgr)) {
+			fastlock_release(&mgr->lock);
+			ret = fi_epoll_wait(mgr->epoll_fd, mgr->ctxs,
+					    MIN(mgr->used, mgr->ctxs_sz), -1);
+			if (ret < 0) {
+				FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+					"fi_epoll_wait failed\n");
+				goto err;
+			}
+			fastlock_acquire(&mgr->lock);
+		}
+		tcpx_auto_prog_tx_queues(mgr);
+		tcpx_auto_prog_rx_queues(mgr);
+		fastlock_release(&mgr->lock);
+	}
+err:
+	return NULL;
+}
+
+static int tcpx_auto_prog_mgr_init(struct auto_prog_mgr *mgr)
+{
+	int ret ;
+
+	ret = fastlock_init(&mgr->lock);
+	if (ret)
+		return ret;
+
+	ret = fi_epoll_create(&mgr->epoll_fd);
+	if (ret)
+		goto err1;
+
+	ret = fd_signal_init(&mgr->signal);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"signal init failed\n");
+		goto err2;
+	}
+
+	ret = fi_epoll_add(mgr->epoll_fd,
+			   mgr->signal.fd[FI_READ_FD],
+			   FI_EPOLL_IN, NULL);
+	if (ret)
+		goto err3;
+
+	mgr->used = 1;
+	mgr->ctxs_sz = 1024;
+	mgr->ctxs = calloc(mgr->ctxs_sz, sizeof(*mgr->ctxs));
+	if (!mgr->ctxs) {
+		ret = -FI_ENOMEM;
+		goto err4;
+	}
+	dlist_init(&mgr->ep_list);
+
+	mgr->run = 1;
+	ret = pthread_create(&mgr->thread, 0,
+			     tcpx_auto_progress_thread,
+			     (void *)mgr);
+
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+			"Failed creating auto progress thread");
+		goto err5;
+	}
+
+	return FI_SUCCESS;
+err5:
+	free(mgr->ctxs);
+err4:
+	fi_epoll_del(mgr->epoll_fd, mgr->signal.fd[FI_READ_FD]);
+err3:
+	fd_signal_free(&mgr->signal);
+err2:
+	fi_epoll_close(mgr->epoll_fd);
+err1:
+	fastlock_destroy(&mgr->lock);
+	return ret;
 }
 
 int tcpx_progress_init(struct tcpx_progress *progress)
 {
+	int ret;
+
+	if (progress->mode == FI_PROGRESS_AUTO) {
+		ret = tcpx_auto_prog_mgr_init(&progress->auto_prog_mgr);
+		if (ret)
+			return ret;
+	}
 	return util_buf_pool_create(&progress->pe_entry_pool,
 				    sizeof(struct tcpx_pe_entry),
 				    16, 0, 1024);
