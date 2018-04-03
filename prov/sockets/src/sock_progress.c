@@ -2446,7 +2446,7 @@ int sock_pe_progress_ep_rx(struct sock_pe *pe, struct sock_ep_attr *ep_attr)
 	struct sock_rx_ctx *rx_ctx;
 	int ret, i;
 
-	for (i = 0; i <= ep_attr->ep_attr.rx_ctx_cnt; i++) {
+	for (i = 0; i < ep_attr->ep_attr.rx_ctx_cnt; i++) {
 		rx_ctx = ep_attr->rx_array[i];
 		if (!rx_ctx)
 			continue;
@@ -2463,7 +2463,7 @@ int sock_pe_progress_ep_tx(struct sock_pe *pe, struct sock_ep_attr *ep_attr)
 	struct sock_tx_ctx *tx_ctx;
 	int ret, i;
 
-	for (i = 0; i <= ep_attr->ep_attr.tx_ctx_cnt; i++) {
+	for (i = 0; i < ep_attr->ep_attr.tx_ctx_cnt; i++) {
 		tx_ctx = ep_attr->tx_array[i];
 		if (!tx_ctx)
 			continue;
