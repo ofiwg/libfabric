@@ -158,7 +158,6 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
 				ep->info->tx_attr->op_flags |= FI_COMPLETION;
-			ofi_atomic_initialize32(&ep->scq->sends_outstanding, 0);
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -561,30 +560,36 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_msg_ep *ep)
 	return FI_SUCCESS;
 }
 
+static inline ssize_t
+fi_ibv_send_poll_cq_if_needed(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
+{
+	int ret;
+
+try_again:
+	ret = FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr, NULL);
+	if (OFI_UNLIKELY(ret == -FI_EAGAIN)) {
+		ret = fi_ibv_poll_reap_unsig_cq(ep);
+		if (OFI_UNLIKELY(ret))
+			return -FI_EAGAIN;
+		goto try_again;
+	}
+	return ret;
+}
+
 /* WR must be filled out by now except for context */
 static inline ssize_t
 fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 {
-	struct fi_ibv_wre *wre = NULL;
-	int ret;
-
 	if (wr->send_flags & IBV_SEND_SIGNALED) {
-		ret = fi_ibv_prepare_signal_send(ep, wr, &wre, context);
+		struct fi_ibv_wre *wre;
+		int ret = fi_ibv_prepare_signal_send(ep, wr, &wre, context);
 		if (OFI_UNLIKELY(ret))
 			return ret;
+		return FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr,
+					  FI_IBV_RELEASE_WRE(ep, wre));
 	} else {
-		if (ofi_atomic_inc32(&ep->scq->sends_outstanding) >=
-						ep->info->tx_attr->size) {
-			ret = fi_ibv_poll_reap_unsig_cq(ep);
-			if (OFI_UNLIKELY(ret)) {
-				ofi_atomic_dec32(&ep->scq->sends_outstanding);
-				return -FI_EAGAIN;
-			}
-		}
+		return fi_ibv_send_poll_cq_if_needed(ep, wr);
 	}
-
-	return FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr,
-				  FI_IBV_RELEASE_WRE(ep, wre));
 }
 
 static inline ssize_t
@@ -608,7 +613,7 @@ fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return fi_ibv_send(ep, wr, NULL);
+	return fi_ibv_send_poll_cq_if_needed(ep, wr);
 }
 
 static inline ssize_t

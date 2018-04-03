@@ -411,7 +411,6 @@ struct fi_ibv_cq {
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
 	struct util_buf_pool	*wce_pool;
-	ofi_atomic32_t		sends_outstanding;
 };
 
 struct fi_ibv_rdm_request;
@@ -628,10 +627,8 @@ fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	int ret = 1;
 
 	/* Handle WR entry when user doesn't request the completion */
-	if (!wc->wr_id) {
-		ofi_atomic_dec32(&cq->sends_outstanding);
+	if (!wc->wr_id)
 		return 0;
-	}
 
 	/* Handle compeltions that should be provided to user */
 	wre = (struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
