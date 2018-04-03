@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
  *
@@ -1432,40 +1432,29 @@ int size_to_count(int size)
 		return (opts.options & FT_OPT_BW) ? 20000: 10000;
 }
 
+static const size_t datatype_size_table[] = {
+	[FI_INT8]   = sizeof(int8_t),
+	[FI_UINT8]  = sizeof(uint8_t),
+	[FI_INT16]  = sizeof(int16_t),
+	[FI_UINT16] = sizeof(uint16_t),
+	[FI_INT32]  = sizeof(int32_t),
+	[FI_UINT32] = sizeof(uint32_t),
+	[FI_INT64]  = sizeof(int64_t),
+	[FI_UINT64] = sizeof(uint64_t),
+	[FI_FLOAT]  = sizeof(float),
+	[FI_DOUBLE] = sizeof(double),
+	[FI_FLOAT_COMPLEX]  = sizeof(OFI_COMPLEX(float)),
+	[FI_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(double)),
+	[FI_LONG_DOUBLE]    = sizeof(long double),
+	[FI_LONG_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(long_double)),
+};
+
 size_t datatype_to_size(enum fi_datatype datatype)
 {
-	switch (datatype) {
-	case FI_INT8:
-		return sizeof(int8_t);
-	case FI_UINT8:
-		return sizeof(uint8_t);
-	case FI_INT16:
-		return sizeof(int16_t);
-	case FI_UINT16:
-		return sizeof(uint16_t);
-	case FI_INT32:
-		return sizeof(int32_t);
-	case FI_UINT32:
-		return sizeof(uint32_t);
-	case FI_FLOAT:
-		return sizeof(float);
-	case FI_INT64:
-		return sizeof(int64_t);
-	case FI_UINT64:
-		return sizeof(uint64_t);
-	case FI_DOUBLE:
-		return sizeof(double);
-	case FI_FLOAT_COMPLEX:
-		return sizeof(OFI_COMPLEX(float));
-	case FI_DOUBLE_COMPLEX:
-		return sizeof(OFI_COMPLEX(double));
-	case FI_LONG_DOUBLE:
-		return sizeof(long double);
-	case FI_LONG_DOUBLE_COMPLEX:
-		return sizeof(OFI_COMPLEX(long_double));;
-	default:
+	if (datatype >= FI_DATATYPE_LAST)
 		return 0;
-	}
+
+	return datatype_size_table[datatype];
 }
 
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
@@ -1708,7 +1697,15 @@ ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
 		       enum fi_datatype datatype, enum fi_op atomic_op,
 		       void *context)
 {
-	size_t count = opts.transfer_size / datatype_to_size(datatype);
+	size_t size, count;
+
+	size = datatype_to_size(datatype);
+	if (!size) {
+		FT_ERR("Unknown datatype\n");
+		return EXIT_FAILURE;
+	}
+	count = opts.transfer_size / size;
+
 	switch (opcode) {
 	case FT_ATOMIC_BASE:
 		FT_POST(fi_atomic, ft_get_tx_comp, tx_seq, "fi_atomic", ep,
