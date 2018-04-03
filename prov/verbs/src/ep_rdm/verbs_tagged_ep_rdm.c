@@ -558,9 +558,12 @@ fi_ibv_rdm_process_recv_wc(struct fi_ibv_rdm_ep *ep, struct ibv_wc *wc)
 			 */
 			fi_ibv_rdm_start_disconnection(conn);
 		} else {
-			assert("Error recv wc\n" &&
-			       (!ep->is_closing ||
-				conn->state != FI_VERBS_CONN_ESTABLISHED));
+			VERBS_DBG(FI_LOG_EP_DATA, "%s recv WC",
+				  ((!ep->is_closing ||
+				   conn->state != FI_VERBS_CONN_ESTABLISHED) ?
+				   "Expected" : "Error"));
+			assert(!ep->is_closing ||
+			       conn->state != FI_VERBS_CONN_ESTABLISHED);
 		}
 		conn->state = FI_VERBS_CONN_CLOSED;
 	}

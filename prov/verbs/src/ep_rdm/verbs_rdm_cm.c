@@ -521,10 +521,10 @@ fi_ibv_rdm_process_event_established(const struct rdma_cm_event *event,
 		(struct fi_ibv_rdm_conn *)event->id->context;
 
 	if (conn->state != FI_VERBS_CONN_STARTED &&
-	    conn->cm_role != FI_VERBS_CM_SELF)
-	{
-		VERBS_INFO(FI_LOG_AV, "state = %d, conn %p", conn->state, conn);
-		assert(0 && "Wrong state");
+	    conn->cm_role != FI_VERBS_CM_SELF) {
+		VERBS_WARN(FI_LOG_AV, "Wrong state! state = %d, conn %p",
+			   conn->state, conn);
+		assert(0);
 		return -FI_ECONNABORTED;
 	}
 
