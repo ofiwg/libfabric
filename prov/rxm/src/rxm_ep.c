@@ -43,6 +43,21 @@
 
 const size_t rxm_pkt_size = sizeof(struct rxm_pkt);
 
+
+static void rxm_fastlock_empty(fastlock_t *lock)
+{
+}
+
+static void rxm_fastlock_acquire(fastlock_t *lock)
+{
+	fastlock_acquire(lock);
+}
+
+static void rxm_fastlock_release(fastlock_t *lock)
+{
+	fastlock_release(lock);
+}
+
 static int rxm_match_recv_entry(struct dlist_entry *item, const void *arg)
 {
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *) arg;

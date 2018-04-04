@@ -332,6 +332,9 @@ struct rxm_buf_pool {
 	fastlock_t lock;
 };
 
+typedef void (*rxm_ep_res_fastlock_acquire_t)(fastlock_t *lock);
+typedef void (*rxm_ep_res_fastlock_release_t)(fastlock_t *lock);
+
 struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
@@ -355,6 +358,9 @@ struct rxm_ep {
 	struct rxm_send_queue	send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+
+	rxm_ep_res_fastlock_acquire_t	res_fastlock_acquire;
+	rxm_ep_res_fastlock_release_t	res_fastlock_release;
 };
 
 struct rxm_ep_wait_ref {
