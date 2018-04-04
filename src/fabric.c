@@ -295,75 +295,9 @@ static int lib_filter(const struct dirent *entry)
 }
 #endif
 
-/* split the given string "s" using the specified delimiter(s) in the string
- * "delim" and return an array of strings.  The array is terminated with a NULL
- * pointer.  You can clean this array up with a call to free_string_array().
- *
- * Returns NULL on failure.
- */
-static char **split_and_alloc(const char *s, const char *delim)
-{
-	int i, n;
-	char *tmp;
-	char *dup = NULL;
-	char **arr = NULL;
-
-	if (!s || !delim)
-		return NULL;
-
-	dup = strdup(s);
-	if (!dup) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "failed to allocate memory\n");
-		return NULL;
-	}
-
-	/* compute the array size */
-	n = 1;
-	for (tmp = dup; *tmp != '\0'; ++tmp) {
-		for (i = 0; delim[i] != '\0'; ++i) {
-			if (*tmp == delim[i]) {
-				++n;
-				break;
-			}
-		}
-	}
-
-	/* +1 to leave space for NULL terminating pointer */
-	arr = calloc(n + 1, sizeof(*arr));
-	if (!arr) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "failed to allocate memory\n");
-		goto cleanup;
-	}
-
-	/* set array elts to point inside the dup'ed string */
-	for (tmp = dup, i = 0; tmp != NULL; ++i) {
-		arr[i] = strsep(&tmp, delim);
-	}
-	assert(i == n);
-
-	return arr;
-
-cleanup:
-	free(dup);
-	free(arr);
-	return NULL;
-}
-
-/* see split_and_alloc() */
-static void free_string_array(char **s)
-{
-	/* all strings are allocated from the same strdup'ed slab, so just free
-	 * the first element */
-	if (s != NULL)
-		free(s[0]);
-
-	/* and then the actual array of pointers */
-	free(s);
-}
-
 void ofi_free_filter(struct fi_filter *filter)
 {
-	free_string_array(filter->names);
+	ofi_free_string_array(filter->names);
 }
 
 void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
@@ -377,7 +311,7 @@ void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
 		++raw_filter;
 	}
 
-	filter->names = split_and_alloc(raw_filter, ",");
+	filter->names = ofi_split_and_alloc(raw_filter, ",");
 	if (!filter->names)
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"unable to parse filter from: %s\n", raw_filter);
@@ -476,12 +410,12 @@ void fi_ini(void)
 	if (!provdir)
 		provdir = PROVDLDIR;
 
-	dirs = split_and_alloc(provdir, ":");
+	dirs = ofi_split_and_alloc(provdir, ":");
 	if (dirs) {
 		for (n = 0; dirs[n]; ++n) {
 			ofi_ini_dir(dirs[n]);
 		}
-		free_string_array(dirs);
+		ofi_free_string_array(dirs);
 	}
 libdl_done:
 #endif
@@ -496,6 +430,7 @@ libdl_done:
 	ofi_register_provider(SHM_INIT, NULL);
 	ofi_register_provider(RXM_INIT, NULL);
 	ofi_register_provider(VERBS_INIT, NULL);
+	//ofi_register_provider(MRAIL_INIT, NULL);
 
 	{
 		/* TODO: RXD is not stable for now. Disable it by default */
