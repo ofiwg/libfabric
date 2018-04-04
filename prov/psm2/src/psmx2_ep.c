@@ -127,11 +127,8 @@ STATIC ssize_t psmx2_ep_cancel(fid_t fid, void *context)
 	int err;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
-	if (!ep->domain)
-		return -FI_EBADF;
-
-	if (!fi_context)
-		return -FI_EINVAL;
+	assert(ep->domain);
+	assert(fi_context);
 
 	switch (PSMX2_CTXT_TYPE(fi_context)) {
 	case PSMX2_TRECV_CONTEXT:
@@ -883,8 +880,7 @@ STATIC int psmx2_tx_context(struct fid_ep *ep, int index, struct fi_tx_attr *att
 
 	sep = container_of(ep, struct psmx2_fid_sep, ep);
 
-	if (index < 0 || index > sep->ctxt_cnt)
-		return -FI_EINVAL;
+	assert(index >= 0 && index < sep->ctxt_cnt);
 
 	*tx_ep = &sep->ctxts[index].ep->ep;
 	return 0;
@@ -898,8 +894,7 @@ STATIC int psmx2_rx_context(struct fid_ep *ep, int index, struct fi_rx_attr *att
 
 	sep = container_of(ep, struct psmx2_fid_sep, ep);
 
-	if (index < 0 || index > sep->ctxt_cnt)
-		return -FI_EINVAL;
+	assert(index >= 0 && index < sep->ctxt_cnt);
 
 	*rx_ep = &sep->ctxts[index].ep->ep;
 	return 0;

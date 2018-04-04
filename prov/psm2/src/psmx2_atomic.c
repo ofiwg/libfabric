@@ -809,14 +809,9 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 							datatype, op, context,
 							flags);
 
-	if (!buf)
-		return -FI_EINVAL;
-
-	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
-		return -FI_EINVAL;
-
-	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
-		return -FI_EINVAL;
+	assert(buf);
+	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -828,9 +823,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		 if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -918,17 +911,13 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 							 datatype, op, context,
 							 flags);
 
-	if (!iov || !count)
-		return -FI_EINVAL;
+	assert(iov);
+	assert(count);
+	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
 
 	while (count && !iov[count-1].count)
 		count--;
-
-	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
-		return -FI_EINVAL;
-
-	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
-		return -FI_EINVAL;
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -940,9 +929,7 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		 if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -1035,9 +1022,11 @@ STATIC ssize_t psmx2_atomic_writemsg(struct fid_ep *ep,
 				const struct fi_msg_atomic *msg,
 				uint64_t flags)
 {
-	if (!msg || !msg->iov_count || !msg->msg_iov || !msg->rma_iov ||
-	    msg->rma_iov_count != 1)
-		return -FI_EINVAL;
+	assert(msg);
+	assert(msg->iov_count);
+	assert(msg->msg_iov);
+	assert(msg->rma_iov);
+	assert(msg->rma_iov_count == 1);
 
 	if (msg->iov_count > 1)
 		return psmx2_atomic_writev_generic(ep, msg->msg_iov, msg->desc,
@@ -1068,8 +1057,8 @@ STATIC ssize_t psmx2_atomic_writev(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (!iov || !count)
-		return -FI_EINVAL;
+	assert(iov);
+	assert(count);
 
 	if (count > 1)
 		return psmx2_atomic_writev_generic(ep, iov, desc, count,
@@ -1132,14 +1121,9 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 							    key, datatype, op,
 							    context, flags);
 
-	if (!buf && op != FI_ATOMIC_READ)
-		return -FI_EINVAL;
-
-	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
-		return -FI_EINVAL;
-
-	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
-		return -FI_EINVAL;
+	assert(buf || op == FI_ATOMIC_READ);
+	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -1151,9 +1135,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -1252,9 +1234,11 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 							     key, datatype, op,
 							     context, flags);
 
-	if (((!iov || !count) && op != FI_ATOMIC_READ) || !resultv ||
-	    !result_count)
-		return -FI_EINVAL;
+	assert((iov && count) || op == FI_ATOMIC_READ);
+	assert(resultv);
+	assert(result_count);
+	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
 
 	if (iov) {
 		while (count && !iov[count-1].count)
@@ -1263,12 +1247,6 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 
 	while (result_count && !resultv[result_count-1].count)
 		result_count--;
-
-	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
-		return -FI_EINVAL;
-
-	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
-		return -FI_EINVAL;
 
 	result_len = psmx2_ioc_size(resultv, result_count, datatype);
 
@@ -1282,8 +1260,7 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 		desc0 = NULL;
 	}
 
-	if (result_len < len)
-		return -FI_EINVAL;
+	assert(result_len >= len);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -1295,9 +1272,7 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -1436,12 +1411,12 @@ STATIC ssize_t psmx2_atomic_readwritemsg(struct fid_ep *ep,
 	size_t count;
 	void *desc;
 
-	if (!msg || !msg->rma_iov || msg->rma_iov_count !=1 || !resultv ||
-	    !result_count)
-		return -FI_EINVAL;
-
-	if ((msg->op != FI_ATOMIC_READ) && (!msg->msg_iov || !msg->iov_count))
-		return -FI_EINVAL;
+	assert(msg);
+	assert(msg->rma_iov);
+	assert(msg->rma_iov_count ==1);
+	assert(resultv);
+	assert(result_count);
+	assert((msg->msg_iov && msg->iov_count) || msg->op == FI_ATOMIC_READ);
 
 	if ((msg->op != FI_ATOMIC_READ && msg->iov_count > 1) ||
 	    result_count > 1)
@@ -1488,11 +1463,9 @@ STATIC ssize_t psmx2_atomic_readwritev(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (!resultv || !result_count)
-		return -FI_EINVAL;
-
-	if ((op != FI_ATOMIC_READ) && (!iov || !count))
-		return -FI_EINVAL;
+	assert(resultv);
+	assert(result_count);
+	assert((iov && count) || op == FI_ATOMIC_READ);
 
 	if ((op != FI_ATOMIC_READ && count > 1) || result_count > 1)
 		return psmx2_atomic_readwritev_generic(ep, iov, desc, count,
@@ -1549,14 +1522,9 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 							    key, datatype, op,
 							    context, flags);
 
-	if (!buf)
-		return -FI_EINVAL;
-
-	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
-		return -FI_EINVAL;
-
-	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
-		return -FI_EINVAL;
+	assert(buf);
+	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -1568,9 +1536,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -1676,9 +1642,14 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 							     key, datatype, op,
 							     context, flags);
 
-	if (!iov || !count || !comparev || !compare_count || !resultv ||
-	    !result_count)
-		return -FI_EINVAL;
+	assert(iov);
+	assert(count);
+	assert(comparev);
+	assert(compare_count);
+	assert(resultv);
+	assert(result_count);
+	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
 
 	while (count && !iov[count-1].count)
 		count--;
@@ -1689,18 +1660,12 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	while (result_count && !resultv[result_count-1].count)
 		result_count--;
 
-	if ((int)datatype < 0 || (int)datatype >= FI_DATATYPE_LAST)
-		return -FI_EINVAL;
-
-	if ((int)op < 0 || (int)op >= FI_ATOMIC_OP_LAST)
-		return -FI_EINVAL;
-
 	len = psmx2_ioc_size(iov, count, datatype);
 	compare_len = psmx2_ioc_size(comparev, compare_count, datatype);
 	result_len = psmx2_ioc_size(resultv, result_count, datatype);
 
-	if (compare_len < len || result_len < len)
-		return -FI_EINVAL;
+	assert(compare_len >= len);
+	assert(result_len >= len);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
@@ -1712,9 +1677,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	} else {
-		if (!dest_addr)
-			return -FI_EINVAL;
-
+		assert(dest_addr);
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
@@ -1876,10 +1839,15 @@ STATIC ssize_t psmx2_atomic_compwritemsg(struct fid_ep *ep,
 					 size_t result_count,
 					 uint64_t flags)
 {
-	if (!msg || !msg->msg_iov || !msg->iov_count ||
-	    !msg->rma_iov || msg->rma_iov_count != 1 ||
-	    !comparev || !compare_count || !resultv || !result_count)
-		return -FI_EINVAL;
+	assert(msg);
+	assert(msg->msg_iov);
+	assert(msg->iov_count);
+	assert(msg->rma_iov);
+	assert(msg->rma_iov_count == 1);
+	assert(comparev);
+	assert(compare_count);
+	assert(resultv);
+	assert(result_count);
 
 	if (msg->iov_count > 1 || compare_count > 1 || result_count > 1)
 		return psmx2_atomic_compwritev_generic(ep, msg->msg_iov, msg->desc,
@@ -1921,8 +1889,12 @@ STATIC ssize_t psmx2_atomic_compwritev(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	if (!iov || !count || !comparev || !compare_count || !resultv || !result_count)
-		return -FI_EINVAL;
+	assert(iov);
+	assert(count);
+	assert(comparev);
+	assert(compare_count);
+	assert(resultv);
+	assert(result_count);
 
 	if (count > 1 || compare_count > 1 || result_count > 1)
 		return psmx2_atomic_compwritev_generic(ep, iov, desc, count,

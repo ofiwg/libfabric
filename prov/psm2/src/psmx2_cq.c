@@ -967,8 +967,7 @@ STATIC ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;
 
-	if (!buf && count)
-		return -FI_EINVAL;
+	assert(buf || !count);
 
 	read_count = 0;
 	for (i = 0; i < count; i++) {
