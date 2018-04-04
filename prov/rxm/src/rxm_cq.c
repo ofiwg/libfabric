@@ -444,7 +444,7 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		return -FI_EINVAL;
 	}
 
-	fastlock_acquire(&rx_buf->recv_queue->lock);
+	rx_buf->ep->res_fastlock_acquire(&rx_buf->recv_queue->lock);
 	entry = dlist_remove_first_match(&rx_buf->recv_queue->recv_list,
 					 rx_buf->recv_queue->match_recv, &match_attr);
 	if (!entry) {
@@ -457,10 +457,10 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		rx_buf->unexp_msg.tag = match_attr.tag;
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->recv_queue->unexp_msg_list);
-		fastlock_release(&rx_buf->recv_queue->lock);
+		rx_buf->ep->res_fastlock_release(&rx_buf->recv_queue->lock);
 		return 0;
 	}
-	fastlock_release(&rx_buf->recv_queue->lock);
+	rx_buf->ep->res_fastlock_release(&rx_buf->recv_queue->lock);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 	return rxm_cq_handle_data(rx_buf);
