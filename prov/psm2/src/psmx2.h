@@ -493,6 +493,7 @@ struct psmx2_fid_cq {
 	struct util_wait		*wait;
 	int				wait_cond;
 	int				wait_is_local;
+	ofi_atomic32_t			signaled;
 	uint8_t				error_data[PSMX2_ERR_DATA_SIZE];
 };
 
