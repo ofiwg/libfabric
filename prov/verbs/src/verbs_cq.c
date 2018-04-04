@@ -340,6 +340,7 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 }
 
 /* Must call with cq->lock held */
+static inline
 ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
 	ssize_t ret;
