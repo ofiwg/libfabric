@@ -139,6 +139,7 @@ int mrail_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		if (ret)
 			goto err;
 
+		mrail_domain->addrlen += fi->src_addrlen;
 	}
 
 	*domain = &mrail_domain->util_domain.domain_fid;

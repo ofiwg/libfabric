@@ -77,6 +77,7 @@ struct mrail_domain {
 	struct fi_info *info;
 	struct fid_domain **domains;
 	size_t num_domains;
+	size_t addrlen;
 };
 
 struct mrail_ep {
