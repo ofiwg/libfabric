@@ -90,6 +90,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 		if (hints->domain_attr) {
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
+			core_info->domain_attr->threading = hints->domain_attr->threading;
 		}
 		if (hints->tx_attr) {
 			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
