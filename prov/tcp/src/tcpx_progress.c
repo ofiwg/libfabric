@@ -42,61 +42,6 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
-static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry, int err)
-{
-	struct fi_cq_err_entry err_entry;
-	struct tcpx_ep *ep = pe_entry->ep;
-	struct util_cq *cq = NULL;
-	struct util_cntr *cntr = NULL;
-
-	if (pe_entry->flags & TCPX_NO_COMPLETION) {
-		return;
-	}
-
-	switch (pe_entry->msg_hdr.op_data) {
-	case TCPX_OP_MSG_SEND:
-		cq = ep->util_ep.tx_cq;
-		cntr = ep->util_ep.tx_cntr;
-		break;
-	case TCPX_OP_MSG_RECV:
-		cq = ep->util_ep.rx_cq;
-		cntr = ep->util_ep.rx_cntr;
-		break;
-	default:
-
-		return;
-	}
-
-	if (cq && err) {
-		err_entry.op_context = pe_entry->context;
-		err_entry.flags = pe_entry->flags;
-		err_entry.len = 0;
-		err_entry.buf = NULL;
-		err_entry.data = pe_entry->msg_hdr.data;
-		err_entry.tag = 0;
-		err_entry.olen = 0;
-		err_entry.err = err;
-		err_entry.prov_errno = errno;
-		err_entry.err_data = NULL;
-		err_entry.err_data_size = 0;
-
-		ofi_cq_write_error(cq, &err_entry);
-	} else if (cq) {
-		ofi_cq_write(cq, pe_entry->context,
-			     pe_entry->flags, 0, NULL,
-			     pe_entry->msg_hdr.data, 0);
-
-		if (cq->wait)
-			ofi_cq_signal(&cq->cq_fid);
-	}
-
-	if (cntr && err) {
-		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
-	}else if (cntr) {
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
-	}
-}
-
 static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
 	uint64_t total_len = ntohll(pe_entry->msg_hdr.size);
@@ -108,13 +53,15 @@ static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		report_pe_entry_completion(pe_entry, ret);
+		tcpx_cq_report_completion(pe_entry->ep->util_ep.tx_cq,
+					  pe_entry, ret);
 		tcpx_pe_entry_release(pe_entry);
 		return;
 	}
 
 	if (pe_entry->done_len == total_len) {
-		report_pe_entry_completion(pe_entry, 0);
+		tcpx_cq_report_completion(pe_entry->ep->util_ep.tx_cq,
+					  pe_entry, 0);
 		tcpx_pe_entry_release(pe_entry);
 	}
 }
@@ -129,34 +76,41 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
-		report_pe_entry_completion(pe_entry, ret);
+		tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
+					  pe_entry, ret);
 		tcpx_pe_entry_release(pe_entry);
 		return;
 	}
 
 	if (pe_entry->done_len &&
 	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.size)) {
-		report_pe_entry_completion(pe_entry, 0);
+		tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
+					  pe_entry, 0);
 		tcpx_pe_entry_release(pe_entry);
 	}
 }
 
-static void process_pe_lists(struct tcpx_ep *ep)
+static void process_rx_queue(struct tcpx_ep *ep)
 {
 	struct tcpx_pe_entry *pe_entry;
 	struct dlist_entry *entry;
 
 	if (dlist_empty(&ep->rx_queue))
-		goto tx_pe_list;
+		return;
 
 	entry = ep->rx_queue.next;
 	pe_entry = container_of(entry, struct tcpx_pe_entry,
 				entry);
 	process_rx_pe_entry(pe_entry);
+}
 
-tx_pe_list:
+static void process_tx_queue(struct tcpx_ep *ep)
+{
+	struct tcpx_pe_entry *pe_entry;
+	struct dlist_entry *entry;
+
 	if (dlist_empty(&ep->tx_queue))
-		return ;
+		return;
 
 	entry = ep->tx_queue.next;
 	pe_entry = container_of(entry, struct tcpx_pe_entry,
@@ -169,6 +123,9 @@ void tcpx_progress(struct util_ep *util_ep)
 	struct tcpx_ep *ep;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	process_pe_lists(ep);
+	fastlock_acquire(&ep->queue_lock);
+	process_rx_queue(ep);
+	process_tx_queue(ep);
+	fastlock_release(&ep->queue_lock);
 	return;
 }

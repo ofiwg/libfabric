@@ -88,11 +88,40 @@ void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 	tcpx_cq = container_of(cq, struct tcpx_cq, util_cq);
 
 	fastlock_acquire(&cq->cq_lock);
-	memset(&pe_entry->msg_hdr, 0, sizeof(pe_entry->msg_hdr));
 	dlist_remove(&pe_entry->entry);
 	memset(pe_entry, 0, sizeof(*pe_entry));
 	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
 	fastlock_release(&cq->cq_lock);
+}
+
+void tcpx_cq_report_completion(struct util_cq *cq,
+			       struct tcpx_pe_entry *pe_entry,
+			       int err)
+{
+	struct fi_cq_err_entry err_entry;
+
+	if (err) {
+		err_entry.op_context = pe_entry->context;
+		err_entry.flags = pe_entry->flags;
+		err_entry.len = 0;
+		err_entry.buf = NULL;
+		err_entry.data = pe_entry->msg_hdr.data;
+		err_entry.tag = 0;
+		err_entry.olen = 0;
+		err_entry.err = err;
+		err_entry.prov_errno = errno;
+		err_entry.err_data = NULL;
+		err_entry.err_data_size = 0;
+
+		ofi_cq_write_error(cq, &err_entry);
+	} else {
+		ofi_cq_write(cq, pe_entry->context,
+			      pe_entry->flags, 0, NULL,
+			      pe_entry->msg_hdr.data, 0);
+
+		if (cq->wait)
+			ofi_cq_signal(&cq->cq_fid);
+	}
 }
 
 static int tcpx_cq_control(struct fid *fid, int command, void *arg)

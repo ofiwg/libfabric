@@ -101,6 +101,9 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
+void tcpx_cq_report_completion(struct util_cq *cq,
+			       struct tcpx_pe_entry *pe_entry,
+			       int err);
 
 int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
 void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
@@ -168,6 +171,8 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
+	/* lock for protecting tx/rx queues */
+	fastlock_t		queue_lock;
 };
 
 struct tcpx_fabric {

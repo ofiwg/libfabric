@@ -75,7 +75,9 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	recv_entry->context = msg->context;
 	recv_entry->done_len = 0;
 
+	fastlock_acquire(&tcpx_ep->queue_lock);
 	dlist_insert_tail(&recv_entry->entry, &tcpx_ep->rx_queue);
+	fastlock_release(&tcpx_ep->queue_lock);
 	return FI_SUCCESS;
 }
 
@@ -118,7 +120,6 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct tcpx_cq *tcpx_cq;
 	struct tcpx_pe_entry *send_entry;
 	uint64_t data_len;
-	int ret = FI_SUCCESS;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq,
@@ -128,17 +129,11 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!send_entry)
 		return -FI_ENOMEM;
 
-	if (msg->iov_count > TCPX_IOV_LIMIT) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
+	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
-	if (flags & FI_INJECT) {
-		if (data_len > TCPX_MAX_INJECT_SZ)
-			return -FI_EINVAL;
-	}
+	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
 
 	send_entry->msg_hdr.version = OFI_CTRL_VERSION;
 	send_entry->msg_hdr.op = ofi_op_msg;
@@ -174,11 +169,10 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	send_entry->context = msg->context;
 	send_entry->done_len = 0;
 
+	fastlock_acquire(&tcpx_ep->queue_lock);
 	dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
+	fastlock_release(&tcpx_ep->queue_lock);
 	return FI_SUCCESS;
-err:
-	tcpx_pe_entry_release(send_entry);
-	return ret;
 }
 
 static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
@@ -466,6 +460,7 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 	struct dlist_entry *entry;
 	struct tcpx_pe_entry *pe_entry;
 
+	fastlock_acquire(&ep->queue_lock);
 	while (!dlist_empty(&ep->tx_queue)) {
 		entry = ep->tx_queue.next;
 		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
@@ -479,6 +474,7 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 		dlist_remove(entry);
 		tcpx_pe_entry_release(pe_entry);
 	}
+	fastlock_release(&ep->queue_lock);
 }
 
 static int tcpx_ep_close(struct fid *fid)
@@ -488,6 +484,7 @@ static int tcpx_ep_close(struct fid *fid)
 
 	tcpx_ep_tx_rx_queues_release(ep);
 	ofi_close_socket(ep->conn_fd);
+	fastlock_destroy(&ep->queue_lock);
 	ofi_endpoint_close(&ep->util_ep);
 
 	free(ep);
@@ -592,6 +589,10 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 	ret = tcpx_setup_socket(ep->conn_fd);
+	if (ret)
+		goto err3;
+
+	ret = fastlock_init(&ep->queue_lock);
 	if (ret)
 		goto err3;
 
