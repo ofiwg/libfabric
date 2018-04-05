@@ -354,14 +354,14 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 	}
 
-	fastlock_init(&ep->wre_lock);
-	ret = util_buf_pool_create(&ep->wre_pool, sizeof(struct fi_ibv_wre),
+	fastlock_init(&ep->wre_pool.lock);
+	ret = util_buf_pool_create(&ep->wre_pool.pool, sizeof(struct fi_ibv_wre),
 				   16, 0, VERBS_WRE_CNT);
 	if (ret) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wre_pool\n");
 		goto err3;
 	}
-	dlist_init(&ep->wre_list);
+	dlist_init(&ep->wre_pool.wre_list);
 
 	ep->id->context = &ep->ep_fid.fid;
 	ep->ep_fid.fid.fclass = FI_CLASS_EP;
@@ -378,7 +378,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	return FI_SUCCESS;
 err3:
-	fastlock_destroy(&ep->wre_lock);
+	fastlock_destroy(&ep->wre_pool.lock);
 err2:
 	rdma_destroy_ep(ep->id);
 err1:
@@ -515,14 +515,14 @@ static inline int
 fi_ibv_prepare_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			   struct fi_ibv_wre **wre, void *context)
 {
-	fastlock_acquire(&ep->wre_lock);
-	*wre = util_buf_alloc(ep->wre_pool);
+	fastlock_acquire(&ep->wre_pool.lock);
+	*wre = util_buf_alloc(ep->wre_pool.pool);
 	if (OFI_UNLIKELY(!*wre)) {
-		fastlock_release(&ep->wre_lock);
+		fastlock_release(&ep->wre_pool.lock);
 		return -FI_EAGAIN;
 	}
-	dlist_insert_tail(&(*wre)->entry, &ep->wre_list);
-	fastlock_release(&ep->wre_lock);
+	dlist_insert_tail(&(*wre)->entry, &ep->wre_pool.wre_list);
+	fastlock_release(&ep->wre_pool.lock);
 
 	(*wre)->context = context;
 	(*wre)->ep = ep;
@@ -652,14 +652,14 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	assert(ep->rcq);
 
-	fastlock_acquire(&ep->wre_lock);
-	wre = util_buf_alloc(ep->wre_pool);
+	fastlock_acquire(&ep->wre_pool.lock);
+	wre = util_buf_alloc(ep->wre_pool.pool);
 	if (OFI_UNLIKELY(!wre)) {
-		fastlock_release(&ep->wre_lock);
+		fastlock_release(&ep->wre_pool.lock);
 		return -FI_EAGAIN;
 	}
-	dlist_insert_tail(&wre->entry, &ep->wre_list);
-	fastlock_release(&ep->wre_lock);
+	dlist_insert_tail(&wre->entry, &ep->wre_pool.wre_list);
+	fastlock_release(&ep->wre_pool.lock);
 
 	wre->ep = ep;
 	wre->srq = NULL;

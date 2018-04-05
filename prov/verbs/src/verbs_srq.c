@@ -103,14 +103,14 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	assert(ep->srq);
 
-	fastlock_acquire(&ep->wre_lock);
-	wre = util_buf_alloc(ep->wre_pool);
+	fastlock_acquire(&ep->wre_pool.lock);
+	wre = util_buf_alloc(ep->wre_pool.pool);
 	if (!wre) {
-		fastlock_release(&ep->wre_lock);
+		fastlock_release(&ep->wre_pool.lock);
 		return -FI_EAGAIN;
 	}
-	dlist_insert_tail(&wre->entry, &ep->wre_list);
-	fastlock_release(&ep->wre_lock);
+	dlist_insert_tail(&wre->entry, &ep->wre_pool.wre_list);
+	fastlock_release(&ep->wre_pool.lock);
 
 	wre->srq = ep;
 	wre->ep = NULL;
@@ -194,9 +194,9 @@ static int fi_ibv_srq_close(fid_t fid)
 	 * arrive in CQ for the recv posted to SRQ) */
 	/* Just to be clear, passes `IBV_RECV_WR`, because SRQ's WREs
 	 * have `IBV_RECV_WR` type only */
-	fi_ibv_empty_wre_list(srq_ep->wre_pool, &srq_ep->wre_list, IBV_RECV_WR);
-	util_buf_pool_destroy(srq_ep->wre_pool);
-	fastlock_destroy(&srq_ep->wre_lock);
+	fi_ibv_empty_wre_list(&srq_ep->wre_pool, IBV_RECV_WR);
+	util_buf_pool_destroy(srq_ep->wre_pool.pool);
+	fastlock_destroy(&srq_ep->wre_pool.lock);
 
 	free(srq_ep);
 
@@ -251,20 +251,20 @@ int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		goto err2;
 	}
 
-	fastlock_init(&srq_ep->wre_lock);
-	ret = util_buf_pool_create(&srq_ep->wre_pool, sizeof(struct fi_ibv_wre),
+	fastlock_init(&srq_ep->wre_pool.lock);
+	ret = util_buf_pool_create(&srq_ep->wre_pool.pool, sizeof(struct fi_ibv_wre),
 				   16, 0, VERBS_WRE_CNT);
 	if (ret) {
 		VERBS_WARN(FI_LOG_DOMAIN, "Failed to create wre_pool\n");
 		goto err3;
 	}
-	dlist_init(&srq_ep->wre_list);
+	dlist_init(&srq_ep->wre_pool.wre_list);
 
 	*srq_ep_fid = &srq_ep->ep_fid;
 
 	return FI_SUCCESS;
 err3:
-	fastlock_destroy(&srq_ep->wre_lock);
+	fastlock_destroy(&srq_ep->wre_pool.lock);
 	if (ibv_destroy_srq(srq_ep->srq))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_destroy_srq", errno);
 err2:
