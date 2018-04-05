@@ -446,17 +446,19 @@ int ofi_check_mr_mode(uint32_t api_version, uint32_t prov_mode,
 		}
 	} else {
 		if (user_mode & FI_MR_BASIC) {
-			if (!OFI_CHECK_MR_BASIC(prov_mode))
+			if ((user_mode & ~FI_MR_BASIC) ||
+			    !OFI_CHECK_MR_BASIC(prov_mode))
 				return -FI_ENODATA;
-			if ((user_mode & prov_mode & ~OFI_MR_BASIC_MAP) ==
-			    (prov_mode & ~OFI_MR_BASIC_MAP))
-				return 0;
-			return -FI_ENODATA;
+		} else if (user_mode & FI_MR_SCALABLE) {
+			if ((user_mode & ~FI_MR_SCALABLE) ||
+			    !OFI_CHECK_MR_SCALABLE(prov_mode))
+				return -FI_ENODATA;
 		} else {
-			return (((user_mode | FI_MR_BASIC) & prov_mode) == prov_mode) ?
-				0 : -FI_ENODATA;
+			if (((user_mode | FI_MR_BASIC) & prov_mode) != prov_mode)
+				return -FI_ENODATA;
 		}
 	}
+	return 0;
 }
 
 int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
@@ -908,8 +910,15 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 			     const struct fi_domain_attr *hints,
 			     uint64_t info_caps, uint32_t api_version)
 {
+	int hints_mr_mode;
+
+	hints_mr_mode = hints ? hints->mr_mode : 0;
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
 		attr->mr_mode = attr->mr_mode ? FI_MR_BASIC : FI_MR_SCALABLE;
+	else if (hints_mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE))
+		attr->mr_mode = hints_mr_mode;
+	else
+		attr->mr_mode &= ~FI_MR_BASIC;
 
 	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
 	if (!hints)
