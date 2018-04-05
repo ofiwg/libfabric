@@ -247,7 +247,6 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_msg_ep *ep,
 
 	/* Handle WR entry when user doesn't request the completion */
 	if (!wc.wr_id) {
-		ofi_atomic_dec32(&cq->sends_outstanding);
 		/* To ensure the new iteration */
 		return 1;
 	}
