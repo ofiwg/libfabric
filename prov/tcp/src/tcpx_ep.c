@@ -480,6 +480,7 @@ static int tcpx_ep_close(struct fid *fid)
 					  util_ep.ep_fid.fid);
 
 	tcpx_ep_tx_rx_queues_release(ep);
+	tcpx_progress_ep_del(ep);
 	ofi_close_socket(ep->conn_fd);
 	fastlock_destroy(&ep->queue_lock);
 	fastlock_destroy(&ep->cm_state_lock);

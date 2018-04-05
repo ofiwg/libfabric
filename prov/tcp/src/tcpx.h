@@ -113,6 +113,8 @@ struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *cq);
 void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry);
 void tcpx_progress(struct util_ep *util_ep);
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
+int tcpx_progress_ep_add(struct tcpx_ep *ep);
+void tcpx_progress_ep_del(struct tcpx_ep *ep);
 
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,

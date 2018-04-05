@@ -273,6 +273,10 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 	if (ret)
 		goto err;
 
+	ret = tcpx_progress_ep_add(ep);
+	if (ret)
+		goto err;
+
 	ep->cm_state = TCPX_EP_CONNECTED;
 err:
 	fastlock_release(&ep->cm_state_lock);

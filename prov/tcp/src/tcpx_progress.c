@@ -154,3 +154,34 @@ void tcpx_progress(struct util_ep *util_ep)
 	fastlock_release(&ep->queue_lock);
 	return;
 }
+
+static int tcpx_try_func(void *util_ep)
+{
+	/* nothing to do here. When endpoints
+	 have incoming data, cq drives progress*/
+	return FI_SUCCESS;
+}
+
+int tcpx_progress_ep_add(struct tcpx_ep *ep)
+{
+	if (!ep->util_ep.rx_cq->wait)
+		return FI_SUCCESS;
+
+	return ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
+			       ep->conn_fd, tcpx_try_func,
+			       (void *)&ep->util_ep, NULL);
+}
+
+void tcpx_progress_ep_del(struct tcpx_ep *ep)
+{
+	fastlock_acquire(&ep->cm_state_lock);
+	if (ep->cm_state == TCPX_EP_CONNECTING) {
+		goto out;
+	}
+
+	if (ep->util_ep.rx_cq->wait) {
+		ofi_wait_fd_del(ep->util_ep.rx_cq->wait, ep->conn_fd);
+	}
+out:
+	fastlock_release(&ep->cm_state_lock);
+}
