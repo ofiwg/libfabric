@@ -35,17 +35,93 @@
 
 #include "tcpx.h"
 
+#define TCPX_DEF_CQ_SIZE (1024)
+
 static int tcpx_cq_close(struct fid *fid)
 {
 	int ret;
-	struct util_cq *cq;
+	struct tcpx_cq *tcpx_cq;
 
-	cq = container_of(fid, struct util_cq, cq_fid.fid);
-	ret = ofi_cq_cleanup(cq);
+	tcpx_cq = container_of(fid, struct tcpx_cq, util_cq.cq_fid.fid);
+	util_buf_pool_destroy(tcpx_cq->pe_entry_pool);
+	ret = ofi_cq_cleanup(&tcpx_cq->util_cq);
 	if (ret)
 		return ret;
-	free(cq);
+
+	free(tcpx_cq);
 	return 0;
+}
+
+struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *tcpx_cq)
+{
+	struct tcpx_pe_entry *pe_entry;
+
+	fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
+	pe_entry = util_buf_alloc(tcpx_cq->pe_entry_pool);
+	if (!pe_entry) {
+		fastlock_release(&tcpx_cq->util_cq.cq_lock);
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
+		return NULL;
+	}
+	memset(pe_entry, 0, sizeof(*pe_entry));
+	fastlock_release(&tcpx_cq->util_cq.cq_lock);
+	return pe_entry;
+}
+
+void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
+{
+	struct util_cq *cq;
+	struct tcpx_cq *tcpx_cq;
+
+	switch (pe_entry->msg_hdr.op_data) {
+	case TCPX_OP_MSG_SEND:
+		cq = pe_entry->ep->util_ep.tx_cq;
+		break;
+	case TCPX_OP_MSG_RECV:
+		cq = pe_entry->ep->util_ep.rx_cq;
+		break;
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"invalid pe_entry\n");
+		return;
+	}
+
+	tcpx_cq = container_of(cq, struct tcpx_cq, util_cq);
+
+	fastlock_acquire(&cq->cq_lock);
+	dlist_remove(&pe_entry->entry);
+	memset(pe_entry, 0, sizeof(*pe_entry));
+	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
+	fastlock_release(&cq->cq_lock);
+}
+
+void tcpx_cq_report_completion(struct util_cq *cq,
+			       struct tcpx_pe_entry *pe_entry,
+			       int err)
+{
+	struct fi_cq_err_entry err_entry;
+
+	if (err) {
+		err_entry.op_context = pe_entry->context;
+		err_entry.flags = pe_entry->flags;
+		err_entry.len = 0;
+		err_entry.buf = NULL;
+		err_entry.data = pe_entry->msg_hdr.data;
+		err_entry.tag = 0;
+		err_entry.olen = 0;
+		err_entry.err = err;
+		err_entry.prov_errno = errno;
+		err_entry.err_data = NULL;
+		err_entry.err_data_size = 0;
+
+		ofi_cq_write_error(cq, &err_entry);
+	} else {
+		ofi_cq_write(cq, pe_entry->context,
+			      pe_entry->flags, 0, NULL,
+			      pe_entry->msg_hdr.data, 0);
+
+		if (cq->wait)
+			ofi_cq_signal(&cq->cq_fid);
+	}
 }
 
 static int tcpx_cq_control(struct fid *fid, int command, void *arg)
@@ -83,20 +159,36 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
 	int ret;
-	struct util_cq *cq;
+	struct tcpx_cq *tcpx_cq;
 
-	cq = calloc(1, sizeof(*cq));
-	if (!cq)
+	tcpx_cq = calloc(1, sizeof(*tcpx_cq));
+	if (!tcpx_cq)
 		return -FI_ENOMEM;
 
-	ret = ofi_cq_init(&tcpx_prov, domain, attr, cq,
-			   &ofi_cq_progress, context);
-	if (ret) {
-		free(cq);
-		return ret;
-	}
+	if (!attr->size)
+		attr->size = TCPX_DEF_CQ_SIZE;
 
-	*cq_fid = &cq->cq_fid;
+	ofi_atomic_initialize64(&tcpx_cq->cq_free_size,
+				attr->size);
+
+	ret =  util_buf_pool_create(&tcpx_cq->pe_entry_pool,
+				    sizeof(struct tcpx_pe_entry),
+				    16, 0, 1024);
+	if (ret)
+		goto free_cq;
+
+	ret = ofi_cq_init(&tcpx_prov, domain, attr, &tcpx_cq->util_cq,
+			   &ofi_cq_progress, context);
+	if (ret)
+		goto destroy_pool;
+
+	*cq_fid = &tcpx_cq->util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &tcpx_cq_fi_ops;
 	return 0;
+
+destroy_pool:
+	util_buf_pool_destroy(tcpx_cq->pe_entry_pool);
+free_cq:
+	free(tcpx_cq);
+	return ret;
 }
