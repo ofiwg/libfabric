@@ -416,6 +416,8 @@ struct fi_ibv_cq {
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
 	struct util_buf_pool	*wce_pool;
+	ofi_fastlock_acquire_t	cq_fastlock_acquire;
+	ofi_fastlock_release_t	cq_fastlock_release;
 };
 
 struct fi_ibv_rdm_request;

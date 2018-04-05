@@ -538,13 +538,13 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_msg_ep *ep)
 	struct ibv_wc wc[10];
 	int ret, i;
 
-	fastlock_acquire(&ep->scq->lock);
+	ep->scq->cq_fastlock_acquire(&ep->scq->lock);
 	/* TODO: retrieve WCs as much as possbile in a single
 	 * ibv_poll_cq call */
 	while (1) {
 		ret = ibv_poll_cq(ep->scq->cq, 10, wc);
 		if (ret <= 0) {
-			fastlock_release(&ep->scq->lock);
+			ep->scq->cq_fastlock_release(&ep->scq->lock);
 			return ret;
 		}
 
@@ -556,7 +556,7 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_msg_ep *ep)
 		}
 	}
 
-	fastlock_release(&ep->scq->lock);
+	ep->scq->cq_fastlock_release(&ep->scq->lock);
 	return FI_SUCCESS;
 }
 
