@@ -42,25 +42,6 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
-int tcpx_progress_close(struct tcpx_progress *progress)
-{
-	util_buf_pool_destroy(progress->pe_entry_pool);
-	return FI_SUCCESS;
-}
-
-struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_progress *progress)
-{
-	struct tcpx_pe_entry *pe_entry;
-
-	pe_entry = util_buf_alloc(progress->pe_entry_pool);
-	if (!pe_entry) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
-		return NULL;
-	}
-	memset(pe_entry, 0, sizeof(*pe_entry));
-	return pe_entry;
-}
-
 static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry, int err)
 {
 	struct fi_cq_err_entry err_entry;
@@ -114,19 +95,6 @@ static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry, int err)
 	}else if (cntr) {
 		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 	}
-}
-
-void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
-{
-	struct tcpx_domain *domain;
-
-	domain = container_of(pe_entry->ep->util_ep.domain,
-			      struct tcpx_domain, util_domain);
-
-	memset(&pe_entry->msg_hdr, 0, sizeof(pe_entry->msg_hdr));
-	dlist_remove(&pe_entry->entry);
-	memset(pe_entry, 0, sizeof(*pe_entry));
-	util_buf_release(domain->progress.pe_entry_pool, pe_entry);
 }
 
 static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
@@ -203,11 +171,4 @@ void tcpx_progress(struct util_ep *util_ep)
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
 	process_pe_lists(ep);
 	return;
-}
-
-int tcpx_progress_init(struct tcpx_progress *progress)
-{
-	return util_buf_pool_create(&progress->pe_entry_pool,
-				    sizeof(struct tcpx_pe_entry),
-				    16, 0, 1024);
 }

@@ -52,18 +52,17 @@
 static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
-	struct tcpx_domain *tcpx_domain;
 	struct tcpx_pe_entry *recv_entry;
 	struct tcpx_ep *tcpx_ep;
+	struct tcpx_cq *tcpx_cq;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
-				   struct tcpx_domain, util_domain);
+	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq,
+			       util_cq);
 
 	assert(msg->iov_count < TCPX_IOV_LIMIT);
 
-
-	recv_entry = tcpx_pe_entry_alloc(&tcpx_domain->progress);
+	recv_entry = tcpx_pe_entry_alloc(tcpx_cq);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -116,16 +115,16 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
-	struct tcpx_domain *tcpx_domain;
+	struct tcpx_cq *tcpx_cq;
 	struct tcpx_pe_entry *send_entry;
 	uint64_t data_len;
 	int ret = FI_SUCCESS;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
-				   struct tcpx_domain, util_domain);
+	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq,
+			       util_cq);
 
-	send_entry = tcpx_pe_entry_alloc(&tcpx_domain->progress);
+	send_entry = tcpx_pe_entry_alloc(tcpx_cq);
 	if (!send_entry)
 		return -FI_ENOMEM;
 
@@ -462,8 +461,7 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.join = fi_no_join,
 };
 
-static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep,
-					 struct tcpx_progress *progress)
+static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 {
 	struct dlist_entry *entry;
 	struct tcpx_pe_entry *pe_entry;
@@ -485,14 +483,10 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep,
 
 static int tcpx_ep_close(struct fid *fid)
 {
-	struct tcpx_ep *ep;
-	struct tcpx_domain *tcpx_domain;
+	struct tcpx_ep *ep = container_of(fid, struct tcpx_ep,
+					  util_ep.ep_fid.fid);
 
-	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
-	tcpx_domain = container_of(ep->util_ep.domain,
-				   struct tcpx_domain, util_domain);
-
-	tcpx_ep_tx_rx_queues_release(ep, &tcpx_domain->progress);
+	tcpx_ep_tx_rx_queues_release(ep);
 	ofi_close_socket(ep->conn_fd);
 	ofi_endpoint_close(&ep->util_ep);
 

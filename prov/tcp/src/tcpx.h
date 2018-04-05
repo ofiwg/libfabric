@@ -81,7 +81,7 @@ extern struct fi_info		tcpx_info;
 struct tcpx_fabric;
 struct tcpx_domain;
 struct tcpx_pe_entry;
-struct tcpx_progress;
+struct tcpx_cq;
 struct tcpx_ep;
 
 int tcpx_create_fabric(struct fi_fabric_attr *attr,
@@ -106,9 +106,7 @@ int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
 void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry);
 int tcpx_send_msg(struct tcpx_pe_entry *pe_entry);
-int tcpx_progress_init(struct tcpx_progress *progress);
-int tcpx_progress_close(struct tcpx_progress *progress);
-struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_progress *progress);
+struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *cq);
 void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry);
 void tcpx_progress(struct util_ep *util_ep);
 
@@ -183,7 +181,7 @@ struct tcpx_msg_data {
 	union {
 		struct iovec		iov[TCPX_IOV_LIMIT+1];
 		struct fi_rma_iov	rma_iov[TCPX_IOV_LIMIT+1];
-		struct fi_rma_ioc	ram_ioc[TCPX_IOV_LIMIT+1];
+		struct fi_rma_ioc	rma_ioc[TCPX_IOV_LIMIT+1];
 	};
 	uint8_t			inject[TCPX_MAX_INJECT_SZ];
 };
@@ -198,13 +196,14 @@ struct tcpx_pe_entry {
 	uint64_t		done_len;
 };
 
-struct tcpx_progress {
-	struct util_buf_pool	*pe_entry_pool;
-};
-
 struct tcpx_domain {
 	struct util_domain	util_domain;
-	struct tcpx_progress	progress;
+};
+
+struct tcpx_cq {
+	struct util_cq		util_cq;
+	ofi_atomic64_t		cq_free_size;
+	struct util_buf_pool	*pe_entry_pool;
 };
 
 #endif //_TCP_H_
