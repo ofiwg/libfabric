@@ -62,7 +62,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	assert(msg->iov_count < TCPX_IOV_LIMIT);
 
-	recv_entry = pe_entry_alloc(&tcpx_domain->progress);
+
+	recv_entry = tcpx_pe_entry_alloc(&tcpx_domain->progress);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -124,7 +125,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tcpx_domain = container_of(tcpx_ep->util_ep.domain,
 				   struct tcpx_domain, util_domain);
 
-	send_entry = pe_entry_alloc(&tcpx_domain->progress);
+	send_entry = tcpx_pe_entry_alloc(&tcpx_domain->progress);
 	if (!send_entry)
 		return -FI_ENOMEM;
 
@@ -139,6 +140,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		if (data_len > TCPX_MAX_INJECT_SZ)
 			return -FI_EINVAL;
 	}
+
 	send_entry->msg_hdr.version = OFI_CTRL_VERSION;
 	send_entry->msg_hdr.op = ofi_op_msg;
 	send_entry->msg_hdr.op_data = TCPX_OP_MSG_SEND;
@@ -176,7 +178,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
 	return FI_SUCCESS;
 err:
-	pe_entry_release(send_entry);
+	tcpx_pe_entry_release(send_entry);
 	return ret;
 }
 
@@ -470,14 +472,14 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep,
 		entry = ep->tx_queue.next;
 		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
 		dlist_remove(entry);
-		pe_entry_release(pe_entry);
+		tcpx_pe_entry_release(pe_entry);
 	}
 
 	while (!dlist_empty(&ep->rx_queue)) {
 		entry = ep->rx_queue.next;
 		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
 		dlist_remove(entry);
-		pe_entry_release(pe_entry);
+		tcpx_pe_entry_release(pe_entry);
 	}
 }
 

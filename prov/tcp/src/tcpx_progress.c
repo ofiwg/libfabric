@@ -48,7 +48,7 @@ int tcpx_progress_close(struct tcpx_progress *progress)
 	return FI_SUCCESS;
 }
 
-struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress)
+struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_progress *progress)
 {
 	struct tcpx_pe_entry *pe_entry;
 
@@ -116,7 +116,7 @@ static void report_pe_entry_completion(struct tcpx_pe_entry *pe_entry, int err)
 	}
 }
 
-void pe_entry_release(struct tcpx_pe_entry *pe_entry)
+void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 {
 	struct tcpx_domain *domain;
 
@@ -141,13 +141,13 @@ static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
 		report_pe_entry_completion(pe_entry, ret);
-		pe_entry_release(pe_entry);
+		tcpx_pe_entry_release(pe_entry);
 		return;
 	}
 
 	if (pe_entry->done_len == total_len) {
 		report_pe_entry_completion(pe_entry, 0);
-		pe_entry_release(pe_entry);
+		tcpx_pe_entry_release(pe_entry);
 	}
 }
 
@@ -162,14 +162,14 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
 		report_pe_entry_completion(pe_entry, ret);
-		pe_entry_release(pe_entry);
+		tcpx_pe_entry_release(pe_entry);
 		return;
 	}
 
 	if (pe_entry->done_len &&
 	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.size)) {
 		report_pe_entry_completion(pe_entry, 0);
-		pe_entry_release(pe_entry);
+		tcpx_pe_entry_release(pe_entry);
 	}
 }
 

@@ -65,6 +65,15 @@
 #define TCPX_MAJOR_VERSION 0
 #define TCPX_MINOR_VERSION 1
 
+#define TCPX_NO_COMPLETION	(1ULL << 63)
+
+#define POLL_MGR_FREE		(1 << 0)
+#define POLL_MGR_DEL		(1 << 1)
+#define POLL_MGR_ACK		(1 << 2)
+
+#define TCPX_MAX_CM_DATA_SIZE	(1<<8)
+#define TCPX_IOV_LIMIT		(4)
+#define TCPX_MAX_INJECT_SZ	(64)
 
 extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
@@ -74,22 +83,6 @@ struct tcpx_domain;
 struct tcpx_pe_entry;
 struct tcpx_progress;
 struct tcpx_ep;
-struct tcpx_op_send;
-
-#define TCPX_NO_COMPLETION	(1ULL << 63)
-
-#define POLL_MGR_FREE		(1 << 0)
-#define POLL_MGR_DEL		(1 << 1)
-#define POLL_MGR_ACK		(1 << 2)
-
-#define TCPX_MAX_CM_DATA_SIZE	(1<<8)
-#define TCPX_PE_COMM_BUFF_SZ	(1<<10)
-#define TCPX_MAX_SOCK_REQS	(1<<10)
-#define TCPX_PE_MAX_ENTRIES	(128)
-#define TCPX_IOV_LIMIT		(4)
-#define TCPX_MAX_INJECT_SZ	(64)
-#define TCPX_MAX_EPOLL_EVENTS	(100)
-#define TCPX_MAX_EP_RB_SIZE     (1024*sizeof(struct tcpx_op_send))
 
 int tcpx_create_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric,
@@ -113,30 +106,16 @@ int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
 void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry);
 int tcpx_send_msg(struct tcpx_pe_entry *pe_entry);
-void posted_rx_find(struct tcpx_pe_entry *pe_entry);
 int tcpx_progress_init(struct tcpx_progress *progress);
 int tcpx_progress_close(struct tcpx_progress *progress);
-struct tcpx_pe_entry *pe_entry_alloc(struct tcpx_progress *progress);
-void pe_entry_release(struct tcpx_pe_entry *pe_entry);
+struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_progress *progress);
+void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry);
 void tcpx_progress(struct util_ep *util_ep);
 
-enum tcpx_xfer_states {
-	TCPX_XFER_IDLE,
-	TCPX_XFER_STARTED,
-	TCPX_XFER_HDR_SENT,
-	TCPX_XFER_FLUSH_COMM_BUF,
-	TCPX_XFER_HDR_RECVD,
-	TCPX_XFER_COMPLETE,
-};
 
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
 	TCPX_OP_MSG_RECV,
-};
-
-enum tcpx_xfer_field {
-	TCPX_MSG_HDR_FIELD,
-	TCPX_DATA_FIELD,
 };
 
 enum poll_fd_type {
