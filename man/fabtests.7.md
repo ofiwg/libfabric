@@ -69,10 +69,6 @@ These are one way streaming data tests.
 	 fi_av_test: Unit tests for address vector
 	 fi_size_left_test: Unit tests to query the lower bound of rx/tx entries
 
-## Ported
-	 fi_cmatose: A librdmacm client-server example
-	 fi_rc_pingpong: A libibverbs ping pong client-server example
-
 ## Complex / Ubertest
 
 These are comprehensive latency and bandwidth tests that can handle a variety of test configurations. Example test configurations are at /test_configs.
