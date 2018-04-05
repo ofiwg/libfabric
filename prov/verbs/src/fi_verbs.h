@@ -148,8 +148,7 @@
 #define FI_IBV_RELEASE_WRE(ep, wre)			\
 ({							\
 	if (wre) {					\
-		fi_ibv_release_wre(ep->wre_pool,	\
-				   &ep->wre_lock, wre);	\
+		fi_ibv_release_wre(&ep->wre_pool, wre);	\
 	}						\
 })
 
@@ -387,6 +386,12 @@ enum fi_ibv_wre_type {
 	IBV_RECV_WR,
 };
 
+struct fi_ibv_wre_pool {
+	fastlock_t		lock;
+	struct util_buf_pool	*pool;
+	struct dlist_entry	wre_list;
+};
+
 struct fi_ibv_wre {
 	struct dlist_entry      entry;
 	void			*context;
@@ -503,9 +508,7 @@ struct ofi_subscription *fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifi
 struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
-	fastlock_t		wre_lock;
-	struct util_buf_pool	*wre_pool;
-	struct dlist_entry	wre_list;
+	struct fi_ibv_wre_pool	wre_pool;
 };
 
 int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
@@ -520,9 +523,7 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_srq_ep	*srq_ep;
 	uint64_t		ep_flags;
 	struct fi_info		*info;
-	fastlock_t		wre_lock;
-	struct util_buf_pool	*wre_pool;
-	struct dlist_entry	wre_list;
+	struct fi_ibv_wre_pool	wre_pool;
 	struct fi_ibv_domain	*domain;
 };
 
@@ -600,23 +601,21 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
 int fi_ibv_set_rnr_timer(struct ibv_qp *qp);
-void fi_ibv_empty_wre_list(struct util_buf_pool *wre_pool,
-			   struct dlist_entry *wre_list,
+void fi_ibv_empty_wre_list(struct fi_ibv_wre_pool *wre_pool,
 			   enum fi_ibv_wre_type wre_type);
 void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *cur_ep);
 int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
                            enum ibv_qp_type qp_type);
 
-static inline void fi_ibv_release_wre(struct util_buf_pool *wre_pool,
-				      fastlock_t *wre_lock,
+static inline void fi_ibv_release_wre(struct fi_ibv_wre_pool *wre_pool,
 				      struct fi_ibv_wre *wre)
 {
-	fastlock_acquire(wre_lock);
+	fastlock_acquire(&wre_pool->lock);
 	dlist_remove(&wre->entry);
 	wre->srq = NULL;
 	wre->ep = NULL;
-	util_buf_release(wre_pool, wre);
-	fastlock_release(wre_lock);
+	util_buf_release(wre_pool->pool, wre);
+	fastlock_release(&wre_pool->lock);
 }
 
 static inline int
@@ -642,11 +641,9 @@ fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	}
 
 	if (wre->ep) {
-		fi_ibv_release_wre(wre->ep->wre_pool,
-				   &wre->ep->wre_lock, wre);
+		fi_ibv_release_wre(&wre->ep->wre_pool, wre);
 	} else if (wre->srq) {
-		fi_ibv_release_wre(wre->srq->wre_pool,
-				   &wre->srq->wre_lock, wre);
+		fi_ibv_release_wre(&wre->srq->wre_pool, wre);
 	} else {
 		/* Shouldn't go here */
 		assert(0);
