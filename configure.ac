@@ -183,7 +183,12 @@ fi
 
 AC_CHECK_HEADER([linux/perf_event.h],
     [AC_CHECK_DECL([__builtin_ia32_rdpmc],
-        [linux_perf_rdpmc=1],
+        [
+            AC_TRY_LINK([#include <linux/perf_event.h>],
+                [__builtin_ia32_rdpmc(0);],
+                [linux_perf_rdpmc=1],
+                [linux_perf_rdpmc=0])
+	],
         [linux_perf_rdpmc=0],
         [#include <linux/perf_event.h>])],
     [linux_perf_rdpmc=0])
