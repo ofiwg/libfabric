@@ -86,6 +86,7 @@ static int util_domain_init(struct util_domain *domain,
 	domain->addr_format = info->addr_format;
 	domain->av_type = info->domain_attr->av_type;
 	domain->name = strdup(info->domain_attr->name);
+	domain->threading = info->domain_attr->threading;
 	return domain->name ? 0 : -FI_ENOMEM;
 }
 

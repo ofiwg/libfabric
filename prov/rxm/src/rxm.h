@@ -306,6 +306,7 @@ struct rxm_recv_entry {
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
 struct rxm_send_queue {
+	struct rxm_ep *rxm_ep;
 	struct rxm_txe_fs *fs;
 	fastlock_t lock;
 };
@@ -316,6 +317,7 @@ enum rxm_recv_queue_type {
 };
 
 struct rxm_recv_queue {
+	struct rxm_ep *rxm_ep;
 	enum rxm_recv_queue_type type;
 	struct rxm_recv_fs *fs;
 	struct dlist_entry recv_list;
@@ -328,9 +330,12 @@ struct rxm_recv_queue {
 struct rxm_buf_pool {
 	struct util_buf_pool *pool;
 	enum rxm_buf_pool_type type;
-	struct rxm_ep *ep;
+	struct rxm_ep *rxm_ep;
 	fastlock_t lock;
 };
+
+typedef void (*rxm_ep_res_fastlock_acquire_t)(fastlock_t *lock);
+typedef void (*rxm_ep_res_fastlock_release_t)(fastlock_t *lock);
 
 struct rxm_ep {
 	struct util_ep 		util_ep;
@@ -355,6 +360,9 @@ struct rxm_ep {
 	struct rxm_send_queue	send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+
+	rxm_ep_res_fastlock_acquire_t	res_fastlock_acquire;
+	rxm_ep_res_fastlock_release_t	res_fastlock_release;
 };
 
 struct rxm_ep_wait_ref {
@@ -495,20 +503,20 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 {
 	struct rxm_rx_buf *rx_buf;
 
-	fastlock_acquire(&recv_queue->lock);
+	recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
 	rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
 					  recv_entry->tag, recv_entry->ignore);
 	if (rx_buf) {
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
-		fastlock_release(&recv_queue->lock);
+		recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
 		return rxm_cq_handle_data(rx_buf);
 	}
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
 			 recv_entry->tag);
 	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
-	fastlock_release(&recv_queue->lock);
+	recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
 
 	return FI_SUCCESS;
 }
@@ -518,22 +526,22 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
 	struct rxm_buf *buf;
 
-	fastlock_acquire(&pool->lock);
+	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
 	buf = util_buf_alloc(pool->pool);
 	if (OFI_UNLIKELY(!buf)) {
-		fastlock_release(&pool->lock);
+		pool->rxm_ep->res_fastlock_release(&pool->lock);
 		return NULL;
 	}
-	fastlock_release(&pool->lock);
+	pool->rxm_ep->res_fastlock_release(&pool->lock);
 	return buf;
 }
 
 static inline
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	fastlock_acquire(&pool->lock);
+	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
 	util_buf_release(pool->pool, buf);
-	fastlock_release(&pool->lock);
+	pool->rxm_ep->res_fastlock_release(&pool->lock);
 }
 
 static inline struct rxm_tx_buf *
@@ -584,19 +592,19 @@ rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
 			(struct rxm_buf *)rx_buf);
 }
 
-#define rxm_entry_pop(queue, entry)			\
-	do {						\
-		fastlock_acquire(&queue->lock);		\
-		entry = freestack_isempty(queue->fs) ?	\
-			NULL : freestack_pop(queue->fs);\
-		fastlock_release(&queue->lock);		\
+#define rxm_entry_pop(queue, entry)					\
+	do {								\
+		queue->rxm_ep->res_fastlock_acquire(&queue->lock);	\
+		entry = freestack_isempty(queue->fs) ?			\
+			NULL : freestack_pop(queue->fs);		\
+		queue->rxm_ep->res_fastlock_release(&queue->lock);	\
 	} while (0)
 
-#define rxm_entry_push(queue, entry)			\
-	do {						\
-		fastlock_acquire(&queue->lock);		\
-		freestack_push(queue->fs, entry);	\
-		fastlock_release(&queue->lock);		\
+#define rxm_entry_push(queue, entry)					\
+	do {								\
+		queue->rxm_ep->res_fastlock_acquire(&queue->lock);	\
+		freestack_push(queue->fs, entry);			\
+		queue->rxm_ep->res_fastlock_release(&queue->lock);	\
 	} while (0)
 
 #define rxm_tx_entry_cleanup(entry)		(entry)->tx_buf = NULL
