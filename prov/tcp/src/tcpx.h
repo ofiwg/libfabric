@@ -112,7 +112,7 @@ int tcpx_send_msg(struct tcpx_pe_entry *pe_entry);
 struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *cq);
 void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry);
 void tcpx_progress(struct util_ep *util_ep);
-
+int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
@@ -165,6 +165,13 @@ struct tcpx_pep {
 	struct poll_fd_info	poll_info;
 };
 
+enum tcpx_cm_state {
+	TCPX_EP_CONNECTING,
+	TCPX_EP_CONNECTED,
+	TCPX_EP_SHUTDOWN,
+	TCPX_EP_ERROR,
+};
+
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
@@ -173,6 +180,8 @@ struct tcpx_ep {
 	struct dlist_entry	tx_queue;
 	/* lock for protecting tx/rx queues */
 	fastlock_t		queue_lock;
+	enum tcpx_cm_state	cm_state;
+	fastlock_t		cm_state_lock;
 };
 
 struct tcpx_fabric {

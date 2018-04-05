@@ -60,7 +60,7 @@ struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *tcpx_cq)
 	pe_entry = util_buf_alloc(tcpx_cq->pe_entry_pool);
 	if (!pe_entry) {
 		fastlock_release(&tcpx_cq->util_cq.cq_lock);
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
+		FI_INFO(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
 		return NULL;
 	}
 	memset(pe_entry, 0, sizeof(*pe_entry));
@@ -89,7 +89,6 @@ void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 
 	fastlock_acquire(&cq->cq_lock);
 	dlist_remove(&pe_entry->entry);
-	memset(pe_entry, 0, sizeof(*pe_entry));
 	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
 	fastlock_release(&cq->cq_lock);
 }

@@ -380,7 +380,6 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
-	struct fi_eq_cm_entry eq_entry;
 	int ret;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
@@ -388,16 +387,14 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	ret = ofi_shutdown(tcpx_ep->conn_fd, SHUT_RDWR);
 	if (ret && errno != ENOTCONN) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "ep shutdown unsuccessful\n");
-		return -errno;
 	}
 
-	eq_entry.fid = &ep->fid;
-	ret = fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-			  &eq_entry, sizeof(eq_entry), 0);
-	if (ret < 0) {
+	ret = tcpx_ep_shutdown_report(tcpx_ep, &ep->fid);
+	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "Error writing to EQ\n");
 	}
-	return FI_SUCCESS;
+
+	return ret;
 }
 
 static int tcpx_pep_sock_create(struct tcpx_pep *pep)
@@ -485,6 +482,7 @@ static int tcpx_ep_close(struct fid *fid)
 	tcpx_ep_tx_rx_queues_release(ep);
 	ofi_close_socket(ep->conn_fd);
 	fastlock_destroy(&ep->queue_lock);
+	fastlock_destroy(&ep->cm_state_lock);
 	ofi_endpoint_close(&ep->util_ep);
 
 	free(ep);
@@ -596,6 +594,12 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err3;
 
+	ep->cm_state = TCPX_EP_CONNECTING;
+
+	ret = fastlock_init(&ep->cm_state_lock);
+	if (ret)
+		goto err4;
+
 	dlist_init(&ep->rx_queue);
 	dlist_init(&ep->tx_queue);
 
@@ -606,6 +610,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &tcpx_msg_ops;
 
 	return 0;
+err4:
+	fastlock_destroy(&ep->queue_lock);
 err3:
 	ofi_close_socket(ep->conn_fd);
 err2:
