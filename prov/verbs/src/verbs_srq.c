@@ -103,14 +103,14 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	assert(ep->srq);
 
-	fastlock_acquire(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
 	wre = util_buf_alloc(ep->wre_pool.pool);
 	if (!wre) {
-		fastlock_release(&ep->wre_pool.lock);
+		ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 		return -FI_EAGAIN;
 	}
 	dlist_insert_tail(&wre->entry, &ep->wre_pool.wre_list);
-	fastlock_release(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 
 	wre->srq = ep;
 	wre->ep = NULL;
@@ -259,6 +259,15 @@ int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		goto err3;
 	}
 	dlist_init(&srq_ep->wre_pool.wre_list);
+	/* WREs are used in CQ and SRQ code. WRE pool can't be protected only
+	 * in case of FI_THREAD_DOMAIN */
+	if (dom->info->domain_attr->threading == FI_THREAD_DOMAIN) {
+		srq_ep->wre_pool.pool_fastlock_acquire = ofi_fastlock_acquire_noop;
+		srq_ep->wre_pool.pool_fastlock_release = ofi_fastlock_release_noop;
+	} else {
+		srq_ep->wre_pool.pool_fastlock_acquire = ofi_fastlock_acquire;
+		srq_ep->wre_pool.pool_fastlock_release = ofi_fastlock_release;
+	}
 
 	*srq_ep_fid = &srq_ep->ep_fid;
 

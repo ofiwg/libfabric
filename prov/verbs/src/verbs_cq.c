@@ -315,9 +315,9 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 	} while (ret > 0);
 
 	/* Handle WRs for which there were no appropriate WCs */
-	fastlock_acquire(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
 	fi_ibv_empty_wre_list(&ep->wre_pool, IBV_RECV_WR);
-	fastlock_release(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 	ep->rcq->cq_fastlock_release(&ep->rcq->lock);
 
 	ep->scq->cq_fastlock_acquire(&ep->scq->lock);
@@ -325,9 +325,9 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->scq);
 	} while (ret > 0);
 	/* Handle WRs for which there were no appropriate WCs */
-	fastlock_acquire(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
 	fi_ibv_empty_wre_list(&ep->wre_pool, IBV_SEND_WR);
-	fastlock_release(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 	ep->scq->cq_fastlock_release(&ep->scq->lock);
 
 	fastlock_destroy(&ep->wre_pool.lock);
