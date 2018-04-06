@@ -43,21 +43,6 @@
 
 const size_t rxm_pkt_size = sizeof(struct rxm_pkt);
 
-
-static void rxm_fastlock_empty(fastlock_t *lock)
-{
-}
-
-static void rxm_fastlock_acquire(fastlock_t *lock)
-{
-	fastlock_acquire(lock);
-}
-
-static void rxm_fastlock_release(fastlock_t *lock)
-{
-	fastlock_release(lock);
-}
-
 static int rxm_match_recv_entry(struct dlist_entry *item, const void *arg)
 {
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *) arg;
@@ -400,11 +385,11 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep,
 	       rxm_ep->msg_mr_local);
 
 	if (domain->threading != FI_THREAD_SAFE) {
-		rxm_ep->res_fastlock_acquire = rxm_fastlock_empty;
-		rxm_ep->res_fastlock_release = rxm_fastlock_empty;
+		rxm_ep->res_fastlock_acquire = ofi_fastlock_acquire_noop;
+		rxm_ep->res_fastlock_release = ofi_fastlock_release_noop;
 	} else {
-		rxm_ep->res_fastlock_acquire = rxm_fastlock_acquire;
-		rxm_ep->res_fastlock_release = rxm_fastlock_release;
+		rxm_ep->res_fastlock_acquire = ofi_fastlock_acquire;
+		rxm_ep->res_fastlock_release = ofi_fastlock_release;
 	}
 
 	ret = rxm_ep_txrx_pool_create(rxm_ep);
