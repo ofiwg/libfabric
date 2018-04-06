@@ -295,6 +295,8 @@ struct util_cq {
 	struct dlist_entry	ep_list;
 	fastlock_t		ep_list_lock;
 	fastlock_t		cq_lock;
+	ofi_fastlock_acquire_t	cq_fastlock_acquire;
+	ofi_fastlock_release_t	cq_fastlock_release;
 
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;
