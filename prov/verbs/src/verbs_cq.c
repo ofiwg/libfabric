@@ -89,7 +89,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 
 	cq = container_of(cq_fid, struct fi_ibv_cq, cq_fid);
 
-	fastlock_acquire(&cq->lock);
+	cq->cq_fastlock_acquire(&cq->lock);
 	if (slist_empty(&cq->wcq))
 		goto err;
 
@@ -100,7 +100,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	api_version = cq->domain->util_domain.fabric->fabric_fid.api_version;
 
 	slist_entry = slist_remove_head(&cq->wcq);
-	fastlock_release(&cq->lock);
+	cq->cq_fastlock_release(&cq->lock);
 
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
 
@@ -122,7 +122,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	util_buf_release(cq->wce_pool, wce);
 	return sizeof(*entry);
 err:
-	fastlock_release(&cq->lock);
+	cq->cq_fastlock_release(&cq->lock);
 	return -FI_EAGAIN;
 }
 
@@ -309,26 +309,26 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 {
 	int ret;
 
-	fastlock_acquire(&ep->rcq->lock);
+	ep->rcq->cq_fastlock_acquire(&ep->rcq->lock);
 	do {
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->rcq);
 	} while (ret > 0);
 
 	/* Handle WRs for which there were no appropriate WCs */
-	fastlock_acquire(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
 	fi_ibv_empty_wre_list(&ep->wre_pool, IBV_RECV_WR);
-	fastlock_release(&ep->wre_pool.lock);
-	fastlock_release(&ep->rcq->lock);
+	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
+	ep->rcq->cq_fastlock_release(&ep->rcq->lock);
 
-	fastlock_acquire(&ep->scq->lock);
+	ep->scq->cq_fastlock_acquire(&ep->scq->lock);
 	do {
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->scq);
 	} while (ret > 0);
 	/* Handle WRs for which there were no appropriate WCs */
-	fastlock_acquire(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
 	fi_ibv_empty_wre_list(&ep->wre_pool, IBV_SEND_WR);
-	fastlock_release(&ep->wre_pool.lock);
-	fastlock_release(&ep->scq->lock);
+	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
+	ep->scq->cq_fastlock_release(&ep->scq->lock);
 
 	fastlock_destroy(&ep->wre_pool.lock);
 	util_buf_pool_destroy(ep->wre_pool.pool);
@@ -357,7 +357,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 
 	cq = container_of(cq_fid, struct fi_ibv_cq, cq_fid);
 
-	fastlock_acquire(&cq->lock);
+	cq->cq_fastlock_acquire(&cq->lock);
 
 	for (i = 0; i < count; i++) {
 		if (!slist_empty(&cq->wcq)) {
@@ -381,7 +381,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		if (wc.status) {
 			wce = util_buf_alloc(cq->wce_pool);
 			if (!wce) {
-				fastlock_release(&cq->lock);
+				cq->cq_fastlock_release(&cq->lock);
 				return -FI_ENOMEM;
 			}
 			memset(wce, 0, sizeof(*wce));
@@ -394,7 +394,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		cq->read_entry(&wc, i, buf);
 	}
 
-	fastlock_release(&cq->lock);
+	cq->cq_fastlock_release(&cq->lock);
 	return i ? i : (ret ? ret : -FI_EAGAIN);
 }
 
@@ -436,7 +436,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 		return -FI_EINVAL;
 	}
 
-	fastlock_acquire(&cq->lock);
+	cq->cq_fastlock_acquire(&cq->lock);
 	if (!slist_empty(&cq->wcq))
 		goto out;
 
@@ -479,7 +479,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 err:
 	util_buf_release(cq->wce_pool, wce);
 out:
-	fastlock_release(&cq->lock);
+	cq->cq_fastlock_release(&cq->lock);
 	return ret;
 }
 
@@ -528,14 +528,14 @@ static int fi_ibv_cq_close(fid_t fid)
 	if (ofi_atomic_get32(&cq->nevents))
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
 
-	fastlock_acquire(&cq->lock);
+	cq->cq_fastlock_acquire(&cq->lock);
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct fi_ibv_wce, entry);
 		util_buf_release(cq->wce_pool, wce);
 	}
 
-	fastlock_release(&cq->lock);
+	cq->cq_fastlock_release(&cq->lock);
 
 	util_buf_pool_destroy(cq->wce_pool);
 
@@ -582,6 +582,14 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	_cq->domain = container_of(domain, struct fi_ibv_domain,
 				   util_domain.domain_fid);
+	if ((_cq->domain->info->domain_attr->threading == FI_THREAD_DOMAIN) ||
+	    (_cq->domain->info->domain_attr->threading == FI_THREAD_COMPLETION)) {
+		_cq->cq_fastlock_acquire = ofi_fastlock_acquire_noop;
+		_cq->cq_fastlock_release = ofi_fastlock_release_noop;
+	} else {
+		_cq->cq_fastlock_acquire = ofi_fastlock_acquire;
+		_cq->cq_fastlock_release = ofi_fastlock_release;
+	}
 	/*
 	 * RDM and DGRAM CQ functionalities are moved to correspond
 	 * separated functions

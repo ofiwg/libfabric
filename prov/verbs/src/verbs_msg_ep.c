@@ -362,6 +362,15 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err3;
 	}
 	dlist_init(&ep->wre_pool.wre_list);
+	/* WREs are used in CQ and EP code. WRE pool can't be protected only
+	 * in case of FI_THREAD_DOMAIN */
+	if (fi->domain_attr->threading == FI_THREAD_DOMAIN) {
+		ep->wre_pool.pool_fastlock_acquire = ofi_fastlock_acquire_noop;
+		ep->wre_pool.pool_fastlock_release = ofi_fastlock_release_noop;
+	} else {
+		ep->wre_pool.pool_fastlock_acquire = ofi_fastlock_acquire;
+		ep->wre_pool.pool_fastlock_release = ofi_fastlock_release;
+	}
 
 	ep->id->context = &ep->ep_fid.fid;
 	ep->ep_fid.fid.fclass = FI_CLASS_EP;
@@ -515,14 +524,14 @@ static inline int
 fi_ibv_prepare_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			   struct fi_ibv_wre **wre, void *context)
 {
-	fastlock_acquire(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
 	*wre = util_buf_alloc(ep->wre_pool.pool);
 	if (OFI_UNLIKELY(!*wre)) {
 		fastlock_release(&ep->wre_pool.lock);
 		return -FI_EAGAIN;
 	}
 	dlist_insert_tail(&(*wre)->entry, &ep->wre_pool.wre_list);
-	fastlock_release(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 
 	(*wre)->context = context;
 	(*wre)->ep = ep;
@@ -538,13 +547,13 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_msg_ep *ep)
 	struct ibv_wc wc[10];
 	int ret, i;
 
-	fastlock_acquire(&ep->scq->lock);
+	ep->scq->cq_fastlock_acquire(&ep->scq->lock);
 	/* TODO: retrieve WCs as much as possbile in a single
 	 * ibv_poll_cq call */
 	while (1) {
 		ret = ibv_poll_cq(ep->scq->cq, 10, wc);
 		if (ret <= 0) {
-			fastlock_release(&ep->scq->lock);
+			ep->scq->cq_fastlock_release(&ep->scq->lock);
 			return ret;
 		}
 
@@ -556,7 +565,7 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_msg_ep *ep)
 		}
 	}
 
-	fastlock_release(&ep->scq->lock);
+	ep->scq->cq_fastlock_release(&ep->scq->lock);
 	return FI_SUCCESS;
 }
 
@@ -652,14 +661,14 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	assert(ep->rcq);
 
-	fastlock_acquire(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
 	wre = util_buf_alloc(ep->wre_pool.pool);
 	if (OFI_UNLIKELY(!wre)) {
-		fastlock_release(&ep->wre_pool.lock);
+		ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 		return -FI_EAGAIN;
 	}
 	dlist_insert_tail(&wre->entry, &ep->wre_pool.wre_list);
-	fastlock_release(&ep->wre_pool.lock);
+	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 
 	wre->ep = ep;
 	wre->srq = NULL;

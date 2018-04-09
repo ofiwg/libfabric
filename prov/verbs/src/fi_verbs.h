@@ -390,6 +390,8 @@ struct fi_ibv_wre_pool {
 	fastlock_t		lock;
 	struct util_buf_pool	*pool;
 	struct dlist_entry	wre_list;
+	ofi_fastlock_acquire_t	pool_fastlock_acquire;
+	ofi_fastlock_release_t	pool_fastlock_release;
 };
 
 struct fi_ibv_wre {
@@ -416,6 +418,8 @@ struct fi_ibv_cq {
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
 	struct util_buf_pool	*wce_pool;
+	ofi_fastlock_acquire_t	cq_fastlock_acquire;
+	ofi_fastlock_release_t	cq_fastlock_release;
 };
 
 struct fi_ibv_rdm_request;
@@ -610,12 +614,12 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 static inline void fi_ibv_release_wre(struct fi_ibv_wre_pool *wre_pool,
 				      struct fi_ibv_wre *wre)
 {
-	fastlock_acquire(&wre_pool->lock);
+	wre_pool->pool_fastlock_acquire(&wre_pool->lock);
 	dlist_remove(&wre->entry);
 	wre->srq = NULL;
 	wre->ep = NULL;
 	util_buf_release(wre_pool->pool, wre);
-	fastlock_release(&wre_pool->lock);
+	wre_pool->pool_fastlock_release(&wre_pool->lock);
 }
 
 static inline int

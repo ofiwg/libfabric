@@ -132,7 +132,23 @@ static inline void fastlock_release(fastlock_t *lock)
 
 #endif
 
+typedef void(*ofi_fastlock_acquire_t)(fastlock_t *lock);
+typedef void(*ofi_fastlock_release_t)(fastlock_t *lock);
 
+static inline void ofi_fastlock_acquire(fastlock_t *lock)
+{
+	fastlock_acquire(lock);
+}
+static inline void ofi_fastlock_release(fastlock_t *lock)
+{
+	fastlock_release(lock);
+}
+static inline void ofi_fastlock_acquire_noop(fastlock_t *lock)
+{
+}
+static inline void ofi_fastlock_release_noop(fastlock_t *lock)
+{
+}
 
 #ifdef __cplusplus
 }

@@ -48,12 +48,12 @@ int ofi_cq_write_error(struct util_cq *cq,
 		return -FI_ENOMEM;
 
 	entry->err_entry = *err_entry;
-	fastlock_acquire(&cq->cq_lock);
+	cq->cq_fastlock_acquire(&cq->cq_lock);
 	slist_insert_tail(&entry->list_entry, &cq->err_list);
 	comp = ofi_cirque_tail(cq->cirq);
 	comp->flags = UTIL_FLAG_ERROR;
 	ofi_cirque_commit(cq->cirq);
-	fastlock_release(&cq->cq_lock);
+	cq->cq_fastlock_release(&cq->cq_lock);
 	if (cq->wait)
 		cq->wait->signal(cq->wait);
 	return 0;
@@ -95,8 +95,8 @@ int ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	struct fi_cq_tagged_entry *comp;
 	int ret = 0;
 
-	fastlock_acquire(&cq->cq_lock);
-	if (ofi_cirque_isfull(cq->cirq)) {
+	cq->cq_fastlock_acquire(&cq->cq_lock);
+	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
 		FI_DBG(cq->domain->prov, FI_LOG_CQ, "util_cq cirq is full!\n");
 		ret = -FI_EAGAIN;
 		goto out;
@@ -111,7 +111,7 @@ int ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	comp->tag = tag;
 	ofi_cirque_commit(cq->cirq);
 out:
-	fastlock_release(&cq->cq_lock);
+	cq->cq_fastlock_release(&cq->cq_lock);
 	return ret;
 }
 
@@ -200,11 +200,11 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 
-	fastlock_acquire(&cq->cq_lock);
+	cq->cq_fastlock_acquire(&cq->cq_lock);
 	if (ofi_cirque_isempty(cq->cirq)) {
-		fastlock_release(&cq->cq_lock);
+		cq->cq_fastlock_release(&cq->cq_lock);
 		cq->progress(cq);
-		fastlock_acquire(&cq->cq_lock);
+		cq->cq_fastlock_acquire(&cq->cq_lock);
 		if (ofi_cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
 			goto out;
@@ -227,7 +227,7 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		ofi_cirque_discard(cq->cirq);
 	}
 out:
-	fastlock_release(&cq->cq_lock);
+	cq->cq_fastlock_release(&cq->cq_lock);
 	return i;
 }
 
@@ -250,7 +250,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	api_version = cq->domain->fabric->fabric_fid.api_version;
 
-	fastlock_acquire(&cq->cq_lock);
+	cq->cq_fastlock_acquire(&cq->cq_lock);
 	if (ofi_cirque_isempty(cq->cirq) ||
 	    !(ofi_cirque_head(cq->cirq)->flags & UTIL_FLAG_ERROR)) {
 		ret = -FI_EAGAIN;
@@ -273,7 +273,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	ret = 1;
 	free(err);
 unlock:
-	fastlock_release(&cq->cq_lock);
+	cq->cq_fastlock_release(&cq->cq_lock);
 	return ret;
 }
 
@@ -410,6 +410,14 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	dlist_init(&cq->ep_list);
 	fastlock_init(&cq->ep_list_lock);
 	fastlock_init(&cq->cq_lock);
+	if (cq->domain->threading == FI_THREAD_COMPLETION ||
+	    (cq->domain->threading == FI_THREAD_DOMAIN)) {
+		cq->cq_fastlock_acquire = ofi_fastlock_acquire_noop;
+		cq->cq_fastlock_release = ofi_fastlock_release_noop;
+	} else {
+		cq->cq_fastlock_acquire = ofi_fastlock_acquire;
+		cq->cq_fastlock_release = ofi_fastlock_release;
+	}
 	slist_init(&cq->err_list);
 	cq->read_entry = read_entry;
 
@@ -473,14 +481,14 @@ void ofi_cq_progress(struct util_cq *cq)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	fastlock_acquire(&cq->ep_list_lock);
+	cq->cq_fastlock_acquire(&cq->ep_list_lock);
 	dlist_foreach(&cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 		ep->progress(ep);
 
 	}
-	fastlock_release(&cq->ep_list_lock);
+	cq->cq_fastlock_release(&cq->ep_list_lock);
 }
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
