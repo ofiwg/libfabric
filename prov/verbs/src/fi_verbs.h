@@ -117,41 +117,6 @@
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
-/* NOTE:
- * When ibv_post_send/recv returns '-1' it means the following:
- * Deal with non-compliant libibverbs drivers which set errno
- * instead of directly returning the error value
- */
-#define FI_IBV_INVOKE_POST(type, wr_type, obj, wr, fail_action)		\
-({									\
-	ssize_t ret;							\
-	struct ibv_ ## wr_type ## _wr *bad_wr;				\
-	ret = ibv_post_ ## type(obj, wr, &bad_wr);			\
-	if (OFI_UNLIKELY(ret)) {					\
-		switch (ret) {						\
-			case ENOMEM:					\
-				ret = -FI_EAGAIN;			\
-				break;					\
-			case -1:					\
-				ret = (errno == ENOMEM) ? -FI_EAGAIN :	\
-							  -errno;	\
-				break;					\
-			default:					\
-				ret = -ret;				\
-				break;					\
-		}							\
-		(void) fail_action;					\
-	}								\
-	ret;								\
-})
-
-#define FI_IBV_RELEASE_WRE(ep, wre)			\
-({							\
-	if (wre) {					\
-		fi_ibv_release_wre(&ep->wre_pool, wre);	\
-	}						\
-})
-
 #define FI_IBV_MEMORY_HOOK_BEGIN(notifier)			\
 {								\
 	pthread_mutex_lock(&notifier->lock);			\
@@ -620,6 +585,40 @@ static inline void fi_ibv_release_wre(struct fi_ibv_wre_pool *wre_pool,
 	wre->ep = NULL;
 	util_buf_release(wre_pool->pool, wre);
 	wre_pool->pool_fastlock_release(&wre_pool->lock);
+}
+
+/* NOTE:
+ * When ibv_post_send/recv returns '-1' it means the following:
+ * Deal with non-compliant libibverbs drivers which set errno
+ * instead of directly returning the error value
+ */
+static inline ssize_t fi_ibv_handle_post(ssize_t ret)
+{
+	switch (ret) {
+		case ENOMEM:
+			ret = -FI_EAGAIN;
+			break;
+		case -1:
+			ret = (errno == ENOMEM) ? -FI_EAGAIN :
+						  -errno;
+			break;
+		default:
+			ret = -ret;
+			break;
+	}
+	return ret;
+}
+
+static inline ssize_t
+fi_ibv_msg_handle_post(ssize_t ret, struct fi_ibv_wre *wre,
+		       struct fi_ibv_wre_pool *wre_pool)
+{
+	if (OFI_UNLIKELY(ret)) {
+		ret = fi_ibv_handle_post(ret);
+		if (wre)
+			fi_ibv_release_wre(wre_pool, wre);
+	}
+	return ret;
 }
 
 static inline int

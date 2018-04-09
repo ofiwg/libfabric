@@ -100,6 +100,7 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 		.next = NULL,
 	};
 	size_t i;
+	struct ibv_recv_wr *bad_wr;
 
 	assert(ep->srq);
 
@@ -126,8 +127,8 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 	}
 	wr.sg_list = sge;
 
-	return FI_IBV_INVOKE_POST(srq_recv, recv, ep->srq, &wr,
-				  FI_IBV_RELEASE_WRE(ep, wre));
+	return fi_ibv_msg_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr),
+				      wre, &ep->wre_pool);
 }
 
 static ssize_t
