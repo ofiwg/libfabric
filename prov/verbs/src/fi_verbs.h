@@ -346,27 +346,6 @@ struct fi_ibv_wce {
 	struct ibv_wc		wc;
 };
 
-enum fi_ibv_wre_type {
-	IBV_SEND_WR,
-	IBV_RECV_WR,
-};
-
-struct fi_ibv_wre_pool {
-	fastlock_t		lock;
-	struct util_buf_pool	*pool;
-	struct dlist_entry	wre_list;
-	ofi_fastlock_acquire_t	pool_fastlock_acquire;
-	ofi_fastlock_release_t	pool_fastlock_release;
-};
-
-struct fi_ibv_wre {
-	struct dlist_entry      entry;
-	void			*context;
-	struct fi_ibv_msg_ep	*ep;
-	struct fi_ibv_srq_ep	*srq;
-	enum fi_ibv_wre_type	wr_type;
-};
-
 struct fi_ibv_cq {
 	struct fid_cq		cq_fid;
 	struct fi_ibv_domain	*domain;
@@ -477,7 +456,6 @@ struct ofi_subscription *fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifi
 struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
-	struct fi_ibv_wre_pool	wre_pool;
 };
 
 int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
@@ -492,7 +470,6 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_srq_ep	*srq_ep;
 	uint64_t		ep_flags;
 	struct fi_info		*info;
-	struct fi_ibv_wre_pool	wre_pool;
 	struct fi_ibv_domain	*domain;
 };
 
@@ -570,22 +547,9 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
 int fi_ibv_set_rnr_timer(struct ibv_qp *qp);
-void fi_ibv_empty_wre_list(struct fi_ibv_wre_pool *wre_pool,
-			   enum fi_ibv_wre_type wre_type);
 void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *cur_ep);
 int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
                            enum ibv_qp_type qp_type);
-
-static inline void fi_ibv_release_wre(struct fi_ibv_wre_pool *wre_pool,
-				      struct fi_ibv_wre *wre)
-{
-	wre_pool->pool_fastlock_acquire(&wre_pool->lock);
-	dlist_remove(&wre->entry);
-	wre->srq = NULL;
-	wre->ep = NULL;
-	util_buf_release(wre_pool->pool, wre);
-	wre_pool->pool_fastlock_release(&wre_pool->lock);
-}
 
 /* NOTE:
  * When ibv_post_send/recv returns '-1' it means the following:
@@ -609,48 +573,20 @@ static inline ssize_t fi_ibv_handle_post(ssize_t ret)
 	return ret;
 }
 
-static inline ssize_t
-fi_ibv_msg_handle_post(ssize_t ret, struct fi_ibv_wre *wre,
-		       struct fi_ibv_wre_pool *wre_pool)
-{
-	if (OFI_UNLIKELY(ret)) {
-		ret = fi_ibv_handle_post(ret);
-		if (wre)
-			fi_ibv_release_wre(wre_pool, wre);
-	}
-	return ret;
-}
-
 static inline int
 fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	struct fi_ibv_wre *wre;
 	int ret = 1;
 
 	/* Handle WR entry when user doesn't request the completion */
 	if (!wc->wr_id)
 		return 0;
 
-	/* Handle compeltions that should be provided to user */
-	wre = (struct fi_ibv_wre *)(uintptr_t)wc->wr_id;
-	assert(wre && (wre->ep || wre->srq));
-	wc->wr_id = (uintptr_t)wre->context;
-
 	if (OFI_UNLIKELY(wc->status == IBV_WC_WR_FLUSH_ERR)) {
 		/* Handle case where remote side destroys
 		 * the connection, but local side isn't aware
 		 * about that yet */
 		ret = 0;
-	}
-
-	if (wre->ep) {
-		fi_ibv_release_wre(&wre->ep->wre_pool, wre);
-	} else if (wre->srq) {
-		fi_ibv_release_wre(&wre->srq->wre_pool, wre);
-	} else {
-		/* Shouldn't go here */
-		assert(0);
-		return -FI_EINVAL;
 	}
 
 	return ret;
@@ -702,12 +638,12 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 	}							\
 })
 
-#define fi_ibv_send_iov(ep, wr, iov, desc, count, context)		\
-	fi_ibv_send_iov_flags(ep, wr, iov, desc, count, context,	\
+#define fi_ibv_send_iov(ep, wr, iov, desc, count)	\
+	fi_ibv_send_iov_flags(ep, wr, iov, desc, count,	\
 			ep->info->tx_attr->op_flags)
 
-#define fi_ibv_send_msg(ep, wr, msg, flags)				\
-	fi_ibv_send_iov_flags(ep, wr, msg->msg_iov, msg->desc,		\
-			msg->iov_count,	msg->context, flags)
+#define fi_ibv_send_msg(ep, wr, msg, flags)			\
+	fi_ibv_send_iov_flags(ep, wr, msg->msg_iov, msg->desc,	\
+			msg->iov_count,	flags)
 
 #endif /* FI_VERBS_H */
