@@ -62,6 +62,7 @@ fi_ibv_dgram_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	struct ibv_sge *sge;
 	struct fi_ibv_dgram_wr_entry *wr_entry;
 	ssize_t i;
+	struct ibv_recv_wr *bad_wr;
 
 	ep = container_of(ep_fid, struct fi_ibv_dgram_ep,
 			  util_ep.ep_fid.fid);
@@ -92,12 +93,8 @@ fi_ibv_dgram_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	fi_ibv_dgram_recv_setup(wr_entry, &wr);
 
-	return FI_IBV_INVOKE_POST(
-		recv, recv, ep->ibv_qp, &wr,
-		(fi_ibv_dgram_wr_entry_release(
-				&ep->grh_pool,
-				(struct fi_ibv_dgram_wr_entry_hdr *)
-				wr_entry)));
+	return fi_ibv_dgram_handle_post(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr),
+					wr_entry, &ep->grh_pool);
 }
 
 static inline ssize_t
@@ -171,6 +168,7 @@ fi_ibv_dgram_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	struct fi_ibv_dgram_av_entry *av_entry;
 	struct fi_ibv_dgram_av *av;
 	size_t total_len = 0, i;
+	struct ibv_send_wr *bad_wr;
 
 	assert(!(flags & FI_FENCE));
 
@@ -235,14 +233,8 @@ fi_ibv_dgram_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	fi_ibv_dgram_send_setup(wr_entry, &wr, total_len);
 
-	return FI_IBV_INVOKE_POST(
-		send, send, ep->ibv_qp, &wr,
-			((wr.send_flags & IBV_SEND_SIGNALED)	?
-				fi_ibv_dgram_wr_entry_release(
-					&ep->grh_pool,
-					(struct fi_ibv_dgram_wr_entry_hdr *)
-						wr_entry)	:
-				NULL));
+	return fi_ibv_dgram_handle_post(ibv_post_send(ep->ibv_qp, &wr, &bad_wr),
+					wr_entry, &ep->grh_pool);
 }
 
 static inline ssize_t

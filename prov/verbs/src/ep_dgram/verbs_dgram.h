@@ -229,6 +229,19 @@ struct fi_ibv_dgram_ep {
 
 extern struct fi_ops_msg fi_ibv_dgram_msg_ops;
 
+static inline ssize_t
+fi_ibv_dgram_handle_post(ssize_t ret, struct fi_ibv_dgram_wr_entry *wr_entry,
+			 struct fi_ibv_dgram_buf_pool *grh_pool)
+{
+	if (OFI_UNLIKELY(ret)) {
+		ret = fi_ibv_handle_post(ret);
+		if (wr_entry)
+			fi_ibv_dgram_wr_entry_release(
+				grh_pool, (struct fi_ibv_dgram_wr_entry_hdr *)wr_entry);
+	}
+	return ret;
+}
+
 static inline struct fi_ibv_dgram_av_entry*
 fi_ibv_dgram_av_lookup_av_entry(struct fi_ibv_dgram_av *av, int index)
 {

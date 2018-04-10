@@ -573,14 +573,17 @@ static inline ssize_t
 fi_ibv_send_poll_cq_if_needed(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
 {
 	int ret;
+	struct ibv_send_wr *bad_wr;
 
-try_again:
-	ret = FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr, NULL);
+	ret = fi_ibv_msg_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr),
+				     NULL, NULL);
 	if (OFI_UNLIKELY(ret == -FI_EAGAIN)) {
 		ret = fi_ibv_poll_reap_unsig_cq(ep);
 		if (OFI_UNLIKELY(ret))
 			return -FI_EAGAIN;
-		goto try_again;
+		/* Try again and return control to a caller */
+		ret = fi_ibv_msg_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr),
+					     NULL, NULL);
 	}
 	return ret;
 }
@@ -591,11 +594,12 @@ fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, void *context)
 {
 	if (wr->send_flags & IBV_SEND_SIGNALED) {
 		struct fi_ibv_wre *wre;
+		struct ibv_send_wr *bad_wr;
 		int ret = fi_ibv_prepare_signal_send(ep, wr, &wre, context);
 		if (OFI_UNLIKELY(ret))
 			return ret;
-		return FI_IBV_INVOKE_POST(send, send, ep->id->qp, wr,
-					  FI_IBV_RELEASE_WRE(ep, wre));
+		return fi_ibv_msg_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr),
+					      wre, &ep->wre_pool);
 	} else {
 		return fi_ibv_send_poll_cq_if_needed(ep, wr);
 	}
@@ -658,6 +662,7 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 		.next = NULL,
 	};
 	size_t i;
+	struct ibv_recv_wr *bad_wr;
 
 	assert(ep->rcq);
 
@@ -684,8 +689,8 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 	}
 	wr.sg_list = sge;
 
-	return FI_IBV_INVOKE_POST(recv, recv, ep->id->qp, &wr,
-				  FI_IBV_RELEASE_WRE(ep, wre));
+	return fi_ibv_msg_handle_post(ibv_post_recv(ep->id->qp, &wr, &bad_wr),
+				      wre, &ep->wre_pool);
 }
 
 static ssize_t
