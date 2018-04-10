@@ -77,6 +77,16 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	},
 };
 
+struct fi_ibv_dev_preset {
+	int		max_inline_data;
+	const char	*dev_name_prefix;
+} verbs_dev_presets[] = {
+	{
+		.max_inline_data = 48,
+		.dev_name_prefix = "i40iw",
+	},
+};
+
 struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
 	.version = VERBS_PROV_VERS,
@@ -363,10 +373,20 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 {
 	struct ibv_qp_init_attr qp_attr;
 	struct ibv_qp *qp = NULL;
-	struct ibv_cq *cq = ibv_create_cq(context, 1, NULL, NULL, 0);
-	assert(cq);
+	struct ibv_cq *cq;
 	int max_inline = 2;
 	int rst = 0;
+	const char *dev_name = ibv_get_device_name(context->device);
+	uint8_t i;
+
+	for (i = 0; i < count_of(verbs_dev_presets); i++) {
+		if (strncmp(dev_name, verbs_dev_presets[i].dev_name_prefix,
+			    strlen(verbs_dev_presets[i].dev_name_prefix)))
+			return verbs_dev_presets[i].max_inline_data;
+	}
+
+	cq = ibv_create_cq(context, 1, NULL, NULL, 0);
+	assert(cq);
 
 	memset(&qp_attr, 0, sizeof(qp_attr));
 	qp_attr.send_cq = cq;
