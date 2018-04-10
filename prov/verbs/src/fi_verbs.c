@@ -380,8 +380,8 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 	uint8_t i;
 
 	for (i = 0; i < count_of(verbs_dev_presets); i++) {
-		if (strncmp(dev_name, verbs_dev_presets[i].dev_name_prefix,
-			    strlen(verbs_dev_presets[i].dev_name_prefix)))
+		if (!strncmp(dev_name, verbs_dev_presets[i].dev_name_prefix,
+			     strlen(verbs_dev_presets[i].dev_name_prefix)))
 			return verbs_dev_presets[i].max_inline_data;
 	}
 
