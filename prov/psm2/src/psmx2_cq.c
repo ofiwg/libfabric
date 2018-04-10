@@ -800,9 +800,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			case PSMX2_SENDV_CONTEXT:
 				sendv_req = PSMX2_CTXT_USER(fi_context);
+				sendv_req->iov_done++;
 				if (sendv_req->iov_protocol == PSMX2_IOV_PROTO_MULTI &&
-				    sendv_req->iov_done < sendv_req->iov_info.count) {
-					PSMX2_FREE_COMPLETION(trx_ctxt, status);
+				    sendv_req->iov_done < sendv_req->iov_info.count + 1) {
+					sendv_req->status = status;
 					continue;
 				}
 				if (ep->send_cq && !sendv_req->no_completion) {
@@ -830,10 +831,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			case PSMX2_IOV_SEND_CONTEXT:
 				sendv_req = PSMX2_CTXT_USER(fi_context);
 				sendv_req->iov_done++;
-				if (sendv_req->iov_done < sendv_req->iov_info.count) {
-					PSMX2_FREE_COMPLETION(trx_ctxt, status);
+				PSMX2_FREE_COMPLETION(trx_ctxt, status);
+				if (sendv_req->iov_done < sendv_req->iov_info.count + 1)
 					continue;
-				}
+				status = sendv_req->status;
 				if (ep->send_cq && !sendv_req->no_completion) {
 					op_context = sendv_req->user_context;
 					buf = NULL;
