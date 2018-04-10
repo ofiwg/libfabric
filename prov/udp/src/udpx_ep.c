@@ -42,7 +42,7 @@ static int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 	int ret;
 
 	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
-	FI_DBG(&udpx_prov, FI_LOG_EP_CTRL, "%s\n", ofi_hex_str(addr, addrlen));
+	ofi_straddr_dbg(&udpx_prov, FI_LOG_EP_CTRL, "bind addr: ", addr);
 	ret = bind(ep->sock, addr, (socklen_t)addrlen);
 	if (ret) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "bind %d (%s)\n",
