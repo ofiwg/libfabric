@@ -93,7 +93,6 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 {
 	struct fi_ibv_srq_ep *ep =
 		container_of(ep_fid, struct fi_ibv_srq_ep, ep_fid);
-	struct fi_ibv_wre *wre;
 	struct ibv_sge *sge = NULL;
 	struct ibv_recv_wr wr = {
 		.num_sge = msg->iov_count,
@@ -104,21 +103,7 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	assert(ep->srq);
 
-	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
-	wre = util_buf_alloc(ep->wre_pool.pool);
-	if (!wre) {
-		ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
-		return -FI_EAGAIN;
-	}
-	dlist_insert_tail(&wre->entry, &ep->wre_pool.wre_list);
-	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
-
-	wre->srq = ep;
-	wre->ep = NULL;
-	wre->context = msg->context;
-	wre->wr_type = IBV_RECV_WR;
-
-	wr.wr_id = (uintptr_t)wre;
+	wr.wr_id = (uintptr_t)msg->context;
 	sge = alloca(sizeof(*sge) * msg->iov_count);
 	for (i = 0; i < msg->iov_count; i++) {
 		sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
@@ -127,8 +112,7 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 	}
 	wr.sg_list = sge;
 
-	return fi_ibv_msg_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr),
-				      wre, &ep->wre_pool);
+	return fi_ibv_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
 }
 
 static ssize_t
@@ -189,16 +173,6 @@ static int fi_ibv_srq_close(fid_t fid)
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Cannot destroy SRQ rc=%d\n", ret);
 
-	/* All WCs from Receive CQ belongs to SRQ, no need to check EP. */
-	/* Assumes that all EP that associated with the SRQ have
-	 * already been closed (therefore, no more completions would
-	 * arrive in CQ for the recv posted to SRQ) */
-	/* Just to be clear, passes `IBV_RECV_WR`, because SRQ's WREs
-	 * have `IBV_RECV_WR` type only */
-	fi_ibv_empty_wre_list(&srq_ep->wre_pool, IBV_RECV_WR);
-	util_buf_pool_destroy(srq_ep->wre_pool.pool);
-	fastlock_destroy(&srq_ep->wre_pool.lock);
-
 	free(srq_ep);
 
 	return FI_SUCCESS;
@@ -252,31 +226,9 @@ int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		goto err2;
 	}
 
-	fastlock_init(&srq_ep->wre_pool.lock);
-	ret = util_buf_pool_create(&srq_ep->wre_pool.pool, sizeof(struct fi_ibv_wre),
-				   16, 0, VERBS_WRE_CNT);
-	if (ret) {
-		VERBS_WARN(FI_LOG_DOMAIN, "Failed to create wre_pool\n");
-		goto err3;
-	}
-	dlist_init(&srq_ep->wre_pool.wre_list);
-	/* WREs are used in CQ and SRQ code. WRE pool can't be protected only
-	 * in case of FI_THREAD_DOMAIN */
-	if (dom->info->domain_attr->threading == FI_THREAD_DOMAIN) {
-		srq_ep->wre_pool.pool_fastlock_acquire = ofi_fastlock_acquire_noop;
-		srq_ep->wre_pool.pool_fastlock_release = ofi_fastlock_release_noop;
-	} else {
-		srq_ep->wre_pool.pool_fastlock_acquire = ofi_fastlock_acquire;
-		srq_ep->wre_pool.pool_fastlock_release = ofi_fastlock_release;
-	}
-
 	*srq_ep_fid = &srq_ep->ep_fid;
 
 	return FI_SUCCESS;
-err3:
-	fastlock_destroy(&srq_ep->wre_pool.lock);
-	if (ibv_destroy_srq(srq_ep->srq))
-		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_destroy_srq", errno);
 err2:
 	free(srq_ep);
 err1:

@@ -235,8 +235,6 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_msg_ep *ep,
 					     struct fi_ibv_cq *cq)
 {
 	struct fi_ibv_wce *wce;
-	struct fi_ibv_wre *wre;
-	struct fi_ibv_wre_pool *wre_pool;
 	struct ibv_wc wc;
 	ssize_t ret;
 
@@ -250,59 +248,18 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_msg_ep *ep,
 		return 1;
 	}
 
-	wre = (struct fi_ibv_wre *)(uintptr_t)wc.wr_id;
-	assert(wre && (wre->ep || wre->srq));
-	wc.wr_id = (uintptr_t)wre->context;
-
-	if (wre->ep) {
-		wre_pool = &wre->ep->wre_pool;
-		if ((wre->ep != ep) &&
-		    (wc.status != IBV_WC_WR_FLUSH_ERR)) {
-			ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
-			if (OFI_UNLIKELY(ret)) {
-				wre->ep = NULL;
-				ret = -FI_EAGAIN;
-				goto fn;
-			}
-			slist_insert_tail(&wce->entry, &cq->wcq);
+	if (wc.status != IBV_WC_WR_FLUSH_ERR) {
+		ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
+		if (OFI_UNLIKELY(ret)) {
+			ret = -FI_EAGAIN;
+			goto fn;
 		}
-	} else {
-		/* WRE belongs to SRQ's wre pool and should be
-		 * handled or rejected if status == `IBV_WC_WR_FLUSH_ERR` */
-		assert(wre->srq);
-		wre_pool = &wre->srq->wre_pool;
-		if (wc.status != IBV_WC_WR_FLUSH_ERR) {
-			ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
-			if (OFI_UNLIKELY(ret)) {
-				ret = -FI_EAGAIN;
-				goto fn;
-			}
-			slist_insert_tail(&wce->entry, &cq->wcq);
-		}
+		slist_insert_tail(&wce->entry, &cq->wcq);
 	}
 	ret = 1;
 fn:
-	fi_ibv_release_wre(wre_pool, wre);
 
 	return ret;
-}
-
-/* Must call with `ep|srq::wre_pool::wre_lock` held */
-void fi_ibv_empty_wre_list(struct fi_ibv_wre_pool *wre_pool,
-			   enum fi_ibv_wre_type wre_type)
-{
-	struct fi_ibv_wre *wre;
-	struct dlist_entry *tmp;
-
-	dlist_foreach_container_safe(&wre_pool->wre_list, struct fi_ibv_wre,
-				     wre, entry, tmp) {
-		if (wre->wr_type == wre_type) {
-			dlist_remove(&wre->entry);
-			wre->ep = NULL;
-			wre->srq = NULL;
-			util_buf_release(wre_pool->pool, wre);
-		}
-	}
 }
 
 void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
@@ -313,25 +270,13 @@ void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
 	do {
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->rcq);
 	} while (ret > 0);
-
-	/* Handle WRs for which there were no appropriate WCs */
-	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
-	fi_ibv_empty_wre_list(&ep->wre_pool, IBV_RECV_WR);
-	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 	ep->rcq->cq_fastlock_release(&ep->rcq->lock);
 
 	ep->scq->cq_fastlock_acquire(&ep->scq->lock);
 	do {
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->scq);
 	} while (ret > 0);
-	/* Handle WRs for which there were no appropriate WCs */
-	ep->wre_pool.pool_fastlock_acquire(&ep->wre_pool.lock);
-	fi_ibv_empty_wre_list(&ep->wre_pool, IBV_SEND_WR);
-	ep->wre_pool.pool_fastlock_release(&ep->wre_pool.lock);
 	ep->scq->cq_fastlock_release(&ep->scq->lock);
-
-	fastlock_destroy(&ep->wre_pool.lock);
-	util_buf_pool_destroy(ep->wre_pool.pool);
 }
 
 /* Must call with cq->lock held */
