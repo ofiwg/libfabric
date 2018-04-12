@@ -65,6 +65,7 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 static inline void
 rxm_ep_rma_fill_msg(struct fi_msg_rma *msg_rma, struct iovec *iov,
 		    size_t iov_count, void **desc,
+		    struct rxm_rma_iov_storage *rma_iov,
 		    struct rxm_tx_entry *tx_entry,
 		    const struct fi_msg_rma *orig_msg)
 {
@@ -72,8 +73,8 @@ rxm_ep_rma_fill_msg(struct fi_msg_rma *msg_rma, struct iovec *iov,
 	msg_rma->desc = desc;
 	msg_rma->iov_count = iov_count;
 	msg_rma->addr = orig_msg->addr;
-	msg_rma->rma_iov = orig_msg->rma_iov;
-	msg_rma->rma_iov_count = orig_msg->rma_iov_count;
+	msg_rma->rma_iov = rma_iov->iov;
+	msg_rma->rma_iov_count = rma_iov->count;
 	msg_rma->context = tx_entry;
 	msg_rma->data = orig_msg->data;
 }
@@ -84,12 +85,10 @@ rxm_ep_rma_fill_msg_no_buf(struct rxm_rma_buf *rma_buf,
 			   const struct fi_msg_rma *orig_msg)
 {
 	rma_buf->rxm_iov.count = (uint8_t)orig_msg->iov_count;
-	memcpy(rma_buf->rxm_iov.iov, orig_msg->msg_iov,
-	       sizeof(*rma_buf->rxm_iov.iov) * rma_buf->rxm_iov.count);
 
 	rxm_ep_rma_fill_msg(&rma_buf->msg, rma_buf->rxm_iov.iov,
 			    rma_buf->rxm_iov.count, rma_buf->rxm_iov.desc,
-			    tx_entry, orig_msg);
+			    &rma_buf->rxm_rma_iov, tx_entry, orig_msg);
 }
 
 static inline void
@@ -104,7 +103,8 @@ rxm_ep_rma_fill_msg_buf(struct rxm_rma_buf *rma_buf,
 	rma_buf->rxm_iov.iov[0].iov_len = rma_buf->pkt.hdr.size;
 
 	rxm_ep_rma_fill_msg(&rma_buf->msg, rma_buf->rxm_iov.iov,
-			    1, &rma_buf->hdr.desc, tx_entry, orig_msg);
+			    1, &rma_buf->hdr.desc, &rma_buf->rxm_rma_iov,
+			    tx_entry, orig_msg);
 }
 
 static inline ssize_t
@@ -144,8 +144,11 @@ rxm_ep_format_rma_buf(struct rxm_ep *rxm_ep, size_t total_size,
 	tx_entry->rma_buf = *rma_buf;
 	(*rma_buf)->pkt.hdr.size = total_size;
 	(*rma_buf)->rxm_iov.count = orig_msg->iov_count;
+	(*rma_buf)->rxm_rma_iov.count = orig_msg->rma_iov_count;
 	for (i = 0; i < orig_msg->iov_count; i++)
 		(*rma_buf)->rxm_iov.iov[i] = orig_msg->msg_iov[i];
+	for (i = 0; i < orig_msg->rma_iov_count; i++)
+		(*rma_buf)->rxm_rma_iov.iov[i] = orig_msg->rma_iov[i];
 
 	return FI_SUCCESS;
 }
