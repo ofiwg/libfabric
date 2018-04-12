@@ -88,6 +88,12 @@ struct mrail_av {
 	ofi_atomic32_t index;
 };
 
+struct mrail_cq {
+	struct util_cq util_cq;
+	struct fid_cq **cqs;
+	size_t num_cqs;
+};
+
 struct mrail_ep {
 	struct util_ep util_ep;
 	struct fi_info *info;
