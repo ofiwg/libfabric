@@ -97,8 +97,10 @@ struct mrail_cq {
 struct mrail_ep {
 	struct util_ep util_ep;
 	struct fi_info *info;
-	struct fid_ep **endpoints;
-	size_t num_endpoints;
+	struct fid_ep **eps;
+	size_t num_eps;
+	ofi_atomic32_t tx_rail;
+	ofi_atomic32_t rx_rail;
 };
 
 int mrail_get_core_info(uint32_t version, const char *node, const char *service,
