@@ -80,6 +80,14 @@ struct mrail_domain {
 	size_t addrlen;
 };
 
+struct mrail_av {
+	struct util_av util_av;
+	struct fid_av **avs;
+	size_t *rail_addrlen;
+	size_t num_avs;
+	ofi_atomic32_t index;
+};
+
 struct mrail_ep {
 	struct util_ep util_ep;
 	struct fi_info *info;
@@ -96,6 +104,8 @@ int mrail_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		       struct fid_domain **domain, void *context);
 int mrail_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq_fid, void *context);
+int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		   struct fid_av **av_fid, void *context);
 int mrail_ep_open(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep_fid, void *context);
 
