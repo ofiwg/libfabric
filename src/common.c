@@ -735,9 +735,9 @@ int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)
 	return cpuinfo[reg] & bit;
 }
 
-/* split the given string "s" using the specified delimiter(s) in the string
- * "delim" and return an array of strings.  The array is terminated with a NULL
- * pointer.  You can clean this array up with a call to free_string_array().
+/* Split the given string "s" using the specified delimiter(s) in the string
+ * "delim" and return an array of strings. The array is terminated with a NULL
+ * pointer. Returned array should be freed with ofi_free_string_array().
  *
  * Returns NULL on failure.
  */
