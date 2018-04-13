@@ -390,7 +390,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	struct util_cmap *cmap = NULL;
 	void *name;
 	size_t len;
-	int ret;
+	int ret, lazy_conn = 1;
 
 	len = rxm_ep->msg_info->src_addrlen;
 	name = calloc(1, len);
@@ -408,9 +408,12 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 			"Unable to fi_getname on msg_ep\n");
 		goto fn;
 	}
+
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
+	fi_param_get_bool(&rxm_prov, "lazy_conn", &lazy_conn);
 
 	attr.name		= name;
+	attr.lazy_conn		= lazy_conn;
 	attr.alloc 		= rxm_conn_alloc;
 	attr.close 		= rxm_conn_close;
 	attr.free 		= rxm_conn_free;
