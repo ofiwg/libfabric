@@ -73,6 +73,7 @@ static int mrail_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 	case FI_CLASS_EQ:
+		ret = -FI_ENOSYS;
 		break;
 	default:
 		FI_WARN(&mrail_prov, FI_LOG_EP_CTRL, "invalid fid class\n");
@@ -94,7 +95,7 @@ static int mrail_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!mrail_ep->util_ep.rx_cq || !mrail_ep->util_ep.tx_cq)
 			return -FI_ENOCQ;
 		if (!mrail_ep->util_ep.av)
-			return -FI_EOPBADSTATE;
+			return -FI_ENOAV;
 		break;
 	default:
 		return -FI_ENOSYS;
