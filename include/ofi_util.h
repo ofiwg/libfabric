@@ -498,6 +498,7 @@ typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 
 struct util_cmap_attr {
 	void 				*name;
+	int				lazy_conn;
 	ofi_cmap_alloc_handle_func 	alloc;
 	ofi_cmap_handle_func 		close;
 	ofi_cmap_handle_func 		free;

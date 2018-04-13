@@ -321,6 +321,31 @@ out:
 	return ret;
 }
 
+static int util_cmap_del_handle(struct util_cmap_handle *handle);
+static inline int
+ofi_av_cmap_connect(struct util_cmap *cmap, fi_addr_t addr)
+{
+	struct util_cmap_handle *handle;
+	int ret = 0;
+
+	fastlock_acquire(&cmap->lock);
+	handle = ofi_cmap_acquire_handle(cmap, addr);
+	if (OFI_UNLIKELY(!handle)) {
+		ret = util_cmap_alloc_handle(cmap, addr, CMAP_IDLE, &handle);
+		if (OFI_UNLIKELY(ret))
+			goto fn;
+		ret = ofi_cmap_handle_connect(cmap, addr, handle);
+		if (OFI_UNLIKELY(ret && (ret != -FI_EAGAIN))) {
+			util_cmap_del_handle(handle);
+			goto fn;
+		}
+		ret = 0;
+	}
+fn:
+	fastlock_release(&cmap->lock);
+	return ret;
+}
+
 /*
  * Must hold AV lock
  */
@@ -364,8 +389,16 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 
 	dlist_foreach(&av->ep_list, av_entry) {
 		ep = container_of(av_entry, struct util_ep, av_entry);
-		if (ep->cmap)
+		if (ep->cmap) {
 			ofi_cmap_update(ep->cmap, addr, (fi_addr_t)(*index));
+			if (!ep->cmap->attr.lazy_conn) {
+				ret = ofi_av_cmap_connect(ep->cmap, (fi_addr_t)(*index));
+				if (OFI_UNLIKELY(ret)) {
+					(void)ofi_av_remove_addr(av, slot, *index);
+					return ret;
+				}
+			}
+		}
 	}
 	return 0;
 }

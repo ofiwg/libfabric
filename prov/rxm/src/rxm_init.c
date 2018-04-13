@@ -292,6 +292,9 @@ RXM_INI
 			"(default: 1) that would be read per progress "
 			"(RxM CQ read).");
 
+	fi_param_define(&rxm_prov, "lazy_conn", FI_PARAM_BOOL,
+			"Defines whether to use lazy connection or not (default: yes).");
+
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
 		return NULL;
