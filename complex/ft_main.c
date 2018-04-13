@@ -341,7 +341,7 @@ static int ft_transfer_subindex(int subindex, int *remote_idx)
 static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info)
 {
 	int ret, subindex, remote_idx = 0, result = 0, end_test = 0;
-	static int server_ready = 0;
+	int server_ready = 0;
 	struct fi_info *open_res_info;
 
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
