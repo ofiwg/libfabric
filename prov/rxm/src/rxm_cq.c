@@ -151,10 +151,11 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 			return ret;
 
 		count = match_iov[i].count;
-		offset = match_iov[i].iov[count - 1].iov_len;
 
-		i++;
 		j += count - 1;
+		offset = (((count - 1) == 0) ? offset : 0) +
+			match_iov[i].iov[count - 1].iov_len;
+		i++;
 
 		if (j >= recv_entry->rxm_iov.count)
 			break;
