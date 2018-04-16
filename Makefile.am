@@ -53,8 +53,6 @@ bin_PROGRAMS = \
 	unit/fi_av_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
-	ported/libibverbs/fi_rc_pingpong \
-	ported/librdmacm/fi_cmatose \
 	complex/fi_ubertest
 
 dist_bin_SCRIPTS = \
@@ -312,14 +310,6 @@ unit_fi_getinfo_test_SOURCES = \
 	unit/getinfo_test.c \
 	$(unit_srcs)
 unit_fi_getinfo_test_LDADD = libfabtests.la
-
-ported_libibverbs_fi_rc_pingpong_SOURCES = \
-	ported/libibverbs/rc_pingpong.c
-ported_libibverbs_fi_rc_pingpong_LDADD = libfabtests.la
-
-ported_librdmacm_fi_cmatose_SOURCES = \
-	ported/librdmacm/cmatose.c
-ported_librdmacm_fi_cmatose_LDADD = libfabtests.la
 
 complex_fi_ubertest_SOURCES = \
 	complex/fabtest.h \

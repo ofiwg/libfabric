@@ -105,7 +105,6 @@ simple_tests=(
 	"shared_ctx -e dgram --no-rx-shared-ctx"
 	"rdm_tagged_peek"
 	"scalable_ep"
-	"cmatose"
 	"rdm_shared_av"
 	"multi_mr -e msg -V"
 	"multi_mr -e rdm -V"
@@ -150,8 +149,6 @@ short_tests=(
 	"rdm_tagged_bw -I 5"
 	"rdm_tagged_bw -I 5 -v"
 	"dgram_pingpong -I 5"
-	"rc_pingpong -n 5"
-	"rc_pingpong -n 5 -e"
 )
 
 standard_tests=(
@@ -187,7 +184,6 @@ standard_tests=(
 	"rdm_tagged_bw -v"
 	"dgram_pingpong"
 	"dgram_pingpong -k"
-	"rc_pingpong"
 )
 
 unit_tests=(
