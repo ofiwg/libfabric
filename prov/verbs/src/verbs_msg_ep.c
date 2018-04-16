@@ -38,7 +38,6 @@
 #define VERBS_CM_DATA_SIZE 56
 #define VERBS_RESOLVE_TIMEOUT 2000	// ms
 
-
 static int
 fi_ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 		  void *optval, size_t *optlen)
@@ -592,7 +591,7 @@ fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	if (!desc)
 		fi_ibv_set_sge_iov_inline(wr->sg_list, iov, count, len);
 	else
-		fi_ibv_set_sge_iov(wr->sg_list, iov, count, desc, len);
+		fi_ibv_set_sge_iov_count_len(wr->sg_list, iov, count, desc, len);
 
 	wr->num_sge = count;
 	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
@@ -603,29 +602,21 @@ fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	return fi_ibv_send(ep, wr);
 }
 
-static ssize_t
+static inline ssize_t
 fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_msg_ep *ep =
 		container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
-	struct ibv_sge *sge = NULL;
 	struct ibv_recv_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 		.num_sge = msg->iov_count,
 		.next = NULL,
 	};
-	size_t i;
 	struct ibv_recv_wr *bad_wr;
 
 	assert(ep->rcq);
 
-	sge = alloca(sizeof(*sge) * msg->iov_count);
-	for (i = 0; i < msg->iov_count; i++) {
-		sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
-		sge[i].length = (uint32_t)msg->msg_iov[i].iov_len;
-		sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
-	}
-	wr.sg_list = sge;
+	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
 	return fi_ibv_handle_post(ibv_post_recv(ep->id->qp, &wr, &bad_wr));
 }
@@ -835,29 +826,21 @@ static struct fi_ops_atomic fi_ibv_srq_atomic_ops = {
 	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 
-static ssize_t
+static inline ssize_t
 fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_srq_ep *ep =
 		container_of(ep_fid, struct fi_ibv_srq_ep, ep_fid);
-	struct ibv_sge *sge = NULL;
 	struct ibv_recv_wr wr = {
+		.wr_id = (uintptr_t)msg->context,
 		.num_sge = msg->iov_count,
 		.next = NULL,
 	};
-	size_t i;
 	struct ibv_recv_wr *bad_wr;
 
 	assert(ep->srq);
 
-	wr.wr_id = (uintptr_t)msg->context;
-	sge = alloca(sizeof(*sge) * msg->iov_count);
-	for (i = 0; i < msg->iov_count; i++) {
-		sge[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
-		sge[i].length = (uint32_t)msg->msg_iov[i].iov_len;
-		sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
-	}
-	wr.sg_list = sge;
+	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
 	return fi_ibv_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
 }
@@ -1078,9 +1061,8 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **d
 		.send_flags = VERBS_COMP_READ(ep),
 		.num_sge = count,
 	};
-	size_t len = 0;
 
-	fi_ibv_set_sge_iov(wr.sg_list, iov, count, desc, len);
+	fi_ibv_set_sge_iov(wr.sg_list, iov, count, desc);
 
 	return fi_ibv_send(ep, &wr);
 }
@@ -1099,9 +1081,8 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.send_flags = VERBS_COMP_READ_FLAGS(ep, flags),
 		.num_sge = msg->iov_count,
 	};
-	size_t len = 0;
 
-	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc, len);
+	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
 	return fi_ibv_send(ep, &wr);
 }
