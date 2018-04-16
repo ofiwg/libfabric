@@ -58,8 +58,6 @@ rem	"rdm_rma -o writedata -I 5"^
 rem	"rdm_tagged_bw -I 5"^
 rem	"rdm_tagged_bw -I 5 -v"^
 rem	"dgram_pingpong -I 5"^
-rem	"rc_pingpong -n 5"^
-rem	"rc_pingpong -n 5 -e"
 
 
 set standard_tests=^
@@ -95,7 +93,6 @@ rem	"rdm_tagged_bw"^
 rem	"rdm_tagged_bw -v"^
 rem	"dgram_pingpong"^
 rem	"dgram_pingpong -k"^
-rem	"rc_pingpong"
 
 
 set test_types=unit simple short
