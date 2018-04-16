@@ -41,6 +41,7 @@
 #include "fabtest.h"
 
 static int persistent = 1;
+static int do_fork = 0;
 
 //static struct timespec start, end;
 
@@ -341,7 +342,7 @@ static int ft_transfer_subindex(int subindex, int *remote_idx)
 static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info)
 {
 	int ret, subindex, remote_idx = 0, result = 0, end_test = 0;
-	static int server_ready = 0;
+	int server_ready = 0;
 	struct fi_info *open_res_info;
 
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
@@ -567,13 +568,17 @@ static int ft_fw_server(void)
 			break;
 		}
 
-		pid = fork();
-		if (!pid) {
-			ret = ft_server_child();
-			_exit(-ret);
+		if (do_fork) {
+			pid = fork();
+			if (!pid) {
+				ret = ft_server_child();
+				_exit(-ret);
+			} else {
+				waitpid(pid, &ret, 0);
+				ret = WEXITSTATUS(ret);
+			}
 		} else {
-			waitpid(pid, &ret, 0);
-			ret = WEXITSTATUS(ret);
+			ret = ft_server_child();
 		}
 
 		results[ft_fw_result_index(ret)]++;
@@ -669,13 +674,17 @@ static int ft_fw_client(void)
 			return ret;
 		}
 
-		pid = fork();
-		if (!pid) {
-			result = ft_client_child();
-			_exit(-result);
+		if (do_fork) {
+			pid = fork();
+			if (!pid) {
+				result = ft_client_child();
+				_exit(-result);
+			} else {
+				waitpid(pid, &result, 0);
+				result = WEXITSTATUS(result);
+			}
 		} else {
-			waitpid(pid, &result, 0);
-			result = WEXITSTATUS(result);
+			result = ft_client_child();
 		}
 
 		results[ft_fw_result_index(result)]++;
@@ -731,7 +740,7 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "p:u:t:q:xy:z:h" ADDR_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "p:u:t:q:xy:z:hf" ADDR_OPTS)) != -1) {
 		switch (op) {
 		case 'u':
 			filename = strdup(optarg);
@@ -753,6 +762,9 @@ int main(int argc, char **argv)
 			break;
 		case 'z':
 			test_end_index = atoi(optarg);
+			break;
+		case 'f':
+			do_fork = 1;
 			break;
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
