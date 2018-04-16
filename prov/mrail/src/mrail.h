@@ -77,13 +77,30 @@ struct mrail_domain {
 	struct fi_info *info;
 	struct fid_domain **domains;
 	size_t num_domains;
+	size_t addrlen;
+};
+
+struct mrail_av {
+	struct util_av util_av;
+	struct fid_av **avs;
+	size_t *rail_addrlen;
+	size_t num_avs;
+	ofi_atomic32_t index;
+};
+
+struct mrail_cq {
+	struct util_cq util_cq;
+	struct fid_cq **cqs;
+	size_t num_cqs;
 };
 
 struct mrail_ep {
 	struct util_ep util_ep;
 	struct fi_info *info;
-	struct fid_ep **endpoints;
-	size_t num_endpoints;
+	struct fid_ep **eps;
+	size_t num_eps;
+	ofi_atomic32_t tx_rail;
+	ofi_atomic32_t rx_rail;
 };
 
 int mrail_get_core_info(uint32_t version, const char *node, const char *service,
@@ -95,6 +112,8 @@ int mrail_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		       struct fid_domain **domain, void *context);
 int mrail_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq_fid, void *context);
+int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		   struct fid_av **av_fid, void *context);
 int mrail_ep_open(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep_fid, void *context);
 

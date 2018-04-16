@@ -142,15 +142,16 @@ out:
 
 static struct fi_info *mrail_dupinfo(const struct fi_info *info)
 {
-	struct fi_info *dup, *head = NULL;
+	struct fi_info *dup, *fi, *head = NULL;
 
 	while (info) {
 		if (!(dup = fi_dupinfo(info)))
 			goto err;
 		if (!head)
-			head = dup;
+			head = fi = dup;
 		else
-			head->next = dup;
+			fi->next = dup;
+		fi = dup;
 		info = info->next;
 	}
 	return head;

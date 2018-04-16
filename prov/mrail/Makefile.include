@@ -6,6 +6,7 @@ _mrail_files = \
 	prov/mrail/src/mrail_domain.c	\
 	prov/mrail/src/mrail_cq.c	\
 	prov/mrail/src/mrail_ep.c	\
+	prov/mrail/src/mrail_av.c	\
 	prov/mrail/src/mrail.h
 
 if HAVE_MRAIL_DL

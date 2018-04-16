@@ -97,8 +97,7 @@ struct fi_fabric_attr mrail_fabric_attr = {
 };
 
 struct fi_info mrail_info = {
-	.caps = FI_PRIMARY_CAPS | FI_SECONDARY_CAPS,
-	.addr_format = FI_SOCKADDR,
+	.caps = ~0x0ULL,
 	.tx_attr = &mrail_tx_attr,
 	.rx_attr = &mrail_rx_attr,
 	.ep_attr = &mrail_ep_attr,

@@ -91,7 +91,7 @@ static struct fi_ops mrail_domain_fi_ops = {
 
 static struct fi_ops_domain mrail_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = fi_no_av_open,
+	.av_open = mrail_av_open,
 	.cq_open = mrail_cq_open,
 	.endpoint = mrail_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
@@ -139,6 +139,7 @@ int mrail_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		if (ret)
 			goto err;
 
+		mrail_domain->addrlen += fi->src_addrlen;
 	}
 
 	*domain = &mrail_domain->util_domain.domain_fid;
