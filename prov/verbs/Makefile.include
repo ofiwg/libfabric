@@ -4,7 +4,6 @@ _verbs_files =							\
 	prov/verbs/src/fi_verbs.c				\
 	prov/verbs/src/verbs_cm.c				\
 	prov/verbs/src/verbs_cq.c				\
-	prov/verbs/src/verbs_srq.c				\
 	prov/verbs/src/verbs_domain.c				\
 	prov/verbs/src/verbs_mr.c				\
 	prov/verbs/src/verbs_eq.c				\
