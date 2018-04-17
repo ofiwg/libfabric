@@ -197,6 +197,11 @@ struct rxm_iov {
 	uint8_t count;
 };
 
+struct rxm_rma_iov_storage {
+	struct fi_rma_iov iov[RXM_IOV_LIMIT];
+	uint8_t count;
+};
+
 enum rxm_buf_pool_type {
 	RXM_BUF_POOL_RX		= 0,
 	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
@@ -261,6 +266,7 @@ struct rxm_rma_buf {
 
 	struct fi_msg_rma msg;
 	struct rxm_iov rxm_iov;
+	struct rxm_rma_iov_storage rxm_rma_iov;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
