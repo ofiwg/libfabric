@@ -361,6 +361,13 @@ this routine.  Use of this call is required if the FI_RAW_MR mode bit has
 been set by the provider; however, it is safe to use this call with any
 memory region.
 
+On input, the key_size parameter should indicate the size of the raw_key
+buffer.  If the actual key is larger than what can fit into the buffer, it
+will return -FI_ETOOSMALL.  On output, key_size is set to the size of the
+buffer needed to store the key, which may be larger than the input value.
+The needed key_size can also be obtained through the mr_key_size domain
+attribute (fi_domain_attr) field.
+
 A raw key must be mapped by a peer before it can be used in data transfer
 operations.  See fi_mr_map_raw below.
 
