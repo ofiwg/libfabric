@@ -115,7 +115,7 @@ static int send_recv()
 	struct fi_cq_entry comp;
 	int ret;
 	int ret_count = 0;
-	int i, tx_cntr_done = 0, rx_cntr_done = 0;
+	int i, tx_cntr_val = 0, rx_cntr_val = 0;
 
 	fprintf(stdout, "Posting a send...\n");
 	ret = ft_post_tx(ep, remote_fi_addr, tx_size, NO_CQ_DATA, &tx_ctx);
@@ -123,9 +123,9 @@ static int send_recv()
 		return ret;
 
 	while (((opts.options & FT_OPT_TX_CQ) && (tx_cq_cntr < tx_seq)) ||
-	       ((opts.options & FT_OPT_TX_CNTR) && (!tx_cntr_done)) ||
+	       ((opts.options & FT_OPT_TX_CNTR) && (tx_cntr_val < tx_seq)) ||
 	       ((opts.options & FT_OPT_RX_CQ) && (rx_cq_cntr < rx_seq)) ||
-	       ((opts.options & FT_OPT_RX_CNTR) && (!rx_cntr_done))) {
+	       ((opts.options & FT_OPT_RX_CNTR) && (rx_cntr_val < rx_seq))) {
 
 		/* Poll send and recv CQs/Cntrs */
 		do {
@@ -149,26 +149,18 @@ static int send_recv()
 				rx_cq_cntr++;
 			} else if (context[i] == &txcntr) {
 				printf("Send counter poll-event\n");
-				if (tx_cntr_done) {
+				tx_cntr_val = fi_cntr_read(txcntr);
+				if (tx_cntr_val > tx_seq) {
 					printf("Invalid tx counter event\n");
 					return -1;
-				}
-
-				if (tx_seq == fi_cntr_read(txcntr)) {
-					printf("Send counter done\n");
-					tx_cntr_done = 1;
 				}
 				continue;
 			} else if (context[i] == &rxcntr) {
 				printf("Recv counter poll-event\n");
-				if (rx_cntr_done) {
+				rx_cntr_val = fi_cntr_read(rxcntr);
+				if (rx_cntr_val > rx_seq) {
 					printf("Invalid rx counter event\n");
 					return -1;
-				}
-
-				if (rx_seq == fi_cntr_read(rxcntr)) {
-					printf("Receive counter done\n");
-					rx_cntr_done = 1;
 				}
 				continue;
 			} else {
