@@ -899,13 +899,15 @@ static int fi_ibv_srq_close(fid_t fid)
 
 	srq_ep = container_of(fid, struct fi_ibv_srq_ep, ep_fid.fid);
 	ret = ibv_destroy_srq(srq_ep->srq);
-	if (ret)
+	if (ret) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Cannot destroy SRQ rc=%d\n", ret);
+		return ret;
+	}
 
 	free(srq_ep);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 static struct fi_ops fi_ibv_srq_ep_ops = {
