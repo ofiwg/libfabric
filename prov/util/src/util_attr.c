@@ -630,6 +630,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 	const struct fi_provider *prov = util_prov->prov;
 
 	if ((user_attr->type != FI_EP_UNSPEC) &&
+	    (prov_attr->type != FI_EP_UNSPEC) &&
 	    (user_attr->type != prov_attr->type)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported endpoint type\n");
 		FI_INFO_CHECK(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);

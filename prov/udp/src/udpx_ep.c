@@ -42,7 +42,7 @@ static int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 	int ret;
 
 	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
-	FI_DBG(&udpx_prov, FI_LOG_EP_CTRL, "%s\n", ofi_hex_str(addr, addrlen));
+	ofi_straddr_dbg(&udpx_prov, FI_LOG_EP_CTRL, "bind addr: ", addr);
 	ret = bind(ep->sock, addr, (socklen_t)addrlen);
 	if (ret) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "bind %d (%s)\n",
@@ -763,13 +763,11 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = ofi_endpoint_init(domain, &udpx_util_prov, info, &ep->util_ep,
 				context, udpx_ep_progress);
 	if (ret)
-		goto err;
+		goto err1;
 
 	ret = udpx_ep_init(ep, info);
-	if (ret) {
-		free(ep);
-		return ret;
-	}
+	if (ret)
+		goto err2;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &udpx_ep_fi_ops;
@@ -779,7 +777,9 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 &udpx_msg_mcast_ops : &udpx_msg_ops;
 
 	return 0;
-err:
+err2:
+	ofi_endpoint_close(&ep->util_ep);
+err1:
 	free(ep);
 	return ret;
 }

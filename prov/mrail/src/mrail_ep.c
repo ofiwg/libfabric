@@ -215,6 +215,7 @@ static int mrail_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_cntr(&mrail_ep->util_ep, cntr, flags);
 		if (ret)
 			return ret;
+		break;
 	case FI_CLASS_EQ:
 		ret = -FI_ENOSYS;
 		break;

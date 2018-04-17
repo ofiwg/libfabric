@@ -430,6 +430,8 @@ static int ofi_str_to_sin(const char *str, void **addr, size_t *len)
 	if (ret == 1)
 		goto match_ip;
 
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Malformed FI_ADDR_STR: %s\n", str);
 err:
 	free(sin);
 	return -FI_EINVAL;
@@ -437,8 +439,11 @@ err:
 match_ip:
 	ip[sizeof(ip) - 1] = '\0';
 	ret = inet_pton(AF_INET, ip, &sin->sin_addr);
-	if (ret != 1)
+	if (ret != 1) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Unable to convert IPv4 address: %s\n", ip);
 		goto err;
+	}
 
 match_port:
 	sin->sin_port = htons(sin->sin_port);
@@ -470,6 +475,8 @@ static int ofi_str_to_sin6(const char *str, void **addr, size_t *len)
 	if (ret == 1)
 		goto match_ip;
 
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Malformed FI_ADDR_STR: %s\n", str);
 err:
 	free(sin6);
 	return -FI_EINVAL;
@@ -477,8 +484,11 @@ err:
 match_ip:
 	ip[sizeof(ip) - 1] = '\0';
 	ret = inet_pton(AF_INET6, ip, &sin6->sin6_addr);
-	if (ret != 1)
+	if (ret != 1) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Unable to convert IPv6 address: %s\n", ip);
 		goto err;
+	}
 
 match_port:
 	sin6->sin6_port = htons(sin6->sin6_port);
