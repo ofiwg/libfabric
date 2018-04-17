@@ -64,7 +64,7 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 	struct mrail_domain *mrail_domain;
 	struct mrail_av *mrail_av;
 	fi_addr_t *rail_fi_addr;
-	size_t i, j, offset;
+	size_t i, j, offset, num_inserted = 0;
 	int ret, index;
 
 	mrail_av = container_of(av_fid, struct mrail_av, util_av.av_fid);
@@ -90,8 +90,10 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 			ret = fi_av_insert(mrail_av->avs[j],
 					   (char *)addr + offset, 1,
 					   &rail_fi_addr[j], flags, NULL);
-			if (ret != 1)
+			if (ret != 1) {
+				free(rail_fi_addr);
 				return ret;
+			}
 			offset += mrail_av->rail_addrlen[j];
 		}
 		ret = ofi_av_insert_addr(&mrail_av->util_av, rail_fi_addr,
@@ -103,11 +105,13 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
 			} else {
 				fi_addr[i] = index;
+				num_inserted++;
 			}
 		}
 	}
 
-	return count;
+	free(rail_fi_addr);
+	return num_inserted;
 }
 
 static struct fi_ops_av mrail_av_ops = {
@@ -190,6 +194,6 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	return 0;
 err:
-	ofi_av_close(&mrail_av->util_av);
+	mrail_av_close(&mrail_av->util_av.av_fid.fid);
 	return ret;
 }
