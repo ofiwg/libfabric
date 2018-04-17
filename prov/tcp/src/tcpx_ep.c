@@ -127,7 +127,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	send_entry = tcpx_pe_entry_alloc(tcpx_cq);
 	if (!send_entry)
-		return -FI_ENOMEM;
+		return -FI_EAGAIN;
 
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 
@@ -170,7 +170,12 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	send_entry->done_len = 0;
 
 	fastlock_acquire(&tcpx_ep->queue_lock);
-	dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
+	if (dlist_empty(&tcpx_ep->tx_queue)) {
+		dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
+		process_tx_pe_entry(send_entry);
+	} else {
+		dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
+	}
 	fastlock_release(&tcpx_ep->queue_lock);
 	return FI_SUCCESS;
 }

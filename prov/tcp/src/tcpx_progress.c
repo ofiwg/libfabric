@@ -59,7 +59,7 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 			  &cm_entry, sizeof(cm_entry), 0);
 }
 
-static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
+void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
 	uint64_t total_len = ntohll(pe_entry->msg_hdr.size);
 	int ret;

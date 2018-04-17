@@ -115,6 +115,7 @@ void tcpx_progress(struct util_ep *util_ep);
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_progress_ep_add(struct tcpx_ep *ep);
 void tcpx_progress_ep_del(struct tcpx_ep *ep);
+void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry);
 
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
@@ -218,7 +219,6 @@ struct tcpx_domain {
 
 struct tcpx_cq {
 	struct util_cq		util_cq;
-	ofi_atomic64_t		cq_free_size;
 	struct util_buf_pool	*pe_entry_pool;
 };
 
