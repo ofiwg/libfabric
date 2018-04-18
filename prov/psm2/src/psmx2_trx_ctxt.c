@@ -59,8 +59,8 @@ static void *disconnect_func(void *args)
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
 		"psm2_ep: %p, epaddr: %p\n", disconn->ep, disconn->epaddr);
 
-	psm2_ep_disconnect(disconn->ep, 1, &disconn->epaddr, NULL,
-			   &errors, 5*1e9);
+	psm2_ep_disconnect2(disconn->ep, 1, &disconn->epaddr, NULL,
+			    &errors, PSM2_EP_DISCONNECT_FORCE, 0);
 	free(args);
 	return NULL;
 }
@@ -160,8 +160,8 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 
 	/* disconnect locally to avoid long delay inside psm2_ep_close() */
 	if (epaddrs && errors)
-		psm2_ep_disconnect(trx_ctxt->psm2_ep, peer_count, epaddrs, NULL,
-				   errors, 5*1e9);
+		psm2_ep_disconnect2(trx_ctxt->psm2_ep, peer_count, epaddrs, NULL,
+				    errors, PSM2_EP_DISCONNECT_FORCE, 0);
 
 	free(errors);
 	free(epaddrs);
