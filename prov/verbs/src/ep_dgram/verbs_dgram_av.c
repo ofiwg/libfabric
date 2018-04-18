@@ -34,38 +34,12 @@
 
 const size_t fi_ibv_dgram_av_entry_size = sizeof(struct fi_ibv_dgram_av_entry);
 
-static inline
-int fi_ibv_dgram_av_fi_addr_cmp(void *addr1, void *addr2)
+/* TODO: find more deterministic hash function */
+static inline int
+fi_ibv_dgram_av_slot(struct util_av *av, const struct ofi_ib_ud_ep_name *ep_name)
 {
-    return (*(int *)addr1 < *(int *)addr2) ?
-		-1 :
-		(*(int *)addr1 > *(int *)addr2);
-}
-
-/* Jenknin's one-at-a-time hash */
-static inline
-int fi_ibv_dgram_one_at_a_time_hash(const int8_t *key, size_t len)
-{
-	size_t i = 0;
-	int hash = 0;
-
-	while (i != len) {
-		hash += key[i++];
-		hash += hash << 10;
-		hash ^= hash >> 6;
-	}
-	hash += hash << 3;
-	hash ^= hash >> 11;
-	hash += hash << 15;
-
-	return hash;	
-}
-
-static inline
-int fi_ibv_dgram_av_slot(const struct fi_ibv_dgram_av_entry *av_entry)
-{
-	return fi_ibv_dgram_one_at_a_time_hash(
-			(int8_t *)av_entry, fi_ibv_dgram_av_entry_size);
+	return (ep_name->gid.global.subnet_prefix + ep_name->lid + ep_name->qpn)
+		% av->hash.slots;
 }
 
 static inline int fi_ibv_dgram_av_is_addr_valid(struct fi_ibv_dgram_av *av,
@@ -97,9 +71,8 @@ static int fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av,
 				       void *context)
 {
 	int ret, index = -1;
-	int *fi_addr_index;
 	struct fi_ibv_domain *domain;
-	struct fi_ibv_dgram_av_entry *av_entry;
+	struct ofi_ib_ud_ep_name *ep_name;
 	struct ibv_ah *ah;
 
 	domain = container_of(&av->util_av.domain->domain_fid,
@@ -111,15 +84,20 @@ static int fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av,
 	}
 
 	if (fi_ibv_dgram_av_is_addr_valid(av, addr)) {
-		struct ofi_ib_ud_ep_name *ep_name =
-			(struct ofi_ib_ud_ep_name *)addr;
+		struct fi_ibv_dgram_av_entry av_entry;
 		struct ibv_ah_attr ah_attr = {
 			.is_global     = 0,
-			.dlid          = ep_name->lid,
-			.sl            = ep_name->sl,
+			.dlid          = ((struct ofi_ib_ud_ep_name *)addr)->lid,
+			.sl            = ((struct ofi_ib_ud_ep_name *)addr)->sl,
 			.src_path_bits = 0,
 			.port_num      = 1,
 		};
+		ep_name = calloc(1, sizeof(*ep_name));
+		if (OFI_UNLIKELY(!ep_name)) {
+			ret = -FI_ENOMEM;
+			goto fn1;
+		}
+		memcpy(ep_name, addr, sizeof(*ep_name));
 		if (ep_name->gid.global.interface_id) {
 			ah_attr.is_global = 1;
 			ah_attr.grh.hop_limit = 64;
@@ -131,41 +109,19 @@ static int fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av,
 			ret = -errno;
 			VERBS_WARN(FI_LOG_AV, "Unable to create "
 				   "Address Handle, errno - %d\n", errno);
-			goto fn1;
-		}
-
-		av_entry = calloc(1, sizeof(*av_entry));
-		if (!av_entry) {
-			ret = -FI_ENOMEM;
 			goto fn2;
 		}
-		av_entry->ah = ah;
-		av_entry->addr = ep_name;
 
-		ret = ofi_av_insert_addr(&av->util_av, av_entry,
-					 fi_ibv_dgram_av_slot(av_entry),
+		av_entry.ah = ah;
+		av_entry.addr = ep_name;
+
+		ret = ofi_av_insert_addr(&av->util_av, &av_entry,
+					 fi_ibv_dgram_av_slot(&av->util_av, ep_name),
 					 &index);
-		if (!ret) {
-			if (fi_addr)
-				*fi_addr = index;
-			if (rbtFind(av->addr_map, &index)) {
-				ret = -FI_EADDRINUSE;
-				goto fn3;
-			}
-
-			fi_addr_index = calloc(1, sizeof(*fi_addr_index));
-			if (!fi_addr_index) {
-				ret = -FI_ENOMEM;
-				goto fn3;
-			}
-			*fi_addr_index = index;
-			if (rbtInsert(av->addr_map, fi_addr_index, av_entry)) {
-				ret = -FI_ENOMEM;
-				goto fn4;
-			}
-		} else {
+		if (ret)
 			goto fn3;
-		}
+		if (fi_addr)
+			*fi_addr = index;
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
 		VERBS_WARN(FI_LOG_AV, "Invalid address\n");
@@ -173,12 +129,10 @@ static int fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av,
 	}
 
 	return ret;
-fn4:
-	free(fi_addr_index);
 fn3:
-	free(av_entry);
-fn2:
 	ibv_destroy_ah(ah);
+fn2:
+	free(ep_name);
 fn1:
 	if (fi_addr)
 		*fi_addr = FI_ADDR_NOTAVAIL;
@@ -230,7 +184,6 @@ static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 {
 	struct fi_ibv_dgram_av *av;
 	int ret, slot, i, index;
-	RbtIterator it;
 
 	assert(av_fid->fid.fclass == FI_CLASS_AV);
 	if (av_fid->fid.fclass != FI_CLASS_AV)
@@ -244,7 +197,9 @@ static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		return ret;
 
 	for (i = count - 1; i >= 0; i--) {
-	    struct fi_ibv_dgram_av_entry *av_entry;
+		struct fi_ibv_dgram_av_entry *av_entry;
+		struct ofi_ib_ud_ep_name *ep_name;
+
 		index = (int)fi_addr[i];
 		av_entry = ofi_av_get_addr(&av->util_av, index);
 		if (!av_entry) {
@@ -256,8 +211,8 @@ static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			VERBS_WARN(FI_LOG_AV,
 				   "AH Destroying of fi_addr %d failed "
 				   "with status - %d\n", index, ret);
-			
-		slot = fi_ibv_dgram_av_slot(av_entry);
+		ep_name = av_entry->addr;
+		slot = fi_ibv_dgram_av_slot(&av->util_av, av_entry->addr);
 		fastlock_acquire(&av->util_av.lock);
 		ret = ofi_av_remove_addr(&av->util_av, slot, index);
 		fastlock_release(&av->util_av.lock);
@@ -265,18 +220,7 @@ static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			VERBS_WARN(FI_LOG_AV,
 				   "Removal of fi_addr %d failed\n",
 				   index);
-
-		it = rbtFind(av->addr_map, &index);
-		if (it) {
-			struct fi_ibv_dgram_av_entry *av_entry_elem = NULL;
-			int *fi_addr_index;
-			rbtKeyValue(av->addr_map, it,
-				    (void **)&fi_addr_index,
-				    (void **)&av_entry_elem);
-			free(fi_addr_index);
-			free(av_entry_elem);
-			rbtErase(av->addr_map, it);
-		}
+		free(ep_name);
 	}
 	return FI_SUCCESS;
 }
@@ -316,9 +260,6 @@ static int fi_ibv_dgram_av_close(struct fid *av_fid)
 {
 	int ret;
 	struct fi_ibv_dgram_av *av;
-	RbtIterator iter;
-	fi_addr_t *fi_addr;
-	struct fi_ibv_dgram_av_entry *av_entry;
 
 	assert(av_fid->fclass == FI_CLASS_AV);
 	if (av_fid->fclass != FI_CLASS_AV)
@@ -327,15 +268,6 @@ static int fi_ibv_dgram_av_close(struct fid *av_fid)
 	av = container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid.fid);
 	if (!av)
 		return -FI_EINVAL;
-
-	for (iter = rbtBegin(av->addr_map);
-	     iter != rbtEnd(av->addr_map);
-	     iter = rbtNext(av->addr_map, iter)) {
-		rbtKeyValue(av->addr_map, iter, (void **)&fi_addr,
-			    (void **)&av_entry);
-		fi_ibv_dgram_av_remove(&av->util_av.av_fid, fi_addr,
-				       1, 0);
-	}
 
 	ret = ofi_av_close(&av->util_av);
 	if (ret)
@@ -389,9 +321,8 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	
 	struct util_av_attr util_attr = {
 		.overhead = attr->count >> 1,
-		.flags = ((domain->util_domain.info_domain_caps & FI_SOURCE) ?
-			  OFI_AV_HASH : 0),
-		.addrlen = sizeof(struct ofi_ib_ud_ep_name),
+		.flags = OFI_AV_HASH,
+		.addrlen = sizeof(struct fi_ibv_dgram_av_entry),
 	};
 
 	if (attr->type == FI_AV_UNSPEC)
@@ -402,19 +333,11 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err1;
 
-	av->addr_map = rbtNew(fi_ibv_dgram_av_fi_addr_cmp);
-	if (!av->addr_map) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-
 	*av_fid = &av->util_av.av_fid;
 	(*av_fid)->fid.ops = &fi_ibv_dgram_fi_ops;
 	(*av_fid)->ops = &fi_ibv_dgram_av_ops;
 
 	return FI_SUCCESS;
-err2:
-	(void) ofi_av_close(&av->util_av);
 err1:
 	free(av);
 	return ret;

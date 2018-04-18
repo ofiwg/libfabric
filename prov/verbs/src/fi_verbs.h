@@ -177,7 +177,7 @@ struct verbs_addr {
  * - GRH (Global Route Header) - Network Layer:
  *   - GID - destination Global Identifier
  * - BTH (Base Transport Header) - Transport Layer:
- *   - QPN - destination Queue Oair number
+ *   - QPN - destination Queue Pair number
  *   - P_key - Partition Key
  *
  * Note: DON'T change the placement of the fields in the structure.

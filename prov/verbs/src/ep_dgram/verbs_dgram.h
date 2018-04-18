@@ -197,7 +197,6 @@ struct fi_ibv_dgram_cq {
 
 struct fi_ibv_dgram_av {
 	struct util_av	util_av;
-	RbtHandle	addr_map;
 };
 
 struct fi_ibv_dgram_eq {
@@ -245,20 +244,8 @@ fi_ibv_dgram_handle_post(ssize_t ret, struct fi_ibv_dgram_wr_entry *wr_entry,
 static inline struct fi_ibv_dgram_av_entry*
 fi_ibv_dgram_av_lookup_av_entry(struct fi_ibv_dgram_av *av, int index)
 {
-	struct fi_ibv_dgram_av_entry *av_entry;
-
-	if (index < 0 || (size_t)index > av->util_av.count) {
-		VERBS_DBG(FI_LOG_AV, "Unknown address\n");
-		return NULL;
-	}
-
-	av_entry = ofi_av_get_addr(&av->util_av, index);
-	if (!av_entry) {
-		VERBS_DBG(FI_LOG_AV, "Unable to find address\n");
-		return NULL;
-	}
-
-	return av_entry;
+	assert((index >= 0) && ((size_t)index < av->util_av.count));
+	return ofi_av_get_addr(&av->util_av, index);
 }
 
 static inline
