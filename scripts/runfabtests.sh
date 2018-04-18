@@ -56,6 +56,7 @@ declare COMPLEX_CFG
 declare TIMEOUT_VAL="90"
 declare STRICT_MODE=0
 declare REGEX=0
+declare FORK=0
 
 declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
 declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
@@ -423,12 +424,18 @@ function complex_test {
 
 	start_time=$(date '+%s')
 
-	s_cmd="${BIN_PATH}${test_exe} -x"
+	if [[ $FORK -eq 1 ]]; then
+		opts="-f"
+	else
+		opts=""
+	fi
+
+	s_cmd="${BIN_PATH}${test_exe} -x $opts"
 	FI_LOG_LEVEL=error ${SERVER_CMD} "$s_cmd" &> $s_outp &
 	p1=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -p \"${PROV}\" -t $config $S_INTERFACE"
+	c_cmd="${BIN_PATH}${test_exe} -p \"${PROV}\" -t $config $S_INTERFACE $opts"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "$c_cmd" &> $c_outp &
 	p2=$!
 
@@ -582,7 +589,7 @@ function usage {
 	exit 1
 }
 
-while getopts ":vt:p:g:e:f:c:s:u:T:NRS" opt; do
+while getopts ":vt:p:g:e:f:c:s:u:T:NRSk" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -609,6 +616,8 @@ case ${opt} in
 	R) REGEX=1
 	;;
 	S) STRICT_MODE=1
+	;;
+	k) FORK=1
 	;;
 	:|\?) usage
 	;;
