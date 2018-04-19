@@ -124,8 +124,9 @@ int mrail_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	mrail_domain = container_of(domain, struct mrail_domain,
 				    util_domain.domain_fid);
 
-	if (!(mrail_cq->cqs = calloc(mrail_domain->num_domains,
-				     sizeof(*mrail_cq->cqs))))
+	mrail_cq->cqs = calloc(mrail_domain->num_domains,
+			       sizeof(*mrail_cq->cqs));
+	if (!mrail_cq->cqs)
 		goto err;
 
 	mrail_cq->num_cqs = mrail_domain->num_domains;
