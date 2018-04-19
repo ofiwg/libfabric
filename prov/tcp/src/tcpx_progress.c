@@ -42,7 +42,24 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
-static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
+int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
+{
+	struct fi_eq_cm_entry cm_entry = {0};
+
+	fastlock_acquire(&ep->cm_state_lock);
+	if (ep->cm_state == TCPX_EP_SHUTDOWN) {
+		fastlock_release(&ep->cm_state_lock);
+		return FI_SUCCESS;
+	}
+	ep->cm_state = TCPX_EP_SHUTDOWN;
+	fastlock_release(&ep->cm_state_lock);
+
+	cm_entry.fid = fid;
+	return fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
+			  &cm_entry, sizeof(cm_entry), 0);
+}
+
+void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
 	uint64_t total_len = ntohll(pe_entry->msg_hdr.size);
 	int ret;
@@ -53,17 +70,21 @@ static void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		tcpx_cq_report_completion(pe_entry->ep->util_ep.tx_cq,
-					  pe_entry, ret);
-		tcpx_pe_entry_release(pe_entry);
-		return;
+		goto err;
 	}
 
-	if (pe_entry->done_len == total_len) {
-		tcpx_cq_report_completion(pe_entry->ep->util_ep.tx_cq,
-					  pe_entry, 0);
-		tcpx_pe_entry_release(pe_entry);
+	if (pe_entry->done_len == total_len)
+		goto done;
+	return;
+err:
+	if (ret == -FI_ENOTCONN) {
+		tcpx_ep_shutdown_report(pe_entry->ep,
+					&pe_entry->ep->util_ep.ep_fid.fid);
 	}
+done:
+	tcpx_cq_report_completion(pe_entry->ep->util_ep.tx_cq,
+				  pe_entry, ret);
+	tcpx_pe_entry_release(pe_entry);
 }
 
 static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
@@ -76,18 +97,22 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
-		tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
-					  pe_entry, ret);
-		tcpx_pe_entry_release(pe_entry);
-		return;
+		goto err;
 	}
 
 	if (pe_entry->done_len &&
-	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.size)) {
-		tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
-					  pe_entry, 0);
-		tcpx_pe_entry_release(pe_entry);
+	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.size))
+		goto done;
+	return;
+err:
+	if (ret == -FI_ENOTCONN) {
+		tcpx_ep_shutdown_report(pe_entry->ep,
+					&pe_entry->ep->util_ep.ep_fid.fid);
 	}
+done:
+	tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
+				  pe_entry, ret);
+	tcpx_pe_entry_release(pe_entry);
 }
 
 static void process_rx_queue(struct tcpx_ep *ep)
@@ -128,4 +153,35 @@ void tcpx_progress(struct util_ep *util_ep)
 	process_tx_queue(ep);
 	fastlock_release(&ep->queue_lock);
 	return;
+}
+
+static int tcpx_try_func(void *util_ep)
+{
+	/* nothing to do here. When endpoints
+	 have incoming data, cq drives progress*/
+	return FI_SUCCESS;
+}
+
+int tcpx_progress_ep_add(struct tcpx_ep *ep)
+{
+	if (!ep->util_ep.rx_cq->wait)
+		return FI_SUCCESS;
+
+	return ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
+			       ep->conn_fd, tcpx_try_func,
+			       (void *)&ep->util_ep, NULL);
+}
+
+void tcpx_progress_ep_del(struct tcpx_ep *ep)
+{
+	fastlock_acquire(&ep->cm_state_lock);
+	if (ep->cm_state == TCPX_EP_CONNECTING) {
+		goto out;
+	}
+
+	if (ep->util_ep.rx_cq->wait) {
+		ofi_wait_fd_del(ep->util_ep.rx_cq->wait, ep->conn_fd);
+	}
+out:
+	fastlock_release(&ep->cm_state_lock);
 }

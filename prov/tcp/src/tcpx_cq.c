@@ -57,10 +57,17 @@ struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *tcpx_cq)
 	struct tcpx_pe_entry *pe_entry;
 
 	fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
+
+	/* optimization: don't allocate queue_entry when cq is full */
+	if (ofi_cirque_isfull(tcpx_cq->util_cq.cirq)) {
+		fastlock_release(&tcpx_cq->util_cq.cq_lock);
+		return NULL;
+	}
+
 	pe_entry = util_buf_alloc(tcpx_cq->pe_entry_pool);
 	if (!pe_entry) {
 		fastlock_release(&tcpx_cq->util_cq.cq_lock);
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
+		FI_INFO(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
 		return NULL;
 	}
 	memset(pe_entry, 0, sizeof(*pe_entry));
@@ -89,7 +96,6 @@ void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 
 	fastlock_acquire(&cq->cq_lock);
 	dlist_remove(&pe_entry->entry);
-	memset(pe_entry, 0, sizeof(*pe_entry));
 	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
 	fastlock_release(&cq->cq_lock);
 }
@@ -99,6 +105,9 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 			       int err)
 {
 	struct fi_cq_err_entry err_entry;
+
+	if (pe_entry->flags & TCPX_NO_COMPLETION)
+		return;
 
 	if (err) {
 		err_entry.op_context = pe_entry->context;
@@ -167,9 +176,6 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	if (!attr->size)
 		attr->size = TCPX_DEF_CQ_SIZE;
-
-	ofi_atomic_initialize64(&tcpx_cq->cq_free_size,
-				attr->size);
 
 	ret =  util_buf_pool_create(&tcpx_cq->pe_entry_pool,
 				    sizeof(struct tcpx_pe_entry),
