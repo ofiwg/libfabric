@@ -40,7 +40,7 @@
 
 static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
-	if (user_format == FI_FORMAT_UNSPEC)
+	if (user_format == FI_FORMAT_UNSPEC || prov_format == FI_FORMAT_UNSPEC)
 		return 1;
 
 	switch (prov_format) {
@@ -993,6 +993,8 @@ int ofi_check_info(const struct util_prov *util_prov,
 	if (!fi_valid_addr_format(prov_info->addr_format,
 				  user_info->addr_format)) {
 		FI_INFO(prov, FI_LOG_CORE, "address format not supported\n");
+		FI_INFO_CHECK(prov, prov_info, user_info, addr_format,
+			      FI_TYPE_ADDR_FORMAT);
 		return -FI_ENODATA;
 	}
 
