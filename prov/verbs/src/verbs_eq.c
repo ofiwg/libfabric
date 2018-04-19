@@ -61,7 +61,6 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	if (!_eq->err.err)
 		return 0;
 
-	
 	api_version = _eq->fab->util_fabric.fabric_fid.api_version;
 
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
@@ -197,7 +196,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	case RDMA_CM_EVENT_ROUTE_ERROR:
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
-		eq->err.err = cma_event->status;
+		eq->err.err = -cma_event->status;
 		goto err;
 	case RDMA_CM_EVENT_REJECTED:
 		eq->err.err = ECONNREFUSED;
