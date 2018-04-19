@@ -60,8 +60,9 @@
 #define RXM_MAJOR_VERSION 1
 #define RXM_MINOR_VERSION 0
 
-#define RXM_BUF_SIZE 16384
-#define RXM_IOV_LIMIT 4
+#define RXM_BUF_SIZE		16384
+#define RXM_DIRECT_COPY_THR	262144
+#define RXM_IOV_LIMIT		4
 
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
 #define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
@@ -155,16 +156,17 @@ struct rxm_rma_iov {
  */
 
 /* RXM protocol states / tx/rx context */
-#define RXM_PROTO_STATES(FUNC)	\
-	FUNC(RXM_TX_NOBUF),	\
-	FUNC(RXM_TX),		\
-	FUNC(RXM_TX_RMA),	\
-	FUNC(RXM_RX),		\
-	FUNC(RXM_LMT_TX),	\
-	FUNC(RXM_LMT_ACK_WAIT),	\
-	FUNC(RXM_LMT_READ),	\
-	FUNC(RXM_LMT_ACK_SENT), \
-	FUNC(RXM_LMT_ACK_RECVD),\
+#define RXM_PROTO_STATES(FUNC)		\
+	FUNC(RXM_TX_NOBUF),		\
+	FUNC(RXM_TX),			\
+	FUNC(RXM_TX_RMA),		\
+	FUNC(RXM_RX),			\
+	FUNC(RXM_SEG_TX),		\
+	FUNC(RXM_LMT_TX),		\
+	FUNC(RXM_LMT_ACK_WAIT),		\
+	FUNC(RXM_LMT_READ),		\
+	FUNC(RXM_LMT_ACK_SENT),		\
+	FUNC(RXM_LMT_ACK_RECVD),	\
 	FUNC(RXM_LMT_FINISH),
 
 enum rxm_proto_state {
@@ -256,6 +258,9 @@ struct rxm_tx_buf {
 
 	enum rxm_buf_pool_type type;
 
+	/* Used for sequentila transfer of data */
+	struct dlist_entry in_flight_entry;
+
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
@@ -294,6 +299,14 @@ struct rxm_tx_entry {
 	/* Used for large messages and RMA */
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	struct rxm_rx_buf *rx_buf;
+
+	/* Used for sequential transfer of data */
+	size_t seg_num;
+	uint64_t msg_id;
+	uint8_t save_type;
+	struct dlist_entry in_flight_tx_buf_list;
+	struct rxm_iov rxm_iov;
+	uint64_t iov_offset;
 };
 DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
 
@@ -307,7 +320,14 @@ struct rxm_recv_entry {
 	uint64_t ignore;
 	uint64_t comp_flags;
 	size_t total_len;
+	struct rxm_recv_queue *recv_queue;
 	void *multi_recv_buf;
+
+	/* Used for sequetila receive of data */
+	size_t total_recv_len;
+	uint64_t msg_id;
+	RbtIterator rbt_iter;
+	size_t last_recv_seg_num;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
@@ -354,6 +374,7 @@ struct rxm_ep {
 	int			msg_mr_local;
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
+	size_t			direct_copy_thr;
 
 	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
 
@@ -363,6 +384,7 @@ struct rxm_ep {
 	struct rxm_send_queue	send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+	RbtHandle		seg_recv_entry_map;
 
 	ofi_fastlock_acquire_t	res_fastlock_acquire;
 	ofi_fastlock_release_t	res_fastlock_release;
@@ -473,6 +495,39 @@ static inline void rxm_cntr_incerr(struct util_cntr *cntr)
 	if (cntr)
 		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 }
+
+#if ENABLE_DEBUG
+static inline void rxm_cq_log_comp(uint64_t flags)
+{
+	flags &= (FI_SEND | FI_WRITE | FI_READ | FI_REMOTE_READ |
+		  FI_REMOTE_WRITE);
+
+	switch (flags) {
+	case FI_SEND:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting send completion\n");
+		break;
+	case FI_WRITE:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting write completion\n");
+		break;
+	case FI_READ:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting read completion\n");
+		break;
+	case FI_REMOTE_READ:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote read completion\n");
+		break;
+	case FI_REMOTE_WRITE:
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote write completion\n");
+		break;
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown completion\n");
+	}
+}
+#else
+static inline void rxm_cq_log_comp(uint64_t flags)
+{
+	// NOP
+}
+#endif
 
 /* Caller must hold recv_queue->lock */
 static inline struct rxm_rx_buf *
@@ -637,3 +692,30 @@ rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 
 RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
+
+static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
+{
+	int ret;
+
+	if (tx_entry->flags & FI_COMPLETION) {
+		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
+				   tx_entry->context, tx_entry->comp_flags, 0,
+				   NULL, 0, 0);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Unable to report completion\n");
+			return ret;
+		}
+		rxm_cq_log_comp(tx_entry->comp_flags);
+	}
+	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		if (tx_entry->comp_flags & FI_SEND)
+			rxm_cntr_inc(tx_entry->ep->util_ep.tx_cntr);
+		else if (tx_entry->comp_flags & FI_WRITE)
+			rxm_cntr_inc(tx_entry->ep->util_ep.wr_cntr);
+		else
+			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
+	}
+	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
+	return 0;
+}

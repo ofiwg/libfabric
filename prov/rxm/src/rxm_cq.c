@@ -61,39 +61,6 @@ static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
-#if ENABLE_DEBUG
-static void rxm_cq_log_comp(uint64_t flags)
-{
-	flags &= (FI_SEND | FI_WRITE | FI_READ | FI_REMOTE_READ |
-		  FI_REMOTE_WRITE);
-
-	switch (flags) {
-	case FI_SEND:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting send completion\n");
-		break;
-	case FI_WRITE:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting write completion\n");
-		break;
-	case FI_READ:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting read completion\n");
-		break;
-	case FI_REMOTE_READ:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote read completion\n");
-		break;
-	case FI_REMOTE_WRITE:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote write completion\n");
-		break;
-	default:
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown completion\n");
-	}
-}
-#else
-static void rxm_cq_log_comp(uint64_t flags)
-{
-	// NOP
-}
-#endif
-
 /* Get a match_iov derived from iov whose size matches given length */
 static int rxm_match_iov(const struct iovec *iov, void **desc,
 			 uint8_t count, uint64_t offset, size_t match_len,
@@ -235,7 +202,8 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 				return ret;
 			}
 			/* Since buffer is elapsed, release recv_entry */
-			rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
+			rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
+					       rx_buf->recv_entry);
 			return ret;
 		}
 
@@ -253,45 +221,41 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
-		return rxm_process_recv_entry(&rx_buf->ep->recv_queue, rx_buf->recv_entry);
+		return rxm_process_recv_entry(rx_buf->recv_entry->recv_queue,
+					      rx_buf->recv_entry);
 	} else {
-		rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
+	    rxm_recv_entry_release(rx_buf->recv_entry->recv_queue, rx_buf->recv_entry);
 	}
 
 	return FI_SUCCESS;
 }
 
-static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
-{
-	int ret;
-
-	if (tx_entry->flags & FI_COMPLETION) {
-		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
-				   tx_entry->context, tx_entry->comp_flags, 0,
-				   NULL, 0, 0);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to report completion\n");
-			return ret;
-		}
-		rxm_cq_log_comp(tx_entry->comp_flags);
-	}
-	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		if (tx_entry->comp_flags & FI_SEND)
-			rxm_cntr_inc(tx_entry->ep->util_ep.tx_cntr);
-		else if (tx_entry->comp_flags & FI_WRITE)
-			rxm_cntr_inc(tx_entry->ep->util_ep.wr_cntr);
-		else
-			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
-	}
-	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
-	return 0;
-}
-
-static int rxm_finish_send(struct rxm_tx_entry *tx_entry)
+static inline int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 {
 	rxm_tx_buf_release(tx_entry->ep, tx_entry->tx_buf);
 	return rxm_finish_send_nobuf(tx_entry);
+}
+
+static int rxm_match_nope(struct dlist_entry *item, const void *arg)
+{
+	OFI_UNUSED(item);
+	OFI_UNUSED(arg);
+	return 1;
+}
+
+static inline int rxm_finish_seg_send(struct rxm_tx_entry *tx_entry)
+{
+	struct dlist_entry *entry =
+		dlist_remove_first_match(&tx_entry->in_flight_tx_buf_list,
+					 rxm_match_nope, NULL);
+	struct rxm_tx_buf *tx_buf = container_of(entry, struct rxm_tx_buf,
+						 in_flight_entry);
+
+	tx_buf->pkt.ctrl_hdr.type = tx_entry->save_type;
+	rxm_tx_buf_release(tx_entry->ep, tx_buf);
+	if (!--tx_entry->seg_num)
+		return rxm_finish_send_nobuf(tx_entry);
+	return FI_SUCCESS;
 }
 
 static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
@@ -362,49 +326,92 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 {
 	size_t i;
 	int ret;
+	uint64_t done_len;
 
-	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) {
-		if (!rx_buf->conn) {
-			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
-			if (OFI_UNLIKELY(!rx_buf->conn))
-				return -FI_EOTHER;
-		}
-
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-		       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
-		       rx_buf->pkt.ctrl_hdr.msg_id);
-
-		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
-		rx_buf->index = 0;
-
-		if (!rx_buf->ep->rxm_mr_local) {
-			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
-						 rx_buf->recv_entry->rxm_iov.count, FI_READ,
-						 rx_buf->mr);
-			if (ret)
-				return ret;
-
-			for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
-				rx_buf->recv_entry->rxm_iov.desc[i] =
-					fi_mr_desc(rx_buf->mr[i]);
-		} else {
-			for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
-				rx_buf->recv_entry->rxm_iov.desc[i] =
-					fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
-		}
-
-		/* Ignore the case when the posted recv buffer is not large enough,
-		 * FI_TRUNC error will be generated to user at the end */
-		rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov, rx_buf->match_iov);
-		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
-		rx_buf->hdr.state = RXM_LMT_READ;
-		return rxm_lmt_rma_read(rx_buf);
-	} else {
-		uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-						    rx_buf->recv_entry->rxm_iov.count,
-						    0, rx_buf->pkt.data,
-						    rx_buf->pkt.hdr.size);
+	if (OFI_LIKELY(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data)) {
+		done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
+					   rx_buf->recv_entry->rxm_iov.count,
+					   0, rx_buf->pkt.data,
+					   rx_buf->pkt.hdr.size);
 		return rxm_finish_recv(rx_buf, done_len);
+	} else {
+		switch (rx_buf->pkt.ctrl_hdr.type) {
+		case ofi_ctrl_large_data:
+			if (!rx_buf->conn) {
+				rx_buf->conn =
+					rxm_key2conn(rx_buf->ep,
+						     rx_buf->pkt.ctrl_hdr.conn_id);
+				if (OFI_UNLIKELY(!rx_buf->conn))
+					return -FI_EOTHER;
+			}
+
+			FI_DBG(&rxm_prov, FI_LOG_CQ,
+			       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
+			       rx_buf->pkt.ctrl_hdr.msg_id);
+
+			rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
+			rx_buf->index = 0;
+
+			if (!rx_buf->ep->rxm_mr_local) {
+				ret = rxm_ep_msg_mr_regv(rx_buf->ep,
+							 rx_buf->recv_entry->rxm_iov.iov,
+							 rx_buf->recv_entry->rxm_iov.count,
+							 FI_READ, rx_buf->mr);
+				if (ret)
+					return ret;
+
+				for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
+					rx_buf->recv_entry->rxm_iov.desc[i] =
+						fi_mr_desc(rx_buf->mr[i]);
+			} else {
+				for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
+					rx_buf->recv_entry->rxm_iov.desc[i] =
+						fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
+			}
+
+			/* Ignore the case when the posted recv buffer is not large enough,
+			 * FI_TRUNC error will be generated to user at the end */
+			rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov, rx_buf->match_iov);
+			RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
+			rx_buf->hdr.state = RXM_LMT_READ;
+			return rxm_lmt_rma_read(rx_buf);
+		case ofi_ctrl_seg_data:
+			done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
+						   rx_buf->recv_entry->rxm_iov.count,
+						   0, rx_buf->pkt.data,
+						   rx_buf->pkt.ctrl_hdr.seg_size);
+			rx_buf->recv_entry->total_recv_len += done_len;
+
+			if ((rx_buf->pkt.ctrl_hdr.seg_no) &&
+			    (done_len == rx_buf->pkt.ctrl_hdr.seg_size)) {
+				rx_buf->recv_entry->last_recv_seg_num =
+							rx_buf->pkt.ctrl_hdr.seg_no;
+				if (rx_buf->recv_entry->msg_id == UINT64_MAX) {
+					rx_buf->recv_entry->msg_id =
+							rx_buf->pkt.ctrl_hdr.msg_id;
+					if (rbtInsert(rx_buf->ep->seg_recv_entry_map,
+						      &rx_buf->recv_entry->msg_id,
+						      rx_buf->recv_entry))
+						goto fn;
+				}
+
+				/* The RX buffer can be reposted for further re-use */
+				rx_buf->recv_entry = NULL;
+				dlist_insert_tail(&rx_buf->repost_entry,
+						  &rx_buf->ep->repost_ready_list);
+				return FI_SUCCESS;
+			}
+			rbtErase(rx_buf->ep->seg_recv_entry_map,
+				 rx_buf->recv_entry->rbt_iter);
+fn:
+			/* Mark rxm_recv_entry::msg_id as unknown for futher re-use */
+			rx_buf->recv_entry->msg_id = UINT64_MAX;
+			return rxm_finish_recv(rx_buf,
+					       rx_buf->recv_entry->total_recv_len);
+		default:
+			assert(0);
+			return -FI_EOTHER;
+		}
 	}
 }
 
@@ -463,6 +470,7 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	rx_buf->ep->res_fastlock_release(&rx_buf->recv_queue->lock);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
+	rx_buf->recv_entry->recv_queue = rx_buf->recv_queue;
 	return rxm_cq_handle_data(rx_buf);
 }
 
@@ -563,6 +571,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 {
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 	struct rxm_tx_entry *tx_entry = comp->op_context;
+	RbtIterator iter;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -578,6 +587,9 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_TX:
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_send(tx_entry);
+	case RXM_SEG_TX:
+		assert(comp->flags & FI_SEND);
+		return rxm_finish_seg_send(tx_entry);
 	case RXM_TX_RMA:
 		assert(comp->flags & (FI_WRITE | FI_READ));
 		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
@@ -589,10 +601,21 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
 		       (rx_buf->pkt.ctrl_hdr.version == OFI_CTRL_VERSION));
 
-		if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack)
+		if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack) {
 			return rxm_lmt_handle_ack(rx_buf);
-		else
-			return rxm_handle_recv_comp(rx_buf);
+		} else if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) {
+			iter = rbtFind(rx_buf->ep->seg_recv_entry_map,
+				       &rx_buf->pkt.ctrl_hdr.msg_id);
+			if (!iter)
+				goto handle;
+			rbtKeyValue(rx_buf->ep->seg_recv_entry_map, iter,
+				    (void **) &rx_buf->pkt.ctrl_hdr.msg_id,
+				    (void **) &rx_buf->recv_entry);
+			rx_buf->recv_entry->rbt_iter = iter;
+			return rxm_cq_handle_data(rx_buf);
+		}
+handle:
+		return rxm_handle_recv_comp(rx_buf);
 	case RXM_LMT_TX:
 		assert(comp->flags & FI_SEND);
 		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_WAIT);
