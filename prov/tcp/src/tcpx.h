@@ -117,6 +117,12 @@ int tcpx_progress_ep_add(struct tcpx_ep *ep);
 void tcpx_progress_ep_del(struct tcpx_ep *ep);
 void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry);
 
+enum tcpx_pep_state{
+	TCPX_PEP_CREATED,
+	TCPX_PEP_LISTENING,
+	TCPX_PEP_CLOSED,
+};
+
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
 	TCPX_OP_MSG_RECV,
@@ -166,6 +172,9 @@ struct tcpx_pep {
 	struct fi_info		info;
 	SOCKET			sock;
 	struct poll_fd_info	poll_info;
+	/* protected by poll mgr lock
+	   as pep state transitions happen in poll mgr*/
+	enum tcpx_pep_state	state;
 };
 
 enum tcpx_cm_state {
