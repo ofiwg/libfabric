@@ -360,8 +360,8 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		return ret;
 	}
 
-	if (!(mrail_ep->eps = calloc(mrail_ep->num_eps,
-				     sizeof(*mrail_ep->eps)))) {
+	mrail_ep->eps = calloc(mrail_ep->num_eps, sizeof(*mrail_ep->eps));
+	if (!mrail_ep->eps) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}

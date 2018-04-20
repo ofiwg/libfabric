@@ -79,7 +79,8 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 	 *         ADDR2: ADDR1_RAIL2:ADDR2_RAIL2
 	*/
 
-	if (!(rail_fi_addr = calloc(mrail_av->num_avs, sizeof(*rail_fi_addr))))
+	rail_fi_addr = calloc(mrail_av->num_avs, sizeof(*rail_fi_addr));
+	if (!rail_fi_addr)
 		return -FI_ENOMEM;
 
 	for (i = 0; i < count; i++) {
@@ -165,14 +166,15 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return ret;
 	}
 
-	if (!(mrail_av->avs = calloc(mrail_av->num_avs,
-				     sizeof(*mrail_av->avs)))) {
+	mrail_av->avs = calloc(mrail_av->num_avs, sizeof(*mrail_av->avs));
+	if (!mrail_av->avs) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	if (!(mrail_av->rail_addrlen = calloc(mrail_av->num_avs,
-					      sizeof(*mrail_av->rail_addrlen)))) {
+	mrail_av->rail_addrlen = calloc(mrail_av->num_avs,
+					sizeof(*mrail_av->rail_addrlen));
+	if (!mrail_av->rail_addrlen) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}

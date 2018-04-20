@@ -127,8 +127,9 @@ int mrail_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	mrail_domain->info = mrail_fabric->info;
 	mrail_domain->num_domains = mrail_fabric->num_fabrics;
 
-	if (!(mrail_domain->domains = calloc(mrail_domain->num_domains,
-					     sizeof(*mrail_domain->domains)))) {
+	mrail_domain->domains = calloc(mrail_domain->num_domains,
+				       sizeof(*mrail_domain->domains));
+	if (!mrail_domain->domains) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}

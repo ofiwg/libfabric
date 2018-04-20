@@ -61,7 +61,8 @@ static int mrail_parse_env_vars(void)
 			"OFI_MRAIL_ADDR_STRC env variable\n");
 		return ret;
 	}
-	if (!(mrail_addr_strv = mrail_split_addr_strc(addr_strc)))
+	mrail_addr_strv = mrail_split_addr_strc(addr_strc);
+	if (!mrail_addr_strv)
 		return -FI_ENOMEM;
 	return 0;
 }
@@ -81,7 +82,8 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		return -FI_ENODATA;
 	}
 
-	if (!(core_hints = fi_dupinfo(hints)))
+	core_hints = fi_dupinfo(hints);
+	if (!core_hints)
 		return -FI_ENOMEM;
 
 	if (core_hints->fabric_attr)
@@ -118,12 +120,16 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 
+		FI_DBG(&mrail_prov, FI_LOG_CORE,
+		       "--- Begin fi_getinfo for rail: %zd ---\n", i);
+
 		ret = fi_getinfo(version, node, service, flags,
 				 core_hints, &info);
+
+		FI_DBG(&mrail_prov, FI_LOG_CORE,
+		       "--- End fi_getinfo for rail: %zd ---\n", i);
 		if (ret)
 			goto err;
-
-		assert(!info->next);
 
 		if (!fi)
 			*core_info = info;
@@ -178,7 +184,8 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	if (ret)
 		return ret;
 
-	if (!(fi = fi_dupinfo(*info))) {
+	fi = fi_dupinfo(*info);
+	if (!fi) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
@@ -191,11 +198,13 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	fi->fabric_attr->prov_name = NULL;
 	fi->domain_attr->name = NULL;
 
-	if (!(fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name))) {
+	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
+	if (!fi->fabric_attr->name) {
 		ret = -FI_ENOMEM;
 		goto err2;
 	}
-	if (!(fi->domain_attr->name = strdup(mrail_info.domain_attr->name))) {
+	fi->domain_attr->name = strdup(mrail_info.domain_attr->name);
+	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
 		goto err2;
 	}
@@ -207,7 +216,8 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	fi->next = *info;
 	*info = fi;
 
-	if (!(mrail_info_vec[mrail_num_info] = mrail_dupinfo(*info)))
+	mrail_info_vec[mrail_num_info] = mrail_dupinfo(*info);
+	if (!mrail_info_vec[mrail_num_info])
 		goto err2;
 
 	mrail_num_info++;

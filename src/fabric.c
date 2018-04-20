@@ -856,8 +856,13 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 		return -FI_ENODEV;
 
 	ret = prov->provider->fabric(attr, fabric, context);
-	if (!ret && FI_VERSION_GE(prov->provider->fi_version, FI_VERSION(1, 5)))
-		(*fabric)->api_version = attr->api_version;
+	if (!ret) {
+		if (FI_VERSION_GE(prov->provider->fi_version, FI_VERSION(1, 5)))
+			(*fabric)->api_version = attr->api_version;
+		FI_INFO(&core_prov, FI_LOG_CORE, "Opened fabric: %s\n",
+			attr->name);
+	}
+
 	return ret;
 }
 CURRENT_SYMVER(fi_fabric_, fi_fabric);

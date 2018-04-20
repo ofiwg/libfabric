@@ -82,7 +82,8 @@ int mrail_fabric_open(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (!mrail_fabric)
 		return -FI_ENOMEM;
 
-	if (!(mrail_fabric->info = mrail_get_info_cached(attr->name))) {
+	mrail_fabric->info = mrail_get_info_cached(attr->name);
+	if (!mrail_fabric->info) {
 		free(mrail_fabric);
 		return -FI_EINVAL;
 	}
