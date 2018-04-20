@@ -133,6 +133,8 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 	case PASSIVE_SOCK:
 		tcpx_pep = container_of(poll_info->fid, struct tcpx_pep,
 					util_pep.pep_fid.fid);
+		if (tcpx_pep->state == TCPX_PEP_CLOSED)
+			return -FI_EINVAL;
 
 		poll_mgr->poll_fds[poll_mgr->nfds].fd = tcpx_pep->sock;
 		poll_mgr->poll_fds[poll_mgr->nfds].events = POLLIN;

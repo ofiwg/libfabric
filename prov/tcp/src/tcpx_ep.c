@@ -444,10 +444,22 @@ err:
 	return ret;
 }
 
+static int tcpx_ep_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct tcpx_ep *tcpx_ep;
+	size_t addrlen_in = *addrlen;
+
+	tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid);
+	if (getsockname(tcpx_ep->conn_fd, addr, (socklen_t *)addrlen))
+		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+
+	return FI_SUCCESS;
+}
+
 static struct fi_ops_cm tcpx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.getname = tcpx_ep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = tcpx_ep_connect,
 	.listen = fi_no_listen,
@@ -557,10 +569,44 @@ static struct fi_ops_ep tcpx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+static SOCKET create_ep_sock_from_pep_sock(SOCKET pep_sock)
+{
+	struct sockaddr_storage ss;
+	socklen_t ss_len;
+	SOCKET ep_sock;
+	int ret, af;
+
+	ss_len = sizeof(ss);
+	ret = ofi_getsockname(pep_sock, (struct sockaddr *)&ss, &ss_len);
+	if (ret)
+		return INVALID_SOCKET;
+
+	af = ss.ss_family;
+
+	ep_sock = ofi_socket(af, SOCK_STREAM, 0);
+	if (ep_sock == INVALID_SOCKET)
+		return INVALID_SOCKET;
+
+	ret = tcpx_setup_socket(ep_sock);
+	if (ret)
+		goto err;
+
+	if (bind(ep_sock, (struct sockaddr *)&ss, ss_len) != 0) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"bind failed \n");
+		goto err;
+	}
+	return ep_sock;
+err:
+	ofi_close_socket(ep_sock);
+	return INVALID_SOCKET;
+}
+
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
 	struct tcpx_ep *ep;
+	struct tcpx_pep *pep;
 	struct tcpx_conn_handle *handle;
 	int af, ret;
 
@@ -576,8 +622,24 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (info->handle) {
 		handle = container_of(info->handle, struct tcpx_conn_handle,
 				      handle);
-		ep->conn_fd = handle->conn_fd;
-		free(handle);
+
+		if (info->handle->fclass == FI_CLASS_PEP) {
+			pep = container_of(info->handle, struct tcpx_pep,
+					   util_pep.pep_fid.fid);
+
+			ep->conn_fd = create_ep_sock_from_pep_sock(pep->sock);
+			if (ep->conn_fd == INVALID_SOCKET) {
+				ret = -errno;
+				goto err2;
+			}
+		} else {
+			ep->conn_fd = handle->conn_fd;
+			free(handle);
+
+			ret = tcpx_setup_socket(ep->conn_fd);
+			if (ret)
+				goto err3;
+		}
 	} else {
 		if (info->src_addr)
 			af = ((const struct sockaddr *) info->src_addr)->sa_family;
@@ -591,10 +653,11 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			ret = -errno;
 			goto err2;
 		}
+
+		ret = tcpx_setup_socket(ep->conn_fd);
+		if (ret)
+			goto err3;
 	}
-	ret = tcpx_setup_socket(ep->conn_fd);
-	if (ret)
-		goto err3;
 
 	ret = fastlock_init(&ep->queue_lock);
 	if (ret)
@@ -637,18 +700,26 @@ static int tcpx_pep_fi_close(struct fid *fid)
 	tcpx_fabric = container_of(pep->util_pep.fabric, struct tcpx_fabric,
 				   util_fabric);
 
-	/* It's possible to close the PEP before adding completes */
+
 	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
+	if (pep->state != TCPX_PEP_LISTENING) {
+		pep->state = TCPX_PEP_CLOSED;
+		fastlock_release(&tcpx_fabric->poll_mgr.lock);
+		goto out;
+	}
+
 	pep->poll_info.flags = POLL_MGR_DEL;
 	if (pep->poll_info.entry.next == pep->poll_info.entry.prev)
-		dlist_insert_tail(&pep->poll_info.entry, &tcpx_fabric->poll_mgr.list);
-
+		dlist_insert_tail(&pep->poll_info.entry,
+				  &tcpx_fabric->poll_mgr.list);
+	pep->state = TCPX_PEP_CLOSED;
 	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
 
 	while (!(pep->poll_info.flags & POLL_MGR_ACK))
 		sleep(0);
-
+out:
+	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
 	free(pep);
 	return 0;
@@ -737,6 +808,7 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 	}
 
 	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
+	tcpx_pep->state = TCPX_PEP_LISTENING;
 	dlist_insert_tail(&tcpx_pep->poll_info.entry, &tcpx_fabric->poll_mgr.list);
 	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
@@ -850,6 +922,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->poll_info.cm_data_sz = 0;
 	dlist_init(&_pep->poll_info.entry);
 	_pep->sock = INVALID_SOCKET;
+	_pep->state = TCPX_PEP_CREATED;
 
 	*pep = &_pep->util_pep.pep_fid;
 
