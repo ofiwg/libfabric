@@ -292,6 +292,19 @@ RXM_INI
 			"(default: 1) that would be read per progress "
 			"(RxM CQ read).");
 
+	fi_param_define(&rxm_prov, "direct_copy_thr", FI_PARAM_SIZE_T,
+			"Set this environment variable to control the RxM direct-copy "
+			"protocol threshold (default: 256 Kb). "
+			"Data transfer algorithms are selected based on the "
+			"following scheme: "
+			"1) Messages shorter than or equal to <nbytes> are sent using "
+			"the eager protocol through the internal pre-registered buffers. "
+			"This approach is faster for short messages. "
+			"2) Messages larger than <nbytes> are sent using the "
+			"direct-copy protocol. It splits message to small ones and "
+			"sends them to the peer (each segment <= BUFFER_SIZE value). "
+			"This approach is faster for large messages.");
+
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
 		return NULL;
