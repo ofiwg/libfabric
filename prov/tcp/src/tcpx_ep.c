@@ -342,8 +342,8 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 
 	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
 	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
+	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	return 0;
 }
 
@@ -377,8 +377,8 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 
 	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
 	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
+	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	return 0;
 }
 
@@ -713,8 +713,8 @@ static int tcpx_pep_fi_close(struct fid *fid)
 		dlist_insert_tail(&pep->poll_info.entry,
 				  &tcpx_fabric->poll_mgr.list);
 	pep->state = TCPX_PEP_CLOSED;
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
+	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 
 	while (!(pep->poll_info.flags & POLL_MGR_ACK))
 		sleep(0);
@@ -810,8 +810,8 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
 	tcpx_pep->state = TCPX_PEP_LISTENING;
 	dlist_insert_tail(&tcpx_pep->poll_info.entry, &tcpx_fabric->poll_mgr.list);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
+	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 
 	return 0;
 }
