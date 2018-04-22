@@ -304,13 +304,16 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 	cm_entry->fid = poll_info->fid;
 	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
 
+	ret = tcpx_ep_msg_xfer_enable(ep);
+	if (ret)
+		goto err;
+
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
 				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err;
 	}
-	ret = tcpx_ep_msg_xfer_enable(ep);
 err:
 	free(cm_entry);
 	return ret;
@@ -438,13 +441,16 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 
 	cm_entry.fid =  poll_info->fid;
 
+	ret = tcpx_ep_msg_xfer_enable(ep);
+	if (ret)
+		goto err;
+
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
 				&cm_entry, sizeof(cm_entry), 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
 
-	tcpx_ep_msg_xfer_enable(ep);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
