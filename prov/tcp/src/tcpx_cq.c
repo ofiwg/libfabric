@@ -70,8 +70,8 @@ struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *tcpx_cq)
 		FI_INFO(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
 		return NULL;
 	}
-	memset(pe_entry, 0, sizeof(*pe_entry));
 	fastlock_release(&tcpx_cq->util_cq.cq_lock);
+	memset(pe_entry, 0, sizeof(*pe_entry));
 	return pe_entry;
 }
 
