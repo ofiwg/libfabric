@@ -95,7 +95,6 @@ void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 	tcpx_cq = container_of(cq, struct tcpx_cq, util_cq);
 
 	fastlock_acquire(&cq->cq_lock);
-	dlist_remove(&pe_entry->entry);
 	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
 	fastlock_release(&cq->cq_lock);
 }
