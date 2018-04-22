@@ -424,7 +424,7 @@ err1:
 static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 			       struct poll_fd_info *poll_info)
 {
-	struct fi_eq_cm_entry cm_entry;
+	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
 	int ret;
