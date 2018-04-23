@@ -474,6 +474,18 @@ static inline void rxm_cntr_incerr(struct util_cntr *cntr)
 		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 }
 
+
+
+static inline void rxm_cq_log_comp(uint64_t flags)
+{
+#if ENABLE_DEBUG
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting %s completion\n",
+	       fi_tostr((void *)flags, FI_TYPE_CQ_EVENT_FLAGS));
+#else
+	/* NOP */
+#endif
+}
+
 /* Caller must hold recv_queue->lock */
 static inline struct rxm_rx_buf *
 rxm_check_unexp_msg_list(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
@@ -637,3 +649,30 @@ rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 
 RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
+
+static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
+{
+	int ret;
+
+	if (tx_entry->flags & FI_COMPLETION) {
+		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
+				   tx_entry->context, tx_entry->comp_flags, 0,
+				   NULL, 0, 0);
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unable to report completion\n");
+			return ret;
+		}
+		rxm_cq_log_comp(tx_entry->comp_flags);
+	}
+	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		if (tx_entry->comp_flags & FI_SEND)
+			rxm_cntr_inc(tx_entry->ep->util_ep.tx_cntr);
+		else if (tx_entry->comp_flags & FI_WRITE)
+			rxm_cntr_inc(tx_entry->ep->util_ep.wr_cntr);
+		else
+			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
+	}
+	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
+	return 0;
+}

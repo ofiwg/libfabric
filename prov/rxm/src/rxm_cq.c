@@ -61,39 +61,6 @@ static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
-#if ENABLE_DEBUG
-static void rxm_cq_log_comp(uint64_t flags)
-{
-	flags &= (FI_SEND | FI_WRITE | FI_READ | FI_REMOTE_READ |
-		  FI_REMOTE_WRITE);
-
-	switch (flags) {
-	case FI_SEND:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting send completion\n");
-		break;
-	case FI_WRITE:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting write completion\n");
-		break;
-	case FI_READ:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting read completion\n");
-		break;
-	case FI_REMOTE_READ:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote read completion\n");
-		break;
-	case FI_REMOTE_WRITE:
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting remote write completion\n");
-		break;
-	default:
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown completion\n");
-	}
-}
-#else
-static void rxm_cq_log_comp(uint64_t flags)
-{
-	// NOP
-}
-#endif
-
 /* Get a match_iov derived from iov whose size matches given length */
 static int rxm_match_iov(const struct iovec *iov, void **desc,
 			 uint8_t count, uint64_t offset, size_t match_len,
@@ -259,33 +226,6 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	}
 
 	return FI_SUCCESS;
-}
-
-static int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
-{
-	int ret;
-
-	if (tx_entry->flags & FI_COMPLETION) {
-		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
-				   tx_entry->context, tx_entry->comp_flags, 0,
-				   NULL, 0, 0);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to report completion\n");
-			return ret;
-		}
-		rxm_cq_log_comp(tx_entry->comp_flags);
-	}
-	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		if (tx_entry->comp_flags & FI_SEND)
-			rxm_cntr_inc(tx_entry->ep->util_ep.tx_cntr);
-		else if (tx_entry->comp_flags & FI_WRITE)
-			rxm_cntr_inc(tx_entry->ep->util_ep.wr_cntr);
-		else
-			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
-	}
-	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
-	return 0;
 }
 
 static int rxm_finish_send(struct rxm_tx_entry *tx_entry)
