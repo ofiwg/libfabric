@@ -78,7 +78,7 @@ int ofi_perfset_create(const struct fi_provider *prov,
 		return ret;
 	}
 
-	set->data = calloc(size, sizeof(*set->data) + sizeof(*set->names));
+	set->data = calloc(size, sizeof(*set->data));
 	if (!set->data) {
 		ofi_pmu_close(set->ctx);
 		return -FI_ENOMEM;
@@ -86,45 +86,26 @@ int ofi_perfset_create(const struct fi_provider *prov,
 
 	set->prov = prov;
 	set->size = size;
-	set->count = 0;
-	set->names = (char **)(set->data + size);
 	return 0;
 }
 
 void ofi_perfset_close(struct ofi_perfset *set)
 {
-	while (set->count--)
-		free(set->names[set->count]);
 	ofi_pmu_close(set->ctx);
 	free(set->data);
 }
 
-struct ofi_perf_data *ofi_perfset_data(struct ofi_perfset *set,
-				       const char *name)
-{
-	if (set->count == set->size)
-		return NULL;
-
-	if (name) {
-		set->names[set->count] = strdup(name);
-		if (!set->names[set->count])
-			return NULL;
-	}
-
-	return &set->data[set->count++];
-}
-
-void ofi_perfset_log(struct ofi_perfset *set)
+void ofi_perfset_log(struct ofi_perfset *set, const char *names[])
 {
 	size_t i;
 
-	for (i = 0; i < set->count; i++) {
+	for (i = 0; i < set->size; i++) {
 		if (!set->data[i].sum)
 			continue;
 
 		FI_INFO(set->prov, FI_LOG_CORE, "PERF (%s) "
 			"events=%" PRIu64 " avg=%g\n",
-			set->names[i] ? set->names[i] : "unknown",
+			names && names[i] ? names[i] : "unknown",
 			set->data[i].events,
 			(double) set->data[i].sum / set->data[i].events);
 	}
