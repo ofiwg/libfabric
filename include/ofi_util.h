@@ -756,6 +756,14 @@ void ofi_fabric_remove(struct util_fabric *fabric);
  * Utility Providers
  */
 
+#define OFI_NAME_DELIM	';'
+#define OFI_UTIL_PREFIX "ofi_"
+
+static inline int ofi_has_util_prefix(const char *str)
+{
+	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
+}
+
 typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
 				struct fi_info *dest_info);
 
@@ -770,9 +778,6 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
 			     struct fi_info **core_info);
 
-
-#define OFI_NAME_DELIM	';'
-#define OFI_UTIL_PREFIX "ofi_"
 
 char *ofi_strdup_append(const char *head, const char *tail);
 // char *ofi_strdup_head(const char *str);

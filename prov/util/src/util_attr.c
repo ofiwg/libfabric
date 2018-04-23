@@ -89,11 +89,6 @@ char *ofi_strdup_append(const char *head, const char *tail)
 	return str;
 }
 
-static int ofi_has_util_prefix(const char *str)
-{
-	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
-}
-
 const char *ofi_util_name(const char *str, size_t *len)
 {
 	char *delim;
