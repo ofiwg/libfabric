@@ -298,53 +298,72 @@ static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 	}
 }
 
-ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
+static inline
+ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 {
 	size_t i;
 	int ret;
 
-	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) {
-		if (!rx_buf->conn) {
-			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
-			if (OFI_UNLIKELY(!rx_buf->conn))
-				return -FI_EOTHER;
-		}
+	if (!rx_buf->conn) {
+		rx_buf->conn = rxm_key2conn(rx_buf->ep,
+					    rx_buf->pkt.ctrl_hdr.conn_id);
+		if (OFI_UNLIKELY(!rx_buf->conn))
+			return -FI_EOTHER;
+	}
 
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-		       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
-		       rx_buf->pkt.ctrl_hdr.msg_id);
+	FI_DBG(&rxm_prov, FI_LOG_CQ,
+	       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
+	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-		rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
-		rx_buf->index = 0;
+	rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
+	rx_buf->index = 0;
 
-		if (!rx_buf->ep->rxm_mr_local) {
-			ret = rxm_ep_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
-						 rx_buf->recv_entry->rxm_iov.count, FI_READ,
-						 rx_buf->mr);
-			if (ret)
-				return ret;
+	if (!rx_buf->ep->rxm_mr_local) {
+		ret = rxm_ep_msg_mr_regv(rx_buf->ep,
+					 rx_buf->recv_entry->rxm_iov.iov,
+					 rx_buf->recv_entry->rxm_iov.count,
+					 FI_READ, rx_buf->mr);
+		if (OFI_UNLIKELY(ret))
+			return ret;
 
-			for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
-				rx_buf->recv_entry->rxm_iov.desc[i] =
-					fi_mr_desc(rx_buf->mr[i]);
-		} else {
-			for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
-				rx_buf->recv_entry->rxm_iov.desc[i] =
-					fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
-		}
-
-		/* Ignore the case when the posted recv buffer is not large enough,
-		 * FI_TRUNC error will be generated to user at the end */
-		rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov, rx_buf->match_iov);
-		RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
-		rx_buf->hdr.state = RXM_LMT_READ;
-		return rxm_lmt_rma_read(rx_buf);
+		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
+			rx_buf->recv_entry->rxm_iov.desc[i] =
+						fi_mr_desc(rx_buf->mr[i]);
 	} else {
-		uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-						    rx_buf->recv_entry->rxm_iov.count,
-						    0, rx_buf->pkt.data,
-						    rx_buf->pkt.hdr.size);
-		return rxm_finish_recv(rx_buf, done_len);
+		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
+			rx_buf->recv_entry->rxm_iov.desc[i] =
+				fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
+	}
+
+	/* Ignore the case when the posted recv buffer is not large enough,
+	 * FI_TRUNC error will be generated to user at the end */
+	rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov, rx_buf->match_iov);
+	RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
+	rx_buf->hdr.state = RXM_LMT_READ;
+	return rxm_lmt_rma_read(rx_buf);	
+}
+
+static inline
+ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
+{
+	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
+					    rx_buf->recv_entry->rxm_iov.count,
+					    0, rx_buf->pkt.data,
+					    rx_buf->pkt.hdr.size);
+	return rxm_finish_recv(rx_buf, done_len);
+}
+
+ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
+{
+	switch (rx_buf->pkt.ctrl_hdr.type) {
+	case ofi_ctrl_data:
+		return rxm_cq_handle_data(rx_buf);
+	case ofi_ctrl_large_data:
+		return rxm_cq_handle_large_data(rx_buf);
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");
+		assert(0);
+		return -FI_EINVAL;
 	}
 }
 
@@ -403,7 +422,7 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	rx_buf->ep->res_fastlock_release(&rx_buf->recv_queue->lock);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
-	return rxm_cq_handle_data(rx_buf);
+	return rxm_cq_handle_rx_buf(rx_buf);
 }
 
 static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)

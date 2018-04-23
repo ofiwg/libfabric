@@ -405,7 +405,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
-ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
@@ -525,7 +525,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 		recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-		return rxm_cq_handle_data(rx_buf);
+		return rxm_cq_handle_rx_buf(rx_buf);
 	}
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,

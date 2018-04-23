@@ -667,7 +667,7 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 		if (OFI_UNLIKELY(ret))
 			return ret;
 		rx_buf->recv_entry = recv_entry;
-		return rxm_cq_handle_data(rx_buf);
+		return rxm_cq_handle_rx_buf(rx_buf);
 	} else {
 		return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr,
 					  tag, ignore, context, flags | op_flags,
