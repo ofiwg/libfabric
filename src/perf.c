@@ -42,6 +42,28 @@
 #include <rdma/providers/fi_log.h>
 
 
+enum ofi_perf_domain	perf_domain = OFI_PMU_CPU;
+uint32_t		perf_cntr = OFI_PMC_CPU_INSTR;
+uint32_t		perf_flags;
+
+
+void ofi_perf_init(void)
+{
+	char *param_val = NULL;
+
+	fi_param_define(NULL, "perf_cntr", FI_PARAM_STRING,
+			"Performance counter to analyze (default: cpu_instr). "
+			"Options: cpu_instr, cpu_cycles.");
+	fi_param_get_str(NULL, "perf_cntr", &param_val);
+	if (!param_val)
+		return;
+
+	if (!strcasecmp(param_val, "cpu_cycles")) {
+		perf_domain = OFI_PMU_CPU;
+		perf_cntr = OFI_PMC_CPU_CYCLES;
+	}
+}
+
 int ofi_perfset_create(const struct fi_provider *prov,
 		       struct ofi_perfset *set, size_t size,
 		       enum ofi_perf_domain domain, uint32_t cntr_id,

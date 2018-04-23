@@ -44,6 +44,7 @@
 #include "ofi_util.h"
 #include "ofi.h"
 #include "ofi_prov.h"
+#include "ofi_perf.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -378,6 +379,7 @@ void fi_ini(void)
 	fi_log_init();
 	ofi_osd_init();
 	ofi_pmem_init();
+	ofi_perf_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");

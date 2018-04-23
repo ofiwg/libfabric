@@ -83,6 +83,12 @@ struct ofi_perf_data {
 };
 
 
+void ofi_perf_init(void);
+extern enum ofi_perf_domain	perf_domain;
+extern uint32_t			perf_cntr;
+extern uint32_t			perf_flags;
+
+
 /*
  * Performance management unit:
  *
