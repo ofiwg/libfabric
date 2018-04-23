@@ -284,13 +284,20 @@ RXM_INI
 			"Defines the transmit buffer size / inject size. Messages"
 			" of size less than this would be transmitted via an "
 			"eager protocol and those above would be transmitted "
-			"via a rendezvous protocol. Transmit data would be copied"
-			" up to this size (default: ~16k).");
+			"via a rendezvous or SAR (Segmentation And Reassembly) "
+			"protocol. Transmit data would be copied up to this size "
+			"(default: ~16k).");
 
 	fi_param_define(&rxm_prov, "comp_per_progress", FI_PARAM_INT,
 			"Defines the maximum number of MSG provider CQ entries "
 			"(default: 1) that would be read per progress "
 			"(RxM CQ read).");
+
+	fi_param_define(&rxm_prov, "sar_limit", FI_PARAM_SIZE_T,
+			"Set this environment variable to control the RxM SAR "
+			"(Segmentation And Reassembly) protocol. "
+			"Messages of size greater than this (default: 256 Kb) "
+			"would be transmitted via rendezvous protocol.");
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
