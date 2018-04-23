@@ -166,6 +166,18 @@ void ofi_perfset_close(struct ofi_perfset *set);
 
 void ofi_perfset_log(struct ofi_perfset *set, const char **names);
 
+static inline void ofi_perfset_start(struct ofi_perfset *set, size_t index)
+{
+	assert(index < set->size);
+	ofi_perf_start(set->ctx, &set->data[index]);
+}
+
+static inline void ofi_perfset_end(struct ofi_perfset *set, size_t index)
+{
+	assert(index < set->size);
+	ofi_perf_end(set->ctx, &set->data[index]);
+}
+
 
 #ifdef __cplusplus
 }
