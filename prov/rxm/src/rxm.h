@@ -235,7 +235,6 @@ struct rxm_rx_buf {
 	struct rxm_ep *ep;
 	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;
-	struct rxm_recv_queue *recv_queue;
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
@@ -307,6 +306,7 @@ struct rxm_recv_entry {
 	uint64_t ignore;
 	uint64_t comp_flags;
 	size_t total_len;
+	struct rxm_recv_queue *recv_queue;
 	void *multi_recv_buf;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
@@ -405,7 +405,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
-ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
@@ -474,6 +474,18 @@ static inline void rxm_cntr_incerr(struct util_cntr *cntr)
 		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 }
 
+
+
+static inline void rxm_cq_log_comp(uint64_t flags)
+{
+#if ENABLE_DEBUG
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting %s completion\n",
+	       fi_tostr((void *)flags, FI_TYPE_CQ_EVENT_FLAGS));
+#else
+	/* NOP */
+#endif
+}
+
 /* Caller must hold recv_queue->lock */
 static inline struct rxm_rx_buf *
 rxm_check_unexp_msg_list(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
@@ -513,7 +525,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 		recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-		return rxm_cq_handle_data(rx_buf);
+		return rxm_cq_handle_rx_buf(rx_buf);
 	}
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
@@ -637,3 +649,30 @@ rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 
 RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
+
+static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
+{
+	int ret;
+
+	if (tx_entry->flags & FI_COMPLETION) {
+		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
+				   tx_entry->context, tx_entry->comp_flags, 0,
+				   NULL, 0, 0);
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unable to report completion\n");
+			return ret;
+		}
+		rxm_cq_log_comp(tx_entry->comp_flags);
+	}
+	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		if (tx_entry->comp_flags & FI_SEND)
+			rxm_cntr_inc(tx_entry->ep->util_ep.tx_cntr);
+		else if (tx_entry->comp_flags & FI_WRITE)
+			rxm_cntr_inc(tx_entry->ep->util_ep.wr_cntr);
+		else
+			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
+	}
+	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
+	return 0;
+}

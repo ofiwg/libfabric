@@ -58,6 +58,7 @@ enum {
 	ofi_ctrl_ack,
 	ofi_ctrl_nack,
 	ofi_ctrl_discard,
+	ofi_ctrl_seg_data,
 };
 
 /*

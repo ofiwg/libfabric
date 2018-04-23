@@ -249,13 +249,17 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 	if (type == RXM_RECV_QUEUE_MSG) {
 		recv_queue->match_recv = rxm_match_recv_entry;
 		recv_queue->match_unexp = rxm_match_unexp_msg;
-		for (i = recv_queue->fs->size - 1; i >= 0; i--)
+		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
 			recv_queue->fs->buf[i].comp_flags = FI_MSG | FI_RECV;
+			recv_queue->fs->buf[i].recv_queue = recv_queue;
+		}
 	} else {
 		recv_queue->match_recv = rxm_match_recv_entry_tagged;
 		recv_queue->match_unexp = rxm_match_unexp_msg_tagged;
-		for (i = recv_queue->fs->size - 1; i >= 0; i--)
+		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
 			recv_queue->fs->buf[i].comp_flags = FI_TAGGED | FI_RECV;
+			recv_queue->fs->buf[i].recv_queue = recv_queue;
+		}
 	}
 	fastlock_init(&recv_queue->lock);
 	return 0;
@@ -667,7 +671,7 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 		if (OFI_UNLIKELY(ret))
 			return ret;
 		rx_buf->recv_entry = recv_entry;
-		return rxm_cq_handle_data(rx_buf);
+		return rxm_cq_handle_rx_buf(rx_buf);
 	} else {
 		return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr,
 					  tag, ignore, context, flags | op_flags,
