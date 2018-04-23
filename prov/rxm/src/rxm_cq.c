@@ -202,7 +202,8 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 				return ret;
 			}
 			/* Since buffer is elapsed, release recv_entry */
-			rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
+			rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
+					       rx_buf->recv_entry);
 			return ret;
 		}
 
@@ -222,7 +223,8 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 
 		return rxm_process_recv_entry(&rx_buf->ep->recv_queue, rx_buf->recv_entry);
 	} else {
-		rxm_recv_entry_release(rx_buf->recv_queue, rx_buf->recv_entry);
+		rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
+				       rx_buf->recv_entry);
 	}
 
 	return FI_SUCCESS;
@@ -367,12 +369,40 @@ ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 	}
 }
 
-static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
+static inline ssize_t
+rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
+		    struct rxm_recv_queue *recv_queue,
+		    struct rxm_recv_match_attr *match_attr)
+{
+	struct dlist_entry *entry;
+
+	rx_buf->ep->res_fastlock_acquire(&recv_queue->lock);
+	entry = dlist_remove_first_match(&recv_queue->recv_list,
+					 recv_queue->match_recv, match_attr);
+	if (!entry) {
+		RXM_DBG_ADDR_TAG(FI_LOG_CQ, "No matching recv found for "
+				 "incoming msg", match_attr->addr,
+				 match_attr->tag);
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "Enqueueing msg to unexpected msg"
+		       "queue\n");
+		rx_buf->unexp_msg.addr = match_attr->addr;
+		rx_buf->unexp_msg.tag = match_attr->tag;
+		dlist_insert_tail(&rx_buf->unexp_msg.entry,
+				  &recv_queue->unexp_msg_list);
+		rx_buf->ep->res_fastlock_release(&recv_queue->lock);
+		return 0;
+	}
+	rx_buf->ep->res_fastlock_release(&recv_queue->lock);
+
+	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
+	return rxm_cq_handle_rx_buf(rx_buf);
+}
+
+static inline ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_recv_match_attr match_attr = {
 		.addr = FI_ADDR_UNSPEC,
 	};
-	struct dlist_entry *entry;
 
 	if (rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) {
 		rx_buf->conn =
@@ -390,39 +420,18 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	switch(rx_buf->pkt.hdr.op) {
 	case ofi_op_msg:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got MSG op\n");
-		rx_buf->recv_queue = &rx_buf->ep->recv_queue;
-		break;
+		return rxm_cq_match_rx_buf(rx_buf, &rx_buf->ep->recv_queue,
+					   &match_attr);
 	case ofi_op_tagged:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
 		match_attr.tag = rx_buf->pkt.hdr.tag;
-		rx_buf->recv_queue = &rx_buf->ep->trecv_queue;
-		break;
+		return rxm_cq_match_rx_buf(rx_buf, &rx_buf->ep->trecv_queue,
+					   &match_attr);
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown op!\n");
 		assert(0);
 		return -FI_EINVAL;
 	}
-
-	rx_buf->ep->res_fastlock_acquire(&rx_buf->recv_queue->lock);
-	entry = dlist_remove_first_match(&rx_buf->recv_queue->recv_list,
-					 rx_buf->recv_queue->match_recv, &match_attr);
-	if (!entry) {
-		RXM_DBG_ADDR_TAG(FI_LOG_CQ, "No matching recv found for "
-				 "incoming msg", match_attr.addr,
-				 match_attr.tag);
-		FI_DBG(&rxm_prov, FI_LOG_CQ, "Enqueueing msg to unexpected msg"
-		       "queue\n");
-		rx_buf->unexp_msg.addr = match_attr.addr;
-		rx_buf->unexp_msg.tag = match_attr.tag;
-		dlist_insert_tail(&rx_buf->unexp_msg.entry,
-				  &rx_buf->recv_queue->unexp_msg_list);
-		rx_buf->ep->res_fastlock_release(&rx_buf->recv_queue->lock);
-		return 0;
-	}
-	rx_buf->ep->res_fastlock_release(&rx_buf->recv_queue->lock);
-
-	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
-	return rxm_cq_handle_rx_buf(rx_buf);
 }
 
 static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
