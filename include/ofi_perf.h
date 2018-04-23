@@ -35,6 +35,7 @@
 
 #include "config.h"
 
+#include <assert.h>
 #include <string.h>
 #include <ofi_osd.h>
 #include <rdma/providers/fi_prov.h>

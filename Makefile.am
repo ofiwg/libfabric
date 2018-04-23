@@ -1,6 +1,6 @@
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
-# Copyright (c) 2017 Intel Corporation, Inc. All right reserved.
+# Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
 #
 # Makefile.am for libfabric
 
@@ -73,6 +73,7 @@ common_srcs =				\
 	prov/hook/src/hook_domain.c	\
 	prov/hook/src/hook_ep.c		\
 	prov/hook/src/hook_eq.c		\
+	prov/hook/src/hook_perf.c	\
 	prov/hook/src/hook_wait.c	\
 	prov/hook/src/hook_xfer.c
 
@@ -149,6 +150,7 @@ src_libfabric_la_SOURCES =			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
 	prov/hook/src/hook.h			\
+	prov/hook/src/hook_perf.h		\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\

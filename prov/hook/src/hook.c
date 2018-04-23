@@ -34,6 +34,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include "hook.h"
+#include "hook_perf.h"
 
 
 struct fid *hook_to_hfid(const struct fid *fid)
