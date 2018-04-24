@@ -655,3 +655,33 @@ struct fi_ops_tagged perf_tagged_ops = {
 	.senddata = perf_tagged_senddata,
 	.injectdata = perf_tagged_injectdata,
 };
+
+
+int hook_perf_create(struct hook_fabric **fabric)
+{
+	struct perf_fabric *fab;
+	int ret;
+
+	fab = calloc(1, sizeof *fab);
+	if (!fab)
+		return -FI_ENOMEM;
+
+	ret = ofi_perfset_create(&core_prov, &fab->perf_set, perf_size,
+				 perf_domain, perf_cntr, perf_flags);
+	if (ret) {
+		free(fab);
+		return ret;
+	}
+
+	*fabric = &fab->fabric_hook;
+	return 0;
+}
+
+void hook_perf_destroy(struct hook_fabric *fabric)
+{
+	struct perf_fabric *fab;
+
+	fab = container_of(fabric, struct perf_fabric, fabric_hook);
+	ofi_perfset_log(&fab->perf_set, perf_counters_str);
+	ofi_perfset_close(&fab->perf_set);
+}

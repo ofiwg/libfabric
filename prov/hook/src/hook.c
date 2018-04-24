@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <ofi.h>
 #include "hook.h"
 #include "hook_perf.h"
 
@@ -136,9 +137,32 @@ static int hook_close(struct fid *fid)
 	return ret;
 }
 
+static int hook_fabric_close(struct fid *fid)
+{
+	struct hook_fabric *fab;
+
+	fab = container_of(fid, struct hook_fabric, fabric.fid);
+	switch (fab->hclass) {
+	case HOOK_PERF:
+		hook_perf_destroy(fab);
+		break;
+	default:
+		break;
+	}
+	return hook_close(fid);
+}
+
 struct fi_ops hook_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = hook_close,
+	.bind = hook_bind,
+	.control = hook_control,
+	.ops_open = hook_ops_open,
+};
+
+static struct fi_ops hook_fabric_fid_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = hook_fabric_close,
 	.bind = hook_bind,
 	.control = hook_control,
 	.ops_open = hook_ops_open,
@@ -153,22 +177,44 @@ static struct fi_ops_fabric hook_fabric_ops = {
 	.trywait = hook_trywait,
 };
 
-int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric)
+static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
+			enum hook_class hclass)
 {
 	struct hook_fabric *fab;
+	int ret = 0;
 
-	fab = calloc(1, sizeof *fab);
-	if (!fab)
-		return -FI_ENOMEM;
+	switch (hclass) {
+	case HOOK_NOOP:
+		FI_TRACE(&core_prov, FI_LOG_FABRIC, "Installing noop hook\n");
+		fab = calloc(1, sizeof *fab);
+		if (!fab)
+			return -FI_ENOMEM;
+		break;
+	case HOOK_PERF:
+		FI_TRACE(&core_prov, FI_LOG_FABRIC, "Installing perf hook\n");
+		ret = hook_perf_create(&fab);
+		break;
+	default:
+		FI_WARN(&core_prov, FI_LOG_FABRIC, "Invalid hook specified\n");
+		return -FI_ENOSYS;
+	}
 
+	if (ret)
+		return ret;
+
+	fab->hclass = hclass;
 	fab->fabric.fid.fclass = FI_CLASS_FABRIC;
 	fab->fabric.fid.context = hfabric->fid.context;
-	fab->fabric.fid.ops = &hook_fid_ops;
+	fab->fabric.fid.ops = &hook_fabric_fid_ops;
 	fab->fabric.api_version = hfabric->api_version;
 	fab->fabric.ops = &hook_fabric_ops;
 
 	hfabric->fid.context = fab;
 	*fabric = &fab->fabric;
-
 	return 0;
+}
+
+void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric)
+{
+	hook_fabric(hfabric, fabric, HOOK_NOOP);
 }

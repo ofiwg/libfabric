@@ -45,6 +45,11 @@
 #include <rdma/fi_tagged.h>
 
 
+enum hook_class {
+	HOOK_NOOP,
+	HOOK_PERF,
+};
+
 /*
  * Define hook structs so we can cast from fid to parent using simple cast.
  * This lets us have a single close() call.
@@ -56,9 +61,8 @@ struct fid *hook_to_hfid(const struct fid *fid);
 struct hook_fabric {
 	struct fid_fabric fabric;
 	struct fid_fabric *hfabric;
+	enum hook_class   hclass;
 };
-
-int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric);
 
 
 struct hook_domain {
