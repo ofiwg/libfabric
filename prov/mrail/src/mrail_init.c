@@ -72,8 +72,7 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 			struct fi_info **core_info)
 {
 	struct fi_info *core_hints, *info, *fi = NULL;
-	const char *core_name;
-	size_t len, i;
+	size_t i;
 	int ret = 0;
 
 	if (!mrail_addr_strv) {
@@ -90,22 +89,22 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		free(core_hints->fabric_attr->prov_name);
 
 	if (hints && hints->fabric_attr && hints->fabric_attr->prov_name) {
-		core_name = ofi_core_name(hints->fabric_attr->prov_name, &len);
-		if (core_name) {
-			core_hints->fabric_attr->prov_name = strndup(core_name,
-								     len);
-			if (!core_hints->fabric_attr->prov_name) {
-				FI_WARN(&mrail_prov, FI_LOG_FABRIC,
-					"Unable to alloc prov name\n");
-				ret = -FI_ENOMEM;
-				goto out;
-			}
+		core_hints->fabric_attr->prov_name =
+			strdup(hints->fabric_attr->prov_name);
+		if (!core_hints->fabric_attr->prov_name) {
+			FI_WARN(&mrail_prov, FI_LOG_FABRIC,
+				"Unable to alloc prov name\n");
+			ret = -FI_ENOMEM;
+			goto out;
 		}
+
+		ret = ofi_exclude_prov_name(&core_hints->fabric_attr->prov_name,
+					    mrail_prov.name);
+		if (ret)
+			goto out;
 	} else {
 		core_hints->fabric_attr->prov_name = NULL;
 	}
-
-	flags |= OFI_CORE_PROV_ONLY;
 
 	for (i = 0; mrail_addr_strv[i]; i++) {
 		free(core_hints->src_addr);
