@@ -480,7 +480,7 @@ static inline void rxm_cq_log_comp(uint64_t flags)
 {
 #if ENABLE_DEBUG
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting %s completion\n",
-	       fi_tostr((void *)flags, FI_TYPE_CQ_EVENT_FLAGS));
+	       fi_tostr((void *)&flags, FI_TYPE_CQ_EVENT_FLAGS));
 #else
 	/* NOP */
 #endif
