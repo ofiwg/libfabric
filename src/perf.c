@@ -103,7 +103,7 @@ void ofi_perfset_log(struct ofi_perfset *set, const char *names[])
 		if (!set->data[i].sum)
 			continue;
 
-		FI_INFO(set->prov, FI_LOG_CORE, "PERF (%s) "
+		FI_TRACE(set->prov, FI_LOG_CORE, "PERF (%s) "
 			"events=%" PRIu64 " avg=%g\n",
 			names && names[i] ? names[i] : "unknown",
 			set->data[i].events,
