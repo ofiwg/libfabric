@@ -160,6 +160,7 @@ struct rxm_rma_iov {
 	FUNC(RXM_TX),		\
 	FUNC(RXM_TX_RMA),	\
 	FUNC(RXM_RX),		\
+	FUNC(RXM_SAR_TX),	\
 	FUNC(RXM_LMT_TX),	\
 	FUNC(RXM_LMT_ACK_WAIT),	\
 	FUNC(RXM_LMT_READ),	\
