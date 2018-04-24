@@ -110,6 +110,7 @@ int hook_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!mysep)
 		return -FI_ENOMEM;
 
+	mysep->domain = dom;
 	hook_setup_ep(&mysep->ep, FI_CLASS_SEP, context);
 	ret = fi_scalable_ep(dom->hdomain, info, &mysep->hep, &mysep->ep.fid);
 	if (ret)
@@ -132,6 +133,7 @@ int hook_stx_ctx(struct fid_domain *domain,
 	if (!mystx)
 		return -FI_ENOMEM;
 
+	mystx->domain = dom;
 	mystx->stx.fid.fclass = FI_CLASS_STX_CTX;
 	mystx->stx.fid.context = context;
 	mystx->stx.fid.ops = &hook_fid_ops;
@@ -157,6 +159,7 @@ int hook_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	if (!srx)
 		return -FI_ENOMEM;
 
+	srx->domain = dom;
 	hook_setup_ep(&srx->ep, FI_CLASS_SRX_CTX, context);
 	ret = fi_srx_context(dom->hdomain, attr, &srx->hep, &srx->ep.fid);
 	if (ret)
@@ -179,6 +182,7 @@ static int hook_open_tx_ctx(struct fid_ep *sep, int index,
 	if (!mytx)
 		return -FI_ENOMEM;
 
+	mytx->domain = mysep->domain;
 	hook_setup_ep(&mytx->ep, FI_CLASS_TX_CTX, context);
 	ret = fi_tx_context(mysep->hep, index, attr, &mytx->hep, &mytx->ep.fid);
 	if (ret)
@@ -201,6 +205,7 @@ static int hook_open_rx_ctx(struct fid_ep *sep, int index,
 	if (!myrx)
 		return -FI_ENOMEM;
 
+	myrx->domain = mysep->domain;
 	hook_setup_ep(&myrx->ep, FI_CLASS_RX_CTX, context);
 	ret = fi_rx_context(mysep->hep, index, attr, &myrx->hep, &myrx->ep.fid);
 	if (ret)
@@ -222,6 +227,7 @@ int hook_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (!mypep)
 		return -FI_ENOMEM;
 
+	mypep->fabric = fab;
 	mypep->pep.fid.fclass = FI_CLASS_PEP;
 	mypep->pep.fid.context = context;
 	mypep->pep.fid.ops = &hook_fid_ops;
@@ -248,6 +254,7 @@ int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!myep)
 		return -FI_ENOMEM;
 
+	myep->domain = dom;
 	hook_setup_ep(&myep->ep, FI_CLASS_EP, context);
 	ret = fi_endpoint(dom->hdomain, info, &myep->hep, &myep->ep.fid);
 	if (ret)

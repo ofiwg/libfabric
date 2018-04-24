@@ -127,6 +127,7 @@ int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (!myeq)
 		return -FI_ENOMEM;
 
+	myeq->fabric = fab;
 	myeq->eq.fid.fclass = FI_CLASS_EQ;
 	myeq->eq.fid.context = context;
 	myeq->eq.fid.ops = &hook_fid_ops;

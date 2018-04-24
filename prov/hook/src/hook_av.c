@@ -112,6 +112,7 @@ int hook_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!myav)
 		return -FI_ENOMEM;
 
+	myav->domain = dom;
 	myav->av.fid.fclass = FI_CLASS_AV;
 	myav->av.fid.context = context;
 	myav->av.fid.ops = &hook_fid_ops;

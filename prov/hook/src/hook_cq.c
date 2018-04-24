@@ -113,6 +113,7 @@ int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!mycq)
 		return -FI_ENOMEM;
 
+	mycq->domain = dom;
 	mycq->cq.fid.fclass = FI_CLASS_CQ;
 	mycq->cq.fid.context = context;
 	mycq->cq.fid.ops = &hook_fid_ops;

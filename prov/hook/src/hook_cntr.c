@@ -105,6 +105,7 @@ int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (!mycntr)
 		return -FI_ENOMEM;
 
+	mycntr->domain = dom;
 	mycntr->cntr.fid.fclass = FI_CLASS_CNTR;
 	mycntr->cntr.fid.context = context;
 	mycntr->cntr.fid.ops = &hook_fid_ops;
