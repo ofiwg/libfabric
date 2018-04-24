@@ -154,7 +154,6 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 	int ret = FI_SUCCESS;
 	int id = 0;
 
-	fastlock_acquire(&poll_mgr->lock);
 	while (!dlist_empty(&poll_mgr->list)) {
 		poll_item = container_of(poll_mgr->list.next,
 					 struct poll_fd_info, entry);
@@ -164,8 +163,7 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 			id = poll_fds_find_dup(poll_mgr, poll_item);
 			assert(id > 0);
 			if (id <= 0) {
-				ret = -FI_EINVAL;
-				goto err;
+				return -FI_EINVAL;
 			}
 
 			poll_fds_swap_del_last(poll_mgr, id);
@@ -184,8 +182,6 @@ static int handle_poll_list(struct poll_fd_mgr *poll_mgr)
 		else
 			poll_item->flags |= POLL_MGR_ACK;
 	}
-err:
-	fastlock_release(&poll_mgr->lock);
 	return ret;
 }
 
@@ -308,13 +304,16 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 	cm_entry->fid = poll_info->fid;
 	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
 
+	ret = tcpx_ep_msg_xfer_enable(ep);
+	if (ret)
+		goto err;
+
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
 				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err;
 	}
-	ret = tcpx_ep_msg_xfer_enable(ep);
 err:
 	free(cm_entry);
 	return ret;
@@ -428,7 +427,7 @@ err1:
 static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 			       struct poll_fd_info *poll_info)
 {
-	struct fi_eq_cm_entry cm_entry;
+	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
 	int ret;
@@ -442,13 +441,16 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 
 	cm_entry.fid =  poll_info->fid;
 
+	ret = tcpx_ep_msg_xfer_enable(ep);
+	if (ret)
+		goto err;
+
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
 				&cm_entry, sizeof(cm_entry), 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
 
-	tcpx_ep_msg_xfer_enable(ep);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -518,11 +520,13 @@ static void *tcpx_conn_mgr_thread(void *data)
 		}
 
 		if (poll_mgr->poll_fds[0].revents & POLLIN) {
+			fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
 			fd_signal_reset(&poll_mgr->signal);
 			if (handle_poll_list(poll_mgr)) {
 				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 					"fd list add or remove failed\n");
 			}
+			fastlock_release(&tcpx_fabric->poll_mgr.lock);
 		}
 		handle_fd_events(poll_mgr);
 	}
@@ -534,7 +538,9 @@ void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric)
 	struct poll_fd_info *poll_info;
 
 	tcpx_fabric->poll_mgr.run = 0;
+	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
 	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
+	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 
 	if (tcpx_fabric->conn_mgr_thread &&
 	    pthread_join(tcpx_fabric->conn_mgr_thread, NULL)) {

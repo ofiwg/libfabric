@@ -84,6 +84,7 @@ err:
 done:
 	tcpx_cq_report_completion(pe_entry->ep->util_ep.tx_cq,
 				  pe_entry, ret);
+	dlist_remove(&pe_entry->entry);
 	tcpx_pe_entry_release(pe_entry);
 }
 
@@ -112,6 +113,7 @@ err:
 done:
 	tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
 				  pe_entry, ret);
+	dlist_remove(&pe_entry->entry);
 	tcpx_pe_entry_release(pe_entry);
 }
 
