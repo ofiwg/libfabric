@@ -180,6 +180,16 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 				cur->caps &= ~FI_DIRECTED_RECV;
 			if (!(hints->caps & FI_SOURCE))
 				cur->caps &= ~FI_SOURCE;
+			if (hints->ep_attr && hints->ep_attr->mem_tag_format &&
+			    (info->caps & FI_TAGGED)) {
+				FI_INFO(&rxm_prov, FI_LOG_CORE,
+					"mem_tag_format requested: 0x%" PRIx64
+					" (note: provider doesn't optimize "
+					"based on mem_tag_format)\n",
+					hints->ep_attr->mem_tag_format);
+				info->ep_attr->mem_tag_format =
+					hints->ep_attr->mem_tag_format;
+			}
 		}
 	}
 }
