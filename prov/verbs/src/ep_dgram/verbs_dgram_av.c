@@ -321,7 +321,7 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	
 	struct util_av_attr util_attr = {
 		.overhead = attr->count >> 1,
-		.flags = FI_SOURCE,
+		.flags = OFI_AV_HASH,
 		.addrlen = sizeof(struct fi_ibv_dgram_av_entry),
 	};
 
