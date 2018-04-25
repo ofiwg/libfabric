@@ -5,6 +5,11 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.6.1rc1, Wed Apr 25, 2018
+===========================
+
+TODO: Fill this in prior to the 1.6.1 release
+
 v1.6.0, Wed Mar 14, 2018
 ========================
 
