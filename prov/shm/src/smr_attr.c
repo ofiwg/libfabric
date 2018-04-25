@@ -62,6 +62,7 @@ struct fi_ep_attr smr_ep_attr = {
 	.max_order_raw_size = SIZE_MAX,
 	.max_order_waw_size = SIZE_MAX,
 	.max_order_war_size = SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1
 };
