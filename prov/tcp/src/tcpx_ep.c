@@ -49,6 +49,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+extern struct fi_ops_rma tcpx_rma_ops;
+
 static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
@@ -677,6 +679,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->ops = &tcpx_ep_ops;
 	(*ep_fid)->cm = &tcpx_cm_ops;
 	(*ep_fid)->msg = &tcpx_msg_ops;
+	(*ep_fid)->rma = &tcpx_rma_ops;
 
 	return 0;
 err4:
