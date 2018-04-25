@@ -468,7 +468,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	if (tx_entry->next_seg_no != pkt_entry->pkt.hdr.seg_no)
 		return;
 
-	if (!(tx_entry->flags & FI_INJECT)) {
+	if (!(tx_entry->flags & RXD_INJECT)) {
 		rxd_tx_entry_progress(ep, tx_entry, 1);
 		if (!slist_empty(&tx_entry->pkt_list))
 			return;

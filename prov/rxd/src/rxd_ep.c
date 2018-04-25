@@ -566,14 +566,14 @@ static ssize_t rxd_ep_generic_inject(struct fid_ep *ep, const struct fi_msg *msg
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, msg, peer_addr,
 				    flags | FI_INJECT);
-	if (!(flags & (FI_COMPLETION | FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE |
-		FI_DELIVERY_COMPLETE)))
-		tx_entry->flags |= RXD_NO_COMPLETION;
-
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
+
+	if (!(flags & (FI_COMPLETION | FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE |
+		FI_DELIVERY_COMPLETE)))
+		tx_entry->flags |= RXD_NO_COMPLETION;
 
 	ret = rxd_ep_post_rts(rxd_ep, tx_entry);
 	if (ret) {
