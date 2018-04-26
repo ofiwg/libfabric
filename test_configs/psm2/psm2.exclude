@@ -11,7 +11,5 @@ av_test
 cm_data
 shared_ctx
 scalable_ep
-cmatose
 shared_av
 rdm_cntr_pingpong
-rc_pingpong
