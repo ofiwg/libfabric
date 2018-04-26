@@ -13,7 +13,4 @@ cntr_test
 scalable_ep
 shared_ctx
 unexpected_msg
-cmatose
-rc_pingpong
 inj_complete
-
