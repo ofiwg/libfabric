@@ -632,7 +632,7 @@ rxm_ ## type ## _entry_get(struct rxm_ ## queue_type ## _queue *queue)		\
 	struct rxm_ ## type ## _entry *entry;					\
 	rxm_entry_pop(queue, entry);						\
 	if (!entry) {								\
-		FI_WARN(&rxm_prov, FI_LOG_CQ,					\
+		FI_DBG(&rxm_prov, FI_LOG_CQ,					\
 			"Exhausted " #type "_entry freestack\n");		\
 		return NULL;							\
 	}									\
