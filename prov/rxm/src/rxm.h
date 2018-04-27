@@ -543,10 +543,6 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 
 	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
 	buf = util_buf_alloc(pool->pool);
-	if (OFI_UNLIKELY(!buf)) {
-		pool->rxm_ep->res_fastlock_release(&pool->lock);
-		return NULL;
-	}
 	pool->rxm_ep->res_fastlock_release(&pool->lock);
 	return buf;
 }
