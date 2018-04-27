@@ -543,10 +543,6 @@ struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 
 	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
 	buf = util_buf_alloc(pool->pool);
-	if (OFI_UNLIKELY(!buf)) {
-		pool->rxm_ep->res_fastlock_release(&pool->lock);
-		return NULL;
-	}
 	pool->rxm_ep->res_fastlock_release(&pool->lock);
 	return buf;
 }
@@ -576,6 +572,9 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	       (tx_buf->type == RXM_BUF_POOL_TX_TAGGED) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_LMT));
+	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
+	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
+	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
 	tx_buf->pkt.hdr.flags &= ~OFI_REMOTE_CQ_DATA;
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
 			(struct rxm_buf *)tx_buf);
