@@ -142,7 +142,9 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	int ret;
 
 	if (OFI_UNLIKELY(done_len < rx_buf->pkt.hdr.size)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Message truncated\n");
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Message truncated: "
+			"recv buf length: %zu message length: %" PRIu64 "\n",
+			done_len, rx_buf->pkt.hdr.size);
 		ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
 					       rx_buf->recv_entry->context,
 					       rx_buf->recv_entry->comp_flags |
@@ -161,7 +163,9 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 	} else {
 		if (rx_buf->recv_entry->flags & FI_COMPLETION) {
-			FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion\n");
+			FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion: "
+			       "length: %" PRIu64 ", tag: 0x%" PRIx64 "\n",
+			       rx_buf->pkt.hdr.size, rx_buf->pkt.hdr.tag);
 			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
 					   rx_buf->recv_entry->context,
 					   rx_buf->recv_entry->comp_flags |

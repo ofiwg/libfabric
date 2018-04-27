@@ -629,6 +629,9 @@ rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 				   recv_queue, &recv_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting recv with length: %zu "
+	       "tag: 0x%" PRIx64 " ignore: 0x%" PRIx64 "\n",
+	       recv_entry->total_len, recv_entry->tag, recv_entry->ignore);
 	return rxm_process_recv_entry(recv_queue, recv_entry);
 }
 
@@ -809,6 +812,9 @@ static inline ssize_t
 rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
 {
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
+	       " tag: 0x%" PRIx64 "\n", tx_entry->tx_buf->pkt.hdr.size,
+	       tx_entry->tx_buf->pkt.hdr.tag);
 	ssize_t ret = fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
 			      tx_entry->tx_buf->hdr.desc, 0, tx_entry);
 	if (OFI_UNLIKELY(ret)) {
@@ -899,6 +905,8 @@ static inline ssize_t
 rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_buf *tx_buf, size_t pkt_size)
 {
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %" PRIu64
+	       " tag: 0x%" PRIx64 "\n", tx_buf->pkt.hdr.size, tx_buf->pkt.hdr.tag);
 	ssize_t ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 	if (OFI_UNLIKELY(ret)) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
