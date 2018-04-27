@@ -288,6 +288,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 {
 	struct ofi_ctrl_hdr conn_resp;
 	struct fi_eq_cm_entry *cm_entry;
+	ssize_t len;
 	int ret = FI_SUCCESS;
 
 	assert(poll_mgr->poll_fds[index].revents == POLLIN);
@@ -308,10 +309,11 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 	if (ret)
 		goto err;
 
-	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
+	len = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
 				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
-	if (ret < 0) {
+	if (len < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+		ret = (int) len;
 		goto err;
 	}
 err:

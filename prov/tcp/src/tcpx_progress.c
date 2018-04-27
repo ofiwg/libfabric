@@ -45,6 +45,7 @@
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 {
 	struct fi_eq_cm_entry cm_entry = {0};
+	ssize_t len;
 
 	fastlock_acquire(&ep->cm_state_lock);
 	if (ep->cm_state == TCPX_EP_SHUTDOWN) {
@@ -55,8 +56,12 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 	fastlock_release(&ep->cm_state_lock);
 
 	cm_entry.fid = fid;
-	return fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-			  &cm_entry, sizeof(cm_entry), 0);
+	len =  fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
+			   &cm_entry, sizeof(cm_entry), 0);
+	if (len < 0)
+		return (int) len;
+
+	return FI_SUCCESS;
 }
 
 void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
