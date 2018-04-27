@@ -311,8 +311,8 @@ void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
 		++raw_filter;
 	}
 
-	filter->names = ofi_split_and_alloc(raw_filter, ",");
-	if (!filter->names)
+	filter->names= ofi_split_and_alloc(raw_filter, ",", NULL);
+	if (filter->names)
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"unable to parse filter from: %s\n", raw_filter);
 }
@@ -410,7 +410,7 @@ void fi_ini(void)
 	if (!provdir)
 		provdir = PROVDLDIR;
 
-	dirs = ofi_split_and_alloc(provdir, ":");
+	dirs = ofi_split_and_alloc(provdir, ":", NULL);
 	if (dirs) {
 		for (n = 0; dirs[n]; ++n) {
 			ofi_ini_dir(dirs[n]);

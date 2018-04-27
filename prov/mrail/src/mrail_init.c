@@ -39,7 +39,7 @@ size_t mrail_num_info = 0;
 
 static inline char **mrail_split_addr_strc(const char *addr_strc)
 {
-	char **addr_strv = ofi_split_and_alloc(addr_strc, ",");
+	char **addr_strv = ofi_split_and_alloc(addr_strc, ",", NULL);
 	if (!addr_strv) {
 		FI_WARN(&mrail_prov, FI_LOG_CORE,
 			"Unable to split a FI_ADDR_STRV string\n");

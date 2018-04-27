@@ -751,7 +751,7 @@ int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)
  *
  * Returns NULL on failure.
  */
-char **ofi_split_and_alloc(const char *s, const char *delim)
+char **ofi_split_and_alloc(const char *s, const char *delim, size_t *count)
 {
 	int i, n;
 	char *tmp;
@@ -791,6 +791,8 @@ char **ofi_split_and_alloc(const char *s, const char *delim)
 	}
 	assert(i == n);
 
+	if (count)
+		*count = n;
 	return arr;
 
 cleanup:
