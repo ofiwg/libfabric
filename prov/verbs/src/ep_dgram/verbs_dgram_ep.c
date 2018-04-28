@@ -454,9 +454,6 @@ int fi_ibv_dgram_endpoint_open(struct fid_domain *domain_fid,
 	ep->service = (info->src_addr) ?
 			(((struct ofi_ib_ud_ep_name *)info->src_addr)->service) :
 			(((getpid() & 0x7FFF) << 16) + ((uintptr_t)ep & 0xFFFF));
-	
-	ofi_atomic_initialize32(&ep->unsignaled_send_cnt, 0);
-	ep->max_unsignaled_send_cnt = ep->info->tx_attr->size / 2;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->cm = &fi_ibv_dgram_cm_ops;

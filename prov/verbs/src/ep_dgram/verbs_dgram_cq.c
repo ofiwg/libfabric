@@ -127,12 +127,6 @@ int fi_ibv_dgram_tx_cq_comp(struct util_cq *util_cq,
 			    struct util_cntr *util_cntr,
 			    struct ibv_wc *wc)
 {
-	struct fi_ibv_dgram_wr_entry *wr_entry =
-		(struct fi_ibv_dgram_wr_entry *)(uintptr_t)wc->wr_id;
-
-	ofi_atomic_sub32(&wr_entry->hdr.ep->unsignaled_send_cnt,
-			 wr_entry->hdr.ep->max_unsignaled_send_cnt);
-
 	return fi_ibv_dgram_cq_cntr_comp(util_cq, util_cntr, wc);
 }
 
@@ -140,12 +134,6 @@ int fi_ibv_dgram_tx_cq_report_error(struct util_cq *util_cq,
 				    struct util_cntr *util_cntr,
 				    struct ibv_wc *wc)
 {
-	struct fi_ibv_dgram_wr_entry *wr_entry =
-		(struct fi_ibv_dgram_wr_entry *)(uintptr_t)wc->wr_id;
-
-	ofi_atomic_sub32(&wr_entry->hdr.ep->unsignaled_send_cnt,
-			 wr_entry->hdr.ep->max_unsignaled_send_cnt);
-
 	return fi_ibv_dgram_cq_cntr_report_error(util_cq, util_cntr, wc);
 }
 
@@ -162,10 +150,6 @@ int fi_ibv_dgram_tx_cq_no_action(struct util_cq *util_cq,
 {
 	struct fi_ibv_dgram_wr_entry *wr_entry =
 		(struct fi_ibv_dgram_wr_entry *)(uintptr_t)wc->wr_id;
-	
-
-	ofi_atomic_sub32(&wr_entry->hdr.ep->unsignaled_send_cnt,
-			 wr_entry->hdr.ep->max_unsignaled_send_cnt);
 
 	fi_ibv_dgram_wr_entry_release(
 		&wr_entry->hdr.ep->grh_pool,
