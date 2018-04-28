@@ -45,11 +45,6 @@ void fi_ibv_dgram_recv_setup(struct fi_ibv_dgram_wr_entry *wr_entry,
 	} else {
 		wr_entry->hdr.suc_cb = fi_ibv_dgram_rx_cq_no_action;
 		wr_entry->hdr.err_cb = fi_ibv_dgram_rx_cq_no_action;
-
-		fi_ibv_dgram_wr_entry_release(
-			&ep->grh_pool,
-			(struct fi_ibv_dgram_wr_entry_hdr *)wr_entry
-		);
 	}
 }
 
@@ -131,25 +126,15 @@ void fi_ibv_dgram_send_setup(struct fi_ibv_dgram_wr_entry *wr_entry,
 			     size_t total_len)
 {
 	struct fi_ibv_dgram_ep *ep = wr_entry->hdr.ep;
-	int32_t unsignaled_cnt = ofi_atomic_inc32(&ep->unsignaled_send_cnt) + 1;
 
+	wr->send_flags |= IBV_SEND_SIGNALED;
 	if (fi_ibv_dgram_is_completion(ep->ep_flags,
 				       wr_entry->hdr.flags)) {
-		wr->send_flags |= IBV_SEND_SIGNALED;
 		wr_entry->hdr.suc_cb = fi_ibv_dgram_tx_cq_comp;
 		wr_entry->hdr.err_cb = fi_ibv_dgram_tx_cq_report_error;
-		wr_entry->hdr.comp_unsignaled_cnt = unsignaled_cnt;
-	} else if (unsignaled_cnt == ep->max_unsignaled_send_cnt) {
-		wr->send_flags |= IBV_SEND_SIGNALED;
-		wr_entry->hdr.suc_cb = fi_ibv_dgram_tx_cq_no_action;
-		wr_entry->hdr.err_cb = fi_ibv_dgram_tx_cq_no_action;
-		wr_entry->hdr.comp_unsignaled_cnt = unsignaled_cnt;
 	} else {
-		/* No need other actions */
-		fi_ibv_dgram_wr_entry_release(
-			&ep->grh_pool,
-			(struct fi_ibv_dgram_wr_entry_hdr *)wr_entry
-		);
+		wr_entry->hdr.suc_cb = fi_ibv_dgram_tx_cq_no_action;
+		wr_entry->hdr.err_cb = fi_ibv_dgram_tx_cq_report_error;
 	}
 
 	if ((wr_entry->hdr.flags & FI_INJECT) &&
@@ -292,7 +277,7 @@ static inline ssize_t
 fi_ibv_dgram_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr)
 {
-    struct iovec iov = {
+	struct iovec iov = {
 		.iov_base	= (void *)buf,
 		.iov_len	= len,
 	};

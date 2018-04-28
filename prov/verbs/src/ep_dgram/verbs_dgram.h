@@ -64,7 +64,6 @@ struct fi_ibv_dgram_wr_entry_hdr {
 	struct dlist_entry		entry;
 	void				*desc;
 	struct fi_ibv_dgram_ep		*ep;
-	int32_t				comp_unsignaled_cnt;
 	void				*context;
 	uint64_t			flags;
 	handle_wr_cb			suc_cb;
@@ -222,8 +221,6 @@ struct fi_ibv_dgram_ep {
 	struct ofi_ib_ud_ep_name	ep_name;
 	int				service;
 	int				ep_flags;
-	int32_t				max_unsignaled_send_cnt;
-	ofi_atomic32_t			unsignaled_send_cnt;
 };
 
 extern struct fi_ops_msg fi_ibv_dgram_msg_ops;
