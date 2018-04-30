@@ -653,22 +653,29 @@ static void usage(void)
 	ft_addr_usage();
 }
 
-static void set_prov(char *prov_name)
+static int set_prov(char *prov_name)
 {
 	const char *util_name;
 	const char *core_name;
+	char *core_name_dup;
 	size_t len;
 
 	util_name = ft_util_name(prov_name, &len);
 	core_name = ft_core_name(prov_name, &len);
 
 	if (util_name && !core_name)
-		return;
+		return 0;
+
+	core_name_dup = strndup(core_name, len);
+	if (!core_name_dup)
+		return -FI_ENOMEM;
 
 	snprintf(new_prov_var, sizeof(new_prov_var) - 1, "FI_PROVIDER=%s",
-		 core_name);
+		 core_name_dup);
 
 	putenv(new_prov_var);
+	free(core_name_dup);
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -750,7 +757,8 @@ int main(int argc, char **argv)
 	hints->mode = ~0;
 
 	if (hints->fabric_attr->prov_name) {
-		set_prov(hints->fabric_attr->prov_name);
+		if (set_prov(hints->fabric_attr->prov_name))
+			return EXIT_FAILURE;
 	} else {
 	       FT_WARN("\nTests getinfo1 to getinfo5 may not run exclusively "
 		       "for a particular provider since we don't pass hints.\n"
