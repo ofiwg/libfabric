@@ -83,6 +83,7 @@ struct tcpx_domain;
 struct tcpx_pe_entry;
 struct tcpx_cq;
 struct tcpx_ep;
+struct tcpx_rx_detect;
 
 int tcpx_create_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric,
@@ -109,6 +110,8 @@ int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
 void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry);
 int tcpx_send_msg(struct tcpx_pe_entry *pe_entry);
+int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
+
 struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *cq);
 void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry);
 void tcpx_progress(struct util_ep *util_ep);
@@ -184,9 +187,16 @@ enum tcpx_cm_state {
 	TCPX_EP_ERROR,
 };
 
+struct tcpx_rx_detect {
+	struct ofi_op_hdr	hdr;
+	uint64_t		done_len;
+};
+
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
+	struct tcpx_rx_detect	rx_detect;
+	struct tcpx_pe_entry	*cur_rx_entry;
 	struct dlist_entry	ep_entry;
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;

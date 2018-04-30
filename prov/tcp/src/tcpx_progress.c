@@ -122,18 +122,77 @@ done:
 	tcpx_pe_entry_release(pe_entry);
 }
 
-static void process_rx_queue(struct tcpx_ep *ep)
+static int tcpx_get_rx_pe_entry(struct tcpx_rx_detect *rx_detect,
+				struct tcpx_pe_entry **new_pe_entry)
 {
 	struct tcpx_pe_entry *pe_entry;
 	struct dlist_entry *entry;
+	struct tcpx_ep *tcpx_ep;
+	int ret;
 
-	if (dlist_empty(&ep->rx_queue))
-		return;
+	tcpx_ep = container_of(rx_detect, struct tcpx_ep, rx_detect);
 
-	entry = ep->rx_queue.next;
-	pe_entry = container_of(entry, struct tcpx_pe_entry,
-				entry);
-	process_rx_pe_entry(pe_entry);
+	switch (rx_detect->hdr.op) {
+	case ofi_op_msg:
+		if (dlist_empty(&tcpx_ep->rx_queue))
+			return -FI_EAGAIN;
+
+		entry = tcpx_ep->rx_queue.next;
+		pe_entry = container_of(entry, struct tcpx_pe_entry,
+					entry);
+
+		pe_entry->msg_hdr = rx_detect->hdr;
+		pe_entry->msg_hdr.op_data = TCPX_OP_MSG_RECV;
+		pe_entry->done_len = sizeof(rx_detect->hdr);
+
+		ret = ofi_truncate_iov(pe_entry->msg_data.iov,
+				     &pe_entry->msg_data.iov_cnt,
+				     (ntohll(pe_entry->msg_hdr.size) -
+				      sizeof(pe_entry->msg_hdr)));
+		if (ret) {
+			tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
+						  pe_entry, ret);
+			dlist_remove(&pe_entry->entry);
+			tcpx_pe_entry_release(pe_entry);
+			return ret;
+		}
+		break;
+	case ofi_op_read_req:
+	case ofi_op_read_rsp:
+	case ofi_op_write:
+	case ofi_op_write_rsp:
+		/* todo  complete these cases for rma*/
+	default:
+		return -FI_EINVAL;
+	}
+
+	rx_detect->done_len = 0;
+	*new_pe_entry = pe_entry;
+	return FI_SUCCESS;
+}
+
+static void tcpx_process_rx_msg(struct tcpx_ep *ep)
+{
+	int ret;
+
+	if (!ep->cur_rx_entry) {
+		ret = tcpx_recv_hdr(ep->conn_fd, &ep->rx_detect);
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			return;
+
+		if (ret)
+			goto err;
+
+		if (tcpx_get_rx_pe_entry(&ep->rx_detect,
+					 &ep->cur_rx_entry))
+			return;
+	}
+
+	process_rx_pe_entry(ep->cur_rx_entry);
+	return;
+err:
+	if (ret == -FI_ENOTCONN)
+		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
 }
 
 static void process_tx_queue(struct tcpx_ep *ep)
@@ -156,7 +215,7 @@ void tcpx_progress(struct util_ep *util_ep)
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
 	fastlock_acquire(&ep->queue_lock);
-	process_rx_queue(ep);
+	tcpx_process_rx_msg(ep);
 	process_tx_queue(ep);
 	fastlock_release(&ep->queue_lock);
 	return;
