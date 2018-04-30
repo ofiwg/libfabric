@@ -745,6 +745,47 @@ int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)
 	return cpuinfo[reg] & bit;
 }
 
+/* String utility functions */
+
+int ofi_rm_substr(char *str, const char *substr)
+{
+	char *dest, *src;
+
+	dest = strstr(str, substr);
+	if (!dest)
+		return -FI_EINVAL;
+
+	src = dest + strlen(substr);
+	memmove(dest, src, strlen(src) + 1);
+	return 0;
+}
+
+int ofi_rm_substr_delim(char *str, const char *substr, const char delim)
+{
+	char *pattern;
+	size_t len = strlen(substr) + 2; // account for delim and null char
+	int ret;
+
+	pattern = malloc(len);
+	if (!pattern)
+		return -FI_ENOMEM;
+
+	snprintf(pattern, len, "%c%s", delim, substr);
+	ret = ofi_rm_substr(str, pattern);
+	if (!ret)
+		goto out;
+
+	snprintf(pattern, len, "%s%c", substr, delim);
+	ret = ofi_rm_substr(str, pattern);
+	if (!ret)
+		goto out;
+
+	ret = ofi_rm_substr(str, substr);
+out:
+	free(pattern);
+	return ret;
+}
+
 /* Split the given string "s" using the specified delimiter(s) in the string
  * "delim" and return an array of strings. The array is terminated with a NULL
  * pointer. Returned array should be freed with ofi_free_string_array().
