@@ -38,6 +38,9 @@
 #include "hook_perf.h"
 
 
+static uint32_t hooks_enabled;
+
+
 struct fid *hook_to_hfid(const struct fid *fid)
 {
 	switch (fid->fclass) {
@@ -223,5 +226,44 @@ static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
 
 void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric)
 {
-	hook_fabric(hfabric, fabric, HOOK_NOOP);
+	int hooks, hclass, ret;
+
+	*fabric = hfabric;
+	if (!hooks_enabled)
+		return;
+
+	for (hooks = hooks_enabled, hclass = 0; hooks;
+	     hooks >>= 1, hclass++) {
+		if (hooks & 0x1) {
+			ret = hook_fabric(hfabric, fabric,
+					  (enum hook_class) hclass);
+			if (ret)
+				return;
+			hfabric = *fabric;
+		}
+	}
+}
+
+void ofi_hook_init(void)
+{
+	char *param_val = NULL;
+
+	fi_param_define(NULL, "hook", FI_PARAM_STRING,
+			"Intercept calls to underlying provider and apply "
+			"the specified functionality to them.  Hook option: "
+			"perf (gather performance data)");
+	fi_param_get_str(NULL, "hook", &param_val);
+
+	hooks_enabled = 0;
+	if (!param_val)
+		return;
+
+	if (!strcasecmp(param_val, "noop")) {
+		FI_INFO(&core_prov, FI_LOG_CORE, "Noop hook requested\n");
+		hooks_enabled |= (1 << HOOK_NOOP);
+	}
+	if (!strcasecmp(param_val, "perf")) {
+		FI_INFO(&core_prov, FI_LOG_CORE, "Perf hook requested\n");
+		hooks_enabled |= (1 << HOOK_PERF);
+	}
 }

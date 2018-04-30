@@ -45,6 +45,10 @@
 #include <rdma/fi_tagged.h>
 
 
+/*
+ * Hooks are installed from top down.
+ * Values must start at 0 and increment by one.
+ */
 enum hook_class {
 	HOOK_NOOP,
 	HOOK_PERF,
