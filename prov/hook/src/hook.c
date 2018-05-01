@@ -87,6 +87,12 @@ struct fid *hook_to_hfid(const struct fid *fid)
 	}
 }
 
+struct fid_wait *hook_to_hwait(const struct fid_wait *wait)
+{
+	return container_of(wait, struct hook_wait, wait)->hwait;
+}
+
+
 static int hook_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fid *hfid, *hbfid;
@@ -203,6 +209,7 @@ static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
 		return ret;
 
 	fab->hclass = hclass;
+	fab->hfabric = hfabric;
 	fab->fabric.fid.fclass = FI_CLASS_FABRIC;
 	fab->fabric.fid.context = hfabric->fid.context;
 	fab->fabric.fid.ops = &hook_fabric_fid_ops;

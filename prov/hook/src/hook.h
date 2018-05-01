@@ -57,6 +57,8 @@ enum hook_class {
 
 extern struct fi_ops hook_fid_ops;
 struct fid *hook_to_hfid(const struct fid *fid);
+struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
+
 
 struct hook_fabric {
 	struct fid_fabric fabric;

@@ -107,6 +107,7 @@ int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
 	struct hook_cq *mycq;
+	struct fi_cq_attr hattr;
 	int ret;
 
 	mycq = calloc(1, sizeof *mycq);
@@ -119,7 +120,11 @@ int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	mycq->cq.fid.ops = &hook_fid_ops;
 	mycq->cq.ops = &hook_cq_ops;
 
-	ret = fi_cq_open(dom->hdomain, attr, &mycq->hcq, &mycq->cq.fid);
+	hattr = *attr;
+	if (attr->wait_obj == FI_WAIT_SET)
+		hattr.wait_set = hook_to_hwait(attr->wait_set);
+
+	ret = fi_cq_open(dom->hdomain, &hattr, &mycq->hcq, &mycq->cq.fid);
 	if (ret)
 		free(mycq);
 	else
