@@ -311,8 +311,8 @@ void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
 		++raw_filter;
 	}
 
-	filter->names = ofi_split_and_alloc(raw_filter, ",");
-	if (!filter->names)
+	filter->names= ofi_split_and_alloc(raw_filter, ",", NULL);
+	if (filter->names)
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"unable to parse filter from: %s\n", raw_filter);
 }
@@ -410,7 +410,7 @@ void fi_ini(void)
 	if (!provdir)
 		provdir = PROVDLDIR;
 
-	dirs = ofi_split_and_alloc(provdir, ":");
+	dirs = ofi_split_and_alloc(provdir, ":", NULL);
 	if (dirs) {
 		for (n = 0; dirs[n]; ++n) {
 			ofi_ini_dir(dirs[n]);
@@ -568,23 +568,41 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
 
 /*
  * The layering of utility providers over core providers follows these rules.
- * 1. If both are specified, then only return that layering
- * 2. If a utility provider is specified, return it over any* core provider.
- * 3. If a core provider is specified, return any utility provider that can
- *    layer over it, plus the core provider itself, if possible.
- * 4* A utility provider will not layer over the sockets provider unless the
- *    user explicitly requests that combination.
- *
- * Utility providers use an internal flag, OFI_CORE_PROV_ONLY, to indicate
- * that only core providers should respond to an fi_getinfo query.  This
- * prevents utility providers from layering over other utility providers.
+ * 0. Provider names are delimited by ";"
+ * 1. Rules when # of providers <= 2:
+ *    1a. If both are specified, then only return that layering
+ *    1b. If a utility provider is specified, return it over any* core provider.
+ *    1c. If a core provider is specified, return any utility provider that can
+ *        layer over it, plus the core provider itself, if possible.
+ *    1d. A utility provider will not layer over the sockets provider unless the
+ *        user explicitly requests that combination.
+ *    1e. OFI_CORE_PROV_ONLY flag prevents utility providers layering over other
+ *        utility providers.
+ * 2. If both the providers are utility providers or if more than two providers
+ *    are specified, the rightmost provider would be compared.
+ * 3. If any provider has a caret symbol "^" is prefixed before any provider
+ *    name it would be excluded (internal use only). These excluded providers
+ *    should be listed only at the end.
  */
 static int ofi_layering_ok(const struct fi_provider *provider,
-			   const char *util_name, size_t util_len,
-			   const char *core_name, size_t core_len,
+			   char **prov_vec, size_t count,
 			   uint64_t flags)
 {
+	char *prov_name;
+	int i;
+
+	/* Excluded providers must be at the end */
+	for (i = count - 1; i >= 0; i--) {
+		if (prov_vec[i][0] != '^')
+		    break;
+
+		if (!strcasecmp(&prov_vec[i][1], provider->name))
+			return 0;
+	}
+	count = i + 1;
+
 	if (flags & OFI_CORE_PROV_ONLY) {
+		assert((count == 1) || (count == 0));
 		if (ofi_is_util_prov(provider)) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
 				"Need core provider, skipping util %s\n",
@@ -592,35 +610,39 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 			return 0;
 		}
 
-		if ((!core_len || !core_name) &&
-		    !strcasecmp(provider->name, "sockets")) {
+		if ((count == 0) && !strcasecmp(provider->name, "sockets")) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
 				"Skipping util;sockets layering\n");
 			return 0;
 		}
 	}
 
-	if (util_len && util_name) {
-		assert(!(flags & OFI_CORE_PROV_ONLY));
-		if ((strlen(provider->name) != util_len) ||
-		    strncasecmp(util_name, provider->name, util_len))
-			return 0;
+	if (!count)
+		return 1;
 
-	} else if (core_len && core_name) {
-		if (!strncasecmp(core_name, "sockets", core_len) &&
-		    ofi_is_util_prov(provider)) {
+	/* To maintain backward compatibility with the previous behaviour of
+	 * ofi_layering_ok we need to check if the # of providers is two or
+	 * fewer. In such a case, we have to be agnostic to the ordering of
+	 * core and utility providers */
+
+	if ((count == 1) && ofi_is_util_prov(provider) &&
+	    !ofi_has_util_prefix(prov_vec[0])) {
+		if (!strcasecmp(prov_vec[0], "sockets")) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
 				"Sockets requested, skipping util layering\n");
 			return 0;
+		} else {
+			return 1;
 		}
-
-		if (!ofi_is_util_prov(provider) &&
-		    ((strlen(provider->name) != core_len) ||
-		     strncasecmp(core_name, provider->name, core_len)))
-			return 0;
 	}
 
-	return 1;
+	if ((count == 2) && ofi_has_util_prefix(prov_vec[0]) &&
+	    !ofi_has_util_prefix(prov_vec[1]))
+		prov_name = prov_vec[0];
+	else
+		prov_name = prov_vec[count - 1];
+
+	return !strcasecmp(provider->name, prov_name);
 }
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
@@ -630,8 +652,8 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 {
 	struct ofi_prov *prov;
 	struct fi_info *tail, *cur;
-	const char *util_name = NULL, *core_name = NULL;
-	size_t util_len = 0, core_len = 0;
+	char **prov_vec = NULL;
+	size_t count = 0;
 	int ret;
 
 	if (!ofi_init)
@@ -648,10 +670,12 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	}
 
 	if (hints && hints->fabric_attr && hints->fabric_attr->prov_name) {
-		util_name = ofi_util_name(hints->fabric_attr->prov_name,
-					  &util_len);
-		core_name = ofi_core_name(hints->fabric_attr->prov_name,
-					  &core_len);
+		prov_vec = ofi_split_and_alloc(hints->fabric_attr->prov_name,
+					       ";", &count);
+		if (!prov_vec)
+			return -FI_ENOMEM;
+		FI_DBG(&core_prov, FI_LOG_CORE, "hints prov_name: %s\n",
+		       hints->fabric_attr->prov_name);
 	}
 
 	*info = tail = NULL;
@@ -659,8 +683,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		if (!prov->provider)
 			continue;
 
-		if (!ofi_layering_ok(prov->provider, util_name, util_len,
-				     core_name, core_len, flags))
+		if (!ofi_layering_ok(prov->provider, prov_vec, count, flags))
 			continue;
 
 		if (FI_VERSION_LT(prov->provider->fi_version, version)) {
@@ -701,6 +724,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		ofi_set_prov_attr(tail->fabric_attr, prov->provider);
 		tail->fabric_attr->api_version = version;
 	}
+	ofi_free_string_array(prov_vec);
 
 	return *info ? 0 : -FI_ENODATA;
 }

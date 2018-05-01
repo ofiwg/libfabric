@@ -756,6 +756,14 @@ void ofi_fabric_remove(struct util_fabric *fabric);
  * Utility Providers
  */
 
+#define OFI_NAME_DELIM	';'
+#define OFI_UTIL_PREFIX "ofi_"
+
+static inline int ofi_has_util_prefix(const char *str)
+{
+	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
+}
+
 typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
 				struct fi_info *dest_info);
 
@@ -767,18 +775,17 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
 		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
 		 ofi_alter_info_t info_to_util, struct fi_info **info);
-int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
+int ofi_get_core_info_fabric(const struct fi_provider *prov,
+			     const struct fi_fabric_attr *util_attr,
 			     struct fi_info **core_info);
 
-
-#define OFI_NAME_DELIM	';'
-#define OFI_UTIL_PREFIX "ofi_"
 
 char *ofi_strdup_append(const char *head, const char *tail);
 // char *ofi_strdup_head(const char *str);
 // char *ofi_strdup_tail(const char *str);
 const char *ofi_util_name(const char *prov_name, size_t *len);
 const char *ofi_core_name(const char *prov_name, size_t *len);
+int ofi_exclude_prov_name(char **prov_name, const char *util_prov_name);
 
 
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,

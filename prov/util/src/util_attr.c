@@ -89,11 +89,6 @@ char *ofi_strdup_append(const char *head, const char *tail)
 	return str;
 }
 
-static int ofi_has_util_prefix(const char *str)
-{
-	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
-}
-
 const char *ofi_util_name(const char *str, size_t *len)
 {
 	char *delim;
@@ -137,6 +132,41 @@ const char *ofi_core_name(const char *str, size_t *len)
 
 }
 
+int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
+{
+	char *exclude, *name, *name_exclude;
+	int ret = -FI_ENOMEM;
+
+	name = strdup(*prov_name_list);
+	if (!name)
+		return -FI_ENOMEM;
+
+	ofi_rm_substr_delim(name, util_prov_name, OFI_NAME_DELIM);
+
+	exclude = malloc(strlen(util_prov_name) + 2);
+	if (!exclude)
+		goto out;
+
+	exclude[0] = '^';
+	strcpy(&exclude[1], util_prov_name);
+
+	if (strlen(name)) {
+		name_exclude = ofi_strdup_append(name, exclude);
+		free(exclude);
+		if (!name_exclude)
+			goto out;
+		free(*prov_name_list);
+		*prov_name_list = name_exclude;
+	} else {
+		free(*prov_name_list);
+		*prov_name_list = exclude;
+	}
+	ret = 0;
+out:
+	free(name);
+	return ret;
+}
+
 static int ofi_dup_addr(const struct fi_info *info, struct fi_info *dup)
 {
 	dup->addr_format = info->addr_format;
@@ -163,8 +193,7 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
-	const char *core_name;
-	size_t len;
+	int ret = -FI_ENOMEM;
 
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
@@ -190,17 +219,18 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 		}
 
 		if (util_info->fabric_attr->prov_name) {
-			core_name = ofi_core_name(util_info->fabric_attr->
-						  prov_name, &len);
-			if (core_name) {
-				(*core_hints)->fabric_attr->prov_name =
-					strndup(core_name, len);
-				if (!(*core_hints)->fabric_attr->prov_name) {
-					FI_WARN(prov, FI_LOG_FABRIC,
-						"Unable to alloc prov name\n");
-					goto err;
-				}
+			(*core_hints)->fabric_attr->prov_name =
+				strdup(util_info->fabric_attr->prov_name);
+			if (!(*core_hints)->fabric_attr->prov_name) {
+				FI_WARN(prov, FI_LOG_FABRIC,
+					"Unable to alloc prov name\n");
+				goto err;
 			}
+			ret = ofi_exclude_prov_name(
+					&(*core_hints)->fabric_attr->prov_name,
+					prov->name);
+			if (ret)
+				goto err;
 		}
 	}
 
@@ -217,7 +247,7 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 
 err:
 	fi_freeinfo(*core_hints);
-	return -FI_ENOMEM;
+	return ret;
 }
 
 static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
@@ -335,28 +365,34 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 }
 
 /* Caller should use only fabric_attr in returned core_info */
-int ofi_get_core_info_fabric(struct fi_fabric_attr *util_attr,
+int ofi_get_core_info_fabric(const struct fi_provider *prov,
+			     const struct fi_fabric_attr *util_attr,
 			     struct fi_info **core_info)
 {
 	struct fi_info hints;
-	const char *core_name;
-	size_t len;
 	int ret;
 
-	core_name = ofi_core_name(util_attr->prov_name, &len);
-	if (!core_name)
+	/* ofix_getinfo() would append utility provider name after core / lower
+	 * layer provider name */
+	if (!strstr(util_attr->prov_name, prov->name))
 		return -FI_ENODATA;
 
 	memset(&hints, 0, sizeof hints);
 	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr))))
 		return -FI_ENOMEM;
 
-	hints.fabric_attr->name = util_attr->name;
-	hints.fabric_attr->api_version = util_attr->api_version;
-	if (!(hints.fabric_attr->prov_name = strndup(core_name, len))) {
+	hints.fabric_attr->prov_name = strdup(util_attr->prov_name);
+	if (!hints.fabric_attr->prov_name) {
 		ret = -FI_ENOMEM;
 		goto out;
 	}
+
+	ret = ofi_exclude_prov_name(&hints.fabric_attr->prov_name, prov->name);
+	if (ret)
+		goto out;
+
+	hints.fabric_attr->name = util_attr->name;
+	hints.fabric_attr->api_version = util_attr->api_version;
 	hints.mode = ~0;
 
 	ret = fi_getinfo(util_attr->api_version, NULL, NULL, OFI_CORE_PROV_ONLY,
