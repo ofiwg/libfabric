@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,13 +32,12 @@
 
 #include "rxd.h"
 
-#define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_DIRECTED_RECV |	\
-		     FI_RECV | FI_SEND | FI_SOURCE)
+#define RXD_EP_CAPS (FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_DIRECTED_RECV)
 
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
-	.inject_size = 0,
+	.inject_size = RXD_INJECT_SIZE,
 	.size = (1ULL << RXD_MAX_TX_BITS),
 	.iov_limit = RXD_IOV_LIMIT,
 	.rma_iov_limit = 0,
@@ -67,6 +66,7 @@ struct fi_domain_attr rxd_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
+	.cq_data_size = sizeof_field(struct rxd_ctrl_hdr, data),
 	.mr_key_size = sizeof(uint64_t),
 	.cq_cnt = 128,
 	.ep_cnt = 128,

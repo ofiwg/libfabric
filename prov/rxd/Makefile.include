@@ -8,7 +8,6 @@ _rxd_files = \
 	prov/rxd/src/rxd_cq.c		\
 	prov/rxd/src/rxd_cntr.c		\
 	prov/rxd/src/rxd_ep.c		\
-	prov/rxd/src/rxd_rma.c		\
 	prov/rxd/src/rxd.h
 
 if HAVE_RXD_DL

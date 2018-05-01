@@ -289,7 +289,6 @@
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">
       </ForcedIncludeFiles>
     </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_rma.c" />
     <ClCompile Include="prov\rxm\src\rxm_attr.c" />
     <ClCompile Include="prov\rxm\src\rxm_conn.c" />
     <ClCompile Include="prov\rxm\src\rxm_rma.c" />
@@ -551,6 +550,7 @@
     <ClCompile Include="src\perf.c" />
     <ClCompile Include="src\mem.c" />
     <ClCompile Include="src\rbtree.c" />
+    <ClCompile Include="src\tree.c" />
     <ClCompile Include="src\var.c" />
     <ClCompile Include="src\windows\osd.c" />
   </ItemGroup>
@@ -574,6 +574,7 @@
     <ClInclude Include="include\ofi_proto.h" />
     <ClInclude Include="include\ofi_rbuf.h" />
     <ClInclude Include="include\ofi_signal.h" />
+    <ClInclude Include="include\ofi_tree.h" />
     <ClInclude Include="include\ofi_util.h" />
     <ClInclude Include="include\ofi_prov.h" />
     <ClInclude Include="include\rbtree.h" />
