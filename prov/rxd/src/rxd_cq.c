@@ -366,13 +366,12 @@ static int rxd_check_post_unexp(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_ent
 	struct dlist_entry *item;
 
 	dlist_foreach(&ep->unexp_list, item) {
-		unexp = container_of(item, struct rxd_pkt_entry, entry);
+		unexp = container_of(item, struct rxd_pkt_entry, d_entry);
 		if (unexp->pkt.hdr.tx_id == pkt_entry->pkt.hdr.tx_id &&
 		    unexp->pkt.hdr.key == pkt_entry->pkt.hdr.key)
 			return 0;
 	}
-	dlist_remove(&pkt_entry->entry);
-	dlist_insert_tail(&pkt_entry->entry, &ep->unexp_list);
+	dlist_insert_tail(&pkt_entry->d_entry, &ep->unexp_list);
 	return -FI_ENOMSG;
 }
 
@@ -421,7 +420,7 @@ static int rxd_handle_rts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 static void rxd_handle_cts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 			    struct rxd_pkt_entry *pkt_entry)
 {
-	struct dlist_entry *pkt_item;
+	struct slist_entry *pkt_item;
 	struct rxd_pkt_entry *pkt;
 	struct rxd_x_entry *tx_entry;
 
@@ -435,12 +434,13 @@ static void rxd_handle_cts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	tx_entry->peer_x_addr = pkt_entry->pkt.hdr.peer;
 
 	if (tx_entry->flags & RXD_INJECT) {
-		dlist_pop_front(&tx_entry->pkt_list, struct rxd_pkt_entry,
-				pkt, entry);
+		pkt = container_of(slist_remove_head(&tx_entry->pkt_list),
+				   struct rxd_pkt_entry, s_entry);
 		rxd_release_tx_pkt(ep, pkt);
 
-		dlist_foreach(&tx_entry->pkt_list, pkt_item) {
-			pkt = container_of(pkt_item, struct rxd_pkt_entry, entry);
+		for (pkt_item = tx_entry->pkt_list.head; pkt_item;
+		     pkt_item = pkt_item->next) {
+			pkt = container_of(pkt_item, struct rxd_pkt_entry, s_entry);
 			pkt->pkt.hdr.rx_id = pkt_entry->pkt.hdr.rx_id;
 			pkt->pkt.hdr.peer = pkt_entry->pkt.hdr.peer;
 			if (rxd_ep_retry_pkt(ep, pkt, tx_entry))
@@ -470,7 +470,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 
 	if (!(tx_entry->flags & FI_INJECT)) {
 		rxd_tx_entry_progress(ep, tx_entry, 1);
-		if (!dlist_empty(&tx_entry->pkt_list))
+		if (!slist_empty(&tx_entry->pkt_list))
 			return;
 	}
 
@@ -487,7 +487,8 @@ free:
 
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 {
-	struct rxd_pkt_entry *pkt_entry;
+	struct rxd_pkt_entry *pkt_entry, *pkt_entry_head;
+	struct slist_entry *item, *prev;
 	int ret = 0;
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "got recv completion\n");
@@ -513,8 +514,23 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 		rxd_handle_data(ep, comp, pkt_entry);
 	}
 
+	pkt_entry_head = container_of(ep->rx_pkt_list.head,
+				      struct rxd_pkt_entry, s_entry);
+	if (pkt_entry_head != pkt_entry) {
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+			"matched to incorrect receive\n");
+		slist_foreach(&ep->rx_pkt_list, item, prev) {
+			pkt_entry_head = container_of(item, struct rxd_pkt_entry,
+						      s_entry);
+			if (pkt_entry_head == pkt_entry)
+				break;
+		}
+		slist_remove(&ep->rx_pkt_list, item, prev);
+	} else {
+		slist_remove_head(&ep->rx_pkt_list);
+	}
+
 	if (!ret) {
-		dlist_remove(&pkt_entry->entry);
 		rxd_release_rx_pkt(ep, pkt_entry);
 		rxd_ep_post_buf(ep);
 	}

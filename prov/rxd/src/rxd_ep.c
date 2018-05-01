@@ -156,7 +156,7 @@ static int rxd_match_unexp_msg(struct dlist_entry *item, const void *arg)
 	const struct rxd_x_entry *rx_entry = arg;
 	struct rxd_pkt_entry *pkt_entry;
 
-	pkt_entry = container_of(item, struct rxd_pkt_entry, entry);
+	pkt_entry = container_of(item, struct rxd_pkt_entry, d_entry);
 	return (rx_entry->peer == FI_ADDR_UNSPEC ||
 		rx_entry->peer == pkt_entry->peer);
 }
@@ -174,9 +174,10 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep,
 		dlist_remove(&rx_entry->entry);
 		dlist_insert_tail(&rx_entry->entry, &ep->active_rx_list);
 
-		pkt_entry = container_of(match, struct rxd_pkt_entry, entry);
+		pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
 
 		rxd_post_cts(ep, rx_entry, pkt_entry);
+
 		rxd_release_rx_pkt(ep, pkt_entry);
 		rxd_ep_post_buf(ep);
 	}
@@ -206,7 +207,7 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	
 	memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
 
-	dlist_init(&rx_entry->pkt_list);
+	slist_init(&rx_entry->pkt_list);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_list);
 
 	return rx_entry;
@@ -309,7 +310,7 @@ int rxd_ep_post_buf(struct rxd_ep *ep)
 	}
 
 	ep->posted_bufs++;
-	dlist_insert_tail(&pkt_entry->entry, &ep->rx_pkt_list);
+	slist_insert_tail(&pkt_entry->s_entry, &ep->rx_pkt_list);
 
 	return 0;
 }
@@ -423,7 +424,7 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep,
 	       sizeof(*msg->msg_iov) * msg->iov_count);
 	tx_entry->iov_count = msg->iov_count;
 
-	dlist_init(&tx_entry->pkt_list);
+	slist_init(&tx_entry->pkt_list);
 	dlist_insert_tail(&tx_entry->entry, &ep->tx_list);
 
 	return tx_entry;
@@ -452,7 +453,7 @@ static ssize_t rxd_ep_post_data_msg(struct rxd_ep *ep,
 	if (tx_entry->bytes_done == tx_entry->size)
 		pkt_entry->pkt.hdr.flags = RXD_LAST;
 
-	dlist_insert_tail(&pkt_entry->entry, &tx_entry->pkt_list);
+	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
 	return try_send ? rxd_ep_retry_pkt(ep, pkt_entry, tx_entry) : 0;
 }
 
@@ -461,13 +462,13 @@ void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 {
 	struct rxd_pkt_entry *pkt_entry;
 
-	while (!dlist_empty(&x_entry->pkt_list)) {
-		pkt_entry = container_of(x_entry->pkt_list.next,
-				   struct rxd_pkt_entry, entry);
+	while (!slist_empty(&x_entry->pkt_list)) {
+		pkt_entry = container_of(x_entry->pkt_list.head,
+				   struct rxd_pkt_entry, s_entry);
 		if (!rxd_is_ctrl_pkt(pkt_entry) &&
 		    pkt_entry->pkt.hdr.seg_no > last_acked)
 			break;
-		dlist_remove(&pkt_entry->entry);
+		slist_remove_head(&x_entry->pkt_list);
 		rxd_release_tx_pkt(ep, pkt_entry);
 	}
 }
@@ -516,7 +517,7 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 	pkt_entry->pkt.ctrl.data = tx_entry->data;
 	pkt_entry->pkt.ctrl.window = RXD_MAX_UNACKED;
 
-	dlist_insert_tail(&pkt_entry->entry, &tx_entry->pkt_list);
+	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
 
 	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry, tx_entry);
 	rxd_set_timeout(tx_entry);
@@ -737,6 +738,7 @@ static int rxd_ep_close(struct fid *fid)
 	int ret;
 	struct rxd_ep *ep;
 	struct rxd_pkt_entry *pkt_entry;
+	struct slist_entry *entry;
 
 	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 
@@ -751,15 +753,15 @@ static int rxd_ep_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	while (!dlist_empty(&ep->rx_pkt_list)) {
-		dlist_pop_front(&ep->rx_pkt_list, struct rxd_pkt_entry,
-				pkt_entry, entry);
+	while (!slist_empty(&ep->rx_pkt_list)) {
+		entry = slist_remove_head(&ep->rx_pkt_list);
+		pkt_entry = container_of(entry, struct rxd_pkt_entry, s_entry);
 		rxd_release_rx_pkt(ep, pkt_entry);
 	}
 
 	while (!dlist_empty(&ep->unexp_list)) {
 		dlist_pop_front(&ep->unexp_list, struct rxd_pkt_entry,
-				pkt_entry, entry);
+				pkt_entry, d_entry);
 		rxd_release_rx_pkt(ep, pkt_entry);
 	}
 
@@ -912,7 +914,8 @@ struct fi_ops_cm rxd_ep_cm = {
 
 static void rxd_ep_progress(struct util_ep *util_ep)
 {
-	struct dlist_entry *tx_item, *pkt_item;
+	struct dlist_entry *tx_item;
+	struct slist_entry *pkt_item;
 	struct fi_cq_err_entry err_entry = {0};
 	struct rxd_x_entry *tx_entry;
 	struct fi_cq_msg_entry cq_entry;
@@ -958,11 +961,13 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 		}
 
 		//TODO - pkt list shouldn't be empty (progress/fail?)
-		if (dlist_empty(&tx_entry->pkt_list))
+		if (slist_empty(&tx_entry->pkt_list))
 			continue;
 
-		dlist_foreach(&tx_entry->pkt_list, pkt_item) {
-			pkt_entry = container_of(pkt_item, struct rxd_pkt_entry, entry);
+		for (pkt_item = tx_entry->pkt_list.head; pkt_item;
+		     pkt_item = pkt_item->next) {
+			pkt_entry = container_of(pkt_item, struct rxd_pkt_entry,
+						 s_entry);
 			pkt_entry->pkt.hdr.flags |= RXD_RETRY;
 			ret = rxd_ep_retry_pkt(ep, pkt_entry, tx_entry);
 			if (ret || rxd_is_ctrl_pkt(pkt_entry))
@@ -1028,7 +1033,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	dlist_init(&ep->rx_list);
 	dlist_init(&ep->active_rx_list);
 	dlist_init(&ep->unexp_list);
-	dlist_init(&ep->rx_pkt_list);
+	slist_init(&ep->rx_pkt_list);
 
 	return 0;
 err:

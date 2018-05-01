@@ -109,6 +109,7 @@ struct rxd_av {
 	struct fid_av *dg_av;
 	struct ofi_rbmap rbmap;
 	fi_addr_t tx_map[RXD_MAX_DGRAM_ADDR];
+
 	int tx_idx;
 
 	int dg_av_used;
@@ -136,7 +137,7 @@ struct rxd_ep {
 
 	struct util_buf_pool *tx_pkt_pool;
 	struct util_buf_pool *rx_pkt_pool;
-	struct dlist_entry rx_pkt_list;
+	struct slist rx_pkt_list;
 
 	struct rxd_tx_fs *tx_fs;
 	struct rxd_rx_fs *rx_fs;
@@ -196,7 +197,7 @@ struct rxd_x_entry {
 	struct iovec iov[RXD_IOV_LIMIT];
 
 	struct dlist_entry entry;
-	struct dlist_entry pkt_list;
+	struct slist pkt_list;
 };
 DECLARE_FREESTACK(struct rxd_x_entry, rxd_tx_fs);
 DECLARE_FREESTACK(struct rxd_x_entry, rxd_rx_fs);
@@ -233,7 +234,8 @@ struct rxd_pkt {
 			   sizeof(struct rxd_pkt_hdr) + RXD_NAME_LENGTH)
 
 struct rxd_pkt_entry {
-	struct dlist_entry entry;
+	struct dlist_entry d_entry;
+	struct slist_entry s_entry;//TODO - keep both or make separate tx/rx pkt structs
 	size_t pkt_size;
 	struct fi_context context;
 	struct fid_mr *mr;
