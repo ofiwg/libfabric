@@ -66,7 +66,7 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 
 void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
-	uint64_t total_len = ntohll(pe_entry->msg_hdr.size);
+	uint64_t total_len = ntohll(pe_entry->msg_hdr.hdr.size);
 	int ret;
 
 	ret = tcpx_send_msg(pe_entry);
@@ -107,7 +107,7 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 	}
 
 	if (pe_entry->done_len &&
-	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.size))
+	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.hdr.size))
 		goto done;
 	return;
 err:
@@ -132,7 +132,7 @@ static int tcpx_get_rx_pe_entry(struct tcpx_rx_detect *rx_detect,
 
 	tcpx_ep = container_of(rx_detect, struct tcpx_ep, rx_detect);
 
-	switch (rx_detect->hdr.op) {
+	switch (rx_detect->hdr.hdr.op) {
 	case ofi_op_msg:
 		if (dlist_empty(&tcpx_ep->rx_queue))
 			return -FI_EAGAIN;
@@ -142,12 +142,12 @@ static int tcpx_get_rx_pe_entry(struct tcpx_rx_detect *rx_detect,
 					entry);
 
 		pe_entry->msg_hdr = rx_detect->hdr;
-		pe_entry->msg_hdr.op_data = TCPX_OP_MSG_RECV;
+		pe_entry->msg_hdr.hdr.op_data = TCPX_OP_MSG_RECV;
 		pe_entry->done_len = sizeof(rx_detect->hdr);
 
 		ret = ofi_truncate_iov(pe_entry->msg_data.iov,
 				     &pe_entry->msg_data.iov_cnt,
-				     (ntohll(pe_entry->msg_hdr.size) -
+				     (ntohll(pe_entry->msg_hdr.hdr.size) -
 				      sizeof(pe_entry->msg_hdr)));
 		if (ret) {
 			tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,

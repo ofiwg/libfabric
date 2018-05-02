@@ -187,8 +187,17 @@ enum tcpx_cm_state {
 	TCPX_EP_ERROR,
 };
 
-struct tcpx_rx_detect {
+struct tcpx_msg_hdr {
 	struct ofi_op_hdr	hdr;
+	size_t			rma_iov_cnt;
+	union {
+		struct fi_rma_iov	rma_iov[TCPX_IOV_LIMIT];
+		struct fi_rma_ioc	rma_ioc[TCPX_IOV_LIMIT];
+	};
+};
+
+struct tcpx_rx_detect {
+	struct tcpx_msg_hdr	hdr;
 	uint64_t		done_len;
 };
 
@@ -213,17 +222,13 @@ struct tcpx_fabric {
 };
 
 struct tcpx_msg_data {
-	size_t		iov_cnt;
-	union {
-		struct iovec		iov[TCPX_IOV_LIMIT+1];
-		struct fi_rma_iov	rma_iov[TCPX_IOV_LIMIT+1];
-		struct fi_rma_ioc	rma_ioc[TCPX_IOV_LIMIT+1];
-	};
+	size_t			iov_cnt;
+	struct iovec		iov[TCPX_IOV_LIMIT+1];
 	uint8_t			inject[TCPX_MAX_INJECT_SZ];
 };
 
 struct tcpx_pe_entry {
-	struct ofi_op_hdr	msg_hdr;
+	struct tcpx_msg_hdr	msg_hdr;
 	struct tcpx_msg_data	msg_data;
 	struct dlist_entry	entry;
 	struct tcpx_ep		*ep;
