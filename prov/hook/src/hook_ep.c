@@ -248,12 +248,19 @@ int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
 	struct hook_ep *myep;
+	struct fid *saved_fid;
 	int ret;
 
 	myep = calloc(1, sizeof *myep);
 	if (!myep)
 		return -FI_ENOMEM;
 
+	saved_fid = info->handle;
+	if (saved_fid) {
+		info->handle = hook_to_hfid(info->handle);
+		if (!info->handle)
+			info->handle = saved_fid;
+	}
 	myep->domain = dom;
 	hook_setup_ep(&myep->ep, FI_CLASS_EP, context);
 	ret = fi_endpoint(dom->hdomain, info, &myep->hep, &myep->ep.fid);
@@ -262,5 +269,6 @@ int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 	else
 		*ep = &myep->ep;
 
+	info->handle = saved_fid;
 	return ret;
 }

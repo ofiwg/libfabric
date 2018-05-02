@@ -85,7 +85,6 @@ struct fid *hook_to_hfid(const struct fid *fid)
 		return &(container_of(fid, struct hook_mr, mr.fid)->
 			 hmr->fid);
 	default:
-		assert(0);
 		return NULL;
 	}
 }
