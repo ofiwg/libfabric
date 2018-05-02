@@ -97,7 +97,7 @@ static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
 	int ret;
 
-	ret = tcpx_recv_msg(pe_entry);
+	ret = tcpx_recv_msg_data(pe_entry);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 

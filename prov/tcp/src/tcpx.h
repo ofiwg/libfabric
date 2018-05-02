@@ -108,7 +108,7 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 
 int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
 void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
-int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry);
+int tcpx_recv_msg_data(struct tcpx_pe_entry *pe_entry);
 int tcpx_send_msg(struct tcpx_pe_entry *pe_entry);
 int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
 

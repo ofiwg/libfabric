@@ -74,8 +74,7 @@ int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect)
 	return (rem_len == bytes_recvd)? FI_SUCCESS : -FI_EAGAIN;
 }
 
-
-int tcpx_recv_msg(struct tcpx_pe_entry *pe_entry)
+int tcpx_recv_msg_data(struct tcpx_pe_entry *pe_entry)
 {
 	ssize_t bytes_recvd;
 
