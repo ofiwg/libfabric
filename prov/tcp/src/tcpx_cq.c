@@ -82,9 +82,11 @@ void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 
 	switch (pe_entry->msg_hdr.hdr.op_data) {
 	case TCPX_OP_MSG_SEND:
+	case TCPX_OP_WRITE:
 		cq = pe_entry->ep->util_ep.tx_cq;
 		break;
 	case TCPX_OP_MSG_RECV:
+	case TCPX_OP_REMOTE_WRITE:
 		cq = pe_entry->ep->util_ep.rx_cq;
 		break;
 	default:

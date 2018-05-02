@@ -129,6 +129,8 @@ enum tcpx_pep_state{
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
 	TCPX_OP_MSG_RECV,
+	TCPX_OP_WRITE,
+	TCPX_OP_REMOTE_WRITE,
 };
 
 enum poll_fd_type {

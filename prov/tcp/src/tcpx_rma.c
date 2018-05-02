@@ -107,7 +107,73 @@ static ssize_t tcpx_rma_readv(struct fid_ep *ep, const struct iovec *iov, void *
 static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		uint64_t flags)
 {
-	return -FI_ENODATA;
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_cq *tcpx_cq;
+	struct tcpx_pe_entry *send_entry;
+	uint64_t data_len;
+
+	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
+	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
+			       util_cq);
+
+	send_entry = tcpx_pe_entry_alloc(tcpx_cq);
+	if (!send_entry)
+		return -FI_EAGAIN;
+
+	assert(msg->iov_count < TCPX_IOV_LIMIT);
+	assert(msg->rma_iov_count < TCPX_IOV_LIMIT);
+
+	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+
+	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
+
+	send_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
+	send_entry->msg_hdr.hdr.op = ofi_op_write;
+	send_entry->msg_hdr.hdr.op_data = TCPX_OP_WRITE;
+	send_entry->msg_hdr.hdr.size = htonll(data_len + sizeof(send_entry->msg_hdr));
+
+
+	memcpy(send_entry->msg_hdr.rma_iov, msg->rma_iov,
+	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
+	send_entry->msg_hdr.rma_iov_cnt = msg->rma_iov_count;
+
+	send_entry->msg_data.iov[0].iov_base = (void *) &send_entry->msg_hdr;
+	send_entry->msg_data.iov[0].iov_len = sizeof(send_entry->msg_hdr);
+	send_entry->msg_data.iov_cnt = msg->iov_count + 1;
+
+	if (flags & FI_INJECT) {
+		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
+				 send_entry->msg_data.inject,
+				 data_len,
+				 OFI_COPY_IOV_TO_BUF);
+
+		send_entry->msg_data.iov[1].iov_base = (void *)send_entry->msg_data.inject;
+		send_entry->msg_data.iov[1].iov_len = data_len;
+		send_entry->msg_data.iov_cnt++;
+	} else {
+		memcpy(&send_entry->msg_data.iov[1], &msg->msg_iov[0],
+		       msg->iov_count * sizeof(struct iovec));
+	}
+
+	if (flags & FI_REMOTE_CQ_DATA) {
+		send_entry->msg_hdr.hdr.flags |= OFI_REMOTE_CQ_DATA;
+		send_entry->msg_hdr.hdr.data = htonll(msg->data);
+	}
+
+	send_entry->msg_hdr.hdr.flags = htonl(send_entry->msg_hdr.hdr.flags);
+	send_entry->ep = tcpx_ep;
+	send_entry->context = msg->context;
+	send_entry->done_len = 0;
+
+	fastlock_acquire(&tcpx_ep->queue_lock);
+	if (dlist_empty(&tcpx_ep->tx_queue)) {
+		dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
+		process_tx_pe_entry(send_entry);
+	} else {
+		dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
+	}
+	fastlock_release(&tcpx_ep->queue_lock);
+	return FI_SUCCESS;
 }
 
 static ssize_t tcpx_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
