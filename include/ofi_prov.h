@@ -59,6 +59,17 @@ GNI_INI ;
 #  define GNI_INIT NULL
 #endif
 
+#if (HAVE_CXI) && (HAVE_CXI_DL)
+#  define CXI_INI FI_EXT_INI
+#  define CXI_INIT NULL
+#elif (HAVE_CXI)
+#  define CXI_INI INI_SIG(fi_cxi_ini)
+#  define CXI_INIT fi_cxi_ini()
+CXI_INI ;
+#else
+#  define CXI_INIT NULL
+#endif
+
 #if (HAVE_VERBS) && (HAVE_VERBS_DL)
 #  define VERBS_INI FI_EXT_INI
 #  define VERBS_INIT NULL

@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright 2018 Cray Inc. All rights reserved.
+
+if HAVE_CXI
+
+AM_CPPFLAGS += -I$(top_srcdir)/prov/cxi/include -I$(top_srcdir)/prov/cxi
+
+_cxi_files = \
+	prov/cxi/src/cxi_fabric.c \
+	prov/cxi/src/cxi_dom.c \
+	prov/cxi/src/cxi_ep.c \
+	prov/cxi/src/cxi_ep_rdm.c \
+	prov/cxi/src/cxi_ctx.c \
+	prov/cxi/src/cxi_av.c \
+	prov/cxi/src/cxi_cq.c \
+	prov/cxi/src/cxi_cntr.c
+
+_cxi_headers = \
+	prov/cxi/include/cxi_prov.h
+
+if HAVE_CRITERION
+bin_PROGRAMS += prov/cxi/test/cxitest
+nodist_prov_cxi_test_cxitest_SOURCES = \
+	prov/cxi/test/fabric.c
+
+prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
+	$(cxitest_CPPFLAGS)
+prov_cxi_test_cxitest_LDFLAGS = $(cxitest_LDFLAGS) -static
+prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback)
+endif HAVE_CRITERION
+
+if HAVE_CXI_DL
+pkglib_LTLIBRARIES += libcxi-fi.la
+libcxi_fi_la_SOURCES = $(_cxi_files) $(_cxi_headers) $(common_srcs)
+libcxi_fi_la_CPPFLAGS = $(cxi_CPPFLAGS)
+libcxi_fi_la_LIBADD = $(linkback) $(cxi_LIBS)
+libcxi_fi_la_LDFLAGS = $(cxi_LDFLAGS) \
+	-module -avoid-version -shared -export-dynamic
+libcxi_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_CXI_DL
+src_libfabric_la_SOURCES += $(_cxi_files) $(_cxi_headers)
+src_libfabric_la_CPPFLAGS += $(cxi_CPPFLAGS)
+src_libfabric_la_LIBADD += $(cxi_LIBS)
+src_libfabric_la_LDFLAGS += $(cxi_LDFLAGS)
+endif !HAVE_CXI_DL
+
+endif HAVE_CXI
+
