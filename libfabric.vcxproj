@@ -262,6 +262,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="prov\hook\src\hook.c" />
+    <ClCompile Include="prov\hook\src\hook_av.c" />
+    <ClCompile Include="prov\hook\src\hook_cm.c" />
+    <ClCompile Include="prov\hook\src\hook_cntr.c" />
+    <ClCompile Include="prov\hook\src\hook_cq.c" />
+    <ClCompile Include="prov\hook\src\hook_domain.c" />
+    <ClCompile Include="prov\hook\src\hook_ep.c" />
+    <ClCompile Include="prov\hook\src\hook_eq.c" />
+    <ClCompile Include="prov\hook\src\hook_perf.c" />
+    <ClCompile Include="prov\hook\src\hook_wait.c" />
+    <ClCompile Include="prov\hook\src\hook_xfer.c" />
     <ClCompile Include="prov\netdir\src\netdir_cntr.c" />
     <ClCompile Include="prov\netdir\src\netdir_ep_msg.c" />
     <ClCompile Include="prov\netdir\src\netdir_ep_rma.c" />
@@ -611,6 +622,8 @@
     <ClInclude Include="include\windows\sys\uio.h" />
     <ClInclude Include="include\windows\sys\wait.h" />
     <ClInclude Include="include\windows\unistd.h" />
+    <ClInclude Include="prov\hook\src\hook.h" />
+    <ClInclude Include="prov\hook\src\hook_perf.h" />
     <ClInclude Include="prov\netdir\src\netdir_buf.h" />
     <ClInclude Include="prov\netdir\src\netdir_cq.h" />
     <ClInclude Include="prov\netdir\src\netdir_queue.h" />
