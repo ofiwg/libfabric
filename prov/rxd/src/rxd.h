@@ -101,6 +101,7 @@ struct rxd_domain {
 	struct fid_domain *dg_domain;
 
 	ssize_t max_mtu_sz;
+	ssize_t max_seg_sz;
 	int mr_mode;
 	struct ofi_mr_map mr_map;//TODO use util_domain mr_map instead
 };
@@ -132,6 +133,7 @@ struct rxd_ep {
 
 	size_t rx_size;
 	size_t tx_size;
+	size_t prefix_size;
 	uint32_t posted_bufs;
 	uint32_t key;
 	int do_local_mr;
@@ -241,12 +243,23 @@ struct rxd_pkt_entry {
 	struct fi_context context;
 	struct fid_mr *mr;
 	fi_addr_t peer;
-	struct rxd_pkt pkt;
+	struct rxd_pkt *pkt;
 };
 
 static inline int rxd_is_ctrl_pkt(struct rxd_pkt_entry *pkt_entry)
 {
-	return (pkt_entry->pkt.hdr.flags & RXD_CTRL);
+	return (pkt_entry->pkt->hdr.flags & RXD_CTRL);
+}
+
+static inline void rxd_set_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
+{
+	pkt_entry->pkt = (struct rxd_pkt *) ((char *) pkt_entry +
+			  sizeof(*pkt_entry) + ep->prefix_size);
+}
+
+static inline void *rxd_pkt_start(struct rxd_pkt_entry *pkt_entry)
+{
+	return (void *) ((char *) pkt_entry + sizeof(*pkt_entry));
 }
 
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
@@ -281,9 +294,8 @@ void rxd_post_cts(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry,
 		  struct rxd_pkt_entry *rts_pkt);
 struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep);
 void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
-void rxd_init_ctrl_pkt(struct rxd_x_entry *x_entry,
-		       struct rxd_pkt_entry *pkt_entry,
-		       uint32_t type);
+void rxd_init_ctrl_pkt(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
+		       struct rxd_pkt_entry *pkt_entry, uint32_t type);
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
 		     struct rxd_x_entry *x_entry);
