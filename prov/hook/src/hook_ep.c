@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <ofi_enosys.h>
 #include "hook.h"
+#include "hook_perf.h"
 
 
 static int hook_open_tx_ctx(struct fid_ep *sep, int index,
@@ -86,16 +87,27 @@ static struct fi_ops_ep hook_ep_ops = {
 };
 
 
-static void hook_setup_ep(struct fid_ep *ep, int fclass, void *context)
+static void hook_setup_ep(enum hook_class hclass, struct fid_ep *ep,
+			  int fclass, void *context)
 {
 	ep->fid.fclass = fclass;
 	ep->fid.context = context;
 	ep->fid.ops = &hook_fid_ops;
 	ep->ops = &hook_ep_ops;
 	ep->cm = &hook_cm_ops;
-	ep->msg = &hook_msg_ops;
-	ep->rma = &hook_rma_ops;
-	ep->tagged = &hook_tagged_ops;
+
+	switch (hclass) {
+	case HOOK_PERF:
+		ep->msg = &perf_msg_ops;
+		ep->rma = &perf_rma_ops;
+		ep->tagged = &perf_tagged_ops;
+		break;
+	default:
+		ep->msg = &hook_msg_ops;
+		ep->rma = &hook_rma_ops;
+		ep->tagged = &hook_tagged_ops;
+		break;
+	}
 	ep->atomic = &hook_atomic_ops;
 }
 
@@ -111,7 +123,7 @@ int hook_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	mysep->domain = dom;
-	hook_setup_ep(&mysep->ep, FI_CLASS_SEP, context);
+	hook_setup_ep(dom->fabric->hclass, &mysep->ep, FI_CLASS_SEP, context);
 	ret = fi_scalable_ep(dom->hdomain, info, &mysep->hep, &mysep->ep.fid);
 	if (ret)
 		free(mysep);
@@ -160,7 +172,7 @@ int hook_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 		return -FI_ENOMEM;
 
 	srx->domain = dom;
-	hook_setup_ep(&srx->ep, FI_CLASS_SRX_CTX, context);
+	hook_setup_ep(dom->fabric->hclass, &srx->ep, FI_CLASS_SRX_CTX, context);
 	ret = fi_srx_context(dom->hdomain, attr, &srx->hep, &srx->ep.fid);
 	if (ret)
 		free(srx);
@@ -183,7 +195,8 @@ static int hook_open_tx_ctx(struct fid_ep *sep, int index,
 		return -FI_ENOMEM;
 
 	mytx->domain = mysep->domain;
-	hook_setup_ep(&mytx->ep, FI_CLASS_TX_CTX, context);
+	hook_setup_ep(mysep->domain->fabric->hclass, &mytx->ep,
+		      FI_CLASS_TX_CTX, context);
 	ret = fi_tx_context(mysep->hep, index, attr, &mytx->hep, &mytx->ep.fid);
 	if (ret)
 		free(mytx);
@@ -206,7 +219,8 @@ static int hook_open_rx_ctx(struct fid_ep *sep, int index,
 		return -FI_ENOMEM;
 
 	myrx->domain = mysep->domain;
-	hook_setup_ep(&myrx->ep, FI_CLASS_RX_CTX, context);
+	hook_setup_ep(mysep->domain->fabric->hclass, &myrx->ep,
+		      FI_CLASS_RX_CTX, context);
 	ret = fi_rx_context(mysep->hep, index, attr, &myrx->hep, &myrx->ep.fid);
 	if (ret)
 		free(myrx);
@@ -262,7 +276,7 @@ int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 			info->handle = saved_fid;
 	}
 	myep->domain = dom;
-	hook_setup_ep(&myep->ep, FI_CLASS_EP, context);
+	hook_setup_ep(dom->fabric->hclass, &myep->ep, FI_CLASS_EP, context);
 	ret = fi_endpoint(dom->hdomain, info, &myep->hep, &myep->ep.fid);
 	if (ret)
 		free(myep);
