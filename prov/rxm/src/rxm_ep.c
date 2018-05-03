@@ -383,6 +383,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep,
 				struct util_domain *domain)
 {
 	int ret;
+	size_t param;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "MSG provider mr_mode & FI_MR_LOCAL: %d\n",
@@ -403,6 +404,19 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep,
 	ret = rxm_ep_txrx_queue_init(rxm_ep);
 	if (ret)
 		goto err;
+
+	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
+		if (param < rxm_info.tx_attr->inject_size)
+			FI_WARN(&rxm_prov, FI_LOG_CORE,
+				"Requested SAR limit (%zd) less than inject size (%zd). "
+				"SAR protocol won't be used. Messages of size <= (>) inject "
+				"size would would be transmitted via eager (rendezvous) "
+				"protocol.\n", param, rxm_info.tx_attr->inject_size);
+		else
+			rxm_ep->sar_limit = param;
+	} else {
+		rxm_ep->sar_limit = RXM_SAR_LIMIT;
+	}
 
 	return FI_SUCCESS;
 err:
