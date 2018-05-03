@@ -506,16 +506,7 @@ libdl_done:
 	ofi_register_provider(VERBS_INIT, NULL);
 	ofi_register_provider(RSTREAM_INIT, NULL);
 	ofi_register_provider(MRAIL_INIT, NULL);
-
-	{
-		/* TODO: RXD is not stable for now. Disable it by default */
-		int enable_rxd = 0;
-		fi_param_define(NULL, "rxd_enable", FI_PARAM_BOOL,
-				"Enable RXD provider (default: no)");
-		fi_param_get_bool(NULL, "rxd_enable", &enable_rxd);
-		if (enable_rxd)
-			ofi_register_provider(RXD_INIT, NULL);
-	}
+	ofi_register_provider(RXD_INIT, NULL);
 
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
