@@ -100,7 +100,7 @@ void ofi_perfset_log(struct ofi_perfset *set, const char *names[])
 	size_t i;
 
 	for (i = 0; i < set->size; i++) {
-		if (!set->data[i].sum)
+		if (!set->data[i].events)
 			continue;
 
 		FI_TRACE(set->prov, FI_LOG_CORE, "PERF (%s) "
