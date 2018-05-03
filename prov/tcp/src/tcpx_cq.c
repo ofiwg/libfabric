@@ -80,11 +80,13 @@ void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 	struct util_cq *cq;
 	struct tcpx_cq *tcpx_cq;
 
-	switch (pe_entry->msg_hdr.op_data) {
+	switch (pe_entry->msg_hdr.hdr.op_data) {
 	case TCPX_OP_MSG_SEND:
+	case TCPX_OP_WRITE:
 		cq = pe_entry->ep->util_ep.tx_cq;
 		break;
 	case TCPX_OP_MSG_RECV:
+	case TCPX_OP_REMOTE_WRITE:
 		cq = pe_entry->ep->util_ep.rx_cq;
 		break;
 	default:
@@ -93,6 +95,9 @@ void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
 	}
 
 	tcpx_cq = container_of(cq, struct tcpx_cq, util_cq);
+
+	if (pe_entry->ep->cur_rx_entry == pe_entry)
+		pe_entry->ep->cur_rx_entry = NULL;
 
 	fastlock_acquire(&cq->cq_lock);
 	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
@@ -113,7 +118,7 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 		err_entry.flags = pe_entry->flags;
 		err_entry.len = 0;
 		err_entry.buf = NULL;
-		err_entry.data = pe_entry->msg_hdr.data;
+		err_entry.data = pe_entry->msg_hdr.hdr.data;
 		err_entry.tag = 0;
 		err_entry.olen = 0;
 		err_entry.err = err;
@@ -125,7 +130,7 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 	} else {
 		ofi_cq_write(cq, pe_entry->context,
 			      pe_entry->flags, 0, NULL,
-			      pe_entry->msg_hdr.data, 0);
+			      pe_entry->msg_hdr.hdr.data, 0);
 
 		if (cq->wait)
 			ofi_cq_signal(&cq->cq_fid);

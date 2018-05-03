@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug-ICC|x64">
@@ -503,6 +503,7 @@
     <ClCompile Include="prov\tcp\src\tcpx_conn_mgr.c" />
     <ClCompile Include="prov\tcp\src\tcpx_cq.c" />
     <ClCompile Include="prov\tcp\src\tcpx_domain.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_rma.c" />
     <ClCompile Include="prov\tcp\src\tcpx_ep.c" />
     <ClCompile Include="prov\tcp\src\tcpx_fabric.c" />
     <ClCompile Include="prov\tcp\src\tcpx_init.c" />
