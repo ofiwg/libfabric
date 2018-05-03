@@ -234,7 +234,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	return FI_SUCCESS;
 }
 
-static int rxm_finish_send(struct rxm_tx_entry *tx_entry)
+static inline int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 {
 	rxm_tx_buf_release(tx_entry->ep, tx_entry->tx_buf);
 	return rxm_finish_send_nobuf(tx_entry);
