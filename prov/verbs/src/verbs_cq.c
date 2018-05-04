@@ -231,7 +231,7 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
 }
 
 /* Must call with cq->lock held */
-static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_msg_ep *ep,
+static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 					     struct fi_ibv_cq *cq)
 {
 	struct fi_ibv_wce *wce;
@@ -262,7 +262,7 @@ fn:
 	return ret;
 }
 
-void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *ep)
+void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 {
 	int ret;
 

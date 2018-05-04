@@ -461,9 +461,29 @@ struct fi_ibv_srq_ep {
 int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		       struct fid_ep **rx_ep, void *context);
 
-struct fi_ibv_msg_ep {
+
+/* Verbs-DGRAM Pool functionality */
+struct fi_ibv_dgram_buf_pool;
+
+typedef void(*fi_ibv_dgram_pool_entry_cancel_hndlr) (struct fi_ibv_dgram_buf_pool *);
+
+struct fi_ibv_dgram_buf_pool {
+	struct util_buf_pool	*pool;
+	struct dlist_entry	buf_list;
+
+	fi_ibv_dgram_pool_entry_cancel_hndlr cancel_hndlr;
+};
+
+struct fi_ibv_ep {
 	struct fid_ep		ep_fid;
-	struct rdma_cm_id	*id;
+	union {
+		struct rdma_cm_id	*id;
+		struct {
+			struct ibv_qp			*ibv_qp;
+			struct ofi_ib_ud_ep_name	ep_name;
+			int				service;
+		};
+	};
 	struct fi_ibv_eq	*eq;
 	struct fi_ibv_cq	*rcq;
 	struct fi_ibv_cq	*scq;
@@ -471,6 +491,8 @@ struct fi_ibv_msg_ep {
 	uint64_t		ep_flags;
 	struct fi_info		*info;
 	struct fi_ibv_domain	*domain;
+	/* TODO: it would be removed */
+	struct fi_ibv_dgram_buf_pool	grh_pool;
 };
 
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
@@ -547,7 +569,7 @@ int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
 int fi_ibv_set_rnr_timer(struct ibv_qp *qp);
-void fi_ibv_cleanup_cq(struct fi_ibv_msg_ep *cur_ep);
+void fi_ibv_cleanup_cq(struct fi_ibv_ep *cur_ep);
 int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
                            enum ibv_qp_type qp_type);
 

@@ -44,18 +44,6 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/* Verbs-DGRAM Pool functionality */
-struct fi_ibv_dgram_buf_pool;
-
-typedef void(*fi_ibv_dgram_pool_entry_cancel_hndlr) (struct fi_ibv_dgram_buf_pool *);
-
-struct fi_ibv_dgram_buf_pool {
-	struct util_buf_pool	*pool;
-	struct dlist_entry	buf_list;
-
-	fi_ibv_dgram_pool_entry_cancel_hndlr cancel_hndlr;
-};
-
 typedef int(*handle_wr_cb)(struct util_cq *util_cq,
 			   struct util_cntr *util_cntr,
 			   struct ibv_wc *wc);
