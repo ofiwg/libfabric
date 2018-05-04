@@ -257,6 +257,9 @@ struct rxm_tx_buf {
 
 	enum rxm_buf_pool_type type;
 
+	/* Used for SAR protocol */
+	struct dlist_entry in_flight_entry;
+
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
@@ -292,9 +295,21 @@ struct rxm_tx_entry {
 		struct rxm_rma_buf *rma_buf;
 	};
 
-	/* Used for large messages and RMA */
-	struct fid_mr *mr[RXM_IOV_LIMIT];
-	struct rxm_rx_buf *rx_buf;
+	union {
+		/* Used for large messages and RMA */
+		struct {
+			struct fid_mr *mr[RXM_IOV_LIMIT];
+			struct rxm_rx_buf *rx_buf;
+		};
+		/* Used for SAR protocol */
+		struct {
+			size_t segs_left;
+			uint64_t msg_id;
+			struct dlist_entry in_flight_tx_buf_list;
+			struct rxm_iov rxm_iov;
+			uint64_t iov_offset;
+		};
+	};
 };
 DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
 
@@ -310,6 +325,11 @@ struct rxm_recv_entry {
 	size_t total_len;
 	struct rxm_recv_queue *recv_queue;
 	void *multi_recv_buf;
+	/* Used for SAR protocol */
+	struct {
+		size_t total_recv_len;
+		uint64_t msg_id;
+	};
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
