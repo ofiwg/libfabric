@@ -212,7 +212,8 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_TAGGED,
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_LMT,
-	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_LMT,
+	RXM_BUF_POOL_TX_SAR,
+	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_RMA,
 	RXM_BUF_POOL_MAX,
 };
@@ -584,7 +585,8 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	assert((type == RXM_BUF_POOL_TX_MSG) ||
 	       (type == RXM_BUF_POOL_TX_TAGGED) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
-	       (type == RXM_BUF_POOL_TX_LMT));
+	       (type == RXM_BUF_POOL_TX_LMT) ||
+	       (type == RXM_BUF_POOL_TX_SAR));
 	return (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
 
@@ -594,7 +596,8 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	assert((tx_buf->type == RXM_BUF_POOL_TX_MSG) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_TAGGED) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_LMT));
+	       (tx_buf->type == RXM_BUF_POOL_TX_LMT) ||
+	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
 	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));

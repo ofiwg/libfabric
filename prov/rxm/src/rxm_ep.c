@@ -159,6 +159,9 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			case RXM_BUF_POOL_TX_LMT:
 				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_large_data;
 				break;
+			case RXM_BUF_POOL_TX_SAR:
+				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_seg_data;
+				break;
 			default:
 				assert(0);
 				break;
