@@ -212,7 +212,8 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_TAGGED,
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_LMT,
-	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_LMT,
+	RXM_BUF_POOL_TX_SAR,
+	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_RMA,
 	RXM_BUF_POOL_MAX,
 };
@@ -257,6 +258,9 @@ struct rxm_tx_buf {
 
 	enum rxm_buf_pool_type type;
 
+	/* Used for SAR protocol */
+	struct dlist_entry in_flight_entry;
+
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
@@ -292,9 +296,21 @@ struct rxm_tx_entry {
 		struct rxm_rma_buf *rma_buf;
 	};
 
-	/* Used for large messages and RMA */
-	struct fid_mr *mr[RXM_IOV_LIMIT];
-	struct rxm_rx_buf *rx_buf;
+	union {
+		/* Used for large messages and RMA */
+		struct {
+			struct fid_mr *mr[RXM_IOV_LIMIT];
+			struct rxm_rx_buf *rx_buf;
+		};
+		/* Used for SAR protocol */
+		struct {
+			size_t segs_left;
+			uint64_t msg_id;
+			struct dlist_entry in_flight_tx_buf_list;
+			struct rxm_iov rxm_iov;
+			uint64_t iov_offset;
+		};
+	};
 };
 DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
 
@@ -310,6 +326,11 @@ struct rxm_recv_entry {
 	size_t total_len;
 	struct rxm_recv_queue *recv_queue;
 	void *multi_recv_buf;
+	/* Used for SAR protocol */
+	struct {
+		size_t total_recv_len;
+		uint64_t msg_id;
+	};
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
@@ -564,7 +585,8 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	assert((type == RXM_BUF_POOL_TX_MSG) ||
 	       (type == RXM_BUF_POOL_TX_TAGGED) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
-	       (type == RXM_BUF_POOL_TX_LMT));
+	       (type == RXM_BUF_POOL_TX_LMT) ||
+	       (type == RXM_BUF_POOL_TX_SAR));
 	return (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
 
@@ -574,7 +596,8 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	assert((tx_buf->type == RXM_BUF_POOL_TX_MSG) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_TAGGED) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_LMT));
+	       (tx_buf->type == RXM_BUF_POOL_TX_LMT) ||
+	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
 	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
