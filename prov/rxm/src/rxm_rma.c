@@ -262,7 +262,7 @@ rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, size_t total_size,
 
 	ret = rxm_ep_rma_reg_iov(rxm_ep, (*rma_buf)->rxm_iov.iov,
 				 /* addr of desc from rma_buf will be assign to itself */
-				 (*rma_buf)->rxm_iov.desc,
+				 orig_msg->desc,
 				 (*rma_buf)->rxm_iov.desc,
 				 orig_msg->iov_count,
 				 comp_flags & (FI_WRITE | FI_READ), *tx_entry);
