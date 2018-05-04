@@ -23,12 +23,12 @@ _verbs_files =							\
 	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm.c		\
 	prov/verbs/src/ep_rdm/verbs_utils.c			\
 	prov/verbs/src/ep_rdm/verbs_utils.h			\
-	prov/verbs/src/ep_dgram/verbs_dgram.h			\
-	prov/verbs/src/ep_dgram/verbs_dgram_ep.c		\
-	prov/verbs/src/ep_dgram/verbs_dgram_ep_msg.c		\
-	prov/verbs/src/ep_dgram/verbs_dgram_cq.c		\
-	prov/verbs/src/ep_dgram/verbs_dgram_cntr.c		\
-	prov/verbs/src/ep_dgram/verbs_dgram_av.c
+	prov/verbs/src/verbs_dgram.h				\
+	prov/verbs/src/verbs_dgram_ep.c				\
+	prov/verbs/src/verbs_dgram_ep_msg.c			\
+	prov/verbs/src/verbs_dgram_cq.c				\
+	prov/verbs/src/verbs_dgram_cntr.c			\
+	prov/verbs/src/verbs_dgram_av.c
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la

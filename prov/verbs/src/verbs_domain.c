@@ -33,7 +33,7 @@
 #include "config.h"
 
 #include "ep_rdm/verbs_rdm.h"
-#include "ep_dgram/verbs_dgram.h"
+#include "verbs_dgram.h"
 
 #include "fi_verbs.h"
 #include <malloc.h>
