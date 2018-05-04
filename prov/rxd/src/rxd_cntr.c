@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -58,28 +58,11 @@ free:
 	return ret;
 }
 
-void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_tx_entry *tx_entry)
+void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
         struct util_cntr *cntr;
 
-	switch (tx_entry->op_type) {
-	case RXD_TX_MSG:
-	case RXD_TX_TAG:
-		cntr = ep->util_ep.tx_cntr;
-		break;
-	case RXD_TX_WRITE:
-		cntr = ep->util_ep.wr_cntr;
-		break;
-	case RXD_TX_READ_REQ:
-		cntr = ep->util_ep.rem_rd_cntr;
-		break;
-	case RXD_TX_READ_RSP:
-		return;
-	default:
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "invalid op type\n");
-		return;
-	}
-
+	cntr = ep->util_ep.tx_cntr;
 	if (cntr)
 		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
@@ -98,6 +81,3 @@ void rxd_cntr_report_error(struct rxd_ep *ep, struct fi_cq_err_entry *err)
 	if (cntr)
 		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 }
-
-
-

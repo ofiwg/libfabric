@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2018 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,21 @@
 #include "rxd.h"
 #include <inttypes.h>
 
+
+static int rxd_tree_compare(struct ofi_rbmap *map, void *key, void *data)
+{
+	struct rxd_av *av;
+	uint8_t addr[RXD_NAME_LENGTH];
+	size_t len = RXD_NAME_LENGTH;
+	int ret;
+
+	av = container_of(map, struct rxd_av, rbmap);
+	ret = fi_av_lookup(&av->util_av.av_fid, (fi_addr_t) data, addr, &len);
+	if (ret)
+		return -1;
+
+	return memcmp(key, addr, len);
+}
 
 /*
  * The RXD code is agnostic wrt the datagram address format, but we need
@@ -87,75 +102,58 @@ close:
 
 fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
 {
-	uint64_t *dg_idx;
-
-	dg_idx = ofi_av_get_addr(&av->util_av, (int) fi_addr);
-	return *dg_idx;
+	return (fi_addr >= RXD_MAX_DGRAM_ADDR || fi_addr == FI_ADDR_UNSPEC) ?
+		FI_ADDR_UNSPEC : av->tx_map[fi_addr];
 }
 
 fi_addr_t rxd_av_fi_addr(struct rxd_av *av, fi_addr_t dg_fiaddr)
 {
-	int ret;
+	//TODO define behavior for duplicate av_insert calls
+	fi_addr_t fi_addr = 0;
 
-	ret = ofi_av_lookup_index(&av->util_av, &dg_fiaddr, (int) dg_fiaddr);
-	return (ret < 0) ? FI_ADDR_UNSPEC : ret;
+	for (fi_addr = 0; fi_addr < RXD_MAX_DGRAM_ADDR; fi_addr++) {
+		if (av->tx_map[fi_addr] == dg_fiaddr)
+			break;
+	}
+	return (fi_addr != RXD_MAX_DGRAM_ADDR) ? fi_addr : FI_ADDR_UNSPEC;
 }
 
-int rxd_av_dg_reverse_lookup(struct rxd_av *av, uint64_t start_idx,
-			      const void *addr, fi_addr_t *dg_fiaddr)
+static fi_addr_t rxd_set_tx_addr(struct rxd_av *av, fi_addr_t addr)
 {
-	uint8_t curr_addr[RXD_MAX_DGRAM_ADDR];
-	size_t i, len;
-	int ret;
+	int tries = 0;
 
-	for (i = 0; i < (size_t) av->dg_av_used; i++) {
-		len = sizeof curr_addr;
-		ret = fi_av_lookup(av->dg_av, (i + start_idx) % av->dg_av_used,
-				   curr_addr, &len);
-		if (!ret) {
-			*dg_fiaddr = (i + start_idx) % av->dg_av_used;
-			FI_DBG(&rxd_prov, FI_LOG_AV, "found: %" PRIu64 "\n",
-				*dg_fiaddr);
-			return 0;
-		}
+	while (av->tx_map[av->tx_idx] != FI_ADDR_UNSPEC &&
+	       tries < RXD_MAX_DGRAM_ADDR) {
+		if (++av->tx_idx == RXD_MAX_DGRAM_ADDR)
+			av->tx_idx = 0;
+		tries++;
 	}
-	FI_DBG(&rxd_prov, FI_LOG_AV, "addr not found\n");
-	return -FI_ENODATA;
+	assert(av->tx_idx < RXD_MAX_DGRAM_ADDR && tries < RXD_MAX_DGRAM_ADDR);
+	av->tx_map[av->tx_idx] = addr;
+
+	return av->tx_idx;
 }
 
-int rxd_av_insert_dg_addr(struct rxd_av *av, uint64_t hint_index,
-			  const void *addr, fi_addr_t *dg_fiaddr)
+int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
+			  fi_addr_t *dg_fiaddr, uint64_t flags,
+			  void *context)
 {
 	int ret;
 
-	fastlock_acquire(&av->util_av.lock);
-	if (!av->dg_addrlen) {
-		ret = rxd_av_set_addrlen(av, addr);
-		if (ret)
-			goto out;
-		ret = -FI_ENODATA;
-	} else {
-		ret = rxd_av_dg_reverse_lookup(av, hint_index, addr, dg_fiaddr);
-	}
+	ret = fi_av_insert(av->dg_av, addr, 1, dg_fiaddr,
+			     flags, context);
+	if (ret != 1)
+		return ret;
 
-	if (ret == -FI_ENODATA) {
-		ret = fi_av_insert(av->dg_av, addr, 1, dg_fiaddr, 0, NULL);
-		if (ret == 1) {
-			av->dg_av_used++;
-			ret = 0;
-		}
-	}
-out:
-	fastlock_release(&av->util_av.lock);
-	return ret;
+	return ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*dg_fiaddr));
 }
 
 static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct rxd_av *av;
-	int i = 0, index, ret = 0, success_cnt = 0, lookup = 1;
-	uint64_t dg_fiaddr;
+	int i = 0, ret = 0, success_cnt = 0;
+	fi_addr_t dg_fiaddr, tx_addr;
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
 	fastlock_acquire(&av->util_av.lock);
@@ -163,27 +161,23 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		ret = rxd_av_set_addrlen(av, addr);
 		if (ret)
 			goto out;
-		/* Skip lookups if this is the first insertion call.  */
-		lookup = 0;
 	}
 
 	for (; i < count; i++, addr = (uint8_t *) addr + av->dg_addrlen) {
-		ret = lookup ? rxd_av_dg_reverse_lookup(av, i, addr, &dg_fiaddr) :
-				-FI_ENODATA;
-		if (ret) {
-			ret = fi_av_insert(av->dg_av, addr, 1, &dg_fiaddr,
-					   flags, context);
-			if (ret != 1)
-				break;
+		ret = rxd_av_insert_dg_addr(av, addr, &dg_fiaddr,
+					    flags, context);
+		if (ret && ret != -FI_EALREADY)
+			break;
+		if (!ret) {
+			tx_addr = rxd_set_tx_addr(av, dg_fiaddr);
+		} else {
+			tx_addr = rxd_av_fi_addr(av, dg_fiaddr);
+			ret = 0;
 		}
 
-		ret = ofi_av_insert_addr(&av->util_av, &dg_fiaddr, dg_fiaddr, &index);
-		if (ret)
-			break;
-
-		success_cnt++;
 		if (fi_addr)
-			fi_addr[i] = index;
+			fi_addr[i] = tx_addr;
+		success_cnt++;
 	}
 
 	if (ret) {
@@ -233,17 +227,30 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 			uint64_t flags)
 {
 	int ret = 0;
-	size_t i;
+	size_t i, addrlen;
 	fi_addr_t dg_fiaddr;
 	struct rxd_av *av;
+	struct ofi_rbnode *node;
+	uint8_t addr[RXD_MAX_DGRAM_ADDR];
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
 	fastlock_acquire(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
-		dg_fiaddr = rxd_av_dg_addr(av, fi_addr[i]);
+		dg_fiaddr = av->tx_map[fi_addr[i]];
+		ret = fi_av_lookup(av->dg_av, dg_fiaddr, addr, &addrlen);
+		if (ret)
+			continue;
+
+		node = ofi_rbmap_find(&av->rbmap, addr);
+		if (!node)
+			continue;
+
 		ret = fi_av_remove(av->dg_av, &dg_fiaddr, 1, flags);
 		if (ret)
 			break;
+
+		ofi_rbmap_delete(&av->rbmap, node);
+		av->tx_map[fi_addr[i]] = FI_ADDR_UNSPEC;
 		av->dg_av_used--;
 	}
 	fastlock_release(&av->util_av.lock);
@@ -262,11 +269,14 @@ static int rxd_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			 size_t *addrlen)
 {
 	struct rxd_av *rxd_av;
-	fi_addr_t dg_addr;
+	fi_addr_t dg_fiaddr;
 
 	rxd_av = container_of(av, struct rxd_av, util_av.av_fid);
-	dg_addr = rxd_av_dg_addr(rxd_av, fi_addr);
-	return fi_av_lookup(rxd_av->dg_av, dg_addr, addr, addrlen);
+	dg_fiaddr = rxd_av_dg_addr(rxd_av, fi_addr);
+	if (dg_fiaddr == FI_ADDR_UNSPEC)
+		return -FI_ENODATA;
+
+	return fi_av_lookup(rxd_av->dg_av, dg_fiaddr, addr, addrlen);
 }
 
 static struct fi_ops_av rxd_av_ops = {
@@ -313,7 +323,7 @@ static struct fi_ops rxd_av_fi_ops = {
 int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		   struct fid_av **av_fid, void *context)
 {
-	int ret;
+	int ret, i;
 	struct rxd_av *av;
 	struct rxd_domain *domain;
 	struct util_av_attr util_attr;
@@ -340,6 +350,11 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 &av->util_av, context);
 	if (ret)
 		goto err1;
+
+
+	av->rbmap.compare = &rxd_tree_compare;
+	ofi_rbmap_init(&av->rbmap);
+	for (i = 0; i < RXD_MAX_DGRAM_ADDR; av->tx_map[i++] = FI_ADDR_UNSPEC);
 
 	av_attr = *attr;
 	av_attr.type = FI_AV_TABLE;

@@ -129,6 +129,9 @@
     <ClCompile Include="src\rbtree.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
+    <ClCompile Include="src\tree.c">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
     <ClCompile Include="src\var.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
@@ -277,9 +280,6 @@
       <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\rxd\src\rxd_init.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_rma.c">
       <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\rxm\src\rxm_attr.c">
@@ -432,6 +432,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\rbtree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_tree.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\rdma\fabric.h">
