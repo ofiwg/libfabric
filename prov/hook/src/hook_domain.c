@@ -46,6 +46,7 @@ static int hook_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (!mymr)
 		return -FI_ENOMEM;
 
+	mymr->domain = dom;
 	mymr->mr.fid.fclass = FI_CLASS_MR;
 	mymr->mr.fid.context = attr->context;
 	mymr->mr.fid.ops = &hook_fid_ops;
@@ -135,6 +136,7 @@ int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!dom)
 		return -FI_ENOMEM;
 
+	dom->fabric = fab;
 	dom->domain.fid.fclass = FI_CLASS_DOMAIN;
 	dom->domain.fid.context = context;
 	dom->domain.fid.ops = &hook_fid_ops;

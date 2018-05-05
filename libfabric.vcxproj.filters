@@ -97,6 +97,12 @@
     <Filter Include="Source Files\prov\tcp\src">
       <UniqueIdentifier>{8c151366-dd08-48d5-aa21-50a500cbde73}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\prov\hook">
+      <UniqueIdentifier>{b85ecf6c-fb76-4d65-a7f0-cba470a0adee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\hook\src">
+      <UniqueIdentifier>{b4689956-b61f-4c5b-b827-9af0797ea087}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\common.c">
@@ -405,6 +411,39 @@
     <ClCompile Include="prov\util\src\util_pep.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\hook\src\hook.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_av.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_cm.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_cntr.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_cq.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_domain.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_ep.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_eq.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_perf.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_wait.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\src\hook_xfer.c">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h">
@@ -622,6 +661,12 @@
     </ClInclude>
     <ClInclude Include="include\windows\netdb.h">
       <Filter>Header Files\windows</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\hook\src\hook.h">
+      <Filter>Source Files\prov\hook\src</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\hook\src\hook_perf.h">
+      <Filter>Source Files\prov\hook\src</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

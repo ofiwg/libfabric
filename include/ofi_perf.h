@@ -35,6 +35,7 @@
 
 #include "config.h"
 
+#include <assert.h>
 #include <string.h>
 #include <ofi_osd.h>
 #include <rdma/providers/fi_prov.h>
@@ -81,6 +82,12 @@ struct ofi_perf_data {
 	uint64_t	sum;
 	uint64_t	events;
 };
+
+
+void ofi_perf_init(void);
+extern enum ofi_perf_domain	perf_domain;
+extern uint32_t			perf_cntr;
+extern uint32_t			perf_flags;
 
 
 /*
@@ -147,9 +154,7 @@ static inline void ofi_perf_end(struct ofi_perf_ctx *ctx,
 
 struct ofi_perfset {
 	const struct fi_provider *prov;
-	char			**names;
 	size_t			size;
-	size_t			count;
 	struct ofi_perf_ctx	*ctx;
 	struct ofi_perf_data	*data;
 };
@@ -160,9 +165,19 @@ int ofi_perfset_create(const struct fi_provider *prov,
 		       uint32_t flags);
 void ofi_perfset_close(struct ofi_perfset *set);
 
-struct ofi_perf_data *ofi_perfset_data(struct ofi_perfset *set,
-				       const char *name);
-void ofi_perfset_log(struct ofi_perfset *set);
+void ofi_perfset_log(struct ofi_perfset *set, const char **names);
+
+static inline void ofi_perfset_start(struct ofi_perfset *set, size_t index)
+{
+	assert(index < set->size);
+	ofi_perf_start(set->ctx, &set->data[index]);
+}
+
+static inline void ofi_perfset_end(struct ofi_perfset *set, size_t index)
+{
+	assert(index < set->size);
+	ofi_perf_end(set->ctx, &set->data[index]);
+}
 
 
 #ifdef __cplusplus

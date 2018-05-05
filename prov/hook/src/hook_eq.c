@@ -36,7 +36,7 @@
 
 static int hook_eq_std_event(uint32_t event)
 {
-	return event <= FI_JOIN_COMPLETE;
+	return (event > FI_NOTIFY) && (event <= FI_JOIN_COMPLETE);
 }
 
 /*
@@ -121,18 +121,24 @@ int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 {
 	struct hook_fabric *fab = container_of(fabric, struct hook_fabric, fabric);
 	struct hook_eq *myeq;
+	struct fi_eq_attr hattr;
 	int ret;
 
 	myeq = calloc(1, sizeof *myeq);
 	if (!myeq)
 		return -FI_ENOMEM;
 
+	myeq->fabric = fab;
 	myeq->eq.fid.fclass = FI_CLASS_EQ;
 	myeq->eq.fid.context = context;
 	myeq->eq.fid.ops = &hook_fid_ops;
 	myeq->eq.ops = &hook_eq_ops;
 
-	ret = fi_eq_open(fab->hfabric, attr, &myeq->heq, &myeq->eq.fid);
+	hattr = *attr;
+	if (attr->wait_obj == FI_WAIT_SET)
+		hattr.wait_set = hook_to_hwait(attr->wait_set);
+
+	ret = fi_eq_open(fab->hfabric, &hattr, &myeq->heq, &myeq->eq.fid);
 	if (ret)
 		free(myeq);
 	else

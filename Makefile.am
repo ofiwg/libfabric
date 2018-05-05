@@ -1,6 +1,6 @@
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
-# Copyright (c) 2017 Intel Corporation, Inc. All right reserved.
+# Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
 #
 # Makefile.am for libfabric
 
@@ -64,17 +64,7 @@ common_srcs =				\
 	prov/util/src/util_ns.c		\
 	prov/util/src/util_shm.c	\
 	prov/util/src/util_mem_monitor.c\
-	prov/util/src/util_mr_cache.c	\
-	prov/hook/src/hook.c		\
-	prov/hook/src/hook_av.c		\
-	prov/hook/src/hook_cm.c		\
-	prov/hook/src/hook_cntr.c	\
-	prov/hook/src/hook_cq.c		\
-	prov/hook/src/hook_domain.c	\
-	prov/hook/src/hook_ep.c		\
-	prov/hook/src/hook_eq.c		\
-	prov/hook/src/hook_wait.c	\
-	prov/hook/src/hook_xfer.c
+	prov/util/src/util_mr_cache.c
 
 
 if MACOS
@@ -149,6 +139,7 @@ src_libfabric_la_SOURCES =			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
 	prov/hook/src/hook.h			\
+	prov/hook/src/hook_perf.h		\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
@@ -157,6 +148,17 @@ src_libfabric_la_SOURCES =			\
 	src/log.c				\
 	src/var.c				\
 	src/abi_1_0.c				\
+	prov/hook/src/hook.c			\
+	prov/hook/src/hook_av.c			\
+	prov/hook/src/hook_cm.c			\
+	prov/hook/src/hook_cntr.c		\
+	prov/hook/src/hook_cq.c			\
+	prov/hook/src/hook_domain.c		\
+	prov/hook/src/hook_ep.c			\
+	prov/hook/src/hook_eq.c			\
+	prov/hook/src/hook_perf.c		\
+	prov/hook/src/hook_wait.c		\
+	prov/hook/src/hook_xfer.c		\
 	$(common_srcs)
 
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)

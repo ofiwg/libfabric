@@ -46,24 +46,35 @@
 
 
 /*
+ * Hooks are installed from top down.
+ * Values must start at 0 and increment by one.
+ */
+enum hook_class {
+	HOOK_NOOP,
+	HOOK_PERF,
+};
+
+/*
  * Define hook structs so we can cast from fid to parent using simple cast.
  * This lets us have a single close() call.
  */
 
 extern struct fi_ops hook_fid_ops;
 struct fid *hook_to_hfid(const struct fid *fid);
+struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
+
 
 struct hook_fabric {
 	struct fid_fabric fabric;
 	struct fid_fabric *hfabric;
+	enum hook_class   hclass;
 };
-
-int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric);
 
 
 struct hook_domain {
 	struct fid_domain domain;
 	struct fid_domain *hdomain;
+	struct hook_fabric *fabric;
 };
 
 int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
@@ -73,6 +84,7 @@ int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
 struct hook_av {
 	struct fid_av av;
 	struct fid_av *hav;
+	struct hook_domain *domain;
 };
 
 int hook_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -82,6 +94,7 @@ int hook_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 struct hook_wait {
 	struct fid_wait wait;
 	struct fid_wait *hwait;
+	struct hook_fabric *fabric;
 };
 
 int hook_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
@@ -92,6 +105,7 @@ int hook_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 struct hook_poll {
 	struct fid_poll poll;
 	struct fid_poll *hpoll;
+	struct hook_domain *domain;
 };
 
 int hook_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
@@ -101,6 +115,7 @@ int hook_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 struct hook_eq {
 	struct fid_eq eq;
 	struct fid_eq *heq;
+	struct hook_fabric *fabric;
 };
 
 int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
@@ -110,6 +125,7 @@ int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 struct hook_cq {
 	struct fid_cq cq;
 	struct fid_cq *hcq;
+	struct hook_domain *domain;
 };
 
 int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -119,6 +135,7 @@ int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 struct hook_cntr {
 	struct fid_cntr cntr;
 	struct fid_cntr *hcntr;
+	struct hook_domain *domain;
 };
 
 int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -128,6 +145,7 @@ int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 struct hook_ep {
 	struct fid_ep ep;
 	struct fid_ep *hep;
+	struct hook_domain *domain;
 };
 
 int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -148,6 +166,7 @@ extern struct fi_ops_atomic hook_atomic_ops;
 struct hook_pep {
 	struct fid_pep pep;
 	struct fid_pep *hpep;
+	struct hook_fabric *fabric;
 };
 
 int hook_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
@@ -157,6 +176,7 @@ int hook_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 struct hook_stx {
 	struct fid_stx stx;
 	struct fid_stx *hstx;
+	struct hook_domain *domain;
 };
 
 int hook_stx_ctx(struct fid_domain *domain,
@@ -167,6 +187,7 @@ int hook_stx_ctx(struct fid_domain *domain,
 struct hook_mr {
 	struct fid_mr mr;
 	struct fid_mr *hmr;
+	struct hook_domain *domain;
 };
 
 

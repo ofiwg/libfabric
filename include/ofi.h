@@ -120,6 +120,8 @@ void fi_log_fini(void);
 void fi_param_init(void);
 void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
+void ofi_hook_init(void);
+void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric);
 
 const char *ofi_hex_str(const uint8_t *data, size_t len);
 

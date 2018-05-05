@@ -33,7 +33,12 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <ofi.h>
 #include "hook.h"
+#include "hook_perf.h"
+
+
+static uint32_t hooks_enabled;
 
 
 struct fid *hook_to_hfid(const struct fid *fid)
@@ -80,10 +85,15 @@ struct fid *hook_to_hfid(const struct fid *fid)
 		return &(container_of(fid, struct hook_mr, mr.fid)->
 			 hmr->fid);
 	default:
-		assert(0);
 		return NULL;
 	}
 }
+
+struct fid_wait *hook_to_hwait(const struct fid_wait *wait)
+{
+	return container_of(wait, struct hook_wait, wait)->hwait;
+}
+
 
 static int hook_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
@@ -135,9 +145,32 @@ static int hook_close(struct fid *fid)
 	return ret;
 }
 
+static int hook_fabric_close(struct fid *fid)
+{
+	struct hook_fabric *fab;
+
+	fab = container_of(fid, struct hook_fabric, fabric.fid);
+	switch (fab->hclass) {
+	case HOOK_PERF:
+		hook_perf_destroy(fab);
+		break;
+	default:
+		break;
+	}
+	return hook_close(fid);
+}
+
 struct fi_ops hook_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = hook_close,
+	.bind = hook_bind,
+	.control = hook_control,
+	.ops_open = hook_ops_open,
+};
+
+static struct fi_ops hook_fabric_fid_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = hook_fabric_close,
 	.bind = hook_bind,
 	.control = hook_control,
 	.ops_open = hook_ops_open,
@@ -152,22 +185,84 @@ static struct fi_ops_fabric hook_fabric_ops = {
 	.trywait = hook_trywait,
 };
 
-int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric)
+static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
+			enum hook_class hclass)
 {
 	struct hook_fabric *fab;
+	int ret = 0;
 
-	fab = calloc(1, sizeof *fab);
-	if (!fab)
-		return -FI_ENOMEM;
+	switch (hclass) {
+	case HOOK_NOOP:
+		FI_TRACE(&core_prov, FI_LOG_FABRIC, "Installing noop hook\n");
+		fab = calloc(1, sizeof *fab);
+		if (!fab)
+			return -FI_ENOMEM;
+		break;
+	case HOOK_PERF:
+		FI_TRACE(&core_prov, FI_LOG_FABRIC, "Installing perf hook\n");
+		ret = hook_perf_create(&fab);
+		break;
+	default:
+		FI_WARN(&core_prov, FI_LOG_FABRIC, "Invalid hook specified\n");
+		return -FI_ENOSYS;
+	}
 
+	if (ret)
+		return ret;
+
+	fab->hclass = hclass;
+	fab->hfabric = hfabric;
 	fab->fabric.fid.fclass = FI_CLASS_FABRIC;
 	fab->fabric.fid.context = hfabric->fid.context;
-	fab->fabric.fid.ops = &hook_fid_ops;
+	fab->fabric.fid.ops = &hook_fabric_fid_ops;
 	fab->fabric.api_version = hfabric->api_version;
 	fab->fabric.ops = &hook_fabric_ops;
 
 	hfabric->fid.context = fab;
 	*fabric = &fab->fabric;
-
 	return 0;
+}
+
+void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric)
+{
+	int hooks, hclass, ret;
+
+	*fabric = hfabric;
+	if (!hooks_enabled)
+		return;
+
+	for (hooks = hooks_enabled, hclass = 0; hooks;
+	     hooks >>= 1, hclass++) {
+		if (hooks & 0x1) {
+			ret = hook_fabric(hfabric, fabric,
+					  (enum hook_class) hclass);
+			if (ret)
+				return;
+			hfabric = *fabric;
+		}
+	}
+}
+
+void ofi_hook_init(void)
+{
+	char *param_val = NULL;
+
+	fi_param_define(NULL, "hook", FI_PARAM_STRING,
+			"Intercept calls to underlying provider and apply "
+			"the specified functionality to them.  Hook option: "
+			"perf (gather performance data)");
+	fi_param_get_str(NULL, "hook", &param_val);
+
+	hooks_enabled = 0;
+	if (!param_val)
+		return;
+
+	if (!strcasecmp(param_val, "noop")) {
+		FI_INFO(&core_prov, FI_LOG_CORE, "Noop hook requested\n");
+		hooks_enabled |= (1 << HOOK_NOOP);
+	}
+	if (!strcasecmp(param_val, "perf")) {
+		FI_INFO(&core_prov, FI_LOG_CORE, "Perf hook requested\n");
+		hooks_enabled |= (1 << HOOK_PERF);
+	}
 }

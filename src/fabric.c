@@ -44,6 +44,7 @@
 #include "ofi_util.h"
 #include "ofi.h"
 #include "ofi_prov.h"
+#include "ofi_perf.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -378,6 +379,8 @@ void fi_ini(void)
 	fi_log_init();
 	ofi_osd_init();
 	ofi_pmem_init();
+	ofi_perf_init();
+	ofi_hook_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
@@ -885,6 +888,8 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 			(*fabric)->api_version = attr->api_version;
 		FI_INFO(&core_prov, FI_LOG_CORE, "Opened fabric: %s\n",
 			attr->name);
+
+		ofi_hook_install(*fabric, fabric);
 	}
 
 	return ret;

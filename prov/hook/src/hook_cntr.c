@@ -99,18 +99,24 @@ int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
 	struct hook_cntr *mycntr;
+	struct fi_cntr_attr hattr;
 	int ret;
 
 	mycntr = calloc(1, sizeof *mycntr);
 	if (!mycntr)
 		return -FI_ENOMEM;
 
+	mycntr->domain = dom;
 	mycntr->cntr.fid.fclass = FI_CLASS_CNTR;
 	mycntr->cntr.fid.context = context;
 	mycntr->cntr.fid.ops = &hook_fid_ops;
 	mycntr->cntr.ops = &hook_cntr_ops;
 
-	ret = fi_cntr_open(dom->hdomain, attr, &mycntr->hcntr,
+	hattr = *attr;
+	if (attr->wait_obj == FI_WAIT_SET)
+		hattr.wait_set = hook_to_hwait(attr->wait_set);
+
+	ret = fi_cntr_open(dom->hdomain, &hattr, &mycntr->hcntr,
 			   &mycntr->cntr.fid);
 	if (ret)
 		free(mycntr);

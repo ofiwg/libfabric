@@ -83,6 +83,7 @@ int hook_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	if (!poll)
 		return -FI_ENOMEM;
 
+	poll->domain = dom;
 	poll->poll.fid.fclass = FI_CLASS_POLL;
 	poll->poll.fid.ops = &hook_fid_ops;
 	poll->poll.ops = &hook_poll_ops;
@@ -139,6 +140,7 @@ int hook_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	if (!wait)
 		return -FI_ENOMEM;
 
+	wait->fabric = fab;
 	wait->wait.fid.fclass = FI_CLASS_WAIT;
 	wait->wait.fid.ops = &hook_fid_ops;
 	wait->wait.ops = &hook_wait_ops;

@@ -42,6 +42,28 @@
 #include <rdma/providers/fi_log.h>
 
 
+enum ofi_perf_domain	perf_domain = OFI_PMU_CPU;
+uint32_t		perf_cntr = OFI_PMC_CPU_INSTR;
+uint32_t		perf_flags;
+
+
+void ofi_perf_init(void)
+{
+	char *param_val = NULL;
+
+	fi_param_define(NULL, "perf_cntr", FI_PARAM_STRING,
+			"Performance counter to analyze (default: cpu_instr). "
+			"Options: cpu_instr, cpu_cycles.");
+	fi_param_get_str(NULL, "perf_cntr", &param_val);
+	if (!param_val)
+		return;
+
+	if (!strcasecmp(param_val, "cpu_cycles")) {
+		perf_domain = OFI_PMU_CPU;
+		perf_cntr = OFI_PMC_CPU_CYCLES;
+	}
+}
+
 int ofi_perfset_create(const struct fi_provider *prov,
 		       struct ofi_perfset *set, size_t size,
 		       enum ofi_perf_domain domain, uint32_t cntr_id,
@@ -56,7 +78,7 @@ int ofi_perfset_create(const struct fi_provider *prov,
 		return ret;
 	}
 
-	set->data = calloc(size, sizeof(*set->data) + sizeof(*set->names));
+	set->data = calloc(size, sizeof(*set->data));
 	if (!set->data) {
 		ofi_pmu_close(set->ctx);
 		return -FI_ENOMEM;
@@ -64,45 +86,26 @@ int ofi_perfset_create(const struct fi_provider *prov,
 
 	set->prov = prov;
 	set->size = size;
-	set->count = 0;
-	set->names = (char **)(set->data + size);
 	return 0;
 }
 
 void ofi_perfset_close(struct ofi_perfset *set)
 {
-	while (set->count--)
-		free(set->names[set->count]);
 	ofi_pmu_close(set->ctx);
 	free(set->data);
 }
 
-struct ofi_perf_data *ofi_perfset_data(struct ofi_perfset *set,
-				       const char *name)
-{
-	if (set->count == set->size)
-		return NULL;
-
-	if (name) {
-		set->names[set->count] = strdup(name);
-		if (!set->names[set->count])
-			return NULL;
-	}
-
-	return &set->data[set->count++];
-}
-
-void ofi_perfset_log(struct ofi_perfset *set)
+void ofi_perfset_log(struct ofi_perfset *set, const char *names[])
 {
 	size_t i;
 
-	for (i = 0; i < set->count; i++) {
-		if (!set->data[i].sum)
+	for (i = 0; i < set->size; i++) {
+		if (!set->data[i].events)
 			continue;
 
-		FI_INFO(set->prov, FI_LOG_CORE, "PERF (%s) "
+		FI_TRACE(set->prov, FI_LOG_CORE, "PERF (%s) "
 			"events=%" PRIu64 " avg=%g\n",
-			set->names[i] ? set->names[i] : "unknown",
+			names && names[i] ? names[i] : "unknown",
 			set->data[i].events,
 			(double) set->data[i].sum / set->data[i].events);
 	}
