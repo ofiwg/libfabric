@@ -63,7 +63,6 @@
 #define RXD_FI_VERSION 		FI_VERSION(1,6)
 
 #define RXD_IOV_LIMIT		4
-#define RXD_MAX_DGRAM_ADDR	128
 #define RXD_NAME_LENGTH		64
 #define RXD_INJECT_SIZE		4096
 #define RXD_MAX_MTU_SIZE	4096
@@ -110,12 +109,11 @@ struct rxd_av {
 	struct util_av util_av;
 	struct fid_av *dg_av;
 	struct ofi_rbmap rbmap;
-	fi_addr_t tx_map[RXD_MAX_DGRAM_ADDR];
-
 	int tx_idx;
 
 	int dg_av_used;
 	size_t dg_addrlen;
+	fi_addr_t tx_map[];
 };
 
 struct rxd_cq;
