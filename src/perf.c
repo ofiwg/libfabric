@@ -95,18 +95,55 @@ void ofi_perfset_close(struct ofi_perfset *set)
 	free(set->data);
 }
 
+static const char *ofi_perf_name(void)
+{
+	switch (perf_domain) {
+	case OFI_PMU_CPU:
+		switch (perf_cntr) {
+		case OFI_PMC_CPU_CYCLES:
+			return "CPU cycles";
+		case OFI_PMC_CPU_INSTR:
+			return "CPU instr";
+		}
+		break;
+	case OFI_PMU_CACHE:
+		switch (perf_cntr) {
+		case OFI_PMC_CACHE_L1_DATA:
+			return "L1 data cache";
+		case OFI_PMC_CACHE_L1_INSTR:
+			return "L1 instr cache";
+		case OFI_PMC_CACHE_TLB_DATA:
+			return "TLB data cache";
+		case OFI_PMC_CACHE_TLB_INSTR:
+			return "TLB instr cache";
+		}
+		break;
+	case OFI_PMU_OS:
+		switch (perf_cntr) {
+		case OFI_PMC_OS_PAGE_FAULT:
+			return "page faults";
+		}
+		break;
+	case OFI_PMU_NIC:
+		break;
+	}
+	return "unknown";
+}
+
 void ofi_perfset_log(struct ofi_perfset *set, const char *names[])
 {
 	size_t i;
+
+	FI_TRACE(set->prov, FI_LOG_CORE, "PERF: %s\n", ofi_perf_name());
+	FI_TRACE(set->prov, FI_LOG_CORE, "Name\tAvg\tEvents\n");
 
 	for (i = 0; i < set->size; i++) {
 		if (!set->data[i].events)
 			continue;
 
-		FI_TRACE(set->prov, FI_LOG_CORE, "PERF (%s) "
-			"events=%" PRIu64 " avg=%g\n",
+		FI_TRACE(set->prov, FI_LOG_CORE, "%s\t%g\t%" PRIu64 "\n",
 			names && names[i] ? names[i] : "unknown",
-			set->data[i].events,
-			(double) set->data[i].sum / set->data[i].events);
+			(double) set->data[i].sum / set->data[i].events,
+			set->data[i].events);
 	}
 }

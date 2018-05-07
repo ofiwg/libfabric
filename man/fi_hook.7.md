@@ -41,7 +41,7 @@ logged when the associated fabric is destroyed.
 
 The environment variable FI_PERF_CNTR is used to identify which performance
 counter is tracked.  The following counters are available:
- 
+
 *cpu_cycles*
 : Counts the number of CPU cycles each function takes to complete.
 
