@@ -185,24 +185,16 @@ void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry)
 
 void rxd_cq_report_tx_comp(struct rxd_cq *cq, struct rxd_x_entry *tx_entry)
 {
-	struct fi_cq_tagged_entry cq_entry = {0};
-
-	cq_entry.flags = (FI_TRANSMIT | FI_MSG);
-	cq_entry.op_context = tx_entry->context;
-	cq_entry.len = tx_entry->size;
-	cq_entry.buf = tx_entry->iov[0].iov_base;
-	cq_entry.data = tx_entry->data;
-	cq->write_fn(cq, &cq_entry);
+	cq->write_fn(cq, &tx_entry->cq_entry);
 }
 
 static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 			struct rxd_pkt_entry *pkt_entry, size_t size)
 {
-	struct fi_cq_tagged_entry cq_entry;
 	struct fi_cq_err_entry err_entry;
-	struct util_cntr *cntr = NULL;
+	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
+	struct util_cntr *cntr = ep->util_ep.rx_cntr;
 	uint64_t done;
-	struct rxd_cq *rxd_rx_cq = rxd_ep_rx_cq(ep);
 
 	done = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
 			       rx_entry->bytes_done, &pkt_entry->pkt->data,
@@ -222,25 +214,17 @@ static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 	rxd_ep_post_ack(ep, rx_entry);
 
 	/* Handle CQ comp */
-	if (rx_entry->bytes_done == rx_entry->size) {
-		cq_entry.flags = FI_RECV;
-		if (rx_entry->flags & RXD_REMOTE_CQ_DATA)
-			cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		cq_entry.op_context = rx_entry->context;
-		cq_entry.len = rx_entry->bytes_done;
-		cq_entry.buf = rx_entry->iov[0].iov_base;
-		cq_entry.data = rx_entry->data;
-		rxd_rx_cq->write_fn(rxd_rx_cq, &cq_entry);
+	if (rx_entry->bytes_done == rx_entry->cq_entry.len) {
+		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
 		/* Handle cntr */
-		cntr = ep->util_ep.rx_cntr;
 		if (cntr)
 			cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 	} else {
-		err_entry.op_context = rx_entry->context;
+		err_entry.op_context = rx_entry->cq_entry.op_context;
 		err_entry.flags = (FI_MSG | FI_RECV);
 		err_entry.err = FI_ETRUNC;
 		err_entry.prov_errno = -FI_ETRUNC;
-		rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
+		rxd_cq_report_error(rx_cq, &err_entry);
 	}
 
 	rxd_rx_entry_free(ep, rx_entry);
@@ -270,13 +254,17 @@ void rxd_post_cts(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry,
 	int ret;
 
 	rx_entry->peer = rts_pkt->peer;
-	rx_entry->size = rts_pkt->pkt->ctrl.size;
-	rx_entry->data = rts_pkt->pkt->ctrl.data;
 	rx_entry->window = rts_pkt->pkt->ctrl.window;
 	rx_entry->key = rts_pkt->pkt->hdr.key;
 	rx_entry->tx_id = rts_pkt->pkt->hdr.tx_id;
 	rx_entry->state = RXD_ACK;
 	rx_entry->next_start = rx_entry->window;
+
+	if (rts_pkt->pkt->hdr.flags & RXD_REMOTE_CQ_DATA) {
+		rx_entry->cq_entry.flags |= FI_REMOTE_CQ_DATA;
+		rx_entry->cq_entry.data = rts_pkt->pkt->ctrl.data;
+	}
+	rx_entry->cq_entry.len = rts_pkt->pkt->ctrl.size;
 
 	pkt_entry = rxd_get_tx_pkt(rxd_ep);
 	if (!pkt_entry)
@@ -454,6 +442,8 @@ static void rxd_handle_cts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 			    struct rxd_pkt_entry *pkt_entry)
 {
+	struct rxd_cq *tx_cq = rxd_ep_tx_cq(ep);
+	struct util_cntr *cntr = ep->util_ep.tx_cntr;
 	struct rxd_x_entry *tx_entry;
 
 	tx_entry = &ep->tx_fs->buf[pkt_entry->pkt->hdr.tx_id];
@@ -473,8 +463,10 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 
 	if (!(tx_entry->flags & RXD_NO_COMPLETION)) {
 		fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-		rxd_cq_report_tx_comp(rxd_ep_tx_cq(ep), tx_entry);
+		tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
 		fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+		if (cntr)
+			cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 	}
 
 	rxd_tx_entry_free(ep, tx_entry);

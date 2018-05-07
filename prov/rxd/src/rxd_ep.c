@@ -94,7 +94,7 @@ static int rxd_match_ctx(struct dlist_entry *item, const void *arg)
 
 	x_entry = container_of(item, struct rxd_x_entry, entry);
 
-	return (x_entry->context == arg);
+	return (x_entry->cq_entry.op_context == arg);
 }
 
 static ssize_t rxd_ep_cancel(fid_t fid, void *context)
@@ -115,7 +115,7 @@ static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 	rx_entry = container_of(entry, struct rxd_x_entry, entry);
 
 	rxd_rx_entry_free(ep, rx_entry);
-	err_entry.op_context = rx_entry->context;
+	err_entry.op_context = rx_entry->cq_entry.op_context;
 	err_entry.flags = (FI_MSG | FI_RECV);
 	err_entry.err = FI_ECANCELED;
 	err_entry.prov_errno = -FI_ECANCELED;
@@ -199,12 +199,15 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	rx_entry->bytes_done = 0;
 	rx_entry->next_seg_no = 0;
 	rx_entry->next_start = 0;
-	rx_entry->context = msg->context;
-	rx_entry->size = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	rx_entry->iov_count = msg->iov_count;
-	
+
 	memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
 
+	rx_entry->cq_entry.op_context = msg->context;
+	rx_entry->cq_entry.len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+	rx_entry->cq_entry.buf = msg->msg_iov[0].iov_base;
+	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
+	
 	slist_init(&rx_entry->pkt_list);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_list);
 
@@ -352,7 +355,7 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 
 	domain = rxd_ep_domain(ep);
 
-	seg_size = tx_entry->size - tx_entry->bytes_done;
+	seg_size = tx_entry->cq_entry.len - tx_entry->bytes_done;
 	seg_size = MIN(domain->max_seg_sz, seg_size);
 
 	rxd_set_pkt(ep, pkt_entry);
@@ -368,7 +371,7 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 						tx_entry->bytes_done);
 
 	tx_entry->bytes_done += pkt_entry->pkt_size;
-	if (tx_entry->bytes_done == tx_entry->size)
+	if (tx_entry->bytes_done == tx_entry->cq_entry.len)
 		pkt_entry->pkt->hdr.flags = RXD_LAST;
 	else
 		pkt_entry->pkt->hdr.flags = 0;
@@ -414,14 +417,16 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep,
 	tx_entry->next_start = 0;
 	tx_entry->window = RXD_MAX_UNACKED;
 	tx_entry->retry_cnt = 0;
-	tx_entry->context = msg->context;
-	tx_entry->size = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
-	if (flags & FI_REMOTE_CQ_DATA)
-		tx_entry->data = msg->data;
-
+	tx_entry->iov_count = msg->iov_count;
 	memcpy(&tx_entry->iov[0], msg->msg_iov,
 	       sizeof(*msg->msg_iov) * msg->iov_count);
-	tx_entry->iov_count = msg->iov_count;
+
+	if (flags & FI_REMOTE_CQ_DATA)
+		tx_entry->cq_entry.data = msg->data;
+	tx_entry->cq_entry.op_context = msg->context;
+	tx_entry->cq_entry.len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+	tx_entry->cq_entry.buf = msg->msg_iov[0].iov_base;
+	tx_entry->cq_entry.flags = (FI_TRANSMIT | FI_MSG);
 
 	slist_init(&tx_entry->pkt_list);
 	dlist_insert_tail(&tx_entry->entry, &ep->tx_list);
@@ -448,9 +453,6 @@ static ssize_t rxd_ep_post_data_msg(struct rxd_ep *ep,
 		return -FI_ENOMEM;
 
 	rxd_init_data_pkt(ep, tx_entry, pkt_entry);
-
-	if (tx_entry->bytes_done == tx_entry->size)
-		pkt_entry->pkt->hdr.flags = RXD_LAST;
 
 	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
 	return try_send ? rxd_ep_retry_pkt(ep, pkt_entry, tx_entry) : 0;
@@ -486,7 +488,7 @@ void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 	tx_entry->retry_cnt = 0;
 	tx_entry->next_start += tx_entry->window;
 	while (tx_entry->next_seg_no < tx_entry->next_start &&
-	       tx_entry->bytes_done != tx_entry->size) {
+	       tx_entry->bytes_done != tx_entry->cq_entry.len) {
 		if (rxd_ep_post_data_msg(ep, tx_entry, try_send))
 			break;
 	}
@@ -512,8 +514,8 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 		return ret;
 	}
 
-	pkt_entry->pkt->ctrl.size = tx_entry->size;
-	pkt_entry->pkt->ctrl.data = tx_entry->data;
+	pkt_entry->pkt->ctrl.size = tx_entry->cq_entry.len;
+	pkt_entry->pkt->ctrl.data = tx_entry->cq_entry.data;
 	pkt_entry->pkt->ctrl.window = RXD_MAX_UNACKED;
 
 	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
@@ -952,7 +954,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 
 		if (tx_entry->retry_cnt > RXD_MAX_PKT_RETRY) {
 			rxd_tx_entry_free(ep, tx_entry);
-			err_entry.op_context = tx_entry->context;
+			err_entry.op_context = tx_entry->cq_entry.op_context;
 			err_entry.flags = (FI_MSG | FI_SEND);
 			err_entry.err = FI_ECONNREFUSED;
 			err_entry.prov_errno = -FI_ECONNREFUSED;

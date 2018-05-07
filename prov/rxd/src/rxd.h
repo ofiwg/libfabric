@@ -182,7 +182,6 @@ struct rxd_x_entry {
 	uint32_t tx_id;
 	uint32_t rx_id;
 	uint32_t key;
-	void *context;
 	enum rxd_msg_type state;
 	uint64_t bytes_done;
 	uint32_t next_seg_no;
@@ -192,10 +191,10 @@ struct rxd_x_entry {
 	uint8_t retry_cnt;
 
 	uint32_t flags;
-	uint64_t size;
-	uint64_t data;
 	uint8_t iov_count;
 	struct iovec iov[RXD_IOV_LIMIT];
+
+	struct fi_cq_tagged_entry cq_entry;
 
 	struct dlist_entry entry;
 	struct slist pkt_list;
