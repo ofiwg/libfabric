@@ -130,6 +130,9 @@ struct hook_cq {
 
 int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
+const char *
+hook_cq_strerror(struct fid_cq *cq, int prov_errno,
+		 const void *err_data, char *buf, size_t len);
 
 
 struct hook_cntr {

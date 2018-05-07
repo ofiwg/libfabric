@@ -45,6 +45,18 @@ static inline struct ofi_perfset *perf_set(struct hook_ep *ep)
 			     fabric_hook)->perf_set;
 }
 
+static inline struct ofi_perfset *perf_set_cq(struct hook_cq *cq)
+{
+	return &container_of(cq->domain->fabric, struct perf_fabric,
+			     fabric_hook)->perf_set;
+}
+
+static inline struct ofi_perfset *perf_set_cntr(struct hook_cntr *cntr)
+{
+	return &container_of(cntr->domain->fabric, struct perf_fabric,
+			     fabric_hook)->perf_set;
+}
+
 /*
 static ssize_t
 perf_atomic_write(struct fid_ep *ep,
@@ -654,6 +666,179 @@ struct fi_ops_tagged perf_tagged_ops = {
 	.inject = perf_tagged_inject,
 	.senddata = perf_tagged_senddata,
 	.injectdata = perf_tagged_injectdata,
+};
+
+
+static ssize_t perf_cq_read_op(struct fid_cq *cq, void *buf, size_t count)
+{
+	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
+	ssize_t ret;
+
+	ofi_perfset_start(perf_set_cq(mycq), perf_cq_read);
+	ret = fi_cq_read(mycq->hcq, buf, count);
+	ofi_perfset_end(perf_set_cq(mycq), perf_cq_read);
+	return ret;
+}
+
+static ssize_t
+perf_cq_readerr_op(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
+{
+	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
+	ssize_t ret;
+
+	ofi_perfset_start(perf_set_cq(mycq), perf_cq_readerr);
+	ret = fi_cq_readerr(mycq->hcq, buf, flags);
+	ofi_perfset_end(perf_set_cq(mycq), perf_cq_readerr);
+	return ret;
+}
+
+static ssize_t
+perf_cq_readfrom_op(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
+{
+	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
+	ssize_t ret;
+
+	ofi_perfset_start(perf_set_cq(mycq), perf_cq_readfrom);
+	ret = fi_cq_readfrom(mycq->hcq, buf, count, src_addr);
+	ofi_perfset_end(perf_set_cq(mycq), perf_cq_readfrom);
+	return ret;
+}
+
+static ssize_t
+perf_cq_sread_op(struct fid_cq *cq, void *buf, size_t count,
+	      const void *cond, int timeout)
+{
+	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
+	ssize_t ret;
+
+	ofi_perfset_start(perf_set_cq(mycq), perf_cq_sread);
+	ret = fi_cq_sread(mycq->hcq, buf, count, cond, timeout);
+	ofi_perfset_end(perf_set_cq(mycq), perf_cq_sread);
+	return ret;
+}
+
+static ssize_t
+perf_cq_sreadfrom_op(struct fid_cq *cq, void *buf, size_t count,
+		  fi_addr_t *src_addr, const void *cond, int timeout)
+{
+	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
+	ssize_t ret;
+
+	ofi_perfset_start(perf_set_cq(mycq), perf_cq_sreadfrom);
+	ret = fi_cq_sreadfrom(mycq->hcq, buf, count, src_addr, cond, timeout);
+	ofi_perfset_end(perf_set_cq(mycq), perf_cq_sreadfrom);
+	return ret;
+}
+
+static int perf_cq_signal_op(struct fid_cq *cq)
+{
+	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
+	int ret;
+
+	ofi_perfset_start(perf_set_cq(mycq), perf_cq_signal);
+	ret = fi_cq_signal(mycq->hcq);
+	ofi_perfset_end(perf_set_cq(mycq), perf_cq_signal);
+	return ret;
+}
+
+struct fi_ops_cq perf_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = perf_cq_read_op,
+	.readfrom = perf_cq_readfrom_op,
+	.readerr = perf_cq_readerr_op,
+	.sread = perf_cq_sread_op,
+	.sreadfrom = perf_cq_sreadfrom_op,
+	.signal = perf_cq_signal_op,
+	.strerror = hook_cq_strerror,
+};
+
+
+static uint64_t perf_cntr_read_op(struct fid_cntr *cntr)
+{
+	struct hook_cntr *mycntr = container_of(cntr, struct hook_cntr, cntr);
+	uint64_t ret;
+
+	ofi_perfset_start(perf_set_cntr(mycntr), perf_cntr_read);
+	ret = fi_cntr_read(mycntr->hcntr);
+	ofi_perfset_end(perf_set_cntr(mycntr), perf_cntr_read);
+	return ret;
+}
+
+static uint64_t perf_cntr_readerr_op(struct fid_cntr *cntr)
+{
+	struct hook_cntr *mycntr = container_of(cntr, struct hook_cntr, cntr);
+	uint64_t ret;
+
+	ofi_perfset_start(perf_set_cntr(mycntr), perf_cntr_readerr);
+	ret = fi_cntr_readerr(mycntr->hcntr);
+	ofi_perfset_end(perf_set_cntr(mycntr), perf_cntr_readerr);
+	return ret;
+}
+
+static int perf_cntr_add_op(struct fid_cntr *cntr, uint64_t value)
+{
+	struct hook_cntr *mycntr = container_of(cntr, struct hook_cntr, cntr);
+	int ret;
+
+	ofi_perfset_start(perf_set_cntr(mycntr), perf_cntr_add);
+	ret = fi_cntr_add(mycntr->hcntr, value);
+	ofi_perfset_end(perf_set_cntr(mycntr), perf_cntr_add);
+	return ret;
+}
+
+static int perf_cntr_set_op(struct fid_cntr *cntr, uint64_t value)
+{
+	struct hook_cntr *mycntr = container_of(cntr, struct hook_cntr, cntr);
+	int ret;
+
+	ofi_perfset_start(perf_set_cntr(mycntr), perf_cntr_set);
+	ret = fi_cntr_set(mycntr->hcntr, value);
+	ofi_perfset_end(perf_set_cntr(mycntr), perf_cntr_set);
+	return ret;
+}
+
+static int perf_cntr_wait_op(struct fid_cntr *cntr, uint64_t threshold, int timeout)
+{
+	struct hook_cntr *mycntr = container_of(cntr, struct hook_cntr, cntr);
+	int ret;
+
+	ofi_perfset_start(perf_set_cntr(mycntr), perf_cntr_wait);
+	ret = fi_cntr_wait(mycntr->hcntr, threshold, timeout);
+	ofi_perfset_end(perf_set_cntr(mycntr), perf_cntr_wait);
+	return ret;
+}
+
+static int perf_cntr_adderr_op(struct fid_cntr *cntr, uint64_t value)
+{
+	struct hook_cntr *mycntr = container_of(cntr, struct hook_cntr, cntr);
+	int ret;
+
+	ofi_perfset_start(perf_set_cntr(mycntr), perf_cntr_adderr);
+	ret = fi_cntr_adderr(mycntr->hcntr, value);
+	ofi_perfset_end(perf_set_cntr(mycntr), perf_cntr_adderr);
+	return ret;
+}
+
+static int perf_cntr_seterr_op(struct fid_cntr *cntr, uint64_t value)
+{
+	struct hook_cntr *mycntr = container_of(cntr, struct hook_cntr, cntr);
+	int ret;
+
+	ofi_perfset_start(perf_set_cntr(mycntr), perf_cntr_seterr);
+	ret = fi_cntr_seterr(mycntr->hcntr, value);
+	ofi_perfset_end(perf_set_cntr(mycntr), perf_cntr_seterr);
+	return ret;
+}
+
+struct fi_ops_cntr perf_cntr_ops = {
+	.size = sizeof(struct fi_ops_cntr),
+	.read = perf_cntr_read_op,
+	.readerr = perf_cntr_readerr_op,
+	.add = perf_cntr_add_op,
+	.set = perf_cntr_set_op,
+	.wait = perf_cntr_wait_op,
+	.adderr = perf_cntr_adderr_op,
+	.seterr = perf_cntr_seterr_op,
 };
 
 

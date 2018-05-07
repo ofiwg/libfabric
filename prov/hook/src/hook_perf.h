@@ -77,9 +77,17 @@ void hook_perf_destroy(struct hook_fabric *fabric);
 	DECL(perf_tinjectdata),		\
 	DECL(perf_cq_read),		\
 	DECL(perf_cq_readfrom),		\
+	DECL(perf_cq_readerr),		\
+	DECL(perf_cq_sread),		\
+	DECL(perf_cq_sreadfrom),	\
+	DECL(perf_cq_signal),		\
 	DECL(perf_cntr_read),		\
+	DECL(perf_cntr_readerr),	\
 	DECL(perf_cntr_add),		\
 	DECL(perf_cntr_set),		\
+	DECL(perf_cntr_wait),		\
+	DECL(perf_cntr_adderr),		\
+	DECL(perf_cntr_seterr),		\
 	DECL(perf_size)
 
 enum perf_counters {
@@ -91,6 +99,8 @@ extern const char *perf_counters_str[];
 extern struct fi_ops_msg perf_msg_ops;
 extern struct fi_ops_rma perf_rma_ops;
 extern struct fi_ops_tagged perf_tagged_ops;
+extern struct fi_ops_cq perf_cq_ops;
+extern struct fi_ops_cntr perf_cntr_ops;
 
 
 #endif /* _HOOK_PERF_H_ */
