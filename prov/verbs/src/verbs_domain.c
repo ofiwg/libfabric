@@ -615,7 +615,7 @@ static int fi_ibv_trywait(struct fid_fabric *fabric, struct fid **fids, int coun
 	for (i = 0; i < count; i++) {
 		switch (fids[i]->fclass) {
 		case FI_CLASS_CQ:
-			cq = container_of(fids[i], struct fi_ibv_cq, cq_fid.fid);
+			cq = container_of(fids[i], struct fi_ibv_cq, util_cq.cq_fid.fid);
 			ret = cq->trywait(fids[i]);
 			if (ret)
 				return ret;

@@ -347,8 +347,7 @@ struct fi_ibv_wce {
 };
 
 struct fi_ibv_cq {
-	struct fid_cq		cq_fid;
-	struct fi_ibv_domain	*domain;
+	struct util_cq		util_cq;
 	struct ibv_comp_channel	*channel;
 	struct ibv_cq		*cq;
 	size_t			entry_size;
@@ -362,8 +361,6 @@ struct fi_ibv_cq {
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
 	struct util_buf_pool	*wce_pool;
-	ofi_fastlock_acquire_t	cq_fastlock_acquire;
-	ofi_fastlock_release_t	cq_fastlock_release;
 };
 
 struct fi_ibv_rdm_request;

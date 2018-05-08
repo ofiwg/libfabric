@@ -145,12 +145,12 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_RECV) {
 			if (ep->rcq)
 				return -EINVAL;
-			ep->rcq = container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
+			ep->rcq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
 		}
 		if (flags & FI_SEND) {
 			if (ep->scq)
 				return -EINVAL;
-			ep->scq = container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
+			ep->scq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
 			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
@@ -176,6 +176,7 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 {
 	struct ibv_qp_init_attr attr = { 0 };
+	struct fi_ibv_domain *domain;
 	struct fi_ibv_ep *ep;
 	struct ibv_pd *pd;
 	int ret;
@@ -212,10 +213,14 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 		attr.cap.max_send_wr = ep->info->tx_attr->size;
 		attr.cap.max_send_sge = ep->info->tx_attr->iov_limit;
 		attr.send_cq = ep->scq->cq;
-		pd = ep->scq->domain->pd;
+		domain = container_of(ep->scq->util_cq.domain, struct fi_ibv_domain,
+				      util_domain);
+		pd = domain->pd;
 	} else {
 		attr.send_cq = ep->rcq->cq;
-		pd = ep->rcq->domain->pd;
+		domain = container_of(ep->scq->util_cq.domain, struct fi_ibv_domain,
+				      util_domain);
+		pd = domain->pd;
 	}
 
 	if (ep->rcq) {
@@ -503,13 +508,13 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 	struct ibv_wc wc[10];
 	int ret, i;
 
-	ep->scq->cq_fastlock_acquire(&ep->scq->lock);
+	ep->scq->util_cq.cq_fastlock_acquire(&ep->scq->lock);
 	/* TODO: retrieve WCs as much as possbile in a single
 	 * ibv_poll_cq call */
 	while (1) {
 		ret = ibv_poll_cq(ep->scq->cq, 10, wc);
 		if (ret <= 0) {
-			ep->scq->cq_fastlock_release(&ep->scq->lock);
+			ep->scq->util_cq.cq_fastlock_release(&ep->scq->lock);
 			return ret;
 		}
 
@@ -521,7 +526,7 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 		}
 	}
 
-	ep->scq->cq_fastlock_release(&ep->scq->lock);
+	ep->scq->util_cq.cq_fastlock_release(&ep->scq->lock);
 	return FI_SUCCESS;
 }
 
