@@ -688,8 +688,10 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 		return -FI_ENOMEM;
 
 	handle = sock_ep_cm_new_handle();
-	if (!handle)
+	if (!handle) {
+		ret = -FI_ENOMEM;
 		goto err;
+	}
 
 	req->hdr.type = SOCK_CONN_REQ;
 	req->hdr.port = htons(_ep->attr->msg_src_port);
@@ -710,6 +712,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	sock_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
 		SOCK_LOG_ERROR("no socket\n");
+		ret = -ofi_sockerr();
 		goto err;
 	}
 
@@ -721,13 +724,19 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (ret < 0) {
 		SOCK_LOG_ERROR("connect failed : %s\n",
 			       strerror(ofi_sockerr()));
+		ret = -ofi_sockerr();
 		goto close_socket;
 	}
 
-	if (sock_cm_send(sock_fd, req, sizeof(*req)))
+	ret = sock_cm_send(sock_fd, req, sizeof(*req));
+	if (ret)
 		goto close_socket;
-	if (handle->paramlen && sock_cm_send(sock_fd, handle->cm_data, handle->paramlen))
-		goto close_socket;
+
+	if (handle->paramlen) {
+		ret = sock_cm_send(sock_fd, handle->cm_data, handle->paramlen);
+		if (ret)
+			goto close_socket;
+	}
 
 	/* Monitor the connection */
 	_ep->attr->cm.state = SOCK_CM_STATE_REQUESTED;
@@ -742,7 +751,7 @@ err:
 	_ep->attr->info.handle = NULL;
 	free(req);
 	free(handle);
-	return -FI_ENOMEM;
+	return ret;
 }
 
 static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paramlen)
