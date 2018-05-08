@@ -510,7 +510,7 @@ static ssize_t rxm_lmt_send_ack_fast(struct rxm_rx_buf *rx_buf)
 }
 
 static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
-				   struct fi_cq_tagged_entry *comp)
+				   struct fi_cq_data_entry *comp)
 {
 	int ret;
 
@@ -531,7 +531,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 }
 
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
-				  struct fi_cq_tagged_entry *comp)
+				  struct fi_cq_data_entry *comp)
 {
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 	struct rxm_tx_entry *tx_entry = comp->op_context;
@@ -595,7 +595,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 }
 
 static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
-				  struct fi_cq_tagged_entry *comp,
+				  struct fi_cq_data_entry *comp,
 				  ssize_t err)
 {
 	struct rxm_tx_entry *tx_entry;
@@ -712,7 +712,7 @@ void rxm_ep_progress_one(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(util_ep, struct rxm_ep, util_ep);
-	struct fi_cq_tagged_entry comp;
+	struct fi_cq_data_entry comp;
 	ssize_t ret;
 
 	rxm_cq_repost_rx_buffers(rxm_ep);
@@ -737,7 +737,7 @@ void rxm_ep_progress_multi(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(util_ep, struct rxm_ep, util_ep);
-	struct fi_cq_tagged_entry comp;
+	struct fi_cq_data_entry comp;
 	ssize_t ret;
 	size_t comp_read = 0;
 
