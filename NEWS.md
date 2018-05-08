@@ -23,6 +23,7 @@ v1.6.0, Wed Mar 14, 2018
 -- Add const to fi_getinfo() hints parameter
 -- Improve use of epoll for better scalability
 -- Fixes to generic name service
+-- Implemented support of MR caching without merging of regions
 
 ## GNI
 -- Fix a problem with the GNI waitset implementation
