@@ -87,9 +87,9 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	struct slist_entry *slist_entry;
 	uint32_t api_version;
 
-	cq = container_of(cq_fid, struct fi_ibv_cq, cq_fid);
+	cq = container_of(cq_fid, struct fi_ibv_cq, util_cq.cq_fid);
 
-	cq->cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->lock);
 	if (slist_empty(&cq->wcq))
 		goto err;
 
@@ -97,10 +97,10 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	if (!wce->wc.status)
 		goto err;
 
-	api_version = cq->domain->util_domain.fabric->fabric_fid.api_version;
+	api_version = cq->util_cq.domain->fabric->fabric_fid.api_version;
 
 	slist_entry = slist_remove_head(&cq->wcq);
-	cq->cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->lock);
 
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
 
@@ -122,7 +122,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	util_buf_release(cq->wce_pool, wce);
 	return sizeof(*entry);
 err:
-	cq->cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->lock);
 	return -FI_EAGAIN;
 }
 
@@ -178,7 +178,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	uint8_t *p;
 
 	p = buf;
-	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
+	_cq = container_of(cq, struct fi_ibv_cq, util_cq.cq_fid);
 
 	if (!_cq->channel)
 		return -FI_ENOSYS;
@@ -193,7 +193,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 				break;
 		}
 
-		ret = _cq->cq_fid.ops->read(&_cq->cq_fid, p, count - cur);
+		ret = _cq->util_cq.cq_fid.ops->read(&_cq->util_cq.cq_fid, p, count - cur);
 		if (ret > 0) {
 			p += ret * _cq->entry_size;
 			cur += ret;
@@ -266,17 +266,17 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 {
 	int ret;
 
-	ep->rcq->cq_fastlock_acquire(&ep->rcq->lock);
+	ep->rcq->util_cq.cq_fastlock_acquire(&ep->rcq->lock);
 	do {
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->rcq);
 	} while (ret > 0);
-	ep->rcq->cq_fastlock_release(&ep->rcq->lock);
+	ep->rcq->util_cq.cq_fastlock_release(&ep->rcq->lock);
 
-	ep->scq->cq_fastlock_acquire(&ep->scq->lock);
+	ep->scq->util_cq.cq_fastlock_acquire(&ep->scq->lock);
 	do {
 		ret = fi_ibv_poll_outstanding_cq(ep, ep->scq);
 	} while (ret > 0);
-	ep->scq->cq_fastlock_release(&ep->scq->lock);
+	ep->scq->util_cq.cq_fastlock_release(&ep->scq->lock);
 }
 
 /* Must call with cq->lock held */
@@ -300,9 +300,9 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 	struct ibv_wc wc;
 	ssize_t ret = 0, i;
 
-	cq = container_of(cq_fid, struct fi_ibv_cq, cq_fid);
+	cq = container_of(cq_fid, struct fi_ibv_cq, util_cq.cq_fid);
 
-	cq->cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->lock);
 
 	for (i = 0; i < count; i++) {
 		if (!slist_empty(&cq->wcq)) {
@@ -326,7 +326,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		if (wc.status) {
 			wce = util_buf_alloc(cq->wce_pool);
 			if (!wce) {
-				cq->cq_fastlock_release(&cq->lock);
+				cq->util_cq.cq_fastlock_release(&cq->lock);
 				return -FI_ENOMEM;
 			}
 			memset(wce, 0, sizeof(*wce));
@@ -339,7 +339,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		cq->read_entry(&wc, i, buf);
 	}
 
-	cq->cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->lock);
 	return i ? i : (ret ? ret : -FI_EAGAIN);
 }
 
@@ -357,7 +357,7 @@ int fi_ibv_cq_signal(struct fid_cq *cq)
 	struct fi_ibv_cq *_cq;
 	char data = '0';
 
-	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
+	_cq = container_of(cq, struct fi_ibv_cq, util_cq.cq_fid);
 
 	if (write(_cq->signal_fd[1], &data, 1) != 1) {
 		VERBS_WARN(FI_LOG_CQ, "Error signalling CQ\n");
@@ -374,14 +374,14 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 	void *context;
 	int ret = -FI_EAGAIN, rc;
 
-	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
+	cq = container_of(fid, struct fi_ibv_cq, util_cq.cq_fid);
 
 	if (!cq->channel) {
 		VERBS_WARN(FI_LOG_CQ, "No wait object object associated with CQ\n");
 		return -FI_EINVAL;
 	}
 
-	cq->cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->lock);
 	if (!slist_empty(&cq->wcq))
 		goto out;
 
@@ -424,7 +424,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 err:
 	util_buf_release(cq->wce_pool, wce);
 out:
-	cq->cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->lock);
 	return ret;
 }
 
@@ -444,7 +444,7 @@ static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 	struct fi_ibv_cq *cq;
 	int ret = 0;
 
-	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
+	cq = container_of(fid, struct fi_ibv_cq, util_cq.cq_fid);
 	switch(command) {
 	case FI_GETWAIT:
 		if (!cq->channel) {
@@ -463,24 +463,25 @@ static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 
 static int fi_ibv_cq_close(fid_t fid)
 {
-	struct fi_ibv_cq *cq;
 	struct fi_ibv_wce *wce;
 	struct slist_entry *entry;
 	int ret;
+	struct fi_ibv_cq *cq =
+		container_of(fid, struct fi_ibv_cq, util_cq.cq_fid);
 
-	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
+	ofi_cq_cleanup(&cq->util_cq);
 
 	if (ofi_atomic_get32(&cq->nevents))
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
 
-	cq->cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->lock);
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct fi_ibv_wce, entry);
 		util_buf_release(cq->wce_pool, wce);
 	}
 
-	cq->cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->lock);
 
 	util_buf_pool_destroy(cq->wce_pool);
 
@@ -514,139 +515,139 @@ static struct fi_ops fi_ibv_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		   struct fid_cq **cq, void *context)
+int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
+		   struct fid_cq **cq_fid, void *context)
 {
-	struct fi_ibv_cq *_cq;
+	struct fi_ibv_cq *cq;
+	struct fi_ibv_domain *domain =
+		container_of(domain_fid, struct fi_ibv_domain,
+			     util_domain.domain_fid);
 	size_t size;
 	int ret;
+	enum fi_wait_obj wait_obj = attr->wait_obj;
 
-	_cq = calloc(1, sizeof *_cq);
-	if (!_cq)
+	cq = calloc(1, sizeof(*cq));
+	if (!cq)
 		return -FI_ENOMEM;
 
-	_cq->domain = container_of(domain, struct fi_ibv_domain,
-				   util_domain.domain_fid);
-	if ((_cq->domain->info->domain_attr->threading == FI_THREAD_DOMAIN) ||
-	    (_cq->domain->info->domain_attr->threading == FI_THREAD_COMPLETION)) {
-		_cq->cq_fastlock_acquire = ofi_fastlock_acquire_noop;
-		_cq->cq_fastlock_release = ofi_fastlock_release_noop;
-	} else {
-		_cq->cq_fastlock_acquire = ofi_fastlock_acquire;
-		_cq->cq_fastlock_release = ofi_fastlock_release;
-	}
+	/* verbs uses its own implementation of wait objects for CQ */
+	attr->wait_obj = FI_WAIT_NONE;
+	ret = ofi_cq_init(&fi_ibv_prov, domain_fid, attr, &cq->util_cq, NULL, context);
+	if (ret)
+		goto err1;
+	attr->wait_obj = wait_obj;
 	/*
 	 * RDM and DGRAM CQ functionalities are moved to correspond
 	 * separated functions
 	 */
-	assert(_cq->domain->ep_type == FI_EP_MSG);
+	assert(domain->ep_type == FI_EP_MSG);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-		_cq->channel = ibv_create_comp_channel(_cq->domain->verbs);
-		if (!_cq->channel) {
+		cq->channel = ibv_create_comp_channel(domain->verbs);
+		if (!cq->channel) {
 			ret = -errno;
 			VERBS_WARN(FI_LOG_CQ,
 				   "Unable to create completion channel\n");
-			goto err1;
-		}
-
-		ret = fi_fd_nonblock(_cq->channel->fd);
-		if (ret)
-			goto err2;
-
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, _cq->signal_fd)) {
-			ret = -errno;
 			goto err2;
 		}
 
-		ret = fi_fd_nonblock(_cq->signal_fd[0]);
+		ret = fi_fd_nonblock(cq->channel->fd);
 		if (ret)
 			goto err3;
+
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, cq->signal_fd)) {
+			ret = -errno;
+			goto err3;
+		}
+
+		ret = fi_fd_nonblock(cq->signal_fd[0]);
+		if (ret)
+			goto err4;
 
 		break;
 	case FI_WAIT_NONE:
 		break;
 	default:
 		ret = -FI_ENOSYS;
-		goto err3;
+		goto err4;
 	}
 
 	size = attr->size ? attr->size : VERBS_DEF_CQ_SIZE;
 
-	_cq->cq = ibv_create_cq(_cq->domain->verbs, size, _cq, _cq->channel,
-			attr->signaling_vector);
-
-	if (!_cq->cq) {
+	cq->cq = ibv_create_cq(domain->verbs, size, cq, cq->channel,
+			       attr->signaling_vector);
+	if (!cq->cq) {
 		ret = -errno;
 		VERBS_WARN(FI_LOG_CQ, "Unable to create verbs CQ\n");
-		goto err3;
-	}
-
-	if (_cq->channel) {
-		ret = ibv_req_notify_cq(_cq->cq, 0);
-		if (ret) {
-			VERBS_WARN(FI_LOG_CQ,
-				   "ibv_req_notify_cq failed\n");
-			goto err4;
-		}
-	}
-
-	ret = util_buf_pool_create(&_cq->wce_pool, sizeof(struct fi_ibv_wce),
-				   16, 0, VERBS_WCE_CNT);
-	if (ret) {
-		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
 		goto err4;
 	}
 
-	_cq->flags |= attr->flags;
-	_cq->wait_cond = attr->wait_cond;
-	_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
-	_cq->cq_fid.fid.context = context;
-	_cq->cq_fid.fid.ops = &fi_ibv_cq_fi_ops;
-	_cq->cq_fid.ops = &fi_ibv_cq_ops;
+	if (cq->channel) {
+		ret = ibv_req_notify_cq(cq->cq, 0);
+		if (ret) {
+			VERBS_WARN(FI_LOG_CQ,
+				   "ibv_req_notify_cq failed\n");
+			goto err5;
+		}
+	}
+
+	ret = util_buf_pool_create(&cq->wce_pool, sizeof(struct fi_ibv_wce),
+				   16, 0, VERBS_WCE_CNT);
+	if (ret) {
+		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
+		goto err5;
+	}
+
+	cq->flags |= attr->flags;
+	cq->wait_cond = attr->wait_cond;
+	/* verbs uses its own ops for CQ */
+	cq->util_cq.cq_fid.fid.ops = &fi_ibv_cq_fi_ops;
+	cq->util_cq.cq_fid.ops = &fi_ibv_cq_ops;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
 	case FI_CQ_FORMAT_CONTEXT:
-		_cq->read_entry = fi_ibv_cq_read_context_entry;
-		_cq->entry_size = sizeof(struct fi_cq_entry);
+		cq->read_entry = fi_ibv_cq_read_context_entry;
+		cq->entry_size = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
-		_cq->read_entry = fi_ibv_cq_read_msg_entry;
-		_cq->entry_size = sizeof(struct fi_cq_msg_entry);
+		cq->read_entry = fi_ibv_cq_read_msg_entry;
+		cq->entry_size = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
-		_cq->read_entry = fi_ibv_cq_read_data_entry;
-		_cq->entry_size = sizeof(struct fi_cq_data_entry);
+		cq->read_entry = fi_ibv_cq_read_data_entry;
+		cq->entry_size = sizeof(struct fi_cq_data_entry);
 		break;
 	case FI_CQ_FORMAT_TAGGED:
 	default:
 		ret = -FI_ENOSYS;
-		goto err5;
+		goto err6;
 	}
 
-	fastlock_init(&_cq->lock);
+	fastlock_init(&cq->lock);
 
-	slist_init(&_cq->wcq);
+	slist_init(&cq->wcq);
 
-	_cq->trywait = fi_ibv_cq_trywait;
-	ofi_atomic_initialize32(&_cq->nevents, 0);
+	cq->trywait = fi_ibv_cq_trywait;
+	ofi_atomic_initialize32(&cq->nevents, 0);
 
-	*cq = &_cq->cq_fid;
+	*cq_fid = &cq->util_cq.cq_fid;
 	return 0;
+err6:
+	util_buf_pool_destroy(cq->wce_pool);
 err5:
-	util_buf_pool_destroy(_cq->wce_pool);
+	ibv_destroy_cq(cq->cq);
 err4:
-	ibv_destroy_cq(_cq->cq);
+	ofi_close_socket(cq->signal_fd[0]);
+	ofi_close_socket(cq->signal_fd[1]);
 err3:
-	ofi_close_socket(_cq->signal_fd[0]);
-	ofi_close_socket(_cq->signal_fd[1]);
+	if (cq->channel)
+		ibv_destroy_comp_channel(cq->channel);
 err2:
-	if (_cq->channel)
-		ibv_destroy_comp_channel(_cq->channel);
+	ofi_cq_cleanup(&cq->util_cq);
 err1:
-	free(_cq);
+	free(cq);
 	return ret;
 }
