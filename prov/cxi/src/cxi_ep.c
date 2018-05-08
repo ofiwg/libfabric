@@ -1102,16 +1102,6 @@ int cxi_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	return 0;
 }
 
-char *cxi_get_fabric_name(struct cxi_addr *src_addr)
-{
-	return NULL;
-}
-
-char *cxi_get_domain_name(struct cxi_addr *src_addr)
-{
-	return NULL;
-}
-
 static void cxi_set_fabric_attr(void *src_addr,
 				const struct fi_fabric_attr *hint_attr,
 				struct fi_fabric_attr *attr)
@@ -1126,11 +1116,7 @@ static void cxi_set_fabric_attr(void *src_addr,
 		attr->fabric = fabric ? &fabric->fab_fid : NULL;
 	}
 
-	/* reverse lookup address from node and assign it as fabric name */
 	attr->name = cxi_get_fabric_name(src_addr);
-	if (!attr->name)
-		attr->name = strdup(cxi_fab_name);
-
 	attr->prov_name = NULL;
 }
 
@@ -1201,8 +1187,6 @@ static void cxi_set_domain_attr(uint32_t api_version, void *src_addr,
 out:
 	/* reverse lookup interface from node and assign it as domain name */
 	attr->name = cxi_get_domain_name(src_addr);
-	if (!attr->name)
-		attr->name = strdup(cxi_dom_name);
 }
 
 

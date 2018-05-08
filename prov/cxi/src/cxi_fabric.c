@@ -22,8 +22,8 @@
 #define CXI_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXI_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
 
-const char cxi_fab_name[] = "cxi/a";	/* Network Name */
-const char cxi_dom_name[] = "cxi0:0";	/* NIC:Domain Name */
+const char cxi_fab_fmt[] = "cxi/%d";	/* Provder/Net Name */
+const char cxi_dom_fmt[] = "cxi%d:%d";	/* IF/Dom Name */
 const char cxi_prov_name[] = "CXI";	/* Provider Name */
 
 int cxi_av_def_sz = CXI_AV_DEF_SZ;
@@ -43,8 +43,60 @@ const struct fi_fabric_attr cxi_fabric_attr = {
 static struct dlist_entry cxi_fab_list;
 static struct dlist_entry cxi_dom_list;
 static fastlock_t cxi_list_lock;
-static struct slist cxi_if_list;
+struct slist cxi_if_list;
 static int read_default_params;
+
+struct cxi_if_list_entry *cxi_if_lookup(struct cxi_addr *src_addr)
+{
+	struct slist_entry *entry, *prev;
+	struct cxi_if_list_entry *if_entry;
+
+	(void) prev; /* Makes compiler happy */
+	slist_foreach(&cxi_if_list, entry, prev) {
+		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+		if (if_entry->if_nic == src_addr->nic) {
+			return if_entry;
+		}
+	}
+
+	return NULL;
+}
+
+char *cxi_get_fabric_name(struct cxi_addr *src_addr)
+{
+	struct cxi_if_list_entry *if_entry;
+	char *fab_name;
+	int ret;
+
+	if_entry = cxi_if_lookup(src_addr);
+	if (!if_entry)
+		return NULL;
+
+	ret = asprintf(&fab_name, cxi_fab_fmt, if_entry->if_fabric);
+	if (ret == -1)
+		return NULL;
+
+	return fab_name;
+}
+
+char *cxi_get_domain_name(struct cxi_addr *src_addr)
+{
+	struct cxi_if_list_entry *if_entry;
+	char *dom_name;
+	int ret;
+
+	if_entry = cxi_if_lookup(src_addr);
+	if (!if_entry)
+		return NULL;
+
+	ret = asprintf(&dom_name, cxi_dom_fmt, if_entry->if_idx,
+		       src_addr->domain);
+	if (ret == -1)
+		return NULL;
+
+	return dom_name;
+}
+
 
 void cxi_dom_add_to_list(struct cxi_domain *domain)
 {
@@ -339,14 +391,21 @@ static int cxi_fabric(struct fi_fabric_attr *attr,
 
 int cxi_get_src_addr(struct cxi_addr *dest_addr, struct cxi_addr *src_addr)
 {
-	/* TODO find local interface on the same fabric as dest_addr */
-
-	/* Just say the first IF matches */
 	struct cxi_if_list_entry *if_entry;
 
+	if_entry = cxi_if_lookup(dest_addr);
+	if (if_entry) {
+		/* Dest addr is loopback */
+		memcpy(src_addr, dest_addr, sizeof(*src_addr));
+		return 0;
+	}
+
+	/* TODO how to select an address on matching network? */
+
+	/* Just say the first IF matches */
 	if_entry = container_of((cxi_if_list.head), struct cxi_if_list_entry,
 				entry);
-	src_addr->nic = if_entry->nic;
+	src_addr->nic = if_entry->if_nic;
 
 	return 0;
 }
@@ -557,7 +616,7 @@ static int cxi_match_src_addr_if(struct slist_entry *entry,
 
 	if_entry = container_of(entry, struct cxi_if_list_entry, entry);
 
-	return if_entry->nic == ((struct cxi_addr *)src_addr)->nic;
+	return if_entry->if_nic == ((struct cxi_addr *)src_addr)->nic;
 }
 
 static int cxi_addr_matches_interface(struct slist *addr_list,
@@ -586,16 +645,31 @@ static int cxi_node_matches_interface(struct slist *if_list, const char *node)
 	return cxi_addr_matches_interface(if_list, &addr);
 }
 
+#define CXI_FAKE_NICS 1
+#define NUM_CXI_FAKE_NICS 4
+static struct cxi_if_list_entry cxi_fake_nics[] = {
+	{ .if_nic = 0xabcd0, .if_idx = 0, .if_fabric = 2 },
+	{ .if_nic = 0xabcd1, .if_idx = 1, .if_fabric = 2 },
+	{ .if_nic = 0xabcd2, .if_idx = 2, .if_fabric = 3 },
+	{ .if_nic = 0xabcd3, .if_idx = 3, .if_fabric = 3 }
+};
+
 void cxi_get_list_of_if(struct slist *if_list)
 {
 	struct cxi_if_list_entry *if_entry;
 
 	/* TODO populate list with all NICs, how do we poll local NICs? */
 
-	/* Make up a NIC for now */
-	if_entry = calloc(1, sizeof(struct cxi_if_list_entry));
-	if_entry->nic = 0xabcde; /* 703710 */
-	slist_insert_tail(&if_entry->entry, if_list);
+#if CXI_FAKE_NICS
+	/* Make up some NICs for now */
+	for (int i = 0; i < NUM_CXI_FAKE_NICS; i++) {
+		if_entry = calloc(1, sizeof(struct cxi_if_list_entry));
+		if_entry->if_nic = cxi_fake_nics[i].if_nic;
+		if_entry->if_idx = cxi_fake_nics[i].if_idx;
+		if_entry->if_fabric = cxi_fake_nics[i].if_fabric;
+		slist_insert_tail(&if_entry->entry, if_list);
+	}
+#endif
 }
 
 static void cxi_free_if_list(struct slist *if_list)
@@ -659,14 +733,21 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 
 	(void) prev; /* Makes compiler happy */
 	slist_foreach(&cxi_if_list, entry, prev) {
-		char local_node[10];
+		char *local_node;
 
 		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
-		snprintf(local_node, 10, "0x%x", if_entry->nic);
+		ret = asprintf(&local_node, "0x%x", if_entry->if_nic);
+		if (ret == -1) {
+			CXI_LOG_ERROR("asprintf failed: %s\n",
+				      strerror(ofi_syserr()));
+			local_node = NULL;
+		}
 
 		flags |= FI_SOURCE;
 		ret = cxi_node_getinfo(version, local_node, service, flags,
 				       hints, info, &tail);
+		free(local_node);
+
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;

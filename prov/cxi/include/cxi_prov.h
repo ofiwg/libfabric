@@ -112,13 +112,14 @@ extern uint64_t CXI_EP_RDM_CAP;
 
 #define CXI_WIRE_PROTO_VERSION (1)
 
-extern const char cxi_fab_name[];
-extern const char cxi_dom_name[];
+extern const char cxi_fab_fmt[];
+extern const char cxi_dom_fmt[];
 extern const char cxi_prov_name[];
 extern struct fi_provider cxi_prov;
 extern int cxi_av_def_sz;
 extern int cxi_cq_def_sz;
 extern int cxi_eq_def_sz;
+extern struct slist cxi_if_list;
 
 extern struct fi_provider cxi_prov;
 
@@ -144,7 +145,9 @@ struct cxi_addr {
 		((addr)->flags &= ~CXI_ADDR_FLAG_AV_ENTRY_VALID)
 
 struct cxi_if_list_entry {
-	uint32_t nic;
+	uint32_t if_nic;
+	uint32_t if_idx;
+	uint32_t if_fabric;
 	struct slist_entry entry;
 };
 
@@ -361,6 +364,10 @@ int cxi_parse_addr(const char *node, const char *service,
 
 int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 	       struct fid_domain **dom, void *context);
+
+char *cxi_get_fabric_name(struct cxi_addr *src_addr);
+char *cxi_get_domain_name(struct cxi_addr *src_addr);
+
 void cxi_dom_add_to_list(struct cxi_domain *domain);
 int cxi_dom_check_list(struct cxi_domain *domain);
 void cxi_dom_remove_from_list(struct cxi_domain *domain);
