@@ -339,7 +339,7 @@ struct fi_ibv_domain {
 };
 
 struct fi_ibv_cq;
-typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, int index, void *buf);
+typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, void *buf);
 
 struct fi_ibv_wce {
 	struct slist_entry	entry;

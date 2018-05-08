@@ -207,27 +207,27 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	return cur ? cur : ret;
 }
 
-static void fi_ibv_cq_read_context_entry(struct ibv_wc *wc, int i, void *buf)
+static void fi_ibv_cq_read_context_entry(struct ibv_wc *wc, void *buf)
 {
 	struct fi_cq_entry *entry = buf;
 
-	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
+	entry->op_context = (void *)(uintptr_t)wc->wr_id;
 }
 
-static void fi_ibv_cq_read_msg_entry(struct ibv_wc *wc, int i, void *buf)
+static void fi_ibv_cq_read_msg_entry(struct ibv_wc *wc, void *buf)
 {
 	struct fi_cq_msg_entry *entry = buf;
 
-	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
-	fi_ibv_handle_wc(wc, &entry[i].flags, &entry[i].len, NULL);
+	entry->op_context = (void *)(uintptr_t)wc->wr_id;
+	fi_ibv_handle_wc(wc, &entry->flags, &entry->len, NULL);
 }
 
-static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
+static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, void *buf)
 {
 	struct fi_cq_data_entry *entry = buf;
 
-	entry[i].op_context = (void *)(uintptr_t)wc->wr_id;
-	fi_ibv_handle_wc(wc, &entry[i].flags, &entry[i].len, &entry[i].data);
+	entry->op_context = (void *)(uintptr_t)wc->wr_id;
+	fi_ibv_handle_wc(wc, &entry->flags, &entry->len, &entry->data);
 }
 
 /* Must call with cq->lock held */
@@ -313,7 +313,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			}
 			entry = slist_remove_head(&cq->wcq);
 			wce = container_of(entry, struct fi_ibv_wce, entry);
-			cq->read_entry(&wce->wc, i, buf);
+			cq->read_entry(&wce->wc, (char *)buf + i * cq->entry_size);
 			util_buf_release(cq->wce_pool, wce);
 			continue;
 		}
@@ -336,7 +336,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			break;
 		}
 
-		cq->read_entry(&wc, i, buf);
+		cq->read_entry(&wc, (char *)buf + i * cq->entry_size);
 	}
 
 	cq->cq_fastlock_release(&cq->lock);
