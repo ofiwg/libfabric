@@ -109,10 +109,10 @@ static int cxi_check_table_in(struct cxi_av *_av, struct cxi_addr *addr,
 			index = _av->table_hdr->stored++;
 		}
 
-		CXI_LOG_DBG("inserted 0x%x:%u:%u\n",
-			    cxi_addr->nic, cxi_addr->domain, cxi_addr->port);
-
 		av_addr = &_av->table[index];
+		CXI_LOG_DBG("inserted 0x%x:%u:%u\n",
+			    av_addr->nic, av_addr->domain, av_addr->port);
+
 		memcpy(av_addr, &addr[i], sizeof(struct cxi_addr));
 		if (fi_addr)
 			fi_addr[i] = (fi_addr_t)index;
