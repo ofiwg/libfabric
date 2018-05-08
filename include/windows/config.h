@@ -159,7 +159,7 @@
 #define PACKAGE_NAME "libfabric"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "libfabric 1.6.1rc1"
+#define PACKAGE_STRING "libfabric 1.6.1"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "libfabric"
