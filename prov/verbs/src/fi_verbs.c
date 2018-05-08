@@ -632,12 +632,12 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of mr_max_cached_size\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_bool("mr_cache_merge_regionss",
+	if (fi_ibv_get_param_bool("mr_cache_merge_regions",
 				  "Enable the merging of MR regions for MR "
 				  "caching functionality",
 				  &fi_ibv_gl_data.mr_cache_merge_regions)) {
 		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of mr_cache_enable\n");
+			   "Invalid value of mr_cache_merge_regions\n");
 		return -FI_EINVAL;
 	}
 
