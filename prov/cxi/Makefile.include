@@ -22,6 +22,7 @@ _cxi_headers = \
 if HAVE_CRITERION
 bin_PROGRAMS += prov/cxi/test/cxitest
 nodist_prov_cxi_test_cxitest_SOURCES = \
+	prov/cxi/test/cxi_test_common.c \
 	prov/cxi/test/fabric.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \

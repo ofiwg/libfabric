@@ -10,130 +10,50 @@
 #include <criterion/criterion.h>
 
 #include "cxi_prov.h"
-
-struct fi_info *fi_hints;
-static struct fid_fabric *fabric;
-static struct fi_info *fi;
-char *node = NULL, *service = NULL;
-uint64_t flags = 0;
-int n_ifs;
-
-static void create_fabric_info(void)
-{
-	int ret;
-
-	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-			 node, service, flags, fi_hints, &fi);
-	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
-}
-
-static void destroy_fabric_info(void)
-{
-	fi_freeinfo(fi);
-}
-
-static void create_fabric(void)
-{
-	int ret;
-
-	create_fabric_info();
-
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	cr_assert(ret == FI_SUCCESS, "fi_fabric");
-}
-
-static void destroy_fabric(void)
-{
-	int ret;
-
-	ret = fi_close(&fabric->fid);
-	cr_assert(ret == FI_SUCCESS, "fi_close fabric");
-
-	destroy_fabric_info();
-}
-
-static void cxi_fabric_test_init(void)
-{
-	struct slist_entry *entry, *prev;
-
-	/* init OFI providers */
-	create_fabric();
-	destroy_fabric();
-
-	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
-		n_ifs++;
-	}
-}
-
-static void setup_getinfo(void)
-{
-	cxi_fabric_test_init();
-
-	fi_hints = fi_allocinfo();
-	cr_assert(fi_hints, "fi_allocinfo");
-}
-
-static void teardown_getinfo(void)
-{
-	fi_freeinfo(fi_hints);
-}
-
-static void setup_fabric(void)
-{
-	setup_getinfo();
-
-	/* Always select CXI */
-	fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
-
-	create_fabric();
-}
-
-static void teardown_fabric(void)
-{
-	destroy_fabric();
-	teardown_getinfo();
-}
+#include "cxi_test_common.h"
 
 static char *get_dom_name(int if_idx, int dom_id)
 {
-	char *dom = malloc(100);
-	cr_assert(dom);
+	char *dom;
+	int ret;
 
-	snprintf(dom, 100, cxi_dom_fmt, if_idx, dom_id);
+	ret = asprintf(&dom, cxi_dom_fmt, if_idx, dom_id);
+	cr_assert(ret > 0);
 
 	return dom;
 }
 
 static char *get_fab_name(int fab_id)
 {
-	char *fab = malloc(100);
-	cr_assert(fab);
+	char *fab;
+	int ret;
 
-	snprintf(fab, 100, cxi_fab_fmt, fab_id);
+	ret = asprintf(&fab, cxi_fab_fmt, fab_id);
+	cr_assert(ret > 0);
 
 	return fab;
 }
 
-TestSuite(getinfo, .init = setup_getinfo,
-	  .fini = teardown_getinfo);
+TestSuite(getinfo, .init = cxit_setup_getinfo,
+	  .fini = cxit_teardown_getinfo);
 
 /* Test fabric selection with provider name */
 Test(getinfo, prov_name)
 {
 	int infos = 0;
 
-	fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
 
-	create_fabric_info();
-	cr_assert(fi != NULL);
+	cxit_create_fabric_info();
+	cr_assert(cxit_fi != NULL);
 
 	/* Make sure we have 1 FI for each IF */
 	do {
-		cr_assert(!strcmp(fi->fabric_attr->prov_name, cxi_prov_name));
+		cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
+				  cxi_prov_name));
 		infos++;
-	} while ((fi = fi->next));
-	cr_assert(infos == n_ifs);
+	} while ((cxit_fi = cxit_fi->next));
+	cr_assert(infos == cxit_n_ifs);
 }
 
 /* Test fabric selection with domain name */
@@ -149,28 +69,30 @@ Test(getinfo, dom_name)
 		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
 		infos = 0;
 
-		fi_hints->domain_attr->name = get_dom_name(if_entry->if_idx, 0);
+		cxit_fi_hints->domain_attr->name =
+				get_dom_name(if_entry->if_idx, 0);
 
-		create_fabric_info();
-		cr_assert(fi != NULL);
+		cxit_create_fabric_info();
+		cr_assert(cxit_fi != NULL);
 
 		/* Make sure we have 1 FI for each IF */
 		do {
-			cr_assert(!strcmp(fi->domain_attr->name,
-					  fi_hints->domain_attr->name));
+			cr_assert(!strcmp(cxit_fi->domain_attr->name,
+					  cxit_fi_hints->domain_attr->name));
 
-			cr_assert(!strcmp(fi->fabric_attr->prov_name,
+			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxi_prov_name));
 
 			fab_name = get_fab_name(if_entry->if_fabric);
-			cr_assert(!strcmp(fi->fabric_attr->name, fab_name));
+			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
+					  fab_name));
 			free(fab_name);
 
 			infos++;
-		} while ((fi = fi->next));
+		} while ((cxit_fi = cxit_fi->next));
 		cr_assert(infos == 1);
 
-		destroy_fabric_info();
+		cxit_destroy_fabric_info();
 	}
 	cr_assert(infos == 1);
 }
@@ -187,24 +109,26 @@ Test(getinfo, fab_name)
 		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
 		infos = 0;
 
-		fi_hints->fabric_attr->name = get_fab_name(if_entry->if_fabric);
+		cxit_fi_hints->fabric_attr->name =
+				get_fab_name(if_entry->if_fabric);
 
-		create_fabric_info();
-		cr_assert(fi != NULL);
+		cxit_create_fabric_info();
+		cr_assert(cxit_fi != NULL);
 
 		do {
 			/* Not all providers can be trusted to filter by fabric
 			 * name */
-			if (strcmp(fi->fabric_attr->prov_name, cxi_prov_name))
+			if (strcmp(cxit_fi->fabric_attr->prov_name,
+				   cxi_prov_name))
 				continue;
 
-			cr_assert(!strcmp(fi->fabric_attr->name,
-					  fi_hints->fabric_attr->name));
+			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
+					  cxit_fi_hints->fabric_attr->name));
 
 			infos++;
-		} while ((fi = fi->next));
+		} while ((cxit_fi = cxit_fi->next));
 
-		destroy_fabric_info();
+		cxit_destroy_fabric_info();
 	}
 	cr_assert(infos);
 }
@@ -212,53 +136,55 @@ Test(getinfo, fab_name)
 /* Test selection by source node */
 Test(getinfo, src_node)
 {
-	int infos = 0;
+	int ret, infos = 0;
 	struct cxi_addr *addr;
 	struct cxi_if_list_entry *if_entry;
 	struct slist_entry *entry, *prev;
 	char *fab_name, *dom_name;
 
-	fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
 
 	(void) prev; /* Makes compiler happy */
 	slist_foreach(&cxi_if_list, entry, prev) {
 		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
 		infos = 0;
 
-		node = malloc(10);
-		cr_assert(node);
-		snprintf(node, 10, "0x%x", if_entry->if_nic);
-		flags = FI_SOURCE;
+		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
+		cr_assert(ret > 0);
 
-		create_fabric_info();
-		cr_assert(fi != NULL);
+		cxit_flags = FI_SOURCE;
+
+		cxit_create_fabric_info();
+		cr_assert(cxit_fi != NULL);
 
 		/* Make sure we have only 1 FI for each IF */
 		do {
-			cr_assert(!strcmp(fi->fabric_attr->prov_name,
+			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxi_prov_name));
 
-			addr = (struct cxi_addr *)fi->src_addr;
+			addr = (struct cxi_addr *)cxit_fi->src_addr;
 			cr_assert(addr->nic == if_entry->if_nic);
 			cr_assert(addr->domain == 0);
 			cr_assert(addr->port == 0);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
-			cr_assert(!strcmp(fi->fabric_attr->name, fab_name));
+			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
+					  fab_name));
 			free(fab_name);
 
 			dom_name = get_dom_name(if_entry->if_idx, 0);
-			cr_assert(!strcmp(fi->domain_attr->name, dom_name));
+			cr_assert(!strcmp(cxit_fi->domain_attr->name,
+					  dom_name));
 			free(dom_name);
 
-			cr_assert(!strcmp(fi->fabric_attr->prov_name,
+			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxi_prov_name));
 			infos++;
-		} while ((fi = fi->next));
+		} while ((cxit_fi = cxit_fi->next));
 		cr_assert(infos == 1);
 
-		destroy_fabric_info();
-		free(node);
+		cxit_destroy_fabric_info();
+		free(cxit_node);
 	}
 	cr_assert(infos == 1);
 }
@@ -266,62 +192,62 @@ Test(getinfo, src_node)
 /* Test selection by source node and service */
 Test(getinfo, src_node_service)
 {
-	int infos = 0;
+	int ret, infos = 0;
 	struct cxi_addr *addr;
 	struct cxi_if_list_entry *if_entry;
 	struct slist_entry *entry, *prev;
 	int dom, port;
 	char *fab_name, *dom_name;
 
-	fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
 
 	(void) prev; /* Makes compiler happy */
 	slist_foreach(&cxi_if_list, entry, prev) {
 		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
 		infos = 0;
 
-		node = malloc(10);
-		cr_assert(node);
-		snprintf(node, 10, "0x%x", if_entry->if_nic);
+		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
+		cr_assert(ret > 0);
 
-		service = malloc(10);
-		cr_assert(service);
 		dom = if_entry->if_idx+4;
 		port = if_entry->if_idx+5;
-		snprintf(service, 10, "%d:%d", dom, port);
+		ret = asprintf(&cxit_service, "%d:%d", dom, port);
+		cr_assert(ret > 0);
 
-		flags = FI_SOURCE;
+		cxit_flags = FI_SOURCE;
 
-		create_fabric_info();
-		cr_assert(fi != NULL);
+		cxit_create_fabric_info();
+		cr_assert(cxit_fi != NULL);
 
 		/* Make sure we have only 1 FI for each IF */
 		do {
-			cr_assert(!strcmp(fi->fabric_attr->prov_name,
+			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxi_prov_name));
 
-			addr = (struct cxi_addr *)fi->src_addr;
+			addr = (struct cxi_addr *)cxit_fi->src_addr;
 			cr_assert(addr->nic == if_entry->if_nic);
 			cr_assert(addr->domain == dom);
 			cr_assert(addr->port == port);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
-			cr_assert(!strcmp(fi->fabric_attr->name, fab_name));
+			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
+					  fab_name));
 			free(fab_name);
 
 			dom_name = get_dom_name(if_entry->if_idx, dom);
-			cr_assert(!strcmp(fi->domain_attr->name, dom_name));
+			cr_assert(!strcmp(cxit_fi->domain_attr->name,
+					  dom_name));
 			free(dom_name);
 
-			cr_assert(!strcmp(fi->fabric_attr->prov_name,
+			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxi_prov_name));
 			infos++;
-		} while ((fi = fi->next));
+		} while ((cxit_fi = cxit_fi->next));
 		cr_assert(infos == 1);
 
-		destroy_fabric_info();
-		free(service);
-		free(node);
+		cxit_destroy_fabric_info();
+		free(cxit_service);
+		free(cxit_node);
 	}
 	cr_assert(infos == 1);
 }
@@ -329,36 +255,36 @@ Test(getinfo, src_node_service)
 /* Select fabric by service */
 Test(getinfo, src_service)
 {
-	int infos = 0;
+	int ret, infos = 0;
 	struct cxi_addr *addr;
 	struct cxi_if_list_entry *if_entry;
 	struct slist_entry *entry, *prev;
 	int dom, port;
 	char *fab_name, *dom_name;
 
-	fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
 
-	service = malloc(10);
-	cr_assert(service);
 	dom = 6;
 	port = 7;
-	snprintf(service, 10, "%d:%d", dom, port);
+	ret = asprintf(&cxit_service, "%d:%d", dom, port);
+	cr_assert(ret > 0);
 
-	flags = FI_SOURCE;
+	cxit_flags = FI_SOURCE;
 
-	create_fabric_info();
-	cr_assert(fi != NULL);
+	cxit_create_fabric_info();
+	cr_assert(cxit_fi != NULL);
 
 	/* Make sure we have only 1 FI for each IF */
 	do {
-		cr_assert(!strcmp(fi->fabric_attr->prov_name,
+		cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 				  cxi_prov_name));
 
 		(void) prev; /* Makes compiler happy */
 		slist_foreach(&cxi_if_list, entry, prev) {
-			if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+			if_entry = container_of(entry,
+					struct cxi_if_list_entry, entry);
 
-			addr = (struct cxi_addr *)fi->src_addr;
+			addr = (struct cxi_addr *)cxit_fi->src_addr;
 			if (addr->nic != if_entry->if_nic)
 				continue;
 
@@ -367,24 +293,26 @@ Test(getinfo, src_service)
 			cr_assert(addr->port == port);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
-			cr_assert(!strcmp(fi->fabric_attr->name, fab_name));
+			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
+					  fab_name));
 			free(fab_name);
 
 			dom_name = get_dom_name(if_entry->if_idx, dom);
-			cr_assert(!strcmp(fi->domain_attr->name, dom_name));
+			cr_assert(!strcmp(cxit_fi->domain_attr->name,
+					  dom_name));
 			free(dom_name);
 
-			cr_assert(!strcmp(fi->fabric_attr->prov_name,
+			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 						cxi_prov_name));
 
 			infos++;
 			break;
 		}
-	} while ((fi = fi->next));
-	cr_assert(infos == n_ifs);
+	} while ((cxit_fi = cxit_fi->next));
+	cr_assert(infos == cxit_n_ifs);
 
-	destroy_fabric_info();
-	free(service);
+	cxit_destroy_fabric_info();
+	free(cxit_service);
 }
 
 Test(getinfo, dest_node, .disabled = true)
@@ -399,11 +327,11 @@ Test(getinfo, dest_service, .disabled = true)
 {
 }
 
-TestSuite(fabric, .init = setup_fabric, .fini = teardown_fabric);
+TestSuite(fabric, .init = cxit_setup_fabric, .fini = cxit_teardown_fabric);
 
 /* Test basic fabric creation */
 Test(fabric, simple)
 {
-	cr_assert(fabric != NULL);
+	cr_assert(cxit_fabric != NULL);
 }
 
