@@ -332,6 +332,9 @@ TestSuite(fabric, .init = cxit_setup_fabric, .fini = cxit_teardown_fabric);
 /* Test basic fabric creation */
 Test(fabric, simple)
 {
+	cxit_create_fabric();
 	cr_assert(cxit_fabric != NULL);
+
+	cxit_destroy_fabric();
 }
 

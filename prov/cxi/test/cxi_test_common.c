@@ -12,8 +12,9 @@
 #include "cxi_prov.h"
 
 struct fi_info *cxit_fi_hints;
-struct fid_fabric *cxit_fabric;
 struct fi_info *cxit_fi;
+struct fid_fabric *cxit_fabric;
+struct fid_domain *cxit_domain;
 char *cxit_node, *cxit_service;
 uint64_t cxit_flags;
 int cxit_n_ifs;
@@ -31,13 +32,12 @@ void cxit_create_fabric_info(void)
 void cxit_destroy_fabric_info(void)
 {
 	fi_freeinfo(cxit_fi);
+	cxit_fi = NULL;
 }
 
 void cxit_create_fabric(void)
 {
 	int ret;
-
-	cxit_create_fabric_info();
 
 	ret = fi_fabric(cxit_fi->fabric_attr, &cxit_fabric, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_fabric");
@@ -49,17 +49,36 @@ void cxit_destroy_fabric(void)
 
 	ret = fi_close(&cxit_fabric->fid);
 	cr_assert(ret == FI_SUCCESS, "fi_close fabric");
-
-	cxit_destroy_fabric_info();
+	cxit_fabric = NULL;
 }
 
-void cxit_fabric_test_init(void)
+void cxit_create_domain(void)
+{
+	int ret;
+
+	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_domain");
+}
+
+void cxit_destroy_domain(void)
+{
+	int ret;
+
+	ret = fi_close(&cxit_domain->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close domain");
+	cxit_domain = NULL;
+}
+
+static void cxit_init(void)
 {
 	struct slist_entry *entry, *prev;
+	int ret;
 
-	/* init OFI providers */
-	cxit_create_fabric();
-	cxit_destroy_fabric();
+	/* Force provider init */
+	ret = fi_getinfo(FI_VERSION(-1, -1),
+			 NULL, NULL, 0, NULL,
+			 NULL);
+	cr_assert(ret == -FI_ENOSYS);
 
 	(void) prev; /* Makes compiler happy */
 	slist_foreach(&cxi_if_list, entry, prev) {
@@ -69,7 +88,7 @@ void cxit_fabric_test_init(void)
 
 void cxit_setup_getinfo(void)
 {
-	cxit_fabric_test_init();
+	cxit_init();
 
 	cxit_fi_hints = fi_allocinfo();
 	cr_assert(cxit_fi_hints, "fi_allocinfo");
@@ -78,6 +97,7 @@ void cxit_setup_getinfo(void)
 void cxit_teardown_getinfo(void)
 {
 	fi_freeinfo(cxit_fi_hints);
+	cxit_fi_hints = NULL;
 }
 
 void cxit_setup_fabric(void)
@@ -87,12 +107,23 @@ void cxit_setup_fabric(void)
 	/* Always select CXI */
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
 
-	cxit_create_fabric();
+	cxit_create_fabric_info();
 }
 
 void cxit_teardown_fabric(void)
 {
-	cxit_destroy_fabric();
+	cxit_destroy_fabric_info();
 	cxit_teardown_getinfo();
 }
 
+void cxit_setup_domain(void)
+{
+	cxit_setup_fabric();
+	cxit_create_fabric();
+}
+
+void cxit_teardown_domain(void)
+{
+	cxit_destroy_fabric();
+	cxit_teardown_fabric();
+}
