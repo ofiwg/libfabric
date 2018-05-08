@@ -15,6 +15,7 @@ struct fi_info *cxit_fi_hints;
 struct fi_info *cxit_fi;
 struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
+struct fid_ep *cxit_ep;
 char *cxit_node, *cxit_service;
 uint64_t cxit_flags;
 int cxit_n_ifs;
@@ -67,6 +68,23 @@ void cxit_destroy_domain(void)
 	ret = fi_close(&cxit_domain->fid);
 	cr_assert(ret == FI_SUCCESS, "fi_close domain");
 	cxit_domain = NULL;
+}
+
+void cxit_create_ep(void)
+{
+	int ret;
+
+	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_domain");
+}
+
+void cxit_destroy_ep(void)
+{
+	int ret;
+
+	ret = fi_close(&cxit_ep->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
+	cxit_ep = NULL;
 }
 
 static void cxit_init(void)
@@ -127,3 +145,16 @@ void cxit_teardown_domain(void)
 	cxit_destroy_fabric();
 	cxit_teardown_fabric();
 }
+
+void cxit_setup_ep(void)
+{
+	cxit_setup_domain();
+	cxit_create_domain();
+}
+
+void cxit_teardown_ep(void)
+{
+	cxit_destroy_domain();
+	cxit_teardown_domain();
+}
+

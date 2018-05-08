@@ -24,7 +24,8 @@ bin_PROGRAMS += prov/cxi/test/cxitest
 nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/cxi_test_common.c \
 	prov/cxi/test/fabric.c \
-	prov/cxi/test/domain.c
+	prov/cxi/test/domain.c \
+	prov/cxi/test/ep.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS)
