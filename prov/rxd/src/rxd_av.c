@@ -113,9 +113,9 @@ fi_addr_t rxd_av_fi_addr(struct rxd_av *av, fi_addr_t dg_fiaddr)
 
 	for (fi_addr = 0; fi_addr < RXD_MAX_DGRAM_ADDR; fi_addr++) {
 		if (av->tx_map[fi_addr] == dg_fiaddr)
-			break;
+			return fi_addr;
 	}
-	return (fi_addr != RXD_MAX_DGRAM_ADDR) ? fi_addr : FI_ADDR_UNSPEC;
+	return FI_ADDR_UNSPEC;
 }
 
 static fi_addr_t rxd_set_tx_addr(struct rxd_av *av, fi_addr_t addr)
