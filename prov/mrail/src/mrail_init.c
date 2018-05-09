@@ -177,11 +177,9 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	}
 
 	free(fi->fabric_attr->name);
-	free(fi->fabric_attr->prov_name);
 	free(fi->domain_attr->name);
 
 	fi->fabric_attr->name = NULL;
-	fi->fabric_attr->prov_name = NULL;
 	fi->domain_attr->name = NULL;
 
 	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
