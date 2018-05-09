@@ -221,11 +221,6 @@ static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	rxd_ep_post_ack(ep, rx_entry);
 
-	/* Handle cntr */
-	cntr = ep->util_ep.rx_cntr;
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
-
 	/* Handle CQ comp */
 	if (rx_entry->bytes_done == rx_entry->size) {
 		cq_entry.flags = FI_RECV;
@@ -236,6 +231,10 @@ static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		cq_entry.buf = rx_entry->iov[0].iov_base;
 		cq_entry.data = rx_entry->data;
 		rxd_rx_cq->write_fn(rxd_rx_cq, &cq_entry);
+		/* Handle cntr */
+		cntr = ep->util_ep.rx_cntr;
+		if (cntr)
+			cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 	} else {
 		err_entry.op_context = rx_entry->context;
 		err_entry.flags = (FI_MSG | FI_RECV);
