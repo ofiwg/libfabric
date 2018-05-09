@@ -524,18 +524,18 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 			     util_domain.domain_fid);
 	size_t size;
 	int ret;
-	enum fi_wait_obj wait_obj = attr->wait_obj;
+	struct fi_cq_attr tmp_attr = *attr;
 
 	cq = calloc(1, sizeof(*cq));
 	if (!cq)
 		return -FI_ENOMEM;
 
 	/* verbs uses its own implementation of wait objects for CQ */
-	attr->wait_obj = FI_WAIT_NONE;
-	ret = ofi_cq_init(&fi_ibv_prov, domain_fid, attr, &cq->util_cq, NULL, context);
+	tmp_attr.wait_obj = FI_WAIT_NONE;
+	ret = ofi_cq_init(&fi_ibv_prov, domain_fid, &tmp_attr,
+			  &cq->util_cq, NULL, context);
 	if (ret)
 		goto err1;
-	attr->wait_obj = wait_obj;
 	/*
 	 * RDM and DGRAM CQ functionalities are moved to correspond
 	 * separated functions
