@@ -342,21 +342,19 @@ static int rxd_check_active(struct rxd_ep *ep, struct rxd_pkt_entry *rts_pkt)
 {
 	struct rxd_x_entry *rx_entry;
 	struct dlist_entry *item;
-	int ret = 0;
 
 	//TODO - improve this search
 	dlist_foreach(&ep->active_rx_list, item) {
 		rx_entry = container_of(item, struct rxd_x_entry, entry);
-		ret = (rx_entry->tx_id == rts_pkt->pkt->hdr.tx_id &&
-		       rx_entry->key == rts_pkt->pkt->hdr.key &&
-		       rx_entry->peer == rts_pkt->peer);
-		if (ret) {
+		if (rx_entry->tx_id == rts_pkt->pkt->hdr.tx_id &&
+		    rx_entry->key == rts_pkt->pkt->hdr.key &&
+		    rx_entry->peer == rts_pkt->peer) {
 			rxd_post_cts(ep, rx_entry, rts_pkt);
 			return 0;
 		}
 	}
 
-	return 1;
+	return -FI_ENOMSG;
 }
 
 static int rxd_check_post_unexp(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
