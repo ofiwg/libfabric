@@ -85,26 +85,13 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 	if (!core_hints)
 		return -FI_ENOMEM;
 
-	if (core_hints->fabric_attr)
-		free(core_hints->fabric_attr->prov_name);
+	if (!core_hints->fabric_attr)
+		core_hints->fabric_attr = calloc(1, sizeof(*core_hints->fabric_attr));
 
-	if (hints && hints->fabric_attr && hints->fabric_attr->prov_name) {
-		core_hints->fabric_attr->prov_name =
-			strdup(hints->fabric_attr->prov_name);
-		if (!core_hints->fabric_attr->prov_name) {
-			FI_WARN(&mrail_prov, FI_LOG_FABRIC,
-				"Unable to alloc prov name\n");
-			ret = -FI_ENOMEM;
-			goto out;
-		}
-
-		ret = ofi_exclude_prov_name(&core_hints->fabric_attr->prov_name,
-					    mrail_prov.name);
-		if (ret)
-			goto out;
-	} else {
-		core_hints->fabric_attr->prov_name = NULL;
-	}
+	ret = ofi_exclude_prov_name(&core_hints->fabric_attr->prov_name,
+				    mrail_prov.name);
+	if (ret)
+		goto out;
 
 	for (i = 0; mrail_addr_strv[i]; i++) {
 		free(core_hints->src_addr);
