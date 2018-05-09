@@ -37,11 +37,13 @@
 
 struct rxd_env rxd_env = {
 	.spin_count	= 1000,
+	.ooo_rdm	= 0,
 };
 
 static void rxd_init_env(void)
 {
 	fi_param_get_int(&rxd_prov, "spin_count", &rxd_env.spin_count);
+	fi_param_get_bool(&rxd_prov, "ooo_rdm", &rxd_env.ooo_rdm);
 }
 
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
@@ -92,6 +94,8 @@ RXD_INI
 {
 	fi_param_define(&rxd_prov, "spin_count", FI_PARAM_INT,
 			"Number of iterations to receive packets (0 - infinite)");
+	fi_param_define(&rxd_prov, "ooo_rdm", FI_PARAM_BOOL,
+			"Turn on out of order reliability mode (default: no)");
 
 	rxd_init_env();
 

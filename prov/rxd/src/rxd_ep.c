@@ -348,13 +348,10 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 			      struct rxd_x_entry *tx_entry,
 			      struct rxd_pkt_entry *pkt_entry)
 {
-	struct rxd_domain *domain;
 	uint32_t seg_size;
 
-	domain = rxd_ep_domain(ep);
-
 	seg_size = tx_entry->cq_entry.len - tx_entry->bytes_done;
-	seg_size = MIN(domain->max_seg_sz, seg_size);
+	seg_size = MIN(tx_entry->seg_size, seg_size);
 
 	rxd_set_pkt(ep, pkt_entry);
 	pkt_entry->pkt->hdr.rx_id = tx_entry->rx_id;
@@ -415,6 +412,7 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep,
 	tx_entry->next_start = 0;
 	tx_entry->window = RXD_MAX_UNACKED;
 	tx_entry->retry_cnt = 0;
+	tx_entry->seg_size = rxd_ep_domain(ep)->max_seg_sz;
 	tx_entry->iov_count = msg->iov_count;
 	memcpy(&tx_entry->iov[0], msg->msg_iov,
 	       sizeof(*msg->msg_iov) * msg->iov_count);
@@ -514,6 +512,7 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 
 	pkt_entry->pkt->ctrl.size = tx_entry->cq_entry.len;
 	pkt_entry->pkt->ctrl.data = tx_entry->cq_entry.data;
+	pkt_entry->pkt->ctrl.seg_size = tx_entry->seg_size;
 	pkt_entry->pkt->ctrl.window = RXD_MAX_UNACKED;
 
 	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
@@ -944,6 +943,9 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 
 	current = fi_gettime_ms();
 
+	if (rxd_env.ooo_rdm)
+		goto out;
+
 	dlist_foreach(&ep->tx_list, tx_item) {
 		tx_entry = container_of(tx_item, struct rxd_x_entry, entry);
 
@@ -975,6 +977,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 		rxd_set_timeout(tx_entry);
 	}
 
+out:
 	while (ep->posted_bufs < ep->rx_size)
 		ret = rxd_ep_post_buf(ep);
 

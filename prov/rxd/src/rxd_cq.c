@@ -197,7 +197,8 @@ static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 	uint64_t done;
 
 	done = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
-			       rx_entry->bytes_done, &pkt_entry->pkt->data,
+			       pkt_entry->pkt->hdr.seg_no * rx_entry->seg_size,
+			       &pkt_entry->pkt->data,
 			       size - sizeof(struct rxd_pkt_hdr) - ep->prefix_size);
 
 	rx_entry->bytes_done += done;
@@ -205,7 +206,7 @@ static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		rx_entry->next_start += rx_entry->window;
 	rx_entry->next_seg_no++;
 
-	if (!(pkt_entry->pkt->hdr.flags & RXD_LAST)) {
+	if (rx_entry->next_seg_no < rx_entry->num_segs) {
 		rx_entry->state = RXD_CTS;
 		return RXD_CTS;
 	}
@@ -257,8 +258,11 @@ void rxd_post_cts(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry,
 	rx_entry->window = rts_pkt->pkt->ctrl.window;
 	rx_entry->key = rts_pkt->pkt->hdr.key;
 	rx_entry->tx_id = rts_pkt->pkt->hdr.tx_id;
+	rx_entry->seg_size = rts_pkt->pkt->ctrl.seg_size;
 	rx_entry->state = RXD_ACK;
 	rx_entry->next_start = rx_entry->window;
+	rx_entry->num_segs = ofi_div_ceil(rts_pkt->pkt->ctrl.size,
+					  rts_pkt->pkt->ctrl.seg_size);
 
 	if (rts_pkt->pkt->hdr.flags & RXD_REMOTE_CQ_DATA) {
 		rx_entry->cq_entry.flags |= FI_REMOTE_CQ_DATA;
@@ -311,7 +315,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 		return;
 	}
 
-	if (pkt_seg_no == rx_entry->next_seg_no) {
+	if (pkt_seg_no == rx_entry->next_seg_no || rxd_env.ooo_rdm) {
 		ret = rxd_ep_recv_data(ep, rx_entry, pkt_entry, comp->len);
 		if (ret == RXD_FREE)
 			return;
