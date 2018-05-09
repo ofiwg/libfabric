@@ -198,8 +198,8 @@ void rxd_cq_report_tx_comp(struct rxd_cq *cq, struct rxd_x_entry *tx_entry)
 static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 			struct rxd_pkt_entry *pkt_entry, size_t size)
 {
-	struct fi_cq_tagged_entry cq_entry = {0};
-	struct fi_cq_err_entry err_entry = {0};
+	struct fi_cq_tagged_entry cq_entry;
+	struct fi_cq_err_entry err_entry;
 	struct util_cntr *cntr = NULL;
 	uint64_t done;
 	struct rxd_cq *rxd_rx_cq = rxd_ep_rx_cq(ep);
