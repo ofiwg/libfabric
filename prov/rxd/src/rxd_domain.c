@@ -234,7 +234,7 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	rxd_domain->max_mtu_sz = dg_info->ep_attr->max_msg_size;
+	rxd_domain->max_mtu_sz = MIN(dg_info->ep_attr->max_msg_size, RXD_MAX_MTU_SIZE);
 	rxd_domain->mr_mode = dg_info->domain_attr->mr_mode;
 
 	ret = ofi_domain_init(fabric, info, &rxd_domain->util_domain, context);
