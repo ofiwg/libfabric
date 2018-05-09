@@ -186,7 +186,6 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov_context *ctx;
 	struct ofi_prov *prov = NULL;
-	size_t len;
 	int ret;
 
 	if (!provider || !provider->name) {
@@ -224,7 +223,7 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	}
 
 	ctx = (struct fi_prov_context *) &provider->context;
-	ctx->is_util_prov = (ofi_util_name(provider->name, &len) != NULL);
+	ctx->is_util_prov = ofi_has_util_prefix(provider->name);
 
 	if (ofi_getinfo_filter(provider)) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
@@ -862,7 +861,6 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 {
 	struct ofi_prov *prov;
 	const char *top_name;
-	size_t len;
 	int ret;
 
 	if (!attr || !attr->prov_name || !attr->name)
@@ -871,14 +869,16 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 	if (!ofi_init)
 		fi_ini();
 
-	top_name = ofi_util_name(attr->prov_name, &len);
-	if (!top_name)
-		top_name = ofi_core_name(attr->prov_name, &len);
+	top_name = strrchr(attr->prov_name, OFI_NAME_DELIM);
+	if (top_name)
+		top_name++;
+	else
+		top_name = attr->prov_name;
 
 	if (!top_name)
 		return -FI_EINVAL;
 
-	prov = ofi_getprov(top_name, len);
+	prov = ofi_getprov(top_name, strlen(top_name));
 	if (!prov || !prov->provider || !prov->provider->fabric)
 		return -FI_ENODEV;
 

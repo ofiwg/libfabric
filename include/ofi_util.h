@@ -783,8 +783,6 @@ int ofi_get_core_info_fabric(const struct fi_provider *prov,
 char *ofi_strdup_append(const char *head, const char *tail);
 // char *ofi_strdup_head(const char *str);
 // char *ofi_strdup_tail(const char *str);
-const char *ofi_util_name(const char *prov_name, size_t *len);
-const char *ofi_core_name(const char *prov_name, size_t *len);
 int ofi_exclude_prov_name(char **prov_name, const char *util_prov_name);
 
 

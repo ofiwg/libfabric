@@ -89,49 +89,6 @@ char *ofi_strdup_append(const char *head, const char *tail)
 	return str;
 }
 
-const char *ofi_util_name(const char *str, size_t *len)
-{
-	char *delim;
-
-	delim = strchr(str, OFI_NAME_DELIM);
-	if (delim) {
-		if (ofi_has_util_prefix(delim + 1)) {
-			*len = strlen(delim + 1);
-			return delim + 1;
-		} else if (ofi_has_util_prefix(str)) {
-			*len = delim - str;
-			return str;
-		}
-	} else if (ofi_has_util_prefix(str)) {
-		*len = strlen(str);
-		return str;
-	}
-	*len = 0;
-	return NULL;
-}
-
-const char *ofi_core_name(const char *str, size_t *len)
-{
-	char *delim;
-
-	delim = strchr(str, OFI_NAME_DELIM);
-	if (delim) {
-		if (!ofi_has_util_prefix(delim + 1)) {
-			*len = strlen(delim + 1);
-			return delim + 1;
-		} else if (!ofi_has_util_prefix(str)) {
-			*len = delim - str;
-			return str;
-		}
-	} else if (!ofi_has_util_prefix(str)) {
-		*len = strlen(str);
-		return str;
-	}
-	*len = 0;
-	return NULL;
-
-}
-
 int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
 {
 	char *exclude, *name, *temp;
