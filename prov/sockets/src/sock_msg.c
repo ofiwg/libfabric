@@ -262,7 +262,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	sock_tx_ctx_write_op_send(tx_ctx, &tx_op, flags, (uintptr_t) msg->context,
-			msg->addr, (uintptr_t) msg->msg_iov[0].iov_base,
+			msg->addr, (uintptr_t)((msg->iov_count > 0) ? msg->msg_iov[0].iov_base : NULL),
 			ep_attr, conn);
 
 	if (flags & FI_REMOTE_CQ_DATA)
@@ -606,7 +606,7 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 
 	sock_tx_ctx_write_op_tsend(tx_ctx, &tx_op, flags,
 			(uintptr_t) msg->context, msg->addr,
-			(uintptr_t) msg->msg_iov[0].iov_base,
+      (uintptr_t)((msg->iov_count > 0) ? msg->msg_iov[0].iov_base : NULL),
 			ep_attr, conn, msg->tag);
 
 	if (flags & FI_REMOTE_CQ_DATA)
