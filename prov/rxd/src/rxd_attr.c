@@ -83,7 +83,7 @@ struct fi_fabric_attr rxd_fabric_attr = {
 
 struct fi_info rxd_info = {
 	.caps = RXD_EP_CAPS,
-	.addr_format = FI_SOCKADDR,
+	.addr_format = FI_FORMAT_UNSPEC,
 	.tx_attr = &rxd_tx_attr,
 	.rx_attr = &rxd_rx_attr,
 	.ep_attr = &rxd_ep_attr,
