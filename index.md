@@ -16,8 +16,8 @@ data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_
 Latest releases
 ===============
 
-* The libfabric library itself (including documentation): [libfabric v1.6.0](https://github.com/ofiwg/libfabric/releases/tag/v1.6.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
-* Examples and unit tests: [fabtests v1.6.0](https://github.com/ofiwg/fabtests/releases/tag/v1.6.0) (or [see all prior releases](https://github.com/ofiwg/fabtests/releases/)).
+* The libfabric library itself (including documentation): [libfabric v1.6.1](https://github.com/ofiwg/libfabric/releases/tag/v1.6.1) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
+* Examples and unit tests: [fabtests v1.6.1](https://github.com/ofiwg/fabtests/releases/tag/v1.6.1) (or [see all prior releases](https://github.com/ofiwg/fabtests/releases/)).
 
 
 Overview
