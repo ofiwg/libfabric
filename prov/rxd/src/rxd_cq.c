@@ -471,14 +471,12 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 			return;
 	}
 
-	if (tx_entry->flags & RXD_NO_COMPLETION)
-		goto free;
+	if (!(tx_entry->flags & RXD_NO_COMPLETION)) {
+		fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+		rxd_cq_report_tx_comp(rxd_ep_tx_cq(ep), tx_entry);
+		fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+	}
 
-	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-	rxd_cq_report_tx_comp(rxd_ep_tx_cq(ep), tx_entry);
-	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
-
-free:
 	rxd_tx_entry_free(ep, tx_entry);
 }
 
