@@ -107,21 +107,19 @@ static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.lock);
 
-	if (ep->util_ep.caps & FI_MSG) {
-		entry = dlist_remove_first_match(&ep->rx_list,
-					&rxd_match_ctx, context);
-		if (!entry)
-			goto out;
+	entry = dlist_remove_first_match(&ep->rx_list,
+				&rxd_match_ctx, context);
+	if (!entry)
+		goto out;
 
-		rx_entry = container_of(entry, struct rxd_x_entry, entry);
+	rx_entry = container_of(entry, struct rxd_x_entry, entry);
 
-		rxd_rx_entry_free(ep, rx_entry);
-		err_entry.op_context = rx_entry->context;
-		err_entry.flags = (FI_MSG | FI_RECV);
-		err_entry.err = FI_ECANCELED;
-		err_entry.prov_errno = -FI_ECANCELED;
-		rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
-	}
+	rxd_rx_entry_free(ep, rx_entry);
+	err_entry.op_context = rx_entry->context;
+	err_entry.flags = (FI_MSG | FI_RECV);
+	err_entry.err = FI_ECANCELED;
+	err_entry.prov_errno = -FI_ECANCELED;
+	rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
 
 out:
 	fastlock_release(&ep->util_ep.lock);
