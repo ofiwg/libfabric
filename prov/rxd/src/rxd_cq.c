@@ -503,7 +503,9 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 			rxd_handle_ack(ep, comp, pkt_entry);
 			break;
 		default:
-			assert(0);
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+				"Unknown message type\n");
+			goto out;
 		}
 	} else {
 		rxd_handle_data(ep, comp, pkt_entry);
@@ -525,6 +527,7 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 		slist_remove_head(&ep->rx_pkt_list);
 	}
 
+out:
 	if (!ret) {
 		rxd_release_rx_pkt(ep, pkt_entry);
 		rxd_ep_post_buf(ep);
