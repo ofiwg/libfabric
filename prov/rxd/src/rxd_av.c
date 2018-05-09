@@ -145,7 +145,12 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 	if (ret != 1)
 		return ret;
 
-	return ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*dg_fiaddr));
+	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*dg_fiaddr));
+
+	if (ret)
+		fi_av_remove(av->dg_av, dg_fiaddr, 1, flags);
+
+	return ret;
 }
 
 static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
