@@ -359,7 +359,8 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av->rbmap.compare = &rxd_tree_compare;
 	ofi_rbmap_init(&av->rbmap);
-	for (i = 0; i < RXD_MAX_DGRAM_ADDR; av->tx_map[i++] = FI_ADDR_UNSPEC);
+	for (i = 0; i < RXD_MAX_DGRAM_ADDR; av->tx_map[i++] = FI_ADDR_UNSPEC)
+		;
 
 	av_attr = *attr;
 	av_attr.type = FI_AV_TABLE;
