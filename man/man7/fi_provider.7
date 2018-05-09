@@ -1,4 +1,4 @@
-.TH "fi_provider" "7" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_provider" "7" "2018\-05\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_provider \- Fabric Interface Providers
@@ -51,6 +51,16 @@ See \f[C]fi_verbs\f[](7) for more information.
 \f[I]RxM\f[] : The RxM provider (ofi_rxm) is an utility provider that
 supports RDM endpoints emulated over MSG endpoints of a core provider.
 See \f[C]fi_rxm\f[](7) for more information.
+.SS Special providers
+.PP
+\f[I]Hook\f[] : The hook provider is a special type of provider that can
+layer over any other provider, unless FI_FABRIC_DIRECT is used.
+The hook provider is always available, but has no impact unless enabled.
+When enabled, the hook provider will intercept all calls to the
+underlying core or utility provider(s).
+The hook provider is useful for capturing performance data or providing
+debugging information, even in release builds of the library.
+See \f[C]fi_hook\f[](7) for more information.
 .SH CORE VERSUS UTILITY PROVIDERS
 .PP
 Core providers implement the libfabric interfaces directly over
@@ -205,7 +215,8 @@ subsystem parameters match the user supplied values.
 flag.
 .SH SEE ALSO
 .PP
-\f[C]fi_gni\f[](7), \f[C]fi_psm\f[](7), \f[C]fi_sockets\f[](7),
-\f[C]fi_usnic\f[](7), \f[C]fi_verbs\f[](7), \f[C]fi_bgq\f[](7),
+\f[C]fi_gni\f[](7), \f[C]fi_hook\f[](7), \f[C]fi_psm\f[](7),
+\f[C]fi_sockets\f[](7), \f[C]fi_usnic\f[](7), \f[C]fi_verbs\f[](7),
+\f[C]fi_bgq\f[](7),
 .SH AUTHORS
 OpenFabrics.
