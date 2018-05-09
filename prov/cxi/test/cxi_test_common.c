@@ -16,6 +16,8 @@ struct fi_info *cxit_fi;
 struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
 struct fid_ep *cxit_ep;
+struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
+struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
 char *cxit_node, *cxit_service;
 uint64_t cxit_flags;
 int cxit_n_ifs;
@@ -85,6 +87,30 @@ void cxit_destroy_ep(void)
 	ret = fi_close(&cxit_ep->fid);
 	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
 	cxit_ep = NULL;
+}
+
+void cxit_create_cqs(void)
+{
+	int ret;
+
+	ret = fi_cq_open(cxit_domain, &cxit_tx_cq_attr, &cxit_tx_cq, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cq_open (TX)");
+
+	ret = fi_cq_open(cxit_domain, &cxit_rx_cq_attr, &cxit_rx_cq, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cq_open (RX)");
+}
+
+void cxit_destroy_cqs(void)
+{
+	int ret;
+
+	ret = fi_close(&cxit_rx_cq->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close RX CQ");
+	cxit_rx_cq = NULL;
+
+	ret = fi_close(&cxit_tx_cq->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close TX CQ");
+	cxit_tx_cq = NULL;
 }
 
 static void cxit_init(void)
