@@ -31,6 +31,8 @@ prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS)
 prov_cxi_test_cxitest_LDFLAGS = $(cxitest_LDFLAGS) -static
 prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback)
+
+TESTS += prov/cxi/test/cxitest
 endif HAVE_CRITERION
 
 if HAVE_CXI_DL
