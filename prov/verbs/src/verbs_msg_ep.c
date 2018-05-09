@@ -218,7 +218,7 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 		pd = domain->pd;
 	} else {
 		attr.send_cq = ep->rcq->cq;
-		domain = container_of(ep->scq->util_cq.domain, struct fi_ibv_domain,
+		domain = container_of(ep->rcq->util_cq.domain, struct fi_ibv_domain,
 				      util_domain);
 		pd = domain->pd;
 	}
