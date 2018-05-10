@@ -190,6 +190,29 @@ struct cxi_eq {
 	int wait_fd;
 };
 
+struct cxi_req {
+	uint8_t type;
+
+	uint64_t flags;
+	uint64_t context;
+	uint64_t addr;
+	uint64_t data;
+	uint64_t tag;
+	uint64_t buf;
+	uint64_t data_len;
+};
+
+struct cxi_cq;
+typedef int (*cxi_cq_report_fn) (struct cxi_cq *cq, fi_addr_t addr,
+				 struct cxi_req *req);
+
+struct cxi_cq_overflow_entry_t {
+	size_t len;
+	fi_addr_t addr;
+	struct dlist_entry entry;
+	char cq_entry[0];
+};
+
 struct cxi_cq {
 	struct fid_cq cq_fid;
 	struct cxi_domain *domain;
@@ -197,15 +220,22 @@ struct cxi_cq {
 	ofi_atomic32_t ref;
 	struct fi_cq_attr attr;
 
+	struct ofi_ringbuf addr_rb;
+	struct ofi_ringbuffd cq_rbfd;
+	struct ofi_ringbuf cqerr_rb;
+	struct dlist_entry overflow_list;
 	fastlock_t lock;
+	fastlock_t list_lock;
 
 	struct fid_wait *waitset;
 	int signal;
+	ofi_atomic32_t signaled;
 
 	struct dlist_entry ep_list;
 	struct dlist_entry rx_list;
 	struct dlist_entry tx_list;
-	fastlock_t list_lock;
+
+	cxi_cq_report_fn report_completion;
 };
 
 struct cxi_cntr {
@@ -359,6 +389,25 @@ struct cxi_av {
 	fastlock_t list_lock;
 };
 
+struct cxi_fid_list {
+	struct dlist_entry entry;
+	struct fid *fid;
+};
+
+struct cxi_wait {
+	struct fid_wait wait_fid;
+	struct cxi_fabric *fab;
+	struct dlist_entry fid_list;
+	enum fi_wait_obj type;
+	union {
+		int fd[2];
+		struct cxi_mutex_cond {
+			pthread_mutex_t	mutex;
+			pthread_cond_t	cond;
+		} mutex_cond;
+	} wobj;
+};
+
 int cxi_parse_addr(const char *node, const char *service,
 		   struct cxi_addr *addr);
 
@@ -414,6 +463,9 @@ int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 int cxi_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
 
+int cxi_wait_get_obj(struct fid_wait *fid, void *arg);
+void cxi_wait_signal(struct fid_wait *wait_fid);
+int cxi_wait_close(fid_t fid);
 int cxi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		  struct fid_wait **waitset);
 
@@ -430,11 +482,20 @@ void cxi_cq_add_tx_ctx(struct cxi_cq *cq, struct cxi_tx_ctx *tx_ctx);
 void cxi_cq_remove_tx_ctx(struct cxi_cq *cq, struct cxi_tx_ctx *tx_ctx);
 void cxi_cq_add_rx_ctx(struct cxi_cq *cq, struct cxi_rx_ctx *rx_ctx);
 void cxi_cq_remove_rx_ctx(struct cxi_cq *cq, struct cxi_rx_ctx *rx_ctx);
+int cxi_cq_progress(struct cxi_cq *cq);
+int cxi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		struct fid_cq **cq, void *context);
+int cxi_cq_report_error(struct cxi_cq *cq, struct cxi_req *req,
+			 size_t olen, int err, int prov_errno, void *err_data,
+			 size_t err_data_size);
 
 void cxi_cntr_add_tx_ctx(struct cxi_cntr *cntr, struct cxi_tx_ctx *tx_ctx);
 void cxi_cntr_remove_tx_ctx(struct cxi_cntr *cntr, struct cxi_tx_ctx *tx_ctx);
 void cxi_cntr_add_rx_ctx(struct cxi_cntr *cntr, struct cxi_rx_ctx *rx_ctx);
 void cxi_cntr_remove_rx_ctx(struct cxi_cntr *cntr, struct cxi_rx_ctx *rx_ctx);
+int cxi_cntr_progress(struct cxi_cntr *cntr);
+int cxi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		  struct fid_cntr **cntr, void *context);
 
 #define _CXI_LOG_DBG(subsys, ...) FI_DBG(&cxi_prov, subsys, __VA_ARGS__)
 #define _CXI_LOG_ERROR(subsys, ...) FI_WARN(&cxi_prov, subsys, __VA_ARGS__)

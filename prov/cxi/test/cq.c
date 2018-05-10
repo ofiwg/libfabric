@@ -15,7 +15,7 @@
 TestSuite(cq, .init = cxit_setup_cq, .fini = cxit_teardown_cq);
 
 /* Test basic CQ creation */
-Test(cq, simple, .disabled = true)
+Test(cq, simple)
 {
 	cxit_create_cqs();
 	cr_assert(cxit_tx_cq != NULL);

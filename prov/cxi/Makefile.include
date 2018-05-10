@@ -14,7 +14,8 @@ _cxi_files = \
 	prov/cxi/src/cxi_ctx.c \
 	prov/cxi/src/cxi_av.c \
 	prov/cxi/src/cxi_cq.c \
-	prov/cxi/src/cxi_cntr.c
+	prov/cxi/src/cxi_cntr.c \
+	prov/cxi/src/cxi_wait.c
 
 _cxi_headers = \
 	prov/cxi/include/cxi_prov.h
