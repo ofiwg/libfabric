@@ -136,7 +136,7 @@ typedef atomic_long	ofi_atomic_int64_t;
 #    define ofi_atomic_ptr(atomic) (&((atomic)->val))
 #  else
 #    define ATOMIC_T(radix) int##radix##_t
-#    define ofi_atomic_ptr(atomic) (atomic)
+#    define ofi_atomic_ptr(atomic) (&(atomic))
 #  endif
 
 #define OFI_ATOMIC_DEFINE(radix)									\
