@@ -472,7 +472,7 @@ struct fi_ibv_dgram_buf_pool {
 };
 
 struct fi_ibv_ep {
-	struct fid_ep		ep_fid;
+	struct util_ep		util_ep;
 	union {
 		struct rdma_cm_id	*id;
 		struct {
@@ -487,7 +487,6 @@ struct fi_ibv_ep {
 	struct fi_ibv_srq_ep	*srq_ep;
 	uint64_t		ep_flags;
 	struct fi_info		*info;
-	struct fi_ibv_domain	*domain;
 	/* TODO: it would be removed */
 	struct fi_ibv_dgram_buf_pool	grh_pool;
 };
