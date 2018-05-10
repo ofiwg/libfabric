@@ -515,6 +515,12 @@ static struct fi_ops fi_ibv_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static void fi_ibv_util_cq_progress_noop(struct util_cq *cq)
+{
+	/* This routine shouldn't be called */
+	assert(0);
+}
+
 int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		   struct fid_cq **cq_fid, void *context)
 {
@@ -532,8 +538,8 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	/* verbs uses its own implementation of wait objects for CQ */
 	tmp_attr.wait_obj = FI_WAIT_NONE;
-	ret = ofi_cq_init(&fi_ibv_prov, domain_fid, &tmp_attr,
-			  &cq->util_cq, NULL, context);
+	ret = ofi_cq_init(&fi_ibv_prov, domain_fid, &tmp_attr, &cq->util_cq,
+			  fi_ibv_util_cq_progress_noop, context);
 	if (ret)
 		goto err1;
 	/*
