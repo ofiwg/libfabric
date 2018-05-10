@@ -156,10 +156,6 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->scq)
 				return -EINVAL;
 			ep->scq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
-			if (flags & FI_SELECTIVE_COMPLETION)
-				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
-			else
-				ep->info->tx_attr->op_flags |= FI_COMPLETION;
 		}
 		
 		break;
@@ -984,12 +980,15 @@ err1:
 	return ret;
 }
 
-#define VERBS_COMP_READ_FLAGS(ep, flags) \
-	((!VERBS_SELECTIVE_COMP(ep) || (flags & \
-	  (FI_COMPLETION | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))) ? \
-	   IBV_SEND_SIGNALED : 0)
-#define VERBS_COMP_READ(ep) \
-	VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
+#define VERBS_COMP_READ_FLAGS(ep, flags)			\
+	((ep->util_ep.tx_op_flags | flags) &			\
+	 (FI_COMPLETION | FI_TRANSMIT_COMPLETE |		\
+	  FI_DELIVERY_COMPLETE) ? IBV_SEND_SIGNALED : 0)
+
+#define VERBS_COMP_READ(ep)					\
+	((ep->util_ep.tx_op_flags) &				\
+	 (FI_COMPLETION | FI_TRANSMIT_COMPLETE |		\
+	  FI_DELIVERY_COMPLETE) ? IBV_SEND_SIGNALED : 0)
 
 static ssize_t
 fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,

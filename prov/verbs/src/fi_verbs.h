@@ -97,7 +97,8 @@
 #define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->info->tx_attr->op_flags)
 
 #define VERBS_SELECTIVE_COMP(ep) (ep->ep_flags & FI_SELECTIVE_COMPLETION)
-#define VERBS_COMP_FLAGS(ep, flags) (ofi_need_completion(ep->ep_flags, flags) ?	\
+#define VERBS_COMP_FLAGS(ep, flags) ((ep->util_ep.tx_op_flags | flags) &	\
+				     FI_COMPLETION ?				\
 				     IBV_SEND_SIGNALED : 0)
 #define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
 
@@ -485,7 +486,6 @@ struct fi_ibv_ep {
 	struct fi_ibv_cq	*rcq;
 	struct fi_ibv_cq	*scq;
 	struct fi_ibv_srq_ep	*srq_ep;
-	uint64_t		ep_flags;
 	struct fi_info		*info;
 	/* TODO: it would be removed */
 	struct fi_ibv_dgram_buf_pool	grh_pool;
