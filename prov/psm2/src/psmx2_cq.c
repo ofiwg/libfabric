@@ -398,6 +398,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 	int err;
 	int context_type;
 
+	PSMX2_STATUS_INIT(status);
+
 	{
 		PSMX2_POLL_COMPLETION(trx_ctxt, status, err);
 
@@ -802,7 +804,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				sendv_req->iov_done++;
 				if (sendv_req->iov_protocol == PSMX2_IOV_PROTO_MULTI &&
 				    sendv_req->iov_done < sendv_req->iov_info.count + 1) {
-					sendv_req->status = status;
+					PSMX2_STATUS_SAVE(status, sendv_req->status);
 					return read_count;
 				}
 				if (ep->send_cq && !sendv_req->no_completion) {
