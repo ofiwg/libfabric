@@ -89,82 +89,43 @@ char *ofi_strdup_append(const char *head, const char *tail)
 	return str;
 }
 
-const char *ofi_util_name(const char *str, size_t *len)
-{
-	char *delim;
-
-	delim = strchr(str, OFI_NAME_DELIM);
-	if (delim) {
-		if (ofi_has_util_prefix(delim + 1)) {
-			*len = strlen(delim + 1);
-			return delim + 1;
-		} else if (ofi_has_util_prefix(str)) {
-			*len = delim - str;
-			return str;
-		}
-	} else if (ofi_has_util_prefix(str)) {
-		*len = strlen(str);
-		return str;
-	}
-	*len = 0;
-	return NULL;
-}
-
-const char *ofi_core_name(const char *str, size_t *len)
-{
-	char *delim;
-
-	delim = strchr(str, OFI_NAME_DELIM);
-	if (delim) {
-		if (!ofi_has_util_prefix(delim + 1)) {
-			*len = strlen(delim + 1);
-			return delim + 1;
-		} else if (!ofi_has_util_prefix(str)) {
-			*len = delim - str;
-			return str;
-		}
-	} else if (!ofi_has_util_prefix(str)) {
-		*len = strlen(str);
-		return str;
-	}
-	*len = 0;
-	return NULL;
-
-}
-
 int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
 {
-	char *exclude, *name, *name_exclude;
-	int ret = -FI_ENOMEM;
-
-	name = strdup(*prov_name_list);
-	if (!name)
-		return -FI_ENOMEM;
-
-	ofi_rm_substr_delim(name, util_prov_name, OFI_NAME_DELIM);
+	char *exclude, *name, *temp;
 
 	exclude = malloc(strlen(util_prov_name) + 2);
 	if (!exclude)
-		goto out;
+		return -FI_ENOMEM;
 
 	exclude[0] = '^';
 	strcpy(&exclude[1], util_prov_name);
 
+	if (!*prov_name_list)
+		goto out;
+
+	name = strdup(*prov_name_list);
+	if (!name)
+		goto err1;
+
+	ofi_rm_substr_delim(name, util_prov_name, OFI_NAME_DELIM);
+
 	if (strlen(name)) {
-		name_exclude = ofi_strdup_append(name, exclude);
+		temp = ofi_strdup_append(name, exclude);
+		if (!temp)
+			goto err2;
 		free(exclude);
-		if (!name_exclude)
-			goto out;
-		free(*prov_name_list);
-		*prov_name_list = name_exclude;
-	} else {
-		free(*prov_name_list);
-		*prov_name_list = exclude;
+		exclude = temp;
 	}
-	ret = 0;
-out:
 	free(name);
-	return ret;
+	free(*prov_name_list);
+out:
+	*prov_name_list = exclude;
+	return 0;
+err2:
+	free(name);
+err1:
+	free(exclude);
+	return -FI_ENOMEM;
 }
 
 static int ofi_dup_addr(const struct fi_info *info, struct fi_info *dup)
