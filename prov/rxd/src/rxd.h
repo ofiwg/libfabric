@@ -63,9 +63,9 @@
 #define RXD_FI_VERSION 		FI_VERSION(1,6)
 
 #define RXD_IOV_LIMIT		4
-#define RXD_MAX_DGRAM_ADDR	128
 #define RXD_NAME_LENGTH		64
 #define RXD_INJECT_SIZE		4096
+#define RXD_MAX_MTU_SIZE	4096
 
 #define RXD_MAX_TX_BITS 	10
 #define RXD_MAX_RX_BITS 	10
@@ -100,6 +100,7 @@ struct rxd_domain {
 	struct fid_domain *dg_domain;
 
 	ssize_t max_mtu_sz;
+	ssize_t max_seg_sz;
 	int mr_mode;
 	struct ofi_mr_map mr_map;//TODO use util_domain mr_map instead
 };
@@ -108,12 +109,11 @@ struct rxd_av {
 	struct util_av util_av;
 	struct fid_av *dg_av;
 	struct ofi_rbmap rbmap;
-	fi_addr_t tx_map[RXD_MAX_DGRAM_ADDR];
-
 	int tx_idx;
 
 	int dg_av_used;
 	size_t dg_addrlen;
+	fi_addr_t tx_map[];
 };
 
 struct rxd_cq;
@@ -131,6 +131,7 @@ struct rxd_ep {
 
 	size_t rx_size;
 	size_t tx_size;
+	size_t prefix_size;
 	uint32_t posted_bufs;
 	uint32_t key;
 	int do_local_mr;
@@ -181,7 +182,6 @@ struct rxd_x_entry {
 	uint32_t tx_id;
 	uint32_t rx_id;
 	uint32_t key;
-	void *context;
 	enum rxd_msg_type state;
 	uint64_t bytes_done;
 	uint32_t next_seg_no;
@@ -191,10 +191,10 @@ struct rxd_x_entry {
 	uint8_t retry_cnt;
 
 	uint32_t flags;
-	uint64_t size;
-	uint64_t data;
 	uint8_t iov_count;
 	struct iovec iov[RXD_IOV_LIMIT];
+
+	struct fi_cq_tagged_entry cq_entry;
 
 	struct dlist_entry entry;
 	struct slist pkt_list;
@@ -240,12 +240,23 @@ struct rxd_pkt_entry {
 	struct fi_context context;
 	struct fid_mr *mr;
 	fi_addr_t peer;
-	struct rxd_pkt pkt;
+	struct rxd_pkt *pkt;
 };
 
 static inline int rxd_is_ctrl_pkt(struct rxd_pkt_entry *pkt_entry)
 {
-	return (pkt_entry->pkt.hdr.flags & RXD_CTRL);
+	return (pkt_entry->pkt->hdr.flags & RXD_CTRL);
+}
+
+static inline void rxd_set_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
+{
+	pkt_entry->pkt = (struct rxd_pkt *) ((char *) pkt_entry +
+			  sizeof(*pkt_entry) + ep->prefix_size);
+}
+
+static inline void *rxd_pkt_start(struct rxd_pkt_entry *pkt_entry)
+{
+	return (void *) ((char *) pkt_entry + sizeof(*pkt_entry));
 }
 
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
@@ -280,9 +291,8 @@ void rxd_post_cts(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry,
 		  struct rxd_pkt_entry *rts_pkt);
 struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep);
 void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
-void rxd_init_ctrl_pkt(struct rxd_x_entry *x_entry,
-		       struct rxd_pkt_entry *pkt_entry,
-		       uint32_t type);
+void rxd_init_ctrl_pkt(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
+		       struct rxd_pkt_entry *pkt_entry, uint32_t type);
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
 		     struct rxd_x_entry *x_entry);

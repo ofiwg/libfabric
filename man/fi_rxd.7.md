@@ -16,23 +16,20 @@ emulated over a base DGRAM provider.
 
 # SUPPORTED FEATURES
 
-The RxD provider currently supports *FI_MSG*, *FI_TAGGED* and *FI_RMA*
-capabilities. It requires the base DGRAM provider to support *FI_MSG*
-capabilities.
+The RxD provider currently supports *FI_MSG* capabilities.
 
 *Endpoint types*
 : The provider supports only endpoint type *FI_EP_RDM*.
 
 *Endpoint capabilities* : The following data transfer interface is
-supported: *fi_msg*, *fi_tagged* and *fi_rma*.
+supported: *fi_msg*.
 
 *Modes*
-: The provider does not require the use of any mode bits.
+: The provider does not require the use of any mode bits but supports
+  core DGRAM providers that require FI_CONTEXT and FI_MSG_PREFIX.
 
 *Progress*
-: The RxD provider supports both *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*,
-  with a default set to auto.  However, receive side data buffers are not
-  modified outside of completion processing routines.
+: The RxD provider only supports *FI_PROGRESS_MANUAL*.
 
 # LIMITATIONS
 
@@ -49,7 +46,11 @@ tested.
 
 # RUNTIME PARAMETERS
 
-No runtime parameters are currently defined.
+The *rxd* provider checks for the following environment variables:
+
+*FI_RXD_SPIN_COUNT*
+: Number of times to read the core provider's CQ for a segment completion
+  before trying to progress sends. Default is 1000.
 
 # SEE ALSO
 

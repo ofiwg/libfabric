@@ -214,9 +214,6 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	rxd_fabric = container_of(fabric, struct rxd_fabric,
 				  util_fabric.fabric_fid);
-	ret = ofi_prov_check_info(&rxd_util_prov, fabric->api_version, info);
-	if (ret)
-		return ret;
 
 	rxd_domain = calloc(1, sizeof(*rxd_domain));
 	if (!rxd_domain)
@@ -234,7 +231,9 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	rxd_domain->max_mtu_sz = dg_info->ep_attr->max_msg_size;
+	rxd_domain->max_mtu_sz = MIN(dg_info->ep_attr->max_msg_size, RXD_MAX_MTU_SIZE);
+	rxd_domain->max_seg_sz = rxd_domain->max_mtu_sz - sizeof(struct rxd_pkt_hdr) -
+				 dg_info->ep_attr->msg_prefix_size;
 	rxd_domain->mr_mode = dg_info->domain_attr->mr_mode;
 
 	ret = ofi_domain_init(fabric, info, &rxd_domain->util_domain, context);

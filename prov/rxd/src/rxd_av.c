@@ -61,7 +61,7 @@ static int rxd_av_set_addrlen(struct rxd_av *av, const void *addr)
 	struct rxd_domain *domain;
 	struct fid_av *tmp_av;
 	struct fi_av_attr attr;
-	uint8_t tmp_addr[RXD_MAX_DGRAM_ADDR];
+	uint8_t tmp_addr[RXD_NAME_LENGTH];
 	size_t len;
 	int ret;
 
@@ -102,7 +102,7 @@ close:
 
 fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
 {
-	return (fi_addr >= RXD_MAX_DGRAM_ADDR || fi_addr == FI_ADDR_UNSPEC) ?
+	return (fi_addr >= av->util_av.count || fi_addr == FI_ADDR_UNSPEC) ?
 		FI_ADDR_UNSPEC : av->tx_map[fi_addr];
 }
 
@@ -111,11 +111,11 @@ fi_addr_t rxd_av_fi_addr(struct rxd_av *av, fi_addr_t dg_fiaddr)
 	//TODO define behavior for duplicate av_insert calls
 	fi_addr_t fi_addr = 0;
 
-	for (fi_addr = 0; fi_addr < RXD_MAX_DGRAM_ADDR; fi_addr++) {
+	for (fi_addr = 0; fi_addr < av->util_av.count; fi_addr++) {
 		if (av->tx_map[fi_addr] == dg_fiaddr)
-			break;
+			return fi_addr;
 	}
-	return (fi_addr != RXD_MAX_DGRAM_ADDR) ? fi_addr : FI_ADDR_UNSPEC;
+	return FI_ADDR_UNSPEC;
 }
 
 static fi_addr_t rxd_set_tx_addr(struct rxd_av *av, fi_addr_t addr)
@@ -123,12 +123,12 @@ static fi_addr_t rxd_set_tx_addr(struct rxd_av *av, fi_addr_t addr)
 	int tries = 0;
 
 	while (av->tx_map[av->tx_idx] != FI_ADDR_UNSPEC &&
-	       tries < RXD_MAX_DGRAM_ADDR) {
-		if (++av->tx_idx == RXD_MAX_DGRAM_ADDR)
+	       tries < av->util_av.count) {
+		if (++av->tx_idx == av->util_av.count)
 			av->tx_idx = 0;
 		tries++;
 	}
-	assert(av->tx_idx < RXD_MAX_DGRAM_ADDR && tries < RXD_MAX_DGRAM_ADDR);
+	assert(av->tx_idx < av->util_av.count && tries < av->util_av.count);
 	av->tx_map[av->tx_idx] = addr;
 
 	return av->tx_idx;
@@ -145,7 +145,12 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 	if (ret != 1)
 		return ret;
 
-	return ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*dg_fiaddr));
+	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*dg_fiaddr));
+
+	if (ret)
+		fi_av_remove(av->dg_av, dg_fiaddr, 1, flags);
+
+	return ret;
 }
 
 static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
@@ -231,7 +236,7 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	fi_addr_t dg_fiaddr;
 	struct rxd_av *av;
 	struct ofi_rbnode *node;
-	uint8_t addr[RXD_MAX_DGRAM_ADDR];
+	uint8_t addr[RXD_NAME_LENGTH];
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
 	fastlock_acquire(&av->util_av.lock);
@@ -336,7 +341,7 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOSYS;
 
 	domain = container_of(domain_fid, struct rxd_domain, util_domain.domain_fid);
-	av = calloc(1, sizeof(*av));
+	av = calloc(1, sizeof(*av) + (attr->count * sizeof(fi_addr_t)));
 	if (!av)
 		return -FI_ENOMEM;
 
@@ -354,7 +359,8 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av->rbmap.compare = &rxd_tree_compare;
 	ofi_rbmap_init(&av->rbmap);
-	for (i = 0; i < RXD_MAX_DGRAM_ADDR; av->tx_map[i++] = FI_ADDR_UNSPEC);
+	for (i = 0; i < attr->count; av->tx_map[i++] = FI_ADDR_UNSPEC)
+		;
 
 	av_attr = *attr;
 	av_attr.type = FI_AV_TABLE;
