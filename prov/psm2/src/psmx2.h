@@ -442,7 +442,7 @@ struct psmx2_iov_info {
 struct psmx2_sendv_request {
 	struct fi_context fi_context;
 	struct fi_context fi_context_iov;
-	PSMX2_STATUS_TYPE *status;
+	PSMX2_STATUS_DECL(status);
 	void *user_context;
 	int iov_protocol;
 	int no_completion;

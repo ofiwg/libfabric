@@ -952,6 +952,8 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	if (!req)
 		return -FI_ENOMEM;
 
+	PSMX2_STATUS_INIT(req->status);
+
 	if (total_len <= PSMX2_IOV_BUF_SIZE) {
 		req->iov_protocol = PSMX2_IOV_PROTO_PACK;
 		p = req->buf;
